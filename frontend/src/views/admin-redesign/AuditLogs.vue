@@ -110,7 +110,7 @@
                 <td v-if="!noTargetTypes && !hiddenCols.has('tt')" class="log-tt" :title="log.targetType || '当前记录未写入目标类型'">{{ targetTypeText(log.targetType) }}</td>
                 <td v-if="!hiddenCols.has('target')" class="log-target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</td>
                 <td v-if="!hiddenCols.has('result')"><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
-                <td v-if="!hiddenCols.has('ip')" class="log-ip mono" :title="log.ip || ''">{{ log.ip || '—' }}</td>
+                <td v-if="!hiddenCols.has('ip')" class="log-ip mono" :title="log.ip || ''">{{ ipText(log.ip) }}</td>
                 <td class="mk-th--right log-arrow" aria-hidden="true">▸</td>
               </tr>
               <tr v-if="openId === log.id" class="log-payload-row">
@@ -172,7 +172,7 @@
             >
               <td class="log-time mono" :title="fmtFull(a.createdAt)">{{ fmtLoginTime(a.createdAt) }}</td>
               <td class="log-admin" :title="a.username">{{ a.username || '—' }}</td>
-              <td class="log-ip mono" :title="a.ip || ''">{{ a.ip || '—' }}</td>
+              <td class="log-ip mono" :title="a.ip || ''">{{ ipText(a.ip) }}</td>
               <td><span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span></td>
               <td class="log-reason" :title="a.reason || ''">{{ reasonText(a.reason) }}</td>
               <td class="mk-th--right">
@@ -219,7 +219,7 @@ import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
 import { errMsg, shortId } from './live'
 import Pagination from './Pagination.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
-import { actionText, targetTypeText } from './statusText'
+import { actionText, targetTypeText, ipText } from './statusText'
 
 /** admin_audit_logs 行（与后端 Prisma 模型一致） */
 interface AuditLogRow {

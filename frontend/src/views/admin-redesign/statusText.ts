@@ -412,3 +412,11 @@ export function runTaskProgressText(p: { done: number; total: number } | null | 
   if (!p || !Number.isFinite(p.total) || p.total <= 0) return ''
   return `任务 ${Math.min(Math.max(p.done, 0), p.total)}/${p.total}`
 }
+
+/** IP 展示：本机回环地址补中文说明（IPv6 `::1` / IPv4 `127.0.0.1` → 「(本机)」） */
+export function ipText(ip?: string | null): string {
+  const v = (ip || '').trim()
+  if (!v) return '—'
+  if (v === '::1' || v === '127.0.0.1' || v === 'localhost') return '127.0.0.1 (本机)'
+  return v
+}

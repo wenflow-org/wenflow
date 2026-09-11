@@ -113,7 +113,7 @@
                     <span class="mk-cell-sub">{{ deviceOf(s).os || '未知系统' }}<template v-if="s.remember"> · 记住我</template></span>
                   </div>
                 </td>
-                <td class="ss-ip mono" :title="s.ip || ''">{{ s.ip || '—' }}</td>
+                <td class="ss-ip mono" :title="s.ip || ''">{{ ipText(s.ip) }}</td>
                 <td class="ss-time mono" :title="fmtFull(s.issuedAt)">{{ fmtDateTime(s.issuedAt) }}</td>
                 <td class="ss-time mono" :title="s.lastSeenAt ? fmtFull(s.lastSeenAt) : ''">
                   {{ s.lastSeenAt ? fmtDateTime(s.lastSeenAt) : '—' }}
@@ -169,7 +169,7 @@
                       <span class="mk-cell-sub">{{ deviceOf(s).os || '未知系统' }}<template v-if="s.remember"> · 记住我</template></span>
                     </div>
                   </td>
-                  <td class="ss-ip mono" :title="s.ip || ''">{{ s.ip || '—' }}</td>
+                  <td class="ss-ip mono" :title="s.ip || ''">{{ ipText(s.ip) }}</td>
                   <td class="ss-time mono" :title="fmtFull(s.issuedAt)">{{ fmtDateTime(s.issuedAt) }}</td>
                   <td class="ss-time mono" :title="s.lastSeenAt ? fmtFull(s.lastSeenAt) : ''">
                     {{ s.lastSeenAt ? fmtDateTime(s.lastSeenAt) : '—' }}
@@ -219,6 +219,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, adminSessionsApi } from '@/api/adminApi'
 import { errMsg } from './live'
 import { useLoadMore } from './useLoadMore'
+import { ipText } from './statusText'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'

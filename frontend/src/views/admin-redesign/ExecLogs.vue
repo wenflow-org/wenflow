@@ -57,7 +57,7 @@
             <button v-for="p in statusPills" :key="p.id" type="button" class="mk-pill" :class="{ 'mk-pill--active': statusFilter === p.id }" @click="statusFilter = statusFilter === p.id ? '' : p.id">{{ p.label }}</button>
           </div>
           <input v-model="keyword" class="mk-filter__input" placeholder="关键词搜索" @keydown.enter="applyServerQuery" />
-          <input v-model="traceId" class="mk-filter__input" placeholder="traceId" @keydown.enter="applyServerQuery" />
+          <input v-model="traceId" class="mk-filter__input" placeholder="Trace ID（链路 ID）" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery" />
         </div>
         <!-- 右侧：错误类别 / 自动刷新 / 高级 / 列设置（对齐 Users：切换控件 + 统计） -->
         <div class="mk-card__head-right">

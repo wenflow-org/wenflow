@@ -878,6 +878,9 @@ html[data-theme='dark'] {
   .mshell__foot-ver { color: #7c8aa3; }
   .mshell__collapse { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
   .mshell__collapse:hover { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
+  /* 暗色 logo：原图深蓝字标(#1D2A63 系)在深底上几乎不可见，提亮以恢复对比 */
+  .mshell__logo-full,
+  .mshell__logo-mark { filter: brightness(1.75) saturate(1.05); }
   .mshell__tool { color: #6b7c96; }
   .mshell__tool:hover { background: #1b2740; color: #7aa2ff; }
   .mshell__user { border-top-color: #1f2a3d; }
