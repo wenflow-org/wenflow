@@ -69,4 +69,43 @@ describe('runtime network policy service', () => {
     expect(service.canAccessPrivateNetwork('ollama.local', '192.168.31.27')).toBe(true)
     expect(service.canAccessPrivateNetwork('other.local', '192.168.31.27')).toBe(false)
   })
+
+  it('production 门禁：applyProductionAccessGuard 仅在生产降级 any', () => {
+    const service = require('../runtime-network-policy.service')
+    expect(service.applyProductionAccessGuard('any', true)).toBe('private')
+    expect(service.applyProductionAccessGuard('any', false)).toBe('any')
+    expect(service.applyProductionAccessGuard('private', true)).toBe('private')
+    expect(service.applyProductionAccessGuard('loopback', true)).toBe('loopback')
+  })
+
+  it('production 下 DB 存 any 时刷新降级为 private', async () => {
+    process.env.NODE_ENV = 'production'
+    findUnique.mockResolvedValue({
+      adminAccessMode: 'any',
+      adminAllowedIps: null,
+      allowPrivateNetwork: true,
+      privateNetworkHosts: null
+    })
+    const service = require('../runtime-network-policy.service')
+
+    const policy = await service.refreshRuntimeNetworkPolicy()
+
+    expect(policy.adminAccessMode).toBe('private')
+    expect(policy.source).toBe('database')
+  })
+
+  it('development 下 DB 存 any 时保持 any', async () => {
+    process.env.NODE_ENV = 'development'
+    findUnique.mockResolvedValue({
+      adminAccessMode: 'any',
+      adminAllowedIps: null,
+      allowPrivateNetwork: true,
+      privateNetworkHosts: null
+    })
+    const service = require('../runtime-network-policy.service')
+
+    const policy = await service.refreshRuntimeNetworkPolicy()
+
+    expect(policy.adminAccessMode).toBe('any')
+  })
 })

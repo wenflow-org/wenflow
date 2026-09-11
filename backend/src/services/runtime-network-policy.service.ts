@@ -24,6 +24,20 @@ function parseAdminAccessMode(value?: string | null): AdminAccessMode {
   return value === 'loopback' || value === 'any' ? value : 'private'
 }
 
+/**
+ * 生产环境访问范围门禁：'any'（不限制来源）在生产被降级为 'private'。
+ * 说明：'private' 仍允许通过 ADMIN_ALLOWED_IPS 精确放行公网管理 IP，
+ * 因此降级不阻断受控远程管理，只关闭“无限制来源”这一高风险姿态。
+ * 纯函数、显式传入 isProduction，便于单测。
+ */
+export function applyProductionAccessGuard(mode: AdminAccessMode, isProduction: boolean): AdminAccessMode {
+  return isProduction && mode === 'any' ? 'private' : mode
+}
+
+function isProduction(): boolean {
+  return process.env.NODE_ENV === 'production'
+}
+
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined || value === '') return fallback
   return value.trim().toLowerCase() === 'true'
@@ -92,6 +106,17 @@ export async function refreshRuntimeNetworkPolicy(): Promise<RuntimeNetworkPolic
             : 'environment'
         }
       : defaults
+
+    // 生产门禁：DB/env 解析出的 'any' 在生产强制降级为 'private'（QA 遗留项 4）
+    const rawMode = currentPolicy.adminAccessMode
+    const guardedMode = applyProductionAccessGuard(rawMode, isProduction())
+    if (guardedMode !== rawMode) {
+      logger.warn('生产环境禁止 Admin 访问范围为 any，已自动降级为 private（如需远程管理请用 ADMIN_ALLOWED_IPS 精确放行）', {
+        requested: rawMode,
+        effective: guardedMode
+      })
+      currentPolicy = { ...currentPolicy, adminAccessMode: guardedMode }
+    }
   } catch (error) {
     currentPolicy = defaults
     logger.warn('加载运行时网络策略失败，使用环境变量默认值', {

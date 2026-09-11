@@ -66,6 +66,12 @@ const networkPolicySchema = z.object({
 router.put('/network-policy', async (req, res) => {
   try {
     const parsed = networkPolicySchema.parse(req.body);
+    if (process.env.NODE_ENV === 'production' && parsed.adminAccessMode === 'any') {
+      return res.status(400).json({
+        success: false,
+        error: '生产环境禁止将 Admin 访问范围设为 any；如需远程管理请用 private + ADMIN_ALLOWED_IPS 精确放行'
+      });
+    }
     const input: {
       adminAccessMode: AdminAccessMode;
       adminAllowedIps: string[];
