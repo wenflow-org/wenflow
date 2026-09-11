@@ -682,10 +682,10 @@ function groupBadgeTitle(title: string): string {
   color: var(--mk-faint);
   font-size: var(--mk-fs-11);
 }
-.mshell__foot-name { font-weight: 700; color: #8a97ab; letter-spacing: 0.02em; }
+.mshell__foot-name { font-weight: 700; color: var(--mk-faint, #5f6f8c); letter-spacing: 0.02em; }
 .mshell__foot-ver {
   font-size: var(--mk-fs-11);
-  color: #b4c0d2;
+  color: var(--mk-faint, #5f6f8c);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -874,8 +874,8 @@ html[data-theme='dark'] {
   .mshell__item-badge { background: #1d2739; color: #6b7c96; }
   .mshell__item--active .mshell__item-badge { background: rgba(91, 141, 239, 0.22); color: #7aa2ff; }
   .mshell__foot { border-top-color: #1f2a3d; }
-  .mshell__foot-name { color: #64748b; }
-  .mshell__foot-ver { color: #3d4c66; }
+  .mshell__foot-name { color: #93a3bd; }
+  .mshell__foot-ver { color: #7c8aa3; }
   .mshell__collapse { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
   .mshell__collapse:hover { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
   .mshell__tool { color: #6b7c96; }
