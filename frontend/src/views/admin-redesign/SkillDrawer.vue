@@ -46,7 +46,8 @@
           <p v-if="entity.description" class="msk__desc" :title="entity.description">{{ entity.description }}</p>
         </header>
 
-        <!-- 页签：概览 / Prompt（只读速览；编辑统一在 Prompt 设计页） -->
+        <!-- 页签：概览 / Prompt / 模型配置 / 模型测试
+             （只读速览；prompt 编辑统一在 Prompt 设计页，模型路由配置与探测允许抽屉内联） -->
         <nav class="mk-pills msk__tabs" aria-label="详情页签">
           <button
             v-for="t in visibleTabs"

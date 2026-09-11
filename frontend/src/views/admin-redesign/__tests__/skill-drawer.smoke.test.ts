@@ -1,7 +1,9 @@
 /**
- * SkillDrawer 阶段 2E 去编辑化冒烟：
- * 1. 页签只剩 概览 / Prompt（移除「运行」「协议」tab）
- * 2. 无试跑 / 运行配置 / 版本对比 / 协议规则 编辑入口
+ * SkillDrawer 冒烟（阶段 2E 去编辑化 + 后续模型路由配置回流）：
+ * 1. 页签 = 概览 / Prompt / 模型配置 / 模型测试
+ *    （阶段 2E 曾收敛为仅 概览 / Prompt；后续「教学工作台」按需回流了
+ *     模型路由配置与探测两个 tab —— 属 model routing 范畴，非 prompt 编辑）
+ * 2. 仍无 prompt 编辑类入口：试跑 / 运行配置 / 协议规则 / 版本对比
  * 3. 保留只读 Prompt 速览 + 「打开 Prompt 设计页」跳转 CTA
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -112,13 +114,14 @@ describe('SkillDrawer 去编辑化冒烟', () => {
     document.body.innerHTML = '';
   });
 
-  it('只读速览：仅 概览 / Prompt 两个页签，无运行/协议 tab', async () => {
+  it('页签 = 概览 / Prompt / 模型配置 / 模型测试；无 prompt 编辑类入口', async () => {
     dataSource.value = 'live';
     liveSkillProfiles.value = [{ id: 'skill-a', name: 'Skill A', category: 'analysis', agentId: 'agent-a', agentName: 'Agent A' }];
     intent.skillDrawerId = 'skill-a';
     const { wrapper } = await mountDrawer();
     activeWrapper = wrapper;
-    expect(bodyTabs()).toEqual(['概览', 'Prompt']);
+    expect(bodyTabs()).toEqual(['概览', 'Prompt', '模型配置', '模型测试']);
+    // prompt 编辑 / 协议 / 试跑 / 版本对比 仍收敛在设计页，抽屉内不出现
     expect(document.body.textContent).not.toContain('运行配置');
     expect(document.body.textContent).not.toContain('试跑');
     expect(document.body.textContent).not.toContain('协议规则');
