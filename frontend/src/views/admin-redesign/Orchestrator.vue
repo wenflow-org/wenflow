@@ -5,8 +5,8 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">编排结构</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">{{ stages.length }} 阶段 · {{ totalSkills }} 个 Skill</span>
-      <span class="mk-status__meta">总调用 {{ totalCalls }}</span>
+      <span class="mk-status__meta">{{ pageLoading ? '—' : stages.length }} 阶段 · {{ pageLoading ? '—' : totalSkills }} 个 Skill</span>
+      <span class="mk-status__meta">总调用 {{ pageLoading ? '—' : totalCalls }}</span>
       <span v-if="unresolvedCount > 0" class="mk-status__meta mk-status__meta--bad">未解析 {{ unresolvedCount }}</span>
       <span v-if="w4Drifted.length" class="mk-status__meta mk-status__meta--bad">哈希漂移 {{ w4Drifted.length }}</span>
       <span class="mk-status__actions">
@@ -67,7 +67,10 @@
         </div>
       </details>
     </template>
-    <div v-else class="orch-tabpane"><p class="mk-empty">暂无编排阶段数据</p></div>
+    <div v-else class="orch-tabpane">
+      <p v-if="pageLoading" class="mk-empty"><span class="mk-spinner"></span> 编排数据加载中…</p>
+      <p v-else class="mk-empty">暂无编排阶段数据</p>
+    </div>
   </div>
 </template>
 
@@ -75,7 +78,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { dataSource } from './store'
-import { liveTopoNodes, liveSkillCatalog, errMsg } from './live'
+import { liveTopoNodes, liveSkillCatalog, liveLoading, errMsg } from './live'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
 import DataFlowGraph from './DataFlowGraph.vue'
@@ -275,6 +278,8 @@ const unresolvedCount = computed(() =>
 )
 // 空拓扑时 current 为 undefined，模板由 v-if="current" 保护
 const current = computed<Stage | undefined>(() => stages.value.find((s) => s.id === active.value) || stages.value[0])
+// 首屏加载中（live boot 未完成且尚无阶段数据）：用于抑制「0 阶段 / 暂无数据」的假空态
+const pageLoading = computed(() => liveLoading.value && !stages.value.length)
 const stageCalls = (st: Stage) => st.skills.reduce((sum, s) => sum + (s.calls || 0), 0)
 // 概览卡结论点色/标题（唯一动态状态载体；状态条只剩身份 + 数量）
 const statusTone = computed(() => {

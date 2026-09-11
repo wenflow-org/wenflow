@@ -4,7 +4,7 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">共 {{ cards.length }} 个 Skill</span>
+      <span class="mk-status__meta">{{ liveLoading && !cards.length ? 'Skill 加载中…' : `共 ${cards.length} 个 Skill` }}</span>
       <span v-if="overallRate != null" class="mk-status__meta" :class="rateNumTone === 'bad' ? 'mk-status__meta--bad' : rateNumTone === 'warn' ? 'mk-status__meta--warn' : ''" :title="'窗口内成功率 = 成功调用 / 总调用'">
         成功率 {{ overallRate }}%<template v-if="totalCalls">（{{ okCalls }}/{{ totalCalls }}）</template>
       </span>
