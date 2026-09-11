@@ -76,7 +76,7 @@
       <div class="mk-card__head">
         <h3 class="mk-card__title">MCP 服务</h3>
         <div class="mk-actions">
-          <button type="button" class="mk-link" @click="openToolCreate">新建 MCP 服务 +</button>
+          <button type="button" class="mk-link" @click="openToolCreate">新建 MCP 服务</button>
         </div>
       </div>
       <div class="ac-mcp" v-if="mcpTools.length">
