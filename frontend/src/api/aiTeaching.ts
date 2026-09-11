@@ -638,10 +638,12 @@ export const aiTeachingAPI = {
         ? result.finalization?.taskCompletion
         : result.finalization?.reviewCompletion;
     if (!finalizationStepCompleted(result, payload.action) && (targetStep === 'not_started' || targetStep === 'skipped')) {
+      // 此重试携带的是「新 revision」——属于不同的课堂结束请求，必须换新的 Idempotency-Key。
+      // 复用同一 key + 变更 revision 会被后端以 FINALIZATION_IDEMPOTENCY_KEY_REUSED(409) 拒绝。
       result = await this.finalizeSession(sessionId, {
         ...payload,
         revision: result.revision
-      }, operationId);
+      }, finalizationKey());
       while (result.status === 'processing' && Date.now() < deadline) {
         await wait(result.pollAfterMs || 1500);
         result = await this.getFinalization(sessionId);
