@@ -318,7 +318,7 @@ export async function callPrompt<TInput, TOutput>(
       maxTokens: runtimeOverride.maxTokensOverride,
     },
   });
-  let currentMaxTokens = generationResolution.maxTokens;
+  const currentMaxTokens = generationResolution.maxTokens;
   // max_tokens 已由 resolve-llm-call-params 统一抬到 128k 全局下限（2026-09-03 定案）；
   // 重试时不再将 maxTokens ×2 放大（见 validation_failed 分支注释），故无需 tokenCeiling 上界。
 
@@ -498,10 +498,15 @@ export async function callPrompt<TInput, TOutput>(
     }
 
     // P3 试点：core fields 声明契约校验（skill 领域校验通过后追加；
-    // delta 语义按 core 文件 deltaOutput 判定，File-as-Truth，不受 ACTIVE metadata 影响）
+    // delta 语义按 core 文件 deltaOutput 判定，File-as-Truth，不受 ACTIVE metadata 影响）。
+    // 校验前先做 skill 提供的容错归一（模型把 object[] 写成 string[] 等等价变体），
+    // 避免因表述差异整轮失败——最终业务形态仍由 normalizeOutput 决定。
+    const contractParsed = spec.coerceParsedForContract
+      ? spec.coerceParsedForContract(extracted.parsed, input)
+      : extracted.parsed;
     const fieldsValidation = await validateSkillOutputFields(
       spec.agentId,
-      extracted.parsed
+      contractParsed
     );
     if (fieldsValidation && !fieldsValidation.valid) {
       lastFailureReason = `fields contract violation: ${fieldsValidation.issues

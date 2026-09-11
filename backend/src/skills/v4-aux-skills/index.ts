@@ -74,12 +74,38 @@ function asTrimmedString(value: any): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * 把「文本动作选项」的多种模型表述收敛为 `{ text }[]`：
+ * - `{ text: string }` → 规范化
+ * - `string` 简写 → `{ text }`（模型常直接把 quickReplies 写成 string[]）
+ * 非法/空项丢弃，最多保留 3 个。
+ */
+function coerceTextOptions(value: any): Array<{ text: string }> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item: any): { text: string } | null => {
+      if (typeof item === 'string') {
+        const text = item.trim();
+        return text ? { text } : null;
+      }
+      if (item && typeof item === 'object' && typeof item.text === 'string') {
+        const text = item.text.trim();
+        return text ? { text } : null;
+      }
+      return null;
+    })
+    .filter((item: { text: string } | null): item is { text: string } => item !== null)
+    .slice(0, 3);
+}
+
 interface RunAuxOptions<TOutput> {
   meta: AuxSkillMeta;
   input: any;
   buildUserPayload: (domain: any) => any;
   normalize: (parsed: any, domain: any, fallback: any) => TOutput;
   validate?: (parsed: any) => { valid: true } | { valid: false; failureReason: string };
+  /** 契约校验前的容错归一（模型输出的等价变体 → core 声明形态）；不影响 normalize */
+  coerceParse?: (parsed: any) => any;
   /** 内置确定性降级输出；优先级低于调用方 __fallback */
   builtinFallback?: (domain: any) => TOutput;
   prepareSystemPrompt?: (systemPrompt: string, domain: any) => string;
@@ -119,6 +145,9 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
         : {}),
       buildUserPayload: () => opts.buildUserPayload(domain),
       normalizeOutput: (parsed) => opts.normalize(parsed, domain, callerFallback),
+      ...(opts.coerceParse
+        ? { coerceParsedForContract: (parsed: any) => opts.coerceParse!(parsed) }
+        : {}),
       validateParsedOutput: opts.validate || ((parsed) => parsed !== undefined && parsed !== null
         ? { valid: true }
         : { valid: false, failureReason: `${opts.meta.skillId.toUpperCase().replace(/-/g, '_')}_OUTPUT_EMPTY` }),
@@ -212,14 +241,14 @@ async function teachingOpeningGeneratorHandler(input: any) {
     normalize: (parsed, d) => ({
       message: asTrimmedString(parsed?.message),
       question: asTrimmedString(parsed?.question),
-      quickReplies: Array.isArray(parsed?.quickReplies)
-        ? parsed.quickReplies
-            .map((item: any) => (typeof item?.text === 'string' ? { text: item.text.trim() } : null))
-            .filter((item: any) => item && item.text)
-            .slice(0, 3)
-        : [],
+      quickReplies: coerceTextOptions(parsed?.quickReplies),
       mode: ['example-first', 'predict', 'self-assess'].includes(parsed?.mode) ? parsed.mode : d.openingMode,
     }),
+    // 模型有时把 quickReplies 写成 string[]（core 声明为 object[]）；契约校验前补成 [{ text }]，
+    // 避免因表述差异整轮失败（normalize 同样兼容两种形态）。
+    coerceParse: (parsed) => (parsed && typeof parsed === 'object'
+      ? { ...parsed, quickReplies: coerceTextOptions(parsed.quickReplies) }
+      : parsed),
     validate: (parsed) => parsed
       && asTrimmedString(parsed.message)
       // quickReplies/question/mode 可缺省（重学/收束等场景模型可合理省略动作与引导，

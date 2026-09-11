@@ -160,6 +160,12 @@ export interface PromptCallSpec<TInput, TOutput> {
   }) => Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
   normalizeOutput: (parsed: any, input: TInput) => TOutput;
   validateParsedOutput?: (parsed: any, input: TInput) => PromptValidationResult;
+  /**
+   * 契约校验前的容错归一：把模型输出的等价变体收敛为 core fields 声明的规范形态
+   * （例如模型把 object[] 字段写成 string[] 时补成 [{ text }]）。
+   * 仅作用于 core fields 契约校验；normalizeOutput 仍各自负责最终业务形态。
+   */
+  coerceParsedForContract?: (parsed: any, input: TInput) => any;
   /** 覆盖默认 extractJsonObject；用于 goal 等专用结构化解析 */
   parseRawOutput?: (rawOutput: string, input: TInput) => PromptRawParseResult;
   /** ACTIVE/default system 解析后、发请求前再加工（如 field routing supplement） */
