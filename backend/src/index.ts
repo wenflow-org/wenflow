@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { logger } from './utils/logger';
+import { isBenignConnectionError } from './utils/connection-errors';
 import prisma from './config/database';
 import systemPrisma from './config/system-database';
 import { initializeAdmin } from './services/auth/init-admin.service';
@@ -766,13 +767,27 @@ if (require.main === module) {
       process.exit(1);
     });
   };
+  /**
+   * 客户端在服务端仍写响应时断开（EPIPE/ECONNRESET 等）会抛出传输层错误。
+   * 这类错误是连接噪声而非程序缺陷，不应触发进程级受控关闭 —— 否则一次浏览器
+   * 切页/中止请求即可让整个后端退出，并中断所有运行中的虚拟实验会话（QA ISSUE-006）。
+   * 判定逻辑抽到 utils/connection-errors 以便单测。
+   */
   process.on('SIGTERM', () => handleSignal('SIGTERM'));
   process.on('SIGINT', () => handleSignal('SIGINT'));
   process.on('uncaughtException', error => {
+    if (isBenignConnectionError(error)) {
+      logger.warn('Ignored benign connection error (client disconnected?)', { error });
+      return;
+    }
     logger.error('Uncaught exception, starting controlled shutdown', { error });
     void shutdown('uncaughtException').finally(() => process.exit(1));
   });
   process.on('unhandledRejection', reason => {
+    if (isBenignConnectionError(reason)) {
+      logger.warn('Ignored benign connection rejection (client disconnected?)', { reason });
+      return;
+    }
     logger.error('Unhandled rejection, starting controlled shutdown', { reason });
     void shutdown('unhandledRejection').finally(() => process.exit(1));
   });
