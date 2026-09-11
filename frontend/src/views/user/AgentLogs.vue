@@ -1031,16 +1031,23 @@ const copyText = async (text: string, successMessage: string) => {
     flex: 1 1 100%;
   }
 
+  /* 窄屏：筛选项整行铺开，日期区间可换行，避免两个 130px 日期输入撑破页面 */
+  .filter-item {
+    flex: 1 1 100%;
+  }
+
+  .filter-dates {
+    flex-wrap: wrap;
+  }
+
   .filter-dates input {
-    width: 100%;
+    width: auto;
+    flex: 1 1 130px;
+    min-width: 0;
   }
 
   .filter-select {
     width: 100%;
-  }
-
-  .filter-item {
-    flex: 1 1 45%;
   }
 
   .detail-facts {
