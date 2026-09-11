@@ -46,7 +46,7 @@
         </div>
         <div class="mk-card__head-right">
           <div class="al-cols">
-            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen">列</button>
+            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen" title="设置显示的列">列</button>
             <div v-if="colsOpen" class="al-cols__menu" @click.stop>
               <label v-for="c in alColDefs" :key="c.key" class="al-cols__item" :title="c.title">
                 <input type="checkbox" :checked="!hiddenCols.has(c.key)" @change="toggleAlCol(c.key)" />

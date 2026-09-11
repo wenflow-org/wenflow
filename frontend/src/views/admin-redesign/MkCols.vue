@@ -1,6 +1,6 @@
 <template>
   <div ref="rootEl" class="mk-cols">
-    <button type="button" class="mk-link" :class="{ 'mk-link--active': open }" @click="open = !open" :aria-expanded="open">列</button>
+    <button type="button" class="mk-link" :class="{ 'mk-link--active': open }" @click="open = !open" :aria-expanded="open" title="设置显示的列">列</button>
     <div v-if="open" class="mk-cols__menu" @click.stop>
       <label v-for="c in colDefs" :key="c.key" class="mk-cols__item" :title="c.title">
         <input type="checkbox" :checked="!hidden.has(c.key)" @change="toggle(c.key)" />

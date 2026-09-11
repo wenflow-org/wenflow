@@ -48,7 +48,7 @@
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'grid' }" @click="view = 'grid'">网格</button>
           </div>
           <div v-if="view === 'list'" ref="skColsEl" class="sk-cols">
-            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen">列</button>
+            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen" title="设置显示的列">列</button>
             <div v-if="colsOpen" class="sk-cols__menu" @click.stop>
               <label v-for="c in skColDefs" :key="c.key" class="sk-cols__item" :title="c.title">
                 <input type="checkbox" :checked="!hiddenCols.has(c.key)" @change="toggleSkCol(c.key)" />

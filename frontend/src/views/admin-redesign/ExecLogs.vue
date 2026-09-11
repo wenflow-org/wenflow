@@ -64,9 +64,9 @@
           <span class="mk-card__meta" v-if="errorCategory">类别「{{ errorCategory }}」<button type="button" class="mk-link" @click="errorCategory = ''; applyServerQuery()">×</button></span>
           <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
           <span class="mk-card__meta">第 {{ liveLogsPage }} / {{ totalPagesOf(liveLogsTotal, liveLogsPageSize) }} 页</span>
-          <button type="button" class="mk-link" :class="{ 'mk-link--active': advOpen }" @click="advOpen = !advOpen">高级</button>
+          <button type="button" class="mk-link" :class="{ 'mk-link--active': advOpen }" @click="advOpen = !advOpen" title="高级筛选">高级</button>
           <div class="exec-cols">
-            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen">列</button>
+            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen" title="设置显示的列">列</button>
             <div v-if="colsOpen" class="exec-cols__menu" @click.stop>
               <label v-for="c in colDefs" :key="c.key" class="exec-cols__item" :title="c.title">
                 <input type="checkbox" :checked="!hiddenCols.has(c.key)" @change="toggleCol(c.key)" />
