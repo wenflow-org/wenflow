@@ -1,8 +1,14 @@
 <template>
   <Teleport to="body">
     <div v-if="confirmState.open" ref="maskRef" class="mk-modal">
-      <div ref="panelRef" class="mk-confirm" role="alertdialog" aria-modal="true" aria-label="确认操作">
-        <h3 class="mk-confirm__title">{{ confirmState.title }}</h3>
+      <div
+        ref="panelRef"
+        class="mk-confirm"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="mk-confirm-title"
+      >
+        <h3 id="mk-confirm-title" class="mk-confirm__title">{{ confirmState.title }}</h3>
         <p class="mk-confirm__msg">{{ confirmState.message }}</p>
         <label v-if="confirmState.input" class="mk-confirm__input">
           <span>{{ confirmState.input.label }}</span>
@@ -148,6 +154,7 @@ function confirm() {
 }
 .mk-btn--danger:hover { background: var(--mk-red-strong, #b91c1c); border-color: var(--mk-red-strong, #b91c1c); }
 /* 暗色覆写：与 shared.css 同源同值（Confirm 独立承载，不依赖 admin shared.css 加载） */
+html[data-theme='dark'] .mk-modal { background: rgba(3, 7, 14, 0.62); }
 html[data-theme='dark'] .mk-btn:hover { background: #1b2740; }
 html[data-theme='dark'] .mk-btn--primary:hover { background: #6a9cf3; }
 html[data-theme='dark'] .mk-btn--danger:hover { background: var(--mk-red-strong, #ef4444); border-color: var(--mk-red-strong, #ef4444); }
