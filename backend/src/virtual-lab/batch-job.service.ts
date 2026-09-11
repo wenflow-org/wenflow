@@ -10,6 +10,7 @@
  * 阶段：身份（persona）→ 故事（scenario），每轮处理 1 项，避免并发打爆 LLM。
  */
 import { prisma } from '../config/database';
+import { runBackgroundTask } from '../services/background-task-tracker.service';
 import { executeSkill } from '../skills';
 import { virtualLearnerPersonaDesignerDefinition } from '../skills/virtual-learner-persona-designer';
 import { virtualLearnerScenarioDesignerDefinition } from '../skills/virtual-learner-scenario-designer';
@@ -80,12 +81,11 @@ class BatchJobService {
       },
     });
 
-    // 后台异步执行（不阻塞响应）
-    setImmediate(() => {
-      void this.execute(job.id).catch((error) => {
-        logger.error('[batch-job] 后台执行异常', { jobId: job.id, error: String(error) });
-      });
-    });
+    // 后台异步执行（不阻塞响应）。
+    // 必须走 runBackgroundTask：它会在「已剥离请求级 abortSignal」的独立上下文里执行，
+    // 否则 HTTP 响应结束（res 'close'）会 abort 请求上下文，正在进行的 LLM 调用被取消
+    // → CALLER_ABORTED / "API request canceled"，导致身份/故事生成 100% 失败（QA ISSUE-003）。
+    runBackgroundTask('batch-create', () => this.execute(job.id), { jobId: job.id });
 
     return { batchId: job.id, created, totalStories };
   }
@@ -214,12 +214,8 @@ class BatchJobService {
         status: 'running',
       },
     });
-    // 重启执行
-    setImmediate(() => {
-      void this.execute(batchId).catch((error) => {
-        logger.error('[batch-job] 重试执行异常', { jobId: batchId, error: String(error) });
-      });
-    });
+    // 重启执行（同样必须脱离请求上下文，见 submit 注释）
+    runBackgroundTask('batch-create-retry', () => this.execute(batchId), { jobId: batchId });
     return true;
   }
 
@@ -269,7 +265,9 @@ class BatchJobService {
             ...(cohort ? { notes: cohort, background: cohort } : {}),
           },
         });
-        const output = result?.output || {};
+        // executeSkill 已把结果拆包到 output：personaSeed 在顶层；这里兼容两种结构，
+        // 避免再次读取 result.output 造成双重拆包（QA ISSUE-003 二次根因）。
+        const output = (result?.personaSeed ? result : result?.output) || {};
         const candidate = (output.personaSeed || output.profile || output) as Record<string, unknown> | null;
         if (candidate && typeof candidate === 'object' && String(candidate.nameHint || '').trim() && String(candidate.background || '').trim()) {
           seed = candidate;
@@ -337,7 +335,8 @@ class BatchJobService {
       existingStoryPool,
       targetStoryCount: 1,
     });
-    const newStory = result?.output?.story;
+    // 同上：executeSkill 已拆包，story 在顶层（兼容旧结构兜底）
+    const newStory = result?.story ?? result?.output?.story;
     if (!newStory) throw new Error('故事生成未返回 story');
     const storyWithStatus = { ...newStory, createdAt: new Date().toISOString() };
     await prisma.virtual_learner_profiles.update({
