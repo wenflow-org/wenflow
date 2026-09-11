@@ -218,8 +218,6 @@ import adminRuntimeDefinitionsRoutes from './routes/admin/runtime-definitions';
 import promptLabRoutes from './routes/prompt-lab';
 import adminPromptOpsRoutes from './routes/admin/prompt-ops';
 import adminSkillModelConfigsRoutes from './routes/admin/skill-model-configs';
-import adminSkillAuthorRoutes from './routes/admin/skill-author';
-import adminAgentModelConfigsRoutes from './routes/admin/agent-model-configs';
 import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
 import adminUsersRoutes from './routes/admin/users';
@@ -346,9 +344,6 @@ app.use('/api/admin/agent-prompts', ...adminRouteMiddleware, adminAgentPromptsRo
 app.use('/api/admin/runtime-definitions', ...adminRouteMiddleware, adminRuntimeDefinitionsRoutes);
 app.use('/api/admin/prompt-ops', ...adminRouteMiddleware, adminPromptOpsRoutes);
 app.use('/api/admin/skill-model-configs', ...adminRouteMiddleware, adminSkillModelConfigsRoutes);
-// 恢复被 871ea4c 误移除的挂载（QA ISSUE-008）：Skill 起草/编译与 Agent 级模型配置此前无 HTTP 入口
-app.use('/api/admin/skill-author', ...adminRouteMiddleware, adminSkillAuthorRoutes);
-app.use('/api/admin/agent-model-configs', ...adminRouteMiddleware, adminAgentModelConfigsRoutes);
 app.use('/api/admin/users', ...adminRouteMiddleware, adminUsersRoutes);
 app.use('/api/admin/sessions', ...adminRouteMiddleware, adminSessionsRoutes);
 // 真实会话控制台同构端点：只读 GET，解析 teaching_sessions / goal_conversations（挂独立路径避免与 admin_sessions 冲突）
