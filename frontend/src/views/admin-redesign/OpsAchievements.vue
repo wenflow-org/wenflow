@@ -42,7 +42,7 @@
                 </div>
               </td>
               <td><span class="mk-badge" :class="typeBadge(d.type)">{{ typeText(d.type) }}</span></td>
-              <td class="mk-cell-text">{{ reqText(d.requirement) }}</td>
+              <td class="mk-cell-text" :title="reqTitle(d.requirement)">{{ reqText(d.requirement) }}</td>
               <td class="mk-num">+{{ d.xpReward }}</td>
               <td class="mk-num">{{ d.unlockCount }}</td>
               <td>
@@ -223,6 +223,14 @@ const reqText = (r: AchievementDef['requirement']) => {
   if (t === 'path_completion') return `完成 ${r.value} 条路径`
   if (t === 'ktl_level') return `KTL 达到 ${r.value}`
   return `自定义条件`
+}
+/** 条件列的补充说明：展开未在本行显示的术语（KTL 等），避免裸缩写无处可查 */
+const reqTitle = (r: AchievementDef['requirement']) => {
+  if (r.type === 'ktl_level') return `KTL（Knowledge Tracing Level，知识掌握水平）达到 ${r.value}`
+  if (r.type === 'task_count') return `累计完成 ${r.value} 个学习任务`
+  if (r.type === 'streak_days') return `连续学习天数达到 ${r.value} 天`
+  if (r.type === 'path_completion') return `完成 ${r.value} 条学习路径`
+  return '由后台自定义条件判定'
 }
 
 async function loadDefs() {
