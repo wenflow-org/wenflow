@@ -5,7 +5,7 @@
       <strong class="mk-status__title">成就管理</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">成就定义 {{ defs.length }}</span>
-      <span class="mk-status__meta">解锁 {{ totalRecords }}</span>
+      <span class="mk-status__meta">解锁 {{ totalUnlocked }}</span>
     </div>
 
     <!-- 二级切换：成就定义 / 解锁记录 -->
@@ -242,6 +242,16 @@ async function loadDefs() {
 /* 记录 */
 const records = ref<Array<AchievementRecord & { busy?: boolean }>>([])
 const totalRecords = ref(0)
+
+/**
+ * 头部「解锁」总览：默认在「成就定义」tab 时 records 尚未加载，totalRecords 恒为 0，
+ * 与表格「已解锁」列（来自 defs.unlockCount）矛盾。改由定义侧 unlockCount 求和，
+ * 保证头部与表格同源一致（记录 tab 加载后 totalRecords 应与之相等）。
+ */
+const totalUnlocked = computed(() => {
+  const sum = defs.value.reduce((n, d) => n + (d.unlockCount || 0), 0)
+  return sum > 0 ? sum : totalRecords.value
+})
 const recordPage = ref(1)
 const pageSize = ref(20)
 const recordsLoading = ref(false)
