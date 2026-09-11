@@ -543,11 +543,13 @@ html[data-theme='dark'] .mk-pill--active {
 .mk-modal__panel {
   width: min(480px, 100%);
   max-height: calc(100vh - 60px);
-  overflow-y: auto;
+  /* 头部/底部固定，仅 body 滚动：避免内容超长时把底部主操作按钮推出视口 */
+  overflow: hidden;
   background: var(--mk-surface, #fff);
   border-radius: var(--mk-radius-modal);
   box-shadow: var(--mk-shadow-modal);
-  display: grid;
+  display: flex;
+  flex-direction: column;
 }
 .mk-modal__panel--wide { width: min(720px, 100%); }
 .mk-modal__head {
@@ -557,6 +559,7 @@ html[data-theme='dark'] .mk-pill--active {
   gap: 10px;
   padding: 16px 18px 12px;
   border-bottom: 1px solid var(--mk-line, #e1e8f2);
+  flex-shrink: 0;
 }
 .mk-modal__title { margin: 0; font-size: var(--mk-fs-16); font-weight: 700; }
 .mk-modal__close {
@@ -572,13 +575,14 @@ html[data-theme='dark'] .mk-pill--active {
   line-height: 1;
   flex-shrink: 0;
 }
-.mk-modal__body { padding: 16px 18px; display: grid; gap: 14px; }
+.mk-modal__body { padding: 16px 18px; display: grid; gap: 14px; overflow-y: auto; min-height: 0; }
 .mk-modal__foot {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 18px 16px;
   border-top: 1px solid var(--mk-line, #e1e8f2);
+  flex-shrink: 0;
 }
 
 /* 表单字段 */
