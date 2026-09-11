@@ -144,4 +144,15 @@ describe('AdminConsole 导航冒烟', () => {
     expect(router.currentRoute.value.path).toBe('/admin/overview');
     expect(wrapper.findComponent(Overview).exists()).toBe(true);
   });
+
+  it('深链 /admin/overview 不被残留 intent 改写（URL 权威，QA ISSUE-001）', async () => {
+    // 模拟模块级单例残留：上一次跨页意图仍是 execution-logs
+    intent.scene = 'execution-logs';
+    const { wrapper, router } = await mountConsole('/admin/overview');
+    await settle();
+    // URL 为准：scene/intent 均归一为 overview，未被历史意图改写
+    expect(router.currentRoute.value.params.page).toBe('overview');
+    expect(intent.scene).toBe('overview');
+    expect(wrapper.findComponent(Overview).exists()).toBe(true);
+  });
 });

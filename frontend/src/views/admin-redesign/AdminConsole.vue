@@ -223,9 +223,11 @@ watch(
   { immediate: true }
 )
 // scene → URL（侧栏/意图跳转）；push 保留历史，浏览器后退可回到上一页面
+// 门闩 bootstrapped：挂载完成前不主动 push，避免初始化瞬态把深链 URL 改写掉（QA ISSUE-001）
+let bootstrapped = false;
 watch(scene, (s) => {
   const cur = typeof route.params.page === 'string' ? route.params.page : ''
-  if (cur !== s) void router.push(`/admin/${s}`)
+  if (bootstrapped && cur !== s) void router.push(`/admin/${s}`)
   subPage.value = null;
   // 切换页面时自动关闭 Skill 抽屉，避免遮挡侧栏导航
   closeSkillDrawer();
@@ -260,6 +262,8 @@ watch(scene, (s) => {
 watch(
   () => intent.scene,
   (s) => {
+    // 挂载完成前以 URL 为唯一权威：忽略残留的跨页 intent，避免深链被历史意图改写（QA ISSUE-001）
+    if (!bootstrapped) return;
     if (s && s !== scene.value) scene.value = s;
   }
 );
@@ -361,6 +365,10 @@ onMounted(() => {
   } else if (components[intent.scene]) {
     scene.value = intent.scene
   }
+  // URL 为唯一权威：挂载后立即用当前 scene 归一 intent，清除可能残留的历史跨页意图，
+  // 避免 intent → scene 反向覆盖深链（QA ISSUE-001）。随后开门闩允许正常跨页跳转。
+  intent.scene = scene.value
+  bootstrapped = true
   void boot();
 });
 </script>
