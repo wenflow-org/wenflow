@@ -50,9 +50,10 @@
           <button type="button" class="mk-link" @click="goContent">管理 →</button>
         </div>
         <div class="ow-state">
-          <div class="ow-state__seg" aria-hidden="true">
+          <div v-if="pathTotal > 0" class="ow-state__seg" aria-hidden="true">
             <i v-for="s in pathSegments" :key="s.key" :class="`ow-seg--${s.tone}`" :style="{ width: s.pct }" :title="`${s.label} ${s.count}`"></i>
           </div>
+          <div v-else class="ow-state__empty">暂无学习路径</div>
           <div class="ow-state__rows">
             <div v-for="c in pathCards" :key="c.label" class="ow-state__row">
               <span><i class="ow-state__dot" :class="`ow-state__dot--${c.tone || 'muted'}`"></i>{{ c.label }}</span>
@@ -67,9 +68,10 @@
           <button type="button" class="mk-link" @click="goAnnouncements">管理 →</button>
         </div>
         <div class="ow-state">
-          <div class="ow-state__seg" aria-hidden="true">
+          <div v-if="annTotal > 0" class="ow-state__seg" aria-hidden="true">
             <i v-for="s in annSegments" :key="s.key" :class="`ow-seg--${s.tone}`" :style="{ width: s.pct }" :title="`${s.label} ${s.count}`"></i>
           </div>
+          <div v-else class="ow-state__empty">暂无公告</div>
           <div class="ow-state__rows">
             <div v-for="s in annSegments" :key="s.key" class="ow-state__row">
               <span><i class="ow-state__dot" :class="`ow-state__dot--${s.tone}`"></i>{{ s.label }}</span>
@@ -174,6 +176,9 @@ const annSegments = computed(() =>
     { key: 'archived', label: '已下线', count: ann.value.archived, tone: 'muted' },
   ])
 )
+/** 总量为 0 时比例条会渲染为空灰条（观感像坏图），改为渲染空态文案 */
+const pathTotal = computed(() => pathSegments.value.reduce((n, s) => n + s.count, 0))
+const annTotal = computed(() => annSegments.value.reduce((n, s) => n + s.count, 0))
 
 /* 生效中公告列表（最近发布优先） */
 const livePublished = computed(() =>
@@ -310,6 +315,15 @@ html[data-theme='dark'] .ow-todo:hover { background: #1a2436; }
   background: var(--mk-line);
 }
 .ow-state__seg i { display: block; height: 100%; min-width: 0; transition: width 0.2s ease; }
+/* 无数据时的占位：保留比例条的高度位，但不画空灰条（避免「像坏图」） */
+.ow-state__empty {
+  height: 8px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--mk-faint);
+  line-height: 1;
+}
 .ow-seg--ok { background: var(--mk-green); }
 .ow-seg--info { background: var(--mk-blue); }
 .ow-seg--warn { background: var(--mk-amber); }
