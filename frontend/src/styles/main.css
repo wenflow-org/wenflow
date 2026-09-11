@@ -25,12 +25,22 @@
   --mk-z-modal: 300;
   --mk-z-toast: 400;
 
-  /* 抽屉宽度档 token：供各详情抽屉 4K 镜像断点复用（base 560 → lg 700 → xl 880 → xxl 1040）。
-     例外：SkillDrawer 有意更窄（520/600/760/890，需容纳两侧并排的版本对比等密集区），保持自身档位 */
+  /* 抽屉宽度档 token：所有右侧详情抽屉统一走此阶梯（base 560 → lg 700 → xl 880 → xxl 1040）。
+     `.mk-drawer__panel` 用 base，`.mk-drawer__panel--wide` 用 lg；4K 各升一档。
+     不再允许组件各自定义抽屉宽度（唯一来源）。 */
   --mk-drawer-w: 560px;
   --mk-drawer-w-lg: 700px;
   --mk-drawer-w-xl: 880px;
   --mk-drawer-w-xxl: 1040px;
+  /* 弹窗宽度档：常规 480→620→760→900；宽版恒比常规高一档 720→860→1000→1160 */
+  --mk-modal-w: 480px;
+  --mk-modal-w-lg: 620px;
+  --mk-modal-w-xl: 760px;
+  --mk-modal-w-xxl: 900px;
+  --mk-modal-w-wide: 720px;
+  --mk-modal-w-wide-lg: 860px;
+  --mk-modal-w-wide-xl: 1000px;
+  --mk-modal-w-wide-xxl: 1160px;
 
   /* 颜色/字体 token：唯一品牌蓝 --mk-blue（全站禁用其它品牌蓝硬编码） */
   --mk-ink: #1a2a44;

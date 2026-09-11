@@ -567,7 +567,7 @@ html[data-theme='dark'] .mk-pill--active {
   padding: 20px;
 }
 .mk-modal__panel {
-  width: min(480px, 100%);
+  width: min(var(--mk-modal-w, 480px), 100%);
   max-height: calc(100vh - 60px);
   /* 头部/底部固定，仅 body 滚动：避免内容超长时把底部主操作按钮推出视口 */
   overflow: hidden;
@@ -577,7 +577,7 @@ html[data-theme='dark'] .mk-pill--active {
   display: flex;
   flex-direction: column;
 }
-.mk-modal__panel--wide { width: min(720px, 100%); }
+.mk-modal__panel--wide { width: min(var(--mk-modal-w-wide, 720px), 100%); }
 .mk-modal__head {
   display: flex;
   align-items: center;
@@ -804,6 +804,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-drawer__panel {
   position: relative;
   width: var(--mk-drawer-w, 560px);
+  max-width: 100vw;
   height: 100%;
   display: grid;
   grid-template-rows: auto 1fr;
@@ -811,6 +812,8 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   box-shadow: var(--mk-shadow-drawer);
   animation: mk-drawer-in 0.18s ease;
 }
+/* 宽版抽屉（含表格/多列的详情）：统一比常规高一档 */
+.mk-drawer__panel--wide { width: var(--mk-drawer-w-lg, 700px); }
 @keyframes mk-drawer-in {
   from { transform: translateX(28px); opacity: 0; }
   to { transform: none; opacity: 1; }
@@ -996,7 +999,8 @@ html[data-theme='dark'] {
   .mk-card__title { font-size: 14.5px; }
   .mk-card__meta { font-size: 13.5px; }
   .mk-num { font-size: 13.5px; }
-  .mk-modal__panel { width: min(620px, 100%); }
+  .mk-modal__panel { width: min(var(--mk-modal-w-lg, 620px), 100%); }
+  .mk-modal__panel--wide { width: min(var(--mk-modal-w-wide-lg, 860px), 100%); }
   .mk-modal__title { font-size: 17px; }
   .mk-modal__close { width: 34px; height: 34px; font-size: 16px; }
   .mk-field__label { font-size: 13.5px; }
@@ -1010,6 +1014,7 @@ html[data-theme='dark'] {
   .mk-link { font-size: 14px; }
   .mk-actions { min-width: 84px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-lg, 700px); }
+  .mk-drawer__panel--wide { width: var(--mk-drawer-w-xl, 880px); }
   .mk-drawer__head { padding: 20px 24px 14px; }
   .mk-drawer__title { font-size: 17px; }
   .mk-drawer__close { width: 32px; height: 32px; font-size: 14px; }
@@ -1041,7 +1046,8 @@ html[data-theme='dark'] {
   .mk-card__title { font-size: 17px; }
   .mk-card__meta { font-size: 16px; }
   .mk-num { font-size: 16px; }
-  .mk-modal__panel { width: min(760px, 100%); }
+  .mk-modal__panel { width: min(var(--mk-modal-w-xl, 760px), 100%); }
+  .mk-modal__panel--wide { width: min(var(--mk-modal-w-wide-xl, 1000px), 100%); }
   .mk-modal__title { font-size: 20px; }
   .mk-modal__close { width: 40px; height: 40px; font-size: 19px; }
   .mk-field__label { font-size: 16px; }
@@ -1054,6 +1060,7 @@ html[data-theme='dark'] {
   .mk-link { font-size: 16.5px; }
   .mk-actions { min-width: 100px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-xl, 880px); }
+  .mk-drawer__panel--wide { width: var(--mk-drawer-w-xxl, 1040px); }
   .mk-drawer__head { padding: 24px 28px 16px; }
   .mk-drawer__title { font-size: 20px; }
   .mk-drawer__close { width: 38px; height: 38px; font-size: 16px; }
@@ -1081,7 +1088,8 @@ html[data-theme='dark'] {
   .mk-badge { font-size: 19px; padding: 5px 15px; }
   .mk-pill { font-size: 19px; padding: 8px 20px; }
   .mk-field__input, .mk-field__select, .mk-field__textarea, .mk-input { font-size: 19px; padding: 14px 19px; }
-  .mk-modal__panel { width: min(900px, 100%); }
+  .mk-modal__panel { width: min(var(--mk-modal-w-xxl, 900px), 100%); }
+  .mk-modal__panel--wide { width: min(var(--mk-modal-w-wide-xxl, 1160px), 100%); }
   .mk-modal__title { font-size: 23px; }
   .mk-modal__close { width: 46px; height: 46px; font-size: 22px; }
   .mk-btn { font-size: 19px; padding: 14px 26px; }

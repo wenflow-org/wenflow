@@ -1798,8 +1798,7 @@ async function quietReload(id: string) {
 </script>
 
 <style scoped>
-/* 故事编辑弹窗：宽面板 + 问题知识分区（P2-2） */
-.mk-modal__panel--wide { width: min(720px, 100%); }
+/* 故事编辑弹窗：宽面板 + 问题知识分区（P2-2）；宽度随全站 .mk-modal__panel--wide token */
 .vp-pk {
   display: grid;
   gap: 10px;

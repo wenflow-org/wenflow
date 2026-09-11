@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
   <div ref="maskRef" class="mk-modal">
-    <div ref="panelRef" class="mk-modal__panel faw" role="dialog" :aria-label="dialogTitle">
+    <div ref="panelRef" class="mk-modal__panel mk-modal__panel--wide faw" role="dialog" :aria-label="dialogTitle">
       <div class="mk-modal__head">
         <h3 class="mk-modal__title">{{ dialogTitle }}</h3>
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
@@ -512,7 +512,6 @@ async function submit() {
 </script>
 
 <style scoped>
-.faw { width: min(760px, 100%); }
 .faw__sub { margin: 0; font-size: var(--mk-fs-12); color: var(--mk-faint, var(--mk-faint-soft)); }
 .faw__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
 .faw__field { display: grid; gap: 4px; font-size: var(--mk-fs-12); font-weight: 600; color: var(--mk-muted, #5b6577); }

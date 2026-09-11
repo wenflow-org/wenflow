@@ -646,7 +646,8 @@ watch(
   justify-content: flex-end;
 }
 .msk__panel {
-  width: min(520px, 100vw);
+  width: var(--mk-drawer-w, 560px);
+  max-width: 100vw;
   height: 100%;
   background: #fff;
   box-shadow: var(--mk-shadow-drawer);
@@ -878,7 +879,8 @@ watch(
 }
 .msk__none { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-12); }
 .msk__notfound {
-  width: min(520px, 100vw);
+  width: var(--mk-drawer-w, 560px);
+  max-width: 100vw;
   height: 100%;
   margin-left: auto;
   background: var(--mk-surface);
@@ -1030,7 +1032,7 @@ watch(
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大（原 460px + 10px 是全站最小） */
 @media (min-width: 2000px) {
-  .msk__panel { width: min(600px, 100vw); }
+  .msk__panel { width: var(--mk-drawer-w-lg, 700px); }
   .msk__head { padding: 20px 24px; }
   .msk__name { font-size: 19px; }
   .msk__id { font-size: 12.5px; }
@@ -1051,7 +1053,7 @@ watch(
   .msk__prompt { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
-  .msk__panel { width: min(760px, 100vw); }
+  .msk__panel { width: var(--mk-drawer-w-xl, 880px); }
   .msk__head { padding: 24px 30px; }
   .msk__name { font-size: 23px; }
   .msk__id { font-size: 15px; }
@@ -1073,7 +1075,7 @@ watch(
 }
 @media (min-width: 3600px) {
   /* 4K（抽屉 Teleport 到 body，无 zoom）：面板再加宽、字号继续放大 */
-  .msk__panel { width: min(890px, 100vw); }
+  .msk__panel { width: var(--mk-drawer-w-xxl, 1040px); }
   .msk__head { padding: 28px 36px; }
   .msk__name { font-size: 27px; }
   .msk__id { font-size: 17.5px; }

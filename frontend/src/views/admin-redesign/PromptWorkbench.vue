@@ -73,7 +73,7 @@
     <!-- 新建 Skill 弹窗（scaffold 一条龙） -->
     <Teleport to="body">
     <div v-if="scaffoldOpen" ref="scaffoldMaskRef" class="mk-modal">
-      <div ref="scaffoldPanelRef" class="mk-modal__panel sc-panel" role="dialog" aria-label="新建 Skill">
+      <div ref="scaffoldPanelRef" class="mk-modal__panel mk-modal__panel--wide sc-panel" role="dialog" aria-label="新建 Skill">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ result ? '新建 Skill · 完成' : '新建 Skill' }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeScaffold">✕</button>
@@ -362,7 +362,6 @@ onMounted(async () => {
 .sc-result__files { margin: 0; padding-left: 18px; }
 .sc-result__files li { font-size: var(--mk-fs-12); color: var(--mk-blue, #2c63d0); line-height: 1.8; }
 .sc-result__snippets { margin-top: 14px; border-top: 1px solid var(--mk-line, #e6ebf4); padding-top: 10px; }
-.sc-panel { width: min(680px, 100%); }
 .sc-form { display: flex; flex-direction: column; gap: 12px; }
 .sc-field { display: flex; flex-direction: column; gap: 5px; }
 .sc-field__label { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-muted, #5b6577); }

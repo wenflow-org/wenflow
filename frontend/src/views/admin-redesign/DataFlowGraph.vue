@@ -1414,7 +1414,8 @@ html[data-theme='dark'] .dfg-step__port:hover { background: #22345a; }
   display: flex; justify-content: flex-end;
 }
 .dfg-drawer {
-  width: min(460px, 100%);
+  width: var(--mk-drawer-w, 560px);
+  max-width: 100%;
   height: 100%;
   background: #fff;
   display: flex; flex-direction: column;

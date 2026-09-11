@@ -212,7 +212,7 @@
     <!-- 编排文件编辑弹窗 -->
     <Teleport to="body">
     <div v-if="orchOpen" ref="orchMaskRef" class="mk-modal">
-      <div ref="orchPanelRef" class="mk-modal__panel frt__orch-panel" role="dialog" aria-label="编排文件编辑">
+      <div ref="orchPanelRef" class="mk-modal__panel mk-modal__panel--wide frt__orch-panel" role="dialog" aria-label="编排文件编辑">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">编排文件 · {{ stage }}.yaml</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="orchOpen = false">✕</button>
@@ -804,7 +804,6 @@ watch(() => props.stage, () => void loadStage());
 .frt__filter { margin-bottom: 12px; }
 .frt__filter-count { font-size: var(--mk-fs-12); color: var(--mk-faint, var(--mk-faint-soft)); font-weight: 600; }
 
-.frt__orch-panel { width: min(820px, 100%); }
 .frt__orch-summary {
   display: flex;
   align-items: center;

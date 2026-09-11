@@ -456,8 +456,6 @@ load()
 .be-run__time { margin-left: auto; }
 .be-run__actions { display: flex; gap: 6px; }
 
-.mk-drawer__panel--wide { width: min(680px, 100%); }
-
 @media (min-width: 2000px) {
   .be-run { padding: 14px 16px; }
   .be-run__head strong { font-size: 14.5px; }

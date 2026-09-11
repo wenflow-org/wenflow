@@ -780,7 +780,8 @@ defineExpose({ refreshNow })
   justify-content: flex-end;
 }
 .ts-panel {
-  width: min(560px, 100vw);
+  width: var(--mk-drawer-w, 560px);
+  max-width: 100vw;
   height: 100%;
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-drawer);
@@ -910,7 +911,7 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {
-  .ts-panel { width: min(700px, 100vw); }
+  .ts-panel { width: var(--mk-drawer-w-lg, 700px); }
   .ts-panel__head { padding: 20px 24px; }
   .ts-panel__title h3 { font-size: 19px; }
   .ts-panel__id { font-size: 12.5px; }
@@ -924,7 +925,7 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
   .ts-more { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
-  .ts-panel { width: min(880px, 100vw); }
+  .ts-panel { width: var(--mk-drawer-w-xl, 880px); }
   .ts-panel__head { padding: 24px 30px; }
   .ts-panel__title h3 { font-size: 23px; }
   .ts-panel__id { font-size: 15px; }
@@ -939,7 +940,7 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-  .ts-panel { width: min(1040px, 100vw); }
+  .ts-panel { width: var(--mk-drawer-w-xxl, 1040px); }
   .ts-panel__head { padding: 28px 36px; }
   .ts-panel__title h3 { font-size: 27px; }
   .ts-panel__id { font-size: 17.5px; }

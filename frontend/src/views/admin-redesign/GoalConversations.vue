@@ -846,7 +846,8 @@ onMounted(() => {
   justify-content: flex-end;
 }
 .gc-panel {
-  width: min(560px, 100vw);
+  width: var(--mk-drawer-w, 560px);
+  max-width: 100vw;
   height: 100%;
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-drawer);
@@ -1102,7 +1103,7 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大 */
 @media (min-width: 2000px) {
-  .gc-panel { width: min(700px, 100vw); }
+  .gc-panel { width: var(--mk-drawer-w-lg, 700px); }
   .gc-panel__head { padding: 20px 24px; }
   .gc-panel__title h3 { font-size: 19px; }
   .gc-panel__id { font-size: 12.5px; }
@@ -1117,7 +1118,7 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
   .mk-btn--sm { font-size: 14px; }
 }
 @media (min-width: 2800px) {
-  .gc-panel { width: min(880px, 100vw); }
+  .gc-panel { width: var(--mk-drawer-w-xl, 880px); }
   .gc-panel__head { padding: 24px 30px; }
   .gc-panel__title h3 { font-size: 23px; }
   .gc-panel__id { font-size: 15px; }
@@ -1133,7 +1134,7 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-  .gc-panel { width: min(1040px, 100vw); }
+  .gc-panel { width: var(--mk-drawer-w-xxl, 1040px); }
   .gc-panel__head { padding: 28px 36px; }
   .gc-panel__title h3 { font-size: 27px; }
   .gc-panel__id { font-size: 17.5px; }

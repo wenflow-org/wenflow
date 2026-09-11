@@ -424,7 +424,7 @@
     <!-- 批量新建虚拟学习者 -->
     <Teleport to="body">
     <div v-if="batchOpen" ref="batchMaskRef" class="mk-modal" @click.self="batchOpen = false">
-      <div ref="batchPanelRef" class="mk-modal__panel" style="width: min(720px, 100%)" role="dialog" aria-label="批量新建虚拟学习者">
+      <div ref="batchPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="批量新建虚拟学习者">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">批量新建虚拟学习者</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="batchOpen = false">✕</button>
@@ -465,7 +465,7 @@
     <!-- 单步 Prompt 测试：用虚拟学习者的人设+故事直接跑一次对话，看字段产出 -->
     <Teleport to="body">
     <div v-if="testTarget" ref="testMaskRef" class="mk-modal" @click.self="closePromptTest">
-      <div ref="testPanelRef" class="mk-modal__panel" style="width: min(720px, 100%)" role="dialog" aria-label="单步 Prompt 测试">
+      <div ref="testPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="单步 Prompt 测试">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">单步测试 · {{ testTarget.name }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="closePromptTest">✕</button>

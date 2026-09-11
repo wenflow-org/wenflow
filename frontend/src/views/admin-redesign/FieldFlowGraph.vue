@@ -1299,7 +1299,8 @@ async function saveEdit() {
   display: flex; justify-content: flex-end;
 }
 .ffg-drawer {
-  width: min(460px, 100%);
+  width: var(--mk-drawer-w, 560px);
+  max-width: 100%;
   height: 100%;
   background: #fff;
   display: flex; flex-direction: column;

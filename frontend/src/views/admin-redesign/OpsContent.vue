@@ -494,8 +494,6 @@ defineExpose({ reload })
 .oc-subtask__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oc-subtask__meta { color: var(--mk-faint); font-size: var(--mk-fs-11); }
 
-.mk-drawer__panel--wide { width: min(720px, 100%); }
-
 /* 4K：抽屉内容跟随全站节奏 */
 @media (min-width: 2000px) {
   .oc-progress__num { font-size: 13px; }
