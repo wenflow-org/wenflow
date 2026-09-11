@@ -397,6 +397,32 @@ describe('QuickLearnService', () => {
       expect(report.lifecycle.divergence).toBe('teacher_ready_learner_not')
     })
 
+    it('回合耗尽（无错误、未双收束）标记为 incomplete 而非 failed', async () => {
+      executeSkillMock.mockResolvedValue(simulatorOutput(false))
+      processMessageMock.mockResolvedValue({
+        analysis: {},
+        aiResponse: '继续练习',
+        strategies: [],
+        knowledgePoint: null,
+        knowledgePoints: [],
+        isCompletion: false,
+        currentState: {},
+        peerTriggered: false,
+        revision: 1,
+      })
+
+      await quickLearnService.startRun({ profileId: 'p1', taskId: 't1', maxTurns: 1 })
+      await executeRunDirect('run-1')
+
+      expect(memoryRun?.status).toBe('incomplete')
+      expect(endSessionMock).toHaveBeenCalledWith('ts-1', 'quick-learn-turns-exhausted', 1)
+      expect(completeTaskMock).not.toHaveBeenCalled()
+
+      const report = JSON.parse(memoryRun!.report!)
+      expect(report.lifecycle.completionReached).toBe(false)
+      expect(report.lifecycle.divergence).toBe('learner_ready_teacher_not')
+    })
+
     it('收到中止请求时不完成任务并标记 aborted', async () => {
       executeSkillMock.mockResolvedValue(simulatorOutput(false))
       processMessageMock.mockResolvedValue({

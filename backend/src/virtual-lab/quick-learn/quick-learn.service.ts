@@ -58,6 +58,7 @@ export type QuickLearnRunStatus =
   | 'queued'
   | 'running'
   | 'completed'
+  | 'incomplete'
   | 'failed'
   | 'aborted'
   | 'interrupted';
@@ -565,8 +566,18 @@ export class QuickLearnService {
       : null;
 
     const completedAt = new Date();
+    // 「回合耗尽但学习者已就绪、教师未收束」不是失败，记 'incomplete'（未收束）；
+    // 教师单方收束（learner 未认可）仍按既有设计记 'failed'（既有测试固定语义）。
+    // 只有真实异常才记 'failed' —— 避免把正常跑满回合误报为失败（QA ISSUE-007）。
+    const endedWithoutDoubleClosure = !runError && outcome === 'learner_ready_teacher_not';
     const finalStatus: QuickLearnRunStatus =
-      outcome === 'completed' ? 'completed' : outcome === 'aborted' ? 'aborted' : 'failed';
+      outcome === 'completed'
+        ? 'completed'
+        : outcome === 'aborted'
+          ? 'aborted'
+          : endedWithoutDoubleClosure
+            ? 'incomplete'
+            : 'failed';
     const report: QuickLearnPropagationReport = buildPropagationReport({
       run: {
         runId: run.id,

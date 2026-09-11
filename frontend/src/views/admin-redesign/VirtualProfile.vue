@@ -1694,6 +1694,7 @@ function formatRunResult(result: string) {
   if (r === 'running') return '运行中'
   if (r === 'created') return '创建中'
   if (r === 'completed' || r === 'success' || r === 'succeeded') return '已完成'
+  if (r === 'incomplete') return '未收束'
   if (r === 'failed' || r === 'error') return '已失败'
   if (r === 'abandoned') return '已终止'
   if (r === 'timeout') return '超时'
@@ -1709,7 +1710,7 @@ function formatRunResult(result: string) {
 function storyRunState(s: StoryItem): string {
   if ((s.runningCount || 0) > 0 && s.latestRun?.status === 'running') return 'running'
   const st = String(s.latestRun?.status || '').toLowerCase()
-  if (['completed', 'failed', 'abandoned', 'paused', 'created', 'timeout', 'cancelled'].includes(st)) return st
+  if (['completed', 'incomplete', 'failed', 'abandoned', 'paused', 'created', 'timeout', 'cancelled'].includes(st)) return st
   if (st === 'running') return 'running'
   return st || 'created'
 }
