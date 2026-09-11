@@ -1589,7 +1589,8 @@ export const adminPromptOpsApi = {
       expectations?: unknown;
     }>;
   }) => {
-    return adminAxios.post('/admin/prompt-ops/run-eval', payload);
+    // 评估需真实调用 LLM，单次常 >30s；若不覆盖 adminAxios 默认 30s 超时会在后端已成功时误报失败（QA ISSUE-004）
+    return adminAxios.post('/admin/prompt-ops/run-eval', payload, { timeout: AI_REQUEST_TIMEOUT });
   },
 
   getEvalRuns: async (agentId?: string, limit?: number) => {
