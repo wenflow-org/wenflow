@@ -306,9 +306,25 @@ router.post('/:name/test', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    // 试跑输入与 Skill 输入契约不匹配（缺 skill:/sandbox: 注入字段）时，
+    // handler 常抛 TypeError（读取 undefined 属性）。给出结构化提示而非裸异常（QA ISSUE-005）。
+    const looksLikeInputShapeError =
+      error instanceof TypeError
+      || /cannot read propert|is not a function|of undefined|of null/i.test(message);
+    if (looksLikeInputShapeError) {
+      return res.status(422).json({
+        success: false,
+        error: {
+          message: `输入可能缺少该 Skill 运行所需字段（如 skill:/sandbox: 注入字段）。请对照「协议」页的输入声明补全后重试。原始错误：${message}`,
+          code: 'SKILL_TRIAL_INPUT_SHAPE'
+        },
+        stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
+      });
+    }
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: message,
       stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
     });
   }
