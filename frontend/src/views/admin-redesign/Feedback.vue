@@ -67,17 +67,27 @@
         </div>
 
         <div v-if="filtered.length" class="mk-table-scroll">
-        <table class="mk-table">
+        <table class="mk-table mk-table--fixed">
+          <colgroup>
+            <col>
+            <col style="width:var(--mk-col-num)">
+            <col>
+            <col style="width:var(--mk-col-model-wide)">
+            <col style="width:var(--mk-col-model)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-time-full)">
+            <col style="width:var(--mk-col-actions)">
+          </colgroup>
           <thead>
             <tr>
               <th>用户</th>
-              <th>评分</th>
+              <th class="mk-th--right">评分</th>
               <th>评论</th>
               <th>节点</th>
               <th>策略</th>
               <th>状态</th>
               <th>时间</th>
-              <th class="mk-col--actions">操作</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -88,7 +98,7 @@
                   <span class="mk-cell-sub">{{ r.userEmail }}</span>
                 </div>
               </td>
-              <td>
+              <td class="mk-num">
                 <span class="fb-rating" :class="{ 'fb-rating--low': r.rating <= 2 }">
                   <b class="mono">{{ r.rating }}</b>★
                 </span>

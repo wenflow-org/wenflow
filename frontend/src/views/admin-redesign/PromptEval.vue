@@ -34,16 +34,25 @@
     <div v-if="tab === 'cases'" class="mk-card">
       <MockSkeletonTable v-if="casesLoading && !cases.length" :cols="6" />
       <div v-else-if="cases.length" class="mk-table-scroll pe-list">
-        <table class="mk-table">
+        <table class="mk-table mk-table--fixed">
+          <colgroup>
+            <col>
+            <col>
+            <col style="width:var(--mk-col-num)">
+            <col>
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-time-full)">
+            <col style="width:var(--mk-col-actions-wide)">
+          </colgroup>
           <thead>
             <tr>
               <th>用例</th>
               <th>Agent</th>
-              <th>消息</th>
+              <th class="mk-th--right">消息</th>
               <th>期望</th>
               <th>状态</th>
-              <th class="mk-col--time-full">更新</th>
-              <th class="mk-col--actions-wide">操作</th>
+              <th>更新</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
