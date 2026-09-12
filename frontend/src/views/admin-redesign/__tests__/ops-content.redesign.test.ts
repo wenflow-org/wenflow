@@ -93,7 +93,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(w.find('.mk-kpi').exists()).toBe(false);
 
     // 头部 pill（状态）
-    const pills = w.findAll('.mk-card__head .mk-pill').map((b) => b.text());
+    const pills = w.findAll('.mk-card__head .mk-filter .mk-pill').map((b) => b.text());
     expect(pills).toEqual(['学习中', '已完成', '生成失败', '已下线']);
 
     // 右侧组件

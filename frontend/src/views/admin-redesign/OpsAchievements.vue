@@ -72,10 +72,7 @@
           <input v-model="recordSearch" class="mk-filter__input" placeholder="搜索用户姓名 / 邮箱…" @keydown.enter="reloadRecords" />
           <button type="button" class="mk-btn mk-btn--sm" @click="reloadRecords">查询</button>
         </div>
-        <label class="mk-field--switch">
-          <input v-model="achIncludeTest" type="checkbox" @change="reloadRecords" />
-          <span class="mk-field__label" style="margin:0">含虚拟/测试</span>
-        </label>
+        <DataScopeToggle :model-value="achIncludeTest" @update:model-value="onAchRescope" />
       </div>
       <MockSkeletonTable v-if="recordsLoading && !records.length" :cols="6" />
       <div v-else-if="records.length" class="mk-table-scroll ac-list">
@@ -212,6 +209,7 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
+import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 
 const achTab = ref<'defs' | 'records'>('defs')
@@ -278,6 +276,11 @@ const recordsLoading = ref(false)
 const recordsFailed = ref(false)
 const recordSearch = ref('')
 const achIncludeTest = ref(false)
+/** 数据范围切换（仅真实/含模拟）→ 立即按新范围重拉 */
+function onAchRescope(v: boolean) {
+  achIncludeTest.value = v
+  void reloadRecords()
+}
 
 async function reloadRecords() {
   recordsLoading.value = true

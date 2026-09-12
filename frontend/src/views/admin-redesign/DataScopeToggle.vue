@@ -1,7 +1,8 @@
 <template>
   <!-- 复用全局 .mk-pills/.mk-pill：与卡头筛选 pills 同一视觉（原 .ds-toggle 自成一套、
-       高度/圆角/字号都不同，同一条工具栏里出现两种分段控件）。 -->
-  <div class="mk-pills" role="group" aria-label="数据范围切换">
+       高度/圆角/字号都不同，同一条工具栏里出现两种分段控件）。
+       `.ds-toggle` 仅保留为稳定选择器/测试钩子，不承载样式。 -->
+  <div class="mk-pills ds-toggle" role="group" aria-label="数据范围切换">
     <button
       type="button"
       class="mk-pill"
