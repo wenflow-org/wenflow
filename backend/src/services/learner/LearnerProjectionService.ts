@@ -1,6 +1,94 @@
 import type { LearnerReplanProjection, LearnerSnapshot, TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 
+/** dashboard / learning-state 呈现层（adaptive-guidance-copy）专用投影：裁剪掉与文案无关的大字段 */
+export interface GuidanceCopyProjection {
+  learnerSnapshot: LearnerSnapshot;
+  path: Record<string, any> | null;
+}
+
+const GUIDANCE_PATH_FIELDS = [
+  'id', 'title', 'name', 'description', 'subject', 'status', 'difficulty',
+  'estimatedHours', 'totalMilestones', 'completedMilestones', 'updatedAt',
+  'deadlineText', 'replanMode', 'replanReason',
+] as const;
+
 export class LearnerProjectionService {
+  /**
+   * 呈现层投影：只保留生成引导文案所需字段。
+   * 关键裁剪（修 10.9 万 token 上下文膨胀）：
+   *  - path 丢掉整行 learning_paths（含 aiPromptTemplate，单字段可达 12 万字符）
+   *  - learnerSnapshot.knowledgeMemory 丢掉 currentPath 的 taskMastery/conceptStates/recentEvidence/milestoneProgress
+   *    与 globalBackground 全量台账，只保留 globalSignals + 顶部若干台账项
+   * 语义不变：adaptive-guidance-copy 只需状态摘要与少量概念。
+   */
+  toGuidanceProjection(snapshot: LearnerSnapshot, path?: Record<string, any> | null): GuidanceCopyProjection {
+    const anySnapshot = snapshot as any;
+    const knowledgeMemory = anySnapshot?.knowledgeMemory ?? {};
+    const currentPath = knowledgeMemory?.currentPath;
+    const globalSignals = knowledgeMemory?.globalSignals ?? {
+      masteredConcepts: [], fragileConcepts: [], strugglingConcepts: [],
+    };
+    const globalBackground = knowledgeMemory?.globalBackground ?? {};
+
+    const trimmedSnapshot = {
+      snapshotVersion: anySnapshot?.snapshotVersion,
+      scope: anySnapshot?.scope,
+      freshness: anySnapshot?.freshness,
+      profile: anySnapshot?.profile,
+      dynamicState: anySnapshot?.dynamicState,
+      learningControlState: anySnapshot?.learningControlState,
+      replanSignal: anySnapshot?.replanSignal,
+      teachingHints: anySnapshot?.teachingHints,
+      knowledgeMemory: {
+        ...(currentPath
+          ? {
+              currentPath: {
+                learningPathId: currentPath.learningPathId,
+                pathTitle: currentPath.pathTitle,
+                pathSummary: currentPath.pathSummary,
+                progress: currentPath.progress,
+                currentPosition: currentPath.currentPosition,
+                prerequisiteGaps: currentPath.prerequisiteGaps,
+                // 大字段置空：文案生成不需要逐任务/逐概念/逐证据明细
+                milestoneProgress: [],
+                taskMastery: [],
+                conceptStates: [],
+                recentEvidence: [],
+              },
+            }
+          : {}),
+        globalSignals: {
+          masteredConcepts: (globalSignals.masteredConcepts ?? []).slice(0, 8),
+          fragileConcepts: (globalSignals.fragileConcepts ?? []).slice(0, 8),
+          strugglingConcepts: (globalSignals.strugglingConcepts ?? []).slice(0, 8),
+        },
+        globalBackground: {
+          reusableFoundations: (globalBackground.reusableFoundations ?? []).slice(0, 5),
+          blockedFoundations: (globalBackground.blockedFoundations ?? []).slice(0, 5),
+          conceptLedger: Array.isArray(globalBackground.conceptLedger) ? globalBackground.conceptLedger.slice(0, 5) : [],
+          recurringConfusions: Array.isArray(globalBackground.recurringConfusions) ? globalBackground.recurringConfusions.slice(0, 3) : [],
+          transferSignals: [],
+        },
+      },
+    } as LearnerSnapshot;
+
+    const pathProjection = path
+      ? {
+          ...Object.fromEntries(GUIDANCE_PATH_FIELDS.map((field) => [field, (path as any)[field]])),
+          milestones: Array.isArray(path.milestones)
+            ? path.milestones.map((milestone: any) => ({
+                id: milestone?.id,
+                title: milestone?.title,
+                stageNumber: milestone?.stageNumber,
+                status: milestone?.status,
+              }))
+            : [],
+        }
+      : null;
+
+    return { learnerSnapshot: trimmedSnapshot, path: pathProjection };
+  }
+
   toTeachingProjection(snapshot: LearnerSnapshot): TeachingLearnerProjection {
     const currentPath = snapshot.knowledgeMemory.currentPath;
 

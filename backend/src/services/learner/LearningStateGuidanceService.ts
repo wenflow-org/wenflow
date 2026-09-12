@@ -12,6 +12,7 @@ import { adaptiveGuidanceCopyDefinition, type AdaptiveGuidanceCopyOutput } from 
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
 import { assembleLearningState } from './assemble-learning-state';
+import { learnerProjectionService } from './LearnerProjectionService';
 import { logger } from '../../utils/logger';
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
@@ -85,13 +86,16 @@ class LearningStateGuidanceService {
         warningCount: warnings.length,
       });
 
+      // 呈现层投影：裁剪与文案无关的大字段（path 整行 / knowledgeMemory 明细），避免上下文膨胀
+      const guidanceProjection = learnerProjectionService.toGuidanceProjection(learnerSnapshot, primaryPath);
+
       // v4 §5.2：统一经 executeSkillWithResult 入口（遥测/用户级开关/归一化），
       // 需读取 quality/debug/output，故用返回完整结果的版本（executeSkill 会拆包只留 output）。
       const result = await executeSkillWithResult(adaptiveGuidanceCopyDefinition, {
         view: 'learning-state',
-        learnerSnapshot,
+        learnerSnapshot: guidanceProjection.learnerSnapshot,
         learningState,
-        path: primaryPath ?? undefined,
+        path: guidanceProjection.path ?? undefined,
         sessionWrapup: sessionWrapup ?? undefined,
         userId,
       });

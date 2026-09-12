@@ -39,8 +39,16 @@ describe('DashboardGuidanceSnapshotService', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     ;(assembleLearningState as jest.Mock).mockResolvedValue({
-      primaryPath: { id: 'lp1', title: 'T' },
-      learnerSnapshot: { freshness: { basedOn: {} } },
+      primaryPath: { id: 'lp1', title: 'T', aiPromptTemplate: 'X'.repeat(5000) },
+      learnerSnapshot: {
+        freshness: { basedOn: {} },
+        dynamicState: { metrics: { lss: 4, ktl: 5, lf: 3, lsb: 1 }, recentTrend: 'stable' },
+        knowledgeMemory: {
+          globalSignals: { masteredConcepts: ['m1'], fragileConcepts: [], strugglingConcepts: [] },
+          globalBackground: { reusableFoundations: [], blockedFoundations: [], conceptLedger: [], recurringConfusions: [], transferSignals: [] },
+          currentPath: { learningPathId: 'lp1', pathTitle: 'T', progress: {}, currentPosition: {}, prerequisiteGaps: [], taskMastery: [{ taskId: 't1' }], conceptStates: [], recentEvidence: [] },
+        },
+      },
       learningState: {},
       sessionWrapup: null,
       advisory: null,
@@ -67,5 +75,10 @@ describe('DashboardGuidanceSnapshotService', () => {
     expect(saved.source).toBe('model')
     expect(saved.trigger).toBe('task-completed')
     expect(saved.debug.durationMs).toBe(12)
+
+    // 传给 skill 的必须是「投影」：不含 path.aiPromptTemplate，knowledgeMemory 明细已裁剪
+    const skillInput = (executeSkillWithResult as jest.Mock).mock.calls.at(-1)![1]
+    expect(skillInput.path).not.toHaveProperty('aiPromptTemplate')
+    expect(skillInput.learnerSnapshot.knowledgeMemory.currentPath.taskMastery).toEqual([])
   })
 })

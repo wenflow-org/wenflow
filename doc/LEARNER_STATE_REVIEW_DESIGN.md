@@ -208,7 +208,7 @@ model learner_insights {
 | `toReviewProjection(snapshot)` | `learner-state-review` | 只带 §4.2 的 digest；丢 `knowledgeMemory.currentPath.taskMastery/conceptStates` 全量 |
 | `toGuidanceProjection(snapshot, path)` | `adaptive-guidance-copy` | 只带 state 摘要 + 当前任务 + top 概念；**丢 `learning_paths.aiPromptTemplate`（单字段 ~12.5 万字符）与完整 `knowledgeMemory`** |
 
-**效果**：单次 guidance 刷新 prompt 预计从 ~10.9 万 token 降到千级；`aiPromptTemplate` 仅供 `LearnerSnapshotService.resolvePathSummary` 内部读取，不对外传输。
+**效果（实测，2026-09-12）**：真实用户单次 guidance payload `249,841 → 20,041 字符`（**−92%**，约 `11.9 万 → 9.5k token`），其中 `aiPromptTemplate` 单项丢弃 116,887 字符；`knowledgeMemory` 明细与路径冗余字段一并裁掉。如需进一步压缩，可继续收敛 `profile.narrativeInsights`、`wrapup`、`path.description/subject/replanReason`。
 
 ---
 
@@ -312,7 +312,7 @@ model insight_records {
 - `LearnerProjectionService` 增 `toGuidanceProjection`（丢 `aiPromptTemplate`/完整 `knowledgeMemory`）。
 - 两个 guidance 服务改读投影。
 - 复盘指标：单次刷新 prompt token、时延。
-- **DoD**：10.9 万 token → 千级；文案语义不变；单测覆盖投影裁剪。
+- **DoD**：实测 payload 体积下降 ≥90%（249,841 → 20,041 字符，−92%）；文案语义不变；单测覆盖投影裁剪（`LearnerProjectionService.test.ts` + 服务测试断言传入的是投影）。
 
 ### Slice 2 · 诊断 skill + 闭环
 
