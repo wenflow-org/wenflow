@@ -8,14 +8,10 @@
       <span class="mk-status__meta">解锁 {{ totalUnlocked }}</span>
     </div>
 
-    <!-- 二级切换：成就定义 / 解锁记录 -->
-    <div class="mk-card ach-tabs">
-      <div class="ach-tabs__bar">
-        <span class="mk-pills">
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': achTab === 'defs' }" @click="switchAchTab('defs')">成就定义</button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': achTab === 'records' }" @click="switchAchTab('records')">解锁记录</button>
-        </span>
-      </div>
+    <!-- 主视图切换（统一样板：状态条正下方的独立一行，按内容宽度、左对齐） -->
+    <div class="mk-pills" role="tablist" aria-label="成就视图切换">
+      <button type="button" role="tab" class="mk-pill" :aria-selected="achTab === 'defs'" :class="{ 'mk-pill--active': achTab === 'defs' }" @click="switchAchTab('defs')">成就定义</button>
+      <button type="button" role="tab" class="mk-pill" :aria-selected="achTab === 'records'" :class="{ 'mk-pill--active': achTab === 'records' }" @click="switchAchTab('records')">解锁记录</button>
     </div>
 
     <!-- 成就定义 -->
@@ -394,7 +390,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.ach-tabs__bar { padding: 8px 14px; }
 .ac-list { min-height: 120px; }
 .ac-icon { margin-right: 4px; }
 .ac-icon--lg { font-size: 22px; margin-right: 10px; }

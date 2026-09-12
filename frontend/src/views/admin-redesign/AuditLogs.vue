@@ -14,22 +14,26 @@
       </span>
     </div>
 
-    <!-- 筛选卡片头（对齐 Users 模式：tabs/搜索/时间范围从状态条移入） -->
+    <!-- 主视图切换（统一样板：状态条正下方的独立一行，按内容宽度、左对齐） -->
+    <div class="mk-pills" role="tablist" aria-label="审计视图切换">
+      <button
+        v-for="t in tabs"
+        :key="t.id"
+        type="button"
+        role="tab"
+        class="mk-pill"
+        :aria-selected="tab === t.id"
+        :class="{ 'mk-pill--active': tab === t.id }"
+        @click="switchTab(t.id)"
+      >
+        {{ t.label }}
+      </button>
+    </div>
+
+    <!-- 筛选卡片头（关键词 / 时间范围 / 列；tabs 已上移到独立切换行） -->
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <div class="mk-pills">
-            <button
-              v-for="t in tabs"
-              :key="t.id"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': tab === t.id }"
-              @click="switchTab(t.id)"
-            >
-              {{ t.label }}
-            </button>
-          </div>
           <input
             v-model="keyword"
             class="mk-filter__input"

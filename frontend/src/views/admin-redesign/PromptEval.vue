@@ -9,7 +9,6 @@
       <span class="mk-status__meta" :title="lastRunHint">{{ lastRunText }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="!canRunBatch" @click="runBatch">批量跑评估</button>
-        <button type="button" class="mk-status__action" @click="tab = 'runs'">评估历史</button>
         <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建用例</button>
       </span>
     </div>

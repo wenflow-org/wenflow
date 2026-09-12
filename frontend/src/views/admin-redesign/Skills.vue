@@ -23,6 +23,12 @@
       </span>
     </div>
 
+    <!-- 主视图切换（统一样板：状态条正下方的独立一行，按内容宽度、左对齐） -->
+    <div class="mk-pills" role="tablist" aria-label="视图模式切换">
+      <button type="button" role="tab" class="mk-pill" :aria-selected="view === 'list'" :class="{ 'mk-pill--active': view === 'list' }" @click="view = 'list'">列表</button>
+      <button type="button" role="tab" class="mk-pill" :aria-selected="view === 'grid'" :class="{ 'mk-pill--active': view === 'grid' }" @click="view = 'grid'">网格</button>
+    </div>
+
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
@@ -43,10 +49,6 @@
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / ID / 类别" />
         </div>
         <div class="mk-card__head-right">
-          <div class="mk-pills">
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'list' }" @click="view = 'list'">列表</button>
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': view === 'grid' }" @click="view = 'grid'">网格</button>
-          </div>
           <div v-if="view === 'list'" ref="skColsEl" class="sk-cols">
             <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen" title="设置显示的列">列</button>
             <div v-if="colsOpen" class="sk-cols__menu" @click.stop>
