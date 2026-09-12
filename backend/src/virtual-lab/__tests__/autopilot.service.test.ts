@@ -229,7 +229,7 @@ describe('AutopilotService 全自动模式', () => {
     await service.start('s1')
     const final = await waitTerminal()
 
-    expect(final.status).toBe('failed')
+    expect(final.status).toBe('incomplete')
     expect(mockRestartLearningPhase).not.toHaveBeenCalled()
     expect(String(final.lastError)).toContain('no_progress_watchdog')
   })

@@ -542,7 +542,7 @@
             <div class="cp-run">
               <div v-if="autopilotResultText && !autopilotRunning" class="cp-run__autopilot-result" :class="{
                 'cp-run__autopilot-result--ok': autopilot.status === 'completed',
-                'cp-run__autopilot-result--bad': autopilot.status === 'failed',
+                'cp-run__autopilot-result--bad': autopilot.status === 'failed' || autopilot.status === 'incomplete',
                 'cp-run__autopilot-result--muted': autopilot.status === 'stopped'
               }">{{ autopilotResultText }}</div>
               <div class="cp-run__stages">
@@ -605,7 +605,7 @@
               <!-- 自动驾驶结果 -->
               <div v-if="autopilotResultText && !autopilotRunning" class="cp-run__autopilot-result" :class="{
                 'cp-run__autopilot-result--ok': autopilot.status === 'completed',
-                'cp-run__autopilot-result--bad': autopilot.status === 'failed',
+                'cp-run__autopilot-result--bad': autopilot.status === 'failed' || autopilot.status === 'incomplete',
                 'cp-run__autopilot-result--muted': autopilot.status === 'stopped'
               }">{{ autopilotResultText }}</div>
 
@@ -1072,6 +1072,7 @@ const autopilotResultText = computed(() => {
   const st = autopilot.value.status
   if (st === 'completed') return '✅ 全部完成：Path 所有任务已跑完'
   if (st === 'failed') return `❌ 运行失败：${firstText(autopilot.value.lastError) || '未知原因'}`
+  if (st === 'incomplete') return `⚠️ 未完成（疑似教学卡死）：${firstText(autopilot.value.lastError) || '无进展'}`
   if (st === 'stopped') return '⏸ 已停止自动驾驶'
   if (st === 'queued') return `⏳ 已排队等待并发槽位（第 ${autopilot.value.queuePosition || 1} 位），有空位自动启动`
   if (st === 'running' && autopilot.value.stopRequested === true) return '⏸ 已请求停止自动驾驶（等待确认）'

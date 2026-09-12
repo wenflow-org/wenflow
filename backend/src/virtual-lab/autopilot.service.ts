@@ -46,7 +46,7 @@ export type AutopilotMode = 'assisted' | 'blackbox'
 export type AutopilotTarget = 'stage' | 'final'
 
 export type AutopilotState = {
-  status: 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'stopped'
+  status: 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'incomplete' | 'stopped'
   mode?: AutopilotMode
   /** 本次运行目标：stage（阶段级） / final（全局级） */
   target?: AutopilotTarget
@@ -647,11 +647,11 @@ export class AutopilotService {
         await this.writeState(sessionId, { noProgressChunks, lastProgressSignature })
         if (noProgressChunks >= budget.noProgressChunkLimit) {
           await this.writeState(sessionId, {
-            status: 'failed',
+            status: 'incomplete',
             completedAt: new Date().toISOString(),
             lastError: `no_progress_watchdog：连续 ${noProgressChunks} 个回合分片（每片 ${budget.turnChunkPerLesson} 回合）无净进展，疑似教学卡死。可检查该课教学设计或手动单步推进`
           })
-          logger.warn('[autopilot] 无进展看门狗触发，停止', {
+          logger.warn('[autopilot] 无进展看门狗触发，停止（标记 incomplete，非基础设施失败）', {
             sessionId,
             noProgressChunks,
             signature

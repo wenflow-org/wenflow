@@ -29,6 +29,7 @@ import {
   resolveStorySessionDemand,
 } from '../virtual-lab/story-demand';
 import { safeJsonParse } from '../utils/safe-json';
+import { getRequestContext } from '../gateway/api-gateway/context';
 import { asErrorLike } from '../virtual-lab/vlab-types';
 import { memoryTraceService } from '../services/memory/memory-trace.service';
 import {
@@ -481,6 +482,15 @@ class SimulationOrchestrator {
     return /structured_output_invalid|invalid chat completion|finish_reason|length|empty content|reply completion mismatch|api request canceled|fetch failed|timeout|timed out|econnreset|socket|network|rate.?limit|\b429\b|\b502\b|\b503\b|\b504\b|\b529\b/.test(message);
   }
 
+  /** 请求级取消检测（客户端断开 / 上层 abort）；无 abortSignal（如自动驾驶）时恒为 false */
+  private isRequestAborted(): boolean {
+    try {
+      return getRequestContext().abortSignal?.aborted === true;
+    } catch {
+      return false;
+    }
+  }
+
   private async retryLearnUpstream<T>(sessionId: string, operation: string, execute: () => Promise<T>): Promise<T> {
     // 预算来源：故事级覆盖（storyContext.budget）优先，否则角色级（profile.simulationBudget）。
     // 语义：maxRetriesPerStep = 单次上游调用的重试次数；costCeiling = 单会话累计 AI 调用
@@ -501,6 +511,13 @@ class SimulationOrchestrator {
     let attempts = 0;
     for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
       attempts = attempt;
+      // 请求级取消（客户端断开 / 上层 abort）：不再发起或重试上游调用，避免白烧预算。
+      // 自动驾驶路径的 runWithContext 已剥离 abortSignal，故这里对其无影响。
+      if (this.isRequestAborted()) {
+        const err = new Error('request_aborted：请求已取消，停止 Learn 上游调用');
+        (err as Error & { code?: string }).code = 'REQUEST_ABORTED';
+        throw err;
+      }
       // 总 AI 调用护栏：每次实际执行前检查累计值（含本次），超限即终止
       if (maxTotalCalls !== null) {
         const consumed = await this.readAiCallCount(sessionId);
@@ -519,6 +536,8 @@ class SimulationOrchestrator {
       } catch (error: unknown) {
         lastError = error;
         if (!this.isRetryableLearnUpstreamError(error) || attempt === maxRetries) break;
+        // 失败后若已取消，不再等待/重试
+        if (this.isRequestAborted()) break;
         logger.warn('[simulation-coordinator] Learn 上游调用失败，准备重试', {
           sessionId,
           operation,

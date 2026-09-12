@@ -430,10 +430,10 @@ export const LEGACY_AGENT_MEMBERS: Record<string, string[]> = {
     'skill:virtual-learner-goal-dialogue-simulator',
     'skill:virtual-learner-path-evaluator',
     'skill:virtual-learner-learn-turn-simulator',
-    'skill:virtual-learner-epistemic-grounding',
     'skill:virtual-learner-referee',
     'skill:virtual-learner-memory-curator',
-    'skill:virtual-learner-actor-auditor'
+    'skill:virtual-learner-actor-auditor',
+    'skill:virtual-learner-epistemic-grounding'
   ]
 };
 
