@@ -45,12 +45,12 @@
             class="mshell__group-head"
             :class="{ 'mshell__group-head--active': groupContainsCurrent(group.title) }"
             :aria-expanded="isGroupOpen(group.title)"
-            :title="`${group.title}（${group.items.length} 项）`"
+            :title="`${group.title}（${group.items.length} 页）`"
             @click="toggleGroup(group.title)"
           >
             <svg class="mshell__group-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" v-html="groupIcon(group.title)"></svg>
             <span class="mshell__group-name">{{ group.title }}</span>
-            <span v-if="groupBadgeCount(group.title)" class="mshell__group-badge" :class="{ 'mshell__group-badge--alarm': groupHasAlarm(group.title) }" :title="groupBadgeTitle(group.title)">{{ groupBadgeCount(group.title) }}</span>
+            <span class="mshell__group-badge" :class="{ 'mshell__group-badge--alarm': groupBadgeCount(group.title) && groupHasAlarm(group.title), 'mshell__group-badge--empty': !groupBadgeCount(group.title) }" :title="groupBadgeTitle(group.title)">{{ groupBadgeCount(group.title) || '—' }}</span>
             <span class="mshell__group-arrow" aria-hidden="true">▸</span>
           </button>
           <div v-show="isGroupOpen(group.title)" class="mshell__group-body">
@@ -253,15 +253,22 @@ function badgeOf(item: MockSceneDef): string {
   return liveNavBadges.value[item.id] || ''
 }
 
-/* 徽章语义说明：红色=告警（近 7 天执行失败数，点击进入执行日志后自动平息）；
-   其余浅蓝/中性=普通计数徽章。统一在 title 注明，避免红/蓝无解释并存 */
+/* 角标语义说明：红色=告警（近 7 天执行失败数，点击进入执行日志后自动平息）；
+   其余=数据量计数。角标语义 =「数据量」；页面数只在分组悬浮里以「页」表达，两者不混用 */
+const BADGE_MEANING: Record<string, string> = {
+  'virtual-learners': '虚拟学习者数量',
+  skills: 'Skill 数量',
+  addons: '外挂能力数量',
+  messages: '已发布公告数量',
+  'execution-logs': '近 7 天执行失败次数',
+}
 function badgeTitle(item: MockSceneDef): string {
   const count = badgeOf(item)
   if (!count) return ''
   if (alarmNavBadges.has(item.id)) {
     return `近 7 天执行失败 ${count} 次（告警徽章：红色；进入执行日志页后自动平息）`
   }
-  return `${item.label}：${count}`
+  return `${BADGE_MEANING[item.id] || item.label}：${count}`
 }
 
 /* 报警徽章可平息：已读数存 localStorage，只有失败数超过已读数才脉冲 */
@@ -412,8 +419,10 @@ const groupBadgeCount = (title: string) => {
 const groupHasAlarm = (title: string) => groupItems(title).some((i) => isAlarmBadge(i))
 function groupBadgeTitle(title: string): string {
   const items = groupItems(title)
-  const parts = items.filter((i) => badgeOf(i)).map((i) => `${i.label} ${badgeOf(i)}`)
-  return parts.join(' · ') || `${title}：计数`
+  const parts = items.filter((i) => badgeOf(i)).map((i) => `${BADGE_MEANING[i.id] || i.label} ${badgeOf(i)}`)
+  return parts.length
+    ? `${title}（共 ${items.length} 页）· ` + parts.join(' · ')
+    : `${title}（共 ${items.length} 页）· 暂无可计数项`
 }
 </script>
 
@@ -518,6 +527,8 @@ function groupBadgeTitle(title: string): string {
   color: #b91c1c;
   animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
 }
+/* 无数据量的分组占位「—」：保持各分组右侧对齐，同时不冒充计数 */
+.mshell__group-badge--empty { background: transparent; color: var(--mk-faint); opacity: 0.7; }
 .mshell__group-arrow {
   font-size: 9px;
   opacity: 0.65;
