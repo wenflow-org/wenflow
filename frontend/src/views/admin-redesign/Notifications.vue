@@ -27,12 +27,6 @@
           <span class="nt-boundary" title="全站横幅公告请到「公告」页管理">横幅公告 → 公告页</span>
         </div>
         <span class="mk-card__head-right">
-          <button
-            v-if="embedded"
-            type="button"
-            class="mk-btn mk-btn--primary mk-btn--sm"
-            @click="openSend"
-          >发送通知</button>
         </span>
       </div>
 
@@ -271,7 +265,7 @@ async function reload() {
   }
 }
 /* 宿主刷新联动（通知与公告合并宿主「刷新」按钮 → reload） */
-defineExpose({ reload })
+defineExpose({ reload, openSend })
 
 async function remove(n: NotifRow) {
   const ok = await askConfirm({

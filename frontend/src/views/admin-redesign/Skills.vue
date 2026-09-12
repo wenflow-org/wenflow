@@ -49,16 +49,12 @@
           <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / ID / 类别" />
         </div>
         <div class="mk-card__head-right">
-          <div v-if="view === 'list'" ref="skColsEl" class="sk-cols">
-            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen" title="设置显示的列">列</button>
-            <div v-if="colsOpen" class="sk-cols__menu" @click.stop>
-              <label v-for="c in skColDefs" :key="c.key" class="sk-cols__item" :title="c.title">
-                <input type="checkbox" :checked="!hiddenCols.has(c.key)" @change="toggleSkCol(c.key)" />
-                <span>{{ c.label }}</span>
-              </label>
-              <button v-if="hiddenCols.size" type="button" class="sk-cols__reset" @click="hiddenCols = new Set()">恢复全部列</button>
-            </div>
-          </div>
+          <MkCols
+            v-if="view === 'list'"
+            :col-defs="skColDefs"
+            :storage-key="SK_COLS_KEY"
+            v-model:hidden="hiddenCols"
+          />
           <span class="mk-card__meta">{{ filtered.length }} / {{ cards.length }}</span>
         </div>
       </div>
@@ -175,12 +171,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { skillStatOf, openSkillDrawer, isLive } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
 import { completionMetaOf } from './glossaryMeta'
 import MockSkeletonTable from './SkeletonTable.vue'
+import MkCols from './MkCols.vue'
 import Pagination from './Pagination.vue'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
@@ -192,7 +189,7 @@ const keyword = ref('')
 const categoryFilter = ref('')
 const view = ref<'list' | 'grid'>('list')
 
-/* D3 表格增强：列显隐（localStorage 持久化；Skill 列固定） */
+/* D3 表格增强：列显隐（持久化 / 点击外部与 Esc 关闭由共享 MkCols 组件承担；Skill 列固定） */
 const SK_COLS_KEY = 'wf_skills_hidden_cols'
 const skColDefs = [
   { key: 'agent', label: '所属阶段', title: '所属顶层 Agent' },
@@ -201,32 +198,7 @@ const skColDefs = [
   { key: 'rate', label: '成功率', title: '窗口内成功率' },
   { key: 'last', label: '最近调用', title: '最近调用时间' },
 ] as const
-const colsOpen = ref(false)
 const hiddenCols = ref<Set<string>>(new Set())
-try {
-  const saved = JSON.parse(localStorage.getItem(SK_COLS_KEY) || '[]') as unknown
-  if (Array.isArray(saved)) hiddenCols.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
-} catch { /* 隐私模式忽略 */ }
-watch(hiddenCols, (s) => {
-  try { localStorage.setItem(SK_COLS_KEY, JSON.stringify([...s])) } catch { /* ignore */ }
-}, { deep: true })
-function toggleSkCol(key: string) {
-  const next = new Set(hiddenCols.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  hiddenCols.value = next
-}
-
-/* 列菜单：点击外部 / Esc 关闭（此前只能再次点击「列」关闭） */
-const skColsEl = ref<HTMLElement | null>(null)
-function onDocMousedown(e: MouseEvent) {
-  if (!colsOpen.value) return
-  const root = skColsEl.value
-  if (root && e.target instanceof Node && !root.contains(e.target)) colsOpen.value = false
-}
-function onDocKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && colsOpen.value) colsOpen.value = false
-}
 const sortKey = ref<SortKey>('errors')
 const sortDir = ref<'asc' | 'desc'>('desc')
 const statsRange = liveSkillStatsRange
@@ -375,12 +347,6 @@ watch(isLive, () => {
 
 onMounted(() => {
   refreshReconciliation()
-  document.addEventListener('mousedown', onDocMousedown, true)
-  document.addEventListener('keydown', onDocKeydown)
-})
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onDocMousedown, true)
-  document.removeEventListener('keydown', onDocKeydown)
 })
 
 /** 完成度五档色标（draft → live）；文案单源：glossaryMeta.ts（与后端 glossary-content 对齐） */

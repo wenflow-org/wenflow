@@ -63,18 +63,9 @@
         <div class="mk-card__head-right">
           <span class="mk-card__meta" v-if="errorCategory">类别「{{ errorCategory }}」<button type="button" class="mk-link" @click="errorCategory = ''; applyServerQuery()">×</button></span>
           <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
-          <span class="mk-card__meta">第 {{ liveLogsPage }} / {{ totalPagesOf(liveLogsTotal, liveLogsPageSize) }} 页</span>
           <button type="button" class="mk-link" :class="{ 'mk-link--active': advOpen }" @click="advOpen = !advOpen" title="高级筛选">高级</button>
-          <div class="exec-cols">
-            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen" title="设置显示的列">列</button>
-            <div v-if="colsOpen" class="exec-cols__menu" @click.stop>
-              <label v-for="c in colDefs" :key="c.key" class="exec-cols__item" :title="c.title">
-                <input type="checkbox" :checked="!hiddenCols.has(c.key)" @change="toggleCol(c.key)" />
-                <span>{{ c.label }}</span>
-              </label>
-              <button v-if="hiddenCols.size" type="button" class="exec-cols__reset" @click="hiddenCols = new Set()">恢复全部列</button>
-            </div>
-          </div>
+          <MkCols :col-defs="colDefs" :storage-key="COLS_KEY" :default-hidden="DEFAULT_HIDDEN" v-model:hidden="hiddenCols" />
+          <span class="mk-card__meta">第 {{ liveLogsPage }} / {{ totalPagesOf(liveLogsTotal, liveLogsPageSize) }} 页</span>
         </div>
       </div>
       <div v-if="advOpen" class="log-advpanel">
@@ -268,6 +259,7 @@ import { intent, openSkillDrawer, clearInvestigation, dataSource } from './store
 import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, totalPagesOf, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
+import MkCols from './MkCols.vue'
 import Pagination from './Pagination.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
 import TokenCost from './TokenCost.vue'
@@ -340,26 +332,7 @@ const colDefs = [
 /* 次要列默认隐藏（收进展开区）：表格只留高频辨识列(时间/节点/调用/耗时/状态),
    窄屏无需滚动、信息不丢（点击行看全）。列设置可手动开启。 */
 const DEFAULT_HIDDEN = ['kind', 'model', 'tokens', 'trace']
-const colsOpen = ref(false)
 const hiddenCols = ref<Set<string>>(new Set())
-try {
-  const raw = localStorage.getItem(COLS_KEY)
-  // 首次访问(无记录)→ 新默认(次要列收进展开区);已有记录(含空数组=全显示)→ 尊重用户配置
-  if (raw == null) hiddenCols.value = new Set(DEFAULT_HIDDEN)
-  else {
-    const saved = JSON.parse(raw) as unknown
-    if (Array.isArray(saved)) hiddenCols.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
-  }
-} catch { /* 隐私模式忽略 */ }
-watch(hiddenCols, (s) => {
-  try { localStorage.setItem(COLS_KEY, JSON.stringify([...s])) } catch { /* ignore */ }
-}, { deep: true })
-function toggleCol(key: string) {
-  const next = new Set(hiddenCols.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  hiddenCols.value = next
-}
 const visibleColCount = computed(() => colDefs.length - hiddenCols.value.size)
 
 /* prompt 契约维度：与执行日志同 traceId 关联（版本/漂移/tokens/JSON） */

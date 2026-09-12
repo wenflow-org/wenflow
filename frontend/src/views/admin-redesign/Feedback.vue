@@ -54,16 +54,20 @@
                 {{ p.label }}
               </button>
             </div>
-            <button
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': lowOnly }"
-              @click="lowOnly = !lowOnly"
-            >
-              仅低分 ≤2
-            </button>
+            <div class="mk-pills">
+              <button
+                type="button"
+                class="mk-pill"
+                :class="{ 'mk-pill--active': lowOnly }"
+                @click="lowOnly = !lowOnly"
+              >
+                仅低分 ≤2
+              </button>
+            </div>
           </div>
-          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}</span>
+          <span class="mk-card__head-right">
+            <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}</span>
+          </span>
         </div>
 
         <div v-if="filtered.length" class="mk-table-scroll">

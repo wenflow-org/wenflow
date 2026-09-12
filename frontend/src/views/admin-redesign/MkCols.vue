@@ -22,6 +22,8 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 const props = defineProps<{
   colDefs: ReadonlyArray<{ key: string; label: string; title?: string }>
   storageKey: string
+  /** 首次访问（本地尚无记录）时默认隐藏的列 key；已有记录则尊重用户配置 */
+  defaultHidden?: ReadonlyArray<string>
 }>()
 const hidden = defineModel<Set<string>>('hidden', { default: () => new Set<string>() })
 const open = ref(false)
@@ -39,8 +41,13 @@ function onDocKeydown(e: KeyboardEvent) {
 
 onMounted(() => {
   try {
-    const saved = JSON.parse(localStorage.getItem(props.storageKey) || '[]') as unknown
-    if (Array.isArray(saved)) hidden.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
+    const raw = localStorage.getItem(props.storageKey)
+    if (raw == null && props.defaultHidden?.length) {
+      hidden.value = new Set(props.defaultHidden)
+    } else {
+      const saved = JSON.parse(raw || '[]') as unknown
+      if (Array.isArray(saved)) hidden.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
+    }
   } catch { /* 隐私模式忽略 */ }
   document.addEventListener('mousedown', onDocMousedown, true)
   document.addEventListener('keydown', onDocKeydown)

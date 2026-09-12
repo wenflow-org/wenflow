@@ -22,6 +22,7 @@
       >学习者 {{ domainCount.learners }}</button>
       <span class="mk-status__meta" title="账号=用户生命周期；学习状态=画像快照（均为仅真实口径）">共 {{ domainTotal }} 人</span>
       <span class="mk-status__actions">
+        <button v-if="tab === 'account'" type="button" class="mk-status__action mk-status__action--primary" @click="usersRef?.openCreate?.()">新建用户</button>
         <button type="button" class="mk-status__action" @click="refreshActive">刷新</button>
       </span>
     </div>
@@ -73,7 +74,7 @@ const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() =>
 function onDomainCount(domain: 'users' | 'learners', n: number) {
   domainCount.value[domain] = n
 }
-const usersRef = ref<{ refresh?: () => void } | null>(null)
+const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
 const learnersRef = ref<{ refresh?: () => void } | null>(null)
 function refreshActive() {
   if (tab.value === 'account') usersRef.value?.refresh?.()

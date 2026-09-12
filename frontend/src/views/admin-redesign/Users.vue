@@ -43,12 +43,6 @@
           </select>
         </div>
         <div class="mk-card__head-right">
-          <button
-            v-if="embedded"
-            type="button"
-            class="mk-btn mk-btn--primary mk-btn--sm"
-            @click="openCreate"
-          >新建用户</button>
           <DataScopeToggle v-if="isLive && pill !== 'deleted'" v-model="includeTest" />
           <MkCols
             :col-defs="ulColDefs"
@@ -379,7 +373,7 @@ watch(liveUsersTotal, (n) => {
   emit('count', Number(n || 0))
 }, { immediate: true })
 /* 宿主刷新联动（用户与学习者合并宿主「刷新」按钮 → 重拉 live 用户域） */
-defineExpose({ refresh: () => { void loadLiveData() } })
+defineExpose({ refresh: () => { void loadLiveData() }, openCreate })
 const pills = [
   { id: 'all', label: '全部' },
   { id: 'admin', label: '管理员' },

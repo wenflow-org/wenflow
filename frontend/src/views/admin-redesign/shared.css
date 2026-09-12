@@ -168,6 +168,9 @@
 .mk-card__title { margin: 0; font-size: var(--mk-fs-14); font-weight: 700; }
 .mk-card__meta { color: var(--mk-faint); font-size: var(--mk-fs-12_5); }
 .mk-card__head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+/* 卡头右组的主操作按钮与筛选控件（输入框/下拉/pills）同高：
+   原来按钮 34.8px、输入框 41px，同一条工具栏高矮不齐；stretch 到行高即与最高控件齐平。 */
+.mk-card__head-right .mk-btn { align-self: stretch; }
 
 /* ----- 表格 ----- */
 .mk-table { width: 100%; border-collapse: collapse; }

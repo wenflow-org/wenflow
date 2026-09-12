@@ -49,16 +49,7 @@
           </select>
         </div>
         <div class="mk-card__head-right">
-          <div class="al-cols">
-            <button type="button" class="mk-link" :class="{ 'mk-link--active': colsOpen }" @click="colsOpen = !colsOpen" :aria-expanded="colsOpen" title="设置显示的列">列</button>
-            <div v-if="colsOpen" class="al-cols__menu" @click.stop>
-              <label v-for="c in alColDefs" :key="c.key" class="al-cols__item" :title="c.title">
-                <input type="checkbox" :checked="!hiddenCols.has(c.key)" @change="toggleAlCol(c.key)" />
-                <span>{{ c.label }}</span>
-              </label>
-              <button v-if="hiddenCols.size" type="button" class="al-cols__reset" @click="hiddenCols = new Set()">恢复全部列</button>
-            </div>
-          </div>
+          <MkCols :col-defs="alColDefs" :storage-key="AL_COLS_KEY" v-model:hidden="hiddenCols" />
           <span class="mk-card__meta">共 {{ total }} 条<template v-if="failed"> · 失败 {{ failed }}</template></span>
         </div>
       </div>
@@ -235,12 +226,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
 import { errMsg, shortId } from './live'
 import Pagination from './Pagination.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
+import MkCols from './MkCols.vue'
 import { actionText, targetTypeText, ipText } from './statusText'
 
 /** admin_audit_logs 行（与后端 Prisma 模型一致） */
@@ -314,7 +306,7 @@ const rows = computed(() => (tab.value === 'operation' ? logs.value : attempts.v
     后端补录该字段后自动恢复显示；title 悬停说明列含义 */
 const noTargetTypes = computed(() => logs.value.length > 0 && logs.value.every((l) => !l.targetType))
 
-/* D3 表格增强：列显隐（localStorage 持久化） */
+/* D3 表格增强：列显隐（持久化 / 点击外部与 Esc 关闭由共享 MkCols 组件承担） */
 const AL_COLS_KEY = 'wf_audit_hidden_cols'
 const alColDefs = [
   { key: 'time', label: '时间', title: '操作时间' },
@@ -325,21 +317,7 @@ const alColDefs = [
   { key: 'result', label: '结果', title: '成功 / 失败' },
   { key: 'ip', label: 'IP', title: '来源 IP' },
 ] as const
-const colsOpen = ref(false)
 const hiddenCols = ref<Set<string>>(new Set())
-try {
-  const saved = JSON.parse(localStorage.getItem(AL_COLS_KEY) || '[]') as unknown
-  if (Array.isArray(saved)) hiddenCols.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
-} catch { /* 隐私模式忽略 */ }
-watch(hiddenCols, (s) => {
-  try { localStorage.setItem(AL_COLS_KEY, JSON.stringify([...s])) } catch { /* ignore */ }
-}, { deep: true })
-function toggleAlCol(key: string) {
-  const next = new Set(hiddenCols.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  hiddenCols.value = next
-}
 const visibleAlCols = computed(() => {
   let n = alColDefs.filter((c) => !hiddenCols.value.has(c.key)).length
   if (noTargetTypes.value) n -= 1 // 目标类型列自动隐藏

@@ -33,12 +33,6 @@
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <span class="mk-card__head-right">
-          <button
-            v-if="embedded"
-            type="button"
-            class="mk-btn mk-btn--primary mk-btn--sm"
-            @click="openCreate"
-          >新建公告</button>
           <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 条</span>
         </span>
       </div>

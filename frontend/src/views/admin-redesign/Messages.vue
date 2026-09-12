@@ -22,6 +22,8 @@
       >通知 {{ domainCount.inapp }}</button>
       <span class="mk-status__meta" title="公告=全站横幅；站内通知=按用户推送">共 {{ domainTotal }} 条</span>
       <span class="mk-status__actions">
+        <button v-if="tab === 'announce'" type="button" class="mk-status__action mk-status__action--primary" @click="announceRef?.openCreate?.()">新建公告</button>
+        <button v-else type="button" class="mk-status__action mk-status__action--primary" @click="notifRef?.openSend?.()">发送通知</button>
         <button type="button" class="mk-status__action" @click="refreshActive">刷新</button>
       </span>
     </div>
@@ -72,8 +74,8 @@ const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() =>
 function onDomainCount(domain: 'announce' | 'inapp', n: number) {
   domainCount.value[domain] = n
 }
-const announceRef = ref<{ refresh?: () => void } | null>(null)
-const notifRef = ref<{ reload?: () => void } | null>(null)
+const announceRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
+const notifRef = ref<{ reload?: () => void; openSend?: () => void } | null>(null)
 function refreshActive() {
   if (tab.value === 'announce') announceRef.value?.refresh?.()
   else notifRef.value?.reload?.()
