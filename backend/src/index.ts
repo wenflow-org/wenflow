@@ -21,6 +21,7 @@ import { loadSkillsFile } from './services/skill-registry/skills-file';
 import learningService from './services/learning/learning.service';
 import { ensureCoreAgentPrompts } from './scripts/seed-core-agent-prompts';
 import { ensureBuiltinVirtualLearners } from './virtual-lab/builtin-learners';
+import { autopilotService } from './virtual-lab/autopilot.service';
 import { bootstrapFieldRoutings } from './services/field-routing-bootstrap.service';
 import { seedSkillModelConfigsIfEmpty } from './services/seed-skill-model-configs';
 import { dashboardGuidanceSnapshotService } from './services/learner/DashboardGuidanceSnapshotService';
@@ -545,6 +546,12 @@ export async function startServer() {
     auditCleanupService.start(lifecycle);
     virtualSessionReclaimService.start(lifecycle);
     startBatchExperimentScheduler();
+    // 进程重启后内存自动驾驶循环已清空：复位 DB 中残留的 running/queued 僵尸态，避免永久阻塞重启
+    await autopilotService.reconcileStaleRuns().catch((err) => {
+      logger.warn('[startup] 自动驾驶僵尸状态对账失败（不阻断启动）', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
     assertStartupActive();
 
     const backendRoot = resolve(__dirname, '..');

@@ -1,5 +1,6 @@
 /** Autopilot 全自动模式单测：终点=Path 全部完成，可重试/可恢复/可停止 */
 const mockSessionFindUnique = jest.fn()
+const mockSessionFindMany = jest.fn()
 const mockSessionUpdate = jest.fn()
 const mockRunLeasedExclusive = jest.fn(async (_sessionId: string, work: () => Promise<unknown>) => work())
 const mockExecuteSingleStep = jest.fn()
@@ -15,6 +16,7 @@ jest.mock('../../config/database', () => ({
   default: {
     virtual_sessions: {
       findUnique: mockSessionFindUnique,
+      findMany: mockSessionFindMany,
       update: mockSessionUpdate
     }
   }
@@ -128,11 +130,27 @@ describe('AutopilotService 全自动模式', () => {
     // 排队中再次启动同会话 → 冲突
     await expect(service.start('s1')).rejects.toBeInstanceOf(AutopilotConflictError)
 
-    // 取消排队
+    // cancel queued
     const stopped = await service.stop('s1')
     expect(stopped.accepted).toBe(true)
     expect(autopilotOf().status).toBe('stopped')
     expect(service.getConcurrencyStats().queued).toBe(0)
+  })
+
+  it('启动对账：复位进程重启后残留的 running/queued 僵尸自动驾驶状态', async () => {
+    mockSessionFindMany.mockResolvedValue([
+      { id: 'z1', stageResults: JSON.stringify({ autopilot: { status: 'running', stopRequested: false } }) },
+      { id: 'z2', stageResults: JSON.stringify({ autopilot: { status: 'queued', queuePosition: 2 } }) },
+      { id: 'z3', stageResults: JSON.stringify({ autopilot: { status: 'completed' } }) },
+      { id: 'z4', stageResults: JSON.stringify({}) }
+    ])
+    const reconciled = await service.reconcileStaleRuns()
+    expect(reconciled).toBe(2)
+    // 复位为 idle 且带中断说明
+    expect(mockSessionUpdate).toHaveBeenCalledTimes(2)
+    const firstPatch = JSON.parse((mockSessionUpdate.mock.calls[0][0] as any).data.stageResults)
+    expect(firstPatch.autopilot.status).toBe('idle')
+    expect(String(firstPatch.autopilot.lastError)).toContain('进程重启')
   })
 
   it('assisted 全链路：goal → path → 逐课 → 达到最终目标（completed）', async () => {

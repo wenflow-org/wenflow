@@ -285,6 +285,41 @@ export class AutopilotService {
     return this.pendingQueue.some((item) => item.sessionId === sessionId)
   }
 
+  /**
+   * 启动时对账：进程重启后内存 runningSessions/pendingQueue 已清空，
+   * 但 DB 里可能残留 autopilot.status='running'/'queued'（僵尸态），会永久阻塞重新启动。
+   * 这里把非终态会话的僵尸自动驾驶状态复位为 idle，使其可被重新拉起。
+   * 返回复位数量。
+   */
+  async reconcileStaleRuns(): Promise<number> {
+    const sessions = await prisma.virtual_sessions.findMany({
+      where: { status: { notIn: ['completed', 'failed', 'abandoned'] } },
+      select: { id: true, stageResults: true }
+    })
+    let reconciled = 0
+    for (const s of sessions) {
+      const stageResults = parseStageResults(s.stageResults)
+      const ap = stageResults.autopilot as AutopilotState | undefined
+      if (!ap || (ap.status !== 'running' && ap.status !== 'queued')) continue
+      stageResults.autopilot = {
+        ...ap,
+        status: 'idle',
+        stopRequested: false,
+        queuePosition: null,
+        lastError: '进程重启，自动驾驶已中断（可重新启动）'
+      }
+      await prisma.virtual_sessions.update({
+        where: { id: s.id },
+        data: { stageResults: JSON.stringify(stageResults) }
+      })
+      reconciled += 1
+    }
+    if (reconciled > 0) {
+      logger.info('[autopilot] 启动对账：复位僵尸自动驾驶状态', { reconciled })
+    }
+    return reconciled
+  }
+
   private removeFromQueue(sessionId: string): boolean {
     const idx = this.pendingQueue.findIndex((item) => item.sessionId === sessionId)
     if (idx === -1) return false
