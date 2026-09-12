@@ -328,6 +328,7 @@ model insight_records {
 - `insight_records` 回填命中率、`reliability` 展示、n<5 不显。
 - prompt 证据引用硬校验 + JSON schema 校验 + fallback；幂等指纹。
 - **DoD**：同输入重复评审结论稳定；命中率可查；越权/无证据洞察被拒。
+- **进度（2026-09-12）**：**3a 已落地**——`concept-belief.service`（零训练 BKT，`pL0/pT/pG/pS` 手填默认 + `applyObservations`/`getBeliefs`，复用 `learner_projections` `scope=beliefs`，无迁移）；评审服务用 `conceptAssessments` 观测驱动信念，摘要附入载荷。**3c 已落地**——`learner-state-review` handler 加 `evidenceRefs` 硬护栏（无引用/未知引用即丢弃）。**3b（`insight_records` 命中率校准）待做**：需先定「可证伪断言 → 后续事件结果」的映射口径。
 
 ---
 
