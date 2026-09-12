@@ -56,7 +56,10 @@
       <div class="cp-console__actions">
         <!-- ① 执行推进（跨阶段：自动驾驶（全流程后台）/ 停止自动驾驶；黑盒与真实会话不提供） -->
         <template v-if="!isRealMode && !isBlackbox">
-          <template v-if="!autopilotRunning">
+          <template v-if="autopilotQueued">
+            <button type="button" class="cp-btn" :disabled="busy" title="已排队等待自动驾驶并发槽位，点击取消排队" @click="act('autopilotStop')">取消排队（第 {{ autopilot.queuePosition || 1 }} 位）</button>
+          </template>
+          <template v-else-if="!autopilotRunning">
             <button v-if="!autopilotStopping" type="button" class="cp-btn cp-btn--primary" :disabled="autopilotStartDisabled" :title="autopilotStartTitle" @click="act('autopilotStart')">自动驾驶</button>
             <button v-else type="button" class="cp-btn" disabled title="已请求停止自动驾驶：后台已停止推进，可点击「自动驾驶」重新启动" @click="act('autopilotStart')">已请求停止</button>
           </template>
@@ -1046,16 +1049,18 @@ const autopilot = computed(() => asRecord(stageResults.value.autopilot) as {
   startedAt?: string
   completedAt?: string
   stopRequested?: boolean
+  queuePosition?: number | null
 })
 // stopRequested=true 表示已请求停止（可能主循环已死未消费）：视为未运行，
 // 否则会出现「已停止却仍显示停止自动驾驶按钮」的悬挂态（按钮点了没反应）
 const autopilotRunning = computed(() => autopilot.value.status === 'running' && autopilot.value.stopRequested !== true)
 const autopilotStopping = computed(() => autopilot.value.status === 'running' && autopilot.value.stopRequested === true)
+const autopilotQueued = computed(() => autopilot.value.status === 'queued')
 const autopilotStartDisabled = computed(() => {
   if (!session.value) return true
   if (busy.value) return true
   if (isTerminal.value) return true
-  return autopilotRunning.value
+  return autopilotRunning.value || autopilotQueued.value
 })
 const autopilotStartTitle = computed(() => {
   if (!session.value) return '会话仍在加载'
@@ -1068,6 +1073,7 @@ const autopilotResultText = computed(() => {
   if (st === 'completed') return '✅ 全部完成：Path 所有任务已跑完'
   if (st === 'failed') return `❌ 运行失败：${firstText(autopilot.value.lastError) || '未知原因'}`
   if (st === 'stopped') return '⏸ 已停止自动驾驶'
+  if (st === 'queued') return `⏳ 已排队等待并发槽位（第 ${autopilot.value.queuePosition || 1} 位），有空位自动启动`
   if (st === 'running' && autopilot.value.stopRequested === true) return '⏸ 已请求停止自动驾驶（等待确认）'
   return ''
 })
@@ -2361,10 +2367,16 @@ async function act(kind: string) {
           await adminVirtualLearnersApi.virtualSessionAuto(id, { maxRounds: 10 })
         }
         break
-      case 'autopilotStart':
-        await adminVirtualLearnersApi.autopilotStart(id, { maxTurns: clampLearnAutoTurnCap() })
-        toast.info('全自动模式已启动：将以最终目标（Path 全部完成）为终点持续运行，每课回合上限随「回合上限」设置')
+      case 'autopilotStart': {
+        const resp = await adminVirtualLearnersApi.autopilotStart(id, { maxTurns: clampLearnAutoTurnCap() })
+        const payload = (resp as { data?: { data?: { queued?: boolean; position?: number } } })?.data?.data
+        if (payload?.queued) {
+          toast.info(`自动驾驶并发已满，已排队（第 ${payload.position ?? 1} 位），有空位会自动启动`)
+        } else {
+          toast.info('全自动模式已启动：将以最终目标（Path 全部完成）为终点持续运行，每课回合上限随「回合上限」设置')
+        }
         break
+      }
       case 'autopilotStop':
         await adminVirtualLearnersApi.autopilotStop(id)
         toast.info('已请求停止全自动')

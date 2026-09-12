@@ -46,12 +46,14 @@ export type AutopilotMode = 'assisted' | 'blackbox'
 export type AutopilotTarget = 'stage' | 'final'
 
 export type AutopilotState = {
-  status: 'idle' | 'running' | 'completed' | 'failed' | 'stopped'
+  status: 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'stopped'
   mode?: AutopilotMode
   /** 本次运行目标：stage（阶段级） / final（全局级） */
   target?: AutopilotTarget
   /** 每课回合上限（自动推进单课预算；前端驾驶舱「回合上限」透传，默认 50） */
   maxTurns?: number
+  /** 排队位次（仅 status='queued' 时有意义，1 为队首） */
+  queuePosition?: number | null
   /** 无进展看门狗：连续无净进展的分片数（达 noProgressChunkLimit 判定卡死） */
   noProgressChunks?: number
   /** 上次学习进度指纹（用于分片间比较是否产生净进展） */
@@ -123,6 +125,12 @@ export class AutopilotService {
   /** 进程内并发锁：同一会话只允许一个全自动运行 */
   private readonly runningSessions = new Set<string>()
 
+  /** 并发闸门排队：超出上限的启动请求按 FIFO 排队（不再直接拒绝），有槽位腾出自动拉起 */
+  private readonly pendingQueue: Array<{ sessionId: string; options: { target: AutopilotTarget; maxTurns?: number } }> = []
+
+  /** drainQueue 防重入 */
+  private draining = false
+
   /** 读取会话的 autopilot 状态（stageResults.autopilot） */
   static readState(session: { stageResults: string | null }): AutopilotState {
     const stageResults = parseStageResults(session.stageResults)
@@ -157,8 +165,12 @@ export class AutopilotService {
    * 启动全自动运行（异步后台执行，立即返回）。
    * target='stage'：推进完当前阶段即停（阶段级）；
    * target='final'：直达最终目标（Path 全部完成，全局级，默认）。
+   * 并发已满时不拒绝，改为排队（FIFO），有槽位腾出自动拉起。
    */
-  async start(sessionId: string, options: { target?: AutopilotTarget; maxTurns?: number } = {}): Promise<{ runId: string; mode: AutopilotMode; target: AutopilotTarget }> {
+  async start(
+    sessionId: string,
+    options: { target?: AutopilotTarget; maxTurns?: number } = {}
+  ): Promise<{ runId: string; mode: AutopilotMode; target: AutopilotTarget; queued?: boolean; position?: number }> {
     const target = options.target === 'stage' ? 'stage' : 'final'
     const session = await prisma.virtual_sessions.findUnique({
       where: { id: sessionId },
@@ -169,13 +181,58 @@ export class AutopilotService {
 
     const mode = this.resolveMode(session)
     const current = AutopilotService.readState(session)
-    if (this.runningSessions.has(sessionId) || current.status === 'running') {
+    if (this.runningSessions.has(sessionId) || current.status === 'running' || this.isQueued(sessionId)) {
       throw new AutopilotConflictError(sessionId)
     }
-    // 全局并发闸门：同时运行的自动驾驶数达到上限 → 拒绝新启动（前端配额条提示）
+
+    // 全局并发闸门：满则排队（不再直接拒绝）
     if (this.runningSessions.size >= AUTOPILOT_CONCURRENCY_LIMIT) {
-      throw new AutopilotQueueFullError(this.runningSessions.size, AUTOPILOT_CONCURRENCY_LIMIT)
+      this.pendingQueue.push({
+        sessionId,
+        options: { target, ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}) }
+      })
+      const position = this.pendingQueue.length
+      await this.writeState(
+        sessionId,
+        {
+          status: 'queued',
+          mode,
+          target,
+          queuePosition: position,
+          completedStage: null,
+          lastError: null,
+          stopRequested: false
+        },
+        current
+      )
+      logger.info('[autopilot] 并发已满，启动请求进入排队', {
+        sessionId,
+        position,
+        used: this.runningSessions.size,
+        limit: AUTOPILOT_CONCURRENCY_LIMIT
+      })
+      return { runId: `queued_${sessionId.slice(0, 8)}_${Date.now()}`, mode, target, queued: true, position }
     }
+
+    return this.launch(sessionId, {
+      target,
+      ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {})
+    })
+  }
+
+  /** 实际占用一个并发槽并启动（调用方需保证已有可用槽位或来自 drainQueue） */
+  private async launch(
+    sessionId: string,
+    options: { target: AutopilotTarget; maxTurns?: number }
+  ): Promise<{ runId: string; mode: AutopilotMode; target: AutopilotTarget }> {
+    const session = await prisma.virtual_sessions.findUnique({
+      where: { id: sessionId },
+      include: { virtual_learner_profiles: true }
+    })
+    if (!session) throw new Error('模拟会话不存在')
+    const target = options.target
+    const mode = this.resolveMode(session)
+    const current = AutopilotService.readState(session)
 
     // 每课回合上限：驾驶舱「回合上限」透传（1-100）；未传时沿用上次状态或默认 50
     const lessonTurnCap = Number.isInteger(options.maxTurns)
@@ -189,6 +246,7 @@ export class AutopilotService {
       mode,
       target,
       maxTurns: lessonTurnCap,
+      queuePosition: null,
       completedStage: null,
       startedAt: new Date().toISOString(),
       completedAt: null as unknown as string,
@@ -216,10 +274,57 @@ export class AutopilotService {
         }).catch(() => undefined)
       }).finally(() => {
         this.runningSessions.delete(sessionId)
+        void this.drainQueue()
       })
     })
 
     return { runId, mode, target }
+  }
+
+  private isQueued(sessionId: string): boolean {
+    return this.pendingQueue.some((item) => item.sessionId === sessionId)
+  }
+
+  private removeFromQueue(sessionId: string): boolean {
+    const idx = this.pendingQueue.findIndex((item) => item.sessionId === sessionId)
+    if (idx === -1) return false
+    this.pendingQueue.splice(idx, 1)
+    void this.refreshQueuePositions()
+    return true
+  }
+
+  /** 刷新排队中会话的位次（前端展示用），best-effort */
+  private async refreshQueuePositions(): Promise<void> {
+    for (let i = 0; i < this.pendingQueue.length; i += 1) {
+      await this.writeState(this.pendingQueue[i].sessionId, { queuePosition: i + 1 }).catch(() => undefined)
+    }
+  }
+
+  /** 有槽位腾出时，按 FIFO 拉起排队中的会话 */
+  private async drainQueue(): Promise<void> {
+    if (this.draining) return
+    this.draining = true
+    try {
+      while (this.pendingQueue.length > 0 && this.runningSessions.size < AUTOPILOT_CONCURRENCY_LIMIT) {
+        const next = this.pendingQueue.shift() as { sessionId: string; options: { target: AutopilotTarget; maxTurns?: number } }
+        await this.refreshQueuePositions()
+        const session = await prisma.virtual_sessions.findUnique({ where: { id: next.sessionId } })
+        if (!session || TERMINAL_STATUSES.has(session.status)) continue
+        const state = AutopilotService.readState(session)
+        if (this.runningSessions.has(next.sessionId) || state.status === 'running') continue
+        try {
+          await this.launch(next.sessionId, next.options)
+          logger.info('[autopilot] 排队会话已拉起', { sessionId: next.sessionId, remaining: this.pendingQueue.length })
+        } catch (error) {
+          logger.warn('[autopilot] 排队会话拉起失败，跳过', {
+            sessionId: next.sessionId,
+            error: error instanceof Error ? error.message : String(error)
+          })
+        }
+      }
+    } finally {
+      this.draining = false
+    }
   }
 
   /**
@@ -229,6 +334,13 @@ export class AutopilotService {
     const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } })
     if (!session) throw new Error('模拟会话不存在')
     const state = AutopilotService.readState(session)
+    // 排队中：直接出队并终态化 stopped（没有活跃循环需要发停止标志）
+    if (state.status === 'queued') {
+      this.removeFromQueue(sessionId)
+      await this.markStopped(sessionId, '排队中被取消')
+      logger.info('[autopilot] 取消排队中的全自动', { sessionId })
+      return { accepted: true }
+    }
     if (state.status !== 'running') {
       return { accepted: false, reason: `当前没有运行中的全自动（状态：${state.status}）` }
     }
@@ -244,11 +356,12 @@ export class AutopilotService {
     return { accepted: true }
   }
 
-  /** 全局自动驾驶并发统计（used=内存中正在运行的会话数；limit=env 可配上限） */
-  getConcurrencyStats(): { used: number; limit: number } {
+  /** 全局自动驾驶并发统计（used=内存中正在运行的会话数；queued=排队数；limit=env 可配上限） */
+  getConcurrencyStats(): { used: number; limit: number; queued: number } {
     return {
       used: this.runningSessions.size,
       limit: AUTOPILOT_CONCURRENCY_LIMIT,
+      queued: this.pendingQueue.length,
     }
   }
 

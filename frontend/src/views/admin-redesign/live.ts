@@ -1393,7 +1393,7 @@ export const liveVirtualRunStats = ref<LiveVirtualRunStats>({
 })
 
 /** 自动驾驶全局并发（配额条：used=内存运行中，limit=env 可配上限，默认 10） */
-export const liveAutopilotConcurrency = ref({ used: 0, limit: 10 })
+export const liveAutopilotConcurrency = ref({ used: 0, limit: 10, queued: 0 })
 
 async function fetchLiveVirtualStats(): Promise<void> {
   const res = await adminVirtualLearnersApi.getVirtualLearnerStats()
@@ -1437,7 +1437,8 @@ async function fetchLiveVirtuals(): Promise<void> {
   const apc = body.autopilotConcurrency as Record<string, number> | undefined
   liveAutopilotConcurrency.value = {
     used: Number(apc?.used ?? 0),
-    limit: Number(apc?.limit ?? 10)
+    limit: Number(apc?.limit ?? 10),
+    queued: Number(apc?.queued ?? 0)
   }
   // 运行统计（完成率/失败率/平均时长/卡死最长分钟）独立并行拉取，失败不影响列表
   void fetchLiveVirtualStats().catch(() => {})

@@ -24,9 +24,9 @@
       <span
         class="mk-status__meta vl-concurrency"
         :class="`is-${concurrencyTone}`"
-        :title="`自动驾驶并发 ${concurrency.used}/${concurrency.limit}：同时运行的自动驾驶会话数（env AUTOPILOT_CONCURRENCY_LIMIT 可配）；满员后新启动会被拒绝，请先暂停部分会话`"
+        :title="`自动驾驶并发 ${concurrency.used}/${concurrency.limit}（排队 ${concurrency.queued}）：同时运行的自动驾驶会话数（env AUTOPILOT_CONCURRENCY_LIMIT 可配）；满员后新启动会进入排队，有空位自动拉起`"
       >
-        并发 {{ concurrency.used }}/{{ concurrency.limit }}<template v-if="concurrency.used >= concurrency.limit"> · 已满</template>
+        并发 {{ concurrency.used }}/{{ concurrency.limit }}<template v-if="concurrency.queued > 0"> · 排队 {{ concurrency.queued }}</template><template v-else-if="concurrency.used >= concurrency.limit"> · 已满</template>
       </span>
       <span class="mk-status__actions">
         <button
@@ -1027,10 +1027,11 @@ async function startLaunch() {
   }
 }
 
-/** 自动驾驶并发配额条数据（used/limit + 分档色调） */
+/** 自动驾驶并发配额条数据（used/limit/queued + 分档色调） */
 const concurrency = computed(() => ({
   used: Number(liveAutopilotConcurrency.value?.used ?? 0),
   limit: Math.max(1, Number(liveAutopilotConcurrency.value?.limit ?? 5)),
+  queued: Number(liveAutopilotConcurrency.value?.queued ?? 0),
 }))
 const concurrencyPct = computed(() => Math.min(100, Math.round((concurrency.value.used / concurrency.value.limit) * 100)))
 const concurrencyTone = computed(() => {

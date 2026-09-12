@@ -113,6 +113,28 @@ describe('AutopilotService 全自动模式', () => {
     expect(result.accepted).toBe(false)
   })
 
+  it('并发已满：启动改为排队（不拒绝），可查位次并取消排队', async () => {
+    // 占满并发槽（limit=10）
+    for (let i = 0; i < 10; i += 1) (service as any).runningSessions.add(`fill-${i}`)
+    sessionRecord = buildSession('goal')
+    mockSessionFindUnique.mockImplementation(async () => sessionRecord)
+
+    const res = await service.start('s1')
+    expect(res.queued).toBe(true)
+    expect(res.position).toBe(1)
+    expect(autopilotOf().status).toBe('queued')
+    expect(service.getConcurrencyStats().queued).toBe(1)
+
+    // 排队中再次启动同会话 → 冲突
+    await expect(service.start('s1')).rejects.toBeInstanceOf(AutopilotConflictError)
+
+    // 取消排队
+    const stopped = await service.stop('s1')
+    expect(stopped.accepted).toBe(true)
+    expect(autopilotOf().status).toBe('stopped')
+    expect(service.getConcurrencyStats().queued).toBe(0)
+  })
+
   it('assisted 全链路：goal → path → 逐课 → 达到最终目标（completed）', async () => {
     mockExecuteSingleStep.mockImplementation(async () => {
       sessionRecord.currentStage = 'path'
