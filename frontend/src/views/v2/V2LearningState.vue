@@ -22,7 +22,7 @@
       </div>
 
       <div class="state__grid">
-        <div class="state__col">
+        <div class="state__col" :class="{ 'state__col--empty': !hasAnyLoad }">
           <!-- 趋势图 -->
           <section class="card chart">
             <div class="card-head">
@@ -52,8 +52,8 @@
               <button type="button" class="chart__retry" @click="loadTrends">重试</button>
             </div>
             <div v-else-if="!hasAnyLoad" class="chart__empty">
-              <strong>还没有学习状态数据</strong>
-              <p>完成学习后，这里会出现掌握趋势、疲劳度与整体状态曲线。</p>
+              <strong>学习状态正在积累中</strong>
+              <p>完成第一个任务后开始记录，连续学习约 3 天即可看到掌握趋势、疲劳度与整体状态曲线。</p>
             </div>
             <template v-else>
               <div class="ff-chart" @mousemove="onChartHover" @mouseleave="hoverDay = null">
@@ -263,7 +263,7 @@ const metricOptions: Array<{ key: MetricKey; label: string }> = [
 ];
 
 function toneOf(key: MetricKey, v: number): { tone: string; color: string; note: string } {
-  if (v === null || v === undefined || Number.isNaN(v)) return { tone: 'blue', color: '#5b6577', note: '暂无数据' };
+  if (v === null || v === undefined || Number.isNaN(v)) return { tone: 'blue', color: '#5b6577', note: '积累中' };
   if (key === 'lsb') {
     // LSB = KTL - LF（-100 ~ +100），分档对齐后端 <0/<20/<40/≥40 与 heroTitle 文案
     if (v < 0) return { tone: 'red', color: '#ef7578', note: '严重疲劳，优先休息' };
@@ -756,6 +756,8 @@ onMounted(() => {
 
 .state__grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
 .state__col { display: grid; gap: 16px; }
+/* P2-11：新用户（指标为空）时把「AI 建议」提到最前，作为首屏主内容；图表空态降级为「积累中」说明 */
+.state__col--empty .suggest { order: -1; }
 
 /* ---------- 趋势图 ---------- */
 .chart { padding: 20px 22px; display: grid; gap: 16px; }
