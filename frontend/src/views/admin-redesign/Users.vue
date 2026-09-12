@@ -68,19 +68,30 @@
       </div>
       <div v-else-if="filtered.length" class="mk-table-scroll">
         <table class="mk-table mk-table--fixed">
+          <!-- 列宽单一来源：<colgroup> + token。「用户」不设宽度＝auto 吸收列，
+               其余列严格按 token 渲染（无吸收列时整表会被等比放大）。 -->
+          <colgroup>
+            <col v-if="isLive && !hiddenCols.has('check')" style="width:32px">
+            <col>
+            <col v-if="!hiddenCols.has('role')" style="width:var(--mk-col-model)">
+            <col v-if="!hiddenCols.has('level')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!hiddenCols.has('paths')" style="width:var(--mk-col-num-wide)">
+            <col v-if="!hiddenCols.has('created')" style="width:var(--mk-col-time-full)">
+            <col v-if="!hiddenCols.has('lastlogin')" style="width:var(--mk-col-time-full)">
+            <col style="width:var(--mk-col-actions-wide)">
+          </colgroup>
           <thead>
             <tr>
-              <th v-if="isLive && !hiddenCols.has('check')" scope="col" style="width:32px">
+              <th v-if="isLive && !hiddenCols.has('check')" scope="col">
                 <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
               </th>
-              <th scope="col" style="width:200px">用户</th>
-              <th v-if="!hiddenCols.has('role')" scope="col" style="width:90px">角色</th>
-              <th v-if="!hiddenCols.has('level')" scope="col" style="width:100px">等级 / XP</th>
-              <th v-if="!hiddenCols.has('paths')" scope="col" class="mk-th--right" style="width:90px">路径 / 会话</th>
-              <!-- 相对时间列固定宽（--mk-col-time-full 110px，防 1920 全列等比放大 42% 与刷新跳动） -->
-              <th v-if="!hiddenCols.has('created')" scope="col" class="mk-col--time-full">注册时间</th>
-              <th v-if="!hiddenCols.has('lastlogin')" scope="col" class="mk-col--time-full">最后登录</th>
-              <th scope="col" class="mk-th--right mk-col--actions-wide">操作</th>
+              <th scope="col">用户</th>
+              <th v-if="!hiddenCols.has('role')" scope="col">角色</th>
+              <th v-if="!hiddenCols.has('level')" scope="col">等级 / XP</th>
+              <th v-if="!hiddenCols.has('paths')" scope="col" class="mk-th--right">路径 / 会话</th>
+              <th v-if="!hiddenCols.has('created')" scope="col">注册时间</th>
+              <th v-if="!hiddenCols.has('lastlogin')" scope="col">最后登录</th>
+              <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
         <tbody>
