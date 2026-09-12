@@ -88,7 +88,7 @@ const form = reactive({
 });
 const errors = reactive({ name: '', password: '' });
 const showPwd = ref(false);
-const remember = ref(true);
+const remember = ref(false);
 const formError = ref('');
 
 function touch(key: 'name' | 'password') {

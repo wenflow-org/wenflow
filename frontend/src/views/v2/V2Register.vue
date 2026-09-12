@@ -101,7 +101,7 @@ const dailyQuota = ref(0);
 const form = reactive({ name: '', password: '', confirm: '' });
 const errors = reactive({ name: '', password: '', confirm: '' });
 const showPwd = ref(false);
-const remember = ref(true);
+const remember = ref(false);
 
 const checks = computed(() => ({
   length: form.password.length >= 8,

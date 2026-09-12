@@ -280,10 +280,9 @@ onMounted(load);
 .overview { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .ov { padding: 16px 18px; display: grid; gap: 3px; }
 .ov small { font-size: 12px; color: var(--faint); font-weight: 700; }
-.ov b { font-size: 28px; letter-spacing: -0.02em; }
+/* P3-19：四张统计卡统一为「主色数值 + 中性标签」两档，去掉逐卡变色（原 1 绿 / 3 蓝 / 2·4 黑） */
+.ov b { font-size: 28px; letter-spacing: -0.02em; color: var(--accent); }
 .ov span { font-size: 11.5px; color: var(--faint); }
-.ov:nth-child(1) b { color: var(--green); }
-.ov:nth-child(3) b { color: var(--accent); }
 
 .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .filter {
