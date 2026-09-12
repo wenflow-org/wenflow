@@ -437,6 +437,7 @@ skills:
         - table: learning_metrics
           via: service
       sandbox: [simulation]
+    notes: 手动触发（POST /api/admin/virtual-learners/sessions/:id/blackbox-evaluations，routes/admin/virtual-learners.ts:2367）；前置 experiment.mode='blackbox-api' 且会话终态。assisted autopilot 不自动执行——simulation.coordinator 未调用，故当前 0 调用
 
   - skillId: virtual-learner-memory-curator
     kind: mainline
@@ -478,6 +479,7 @@ skills:
         - table: virtual_learner_profiles
           via: service
       sandbox: [simulation]
+    notes: 手动触发（同 referee，POST /blackbox-evaluations）；前置 experiment.mode='blackbox-api' 且会话终态。assisted autopilot 不自动执行，故当前 0 调用
 
   - skillId: virtual-learner-epistemic-grounding
     kind: mainline

@@ -1,7 +1,7 @@
 export const simulationAgentRuntimeDefinition = {
   id: 'simulation-agent',
   displayName: 'Virtual Learner Simulation Agent',
-  description: '正式黑盒链路为 Virtual Learner -> Goal Conversation -> Path Result -> AI Teaching；Path Review 仅用于 legacy assisted 调试。persona/scenario 设计为前置配置阶段（routes/admin/virtual-learners.ts），不在主链 steps 内；referee/auditor 在 virtual-lab/blackbox-runner 旁路执行。',
+  description: '正式黑盒链路为 Virtual Learner -> Goal Conversation -> Path Result -> AI Teaching；Path Review 仅用于 legacy assisted 调试。persona/scenario 设计为前置配置阶段（routes/admin/virtual-learners.ts），不在主链 steps 内；referee/auditor 为手动评估端点（POST /blackbox-evaluations，且仅 mode=blackbox-api 实验会话），assisted autopilot 不自动执行。',
   category: 'agent',
   steps: [
     { step: 1, agentId: 'skill:virtual-learner-goal-dialogue-simulator', role: 'goal-stage-learner-turn-simulation', loopOver: 'goal-rounds' },
@@ -10,8 +10,8 @@ export const simulationAgentRuntimeDefinition = {
     { step: 4, agentId: 'skill:virtual-learner-path-evaluator', role: 'legacy-assisted-path-review', condition: 'legacy assisted mode only' },
     { step: 5, agentId: 'skill:virtual-learner-learn-turn-simulator', role: 'teaching-stage-learner-turn-simulation', condition: 'when teaching phase starts', loopOver: 'teaching-turns' },
     { step: 6, agentId: 'teaching-agent', role: 'teaching-session-execution', condition: 'when teaching phase starts', loopOver: 'teaching-turns' },
-    { step: 7, agentId: 'skill:virtual-learner-referee', role: 'platform-quality-referee', condition: 'after blackbox experiment reaches terminal state' },
-    { step: 8, agentId: 'skill:virtual-learner-actor-auditor', role: 'synthetic-learner-fidelity-audit', condition: 'after blackbox experiment reaches terminal state' },
+    { step: 7, agentId: 'skill:virtual-learner-referee', role: 'platform-quality-referee', condition: 'manual: /blackbox-evaluations (blackbox-api sessions only)' },
+    { step: 8, agentId: 'skill:virtual-learner-actor-auditor', role: 'synthetic-learner-fidelity-audit', condition: 'manual: /blackbox-evaluations (blackbox-api sessions only)' },
     { step: 9, agentId: 'skill:virtual-learner-memory-curator', role: 'after-lesson-memory-curation', condition: 'after a lesson/task completes in any chain' },
   ],
   variableGraph: {
