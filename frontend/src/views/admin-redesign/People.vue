@@ -10,17 +10,20 @@
         type="button"
         class="pp-count-link"
         :class="{ 'pp-count-link--on': tab === 'account' }"
-        title="点击切换到「账号管理」视图"
+        title="平台账号数（真实用户，不含测试/虚拟）· 点击切换到「账号管理」"
         @click="switchTab('account')"
-      >用户 {{ domainCount.users }}</button>
+      >用户 {{ userCount }}</button>
       <button
         type="button"
         class="pp-count-link"
         :class="{ 'pp-count-link--on': tab === 'state' }"
-        title="点击切换到「学习状态」视图"
+        title="学习画像份数（每位用户 1 份，与「用户」是同一批人）· 点击切换到「学习状态」"
         @click="switchTab('state')"
       >学习者 {{ domainCount.learners }}</button>
-      <span class="mk-status__meta" title="账号=用户生命周期；学习状态=画像快照（均为仅真实口径）">共 {{ domainTotal }} 人</span>
+      <span
+        class="mk-status__meta"
+        :title="tab === 'state' ? '账号数与学习画像份数覆盖同一批真实用户，合计不重复计人' : '平台真实用户数（不含测试/虚拟）'"
+      >共 {{ userCount }} 人<template v-if="tab === 'state'"> · {{ domainCount.learners }} 份学习画像</template></span>
       <span class="mk-status__actions">
         <button v-if="tab === 'account'" type="button" class="mk-status__action mk-status__action--primary" @click="usersRef?.openCreate?.()">新建用户</button>
         <button type="button" class="mk-status__action" @click="refreshActive">刷新</button>
@@ -54,6 +57,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { intent } from './store'
+import { liveUsersTotal } from './live'
 import Users from './Users.vue'
 import LearnerCenter from './LearnerCenter.vue'
 
@@ -67,13 +71,22 @@ const router = useRouter()
 /* ===== 宿主状态条（用户与学习者：两域计数徽章 + 切视图） ===== */
 /** 两域计数（由激活子视图上报；域计数徽章方案，对齐学习会话宿主） */
 const domainCount = ref<{ users: number; learners: number }>({ users: 0, learners: 0 })
-const domainTotal = computed(() => domainCount.value.users + domainCount.value.learners)
+/**
+ * 账号总数以全局 live 单源为准：Users 只在「账号管理」Tab 挂载，
+ * 若沿用子视图 emit，切到「学习状态」后 users 会停留在旧值、深链直连则取不到。
+ */
+const userCount = computed(() => liveUsersTotal.value || domainCount.value.users)
 const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() =>
-  domainTotal.value > 0 ? 'ok' : 'muted'
+  userCount.value > 0 ? 'ok' : 'muted'
 )
 function onDomainCount(domain: 'users' | 'learners', n: number) {
   domainCount.value[domain] = n
 }
+/* 学习画像与账号是同一批人：离开「学习状态」即清零，
+   避免「用户 19 + 学习者 19 = 共 38 人」的重复计数误读 */
+watch(tab, (t) => {
+  if (t !== 'state') domainCount.value.learners = 0
+})
 const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
 const learnersRef = ref<{ refresh?: () => void } | null>(null)
 function refreshActive() {
