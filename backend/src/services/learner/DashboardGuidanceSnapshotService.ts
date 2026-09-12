@@ -1,5 +1,5 @@
 import prisma from '../../config/database';
-import { executeSkill } from '../../skills';
+import { executeSkillWithResult } from '../../skills';
 import { adaptiveGuidanceCopyDefinition, type AdaptiveGuidanceCopyOutput } from '../../skills/adaptive-guidance-copy';
 import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
@@ -146,8 +146,9 @@ class DashboardGuidanceSnapshotService {
         warningCount: warnings.length,
       });
 
-      // v4 §5.2：统一经 executeSkill 入口（遥测/用户级开关/归一化），禁止直连 handler
-      const result = await executeSkill(adaptiveGuidanceCopyDefinition, {
+      // v4 §5.2：统一经 executeSkillWithResult 入口（遥测/用户级开关/归一化），
+      // 需读取 quality/debug/output，故用返回完整结果的版本（executeSkill 会拆包只留 output）。
+      const result = await executeSkillWithResult(adaptiveGuidanceCopyDefinition, {
         view: 'dashboard',
         learnerSnapshot,
         learningState,
