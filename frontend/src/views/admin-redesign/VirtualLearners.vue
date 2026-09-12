@@ -28,6 +28,13 @@
       >
         并发 {{ concurrency.used }}/{{ concurrency.limit }}<template v-if="concurrency.queued > 0"> · 排队 {{ concurrency.queued }}</template><template v-else-if="concurrency.used >= concurrency.limit"> · 已满</template>
       </span>
+      <span class="mk-status__meta" :title="`虚拟学习者专属出站速率：在途 ${vlRpm.inFlight}，排队 ${vlRpm.queued}；上限 ${vlRpm.limit ? vlRpm.limit + ' RPM' : '不限'}`">
+        速率 {{ vlRpm.inFlight }} 在途 / {{ vlRpm.limit ? vlRpm.limit + ' RPM' : '不限' }}<template v-if="vlRpm.queued > 0"> · 排队 {{ vlRpm.queued }}</template>
+      </span>
+      <label class="mk-status__meta" title="虚拟学习者专属出站 RPM 上限（0=不限）；与平台全局速率相互独立，不会挤占真实用户额度" style="display:inline-flex;align-items:center;gap:4px">
+        VL RPM
+        <input v-model.number="vlRpm.limit" type="number" min="0" max="100000" step="10" class="mk-filter__input" style="width:84px" @change="saveVlRpm" />
+      </label>
       <span class="mk-status__actions">
         <button
           v-if="partition.stale > 0"
@@ -559,7 +566,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, reactive, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency } from './live'
 import { adminVirtualLearnersApi, adminPromptOpsApi } from '@/api/adminApi'
@@ -1040,6 +1047,45 @@ const concurrencyTone = computed(() => {
   if (pct >= 70) return 'warn'
   return 'ok'
 })
+
+/* 虚拟学习者专属出站速率（RPM）：设置 + 运行态。与平台全局速率相互独立。 */
+const vlRpm = reactive({ limit: 0, inFlight: 0, queued: 0, rpm: 0 })
+async function loadVlRpm() {
+  try {
+    const res = await adminVirtualLearnersApi.getVirtualLabSettings()
+    const d = res.data?.data ?? {}
+    const s = d.settings ?? {}
+    const r = d.rpm ?? {}
+    vlRpm.limit = Number(s.virtualLearnerRpmLimit ?? 0)
+    vlRpm.rpm = Number(r.rpm ?? 0)
+    vlRpm.inFlight = Number(r.inFlight ?? 0)
+    vlRpm.queued = Number(r.queued ?? 0)
+  } catch { /* 保留上次值 */ }
+}
+async function saveVlRpm() {
+  const value = Math.max(0, Math.min(100000, Math.round(Number(vlRpm.limit) || 0)))
+  vlRpm.limit = value
+  try {
+    const res = await adminVirtualLearnersApi.updateVirtualLabSettings({ virtualLearnerRpmLimit: value })
+    const r = res.data?.data?.rpm
+    if (r) {
+      vlRpm.rpm = Number(r.rpm ?? value)
+      vlRpm.inFlight = Number(r.inFlight ?? 0)
+      vlRpm.queued = Number(r.queued ?? 0)
+    }
+    toast.success(value > 0 ? `虚拟学习者 RPM 上限已设为 ${value}` : '虚拟学习者 RPM 已设为不限')
+  } catch (e) {
+    toast.error(errMsg(e) || '保存失败')
+  }
+}
+const vlRpmPolling = useSafePolling(() => loadVlRpm(), {
+  interval: 10000,
+  maxBackoff: 30000,
+  circuitBreakerThreshold: 5,
+  skipWhenHidden: true,
+  immediate: true
+})
+vlRpmPolling.start()
 
 /** 当前有活跃会话的虚拟学习者（"正在运行"条直接列名） */
 const runningSamples = computed(() => samples.value.filter((s) => s.runningCount > 0))

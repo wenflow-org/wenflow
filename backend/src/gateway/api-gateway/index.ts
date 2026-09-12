@@ -7,6 +7,7 @@ import { logger } from '../../utils/logger';
 import { createHash } from 'crypto';
 import { getAgentOfSkill } from '../../services/agent-manifest.service';
 import { createRuntimeRetryBudget } from '../../services/reliability-settings.service';
+import { platformRpmLimiter, virtualLearnerRpmLimiter } from './rpm-limiter';
 
 export class APIGateway {
   private router: APIRouter;
@@ -93,7 +94,17 @@ export class APIGateway {
 
     route = this.applyRouteOverride(route, requestContext.promptRuntimeOverride?.routeOverride);
 
-    return this.executor.execute(route, request, executionContext);
+    // 出站 RPM 限流：虚拟学习者（sourceEntry=simulation）与平台全局两条独立通道。
+    // 超预算时在此等待令牌（不报错），让自动驾驶自然变慢。
+    const rpmLimiter = executionContext.sourceEntry === 'simulation'
+      ? virtualLearnerRpmLimiter
+      : platformRpmLimiter;
+    const releaseRpm = await rpmLimiter.acquire();
+    try {
+      return await this.executor.execute(route, request, executionContext);
+    } finally {
+      releaseRpm();
+    }
   }
 
   private applyRouteOverride(route: ResolvedRoute, override?: RouteExecutionOverride): ResolvedRoute {

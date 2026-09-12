@@ -17,6 +17,8 @@ export interface PlatformReliabilitySettings {
   retryBaseDelayMs: number;
   maxRetryAfterMs: number;
   jitterEnabled: boolean;
+  /** 平台全局出站 LLM 请求速率上限（RPM）；0 = 不限。虚拟学习者走独立通道，不计入此处 */
+  platformRpmLimit: number;
 }
 
 export const DEFAULT_PLATFORM_RELIABILITY_SETTINGS: PlatformReliabilitySettings = {
@@ -27,7 +29,9 @@ export const DEFAULT_PLATFORM_RELIABILITY_SETTINGS: PlatformReliabilitySettings 
   defaultRequestTimeoutMs: 600_000,
   retryBaseDelayMs: 1_000,
   maxRetryAfterMs: 10_000,
-  jitterEnabled: true
+  jitterEnabled: true,
+  // 默认不限，避免未配置时改变现网行为
+  platformRpmLimit: 0
 };
 
 let runtimeCache: { value: PlatformReliabilitySettings; expiresAt: number } | null = null;
@@ -82,7 +86,13 @@ export function normalizePlatformReliabilitySettings(
       0,
       RETRY_BUDGET_HARD_LIMITS.maxRetryAfterMs
     ),
-    jitterEnabled: input?.jitterEnabled !== false
+    jitterEnabled: input?.jitterEnabled !== false,
+    platformRpmLimit: clampInteger(
+      input?.platformRpmLimit,
+      DEFAULT_PLATFORM_RELIABILITY_SETTINGS.platformRpmLimit,
+      0,
+      100_000
+    )
   };
 }
 

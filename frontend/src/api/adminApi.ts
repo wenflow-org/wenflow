@@ -1237,6 +1237,14 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get('/admin/virtual-learners/stats');
   },
 
+  getVirtualLabSettings: async () => {
+    return adminAxios.get('/admin/virtual-learners/settings');
+  },
+
+  updateVirtualLabSettings: async (data: { virtualLearnerRpmLimit: number }) => {
+    return adminAxios.put('/admin/virtual-learners/settings', data);
+  },
+
   createVirtualLearner: async (data: {
     name: string;
     learningGoal?: string;

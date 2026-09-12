@@ -371,6 +371,16 @@
                 </label>
               </div>
             </div>
+            <div v-if="reliability" class="ac-group">
+              <div class="ac-group__title">出站速率（平台全局）</div>
+              <div class="ac-group__fields">
+                <label class="mk-field">
+                  <span class="mk-field__label">平台全局 RPM 上限（0=不限）</span>
+                  <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <span class="mk-field__hint">真实用户与平台自身调用的出站 LLM 请求速率上限；虚拟学习者走独立通道，不计入此处</span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -599,6 +609,7 @@ interface Reliability {
   retryBaseDelayMs: number
   maxRetryAfterMs: number
   jitterEnabled: boolean
+  platformRpmLimit: number
 }
 const reliability = ref<Reliability | null>(null)
 const configLoadFailed = ref(false)
@@ -665,7 +676,8 @@ async function loadReliability() {
       defaultRequestTimeoutMs: Number(s.defaultRequestTimeoutMs ?? 600000),
       retryBaseDelayMs: Number(s.retryBaseDelayMs ?? 2000),
       maxRetryAfterMs: Number(s.maxRetryAfterMs ?? 30000),
-      jitterEnabled: s.jitterEnabled !== false
+      jitterEnabled: s.jitterEnabled !== false,
+      platformRpmLimit: Number(s.platformRpmLimit ?? 0)
     }
     configLoadFailed.value = false
   } catch {

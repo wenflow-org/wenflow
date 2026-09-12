@@ -41,7 +41,8 @@ describe('reliability settings service', () => {
       defaultRequestTimeoutMs: 600000,
       retryBaseDelayMs: 1000,
       maxRetryAfterMs: 10000,
-      jitterEnabled: true
+      jitterEnabled: true,
+      platformRpmLimit: 0
     })
   })
 
@@ -63,7 +64,8 @@ describe('reliability settings service', () => {
       defaultRequestTimeoutMs: 600000,
       retryBaseDelayMs: 5000,
       maxRetryAfterMs: 10000,
-      jitterEnabled: false
+      jitterEnabled: false,
+      platformRpmLimit: 0
     })
 
     await updatePlatformReliabilitySettings(normalized)

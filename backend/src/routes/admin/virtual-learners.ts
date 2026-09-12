@@ -27,6 +27,8 @@ import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
+import { getVirtualLabSettings, updateVirtualLabSettings } from '../../services/virtual-lab-settings.service';
+import { applyRpmLimitsFromSettings, getRpmLimitStats } from '../../services/rpm-limit-config.service';
 import { virtualCleanupService } from '../../services/virtual-lab/virtual-cleanup.service';
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
 import { safeJsonParse } from '../../utils/safe-json';
@@ -1689,6 +1691,37 @@ router.get('/stats', async (req: Request, res) => {
  * 获取虚拟用户详情
  * GET /api/admin/virtual-learners/:id
  */
+/**
+ * 虚拟学习者专属运行设置（RPM 等）。必须定义在 `/:id` 之前，否则会被当作画像 id。
+ * GET 返回设置 + 当前限流器运行态；PUT 更新并即时生效；与「平台全局 RPM」相互独立。
+ */
+router.get('/settings', async (_req: Request, res) => {
+  try {
+    const settings = await getVirtualLabSettings();
+    const stats = getRpmLimitStats();
+    res.json({ success: true, data: { settings, rpm: stats.virtualLearner } });
+  } catch (error) {
+    logger.error('读取虚拟学习者设置失败:', error);
+    res.status(500).json({ success: false, error: error.message || '读取虚拟学习者设置失败' });
+  }
+});
+
+router.put('/settings', async (req: Request, res) => {
+  try {
+    const body = req.body || {};
+    if (body.virtualLearnerRpmLimit !== undefined && !Number.isInteger(body.virtualLearnerRpmLimit)) {
+      return res.status(400).json({ success: false, error: 'virtualLearnerRpmLimit 必须是整数' });
+    }
+    const settings = await updateVirtualLabSettings(body);
+    await applyRpmLimitsFromSettings().catch(() => undefined);
+    const stats = getRpmLimitStats();
+    res.json({ success: true, data: { settings, rpm: stats.virtualLearner } });
+  } catch (error) {
+    logger.error('更新虚拟学习者设置失败:', error);
+    res.status(500).json({ success: false, error: error.message || '更新虚拟学习者设置失败' });
+  }
+});
+
 router.get('/:id', async (req: Request, res) => {
   try {
     const { id } = req.params;

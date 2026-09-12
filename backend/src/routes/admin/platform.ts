@@ -26,6 +26,7 @@ import {
   getReliabilityHardLimits,
   updatePlatformReliabilitySettings
 } from '../../services/reliability-settings.service';
+import { applyRpmLimitsFromSettings } from '../../services/rpm-limit-config.service';
 import {
   getPlatformCapabilityProbeEnabled,
   getPlatformCapabilityProbeInterval,
@@ -1908,7 +1909,8 @@ router.put('/settings/reliability', async (req: Request, res: Response) => {
       'maxLogicalRetries',
       'defaultRequestTimeoutMs',
       'retryBaseDelayMs',
-      'maxRetryAfterMs'
+      'maxRetryAfterMs',
+      'platformRpmLimit'
     ];
     for (const field of integerFields) {
       if (!Number.isInteger(input[field])) {
@@ -1925,7 +1927,8 @@ router.put('/settings/reliability', async (req: Request, res: Response) => {
       maxLogicalRetries: [0, limits.maxLogicalRetries],
       defaultRequestTimeoutMs: [limits.minRequestTimeoutMs, limits.maxRequestTimeoutMs],
       retryBaseDelayMs: [limits.minRetryBaseDelayMs, limits.maxRetryBaseDelayMs],
-      maxRetryAfterMs: [0, limits.maxRetryAfterMs]
+      maxRetryAfterMs: [0, limits.maxRetryAfterMs],
+      platformRpmLimit: [0, 100_000]
     };
     for (const [field, [min, max]] of Object.entries(ranges)) {
       if (input[field] < min || input[field] > max) {
@@ -1936,6 +1939,7 @@ router.put('/settings/reliability', async (req: Request, res: Response) => {
       }
     }
     const settings = await updatePlatformReliabilitySettings(input);
+    await applyRpmLimitsFromSettings().catch(() => undefined);
     res.json({ success: true, data: { settings, hardLimits: getReliabilityHardLimits() } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { message: error.message || '更新 AI 可靠性设置失败' } });

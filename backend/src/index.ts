@@ -22,6 +22,7 @@ import learningService from './services/learning/learning.service';
 import { ensureCoreAgentPrompts } from './scripts/seed-core-agent-prompts';
 import { ensureBuiltinVirtualLearners } from './virtual-lab/builtin-learners';
 import { autopilotService } from './virtual-lab/autopilot.service';
+import { startRpmLimitSync } from './services/rpm-limit-config.service';
 import { bootstrapFieldRoutings } from './services/field-routing-bootstrap.service';
 import { seedSkillModelConfigsIfEmpty } from './services/seed-skill-model-configs';
 import { dashboardGuidanceSnapshotService } from './services/learner/DashboardGuidanceSnapshotService';
@@ -552,6 +553,8 @@ export async function startServer() {
         error: err instanceof Error ? err.message : String(err),
       });
     });
+    // 出站 RPM 限流配置对齐（平台全局 + 虚拟学习者专属两条通道）
+    startRpmLimitSync();
     assertStartupActive();
 
     const backendRoot = resolve(__dirname, '..');
