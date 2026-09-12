@@ -14,6 +14,12 @@
       </span>
     </div>
 
+    <!-- 主视图切换（统一样板：状态条正下方的独立一行，按内容宽度、左对齐） -->
+    <div class="mk-pills" role="tablist" aria-label="评估视图切换">
+      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'cases'" :class="{ 'mk-pill--active': tab === 'cases' }" @click="switchTab('cases')">评估用例</button>
+      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'runs'" :class="{ 'mk-pill--active': tab === 'runs' }" @click="switchTab('runs')">评估历史</button>
+    </div>
+
     <!-- 筛选行 -->
     <div class="mk-card">
       <div class="pe-filter">
@@ -21,10 +27,6 @@
           <option value="">全部 Agent</option>
           <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.label }}</option>
         </select>
-        <span class="mk-pills">
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'cases' }" @click="switchTab('cases')">评估用例</button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'runs' }" @click="switchTab('runs')">评估历史</button>
-        </span>
         <span v-if="tab === 'cases'" class="pe-filter__hint">用例驱动：为 goal-conversation 等 Agent 维护评估集，一键跑评估验证 prompt 改动</span>
       </div>
     </div>
