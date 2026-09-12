@@ -549,7 +549,7 @@ skills:
     dataSource:
       db: []
       sandbox: []
-    notes: metrics/signals 由调用方内存计算（LearnerProgressService.ts:81-90 getCurrentMetrics 不落库），触发点 learning.service.ts:4623；无 DB 直读
+    notes: metrics/signals 由调用方内存计算（LearnerProgressService.ts:81-90 getCurrentMetrics 不落库），触发链 learning.service.ts:5343（任务完成）→ LearnerProgressService.ts:251 executeSkill；无 DB 直读
 
   - skillId: generic-chat
     kind: aux
@@ -582,7 +582,7 @@ skills:
     dataSource:
       db: []
       sandbox: []
-    notes: 用户提交的 prompt 文本/字段清单（skill-author/index.ts:47），无 DB 直读
+    notes: 无调用方——原 /api/admin/skill-author 路由已删除（QA ISSUE-008），services/skill-author/index.ts 的 draftSkillPrompt 无消费方；历史输入=用户提交的 prompt 文本/字段清单，无 DB 直读
 
   - skillId: skill-compiler
     kind: aux
@@ -593,7 +593,7 @@ skills:
     dataSource:
       db: []
       sandbox: []
-    notes: 用户提交 systemPrompt/requiredFieldIds（skill-author/index.ts:145），无 DB 直读
+    notes: 无调用方——原 /api/admin/skill-author 路由已删除（QA ISSUE-008），services/skill-author/index.ts 的 compileSkill 无消费方；历史输入=用户提交 systemPrompt/requiredFieldIds，无 DB 直读
 
   - skillId: basic-evaluator
     kind: aux
