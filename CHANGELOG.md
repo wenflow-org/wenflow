@@ -116,6 +116,7 @@
 
 - 完成 Agent → Coordinator 核心架构重构。
 - 重构平台能力体系与虚拟学习者流程。
+- **system 库表名对齐架构命名**：`orchestrator_contracts` → `agent_contracts`，`orchestrator_field_routings` → `agent_field_routings`。迁移脚本见 `backend/prisma/legacy-migrations/20260621171700_rename_orchestrator_to_agent/`，该变更已并入 `20260717000000_system_baseline` 基线，从基线开始回放的空库无需额外操作；若外部脚本或查询仍引用旧表名，升级时需同步替换。
 
 ### 修复
 
