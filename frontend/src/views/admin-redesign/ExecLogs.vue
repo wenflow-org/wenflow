@@ -99,12 +99,13 @@
           <colgroup>
             <col v-if="!hiddenCols.has('time')" style="width:var(--mk-col-time-full)">
             <col v-if="!hiddenCols.has('kind')" style="width:36px">
-            <col v-if="!hiddenCols.has('agent')" style="width:120px">
-            <col v-if="!hiddenCols.has('msg')" style="width:180px">
-            <col v-if="!hiddenCols.has('model')" style="width:140px">
-            <col v-if="!hiddenCols.has('tokens')" style="width:132px">
-            <col v-if="!hiddenCols.has('dur')" style="width:52px">
-            <col v-if="!hiddenCols.has('status')" style="width:56px">
+            <col v-if="!hiddenCols.has('agent')" style="width:var(--mk-col-model)">
+            <!-- 调用文本：弹性吸收列（不设宽度） -->
+            <col v-if="!hiddenCols.has('msg')">
+            <col v-if="!hiddenCols.has('model')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!hiddenCols.has('tokens')" style="width:var(--mk-col-num-wide)">
+            <col v-if="!hiddenCols.has('dur')" style="width:var(--mk-col-num)">
+            <col v-if="!hiddenCols.has('status')" style="width:var(--mk-col-badge)">
             <col v-if="!hiddenCols.has('trace')" style="width:86px">
           </colgroup>
           <thead>

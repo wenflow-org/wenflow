@@ -69,12 +69,13 @@
       <div v-if="view === 'list'" class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table sk-table mk-table--fixed">
           <colgroup>
-            <col style="width:auto">
-            <col v-if="!hiddenCols.has('agent')" style="width:120px">
-            <col v-if="!hiddenCols.has('cat')" style="width:80px">
-            <col v-if="!hiddenCols.has('completion')" style="width:100px">
-            <col v-if="!hiddenCols.has('rate')" style="width:80px">
-            <col v-if="!hiddenCols.has('last')" style="width:120px">
+            <!-- Skill 名：弹性吸收列（不设宽度） -->
+            <col>
+            <col v-if="!hiddenCols.has('agent')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!hiddenCols.has('cat')" style="width:var(--mk-col-badge)">
+            <col v-if="!hiddenCols.has('completion')" style="width:var(--mk-col-badge)">
+            <col v-if="!hiddenCols.has('rate')" style="width:var(--mk-col-num)">
+            <col v-if="!hiddenCols.has('last')" style="width:var(--mk-col-time-full)">
           </colgroup>
           <thead>
             <tr>
@@ -422,21 +423,9 @@ function recGateDetail(completion: SkillCompletion): string {
 /* 列表视图 */
 .sk-row { cursor: pointer; }
 .sk-cell { display: flex; align-items: center; gap: 10px; }
-/* 目录表列宽防抖（ADMIN_COLUMN_WIDTH_AUDIT ④）：全部固定宽，杜绝内容撑宽抖动；
-   Skill 列 = 吸收列（剩余宽度主要进它，1920 不再全列等比放大 42%）。
-   用 :not(.sk-rec-table) 排除下方对账表（7 列结构不同）；
-   固定宽统一走 mk-col-* token（4K 档由 shared.css 自动放大）。
-   用 :not(.sk-rec-table) 排除下方对账表（7 列结构不同） */
-.sk-table:not(.sk-rec-table) th:nth-child(1), .sk-table:not(.sk-rec-table) td:nth-child(1) { width: var(--mk-col-flex-max); }
-.sk-table:not(.sk-rec-table) th:nth-child(2), .sk-table:not(.sk-rec-table) td:nth-child(2) { width: var(--mk-col-model); }
-.sk-table:not(.sk-rec-table) th:nth-child(3), .sk-table:not(.sk-rec-table) td:nth-child(3) { width: var(--mk-col-badge); }
-.sk-table:not(.sk-rec-table) th:nth-child(4), .sk-table:not(.sk-rec-table) td:nth-child(4) { width: var(--mk-col-badge); }
-.sk-table:not(.sk-rec-table) th:nth-child(5), .sk-table:not(.sk-rec-table) td:nth-child(5),
-.sk-table:not(.sk-rec-table) th:nth-child(6), .sk-table:not(.sk-rec-table) td:nth-child(6),
-.sk-table:not(.sk-rec-table) th:nth-child(7), .sk-table:not(.sk-rec-table) td:nth-child(7) { width: var(--mk-col-num); }
-.sk-table:not(.sk-rec-table) th:nth-child(8), .sk-table:not(.sk-rec-table) td:nth-child(8) { width: var(--mk-col-num); }
-.sk-table:not(.sk-rec-table) th:nth-child(9), .sk-table:not(.sk-rec-table) td:nth-child(9) { width: var(--mk-col-num-wide); }
-.sk-table:not(.sk-rec-table) th:nth-child(10), .sk-table:not(.sk-rec-table) td:nth-child(10) { width: var(--mk-col-actions); }
+/* 列宽统一走 <colgroup> + token（见模板上方）；Skill 列为 auto 吸收列。
+   此处不再用 th/td:nth-child 写宽——它与 colgroup 冲突，且 nth-child(7~10) 已无对应列，
+   会导致列宽既非 colgroup 也非 token、且不可预测。 */
 /* 英文原名（id）主行：等宽突出；中文描述副行：灰色正文（非 mono）。
    截断上限统一引用 token（原散落 460px） */
 .sk-id-main {

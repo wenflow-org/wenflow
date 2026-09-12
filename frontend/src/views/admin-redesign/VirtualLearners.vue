@@ -115,15 +115,17 @@
       <table class="mk-table mk-table--click mk-table--fixed">
         <colgroup>
           <col v-if="isLive" style="width:32px">
-          <col style="width:var(--mk-col-flex-min, 200px);max-width:var(--mk-col-flex-max, 840px)">
-          <col style="width:var(--mk-col-model-wide, 165px)">
-          <col style="width:var(--mk-col-badge, 76px)">
-          <col style="width:var(--mk-col-num, 64px)">
-          <col style="width:150px">
-          <col style="width:var(--mk-col-num, 64px)">
-          <col style="width:var(--mk-col-num, 64px)">
-          <col style="width:var(--mk-col-time-full, 128px)">
-          <col style="width:var(--mk-col-actions-wide, 140px)">
+          <!-- 文本列（虚拟学习者 / 长期倾向）：auto 吸收列，共享剩余宽度；
+               固定 token 只用于徽章/数字/时间/操作列。 -->
+          <col>
+          <col>
+          <col style="width:var(--mk-col-badge)">
+          <col style="width:var(--mk-col-num)">
+          <col style="width:var(--mk-col-flex-min)">
+          <col style="width:var(--mk-col-num)">
+          <col style="width:var(--mk-col-num)">
+          <col style="width:var(--mk-col-time-full)">
+          <col style="width:var(--mk-col-actions-wide)">
         </colgroup>
         <thead>
           <tr>

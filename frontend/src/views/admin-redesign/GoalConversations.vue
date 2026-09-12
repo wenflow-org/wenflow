@@ -90,15 +90,25 @@
         </div>
         <div v-else-if="filtered.length" class="mk-table-scroll">
         <table class="mk-table mk-table--fixed">
+          <!-- 列宽单一来源：<colgroup> + token；「目标摘要」为 auto 吸收列 -->
+          <colgroup>
+            <col style="width:var(--mk-col-model-wide)">
+            <col v-if="!gcHiddenCols.has('summary')">
+            <col v-if="!gcHiddenCols.has('status')" style="width:var(--mk-col-badge)">
+            <col v-if="!gcHiddenCols.has('stage')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!gcHiddenCols.has('path')" style="width:var(--mk-col-badge)">
+            <col v-if="!gcHiddenCols.has('created')" style="width:var(--mk-col-time-full)">
+            <col style="width:var(--mk-col-actions-wide)">
+          </colgroup>
           <thead>
             <tr>
-              <th style="width:160px">用户</th>
-              <th v-if="!gcHiddenCols.has('summary')" style="width:35%">目标摘要</th>
-              <th v-if="!gcHiddenCols.has('status')" class="mk-col--badge">状态</th>
-              <th v-if="!gcHiddenCols.has('stage')" style="width:160px">阶段</th>
-              <th v-if="!gcHiddenCols.has('path')" class="mk-col--badge">路径</th>
-              <th v-if="!gcHiddenCols.has('created')" class="mk-col--time-full">创建时间</th>
-              <th class="mk-col--actions-wide">操作</th>
+              <th>用户</th>
+              <th v-if="!gcHiddenCols.has('summary')">目标摘要</th>
+              <th v-if="!gcHiddenCols.has('status')">状态</th>
+              <th v-if="!gcHiddenCols.has('stage')">阶段</th>
+              <th v-if="!gcHiddenCols.has('path')">路径</th>
+              <th v-if="!gcHiddenCols.has('created')">创建时间</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
