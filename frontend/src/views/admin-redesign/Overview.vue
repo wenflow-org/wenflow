@@ -44,6 +44,20 @@
       <span class="brief-card__go">健康中心 →</span>
     </button>
 
+    <!-- 仿真通道摘要条（虚拟学习者）：与上方真实用户 KPI 互斥——避免总览首屏把仿真失败完全遮住 -->
+    <button
+      type="button"
+      class="ov-health ov-sim"
+      :class="`ov-health--${simTone}`"
+      :title="simTitle"
+      @click="jump('virtual-learners')"
+    >
+      <span class="ov-health__dot" aria-hidden="true"></span>
+      <strong class="ov-health__title">仿真通道 · {{ simHeadline }}</strong>
+      <span class="ov-health__sub">今日虚拟调用 {{ runStats.todayCalls.toLocaleString() }} · 完成率 {{ runStats.completionRate }}% · 运行中 {{ runStats.running }} · 失败 {{ runStats.failed }}</span>
+      <span class="brief-card__go">虚拟学习者 →</span>
+    </button>
+
     <div class="brief-grid">
       <!-- KPI 行：今日窗口指标（共享 MkKpi，clickable 跳转） -->
       <section class="brief-kpis">
@@ -354,7 +368,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource } from './store';
-import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading } from './live';
+import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveVirtualRunStats } from './live';
 import { adminHealthCenterApi } from '@/api/adminApi';
 import { TERMS } from './terms';
 import MkKpi from './MkKpi.vue';
@@ -560,6 +574,35 @@ async function loadHealth() {
     healthCheck.value = null
   }
 }
+/* 仿真通道摘要条（虚拟学习者）：独立于真实用户 KPI，避免首屏把仿真失败遮住。
+   失败率用「系统失败率」（failed/total，不含人为终止）；阈值：≥50% 红、≥20% 或存在失败 黄、否则绿；
+   无会话且无今日虚拟调用 → 灰（仿真空闲）。 */
+const runStats = liveVirtualRunStats
+const simTone = computed<Tone>(() => {
+  const r = runStats.value
+  if (!r.totalSessions && !r.todayCalls) return 'muted'
+  if (r.systemFailureRate >= 50) return 'bad'
+  if (r.systemFailureRate >= 20 || r.failed > 0) return 'warn'
+  return 'ok'
+})
+const simHeadline = computed(() => {
+  const r = runStats.value
+  if (!r.totalSessions && !r.todayCalls) return '仿真空闲'
+  if (r.systemFailureRate >= 20) return `需要关注：系统失败率 ${r.systemFailureRate}%`
+  return '仿真运行平稳'
+})
+const simTitle = computed(() => {
+  const r = runStats.value
+  return [
+    '虚拟学习者 / 仿真通道健康度（仅虚拟/测试账号，与上方真实用户口径互斥）',
+    `总会话 ${r.totalSessions}`,
+    `已完成 ${r.completed}`,
+    `系统失败 ${r.failed}`,
+    `人为终止 ${r.abandoned}`,
+    `运行中 ${r.running}`,
+    '点击进入「虚拟学习者」',
+  ].join(' · ')
+})
 const hasWrapupStats = computed(() => {
   const w = data.value?.wrapup;
   if (!w) return false;
@@ -1020,6 +1063,9 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
 .ov-health__title { font-size: var(--mk-fs-13); font-weight: 800; color: var(--mk-ink); }
 .ov-health__sub { flex: 1; font-size: var(--mk-fs-12); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ov-health .brief-card__go { margin-right: 0; }
+/* 仿真通道条：与系统健康条同形，用左侧强调线区分「虚拟/仿真口径」 */
+.ov-sim { border-left: 3px solid #7c5cff; }
+.ov-sim .ov-health__title { white-space: nowrap; }
 
 /* 近 7 天调用趋势（ECharts 图表；仅保留容器与合计行） */
 .ov-trend { display: grid; gap: 8px; flex: 1; min-height: 0; align-content: end; }
