@@ -49,6 +49,15 @@
           </select>
         </div>
         <div class="mk-card__head-right">
+          <span v-if="failureByAction.length" class="al-fails">
+            <span class="al-fails__label" title="失败最多的动作（近 2000 条失败内聚合）">失败 TOP</span>
+            <span
+              v-for="f in failureByAction"
+              :key="f.action"
+              class="al-fails__chip"
+              :title="f.action"
+            >{{ failureLabel(f.action) }} <b>{{ f.count }}</b></span>
+          </span>
           <MkCols :col-defs="alColDefs" :storage-key="AL_COLS_KEY" v-model:hidden="hiddenCols" />
           <span class="mk-card__meta">共 {{ total }} 条<template v-if="failed"> · 失败 {{ failed }}</template></span>
         </div>
@@ -108,7 +117,7 @@
                 <td v-if="!hiddenCols.has('action')" :title="log.action">
                   <template v-if="methodOf(log)">
                     <span class="log-method" :class="`log-method--${methodOf(log).toLowerCase()}`">{{ methodOf(log) }}</span>
-                    <span class="log-path mono">{{ log.path || actionText(log.action) }}</span>
+                    <span class="log-path mono" :title="`${methodOf(log)} ${log.path || ''}`">{{ actionLabelOf(log) }}</span>
                   </template>
                   <span v-else class="log-action">{{ actionText(log.action) }}</span>
                 </td>
@@ -233,7 +242,7 @@ import { errMsg, shortId } from './live'
 import Pagination from './Pagination.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from './MkCols.vue'
-import { actionText, targetTypeText, ipText } from './statusText'
+import { actionText, targetTypeText, ipText, pathActionText } from './statusText'
 
 /** admin_audit_logs 行（与后端 Prisma 模型一致） */
 interface AuditLogRow {
@@ -273,6 +282,13 @@ function methodOf(log: AuditLogRow): string {
   return /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)$/.test(m) ? m : ''
 }
 
+/** 动作列展示（P2-16）：语义名优先；老数据（action 存原始串）按 path 兜底映射；都没有才回退原始 path */
+function actionLabelOf(log: AuditLogRow): string {
+  const mapped = actionText(log.action)
+  if (mapped !== log.action) return mapped
+  return pathActionText(log.path) || log.path || mapped
+}
+
 const tabs = [
   { id: 'operation', label: '操作审计' },
   { id: 'login', label: '登录审计' },
@@ -292,6 +308,8 @@ const logs = ref<AuditLogRow[]>([])
 const attempts = ref<LoginAttemptRow[]>([])
 const total = ref(0)
 const failed = ref(0)
+/** P2-16：失败按动作聚合 TOP（后端 /stats 返回），作为「失败 N」的下钻入口 */
+const failureByAction = ref<Array<{ action: string; count: number }>>([])
 /** 当前页（1 基）；筛选/tab/每页条数变化回第 1 页 */
 const page = ref(1)
 /** 每页条数（与执行日志同一分页器形态：15/30/50/100，默认 30） */
@@ -392,10 +410,23 @@ async function fetchStats() {
       total.value = typeof stats.total === 'number' ? stats.total : total.value
       failed.value = typeof stats.failed === 'number' ? stats.failed : 0
     }
+    const byAction = res.data?.data?.failureByAction
+    failureByAction.value = Array.isArray(byAction)
+      ? byAction.filter((f: { action?: unknown; count?: unknown }) => typeof f?.action === 'string' && Number(f?.count) > 0)
+      : []
   } catch {
     // 统计接口不可用时回退到已加载样本计算（与执行日志页同策略）
     failed.value = rows.value.filter((r) => !r.success).length
+    failureByAction.value = []
   }
+}
+
+/** 失败聚合项展示名：语义名优先；老数据 action 为 `METHOD /path` → 取 path 兜底映射（已归一化动态 id） */
+function failureLabel(action: string): string {
+  const mapped = actionText(action)
+  if (mapped !== action) return mapped
+  const path = action.replace(/^[A-Z]+ /, '')
+  return pathActionText(path) || action
 }
 
 async function applyFilters() {
@@ -590,6 +621,19 @@ function goSessions(username: string) {
   text-overflow: ellipsis;
   max-width: 240px;
 }
+/* P2-16：失败 TOP 聚合 chip（点击下钻到该动作的失败记录） */
+.al-fails { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 48%; }
+.al-fails__label { font-size: var(--mk-fs-11); font-weight: 800; color: var(--mk-faint); }
+.al-fails__chip {
+  border: 1px solid var(--mk-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-12);
+  font-weight: 700;
+  padding: 2px 8px;
+}
+.al-fails__chip b { color: #b91c1c; font-variant-numeric: tabular-nums; }
 .log-tt {
   font-size: var(--mk-fs-12_5);
   color: var(--mk-muted);

@@ -11,7 +11,7 @@ jest.mock('../../utils/logger', () => ({
 }));
 
 import prisma from '../../config/database';
-import { adminAuditMiddleware } from '../../middleware/admin-audit.middleware';
+import { adminAuditMiddleware, resetAuditDedupWindow } from '../../middleware/admin-audit.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 
 const create = prisma.admin_audit_logs.create as jest.Mock;
@@ -50,6 +50,7 @@ function createResponse(statusCode = 200) {
 describe('adminAuditMiddleware', () => {
   beforeEach(() => {
     create.mockReset();
+    resetAuditDedupWindow();
   });
 
   it('响应 finish 时异步写入一条操作审计记录', () => {

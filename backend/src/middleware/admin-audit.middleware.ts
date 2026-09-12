@@ -29,6 +29,32 @@ const HIGH_FREQUENCY_PATH_PATTERNS: RegExp[] = [
   /\/virtual-quick-learn\/.*\/runs/,
 ];
 
+/**
+ * 幂等去重（P2-16）：同管理员 + 同方法/路径/请求体在窗口内重复（前端双击/重试/并发提交）
+ * 只落一条，避免审计里出现「同一毫秒多条完全相同」的假操作次数。单实例内存窗口即可覆盖。
+ */
+const AUDIT_DEDUP_TTL_MS = 3000;
+const AUDIT_DEDUP_MAX_ENTRIES = 500;
+const recentAuditKeys = new Map<string, number>();
+function isDuplicateAudit(key: string): boolean {
+  const now = Date.now();
+  const last = recentAuditKeys.get(key);
+  if (last !== undefined && now - last < AUDIT_DEDUP_TTL_MS) return true;
+  if (recentAuditKeys.size >= AUDIT_DEDUP_MAX_ENTRIES) {
+    for (const [k, t] of recentAuditKeys) {
+      if (now - t >= AUDIT_DEDUP_TTL_MS) recentAuditKeys.delete(k);
+    }
+    if (recentAuditKeys.size >= AUDIT_DEDUP_MAX_ENTRIES) recentAuditKeys.clear();
+  }
+  recentAuditKeys.set(key, now);
+  return false;
+}
+
+/** 仅供测试：清空去重窗口（模块级缓存跨用例保留，避免误判重复） */
+export function resetAuditDedupWindow(): void {
+  recentAuditKeys.clear();
+}
+
 interface ActionRule {
   method: string;
   pattern: RegExp;
@@ -61,6 +87,20 @@ const ACTION_RULES: ActionRule[] = [
   { method: 'DELETE', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+$/, action: 'virtual-session-delete', targetType: 'virtual-session' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/reclaim-stale$/, action: 'virtual-session-stale-reclaim', targetType: 'virtual-session' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/terminate$/, action: 'virtual-session-batch-terminate', targetType: 'virtual-session' },
+  // P2-16：配置/观测类高频接口语义化（此前动作列直接显示原始 HTTP 串）
+  { method: 'POST', pattern: /^\/api\/admin\/system\/capabilities\/probe$/, action: 'capability-probe' },
+  { method: 'PUT', pattern: /^\/api\/admin\/settings\/reliability$/, action: 'reliability-update' },
+  { method: 'PUT', pattern: /^\/api\/admin\/settings\/capability-probe$/, action: 'capability-probe-update' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/generate-persona$/, action: 'virtual-persona-generate', targetType: 'virtual-learner' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/teaching-step$/, action: 'virtual-session-step', targetType: 'virtual-session' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/restart-learning$/, action: 'virtual-session-restart', targetType: 'virtual-session' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/autopilot\/start$/, action: 'virtual-session-autopilot-start', targetType: 'virtual-session' },
+  { method: 'POST', pattern: /^\/api\/admin\/prompt-ops\/run-eval$/, action: 'prompt-eval-run' },
+  { method: 'POST', pattern: /^\/api\/admin\/prompt-lab\/compile-core$/, action: 'prompt-compile-core' },
+  { method: 'POST', pattern: /^\/api\/admin\/prompt-lab\/publish-core$/, action: 'prompt-publish-core' },
+  { method: 'POST', pattern: /^\/api\/admin\/prompt-workbench\/compile-core$/, action: 'prompt-compile-core' },
+  { method: 'POST', pattern: /^\/api\/admin\/skill-author\/draft$/, action: 'skill-author-draft' },
+  { method: 'POST', pattern: /^\/api\/admin\/achievements\/grant$/, action: 'achievement-grant', targetType: 'user' },
 ];
 
 /** 去掉末尾斜杠后匹配映射表（路由注册在挂载点下时 baseUrl+path 即为完整路径） */
@@ -163,6 +203,15 @@ export const adminAuditMiddleware = (req: Request, res: Response, next: NextFunc
           : null,
         durationMs: Date.now() - startedAt
       };
+
+      const dedupKey = `${record.adminId ?? ''}|${record.method}|${record.path}|${record.requestJson ?? ''}`;
+      if (isDuplicateAudit(dedupKey)) {
+        logger.warn('[admin-audit] 丢弃窗口内重复写操作（幂等去重）', {
+          method: record.method,
+          path: record.path
+        });
+        return;
+      }
 
       prisma.admin_audit_logs.create({ data: record }).catch((error) => {
         logger.warn('[admin-audit] 操作审计写入失败', {

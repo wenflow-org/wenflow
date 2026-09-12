@@ -256,7 +256,47 @@ const ACTION_TEXT: Record<string, string> = {
   'virtual-session-delete': '删除虚拟会话',
   'virtual-session-stale-reclaim': '回收卡死会话',
   'virtual-session-batch-terminate': '批量终止虚拟会话',
-  'virtual-cascade-delete': '级联删除虚拟数据'
+  'virtual-cascade-delete': '级联删除虚拟数据',
+  // P2-16：配置/观测类高频接口语义名（避免动作列显示原始 HTTP 串）
+  'capability-probe': '探测模型能力',
+  'reliability-update': '修改可靠性配置',
+  'capability-probe-update': '修改能力探针设置',
+  'virtual-persona-generate': '生成虚拟人设',
+  'virtual-session-step': '推进虚拟会话',
+  'virtual-session-restart': '重启虚拟会话学习',
+  'virtual-session-autopilot-start': '启动虚拟会话自动驾驶',
+  'prompt-eval-run': '运行 Prompt 评估',
+  'prompt-compile-core': '编译 Prompt 核心',
+  'prompt-publish-core': '发布 Prompt 核心',
+  'skill-author-draft': '生成 Skill 草稿',
+  'achievement-grant': '授予成就'
+}
+
+/**
+ * 原始 HTTP path → 用户可读动作名（P2-16）。
+ * 老审计行的 action 存的是 `${method} ${path}` 原始串，actionText 映射不到；
+ * 用 path 规则兜底，让历史行也不必自己翻译接口路径。
+ */
+const PATH_ACTION_RULES: Array<[RegExp, string]> = [
+  [/\/system\/capabilities\/probe$/, '探测模型能力'],
+  [/\/settings\/reliability$/, '修改可靠性配置'],
+  [/\/settings\/capability-probe$/, '修改能力探针设置'],
+  [/\/virtual-learners\/generate-persona$/, '生成虚拟人设'],
+  [/\/virtual-learners\/sessions\/[^/]+\/teaching-step$/, '推进虚拟会话'],
+  [/\/virtual-learners\/sessions\/[^/]+\/restart-learning$/, '重启虚拟会话学习'],
+  [/\/virtual-learners\/sessions\/[^/]+\/autopilot\/start$/, '启动虚拟会话自动驾驶'],
+  [/\/prompt-ops\/run-eval$/, '运行 Prompt 评估'],
+  [/\/prompt-lab\/compile-core$/, '编译 Prompt 核心'],
+  [/\/prompt-lab\/publish-core$/, '发布 Prompt 核心'],
+  [/\/prompt-workbench\/compile-core$/, '编译 Prompt 核心'],
+  [/\/skill-author\/draft$/, '生成 Skill 草稿'],
+  [/\/achievements\/grant$/, '授予成就']
+]
+
+export function pathActionText(path: string | null | undefined): string {
+  const p = String(path || '').split('?')[0]
+  for (const [re, name] of PATH_ACTION_RULES) if (re.test(p)) return name
+  return ''
 }
 
 export function actionText(s: string | null | undefined): string {

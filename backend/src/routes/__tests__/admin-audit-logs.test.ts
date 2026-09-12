@@ -6,6 +6,7 @@ type RouteHandler = (...args: any[]) => any
 const routes: Record<string, RouteHandler[]> = {}
 const auditFindMany = jest.fn()
 const auditCount = jest.fn()
+const auditGroupBy = jest.fn()
 const attemptsFindMany = jest.fn()
 const attemptsCount = jest.fn()
 
@@ -28,7 +29,8 @@ jest.mock('../../config/database', () => ({
   default: {
     admin_audit_logs: {
       findMany: auditFindMany,
-      count: auditCount
+      count: auditCount,
+      groupBy: auditGroupBy
     },
     login_attempts: {
       findMany: attemptsFindMany,
@@ -334,16 +336,34 @@ describe('GET /api/admin/audit-logs（scope=login）', () => {
 })
 
 describe('GET /api/admin/audit-logs/stats', () => {
-  it('返回 total 与 failed（failed=success=false 计数）', async () => {
+  it('返回 total 与 failed（failed=success=false 计数）+ 失败按动作聚合 TOP（归一化动态 id）', async () => {
     auditCount.mockResolvedValueOnce(42).mockResolvedValueOnce(7)
+    auditFindMany.mockResolvedValueOnce([
+      { action: 'POST /api/admin/settings/reliability' },
+      { action: 'POST /api/admin/settings/reliability' },
+      { action: 'POST /api/admin/system/capabilities/probe' },
+      { action: 'POST /api/admin/virtual-learners/sessions/ee795d57-54ea-4051-8da1-9005318cc7c0/autopilot/start' },
+      { action: 'POST /api/admin/virtual-learners/sessions/aa111111-2222-3333-4444-555555555555/autopilot/start' },
+    ])
     const { res } = await run('GET', '/stats', adminReq())
 
     expect(auditCount).toHaveBeenCalledTimes(2)
     expect(auditCount).toHaveBeenNthCalledWith(1, { where: {} })
     expect(auditCount).toHaveBeenNthCalledWith(2, { where: { success: false } })
+    expect(auditFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { success: false },
+      select: { action: true },
+    }))
     expect(res.body).toEqual({
       success: true,
-      data: { stats: { total: 42, failed: 7 } }
+      data: {
+        stats: { total: 42, failed: 7 },
+        failureByAction: [
+          { action: 'POST /api/admin/settings/reliability', count: 2 },
+          { action: 'POST /api/admin/virtual-learners/sessions/:id/autopilot/start', count: 2 },
+          { action: 'POST /api/admin/system/capabilities/probe', count: 1 },
+        ],
+      }
     })
   })
 

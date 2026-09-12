@@ -110,6 +110,16 @@ function buildTimeWhere(query: Record<string, unknown>): Record<string, Date> | 
   return Object.keys(bounds).length > 0 ? bounds : undefined;
 }
 
+/** 失败聚合的动作归一化（P2-16）：老审计行 action 为 `METHOD /path` 且 path 含动态 id，
+ *  归并时把 uuid / 带前缀 id 段折叠为 `:id`，避免同一动作被拆成多组。语义键原样返回。 */
+function canonicalizeAuditAction(action: string): string {
+  const raw = String(action || '').trim();
+  if (!/^(GET|POST|PUT|PATCH|DELETE)\s/.test(raw)) return raw;
+  return raw
+    .replace(/\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g, '/:id')
+    .replace(/\/(gc|user|vs|virt|session)_[A-Za-z0-9]+/g, '/:id');
+}
+
 interface AuditQueryModel {
   count: (args: { where: Record<string, unknown> }) => Promise<number>;
   findMany: (args: {
@@ -179,12 +189,33 @@ function handleError(error: unknown, res: Response, next: NextFunction) {
 // 注意：/stats 必须先于 / 注册（Express 匹配顺序）
 router.get('/stats', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { model, where } = buildFilter(req.query as Record<string, unknown>);
+    const { scope, model, where } = buildFilter(req.query as Record<string, unknown>);
     const [total, failed] = await Promise.all([
       model.count({ where }),
       model.count({ where: { ...where, success: false } }),
     ]);
-    res.json({ success: true, data: { stats: { total, failed } } });
+    // P2-16：失败按动作聚合（TOP 5），给「失败 N」一个可下钻的入口。
+    // 用 findMany + 归一化归并（而非 groupBy action）：老数据 action 含动态 id，直接 groupBy 会被拆散。
+    let failureByAction: Array<{ action: string; count: number }> = [];
+    if (scope === 'operation' && failed > 0) {
+      const failedRows = await prisma.admin_audit_logs.findMany({
+        where: { ...where, success: false },
+        select: { action: true },
+        orderBy: { createdAt: 'desc' },
+        take: 2000,
+      });
+      const counts = new Map<string, number>();
+      for (const row of failedRows) {
+        const key = canonicalizeAuditAction(String(row.action || ''));
+        if (!key) continue;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      failureByAction = [...counts.entries()]
+        .map(([action, count]) => ({ action, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+    }
+    res.json({ success: true, data: { stats: { total, failed }, failureByAction } });
   } catch (error) {
     handleError(error, res, next);
   }
