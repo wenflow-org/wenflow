@@ -6,7 +6,7 @@
     <!-- 未登录 -->
     <main v-if="!loggedIn" class="entry">
       <div class="login-gate">
-        <img src="/favicon.png" alt="问流" class="login-gate__logo" />
+        <img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" class="login-gate__logo" />
         <h1>登录后体验真实对话</h1>
         <p>登录后，和问流聊聊你最近想解决的事。两三分钟的对话，就能收敛出你的第一版学习计划。</p>
         <a class="btn-primary btn-primary--lg" href="/login?redirect=/goal-conversation">去登录</a>
@@ -173,7 +173,7 @@
               <div class="msg__meta">你 · {{ km.msg.time }}</div>
             </div>
             <div v-else class="msg msg--ai">
-              <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
+              <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
               <div class="msg__content msg__content--actions"
                 @mouseenter="onBubbleEnter(km.key)"
                 @mouseleave="onBubbleLeave"
@@ -196,14 +196,14 @@
 
           <!-- typing：等待首个 delta 期间 -->
           <div v-if="live.sending && !live.streamingText" class="msg msg--ai">
-            <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
+            <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
             <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
           </div>
 
           <!-- 流式渐进渲染：SSE delta 实时累积（goal skill 为 JSON 输出，展示原始模型文本；
                final 到达后由官方消息替换，避免双泡；方案浮层打开时不重复展示，浮层内已有流式进度） -->
           <div v-if="live.sending && live.streamingText && !showProposal" class="msg msg--ai">
-            <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
+            <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
             <div class="msg__content msg__content--actions">
               <div class="msg__bubble msg__bubble--html msg__bubble--streaming" v-html="formatMessage(live.streamingText)"></div>
               <div class="msg__meta">问流 · 正在生成…</div>
@@ -398,6 +398,9 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useIsDark } from '@/composables/useIsDark';
+
+const isDark = useIsDark();
 import { useRoute, useRouter } from 'vue-router';
 import { useGoalLive, type LiveMessage } from './useGoalLive';
 import V2Nav from './V2Nav.vue';

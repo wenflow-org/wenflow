@@ -5,6 +5,9 @@
  * Designed to work inside a container that provides its own scroll (e.g. .tutor__scroll, .chat__scroll).
  */
 import { nextTick, ref } from 'vue';
+import { useIsDark } from '@/composables/useIsDark';
+
+const isDark = useIsDark();
 import { cachedMessageHtml } from '@/utils/messageMarkdown';
 
 export interface ChatMessage {
@@ -72,7 +75,7 @@ defineExpose({ scrollEl, scrollDown, jumpToBottom, nearBottom });
         <div class="msg__meta">你 · {{ m.time || nowTime() }}</div>
       </div>
       <div v-else class="msg msg--ai">
-        <span v-if="showAvatar" class="msg__avatar"><img src="/favicon.png" :alt="aiLabel" /></span>
+        <span v-if="showAvatar" class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" :alt="aiLabel" /></span>
         <div class="msg__content">
           <div class="msg__bubble msg__bubble--html" v-html="htmlFor(m)"></div>
           <span v-if="m.confusion?.length" class="msg__chip msg__chip--confuse">捕获到卡点「{{ m.confusion.join('、') }}」· 导师会在这里多做确认</span>

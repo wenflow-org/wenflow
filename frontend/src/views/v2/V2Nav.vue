@@ -2,7 +2,7 @@
   <header class="v2nav">
     <div class="v2nav__in">
       <div class="v2nav__brand" @click="$router.push('/dashboard')">
-        <img src="/logo.png" alt="问流 WenFlow" class="v2nav__logo" />
+        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" class="v2nav__logo" />
       </div>
       <nav class="v2nav__links">
         <router-link

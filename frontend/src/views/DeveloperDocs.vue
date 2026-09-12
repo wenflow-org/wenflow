@@ -4,7 +4,7 @@
     <header class="docs-nav">
       <div class="docs-nav__inner">
         <router-link to="/" class="docs-brand">
-          <img src="/logo.png" alt="问流" class="docs-brand__logo" />
+          <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流" class="docs-brand__logo" />
           <span class="docs-brand__name">问流</span>
           <span class="docs-brand__tag">开发者</span>
         </router-link>
@@ -360,6 +360,9 @@ npm run lint             # ESLint --fix
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
+import { useIsDark } from '@/composables/useIsDark';
+
+const isDark = useIsDark();
 import { toast } from '../utils/toast'
 
 const active = ref('quickstart')

@@ -4,7 +4,7 @@
 
     <main class="auth__main">
       <router-link to="/" class="auth__logo">
-        <img src="/logo.png" alt="问流 WenFlow" />
+        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" />
       </router-link>
 
       <!-- 一体式双栏卡：左表单 右演示，天然 1:1 平衡 -->
@@ -72,6 +72,9 @@
 
 <script setup lang="ts">
 import V2Footer from './V2Footer.vue';
+import { useIsDark } from '@/composables/useIsDark';
+
+const isDark = useIsDark();
 
 </script>
 

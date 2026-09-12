@@ -2,7 +2,7 @@
   <header class="mknav" :class="{ 'mknav--on': scrolled || menuOpen }">
     <div class="mknav__shell mknav__in">
       <router-link to="/" class="mknav__logo" @click="closeMenu">
-        <img src="/logo.png" alt="问流 WenFlow" />
+        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" />
       </router-link>
       <nav class="mknav__links" aria-label="页面导航">
         <router-link
@@ -58,6 +58,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useIsDark } from '@/composables/useIsDark';
+
+const isDark = useIsDark();
 import { useRoute } from 'vue-router'
 
 const props = defineProps<{ loggedIn: boolean }>()

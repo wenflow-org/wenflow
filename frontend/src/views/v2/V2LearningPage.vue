@@ -161,7 +161,7 @@
               <div class="msg__meta">你 · {{ m.time }}</div>
             </div>
             <div v-else class="msg msg--ai">
-              <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
+              <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
               <div class="msg__content msg__content--actions"
                 @mouseenter="onBubbleEnter(m.id || '')"
                 @mouseleave="onBubbleLeave"
@@ -184,7 +184,7 @@
           </template>
 
           <div v-if="typing && streamingBubbleIndex === -1" class="msg msg--ai">
-            <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
+            <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
             <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
           </div>
         </div>
@@ -411,6 +411,9 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useIsDark } from '@/composables/useIsDark';
+
+const isDark = useIsDark();
 import { useRoute, useRouter } from 'vue-router';
 import request, { API_BASE_URL } from '@/utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';

@@ -31,7 +31,7 @@
             </div>
             <div class="hn-bubble hn-bubble--user" :class="{ 'hn-demo--off': phase < 1 }">每周 Excel 周报太花时间，想用 Python 自动化</div>
             <div class="hn-bubble hn-bubble--ai" :class="{ 'hn-demo--off': phase < 2 }">
-              <img src="/favicon.png" alt="" />
+              <img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="" />
               <div v-if="phase < 3" class="hn-typing__dots" aria-label="正在输入"><i /><i /><i /></div>
               <div v-else>
                 <p>好，我们先把问题说小一点。你更想先节省哪一段时间？</p>
@@ -172,7 +172,7 @@
     <footer class="hn-foot">
       <div class="hn-shell hn-foot__in">
         <div class="hn-foot__brand">
-          <img src="/favicon.png" alt="" />
+          <img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="" />
           <span>问流 WenFlow</span>
           <em>从问题到学习路径</em>
         </div>
@@ -187,6 +187,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useIsDark } from '@/composables/useIsDark';
+
+const isDark = useIsDark();
 import { hasUserSession } from '@/utils/api'
 import MarketingNav from '@/components/MarketingNav.vue'
 

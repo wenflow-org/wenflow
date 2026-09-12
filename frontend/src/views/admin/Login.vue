@@ -4,7 +4,7 @@
 
     <main class="auth__main">
       <router-link to="/" class="auth__logo">
-        <img src="/logo.png" alt="问流 WenFlow" />
+        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" />
       </router-link>
 
       <div class="auth__card">
@@ -135,7 +135,7 @@
     </main>
 
     <footer class="auth__footer">
-      <img src="/favicon.png" alt="" class="auth__footer-logo" />
+      <img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="" class="auth__footer-logo" />
       <span>WenFlow Admin</span>
     </footer>
   </div>
@@ -143,6 +143,9 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { useIsDark } from '@/composables/useIsDark';
+
+const isDark = useIsDark();
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, markAdminSession } from '@/api/adminApi'
 import { toast } from '../../utils/toast'

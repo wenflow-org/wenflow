@@ -4,7 +4,7 @@
 
     <main class="ob__main">
       <router-link to="/" class="ob__logo">
-        <img src="/logo.png" alt="问流 WenFlow" />
+        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" />
       </router-link>
 
       <section class="ob__card">
@@ -64,7 +64,7 @@
               </div>
               <div class="ob__bubble ob__bubble--user">每周 Excel 周报太花时间，想用 Python 自动化</div>
               <div class="ob__bubble ob__bubble--ai">
-                <img src="/favicon.png" alt="" />
+                <img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="" />
                 <div class="ob__bubble-body">
                   <p>好，我们先把问题说小一点。你更想先节省哪一段时间？</p>
                   <div class="ob__demo-tags">
@@ -169,6 +169,9 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useIsDark } from '@/composables/useIsDark';
+
+const isDark = useIsDark();
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import api from '@/utils/api'

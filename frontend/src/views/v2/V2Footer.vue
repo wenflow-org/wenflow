@@ -2,7 +2,7 @@
   <footer class="v2footer">
     <div class="v2footer__inner">
       <router-link to="/dashboard" class="v2footer__brand">
-        <img src="/favicon.png" alt="问流" class="v2footer__logo" />
+        <img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" class="v2footer__logo" />
         <span class="v2footer__brand-text">
           <span class="v2footer__name">问流 WenFlow</span>
           <span class="v2footer__tag">从问题到学习路径</span>
@@ -25,7 +25,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { version as appVersion } from '../../../package.json';
+import { useIsDark } from '@/composables/useIsDark';
 
+const isDark = useIsDark();
 const year = computed(() => new Date().getFullYear());
 const version = appVersion;
 </script>
