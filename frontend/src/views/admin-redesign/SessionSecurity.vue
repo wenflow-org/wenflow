@@ -82,16 +82,25 @@
 
         <!-- 活跃会话表（分页：每批 12 行） -->
         <div class="mk-table-scroll">
-          <table class="mk-table">
+          <table class="mk-table mk-table--fixed">
+            <colgroup>
+              <col>
+              <col style="width:var(--mk-col-id)">
+              <col style="width:var(--mk-col-datetime)">
+              <col style="width:var(--mk-col-datetime)">
+              <col style="width:var(--mk-col-datetime)">
+              <col style="width:var(--mk-col-badge)">
+              <col style="width:var(--mk-col-actions-wide)">
+            </colgroup>
             <thead>
               <tr>
                 <th>设备</th>
-                <th class="mk-col--id">IP</th>
-                <th class="mk-col--time-full">登录时间</th>
-                <th class="mk-col--time-full">最后活跃</th>
-                <th class="mk-col--time-full">过期时间</th>
-                <th class="mk-col--badge">状态</th>
-                <th class="mk-th--right mk-col--actions">操作</th>
+                <th>IP</th>
+                <th>登录时间</th>
+                <th>最后活跃</th>
+                <th>过期时间</th>
+                <th>状态</th>
+                <th class="mk-th--right">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -146,16 +155,25 @@
             <span class="ss-hist__meta">过期 {{ g.expiredCount }} · 已撤销 {{ g.revokedCount }}</span>
           </summary>
           <div class="mk-table-scroll">
-            <table class="mk-table">
+            <table class="mk-table mk-table--fixed">
+              <colgroup>
+                <col>
+                <col style="width:var(--mk-col-id)">
+                <col style="width:var(--mk-col-datetime)">
+                <col style="width:var(--mk-col-datetime)">
+                <col style="width:var(--mk-col-datetime)">
+                <col style="width:var(--mk-col-badge)">
+                <col style="width:var(--mk-col-actions-wide)">
+              </colgroup>
               <thead>
                 <tr>
                   <th>设备</th>
-                  <th class="mk-col--id">IP</th>
-                  <th class="mk-col--time-full">登录时间</th>
-                  <th class="mk-col--time-full">最后活跃</th>
-                  <th class="mk-col--time-full">过期时间</th>
-                  <th class="mk-col--badge">状态</th>
-                  <th class="mk-th--right mk-col--actions">操作</th>
+                  <th>IP</th>
+                  <th>登录时间</th>
+                  <th>最后活跃</th>
+                  <th>过期时间</th>
+                  <th>状态</th>
+                  <th class="mk-th--right">操作</th>
                 </tr>
               </thead>
               <tbody>

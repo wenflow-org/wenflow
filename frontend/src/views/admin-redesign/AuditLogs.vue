@@ -78,7 +78,17 @@
     <!-- 操作审计列表 -->
     <div v-else-if="tab === 'operation' && logs.length" class="log-body">
       <div class="mk-table-scroll">
-        <table class="mk-table mk-table--click">
+        <table class="mk-table mk-table--click mk-table--fixed">
+          <colgroup>
+            <col v-if="!hiddenCols.has('time')" style="width:var(--mk-col-datetime)">
+            <col v-if="!hiddenCols.has('admin')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!hiddenCols.has('action')">
+            <col v-if="!noTargetTypes && !hiddenCols.has('tt')" style="width:var(--mk-col-model)">
+            <col v-if="!hiddenCols.has('target')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!hiddenCols.has('result')" style="width:var(--mk-col-badge)">
+            <col v-if="!hiddenCols.has('ip')" style="width:var(--mk-col-model)">
+            <col style="width:36px">
+          </colgroup>
           <thead>
             <tr>
               <th v-if="!hiddenCols.has('time')">时间</th>
@@ -156,7 +166,15 @@
     <!-- 登录审计列表 -->
     <div v-else-if="tab === 'login' && attempts.length" class="log-body">
       <div class="mk-table-scroll">
-        <table class="mk-table">
+        <table class="mk-table mk-table--fixed">
+          <colgroup>
+            <col style="width:var(--mk-col-datetime)">
+            <col style="width:var(--mk-col-model-wide)">
+            <col style="width:var(--mk-col-model)">
+            <col style="width:var(--mk-col-badge)">
+            <col>
+            <col style="width:var(--mk-col-actions)">
+          </colgroup>
           <thead>
             <tr>
               <th>时间</th>
