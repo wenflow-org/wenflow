@@ -38,6 +38,7 @@ import {
   type LessonKnowledgePoint,
   type SelfReportedLearnerState,
 } from '../virtual-lab/learner-memory';
+import { resolveSessionBudget } from '../virtual-lab/session-budget';
 import type { LeaseClientLike } from '../virtual-lab/vlab-types';
 import type {
   SimulationMilestone,
@@ -482,24 +483,17 @@ class SimulationOrchestrator {
 
   private async retryLearnUpstream<T>(sessionId: string, operation: string, execute: () => Promise<T>): Promise<T> {
     // 预算来源：故事级覆盖（storyContext.budget）优先，否则角色级（profile.simulationBudget）。
-    // 语义：maxRetriesPerStep = 单次上游调用的重试次数；maxRetriesTotal = 单会话累计 AI 调用
-    // 上限（防无限跑的总护栏，含重试）；两者任一耗尽即终止。
+    // 语义：maxRetriesPerStep = 单次上游调用的重试次数；costCeiling = 单会话累计 AI 调用
+    // 上限（防无限跑的成本护栏，含重试）；两者任一耗尽即终止。解析统一走 resolveSessionBudget。
     let maxRetries = LEARN_UPSTREAM_RETRY_ATTEMPTS;
     let maxTotalCalls: number | null = null;
     try {
       const session = await this.getVirtualSession(sessionId);
       const profileData = safeJsonParse<VirtualLearnerProfileData>(session.virtual_learner_profiles.profile, {});
       const stageResults = this.parseStageResultsPayload(session.stageResults);
-      // 故事级覆盖：会话绑定的故事可单独设预算（单个故事失控时单独限制，不影响其他故事）
-      const storyBudget = (stageResults.story?.budget || null) as Record<string, unknown> | null;
-      const budget = storyBudget || profileData?.simulationBudget || null;
-      if (budget && Number.isFinite(Number(budget.maxRetriesPerStep)) && Number(budget.maxRetriesPerStep) > 0) {
-        // 上限钳制与路由层/前端输入框一致（[1,20]），防止历史脏数据触发近无限重试
-        maxRetries = Math.min(20, Math.max(1, Math.round(Number(budget.maxRetriesPerStep))));
-      }
-      if (budget && Number.isFinite(Number(budget.maxRetriesTotal)) && Number(budget.maxRetriesTotal) > 0) {
-        maxTotalCalls = Math.min(1000, Math.max(1, Math.round(Number(budget.maxRetriesTotal))));
-      }
+      const budget = resolveSessionBudget({ stageResults, profileData });
+      maxRetries = budget.maxRetriesPerStep;
+      maxTotalCalls = budget.costCeiling;
     } catch {
       // 会话尚不可用或 profile 无预算配置：沿用默认值
     }

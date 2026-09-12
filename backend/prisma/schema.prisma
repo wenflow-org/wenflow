@@ -876,12 +876,19 @@ model virtual_learner_profiles {
   personalityTraits     String?
   tags                  String?
   notes                 String?
+  // 预制虚拟学习者来源：builtin=仓库预置（部署时按 presetKey 幂等同步）；custom=后台手动/AI 创建
+  source                String             @default("custom")
+  // 预制稳定键（幂等同步锚点，来自 virtual-learners/presets.yaml）；custom 为 null
+  presetKey             String?
+  // 预制定义版本号；文件升级后据此刷新定义（保留运行时产物）
+  presetVersion         Int?
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
   users                 users              @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessions              virtual_sessions[]
 
   @@index([userId])
+  @@unique([presetKey])
 }
 
 model virtual_sessions {

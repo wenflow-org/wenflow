@@ -26,6 +26,7 @@ import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
 import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
+import { resolveSessionBudget } from '../../virtual-lab/session-budget';
 import { virtualCleanupService } from '../../services/virtual-lab/virtual-cleanup.service';
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
 import { safeJsonParse } from '../../utils/safe-json';
@@ -1978,6 +1979,10 @@ router.get('/sessions/:sessionId', async (req: Request, res) => {
 
     const conversations = buildSessionConversations(session, logs, goalConversation);
     const runtime = buildSessionRuntime(session, teachingSession);
+    const resolvedBudget = resolveSessionBudget({
+      stageResults,
+      profileData: JSON.parse(session.virtual_learner_profiles.profile || '{}')
+    });
     
     res.json({
       success: true,
@@ -1987,6 +1992,7 @@ router.get('/sessions/:sessionId', async (req: Request, res) => {
         stageResults,
         conversations,
         runtime,
+        budget: resolvedBudget,
         bindings: buildSessionBindings(session),
         storyContext: parseStoryContext(session),
         profile: {

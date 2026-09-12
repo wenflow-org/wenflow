@@ -19,15 +19,17 @@
         />
         <span class="cp-topbar__sep"></span>
         <span class="cp-topbar__mode">{{ modeText }}</span>
-        <!-- 预算消耗预警条（累积 AI 调用：已用/上限，≥70% 变黄、≥90% 变红） -->
+        <!-- 预算消耗预警条（累积 AI 调用）：成本护栏。无配置时显示「不限」，不猜默认值 -->
         <span
           class="cp-budget"
           :class="`is-${budgetTone}`"
-          :title="`本会话累计 AI 调用 ${budgetUsage.used}/${budgetUsage.limit}（含重试）；可在画像/故事预算中调整上限`"
+          :title="budgetUsage.unlimited
+            ? `本会话累计 AI 调用 ${budgetUsage.used}（含重试）；当前未设置成本上限（不限）。可在画像/故事预算中设置上限`
+            : `本会话累计 AI 调用 ${budgetUsage.used}/${budgetUsage.limit}（含重试）；可在画像/故事预算中调整上限`"
         >
           <span class="cp-budget__label">AI 调用</span>
           <span class="cp-budget__track"><span class="cp-budget__fill" :style="{ width: `${budgetPct}%` }"></span></span>
-          <span class="cp-budget__num">{{ budgetUsage.used }}/{{ budgetUsage.limit }}</span>
+          <span class="cp-budget__num">{{ budgetUsage.used }}/{{ budgetUsage.unlimited ? '不限' : budgetUsage.limit }}</span>
         </span>
         <button type="button" class="cp-topbar__btn" :disabled="busy" @click="refresh">刷新</button>
       </div>
@@ -946,27 +948,28 @@ const stageResults = computed(() => (session.value?.stageResults || {}) as Recor
 const runtime = computed(() => (session.value?.runtime || {}) as Record<string, unknown>)
 const stageStatus = computed(() => (runtime.value.stageStatus || {}) as Record<string, Record<string, unknown>>)
 
-/* ---- 预算消耗（三级页顶栏预警条）：runtimeStats.aiCalls / 画像 maxRetriesTotal ---- */
+/* ---- 预算消耗（三级页顶栏预警条）：runtimeStats.aiCalls / 后端解析的成本上限 ---- */
 const budgetUsage = computed(() => {
   const rs = (stageResults.value.runtimeStats || {}) as Record<string, unknown>
   const used = Number(rs.aiCalls) || 0
-  // 故事级预算优先，否则画像级（profile.simulationBudget.maxRetriesTotal），否则默认 600
-  const storyBudget = ((stageResults.value.story || {}) as Record<string, unknown>).budget as Record<string, unknown> | undefined
-  const profileBudget = ((session.value?.virtual_learner_profiles || {}) as Record<string, unknown>).profile as string | undefined
-  let limit = 600
-  try {
-    if (storyBudget && Number.isFinite(Number(storyBudget.maxRetriesTotal))) {
-      limit = Number(storyBudget.maxRetriesTotal)
-    } else if (profileBudget) {
-      const pd = JSON.parse(profileBudget) as Record<string, unknown>
-      const sb = (pd.simulationBudget || {}) as Record<string, unknown>
-      if (Number.isFinite(Number(sb.maxRetriesTotal))) limit = Number(sb.maxRetriesTotal)
-    }
-  } catch { /* 忽略解析失败 */ }
-  return { used, limit: Math.max(1, limit) }
+  // 唯一事实来源：后端下发的 budget（故事级 > 画像级 > 不限）。前端不再自行猜测默认值。
+  const serverBudget = (session.value?.budget || {}) as Record<string, unknown>
+  const costCeiling = serverBudget.costCeiling
+  if (serverBudget.unlimited === true || costCeiling === null || costCeiling === undefined) {
+    return { used, limit: null, unlimited: true }
+  }
+  const limit = Number(costCeiling)
+  if (!Number.isFinite(limit) || limit <= 0) {
+    return { used, limit: null, unlimited: true }
+  }
+  return { used, limit: Math.max(1, limit), unlimited: false }
 })
-const budgetPct = computed(() => Math.min(100, Math.round((budgetUsage.value.used / budgetUsage.value.limit) * 100)))
+const budgetPct = computed(() => {
+  if (budgetUsage.value.unlimited || !budgetUsage.value.limit) return 0
+  return Math.min(100, Math.round((budgetUsage.value.used / budgetUsage.value.limit) * 100))
+})
 const budgetTone = computed(() => {
+  if (budgetUsage.value.unlimited) return 'ok'
   const pct = budgetPct.value
   if (pct >= 90) return 'full'
   if (pct >= 70) return 'warn'

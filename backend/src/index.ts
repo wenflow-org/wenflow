@@ -20,6 +20,7 @@ import { loadSkillsFile } from './services/skill-registry/skills-file';
 
 import learningService from './services/learning/learning.service';
 import { ensureCoreAgentPrompts } from './scripts/seed-core-agent-prompts';
+import { ensureBuiltinVirtualLearners } from './virtual-lab/builtin-learners';
 import { bootstrapFieldRoutings } from './services/field-routing-bootstrap.service';
 import { seedSkillModelConfigsIfEmpty } from './services/seed-skill-model-configs';
 import { dashboardGuidanceSnapshotService } from './services/learner/DashboardGuidanceSnapshotService';
@@ -616,6 +617,25 @@ export async function startServer() {
       logger.info('✅ 管理员账户已存在，跳过创建', { adminId: adminBootstrap.adminId });
     } else {
       logger.warn('未创建初始管理员：未配置 INIT_ADMIN_PASSWORD');
+    }
+
+    // 内置预制虚拟学习者同步（File-as-Truth：virtual-learners/presets.yaml → DB 实例）
+    // 幂等（按 presetKey upsert，保留运行时产物）；失败不阻断启动。
+    try {
+      const builtinLearners = await ensureBuiltinVirtualLearners(prisma);
+      assertStartupActive();
+      logger.info('内置预制虚拟学习者同步完成', {
+        version: builtinLearners.version,
+        created: builtinLearners.created.length,
+        updated: builtinLearners.updated.length,
+        skipped: builtinLearners.skipped.length,
+        drifted: builtinLearners.drifted.length,
+        errors: builtinLearners.errors.length,
+      });
+    } catch (err) {
+      logger.warn('[startup] 内置预制虚拟学习者同步失败（不阻断启动）', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
       // 初始化 EduClaw Gateway

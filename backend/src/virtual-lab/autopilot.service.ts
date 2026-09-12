@@ -16,6 +16,7 @@ import { asErrorLike } from './vlab-types'
 import simulationCoordinator from '../coordinators/simulation.coordinator'
 import blackboxVirtualLearnerRunner from './blackbox-runner'
 import { safeJsonParse } from '../utils/safe-json'
+import { resolveSessionBudget, computeLearnProgressSignature } from './session-budget'
 import type { VirtualSessionWithProfile } from './vlab-types'
 
 const AUTOPILOT_GOAL_MAX_ROUNDS = 20
@@ -51,6 +52,10 @@ export type AutopilotState = {
   target?: AutopilotTarget
   /** 每课回合上限（自动推进单课预算；前端驾驶舱「回合上限」透传，默认 50） */
   maxTurns?: number
+  /** 无进展看门狗：连续无净进展的分片数（达 noProgressChunkLimit 判定卡死） */
+  noProgressChunks?: number
+  /** 上次学习进度指纹（用于分片间比较是否产生净进展） */
+  lastProgressSignature?: string | null
   /** 阶段级目标达成时记录已达成的阶段（goal / path / teaching） */
   completedStage?: string | null
   startedAt?: string
@@ -333,6 +338,9 @@ export class AutopilotService {
   private async executeAssistedLoop(sessionId: string, runId: string): Promise<void> {
     let lessonRecoveries = 0
     let goalRetries = 0
+    // 无进展看门狗：跨「分片」比较学习进度指纹
+    let noProgressChunks = 0
+    let lastProgressSignature: string | null = null
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -431,9 +439,24 @@ export class AutopilotService {
         continue
       }
 
-      // ---- Teaching 阶段：逐课推进（回合上限跟随状态 maxTurns） ----
+      // ---- Teaching 阶段：逐课「分片」推进 ----
+      // 每片 = turnChunkPerLesson 个回合。跑满一片不代表失败，只代表一片结束；
+      // 未收敛则继续下一片，直到收敛 / 撞成本护栏 / 无进展看门狗判定卡死。
+      const currentState = AutopilotService.readState(session)
+      const profileData = safeJsonParse<Record<string, any>>(
+        (session as { virtual_learner_profiles?: { profile?: string } }).virtual_learner_profiles?.profile,
+        {}
+      )
+      const budget = resolveSessionBudget({
+        stageResults: parseStageResults(session.stageResults),
+        profileData
+      })
       const learnResult = await simulationCoordinator.runLeasedExclusive(sessionId, () =>
-        simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones: 20, maxTurns: AutopilotService.readState(session).maxTurns ?? 50 })
+        simulationCoordinator.executeAutoLearning(sessionId, {
+          maxMilestones: 20,
+          // 分片大小：本次运行显式回合上限优先，其次画像/故事预算，最后默认
+          maxTurns: currentState.maxTurns ?? budget.turnChunkPerLesson
+        })
       )
       await this.countStep(sessionId)
 
@@ -460,10 +483,46 @@ export class AutopilotService {
         }
       }
 
+      // 分片边界（回合上限）：不是失败。用进度指纹判断这一片是否真的推进了东西，
+      // 有进展 → 继续下一片；连续 N 片零净进展 → 判定卡死（疑似教学死循环）才停止。
+      if (!learnResult.success && String(learnResult.error || '').includes('auto_turn_cap_exhausted')) {
+        const signature = computeLearnProgressSignature(
+          after ? parseStageResults(after.stageResults) : null,
+          { completedTasks: after?.completedTasks, currentTaskId: after?.currentTaskId }
+        )
+        if (signature !== lastProgressSignature) {
+          lastProgressSignature = signature
+          noProgressChunks = 0
+        } else {
+          noProgressChunks += 1
+        }
+        await this.writeState(sessionId, { noProgressChunks, lastProgressSignature })
+        if (noProgressChunks >= budget.noProgressChunkLimit) {
+          await this.writeState(sessionId, {
+            status: 'failed',
+            completedAt: new Date().toISOString(),
+            lastError: `no_progress_watchdog：连续 ${noProgressChunks} 个回合分片（每片 ${budget.turnChunkPerLesson} 回合）无净进展，疑似教学卡死。可检查该课教学设计或手动单步推进`
+          })
+          logger.warn('[autopilot] 无进展看门狗触发，停止', {
+            sessionId,
+            noProgressChunks,
+            signature
+          })
+          return
+        }
+        logger.info('[autopilot] 分片边界：本片未收敛，继续下一片', {
+          sessionId,
+          noProgressChunks,
+          chunkTurns: budget.turnChunkPerLesson
+        })
+        await this.pause()
+        continue
+      }
+
       // 单课失败：可恢复（provider 瞬时）→ restart-learning 续跑，有上限
       if (!learnResult.success) {
         const errMsg = String(learnResult.error || '').toLowerCase()
-        // 预算耗尽（turn/retry budget）是闸门终止信号：restart 只会再次耗尽，不可恢复续跑。
+        // 成本护栏（retry/budget）是终止信号：restart 只会再次耗尽，不可恢复续跑。
         // 若本课已完成（taskCompleted）只是下一课启动失败：进度保留，直接终态化 failed，
         // 文案明确「调高预算后可续传」，避免误报为「学习失败」或空转恢复次数。
         if (learnResult.taskCompleted || errMsg.includes('budget_exhausted')) {

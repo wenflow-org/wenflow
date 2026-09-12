@@ -173,6 +173,56 @@ describe('AutopilotService 全自动模式', () => {
     expect(String(final.lastError)).toContain('恢复上限')
   })
 
+  it('assisted：回合上限=分片边界，连续无进展触发看门狗（不重启）', async () => {
+    mockExecuteSingleStep.mockImplementation(async () => {
+      sessionRecord.currentStage = 'path'
+      return { success: true, goalReady: true }
+    })
+    mockWaitForPathReady.mockResolvedValue({ ready: true })
+    mockResolvePathReview.mockImplementation(async () => {
+      sessionRecord.currentStage = 'teaching'
+      return { success: true }
+    })
+    // 每片都跑满回合上限且无净进展 → 看门狗判定卡死
+    mockExecuteAutoLearning.mockResolvedValue({ success: false, error: 'auto_turn_cap_exhausted：已自动推进 40 回合' })
+
+    await service.start('s1')
+    const final = await waitTerminal()
+
+    expect(final.status).toBe('failed')
+    expect(mockRestartLearningPhase).not.toHaveBeenCalled()
+    expect(String(final.lastError)).toContain('no_progress_watchdog')
+  })
+
+  it('assisted：分片有净进展则继续下一片，不判失败', async () => {
+    mockExecuteSingleStep.mockImplementation(async () => {
+      sessionRecord.currentStage = 'path'
+      return { success: true, goalReady: true }
+    })
+    mockWaitForPathReady.mockResolvedValue({ ready: true })
+    mockResolvePathReview.mockImplementation(async () => {
+      sessionRecord.currentStage = 'teaching'
+      return { success: true }
+    })
+    // 第一片跑满但任务推进（completedTasks 递增）→ 有进展，继续；第二片直接完成
+    let chunk = 0
+    mockExecuteAutoLearning.mockImplementation(async () => {
+      chunk += 1
+      if (chunk === 1) {
+        sessionRecord.completedTasks = 1
+        return { success: false, error: 'auto_turn_cap_exhausted：已自动推进 40 回合' }
+      }
+      sessionRecord.status = 'completed'
+      return { success: true, totalSteps: 3 }
+    })
+
+    await service.start('s1')
+    const final = await waitTerminal()
+
+    expect(final.status).toBe('completed')
+    expect(mockRestartLearningPhase).not.toHaveBeenCalled()
+  })
+
   it('assisted：单课不可恢复错误直接失败，不重启', async () => {
     mockExecuteSingleStep.mockImplementation(async () => {
       sessionRecord.currentStage = 'path'
@@ -183,14 +233,14 @@ describe('AutopilotService 全自动模式', () => {
       sessionRecord.currentStage = 'teaching'
       return { success: true }
     })
-    mockExecuteAutoLearning.mockResolvedValue({ success: false, error: 'auto_turn_cap_exhausted：已自动推进 24 回合' })
+    mockExecuteAutoLearning.mockResolvedValue({ success: false, error: 'fatal：教学设计不可恢复的结构错误' })
 
     await service.start('s1')
     const final = await waitTerminal()
 
     expect(final.status).toBe('failed')
     expect(mockRestartLearningPhase).not.toHaveBeenCalled()
-    expect(String(final.lastError)).toContain('auto_turn_cap_exhausted')
+    expect(String(final.lastError)).toContain('不可恢复')
   })
 
   it('stop：运行中请求停止 → stopped 并保留会话可继续', async () => {
