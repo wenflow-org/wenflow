@@ -364,17 +364,27 @@ async function learnerStateReviewHandler(input: any) {
       recentEvidence: Array.isArray(d.recentEvidence) ? d.recentEvidence : [],
       priorInsights: Array.isArray(d.priorInsights) ? d.priorInsights : [],
     }),
-    normalize: (parsed) => {
+    normalize: (parsed, d) => {
+      const knownEvidenceIds = new Set(
+        (Array.isArray((d as any)?.recentEvidence) ? (d as any).recentEvidence : [])
+          .map((entry: any) => asTrimmedString(entry?.id))
+          .filter(Boolean),
+      );
       const insights = (Array.isArray(parsed?.insights) ? parsed.insights : [])
         .filter((item: any) => item && asTrimmedString(item.claim))
-        .slice(0, 5)
         .map((item: any) => ({
           type: asTrimmedString(item.type) || 'strategy_fit',
           claim: asTrimmedString(item.claim),
           evidenceRefs: Array.isArray(item.evidenceRefs) ? item.evidenceRefs.map((x: any) => asTrimmedString(x)).filter(Boolean) : [],
           confidence: typeof item.confidence === 'number' ? Math.max(0, Math.min(1, item.confidence)) : null,
           action: asTrimmedString(item.action),
-        }));
+        }))
+        // 护栏：无证据引用即丢弃；已知证据集非空时过滤不存在的引用，过滤后为空仍丢弃
+        .map((item: any) => (knownEvidenceIds.size > 0
+          ? { ...item, evidenceRefs: item.evidenceRefs.filter((ref: string) => knownEvidenceIds.has(ref)) }
+          : item))
+        .filter((item: any) => item.evidenceRefs.length > 0)
+        .slice(0, 5);
       const conceptAssessments = (Array.isArray(parsed?.conceptAssessments) ? parsed.conceptAssessments : [])
         .filter((item: any) => item && asTrimmedString(item.conceptKey))
         .slice(0, 20)
