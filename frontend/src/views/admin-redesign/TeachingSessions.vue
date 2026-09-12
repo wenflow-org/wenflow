@@ -87,16 +87,26 @@
       <MockSkeletonTable v-if="refreshing && !rows.length" :cols="8" />
       <div v-else class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table mk-table--fixed">
+          <colgroup>
+            <col>
+            <col v-if="!tsHiddenCols.has('user')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!tsHiddenCols.has('status')" style="width:var(--mk-col-badge)">
+            <col v-if="!tsHiddenCols.has('interact')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!tsHiddenCols.has('progress')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!tsHiddenCols.has('output')" style="width:var(--mk-col-badge)">
+            <col v-if="!tsHiddenCols.has('attention')" style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-actions)">
+          </colgroup>
           <thead>
             <tr>
-              <th style="width:220px">会话</th>
-              <th v-if="!tsHiddenCols.has('user')" style="width:140px">用户</th>
-              <th v-if="!tsHiddenCols.has('status')" class="mk-col--badge" style="width:90px">状态</th>
-              <th v-if="!tsHiddenCols.has('interact')" style="width:140px">互动</th>
-              <th v-if="!tsHiddenCols.has('progress')" style="width:120px">进度</th>
-              <th v-if="!tsHiddenCols.has('output')" class="mk-col--badge" style="width:90px">产物</th>
-              <th v-if="!tsHiddenCols.has('attention')" class="mk-col--badge" style="width:60px">关注</th>
-              <th class="mk-col--actions">详情</th>
+              <th>会话</th>
+              <th v-if="!tsHiddenCols.has('user')">用户</th>
+              <th v-if="!tsHiddenCols.has('status')">状态</th>
+              <th v-if="!tsHiddenCols.has('interact')">互动</th>
+              <th v-if="!tsHiddenCols.has('progress')">进度</th>
+              <th v-if="!tsHiddenCols.has('output')">产物</th>
+              <th v-if="!tsHiddenCols.has('attention')">关注</th>
+              <th class="mk-th--right">详情</th>
             </tr>
           </thead>
           <tbody>

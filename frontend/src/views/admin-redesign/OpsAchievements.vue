@@ -79,15 +79,23 @@
       </div>
       <MockSkeletonTable v-if="recordsLoading && !records.length" :cols="6" />
       <div v-else-if="records.length" class="mk-table-scroll ac-list">
-        <table class="mk-table">
+        <table class="mk-table mk-table--fixed">
+          <colgroup>
+            <col>
+            <col>
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-num)">
+            <col style="width:var(--mk-col-time-full)">
+            <col style="width:var(--mk-col-actions-wide)">
+          </colgroup>
           <thead>
             <tr>
               <th>成就</th>
               <th>用户</th>
               <th>类型</th>
-              <th class="mk-col--num">XP</th>
-              <th class="mk-col--time-full">解锁时间</th>
-              <th class="mk-col--actions">操作</th>
+              <th class="mk-th--right">XP</th>
+              <th>解锁时间</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>

@@ -81,16 +81,25 @@
       <div v-if="deadLoading" class="dt-loading"><span class="mk-spinner"></span> 加载中…</div>
       <template v-else-if="deadItems.length">
         <div class="mk-table-scroll">
-          <table class="mk-table">
+          <table class="mk-table mk-table--fixed">
+            <colgroup>
+              <col>
+              <col style="width:var(--mk-col-model-wide)">
+              <col style="width:var(--mk-col-model)">
+              <col style="width:var(--mk-col-num)">
+              <col style="width:var(--mk-col-model-wide)">
+              <col style="width:var(--mk-col-time-full)">
+              <col style="width:var(--mk-col-actions)">
+            </colgroup>
             <thead>
               <tr>
                 <th>事件</th>
                 <th>用户</th>
                 <th>聚合</th>
-                <th class="mk-col--num">尝试</th>
+                <th class="mk-th--right">尝试</th>
                 <th>错误</th>
-                <th class="mk-col--time-full">发生时间</th>
-                <th class="mk-col--actions">操作</th>
+                <th>发生时间</th>
+                <th class="mk-th--right">操作</th>
               </tr>
             </thead>
             <tbody>

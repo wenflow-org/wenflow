@@ -38,15 +38,23 @@
 
       <MockSkeletonTable v-if="loading && !items.length" :cols="5" />
       <div v-else-if="items.length" class="mk-table-scroll nt-list">
-        <table class="mk-table">
+        <table class="mk-table mk-table--fixed">
+          <colgroup>
+            <col>
+            <col>
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-time-full)">
+            <col style="width:var(--mk-col-actions)">
+          </colgroup>
           <thead>
             <tr>
               <th>通知</th>
               <th>接收用户</th>
               <th>类型</th>
               <th>状态</th>
-              <th class="mk-col--time-full">发送时间</th>
-              <th class="mk-col--actions">操作</th>
+              <th>发送时间</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>

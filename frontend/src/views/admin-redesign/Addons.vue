@@ -26,16 +26,25 @@
         <button type="button" class="mk-link" @click="loadConfigs">重试</button>
       </div>
       <div class="mk-table-scroll">
-        <table v-if="capabilityRows.length" class="mk-table">
+        <table v-if="capabilityRows.length" class="mk-table mk-table--fixed">
+          <colgroup>
+            <col>
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-model-wide)">
+            <col style="width:var(--mk-col-num)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-time-full)">
+            <col style="width:var(--mk-col-actions-wide)">
+          </colgroup>
           <thead>
             <tr>
               <th>能力</th>
               <th>类型</th>
               <th>模型</th>
-              <th>超时</th>
+              <th class="mk-th--right">超时</th>
               <th>配置</th>
               <th>最近调用</th>
-              <th class="mk-col--actions-wide">操作</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>

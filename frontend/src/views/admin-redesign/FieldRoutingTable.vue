@@ -133,7 +133,19 @@
           <span class="frt__agentcount">{{ filteredOf(agent.agentId).length }}<template v-if="filterActive"> / {{ routingsOf(agent.agentId).length }}</template> 行</span>
         </div>
         <div class="frt__scroll mk-table-scroll">
-          <table class="mk-table mk-table--dense">
+          <table class="mk-table mk-table--dense mk-table--fixed">
+            <colgroup>
+              <col>
+              <col>
+              <col style="width:var(--mk-col-badge)">
+              <col style="width:var(--mk-col-badge)">
+              <col style="width:var(--mk-col-badge)">
+              <col style="width:var(--mk-col-badge)">
+              <col style="width:var(--mk-col-badge)">
+              <col style="width:var(--mk-col-badge)">
+              <col style="width:var(--mk-col-model)">
+              <col style="width:var(--mk-col-badge)">
+            </colgroup>
             <thead>
               <tr>
                 <th scope="col">字段</th>

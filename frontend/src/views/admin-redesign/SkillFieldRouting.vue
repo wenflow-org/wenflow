@@ -104,7 +104,21 @@
 
       <!-- 产出字段表 -->
       <div class="sfr__scroll mk-table-scroll">
-        <table class="mk-table mk-table--dense">
+        <table class="mk-table mk-table--dense mk-table--fixed">
+          <colgroup>
+            <col>
+            <col>
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-model)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-actions-wide)">
+          </colgroup>
           <thead>
             <tr>
               <th scope="col">字段</th>
@@ -118,7 +132,7 @@
               <th scope="col">落库键</th>
               <th scope="col">锁定</th>
               <th scope="col">core 状态</th>
-              <th scope="col" class="mk-th--right mk-col--actions-wide">操作</th>
+              <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>

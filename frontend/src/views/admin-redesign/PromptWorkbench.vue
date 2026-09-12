@@ -27,7 +27,15 @@
         <span class="mk-card__meta">{{ cores.length }} 个</span>
       </div>
       <div class="mk-table-scroll">
-      <table v-if="cores.length" class="mk-table mk-table--click">
+      <table v-if="cores.length" class="mk-table mk-table--click mk-table--fixed">
+        <colgroup>
+          <col>
+          <col style="width:var(--mk-col-badge)">
+          <col style="width:var(--mk-col-badge)">
+          <col style="width:var(--mk-col-model)">
+          <col style="width:var(--mk-col-badge)">
+          <col style="width:var(--mk-col-actions)">
+        </colgroup>
         <thead>
           <tr>
             <th>Skill</th>
@@ -35,7 +43,7 @@
             <th>输出</th>
             <th>coreHash</th>
             <th>状态</th>
-            <th class="mk-th--right mk-col--actions">操作</th>
+            <th class="mk-th--right">操作</th>
           </tr>
         </thead>
         <tbody>

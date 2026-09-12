@@ -45,15 +45,23 @@
 
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="6" />
       <div v-else-if="filtered.length" class="mk-table-scroll an-list">
-      <table class="mk-table">
+      <table class="mk-table mk-table--fixed">
+        <colgroup>
+          <col>
+          <col style="width:var(--mk-col-badge)">
+          <col style="width:var(--mk-col-badge)">
+          <col style="width:var(--mk-col-time-full)">
+          <col style="width:var(--mk-col-time-full)">
+          <col style="width:var(--mk-col-actions-wide)">
+        </colgroup>
         <thead>
           <tr>
             <th>公告</th>
             <th>级别</th>
             <th>状态</th>
-            <th class="mk-col--time-full">发布</th>
-            <th class="mk-col--time-full">过期</th>
-            <th class="mk-col--actions-wide">操作</th>
+            <th>发布</th>
+            <th>过期</th>
+            <th class="mk-th--right">操作</th>
           </tr>
         </thead>
         <tbody>

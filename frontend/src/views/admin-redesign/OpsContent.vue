@@ -72,15 +72,24 @@
       </div>
       <div v-else-if="filtered.length" class="mk-table-scroll oc-list">
         <table class="mk-table mk-table--fixed">
+          <colgroup>
+            <col>
+            <col v-if="!hiddenCols.has('subject')">
+            <col v-if="!hiddenCols.has('user')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!hiddenCols.has('status')" style="width:var(--mk-col-badge)">
+            <col v-if="!hiddenCols.has('progress')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!hiddenCols.has('updated')" style="width:var(--mk-col-time-full)">
+            <col style="width:var(--mk-col-actions-wide)">
+          </colgroup>
           <thead>
             <tr>
               <th>路径</th>
-              <th v-if="!hiddenCols.has('subject')" style="width:32%">主题</th>
-              <th v-if="!hiddenCols.has('user')" style="width:150px">用户</th>
-              <th v-if="!hiddenCols.has('status')" class="mk-col--badge">状态</th>
-              <th v-if="!hiddenCols.has('progress')" style="width:130px">进度</th>
-              <th v-if="!hiddenCols.has('updated')" class="mk-col--time-full">更新</th>
-              <th class="mk-col--actions-wide">操作</th>
+              <th v-if="!hiddenCols.has('subject')">主题</th>
+              <th v-if="!hiddenCols.has('user')">用户</th>
+              <th v-if="!hiddenCols.has('status')">状态</th>
+              <th v-if="!hiddenCols.has('progress')">进度</th>
+              <th v-if="!hiddenCols.has('updated')">更新</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>

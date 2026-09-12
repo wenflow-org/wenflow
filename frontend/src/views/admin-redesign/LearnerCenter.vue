@@ -75,16 +75,16 @@
         <button type="button" class="mk-empty__action" @click="retryLoad">重试</button>
       </div>
       <div v-else-if="filtered.length" class="mk-table-scroll">
-      <table class="mk-table">
+      <table class="mk-table mk-table--fixed">
         <colgroup>
-          <col v-if="!lcHiddenCols.has('learner')" style="width:180px">
-          <col v-if="!lcHiddenCols.has('progress')" style="width:35%">
-          <col v-if="!lcHiddenCols.has('trend')" style="width:80px">
-          <col v-if="!lcHiddenCols.has('fatigue')" style="width:60px">
-          <col v-if="!lcHiddenCols.has('conf')" style="width:110px">
-          <col v-if="!lcHiddenCols.has('risk')" style="width:180px">
-          <col v-if="!lcHiddenCols.has('updated')" style="width:90px">
-          <col style="width:var(--mk-col-actions-wide, 120px)">
+          <col v-if="!lcHiddenCols.has('learner')">
+          <col v-if="!lcHiddenCols.has('progress')" style="width:var(--mk-col-model-wide)">
+          <col v-if="!lcHiddenCols.has('trend')" style="width:var(--mk-col-badge)">
+          <col v-if="!lcHiddenCols.has('fatigue')" style="width:var(--mk-col-badge)">
+          <col v-if="!lcHiddenCols.has('conf')" style="width:var(--mk-col-num-wide)">
+          <col v-if="!lcHiddenCols.has('risk')">
+          <col v-if="!lcHiddenCols.has('updated')" style="width:var(--mk-col-time-full)">
+          <col style="width:var(--mk-col-actions-wide)">
         </colgroup>
         <thead>
           <tr>
@@ -95,7 +95,7 @@
             <th v-if="!lcHiddenCols.has('conf')" title="快照置信度：模型对该学习者状态的把握程度，低于 50% 为低置信">置信</th>
             <th v-if="!lcHiddenCols.has('risk')">风险摘要</th>
             <th v-if="!lcHiddenCols.has('updated')">更新</th>
-            <th class="mk-col--actions-wide">操作</th>
+            <th class="mk-th--right">操作</th>
           </tr>
         </thead>
         <tbody>

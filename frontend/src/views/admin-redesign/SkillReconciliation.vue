@@ -36,7 +36,16 @@
         <span class="mk-card__meta" title="异常 = 未注册（配置文件缺失）/ 缺 ACTIVE（无生效版本）/ 未上线（完成度非 live）">异常 = 未注册 / 无生效版本 / 未上线</span>
       </div>
       <div class="mk-table-scroll">
-        <table v-if="recReport.items.length" class="mk-table sk-table sk-rec-table">
+        <table v-if="recReport.items.length" class="mk-table sk-table sk-rec-table mk-table--fixed">
+          <colgroup>
+            <col>
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-badge)">
+            <col style="width:var(--mk-col-badge)">
+            <col>
+          </colgroup>
           <thead>
             <tr>
               <th>Skill</th>

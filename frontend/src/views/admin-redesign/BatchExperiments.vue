@@ -18,15 +18,23 @@
     <div class="mk-card">
       <MockSkeletonTable v-if="loading && !experiments.length" :cols="6" />
       <div v-else-if="experiments.length" class="mk-table-scroll be-list">
-        <table class="mk-table">
+        <table class="mk-table mk-table--fixed">
+          <colgroup>
+            <col>
+            <col style="width:var(--mk-col-badge)">
+            <col>
+            <col style="width:var(--mk-col-model-wide)">
+            <col style="width:var(--mk-col-time-full)">
+            <col style="width:var(--mk-col-actions-wide)">
+          </colgroup>
           <thead>
             <tr>
               <th>实验</th>
               <th>状态</th>
               <th>学习者</th>
               <th>进度</th>
-              <th class="mk-col--time-full">创建时间</th>
-              <th class="mk-col--actions-wide">操作</th>
+              <th>创建时间</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>

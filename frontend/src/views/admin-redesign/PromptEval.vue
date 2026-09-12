@@ -108,16 +108,25 @@
     <div v-else class="mk-card">
       <MockSkeletonTable v-if="runsLoading && !runs.length" :cols="6" />
       <div v-else-if="runs.length" class="mk-table-scroll pe-list">
-        <table class="mk-table">
+        <table class="mk-table mk-table--fixed">
+          <colgroup>
+            <col>
+            <col style="width:var(--mk-col-model-wide)">
+            <col>
+            <col style="width:var(--mk-col-num-wide)">
+            <col style="width:var(--mk-col-num)">
+            <col style="width:var(--mk-col-time-full)">
+            <col style="width:var(--mk-col-actions)">
+          </colgroup>
           <thead>
             <tr>
               <th>运行</th>
               <th>Agent</th>
               <th>结果</th>
               <th>用例/次数</th>
-              <th>耗时</th>
-              <th class="mk-col--time-full">时间</th>
-              <th class="mk-col--actions">操作</th>
+              <th class="mk-th--right">耗时</th>
+              <th>时间</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
