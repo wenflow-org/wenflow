@@ -226,7 +226,9 @@ router.get('/stats', async (req: Request, res: Response) => {
       prisma.learning_paths.groupBy({ by: ['status'], _count: { _all: true }, where: { users: REAL_USER_WHERE } }),
       prisma.learning_paths.groupBy({ by: ['subject'], _count: { _all: true }, where: { users: REAL_USER_WHERE } }),
       prisma.milestones.count({ where: { learning_paths: { users: REAL_USER_WHERE } } }),
-      prisma.subtasks.count({ where: { users: REAL_USER_WHERE } }),
+      // 口径修复：subtasks.users 关系建在 usersId（生产路径从不写入，恒为 null），
+      // 改走 milestones → learning_paths → users（learning_paths.users 建在 userId 上，可靠）。
+      prisma.subtasks.count({ where: { milestones: { learning_paths: { users: REAL_USER_WHERE } } } }),
     ]);
 
     res.json({

@@ -781,15 +781,17 @@ async function computeOverviewStats(): Promise<unknown> {
         select: { id: true },
       }),
       
-      // 总任务数（不含虚拟学习者）
+      // 总任务数（不含虚拟学习者/测试账号）
+      // 口径修复：subtasks.users 关系建在 usersId 上，而生产创建路径只写 userId（usersId 全为 null），
+      // 用 users 关系过滤会恒为 0 → 漏斗「任务/完成」永久 0。改为按 userId 归属过滤（与调用/token 同源）。
       prisma.subtasks.count({
-        where: { users: REAL_USER_WHERE },
+        where: { ...realUserScope },
       }),
       
-      // 已完成任务数（不含虚拟学习者）
+      // 已完成任务数（不含虚拟学习者/测试账号）
       prisma.subtasks.count({
         where: {
-          users: REAL_USER_WHERE,
+          ...realUserScope,
           status: 'completed',
         },
       }),

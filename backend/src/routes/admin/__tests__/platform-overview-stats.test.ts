@@ -337,6 +337,15 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     const llmWhere = mockPrisma.llm_execution_attempts.aggregate.mock.calls.find((c: any) => c[0]?.where?.userId)?.[0].where;
     expect(llmWhere.userId).toEqual({ in: ['real1', 'real2'] });
 
+    // P1-9 回归：subtasks 归属必须按 userId 过滤。
+    // subtasks.users 关系建在 usersId 上、生产创建路径从不写入（恒 null），旧写法用 users 关系过滤恒为 0。
+    const subtaskWheres = mockPrisma.subtasks.count.mock.calls.map((c: any) => c[0]?.where);
+    expect(subtaskWheres.length).toBeGreaterThanOrEqual(2);
+    for (const w of subtaskWheres) {
+      expect(w.userId).toEqual({ in: ['real1', 'real2'] });
+      expect(w.users).toBeUndefined();
+    }
+
     // 主口径 = 真实（12 调用 / 30 万 tokens），全量副口径 = 含虚拟/测试（24 / 120 万）
     expect(payload.agents.totalCalls).toBe(12);
     expect(payload.agents.totalCallsAll).toBe(24);
