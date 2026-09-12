@@ -273,6 +273,7 @@ export interface LearnerStateReview {
   generatedAt?: string;
   source: 'rules' | 'model';
   diagnosis?: LearnerStateReviewDiagnosis | null;
+  calibration?: { n: number; hits: number; misses: number; hitRate: number | null } | null;
 }
 
 export interface AdaptiveGuidancePayload {

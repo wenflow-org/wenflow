@@ -18,6 +18,7 @@ import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './Le
 import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
 import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
 import { conceptBeliefService } from './concept-belief.service';
+import { insightCalibrationService, type InsightReliability } from './insight-calibration.service';
 
 export const REVIEW_PROJECTION_SCOPE = 'review';
 
@@ -56,6 +57,8 @@ export interface LearnerStateReviewPayload {
   diagnosis: LearnerStateReviewDiagnosis | null;
   /** BKT 概念信念（3a）：conceptKey → pKnowL（0-1）；无观测时为 null */
   beliefs?: Record<string, number> | null;
+  /** 诊断可信度（3b）：历史断言命中率；样本 <5 时 hitRate 为 null */
+  calibration?: InsightReliability | null;
 }
 
 export function reviewProjectionKey(userId: string, pathId?: string | null): string {
@@ -126,6 +129,31 @@ class LearnerStateReviewService {
     }
 
     const generatedAt = new Date().toISOString();
+
+    // 3b：先结算历史待核对断言，再把本次诊断断言入账，最后取可信度
+    const recentEvidenceDigest = buildRecentEvidence(learnerSnapshot);
+    const opportunityAt = learnerSnapshot?.freshness?.basedOn?.latestTaskCompletionAt
+      || learnerSnapshot?.freshness?.basedOn?.latestTeachingSessionAt
+      || null;
+    await insightCalibrationService.resolvePending(userId, primaryPath.id, {
+      opportunityAt,
+      struggling: learnerSnapshot?.knowledgeMemory?.globalSignals?.strugglingConcepts ?? [],
+      fragile: learnerSnapshot?.knowledgeMemory?.globalSignals?.fragileConcepts ?? [],
+    });
+    if (diagnosis?.insights?.length) {
+      await insightCalibrationService.recordInsights(
+        userId,
+        primaryPath.id,
+        diagnosis.insights.map((item) => ({
+          claim: item.claim,
+          insightType: item.type,
+          conceptKeys: conceptsForEvidenceRefs(item.evidenceRefs, recentEvidenceDigest),
+          predictedAt: generatedAt,
+        })),
+      );
+    }
+    const calibration = await insightCalibrationService.getReliability(userId, primaryPath.id);
+
     const payload: LearnerStateReviewPayload = {
       schemaVersion: 'learner-state-review-v1',
       reviewVersion: 1,
@@ -137,6 +165,7 @@ class LearnerStateReviewService {
       insights,
       diagnosis,
       beliefs,
+      calibration,
     };
 
     await prisma.learner_projections.upsert({
@@ -205,6 +234,21 @@ async function runModelDiagnosis(
     });
   }
   return { source: 'rules', diagnosis: null };
+}
+
+/** 从证据引用反查概念（供 3b 校准把断言关联到概念）。 */
+function conceptsForEvidenceRefs(
+  refs: string[],
+  recentEvidence: Array<{ id: string; concepts: string[] }>,
+): string[] {
+  const byId = new Map(recentEvidence.map((entry) => [entry.id, entry.concepts]));
+  const out = new Set<string>();
+  for (const ref of refs || []) {
+    for (const concept of byId.get(ref) || []) {
+      if (concept) out.add(concept);
+    }
+  }
+  return Array.from(out);
 }
 
 /** 从快照取最近证据，赋予稳定引用 id（诊断输出的 evidenceRefs 引用它）。 */

@@ -133,6 +133,7 @@
                 <h3 class="review__title">状态评审</h3>
                 <span class="review__src">{{ reviewSource === 'model' ? 'AI 诊断' : '规则' }}</span>
               </header>
+              <p v-if="reviewReliabilityText" class="review__rel">{{ reviewReliabilityText }}</p>
               <p v-if="reviewNarrative" class="review__narrative">{{ reviewNarrative }}</p>
               <ul v-if="reviewInsights.length" class="review__list">
                 <li v-for="(it, i) in reviewInsights" :key="i" class="review__item">
@@ -518,6 +519,13 @@ const reviewNarrative = computed(() => reviewDiagnosis.value?.narrative || '');
 const reviewInsights = computed<Array<{ type: string; claim: string; action: string }>>(() =>
   Array.isArray(reviewDiagnosis.value?.insights) ? reviewDiagnosis.value.insights : []
 );
+const reviewCalibration = computed(() => guidance.value?.review?.calibration || null);
+const reviewReliabilityText = computed(() => {
+  const c = reviewCalibration.value;
+  if (!c || !c.n) return '';
+  if (c.hitRate == null) return `历史核对 ${c.n} 条 · 样本不足`;
+  return `历史核对 ${c.n} 条 · 命中 ${Math.round(c.hitRate * 100)}%`;
+});
 
 /* ---------- AI 决策记录（同一接口返回，LearningDecisionFeedService 组装） ---------- */
 interface DecisionCard {
@@ -863,6 +871,7 @@ onMounted(() => {
 .review__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .review__title { margin: 0; font-size: 15px; }
 .review__src { font-size: 11px; color: var(--faint, #6b7280); }
+.review__rel { margin: 4px 0 0; font-size: 11px; color: var(--faint, #6b7280); }
 .review__narrative { margin: 8px 0 0; font-size: 13px; line-height: 1.6; }
 .review__list { margin: 10px 0 0; padding-left: 16px; display: grid; gap: 8px; }
 .review__item strong { display: block; font-size: 13px; }
