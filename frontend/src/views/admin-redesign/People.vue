@@ -118,9 +118,9 @@ watch(
 
 <style scoped>
 /* 宿主为应用式布局容器：自身铺满、内滚由子组件表格接管 */
-.pp-host {
-  padding: var(--mk-space-3) var(--mk-space-4) var(--mk-space-4);
-}
+/* 宿主容器沿用 .mk-page 的响应式内边距（不再用静态 token 覆盖）：
+   原覆盖在 ≥1440px 档位与 .mk-page 的 px 内边距脱节，导致本页状态条起始位置/宽度
+   与单页容器（如虚拟学习者）不一致。子页签与嵌入页自行承担内容间距。 */
 .pp-tabs { width: fit-content; }
 /* 页头计数锚点（与学习会话宿主 gc-count-link 同形态）：用户/学习者可点击切视图 */
 .pp-count-link {

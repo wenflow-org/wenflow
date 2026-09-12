@@ -117,9 +117,7 @@ watch(
 
 <style scoped>
 /* 宿主为应用式布局容器：自身铺满、内滚由子组件接管 */
-.ms-host {
-  padding: var(--mk-space-3) var(--mk-space-4) var(--mk-space-4);
-}
+/* 宿主容器沿用 .mk-page 的响应式内边距（对齐 pp-host / gc-host）。 */
 .ms-tabs { width: fit-content; }
 /* 页头计数锚点（与学习会话 gc-count-link / 用户与学习者 pp-count-link 同形态） */
 .ms-count-link {

@@ -792,9 +792,8 @@ onMounted(() => {
 
 <style scoped>
 /* 合并宿主（对齐观测组执行日志形态）：应用式 fill 容器 + 顶部视图切换 pills + 子组件占满 */
-.gc-host {
-  padding: var(--mk-space-3) var(--mk-space-4) var(--mk-space-4);
-}
+/* 宿主容器沿用 .mk-page 的响应式内边距（对齐 pp-host / 虚拟学习者单页容器），
+   避免 ≥1440px 档位状态条起始位置与其它页脱节。 */
 .gc-tabs { width: fit-content; }
 /* 子组件根节点（.mk-page--fill）：占满剩余高度，表格区内滚（对齐 pp-host > .mk-page--fill 先例） */
 .gc-host > .mk-page--fill {
