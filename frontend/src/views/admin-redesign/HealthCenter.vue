@@ -4,8 +4,8 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">健康中心</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" v-if="displayReport">
-        技能 {{ global.total }} · 上线 {{ completionLive }}/{{ reconciliation.total }} · {{ displayReport.generatedAt ? '更新于 ' + timeAgo(displayReport.generatedAt) : '' }}
+      <span class="mk-status__meta" v-if="displayReport" :title="skillCountTitle">
+        技能 {{ global.total }}<template v-if="extraCapabilityCount">（含 {{ extraCapabilityCount }} 个外挂能力）</template> · 上线 {{ completionLive }}/{{ reconciliation.total }} · {{ displayReport.generatedAt ? '更新于 ' + timeAgo(displayReport.generatedAt) : '' }}
       </span>
       <span class="mk-badge" :class="topAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'" v-if="displayReport" :title="badgeTitle">{{ topAbnormal > 0 ? `异常 ${topAbnormal}` : '全部健康' }}</span>
       <span class="mk-status__actions">
@@ -208,10 +208,14 @@ import {
 } from '@/api/adminApi'
 import { TERMS } from './terms'
 import { COMPLETION_META, SEMANTICS_META } from './glossaryMeta'
+import { EXTRA_CAPABILITY_SKILLS } from '@/views/admin/capabilityCatalog'
 import MkKpi from './MkKpi.vue'
 import SkillReconciliation from './SkillReconciliation.vue'
 
 const reconRef = ref<{ openPanel?: () => void } | null>(null)
+
+/** 外挂能力数（MCP + 能力 Skill）：健康中心/对账的登记总数含它们，Skill 运行页不含——口径标注用 */
+const extraCapabilityCount = EXTRA_CAPABILITY_SKILLS.length
 
 /** 只读观测不计入「需处理」：漂移卡仅统计契约漂移 + W4 哈希漂移 */
 const driftActionable = computed(() => (displayReport.value?.drift?.contract || 0) + (displayReport.value?.drift?.hash || 0))
@@ -239,8 +243,12 @@ const reconCardTitle = computed(() => {
     `接线不一致 ${r.unwired}`,
   ]
   const note = r.zombieSkillActive > 0 ? `（另有 ${r.zombieSkillActive} 条失效 ACTIVE 与健康检查「生效版本检查」同源，不重复计数）` : ''
-  return parts.join(' · ') + note
+  const scope = extraCapabilityCount > 0 ? `（对账总数含 ${extraCapabilityCount} 个外挂能力，Skill 运行页不含）` : ''
+  return parts.join(' · ') + note + scope
 })
+const skillCountTitle = computed(
+  () => `登记总数 ${global.value.total} = Skill 运行 ${global.value.total - extraCapabilityCount} 个 + 外挂能力 ${extraCapabilityCount} 个（数据源 prompts/skills.yaml）`,
+)
 const badgeTitle = computed(() => {
   const c = counts.value
   const parts: string[] = []

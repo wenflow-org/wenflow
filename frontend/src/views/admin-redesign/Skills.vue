@@ -4,7 +4,7 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">{{ liveLoading && !cards.length ? 'Skill 加载中…' : `共 ${cards.length} 个 Skill` }}</span>
+      <span class="mk-status__meta" :title="skillCountHint">{{ liveLoading && !cards.length ? 'Skill 加载中…' : `共 ${cards.length} 个 Skill` }}</span>
       <span v-if="overallRate != null" class="mk-status__meta" :class="rateNumTone === 'bad' ? 'mk-status__meta--bad' : rateNumTone === 'warn' ? 'mk-status__meta--warn' : ''" :title="'窗口内成功率 = 成功调用 / 总调用'">
         成功率 {{ overallRate }}%<template v-if="totalCalls">（{{ okCalls }}/{{ totalCalls }}）</template>
       </span>
@@ -176,6 +176,7 @@ import { skillStatOf, openSkillDrawer, isLive } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
 import { completionMetaOf } from './glossaryMeta'
+import { EXTRA_CAPABILITY_SKILLS } from '@/views/admin/capabilityCatalog'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from './MkCols.vue'
 import Pagination from './Pagination.vue'
@@ -280,6 +281,12 @@ const totalCalls = computed(() => cards.value.reduce((a, c) => a + c.calls, 0))
 const totalErrors = computed(() => cards.value.reduce((a, c) => a + c.errors, 0))
 const okCalls = computed(() => Math.max(0, totalCalls.value - totalErrors.value))
 const overallRate = computed(() => (totalCalls.value > 0 ? Math.round((okCalls.value / totalCalls.value) * 100) : null))
+/** 口径提示：Skill 运行页不含外挂能力（MCP + 能力 Skill），而健康中心/对账的登记总数含它们——避免「31/28/3」三处数字无从解释 */
+const skillCountHint = computed(
+  () => (EXTRA_CAPABILITY_SKILLS.length
+    ? `不含 ${EXTRA_CAPABILITY_SKILLS.length} 个外挂能力（见「外挂能力」页）；健康中心 / 对账的登记总数含它们`
+    : ''),
+)
 const rateNumTone = computed<'' | 'bad' | 'warn'>(() => (overallRate.value == null ? '' : overallRate.value < 70 ? 'bad' : overallRate.value < 90 ? 'warn' : ''))
 const idleCount = computed(() => cards.value.filter((c) => c.calls === 0).length)
 const avgLatencyMs = computed(() => {
