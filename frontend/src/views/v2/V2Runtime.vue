@@ -130,6 +130,7 @@ const AGENT_LABEL: Record<string, string> = {
   'skill:stage-designer': '设计阶段任务',
   'skill:path-reviewer': '评审路径',
   'skill:kc-mapper': '整理知识组件',
+  'skill:teaching-opening-generator': '生成教学开场',
   'path-agent': '路径生成',
   'ai-teaching-agent': '课堂处理',
   'ai-tutor': '伴学回应',
@@ -151,10 +152,9 @@ function agentLabelOf(agentId: string, phase?: string | null): string {
   }
   return AGENT_LABEL[agentId] ?? fallbackLabel(agentId);
 }
-const fallbackLabel = (agentId: string) => {
-  const plain = agentId.replace(/^skill:/, '');
-  const short = plain.split('-').pop() || plain;
-  return `AI 任务「${short}」`;
+const fallbackLabel = (_agentId: string) => {
+  // 未登记 agent 的兜底：不泄露内部代号（原样取 `-` 末段会向用户暴露 generator/copy 等内部名）
+  return 'AI 任务';
 };
 
 interface AgentLog {
