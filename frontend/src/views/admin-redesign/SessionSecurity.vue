@@ -267,27 +267,41 @@ interface DeviceInfo {
   os: string
   kind: 'windows' | 'mac' | 'linux' | 'android' | 'ios' | 'other'
 }
+/** 版本号规整：去掉尾部 `.0` 段（Headless Chrome 上报 152.0.0.0 这类），保留有意义的段 */
+const fmtVer = (v: string) => v.replace(/(?:\.0)+$/, '') || v
 function deviceOf(s: AdminSessionRow): DeviceInfo {
   const ua = s.userAgent || ''
   const out: DeviceInfo = { browser: '未知', os: '', kind: 'other' }
   if (!ua) return out
   let m: RegExpMatchArray | null
-  if ((m = ua.match(/Edg(?:e|A)?\/([\d.]+)/))) out.browser = `Edge ${m[1]}`
-  else if ((m = ua.match(/HeadlessChrome\/([\d.]+)/))) out.browser = `Headless Chrome ${m[1]}`
-  else if ((m = ua.match(/Chrome\/([\d.]+)/))) out.browser = `Chrome ${m[1]}`
-  else if ((m = ua.match(/Firefox\/([\d.]+)/))) out.browser = `Firefox ${m[1]}`
-  else if ((m = ua.match(/Version\/([\d.]+).*Safari/))) out.browser = `Safari ${m[1]}`
+  if ((m = ua.match(/Edg(?:e|A)?\/([\d.]+)/))) out.browser = `Edge ${fmtVer(m[1])}`
+  else if ((m = ua.match(/OPR\/([\d.]+)/))) out.browser = `Opera ${fmtVer(m[1])}`
+  else if ((m = ua.match(/HeadlessChrome\/([\d.]+)/))) out.browser = `Headless Chrome ${fmtVer(m[1])}`
+  else if ((m = ua.match(/Chrome\/([\d.]+)/))) out.browser = `Chrome ${fmtVer(m[1])}`
+  else if ((m = ua.match(/Firefox\/([\d.]+)/))) out.browser = `Firefox ${fmtVer(m[1])}`
+  else if ((m = ua.match(/Version\/([\d.]+).*Safari/))) out.browser = `Safari ${fmtVer(m[1])}`
+  else if (/WindowsPowerShell/i.test(ua)) out.browser = 'PowerShell'
   else if (/curl\//.test(ua)) out.browser = 'curl'
   else if (/PostmanRuntime/.test(ua)) out.browser = 'Postman'
   else if (/python-requests/.test(ua)) out.browser = 'Python requests'
+  else if (/Python-urllib/.test(ua)) out.browser = 'Python urllib'
   else if (/axios/.test(ua)) out.browser = 'axios'
   else if (/Playwright/.test(ua)) out.browser = 'Playwright'
+  else if (/Go-http-client/.test(ua)) out.browser = 'Go http client'
+  else if (/okhttp/.test(ua)) out.browser = 'OkHttp'
+  else if (/Java\//.test(ua)) out.browser = 'Java'
   else if (/node/i.test(ua)) out.browser = 'Node.js'
+  // 解析失败：降级展示原始 UA 片段（去 Mozilla 前缀），而不是对判断无信息的「未知」
+  if (out.browser === '未知') {
+    const snippet = ua.replace(/^Mozilla\/5\.0\s*/i, '').slice(0, 48)
+    if (snippet) out.browser = snippet
+  }
   if (/Windows NT 10\.0/.test(ua)) { out.os = 'Windows 10/11'; out.kind = 'windows' }
   else if (/Windows NT 6\.[13]/.test(ua)) { out.os = 'Windows 7/8'; out.kind = 'windows' }
   else if (/Mac OS X/.test(ua)) { out.os = 'macOS'; out.kind = 'mac' }
   else if (/Android/.test(ua)) { out.os = 'Android'; out.kind = 'android' }
   else if (/iPhone|iPad|iPod/.test(ua)) { out.os = 'iOS'; out.kind = 'ios' }
+  else if (/CrOS/.test(ua)) { out.os = 'ChromeOS'; out.kind = 'linux' }
   else if (/Linux/.test(ua)) { out.os = 'Linux'; out.kind = 'linux' }
   return out
 }
