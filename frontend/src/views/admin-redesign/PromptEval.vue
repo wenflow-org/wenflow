@@ -64,7 +64,7 @@
                 </div>
               </td>
               <td><span class="mk-badge mk-badge--info">{{ agentLabel(c.agentId) }}</span></td>
-              <td class="mk-num">{{ c.messages.length }}</td>
+              <td class="mk-num" :title="c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟用例：学生话由模拟器生成，无需手写消息' : ''">{{ c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟' : c.messages.length }}</td>
               <td>
                 <div v-if="expectationText(c)" class="pe-expect" :title="expectationText(c)">{{ expectationText(c) }}</div>
                 <span v-else class="mk-na">无</span>
@@ -528,6 +528,8 @@ const expectationText = (c: EvalCase) => {
   const e = c.expectations
   if (!e) return ''
   const parts: string[] = []
+  if (e.mode === 'simulated') parts.push(`模拟场景${e.scenario ? `：${e.scenario}` : ''}`)
+  if (e.dialogueRounds) parts.push(`${e.dialogueRounds} 轮`)
   if (e.expectedStage) parts.push(`stage=${e.expectedStage}`)
   if (e.mustIncludeFields?.length) parts.push(`含 ${e.mustIncludeFields.length} 字段`)
   if (e.mustNotInclude?.length) parts.push(`不含 ${e.mustNotInclude.length} 词`)
@@ -981,6 +983,8 @@ async function openRunDetail(r: EvalRun) {
 }
 
 void reloadCases()
+// 首屏就拉评估历史，保证状态条「评估历史 N」不是 0（原仅切到历史 Tab 才加载）
+void reloadRuns()
 </script>
 
 <style scoped>
