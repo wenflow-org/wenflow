@@ -381,6 +381,28 @@ export async function collectHealthCenterScan(
   };
 }
 
+/**
+ * 运行时遥测采样按 Skill 归并：`<agentId> ×N @ <最近ISO>`。
+ * 原实现平铺最多 20 条 ISO 行，计数（50）与明细条数对不上且不可读；归并后行数=去重 Skill 数、计数一致。
+ */
+function groupRuntimeDriftRows(rows: { agentId: string; createdAt?: string | Date | null }[]): string[] {
+  const groups = new Map<string, { count: number; latest: number; latestIso: string }>()
+  for (const row of rows) {
+    const agent = String(row.agentId || 'unknown')
+    const ts = row.createdAt ? new Date(row.createdAt).getTime() : 0
+    const g = groups.get(agent) || { count: 0, latest: 0, latestIso: '' }
+    g.count += 1
+    if (Number.isFinite(ts) && ts > g.latest) {
+      g.latest = ts
+      g.latestIso = row.createdAt ? new Date(row.createdAt).toISOString() : ''
+    }
+    groups.set(agent, g)
+  }
+  return [...groups.entries()]
+    .sort((a, b) => b[1].latest - a[1].latest)
+    .map(([agent, g]) => `${agent} ×${g.count}${g.latestIso ? ` @ ${g.latestIso}` : ''}`)
+}
+
 /** 纯组装：由单次扫描中间产物装配 13 项健康清单（健康中心与巡检聚合共用同一实现） */
 export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCenterItem[] {
   const {
@@ -632,9 +654,7 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
       count: runtimeDriftRows.rows.length,
       detail: runtimeDriftRows.note
         ? [runtimeDriftRows.note]
-        : runtimeDriftRows.rows.slice(0, 20).map((row) =>
-            `${row.agentId} @ ${row.createdAt ? new Date(row.createdAt).toISOString() : '—'}`,
-          ),
+        : groupRuntimeDriftRows(runtimeDriftRows.rows),
       cause: '运行时遥测：每次 LLM 调用时比对"代码侧 prompt 与数据库 ACTIVE 版本"是否一致，记录异常',
       action: 'none',
       fixHint: '只读观察项：出现漂移时，修复=重新同步数据库（w4 一键修复覆盖）',

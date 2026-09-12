@@ -51,7 +51,7 @@
         <MkKpi
           label="漂移"
           :value="driftActionable"
-          :hint="driftActionable > 0 ? '需处理' : '正常'"
+          :hint="driftActionable > 0 ? '需处理' : drift.runtime > 0 ? `另 ${drift.runtime} 条只读遥测` : '正常'"
           :tone="driftActionable > 0 ? 'warn' : 'ok'"
           clickable
           :title="driftCardTitle"
@@ -349,7 +349,26 @@ function toggleDetail(id: string) {
 
 /** 明细截断：防止几十条遥测把页面拉爆 */
 const DETAIL_LIMIT = 20
-function visibleDetail(item: HealthCenterItem): string[] { return item.detail.slice(0, DETAIL_LIMIT) }
+function visibleDetail(item: HealthCenterItem): string[] {
+  // 运行时遥测：后端按 Skill 归并 + 带最近时间 → 先本地化再截断（归并后行数通常很少）
+  if (item.id === 'runtime-prompt') return runtimePromptLines(item).slice(0, DETAIL_LIMIT)
+  return item.detail.slice(0, DETAIL_LIMIT)
+}
+/** 运行时遥测明细本地化：后端 `agent ×N @ ISO` → `agent ×N｜最近 9月6日 10:14` */
+function runtimePromptLines(item: HealthCenterItem): string[] {
+  return item.detail.map((line) => {
+    const at = line.lastIndexOf(' @ ')
+    if (at < 0) return line
+    const ts = new Date(line.slice(at + 3)).getTime()
+    return Number.isFinite(ts) ? `${line.slice(0, at)}｜最近 ${formatLocalTime(ts)}` : line
+  })
+}
+function formatLocalTime(ts: number): string {
+  if (!Number.isFinite(ts) || ts <= 0) return '—'
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${p(d.getHours())}:${p(d.getMinutes())}`
+}
 function detailTruncated(item: HealthCenterItem): boolean { return item.detail.length > DETAIL_LIMIT }
 
 /* ---------- 数字带单位 + 语义标签提示 ---------- */
