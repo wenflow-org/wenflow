@@ -78,22 +78,24 @@
               <span v-if="path.deadlineText" class="metric"><b>{{ path.deadlineText }}</b>目标周期</span>
             </div>
             <div class="hero__actions">
-              <span
+              <button
                 v-if="currentTask && canLearn"
+                type="button"
                 class="btn-primary"
                 @click="goLearn(currentTask.id)"
               >
                 <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
                 {{ currentTask.status === 'in_progress' ? '继续当前任务' : '开始学习' }}
-              </span>
-              <span
+              </button>
+              <button
                 v-if="canLearn"
+                type="button"
                 class="btn-ghost"
                 title="按你的情况调整路径：重学、调整剩余或让 AI 按学习情况建议"
                 @click="openAdjustDialog"
               >
                 调整路径
-              </span>
+              </button>
               <span v-else-if="allDone" class="btn-ghost">全部任务已完成</span>
             </div>
           </div>

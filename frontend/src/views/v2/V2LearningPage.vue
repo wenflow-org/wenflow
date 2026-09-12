@@ -2,7 +2,7 @@
   <div class="learn v2-page">
     <!-- 沉浸式头部 -->
     <header class="learn__head">
-      <span class="learn__back" @click="goBack">‹ 返回路径详情</span>
+      <button type="button" class="learn__back" @click="goBack">‹ 返回路径详情</button>
       <div class="learn__title">
         <span class="learn__task-pill">当前任务</span>
         <strong>{{ taskTitle || '学习会话' }}</strong>
@@ -11,7 +11,7 @@
       <div class="learn__head-right">
         <span class="learn__live">{{ session ? '学习中' : '连接中' }}</span>
         <span class="learn__menu-wrap">
-          <span class="learn__menu" title="更多" @click="menuOpen = !menuOpen" :aria-expanded="menuOpen">⋯</span>
+          <button type="button" class="learn__menu" title="更多" @click="menuOpen = !menuOpen" :aria-expanded="menuOpen">⋯</button>
           <Transition name="pop">
             <div v-if="menuOpen" class="learn__menu-pop">
             <div class="learn__menu-group">
@@ -1625,7 +1625,7 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 50;
 }
-.learn__back { font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.learn__back { font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; background: none; border: 0; padding: 0; font-family: inherit; }
 .learn__back:hover { color: var(--blue-deep); }
 .learn__title { display: grid; gap: 3px; min-width: 0; }
 .learn__title strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1651,7 +1651,7 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(49, 177, 111, 0.3);
   padding: 4px 10px; border-radius: 999px;
 }
-.learn__menu { color: var(--faint); font-size: 18px; cursor: pointer; padding: 0 6px; }
+.learn__menu { color: var(--faint); font-size: 18px; cursor: pointer; padding: 0 6px; background: none; border: 0; font-family: inherit; }
 
 /* ---------- 布局 ---------- */
 .learn__body {
