@@ -434,6 +434,10 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-filter__select:focus { border-color: var(--mk-blue); }
 .mk-filter__input { min-width: 180px; }
 .mk-pills { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; }
+/* 主视图切换（.mk-page 的直接子级 pills）：统一左对齐 + 按内容宽度收缩。
+   否则在 grid / flex 列容器里会被 justify-self:stretch / align-items:stretch 拉伸成整行
+   ——虚拟学习者、执行日志、系统工具曾出现 pills 占满整行的「超长」形态。 */
+.mk-page > .mk-pills { width: fit-content; justify-self: start; align-self: flex-start; }
 .mk-pill {
   border: 0;
   background: transparent;
