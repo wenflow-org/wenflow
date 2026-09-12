@@ -1,0 +1,131 @@
+/**
+ * LearnerStateReviewService（状态评审诊断层 · Slice 2a）
+ *
+ * 定位：把「学习者状态」聚合成一份可回写、可复用的**评审产物**（learner-state-review-v1），
+ * 供 dashboard / learning-state / 教学侧消费；落 `learner_projections`（scope=review），按需读取。
+ *
+ * 当前实现（2a）：洞察来自既有**规则**组件（LearnerStateSummary + LearningDecisionFeed），
+ *   不新增 LLM 调用；输入侧统一走 `toReviewProjection`（诊断层投影）。
+ * 下一阶段（2b）：接入 `learner-state-review` LLM skill，把 `insights` 升级为可证伪诊断，
+ *   并把 `source` 从 'rules' 升为 'model'（见 doc/LEARNER_STATE_REVIEW_DESIGN.md §4）。
+ */
+import prisma from '../../config/database';
+import { logger } from '../../utils/logger';
+import { runBackgroundTask } from '../background-task-tracker.service';
+import { assembleLearningState } from './assemble-learning-state';
+import { learnerProjectionService, type ReviewProjection } from './LearnerProjectionService';
+import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
+import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
+
+export const REVIEW_PROJECTION_SCOPE = 'review';
+
+export interface LearnerStateReviewPayload {
+  schemaVersion: 'learner-state-review-v1';
+  reviewVersion: 1;
+  generatedAt: string;
+  pathId: string | null;
+  /** 'rules' = 规则派生（2a）；'model' = LLM 诊断（2b，预留） */
+  source: 'rules' | 'model';
+  projection: ReviewProjection;
+  summary: LearnerStateSummaryOutput;
+  insights: LearningDecisionCard[];
+}
+
+export function reviewProjectionKey(userId: string, pathId?: string | null): string {
+  return `learner-state-review-v1:${userId}:${pathId || 'global'}`;
+}
+
+class LearnerStateReviewService {
+  private inflight = new Map<string, Promise<LearnerStateReviewPayload | null>>();
+
+  async getLatest(userId: string, pathId?: string | null): Promise<LearnerStateReviewPayload | null> {
+    const row = await prisma.learner_projections.findUnique({
+      where: { projectionKey: reviewProjectionKey(userId, pathId) },
+      select: { payload: true },
+    });
+    return parseJsonSafe<LearnerStateReviewPayload>(row?.payload);
+  }
+
+  async refresh(userId: string, pathId?: string | null): Promise<LearnerStateReviewPayload | null> {
+    const key = reviewProjectionKey(userId, pathId);
+    const pending = this.inflight.get(key);
+    if (pending) return pending;
+
+    const task = this.perform(userId, pathId)
+      .catch((error: any) => {
+        logger.warn('[learner-state-review] refresh failed', { userId, pathId, error: error?.message || String(error) });
+        return null;
+      })
+      .finally(() => {
+        if (this.inflight.get(key) === task) this.inflight.delete(key);
+      });
+
+    this.inflight.set(key, task);
+    return task;
+  }
+
+  refreshInBackground(userId: string, pathId?: string | null): void {
+    runBackgroundTask('learner-state-review.refresh', () => this.refresh(userId, pathId), { userId, pathId });
+  }
+
+  private async perform(userId: string, pathId?: string | null): Promise<LearnerStateReviewPayload | null> {
+    const assembled = await assembleLearningState(userId, { snapshotScope: 'path', pathId });
+    if (!assembled || !assembled.primaryPath) return null;
+
+    const { paths, sessions, primaryPath, learnerSnapshot, learningState, warnings } = assembled;
+
+    const summary = learnerStateSummaryService.build({
+      learnerSnapshot,
+      learningState,
+      path: primaryPath,
+      warningCount: warnings.length,
+    });
+    const insights = learningDecisionFeedService.build({ paths, sessions, learnerSnapshot, summary });
+    const projection = learnerProjectionService.toReviewProjection(learnerSnapshot);
+
+    const generatedAt = new Date().toISOString();
+    const payload: LearnerStateReviewPayload = {
+      schemaVersion: 'learner-state-review-v1',
+      reviewVersion: 1,
+      generatedAt,
+      pathId: primaryPath.id,
+      source: 'rules',
+      projection,
+      summary,
+      insights,
+    };
+
+    await prisma.learner_projections.upsert({
+      where: { projectionKey: reviewProjectionKey(userId, primaryPath.id) },
+      create: {
+        id: `lsr_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        projectionKey: reviewProjectionKey(userId, primaryPath.id),
+        userId,
+        scope: REVIEW_PROJECTION_SCOPE,
+        pathId: primaryPath.id,
+        version: 1,
+        payload: JSON.stringify(payload),
+        generatedAt: new Date(generatedAt),
+      },
+      update: {
+        version: { increment: 1 },
+        payload: JSON.stringify(payload),
+        generatedAt: new Date(generatedAt),
+      },
+    });
+
+    return payload;
+  }
+}
+
+function parseJsonSafe<T>(raw: string | null | undefined): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+export const learnerStateReviewService = new LearnerStateReviewService();
+export default learnerStateReviewService;

@@ -6,6 +6,30 @@ export interface GuidanceCopyProjection {
   path: Record<string, any> | null;
 }
 
+/** 状态评审诊断层（learner-state-review）专用投影：只带状态摘要与知识线索 */
+export interface ReviewProjection {
+  learnerDigest: {
+    level: number | null;
+    metrics: { lss: number; ktl: number; lf: number; lsb: number };
+    trend?: string;
+    fatigue?: string;
+    pacing?: string;
+    srlPhase?: string;
+  };
+  knowledgeDigest: {
+    mastered: string[];
+    fragile: string[];
+    struggling: string[];
+    prerequisiteGaps: Array<{ label: string; reason: string; severity: string }>;
+    currentPath: {
+      learningPathId?: string;
+      pathTitle?: string;
+      progress?: any;
+      currentPosition?: any;
+    } | null;
+  };
+}
+
 const GUIDANCE_PATH_FIELDS = [
   'id', 'title', 'name', 'description', 'subject', 'status', 'difficulty',
   'estimatedHours', 'totalMilestones', 'completedMilestones', 'updatedAt',
@@ -87,6 +111,52 @@ export class LearnerProjectionService {
       : null;
 
     return { learnerSnapshot: trimmedSnapshot, path: pathProjection };
+  }
+
+  /**
+   * 诊断层投影：给 learner-state-review 的最小状态摘要 + 知识线索。
+   * 不含逐任务/逐证据明细；证据引用由调用方按 DB 事件 id 另附（见设计 §4.2）。
+   */
+  toReviewProjection(snapshot: LearnerSnapshot): ReviewProjection {
+    const anySnapshot = snapshot as any;
+    const metrics = anySnapshot?.dynamicState?.metrics ?? {};
+    const knowledgeMemory = anySnapshot?.knowledgeMemory ?? {};
+    const globalSignals = knowledgeMemory?.globalSignals ?? {};
+    const currentPath = knowledgeMemory?.currentPath;
+
+    return {
+      learnerDigest: {
+        level: anySnapshot?.profile?.learning?.level ?? null,
+        metrics: {
+          lss: Number(metrics.lss) || 0,
+          ktl: Number(metrics.ktl) || 0,
+          lf: Number(metrics.lf) || 0,
+          lsb: Number(metrics.lsb) || 0,
+        },
+        trend: anySnapshot?.dynamicState?.recentTrend,
+        fatigue: anySnapshot?.dynamicState?.fatigueRisk,
+        pacing: anySnapshot?.dynamicState?.recommendedPacing,
+        srlPhase: anySnapshot?.dynamicState?.srlPhase,
+      },
+      knowledgeDigest: {
+        mastered: (globalSignals.masteredConcepts ?? []).slice(0, 12),
+        fragile: (globalSignals.fragileConcepts ?? []).slice(0, 12),
+        struggling: (globalSignals.strugglingConcepts ?? []).slice(0, 12),
+        prerequisiteGaps: (currentPath?.prerequisiteGaps ?? []).slice(0, 8).map((gap: any) => ({
+          label: gap?.label,
+          reason: gap?.reason,
+          severity: gap?.severity,
+        })),
+        currentPath: currentPath
+          ? {
+              learningPathId: currentPath.learningPathId,
+              pathTitle: currentPath.pathTitle,
+              progress: currentPath.progress,
+              currentPosition: currentPath.currentPosition,
+            }
+          : null,
+      },
+    };
   }
 
   toTeachingProjection(snapshot: LearnerSnapshot): TeachingLearnerProjection {

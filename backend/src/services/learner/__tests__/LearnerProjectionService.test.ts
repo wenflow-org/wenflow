@@ -84,4 +84,16 @@ describe('LearnerProjectionService.toGuidanceProjection', () => {
     expect(projected.length).toBeLessThan(20000);
     expect(projected.length).toBeLessThan(original.length / 5);
   });
+
+  it('toReviewProjection 只保留状态摘要与知识线索', () => {
+    const review = learnerProjectionService.toReviewProjection(heavySnapshot());
+    expect(review.learnerDigest.metrics).toEqual({ lss: 4, ktl: 5, lf: 3, lsb: 1 });
+    expect(review.learnerDigest.trend).toBe('stable');
+    expect(review.knowledgeDigest.mastered).toEqual(['m1']);
+    expect(review.knowledgeDigest.prerequisiteGaps).toEqual([{ label: 'g', reason: 'r', severity: 'high' }]);
+    expect(review.knowledgeDigest.currentPath?.learningPathId).toBe('lp1');
+    // 逐任务/逐证据明细不进入诊断投影
+    expect(JSON.stringify(review)).not.toContain('taskMastery');
+    expect(JSON.stringify(review).length).toBeLessThan(3000);
+  });
 });
