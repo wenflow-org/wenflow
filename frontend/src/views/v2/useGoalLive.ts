@@ -26,6 +26,8 @@ export interface LiveMessage {
   time: string;
   failed?: boolean;
   id?: string;
+  /** P2-14：随消息持久化的快捷补充选项（刷新/恢复后仍可点选） */
+  quickReplies?: Array<{ text: string; icon?: string }>;
 }
 
 export interface LiveField {
@@ -239,12 +241,16 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
 
   // 消息：优先使用后端返回的完整历史
   if (Array.isArray(env.meta?.messages) && env.meta.messages.length > 0) {
-    messages.value = env.meta.messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-      time: formatMsgTime(m.time),
-      id: `h_${Math.random().toString(36).slice(2, 10)}`
-    }));
+    messages.value = env.meta.messages.map((m) => {
+      const row = m as { role: 'user' | 'ai'; content: string; time: string; quickReplies?: Array<{ text: string; icon?: string }> };
+      return {
+        role: row.role,
+        content: row.content,
+        time: formatMsgTime(row.time),
+        id: `h_${Math.random().toString(36).slice(2, 10)}`,
+        ...(Array.isArray(row.quickReplies) && row.quickReplies.length ? { quickReplies: row.quickReplies } : {}),
+      };
+    });
   } else {
     // 乐观插入后可能已有用户气泡，避免重复
     if (opts.userText) {
@@ -254,6 +260,16 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
       }
     }
     if (env.userVisible) pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
+  }
+  // P2-14：恢复会话时用最后一条带快捷补充的 AI 消息回填当前轮面板（刷新后不再只剩输入框）
+  if (!quickReplies.value.length) {
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      const qr = messages.value[i].quickReplies;
+      if (messages.value[i].role === 'ai' && Array.isArray(qr) && qr.length) {
+        quickReplies.value = qr;
+        break;
+      }
+    }
   }
   localStorage.setItem(MSG_KEY, JSON.stringify(messages.value.slice(-60)));
   started.value = true;

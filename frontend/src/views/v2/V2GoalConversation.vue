@@ -179,6 +179,17 @@
                 @mouseleave="onBubbleLeave"
               >
                 <div class="msg__bubble msg__bubble--html msg__bubble--relative" v-html="formatMessage(km.msg.content)"></div>
+                <!-- P2-14：历史轮次的快捷补充随消息渲染（当前轮由下方面板承担），点选填入输入框 -->
+                <div v-if="km.msg.quickReplies?.length && km.key !== lastAiKey" class="msg__replies">
+                  <button
+                    v-for="q in km.msg.quickReplies"
+                    :key="q.text"
+                    type="button"
+                    class="msg__reply"
+                    :class="{ 'msg__reply--on': pickedReplySet.has(q.text.trim()) }"
+                    @click="toggleReply(q.text)"
+                  >{{ q.text }}</button>
+                </div>
                 <MessageActions
                   :show="hoveredMsgId === km.key"
                   :streaming="live.sending"
@@ -445,6 +456,13 @@ function onNarrowChange(e: MediaQueryListEvent) {
 const keyedMessages = computed(() =>
   live.messages.map((m, i) => ({ key: m.id ?? `i_${i}`, msg: m }))
 );
+/** P2-14：最后一条 AI 消息的 key——其快捷补充由下方的常驻面板承担，历史轮次才内联渲染 chip */
+const lastAiKey = computed(() => {
+  for (let i = live.messages.length - 1; i >= 0; i -= 1) {
+    if (live.messages[i].role === 'ai') return live.messages[i].id ?? `i_${i}`;
+  }
+  return '';
+});
 
 onMounted(() => {
   window.addEventListener('v2:new-goal', onNewGoalEvent);
@@ -1433,6 +1451,22 @@ function shuffleScenes() {
 .replies-panel__option--active:hover {
   background: rgba(52, 120, 246, 0.16);
 }
+/* P2-14：历史轮次的快捷补充 chip（随消息渲染，点选填入输入框；选中态跟随输入草稿） */
+.msg__replies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.msg__reply {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface, #fff);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.msg__reply:hover { border-color: rgba(52, 120, 246, 0.45); color: var(--blue-deep); }
+.msg__reply--on { border-color: rgba(52, 120, 246, 0.5); background: rgba(52, 120, 246, 0.1); color: var(--blue-deep); }
 .replies-panel__dot {
   width: 7px;
   height: 7px;

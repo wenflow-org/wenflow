@@ -389,7 +389,7 @@ class GoalConversationService {
       }
 
       await this.saveMessage(conversation.id, 'user', initialGoal);
-      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible);
+      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: this.getGoalExt(aiResponse.internal).quickReplies });
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
       await this.updateCollectedData(conversation.id, responseWithConversationId);
@@ -564,7 +564,7 @@ async continueConversation(
       }
 
       await this.saveMessage(conversation.id, 'user', userReply, options?.meta);
-      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible);
+      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: this.getGoalExt(aiResponse.internal).quickReplies });
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
       await this.updateCollectedData(conversation.id, responseWithConversationId);
@@ -720,7 +720,30 @@ async continueConversation(
   /**
    * 保存消息到历史
    */
-  private async saveMessage(conversationId: string, role: string, content: string, meta?: Record<string, number> | null) {
+  /** 快捷补充归一化：兼容 string[] 与 {text,icon?}[]，去空去重、最多 4 条（与前端渲染一致） */
+  private normalizeQuickReplies(input: unknown): Array<{ text: string; icon?: string }> {
+    if (!Array.isArray(input)) return [];
+    const out: Array<{ text: string; icon?: string }> = [];
+    const seen = new Set<string>();
+    for (const raw of input) {
+      const rawText = typeof raw === 'string'
+        ? raw
+        : (raw && typeof raw === 'object' && typeof (raw as { text?: unknown }).text === 'string'
+          ? String((raw as { text: string }).text)
+          : '');
+      const text = rawText.trim();
+      if (!text || seen.has(text)) continue;
+      seen.add(text);
+      const icon = raw && typeof raw === 'object' && typeof (raw as { icon?: unknown }).icon === 'string'
+        ? (raw as { icon: string }).icon
+        : undefined;
+      out.push(icon ? { text, icon } : { text });
+      if (out.length >= 4) break;
+    }
+    return out;
+  }
+
+  private async saveMessage(conversationId: string, role: string, content: string, meta?: Record<string, number> | null, extra?: { quickReplies?: unknown }) {
     // 乐观锁：messages/collectedData 是整包 JSON 读改写，同一会话的并发提交
     // （双击/重试）会互相覆盖丢消息。以 revision 条件更新，冲突时重读重放。
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -734,11 +757,14 @@ async continueConversation(
       const data = JSON.parse(conversation.collectedData);
       data.messages = data.messages || [];
       const sanitizedContent = this.sanitizeVisibleContent(content);
+      // P2-14：快捷补充随消息持久化（渲染时随历史消息一起回来，刷新不再只剩输入框）
+      const quickReplies = this.normalizeQuickReplies(extra?.quickReplies);
       data.messages.push({
         role,
         content: sanitizedContent,
         time: new Date().toISOString(),
-        ...(meta && Object.keys(meta).length > 0 ? { meta } : {})
+        ...(meta && Object.keys(meta).length > 0 ? { meta } : {}),
+        ...(quickReplies.length ? { quickReplies } : {})
       });
 
       // S1 数据质量修复：messages 列与 collectedData.messages 双写（追加后整列同步为完整对话数组）。
