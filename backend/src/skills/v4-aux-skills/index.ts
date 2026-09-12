@@ -27,7 +27,8 @@ export type AuxSkillId =
   | 'skill-author'
   | 'skill-compiler'
   | 'basic-evaluator'
-  | 'goal-alignment-checker';
+  | 'goal-alignment-checker'
+  | 'learner-state-review';
 
 // File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
 const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
@@ -39,6 +40,7 @@ const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
   'skill-compiler': loadPromptFile('skill:skill-compiler')?.systemPrompt || '',
   'basic-evaluator': loadPromptFile('skill:basic-evaluator')?.systemPrompt || '',
   'goal-alignment-checker': loadPromptFile('skill:goal-alignment-checker')?.systemPrompt || '',
+  'learner-state-review': loadPromptFile('skill:learner-state-review')?.systemPrompt || '',
 };
 
 interface AuxPlumbing extends PromptCallContext {
@@ -215,6 +217,7 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
   'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis' },
   'basic-evaluator': { skillId: 'basic-evaluator', displayName: '学习质量评估器', description: '评估学习内容、答案或任务完成情况', category: 'analysis' },
   'goal-alignment-checker': { skillId: 'goal-alignment-checker', displayName: '路径目标对齐检查器', description: '检查学习路径与目标的对齐程度', category: 'analysis' },
+  'learner-state-review': { skillId: 'learner-state-review', displayName: '学习状态评审诊断器', description: '基于状态摘要与证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）', category: 'analysis' },
 };
 
 // ============================================================
@@ -351,6 +354,53 @@ async function goalAlignmentCheckerHandler(input: any) {
   });
 }
 
+async function learnerStateReviewHandler(input: any) {
+  return runAux({
+    meta: META['learner-state-review'],
+    input,
+    buildUserPayload: (d) => ({
+      learnerDigest: d.learnerDigest,
+      knowledgeDigest: d.knowledgeDigest,
+      recentEvidence: Array.isArray(d.recentEvidence) ? d.recentEvidence : [],
+      priorInsights: Array.isArray(d.priorInsights) ? d.priorInsights : [],
+    }),
+    normalize: (parsed) => {
+      const insights = (Array.isArray(parsed?.insights) ? parsed.insights : [])
+        .filter((item: any) => item && asTrimmedString(item.claim))
+        .slice(0, 5)
+        .map((item: any) => ({
+          type: asTrimmedString(item.type) || 'strategy_fit',
+          claim: asTrimmedString(item.claim),
+          evidenceRefs: Array.isArray(item.evidenceRefs) ? item.evidenceRefs.map((x: any) => asTrimmedString(x)).filter(Boolean) : [],
+          confidence: typeof item.confidence === 'number' ? Math.max(0, Math.min(1, item.confidence)) : null,
+          action: asTrimmedString(item.action),
+        }));
+      const conceptAssessments = (Array.isArray(parsed?.conceptAssessments) ? parsed.conceptAssessments : [])
+        .filter((item: any) => item && asTrimmedString(item.conceptKey))
+        .slice(0, 20)
+        .map((item: any) => ({
+          conceptKey: asTrimmedString(item.conceptKey),
+          observed: item.observed === 'not' ? 'not' : 'mastered',
+          masteryBand: ['low', 'medium', 'high'].includes(item.masteryBand) ? item.masteryBand : 'medium',
+          rationale: asTrimmedString(item.rationale),
+          evidenceRefs: Array.isArray(item.evidenceRefs) ? item.evidenceRefs.map((x: any) => asTrimmedString(x)).filter(Boolean) : [],
+        }));
+      const falsifiableClaims = (Array.isArray(parsed?.falsifiableClaims) ? parsed.falsifiableClaims : [])
+        .filter((item: any) => item && asTrimmedString(item.claim))
+        .slice(0, 3)
+        .map((item: any) => ({
+          claim: asTrimmedString(item.claim),
+          checkOn: ['next_lesson', 'next_task', 'next_review'].includes(item.checkOn) ? item.checkOn : 'next_lesson',
+          expect: asTrimmedString(item.expect),
+        }));
+      return { insights, conceptAssessments, falsifiableClaims, narrative: asTrimmedString(parsed?.narrative) };
+    },
+    validate: (parsed) => parsed && typeof parsed === 'object'
+      ? { valid: true }
+      : { valid: false, failureReason: 'LEARNER_STATE_REVIEW_OUTPUT_NOT_OBJECT' },
+  });
+}
+
 // ============================================================
 // 注册表
 // ============================================================
@@ -370,4 +420,5 @@ export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillE
   'skill-compiler': skillCompilerHandler,
   'basic-evaluator': basicEvaluatorHandler,
   'goal-alignment-checker': goalAlignmentCheckerHandler,
+  'learner-state-review': learnerStateReviewHandler,
 };

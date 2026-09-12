@@ -553,6 +553,17 @@ skills:
       sandbox: []
     notes: metrics/signals 由调用方内存计算（LearnerProgressService.ts:81-90 getCurrentMetrics 不落库），触发链 learning.service.ts:5343（任务完成）→ LearnerProgressService.ts:251 executeSkill；无 DB 直读
 
+  - skillId: learner-state-review
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/learner-state-review.yaml
+    displayName: 学习状态评审诊断器
+    description: 基于状态摘要与最近证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）
+    dataSource:
+      db: []
+      sandbox: []
+    notes: 诊断层 skill（设计 doc/LEARNER_STATE_REVIEW_DESIGN.md §4）；输入 = LearnerStateReviewService 的投影（toReviewProjection）+ 最近证据；输出结构化 insights/conceptAssessments/falsifiableClaims；经 runAux 调用，无 DB 直读
+
   - skillId: generic-chat
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts

@@ -16,19 +16,43 @@ import { assembleLearningState } from './assemble-learning-state';
 import { learnerProjectionService, type ReviewProjection } from './LearnerProjectionService';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
+import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
 
 export const REVIEW_PROJECTION_SCOPE = 'review';
+
+export interface LearnerStateReviewDiagnosisInsight {
+  type: string;
+  claim: string;
+  evidenceRefs: string[];
+  confidence: number | null;
+  action: string;
+}
+
+export interface LearnerStateReviewDiagnosis {
+  insights: LearnerStateReviewDiagnosisInsight[];
+  conceptAssessments: Array<{
+    conceptKey: string;
+    observed: 'mastered' | 'not';
+    masteryBand: 'low' | 'medium' | 'high';
+    rationale: string;
+    evidenceRefs: string[];
+  }>;
+  falsifiableClaims: Array<{ claim: string; checkOn: string; expect: string }>;
+  narrative: string;
+}
 
 export interface LearnerStateReviewPayload {
   schemaVersion: 'learner-state-review-v1';
   reviewVersion: 1;
   generatedAt: string;
   pathId: string | null;
-  /** 'rules' = 规则派生（2a）；'model' = LLM 诊断（2b，预留） */
+  /** 'rules' = 规则派生（2a）；'model' = LLM 诊断（2b） */
   source: 'rules' | 'model';
   projection: ReviewProjection;
   summary: LearnerStateSummaryOutput;
   insights: LearningDecisionCard[];
+  /** LLM 诊断产物（2b）；失败或未产出时为 null */
+  diagnosis: LearnerStateReviewDiagnosis | null;
 }
 
 export function reviewProjectionKey(userId: string, pathId?: string | null): string {
@@ -83,16 +107,19 @@ class LearnerStateReviewService {
     const insights = learningDecisionFeedService.build({ paths, sessions, learnerSnapshot, summary });
     const projection = learnerProjectionService.toReviewProjection(learnerSnapshot);
 
+    const { source, diagnosis } = await runModelDiagnosis(learnerSnapshot, projection, userId, primaryPath.id);
+
     const generatedAt = new Date().toISOString();
     const payload: LearnerStateReviewPayload = {
       schemaVersion: 'learner-state-review-v1',
       reviewVersion: 1,
       generatedAt,
       pathId: primaryPath.id,
-      source: 'rules',
+      source,
       projection,
       summary,
       insights,
+      diagnosis,
     };
 
     await prisma.learner_projections.upsert({
@@ -125,6 +152,54 @@ function parseJsonSafe<T>(raw: string | null | undefined): T | null {
   } catch {
     return null;
   }
+}
+
+/** 调 LLM 诊断 skill；失败/空产出时回退规则洞察（source='rules'）。 */
+async function runModelDiagnosis(
+  learnerSnapshot: any,
+  projection: ReviewProjection,
+  userId: string,
+  pathId: string,
+): Promise<{ source: 'rules' | 'model'; diagnosis: LearnerStateReviewDiagnosis | null }> {
+  try {
+    const result = await executeSkillWithResult(auxSkillDefinitionMap['learner-state-review'], {
+      learnerDigest: projection.learnerDigest,
+      knowledgeDigest: projection.knowledgeDigest,
+      recentEvidence: buildRecentEvidence(learnerSnapshot),
+      priorInsights: [],
+    });
+    const output: any = (result as any)?.output;
+    if (output && (output.insights?.length || output.conceptAssessments?.length || output.narrative)) {
+      return {
+        source: 'model',
+        diagnosis: {
+          insights: output.insights ?? [],
+          conceptAssessments: output.conceptAssessments ?? [],
+          falsifiableClaims: output.falsifiableClaims ?? [],
+          narrative: output.narrative ?? '',
+        },
+      };
+    }
+  } catch (error: any) {
+    logger.warn('[learner-state-review] LLM 诊断失败，回退规则洞察', {
+      userId,
+      pathId,
+      error: error?.message || String(error),
+    });
+  }
+  return { source: 'rules', diagnosis: null };
+}
+
+/** 从快照取最近证据，赋予稳定引用 id（诊断输出的 evidenceRefs 引用它）。 */
+function buildRecentEvidence(snapshot: any): Array<{ id: string; signal: string; concepts: string[]; at: string }> {
+  const currentPath = snapshot?.knowledgeMemory?.currentPath;
+  const rows = Array.isArray(currentPath?.recentEvidence) ? currentPath.recentEvidence : [];
+  return rows.slice(0, 10).map((entry: any, index: number) => ({
+    id: entry?.taskId || (entry?.sessionId ? `${entry.sessionId}#${index}` : `ev_${index}`),
+    signal: entry?.signal || 'incomplete',
+    concepts: Array.isArray(entry?.conceptKeys) ? entry.conceptKeys : [],
+    at: entry?.happenedAt || '',
+  }));
 }
 
 export const learnerStateReviewService = new LearnerStateReviewService();

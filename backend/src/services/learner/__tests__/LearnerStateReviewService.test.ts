@@ -13,10 +13,15 @@ jest.mock('../LearnerStateSummaryService', () => ({
 jest.mock('../LearningDecisionFeedService', () => ({
   learningDecisionFeedService: { build: jest.fn(() => [{ id: 'concept-watch', kind: 'concept-watch' }]) },
 }))
+jest.mock('../../../skills', () => ({
+  executeSkillWithResult: jest.fn(),
+  auxSkillDefinitionMap: { 'learner-state-review': { name: 'learner-state-review' } },
+}))
 jest.mock('../../../utils/logger', () => ({
   logger: { warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }))
 
+import { executeSkillWithResult } from '../../../skills'
 import { assembleLearningState } from '../assemble-learning-state'
 import { learnerStateReviewService, reviewProjectionKey } from '../LearnerStateReviewService'
 
@@ -38,6 +43,7 @@ describe('LearnerStateReviewService (Slice 2a)', () => {
       warnings: [],
     })
     upsert.mockResolvedValue({})
+    ;(executeSkillWithResult as jest.Mock).mockResolvedValue({ success: true, output: { insights: [], conceptAssessments: [], falsifiableClaims: [], narrative: '' } })
   })
 
   it('refresh 生成评审载荷（含投影/摘要/洞察）并落库', async () => {
@@ -56,6 +62,24 @@ describe('LearnerStateReviewService (Slice 2a)', () => {
     expect(call.create.scope).toBe('review')
     const saved = JSON.parse(call.create.payload)
     expect(saved.insights).toHaveLength(1)
+  })
+
+  it('LLM 产出诊断时 source=model 并写 diagnosis', async () => {
+    (executeSkillWithResult as jest.Mock).mockResolvedValue({
+      success: true,
+      output: { insights: [{ type: 'prerequisite_gap', claim: 'c', evidenceRefs: ['ev1'], confidence: 0.6, action: 'a' }], conceptAssessments: [], falsifiableClaims: [], narrative: 'n' },
+    })
+    const payload = await learnerStateReviewService.refresh('u1', 'lp1')
+    expect(payload?.source).toBe('model')
+    expect(payload?.diagnosis?.insights).toHaveLength(1)
+    expect(payload?.diagnosis?.narrative).toBe('n')
+  })
+
+  it('LLM 失败时回退 source=rules 且 diagnosis=null', async () => {
+    (executeSkillWithResult as jest.Mock).mockRejectedValue(new Error('boom'))
+    const payload = await learnerStateReviewService.refresh('u1', 'lp1')
+    expect(payload?.source).toBe('rules')
+    expect(payload?.diagnosis).toBeNull()
   })
 
   it('getLatest 解析已存储载荷', async () => {

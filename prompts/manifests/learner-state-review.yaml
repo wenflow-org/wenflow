@@ -1,0 +1,26 @@
+version: prompt-lab-manifest/v1
+skillId: learner-state-review
+agentId: skill:learner-state-review
+name: default-skill-learner-state-review
+archetype: distiller
+description: 学习状态评审诊断器
+acceptableAgentIds: [skill:learner-state-review]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: learner-state-review, phases: [review-generated], defaultPhase: review-generated, terminalPhases: [review-generated], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, learner, review, diagnosis, v4]
+notes: 学习状态评审诊断层核心文件契约；输出结构化诊断，回写 learner_projections(scope=review)。

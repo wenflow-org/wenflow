@@ -320,7 +320,7 @@ model insight_records {
 - 新增 `learner_insights`（或复用 projection）与事件触发（`lesson/task/review:completed`）。
 - dashboard/learning-state/teaching 改消费 `insights`；`toReviewProjection`。
 - **DoD**：一次课后产出结构化洞察并落库；dashboard 文案引用洞察；教学能读到 top-N。
-- **进度（2026-09-12）**：**2a 已落地**——`LearnerProjectionService.toReviewProjection` + `LearnerStateReviewService`（评审载荷落 `learner_projections`，`scope=review`，`getLatest`/`refreshInBackground`，`source='rules'`）+ 单测。LLM 诊断 skill（`learner-state-review`，走 v4 aux 管线）与消费接入为 **2b**。
+- **进度（2026-09-12）**：**2a 已落地**——`LearnerProjectionService.toReviewProjection` + `LearnerStateReviewService`（评审载荷落 `learner_projections`，`scope=review`，`getLatest`/`refreshInBackground`，`source='rules'`）+ 单测。**2b 已落地**——`learner-state-review` aux skill（core + 编译 md + manifest + v4-aux 注册 + 户口簿）；服务改调该 skill，产出结构化诊断 `diagnosis`（`source='model'`，失败回退 `rules`）。实测：真实用户一次评审 `source=model`，输出 narrative + insights + conceptAssessments；门禁 `skills:check`/`yaml:check`/`core-hash-parity` 全绿。消费接入（dashboard/教学读 insights）留作 2c。
 
 ### Slice 3 · BKT + 校准 + 护栏
 
