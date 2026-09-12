@@ -27,6 +27,9 @@
   - V3 字段路由模型：`agent-output-v1` 外壳约定、`internal.ext.*` 命名空间规范
 - [`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md)（[en](./LEARNER_MODEL_ARCHITECTURE.en.md)）
   - 学习者模型场景设计：`LearnerSnapshot`、AI 介入时机、admin 观察与重算设计
+- [`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md)
+  - 学习者状态评审设计（LLM 诊断层 + 可配置 BKT）：补「诊断层」、投影止血、零训练时序信念更新与校准闭环
+  - 硬约束：不引入额外/训练模型，全部走 prompt + LLM + 既有确定性代码
 - `skill:session-wrapup`（旧名 `session-wrapup-agent`，保留为 alias，已落代码）
   - 统一生成课后总结与评估
   - 当前主链路已替代 `summary-agent + session-evaluation-agent`
