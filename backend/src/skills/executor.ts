@@ -24,6 +24,17 @@ function normalizeSkillId(definition: SkillDefinition | { id?: string; name?: st
   return rawId.replace(/^skill:/, '');
 }
 
+/**
+ * 是否为「调用方主动取消」（HTTP 断开 / 前端切页 / withTimeoutSignal 超时取消）。
+ * 这类错误不代表 Skill 逻辑失败，不应计入技能成功率，也不应触发重试。
+ */
+function isCallerAbort(error: any): boolean {
+  if (!error || typeof error !== 'object') return false;
+  if (String(error.code || '') === 'CALLER_ABORTED') return true;
+  if (String(error.name || '') === 'AbortError') return true;
+  return /aborted by caller/i.test(String(error.message || ''));
+}
+
 function summarizeSkillPayload(value: any, depth = 0): any {
   if (depth > 3) return '[max-depth]';
   if (value == null) return value;
@@ -155,6 +166,14 @@ export async function executeSkillHandler(
   const skillId = normalizeSkillId(definition);
   const startedAt = Date.now();
   const parentContext = getRequestContext();
+  // 调用方已取消：立即短路，不进入 handler / 重试 / 统计。
+  // 否则「取消 → 外层重试 → 每次立即失败」会产生 CALLER_ABORTED 风暴并污染技能成功率（QA skill 调查 P3）。
+  const entryAbortSignal = options.abortSignal || parentContext.abortSignal;
+  if (entryAbortSignal?.aborted) {
+    throw Object.assign(new Error('Skill execution aborted by caller'), {
+      code: 'CALLER_ABORTED',
+    });
+  }
   const executionLogId = `acl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   const parentAgent = getAgentOfSkill(`skill:${skillId}`)?.id;
   const userId = resolveExecutionUserId(input, parentContext.userId, options.contextEnvelope);
@@ -241,11 +260,16 @@ export async function executeSkillHandler(
       });
 
       return result;
-    } catch (error: any) {      const durationMs = Date.now() - startedAt;
+    } catch (error: any) {
+      const durationMs = Date.now() - startedAt;
       if (error && typeof error === 'object') {
         error.skillDurationMs = durationMs;
       }
-      await recordSkillStats(skillId, false, durationMs);
+      // 调用方取消不算技能失败：仍记 span 供观测，但不计入 successRate，
+      // 否则客户端超时/切页会把技能成功率拉低（QA skill 调查 P3）。
+      if (!isCallerAbort(error)) {
+        await recordSkillStats(skillId, false, durationMs);
+      }
       void recordSkillSpan(
         executionLogId,
         skillId,

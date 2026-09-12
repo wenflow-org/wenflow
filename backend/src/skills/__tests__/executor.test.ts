@@ -217,4 +217,39 @@ describe('统一 Skill Executor', () => {
     expect(data.input).not.toContain('private input')
     expect(data.output).not.toContain('private output')
   })
+
+  it('调用方已取消时短路：不执行 handler、不写失败统计（P3）', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const handler = jest.fn()
+
+    await expect(runWithContext(
+      { userId: 'user-1', abortSignal: controller.signal },
+      () => executeSkillHandler({ name: 'text-structure-analyzer' }, {}, handler)
+    )).rejects.toMatchObject({ code: 'CALLER_ABORTED' })
+
+    expect(handler).not.toHaveBeenCalled()
+    expect(skillUpdate).not.toHaveBeenCalled()
+  })
+
+  it('handler 中途被取消：不计入失败成功率，但仍写观测 span（P3）', async () => {
+    const handler = jest.fn(async () => {
+      throw Object.assign(new Error('Skill aborted by caller'), { code: 'CALLER_ABORTED' })
+    })
+
+    await expect(executeSkillHandler(
+      { name: 'text-structure-analyzer' },
+      {},
+      handler
+    )).rejects.toMatchObject({ code: 'CALLER_ABORTED' })
+
+    // 取消不计入失败统计，避免拉低技能成功率
+    expect(skillUpdate).not.toHaveBeenCalled()
+
+    // 但仍写一条观测 span，便于排查
+    await new Promise(resolve => setImmediate(resolve))
+    const data = logCreate.mock.calls.at(-1)[0].data
+    expect(data.success).toBe(false)
+    expect(data.errorCode).toBe('CALLER_ABORTED')
+  })
 })
