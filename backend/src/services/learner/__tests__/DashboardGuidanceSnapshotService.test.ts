@@ -10,6 +10,9 @@ jest.mock('../../../skills/adaptive-guidance-copy', () => ({
   adaptiveGuidanceCopyDefinition: { name: 'adaptive-guidance-copy' },
 }))
 jest.mock('../assemble-learning-state', () => ({ assembleLearningState: jest.fn() }))
+jest.mock('../LearnerStateReviewService', () => ({
+  learnerStateReviewService: { getLatest: jest.fn(async () => null) },
+}))
 jest.mock('../LearnerStateSummaryService', () => ({
   learnerStateSummaryService: { build: jest.fn(() => ({ state: 'ok' })) },
 }))
@@ -22,6 +25,7 @@ jest.mock('../../../utils/logger', () => ({
 
 import { executeSkillWithResult } from '../../../skills'
 import { assembleLearningState } from '../assemble-learning-state'
+import { learnerStateReviewService } from '../LearnerStateReviewService'
 import dashboardGuidanceSnapshotService from '../DashboardGuidanceSnapshotService'
 
 const COPY = {
@@ -80,5 +84,17 @@ describe('DashboardGuidanceSnapshotService', () => {
     const skillInput = (executeSkillWithResult as jest.Mock).mock.calls.at(-1)![1]
     expect(skillInput.path).not.toHaveProperty('aiPromptTemplate')
     expect(skillInput.learnerSnapshot.knowledgeMemory.currentPath.taskMastery).toEqual([])
+  })
+
+  it('附带最近一次状态评审 review（诊断层闭环）', async () => {
+    (learnerStateReviewService.getLatest as jest.Mock).mockResolvedValue({
+      schemaVersion: 'learner-state-review-v1',
+      source: 'model',
+      diagnosis: { narrative: 'n', insights: [] },
+    })
+    await dashboardGuidanceSnapshotService.refresh('u1', 'task-completed')
+    const saved = JSON.parse(update.mock.calls.at(-1)![0].data.dashboardGuidanceSnapshot)
+    expect(saved.review.source).toBe('model')
+    expect(saved.review.diagnosis.narrative).toBe('n')
   })
 })

@@ -3,6 +3,9 @@ jest.mock('../../../skills/adaptive-guidance-copy', () => ({
   adaptiveGuidanceCopyDefinition: { name: 'adaptive-guidance-copy' },
 }))
 jest.mock('../assemble-learning-state', () => ({ assembleLearningState: jest.fn() }))
+jest.mock('../LearnerStateReviewService', () => ({
+  learnerStateReviewService: { getLatest: jest.fn(async () => null) },
+}))
 jest.mock('../LearnerStateSummaryService', () => ({
   learnerStateSummaryService: { build: jest.fn(() => ({ state: 'ok' })) },
 }))
@@ -44,5 +47,6 @@ describe('LearningStateGuidanceService', () => {
     expect(executeSkillWithResult).toHaveBeenCalledTimes(1)
     expect(payload?.copy).toEqual({ headline: 'H', subtitle: 's' })
     expect(payload?.source).toBe('fallback')
+    expect(payload?.review).toBeNull()
   })
 })

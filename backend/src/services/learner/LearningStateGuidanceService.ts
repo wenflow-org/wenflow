@@ -13,6 +13,7 @@ import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './Le
 import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
 import { assembleLearningState } from './assemble-learning-state';
 import { learnerProjectionService } from './LearnerProjectionService';
+import { learnerStateReviewService, type LearnerStateReviewPayload } from './LearnerStateReviewService';
 import { logger } from '../../utils/logger';
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
@@ -26,6 +27,8 @@ export interface LearningStateGuidancePayload {
   summary: LearnerStateSummaryOutput;
   /** AI 决策记录：捕获 → 判断 → 动作（LearningDecisionFeedService 组装） */
   decisions: LearningDecisionCard[];
+  /** 状态评审诊断（诊断层闭环）；无则 null */
+  review?: LearnerStateReviewPayload | null;
   debug?: {
     skillId: string;
     model: string | null;
@@ -118,6 +121,7 @@ class LearningStateGuidanceService {
         copy: result.output,
         summary,
         decisions,
+        review: await loadLatestReview(userId, primaryPath?.id ?? null),
         debug: {
           skillId: result.debug?.skillId || 'adaptive-guidance-copy',
           model: result.debug?.model || null,
@@ -131,6 +135,14 @@ class LearningStateGuidanceService {
       logger.warn('[learning-state-guidance] refresh failed', { userId, error: error?.message || String(error) });
       return null;
     }
+  }
+}
+
+async function loadLatestReview(userId: string, pathId: string | null): Promise<LearnerStateReviewPayload | null> {
+  try {
+    return await learnerStateReviewService.getLatest(userId, pathId);
+  } catch {
+    return null;
   }
 }
 

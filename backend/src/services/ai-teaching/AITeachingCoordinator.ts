@@ -21,6 +21,7 @@ import { teachingContextCompressionService } from './TeachingContextCompressionS
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { learnerSnapshotService } from '../learner/LearnerSnapshotService';
 import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
+import { learnerStateReviewService } from '../learner/LearnerStateReviewService';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { assembleTeachingTurnChannels } from '../field-dispatcher';
 import { createDomainEvent } from '../../events/contracts';
@@ -2387,6 +2388,7 @@ export class AITeachingOrchestrator {
       }
 
       dashboardGuidanceSnapshotService.refreshInBackground(session.userId, 'lesson-wrapup');
+      learnerStateReviewService.refreshInBackground(session.userId);
       // 记忆引擎 M2：课后按知识看板状态确定性回写内化强度（best-effort，失败不阻断课堂完成）
       const calibrationBias = learnerSnapshot?.profile?.cognitive?.selfAssessmentAccuracy ?? 'accurate';
       memoryTraceService.recordSessionOutcome(session.userId, session.knowledgeState, 'derived', calibrationBias).catch((error) => {

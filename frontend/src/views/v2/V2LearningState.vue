@@ -127,6 +127,22 @@
               </div>
             </template>
 
+            <!-- 状态评审诊断（diagnosis 层，Slice 2c） -->
+            <section v-if="reviewNarrative || reviewInsights.length" class="review">
+              <header class="review__head">
+                <h3 class="review__title">状态评审</h3>
+                <span class="review__src">{{ reviewSource === 'model' ? 'AI 诊断' : '规则' }}</span>
+              </header>
+              <p v-if="reviewNarrative" class="review__narrative">{{ reviewNarrative }}</p>
+              <ul v-if="reviewInsights.length" class="review__list">
+                <li v-for="(it, i) in reviewInsights" :key="i" class="review__item">
+                  <strong>{{ it.claim }}</strong>
+                  <span v-if="it.action" class="review__action">{{ it.action }}</span>
+                </li>
+              </ul>
+              <AiContentNote />
+            </section>
+
             <!-- 静态规则兜底块 -->
             <template v-else>
               <div v-if="!suggestionCards.length" class="chart__empty">
@@ -495,6 +511,14 @@ const guidance = ref<Record<string, any> | null>(null);
 
 const skillCopy = computed(() => guidance.value?.copy || null);
 
+/* ---------- 状态评审诊断（diagnosis 层，Slice 2c） ---------- */
+const reviewDiagnosis = computed(() => guidance.value?.review?.diagnosis || null);
+const reviewSource = computed(() => guidance.value?.review?.source || null);
+const reviewNarrative = computed(() => reviewDiagnosis.value?.narrative || '');
+const reviewInsights = computed<Array<{ type: string; claim: string; action: string }>>(() =>
+  Array.isArray(reviewDiagnosis.value?.insights) ? reviewDiagnosis.value.insights : []
+);
+
 /* ---------- AI 决策记录（同一接口返回，LearningDecisionFeedService 组装） ---------- */
 interface DecisionCard {
   id: string;
@@ -835,6 +859,14 @@ onMounted(() => {
 
 /* ---------- AI 决策记录 ---------- */
 .decisions { padding: 20px 22px; display: grid; gap: 12px; }
+.review { margin-top: 14px; padding: 16px 18px; border: 1px solid var(--line, #e5e7eb); border-radius: 12px; }
+.review__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.review__title { margin: 0; font-size: 15px; }
+.review__src { font-size: 11px; color: var(--faint, #6b7280); }
+.review__narrative { margin: 8px 0 0; font-size: 13px; line-height: 1.6; }
+.review__list { margin: 10px 0 0; padding-left: 16px; display: grid; gap: 8px; }
+.review__item strong { display: block; font-size: 13px; }
+.review__action { display: block; margin-top: 2px; font-size: 12px; color: var(--faint, #6b7280); }
 .dec {
   display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: start;
   padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas, #fbfcff);

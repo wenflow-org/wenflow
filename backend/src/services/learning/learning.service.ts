@@ -8,6 +8,7 @@ import type { AgentInput } from '../../agents/protocol';
 import { normalizeAgentOutput } from '../../agents/output-normalizer';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
+import { learnerStateReviewService } from '../learner/LearnerStateReviewService';
 import { runBackgroundTask } from '../background-task-tracker.service';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { learnerProgressService } from '../learner/LearnerProgressService';
@@ -5366,6 +5367,7 @@ const learningPath = await prisma.learning_paths.findUnique({
         scope: 'teaching',
       }), { userId: data.userId, taskId: data.taskId });
       dashboardGuidanceSnapshotService.refreshInBackground(data.userId, 'task-completed');
+      learnerStateReviewService.refreshInBackground(data.userId);
 
       return {
         task: updatedSubtask,

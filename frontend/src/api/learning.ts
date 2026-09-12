@@ -261,9 +261,24 @@ export interface LearnerStateSummary {
   } | null;
 }
 
+export interface LearnerStateReviewDiagnosis {
+  insights: Array<{ type: string; claim: string; evidenceRefs: string[]; confidence: number | null; action: string }>;
+  conceptAssessments: Array<{ conceptKey: string; observed: string; masteryBand: string; rationale: string; evidenceRefs: string[] }>;
+  falsifiableClaims: Array<{ claim: string; checkOn: string; expect: string }>;
+  narrative: string;
+}
+
+export interface LearnerStateReview {
+  schemaVersion: string;
+  generatedAt?: string;
+  source: 'rules' | 'model';
+  diagnosis?: LearnerStateReviewDiagnosis | null;
+}
+
 export interface AdaptiveGuidancePayload {
   copy: AdaptiveGuidanceCopy;
   summary: LearnerStateSummary;
+  review?: LearnerStateReview | null;
   debug?: {
     skillId: string;
     model: string | null;

@@ -5,6 +5,7 @@ import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import { assembleLearningState } from './assemble-learning-state';
 import { learnerProjectionService } from './LearnerProjectionService';
+import { learnerStateReviewService, type LearnerStateReviewPayload } from './LearnerStateReviewService';
 import stateTrackingService from '../learning/learning-state.service';
 import { logger } from '../../utils/logger';
 import { runBackgroundTask } from '../background-task-tracker.service';
@@ -26,6 +27,8 @@ export interface DashboardGuidanceSnapshotPayload {
   source: 'model' | 'fallback';
   copy: AdaptiveGuidanceCopyOutput;
   summary: LearnerStateSummaryOutput;
+  /** 状态评审诊断（诊断层闭环）；无则 null */
+  review?: LearnerStateReviewPayload | null;
   debug?: {
     skillId: string;
     model: string | null;
@@ -185,6 +188,9 @@ class DashboardGuidanceSnapshotService {
         freshness: learnerSnapshot.freshness?.basedOn,
       };
 
+      // 诊断层闭环：附带最近一次状态评审（读取失败不影响快照）
+      payload.review = await loadLatestReview(userId, primaryPath.id);
+
       await prisma.users.update({
         where: { id: userId },
         data: {
@@ -201,6 +207,14 @@ class DashboardGuidanceSnapshotService {
       });
       return null;
     }
+  }
+}
+
+async function loadLatestReview(userId: string, pathId: string): Promise<LearnerStateReviewPayload | null> {
+  try {
+    return await learnerStateReviewService.getLatest(userId, pathId);
+  } catch {
+    return null;
   }
 }
 

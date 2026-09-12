@@ -41,6 +41,7 @@ router.get('/copy', async (req: any, res) => {
               copy: payload.copy,
               summary: payload.summary,
               decisions: payload.decisions || [],
+              review: payload.review ?? null,
               source: payload.source,
               generatedAt: payload.generatedAt,
               ...(canIncludeDebug && payload.debug ? { debug: payload.debug } : {}),
@@ -65,6 +66,7 @@ router.get('/copy', async (req: any, res) => {
         ? {
             copy: snapshot.copy,
             summary: snapshot.summary,
+            review: snapshot.review ?? null,
             ...(canIncludeDebug && snapshot.debug ? { debug: snapshot.debug } : {}),
           }
         : null,
