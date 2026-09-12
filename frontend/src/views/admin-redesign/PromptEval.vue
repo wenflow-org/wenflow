@@ -36,10 +36,10 @@
       <div v-else-if="cases.length" class="mk-table-scroll pe-list">
         <table class="mk-table mk-table--fixed">
           <colgroup>
-            <col>
-            <col>
+            <col style="width:var(--mk-col-text)">
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-num)">
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-time-full)">
             <col style="width:var(--mk-col-actions-wide)">
@@ -110,9 +110,9 @@
       <div v-else-if="runs.length" class="mk-table-scroll pe-list">
         <table class="mk-table mk-table--fixed">
           <colgroup>
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-model-wide)">
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-num-wide)">
             <col style="width:var(--mk-col-num)">
             <col style="width:var(--mk-col-time-full)">

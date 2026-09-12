@@ -118,6 +118,7 @@
   --mk-col-time: 72px;           /* 纯时刻 HH:mm:ss */
   --mk-col-time-full: 110px;     /* 相对时间 / 含日期时间戳 */
   --mk-col-datetime: 176px;      /* 完整日期时间戳 YYYY-MM-DD HH:mm（:ss），mono */
+  --mk-col-text: 320px;          /* 文本列基准宽：fixed 表所有列都带宽度，余量按各列宽度权重摊开（无单一吸收列） */
   --mk-col-badge: 64px;          /* 状态徽章（最长词 3 字 ≈ 64px 预算） */
   --mk-col-num: 56px;            /* 纯数字右对齐 */
   --mk-col-num-wide: 108px;      /* 组合数字（12,345 · 6,789） */

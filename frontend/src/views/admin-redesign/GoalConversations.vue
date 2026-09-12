@@ -93,7 +93,7 @@
           <!-- 列宽单一来源：<colgroup> + token；「目标摘要」为 auto 吸收列 -->
           <colgroup>
             <col style="width:var(--mk-col-model-wide)">
-            <col v-if="!gcHiddenCols.has('summary')">
+            <col v-if="!gcHiddenCols.has('summary')" style="width:var(--mk-col-text)">
             <col v-if="!gcHiddenCols.has('status')" style="width:var(--mk-col-badge)">
             <col v-if="!gcHiddenCols.has('stage')" style="width:var(--mk-col-model-wide)">
             <col v-if="!gcHiddenCols.has('path')" style="width:var(--mk-col-badge)">

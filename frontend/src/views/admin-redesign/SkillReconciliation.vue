@@ -38,13 +38,13 @@
       <div class="mk-table-scroll">
         <table v-if="recReport.items.length" class="mk-table sk-table sk-rec-table mk-table--fixed">
           <colgroup>
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
-            <col>
+            <col style="width:var(--mk-col-text)">
           </colgroup>
           <thead>
             <tr>

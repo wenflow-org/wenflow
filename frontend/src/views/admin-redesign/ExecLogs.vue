@@ -101,7 +101,7 @@
             <col v-if="!hiddenCols.has('kind')" style="width:36px">
             <col v-if="!hiddenCols.has('agent')" style="width:var(--mk-col-model)">
             <!-- 调用文本：弹性吸收列（不设宽度） -->
-            <col v-if="!hiddenCols.has('msg')">
+            <col v-if="!hiddenCols.has('msg')" style="width:var(--mk-col-text)">
             <col v-if="!hiddenCols.has('model')" style="width:var(--mk-col-model-wide)">
             <col v-if="!hiddenCols.has('tokens')" style="width:var(--mk-col-num-wide)">
             <col v-if="!hiddenCols.has('dur')" style="width:var(--mk-col-num)">

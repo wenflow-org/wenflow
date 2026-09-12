@@ -84,7 +84,7 @@
         <div class="mk-table-scroll">
           <table class="mk-table mk-table--fixed">
             <colgroup>
-              <col>
+              <col style="width:var(--mk-col-text)">
               <col style="width:var(--mk-col-id)">
               <col style="width:var(--mk-col-datetime)">
               <col style="width:var(--mk-col-datetime)">
@@ -157,7 +157,7 @@
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--fixed">
               <colgroup>
-                <col>
+                <col style="width:var(--mk-col-text)">
                 <col style="width:var(--mk-col-id)">
                 <col style="width:var(--mk-col-datetime)">
                 <col style="width:var(--mk-col-datetime)">

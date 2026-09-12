@@ -82,7 +82,7 @@
           <colgroup>
             <col v-if="!hiddenCols.has('time')" style="width:var(--mk-col-datetime)">
             <col v-if="!hiddenCols.has('admin')" style="width:var(--mk-col-model-wide)">
-            <col v-if="!hiddenCols.has('action')">
+            <col v-if="!hiddenCols.has('action')" style="width:var(--mk-col-text)">
             <col v-if="!noTargetTypes && !hiddenCols.has('tt')" style="width:var(--mk-col-model)">
             <col v-if="!hiddenCols.has('target')" style="width:var(--mk-col-model-wide)">
             <col v-if="!hiddenCols.has('result')" style="width:var(--mk-col-badge)">
@@ -172,7 +172,7 @@
             <col style="width:var(--mk-col-model-wide)">
             <col style="width:var(--mk-col-model)">
             <col style="width:var(--mk-col-badge)">
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-actions)">
           </colgroup>
           <thead>

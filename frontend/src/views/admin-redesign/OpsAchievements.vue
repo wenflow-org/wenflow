@@ -20,9 +20,9 @@
       <div v-else-if="defs.length" class="mk-table-scroll ac-list">
         <table class="mk-table mk-table--fixed">
           <colgroup>
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-badge)">
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-num)">
             <col style="width:var(--mk-col-num)">
             <col style="width:var(--mk-col-actions-wide)">
@@ -81,8 +81,8 @@
       <div v-else-if="records.length" class="mk-table-scroll ac-list">
         <table class="mk-table mk-table--fixed">
           <colgroup>
-            <col>
-            <col>
+            <col style="width:var(--mk-col-text)">
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-num)">
             <col style="width:var(--mk-col-time-full)">

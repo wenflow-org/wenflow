@@ -135,8 +135,8 @@
         <div class="frt__scroll mk-table-scroll">
           <table class="mk-table mk-table--dense mk-table--fixed">
             <colgroup>
-              <col>
-              <col>
+              <col style="width:var(--mk-col-text)">
+              <col style="width:var(--mk-col-text)">
               <col style="width:var(--mk-col-badge)">
               <col style="width:var(--mk-col-badge)">
               <col style="width:var(--mk-col-badge)">

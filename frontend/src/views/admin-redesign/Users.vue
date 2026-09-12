@@ -72,7 +72,7 @@
                其余列严格按 token 渲染（无吸收列时整表会被等比放大）。 -->
           <colgroup>
             <col v-if="isLive && !hiddenCols.has('check')" style="width:32px">
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col v-if="!hiddenCols.has('role')" style="width:var(--mk-col-model)">
             <col v-if="!hiddenCols.has('level')" style="width:var(--mk-col-model-wide)">
             <col v-if="!hiddenCols.has('paths')" style="width:var(--mk-col-num-wide)">

@@ -88,7 +88,7 @@
       <div v-else class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table mk-table--fixed">
           <colgroup>
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col v-if="!tsHiddenCols.has('user')" style="width:var(--mk-col-model-wide)">
             <col v-if="!tsHiddenCols.has('status')" style="width:var(--mk-col-badge)">
             <col v-if="!tsHiddenCols.has('interact')" style="width:var(--mk-col-model-wide)">

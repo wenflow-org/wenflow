@@ -69,9 +69,9 @@
         <div v-if="filtered.length" class="mk-table-scroll">
         <table class="mk-table mk-table--fixed">
           <colgroup>
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-num)">
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-model-wide)">
             <col style="width:var(--mk-col-model)">
             <col style="width:var(--mk-col-badge)">

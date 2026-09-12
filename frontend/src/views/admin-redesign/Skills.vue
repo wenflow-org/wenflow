@@ -70,7 +70,7 @@
         <table v-if="filtered.length" class="mk-table sk-table mk-table--fixed">
           <colgroup>
             <!-- Skill 名：弹性吸收列（不设宽度） -->
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col v-if="!hiddenCols.has('agent')" style="width:var(--mk-col-model-wide)">
             <col v-if="!hiddenCols.has('cat')" style="width:var(--mk-col-badge)">
             <col v-if="!hiddenCols.has('completion')" style="width:var(--mk-col-badge)">

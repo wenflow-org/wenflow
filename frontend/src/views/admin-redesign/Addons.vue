@@ -28,7 +28,7 @@
       <div class="mk-table-scroll">
         <table v-if="capabilityRows.length" class="mk-table mk-table--fixed">
           <colgroup>
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-model-wide)">
             <col style="width:var(--mk-col-num)">

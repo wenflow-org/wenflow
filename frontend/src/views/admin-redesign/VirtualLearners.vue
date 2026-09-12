@@ -117,8 +117,8 @@
           <col v-if="isLive" style="width:32px">
           <!-- 文本列（虚拟学习者 / 长期倾向）：auto 吸收列，共享剩余宽度；
                固定 token 只用于徽章/数字/时间/操作列。 -->
-          <col>
-          <col>
+          <col style="width:var(--mk-col-text)">
+          <col style="width:var(--mk-col-text)">
           <col style="width:var(--mk-col-badge)">
           <col style="width:var(--mk-col-num)">
           <col style="width:var(--mk-col-flex-min)">

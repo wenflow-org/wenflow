@@ -195,10 +195,10 @@
 .mk-table tbody tr { transition: background 0.12s; }
 .mk-table tbody tr:hover { background: #f6f9ff; }
 .mk-table--click tbody tr { cursor: pointer; }
-/* fixed 档：强制列宽由 <colgroup> 决定（配合每表一个 auto 吸收列）。
-   width:max-content + max-width:100%：列宽按内容/token 收敛，表格不强行铺满
-   （避免唯一的吸收列被拉到极宽、留出大片无信息空白）；内容过宽时再退化为占满容器。 */
-.mk-table--fixed { table-layout: fixed; width: max-content; max-width: 100%; }
+/* fixed 档：列宽由 <colgroup> 决定，且**每列都给宽度**（文本列用 --mk-col-text），
+   使表格铺满容器时余量按各列宽度权重摊到所有列，而不是全堆进某一列（避免出现超宽空列）。
+   内容确实很宽时由各列截断上限兜底。 */
+.mk-table--fixed { table-layout: fixed; }
 /* dense 档：字段配置类密集表（12/10 列）——原 sfr__table / frt__table 独立类并入（表统一批次，行高 ≈28px） */
 .mk-table--dense th,
 .mk-table--dense td { padding: 8px 12px; }
@@ -978,6 +978,7 @@ html[data-theme='dark'] {
     --mk-col-time: 84px;
     --mk-col-time-full: 128px;
     --mk-col-datetime: 205px;
+    --mk-col-text: 372px;
     --mk-col-badge: 76px;
     --mk-col-num: 64px;
     --mk-col-num-wide: 130px;
@@ -1089,6 +1090,7 @@ html[data-theme='dark'] {
     --mk-col-time: 100px;
     --mk-col-time-full: 154px;
     --mk-col-datetime: 246px;
+    --mk-col-text: 448px;
     --mk-col-badge: 90px;
     --mk-col-num: 78px;
     --mk-col-num-wide: 156px;

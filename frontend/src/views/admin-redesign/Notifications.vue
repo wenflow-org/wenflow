@@ -40,8 +40,8 @@
       <div v-else-if="items.length" class="mk-table-scroll nt-list">
         <table class="mk-table mk-table--fixed">
           <colgroup>
-            <col>
-            <col>
+            <col style="width:var(--mk-col-text)">
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-time-full)">

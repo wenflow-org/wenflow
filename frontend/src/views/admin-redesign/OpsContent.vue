@@ -73,8 +73,8 @@
       <div v-else-if="filtered.length" class="mk-table-scroll oc-list">
         <table class="mk-table mk-table--fixed">
           <colgroup>
-            <col>
-            <col v-if="!hiddenCols.has('subject')">
+            <col style="width:var(--mk-col-text)">
+            <col v-if="!hiddenCols.has('subject')" style="width:var(--mk-col-text)">
             <col v-if="!hiddenCols.has('user')" style="width:var(--mk-col-model-wide)">
             <col v-if="!hiddenCols.has('status')" style="width:var(--mk-col-badge)">
             <col v-if="!hiddenCols.has('progress')" style="width:var(--mk-col-model-wide)">

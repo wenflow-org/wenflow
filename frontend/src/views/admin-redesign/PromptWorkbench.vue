@@ -29,7 +29,7 @@
       <div class="mk-table-scroll">
       <table v-if="cores.length" class="mk-table mk-table--click mk-table--fixed">
         <colgroup>
-          <col>
+          <col style="width:var(--mk-col-text)">
           <col style="width:var(--mk-col-badge)">
           <col style="width:var(--mk-col-badge)">
           <col style="width:var(--mk-col-model)">

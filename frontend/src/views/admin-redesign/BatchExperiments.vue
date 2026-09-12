@@ -20,9 +20,9 @@
       <div v-else-if="experiments.length" class="mk-table-scroll be-list">
         <table class="mk-table mk-table--fixed">
           <colgroup>
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-badge)">
-            <col>
+            <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-model-wide)">
             <col style="width:var(--mk-col-time-full)">
             <col style="width:var(--mk-col-actions-wide)">

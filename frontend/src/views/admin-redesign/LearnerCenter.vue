@@ -77,12 +77,12 @@
       <div v-else-if="filtered.length" class="mk-table-scroll">
       <table class="mk-table mk-table--fixed">
         <colgroup>
-          <col v-if="!lcHiddenCols.has('learner')">
+          <col v-if="!lcHiddenCols.has('learner')" style="width:var(--mk-col-text)">
           <col v-if="!lcHiddenCols.has('progress')" style="width:var(--mk-col-model-wide)">
           <col v-if="!lcHiddenCols.has('trend')" style="width:var(--mk-col-badge)">
           <col v-if="!lcHiddenCols.has('fatigue')" style="width:var(--mk-col-badge)">
           <col v-if="!lcHiddenCols.has('conf')" style="width:var(--mk-col-num-wide)">
-          <col v-if="!lcHiddenCols.has('risk')">
+          <col v-if="!lcHiddenCols.has('risk')" style="width:var(--mk-col-text)">
           <col v-if="!lcHiddenCols.has('updated')" style="width:var(--mk-col-time-full)">
           <col style="width:var(--mk-col-actions-wide)">
         </colgroup>
