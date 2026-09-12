@@ -5,10 +5,10 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">模型与接入</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">密钥：{{ keySet ? '已配置' : '未配置' }}</span>
-      <span class="mk-status__meta">模型：{{ models.length || '待拉取' }}</span>
-      <span class="mk-status__meta">路由：{{ routeCount }}/3</span>
-      <span v-if="isLive && lastCheckedText" class="mk-status__meta">上次探测：{{ lastCheckedText }}</span>
+      <span class="mk-status__meta" title="服务商 API Key 是否已配置">密钥：{{ keySet ? '已配置' : '未配置' }}</span>
+      <span class="mk-status__meta" :title="modelListTitle">模型清单：{{ models.length ? `${models.length} 个` : '未拉取' }}</span>
+      <span class="mk-status__meta" :title="routeTitle">默认路由：{{ routeCount }}/3</span>
+      <span v-if="isLive && lastCheckedText" class="mk-status__meta" title="连通性 / 能力探测时间">上次探测：{{ lastCheckedText }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="fetching || !form.apiUrl" @click="fetchModels">
           <span v-if="fetching"><span class="mk-spinner"></span> 拉取中…</span>
@@ -67,30 +67,34 @@
             </template>
             <div v-else class="ac-models__empty">
               <span class="ac-models__empty-icon" aria-hidden="true">﹢</span>
-              <span>尚未拉取模型，点击右上角「连接并拉取」获取服务商模型列表</span>
+              <span v-if="fetchError">拉取失败：{{ fetchError }}。请检查服务地址 / 密钥后重试。</span>
+              <span v-else>模型清单尚未拉取（连接状态：{{ connBadge.text }}）。下方「路由默认」标「当前生效」的是平台实际在用模型；点击右上角「连接并拉取」获取服务商列表。</span>
             </div>
           </div>
         </label>
-        <div class="ac-sec__title">路由默认</div>
+        <div class="ac-sec__title">路由默认<span class="ac-sec__hint">模型清单未拉取时此项只读，展示的是当前生效值</span></div>
         <div class="ac-row ac-row--3">
           <label class="mk-field">
             <span class="mk-field__label">对话默认</span>
-            <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultModel" @change="form.defaultModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
-              <option v-if="!models.length" value="">未设置（等待拉取）</option>
+            <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultModel" title="清单未拉取时只读，展示当前生效值" @change="form.defaultModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
+              <option v-if="!models.length && !form.defaultModel" value="">未设置</option>
+              <option v-if="!models.length && form.defaultModel" :value="form.defaultModel">{{ form.defaultModel }}（当前生效）</option>
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
             </select>
           </label>
           <label class="mk-field">
             <span class="mk-field__label">推理默认</span>
-            <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultReasoningModel" @change="form.defaultReasoningModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
-              <option v-if="!models.length" value="">未设置（等待拉取）</option>
+            <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultReasoningModel" title="清单未拉取时只读，展示当前生效值" @change="form.defaultReasoningModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
+              <option v-if="!models.length && !form.defaultReasoningModel" value="">未设置</option>
+              <option v-if="!models.length && form.defaultReasoningModel" :value="form.defaultReasoningModel">{{ form.defaultReasoningModel }}（当前生效）</option>
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
             </select>
           </label>
           <label class="mk-field">
             <span class="mk-field__label">评估默认</span>
-            <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultEvaluationModel" @change="form.defaultEvaluationModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
-              <option v-if="!models.length" value="">未设置（等待拉取）</option>
+            <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultEvaluationModel" title="清单未拉取时只读，展示当前生效值" @change="form.defaultEvaluationModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
+              <option v-if="!models.length && !form.defaultEvaluationModel" value="">未设置</option>
+              <option v-if="!models.length && form.defaultEvaluationModel" :value="form.defaultEvaluationModel">{{ form.defaultEvaluationModel }}（当前生效）</option>
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
             </select>
           </label>
@@ -576,6 +580,8 @@ const fetchedModels = ref<string[]>([])
 const keySet = ref(false)
 const keyVisible = ref(false)
 const connectionStatus = ref('unknown')
+/** 最近一次「连接并拉取」的失败原因：展示在模型清单空态，避免错误上下文丢失（刷新即消失） */
+const fetchError = ref('')
 /** 曾成功拉取过模型列表（含从已保存配置载入）：此后提交才携带 availableModels，避免空数组清空后端列表 */
 const modelsFetchedOnce = ref(false)
 /** 已保存的服务地址：endpoint 被改动且 Key 留空时提示重新输入密钥 */
@@ -768,6 +774,15 @@ function setEffort(v: string) {
 
 const ready = computed(() => keySet.value && models.value.length > 0 && !!form.defaultModel)
 const routeCount = computed(() => [form.defaultModel, form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length)
+/** 模型清单状态说明：区分「清单未拉取」与「已就绪」，不点「默认路由 3/3」暗示整体就绪 */
+const modelListTitle = computed(() =>
+  models.value.length
+    ? `已拉取 ${models.value.length} 个服务商模型`
+    : '尚未拉取服务商模型清单；下方「路由默认」标「当前生效」的是平台实际在用模型，切换取值需先拉取清单',
+)
+const routeTitle = computed(
+  () => `已指定 ${routeCount.value} / 3 条默认路由（对话 / 推理 / 评估）。路由数只表示已指定，不代表模型清单已就绪`,
+)
 const statusTone = computed(() => {
   if (ready.value) return 'mk-status--ok'
   if (keySet.value) return 'mk-status--muted'
@@ -776,7 +791,7 @@ const statusTone = computed(() => {
 const connBadge = computed(() => {
   if (connectionStatus.value === 'connected') return { cls: 'mk-badge--ok', text: '连接正常' }
   if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '上次连接失败' }
-  return { cls: 'mk-badge--muted', text: ready.value ? '已配置' : '待配置' }
+  return { cls: 'mk-badge--muted', text: '连接未探测' }
 })
 
 /** 已配置密钥但改了服务地址且 Key 留空：密钥不会随地址迁移，需提示重新输入 */
@@ -809,10 +824,12 @@ async function fetchModels() {
     fetchedModels.value = list
     modelsFetchedOnce.value = true
     connectionStatus.value = 'connected'
+    fetchError.value = ''
     markDirty('conn')
     toast.info(list.length ? `已获取 ${list.length} 个模型，记得保存` : '连接成功，但服务未返回模型列表')
   } catch (e) {
     connectionStatus.value = 'failed'
+    fetchError.value = errMsg(e)
     toast.error(`连接失败：${errMsg(e)}`)
   } finally {
     fetching.value = false
