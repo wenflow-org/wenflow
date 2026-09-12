@@ -17,6 +17,7 @@ import { learnerProjectionService, type ReviewProjection } from './LearnerProjec
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
 import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
+import { conceptBeliefService } from './concept-belief.service';
 
 export const REVIEW_PROJECTION_SCOPE = 'review';
 
@@ -53,6 +54,8 @@ export interface LearnerStateReviewPayload {
   insights: LearningDecisionCard[];
   /** LLM 诊断产物（2b）；失败或未产出时为 null */
   diagnosis: LearnerStateReviewDiagnosis | null;
+  /** BKT 概念信念（3a）：conceptKey → pKnowL（0-1）；无观测时为 null */
+  beliefs?: Record<string, number> | null;
 }
 
 export function reviewProjectionKey(userId: string, pathId?: string | null): string {
@@ -109,6 +112,19 @@ class LearnerStateReviewService {
 
     const { source, diagnosis } = await runModelDiagnosis(learnerSnapshot, projection, userId, primaryPath.id);
 
+    // 3a：用诊断观测做 BKT 时序更新（零训练），并把信念摘要附入评审载荷
+    let beliefs: Record<string, number> | null = null;
+    if (diagnosis?.conceptAssessments?.length) {
+      const updated = await conceptBeliefService.applyObservations(
+        userId,
+        primaryPath.id,
+        diagnosis.conceptAssessments.map((item) => ({ conceptKey: item.conceptKey, observed: item.observed === 'mastered' })),
+      );
+      if (updated) {
+        beliefs = Object.fromEntries(Object.entries(updated.beliefs).map(([key, value]) => [key, value.pKnowL]));
+      }
+    }
+
     const generatedAt = new Date().toISOString();
     const payload: LearnerStateReviewPayload = {
       schemaVersion: 'learner-state-review-v1',
@@ -120,6 +136,7 @@ class LearnerStateReviewService {
       summary,
       insights,
       diagnosis,
+      beliefs,
     };
 
     await prisma.learner_projections.upsert({

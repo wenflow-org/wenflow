@@ -67,12 +67,15 @@ describe('LearnerStateReviewService (Slice 2a)', () => {
   it('LLM 产出诊断时 source=model 并写 diagnosis', async () => {
     (executeSkillWithResult as jest.Mock).mockResolvedValue({
       success: true,
-      output: { insights: [{ type: 'prerequisite_gap', claim: 'c', evidenceRefs: ['ev1'], confidence: 0.6, action: 'a' }], conceptAssessments: [], falsifiableClaims: [], narrative: 'n' },
+      output: { insights: [{ type: 'prerequisite_gap', claim: 'c', evidenceRefs: ['ev1'], confidence: 0.6, action: 'a' }], conceptAssessments: [{ conceptKey: 'c1', observed: 'mastered', masteryBand: 'high', rationale: '', evidenceRefs: [] }], falsifiableClaims: [], narrative: 'n' },
     })
+    findUnique.mockResolvedValue(null)
     const payload = await learnerStateReviewService.refresh('u1', 'lp1')
     expect(payload?.source).toBe('model')
     expect(payload?.diagnosis?.insights).toHaveLength(1)
     expect(payload?.diagnosis?.narrative).toBe('n')
+    // 3a：诊断观测驱动 BKT 信念
+    expect(payload?.beliefs?.c1).toBeGreaterThan(0.3)
   })
 
   it('LLM 失败时回退 source=rules 且 diagnosis=null', async () => {
