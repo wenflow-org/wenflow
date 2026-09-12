@@ -197,7 +197,10 @@
           <!-- typing：等待首个 delta 期间 -->
           <div v-if="live.sending && !live.streamingText" class="msg msg--ai">
             <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
-            <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
+            <div class="msg__content">
+              <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
+              <div class="msg__meta">{{ chatWaitText }}</div>
+            </div>
           </div>
 
           <!-- 流式渐进渲染：SSE delta 实时累积（goal skill 为 JSON 输出，展示原始模型文本；
@@ -206,7 +209,7 @@
             <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
             <div class="msg__content msg__content--actions">
               <div class="msg__bubble msg__bubble--html msg__bubble--streaming" v-html="formatMessage(live.streamingText)"></div>
-              <div class="msg__meta">问流 · 正在生成…</div>
+              <div class="msg__meta">问流 · {{ chatWaitText }}</div>
             </div>
           </div>
 
@@ -356,7 +359,7 @@
           <div v-else-if="phase === 'generating'" class="proposal proposal--center">
             <span class="spinner"></span>
             <h2 class="proposal__title">正在生成你的路径…</h2>
-            <p class="proposal__generating-note">根据 {{ live.filledCount }} 条已确认信息拆解阶段，一般需要 1-2 分钟。</p>
+            <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解，一般需要 1-2 分钟。</p>
             <div class="skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
             <!-- 流式进度：模型输出实时可见（原始思考文本），生成不再是无反馈等待 -->
             <div v-if="live.streamingText" class="proposal__stream">
@@ -533,6 +536,32 @@ const availableReplies = computed(() => currentQuickReplies.value);
 const pickedReplySet = computed(() => new Set(input.value.split('\n').map((s) => s.trim()).filter(Boolean)));
 const scrollEl = ref<HTMLElement | null>(null);
 const phase = ref<'preview' | 'generating' | 'done'>('preview');
+/* P2-12：等待态加阶段文案（比三点动画更能留住人）。每秒 tick，按已等待秒数切换文案。 */
+const waitTick = ref(0);
+let waitTimer: ReturnType<typeof setInterval> | undefined;
+function stopWaitTimer() { if (waitTimer) { clearInterval(waitTimer); waitTimer = undefined; } }
+function startWaitTimer() { stopWaitTimer(); waitTick.value = 0; waitTimer = setInterval(() => { waitTick.value += 1; }, 1000); }
+const waiting = computed(() => live.sending || phase.value === 'generating');
+watch(waiting, (on) => { if (on) startWaitTimer(); else stopWaitTimer(); });
+onBeforeUnmount(stopWaitTimer);
+const CHAT_WAIT_STAGES: Array<[number, string]> = [
+  [4, '正在理解你的输入…'],
+  [12, '正在梳理关键信息…'],
+  [30, '正在组织回复…'],
+  [Infinity, '内容较多，仍在生成，请稍候…'],
+];
+const GEN_WAIT_STAGES: Array<[number, string]> = [
+  [8, '正在梳理你的目标…'],
+  [25, '正在拆解阶段…'],
+  [60, '正在排布任务…'],
+  [Infinity, '正在收尾，马上就好…'],
+];
+function stageText(stages: Array<[number, string]>) {
+  for (const [until, text] of stages) if (waitTick.value < until) return text;
+  return stages[stages.length - 1][1];
+}
+const chatWaitText = computed(() => stageText(CHAT_WAIT_STAGES));
+const genWaitText = computed(() => stageText(GEN_WAIT_STAGES));
 const supplementMode = ref(false);
 const supplementText = ref('');
 /* 用户消息内联编辑（仅最后一条用户消息可编辑） */
