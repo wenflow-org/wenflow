@@ -109,6 +109,8 @@ class AuthService {
           name: data.name,
           email: `${data.name}@wenflow.local`,
           password: hashedPassword,
+          // 注册即登录：与 login 一致记录最后登录时间，避免「注册后走完整流程」的用户页仍显示「从未」
+          lastLoginAt: new Date(),
           updatedAt: new Date(),
         }
       });

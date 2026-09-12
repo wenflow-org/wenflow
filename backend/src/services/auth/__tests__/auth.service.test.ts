@@ -3,7 +3,8 @@ export {}
 const userMocks = {
   findFirst: jest.fn(),
   findUnique: jest.fn(),
-  update: jest.fn()
+  update: jest.fn(),
+  create: jest.fn()
 }
 
 const bcryptCompare = jest.fn()
@@ -28,7 +29,11 @@ jest.mock('bcryptjs', () => ({
 
 jest.mock('../../../utils/session-token', () => ({
   signSessionToken: mockSessionTokenSign,
-  verifySessionToken: mockSessionTokenVerify
+  verifySessionToken: mockSessionTokenVerify,
+  signAccessToken: jest.fn(() => 'access-token'),
+  signRefreshToken: jest.fn(() => 'refresh-token'),
+  verifyAccessToken: jest.fn(),
+  verifyRefreshToken: jest.fn()
 }))
 
 jest.mock('jsonwebtoken', () => ({
@@ -187,6 +192,26 @@ describe('AuthService 软删除账号', () => {
 
     const user = await authService.verifyToken('valid-token')
     expect(user.name).toBe('real-user')
+  })
+})
+
+describe('AuthService 注册（注册即登录）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('创建用户时写入 lastLoginAt，避免注册后完整走查的用户页仍显示「从未」', async () => {
+    userMocks.findFirst.mockResolvedValue(null)
+    bcryptHash.mockResolvedValue('hashed')
+    userMocks.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({ id: data.id, name: data.name, tokenVersion: 0 })
+    )
+
+    await authService.register({ name: 'newbie', password: 'Secret123' })
+
+    expect(userMocks.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ lastLoginAt: expect.any(Date) })
+    })
   })
 })
 
