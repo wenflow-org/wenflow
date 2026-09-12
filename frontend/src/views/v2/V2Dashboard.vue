@@ -139,7 +139,7 @@
             <h1 class="action__title">用 2 分钟，理出一条能执行的路径</h1>
             <p class="action__desc">{{ guidanceEmptyText }}</p>
             <div class="action__examples">
-              <router-link v-for="e in examples" :key="e" to="/goal-conversation" class="example">{{ e }}</router-link>
+              <router-link v-for="e in examples" :key="e.text" :to="{ path: '/goal-conversation', query: { seed: e.seed } }" class="example">{{ e.text }}</router-link>
             </div>
             <div class="action__footer">
               <router-link to="/goal-conversation" class="btn-primary">开始规划目标</router-link>
@@ -549,7 +549,11 @@ const dateText = computed(() => {
   return `${d.getMonth() + 1}月${d.getDate()}日 ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()]}`;
 });
 
-const examples = ['用 Python 自动化处理 Excel 报表', '提升职场沟通和表达能力', '用 AI 工具做自媒体副业'];
+const examples = [
+  { text: '用 Python 自动化处理 Excel 报表', seed: '我想用 Python 自动化处理 Excel 报表，每天能节省时间' },
+  { text: '提升职场沟通和表达能力', seed: '我想提升职场沟通和表达能力，在工作里更从容' },
+  { text: '用 AI 工具做自媒体副业', seed: '我想用 AI 工具做自媒体副业，提高内容创作效率' },
+];
 
 /* ================= 数据加载 ================= */
 const reviewDue = ref<Array<{ conceptKey: string; label: string; retention: number; reason: string; estimatedMinutes: number }>>([]);

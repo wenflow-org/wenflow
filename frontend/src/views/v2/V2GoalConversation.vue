@@ -453,6 +453,15 @@ onMounted(() => {
   // 每次进入页面随机展示一批场景
   shuffleScenes();
   const cid = typeof route.params.conversationId === 'string' ? route.params.conversationId : '';
+  // P2-10：首页预设方向带入（?seed=…）→ 作为首条消息直接开始澄清，不丢失用户点击的意图
+  const seeded = typeof route.query.seed === 'string' ? route.query.seed.trim() : '';
+  if (seeded) {
+    resetToEntry();
+    // 不在此处手动清 query：会话开始后 conversationId watcher 会用 params 覆盖 URL（自然去掉 seed），
+    // 手动 replace 会与 route.params 的 reset watcher 竞争，导致刚推入的消息被清回初始态。
+    void startWith(seeded);
+    return;
+  }
   if (cid && cid !== live.conversationId) {
     live.resumeById(cid).catch(() => {});
   } else if (!cid && live.started) {
