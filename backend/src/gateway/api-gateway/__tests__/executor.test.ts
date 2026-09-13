@@ -232,7 +232,7 @@ describe('APIExecutor retry attempts', () => {
       route,
       { messages: [{ role: 'user', content: 'hello' }] },
       { traceId: 'trace-budget', retryBudget: budget }
-    )).rejects.toMatchObject({ code: 'RETRY_BUDGET_EXHAUSTED' })
+    )).rejects.toMatchObject({ code: 'RETRY_BUDGET_EXHAUSTED', category: 'provider_http' })
 
     expect(safeHttpRequestMock).toHaveBeenCalledTimes(1)
     expect(budget.used.upstreamAttempts).toBe(1)
@@ -462,7 +462,7 @@ describe('APIExecutor retry attempts', () => {
       route,
       { messages: [{ role: 'user', content: 'hello' }] },
       { traceId: 'trace-safe-http-timeout', retryBudget: budget }
-    )).rejects.toMatchObject({ code: 'RETRY_BUDGET_EXHAUSTED' })
+    )).rejects.toMatchObject({ code: 'RETRY_BUDGET_EXHAUSTED', category: 'provider_timeout' })
 
     expect(safeHttpRequestMock).toHaveBeenCalledTimes(2)
     expect(budget.exhaustedBy).toBe('transport-retries')

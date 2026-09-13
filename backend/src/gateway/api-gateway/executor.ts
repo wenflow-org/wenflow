@@ -128,9 +128,7 @@ export class APIExecutor {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (!consumeUpstreamAttempt(retryBudget, attempt > 1)) {
-        lastError = new GatewayExecutionError('Provider request retry budget exhausted', {
-          category: 'internal', code: 'RETRY_BUDGET_EXHAUSTED', retryable: false
-        });
+        lastError = this.buildRetryBudgetError(lastError as GatewayExecutionError | null);
         break;
       }
       attemptsMade = attempt;
@@ -260,9 +258,7 @@ export class APIExecutor {
         });
 
         if (retryBudgetExhausted) {
-          lastError = new GatewayExecutionError('Provider request retry budget exhausted', {
-            category: 'internal', code: 'RETRY_BUDGET_EXHAUSTED', retryable: false
-          });
+          lastError = this.buildRetryBudgetError(lastError as GatewayExecutionError | null);
           break;
         }
         if (!willRetry) break;
@@ -942,6 +938,22 @@ export class APIExecutor {
     if (error instanceof GatewayExecutionError) return error;
     return new GatewayExecutionError(error instanceof Error ? error.message : String(error), {
       category: 'internal', code: 'API_GATEWAY_INTERNAL_ERROR', retryable: false
+    });
+  }
+
+  /**
+   * 重试预算耗尽的终止错误。
+   * 继承最后一次真实失败的 category（provider_http / provider_timeout …），避免把上游故障
+   * 归因成平台 internal；code 仍保留 RETRY_BUDGET_EXHAUSTED 作为网关终止信号。
+   */
+  private buildRetryBudgetError(lastError: GatewayExecutionError | null): GatewayExecutionError {
+    const inherited = lastError && lastError.category !== 'internal' ? lastError.category : 'internal';
+    return new GatewayExecutionError('Provider request retry budget exhausted', {
+      category: inherited,
+      code: 'RETRY_BUDGET_EXHAUSTED',
+      retryable: false,
+      ...(lastError?.statusCode ? { statusCode: lastError.statusCode } : {}),
+      ...(lastError?.requestUrl ? { requestUrl: lastError.requestUrl } : {})
     });
   }
 
