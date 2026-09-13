@@ -20,7 +20,7 @@ import {
   getSimulationAgentConfig,
   type SimulationAgentConfig
 } from '../services/agentConfig.service';
-import { executeSkill, virtualLearnerGoalDialogueSimulatorDefinition, virtualLearnerPathEvaluatorDefinition, virtualLearnerLearnTurnSimulatorDefinition, virtualLearnerEpistemicGroundingDefinition, virtualLearnerMemoryCuratorDefinition } from '../skills';
+import { executeSkill, virtualLearnerGoalDialogueSimulatorDefinition, virtualLearnerPathEvaluatorDefinition, virtualLearnerLearnTurnSimulatorDefinition, virtualLearnerEpistemicGroundingDefinition } from '../skills';
 import { type FrictionBudget } from '../skills/virtual-learner-shared';
 import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/session-wrapup';
 import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
@@ -30,19 +30,10 @@ import {
 } from '../virtual-lab/story-demand';
 import { safeJsonParse } from '../utils/safe-json';
 import { asErrorLike } from '../virtual-lab/vlab-types';
-import { memoryTraceService } from '../services/memory/memory-trace.service';
-import {
-  buildLearnerMemorySnapshot,
-  recordCompletedArtifact,
-  writeProfileConceptsAfterLesson,
-  type LessonKnowledgePoint,
-  type SelfReportedLearnerState,
-} from '../virtual-lab/learner-memory';
 import { resolveSessionBudget } from '../virtual-lab/session-budget';
 import type { LeaseClientLike } from '../virtual-lab/vlab-types';
 import type {
   SimulationMilestone,
-  SimulationTask,
   StageResults,
   TeachingState,
   VirtualSessionWithProfile
@@ -66,17 +57,13 @@ import {
   COORDINATOR_ID,
   ASSISTED_SESSION_LEASE_MS,
   ASSISTED_SESSION_LEASE_RENEW_MS,
-  LEASE_RETRY_DELAYS_MS,
   LEARN_UPSTREAM_RETRY_ATTEMPTS,
   LEARN_UPSTREAM_RETRY_DELAY_MS,
   LEARN_AUTO_TURN_CAP,
-  WORK_SETTLE_TIMEOUT_MS,
-  STALE_RUNNING_SESSION_MS
+  WORK_SETTLE_TIMEOUT_MS
 } from './simulation.constants';
 import {
   isProviderRetryable,
-  isPrismaErrorCode,
-  isLeaseDatabaseBusyError,
   sanitizeVisibleDialogue,
   getRunnableTasks,
   countTaskProgress,
@@ -104,11 +91,20 @@ import {
   getSessionFrictionBudget,
   getSessionPromptOverrides
 } from './simulation.helpers';
+import { VirtualSessionLeaseBusyError } from './simulation.errors';
 import {
-  VirtualSessionLeaseBusyError,
-  VirtualSessionLeaseLostError,
-  VirtualSessionDatabaseBusyError
-} from './simulation.errors';
+  acquireSessionLease,
+  releaseSessionLease,
+  detectStaleRunningSession,
+  renewSessionLease
+} from './simulation.lease';
+import {
+  persistKnowledgeState,
+  buildAssistedLearnerMemory,
+  buildAssistedKnowledgeSnapshot,
+  persistAssistedLearnerMemory,
+  persistProfileConcepts
+} from './simulation.memory';
 export {
   VirtualSessionLeaseBusyError,
   VirtualSessionLeaseLostError,
@@ -141,13 +137,13 @@ class SimulationOrchestrator {
     const ownerId = `assisted_${uuidv4()}`;
     let acquiredExpiresAt: Date;
     try {
-      acquiredExpiresAt = await this.acquireSessionLease(sessionId, ownerId);
+      acquiredExpiresAt = await acquireSessionLease(sessionId, ownerId);
     } catch (error) {
       releaseQueue();
       if (this.sessionLocks.get(sessionId) === queued) this.sessionLocks.delete(sessionId);
       throw error;
     }
-    await this.detectStaleRunningSession(sessionId);
+    await detectStaleRunningSession(sessionId);
 
     let rejectLeaseFailure!: (error: unknown) => void;
     const leaseFailurePromise = new Promise<never>((_, reject) => {
@@ -225,7 +221,7 @@ class SimulationOrchestrator {
       forceReleaseTimer?.unref();
       await Promise.race([workSettled, forceReleaseDeadline]);
       if (forceReleaseTimer) clearTimeout(forceReleaseTimer);
-      await this.releaseSessionLease(sessionId, ownerId);
+      await releaseSessionLease(sessionId, ownerId);
     })()
       .finally(() => {
         releaseQueue();
@@ -253,98 +249,20 @@ class SimulationOrchestrator {
     return result;
   }
 
-  private async acquireSessionLease(sessionId: string, ownerId: string): Promise<Date> {
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + ASSISTED_SESSION_LEASE_MS);
-    try {
-      const updated = await prisma.virtual_experiment_leases.updateMany({
-        where: { sessionId, expiresAt: { lt: now } },
-        data: { ownerId, expiresAt }
-      });
-      if (updated.count === 1) return expiresAt;
-    } catch (error) {
-      if (isLeaseDatabaseBusyError(error)) throw new VirtualSessionDatabaseBusyError(error);
-      throw error;
-    }
-
-    try {
-      await prisma.virtual_experiment_leases.create({
-        data: { sessionId, ownerId, expiresAt }
-      });
-      return expiresAt;
-    } catch (error) {
-      if (isPrismaErrorCode(error, 'P2002')) throw new VirtualSessionLeaseBusyError();
-      if (isLeaseDatabaseBusyError(error)) throw new VirtualSessionDatabaseBusyError(error);
-      throw error;
-    }
-  }
-
-  private async releaseSessionLease(sessionId: string, ownerId: string) {
-    try {
-      await prisma.virtual_experiment_leases.deleteMany({ where: { sessionId, ownerId } });
-    } catch (error) {
-      if (isLeaseDatabaseBusyError(error)) throw new VirtualSessionDatabaseBusyError(error);
-      throw error;
-    }
-  }
-
-  private async detectStaleRunningSession(sessionId: string) {
-    try {
-      const session = await prisma.virtual_sessions.findUnique({
-        where: { id: sessionId },
-        select: { status: true, currentStage: true, updatedAt: true }
-      });
-      if (!session || session.status !== 'running') return;
-      const updatedAt = session.updatedAt ? new Date(session.updatedAt).getTime() : 0;
-      if (Number.isFinite(updatedAt) && Date.now() - updatedAt > STALE_RUNNING_SESSION_MS) {
-        logger.warn('[simulation-coordinator] 检测到疑似卡死的 running 会话：无活跃租约且长时间未写入，请人工确认后重启', {
-          sessionId,
-          currentStage: session.currentStage,
-          staleMs: Date.now() - updatedAt,
-          thresholdMs: STALE_RUNNING_SESSION_MS
-        });
-      }
-    } catch (error) {
-      logger.warn('[simulation-coordinator] 检查疑似卡死会话状态失败', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
-  }
-
+  // 测试直接调用入口：保持与原实例方法同名，委托给抽离后的模块函数
   private async renewSessionLease(
     sessionId: string,
     ownerId: string,
     knownExpiresAt = Date.now() + ASSISTED_SESSION_LEASE_MS,
     leaseClient: LeaseClientLike = prisma
   ) {
-    for (let attempt = 0; ; attempt += 1) {
-      const now = new Date();
-      if (now.getTime() >= knownExpiresAt) throw new VirtualSessionLeaseLostError();
-      const expiresAt = new Date(now.getTime() + ASSISTED_SESSION_LEASE_MS);
-      try {
-        const updated = await leaseClient.virtual_experiment_leases.updateMany({
-          where: { sessionId, ownerId, expiresAt: { gt: now } },
-          data: { expiresAt }
-        });
-        if (updated.count !== 1) throw new VirtualSessionLeaseLostError();
-        return expiresAt;
-      } catch (error) {
-        if (!isLeaseDatabaseBusyError(error)) throw error;
-        const delayMs = LEASE_RETRY_DELAYS_MS[attempt];
-        const remainingMs = knownExpiresAt - Date.now();
-        if (delayMs === undefined || remainingMs <= delayMs) {
-          throw new VirtualSessionDatabaseBusyError(error);
-        }
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-      }
-    }
+    return renewSessionLease(sessionId, ownerId, knownExpiresAt, leaseClient);
   }
 
   private async renewAssistedLease(context: AssistedLeaseContext, leaseClient: LeaseClientLike = prisma) {
     const renewal = context.renewal.then(async () => {
       if (context.failureError) throw context.failureError;
-      const expiresAt = await this.renewSessionLease(
+      const expiresAt = await renewSessionLease(
         context.sessionId,
         context.ownerId,
         context.expiresAt,
@@ -582,7 +500,7 @@ class SimulationOrchestrator {
   }) {
     // 长期记忆注入（目标澄清时学习者能提及过往学习经历）
     const learnerMemory = params.userId
-      ? await this.buildAssistedLearnerMemory(params.userId)
+      ? await buildAssistedLearnerMemory(params.userId)
       : null;
     const output = await executeSkill(virtualLearnerGoalDialogueSimulatorDefinition, {
       learner: {
@@ -861,7 +779,7 @@ class SimulationOrchestrator {
         rating: 5
       });
       // 记忆回写：画像概念 + 成果物登记（best-effort，失败不阻断）
-      await this.persistAssistedLearnerMemory(sessionId, session, taskMatch.task);
+      await persistAssistedLearnerMemory(sessionId, session, taskMatch.task);
     } catch (error: unknown) {
       const boundedError = boundTaskCompletionError(error);
       const updatedAt = new Date().toISOString();
@@ -1882,7 +1800,7 @@ class SimulationOrchestrator {
       });
       
       const reactionStart = Date.now();
-      const pathLearnerMemory = await this.buildAssistedLearnerMemory(session.userId);
+      const pathLearnerMemory = await buildAssistedLearnerMemory(session.userId);
       const reactionOutput = await executeSkill(virtualLearnerPathEvaluatorDefinition, {
         learner: profile,
         story: parseStoryContextFromStageResults(stageResults),
@@ -2326,255 +2244,6 @@ class SimulationOrchestrator {
     }
   }
 
-  /**
-   * 记忆引擎 M2：教学回合后按知识看板状态增量写 memory_traces。
-   * best-effort——失败不阻断教学回合；修复「卡死任务期间 learner 状态零落库」。
-   */
-  private persistKnowledgeState(userId: string, knowledgePoints: Array<{ name: string; status: string; progress: number }>): void {
-    if (!userId || !Array.isArray(knowledgePoints) || !knowledgePoints.length) return;
-    const outcomes = knowledgePoints
-      .filter((kp) => kp && String(kp.name || '').trim())
-      .map((kp) => ({
-        name: String(kp.name).trim(),
-        status: (['pending', 'learning', 'mastered', 'review'].includes(kp.status)
-          ? kp.status
-          : 'learning') as 'pending' | 'learning' | 'mastered' | 'review',
-        progress: Number.isFinite(Number(kp.progress)) ? Number(kp.progress) : 0,
-      }));
-    if (!outcomes.length) return;
-    memoryTraceService.recordSessionOutcome(userId, outcomes, 'derived').catch((error) => {
-      logger.warn('[simulation-coordinator] 教学回合记忆痕迹回写失败', {
-        userId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
-  }
-
-  /**
-   * 组装 assisted 模式的学习者记忆（learnerMemory 用）：已掌握/到期复习/易混淆 + 最近成果。
-   */
-  private async buildAssistedLearnerMemory(
-    userId: string
-  ): Promise<{
-    mastered: string[];
-    dueReview: string[];
-    struggling: string[];
-    recentCompleted: string[];
-  } | null> {
-    const memory = await buildLearnerMemorySnapshot(userId, { limit: 8 }).catch(() => null);
-    if (!memory) return null;
-    return {
-      mastered: memory.mastered.map((item) => item.name),
-      dueReview: memory.dueReview.map((item) => item.name),
-      struggling: memory.struggling.map((item) => item.name),
-      recentCompleted: memory.recentTaskTitles,
-    };
-  }
-
-  /**
-   * 组装 assisted 模式的学习者记忆快照（knowledgeSnapshot 用）：
-   * 当前任务概念为锚 + 画像已掌握/易混淆 + 到期复习点 + 最近成果。
-   */
-  private async buildAssistedKnowledgeSnapshot(
-    userId: string,
-    currentTask: SimulationTask | null,
-    currentMilestone: SimulationMilestone | null
-  ): Promise<Array<{ name: string; status: string; progress: number }>> {
-    const memory = await buildLearnerMemorySnapshot(userId, { limit: 6 }).catch(() => null);
-    const result: Array<{ name: string; status: string; progress: number }> = [];
-    const anchor = currentTask?.linkedConcept || currentMilestone?.coreConceptId
-      || currentTask?.title || currentMilestone?.title || '当前任务概念';
-    result.push({ name: String(anchor), status: 'learning', progress: 40 });
-    for (const item of memory?.mastered || []) result.push({ name: item.name, status: 'mastered', progress: 100 });
-    for (const item of memory?.dueReview || []) result.push({ name: item.name, status: 'review', progress: item.progress });
-    for (const item of memory?.struggling || []) result.push({ name: item.name, status: 'learning', progress: 30 });
-    return result.slice(0, 8);
-  }
-
-  /**
-   * assisted 模式任务结算后的记忆回写：画像概念（统一出口）+ 成果物登记。
-   * best-effort——失败不阻断任务完成。
-   */
-  private async persistAssistedLearnerMemory(
-    sessionId: string,
-    session: VirtualSessionWithProfile,
-    task: SimulationTask
-  ): Promise<void> {
-    try {
-      const stageResults = parseStageResultsPayload(session.stageResults);
-      const learningState = (stageResults.teaching || {}) as Record<string, unknown>;
-      const teachingSessionId = typeof learningState.teachingSessionId === 'string' ? learningState.teachingSessionId : null;
-      let knowledgePoints: LessonKnowledgePoint[] = [];
-      if (teachingSessionId) {
-        const teaching = await prisma.teaching_sessions.findUnique({ where: { id: teachingSessionId } }).catch(() => null);
-        knowledgePoints = Array.isArray(teaching?.knowledgeState)
-          ? (teaching.knowledgeState as LessonKnowledgePoint[]).filter(
-              (kp) => kp && typeof kp.name === 'string' && kp.name.trim()
-            )
-          : [];
-      }
-      // 内部提炼：用模拟器自述状态（assisted 的收束轮 learnerState + learnerFeedback）
-      const learnerState = (learningState.learnerState && typeof learningState.learnerState === 'object'
-        ? learningState.learnerState : {}) as Record<string, any>;
-      const feedback = (learningState.latestLearnerFeedback && typeof learningState.latestLearnerFeedback === 'object'
-        ? learningState.latestLearnerFeedback : {}) as Record<string, any>;
-      const selfState: SelfReportedLearnerState | null = {
-        conceptName: task.linkedConcept || task.title || null,
-        conceptualMastery: typeof learnerState.conceptualMastery === 'number' ? learnerState.conceptualMastery : null,
-        taskUnderstanding: typeof learnerState.taskUnderstanding === 'number' ? learnerState.taskUnderstanding : null,
-        proceduralMastery: typeof learnerState.proceduralMastery === 'number' ? learnerState.proceduralMastery : null,
-        selfReportedTaskDone: typeof feedback.selfReportedTaskDone === 'boolean' ? feedback.selfReportedTaskDone : null,
-        confidence: typeof feedback.confidence === 'number' ? feedback.confidence : null,
-        wantsMoreHelp: typeof feedback.wantsMoreHelp === 'boolean' ? feedback.wantsMoreHelp : null,
-        remainingBlockers: Array.isArray(feedback.remainingBlockers) ? feedback.remainingBlockers : null,
-        wantsHint: typeof learnerState.wantsHint === 'boolean' ? learnerState.wantsHint : null,
-      };
-      // 记忆提炼 skill（LLM 主路径，失败走确定性 fallback）
-      const curated = await this.runAssistedMemoryCurator(session, learningState, task);
-      const effectiveSelfState: SelfReportedLearnerState | null = curated
-        ? {
-            ...(selfState || {}),
-            conceptName: curated.masteredConcepts[0]?.name || curated.struggleConcepts[0]?.name
-              || selfState?.conceptName || task.title || null,
-            conceptualMastery: curated.masteredConcepts.length > 0 ? 0.85 : selfState?.conceptualMastery ?? null,
-            selfReportedTaskDone: curated.masteredConcepts.length > 0 ? true : selfState?.selfReportedTaskDone ?? null,
-            remainingBlockers: curated.struggleConcepts.length > 0
-              ? curated.struggleConcepts.map((s) => s.blocker).filter(Boolean)
-              : selfState?.remainingBlockers || null,
-          }
-        : selfState;
-      await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, { source: 'assisted', selfState: effectiveSelfState });
-      await recordCompletedArtifact({
-        userId: session.userId,
-        taskId: task.id,
-        taskTitle: task.title || '当前任务',
-        artifactType: typeof task.taskType === 'string' ? task.taskType : null,
-        deliverable: typeof task.acceptanceCriteria === 'string' ? task.acceptanceCriteria : null,
-        knowledgePoints,
-        selfState: effectiveSelfState,
-        memoryDelta: curated?.memoryDelta || null,
-        memoryCurated: curated ? {
-          mastered: curated.masteredConcepts.map((m) => m.name),
-          struggling: curated.struggleConcepts.map((s) => s.name),
-          selfCalibration: curated.selfCalibration,
-        } : undefined,
-        milestoneTitle: null,
-      });
-    } catch (error) {
-      logger.warn('[simulation-coordinator] 虚拟学习者记忆回写失败（不影响任务完成）', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  /** assisted 的记忆提炼 skill 调用（LLM 主路径；失败返回 null 走 fallback） */
-  private async runAssistedMemoryCurator(
-    session: VirtualSessionWithProfile,
-    learningState: Record<string, unknown>,
-    task: SimulationTask
-  ): Promise<{
-    masteredConcepts: Array<{ name: string; evidence: string; confidence: number }>;
-    struggleConcepts: Array<{ name: string; blocker: string; severity: string }>;
-    selfCalibration: string;
-    memoryDelta: string;
-  } | null> {
-    try {
-      const profile = session.virtual_learner_profiles;
-      if (!profile) return null;
-      const persona = {
-        ...safeJsonParse<Record<string, any>>(profile.profile, {}),
-        learningGoal: profile.learningGoal,
-      };
-      // 从 conversationHistory 构建回合序列
-      const history = Array.isArray(learningState.conversationHistory) ? learningState.conversationHistory : [];
-      const turnSequence = history.slice(-24).map((m: any, index: number) => ({
-        turn: index + 1,
-        reply: typeof m.content === 'string' ? m.content : '',
-        emotion: null,
-        learnerState: undefined,
-        learnerFeedback: undefined,
-        role: m.role || 'learner',
-      }));
-      const existing = await buildLearnerMemorySnapshot(session.userId, { limit: 30 }).catch(() => null);
-      const result = await executeSkill(virtualLearnerMemoryCuratorDefinition, {
-        persona,
-        turnSequence,
-        currentTask: {
-          title: task.title || null,
-          linkedConcept: task.linkedConcept || null,
-          acceptanceCriteria: typeof task.acceptanceCriteria === 'string' ? task.acceptanceCriteria : null,
-        },
-        existingKnown: existing?.mastered.map((m) => m.name) || [],
-        existingStruggle: existing?.struggling.map((m) => m.name) || [],
-      });
-      if (!result.success || !result.output) return null;
-      const output = result.output as any;
-      return {
-        masteredConcepts: Array.isArray(output.masteredConcepts) ? output.masteredConcepts : [],
-        struggleConcepts: Array.isArray(output.struggleConcepts) ? output.struggleConcepts : [],
-        selfCalibration: typeof output.selfCalibration === 'string' ? output.selfCalibration : '',
-        memoryDelta: typeof output.memoryDelta === 'string' ? output.memoryDelta : '',
-      };
-    } catch (error) {
-      logger.warn('[simulation-coordinator] 记忆提炼 skill 调用失败，走确定性 fallback', {
-        sessionId: session.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
-  }
-
-  /**
-   * 任务完成后回写画像字段：掌握的概念 → knownConcepts，仍在学/需复习 → struggleConcepts。
-   * best-effort——失败不阻断；修复「画像字段整个学习过程不更新」。
-   */
-  private async persistProfileConcepts(sessionId: string, userId: string, knowledgePoints: Array<{ name: string; status: string }>): Promise<void> {
-    if (!userId || !Array.isArray(knowledgePoints) || !knowledgePoints.length) return;
-    try {
-      const profile = await prisma.virtual_learner_profiles.findUnique({ where: { userId } });
-      if (!profile) return;
-      const mastered = new Set<string>();
-      const struggling = new Set<string>();
-      for (const kp of knowledgePoints) {
-        const name = String(kp?.name || '').trim();
-        if (!name) continue;
-        if (kp.status === 'mastered') mastered.add(name);
-        else if (kp.status === 'review' || kp.status === 'learning' || kp.status === 'pending') struggling.add(name);
-      }
-      const profileData = safeJsonParse<Record<string, any>>(profile.profile, {});
-      const knownConcepts = [...new Set([...(profileData.knownConcepts || []), ...mastered])];
-      const struggleConcepts = [...new Set([...(profileData.struggleConcepts || []), ...struggling].filter((c) => !mastered.has(c)))];
-      if (knownConcepts.length || struggleConcepts.length) {
-        await prisma.virtual_learner_profiles.update({
-          where: { userId },
-          data: {
-            profile: JSON.stringify({
-              ...profileData,
-              knownConcepts,
-              struggleConcepts,
-            }),
-            knownConcepts: JSON.stringify(knownConcepts),
-            struggleConcepts: JSON.stringify(struggleConcepts),
-            updatedAt: new Date(),
-          },
-        });
-        logger.info('[simulation-coordinator] 画像概念字段已回写', {
-          sessionId,
-          userId,
-          known: knownConcepts.length,
-          struggle: struggleConcepts.length,
-        });
-      }
-    } catch (error) {
-      logger.warn('[simulation-coordinator] 画像字段回写失败', {
-        sessionId,
-        userId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
   async executeLearningStep(sessionId: string, options: { turnBudget?: number } = {}): Promise<{
     success: boolean;
     userMessage?: string;
@@ -2916,12 +2585,12 @@ class SimulationOrchestrator {
       
       const virtualReplyStart = Date.now();
       // 知识看板快照：当前任务概念为锚 + 学习者记忆（已掌握/到期复习/易混淆/最近成果）
-      const knowledgeSnapshot = await this.buildAssistedKnowledgeSnapshot(
+      const knowledgeSnapshot = await buildAssistedKnowledgeSnapshot(
         session.userId,
         currentTask,
         currentMilestone
       );
-      const learnerMemoryForSimulator = await this.buildAssistedLearnerMemory(session.userId);
+      const learnerMemoryForSimulator = await buildAssistedLearnerMemory(session.userId);
       // 阶段1：认知判决（BEAGLE 物理两阶段第一段；失败降级 null，不阻断叙事）
       let epistemicGrounding: any = null;
       try {
@@ -3045,9 +2714,9 @@ class SimulationOrchestrator {
           aiResponse = aiResult.aiResponse || '';
           
           // 记忆引擎：教学回合后增量写 memory_traces（知识看板状态 → 内化强度）
-          this.persistKnowledgeState(session.userId, aiResult.knowledgePoints || []);
+          persistKnowledgeState(session.userId, aiResult.knowledgePoints || []);
           // 画像回写：掌握 → knownConcepts，仍在学/需复习 → struggleConcepts
-          void this.persistProfileConcepts(sessionId, session.userId, aiResult.knowledgePoints || []);
+          void persistProfileConcepts(sessionId, session.userId, aiResult.knowledgePoints || []);
           
           const learnerFeedback = virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null;
           const teacherReady = !!(aiResult.isCompletion || aiResult.autoEnded);
@@ -3646,7 +3315,7 @@ class SimulationOrchestrator {
       // ② 无排队尝试获取租约
       const ownerId = `stop_${uuidv4()}`;
       try {
-        await this.acquireSessionLease(sessionId, ownerId);
+        await acquireSessionLease(sessionId, ownerId);
       } catch (error) {
         if (error instanceof VirtualSessionLeaseBusyError) {
           logger.info('[simulation-coordinator] 停止标志已写入，运行中的学习循环将自行退出并终态化', { sessionId });
@@ -3659,7 +3328,7 @@ class SimulationOrchestrator {
         const result = await this.emergencyStopLearning(sessionId, reason);
         return result.success ? { success: true } : result;
       } finally {
-        await this.releaseSessionLease(sessionId, ownerId).catch(() => {});
+        await releaseSessionLease(sessionId, ownerId).catch(() => {});
       }
     } catch (error: unknown) {
       logger.error('[simulation-coordinator] 旁路紧急停止失败', {
