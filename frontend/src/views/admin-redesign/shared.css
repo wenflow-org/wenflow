@@ -577,7 +577,7 @@ html[data-theme='dark'] .mk-pill--active {
   position: fixed;
   inset: 0;
   z-index: var(--mk-z-modal);
-  background: rgba(15, 23, 42, 0.36);
+  background: rgba(15, 23, 42, 0.45);
   display: grid;
   place-items: center;
   padding: 20px;
@@ -715,6 +715,18 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   background: var(--mk-red-strong, #b91c1c);
   border-color: var(--mk-red-strong, #b91c1c);
 }
+/* 危险操作「低强调」变体：红字描边，避免大面积实心红稀释警示级别（悬停才实心） */
+.mk-btn--danger-ghost {
+  background: transparent;
+  border-color: rgba(220, 38, 38, 0.4);
+  color: var(--mk-red, #dc2626);
+}
+.mk-btn--danger-ghost:hover,
+.mk-btn--danger-ghost:active {
+  background: var(--mk-red, #dc2626);
+  border-color: var(--mk-red, #dc2626);
+  color: #fff;
+}
 /* 幽灵按钮：浅蓝底 + 深蓝字 + 蓝描边（次级强调，与主按钮同族） */
 .mk-btn--ghost {
   background: #eef5ff;
@@ -815,7 +827,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-drawer__mask {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.36);
+  background: rgba(15, 23, 42, 0.45);
 }
 .mk-drawer__panel {
   position: relative;
@@ -1242,3 +1254,25 @@ html[data-theme='dark'] .mk-batchbar__danger:hover:not(:disabled) { background: 
 }
 html[data-theme='dark'] .mk-alert--ok { background: rgba(74, 222, 128, 0.12); color: #6ee7a0; }
 html[data-theme='dark'] .mk-alert--info { background: #141c2b; color: #94a3b8; }
+
+/* ==========================================
+   宽屏「推挤式」抽屉：抽屉打开时主内容让出抽屉宽度，
+   避免浮层遮住右侧列且无法查看（标记见 SkillDrawer.vue 的 wf-drawer-open）
+   ========================================== */
+@media (min-width: 1440px) {
+  html.wf-drawer-open .mshell__main {
+    padding-right: var(--mk-drawer-w, 560px);
+    transition: padding-right 0.2s ease;
+  }
+  html.wf-drawer-open .msk { pointer-events: none; background: transparent; }
+  html.wf-drawer-open .msk__panel { pointer-events: auto; }
+}
+@media (min-width: 2000px) {
+  html.wf-drawer-open .mshell__main { padding-right: var(--mk-drawer-w-lg, 700px); }
+}
+@media (min-width: 2800px) {
+  html.wf-drawer-open .mshell__main { padding-right: var(--mk-drawer-w-xl, 880px); }
+}
+@media (min-width: 3600px) {
+  html.wf-drawer-open .mshell__main { padding-right: var(--mk-drawer-w-xxl, 1040px); }
+}

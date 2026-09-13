@@ -168,9 +168,9 @@
                   <span class="be-run__meta be-run__time">{{ timeAgo(r.updatedAt) }}</span>
                 </div>
                 <div class="be-run__actions">
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail" @click="advance(detail!.id, r.id)">推进</button>
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail" @click="decay(detail!.id, r.id)">衰减</button>
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail" @click="snapshot(detail!.id, r.id)">快照</button>
+                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail" title="推进一个阶段：快进到该运行的下一个阶段" @click="advance(detail!.id, r.id)">推进</button>
+                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail" title="模拟跨日衰减：按衰减模型更新该运行的学习状态" @click="decay(detail!.id, r.id)">衰减</button>
+                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail" title="保存当前快照（只读，不改变状态）" @click="snapshot(detail!.id, r.id)">快照</button>
                 </div>
               </div>
             </template>
@@ -396,6 +396,13 @@ const runStatusBadge = (s: string) =>
   s === 'done' ? 'mk-badge--ok' : s === 'failed' ? 'mk-badge--bad' : s === 'stalled' ? 'mk-badge--warn' : 'mk-badge--info'
 
 async function advance(experimentId: string, runId: string) {
+  // 会直接改变虚拟学习者阶段状态：执行前确认
+  const ok = await askConfirm({
+    title: '推进实验',
+    message: '确认将该运行推进一个阶段？会立即改变虚拟学习者的阶段状态。',
+    confirmText: '推进',
+  })
+  if (!ok) return
   runBusy.value = true
   try {
     await adminBatchExperimentsApi.advanceRun(experimentId, runId)
@@ -409,6 +416,13 @@ async function advance(experimentId: string, runId: string) {
 }
 
 async function decay(experimentId: string, runId: string) {
+  // 按衰减模型改写学习状态：执行前确认
+  const ok = await askConfirm({
+    title: '模拟跨日衰减',
+    message: '确认模拟跨日衰减？会按衰减模型更新该运行的学习状态（KTL/LF 等）。',
+    confirmText: '模拟衰减',
+  })
+  if (!ok) return
   runBusy.value = true
   try {
     await adminBatchExperimentsApi.decayRun(experimentId, runId)

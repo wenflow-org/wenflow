@@ -483,12 +483,12 @@ function fmtMs(ms: number) {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
 }
 const pad = (n: number) => String(n).padStart(2, '0')
-/* 绝对时间（统一 YYYY-MM-DD HH:MM:SS，跨年可辨） */
+/* 绝对时间：与执行日志统一 MM-DD HH:MM:SS（完整时间见 tooltip fmtFull） */
 function fmtTime(iso?: string | null): string {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
-  return fmtFull(iso)
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 function fmtFull(iso?: string | null): string {
   if (!iso) return ''

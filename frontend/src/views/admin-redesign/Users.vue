@@ -65,32 +65,32 @@
           <!-- 列宽单一来源：<colgroup> + token。「用户」不设宽度＝auto 吸收列，
                其余列严格按 token 渲染（无吸收列时整表会被等比放大）。 -->
           <colgroup>
-            <col v-if="isLive && !hiddenCols.has('check')" style="width:32px">
+            <col v-if="isLive && showCol('check')" style="width:32px">
             <col style="width:var(--mk-col-text)">
-            <col v-if="!hiddenCols.has('role')" style="width:var(--mk-col-model)">
-            <col v-if="!hiddenCols.has('level')" style="width:var(--mk-col-model-wide)">
-            <col v-if="!hiddenCols.has('paths')" style="width:var(--mk-col-num-wide)">
-            <col v-if="!hiddenCols.has('created')" style="width:var(--mk-col-time-full)">
-            <col v-if="!hiddenCols.has('lastlogin')" style="width:var(--mk-col-time-full)">
+            <col v-if="showCol('role')" style="width:var(--mk-col-model)">
+            <col v-if="showCol('level')" style="width:var(--mk-col-model-wide)">
+            <col v-if="showCol('paths')" style="width:var(--mk-col-num-wide)">
+            <col v-if="showCol('created')" style="width:var(--mk-col-time-full)">
+            <col v-if="showCol('lastlogin')" style="width:var(--mk-col-time-full)">
             <col style="width:var(--mk-col-actions-wide)">
           </colgroup>
           <thead>
             <tr>
-              <th v-if="isLive && !hiddenCols.has('check')" scope="col">
+              <th v-if="isLive && showCol('check')" scope="col">
                 <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
               </th>
               <th scope="col">用户</th>
-              <th v-if="!hiddenCols.has('role')" scope="col">角色</th>
-              <th v-if="!hiddenCols.has('level')" scope="col">等级 / XP</th>
-              <th v-if="!hiddenCols.has('paths')" scope="col" class="mk-th--right">路径 / 会话</th>
-              <th v-if="!hiddenCols.has('created')" scope="col">注册时间</th>
-              <th v-if="!hiddenCols.has('lastlogin')" scope="col">最后登录</th>
+              <th v-if="showCol('role')" scope="col">角色</th>
+              <th v-if="showCol('level')" scope="col">等级 / XP</th>
+              <th v-if="showCol('paths')" scope="col" class="mk-th--right">路径 / 会话</th>
+              <th v-if="showCol('created')" scope="col">注册时间</th>
+              <th v-if="showCol('lastlogin')" scope="col">最后登录</th>
               <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
         <tbody>
           <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" @click="openSubPage('user', u.id)">
-            <td v-if="isLive && !hiddenCols.has('check')"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isTestAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
+            <td v-if="isLive && showCol('check')"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isTestAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
               <div class="mk-cell-main">
                 <strong>{{ u.name }}</strong>
@@ -103,16 +103,16 @@
                 <span v-else-if="isTestAccount(u)" class="mk-badge mk-badge--sm mk-badge--warn">测试账号</span>
               </div>
             </td>
-            <td v-if="!hiddenCols.has('role')"><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
-            <td v-if="!hiddenCols.has('level')">
+            <td v-if="showCol('role')"><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
+            <td v-if="showCol('level')">
               <div class="ul-level">
                 <span class="ul-level__badge" :title="`XP 推导等级 ${levelFromXp(u.xp)}`">{{ levelLabel(u.xp) }}</span>
                 <span class="ul-level__xp" :class="{ 'mk-na': u.xp === 0 }">{{ u.xp }} XP</span>
               </div>
             </td>
-            <td v-if="!hiddenCols.has('paths')" class="mk-num">{{ u.paths }} / {{ u.sessions }}</td>
-            <td v-if="!hiddenCols.has('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
-            <td v-if="!hiddenCols.has('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
+            <td v-if="showCol('paths')" class="mk-num">{{ u.paths }} / {{ u.sessions }}</td>
+            <td v-if="showCol('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
+            <td v-if="showCol('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
             <td>
               <div class="mk-actions">
                 <button type="button" class="mk-icon-btn" title="详情" @click.stop="openSubPage('user', u.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
@@ -231,6 +231,7 @@ import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from './MkCols.vue'
 import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
+import { useIsNarrow } from './useIsNarrow'
 import { toast } from '@/utils/toast'
 import { isTestAccountUser, levelFromXp, levelLabel } from './learner-profile'
 
@@ -357,6 +358,11 @@ const ulColDefs = [
   { key: 'lastlogin', label: '最后登录', title: '最近登录时间' },
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())
+
+/* 移动端仅保留「名称 / 状态 / 操作」：隐藏勾选列与时间/等级等次要列，避免多列挤进横向滚动 */
+const isNarrow = useIsNarrow()
+const MOBILE_HIDDEN_COLS = new Set(['check', 'role', 'level', 'created', 'lastlogin'])
+const showCol = (key: string) => !hiddenCols.value.has(key) && !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
 
 /** 真实用户数（排除测试/虚拟账号；口径标注用，与总览「总用户」对齐的近似值——列表为前 50 行样本） */
 const realUsers = computed(() => users.value.filter((u) => !u.deleted && !isTestAccountUser(u)).length)

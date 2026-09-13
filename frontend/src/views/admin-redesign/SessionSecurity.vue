@@ -137,7 +137,7 @@
                     <button
                       v-else-if="statusOf(s) === 'active'"
                       type="button"
-                      class="mk-btn mk-btn--danger mk-btn--sm"
+                      class="mk-btn mk-btn--danger-ghost mk-btn--sm"
                       @click="revoke(s)"
                     >强制下线</button>
                     <span v-else class="ss-na">—</span>
@@ -202,7 +202,7 @@
                       <button
                         v-else-if="statusOf(s) === 'active'"
                         type="button"
-                        class="mk-btn mk-btn--danger mk-btn--sm"
+                        class="mk-btn mk-btn--danger-ghost mk-btn--sm"
                         @click="revoke(s)"
                       >强制下线</button>
                       <span v-else class="ss-na">—</span>

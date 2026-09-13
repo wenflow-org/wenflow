@@ -67,20 +67,20 @@
           <colgroup>
             <!-- Skill 名：弹性吸收列（不设宽度） -->
             <col style="width:var(--mk-col-text)">
-            <col v-if="!hiddenCols.has('agent')" style="width:var(--mk-col-model-wide)">
-            <col v-if="!hiddenCols.has('cat')" style="width:var(--mk-col-badge)">
-            <col v-if="!hiddenCols.has('completion')" style="width:var(--mk-col-badge)">
-            <col v-if="!hiddenCols.has('rate')" style="width:var(--mk-col-num)">
-            <col v-if="!hiddenCols.has('last')" style="width:var(--mk-col-time-full)">
+            <col v-if="showCol('agent')" style="width:var(--mk-col-model-wide)">
+            <col v-if="showCol('cat')" style="width:var(--mk-col-badge)">
+            <col v-if="showCol('completion')" style="width:var(--mk-col-badge)">
+            <col v-if="showCol('rate')" style="width:var(--mk-col-num)">
+            <col v-if="showCol('last')" style="width:var(--mk-col-time-full)">
           </colgroup>
           <thead>
             <tr>
               <th>Skill</th>
-              <th v-if="!hiddenCols.has('agent')">所属阶段</th>
-              <th v-if="!hiddenCols.has('cat')">类别</th>
-              <th v-if="!hiddenCols.has('completion')">完成度</th>
-              <th v-if="!hiddenCols.has('rate')" class="mk-th--right">成功率</th>
-              <th v-if="!hiddenCols.has('last')">最近调用</th>
+              <th v-if="showCol('agent')">所属阶段</th>
+              <th v-if="showCol('cat')">类别</th>
+              <th v-if="showCol('completion')">完成度</th>
+              <th v-if="showCol('rate')" class="mk-th--right">成功率</th>
+              <th v-if="showCol('last')">最近调用</th>
             </tr>
           </thead>
           <tbody>
@@ -94,12 +94,12 @@
                   </div>
                 </div>
               </td>
-              <td v-if="!hiddenCols.has('agent')">
+              <td v-if="showCol('agent')">
                 <span v-if="s.agentId" class="sk-agent-tag" :title="s.agentId">{{ s.agentName || s.agentId }}</span>
                 <span v-else class="mk-na">工具类</span>
               </td>
-              <td v-if="!hiddenCols.has('cat')"><span class="mk-badge mk-badge--muted" :title="s.category">{{ categoryText(s.category) }}</span></td>
-              <td v-if="!hiddenCols.has('completion')">
+              <td v-if="showCol('cat')"><span class="mk-badge mk-badge--muted" :title="s.category">{{ categoryText(s.category) }}</span></td>
+              <td v-if="showCol('completion')">
                 <span
                   v-if="completionBadgeOf(s.id)"
                   class="mk-badge"
@@ -108,8 +108,8 @@
                 >{{ completionBadgeOf(s.id)!.text }}</span>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td v-if="!hiddenCols.has('rate')" class="mk-num" :class="rateTone(s)">{{ successRate(s) }}</td>
-              <td v-if="!hiddenCols.has('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
+              <td v-if="showCol('rate')" class="mk-num" :class="rateTone(s)">{{ successRate(s) }}</td>
+              <td v-if="showCol('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
             </tr>
           </tbody>
         </table>
@@ -180,6 +180,7 @@ import { EXTRA_CAPABILITY_SKILLS } from '@/views/admin/capabilityCatalog'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from './MkCols.vue'
 import Pagination from './Pagination.vue'
+import { useIsNarrow } from './useIsNarrow'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
 type Health = 'ok' | 'idle' | 'error'
@@ -200,6 +201,11 @@ const skColDefs = [
   { key: 'last', label: '最近调用', title: '最近调用时间' },
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())
+
+/* 移动端仅保留「Skill / 状态」：隐藏所属阶段、类别、完成度、最近调用，减少横向滚动 */
+const isNarrow = useIsNarrow()
+const MOBILE_HIDDEN_COLS = new Set(['agent', 'cat', 'completion', 'last'])
+const showCol = (key: string) => !hiddenCols.value.has(key) && !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
 const sortKey = ref<SortKey>('errors')
 const sortDir = ref<'asc' | 'desc'>('desc')
 const statsRange = liveSkillStatsRange

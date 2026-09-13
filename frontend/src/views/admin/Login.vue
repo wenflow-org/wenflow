@@ -403,9 +403,9 @@ onMounted(() => {
 }
 
 .field__error {
-  font-size: 11.5px;
+  font-size: 13px;
   color: #c0454a;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .field__pwd {

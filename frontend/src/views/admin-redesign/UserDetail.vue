@@ -43,7 +43,7 @@
               <div class="ud-path__bar"><i :style="{ width: p.pct + '%' }" :class="{ warn: p.tone === 'warn' }"></i></div>
               <span class="ud-path__pct">{{ p.pct }}%</span>
             </div>
-            <p v-if="!d.recentPaths.length" class="ud-none">路径明细暂不可用</p>
+            <p v-if="!d.recentPaths.length" class="ud-none">该用户暂无学习路径记录。开始一条学习路径后，这里会显示各路径的阶段与进度明细。</p>
           </div>
         </section>
       </div>
@@ -468,19 +468,22 @@ html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line
 }
 .ud-grant__grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  grid-template-columns: 1fr;
+  gap: 8px;
   padding: 0 16px 12px;
 }
 .ud-grant__grid div {
   display: grid;
-  gap: 3px;
-  padding: 10px 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 2px 12px;
+  padding: 8px 12px;
   border: 1px solid var(--mk-line);
   border-radius: 9px;
   font-size: var(--mk-fs-12);
 }
-.ud-grant__grid span { color: var(--mk-faint); font-weight: 700; font-size: var(--mk-fs-11); }
+.ud-grant__grid span { color: var(--mk-faint); font-weight: 700; font-size: var(--mk-fs-11); white-space: nowrap; }
+.ud-grant__grid strong { text-align: right; min-width: 0; }
 .ud-grant__actions {
   display: flex;
   gap: 8px;

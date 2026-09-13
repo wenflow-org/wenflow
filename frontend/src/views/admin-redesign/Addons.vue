@@ -81,7 +81,7 @@
     </div>
 
     <!-- ② MCP 服务 -->
-    <div class="mk-card">
+    <div class="mk-card ac-mcp-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">MCP 服务</h3>
         <div class="mk-actions">
@@ -450,12 +450,14 @@ function goConfig() {
 /* E3 并栏容器：默认单列全宽；内容少时 1fr 1fr 并排 */
 .ac-cards {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
 }
+/* 卡片可压缩：左卡宽表 min-content 会撑爆 1fr，饿死右卡导致 MCP 行逐字竖排 */
+.ac-cards > .mk-card { min-width: 0; }
 @media (min-width: 1100px) {
-  .ac-cards--side { grid-template-columns: 1fr 1fr; }
+  .ac-cards--side { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
 
 /* 能力配置加载失败错误条 */
@@ -512,8 +514,12 @@ function goConfig() {
 }
 .ac-mcp__formrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-/* 窄屏：MCP 行两行重排（状态点/名称/徽标一行，类型/endpoint 次行，操作收底行） */
-@media (max-width: 700px) {
+/* MCP 卡片作为容器：行按「卡片自身宽度」重排，而非视口宽度
+   （并栏时卡片可能远窄于视口，视口断点不触发） */
+.ac-mcp-card { container-type: inline-size; }
+
+/* 窄卡：MCP 行两行重排（状态点/名称/徽标一行，类型/endpoint 次行，操作收底行） */
+@container (max-width: 540px) {
   .ac-mcp__row {
     grid-template-columns: 10px minmax(0, 1fr) auto;
     grid-template-areas:

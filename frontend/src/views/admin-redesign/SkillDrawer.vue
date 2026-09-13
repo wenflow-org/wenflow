@@ -83,6 +83,7 @@
               <strong>{{ stat.calls ? fmtMs(stat.avgMs) : '—' }}</strong>
             </div>
           </div>
+          <p v-if="!stat.calls" class="msk__note">该工具暂无调用记录，指标将在首次调用后生成。</p>
           <p v-if="skillProfile && statsSourceNote" class="msk__note">{{ statsSourceNote }}</p>
 
           <!-- 生效模型（skill 模式）：所属/类别已进头部 chips -->
@@ -272,7 +273,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   intent,
@@ -308,6 +309,15 @@ const skillProfile = computed(() => {
   return null
 })
 const entity = computed(() => skillProfile.value)
+
+/* 宽屏「推挤式」抽屉：打开时给 <html> 挂标记，主内容让出抽屉宽度（规则见 shared.css），
+   避免浮层遮住右侧列且无法查看。窄屏仍为浮层遮罩。 */
+watch(entity, (v) => {
+  if (typeof document !== 'undefined') document.documentElement.classList.toggle('wf-drawer-open', !!v)
+}, { immediate: true })
+onBeforeUnmount(() => {
+  if (typeof document !== 'undefined') document.documentElement.classList.remove('wf-drawer-open')
+})
 
 /* 身份色：与 Agent 拓扑同套阶段色（按所属 Agent 取色） */
 const tone = computed(() => {
@@ -641,7 +651,7 @@ watch(
   position: fixed;
   inset: 0;
   z-index: var(--mk-z-drawer);
-  background: rgba(15, 23, 42, 0.36);
+  background: rgba(15, 23, 42, 0.45);
   display: flex;
   justify-content: flex-end;
 }
