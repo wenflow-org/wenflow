@@ -556,5 +556,12 @@ select {
   .no-print {
     display: none !important;
   }
+
+  /* 无滚动兜底：打印/预渲染时 IntersectionObserver 不会触发，
+     强制揭示 v-reveal 元素，避免整页空白 */
+  .rv {
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 

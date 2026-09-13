@@ -435,6 +435,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   text-decoration: none;
   font-size: 13px;
   font-weight: 600;
+  padding: 5px 6px;
 }
 .docs-nav__links a:hover { color: var(--blue); }
 .docs-nav__back {
@@ -551,7 +552,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   font-family: 'JetBrains Mono', Consolas, monospace;
 }
 .mono { font-family: 'JetBrains Mono', Consolas, monospace; }
-.docs-main a { color: var(--blue); text-decoration: none; }
+.docs-main a { color: var(--blue); text-decoration: none; padding: 4px 0; }
 .docs-main a:hover { text-decoration: underline; }
 
 /* 迷你卡网格 */
@@ -641,7 +642,8 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   border: 1px solid #2a3c58;
   background: transparent;
   color: #9db8dc;
-  padding: 3px 10px;
+  padding: 4px 10px;
+  min-height: 24px;
   border-radius: 6px;
   font-size: 11px;
   cursor: pointer;
@@ -746,7 +748,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   color: var(--faint);
   font-size: 12px;
 }
-.docs-foot a { color: var(--muted); text-decoration: none; }
+.docs-foot a { color: var(--muted); text-decoration: none; padding: 5px 0; }
 .docs-foot a:hover { color: var(--blue); }
 
 /* ===== 暗色模式（data-theme=dark）：覆写固定浅色样式 ===== */

@@ -1224,6 +1224,7 @@ main {
   font-weight: 700;
   color: var(--muted);
   text-decoration: none;
+  padding: 7px 2px;
 }
 .hn-foot__links a:hover {
   color: var(--blue-deep);

@@ -66,15 +66,16 @@ const version = appVersion;
   font-size: 11px; color: var(--faint, #8492ab);
   line-height: 1.3;
 }
-.v2footer__links { display: inline-flex; align-items: center; gap: 18px; }
+.v2footer__links { display: inline-flex; align-items: center; gap: 12px; }
 .v2footer__link {
   position: relative;
   font-size: 12.5px; color: var(--muted, #5b6577);
   text-decoration: none;
+  padding: 8px 3px;
   transition: color 0.15s ease;
 }
 .v2footer__link::after {
-  content: ''; position: absolute; left: 0; right: 100%; bottom: -3px;
+  content: ''; position: absolute; left: 0; right: 100%; bottom: 4px;
   height: 2px; border-radius: 2px;
   background: var(--blue-deep, #1f57cc);
   transition: right 0.18s ease;

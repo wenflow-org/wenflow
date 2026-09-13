@@ -394,7 +394,8 @@ html, body {
 .v2-page .errorbar__retry {
   background: none;
   border: 0;
-  padding: 0;
+  padding: 5px 3px;
+  margin: -5px -3px;
   font: inherit;
   color: inherit;
   text-decoration: underline;

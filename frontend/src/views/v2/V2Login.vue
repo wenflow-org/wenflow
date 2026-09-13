@@ -198,7 +198,10 @@ onMounted(() => {
   border: 0; background: transparent;
   color: var(--blue-deep);
   font: inherit; font-weight: 800;
-  cursor: pointer; padding: 0;
+  cursor: pointer;
+  padding: 5px 6px;
+  min-height: 24px;
+  border-radius: 8px;
 }
 .switch button:hover { text-decoration: underline; }
 
@@ -220,14 +223,36 @@ onMounted(() => {
 .remember-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 13px;
   color: var(--muted);
   cursor: pointer;
+  min-height: 24px;
   margin-bottom: 4px;
 }
 .remember-cb {
-  accent-color: var(--blue);
+  appearance: none;
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 1.5px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.remember-cb:hover { border-color: rgba(52, 120, 246, 0.5); }
+.remember-cb:checked { background: var(--blue); border-color: var(--blue); }
+.remember-cb:checked::after {
+  content: '';
+  position: absolute;
+  left: 7px; top: 3px;
+  width: 6px; height: 11px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 </style>
 
@@ -236,14 +261,15 @@ onMounted(() => {
 .field__pwd .field__input { padding-right: 42px; }
 .field__eye {
   position: absolute;
-  right: 8px; top: 50%;
+  right: 5px; top: 50%;
   transform: translateY(-50%);
-  width: 30px; height: 30px;
+  width: 34px; height: 34px;
   border: 0; border-radius: 8px;
   background: transparent;
   color: var(--faint);
   cursor: pointer;
   display: grid; place-items: center;
 }
+
 .field__eye:hover { color: var(--blue-deep); background: rgba(52, 120, 246, 0.07); }
 </style>

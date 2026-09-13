@@ -1277,7 +1277,7 @@ onMounted(loadAll);
   box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
 }
 .card-head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
-.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; transition: color 0.15s ease; }
+.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; padding: 5px 0; transition: color 0.15s ease; }
 .link-muted:hover { color: var(--blue-deep); }
 
 /* ---------- 今日预算（多目标调度台账） ---------- */
@@ -1599,7 +1599,7 @@ a.btn-primary { text-decoration: none; }
 .path__detail-link:hover { text-decoration: underline; }
 .step--blocked .step__dot { border-color: var(--red); box-shadow: 0 0 0 4px rgba(239, 117, 120, 0.14); }
 .mini__icon--medal { font-size: 18px; }
-.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; text-decoration: none; }
+.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; text-decoration: none; padding: 5px 0; }
 .link-muted:hover { color: var(--blue-deep); }
 .dash__main { width: 100%; }
 </style>

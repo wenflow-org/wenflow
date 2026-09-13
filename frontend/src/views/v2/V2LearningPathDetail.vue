@@ -1208,8 +1208,8 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
   padding: 20px 28px 48px;
   display: grid; gap: 16px;
 }
-.crumbs { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--faint); }
-.crumbs__back { font-weight: 600; color: var(--muted); cursor: pointer; }
+.crumbs { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--faint); min-width: 0; }
+.crumbs__back { font-weight: 600; color: var(--muted); cursor: pointer; padding: 5px 0; }
 .crumbs__back:hover { color: var(--blue-deep); }
 .crumbs__current { color: var(--ink); font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crumbs__toggle { flex: 0 0 auto; margin-left: auto; }
@@ -1441,6 +1441,7 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
   align-items: center;
   gap: 4px;
   padding: 3px 9px;
+  min-height: 24px;
   border: none; border-radius: 6px;
   background: transparent;
   font-size: 12px; font-weight: 500;
