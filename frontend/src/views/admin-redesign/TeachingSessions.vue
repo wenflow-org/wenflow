@@ -253,7 +253,7 @@
             <!-- 总结 tab -->
             <div v-if="panelTab === 'wrapup'">
               <section v-if="detail.wrapup" class="ts-section">
-                <h4>会话总结 <span class="ts-src">来源：<span class="mk-badge" :class="detail.wrapupSource === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ detail.wrapupSource }}</span></span></h4>
+                <h4>会话总结 <span class="ts-src">来源：<span class="mk-badge" :class="detail.wrapupSource === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ detail.wrapupSource }}</span><span v-if="detail.wrapupDegraded" class="mk-badge mk-badge--warn ts-degraded">降级总结 · 未完整结束</span></span></h4>
                 <div class="ts-card" v-if="detail.wrapup.topicSummary">
                   <span>主题摘要</span>
                   <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('topic') }">{{ detail.wrapup.topicSummary }}</p>
@@ -266,8 +266,8 @@
                 </div>
                 <div class="ts-card" v-if="detail.wrapup.practiceAdvice">
                   <span>练习建议</span>
-                  <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('practice') }">{{ detail.wrapup.practiceAdvice }}</p>
-                  <button v-if="isLong(detail.wrapup.practiceAdvice)" type="button" class="ts-more" @click="toggleCard('practice')">{{ openCards.has('practice') ? '收起' : '展开全文' }}</button>
+                  <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('practice') }">{{ detail.wrapupDegraded ? '本节课未完整结束（超时或提前中断），未生成完整练习建议。' : detail.wrapup.practiceAdvice }}</p>
+                  <button v-if="!detail.wrapupDegraded && isLong(detail.wrapup.practiceAdvice)" type="button" class="ts-more" @click="toggleCard('practice')">{{ openCards.has('practice') ? '收起' : '展开全文' }}</button>
                 </div>
                 <div class="ts-card" v-if="detail.wrapup.learningEvaluation">
                   <span>学习评估</span>
@@ -363,6 +363,8 @@ interface Row {
   startTime?: string
   wrapup: WrapupSummary | null
   wrapupSource: string
+  /** 降级总结：超时/收束失败兜底（summary-only/*-fallback），练习建议是学习者向占位，后台不原样展示 */
+  wrapupDegraded: boolean
   advisory: { title: string; text: string; priority: string } | null
   rawJson: string
   progress: SessionProgress | null
@@ -459,6 +461,11 @@ function mapRow(s: Record<string, unknown>): Row {
     : null
   const advisoryRelevant = !!advisory && rawAdvisory?.shouldSuggest !== false && !['none', ''].includes(advisory.priority)
   const wrapupStatus = wrapup?.status === 'complete' ? 'complete' : 'missing'
+  const wrapupSources = (wrapup?.sources as Record<string, string>) || {}
+  const rawPracticeAdvice = String(summary?.practiceAdvice || '')
+  const wrapupDegraded = wrapup?.status === 'summary-only'
+    || String(wrapupSources.summary || '').includes('fallback')
+    || /重新开始本节|重新完成一次完整的学习/.test(rawPracticeAdvice)
   const attention: Row['attention'] =
     s.status === 'failed' || s.status === 'timeout' || (s.status === 'completed' && wrapupStatus === 'missing')
       ? 'high'
@@ -488,6 +495,7 @@ function mapRow(s: Record<string, unknown>): Row {
     startTime: s.startTime ? String(s.startTime) : undefined,
     wrapup: summary,
     wrapupSource: (wrapup?.sources as Record<string, string>)?.summary === 'model' ? '模型生成' : '规则/其他',
+    wrapupDegraded,
     advisory,
     rawJson: JSON.stringify({ wrapup, advisory }, null, 2),
     progress: (s.progress as SessionProgress) || null
@@ -867,6 +875,7 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
   gap: 8px;
 }
 .ts-src { font-size: var(--mk-fs-11); font-weight: 600; text-transform: none; letter-spacing: 0; }
+.ts-degraded { margin-left: 6px; }
 .ts-card {
   border: 1px solid var(--mk-line);
   border-radius: 10px;
