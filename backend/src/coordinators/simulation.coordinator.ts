@@ -60,112 +60,45 @@ import type {
   VirtualLearnerProfile,
   VirtualLearnerProfileData,
   GoalConcernPool,
-  LearnerLatentState
+  LearnerLatentState,
+  AssistedLeaseContext,
+  SimulationOrchestratorInput,
+  AutoLoopOptions,
+  RunFullOptions
 } from './simulation.types';
-
-const COORDINATOR_ID = 'simulation-agent';
-const ASSISTED_SESSION_LEASE_MS = 10 * 60 * 1000;
-const ASSISTED_SESSION_LEASE_RENEW_MS = 2 * 60 * 1000;
-const LEASE_RETRY_DELAYS_MS = [25, 50, 100];
-const LEARN_UPSTREAM_RETRY_ATTEMPTS = 8;
-const LEARN_UPSTREAM_RETRY_DELAY_MS = 2000;
-/** 一节课的课时预算：超过仍未双方收束则显式失败（可重启恢复），不允许无限拖堂 */
-const LEARN_TASK_TURN_BUDGET = 40;
-/** 「自动完成本课」单次调用的回合上限（按课界停止，不按里程碑数估算） */
-const LEARN_AUTO_TURN_CAP = 40;
-/** Provider 不稳定时的自动重试上限（每次 executeAutoLearning 循环内） */
-const LEARN_STEP_PROVIDER_RETRIES = 3;
-
-/** 判断错误是否为 LLM Provider 可重试错误（过载/超时/JSON 解析失败） */
-function isProviderRetryable(errorMsg: string): boolean {
-  const e = errorMsg.toLowerCase();
-  // turn_budget_exhausted 是课时预算闸门的显式终止信号：若被当作可重试，
-  // 自动循环会静默 restartLearningPhase 把 turns 归零，预算形同虚设
-  // retry_budget_exhausted 同理：总 AI 调用预算耗尽后 restart 只会再次耗尽，空转恢复次数
-  if (e.includes('turn_budget_exhausted') || e.includes('retry_budget_exhausted')) return false;
-  return e.includes('provider') || e.includes('retry') || e.includes('timeout')
-    || e.includes('overload') || e.includes('budget') || e.includes('503')
-    || e.includes('does not contain valid json') || e.includes('response does not contain');
-}
-/** 保护工作（可能悬挂的 LLM 调用）超过该时限仍未收尾时，强制放行会话队列 */
-const WORK_SETTLE_TIMEOUT_MS = 5 * 60 * 1000;
-/** 疑似卡死 running 会话的判定阈值：无活跃租约且超过该时长未写入 */
-const STALE_RUNNING_SESSION_MS = 30 * 60 * 1000;
-
-function isPrismaErrorCode(error: unknown, code: string) {
-  return typeof error === 'object' && error !== null && asErrorLike(error).code === code;
-}
-
-function isLeaseDatabaseBusyError(error: unknown) {
-  if (isPrismaErrorCode(error, 'P1008')) return true;
-  const code = typeof error === 'object' && error !== null ? String(asErrorLike(error).code || '') : '';
-  const message = error instanceof Error ? error.message : String(error || '');
-  return code === 'SQLITE_BUSY'
-    || /SQLITE_BUSY|database (?:is|table is) locked|timed out|timeout/i.test(message);
-}
-
-export class VirtualSessionLeaseBusyError extends Error {
-  readonly code = 'VIRTUAL_SESSION_BUSY';
-  readonly statusCode = 409;
-  readonly retryable = true;
-
-  constructor() {
-    super('当前模拟会话正在执行其他写操作，请稍后重试');
-    this.name = 'VirtualSessionLeaseBusyError';
-  }
-}
-
-export class VirtualSessionLeaseLostError extends Error {
-  readonly code = 'VIRTUAL_SESSION_LEASE_LOST';
-  readonly statusCode = 409;
-  readonly retryable = true;
-
-  constructor() {
-    super('模拟会话执行租约已丢失，请重试');
-    this.name = 'VirtualSessionLeaseLostError';
-  }
-}
-
-export class VirtualSessionDatabaseBusyError extends Error {
-  readonly code = 'DB_BUSY';
-  readonly statusCode = 503;
-  readonly retryable = true;
-
-  constructor(readonly originalError?: unknown) {
-    super('租约数据库暂时繁忙，请稍后重试');
-    this.name = 'VirtualSessionDatabaseBusyError';
-  }
-}
-
-type AssistedLeaseContext = {
-  sessionId: string;
-  ownerId: string;
-  expiresAt: number;
-  renewal: Promise<void>;
-  failureError: unknown | null;
-  assertLeaseOwned: (leaseClient?: LeaseClientLike) => Promise<void>;
-};
-
-export interface SimulationOrchestratorInput {
-  sessionId: string;
-  userId: string;
-  mode: 'single-step' | 'auto-loop';
-}
-
-export interface AutoLoopOptions {
-  maxRounds?: number;
-  onStep?: (result: SimulationStepResult) => void;
-  autoAdvanceToPath?: boolean;
-  autoAdvanceToLearning?: boolean;
-}
-
-export interface RunFullOptions {
-  maxRounds?: number;
-  maxMilestones?: number;
-  continueOnTaskComplete?: boolean;
-  autoAdvanceToPath?: boolean;
-  autoAdvanceToLearning?: boolean;
-}
+import {
+  COORDINATOR_ID,
+  ASSISTED_SESSION_LEASE_MS,
+  ASSISTED_SESSION_LEASE_RENEW_MS,
+  LEASE_RETRY_DELAYS_MS,
+  LEARN_UPSTREAM_RETRY_ATTEMPTS,
+  LEARN_UPSTREAM_RETRY_DELAY_MS,
+  LEARN_TASK_TURN_BUDGET,
+  LEARN_AUTO_TURN_CAP,
+  WORK_SETTLE_TIMEOUT_MS,
+  STALE_RUNNING_SESSION_MS
+} from './simulation.constants';
+import {
+  isProviderRetryable,
+  isPrismaErrorCode,
+  isLeaseDatabaseBusyError
+} from './simulation.helpers';
+import {
+  VirtualSessionLeaseBusyError,
+  VirtualSessionLeaseLostError,
+  VirtualSessionDatabaseBusyError
+} from './simulation.errors';
+export {
+  VirtualSessionLeaseBusyError,
+  VirtualSessionLeaseLostError,
+  VirtualSessionDatabaseBusyError
+} from './simulation.errors';
+export type {
+  SimulationOrchestratorInput,
+  AutoLoopOptions,
+  RunFullOptions,
+  AssistedLeaseContext
+} from './simulation.types';
 
 class SimulationOrchestrator {
   readonly id = COORDINATOR_ID;

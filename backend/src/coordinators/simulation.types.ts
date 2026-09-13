@@ -1,3 +1,5 @@
+import type { LeaseClientLike } from '../virtual-lab/vlab-types';
+
 export interface VirtualLearnerProfileData {
   age?: number;
   occupation?: string;
@@ -194,4 +196,34 @@ export interface SimulationStepResult {
   goalReady: boolean;
   logs: SimulationLogEntry[];
   error?: string;
+}
+
+export type AssistedLeaseContext = {
+  sessionId: string;
+  ownerId: string;
+  expiresAt: number;
+  renewal: Promise<void>;
+  failureError: unknown | null;
+  assertLeaseOwned: (leaseClient?: LeaseClientLike) => Promise<void>;
+};
+
+export interface SimulationOrchestratorInput {
+  sessionId: string;
+  userId: string;
+  mode: 'single-step' | 'auto-loop';
+}
+
+export interface AutoLoopOptions {
+  maxRounds?: number;
+  onStep?: (result: SimulationStepResult) => void;
+  autoAdvanceToPath?: boolean;
+  autoAdvanceToLearning?: boolean;
+}
+
+export interface RunFullOptions {
+  maxRounds?: number;
+  maxMilestones?: number;
+  continueOnTaskComplete?: boolean;
+  autoAdvanceToPath?: boolean;
+  autoAdvanceToLearning?: boolean;
 }
