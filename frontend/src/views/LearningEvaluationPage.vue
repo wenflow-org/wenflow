@@ -637,7 +637,7 @@ onUnmounted(() => {
 .evaluation-loading,
 .evaluation-error {
   padding: 60px 24px;
-  border: 1px solid rgba(23, 32, 51, 0.06);
+  border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
   display: grid;
@@ -662,7 +662,7 @@ onUnmounted(() => {
 .evaluation-loading__inner { width: 100%; display: grid; gap: 14px; justify-items: stretch; }
 .evaluation-loading__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .evaluation-loading__summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.evaluation-loading__card { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid rgba(23, 32, 51, 0.06); border-radius: 12px; background: color-mix(in srgb, var(--surface) 70%, var(--canvas)); }
+.evaluation-loading__card { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--surface) 70%, var(--canvas)); }
 .evaluation-loading__text { display: inline-flex; align-items: center; gap: 8px; justify-content: center; margin: 4px 0 0; }
 /* 加载 spinner（替代 el-icon Loading，统一 v2 风格） */
 .evaluation-spinner {
@@ -707,7 +707,7 @@ onUnmounted(() => {
   margin-top: 0;
   padding: 28px 32px;
   background: var(--surface);
-  border: 1px solid rgba(23, 32, 51, 0.06);
+  border: 1px solid var(--line);
   border-radius: 16px;
   box-shadow: 0 1px 3px rgba(23, 32, 51, 0.04);
   background-image: none;
@@ -716,7 +716,7 @@ onUnmounted(() => {
 .evaluation-shell :deep(.completion-header) {
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+  border-bottom: 1px solid var(--line);
 }
 
 .evaluation-shell :deep(.completion-title) {
@@ -795,7 +795,7 @@ onUnmounted(() => {
 .evaluation-shell :deep(.metric-card) {
   padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(23, 32, 51, 0.06);
+  border: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
 }
 
@@ -848,7 +848,7 @@ onUnmounted(() => {
 .evaluation-shell :deep(.knowledge-item) {
   padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(23, 32, 51, 0.06);
+  border: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
 }
 
@@ -882,7 +882,7 @@ onUnmounted(() => {
 
 .evaluation-shell :deep(.completion-actions) {
   padding-top: 16px;
-  border-top: 1px solid rgba(23, 32, 51, 0.06);
+  border-top: 1px solid var(--line);
   margin-top: 8px;
   gap: 10px;
 }
@@ -916,7 +916,7 @@ onUnmounted(() => {
   margin: 0 0 6px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--accent-deep, #1f57cc);
+  color: var(--blue-deep, #1f57cc);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -957,7 +957,7 @@ onUnmounted(() => {
   max-width: min(100%, 860px);
   padding: 16px 18px;
   border-radius: 16px;
-  border: 1px solid rgba(23, 32, 51, 0.06);
+  border: 1px solid var(--line);
   display: grid;
   gap: 10px;
 }
@@ -969,8 +969,8 @@ onUnmounted(() => {
 
 .evaluation-transcript-item--user {
   justify-self: end;
-  background: color-mix(in srgb, var(--accent, #3478f6) 8%, white);
-  border-color: rgba(52, 120, 246, 0.12);
+  background: color-mix(in srgb, var(--accent, #3478f6) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--blue, #3478f6) 22%, transparent);
 }
 
 .evaluation-transcript-item__meta {
@@ -1100,5 +1100,12 @@ onUnmounted(() => {
   .evaluation-error {
     display: none;
   }
+}
+
+/* ---- 暗色模式：浅色投影在深底上不可见，改用深色投影（对齐 v2.css .card） ---- */
+[data-theme='dark'] .evaluation-head,
+[data-theme='dark'] .evaluation-transcript-card,
+[data-theme='dark'] .evaluation-shell :deep(.completion-card) {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.25);
 }
 </style>
