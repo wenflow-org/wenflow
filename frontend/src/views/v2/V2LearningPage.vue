@@ -612,6 +612,18 @@ async function continueFromScene() {
   typing.value = true;
   scrollDown();
   const s = session.value;
+  // P5：续讲 revision 是必填项；缺失/非法时先向服务端拉一次最新 revision，
+  // 否则请求必然 409 TEACHING_REVISION_REQUIRED——最需要恢复续讲的时刻反而恢复不了。
+  if (!Number.isInteger(s.revision) || s.revision < 0) {
+    try {
+      const detail = await aiTeachingAPI.getSessionDetail(s.sessionId);
+      if (detail && Number.isInteger(detail.revision) && detail.revision >= 0) {
+        s.revision = detail.revision;
+      }
+    } catch {
+      /* 拉取失败：沿用原值，由后端返回明确错误 */
+    }
+  }
   try {
     let r: Record<string, any>;
     try {
