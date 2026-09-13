@@ -15,7 +15,7 @@ import {
   type TeachingSessionOperationClaim,
   type TeachingSessionRecord,
 } from './TeachingSessionRepository';
-import { knowledgeStateService } from './KnowledgeStateService';
+import { knowledgeStateService, COMPLETION_TARGET_PROGRESS_FLOOR } from './KnowledgeStateService';
 import { peerTriggerService } from './PeerTriggerService';
 import { teachingContextCompressionService } from './TeachingContextCompressionService';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
@@ -772,6 +772,8 @@ function buildEndWrapupFallback(session: TeachingSessionRecord, durationMinutes:
 
 /** 合并后知识点的总数上限（防止模型每轮新增点导致无限膨胀） */
 const MAX_KNOWLEDGE_POINTS = 12;
+/** 收束兜底：回合数达到该值且目标集均分达标、无 pending 时放行，保证课堂不会「永不收敛」 */
+const COMPLETION_TURNS_BACKSTOP = 8;
 
 function normalizeFrozenKnowledgeState(
   frozenPoints: TeachingKnowledgePointState[] | null | undefined,
@@ -807,12 +809,6 @@ function normalizeFrozenKnowledgeState(
     if (merged.length >= MAX_KNOWLEDGE_POINTS) break;
   }
   return merged;
-}
-
-function isKnowledgeStateComplete(points: TeachingKnowledgePointState[] | null | undefined): boolean {
-  return Array.isArray(points)
-    && points.length > 0
-    && points.every((point) => point.status === 'mastered');
 }
 
 function hasPrematureNextStepLanguage(reply: string): boolean {
@@ -1710,8 +1706,27 @@ export class AITeachingOrchestrator {
         session.mode === 'review' // 复习课允许 mastered 降级：复习失败在掌握度数据上真实可见
       )
     );
-    // 知识完成度仍是 completion 的唯一硬门禁；envelope phase 仅作观测 soft 信号
-    const completionReady = isKnowledgeStateComplete(mergedKnowledge);
+    // 收束判定锚定「冻结目标集」而非每轮合并后的膨胀集合：
+    // 目标集在开课（有种子）或首个教学回合冻结，之后模型新增/改名的点不再抬高门槛；
+    // 目标点达到 mastered 或进度≥阈值即视为可收束。envelope phase 仍仅作观测 soft 信号。
+    const frozenTargetsBefore = parseSessionArtifacts(previousTeachingState).completionTargets;
+    const targetsFrozenBefore = Array.isArray(frozenTargetsBefore) && frozenTargetsBefore.length > 0;
+    const completionTargets = knowledgeStateService.resolveCompletionTargets(
+      frozenTargetsBefore,
+      effectiveInitialKnowledgeState,
+      mergedKnowledge,
+    );
+    // 首回合只冻结目标集、不判完成：避免开课注入的到期复习点（retention≥阈值）
+    // 在学员尚未参与任何交互时就把课判成「可收束」。
+    const targetsConsolidated = targetsFrozenBefore
+      && knowledgeStateService.areTargetsConsolidated(completionTargets, mergedKnowledge);
+    // 兜底：回合足够多、无 pending、目标集均分达标 → 放行，保证课堂不会「永不收敛」
+    const teachingTurns = session.messages.filter((message) => message.role === 'assistant').length;
+    const backstopReady = targetsFrozenBefore
+      && teachingTurns >= COMPLETION_TURNS_BACKSTOP
+      && mergedKnowledge.every((point) => point.status !== 'pending')
+      && knowledgeStateService.averageTargetProgress(completionTargets, mergedKnowledge) >= COMPLETION_TARGET_PROGRESS_FLOOR;
+    const completionReady = targetsConsolidated || backstopReady;
     const envelopeCompletionSignal =
       turnRuntimeEnvelope?.businessState?.phase === 'completion-candidate'
       || turnRuntimeEnvelope?.businessState?.isTerminal === true;
@@ -1977,6 +1992,8 @@ export class AITeachingOrchestrator {
       sessionArtifacts: {
         ...parseSessionArtifacts(session.teachingState),
         initialKnowledgeState: effectiveInitialKnowledgeState,
+        // 冻结的收束目标集：只增一次，后续回合沿用（防止目标集随模型新增/改名膨胀）
+        completionTargets,
         pathBackgroundContext: sessionArtifacts.pathBackgroundContext || buildPathBackgroundContext(context),
         endReason: endIntent.isEndIntent
           ? 'learner-requested-end'
