@@ -31,7 +31,7 @@ userStore.initFromStorage();
 // 主题初始化：从 localStorage 或系统偏好读取，防止首屏闪烁。
 // 与 router beforeEach / ThemeToggle / index.html 首屏脚本同源（utils/theme.ts SSOT），
 // 避免「路由切换时按旧 key 回退系统偏好 → 日间模式黑白闪烁」。
-;(function initTheme() {
+(function initTheme() {
   applyDocumentTheme(readTheme());
 })();
 </script>

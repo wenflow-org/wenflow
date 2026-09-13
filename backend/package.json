@@ -1,6 +1,6 @@
 {
   "name": "wenflow-backend",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "WenFlow Backend - 问流后端 API",
   "main": "dist/index.js",
   "scripts": {
@@ -14,6 +14,7 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test:ci": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage",
     "runtime:validate": "node scripts/validate-runtime-environment.js",
     "secrets:audit": "npm run runtime:validate && ts-node src/scripts/migrate-database-secrets.ts",
     "secrets:migrate": "npm run runtime:validate && ts-node src/scripts/migrate-database-secrets.ts --apply",

@@ -774,7 +774,7 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
         && parsedPromptTemplate.goalFinalPayload.rawGoal.trim()
         ? parsedPromptTemplate.goalFinalPayload.rawGoal.trim()
         : null;
-      let baseGoal = rawGoal || path.description || path.title || path.name || '个性化学习路径';
+      const baseGoal = rawGoal || path.description || path.title || path.name || '个性化学习路径';
       pathOrchestrator.runAsync({
         userId,
         description: adjustments

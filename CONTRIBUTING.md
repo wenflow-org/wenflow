@@ -47,9 +47,17 @@ npm run env:setup
 npm run check
 ```
 
-它依次执行：secret 扫描 → Prisma 双 schema 校验 → 空库迁移回放 → 后端 typecheck → LLM 调用契约检查 → 迁移部署 → prompts 门禁 → lint → 后端测试 → 前端测试 → 前后端构建。
+它依次执行：secret 扫描 → Prisma 双 schema 校验 → 空库迁移回放 → 后端 typecheck → 前端 typecheck → LLM 调用契约检查 → 迁移部署 → prompts 门禁 → lint → 后端测试 → 前端测试 → 前后端构建。
 
-`.github/workflows/quality-check.yml` 会在 push `main` / `master` / `develop` 与 PR 时执行同一套检查，并额外扫描可达 Git 历史中的密钥。
+`.github/workflows/quality-check.yml` 会在 push `main` / `master` / `develop` 与 PR 时执行同一套检查，并额外扫描可达 Git 历史中的密钥。CI 把检查拆成 3 个并行 job（质量 / 测试 / 构建），分别对应本地可单独复现的子命令：
+
+```bash
+npm run check:quality    # secret / prisma / 类型 / prompts 门禁 / lint
+npm run check:test       # 后端 + 前端测试（带覆盖率门槛）
+npm run check:build      # 前后端构建
+```
+
+`check:test` 会强制覆盖率门槛（`backend/jest.config.js`、`frontend/vitest.config.ts` 的 `coverageThreshold` / `thresholds`），目标是防劣化：可以小幅上调，但不要为了过 CI 下调。
 
 单独运行某个环节：
 
@@ -62,6 +70,14 @@ npm run security:scan            # 当前工作区 + Git 历史的密钥扫描
 ```
 
 **提交的底线是 `npm run check` 全绿。** 如果某一步在本地无法复现，请在 PR 描述中说明，不要静默绕过。
+
+### 类型安全：`any` 存量冻结
+
+`@typescript-eslint/no-explicit-any` 在前后端均设为 `error`。为不阻塞历史代码，审计时已把当时违规的文件列入 `backend/.eslintrc.json` / `frontend/.eslintrc.cjs` 的 `overrides` 白名单并临时关闭该规则：
+
+- **新增文件禁止使用 `any`**，否则 `npm run lint` 直接失败。
+- 修改白名单中的旧文件时，顺手把 `any` 换成具体类型；改干净后请把该文件从白名单中删掉（白名单只减不增）。
+- 不要把规则改回 `warn`，也不要为了让新代码通过而扩大白名单。
 
 ## 四、Prompt 与 Skill 改动铁律（File-as-Truth）
 

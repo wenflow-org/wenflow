@@ -9,7 +9,10 @@ const { postMock, createMock } = vi.hoisted(() => {
   const postMock = vi.fn();
   const createMock = vi.fn(() => ({
     post: postMock,
-    interceptors: { response: { use: vi.fn() } },
+    interceptors: {
+      request: { use: vi.fn() },
+      response: { use: vi.fn() },
+    },
     get: vi.fn(),
     put: vi.fn(),
     delete: vi.fn(),

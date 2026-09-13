@@ -156,7 +156,7 @@ AI_MODEL=deepseek-v4-flash
 AI_MODEL_REASONING=deepseek-v4-pro
 
 INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=Admin@2026Strong
+INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
 ```
 
 数据库 Secret 升级或轮换顺序：
@@ -290,7 +290,7 @@ Copy-Item frontend/.env.example frontend/.env
 
 ```env
 INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=Admin@2026Strong
+INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
 ```
 
 说明：

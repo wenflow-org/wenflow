@@ -105,10 +105,14 @@ describe('skills-readiness：W3 接线双向', () => {
       makeEntry({ skillId: 'goal-conversation', coordinator: { agentId: 'goal-agent', steps: [{ step: 1, role: 'goal-clarification' }] } }),
       makeEntry({ skillId: 'teaching-opening-generator', kind: 'aux', coordinator: { agentId: 'teaching-agent', steps: [{ step: 2, role: 'opening-generation' }] } }),
       makeEntry({ skillId: 'virtual-learner-goal-dialogue-simulator', coordinator: { agentId: 'simulation-agent', steps: [{ step: 1, role: 'goal-stage-learner-turn-simulation' }] } }),
-      // steps:[] 豁免清单三例
+      // steps:[] 豁免清单（W3_STEPS_EMPTY_EXEMPT 全量 7 例）
       makeEntry({ skillId: 'adaptive-guidance-copy', coordinator: { agentId: 'teaching-agent', steps: [] } }),
       makeEntry({ skillId: 'virtual-learner-persona-designer', coordinator: { agentId: 'simulation-agent', steps: [] } }),
       makeEntry({ skillId: 'virtual-learner-scenario-designer', coordinator: { agentId: 'simulation-agent', steps: [] } }),
+      makeEntry({ skillId: 'path-reviewer', coordinator: { agentId: 'path-agent', steps: [] } }),
+      makeEntry({ skillId: 'kc-mapper', coordinator: { agentId: 'path-agent', steps: [] } }),
+      makeEntry({ skillId: 'learning-predictor', coordinator: { agentId: 'profile-agent', steps: [] } }),
+      makeEntry({ skillId: 'virtual-learner-epistemic-grounding', coordinator: { agentId: 'simulation-agent', steps: [] } }),
       // 无 coordinator 块的 aux（service 直调）与 platform-direct
       makeEntry({ skillId: 'learner-progress-report', kind: 'aux' }),
       makeEntry({ skillId: 'semantic-freeze-judge', kind: 'aux', registrationPoint: 'platform-direct' }),

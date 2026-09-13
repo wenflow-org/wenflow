@@ -1,6 +1,6 @@
 # WenFlow
 
-![WenFlow Banner](docs/logo/品牌横幅.png)
+![WenFlow Banner](doc/logo/品牌横幅.png)
 
 > ⚠️ **Current Main Development**: [develop](https://github.com/wenflow-org/wenflow/tree/develop) branch | main is stable
 
@@ -49,22 +49,22 @@ These six screenshots show WenFlow's core experience, from a real problem to a c
 
 | ① Start from a Real Problem |
 |:---:|
-| ![Start from a Real Problem](docs/images/home-start-from-problem.png) |
+| ![Start from a Real Problem](doc/images/home-start-from-problem.png) |
 | Learners state their problem first, rather than choosing a course |
 
 | ② Clarify the Real Goal | ③ Generate a Learning Path |
 |:---:|:---:|
-| ![Clarify the Real Goal](docs/images/goal-clarification.png) | ![Generate a Learning Path](docs/images/learning-path.png) |
+| ![Clarify the Real Goal](doc/images/goal-clarification.png) | ![Generate a Learning Path](doc/images/learning-path.png) |
 | The AI clarifies the real goal through multi-round questioning | A vague goal becomes phases, tasks, and an actionable first step |
 
 | ④ Enter Round-based Learning | ⑤ Learning Loop Overview |
 |:---:|:---:|
-| ![Enter Round-based Learning](docs/images/round-based-learning.png) | ![Learning Loop Overview](docs/images/learning-loop-overview.png) |
+| ![Enter Round-based Learning](doc/images/round-based-learning.png) | ![Learning Loop Overview](doc/images/learning-loop-overview.png) |
 | The AI teaches, the learner answers, and feedback is immediate; teaching adapts dynamically | A post-session summary and evaluation provide guidance on what to learn next |
 
 | ⑥ Learning State Tracking |
 |:---:|
-| ![Learning State Tracking](docs/images/learning-state.png) |
+| ![Learning State Tracking](doc/images/learning-state.png) |
 | LSS / KTL / LF / LSB tracked continuously, with rest prompts when fatigue is detected |
 
 ### From Problem to Path
@@ -330,7 +330,7 @@ On first startup, the system reads these fields from `backend/.env` to auto-crea
 
 ```env
 INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=Admin@2026Strong
+INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
 ```
 
 If admin already exists in database, creation is skipped.

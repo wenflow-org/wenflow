@@ -6,17 +6,28 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: file:./ci-main.db
+  SYSTEM_DATABASE_URL: file:./ci-system.db
+  JWT_SECRET: ci-only-jwt-secret-with-at-least-32-characters
+  SECRET_ENCRYPTION_CURRENT_KEY_ID: ci
+  SECRET_ENCRYPTION_KEYS: ci:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=
+  NODE_ENV: test
+
+# 三个阶段可以在本地用 `npm run check:quality` / `check:test` / `check:build`
+# 逐条复现；CI 只是把它们拆到并行 job，避免单个 20 分钟 job 同时背所有检查。
 jobs:
-  required-checks:
+  quality:
+    name: Quality (secrets / types / prompts / lint)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      DATABASE_URL: file:./ci-main.db
-      SYSTEM_DATABASE_URL: file:./ci-system.db
-      JWT_SECRET: ci-only-jwt-secret-with-at-least-32-characters
-      SECRET_ENCRYPTION_CURRENT_KEY_ID: ci
-      SECRET_ENCRYPTION_KEYS: ci:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=
-      NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,21 +50,67 @@ jobs:
         working-directory: backend
       - name: Scan reachable Git history for secrets
         run: npm run security:scan:history
-      - name: Run required quality checks
-        run: npm run check
-      - name: Run frontend unit tests
-        run: npm test
-        working-directory: frontend
-      - name: Lint backend and frontend
-        run: npm run lint
-      - name: Run prompt contract gates (File-as-Truth)
+      - name: Run quality checks
+        run: npm run check:quality
+
+  test:
+    name: Tests (with coverage)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci
         working-directory: backend
-        run: |
-          npm run prompts:lint
-          npm run prisma:migrate:deploy:all
-          npm run prompts:seed-routings
-          npm run prompts:drift-check
-          npm run prompts:check-handoff:strict
-          npm run prompts:snapshots:check
-          npm run prompts:core:check
-          npm run prompts:runtime-contract:check
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+      - name: Generate Prisma clients
+        run: npm run prisma:generate
+        working-directory: backend
+      - name: Deploy database migrations
+        run: npm --prefix backend run prisma:migrate:deploy:all
+      - name: Run backend and frontend tests with coverage
+        run: npm run check:test
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            backend/coverage
+            frontend/coverage
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build:
+    name: Build (backend / frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+      - name: Generate Prisma clients
+        run: npm run prisma:generate
+        working-directory: backend
+      - name: Build backend and frontend
+        run: npm run check:build

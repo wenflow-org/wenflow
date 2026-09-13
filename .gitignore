@@ -89,8 +89,8 @@ Thumbs.db
 *.gif
 *.bmp
 *.webp
-!docs/**/*.png
-!docs/**/*.jpg
+!doc/**/*.png
+!doc/**/*.jpg
 !frontend/public/**/*
 
 # Test files

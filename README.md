@@ -1,6 +1,6 @@
 # WenFlow
 
-![WenFlow 品牌横幅](docs/logo/品牌横幅.png)
+![WenFlow 品牌横幅](doc/logo/品牌横幅.png)
 
 > ⚠️ **当前主要开发版本**: [develop](https://github.com/wenflow-org/wenflow/tree/develop) 分支 | main 分支为稳定版
 
@@ -49,22 +49,22 @@
 
 | ① 从一个问题开始 |
 |:---:|
-| ![从一个问题开始](docs/images/home-start-from-problem.png) |
+| ![从一个问题开始](doc/images/home-start-from-problem.png) |
 | 学习者先陈述问题，而非直接选课 |
 
 | ② 澄清真实目标 | ③ 生成学习路径 |
 |:---:|:---:|
-| ![澄清真实目标](docs/images/goal-clarification.png) | ![生成学习路径](docs/images/learning-path.png) |
+| ![澄清真实目标](doc/images/goal-clarification.png) | ![生成学习路径](doc/images/learning-path.png) |
 | AI 通过多轮追问澄清真实目标 | 将模糊目标拆解为阶段、任务与可立即执行的第一步 |
 
 | ④ 进入回合式学习 | ⑤ 学习闭环总览 |
 |:---:|:---:|
-| ![进入回合式学习](docs/images/round-based-learning.png) | ![学习闭环总览](docs/images/learning-loop-overview.png) |
+| ![进入回合式学习](doc/images/round-based-learning.png) | ![学习闭环总览](doc/images/learning-loop-overview.png) |
 | AI 讲解、学习者作答并即时获得反馈，教学过程动态调整 | 课后生成总结与评估，并给出后续学习建议 |
 
 | ⑥ 学习状态追踪 |
 |:---:|
-| ![学习状态追踪](docs/images/learning-state.png) |
+| ![学习状态追踪](doc/images/learning-state.png) |
 | LSS / KTL / LF / LSB 持续追踪学习状态，并在疲劳时予以提醒 |
 
 ### 从问题到路径
@@ -158,7 +158,7 @@ flowchart TD
 | **虚拟实验** | Virtual Learner Lab（黑盒模拟 + Quick Learn） |
 | **可观测** | Agent/Skill 调用日志、Trace 瀑布、LLM 执行明细 |
 | **安全** | JWT + CSRF + 登录限流 + Secret AES-256-GCM 静态加密 + 敏感存储权限审计 |
-| **部署** | PowerShell 启动脚本 + 可选 Nginx（测试部署）+ Docker（Linux/macOS） |
+| **部署** | 跨平台启动脚本（`npm run dev`：Windows PowerShell / Linux·macOS bash）+ 可选 Nginx（测试部署）+ Docker（Linux/macOS 推荐） |
 
 ---
 
@@ -176,7 +176,8 @@ WenFlow 目前仍处于**早期开发阶段**，是一个用于验证教学概�
 
 ### 环境要求
 - Node.js >= 20.17.0
-- 推荐 Windows + PowerShell 5.1+；根目录启动脚本当前未适配 Linux/macOS
+- Windows + PowerShell 5.1+ 或 Linux/macOS + bash 均可；`npm run dev` 会按平台自动选择 `start-dev.ps1` / `start-dev.sh`
+- Linux/macOS 不想在本机装依赖时，推荐直接走 Docker：`./docker-start.sh`
 
 安全与 Secret 管理见 [`SECURITY.md`](./SECURITY.md)。提交前运行 `npm run security:scan`。
 
@@ -186,10 +187,10 @@ WenFlow 目前仍处于**早期开发阶段**，是一个用于验证教学概�
 
 ```bash
 # 1) 初始化 backend/.env（JWT_SECRET、AI 配置、初始管理员）
-npm run env:setup
+npm run env:setup        # Windows PowerShell；Linux/macOS 用 cp backend/.env.example backend/.env 后手工填写
 
-# 2) 按需选择启动方式
-./start-dev.ps1
+# 2) 跨平台启动（Windows → start-dev.ps1，Linux/macOS → start-dev.sh）
+npm run dev
 ```
 
 说明：建议首次使用先完成环境初始化，再选择启动脚本。若 `backend/.env` 缺失或 `JWT_SECRET` 不合格，启动脚本也会自动拉起初始化流程。
@@ -198,12 +199,15 @@ npm run env:setup
 ### 本机开发
 
 ```bash
-# PowerShell
-./start-dev.ps1
+npm run dev              # 跨平台：Windows 走 start-dev.ps1，Linux/macOS 走 start-dev.sh
+
+# 也可显式指定
+npm run dev:win          # Windows PowerShell
+npm run dev:unix         # Linux/macOS bash
 ```
 
 说明：脚本会自动安装依赖、生成双 Prisma Client、给主库和 System DB 分别执行 migrate、必要时引导创建或补全 `backend/.env`，启动前再自动同步一次 core prompts。
-如需跳过 Prisma 初始化可使用：`./start-dev.ps1 -SkipPrisma`。注意：该选项也会跳过启动前的 core prompts 同步，仅适用于数据库和 prompts 已经准备好的环境。
+如需跳过 Prisma 初始化：PowerShell 用 `./start-dev.ps1 -SkipPrisma`，bash 用 `./start-dev.sh --skip-prisma`。注意：该选项也会跳过启动前的 core prompts 同步，仅适用于数据库和 prompts 已经准备好的环境。
 
 ### 局域网开发模式
 
@@ -331,7 +335,7 @@ npm run prompts:core:check
 
 ```env
 INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=Admin@2026Strong
+INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
 ```
 
 如果数据库里已经存在管理员，系统会自动跳过创建。

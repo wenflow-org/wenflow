@@ -17,13 +17,28 @@ export type InitializeAdminResult =
 /** 开发环境内置默认初始密码（生产环境必须显式配置 INIT_ADMIN_PASSWORD） */
 export const DEFAULT_INIT_ADMIN_PASSWORD = 'ChangeMe_2026_Admin';
 
+/**
+ * 明确禁止的示例 / 默认口令集合。
+ * 目的：文档里出现的示例值若被直接复制上线，启动时立即失败，而不是静默生效。
+ * 注意：DEFAULT_INIT_ADMIN_PASSWORD 仅在开发环境「未配置」时被回退使用（不会进入本校验）；
+ * 若有人显式把它或文档占位符写进 INIT_ADMIN_PASSWORD，这里会拒绝。
+ */
+const DISALLOWED_INIT_ADMIN_PASSWORDS = new Set([
+  'admin123',
+  'password',
+  'yourstrongpassword123',
+  'admin@2026strong',
+  'changeme_2026_admin',
+  'change_me_before_deploy',
+]);
+
 function initialAdminPassword(environment: NodeJS.ProcessEnv): string | null {
   const configured = environment.INIT_ADMIN_PASSWORD;
   if (configured !== undefined && configured.trim() !== '') {
     const password = configured.trim();
     if (password.length < 12 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)
-      || /^(admin123|password|yourstrongpassword123)$/i.test(password)) {
-      throw new Error('INIT_ADMIN_PASSWORD 必须至少 12 位并包含大小写字母和数字，且不能使用示例弱密码');
+      || DISALLOWED_INIT_ADMIN_PASSWORDS.has(password.toLowerCase())) {
+      throw new Error('INIT_ADMIN_PASSWORD 必须至少 12 位并包含大小写字母和数字，且不能使用文档示例 / 默认弱密码');
     }
     return password;
   }

@@ -41,6 +41,7 @@ vi.mock('../live', async () => {
     timeAgo: () => 'x',
     errMsg: (e: unknown) => String(e),
     shortId: (id: string) => id.slice(0, 8),
+    liveAutopilotConcurrency: ref({ used: 0, limit: 10, queued: 0 }),
     /* VL 列表页使用共享 <Pagination> 页码器（依赖 live.totalPagesOf） */
     totalPagesOf: (total: number, pageSize: number) => Math.max(1, Math.ceil(total / pageSize))
   };

@@ -1,13 +1,15 @@
 {
   "name": "wenflow",
-  "version": "1.0.0",
-  "description": "问流 / WenFlow - A learning system for navigating uncertainty",
-  "main": "index.js",
+  "version": "0.2.0",
+  "description": "问流 / WenFlow - 从真实问题出发的 AI 学习路径原型（先澄清目标，再生成路径）",
+  "private": true,
   "directories": {
-    "doc": "docs"
+    "doc": "doc"
   },
   "scripts": {
-    "dev": "powershell -ExecutionPolicy Bypass -File ./start-dev.ps1",
+    "dev": "node scripts/dev-entry.mjs",
+    "dev:win": "powershell -ExecutionPolicy Bypass -File ./start-dev.ps1",
+    "dev:unix": "bash ./start-dev.sh",
     "dev:nginx": "powershell -ExecutionPolicy Bypass -File ./start-dev.ps1 -UseNginx",
     "dev:lan": "powershell -ExecutionPolicy Bypass -File ./start-lan.ps1",
     "env:setup": "powershell -ExecutionPolicy Bypass -File ./setup-env.ps1",
@@ -25,6 +27,7 @@
     "database:backup:create": "npm run build:backend && npm --prefix backend run database:backup:create --",
     "database:backup:verify": "npm run build:backend && npm --prefix backend run database:backup:verify --",
     "test": "npm --prefix backend run test:ci",
+    "test:coverage": "npm --prefix backend run test:coverage",
     "typecheck:backend": "npm --prefix backend run typecheck",
     "build:backend": "npm --prefix backend run build",
     "build:frontend": "npm --prefix frontend run build",
@@ -33,19 +36,27 @@
     "prompts:check": "npm --prefix backend run prompts:check:all",
     "prompts:core:check": "npm --prefix backend run prompts:core:check",
     "prompts:runtime-contract:check": "npm --prefix backend run prompts:runtime-contract:check",
-    "check": "npm run security:scan:current && npm run prisma:validate && npm run prisma:migrate:verify-clean && npm run typecheck:backend && npm run llm:calls:check && npm --prefix backend run prisma:migrate:deploy:all && npm run prompts:check && npm run lint && npm test && npm --prefix frontend run test && npm run build:backend && npm run build:frontend",
+    "check:quality": "npm run security:scan:current && npm run prisma:validate && npm run prisma:migrate:verify-clean && npm run typecheck:backend && npm run check:frontend-types && npm run llm:calls:check && npm --prefix backend run prisma:migrate:deploy:all && npm --prefix backend run prompts:seed-routings && npm run prompts:check && npm run prompts:core:check && npm run prompts:runtime-contract:check && npm run lint",
+    "check:test": "npm --prefix backend run test:coverage && npm --prefix frontend run test:coverage",
+    "check:build": "npm run build:backend && npm run build:frontend",
+    "check": "npm run check:quality && npm run check:test && npm run check:build",
     "check:frontend-types": "npm --prefix frontend run typecheck",
     "lint": "npm --prefix backend run lint && npm --prefix frontend run lint"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "ai-agent",
+    "ai-learning",
+    "education",
+    "learning-platform",
+    "learning-system",
+    "llm"
+  ],
+  "author": "Jinl2l3",
   "license": "MIT",
   "engines": {
     "node": ">=20.17.0"
   },
-  "dependencies": {
-    "axios": "^1.13.6",
-    "oh-my-opencode-windows-x64": "^3.12.3",
+  "devDependencies": {
     "playwright": "^1.58.2"
   }
 }

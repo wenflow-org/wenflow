@@ -1220,7 +1220,8 @@ export class AITeachingOrchestrator {
       const run = this.checkIdleSessions();
       this.idleCheckInFlight = run;
       void run.catch(error => {
-        logger.warn('[AITeaching] idle session scan failed', {
+        // 防御：巡检失败时日志器本身也可能被替换/不完整（测试替身），日志失败不应拖垮进程
+        logger.warn?.('[AITeaching] idle session scan failed', {
           error: error instanceof Error ? error.message : String(error)
         });
       }).finally(() => {
