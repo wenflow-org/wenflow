@@ -74,4 +74,41 @@ describe('aiTeachingAPI.finalizeSessionReliably 幂等键', () => {
 
     expect(post).toHaveBeenCalledTimes(1)
   })
+
+  it('首次抛错（409）时仍会用服务端 revision 换新 key 补偿重试（P1：补偿分支此前不可达）', async () => {
+    post.mockRejectedValueOnce(Object.assign(new Error('Idempotency-Key 已用于不同的课堂结束请求'), {
+      response: { status: 409 },
+    }))
+    get.mockResolvedValueOnce({
+      data: {
+        status: 'completed',
+        revision: 5,
+        session: { status: 'completed' },
+        finalization: { sessionClosure: 'completed', taskCompletion: 'not_started' },
+      },
+    })
+    post.mockResolvedValueOnce({
+      data: {
+        status: 'completed',
+        revision: 6,
+        session: { status: 'completed' },
+        finalization: { taskCompletion: 'completed' },
+      },
+    })
+
+    const result = await aiTeachingAPI.finalizeSessionReliably('sess-3', {
+      action: 'complete_task',
+      revision: 4,
+    })
+
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(post).toHaveBeenCalledTimes(2)
+    const firstKey = post.mock.calls[0][2].headers['Idempotency-Key']
+    const secondKey = post.mock.calls[1][2].headers['Idempotency-Key']
+    expect(secondKey).toBeTruthy()
+    expect(secondKey).not.toBe(firstKey)
+    // 补偿用服务端返回的 revision，而不是原始 revision
+    expect(post.mock.calls[1][1].revision).toBe(5)
+    expect(result.finalization?.taskCompletion).toBe('completed')
+  })
 })

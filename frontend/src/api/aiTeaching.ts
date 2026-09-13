@@ -612,41 +612,44 @@ export const aiTeachingAPI = {
       reason?: 'manual-end' | 'learner-abandoned' | 'task-completed';
     }
   ): Promise<FinalizationResult> {
-    const operationId = finalizationKey();
     let result: FinalizationResult;
     try {
-      result = await this.finalizeSession(sessionId, payload, operationId);
+      result = await this.finalizeSession(sessionId, payload, finalizationKey());
     } catch (error) {
       const recovered = await this.getFinalization(sessionId).catch(() => null);
-      if (!recovered || (!finalizationStepCompleted(recovered, payload.action) && recovered.status !== 'processing')) {
-        if (recovered && error && typeof error === 'object') {
-          (error as { finalization?: FinalizationResult }).finalization = recovered;
-        }
-        throw error;
-      }
+      // 连结算状态都拿不到：无法安全补偿，原样抛出。
+      if (!recovered) throw error;
+      // 首次失败但服务端已有结算状态：落到下方统一的「未完成则换新 key 补一次」补偿。
+      // P1 修复：原实现在这里只要步骤未完成且非 processing 就直接 throw，
+      // 导致下面那段换新 Idempotency-Key 的补偿分支永远不可达（用户点了也白点）。
       result = recovered;
     }
 
     const deadline = Date.now() + 60_000;
-    while (result.status === 'processing' && Date.now() < deadline) {
-      await wait(result.pollAfterMs || 1500);
-      result = await this.getFinalization(sessionId);
-    }
-    const targetStep = payload.action === 'end_only'
-      ? result.finalization?.sessionClosure
-      : payload.action === 'complete_task'
-        ? result.finalization?.taskCompletion
-        : result.finalization?.reviewCompletion;
-    if (!finalizationStepCompleted(result, payload.action) && (targetStep === 'not_started' || targetStep === 'skipped')) {
-      // 此重试携带的是「新 revision」——属于不同的课堂结束请求，必须换新的 Idempotency-Key。
-      // 复用同一 key + 变更 revision 会被后端以 FINALIZATION_IDEMPOTENCY_KEY_REUSED(409) 拒绝。
-      result = await this.finalizeSession(sessionId, {
-        ...payload,
-        revision: result.revision
-      }, finalizationKey());
-      while (result.status === 'processing' && Date.now() < deadline) {
-        await wait(result.pollAfterMs || 1500);
-        result = await this.getFinalization(sessionId);
+    const pollUntilSettled = async (initial: FinalizationResult): Promise<FinalizationResult> => {
+      let current = initial;
+      while (current.status === 'processing' && Date.now() < deadline) {
+        await wait(current.pollAfterMs || 1500);
+        current = await this.getFinalization(sessionId);
+      }
+      return current;
+    };
+    result = await pollUntilSettled(result);
+
+    if (!finalizationStepCompleted(result, payload.action)) {
+      const targetStep = payload.action === 'end_only'
+        ? result.finalization?.sessionClosure
+        : payload.action === 'complete_task'
+          ? result.finalization?.taskCompletion
+          : result.finalization?.reviewCompletion;
+      if (targetStep === 'not_started' || targetStep === 'skipped') {
+        // 此重试携带「服务端当前 revision」——属于不同的课堂结束请求，必须换新的 Idempotency-Key。
+        // 复用同一 key + 变更 revision 会被后端以 FINALIZATION_IDEMPOTENCY_KEY_REUSED(409) 拒绝。
+        result = await this.finalizeSession(sessionId, {
+          ...payload,
+          revision: result.revision
+        }, finalizationKey());
+        result = await pollUntilSettled(result);
       }
     }
     if (!finalizationStepCompleted(result, payload.action)) {
