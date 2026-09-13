@@ -3,7 +3,7 @@
 > 状态：**生效中（Active）**
 > 起草日期：2026-06-18
 > 适用版本：WenFlow 平台后端 / 前端管理台
-> 取代：`doc/archive/AGENT_IO_DESIGN.md`（v1.1）、`doc/archive/AGENT_IO_DESIGN_V2.md`、`doc/archive/contracts/GOAL_CONVERSATION_FIELDS.md`、`doc/archive/GOAL_CONVERSATION_LAYERING_NOTE.md`、`doc/archive/STRUCTURED_CONVERSATION_PATTERN.md`
+> 取代：v1.1 / v2 / 旧字段契约 / layering / structured-pattern 等早期设计稿（已于 2026-09-05 清理，仅存本机，不在仓库）
 > 受众：平台开发者、运营管理员、新接手 V3 体系的工程师
 > **落地注记（2026-08，配置式值流转）**：本设计的字段调度引擎（AgentFieldDispatcher）已激活接线——
 > - `field_definitions.pathInRawOutput` 列已落地（goal 阶段 28 字段 + teaching 回合 5 通道已登记），作为值抽取的物理路径；
@@ -910,7 +910,7 @@ Phase 1 实施完成后必须走通以下 5 件事，作为"V3 模型成立"的�
 按编号顺序执行，每个 P 项目一次性 commit。**不在乎工时，只在乎功能完成**。
 
 ### P1.0 — 文档归档与 V3 起草 ✅ 已完成
-- 旧 v1/v2/contracts/layering/structured-pattern 归档至 `doc/archive/`
+- 旧 v1/v2/contracts/layering/structured-pattern 已归档（2026-09-05 清理，仅存本机）
 - 起草本文档（`doc/AGENT_IO_DESIGN_V3.md`）
 
 ### P1.1 — 修高价值 bug
@@ -984,13 +984,13 @@ Phase 1 实施完成后必须走通以下 5 件事，作为"V3 模型成立"的�
 
 ### P1.12 — V3 文档定稿
 - 本文档（`doc/AGENT_IO_DESIGN_V3.md`）随实现迭代修正
-- 新增 `doc/archive/STAGE_MIGRATION_GUIDE.md`（2026-08-09 归档）：垦荒一个 stage 的标准操作流程（给 Phase 2-4 用）
+- 新增 stage 迁移 SOP《STAGE_MIGRATION_GUIDE》（2026-08-09；2026-09-05 起归档为仅本机，不在仓库）：垦荒一个 stage 的标准操作流程（给 Phase 2-4 用）
 
 ---
 
 ## 11. Phase 2-4 SOP
 
-每个新 stage 的标准 6 步走（详见 `doc/archive/STAGE_MIGRATION_GUIDE.md`）：
+每个新 stage 的标准 6 步走（原详解见已归档的《STAGE_MIGRATION_GUIDE》，仅存本机）：
 
 1. **盘点字段**：找出该 stage 当前所有字段（prompt + 代码 + 文档），生成 `<STAGE>_FIELD_DEFINITIONS` 数组
 2. **盘点路由**：分析每个字段的 render/handoff/internal/accumulate 现状（前端读吗？哪个下游消费？）
@@ -1115,9 +1115,7 @@ V3 模型稳定后（Phase 1 静默期通过 + Phase 2 落地）启动独立 ren
 
 #### 文档
 - `doc/AGENT_IO_DESIGN_V3.md` （本文档）
-- `doc/archive/AGENT_IO_DESIGN.md` v1（已归档）
-- `doc/archive/AGENT_IO_DESIGN_V2.md` v2（已归档）
-- `doc/archive/contracts/GOAL_CONVERSATION_FIELDS.md` 旧字段契约（已归档）
+- v1 / v2 / 旧字段契约等早期文档（2026-09-05 起已清理，仅存本机，不在仓库）
 
 ### 14.3 与早期 v1/v2 文档概念对应表
 

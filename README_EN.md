@@ -158,7 +158,7 @@ The admin panel lives at `/admin` with 18 scene pages (grouped by the sidebar), 
 | **Virtual Experiment** | Virtual Learner Lab (black-box simulation + Quick Learn) |
 | **Observability** | Agent/Skill call logs, trace waterfall, LLM execution details |
 | **Security** | JWT + CSRF + login rate limiting + Secret AES-256-GCM encryption + sensitive-storage permission audits |
-| **Deployment** | PowerShell scripts + optional Nginx (test deployment) + Docker (Linux/macOS) |
+| **Deployment** | Cross-platform start script (`npm run dev`: Windows `start-dev.ps1` / Linux·macOS `start-dev.sh`) + optional Nginx + Docker (recommended for Linux/macOS) |
 
 ---
 
@@ -176,7 +176,8 @@ The project will continue to explore how to cultivate five capabilities that mat
 
 ### Requirements
 - Node.js >= 20.17.0
-- Recommended: Windows + PowerShell 5.1+; the root startup scripts are Windows-only. On Linux/macOS, use the Docker deployment.
+- Windows + PowerShell 5.1+ or Linux/macOS + bash; `npm run dev` selects `start-dev.ps1` / `start-dev.sh` by platform.
+- On Linux/macOS without a local toolchain setup, Docker is recommended: `./docker-start.sh`.
 
 ### Recommended Order (First Run)
 
@@ -186,10 +187,10 @@ Runtime status: `/health` and `/livez` report process liveness; `/readyz` verifi
 
 ```bash
 # 1) Initialize backend/.env (JWT_SECRET, AI config, initial admin)
-npm run env:setup
+npm run env:setup        # Windows PowerShell; on Linux/macOS: cp backend/.env.example backend/.env, then edit
 
-# 2) Choose a startup mode as needed
-./start-dev.ps1
+# 2) Start (cross-platform: Windows -> start-dev.ps1, Linux/macOS -> start-dev.sh)
+npm run dev
 ```
 
 Note: For first-time use, it is recommended to finish environment setup before choosing a startup script. If `backend/.env` is missing or `JWT_SECRET` is invalid, the startup scripts will also launch the setup flow automatically.
@@ -198,12 +199,15 @@ When the backend starts, core prompts are synced from the repo into the database
 ### Local Development
 
 ```bash
-# PowerShell
-./start-dev.ps1
+npm run dev              # cross-platform: Windows -> start-dev.ps1, Linux/macOS -> start-dev.sh
+
+# Or explicitly
+npm run dev:win          # Windows PowerShell
+npm run dev:unix         # Linux/macOS bash
 ```
 
 Note: The script installs dependencies, generates both Prisma clients, runs migrations for the main and System databases, guides environment setup if needed, and syncs core prompts once before startup.
-To skip Prisma initialization: `./start-dev.ps1 -SkipPrisma`  
+To skip Prisma initialization: `./start-dev.ps1 -SkipPrisma` (PowerShell) or `./start-dev.sh --skip-prisma` (bash).
 Important: this flag also skips the startup prompt sync, so it should only be used when both the database schema and prompt records are already ready.
 
 ### LAN Development Mode

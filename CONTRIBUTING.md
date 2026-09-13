@@ -25,19 +25,19 @@
 环境要求：
 
 - Node.js >= 20.17.0
-- 推荐 Windows + PowerShell 5.1+（根目录启动脚本当前未适配 Linux/macOS、Docker 除外）
+- Windows + PowerShell 5.1+ 或 Linux/macOS + bash 均可；`npm run dev` 会按平台自动选择 `start-dev.ps1` / `start-dev.sh`
 
 ```bash
 # 1) 初始化 backend/.env（JWT_SECRET、AI 配置、初始管理员）
-npm run env:setup
+npm run env:setup        # Windows PowerShell；Linux/macOS 用 cp backend/.env.example backend/.env 后手工填写
 
 # 2) 启动本机开发（自动装依赖、生成双 Prisma Client、执行 migrate、同步 core prompts）
-./start-dev.ps1
+npm run dev
 ```
 
-如需跳过 Prisma 初始化，可使用 `./start-dev.ps1 -SkipPrisma`。注意该选项同时会跳过启动前的 core prompts 同步，仅适用于数据库与 prompts 已就绪的环境。
+如需跳过 Prisma 初始化：PowerShell 用 `./start-dev.ps1 -SkipPrisma`，bash 用 `./start-dev.sh --skip-prisma`。注意该选项同时会跳过启动前的 core prompts 同步，仅适用于数据库与 prompts 已就绪的环境。
 
-局域网调试用 `./start-lan.ps1`，本机 Nginx 测试部署用 `./start-dev.ps1 -UseNginx`。更细的部署说明见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
+局域网调试用 `./start-lan.ps1`（Windows），本机 Nginx 测试部署用 `./start-dev.ps1 -UseNginx`。更细的部署说明见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
 
 ## 三、质量门禁
 

@@ -89,11 +89,11 @@ cd backend
 .\start-backend.ps1
 ```
 
-说明：该脚本适合 backend-only 本地调试，会先执行一次 core prompt sync 再启动后端；如无特殊需要，日常开发仍推荐优先使用项目根目录的 `start-dev.ps1`。
+说明：该脚本适合 backend-only 本地调试，会先执行一次 core prompt sync 再启动后端；如无特殊需要，日常开发推荐在项目根目录用 `npm run dev`（跨平台，自动选择 `start-dev.ps1` / `start-dev.sh`）。
 
 ### 方式五：Docker 部署（Linux/macOS）
 
-PowerShell 启动脚本当前仅适配 Windows；Linux/macOS 使用 Docker 一键脚本：
+`start-dev.ps1` 仅适配 Windows；Linux/macOS 本地开发用 `npm run dev`（会自动走 `start-dev.sh`）。部署到 Linux/macOS 推荐 Docker 一键脚本：
 
 ```bash
 ./docker-start.sh

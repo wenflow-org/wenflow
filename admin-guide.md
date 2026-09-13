@@ -27,16 +27,15 @@ INIT_ADMIN_PASSWORD=<set-a-unique-strong-password>
 
 ## 启动后端
 
-```powershell
-# 推荐：在项目根目录一键启动
-./start-dev.ps1
-
-# 或使用 backend-only 便捷脚本
-cd backend
-./start-backend.ps1
-
-# 或仅启动后端
+```bash
+# 推荐：项目根目录一键启动前后端（Windows → start-dev.ps1，Linux/macOS → start-dev.sh）
 npm run dev
+
+# Windows：backend-only 便捷脚本（含 core prompt sync）
+cd backend && ./start-backend.ps1
+
+# 任意平台：仅启动后端服务（需数据库已就绪；先执行 npm run prisma:prepare）
+cd backend && npm run dev:server
 ```
 
 说明：
