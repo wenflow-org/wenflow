@@ -14,7 +14,8 @@ $envContent = Get-Content (Join-Path $PSScriptRoot '..\backend\.env')
 $adminName = ($envContent | Where-Object { $_ -match '^INIT_ADMIN_NAME=' }) -replace '^INIT_ADMIN_NAME=',''
 $adminPass = ($envContent | Where-Object { $_ -match '^INIT_ADMIN_PASSWORD=' }) -replace '^INIT_ADMIN_PASSWORD=',''
 $body = @{ name = $adminName; password = $adminPass; remember = $true } | ConvertTo-Json
-$resp = Invoke-WebRequest -Uri "$Base/api/admin-auth/login" -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 20 -UseBasicParsing
+# 显式 UTF-8 字节：Windows PowerShell 5.1 的字符串 Body 会按本地代码页编码，导致中文变 "?"
+$resp = Invoke-WebRequest -Uri "$Base/api/admin-auth/login" -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType 'application/json; charset=utf-8' -TimeoutSec 20 -UseBasicParsing
 $sid = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
 $cookie = ($resp.Headers['Set-Cookie'] -split ';')[0]
 $sid.Cookies.SetCookies('http://127.0.0.1:3001/', $cookie)
@@ -25,7 +26,7 @@ $sessionId = '6d53ee90-dfc5-4cc1-b2f1-b2f868bda7e5'
 
 function Call-Api($method, $path, $payload = $null) {
   $params = @{ Uri = "$Base$path"; Method = $method; WebSession = $sid; Headers = $h; TimeoutSec = 420 }
-  if ($payload) { $params.Body = ($payload | ConvertTo-Json -Depth 10); $params.ContentType = 'application/json' }
+  if ($payload) { $params.Body = [System.Text.Encoding]::UTF8.GetBytes(($payload | ConvertTo-Json -Depth 10)); $params.ContentType = 'application/json; charset=utf-8' }
   try {
     return Invoke-RestMethod @params
   } catch {
