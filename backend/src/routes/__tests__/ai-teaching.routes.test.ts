@@ -422,6 +422,8 @@ describe('ai-teaching routes', () => {
       status: 'completed',
       revision: 9,
       task: { id: 'task-1', status: 'completed' },
+      // 端到端断言（对应「新会话不先关课，直接 complete_task」）：结算结果为任务已完成
+      taskCompletion: { status: 'completed', alreadyCompleted: false },
       wrapup: { summary: '本次学习已完成' },
     };
     mockSessionFinalizationService.finalize.mockResolvedValue(result);
@@ -453,6 +455,8 @@ describe('ai-teaching routes', () => {
     });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ success: true, data: result });
+    expect((res.json as jest.Mock).mock.calls[0][0].data.taskCompletion)
+      .toEqual({ status: 'completed', alreadyCompleted: false });
   });
 
   it('Finalization 拒绝缺少 Idempotency-Key', async () => {
