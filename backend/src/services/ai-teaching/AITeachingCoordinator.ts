@@ -1280,34 +1280,9 @@ export class AITeachingOrchestrator {
         });
       }
     }
-    // 记忆引擎 M2：经 learn agent 出口惰性检查到期复习点，作为 review 状态注入本节课知识看板
-    // （旧知唤醒，best-effort：查询失败不阻断开课；出口=LearnerExitService.getDueReview）
-    try {
-      const dueTraces = await learnerExitService.getDueReview(input.userId, 2);
-      if (dueTraces.length > 0) {
-        const existingKeys = new Set(seededKnowledgeState.map((point) => point.name));
-        for (const trace of dueTraces) {
-          if (existingKeys.has(trace.conceptKey)) continue;
-          seededKnowledgeState.push({
-            name: trace.conceptKey,
-            status: 'review',
-            progress: Math.round(trace.retention * 100),
-          });
-          existingKeys.add(trace.conceptKey);
-          logger.info('[AITeaching] 到期旧知唤醒注入看板', {
-            userId: input.userId,
-            taskId: input.taskId,
-            conceptKey: trace.conceptKey,
-            retention: trace.retention,
-          });
-        }
-      }
-    } catch (error) {
-      logger.warn('[AITeaching] 到期复习点查询失败，跳过注入', {
-        userId: input.userId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    // 分层边界：到期旧知属「记忆层」（用户级、天然跨 path），只在该课复习模式（上方 mode==='review'）
+    // 或 GET /ai-teaching/review/due「今日复习」出口呈现；不再注入日常课的「本节知识点」看板，
+    // 否则别的 path 的到期点会串进本节清单，并被前端误显示为「进行中 · x%」。
     const sessionId = buildSessionId(input.userId);
     const reservation = await teachingSessionRepository.reserve({
       id: sessionId,
