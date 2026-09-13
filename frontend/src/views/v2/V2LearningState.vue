@@ -749,10 +749,10 @@ onMounted(() => {
 .metric__value { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
 .metric__value i { font-size: 13px; font-style: normal; font-weight: 600; color: var(--faint); }
 .metric__note { width: fit-content; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; }
-.metric__note--green { color: #1d7a4c; background: rgba(49, 177, 111, 0.12); }
+.metric__note--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .metric__note--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
 .metric__note--purple { color: var(--accent); background: rgba(141, 107, 255, 0.12); }
-.metric__note--amber { color: #b3540a; background: rgba(244, 170, 70, 0.16); }
+.metric__note--amber { color: var(--amber-ink); background: rgba(244, 170, 70, 0.16); }
 
 .state__grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
 .state__col { display: grid; gap: 16px; }
@@ -821,7 +821,7 @@ onMounted(() => {
 </style>
 
 <style scoped>
-.metric__note--red { color: #c0454a; background: rgba(239, 117, 120, 0.12); }
+.metric__note--red { color: var(--red-ink); background: rgba(239, 117, 120, 0.12); }
 .chart__controls { display: flex; gap: 8px; flex-wrap: wrap; }
 .chart__loading { display: grid; justify-items: center; padding: 40px 0; }
 .chart__retry {
@@ -848,7 +848,7 @@ onMounted(() => {
 .guide__sub { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.65; }
 .guide__warn {
   display: flex; align-items: center; gap: 8px;
-  font-size: 12.5px; font-weight: 600; color: #b3540a;
+  font-size: 12.5px; font-weight: 600; color: var(--amber-ink);
   background: rgba(244, 170, 70, 0.1);
   border: 1px solid rgba(244, 170, 70, 0.3);
   border-radius: 10px; padding: 9px 12px;
@@ -883,11 +883,11 @@ onMounted(() => {
   padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas, #fbfcff);
 }
 .dec__tag { font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
-.dec__tag--blue { color: #1f57cc; background: rgba(52, 120, 246, 0.1); }
-.dec__tag--purple { color: #6b4ae0; background: rgba(141, 107, 255, 0.12); }
+.dec__tag--blue { color: var(--blue-ink); background: rgba(52, 120, 246, 0.1); }
+.dec__tag--purple { color: var(--purple-ink); background: rgba(141, 107, 255, 0.12); }
 .dec__tag--cyan { color: #3593b5; background: rgba(67, 176, 216, 0.12); }
-.dec__tag--amber { color: #b3540a; background: rgba(244, 170, 70, 0.14); }
-.dec__tag--green { color: #1d7a4c; background: rgba(49, 177, 111, 0.12); }
+.dec__tag--amber { color: var(--amber-ink); background: rgba(244, 170, 70, 0.14); }
+.dec__tag--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .dec__body { display: grid; gap: 6px; }
 .dec__body p { margin: 0; display: grid; grid-template-columns: 34px 1fr; gap: 10px; font-size: 13px; line-height: 1.65; color: var(--ink); }
 .dec__body b { font-size: 11px; font-weight: 800; color: var(--faint); padding-top: 2.5px; }
@@ -921,9 +921,9 @@ onMounted(() => {
   font-size: 11.5px; font-weight: 800;
   padding: 4px 11px; border-radius: 999px;
 }
-.ff-form-chip--fresh { color: #1d7a4c; background: rgba(49, 177, 111, 0.12); }
+.ff-form-chip--fresh { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .ff-form-chip--optimal { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
-.ff-form-chip--risk { color: #c0454a; background: rgba(239, 117, 120, 0.12); }
+.ff-form-chip--risk { color: var(--red-ink); background: rgba(239, 117, 120, 0.12); }
 
 .ff-chart { width: 100%; }
 .ff-chart svg { display: block; width: 100%; height: auto; }
@@ -932,7 +932,7 @@ onMounted(() => {
 .ff-line--fitness { stroke: #3478f6; }
 .ff-line--fatigue { stroke: #8d6bff; }
 .ff-line--lsb { stroke: #31b16f; }
-.ff-cursor { stroke: rgba(23, 32, 51, 0.2); stroke-width: 1; stroke-dasharray: 3 3; }
+.ff-cursor { stroke: color-mix(in srgb, var(--ink) 20%, transparent); stroke-width: 1; stroke-dasharray: 3 3; }
 .ff-pt { stroke: #fff; stroke-width: 2; }
 .ff-pt--fitness { fill: #3478f6; }
 .ff-pt--fatigue { fill: #8d6bff; }

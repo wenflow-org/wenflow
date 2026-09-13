@@ -180,7 +180,7 @@ onMounted(() => {
 }
 .field--error .field__input { border-color: rgba(239, 117, 120, 0.6); }
 .field--error .field__input:focus { box-shadow: 0 0 0 3px rgba(239, 117, 120, 0.12); }
-.field__error { font-size: 11.5px; color: #c0454a; font-weight: 600; }
+.field__error { font-size: 11.5px; color: var(--red-ink); font-weight: 600; }
 
 .btn-primary--block {
   justify-content: center;

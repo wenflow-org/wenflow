@@ -494,7 +494,7 @@ onBeforeUnmount(() => {
 .pcard__body { flex: 1; min-width: 0; }
 .pcard__head-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .pcard__badge { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; flex: 0 0 auto; }
-.pcard__badge--green { color: #218a56; background: rgba(49, 177, 111, 0.12); }
+.pcard__badge--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .pcard__badge--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
 .pcard__badge--cyan { color: var(--blue-deep, #2b7a99); background: rgba(67, 176, 216, 0.14); }
 .pcard__badge--red { color: var(--red, #c0454a); background: rgba(239, 117, 120, 0.12); }
@@ -589,7 +589,7 @@ onBeforeUnmount(() => {
 </style>
 
 <style scoped>
-.pcard__badge--green { color: #1d7a4c; background: rgba(49, 177, 111, 0.12); }
+.pcard__badge--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .pcard__more-wrap { position: relative; }
 .pcard__menu {
   position: absolute; top: 26px; right: 0; z-index: 10;

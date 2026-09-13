@@ -1988,7 +1988,7 @@ onBeforeUnmount(() => {
   width: fit-content; padding: 4px 10px; border-radius: 999px;
   font-size: 11px; font-weight: 700; line-height: 1.5;
 }
-.msg__chip--confuse { color: #b3540a; background: rgba(244, 170, 70, 0.12); border: 1px solid rgba(244, 170, 70, 0.2); margin-top: 6px; }
+.msg__chip--confuse { color: var(--amber-ink); background: rgba(244, 170, 70, 0.12); border: 1px solid rgba(244, 170, 70, 0.2); margin-top: 6px; }
 
 /* ---------- 伴学浮窗（角色「小启」· 暖橙系，dock 式不占主对话区） ---------- */
 .peerdock {
@@ -2104,7 +2104,7 @@ onBeforeUnmount(() => {
 .peerdock__follow {
   text-align: left;
   max-width: 92%; padding: 6px 11px;
-  font: inherit; font-size: 12px; line-height: 1.5; color: #b3540a;
+  font: inherit; font-size: 12px; line-height: 1.5; color: var(--amber-ink);
   background: color-mix(in srgb, #fff 82%, rgba(244, 170, 70, 0.35));
   border: 1px solid rgba(244, 149, 66, 0.35); border-radius: 12px;
   cursor: pointer;
@@ -2290,7 +2290,7 @@ onBeforeUnmount(() => {
 .checkpoint__head code { background: rgba(52, 120, 246, 0.1); color: var(--blue-deep); padding: 1px 6px; border-radius: 6px; font-size: 12.5px; }
 .checkpoint__badge {
   width: fit-content;
-  font-size: 11px; font-weight: 800; color: #b3540a;
+  font-size: 11px; font-weight: 800; color: var(--amber-ink);
   background: rgba(244, 170, 70, 0.18);
   border: 1px solid rgba(244, 170, 70, 0.4);
   padding: 3px 9px; border-radius: 999px;
@@ -2473,7 +2473,7 @@ onBeforeUnmount(() => {
   flex: 1; display: grid; place-content: center; justify-items: center; gap: 14px;
   color: var(--faint); font-size: 14px; padding: 80px 20px; text-align: center;
 }
-.learn__init-error { color: #c0454a; font-size: 14px; font-weight: 600; }
+.learn__init-error { color: var(--red-ink); font-size: 14px; font-weight: 600; }
 .learn__menu-pop {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 40;
   background: var(--surface); border: 1px solid var(--line);
@@ -2501,8 +2501,8 @@ onBeforeUnmount(() => {
 .learn__menu-item:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); color: var(--ink); }
 .learn__menu-item--primary { color: var(--blue, #2c63d0); }
 .learn__menu-item--primary:hover { background: #e8effc; color: var(--blue, #2c63d0); }
-.learn__menu-item--danger { color: #c0454a; }
-.learn__menu-item--danger:hover { background: rgba(239, 117, 120, 0.1); color: #c0454a; }
+.learn__menu-item--danger { color: var(--red-ink); }
+.learn__menu-item--danger:hover { background: rgba(239, 117, 120, 0.1); color: var(--red-ink); }
 .learn__head-right { position: relative; }
 .checkpoint__option {
   display: flex; align-items: center; gap: 9px;
@@ -2514,12 +2514,12 @@ onBeforeUnmount(() => {
 }
 .checkpoint__option--on { border-color: rgba(52, 120, 246, 0.5); background: rgba(52, 120, 246, 0.06); }
 .checkpoint__feedback {
-  font-size: 13px; font-weight: 600; color: #b3540a;
+  font-size: 13px; font-weight: 600; color: var(--amber-ink);
   background: rgba(244, 170, 70, 0.1);
   border-radius: 10px; padding: 9px 12px;
 }
-.checkpoint__feedback--ok { color: #1d7a4c; background: rgba(49, 177, 111, 0.1); }
-.msg__retry { margin-left: 8px; color: #c0454a; font-weight: 800; text-decoration: underline; cursor: pointer; }
+.checkpoint__feedback--ok { color: var(--green-ink); background: rgba(49, 177, 111, 0.1); }
+.msg__retry { margin-left: 8px; color: var(--red-ink); font-weight: 800; text-decoration: underline; cursor: pointer; }
 .msg__bubble--html :deep(p) { margin: 0 0 8px; }
 .msg__bubble--html :deep(p:last-child) { margin-bottom: 0; }
 .msg__bubble--html :deep(ul), .msg__bubble--html :deep(ol) { margin: 4px 0; padding-left: 18px; }
@@ -2638,7 +2638,7 @@ onBeforeUnmount(() => {
 .stage-card__warn {
   width: 44px; height: 44px; border-radius: 50%;
   background: rgba(244, 170, 70, 0.14);
-  color: #b3540a;
+  color: var(--amber-ink);
   font-size: 22px; font-weight: 800;
   display: grid; place-items: center;
   border: 1px solid rgba(244, 170, 70, 0.35);

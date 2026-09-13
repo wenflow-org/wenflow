@@ -18,6 +18,13 @@
   --bubble-ai-bg: #f2f6fc;
   --supplement-bg: #fafcff;
   --v2nav-bg: rgba(255, 255, 255, 0.86);
+  /* 状态文字墨色（浅色主题用深色保证对比度；暗色主题见下方覆盖） */
+  --green-ink: #1d7a4c;
+  --cyan-ink: #2b7a99;
+  --blue-ink: #1f57cc;
+  --purple-ink: #6b4ae0;
+  --amber-ink: #b3540a;
+  --red-ink: #c0454a;
 }
 [data-theme='dark'] {
   --ink: #e6edf7;
@@ -36,6 +43,13 @@
   --bubble-ai-bg: rgba(24, 34, 48, 0.8);
   --supplement-bg: rgba(246, 187, 99, 0.06);
   --v2nav-bg: rgba(15, 22, 32, 0.88);
+  /* 状态文字墨色：暗色主题用亮色保证对比度 */
+  --green-ink: #3ec984;
+  --cyan-ink: #5fc3e6;
+  --blue-ink: #6fa3ff;
+  --purple-ink: #a78bff;
+  --amber-ink: #f6bb63;
+  --red-ink: #f28588;
 }
 
 /* ====== 全局背景兜底：路由切换过渡期间防止白闪 ====== */
@@ -386,7 +400,7 @@ html, body {
   border-radius: 12px;
   background: rgba(239, 117, 120, 0.08);
   border: 1px solid rgba(239, 117, 120, 0.3);
-  color: #c0454a;
+  color: var(--red-ink);
   font-size: 13px;
   font-weight: 600;
 }
@@ -595,3 +609,34 @@ html, body {
   .v2-page { padding-bottom: 72px; }
   .v2-page .v2footer { margin-bottom: 0; }
 }
+
+/* ====== 暗色模式：非 .card 抬升面投影 ======
+   浅色投影 rgba(23,32,51,·) 在深底上不可见，统一换深色投影。
+   用 html[data-theme='dark'] 提升优先级以压过组件 scoped 样式。 */
+html[data-theme='dark'] .ach-card:hover { box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4); }
+html[data-theme='dark'] .auth__card { box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25), 0 24px 60px rgba(0, 0, 0, 0.4); }
+html[data-theme='dark'] .tip__icon { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
+html[data-theme='dark'] .quick__item { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
+html[data-theme='dark'] .sheet { box-shadow: -24px 0 60px rgba(0, 0, 0, 0.45); }
+html[data-theme='dark'] .composer__box { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28); }
+html[data-theme='dark'] .composer__box--active { box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.18), 0 6px 20px rgba(0, 0, 0, 0.28); }
+html[data-theme='dark'] .proposal { box-shadow: 0 28px 70px rgba(0, 0, 0, 0.45); }
+html[data-theme='dark'] .msg__avatar { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
+html[data-theme='dark'] .login-gate__logo { box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4); }
+html[data-theme='dark'] .history__stat { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }
+html[data-theme='dark'] .oscene { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }
+html[data-theme='dark'] .tutor__jump-bottom { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4); }
+html[data-theme='dark'] .kp-act:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); }
+html[data-theme='dark'] .finish__card { box-shadow: 0 28px 70px rgba(0, 0, 0, 0.45); }
+html[data-theme='dark'] .learn__menu-pop { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42); }
+html[data-theme='dark'] .replies { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }
+html[data-theme='dark'] .reply:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); }
+html[data-theme='dark'] .view-toggle__btn--active { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+html[data-theme='dark'] .pcard { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }
+html[data-theme='dark'] .pcard:hover { box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4); }
+html[data-theme='dark'] .toast { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); }
+html[data-theme='dark'] .pcard__menu { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42); }
+html[data-theme='dark'] .seg__item--on { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+html[data-theme='dark'] .v2nav__menu { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45); }
+html[data-theme='dark'] .nc__panel { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45); }
+html[data-theme='dark'] .runtime { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }

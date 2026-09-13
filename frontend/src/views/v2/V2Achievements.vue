@@ -373,13 +373,13 @@ onMounted(load);
   letter-spacing: 0.3px;
 }
 .rarity--common { color: #67758f; background: rgba(103,117,143,0.1); }
-.rarity--uncommon { color: #1e9e58; background: rgba(30,158,88,0.1); }
+.rarity--uncommon { color: var(--green-ink); background: rgba(30,158,88,0.1); }
 .rarity--rare { color: #3478f6; background: rgba(52,120,246,0.1); }
 .rarity--epic { color: #8d6bff; background: rgba(141,107,255,0.12); }
 
 /* ── Badge ── */
 .ach-card__badge { font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; }
-.ach-card__badge--on { color: #1d7a4c; background: rgba(49, 177, 111, 0.12); }
+.ach-card__badge--on { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .ach-card__badge--off { color: var(--muted); background: var(--line, #e8edf5); }
 .ach-card__name { font-size: 15px; }
 .ach-card__desc { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.55; flex: 1; }

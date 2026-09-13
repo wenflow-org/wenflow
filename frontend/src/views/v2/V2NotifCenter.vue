@@ -620,7 +620,7 @@ onBeforeUnmount(() => {
 }
 .nc__section-label-icon { display: grid; place-items: center; }
 .nc__section-label-icon--running { color: var(--blue, #3478f6); }
-.nc__section-label-icon--done { color: #1d7a4c; }
+.nc__section-label-icon--done { color: var(--green-ink); }
 .nc__task {
   display: flex;
   gap: 10px;
@@ -727,7 +727,7 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   flex-shrink: 0;
 }
-.nc__task-dismiss:hover { background: rgba(229, 72, 77, 0.1); color: #c0454a; }
+.nc__task-dismiss:hover { background: rgba(229, 72, 77, 0.1); color: var(--red-ink); }
 .nc__feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
 
 /* 空态 / 错误 */

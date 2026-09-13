@@ -1387,9 +1387,9 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 
 <style scoped>
 .detail__loading { display: grid; justify-items: center; gap: 12px; padding: 64px 0; color: var(--faint); font-size: 13px; }
-.badge--green { color: #1d7a4c; background: rgba(49, 177, 111, 0.12); }
-.badge--cyan { color: #2b7a99; background: rgba(67, 176, 216, 0.14); }
-.badge--red { color: #c0454a; background: rgba(239, 117, 120, 0.12); }
+.badge--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
+.badge--cyan { color: var(--cyan-ink); background: rgba(67, 176, 216, 0.14); }
+.badge--red { color: var(--red-ink); background: rgba(239, 117, 120, 0.12); }
 .genbar {
   display: flex; align-items: center; gap: 14px;
   padding: 16px 20px;
@@ -1571,7 +1571,7 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
   font-size: 11px; font-weight: 700;
   white-space: nowrap;
 }
-.tl__badge--done { background: rgba(49, 177, 111, 0.1); color: #1d7a4c; }
+.tl__badge--done { background: rgba(49, 177, 111, 0.1); color: var(--green-ink); }
 .tl__badge--current { background: rgba(52, 120, 246, 0.1); color: var(--blue-deep, #2563eb); }
 .tl__badge--locked { background: var(--line, #f1f5fb); color: var(--muted, #5b6577); }
 
@@ -1795,7 +1795,7 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 }
 .adjust-mode:hover { border-color: #8db3f8; background: #f7faff; box-shadow: 0 2px 10px rgba(52, 120, 246, 0.08); }
 .adjust-mode--warn .adjust-mode__icon {
-  color: #b3540a;
+  color: var(--amber-ink);
   background: rgba(244, 170, 70, 0.16);
 }
 .adjust-mode__icon {
@@ -1816,10 +1816,10 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
   padding: 7px 12px;
   font-size: 12.5px; font-weight: 700;
   border-radius: 999px;
-  color: #1f57cc; background: rgba(52, 120, 246, 0.1);
+  color: var(--blue-ink); background: rgba(52, 120, 246, 0.1);
 }
-.adjust-form__mode-hint--rebuild { color: #b3540a; background: rgba(244, 170, 70, 0.14); }
-.adjust-form__mode-hint--auto { color: #6b4ae0; background: rgba(141, 107, 255, 0.1); }
+.adjust-form__mode-hint--rebuild { color: var(--amber-ink); background: rgba(244, 170, 70, 0.14); }
+.adjust-form__mode-hint--auto { color: var(--purple-ink); background: rgba(141, 107, 255, 0.1); }
 .adjust-form__back {
   border: 0; background: transparent; padding: 2px 4px;
   font: inherit; font-size: 12px; font-weight: 600;
@@ -1854,7 +1854,7 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 .clear-sessions__tag {
   justify-self: start;
   font-size: 10.5px; font-weight: 800;
-  color: #b3540a;
+  color: var(--amber-ink);
   background: rgba(244, 170, 70, 0.14);
   border: 1px solid rgba(244, 170, 70, 0.35);
   padding: 2px 8px; border-radius: 999px;
@@ -1943,7 +1943,7 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
   border-color: rgba(141, 107, 255, 0.55);
   box-shadow: 0 0 0 2px rgba(141, 107, 255, 0.12);
 }
-.adjust-scope__opt.is-on strong { color: #6b4ae0; }
+.adjust-scope__opt.is-on strong { color: var(--purple-ink); }
 .adjust-scope__picker {
   margin-top: 8px;
   display: flex;
@@ -1991,16 +1991,16 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 .ai-advice__tag {
   flex: 0 0 auto;
   font-size: 10.5px; font-weight: 800;
-  color: #6b4ae0;
+  color: var(--purple-ink);
   background: rgba(141, 107, 255, 0.12);
   border: 1px solid rgba(141, 107, 255, 0.3);
   padding: 2px 8px; border-radius: 999px;
 }
 .ai-advice__verdict {
   font-size: 14px; font-weight: 800;
-  color: #6b4ae0;
+  color: var(--purple-ink);
 }
-.ai-advice__verdict--ok { color: #1e9e58; }
+.ai-advice__verdict--ok { color: var(--green-ink); }
 .ai-advice__rationale {
   margin: 0;
   font-size: 13px; line-height: 1.6;
@@ -2025,13 +2025,13 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 }
 .ai-advice__chip {
   font-size: 11px; font-weight: 600;
-  color: #1f57cc;
+  color: var(--blue-ink);
   background: rgba(52, 120, 246, 0.1);
   border-radius: 999px;
   padding: 2px 9px;
 }
 .ai-advice__chip--warn {
-  color: #b3540a;
+  color: var(--amber-ink);
   background: rgba(244, 170, 70, 0.14);
   border: 1px solid rgba(244, 170, 70, 0.3);
 }

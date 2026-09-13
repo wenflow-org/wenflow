@@ -293,7 +293,7 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 .v2nav__menu-danger {
-  color: #c0454a !important;
+  color: var(--red-ink) !important;
   border-top: 1px solid var(--line, #e3e9f4) !important;
   margin-top: 2px;
   border-radius: 0 0 8px 8px !important;
