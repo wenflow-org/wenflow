@@ -212,6 +212,16 @@ describe('LearningService stale core recovery', () => {
       expect.objectContaining({ stageDesignRetryCount: 3 })
     )
   })
+
+  it('P4：计数已达上限后不再触发新的重试（无新重试调用/无新日志）', async () => {
+    mockPrisma.learning_paths.findMany.mockResolvedValue([stageDesignCandidate({ stageDesignRetryCount: 3 })])
+    const queue = jest.spyOn(learningService as any, 'queuePathEnrichmentRetry')
+
+    await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(0)
+
+    expect(queue).not.toHaveBeenCalled()
+    expect((learningService as any).updatePathGenerationStatus).not.toHaveBeenCalled()
+  })
 })
 
 function stageDesignCandidate(overrides: { stageDesignRetryCount?: number } = {}) {

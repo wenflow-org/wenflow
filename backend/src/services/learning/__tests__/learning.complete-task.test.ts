@@ -182,6 +182,8 @@ describe('LearningService.completeTask milestone progression', () => {
   it('关闭当前里程碑、解锁下一里程碑，并在最后任务后完成路径', async () => {
     await learningService.completeTask({ taskId: 'task-2', userId })
 
+    // 端到端断言的「任务本身」：完成结算后 subtask 必须置为 completed
+    expect(tasks[1].status).toBe('completed')
     expect(milestones[0].status).toBe('completed')
     expect(milestones[1].status).toBe('active')
     expect(milestones[1].unlockedAt).toBeInstanceOf(Date)
@@ -199,6 +201,7 @@ describe('LearningService.completeTask milestone progression', () => {
 
     await learningService.completeTask({ taskId: 'task-3', userId })
 
+    expect(tasks[2].status).toBe('completed')
     expect(milestones[1].status).toBe('completed')
     expect(path).toEqual(expect.objectContaining({ status: 'completed', completedMilestones: 2 }))
     expect(mockAddXp).toHaveBeenCalledTimes(2)
