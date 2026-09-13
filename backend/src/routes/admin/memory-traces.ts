@@ -37,10 +37,21 @@ router.get('/', async (req, res) => {
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
     const includeVirtual = String(req.query.includeVirtual || '') === 'true';
 
+    // memory_traces.userId 是纯字符串列、无 user 关系，不能写 where: { user: {...} }（Prisma 直接抛错 → 500）。
+    // 默认排除虚拟学习者：先取虚拟 id 集合，再用 userId.notIn；与指定 userId 用 AND 组合（避免键覆盖）。
+    const virtualIds = includeVirtual
+      ? []
+      : (await prisma.users.findMany({
+          where: { isVirtualLearner: true },
+          select: { id: true },
+        })).map((u) => u.id);
+
     const traces = await prisma.memory_traces.findMany({
       where: {
-        ...(userId ? { userId } : {}),
-        ...(includeVirtual ? {} : { user: { isVirtualLearner: false } }),
+        AND: [
+          ...(userId ? [{ userId }] : []),
+          ...(virtualIds.length ? [{ userId: { notIn: virtualIds } }] : []),
+        ],
       },
       orderBy: { updatedAt: 'desc' },
       take: limit,

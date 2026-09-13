@@ -1524,6 +1524,12 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
 
     if (sourceEntry) {
       where.sourceEntry = String(sourceEntry);
+    } else {
+      // 默认排除系统金丝雀探针流量（自检超时/中断会污染待办与失败列表）；
+      // 显式按 sourceEntry 筛选时保留，便于排查探针本身
+      where.AND.push({
+        OR: [{ sourceEntry: null }, { sourceEntry: { not: 'system-canary' } }],
+      });
     }
 
     if (status) {
@@ -2210,9 +2216,14 @@ router.get('/activity', async (req: Request, res: Response) => {
     });
 
     // 近 24h 失败事件（异常流：动态 feed 的 bad/warn 事件源，含类别/错误码供跳转筛选）
+    // 排除系统金丝雀探针：自检超时/中断不应作为业务失败进入异常流
     const recentFailures = await prisma.agent_call_logs.findMany({
       take: 10,
-      where: { calledAt: { gte: activityWindowStart }, success: false },
+      where: {
+        calledAt: { gte: activityWindowStart },
+        success: false,
+        OR: [{ sourceEntry: null }, { sourceEntry: { not: 'system-canary' } }],
+      },
       orderBy: { calledAt: 'desc' },
       select: {
         id: true,
