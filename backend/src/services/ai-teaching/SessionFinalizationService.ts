@@ -61,6 +61,17 @@ function finalizationRequestIdentity(input: FinalizeSessionInput) {
   };
 }
 
+/**
+ * 同一次 finalize(complete_task) 内部会先自动 end_only（关课堂）再 complete_task（任务结算）。
+ * 两步若共用同一个客户端 Idempotency-Key，会撞 session_finalization_operations 的
+ * (sessionId, idempotencyKey) 唯一键：第二步被幂等守卫判为「同 key 不同请求」而 409
+ * FINALIZATION_IDEMPOTENCY_KEY_REUSED，导致课堂关了但任务不结算。
+ * 这里派生出确定性的独立键——同一次客户端请求重放仍幂等，同时与 complete_task 的键隔离。
+ */
+function derivedClosureOperationId(operationId: string): string {
+  return `${operationId}#closure`;
+}
+
 export class SessionFinalizationService {
   async finalize(input: FinalizeSessionInput) {
     const session = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
@@ -146,9 +157,11 @@ export class SessionFinalizationService {
         input.sessionId,
         input.endReason || 'task-completed',
         input.revision,
-        operationId,
-        requestIdentity.requestHash,
-        requestIdentity.requestJson
+        // 关键：自动 end_only 用派生键，不能与下面的 complete_task 共用客户端 Idempotency-Key，
+        // 否则 (sessionId,key) 唯一键冲突 → FINALIZATION_IDEMPOTENCY_KEY_REUSED。
+        // 不传 requestHash/requestJson：交由 endSession 生成 end_only 自身的请求身份，
+        // 避免该行出现「action=end_only、requestJson 却是 complete_task」的记录。
+        derivedClosureOperationId(operationId)
       );
       if (endResult.status === 'processing') {
         return {

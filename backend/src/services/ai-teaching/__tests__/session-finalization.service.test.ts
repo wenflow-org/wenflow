@@ -124,14 +124,20 @@ describe('SessionFinalizationService', () => {
       revision: 4
     })
 
+    // P0 回归：自动 end_only 必须用派生键，不能与 complete_task 共用客户端 Idempotency-Key，
+    // 否则 session_finalization_operations 的 (sessionId,key) 唯一键冲突 →
+    // FINALIZATION_IDEMPOTENCY_KEY_REUSED，课堂关了但任务不结算。
+    // 且不再把 complete_task 的请求身份塞进 end_only 记录（少传 hash/json，由 endSession 自建）。
     expect(mockEndSession).toHaveBeenCalledWith(
       'session-1',
       'task-completed',
       4,
-      'task-op',
-      expect.any(String),
-      expect.any(String)
+      'task-op#closure'
     )
+    const endCallArgs = mockEndSession.mock.calls[0]
+    expect(endCallArgs[3]).not.toBe('task-op')
+    expect(endCallArgs[4]).toBeUndefined()
+    expect(endCallArgs[5]).toBeUndefined()
     expect(mockCompleteTask).toHaveBeenCalled()
     expect(result.status).toBe('completed')
     expect((result as any).taskCompletion).toEqual({ status: 'completed', alreadyCompleted: false })
