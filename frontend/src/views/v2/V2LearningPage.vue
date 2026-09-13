@@ -879,6 +879,11 @@ async function boot() {
     const s = (isReviewMode.value
       ? await aiTeachingAPI.startReviewSession(taskId)
       : await aiTeachingAPI.startSession(taskId)) as unknown as Record<string, any>;
+    if (s.mode === 'completed') {
+      // P3：服务端已把上次「完成并结算」补结算完成（该任务已完成），直接进入学习反馈，不再新建课堂
+      router.replace({ name: 'LearningEvaluationPage', params: { taskId, sessionId: s.sessionId } });
+      return;
+    }
     session.value = { sessionId: s.sessionId, revision: s.revision ?? 0 };
     // 开场景卡片数据（scene 驱动；resume/复习/重学/接续的结构化开场）
     const sceneRaw = s?.scene && typeof s.scene === 'object' ? s.scene : null;

@@ -392,6 +392,43 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
       });
     }
 
+    // P3：该任务上次是「完成结算」自动关课、但 complete_task 没落地（endReason=task-completed
+    // 且 taskCompletion≠completed）时，先补结算，避免重进又新建一节课、任务永远卡在 in_progress。
+    // 仅对明确标记生效，用户主动「结束学习（不计入完成）」不受影响。
+    const completionPending = await teachingSessionRepository.findCompletionPendingSession(userId, taskId);
+    if (completionPending) {
+      try {
+        const healed = await sessionFinalizationService.finalize({
+          sessionId: completionPending.id,
+          userId,
+          action: 'complete_task',
+          revision: completionPending.revision,
+          endReason: 'task-completed'
+        });
+        return res.json({
+          success: true,
+          data: {
+            sessionId: completionPending.id,
+            subject: completionPending.subject,
+            topic: completionPending.topic,
+            startTime: completionPending.startTime,
+            welcomeMessage: completionPending.messages?.[0]?.content || '',
+            mode: 'completed',
+            revision: healed.revision ?? completionPending.revision,
+            knowledgePoints: [],
+            scene: null,
+            ...(req.user?.projection?.grantSource === 'synthetic' ? { schemaVersion: 'synthetic-user-v1' } : {}),
+          },
+        });
+      } catch (error) {
+        logger.warn('重进补结算未完成，回退为正常开课', {
+          sessionId: completionPending.id,
+          taskId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+
     const session = await aiTeachingCoordinator.startSession({
       userId,
       taskId,

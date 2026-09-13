@@ -498,6 +498,36 @@ export class TeachingSessionRepository {
     return updated.count === 1;
   }
 
+  /**
+   * P3：查找同一任务下「因完成结算而自动关课、但 complete_task 未落地」的最近一次会话。
+   *
+   * 背景：complete_task 遇到未收束课堂时会先自动 end_only 关课，若随后的 complete_task
+   * 失败/中断，会话就停在 completed + taskCompletion=not_started；重进页面时 reserve 因
+   * openKey 已清空而新建课堂，任务永远卡在 in_progress。
+   *
+   * 只用明确标记区分：自动关课（为完成结算）会把 sessionArtifacts.endReason 记为
+   * 'task-completed'；用户主动「结束学习（不计入完成）」是 'manual-end'，不会被误结算。
+   */
+  async findCompletionPendingSession(
+    userId: string,
+    taskId: string
+  ): Promise<TeachingSessionRecord | null> {
+    const records = await prisma.teaching_sessions.findMany({
+      where: { userId, taskId, status: 'completed' },
+      orderBy: { updatedAt: 'desc' },
+      take: 5
+    });
+    for (const record of records) {
+      const session = mapRecord(record);
+      const artifacts = (session.teachingState as Record<string, any> | null)?.sessionArtifacts;
+      const finalization = getSessionFinalizationState(session.teachingState);
+      if (artifacts?.endReason === 'task-completed' && finalization?.taskCompletion !== 'completed') {
+        return session;
+      }
+    }
+    return null;
+  }
+
   async listByUser(userId: string, limit: number = 50): Promise<TeachingSessionRecord[]> {
     // 已知限制（L5）：固定 take 50，无分页；历史消息较多的用户只返回最近 50 条。
     // 完整历史需引入游标/offset 分页，且需同步调整调用方（getSessionHistory / getLatestTaskEvaluation）。

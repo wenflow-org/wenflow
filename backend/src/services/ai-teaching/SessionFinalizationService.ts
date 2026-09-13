@@ -155,7 +155,9 @@ export class SessionFinalizationService {
       // 否则教学完成后的自动收束必然 409 FINALIZATION_SESSION_NOT_CLOSED（真实用户高频场景）
       const endResult = await aiTeachingCoordinator.endSession(
         input.sessionId,
-        input.endReason || 'task-completed',
+        // 固定记为 task-completed：这是「为完成任务而自动关课」，同时作为重进补结算的标记
+        // （用户主动「结束学习（不计入完成）」走 end_only 分支，reason 仍是 manual-end，不会被误结算）
+        'task-completed',
         input.revision,
         // 关键：自动 end_only 用派生键，不能与下面的 complete_task 共用客户端 Idempotency-Key，
         // 否则 (sessionId,key) 唯一键冲突 → FINALIZATION_IDEMPOTENCY_KEY_REUSED。
