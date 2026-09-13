@@ -38,6 +38,12 @@ if (typeof window !== 'undefined') {
   window.scrollTo = () => undefined;
 }
 
+// Element.scrollIntoView：jsdom 未实现，组件在 onMounted/watch 中调用会变成未处理异常，
+// 使 vitest 退出码非 0（即便测试全过）→ 补 no-op
+if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = () => undefined;
+}
+
 /* ECharts（MkChart 组件）在 jsdom 下需要 canvas 2D context，否则 init 抛
    「Cannot set properties of null (setting 'dpr')」→ 覆盖 jsdom 的 getContext
    （jsdom 默认实现存在但抛 Not implemented，需无条件替换为 stub） */
