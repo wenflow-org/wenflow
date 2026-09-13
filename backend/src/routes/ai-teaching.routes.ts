@@ -369,7 +369,33 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
 
     const { taskId } = req.params;
 
-    await learningService.assertTaskReadyForLearning(taskId, userId);
+    try {
+      await learningService.assertTaskReadyForLearning(taskId, userId, { requireTaskIncomplete: true });
+    } catch (error) {
+      // P3 补强：已完成任务直接拒绝开新课；返回 mode=completed + 最近一次已完成会话，
+      // 前端 boot() 会跳转学习反馈页，避免「直接访问 /learn/<taskId>」又新建一节课。
+      if ((error as { code?: string })?.code === 'TASK_ALREADY_COMPLETED') {
+        const last = await teachingSessionRepository.findLatestSession(userId, taskId, 'completed');
+        if (last) {
+          return res.json({
+            success: true,
+            data: {
+              sessionId: last.id,
+              subject: last.subject,
+              topic: last.topic,
+              startTime: last.startTime,
+              welcomeMessage: last.messages?.[0]?.content || '',
+              mode: 'completed',
+              revision: last.revision,
+              knowledgePoints: [],
+              scene: null,
+              ...(req.user?.projection?.grantSource === 'synthetic' ? { schemaVersion: 'synthetic-user-v1' } : {}),
+            },
+          });
+        }
+      }
+      throw error;
+    }
 
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
       return handleStreamingSession(req, res, async () => {

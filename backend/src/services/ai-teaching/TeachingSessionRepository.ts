@@ -528,6 +528,19 @@ export class TeachingSessionRepository {
     return null;
   }
 
+  /** 最近一次指定状态的会话（默认不限状态）；用于已完成任务重定向到学习反馈。 */
+  async findLatestSession(
+    userId: string,
+    taskId: string,
+    status?: string
+  ): Promise<TeachingSessionRecord | null> {
+    const record = await prisma.teaching_sessions.findFirst({
+      where: { userId, taskId, ...(status ? { status } : {}) },
+      orderBy: { updatedAt: 'desc' }
+    });
+    return record ? mapRecord(record) : null;
+  }
+
   async listByUser(userId: string, limit: number = 50): Promise<TeachingSessionRecord[]> {
     // 已知限制（L5）：固定 take 50，无分页；历史消息较多的用户只返回最近 50 条。
     // 完整历史需引入游标/offset 分页，且需同步调整调用方（getSessionHistory / getLatestTaskEvaluation）。

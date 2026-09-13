@@ -2,6 +2,7 @@
   processStudentMessage: jest.fn(),
   submitCheckpoint: jest.fn(),
   processPeerMessage: jest.fn(),
+  startSession: jest.fn(),
 };
 
 const mockSessionFinalizationService = {
@@ -11,6 +12,12 @@ const mockSessionFinalizationService = {
 
 const mockTeachingSessionRepository = {
   assertOwnership: jest.fn(),
+  findLatestSession: jest.fn(),
+  findCompletionPendingSession: jest.fn(),
+};
+
+const mockLearningService = {
+  assertTaskReadyForLearning: jest.fn(),
 };
 
 jest.mock('../../services/ai-teaching/AITeachingCoordinator', () => ({
@@ -29,9 +36,9 @@ jest.mock('../../middleware/auth.middleware', () => ({
 }));
 jest.mock('../../services/learning/learning-state.service', () => ({ __esModule: true, default: {} }));
 jest.mock('../../services/ai/ai.service', () => ({ __esModule: true, default: {} }));
-jest.mock('../../services/learning/learning.service', () => ({ __esModule: true, default: {} }));
+jest.mock('../../services/learning/learning.service', () => ({ __esModule: true, default: mockLearningService }));
 jest.mock('../../config/database', () => ({ __esModule: true, default: {} }));
-jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn() } }));
+jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn() } }));
 
 import router from '../ai-teaching.routes';
 import { requestContextStorage, runWithContext } from '../../gateway/api-gateway/context';
@@ -510,5 +517,56 @@ describe('ai-teaching routes', () => {
       success: true,
       data: { operationId: 'finalize-1', status: 'completed', revision: 6 }
     });
+  });
+
+  it('已完成任务直接拒绝开新课：返回 mode=completed 且不调用 startSession', async () => {
+    mockLearningService.assertTaskReadyForLearning.mockRejectedValue(
+      Object.assign(new Error('该任务已完成'), { code: 'TASK_ALREADY_COMPLETED', status: 409 })
+    );
+    mockTeachingSessionRepository.findLatestSession.mockResolvedValue({
+      id: 'session-done',
+      subject: '数学',
+      topic: '分数',
+      startTime: '2026-09-12T00:00:00.000Z',
+      messages: [{ content: '欢迎' }],
+      revision: 7
+    });
+    const handler = getRouteHandler('/tasks/:taskId/session');
+    const res = createResponse();
+
+    await handler({ user: { userId: 'user-1' }, params: { taskId: 'task-1' }, headers: {}, body: {} }, res);
+
+    expect(mockCoordinator.startSession).not.toHaveBeenCalled();
+    expect(mockTeachingSessionRepository.findLatestSession).toHaveBeenCalledWith('user-1', 'task-1', 'completed');
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({ sessionId: 'session-done', mode: 'completed', revision: 7 })
+    }));
+  });
+
+  it('任务可学时正常开会话（不触发已完成拒绝）', async () => {
+    mockLearningService.assertTaskReadyForLearning.mockResolvedValue(undefined);
+    mockTeachingSessionRepository.findCompletionPendingSession.mockResolvedValue(null);
+    mockCoordinator.startSession.mockResolvedValue({
+      sessionId: 'session-new',
+      subject: '数学',
+      topic: '分数',
+      startTime: '2026-09-12T00:00:00.000Z',
+      welcomeMessage: '你好',
+      mode: 'new',
+      revision: 1,
+      knowledgePoints: [],
+      scene: null
+    });
+    const handler = getRouteHandler('/tasks/:taskId/session');
+    const res = createResponse();
+
+    await handler({ user: { userId: 'user-1' }, params: { taskId: 'task-1' }, headers: {}, body: {} }, res);
+
+    expect(mockCoordinator.startSession).toHaveBeenCalledWith({ userId: 'user-1', taskId: 'task-1' });
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({ sessionId: 'session-new', mode: 'new' })
+    }));
   });
 });

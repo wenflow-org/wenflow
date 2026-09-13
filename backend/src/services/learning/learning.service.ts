@@ -3343,7 +3343,11 @@ const learningPath = await prisma.learning_paths.findUnique({
     }
   }
 
-  async assertTaskReadyForLearning(taskId: string, userId: string) {
+  async assertTaskReadyForLearning(
+    taskId: string,
+    userId: string,
+    options: { requireTaskIncomplete?: boolean } = {}
+  ) {
     const task = await prisma.subtasks.findUnique({
       where: { id: taskId },
       include: {
@@ -3365,6 +3369,16 @@ const learningPath = await prisma.learning_paths.findUnique({
 
     if (!task) {
       throw new Error('任务不存在');
+    }
+
+    // 已完成任务默认不允许再开「上课」会话（避免直接访问 /learn/<taskId> 又新建一节课）；
+    // 由用户上课路由显式传入 requireTaskIncomplete 生效——复习课 / quick-learn 等
+    // 既有调用方行为保持不变（复习课本就作用于已完成任务）。
+    if (options.requireTaskIncomplete && task.status === 'completed') {
+      const error = new Error('该任务已完成，请查看学习反馈，或从学习路径页选择重学');
+      (error as { code?: string; status?: number }).code = 'TASK_ALREADY_COMPLETED';
+      (error as { code?: string; status?: number }).status = 409;
+      throw error;
     }
 
     const milestone = task.milestones;
