@@ -138,6 +138,17 @@ interface PathReplanRequest {
 const STALE_GENERATING_PATH_MINUTES = 15;
 const ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES = [1, 5, 15] as const;
 
+/**
+ * P4：阶段任务自动重试的「不可自愈」冲突码。命中这些错误时重试多少次都不会好
+ * （例如路径下已有已完成课堂，任务覆盖被安全校验永久挡住），应直接把自动重试计数
+ * 顶到上限、停止自动重试；用户仍可在页面手动「重新准备阶段任务」。
+ */
+const TERMINAL_STAGE_DESIGN_RETRY_CODES = new Set<string>([
+  'PATH_MUTATION_HAS_COMPLETED_TEACHING_EVIDENCE',
+  'PATH_MUTATION_HAS_OPEN_SESSION',
+  'PATH_VERSIONING_NOT_SUPPORTED'
+]);
+
 type PathCoreStep = 'framing' | 'planning' | 'persist' | 'completed';
 
 interface PathGenerationLogPayload {
@@ -2198,9 +2209,27 @@ class LearningService {
         await this.queuePathEnrichmentRetry(path, generationStatus);
         retriedCount += 1;
       } catch (error) {
+        const rawCode = (error as { code?: unknown })?.code;
+        const errorCode = typeof rawCode === 'string' ? rawCode : '';
+        // P4：失败也必须把重试计数落库。原实现只在 queuePathEnrichmentRetry 成功、
+        // 且预检通过之后才自增计数（createAndClaimGenerationRun 的 guard 在计数写入之前），
+        // 预检一抛错计数就停在 0，于是每分钟按「第 1 次、延迟 1 分钟」无限重试。
+        // 对不可自愈的路径变更冲突直接把次数顶到上限，终止自动重试。
+        const terminal = TERMINAL_STAGE_DESIGN_RETRY_CODES.has(errorCode);
+        const nextRetryCount = terminal
+          ? ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length
+          : retryCount + 1;
+        await this.updatePathGenerationStatus(path.id, {
+          stageDesignRetryCount: nextRetryCount,
+          lastStageDesignRetryAt: new Date().toISOString(),
+          lastError: error instanceof Error ? error.message : String(error),
+          updatedAt: new Date().toISOString()
+        });
         logger.warn('自动继续生成阶段任务失败', {
           pathId: path.id,
-          retryCount,
+          retryCount: nextRetryCount,
+          terminal,
+          ...(errorCode ? { errorCode } : {}),
           error: error instanceof Error ? error.message : String(error)
         });
       }

@@ -182,7 +182,61 @@ describe('LearningService stale core recovery', () => {
 
     expect(mockPrisma.learning_paths.findMany.mock.calls[0][0]).not.toHaveProperty('take')
   })
+
+  it('P4：预检失败也会把重试计数落库（修复每分钟无限重试）', async () => {
+    mockPrisma.learning_paths.findMany.mockResolvedValue([stageDesignCandidate()])
+    const queue = jest.spyOn(learningService as any, 'queuePathEnrichmentRetry')
+      .mockRejectedValue(Object.assign(new Error('阶段任务生成失败'), { code: 'STAGE_DESIGN_TMP' }))
+
+    await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(0)
+
+    expect(queue).toHaveBeenCalledTimes(1)
+    expect((learningService as any).updatePathGenerationStatus).toHaveBeenCalledWith(
+      'path-1',
+      expect.objectContaining({ stageDesignRetryCount: 1 })
+    )
+  })
+
+  it('P4：不可自愈的路径变更冲突直接把重试次数顶到上限，终止自动重试', async () => {
+    mockPrisma.learning_paths.findMany.mockResolvedValue([stageDesignCandidate()])
+    jest.spyOn(learningService as any, 'queuePathEnrichmentRetry')
+      .mockRejectedValue(Object.assign(new Error('相关学习内容已有已完成课堂记录，不能删除或覆盖'), {
+        code: 'PATH_MUTATION_HAS_COMPLETED_TEACHING_EVIDENCE',
+        status: 409
+      }))
+
+    await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(0)
+
+    expect((learningService as any).updatePathGenerationStatus).toHaveBeenCalledWith(
+      'path-1',
+      expect.objectContaining({ stageDesignRetryCount: 3 })
+    )
+  })
 })
+
+function stageDesignCandidate(overrides: { stageDesignRetryCount?: number } = {}) {
+  const oldIso = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  return {
+    id: 'path-1',
+    status: 'active',
+    userId: 'user-1',
+    title: 't',
+    name: 't',
+    description: 'd',
+    subject: 's',
+    deadline: null,
+    deadlineText: null,
+    aiPromptTemplate: JSON.stringify({
+      _generation: {
+        stageDesign: 'failed',
+        stageDesignRetryCount: overrides.stageDesignRetryCount ?? 0,
+        updatedAt: oldIso
+      }
+    }),
+    activeGenerationRunId: null,
+    updatedAt: new Date(oldIso)
+  }
+}
 
 function staleRun(
   input: Record<string, unknown>,
