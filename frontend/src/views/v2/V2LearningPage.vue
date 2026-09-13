@@ -69,11 +69,11 @@
       <aside v-if="knowledgePoints.length" class="kp" :class="{ 'kp--collapsed': !kpExpanded }">
         <button type="button" class="kp__head" :aria-expanded="kpExpanded" @click="toggleKp">
           <strong>本节知识点</strong>
-          <span>{{ masteredCount }} / {{ knowledgePoints.length }} 已掌握</span>
+          <span>{{ masteredCount }} / {{ knowledgePoints.length }} 已掌握<template v-if="inProgressCount"> · 进行中 {{ inProgressCount }}</template></span>
           <span class="kp__caret" aria-hidden="true">{{ kpExpanded ? '▾' : '▸' }}</span>
         </button>
         <div class="kp__body">
-          <div class="kp__bar"><i :style="{ width: (masteredCount / knowledgePoints.length) * 100 + '%' }"></i></div>
+          <div class="kp__bar"><i :style="{ width: weightedProgressPct + '%' }"></i></div>
           <ol class="kp__list">
             <li v-for="(kp, i) in knowledgePoints" :key="kp.id || i" class="kp__item" :class="kpCls(kp)">
               <span class="kp__mark">
@@ -1506,15 +1506,33 @@ function isMastered(kp: Record<string, any>) {
 function isCurrent(kp: Record<string, any>) {
   return ['learning', 'in_progress', 'current', 'teaching'].includes(String(kp.status || '').toLowerCase());
 }
+/** 单点完成度 0-100：已掌握算满；否则取 progress（夹取到 0-100） */
+function kpProgressPct(kp: Record<string, any>) {
+  if (isMastered(kp)) return 100;
+  const raw = Number(kp.progress);
+  if (Number.isFinite(raw)) return Math.max(0, Math.min(100, Math.round(raw)));
+  return 0;
+}
 function kpCls(kp: Record<string, any>) {
   return { 'kp__item--done': isMastered(kp), 'kp__item--current': isCurrent(kp) };
 }
 function kpStatusText(kp: Record<string, any>) {
   if (isMastered(kp)) return '已掌握';
-  if (isCurrent(kp)) return '学习中';
-  return '待学习';
+  const pct = kpProgressPct(kp);
+  if (isCurrent(kp)) return pct > 0 ? `学习中 · ${pct}%` : '学习中';
+  return pct > 0 ? `进行中 · ${pct}%` : '待学习';
 }
 const masteredCount = computed(() => knowledgePoints.value.filter(isMastered).length);
+/** 进行中（未掌握且已有进度）的点数 */
+const inProgressCount = computed(
+  () => knowledgePoints.value.filter((kp) => !isMastered(kp) && kpProgressPct(kp) > 0).length
+);
+/** 加权完成度：按各点 progress 求均值（不再只数 mastered，避免 80-90% 显示成 0%） */
+const weightedProgressPct = computed(() => {
+  const list = knowledgePoints.value;
+  if (!list.length) return 0;
+  return Math.round(list.reduce((sum, kp) => sum + kpProgressPct(kp), 0) / list.length);
+});
 
 /* ---------- 导航 ---------- */
 function goBack() {
