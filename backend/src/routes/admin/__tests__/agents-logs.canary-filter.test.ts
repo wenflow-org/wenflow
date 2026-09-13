@@ -67,13 +67,11 @@ async function run(handler: RouteHandler, req: any): Promise<any> {
   return res
 }
 
-const CANARY_EXCLUSION = { OR: [{ sourceEntry: null }, { sourceEntry: { not: 'system-canary' } }] }
+// sourceEntry 为非空列（String @default("platform")），排除条件不能带 { sourceEntry: null }
+const CANARY_EXCLUSION = { sourceEntry: { not: 'system-canary' } }
 
 function hasCanaryExclusion(and: any[]): boolean {
-  return (and || []).some(
-    (clause: any) =>
-      clause?.OR?.some?.((item: any) => item?.sourceEntry?.not === 'system-canary')
-  )
+  return (and || []).some((clause: any) => clause?.sourceEntry?.not === 'system-canary')
 }
 
 beforeEach(() => {

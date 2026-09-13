@@ -1526,10 +1526,9 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       where.sourceEntry = String(sourceEntry);
     } else {
       // 默认排除系统金丝雀探针流量（自检超时/中断会污染待办与失败列表）；
-      // 显式按 sourceEntry 筛选时保留，便于排查探针本身
-      where.AND.push({
-        OR: [{ sourceEntry: null }, { sourceEntry: { not: 'system-canary' } }],
-      });
+      // 显式按 sourceEntry 筛选时保留，便于排查探针本身。
+      // 注意：sourceEntry 非空（String @default("platform")），不能用 { sourceEntry: null } 过滤（Prisma 校验会报错）。
+      where.AND.push({ sourceEntry: { not: 'system-canary' } });
     }
 
     if (status) {
@@ -2222,7 +2221,8 @@ router.get('/activity', async (req: Request, res: Response) => {
       where: {
         calledAt: { gte: activityWindowStart },
         success: false,
-        OR: [{ sourceEntry: null }, { sourceEntry: { not: 'system-canary' } }],
+        // sourceEntry 非空（String @default("platform")）：直接 not 过滤，勿用 { sourceEntry: null }
+        sourceEntry: { not: 'system-canary' },
       },
       orderBy: { calledAt: 'desc' },
       select: {
