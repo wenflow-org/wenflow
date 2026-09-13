@@ -217,6 +217,26 @@ describe('sandbox-resolver', () => {
       expect(result!.missingCount).toBe(0);
     });
 
+    it('path-planning 的可选输入（type: string?）不参与必填对账，缺 adjustments 不再告警', async () => {
+      const refs = await extractSandboxRefsFromCore('path-planning');
+      expect(refs.some((r) => r.path.endsWith('understanding.adjustments'))).toBe(false);
+
+      const loggerSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const result = await checkAgentSandboxRefsFromContext(
+        'path-planning',
+        'path',
+        {
+          normalizedInputV1: {
+            learnerProfile: { surfaceGoal: '目标' },
+            confirmedProposal: { learningDirection: '方向' },
+          },
+        }
+      );
+      expect(result!.missingCount).toBe(0);
+      expect(loggerSpy).not.toHaveBeenCalled();
+      loggerSpy.mockRestore();
+    });
+
     it('自定义 provider 可注册，构造的池可被 checkSandboxRefs 校验', async () => {
       registerSandboxPoolProvider('test-agent', (ctx) => ({ 'test-agent': { a: { b: ctx.value } } }));
       const provider = getSandboxPoolProvider('test-agent');

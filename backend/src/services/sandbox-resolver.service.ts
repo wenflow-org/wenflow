@@ -86,6 +86,10 @@ export async function extractSandboxRefsFromCore(skillId: string): Promise<Array
     const refs: Array<{ agentAlias: string; path: string }> = [];
     for (const input of core.inputs) {
       if (input.kind !== 'sandbox' || !input.sandboxPath) continue;
+      // 可选输入（声明 type 以 ? 结尾，如 string?）不参与必填对账：
+      // 这类键只在特定场景注入（如 path 的 adjustments 只在「补充说明重规划」出现），
+      // 普通流程缺失属正常，不应刷「声明与装配脱节」告警。
+      if (typeof input.type === 'string' && input.type.trim().endsWith('?')) continue;
       const dotIndex = input.sandboxPath.indexOf('.');
       if (dotIndex === -1) {
         refs.push({ agentAlias: input.sandboxPath, path: '' });
