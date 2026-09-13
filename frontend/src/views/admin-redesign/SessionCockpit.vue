@@ -232,9 +232,11 @@
               </div>
               <p v-if="teachingDetailLoading" class="cp-none">正在读取教学会话记录…</p>
               <!-- 课时总结卡片 -->
-              <div v-if="hasLessonWrapup && lessonWrapup" class="cp-lesson-wrapup">
+              <div v-if="hasLessonWrapup && lessonWrapup" class="cp-lesson-wrapup" :class="{ 'is-degraded': lessonWrapup.degraded }">
                 <div class="cp-lesson-wrapup__head">
-                  <span class="cp-lesson-wrapup__badge">✓ 本课总结</span>
+                  <span class="cp-lesson-wrapup__badge" :class="{ 'is-degraded': lessonWrapup.degraded }">
+                    {{ lessonWrapup.degraded ? '⚠ 降级总结 · 本课未完整结束' : '✓ 本课总结' }}
+                  </span>
                   <span class="cp-lesson-wrapup__scores">
                     <span v-if="lessonWrapup.duration" class="cp-lesson-wrapup__score">{{ lessonWrapup.duration }} 分钟</span>
                     <span v-if="lessonWrapup.turnCount" class="cp-lesson-wrapup__score">{{ lessonWrapup.turnCount }} 轮对话</span>
@@ -245,6 +247,9 @@
                   </span>
                 </div>
                 <div class="cp-lesson-wrapup__body">
+                  <p v-if="lessonWrapup.degraded" class="cp-lesson-wrapup__notice">
+                    本节课未完整结束（超时或提前中断），以下仅保留基础学习记录；完整练习建议与课堂评价未生成。
+                  </p>
                   <!-- 知识点掌握 -->
                   <div v-if="lessonWrapup.knowledgeItems.length" class="cp-lesson-wrapup__section">
                     <span class="cp-lesson-wrapup__section-title">知识点掌握</span>
@@ -853,12 +858,21 @@ const lessonWrapup = computed(() => {
   const confusionPoints = Array.isArray(evidence.topConfusionPoints) ? evidence.topConfusionPoints as string[] : []
   const highlights = (summary.evaluationHighlights || {}) as Record<string, unknown>
   const emotions = (evidence.emotionalSignals || {}) as Record<string, unknown>
+  const sources = (w.sources || {}) as Record<string, unknown>
+  const status = String(w.status || '')
+  const rawPracticeAdvice = String(summary.practiceAdvice || '')
+  // 降级总结：超时/收束失败兜底（summary-only）的 practiceAdvice 是面向学习者的
+  // 「重新开始本节…」占位，后台原样展示像在要求管理员重新学习 → 标记降级并隐藏该占位。
+  const degraded = status === 'summary-only'
+    || String(sources.summary || '').includes('fallback')
+    || /重新开始本节|重新完成一次完整的学习/.test(rawPracticeAdvice)
   return {
-    status: String(w.status || ''),
+    status,
+    degraded,
     duration: numberValue(w.duration),
     topicSummary: String(summary.topicSummary || ''),
     knowledgeSummary: String(summary.knowledgeSummary || ''),
-    practiceAdvice: String(summary.practiceAdvice || ''),
+    practiceAdvice: degraded ? '' : rawPracticeAdvice,
     learningEvaluation: String(summary.learningEvaluation || ''),
     keyTakeaways: Array.isArray(summary.keyTakeaways) ? summary.keyTakeaways as string[] : [],
     actionPlan: Array.isArray(summary.actionPlan) ? summary.actionPlan as string[] : [],
@@ -3137,6 +3151,20 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   font-size: var(--mk-fs-13);
   font-weight: 800;
   color: var(--mk-green);
+}
+.cp-lesson-wrapup__badge.is-degraded { color: var(--mk-amber); }
+.cp-lesson-wrapup.is-degraded .cp-lesson-wrapup__head {
+  background: var(--mk-amber-bg);
+  border-bottom-color: var(--mk-amber-bg);
+}
+.cp-lesson-wrapup__notice {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: var(--mk-fs-12);
+  line-height: 1.6;
+  color: var(--mk-amber);
+  background: var(--mk-amber-bg);
 }
 .cp-lesson-wrapup__scores {
   display: flex;
