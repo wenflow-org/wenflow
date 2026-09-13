@@ -311,6 +311,34 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
     }))
   })
 
+  it('收敛时最终 learnerState 采用 envelope.contextUpdate.nextState（envelope 回退一致）', async () => {
+    sessionRecord.goalConversationId = 'conv-1'
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'conv-1',
+      collectedData: JSON.stringify({ stage: 'understanding', messages: [], understanding: {} })
+    })
+    // 状态只放在 runtimeEnvelope 里（output.learnerState 故意留空），验证最终落库走 envelope 回退
+    mockExecuteSkill.mockResolvedValue({
+      reply: '就按这个方案来',
+      learnerState: {},
+      runtimeEnvelope: { contextUpdate: { nextState: { emotion: 'confident', goalReadiness: 0.9 } } }
+    })
+    mockContinueConversation.mockResolvedValue({
+      userVisible: '路径生成中',
+      internal: {
+        core: { conversationId: 'conv-1', stage: 'ready', confidence: 0.9 },
+        ext: { goalConversation: { quickReplies: [] } }
+      }
+    })
+    mockGoalFindUnique.mockResolvedValue({ id: 'conv-1', learningPathId: 'path-1' })
+
+    const result = await coordinator.executeSingleStep({ sessionId: 'simulation-1', userId: 'user-1', mode: 'single-step' })
+
+    expect(result.goalReady).toBe(true)
+    const goal = JSON.parse(sessionRecord.stageResults).goal
+    expect(goal.learnerState).toEqual(expect.objectContaining({ emotion: 'confident', goalReadiness: 0.9 }))
+  })
+
   it('会话已是终态（failed/abandoned）：直接失败，不调用任何 skill', async () => {
     sessionRecord.status = 'failed'
 

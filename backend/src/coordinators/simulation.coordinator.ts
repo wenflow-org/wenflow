@@ -1147,7 +1147,9 @@ class SimulationOrchestrator {
           virtualReplyResult.learnerStateFromEnvelope || {}
         ),
         activeStoryContext,
-        (existingGoalState.finalStage as string | undefined) || (existingGoalState.stage as string | undefined) || goalState?.stage
+        // 优先取本次对话的实时 stage；stageResults.goal 的 finalStage/stage 仅作兜底，
+        // 避免历史落库字段遮蔽实时进度（issue #4 健壮性观察）
+        goalState?.stage || (existingGoalState.finalStage as string | undefined) || (existingGoalState.stage as string | undefined)
       );
       
       logs.push({
@@ -1215,7 +1217,9 @@ class SimulationOrchestrator {
       const goalReady = isGoalConverged(goalResult.internal.core.stage);
       const finalGoalLearnerState = finalizeGoalLearnerState(
         profile,
-        virtualReplyResult.output?.learnerState || {},
+        // 与 currentGoalLearnerState 同口径（含 envelope 回退），否则最终落库会丢掉
+        // envelope.contextUpdate.nextState（issue #4 一致性观察）
+        resolveSimLearnerState(virtualReplyResult.output, virtualReplyResult.learnerStateFromEnvelope || {}),
         activeStoryContext,
         goalResult.internal.core.stage
       );
