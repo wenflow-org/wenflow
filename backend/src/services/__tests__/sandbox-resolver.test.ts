@@ -210,6 +210,7 @@ describe('sandbox-resolver', () => {
           normalizedInputV1: {
             learnerProfile: { surfaceGoal: '目标' },
             confirmedProposal: { learningDirection: '方向' },
+            understanding: { adjustments: '补充说明' },
           },
         }
       );

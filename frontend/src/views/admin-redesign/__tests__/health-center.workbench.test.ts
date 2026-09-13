@@ -27,6 +27,10 @@ vi.mock('@/api/adminApi', () => ({
     getSummary: getSummaryMock,
     fix: vi.fn(),
   },
+  // 健康中心内嵌「技能对账」子组件会调用此 API；返回空报告即可（本套件不校验对账内容）
+  adminSkillsApi: {
+    getReconciliation: vi.fn(async () => ({ data: { data: null } })),
+  },
 }));
 
 function makeItem(
@@ -174,15 +178,15 @@ describe('健康中心（G1）', () => {
   it('网络失败降级：失败空态 + 重试成功后恢复', async () => {
     getSummaryMock.mockRejectedValueOnce(new Error('network down'));
     const wrapper = await mountWorkbench();
-    const failedBox = wrapper.find('.mk-empty');
+    const failedBox = wrapper.find('.mk-empty--min');
     expect(failedBox.exists()).toBe(true);
     expect(failedBox.text()).toContain('加载失败');
 
     getSummaryMock.mockResolvedValueOnce({ data: { success: true, data: makeReport() } });
-    await wrapper.find('.mk-empty__action').trigger('click');
+    await wrapper.find('.mk-empty--min .mk-empty__action').trigger('click');
     await flushPromises();
     await nextTick();
-    expect(wrapper.find('.mk-empty').exists()).toBe(false);
+    expect(wrapper.find('.mk-empty--min').exists()).toBe(false);
     expect(wrapper.findAll('.hc-check__row').length).toBe(13);
     expect(getSummaryMock).toHaveBeenCalledWith(true); // 重试走强制刷新
   });

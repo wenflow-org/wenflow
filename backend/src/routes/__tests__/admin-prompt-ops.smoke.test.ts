@@ -51,6 +51,8 @@ jest.mock('../../utils/logger', () => ({
 
 jest.mock('../../composers/prompt-files/loader', () => ({
   loadAllPromptFiles: (...args: unknown[]) => mockLoadAllPromptFiles(...args),
+  // path-planning 在模块加载时调用 loadPromptFile(agentId) 取编译产物，mock 需覆盖
+  loadPromptFile: () => null,
 }))
 
 jest.mock('../../services/agent-manifest.service', () => ({

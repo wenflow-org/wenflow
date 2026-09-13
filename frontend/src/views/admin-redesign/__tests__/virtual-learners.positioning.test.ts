@@ -73,33 +73,30 @@ beforeEach(() => {
 });
 
 describe('虚拟学习者定位（D1）', () => {
-  it('无数据时：状态条精简 + 仿真概览显示「仿真空闲」结论（统计不渲染）', async () => {
+  it('无数据时：状态条精简，分区筛选计数全 0（无「创建中」旧叫法）', async () => {
     const wrapper = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
     const bar = wrapper.find('.mk-status');
     expect(bar.exists()).toBe(true);
-    // 状态条回归「标题+总量+操作」：不再含分区统计
     expect(bar.text()).toContain('共 0 人');
+    // 分区筛选计数（画像口径）
+    expect(bar.text()).toContain('运行中 0');
+    expect(bar.text()).toContain('已暂停 0');
+    expect(bar.text()).toContain('需关注 0');
     expect(bar.text()).not.toContain('创建中');
-    // 仿真概览只显示结论头（无数据时不渲染无意义统计）
-    expect(wrapper.find('.mk-overview').exists()).toBe(true);
-    expect(wrapper.text()).toContain('仿真空闲');
-    expect(wrapper.find('.mk-overview__kpis').exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it('有数据时：仿真概览 KPI + 运行详情透出全量口径数值（liveVirtualSessionStats 驱动；已失败含 abandoned）', async () => {
+  it('有数据时：状态条活动会话按全量口径（running + created，已失败含 abandoned）', async () => {
     liveVirtualSessionStats.value = { created: 1, running: 2, failed: 3, abandoned: 1, completed: 0, total: 7 };
     const wrapper = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
-    const dash = wrapper.find('.mk-overview');
-    expect(dash.exists()).toBe(true);
-    expect(dash.text()).toContain('创建中 1');
-    expect(dash.text()).toContain('运行中 2');
-    expect(dash.text()).toContain('已失败 4');
-    expect(dash.text()).toContain('仿真运行中');
+    const bar = wrapper.find('.mk-status');
+    expect(bar.exists()).toBe(true);
+    // 活动会话 = running 2 + created 1 = 3
+    expect(bar.text()).toContain('活动会话 3');
     wrapper.unmount();
   });
 

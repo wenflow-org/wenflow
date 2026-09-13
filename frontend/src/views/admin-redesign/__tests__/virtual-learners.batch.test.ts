@@ -139,21 +139,27 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     openSubPageMock.mockClear();
   });
 
-  it('状态条分区计数：全量口径（创建中/运行中/已失败/卡死）+ 已截断提示', async () => {
+  it('状态条：会话口径活动数 + 画像口径分区计数 + 已截断提示', async () => {
     liveVirtualSessionStats.value = { created: 3, running: 2, failed: 1, abandoned: 1, completed: 0, total: 7 };
     liveVirtualStaleCount.value = 2;
     liveVirtualsTotal.value = 80;
-    liveVirtuals.value = [makeVirtual(1), makeVirtual(2), makeVirtual(3)];
+    liveVirtuals.value = [
+      makeVirtual(1, { runningCount: 2 }),
+      makeVirtual(2, { pausedCount: 1 }),
+      makeVirtual(3, { failedCount: 1, stalledCount: 2 }),
+    ];
     const w = await mountPage();
-    expect(w.text()).toContain('创建中 3');
-    expect(w.text()).toContain('运行中 2');
-    expect(w.text()).toContain('已失败 2');
-    expect(w.text()).toContain('卡死 2');
+    // 会话口径：活动 = running 2 + created 3
+    expect(w.text()).toContain('活动会话 5');
+    // 画像口径分区筛选计数
+    expect(w.text()).toContain('运行中 1');
+    expect(w.text()).toContain('已暂停 1');
+    expect(w.text()).toContain('需关注 1');
     expect(w.text()).toContain('已截断 · 共 80 人');
     expect(w.text()).toContain('回收卡死（2）');
   });
 
-  it('运行统计展示（A5）：完成率/失败率/终止率/均耗/卡死最长分钟（状态条）', async () => {
+  it('运行统计展示（A5）：今日调用/完成率/失败率（状态条）', async () => {
     liveVirtualRunStats.value = {
       profileCount: 3,
       totalSessions: 10,
@@ -183,16 +189,13 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).toContain('60%');
     expect(w.text()).toContain('失败率');
     expect(w.text()).toContain('30%');
-    expect(w.text()).toContain('终止率 10%');
-    expect(w.text()).toContain('均耗 2 小时');
-    expect(w.text()).toContain('卡死 2（最长 24.2 小时）');
   });
 
-  it('无会话数据时统计段不出现（完成率/平均时长等）', async () => {
+  it('无会话数据时完成率/失败率显示 0%（状态条常驻）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    expect(w.text()).not.toContain('完成率');
-    expect(w.text()).not.toContain('平均时长');
+    expect(w.text()).toContain('完成率 0%');
+    expect(w.text()).toContain('失败率 0%');
   });
 
   it('无卡死时不出现一键回收按钮；未截断时不出现截断提示', async () => {
@@ -296,7 +299,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
   it('「运行中」列点击直达会话座舱（openSubPage session）', async () => {
     liveVirtuals.value = [makeVirtual(1, { runningCount: 1, runningSessionIds: ['run-1'], currentStage: 'goal' })];
     const w = await mountPage();
-    await w.find('.vl-run--live').trigger('click');
+    await w.find('.rs-badge').trigger('click');
     expect(openSubPageMock).toHaveBeenCalledWith('session', 'run-1');
   });
 
@@ -308,9 +311,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     // 失败列：纯数字（新列布局）
     const failCell = w.findAll('tbody tr td').find((td) => (td.text() || '').trim() === '2');
     expect(failCell).toBeTruthy();
-    expect(w.find('.vl-stall').exists()).toBe(true);
-    expect(w.find('.vl-num--bad').exists()).toBe(true);
-    // 运行中列不再混入失败/卡死徽章
-    expect(w.findAll('.vl-badge--bad')).toHaveLength(0);
+    expect(w.find('.vl-faillink.vl-num--bad').exists()).toBe(true);
+    // 运行中列只表达生命周期/阶段，不混入失败/卡死徽章
+    expect(w.find('.vl-state-cell .mk-badge--bad').exists()).toBe(false);
   });
 });

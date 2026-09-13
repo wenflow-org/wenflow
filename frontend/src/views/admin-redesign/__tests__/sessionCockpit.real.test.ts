@@ -219,8 +219,8 @@ describe('SessionCockpit 双模式', () => {
 
     // 顶栏 + 模式标识（标题已由「会话座舱」更名为「会话监控」）
     expect(wrapper.text()).toContain('会话监控');
-    expect(wrapper.text()).toContain('真实教学会话');
-    expect(wrapper.find('.cp-back').text()).toContain('会话列表');
+    expect(wrapper.text()).toContain('真实会话');
+    expect(wrapper.find('.mk-back').text()).toContain('会话列表');
 
     // 阶段条：4 段 + 进度副标（Path 1/2 里程碑、Goal 对话轮次）
     expect(wrapper.findAll('.cp-stage')).toHaveLength(4);
@@ -252,7 +252,7 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).not.toContain('裁判旁路诊断');
 
     // 只读提示
-    expect(wrapper.text()).toContain('真实会话 · 只读');
+    expect(wrapper.text()).toContain('真实会话：只读监控');
 
     wrapper.unmount();
   });
@@ -279,14 +279,14 @@ describe('SessionCockpit 双模式', () => {
 
     // Path tab：真实模式空态明示数据边界
     const stages = wrapper.findAll('.cp-stage');
-    await stages.find((s) => s.text().includes('Path 生成'))!.trigger('click');
+    await stages.find((s) => s.text().includes('Path'))!.trigger('click');
     await settle();
     expect(wrapper.text()).toContain('该真实会话尚未生成 Path');
 
     // Learn tab：真实模式无教学记录空态
-    await wrapper.findAll('.cp-stage').find((s) => s.text().includes('Learn 学习'))!.trigger('click');
+    await wrapper.findAll('.cp-stage').find((s) => s.text().includes('Learn'))!.trigger('click');
     await settle();
-    expect(wrapper.text()).toContain('该真实会话尚未开始学习');
+    expect(wrapper.text()).toContain('尚未生成课程');
 
     // 无轨迹面板（黑盒数据不存在）
     expect(wrapper.text()).not.toContain('裁判旁路诊断');
@@ -305,13 +305,14 @@ describe('SessionCockpit 双模式', () => {
 
     const wrapper = await mountCockpit('session', 'vs_1');
 
-    expect(wrapper.find('.cp-back').text()).toContain('虚拟学习者');
+    expect(wrapper.find('.mk-back').text()).toContain('虚拟学习者');
     expect(wrapper.text()).toContain('辅助模式');
     // 虚拟行为 100% 保留：操作按钮 + 对抗预算 + 删除会话（一键全流程已收敛到「自动驾驶」）
     expect(wrapper.text()).not.toContain('一键全流程');
     expect(wrapper.text()).toContain('自动驾驶');
     expect(wrapper.find('.cp-run__budget').exists()).toBe(true);
-    expect(wrapper.text()).toContain('删除会话');
+    // 删除仅终态出现：进行中的会话不显示删除
+    expect(wrapper.text()).not.toContain('删除会话');
     // 白盒无裁判/私有轨迹 → 统一时间线面板不出现（不破坏原黑盒区）
     expect(wrapper.text()).not.toContain('统一时间线');
 
@@ -342,13 +343,16 @@ describe('SessionCockpit 双模式', () => {
 
     expect(wrapper.text()).toContain('黑盒模式');
     expect(wrapper.text()).toContain('终局评估');
-    expect(wrapper.text()).toContain('裁判旁路诊断');
     expect(wrapper.text()).toContain('85%');
 
-    // 三流统一时间线：裁判诊断 + 私有状态 + 会话日志合并单轴
-    expect(wrapper.text()).toContain('统一时间线（三流合并）');
-    const traceText = wrapper.find('.cp-timeline-panel').text();
-    expect(traceText).toContain('裁判诊断');
+    // Trace 诊断侧栏默认折叠：展开后可见三流统一时间线 + 裁判旁路诊断
+    const traceToggle = wrapper.findAll('button').find((b) => b.text().includes('Trace 诊断'));
+    expect(traceToggle).toBeTruthy();
+    await traceToggle!.trigger('click');
+    await nextTick();
+    expect(wrapper.text()).toContain('裁判旁路诊断');
+    expect(wrapper.text()).toContain('统一时间线');
+    const traceText = wrapper.find('.cp-trace-panel').text();
     expect(traceText).toContain('curious');
     expect(traceText).toContain('virtual-reply');
 

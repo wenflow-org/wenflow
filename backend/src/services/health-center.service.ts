@@ -583,7 +583,7 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
       ].slice(0, 30),
       cause: 'core 声明的字段与编排产出的字段对不上（缺项/孤儿/类型不一致）：两边分别维护，漏改了一方',
       action: 'manual',
-      fixHint: '需开发决策：补编排路由、登记豁免，或明确接受存量孤儿（当前 5 条为有意保留）',
+      fixHint: '需开发决策：补编排路由、登记豁免，或明确接受存量孤儿',
       source: 'check-core-fields-sync.ts',
     }),
     buildItem('w1-active', {

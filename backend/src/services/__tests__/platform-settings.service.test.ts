@@ -19,15 +19,21 @@ import {
   updatePlatformSettings
 } from '../platform-settings.service'
 
+/** registerIpQuota* 默认值（未配置时开关关、额度 5） */
+const QUOTA_DEFAULTS = { registerIpQuotaEnabled: false, registerIpDailyQuota: 5 }
+
 describe('platform settings service', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
+    // 用 reset（而非 clear）清掉实现，避免上一个用例的 readFile mockResolvedValue 泄漏到下一个
+    jest.resetAllMocks()
+    // 默认旧 JSON 设置文件不存在（ENOENT）
+    readFile.mockRejectedValue(Object.assign(new Error('not found'), { code: 'ENOENT' }))
   })
 
   it('优先从 System DB 读取注册开关', async () => {
     mockSystemPrisma.platform_settings.findUnique.mockResolvedValue({ value: 'false' })
 
-    await expect(getPlatformSettings()).resolves.toEqual({ registrationEnabled: false })
+    await expect(getPlatformSettings()).resolves.toEqual({ registrationEnabled: false, ...QUOTA_DEFAULTS })
     expect(readFile).not.toHaveBeenCalled()
   })
 
@@ -36,7 +42,7 @@ describe('platform settings service', () => {
     readFile.mockResolvedValue(JSON.stringify({ registrationEnabled: true }))
     mockSystemPrisma.platform_settings.upsert.mockResolvedValue({})
 
-    await expect(getPlatformSettings()).resolves.toEqual({ registrationEnabled: true })
+    await expect(getPlatformSettings()).resolves.toEqual({ registrationEnabled: true, ...QUOTA_DEFAULTS })
     expect(mockSystemPrisma.platform_settings.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { key: 'registrationEnabled' },
       create: expect.objectContaining({ value: 'true' })
@@ -51,8 +57,9 @@ describe('platform settings service', () => {
 
   it('更新注册开关写入 System DB', async () => {
     mockSystemPrisma.platform_settings.upsert.mockResolvedValue({})
+    mockSystemPrisma.platform_settings.findUnique.mockResolvedValue({ value: 'false' })
 
-    await expect(updatePlatformSettings({ registrationEnabled: false })).resolves.toEqual({ registrationEnabled: false })
+    await expect(updatePlatformSettings({ registrationEnabled: false })).resolves.toEqual({ registrationEnabled: false, ...QUOTA_DEFAULTS })
     expect(mockSystemPrisma.platform_settings.upsert).toHaveBeenCalledWith(expect.objectContaining({
       update: { value: 'false' }
     }))

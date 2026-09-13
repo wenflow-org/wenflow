@@ -132,7 +132,7 @@ describe('健康中心聚合（基准体系版）', () => {
     }
   });
 
-  it('验收口径：W4 当前 0 → ok；fields-sync 存量孤儿 5 → consistency warn；覆盖行 0 → info', async () => {
+  it('验收口径：W4 当前 0 → ok；fields-sync 存量孤儿已清零 → consistency ok；覆盖行 0 → info', async () => {
     const report = await buildHealthCenterReport(EMPTY_DB);
     const byId = new Map(report.items.map((item) => [item.id, item]));
 
@@ -145,10 +145,10 @@ describe('健康中心聚合（基准体系版）', () => {
     const fieldsSync = byId.get('fields-sync')!;
     expect(fieldsSync.semantics).toBe('consistency');
     expect(fieldsSync.base).toBe('bidirectional');
-    // 存量孤儿 5 条（path-planning 3 + virtual-learner-scenario-designer 2，真实漂移保留报）
-    expect(fieldsSync.count).toBe(5);
-    expect(fieldsSync.severity).toBe('warn');
-    expect(fieldsSync.status).toBe('orphan');
+    // 存量孤儿（path-planning / virtual-learner-scenario-designer）已补齐，归零
+    expect(fieldsSync.count).toBe(0);
+    expect(fieldsSync.severity).toBe('ok');
+    expect(fieldsSync.status).toBe('clean');
     expect(fieldsSync.action).toBe('manual');
 
     const overrideRecord = byId.get('override-record')!;

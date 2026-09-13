@@ -49,7 +49,7 @@ describe('LearningDecisionFeedService', () => {
     const card = cards.find((c) => c.kind === 'path-replanned')
     expect(card).toBeDefined()
     expect(card!.judgment).toBe('掌握证据显示前置缺口')
-    expect(card!.action).toContain('新的路径版本')
+    expect(card!.action).toContain('调整后续阶段安排')
   })
 
   it('学习者快照有脆弱概念时产出 concept-watch 卡', () => {

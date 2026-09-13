@@ -8,7 +8,7 @@
       <span class="mk-status__meta">{{ pageLoading ? '—' : stages.length }} 阶段 · {{ pageLoading ? '—' : totalSkills }} 个 Skill</span>
       <span class="mk-status__meta">总调用 {{ pageLoading ? '—' : totalCalls }}</span>
       <span v-if="unresolvedCount > 0" class="mk-status__meta mk-status__meta--bad">未解析 {{ unresolvedCount }}</span>
-      <span v-if="w4Drifted.length" class="mk-status__meta mk-status__meta--bad">哈希漂移 {{ w4Drifted.length }}</span>
+      <span v-if="w4Drifted.length" class="mk-status__meta mk-status__meta--bad">{{ TERMS.driftHashQualified }} {{ w4Drifted.length }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">刷新</button>
       </span>
@@ -59,7 +59,7 @@
       </details>
       <details class="orch-fold" :open="governOpen">
         <summary class="orch-fold__summary">
-          治理：漂移报告 + 变更审计
+          治理：{{ TERMS.driftContract }}报告 + 变更审计
           <span class="orch-fold__meta">编辑后核对文件与库一致</span>
         </summary>
         <div class="orch-fold__body">
@@ -79,6 +79,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { dataSource } from './store'
 import { liveTopoNodes, liveSkillCatalog, liveLoading, errMsg } from './live'
+import { TERMS } from './terms'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
 import DataFlowGraph from './DataFlowGraph.vue'
