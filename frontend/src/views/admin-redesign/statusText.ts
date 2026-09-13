@@ -269,7 +269,18 @@ const ACTION_TEXT: Record<string, string> = {
   'prompt-compile-core': '编译 Prompt 核心',
   'prompt-publish-core': '发布 Prompt 核心',
   'skill-author-draft': '生成 Skill 草稿',
-  'achievement-grant': '授予成就'
+  'achievement-grant': '授予成就',
+  // 低频虚拟学习者/配置类接口（P2-16 补齐）
+  'virtual-batch-create': '批量创建虚拟学习者',
+  'virtual-draft-profile': '生成虚拟人设画像',
+  'virtual-projection-token': '生成虚拟投影令牌',
+  'virtual-session-start-learning': '开始虚拟会话学习',
+  'virtual-session-stop-learning': '停止虚拟会话学习',
+  'virtual-session-autopilot-stop': '暂停虚拟会话自动驾驶',
+  'virtual-session-auto-learning': '虚拟会话自动学习',
+  'virtual-session-run-full': '虚拟会话全量运行',
+  'virtual-session-blackbox-action': '虚拟会话黑盒操作',
+  'projection-access-token': '生成投影访问令牌'
 }
 
 /**
@@ -278,24 +289,63 @@ const ACTION_TEXT: Record<string, string> = {
  * 用 path 规则兜底，让历史行也不必自己翻译接口路径。
  */
 const PATH_ACTION_RULES: Array<[RegExp, string]> = [
+  // 配置/观测
   [/\/system\/capabilities\/probe$/, '探测模型能力'],
   [/\/settings\/reliability$/, '修改可靠性配置'],
   [/\/settings\/capability-probe$/, '修改能力探针设置'],
+  [/\/settings\/registration$/, '修改注册设置'],
+  [/\/api-config\/test$/, '测试模型连通性'],
+  [/\/skills\/teaching-turn\/model-probe$/, '探测教学模型'],
+  // 虚拟学习者 · 人设/画像/故事
   [/\/virtual-learners\/generate-persona$/, '生成虚拟人设'],
+  [/\/virtual-learners\/[^/]+\/draft-stories$/, '生成虚拟故事'],
+  [/\/virtual-learners\/[^/]+\/draft-profile$/, '生成虚拟人设画像'],
+  [/\/virtual-learners\/[^/]+\/stories\/[^/]+$/, '编辑虚拟故事'],
+  [/\/virtual-learners\/[^/]+\/projection-token$/, '生成虚拟投影令牌'],
+  [/\/virtual-learners\/batch-delete$/, '批量删除虚拟学习者'],
+  [/\/virtual-learners\/batch-create$/, '批量创建虚拟学习者'],
+  // 虚拟学习者 · 会话
+  [/\/virtual-learners\/sessions\/reclaim-stale$/, '回收卡死会话'],
+  [/\/virtual-learners\/sessions\/terminate$/, '批量终止虚拟会话'],
   [/\/virtual-learners\/sessions\/[^/]+\/teaching-step$/, '推进虚拟会话'],
   [/\/virtual-learners\/sessions\/[^/]+\/restart-learning$/, '重启虚拟会话学习'],
+  [/\/virtual-learners\/sessions\/[^/]+\/start-learning$/, '开始虚拟会话学习'],
+  [/\/virtual-learners\/sessions\/[^/]+\/stop-learning$/, '停止虚拟会话学习'],
   [/\/virtual-learners\/sessions\/[^/]+\/autopilot\/start$/, '启动虚拟会话自动驾驶'],
+  [/\/virtual-learners\/sessions\/[^/]+\/autopilot\/stop$/, '暂停虚拟会话自动驾驶'],
+  [/\/virtual-learners\/sessions\/[^/]+\/auto-learning$/, '虚拟会话自动学习'],
+  [/\/virtual-learners\/sessions\/[^/]+\/run-full$/, '虚拟会话全量运行'],
+  [/\/virtual-learners\/sessions\/[^/]+\/blackbox-action$/, '虚拟会话黑盒操作'],
+  [/\/virtual-learners\/[^/]+\/start-blackbox-session$/, '启动虚拟实验'],
+  [/\/virtual-learners\/[^/]+\/start-session$/, '启动虚拟实验'],
+  // Prompt / Skill / 成就
   [/\/prompt-ops\/run-eval$/, '运行 Prompt 评估'],
   [/\/prompt-lab\/compile-core$/, '编译 Prompt 核心'],
   [/\/prompt-lab\/publish-core$/, '发布 Prompt 核心'],
   [/\/prompt-workbench\/compile-core$/, '编译 Prompt 核心'],
   [/\/skill-author\/draft$/, '生成 Skill 草稿'],
-  [/\/achievements\/grant$/, '授予成就']
+  [/\/achievements\/grant$/, '授予成就'],
+  // 投影令牌
+  [/\/projection-access-grants\/[^/]+\/projection-token$/, '生成投影访问令牌']
 ]
 
-export function pathActionText(path: string | null | undefined): string {
+/** 需要区分方法的通用资源路径（只在无 path 规则命中时兜底） */
+const METHOD_PATH_ACTION_RULES: Array<{ method: string; re: RegExp; name: string }> = [
+  { method: 'DELETE', re: /\/virtual-learners\/sessions\/[^/]+$/, name: '删除虚拟会话' },
+  { method: 'DELETE', re: /\/virtual-learners\/[^/]+$/, name: '删除虚拟学习者' },
+  { method: 'PUT', re: /\/virtual-learners\/[^/]+$/, name: '更新虚拟画像' },
+  { method: 'PATCH', re: /\/virtual-learners\/[^/]+$/, name: '更新虚拟画像' },
+  { method: 'DELETE', re: /\/announcements\/[^/]+$/, name: '删除公告' },
+  { method: 'PUT', re: /\/announcements\/[^/]+$/, name: '更新公告' }
+]
+
+export function pathActionText(path: string | null | undefined, method?: string | null): string {
   const p = String(path || '').split('?')[0]
   for (const [re, name] of PATH_ACTION_RULES) if (re.test(p)) return name
+  const m = String(method || '').toUpperCase()
+  if (m) {
+    for (const rule of METHOD_PATH_ACTION_RULES) if (rule.method === m && rule.re.test(p)) return rule.name
+  }
   return ''
 }
 

@@ -9,6 +9,7 @@ import {
   stageBadgeCls,
   categoryText,
   actionText,
+  pathActionText,
   targetTypeText,
   stageProgressIndex,
   stageProgress,
@@ -118,6 +119,26 @@ describe('actionText（审计动作）', () => {
 
   it('未知动作回退原文', () => {
     expect(actionText('mystery-action')).toBe('mystery-action');
+  });
+});
+
+describe('pathActionText（HTTP path → 中文动作，兜底老审计行）', () => {
+  it('高频/低频接口路径都能语义化', () => {
+    expect(pathActionText('/api/admin/system/capabilities/probe')).toBe('探测模型能力');
+    expect(pathActionText('/api/admin/virtual-learners/abc/projection-token')).toBe('生成虚拟投影令牌');
+    expect(pathActionText('/api/admin/virtual-learners/sessions/s1/start-learning')).toBe('开始虚拟会话学习');
+    expect(pathActionText('/api/admin/virtual-learners/sessions/s1/autopilot/stop')).toBe('暂停虚拟会话自动驾驶');
+  });
+
+  it('需要区分方法的通用资源路径按 method 映射', () => {
+    expect(pathActionText('/api/admin/virtual-learners/abc', 'DELETE')).toBe('删除虚拟学习者');
+    expect(pathActionText('/api/admin/virtual-learners/abc', 'PUT')).toBe('更新虚拟画像');
+    expect(pathActionText('/api/admin/virtual-learners/sessions/s1', 'DELETE')).toBe('删除虚拟会话');
+  });
+
+  it('未命中返回空串（调用方再回退原始 path）', () => {
+    expect(pathActionText('/api/admin/whatever')).toBe('');
+    expect(pathActionText(null)).toBe('');
   });
 });
 

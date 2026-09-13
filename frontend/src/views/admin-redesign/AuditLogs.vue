@@ -116,8 +116,9 @@
                 </td>
                 <td v-if="!hiddenCols.has('action')" :title="log.action">
                   <template v-if="methodOf(log)">
-                    <span class="log-method" :class="`log-method--${methodOf(log).toLowerCase()}`">{{ methodOf(log) }}</span>
                     <span class="log-path mono" :title="`${methodOf(log)} ${log.path || ''}`">{{ actionLabelOf(log) }}</span>
+                    <span class="log-action-sep" aria-hidden="true">·</span>
+                    <span class="log-method" :class="`log-method--${methodOf(log).toLowerCase()}`">{{ methodOf(log) }}</span>
                   </template>
                   <span v-else class="log-action">{{ actionText(log.action) }}</span>
                 </td>
@@ -286,7 +287,7 @@ function methodOf(log: AuditLogRow): string {
 function actionLabelOf(log: AuditLogRow): string {
   const mapped = actionText(log.action)
   if (mapped !== log.action) return mapped
-  return pathActionText(log.path) || log.path || mapped
+  return pathActionText(log.path, log.method) || log.path || mapped
 }
 
 const tabs = [
@@ -425,8 +426,10 @@ async function fetchStats() {
 function failureLabel(action: string): string {
   const mapped = actionText(action)
   if (mapped !== action) return mapped
+  const methodMatch = action.match(/^([A-Z]+)\s/)
+  const method = methodMatch ? methodMatch[1] : ''
   const path = action.replace(/^[A-Z]+ /, '')
-  return pathActionText(path) || action
+  return pathActionText(path, method) || action
 }
 
 async function applyFilters() {
@@ -592,6 +595,14 @@ function goSessions(username: string) {
 .log-method--delete { background: #fef2f2; color: #b91c1c; }
 .log-method--options,
 .log-method--head { background: #f1f5f9; color: #475569; }
+/* 动作名与方法之间的分隔符：避免「POST探测模型能力」这类无分隔粘连（复制文本也不再黏在一起） */
+.log-action-sep {
+  display: inline-block;
+  margin: 0 6px;
+  color: var(--mk-faint);
+  font-weight: 700;
+  vertical-align: middle;
+}
 /* API 路径：mono 省略号 + title 全值。
    max-width 用固定值（非 100%）：表格 auto 布局按单元格 max-content 定列宽，
    百分比 max-width 在列宽计算时视为 auto → 长路径会把整列撑宽（1440 下 654px、4K 下 1543px），

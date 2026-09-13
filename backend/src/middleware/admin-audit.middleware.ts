@@ -101,6 +101,17 @@ const ACTION_RULES: ActionRule[] = [
   { method: 'POST', pattern: /^\/api\/admin\/prompt-workbench\/compile-core$/, action: 'prompt-compile-core' },
   { method: 'POST', pattern: /^\/api\/admin\/skill-author\/draft$/, action: 'skill-author-draft' },
   { method: 'POST', pattern: /^\/api\/admin\/achievements\/grant$/, action: 'achievement-grant', targetType: 'user' },
+  // 低频但会在审计里出现的虚拟学习者/配置类接口：补齐语义名，避免动作列显示原始 HTTP 串
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/batch-create$/, action: 'virtual-batch-create', targetType: 'virtual-learner' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/draft-profile$/, action: 'virtual-draft-profile', targetType: 'virtual-learner' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/projection-token$/, action: 'virtual-projection-token', targetType: 'virtual-learner' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/start-learning$/, action: 'virtual-session-start-learning', targetType: 'virtual-session' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/stop-learning$/, action: 'virtual-session-stop-learning', targetType: 'virtual-session' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/autopilot\/stop$/, action: 'virtual-session-autopilot-stop', targetType: 'virtual-session' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/auto-learning$/, action: 'virtual-session-auto-learning', targetType: 'virtual-session' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/run-full$/, action: 'virtual-session-run-full', targetType: 'virtual-session' },
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/blackbox-action$/, action: 'virtual-session-blackbox-action', targetType: 'virtual-session' },
+  { method: 'POST', pattern: /^\/api\/admin\/projection-access-grants\/[^/]+\/projection-token$/, action: 'projection-access-token' },
 ];
 
 /** 去掉末尾斜杠后匹配映射表（路由注册在挂载点下时 baseUrl+path 即为完整路径） */

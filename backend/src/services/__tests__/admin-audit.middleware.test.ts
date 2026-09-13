@@ -310,4 +310,21 @@ describe('adminAuditMiddleware', () => {
       // fire-and-forget 的 rejection 已被 catch 吞掉（无未处理拒绝即通过）
     });
   });
+
+  it('低频接口也映射为语义动作（投影令牌 / 开始学习 / 自动驾驶停止 / 批量创建）', () => {
+    const cases: Array<[string, string, string]> = [
+      ['POST', '/api/admin/virtual-learners/p1/projection-token', 'virtual-projection-token'],
+      ['POST', '/api/admin/virtual-learners/sessions/s1/start-learning', 'virtual-session-start-learning'],
+      ['POST', '/api/admin/virtual-learners/sessions/s1/autopilot/stop', 'virtual-session-autopilot-stop'],
+      ['POST', '/api/admin/virtual-learners/batch-create', 'virtual-batch-create'],
+    ];
+    for (const [method, originalUrl, action] of cases) {
+      create.mockClear();
+      const req = createRequest({ method, baseUrl: '', path: originalUrl, originalUrl, params: {} });
+      const res = createResponse();
+      adminAuditMiddleware(req, res, jest.fn());
+      res.emit('finish');
+      expect(create.mock.calls[0][0].data.action).toBe(action);
+    }
+  });
 });
