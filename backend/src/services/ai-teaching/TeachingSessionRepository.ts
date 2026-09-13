@@ -8,7 +8,13 @@ import {
   updateSessionFinalizationState
 } from './SessionFinalizationPolicy';
 
-const TEACHING_OPERATION_LEASE_MS = 30 * 60 * 1000;
+/**
+ * 课堂操作租约（P2）：原为 30 分钟且无心跳——进程重启/请求挂起会把这个会话锁死很久
+ * （实测 BUSY 卡住 10+ 分钟）。改为「短租期 + 心跳续租」：在途回合由
+ * TeachingOperationLeaseGuard 每 30s 续一次，最长孤儿窗口从 30 分钟降到 2 分钟。
+ */
+export const TEACHING_OPERATION_LEASE_MS = 2 * 60 * 1000;
+export const TEACHING_OPERATION_RENEW_MS = 30 * 1000;
 export const FINALIZATION_LEASE_MS = 3 * 60 * 1000;
 export const FINALIZATION_LEASE_RENEW_MS = 45 * 1000;
 const RECOVERABLE_SESSION_STATUSES = ['active', 'paused', 'timeout'] as const;
@@ -469,6 +475,27 @@ export class TeachingSessionRepository {
         updatedAt: new Date()
       }
     });
+  }
+
+  /**
+   * P2：在途回合心跳续租课堂操作租约。
+   * 只在仍持有租约（operationId 匹配且未过期）时续，返回是否续成功；返回 false 表示
+   * 租约已被并发请求接管/回收，调用方应停止续租。
+   */
+  async renewOperationLease(sessionId: string, operationId: string): Promise<boolean> {
+    const now = new Date();
+    const updated = await prisma.teaching_sessions.updateMany({
+      where: {
+        id: sessionId,
+        operationId,
+        operationLeaseExpiresAt: { gt: now }
+      },
+      data: {
+        operationLeaseExpiresAt: new Date(now.getTime() + TEACHING_OPERATION_LEASE_MS),
+        updatedAt: now
+      }
+    });
+    return updated.count === 1;
   }
 
   async listByUser(userId: string, limit: number = 50): Promise<TeachingSessionRecord[]> {

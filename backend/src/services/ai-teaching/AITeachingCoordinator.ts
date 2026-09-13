@@ -29,6 +29,7 @@ import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryServ
 import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
 import { classifyFinalizationError } from './FinalizationErrors';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
+import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
 import { learnerExitService } from '../learner/LearnerExitService';
 import { memoryTraceService } from '../memory/memory-trace.service';
 import { recordMisconceptions } from '../learner/misconception-ledger.service';
@@ -1336,6 +1337,9 @@ export class AITeachingOrchestrator {
         'resume',
         ['active', 'paused', 'timeout']
       );
+      // P2：恢复分支同样要跑 LLM 上下文构建，短租期内必须续租
+      const resumeLeaseGuard = new TeachingOperationLeaseGuard(reservation.session.id, claim.operationId);
+      resumeLeaseGuard.start();
       let committed = false;
       try {
         const previousSession = claim.session;
@@ -1386,6 +1390,7 @@ export class AITeachingOrchestrator {
           scene: buildSessionOpeningScene({ mode: 'resumed', context: resumedContext, sameTaskAttempt }),
         };
       } finally {
+        resumeLeaseGuard.stop();
         if (!committed) {
           await teachingSessionRepository.releaseOperation(claim.session.id, claim.operationId);
         }
@@ -1393,6 +1398,9 @@ export class AITeachingOrchestrator {
     }
 
     const operationId = reservation.operationId as string;
+    // P2：开课初始化含 opening LLM 调用，短租期内必须续租
+    const initLeaseGuard = new TeachingOperationLeaseGuard(sessionId, operationId);
+    initLeaseGuard.start();
     try {
       const opening = await this.generateOpening(context);
       const welcomeMessage = `${opening.message}\n\n${opening.question}`;
@@ -1501,6 +1509,8 @@ export class AITeachingOrchestrator {
     } catch (error) {
       await teachingSessionRepository.failInitialization(sessionId, operationId);
       throw error;
+    } finally {
+      initLeaseGuard.stop();
     }
   }
 
@@ -1608,6 +1618,10 @@ export class AITeachingOrchestrator {
       ['active', 'timeout'],
       requireTeachingRevision(options.expectedRevision)
     );
+    // P2：回合期间心跳续租。操作租约已缩短到 2 分钟，教学回合可能含多次 LLM 调用跑几分钟，
+    // 不续租会被并发请求误判为陈旧而抢占（进程崩溃则无人续租，最多 2 分钟自动释放）。
+    const operationLeaseGuard = new TeachingOperationLeaseGuard(sessionId, operationClaim.operationId);
+    operationLeaseGuard.start();
     let committed = false;
 
     try {
@@ -2096,6 +2110,7 @@ export class AITeachingOrchestrator {
 
       return baseResult;
     } finally {
+      operationLeaseGuard.stop();
       if (!committed) {
         await teachingSessionRepository.releaseOperation(sessionId, operationClaim.operationId);
       }
