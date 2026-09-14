@@ -263,6 +263,7 @@ sandbox:teaching-agent.controls.teachingControlContext
 sandbox:teaching-agent.evaluation.sessionKtl
 sandbox:teaching-agent.evaluation.sessionLf
 sandbox:teaching-agent.evaluation.sessionLss
+sandbox:teaching-agent.interactionProfile
 sandbox:teaching-agent.knowledge.points
 sandbox:teaching-agent.knowledge.state
 sandbox:teaching-agent.learner.learnerProjection

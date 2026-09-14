@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-turn
-coreHash: a81e9bfaaecd4890b77916ab2f4fe0dadaab41abde650c124c2bcd02d29a7039
+coreHash: 90a660441b92ff27f2afe253e64fbaa46cf05720866d01efe4a393cfd8da7870
 coreVersion: 1
 temperature: 0.7
 maxTokens: 12000
@@ -28,7 +28,7 @@ failurePolicy: retry
 - 「visibleDialogueContext（object[]）」`sandbox:teaching.visibleDialogueContext`（编排注入） — 最近可见对话（role/content）
 - 「controls（object）」`sandbox:teaching.controls.teachingControlContext`（编排注入） — 教学控制上下文（priority/allow* 标志）+ 回合模式
 - 「scenario（object）」`sandbox:teaching.scenario`（编排注入） — 任务与路径上下文（taskProfile/cognitiveFrame/pathProgress 等，编排层组装）
-- 「interactionProfile（object）」`sandbox:teaching.scenario.interactionProfile`（编排注入） — 本轮学生输入的前端交互特征情报（认知负荷量测）：current（本轮统计值）+ history（近 6 条消息含 timestamps 的特征对比）。 字段含义：draftMs 输入总时长、idleMsBefore 上条回复到首次输入的间隔、lastIdleMs 输入中最大停顿、editingCount 编辑次数、 deleteCount 回退字符数、charsPerSentence 每句平均字符数。缺失字段/whole profile 为 absent（旧客户端/虚拟学习者）， 仅作为辅助情报，与 messages 同权、低于 classroomContext 的语义真相优先级。
+- 「interactionProfile（object）」`sandbox:teaching.interactionProfile`（编排注入） — 本轮学生输入的前端交互特征情报（认知负荷量测）：current（本轮统计值）+ history（近 6 条消息含 timestamps 的特征对比）。 字段含义：draftMs 输入总时长、idleMsBefore 上条回复到首次输入的间隔、lastIdleMs 输入中最大停顿、editingCount 编辑次数、 deleteCount 回退字符数、charsPerSentence 每句平均字符数。缺失字段/whole profile 为 absent（旧客户端/虚拟学习者）， 仅作为辅助情报，与 messages 同权、低于 classroomContext 的语义真相优先级。
 
 ## 执行规则
 

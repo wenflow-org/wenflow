@@ -243,6 +243,7 @@ export function buildTeachingSandboxPool(options: {
       classroomEventContext: options.classroomEventContext || {},
       visibleDialogueContext: options.sessionMessages,
       controls: { teachingControlContext: options.teachingControlContext },
+      interactionProfile: options.interactionProfile,
       scenario: {
         ...(options.scenario || {}),
         interactionProfile: options.interactionProfile,
