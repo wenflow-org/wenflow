@@ -187,8 +187,8 @@ watch(
 }
 /* 当前页码：实心蓝（AntD Pagination active 形态） */
 .mk-pagination__num--active {
-  background: var(--mk-blue);
-  border-color: var(--mk-blue);
+  background: var(--mk-blue-fill, #2c63d0);
+  border-color: var(--mk-blue-fill, #2c63d0);
   color: #fff;
   cursor: default;
   font-weight: 700;

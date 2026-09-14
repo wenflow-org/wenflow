@@ -233,7 +233,7 @@ const isDark = useIsDark();
   display: grid; place-items: center;
   font-size: 9px; font-style: normal;
 }
-.mark--done { background: var(--green); border: 0; color: #fff; }
+.mark--done { background: var(--mk-green-fill, #15803d); border: 0; color: #fff; }
 .mark--asking { border: 2px solid var(--blue); }
 .demo__field--asking {
   background: rgba(52, 120, 246, 0.06);

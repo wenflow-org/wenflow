@@ -373,6 +373,7 @@ html[data-theme='dark'] .mk-tabbar { background: #131b2a; border-bottom-color: #
 html[data-theme='dark'] .mk-tabbar__item { background: #1b2537; border-color: #232f45; color: #9fb0c8; }
 html[data-theme='dark'] .mk-tabbar__item:hover { background: #22304a; color: #e6edf7; }
 html[data-theme='dark'] .mk-tabbar__item--active { background: #17202f; color: #7aa2ff; }
+html[data-theme='dark'] .mk-tabbar__close { color: var(--mk-muted); }
 html[data-theme='dark'] .mk-tabbar__close:hover:not(:disabled) { background: #2c3a55; color: #e6edf7; }
 html[data-theme='dark'] .mk-tabbar__scrollbtn:hover:not(:disabled) { background: #22304a; color: #e6edf7; }
 html[data-theme='dark'] .mk-tabbar__more-btn:hover { background: #22304a; color: #e6edf7; }

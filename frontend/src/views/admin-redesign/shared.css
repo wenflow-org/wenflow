@@ -554,6 +554,8 @@ html[data-theme='dark'] .mk-pill--active .mk-pill__count { background: rgba(91, 
 }
 .mk-search__clear:hover { background: #cbd5e1; color: var(--mk-ink); }
 html[data-theme='dark'] .mk-search__clear { background: #2a3850; color: #9fb0c8; }
+/* 卡头元信息：暗色下 --mk-faint 对比不足（审计 AA 边缘），提到 --mk-muted */
+html[data-theme='dark'] .mk-card__meta { color: var(--mk-muted); }
 
 /* ----- 链接按钮 ----- */
 /* 返回按钮：子页面顶部"← 返回"统一样式（原散落在 ud-back/ld-back/vp-back 三处局部定义） */

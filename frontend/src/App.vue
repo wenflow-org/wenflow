@@ -61,7 +61,7 @@ userStore.initFromStorage();
   z-index: 9999;
   padding: 8px 14px;
   border-radius: 8px;
-  background: var(--blue, #3478f6);
+  background: var(--mk-blue-fill, #2c63d0);
   color: #fff;
   font-size: 13px;
   font-weight: 700;

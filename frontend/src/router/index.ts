@@ -125,6 +125,10 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/user/Settings.vue'),
     meta: { title: 'API 接入', requiresAuth: true }
   },
+  // 旧个人中心路径 → 正式 /user/* 路径（书签/外链兼容）
+  { path: '/profile', redirect: '/user/account' },
+  { path: '/settings', redirect: '/user/settings' },
+  { path: '/agent-logs', redirect: '/user/agent-logs' },
   {
     path: '/goal-conversation/:conversationId?',
     name: 'V2GoalConversation',

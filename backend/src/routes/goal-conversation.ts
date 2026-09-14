@@ -2,6 +2,7 @@
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
+import { gatewayErrorHttpStatus } from '../utils/gateway-http-status';
 import requirementOrchestrator from '../coordinators/requirement.coordinator';
 import { PromptStreamEvent, setRequestContext } from '../gateway/api-gateway/context';
 
@@ -235,6 +236,10 @@ router.post('/start', authMiddleware, goalConversationUserLimiter, async (req: R
         data: goalEnvelopeForRequest(req, error.result)
       });
     }
+    const gateway = gatewayErrorHttpStatus(error);
+    if (gateway) {
+      return res.status(gateway.status).json({ success: false, error: gateway.message });
+    }
     return res.status(500).json({ success: false, error: '开始对话失败，请稍后重试' });
   }
 });
@@ -288,6 +293,10 @@ router.post('/:conversationId/reply', authMiddleware, goalConversationUserLimite
         data: goalEnvelopeForRequest(req, error.result, req.params.conversationId)
       });
     }
+    const gateway = gatewayErrorHttpStatus(error);
+    if (gateway) {
+      return res.status(gateway.status).json({ success: false, error: gateway.message });
+    }
     const status = error.message === '对话会话不存在' ? 404 : 500;
     return res.status(status).json({ success: false, error: status === 404 ? error.message : '继续对话失败，请稍后重试' });
   }
@@ -326,6 +335,10 @@ router.post('/:conversationId/regenerate', authMiddleware, goalConversationUserL
     // 并发生成冲突（claimPathCoreGeneration）应返回 409，与 learning.ts 的 sendPathMutationConflict 一致
     if (error?.status === 409 || error?.code === 'PATH_GENERATION_RUN_CHANGED') {
       return res.status(409).json({ success: false, error: { message: '路径正在生成中，请稍后再试', code: 'PATH_GENERATION_RUN_CHANGED', status: 409 } });
+    }
+    const gateway = gatewayErrorHttpStatus(error);
+    if (gateway) {
+      return res.status(gateway.status).json({ success: false, error: gateway.message });
     }
     const status = error.message === '对话会话不存在' ? 404 : 500;
     return res.status(status).json({ success: false, error: status === 404 ? error.message : '重新生成路径失败，请稍后重试' });
