@@ -1073,12 +1073,17 @@ export const liveUsers = ref<LiveUser[]>([])
 /** 后端用户总数（分页 total；前端只拉前 50 行，用于截断提示） */
 export const liveUsersTotal = ref(0)
 
+/** 列表「全量加载」上限：客户端排序/聚合需要全量数据；超过此数仍会截断（状态条「已截断」提示）。
+ *  取值权衡：这些管理列表按「客户端全量 + 本地筛选/排序/分页」架构，故一次性拉全量；
+ *  规模真超出时再评估改为服务端分页。 */
+const LIVE_LIST_FULL_LIMIT = 1000
+
 /**
  * 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，后端单点 utils/test-account.ts）；
  * includeTest=true 时显式包含全量并带回行标记
  */
 async function fetchLiveUsers(includeTest = false): Promise<void> {
-  const res = await adminUsersApi.getUsers({ limit: 50, ...(includeTest ? { includeTest: true } : {}) })
+  const res = await adminUsersApi.getUsers({ limit: LIVE_LIST_FULL_LIMIT, ...(includeTest ? { includeTest: true } : {}) })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.users || body.items || []
   liveUsersTotal.value = Number(body.pagination?.total || items.length)
@@ -1422,7 +1427,7 @@ async function fetchLiveVirtualStats(): Promise<void> {
 }
 
 async function fetchLiveVirtuals(): Promise<void> {
-  const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: 50 })
+  const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: LIVE_LIST_FULL_LIMIT })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.profiles || body.items || []
   liveVirtualsTotal.value = Number(body.pagination?.total ?? items.length)

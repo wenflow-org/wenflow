@@ -110,14 +110,53 @@
             <th v-if="isLive" scope="col">
               <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
             </th>
-            <th>虚拟学习者</th>
+            <th
+              scope="col"
+              class="mk-th--sortable"
+              :aria-sort="vlSortState('name')"
+              @click="toggleVlSort('name')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('name')">虚拟学习者<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th>长期倾向</th>
-            <th>故事池</th>
-            <th class="mk-th--right" title="累计会话数（全部会话，含终态）">会话</th>
-            <th title="当前运行中/创建中的会话数及最近阶段；点击进入会话座舱">运行中</th>
-            <th class="mk-th--right" title="已失败/已终止会话数（全量聚合）">失败</th>
-            <th class="mk-th--right" title="超过回收阈值无写入且无活跃租约的会话数（可在状态条一键回收）">卡死</th>
-            <th>创建</th>
+            <th
+              scope="col"
+              class="mk-th--sortable"
+              :aria-sort="vlSortState('story')"
+              @click="toggleVlSort('story')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('story')">故事池<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              scope="col"
+              class="mk-th--right mk-th--sortable"
+              title="累计会话数（全部会话，含终态）"
+              :aria-sort="vlSortState('sessions')"
+              @click="toggleVlSort('sessions')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('sessions')">会话<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              scope="col"
+              class="mk-th--sortable"
+              title="当前运行中/创建中的会话数及最近阶段；点击进入会话座舱"
+              :aria-sort="vlSortState('running')"
+              @click="toggleVlSort('running')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('running')">运行中<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              scope="col"
+              class="mk-th--right mk-th--sortable"
+              title="已失败/已终止会话数（全量聚合）"
+              :aria-sort="vlSortState('failed')"
+              @click="toggleVlSort('failed')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('failed')">失败<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              scope="col"
+              class="mk-th--right mk-th--sortable"
+              title="超过回收阈值无写入且无活跃租约的会话数（可在状态条一键回收）"
+              :aria-sort="vlSortState('stalled')"
+              @click="toggleVlSort('stalled')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('stalled')">卡死<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              scope="col"
+              class="mk-th--sortable"
+              :aria-sort="vlSortState('created')"
+              @click="toggleVlSort('created')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('created')">创建<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th>操作</th>
           </tr>
         </thead>
@@ -558,6 +597,7 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
+import { useTableSort } from './useTableSort'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
 import BatchExperiments from './BatchExperiments.vue'
@@ -602,6 +642,8 @@ interface Sample {
   } | null
   /** 最近一个运行中会话的阶段（无运行中时回退最近会话阶段） */
   currentStage: string | null
+  /** 原始创建时间（ISO），仅供排序；显示文案见 created */
+  createdAt: string
   created: string
 }
 
@@ -618,6 +660,7 @@ const samples = computed<Sample[]>(() =>
     stalledCount: Number(v.stalledCount || 0),
     runningSessionIds: v.runningSessionIds,
     currentStage: v.currentStage || null,
+    createdAt: String(v.createdAt || ''),
     created: timeAgo(v.createdAt)
   }))
 )
@@ -642,6 +685,21 @@ const loadFailed = computed(
 function retryLoad() {
   void loadLiveData()
 }
+/* 客户端排序：数据全量在客户端（live 全量拉取）→ 排序诚实。
+   默认保持服务端顺序（创建时间倒序）；点表头切换，状态 localStorage 记忆。 */
+const { toggle: toggleVlSort, sortState: vlSortState, sortRows: sortVlRows } = useTableSort<Sample>({
+  accessors: {
+    name: (s) => s.name,
+    story: (s) => s.storyCount,
+    sessions: (s) => s.sessions,
+    running: (s) => s.runningCount,
+    failed: (s) => s.failedCount,
+    stalled: (s) => s.stalledCount,
+    created: (s) => (s.createdAt ? new Date(s.createdAt).getTime() : null)
+  },
+  storageKey: 'wf_virtual_learners_sort'
+})
+
 const filtered = computed(() => {
   const q = keyword.value.trim().toLowerCase()
   let list = samples.value
@@ -651,7 +709,7 @@ const filtered = computed(() => {
   else if (sf === 'paused') list = list.filter((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0)
   else if (sf === 'failed') list = list.filter((s) => s.failedCount > 0)
   // queued：预留（服务端排队实现后接入）
-  return list
+  return sortVlRows(list)
 })
 
 const isFiltered = computed(() => !!keyword.value.trim() || !!stateFilter.value)

@@ -79,12 +79,41 @@
               <th v-if="isLive && showCol('check')" scope="col">
                 <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
               </th>
-              <th scope="col">用户</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="userSortState('user')"
+                @click="toggleUserSort('user')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="showCol('role')" scope="col">角色</th>
-              <th v-if="showCol('level')" scope="col">等级 / XP</th>
-              <th v-if="showCol('paths')" scope="col" class="mk-th--right">路径 / 会话</th>
-              <th v-if="showCol('created')" scope="col">注册时间</th>
-              <th v-if="showCol('lastlogin')" scope="col">最后登录</th>
+              <th
+                v-if="showCol('level')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="userSortState('level')"
+                @click="toggleUserSort('level')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('level')">等级 / XP<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="showCol('paths')"
+                scope="col"
+                class="mk-th--right mk-th--sortable"
+                :aria-sort="userSortState('paths')"
+                @click="toggleUserSort('paths')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('paths')">路径 / 会话<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="showCol('created')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="userSortState('created')"
+                @click="toggleUserSort('created')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('created')">注册时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="showCol('lastlogin')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="userSortState('lastlogin')"
+                @click="toggleUserSort('lastlogin')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('lastlogin')">最后登录<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -230,6 +259,7 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
+import { useTableSort } from './useTableSort'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from './MkCols.vue'
 import MkEmptyState from './MkEmptyState.vue'
@@ -276,6 +306,9 @@ interface UserRow {
   isTestAccount?: boolean
   createdAt: string
   lastLogin: string
+  /** 原始时间戳（ISO），仅供客户端排序；显示文案见 createdAt / lastLogin */
+  createdAtRaw?: string
+  lastLoginRaw?: string | null
   paths: number
   sessions: number
   /** 学习态摘要：XP 与等级（等级由 xp 按权威公式推导，L1-L5） */
@@ -300,6 +333,8 @@ function mapDeletedRow(u: Record<string, unknown>): UserRow {
     online: false,
     createdAt: timeAgo(String(u.createdAt || '')),
     lastLogin: timeAgo(u.lastLoginAt as string | null),
+    createdAtRaw: u.createdAt ? String(u.createdAt) : undefined,
+    lastLoginRaw: (u.lastLoginAt as string | null) || null,
     paths: Number((u._count as Record<string, number>)?.learning_paths || 0),
     sessions: Number((u._count as Record<string, number>)?.teaching_sessions || 0),
     xp: Number(u.xp || 0),
@@ -335,6 +370,8 @@ const users = computed<UserRow[]>(() => {
     isTestAccount: u.isTestAccount,
     createdAt: timeAgo(u.createdAt),
     lastLogin: timeAgo(u.lastLoginAt),
+    createdAtRaw: u.createdAt || undefined,
+    lastLoginRaw: u.lastLoginAt || null,
     paths: u.paths,
     sessions: u.sessions,
     xp: u.xp,
@@ -633,8 +670,21 @@ async function restoreUserRow(u: UserRow) {
 const adminCount = computed(() => users.value.filter((u) => u.admin).length)
 const activeToday = computed(() => users.value.filter((u) => u.online).length)
 
+/* 客户端排序：数据全量在客户端（live 全量拉取）→ 排序诚实。
+   默认保持服务端顺序（注册时间倒序）；点表头切换，状态 localStorage 记忆。 */
+const { toggle: toggleUserSort, sortState: userSortState, sortRows: sortUserRows } = useTableSort<UserRow>({
+  accessors: {
+    user: (u) => u.name || u.email,
+    level: (u) => u.xp,
+    paths: (u) => u.paths,
+    created: (u) => (u.createdAtRaw ? new Date(u.createdAtRaw).getTime() : null),
+    lastlogin: (u) => (u.lastLoginRaw ? new Date(u.lastLoginRaw).getTime() : null)
+  },
+  storageKey: 'wf_users_sort'
+})
+
 const filtered = computed(() =>
-  users.value.filter((u) => {
+  sortUserRows(users.value.filter((u) => {
     if (pill.value === 'deleted' && !u.deleted) return false
     if (pill.value === 'admin' && !u.admin) return false
     if (pill.value === 'online' && !u.online) return false
@@ -643,7 +693,7 @@ const filtered = computed(() =>
     const q = keyword.value.trim().toLowerCase()
     if (q && !`${u.name} ${u.email} ${u.id}`.toLowerCase().includes(q)) return false
     return true
-  })
+  }))
 )
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
