@@ -216,13 +216,14 @@ ORDER BY avg_prompt DESC;
 | learning-predictor | 148 | 800 | 41 | ~0.006M |
 | **合计** | | | | **≈ 19.7M tokens** |
 
-> 说明：本表是**确定性**测量（真实 payload + 真实键序），但仍是**前缀上界**；实际命中受 provider 路由影响（best-effort），须以真 LLM A/B 佐证（见 §7.6）。
+> 说明：本表是**确定性**测量（真实 payload + 真实键序）。原理：重排让 payload **以「常量块」开头**（`task`/`personaAnchorHint`/`cognitiveCore` 等），这些在同 skill 任意两次调用间相同 → 公共前缀必然变长。
+> 直连真实模型的 A/B 受 provider 路由影响（best-effort、噪声大，多数 0），但在命中窗口可达 **99%**（§7.7）；故以确定性测量为准，LLM 实测仅作机制佐证。
 
 ### 7.3 真业务实测基线（隔离会话，教学链）
 - **同一新会话内**：`goal-conversation` 命中 62%/73%/84%/95%，`path-planning` 46%，`stage-designer` 48%；而 **`teaching-turn` 仅 0/1.0/0/0.9%** —— 直接印证前缀分析（goal 有稳定前缀、teaching 没有）。
 - 全窗口合计命中 23.7%（n=33 次调用）。
 
-### 7.4 已落地改造（flag 门控，默认关，`PAYLOAD_STABLE_PREFIX=1` 开启）
+### 7.4 已落地改造（**已定稿：默认启用**新键序；`PAYLOAD_STABLE_PREFIX=0` 可回退旧序）
 | skill | 改动 |
 |---|---|
 | `teaching-turn` | 稳定块（scenario 洁版 / promptDirectives / learner）前置，逐回合变化键全部后置；去 `recentDialogueContext` 重复 |
