@@ -1,58 +1,20 @@
 <template>
   <div class="mk-page">
-    <!-- 单行状态条：结论移到下方接入体检区，这里只留标题与动作 -->
+    <!-- 单行健康条 -->
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">模型与接入</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" title="平台级配置，真实用户与虚拟学习者共用同一套模型接入">平台级配置</span>
+      <span class="mk-status__meta" title="服务商 API Key 是否已配置">密钥：{{ keySet ? '已配置' : '未配置' }}</span>
+      <span class="mk-status__meta" :title="modelListTitle">模型清单：{{ models.length ? `${models.length} 个` : '未拉取' }}</span>
+      <span class="mk-status__meta" :title="routeTitle">默认路由：{{ routeCount }}/3</span>
+      <span v-if="isLive && lastCheckedText" class="mk-status__meta" title="连通性 / 能力探测时间">上次探测：{{ lastCheckedText }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="fetching || !form.apiUrl" @click="fetchModels">
           <span v-if="fetching"><span class="mk-spinner"></span> 拉取中…</span>
           <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
         </button>
       </span>
-    </div>
-
-    <!-- 接入体检（方向 A）：平台现在能不能正常调模型，第一眼给结论 -->
-    <div class="ac-kpis" role="group" aria-label="接入体检">
-      <MkKpi
-        label="连通性"
-        :value="connBadge.text"
-        hint="服务商 API 是否可达"
-        :tone="connectionStatus === 'connected' ? 'ok' : connectionStatus === 'failed' ? 'bad' : ''"
-      />
-      <MkKpi
-        label="能力健康"
-        :value="healthLabel"
-        :hint="healthSummaryText || '尚未探测'"
-        :tone="health?.overall === 'operational' ? 'ok' : health?.overall === 'degraded' ? 'warn' : health?.overall === 'unavailable' ? 'bad' : ''"
-      />
-      <MkKpi
-        label="密钥"
-        :value="keySet ? '已配置' : '未配置'"
-        hint="平台 API Key"
-        :tone="keySet ? 'ok' : 'warn'"
-      />
-      <MkKpi
-        label="模型清单"
-        :value="models.length ? `${models.length} 个` : '未拉取'"
-        hint="服务商可用模型"
-        :tone="models.length ? 'ok' : ''"
-        :title="modelListTitle"
-      />
-      <MkKpi
-        label="路由默认"
-        :value="`${routeCount}/3`"
-        hint="对话 / 推理 / 评估"
-        :tone="routeCount === 3 ? 'ok' : ''"
-        :title="routeTitle"
-      />
-      <MkKpi
-        label="最后探测"
-        :value="lastCheckedText || '未探测'"
-        hint="连通性 / 能力探测"
-      />
     </div>
 
 
@@ -504,7 +466,6 @@ import {
 } from './live'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
-import MkKpi from './MkKpi.vue'
 
 /* ---------- AI 能力健康快照 ---------- */
 interface CapHealth {
@@ -1176,16 +1137,6 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
 }
 .ac-quota-field .mk-filter__input { width: 76px; text-align: center; }
 .ac-quota-field em { font-style: normal; color: var(--mk-faint); }
-/* 接入体检（方向 A）：结论区，替代原状态条里的零散文本。与 VL 结论区同构（flex 单行优先）。 */
-.ac-kpis {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: stretch;
-}
-.ac-kpis :deep(.mk-kpi) { flex: 1 1 104px; min-width: 104px; padding: 9px 12px; gap: 1px; border-radius: 10px; }
-.ac-kpis :deep(.mk-kpi__num) { font-size: var(--mk-fs-20); }
-.ac-kpis :deep(.mk-kpi__hint) { font-size: var(--mk-fs-11); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 主布局：左列(接入与模型 + 安全与访问 纵向叠放) / 右列(AI 调用与健康)。
    安全卡放左列下方填满空档；两栏 1.1:1 接近等宽，右列监控表亦不受挤 */
 .ac-layout {

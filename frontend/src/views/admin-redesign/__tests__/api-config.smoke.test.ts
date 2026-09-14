@@ -217,11 +217,10 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('接入体检与能力行时间同源：均来自快照 checkedAt', async () => {
+  it('状态条与能力行时间同源：均为「上次探测」且来自快照 checkedAt', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    // 结论区「最后探测」与能力行「最近探测」同源（health.checkedAt）
-    expect(wrapper.find('.ac-kpis').text()).toContain('最后探测');
+    expect(wrapper.find('.mk-status').text()).toContain('上次探测');
     expect(wrapper.find('.ac-sec__sub').text()).toContain('最近探测');
     wrapper.unmount();
   });
