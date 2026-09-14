@@ -67,7 +67,7 @@
       </div>
       <div class="ac-body">
         <!-- 连接凭证：地址与密钥并排，密钥附显示切换 -->
-        <div class="ac-sec__title">连接</div>
+        <div class="ac-sec__title">连接<button v-if="dirty.has('conn')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['conn'])">{{ saving ? '保存中…' : '保存连接' }}</button></div>
         <div class="ac-row ac-row--2-1">
           <label class="mk-field mk-field--row">
             <span class="mk-field__label">服务地址</span>
@@ -110,7 +110,7 @@
             </div>
           </div>
         </label>
-        <div class="ac-sec__title">路由默认<span class="ac-sec__hint">模型清单未拉取时此项只读，展示的是当前生效值</span></div>
+        <div class="ac-sec__title">路由默认<span class="ac-sec__hint">模型清单未拉取时此项只读，展示的是当前生效值</span><button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button></div>
         <div class="ac-row ac-row--3">
           <label class="mk-field">
             <span class="mk-field__label">对话默认</span>
@@ -139,7 +139,7 @@
         </div>
 
         <!-- 默认思考：平台级开关 + 强度（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖） -->
-        <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖</span></div>
+        <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖</span><button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button></div>
         <div class="ac-row ac-row--3 ac-think">
           <label class="mk-field mk-field--switch">
             <input
@@ -205,6 +205,7 @@
         <div class="mk-card__head">
           <h3 class="mk-card__title">安全与访问</h3>
           <span class="mk-badge mk-badge--info">平台策略 · 热生效</span>
+          <button v-if="dirty.has('policy')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['policy'])">{{ saving ? '保存中…' : '保存策略' }}</button>
         </div>
         <div class="ac-policy ac-policy--2x2">
           <div class="ac-policy__item">
@@ -378,7 +379,7 @@
       <div class="ac-cols">
         <!-- 左列：调用参数（重试 / 超时 / 探测 分组） -->
         <div v-if="reliability || probe.loaded" class="ac-cols__main">
-          <div class="ac-sec__title">调用参数</div>
+          <div class="ac-sec__title">调用参数<button v-if="dirty.has('reliability')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['reliability'])">{{ saving ? '保存中…' : '保存参数' }}</button></div>
           <div class="ac-groups">
             <div v-if="reliability" class="ac-group">
               <div class="ac-group__title">重试与超时</div>
@@ -915,10 +916,14 @@ async function runTest() {
   }
 }
 
-async function saveAll() {
+/** 按域保存：只提交传入且处于脏状态的域，不动其他未保存改动。
+    UI 在每个分段的标题上挂「保存」，调用方传该段对应的域。 */
+async function saveGroups(groups: string[]) {
   if (saving.value) return
+  const set = new Set(groups.filter((g) => dirty.value.has(g)))
+  if (!set.size) return
   // 高风险确认：开放公网访问需二次确认
-  if (dirty.value.has('policy') && policy.adminAccessMode === 'any') {
+  if (set.has('policy') && policy.adminAccessMode === 'any') {
     const ok = await askConfirm({
       title: '开放公网访问',
       message: '你正在将 Admin 后台开放到公网/任意来源访问。\n任何能访问该服务地址的人都能看到管理入口，请确认已了解风险。',
@@ -928,7 +933,7 @@ async function saveAll() {
   }
   saving.value = true
   try {
-    if (dirty.value.has('conn') || dirty.value.has('route')) {
+    if (set.has('conn') || set.has('route')) {
       const payload: {
         apiUrl: string
         apiKey: string
@@ -951,21 +956,24 @@ async function saveAll() {
       if (modelsFetchedOnce.value) payload.availableModels = fetchedModels.value
       await liveSaveApiConfig(payload as Parameters<typeof liveSaveApiConfig>[0])
     }
-    if (dirty.value.has('policy')) {
+    if (set.has('policy')) {
       await liveSaveNetworkPolicy({ ...policy })
     }
-    if (dirty.value.has('reliability') && reliability.value) {
+    if (set.has('reliability') && reliability.value) {
       await adminPlatformSettingsApi.updateReliabilitySettings({ ...reliability.value })
     }
-    // 探针（enabled/interval）为独立热生效开关，改动即时保存，不走统一保存条
-    // L5：probe 未加载成功时保留其脏标记，避免静默丢弃用户改动（保留兼容）
-    dirty.value = new Set(dirty.value.has('probe') && !probe.loaded ? ['probe'] : [])
+    // 只清除本次已保存的域，保留其他未保存改动（探针为热生效开关，不走统一保存条）
+    dirty.value = new Set([...dirty.value].filter((g) => !set.has(g)))
     toast.success('配置已保存并生效')
   } catch (e) {
     toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     saving.value = false
   }
+}
+
+function saveAll() {
+  return saveGroups([...dirty.value])
 }
 
 function discardAll() {
@@ -1212,6 +1220,21 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
 }
 .ac-sec__hint { font-size: var(--mk-fs-12_5); font-weight: 500; color: var(--mk-faint); }
 .ac-sec__sub { margin-left: auto; font-size: var(--mk-fs-12_5); font-weight: 500; color: var(--mk-faint); }
+/* 分段保存（方向 A）：该段有未保存改动时才出现；与底部统一保存条并存 */
+.ac-sec__save {
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(44, 99, 208, 0.3);
+  background: rgba(44, 99, 208, 0.08);
+  color: var(--mk-blue);
+  font: inherit;
+  font-size: var(--mk-fs-12);
+  font-weight: 700;
+  cursor: pointer;
+}
+.ac-sec__save:hover { background: rgba(44, 99, 208, 0.16); }
+.ac-sec__save:disabled { opacity: 0.6; cursor: not-allowed; }
 .ac-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; width: fit-content; }
 .ac-seg__item {
   border: 0;
