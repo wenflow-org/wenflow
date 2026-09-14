@@ -38,7 +38,7 @@
                 <li v-for="f in agent.outputFields" :key="f.fieldId" class="sbx__li">
                   <span class="sbx__path">{{ f.fieldId }}</span>
                   <span v-if="f.type" class="sbx__type">（{{ f.type }}）</span>
-                  <span v-if="f.handoff?.length" class="sbx__handoff">移交 → {{ f.handoff.join(' / ') }}</span>
+                  <span v-if="f.handoff?.length" class="sbx__handoff" :title="f.handoff.join(' / ')">移交 → {{ f.handoff.join(' / ') }}</span>
                 </li>
               </ul>
               <p v-else class="sbx__empty">无输出字段</p>

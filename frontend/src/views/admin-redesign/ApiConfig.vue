@@ -1355,6 +1355,10 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
   .ac-cols__side { border-left: none; padding: 0 16px; margin-top: 6px; }
 }
 @media (max-width: 800px) {
+  /* 两列/三列栅格在窄屏回落单列：此前漏掉这两条，390 下「服务地址 | API Key」
+     仍强行并排，服务地址输入框被 180px 下限撑破、压掉 API Key（审计 P1 2.2） */
+  .ac-row--2-1,
+  .ac-row--3 { grid-template-columns: 1fr; }
   .ac-group__fields { grid-template-columns: 1fr; }
   .ac-health__row { grid-template-columns: 10px minmax(0, 1fr) auto; }
   .ac-health__head { grid-template-columns: 10px minmax(0, 1fr) auto; }

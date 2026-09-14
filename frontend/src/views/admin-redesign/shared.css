@@ -438,7 +438,12 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 }
 .mk-filter__input:focus,
 .mk-filter__select:focus { border-color: var(--mk-blue); }
-.mk-filter__input { min-width: 180px; }
+/* 180px 下限只服务「筛选工具条」语境：.mk-filter（全站列表页筛选行）与
+   .log-advpanel（执行日志高级面板）。此前为全局规则，会泄漏到表单输入框：
+   撑破 ApiConfig 两列/三列栅格（服务地址挤掉 API Key）、并压过 VL RPM 的内联
+   width:84px。表单输入框宽度由各自容器（.mk-field width:100% / 内联）决定。 */
+.mk-filter .mk-filter__input,
+.log-advpanel .mk-filter__input { min-width: 180px; }
 .mk-pills { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; }
 /* 主视图切换（.mk-page 的直接子级 pills）：统一左对齐 + 按内容宽度收缩。
    否则在 grid / flex 列容器里会被 justify-self:stretch / align-items:stretch 拉伸成整行
