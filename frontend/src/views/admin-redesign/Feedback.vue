@@ -31,16 +31,6 @@
       <button type="button" class="mk-empty__action" @click="() => load(true)">重试</button>
     </div>
 
-    <MkEmptyState
-      v-else-if="!rows.length && !loading"
-      icon="◌"
-      min
-      title="暂无反馈数据"
-      description="学习者提交反馈后自动呈现。"
-      action-text="刷新"
-      @action="() => load(true)"
-    />
-
     <template v-else>
       <!-- 列表 -->
       <div class="mk-card mk-card--fill">
@@ -126,19 +116,23 @@
           </tbody>
         </table>
         </div>
-        <div v-else-if="loadFailed" class="mk-empty">
-          <span class="mk-empty__icon" aria-hidden="true">◌</span>
-          <strong>反馈数据加载失败</strong>
-          <span>无法从后端拉取反馈列表。</span>
-          <button type="button" class="mk-empty__action" @click="() => load()">重试</button>
-        </div>
-        <div v-else class="mk-empty mk-empty--min">
-          <span v-if="loading" class="mk-spinner" aria-hidden="true"></span>
-          <span v-else class="mk-empty__icon" aria-hidden="true">◌</span>
-          <strong>{{ loading ? '加载中…' : (keyword || statusFilter || lowOnly ? '当前筛选无匹配' : '暂无反馈') }}</strong>
-          <span v-if="!loading">{{ keyword || statusFilter || lowOnly ? '放宽筛选条件试试。' : '学习者评分与评论出现后会在这里汇总，低分反馈会自动标记「待处理」。' }}</span>
-          <button v-if="isFiltered && !loading" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
-        </div>
+        <MkEmptyState
+          v-else-if="loading"
+          min
+          title="加载中…"
+          description="正在从后端拉取反馈。"
+        >
+          <template #icon><span class="mk-spinner" aria-hidden="true"></span></template>
+        </MkEmptyState>
+        <MkEmptyState
+          v-else
+          icon="◌"
+          min
+          :title="isFiltered ? '当前筛选无匹配' : '暂无反馈'"
+          :description="isFiltered ? '放宽筛选条件试试。' : '学习者评分与评论出现后会在这里汇总，低分反馈会自动标记「待处理」。'"
+          :action-text="isFiltered ? '清除筛选' : '刷新'"
+          @action="isFiltered ? clearFilters() : load(true)"
+        />
       </div>
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
       <Pagination

@@ -50,10 +50,10 @@
           <button type="button" class="mk-link" @click="goContent">管理 →</button>
         </div>
         <div class="ow-state">
-          <div v-if="pathTotal > 0" class="ow-state__seg" aria-hidden="true">
+          <div v-if="pathTotal > 0 && pathHasDistribution" class="ow-state__seg" aria-hidden="true">
             <i v-for="s in pathSegments" :key="s.key" :class="`ow-seg--${s.tone}`" :style="{ width: s.pct }" :title="`${s.label} ${s.count}`"></i>
           </div>
-          <div v-else class="ow-state__empty">暂无学习路径</div>
+          <div v-else-if="pathTotal === 0" class="ow-state__empty">暂无学习路径</div>
           <div class="ow-state__rows">
             <div v-for="c in pathCards" :key="c.label" class="ow-state__row">
               <span><i class="ow-state__dot" :class="`ow-state__dot--${c.tone || 'muted'}`"></i>{{ c.label }}</span>
@@ -68,10 +68,10 @@
           <button type="button" class="mk-link" @click="goAnnouncements">管理 →</button>
         </div>
         <div class="ow-state">
-          <div v-if="annTotal > 0" class="ow-state__seg" aria-hidden="true">
+          <div v-if="annTotal > 0 && annHasDistribution" class="ow-state__seg" aria-hidden="true">
             <i v-for="s in annSegments" :key="s.key" :class="`ow-seg--${s.tone}`" :style="{ width: s.pct }" :title="`${s.label} ${s.count}`"></i>
           </div>
-          <div v-else class="ow-state__empty">暂无公告</div>
+          <div v-else-if="annTotal === 0" class="ow-state__empty">暂无公告</div>
           <div class="ow-state__rows">
             <div v-for="s in annSegments" :key="s.key" class="ow-state__row">
               <span><i class="ow-state__dot" :class="`ow-state__dot--${s.tone}`"></i>{{ s.label }}</span>
@@ -179,6 +179,10 @@ const annSegments = computed(() =>
 /** 总量为 0 时比例条会渲染为空灰条（观感像坏图），改为渲染空态文案 */
 const pathTotal = computed(() => pathSegments.value.reduce((n, s) => n + s.count, 0))
 const annTotal = computed(() => annSegments.value.reduce((n, s) => n + s.count, 0))
+/** 只有 ≥2 个非零状态时才画「构成条」：单一状态会渲染成整条满格绿，
+    被误读为进度条（比例失真），此时交给下方行式计数表达即可。 */
+const pathHasDistribution = computed(() => pathSegments.value.filter((s) => s.count > 0).length > 1)
+const annHasDistribution = computed(() => annSegments.value.filter((s) => s.count > 0).length > 1)
 
 /* 生效中公告列表（最近发布优先） */
 const livePublished = computed(() =>
