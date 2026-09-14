@@ -951,11 +951,17 @@ async function buildLearnerPrediction(
     // 2) 无记录 → LLM 预测（读取最近知识状态摘要）+ 超时保护
     const summary = await fetchLatestKnowledgeSummary(userId);
     const prediction = (await Promise.race([
-      executeSkill(learningPredictorDefinition, {
-        knowledgeStateSummary: summary || '无历史摘要',
-        fatigueSignal: opts.fatigueSignal || 'low',
-        taskContext: opts.taskContext,
-      }),
+      executeSkill(learningPredictorDefinition, process.env.PAYLOAD_STABLE_PREFIX === '1'
+        ? {
+            fatigueSignal: opts.fatigueSignal || 'low',
+            knowledgeStateSummary: summary || '无历史摘要',
+            taskContext: opts.taskContext,
+          }
+        : {
+            knowledgeStateSummary: summary || '无历史摘要',
+            fatigueSignal: opts.fatigueSignal || 'low',
+            taskContext: opts.taskContext,
+          }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), PREDICTION_TIMEOUT_MS)),
     ])) as LearningPredictorOutput | null;
 
