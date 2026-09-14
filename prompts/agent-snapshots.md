@@ -34,6 +34,7 @@
 | `understanding.scenario` | string | goal-agent |
 | `understanding.deadline_text` | string | goal-agent |
 | `understanding.background_experience` | string | goal-agent |
+| `understanding.goal_orientation` | string | goal-agent |
 | `understanding.learning_signal` | string | goal-agent |
 | `understanding.cognitive_bandwidth` | string | goal-agent |
 | `structuredData` | object? | goal-agent |
@@ -41,6 +42,7 @@
 | `confirmedProposal.first_deliverable` | string | goal-agent |
 | `confirmedProposal.key_stages` | array<string> | goal-agent |
 | `confirmedProposal.out_of_scope` | array<string> | goal-agent |
+| `confirmedProposal.scope_size` | string | goal-agent |
 | `userVisible` | string | — |
 | `goalConversation.nextQuestions` | array<string> | — |
 | `goalConversation.quickReplies` | array<string> | — |
@@ -63,6 +65,7 @@ sandbox:goal-agent.confirmedProposal.first_deliverable
 sandbox:goal-agent.confirmedProposal.key_stages
 sandbox:goal-agent.confirmedProposal.learning_direction
 sandbox:goal-agent.confirmedProposal.out_of_scope
+sandbox:goal-agent.confirmedProposal.scope_size
 sandbox:goal-agent.structuredData
 sandbox:goal-agent.understanding.available_resources.time_budget
 sandbox:goal-agent.understanding.available_resources.time_horizon
@@ -73,6 +76,7 @@ sandbox:goal-agent.understanding.constraints_and_boundaries
 sandbox:goal-agent.understanding.current_baseline.evidence
 sandbox:goal-agent.understanding.current_baseline.level
 sandbox:goal-agent.understanding.deadline_text
+sandbox:goal-agent.understanding.goal_orientation
 sandbox:goal-agent.understanding.learning_signal
 sandbox:goal-agent.understanding.motivation
 sandbox:goal-agent.understanding.pain_points

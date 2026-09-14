@@ -106,6 +106,11 @@ fields:
     valueType: string
     pathInRawOutput: internal.ext.goalConversation.understanding.background_experience
     description: 背景经验推断（prompt 明确不展示给前端）
+  - fieldId: understanding.goal_orientation
+    promptRole: hidden-inference
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.understanding.goal_orientation
+    description: 目标取向（掌握型/表现型等自由描述，hidden，静默累积，不主动追问）
   - fieldId: understanding.learning_signal
     promptRole: hidden-inference
     valueType: string
@@ -298,6 +303,13 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: skill:goal-conversation
+    fieldId: understanding.goal_orientation
+    render: hidden
+    handoff: [goal-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
     fieldId: understanding.learning_signal
     render: hidden
     handoff: [goal-agent]
@@ -418,6 +430,13 @@ routings:
     notes: path description 的最终兜底
   - agentId: goal-agent
     fieldId: understanding.background_experience
+    render: hidden
+    handoff: [path]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+  - agentId: goal-agent
+    fieldId: understanding.goal_orientation
     render: hidden
     handoff: [path]
     internal: false

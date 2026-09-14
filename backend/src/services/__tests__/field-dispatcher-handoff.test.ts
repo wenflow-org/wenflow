@@ -31,6 +31,7 @@ function buildGoalSkillOutput(overrides: Record<string, any> = {}) {
             surface_goal: '向上汇报时抓不住重点',
             real_problem: '每次汇报被追问逻辑就乱，缺问题框架',
             background_experience: '做过几次汇报，都被追问到卡壳',
+            goal_orientation: '偏表现型：想尽快做出成果、证明自己',
             learning_signal: '想直接要模板',
             cognitive_bandwidth: '多任务并发',
             constraints_and_boundaries: ['不能占用工作时间'],
@@ -75,6 +76,7 @@ describe('assembleGoalHandoff（配置式 goal→path 值抽取）', () => {
     expect(fields['understanding.real_problem']).toBe(ext.understanding.real_problem)
     expect(fields['understanding.real_problem']).toBe(visible.realProblem)
     expect(fields['understanding.background_experience']).toBe(visible.backgroundExperience)
+    expect(fields['understanding.goal_orientation']).toBe(visible.goalOrientation)
     expect(fields['understanding.learning_signal']).toBe(visible.learningSignal)
     expect(fields['confirmedProposal.key_stages']).toEqual(visible.confirmedProposal?.keyStages)
     expect(fields['understanding.success_criteria.observable_result']).toBe(visible.successCriteria?.observableResult)
