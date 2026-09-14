@@ -77,6 +77,21 @@ export function cleanPathTitle(title: string): string {
   return cleaned || t;
 }
 
+/** subject 长度上限：超过即视为把目标原文误当学科，改用路径名兜底 */
+export const MAX_PATH_SUBJECT_LENGTH = 24;
+
+/**
+ * 解析学习路径 subject。
+ * 背景：path-planning 的 analyzeInput 用 `input.goal` 当 subject，导致 learning_paths.subject
+ * 常被写成几百字目标原文，进而污染教学 prompt、管理端内容列表与 Dashboard 路径卡副标题。
+ * 规则：subject 简洁（<= MAX_PATH_SUBJECT_LENGTH）则沿用；否则用清洗后的路径名兜底。
+ */
+export function resolvePathSubject(subject: unknown, fallbackTitle: string): string {
+  const raw = typeof subject === 'string' ? subject.trim() : '';
+  if (raw && raw.length <= MAX_PATH_SUBJECT_LENGTH) return raw;
+  return fallbackTitle;
+}
+
 export function normalizeStringArray(value: any): string[] {
   if (!Array.isArray(value)) return [];
   return value

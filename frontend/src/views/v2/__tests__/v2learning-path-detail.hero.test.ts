@@ -53,7 +53,8 @@ describe('V2LearningPathDetail Hero', () => {
 
   it('优先渲染 AI 摘要 summary，不铺原始 description 原文', async () => {
     const w = await mountDetail();
-    const desc = w.find('.hero__main p');
+    const desc = w.find('.hero__desc');
+    expect(desc.exists()).toBe(true);
     expect(desc.text()).toContain('适合一个人在家复习');
     expect(desc.text()).not.toContain('最小重启标准');
   });
@@ -69,7 +70,7 @@ describe('V2LearningPathDetail Hero', () => {
     });
     const w = mount(V2LearningPathDetail);
     await flushPromises();
-    expect(w.find('.hero__main p').text()).toBe('兜底描述');
+    expect(w.find('.hero__desc').text()).toBe('兜底描述');
   });
 
   it('Hero 不再出现 AI 提示，页脚保留全站统一那条', async () => {

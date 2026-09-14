@@ -69,7 +69,17 @@
               <span class="badge" :class="badgeCls">{{ badgeText }}</span>
             </div>
             <h1>{{ pathTitle }}</h1>
-            <p>{{ path.summary || path.description }}</p>
+            <p
+              ref="heroDescRef"
+              class="hero__desc"
+              :class="{ 'hero__desc--expanded': descExpanded }"
+            >{{ heroDescription }}</p>
+            <button
+              v-if="heroDescOverflow"
+              type="button"
+              class="hero__desc-toggle"
+              @click="toggleHeroDesc"
+            >{{ descExpanded ? '收起' : '展开全文' }}</button>
             <div class="hero__metrics">
               <span class="metric"><b>{{ currentStageNo }} / {{ stages.length || '?' }}</b>当前阶段</span>
               <span class="metric"><b>{{ path.estimatedHours || '—' }} 小时</b>预计投入</span>
@@ -534,7 +544,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
@@ -605,6 +615,32 @@ function onTaskClick(task: Record<string, any>) {
 
 const pathTitle = computed(() => path.value?.title || path.value?.name || '');
 
+/* ---------- Hero 描述：优先 AI 摘要，超长折行截断（老数据无 summary 时兜底原文不糊屏） ---------- */
+const heroDescription = computed(() => String(path.value?.summary || path.value?.description || '').trim());
+const descExpanded = ref(false);
+const heroDescOverflow = ref(false);
+const heroDescRef = ref<HTMLElement | null>(null);
+
+function measureHeroDesc() {
+  if (descExpanded.value) return;
+  const el = heroDescRef.value;
+  if (!el) {
+    heroDescOverflow.value = false;
+    return;
+  }
+  heroDescOverflow.value = el.scrollHeight > el.clientHeight + 1;
+}
+
+function toggleHeroDesc() {
+  descExpanded.value = !descExpanded.value;
+  if (!descExpanded.value) nextTick(measureHeroDesc);
+}
+
+watch(heroDescription, () => {
+  descExpanded.value = false;
+  nextTick(measureHeroDesc);
+});
+
 async function load(silent = false) {
   if (!silent) loading.value = true;
   loadError.value = false;
@@ -625,6 +661,7 @@ async function load(silent = false) {
       .map((s, i) => ({ s, i }))
       .filter(({ s, i }) => stageStatus(s, i) === 'current')
       .map(({ i }) => i);
+    nextTick(measureHeroDesc);
   } catch {
     if (!silent) loadError.value = true;
   } finally {
@@ -1189,8 +1226,14 @@ async function viewFeedback(task: Record<string, any>) {
   if (go) router.push('/learning-history');
 }
 
-onMounted(load);
-onBeforeUnmount(() => window.clearTimeout(pollTimer));
+onMounted(() => {
+  load();
+  window.addEventListener('resize', measureHeroDesc);
+});
+onBeforeUnmount(() => {
+  window.clearTimeout(pollTimer);
+  window.removeEventListener('resize', measureHeroDesc);
+});
 </script>
 
 <style scoped>
@@ -1227,6 +1270,24 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 .hero__tags { display: flex; align-items: center; gap: 10px; }
 .hero h1 { margin: 8px 0 6px; font-size: 28px; letter-spacing: -0.01em; }
 .hero p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.7; max-width: 56ch; }
+/* Hero 描述：默认 3 行截断，展开后完整显示（老数据无 summary 时兜底原文，避免整段糊屏） */
+.hero__desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.hero__desc--expanded { display: block; overflow: visible; }
+.hero__desc-toggle {
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue-deep, #3478f6);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
 .hero__metrics { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
 .metric {
   display: grid; gap: 2px;

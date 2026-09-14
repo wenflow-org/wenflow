@@ -85,6 +85,7 @@ import {
   normalizePathHoursFromTasks,
   parsePathSummary,
   cleanPathTitle,
+  resolvePathSubject,
   normalizeStringArray,
   normalizeConceptText,
   resolveTaskConcept,
@@ -1829,6 +1830,11 @@ class LearningService {
         }
     };
 
+    // subject 兜底：path-planning 的 analysis.subject 可能是目标原文（其 analyzeInput 用 input.goal），
+    // 过长会污染教学 prompt / 管理端列表 / Dashboard 副标题，超阈值时用清洗后的路径名兜底。
+    const pathTitle = cleanPathTitle(analysis.pathName || `${analysis.subject || '个性化'}学习路径`);
+    const pathSubject = resolvePathSubject(analysis.subject, pathTitle);
+
     const learningPath = await prisma.$transaction(async (tx) => {
       let path;
       if (data.existingPathId) {
@@ -1842,7 +1848,6 @@ class LearningService {
         await assertPathMutationSafe(tx, data.existingPathId, 'replace-path', {
           allowCompleted: (data.userProfile as any)?.replan?.forceReplace === true,
         });
-        const pathTitle = cleanPathTitle(analysis.pathName || `${analysis.subject || '个性化'}学习路径`);
         path = await tx.learning_paths.update({
           where: { id: data.existingPathId },
           data: {
@@ -1851,7 +1856,7 @@ class LearningService {
             description: (data.description && !data.description.includes('\uFFFD'))
               ? data.description
               : (normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
-            subject: analysis.subject || '综合',
+            subject: pathSubject,
             status: 'active',
             difficulty: analysis.difficulty || 'beginner',
             totalMilestones: normalizedMilestonesData.length || 1,
@@ -1883,7 +1888,6 @@ class LearningService {
           where: { learningPathId: path.id }
         });
       } else {
-        const pathTitle = cleanPathTitle(analysis.pathName || `${analysis.subject || '个性化'}学习路径`);
         path = await tx.learning_paths.create({
           data: {
             id: `lp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
@@ -1893,7 +1897,7 @@ class LearningService {
             description: (data.description && !data.description.includes('\uFFFD'))
               ? data.description
               : (normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
-            subject: analysis.subject || '综合',
+            subject: pathSubject,
             difficulty: analysis.difficulty || 'beginner',
             totalMilestones: normalizedMilestonesData.length || 1,
             estimatedHours: analysis.estimatedTotalHours || 0,
