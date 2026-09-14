@@ -327,7 +327,7 @@
                 @click="selectDay(d.date)"
               >
                 <span class="day__label">{{ d.weekLabel }}</span>
-                <span class="day__cell" :class="`day__cell--h${d.level}`">{{ d.minutes || '' }}</span>
+                <span class="day__cell" :class="`day__cell--h${d.level}`">{{ d.dayNum }}</span>
                 <span class="day__min">{{ d.minutes ? d.minutes + '分' : '—' }}</span>
               </button>
             </div>
@@ -989,7 +989,7 @@ const weekDays = computed(() => {
     // 用本地日期键：toISOString 是 UTC，UTC+8 凌晨会把整周前移一天，和 minutesByDate 口径对不上
     const date = localDateKey(d);
     const minutes = minutesByDate.value.get(date) ?? 0;
-    return { label, weekLabel: label, date, minutes, isToday: date === todayStr, level: heatLevel(minutes) };
+    return { label, weekLabel: label, dayNum: d.getDate(), date, minutes, isToday: date === todayStr, level: heatLevel(minutes) };
   });
 });
 

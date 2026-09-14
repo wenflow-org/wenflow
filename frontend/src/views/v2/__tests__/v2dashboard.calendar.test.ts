@@ -64,11 +64,11 @@ describe('V2Dashboard 日历口径（本地日期）', () => {
     getAdaptiveGuidance.mockReset();
   });
 
-  it('本周节奏把分钟归到本地当天（不被 UTC 换算前移一天）', async () => {
+  it('本周节奏格子里显示日期数字（不是空白），并归到本地当天', async () => {
     const w = await mountDash(todaySessions());
     const today = w.find('.day--today');
     expect(today.exists()).toBe(true);
-    expect(today.find('.day__cell').text()).toBe('25');
+    expect(today.find('.day__cell').text()).toBe(String(new Date().getDate()));
     expect(today.find('.day__cell').classes()).toContain('day__cell--h1');
     expect(today.find('.day__min').text()).toBe('25分');
   });
