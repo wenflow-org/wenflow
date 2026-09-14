@@ -178,19 +178,32 @@ ORDER BY avg_prompt DESC;
 
 > 口径与 caveat：字符前缀是 token 前缀的代理；**不含 system prompt**（静态、另计）；provider 前缀缓存受路由影响（best-effort），故本表是**上界估计**，真值须以真业务 A/B 为准。
 
-### 7.2 预估（真实 payload）
+### 7.2 实测预估（真实 payload × 实际新键序，确定性）
 
-| skill | 相邻对数 | 平均 payload | 当前可缓存前缀 | 重排后 | 预估提升 |
-|---|---:|---:|---:|---:|---:|
-| **stage-designer** | 154 | 3.5k | 0.9% | 66.6% | **+65.7pp** |
-| **goal-conversation** | 136 | 2.0k | 5.7% | 22.8% | **+17.1pp** |
-| **adaptive-guidance-copy** | 158 | 79k | 0.2% | 10.8% | **+10.6pp** |
-| virtual-learner-learn-turn-simulator | 159 | 20k | 6.6% | 11.3% | +4.7pp |
-| teaching-turn | 159 | 33k | 6.5% | 6.7%* | +0.2pp* |
-| virtual-learner-epistemic-grounding | 159 | 14k | 6.9% | 7.0% | +0.1pp |
-| lesson-knowledge-enricher | 140 | 16k | 0.2% | 0.3% | +0.1pp |
+方法升级：不再用「通用波动性重排」（低估），而是**施加各 skill 实际实现的新键序**，在真实 `userPayload` 上重算相邻回合公共前缀（可复现、无 LLM 调用）。
 
-\* teaching-turn 的字符模拟未体现：其差异集中在**嵌套子键**（`scenario.interactionProfile/contextCompression`），需按子键处理——子键级分析已证实：`scenario` 去掉这两个子键后，逐回合变化率 **48/48 → 13/48**。
+| skill | 相邻对数 | 当前可缓存前缀 | 改造后 | **提升** |
+|---|---:|---:|---:|---:|
+| **stage-designer** | 194 | 0.9% | 61.2% | **+60.4pp** |
+| **teaching-turn** | 199 | 16.8% | 36.1% | **+19.3pp** |
+| **adaptive-guidance-copy** | 198 | 0.2% | 15.3% | **+15.0pp** |
+| **virtual-learner-learn-turn-simulator** | 198 | 19.7% | 28.7% | **+9.0pp** |
+
+### 7.2.1 缓存 token 收益（估算）
+
+用真实历史调用量换算（Δpp × 平均 prompt tokens）：
+
+| skill | 调用数 | 平均 prompt | +缓存/次 | +缓存总计 |
+|---|---:|---:|---:|---:|
+| teaching-turn | 2,493 | 21,815 | 4,210 | ~10.5M |
+| adaptive-guidance-copy | 655 | 40,150 | 6,022 | ~3.9M |
+| stage-designer | 1,138 | 3,446 | 2,081 | ~2.4M |
+| learn-turn-sim | 2,673 | 9,648 | 868 | ~2.3M |
+| **合计** | | | | **≈ 19.1M tokens** |
+
+即：这 4 个 skill 在历史样本区间内，约 **1,910 万 tokens 从 cache-miss 变为 cache-hit**（按缓存折扣价计即直接降本）。
+
+> 说明：本表是**确定性**测量（真实 payload + 真实键序），但仍是**前缀上界**；实际命中受 provider 路由影响（best-effort），须以真 LLM A/B 佐证（见 §7.6）。
 
 ### 7.3 真业务实测基线（隔离会话，教学链）
 - **同一新会话内**：`goal-conversation` 命中 62%/73%/84%/95%，`path-planning` 46%，`stage-designer` 48%；而 **`teaching-turn` 仅 0/1.0/0/0.9%** —— 直接印证前缀分析（goal 有稳定前缀、teaching 没有）。
@@ -210,8 +223,13 @@ ORDER BY avg_prompt DESC;
 - `virtual-learner-learn-turn-simulator` / `epistemic-grounding`：`learner.profile.storyPool` 等无关大对象投影剔除 + 稳定键前置。
 - `path-planning` / `kc-mapper` / `path-reviewer`：去重（confirmedProposal ×2 / `【强制要求】`×5）+ 前置稳定块；`path-reviewer` 修 `prerreqTree` key。
 
-### 7.6 真业务 A/B 计划
-1. 带 `PAYLOAD_STABLE_PREFIX=1` 起实例（建议**另起端口**，避免打断在跑的实验）。
-2. 用同一/同类 VL 会话跑真实教学链（`accept-path → start-learning → teaching-step × N`）。
-3. 对比 `llm_execution_attempts` 的逐回合 `promptTokens / promptCacheHitTokens / requestBytes`（多会话、多回合取分布，样本 n≥30/技能）。
+### 7.6 真业务 A/B：尝试与阻塞（2026-09-15）
+
+- 已起第二实例（端口 3011，`PAYLOAD_STABLE_PREFIX=1`）并用**非预设 profile**（批跑 runner 不扫，规避租约争用）驱动真实教学链（`start-session → run-full → accept-path → start-learning → teaching-step`）。
+- 阻塞点：
+  1. `run-full` 的 `autoAdvanceToLearning` 不可靠（只到 path，`learningSteps=0`）；
+  2. path 的 **subtasks 由 stage-designer 异步生成**，过早 `start-learning` → "第一个里程碑没有可用任务" → 未产生 `teaching-turn` 调用；
+  3. 后台第二实例被回收（`3011=000`），ON 段无数据。
+- 已获得的真业务基线：同会话内 `goal-conversation` 命中 62–95%、`teaching-turn` 0–1%（与 §7.2 一致）。
+- 结论：真 LLM A/B 受**基础设施**（实例持久性、path-ready 时序、租约争用）制约；确定性测量（§7.2）已给出可复现的改造预期，真 A/B 待有稳定窗口/独立 runner 时补做。
 
