@@ -1016,7 +1016,8 @@ interface MonthCell { date: string; dayNum: number; minutes: number; outside: bo
 const monthWeeks = computed(() => {
   const { year, month } = monthCursor.value;
   const first = new Date(year, month, 1);
-  const startOffset = first.getDay();
+  // 周一为一周之始（与「本周节奏」方格条一致；此前用 first.getDay() 是周日起，两边「本周」差一天）
+  const startOffset = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const prevDays = new Date(year, month, 0).getDate();
   const cells: MonthCell[] = [];

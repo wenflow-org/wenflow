@@ -96,4 +96,19 @@ describe('V2Dashboard 日历口径（本地日期）', () => {
     // 今天 25 分 → h1
     expect(w.findAll('.mday--h1').length).toBeGreaterThan(0);
   });
+
+  it('整月节奏的周行也按周一~周日（与「本周节奏」对齐）', async () => {
+    const w = await mountDash(todaySessions());
+    const toggle = w.findAll('button').find((b) => b.text().includes('展开整月'));
+    await toggle!.trigger('click');
+    await flushPromises();
+
+    const thisWeek = w.findAll('.mweek').find(
+      (row) => row.find('.mweek__side strong').exists() && row.find('.mweek__side strong').text() === '本周',
+    );
+    expect(thisWeek).toBeTruthy();
+    const cells = thisWeek!.findAll('.mday');
+    const expectedIndex = (new Date().getDay() + 6) % 7; // 周一 = 第 0 列
+    expect(cells[expectedIndex].text()).toBe(String(new Date().getDate()));
+  });
 });
