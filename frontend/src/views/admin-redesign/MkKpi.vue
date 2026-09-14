@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-kpi" :class="[tone ? `mk-kpi--${tone}` : '', { 'mk-kpi--clickable': clickable, 'mk-kpi--compact': compact }]">
+  <div class="mk-kpi" :class="[tone ? `mk-kpi--${tone}` : '', { 'mk-kpi--clickable': clickable, 'mk-kpi--compact': compact, 'mk-kpi--linked-on': active }]">
     <span class="mk-kpi__label">{{ label }} </span>
     <strong class="mk-kpi__num">{{ value }}</strong>
     <span v-if="hint && !compact" class="mk-kpi__hint">{{ hint }}</span>
@@ -18,8 +18,10 @@ withDefaults(
     clickable?: boolean
     /** 紧凑模式（列表页顶部 KPI）：减内边距/字号、隐藏 hint，压缩垂直空间 */
     compact?: boolean
+    /** 作为筛选锚点且当前已激活（结论区点数字筛选）：高亮边框 */
+    active?: boolean
   }>(),
-  { hint: '', tone: '', clickable: false, compact: false }
+  { hint: '', tone: '', clickable: false, compact: false, active: false }
 )
 </script>
 

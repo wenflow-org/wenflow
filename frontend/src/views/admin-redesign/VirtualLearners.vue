@@ -5,14 +5,9 @@
       <strong class="mk-status__title">虚拟学习者</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ samples.length }} 人</span>
-      <MkStatStrip :items="headerStats" @select="onHeaderStatSelect" />
       <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-status__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
         已截断 · 共 {{ liveVirtualsTotal }} 人
       </span>
-      <label class="mk-status__meta vl-rpm" title="虚拟学习者专属出站 RPM 上限（0=不限）；与平台全局速率相互独立，不会挤占真实用户额度">
-        VL RPM
-        <input v-model.number="vlRpm.limit" type="number" min="0" max="100000" step="10" class="mk-filter__input" style="width:84px" @change="saveVlRpm" />
-      </label>
       <span class="mk-status__actions">
         <button
           v-if="partition.stale > 0"
@@ -27,6 +22,68 @@
         <button type="button" class="mk-status__action mk-status__action--primary" title="新建虚拟学习者：填写名称/目标/故事，生成后可运行实验会话" @click="openCreate">新建</button>
         <button type="button" class="mk-status__action" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="batchOpen = true">批量新建</button>
       </span>
+    </div>
+
+    <!-- 结论区（方向 A）：可点数字即筛选，替代原状态条里的 15 项指标条与内嵌配额输入 -->
+    <div class="vl-kpis" role="group" aria-label="运行结论">
+      <MkKpi
+        label="需关注"
+        :value="stateCount('failed')"
+        hint="失败 / 终止会话"
+        :tone="stateCount('failed') > 0 ? 'bad' : ''"
+        clickable
+        :active="stateFilter === 'failed'"
+        title="点击只看失败 / 终止会话的虚拟学习者"
+        @click="onHeaderStatSelect('failed')"
+      />
+      <MkKpi
+        label="运行中"
+        :value="stateCount('running')"
+        hint="有活跃会话"
+        :tone="stateCount('running') > 0 ? 'ok' : ''"
+        clickable
+        :active="stateFilter === 'running'"
+        title="点击只看有活跃会话的虚拟学习者"
+        @click="onHeaderStatSelect('running')"
+      />
+      <MkKpi
+        label="已暂停"
+        :value="stateCount('paused')"
+        hint="自动驾驶已停"
+        clickable
+        :active="stateFilter === 'paused'"
+        title="点击只看已暂停自动驾驶的虚拟学习者"
+        @click="onHeaderStatSelect('paused')"
+      />
+      <MkKpi
+        label="活动会话"
+        :value="partition.running + partition.created"
+        hint="全量口径（含卡死）"
+        title="当前运行中 + 创建中会话数（全量口径，含卡死）"
+      />
+      <MkKpi label="今日调用" :value="runStats.todayCalls ?? 0" hint="虚拟 / 测试账号" />
+      <MkKpi
+        label="完成率"
+        :value="`${runStats.completionRate ?? 0}%`"
+        hint="已完成 / 全部"
+      />
+      <MkKpi
+        label="失败率"
+        :value="`${runStats.systemFailureRate ?? 0}%`"
+        hint="系统失败 / 全部"
+        :tone="(runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''"
+      />
+      <MkKpi
+        label="并发"
+        :value="`${concurrency.used}/${concurrency.limit}`"
+        :hint="concurrency.queued > 0 ? `排队 ${concurrency.queued}` : (concurrency.used >= concurrency.limit ? '已满' : '自动驾驶槽位')"
+        :tone="concurrencyTone === 'full' ? 'bad' : concurrencyTone === 'warn' ? 'warn' : ''"
+      />
+      <label class="vl-quota" title="虚拟学习者专属出站 RPM 上限（0=不限）；与平台全局速率相互独立，不会挤占真实用户额度">
+        <span class="vl-quota__label">配额</span>
+        <input v-model.number="vlRpm.limit" type="number" min="0" max="100000" step="10" class="mk-filter__input vl-quota__input" @change="saveVlRpm" />
+        <span class="vl-quota__unit">RPM</span>
+      </label>
     </div>
 
     <!-- 学习者 / 批量实验 tab 切换 -->
@@ -89,12 +146,13 @@
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !samples.length" :cols="6" />
-      <div v-else-if="filtered.length" class="mk-table-scroll">
+      <div v-else-if="filtered.length" class="mk-table-scroll vl-table-scroll">
       <table class="mk-table mk-table--click mk-table--fixed">
         <colgroup>
           <col v-if="isLive" style="width:32px">
-          <!-- 文本列（虚拟学习者 / 长期倾向）：auto 吸收列，共享剩余宽度；
-               固定 token 只用于徽章/数字/时间/操作列。 -->
+          <!-- 文本列（虚拟学习者 / 长期倾向）：固定基准宽 --mk-col-text（320px，断点 372/448）。
+               table-layout:fixed 下按各列宽度权重摊余量；列宽之和超出容器时由外层
+               .mk-table-scroll 横向滚动兜底，不会让「操作」列越出视口。 -->
           <col style="width:var(--mk-col-text)">
           <col style="width:var(--mk-col-text)">
           <col style="width:var(--mk-col-badge)">
@@ -561,7 +619,7 @@ import Pagination from './Pagination.vue'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
 import BatchExperiments from './BatchExperiments.vue'
-import MkStatStrip, { type MkStatItem } from './MkStatStrip.vue'
+import MkKpi from './MkKpi.vue'
 
 /* 学习者 / 批量实验 tab（批量实验为低频调试工具，折叠进本页） */
 const vlTab = ref<'learners' | 'experiments'>('learners')
@@ -1102,66 +1160,10 @@ const partition = computed(() => {
 /* ===== A5 运行统计：完成率/失败率/平均时长/卡死最长分钟（GET /virtual-learners/stats） ===== */
 const runStats = computed(() => liveVirtualRunStats.value)
 
-/** 页头分格指标条（MkStatStrip）：3 个可点击状态筛选 + 运行统计。
-    此前 11 组指标平铺成一句话、无标签/数值层级（审计 3.2）。 */
-const headerStats = computed<MkStatItem[]>(() => {
-  const stats: MkStatItem[] = stateFilterOptions.value
-    .filter((o) => o.key)
-    .map((o) => ({
-      key: o.key,
-      label: o.label,
-      value: o.count,
-      clickable: true,
-      active: stateFilter.value === o.key,
-      title: `点击筛选「${o.label}」虚拟学习者`,
-    }))
-
-  stats.push({
-    label: '今日调用',
-    value: runStats.value.todayCalls ?? 0,
-    title: '今日虚拟/测试账号的 Agent 调用数（自然日口径，与总览页真实调用互斥）',
-  })
-
-  const concurrencyValue = concurrency.value.queued > 0
-    ? `${concurrency.value.used}/${concurrency.value.limit} · 排队 ${concurrency.value.queued}`
-    : concurrency.value.used >= concurrency.value.limit
-      ? `${concurrency.value.used}/${concurrency.value.limit} · 已满`
-      : `${concurrency.value.used}/${concurrency.value.limit}`
-
-  stats.push(
-    {
-      label: '活动会话',
-      value: partition.value.running + partition.value.created,
-      title: '当前运行中 + 创建中会话数（含卡死）',
-    },
-    {
-      label: '完成率',
-      value: `${runStats.value.completionRate}%`,
-      title: '已完成会话 / 总会话（全量口径）',
-    },
-    {
-      label: '失败率',
-      value: `${runStats.value.systemFailureRate}%`,
-      tone: (runStats.value.systemFailureRate ?? 0) > 0 ? 'bad' : '',
-      title: '系统失败会话 / 总会话（与状态条同口径）',
-    },
-    {
-      label: '并发',
-      value: concurrencyValue,
-      tone: concurrencyTone.value === 'full' ? 'bad' : concurrencyTone.value === 'warn' ? 'warn' : '',
-      title: `自动驾驶并发 ${concurrency.value.used}/${concurrency.value.limit}（排队 ${concurrency.value.queued}）：同时运行的自动驾驶会话数（env AUTOPILOT_CONCURRENCY_LIMIT 可配）；满员后新启动会进入排队，有空位自动拉起`,
-    },
-    {
-      label: '速率',
-      value: vlRpm.queued > 0
-        ? `${vlRpm.inFlight} 在途 / ${vlRpm.limit ? `${vlRpm.limit} RPM` : '不限'} · 排队 ${vlRpm.queued}`
-        : `${vlRpm.inFlight} 在途 / ${vlRpm.limit ? `${vlRpm.limit} RPM` : '不限'}`,
-      title: `虚拟学习者专属出站速率：在途 ${vlRpm.inFlight}，排队 ${vlRpm.queued}；上限 ${vlRpm.limit ? vlRpm.limit + ' RPM' : '不限'}`,
-    }
-  )
-
-  return stats
-})
+/** 结论区计数：按状态 key 取样本口径统计（与 stateFilter 同源） */
+function stateCount(key: string): number {
+  return stateFilterOptions.value.find((o) => o.key === key)?.count ?? 0
+}
 
 /** 页头计数点击筛（运行中/已暂停/需关注）：再次点击取消筛选 */
 function onHeaderStatSelect(key?: string) {
@@ -1714,8 +1716,30 @@ function startBatchPolling() { batchPolling.start() }
 .vl-faillink:hover { color: var(--mk-blue); background: #eff6ff; box-shadow: 0 0 0 3px #eff6ff; }
 .mk-num--na { color: var(--mk-faint); font-weight: 600; }
 
-/* VL RPM 输入（状态条内）：与分格指标同基线 */
-.vl-rpm { display: inline-flex; align-items: center; gap: 4px; }
+/* 结论区（方向 A）：KPI 卡 + 配额内联，替代原状态条内的指标条与 RPM 输入。
+   flex 单行优先：卡片 flex-basis 104px 可伸可缩，配额固定宽度跟在行尾，
+   避免 grid auto-fit 把配额挤到第二行变成孤儿。 */
+.vl-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: stretch;
+}
+.vl-kpis :deep(.mk-kpi) { flex: 1 1 104px; min-width: 104px; padding: 9px 12px; gap: 1px; border-radius: 10px; }
+.vl-kpis :deep(.mk-kpi__hint) { font-size: var(--mk-fs-11); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vl-quota {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 4px;
+}
+.vl-quota__label { font-size: var(--mk-fs-12); font-weight: 700; letter-spacing: 0.04em; color: var(--mk-faint); }
+.vl-quota__input { width: 54px; text-align: center; }
+.vl-quota__unit { font-size: var(--mk-fs-12); color: var(--mk-faint); }
+/* 表格文本列在 VL 语境收窄：10 列固定宽之和需落进内容区，否则「操作」列越出视口
+   （原 --mk-col-text 320 基准下 1314 > 内容区，靠横向滚动兜底）。 */
+.vl-table-scroll { --mk-col-text: 200px; }
 .vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 /* 「正在运行」折叠展开按钮 */
