@@ -258,7 +258,7 @@
           </ul>
         </section>
 
-        <!-- 今日复习（到期旧知唤醒，复习闭环） -->
+        <!-- 今日复习（到期旧知回捞） -->
         <section v-if="sourceFailed.review" class="card dash__review">
           <div class="review__head">
             <span class="review__eyebrow">今日复习</span>
@@ -267,22 +267,45 @@
         </section>
         <section v-else-if="reviewDue.length" class="card review dash__review">
           <div class="review__head">
-            <span class="review__eyebrow">今日复习 · {{ reviewDue.length }} 个知识点到期</span>
-            <span class="review__sub">间隔复习对抗遗忘（ACT-R）</span>
+            <div class="review__headline">
+              <span class="review__eyebrow">今日复习</span>
+              <strong class="review__title">{{ reviewDue.length }} 个知识点待回捞</strong>
+            </div>
+            <div class="review__stats">
+              <span v-if="reviewUrgentCount" class="review__stat review__stat--urgent">记忆偏弱 {{ reviewUrgentCount }}</span>
+              <span class="review__stat">按计划到期 {{ reviewDue.length - reviewUrgentCount }}</span>
+            </div>
           </div>
+          <p class="review__lead">按记忆曲线排期，越靠前越该回捞；右侧为当前记忆强度。</p>
           <ul class="review__list">
-            <li v-for="item in reviewDue.slice(0, 5)" :key="item.conceptKey" class="review__item">
+            <li
+              v-for="item in visibleReviewDue"
+              :key="item.conceptKey"
+              class="review__item"
+              :class="{ 'review__item--urgent': item.reason === 'below-threshold' }"
+            >
               <router-link to="/achievements" class="review__link" :title="'查看「' + item.label + '」的复习进度'">
                 <span class="review__name">{{ item.label }}</span>
-                <span class="review__bar"><i :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
-                <span class="review__pct">{{ Math.round(item.retention * 100) }}%</span>
-                <span class="review__minutes">约 {{ item.estimatedMinutes }} 分钟</span>
+                <span
+                  class="review__tag"
+                  :class="item.reason === 'below-threshold' ? 'review__tag--urgent' : 'review__tag--plan'"
+                >{{ reviewReasonText(item.reason) }}</span>
+                <span class="review__meter" :title="`当前记忆强度 ${reviewPct(item.retention)}`">
+                  <span class="review__bar"><i :style="{ width: reviewPct(item.retention) }"></i></span>
+                  <span class="review__pct">{{ reviewPct(item.retention) }}</span>
+                </span>
               </router-link>
             </li>
           </ul>
+          <button
+            v-if="reviewDue.length > REVIEW_PREVIEW"
+            type="button"
+            class="review__more"
+            @click="reviewExpanded = !reviewExpanded"
+          >{{ reviewExpanded ? '收起' : `还有 ${reviewDue.length - REVIEW_PREVIEW} 个 · 展开全部` }}</button>
           <div class="review__footer">
             <router-link v-if="todayTask?.id" :to="`/learn/${todayTask.id}?mode=review`" class="btn-primary review__go">开始复习</router-link>
-            <span class="review__hint">复习课会优先回捞这些到期知识点</span>
+            <span class="review__hint"><template v-if="todayTask?.minutes">约 {{ todayTask.minutes }} 分钟 · </template>复习课会优先回捞这些到期知识点</span>
           </div>
         </section>
 
@@ -557,6 +580,24 @@ const examples = [
 
 /* ================= 数据加载 ================= */
 const reviewDue = ref<Array<{ conceptKey: string; label: string; retention: number; reason: string; estimatedMinutes: number }>>([]);
+/** 今日复习列表默认预览条数（其余折叠为「还有 N 个」） */
+const REVIEW_PREVIEW = 5;
+const reviewExpanded = ref(false);
+const visibleReviewDue = computed(() =>
+  reviewExpanded.value ? reviewDue.value : reviewDue.value.slice(0, REVIEW_PREVIEW)
+);
+/** below-threshold = 记忆已跌破阈值（偏弱/该优先）；interval-elapsed = 按计划到期 */
+const reviewUrgentCount = computed(() => reviewDue.value.filter((item) => item.reason === 'below-threshold').length);
+function reviewPct(retention: number): string {
+  const value = Number(retention);
+  const safe = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+  return `${Math.round(safe * 100)}%`;
+}
+function reviewReasonText(reason: string): string {
+  if (reason === 'below-threshold') return '记忆偏弱';
+  if (reason === 'interval-elapsed') return '计划到期';
+  return '待复习';
+}
 const todaySchedule = ref<Record<string, any> | null>(null);
 const loadError = ref(false);
 /** 各数据源失败标记：区块级降级提示（不整页失败，也不伪装成空态） */
@@ -1300,21 +1341,46 @@ onMounted(loadAll);
 /* ---------- 今日复习（复习闭环） ---------- */
 .dash__review { margin-bottom: 16px; }
 .review { padding: 16px 18px; }
-.review__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
-.review__eyebrow { font-size: 14px; font-weight: 700; }
-.review__sub { font-size: 12px; color: var(--faint); }
-.review__list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
-.review__item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
-.review__link { display: flex; align-items: center; gap: 10px; flex: 1; text-decoration: none; color: inherit; }
-.review__link:hover { opacity: 0.8; }
-.review__link:hover .review__name { color: var(--blue, #2c63d0); }
-.review__name { min-width: 140px; font-weight: 600; }
+.review__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.review__headline { display: grid; gap: 2px; min-width: 0; }
+.review__eyebrow { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; color: var(--blue-deep); }
+.review__title { font-size: 15px; font-weight: 700; color: var(--ink); }
+.review__stats { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.review__stat {
+  padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  color: var(--blue-deep); font-size: 11px; font-weight: 700;
+}
+.review__stat--urgent {
+  background: color-mix(in srgb, var(--amber) 16%, transparent);
+  color: var(--amber-ink);
+}
+.review__lead { margin: 6px 0 10px; font-size: 12px; color: var(--faint); }
+.review__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.review__item { border-radius: 8px; }
+.review__link {
+  display: flex; align-items: center; gap: 10px; padding: 5px 8px;
+  border-radius: 8px; text-decoration: none; color: inherit;
+  transition: background-color 0.15s ease;
+}
+.review__link:hover { background: color-mix(in srgb, var(--blue) 6%, transparent); }
+.review__name {
+  flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.review__link:hover .review__name { color: var(--blue-deep); }
+.review__tag { flex: 0 0 auto; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.review__tag--urgent { background: color-mix(in srgb, var(--amber) 18%, transparent); color: var(--amber-ink); }
+.review__tag--plan { background: color-mix(in srgb, var(--faint) 12%, transparent); color: var(--faint); }
+.review__meter { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; width: 132px; }
 .review__bar { flex: 1; height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
-.review__bar i { display: block; height: 100%; border-radius: 3px; background: var(--blue, #3b82f6); }
-.review__pct { width: 42px; text-align: right; color: var(--faint); font-size: 12px; }
-.review__minutes { width: 90px; text-align: right; color: var(--faint); font-size: 12px; }
-.review__footer { display: flex; align-items: center; gap: 12px; }
-.review__go { padding: 6px 16px; border-radius: 8px; }
+.review__bar i { display: block; height: 100%; border-radius: 3px; background: var(--blue); transition: width 0.4s ease; }
+.review__item--urgent .review__bar i { background: var(--amber); }
+.review__pct { width: 34px; text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.review__more { margin-top: 8px; padding: 4px 0; font-size: 12.5px; font-weight: 700; color: var(--blue-deep); }
+.review__more:hover { text-decoration: underline; }
+.review__footer { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.review__go { padding: 8px 18px; border-radius: 10px; }
 .review__hint { font-size: 12px; color: var(--faint); }
 
 /* ---------- 主区 ---------- */
