@@ -233,10 +233,10 @@ doc/*
 !doc/LEARNER_MODEL_ARCHITECTURE.md
 !doc/LEARNER_MODEL_ARCHITECTURE.en.md
 !doc/LEARNER_STATE_REVIEW_DESIGN.md
+!doc/ADMIN_TERMINOLOGY_AUDIT.md
 !doc/AGENT_IO_DESIGN_V3.md
 !doc/SKILL_DEVELOPMENT_GUIDE.md
-doc/archive/
-doc/history/
+doc/local/
 
 # Playwright MCP 会话临时文件
 .playwright-mcp/

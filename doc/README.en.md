@@ -19,6 +19,9 @@
 - [`EDUCATIONAL_THEORY_MAP.md`](./EDUCATIONAL_THEORY_MAP.md)
   - Educational theory map (ideological constitution): pedagogy/psychology/neuroscience/LLM theories × implementation index
   - All literature verified online (DOI/arXiv links); source of theoretical basis for prompt rules and metric design
+- [`ADMIN_TERMINOLOGY_AUDIT.md`](./ADMIN_TERMINOLOGY_AUDIT.md)
+  - Single source of truth for admin console terminology governance: term families, banned phrases, and guard rules
+  - Source for `frontend/src/views/admin-redesign/terms.ts`, `statusText.ts` and the terminology guard tests
 
 ## Agents & Scenarios
 
@@ -26,6 +29,9 @@
   - V3 field routing model: `agent-output-v1` shell contract, `internal.ext.*` namespace rules
 - [`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md) ([en](./LEARNER_MODEL_ARCHITECTURE.en.md))
   - Learner model scene design: `LearnerSnapshot`, AI intervention timing, admin observation and recompute design
+- [`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md)
+  - Learner state review design (LLM diagnosis layer + configurable BKT): diagnosis layer, projection triage, zero-training temporal belief update and calibration loop
+  - Hard constraint: no extra/trained models — all via prompt + LLM + existing deterministic code
 - `skill:session-wrapup` (formerly `session-wrapup-agent`, kept as alias; landed)
   - Unified post-session summary and evaluation
   - Replaced the main chain's `summary-agent + session-evaluation-agent`
@@ -47,3 +53,5 @@
 ## Process materials (removed, not in repo)
 
 Survey snapshots (`SKILL_RUNTIME_MAP_MAIN/SIM`), design process records (`ORCHESTRATOR_FIELD_FLOW_REDESIGN`, `QUICK_LEARN` design doc), `design/` folder, `CHANGES_*` change logs and `doc/CHANGELOG` were cleaned up on 2026-09-05 and are no longer kept in the repository. Prompt-lab `archive/` (v2 legacy assets) was cleaned up at the same time.
+
+Local process materials (design drafts, research surveys, dated snapshots, screenshots, etc.) live under `doc/local/` (gitignored, not tracked); the `doc/` root keeps only current, in-repo documents that are tracked by git.
