@@ -4,7 +4,7 @@
  * learning_paths.subject，进而污染教学 prompt、管理端内容列表与 Dashboard 路径卡副标题。
  * 口径：subject 简洁则沿用，过长/缺失用清洗后的路径名兜底。
  */
-import { MAX_PATH_SUBJECT_LENGTH, resolvePathSubject, cleanPathTitle } from '../learning.helpers';
+import { MAX_PATH_SUBJECT_LENGTH, resolvePathSubject, cleanPathTitle, buildSceneSummaryFromFraming } from '../learning.helpers';
 
 describe('resolvePathSubject（路径 subject 兜底）', () => {
   it('简洁 subject 原样保留', () => {
@@ -39,5 +39,39 @@ describe('cleanPathTitle', () => {
 
   it('无后缀时原样返回', () => {
     expect(cleanPathTitle('二战在家备考偏离重启入门')).toBe('二战在家备考偏离重启入门');
+  });
+});
+
+describe('buildSceneSummaryFromFraming（设计意图卡数据）', () => {
+  const realProblem = '偏离后没有「最小重启标准」，且该标准在崩溃当下无法被主动想起。'.repeat(12);
+  const framing = {
+    normalizedInput: {
+      learnerProfile: { surfaceGoal: '二战在家备考不崩' },
+      problemSpace: { realProblem },
+      confirmedProposal: { firstDeliverable: '一张重启卡', keyStages: ['阶段一：做卡', '阶段二：跑闭环'] },
+      successCriteria: { observableResult: '下次偏离当天不崩' },
+      resources: { timeBudget: '每天 1 小时', timeHorizon: '3 周' },
+    },
+  };
+
+  it('标题用短目标 surfaceGoal，问题原文另置 problemBackground', () => {
+    const summary = buildSceneSummaryFromFraming(framing as any, 3, 12);
+    expect(summary?.title).toBe('二战在家备考不崩');
+    expect(summary?.problemBackground).toContain('最小重启标准');
+    expect(summary?.title).not.toBe(summary?.problemBackground);
+  });
+
+  it('无 surfaceGoal 时标题回落问题原文，problemBackground 仍保留', () => {
+    const noGoal = { normalizedInput: { ...framing.normalizedInput, learnerProfile: {} } };
+    const summary = buildSceneSummaryFromFraming(noGoal as any, 3, 12);
+    expect(summary?.title).toContain('最小重启标准');
+    expect(summary?.problemBackground).toContain('最小重启标准');
+  });
+
+  it('保留 firstDeliverable / targetState / planningFocus（是否展示由前端决定）', () => {
+    const summary = buildSceneSummaryFromFraming(framing as any, 3, 12);
+    expect(summary?.firstDeliverable).toBe('一张重启卡');
+    expect(summary?.targetState).toBe('下次偏离当天不崩');
+    expect(summary?.planningFocus).toEqual(['阶段一：做卡', '阶段二：跑闭环']);
   });
 });

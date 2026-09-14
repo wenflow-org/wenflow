@@ -93,8 +93,11 @@ export interface LearningPath {
   generationLifecycle?: GenerationLifecycleDTO | null;
   sceneSummary?: {
     title?: string;
+    /** 问题原文（realProblem）：标题用短目标后，卡内折叠展示的背景 */
+    problemBackground?: string | null;
     firstDeliverable?: string;
     targetState?: string;
+    /** 用户确认的阶段提示（与页面阶段列表重复，前端不再展示） */
     planningFocus?: string[];
     excludedScope?: string[];
     riskFlags?: string[];

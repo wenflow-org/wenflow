@@ -462,12 +462,18 @@ export function buildSceneSummaryFromFraming(
   const focusSource = getSceneFramingFocusSource(sceneFraming);
   const outOfScope = normalizeStringArray(normalizedInput?.confirmedProposal?.outOfScope);
   const legacyExcludedScope = normalizeStringArray(sceneFraming.excludedScope);
+  const surfaceGoal = typeof normalizedInput?.learnerProfile?.surfaceGoal === 'string'
+    ? normalizedInput.learnerProfile.surfaceGoal.trim()
+    : '';
+  const realProblem = typeof normalizedInput?.problemSpace?.realProblem === 'string'
+    ? normalizedInput.problemSpace.realProblem.trim()
+    : '';
 
   return {
-    title: normalizedInput?.problemSpace?.realProblem
-      || normalizedInput?.learnerProfile?.surfaceGoal
-      || sceneFraming.intent
-      || null,
+    // 标题用短的用户目标（surfaceGoal）；问题原文另放 problemBackground 供卡内按需展开，
+    // 避免把几百字 realProblem 当卡片标题整段铺出（见 V2LearningPathDetail 设计意图卡）。
+    title: surfaceGoal || realProblem || sceneFraming.intent || null,
+    problemBackground: realProblem || null,
     firstDeliverable,
     targetState: normalizedInput?.successCriteria?.observableResult || sceneFraming.targetState || null,
     planningFocus: focusSource,

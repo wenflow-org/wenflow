@@ -332,6 +332,18 @@
                   <dd>{{ row.value }}</dd>
                 </div>
               </dl>
+              <div v-if="sceneProblemBackground" class="sidecard__bg">
+                <button
+                  type="button"
+                  class="sidecard__bg-head"
+                  :aria-expanded="bgExpanded"
+                  @click="bgExpanded = !bgExpanded"
+                >
+                  <span>问题背景</span>
+                  <span class="sidecard__bg-chev" :class="{ 'sidecard__bg-chev--open': bgExpanded }">▾</span>
+                </button>
+                <p v-if="bgExpanded" class="sidecard__bg-text">{{ sceneProblemBackground }}</p>
+              </div>
             </section>
           </aside>
         </div>
@@ -1204,12 +1216,23 @@ const sceneRows = computed(() => {
   const rows: Array<{ label: string; value: string }> = [];
   if (s.firstDeliverable) rows.push({ label: '第一阶段产出', value: String(s.firstDeliverable) });
   if (s.targetState) rows.push({ label: '目标状态', value: String(s.targetState) });
-  if (Array.isArray(s.planningFocus) && s.planningFocus.length) rows.push({ label: '规划焦点', value: s.planningFocus.join('、') });
+  // 规划焦点（confirmedProposal.keyStages）与左侧阶段列表重复，不再在此展示
   // 注意：excludedScope/「先不学」不展示——不学的内容无需让用户确认，避免不必要的顾虑（与 goal 预览一致）
   if (s.timeBudget) rows.push({ label: '时间预算', value: String(s.timeBudget) });
   if (s.timeHorizon) rows.push({ label: '时间跨度', value: String(s.timeHorizon) });
   return rows;
 });
+
+/** 问题背景（问题原文 realProblem）：默认折叠；标题已是同一段时不再重复展示 */
+const bgExpanded = ref(false);
+const sceneProblemBackground = computed(() => {
+  const s = sceneSummary.value;
+  if (!s || typeof s === 'string') return '';
+  const bg = typeof s.problemBackground === 'string' ? s.problemBackground.trim() : '';
+  return bg && bg !== sceneSummaryTitle.value ? bg : '';
+});
+
+watch(sceneProblemBackground, () => { bgExpanded.value = false; });
 
 /* ---------- 展示辅助 ---------- */
 const badgeText = computed(() => {
@@ -1480,6 +1503,15 @@ onBeforeUnmount(() => {
 .sidecard__row { display: grid; gap: 2px; }
 .sidecard__row dt { font-size: 11px; font-weight: 800; color: var(--faint); letter-spacing: 0.03em; }
 .sidecard__row dd { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+.sidecard__bg { border-top: 1px dashed var(--line); padding-top: 8px; }
+.sidecard__bg-head {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.03em; color: var(--faint);
+}
+.sidecard__bg-head:hover { color: var(--blue-deep); }
+.sidecard__bg-chev { font-size: 10px; transition: transform 0.15s ease; }
+.sidecard__bg-chev--open { transform: rotate(180deg); }
+.sidecard__bg-text { margin: 6px 0 0; font-size: 12px; line-height: 1.65; color: var(--muted); white-space: pre-wrap; }
 
 @media (max-width: 900px) {
   .detail__main { padding: 14px 14px 32px; }
