@@ -69,8 +69,7 @@
               <span class="badge" :class="badgeCls">{{ badgeText }}</span>
             </div>
             <h1>{{ pathTitle }}</h1>
-            <p>{{ path.description || path.summary }}</p>
-            <AiContentNote class="hero__ai-note" />
+            <p>{{ path.summary || path.description }}</p>
             <div class="hero__metrics">
               <span class="metric"><b>{{ currentStageNo }} / {{ stages.length || '?' }}</b>当前阶段</span>
               <span class="metric"><b>{{ path.estimatedHours || '—' }} 小时</b>预计投入</span>
