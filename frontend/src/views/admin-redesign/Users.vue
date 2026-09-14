@@ -4,7 +4,7 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">用户</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" :title="isLive ? '后端共 ' + liveUsersTotal + ' 人，列表仅加载前 ' + users.length + ' 行' : undefined">
+      <span class="mk-status__meta" :title="isLive ? (liveUsersTotal > users.length ? '后端共 ' + liveUsersTotal + ' 人，列表仅加载前 ' + users.length + ' 行' : '后端共 ' + liveUsersTotal + ' 人') : undefined">
         共 {{ users.length }} 人
       </span>
       <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">
@@ -32,15 +32,20 @@
               :class="{ 'mk-pill--active': pill === p.id }"
               @click="pill = p.id"
             >
-              {{ p.label }}
+              {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
             </button>
           </div>
-          <input class="mk-filter__input" v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
-          <select v-model="roleFilter" class="mk-filter__select" aria-label="按角色筛选">
-            <option value="">全部角色</option>
-            <option value="admin">管理员</option>
-            <option value="user">普通用户</option>
-          </select>
+          <span class="mk-search">
+            <input class="mk-filter__input" v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
+            <button
+              v-if="keyword"
+              type="button"
+              class="mk-search__clear"
+              aria-label="清空搜索"
+              @click="keyword = ''"
+            >✕</button>
+          </span>
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <DataScopeToggle v-if="isLive && pill !== 'deleted'" v-model="includeTest" />
@@ -381,7 +386,6 @@ const users = computed<UserRow[]>(() => {
 
 const pill = ref('all')
 const keyword = ref('')
-const roleFilter = ref('')
 
 /* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后按新口径重拉并灰标虚拟/测试行 */
 const includeTest = ref(false)
@@ -405,7 +409,7 @@ const isNarrow = useIsNarrow()
 const MOBILE_HIDDEN_COLS = new Set(['check', 'role', 'level', 'created', 'lastlogin'])
 const showCol = (key: string) => !hiddenCols.value.has(key) && !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
 
-/** 真实用户数（排除测试/虚拟账号；口径标注用，与总览「总用户」对齐的近似值——列表为前 50 行样本） */
+/** 真实用户数（排除测试/虚拟账号；口径标注用，与总览「总用户」对齐——列表已全量加载，仅超上限时截断） */
 const realUsers = computed(() => users.value.filter((u) => !u.deleted && !isTestAccountUser(u)).length)
 
 /** live 用户域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
@@ -421,12 +425,20 @@ watch(liveUsersTotal, (n) => {
 }, { immediate: true })
 /* 宿主刷新联动（用户与学习者合并宿主「刷新」按钮 → 重拉 live 用户域） */
 defineExpose({ refresh: () => { void loadLiveData() }, openCreate })
-const pills = [
-  { id: 'all', label: '全部' },
-  { id: 'admin', label: '管理员' },
-  { id: 'online', label: '近期在线' },
-  { id: 'deleted', label: '已删除' }
-]
+/* 筛选 pill（角色 / 活跃 / 生命周期单源；已去掉原「全部角色」下拉，避免与「管理员」pill 语义冲突）。
+   计数取自全量 liveUsers；「已删除」为独立数据源，切过去才拉取，未加载时不显示计数。 */
+const pills = computed(() => {
+  const active = liveUsers.value
+  const isOnline = (u: { lastLoginAt?: string | null }) =>
+    !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 30 * 60000
+  return [
+    { id: 'all', label: '全部', count: active.length },
+    { id: 'admin', label: '管理员', count: active.filter((u) => u.isAdmin).length },
+    { id: 'user', label: '普通用户', count: active.filter((u) => !u.isAdmin).length },
+    { id: 'online', label: '近期在线', count: active.filter(isOnline).length },
+    { id: 'deleted', label: '已删除', count: deletedUsers.value.length || null }
+  ]
+})
 
 /* Phase 2：切到「已删除」pill 时拉取已删列表（live 模式）；恢复/删除后回「全部」保持一致性 */
 watch(pill, (p) => {
@@ -687,9 +699,8 @@ const filtered = computed(() =>
   sortUserRows(users.value.filter((u) => {
     if (pill.value === 'deleted' && !u.deleted) return false
     if (pill.value === 'admin' && !u.admin) return false
+    if (pill.value === 'user' && u.admin) return false
     if (pill.value === 'online' && !u.online) return false
-    if (roleFilter.value === 'admin' && !u.admin) return false
-    if (roleFilter.value === 'user' && u.admin) return false
     const q = keyword.value.trim().toLowerCase()
     if (q && !`${u.name} ${u.email} ${u.id}`.toLowerCase().includes(q)) return false
     return true
@@ -709,11 +720,10 @@ watch(filtered, () => {
   page.value = 1
 })
 
-const isFiltered = computed(() => pill.value !== 'all' || !!keyword.value.trim() || !!roleFilter.value)
+const isFiltered = computed(() => pill.value !== 'all' || !!keyword.value.trim())
 function clearFilters() {
   pill.value = 'all'
   keyword.value = ''
-  roleFilter.value = ''
 }
 </script>
 

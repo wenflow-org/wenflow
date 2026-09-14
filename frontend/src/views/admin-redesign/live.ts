@@ -1070,7 +1070,7 @@ export interface LiveUser {
 
 export const liveUsers = ref<LiveUser[]>([])
 
-/** 后端用户总数（分页 total；前端只拉前 50 行，用于截断提示） */
+/** 后端用户总数（分页 total；前端全量加载，仅超 LIVE_LIST_FULL_LIMIT 时截断，用于截断提示） */
 export const liveUsersTotal = ref(0)
 
 /** 列表「全量加载」上限：客户端排序/聚合需要全量数据；超过此数仍会截断（状态条「已截断」提示）。

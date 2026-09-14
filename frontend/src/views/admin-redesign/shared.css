@@ -512,6 +512,48 @@ html[data-theme='dark'] .mk-pill--active {
   color: #9db8f5;
   box-shadow: 0 0 0 1px rgba(91, 141, 239, 0.45);
 }
+/* 筛选 pill 内的计数徽章：默认弱化，激活态跟随主色 */
+.mk-pill__count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.14);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-11);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.mk-pill--active .mk-pill__count {
+  background: rgba(44, 99, 208, 0.14);
+  color: var(--mk-blue);
+}
+html[data-theme='dark'] .mk-pill__count { background: rgba(148, 163, 184, 0.18); }
+html[data-theme='dark'] .mk-pill--active .mk-pill__count { background: rgba(91, 141, 239, 0.24); color: #9db8f5; }
+
+/* 搜索框清空按钮（输入有值时显示）：包一层 .mk-search 提供定位锚点 */
+.mk-search { position: relative; display: inline-flex; align-items: center; }
+.mk-search > .mk-filter__input { padding-right: 28px; }
+.mk-search__clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: var(--mk-muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.mk-search__clear:hover { background: #cbd5e1; color: var(--mk-ink); }
+html[data-theme='dark'] .mk-search__clear { background: #2a3850; color: #9fb0c8; }
 
 /* ----- 链接按钮 ----- */
 /* 返回按钮：子页面顶部"← 返回"统一样式（原散落在 ud-back/ld-back/vp-back 三处局部定义） */
