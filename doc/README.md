@@ -23,6 +23,9 @@
 - [`ADMIN_TERMINOLOGY_AUDIT.md`](./ADMIN_TERMINOLOGY_AUDIT.md)
   - Admin 运营台术语治理单源依据：术语族、禁用叫法与守卫规则
   - `frontend/src/views/admin-redesign/terms.ts`、`statusText.ts` 与术语守卫测试均以本文为准
+- [`CONTEXT_MECHANISM_AUDIT.md`](./CONTEXT_MECHANISM_AUDIT.md)
+  - 各阶段 skill 的**上下文机制审计**：真实调用遥测（输入体积 / 前缀缓存命中率）+ 优化方向
+  - 结论：体积不是瓶颈，真正的杠杆是**前缀缓存命中率**（全局 20.9%）
 
 ## Agent 与场景
 

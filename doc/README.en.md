@@ -22,6 +22,9 @@
 - [`ADMIN_TERMINOLOGY_AUDIT.md`](./ADMIN_TERMINOLOGY_AUDIT.md)
   - Single source of truth for admin console terminology governance: term families, banned phrases, and guard rules
   - Source for `frontend/src/views/admin-redesign/terms.ts`, `statusText.ts` and the terminology guard tests
+- [`CONTEXT_MECHANISM_AUDIT.md`](./CONTEXT_MECHANISM_AUDIT.md)
+  - Context-mechanism audit across all stage skills: real-call telemetry (input size / prefix-cache hit rate) + optimization directions
+  - Finding: size is not the bottleneck; the real lever is **prefix-cache hit rate** (global 20.9%)
 
 ## Agents & Scenarios
 
