@@ -298,13 +298,14 @@ router.get('/me/sessions', async (req, res, next) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 100);
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
-    // excludeInternal=1：跳过内部替换/废弃会话（discarded/superseded），供学习历史页使用。
-    // discarded/superseded 是技术artifact（重开/被新会话取代），不是用户真实的学习记录。
-    const excludeInternal = req.query.excludeInternal === '1' || req.query.excludeInternal === 'true';
+    // 默认过滤内部替换/废弃会话（discarded/superseded）：它们是重开/被取代的技术artifact，
+    // 不是用户真实的学习记录。首页时长、学习状态、学习历史统一按此口径。
+    // 需要原始全量（含内部会话）时传 includeInternal=1。
+    const includeInternal = req.query.includeInternal === '1' || req.query.includeInternal === 'true';
 
     // 构建查询条件
     const where: any = { userId };
-    if (excludeInternal) {
+    if (!includeInternal) {
       where.status = { notIn: ['discarded', 'superseded'] };
     }
     

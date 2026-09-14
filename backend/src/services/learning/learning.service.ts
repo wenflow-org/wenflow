@@ -86,6 +86,7 @@ import {
   parsePathSummary,
   cleanPathTitle,
   resolvePathSubject,
+  normalizeSessionDurationMinutes,
   normalizeStringArray,
   normalizeConceptText,
   resolveTaskConcept,
@@ -1312,27 +1313,6 @@ class LearningService {
     return retriedCount;
   }
 
-  private normalizeSessionDurationMinutes(session: {
-    duration: number | null;
-    startTime: Date;
-    endTime: Date | null;
-  }): number {
-    // 优先使用 duration 列：收束时已扣除暂停/按消息时间戳封顶（computeEffectiveDurationMinutes），
-    // endTime−startTime 裸算会把暂停/idle 时间计入，与授课页/总结页/EWMA 口径不一致
-    const rawDuration = session.duration ?? 0;
-    if (rawDuration > 0) {
-      // 历史兼容：部分会话把秒写入 duration，这里兜底转分钟
-      return rawDuration > 24 * 60 ? Math.round(rawDuration / 60) : rawDuration;
-    }
-
-    // 无 duration 的历史会话：用 endTime−startTime 推导，间隔按 30 分钟封顶（与收束口径对齐）
-    if (session.endTime) {
-      return Math.max(1, Math.min(30, Math.round((session.endTime.getTime() - session.startTime.getTime()) / 60000)));
-    }
-
-    return 0;
-  }
-
   private async attachActualMinutesToPath(path: any): Promise<any> {
     const milestones = path?.milestones || [];
     const cognitiveDesign = parsePathCognitiveDesign(path?.aiPromptTemplate || null);
@@ -1373,7 +1353,7 @@ class LearningService {
     sessions.forEach((session) => {
       if (!session.taskId) return;
 
-      const minutes = this.normalizeSessionDurationMinutes(session);
+      const minutes = normalizeSessionDurationMinutes(session);
       if (minutes <= 0) return;
 
       actualMinutesMap.set(session.taskId, (actualMinutesMap.get(session.taskId) || 0) + minutes);
@@ -4524,15 +4504,16 @@ const learningPath = await prisma.learning_paths.findUnique({
       const todoSubtasks = subtasks.filter(t => t.status === 'todo');
 
       const totalEstimatedMinutes = subtasks.reduce((sum, t) => sum + (t.estimatedMinutes || 0), 0);
+      // 与 /users/me/sessions、学习状态页统一口径：内部替换/废弃会话不计入时长与学习天数
       const sessions = await prisma.teaching_sessions.findMany({
-        where: { userId },
+        where: { userId, status: { notIn: ['discarded', 'superseded'] } },
         select: {
           duration: true,
           startTime: true,
           endTime: true,
         },
       });
-      const totalMinutes = sessions.reduce((sum, session) => sum + this.normalizeSessionDurationMinutes(session), 0);
+      const totalMinutes = sessions.reduce((sum, session) => sum + normalizeSessionDurationMinutes(session), 0);
       const activeLearningDays = new Set(
         sessions.map((session) => session.startTime.toISOString().split('T')[0])
       ).size;

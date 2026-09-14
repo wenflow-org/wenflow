@@ -7,6 +7,7 @@ import prisma from '../../config/database';
 import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService } from './LearnerStateSummaryService';
 import stateTrackingService from '../learning/learning-state.service';
+import { normalizeSessionDurationMinutes } from '../learning/learning.helpers';
 import { getLevelFromXp } from './level.util';
 
 export interface AssembledLearningState {
@@ -59,7 +60,7 @@ export async function assembleLearningState(
 ): Promise<AssembledLearningState | null> {
   const { snapshotScope = 'global', pathId = null, pathsTake } = options;
 
-  const [user, paths, subtasks, sessions] = await Promise.all([
+  const [user, paths, subtasks, sessions, timeSessions] = await Promise.all([
     prisma.users.findUnique({
       where: { id: userId },
       select: { id: true, name: true, xp: true },
@@ -95,7 +96,7 @@ export async function assembleLearningState(
       },
     }),
     prisma.teaching_sessions.findMany({
-      where: { userId },
+      where: { userId, status: { notIn: ['discarded', 'superseded'] } },
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
@@ -109,6 +110,12 @@ export async function assembleLearningState(
         status: true,
       },
       take: 10,
+    }),
+    // 时长/学习天数按全量口径（此前从 take:10 的样本里算，累计时长/天数会明显偏小）；
+    // 与 /learning/stats、/users/me/sessions 同口径，过滤 discarded/superseded 内部会话。
+    prisma.teaching_sessions.findMany({
+      where: { userId, status: { notIn: ['discarded', 'superseded'] } },
+      select: { duration: true, startTime: true, endTime: true },
     }),
   ]);
 
@@ -149,16 +156,8 @@ export async function assembleLearningState(
   const inProgressSubtasks = subtasks.filter((task: any) => task.status === 'in_progress');
   const todoSubtasks = subtasks.filter((task: any) => task.status === 'todo');
   const totalEstimatedMinutes = subtasks.reduce((sum: number, task: any) => sum + (task.estimatedMinutes || 0), 0);
-  const totalMinutes = sessions.reduce((sum: number, session: any) => {
-    if (session.endTime) {
-      return sum + Math.max(1, Math.round((session.endTime.getTime() - session.startTime.getTime()) / 60000));
-    }
-    if ((session.duration || 0) > 24 * 60) {
-      return sum + Math.round((session.duration || 0) / 60);
-    }
-    return sum + Math.max(0, session.duration || 0);
-  }, 0);
-  const activeLearningDays = new Set(sessions.map((session: any) => session.startTime.toISOString().split('T')[0])).size;
+  const totalMinutes = timeSessions.reduce((sum: number, session: any) => sum + normalizeSessionDurationMinutes(session), 0);
+  const activeLearningDays = new Set(timeSessions.map((session: any) => session.startTime.toISOString().split('T')[0])).size;
   const avgDailyMinutes = activeLearningDays > 0 ? Number((totalMinutes / activeLearningDays).toFixed(1)) : 0;
 
   const learningState = {

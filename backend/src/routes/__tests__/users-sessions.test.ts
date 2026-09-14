@@ -82,15 +82,15 @@ describe('GET /me/sessions（学习历史：分页 + 内部会话过滤）', () 
     expect(teachingSessionMocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 0, take: 10 }));
   });
 
-  it('excludeInternal=1 时列表与总数同口径过滤 discarded/superseded', async () => {
-    await callSessions({ excludeInternal: '1' });
+  it('默认过滤 discarded/superseded，列表与总数同口径（首页/状态/历史统一）', async () => {
+    await callSessions({});
     const expectedWhere = { userId: 'user-1', status: { notIn: ['discarded', 'superseded'] } };
     expect(teachingSessionMocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expectedWhere }));
     expect(teachingSessionMocks.count).toHaveBeenCalledWith({ where: expectedWhere });
   });
 
-  it('未传 excludeInternal 时保持原口径（不加 status 过滤，兼容其它页面）', async () => {
-    await callSessions({});
+  it('includeInternal=1 时不过滤（需要原始全量时显式开启）', async () => {
+    await callSessions({ includeInternal: '1' });
     const call = teachingSessionMocks.findMany.mock.calls[0][0];
     expect(call.where.status).toBeUndefined();
   });

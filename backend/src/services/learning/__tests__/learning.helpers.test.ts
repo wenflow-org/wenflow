@@ -4,7 +4,7 @@
  * learning_paths.subject，进而污染教学 prompt、管理端内容列表与 Dashboard 路径卡副标题。
  * 口径：subject 简洁则沿用，过长/缺失用清洗后的路径名兜底。
  */
-import { MAX_PATH_SUBJECT_LENGTH, resolvePathSubject, cleanPathTitle, buildSceneSummaryFromFraming } from '../learning.helpers';
+import { MAX_PATH_SUBJECT_LENGTH, resolvePathSubject, cleanPathTitle, buildSceneSummaryFromFraming, normalizeSessionDurationMinutes } from '../learning.helpers';
 
 describe('resolvePathSubject（路径 subject 兜底）', () => {
   it('简洁 subject 原样保留', () => {
@@ -73,5 +73,36 @@ describe('buildSceneSummaryFromFraming（设计意图卡数据）', () => {
     expect(summary?.firstDeliverable).toBe('一张重启卡');
     expect(summary?.targetState).toBe('下次偏离当天不崩');
     expect(summary?.planningFocus).toEqual(['阶段一：做卡', '阶段二：跑闭环']);
+  });
+});
+
+describe('normalizeSessionDurationMinutes（会话时长统一口径）', () => {
+  it('优先用 duration 列（已扣除暂停/idle）', () => {
+    expect(normalizeSessionDurationMinutes({
+      duration: 25,
+      startTime: new Date('2026-01-01T00:00:00Z'),
+      endTime: new Date('2026-01-01T03:00:00Z'),
+    })).toBe(25);
+  });
+
+  it('duration 写成秒的历史数据按秒兜底', () => {
+    expect(normalizeSessionDurationMinutes({ duration: 3600, startTime: null, endTime: null })).toBe(60);
+  });
+
+  it('无 duration 时用 endTime−startTime 兜底，封顶 30 分钟', () => {
+    expect(normalizeSessionDurationMinutes({
+      duration: null,
+      startTime: new Date('2026-01-01T00:00:00Z'),
+      endTime: new Date('2026-01-01T00:10:00Z'),
+    })).toBe(10);
+    expect(normalizeSessionDurationMinutes({
+      duration: null,
+      startTime: new Date('2026-01-01T00:00:00Z'),
+      endTime: new Date('2026-01-01T02:00:00Z'),
+    })).toBe(30);
+  });
+
+  it('既无 duration 也无 endTime 返回 0', () => {
+    expect(normalizeSessionDurationMinutes({ duration: null, startTime: new Date(), endTime: null })).toBe(0);
   });
 });

@@ -12,7 +12,7 @@
         </div>
       </div>
 
-      <!-- 统计（全量口径：后端 /users/me/sessions total + /learning/stats） -->
+      <!-- 统计（与首页/状态页同口径：后端已默认过滤 discarded/superseded 内部会话） -->
       <div class="history__stats">
         <div class="card history__stat">
           <span>学习次数</span>
@@ -195,7 +195,7 @@ const activeDays = ref(0);
 async function loadStats() {
   try {
     const [sessionsRes, statsRes] = await Promise.all([
-      request.get('/users/me/sessions', { params: { limit: 1, excludeInternal: 1 } }),
+      request.get('/users/me/sessions', { params: { limit: 1 } }),
       request.get('/learning/stats')
     ]);
     // total 在响应顶层（与 data 平级），不能用 unwrap（它只取 data）
@@ -257,7 +257,7 @@ async function load(reset = false) {
   try {
     const page = reset ? 1 : Math.floor(sessions.value.length / PAGE_SIZE) + 1;
     const res = await request.get('/users/me/sessions', {
-      params: { page, limit: PAGE_SIZE, excludeInternal: 1 }
+      params: { page, limit: PAGE_SIZE }
     });
     const data = unwrap<{ sessions?: SessionRecord[] }>(res);
     const items = Array.isArray(data) ? data as unknown as SessionRecord[] : data?.sessions || [];

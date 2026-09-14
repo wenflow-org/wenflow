@@ -60,12 +60,12 @@ describe('V2LearningHistory', () => {
     expect(w.findAll('.history__feedback').length).toBe(2);
   });
 
-  it('列表请求带 excludeInternal=1，过滤 discarded/superseded', async () => {
+  it('列表请求带分页参数（page/limit），配合后端 skip 支持「加载更多」', async () => {
     await mountHistory();
-    const sessionCalls = getMock.mock.calls.filter(([url]) => String(url).includes('/users/me/sessions'));
-    expect(sessionCalls.length).toBeGreaterThan(0);
-    for (const [, config] of sessionCalls) {
-      expect(config?.params?.excludeInternal).toBe(1);
-    }
+    const listCalls = getMock.mock.calls.filter(([url, config]) =>
+      String(url).includes('/users/me/sessions') && config?.params?.limit !== 1
+    );
+    expect(listCalls.length).toBeGreaterThan(0);
+    expect(listCalls[0][1]?.params).toMatchObject({ page: 1, limit: 30 });
   });
 });

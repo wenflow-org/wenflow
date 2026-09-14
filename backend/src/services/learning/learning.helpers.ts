@@ -92,6 +92,29 @@ export function resolvePathSubject(subject: unknown, fallbackTitle: string): str
   return fallbackTitle;
 }
 
+/**
+ * 会话有效时长（分钟）统一口径：优先 duration 列（收束时已扣除暂停/idle 并封顶），
+ * 无 duration 的历史会话才用 endTime−startTime 兜底并封顶 30 分钟。
+ * 学习历史的「累计时长」、/learning/stats、学习状态聚合都走这里，避免各页各算。
+ */
+export function normalizeSessionDurationMinutes(session: {
+  duration?: number | null;
+  startTime?: Date | string | null;
+  endTime?: Date | string | null;
+}): number {
+  const rawDuration = session.duration ?? 0;
+  if (rawDuration > 0) {
+    // 历史兼容：部分会话把秒写入 duration
+    return rawDuration > 24 * 60 ? Math.round(rawDuration / 60) : rawDuration;
+  }
+  const start = session.startTime ? new Date(session.startTime).getTime() : NaN;
+  const end = session.endTime ? new Date(session.endTime).getTime() : NaN;
+  if (Number.isFinite(start) && Number.isFinite(end)) {
+    return Math.max(1, Math.min(30, Math.round((end - start) / 60000)));
+  }
+  return 0;
+}
+
 export function normalizeStringArray(value: any): string[] {
   if (!Array.isArray(value)) return [];
   return value
