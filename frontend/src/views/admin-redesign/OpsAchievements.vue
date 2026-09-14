@@ -41,7 +41,7 @@
             <tr v-for="d in defs" :key="d.id">
               <td>
                 <div class="mk-cell-main">
-                  <strong><span class="ac-icon">{{ d.icon }}</span> {{ d.name }}</strong>
+                  <strong><AchIcon :type="d.type" /> {{ d.name }}</strong>
                   <span class="mk-cell-sub">{{ d.description }}</span>
                 </div>
               </td>
@@ -101,7 +101,7 @@
                 <div class="mk-cell-main">
                   <strong><span class="ac-icon">
                     <img v-if="r.iconUrl" :src="r.iconUrl" alt="" class="ac-icon-img" />
-                    <svg v-else viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></svg>
+                    <AchIcon v-else :type="r.type" />
                   </span> {{ r.title }}</strong>
                   <span class="mk-cell-sub" :title="r.description || ''">{{ r.description || '' }}</span>
                 </div>
@@ -159,7 +159,7 @@
             <div class="mk-field">
               <span class="mk-field__label">成就</span>
               <div class="ac-grant-target">
-                <span class="ac-icon ac-icon--lg">{{ grantTarget?.icon }}</span>
+                <AchIcon :type="grantTarget?.type" size="lg" />
                 <div>
                   <strong>{{ grantTarget?.name }}</strong>
                   <span class="mk-cell-sub">{{ grantTarget?.description }}</span>
@@ -211,6 +211,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
+import AchIcon from './AchIcon.vue'
 
 const achTab = ref<'defs' | 'records'>('defs')
 function switchAchTab(t: 'defs' | 'records') {
@@ -225,7 +226,7 @@ const defsFailed = ref(false)
 
 const typeText = (t: string) => ({ milestone: '里程碑', streak: '连续', completion: '完成度', mastery: '掌握', social: '社交' }[t] || t)
 const typeBadge = (t: string) =>
-  t === 'milestone' ? 'mk-badge--info' : t === 'streak' ? 'mk-badge--warn' : t === 'completion' ? 'mk-badge--ok' : t === 'mastery' ? 'mk-badge--bad' : 'mk-badge--muted'
+  t === 'milestone' ? 'mk-badge--info' : t === 'streak' ? 'mk-badge--warn' : t === 'completion' ? 'mk-badge--ok' : t === 'mastery' ? 'mk-badge--info' : 'mk-badge--muted'
 const reqText = (r: AchievementDef['requirement']) => {
   const t = r.type
   if (t === 'task_count') return `完成 ${r.value} 个任务`

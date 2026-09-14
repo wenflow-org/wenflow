@@ -1100,7 +1100,7 @@ async function saveQuota(enabled: boolean, quota: number) {
 html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
 .ac-policy__label { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-muted); }
 .ac-policy__desc { font-size: var(--mk-fs-12_5); color: var(--mk-muted); line-height: 1.6; }
-.ac-policy__hint { font-size: var(--mk-fs-11); color: var(--mk-faint); line-height: 1.55; display: block; }
+.ac-policy__hint { font-size: var(--mk-fs-12_5); color: var(--mk-faint); line-height: 1.55; display: block; }
 .ac-policy__toggle { width: fit-content; }
 .ac-policy__warn { font-size: var(--mk-fs-12_5); color: var(--mk-red); font-weight: 600; }
 .ac-quota-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -1146,8 +1146,8 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
   font-weight: 700;
   color: var(--mk-muted);
 }
-.ac-sec__hint { font-size: var(--mk-fs-11); font-weight: 500; color: var(--mk-faint); }
-.ac-sec__sub { margin-left: auto; font-size: var(--mk-fs-11); font-weight: 500; color: var(--mk-faint); }
+.ac-sec__hint { font-size: var(--mk-fs-12_5); font-weight: 500; color: var(--mk-faint); }
+.ac-sec__sub { margin-left: auto; font-size: var(--mk-fs-12_5); font-weight: 500; color: var(--mk-faint); }
 .ac-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; width: fit-content; }
 .ac-seg__item {
   border: 0;

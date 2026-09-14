@@ -97,11 +97,15 @@
         <span>无法从服务读取用例列表。</span>
         <button type="button" class="mk-empty__action" @click="reloadCases">重试</button>
       </div>
-      <div v-else class="mk-empty mk-empty--min">
-        <strong>还没有评估用例</strong>
-        <span>为 Agent 维护输入消息与期望，跑评估验证 prompt 改动是否达标。</span>
-        <button type="button" class="mk-empty__action" @click="openCreate">新建用例</button>
-      </div>
+      <MkEmptyState
+        v-else
+        icon="◌"
+        min
+        title="还没有评估用例"
+        description="为 Agent 维护输入消息与期望，跑评估验证 prompt 改动是否达标。"
+        action-text="新建用例"
+        @action="openCreate"
+      />
     </div>
 
     <!-- 历史 Tab -->
@@ -161,10 +165,13 @@
         <strong>评估历史加载失败</strong>
         <button type="button" class="mk-empty__action" @click="reloadRuns">重试</button>
       </div>
-      <div v-else class="mk-empty mk-empty--min">
-        <strong>还没有评估记录</strong>
-        <span>在用例列表选择「跑评估」或「单条试跑」后，历史会记录在这里。</span>
-      </div>
+      <MkEmptyState
+        v-else
+        icon="◌"
+        min
+        title="还没有评估记录"
+        description="在用例列表选择「跑评估」或「单条试跑」后，历史会记录在这里。"
+      />
     </div>
 
     <!-- 用例编辑弹窗 -->
@@ -400,6 +407,7 @@ import { useRowMenu } from './useRowMenu'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkKpi from './MkKpi.vue'
+import MkEmptyState from './MkEmptyState.vue'
 
 interface EvalCase {
   id: string

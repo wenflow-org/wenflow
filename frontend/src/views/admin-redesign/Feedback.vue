@@ -31,10 +31,15 @@
       <button type="button" class="mk-empty__action" @click="() => load(true)">重试</button>
     </div>
 
-    <div v-else-if="!rows.length && !loading" class="mk-empty mk-empty--min">
-      <strong>暂无反馈数据</strong>
-      <span>学习者提交反馈后自动呈现。</span>
-    </div>
+    <MkEmptyState
+      v-else-if="!rows.length && !loading"
+      icon="◌"
+      min
+      title="暂无反馈数据"
+      description="学习者提交反馈后自动呈现。"
+      action-text="刷新"
+      @action="() => load(true)"
+    />
 
     <template v-else>
       <!-- 列表 -->
@@ -222,6 +227,7 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import Pagination from './Pagination.vue'
+import MkEmptyState from './MkEmptyState.vue'
 
 type Status = 'new' | 'triaged' | 'resolved' | 'dismissed'
 

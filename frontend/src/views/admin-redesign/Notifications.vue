@@ -84,18 +84,24 @@
         <strong>通知加载失败</strong>
         <button type="button" class="mk-empty__action" @click="reload">重试</button>
       </div>
-      <div v-else class="mk-empty mk-empty--min">
-        <template v-if="kindFilter || unreadOnly">
-          <strong>当前筛选无匹配</strong>
-          <span>试试切换通知类型，或关闭「仅未读」。</span>
-          <button type="button" class="mk-empty__action" @click="clearFilter">清除筛选</button>
-        </template>
-        <template v-else>
-          <strong>还没有通知</strong>
-          <span>发送全员或定向通知后，用户端会收到站内信。</span>
-          <button type="button" class="mk-empty__action" @click="openSend">发送第一条通知</button>
-        </template>
-      </div>
+      <MkEmptyState
+        v-else-if="kindFilter || unreadOnly"
+        icon="◌"
+        min
+        title="当前筛选无匹配"
+        description="试试切换通知类型，或关闭「仅未读」。"
+        action-text="清除筛选"
+        @action="clearFilter"
+      />
+      <MkEmptyState
+        v-else
+        icon="◌"
+        min
+        title="还没有通知"
+        description="发送全员或定向通知后，用户端会收到站内信。"
+        action-text="发送第一条通知"
+        @action="openSend"
+      />
       <Pagination
         v-if="total > pageSize"
         v-model:page="page"
@@ -192,6 +198,7 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
+import MkEmptyState from './MkEmptyState.vue'
 import Pagination from './Pagination.vue'
 
 /** 嵌入模式：作为「通知与公告」页「站内通知」tab 渲染（仅去掉外层壳，状态条/发送弹窗保留）。

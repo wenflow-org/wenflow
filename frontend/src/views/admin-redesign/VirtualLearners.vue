@@ -5,33 +5,11 @@
       <strong class="mk-status__title">{{ samples.length ? '虚拟学习者' : '暂无虚拟学习者' }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ samples.length }} 人</span>
-      <button
-        v-for="opt in stateFilterOptions.filter((o) => o.key)"
-        :key="opt.key"
-        type="button"
-        class="lc-count-link"
-        :class="{ 'lc-count-link--on': stateFilter === opt.key }"
-        :title="`点击筛选「${opt.label}」虚拟学习者`"
-        @click="stateFilter = stateFilter === opt.key ? '' : opt.key"
-      >{{ opt.label }} {{ opt.count }}</button>
-      <span class="mk-status__meta" :title="'今日虚拟/测试账号的 Agent 调用数（自然日口径，与总览页真实调用互斥）'">今日调用 {{ runStats.todayCalls ?? 0 }}</span>
+      <MkStatStrip :items="headerStats" @select="onHeaderStatSelect" />
       <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-status__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
         已截断 · 共 {{ liveVirtualsTotal }} 人
       </span>
-      <span class="mk-status__meta" title="当前运行中 + 创建中会话数（含卡死）">活动会话 {{ partition.running + partition.created }}</span>
-      <span class="mk-status__meta" :title="`已完成会话 / 总会话（全量口径）`">完成率 {{ runStats.completionRate }}%</span>
-      <span class="mk-status__meta" :class="(runStats.systemFailureRate ?? 0) > 0 ? 'mk-status__meta--bad' : ''" :title="'系统失败会话 / 总会话（与状态条同口径）'">失败率 {{ runStats.systemFailureRate }}%</span>
-      <span
-        class="mk-status__meta vl-concurrency"
-        :class="`is-${concurrencyTone}`"
-        :title="`自动驾驶并发 ${concurrency.used}/${concurrency.limit}（排队 ${concurrency.queued}）：同时运行的自动驾驶会话数（env AUTOPILOT_CONCURRENCY_LIMIT 可配）；满员后新启动会进入排队，有空位自动拉起`"
-      >
-        并发 {{ concurrency.used }}/{{ concurrency.limit }}<template v-if="concurrency.queued > 0"> · 排队 {{ concurrency.queued }}</template><template v-else-if="concurrency.used >= concurrency.limit"> · 已满</template>
-      </span>
-      <span class="mk-status__meta" :title="`虚拟学习者专属出站速率：在途 ${vlRpm.inFlight}，排队 ${vlRpm.queued}；上限 ${vlRpm.limit ? vlRpm.limit + ' RPM' : '不限'}`">
-        速率 {{ vlRpm.inFlight }} 在途 / {{ vlRpm.limit ? vlRpm.limit + ' RPM' : '不限' }}<template v-if="vlRpm.queued > 0"> · 排队 {{ vlRpm.queued }}</template>
-      </span>
-      <label class="mk-status__meta" title="虚拟学习者专属出站 RPM 上限（0=不限）；与平台全局速率相互独立，不会挤占真实用户额度" style="display:inline-flex;align-items:center;gap:4px">
+      <label class="mk-status__meta vl-rpm" title="虚拟学习者专属出站 RPM 上限（0=不限）；与平台全局速率相互独立，不会挤占真实用户额度">
         VL RPM
         <input v-model.number="vlRpm.limit" type="number" min="0" max="100000" step="10" class="mk-filter__input" style="width:84px" @change="saveVlRpm" />
       </label>
@@ -583,6 +561,7 @@ import Pagination from './Pagination.vue'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
 import BatchExperiments from './BatchExperiments.vue'
+import MkStatStrip, { type MkStatItem } from './MkStatStrip.vue'
 
 /* 学习者 / 批量实验 tab（批量实验为低频调试工具，折叠进本页） */
 const vlTab = ref<'learners' | 'experiments'>('learners')
@@ -1122,6 +1101,73 @@ const partition = computed(() => {
 
 /* ===== A5 运行统计：完成率/失败率/平均时长/卡死最长分钟（GET /virtual-learners/stats） ===== */
 const runStats = computed(() => liveVirtualRunStats.value)
+
+/** 页头分格指标条（MkStatStrip）：3 个可点击状态筛选 + 运行统计。
+    此前 11 组指标平铺成一句话、无标签/数值层级（审计 3.2）。 */
+const headerStats = computed<MkStatItem[]>(() => {
+  const stats: MkStatItem[] = stateFilterOptions.value
+    .filter((o) => o.key)
+    .map((o) => ({
+      key: o.key,
+      label: o.label,
+      value: o.count,
+      clickable: true,
+      active: stateFilter.value === o.key,
+      title: `点击筛选「${o.label}」虚拟学习者`,
+    }))
+
+  stats.push({
+    label: '今日调用',
+    value: runStats.value.todayCalls ?? 0,
+    title: '今日虚拟/测试账号的 Agent 调用数（自然日口径，与总览页真实调用互斥）',
+  })
+
+  const concurrencyValue = concurrency.value.queued > 0
+    ? `${concurrency.value.used}/${concurrency.value.limit} · 排队 ${concurrency.value.queued}`
+    : concurrency.value.used >= concurrency.value.limit
+      ? `${concurrency.value.used}/${concurrency.value.limit} · 已满`
+      : `${concurrency.value.used}/${concurrency.value.limit}`
+
+  stats.push(
+    {
+      label: '活动会话',
+      value: partition.value.running + partition.value.created,
+      title: '当前运行中 + 创建中会话数（含卡死）',
+    },
+    {
+      label: '完成率',
+      value: `${runStats.value.completionRate}%`,
+      title: '已完成会话 / 总会话（全量口径）',
+    },
+    {
+      label: '失败率',
+      value: `${runStats.value.systemFailureRate}%`,
+      tone: (runStats.value.systemFailureRate ?? 0) > 0 ? 'bad' : '',
+      title: '系统失败会话 / 总会话（与状态条同口径）',
+    },
+    {
+      label: '并发',
+      value: concurrencyValue,
+      tone: concurrencyTone.value === 'full' ? 'bad' : concurrencyTone.value === 'warn' ? 'warn' : '',
+      title: `自动驾驶并发 ${concurrency.value.used}/${concurrency.value.limit}（排队 ${concurrency.value.queued}）：同时运行的自动驾驶会话数（env AUTOPILOT_CONCURRENCY_LIMIT 可配）；满员后新启动会进入排队，有空位自动拉起`,
+    },
+    {
+      label: '速率',
+      value: vlRpm.queued > 0
+        ? `${vlRpm.inFlight} 在途 / ${vlRpm.limit ? `${vlRpm.limit} RPM` : '不限'} · 排队 ${vlRpm.queued}`
+        : `${vlRpm.inFlight} 在途 / ${vlRpm.limit ? `${vlRpm.limit} RPM` : '不限'}`,
+      title: `虚拟学习者专属出站速率：在途 ${vlRpm.inFlight}，排队 ${vlRpm.queued}；上限 ${vlRpm.limit ? vlRpm.limit + ' RPM' : '不限'}`,
+    }
+  )
+
+  return stats
+})
+
+/** 页头计数点击筛（运行中/已暂停/需关注）：再次点击取消筛选 */
+function onHeaderStatSelect(key?: string) {
+  if (!key) return
+  stateFilter.value = stateFilter.value === key ? '' : key
+}
 
 /* 仿真概览结论已收敛到单行状态条（KPI/结论随状态条 meta 展示，双块移除） */
 
@@ -1668,31 +1714,9 @@ function startBatchPolling() { batchPolling.start() }
 .vl-faillink:hover { color: var(--mk-blue); background: #eff6ff; box-shadow: 0 0 0 3px #eff6ff; }
 .mk-num--na { color: var(--mk-faint); font-weight: 600; }
 
-/* 状态过滤 chips（一级页：与搜索同行，计数联动 samples） */
-/* 页头计数锚点（对齐 LearnerCenter lc-count-link）：运行中/已暂停/需关注 可点击筛选 */
-.lc-count-link {
-  border: 0; background: transparent; padding: 0;
-  font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
-  color: var(--mk-muted); cursor: pointer;
-  border-radius: 6px;
-  transition: color 0.12s ease, background 0.12s ease;
-}
-.lc-count-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); padding: 2px 6px; margin: -2px -6px; }
-.lc-count-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); padding: 2px 6px; margin: -2px -6px; }
+/* VL RPM 输入（状态条内）：与分格指标同基线 */
+.vl-rpm { display: inline-flex; align-items: center; gap: 4px; }
 .vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-
-/* 自动驾驶并发配额（状态条 meta：紧凑文字形态，满员红色警示） */
-.vl-concurrency {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--mk-fs-12);
-  cursor: help;
-  font-weight: 700;
-  color: var(--mk-muted);
-}
-.vl-concurrency.is-full { color: var(--mk-red, #dc2626); }
-.vl-concurrency.is-warn { color: var(--mk-amber, #f59e0b); }
 
 /* 「正在运行」折叠展开按钮 */
 .vl-running__more {

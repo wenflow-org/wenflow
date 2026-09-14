@@ -144,11 +144,14 @@
       </table>
       </div>
 
-      <div v-else class="mk-empty">
-        <strong>{{ isFiltered ? '没有匹配的用户' : '暂无真实用户' }}</strong>
-        <span>{{ isFiltered ? '放宽筛选条件试试。' : '用户注册后将自动出现在这里。' }}</span>
-        <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
-      </div>
+      <MkEmptyState
+        v-else
+        icon="◌"
+        :title="isFiltered ? '没有匹配的用户' : '暂无真实用户'"
+        :description="isFiltered ? '放宽筛选条件试试。' : '用户注册后将自动出现在这里。'"
+        :action-text="isFiltered ? '清除筛选' : ''"
+        @action="clearFilters"
+      />
       <!-- 客户端分页（P2：37 行长表单页直排 → mk-pagination 统一分页器，15-30-50-100 条/页） -->
       <Pagination
         v-if="filtered.length"
@@ -229,6 +232,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from './MkCols.vue'
+import MkEmptyState from './MkEmptyState.vue'
 import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useIsNarrow } from './useIsNarrow'
