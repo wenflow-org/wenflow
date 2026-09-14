@@ -676,6 +676,9 @@ export function buildGoalToPathHandoffSnapshot(data: GeneratePathData): GoalToPa
         : (Array.isArray(data.userProfile?.normalizedInput?.prerequisiteCheckResults)
           ? data.userProfile.normalizedInput.prerequisiteCheckResults
           : null),
+      goalHandoffFields: handoff.goalHandoffFields && typeof handoff.goalHandoffFields === 'object'
+        ? handoff.goalHandoffFields
+        : null,
     };
   }
 
@@ -691,6 +694,7 @@ export function buildGoalToPathHandoffSnapshot(data: GeneratePathData): GoalToPa
     prerequisiteCheckResults: Array.isArray(data.userProfile?.normalizedInput?.prerequisiteCheckResults)
       ? data.userProfile.normalizedInput.prerequisiteCheckResults
       : null,
+    goalHandoffFields: null,
   };
 }
 

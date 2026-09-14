@@ -132,4 +132,28 @@ describe('path.coordinator normalizedInputV1 配置式装配', () => {
     const ni = bare.userProfile.normalizedInput
     expect(ni.learnerProfile.surfaceGoal).toBe('想学会向上汇报')
   })
+
+  // 回归：GoalFinalPayload 重建时曾漏拷 goalHandoffFields，导致 handoff 恒被丢弃、永远回退 visibleSummary。
+  // 本用例取 handoff 与 visibleSummary 不同的值，只有真交接才会得到 HANDOFF 值。
+  it('goalHandoffFields 真实生效：与 visibleSummary 取值不同时以 handoff 为准', async () => {
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+      goalHandoffFields: {
+        'understanding.real_problem': 'HANDOFF 版本的真问题',
+        'understanding.available_resources.time_budget': 'HANDOFF 每周2小时',
+        'understanding.pain_points': ['HANDOFF 痛点A'],
+      },
+    } as any)
+
+    const ni = result.userProfile.normalizedInput
+    expect(ni.problemSpace.realProblem).toBe('HANDOFF 版本的真问题')
+    expect(ni.resources.timeBudget).toBe('HANDOFF 每周2小时')
+    expect(ni.learnerProfile.painPoints).toEqual(['HANDOFF 痛点A'])
+    // 落库快照必须保留 handoff，供异步生成/重试/重生成复用
+    expect(result.userProfile.goalFinalPayload?.goalHandoffFields).toMatchObject({
+      'understanding.real_problem': 'HANDOFF 版本的真问题',
+    })
+  })
 })

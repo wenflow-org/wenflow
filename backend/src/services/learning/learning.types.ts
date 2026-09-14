@@ -207,6 +207,8 @@ export interface GoalToPathHandoffSnapshot {
   conversationHistory: Array<{ role: string; content: string }>;
   /** 前置知识探测结果（goal 层透传，供 prerequisiteTree.knownConcepts 校准） */
   prerequisiteCheckResults?: Array<{ probeId?: string; targetConcept?: string; userAnswer?: string; isCorrect?: boolean }> | null;
+  /** goal→path 配置式值流转字段（持久化以支持异步生成/重试/重生成） */
+  goalHandoffFields?: Record<string, any> | null;
 }
 
 export interface PathCognitiveConcept {

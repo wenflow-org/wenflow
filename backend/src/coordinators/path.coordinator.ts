@@ -93,6 +93,7 @@ interface NormalizedPathInputV1 {
     firstDeliverable: string | null;
     keyStages: string[];
     outOfScope: string[];
+    scopeSize: string | null;
   };
   /** LLM 推断的时间维度数值（goal 层 time_dimensions 透传，供 planningHints maxWeeks 推导） */
   timeDimensions?: {
@@ -123,6 +124,8 @@ export interface GoalPathRequest {
   structuredData?: Record<string, any> | null;
   /** 前置知识探测结果（goal 层 prerequisiteCheckResults 透传） */
   prerequisiteCheckResults?: PrerequisiteCheckResult[] | null;
+  /** goal→path 配置式值流转字段（routings 表 goal-agent 交付行抽取，装配时优先于 visibleSummary） */
+  goalHandoffFields?: Record<string, any> | null;
   systemPromptOverrides?: {
     pathAgent?: string;
   };
@@ -249,6 +252,7 @@ class PathCoordinator {
         firstDeliverable: str('confirmedProposal.first_deliverable', visibleSummary?.confirmedProposal?.firstDeliverable),
         keyStages: arr('confirmedProposal.key_stages', visibleSummary?.confirmedProposal?.keyStages),
         outOfScope: arr('confirmedProposal.out_of_scope', visibleSummary?.confirmedProposal?.outOfScope),
+        scopeSize: str('confirmedProposal.scope_size', visibleSummary?.confirmedProposal?.scopeSize ?? null),
       } : null,
       timeDimensions: visibleSummary?.timeDimensions ?? null,
     };
@@ -265,6 +269,8 @@ class PathCoordinator {
       adjustments: typeof input.adjustments === 'string' && input.adjustments.trim() ? input.adjustments.trim() : null,
       // 前置知识探测结果（goal 层 prerequisiteCheckResults 透传）
       prerequisiteCheckResults: input.prerequisiteCheckResults || null,
+      // goal→path 配置式值流转（routings 表抽取；装配时优先于 visibleSummary）
+      goalHandoffFields: input.goalHandoffFields || undefined,
     };
 
     const source = {
@@ -400,6 +406,8 @@ class PathCoordinator {
           visibleSummary: goalFinalPayload.visibleSummary || null,
           conversationHistory: goalFinalPayload.conversationHistory || [],
           prerequisiteCheckResults: goalFinalPayload.prerequisiteCheckResults || null,
+          // 持久化 handoff 字段，支持异步生成/重试/重生成时仍走配置式装配
+          goalHandoffFields: goalFinalPayload.goalHandoffFields || null,
         },
       }
     };

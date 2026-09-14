@@ -169,6 +169,9 @@ const buildStoredGoalPathRequest = (path: {
     prerequisiteCheckResults: Array.isArray(goalFinalPayload.prerequisiteCheckResults)
       ? goalFinalPayload.prerequisiteCheckResults
       : null,
+    goalHandoffFields: goalFinalPayload.goalHandoffFields && typeof goalFinalPayload.goalHandoffFields === 'object'
+      ? goalFinalPayload.goalHandoffFields
+      : undefined,
   };
 };
 
