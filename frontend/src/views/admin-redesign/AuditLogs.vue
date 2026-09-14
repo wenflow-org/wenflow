@@ -91,12 +91,24 @@
           </colgroup>
           <thead>
             <tr>
-              <th v-if="!hiddenCols.has('time')">时间</th>
+              <th
+                v-if="!hiddenCols.has('time')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="alSortState('createdAt')"
+                @click="toggleAlSort('createdAt')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('createdAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!hiddenCols.has('admin')">操作者</th>
               <th v-if="!hiddenCols.has('action')">动作</th>
               <th v-if="!noTargetTypes && !hiddenCols.has('tt')" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</th>
               <th v-if="!hiddenCols.has('target')">目标</th>
-              <th v-if="!hiddenCols.has('result')">结果</th>
+              <th
+                v-if="!hiddenCols.has('result')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="alSortState('success')"
+                @click="toggleAlSort('success')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('success')">结果<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!hiddenCols.has('ip')">IP</th>
               <th class="mk-th--right" aria-hidden="true"></th>
             </tr>
@@ -178,10 +190,20 @@
           </colgroup>
           <thead>
             <tr>
-              <th>时间</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="alSortState('createdAt')"
+                @click="toggleAlSort('createdAt')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('createdAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th>用户名</th>
               <th>IP</th>
-              <th>结果</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="alSortState('success')"
+                @click="toggleAlSort('success')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('success')">结果<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th>原因</th>
               <th class="mk-th--right">操作</th>
             </tr>
@@ -236,7 +258,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
 import { errMsg, shortId } from './live'
@@ -244,6 +266,7 @@ import Pagination from './Pagination.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from './MkCols.vue'
 import { actionText, targetTypeText, ipText, pathActionText } from './statusText'
+import { useTableSort } from './useTableSort'
 
 /** admin_audit_logs 行（与后端 Prisma 模型一致） */
 interface AuditLogRow {
@@ -319,6 +342,20 @@ const loading = ref(false)
 const loadError = ref('')
 const openId = ref('')
 
+/* 服务端排序：白名单 createdAt / success（operation / login 两个 tab 共用），默认时间倒序。
+   排序在后端执行（不使用 sortRows）；变更回第 1 页重查，状态 localStorage 记忆。 */
+const {
+  sortKey: alSortKey,
+  sortDir: alSortDir,
+  toggle: toggleAlSort,
+  sortState: alSortState
+} = useTableSort({
+  keys: ['createdAt', 'success'],
+  defaultKey: 'createdAt',
+  defaultDir: 'desc',
+  storageKey: 'wf_audit_logs_sort'
+})
+
 const rows = computed(() => (tab.value === 'operation' ? logs.value : attempts.value))
 
 /** 目标类型列语义（P3）：当前页全部记录未写入 targetType 时隐藏该列（表头/行/网格同步），
@@ -367,6 +404,8 @@ function buildParams(nextPage: number, scopeOverride?: typeof tab.value): AuditL
     scope: scopeOverride ?? tab.value,
     keyword: keyword.value.trim() || undefined,
     timeRange: timeRange.value === 'all' ? undefined : timeRange.value,
+    sort: (alSortKey.value || undefined) as AuditLogQuery['sort'],
+    order: alSortDir.value,
   }
 }
 
@@ -449,6 +488,11 @@ function switchTab(id: TabId) {
   tab.value = id
   void applyFilters()
 }
+
+/* 排序变更：与筛选同义，回第 1 页重查 */
+watch([alSortKey, alSortDir], () => {
+  void applyFilters()
+})
 
 const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'week')
 function clearFilters() {

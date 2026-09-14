@@ -125,7 +125,7 @@ describe('GET /api/admin/audit-logs（scope=operation 默认）', () => {
     expect(auditCount).toHaveBeenCalledWith({ where: {} })
     expect(auditFindMany).toHaveBeenCalledWith({
       where: {},
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip: 0,
       take: 50
     })
@@ -277,7 +277,7 @@ describe('GET /api/admin/audit-logs（scope=login）', () => {
     expect(attemptsCount).toHaveBeenCalledWith({ where: { scope: 'admin' } })
     expect(attemptsFindMany).toHaveBeenCalledWith({
       where: { scope: 'admin' },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip: 0,
       take: 50
     })
@@ -392,5 +392,33 @@ describe('GET /api/admin/audit-logs/stats', () => {
     expect(res.statusCode).toBe(400)
     expect(attemptsCount).not.toHaveBeenCalled()
     expect(auditCount).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/admin/audit-logs（服务端排序）', () => {
+  it('默认：createdAt 倒序 + id 稳定次级键', async () => {
+    await run('GET', '/', adminReq())
+    expect(auditFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
+    }))
+  })
+
+  it('sort=success&order=asc：按结果升序，createdAt 倒序 + id 兜底', async () => {
+    await run('GET', '/', adminReq({ sort: 'success', order: 'asc' }))
+    expect(auditFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      orderBy: [{ success: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }]
+    }))
+  })
+
+  it('非法 sort → 400 且不查库', async () => {
+    const { res } = await run('GET', '/', adminReq({ sort: 'password' }))
+    expect(res.statusCode).toBe(400)
+    expect(auditFindMany).not.toHaveBeenCalled()
+  })
+
+  it('非法 order → 400 且不查库', async () => {
+    const { res } = await run('GET', '/', adminReq({ order: 'sideways' }))
+    expect(res.statusCode).toBe(400)
+    expect(auditFindMany).not.toHaveBeenCalled()
   })
 })

@@ -90,8 +90,18 @@
               <th>成就</th>
               <th>用户</th>
               <th>类型</th>
-              <th class="mk-th--right">XP</th>
-              <th>解锁时间</th>
+              <th
+                scope="col"
+                class="mk-th--right mk-th--sortable"
+                :aria-sort="achSortState('xpReward')"
+                @click="toggleAchSort('xpReward')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleAchSort('xpReward')">XP<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="achSortState('earnedAt')"
+                @click="toggleAchSort('earnedAt')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleAchSort('earnedAt')">解锁时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -201,7 +211,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useTableSort } from './useTableSort'
 import { timeAgo, errMsg } from './live'
 import { adminAchievementsApi, adminUsersApi, type AchievementDef, type AchievementRecord } from '@/api/adminApi'
 import { useEscape } from './useEscape'
@@ -277,11 +288,30 @@ const recordsLoading = ref(false)
 const recordsFailed = ref(false)
 const recordSearch = ref('')
 const achIncludeTest = ref(false)
+
+/* 服务端排序：白名单 earnedAt / xpReward，默认解锁时间倒序；变更回第 1 页重查。 */
+const {
+  sortKey: achSortKey,
+  sortDir: achSortDir,
+  toggle: toggleAchSort,
+  sortState: achSortState
+} = useTableSort({
+  keys: ['earnedAt', 'xpReward'],
+  defaultKey: 'earnedAt',
+  defaultDir: 'desc',
+  storageKey: 'wf_achievements_records_sort'
+})
 /** 数据范围切换（仅真实/含模拟）→ 立即按新范围重拉 */
 function onAchRescope(v: boolean) {
   achIncludeTest.value = v
   void reloadRecords()
 }
+
+/* 排序变更：回第 1 页重查（与筛选同义） */
+watch([achSortKey, achSortDir], () => {
+  recordPage.value = 1
+  void reloadRecords()
+})
 
 async function reloadRecords() {
   recordsLoading.value = true
@@ -292,6 +322,8 @@ async function reloadRecords() {
       limit: pageSize.value,
       userId: recordSearch.value.trim() || undefined,
       includeTest: achIncludeTest.value || undefined,
+      sort: (achSortKey.value || undefined) as 'earnedAt' | 'xpReward',
+      order: achSortDir.value,
     })
     const body = res.data?.data ?? res.data ?? {}
     records.value = (body.records || []).map((r) => ({ ...r, busy: false }))

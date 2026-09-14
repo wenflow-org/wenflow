@@ -132,6 +132,7 @@
         "src/routes/admin/__tests__/admin-data-isolation.test.ts",
         "src/routes/admin/__tests__/agents-logs.canary-filter.test.ts",
         "src/routes/admin/__tests__/agents-logs.sort.test.ts",
+        "src/routes/admin/__tests__/admin-lists.sort.test.ts",
         "src/routes/admin/__tests__/field-routings.orchestration.test.ts",
         "src/routes/admin/__tests__/field-routings.skill-batch.test.ts",
         "src/routes/admin/__tests__/health-center.test.ts",

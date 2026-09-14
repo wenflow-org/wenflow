@@ -72,10 +72,26 @@ router.get('/records', async (req: Request, res: Response) => {
     if (userId) where.userId = userId;
     if (!includeTest) where.users = REAL_USER_WHERE;
 
+    /* 服务端排序：白名单（earnedAt / xpReward）+ 方向；非法 400。
+       并列时以「earnedAt 倒序 + id」为稳定次级键。 */
+    const ACH_SORT_FIELDS = ['earnedAt', 'xpReward'] as const;
+    const sortRaw = typeof req.query.sort === 'string' && req.query.sort ? req.query.sort : 'earnedAt';
+    if (!(ACH_SORT_FIELDS as readonly string[]).includes(sortRaw)) {
+      return res.status(400).json({ success: false, error: { message: `非法 sort 参数: ${sortRaw}（可选值: ${ACH_SORT_FIELDS.join('/')}）`, status: 400 } });
+    }
+    const orderRaw = typeof req.query.order === 'string' && req.query.order ? req.query.order : 'desc';
+    if (orderRaw !== 'asc' && orderRaw !== 'desc') {
+      return res.status(400).json({ success: false, error: { message: `非法 order 参数: ${orderRaw}（可选值: asc/desc）`, status: 400 } });
+    }
+    const order: 'asc' | 'desc' = orderRaw === 'asc' ? 'asc' : 'desc';
+    const orderBy = sortRaw === 'xpReward'
+      ? [{ xpReward: order }, { earnedAt: 'desc' as const }, { id: 'desc' as const }]
+      : [{ earnedAt: order }, { id: 'desc' as const }];
+
     const [records, total] = await Promise.all([
       prisma.achievements.findMany({
         where,
-        orderBy: { earnedAt: 'desc' },
+        orderBy,
         skip,
         take: limit,
         include: {

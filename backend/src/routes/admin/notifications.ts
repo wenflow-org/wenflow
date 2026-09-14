@@ -39,10 +39,26 @@ router.get('/', async (req: Request, res: Response) => {
     if (kind) where.kind = kind;
     if (unreadOnly) where.isRead = false;
 
+    /* 服务端排序：白名单（createdAt / isRead）+ 方向；非法 400。
+       并列时以「createdAt 倒序 + id」为稳定次级键。 */
+    const NOTIF_SORT_FIELDS = ['createdAt', 'isRead'] as const;
+    const sortRaw = typeof req.query.sort === 'string' && req.query.sort ? req.query.sort : 'createdAt';
+    if (!(NOTIF_SORT_FIELDS as readonly string[]).includes(sortRaw)) {
+      return res.status(400).json({ success: false, error: { message: `非法 sort 参数: ${sortRaw}（可选值: ${NOTIF_SORT_FIELDS.join('/')}）`, status: 400 } });
+    }
+    const orderRaw = typeof req.query.order === 'string' && req.query.order ? req.query.order : 'desc';
+    if (orderRaw !== 'asc' && orderRaw !== 'desc') {
+      return res.status(400).json({ success: false, error: { message: `非法 order 参数: ${orderRaw}（可选值: asc/desc）`, status: 400 } });
+    }
+    const order: 'asc' | 'desc' = orderRaw === 'asc' ? 'asc' : 'desc';
+    const orderBy = sortRaw === 'isRead'
+      ? [{ isRead: order }, { createdAt: 'desc' as const }, { id: 'desc' as const }]
+      : [{ createdAt: order }, { id: 'desc' as const }];
+
     const [items, total, unreadTotal] = await Promise.all([
       prisma.notifications.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip,
         take: limit,
         include: { users: { select: { id: true, name: true, email: true } } },

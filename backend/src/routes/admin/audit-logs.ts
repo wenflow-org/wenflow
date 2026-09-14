@@ -124,7 +124,7 @@ interface AuditQueryModel {
   count: (args: { where: Record<string, unknown> }) => Promise<number>;
   findMany: (args: {
     where: Record<string, unknown>;
-    orderBy: { createdAt: 'desc' };
+    orderBy: Record<string, unknown> | Array<Record<string, unknown>>;
     skip: number;
     take: number;
   }) => Promise<Array<Record<string, unknown>>>;
@@ -231,11 +231,26 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       throw new FilterError(`limit 最大 ${MAX_LIMIT}`);
     }
 
+    /* 服务端排序：白名单取两个 scope 模型的共有列（createdAt / success），非法 400。
+       并列时以「createdAt 倒序 + id」为稳定次级键，保证翻页不重不漏。 */
+    const AUDIT_SORT_FIELDS = ['createdAt', 'success'] as const;
+    const sortRaw = optionalString(req.query.sort) || 'createdAt';
+    if (!(AUDIT_SORT_FIELDS as readonly string[]).includes(sortRaw)) {
+      throw new FilterError(`非法 sort 参数: ${sortRaw}（可选值: ${AUDIT_SORT_FIELDS.join('/')}）`);
+    }
+    const orderRaw = optionalString(req.query.order) || 'desc';
+    if (orderRaw !== 'asc' && orderRaw !== 'desc') {
+      throw new FilterError(`非法 order 参数: ${orderRaw}（可选值: asc/desc）`);
+    }
+    const orderBy = sortRaw === 'success'
+      ? [{ success: orderRaw }, { createdAt: 'desc' }, { id: 'desc' }]
+      : [{ createdAt: orderRaw }, { id: 'desc' }];
+
     const [total, rows] = await Promise.all([
       model.count({ where }),
       model.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip: (page - 1) * limit,
         take: limit,
       }),

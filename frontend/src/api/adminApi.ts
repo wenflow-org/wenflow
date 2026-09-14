@@ -1787,6 +1787,9 @@ export interface AuditLogQuery {
   timeRange?: 'today' | 'yesterday' | 'week' | 'month' | 'all';
   startTime?: string;
   endTime?: string;
+  /** 服务端排序：白名单列（operation/login 两个 scope 共有列）；默认 createdAt desc */
+  sort?: 'createdAt' | 'success';
+  order?: 'asc' | 'desc';
 }
 
 export const adminAuditApi = {
@@ -1954,7 +1957,7 @@ export const adminAchievementsApi = {
   getDefinitions: async () => {
     return adminAxios.get<{ success: boolean; data: AchievementDef[] }>('/admin/achievements/definitions');
   },
-  getRecords: async (params?: { page?: number; limit?: number; userId?: string; includeTest?: boolean }) => {
+  getRecords: async (params?: { page?: number; limit?: number; userId?: string; includeTest?: boolean; sort?: 'earnedAt' | 'xpReward'; order?: 'asc' | 'desc' }) => {
     return adminAxios.get<{ success: boolean; data: { records: AchievementRecord[]; pagination: { total: number; page: number; limit: number } } }>(
       '/admin/achievements/records',
       { params }
@@ -2076,7 +2079,7 @@ export interface NotificationItem {
 }
 
 export const adminNotificationsApi = {
-  list: async (params?: { page?: number; limit?: number; userId?: string; kind?: string; unreadOnly?: boolean }) => {
+  list: async (params?: { page?: number; limit?: number; userId?: string; kind?: string; unreadOnly?: boolean; sort?: 'createdAt' | 'isRead'; order?: 'asc' | 'desc' }) => {
     return adminAxios.get<{ success: boolean; data: { items: NotificationItem[]; pagination: { total: number; page: number; limit: number }; unreadTotal: number } }>(
       '/admin/notifications',
       { params }

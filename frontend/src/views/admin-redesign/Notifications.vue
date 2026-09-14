@@ -46,8 +46,18 @@
               <th>通知</th>
               <th>接收用户</th>
               <th>类型</th>
-              <th>状态</th>
-              <th>发送时间</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="ntSortState('isRead')"
+                @click="toggleNtSort('isRead')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleNtSort('isRead')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="ntSortState('createdAt')"
+                @click="toggleNtSort('createdAt')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleNtSort('createdAt')">发送时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -190,7 +200,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useTableSort } from './useTableSort'
 import { timeAgo, errMsg } from './live'
 import { adminNotificationsApi, adminUsersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
@@ -228,6 +239,19 @@ const loading = ref(false)
 const failed = ref(false)
 const kindFilter = ref('')
 const unreadOnly = ref(false)
+
+/* 服务端排序：白名单 createdAt / isRead，默认时间倒序；变更回第 1 页重查。 */
+const {
+  sortKey: ntSortKey,
+  sortDir: ntSortDir,
+  toggle: toggleNtSort,
+  sortState: ntSortState
+} = useTableSort({
+  keys: ['createdAt', 'isRead'],
+  defaultKey: 'createdAt',
+  defaultDir: 'desc',
+  storageKey: 'wf_notifications_sort'
+})
 /** 清除筛选并重新加载 */
 function clearFilter() {
   kindFilter.value = ''
@@ -258,6 +282,8 @@ async function reload() {
       limit: pageSize.value,
       kind: kindFilter.value || undefined,
       unreadOnly: unreadOnly.value || undefined,
+      sort: (ntSortKey.value || undefined) as 'createdAt' | 'isRead',
+      order: ntSortDir.value,
     })
     const body = res.data?.data ?? {}
     items.value = (body.items || []).map((n: NotifRow) => ({ ...n, busy: false }))
@@ -273,6 +299,12 @@ async function reload() {
 }
 /* 宿主刷新联动（通知与公告合并宿主「刷新」按钮 → reload） */
 defineExpose({ reload, openSend })
+
+/* 排序变更：回第 1 页重查（与筛选同义） */
+watch([ntSortKey, ntSortDir], () => {
+  page.value = 1
+  void reload()
+})
 
 async function remove(n: NotifRow) {
   const ok = await askConfirm({
