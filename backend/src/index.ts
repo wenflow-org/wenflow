@@ -659,22 +659,10 @@ export async function startServer() {
       await initializeGateway();
       assertStartupActive();
       {
-        // 能力探针开关统管所有自动探测：启动金丝雀、定时轮询必须同时开/关，
-        // 否则 dev 热重载（ts-node-dev --respawn）每次重启都会向模型服务发一轮真实请求。
+        // 能力探针开关统管自动探测：关闭时不启动定时轮询。
+        // 启动金丝雀已移除：健康快照由周期探测（开关开启时）或手动「立即探测」生成，
+        // 不再在每次进程启动时向模型服务发一轮真实请求（dev 热重载下尤其浪费）。
         const probeEnabled = await getRuntimeCapabilityProbeEnabled();
-        if (process.env.STARTUP_CANARY === '0') {
-          logger.debug('[ai-capability] 启动金丝雀探测已跳过（STARTUP_CANARY=0）');
-        } else if (!probeEnabled) {
-          logger.info('[ai-capability] 启动金丝雀探测已跳过（能力探针关闭）');
-        } else {
-          // 启动金丝雀：失败不阻断启动（能力状态由定时探测/首次真实请求校准）。
-          // 2026-08-30：此前 await 超时会把 connectionStatus 写为 failed 并拖慢启动。
-          await aiCapabilityHealthService.refresh().catch(error => {
-            logger.warn('[ai-capability] 启动金丝雀探测失败（不阻断启动）', {
-              error: error instanceof Error ? error.message : String(error)
-            });
-          });
-        }
         await aiCapabilityHealthService.setEnabled(probeEnabled);
         if (!probeEnabled) {
           logger.info('[ai-capability] 探测定时器已禁用（默认关闭 / 连接与安全开关关闭），跳过 start()');

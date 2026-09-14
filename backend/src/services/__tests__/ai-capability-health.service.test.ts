@@ -60,6 +60,30 @@ describe('AICapabilityHealthService', () => {
     expect(snapshot.capabilities.every(item => item.status === 'operational')).toBe(true)
   })
 
+  it('多个 skill 共享 endpoint/model 时按路由去重：5 能力 → 2 次探测（providerId 不参与）', async () => {
+    const service = new AICapabilityHealthService()
+    // 5 个能力分属 2 个模型，但 endpoint/凭据相同；skill 路由的 providerId 各不相同
+    const modelBySkill: Record<string, string> = {
+      'goal-conversation': 'deepseek-v4-flash',
+      'path-planning': 'deepseek-v4-pro',
+      'stage-designer': 'deepseek-v4-pro',
+      'teaching-turn': 'deepseek-v4-pro',
+      'session-wrapup': 'deepseek-v4-flash'
+    }
+    mockResolveRoute.mockImplementation(async (caller: { skillId?: string }) => ({
+      ...route,
+      providerId: `skill:${caller?.skillId || ''}`,
+      model: modelBySkill[caller?.skillId as string] || route.model
+    }))
+
+    const snapshot = await service.refresh()
+
+    expect(mockResolveRoute).toHaveBeenCalledTimes(5)
+    // 只按 endpoint+model+凭据去重 → flash / pro 各一次，而不是 5 个 skill 各一次
+    expect(mockExecute).toHaveBeenCalledTimes(2)
+    expect(snapshot.capabilities.every(item => item.status === 'operational')).toBe(true)
+  })
+
   it('连续两次失败才不可用，并要求连续两次成功恢复', async () => {
     const service = new AICapabilityHealthService()
     await service.refresh()

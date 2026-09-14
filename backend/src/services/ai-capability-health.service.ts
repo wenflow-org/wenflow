@@ -57,7 +57,9 @@ function initialHealth(id: string): AICapabilityHealth {
 function routeFingerprint(route: ResolvedRoute): string {
   return createHash('sha256')
     .update(JSON.stringify({
-      providerId: route.providerId,
+      // 刻意不含 providerId：skill 路由的 providerId 形如 `skill:<skillId>`（Agent 身份），
+      // 与「能不能连通」无关。带上它会让每个能力各探一次，同一模型被重复探测 5 次。
+      // 探测去重只按实际出网维度：同一 endpoint + model + 凭据 + 网络策略 → 只探一次。
       endpoint: route.endpoint,
       model: route.model,
       privateNetworkPolicy: route.privateNetworkPolicy,
