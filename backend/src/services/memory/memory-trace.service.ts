@@ -58,6 +58,26 @@ function fsrsIntervalDaysOfTrace(
   return Math.max(1, Math.round(state.stability));
 }
 
+/**
+ * 知识点键归一化（幂等）：conceptKey 直接取模型生成的知识点名字，模型换一种说法就多一条，
+ * 导致同一概念被记成多条痕迹（实测「离开前翻页立好」被记成 5 条），复习清单因此爆炸。
+ * 写入与查询都过这里，保证同一概念只占一条 trace。
+ * 规则：压缩空白 → 去引号 → 去冒号后的解释性从句 → 去尾部标点。
+ */
+export function normalizeConceptKey(raw: unknown): string {
+  const original = String(raw ?? '').trim();
+  if (!original) return '';
+  let s = original.replace(/\s+/g, ' ');
+  // 引号只是强调：去掉才能合并「靠「动作先发生」取胜」与「靠动作先发生取胜」
+  s = s.replace(/[「」『』"'“”‘’]/g, '');
+  // 冒号后多为模型的解释性从句（主体至少 4 字才截），只保留冒号前的主体
+  const colon = s.search(/[：:]/);
+  if (colon >= 4) s = s.slice(0, colon);
+  // 去尾部标点/破折号
+  s = s.replace(/[。．.，,、；;！!？?~～\-—…\s]+$/g, '');
+  return s.trim() || original;
+}
+
 export type MemoryStability = 'unknown' | 'fragile' | 'developing' | 'stable';
 
 const ALLOWED_STABILITY: MemoryStability[] = ['unknown', 'fragile', 'developing', 'stable'];
@@ -163,6 +183,8 @@ class MemoryTraceService {
 
   /** 记录一次提取/评估：upsert 痕迹并累计提取次数；提供 fsrsGrade 时走 FSRS-6 DSR 调度 */
   async recordExtraction(input: MemoryTraceInput): Promise<void> {
+    const conceptKey = normalizeConceptKey(input.conceptKey);
+    if (!conceptKey) return;
     const masteryScore = clamp01(input.masteryScore);
     const stability = ALLOWED_STABILITY.includes(input.stability as MemoryStability)
       ? (input.stability as MemoryStability)
@@ -173,7 +195,7 @@ class MemoryTraceService {
     let fsrsDifficulty: number | null = null;
 
     if (input.fsrsGrade !== undefined) {
-      const existing = await this.getTrace(input.userId, input.conceptKey);
+      const existing = await this.getTrace(input.userId, conceptKey);
       const isFirstExtraction = !existing || existing.extractionCount === 0;
       const prev: FsrsMemoryState | null = existing
         ? (existing.fsrsStability !== null && existing.fsrsStability !== undefined
@@ -195,12 +217,12 @@ class MemoryTraceService {
 
     await prisma.memory_traces.upsert({
       where: {
-        userId_conceptKey: { userId: input.userId, conceptKey: input.conceptKey },
+        userId_conceptKey: { userId: input.userId, conceptKey },
       },
       create: {
         id: `mt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
         userId: input.userId,
-        conceptKey: input.conceptKey,
+        conceptKey,
         label: input.label ?? null,
         masteryScore,
         stability,
@@ -239,6 +261,7 @@ class MemoryTraceService {
       await this.recordExtraction({
         userId,
         conceptKey: String(item.name).trim(),
+        label: String(item.name).trim(),
         masteryScore,
         stability,
         source,
@@ -355,8 +378,11 @@ class MemoryTraceService {
     }));
   }
 
-  async getTrace(userId: string, conceptKey: string) {    return prisma.memory_traces.findUnique({
-      where: { userId_conceptKey: { userId, conceptKey } },
+  async getTrace(userId: string, conceptKey: string) {
+    const key = normalizeConceptKey(conceptKey);
+    if (!key) return null;
+    return prisma.memory_traces.findUnique({
+      where: { userId_conceptKey: { userId, conceptKey: key } },
     });
   }
 
@@ -373,7 +399,7 @@ class MemoryTraceService {
     const ALPHA = 0.2;
     const now = new Date();
     for (const item of items) {
-      const key = String(item.conceptKey || '').trim();
+      const key = normalizeConceptKey(item.conceptKey);
       if (!key) continue;
       const mastery = Number.isFinite(item.mastery) ? Math.max(0, Math.min(1, item.mastery)) : null;
       if (mastery === null) continue;
@@ -407,8 +433,10 @@ class MemoryTraceService {
    * FSRS-6 调度更新：复习成功后按成绩更新 FSRS 状态（Dsr 稳定性/难度）；grade 未提供时走 legacy SM-2 ×2。
    */
   async bumpReviewInterval(userId: string, conceptKey: string, grade?: FsrsGradeCode): Promise<void> {
+    const key = normalizeConceptKey(conceptKey);
+    if (!key) return;
     if (grade !== undefined) {
-      const trace = await this.getTrace(userId, conceptKey);
+      const trace = await this.getTrace(userId, key);
       if (!trace) return;
       const prev: FsrsMemoryState = trace.fsrsStability !== null && trace.fsrsStability !== undefined
         ? {
@@ -422,13 +450,13 @@ class MemoryTraceService {
       const now = new Date();
       const result = fsrsSchedule(prev, grade, now);
       // 语义干扰矩阵：活跃误解 → 稳定性降低（下次复习更早，对比式纠错）
-      const activeMisconceptions = await getActiveForConcepts(userId, [conceptKey], 1);
+      const activeMisconceptions = await getActiveForConcepts(userId, [key], 1);
       const interferenceMultiplier = activeMisconceptions.length > 0 ? 0.85 : 1;
       const adjustedStability = result.state.stability * interferenceMultiplier;
       const rawDue = new Date(now.getTime() + Math.round(result.intervalDays * interferenceMultiplier) * DAY_MS);
       const isFirstExtraction = trace.extractionCount === 0;
       await prisma.memory_traces.updateMany({
-        where: { userId, conceptKey },
+        where: { userId, conceptKey: key },
         data: {
           fsrsStability: adjustedStability,
           fsrsDifficulty: result.state.difficulty,
