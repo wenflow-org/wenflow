@@ -17,7 +17,7 @@
 
 ### 1.2 范围
 
-- 本协议约束 **26 个 core skill**（15 个首批 + 8 个辅助 Skill（§5.6，v4-aux-skills 实际 handler 数）+ semantic-freeze-judge + learning-predictor + virtual-learner-memory-curator；清单见附录 A。**以 `prompts/core/` 实际文件数为准**（2026-08-30 复核：26 个 yaml 文件；session-evaluation-fallback 已退役；learning-predictor 与 virtual-learner-memory-curator 为 2026-08-11 纯重试改造后新增；此前 24/25 个）。
+- 本协议约束 **`prompts/core/` 下的全部 core skill**（清单见附录 A）。**以 `prompts/core/` 实际文件数为准**（2026-09-14 复核：30 个 yaml 文件 = 20 mainline + 10 aux；session-evaluation-fallback 已退役；此前 26/25/24 等口径均已过期）。
 - code-only skill（acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector）豁免，不进入核心文件体系（handler-only 确定性组件，无 LLM prompt）。
 - 无生产调用点的注册 skill（label-generator 等 11 个）维持现状，接入生产时必须先满足本协议。
 
@@ -309,7 +309,7 @@ type SkillResult = {
 
 ### 5.6 辅助 Skill（v4-aux-skills）调用约定与失败策略执行语义
 
-遗留插件/旁路能力迁入的 8 个辅助 LLM Skill（`backend/src/skills/v4-aux-skills/index.ts`，AuxSkillId 枚举，2026-08-11 复核：session-evaluation-fallback 已于当日退役）与主 Skill 共用同一链路：`调用点 → executeSkill / executeSkillWithResult → aux handler → callPrompt → APIGateway`。handler 必须 `requireActivePrompt: true`。
+遗留插件/旁路能力迁入的 9 个辅助 LLM Skill（`backend/src/skills/v4-aux-skills/index.ts`，AuxSkillId 枚举，2026-08-11 复核：session-evaluation-fallback 已于当日退役）与主 Skill 共用同一链路：`调用点 → executeSkill / executeSkillWithResult → aux handler → callPrompt → APIGateway`。handler 必须 `requireActivePrompt: true`。
 
 1. **入口选择**：只要输出用 `executeSkill`；需要 `quality`/`debug`/`runtimeEnvelope`（区分 model/fallback、取 tokenUsage/model）用 `executeSkillWithResult`。
 2. **保留字段**（handler 从输入对象剥离，不进入 user payload）：
@@ -370,9 +370,9 @@ coreHash 写入侧 = 编译发布流程（与 sourceHash 同批落库）；判�
 | Delta 写 | 缺席=不变、null=清空、输出=覆盖 的增量输出模式（试验） |
 | 基准 v1 | 现行 prompt 在版本体系中的登记身份 |
 
-## 附录 A. 受约束 skill 清单（26 core + 3 code-only）
+## 附录 A. 受约束 skill 清单（30 core；3 个 code-only 组件已退役）
 
-> 2026-08-30 复核：以 `prompts/core/` 实际文件数为准（26 个 yaml；此前声称 25/24，差额为 2026-08-11 后新增 learning-predictor 与 virtual-learner-memory-curator，以及已退役 skill 未同步）。
+> 2026-09-14 复核：以 `prompts/core/` 实际文件数为准（30 个 yaml = 20 mainline + 10 aux；此前 26/25/24 等口径均已过期）。
 
 首批（15）：
 conversational：goal-conversation、teaching-turn、virtual-learner-goal-dialogue-simulator、virtual-learner-learn-turn-simulator
@@ -381,10 +381,12 @@ extractor：virtual-learner-actor-auditor、virtual-learner-path-evaluator、vir
 distiller：lesson-knowledge-enricher、session-wrapup
 copywriter：adaptive-guidance-copy、peer-reinforcement
 
-辅助 Skill（8，§5.6，v4-aux-skills index.ts 实际 handler 数；另有 concept-priority / path-adjustment-generator **已退役，仅 manifest 残留（2026-08）**，无 core.yaml，不计数）：
+后续新增（core，未列入首批）：path-reviewer、kc-mapper、virtual-learner-epistemic-grounding
+
+辅助 Skill（9，§5.6，v4-aux-skills index.ts 实际 handler 数；另有 concept-priority / path-adjustment-generator **已退役，仅 manifest 残留（2026-08）**，无 core.yaml，不计数）：
 conversational：generic-chat
 generator：course-design、teaching-opening-generator（~~concept-priority~~、~~path-adjustment-generator~~ 已退役，仅 manifest 残留（2026-08））
-extractor：basic-evaluator、goal-alignment-checker、skill-compiler
+extractor：basic-evaluator、goal-alignment-checker、skill-compiler、learner-state-review
 copywriter：learner-progress-report、skill-author
 
 平台守门（1）：semantic-freeze-judge（extractor，thinkingMode=disabled；调用方式见 §5.6 平台层例外）
@@ -393,7 +395,7 @@ copywriter：learner-progress-report、skill-author
 - learning-predictor（distiller，预测校准闭环：`learning_metrics` 预测 vs 实际，`prediction_records` 表）
 - virtual-learner-memory-curator（虚拟学习者记忆策展；manifest 已于 2026-09-02 补齐，`failurePolicy: blocking`，与 core propagate 对齐。此前「缺 manifest / failurePolicy=fallback，待补」的记录已解决）
 
-code-only（3，无 LLM prompt，handler-only 确定性组件）：
+code-only（3，无 LLM prompt，handler-only 确定性组件；**已注销 skill 身份、仅保留纯函数模块**，见 `backend/src/skills/retired-skills.ts` 的 `RESIDUE_ONLY_SKILLS`）：
 acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector
 
 > 退役注记（2026-07 调用调查）：label-generator、state-assessment、confidence-handler 因生产零调用/事件无发射者退役；text-structure-analyzer、retrieval、web-extractor、image-analyzer、memory-search、smart-search 六个无调用点组件一并退役。

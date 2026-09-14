@@ -12,6 +12,7 @@
 > - 治理：`prompts:check-handoff --strict`（inputs↔handoff 双向对账）、`detectFieldRoutingDrift`（声明 vs DB 漂移启动 warn）、`validateFieldRoutingSeedSemantics`（handoff 白名单/组合语义启动 fail-fast）、P3 字段声明驱动输出校验（默认全量启用，排除名单见 SKILL_PROTOCOL_V4 §5.5 注记）。
 > 差异提醒：实现中 agentId 统一为 canonical（`skill:` 前缀，经 `getCanonicalAgentId` 归一）；原设计的 `agent_contracts.ownInputs/downstreamAgents` 等列未实现（以 v4 inputs 声明 + routings.handoff 表达）。
 > **引用时效**：正文 §9「实施步骤」与后续附录里的源码路径/行号是**起草当时的快照（2026-06~08）**，其后部分文件已重构或移除（如 `frontend/src/components/admin/*`、`views/admin/AgentRegistry.vue`、`views/GoalConversation.vue`、`agents/dispatcher.ts`、`composers/prompt-from-routing.ts`、`orchestrators/*`）。现行实现以 `prompts/orchestration/*.yaml`（字段路由数据面，声明源规范见 [`SKILL_PROTOCOL_V4.md`](./SKILL_PROTOCOL_V4.md) §2.6）、`prompts/core/*.yaml`（字段契约）与 `frontend/src/views/admin-redesign/`（管理台）为准；`prisma/system.prisma` 现为 `prisma/system/schema.prisma`。
+> **实现差异提醒**：文中 `accumulate: true` 触发 `eventBus` 事件、以及 `bindings.backendCode` 三级锁（`structure-locked`）等描述为**设计设想，未按此实现**。现状：事件走 **DB outbox**（同事务写入 + `backend/src/events/outbox.worker.ts` 消费）；`accumulate` 运行时只产出 prompt 标签「累积到 learnerProfile」，不做写入；锁为 DB 布尔列 `systemLocked` / `structureLocked`（无 `backendCode` 字段，也**无** AST 扫描同步），且 `structureLocked` 目前只拦路由行 PATCH、不拦字段删除。
 
 ---
 

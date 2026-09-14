@@ -514,7 +514,7 @@ skills:
       sandbox: []
     notes: handler 直读反例（P4 例外账）——handler 直读 user_mcp_configs（mcp-tool/index.ts:80 getUserMcpRuntimeConfig）与 config/mcp.json 平台工具（:126），外部调用 mcpGateway（:95/:140）；api 类由 mcpTools 字段承担，dataSource.db 保持空
 
-  # ============ aux（8 条，不进字段路由；v4-aux-skills 注册） ============
+  # ============ aux（10 条，不进字段路由；v4-aux-skills 注册） ============
   - skillId: teaching-opening-generator
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts
