@@ -34,7 +34,7 @@ export const INJECTED_JSON_CONSTRAINT =
 export const INJECTED_NON_JSON_CONSTRAINT =
   '直接输出最终交付内容本身，不要用 JSON 包装，不要附加解释、过程说明或多余标记。';
 export const INJECTED_DELTA_CONSTRAINT =
-  '标注（当轮）的字段每轮必须输出；其余字段仅输出本轮新增或需要修改的，未变化的字段请勿输出；需要清空某字段时输出 null。';
+  '标注（当轮）的字段每轮必须输出；其余字段仅输出本轮新增或需要修改的，未变化的字段请勿输出；数组字段必须输出完整数组（不要只给新增项，平台按整体覆盖），要清空数组输出 []；需要清空其它字段时输出 null。';
 
 export interface CompileCoreOptions {
   /** 编译产物的 coreVersion（默认 1，由发布流程递增） */
