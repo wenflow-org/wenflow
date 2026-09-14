@@ -143,6 +143,11 @@ fields:
     valueType: array<string>
     pathInRawOutput: internal.ext.goalConversation.confirmedProposal.out_of_scope
     description: 不在此次学习的范围
+  - fieldId: confirmedProposal.scope_size
+    promptRole: proposal-output
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.confirmedProposal.scope_size
+    description: 问题规模（micro/small/medium/large），决定路径体量
   # public-reply
   - fieldId: userVisible
     promptRole: public-reply
@@ -339,6 +344,12 @@ routings:
     handoff: [goal-agent]
     internal: false
     accumulate: false
+  - agentId: skill:goal-conversation
+    fieldId: confirmedProposal.scope_size
+    render: visible
+    handoff: [goal-agent]
+    internal: false
+    accumulate: false
   # public-reply: visible, no handoff (stays in goal conversation)
   - agentId: skill:goal-conversation
     fieldId: userVisible
@@ -524,6 +535,12 @@ routings:
     accumulate: false
   - agentId: goal-agent
     fieldId: confirmedProposal.out_of_scope
+    render: visible
+    handoff: [path]
+    internal: false
+    accumulate: false
+  - agentId: goal-agent
+    fieldId: confirmedProposal.scope_size
     render: visible
     handoff: [path]
     internal: false

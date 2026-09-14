@@ -40,6 +40,7 @@ export interface GoalPathVisibleSummary {
     firstDeliverable: string | null;
     keyStages: string[];
     outOfScope: string[];
+    scopeSize: string | null;
   } | null;
 }
 
@@ -148,6 +149,7 @@ export function buildGoalPathVisibleSummary(params: {
   const firstDeliverable = normalizeString(confirmedProposal?.first_deliverable);
   const keyStages = normalizeStringArray(confirmedProposal?.key_stages);
   const outOfScope = normalizeStringArray(confirmedProposal?.out_of_scope);
+  const scopeSize = normalizeString(confirmedProposal?.scope_size);
 
   return {
     surfaceGoal,
@@ -178,12 +180,13 @@ export function buildGoalPathVisibleSummary(params: {
           acceptanceCheck,
         }
       : null,
-    confirmedProposal: learningDirection || firstDeliverable || keyStages.length > 0 || outOfScope.length > 0
+    confirmedProposal: learningDirection || firstDeliverable || keyStages.length > 0 || outOfScope.length > 0 || scopeSize
       ? {
           learningDirection,
           firstDeliverable,
           keyStages,
           outOfScope,
+          scopeSize,
         }
       : null,
     timeDimensions,

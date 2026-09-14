@@ -48,6 +48,7 @@ function buildGoalSkillOutput(overrides: Record<string, any> = {}) {
             first_deliverable: '一次完整汇报',
             key_stages: ['识别问题结构', '建立汇报框架', '实战汇报'],
             out_of_scope: [],
+            scope_size: 'small',
           },
           nextQuestions: ['你希望先解决哪一块？'],
           quickReplies: ['先搭框架', '先练表达'],

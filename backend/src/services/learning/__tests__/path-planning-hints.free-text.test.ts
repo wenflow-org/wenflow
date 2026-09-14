@@ -42,9 +42,9 @@ describe('derivePlanningHints maxWeeks 兜底链路', () => {
     expect(hints.maxWeeks).toBe(1);
   });
 
-  it('自由文本无时间信号时保持 pace 默认值', () => {
+  it('自由文本无时间信号时兜底 standard（不再默认 extended）', () => {
     const hints = derivePlanningHints('有空就剪，灵感来了能到半夜', null, null, null, []);
-    expect(hints.maxWeeks).toBe(24);
+    expect(hints.maxWeeks).toBe(8);
   });
 
   it('timeDimensions.totalWeeks 优先于自由文本', () => {
@@ -54,6 +54,58 @@ describe('derivePlanningHints maxWeeks 兜底链路', () => {
       { totalWeeks: 12, estimatedHours: null, sessionsPerWeek: null, sessionsLengthMin: null }
     );
     expect(hints.maxWeeks).toBe(Math.min(52, Math.max(1, Math.ceil(12 * 1.2)))); // 15
+  });
+});
+
+describe('inferPaceSignal（节奏档兜底：未命中映射表时按周数分档，不再一律 extended）', () => {
+  it('两周 / 一个月 → standard（不再 extended）', () => {
+    expect(derivePlanningHints('两周', null, null, null, []).paceSignal).toBe('standard');
+    expect(derivePlanningHints('一个月', null, null, null, []).paceSignal).toBe('standard');
+  });
+  it('三个月 / 半年 → extended', () => {
+    expect(derivePlanningHints('三个月', null, null, null, []).paceSignal).toBe('extended');
+    expect(derivePlanningHints('半年', null, null, null, []).paceSignal).toBe('extended');
+  });
+  it('null / 未明确 → standard（不再 extended）', () => {
+    expect(derivePlanningHints(null, null, null, null, []).paceSignal).toBe('standard');
+    expect(derivePlanningHints('未明确', null, null, null, []).paceSignal).toBe('standard');
+  });
+  it('半天 / 1天 → compact（映射表优先，不变）', () => {
+    expect(derivePlanningHints('半天', null, null, null, []).paceSignal).toBe('compact');
+    expect(derivePlanningHints('1天', null, null, null, []).paceSignal).toBe('compact');
+  });
+  it('下周复诊前，剩四天 → compact（短周期）', () => {
+    expect(derivePlanningHints('下周复诊前，剩四天', null, null, null, []).paceSignal).toBe('compact');
+  });
+});
+
+describe('scope_size（问题规模钳制里程碑数）', () => {
+  it('micro 钳制 milestone 顶多 2：即便 keyStages 给 5 个也压到 2', () => {
+    const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3', 'S4', 'S5'], null, 'micro');
+    expect(hints.targetMilestones).toBe(2);
+    expect(hints.milestoneRange).toEqual([2, 2]);
+    expect(hints.scopeSize).toBe('micro');
+  });
+  it('small 钳制 milestone 顶多 3：keyStages 给 5 个压到 3', () => {
+    const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3', 'S4', 'S5'], null, 'small');
+    expect(hints.targetMilestones).toBe(3);
+  });
+  it('medium 允许到 5：keyStages 给 5 个保留 5', () => {
+    const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3', 'S4', 'S5'], null, 'medium');
+    expect(hints.targetMilestones).toBe(5);
+  });
+  it('large 允许到 8：keyStages 给 8 个保留 8', () => {
+    const hints = derivePlanningHints('三个月', null, null, null, Array.from({ length: 8 }, (_, i) => `S${i}`), null, 'large');
+    expect(hints.targetMilestones).toBe(8);
+  });
+  it('无 scope_size 时回退旧行为（keyStages 直接 clamp 2-8）', () => {
+    const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3', 'S4', 'S5'], null, null);
+    expect(hints.targetMilestones).toBe(5);
+    expect(hints.scopeSize).toBeNull();
+  });
+  it('scope_size 改变 subtasksPerStageRange：micro 兜底下限 1', () => {
+    const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2'], null, 'micro');
+    expect(hints.targetSubtasksPerStage).toBe(1);
   });
 });
 
@@ -99,26 +151,37 @@ describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数�
     expect(hints.subtasksPerStageRange).toEqual([2, 2]);
   });
 
-  it('estimatedHours 与频率都缺失时用 pace 档位中位数兜底（不再 null）', () => {
+  it('estimatedHours 与频率都缺失时用 pace 档位下限兜底（不再 null）', () => {
     const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3'], null);
-    // extended subtasksPerStageRange=[4,6]，中位数 5
-    expect(hints.targetSubtasksPerStage).toBe(5);
-    expect(hints.subtasksPerStageRange).toEqual([5, 5]);
+    // extended subtasksPerStageRange=[4,6]，下限 4
+    expect(hints.targetSubtasksPerStage).toBe(4);
+    expect(hints.subtasksPerStageRange).toEqual([4, 4]);
   });
 
-  it('每阶段任务数超出范围时夹取 2-6', () => {
-    // 30h / 3 里程碑 / 1h → 10，夹取到 6
+  it('每阶段任务数超出范围时按 pace 区间上限夹取（无 scope 时 standard 上限 5）', () => {
+    // 30h / 3 里程碑 / 1h → 10，null 时间 → standard subtasksPerStageRange=[3,5]，夹取到 5
     const high = derivePlanningHints(
       null, null, null, null, ['S1', 'S2', 'S3'],
       { totalWeeks: null, estimatedHours: 30, sessionsPerWeek: null, sessionsLengthMin: null }
     );
-    expect(high.targetSubtasksPerStage).toBe(6);
-    // 1.4h / 4 里程碑 → ~0.35，夹取到 2
+    expect(high.targetSubtasksPerStage).toBe(5);
+    // 1.4h / 4 里程碑 → ~0.35，下限硬编码 2
     const low = derivePlanningHints(
       null, null, null, null, ['S1', 'S2', 'S3', 'S4'],
       { totalWeeks: null, estimatedHours: 1.4, sessionsPerWeek: null, sessionsLengthMin: null }
     );
     expect(low.targetSubtasksPerStage).toBe(2);
+  });
+
+  it('scope_size 钳制 perStageFromHours：small + 大 estimatedHours 仍不超 3', () => {
+    const hints = derivePlanningHints(
+      '三个月', null, null, null, ['S1', 'S2', 'S3'],
+      { totalWeeks: 2, estimatedHours: 16, sessionsPerWeek: 6, sessionsLengthMin: 60 },
+      'small'
+    );
+    // small subtasksPerStageRange=[2,3]，16h/3≈5 被钳到 3
+    expect(hints.targetSubtasksPerStage).toBe(3);
+    expect(hints.subtasksPerStageRange).toEqual([3, 3]);
   });
 
   it('keyStages 缺失时 targetSubtasksPerStage 为 null，沿用 pace 区间', () => {

@@ -113,8 +113,33 @@ function parseBudgetMinutes(value: string | null): number | null {
 }
 
 function inferPaceSignal(timeHorizon: string | null): PlanningPaceSignal {
-  if (!timeHorizon) return 'extended';
-  return (timeHorizonPaceMapping[timeHorizon] as PlanningPaceSignal) || 'extended';
+  // 未明确时间不再默认最长档（extended 会让"无 deadline/未明确"的小问题被撑成 24 周大路径）
+  if (!timeHorizon) return 'standard';
+  const exact = timeHorizonPaceMapping[timeHorizon] as PlanningPaceSignal | undefined;
+  if (exact) return exact;
+  // 用已有的中文时间短语解析能力兜底分档（覆盖"两周/一个月/三个月/半年"等映射表未收录的表述）
+  const weeks = inferMaxWeeksFromTimeHorizon(timeHorizon);
+  if (weeks !== null) {
+    if (weeks <= 1) return 'compact';
+    if (weeks <= 8) return 'standard';
+    return 'extended';
+  }
+  // 最终兜底：解析不出时间信号时取中等档，而非最长档
+  return 'standard';
+}
+
+/** 问题规模（goal 层 scope_size）→ 路径体量（里程碑数 + 每阶段子任务数） */
+export type ScopeSize = 'micro' | 'small' | 'medium' | 'large';
+
+export const SCOPE_SIZE_RANGES: Record<ScopeSize, { milestoneRange: [number, number]; subtasksPerStageRange: [number, number] }> = {
+  micro:  { milestoneRange: [1, 2], subtasksPerStageRange: [1, 3] },
+  small:  { milestoneRange: [2, 3], subtasksPerStageRange: [2, 3] },
+  medium: { milestoneRange: [3, 5], subtasksPerStageRange: [3, 5] },
+  large:  { milestoneRange: [4, 8], subtasksPerStageRange: [4, 6] },
+};
+
+function normalizeScopeSize(value: unknown): ScopeSize | null {
+  return value === 'micro' || value === 'small' || value === 'medium' || value === 'large' ? value : null;
 }
 
 export interface PlanningHints {
@@ -124,7 +149,9 @@ export interface PlanningHints {
   subtasksPerStageRange: [number, number];
   subtaskMinutesRange: [number, number];
   maxWeeks: number;
-  /** 强制里程碑目标数量（由上游 keyStages 数量直接透传，path LLM 必须精确输出该值，不增减） */
+  /** 问题规模（goal 层 scope_size 透传，未提供为 null） */
+  scopeSize: ScopeSize | null;
+  /** 强制里程碑目标数量（由 scope_size 与 keyStages 共同决定，path LLM 必须精确输出该值，不增减） */
   targetMilestones: number | null;
   /** 强制每阶段子任务目标数量（由总学时/里程碑数推导，stage-designer 必须精确输出该值） */
   targetSubtasksPerStage: number | null;
@@ -136,21 +163,34 @@ export function derivePlanningHints(
   timeBudget: string | null,
   timeBudgetCadence: TimeBudgetCadence | null,
   keyStages: string[],
-  timeDimensions?: { totalWeeks?: number | null; estimatedHours?: number | null; sessionsPerWeek?: number | null; sessionsLengthMin?: number | null } | null
+  timeDimensions?: { totalWeeks?: number | null; estimatedHours?: number | null; sessionsPerWeek?: number | null; sessionsLengthMin?: number | null } | null,
+  scopeSize?: ScopeSize | null
 ): PlanningHints {
   const paceSignal = inferPaceSignal(timeHorizon);
   const keyStageCount = keyStages.length;
   const paceConfig = paceSignalRangeConfig[paceSignal];
 
-  let milestoneRange: [number, number] = [...paceConfig.milestoneRange];
+  // 问题规模优先于 pace 档位：scope_size 是 goal 层对"这个问题多大"的直接判断，
+  // 比"时间紧迫/从容"更接近路径体量的真实决定因素
+  const scope = normalizeScopeSize(scopeSize);
+  const scopeConfig = scope ? SCOPE_SIZE_RANGES[scope] : null;
+
+  let milestoneRange: [number, number] = scopeConfig ? [...scopeConfig.milestoneRange] : [...paceConfig.milestoneRange];
   let conceptRange: [number, number] = [...paceConfig.conceptRange];
-  let subtasksPerStageRange: [number, number] = [...paceConfig.subtasksPerStageRange];
+  let subtasksPerStageRange: [number, number] = scopeConfig ? [...scopeConfig.subtasksPerStageRange] : [...paceConfig.subtasksPerStageRange];
   const defaultMinutesRange: [number, number] = [...paceConfig.defaultMinutesRange];
-  // 强制里程碑数量：直接透传上游 keyStages 数量（用户已确认的阶段数），上下限夹取 2-8。
-  // 不再依赖 LLM 在区间内自行选值（实测区间总是懒选下限 3-4）。
-  const targetMilestones: number | null = keyStageCount > 0
-    ? Math.min(8, Math.max(2, keyStageCount))
-    : null;
+  // 强制里程碑数量：优先尊重 scope_size 的体量上限，再叠 keyStages 数。
+  // 之前直接 clamp(keyStages, 2, 8) 会让 goal 随机产出的 3-5 个 keyStages 无脑放大成 3-5 个 milestone；
+  // 现在 milestone 数被 scope_size 钳制：micro 顶多 2、small 顶多 3、medium 顶多 5、large 顶多 8。
+  const scopeMilestoneCap = scopeConfig ? scopeConfig.milestoneRange[1] : 8;
+  const scopeMilestoneFloor = scopeConfig ? scopeConfig.milestoneRange[0] : 2;
+  const targetMilestones: number | null = scope
+    ? (keyStageCount > 0
+        ? Math.min(scopeMilestoneCap, Math.max(scopeMilestoneFloor, keyStageCount))
+        : scopeMilestoneFloor)
+    : (keyStageCount > 0
+        ? Math.min(8, Math.max(2, keyStageCount))
+        : null);
   // maxWeeks：优先用 goal 层 LLM 推断的 totalWeeks（×1.2 缓冲）；
   // 其次用自由文本 time_horizon 的确定性周数兜底（LLM 未产出 totalWeeks 时仍能钳制紧迫场景）；
   // 最后回退 pace 档位固定值，硬上限 52
@@ -208,14 +248,18 @@ export function derivePlanningHints(
         ? (timeDimensions!.totalWeeks as number) * (timeDimensions!.sessionsPerWeek as number)
           * (timeDimensions!.sessionsLengthMin as number) / 60
         : null;
+  // perStage 从总学时反推时，上限必须被 subtasksPerStageRange 钳制：scope_size 是"问题多大"的硬约束，
+  // 不能因为 goal 碰巧推断出 estimatedHours 就突破 scope 的任务密度上限（否则 micro/small 又会被撑大）。
+  // 下限保持宽松（硬编码 2），允许比 pace 默认更少，不被抬升。
+  const subtasksCap = subtasksPerStageRange[1];
   const perStageFromHours: number | null =
     targetMilestones !== null && estimatedHoursTotal !== null
-      ? Math.min(6, Math.max(2, Math.round(estimatedHoursTotal / targetMilestones / 1.0)))
+      ? Math.min(subtasksCap, Math.max(2, Math.round(estimatedHoursTotal / targetMilestones / 1.0)))
       : null;
-  // 无总学时信息时用 pace 档位中位数（subtasksPerStageRange 中点，取整），保证始终有目标
-  const paceMidpoint = Math.round((subtasksPerStageRange[0] + subtasksPerStageRange[1]) / 2);
+  // 无总学时信息时兜底取区间下限而非中点：预算未知时宁可给少不给多，避免小问题被硬撑成多节课
+  const paceFloor = subtasksPerStageRange[0];
   const targetSubtasksPerStage: number | null =
-    perStageFromHours ?? (targetMilestones !== null ? paceMidpoint : null);
+    perStageFromHours ?? (targetMilestones !== null ? paceFloor : null);
   // 有目标时 subtasksPerStageRange 同步精确化
   const effectiveSubtasksPerStageRange: [number, number] = targetSubtasksPerStage !== null
     ? [targetSubtasksPerStage, targetSubtasksPerStage]
@@ -223,6 +267,7 @@ export function derivePlanningHints(
 
   return {
     paceSignal,
+    scopeSize: scope,
     milestoneRange: effectiveMilestoneRange,
     targetMilestones,
     conceptRange,
@@ -258,6 +303,7 @@ export function buildFramedNormalizedInput(input: any): any {
   const explicitProblem = normalizeString(problemSpace.realProblem);
   const rawKeyStages = normalizeStringArray(confirmedProposal?.keyStages);
   const keyStages = rawKeyStages.filter((item) => !isOperationalStageLike(item));
+  const scopeSize = normalizeScopeSize(confirmedProposal?.scopeSize ?? confirmedProposal?.scope_size);
   const timeBudget = normalizeString(resources.timeBudget) || normalizeString(resources.timePerWeek);
   const timeBudgetCadence = normalizeCadence(resources.timeBudgetCadence);
   const timePerSession = normalizeString(resources.timePerSession);
@@ -265,7 +311,7 @@ export function buildFramedNormalizedInput(input: any): any {
   const timeDimensions = input.timeDimensions && typeof input.timeDimensions === 'object'
     ? input.timeDimensions
     : null;
-  const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions);
+  const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize);
 
   return {
     ...input,
@@ -309,6 +355,7 @@ export function buildFramedNormalizedInput(input: any): any {
           firstDeliverable: normalizeString(confirmedProposal.firstDeliverable),
           keyStages,
           outOfScope: normalizeStringArray(confirmedProposal.outOfScope),
+          scopeSize: normalizeScopeSize(confirmedProposal.scopeSize ?? confirmedProposal.scope_size),
         }
       : null,
     timeDimensions,

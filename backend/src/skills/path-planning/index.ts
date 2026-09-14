@@ -105,6 +105,9 @@ function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         paceSignal: planningHints.paceSignal === 'compact' || planningHints.paceSignal === 'standard' || planningHints.paceSignal === 'extended'
           ? planningHints.paceSignal
           : null,
+        scopeSize: planningHints.scopeSize === 'micro' || planningHints.scopeSize === 'small' || planningHints.scopeSize === 'medium' || planningHints.scopeSize === 'large'
+          ? planningHints.scopeSize
+          : null,
         milestoneRange: Array.isArray(planningHints.milestoneRange) ? planningHints.milestoneRange : null,
         conceptRange: Array.isArray(planningHints.conceptRange) ? planningHints.conceptRange : null,
         subtasksPerStageRange: Array.isArray(planningHints.subtasksPerStageRange) ? planningHints.subtasksPerStageRange : null,

@@ -131,6 +131,11 @@ fields:
       · first_deliverable（string）用户最先要拿到的最小结果；
         零基础用户（仅知模糊概念、从未系统学过）优先建立基础认知框架（最小可用 mental model），不做跳过
       · key_stages（string[]）大致阶段，通常 2-5 个
+      · scope_size（enum，必填）问题规模的自我判断，决定路径该有多长，取值 micro | small | medium | large：
+        micro = 一个动作/一次判断就能解决（1-2 个阶段）；small = 单一技能/单一缺口（2-3 个阶段）；
+        medium = 中等目标，多个相关能力交织（3-5 个阶段）；large = 大型/长期目标（4-8 个阶段）。
+        判定依据是「这个问题本身有多大」，而不是用户的时间预算；越具体、越单点的问题越往下取。
+        例：「下次被客户骂能撑过那几秒」→micro；「学会报价不亏本」→small；「系统掌握一门学科」→large。
       · out_of_scope（string[]）内部占位（hidden，供路径细化参考，如"投资理财等下阶段"）——用户界面不展示该内容，不允许要求用户"确认不学什么"，只在回复里自然说明"这一版先聚焦……，后续阶段再展开"
       · prerequisiteDiagnostics（object[]，可选）前置知识探测题（最多 2 个，见规则"前置知识探测"）：
         [{ "probeId": "probe-1", "targetConcept": 被探测的前置概念, "question": 极简二元探测题（单一概念点，一次判断）,
