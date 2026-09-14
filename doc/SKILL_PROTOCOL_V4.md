@@ -100,6 +100,8 @@ deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5
 
 字段路由域（字段定义、agent 契约、路由矩阵）的**声明源**为 `prompts/orchestration/<stage>.yaml`（goal/path/teaching/profile/simulation 各一份，进 git，File-as-Truth）。本域属于 §1.1 原则 3 的**数据面**（运行时管线配置），与控制面（`prompts/core/*.yaml`，prompt 内容）经 bootstrap 编译链连接；编排文件**不修改 core.yaml 任何条款**，也不承载 prompt 文本。
 
+> 概念模型与设计动机见 [`AGENT_IO_DESIGN_V3.md`](./AGENT_IO_DESIGN_V3.md)（`agent-output-v1` 外壳、`internal.ext.*` 命名空间、字段路由与调度）；本节承接其「字段路由声明源」，为现行规范（原 seed TS 已退役）。
+
 #### Schema（规范性定义）
 
 ```yaml
