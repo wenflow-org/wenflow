@@ -129,8 +129,8 @@ const hasMore = ref(true);
 
 const doneStatuses = new Set(['completed', 'done', 'finished', 'closed']);
 
-/** 会话三态：completed（已完成）/ resumable（可继续：active·paused）/ ended（已结束，如 timeout）。
-    DB 里另有 discarded/superseded（内部重开/被取代），接口已通过 excludeInternal 过滤。 */
+/** 会话三态：completed（已完成）/ resumable（可继续：active·paused）/ ended（已结束：timeout·discarded 等）。
+    接口只过滤 superseded（stale 行被回收重开，无真实进展）。 */
 type SessionState = 'completed' | 'resumable' | 'ended';
 
 function sessionState(s: SessionRecord): SessionState {
@@ -146,6 +146,9 @@ function stateLabel(s: SessionRecord): string {
   if (status === 'paused') return '已暂停';
   if (status === 'active' || status === 'in_progress') return '进行中';
   if (status === 'timeout') return '已超时';
+  // discarded = 用户点「重新开始」后旧会话被丢弃（duration 是真实有效时长，计入学习）
+  if (status === 'discarded') return '已重开';
+  if (status === 'superseded') return '已取代';
   return '已结束';
 }
 

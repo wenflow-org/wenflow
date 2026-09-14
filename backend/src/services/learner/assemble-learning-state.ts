@@ -96,7 +96,7 @@ export async function assembleLearningState(
       },
     }),
     prisma.teaching_sessions.findMany({
-      where: { userId, status: { notIn: ['discarded', 'superseded'] } },
+      where: { userId, status: { notIn: ['superseded'] } },
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
@@ -112,9 +112,9 @@ export async function assembleLearningState(
       take: 10,
     }),
     // 时长/学习天数按全量口径（此前从 take:10 的样本里算，累计时长/天数会明显偏小）；
-    // 与 /learning/stats、/users/me/sessions 同口径，过滤 discarded/superseded 内部会话。
+    // 与 /learning/stats、/users/me/sessions 同口径：只排除被回收重开的 superseded。
     prisma.teaching_sessions.findMany({
-      where: { userId, status: { notIn: ['discarded', 'superseded'] } },
+      where: { userId, status: { notIn: ['superseded'] } },
       select: { duration: true, startTime: true, endTime: true },
     }),
   ]);

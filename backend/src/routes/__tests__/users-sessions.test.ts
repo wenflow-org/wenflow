@@ -82,9 +82,9 @@ describe('GET /me/sessions（学习历史：分页 + 内部会话过滤）', () 
     expect(teachingSessionMocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 0, take: 10 }));
   });
 
-  it('默认过滤 discarded/superseded，列表与总数同口径（首页/状态/历史统一）', async () => {
+  it('默认只过滤 superseded（discarded 是用户「重新开始」的真实学习，计入）', async () => {
     await callSessions({});
-    const expectedWhere = { userId: 'user-1', status: { notIn: ['discarded', 'superseded'] } };
+    const expectedWhere = { userId: 'user-1', status: { notIn: ['superseded'] } };
     expect(teachingSessionMocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expectedWhere }));
     expect(teachingSessionMocks.count).toHaveBeenCalledWith({ where: expectedWhere });
   });

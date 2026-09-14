@@ -21,6 +21,7 @@ const SESSIONS = [
   { id: 's2', taskId: 't2', taskTitle: '任务二', status: 'timeout', startTime: '2026-09-14T10:00:00Z', durationMinutes: 10, wrapup: '{"summary":{}}' },
   { id: 's3', taskId: 't3', taskTitle: '任务三', status: 'active', startTime: '2026-09-14T11:00:00Z', durationMinutes: 0 },
   { id: 's4', taskId: 't4', taskTitle: '任务四', status: 'paused', startTime: '2026-09-14T12:00:00Z', durationMinutes: 0 },
+  { id: 's5', taskId: 't5', taskTitle: '任务五', status: 'discarded', startTime: '2026-09-14T08:00:00Z', durationMinutes: 93 },
 ];
 
 async function mountHistory() {
@@ -49,7 +50,7 @@ describe('V2LearningHistory', () => {
   it('状态三态标签正确（已结束会话不再被标成「进行中」）', async () => {
     const w = await mountHistory();
     const labels = w.findAll('.history__item .uc-badge').map((n) => n.text());
-    expect(labels).toEqual(['已完成', '已超时', '进行中', '已暂停']);
+    expect(labels).toEqual(['已完成', '已超时', '进行中', '已暂停', '已重开']);
   });
 
   it('「继续」只给 active/paused；已结束会话给「查看反馈」', async () => {

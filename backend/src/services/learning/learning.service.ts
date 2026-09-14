@@ -4504,9 +4504,10 @@ const learningPath = await prisma.learning_paths.findUnique({
       const todoSubtasks = subtasks.filter(t => t.status === 'todo');
 
       const totalEstimatedMinutes = subtasks.reduce((sum, t) => sum + (t.estimatedMinutes || 0), 0);
-      // 与 /users/me/sessions、学习状态页统一口径：内部替换/废弃会话不计入时长与学习天数
+      // 与 /users/me/sessions、学习状态页统一口径：只排除被回收重开的 superseded（无真实进展），
+      // discarded（用户「重新开始」的旧会话）计入真实学习时长
       const sessions = await prisma.teaching_sessions.findMany({
-        where: { userId, status: { notIn: ['discarded', 'superseded'] } },
+        where: { userId, status: { notIn: ['superseded'] } },
         select: {
           duration: true,
           startTime: true,

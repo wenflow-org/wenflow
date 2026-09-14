@@ -299,15 +299,15 @@ router.get('/me/sessions', async (req, res, next) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 100);
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
-    // 默认过滤内部替换/废弃会话（discarded/superseded）：它们是重开/被取代的技术artifact，
-    // 不是用户真实的学习记录。首页时长、学习状态、学习历史统一按此口径。
-    // 需要原始全量（含内部会话）时传 includeInternal=1。
+    // 排除 superseded（stale/failed 行被回收重开：无真实进展，openKey 被新会话接管），
+    // 但保留 discarded —— 它是用户点「重新开始」后的旧会话，duration 是真实有效时长，属于学习记录。
+    // 需要原始全量（含 superseded）时传 includeInternal=1。
     const includeInternal = req.query.includeInternal === '1' || req.query.includeInternal === 'true';
 
     // 构建查询条件
     const where: any = { userId };
     if (!includeInternal) {
-      where.status = { notIn: ['discarded', 'superseded'] };
+      where.status = { notIn: ['superseded'] };
     }
     
     // 添加日期范围过滤
