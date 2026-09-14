@@ -224,6 +224,7 @@ export function buildTeachingSandboxPool(options: {
   learnerProjection?: unknown;
   knowledgeState?: unknown;
   classroomContext?: Record<string, unknown>;
+  classroomEventContext?: Record<string, unknown>;
   teachingControlContext?: unknown;
   scenario?: Record<string, unknown>;
   interactionProfile?: unknown;
@@ -239,6 +240,7 @@ export function buildTeachingSandboxPool(options: {
       learner: { learnerProjection: options.learnerProjection },
       knowledge: { state: options.knowledgeState },
       classroomContext: options.classroomContext || {},
+      classroomEventContext: options.classroomEventContext || {},
       visibleDialogueContext: options.sessionMessages,
       controls: { teachingControlContext: options.teachingControlContext },
       scenario: {
@@ -281,6 +283,7 @@ registerSandboxPoolProvider('teaching', (context) =>
     learnerProjection: context?.learnerProjection,
     knowledgeState: context?.knowledgeState,
     classroomContext: context?.classroomContext,
+    classroomEventContext: context?.classroomEventContext,
     teachingControlContext: context?.teachingControlContext,
     scenario: context?.scenario,
     interactionProfile: context?.interactionProfile,

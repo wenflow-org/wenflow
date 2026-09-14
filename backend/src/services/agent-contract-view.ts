@@ -92,6 +92,7 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'knowledge.state',
     'controls.teachingControlContext',
     'classroomContext',
+    'classroomEventContext',
     'visibleDialogueContext',
   ],
   'profile-agent': [

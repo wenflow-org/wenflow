@@ -1073,6 +1073,7 @@ async function buildTeachingTurnInput(
         knowledgeState: session.knowledgeState,
         classroomContext,
         teachingControlContext,
+        classroomEventContext,
         scenario: scenario as Record<string, unknown>,
         interactionProfile: (context as any).interactionProfile,
       },

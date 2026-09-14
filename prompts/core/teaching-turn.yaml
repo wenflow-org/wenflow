@@ -27,6 +27,10 @@ inputs:
     type: object
     desc: 课堂上下文（阶段/焦点，上轮持久化）
     ref: sandbox:teaching.classroomContext
+  - name: classroomEventContext
+    type: object
+    desc: 近期课堂事件（recentEvents 最近 5 条；如 session-resumed 断线恢复），平台由 classroomEventHistory 派生
+    ref: sandbox:teaching.classroomEventContext
   - name: visibleDialogueContext
     type: object[]
     desc: 最近可见对话（role/content）

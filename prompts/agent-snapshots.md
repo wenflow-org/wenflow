@@ -258,6 +258,7 @@ sandbox:path-agent.subtasks.title
 sandbox:teaching-agent.analysis.confusionPoints
 sandbox:teaching-agent.analysis.understanding
 sandbox:teaching-agent.classroomContext
+sandbox:teaching-agent.classroomEventContext
 sandbox:teaching-agent.controls.teachingControlContext
 sandbox:teaching-agent.evaluation.sessionKtl
 sandbox:teaching-agent.evaluation.sessionLf

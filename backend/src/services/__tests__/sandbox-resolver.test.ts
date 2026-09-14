@@ -101,7 +101,7 @@ describe('sandbox-resolver', () => {
       expect(result.missingCount).toBe(0);
     });
 
-    it('teaching 池：teaching-turn.yaml 声明的 8 键全部可解析', () => {
+    it('teaching 池：teaching-turn.yaml 声明的 9 键全部可解析', () => {
       const pools = buildTeachingSandboxPool({
         sessionMessages: [{ role: 'user', content: 'q' }],
         sessionId: 's1',
@@ -110,6 +110,7 @@ describe('sandbox-resolver', () => {
         learnerProjection: { id: 'u1' },
         knowledgeState: [{ name: 'k1' }],
         classroomContext: { stage: { current: 'teaching' } },
+        classroomEventContext: { recentEvents: [] },
         teachingControlContext: { mode: 'normal' },
         scenario: { subject: 's' },
         interactionProfile: { engagement: 'high' },
@@ -119,6 +120,7 @@ describe('sandbox-resolver', () => {
         'learner.learnerProjection',
         'knowledge.state',
         'classroomContext',
+        'classroomEventContext',
         'visibleDialogueContext',
         'controls.teachingControlContext',
         'scenario',
@@ -182,7 +184,7 @@ describe('sandbox-resolver', () => {
       expect(result!.missingCount).toBe(0);
     });
 
-    it('内置 teaching provider：8 键全部可解析', async () => {
+    it('内置 teaching provider：9 键全部可解析', async () => {
       const result = await checkAgentSandboxRefsFromContext(
         'teaching-turn',
         'teaching',
@@ -194,6 +196,7 @@ describe('sandbox-resolver', () => {
           learnerProjection: { id: 'u1' },
           knowledgeState: [{ name: 'k1' }],
           classroomContext: { stage: { current: 'teaching' } },
+          classroomEventContext: { recentEvents: [] },
           teachingControlContext: { mode: 'normal' },
           scenario: { subject: 's' },
           interactionProfile: { engagement: 'high' },

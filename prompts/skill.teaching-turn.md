@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-turn
-coreHash: 1b5172798f96fabb696ef7b520def04afdf857c136648c37b6e4f08bc49e198d
+coreHash: a81e9bfaaecd4890b77916ab2f4fe0dadaab41abde650c124c2bcd02d29a7039
 coreVersion: 1
 temperature: 0.7
 maxTokens: 12000
@@ -24,6 +24,7 @@ failurePolicy: retry
 - 「learner（object）」`sandbox:teaching.learner.learnerProjection`（编排注入） — 学习者教学投影（画像叙述/困惑点/教学提示）
 - 「knowledge（object）」`sandbox:teaching.knowledge.state`（编排注入） — 知识看板当前状态（points/currentPoint）
 - 「classroomContext（object）」`sandbox:teaching.classroomContext`（编排注入） — 课堂上下文（阶段/焦点，上轮持久化）
+- 「classroomEventContext（object）」`sandbox:teaching.classroomEventContext`（编排注入） — 近期课堂事件（recentEvents 最近 5 条；如 session-resumed 断线恢复），平台由 classroomEventHistory 派生
 - 「visibleDialogueContext（object[]）」`sandbox:teaching.visibleDialogueContext`（编排注入） — 最近可见对话（role/content）
 - 「controls（object）」`sandbox:teaching.controls.teachingControlContext`（编排注入） — 教学控制上下文（priority/allow* 标志）+ 回合模式
 - 「scenario（object）」`sandbox:teaching.scenario`（编排注入） — 任务与路径上下文（taskProfile/cognitiveFrame/pathProgress 等，编排层组装）
