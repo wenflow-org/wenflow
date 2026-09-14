@@ -185,8 +185,11 @@ ORDER BY avg_prompt DESC;
 | skill | 相邻对数 | 当前可缓存前缀 | 改造后 | **提升** |
 |---|---:|---:|---:|---:|
 | **stage-designer** | 194 | 0.9% | 61.2% | **+60.4pp** |
+| **learner-progress-report** | 62 | 11.5% | 50.4% | **+38.9pp** |
 | **teaching-turn** | 199 | 16.8% | 36.1% | **+19.3pp** |
 | **adaptive-guidance-copy** | 198 | 0.2% | 15.3% | **+15.0pp** |
+| **teaching-opening-generator** | 109 | 10.3% | 24.8% | **+14.6pp** |
+| **virtual-learner-path-evaluator** | 195 | 38.5% | 52.0% | **+13.5pp** |
 | **virtual-learner-learn-turn-simulator** | 198 | 19.7% | 28.7% | **+9.0pp** |
 
 ### 7.2.1 缓存 token 收益（估算）
@@ -199,9 +202,12 @@ ORDER BY avg_prompt DESC;
 | adaptive-guidance-copy | 655 | 40,150 | 6,022 | ~3.9M |
 | stage-designer | 1,138 | 3,446 | 2,081 | ~2.4M |
 | learn-turn-sim | 2,673 | 9,648 | 868 | ~2.3M |
-| **合计** | | | | **≈ 19.1M tokens** |
+| virtual-learner-path-evaluator | 189 | 7,193 | 971 | ~0.18M |
+| teaching-opening-generator | 115 | 1,585 | 231 | ~0.03M |
+| learner-progress-report | 62 | 352 | 136 | ~0.01M |
+| **合计** | | | | **≈ 19.3M tokens** |
 
-即：这 4 个 skill 在历史样本区间内，约 **1,910 万 tokens 从 cache-miss 变为 cache-hit**（按缓存折扣价计即直接降本）。
+即：这 7 个 skill 在历史样本区间内，约 **1,930 万 tokens 从 cache-miss 变为 cache-hit**（按缓存折扣价计即直接降本）。
 
 > 说明：本表是**确定性**测量（真实 payload + 真实键序），但仍是**前缀上界**；实际命中受 provider 路由影响（best-effort），须以真 LLM A/B 佐证（见 §7.6）。
 
@@ -214,6 +220,11 @@ ORDER BY avg_prompt DESC;
 |---|---|
 | `teaching-turn` | 稳定块（scenario 洁版 / promptDirectives / learner）前置，逐回合变化键全部后置；去 `recentDialogueContext` 重复 |
 | `stage-designer` | `cognitiveCore`/`normalizedInput` 前置；`milestone`/`previousMilestone`/`repairHints` 后置 |
+| `adaptive-guidance-copy` | `view`/`path` 前置；`learner`/`learningState`/`wrapup`/`advisory` 后置 |
+| `virtual-learner-learn-turn-simulator` | `task`/`personaAnchorHint`/`story`/`learner` 前置，逐回合状态块后置 |
+| `teaching-opening-generator` | `learner`/`openingMode` 前置 |
+| `learner-progress-report` | `signals` 前置 |
+| `virtual-learner-path-evaluator` | `task`/`personaAnchorHint`/`goalState` 前置，`pathProposal`/`previousReaction` 后置 |
 
 默认路径字节不变（`tsc` 0、payload 快照与单测全绿）。
 
