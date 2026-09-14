@@ -341,8 +341,8 @@ const nameProblems = computed(() => {
   const name = form.value.name.trim()
   if (!name) return '字段名必填'
   if (!nameSegmentsOk.value) return '命名非法：每段须小写字母开头，仅含字母/数字/下划线，可点分嵌套'
-  if (nameDup.value === 'full') return '✗ 与现有 core 字段 / 编排 fieldId 重复（如需调整请走既有编辑面）'
-  if (nameDup.value === 'root' && !isNested.value) return '✗ 顶层名与现有 core 字段首段重复'
+  if (nameDup.value === 'full') return '✗ 与现有字段重复（核心声明或编排 fieldId，如需调整请走既有编辑面）'
+  if (nameDup.value === 'root' && !isNested.value) return '✗ 顶层名与现有核心字段首段重复'
   return ''
 })
 
@@ -423,10 +423,10 @@ function errText(e: unknown): string {
   const raw = d?.error ? (typeof d.error === 'string' ? d.error : d.error.message) : r?.message
   const code = d?.code || ''
   const map: Record<string, string> = {
-    FIELD_EXISTS: '字段已存在（core fields 或编排 fieldId 重复），如需调整请走既有编辑面',
-    FIELD_NOT_FOUND: '字段不存在（core fields / 编排 fields / 编排 routings 三处需同名登记，可能已被删除或仅存在于一侧）',
+    FIELD_EXISTS: '字段已存在（核心声明或编排 fieldId 重复），如需调整请走既有编辑面',
+    FIELD_NOT_FOUND: '字段不存在：核心声明与编排登记需同名（可能已被删除或仅存在于一侧）',
     FIELD_SYSTEM_LOCKED: '该字段由平台锁定（平台派生 / 代码消费）：此处只读，请改编排文件',
-    FIELD_CONSUMED: '字段仍被下游消费（其他 agent 路由引用 或 其他 skill 的 core inputs 引用），禁止删除；请先解除下游消费',
+    FIELD_CONSUMED: '字段仍被下游引用（其他 Agent 路由 或 其他 Skill 的输入声明），禁止删除；请先解除引用',
     FIELD_NAME_REQUIRED: '字段名校验失败',
     FIELD_NAME_INVALID: '字段名校验失败',
     FIELD_NAME_PLATFORM: '字段名是平台包装字段（success/quality/stage/raw），禁止出现在字段表',
@@ -445,14 +445,14 @@ function errText(e: unknown): string {
     ORCHESTRATION_FILE_MISSING: '编排文件不存在',
     CORE_FILE_INVALID: '核心文件 schema 不合法',
     ORCHESTRATION_FILE_INVALID: '编排文件解析失败',
-    NESTED_ROOT_NOT_OBJECT: '嵌套字段的顶层不是 object',
-    HANDOFF_SELF_LOOP: 'handoff 自环（指向自身）',
-    HANDOFF_TARGET_UNKNOWN: 'handoff 目标不在 manifest，也不是阶段名',
+    NESTED_ROOT_NOT_OBJECT: '嵌套字段的顶层不是对象（object）',
+    HANDOFF_SELF_LOOP: '流转去向指向自身（自环）',
+    HANDOFF_TARGET_UNKNOWN: '流转目标不在清单（manifest）中，也不是阶段名',
     RENDER_INTERNAL_CONFLICT: '「对外可见」与「仅内部流转」不能同时为真，仅控制信号字段允许',
     ROUTING_NO_FLOW: '缺少流转去向：请设置移交目标（公开回复 / 画像终点除外）',
     CORE_VALIDATION_FAILED: '修改后核心文件未通过校验',
     ORCHESTRATION_VALIDATION_FAILED: '修改后编排文件未通过校验',
-    FIELDS_SYNC_RECHECK_FAILED: 'fields-sync 复检未通过，已回滚双文件（恢复原内容）',
+    FIELDS_SYNC_RECHECK_FAILED: '同步复检未通过，已回滚双文件（恢复原内容）',
     ORCHESTRATION_WRITE_FAILED: '编排文件写盘失败，core 已回滚原内容'
   }
   const title = code ? (map[code] || (isEdit.value ? '改字段被拒绝' : '加字段被拒绝')) : (isEdit.value ? '改字段失败' : '加字段失败')

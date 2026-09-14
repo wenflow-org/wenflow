@@ -515,8 +515,8 @@ function canEditRow(row: Record<string, any>): boolean {
 }
 function editTitleOf(row: Record<string, any>): string {
   if (row.lockLevel === 'system-locked') return '平台锁定字段只读（平台派生 / 代码消费），请改编排文件'
-  if (row.coreState === 'missing') return 'core 缺项：无法编辑 core 侧（先在协议 tab 补声明，或走编排弹窗）'
-  return '编辑字段（core 声明 + 编排路由 + DB 对账原子修改）'
+  if (row.coreState === 'missing') return '核心缺项：无法编辑核心侧（先在协议 tab 补声明，或走编排弹窗）'
+  return '编辑字段：核心声明、编排路由与数据库一次性原子修改'
 }
 function canDeleteRow(row: Record<string, any>): boolean {
   return row.lockLevel !== 'system-locked'
