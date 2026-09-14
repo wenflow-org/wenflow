@@ -308,9 +308,9 @@ const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' :
 .summary-value { font-size: 13px; font-weight: 600; color: var(--green, #2e7d32); }
 .completion-section { margin-bottom: 16px; padding: 12px; background-color: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; }
 .advisory-section { border: 1px solid var(--line, #dfe7d6); }
-.advisory-section--high { border-color: #efc9b2; background: color-mix(in srgb, var(--red, #ef7578) 8%, var(--surface)); }
-.advisory-section--medium { border-color: #ecd9a6; background: color-mix(in srgb, var(--amber, #f4aa46) 10%, var(--surface)); }
-.advisory-section--low { border-color: #b7ddb6; background: color-mix(in srgb, var(--green, #1e9e58) 8%, var(--surface)); }
+.advisory-section--high { border-color: color-mix(in srgb, var(--red, #ef7578) 45%, var(--line, #dfe7d6)); background: color-mix(in srgb, var(--red, #ef7578) 8%, var(--surface)); }
+.advisory-section--medium { border-color: color-mix(in srgb, var(--amber, #f4aa46) 45%, var(--line, #dfe7d6)); background: color-mix(in srgb, var(--amber, #f4aa46) 10%, var(--surface)); }
+.advisory-section--low { border-color: color-mix(in srgb, var(--green, #1e9e58) 40%, var(--line, #dfe7d6)); background: color-mix(in srgb, var(--green, #1e9e58) 8%, var(--surface)); }
 .section-title { margin: 0 0 10px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--green, #1b5e20); }
 .section-hint { margin: 0 0 10px; font-size: 12px; color: var(--muted, #607d8b); }
 .review-link { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--red, #b3261e); text-decoration: none; }
@@ -326,8 +326,8 @@ const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' :
 .metric-value { margin-top: 6px; font-size: 22px; font-weight: 700; color: var(--green, #2e7d32); }
 .metric-desc { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted, #607d8b); }
 .metric-card--good { border-color: color-mix(in srgb, var(--green, #1e9e58) 30%, var(--line)); }
-.metric-card--normal { border-color: #d3dcb0; }
-.metric-card--warn { border-color: #efc9b2; }
+.metric-card--normal { border-color: color-mix(in srgb, var(--green, #1e9e58) 30%, var(--line, #dfe7d6)); }
+.metric-card--warn { border-color: color-mix(in srgb, var(--red, #ef7578) 45%, var(--line, #dfe7d6)); }
 .knowledge-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
 .knowledge-item { padding: 10px; border: 1px solid color-mix(in srgb, var(--green, #1e9e58) 18%, var(--line)); border-radius: 8px; background: var(--surface); }
 .knowledge-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }

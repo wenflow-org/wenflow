@@ -1130,8 +1130,8 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
 .gc-btn-danger {
   padding: 8px 16px;
   border-radius: 8px;
-  border: 1px solid var(--mk-red-strong, var(--mk-red));
-  background: var(--mk-red-strong, var(--mk-red));
+  border: 1px solid var(--mk-red-fill, #dc2626);
+  background: var(--mk-red-fill, #dc2626);
   color: #fff;
   font: inherit;
   font-size: var(--mk-fs-12_5);

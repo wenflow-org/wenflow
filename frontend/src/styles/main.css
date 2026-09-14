@@ -62,6 +62,12 @@
   --mk-red: #dc2626;
   --mk-red-bg: #fef2f2;
   --mk-blue-bg: #eff6ff;
+  /* 实心语义底色（配白字）：与 --mk-red/green/amber 分离——后两者暗色下被提亮供文字用，
+     直接当背景会让白字对比不足。实心底在明暗两态都保持“深底”，保障白字 ≥4.5:1。 */
+  --mk-red-fill: #dc2626;
+  --mk-red-fill-strong: #b91c1c;
+  --mk-green-fill: #15803d;
+  --mk-amber-fill: #b45309;
   --mk-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
   --mk-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
 

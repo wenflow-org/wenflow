@@ -792,14 +792,14 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-btn--primary:hover { background: #2b64d8; }
 /* 危险按钮：红底白字（规格对齐 .mk-btn--primary），悬停/按下加深 */
 .mk-btn--danger {
-  background: var(--mk-red, #dc2626);
-  border-color: var(--mk-red, #dc2626);
+  background: var(--mk-red-fill, #dc2626);
+  border-color: var(--mk-red-fill, #dc2626);
   color: #fff;
 }
 .mk-btn--danger:hover,
 .mk-btn--danger:active {
-  background: var(--mk-red-strong, #b91c1c);
-  border-color: var(--mk-red-strong, #b91c1c);
+  background: var(--mk-red-fill-strong, #b91c1c);
+  border-color: var(--mk-red-fill-strong, #b91c1c);
 }
 /* 危险操作「低强调」变体：红字描边，避免大面积实心红稀释警示级别（悬停才实心） */
 .mk-btn--danger-ghost {
@@ -809,8 +809,8 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 }
 .mk-btn--danger-ghost:hover,
 .mk-btn--danger-ghost:active {
-  background: var(--mk-red, #dc2626);
-  border-color: var(--mk-red, #dc2626);
+  background: var(--mk-red-fill, #dc2626);
+  border-color: var(--mk-red-fill, #dc2626);
   color: #fff;
 }
 /* 幽灵按钮：浅蓝底 + 深蓝字 + 蓝描边（次级强调，与主按钮同族） */
@@ -995,7 +995,7 @@ html[data-theme='dark'] {
   .mk-btn:hover { background: #1b2740; }
   .mk-btn--primary:hover { background: #6a9cf3; }
   .mk-btn--danger:hover,
-  .mk-btn--danger:active { background: var(--mk-red-strong); }
+  .mk-btn--danger:active { background: var(--mk-red-fill-strong, #b91c1c); }
   .mk-btn--ghost { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.4); color: #9db8f5; }
   .mk-btn--ghost:hover { background: rgba(91, 141, 239, 0.26); }
   .mk-btn--ok { background: rgba(74, 222, 128, 0.14); border-color: rgba(74, 222, 128, 0.35); color: #6ee7a0; }
@@ -1298,7 +1298,7 @@ html[data-theme='dark'] {
   padding: 6px 14px;
   border-radius: 999px;
   border: 0;
-  background: var(--mk-red, #dc2626);
+  background: var(--mk-red-fill, #dc2626);
   color: #fff;
   font: inherit;
   font-size: 12px;

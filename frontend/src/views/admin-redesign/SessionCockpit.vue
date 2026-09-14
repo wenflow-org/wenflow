@@ -2615,7 +2615,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-topbar__btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .cp-topbar__btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
 .cp-topbar__btn--primary:hover:not(:disabled) { opacity: 0.9; }
-.cp-topbar__btn--danger { background: var(--mk-red-strong, var(--mk-red)); border-color: var(--mk-red-strong, var(--mk-red)); color: #fff; }
+.cp-topbar__btn--danger { background: var(--mk-red-fill, #dc2626); border-color: var(--mk-red-fill, #dc2626); color: #fff; }
 .cp-topbar__sep { width: 1px; height: 20px; background: var(--mk-line); flex-shrink: 0; margin: 0 2px; }
 .cp-topbar__autopilot {
   font-size: var(--mk-fs-12);
@@ -2935,7 +2935,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .cp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
 .cp-btn--primary:hover:not(:disabled) { color: #fff; opacity: 0.9; }
-.cp-danger-btn { background: var(--mk-red-strong, var(--mk-red)); border-color: var(--mk-red-strong, var(--mk-red)); color: #fff; }
+.cp-danger-btn { background: var(--mk-red-fill, #dc2626); border-color: var(--mk-red-fill, #dc2626); color: #fff; }
 .cp-danger-btn:hover:not(:disabled) { color: #fff; opacity: 0.9; }
 .cp-turn-cap {
   width: 56px; padding: 5px 6px; border-radius: 6px; border: 1px solid var(--mk-line);
@@ -2964,7 +2964,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   padding: 0 5px; border-radius: 99px; font-size: var(--mk-fs-11); font-weight: 700;
   background: #eef2ff; color: #4453a1; white-space: nowrap;
 }
-.cp-log__phase--error { background: var(--mk-red); color: #fff; }
+.cp-log__phase--error { background: var(--mk-red-fill, #dc2626); color: #fff; }
 .cp-log__text { color: var(--mk-muted); word-break: break-all; min-width: 0; flex: 1 1 auto; }
 .cp-log--error .cp-log__text { color: var(--mk-red); font-weight: 600; }
 .cp-log__dur { color: var(--mk-faint); font-family: var(--mk-mono); font-size: var(--mk-fs-11); white-space: nowrap; font-variant-numeric: tabular-nums; }

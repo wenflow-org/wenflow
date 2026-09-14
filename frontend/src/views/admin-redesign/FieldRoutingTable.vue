@@ -907,12 +907,12 @@ watch(() => props.stage, () => void loadStage());
 }
 .frt__prune--danger {
   border-color: rgba(220, 38, 38, 0.45);
-  background: var(--mk-red, #dc2626);
+  background: var(--mk-red-fill, #dc2626);
   color: #fff;
 }
 .frt__prune--danger:hover {
-  background: var(--mk-red-strong);
-  border-color: var(--mk-red-strong);
+  background: var(--mk-red-fill-strong, #b91c1c);
+  border-color: var(--mk-red-fill-strong, #b91c1c);
 }
 .frt__agent { margin-bottom: 18px; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 12px; overflow: hidden; background: var(--mk-surface, #fff); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
 .frt__agenthead { padding: 10px 14px; background: #fafbfd; border-bottom: 1px solid var(--mk-line, #e6ebf4); display: flex; align-items: baseline; gap: 10px; }

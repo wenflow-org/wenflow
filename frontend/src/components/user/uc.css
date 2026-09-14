@@ -476,6 +476,9 @@ table.uc-table {
   animation: uc-shimmer 1.4s infinite;
   border-radius: 6px;
 }
+[data-theme='dark'] .uc-skeleton {
+  background: linear-gradient(90deg, #1d2739 25%, #253049 50%, #1d2739 75%);
+}
 
 @keyframes uc-shimmer {
   0% { background-position: 200% 0; }

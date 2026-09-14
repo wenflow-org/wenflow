@@ -47,8 +47,8 @@ const meta = computed(
   background: #94a3b8;
 }
 .ach-icon--info { background: var(--mk-blue); }
-.ach-icon--ok { background: var(--mk-green); }
-.ach-icon--warn { background: var(--mk-amber); }
+.ach-icon--ok { background: var(--mk-green-fill, #15803d); }
+.ach-icon--warn { background: var(--mk-amber-fill, #b45309); }
 .ach-icon--mastery { background: #7c3aed; }
 .ach-icon--muted { background: #94a3b8; }
 .ach-icon--lg {

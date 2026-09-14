@@ -98,22 +98,22 @@ const dismissToast = (item: ToastItem) => {
 }
 
 .toast-icon--success {
-  color: #166534;
+  color: var(--mk-green, #166534);
   background: rgba(22, 163, 74, 0.1);
 }
 
 .toast-icon--error {
-  color: #991b1b;
+  color: var(--mk-red, #991b1b);
   background: rgba(220, 38, 38, 0.1);
 }
 
 .toast-icon--warning {
-  color: #92400e;
+  color: var(--mk-amber, #92400e);
   background: rgba(217, 119, 6, 0.1);
 }
 
 .toast-icon--info {
-  color: #1e40af;
+  color: var(--mk-blue, #1e40af);
   background: rgba(37, 99, 235, 0.1);
 }
 

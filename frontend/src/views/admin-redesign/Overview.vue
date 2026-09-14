@@ -375,6 +375,9 @@ import MkKpi from './MkKpi.vue';
 import MkChart from './MkChart.vue';
 import type { EChartsCoreOption } from 'echarts/core';
 import { useSafePolling } from '@/composables/useSafePolling';
+import { useIsDark } from '@/composables/useIsDark';
+
+const isDark = useIsDark();
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
@@ -465,14 +468,14 @@ const pulseChartOption = computed<EChartsCoreOption>(() => {
     xAxis: {
       type: 'category',
       data: labels,
-      axisLine: { lineStyle: { color: 'rgba(23,32,51,0.15)' } },
+      axisLine: { lineStyle: { color: isDark.value ? 'rgba(230,237,247,0.22)' : 'rgba(23,32,51,0.15)' } },
       axisTick: { show: false },
       axisLabel: { color: '#8492ab', fontSize: 10, interval: 3 },
     },
     yAxis: {
       type: 'value',
       minInterval: 1,
-      splitLine: { lineStyle: { color: 'rgba(23,32,51,0.06)' } },
+      splitLine: { lineStyle: { color: isDark.value ? 'rgba(230,237,247,0.08)' : 'rgba(23,32,51,0.06)' } },
       axisLabel: { color: '#8492ab', fontSize: 10 },
     },
     series: [
@@ -505,14 +508,14 @@ const trend7dChartOption = computed<EChartsCoreOption>(() => {
     xAxis: {
       type: 'category',
       data: labels,
-      axisLine: { lineStyle: { color: 'rgba(23,32,51,0.15)' } },
+      axisLine: { lineStyle: { color: isDark.value ? 'rgba(230,237,247,0.22)' : 'rgba(23,32,51,0.15)' } },
       axisTick: { show: false },
       axisLabel: { color: '#8492ab', fontSize: 10 },
     },
     yAxis: {
       type: 'value',
       minInterval: 1,
-      splitLine: { lineStyle: { color: 'rgba(23,32,51,0.06)' } },
+      splitLine: { lineStyle: { color: isDark.value ? 'rgba(230,237,247,0.08)' : 'rgba(23,32,51,0.06)' } },
       axisLabel: { color: '#8492ab', fontSize: 10 },
     },
     series: [
@@ -1314,8 +1317,8 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
 .feed__item--bad:hover { background: #fff2f2; }
 .feed__item--warn:hover { background: #fffaed; }
 .feed__item .feed__body { flex: 1; min-width: 0; display: grid; gap: 1px; }
-.feed__item--bad strong { color: #b91c1c; }
-.feed__item--warn strong { color: #b45309; }
+.feed__item--bad strong { color: var(--mk-red, #b91c1c); }
+.feed__item--warn strong { color: var(--mk-amber, #b45309); }
 .feed__go { font-style: normal; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-blue); flex-shrink: 0; align-self: center; opacity: 0; transition: opacity 0.12s ease; }
 .feed__item:hover .feed__go { opacity: 1; }
 /* 普通事件折叠开关 */

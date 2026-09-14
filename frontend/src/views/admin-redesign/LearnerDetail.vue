@@ -521,6 +521,9 @@ import { toast } from '@/utils/toast'
 import type { EChartsCoreOption } from 'echarts/core'
 import MkChart from './MkChart.vue'
 import MkKpi from './MkKpi.vue'
+import { useIsDark } from '@/composables/useIsDark'
+
+const isDark = useIsDark()
 
 interface Detail {
   name: string
@@ -1155,7 +1158,7 @@ const loadChartOption = computed<EChartsCoreOption>(() => {
       type: 'category',
       data: labels,
       boundaryGap: false,
-      axisLine: { lineStyle: { color: 'rgba(23,32,51,0.15)' } },
+      axisLine: { lineStyle: { color: isDark.value ? 'rgba(230,237,247,0.22)' : 'rgba(23,32,51,0.15)' } },
       axisTick: { show: false },
       axisLabel: { color: '#8492ab', fontSize: 11, interval: Math.max(0, Math.floor(labels.length / 8)) },
     },
@@ -1163,7 +1166,7 @@ const loadChartOption = computed<EChartsCoreOption>(() => {
       type: 'value',
       min: -4,
       max: 12,
-      splitLine: { lineStyle: { color: 'rgba(23,32,51,0.06)' } },
+      splitLine: { lineStyle: { color: isDark.value ? 'rgba(230,237,247,0.08)' : 'rgba(23,32,51,0.06)' } },
       axisLabel: { color: '#8492ab', fontSize: 11 },
     },
     series: [

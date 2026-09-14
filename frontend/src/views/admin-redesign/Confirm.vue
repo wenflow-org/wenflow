@@ -148,14 +148,14 @@ function confirm() {
 /* 危险按钮：红底白字。复用全站 .mk-btn--danger 语义类（而非自定义类名），
    否则在 admin 页会与 shared.css 的 .mk-btn 同特异性竞争、被后者按层叠顺序覆盖为白底。 */
 .mk-btn--danger {
-  border: 1px solid var(--mk-red, #dc2626);
-  background: var(--mk-red, #dc2626);
+  border: 1px solid var(--mk-red-fill, #dc2626);
+  background: var(--mk-red-fill, #dc2626);
   color: #fff;
 }
-.mk-btn--danger:hover { background: var(--mk-red-strong, #b91c1c); border-color: var(--mk-red-strong, #b91c1c); }
+.mk-btn--danger:hover { background: var(--mk-red-fill-strong, #b91c1c); border-color: var(--mk-red-fill-strong, #b91c1c); }
 /* 暗色覆写：与 shared.css 同源同值（Confirm 独立承载，不依赖 admin shared.css 加载） */
 html[data-theme='dark'] .mk-modal { background: rgba(3, 7, 14, 0.62); }
 html[data-theme='dark'] .mk-btn:hover { background: #1b2740; }
 html[data-theme='dark'] .mk-btn--primary:hover { background: #6a9cf3; }
-html[data-theme='dark'] .mk-btn--danger:hover { background: var(--mk-red-strong, #ef4444); border-color: var(--mk-red-strong, #ef4444); }
+html[data-theme='dark'] .mk-btn--danger:hover { background: var(--mk-red-fill-strong, #b91c1c); border-color: var(--mk-red-fill-strong, #b91c1c); }
 </style>

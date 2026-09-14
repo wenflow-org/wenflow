@@ -263,30 +263,30 @@ const metricOptions: Array<{ key: MetricKey; label: string }> = [
 ];
 
 function toneOf(key: MetricKey, v: number): { tone: string; color: string; note: string } {
-  if (v === null || v === undefined || Number.isNaN(v)) return { tone: 'blue', color: '#5b6577', note: '积累中' };
+  if (v === null || v === undefined || Number.isNaN(v)) return { tone: 'blue', color: 'var(--muted)', note: '积累中' };
   if (key === 'lsb') {
     // LSB = KTL - LF（-100 ~ +100），分档对齐后端 <0/<20/<40/≥40 与 heroTitle 文案
-    if (v < 0) return { tone: 'red', color: '#ef7578', note: '严重疲劳，优先休息' };
-    if (v >= 40) return { tone: 'green', color: '#31b16f', note: '精力充沛' };
-    if (v >= 20) return { tone: 'blue', color: '#3478f6', note: '最优训练区' };
-    return { tone: 'amber', color: '#d9932e', note: '需要休息' };
+    if (v < 0) return { tone: 'red', color: 'var(--red-ink)', note: '严重疲劳，优先休息' };
+    if (v >= 40) return { tone: 'green', color: 'var(--green-ink)', note: '精力充沛' };
+    if (v >= 20) return { tone: 'blue', color: 'var(--blue-deep)', note: '最优训练区' };
+    return { tone: 'amber', color: 'var(--amber-ink)', note: '需要休息' };
   }
   if (key === 'ktl') {
-    if (v > 0) return { tone: 'purple', color: '#8d6bff', note: '上升' };
-    if (v === 0) return { tone: 'blue', color: '#3478f6', note: '持平' };
-    return { tone: 'amber', color: '#d9932e', note: '下降' };
+    if (v > 0) return { tone: 'purple', color: 'var(--accent)', note: '上升' };
+    if (v === 0) return { tone: 'blue', color: 'var(--blue-deep)', note: '持平' };
+    return { tone: 'amber', color: 'var(--amber-ink)', note: '下降' };
   }
   // lss / lf 越低越好
-  if (v <= 35) return { tone: 'green', color: '#31b16f', note: key === 'lss' ? '适中' : '较低' };
-  if (v <= 65) return { tone: 'amber', color: '#d9932e', note: key === 'lss' ? '偏高' : '偏高' };
-  return { tone: 'red', color: '#ef7578', note: '过高' };
+  if (v <= 35) return { tone: 'green', color: 'var(--green-ink)', note: key === 'lss' ? '适中' : '较低' };
+  if (v <= 65) return { tone: 'amber', color: 'var(--amber-ink)', note: key === 'lss' ? '偏高' : '偏高' };
+  return { tone: 'red', color: 'var(--red-ink)', note: '过高' };
 }
 
 const metricCards = computed(() =>
   metricOptions.map((m) => {
     // P1 修复：加载失败显示「读取失败」而非伪装「暂无数据」
     if (currentLoadFailed.value) {
-      return { ...m, value: '—', unit: m.key === 'lsb' ? '' : '分', tone: 'red', color: '#ef7578', note: '读取失败' };
+      return { ...m, value: '—', unit: m.key === 'lsb' ? '' : '分', tone: 'red', color: 'var(--red-ink)', note: '读取失败' };
     }
     const v = current.value?.[m.key];
     const t = toneOf(m.key, v);
