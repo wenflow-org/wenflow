@@ -99,10 +99,33 @@
           </colgroup>
           <thead>
             <tr>
-              <th>会话</th>
-              <th v-if="!tsHiddenCols.has('user')">用户</th>
-              <th v-if="!tsHiddenCols.has('status')">状态</th>
-              <th v-if="!tsHiddenCols.has('interact')">互动</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="tsSortState('topic')"
+                @click="toggleTsSort('topic')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('topic')">会话<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="!tsHiddenCols.has('user')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="tsSortState('user')"
+                @click="toggleTsSort('user')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="!tsHiddenCols.has('status')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="tsSortState('status')"
+                @click="toggleTsSort('status')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="!tsHiddenCols.has('interact')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="tsSortState('interact')"
+                @click="toggleTsSort('interact')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">互动<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!tsHiddenCols.has('progress')">进度</th>
               <th v-if="!tsHiddenCols.has('output')">产物</th>
               <th v-if="!tsHiddenCols.has('attention')">关注</th>
@@ -326,6 +349,7 @@ import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
+import { useTableSort } from './useTableSort'
 import MkCols from './MkCols.vue'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
@@ -383,7 +407,7 @@ async function fetchRows(force = false): Promise<boolean> {
   // 页面级 TTL 缓存：切换页面回来时跳过重复请求（轮询/显式刷新传 force 不受影响）
   if (!force && isPageCacheFresh('teaching-sessions') && rows.value.length) return true
   try {
-    const res = await adminTeachingSessionsApi.list({ limit: 100, includeTest: includeTest.value })
+    const res = await adminTeachingSessionsApi.list({ limit: 1000, includeTest: includeTest.value })
     const body = res.data?.data ?? res.data ?? {}
     const items = body.items || []
     rows.value = items.map((s: Record<string, unknown>) => mapRow(s))
@@ -538,6 +562,17 @@ const statusOptions = [
   { value: 'discarded', label: '已废弃' }
 ]
 
+/* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
+const { toggle: toggleTsSort, sortState: tsSortState, sortRows: sortTsRows } = useTableSort<Row>({
+  accessors: {
+    topic: (r) => r.topic,
+    user: (r) => r.userName,
+    status: (r) => r.status,
+    interact: (r) => r.duration
+  },
+  storageKey: 'wf_teaching_sessions_sort'
+})
+
 const filtered = computed(() => {
   let list = rows.value
   if (pill.value === 'active') list = list.filter((r) => r.status === 'active')
@@ -556,7 +591,7 @@ const filtered = computed(() => {
   }
   const q = keyword.value.trim().toLowerCase()
   if (q) list = list.filter((r) => `${r.topic} ${r.userName} ${r.email} ${r.id}`.toLowerCase().includes(q))
-  return list
+  return sortTsRows(list)
 })
 
 const isFiltered = computed(() => pill.value !== 'all' || !!statusFilter.value || !!dateFilter.value || !!keyword.value.trim())

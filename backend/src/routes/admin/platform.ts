@@ -2394,7 +2394,7 @@ function parseJsonSafe<T>(raw: string | null | undefined, fallback: T): T {
 router.get('/teaching-sessions', async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit as string) || 20));
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit as string) || 20));
     const userId = (req.query.userId as string) || undefined;
     const status = (req.query.status as string) || undefined;
     const onlyWithAdvisory = String(req.query.onlyWithAdvisory || '') === 'true';

@@ -79,12 +79,27 @@
           </colgroup>
           <thead>
             <tr>
-              <th>用户</th>
-              <th class="mk-th--right">评分</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="fbSortState('user')"
+                @click="toggleFbSort('user')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--right mk-th--sortable"
+                :aria-sort="fbSortState('rating')"
+                @click="toggleFbSort('rating')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('rating')">评分<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th>评论</th>
               <th>节点</th>
               <th>策略</th>
-              <th>状态</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="fbSortState('status')"
+                @click="toggleFbSort('status')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th>时间</th>
               <th class="mk-th--right">操作</th>
             </tr>
@@ -221,6 +236,7 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import Pagination from './Pagination.vue'
+import { useTableSort } from './useTableSort'
 import MkEmptyState from './MkEmptyState.vue'
 
 type Status = 'new' | 'triaged' | 'resolved' | 'dismissed'
@@ -301,14 +317,24 @@ function mapRow(f: Record<string, unknown>): Row {
   }
 }
 
+/* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
+const { toggle: toggleFbSort, sortState: fbSortState, sortRows: sortFbRows } = useTableSort<Row>({
+  accessors: {
+    user: (r) => r.userName,
+    rating: (r) => r.rating,
+    status: (r) => r.status
+  },
+  storageKey: 'wf_feedback_sort'
+})
+
 const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
-  return rows.value.filter((r) => {
+  return sortFbRows(rows.value.filter((r) => {
     if (statusFilter.value && r.status !== statusFilter.value) return false
     if (lowOnly.value && r.rating > 2) return false
     if (!k) return true
     return `${r.userName} ${r.userEmail} ${r.comment} ${r.taskId}`.toLowerCase().includes(k)
-  })
+  }))
 })
 
 const isFiltered = computed(() => !!keyword.value.trim() || !!statusFilter.value || lowOnly.value)
@@ -339,7 +365,7 @@ async function load(force?: boolean) {
   loadFailed.value = false
   try {
     const [listRes, newRes, trendRes] = await Promise.all([
-      adminFeedbackApi.list({ limit: 100 }),
+      adminFeedbackApi.list({ limit: 1000 }),
       adminFeedbackApi.list({ limit: 1, status: 'new' }).catch(() => null),
       adminFeedbackApi.getTrend(30).catch(() => null)
     ])

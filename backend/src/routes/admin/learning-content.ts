@@ -29,7 +29,7 @@ router.get('/paths', async (req: Request, res: Response) => {
     if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
 
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+    const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 20));
     const skip = (page - 1) * limit;
 
     const status = typeof req.query.status === 'string' && req.query.status.trim() ? String(req.query.status).trim() : undefined;

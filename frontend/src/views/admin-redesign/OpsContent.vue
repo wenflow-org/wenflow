@@ -83,12 +83,41 @@
           </colgroup>
           <thead>
             <tr>
-              <th>路径</th>
-              <th v-if="!hiddenCols.has('subject')">主题</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="ocSortState('path')"
+                @click="toggleOcSort('path')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('path')">路径<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="!hiddenCols.has('subject')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="ocSortState('subject')"
+                @click="toggleOcSort('subject')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('subject')">主题<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!hiddenCols.has('user')">用户</th>
-              <th v-if="!hiddenCols.has('status')">状态</th>
-              <th v-if="!hiddenCols.has('progress')">进度</th>
-              <th v-if="!hiddenCols.has('updated')">更新</th>
+              <th
+                v-if="!hiddenCols.has('status')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="ocSortState('status')"
+                @click="toggleOcSort('status')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="!hiddenCols.has('progress')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="ocSortState('progress')"
+                @click="toggleOcSort('progress')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('progress')">进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="!hiddenCols.has('updated')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="ocSortState('updated')"
+                @click="toggleOcSort('updated')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -198,6 +227,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { timeAgo, errMsg, shortId } from './live'
 import { intent } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
+import { useTableSort } from './useTableSort'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -252,14 +282,26 @@ const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   return 'ok'
 })
 
+/* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
+const { toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows } = useTableSort<PathRow>({
+  accessors: {
+    path: (p) => p.title,
+    subject: (p) => p.subject || '',
+    status: (p) => p.status,
+    progress: (p) => progressPct(p),
+    updated: (p) => (p.updatedAt ? new Date(p.updatedAt).getTime() : null)
+  },
+  storageKey: 'wf_ops_content_sort'
+})
+
 /* 客户端过滤（与教学会话/目标对话 tab 一致：全量拉最近 100 条后本地即时过滤，无「查询」按钮） */
 const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
-  return rows.value.filter((p) => {
+  return sortOcRows(rows.value.filter((p) => {
     if (statusFilter.value && p.status !== statusFilter.value) return false
     if (!k) return true
     return `${p.title} ${p.user?.name || ''} ${p.user?.email || ''} ${p.subject || ''}`.toLowerCase().includes(k)
-  })
+  }))
 })
 const isFiltered = computed(() => !!keyword.value.trim() || !!statusFilter.value)
 function clearFilters() {
@@ -300,7 +342,7 @@ async function reload() {
     /* 全量拉最近 100 条后客户端过滤（与教学会话/目标对话一致；筛选即时响应，无服务端往返） */
     const res = await adminLearningContentApi.listPaths({
       page: 1,
-      limit: 100,
+      limit: 1000,
       includeTest: includeTest.value || undefined,
     })
     const body = res.data?.data ?? res.data ?? {}

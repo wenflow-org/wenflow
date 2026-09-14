@@ -102,10 +102,27 @@
           </colgroup>
           <thead>
             <tr>
-              <th>用户</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="gcSortState('user')"
+                @click="toggleGcSort('user')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!gcHiddenCols.has('summary')">目标摘要</th>
-              <th v-if="!gcHiddenCols.has('status')">状态</th>
-              <th v-if="!gcHiddenCols.has('stage')">阶段</th>
+              <th
+                v-if="!gcHiddenCols.has('status')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="gcSortState('status')"
+                @click="toggleGcSort('status')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="!gcHiddenCols.has('stage')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="gcSortState('stage')"
+                @click="toggleGcSort('stage')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('stage')">阶段<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!gcHiddenCols.has('path')">路径</th>
               <th v-if="!gcHiddenCols.has('created')">创建时间</th>
               <th class="mk-th--right">操作</th>
@@ -309,6 +326,7 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
+import { useTableSort } from './useTableSort'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from './MkCols.vue'
 import OpsContent from './OpsContent.vue'
@@ -564,13 +582,23 @@ function mapRow(c: Record<string, unknown>): Row {
   }
 }
 
+/* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
+const { toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows } = useTableSort<Row>({
+  accessors: {
+    user: (r) => r.userName,
+    status: (r) => r.status,
+    stage: (r) => r.stageIndex
+  },
+  storageKey: 'wf_goal_conversations_sort'
+})
+
 const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
-  return rows.value.filter((r) => {
+  return sortGcRows(rows.value.filter((r) => {
     if (statusFilter.value && r.status !== statusFilter.value) return false
     if (!k) return true
     return `${r.userName} ${r.userEmail} ${r.summary}`.toLowerCase().includes(k)
-  })
+  }))
 })
 
 const isFiltered = computed(() => !!keyword.value.trim() || !!statusFilter.value)
@@ -601,7 +629,7 @@ async function load(force = false) {
   loadError.value = ''
   try {
     const [listRes, statsRes] = await Promise.all([
-      adminGoalConversationsApi.list({ limit: 100, includeTest: includeTest.value }),
+      adminGoalConversationsApi.list({ limit: 1000, includeTest: includeTest.value }),
       adminGoalConversationsApi.getStats().catch(() => null)
     ])
     const body = listRes.data?.data ?? listRes.data ?? {}

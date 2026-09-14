@@ -161,7 +161,7 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     await flushPromises();
     await nextTick();
     await flushPromises();
-    expect(tsListMock).toHaveBeenCalledWith({ limit: 100, includeTest: false });
+    expect(tsListMock).toHaveBeenCalledWith({ limit: 1000, includeTest: false });
     expect(wrapper.text()).toContain('仅真实');
     expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
     wrapper.unmount();
@@ -188,7 +188,7 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     await findBtn(wrapper, '含模拟').trigger('click');
     await flushPromises();
     await nextTick();
-    expect(tsListMock).toHaveBeenLastCalledWith({ limit: 100, includeTest: true });
+    expect(tsListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true });
     expect(wrapper.text()).toContain('含模拟');
     const tags = wrapper.findAll('.mk-badge--sm');
     expect(tags).toHaveLength(2);
@@ -206,7 +206,7 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
     const wrapper = mount(GoalConversations, { global: { plugins: [mockRouter()] } });
     await flushPromises();
     await flushPromises();
-    expect(gcListMock).toHaveBeenCalledWith({ limit: 100, includeTest: false });
+    expect(gcListMock).toHaveBeenCalledWith({ limit: 1000, includeTest: false });
     expect(wrapper.text()).toContain('仅真实');
     expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
 
@@ -228,7 +228,7 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
     await findBtn(wrapper, '含模拟').trigger('click');
     await flushPromises();
     await nextTick();
-    expect(gcListMock).toHaveBeenLastCalledWith({ limit: 100, includeTest: true });
+    expect(gcListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true });
     expect(wrapper.text()).toContain('含模拟');
     const tag = wrapper.find('.mk-badge--virtual');
     expect(tag.exists()).toBe(true);
