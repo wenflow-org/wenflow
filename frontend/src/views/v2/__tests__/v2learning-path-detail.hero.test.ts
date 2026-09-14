@@ -78,4 +78,26 @@ describe('V2LearningPathDetail Hero', () => {
     expect(w.find('.hero .ai-note').exists()).toBe(false);
     expect(w.find('.detail__ai-note .ai-note').exists()).toBe(true);
   });
+
+  it('设计意图卡片标题渲染 sceneSummary.title，并带折叠类（长文不糊屏）', async () => {
+    getPathDetail.mockResolvedValue({
+      id: 'lp_test',
+      title: '二战在家备考偏离重启入门',
+      summary: SUMMARY,
+      description: RAW_DESCRIPTION,
+      sceneSummary: {
+        title: RAW_DESCRIPTION,
+        firstDeliverable: '第一阶段产出示例',
+        targetState: '目标状态示例',
+      },
+      milestones: [],
+    });
+    const w = mount(V2LearningPathDetail);
+    await flushPromises();
+    const title = w.find('.sidecard__intent-title');
+    expect(title.exists()).toBe(true);
+    expect(title.text()).toContain('最小重启标准');
+    expect(title.classes()).toContain('sidecard__intent-title');
+    expect(title.classes()).not.toContain('sidecard__intent-title--expanded');
+  });
 });

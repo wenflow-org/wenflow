@@ -314,7 +314,18 @@
 
             <section v-if="sceneSummary" class="card sidecard">
               <span class="kicker">设计意图</span>
-              <strong v-if="sceneSummaryTitle" class="sidecard__intent-title">{{ sceneSummaryTitle }}</strong>
+              <strong
+                v-if="sceneSummaryTitle"
+                ref="intentTitleRef"
+                class="sidecard__intent-title"
+                :class="{ 'sidecard__intent-title--expanded': intentExpanded }"
+              >{{ sceneSummaryTitle }}</strong>
+              <button
+                v-if="intentOverflow"
+                type="button"
+                class="sidecard__intent-toggle"
+                @click="toggleIntentTitle"
+              >{{ intentExpanded ? '收起' : '展开全文' }}</button>
               <dl v-if="sceneRows.length" class="sidecard__rows">
                 <div v-for="row in sceneRows" :key="row.label" class="sidecard__row">
                   <dt>{{ row.label }}</dt>
@@ -615,20 +626,20 @@ function onTaskClick(task: Record<string, any>) {
 
 const pathTitle = computed(() => path.value?.title || path.value?.name || '');
 
-/* ---------- Hero 描述：优先 AI 摘要，超长折行截断（老数据无 summary 时兜底原文不糊屏） ---------- */
+/* ---------- 长文本折叠：Hero 描述 / 设计意图标题（默认 line-clamp，溢出才给「展开全文」） ---------- */
+function isClampedOverflow(el: HTMLElement | null): boolean {
+  if (!el) return false;
+  return el.scrollHeight > el.clientHeight + 1;
+}
+
+/* Hero 描述：优先 AI 摘要，老数据无 summary 时兜底原文 */
 const heroDescription = computed(() => String(path.value?.summary || path.value?.description || '').trim());
 const descExpanded = ref(false);
 const heroDescOverflow = ref(false);
 const heroDescRef = ref<HTMLElement | null>(null);
 
 function measureHeroDesc() {
-  if (descExpanded.value) return;
-  const el = heroDescRef.value;
-  if (!el) {
-    heroDescOverflow.value = false;
-    return;
-  }
-  heroDescOverflow.value = el.scrollHeight > el.clientHeight + 1;
+  heroDescOverflow.value = !descExpanded.value && isClampedOverflow(heroDescRef.value);
 }
 
 function toggleHeroDesc() {
@@ -636,9 +647,29 @@ function toggleHeroDesc() {
   if (!descExpanded.value) nextTick(measureHeroDesc);
 }
 
+/* 设计意图标题：后端 title 取 problemSpace.realProblem（问题原文，可达数百字） */
+const intentExpanded = ref(false);
+const intentOverflow = ref(false);
+const intentTitleRef = ref<HTMLElement | null>(null);
+
+function measureIntentTitle() {
+  intentOverflow.value = !intentExpanded.value && isClampedOverflow(intentTitleRef.value);
+}
+
+function toggleIntentTitle() {
+  intentExpanded.value = !intentExpanded.value;
+  if (!intentExpanded.value) nextTick(measureIntentTitle);
+}
+
+/** 一次测量所有折叠文本（首帧 / 静默刷新 / 窗口尺寸变化共用） */
+function measureClampedText() {
+  measureHeroDesc();
+  measureIntentTitle();
+}
+
 watch(heroDescription, () => {
   descExpanded.value = false;
-  nextTick(measureHeroDesc);
+  nextTick(measureClampedText);
 });
 
 async function load(silent = false) {
@@ -661,7 +692,7 @@ async function load(silent = false) {
       .map((s, i) => ({ s, i }))
       .filter(({ s, i }) => stageStatus(s, i) === 'current')
       .map(({ i }) => i);
-    nextTick(measureHeroDesc);
+    nextTick(measureClampedText);
   } catch {
     if (!silent) loadError.value = true;
   } finally {
@@ -1162,6 +1193,11 @@ const sceneSummaryTitle = computed(() => {
   return typeof s === 'string' ? s : (s.title || s.summary || s.intent || '');
 });
 
+watch(sceneSummaryTitle, () => {
+  intentExpanded.value = false;
+  nextTick(measureIntentTitle);
+});
+
 const sceneRows = computed(() => {
   const s = sceneSummary.value;
   if (!s || typeof s === 'string') return [];
@@ -1228,11 +1264,11 @@ async function viewFeedback(task: Record<string, any>) {
 
 onMounted(() => {
   load();
-  window.addEventListener('resize', measureHeroDesc);
+  window.addEventListener('resize', measureClampedText);
 });
 onBeforeUnmount(() => {
   window.clearTimeout(pollTimer);
-  window.removeEventListener('resize', measureHeroDesc);
+  window.removeEventListener('resize', measureClampedText);
 });
 </script>
 
@@ -1278,7 +1314,8 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 .hero__desc--expanded { display: block; overflow: visible; }
-.hero__desc-toggle {
+.hero__desc-toggle,
+.sidecard__intent-toggle {
   margin-top: 4px;
   padding: 0;
   border: 0;
@@ -1287,6 +1324,7 @@ onBeforeUnmount(() => {
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
+  text-align: left;
 }
 .hero__metrics { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
 .metric {
@@ -1429,7 +1467,15 @@ onBeforeUnmount(() => {
 .next-list small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--faint); }
 .sidecard__sum { font-size: 12px; font-weight: 700; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 9px; }
 .sidecard__text { font-size: 13px; }
-.sidecard__intent-title { font-size: 14px; line-height: 1.5; }
+.sidecard__intent-title {
+  font-size: 14px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sidecard__intent-title--expanded { display: block; overflow: visible; }
 .sidecard__rows { margin: 0; display: grid; gap: 8px; }
 .sidecard__row { display: grid; gap: 2px; }
 .sidecard__row dt { font-size: 11px; font-weight: 800; color: var(--faint); letter-spacing: 0.03em; }
