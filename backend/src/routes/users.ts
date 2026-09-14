@@ -5,6 +5,7 @@ import prisma from '../config/database';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 import { getLevelFromXp } from '../services/learner/level.util';
+import { normalizeSessionDurationMinutes } from '../services/learning/learning.helpers';
 import { listAgentManifest } from '../services/agent-manifest.service';
 
 // 与 auth.service 等价的假哈希：密码比对失败时保持恒定时间，防时序探测
@@ -361,18 +362,10 @@ router.get('/me/sessions', async (req, res, next) => {
         }
       }
 
-      const derivedMinutes = session.endTime
-        ? Math.max(1, Math.round((session.endTime.getTime() - session.startTime.getTime()) / 60000))
-        : null;
-
-      // 兼容历史数据：部分会话把 duration 以“秒”写入，导致日历分钟数异常膨胀
-      // 优先使用 start/end 推导出的分钟数；没有 endTime 时才回退到 duration 字段
-      const durationMinutes = derivedMinutes ?? (() => {
-        const rawDuration = session.duration ?? 0;
-        if (rawDuration <= 0) return 0;
-        // 没有 endTime 时，若值异常大，按秒兜底转换
-        return rawDuration > 24 * 60 ? Math.round(rawDuration / 60) : rawDuration;
-      })();
+      // 时长统一口径（与 /learning/stats、学习状态聚合同源）：优先 duration 列（已扣暂停/idle），
+      // 无值才用 endTime−startTime 兜底并封顶 30 分钟。此前这里裸算 endTime−startTime 且不封顶，
+      // 导致跨天未收束的会话把日历单日算成几千甚至两万分钟（如 25729 分钟）。
+      const durationMinutes = normalizeSessionDurationMinutes(session);
 
       return {
         ...session,

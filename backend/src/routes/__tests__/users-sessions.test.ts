@@ -94,4 +94,15 @@ describe('GET /me/sessions（学习历史：分页 + 内部会话过滤）', () 
     const call = teachingSessionMocks.findMany.mock.calls[0][0];
     expect(call.where.status).toBeUndefined();
   });
+
+  it('durationMinutes 用统一口径：跨天未收束会话封顶 30 分钟（此前会出现两万分钟）', async () => {
+    teachingSessionMocks.findMany.mockResolvedValue([
+      { id: 's1', taskId: null, status: 'timeout', duration: null, startTime: new Date('2026-01-01T00:00:00Z'), endTime: new Date('2026-01-18T00:00:00Z'), teachingState: null },
+      { id: 's2', taskId: null, status: 'completed', duration: 42, startTime: new Date('2026-01-02T00:00:00Z'), endTime: new Date('2026-01-02T05:00:00Z'), teachingState: null },
+    ]);
+    const res = await callSessions({});
+    const items = (res.body as any).data as Array<{ id: string; durationMinutes: number }>;
+    expect(items.find((i) => i.id === 's1')?.durationMinutes).toBe(30); // 17 天 → 封顶 30
+    expect(items.find((i) => i.id === 's2')?.durationMinutes).toBe(42); // 有 duration 列则优先
+  });
 });

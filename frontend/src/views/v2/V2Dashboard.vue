@@ -904,6 +904,10 @@ function localDateKey(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+/** 会话归属的本地日期键（与 minutesByDate 同口径；勿用 toISOString，UTC+8 凌晨会前移一天） */
+function sessionLocalDate(s: { startTime?: string | null }): string {
+  return s.startTime ? localDateKey(new Date(s.startTime)) : '';
+}
 const todayStr = localDateKey(new Date());
 
 /** 认知带宽枚举 → 中文（light/medium/heavy 等） */
@@ -976,7 +980,8 @@ const weekDays = computed(() => {
   return labels.map((label, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    const date = d.toISOString().slice(0, 10);
+    // 用本地日期键：toISOString 是 UTC，UTC+8 凌晨会把整周前移一天，和 minutesByDate 口径对不上
+    const date = localDateKey(d);
     const minutes = minutesByDate.value.get(date) ?? 0;
     return { label, weekLabel: label, date, minutes, isToday: date === todayStr, ...heat(minutes) };
   });
@@ -1061,7 +1066,7 @@ function selectDay(date: string) {
 const selectedInfo = computed(() => {
   const date = selectedDate.value;
   const minutes = minutesByDate.value.get(date) ?? 0;
-  const daySessions = sessions.value.filter((s) => String(s.startTime || '').startsWith(date));
+  const daySessions = sessions.value.filter((s) => sessionLocalDate(s) === date);
   const d = new Date(date + 'T00:00:00');
   const title = `${d.getMonth() + 1}月${d.getDate()}日 ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()]}${date === todayStr ? ' · 今天' : ''}`;
   if (minutes <= 0) {
@@ -1128,7 +1133,7 @@ function sessionStatusLabel(s: Record<string, any>) {
 const daySheet = computed(() => {
   const date = selectedDate.value;
   const daySessions = sessions.value
-    .filter((s) => String(s.startTime || '').startsWith(date))
+    .filter((s) => sessionLocalDate(s) === date)
     .sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)));
 
   const minutes = daySessions.reduce((sum, s) => sum + (s.durationMinutes ?? 0), 0);
