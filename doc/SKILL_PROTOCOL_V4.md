@@ -389,7 +389,7 @@ copywriter：learner-progress-report、skill-author
 
 新增（2，2026-08-11 纯重试改造后加入核心文件体系）：
 - learning-predictor（distiller，预测校准闭环：`learning_metrics` 预测 vs 实际，`prediction_records` 表）
-- virtual-learner-memory-curator（虚拟学习者记忆策展；⚠️ 缺 manifest，`yaml:check` / `skills:check` 基线既有 FAIL，待补；failurePolicy 仍为 fallback，是 26 个 core 中唯一残留 fallback 值，与 2026-08-11 纯重试原则冲突）
+- virtual-learner-memory-curator（虚拟学习者记忆策展；manifest 已于 2026-09-02 补齐，`failurePolicy: blocking`，与 core propagate 对齐。此前「缺 manifest / failurePolicy=fallback，待补」的记录已解决）
 
 code-only（3，无 LLM prompt，handler-only 确定性组件）：
 acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector

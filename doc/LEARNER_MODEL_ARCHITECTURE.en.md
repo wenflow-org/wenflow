@@ -449,7 +449,7 @@ Not do:
 
 Suggested add:
 
-- `frontend/src/views/admin/LearnerModels.vue`
+- `frontend/src/views/admin-redesign/LearnerCenter.vue` (originally designed as `views/admin/LearnerModels.vue`)
 
 Suggested display:
 
@@ -468,7 +468,7 @@ Suggested display:
 
 Suggested add:
 
-- `frontend/src/views/admin/LearnerModelDetail.vue`
+- `frontend/src/views/admin-redesign/LearnerDetail.vue` (originally designed as `views/admin/LearnerModelDetail.vue`)
 
 Suggested tabs:
 
@@ -581,8 +581,8 @@ Responsibility:
 ### Teaching Integration
 
 - `backend/src/services/ai-teaching/TeachingContextBuilder.ts`
-- `backend/src/services/ai-teaching/AITeachingOrchestrator.ts`
-- `backend/src/agents/teaching-turn-agent/index.ts`
+- `backend/src/services/ai-teaching/AITeachingCoordinator.ts` (formerly `AITeachingOrchestrator.ts`)
+- `backend/src/skills/teaching-turn/` (formerly `agents/teaching-turn-agent/index.ts`)
 
 ### Admin API
 
@@ -590,8 +590,8 @@ Responsibility:
 
 ### Admin Frontend
 
-- `frontend/src/views/admin/LearnerModels.vue`
-- `frontend/src/views/admin/LearnerModelDetail.vue`
+- `frontend/src/views/admin-redesign/LearnerCenter.vue` (originally designed as `views/admin/LearnerModels.vue`)
+- `frontend/src/views/admin-redesign/LearnerDetail.vue` (originally designed as `views/admin/LearnerModelDetail.vue`)
 - `frontend/src/api/adminApi.ts`
 - `frontend/src/router/index.ts`
 

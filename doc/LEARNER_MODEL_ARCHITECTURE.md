@@ -581,8 +581,8 @@ query：
 ### Teaching 接入
 
 - `backend/src/services/ai-teaching/TeachingContextBuilder.ts`
-- `backend/src/services/ai-teaching/AITeachingOrchestrator.ts`
-- `backend/src/agents/teaching-turn-agent/index.ts`
+- `backend/src/services/ai-teaching/AITeachingCoordinator.ts`（原 `AITeachingOrchestrator.ts`）
+- `backend/src/skills/teaching-turn/`（原 `agents/teaching-turn-agent/index.ts`）
 
 ### Admin API
 

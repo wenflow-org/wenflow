@@ -16,7 +16,7 @@ prompts/
 ├── orchestration/       # 字段路由编排文件（数据面声明源，见 orchestration/_README.md）
 ├── manifests/           # skill 契约（promptContract / runtimeContract），发布时写入 DB metadata
 ├── field-lineage.yaml   # 字段消费者血缘注册表（管理端编辑分级；失效时回退内置静态表）
-├── skills.yaml          # skill 户口簿（跨阶段技能注册唯一声明源，规格见 doc/SKILLS_YAML_SPEC.md）
+├── skills.yaml          # skill 户口簿（跨阶段技能注册唯一声明源，F1–F12 门禁实现见 backend/src/scripts/check-skills-file.ts）
 ├── skill.*.md           # 编译产物（由 compile 生成，勿手改；漂移会被 sync 跳过）
 ├── backups/             # 发布/回滚前的生产快照（按 skillId/时间戳归档）
 ├── _README.md           # 本说明
@@ -50,7 +50,7 @@ prompts/
 - `npm run prompts:skills:check` —— skill 户口簿（`prompts/skills.yaml`）F1~F12 全量门禁：
   schema/唯一性/stage 归属/mainline contracts 铁律/parentAgent 合法性/handlerRef 与 coreFile
   存在性/退役互斥/alias 冲突/coordinator 挂接点/注册存在性/manifest 双向一致 + agentMembers
-  派生等价（已挂入 `prompts:check:all`）。规格见 `doc/SKILLS_YAML_SPEC.md`。
+  派生等价（已挂入 `prompts:check:all`）。F1–F12 门禁实现见 `backend/src/scripts/check-skills-file.ts`。
 - 字段路由编排文件（`prompts/orchestration/*.yaml`，数据面配置）由 bootstrap 灌入 DB 三表，为字段路由唯一声明源（seed TS 已退役），详见 `orchestration/_README.md`
 
 ## 注意事项

@@ -1,6 +1,6 @@
 # 学习者状态评审设计（LLM 诊断层 + 可配置 BKT）
 
-> 状态：设计草案（2026-09-12）
+> 状态：**已落地**（Slice 1 投影止血 / Slice 2 诊断 skill 闭环 / Slice 3 BKT 校准护栏 全部完成，进度见文内各 Slice 段；2026-09-12 起草）
 > 关联文档：[`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md)（状态层契约）、[`EDUCATIONAL_THEORY_MAP.md`](./EDUCATIONAL_THEORY_MAP.md)（⑯ 预测校准、LBM/CIKT）、[`SKILL_PROTOCOL_V4.md`](./SKILL_PROTOCOL_V4.md)
 > **硬约束**：不引入任何额外/训练模型。全部能力由 **prompt + LLM + 既有确定性代码** 实现。
 
