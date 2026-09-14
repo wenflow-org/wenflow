@@ -86,6 +86,7 @@ const icons = {
   goal: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM7 9h10v2H7V9zm6 5H7v-2h6v2zm4-6H7V6h10v2z"/></svg>',
   layers: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="m12 2 10 5-10 5L2 7l10-5zm0 7.6L18.9 7 12 4.4 5.1 7 12 9.6zM2 12l10 5 10-5v2l-10 5L2 14v-2zm0 5 10 5 10-5v2l-10 5L2 19v-2z" opacity=".9"/></svg>',
   pulse: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 13h4l2-7 4 12 2-7h6v2h-4.6l-2.4 8.4L9.6 7.6 7.6 15H3v-2z"/></svg>',
+  history: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm-.75 3v5.6l4.3 2.55.9-1.5-3.7-2.2V7h-1.5z"/></svg>',
   medal: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></svg>'
 };
 
@@ -94,6 +95,7 @@ const items = [
   { to: '/goal-conversation', label: '目标规划', match: ['/goal-conversation'], icon: icons.goal },
   { to: '/learning-paths', label: '学习路径', match: ['/learning-paths', '/learning-path'], icon: icons.layers },
   { to: '/learning-state', label: '学习状态', match: ['/learning-state'], icon: icons.pulse },
+  { to: '/learning-history', label: '学习历史', match: ['/learning-history'], icon: icons.history },
   { to: '/achievements', label: '成就', match: ['/achievements'], icon: icons.medal }
 ];
 
@@ -337,7 +339,7 @@ onUnmounted(() => {
 @media (max-width: 1100px) {
   .v2nav__tabs {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     position: fixed;
     left: 0; right: 0; bottom: 0;
     z-index: 40;

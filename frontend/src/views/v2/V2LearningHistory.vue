@@ -14,15 +14,15 @@
 
       <!-- 统计（全量口径：后端 /users/me/sessions total + /learning/stats） -->
       <div class="history__stats">
-        <div class="history__stat">
+        <div class="card history__stat">
           <span>学习次数</span>
           <strong>{{ totalSessions }}<i> 次</i></strong>
         </div>
-        <div class="history__stat">
+        <div class="card history__stat">
           <span>累计时长</span>
           <strong>{{ totalMinutes }}<i> 分钟</i></strong>
         </div>
-        <div class="history__stat">
+        <div class="card history__stat">
           <span>学习天数</span>
           <strong>{{ activeDays }}<i> 天</i></strong>
         </div>
@@ -55,21 +55,24 @@
           </div>
           <ul class="history__items">
             <li v-for="s in group.items" :key="s.id" class="history__item">
-              <span class="history__dot" :class="{ 'history__dot--done': isDone(s) }"></span>
+              <span class="history__dot" :class="`history__dot--${sessionState(s)}`"></span>
               <div class="history__item-main">
                 <strong>{{ taskTitle(s) }}</strong>
                 <span v-if="sessionSummary(s)" class="history__item-sub">{{ sessionSummary(s) }}</span>
               </div>
-              <span class="uc-badge" :class="isDone(s) ? 'uc-badge--ok' : 'uc-badge--muted'">
-                {{ isDone(s) ? '已完成' : '进行中' }}
-              </span>
+              <span class="uc-badge" :class="stateBadgeCls(s)">{{ stateLabel(s) }}</span>
               <span class="history__item-time">{{ s.durationMinutes ? `${s.durationMinutes} 分钟` : '—' }}</span>
-              <!-- 进行中的会话：可继续学习（/learn/:taskId 会恢复或重开课） -->
+              <!-- 可继续的会话（active/paused）才给「继续」；已结束/已完成不再误导 -->
               <router-link
-                v-if="!isDone(s) && s.taskId"
+                v-if="sessionState(s) === 'resumable' && s.taskId"
                 :to="`/learn/${s.taskId}`"
                 class="history__resume"
               >继续 ›</router-link>
+              <router-link
+                v-else-if="canViewFeedback(s)"
+                :to="feedbackLink(s)"
+                class="history__feedback"
+              >查看反馈 ›</router-link>
             </li>
           </ul>
         </section>
@@ -113,7 +116,8 @@ interface SessionRecord {
   duration?: number | null;
   teachingState?: string | null;
   messages?: string | null;
-  completedAt?: string | null;
+  /** 当堂小结（有则可查看反馈；数据库无 completedAt 字段，勿再依赖它判断完成） */
+  wrapup?: string | null;
 }
 
 const PAGE_SIZE = 30;
@@ -125,10 +129,43 @@ const hasMore = ref(true);
 
 const doneStatuses = new Set(['completed', 'done', 'finished', 'closed']);
 
-const isDone = (s: SessionRecord) =>
-  doneStatuses.has(String(s.status || '').toLowerCase()) || Boolean(s.completedAt);
+/** 会话三态：completed（已完成）/ resumable（可继续：active·paused）/ ended（已结束，如 timeout）。
+    DB 里另有 discarded/superseded（内部重开/被取代），接口已通过 excludeInternal 过滤。 */
+type SessionState = 'completed' | 'resumable' | 'ended';
+
+function sessionState(s: SessionRecord): SessionState {
+  const status = String(s.status || '').toLowerCase();
+  if (doneStatuses.has(status)) return 'completed';
+  if (status === 'active' || status === 'paused' || status === 'in_progress') return 'resumable';
+  return 'ended';
+}
+
+function stateLabel(s: SessionRecord): string {
+  const status = String(s.status || '').toLowerCase();
+  if (doneStatuses.has(status)) return '已完成';
+  if (status === 'paused') return '已暂停';
+  if (status === 'active' || status === 'in_progress') return '进行中';
+  if (status === 'timeout') return '已超时';
+  return '已结束';
+}
+
+function stateBadgeCls(s: SessionRecord): string {
+  const state = sessionState(s);
+  if (state === 'completed') return 'uc-badge--ok';
+  if (state === 'resumable') return 'uc-badge--warn';
+  return 'uc-badge--muted';
+}
 
 const taskTitle = (s: SessionRecord) => s.taskTitle || '未命名任务';
+
+/** 有当堂小结的会话可查看反馈（评估页直接按 sessionId 取详情） */
+function canViewFeedback(s: SessionRecord): boolean {
+  return !!s.taskId && typeof s.wrapup === 'string' && s.wrapup.trim().length > 0;
+}
+
+function feedbackLink(s: SessionRecord): string {
+  return `/learn/${s.taskId}/evaluation/${s.id}`;
+}
 
 function sessionSummary(s: SessionRecord): string {
   try {
@@ -158,7 +195,7 @@ const activeDays = ref(0);
 async function loadStats() {
   try {
     const [sessionsRes, statsRes] = await Promise.all([
-      request.get('/users/me/sessions', { params: { limit: 1 } }),
+      request.get('/users/me/sessions', { params: { limit: 1, excludeInternal: 1 } }),
       request.get('/learning/stats')
     ]);
     // total 在响应顶层（与 data 平级），不能用 unwrap（它只取 data）
@@ -220,7 +257,7 @@ async function load(reset = false) {
   try {
     const page = reset ? 1 : Math.floor(sessions.value.length / PAGE_SIZE) + 1;
     const res = await request.get('/users/me/sessions', {
-      params: { page, limit: PAGE_SIZE }
+      params: { page, limit: PAGE_SIZE, excludeInternal: 1 }
     });
     const data = unwrap<{ sessions?: SessionRecord[] }>(res);
     const items = Array.isArray(data) ? data as unknown as SessionRecord[] : data?.sessions || [];
@@ -289,10 +326,6 @@ onMounted(() => {
 
 .history__stat {
   padding: 16px 18px;
-  border-radius: 16px;
-  border: 1px solid var(--line, #e3e9f4);
-  background: var(--surface, #fff);
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
   display: grid;
   gap: 4px;
 }
@@ -372,9 +405,9 @@ onMounted(() => {
   flex: none;
 }
 
-.history__dot--done {
-  background: var(--green, #1e9e58);
-}
+.history__dot--completed { background: var(--green, #1e9e58); }
+.history__dot--resumable { background: var(--blue, #3478f6); }
+.history__dot--ended { background: var(--faint, #67758f); }
 
 .history__item-main {
   flex: 1;
@@ -417,6 +450,18 @@ onMounted(() => {
   transition: background 0.15s ease;
 }
 .history__resume:hover { background: rgba(52, 120, 246, 0.12); }
+
+.history__feedback {
+  font-size: 12px; font-weight: 800;
+  color: var(--muted, #5b6577);
+  text-decoration: none;
+  padding: 5px 12px;
+  border: 1px solid var(--line, #e3e9f4);
+  border-radius: 999px;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.history__feedback:hover { color: var(--blue-deep, #1f57cc); border-color: rgba(52, 120, 246, 0.4); }
 
 .history__more {
   display: flex;

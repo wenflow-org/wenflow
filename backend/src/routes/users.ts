@@ -298,9 +298,15 @@ router.get('/me/sessions', async (req, res, next) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 100);
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
+    // excludeInternal=1：跳过内部替换/废弃会话（discarded/superseded），供学习历史页使用。
+    // discarded/superseded 是技术artifact（重开/被新会话取代），不是用户真实的学习记录。
+    const excludeInternal = req.query.excludeInternal === '1' || req.query.excludeInternal === 'true';
 
     // 构建查询条件
     const where: any = { userId };
+    if (excludeInternal) {
+      where.status = { notIn: ['discarded', 'superseded'] };
+    }
     
     // 添加日期范围过滤
     if (startDate || endDate) {
@@ -319,6 +325,8 @@ router.get('/me/sessions', async (req, res, next) => {
     const sessions = await prisma.teaching_sessions.findMany({
       where,
       orderBy: { startTime: 'desc' },
+      // page 分页：此前前端传 page 但后端忽略（无 skip），导致「加载更多」永远拿回同一页
+      skip: (Math.max(parseInt(req.query.page as string) || 1, 1) - 1) * limit,
       take: limit
     });
 
