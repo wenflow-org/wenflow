@@ -1543,4 +1543,26 @@ html[data-theme='dark'] {
   .dfg-edit__row { color: var(--mk-ink); }
   .dfg-edit__actions { color: var(--mk-ink); }
 }
+
+/* 响应式（此前本组件 0 个 @media，窄屏靠 .dfg-frame overflow:hidden 静默裁切）：
+   收窄右侧连线走廊（≥44px 保证 bus 折线 busX=卡右缘+40 仍在画布内），
+   并给步骤头 agent 设最小宽度，避免被 flex 压成 0（原 flex:1;min-width:0 在 @820 塌成 2px）。 */
+@media (max-width: 1024px) {
+  .dfg-pipe { max-width: none; padding: 14px 16px 24px; padding-right: 56px; }
+}
+@media (max-width: 860px) {
+  .dfg-pipe { padding: 12px 14px 20px; padding-right: 48px; gap: 12px; }
+  .dfg-gate__head { flex-wrap: wrap; }
+  .dfg-step__agent { flex: 1 1 140px; min-width: 140px; }
+  .dfg-step__cond { max-width: 100%; }
+  .dfg-search__input { width: 160px; }
+}
+@media (max-width: 640px) {
+  .dfg-pipe { padding: 10px 12px 16px; padding-right: 44px; }
+  .dfg-toolbar { padding: 8px 10px; }
+  .dfg-toolbar__controls { width: 100%; gap: 8px; }
+  .dfg-search { flex: 1 1 100%; }
+  .dfg-search__input { width: 100%; }
+  .dfg-step__rowlabel { min-width: 28px; }
+}
 </style>
