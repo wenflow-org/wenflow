@@ -349,7 +349,8 @@ router.get('/skill/:skillId', async (req: Request, res: Response) => {
 //   - 写 node_config_changes 审计（changeType='routing-patch'）。
 // ============================================================
 router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) => {
-  const agentId = String(req.params.agentId || '').trim();
+  // 与 dispatcher/查询侧统一：入参先归一到 canonical（skill: 前缀），避免别名 id 找不到 DB 行
+  const agentId = getCanonicalAgentId(String(req.params.agentId || '').trim());
   const fieldId = String(req.params.fieldId || '').trim();
   if (!agentId || !fieldId) {
     return res.status(400).json({ success: false, error: { message: 'agentId / fieldId 必填' } });
