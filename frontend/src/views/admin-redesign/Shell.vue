@@ -137,6 +137,9 @@
     <!-- 主区 -->
     <div class="mshell__main">
       <main ref="contentEl" class="mshell__content">
+        <div v-if="crumb" class="mshell__crumb">
+          <span class="mshell__crumb-label" :title="crumbTitle || undefined">{{ crumb }}</span>
+        </div>
         <slot />
       </main>
       <!-- 滚动修复 #9：回到顶部（>2 屏长页出现，全站统一由 Shell 挂载） -->
@@ -715,12 +718,33 @@ function groupBadgeTitle(title: string): string {
   min-height: 0;
   overflow: hidden;
 }
-.mshell__content > :not(.mk-tabbar) {
+.mshell__content > :not(.mk-tabbar):not(.mshell__crumb) {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
+/* 二级页面包屑（AdminConsole 传入 crumb/crumbTitle；此前为死 prop）：
+   固定在内容区顶部，随 TabBar 之下、页面块之上，不参与滚动 */
+.mshell__crumb {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--mk-line, #e6ebf4);
+  background: var(--mk-surface, #fff);
+  font-size: var(--mk-fs-12_5);
+  color: var(--mk-faint, #8a97ab);
+}
+.mshell__crumb-label {
+  font-weight: 700;
+  color: var(--mk-muted, #5b6577);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html[data-theme='dark'] .mshell__crumb { background: #141c2b; border-color: #232f45; }
 
 /* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半） */
 @media (min-width: 1440px) {

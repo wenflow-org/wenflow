@@ -130,10 +130,9 @@ describe('前端术语单源守卫（阶段 1D）', () => {
     }
   });
 
-  it('表头守卫：<th> 不得为 camelCase 字段名（工程明细 tab 放行）', () => {
+  it('表头守卫：<th> 不得为 camelCase 字段名（字段名降级到 title / 括号）', () => {
     const allow = new Set(['IP', 'XP', 'ID', 'ACTIVE']);
     for (const file of listVueFiles(ADMIN_REDESIGN_DIR)) {
-      if (file.includes('/')) continue; // skill-design/* 为原始契约展示
       const src = read(file);
       const re = /<th[^>]*>([^<]+)<\/th>/g;
       let m: RegExpExecArray | null;

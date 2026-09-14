@@ -83,4 +83,11 @@ describe('Shell 导航', () => {
     const wrapper = mountShell({ current: 'bogus' });
     expect(wrapper.findAll('.mshell__item--active')).toHaveLength(0);
   });
+
+  it('二级页面包屑：传入 crumb 时渲染，未传时不渲染（死 prop 已接入）', () => {
+    const withCrumb = mountShell({ current: 'skills', crumb: '虚拟学习者' });
+    expect(withCrumb.find('.mshell__crumb-label').text()).toBe('虚拟学习者');
+    const without = mountShell({ current: 'overview' });
+    expect(without.find('.mshell__crumb').exists()).toBe(false);
+  });
 });

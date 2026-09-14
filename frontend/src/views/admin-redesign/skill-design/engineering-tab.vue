@@ -5,12 +5,12 @@
       <header class="sdp-sec-head"><h4>基础信息</h4></header>
       <table class="sdp-kv">
         <tbody>
-          <tr><th>kind</th><td><code class="mono">{{ overview.kind }}</code></td></tr>
-          <tr><th>agentId</th><td><code class="mono">{{ overview.agentId }}</code></td></tr>
-          <tr v-if="overview.file"><th>file path</th><td><code class="mono">{{ overview.file.path }}</code></td></tr>
-          <tr v-if="overview.file?.hash"><th>file hash</th><td><code class="mono" :title="overview.file.hash">{{ shortHash(overview.file.hash) }}</code></td></tr>
-          <tr v-if="overview.db?.id"><th>DB ACTIVE id</th><td><code class="mono">{{ overview.db.id }}</code></td></tr>
-          <tr v-if="overview.db?.version"><th>DB ACTIVE version</th><td><code class="mono">v{{ overview.db.version }}</code></td></tr>
+          <tr><th title="kind">类型</th><td><code class="mono">{{ overview.kind }}</code></td></tr>
+          <tr><th title="agentId">Agent 标识</th><td><code class="mono">{{ overview.agentId }}</code></td></tr>
+          <tr v-if="overview.file"><th title="file.path">文件路径</th><td><code class="mono">{{ overview.file.path }}</code></td></tr>
+          <tr v-if="overview.file?.hash"><th title="file.hash">文件哈希</th><td><code class="mono" :title="overview.file.hash">{{ shortHash(overview.file.hash) }}</code></td></tr>
+          <tr v-if="overview.db?.id"><th title="db.id">生效记录 ID</th><td><code class="mono">{{ overview.db.id }}</code></td></tr>
+          <tr v-if="overview.db?.version"><th title="db.version">生效版本</th><td><code class="mono">v{{ overview.db.version }}</code></td></tr>
           <tr v-if="overview.db?.useCount !== undefined"><th>调用次数</th><td>{{ overview.db.useCount }}</td></tr>
           <tr v-if="overview.db?.model"><th>默认模型</th><td><code class="mono">{{ overview.db.model }}</code></td></tr>
           <tr v-if="overview.db?.publishedAt"><th>发布时间</th><td>{{ fmtTime(String(overview.db.publishedAt)) }}</td></tr>
@@ -31,14 +31,14 @@
       </header>
       <table class="sdp-kv">
         <tbody>
-          <tr><th>version</th><td><code class="mono">{{ overview.runtimeContract.version }}</code></td></tr>
-          <tr><th>contextMode</th><td><code class="mono">{{ overview.runtimeContract.contextMode }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.domain"><th>domain</th><td><code class="mono">{{ overview.runtimeContract.businessState.domain }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.phases"><th>phases</th><td><code class="mono">{{ overview.runtimeContract.businessState.phases.join(', ') }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.defaultPhase"><th>defaultPhase</th><td><code class="mono">{{ overview.runtimeContract.businessState.defaultPhase }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.terminalPhases"><th>terminalPhases</th><td><code class="mono">{{ overview.runtimeContract.businessState.terminalPhases.join(', ') }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.contextUpdate?.mode"><th>contextUpdate.mode</th><td><code class="mono">{{ overview.runtimeContract.contextUpdate.mode }}</code></td></tr>
-          <tr><th>outputEnvelope</th><td><code class="mono">{{ overview.runtimeContract.outputEnvelope }}</code></td></tr>
+          <tr><th title="version">契约版本</th><td><code class="mono">{{ overview.runtimeContract.version }}</code></td></tr>
+          <tr><th title="contextMode">上下文模式</th><td><code class="mono">{{ overview.runtimeContract.contextMode }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.businessState?.domain"><th title="domain">业务域</th><td><code class="mono">{{ overview.runtimeContract.businessState.domain }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.businessState?.phases"><th title="phases">阶段集合</th><td><code class="mono">{{ overview.runtimeContract.businessState.phases.join(', ') }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.businessState?.defaultPhase"><th title="defaultPhase">默认阶段</th><td><code class="mono">{{ overview.runtimeContract.businessState.defaultPhase }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.businessState?.terminalPhases"><th title="terminalPhases">终止阶段</th><td><code class="mono">{{ overview.runtimeContract.businessState.terminalPhases.join(', ') }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.contextUpdate?.mode"><th title="contextUpdate.mode">上下文更新模式</th><td><code class="mono">{{ overview.runtimeContract.contextUpdate.mode }}</code></td></tr>
+          <tr><th title="outputEnvelope">输出封装</th><td><code class="mono">{{ overview.runtimeContract.outputEnvelope }}</code></td></tr>
         </tbody>
       </table>
     </section>
