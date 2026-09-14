@@ -1,41 +1,17 @@
 ﻿<template>
   <div class="mk-page">
-    <!-- 状态条：身份 + 刷新；结论移到下方结论区 -->
+    <!-- 状态条：标题 + 全局关键指标（紧凑单行） -->
     <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">编排结构</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">平台流水线 · 以编排文件为准</span>
+      <span class="mk-status__meta">{{ pageLoading ? '—' : stages.length }} 阶段 · {{ pageLoading ? '—' : totalSkills }} 个 Skill</span>
+      <span class="mk-status__meta">总调用 {{ pageLoading ? '—' : totalCalls }}</span>
+      <span v-if="unresolvedCount > 0" class="mk-status__meta mk-status__meta--bad">未解析 {{ unresolvedCount }}</span>
+      <span v-if="w4Drifted.length" class="mk-status__meta mk-status__meta--bad">{{ TERMS.driftHashQualified }} {{ w4Drifted.length }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">刷新</button>
       </span>
-    </div>
-
-    <!-- 结论区（方向 A）：可点数字即入口（未解析 / 漂移 → 治理报告） -->
-    <div class="orch-kpis" role="group" aria-label="编排结论">
-      <MkKpi label="阶段" :value="pageLoading ? '—' : stages.length" hint="流水线阶段" />
-      <MkKpi label="Skill" :value="pageLoading ? '—' : totalSkills" hint="已接入字段契约" />
-      <MkKpi label="总调用" :value="pageLoading ? '—' : totalCalls" hint="累计调用次数" />
-      <MkKpi
-        label="未解析"
-        :value="unresolvedCount"
-        hint="步骤未解析到契约"
-        :tone="unresolvedCount > 0 ? 'bad' : ''"
-        :clickable="unresolvedCount > 0"
-        :active="unresolvedCount > 0 && governOpen"
-        :title="unresolvedCount > 0 ? '点击查看治理报告' : '无未解析步骤'"
-        @click="unresolvedCount > 0 && focusGovernance()"
-      />
-      <MkKpi
-        label="漂移"
-        :value="w4Drifted.length"
-        :hint="TERMS.driftHashQualified"
-        :tone="w4Drifted.length > 0 ? 'bad' : ''"
-        :clickable="w4Drifted.length > 0"
-        :active="w4Drifted.length > 0 && governOpen"
-        :title="w4Drifted.length > 0 ? '点击查看治理报告' : '文件与库一致'"
-        @click="w4Drifted.length > 0 && focusGovernance()"
-      />
     </div>
 
     <!-- 阶段导航：五个 tab = 五个阶段（浏览 + 编辑 + 治理都在阶段工作区内） -->
@@ -109,7 +85,6 @@ import FieldRoutingTable from './FieldRoutingTable.vue'
 import DataFlowGraph from './DataFlowGraph.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
-import MkKpi from './MkKpi.vue'
 
 const viewMode = ref<'stage' | 'sandbox'>('stage')
 /** 编辑页内治理折叠区（漂移/审计）：?tab=drift 深链时自动展开 */
@@ -123,11 +98,6 @@ function onRoutingChanged() {
 /** 图内锚点跳转切阶段：同步 active（tab 高亮跟随） */
 function onStageChange(s: string) {
   active.value = s
-}
-/** 结论区「未解析 / 漂移」点击 → 回阶段视图并展开治理折叠区 */
-function focusGovernance() {
-  viewMode.value = 'stage'
-  governOpen.value = true
 }
 
 const route = useRoute()
@@ -325,16 +295,6 @@ const stageTitle = computed(() => {
 })
 void stageTitle.value
 </script><style scoped>
-/* 结论区（方向 A）：与 VL/AC 同构，flex 单行优先 */
-.orch-kpis {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: stretch;
-  margin-bottom: 10px;
-}
-.orch-kpis :deep(.mk-kpi) { flex: 1 1 104px; min-width: 104px; padding: 9px 12px; gap: 1px; border-radius: 10px; }
-.orch-kpis :deep(.mk-kpi__hint) { font-size: var(--mk-fs-11); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 阶段导航：五个 tab = 五个阶段（大分段卡，每卡含阶段名 + Skill/调用概要） */
 .orch-stage-tabs {
   display: grid;
