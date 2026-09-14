@@ -647,16 +647,42 @@ function buildPromptInput(input: TeachingTurnInput) {
   // 稳定主体（任务/路径/策略上下文）保持前置，最大化 user 内前缀命中
   const { interactionProfile: scenarioInteractionProfile, contextCompression: scenarioCompression, ...stableScenario } = input.scenario;
 
+  const promptDirectives = {
+    ...(strategyGuidancePrompt ? { strategyGuidance: strategyGuidancePrompt } : {}),
+    taskExecution: taskExecutionPrompt,
+  };
+  const latestLearnerMessage = [...input.messages].reverse().find((message) => message.role === 'user')?.content || '';
+
+  // 试飞改造（默认关，PAYLOAD_STABLE_PREFIX=1 开启）：
+  // 真实遥测显示 scenario 每回合必变（因子键 interactionProfile/contextCompression 逐回合变化），
+  // 前缀在 promptDirectives 之后的 knowledge 处即断（~7.3k/15.8k）。
+  // 稳定前缀版：scenario(洁) → promptDirectives → learner 前置，其余逐回合变化的键全部后置，
+  // 并去掉 recentDialogueContext（与 visibleDialogueContext/messages 同源重复）。
+  if (process.env.PAYLOAD_STABLE_PREFIX === '1') {
+    return {
+      scenario: stableScenario,
+      promptDirectives,
+      learner: input.learner,
+      // —— 以下为逐回合变化项，统一后置 ——
+      controls: input.controls,
+      knowledge: input.knowledge,
+      classroomContext: input.classroomContext,
+      classroomEventContext: input.classroomEventContext,
+      interactionProfile: scenarioInteractionProfile ?? null,
+      ...(scenarioCompression ? { contextCompression: scenarioCompression } : {}),
+      visibleDialogueContext: input.visibleDialogueContext || input.messages,
+      latestLearnerMessage,
+      ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
+    };
+  }
+
   return {
     scenario: {
       ...stableScenario,
       ...(scenarioCompression ? { contextCompression: scenarioCompression } : {}),
       interactionProfile: scenarioInteractionProfile,
     },
-    promptDirectives: {
-      ...(strategyGuidancePrompt ? { strategyGuidance: strategyGuidancePrompt } : {}),
-      taskExecution: taskExecutionPrompt,
-    },
+    promptDirectives,
     knowledge: input.knowledge,
     learner: input.learner,
     controls: input.controls,
@@ -665,7 +691,7 @@ function buildPromptInput(input: TeachingTurnInput) {
     interactionProfile: scenarioInteractionProfile ?? null,
     visibleDialogueContext: input.visibleDialogueContext || input.messages,
     recentDialogueContext: input.messages,
-    latestLearnerMessage: [...input.messages].reverse().find((message) => message.role === 'user')?.content || '',
+    latestLearnerMessage,
     // 双引擎试点：第一段（推理模型）产出的 analysis 作为第二段的既定认知判定
     ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
   };

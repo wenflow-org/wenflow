@@ -112,13 +112,23 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       defaultSystemPrompt: STAGE_DESIGNER_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'stage-designer' },
-            buildUserPayload: (payload) => ({
-        milestone: payload.milestone,
-        previousMilestone: payload.previousMilestone || null,
-        cognitiveCore: payload.cognitiveCore,
-        normalizedInput: payload.normalizedInput || null,
-        repairHints: payload.repairHints || null,
-      }),
+      // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：cognitiveCore/normalizedInput 跨里程碑稳定，前置；
+      // milestone/previousMilestone/repairHints 逐次变化，后置。默认顺序保持不变。
+      buildUserPayload: (payload) => (process.env.PAYLOAD_STABLE_PREFIX === '1'
+        ? {
+            cognitiveCore: payload.cognitiveCore,
+            normalizedInput: payload.normalizedInput || null,
+            milestone: payload.milestone,
+            previousMilestone: payload.previousMilestone || null,
+            repairHints: payload.repairHints || null,
+          }
+        : {
+            milestone: payload.milestone,
+            previousMilestone: payload.previousMilestone || null,
+            cognitiveCore: payload.cognitiveCore,
+            normalizedInput: payload.normalizedInput || null,
+            repairHints: payload.repairHints || null,
+          }),
       normalizeOutput: (parsed, payload) => ({
         subtasks: normalizeSubtasks(parsed?.subtasks, normalizeString(payload?.milestone?.coreConcept)),
       }),
