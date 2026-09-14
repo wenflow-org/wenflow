@@ -276,7 +276,7 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
 
   const friction = decideFrictionTrigger(input.frictionBudget);
 
-  return {
+  const body = {
     learner: input.learner || {},
     story: input.story || null,
     visibleContext: {
@@ -314,6 +314,26 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
       ]
     }
   };
+
+  // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：常量/慢变块（task/personaAnchorHint/story/learner）前置，
+  // 逐回合变化块后置。默认顺序不变。
+  if (process.env.PAYLOAD_STABLE_PREFIX === '1') {
+    return {
+      task: body.task,
+      personaAnchorHint: body.personaAnchorHint,
+      story: body.story,
+      learner: body.learner,
+      currentPhase: body.currentPhase,
+      previousLearnerState: body.previousLearnerState,
+      currentTask: body.currentTask,
+      knowledgeSnapshot: body.knowledgeSnapshot,
+      learnerMemory: body.learnerMemory,
+      epistemicGrounding: body.epistemicGrounding,
+      friction: body.friction,
+      visibleContext: body.visibleContext,
+    };
+  }
+  return body;
 }
 
 export const virtualLearnerLearnTurnSimulatorDefinition: SkillDefinition = {
