@@ -1,5 +1,5 @@
 /**
- * Skill scaffold 服务（SCAFFOLD_P5_SURVEY §5 / SKILL_READINESS_SPEC §5 步骤 1）
+ * Skill scaffold 服务
  *
  * POST /api/admin/skills/scaffold 的确定性写盘核心（纯模板拼装，无 LLM）。
  * 把"6~7 处手写动作"收敛为 1 次请求，并保证每个生成物通过对应校验器：
@@ -14,7 +14,7 @@
  *                 实际注册在 v4-aux-skills/index.ts，4 处修改片段作为文本返回）
  *   handler-only  skills.yaml 条目（noPromptFile=true，无 coreFile）+ handler 占位
  *
- * 幂等语义（以 skills.yaml 为唯一状态事实，SKILLS_YAML_SPEC §4.2）：
+ * 幂等语义（以 skills.yaml 为唯一状态事实）：
  *   - 条目存在且该 kind 全部生成物齐备 → already-exists（路由 → 409）
  *   - 条目存在但部分生成物缺失       → 补齐缺失生成物（status=completed，幂等重放）
  *   - 条目不存在                     → 全量生成（status=created）
@@ -843,7 +843,7 @@ export function deleteFieldFromOrchestration(
 }
 
 /* ------------------------------------------------------------------ */
-/* 注册/接线片段（文本返回，不落盘 —— SKILLS_YAML_SPEC:210-215 决策）      */
+/* 注册/接线片段（文本返回，不落盘 —— 决策）      */
 /* ------------------------------------------------------------------ */
 
 function buildSnippets(input: ScaffoldRequest): Array<{ title: string; content: string }> {
@@ -1017,7 +1017,7 @@ export async function scaffoldSkill(input: ScaffoldRequest, deps?: ScaffoldDeps)
   const coreFileRel = kind === 'handler-only' ? undefined : `prompts/core/${skillId}.yaml`;
   const handlerRef = `backend/src/skills/${skillId}/index.ts`;
 
-  // ---- 唯一性预检（SKILLS_YAML_SPEC:320 三处：户口簿 + manifest + 目录） ----
+  // ---- 唯一性预检（三处：户口簿 + manifest + 目录） ----
   const book = bookLoader();
   const existingEntry = book.skills.find((entry) => entry.skillId === skillId);
   const manifestSkillIds = new Set(

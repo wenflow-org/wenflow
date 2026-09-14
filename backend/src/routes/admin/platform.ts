@@ -446,7 +446,7 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
 
     const catalogOnly = catalogIds.filter(id => !canonicalManifestIds.has(id));
 
-    // ---- skill_registrations 维度（SKILL_READINESS_SPEC §4.1）----
+    // ---- skill_registrations 维度----
     // 数据源：户口簿活跃集 vs skill_registrations（name 无 skill: 前缀）双向差集，
     // 复用 skills-readiness W2 分析纯函数（analyzeW2，同一对账口径，不复制逻辑）。
     const book = loadSkillsBookRaw();

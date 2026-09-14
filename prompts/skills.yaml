@@ -3,7 +3,7 @@
 # 定位：全部"活跃" skill（mainline / aux / handler-only）的注册登记唯一声明源。
 # 消费方：agent-manifest.service.ts（agentMembers 由 parentAgent 运行时派生，P1）、
 #         skills:check 校验器（F1~F12）、coordinator 挂接点校验、admin 向导（P5 预留）。
-# 规格：doc/SKILLS_YAML_SPEC.md（schema §1、校验清单 §2.4、迁移 §3、风险回滚 §5）。
+# 规格：F1~F12 门禁实现见 backend/src/scripts/check-skills-file.ts。
 #
 # 维护规则：
 # 1. 新增 skill：追加一行（kind/stage/parentAgent/handlerRef/coreFile/displayName/description），
@@ -584,7 +584,7 @@ skills:
     dataSource:
       db: []
       sandbox: []
-    notes: 注册中零调用（唯一调用点 designWeekCourses 无调用者）——僵尸状态保留，禁止进退役名单（RETIRED_SKILLS_FIX_PLAN §4.3）；输入 = 请求体 + 代码常量（ai.service.ts:812）
+    notes: 注册中零调用（唯一调用点 designWeekCourses 无调用者）——僵尸状态保留，禁止进退役名单；输入 = 请求体 + 代码常量（ai.service.ts:812）
 
   - skillId: skill-author
     kind: aux
@@ -617,7 +617,7 @@ skills:
     dataSource:
       db: []
       sandbox: []
-    notes: 僵尸项——保留注册但零生产调用（RETIRED_SKILLS_FIX_PLAN §4.3），不进退役名单
+    notes: 僵尸项——保留注册但零生产调用，不进退役名单
 
   - skillId: goal-alignment-checker
     kind: aux
@@ -628,7 +628,7 @@ skills:
     dataSource:
       db: []
       sandbox: []
-    notes: 僵尸项——保留注册但零生产调用（RETIRED_SKILLS_FIX_PLAN §4.3），不进退役名单
+    notes: 僵尸项——保留注册但零生产调用，不进退役名单
 
   # ============ 平台守门（aux 变体，registrationPoint=platform-direct 豁免注册检查） ============
   - skillId: semantic-freeze-judge

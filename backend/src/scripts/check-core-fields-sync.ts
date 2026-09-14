@@ -1,7 +1,7 @@
 /**
  * fields-synced 判定：core.yaml 平铺字段 ↔ 编排文件嵌套 fieldId 的首段前缀一致性
  *
- * 一份逻辑两份消费（SKILL_READINESS_SPEC §2）：
+ * 一份逻辑两份消费：
  * - 门禁：`npm run prompts:fields-sync:check`（已并入 prompts:check:all 链）
  * - 状态机：fields-synced 档复用 analyzeCoreFieldsSync 纯函数（缺项红、孤儿/类型不阻断）
  *

@@ -1,5 +1,5 @@
 /**
- * workbench-meta 端点单测（SKILL_READINESS_SPEC §1.2/§1.3）：
+ * workbench-meta 端点单测：
  * - 404 降级：不在 manifest 但户口簿有登记的 skill → 200 + { draft: true, completion, displayName, description }
  * - 完全不在户口簿 → 404
  * - manifest skill 正常路径 → 200 + completion 字段（全部 skill 响应扩展）

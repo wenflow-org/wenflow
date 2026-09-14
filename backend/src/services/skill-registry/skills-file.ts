@@ -1,11 +1,11 @@
 /**
- * skills.yaml 技能户口簿加载器 —— 跨阶段技能注册唯一声明源（SKILLS_YAML_SPEC P0/P1）
+ * skills.yaml 技能户口簿加载器 —— 跨阶段技能注册唯一声明源（P0/P1）
  *
  * 定位：prompts/skills.yaml 是全部"活跃" skill（mainline / aux / handler-only）的
  * 注册登记唯一声明源；manifest 的 agentMembers 由 parentAgent 字段运行时派生（P1，
  * agent-manifest.service.ts 惰性 require 本模块的 loadSkillsBookRaw）。
  *
- * 边界（与既有单源化的分工，见 doc/SKILLS_YAML_SPEC.md §附）：
+ * 边界（与既有单源化的分工）：
  *   - 编排文件 prompts/orchestration/<stage>.yaml 仍为字段路由数据面唯一声明源；
  *     本模块只做 stage 归属校验（F3）与 mainline 铁律（对应 stage contracts 对照）。
  *   - 退役名单执行权威 = backend/src/skills/retired-skills.ts；本文件不设 retired 字段，
@@ -70,7 +70,7 @@ export interface SkillDataSourceDbEntry {
 
 /**
  * P4 W5：输入血缘声明（声明对象 = 编排层为该 skill 组装 LLM 输入时读取的数据源，
- * 见 doc/DATASOURCE_P4_SURVEY.md §3.1 —— 不是 handler 代码直读声明）。
+ * 不是 handler 代码直读声明）。
  * db 值为裸表名（string）或 {table, keys?, via?} 对象；api 类仅 mcp-tool（由 mcpTools 承担）；
  * sandbox 为该 skill core.yaml inputs 中 sandbox ref 的 agent 前缀（goal/path/teaching/profile/simulation）。
  */

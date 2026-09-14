@@ -1,5 +1,5 @@
 /**
- * Prompt Schema 解析器 v2 (PROMPT_AUTHORING_PROTOCOL v1.1)
+ * Prompt Schema 解析器 v2
  * ============================================================
  * 把 skill prompt 文本解析为统一的结构化 schema，并支持：
  *   - 8 类块（identity/input/rules/state_machine/output/constraints/quality/examples）+ extras 兜底
@@ -10,7 +10,7 @@
  *
  * 真相源仍是 prompts/*.md；本工具只在内存里拆/拼，便于运营按块编辑与可视化。
  *
- * 详见 doc/archive/PROMPT_AUTHORING_PROTOCOL_v2.md（v2 已归档 2026-08-09，现行协议为 SKILL_PROTOCOL_V4）。
+ * 详见 SKILL_PROTOCOL_V4。
  *
  * ⚠️ 向后兼容：保留 v1 的 PromptSchema 字段（title/identity/rulesRaw/rules/output/
  *    extras/conformant/warnings）+ parsePromptSchema/composePromptSchema/parseRuleItems/
@@ -220,7 +220,7 @@ export function isCanonicalHeading(heading: string): boolean {
 // ============================================================
 // 这是“什么是一个合法的 skill prompt”的唯一定义。
 // 解析器按这张表归类（不靠正则猜），编辑器渲染按这张表，校验器按这张表判合规。
-// 详见 doc/PROMPT_AUTHORING_PROTOCOL.md「强制契约」章节。
+// 详见 SKILL_PROTOCOL_V4「强制契约」章节。
 
 export interface ArchetypeSpec {
   /** 必需的 H2 段落（缺一即违规） */
@@ -247,7 +247,7 @@ export const SECTION_ORDER: Record<PromptSection, number> = {
 };
 
 /**
- * 每个 archetype 的段落契约 —— 严格对应 doc/PROMPT_AUTHORING_PROTOCOL.md §3 矩阵：
+ * 每个 archetype 的段落契约 —— 严格对应 SKILL_PROTOCOL_V4 §3 矩阵：
  *   identity/input/rules/output : 全 archetype M（必含）
  *   state_machine : 仅 conversational M，其余 X（禁止）
  *   constraints   : conv/extractor/distiller/copywriter M，generator O

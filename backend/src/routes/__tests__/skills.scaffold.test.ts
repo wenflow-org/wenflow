@@ -1,5 +1,5 @@
 /**
- * POST /api/admin/skills/scaffold 端点单测（SCAFFOLD_P5_SURVEY §5 / SKILL_READINESS_SPEC §5）
+ * POST /api/admin/skills/scaffold 端点单测
  *
  * 覆盖：
  *   - 正常创建 → 200 { success, data: { skillId, kind, status, generated, completion, snippets, note } }

@@ -3,7 +3,7 @@
  *
  * 定位：全仓唯一维护"退役 skill 名单"的文件。index.ts 启动 purge 与
  * cleanup-retired-field-data.ts 手动脚本均 import 本文件派生；禁止任何其他文件
- * 再定义同类名单（否则双名单漂移回归，漂移过程见 doc/RETIRED_SKILLS_FIX_PLAN.md）。
+ * 再定义同类名单（否则双名单漂移回归，漂移过程）。
  *
  * 两常量语义：
  * - PURGED_SKILLS：启动 purge 语义——曾经注册过、启动时必须清残留的 skill
@@ -13,7 +13,7 @@
  *   项（code-only 注销 / 仅 manifest 残留，从未注册），供手动 cleanup 脚本使用。
  *   恒为 PURGED_SKILLS 超集（不变量在模块加载时断言）。
  *
- * 僵尸项处置（2026-08-10，doc/RETIRED_SKILLS_FIX_PLAN.md §4.3）：
+ * 僵尸项处置（2026-08-10）：
  * basic-evaluator / goal-alignment-checker 是"已注册（v4-aux-skills）但零生产调用"
  * 的僵尸项——保留注册、**移出**清理名单（归入活跃集合）。原因：cleanup 删其行会导致
  * skill_model_configs 永久丢失（该表不可自愈，写入方仅管理端配置）与运行期窗口故障。
@@ -85,7 +85,7 @@ export const PURGED_SKILLS: readonly string[] = [
   'prompt-compiler',
   // 2026-08-11 完整退役：session-evaluation-fallback（曾注册于 v4-aux-skills）——43a01fb
   // 纯重试+明确失败改造后失去全部调用语义（session-wrapup 缺 evaluation 直接 evaluation=null +
-  // 'unavailable'），注册/户口簿/产物四同步注销（doc/FALLBACK_RETIREMENT_PLAN.md Phase A）；
+  // 'unavailable'），注册/户口簿/产物四同步注销；
   // 存量 skill_registrations/skill_model_configs 等行由启动 purge 清理
   'session-evaluation-fallback',
 ] as const;

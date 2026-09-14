@@ -1,5 +1,5 @@
 /**
- * scaffold 端到端验收脚本（P5 一条龙，SCAFFOLD_P5_SURVEY §5 手工验收自动化）
+ * scaffold 端到端验收脚本（P5 一条龙，手工验收自动化）
  *
  * 挂真实 skills 路由（无鉴权 stub）+ 真实 scaffold 服务，对真实仓库执行：
  *   1. POST /scaffold 新建 mainline 测试 skill（test-scaffold-demo）

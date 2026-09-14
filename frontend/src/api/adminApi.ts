@@ -490,7 +490,7 @@ export const adminRuntimeDefinitionsApi = {
 /**
  * Skill 工作台综合元数据 API
  * 一次拉回：skill manifest + 隶属 Agent + 模型配置 + prompt 版本 + 字段契约 + 调用统计
- * 完成度扩展（SKILL_READINESS_SPEC §1.3）：completion 字段；不在 manifest 但户口簿有登记的
+ * 完成度扩展：completion 字段；不在 manifest 但户口簿有登记的
  * skill 降级返回 draft 态（data.draft=true + completion + displayName/description），不再 404。
  */
 export interface SkillCompletionGateDetail {
@@ -1080,7 +1080,7 @@ export const adminSkillsApi = {
   },
 
   /**
-   * 技能四向对账（SKILL_READINESS_SPEC §4.2）：户口簿 / manifest / gateway 注册 / ACTIVE prompt
+   * 技能四向对账：户口簿 / manifest / gateway 注册 / ACTIVE prompt
    * 全量逐 skill 状态 + 完成度投影 + 差集标记（Skills.vue 对账面板数据源）。
    */
   getReconciliation: async () => {
@@ -1095,7 +1095,7 @@ export const adminSkillsApi = {
   },
 
   /**
-   * 新建 Skill 一条龙（P5 scaffold，SKILL_READINESS_SPEC §5 步骤 1）：
+   * 新建 Skill 一条龙（P5 scaffold）：
    * 确定性生成 core.yaml 骨架 + skills.yaml 条目 + 编排 contracts 追加（mainline）+ handler 占位，
    * 注册/接线片段仅返回文本。幂等：条目与生成物齐备 → 409；条目在但缺生成物 → completed 补齐。
    */

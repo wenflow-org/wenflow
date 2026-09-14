@@ -1,5 +1,5 @@
 ﻿/**
- * skill scaffold 服务单测（SCAFFOLD_P5_SURVEY §5 / SKILL_READINESS_SPEC §5）
+ * skill scaffold 服务单测
  *
  * 全部在临时目录中执行（deps 注入 temp 路径 + 内存 bookLoader + 假 completionLoader），
  * 零真实仓库写盘。覆盖：

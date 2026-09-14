@@ -1,5 +1,5 @@
 /**
- * 技能完成度状态机（SKILL_READINESS_SPEC §1）
+ * 技能完成度状态机
  *
  * 派生投影，不落库：每次 workbench-meta / reconciliation / scaffold 响应时重算。
  * state = 最大连续满足前缀（draft 恒满足）；条件回退即状态回退。
@@ -125,7 +125,7 @@ export function computeCompletionState(input: ComputeCompletionInput): SkillComp
 
   // handler-ready 只判 F5（占位策略微调）：F11 注册存在性为 items 展示项（checksGreen 语义），
   // 不参与状态推进 —— scaffold 占位 handler 不注册进 skillHandlers 是既定设计
-  //（SCAFFOLD_P5_SURVEY §5.3），注册粘贴是实现完成的标志，由 registered 展示项呈现。
+  // 注册粘贴是实现完成的标志，由 registered 展示项呈现。
   const handlerReadyOk = input.handlerFileExists;
 
   let coreReadyOk: boolean;

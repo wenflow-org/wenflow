@@ -1,7 +1,7 @@
 /**
  * prompts:data-source:check —— dataSource 声明校验（P4 缩小版，W5 warn 级三通道）
  *
- * 语义（doc/DATASOURCE_P4_SURVEY.md §3.1）：dataSource 声明的是"编排层为该 skill
+ * 语义：dataSource 声明的是"编排层为该 skill
  * 组装 LLM 输入时读取的数据源"（输入血缘），不是 handler 代码直读（handler 层零直读，
  * 仅 learner-model/mcp-tool 两特例，见例外账）。校验对象 = skills.yaml 26 条 dataSource。
  *
@@ -547,7 +547,7 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  console.log('[data-source:check] OK：error 级 0 条；W5 warn 级仅审计提示，不阻断（warn 级决策，DATASOURCE_P4_SURVEY §4.1⑤）');
+  console.log('[data-source:check] OK：error 级 0 条；W5 warn 级仅审计提示，不阻断（warn 级决策）');
 }
 
 main();

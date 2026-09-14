@@ -1,5 +1,5 @@
 /**
- * W1-W5 技能 readiness 校验（SKILL_READINESS_SPEC §3）
+ * W1-W5 技能 readiness 校验
  *
  * 全 warn 通道，不进 ReadinessResult.checks，不改变 ready 语义：
  * - readiness.service.ts check() 尾部 fire-and-forget 调用（60s 内存缓存，防 /readyz 轮询反复 fs 扫描）
@@ -11,7 +11,7 @@
  * 检查项：
  * - W1 ACTIVE 覆盖：户口簿活跃集 vs agent_prompts ACTIVE 双向差集；
  *   noPromptFile=true（handler-only）豁免方向 A；僵尸技能（basic-evaluator /
- *   goal-alignment-checker / course-design，保留注册但零生产调用，RETIRED_SKILLS_FIX_PLAN §4.3）
+ *   goal-alignment-checker / course-design，保留注册但零生产调用）
  *   的 ACTIVE 行视为"保留决策下的必需资产"（handler requireActivePrompt: true），
  *   不计入告警 items，仅保留 zombieSkillActive 数组供审计计数。
  * - W2 注册对账：户口簿活跃集 vs skill_registrations（name 无 skill: 前缀）双向差集；
@@ -41,7 +41,7 @@ import {
   type CoreHashParityReport,
 } from '../scripts/check-core-hash-parity';
 
-/** 僵尸技能：保留注册但零生产调用（skills.yaml notes + RETIRED_SKILLS_FIX_PLAN §4.3）；
+/** 僵尸技能：保留注册但零生产调用（skills.yaml notes）；
  * 其 ACTIVE prompt 为保留决策下的必需资产（handler requireActivePrompt: true），
  * 不计告警（zombieSkillActive 仅作审计计数保留）。 */
 export const ZOMBIE_SKILL_IDS = ['basic-evaluator', 'goal-alignment-checker', 'course-design'] as const;
@@ -168,8 +168,7 @@ export function analyzeW1(book: SkillsBook, activeRows: CoreHashParityActiveRow[
     .sort();
 
   // 告警 items：仅缺 ACTIVE（missingActive）与幽灵 ACTIVE（zombieActive）。
-  // zombieSkillActive 不进入 items——按 RETIRED_SKILLS_FIX_PLAN §4.3 决策，
-  // 三个僵尸项正式保留注册（禁止退役名单），且其 handler requireActivePrompt: true
+  // zombieSkillActive 不进入 items——按  决策，  // 三个僵尸项正式保留注册（禁止退役名单），且其 handler requireActivePrompt: true
   // （v4-aux-skills/index.ts:115，admin 测试入口按需执行依赖 ACTIVE prompt），
   // 其 ACTIVE 行为必需资产而非"残留"，报警会把保留决策执行者引向错误清理。
   const items: ReadinessWarningItem[] = [

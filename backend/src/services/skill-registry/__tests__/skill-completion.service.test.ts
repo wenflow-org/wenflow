@@ -1,5 +1,5 @@
 /**
- * 完成度状态机单测（SKILL_READINESS_SPEC §1）
+ * 完成度状态机单测
  *
  * 覆盖：5 档正反用例 + handler-only/aux 豁免链 + TODO 占位阻断 + 注册豁免 + 状态回退。
  * 纯函数 computeCompletionState / 装配 buildCompletionInput / 入口 getSkillCompletion

@@ -1,10 +1,10 @@
 # 统一 Skill 协议 v4（规则文档）
 
-> 版本：v4.0-draft
-> v4.1-draft：新增数据面配置章节（§2.6 编排文件）
+> 版本：v4.1（现行规范，生效）
+> 变更：在 v4.0 基础上新增数据面配置章节（§2.6 编排文件）
 > 性质：规范性协议。本文件定义"什么是合法的"，不含迁移计划。实施顺序见附录 C。
-> 取代关系：落地后取代 PROMPT_AUTHORING_PROTOCOL v2 中 LLM skill 部分；v2 继续约束 code-only skill 直至退役。
-> 配套：archive/PROMPT_PROTOCOL_V4_DESIGN.md（设计推导，已归档）、PROMPT_PROTOCOL_V4_PREWORK_SURVEY.md（现状盘点）
+> 取代关系：取代旧的 Prompt 协议 v2 中 LLM skill 部分；v2 继续约束 code-only skill 直至退役。
+> 配套（历史过程材料，已归档、不在仓库）：PROMPT_PROTOCOL_V4_DESIGN.md（设计推导）、PROMPT_PROTOCOL_V4_PREWORK_SURVEY.md（现状盘点）
 
 ## 1. 总则
 
@@ -320,7 +320,7 @@ type SkillResult = {
    - `propagate`：失败抛错（经 executor 记录 failed span 后重抛），由调用方 try/catch 决定降级。
    - `fallback`：**已退役**（2026-08-11 纯重试+明确失败改造后 core 无 fallback 值）；存量数据带该值时 runAux 防御性按 propagate 处理并 warn，不产出降级产物。
    - `retry`：由 callPrompt 的 retryStrategy 与逻辑重试预算承载，handler 不重复实现。
-4. **failurePolicy 双词表映射**（历史存量，唯一合法映射）：core 词表 → manifest 词表为 `propagate → blocking`、`fallback → deterministic`、`retry → retry`；两边一一对应，lint/parity 检查已硬约束。新文件不得创造第四种取值；中期收敛目标：词表收缩为 `retry | propagate`（RETRY_FAILURE_IMPACT.md §5.2 路径 B）。
+4. **failurePolicy 双词表映射**（历史存量，唯一合法映射）：core 词表 → manifest 词表为 `propagate → blocking`、`fallback → deterministic`、`retry → retry`；两边一一对应，lint/parity 检查已硬约束。新文件不得创造第四种取值；中期收敛目标：词表收缩为 `retry | propagate`。
 5. **平台层例外**：`semantic-freeze-judge` 是发布流水线的 Gate #3，由 `services/prompt-lab/semantic-freeze-judge.ts` 直调 `callPrompt`，不注册进 `skillHandlers`；这是唯一合法的业务外直调例外，新增例外须先修改本节。
 
 ## 6. 版本、发布与漂移检测

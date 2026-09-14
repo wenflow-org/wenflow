@@ -8,7 +8,7 @@
 
 - [`SKILL_PROTOCOL_V4.md`](./SKILL_PROTOCOL_V4.md)
   - 统一 Skill 协议 v4 规则文档（核心文件 core.yaml / 六材料池 / 五块编译产物 / 守门三查 / SkillResult）
-  - 后续 AI 开发、重构的最高指导准则（v4.1-draft：新增 §2.6 编排文件章节，编排文件为字段路由唯一源）
+  - 后续 AI 开发、重构的最高指导准则（v4.1：新增 §2.6 编排文件章节，编排文件为字段路由唯一源）
 - [`SKILL_DEVELOPMENT_GUIDE.md`](./SKILL_DEVELOPMENT_GUIDE.md)
   - Skill 开发指南（开发者向）：选型 → scaffold → 接线 → 加字段 → 门禁 → 发布 → 测试（2026-08-12）
 

@@ -178,7 +178,7 @@ router.get('/scaffold/meta', async (_req: Request, res: Response) => {
 
 /**
  * POST /api/admin/skills/scaffold
- * 新建 Skill 一条龙（SCAFFOLD_P5_SURVEY §5 / SKILL_READINESS_SPEC §5 步骤 1）：
+ * 新建 Skill 一条龙：
  * 确定性生成 core.yaml 骨架 + skills.yaml 条目 + 编排 contracts 追加（mainline）+ handler 占位，
  * 每个生成物写盘前后过对应校验器；注册/接线片段仅返回文本不落盘。
  *
@@ -762,7 +762,7 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
     const manifest = getAgentManifest(canonicalId);
 
     if (!manifest) {
-      // 404 降级（SKILL_READINESS_SPEC §1.2/§1.3）：不在 manifest 但户口簿有登记的 skill
+      // 404 降级：不在 manifest 但户口簿有登记的 skill
       // （scaffold 后、manifest 代码未合并前）→ 200 + draft 态 completion，否则才 404。
       const shortSkillId = canonicalId.replace(/^skill:/, '');
       const bookEntry = loadSkillsBookRaw().skills.find((entry) => entry.skillId === shortSkillId);
@@ -825,7 +825,7 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
     const stats = unifiedStats.get(shortSkillId);
     const activePrompt = promptVersions.find(p => p.status === 'ACTIVE' || p.status === 'published') || null;
 
-    // 完成度状态机（SKILL_READINESS_SPEC §1）：派生投影，复用本次查询的 promptVersions/stats
+    // 完成度状态机：派生投影，复用本次查询的 promptVersions/stats
     const completion = await getSkillCompletion(shortSkillId, {
       activePromptIds: new Set(
         promptVersions.some((p) => p.status === 'ACTIVE') ? [canonicalId] : [],
@@ -927,7 +927,7 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
 /**
  * GET /api/admin/skills/reconciliation
  *
- * 技能四向对账（SKILL_READINESS_SPEC §4.2）：户口簿 / manifest / gateway 注册 / ACTIVE prompt
+ * 技能四向对账：户口簿 / manifest / gateway 注册 / ACTIVE prompt
  * 全量逐 skill 状态 + 完成度状态机投影 + 差集标记（unregistered / active-missing），
  * 另附注册表幽灵残留（户口簿无登记）清单。前端 Skills.vue 对账面板唯一数据源。
  */
@@ -1028,7 +1028,7 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
 /**
  * GET /api/admin/skills/readiness
  *
- * W1-W5 技能完成度诊断（SKILL_READINESS_SPEC §3，全 warn 不阻断 ready）：
+ * W1-W5 技能完成度诊断（全 warn 不阻断 ready）：
  * 默认返回 60s 缓存；?refresh=1 时总是重算（按需正确性优先）。
  * 结构：{ checks: { W1..W5 }, generatedAt }，与 readiness.service 启动异步通道同一份报告。
  */

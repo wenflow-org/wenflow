@@ -7,7 +7,7 @@
 
 - [`SKILL_PROTOCOL_V4.md`](./SKILL_PROTOCOL_V4.md)
   - Unified Skill Protocol v4 (rules): core.yaml / six input channels / five-block compiled prompt / three gate checks / SkillResult
-  - Supreme guideline for future AI development & refactoring (v4.1-draft: §2.6 orchestration files; orchestration files are the single source for field routing)
+  - Supreme guideline for future AI development & refactoring (v4.1: §2.6 orchestration files; orchestration files are the single source for field routing)
 - [`SKILL_DEVELOPMENT_GUIDE.md`](./SKILL_DEVELOPMENT_GUIDE.md)
   - Skill development guide (for developers): selection → scaffold → wiring → fields → gates → publish → tests (2026-08-12)
 

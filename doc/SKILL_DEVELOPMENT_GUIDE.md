@@ -80,7 +80,7 @@ scaffold（draft）→ 实现 handler + 粘贴注册片段（handler-ready）→
 ## 4. 三处手工注册接线（scaffold 只出片段，不落盘）
 
 > 决策背景：注册是**代码语义**（import/映射），不是配置声明，scaffold 只把「6~7 处手写」收敛为
-> 「3 处粘贴」（SKILLS_YAML_SPEC:210-215）。
+> 「3 处粘贴」。
 
 ### 4.1 manifest 登记（F12：mainline/handler-only 必须登记，kind=skill）
 

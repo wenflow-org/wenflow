@@ -1,7 +1,7 @@
 /**
  * 退役名单门禁（retired:check）：
  * 校验 backend/src/skills/retired-skills.ts 单源名单的不变量与文件状态一致性，
- * 防止双名单漂移与僵尸项误入名单回归（doc/RETIRED_SKILLS_FIX_PLAN.md §4.2）。
+ * 防止双名单漂移与僵尸项误入名单回归。
  *
  * 检查项：
  * 1. 单源不变量：PURGED_SKILLS ⊆ ALL_RETIRED_SKILLS，且两名单内部无重复

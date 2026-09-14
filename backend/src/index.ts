@@ -473,7 +473,7 @@ async function initializeGateway() {
   const topAgents = listTopLevelAgents();
   logger.info(`[startup] Agent manifest OK · ${topAgents.length} 个顶层 Agent: ${topAgents.map(a => a.id).join(', ')}`);
 
-  // skills.yaml 户口簿校验（P0，SKILLS_YAML_SPEC §2.4 表 A）：F1~F10/F12 任一失败即终止启动
+  // skills.yaml 户口簿校验（P0）：F1~F10/F12 任一失败即终止启动
   // （fail-fast，与 field-routing import 期 fail-fast 同风格）。过渡开关 SKILLS_FILE_DISABLED=1
   // 跳过（规格 §5.3 回滚点，仅限一版发布窗口）。
   if (process.env.SKILLS_FILE_DISABLED === '1') {

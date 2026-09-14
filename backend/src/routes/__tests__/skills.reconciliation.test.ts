@@ -1,5 +1,5 @@
 /**
- * GET /api/admin/skills/reconciliation 端点单测（SKILL_READINESS_SPEC §4.2）：
+ * GET /api/admin/skills/reconciliation 端点单测：
  * 四向对账（户口簿/manifest/gateway 注册/ACTIVE prompt）+ 完成度投影 + 差集标记。
  */
 import type { SkillCompletionReport } from '../../services/skill-registry/skill-completion.service';

@@ -12,7 +12,7 @@
  *   - kind=skill: id 必须以 'skill:' 开头
  *   - alias: 仅用于旧 id 向新 id 的兼容映射
  *
- * agentMembers 派生（SKILLS_YAML_SPEC §2.3①）：
+ * agentMembers 派生：
  *   - 数据源 = prompts/skills.yaml 条目 parentAgent 字段（唯一来源），本模块惰性加载
  *     （首次调用 getAgentMembersOfAgent 时 require skills-file，避免模块顶部静态 import
  *     造成循环依赖与启动顺序问题）。
@@ -410,7 +410,7 @@ for (const item of AGENT_MANIFEST) {
 }
 
 // ============================================================
-// agentMembers 派生（P1，SKILLS_YAML_SPEC §2.3①）
+// agentMembers 派生（P1）
 // ============================================================
 
 /**

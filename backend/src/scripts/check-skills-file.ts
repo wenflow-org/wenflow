@@ -1,7 +1,7 @@
 /**
  * skills:check —— 技能户口簿（prompts/skills.yaml）全量门禁（F1~F12 + 派生等价）
  *
- * 检查项（SKILLS_YAML_SPEC §2.4 表 A；F 系列纯静态、零误报）：
+ * 检查项（F 系列纯静态、零误报）：
  *   F1   schema：字段必填/可选/值域（kind/stage 枚举、skillId kebab-case、未知字段拒绝）
  *   F2   skillId 全局唯一
  *   F3   mainline 的 stage ∈ 编排文件 stage 清单 + 对应 stage contracts 铁律
