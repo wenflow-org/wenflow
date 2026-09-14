@@ -191,23 +191,28 @@ ORDER BY avg_prompt DESC;
 | **teaching-opening-generator** | 109 | 10.3% | 24.8% | **+14.6pp** |
 | **virtual-learner-path-evaluator** | 195 | 38.5% | 52.0% | **+13.5pp** |
 | **virtual-learner-learn-turn-simulator** | 198 | 19.7% | 28.7% | **+9.0pp** |
+| **path-reviewer** | 183 | 1.0% | 6.9% | **+5.9pp** |
+| **virtual-learner-goal-dialogue-simulator** | 189 | 58.9% | 63.3% | **+4.4pp** |
+| **virtual-learner-persona-designer** | 94 | 54.1% | 56.0% | **+1.9pp** |
+| ~~goal-conversation~~ | 136 | 26.6% | 22.8% | **-3.8pp（已回退）** |
+
+> `goal-conversation` 实测为**负收益**（`userInput` 前置反而变差），已按数据回退，不做无收益改动。
 
 ### 7.2.1 缓存 token 收益（估算）
 
-用真实历史调用量换算（Δpp × 平均 prompt tokens）：
-
 | skill | 调用数 | 平均 prompt | +缓存/次 | +缓存总计 |
 |---|---:|---:|---:|---:|
-| teaching-turn | 2,493 | 21,815 | 4,210 | ~10.5M |
+| teaching-turn | 2,531 | 21,730 | 4,193 | ~10.6M |
 | adaptive-guidance-copy | 655 | 40,150 | 6,022 | ~3.9M |
 | stage-designer | 1,138 | 3,446 | 2,081 | ~2.4M |
-| learn-turn-sim | 2,673 | 9,648 | 868 | ~2.3M |
+| learn-turn-sim | 2,714 | 9,590 | 863 | ~2.3M |
 | virtual-learner-path-evaluator | 189 | 7,193 | 971 | ~0.18M |
-| teaching-opening-generator | 115 | 1,585 | 231 | ~0.03M |
+| virtual-learner-goal-dialogue-simulator | 606 | 5,663 | 249 | ~0.15M |
+| path-reviewer | 197 | 2,657 | 156 | ~0.03M |
+| teaching-opening-generator | 124 | 1,590 | 232 | ~0.03M |
 | learner-progress-report | 62 | 352 | 136 | ~0.01M |
-| **合计** | | | | **≈ 19.3M tokens** |
-
-即：这 7 个 skill 在历史样本区间内，约 **1,930 万 tokens 从 cache-miss 变为 cache-hit**（按缓存折扣价计即直接降本）。
+| virtual-learner-persona-designer | 125 | 1,675 | 31 | ~0.003M |
+| **合计** | | | | **≈ 19.7M tokens** |
 
 > 说明：本表是**确定性**测量（真实 payload + 真实键序），但仍是**前缀上界**；实际命中受 provider 路由影响（best-effort），须以真 LLM A/B 佐证（见 §7.6）。
 
@@ -225,14 +230,19 @@ ORDER BY avg_prompt DESC;
 | `teaching-opening-generator` | `learner`/`openingMode` 前置 |
 | `learner-progress-report` | `signals` 前置 |
 | `virtual-learner-path-evaluator` | `task`/`personaAnchorHint`/`goalState` 前置，`pathProposal`/`previousReaction` 后置 |
+| `path-reviewer` | `prerequisiteTree`（常量）前置 |
+| `virtual-learner-goal-dialogue-simulator` | `personaAnchorHint`/`task` 前置，`visibleContext` 后置 |
+| `virtual-learner-persona-designer` | `candidatePersonas`/`preferredLevels` 前置 |
 
-默认路径字节不变（`tsc` 0、payload 快照与单测全绿）。
+默认路径字节不变（`tsc` 0、payload 快照与单测全绿）。共 **10 个 skill**。
 
-### 7.5 待落地改造
-- `goal-conversation`：payload 去 `state.collected`（understanding 的派生副本）+ 稳定键前置。
-- `adaptive-guidance-copy`：79k 动态 payload 裁剪（`sessionWrapup` 只留必要字段）+ 稳定前缀。
-- `virtual-learner-learn-turn-simulator` / `epistemic-grounding`：`learner.profile.storyPool` 等无关大对象投影剔除 + 稳定键前置。
-- `path-planning` / `kc-mapper` / `path-reviewer`：去重（confirmedProposal ×2 / `【强制要求】`×5）+ 前置稳定块；`path-reviewer` 修 `prerreqTree` key。
+### 7.5 待落地改造（低收益 / 大改 / 已否）
+- `adaptive-guidance-copy`：79k 动态 payload **裁剪**（`sessionWrapup` 只留必要字段）——前缀序已改，**体积**收益待做。
+- `learn-turn-sim` / `virtual-learner-*`：`learner.profile.storyPool` 等无关大对象**投影剔除**（体积而非前缀）。
+- `path-planning` / `kc-mapper`：**去重**（confirmedProposal ×2 / `【强制要求】`×5）——前缀收益≈0，属体积项。
+- `learning-predictor`：需在**调用方**（`TeachingContextBuilder`）改序（skill 侧是 `payload=>payload`）。
+- `goal-conversation`：试改**负收益（-3.8pp）已回退**；除非先去掉 `state.collected` 派生副本再评估。
+- `epistemic-grounding` / `lesson-knowledge-enricher`：实测前缀≈0，不做序改。
 
 ### 7.6 真业务 A/B：尝试与阻塞（2026-09-15）
 
