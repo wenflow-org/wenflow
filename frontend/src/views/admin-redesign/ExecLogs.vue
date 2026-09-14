@@ -101,13 +101,25 @@
           </colgroup>
           <thead>
             <tr>
-              <th v-if="!hiddenCols.has('time')">时间</th>
+              <th
+                v-if="!hiddenCols.has('time')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="logSortState('calledAt')"
+                @click="toggleLogSort('calledAt')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('calledAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!hiddenCols.has('kind')">类型</th>
               <th v-if="!hiddenCols.has('agent')">节点</th>
               <th v-if="!hiddenCols.has('msg')">调用</th>
               <th v-if="!hiddenCols.has('model')">模型</th>
               <th v-if="!hiddenCols.has('tokens')">输入 / 输出</th>
-              <th v-if="!hiddenCols.has('dur')" class="right">耗时</th>
+              <th
+                v-if="!hiddenCols.has('dur')"
+                scope="col"
+                class="right mk-th--sortable"
+                :aria-sort="logSortState('durationMs')"
+                @click="toggleLogSort('durationMs')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('durationMs')">耗时<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!hiddenCols.has('status')">状态</th>
               <th v-if="!hiddenCols.has('trace')" class="right">Trace</th>
             </tr>
@@ -264,6 +276,7 @@ import Pagination from './Pagination.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
 import TokenCost from './TokenCost.vue'
 import { TERMS, errorCodeLabel } from './terms'
+import { useTableSort } from './useTableSort'
 
 /* 日志 / Trace 链路 / 成本分析 tab（Trace 为执行日志下钻视图；成本分析为观测同域并入） */
 const EL_TABS = ['logs', 'trace', 'cost'] as const
@@ -394,6 +407,21 @@ function tokensTitle(log: TokenRow): string {
 /* live 模式：服务端筛选（时间范围/关键词/状态/节点/traceId/sessionId/错误类别）。
    reloadLiveSpans 写入独立的 liveLogsFiltered（不污染全局 liveSpans）；
    并发与 last-wins 由 live.ts 串行化保证（loading 反馈见 liveLogsLoading） */
+/* 服务端排序：复用 useTableSort 的状态/语义（排序在后端执行，不调用 sortRows）。
+   默认时间倒序；点表头「时间 / 耗时」切换，变更后回第 1 页重查。
+   只暴露列表自身列——token 列是网关行合并口径，不适合服务端排序。 */
+const {
+  sortKey: logSortKey,
+  sortDir: logSortDir,
+  toggle: toggleLogSort,
+  sortState: logSortState
+} = useTableSort({
+  keys: ['calledAt', 'durationMs'],
+  defaultKey: 'calledAt',
+  defaultDir: 'desc',
+  storageKey: 'wf_exec_logs_sort'
+})
+
 function currentQuery(): SpanQuery {
   const status = statusFilter.value === 'err' ? 'error' : statusFilter.value === 'warn' ? 'timeout' : statusFilter.value === 'ok' ? 'success' : undefined
   return {
@@ -403,7 +431,9 @@ function currentQuery(): SpanQuery {
     agentId: agentFilter.value || undefined,
     traceId: traceId.value.trim() || undefined,
     sessionId: sessionId.value.trim() || undefined,
-    errorCategory: errorCategory.value || undefined
+    errorCategory: errorCategory.value || undefined,
+    sort: (logSortKey.value || undefined) as SpanQuery['sort'],
+    order: logSortDir.value
   }
 }
 
@@ -444,6 +474,11 @@ async function goPage(p: number) {
    消除「本地过滤 × 服务端分页」组合缺陷（旧实现下第 2 页整页被滤掉时，
    「加载更多」空转无感知变化） */
 watch([statusFilter, agentFilter], () => {
+  void applyServerQuery()
+})
+
+/* 服务端排序变化：与筛选同义，回第 1 页重查 */
+watch([logSortKey, logSortDir], () => {
   void applyServerQuery()
 })
 

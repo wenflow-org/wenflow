@@ -15,6 +15,10 @@
  * 用法（下拉式，窄列表头不适合放箭头时）：
  *   const { sortKey, sortDir, toggleDir, sortRows } = useTableSort<T>({ accessors })
  *   <select v-model="sortKey">…</select><button @click="toggleDir">{{ sortDir === 'asc' ? '升序' : '降序' }}</button>
+ *
+ * 用法（服务端排序，复用状态/语义，排序由后端执行）：
+ *   const { sortKey, sortDir, toggle, sortState } = useTableSort({ keys: ['calledAt', 'durationMs'], defaultKey: 'calledAt' })
+ *   watch([sortKey, sortDir], () => reload({ sort: sortKey.value, order: sortDir.value }))
  */
 import { ref, type Ref } from 'vue'
 
@@ -24,8 +28,10 @@ export type SortValue = string | number | boolean | null | undefined
 export type SortState = 'ascending' | 'descending' | 'none'
 
 export interface UseTableSortOptions<T> {
-  /** 列 key → 取值器（返回值用于比较；空值恒排末尾，不随升降序翻转） */
-  accessors: Record<string, (row: T) => SortValue>
+  /** 列 key → 取值器（客户端排序用）。服务端排序只需 `keys`，可不传 accessors。 */
+  accessors?: Record<string, (row: T) => SortValue>
+  /** 可排序键（默认取 accessors 的键；纯服务端排序状态显式给出） */
+  keys?: string[]
   /** 默认排序键；不传则点击前保持数据原始顺序（不排序） */
   defaultKey?: string
   /** 默认方向（默认 'desc'） */
@@ -82,7 +88,8 @@ function compareValues(a: SortValue, b: SortValue, dir: number): number {
 }
 
 export function useTableSort<T>(options: UseTableSortOptions<T>): UseTableSort<T> {
-  const keys = Object.keys(options.accessors)
+  const accessors = options.accessors ?? {}
+  const keys = options.keys ?? Object.keys(accessors)
   const saved = readSnapshot(options.storageKey, keys)
   const validDefault = options.defaultKey && keys.includes(options.defaultKey) ? options.defaultKey : ''
   const sortKey = ref(saved?.key ?? validDefault)
@@ -125,7 +132,8 @@ export function useTableSort<T>(options: UseTableSortOptions<T>): UseTableSort<T
 
   function sortRows(rows: T[]): T[] {
     const key = sortKey.value
-    const accessor = key ? options.accessors[key] : undefined
+    const accessor = key ? accessors[key] : undefined
+    // 无取值器 = 该键交给服务端排序：此处原样返回，不改变顺序
     if (!accessor) return rows
     const dir = sortDir.value === 'asc' ? 1 : -1
     return rows

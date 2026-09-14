@@ -446,6 +446,9 @@ export const adminAgentsApi = {
     startTime?: string;
     endTime?: string;
     errorCategory?: string;
+    /** 服务端排序：白名单列（agent_call_logs 自身列）；默认 calledAt desc */
+    sort?: 'calledAt' | 'durationMs';
+    order?: 'asc' | 'desc';
   }) => {
     return adminAxios.get('/admin/agents/logs', { params });
   },

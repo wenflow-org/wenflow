@@ -512,6 +512,9 @@ export interface SpanQuery {
   sessionId?: string
   /** 错误类别筛选（失败归因/异常流跳转；后端按列值 + 空类别启发式归并） */
   errorCategory?: string
+  /** 服务端排序：白名单列（agent_call_logs 自身列）；默认 calledAt desc */
+  sort?: 'calledAt' | 'durationMs'
+  order?: 'asc' | 'desc'
   limit?: number
 }
 

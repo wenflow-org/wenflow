@@ -223,4 +223,23 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     expect(cell.text()).toBe('未统计');
     expect(cell.attributes('title')).toContain('未记录 token 用量');
   });
+
+  it('服务端排序：点「耗时」表头 → 按 durationMs 重查并回第 1 页；再点切升序', async () => {
+    liveLogsTotal.value = 1;
+    liveLogsFiltered.value = [fakeSpan(1)];
+    const w = await mountExec();
+    liveLogsPage.value = 3;
+    h.reload.mockClear();
+    const th = w.findAll('th.mk-th--sortable').find((t) => t.text().includes('耗时'))!;
+    expect(th.attributes('aria-sort')).toBe('none'); // 默认按时间排序
+    await th.find('button').trigger('click');
+    await flushPromises();
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ sort: 'durationMs', order: 'desc' });
+    expect(liveLogsPage.value).toBe(1); // 排序变更回第 1 页
+    expect(th.attributes('aria-sort')).toBe('descending');
+    await th.find('button').trigger('click');
+    await flushPromises();
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ sort: 'durationMs', order: 'asc' });
+    expect(th.attributes('aria-sort')).toBe('ascending');
+  });
 });

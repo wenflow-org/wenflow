@@ -87,4 +87,14 @@ describe('useTableSort', () => {
     s.toggleDir()
     expect(s.sortDir.value).toBe('asc')
   })
+
+  it('纯 keys 模式（服务端排序）：可切换状态，但 sortRows 原样返回不改序', () => {
+    const s = useTableSort({ keys: ['calledAt', 'durationMs'], defaultKey: 'calledAt' })
+    expect(s.sortState('calledAt')).toBe('descending')
+    expect(s.isSortable('durationMs')).toBe(true)
+    s.toggle('durationMs')
+    expect(s.sortState('durationMs')).toBe('descending')
+    const data = [{ id: 'a' }, { id: 'b' }]
+    expect(s.sortRows(data)).toEqual(data) // 无 accessor → 交给后端，前端不动
+  })
 })

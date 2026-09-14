@@ -1464,6 +1464,29 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
+    /* 服务端排序：白名单 + 方向校验（非法 400，与 timeRange 一致）。
+       只暴露 agent_call_logs 自身列——token 列不参与：前端「输入 / 输出」是同 trace
+       网关行合并后的口径，与本表单行不一致，服务端排序会误导。
+       并列时以「时间倒序 + id」为稳定次级键，保证翻页不重不漏。 */
+    const LOG_SORT_FIELDS = ['calledAt', 'durationMs'] as const;
+    const sortRaw = req.query.sort === undefined ? 'calledAt' : String(req.query.sort);
+    if (!(LOG_SORT_FIELDS as readonly string[]).includes(sortRaw)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: `非法 sort 参数: ${sortRaw}（可选值: ${LOG_SORT_FIELDS.join('/')}）`, status: 400 },
+      });
+    }
+    const orderRaw = req.query.order === undefined ? 'desc' : String(req.query.order);
+    if (orderRaw !== 'asc' && orderRaw !== 'desc') {
+      return res.status(400).json({
+        success: false,
+        error: { message: `非法 order 参数: ${orderRaw}（可选值: asc/desc）`, status: 400 },
+      });
+    }
+    const logOrderBy: any = sortRaw === 'calledAt'
+      ? [{ calledAt: orderRaw }, { id: 'desc' }]
+      : [{ [sortRaw]: orderRaw }, { calledAt: 'desc' }, { id: 'desc' }];
+
     const timeoutErrorSignals = [
       'timeout',
       'timed out',
@@ -1748,7 +1771,7 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         where,
         skip,
         take: Number(limit),
-        orderBy: { calledAt: 'desc' },
+        orderBy: logOrderBy,
         select: {
           id: true,
           agentId: true,
