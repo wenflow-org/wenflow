@@ -2737,6 +2737,7 @@ html[data-theme='dark'] {
   .vp-life--ok { background: rgba(74, 222, 128, 0.12); }
   .vp-life--warn { background: rgba(251, 191, 36, 0.12); }
   .vp-life--bad { background: rgba(248, 113, 113, 0.12); }
+  .vp-life--muted { background: #253049; border-color: #33415c; }
   .vp-story { background: #141c2b; border-color: #232f45; }
   .vp-story__radio { background: #1b2537; }
   .vp-story.is-selected { background: rgba(91, 141, 239, 0.1); border-color: rgba(91, 141, 239, 0.35); }

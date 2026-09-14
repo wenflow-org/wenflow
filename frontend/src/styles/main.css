@@ -18,6 +18,10 @@
 @import './learning-components.css';
 
 :root {
+  /* 原生控件配色：浅色为默认；深色由下方 html[data-theme='dark'] 覆盖。
+     否则 <button>/滚动条/表单在深色主题下仍按 UA 浅色渲染（buttontext=纯黑）。 */
+  color-scheme: light;
+
   /* 层级 token：抽屉/弹窗/菜单统一 z-index，避免散落硬编码 */
   --mk-z-menu: 60;
   --mk-z-drawer: 200;
@@ -135,11 +139,19 @@
 }
 
 /* ========================================
+   原生控件基座：未显式声明 color 的 <button> 在浅色下取 UA buttontext（纯黑），
+   深底不可读；统一继承父级文字色（组件仍可自行覆盖）。
+   ======================================== */
+button { color: inherit; }
+html.dark { color-scheme: dark; }
+
+/* ========================================
    暗色模式（D1 设计改进）
    机制：html[data-theme='dark'] 覆写 --mk-* 语义 token；组件尽量引用 token，
    少量硬编码色由 shared.css 暗色段兜底覆写。切换开关见 Shell.vue。
    ======================================== */
 html[data-theme='dark'] {
+  color-scheme: dark;
   --mk-ink: #e6edf7;            /* 主文字：深底浅字 */
   --mk-muted: #9fb0c8;          /* 次级文字 */
   --mk-faint: #6b7c96;          /* 弱化文字 */

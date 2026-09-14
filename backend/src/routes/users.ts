@@ -391,7 +391,7 @@ router.get('/me/sessions', async (req, res, next) => {
 router.get('/me/agent-logs', async (req, res, next) => {
   try {
     const userId = req.user.userId;
-    const page = parseInt(req.query.page as string) || 1;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
     // limit 钳制（1-100），防止无上限分页拉全表
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
     const where = buildAgentLogWhere(userId, req.query);

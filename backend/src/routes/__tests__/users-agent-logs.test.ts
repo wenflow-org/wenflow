@@ -211,4 +211,17 @@ describe('users agent log routes', () => {
     // 明细保留 phase，供前端显示「主结构 / 阶段任务」
     expect(pathGroup[0].groupItems.map((i: any) => i.phase)).toEqual(['core', 'core', 'stageDesign']);
   });
+
+  it('page 负值被钳制为 1（skip=0），不再向 Prisma 传负 skip', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    agentLogMocks.count.mockResolvedValue(0);
+    const req: any = { user: { userId: 'user-1' }, query: { page: '-5' } };
+    const res = createResponse();
+
+    await routes['GET /me/agent-logs'](req, res, jest.fn());
+
+    const args = agentLogMocks.findMany.mock.calls.at(-1)?.[0];
+    expect(args.skip).toBe(0);
+    expect(res.body?.success).toBe(true);
+  });
 });

@@ -22,8 +22,8 @@ const STATS_USER_WHERE: Prisma.usersWhereInput = {
  */
 router.get('/', async (req: any, res) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit as string) || 20));
     const status = req.query.status as string;
     const userId = req.query.userId as string;
     // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 STATS_USER_WHERE）；

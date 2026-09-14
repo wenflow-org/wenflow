@@ -1376,8 +1376,8 @@ router.post('/', async (req: Request, res) => {
  */
 router.get('/', async (req: Request, res) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit as string) || 20));
     const skip = (page - 1) * limit;
     
     const [profiles, total] = await Promise.all([
