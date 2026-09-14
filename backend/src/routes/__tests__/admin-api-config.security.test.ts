@@ -8,6 +8,7 @@ const updateConfig = jest.fn()
 const testConnection = jest.fn()
 const safeHttpRequest = jest.fn()
 const refresh = jest.fn()
+const getRuntimeCapabilityProbeEnabled = jest.fn()
 
 jest.mock('express', () => ({
   Router: () => ({
@@ -40,6 +41,10 @@ jest.mock('../../services/runtime-network-policy.service', () => ({
 
 jest.mock('../../services/ai-capability-health.service', () => ({
   aiCapabilityHealthService: { refresh }
+}))
+
+jest.mock('../../services/capability-probe-settings.service', () => ({
+  getRuntimeCapabilityProbeEnabled
 }))
 
 require('../admin/api-config')
@@ -81,6 +86,7 @@ describe('Admin API 配置 Secret 绑定', () => {
     getConfig.mockResolvedValue(currentConfig)
     updateConfig.mockResolvedValue(currentConfig)
     refresh.mockResolvedValue({})
+    getRuntimeCapabilityProbeEnabled.mockResolvedValue(true)
   })
 
   it('更换主 Endpoint 时不能复用掩码后的平台密钥', async () => {

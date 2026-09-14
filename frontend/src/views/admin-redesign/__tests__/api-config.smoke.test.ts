@@ -2,7 +2,7 @@
  * ApiConfig.vue P1 修复批冒烟：
  * 1. 能力健康汇总角标（「5 能力 · N 异常」）
  * 2. 脏位分域标注（连接/路由/策略/可靠性/探测 分组列出）
- * 3. 快照过期语义 + 页面进入自动探测（stale → 自动补一次探测）+ 状态条与能力行时间同源
+ * 3. 快照过期语义 + 页面进入自动探测（仅探针开启时 stale → 自动补一次探测）+ 状态条与能力行时间同源
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -161,7 +161,8 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('页面进入自动探测：快照 stale → 自动补一次探测（含时间语义文案）', async () => {
+  it('页面进入自动探测：探针开启且快照 stale → 自动补一次探测（含时间语义文案）', async () => {
+    getProbeSettingsMock.mockResolvedValue({ data: { data: { enabled: true, intervalMs: 120000, minIntervalMs: 10000, maxIntervalMs: 86400000 } } });
     getCapabilitiesMock.mockResolvedValue({
       data: { data: makeSnapshot({ overall: 'unknown', stale: true }) }
     });
@@ -171,9 +172,8 @@ describe('ApiConfig P1 修复批', () => {
     const wrapper = await mountApiConfig();
     expect(getCapabilitiesMock).toHaveBeenCalled();
     expect(probeCapabilitiesMock).toHaveBeenCalledTimes(1);
-    // stale 语义：上次探测时间 + 已过期提示 + 探针关闭副文案 + 探测中
+    // stale 语义：上次探测时间 + 已过期提示 + 探测中
     expect(wrapper.text()).toContain('快照已过期');
-    expect(wrapper.text()).toContain('关闭时快照不自动刷新');
     expect(wrapper.text()).toContain('探测中…');
     // 探测完成 → 快照刷新、角标更新、过期提示消失
     resolveProbe({ data: { data: makeSnapshot() } });
@@ -181,6 +181,19 @@ describe('ApiConfig P1 修复批', () => {
     await nextTick();
     expect(wrapper.text()).toContain('5 能力 · 1 异常');
     expect(wrapper.text()).not.toContain('快照已过期');
+    wrapper.unmount();
+  });
+
+  it('页面进入自动探测：探针关闭且快照 stale → 不自动探测（仅手动「立即探测」）', async () => {
+    // beforeEach 已把探测设置 mock 为 enabled:false
+    getCapabilitiesMock.mockResolvedValue({
+      data: { data: makeSnapshot({ overall: 'unknown', stale: true }) }
+    });
+    const wrapper = await mountApiConfig();
+    expect(getCapabilitiesMock).toHaveBeenCalled();
+    expect(probeCapabilitiesMock).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('快照已过期');
+    expect(wrapper.text()).toContain('关闭时快照不自动刷新');
     wrapper.unmount();
   });
 

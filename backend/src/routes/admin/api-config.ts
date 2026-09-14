@@ -10,6 +10,7 @@ import {
   updateRuntimeNetworkPolicy
 } from '../../services/runtime-network-policy.service';
 import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
+import { getRuntimeCapabilityProbeEnabled } from '../../services/capability-probe-settings.service';
 import { endpointsMatch, resolveEndpointBoundSecret } from '../../utils/endpoint-identity';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 
@@ -197,7 +198,10 @@ router.put('/', async (req, res) => {
     setAuditAfter(res, updatedConfig);
 
     getAPIGateway().invalidateCache();
-    void aiCapabilityHealthService.refresh().catch(() => undefined);
+    // 配置变更后校准连接状态。能力探针关闭时不自动探测（与探针开关语义一致，避免关闭后仍发 LLM 请求）。
+    if (await getRuntimeCapabilityProbeEnabled()) {
+      void aiCapabilityHealthService.refresh().catch(() => undefined);
+    }
 
     res.json({
       success: true,
@@ -348,8 +352,11 @@ router.post('/reset', async (req, res) => {
   try {
     await apiConfigService.resetConfig();
     getAPIGateway().invalidateCache();
-    void aiCapabilityHealthService.refresh().catch(() => undefined);
-    
+    // 重置后校准连接状态；能力探针关闭时不自动探测（尊重探针开关）
+    if (await getRuntimeCapabilityProbeEnabled()) {
+      void aiCapabilityHealthService.refresh().catch(() => undefined);
+    }
+
     res.json({
       success: true,
       message: '配置已重置为默认值'

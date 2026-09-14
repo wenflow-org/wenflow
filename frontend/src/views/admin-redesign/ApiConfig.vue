@@ -537,6 +537,10 @@ async function loadHealth() {
     health.value = res.data?.data ?? res.data ?? null
     healthFailed.value = false
     if (health.value?.stale && !autoProbeDone) {
+      // 探针设置未就绪时先等它，避免「探针已关闭」却自动探测：
+      // 自动探测与启动金丝雀一样，应受能力探针开关约束。
+      if (!probe.loaded) await loadProbe()
+      if (!probe.enabled) return
       autoProbeDone = true
       void probeHealth()
     }
@@ -692,23 +696,34 @@ async function loadReliability() {
   }
 }
 
-async function loadProbe() {
-  try {
-    const res = await adminCapabilityProbeApi.getSettings()
-    const d = res.data?.data ?? {}
-    probe.enabled = d.enabled === true
-    probe.lastEnabled = probe.enabled
-    const ms = Number(d.intervalMs)
-    probe.intervalSec = Number.isFinite(ms) && ms > 0 ? Math.round(ms / 1000) : 120
-    probe.lastIntervalSec = probe.intervalSec
-    if (typeof d.minIntervalMs === 'number') probe.minIntervalMs = d.minIntervalMs
-    if (typeof d.maxIntervalMs === 'number') probe.maxIntervalMs = d.maxIntervalMs
-    probe.loaded = true
-    configLoadFailed.value = false
-  } catch {
-    probe.loaded = false
-    configLoadFailed.value = true
-  }
+/** 探针设置加载中共享 promise：loadHealth 的自动探测需要先知道开关状态，
+    避免与 watch 并发重复拉取；同一时刻只发一次 GET */
+let probeLoadPromise: Promise<void> | null = null
+function loadProbe(): Promise<void> {
+  if (probeLoadPromise) return probeLoadPromise
+  const run = (async () => {
+    try {
+      const res = await adminCapabilityProbeApi.getSettings()
+      const d = res.data?.data ?? {}
+      probe.enabled = d.enabled === true
+      probe.lastEnabled = probe.enabled
+      const ms = Number(d.intervalMs)
+      probe.intervalSec = Number.isFinite(ms) && ms > 0 ? Math.round(ms / 1000) : 120
+      probe.lastIntervalSec = probe.intervalSec
+      if (typeof d.minIntervalMs === 'number') probe.minIntervalMs = d.minIntervalMs
+      if (typeof d.maxIntervalMs === 'number') probe.maxIntervalMs = d.maxIntervalMs
+      probe.loaded = true
+      configLoadFailed.value = false
+    } catch {
+      probe.loaded = false
+      configLoadFailed.value = true
+    }
+  })()
+  probeLoadPromise = run
+  void run.finally(() => {
+    if (probeLoadPromise === run) probeLoadPromise = null
+  })
+  return run
 }
 
 /** 配置域重试：重新拉取可靠性 + 探测设置 */
