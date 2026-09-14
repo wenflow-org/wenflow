@@ -50,9 +50,10 @@
               :title="`只看${p.label}会话`"
               @click="statusFilter = statusFilter === p.id ? '' : p.id"
             >
-              {{ p.label }}<template v-if="countOf(p.id) > 0"> {{ countOf(p.id) }}</template>
+              {{ p.label }}<span v-if="countOf(p.id) > 0" class="mk-pill__count">{{ countOf(p.id) }}</span>
             </button>
           </div>
+          <button v-if="statusFilter" type="button" class="mk-link" @click="statusFilter = ''">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <span class="mk-card__meta">{{ sessions.length }} 个会话<template v-if="activeCount"> · 活跃 {{ activeCount }}</template></span>

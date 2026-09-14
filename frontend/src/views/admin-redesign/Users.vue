@@ -35,16 +35,7 @@
               {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
             </button>
           </div>
-          <span class="mk-search">
-            <input class="mk-filter__input" v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
-            <button
-              v-if="keyword"
-              type="button"
-              class="mk-search__clear"
-              aria-label="清空搜索"
-              @click="keyword = ''"
-            >✕</button>
-          </span>
+          <MkFilterSearch v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
@@ -264,6 +255,7 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
+import MkFilterSearch from './MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from './MkCols.vue'
