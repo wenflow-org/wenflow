@@ -24,7 +24,7 @@ const SESSIONS = [
 ];
 
 async function mountHistory() {
-  getMock.mockImplementation((url: string, config?: any) => {
+  getMock.mockImplementation((url: string, config?: { params?: { limit?: number } }) => {
     if (String(url).includes('/learning/stats')) {
       return Promise.resolve({ data: { time: { totalMinutes: 120, activeLearningDays: 3 } } });
     }
