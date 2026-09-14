@@ -95,14 +95,26 @@ function safeText(value: any): string {
 }
 
 function buildPrompt(input: AdaptiveGuidanceCopyInput): string {
-  return JSON.stringify({
-    view: input.view,
-    learner: input.learnerSnapshot,
-    learningState: input.learningState,
-    path: input.path,
-    wrapup: input.sessionWrapup,
-    advisory: input.advisory,
-  }, null, 2);
+  // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：view/path 逐次稳定，前置；
+  // learner/learningState/wrapup/advisory 每次变化，后置。默认顺序不变。
+  const ordered = process.env.PAYLOAD_STABLE_PREFIX === '1'
+    ? {
+        view: input.view,
+        path: input.path,
+        learner: input.learnerSnapshot,
+        learningState: input.learningState,
+        wrapup: input.sessionWrapup,
+        advisory: input.advisory,
+      }
+    : {
+        view: input.view,
+        learner: input.learnerSnapshot,
+        learningState: input.learningState,
+        path: input.path,
+        wrapup: input.sessionWrapup,
+        advisory: input.advisory,
+      };
+  return JSON.stringify(ordered, null, 2);
 }
 
 function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanceCopyOutput {
