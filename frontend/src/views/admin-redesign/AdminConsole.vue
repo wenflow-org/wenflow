@@ -3,9 +3,16 @@
     <!-- 启动失败（非 401；401 由路由守卫与拦截器导向登录页） -->
     <div v-if="bootError" class="ac-error">
       <div class="ac-error__card">
-        <strong>控制台数据加载失败</strong>
-        <span>{{ bootError }}</span>
-        <button type="button" class="ac-error__retry" @click="boot">重试</button>
+        <strong>控制台暂时无法打开</strong>
+        <span>数据服务返回异常，所有页面受影响。可直接重试；若仍失败，请复制下方诊断信息发给研发。</span>
+        <div class="ac-error__actions">
+          <button type="button" class="ac-error__retry" @click="boot">重试</button>
+          <button type="button" class="ac-error__retry ac-error__retry--ghost" @click="copyDiagnostics">复制诊断信息</button>
+        </div>
+        <details class="ac-error__diag">
+          <summary>诊断信息</summary>
+          <code>{{ bootError }}</code>
+        </details>
       </div>
     </div>
 
@@ -46,7 +53,7 @@ function asyncPage(loader: () => Promise<any>) {
       setup() {
         return () => h('div', { class: 'errorbar admin-page-error' }, [
           h('strong', '页面加载失败'),
-          h('p', '网络问题或部署更新导致资源不可用'),
+          h('p', '资源加载失败（部署更新或网络异常）'),
           h('button', { type: 'button', class: 'errorbar__retry', onClick: () => window.location.reload() }, '刷新页面')
         ]);
       }
@@ -357,6 +364,15 @@ async function boot() {
   }
 }
 
+/** 复制诊断信息（bootError 原文，含后端 message；剪贴板不可用则静默） */
+async function copyDiagnostics() {
+  try {
+    await navigator.clipboard.writeText(`控制台数据加载失败：${bootError.value}`);
+  } catch {
+    /* 剪贴板权限不可用：忽略 */
+  }
+}
+
 onMounted(() => {
   // 初始场景优先级：URL :page（深链/刷新恢复）> intent（跨路由入口）> overview 兜底
   const fromRoute = typeof route.params.page === 'string' ? route.params.page : ''
@@ -426,6 +442,24 @@ onMounted(() => {
   font-size: var(--mk-fs-13);
   font-weight: 700;
   cursor: pointer;
+}
+.ac-error__actions { display: flex; gap: 10px; margin-top: 6px; }
+.ac-error__actions .ac-error__retry { margin-top: 0; }
+.ac-error__retry--ghost {
+  background: transparent;
+  color: var(--mk-blue, #2c63d0);
+  border: 1px solid var(--mk-line);
+}
+.ac-error__diag { max-width: 460px; font-size: var(--mk-fs-12); color: var(--mk-faint); }
+.ac-error__diag summary { cursor: pointer; }
+.ac-error__diag code {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f3f5f9;
+  color: var(--mk-muted);
+  word-break: break-all;
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15） ========== */
