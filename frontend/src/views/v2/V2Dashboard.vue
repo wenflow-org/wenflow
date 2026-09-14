@@ -964,11 +964,13 @@ const streakDays = computed(() => {
 });
 
 const heat = (m: number) => {
-  // 空值底色走 CSS 变量 --heat-empty（.dash 上按主题定义），随主题即时切换，浅色回退 #eef2f8
-  if (m <= 0) return { color: 'var(--heat-empty, #eef2f8)', ink: 'transparent' };
-  if (m < 30) return { color: 'rgba(52,120,246,.20)', ink: '#1f57cc' };
-  if (m <= 60) return { color: 'rgba(52,120,246,.45)', ink: '#10337e' };
-  return { color: 'rgba(52,120,246,.85)', ink: '#fff' };
+  // 空值底色走 CSS 变量 --heat-empty（.dash 上按主题定义），随主题即时切换，浅色回退 #eef2f8。
+  // 墨色也走 CSS 变量：月历格子里的日期数字用的就是它，暗色下必须是浅色才看得见
+  // （此前 m<=0 返回 transparent，导致"没学习的日期"数字直接消失）。
+  if (m <= 0) return { color: 'var(--heat-empty, #eef2f8)', ink: 'var(--heat-ink-0, #172033)' };
+  if (m < 30) return { color: 'rgba(52,120,246,.20)', ink: 'var(--heat-ink-1, #1f57cc)' };
+  if (m <= 60) return { color: 'rgba(52,120,246,.45)', ink: 'var(--heat-ink-2, #10337e)' };
+  return { color: 'rgba(52,120,246,.85)', ink: 'var(--heat-ink-3, #ffffff)' };
 };
 
 /* 本周条 */
@@ -1963,6 +1965,11 @@ a.btn-primary { text-decoration: none; }
 /* ---------- 暗色模式覆写 ---------- */
 [data-theme='dark'] .dash {
   --heat-empty: rgba(230, 237, 247, 0.08);
+  /* 热力墨色：暗色底上必须浅色，否则月历日期数字看不清（原来写死的 #10337e 几乎不可见） */
+  --heat-ink-0: var(--ink, #e6edf7);
+  --heat-ink-1: var(--blue-deep, #6fa3ff);
+  --heat-ink-2: #e6edf7;
+  --heat-ink-3: #ffffff;
 }
 [data-theme='dark'] .nav { background: var(--v2nav-bg); }
 [data-theme='dark'] .budget__bar,

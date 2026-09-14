@@ -80,4 +80,18 @@ describe('V2Dashboard 日历口径（本地日期）', () => {
     expect(detail.text()).toContain('学习次数');
     expect(detail.text()).toContain('1 次');
   });
+
+  it('月历无学习日子的日期数字不再透明（暗色下也能看见）', async () => {
+    const w = await mountDash(todaySessions());
+    const toggle = w.findAll('button').find((b) => b.text().includes('展开整月'));
+    expect(toggle).toBeTruthy();
+    await toggle!.trigger('click');
+    await flushPromises();
+
+    const styles = w.findAll('.mday').map((c) => c.attributes('style') || '');
+    expect(styles.length).toBeGreaterThan(0);
+    // 无学习日子用可读墨色变量，而不是 transparent
+    expect(styles.some((s) => s.includes('--heat-ink-0'))).toBe(true);
+    expect(styles.every((s) => !s.includes('transparent'))).toBe(true);
+  });
 });
