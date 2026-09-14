@@ -95,9 +95,9 @@ function safeText(value: any): string {
 }
 
 function buildPrompt(input: AdaptiveGuidanceCopyInput): string {
-  // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：view/path 逐次稳定，前置；
-  // learner/learningState/wrapup/advisory 每次变化，后置。默认顺序不变。
-  const ordered = process.env.PAYLOAD_STABLE_PREFIX === '1'
+  // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：view/path 逐次稳定，前置；
+  // learner/learningState/wrapup/advisory 每次变化，后置
+  const ordered = process.env.PAYLOAD_STABLE_PREFIX !== '0'
     ? {
         view: input.view,
         path: input.path,

@@ -228,7 +228,7 @@ async function teachingOpeningGeneratorHandler(input: any) {
   return runAux({
     meta: META['teaching-opening-generator'],
     input,
-    buildUserPayload: (d) => (process.env.PAYLOAD_STABLE_PREFIX === '1'
+    buildUserPayload: (d) => (process.env.PAYLOAD_STABLE_PREFIX !== '0'
       ? {
           learner: d.learner,
           openingMode: d.openingMode,
@@ -279,7 +279,7 @@ async function learnerProgressReportHandler(input: any) {
   return runAux({
     meta: META['learner-progress-report'],
     input,
-    buildUserPayload: (d) => (process.env.PAYLOAD_STABLE_PREFIX === '1'
+    buildUserPayload: (d) => (process.env.PAYLOAD_STABLE_PREFIX !== '0'
       ? { signals: d.signals, metrics: d.metrics, task: d.task }
       : { task: d.task, metrics: d.metrics, signals: d.signals }),
     normalize: (parsed, _d, fb) => ({

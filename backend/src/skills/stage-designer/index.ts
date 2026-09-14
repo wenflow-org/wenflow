@@ -112,9 +112,9 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       defaultSystemPrompt: STAGE_DESIGNER_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'stage-designer' },
-      // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：cognitiveCore/normalizedInput 跨里程碑稳定，前置；
-      // milestone/previousMilestone/repairHints 逐次变化，后置。默认顺序保持不变。
-      buildUserPayload: (payload) => (process.env.PAYLOAD_STABLE_PREFIX === '1'
+      // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：cognitiveCore/normalizedInput 跨里程碑稳定，前置；
+      // milestone/previousMilestone/repairHints 逐次变化，后置。
+      buildUserPayload: (payload) => (process.env.PAYLOAD_STABLE_PREFIX !== '0'
         ? {
             cognitiveCore: payload.cognitiveCore,
             normalizedInput: payload.normalizedInput || null,

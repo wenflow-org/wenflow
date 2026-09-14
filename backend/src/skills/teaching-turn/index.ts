@@ -653,12 +653,12 @@ function buildPromptInput(input: TeachingTurnInput) {
   };
   const latestLearnerMessage = [...input.messages].reverse().find((message) => message.role === 'user')?.content || '';
 
-  // 试飞改造（默认关，PAYLOAD_STABLE_PREFIX=1 开启）：
+  // 试飞改造（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：
   // 真实遥测显示 scenario 每回合必变（因子键 interactionProfile/contextCompression 逐回合变化），
   // 前缀在 promptDirectives 之后的 knowledge 处即断（~7.3k/15.8k）。
   // 稳定前缀版：scenario(洁) → promptDirectives → learner 前置，其余逐回合变化的键全部后置，
   // 并去掉 recentDialogueContext（与 visibleDialogueContext/messages 同源重复）。
-  if (process.env.PAYLOAD_STABLE_PREFIX === '1') {
+  if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
     return {
       scenario: stableScenario,
       promptDirectives,
@@ -671,6 +671,7 @@ function buildPromptInput(input: TeachingTurnInput) {
       interactionProfile: scenarioInteractionProfile ?? null,
       ...(scenarioCompression ? { contextCompression: scenarioCompression } : {}),
       visibleDialogueContext: input.visibleDialogueContext || input.messages,
+      recentDialogueContext: input.messages,
       latestLearnerMessage,
       ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
     };

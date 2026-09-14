@@ -106,8 +106,8 @@ export async function pathReviewer(input: any): Promise<SkillExecutionResult<any
       defaultSystemPrompt: PATH_REVIEWER_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'path-reviewer' },
-      // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：prerequisiteTree(常量) 前置，pathPlan 后置。默认顺序不变。
-      buildUserPayload: (payload) => (process.env.PAYLOAD_STABLE_PREFIX === '1'
+      // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：prerequisiteTree(常量) 前置，pathPlan 后置
+      buildUserPayload: (payload) => (process.env.PAYLOAD_STABLE_PREFIX !== '0'
         ? {
             prerequisiteTree: payload.prerequisiteTree || null,
             goalContext: payload.goalContext || null,

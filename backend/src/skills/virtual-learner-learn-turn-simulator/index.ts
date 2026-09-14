@@ -315,9 +315,9 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
     }
   };
 
-  // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：常量/慢变块（task/personaAnchorHint/story/learner）前置，
-  // 逐回合变化块后置。默认顺序不变。
-  if (process.env.PAYLOAD_STABLE_PREFIX === '1') {
+  // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：常量/慢变块（task/personaAnchorHint/story/learner）前置，
+  // 逐回合变化块后置
+  if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
     return {
       task: body.task,
       personaAnchorHint: body.personaAnchorHint,

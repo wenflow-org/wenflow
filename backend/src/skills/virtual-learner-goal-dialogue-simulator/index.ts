@@ -285,8 +285,8 @@ function buildUserPayload(input: GoalLearnerSimulationInput) {
     }
   };
 
-  // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：personaAnchorHint/task 常量前置，可见对话等易变块后置。默认顺序不变。
-  if (process.env.PAYLOAD_STABLE_PREFIX === '1') {
+  // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：personaAnchorHint/task 常量前置，可见对话等易变块后置
+  if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
     return {
       personaAnchorHint: body.personaAnchorHint,
       task: body.task,

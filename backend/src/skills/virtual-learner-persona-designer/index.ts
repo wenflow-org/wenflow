@@ -267,7 +267,7 @@ export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillEx
       defaultSystemPrompt: VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-persona-designer' },
-      // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：candidatePersonas/preferredLevels 前置。默认顺序不变。
+      // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：candidatePersonas/preferredLevels 前置
       buildUserPayload: (payload) => {
         const body = {
           preferredLevels: normalizeStringArray(payload?.preferredLevels),
@@ -276,7 +276,7 @@ export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillEx
           recentPersonaHints: normalizeStringArray(payload?.recentPersonaHints, DEFAULT_RECENT_PERSONA_HINTS),
           existingPersonaSeed: payload?.existingPersonaSeed && typeof payload.existingPersonaSeed === 'object' ? payload.existingPersonaSeed : undefined,
         };
-        if (process.env.PAYLOAD_STABLE_PREFIX === '1') {
+        if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
           return {
             candidatePersonas: body.candidatePersonas,
             preferredLevels: body.preferredLevels,
