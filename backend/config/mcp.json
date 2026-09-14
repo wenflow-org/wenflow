@@ -1,7 +1,7 @@
 {
   "$schema": "./mcp-schema.json",
   "version": "1.0.0",
-  "description": "AI学习平台 MCP 配置",
+  "description": "AI学习平台 MCP / 外挂能力配置。servers=外挂服务连接与状态（仅供管理端展示与健康检查，不参与运行时模型路由；模型路由见管理端「模型与接入」/ platform_api_configs）；tools=平台 MCP 工具。",
   "servers": [
     {
       "id": "openai",

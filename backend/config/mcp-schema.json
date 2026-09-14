@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://wenflow.local/schemas/mcp.json",
+  "title": "WenFlow MCP / 外挂能力配置",
+  "description": "backend/config/mcp.json 的结构定义。注意区分：servers 是“外挂服务/供应商”的连接与状态（仅供管理端展示与健康检查，不参与运行时模型路由）；运行时模型路由的真实来源是 system 库 platform_api_configs（管理端「模型与接入」）。tools 是平台 MCP 工具；endpoint 为 local 时走本机执行。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "servers", "tools"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "servers": {
+      "type": "array",
+      "description": "外挂服务/供应商连接信息。仅用于状态与健康检查展示；不参与运行时模型路由。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "type", "endpoint", "enabled"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "type": { "enum": ["openai", "openai-compatible", "anthropic"] },
+          "endpoint": { "type": "string" },
+          "apiKey": { "type": "string" },
+          "models": { "type": "array", "items": { "type": "string" } },
+          "defaultModel": { "type": "string" },
+          "priority": { "type": "integer" },
+          "enabled": { "type": "boolean" },
+          "config": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "temperature": { "type": "number" },
+              "maxTokens": { "type": "integer" },
+              "timeout": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "description": "平台 MCP 工具。type 常见取值：http | code | search | filesystem | image（对远程工具不参与执行分支）；endpoint=local 走本机执行。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "type", "enabled"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "type": { "type": "string" },
+          "endpoint": { "type": "string" },
+          "apiKey": { "type": "string" },
+          "userAccessible": { "type": "boolean" },
+          "enabled": { "type": "boolean" },
+          "config": { "type": "object", "additionalProperties": true }
+        }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": { "type": "string" },
+        "fallback": { "type": "boolean" },
+        "healthCheck": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "interval": { "type": "integer" }
+          }
+        }
+      }
+    }
+  }
+}
