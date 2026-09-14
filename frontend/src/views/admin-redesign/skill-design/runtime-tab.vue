@@ -3,7 +3,8 @@
   <div class="sdp-pane">
     <div class="sdp-notice">
       <strong>路由与可靠性</strong>
-      只配置 endpoint / model 路由 / 超时 / 逻辑重试；温度与 Max Tokens 由 ACTIVE Prompt 管理。
+      只配置 endpoint / model 路由 / 超时 / 逻辑重试；温度、Max Tokens 与最终 model 由 ACTIVE Prompt 管理
+      （Prompt 未声明 model 时回退到此处路由）。
     </div>
 
     <div class="sdp-chiprows">
@@ -40,7 +41,7 @@
           </select>
         </label>
         <label class="sdp-field">
-          <span>模型（留空继承）</span>
+          <span>模型（留空继承）<em>仅当 ACTIVE Prompt 未声明 model 时生效</em></span>
           <input v-model="rtForm.model" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="继承 Agent / 平台默认" />
         </label>
         <label class="sdp-field">

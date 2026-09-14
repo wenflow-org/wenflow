@@ -31,8 +31,7 @@
       "apiKey": "${AI_API_KEY}",
       "models": [
         "deepseek-v4-flash",
-        "deepseek-v4-pro",
-        "deepseek-r1"
+        "deepseek-v4-pro"
       ],
       "defaultModel": "deepseek-v4-flash",
       "priority": 2,

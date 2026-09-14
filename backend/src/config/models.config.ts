@@ -35,14 +35,6 @@ export const AVAILABLE_MODELS: ModelDefinition[] = [
     provider: 'deepseek',
     supportsThinking: true,
     description: '强大推理能力，适合复杂任务和深度思考'
-  },
-  {
-    id: 'deepseek-r1',
-    label: 'DeepSeek R1',
-    tier: 'reasoning',
-    provider: 'deepseek',
-    supportsThinking: true,
-    description: '专注推理的模型，适合逻辑推导和问题解决'
   }
 ];
 

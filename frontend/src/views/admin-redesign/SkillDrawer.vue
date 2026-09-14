@@ -162,8 +162,8 @@
                 </select>
               </label>
               <label class="mt-field">
-                <span>模型</span>
-                <input v-model="rtForm.model" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="留空继承默认" spellcheck="false" />
+                <span>模型<em class="mt-hint">Prompt 声明 model 时不生效</em></span>
+                <input v-model="rtForm.model" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="留空继承默认" spellcheck="false" title="仅当该 Skill 的 ACTIVE Prompt 未声明 model 时生效；生成参数（含 model）以 ACTIVE Prompt 为准" />
               </label>
               <label class="mt-field">
                 <span>思考模式</span>
@@ -203,7 +203,7 @@
             </div>
           </section>
 
-          <p class="msk__none">说明：改的是模型路由（skill_model_configs），不影响 prompt 内容；改完立即生效，可在「模型测试」tab 验证延迟。</p>
+          <p class="msk__none">说明：这里配置的是路由（endpoint / model / 超时 / 思考档），不改 prompt 内容。其中 model 仅当该 Skill 的 ACTIVE Prompt 未声明 model 时生效（生成参数以 ACTIVE Prompt 为准）；endpoint / 超时 / 思考档不受影响，可在「模型测试」tab 验证延迟。</p>
           </template>
 
           <!-- ========== 模型测试（只读探测：指定思考档直发上游，不落库不改配置） ========== -->
@@ -510,7 +510,7 @@ async function saveRuntimeConfig() {
       enabled: rtForm.value.enabled,
     })
     rtErr.value = false
-    rtMsg.value = '已保存，立即生效'
+    rtMsg.value = '已保存（endpoint / 超时 / 思考档生效；model 以 ACTIVE Prompt 为准）'
     await loadRuntimeConfig()
   } catch (e) {
     rtErr.value = true
@@ -987,6 +987,7 @@ watch(
 }
 .mt-field { display: grid; gap: 4px; }
 .mt-field > span { font-size: 11px; color: var(--mk-faint); font-weight: 600; }
+.mt-hint { font-style: normal; font-weight: 400; color: var(--mk-faint); font-size: 10.5px; margin-left: 5px; }
 .mt-resolved {
   margin: 0;
   padding: 6px 10px;
