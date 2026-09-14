@@ -95,7 +95,7 @@
             <strong>{{ t.name }}</strong>
             <span class="ac-mcp__id mono">{{ t.id }}</span>
           </div>
-          <span class="ac-mcp__type mono">{{ t.type }}</span>
+          <span class="ac-mcp__type mono">{{ mcpTypeText(t.type) }}</span>
           <span class="ac-mcp__endpoint mono" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
           <span class="mk-badge" :class="t.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ t.enabled ? '启用' : '停用' }}</span>
           <div class="mk-actions">
@@ -149,7 +149,7 @@
             <label class="mk-field">
               <span class="mk-field__label">类型</span>
               <select v-model="toolForm.type" class="mk-field__select">
-                <option value="http">HTTP</option>
+                <option value="http">HTTP 接口</option>
                 <option value="code">代码执行</option>
                 <option value="search">搜索</option>
                 <option value="filesystem">文件系统</option>
@@ -229,6 +229,11 @@ function endpointTitle(endpoint: string): string {
     ? `环境变量 ${endpoint} 未替换（未在服务端配置），该工具当前不可用`
     : endpoint
 }
+/** MCP 工具类型枚举 → 中文（下拉与表格同一套，避免同屏中英两套） */
+const MCP_TYPE_TEXT: Record<string, string> = {
+  http: 'HTTP 接口', code: '代码执行', search: '搜索', filesystem: '文件系统', image: '生图'
+}
+const mcpTypeText = (t: string) => MCP_TYPE_TEXT[t] || t
 
 const configMap = ref<Record<string, Record<string, unknown>>>({})
 const loading = ref(false)

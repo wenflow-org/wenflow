@@ -120,9 +120,9 @@
               @change="setEffort(($event.target as HTMLSelectElement).value)"
             >
               <option value="default">跟随模型默认</option>
-              <option value="low">low</option>
-              <option value="high">high</option>
-              <option value="max">max</option>
+              <option value="low">低（low）</option>
+              <option value="high">高（high）</option>
+              <option value="max">最高（max）</option>
             </select>
           </label>
           <label class="mk-field">

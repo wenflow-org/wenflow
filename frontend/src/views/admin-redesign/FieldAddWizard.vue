@@ -348,7 +348,7 @@ const nameProblems = computed(() => {
 
 const typeHint = computed(() => {
   const vt = valueTypeOf(form.value.type)
-  if (form.value.type === 'enum') return 'enum 为 core-only：编排侧无对应 valueType，需人工登记或选用其它类型'
+  if (form.value.type === 'enum') return '这个类型只能在核心文件里声明：编排侧没有对应写法，请改用其它类型，或人工登记编排侧'
   return `core「${form.value.type}${form.value.optional ? '?' : ''}」 ⇔ 编排「${vt}」`
 })
 const typeHintCls = computed(() => (form.value.type === 'enum' ? 'faw__hint--err' : ''))
@@ -360,13 +360,13 @@ const roleHint = computed(() => {
 
 const formProblems = computed(() => {
   const list: string[] = []
-  if (form.value.systemLocked) list.push('systemLocked 字段只读（需走编排文件编辑）')
+  if (form.value.systemLocked) list.push('平台锁定字段只读（平台派生 / 代码消费），需在编排文件里改')
   const n = nameProblems.value
   if (n) list.push(n)
-  if (form.value.type === 'enum') list.push('enum 为 core-only，编排侧无对应 valueType（提交会被 422 拒绝）')
-  if (!form.value.desc.trim()) list.push('desc（生成指令/含义）必填')
-  if (form.value.internal && handoffList.value.length) list.push('internal 与 handoff 互斥（control-signal 除外）')
-  if (form.value.optional && isNested.value) list.push('optional 仅顶层直配生效（嵌套字段不加 ?）')
+  if (form.value.type === 'enum') list.push('这个类型只能在核心文件里声明，编排侧没有对应写法：请改用其它类型或人工登记（否则提交会被拒绝）')
+  if (!form.value.desc.trim()) list.push('字段说明（生成指令 / 含义）必填')
+  if (form.value.internal && handoffList.value.length) list.push('「仅内部流转」与「移交去向」不能同时设置（控制信号字段除外）')
+  if (form.value.optional && isNested.value) list.push('「可选」只在顶层字段生效（嵌套字段不要加 ?）')
   return list
 })
 const canSubmit = computed(() => !saving.value && formProblems.value.length === 0)
@@ -425,7 +425,7 @@ function errText(e: unknown): string {
   const map: Record<string, string> = {
     FIELD_EXISTS: '字段已存在（core fields 或编排 fieldId 重复），如需调整请走既有编辑面',
     FIELD_NOT_FOUND: '字段不存在（core fields / 编排 fields / 编排 routings 三处需同名登记，可能已被删除或仅存在于一侧）',
-    FIELD_SYSTEM_LOCKED: '字段为 systemLocked（平台派生/代码消费）：只读，禁止在本向导修改/删除（需走编排文件）',
+    FIELD_SYSTEM_LOCKED: '该字段由平台锁定（平台派生 / 代码消费）：此处只读，请改编排文件',
     FIELD_CONSUMED: '字段仍被下游消费（其他 agent 路由引用 或 其他 skill 的 core inputs 引用），禁止删除；请先解除下游消费',
     FIELD_NAME_REQUIRED: '字段名校验失败',
     FIELD_NAME_INVALID: '字段名校验失败',
@@ -433,10 +433,10 @@ function errText(e: unknown): string {
     FIELD_TYPE_REQUIRED: '类型（core 侧）必填',
     FIELD_TYPE_UNKNOWN: '类型不在受控词表',
     FIELD_TYPE_INVALID: '类型非法（? 只能作后缀）',
-    VALUE_TYPE_UNMAPPABLE: 'enum 为 core-only，编排侧无对应 valueType：请人工登记编排侧或选用其它类型',
+    VALUE_TYPE_UNMAPPABLE: '这个类型只能在核心文件里声明，编排侧没有对应写法：请改用其它类型，或人工登记编排侧',
     ROLE_UNKNOWN: '角色不在受控词表',
-    RENDER_UNKNOWN: 'render 不在受控词表',
-    VISIBILITY_PRESET_UNKNOWN: 'visibilityPreset 不在受控词表',
+    RENDER_UNKNOWN: '「对外可见性」取值不在受控词表',
+    VISIBILITY_PRESET_UNKNOWN: '「可见性预设」取值不在受控词表',
     LOCKED_UNKNOWN: 'locked 非法（可选 system | structure）',
     FIELD_DESC_REQUIRED: 'desc（生成指令/含义）必填',
     SKILL_NOT_FOUND: 'skills.yaml 无该 skill 登记',
@@ -448,8 +448,8 @@ function errText(e: unknown): string {
     NESTED_ROOT_NOT_OBJECT: '嵌套字段的顶层不是 object',
     HANDOFF_SELF_LOOP: 'handoff 自环（指向自身）',
     HANDOFF_TARGET_UNKNOWN: 'handoff 目标不在 manifest，也不是阶段名',
-    RENDER_INTERNAL_CONFLICT: 'render=visible 与 internal=true 组合仅允许 control-signal 字段',
-    ROUTING_NO_FLOW: 'handoff 为空且非 public-reply/画像终点，缺少流转去向',
+    RENDER_INTERNAL_CONFLICT: '「对外可见」与「仅内部流转」不能同时为真，仅控制信号字段允许',
+    ROUTING_NO_FLOW: '缺少流转去向：请设置移交目标（公开回复 / 画像终点除外）',
     CORE_VALIDATION_FAILED: '修改后核心文件未通过校验',
     ORCHESTRATION_VALIDATION_FAILED: '修改后编排文件未通过校验',
     FIELDS_SYNC_RECHECK_FAILED: 'fields-sync 复检未通过，已回滚双文件（恢复原内容）',

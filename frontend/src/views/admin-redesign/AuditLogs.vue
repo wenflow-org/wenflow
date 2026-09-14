@@ -147,7 +147,7 @@
                       <span class="log-label">变更后</span>
                       <pre>{{ log.afterJson }}</pre>
                     </div>
-                    <p v-if="!log.requestJson && !log.beforeJson && !log.afterJson" class="log-none">无 payload 记录</p>
+                    <p v-if="!log.requestJson && !log.beforeJson && !log.afterJson" class="log-none">无请求内容记录</p>
                   </div>
                 </td>
               </tr>

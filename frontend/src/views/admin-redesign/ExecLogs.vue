@@ -230,7 +230,7 @@
                           <pre v-if="promptOf(log)!.normalizedOutput">{{ promptOf(log)!.normalizedOutput }}</pre>
                         </div>
                         <p v-if="detailFailed[log.id]" class="tline__none tline__none--err">详情拉取失败，请稍后重试</p>
-                        <p v-else-if="!detailCache[log.id].attempts.length && !detailCache[log.id].error && !detailCache[log.id].input && !detailCache[log.id].output" class="tline__none">无 payload 记录</p>
+                        <p v-else-if="!detailCache[log.id].attempts.length && !detailCache[log.id].error && !detailCache[log.id].input && !detailCache[log.id].output" class="tline__none">无请求内容记录</p>
                       </template>
                       <p v-else class="tline__none">详情不可用</p>
                   </div>
@@ -384,11 +384,11 @@ function tokensText(log: TokenRow): string {
 }
 function tokensTitle(log: TokenRow): string {
   if (log.promptTokens != null || log.completionTokens != null) {
-    return `输入 ${log.promptTokens ?? 0} / 输出 ${log.completionTokens ?? 0} token（agent_call_logs 传输层统计）`
+    return `输入 ${log.promptTokens ?? 0} / 输出 ${log.completionTokens ?? 0} token（传输层统计）`
   }
   const p = promptOf(log)
-  if (p?.tokens) return `${p.tokens}（prompt_call_logs 契约层统计）`
-  return '该日志未记录 token 用量（无传输层与契约层数据）'
+  if (p?.tokens) return `${p.tokens}（调用内容统计）`
+  return '该日志未记录 token 用量'
 }
 
 /* live 模式：服务端筛选（时间范围/关键词/状态/节点/traceId/sessionId/错误类别）。

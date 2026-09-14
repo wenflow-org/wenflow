@@ -198,7 +198,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     expect(liveLogsPage.value).toBe(1);
   });
 
-  it('P2 Tokens 列（列设置开启）：有传输层统计（agent_call_logs）→ 展示「输入 x / 输出 y」实际值', async () => {
+  it('P2 Tokens 列（列设置开启）：有传输层统计 → 展示「输入 x / 输出 y」实际值（tooltip 不暴露表名）', async () => {
     localStorage.setItem('wf_exec_hidden_cols', '[]') // 开启全部列(含 tokens)
     liveLogsTotal.value = 1;
     liveLogsFiltered.value = [
@@ -208,7 +208,8 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     await nextTick();
     const cell = w.find('.exec-tokens');
     expect(cell.text()).toBe('输入 860 · 输出 204');
-    expect(cell.attributes('title')).toContain('agent_call_logs');
+    expect(cell.attributes('title')).toContain('传输层统计');
+    expect(cell.attributes('title')).not.toContain('agent_call_logs');
     expect(cell.text()).not.toBe('未统计');
   });
 

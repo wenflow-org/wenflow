@@ -514,7 +514,7 @@ function canEditRow(row: Record<string, any>): boolean {
   return true
 }
 function editTitleOf(row: Record<string, any>): string {
-  if (row.lockLevel === 'system-locked') return 'systemLocked 只读：平台派生 / 代码消费，需走编排文件编辑'
+  if (row.lockLevel === 'system-locked') return '平台锁定字段只读（平台派生 / 代码消费），请改编排文件'
   if (row.coreState === 'missing') return 'core 缺项：无法编辑 core 侧（先在协议 tab 补声明，或走编排弹窗）'
   return '编辑字段（core 声明 + 编排路由 + DB 对账原子修改）'
 }
@@ -522,8 +522,8 @@ function canDeleteRow(row: Record<string, any>): boolean {
   return row.lockLevel !== 'system-locked'
 }
 function deleteTitleOf(row: Record<string, any>): string {
-  if (row.lockLevel === 'system-locked') return 'systemLocked 字段禁止删除（平台派生 / 代码消费，锁原因见编排文件）'
-  return '删除字段（移除 core 声明 + 编排字段/路由 + DB 行；下游消费会被后端 409 拦截）'
+  if (row.lockLevel === 'system-locked') return '平台锁定字段禁止删除（平台派生 / 代码消费，锁原因见编排文件）'
+  return '删除字段：同时移除核心声明、编排字段/路由与数据库行；若仍被下游引用，后端会拦截'
 }
 
 /** 404 / 409 删除错误码 → 中文 */
@@ -534,8 +534,8 @@ function deleteErrText(e: unknown): string {
   const code = d?.code || ''
   const map: Record<string, string> = {
     FIELD_NOT_FOUND: '字段不存在（可能已被删除，或仅声明于一侧）',
-    FIELD_SYSTEM_LOCKED: '字段为 systemLocked，禁止删除（平台派生 / 代码消费）',
-    FIELD_CONSUMED: '字段仍被下游消费（其他 agent 路由 / 其他 skill 的 core inputs），已拒绝删除'
+    FIELD_SYSTEM_LOCKED: '该字段由平台锁定（平台派生 / 代码消费），禁止删除',
+    FIELD_CONSUMED: '该字段仍被下游引用（其他 Agent 路由 / 其他 Skill），已拒绝删除'
   }
   const title = code ? (map[code] || '删除被拒绝') : '删除失败'
   return raw ? `${title}：${raw}` : title
@@ -545,7 +545,7 @@ async function onDelete(row: Record<string, any>) {
   if (deleting.value) return
   const ok = await askConfirm({
     title: `删除字段 ${row.fieldId}？`,
-    message: `将同时移除 core.yaml 声明、编排 fields 定义与 skill:${props.skillId} 名下的路由行，并清理 DB 落库行（文件备份保留在 prompts/backups/unified-edit）。\n\n删除前请确认下游无消费：其他 agent 的路由引用、其他 skill 的 core inputs 引用会被后端 409 拦截并列出。`,
+    message: `将同时删除该字段的核心声明、编排字段/路由与数据库落库行（原文件会自动备份，可恢复）。\n\n删除前请确认没有下游引用：若其他 Agent 路由或 Skill 仍引用它，后端会拒绝删除并列出引用方。`,
     confirmText: '确认删除（不可恢复）'
   })
   if (!ok) return
