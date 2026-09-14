@@ -169,3 +169,49 @@ ORDER BY avg_prompt DESC;
 ## 6. 变更记录
 
 - 2026-09-14：首版（基于 12,537 次真实调用遥测；修正"体积是主要浪费"的早期判断——真正杠杆是**前缀缓存命中率**）。
+- 2026-09-15：新增 §7 改造收益预估（基于真实 payload 的前缀模拟）与真业务实测基线。
+
+## 7. 改造收益预估（2026-09-15）
+
+### 7.1 方法
+对每个 skill，取库中**真实 `userPayload`**（同会话、按时间排序），计算相邻两次调用的**公共前缀字符占比**（= 可缓存前缀的理论上界）；再用「按逐回合键稳定性递归重排键序」模拟改造后，重算公共前缀。
+
+> 口径与 caveat：字符前缀是 token 前缀的代理；**不含 system prompt**（静态、另计）；provider 前缀缓存受路由影响（best-effort），故本表是**上界估计**，真值须以真业务 A/B 为准。
+
+### 7.2 预估（真实 payload）
+
+| skill | 相邻对数 | 平均 payload | 当前可缓存前缀 | 重排后 | 预估提升 |
+|---|---:|---:|---:|---:|---:|
+| **stage-designer** | 154 | 3.5k | 0.9% | 66.6% | **+65.7pp** |
+| **goal-conversation** | 136 | 2.0k | 5.7% | 22.8% | **+17.1pp** |
+| **adaptive-guidance-copy** | 158 | 79k | 0.2% | 10.8% | **+10.6pp** |
+| virtual-learner-learn-turn-simulator | 159 | 20k | 6.6% | 11.3% | +4.7pp |
+| teaching-turn | 159 | 33k | 6.5% | 6.7%* | +0.2pp* |
+| virtual-learner-epistemic-grounding | 159 | 14k | 6.9% | 7.0% | +0.1pp |
+| lesson-knowledge-enricher | 140 | 16k | 0.2% | 0.3% | +0.1pp |
+
+\* teaching-turn 的字符模拟未体现：其差异集中在**嵌套子键**（`scenario.interactionProfile/contextCompression`），需按子键处理——子键级分析已证实：`scenario` 去掉这两个子键后，逐回合变化率 **48/48 → 13/48**。
+
+### 7.3 真业务实测基线（隔离会话，教学链）
+- **同一新会话内**：`goal-conversation` 命中 62%/73%/84%/95%，`path-planning` 46%，`stage-designer` 48%；而 **`teaching-turn` 仅 0/1.0/0/0.9%** —— 直接印证前缀分析（goal 有稳定前缀、teaching 没有）。
+- 全窗口合计命中 23.7%（n=33 次调用）。
+
+### 7.4 已落地改造（flag 门控，默认关，`PAYLOAD_STABLE_PREFIX=1` 开启）
+| skill | 改动 |
+|---|---|
+| `teaching-turn` | 稳定块（scenario 洁版 / promptDirectives / learner）前置，逐回合变化键全部后置；去 `recentDialogueContext` 重复 |
+| `stage-designer` | `cognitiveCore`/`normalizedInput` 前置；`milestone`/`previousMilestone`/`repairHints` 后置 |
+
+默认路径字节不变（`tsc` 0、payload 快照与单测全绿）。
+
+### 7.5 待落地改造
+- `goal-conversation`：payload 去 `state.collected`（understanding 的派生副本）+ 稳定键前置。
+- `adaptive-guidance-copy`：79k 动态 payload 裁剪（`sessionWrapup` 只留必要字段）+ 稳定前缀。
+- `virtual-learner-learn-turn-simulator` / `epistemic-grounding`：`learner.profile.storyPool` 等无关大对象投影剔除 + 稳定键前置。
+- `path-planning` / `kc-mapper` / `path-reviewer`：去重（confirmedProposal ×2 / `【强制要求】`×5）+ 前置稳定块；`path-reviewer` 修 `prerreqTree` key。
+
+### 7.6 真业务 A/B 计划
+1. 带 `PAYLOAD_STABLE_PREFIX=1` 起实例（建议**另起端口**，避免打断在跑的实验）。
+2. 用同一/同类 VL 会话跑真实教学链（`accept-path → start-learning → teaching-step × N`）。
+3. 对比 `llm_execution_attempts` 的逐回合 `promptTokens / promptCacheHitTokens / requestBytes`（多会话、多回合取分布，样本 n≥30/技能）。
+
