@@ -80,13 +80,11 @@ describe('虚拟学习者定位（D1）', () => {
     const bar = wrapper.find('.mk-status');
     expect(bar.exists()).toBe(true);
     expect(bar.text()).toContain('共 0 人');
-    // 结论区（方向 A）：可点数字即筛选，状态计数从状态条移到 .vl-kpis
-    const kpis = wrapper.find('.vl-kpis');
-    expect(kpis.exists()).toBe(true);
-    expect(kpis.text()).toContain('运行中0');
-    expect(kpis.text()).toContain('已暂停0');
-    expect(kpis.text()).toContain('需关注0');
-    expect(kpis.text()).not.toContain('创建中');
+    // 分区筛选计数（画像口径）
+    expect(bar.text()).toContain('运行中 0');
+    expect(bar.text()).toContain('已暂停 0');
+    expect(bar.text()).toContain('需关注 0');
+    expect(bar.text()).not.toContain('创建中');
     wrapper.unmount();
   });
 
@@ -95,10 +93,10 @@ describe('虚拟学习者定位（D1）', () => {
     const wrapper = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
-    const kpis = wrapper.find('.vl-kpis');
-    expect(kpis.exists()).toBe(true);
-    // 活动会话 = running 2 + created 1 = 3（全量口径，含卡死）
-    expect(kpis.text()).toContain('活动会话3');
+    const bar = wrapper.find('.mk-status');
+    expect(bar.exists()).toBe(true);
+    // 活动会话 = running 2 + created 1 = 3
+    expect(bar.text()).toContain('活动会话 3');
     wrapper.unmount();
   });
 

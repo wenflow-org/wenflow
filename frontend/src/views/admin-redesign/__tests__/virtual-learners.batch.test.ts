@@ -150,11 +150,11 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     ];
     const w = await mountPage();
     // 会话口径：活动 = running 2 + created 3
-    expect(w.text()).toContain('活动会话5');
+    expect(w.text()).toContain('活动会话 5');
     // 画像口径分区筛选计数
-    expect(w.text()).toContain('运行中1');
-    expect(w.text()).toContain('已暂停1');
-    expect(w.text()).toContain('需关注1');
+    expect(w.text()).toContain('运行中 1');
+    expect(w.text()).toContain('已暂停 1');
+    expect(w.text()).toContain('需关注 1');
     expect(w.text()).toContain('已截断 · 共 80 人');
     expect(w.text()).toContain('回收卡死（2）');
   });
@@ -194,8 +194,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
   it('无会话数据时完成率/失败率显示 0%（状态条常驻）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    expect(w.text()).toContain('完成率0%');
-    expect(w.text()).toContain('失败率0%');
+    expect(w.text()).toContain('完成率 0%');
+    expect(w.text()).toContain('失败率 0%');
   });
 
   it('无卡死时不出现一键回收按钮；未截断时不出现截断提示', async () => {
