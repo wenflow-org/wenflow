@@ -34,7 +34,9 @@
       </div>
       <div v-else class="mk-status mk-status--muted">
         <span class="mk-status__dot"></span>
-        <strong class="mk-status__title">{{ loading ? '加载中…' : loadFailed ? '概览加载失败' : skillId }}</strong>
+        <strong class="mk-status__title">{{ skillId }}</strong>
+        <span v-if="loading" class="mk-status__meta">加载中…</span>
+        <span v-else-if="loadFailed" class="mk-status__meta mk-status__meta--bad">概览加载失败</span>
         <span class="mk-status__actions">
           <button v-if="loadFailed && !loading" type="button" class="mk-status__action" @click="loadAll">重试</button>
         </span>

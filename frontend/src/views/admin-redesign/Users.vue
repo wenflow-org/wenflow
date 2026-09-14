@@ -147,7 +147,7 @@
       <MkEmptyState
         v-else
         icon="◌"
-        :title="isFiltered ? '没有匹配的用户' : '暂无真实用户'"
+        :title="isFiltered ? '当前筛选无用户' : '暂无真实用户'"
         :description="isFiltered ? '放宽筛选条件试试。' : '用户注册后将自动出现在这里。'"
         :action-text="isFiltered ? '清除筛选' : ''"
         @action="clearFilters"

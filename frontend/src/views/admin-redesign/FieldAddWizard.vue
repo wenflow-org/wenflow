@@ -25,7 +25,7 @@
             <li v-if="result.changed === false">无变化（字段现状与提交内容一致，未写盘未同步）</li>
             <template v-else>
               <li>core.yaml <b>{{ result.coreWritten ? '已写入' : '未写入' }}</b> · 编排文件 <b>{{ result.orchestrationWritten ? '已写入' : '未写入' }}</b></li>
-              <li v-if="mode === 'add'">{{ TERMS.syncToDb }} <b :class="result.synced ? 'faw__ok' : 'faw__err'">{{ result.synced ? '已同步' : '失败' }}</b>
+              <li v-if="mode === 'add'">{{ TERMS.syncToDb }} <b :class="result.synced ? 'faw__ok' : 'faw__err'">{{ result.synced ? TERMS.driftInSync : '失败' }}</b>
                 <span class="faw__result-hint">{{ result.syncHint }}</span></li>
               <li v-else>同步对账：fields 更新 <b>{{ result.dbSync?.fieldsUpdated ?? 0 }}</b> · routings 更新 <b>{{ result.dbSync?.routingsUpdated ?? 0 }}</b>
                 <span v-if="result.dbSync?.skippedAdminRows?.length" class="faw__result-hint">

@@ -226,7 +226,7 @@ async function runTrial() {
   } catch (e) {
     if (id !== props.skillId) return
     trialResult.value = null
-    trialError.value = `试运行失败：${errText(e)}`
+    trialError.value = `试跑失败：${errText(e)}`
   } finally {
     trialRunning.value = false
   }

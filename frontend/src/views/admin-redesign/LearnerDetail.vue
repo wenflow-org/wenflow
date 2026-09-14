@@ -276,7 +276,7 @@
           <div class="mk-card__head"><h3 class="mk-card__title">记忆痕迹与保持率（FSRS）</h3></div>
           <table class="ld-mt">
             <thead>
-              <tr><th>概念</th><th>掌握度</th><th>稳定性(天)</th><th>难度</th><th>保持率</th><th>到期</th></tr>
+              <tr><th>概念</th><th>掌握度</th><th>稳定性（天）</th><th>难度</th><th>保持率</th><th>到期</th></tr>
             </thead>
             <tbody>
               <tr v-for="t in memoryTraces" :key="t.conceptKey">

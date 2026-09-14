@@ -3,7 +3,7 @@
     <!-- 状态条 -->
     <div class="mk-status" :class="capabilityRows.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ capabilityRows.length ? '外挂能力' : '暂无外挂能力' }}</strong>
+      <strong class="mk-status__title">外挂能力</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ capabilityRows.length }} 个</span>
       <span class="mk-status__meta">MCP {{ mcpCount }}</span>
@@ -361,7 +361,7 @@ async function saveTool() {
   toolErrors.value = {}
   if (!toolForm.value.id.trim()) toolErrors.value.id = '请输入工具 ID'
   if (!toolForm.value.name.trim()) toolErrors.value.name = '请输入名称'
-  if (!toolForm.value.endpoint.trim()) toolErrors.value.endpoint = '请输入 endpoint'
+  if (!toolForm.value.endpoint.trim()) toolErrors.value.endpoint = '请输入 Endpoint 地址'
   if (Object.keys(toolErrors.value).length) return
   toolSaving.value = true
   try {

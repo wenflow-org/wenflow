@@ -462,11 +462,7 @@ const statusTone = computed(() => {
   if (!rows.value.length) return 'muted'
   return failed.value ? 'bad' : 'ok'
 })
-const statusTitle = computed(() => {
-  if (loadError.value) return '审计日志加载失败'
-  if (!rows.value.length) return tab.value === 'login' ? '暂无登录审计' : '暂无审计记录'
-  return tab.value === 'login' ? '登录审计' : '审计日志'
-})
+const statusTitle = computed(() => (tab.value === 'login' ? '登录审计' : '审计日志'))
 
 const REASON_TEXT: Record<string, string> = {
   account_locked: '账户已锁定',

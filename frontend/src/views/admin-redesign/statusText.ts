@@ -48,6 +48,18 @@ export function statusText(s: string | null | undefined): string {
   return STATUS_TEXT[key] || String(s || '')
 }
 
+/** 版本状态（核心文件 / Prompt 版本表）→ 中文。
+    勿复用 statusText：通用表把 'active' 映射成「进行中」，而版本域的 ACTIVE 是「当前生效」。 */
+const VERSION_STATUS_TEXT: Record<string, string> = {
+  ACTIVE: '当前生效',
+  SUPERSEDED: '已被替代',
+  ARCHIVED: '已归档'
+}
+export function versionStatusText(s: string | null | undefined): string {
+  if (!s) return '—'
+  return VERSION_STATUS_TEXT[s.toUpperCase()] || s
+}
+
 /** Goal 会话阶段枚举 → 中文 */
 const STAGE_TEXT: Record<string, string> = {
   understanding: '澄清中',
@@ -507,6 +519,6 @@ export function runTaskProgressText(p: { done: number; total: number } | null | 
 export function ipText(ip?: string | null): string {
   const v = (ip || '').trim()
   if (!v) return '—'
-  if (v === '::1' || v === '127.0.0.1' || v === 'localhost') return '127.0.0.1 (本机)'
+  if (v === '::1' || v === '127.0.0.1' || v === 'localhost') return '127.0.0.1（本机）'
   return v
 }

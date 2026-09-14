@@ -2,7 +2,7 @@
   <div class="mk-page mk-page--fill">
     <div class="mk-status" :class="samples.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ samples.length ? '虚拟学习者' : '暂无虚拟学习者' }}</strong>
+      <strong class="mk-status__title">虚拟学习者</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ samples.length }} 人</span>
       <MkStatStrip :items="headerStats" @select="onHeaderStatSelect" />
@@ -212,7 +212,7 @@
         <button type="button" class="mk-empty__action" @click="retryLoad">重试</button>
       </div>
       <div v-else class="mk-empty">
-        <strong>{{ samples.length ? '没有匹配的虚拟学习者' : '暂无虚拟学习者' }}</strong>
+        <strong>{{ samples.length ? '当前筛选无虚拟学习者' : '暂无虚拟学习者' }}</strong>
         <span>新建虚拟学习者后，在画像页生成故事即可运行。</span>
         <button v-if="isFiltered && samples.length" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
       </div>

@@ -44,7 +44,7 @@
 
     <!-- 图例：角色 / render / 锁定 / 流转 一句话人话表（可折叠） -->
     <details class="frt__legend" :open="legendOpen" @toggle="legendOpen = ($event.target as HTMLDetailsElement).open">
-      <summary class="frt__legend-summary">图例：字段角色 / render / 锁定 / 流转 —— 不懂就看这里</summary>
+      <summary class="frt__legend-summary">图例：字段角色 / 对外可见性 / 锁定 / 流转 —— 不懂就看这里</summary>
       <div class="frt__legend-body">
         <div class="frt__legend-group frt__legend-group--roles">
           <h5 class="frt__legend-title">字段角色（promptRole）</h5>
@@ -61,11 +61,11 @@
           <h5 class="frt__legend-title">render（是否对外可见）</h5>
           <ul class="frt__legend-list">
             <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--render-visible">visible</span>
+              <span class="mk-badge mk-badge--render-visible" title="render: visible">可见</span>
               <span class="frt__legend-hint">可见：会出现在对外交付（用户 / 界面）</span>
             </li>
             <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--render-hidden">hidden</span>
+              <span class="mk-badge mk-badge--render-hidden" title="render: hidden">隐藏</span>
               <span class="frt__legend-hint">隐藏：仅内部流转，不对外展示</span>
             </li>
           </ul>
@@ -108,14 +108,13 @@
         </div>
       </div>
       <p class="frt__legend-foot">
-        机制说明见仓库 <span class="mono">prompts/orchestration/_README.md</span> · 设计落盘
-        <span class="mono">doc/FIELD_ROUTING_UX_REDESIGN.md</span> · 术语查「这是什么」抽屉
+        机制说明见仓库 <span class="mono">prompts/orchestration/_README.md</span> · 术语查「这是什么」抽屉
       </p>
     </details>
 
     <!-- 搜索 / 角色过滤 -->
     <div class="mk-filter frt__filter">
-      <input v-model="keyword" class="mk-filter__input" type="search" placeholder="搜索字段名 / 含义 / 角色 / render / 移交…" />
+      <input v-model="keyword" class="mk-filter__input" type="search" placeholder="搜索字段名 / 含义 / 角色 / 可见性 / 移交…" />
       <select v-model="roleFilter" class="mk-filter__select" aria-label="按角色过滤">
         <option value="">全部角色</option>
         <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
@@ -185,7 +184,7 @@
                     class="mk-badge"
                     :class="`mk-badge--render-${row.render}`"
                     :title="renderHint(row)"
-                  >{{ row.render }}</span>
+                  >{{ renderText(row.render) }}</span>
                 </td>
                 <td><span class="mono frt__handoff" :title="handoffTitle(row)">{{ formatHandoff(row.handoff) }}</span></td>
                 <td>{{ row.internal ? '是' : '否' }}</td>
@@ -238,9 +237,9 @@
           <div class="frt__orch-quick">
             <span class="frt__orch-quick-title">值域速查：</span>
             <span class="frt__orch-quick-item"><b>promptRole</b>{{ roleNames }}</span>
-            <span class="frt__orch-quick-item"><b>render</b>visible / hidden</span>
-            <span class="frt__orch-quick-item"><b>handoff</b>阶段名（goal/path/teaching/profile/simulation）或 agent / skill:</span>
-            <span class="frt__orch-quick-item"><b>persistKey</b>仅落库键与 fieldId 不一致时标注</span>
+            <span class="frt__orch-quick-item"><b>对外可见性</b>可见 / 隐藏（render）</span>
+            <span class="frt__orch-quick-item"><b>流转去向</b>阶段名（goal/path/teaching/profile/simulation）或 agent / skill:（handoff）</span>
+            <span class="frt__orch-quick-item"><b>落库键</b>仅落库键与 fieldId 不一致时标注（persistKey）</span>
           </div>
           <textarea
             v-model="orchContent"
@@ -434,6 +433,11 @@ function persistKeyOf(row: RoutingItem) {
 function pathOf(fieldId: string) {
   return fieldMap().get(fieldId)?.pathInRawOutput || '';
 }
+/** render 枚举 → 中文（原始值保留在 title 的 renderHint） */
+function renderText(render: string) {
+  return render === 'hidden' ? '隐藏' : '可见'
+}
+
 function renderHint(row: RoutingItem) {
   const base = row.render === 'hidden' ? '隐藏：仅内部流转，不对外展示' : '可见：会出现在对外交付（用户 / 界面）';
   return row.visibilityPreset ? `${base}\n可见性预设：${row.visibilityPreset}` : base;

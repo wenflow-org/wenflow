@@ -284,7 +284,7 @@
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">不能出现</span>
-                  <input v-model="form.mustNotInclude" class="mk-field__input" placeholder="例如：我不知道,去问老师吧" />
+                  <input v-model="form.mustNotInclude" class="mk-field__input" placeholder="例如：我不知道，去问老师吧" />
                   <span class="mk-field__hint">回复出现这些字样就不通过。</span>
                 </label>
               </div>

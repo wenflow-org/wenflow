@@ -714,7 +714,7 @@
               <summary>角色私有状态 · {{ privateStateTraceCount }} 条</summary>
               <ol class="cp-trace-list">
                 <li v-for="(item, idx) in privateStateTrace" :key="(item.sequence ?? idx)">
-                  <div class="cp-trace-list__head"><span class="cp-trace-list__seq">#{{ item.sequence ?? (idx + 1) }}</span><span class="cp-trace-list__stage" :data-stage="item.stage">{{ item.stage }}</span><code v-if="item.taskId">task={{ item.taskId.slice(0, 8) }}</code><time v-if="item.generatedAt">{{ formatTime(item.generatedAt) }}</time><span v-if="item.emotion" class="cp-trace-list__emotion">{{ item.emotion }}</span><span v-if="item.degraded" class="cp-trace-list__degraded">degraded</span><span v-if="item.transition" class="cp-trace-list__transition">{{ item.transition }}</span></div>
+                  <div class="cp-trace-list__head"><span class="cp-trace-list__seq">#{{ item.sequence ?? (idx + 1) }}</span><span class="cp-trace-list__stage" :data-stage="item.stage">{{ item.stage }}</span><code v-if="item.taskId">task={{ item.taskId.slice(0, 8) }}</code><time v-if="item.generatedAt">{{ formatTime(item.generatedAt) }}</time><span v-if="item.emotion" class="cp-trace-list__emotion">{{ item.emotion }}</span><span v-if="item.degraded" class="cp-trace-list__degraded">降级</span><span v-if="item.transition" class="cp-trace-list__transition">{{ item.transition }}</span></div>
                   <div v-if="item.phaseFocus" class="cp-trace-list__focus">聚焦：{{ item.phaseFocus }}</div>
                   <div v-if="item.visibleSignal" class="cp-trace-list__signal">{{ item.visibleSignal }}</div>
                   <div v-if="item.stateChangeReason" class="cp-trace-list__reason">状态变化：{{ item.stateChangeReason }}</div>

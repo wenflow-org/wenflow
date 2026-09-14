@@ -132,7 +132,7 @@
                       <strong v-else-if="contentPreview(log)" class="exec-title exec-title--preview" :title="log.title">{{ contentPreview(log) }}</strong>
                       <strong v-else class="exec-title exec-title--ok" :title="log.title">{{ log.title }}</strong>
                       <!-- 链路入口：图标按钮,一眼可见点击直达 Trace(替代隐藏的 Trace 列) -->
-                      <button type="button" class="exec-trace-btn" title="查看完整调用链路(Trace):这条调用从进入到出结果的全部阶段" @click.stop="showTrace(log.traceId)">
+                      <button type="button" class="exec-trace-btn" title="查看完整调用链路（Trace）：这条调用从进入到出结果的全部阶段" @click.stop="showTrace(log.traceId)">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.2"/><circle cx="5" cy="18" r="2.2"/><circle cx="19" cy="12" r="2.2"/><path d="M7 6h7a3 3 0 0 1 3 3"/><path d="M7 18h7a3 3 0 0 0 3-3"/></svg>
                       </button>
                     </div>

@@ -2,7 +2,7 @@
   <div class="mk-page mk-page--fill">
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ statusTitle }}</strong>
+      <strong class="mk-status__title">Skill 运行</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta" :title="skillCountHint">{{ liveLoading && !cards.length ? 'Skill 加载中…' : `共 ${cards.length} 个 Skill` }}</span>
       <span v-if="overallRate != null" class="mk-status__meta" :class="rateNumTone === 'bad' ? 'mk-status__meta--bad' : rateNumTone === 'warn' ? 'mk-status__meta--warn' : ''" :title="'窗口内成功率 = 成功调用 / 总调用'">
@@ -150,7 +150,7 @@
         <button type="button" class="mk-empty__action" @click="retrySkills">重试</button>
       </div>
       <div v-else-if="!filtered.length" class="mk-empty">
-        <strong>{{ onlyAttention ? '没有需关注的 Skill' : keyword ? '没有匹配的 Skill' : '暂无运行数据' }}</strong>
+        <strong>{{ onlyAttention ? '没有需关注的 Skill' : keyword ? '当前筛选无 Skill' : '暂无运行数据' }}</strong>
         <span v-if="onlyAttention">一切健康。</span>
         <span v-else-if="keyword">换个关键词试试。</span>
         <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
@@ -326,9 +326,6 @@ watch(filtered, () => {
 })
 
 const statusTone = computed(() => (errorCount.value ? 'mk-status--bad' : activeCount.value ? 'mk-status--ok' : 'mk-status--muted'))
-const statusTitle = computed(() =>
-  cards.value.length ? 'Skill 运行' : '暂无运行数据'
-)
 
 const successRate = (s: { calls: number; errors: number }) =>
   s.calls ? `${(((s.calls - s.errors) / s.calls) * 100).toFixed(0)}%` : '—'

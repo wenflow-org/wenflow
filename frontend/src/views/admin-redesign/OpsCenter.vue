@@ -121,7 +121,7 @@
         </div>
         <div class="mk-list-more">
           <span>最近 50 条 · 共 {{ deadCount }} 条死信</span>
-          <button type="button" class="mk-link" @click="loadDead">重新加载</button>
+          <button type="button" class="mk-link" @click="loadDead">刷新</button>
         </div>
       </template>
       <div v-else-if="deadFailed" class="mk-empty mk-empty--compact">

@@ -9,14 +9,14 @@
       <div class="mk-table-wrap">
         <table class="sdp-pw__table">
           <thead>
-            <tr><th>版本</th><th>coreHash</th><th>coreVer</th><th>状态</th><th>发布者</th><th></th></tr>
+            <tr><th>版本</th><th title="coreHash">核心哈希</th><th title="coreVer">核心版本</th><th>状态</th><th>发布者</th><th></th></tr>
           </thead>
           <tbody>
             <tr v-for="v in coreVersions" :key="v.version" :class="{ 'sdp-pw__table-active': v.status === 'ACTIVE' }">
               <td class="mono">v{{ v.version }}</td>
               <td class="mono" :title="v.coreHash ?? undefined">{{ coreShortHash(v.coreHash) }}</td>
               <td class="mono">{{ v.coreVersion ?? '—' }}</td>
-              <td>{{ v.status }}</td>
+              <td>{{ versionStatusText(v.status) }}</td>
               <td>{{ v.createdBy }}</td>
               <td>
                 <button
@@ -55,7 +55,7 @@
             <tr v-for="v in promptVersions" :key="v.id">
               <td><span class="sdp-vtag mono">v{{ v.version }}</span></td>
               <td>
-                <span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">{{ v.status }}</span>
+                <span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">{{ versionStatusText(v.status) }}</span>
               </td>
               <td><span class="sdp-vname" :title="v.name">{{ v.name || '—' }}</span></td>
               <td>
@@ -114,6 +114,7 @@ import { adminAgentPromptsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
 import { toast } from '@/utils/toast'
 import { coreShortHash, errText } from './sdp-shared'
+import { versionStatusText } from '../statusText'
 
 const props = defineProps<{ skillId: string; refreshTick: number }>()
 const emit = defineEmits<{ (e: 'core-rolled-back'): void }>()

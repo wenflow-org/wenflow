@@ -26,12 +26,12 @@
         <details class="hc-details">
           <summary class="mk-card__head hc-details__summary">
             <h3 class="mk-card__title">本页看什么？</h3>
-            <span class="mk-card__meta">系统健康 13 项检查 · 技能是否健康运行 · 点开看术语速查</span>
+            <span class="mk-card__meta">系统健康 13 项检查 · Skill 是否健康运行 · 点开看术语速查</span>
           </summary>
           <div class="hc-guide__body">
-            <p><b>健康检查</b>：系统自动检查技能运行的各个环境（配置、注册、提示词版本等），异常项可一键修复或跳转处理。</p>
+            <p><b>健康检查</b>：系统自动检查 Skill 运行的各个环境（配置、注册、提示词版本等），异常项可一键修复或跳转处理。</p>
             <p><b>漂移</b>：配置内容与实际运行不一致——通常是修改了 Skill 配置但尚未同步/发布生效，去对应页面点「同步/发布」即可。</p>
-            <p><b>对账</b>：核对技能在四个登记来源（配置文件、运行注册、生效版本、登记册）中是否齐全一致；「失效注册 / 无生效版本」等需要人工处理。</p>
+            <p><b>对账</b>：核对 Skill 在四个登记来源（配置文件、运行注册、生效版本、登记册）中是否齐全一致；「失效注册 / 无生效版本」等需要人工处理。</p>
             <p><b>ACTIVE / W1-W5</b>：系统内部对「当前生效的提示词版本 / 各类自动检查」的编号称呼，处理时按页面提示操作即可，不影响理解问题本身。</p>
           </div>
         </details>
@@ -49,7 +49,7 @@
           @click="scrollTo('health')"
         />
         <MkKpi
-          label="漂移"
+          :label="TERMS.driftContract"
           :value="driftActionable"
           :hint="driftActionable > 0 ? '需处理' : drift.runtime > 0 ? `另 ${drift.runtime} 条只读遥测` : '正常'"
           :tone="driftActionable > 0 ? 'warn' : 'ok'"
@@ -58,7 +58,7 @@
           @click="scrollTo('drift')"
         />
         <MkKpi
-          label="对账"
+          :label="TERMS.reconcile"
           :value="reconciliation.total"
           :hint="reconAbnormal > 0 ? `${reconAbnormal} 异常` : '一致'"
           :tone="reconAbnormal > 0 ? 'warn' : 'ok'"
@@ -138,7 +138,7 @@
       <section v-if="driftAny" class="mk-card" id="hc-drift">
         <details class="hc-details" open>
           <summary class="mk-card__head hc-details__summary">
-            <h3 class="mk-card__title">漂移</h3>
+            <h3 class="mk-card__title">{{ TERMS.driftContract }}</h3>
             <span class="mk-card__meta">{{ driftActionable }} 项需处理</span>
             <span v-if="drift.runtime" class="mk-card__meta">遥测 {{ drift.runtime }} 条</span>
           </summary>

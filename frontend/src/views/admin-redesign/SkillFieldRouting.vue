@@ -66,8 +66,8 @@
           <div class="sfr__legend-group">
             <h5 class="sfr__legend-title">render（是否对外可见）</h5>
             <ul class="sfr__legend-list">
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--render-visible">visible</span><span class="sfr__legend-hint">可见：会出现在对外交付（用户 / 界面）</span></li>
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--render-hidden">hidden</span><span class="sfr__legend-hint">隐藏：仅内部流转，不对外展示</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--render-visible" title="render: visible">可见</span><span class="sfr__legend-hint">会出现在对外交付（用户 / 界面）</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--render-hidden" title="render: hidden">隐藏</span><span class="sfr__legend-hint">仅内部流转，不对外展示</span></li>
             </ul>
             <h5 class="sfr__legend-title">流转（handoff / internal / accumulate）</h5>
             <ul class="sfr__legend-list">

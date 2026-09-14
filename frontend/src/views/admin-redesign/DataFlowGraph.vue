@@ -449,8 +449,8 @@
               <div class="dfg-edit__row">
                 <span class="dfg-edit__label">可见性</span>
                 <span class="dfg-edit__pills">
-                  <button type="button" class="dfg-pill" :class="{ 'is-on': editDraft.render === 'visible' }" @click="editDraft.render = 'visible'">visible</button>
-                  <button type="button" class="dfg-pill" :class="{ 'is-on': editDraft.render === 'hidden' }" @click="editDraft.render = 'hidden'">hidden</button>
+                  <button type="button" class="dfg-pill" :class="{ 'is-on': editDraft.render === 'visible' }" @click="editDraft.render = 'visible'">可见</button>
+                  <button type="button" class="dfg-pill" :class="{ 'is-on': editDraft.render === 'hidden' }" @click="editDraft.render = 'hidden'">隐藏</button>
                 </span>
               </div>
               <div class="dfg-edit__row">

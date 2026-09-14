@@ -329,13 +329,13 @@
                     class="ffg-pill"
                     :class="{ 'is-on': editDraft.render === 'visible' }"
                     @click="editDraft.render = 'visible'"
-                  >visible</button>
+                  >可见</button>
                   <button
                     type="button"
                     class="ffg-pill"
                     :class="{ 'is-on': editDraft.render === 'hidden' }"
                     @click="editDraft.render = 'hidden'"
-                  >hidden</button>
+                  >隐藏</button>
                 </span>
               </div>
               <div class="ffg-edit__row">

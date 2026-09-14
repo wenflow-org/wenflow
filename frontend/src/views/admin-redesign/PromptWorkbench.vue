@@ -41,7 +41,7 @@
             <th>Skill</th>
             <th>结构</th>
             <th>输出</th>
-            <th>coreHash</th>
+            <th title="coreHash">核心哈希</th>
             <th>状态</th>
             <th class="mk-th--right">操作</th>
           </tr>
@@ -116,11 +116,11 @@
           <template v-else>
             <div class="sc-form">
               <label class="sc-field">
-                <span class="sc-field__label">skillId <em>*</em></span>
+                <span class="sc-field__label">Skill 标识（skillId） <em>*</em></span>
                 <input v-model="form.skillId" class="sc-field__input mono" placeholder="kebab-case，如 my-new-skill" spellcheck="false" />
               </label>
               <label class="sc-field">
-                <span class="sc-field__label">kind <em>*</em></span>
+                <span class="sc-field__label">类型（kind） <em>*</em></span>
                 <select v-model="form.kind" class="sc-field__input">
                   <option value="mainline">mainline（主链，进编排字段路由）</option>
                   <option value="aux">aux（v4-aux-skills 旁挂）</option>
@@ -136,7 +136,7 @@
                   </select>
                 </label>
                 <label class="sc-field">
-                  <span class="sc-field__label">parentAgent <em>*</em></span>
+                  <span class="sc-field__label">归属 Agent（parentAgent） <em>*</em></span>
                   <select v-model="form.parentAgent" class="sc-field__input">
                     <option value="">— 选择归属 Agent —</option>
                     <option v-for="agent in meta.agents" :key="agent.id" :value="agent.id">{{ agent.id }}（{{ agent.name }}）</option>
