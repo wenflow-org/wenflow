@@ -34,9 +34,8 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <input
+          <MkFilterSearch
             v-model="keyword"
-            class="mk-filter__input"
             :placeholder="tab === 'login' ? '用户名 / IP，回车查询' : '关键词，回车查询'"
             @keydown.enter="applyFilters"
           />
@@ -47,6 +46,7 @@
             <option value="month">近 30 天</option>
             <option value="all">全部</option>
           </select>
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <span v-if="failureByAction.length" class="al-fails">
@@ -263,6 +263,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
 import { errMsg, shortId } from './live'
 import Pagination from './Pagination.vue'
+import MkFilterSearch from './MkFilterSearch.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from './MkCols.vue'
 import { actionText, targetTypeText, ipText, pathActionText } from './statusText'

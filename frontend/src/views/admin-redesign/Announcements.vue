@@ -17,7 +17,7 @@
     <div class="mk-card">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <input v-model="keyword" class="mk-filter__input" placeholder="搜索标题 / 正文" />
+          <MkFilterSearch v-model="keyword" placeholder="搜索标题 / 正文" />
           <select v-model="severityFilter" class="mk-filter__select" aria-label="按级别筛选">
             <option value="">全部级别</option>
             <option value="info">通知</option>
@@ -185,6 +185,7 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
+import MkFilterSearch from './MkFilterSearch.vue'
 
 /** 嵌入模式：作为「通知与公告」页「公告」tab 渲染（仅去掉外层壳，状态条/新建/编辑弹窗保留）。
     count 事件：公告总数上报（宿主「公告 N」徽章；embedded 才消费） */

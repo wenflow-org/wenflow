@@ -54,10 +54,11 @@
         <!-- 左侧筛选组（对齐 Users：pills + 搜索框） -->
         <div class="mk-filter">
           <div class="mk-pills">
-            <button v-for="p in statusPills" :key="p.id" type="button" class="mk-pill" :class="{ 'mk-pill--active': statusFilter === p.id }" @click="statusFilter = statusFilter === p.id ? '' : p.id">{{ p.label }}</button>
+            <button v-for="p in statusPills" :key="p.id" type="button" class="mk-pill" :class="{ 'mk-pill--active': statusFilter === p.id }" @click="statusFilter = statusFilter === p.id ? '' : p.id">{{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span></button>
           </div>
-          <input v-model="keyword" class="mk-filter__input" placeholder="关键词搜索" @keydown.enter="applyServerQuery" />
-          <input v-model="traceId" class="mk-filter__input" placeholder="Trace ID（链路 ID）" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery" />
+          <MkFilterSearch v-model="keyword" placeholder="关键词搜索" @keydown.enter="applyServerQuery" />
+          <MkFilterSearch v-model="traceId" placeholder="Trace ID（链路 ID）" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery" />
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
         </div>
         <!-- 右侧：错误类别 / 自动刷新 / 高级 / 列设置（对齐 Users：切换控件 + 统计） -->
         <div class="mk-card__head-right">
@@ -273,6 +274,7 @@ import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from './MkCols.vue'
 import Pagination from './Pagination.vue'
+import MkFilterSearch from './MkFilterSearch.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
 import TokenCost from './TokenCost.vue'
 import { TERMS, errorCodeLabel } from './terms'
@@ -649,11 +651,14 @@ const filterLabel = computed(() =>
     .join(' · ')
 )
 
-const statusPills = [
-  { id: 'err', label: '失败' },
-  { id: 'warn', label: '超时' },
-  { id: 'ok', label: '成功' }
-]
+const statusPills = computed(() => {
+  const st = liveStats.value
+  return [
+    { id: 'err', label: '失败', count: st?.error },
+    { id: 'warn', label: '超时', count: st?.timeout },
+    { id: 'ok', label: '成功', count: st?.success }
+  ]
+})
 
 function clearFilter() {
   testFilter.value = ''

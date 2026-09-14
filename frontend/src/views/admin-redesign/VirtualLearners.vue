@@ -81,7 +81,8 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <span class="mk-card__meta">{{ filtered.length }} / {{ samples.length }} 人<template v-if="filtered.length < samples.length">（已筛选）</template> · 点击行查看画像</span>
@@ -597,6 +598,7 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
+import MkFilterSearch from './MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'

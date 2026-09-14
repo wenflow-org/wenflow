@@ -69,7 +69,7 @@
     <div v-else class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="ac-filter">
-          <input v-model="recordSearch" class="mk-filter__input" placeholder="搜索用户姓名 / 邮箱…" @keydown.enter="reloadRecords" />
+          <MkFilterSearch v-model="recordSearch" placeholder="搜索用户姓名 / 邮箱…" @keydown.enter="reloadRecords" />
           <button type="button" class="mk-btn mk-btn--sm" @click="reloadRecords">查询</button>
         </div>
         <DataScopeToggle :model-value="achIncludeTest" @update:model-value="onAchRescope" />
@@ -222,6 +222,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
+import MkFilterSearch from './MkFilterSearch.vue'
 import AchIcon from './AchIcon.vue'
 
 const achTab = ref<'defs' | 'records'>('defs')

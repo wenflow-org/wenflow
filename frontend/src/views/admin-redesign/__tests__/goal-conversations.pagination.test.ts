@@ -154,7 +154,7 @@ describe('GoalConversations 客户端分页（mk-pagination）', () => {
     await findBtn(w, '下一页').trigger('click');
     await nextTick();
     expect(w.text()).toContain('第 2 / 3 页');
-    await w.findAll('.mk-pill').find((x) => x.text() === '已取消')!.trigger('click');
+    await w.findAll('.mk-pill').find((x) => x.text().startsWith('已取消'))!.trigger('click');
     await nextTick();
     expect(w.text()).toContain('第 1 / 1 页');
     expect(w.findAll('tbody tr')).toHaveLength(5);

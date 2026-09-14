@@ -25,6 +25,7 @@
             <span class="mk-field__label" style="margin:0">仅未读</span>
           </label>
           <span class="nt-boundary" title="全站横幅公告请到「公告」页管理">横幅公告 → 公告页</span>
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
         </div>
         <span class="mk-card__head-right">
         </span>
@@ -258,6 +259,7 @@ function clearFilter() {
   unreadOnly.value = false
   void reload()
 }
+const isFiltered = computed(() => !!kindFilter.value || unreadOnly.value)
 
 /* mk-status 只有 ok/warn/bad/muted 四档（shared.css）：有未读用 warn 提示，无未读为 ok */
 const statusTone = computed(() => (unreadTotal.value > 0 ? 'mk-status--warn' : 'mk-status--ok'))

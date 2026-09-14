@@ -66,10 +66,11 @@
                 :class="{ 'mk-pill--active': statusFilter === p.id }"
                 @click="statusFilter = statusFilter === p.id ? '' : p.id"
               >
-                {{ p.label }}
+                {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
               </button>
             </div>
-            <input v-model="keyword" class="mk-filter__input" placeholder="搜索用户 / 邮箱 / 目标摘要" />
+            <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
+            <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           </div>
           <div class="mk-card__head-right">
             <DataScopeToggle v-model="includeTest" />
@@ -326,6 +327,7 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
+import MkFilterSearch from './MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from './MkCols.vue'
@@ -530,11 +532,14 @@ function scrollMsgsToBottom() {
   bodyRef.value?.scrollTo({ top: bodyRef.value.scrollHeight, behavior: 'smooth' })
 }
 
-const statusPills = [
-  { id: 'active', label: '进行中' },
-  { id: 'completed', label: '已完成' },
-  { id: 'cancelled', label: '已取消' }
-]
+const statusPills = computed(() => {
+  const all = rows.value
+  return [
+    { id: 'active', label: '进行中', count: all.filter((r) => r.status === 'active').length },
+    { id: 'completed', label: '已完成', count: all.filter((r) => r.status === 'completed').length },
+    { id: 'cancelled', label: '已取消', count: all.filter((r) => r.status === 'cancelled').length }
+  ]
+})
 
 const statusLabel = (s: string) => ({ active: '进行中', completed: '已完成', cancelled: '已取消' })[s] || s || '—'
 const statusBadge = (s: string) =>

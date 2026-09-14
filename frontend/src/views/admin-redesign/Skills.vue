@@ -33,8 +33,8 @@
       <div class="mk-card__head">
         <div class="mk-filter">
           <div class="mk-pills">
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" @click="onlyAttention = false">全部</button>
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" @click="onlyAttention = true">仅看需关注</button>
+            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" @click="onlyAttention = false">全部<span class="mk-pill__count">{{ cards.length }}</span></button>
+            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" @click="onlyAttention = true">仅看需关注<span class="mk-pill__count">{{ errorCount }}</span></button>
           </div>
           <select v-model="categoryFilter" class="mk-filter__select" aria-label="按类别筛选">
             <option value="">全部类别</option>
@@ -46,7 +46,8 @@
             <option value="30d">近 30 天</option>
             <option value="all">全部</option>
           </select>
-          <input class="mk-filter__input" v-model="keyword" placeholder="搜索名称 / ID / 类别" />
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID / 类别" />
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <MkCols
@@ -208,6 +209,7 @@ import { COMPLETION_META, completionMetaOf } from './glossaryMeta'
 import { EXTRA_CAPABILITY_SKILLS } from '@/views/admin/capabilityCatalog'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from './MkCols.vue'
+import MkFilterSearch from './MkFilterSearch.vue'
 import Pagination from './Pagination.vue'
 import { useIsNarrow } from './useIsNarrow'
 import { useTableSort } from './useTableSort'

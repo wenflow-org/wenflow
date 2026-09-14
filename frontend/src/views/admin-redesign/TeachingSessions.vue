@@ -54,10 +54,10 @@
               :class="{ 'mk-pill--active': pill === p.id }"
               @click="pill = p.id"
             >
-              {{ p.label }}
+              {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
             </button>
           </div>
-          <input class="mk-filter__input" v-model="keyword" placeholder="搜索主题 / 用户 / ID" />
+          <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / ID" />
           <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
             <option value="">全部状态</option>
             <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
@@ -67,6 +67,7 @@
             <option value="7d">近 7 天</option>
             <option value="30d">近 30 天</option>
           </select>
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <DataScopeToggle v-model="includeTest" />
@@ -349,6 +350,7 @@ import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
+import MkFilterSearch from './MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from './MkCols.vue'
 
@@ -542,12 +544,15 @@ const tsColDefs = [
   { key: 'attention', label: '关注', title: '关注度' },
 ] as const
 const tsHiddenCols = ref<Set<string>>(new Set())
-const pills = [
-  { id: 'all' as const, label: '全部' },
-  { id: 'active' as const, label: '进行中' },
-  { id: 'attention' as const, label: '待关注' },
-  { id: 'missing' as const, label: '缺总结' }
-]
+const pills = computed(() => {
+  const all = rows.value
+  return [
+    { id: 'all' as const, label: '全部', count: all.length },
+    { id: 'active' as const, label: '进行中', count: all.filter((r) => r.status === 'active').length },
+    { id: 'attention' as const, label: '待关注', count: all.filter((r) => r.attention !== 'low').length },
+    { id: 'missing' as const, label: '缺总结', count: all.filter((r) => r.wrapupStatus === 'missing').length }
+  ]
+})
 /* 状态筛选选项（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
 const statusOptions = [
   { value: 'initializing', label: '初始化中' },

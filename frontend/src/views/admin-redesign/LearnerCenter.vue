@@ -39,15 +39,11 @@
               :class="{ 'mk-pill--active': pill === p.id }"
               @click="pill = p.id"
             >
-              {{ p.label }}
+              {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
             </button>
           </div>
-          <input
-            v-model="keyword"
-            class="mk-filter__input"
-            style="width: 200px;"
-            placeholder="搜索名称 / 邮箱 / ID"
-          />
+          <MkFilterSearch v-model="keyword" style="width: 200px;" placeholder="搜索名称 / 邮箱 / ID" />
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <button
@@ -213,6 +209,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
+import MkFilterSearch from './MkFilterSearch.vue'
 import MkCols from './MkCols.vue'
 import { adminNotificationsApi } from '@/api/adminApi'
 
@@ -334,11 +331,11 @@ const rows = computed<Row[]>(() =>
   }))
 )
 
-const pills = [
-  { id: 'all' as const, label: '全部' },
-  { id: 'risk' as const, label: '需关注' },
-  { id: 'stale' as const, label: '低置信' }
-]
+const pills = computed(() => [
+  { id: 'all' as const, label: '全部', count: rows.value.length },
+  { id: 'risk' as const, label: '需关注', count: riskCount.value },
+  { id: 'stale' as const, label: '低置信', count: lowConfCount.value }
+])
 
 const isRisk = (r: Row) => r.trend === 'down' || r.fatigue !== '低' || !!r.risk
 const riskCount = computed(() => rows.value.filter(isRisk).length)
@@ -366,6 +363,12 @@ const filtered = computed(() => {
 })
 
 const statusTone = computed(() => (!rows.value.length ? 'mk-status--muted' : riskCount.value > 0 ? 'mk-status--warn' : 'mk-status--ok'))
+
+const isFiltered = computed(() => pill.value !== 'all' || !!keyword.value.trim())
+function clearFilters() {
+  pill.value = 'all'
+  keyword.value = ''
+}
 
 /** live 学习者域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
 const loadFailed = computed(

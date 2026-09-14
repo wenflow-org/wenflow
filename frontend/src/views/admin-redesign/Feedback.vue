@@ -36,7 +36,7 @@
       <div class="mk-card mk-card--fill">
         <div class="mk-card__head">
           <div class="mk-filter">
-            <input v-model="keyword" class="mk-filter__input" placeholder="搜索用户 / 评论 / 任务" />
+            <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 评论 / 任务" />
             <div class="mk-pills">
               <button
                 v-for="p in statusPills"
@@ -46,7 +46,7 @@
                 :class="{ 'mk-pill--active': statusFilter === p.id }"
                 @click="statusFilter = statusFilter === p.id ? '' : p.id"
               >
-                {{ p.label }}
+                {{ p.label }}<span class="mk-pill__count">{{ p.count }}</span>
               </button>
             </div>
             <div class="mk-pills">
@@ -56,9 +56,10 @@
                 :class="{ 'mk-pill--active': lowOnly }"
                 @click="lowOnly = !lowOnly"
               >
-                仅低分 ≤2
+                仅低分 ≤2<span class="mk-pill__count">{{ lowCount }}</span>
               </button>
             </div>
+            <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           </div>
           <span class="mk-card__head-right">
             <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}</span>
@@ -236,6 +237,7 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import Pagination from './Pagination.vue'
+import MkFilterSearch from './MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from './MkEmptyState.vue'
 
@@ -287,12 +289,17 @@ const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => !!detail.value), panelRef)
 useMaskClose(maskRef, () => { detail.value = null })
 
-const statusPills = [
-  { id: 'new', label: '待处理' },
-  { id: 'triaged', label: '已分流' },
-  { id: 'resolved', label: '已解决' },
-  { id: 'dismissed', label: '已忽略' }
-]
+const statusPills = computed(() => {
+  const all = rows.value
+  return [
+    { id: 'new', label: '待处理', count: all.filter((r) => r.status === 'new').length },
+    { id: 'triaged', label: '已分流', count: all.filter((r) => r.status === 'triaged').length },
+    { id: 'resolved', label: '已解决', count: all.filter((r) => r.status === 'resolved').length },
+    { id: 'dismissed', label: '已忽略', count: all.filter((r) => r.status === 'dismissed').length }
+  ]
+})
+/** 低分（≤2）条数：供「仅低分」pill 计数 */
+const lowCount = computed(() => rows.value.filter((r) => r.rating <= 2).length)
 
 const statusLabel = (s: string) =>
   ({ new: '待处理', triaged: '已分流', resolved: '已解决', dismissed: '已忽略' })[s] || s || '—'

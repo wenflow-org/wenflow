@@ -114,7 +114,7 @@
 
     <!-- 搜索 / 角色过滤 -->
     <div class="mk-filter frt__filter">
-      <input v-model="keyword" class="mk-filter__input" type="search" placeholder="搜索字段名 / 含义 / 角色 / 可见性 / 移交…" />
+      <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段名 / 含义 / 角色 / 可见性 / 移交…" />
       <select v-model="roleFilter" class="mk-filter__select" aria-label="按角色过滤">
         <option value="">全部角色</option>
         <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
@@ -134,6 +134,7 @@
         :title="sortDir === 'asc' ? '当前升序，点击切换为降序' : '当前降序，点击切换为升序'"
         @click="toggleDir"
       >{{ sortDir === 'asc' ? '升序' : '降序' }}</button>
+      <button v-if="filterActive" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
       <span v-if="filterActive" class="frt__filter-count">命中 {{ filteredTotal }} / {{ routings.length }} 行</span>
     </div>
 
@@ -298,6 +299,7 @@ import { toast } from '@/utils/toast';
 import { askConfirm } from './useConfirm';
 import { TERMS } from './terms';
 import Pagination from './Pagination.vue';
+import MkFilterSearch from './MkFilterSearch.vue';
 import { useTableSort } from './useTableSort';
 
 interface FieldItem {
@@ -395,6 +397,10 @@ function pathParts(fieldId: string) { return fieldId.split('.'); }
 function routingsOf(agentId: string) { return routings.value.filter((r) => r.agentId === agentId); }
 
 const filterActive = computed(() => Boolean(keyword.value.trim() || roleFilter.value));
+function clearFilter() {
+  keyword.value = '';
+  roleFilter.value = '';
+}
 const filteredTotal = computed(() => routings.value.filter(matches).length);
 
 /** 弹窗速查条：promptRole 取值清单（后端词表下发；未加载时显示占位） */

@@ -43,14 +43,11 @@
               :class="{ 'mk-pill--active': statusFilter === p.id }"
               @click="statusFilter = statusFilter === p.id ? '' : p.id"
             >
-              {{ p.label }}
+              {{ p.label }}<span class="mk-pill__count">{{ p.count }}</span>
             </button>
           </div>
-          <input
-            v-model="keyword"
-            class="mk-filter__input"
-            placeholder="搜索标题 / 用户 / ID"
-          />
+          <MkFilterSearch v-model="keyword" placeholder="搜索标题 / 用户 / ID" />
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <DataScopeToggle v-model="includeTest" />
@@ -227,6 +224,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { timeAgo, errMsg, shortId } from './live'
 import { intent } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
+import MkFilterSearch from './MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
@@ -257,12 +255,15 @@ const includeTest = ref(false)
 const stats = ref<LearningContentStats | null>(null)
 
 /* 状态 pill 组（与教学会话/目标对话头部同形态；点击可取消，取色全站语义） */
-const statusPills = [
-  { id: 'active', label: '学习中' },
-  { id: 'completed', label: '已完成' },
-  { id: 'failed', label: '生成失败' },
-  { id: 'archived', label: '已下线' }
-]
+const statusPills = computed(() => {
+  const all = rows.value
+  return [
+    { id: 'active', label: '学习中', count: all.filter((p) => p.status === 'active').length },
+    { id: 'completed', label: '已完成', count: all.filter((p) => p.status === 'completed').length },
+    { id: 'failed', label: '生成失败', count: all.filter((p) => p.status === 'failed').length },
+    { id: 'archived', label: '已下线', count: all.filter((p) => p.status === 'archived').length }
+  ]
+})
 
 /* 列显隐（与同页其他列表一致）：目标摘要/用户/状态/进度/更新 可隐藏，路径/操作固定 */
 const colDefs = [
