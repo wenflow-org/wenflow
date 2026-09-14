@@ -194,6 +194,7 @@ ORDER BY avg_prompt DESC;
 | **path-reviewer** | 183 | 1.0% | 6.9% | **+5.9pp** |
 | **virtual-learner-goal-dialogue-simulator** | 189 | 58.9% | 63.3% | **+4.4pp** |
 | **virtual-learner-persona-designer** | 94 | 54.1% | 56.0% | **+1.9pp** |
+| **learning-predictor** | 148 | 15.8% | 21.0% | **+5.2pp** |
 | ~~goal-conversation~~ | 136 | 26.6% | 22.8% | **-3.8pp（已回退）** |
 
 > `goal-conversation` 实测为**负收益**（`userInput` 前置反而变差），已按数据回退，不做无收益改动。
@@ -212,6 +213,7 @@ ORDER BY avg_prompt DESC;
 | teaching-opening-generator | 124 | 1,590 | 232 | ~0.03M |
 | learner-progress-report | 62 | 352 | 136 | ~0.01M |
 | virtual-learner-persona-designer | 125 | 1,675 | 31 | ~0.003M |
+| learning-predictor | 148 | 800 | 41 | ~0.006M |
 | **合计** | | | | **≈ 19.7M tokens** |
 
 > 说明：本表是**确定性**测量（真实 payload + 真实键序），但仍是**前缀上界**；实际命中受 provider 路由影响（best-effort），须以真 LLM A/B 佐证（见 §7.6）。
@@ -233,6 +235,9 @@ ORDER BY avg_prompt DESC;
 | `path-reviewer` | `prerequisiteTree`（常量）前置 |
 | `virtual-learner-goal-dialogue-simulator` | `personaAnchorHint`/`task` 前置，`visibleContext` 后置 |
 | `virtual-learner-persona-designer` | `candidatePersonas`/`preferredLevels` 前置 |
+| `learning-predictor` | 调用方改序：`fatigueSignal` 前置 |
+
+另：`teaching-turn` 的 `interactionProfile` 输入 **ref 由 `teaching.scenario.interactionProfile` 对齐为 `teaching.interactionProfile`**（+ 沙盘注册/池），使声明与装配一致（§7.8）。
 
 默认路径字节不变（`tsc` 0、payload 快照与单测全绿）。共 **10 个 skill**。
 
@@ -240,7 +245,6 @@ ORDER BY avg_prompt DESC;
 - `adaptive-guidance-copy`：79k 动态 payload **裁剪**（`sessionWrapup` 只留必要字段）——前缀序已改，**体积**收益待做。
 - `learn-turn-sim` / `virtual-learner-*`：`learner.profile.storyPool` 等无关大对象**投影剔除**（体积而非前缀）。
 - `path-planning` / `kc-mapper`：**去重**（confirmedProposal ×2 / `【强制要求】`×5）——前缀收益≈0，属体积项。
-- `learning-predictor`：需在**调用方**（`TeachingContextBuilder`）改序（skill 侧是 `payload=>payload`）。
 - `goal-conversation`：试改**负收益（-3.8pp）已回退**；除非先去掉 `state.collected` 派生副本再评估。
 - `epistemic-grounding` / `lesson-knowledge-enricher`：实测前缀≈0，不做序改。
 
@@ -266,4 +270,13 @@ ORDER BY avg_prompt DESC;
 > 真实模型下，新键序把**相邻回合缓存命中从「多数 0」拉到 99%**，直接证实改造收益。（payload 约 1.8万 tokens/回合）
 
 **回答"为什么不能跑真实的"**：能跑。改造本身就只是**输入 payload 的键序**（+ 去一个重复键），不涉及 schema/逻辑/模型；此前没跑出来是**测试接线**问题（flag 在进程启动时读、第二实例被回收、VL 未走到 learn、preset 会话被抢租约）——本节的直连模型实测即绕开了这一切。
+
+### 7.8 声明与装配对齐（teaching-turn）
+
+稳定前缀改造把 `interactionProfile` 从 `scenario` 内移到顶层（`scenario` 内那份是重复），为使「声明↔装配」一致：
+- `core/teaching-turn.yaml`：`inputs.interactionProfile.ref` 由 `sandbox:teaching.scenario.interactionProfile` → **`sandbox:teaching.interactionProfile`**
+- `SANDBOX_EXTRA_KEYS['teaching-agent']` 注册 `interactionProfile`；`buildTeachingSandboxPool` 在 teaching 级补充该键（scenario 级保留兼容）
+- 重编译 md + 快照；`check-handoff:strict`、`snapshots:check`、`fields-sync`、`yaml:check` 全绿
+
+> 这是本轮**唯一**一处改动 skill「声明字段」的地方（其余 skill 仅改 payload 键序）。
 
