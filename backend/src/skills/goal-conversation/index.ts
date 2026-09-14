@@ -196,22 +196,20 @@ export function buildGoalConversationUserPayload(input: {
   }));
 
   // 键序按"稳定→动态"（KV 前缀缓存）：task 常量前置（跨轮/跨用户稳定），
-  // 动态块（state 全量快照 / 当轮输入 / 增长历史）后置，最大化 user 内前缀命中。
-  const payloadJson = JSON.stringify({
-    task: {
-      mode: 'goal-conversation-turn-update',
-      requirements: [
-        'treat state as primary memory',
-        'treat conversationContext as supporting evidence only',
-        'if state conflicts with userInput, trust userInput',
-        'do not treat conversationContext as chat history to continue',
-        'return exactly one raw JSON object with no extra text'
-      ]
-    },
-    state: statePayload,
-    userInput: input.userInput,
-    conversationContext
-  }, null, 2);
+  // 动态块（当轮输入 / state 全量快照 / 增长历史）后置，最大化 user 内前缀命中。
+  const taskBlock = {
+    mode: 'goal-conversation-turn-update',
+    requirements: [
+      'treat state as primary memory',
+      'treat conversationContext as supporting evidence only',
+      'if state conflicts with userInput, trust userInput',
+      'do not treat conversationContext as chat history to continue',
+      'return exactly one raw JSON object with no extra text'
+    ]
+  };
+  const payloadJson = JSON.stringify(process.env.PAYLOAD_STABLE_PREFIX === '1'
+    ? { task: taskBlock, userInput: input.userInput, state: statePayload, conversationContext }
+    : { task: taskBlock, state: statePayload, userInput: input.userInput, conversationContext }, null, 2);
 
   // supplement 作为 JSON 外前缀文本（不污染 JSON 键集）；无 supplement 时纯 JSON
   return input.supplementText ? `${input.supplementText}\n\n${payloadJson}` : payloadJson;

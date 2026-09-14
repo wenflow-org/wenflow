@@ -245,7 +245,7 @@ function buildUserPayload(input: GoalLearnerSimulationInput) {
 
   const friction = decideFrictionTrigger(input.frictionBudget);
 
-  return {
+  const body = {
     learner: input.learner || {},
     story: input.story || null,
     visibleContext: {
@@ -284,6 +284,22 @@ function buildUserPayload(input: GoalLearnerSimulationInput) {
       ...(input.task || {})
     }
   };
+
+  // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：personaAnchorHint/task 常量前置，可见对话等易变块后置。默认顺序不变。
+  if (process.env.PAYLOAD_STABLE_PREFIX === '1') {
+    return {
+      personaAnchorHint: body.personaAnchorHint,
+      task: body.task,
+      learner: body.learner,
+      story: body.story,
+      learnerMemory: body.learnerMemory,
+      friction: body.friction,
+      currentPhase: body.currentPhase,
+      previousLearnerState: body.previousLearnerState,
+      visibleContext: body.visibleContext,
+    };
+  }
+  return body;
 }
 
 export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimulationInput): Promise<SkillExecutionResult<GoalLearnerSimulationOutput>> {

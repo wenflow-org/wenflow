@@ -267,13 +267,25 @@ export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillEx
       defaultSystemPrompt: VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-persona-designer' },
-            buildUserPayload: (payload) => ({
-        preferredLevels: normalizeStringArray(payload?.preferredLevels),
-        // 候选池可空：不传/空 → 自由生成（不再兜底固定 15 职业池，消除职业天花板）
-        candidatePersonas: normalizeStringArray(payload?.candidatePersonas),
-        recentPersonaHints: normalizeStringArray(payload?.recentPersonaHints, DEFAULT_RECENT_PERSONA_HINTS),
-        existingPersonaSeed: payload?.existingPersonaSeed && typeof payload.existingPersonaSeed === 'object' ? payload.existingPersonaSeed : undefined,
-      }),
+      // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：candidatePersonas/preferredLevels 前置。默认顺序不变。
+      buildUserPayload: (payload) => {
+        const body = {
+          preferredLevels: normalizeStringArray(payload?.preferredLevels),
+          // 候选池可空：不传/空 → 自由生成（不再兜底固定 15 职业池，消除职业天花板）
+          candidatePersonas: normalizeStringArray(payload?.candidatePersonas),
+          recentPersonaHints: normalizeStringArray(payload?.recentPersonaHints, DEFAULT_RECENT_PERSONA_HINTS),
+          existingPersonaSeed: payload?.existingPersonaSeed && typeof payload.existingPersonaSeed === 'object' ? payload.existingPersonaSeed : undefined,
+        };
+        if (process.env.PAYLOAD_STABLE_PREFIX === '1') {
+          return {
+            candidatePersonas: body.candidatePersonas,
+            preferredLevels: body.preferredLevels,
+            recentPersonaHints: body.recentPersonaHints,
+            existingPersonaSeed: body.existingPersonaSeed,
+          };
+        }
+        return body;
+      },
       validateParsedOutput: (parsed) => validatePersonaOutput(parsed),
       normalizeOutput: (parsed) => normalizePersonaOutput(parsed),
       mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {

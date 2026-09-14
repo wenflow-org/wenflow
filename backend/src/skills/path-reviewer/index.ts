@@ -106,11 +106,18 @@ export async function pathReviewer(input: any): Promise<SkillExecutionResult<any
       defaultSystemPrompt: PATH_REVIEWER_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'path-reviewer' },
-      buildUserPayload: (payload) => ({
-        pathPlan: payload.pathPlan,
-        goalContext: payload.goalContext || null,
-        prerequisiteTree: payload.prerequisiteTree || null,
-      }),
+      // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：prerequisiteTree(常量) 前置，pathPlan 后置。默认顺序不变。
+      buildUserPayload: (payload) => (process.env.PAYLOAD_STABLE_PREFIX === '1'
+        ? {
+            prerequisiteTree: payload.prerequisiteTree || null,
+            goalContext: payload.goalContext || null,
+            pathPlan: payload.pathPlan,
+          }
+        : {
+            pathPlan: payload.pathPlan,
+            goalContext: payload.goalContext || null,
+            prerequisiteTree: payload.prerequisiteTree || null,
+          }),
       normalizeOutput: (parsed, _payload) => {
         const dims = normalizeDimensions(parsed?.dimensions);
         const overall = clamp01(parsed?.score);
