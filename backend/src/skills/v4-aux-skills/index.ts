@@ -228,19 +228,33 @@ async function teachingOpeningGeneratorHandler(input: any) {
   return runAux({
     meta: META['teaching-opening-generator'],
     input,
-        buildUserPayload: (d) => ({
-      subject: d.subject,
-      topic: d.topic,
-      taskTitle: d.taskTitle,
-      taskDescription: d.taskDescription,
-      taskType: d.taskType,
-      pathSummary: d.pathSummary,
-      currentMilestoneTitle: d.currentMilestoneTitle,
-      learner: d.learner,
-      openingMode: d.openingMode,
-      ...(d.learningSignal ? { learningSignal: d.learningSignal } : {}),
-      ...(d.lastLessonRecap ? { lastLessonRecap: d.lastLessonRecap } : {}),
-    }),
+    buildUserPayload: (d) => (process.env.PAYLOAD_STABLE_PREFIX === '1'
+      ? {
+          learner: d.learner,
+          openingMode: d.openingMode,
+          subject: d.subject,
+          pathSummary: d.pathSummary,
+          taskType: d.taskType,
+          currentMilestoneTitle: d.currentMilestoneTitle,
+          topic: d.topic,
+          taskTitle: d.taskTitle,
+          taskDescription: d.taskDescription,
+          ...(d.learningSignal ? { learningSignal: d.learningSignal } : {}),
+          ...(d.lastLessonRecap ? { lastLessonRecap: d.lastLessonRecap } : {}),
+        }
+      : {
+          subject: d.subject,
+          topic: d.topic,
+          taskTitle: d.taskTitle,
+          taskDescription: d.taskDescription,
+          taskType: d.taskType,
+          pathSummary: d.pathSummary,
+          currentMilestoneTitle: d.currentMilestoneTitle,
+          learner: d.learner,
+          openingMode: d.openingMode,
+          ...(d.learningSignal ? { learningSignal: d.learningSignal } : {}),
+          ...(d.lastLessonRecap ? { lastLessonRecap: d.lastLessonRecap } : {}),
+        }),
     normalize: (parsed, d) => ({
       message: asTrimmedString(parsed?.message),
       question: asTrimmedString(parsed?.question),
@@ -265,7 +279,9 @@ async function learnerProgressReportHandler(input: any) {
   return runAux({
     meta: META['learner-progress-report'],
     input,
-        buildUserPayload: (d) => ({ task: d.task, metrics: d.metrics, signals: d.signals }),
+    buildUserPayload: (d) => (process.env.PAYLOAD_STABLE_PREFIX === '1'
+      ? { signals: d.signals, metrics: d.metrics, task: d.task }
+      : { task: d.task, metrics: d.metrics, signals: d.signals }),
     normalize: (parsed, _d, fb) => ({
       reasoning: asTrimmedString(parsed?.reasoning) || fb?.reasoning || '基于当前学习数据，你正在稳步推进学习进度。',
       suggestion: asTrimmedString(parsed?.suggestion) || fb?.suggestion || '继续保持当前学习节奏，遇到困难时先回顾前置知识点。',

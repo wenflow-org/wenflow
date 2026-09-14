@@ -200,7 +200,7 @@ export { normalizeOutput };
 
 function buildUserPayload(input: VirtualLearnerPathEvaluatorInput) {
   const friction = decideFrictionTrigger(input.frictionBudget);
-  return {
+  const body = {
     learner: input.learner || {},
     story: input.story || null,
     goalState: input.goalState || null,
@@ -235,6 +235,23 @@ function buildUserPayload(input: VirtualLearnerPathEvaluatorInput) {
       ]
     }
   };
+
+  // 稳定前缀（PAYLOAD_STABLE_PREFIX=1）：常量/慢变块前置，逐次变化块后置。默认顺序不变。
+  if (process.env.PAYLOAD_STABLE_PREFIX === '1') {
+    return {
+      task: body.task,
+      personaAnchorHint: body.personaAnchorHint,
+      goalState: body.goalState,
+      learner: body.learner,
+      story: body.story,
+      learnerState: body.learnerState,
+      learnerMemory: body.learnerMemory,
+      friction: body.friction,
+      pathProposal: body.pathProposal,
+      previousReaction: body.previousReaction,
+    };
+  }
+  return body;
 }
 
 export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvaluatorInput): Promise<SkillExecutionResult<VirtualLearnerPathEvaluatorOutput>> {
