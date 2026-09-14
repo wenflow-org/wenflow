@@ -69,6 +69,7 @@ describe('V2Dashboard 日历口径（本地日期）', () => {
     const today = w.find('.day--today');
     expect(today.exists()).toBe(true);
     expect(today.find('.day__cell').text()).toBe('25');
+    expect(today.find('.day__cell').classes()).toContain('day__cell--h1');
     expect(today.find('.day__min').text()).toBe('25分');
   });
 
@@ -81,17 +82,18 @@ describe('V2Dashboard 日历口径（本地日期）', () => {
     expect(detail.text()).toContain('1 次');
   });
 
-  it('月历无学习日子的日期数字不再透明（暗色下也能看见）', async () => {
+  it('热力色阶走 CSS class（无内联颜色，暗色由主题样式接管）', async () => {
     const w = await mountDash(todaySessions());
     const toggle = w.findAll('button').find((b) => b.text().includes('展开整月'));
     expect(toggle).toBeTruthy();
     await toggle!.trigger('click');
     await flushPromises();
 
-    const styles = w.findAll('.mday').map((c) => c.attributes('style') || '');
-    expect(styles.length).toBeGreaterThan(0);
-    // 无学习日子用可读墨色变量，而不是 transparent
-    expect(styles.some((s) => s.includes('--heat-ink-0'))).toBe(true);
-    expect(styles.every((s) => !s.includes('transparent'))).toBe(true);
+    // 无学习日子 → mday--h0（暗色样式里是可读的浅字深底），不再内联 transparent / 浅底深字
+    const zeroCells = w.findAll('.mday--h0');
+    expect(zeroCells.length).toBeGreaterThan(0);
+    for (const cell of zeroCells) expect(cell.attributes('style') || '').toBe('');
+    // 今天 25 分 → h1
+    expect(w.findAll('.mday--h1').length).toBeGreaterThan(0);
   });
 });

@@ -327,13 +327,13 @@
                 @click="selectDay(d.date)"
               >
                 <span class="day__label">{{ d.weekLabel }}</span>
-                <span class="day__cell" :style="{ background: d.color, color: d.ink }">{{ d.minutes || '' }}</span>
+                <span class="day__cell" :class="`day__cell--h${d.level}`">{{ d.minutes || '' }}</span>
                 <span class="day__min">{{ d.minutes ? d.minutes + '分' : '—' }}</span>
               </button>
             </div>
             <div v-else class="week__empty">完成第一次学习后，这里会点亮你的节奏。</div>
             <div v-if="hasAnyMinutes" class="week__stats">
-              <span>近 7 天 <b>{{ weekTotal }}</b> 分钟</span>
+              <span>本周 <b>{{ weekTotal }}</b> 分钟</span>
               <span><b>{{ weekActiveDays }}</b> 天有学习</span>
             </div>
           </section>
@@ -396,8 +396,10 @@
                     :key="ci"
                     type="button"
                     class="mday"
-                    :class="{ 'mday--prev': c.outside, 'mday--future': c.future, 'mday--today': c.isToday, 'mday--selected': selectedDate === c.date && !c.outside }"
-                    :style="!c.outside && !c.future ? { background: c.color, color: c.ink } : {}"
+                    :class="[
+                      { 'mday--prev': c.outside, 'mday--future': c.future, 'mday--today': c.isToday, 'mday--selected': selectedDate === c.date && !c.outside },
+                      !c.outside && !c.future ? `mday--h${c.level}` : '',
+                    ]"
                     :disabled="c.outside || c.future"
                     @click="selectedDate = c.date"
                   >
@@ -963,15 +965,17 @@ const streakDays = computed(() => {
   return streak;
 });
 
-const heat = (m: number) => {
-  // 空值底色走 CSS 变量 --heat-empty（.dash 上按主题定义），随主题即时切换，浅色回退 #eef2f8。
-  // 墨色也走 CSS 变量：月历格子里的日期数字用的就是它，暗色下必须是浅色才看得见
-  // （此前 m<=0 返回 transparent，导致"没学习的日期"数字直接消失）。
-  if (m <= 0) return { color: 'var(--heat-empty, #eef2f8)', ink: 'var(--heat-ink-0, #172033)' };
-  if (m < 30) return { color: 'rgba(52,120,246,.20)', ink: 'var(--heat-ink-1, #1f57cc)' };
-  if (m <= 60) return { color: 'rgba(52,120,246,.45)', ink: 'var(--heat-ink-2, #10337e)' };
-  return { color: 'rgba(52,120,246,.85)', ink: 'var(--heat-ink-3, #ffffff)' };
-};
+/**
+ * 热力等级 0-3（背景表示学习强度）。
+ * 具体颜色走 CSS class（浅/暗各一套），不再用内联 `var(--x, 浅色回退)`：
+ * 一旦变量没解析成功，回退值是浅色底 + 深色字，在暗色主题下会把格子渲染成"白底黑字"。
+ */
+function heatLevel(m: number): 0 | 1 | 2 | 3 {
+  if (m <= 0) return 0;
+  if (m < 30) return 1;
+  if (m <= 60) return 2;
+  return 3;
+}
 
 /* 本周条 */
 const weekDays = computed(() => {
@@ -985,7 +989,7 @@ const weekDays = computed(() => {
     // 用本地日期键：toISOString 是 UTC，UTC+8 凌晨会把整周前移一天，和 minutesByDate 口径对不上
     const date = localDateKey(d);
     const minutes = minutesByDate.value.get(date) ?? 0;
-    return { label, weekLabel: label, date, minutes, isToday: date === todayStr, ...heat(minutes) };
+    return { label, weekLabel: label, date, minutes, isToday: date === todayStr, level: heatLevel(minutes) };
   });
 });
 
@@ -1008,7 +1012,7 @@ async function shiftMonth(dir: number) {
   sessions.value = await fetchSessions(monthCursor.value).catch(() => []);
 }
 
-interface MonthCell { date: string; dayNum: number; minutes: number; outside: boolean; future: boolean; isToday: boolean; color: string; ink: string }
+interface MonthCell { date: string; dayNum: number; minutes: number; outside: boolean; future: boolean; isToday: boolean; level: 0 | 1 | 2 | 3 }
 const monthWeeks = computed(() => {
   const { year, month } = monthCursor.value;
   const first = new Date(year, month, 1);
@@ -1017,17 +1021,17 @@ const monthWeeks = computed(() => {
   const prevDays = new Date(year, month, 0).getDate();
   const cells: MonthCell[] = [];
   for (let i = startOffset - 1; i >= 0; i--) {
-    cells.push({ date: '', dayNum: prevDays - i, minutes: 0, outside: true, future: false, isToday: false, color: 'transparent', ink: 'inherit' });
+    cells.push({ date: '', dayNum: prevDays - i, minutes: 0, outside: true, future: false, isToday: false, level: 0 });
   }
   for (let d = 1; d <= daysInMonth; d++) {
     const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const minutes = minutesByDate.value.get(date) ?? 0;
     const future = date > todayStr;
-    cells.push({ date, dayNum: d, minutes: future ? 0 : minutes, outside: false, future, isToday: date === todayStr, ...heat(future ? 0 : minutes) });
+    cells.push({ date, dayNum: d, minutes: future ? 0 : minutes, outside: false, future, isToday: date === todayStr, level: heatLevel(future ? 0 : minutes) });
   }
   const tail = (7 - (cells.length % 7)) % 7;
   for (let d = 1; d <= tail; d++) {
-    cells.push({ date: '', dayNum: d, minutes: 0, outside: true, future: false, isToday: false, color: 'transparent', ink: 'inherit' });
+    cells.push({ date: '', dayNum: d, minutes: 0, outside: true, future: false, isToday: false, level: 0 });
   }
   const rows = [];
   for (let i = 0; i < cells.length; i += 7) {
@@ -1524,7 +1528,12 @@ onMounted(loadAll);
   display: grid; place-items: center;
   font-size: 12px; font-weight: 800;
 }
-.day__min { font-size: 11px; color: var(--faint); }
+.day__min { font-size: 11px; color: var(--muted); }
+/* 热力色阶（浅色）：背景=学习强度；`.mday` 的日期数字始终可读 */
+.day__cell--h0, .mday--h0 { background: #eef2f8; color: var(--ink, #172033); }
+.day__cell--h1, .mday--h1 { background: rgba(52, 120, 246, 0.2); color: #1f57cc; }
+.day__cell--h2, .mday--h2 { background: rgba(52, 120, 246, 0.45); color: #10337e; }
+.day__cell--h3, .mday--h3 { background: rgba(52, 120, 246, 0.85); color: #ffffff; }
 .week__empty {
   padding: 26px 0; text-align: center; color: var(--faint); font-size: 13px;
   border: 1px dashed var(--line); border-radius: 12px; background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
@@ -1569,10 +1578,14 @@ onMounted(loadAll);
 .month__meta b { color: var(--ink); }
 .month__legend { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--faint); }
 .lg { width: 12px; height: 12px; border-radius: 4px; display: inline-block; margin-left: 6px; }
-.lg--0 { background: var(--heat-empty, #eef2f8); }
+.lg--0 { background: #eef2f8; }
 .lg--1 { background: rgba(52, 120, 246, 0.2); }
 .lg--2 { background: rgba(52, 120, 246, 0.45); }
 .lg--3 { background: rgba(52, 120, 246, 0.85); }
+[data-theme='dark'] .lg--0 { background: rgba(230, 237, 247, 0.1); }
+[data-theme='dark'] .lg--1 { background: rgba(77, 139, 248, 0.22); }
+[data-theme='dark'] .lg--2 { background: rgba(77, 139, 248, 0.45); }
+[data-theme='dark'] .lg--3 { background: rgba(77, 139, 248, 0.85); }
 .month__body { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 18px; }
 .month__weeks { display: grid; gap: 6px; }
 .mweek { display: grid; grid-template-columns: 108px 1fr; gap: 10px; align-items: center; }
@@ -1963,14 +1976,14 @@ a.btn-primary { text-decoration: none; }
 }
 
 /* ---------- 暗色模式覆写 ---------- */
-[data-theme='dark'] .dash {
-  --heat-empty: rgba(230, 237, 247, 0.08);
-  /* 热力墨色：暗色底上必须浅色，否则月历日期数字看不清（原来写死的 #10337e 几乎不可见） */
-  --heat-ink-0: var(--ink, #e6edf7);
-  --heat-ink-1: var(--blue-deep, #6fa3ff);
-  --heat-ink-2: #e6edf7;
-  --heat-ink-3: #ffffff;
-}
+[data-theme='dark'] .day__cell--h0,
+[data-theme='dark'] .mday--h0 { background: rgba(230, 237, 247, 0.1); color: var(--ink, #e6edf7); }
+[data-theme='dark'] .day__cell--h1,
+[data-theme='dark'] .mday--h1 { background: rgba(77, 139, 248, 0.22); color: var(--blue-deep, #6fa3ff); }
+[data-theme='dark'] .day__cell--h2,
+[data-theme='dark'] .mday--h2 { background: rgba(77, 139, 248, 0.45); color: #e6edf7; }
+[data-theme='dark'] .day__cell--h3,
+[data-theme='dark'] .mday--h3 { background: rgba(77, 139, 248, 0.85); color: #ffffff; }
 [data-theme='dark'] .nav { background: var(--v2nav-bg); }
 [data-theme='dark'] .budget__bar,
 [data-theme='dark'] .review__bar { background: rgba(230, 237, 247, 0.12); }
