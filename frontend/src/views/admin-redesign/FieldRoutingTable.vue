@@ -119,6 +119,21 @@
         <option value="">全部角色</option>
         <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
       </select>
+      <select v-model="sortKey" class="mk-filter__select" aria-label="组内排序字段">
+        <option value="">默认顺序</option>
+        <option value="field">字段名</option>
+        <option value="role">角色</option>
+        <option value="render">可见性</option>
+        <option value="type">类型</option>
+        <option value="meaning">含义</option>
+      </select>
+      <button
+        type="button"
+        class="mk-btn mk-btn--sm"
+        :disabled="!sortKey"
+        :title="sortDir === 'asc' ? '当前升序，点击切换为降序' : '当前降序，点击切换为升序'"
+        @click="toggleDir"
+      >{{ sortDir === 'asc' ? '升序' : '降序' }}</button>
       <span v-if="filterActive" class="frt__filter-count">命中 {{ filteredTotal }} / {{ routings.length }} 行</span>
     </div>
 
@@ -283,6 +298,7 @@ import { toast } from '@/utils/toast';
 import { askConfirm } from './useConfirm';
 import { TERMS } from './terms';
 import Pagination from './Pagination.vue';
+import { useTableSort } from './useTableSort';
 
 interface FieldItem {
   fieldId: string;
@@ -325,6 +341,23 @@ const keyword = ref('');
 const roleFilter = ref('');
 const legendOpen = ref(false);
 
+/* 组内排序：数据完整（一次拉取本阶段全部路由行 → 按 agent 分组 → 本地分页），
+   默认保持后端编排顺序（promptRole/fieldId 升序），下拉选字段 + 升/降按钮切换。
+   本表列窄（badge 64px）不适合表头箭头，故用下拉式而非可排序表头。 */
+const { sortKey, sortDir, toggleDir, sortRows } = useTableSort<RoutingItem>({
+  accessors: {
+    field: (r) => r.fieldId,
+    meaning: (r) => descOf(r.fieldId),
+    type: (r) => typeOf(r.fieldId),
+    role: (r) => roleMetaOf(r.fieldId)?.label || '',
+    render: (r) => r.render,
+    persist: (r) => persistKeyOf(r),
+    lock: (r) => r.locks?.level || ''
+  },
+  defaultDir: 'asc',
+  storageKey: 'wf_field_routing_sort'
+});
+
 /* ============ 每 agent 组分页（滚动修复 #1） ============ */
 const AGENT_PAGE_SIZE = 15;
 const agentPages = ref<Record<string, number>>({});
@@ -344,8 +377,8 @@ function rowsOf(agentId: string) {
   const p = pageOf(agentId);
   return list.slice(p * AGENT_PAGE_SIZE, (p + 1) * AGENT_PAGE_SIZE);
 }
-/* 筛选/搜索变化 → 页码回到第 1 页（与 useLoadMore 同语义） */
-watch([keyword, roleFilter], () => { agentPages.value = {}; });
+/* 筛选/搜索/排序变化 → 页码回到第 1 页（与 useLoadMore 同语义） */
+watch([keyword, roleFilter, sortKey, sortDir], () => { agentPages.value = {}; });
 
 const fieldMap = () => new Map(fields.value.map((f) => [f.fieldId, f]));
 
@@ -392,7 +425,7 @@ function matches(r: RoutingItem) {
 }
 
 function filteredOf(agentId: string) {
-  return routingsOf(agentId).filter(matches);
+  return sortRows(routingsOf(agentId).filter(matches));
 }
 
 function formatHandoff(raw: string | string[] | null) {

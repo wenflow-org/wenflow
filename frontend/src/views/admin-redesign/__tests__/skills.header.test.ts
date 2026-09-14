@@ -145,4 +145,16 @@ describe('Skills 新页头（单行状态条）', () => {
     const style = (grid.element as HTMLElement).style
     expect(style.maxHeight).toBe('')
   })
+
+  it('表头排序：点击「成功率」在 none → descending → ascending 间切换 aria-sort', async () => {
+    localStorage.removeItem('wf_skills_sort')
+    const w = await mountSkills()
+    const th = w.findAll('th.mk-th--sortable').find((t) => t.text().includes('成功率'))
+    expect(th).toBeTruthy()
+    expect(th!.attributes('aria-sort')).toBe('none')
+    await th!.find('button').trigger('click')
+    expect(th!.attributes('aria-sort')).toBe('descending')
+    await th!.find('button').trigger('click')
+    expect(th!.attributes('aria-sort')).toBe('ascending')
+  })
 })

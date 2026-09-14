@@ -134,10 +134,11 @@ describe('前端术语单源守卫（阶段 1D）', () => {
     const allow = new Set(['IP', 'XP', 'ID', 'ACTIVE']);
     for (const file of listVueFiles(ADMIN_REDESIGN_DIR)) {
       const src = read(file);
-      const re = /<th[^>]*>([^<]+)<\/th>/g;
+      // 可排序表头会在 <th> 内嵌套 <button>/<span>：先剥离内层标签，再校验文本标签
+      const re = /<th\b[^>]*>([\s\S]*?)<\/th>/g;
       let m: RegExpExecArray | null;
       while ((m = re.exec(src)) !== null) {
-        const text = m[1].trim();
+        const text = m[1].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
         if (!text || allow.has(text)) continue;
         expect(/[a-z][A-Z]/.test(text)).toBe(false);
       }

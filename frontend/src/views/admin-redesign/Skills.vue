@@ -75,11 +75,40 @@
           </colgroup>
           <thead>
             <tr>
-              <th>Skill</th>
-              <th v-if="showCol('agent')">所属阶段</th>
-              <th v-if="showCol('cat')">类别</th>
-              <th v-if="showCol('completion')">完成度</th>
-              <th v-if="showCol('rate')" class="mk-th--right">成功率</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="sortState('skill')"
+                @click="toggleSort('skill')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('skill')">Skill<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="showCol('agent')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="sortState('agent')"
+                @click="toggleSort('agent')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('agent')">所属阶段<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="showCol('cat')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="sortState('cat')"
+                @click="toggleSort('cat')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('cat')">类别<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="showCol('completion')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="sortState('completion')"
+                @click="toggleSort('completion')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('completion')">完成度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="showCol('rate')"
+                scope="col"
+                class="mk-th--right mk-th--sortable"
+                :aria-sort="sortState('rate')"
+                @click="toggleSort('rate')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')">成功率<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="showCol('last')">最近调用</th>
             </tr>
           </thead>
@@ -175,16 +204,29 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { skillStatOf, openSkillDrawer, isLive } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
-import { completionMetaOf } from './glossaryMeta'
+import { COMPLETION_META, completionMetaOf } from './glossaryMeta'
 import { EXTRA_CAPABILITY_SKILLS } from '@/views/admin/capabilityCatalog'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from './MkCols.vue'
 import Pagination from './Pagination.vue'
 import { useIsNarrow } from './useIsNarrow'
+import { useTableSort } from './useTableSort'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
 type Health = 'ok' | 'idle' | 'error'
-type SortKey = 'calls' | 'errors' | 'avgMs'
+/** 目录表行（档案 + 实时统计 + 健康态） */
+interface SkillRow {
+  id: string
+  name: string
+  category: string
+  agentId: string
+  agentName?: string
+  calls: number
+  errors: number
+  avgMs: number
+  lastAt: string
+  health: Health
+}
 
 const onlyAttention = ref(false)
 const keyword = ref('')
@@ -206,8 +248,6 @@ const hiddenCols = ref<Set<string>>(new Set())
 const isNarrow = useIsNarrow()
 const MOBILE_HIDDEN_COLS = new Set(['agent', 'cat', 'completion', 'last'])
 const showCol = (key: string) => !hiddenCols.value.has(key) && !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
-const sortKey = ref<SortKey>('errors')
-const sortDir = ref<'asc' | 'desc'>('desc')
 const statsRange = liveSkillStatsRange
 
 /** 类别下拉动态化：取当前档案实际出现的类别（覆盖 standard/teaching/simulation/tool） */
@@ -254,13 +294,29 @@ async function retrySkills() {
 }
 
 // 卡片数据 = 档案 + 实时统计（live 注册表；为空即空态）
-const cards = computed(() => {
+const cards = computed<SkillRow[]>(() => {
   const profiles = liveSkillProfiles.value.map((p) => ({ ...p, promptVersion: '', description: '' }))
   return profiles.map((p) => {
     const stat = skillStatOf(p.id)
     const health: Health = stat.errors > 0 ? 'error' : stat.calls === 0 ? 'idle' : 'ok'
     return { ...p, ...stat, health }
   })
+})
+
+/* 表格排序：默认失败数优先（问题浮顶，保持既有行为），表头可点切换。
+   数据为 live 注册表全量（有界）→ 客户端排序是诚实的；截断/服务端分页列表不适用本机制。 */
+const { sortState, toggle: toggleSort, sortRows } = useTableSort<SkillRow>({
+  accessors: {
+    errors: (s) => s.errors,
+    skill: (s) => s.name || s.id,
+    agent: (s) => s.agentName || s.agentId || '',
+    cat: (s) => s.category || '',
+    completion: (s) => completionRank(s.id),
+    rate: (s) => (s.calls > 0 ? (s.calls - s.errors) / s.calls : null)
+  },
+  defaultKey: 'errors',
+  defaultDir: 'desc',
+  storageKey: 'wf_skills_sort'
 })
 
 const filtered = computed(() => {
@@ -270,13 +326,7 @@ const filtered = computed(() => {
   if (categoryFilter.value) list = list.filter((c) => String(c.category || '').toLowerCase() === categoryFilter.value)
   const q = keyword.value.trim().toLowerCase()
   if (q) list = list.filter((c) => `${c.name} ${c.id} ${c.category}`.toLowerCase().includes(q))
-  // 排序：默认失败优先，其次调用量
-  const dir = sortDir.value === 'desc' ? -1 : 1
-  return [...list].sort((a, b) => {
-    const diff = (a[sortKey.value] - b[sortKey.value]) * dir
-    if (diff !== 0) return diff
-    return b.calls - a.calls
-  })
+  return sortRows(list)
 })
 
 const activeCount = computed(() => cards.value.filter((c) => c.calls > 0).length)
@@ -370,6 +420,14 @@ const recCompletionOf = computed(() => {
   for (const r of recReport.value?.items ?? []) m.set(r.skillId, r.completion)
   return m
 })
+
+/** 完成度序号（0=draft … 4=live；无对账行 → null 排末尾），供表头排序 */
+function completionRank(skillId: string): number | null {
+  const c = recCompletionOf.value.get(skillId)
+  if (!c) return null
+  const i = COMPLETION_META.findIndex((m) => m.status === c.status)
+  return i >= 0 ? i : null
+}
 
 function completionBadgeOf(skillId: string): { cls: string; text: string; title: string } | null {
   const c = recCompletionOf.value.get(skillId)

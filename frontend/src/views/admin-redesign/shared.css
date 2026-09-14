@@ -189,6 +189,45 @@
 }
 /* 表头 hover 反馈（对齐 AntD：无排序功能时仍给可交互提示的视觉响应） */
 .mk-table th:hover { background: #f2f6fb; color: var(--mk-ink); }
+
+/* ----- 可排序表头（useTableSort） -----
+   整格可点（th 上的 @click）+ 内层按钮负责键盘/AT，箭头由 aria-sort 驱动。
+   箭头随文本行内、不设固定宽度：fixed 表仍由 colgroup 定宽，不改变既有列宽。 */
+.mk-table th.mk-th--sortable { cursor: pointer; user-select: none; }
+.mk-table th.mk-th--sortable:hover { background: #e9f1fd; }
+.mk-table th.mk-th--sortable[aria-sort='ascending'],
+.mk-table th.mk-th--sortable[aria-sort='descending'] { color: var(--mk-ink); }
+.mk-th__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.mk-th__caret {
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 5px solid currentColor;
+  opacity: 0.28;
+  transition: opacity 0.12s;
+}
+.mk-table th.mk-th--sortable:hover .mk-th__caret { opacity: 0.6; }
+.mk-table th.mk-th--sortable[aria-sort='ascending'] .mk-th__caret,
+.mk-table th.mk-th--sortable[aria-sort='descending'] .mk-th__caret { opacity: 0.95; }
+.mk-table th.mk-th--sortable[aria-sort='descending'] .mk-th__caret {
+  border-bottom: 0;
+  border-top: 5px solid currentColor;
+}
 .mk-table td {
   padding: 9px 13px;
   border-bottom: 1px solid #eef1f7;
