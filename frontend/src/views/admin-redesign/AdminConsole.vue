@@ -150,15 +150,26 @@ const bootError = ref('');
 
 const currentComponent = computed(() => components[scene.value]);
 const detailComponent = computed(() => (subPage.value ? detailComponents[subPage.value.view] : null));
-/* 面包屑：二级页优先显示中文名/短标识（label），未设置时回退 ID 截断；title 始终给全 ID */
+/* 面包屑：二级页优先显示中文名/短标识（label），未设置时回退 ID 截断；title 始终给全 ID。
+   三级页（会话座舱由画像打开）拼出「二级 / 三级」，否则进详情后会丢掉二级名。 */
+function crumbPart(label?: string, id?: string): string {
+  const text = label || id || ''
+  if (text.length <= 12) return text
+  return `${text.slice(0, 8)}…${text.slice(-4)}`
+}
 const crumbLabel = computed(() => {
   const sp = subPage.value
   if (!sp) return ''
-  const text = sp.label || sp.id
-  if (text.length <= 12) return text
-  return `${text.slice(0, 8)}…${text.slice(-4)}`
+  const current = crumbPart(sp.label, sp.id)
+  const parent = sp.from ? crumbPart(sp.from.label, sp.from.id) : ''
+  return parent ? `${parent} / ${current}` : current
 })
-const crumbTitle = computed(() => subPage.value?.id || '')
+const crumbTitle = computed(() => {
+  const sp = subPage.value
+  if (!sp) return ''
+  const parent = sp.from ? (sp.from.label || sp.from.id) : ''
+  return parent ? `${parent} / ${sp.id}` : sp.id
+})
 
 /* —— 真路由化：scene ↔ URL /admin/:page 双向同步 —— */
 const route = useRoute()
