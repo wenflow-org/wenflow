@@ -2560,7 +2560,7 @@ class LearningService {
             confirmedProposal: (data as any).confirmedProposal,
             learnerProfile: (data as any).userProfile?.learnerProfile,
           },
-          prerreqTree: ((analysis.cognitiveCore || analysis.cognitiveDesign) as any)?.prerequisiteTree,
+          prerequisiteTree: ((analysis.cognitiveCore || analysis.cognitiveDesign) as any)?.prerequisiteTree,
         });
         if (reviewResult?.success && reviewResult?.output) {
           pathReview = reviewResult.output;

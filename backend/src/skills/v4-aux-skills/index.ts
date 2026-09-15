@@ -232,6 +232,8 @@ async function teachingOpeningGeneratorHandler(input: any) {
       ? {
           learner: d.learner,
           openingMode: d.openingMode,
+          // core rules 引用 priorLearningContext（前序承接）；caller 已传，此前漏在 payload 外
+          ...(d.priorLearningContext ? { priorLearningContext: d.priorLearningContext } : {}),
           subject: d.subject,
           pathSummary: d.pathSummary,
           taskType: d.taskType,
@@ -252,6 +254,7 @@ async function teachingOpeningGeneratorHandler(input: any) {
           currentMilestoneTitle: d.currentMilestoneTitle,
           learner: d.learner,
           openingMode: d.openingMode,
+          ...(d.priorLearningContext ? { priorLearningContext: d.priorLearningContext } : {}),
           ...(d.learningSignal ? { learningSignal: d.learningSignal } : {}),
           ...(d.lastLessonRecap ? { lastLessonRecap: d.lastLessonRecap } : {}),
         }),

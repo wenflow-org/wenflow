@@ -91,13 +91,13 @@
 |---|---|---|
 | path-planning | 全量对话历史拼文本；`confirmedProposal` 2 份、`realProblem` ≥3 次、`【强制要求】` 重复 5 次；`scenario` 算了不打印；`includeStructuredData`/`includeConfidenceScores` 死配置 | 历史截断；去重复文本块；补 `scenario`；接线或删死配置 |
 | stage-designer | loopOver **每里程碑重传** `cognitiveCore`+`normalizedInput` 全量，只消费 3~7 字段 | 循环外裁剪；固定前缀 + 变体后置（吃缓存） |
-| path-reviewer | **（正确性）** 装配键 `prerreqTree` ≠ skill 读的 `prerequisiteTree` → 恒 null；`learnerProfile`/`successCriteria` 未传 | 修 key；`goalContext` 透传 `normalizedInput` |
+| path-reviewer | ~~装配键 `prerreqTree` ≠ skill 读的 `prerequisiteTree` → 恒 null~~ **已修（2026-09-15）**：`learning.service.ts:2563` → `prerequisiteTree`；`learnerProfile`/`successCriteria` 仍未传 | 透传 `normalizedInput`（剩余） |
 
 ### teaching
 | skill | 问题 | 优化方向 |
 |---|---|---|
 | teaching-turn | `visibleDialogueContext` 与 `recentDialogueContext` 同源双键；`interactionProfile` 顶层 + `scenario` 内双份；沙盘 `sessionMessages` 被挂 3 个池键；压缩 recap **无 rule 引用** | 对话单键；profile 去一份；池去重；recap 接线；**前缀稳定化** |
-| teaching-opening-generator | **（正确性）** caller 传的 `priorLearningContext` 被丢弃；core rules 7/8 逐字重复；无 retryStrategy（QA 41.8%） | 补/删字段；删重复 rule；加 retry |
+| teaching-opening-generator | ~~caller 传的 `priorLearningContext` 被丢弃~~ **已修（2026-09-15）**：`v4-aux-skills/index.ts` 两个分支补回该键；core rules 7/8 逐字重复；无 retryStrategy（QA 41.8%） | 删重复 rule；加 retry（剩余） |
 | session-wrapup / peer-reinforcement / adaptive-guidance-copy / lesson-knowledge-enricher | 与 wrapup 重复读同一批数据；adaptive-guidance 的 `sessionWrapup` 全量 JSON（实测该链 41k/次、1.8% 命中）；enricher `knowledgeDelta`/`knowledgeState`/事件与 wrapup 重复且零裁剪 | 共享一份"课后投影"（wrapup artifact）；**adaptive-guidance 专项缩 payload** |
 | finalization | dashboard 与 state-review **各跑一次** `assembleLearningState` | 一次构建、两处共享 |
 
@@ -116,7 +116,7 @@
 | 对话历史/轨迹无上限 | goal-dialogue `index.ts:239-244`；`visibleHistory` 跨全部 trace 累加 `blackbox-runner.ts:1964-1966` | 统一 `history.slice(-6~-10)` |
 | 记忆重复计算 | `buildLearnerMemorySnapshot` 以 6/8/30 三种 limit 在 6+ 处独立调用 | 同 task 构建一次、按 limit 投影 |
 | 预算双源漂移 | `index.ts` 常量 ≠ core/definition | 单一来源 + 删死常量 |
-| **virtual-learner-referee** | **（正确性）** payload 丢 `storyMeta`/`metricCompleteness`（core 声明且 rule 依赖） | 补回 |
+| ~~virtual-learner-referee~~ | ~~**（正确性）** payload 丢 `storyMeta`/`metricCompleteness`（core 声明且 rule 依赖）~~ **已复核（2026-09-15）：不成立**——`blackbox-runner.ts:2095-2096` 已装配，skill `normalizeEvidence` 也接受这两个 source | 无需改 |
 | virtual-learner-actor-auditor | 本阶段输入最大（profile+story+≤120 状态+≤120 trace），零裁剪 | trace 截尾 + 复用 referee 的 compact trace |
 
 ### aux
@@ -136,7 +136,7 @@
 | **P0** | **前缀稳定化**：system + 稳定指令 + 稳定场景/任务块前置，动态快照后置（复刻 goal 42%/path 56% 的做法） | teaching-turn / learn-turn-sim / epistemic-grounding 三个 skill 占 miss 的 63%，命中率仅 23–26%，缓存前缀远未吃满 |
 | **P0** | **`adaptive-guidance-copy` 专项**：40k×**1.8%**、90KB 动态 payload 是单次最贵；裁到必要字段或造稳定前缀 | 单次成本第一，且缓存不可救 |
 | **P1** | 给大 payload skill 加 **system-hash 稳定性回归**（防动态内容拼进 system，generic-chat 现即犯） | 保住 P0 收益 |
-| **P1** | 修正 §3 的**正确性 bug**（path-reviewer key、referee 缺字段、progress-report 恒 0、opening 丢字段） | 影响功能正确性，成本极低 |
+| **P1** | 修正 §3 的**正确性 bug**：path-reviewer key ✅已修 / opening `priorLearningContext` ✅已修 / referee 缺字段 ❌不成立 / progress-report 恒 0（待做，需接真实指标） | 影响功能正确性，成本极低 |
 | **P2** | 去重复池/去副本（`sessionMessages` 三挂、payload 双键、envelope artifact/nextState 重复） | 体积已小，收益有限，顺手做 |
 | **P2** | per-skill payload 预算护栏 + 紧凑 `JSON.stringify`（去 `null,2`） | 全链 +15~30% token（`null,2` → 紧凑） |
 | **P2** | `modelExposure=projected` 要么实现要么删除；`output`/`runtimeEnvelope.artifact`/`debug` 三同一收敛，debug 改按需 | 声明与实现对齐 |
@@ -302,3 +302,26 @@ ORDER BY avg_prompt DESC;
 - provider 命中不完全跟随确定性前缀（个别回合前缀 60% 却只命中 2%），说明**确定性前缀是上界/稳定属性，实际命中另受网关路由影响**。
 - 环境约束：provider 限 **10 请求/分**；并发跑批（`scripts/run-vl-learn-concurrent.mjs`）长期占用配额，导致 429 与 ON 样本偏小。
 - 功能面无回归：改造后完整链（goal/path/learn）在默认新序下跑通至 `completed`。
+
+### 7.10 §3/§4 待改点 · 逐条复核（2026-09-15）
+
+按真实 payload 复核 §3 列出的"问题"，结论如下（**避免把过期结论当任务**）：
+
+**已修（本轮）**
+- **path-reviewer 装配键**：`learning.service.ts:2563` `prerreqTree` → `prerequisiteTree`。此前 skill 恒读 `undefined`；同会话前缀实测仅 **0.9%**（因为恒定 `null` 之后 `goalContext` 立刻分叉）。
+- **teaching-opening-generator 丢 `priorLearningContext`**：caller（`AITeachingCoordinator.ts:1519`）已传、core rules 引用，但 `buildUserPayload` 两分支都没输出 → 已在两分支补回该键。
+
+**复核后不成立（删除该待办）**
+- **virtual-learner-referee 丢 `storyMeta`/`metricCompleteness`**：`blackbox-runner.ts:2095-2096` 已装配；skill `normalizeEvidence`（`virtual-learner-referee/index.ts:39,46`）也接受这两个 source。**无需改**。
+
+**复核后确认存在，但属功能缺口/需产品定夺（本轮未改）**
+- **learner-progress-report KTL/LF 恒 0**：`LearnerProgressService.ts` 的 `getCurrentMetrics()` 初始 `ktl/lf/lss` 全 0，`recordTaskCompletion` 只重算 `lss`，`ktl/lf` 一直沿用 0。真实来源在别处（`learningState.ktl` / `achievement.service`）→ 需要一个明确的"以哪份指标为准"的决定。
+- **learner-state-review `priorInsights` 恒空**：`LearnerStateReviewService.ts:215` 硬编码 `[]`。已有可用的历史洞察源 `insightCalibrationService.getRecords(userId, pathId)`；但 core prompt 并未引用 `priorInsights`，接通属于**行为增强**而非修 bug。
+
+**复核后"本来就正常"（无需改）**
+- `virtual-learner-epistemic-grounding`（最高频 skill）：同会话（按 `currentTask` 判定）确定性前缀 **97.7%**，键序已合理——不是待改项。
+- `teaching-opening-generator` / `learning-predictor`：同会话前缀 **100%** / **100%**。
+
+**仍然成立、按原优先级保留**
+- `teaching-turn`：`visibleDialogueContext` 与 `recentDialogueContext` **字节完全相同**（实测 `==`，同源双键）→ 长会话里重复最多约 30% 体积；但 `recentDialogueContext` 为 **manifest 声明的 input 字段**，删除须同步改声明（同 `interactionProfile` 对齐做法），故列为 P2 待办。
+- `adaptive-guidance-copy`：典型 20KB（`learner`≈7.4KB + `wrapup`≈6KB 占 ~65%），窗口内 `path` 峰值 **138KB**；仍建议做投影裁剪。
