@@ -342,4 +342,21 @@ ORDER BY avg_prompt DESC;
 3. **多故事时的风险**：`storyPool` 每条都含 `hiddenDetails / disclosurePlan / goalSeed`（**别的故事的私有底牌**）→ 直接倒给模拟器会串场/泄露，反而拉低 actor-auditor 的 `personaConsistency / storyConsistency`。
 4. **体量**：近 24h 4 个模拟器 **944 次调用 100% 携带** `storyPool`，平均 ~1.1KB/次 → **~1.08MB/天**（约 30 万 tokens/天）纯重复。
 
-**方向（服务设计意图，而非删除）**：在 persona 边界（`session-factory` 组装 `actorProfile` / `blackbox-runner` 恢复快照）把 `storyPool` 投影为 **`storyHistory`**——每条只留"标题 + 一句话经历/收获"，**剔 private 字段**（hiddenDetails/disclosurePlan/goalSeed），并标 `currentStoryId`；再在 goal-dialogue / learn-turn core 加一条"可自然引用过往经历、但不暴露其他故事私有细节"的规则。单故事时该投影≈0 字节，多故事时自动生效且不泄露。
+**已实施（commit `ed45615`）**：在 5 个模拟器 skill 的 **payload 发送前**做 deep 投影 `projectSimulatorPayload`：任意位置的 `storyPool` → **`storyHistory`**（标题 + 一句话概述，截断 160 字、上限 12 条），hiddenDetails/disclosurePlan/goalSeed 等私有字段全部剔除；goal-dialogue / learn-turn 的 core 增补 `storyHistory` 使用规则（可显式体现生活史，但不得复述其他故事细节）。单故事时该投影≈0 字节，多故事时自动生效且不泄露。
+
+### 7.12 附：黑盒 vs 辅助的定位复核（2026-09-15）
+
+排查上下文时顺带核对了虚拟实验室的两条驱动链路——**目标重叠，定位不重叠**：
+
+| | 辅助 assisted | 黑盒 blackbox-api |
+|---|---|---|
+| 判别 | `experiment.mode !== 'blackbox-api'`（`session-mode.ts`） | `experiment.mode === 'blackbox-api'` |
+| 驱动 | `simulationCoordinator` 进程内直调（`goal-conversation.service` / `path.coordinator` / `AITeachingCoordinator`） | `blackboxVirtualLearnerRunner` → `PlatformUserAdapter` 以投影 token **走 HTTP `/api`**，合成外部用户 |
+| 视角 | 白盒（内部状态/日志/租约） | 黑盒（只见 `publicTrace` / `availableActions`） |
+| 控制 | 驾驶舱可人工接管：`step` / `auto` / `advance-path` / `accept-path` / `start-learning` / `teaching-step` / `auto-learning` / `run-full` | 全自动 `autoStep`；`blackbox-observe` / `blackbox-evaluations` / `blackbox-rerun` |
+| 独有 | 白盒定位 + 人工干预 | **referee 裁判 + actor-auditor 保真审计 + metricCompleteness**；HTTP 契约/鉴权/投影可见性 |
+
+- 两者**共用同一层**「虚拟学习者模拟」（`goal-dialogue-sim` / `learn-turn-sim` / `epistemic-grounding` / `memory-curator`），autopilot 也已统一驱动两种模式（`AutopilotMode = 'assisted' | 'blackbox'`）。
+- 真正的区别是**测试分层**：辅助 = 白盒 + 可人工接管（开发/排障）；黑盒 = 黑盒 + HTTP 契约 + 可见性 + 裁判评估（回归/评测）。
+- 可省冗余：`assisted.auto` 与 autopilot 的全自动跑全程重复，可让 `assisted` 只保留"人工单步 + 排障"语义。
+- 附带发现：`profile.simulationMode`（写入 `'manual'`）**只写不读**，疑似死配置。
