@@ -20,6 +20,7 @@ import {
   teachingSessionRepository
 } from '../services/ai-teaching/TeachingSessionRepository';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
+import { reviewPlanService } from '../services/memory/review-plan.service';
 import { learnerExitService } from '../services/learner/LearnerExitService';
 import { PromptStreamEvent, setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
 import type { InteractionMetaRecord } from '../services/ai-teaching/TeachingContextBuilder';
@@ -41,6 +42,26 @@ const teachingMessagesUserLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req: any) => req.user?.userId || ipKeyGenerator(req.ip, 56),
+});
+
+/**
+ * 课内温故计划（记忆层 · 认知负担动态调整）
+ * GET /api/ai-teaching/review/plan
+ * 与 /review/due 的分工：due 是「全部到期清单」（上限 20，供展示）；plan 是
+ * 「本节该接哪几个 + 负担预算 + 积压计数」（供课内温故注入与首页诚实计数）。
+ */
+router.get('/review/plan', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return sendUnauthorized(res);
+    }
+    const plan = await reviewPlanService.buildReviewPlan(userId);
+    res.json({ success: true, data: plan });
+  } catch (error: any) {
+    logger.error('[review] 课内温故计划生成失败:', error);
+    return sendTeachingError(res, error, '获取温故计划失败');
+  }
 });
 
 /**

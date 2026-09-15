@@ -269,7 +269,7 @@
           <div class="review__head">
             <div class="review__headline">
               <span class="review__eyebrow">今日复习</span>
-              <strong class="review__title">{{ reviewDue.length }} 个知识点待回捞</strong>
+              <strong class="review__title">{{ reviewTitle }}</strong>
             </div>
             <div class="review__stats">
               <span v-if="reviewUrgentCount" class="review__stat review__stat--urgent">记忆偏弱 {{ reviewUrgentCount }}</span>
@@ -304,8 +304,8 @@
             @click="reviewExpanded = !reviewExpanded"
           >{{ reviewExpanded ? '收起' : `还有 ${reviewDue.length - REVIEW_PREVIEW} 个 · 展开全部` }}</button>
           <div class="review__footer">
-            <router-link v-if="todayTask?.id" :to="`/learn/${todayTask.id}?mode=review`" class="btn-primary review__go">开始复习</router-link>
-            <span class="review__hint"><template v-if="todayTask?.minutes">约 {{ todayTask.minutes }} 分钟 · </template>复习课会优先回捞这些到期知识点</span>
+            <router-link v-if="todayTask?.id" :to="`/learn/${todayTask.id}`" class="btn-primary review__go">去上课 · 顺带温故</router-link>
+            <span class="review__hint">{{ reviewFooterHint }}</span>
           </div>
         </section>
 
@@ -582,6 +582,11 @@ const examples = [
 
 /* ================= 数据加载 ================= */
 const reviewDue = ref<Array<{ conceptKey: string; label: string; retention: number; reason: string; estimatedMinutes: number }>>([]);
+/**
+ * 课内温故计划（记忆层 · 认知负担动态调整）：今天课上实际会接几个、还有多少在排队。
+ * 后端按「负担预算」裁剪（复合概念吃更多预算），比 due 列表的接口上限（20）更能代表真实工作量。
+ */
+const reviewPlan = ref<{ items: Array<{ conceptKey: string; label: string; retention: number }>; backlogCount: number; budget: number } | null>(null);
 /** 今日复习列表默认预览条数（其余折叠为「还有 N 个」） */
 const REVIEW_PREVIEW = 5;
 const reviewExpanded = ref(false);
@@ -590,6 +595,18 @@ const visibleReviewDue = computed(() =>
 );
 /** below-threshold = 记忆已跌破阈值（偏弱/该优先）；interval-elapsed = 按计划到期 */
 const reviewUrgentCount = computed(() => reviewDue.value.filter((item) => item.reason === 'below-threshold').length);
+
+/** 标题：以「今天课上实际接几个」为主口径，排队量单独说（避免把接口上限 20 当总数） */
+const reviewTitle = computed(() => {
+  const planned = reviewPlan.value?.items?.length ?? 0;
+  if (planned > 0) return `今天课上接 ${planned} 个 · 排队 ${reviewPlan.value?.backlogCount ?? 0} 个`;
+  return `${reviewDue.value.length} 个知识点待回捞`;
+});
+const reviewFooterHint = computed(() => {
+  const planned = reviewPlan.value?.items?.length ?? 0;
+  if (planned > 0) return `上课时会先花 1–2 分钟回捞这 ${planned} 个，不用额外开一节复习课`;
+  return '到期知识点会在上课时顺带回捞';
+});
 function reviewPct(retention: number): string {
   const value = Number(retention);
   const safe = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
@@ -618,6 +635,7 @@ async function loadAll() {
     fetchSessions(monthCursor.value),
     request.get('/achievements/all'),
     request.get('/ai-teaching/review/due'),
+    request.get('/ai-teaching/review/plan'),
     request.get('/learning/schedule/today')
   ]);
   // 所有数据源全部失败 → 整页加载失败态（避免误渲染成新手空态）
@@ -626,7 +644,7 @@ async function loadAll() {
     loadError.value = true;
     return;
   }
-  const [statsR, pathsR, sessionsR, achR, dueR, scheduleR] = fastGroup;
+  const [statsR, pathsR, sessionsR, achR, dueR, planR, scheduleR] = fastGroup;
   if (statsR.status === 'fulfilled') stats.value = statsR.value as Record<string, any>;
   if (pathsR.status === 'fulfilled') paths.value = pathsR.value as unknown as Array<Record<string, any>>;
   if (sessionsR.status === 'fulfilled') sessions.value = sessionsR.value;
@@ -637,6 +655,10 @@ async function loadAll() {
     reviewDue.value = Array.isArray(body.items) ? body.items : [];
   } else {
     sourceFailed.value.review = true;
+  }
+  if (planR.status === 'fulfilled') {
+    const body = planR.value?.data ?? planR.value ?? {};
+    reviewPlan.value = body && Array.isArray(body.items) ? body : null;
   }
   if (scheduleR.status === 'fulfilled') {
     const body = scheduleR.value?.data ?? scheduleR.value ?? {};

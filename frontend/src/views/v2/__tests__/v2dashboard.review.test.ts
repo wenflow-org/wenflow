@@ -1,8 +1,10 @@
 /**
  * V2Dashboard「今日复习」卡重设计回归：
- * - 头部聚合：显示待回捞总数 + 「记忆偏弱 / 按计划到期」分布（来自后端 reason 字段）。
+ * - 头部口径：以「今天课上实际接几个（课内温故计划）」为主，排队量单独说
+ *   （避免把 due 接口上限 20 当成真实总数）；计划拿不到时回退到到期清单总数。
  * - 行内去掉由 retention 推导出来的假「约 X 分钟」，改为「到期原因 + 记忆强度」。
  * - 默认只预览前 5 条，其余折叠为「还有 N 个 · 展开全部」。
+ * - 入口：复习藏在日常课里（默认去上课顺带温故），不再借壳开独立复习课。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -46,7 +48,21 @@ const DUE_ITEMS = [
   { conceptKey: 'c7', label: '模糊的正确比精确的错误更重要', retention: 0.91, reason: 'interval-elapsed', estimatedMinutes: 18 },
 ];
 
-async function mountDashboard() {
+/** 课内温故计划：本节按负担预算只接 3 个，另有 4 个排队 */
+const PLAN = {
+  items: [
+    { conceptKey: 'c1', label: '翻页动作不依赖记得去翻', retention: 0.42, load: 1, loadFactors: [], originPathTitle: '收尾习惯' },
+    { conceptKey: 'c2', label: '收尾动作的完整流程', retention: 0.55, load: 1.5, loadFactors: ['type:process'], originPathTitle: null },
+    { conceptKey: 'c3', label: '触发载体的时效衰减与定期更新', retention: 0.87, load: 1, loadFactors: [], originPathTitle: null },
+  ],
+  budget: 2,
+  usedLoad: 3.5,
+  backlogCount: 4,
+  successRate: null,
+  relearnSuggestions: [{ conceptKey: 'c9', label: '老卡点', consecutiveAgain: 3 }],
+};
+
+async function mountDashboard(options: { withPlan?: boolean } = {}) {
   getStats.mockResolvedValue({});
   getPaths.mockResolvedValue([
     {
@@ -61,6 +77,9 @@ async function mountDashboard() {
   ]);
   getAdaptiveGuidance.mockResolvedValue(null);
   getMock.mockImplementation((url: string) => {
+    if (String(url).includes('/ai-teaching/review/plan')) {
+      return options.withPlan === false ? Promise.reject(new Error('offline')) : Promise.resolve({ data: PLAN });
+    }
     if (String(url).includes('/ai-teaching/review/due')) return Promise.resolve({ data: { items: DUE_ITEMS } });
     if (String(url).includes('/users/me/sessions')) return Promise.resolve({ data: [] });
     if (String(url).includes('/achievements/all')) return Promise.resolve({ data: [] });
@@ -82,12 +101,17 @@ describe('V2Dashboard 今日复习卡（重设计）', () => {
     getAdaptiveGuidance.mockReset();
   });
 
-  it('头部聚合：总数 + 记忆偏弱/按计划到期分布', async () => {
+  it('头部口径：今天课上接几个 + 排队几个（不把接口上限当总数）', async () => {
     const w = await mountDashboard();
-    expect(w.find('.review__title').text()).toBe('7 个知识点待回捞');
+    expect(w.find('.review__title').text()).toBe('今天课上接 3 个 · 排队 4 个');
     expect(w.find('.review__stat--urgent').text()).toContain('记忆偏弱 2');
     const stats = w.findAll('.review__stat').map((n) => n.text());
     expect(stats).toContain('按计划到期 5');
+  });
+
+  it('温故计划拿不到时回退到到期清单总数（不显示 0/空）', async () => {
+    const w = await mountDashboard({ withPlan: false });
+    expect(w.find('.review__title').text()).toBe('7 个知识点待回捞');
   });
 
   it('行内用「到期原因 + 记忆强度」，不再出现由 retention 推导的假时长', async () => {
@@ -110,8 +134,11 @@ describe('V2Dashboard 今日复习卡（重设计）', () => {
     expect(w.find('.review__more').text()).toBe('收起');
   });
 
-  it('复习课时长用今日任务的真实估算（约 25 分钟）', async () => {
+  it('入口是「去上课 · 顺带温故」，并说明课上会先花 1–2 分钟回捞', async () => {
     const w = await mountDashboard();
-    expect(w.find('.review__hint').text()).toContain('约 25 分钟');
+    expect(w.find('.review__go').text()).toContain('去上课 · 顺带温故');
+    expect(w.find('.review__hint').text()).toContain('回捞这 3 个');
+    expect(w.find('.review__hint').text()).toContain('不用额外开一节复习课');
   });
 });
+
