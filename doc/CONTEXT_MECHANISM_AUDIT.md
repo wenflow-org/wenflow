@@ -98,7 +98,7 @@
 |---|---|---|
 | teaching-turn | ~~`visibleDialogueContext` 与 `recentDialogueContext` 同源双键~~ **已修（单键 `messages`）**；`interactionProfile` 顶层 + `scenario` 内双份；压缩 recap **无 rule 引用** | profile 去一份；recap 接线；**前缀稳定化**（已完成） |
 | teaching-opening-generator | ~~caller 传的 `priorLearningContext` 被丢弃~~ **已修（2026-09-15）**：`v4-aux-skills/index.ts` 两个分支补回该键；core rules 7/8 逐字重复；无 retryStrategy（QA 41.8%） | 删重复 rule；加 retry（剩余） |
-| session-wrapup / peer-reinforcement / adaptive-guidance-copy / lesson-knowledge-enricher | 与 wrapup 重复读同一批数据；adaptive-guidance 的 `sessionWrapup` 全量 JSON（实测该链 41k/次、1.8% 命中）；enricher `knowledgeDelta`/`knowledgeState`/事件与 wrapup 重复且零裁剪 | 共享一份"课后投影"（wrapup artifact）；**adaptive-guidance 专项缩 payload** |
+| session-wrapup / peer-reinforcement / adaptive-guidance-copy / lesson-knowledge-enricher | 与 wrapup 重复读同一批数据；~~adaptive-guidance 的 `sessionWrapup` 全量 JSON（实测该链 41k/次、1.8% 命中）~~ **已解决（09-12）**：`toGuidanceProjection` 投影后 9–22KB；enricher `knowledgeDelta`/`knowledgeState`/事件与 wrapup 重复且零裁剪 | 共享一份"课后投影"（wrapup artifact）；enricher 投影（剩余） |
 | finalization | dashboard 与 state-review **各跑一次** `assembleLearningState` | 一次构建、两处共享 |
 
 ### profile
@@ -134,7 +134,7 @@
 | 优先级 | 动作 | 依据 / 预期 |
 |---|---|---|
 | **P0** | **前缀稳定化**：system + 稳定指令 + 稳定场景/任务块前置，动态快照后置（复刻 goal 42%/path 56% 的做法） | teaching-turn / learn-turn-sim / epistemic-grounding 三个 skill 占 miss 的 63%，命中率仅 23–26%，缓存前缀远未吃满 |
-| **P0** | **`adaptive-guidance-copy` 专项**：40k×**1.8%**、90KB 动态 payload 是单次最贵；裁到必要字段或造稳定前缀 | 单次成本第一，且缓存不可救 |
+| ~~**P0**~~ | ~~**`adaptive-guidance-copy` 专项**：40k×**1.8%**、90KB 动态 payload 是单次最贵；裁到必要字段或造稳定前缀~~ **已解决（2026-09-12 22:00 起）**：`LearnerProjectionService.toGuidanceProjection` 已投影（丢 path 整行/`aiPromptTemplate`、knowledgeMemory 明细）→ payload 由 ~94–222KB 降至 **9–22KB** | 已完成，无需再做 |
 | **P1** | 给大 payload skill 加 **system-hash 稳定性回归**（防动态内容拼进 system，generic-chat 现即犯） | 保住 P0 收益 |
 | **P1** | 修正 §3 的**正确性 bug**：path-reviewer key ✅已修 / opening `priorLearningContext` ✅已修 / referee 缺字段 ❌不成立 / progress-report 恒 0（待做，需接真实指标） | 影响功能正确性，成本极低 |
 | **P2** | 去重复池/去副本（`sessionMessages` 三挂、payload 双键、envelope artifact/nextState 重复） | 体积已小，收益有限，顺手做 |
@@ -327,3 +327,19 @@ ORDER BY avg_prompt DESC;
 
 **仍然成立、按原优先级保留**
 - `adaptive-guidance-copy`：典型 20KB（`learner`≈7.4KB + `wrapup`≈6KB 占 ~65%），窗口内 `path` 峰值 **138KB**；仍建议做投影裁剪。
+
+### 7.11 simulation 块复核：`storyPool` 的真实作用（2026-09-15）
+
+**设计意图**：虚拟学习者应是"一个有故事的人"，而非"只知道一个故事"——所以 `actorProfile.profile` 里带着 `storyPool`（该角色的全部故事）。
+
+**复核结论：当前实现没有兑现这个意图，且当多故事真正出现时会变成风险。**
+
+1. **数据面：全库 18/18 画像都只有 1 条故事**；`storyPool[0]` 与本次单独传入的 `story` **同 id、同 1078B**（仅字段名不同：`storyOutline`↔`outline`、`storyTriggerEvent`↔`triggerEvent`）→ **storyPool 就是当前故事的改名副本**，"立体"信息增量为 **0**。
+2. **规则面：没有任何 core / 编译产物引用 `storyPool`**（`grep prompts/core/*.yaml`、`prompts/skill.*.md` 均为空）。真正让人物立体的载体是 **被规则点名的那些**：
+   - persona 字段：`learner.personalityTraits / helpSeekingPattern / adversarialPattern / emotionalTriggers / failurePatterns`（`PERSONA_FIELD_ANCHORS_HINT` 明列）；
+   - 当前 `story`：`disclosurePlan / pressurePoints / behaviorHooks`；
+   - 跨故事连续性：`learnerMemory`（mastered/struggling/recentCompleted）+ `learner.profile.background / priorAttempts`。
+3. **多故事时的风险**：`storyPool` 每条都含 `hiddenDetails / disclosurePlan / goalSeed`（**别的故事的私有底牌**）→ 直接倒给模拟器会串场/泄露，反而拉低 actor-auditor 的 `personaConsistency / storyConsistency`。
+4. **体量**：近 24h 4 个模拟器 **944 次调用 100% 携带** `storyPool`，平均 ~1.1KB/次 → **~1.08MB/天**（约 30 万 tokens/天）纯重复。
+
+**方向（服务设计意图，而非删除）**：在 persona 边界（`session-factory` 组装 `actorProfile` / `blackbox-runner` 恢复快照）把 `storyPool` 投影为 **`storyHistory`**——每条只留"标题 + 一句话经历/收获"，**剔 private 字段**（hiddenDetails/disclosurePlan/goalSeed），并标 `currentStoryId`；再在 goal-dialogue / learn-turn core 加一条"可自然引用过往经历、但不暴露其他故事私有细节"的规则。单故事时该投影≈0 字节，多故事时自动生效且不泄露。
