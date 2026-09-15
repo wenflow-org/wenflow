@@ -124,7 +124,7 @@
 |---|---|---|
 | generic-chat | 调用方指令拼进 **system** → 前缀缓存不稳定；history 无界；QA 成功率 16%/34% | 指令改 user 前缀；接统一摘要；加 retry |
 | ~~course-design / basic-evaluator / goal-alignment-checker~~ | ~~僵尸（零调用）~~ **已退役（2026-09-15，四同步）**：注册/户口簿/core+manifest+编译产物/文档全部删除，`PURGED_SKILLS` → 39；DB 残留行由启动 purge 清理。**业务依据**：`course-design` 周计划模型被 path→stage-designer 取代（`designWeekCourses` + 孪生 `generateTasksForExistingPath` 均无调用者，一并删除）；`goal-alignment-checker` 被 `path-reviewer`（CIDDP 五维含 Pertinence、可触发重规划）覆盖；`basic-evaluator` 无"评分/等级"产品面（未来做作业评分可复用其设计） | **已注销**（2026-08-10 的"保留注册"决定被覆盖） |
-| skill-author / skill-compiler | 服务仍在（`services/skill-author`：`draftSkillPrompt`/`compileSkill`），但 **`/api/admin/skill-author/*` 路由已无注册**（`admin-audit.middleware` 仍留着旧路径名）→ 属"路由已删、服务未清"的孤儿；清理须按 `retired-skills.ts` 的**四同步**规则（注册代码/文件/名单/文档） | 若确认弃用：四同步清理 |
+| skill-author / skill-compiler | **预留能力（Prompt-AI：起草 system prompt + 单轮验收必填字段）**。服务与 prompt 完整保留（`services/skill-author`）；入口 `/api/admin/skill-author/*` 于 2026-09-11 因"未挂载死路由"下线（`0c8105e` 明确保留底层能力）。**归类 `registrationPoint: platform-direct`（service 直调，与 semantic-freeze-judge 同组）→ 不进业务编排链**；`compileSkill` 失败路径漏 return 已修 | **保留**；要恢复只需加回 admin 路由（挂 prompt 工程区） |
 | semantic-freeze-judge | payload = 完整 YAML + 完整编译产物，**无长度上限**；声明 retry 但无实现 | 加字节上限/分块；补 retry |
 
 ---
@@ -373,6 +373,6 @@ ORDER BY avg_prompt DESC;
 
 **③ 关于 #2（僵尸/死代码）— 复核后按"设计原由"处理**：
 - `course-design` / `basic-evaluator` / `goal-alignment-checker` **已正式退役（2026-09-15，四同步）**：注册（v4-aux-skills）/ 户口簿（prompts/skills.yaml）/ core+manifest+编译产物 / 文档全部删除，补入 `PURGED_SKILLS`（→39），由启动 purge 清理 DB 残留行。业务依据见 §3 aux 行；2026-08-10 的"保留注册"决定被覆盖（当时顾虑的 `skill_model_configs` 永久丢失，在**整体注销**下不再构成问题）。
-- `skill-author` / `skill-compiler`：服务仍在（`services/skill-author`）但路由已无注册 → 「路由已删、服务未清」的孤儿；按 `retired-skills.ts` 的**四同步**规则清理需专门一次提交。
+- `skill-author` / `skill-compiler`：**不退役，属"预留能力"**。`0c8105e` 删除的是"自 `871ea4c` 起未挂载的死路由"，并**明确保留底层能力**（service + core prompt + v4-aux 定义）。现归类 `registrationPoint: platform-direct`（service 直调，与 semantic-freeze-judge 同组），**不进业务编排链**；顺带修复 `compileSkill` 失败路径漏 return。恢复只需加回 admin 路由（建议挂 prompt 工程区）。
 
 **④ 验证口径说明**：单键化（08:42）、storyHistory（09:15）、紧凑序列化（12:2x）三项都发生在**跑批停止（08:26）之后**，因此**只有单测/编译产物验证，没有新的实时遥测**；待虚拟实验室跑批再起，可在 `prompt_call_logs` 直接复核 `messages` 单键、`storyHistory` 与紧凑格式。

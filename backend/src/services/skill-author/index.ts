@@ -177,6 +177,20 @@ export async function compileSkill(input: CompileSkillInput): Promise<CompileSki
   } catch (err) {
     logger.error('[skill-compiler] LLM call failed', { error: (err as Error).message });
   }
+  // LLM 失败/非成功路径：必须返回失败结果
+  // （修复：此前该路径 fall through → 返回 undefined，与 CompileSkillResult 声明不符，调用方会拿到 undefined）
+  return {
+    pass: false,
+    rawOutput,
+    parsedJson: null,
+    parseError: 'compile failed',
+    fieldHits: input.requiredFieldIds.map((fieldId) => ({ fieldId, found: false })),
+    missingFields: [...input.requiredFieldIds],
+    durationMs: Date.now() - start,
+    suggestions: suggestions.length > 0
+      ? suggestions
+      : ['编译失败：LLM 未产出可用结果，请稍后重试或检查模型配置'],
+  };
 }
 
 export const __META_RULES_VERSION__ = META_RULES_VERSION;

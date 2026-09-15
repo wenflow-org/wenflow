@@ -391,6 +391,8 @@ copywriter：learner-progress-report、skill-author
 
 平台守门（1）：semantic-freeze-judge（extractor，thinkingMode=disabled；调用方式见 §5.6 平台层例外）
 
+平台直调（`registrationPoint: platform-direct`，service 直调、不进业务编排链，共 3）：semantic-freeze-judge（守门）+ **skill-author / skill-compiler（Prompt-AI 预留能力**：起草 system prompt + 单轮验收必填字段。底层能力保留；入口 `/api/admin/skill-author/*` 于 2026-09-11 因未挂载死路由下线（`0c8105e`），恢复只需加回 admin 路由）
+
 新增（2，2026-08-11 纯重试改造后加入核心文件体系）：
 - learning-predictor（distiller，预测校准闭环：`learning_metrics` 预测 vs 实际，`prediction_records` 表）
 - virtual-learner-memory-curator（虚拟学习者记忆策展；manifest 已于 2026-09-02 补齐，`failurePolicy: blocking`，与 core propagate 对齐。此前「缺 manifest / failurePolicy=fallback，待补」的记录已解决）
