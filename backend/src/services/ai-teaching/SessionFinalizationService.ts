@@ -14,6 +14,7 @@ import {
 import { logger } from '../../utils/logger';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 import { memoryTraceService } from '../memory/memory-trace.service';
+import { mapReviewStatusToRating } from '../learner/ReviewCompletedConsumer';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
 import prisma from '../../config/database';
@@ -133,6 +134,7 @@ export class SessionFinalizationService {
         };
       }
       const completedSession = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
+      await this.applyWarmupExtraction(completedSession);
       return this.completedResponse(completedSession, result.operationId, {
         status: 'skipped',
         alreadyCompleted: false
@@ -228,6 +230,7 @@ export class SessionFinalizationService {
           }
         }
       );
+      await this.applyWarmupExtraction(completedSession);
       return this.completedResponse(completedSession, claim.operationId, {
         status: 'completed',
         alreadyCompleted: completion.alreadyCompleted === true
@@ -395,6 +398,45 @@ export class SessionFinalizationService {
    * 复习结果事件化（断链修复 P0-1）：复习课收束后发出 review:completed 事件，
    * 让复习结果走 outbox 事件链（可追溯、可重放、可幂等），替代纯旁路直写。
    */
+  /**
+   * 课内温故回写（记忆层闭环）：把本堂课内温故的实测结果送进复习事件链。
+   * 与复习课同源（review:completed → ReviewCompletedConsumer：写 learner_evidence + FSRS 重排 dueAt），
+   * 于是同时闭合两个环：① 调度（下次什么时候再捞）② 动态负担预算（成功率高就多带一个、低就收缩）。
+   * 只处理「教学回合真的报告了结果」的点；没接上的点留在计划里，下次课继续。
+   */
+  private async applyWarmupExtraction(session: TeachingSessionRecord): Promise<void> {
+    try {
+      const plan = (session.teachingState as Record<string, any> | null)?.sessionArtifacts?.memoryWarmup;
+      const items: any[] = Array.isArray(plan?.items) ? plan.items : [];
+      const reviewed = items.filter((item) => item?.conceptKey && item?.outcome?.status);
+      if (reviewed.length === 0) return;
+      const payload = reviewed.map((item) => {
+        const status = String(item.outcome.status);
+        const progress = Number(item.outcome.progress) || 0;
+        const { rating, masteryScore } = mapReviewStatusToRating(status, progress);
+        return {
+          conceptKey: String(item.conceptKey),
+          label: typeof item.label === 'string' ? item.label : null,
+          status,
+          progress,
+          masteryScore,
+          rating,
+        };
+      });
+      await this.enqueueReviewCompletedEvent(session, payload);
+      logger.info('[SessionFinalization] 课内温故结果已回写记忆引擎', {
+        sessionId: session.id,
+        userId: session.userId,
+        itemCount: payload.length,
+      });
+    } catch (error) {
+      logger.warn('[SessionFinalization] 课内温故回写失败（不影响收束）', {
+        sessionId: session.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   private async enqueueReviewCompletedEvent(
     session: TeachingSessionRecord,
     items: Array<{

@@ -134,6 +134,26 @@ export interface TeachingTurnInput {
         totalTasks?: number;
       }>;
     } | null;
+    /**
+     * 课内温故计划（记忆层）：本节开头要回捞的到期旧知（≤3，已按认知负担预算裁剪）。
+     * 与 knowledge.points（本节知识点）物理分离——不要把 items 混进本节看板。
+     */
+    memoryWarmup?: {
+      items?: Array<{
+        conceptKey?: string;
+        label?: string;
+        retention?: number;
+        reason?: string;
+        load?: number;
+        loadFactors?: string[];
+        originPathTitle?: string | null;
+      }>;
+      budget?: number;
+      usedLoad?: number;
+      backlogCount?: number;
+      successRate?: number | null;
+      relearnSuggestions?: Array<{ conceptKey?: string; label?: string; consecutiveAgain?: number }>;
+    } | null;
     /** 前端交互特征情报（认知负荷量测）：本轮统计 + 近轮对比，仅供判断 loadIndex */
     interactionProfile?: {
       current?: Record<string, number> | null;

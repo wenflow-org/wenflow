@@ -91,6 +91,26 @@
 
       <!-- 中：导师对话 -->
       <section class="tutor">
+        <!-- 课内温故（记忆层）：本次课会先回捞的到期旧知。与「本节知识点」物理分离——
+             到期点跨 path，混进本节清单会被误读成「本节进行中」，故单列一条轻量提示。 -->
+        <div v-if="memoryWarmup?.items?.length" class="warmup">
+          <div class="warmup__head">
+            <span class="warmup__tag">先接一下</span>
+            <span class="warmup__text">这 {{ memoryWarmup.items.length }} 个是之前学过、快到遗忘点的，老师会先带你回捞</span>
+          </div>
+          <ul class="warmup__list">
+            <li v-for="item in memoryWarmup.items" :key="item.conceptKey" class="warmup__item">
+              <span class="warmup__name">{{ item.label }}</span>
+              <span class="warmup__meta">
+                <template v-if="item.originPathTitle">来自《{{ item.originPathTitle }}》 · </template>记忆强度 {{ Math.round((item.retention || 0) * 100) }}%
+              </span>
+            </li>
+          </ul>
+          <p v-if="memoryWarmup.relearnSuggestions?.length" class="warmup__relearn">
+            {{ memoryWarmup.relearnSuggestions.length }} 个点连着几次都没接上，已不再占用复习额度——建议回路径重学。
+          </p>
+        </div>
+
         <!-- 恢复进度横幅：续上历史时可见，明确「已恢复到上次进度」并提供重新开始出口 -->
         <div v-if="resumedNotice" class="tutor__resume">
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13 2 4.5 13.5H11L9.5 22 19 9.5h-6.5L13 2z"/></svg>
@@ -470,6 +490,12 @@ useKeyboardShortcuts([
 
 /* ---------- 基础 ---------- */
 const taskTitle = ref('');
+/** 课内温故计划（记忆层）：本次课开场要回捞的到期旧知；null = 本节无温故 */
+const memoryWarmup = ref<{
+  items?: Array<{ conceptKey: string; label: string; retention?: number; originPathTitle?: string | null }>;
+  backlogCount?: number;
+  relearnSuggestions?: Array<{ conceptKey: string; label: string }>;
+} | null>(null);
 const pathName = ref('');
 const pathId = ref('');
 const session = ref<{ sessionId: string; revision: number } | null>(null);
@@ -899,6 +925,8 @@ async function boot() {
     session.value = { sessionId: s.sessionId, revision: s.revision ?? 0 };
     // 开场景卡片数据（scene 驱动；resume/复习/重学/接续的结构化开场）
     const sceneRaw = s?.scene && typeof s.scene === 'object' ? s.scene : null;
+    // 课内温故（记忆层）：后端已按认知负担预算裁好本节要回捞的到期旧知
+    memoryWarmup.value = s?.memoryWarmup && Array.isArray(s.memoryWarmup.items) ? s.memoryWarmup : null;
     // 首课（first）不需要卡片：AI 真实开场白已足够，避免双重介绍
     openingScene.value = sceneRaw && sceneRaw.kind !== 'first' ? sceneRaw : null;
     openingSceneDone.value = !openingScene.value;
@@ -1811,6 +1839,32 @@ onBeforeUnmount(() => {
   padding: 2px 9px; border-radius: 999px;
 }
 .oscene--review .oscene__tag { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.12); border-color: rgba(52, 120, 246, 0.32); }
+
+/* 课内温故（记忆层）：轻量提示条，与「本节知识点」区隔，不抢主视觉 */
+.warmup {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, rgba(15, 23, 42, 0.1));
+  border-left: 3px solid var(--amber, #d97706);
+  border-radius: 10px;
+  background: var(--warmup-bg, rgba(217, 119, 6, 0.06));
+}
+.warmup__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.warmup__tag {
+  flex: none;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--amber-deep, #b45309);
+  background: rgba(217, 119, 6, 0.14);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+}
+.warmup__text { font-size: 12px; color: var(--ink-2, #475569); }
+.warmup__list { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.warmup__item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 12px; }
+.warmup__name { color: var(--ink-1, #0f172a); }
+.warmup__meta { color: var(--ink-3, #94a3b8); font-size: 11px; }
+.warmup__relearn { margin: 8px 0 0; font-size: 11px; color: var(--amber-deep, #b45309); }
 .oscene__title { margin: 0; font-size: 15.5px; font-weight: 800; color: var(--ink, #1c2b45); }
 .oscene__lead { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
 .oscene__summary {

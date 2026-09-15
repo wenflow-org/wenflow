@@ -31,7 +31,8 @@ import { classifyFinalizationError } from './FinalizationErrors';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
 import { learnerExitService } from '../learner/LearnerExitService';
-import { memoryTraceService } from '../memory/memory-trace.service';
+import { memoryTraceService, normalizeConceptKey } from '../memory/memory-trace.service';
+import reviewPlanService, { type ReviewPlan } from '../memory/review-plan.service';
 import { recordMisconceptions } from '../learner/misconception-ledger.service';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
@@ -246,6 +247,74 @@ function normalizeKnowledgePoints(points: TeachingKnowledgePointState[]): Knowle
 
 function parseSessionArtifacts(teachingState: Record<string, any> | null | undefined) {
   return teachingState?.sessionArtifacts || {};
+}
+
+/** 课内温故：模型用「原名字」报告回捞结果，比对走归一化（模型可能换写法） */
+function warmupKeyOf(name: string): string {
+  return normalizeConceptKey(name);
+}
+
+/** 计划内温故点的归一化键集合 */
+function buildWarmupKeySet(plan: ReviewPlan | null | undefined): Set<string> {
+  const keys = new Set<string>();
+  for (const item of plan?.items || []) {
+    const key = warmupKeyOf(item.label || item.conceptKey);
+    if (key) keys.add(key);
+  }
+  return keys;
+}
+
+/**
+ * 从教学回合的 knowledge.points 里摘出「课内温故」的结果。
+ * 到期旧知必须与本节点看板**物理分离**——历史事故 2e3ca16：日常课把跨 path 到期点注入
+ * seededKnowledgeState，结果串进「本节知识点」且被前端 isCurrent 误显示为「进行中 · x%」，
+ * 于是整个课内复习机制被下线。这里改走独立通道（只取结果，不进看板）。
+ */
+export function extractWarmupOutcomes(
+  plan: ReviewPlan | null | undefined,
+  points: Array<{ name: string; status: string; progress: number }> | null | undefined,
+): Array<{ conceptKey: string; status: string; progress: number }> {
+  const keys = buildWarmupKeySet(plan);
+  if (keys.size === 0 || !Array.isArray(points)) return [];
+  const outcomes: Array<{ conceptKey: string; status: string; progress: number }> = [];
+  for (const point of points) {
+    const name = String(point?.name || '').trim();
+    if (!name || !keys.has(warmupKeyOf(name))) continue;
+    outcomes.push({
+      conceptKey: name,
+      status: String(point.status || '') || 'learning',
+      progress: Number(point.progress) || 0,
+    });
+  }
+  return outcomes;
+}
+
+/** 从本节看板点里剔除温故点（保证到期旧知不污染本节知识点清单） */
+export function stripWarmupPoints<T extends { name: string }>(
+  plan: ReviewPlan | null | undefined,
+  points: T[],
+): T[] {
+  const keys = buildWarmupKeySet(plan);
+  if (keys.size === 0) return points;
+  return points.filter((point) => !keys.has(warmupKeyOf(String(point?.name || ''))));
+}
+
+/** 把温故结果并进持久化计划项（按归一化键匹配） */
+export function mergeWarmupOutcomes(
+  plan: ReviewPlan | null | undefined,
+  updates: Array<{ conceptKey: string; status: string; progress: number }>,
+  reviewedAt: string,
+): ReviewPlan | null {
+  if (!plan || updates.length === 0) return plan ?? null;
+  const byKey = new Map(updates.map((item) => [warmupKeyOf(item.conceptKey), item]));
+  return {
+    ...plan,
+    items: plan.items.map((item) => {
+      const update = byKey.get(warmupKeyOf(item.label || item.conceptKey));
+      if (!update) return item;
+      return { ...item, outcome: { status: update.status, progress: update.progress, reviewedAt } };
+    }),
+  };
 }
 
 function getPendingCheckpoint(teachingState: Record<string, any> | null | undefined): TeachingCheckpoint | null {
@@ -1024,6 +1093,7 @@ async function buildTeachingTurnInput(
     learningSignal: context.learningSignal,
     lastLessonRecap: context.lastLessonRecap,
     priorLearningContext: context.priorLearningContext,
+    memoryWarmup: context.memoryWarmup ?? null,
     learnerPrediction: context.learnerPrediction
       ? {
           stallRisk: context.learnerPrediction.stallRisk,
@@ -1226,6 +1296,8 @@ export class AITeachingOrchestrator {
     knowledgePoints: KnowledgePointStatus[];
     mode: SessionResumeMode;
     revision: number;
+    /** 课内温故计划（记忆层）：日常课开场回捞的到期旧知；无到期点或复习课为 null */
+    memoryWarmup?: ReviewPlan | null;
     scene?: SessionOpeningScene;
   }> {
     const context = await buildTeachingScenarioContext(input.userId, input.taskId, null);
@@ -1266,6 +1338,26 @@ export class AITeachingOrchestrator {
     // 或 GET /ai-teaching/review/due「今日复习」出口呈现；不再注入日常课的「本节知识点」看板，
     // 否则别的 path 的到期点会串进本节清单，并被前端误显示为「进行中 · x%」。
     const sessionId = buildSessionId(input.userId);
+    // 课内温故（记忆层 · 认知负担动态调整）：日常课在**本节开头**花 1–2 分钟回捞到期旧知，
+    // 而不是让用户额外开一节复习课（依从性：复习不该需要用户做决定）。
+    // 配额按负担预算动态裁剪（由课内检索成功率回校准）；复习课模式已在上面走到期点注入，不叠加。
+    let memoryWarmup: ReviewPlan | null = null;
+    if (input.mode !== 'review') {
+      try {
+        const plan = await reviewPlanService.buildReviewPlan(input.userId);
+        if (plan.items.length > 0) {
+          memoryWarmup = plan;
+          context.memoryWarmup = plan;
+        }
+      } catch (error) {
+        logger.warn('[AITeaching] 课内温故计划生成失败，本节不温故（不阻断开课）', {
+          userId: input.userId,
+          taskId: input.taskId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        memoryWarmup = null;
+      }
+    }
     const reservation = await teachingSessionRepository.reserve({
       id: sessionId,
       userId: input.userId,
@@ -1278,7 +1370,7 @@ export class AITeachingOrchestrator {
       mode: input.mode || 'tutor',
       messages: [],
       knowledgeState: seededKnowledgeState,
-      teachingState: null,
+      teachingState: memoryWarmup ? { sessionArtifacts: { memoryWarmup } } : null,
     }, RECOVERY_WINDOW_MS);
 
     if (!reservation.created) {
@@ -1341,6 +1433,7 @@ export class AITeachingOrchestrator {
           knowledgePoints: normalizeKnowledgePoints(resumedKnowledgeState),
           mode: 'resumed',
           revision: previousSession.revision + 1,
+          memoryWarmup: (sessionArtifacts.memoryWarmup as ReviewPlan | undefined) ?? null,
           scene: buildSessionOpeningScene({ mode: 'resumed', context: resumedContext, sameTaskAttempt }),
         };
       } finally {
@@ -1453,6 +1546,7 @@ export class AITeachingOrchestrator {
         knowledgePoints: normalizeKnowledgePoints(seededKnowledgeState),
         mode: 'new',
         revision: session.revision,
+        memoryWarmup,
         scene: buildSessionOpeningScene({
           mode: 'new',
           context,
@@ -1655,11 +1749,17 @@ export class AITeachingOrchestrator {
     const rawTeachingOutput = extractTeachingOutput(turnResult);
     const promptDebug = extractTeachingPromptDebug(turnResult);
     const { teachingOutput, existingPoints } = reconcileTeachingKnowledgeState(context, rawTeachingOutput, frozenKnowledgeState);
+    // 课内温故结果回收：模型用「计划里的原名字」在 knowledge.points 里报告到期旧知的回捞结果。
+    // 这里把温故点从本节看板里摘出去（历史事故 2e3ca16：跨 path 到期点串进「本节知识点」被
+    // 误显示为「进行中 · x%」，导致课内复习整体下线），只把结果记进 sessionArtifacts.memoryWarmup，
+    // 收束时回写记忆引擎（FSRS 重排 dueAt + 落 learner_evidence 供动态预算回校准）。
+    const warmupOutcomes = extractWarmupOutcomes(context.memoryWarmup, teachingOutput.knowledge.points);
+    const boardPoints = stripWarmupPoints(context.memoryWarmup, teachingOutput.knowledge.points);
     const mergedKnowledge = normalizeFrozenKnowledgeState(
       effectiveInitialKnowledgeState,
       knowledgeStateService.merge(
         existingPoints,
-        teachingOutput.knowledge.points,
+        boardPoints,
         session.mode === 'review' // 复习课允许 mastered 降级：复习失败在掌握度数据上真实可见
       )
     );
@@ -1949,6 +2049,16 @@ export class AITeachingOrchestrator {
       sessionArtifacts: {
         ...parseSessionArtifacts(session.teachingState),
         initialKnowledgeState: effectiveInitialKnowledgeState,
+        // 课内温故结果：只更新实测过的点，计划其余部分原样保留（含负担预算与积压计数）
+        ...(warmupOutcomes.length > 0
+          ? {
+              memoryWarmup: mergeWarmupOutcomes(
+                parseSessionArtifacts(session.teachingState).memoryWarmup || context.memoryWarmup,
+                warmupOutcomes,
+                new Date().toISOString(),
+              ),
+            }
+          : {}),
         // 冻结的收束目标集：只增一次，后续回合沿用（防止目标集随模型新增/改名膨胀）
         completionTargets,
         pathBackgroundContext: sessionArtifacts.pathBackgroundContext || buildPathBackgroundContext(context),

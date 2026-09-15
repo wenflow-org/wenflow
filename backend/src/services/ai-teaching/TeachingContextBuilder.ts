@@ -9,6 +9,7 @@ import { executeSkill } from '../../skills';
 import { learningPredictorDefinition, type LearningPredictorOutput } from '../../skills/learning-predictor';
 import { predictionCalibrationService } from '../learner/PredictionCalibrationService';
 import { getActiveForConcepts } from '../learner/misconception-ledger.service';
+import type { ReviewPlan } from '../memory/review-plan.service';
 import { logger } from '../../utils/logger';
 
 export interface TeachingScenarioContext {
@@ -175,6 +176,14 @@ export interface TeachingScenarioContext {
   }> | null;
   /** 任务模式：normal（默认教学）| productiveFailure（有效失败：先让学生挣扎，后整合） */
   taskMode?: 'normal' | 'productiveFailure';
+  /**
+   * 课内温故计划（记忆层出口）：把快到遗忘点的旧知放进**本节开头**回捞，
+   * 而不是让用户额外开一节复习课（依从性：复习不需要用户做决定）。
+   * 与 knowledgeState（本节知识点看板）**物理分离**——跨 path 的到期点不得混进本节清单
+   * （历史事故：`2e3ca16` 因到期点串进看板被误显示为「进行中 · x%」而整体下线该机制）。
+   * 为空表示本节没有到期旧知。
+   */
+  memoryWarmup?: ReviewPlan | null;
   /** 行为投影器（LLM-KT Behavioral Dynamics Projector）：近期回合级行为动态压缩 */
   behavioralProfile: {
     avgUnderstanding: number | null;
