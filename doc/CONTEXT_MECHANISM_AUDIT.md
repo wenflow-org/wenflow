@@ -431,7 +431,7 @@ ORDER BY avg_prompt DESC;
 | **C4** learner-model | **不成立**：`agents/learner-model-agent` **无 `maxTokens` 声明**；户口簿 notes 明确"**无 LLM 输入组装**" | 划掉（过期） |
 | **C5** learning-predictor | **成立但属延迟**：`TeachingContextBuilder` 每次建课堂多次 prisma 查询（含 `prediction_records.findFirst`）；非 token 问题 | 降级 |
 | **C6** finalization / state-review | **部分成立（DB）**：`assembleLearningState` 由 dashboard / state-review / learning-state-guidance **各自请求**调用；合并需跨请求缓存 | 降级 |
-| **C7** opening-generator 15s 超时 | **成立**：高频 `CALLER_ABORTED`（实测 08:06–08:24、15:30 同模式）→ **产品可用性问题**，非上下文问题 | 另立项 |
+| **C7** opening-generator 超时 | **已修（2026-09-15）**：实测 148 次**成功**调用时延 **p50=3.9s / p90=8.2s / p95=11.2s / max=14.1s**，而原 **15s** 恰好切在 p95~max 之间 → 59 次失败**全部停在 15.0–15.8s**（`CALLER_ABORTED`，成功率 71%）。改为 **30s**（>2× max）且支持 `OPENING_GENERATION_TIMEOUT_MS` 覆盖；真失败仍有 `buildDeterministicOpening` 兜底 | ✅ 完成 |
 | **C8** `simulationMode` DB 列 | **成立**：仅清代码接线，**列未迁移**（共享 dev.db 上不动迁移） | 需迁移时再动 |
 | **D** 验证欠账 | **2026-09-15 已闭环**：✅ `storyHistory`（goal-dialogue-sim + learn-turn-sim 现场均为 `storyHistory`、无 `storyPool`）✅ `persona-designer` 首键=`candidatePersonas` ✅ 紧凑序列化 ✅ **`teaching-turn` 单键 `messages`**（22:12 现场：keys 含 `messages`、无 `recentDialogueContext`/`visibleDialogueContext`）✅ **progress-report 指标**（22:02 现场：`ktl=75.2 / lf=28.2 / lss=28.2`，不再恒 0）✅ 缓存率：近 24h 全局 **37.5%**（改造前 20.9%） | ✅ 闭环（见 §7.15） |
 | **E** 文档漂移 | 本轮已加 §3 状态指针 + 本表；`stage-designer` 前缀、`storyPool→storyHistory` 投影、§4 P0 前缀稳定化均已标注 | ✅ 完成 |

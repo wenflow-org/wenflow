@@ -842,6 +842,18 @@ function buildEndWrapupFallback(session: TeachingSessionRecord, durationMinutes:
 
 /** 合并后知识点的总数上限（防止模型每轮新增点导致无限膨胀） */
 const MAX_KNOWLEDGE_POINTS = 12;
+
+/**
+ * 开场交互块生成的超时（C7 修复，2026-09-15）。
+ * 实测 148 次**成功**调用的时延：p50=3.9s / p90=8.2s / **p95=11.2s / max=14.1s**；
+ * 而原 15s 恰好切在 p95~max 之间 → 慢的合法调用被 abort（59 次失败全部停在 **15.0–15.8s**，`CALLER_ABORTED`）。
+ * 抬到 30s（>2× 实测 max）并支持 env 覆盖。开场每节课只生成一次，最坏只多等一次；
+ * 真失败仍有确定性开场兜底（`buildDeterministicOpening`）。
+ */
+const OPENING_GENERATION_TIMEOUT_MS = Math.max(
+  5_000,
+  Number(process.env.OPENING_GENERATION_TIMEOUT_MS) || 30_000,
+);
 /** 收束兜底：回合数达到该值且目标集均分达标、无 pending 时放行，保证课堂不会「永不收敛」 */
 const COMPLETION_TURNS_BACKSTOP = 8;
 
@@ -1600,7 +1612,7 @@ export class AITeachingOrchestrator {
             callerAgentId: AI_TEACHING_AGENT_ID,
           },
         }, { abortSignal: signal }),
-        15000,
+        OPENING_GENERATION_TIMEOUT_MS,
         'OPENING_GENERATION_TIMEOUT'
       );
       parsed = result.success && result.output ? result.output : null;
