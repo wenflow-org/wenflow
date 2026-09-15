@@ -1,5 +1,6 @@
 import { executeSkill, auxSkillDefinitionMap } from '../../skills';
 import { calculateCognitiveEngagement, CognitiveEngagementInput } from '../learning/cognitive-engagement.service';
+import { getLearningMetrics } from '../metrics/LearningMetricService';
 import type { LearningSignal, ProgressMetrics } from '../../agents/protocol';
 
 const THRESHOLDS = {
@@ -49,11 +50,14 @@ class LearnerProgressService {
     const updatedMetrics = this.recordTaskCompletion(data, currentMetrics);
     const signals = this.detectSignals(updatedMetrics, data);
     const recommendations = this.generateRecommendations(updatedMetrics, signals);
+    // 权威学习状态指标（KTL/LF/LSS，0-100 display，与看板 /api/metrics 同源）：
+    // 本服务的 getCurrentMetrics() 是「单任务快照」，其 KTL/LF 恒 0，不能作为报告输入。
+    const authoritative = await getLearningMetrics(userId).catch(() => null);
     const report = await this.generateLearningReport(updatedMetrics, signals, {
       taskTitle: data.taskTitle,
       timeSpent: data.timeSpent,
       difficulty: data.subjectiveDifficulty ?? data.difficulty
-    }, userId);
+    }, userId, authoritative);
 
     return this.buildResult(updatedMetrics, signals, recommendations, report);
   }
@@ -227,7 +231,8 @@ class LearnerProgressService {
     metrics: ProgressMetrics,
     signals: LearningSignal[],
     taskData: { taskTitle?: string; timeSpent?: number; difficulty?: number },
-    userId?: string
+    userId?: string,
+    authoritative?: { lss: number; ktl: number; lf: number; lsb: number } | null
   ): Promise<{ reasoning: string; suggestion: string }> {
     const fallback = {
       reasoning: '基于当前学习数据，你正在稳步推进学习进度。继续保持当前的学习节奏。',
@@ -256,9 +261,10 @@ class LearnerProgressService {
         },
         metrics: {
           completionRate: Math.round(metrics.completionRate * 100),
-          ktl: metrics.ktl || 0,
-          lf: metrics.lf || 0,
-          lss: metrics.lss || 0,
+          // KTL/LF/LSS 优先取权威学习状态（0-100 display）；无记录时回退本服务单任务快照
+          ktl: authoritative?.ktl ?? metrics.ktl ?? 0,
+          lf: authoritative?.lf ?? metrics.lf ?? 0,
+          lss: authoritative?.lss ?? metrics.lss ?? 0,
         },
         signals: signalDescriptions || '无明显信号',
         __fallback: fallback,
