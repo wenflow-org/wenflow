@@ -96,7 +96,7 @@
 ### teaching
 | skill | 问题 | 优化方向 |
 |---|---|---|
-| teaching-turn | `visibleDialogueContext` 与 `recentDialogueContext` 同源双键；`interactionProfile` 顶层 + `scenario` 内双份；沙盘 `sessionMessages` 被挂 3 个池键；压缩 recap **无 rule 引用** | 对话单键；profile 去一份；池去重；recap 接线；**前缀稳定化** |
+| teaching-turn | ~~`visibleDialogueContext` 与 `recentDialogueContext` 同源双键~~ **已修（单键 `messages`）**；`interactionProfile` 顶层 + `scenario` 内双份；压缩 recap **无 rule 引用** | profile 去一份；recap 接线；**前缀稳定化**（已完成） |
 | teaching-opening-generator | ~~caller 传的 `priorLearningContext` 被丢弃~~ **已修（2026-09-15）**：`v4-aux-skills/index.ts` 两个分支补回该键；core rules 7/8 逐字重复；无 retryStrategy（QA 41.8%） | 删重复 rule；加 retry（剩余） |
 | session-wrapup / peer-reinforcement / adaptive-guidance-copy / lesson-knowledge-enricher | 与 wrapup 重复读同一批数据；adaptive-guidance 的 `sessionWrapup` 全量 JSON（实测该链 41k/次、1.8% 命中）；enricher `knowledgeDelta`/`knowledgeState`/事件与 wrapup 重复且零裁剪 | 共享一份"课后投影"（wrapup artifact）；**adaptive-guidance 专项缩 payload** |
 | finalization | dashboard 与 state-review **各跑一次** `assembleLearningState` | 一次构建、两处共享 |
@@ -106,7 +106,7 @@
 |---|---|---|
 | learner-model | 不调 LLM 却声明 `maxTokens`；`get` 触发全量聚合；profile.yaml 同字段双份 handoff | 去 maxTokens；短 TTL 缓存；单条终点路由 |
 | learning-predictor | 每次建课堂额外查 evidence+prediction | 复用已加载摘要；无历史直返 null |
-| learner-progress-report | **（正确性）** `getCurrentMetrics()` 恒返回 0 → 报告基于空输入 | 改读 `learning-state.service` 真实指标；空则不调 LLM |
+| learner-progress-report | ~~**（正确性）** `getCurrentMetrics()` 恒返回 0 → 报告基于空输入~~ **已修（2026-09-15）**：改读 `getLearningMetrics(userId)` 权威指标 | 其余：`ski/mki/dki` 算了未传 |
 | learner-state-review | `priorInsights` 恒空；与 dashboard 重复跑 `assembleLearningState` | 接通历史洞察；快照去重 |
 
 ### simulation（11 个 virtual-learner-*）
@@ -315,13 +315,15 @@ ORDER BY avg_prompt DESC;
 - **virtual-learner-referee 丢 `storyMeta`/`metricCompleteness`**：`blackbox-runner.ts:2095-2096` 已装配；skill `normalizeEvidence`（`virtual-learner-referee/index.ts:39,46`）也接受这两个 source。**无需改**。
 
 **复核后确认存在，但属功能缺口/需产品定夺（本轮未改）**
-- **learner-progress-report KTL/LF 恒 0**：`LearnerProgressService.ts` 的 `getCurrentMetrics()` 初始 `ktl/lf/lss` 全 0，`recordTaskCompletion` 只重算 `lss`，`ktl/lf` 一直沿用 0。真实来源在别处（`learningState.ktl` / `achievement.service`）→ 需要一个明确的"以哪份指标为准"的决定。
-- **learner-state-review `priorInsights` 恒空**：`LearnerStateReviewService.ts:215` 硬编码 `[]`。已有可用的历史洞察源 `insightCalibrationService.getRecords(userId, pathId)`；但 core prompt 并未引用 `priorInsights`，接通属于**行为增强**而非修 bug。
+- ~~**learner-progress-report KTL/LF 恒 0**~~ **已修（2026-09-15）**：`evaluateTaskCompletion` 现读权威学习状态 `getLearningMetrics(userId)`（0-100 display，与看板 `/api/metrics` 同源），无记录回退本服务快照。注：`task:completed` 事件异步消费 → 读到上一任务末的指标（仍为真实值）。
+- **learner-state-review `priorInsights` 恒空**：`LearnerStateReviewService.ts:215` 硬编码 `[]`。已有可用的历史洞察源 `insightCalibrationService.getRecords(userId, pathId)`；但 core prompt 并未引用 `priorInsights`，接通属于**行为增强**而非修 bug（且 15 次调用，影响可忽略）。
 
 **复核后"本来就正常"（无需改）**
 - `virtual-learner-epistemic-grounding`（最高频 skill）：同会话（按 `currentTask` 判定）确定性前缀 **97.7%**，键序已合理——不是待改项。
 - `teaching-opening-generator` / `learning-predictor`：同会话前缀 **100%** / **100%**。
 
+**已修（后续提交）**
+- ~~`teaching-turn` 对话上下文同源双键~~ **已修（单键化，commit `4b81f75`）**：删 core 输入 `visibleDialogueContext` + 规则提及、manifest 字段、沙盘 `teaching.visibleDialogueContext`、`agent-contract-view` 通道项；payload 键 `recentDialogueContext` → **`messages`**（对齐 core 输入名与编译产物文档名）。实测原两键 400/400 逐字节相同，长会话重复占 payload 最多 ~22%。
+
 **仍然成立、按原优先级保留**
-- `teaching-turn`：`visibleDialogueContext` 与 `recentDialogueContext` **字节完全相同**（实测 `==`，同源双键）→ 长会话里重复最多约 30% 体积；但 `recentDialogueContext` 为 **manifest 声明的 input 字段**，删除须同步改声明（同 `interactionProfile` 对齐做法），故列为 P2 待办。
 - `adaptive-guidance-copy`：典型 20KB（`learner`≈7.4KB + `wrapup`≈6KB 占 ~65%），窗口内 `path` 峰值 **138KB**；仍建议做投影裁剪。
