@@ -433,7 +433,7 @@ ORDER BY avg_prompt DESC;
 | **C6** finalization / state-review | **部分成立（DB）**：`assembleLearningState` 由 dashboard / state-review / learning-state-guidance **各自请求**调用；合并需跨请求缓存 | 降级 |
 | **C7** opening-generator 15s 超时 | **成立**：高频 `CALLER_ABORTED`（实测 08:06–08:24、15:30 同模式）→ **产品可用性问题**，非上下文问题 | 另立项 |
 | **C8** `simulationMode` DB 列 | **成立**：仅清代码接线，**列未迁移**（共享 dev.db 上不动迁移） | 需迁移时再动 |
-| **D** 验证欠账 | **2026-09-15 复验（见 §7.15）**：✅ `storyHistory`（goal-dialogue-sim 现场已是 `storyHistory`、无 `storyPool`）✅ `persona-designer` 首键=`candidatePersonas`（与 ON 分支一致）✅ 紧凑序列化（最新 payload 无换行）✅ progress-report 数据侧（`learning_metrics` **126 行非零** ktl/lf/lss）✅ 缓存率可观测：**近 24h 全局 37.5%**（改造前口径 20.9%）。⏳ 仍待现场：`teaching-turn` 单键（跑批未到 learn，最新仍 08:26）、progress-report 端到端（最新 08:16） | 部分闭环 |
+| **D** 验证欠账 | **2026-09-15 已闭环**：✅ `storyHistory`（goal-dialogue-sim + learn-turn-sim 现场均为 `storyHistory`、无 `storyPool`）✅ `persona-designer` 首键=`candidatePersonas` ✅ 紧凑序列化 ✅ **`teaching-turn` 单键 `messages`**（22:12 现场：keys 含 `messages`、无 `recentDialogueContext`/`visibleDialogueContext`）✅ **progress-report 指标**（22:02 现场：`ktl=75.2 / lf=28.2 / lss=28.2`，不再恒 0）✅ 缓存率：近 24h 全局 **37.5%**（改造前 20.9%） | ✅ 闭环（见 §7.15） |
 | **E** 文档漂移 | 本轮已加 §3 状态指针 + 本表；`stage-designer` 前缀、`storyPool→storyHistory` 投影、§4 P0 前缀稳定化均已标注 | ✅ 完成 |
 
 **结论（重排后）**：真正"值得做"的只剩 **A1（需你定）**、**B1（enricher 投影）**、**B2（sfj 上限）**、**C2 的死配置清理**；其余已降级为"低价值 / DB 延迟 / 不成立 / 已修"。
@@ -451,6 +451,7 @@ ORDER BY avg_prompt DESC;
 
 > 注：24h 窗口含翻转前时段（翻转 07:45），故以上为**偏保守**读数。
 
-**仍待现场（跑批需走到 learn 阶段）⏳**
-- `teaching-turn` 单键 `messages`：最新调用仍为 08:26（旧格式）；代码侧已由单测（12 通过）+ 编译产物输入列表（8 项、无 `visibleDialogueContext`）确定。
-- `learner-progress-report` 端到端：最新 08:16（改造前，ktl/lf=0）；数据侧已如上验证。
+**已全部现场闭环（22:xx 驱动真实 VL 跑到 teaching 后取样）✅**
+- **`teaching-turn` 单键**：22:12:16 payload keys = `scenario, promptDirectives, learner, controls, knowledge, classroomContext, classroomEventContext, interactionProfile, **messages**, latestLearnerMessage` → `messages` 长度 14；**`recentDialogueContext` / `visibleDialogueContext` 均已消失**；紧凑格式 ✓
+- **`learner-progress-report` 端到端**：22:02:05 任务完成调用 → `metrics={"completionRate":10,"ktl":**75.2**,"lf":**28.2**,"lss":28.2}` → **KTL/LF 不再恒 0**（0–100 display 口径落地）✓
+- **`virtual-learner-learn-turn-simulator`（VL 投影）**：22:12:50 → `storyPool? False` / `storyHistory? True` ✓
