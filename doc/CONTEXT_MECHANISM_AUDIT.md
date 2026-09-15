@@ -432,7 +432,7 @@ ORDER BY avg_prompt DESC;
 | **C5** learning-predictor | **成立但属延迟**：`TeachingContextBuilder` 每次建课堂多次 prisma 查询（含 `prediction_records.findFirst`）；非 token 问题 | 降级 |
 | **C6** finalization / state-review | **部分成立（DB）**：`assembleLearningState` 由 dashboard / state-review / learning-state-guidance **各自请求**调用；合并需跨请求缓存 | 降级 |
 | **C7** opening-generator 超时 | **已修 + 现场闭环（2026-09-15）**：实测 148 次**成功**调用时延 **p50=3.9s / p90=8.2s / p95=11.2s / max=14.1s**，原 **15s** 恰切在 p95~max 之间 → 59 次失败**全部停在 15.0–15.8s**（`CALLER_ABORTED`）。改为 **30s**（`OPENING_GENERATION_TIMEOUT_MS` 可覆盖）。**现场证据**：修复后出现 **`dur=18620ms 且 success=1`**（旧超时下必被砍），且新失败停在 **`30076ms`**（= 新 30s 上限生效，而非 15s） | ✅ 完成 |
-| **C8** `simulationMode` DB 列 | **成立**：仅清代码接线，**列未迁移**（共享 dev.db 上不动迁移） | 需迁移时再动 |
+| **C8** `simulationMode` DB 列 | **已完成（2026-09-15）**：`schema.prisma` 删列 + 新增迁移 `20260915000000_drop_simulation_mode`（`ALTER TABLE ... DROP COLUMN`）；干净重放校验通过（main 42 / system 11）。**本机 dev.db 待下次 `npm run dev`**（`prisma:prepare` → deploy）落库——当时被运行中的服务持锁，未能就地 apply | ✅ 已出迁移 |
 | **D** 验证欠账 | **2026-09-15 已闭环**：✅ `storyHistory`（goal-dialogue-sim + learn-turn-sim 现场均为 `storyHistory`、无 `storyPool`）✅ `persona-designer` 首键=`candidatePersonas` ✅ 紧凑序列化 ✅ **`teaching-turn` 单键 `messages`**（22:12 现场：keys 含 `messages`、无 `recentDialogueContext`/`visibleDialogueContext`）✅ **progress-report 指标**（22:02 现场：`ktl=75.2 / lf=28.2 / lss=28.2`，不再恒 0）✅ 缓存率：近 24h 全局 **37.5%**（改造前 20.9%） | ✅ 闭环（见 §7.15） |
 | **E** 文档漂移 | 本轮已加 §3 状态指针 + 本表；`stage-designer` 前缀、`storyPool→storyHistory` 投影、§4 P0 前缀稳定化均已标注 | ✅ 完成 |
 

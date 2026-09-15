@@ -869,7 +869,6 @@ model virtual_learner_profiles {
   knowledgeLevel        String
   knownConcepts         String?
   struggleConcepts      String?
-  simulationMode        String             @default("manual")
   simulationPrompt      String?
   simulationModel       String?
   simulationTemperature Float?             @default(0.8)
