@@ -420,13 +420,13 @@ ORDER BY avg_prompt DESC;
 |---|---|---|
 | **A1** `modelExposure=projected` | **仍成立**（全 manifest 声明、零消费方）。但其"实现"就是 §8 的**路线 B（渐进式投递）**，与已冻结的 L2 声明驱动装配同源 | **待你定**：实现 or 删声明 |
 | **A3** `payload-prefix` 升 strict | **已完成**：新增 `prompts:payload-prefix:check:strict` 并挂进 `prompts:check:all`（本地 0 违规；CI 无遥测则自动跳过） | ✅ 完成 |
-| **B1** enricher 投影 | **成立**：实测一条 29.8KB 中 `visibleDialogueContext` 8.3KB + `classroomEventHistory` 6.5KB + `wrapup` 6.1KB（**合计 ~70%**）；7d avgPT 12.9k、命中 0.8% | 可做（需定投影白名单） |
-| **B2** semantic-freeze-judge | **成立**：payload = `【核心文件】+【编译产物】` 纯文本，**无长度上限**（`services/prompt-lab/semantic-freeze-judge.ts:72`） | 可做（建议**超限转 degraded→转人工**，不静默截断） |
+| **B1** enricher 投影 | **已修（2026-09-15）**：`LessonKnowledgeEnrichmentConsumer` 发前剔除 `wrapup.runtimeEnvelope`/`debug`（执行信封元数据，实测**每次稳定 ~2.4–2.8KB**，占单次 payload 10~30%）。`visibleDialogueContext`/`classroomEventHistory` 保留（是 recurringConfusions 的证据基底，不裁） | ✅ 完成 |
+| **B2** semantic-freeze-judge | **已修（2026-09-15）**：① 加**字节上限**（默认 400KB，`SEMANTIC_FREEZE_MAX_BYTES` 可调）→ **超限降级转人工**（不静默截断：判"语义等价"不能截输入）；② manifest 声明的 `failurePolicy=retry` **落到实现**（非法 verdict 重试 1 次） | ✅ 完成 |
 | **B3** wrapup / peer 重复读 | **基本不成立**：`peer-reinforcement` 只声明 `topic/studentMessage/tutorContext`（**不读 wrapup**）；重复主要在 wrapup↔enricher 数据面 | 降级 |
 | **B4** VL 族 | **成立但属 DB/延迟**：`buildLearnerMemorySnapshot` 以 limit 30/6/8 在 `blackbox-runner.ts:1690/1754/1782` 重复调用；`learnerMemory` 仅百余字节 → token 影响小 | 降级（延迟优化另立项） |
 | **B5** 沙盘 `session.evidence` 同源 | **不成立**：与 `messages` 是**同一数组引用**（非副本）；且 `session-wrapup` 的 `sessionEvidence` 由调用方 `computeSessionEvidence(session)` 提供**聚合**（`AITeachingCoordinator.ts:2271/2307`）→ 该池键**不进任何 payload** | 无需改 |
 | **C1** goal-conversation | **低价值**：实测 payload 仅 **3.2KB**（state 1.2KB / conversationContext 1.05KB），"全量历史"无实害 | 降级 |
-| **C2** path-planning | **成立**：重复文本块（`confirmedProposal`×2、`realProblem`×3、`【强制要求】`×5）+ **死配置**（`includeStructuredData`/`includeConfidenceScores`）+ `scenario` 算了不打印 | 可做（**先清死配置**，小） |
+| **C2** path-planning | **死配置已清（2026-09-15）**：`includeStructuredData` / `includeConfidenceScores` 两个**零消费方**开关已从 `PathAgentInputConfig` 接口/默认值/normalizer 移除（`includeConfirmedProposal`/`includeConversationHistory` 有消费方，保留）。~~去重复文本块~~ **不动**：复核后发现各块用途不同（结构化轮廓 / 原始 JSON / 指令），非冗余 | ✅ 死配置完成 |
 | **C3** kc-mapper | **低价值**：实测 payload 仅 **3.6KB**（`cognitiveCore` 1.3KB + `milestones` 0.58KB） | 降级 |
 | **C4** learner-model | **不成立**：`agents/learner-model-agent` **无 `maxTokens` 声明**；户口簿 notes 明确"**无 LLM 输入组装**" | 划掉（过期） |
 | **C5** learning-predictor | **成立但属延迟**：`TeachingContextBuilder` 每次建课堂多次 prisma 查询（含 `prediction_records.findFirst`）；非 token 问题 | 降级 |

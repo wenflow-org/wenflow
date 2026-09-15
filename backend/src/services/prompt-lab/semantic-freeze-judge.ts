@@ -40,6 +40,15 @@ export interface JudgeSemanticFreezeInput {
 const VALID_VERDICTS: readonly SemanticVerdict[] = ['equivalent', 'uncertain', 'divergent'];
 const VALID_SEVERITIES = ['critical', 'major', 'minor'] as const;
 
+/**
+ * 输入字节上限：超出即**降级转人工**（corer/candidate 是完整文本，判断"语义是否等价"不能截断输入，
+ * 否则会给出错误结论）。默认 400KB，可用 env 覆盖。
+ */
+const MAX_JUDGE_PAYLOAD_BYTES = Math.max(
+  10_000,
+  Number(process.env.SEMANTIC_FREEZE_MAX_BYTES) || 400_000,
+);
+
 function normalizeFinding(item: unknown): SemanticFreezeFinding | null {
   if (!item || typeof item !== 'object') return null;
   const record = item as Record<string, unknown>;
@@ -77,6 +86,20 @@ export async function judgeSemanticFreeze(
     input.candidateText.trim(),
   ].join('\n');
 
+  // 上限护栏：超限降级转人工（不做静默截断）
+  const payloadBytes = Buffer.byteLength(payload, 'utf8');
+  if (payloadBytes > MAX_JUDGE_PAYLOAD_BYTES) {
+    logger.warn('[semantic-freeze-judge] 输入超过字节上限，降级转人工', {
+      skillId: input.skillId,
+      payloadBytes,
+      limit: MAX_JUDGE_PAYLOAD_BYTES,
+    });
+    return degradedJudgement(
+      `输入过大（${payloadBytes}B > 上限 ${MAX_JUDGE_PAYLOAD_BYTES}B），转人工判定`,
+      Date.now() - startTime,
+    );
+  }
+
   try {
     const result = await callPrompt<string, { verdict: string; findings?: unknown[]; rationale?: string }>({
       agentId: 'skill:semantic-freeze-judge',
@@ -84,6 +107,12 @@ export async function judgeSemanticFreeze(
       requireActivePrompt: true,
       caller: { skillId: 'semantic-freeze-judge' },
             buildUserPayload: () => payload,
+      // 声明 failurePolicy=retry（manifest）→ 落到实现：非法 verdict 时重试一次
+      retryStrategy: {
+        maxAttempts: 2,
+        onValidationFail: ({ failureReason }) =>
+          `上次输出不合法（${failureReason}）。请只输出一个 JSON 对象，verdict 必须是 equivalent | uncertain | divergent 三者之一。`,
+      },
       validateParsedOutput: (parsed) => ({
         valid:
           Boolean(parsed) &&

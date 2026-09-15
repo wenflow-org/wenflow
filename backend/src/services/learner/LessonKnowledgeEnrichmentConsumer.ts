@@ -28,6 +28,12 @@ export class LessonKnowledgeEnrichmentConsumer {
       ? data.transferGoal.trim()
       : null;
 
+    // 呈现层投影（B1）：wrapup 里的**执行信封元数据**（runtimeEnvelope/debug）对知识蒸馏无信息量，
+    // 实测每次稳定 ~2.4–2.8KB（占单次 payload 的 10~30%），发前剔除。
+    const wrapupSource = data.wrapup && typeof data.wrapup === 'object' ? (data.wrapup as Record<string, unknown>) : null;
+    const { runtimeEnvelope: _wrapupRuntimeEnvelope, debug: _wrapupDebug, ...wrapup } = (wrapupSource || {}) as Record<string, unknown>;
+    const wrapupPayload = wrapupSource && Object.keys(wrapup).length > 0 ? wrapup : null;
+
     // 单次 LLM 调用完成知识台账蒸馏 + 隐性概念抽取（原两个 skill 合并）
     // 隔离语义：enricher 失败 → 不写证据、不写 receipt → 抛错给 outbox worker
     // （指数退避重投，MAX_ATTEMPTS=8 后 dead）；证据 ID 固定 + receipt 与证据同事务 → 重投幂等安全。
@@ -45,7 +51,7 @@ export class LessonKnowledgeEnrichmentConsumer {
               unchangedMastered: data.wrapup.progress.unchangedMastered || []
             }
           : null,
-        wrapup: data.wrapup || null,
+        wrapup: wrapupPayload,
         taskContext: { learningPathId: data.pathId, taskId: data.taskId },
         sessionEvidence: data.performance || null,
         visibleDialogueContext,

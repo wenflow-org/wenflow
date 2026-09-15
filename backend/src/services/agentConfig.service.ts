@@ -9,9 +9,7 @@ export interface PathAgentInputConfig {
     skillLevelSources: string[];
     timePerDaySources: string[];
     deadlineTextSources: string[];
-    includeStructuredData: boolean;
     includeConfirmedProposal: boolean;
-    includeConfidenceScores: boolean;
     includeConversationHistory: boolean;
   };
 }
@@ -36,9 +34,7 @@ export const DEFAULT_PATH_AGENT_INPUT_CONFIG: PathAgentInputConfig = {
     skillLevelSources: ['visibleSummary.currentBaseline.level', 'understanding.background.current_level', 'collected.level'],
     timePerDaySources: ['visibleSummary.resources.timeBudget', 'understanding.background.available_time', 'collected.timePerDay', 'understanding.available_resources.time_budget'],
     deadlineTextSources: ['visibleSummary.resources.deadlineText', 'visibleSummary.resources.timeHorizon', 'understanding.available_resources.time_horizon', 'understanding.deadline_text'],
-    includeStructuredData: true,
     includeConfirmedProposal: true,
-    includeConfidenceScores: true,
     includeConversationHistory: true,
   }
 };
@@ -89,9 +85,7 @@ function normalizePathAgentInputConfig(value: any): PathAgentInputConfig {
       skillLevelSources: normalizeStringArray(normalizedInput.skillLevelSources, DEFAULT_PATH_AGENT_INPUT_CONFIG.normalizedInput.skillLevelSources),
       timePerDaySources: normalizeStringArray(normalizedInput.timePerDaySources, DEFAULT_PATH_AGENT_INPUT_CONFIG.normalizedInput.timePerDaySources),
       deadlineTextSources: normalizeStringArray(normalizedInput.deadlineTextSources, DEFAULT_PATH_AGENT_INPUT_CONFIG.normalizedInput.deadlineTextSources),
-      includeStructuredData: normalizeBoolean(normalizedInput.includeStructuredData, DEFAULT_PATH_AGENT_INPUT_CONFIG.normalizedInput.includeStructuredData),
       includeConfirmedProposal: normalizeBoolean(normalizedInput.includeConfirmedProposal, DEFAULT_PATH_AGENT_INPUT_CONFIG.normalizedInput.includeConfirmedProposal),
-      includeConfidenceScores: normalizeBoolean(normalizedInput.includeConfidenceScores, DEFAULT_PATH_AGENT_INPUT_CONFIG.normalizedInput.includeConfidenceScores),
       includeConversationHistory: normalizeBoolean(normalizedInput.includeConversationHistory, DEFAULT_PATH_AGENT_INPUT_CONFIG.normalizedInput.includeConversationHistory),
     }
   };
