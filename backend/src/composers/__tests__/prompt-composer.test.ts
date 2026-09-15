@@ -78,7 +78,7 @@ describe('callPrompt runtime overrides', () => {
     expect(mockGatewayExecute).toHaveBeenCalledWith({
       messages: [
         { role: 'system', content: 'frozen prompt' },
-        { role: 'user', content: '{\n  "input": true\n}' }
+        { role: 'user', content: '{"input":true}' }
       ],
       model: 'frozen-model',
       max_tokens: 321,
@@ -133,7 +133,7 @@ describe('callPrompt runtime overrides', () => {
       value: 'business-only',
       language: 'zh-CN',
       contextMode: 'snapshot-context'
-    }, null, 2))
+    }))
     expect(result.debug.userPayload).not.toContain('session-1')
     expect(mockGatewayExecute).toHaveBeenCalledWith(
       expect.anything(),

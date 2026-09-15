@@ -56,7 +56,12 @@ function defaultParseRawOutput(rawOutput: string, media: SkillPromptOutputMedia)
 }
 
 function stringifyPayload(payload: string | object): string {
-  return typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+  if (typeof payload === 'string') return payload;
+  // 紧凑序列化（默认启用；PAYLOAD_COMPACT_JSON=0 回退 pretty-print）：
+  // pretty 仅为人可读，对模型语义等价，但缩进/换行会让全链输入多 15~30% token。
+  return process.env.PAYLOAD_COMPACT_JSON !== '0'
+    ? JSON.stringify(payload)
+    : JSON.stringify(payload, null, 2);
 }
 
 function normalizeTokenUsage(usage: any) {
