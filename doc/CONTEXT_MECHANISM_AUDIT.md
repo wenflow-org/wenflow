@@ -467,3 +467,19 @@ ORDER BY avg_prompt DESC;
 
 **结论**：修复同时满足两个判据——① 出现 **>15s 且成功**的样本；② 失败带从 15s 迁移到 30s。
 **残留**：仍有单次 >30s 的超时（22:41:59）；若后续实测 30s 挡掉的合法调用仍多，可再抬阈值或给开场加一次重试（当前有 `buildDeterministicOpening` 兜底，不阻断链路）。
+
+### 7.17 附带修复：黑盒命令回执丢失导致会话永久 running（2026-09-15）
+
+**背景（复验时踩到）**：驱动脚本在 teaching 中途被连接重置（服务器随并行进程保存重启），留下一条
+`status=processing` 但 `resultJson` 为空的命令行。此时：
+- 同 key 重试 → `pendingProjectionReceipt=null` 且 `isRetryableFailedCommand=false`（status 不是 `failed`）→ **`BLACKBOX_RECONCILIATION_RECEIPT_MISSING`（`retryable:false`）**；
+- 发新命令 → `isCommandOrderingBarrier(processing)=true` → **`BLACKBOX_RECONCILIATION_PENDING`**。
+
+两条路互锁 → **会话永久停在 `running`**（只能靠 `/sessions/terminate`）。
+
+**修复**：`blackbox-runner` 在抛 `RECEIPT_MISSING` 前调用新增的 `markSessionLostCommand()` —— 把会话落成
+终态 **`abandoned`** + `currentStage=error` + `stageResults.blackbox.control.terminalCode=BLACKBOX_COMMAND_LOST`
++ refereeTrace 留痕 + 日志。**语义保守：不重放、不猜测平台副作用**（自动重试可能造成平台步骤双执行，故不做）。
+
+**现场验证**：对上述楔死会话用同 key 重试 → 返回 `…（已将会话标记为 abandoned）`，DB 侧
+`status=abandoned / currentStage=error / terminalCode=BLACKBOX_COMMAND_LOST` ✅

@@ -339,8 +339,12 @@ export class BlackboxVirtualLearnerRunner {
               }
               retryRebuilt = true
             } else {
+              // 死锁兜底（2026-09-15）：进程在「命令已落 processing、平台回执未落盘」之间崩溃时，
+              // 该命令永远无法对账（同 key 重试因缺回执被拒；新命令被 ordering barrier 挡住），
+              // 会话会永久停在 running。此处落终态 abandoned：**不重放、不猜测平台副作用**，并留痕。
+              await this.markSessionLostCommand(options.sessionId, command.commandId).catch(() => undefined)
               throw new BlackboxRunStateError(
-                '待对账命令缺少平台投影回执，不能安全重试',
+                '待对账命令缺少平台投影回执，不能安全重试（已将会话标记为 abandoned）',
                 'BLACKBOX_RECONCILIATION_RECEIPT_MISSING'
               )
             }
@@ -1297,6 +1301,43 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   /** 可恢复失败命令：errorJson 带 retryable=true（LLM/Provider 瞬时失败，平台副作用未发生），同 key 可续跑 */
+  /**
+   * 命令回执丢失 → 会话不可恢复：落终态 abandoned（不重放平台副作用），并写 refereeTrace + 日志留痕。
+   * 只改变会话生命周期，不让任何被中断的命令"看起来成功了"。
+   */
+  private async markSessionLostCommand(sessionId: string, commandId: string): Promise<void> {
+    const session = await this.getSession(sessionId)
+    if (TERMINAL_SESSION_STATUSES.has(session.status)) return
+    const state = parseStageResults(session.stageResults)
+    const blackbox = (state.blackbox = state.blackbox || {})
+    blackbox.control = {
+      ...(blackbox.control || {}),
+      terminalReason: 'abandoned',
+      terminalCode: 'BLACKBOX_COMMAND_LOST',
+      terminalDetail: `命令 ${commandId} 缺少平台投影回执，无法对账；会话不可继续`
+    }
+    const refereeTrace = Array.isArray(blackbox.refereeTrace) ? blackbox.refereeTrace : []
+    blackbox.refereeTrace = [
+      ...refereeTrace,
+      {
+        timestamp: new Date().toISOString(),
+        traceId: null,
+        diagnostic: { code: 'command-lost', commandId, detail: 'missing platform projection receipt' }
+      }
+    ].slice(-120)
+    await prisma.virtual_sessions.update({
+      where: { id: sessionId },
+      data: {
+        status: 'abandoned',
+        currentStage: 'error',
+        completedAt: new Date(),
+        stageResults: JSON.stringify(state),
+        updatedAt: new Date()
+      }
+    })
+    logger.warn('[blackbox-runner] 命令回执丢失，会话已标记 abandoned', { sessionId, commandId })
+  }
+
   private isRetryableFailedCommand(command: VirtualExperimentCommandRow): boolean {
     if (command?.status !== 'failed') return false
     return safeJsonParse<{ retryable?: unknown }>(command.errorJson, {}).retryable === true
