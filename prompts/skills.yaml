@@ -563,6 +563,23 @@ skills:
       db: []
       sandbox: []
     notes: 诊断层 skill（设计 doc/LEARNER_STATE_REVIEW_DESIGN.md §4）；输入 = LearnerStateReviewService 的投影（toReviewProjection）+ 最近证据；输出结构化 insights/conceptAssessments/falsifiableClaims；经 runAux 调用，无 DB 直读
+
+  - skillId: concept-consolidator
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/concept-consolidator.yaml
+    displayName: 概念身份归并器
+    description: 判断多个知识点名字里哪些是同一个概念的不同说法，输出可执行、可审计的归并建议
+    dataSource:
+      db:
+        - table: memory_traces
+          via: service
+        - table: learner_evidence
+          via: service
+        - table: learner_projections
+          via: service
+      sandbox: []
+    notes: 记忆层维护型 skill（用户级、跨 path 的身份归并；概念/结构层仍按 path 隔离）；调用方 = ConceptConsolidatorService.buildProjection（memory_traces 活跃概念 ≤60 + learner_evidence.pathId 归属路径），审计与回滚快照落 learner_projections(scope=concept-consolidation)；默认 observe 只记录建议不动数据，apply 只执行 autoApplicable（词面闸门）；触发点同 learner-state-review（AITeachingCoordinator 课后 / learning.service 任务完成）
   - skillId: skill-author
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts

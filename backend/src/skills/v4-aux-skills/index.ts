@@ -24,7 +24,8 @@ export type AuxSkillId =
   | 'learner-progress-report'
   | 'skill-author'
   | 'skill-compiler'
-  | 'learner-state-review';
+  | 'learner-state-review'
+  | 'concept-consolidator';
 
 // File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
 const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
@@ -33,6 +34,7 @@ const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
   'skill-author': loadPromptFile('skill:skill-author')?.systemPrompt || '',
   'skill-compiler': loadPromptFile('skill:skill-compiler')?.systemPrompt || '',
   'learner-state-review': loadPromptFile('skill:learner-state-review')?.systemPrompt || '',
+  'concept-consolidator': loadPromptFile('skill:concept-consolidator')?.systemPrompt || '',
 };
 
 interface AuxPlumbing extends PromptCallContext {
@@ -206,6 +208,7 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
   'skill-author': { skillId: 'skill-author', displayName: 'Prompt 起草助手', description: '为新 Skill 起草 system prompt', category: 'generation' },
   'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis' },
   'learner-state-review': { skillId: 'learner-state-review', displayName: '学习状态评审诊断器', description: '基于状态摘要与证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）', category: 'analysis' },
+  'concept-consolidator': { skillId: 'concept-consolidator', displayName: '概念身份归并器', description: '判断多个知识点名字里哪些是同一个概念的不同说法，输出可执行、可审计的归并建议', category: 'analysis' },
 };
 
 // ============================================================
@@ -364,10 +367,84 @@ async function learnerStateReviewHandler(input: any) {
   });
 }
 
+/**
+ * 概念身份归并器：**护栏放在 normalize 里**（它有原始输入 candidates）。
+ * 模型只出建议；这里保证 ① canonical/aliases 必须来自输入（不许新造概念）
+ * ② 同一族只保留一条 merge ③ 数量封顶。词面相似度闸门由服务层算（那是执行策略，不是解析）。
+ */
+async function conceptConsolidatorHandler(input: any) {
+  return runAux({
+    meta: META['concept-consolidator'],
+    input,
+    buildUserPayload: (d) => ({
+      candidates: Array.isArray(d.candidates) ? d.candidates : [],
+      canonicalWhitelist: Array.isArray(d.canonicalWhitelist) ? d.canonicalWhitelist : [],
+      aliasMap: d.aliasMap && typeof d.aliasMap === 'object' ? d.aliasMap : {},
+    }),
+    normalize: (parsed, d) => {
+      const known = new Set(
+        (Array.isArray(d?.candidates) ? d.candidates : [])
+          .map((item: any) => asTrimmedString(item?.conceptKey))
+          .filter(Boolean),
+      );
+      const claimed = new Set<string>();
+      const merges = (Array.isArray(parsed?.merges) ? parsed.merges : [])
+        .filter((item: any) => item && asTrimmedString(item.canonical))
+        .map((item: any) => {
+          const canonical = asTrimmedString(item.canonical);
+          const aliases = Array.from(new Set(
+            (Array.isArray(item.aliases) ? item.aliases : [])
+              .map((x: any) => asTrimmedString(x))
+              .filter((x: string) => x && x !== canonical),
+          ));
+          return {
+            canonical,
+            aliases,
+            confidence: typeof item.confidence === 'number' ? Math.max(0, Math.min(1, item.confidence)) : 0,
+            rationale: asTrimmedString(item.rationale),
+          };
+        })
+        // 护栏：canonical/aliases 必须都在输入里；aliases 非空；同一 canonical 与 alias 只出现一次
+        .filter((item: any) => item.aliases.length > 0
+          && known.has(item.canonical)
+          && item.aliases.every((alias: string) => known.has(alias)))
+        .filter((item: any) => {
+          const conflict = claimed.has(item.canonical) || item.aliases.some((alias: string) => claimed.has(alias));
+          if (conflict) return false;
+          claimed.add(item.canonical);
+          item.aliases.forEach((alias: string) => claimed.add(alias));
+          return true;
+        })
+        .slice(0, 15);
+
+      const ambiguous = (Array.isArray(parsed?.ambiguous) ? parsed.ambiguous : [])
+        .filter((item: any) => item && known.has(asTrimmedString(item.a)) && known.has(asTrimmedString(item.b)))
+        .slice(0, 20)
+        .map((item: any) => ({
+          a: asTrimmedString(item.a),
+          b: asTrimmedString(item.b),
+          reason: asTrimmedString(item.reason),
+        }));
+
+      const dropCandidates = (Array.isArray(parsed?.dropCandidates) ? parsed.dropCandidates : [])
+        .filter((item: any) => item && known.has(asTrimmedString(item.conceptKey)))
+        .slice(0, 10)
+        .map((item: any) => ({
+          conceptKey: asTrimmedString(item.conceptKey),
+          reason: asTrimmedString(item.reason),
+        }));
+
+      return { merges, ambiguous, dropCandidates };
+    },
+    validate: (parsed) => parsed && typeof parsed === 'object'
+      ? { valid: true }
+      : { valid: false, failureReason: 'CONCEPT_CONSOLIDATOR_OUTPUT_NOT_OBJECT' },
+  });
+}
+
 // ============================================================
 // 注册表
 // ============================================================
-
 export const auxSkillDefinitions: SkillDefinition[] = Object.values(META).map(definition);
 
 export const auxSkillDefinitionMap: Record<AuxSkillId, SkillDefinition> = Object.fromEntries(
@@ -380,4 +457,5 @@ export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillE
   'skill-author': skillAuthorHandler,
   'skill-compiler': skillCompilerHandler,
   'learner-state-review': learnerStateReviewHandler,
+  'concept-consolidator': conceptConsolidatorHandler,
 };

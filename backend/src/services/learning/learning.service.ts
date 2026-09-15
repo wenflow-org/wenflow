@@ -8,6 +8,7 @@ import { normalizeAgentOutput } from '../../agents/output-normalizer';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
 import { learnerStateReviewService } from '../learner/LearnerStateReviewService';
+import { conceptConsolidatorService } from '../learner/ConceptConsolidatorService';
 import { runBackgroundTask } from '../background-task-tracker.service';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { learnerProgressService } from '../learner/LearnerProgressService';
@@ -4361,6 +4362,7 @@ class LearningService {
       }), { userId: data.userId, taskId: data.taskId });
       dashboardGuidanceSnapshotService.refreshInBackground(data.userId, 'task-completed');
       learnerStateReviewService.refreshInBackground(data.userId);
+      conceptConsolidatorService.refreshInBackground(data.userId);
 
       return {
         task: updatedSubtask,

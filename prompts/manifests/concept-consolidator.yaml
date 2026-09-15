@@ -1,0 +1,26 @@
+version: prompt-lab-manifest/v1
+skillId: concept-consolidator
+agentId: skill:concept-consolidator
+name: default-skill-concept-consolidator
+archetype: distiller
+description: 概念身份归并器
+acceptableAgentIds: [skill:concept-consolidator]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: concept-consolidator, phases: [consolidation-proposed], defaultPhase: consolidation-proposed, terminalPhases: [consolidation-proposed], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, learner, memory, consolidation, v4]
+notes: 概念身份归并（记忆层维护）：输入 = ConceptConsolidatorService 的用户级活跃概念投影（≤60 条，含出现次数与来源路径）；输出 merges/ambiguous/dropCandidates；合并由代码执行并落 learner_projections(scope=concept-consolidation) 审计（默认 observe 不落库改动）。
