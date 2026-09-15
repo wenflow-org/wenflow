@@ -7,9 +7,6 @@ import type { RetryBudget } from '../../gateway/api-gateway/retry-budget';
 const AI_MODEL = process.env.AI_MODEL;
 const AI_MODEL_REASONING = process.env.AI_MODEL_REASONING;
 
-// AI 配置 - 课程设计模型
-const COURSE_DESIGN_MODEL = process.env.COURSE_DESIGN_MODEL || 'grok-4.1-fast';
-
 // 系统提示词定义
 export const SYSTEM_PROMPTS = {
   ANALYZE_GOAL: `你是一个专业的学习规划 AI 助手。你的任务是分析用户的学习目标，并设计阶段化的学习路径。
@@ -778,58 +775,6 @@ ${context ? `上下文：
       };
     } catch (error: any) {
       logger.error('目标诊断失败:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * 课程设计 - 使用 Grok 模型设计每周学习任务
-   * 这是一个专门的方法，使用独立的 API 配置
-   */
-  async designWeekCourses(params: {
-    userId?: string;
-    weekNumber: number;
-    weekTitle: string;
-    weekDescription: string;
-    overallGoal: string;
-    userProfile: {
-      skillLevel?: string;
-      timePerDay?: string;
-      learningStyle?: string;
-    };
-    previousWeeks?: {
-      weekNumber: number;
-      title: string;
-      completedTasks: number;
-    }[];
-  }) {
-    try {
-      logger.info('课程设计请求', { 
-        weekNumber: params.weekNumber,
-        model: COURSE_DESIGN_MODEL
-      });
-
-      const response = await executeSkillWithResult(auxSkillDefinitionMap['course-design'], {
-        ...params,
-        model: COURSE_DESIGN_MODEL,
-        __prompt: {
-          userId: params.userId,
-          requestPath: '/services/ai/design-week-courses',
-          callerAgentId: 'course-design',
-          callerAction: 'designWeekCourses',
-        },
-      });
-      if (!response.success || !response.output) {
-        throw new Error(response.error?.message || 'COURSE_DESIGN_FAILED');
-      }
-      const result = response.output;
-
-      return {
-        success: true,
-        data: result
-      };
-    } catch (error: any) {
-      logger.error('课程设计失败:', error);
       return { success: false, error: error.message };
     }
   }

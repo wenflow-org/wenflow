@@ -20,15 +20,15 @@ function writeTempYaml(content: string): string {
 }
 
 describe('skills-file loader（P0 户口簿）', () => {
-  it('加载真实 prompts/skills.yaml：32 条活跃登记，kind/stage 分布符合规格', () => {
+  it('加载真实 prompts/skills.yaml：29 条活跃登记，kind/stage 分布符合规格', () => {
     const book = parseSkillsFile(SKILLS_FILE_PATH);
     expect(book.version).toBe(1);
-    expect(book.skills.length).toBe(32);
+    expect(book.skills.length).toBe(29);
 
     const byKind = (kind: string) => book.skills.filter((entry) => entry.kind === kind);
     expect(byKind('mainline').length).toBe(20);
     expect(byKind('handler-only').length).toBe(2);
-    expect(byKind('aux').length).toBe(10);
+    expect(byKind('aux').length).toBe(7);
 
     const mainlineStages = byKind('mainline').map((entry) => entry.stage);
     expect(mainlineStages.every((stage) => ['goal', 'path', 'teaching', 'profile', 'simulation'].includes(stage!))).toBe(true);
@@ -43,16 +43,16 @@ describe('skills-file loader（P0 户口簿）', () => {
     expect(resolveRegistrationPoint(semanticFreezeJudge)).toBe('platform-direct');
     expect(semanticFreezeJudge.platformGate).toBe(true);
 
-    const zombieIds = ['basic-evaluator', 'goal-alignment-checker', 'course-design'];
-    for (const id of zombieIds) {
-      const entry = book.skills.find((item) => item.skillId === id);
-      expect(entry?.kind).toBe('aux');
+    // 2026-09-15：course-design / basic-evaluator / goal-alignment-checker 已正式退役，
+    // 不在户口簿活跃集内（并已进入 retired-skills.ts 名单）。
+    for (const id of ['course-design', 'basic-evaluator', 'goal-alignment-checker']) {
+      expect(book.skills.find((item) => item.skillId === id)).toBeUndefined();
     }
   });
 
-  it('派生视图：活跃集 32 条、parentAgent 归属映射（保序）', () => {
+  it('派生视图：活跃集 29 条、parentAgent 归属映射（保序）', () => {
     const book = loadSkillsBookRaw();
-    expect(getActiveSkillIds(book).size).toBe(32);
+    expect(getActiveSkillIds(book).size).toBe(29);
     const members = getParentAgentMembers(book);
     expect(members.get('goal-agent')).toEqual(['skill:goal-conversation']);
     expect(members.get('path-agent')).toEqual(['skill:path-planning', 'skill:stage-designer', 'skill:path-reviewer', 'skill:kc-mapper']);

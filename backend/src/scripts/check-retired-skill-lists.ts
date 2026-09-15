@@ -6,8 +6,7 @@
  * 检查项：
  * 1. 单源不变量：PURGED_SKILLS ⊆ ALL_RETIRED_SKILLS，且两名单内部无重复
  * 2. 活跃守卫：ALL_RETIRED_SKILLS ∩ 注册集（allSkillDefinitions 名称，含 v4-aux） = ∅。
- *    僵尸项（注册中但零调用，如 basic-evaluator / goal-alignment-checker / course-design）
- *    由此守卫保护——把注册中 skill 放入退役名单会在此被拒绝。
+ *    仍在注册中的 skill 由此守卫保护——把注册中 skill 放入退役名单会在此被拒绝（须先摘注册）。
  *    说明：静态检查只能覆盖注册集；"零生产调用"判定需调用点审计，见
  *    services/skill-output-validator.ts 排除名单注释（自述口径）。
  * 3. manifest 状态一致性：退役 skill 不得存在 prompts/core/<id>.yaml（core 文件=活跃证据）；
@@ -65,7 +64,7 @@ function main() {
   const protectedActive = [...activeNames].sort().filter((name) => !allSet.has(name));
   console.log(`[retired:check] PURGED=${PURGED_SKILLS.length} ALL=${ALL_RETIRED_SKILLS.length} ACTIVE=${activeNames.size}`);
   console.log(
-    `[retired:check] 活跃注册集 ${activeNames.size} 项；不在退役名单的受保护项（含僵尸项 basic-evaluator / goal-alignment-checker / course-design，保留注册、零调用，由本守卫保护）: ${protectedActive.join(', ')}`,
+    `[retired:check] 活跃注册集 ${activeNames.size} 项；不在退役名单的受保护项: ${protectedActive.join(', ')}`,
   );
   console.log(
     '[retired:check] 零生产调用判定说明：静态检查仅覆盖注册集；调用点审计口径见 services/skill-output-validator.ts 排除名单注释',

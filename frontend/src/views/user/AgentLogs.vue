@@ -579,7 +579,6 @@ const formatAgentId = (logOrAgentId: string | AgentLogItem | null | undefined) =
     'teaching-agent': 'AI 授课',
     'ai-tutor': 'AI 辅导',
     'learner-model-agent': '学习者模型',
-    'course-design': '课程设计',
     'system-call': '平台底层调用'
   };
   

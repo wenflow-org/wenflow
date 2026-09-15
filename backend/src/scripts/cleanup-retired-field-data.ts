@@ -7,8 +7,8 @@
  *
  * 名单单源：ALL_RETIRED_SKILLS（backend/src/skills/retired-skills.ts，40 项），禁止本地再定义名单。
  * 活跃保护：名单与 allSkillDefinitions 注册集相交时拒绝执行——防止误删注册中 skill 的
- * skill_model_configs（该表不可自愈，写入方仅管理端配置；僵尸项 basic-evaluator /
- * goal-alignment-checker 即因此保留注册并移出名单）。
+ * skill_model_configs（该表不可自愈，写入方仅管理端配置；2026-09-15 起
+ * course-design / basic-evaluator / goal-alignment-checker 已整体注销，其残留行由启动 purge 清理）。
  *
  * 用法（默认 dry-run，只统计不删除）：
  *   npx ts-node --transpile-only src/scripts/cleanup-retired-field-data.ts

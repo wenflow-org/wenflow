@@ -128,7 +128,7 @@ function main() {
   console.log(`[skills:check] coordinator 挂接点登记: ${coordinatorCount} 条；parentAgent 归属: ${[...parentAgentMembers.keys()].map((agent) => `${agent}=${parentAgentMembers.get(agent)!.length} 成员`).join(' ')}`);
   console.log(`[skills:check] F8 退役互斥: 活跃集 ∩ PURGED(${PURGED_SKILLS.length})/ALL(${ALL_RETIRED_SKILLS.length}) = ∅（通过）`);
   console.log(`[skills:check] F11 注册存在性: ${book.skills.length - unregistered.length}/${book.skills.length} 通过（豁免: platform-direct/none 共 ${book.skills.filter((entry) => ['platform-direct', 'none'].includes(resolveRegistrationPoint(entry))).length} 条）`);
-  console.log(`[skills:check] aux 集合: v4-aux AuxSkillId ${auxDefinitionNames.size} 条与户口簿双向一致（僵尸项 basic-evaluator/goal-alignment-checker/course-design 在册）`);
+  console.log(`[skills:check] aux 集合: v4-aux AuxSkillId ${auxDefinitionNames.size} 条与户口簿双向一致`);
   console.log(`[skills:check] F12 差额: manifest ${listRawManifestEntries().filter((item) => item.kind === 'skill').length} 条全部登记；户口簿未登 manifest ${diff.bookWithoutManifest.length} 条（aux=${diff.bookWithoutManifest.filter((item) => item.kind === 'aux').length}，合法不登 manifest）`);
   console.log(`[skills:check] P1 派生等价: agentMembers ${agents.length}/${agents.length} 个顶层 Agent 与手写镜像一致（diff 为空）`);
 

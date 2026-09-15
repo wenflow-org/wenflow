@@ -123,7 +123,7 @@
 | skill | 问题 | 优化 |
 |---|---|---|
 | generic-chat | 调用方指令拼进 **system** → 前缀缓存不稳定；history 无界；QA 成功率 16%/34% | 指令改 user 前缀；接统一摘要；加 retry |
-| ~~course-design / basic-evaluator / goal-alignment-checker~~ | ~~僵尸（零调用）~~ **复核（2026-09-15）：这是项目**有意保留**的"僵尸项"**——`retired-skills.ts` 明确记载 2026-08-10 决策：保留注册、移出清理名单（cleanup 删其 `skill_model_configs` 行会**永久丢失**且造成运行期窗口故障），由 `retired:check` 的"活跃守卫"保护；`course-design` 唯一调用点 `designWeekCourses` 无调用者 | **不下线**（改动会被门禁拒绝） |
+| ~~course-design / basic-evaluator / goal-alignment-checker~~ | ~~僵尸（零调用）~~ **已退役（2026-09-15，四同步）**：注册/户口簿/core+manifest+编译产物/文档全部删除，`PURGED_SKILLS` → 39；DB 残留行由启动 purge 清理。**业务依据**：`course-design` 周计划模型被 path→stage-designer 取代（`designWeekCourses` + 孪生 `generateTasksForExistingPath` 均无调用者，一并删除）；`goal-alignment-checker` 被 `path-reviewer`（CIDDP 五维含 Pertinence、可触发重规划）覆盖；`basic-evaluator` 无"评分/等级"产品面（未来做作业评分可复用其设计） | **已注销**（2026-08-10 的"保留注册"决定被覆盖） |
 | skill-author / skill-compiler | 服务仍在（`services/skill-author`：`draftSkillPrompt`/`compileSkill`），但 **`/api/admin/skill-author/*` 路由已无注册**（`admin-audit.middleware` 仍留着旧路径名）→ 属"路由已删、服务未清"的孤儿；清理须按 `retired-skills.ts` 的**四同步**规则（注册代码/文件/名单/文档） | 若确认弃用：四同步清理 |
 | semantic-freeze-judge | payload = 完整 YAML + 完整编译产物，**无长度上限**；声明 retry 但无实现 | 加字节上限/分块；补 retry |
 
@@ -372,7 +372,7 @@ ORDER BY avg_prompt DESC;
 - **一处待观察**：`virtual-learner-persona-designer` 最新一条（08:43）首键是 `preferredLevels`（旧序），而其 ON 分支应为 `candidatePersonas` 先；声明表暂同时容纳两键以避免误报，待有新增量后复核该 skill 是否真的走 ON 分支。
 
 **③ 关于 #2（僵尸/死代码）— 复核后按"设计原由"处理**：
-- `course-design` / `basic-evaluator` / `goal-alignment-checker` **不是可删项**：`skills/retired-skills.ts` 明确记载 2026-08-10 决策——保留注册、移出清理名单（cleanup 删行会导致 `skill_model_configs` **永久丢失** + 运行期窗口故障），由 `retired:check` 的「活跃守卫」保护；任何把它们塞进退役名单的改动会被 CI 拒绝。
+- `course-design` / `basic-evaluator` / `goal-alignment-checker` **已正式退役（2026-09-15，四同步）**：注册（v4-aux-skills）/ 户口簿（prompts/skills.yaml）/ core+manifest+编译产物 / 文档全部删除，补入 `PURGED_SKILLS`（→39），由启动 purge 清理 DB 残留行。业务依据见 §3 aux 行；2026-08-10 的"保留注册"决定被覆盖（当时顾虑的 `skill_model_configs` 永久丢失，在**整体注销**下不再构成问题）。
 - `skill-author` / `skill-compiler`：服务仍在（`services/skill-author`）但路由已无注册 → 「路由已删、服务未清」的孤儿；按 `retired-skills.ts` 的**四同步**规则清理需专门一次提交。
 
 **④ 验证口径说明**：单键化（08:42）、storyHistory（09:15）、紧凑序列化（12:2x）三项都发生在**跑批停止（08:26）之后**，因此**只有单测/编译产物验证，没有新的实时遥测**；待虚拟实验室跑批再起，可在 `prompt_call_logs` 直接复核 `messages` 单键、`storyHistory` 与紧凑格式。

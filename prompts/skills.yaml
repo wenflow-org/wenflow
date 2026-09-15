@@ -11,8 +11,8 @@
 #    mainline 还需进 prompts/orchestration/<stage>.yaml contracts（铁律，F3 校验）。
 # 2. 退役 skill：**不放进本文件**（从 skills[] 移除）；名单执行权威 =
 #    backend/src/skills/retired-skills.ts（PURGED_SKILLS / ALL_RETIRED_SKILLS），
-#    本文件只做活跃/退役互斥校验（F8）。僵尸项（basic-evaluator / goal-alignment-checker /
-#    course-design）保留登记为 aux，notes 注明状态，禁止进退役名单。
+#    本文件只做活跃/退役互斥校验（F8）。2026-09-15 起 course-design / basic-evaluator /
+#    goal-alignment-checker 已正式退役（从本文件移除；名单见 retired-skills.ts）。
 # 3. 字段路由边界：prompts/orchestration/<stage>.yaml 仍是字段路由数据面唯一声明源
 #    （本文件不承载 prompt 文本/字段语义）；coordinator 块只做挂接点登记（F10 校验 +
 #    向导粘贴片段，definition.ts 保持手写权威）。
@@ -574,18 +574,6 @@ skills:
       db: []
       sandbox: []
     notes: 调用方消息/历史（ai.service.ts:331-354），无 DB 直读
-
-  - skillId: course-design
-    kind: aux
-    handlerRef: backend/src/skills/v4-aux-skills/index.ts
-    coreFile: prompts/core/course-design.yaml
-    displayName: 课程设计器
-    description: 为周次主题生成结构化课程任务
-    dataSource:
-      db: []
-      sandbox: []
-    notes: 注册中零调用（唯一调用点 designWeekCourses 无调用者）——僵尸状态保留，禁止进退役名单；输入 = 请求体 + 代码常量（ai.service.ts:812）
-
   - skillId: skill-author
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts
@@ -607,29 +595,6 @@ skills:
       db: []
       sandbox: []
     notes: 无调用方——原 /api/admin/skill-author 路由已删除（QA ISSUE-008），services/skill-author/index.ts 的 compileSkill 无消费方；历史输入=用户提交 systemPrompt/requiredFieldIds，无 DB 直读
-
-  - skillId: basic-evaluator
-    kind: aux
-    handlerRef: backend/src/skills/v4-aux-skills/index.ts
-    coreFile: prompts/core/basic-evaluator.yaml
-    displayName: 学习质量评估器
-    description: 评估学习内容、答案或任务完成情况
-    dataSource:
-      db: []
-      sandbox: []
-    notes: 僵尸项——保留注册但零生产调用，不进退役名单
-
-  - skillId: goal-alignment-checker
-    kind: aux
-    handlerRef: backend/src/skills/v4-aux-skills/index.ts
-    coreFile: prompts/core/goal-alignment-checker.yaml
-    displayName: 路径目标对齐检查器
-    description: 检查学习路径与目标的对齐程度
-    dataSource:
-      db: []
-      sandbox: []
-    notes: 僵尸项——保留注册但零生产调用，不进退役名单
-
   # ============ 平台守门（aux 变体，registrationPoint=platform-direct 豁免注册检查） ============
   - skillId: semantic-freeze-judge
     kind: aux

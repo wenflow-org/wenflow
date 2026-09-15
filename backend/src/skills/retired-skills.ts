@@ -13,13 +13,15 @@
  *   项（code-only 注销 / 仅 manifest 残留，从未注册），供手动 cleanup 脚本使用。
  *   恒为 PURGED_SKILLS 超集（不变量在模块加载时断言）。
  *
- * 僵尸项处置（2026-08-10）：
- * basic-evaluator / goal-alignment-checker 是"已注册（v4-aux-skills）但零生产调用"
- * 的僵尸项——保留注册、**移出**清理名单（归入活跃集合）。原因：cleanup 删其行会导致
- * skill_model_configs 永久丢失（该表不可自愈，写入方仅管理端配置）与运行期窗口故障。
- * 它们由 retired:check 门禁（check-retired-skill-lists.ts）的"活跃守卫"保护：
- * 任何把注册中 skill 放入 ALL_RETIRED_SKILLS 的改动都会在 CI 被拒绝。
- * course-design 同为注册中零调用项（唯一调用点 designWeekCourses 无调用者），不进名单。
+ * 僵尸项处置（**2026-09-15 更新：覆盖 2026-08-10 的"保留注册"决定**）：
+ * course-design / basic-evaluator / goal-alignment-checker 已**正式退役**——四同步
+ * （注册代码 v4-aux-skills / 文件 core+manifests+编译产物 / 本名单 / 文档）完成，补入 PURGED_SKILLS。
+ * 业务依据：course-design 的"周计划"模型已被 path→milestone→stage-designer 取代（其唯一入口
+ * designWeekCourses 与孪生 generateTasksForExistingPath 均无调用者）；goal-alignment-checker 被
+ * 现役 path-reviewer（CIDDP 五维，含 Pertinence）覆盖；basic-evaluator 无"评分/等级"产品面。
+ * 一次性代价：启动 purge 会清理它们在 skill_model_configs 的历史行（该表不可自愈）。
+ * 历史（2026-08-10）：曾因"cleanup 删行会导致配置永久丢失"而保留注册、移出名单，由 retired:check
+ * 活跃守卫保护；本次为**整体注销**，故先摘注册再入名单，守卫条件（名单 ∩ 注册集 = ∅）依然满足。
  *
  * 维护规则：
  * 1. 新退役条目：曾注册过的补入 PURGED_SKILLS；从未注册（仅 code-only / manifest 残留）
@@ -32,8 +34,8 @@
  */
 
 /**
- * 启动 purge 名单（36 项，2026-08-10 自 index.ts:45-92 单源化，逐项一致；2026-08-11 增补
- * session-evaluation-fallback）。
+ * 启动 purge 名单（2026-08-10 自 index.ts 单源化；2026-08-11 增补 session-evaluation-fallback；
+ * 2026-09-15 增补 course-design / basic-evaluator / goal-alignment-checker）。
  * 语义：曾经注册过、启动时须清残留，防止幽灵注册；不 purge 注册中 skill 的配置行。
  */
 export const PURGED_SKILLS: readonly string[] = [
@@ -88,6 +90,10 @@ export const PURGED_SKILLS: readonly string[] = [
   // 'unavailable'），注册/户口簿/产物四同步注销；
   // 存量 skill_registrations/skill_model_configs 等行由启动 purge 清理
   'session-evaluation-fallback',
+  // 2026-09-15 正式退役（覆盖 2026-08-10"保留注册"决定）：业务面已被取代或无需求面，四同步注销
+  'course-design',
+  'basic-evaluator',
+  'goal-alignment-checker',
 ] as const;
 
 /**
@@ -106,8 +112,7 @@ const RESIDUE_ONLY_SKILLS: readonly string[] = [
 ] as const;
 
 /**
- * 全量清理名单（41 项 = purge 36 + 残留 5）：cleanup-retired-field-data.ts 使用。
- * 不含僵尸项 basic-evaluator / goal-alignment-checker（注册中，见文件头处置说明）。
+ * 全量清理名单：cleanup-retired-field-data.ts 使用（项数见文件头；= PURGED + RESIDUE_ONLY）。
  */
 export const ALL_RETIRED_SKILLS: readonly string[] = [...PURGED_SKILLS, ...RESIDUE_ONLY_SKILLS] as const;
 

@@ -17,8 +17,7 @@
  *   ② sandbox 通道：dataSource.sandbox 声明的 agent 前缀 vs 该 skill core.yaml inputs 中
  *      `ref: sandbox:<prefix>.*` 实际引用前缀集合，双向 diff，WARN 级。
  *   ③ 例外账（WARN 级）：mcp-tool（db 必须为空 + mcpTools 非空）、learner-model（handler
- *      直读反例，db 必须非空）、僵尸 3 条（course-design/basic-evaluator/goal-alignment-checker
- *      与 semantic-freeze-judge 平台直调，db/sandbox 必须为空）。
+ *      直读反例，db 必须非空）、semantic-freeze-judge 平台直调（db/sandbox 必须为空）。
  *
  * 退出码：error 级发现 >0 → 1；W5 warn 级仅输出，不阻断（调查 §4.1⑤ warn 级决策）。
  *
@@ -132,20 +131,15 @@ const CALL_SITE_MANIFEST: Record<string, CallSite[]> = {
   'generic-chat': [
     { file: 'backend/src/services/ai/ai.service.ts', line: 340 },
   ],
-  'course-design': [
-    { file: 'backend/src/services/ai/ai.service.ts', line: 812 },
-  ],
   'skill-author': [
     { file: 'backend/src/services/skill-author/index.ts', line: 47 },
   ],
   'skill-compiler': [
     { file: 'backend/src/services/skill-author/index.ts', line: 145 },
   ],
-  // 例外账：无 executeSkill 调用点（learner-model=handler 直读 / 僵尸 / 平台直调）
+  // 例外账：无 executeSkill 调用点（learner-model=handler 直读 / 平台直调）
   'learner-model': [],
   'mcp-tool': [],
-  'basic-evaluator': [],
-  'goal-alignment-checker': [],
   'semantic-freeze-judge': [],
 };
 
@@ -516,12 +510,12 @@ function main() {
         findings.push({ level: 'warn', channel: 'W5-例外账', message: 'learner-model: handler 直读反例，dataSource.db 必须声明（learner_evidence/teaching_sessions/subtasks/learning_paths）' });
       }
     }
-    if (['course-design', 'basic-evaluator', 'goal-alignment-checker', 'semantic-freeze-judge'].includes(entry.skillId)) {
+    if (['semantic-freeze-judge'].includes(entry.skillId)) {
       if (declared.length > 0 || declaredSandbox.length > 0) {
         findings.push({
           level: 'warn',
           channel: 'W5-例外账',
-          message: `${entry.skillId}: 僵尸/平台直调项，dataSource 必须为空（db=[] sandbox=[]）`,
+          message: `${entry.skillId}: 平台直调项，dataSource 必须为空（db=[] sandbox=[]）`,
         });
       }
     }
@@ -535,7 +529,7 @@ function main() {
   console.log(`[data-source:check] skills.yaml 加载 OK（version=${book.version}，${book.skills.length} 条）`);
   console.log(`[data-source:check] prisma schema 模型名：主库+系统库共 ${modelNames.size} 个（声明表存在性校验基准）`);
   console.log(`[data-source:check] db 声明表对账通过：${okCount} 条；W5 warn 级发现：${warns.length} 条；error 级：${errors.length} 条`);
-  console.log('[data-source:check] 三通道：W5a 未声明表 / W5b 过期表 / W5-sandbox 声明一致性 / W5-例外账（mcp-tool·learner-model·僵尸·平台直调）');
+  console.log('[data-source:check] 三通道：W5a 未声明表 / W5b 过期表 / W5-sandbox 声明一致性 / W5-例外账（mcp-tool·learner-model·平台直调）');
 
   for (const f of [...errors, ...warns]) {
     const tag = f.level === 'error' ? 'ERROR' : 'warn';

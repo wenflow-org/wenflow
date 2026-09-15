@@ -10,8 +10,8 @@
  *
  * 检查项：
  * - W1 ACTIVE 覆盖：户口簿活跃集 vs agent_prompts ACTIVE 双向差集；
- *   noPromptFile=true（handler-only）豁免方向 A；僵尸技能（basic-evaluator /
- *   goal-alignment-checker / course-design，保留注册但零生产调用）
+ *   noPromptFile=true（handler-only）豁免方向 A（2026-09-15：course-design /
+ *   basic-evaluator / goal-alignment-checker 三个僵尸项已正式退役，不再保留注册）
  *   的 ACTIVE 行视为"保留决策下的必需资产"（handler requireActivePrompt: true），
  *   不计入告警 items，仅保留 zombieSkillActive 数组供审计计数。
  * - W2 注册对账：户口簿活跃集 vs skill_registrations（name 无 skill: 前缀）双向差集；
@@ -41,10 +41,10 @@ import {
   type CoreHashParityReport,
 } from '../scripts/check-core-hash-parity';
 
-/** 僵尸技能：保留注册但零生产调用（skills.yaml notes）；
- * 其 ACTIVE prompt 为保留决策下的必需资产（handler requireActivePrompt: true），
- * 不计告警（zombieSkillActive 仅作审计计数保留）。 */
-export const ZOMBIE_SKILL_IDS = ['basic-evaluator', 'goal-alignment-checker', 'course-design'] as const;
+/** 僵尸技能：保留注册但零生产调用（skills.yaml notes）。
+ * 2026-09-15：course-design / basic-evaluator / goal-alignment-checker 已正式退役（四同步），
+ * 名单清空；字段保留供审计计数。 */
+export const ZOMBIE_SKILL_IDS: readonly string[] = [];
 
 /** W3-B 免检清单：coordinator.steps=[] 条目（notes 注明 service 侧接线，不进主链 steps） */
 export const W3_STEPS_EMPTY_EXEMPT: Record<string, string> = {
@@ -168,9 +168,8 @@ export function analyzeW1(book: SkillsBook, activeRows: CoreHashParityActiveRow[
     .sort();
 
   // 告警 items：仅缺 ACTIVE（missingActive）与幽灵 ACTIVE（zombieActive）。
-  // zombieSkillActive 不进入 items——按  决策，  // 三个僵尸项正式保留注册（禁止退役名单），且其 handler requireActivePrompt: true
-  // （v4-aux-skills/index.ts:115，admin 测试入口按需执行依赖 ACTIVE prompt），
-  // 其 ACTIVE 行为必需资产而非"残留"，报警会把保留决策执行者引向错误清理。
+  // zombieSkillActive 由 ZOMBIE_SKILL_IDS 驱动；2026-09-15 三个僵尸项正式退役后该名单为空，
+  // 字段保留供审计（未来若再出现"保留注册但零调用"的项，填回名单即可豁免其 ACTIVE 告警）。
   const items: ReadinessWarningItem[] = [
     ...missingActive.map((skillId) => ({
       code: 'W1' as const,

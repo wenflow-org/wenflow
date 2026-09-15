@@ -23,11 +23,8 @@ export type AuxSkillId =
   | 'teaching-opening-generator'
   | 'learner-progress-report'
   | 'generic-chat'
-  | 'course-design'
   | 'skill-author'
   | 'skill-compiler'
-  | 'basic-evaluator'
-  | 'goal-alignment-checker'
   | 'learner-state-review';
 
 // File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
@@ -35,11 +32,8 @@ const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
   'teaching-opening-generator': loadPromptFile('skill:teaching-opening-generator')?.systemPrompt || '',
   'learner-progress-report': loadPromptFile('skill:learner-progress-report')?.systemPrompt || '',
   'generic-chat': loadPromptFile('skill:generic-chat')?.systemPrompt || '',
-  'course-design': loadPromptFile('skill:course-design')?.systemPrompt || '',
   'skill-author': loadPromptFile('skill:skill-author')?.systemPrompt || '',
   'skill-compiler': loadPromptFile('skill:skill-compiler')?.systemPrompt || '',
-  'basic-evaluator': loadPromptFile('skill:basic-evaluator')?.systemPrompt || '',
-  'goal-alignment-checker': loadPromptFile('skill:goal-alignment-checker')?.systemPrompt || '',
   'learner-state-review': loadPromptFile('skill:learner-state-review')?.systemPrompt || '',
 };
 
@@ -212,11 +206,8 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
   'teaching-opening-generator': { skillId: 'teaching-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
   'learner-progress-report': { skillId: 'learner-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis' },
   'generic-chat': { skillId: 'generic-chat', displayName: '平台通用文本能力', description: '无更专用 Skill 时的通用文本调用能力', category: 'generation' },
-  'course-design': { skillId: 'course-design', displayName: '课程设计器', description: '为周次主题生成结构化课程任务', category: 'generation' },
   'skill-author': { skillId: 'skill-author', displayName: 'Prompt 起草助手', description: '为新 Skill 起草 system prompt', category: 'generation' },
   'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis' },
-  'basic-evaluator': { skillId: 'basic-evaluator', displayName: '学习质量评估器', description: '评估学习内容、答案或任务完成情况', category: 'analysis' },
-  'goal-alignment-checker': { skillId: 'goal-alignment-checker', displayName: '路径目标对齐检查器', description: '检查学习路径与目标的对齐程度', category: 'analysis' },
   'learner-state-review': { skillId: 'learner-state-review', displayName: '学习状态评审诊断器', description: '基于状态摘要与证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）', category: 'analysis' },
 };
 
@@ -310,21 +301,6 @@ async function genericChatHandler(input: any) {
   });
 }
 
-async function courseDesignHandler(input: any) {
-  return runAux({
-    meta: META['course-design'],
-    input,
-        buildUserPayload: (d) => {
-      const { model: _m, ...params } = d;
-      return params;
-    },
-    normalize: (parsed) => parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'COURSE_DESIGN_OUTPUT_NOT_OBJECT' },
-  });
-}
-
 async function skillAuthorHandler(input: any) {
   return runAux<string>({
     meta: META['skill-author'],
@@ -346,30 +322,6 @@ async function skillCompilerHandler(input: any) {
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
       : { valid: false, failureReason: 'SKILL_COMPILER_OUTPUT_NOT_OBJECT' },
-  });
-}
-
-async function basicEvaluatorHandler(input: any) {
-  return runAux({
-    meta: META['basic-evaluator'],
-    input,
-        buildUserPayload: (d) => ({ input: d.input, evalContext: d.evalContext }),
-    normalize: (parsed) => parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'BASIC_EVALUATOR_OUTPUT_NOT_OBJECT' },
-  });
-}
-
-async function goalAlignmentCheckerHandler(input: any) {
-  return runAux({
-    meta: META['goal-alignment-checker'],
-    input,
-        buildUserPayload: (d) => ({ path: d.path, goal: d.goal, userContext: d.userContext, pathSummary: d.pathSummary }),
-    normalize: (parsed) => parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'GOAL_ALIGNMENT_OUTPUT_NOT_OBJECT' },
   });
 }
 
@@ -444,10 +396,7 @@ export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillE
   'teaching-opening-generator': teachingOpeningGeneratorHandler,
   'learner-progress-report': learnerProgressReportHandler,
   'generic-chat': genericChatHandler,
-  'course-design': courseDesignHandler,
   'skill-author': skillAuthorHandler,
   'skill-compiler': skillCompilerHandler,
-  'basic-evaluator': basicEvaluatorHandler,
-  'goal-alignment-checker': goalAlignmentCheckerHandler,
   'learner-state-review': learnerStateReviewHandler,
 };

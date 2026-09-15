@@ -161,9 +161,7 @@ export function validateCoreFieldDeclarations(fields: CoreFieldDeclaration[]): s
  * - 非 JSON 对象输出：generic-chat（string）、skill-author（markdown）
  * - 平台守门直调：semantic-freeze-judge（发布门禁，失败后果重，不走常规重试语义）
  * - 模拟器家族：virtual-learner-*（turn 字段多、fallback 路径特殊、referee 旁路通道）
- * - 零调用或不可达：basic-evaluator / goal-alignment-checker（注册中零调用，v4-aux 僵尸项，
- *   保留注册由 retired:check 守卫保护，不入退役名单）、concept-priority（已退役，仅 manifest 残留）、
- *   course-design（注册但生产不可达：唯一调用点 designWeekCourses 无调用者）
+ * - concept-priority（已退役，仅 manifest 残留）
  */
 const FIELD_VALIDATION_EXCLUDED_SKILLS = new Set([
   'skill:generic-chat',
@@ -176,10 +174,7 @@ const FIELD_VALIDATION_EXCLUDED_SKILLS = new Set([
   'skill:virtual-learner-referee',
   'skill:virtual-learner-actor-auditor',
   'skill:virtual-learner-scenario-designer',
-  'skill:basic-evaluator',
   'skill:concept-priority',
-  'skill:course-design',
-  'skill:goal-alignment-checker',
 ]);
 
 export function isFieldValidatedSkill(agentId: string): boolean {
