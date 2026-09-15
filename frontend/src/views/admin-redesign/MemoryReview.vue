@@ -170,13 +170,44 @@
         </div>
 
         <template v-if="detail.audit">
-          <h4 class="mr__h4">归并建议（canonical ← aliases）</h4>
+          <h4 class="mr__h4">
+            归并建议（canonical ← aliases）
+            <span class="mr__sub-inline">
+              勾选后执行；默认只勾选「可自动执行」的（把握度 + 词面闸门都过）。
+              执行会改动该用户的 memory_traces，但会留整行前后快照，可回滚。
+            </span>
+          </h4>
+          <div v-if="detail.audit.proposals.length" class="mr__bulk">
+            <button type="button" class="mr__btn" @click="selectAllApplicable">全选可自动执行</button>
+            <button type="button" class="mr__btn" @click="clearSelection">清空</button>
+            <button
+              type="button"
+              class="mr__btn mr__btn--danger"
+              :disabled="busy || selectedKeys.length === 0"
+              @click="applySelected"
+            >执行选中（{{ selectedKeys.length }}）</button>
+            <span v-if="selectedNeedsReview.length" class="mr__warn-inline">
+              {{ selectedNeedsReview.length }} 条属于「需人工确认」，执行前请先看清
+            </span>
+          </div>
           <table v-if="detail.audit.proposals.length" class="mr__table">
             <thead>
-              <tr><th>规范键</th><th>别名</th><th class="mr__num">把握度</th><th class="mr__num">词面相似</th><th>可自动执行</th><th>理由</th></tr>
+              <tr>
+                <th></th>
+                <th>规范键</th><th>别名</th><th class="mr__num">把握度</th><th class="mr__num">词面相似</th>
+                <th>可自动执行</th><th>理由</th>
+              </tr>
             </thead>
             <tbody>
               <tr v-for="proposal in detail.audit.proposals" :key="proposal.canonical">
+                <td>
+                  <input
+                    type="checkbox"
+                    :checked="selected[proposal.canonical] === true"
+                    :data-auto="proposal.autoApplicable ? '1' : '0'"
+                    @change="toggleSelect(proposal.canonical, proposal.autoApplicable)"
+                  />
+                </td>
                 <td>{{ proposal.canonical }}</td>
                 <td class="mr__sub">{{ proposal.aliases.join(' / ') }}</td>
                 <td class="mr__num">{{ Math.round(proposal.confidence * 100) }}%</td>
@@ -201,19 +232,22 @@
           </table>
           <p v-else class="mr__sub">没有待人工确认项。</p>
 
-          <h4 class="mr__h4">已执行归并（可回滚快照见接口返回）</h4>
+          <h4 class="mr__h4">已执行归并（可回滚）</h4>
           <table v-if="detail.audit.appliedMerges.length" class="mr__table">
-            <thead><tr><th>规范键</th><th>别名</th><th class="mr__num">删除条数</th><th>执行时间</th></tr></thead>
+            <thead><tr><th>规范键</th><th>别名</th><th class="mr__num">删除条数</th><th>执行时间</th><th></th></tr></thead>
             <tbody>
               <tr v-for="merge in detail.audit.appliedMerges" :key="`${merge.canonical}-${merge.appliedAt}`">
                 <td>{{ merge.canonical }}</td>
                 <td class="mr__sub">{{ merge.aliases.join(' / ') }}</td>
                 <td class="mr__num">{{ merge.deletedRows.length }}</td>
                 <td>{{ new Date(merge.appliedAt).toLocaleString() }}</td>
+                <td>
+                  <button type="button" class="mr__btn" :disabled="busy" @click="rollbackOne(merge.canonical)">回滚</button>
+                </td>
               </tr>
             </tbody>
           </table>
-          <p v-else class="mr__sub">观察模式：还没有执行过任何合并（数据未被改动）。</p>
+          <p v-else class="mr__sub">还没有执行过任何合并（数据未被改动）。</p>
         </template>
       </div>
     </div>
@@ -221,10 +255,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { adminMemoryReviewApi } from '@/api/adminApi'
 import MkKpi from './MkKpi.vue'
 import MkEmptyState from './MkEmptyState.vue'
+import { askConfirm } from './useConfirm'
+import { toast } from '@/utils/toast'
 import { errMsg, shortId, timeAgo } from './live'
 
 interface AuditUserSummary {
@@ -267,6 +304,89 @@ const totals = ref({
 })
 const selectedId = ref('')
 const detail = ref<any>(null)
+const route = useRoute()
+/** 勾选状态（key = 规范键）；默认只勾「可自动执行」的 */
+const selected = ref<Record<string, boolean>>({})
+
+const selectedKeys = computed(() => Object.keys(selected.value).filter((key) => selected.value[key]))
+const selectedNeedsReview = computed(() => {
+  const proposals = detail.value?.audit?.proposals ?? []
+  return selectedKeys.value.filter((key) => {
+    const proposal = proposals.find((item: any) => item.canonical === key)
+    return proposal && !proposal.autoApplicable
+  })
+})
+
+function resetSelection(audit: any) {
+  const next: Record<string, boolean> = {}
+  for (const proposal of audit?.proposals ?? []) next[proposal.canonical] = !!proposal.autoApplicable
+  selected.value = next
+}
+
+function toggleSelect(canonical: string, _auto: boolean) {
+  selected.value = { ...selected.value, [canonical]: !selected.value[canonical] }
+}
+
+function selectAllApplicable() {
+  const next: Record<string, boolean> = {}
+  for (const proposal of detail.value?.audit?.proposals ?? []) next[proposal.canonical] = !!proposal.autoApplicable
+  selected.value = next
+}
+
+function clearSelection() {
+  selected.value = {}
+}
+
+async function applySelected() {
+  const keys = selectedKeys.value
+  if (!keys.length) return
+  const needsReview = selectedNeedsReview.value.length
+  const ok = await askConfirm({
+    title: '执行概念归并',
+    message: needsReview > 0
+      ? `将执行 ${keys.length} 条归并（其中 ${needsReview} 条属于「需人工确认」），会删除该用户的重复记忆痕迹。执行后可回滚，但请先确认这些确实是同一个概念。`
+      : `将执行 ${keys.length} 条归并，会删除该用户的重复记忆痕迹（保留并字段后的那条）。执行后可回滚。`,
+    confirmText: '执行归并',
+    danger: true,
+  })
+  if (!ok) return
+  busy.value = true
+  error.value = ''
+  try {
+    const res: any = await adminMemoryReviewApi.apply(selectedId.value, keys, { includeNeedsReview: needsReview > 0 })
+    const body = res.data?.data ?? res.data ?? {}
+    toast.success(`已执行 ${body.applied ?? 0} 条归并${body.skipped?.length ? `，跳过 ${body.skipped.length} 条` : ''}`)
+    await openDetail(selectedId.value)
+    await loadOverview()
+  } catch (e) {
+    error.value = errMsg(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function rollbackOne(canonical: string) {
+  const ok = await askConfirm({
+    title: '回滚归并',
+    message: `将「${canonical}」还原成合并前状态：胜出者恢复原字段，被删除的重复痕迹按快照重建。`,
+    confirmText: '回滚',
+    danger: true,
+  })
+  if (!ok) return
+  busy.value = true
+  error.value = ''
+  try {
+    const res: any = await adminMemoryReviewApi.rollback(selectedId.value, [canonical])
+    const body = res.data?.data ?? res.data ?? {}
+    toast.success(body.rolledBack ? '已回滚' : '未找到可回滚的记录')
+    await openDetail(selectedId.value)
+    await loadOverview()
+  } catch (e) {
+    error.value = errMsg(e)
+  } finally {
+    busy.value = false
+  }
+}
 
 async function loadOverview() {
   loading.value = true
@@ -290,6 +410,7 @@ async function openDetail(userId: string) {
   try {
     const res: any = await adminMemoryReviewApi.detail(userId)
     detail.value = res.data?.data ?? res.data ?? null
+    resetSelection(detail.value?.audit)
   } catch (e) {
     error.value = errMsg(e)
   } finally {
@@ -311,7 +432,14 @@ async function recompute(userId: string) {
   }
 }
 
-onMounted(loadOverview)
+onMounted(async () => {
+  await loadOverview()
+  // 深链：/admin/memory-review?userId=xxx 直接落到该用户明细（供学习者详情等入口跳转）
+  const queryUserId = route.query.userId
+  if (typeof queryUserId === 'string' && queryUserId) {
+    await openDetail(queryUserId)
+  }
+})
 </script>
 
 <style scoped>
@@ -338,4 +466,8 @@ onMounted(loadOverview)
 .mr__warn { margin-top: 8px; padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(217, 119, 6, 0.3); background: rgba(217, 119, 6, 0.06); font-size: 12px; }
 .mr__chip { display: inline-block; margin-left: 8px; }
 .mr__detail { display: grid; gap: 14px; }
+.mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #94a3b8); font-size: 11px; }
+.mr__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 10px; }
+.mr__warn-inline { color: #b45309; font-size: 11px; }
+.mr__btn--danger { border-color: rgba(185, 28, 28, 0.35); color: #b91c1c; }
 </style>

@@ -282,9 +282,70 @@ router.get('/:userId', async (req, res) => {
 });
 
 /**
+ * POST /api/admin/memory-review/:userId/apply
+ * 执行选中的归并建议（前端勾选，默认只含 autoApplicable）。
+ * body: { canonicals: string[]; includeNeedsReview?: boolean }
+ * 每条都会留「胜出者合并前整行 + 被删行整行」快照，可经 rollback 还原。
+ */
+router.post('/:userId/apply', async (req, res) => {
+  try {
+    if (!(await ensureAdmin(req.user?.userId))) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const { userId } = req.params;
+    const canonicals = Array.isArray(req.body?.canonicals)
+      ? req.body.canonicals.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : [];
+    if (canonicals.length === 0) {
+      return res.status(400).json({ success: false, error: { message: '缺少要执行的归并项（canonicals）' } });
+    }
+    const user = await prisma.users.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) {
+      return res.status(404).json({ success: false, error: { message: '用户不存在' } });
+    }
+    const result = await conceptConsolidatorService.applyProposals(userId, canonicals, {
+      includeNeedsReview: req.body?.includeNeedsReview === true,
+    });
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error('[admin/memory-review] 执行归并失败:', error);
+    return res.status(500).json({ success: false, error: { message: '执行归并失败' } });
+  }
+});
+
+/**
+ * POST /api/admin/memory-review/:userId/rollback
+ * 回滚指定归并：胜出者还原成合并前整行，被删除行按整行快照重建。
+ * body: { canonicals: string[] }
+ */
+router.post('/:userId/rollback', async (req, res) => {
+  try {
+    if (!(await ensureAdmin(req.user?.userId))) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const { userId } = req.params;
+    const canonicals = Array.isArray(req.body?.canonicals)
+      ? req.body.canonicals.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : [];
+    if (canonicals.length === 0) {
+      return res.status(400).json({ success: false, error: { message: '缺少要回滚的归并项（canonicals）' } });
+    }
+    const user = await prisma.users.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) {
+      return res.status(404).json({ success: false, error: { message: '用户不存在' } });
+    }
+    const result = await conceptConsolidatorService.rollbackMerge(userId, canonicals);
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error('[admin/memory-review] 回滚归并失败:', error);
+    return res.status(500).json({ success: false, error: { message: '回滚归并失败' } });
+  }
+});
+
+/**
  * POST /api/admin/memory-review/:userId/recompute
  * 强制跑一次「概念归并观察」（observe：只记录建议，不动 memory_traces）。
- * 用于人工核对归并准确率；执行（apply）不在此暴露。
+ * 用于人工核对归并准确率；执行请走 apply（逐条勾选）。
  */
 router.post('/:userId/recompute', async (req, res) => {
   try {

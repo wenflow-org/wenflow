@@ -427,6 +427,17 @@ export const adminMemoryReviewApi = {
   },
   recompute: async (userId: string) => {
     return adminAxios.post(`/admin/memory-review/${userId}/recompute`);
+  },
+  /** 执行选中的归并建议（服务端会留整行前后快照，可回滚） */
+  apply: async (userId: string, canonicals: string[], options?: { includeNeedsReview?: boolean }) => {
+    return adminAxios.post(`/admin/memory-review/${userId}/apply`, {
+      canonicals,
+      ...(options?.includeNeedsReview ? { includeNeedsReview: true } : {})
+    });
+  },
+  /** 回滚指定归并（胜出者还原 + 被删行重建） */
+  rollback: async (userId: string, canonicals: string[]) => {
+    return adminAxios.post(`/admin/memory-review/${userId}/rollback`, { canonicals });
   }
 };
 

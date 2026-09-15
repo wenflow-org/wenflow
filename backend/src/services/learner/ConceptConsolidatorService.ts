@@ -67,13 +67,17 @@ export interface ConceptConsolidationAudit {
   proposals: ConceptMergeProposal[];
   ambiguous: Array<{ a: string; b: string; reason: string }>;
   dropCandidates: Array<{ conceptKey: string; reason: string }>;
-  /** 执行记录（observe 模式恒为空；P2 执行后写入，含回滚所需的删除前快照） */
+  /** 执行记录（observe 模式恒为空；执行后写入，含回滚所需的整行前后快照） */
   appliedMerges: Array<{
     canonical: string;
     aliases: string[];
     winnerId: string;
-    deletedIds: string[];
-    deletedRows: Array<{ id: string; conceptKey: string; label: string | null; extractionCount: number; masteryScore: number }>;
+    /** 并合后写进胜出者的字段（dueAt 取最早、mastery 取最高、ktMasteryEma 按观测加权…） */
+    mergedFields: Record<string, unknown>;
+    /** 胜出者合并前整行（回滚用） */
+    winnerBefore: Record<string, unknown> | null;
+    /** 被删除行的整行快照（回滚用；不是只存 id） */
+    deletedRows: Array<Record<string, unknown>>;
     appliedAt: string;
   }>;
   stats: {
@@ -94,12 +98,15 @@ export interface ConceptConsolidatorDeps {
   readAudit: (projectionKey: string) => Promise<{ payload: string } | null>;
   writeAudit: (args: Record<string, unknown>) => Promise<unknown>;
   callSkill: (input: Record<string, unknown>) => Promise<{ success: boolean; output?: any; error?: any }>;
+  /** 回滚用：按整行快照重建被删除的痕迹 */
+  createTraces: (args: Record<string, unknown>) => Promise<unknown>;
 }
 
 const defaultDeps: ConceptConsolidatorDeps = {
   findTraces: (args) => prisma.memory_traces.findMany(args as any) as any,
   updateTrace: (args) => prisma.memory_traces.update(args as any) as any,
   deleteTraces: (args) => prisma.memory_traces.deleteMany(args as any) as any,
+  createTraces: (args) => prisma.memory_traces.createMany(args as any) as any,
   findEvidence: (args) => prisma.learner_evidence.findMany(args as any) as any,
   findPaths: (args) => prisma.learning_paths.findMany(args as any) as any,
   readAudit: (projectionKey) => prisma.learner_projections.findUnique({
@@ -217,27 +224,86 @@ export function validateConsolidation(input: {
   return { proposals, ambiguous, dropCandidates };
 }
 
+type TraceRow = Record<string, any>;
+
 export interface MergeExecutionPlan {
   canonical: string;
   aliases: string[];
   winnerId: string;
-  /** 被删除的重复行（合并前快照，供回滚） */
-  deletedRows: Array<{ id: string; conceptKey: string; label: string | null; extractionCount: number; masteryScore: number }>;
-  /** 需要改键的胜出者（其原 key 与规范键不同时） */
-  winnerPatch: { conceptKey: string; label?: string } | null;
+  /** 并合后要写进胜出者的字段（保留信息，不制造倒退） */
+  mergedFields: TraceRow;
+  /** 胜出者合并前整行（回滚用） */
+  winnerBefore: TraceRow | null;
+  /** 被删除行的整行快照（回滚用） */
+  deletedRows: TraceRow[];
+}
+
+function maxOf(values: number[], fallback: number): number {
+  const finite = values.filter((value) => Number.isFinite(value));
+  return finite.length > 0 ? Math.max(...finite) : fallback;
+}
+
+function minDateOf(values: Array<unknown>): Date | null {
+  const times = values
+    .map((value) => (value ? new Date(value as any).getTime() : NaN))
+    .filter((time) => Number.isFinite(time));
+  return times.length > 0 ? new Date(Math.min(...times)) : null;
+}
+
+function maxDateOf(values: Array<unknown>): Date | null {
+  const times = values
+    .map((value) => (value ? new Date(value as any).getTime() : NaN))
+    .filter((time) => Number.isFinite(time));
+  return times.length > 0 ? new Date(Math.max(...times)) : null;
+}
+
+/**
+ * 并合字段：**不是删掉多余行就算了**——被删那条更早的排期、更高的掌握度、知识状态 EMA
+ * 都必须并进胜出者，否则「合并」等于让记忆状态倒退。
+ * - dueAt 取最早（宁可早捞，不可漏捞）
+ * - masteryScore 取最高；extractionCount 取最大（该字段语义已脏，求和会放大噪声）
+ * - ktMasteryEma 按观测数（extractionCount 作代理）加权
+ * - FSRS 状态取最稳固的那条（无法定义"并合"两个调度状态，取信息量最大的）
+ * - label 保留胜出者原文（不改用户看到的名字）；conceptKey 收敛到规范键
+ */
+export function buildMergedFields(members: TraceRow[], winner: TraceRow, canonical: string): TraceRow {
+  let ktWeighted = 0;
+  let ktWeights = 0;
+  for (const member of members) {
+    const kt = Number(member.ktMasteryEma);
+    if (!Number.isFinite(kt)) continue;
+    const weight = Number(member.extractionCount) > 0 ? Number(member.extractionCount) : 1;
+    ktWeighted += kt * weight;
+    ktWeights += weight;
+  }
+  const withFsrs = members.filter((member) => Number.isFinite(Number(member.fsrsStability)));
+  const bestFsrs = withFsrs.length > 0
+    ? withFsrs.reduce((best, current) => (Number(current.fsrsStability) > Number(best.fsrsStability) ? current : best))
+    : null;
+
+  const merged: TraceRow = {
+    conceptKey: canonical,
+    label: winner.label || canonical,
+    masteryScore: maxOf(members.map((member) => Number(member.masteryScore)), Number(winner.masteryScore) || 0),
+    extractionCount: maxOf(members.map((member) => Number(member.extractionCount)), Number(winner.extractionCount) || 0),
+    lastSeenAt: maxDateOf(members.map((member) => member.lastSeenAt)) ?? winner.lastSeenAt ?? null,
+    dueAt: minDateOf(members.map((member) => member.dueAt)) ?? winner.dueAt ?? null,
+  };
+  if (ktWeights > 0) merged.ktMasteryEma = Math.round((ktWeighted / ktWeights) * 1000) / 1000;
+  if (bestFsrs) {
+    merged.fsrsStability = bestFsrs.fsrsStability;
+    merged.fsrsDifficulty = bestFsrs.fsrsDifficulty ?? null;
+  }
+  return merged;
 }
 
 /**
  * 合并执行计划：优先保留「名字已等于规范键」的那条（避免改键撞唯一约束），
- * 否则取 extractionCount 最大 → masteryScore 最高 → lastSeenAt 最新，其余删除。
+ * 否则按 extractionCount → masteryScore → lastSeenAt 选胜出者；其余删除但留整行快照。
  */
-export function planMerge(
-  rows: Array<{ id: string; conceptKey: string; label?: string | null; extractionCount?: number; masteryScore?: number; lastSeenAt?: Date | string | null }>,
-  canonical: string,
-  aliases: string[],
-): MergeExecutionPlan | null {
+export function planMerge(rows: TraceRow[], canonical: string, aliases: string[]): MergeExecutionPlan | null {
   const family = new Set([canonical, ...aliases].map((key) => normalizeConceptKey(key)));
-  const members = rows.filter((row) => family.has(normalizeConceptKey(row.conceptKey)));
+  const members = rows.filter((row) => family.has(normalizeConceptKey(String(row.conceptKey || ''))));
   if (members.length < 2) return null;
 
   const exact = members.find((row) => row.conceptKey === canonical);
@@ -249,24 +315,13 @@ export function planMerge(
     return new Date(b.lastSeenAt || 0).getTime() - new Date(a.lastSeenAt || 0).getTime();
   })[0];
 
-  const deletedRows = members
-    .filter((row) => row.id !== winner.id)
-    .map((row) => ({
-      id: row.id,
-      conceptKey: row.conceptKey,
-      label: row.label ?? null,
-      extractionCount: Number(row.extractionCount || 0),
-      masteryScore: Number(row.masteryScore || 0),
-    }));
-
   return {
     canonical,
     aliases,
     winnerId: winner.id,
-    deletedRows,
-    winnerPatch: winner.conceptKey === canonical
-      ? null
-      : { conceptKey: canonical, ...(winner.label ? {} : { label: winner.conceptKey }) },
+    mergedFields: buildMergedFields(members, winner, canonical),
+    winnerBefore: { ...winner },
+    deletedRows: members.filter((row) => row.id !== winner.id).map((row) => ({ ...row })),
   };
 }
 
@@ -418,23 +473,7 @@ class ConceptConsolidatorService {
       },
     };
 
-    await this.deps.writeAudit({
-      where: { projectionKey: consolidationAuditKey(userId) },
-      create: {
-        id: `ccs_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-        projectionKey: consolidationAuditKey(userId),
-        userId,
-        scope: CONSOLIDATION_AUDIT_PROJECTION_SCOPE,
-        version: 1,
-        payload: JSON.stringify(audit),
-        generatedAt: now,
-      },
-      update: {
-        version: { increment: 1 },
-        payload: JSON.stringify(audit),
-        generatedAt: now,
-      },
-    });
+    await this.writeAudit(userId, audit);
 
     logger.info('[concept-consolidator] 归并审计已记录', {
       userId,
@@ -454,11 +493,136 @@ class ConceptConsolidatorService {
     return audit;
   }
 
+  /**
+   * 执行选中的归并建议（后台「一键 apply」的落点）。
+   * - 只处理审计里真实存在的建议（名单由前端勾选，服务端再校验一次）；
+   * - 默认只执行 `autoApplicable`，`includeNeedsReview` 才允许人工强行执行需确认项；
+   * - 每条的胜出者合并前整行 + 被删行整行都写进审计，`rollbackMerge` 可还原。
+   */
+  async applyProposals(
+    userId: string,
+    canonicals: string[],
+    options: { includeNeedsReview?: boolean } = {},
+  ): Promise<{ audit: ConceptConsolidationAudit | null; applied: number; skipped: string[] }> {
+    const audit = await this.getAudit(userId);
+    if (!audit) return { audit: null, applied: 0, skipped: [] };
+    const wanted = new Set(canonicals.map((item) => String(item || '').trim()).filter(Boolean));
+    const skipped: string[] = [];
+    const executable = audit.proposals.filter((proposal) => {
+      if (!wanted.has(proposal.canonical)) return false;
+      if (!proposal.autoApplicable && !options.includeNeedsReview) {
+        skipped.push(proposal.canonical);
+        return false;
+      }
+      return true;
+    });
+    for (const canonical of wanted) {
+      if (!audit.proposals.some((proposal) => proposal.canonical === canonical)) skipped.push(canonical);
+    }
+    if (executable.length === 0) return { audit, applied: 0, skipped };
+
+    const applied = await this.executeMerges(userId, executable, {
+      includeNeedsReview: options.includeNeedsReview === true,
+    });
+    const next: ConceptConsolidationAudit = {
+      ...audit,
+      mode: 'apply',
+      generatedAt: new Date().toISOString(),
+      appliedMerges: [...applied, ...audit.appliedMerges].slice(0, 100),
+      proposals: audit.proposals.filter((proposal) => !executable.some((item) => item.canonical === proposal.canonical)),
+      stats: {
+        ...audit.stats,
+        applied: audit.stats.applied + applied.length,
+        deleted: audit.stats.deleted + applied.reduce((sum, item) => sum + item.deletedRows.length, 0),
+      },
+    };
+    await this.writeAudit(userId, next);
+    logger.info('[concept-consolidator] 归并已执行', {
+      userId,
+      applied: applied.length,
+      skipped: skipped.length,
+    });
+    return { audit: next, applied: applied.length, skipped };
+  }
+
+  /**
+   * 回滚指定归并：把胜出者还原成合并前整行，并按整行快照重建被删除的重复行。
+   * 只回滚审计里仍记录的合并（留档即凭据）。
+   */
+  async rollbackMerge(
+    userId: string,
+    canonicals: string[],
+  ): Promise<{ audit: ConceptConsolidationAudit | null; rolledBack: number; skipped: string[] }> {
+    const audit = await this.getAudit(userId);
+    if (!audit) return { audit: null, rolledBack: 0, skipped: [] };
+    const wanted = new Set(canonicals.map((item) => String(item || '').trim()).filter(Boolean));
+    const targets = audit.appliedMerges.filter((merge) => wanted.has(merge.canonical));
+    const skipped = Array.from(wanted).filter((canonical) => !targets.some((merge) => merge.canonical === canonical));
+    if (targets.length === 0) return { audit, rolledBack: 0, skipped };
+
+    let rolledBack = 0;
+    for (const target of targets) {
+      try {
+        if (target.winnerBefore && target.winnerId) {
+          const { id, ...restore } = target.winnerBefore as Record<string, unknown>;
+          await this.deps.updateTrace({ where: { id: target.winnerId }, data: restore });
+        }
+        const rows = (target.deletedRows || []).filter((row) => row && (row as any).id && (row as any).conceptKey);
+        if (rows.length > 0) {
+          await this.deps.createTraces({ data: rows });
+        }
+        rolledBack += 1;
+      } catch (error) {
+        logger.warn('[concept-consolidator] 单条回滚失败（跳过）', {
+          userId,
+          canonical: target.canonical,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const next: ConceptConsolidationAudit = {
+      ...audit,
+      generatedAt: new Date().toISOString(),
+      appliedMerges: audit.appliedMerges.filter((merge) => !targets.some((item) => item.canonical === merge.canonical)),
+      stats: {
+        ...audit.stats,
+        applied: Math.max(0, audit.stats.applied - rolledBack),
+        deleted: Math.max(0, audit.stats.deleted - targets.reduce((sum, item) => sum + (item.deletedRows?.length || 0), 0)),
+      },
+    };
+    await this.writeAudit(userId, next);
+    logger.info('[concept-consolidator] 归并已回滚', { userId, rolledBack });
+    return { audit: next, rolledBack, skipped };
+  }
+
+  /** 写审计（upsert 到 learner_projections） */
+  private async writeAudit(userId: string, audit: ConceptConsolidationAudit): Promise<void> {
+    const now = new Date();
+    await this.deps.writeAudit({
+      where: { projectionKey: consolidationAuditKey(userId) },
+      create: {
+        id: `ccs_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        projectionKey: consolidationAuditKey(userId),
+        userId,
+        scope: CONSOLIDATION_AUDIT_PROJECTION_SCOPE,
+        version: 1,
+        payload: JSON.stringify(audit),
+        generatedAt: now,
+      },
+      update: {
+        version: { increment: 1 },
+        payload: JSON.stringify(audit),
+        generatedAt: now,
+      },
+    });
+  }
+
   /** 执行归并（只处理 autoApplicable，除非显式 includeNeedsReview） */
   private async executeMerges(
     userId: string,
     proposals: ConceptMergeProposal[],
-    options: { includeNeedsReview: boolean },
+    options: { includeNeedsReview?: boolean } = {},
   ): Promise<ConceptConsolidationAudit['appliedMerges']> {
     const applied: ConceptConsolidationAudit['appliedMerges'] = [];
     const executable = proposals.filter((item) => options.includeNeedsReview || item.autoApplicable);
@@ -466,16 +630,12 @@ class ConceptConsolidatorService {
 
     for (const proposal of executable) {
       try {
-        const rows = await this.deps.findTraces({
-          where: { userId },
-          select: { id: true, conceptKey: true, label: true, extractionCount: true, masteryScore: true, lastSeenAt: true },
-        });
-        const plan = planMerge(rows as any, proposal.canonical, proposal.aliases);
+        // 整行抓取：回滚快照要完整（dueAt/FSRS 状态/知识状态 EMA 都要能还原）
+        const rows = await this.deps.findTraces({ where: { userId } });
+        const plan = planMerge(rows as TraceRow[], proposal.canonical, proposal.aliases);
         if (!plan) continue;
 
-        if (plan.winnerPatch) {
-          await this.deps.updateTrace({ where: { id: plan.winnerId }, data: plan.winnerPatch });
-        }
+        await this.deps.updateTrace({ where: { id: plan.winnerId }, data: plan.mergedFields });
         if (plan.deletedRows.length > 0) {
           await this.deps.deleteTraces({ where: { id: { in: plan.deletedRows.map((row) => row.id) } } });
         }
@@ -483,7 +643,8 @@ class ConceptConsolidatorService {
           canonical: plan.canonical,
           aliases: plan.aliases,
           winnerId: plan.winnerId,
-          deletedIds: plan.deletedRows.map((row) => row.id),
+          mergedFields: plan.mergedFields,
+          winnerBefore: plan.winnerBefore,
           deletedRows: plan.deletedRows,
           appliedAt: new Date().toISOString(),
         });

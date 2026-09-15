@@ -39,11 +39,15 @@ jest.mock('../../../services/memory/review-plan.service', () => ({
 
 const getAudit = jest.fn()
 const consolidate = jest.fn()
+const applyProposals = jest.fn()
+const rollbackMerge = jest.fn()
 jest.mock('../../../services/learner/ConceptConsolidatorService', () => ({
   CONSOLIDATION_AUDIT_PROJECTION_SCOPE: 'concept-consolidation',
   conceptConsolidatorService: {
     getAudit: (...args: any[]) => getAudit(...args),
     consolidate: (...args: any[]) => consolidate(...args),
+    applyProposals: (...args: any[]) => applyProposals(...args),
+    rollbackMerge: (...args: any[]) => rollbackMerge(...args),
   },
 }))
 
@@ -183,6 +187,58 @@ describe('单用户明细', () => {
     usersFindUnique.mockImplementation(async (args: any) => (args?.select?.isAdmin ? { isAdmin: true } : null))
     const res = await run(getRouteHandler(memoryReviewRouter, '/:userId', 'get'), { ...adminReq, params: { userId: 'nope' } })
     expect(res.statusCode).toBe(404)
+  })
+})
+
+describe('执行 / 回滚归并', () => {
+  beforeEach(() => {
+    usersFindUnique.mockImplementation(async (args: any) => (args?.select?.isAdmin ? { isAdmin: true } : { id: 'u1' }))
+  })
+
+  it('apply：校验必填，按勾选执行（默认不强行执行需人工确认项）', async () => {
+    const missing = await run(getRouteHandler(memoryReviewRouter, '/:userId/apply', 'post'), { ...adminReq, params: { userId: 'u1' }, body: {} })
+    expect(missing.statusCode).toBe(400)
+
+    applyProposals.mockResolvedValue({ audit: null, applied: 1, skipped: [] })
+    const res = await run(getRouteHandler(memoryReviewRouter, '/:userId/apply', 'post'), {
+      ...adminReq,
+      params: { userId: 'u1' },
+      body: { canonicals: ['离开前翻页立好', ''] },
+    })
+    expect(applyProposals).toHaveBeenCalledWith('u1', ['离开前翻页立好'], { includeNeedsReview: false })
+    expect(res.body.data.applied).toBe(1)
+  })
+
+  it('apply：显式 includeNeedsReview 才允许执行需人工确认项', async () => {
+    applyProposals.mockResolvedValue({ audit: null, applied: 2, skipped: [] })
+    await run(getRouteHandler(memoryReviewRouter, '/:userId/apply', 'post'), {
+      ...adminReq,
+      params: { userId: 'u1' },
+      body: { canonicals: ['a', 'b'], includeNeedsReview: true },
+    })
+    expect(applyProposals).toHaveBeenCalledWith('u1', ['a', 'b'], { includeNeedsReview: true })
+  })
+
+  it('rollback：按 canonicals 回滚，缺参 400', async () => {
+    const missing = await run(getRouteHandler(memoryReviewRouter, '/:userId/rollback', 'post'), { ...adminReq, params: { userId: 'u1' }, body: { canonicals: [] } })
+    expect(missing.statusCode).toBe(400)
+
+    rollbackMerge.mockResolvedValue({ audit: null, rolledBack: 1, skipped: [] })
+    const res = await run(getRouteHandler(memoryReviewRouter, '/:userId/rollback', 'post'), {
+      ...adminReq,
+      params: { userId: 'u1' },
+      body: { canonicals: ['离开前翻页立好'] },
+    })
+    expect(rollbackMerge).toHaveBeenCalledWith('u1', ['离开前翻页立好'])
+    expect(res.body.data.rolledBack).toBe(1)
+  })
+
+  it('执行 / 回滚都要求管理员', async () => {
+    usersFindUnique.mockResolvedValue({ isAdmin: false })
+    const apply = await run(getRouteHandler(memoryReviewRouter, '/:userId/apply', 'post'), { ...adminReq, params: { userId: 'u1' }, body: { canonicals: ['a'] } })
+    const rollback = await run(getRouteHandler(memoryReviewRouter, '/:userId/rollback', 'post'), { ...adminReq, params: { userId: 'u1' }, body: { canonicals: ['a'] } })
+    expect(apply.statusCode).toBe(403)
+    expect(rollback.statusCode).toBe(403)
   })
 })
 

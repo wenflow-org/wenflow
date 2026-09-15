@@ -1,5 +1,6 @@
 import {
   ConceptConsolidatorService,
+  buildMergedFields,
   candidateFingerprint,
   lexicalSimilarity,
   planMerge,
@@ -75,7 +76,7 @@ describe('validateConsolidation（护栏：模型建议必须落在候选内）'
     expect(result.ambiguous[0]).toMatchObject({ a: '离开前翻页立好' });
   });
 
-  it('把握度足 + 词面近 → autoApplicable（允许 P2 执行）', () => {
+  it('把握度足 + 词面近 → autoApplicable（允许执行）', () => {
     const result = validateConsolidation({
       candidates,
       parsed: { merges: [{ canonical: '离开前翻页立好', aliases: ['离开前翻页立好：动作先于评价'], confidence: 0.9, rationale: '同一动作' }] },
@@ -115,23 +116,89 @@ describe('validateConsolidation（护栏：模型建议必须落在候选内）'
   });
 });
 
-describe('planMerge（合并执行计划）', () => {
+describe('buildMergedFields（并字段，不是删了就算了）', () => {
+  const members = [
+    {
+      id: 'r1',
+      conceptKey: '离开前翻页立好',
+      label: '离开前翻页立好',
+      source: 'derived',
+      masteryScore: 0.5,
+      extractionCount: 2,
+      lastSeenAt: new Date('2026-09-01'),
+      dueAt: new Date('2026-09-16'),
+      ktMasteryEma: 0.4,
+      fsrsStability: null,
+      fsrsDifficulty: null,
+    },
+    {
+      id: 'r2',
+      conceptKey: '离开前翻页立好：动作先于评价',
+      label: null,
+      source: 'derived',
+      masteryScore: 0.9,
+      extractionCount: 8,
+      lastSeenAt: new Date('2026-09-12'),
+      dueAt: new Date('2026-09-20'),
+      ktMasteryEma: 0.8,
+      fsrsStability: 12.5,
+      fsrsDifficulty: 4.2,
+    },
+  ];
+  const winner = members[0];
+
+  it('dueAt 取最早、mastery 取最高、extractionCount 取最大、lastSeenAt 取最新', () => {
+    const merged = buildMergedFields(members, winner, '离开前翻页立好');
+    expect(merged.dueAt).toEqual(new Date('2026-09-16'));
+    expect(merged.masteryScore).toBe(0.9);
+    expect(merged.extractionCount).toBe(8);
+    expect(merged.lastSeenAt).toEqual(new Date('2026-09-12'));
+    expect(merged.conceptKey).toBe('离开前翻页立好');
+    expect(merged.label).toBe('离开前翻页立好');
+  });
+
+  it('ktMasteryEma 按观测数加权；FSRS 取最稳固的那条', () => {
+    const merged = buildMergedFields(members, winner, '离开前翻页立好');
+    // (0.4*2 + 0.8*8) / 10 = 0.72
+    expect(merged.ktMasteryEma).toBe(0.72);
+    expect(merged.fsrsStability).toBe(12.5);
+    expect(merged.fsrsDifficulty).toBe(4.2);
+  });
+
+  it('无 kt/FSRS 时不编造字段', () => {
+    const merged = buildMergedFields(
+      [{ id: 'a', conceptKey: 'A', label: null, extractionCount: 1, masteryScore: 0.3, lastSeenAt: null, dueAt: null }],
+      { id: 'a', conceptKey: 'A', label: null, masteryScore: 0.3, extractionCount: 1, lastSeenAt: null, dueAt: null },
+      'A',
+    );
+    expect(merged.ktMasteryEma).toBeUndefined();
+    expect(merged.fsrsStability).toBeUndefined();
+    expect(merged.label).toBe('A');
+  });
+});
+
+describe('planMerge（合并执行计划：整行快照）', () => {
   const rows = [
-    { id: 'r1', conceptKey: '离开前翻页立好', label: '离开前翻页立好', extractionCount: 2, masteryScore: 0.5, lastSeenAt: new Date('2026-09-01') },
-    { id: 'r2', conceptKey: '离开前翻页立好：动作先于评价', label: null, extractionCount: 9, masteryScore: 0.9, lastSeenAt: new Date('2026-09-10') },
+    { id: 'r1', conceptKey: '离开前翻页立好', label: '离开前翻页立好', extractionCount: 2, masteryScore: 0.5, lastSeenAt: new Date('2026-09-01'), dueAt: new Date('2026-09-16') },
+    { id: 'r2', conceptKey: '离开前翻页立好：动作先于评价', label: null, extractionCount: 9, masteryScore: 0.9, lastSeenAt: new Date('2026-09-10'), dueAt: new Date('2026-09-20') },
   ];
 
   it('优先保留名字已等于规范键的那条（避免改键撞唯一约束）', () => {
     const plan = planMerge(rows, '离开前翻页立好', ['离开前翻页立好：动作先于评价']);
     expect(plan?.winnerId).toBe('r1');
-    expect(plan?.winnerPatch).toBeNull();
+    expect(plan?.winnerBefore).toEqual(rows[0]);
     expect(plan?.deletedRows.map((row) => row.id)).toEqual(['r2']);
+    // 并字段：被删那条更早的排期不能丢
+    expect(plan?.mergedFields.dueAt).toEqual(new Date('2026-09-16'));
+    expect(plan?.mergedFields.masteryScore).toBe(0.9);
   });
 
-  it('没有同名条目时按 extractionCount → mastery → lastSeenAt 选胜出者，并补 label', () => {
+  it('没有同名条目时按 extractionCount → mastery → lastSeenAt 选胜出者', () => {
     const plan = planMerge(rows, '离开前：把书翻到下一页立好', ['离开前翻页立好', '离开前翻页立好：动作先于评价']);
     expect(plan?.winnerId).toBe('r2');
-    expect(plan?.winnerPatch).toEqual({ conceptKey: '离开前：把书翻到下一页立好', label: '离开前翻页立好：动作先于评价' });
+    expect(plan?.mergedFields.conceptKey).toBe('离开前：把书翻到下一页立好');
+    // 胜出者 label 为空 → 用规范键兜底（展示名不空）
+    expect(plan?.mergedFields.label).toBe('离开前：把书翻到下一页立好');
     expect(plan?.deletedRows).toHaveLength(1);
   });
 
@@ -145,27 +212,32 @@ describe('planMerge（合并执行计划）', () => {
   });
 });
 
-describe('ConceptConsolidatorService（默认观察模式：一个字节都不动数据）', () => {
-  const candidates = [
-    candidate('离开前翻页立好', { occurrences: 7 }),
-    candidate('离开前翻页立好：动作先于评价', { occurrences: 2, pathTitles: ['收尾习惯'] }),
+describe('ConceptConsolidatorService', () => {
+  const projectionRows = [
+    {
+      id: 'r1', conceptKey: '离开前翻页立好', label: '离开前翻页立好', source: 'derived',
+      extractionCount: 7, masteryScore: 0.6, lastSeenAt: new Date('2026-09-10'), dueAt: new Date('2026-09-16'),
+      ktMasteryEma: 0.5, fsrsStability: 3, fsrsDifficulty: 5,
+    },
+    {
+      id: 'r2', conceptKey: '离开前翻页立好：动作先于评价', label: null, source: 'derived',
+      extractionCount: 2, masteryScore: 0.5, lastSeenAt: new Date('2026-09-12'), dueAt: new Date('2026-09-14'),
+      ktMasteryEma: 0.7, fsrsStability: null, fsrsDifficulty: null,
+    },
   ];
 
   function build(over: Partial<ConceptConsolidatorDeps> = {}) {
-    const writes = { updateTrace: jest.fn(), deleteTraces: jest.fn(), writeAudit: jest.fn().mockResolvedValue({}) };
+    const writes = {
+      updateTrace: jest.fn().mockResolvedValue({}),
+      deleteTraces: jest.fn().mockResolvedValue({}),
+      createTraces: jest.fn().mockResolvedValue({}),
+      writeAudit: jest.fn().mockResolvedValue({}),
+    };
     const deps: ConceptConsolidatorDeps = {
-      findTraces: jest.fn().mockImplementation(async (args: any) => {
-        if (args?.select?.id) return [
-          { id: 'r1', conceptKey: '离开前翻页立好', label: '离开前翻页立好', extractionCount: 7, masteryScore: 0.6, lastSeenAt: new Date('2026-09-10') },
-          { id: 'r2', conceptKey: '离开前翻页立好：动作先于评价', label: null, extractionCount: 2, masteryScore: 0.5, lastSeenAt: new Date('2026-09-12') },
-        ];
-        return [
-          { conceptKey: '离开前翻页立好', label: '离开前翻页立好', source: 'derived', extractionCount: 7, lastSeenAt: new Date('2026-09-10') },
-          { conceptKey: '离开前翻页立好：动作先于评价', label: null, source: 'derived', extractionCount: 2, lastSeenAt: new Date('2026-09-12') },
-        ];
-      }),
+      findTraces: jest.fn().mockResolvedValue(projectionRows),
       updateTrace: writes.updateTrace,
       deleteTraces: writes.deleteTraces,
+      createTraces: writes.createTraces,
       findEvidence: jest.fn().mockResolvedValue([]),
       findPaths: jest.fn().mockResolvedValue([]),
       readAudit: jest.fn().mockResolvedValue(null),
@@ -181,6 +253,14 @@ describe('ConceptConsolidatorService（默认观察模式：一个字节都不�
       ...over,
     };
     return { service: new ConceptConsolidatorService(deps), deps, writes };
+  }
+
+  /** 已有一条审计（含一条可执行建议）的服务：用于 apply / rollback */
+  async function buildWithAudit(over: Partial<ConceptConsolidatorDeps> = {}) {
+    const built = build(over);
+    const audit = await built.service.consolidate('u1', { now: new Date('2026-09-15T00:00:00Z') });
+    (built.deps.readAudit as jest.Mock).mockResolvedValue({ payload: JSON.stringify(audit) });
+    return { ...built, audit: audit! };
   }
 
   it('默认 observe：记录审计但不改 memory_traces', async () => {
@@ -210,16 +290,40 @@ describe('ConceptConsolidatorService（默认观察模式：一个字节都不�
     expect(deps.callSkill).toHaveBeenCalledTimes(2);
   });
 
-  it('apply 模式：只执行 autoApplicable，并留下可回滚的删除前快照', async () => {
+  it('apply 模式：并字段 + 留整行快照（可回滚）', async () => {
     const { service, writes } = build();
     const audit = await service.consolidate('u1', { mode: 'apply', now: new Date('2026-09-15T00:00:00Z') });
     expect(audit?.stats).toMatchObject({ applied: 1, deleted: 1 });
     expect(writes.deleteTraces).toHaveBeenCalledWith({ where: { id: { in: ['r2'] } } });
-    expect(audit?.appliedMerges[0].deletedRows[0]).toMatchObject({ id: 'r2', conceptKey: '离开前翻页立好：动作先于评价' });
+    // 并字段：被删那条更早的 dueAt 与更高的 ktMasteryEma 都要并进胜出者
+    const patch = writes.updateTrace.mock.calls[0][0].data;
+    expect(patch.dueAt).toEqual(new Date('2026-09-14'));
+    expect(patch.extractionCount).toBe(7);
+    expect(patch.masteryScore).toBe(0.6);
+    expect(patch.ktMasteryEma).toBeCloseTo((0.5 * 7 + 0.7 * 2) / 9, 3);
+    // 整行快照（不只是 id）
+    const applied = audit?.appliedMerges[0];
+    expect(applied?.winnerBefore).toMatchObject({ id: 'r1', conceptKey: '离开前翻页立好' });
+    expect(applied?.deletedRows[0]).toMatchObject({ id: 'r2', dueAt: new Date('2026-09-14'), ktMasteryEma: 0.7 });
   });
 
-  it('apply 模式：需要人工看的（词面远）不自动执行', async () => {
-    const { service, writes } = build({
+  it('applyProposals：只执行勾选的，未勾选/不存在的不动', async () => {
+    const { service, writes } = await buildWithAudit();
+    const result = await service.applyProposals('u1', ['离开前翻页立好', '不存在的键']);
+    expect(result.applied).toBe(1);
+    expect(result.skipped).toContain('不存在的键');
+    expect(writes.deleteTraces).toHaveBeenCalledTimes(1);
+    // 执行后建议从待办里移除
+    expect(result.audit?.proposals).toHaveLength(0);
+    expect(result.audit?.appliedMerges).toHaveLength(1);
+  });
+
+  it('applyProposals：需人工确认的（autoApplicable=false）默认拒绝执行', async () => {
+    const { service, writes } = await buildWithAudit({
+      findTraces: jest.fn().mockResolvedValue([
+        { id: 's1', conceptKey: '回来后的第一眼第一手交给已翻开的书', label: 'a', source: 'derived', extractionCount: 5, masteryScore: 0.5, lastSeenAt: new Date(), dueAt: null },
+        { id: 's2', conceptKey: '回来后第一手落到哪里', label: 'b', source: 'derived', extractionCount: 5, masteryScore: 0.5, lastSeenAt: new Date(), dueAt: null },
+      ]),
       callSkill: jest.fn().mockResolvedValue({
         success: true,
         output: {
@@ -227,30 +331,61 @@ describe('ConceptConsolidatorService（默认观察模式：一个字节都不�
             canonical: '回来后的第一眼第一手交给已翻开的书',
             aliases: ['回来后第一手落到哪里'],
             confidence: 0.9,
-            rationale: '同一动作的不同说法',
+            rationale: '同一动作',
           }],
           ambiguous: [],
           dropCandidates: [],
         },
       }),
-      findTraces: jest.fn().mockImplementation(async (args: any) => {
-        if (args?.select?.id) return [];
-        return [
-          { conceptKey: '回来后的第一眼第一手交给已翻开的书', label: 'a', source: 'derived', extractionCount: 5, lastSeenAt: new Date() },
-          { conceptKey: '回来后第一手落到哪里', label: 'b', source: 'derived', extractionCount: 5, lastSeenAt: new Date() },
-        ];
-      }),
     });
-    const audit = await service.consolidate('u1', { mode: 'apply', now: new Date('2026-09-15T00:00:00Z') });
-    expect(audit?.stats.applied).toBe(0);
+    const denied = await service.applyProposals('u1', ['回来后的第一眼第一手交给已翻开的书']);
+    expect(denied.applied).toBe(0);
+    expect(denied.skipped).toContain('回来后的第一眼第一手交给已翻开的书');
     expect(writes.deleteTraces).not.toHaveBeenCalled();
-    expect(audit?.proposals[0].autoApplicable).toBe(false);
+
+    const forced = await service.applyProposals('u1', ['回来后的第一眼第一手交给已翻开的书'], { includeNeedsReview: true });
+    expect(forced.applied).toBe(1);
+  });
+
+  it('rollbackMerge：胜出者还原 + 被删行按整行快照重建', async () => {
+    const { service, writes } = await buildWithAudit();
+    const applied = await service.applyProposals('u1', ['离开前翻页立好']);
+    expect(applied.applied).toBe(1);
+    (writes.updateTrace as jest.Mock).mockClear();
+    (writes.createTraces as jest.Mock).mockClear();
+
+    // 审计已更新 → 让 readAudit 返回最新
+    const latest = applied.audit!;
+    (service as any).deps.readAudit = jest.fn().mockResolvedValue({ payload: JSON.stringify(latest) });
+
+    const rolled = await service.rollbackMerge('u1', ['离开前翻页立好']);
+    expect(rolled.rolledBack).toBe(1);
+    // 胜出者还原成合并前整行（id 不作为 update 的 data 字段）
+    const restore = writes.updateTrace.mock.calls[0][0];
+    expect(restore.where).toEqual({ id: 'r1' });
+    expect(restore.data.conceptKey).toBe('离开前翻页立好');
+    expect(restore.data.id).toBeUndefined();
+    // 被删行整行重建（含 dueAt / ktMasteryEma）
+    const recreated = writes.createTraces.mock.calls[0][0].data;
+    expect(recreated).toHaveLength(1);
+    // 快照经 JSON 往返后日期是 ISO 字符串（Prisma 接受），不失真
+    expect(recreated[0]).toMatchObject({ id: 'r2', conceptKey: '离开前翻页立好：动作先于评价', dueAt: '2026-09-14T00:00:00.000Z' });
+    expect(rolled.audit?.appliedMerges).toHaveLength(0);
+  });
+
+  it('rollbackMerge：不存在的归并项报告 skipped，不写数据', async () => {
+    const { service, writes } = await buildWithAudit();
+    const rolled = await service.rollbackMerge('u1', ['没执行过的键']);
+    expect(rolled.rolledBack).toBe(0);
+    expect(rolled.skipped).toEqual(['没执行过的键']);
+    expect(writes.updateTrace).not.toHaveBeenCalled();
+    expect(writes.createTraces).not.toHaveBeenCalled();
   });
 
   it('候选不足两条 → 不调用 LLM', async () => {
     const { service, deps } = build({
       findTraces: jest.fn().mockResolvedValue([
-        { conceptKey: '只有一个', label: '只有一个', source: 'derived', extractionCount: 1, lastSeenAt: new Date() },
+        { id: 'only', conceptKey: '只有一个', label: '只有一个', source: 'derived', extractionCount: 1, masteryScore: 0.5, lastSeenAt: new Date() },
       ]),
     });
     expect(await service.consolidate('u1', { now: new Date() })).toBeNull();
@@ -271,11 +406,14 @@ describe('ConceptConsolidatorService（默认观察模式：一个字节都不�
 
   it('候选上限受 MAX_CANDIDATES 约束（控 LLM 成本）', async () => {
     const many = Array.from({ length: MAX_CANDIDATES + 20 }, (_, i) => ({
+      id: `t${i}`,
       conceptKey: `概念 ${i}`,
       label: `概念 ${i}`,
       source: 'derived',
       extractionCount: 1,
+      masteryScore: 0.5,
       lastSeenAt: new Date(),
+      dueAt: null,
     }));
     const { service, deps } = build({ findTraces: jest.fn().mockResolvedValue(many) });
     await service.consolidate('u1', { now: new Date() });
