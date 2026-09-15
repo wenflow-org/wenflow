@@ -101,7 +101,7 @@ describe('sandbox-resolver', () => {
       expect(result.missingCount).toBe(0);
     });
 
-    it('teaching 池：teaching-turn.yaml 声明的 9 键全部可解析', () => {
+    it('teaching 池：teaching-turn.yaml 声明的键全部可解析（对话单键 messages）', () => {
       const pools = buildTeachingSandboxPool({
         sessionMessages: [{ role: 'user', content: 'q' }],
         sessionId: 's1',
@@ -121,7 +121,6 @@ describe('sandbox-resolver', () => {
         'knowledge.state',
         'classroomContext',
         'classroomEventContext',
-        'visibleDialogueContext',
         'controls.teachingControlContext',
         'scenario',
         'scenario.interactionProfile',

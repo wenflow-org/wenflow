@@ -83,13 +83,12 @@ describe('teaching-turn payload snapshot parity', () => {
       'knowledge',
       'latestLearnerMessage',
       'learner',
+      'messages',
       'promptDirectives',
-      'recentDialogueContext',
       'scenario',
-      'visibleDialogueContext',
     ])
-    // prompt 文档不再声明 messages —— runtime 键是 recentDialogueContext
-    expect(payload).not.toHaveProperty('messages')
+    // 对话上下文单键化：runtime 键就是 core 输入名 messages
+    expect(payload.messages).toHaveLength(3)
     expect(payload.interactionProfile).toBeNull()
     expect(payload).toMatchSnapshot({
       latestLearnerMessage: expect.any(String),
@@ -104,21 +103,7 @@ describe('teaching-turn payload snapshot parity', () => {
     const payload = spec.buildUserPayload(input, {})
 
     expect(payload.latestLearnerMessage).toBe('那变量为什么不会被回收？')
-    expect(payload.recentDialogueContext).toHaveLength(3)
-    expect(payload.visibleDialogueContext).toHaveLength(3)
-  })
-
-  it('visibleDialogueContext overrides messages when provided explicitly', async () => {
-    await teachingTurnAgentHandler({
-      ...MINIMAL_INPUT,
-      visibleDialogueContext: [{ role: 'user', content: '只看这一句' }],
-    } as any)
-
-    const [spec, input] = mockCallPrompt.mock.calls[0]
-    const payload = spec.buildUserPayload(input, {})
-
-    expect(payload.visibleDialogueContext).toEqual([{ role: 'user', content: '只看这一句' }])
-    expect(payload.recentDialogueContext).toHaveLength(3)
+    expect(payload.messages).toHaveLength(3)
   })
 
   it('fields declaration reconciles with real payload and output keys (File-as-Truth)', async () => {
@@ -134,10 +119,9 @@ describe('teaching-turn payload snapshot parity', () => {
       'controls',
       'interactionProfile',
       'latestLearnerMessage',
+      'messages',
       'promptDirectives',
-      'recentDialogueContext',
       'scenario',
-      'visibleDialogueContext',
     ])
     for (const key of declaredInputs) expect(payload).toHaveProperty(key)
     for (const key of Object.keys(payload)) expect(['input', 'state']).toContain(fields[key]?.direction)

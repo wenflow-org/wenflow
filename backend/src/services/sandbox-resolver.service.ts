@@ -241,7 +241,6 @@ export function buildTeachingSandboxPool(options: {
       knowledge: { state: options.knowledgeState },
       classroomContext: options.classroomContext || {},
       classroomEventContext: options.classroomEventContext || {},
-      visibleDialogueContext: options.sessionMessages,
       controls: { teachingControlContext: options.teachingControlContext },
       interactionProfile: options.interactionProfile,
       scenario: {

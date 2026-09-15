@@ -1083,14 +1083,8 @@ async function buildTeachingTurnInput(
     // 对账失败不影响主流程
   }
 
-  // 配置式输入通道（P2 声明 + 本链运行时消费）：routings 表 teaching-agent 通道行抽值优先，
-  // 缺失回退既有组装；visibleDialogueContext 保持 {role, content} 映射语义
+  // 配置式输入通道（P2 声明 + 本链运行时消费）：routings 表 teaching-agent 通道行抽值优先，缺失回退既有组装
   const { channels } = await assembleTeachingTurnChannels({ session, teachingState, context }).catch(() => ({ channels: {}, skipped: [] }));
-  const configuredVisible = Array.isArray(channels['visibleDialogueContext'])
-    ? channels['visibleDialogueContext']
-        .filter((item: any) => item && (typeof item.role === 'string' || typeof item.role === 'number'))
-        .map((item: any) => ({ role: item.role, content: typeof item.content === 'string' ? item.content : '' }))
-    : null;
 
   return {
     messages: compression.messages,
@@ -1098,19 +1092,6 @@ async function buildTeachingTurnInput(
     scenario,
     classroomContext: channels['classroomContext'] || classroomContext,
     classroomEventContext,
-    // visibleDialogueContext 压缩修复（KV 前缀优化）：压缩后只带最近 N 条（recap 由
-    // scenario.contextCompression 承担），避免全量历史绕过压缩导致 user payload 无界增长
-    visibleDialogueContext: configuredVisible || (() => {
-      if (compression.compressed) {
-        return compression.messages
-          .filter((item) => item.role !== 'system')
-          .map((item) => ({ role: item.role as 'user' | 'assistant', content: item.content }));
-      }
-      return session.messages.map((item) => ({
-        role: item.role,
-        content: item.content,
-      }));
-    })(),
     knowledge: {
       points: (channels['knowledge.state'] && Array.isArray(channels['knowledge.state'])
         ? channels['knowledge.state']

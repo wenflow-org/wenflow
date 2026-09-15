@@ -34,8 +34,7 @@ promptContract:
     classroomEventContext: { direction: state, visibility: handoff, owner: orchestrator }
     knowledge: { direction: state, visibility: handoff, owner: orchestrator }
     controls: { direction: input, visibility: internal }
-    visibleDialogueContext: { direction: input, visibility: internal }
-    recentDialogueContext: { direction: input, visibility: internal }
+    messages: { direction: input, visibility: internal }
     promptDirectives: { direction: input, visibility: internal }
     reply: { direction: output, visibility: user-visible }
     analysis: { direction: output, visibility: internal }

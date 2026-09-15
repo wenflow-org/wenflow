@@ -22,8 +22,7 @@ exports[`teaching-turn payload snapshot parity payload contains exactly the keys
     "learningControlState": {},
     "stableProfile": {},
   },
-  "promptDirectives": Any<Object>,
-  "recentDialogueContext": [
+  "messages": [
     {
       "content": "闭包到底是什么？",
       "role": "user",
@@ -37,6 +36,7 @@ exports[`teaching-turn payload snapshot parity payload contains exactly the keys
       "role": "user",
     },
   ],
+  "promptDirectives": Any<Object>,
   "scenario": {
     "subject": "JavaScript",
     "taskDescription": "解释闭包与变量生命周期",
@@ -49,19 +49,5 @@ exports[`teaching-turn payload snapshot parity payload contains exactly the keys
     "taskType": "concept-explanation",
     "topic": "闭包",
   },
-  "visibleDialogueContext": [
-    {
-      "content": "闭包到底是什么？",
-      "role": "user",
-    },
-    {
-      "content": "先看词法作用域。",
-      "role": "assistant",
-    },
-    {
-      "content": "那变量为什么不会被回收？",
-      "role": "user",
-    },
-  ],
 }
 `;

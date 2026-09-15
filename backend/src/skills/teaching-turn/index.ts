@@ -189,7 +189,6 @@ export interface TeachingTurnInput {
   };
   classroomContext?: Record<string, any>;
   classroomEventContext?: Record<string, any>;
-  visibleDialogueContext?: Array<{ role: MessageRole; content: string }>;
   /** 双引擎试点（内部透传）：第一段 analysis-only 的产出，注入第二段作为约束 */
   _analysisStage?: Record<string, any> | null;
 }
@@ -656,8 +655,9 @@ function buildPromptInput(input: TeachingTurnInput) {
   // 试飞改造（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：
   // 真实遥测显示 scenario 每回合必变（因子键 interactionProfile/contextCompression 逐回合变化），
   // 前缀在 promptDirectives 之后的 knowledge 处即断（~7.3k/15.8k）。
-  // 稳定前缀版：scenario(洁) → promptDirectives → learner 前置，其余逐回合变化的键全部后置，
-  // 并去掉 recentDialogueContext（与 visibleDialogueContext/messages 同源重复）。
+  // 稳定前缀版：scenario(洁) → promptDirectives → learner 前置，其余逐回合变化的键全部后置。
+  // 对话上下文单键化：原 visibleDialogueContext / recentDialogueContext 同源重复，收敛为 messages
+  // （与 core 输入名一致；沙盘 ref sandbox:teaching.session.messages）。
   if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
     return {
       scenario: stableScenario,
@@ -670,8 +670,7 @@ function buildPromptInput(input: TeachingTurnInput) {
       classroomEventContext: input.classroomEventContext,
       interactionProfile: scenarioInteractionProfile ?? null,
       ...(scenarioCompression ? { contextCompression: scenarioCompression } : {}),
-      visibleDialogueContext: input.visibleDialogueContext || input.messages,
-      recentDialogueContext: input.messages,
+      messages: input.messages,
       latestLearnerMessage,
       ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
     };
@@ -690,8 +689,7 @@ function buildPromptInput(input: TeachingTurnInput) {
     classroomContext: input.classroomContext,
     classroomEventContext: input.classroomEventContext,
     interactionProfile: scenarioInteractionProfile ?? null,
-    visibleDialogueContext: input.visibleDialogueContext || input.messages,
-    recentDialogueContext: input.messages,
+    messages: input.messages,
     latestLearnerMessage,
     // 双引擎试点：第一段（推理模型）产出的 analysis 作为第二段的既定认知判定
     ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
