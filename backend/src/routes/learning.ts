@@ -4,7 +4,6 @@ import { z } from 'zod';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import prisma from '../config/database';
 import learningService from '../services/learning/learning.service';
-import aiService from '../services/ai/ai.service';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { learningPathsPollingLimiter } from '../middleware/api-rate-limit.middleware';
 import { logger } from '../utils/logger';

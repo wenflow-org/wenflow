@@ -23,6 +23,10 @@
  * 历史（2026-08-10）：曾因"cleanup 删行会导致配置永久丢失"而保留注册、移出名单，由 retired:check
  * 活跃守卫保护；本次为**整体注销**，故先摘注册再入名单，守卫条件（名单 ∩ 注册集 = ∅）依然满足。
  *
+ * 2026-09-15 追加：generic-chat（"无专用 skill 时的通用文本兜底"）同批退役——其唯一入口
+ * `aiService.chat()` 与全部内部调用方均不可达，正式业务均已使用专用 skill；一并清理其底座
+ * `services/ai/ai.service.ts`（含测试）与死链 `learning.service.generateTasksForExistingPath`。
+ *
  * 维护规则：
  * 1. 新退役条目：曾注册过的补入 PURGED_SKILLS；从未注册（仅 code-only / manifest 残留）
  *    的补入 RESIDUE_ONLY_SKILLS。同步更新 doc/SKILL_PROTOCOL_V4.md 附录 A 与
@@ -94,6 +98,9 @@ export const PURGED_SKILLS: readonly string[] = [
   'course-design',
   'basic-evaluator',
   'goal-alignment-checker',
+  // 2026-09-15 正式退役：generic-chat（"通用文本兜底"）——唯一入口 aiService.chat() 及其调用链全部不可达，
+  // 正式业务均有专用 skill；四同步注销并清理其底座 ai.service 与死链 generateTasksForExistingPath
+  'generic-chat',
 ] as const;
 
 /**

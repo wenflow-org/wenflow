@@ -955,7 +955,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     if (r !== 0) return r
     return (b.ts ?? 0) - (a.ts ?? 0)
   })
-  // 动态去重：同文案事件（如同一失败调用重复上报的 generic-chat/caller_abort）只保留最新一条，
+  // 动态去重：同文案事件（如同一失败调用重复上报的 caller_abort）只保留最新一条，
   // 避免"3 张相同卡"占满动态流（排序已在上面完成，此处按首现即最新）
   const feedDeduped = new Map<string, LiveOverviewFull['feed'][number]>()
   for (const f of feed) {

@@ -1,7 +1,6 @@
 // 学习服务
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
-import aiService from '../ai/ai.service';
 import stateTrackingService from './learning-state.service';
 import achievementService from '../achievements/achievement.service';
 import type { AgentInput } from '../../agents/protocol';
@@ -2785,108 +2784,6 @@ class LearningService {
     return fullPath;
   }
 
-  /**
-   * 为现有学习路径补充实战任务
-   */
-  async generateTasksForExistingPath(data: {
-    learningPathId: string;
-    userId: string;
-    description: string;
-    userProfile?: any;
-  }) {
-    try {
-const learningPath = await prisma.learning_paths.findUnique({
-        where: { id: data.learningPathId },
-        include: {
-          milestones: {
-            orderBy: { stageNumber: 'asc' },
-            include: {
-              subtasks: {
-                orderBy: { order: 'asc' }
-              }
-            }
-          }
-        }
-      });
-
-      if (!learningPath) {
-        throw new Error('学习路径不存在');
-      }
-
-      for (const milestone of learningPath.milestones) {
-        const stageNum = milestone.stageNumber;
-        logger.info(`正在为里程碑 ${stageNum} 生成实战任务...`);
-        
-        const contextualTopic = `总体目标：${data.description} - 当前阶段：${milestone.title || `里程碑${stageNum}`}`;
-        
-        try {
-          const taskResult = await aiService.generateTasksForTopic(
-            contextualTopic,
-            stageNum,
-            data.userProfile
-          );
-
-          if (taskResult.success && taskResult.internal?.tasks && taskResult.internal.tasks.length > 0) {
-            for (const task of taskResult.internal.tasks) {
-              await prisma.subtasks.create({
-                data: {
-                  id: `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                  milestoneId: milestone.id,
-                  userId: data.userId,
-                  title: task.title,
-                  description: task.description,
-                  taskType: normalizePathTaskType(task.type),
-                  estimatedMinutes: task.estimatedMinutes || 30,
-                  acceptanceCriteria: task.acceptanceCriteria || '',
-                  status: 'todo',
-                  updatedAt: new Date()
-                }
-              });
-            }
-            logger.info(`里程碑 ${stageNum} 实战任务生成完成：${taskResult.internal.tasks.length}个任务`);
-          } else {
-            logger.warn(`里程碑 ${stageNum} AI 生成任务失败，使用默认任务`);
-            await prisma.subtasks.create({
-              data: {
-                id: `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                milestoneId: milestone.id,
-                userId: data.userId,
-                title: milestone.title || `里程碑${stageNum}学习任务`,
-                description: milestone.description || milestone.goal || '完成本里程碑学习内容',
-                taskType: 'execute',
-                estimatedMinutes: 30,
-                status: 'todo',
-                updatedAt: new Date()
-              }
-            });
-          }
-        } catch (taskError) {
-          logger.error(`里程碑 ${stageNum} 任务生成失败:`, taskError);
-          await prisma.subtasks.create({
-            data: {
-              id: `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-              milestoneId: milestone.id,
-              userId: data.userId,
-              title: milestone.title || `里程碑${stageNum}学习任务`,
-              description: milestone.description || milestone.goal || '完成本里程碑学习内容',
-              taskType: 'execute',
-              estimatedMinutes: 30,
-              status: 'todo',
-              updatedAt: new Date()
-            }
-          });
-        }
-      }
-
-      logger.info(`学习路径生成完成：${learningPath.id}`);
-      return learningPath;
-    } catch (error) {
-      logger.error('生成学习路径失败:', error);
-      throw error;
-    }
-  }
-
-// 获取学习路径详情
   async getLearningPath(pathId: string) {
     try {
       const path = await prisma.learning_paths.findUnique({

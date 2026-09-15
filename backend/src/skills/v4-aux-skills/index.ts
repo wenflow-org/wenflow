@@ -22,7 +22,6 @@ import { logger } from '../../utils/logger';
 export type AuxSkillId =
   | 'teaching-opening-generator'
   | 'learner-progress-report'
-  | 'generic-chat'
   | 'skill-author'
   | 'skill-compiler'
   | 'learner-state-review';
@@ -31,7 +30,6 @@ export type AuxSkillId =
 const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
   'teaching-opening-generator': loadPromptFile('skill:teaching-opening-generator')?.systemPrompt || '',
   'learner-progress-report': loadPromptFile('skill:learner-progress-report')?.systemPrompt || '',
-  'generic-chat': loadPromptFile('skill:generic-chat')?.systemPrompt || '',
   'skill-author': loadPromptFile('skill:skill-author')?.systemPrompt || '',
   'skill-compiler': loadPromptFile('skill:skill-compiler')?.systemPrompt || '',
   'learner-state-review': loadPromptFile('skill:learner-state-review')?.systemPrompt || '',
@@ -205,7 +203,6 @@ async function resolveDefaultFailureMode(skillId: AuxSkillId): Promise<'throw' |
 const META: Record<AuxSkillId, AuxSkillMeta> = {
   'teaching-opening-generator': { skillId: 'teaching-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
   'learner-progress-report': { skillId: 'learner-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis' },
-  'generic-chat': { skillId: 'generic-chat', displayName: '平台通用文本能力', description: '无更专用 Skill 时的通用文本调用能力', category: 'generation' },
   'skill-author': { skillId: 'skill-author', displayName: 'Prompt 起草助手', description: '为新 Skill 起草 system prompt', category: 'generation' },
   'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis' },
   'learner-state-review': { skillId: 'learner-state-review', displayName: '学习状态评审诊断器', description: '基于状态摘要与证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）', category: 'analysis' },
@@ -283,21 +280,6 @@ async function learnerProgressReportHandler(input: any) {
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
       : { valid: false, failureReason: 'LEARNER_PROGRESS_REPORT_OUTPUT_NOT_OBJECT' },
-  });
-}
-
-async function genericChatHandler(input: any) {
-  return runAux<string>({
-    meta: META['generic-chat'],
-    input,
-        prepareSystemPrompt: (systemPrompt, d) => d.systemPrompt
-      ? `${systemPrompt}\n\n【调用方系统指令】\n${d.systemPrompt}`
-      : systemPrompt,
-    buildUserPayload: (d) => d.message ?? '',
-    normalize: (parsed) => (typeof parsed === 'string' ? parsed : String(parsed || '')),
-    validate: (parsed) => typeof parsed === 'string' && parsed.length > 0
-      ? { valid: true }
-      : { valid: false, failureReason: 'GENERIC_CHAT_OUTPUT_EMPTY' },
   });
 }
 
@@ -395,7 +377,6 @@ export const auxSkillDefinitionMap: Record<AuxSkillId, SkillDefinition> = Object
 export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillExecutionResult<any>>> = {
   'teaching-opening-generator': teachingOpeningGeneratorHandler,
   'learner-progress-report': learnerProgressReportHandler,
-  'generic-chat': genericChatHandler,
   'skill-author': skillAuthorHandler,
   'skill-compiler': skillCompilerHandler,
   'learner-state-review': learnerStateReviewHandler,

@@ -36,7 +36,6 @@ jest.mock('../../background-task-tracker.service', () => ({
 jest.mock('../../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
 }))
-jest.mock('../../ai/ai.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../learning-state.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../../learner/LearnerProjectionService', () => ({ learnerProjectionService: {} }))
 jest.mock('../../../skills', () => ({ executeSkill: jest.fn() }))

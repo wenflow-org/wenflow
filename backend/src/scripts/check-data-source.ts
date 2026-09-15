@@ -128,9 +128,6 @@ const CALL_SITE_MANIFEST: Record<string, CallSite[]> = {
   'learner-progress-report': [
     { file: 'backend/src/services/learner/LearnerProgressService.ts', line: 251 },
   ],
-  'generic-chat': [
-    { file: 'backend/src/services/ai/ai.service.ts', line: 340 },
-  ],
   'skill-author': [
     { file: 'backend/src/services/skill-author/index.ts', line: 47 },
   ],

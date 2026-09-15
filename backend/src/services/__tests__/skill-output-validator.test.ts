@@ -129,7 +129,7 @@ describe('validateCoreFieldDeclarations', () => {
 describe('validateSkillOutputFields（P3 运行时入口）', () => {
   it('默认启用的 skill 从 core 文件加载 fields 并校验', async () => {
     expect(isFieldValidatedSkill('skill:teaching-turn')).toBe(true)
-    expect(isFieldValidatedSkill('skill:generic-chat')).toBe(false)
+    expect(isFieldValidatedSkill('skill:skill-author')).toBe(false)
     expect(isFieldValidatedSkill('skill:semantic-freeze-judge')).toBe(false)
     const result = await validateSkillOutputFields('skill:teaching-turn', {
       reply: '讲解一下',
@@ -144,7 +144,7 @@ describe('validateSkillOutputFields（P3 运行时入口）', () => {
   })
 
   it('排除名单内的 skill 返回 null（跳过）', async () => {
-    expect(await validateSkillOutputFields('skill:generic-chat', {})).toBeNull()
+    expect(await validateSkillOutputFields('skill:skill-author', {})).toBeNull()
     expect(await validateSkillOutputFields('skill:virtual-learner-referee', {})).toBeNull()
   })
 

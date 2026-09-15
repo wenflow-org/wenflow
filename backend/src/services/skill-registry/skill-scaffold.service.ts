@@ -126,7 +126,7 @@ function asNonEmptyString(value: unknown, label: string): string | undefined {
  * 最小合法 core.yaml 骨架（validateCoreFileShape 可过）：
  * channels: [task]；identity/rules/fields 带 TODO 占位标记（core-ready 判定识别，
  * 完成度停在 handler-ready，直到 admin 在 SkillDesignPage 填真实内容）。
- * 骨架按 generic-chat.yaml 的 25/25 存量惯例显式声明 stateAdvance/deltaOutput/outputMedia。
+ * 骨架按 learner-state-review.yaml 的 25/25 存量惯例显式声明 stateAdvance/deltaOutput/outputMedia。
  */
 export function buildCoreSkeleton(skillId: string): CoreFile {
   return {
@@ -855,9 +855,9 @@ function buildSnippets(input: ScaffoldRequest): Array<{ title: string; content: 
         title: 'v4-aux-skills/index.ts 4 处修改（aux 实际注册点）',
         content: [
           `// 1) AuxSkillId 联合类型追加：'${skillId}'`,
-          `// 2) META 表追加（参考 generic-chat 形态）：`,
+          `// 2) META 表追加（参考 learner-state-review 形态）：`,
           `//    ${skillId}: { name: '${skillId}', displayName: '${input.displayName || skillId}', description: '${input.description || ''}', category: 'generation' },`,
-          `// 3) handler 函数（runAux 模板，参考 genericChatHandler）：`,
+          `// 3) handler 函数（runAux 模板，参考 learnerStateReviewHandler）：`,
           `//    async function ${camel}Handler(input: any) {`,
           `//      return runAux({ meta: META['${skillId}'], input,`,
           `//        buildUserPayload: (d) => d.message ?? '',`,

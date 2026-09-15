@@ -20,15 +20,15 @@ function writeTempYaml(content: string): string {
 }
 
 describe('skills-file loader（P0 户口簿）', () => {
-  it('加载真实 prompts/skills.yaml：29 条活跃登记，kind/stage 分布符合规格', () => {
+  it('加载真实 prompts/skills.yaml：28 条活跃登记，kind/stage 分布符合规格', () => {
     const book = parseSkillsFile(SKILLS_FILE_PATH);
     expect(book.version).toBe(1);
-    expect(book.skills.length).toBe(29);
+    expect(book.skills.length).toBe(28);
 
     const byKind = (kind: string) => book.skills.filter((entry) => entry.kind === kind);
     expect(byKind('mainline').length).toBe(20);
     expect(byKind('handler-only').length).toBe(2);
-    expect(byKind('aux').length).toBe(7);
+    expect(byKind('aux').length).toBe(6);
 
     const mainlineStages = byKind('mainline').map((entry) => entry.stage);
     expect(mainlineStages.every((stage) => ['goal', 'path', 'teaching', 'profile', 'simulation'].includes(stage!))).toBe(true);
@@ -50,9 +50,9 @@ describe('skills-file loader（P0 户口簿）', () => {
     }
   });
 
-  it('派生视图：活跃集 29 条、parentAgent 归属映射（保序）', () => {
+  it('派生视图：活跃集 28 条、parentAgent 归属映射（保序）', () => {
     const book = loadSkillsBookRaw();
-    expect(getActiveSkillIds(book).size).toBe(29);
+    expect(getActiveSkillIds(book).size).toBe(28);
     const members = getParentAgentMembers(book);
     expect(members.get('goal-agent')).toEqual(['skill:goal-conversation']);
     expect(members.get('path-agent')).toEqual(['skill:path-planning', 'skill:stage-designer', 'skill:path-reviewer', 'skill:kc-mapper']);

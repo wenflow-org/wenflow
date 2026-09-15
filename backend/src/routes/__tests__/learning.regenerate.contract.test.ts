@@ -37,7 +37,6 @@ jest.mock('../../coordinators/path.coordinator', () => ({
   },
 }));
 
-jest.mock('../../services/ai/ai.service', () => ({ __esModule: true, default: {} }));
 jest.mock('../../middleware/auth.middleware', () => ({
   authMiddleware: (_req: any, _res: any, next: () => void) => next(),
 }));

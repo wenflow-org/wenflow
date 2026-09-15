@@ -122,7 +122,7 @@
 ### aux
 | skill | 问题 | 优化 |
 |---|---|---|
-| generic-chat | 调用方指令拼进 **system** → 前缀缓存不稳定；history 无界；QA 成功率 16%/34% | 指令改 user 前缀；接统一摘要；加 retry |
+| ~~generic-chat~~ | ~~调用方指令拼进 **system** → 前缀缓存不稳定；history 无界~~ **已退役（2026-09-15，四同步）**：唯一入口 `aiService.chat()` 及其全部内部调用方均无调用方，正式业务均有专用 skill；底座 `services/ai/ai.service.ts`、死链 `learning.service.generateTasksForExistingPath` 一并清理。（此前"QA 成功率 16%/34%"实为 admin 试跑被取消，非模型能力问题） | **已注销** |
 | ~~course-design / basic-evaluator / goal-alignment-checker~~ | ~~僵尸（零调用）~~ **已退役（2026-09-15，四同步）**：注册/户口簿/core+manifest+编译产物/文档全部删除，`PURGED_SKILLS` → 39；DB 残留行由启动 purge 清理。**业务依据**：`course-design` 周计划模型被 path→stage-designer 取代（`designWeekCourses` + 孪生 `generateTasksForExistingPath` 均无调用者，一并删除）；`goal-alignment-checker` 被 `path-reviewer`（CIDDP 五维含 Pertinence、可触发重规划）覆盖；`basic-evaluator` 无"评分/等级"产品面（未来做作业评分可复用其设计） | **已注销**（2026-08-10 的"保留注册"决定被覆盖） |
 | skill-author / skill-compiler | **预留能力（Prompt-AI：起草 system prompt + 单轮验收必填字段）**。服务与 prompt 完整保留（`services/skill-author`）；入口 `/api/admin/skill-author/*` 于 2026-09-11 因"未挂载死路由"下线（`0c8105e` 明确保留底层能力）。**归类 `registrationPoint: platform-direct`（service 直调，与 semantic-freeze-judge 同组）→ 不进业务编排链**；`compileSkill` 失败路径漏 return 已修 | **保留**；要恢复只需加回 admin 路由（挂 prompt 工程区） |
 | semantic-freeze-judge | payload = 完整 YAML + 完整编译产物，**无长度上限**；声明 retry 但无实现 | 加字节上限/分块；补 retry |
@@ -135,7 +135,7 @@
 |---|---|---|
 | **P0** | **前缀稳定化**：system + 稳定指令 + 稳定场景/任务块前置，动态快照后置（复刻 goal 42%/path 56% 的做法） | teaching-turn / learn-turn-sim / epistemic-grounding 三个 skill 占 miss 的 63%，命中率仅 23–26%，缓存前缀远未吃满 |
 | ~~**P0**~~ | ~~**`adaptive-guidance-copy` 专项**：40k×**1.8%**、90KB 动态 payload 是单次最贵；裁到必要字段或造稳定前缀~~ **已解决（2026-09-12 22:00 起）**：`LearnerProjectionService.toGuidanceProjection` 已投影（丢 path 整行/`aiPromptTemplate`、knowledgeMemory 明细）→ payload 由 ~94–222KB 降至 **9–22KB** | 已完成，无需再做 |
-| **P1** | 给大 payload skill 加 **system-hash 稳定性回归**（防动态内容拼进 system，generic-chat 现即犯） | 保住 P0 收益 |
+| **P1** | 给大 payload skill 加 **system-hash 稳定性回归**（防动态内容拼进 system） | 保住 P0 收益（generic-chat 曾是现成反例，已随退役消失） |
 | **P1** | 修正 §3 的**正确性 bug**：path-reviewer key ✅已修 / opening `priorLearningContext` ✅已修 / referee 缺字段 ❌不成立 / progress-report 恒 0（待做，需接真实指标） | 影响功能正确性，成本极低 |
 | **P2** | 去重复池/去副本（`sessionMessages` 三挂、payload 双键、envelope artifact/nextState 重复） | 体积已小，收益有限，顺手做 |
 | ~~**P2**~~ | ~~per-skill payload 预算护栏 + 紧凑 `JSON.stringify`（去 `null,2`）~~ **已完成（2026-09-15）**：`stringifyPayload` 默认紧凑（`PAYLOAD_COMPACT_JSON=0` 回退）；另加**稳定前缀 SSOT + 回归门禁**（`prompts:payload-prefix:check`，见 §7.13） | 全链 -15~30% token；前缀能力有护栏 |

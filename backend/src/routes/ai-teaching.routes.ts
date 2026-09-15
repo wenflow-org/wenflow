@@ -11,7 +11,6 @@ import { Router } from 'express';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import aiTeachingCoordinator from '../services/ai-teaching/AITeachingCoordinator';
 import learningStateService from '../services/learning/learning-state.service';
-import aiService from '../services/ai/ai.service';
 import { authMiddleware } from '../middleware/auth.middleware';
 import prisma from '../config/database';
 import { logger } from '../utils/logger';

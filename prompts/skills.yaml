@@ -563,17 +563,6 @@ skills:
       db: []
       sandbox: []
     notes: 诊断层 skill（设计 doc/LEARNER_STATE_REVIEW_DESIGN.md §4）；输入 = LearnerStateReviewService 的投影（toReviewProjection）+ 最近证据；输出结构化 insights/conceptAssessments/falsifiableClaims；经 runAux 调用，无 DB 直读
-
-  - skillId: generic-chat
-    kind: aux
-    handlerRef: backend/src/skills/v4-aux-skills/index.ts
-    coreFile: prompts/core/generic-chat.yaml
-    displayName: 平台通用文本能力
-    description: 无更专用 Skill 时的通用文本调用能力
-    dataSource:
-      db: []
-      sandbox: []
-    notes: 调用方消息/历史（ai.service.ts:331-354），无 DB 直读
   - skillId: skill-author
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts

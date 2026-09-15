@@ -35,7 +35,6 @@ jest.mock('../../middleware/auth.middleware', () => ({
   authMiddleware: (_req: any, _res: any, next: () => void) => next(),
 }));
 jest.mock('../../services/learning/learning-state.service', () => ({ __esModule: true, default: {} }));
-jest.mock('../../services/ai/ai.service', () => ({ __esModule: true, default: {} }));
 jest.mock('../../services/learning/learning.service', () => ({ __esModule: true, default: mockLearningService }));
 jest.mock('../../config/database', () => ({ __esModule: true, default: {} }));
 jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn() } }));

@@ -304,7 +304,7 @@ type SkillResult = {
 
 **落地注记（2026-08，P3）**：字段声明契约校验已默认全量启用（`services/skill-output-validator.ts`，经 callPrompt 在 skill 领域校验后追加）：
 - 规则：按核心文件 fields 声明校验——必填缺失（`missing-required`）/类型不匹配（`type-mismatch`，受控词表）/enum 越界（`enum-out-of-range`）；`?` 可缺省；delta 模式仅验类型（缺席合法）。
-- 排除名单（11 个，与 `services/skill-output-validator.ts` 实际名单一致）：非 JSON 输出（generic-chat / skill-author；prompt-compiler 已退役不在名单）、平台守门（semantic-freeze-judge）、模拟器家族（virtual-learner-*，fallback/旁路特殊）、已退役仅 manifest 残留（concept-priority）。
+- 排除名单（10 个，与 `services/skill-output-validator.ts` 实际名单一致）：非 JSON 输出（skill-author；prompt-compiler 已退役不在名单）、平台守门（semantic-freeze-judge）、模拟器家族（virtual-learner-*，fallback/旁路特殊）、已退役仅 manifest 残留（concept-priority）。
 - fields 声明即运行时校验契约：新增字段须标 `?` 或保证模型必出，否则会驱动重试（编辑分级 §7.1 的"新增字段受限级"同步生效）。
 
 ### 5.6 辅助 Skill（v4-aux-skills）调用约定与失败策略执行语义
@@ -383,8 +383,7 @@ copywriter：adaptive-guidance-copy、peer-reinforcement
 
 后续新增（core，未列入首批）：path-reviewer、kc-mapper、virtual-learner-epistemic-grounding
 
-辅助 Skill（6，§5.6，v4-aux-skills index.ts 实际 handler 数；course-design / basic-evaluator / goal-alignment-checker 已于 **2026-09-15 正式退役**（四同步，详见附录 A 退役注记）；concept-priority / path-adjustment-generator **已退役，仅 manifest 残留（2026-08）**，无 core.yaml，均不计数）：
-conversational：generic-chat
+辅助 Skill（5，§5.6，v4-aux-skills index.ts 实际 handler 数；generic-chat 于 **2026-09-15 正式退役**；course-design / basic-evaluator / goal-alignment-checker 同日退役（四同步，详见附录 A 退役注记）；concept-priority / path-adjustment-generator **已退役，仅 manifest 残留（2026-08）**，无 core.yaml，均不计数）：
 generator：teaching-opening-generator（~~course-design~~ 2026-09-15 退役）
 extractor：skill-compiler、learner-state-review（~~basic-evaluator~~、~~goal-alignment-checker~~ 2026-09-15 退役）
 copywriter：learner-progress-report、skill-author
@@ -408,6 +407,7 @@ acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-
 > 退役注记（2026-08-11 Phase A 完整退役）：session-evaluation-fallback 失去全部调用语义（43a01fb 改造后 session-wrapup 缺 evaluation 直接 evaluation=null + 'unavailable'），自 v4-aux-skills 注册/户口簿/core/manifest/md 产物四同步注销（`PURGED_SKILLS` → 36 项，`ALL_RETIRED_SKILLS` → 41 项），存量 DB 行由启动 purge 清理；附录 A 同步移除，aux 计数 9→8，core 文件 25→24。
 > 退役注记（2026-09-15 完整退役）：course-design / basic-evaluator / goal-alignment-checker 自 v4-aux-skills 注册 / 户口簿 / core+manifest+编译产物 / 文档**四同步注销**（`PURGED_SKILLS` → 39，`ALL_RETIRED_SKILLS` → 44），存量 DB 行由启动 purge 清理；附录 A 同步移除，aux 计数 9→6，core 文件 27→24。**业务依据**：① course-design 的"周计划"模型被 path→milestone→stage-designer 取代（唯一入口 `designWeekCourses` 与孪生 `generateTasksForExistingPath` 均无调用者，一并删除）；② goal-alignment-checker 被现役 path-reviewer（CIDDP 五维，含 Pertinence，且能触发重规划）完全覆盖；③ basic-evaluator 无"评分/等级"产品面（如未来做作业评分/等级/证书可复用其 prompt 设计）。此前 2026-08-10 的"保留注册"决定随之覆盖。
 
+> 退役注记（2026-09-15 generic-chat 退役）：generic-chat（无专用 skill 时的通用文本兜底）自 v4-aux 注册 / 户口簿 / core+manifest+编译产物 / 文档四同步注销（`PURGED_SKILLS` → 40，`ALL_RETIRED_SKILLS` → 45），aux 计数 6→5，core 文件 24→23。依据：唯一入口 `aiService.chat()` 与全部内部调用方（evaluatePromptBatch/judgeResult/analyzeLearningGoal/generateTasksForTopic/diagnoseGoal）均无调用方，正式业务均有专用 skill；连带清理底座 `services/ai/ai.service.ts`（含测试）、死链 `learning.service.generateTasksForExistingPath`、两处死 import 与三处 jest.mock。
 
 ## 附录 B. goal-conversation 核心文件（参照样例）
 
@@ -452,3 +452,4 @@ deltaOutput: true   # 试点
 1. **链路改造（skill 无关）**：core 文件 loader、五块 lint、统一调用信封（§5.2）、SkillResult 包装收敛、coreHash/coreVersion 列与漂移检测、编译链（确定性模板渲染先行，LLM 润色后置）、字段血缘注册表。
 2. **逐 skill 接入**（每个 skill 走同一流程：反向提取核心文件 → 编译 → 守门三查 → 影子运行对比 → 切流 → 验证消费者）：
     试点 goal-conversation（含 Delta 试验）→ teaching-turn → session-wrapup / peer-reinforcement → extractor/distiller/copywriter 家族 → virtual-learner 家族 → prompt-compiler 最后（它自身即编译器）。
+

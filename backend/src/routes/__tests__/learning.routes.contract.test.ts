@@ -7,7 +7,6 @@ jest.mock('../../services/learning/learning.service', () => ({
   __esModule: true,
   default: mockLearningService,
 }));
-jest.mock('../../services/ai/ai.service', () => ({ __esModule: true, default: {} }));
 jest.mock('../../middleware/auth.middleware', () => ({
   authMiddleware: (_req: any, _res: any, next: () => void) => next(),
 }));
