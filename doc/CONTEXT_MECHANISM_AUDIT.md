@@ -256,8 +256,8 @@ ORDER BY avg_prompt DESC;
   1. `run-full` 的 `autoAdvanceToLearning` 不可靠（只到 path，`learningSteps=0`）；
   2. path 的 **subtasks 由 stage-designer 异步生成**，过早 `start-learning` → "第一个里程碑没有可用任务" → 未产生 `teaching-turn` 调用；
   3. 后台第二实例被回收（`3011=000`），ON 段无数据。
-- 已获得的真业务基线：同会话内 `goal-conversation` 命中 62–95%、`teaching-turn` 0–1%（与 §7.2 一致）。
-- 结论：真 LLM A/B 受**基础设施**（实例持久性、path-ready 时序、租约争用）制约。
+- 该次尝试未取到 ON 段数据；其后用**黑盒自动驾驶**完整跑通一轮真实业务（见 §7.9），以那份数据为准。**注意**：早期"`teaching-turn` 命中 0–1%"只属该次失败尝试的样本，不成立——真实业务旧序命中约 30%（§7.9）。
+- 结论：真 LLM A/B 受**基础设施**（实例持久性、path-ready 时序、租约争用、provider 限流）制约。
 
 ### 7.7 真 LLM 缓存实测（真实 payload，直连模型）
 
@@ -281,3 +281,24 @@ ORDER BY avg_prompt DESC;
 
 > 这是本轮**唯一**一处改动 skill「声明字段」的地方（其余 skill 仅改 payload 键序）。
 
+
+### 7.9 真实虚拟学习者 · 黑盒自动驾驶一轮取证（2026-09-15）
+
+用**预制角色** `shop-owner-inventory`（「盘不清的账」），走后台**黑盒自动驾驶**（`POST /:id/start-blackbox-session` → 连续 `blackbox-step`，即产品里的"自动驾驶"）：
+
+- 结果：`goal → path → teaching → completed`（2/2 任务），会话 `3ede7c64-1890-4b21-af1a-452b9d475a31`，约 20 分钟 / 25 步教学。
+- 会话内 21 次 `teaching-turn`：provider 命中合计 **40.8%**（138112 / 338455）；逐回合确定性公共前缀中位 ~50%（23–70%）。
+
+**同会话（按 `scenario.taskTitle` 判定）确定性公共前缀，真实 payload：**
+
+| 键序 | 相邻对数 | 确定性前缀（中位） | provider 命中（中位） |
+|---|---|---|---|
+| OFF（旧序） | 2344 | **21.9%** | **30.5%** |
+| ON（新序） | 23 | **80.3%** | **59.5%** |
+
+其它 skill（同会话，OFF→ON 确定性前缀）：`learn-turn-sim` 0.5%→10.4%、`teaching-opening-generator` 5.5%→29.0%、`virtual-learner-goal-dialogue-simulator` 74.5%→80.3%。
+
+- 结论：新键序在**真实业务**里确实把 `teaching-turn` 同会话可缓存前缀从 ~22% 提到 ~80%；provider 侧命中受**路由/驱逐 best-effort** 影响噪声大，但方向为正（中位 30% → ~40–60%）。
+- provider 命中不完全跟随确定性前缀（个别回合前缀 60% 却只命中 2%），说明**确定性前缀是上界/稳定属性，实际命中另受网关路由影响**。
+- 环境约束：provider 限 **10 请求/分**；并发跑批（`scripts/run-vl-learn-concurrent.mjs`）长期占用配额，导致 429 与 ON 样本偏小。
+- 功能面无回归：改造后完整链（goal/path/learn）在默认新序下跑通至 `completed`。
