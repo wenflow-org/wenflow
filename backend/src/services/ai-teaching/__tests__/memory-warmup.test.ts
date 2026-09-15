@@ -47,6 +47,19 @@ describe('课内温故：到期旧知与本节知识点看板物理分离（回�
     expect(outcomes[1].status).toBe('learning');
   });
 
+  it('extractWarmupOutcomes：温故点排在本节点之后也不丢（截断前摘取，回归 slice(0,5) 丢结果）', () => {
+    const outcomes = extractWarmupOutcomes(warmup, [
+      { name: '本节点 1', status: 'learning', progress: 30 },
+      { name: '本节点 2', status: 'learning', progress: 30 },
+      { name: '本节点 3', status: 'learning', progress: 30 },
+      { name: '本节点 4', status: 'learning', progress: 30 },
+      { name: '本节点 5', status: 'learning', progress: 30 },
+      { name: '离开前把书翻到下一页并立好', status: 'mastered', progress: 90 },
+    ]);
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0].conceptKey).toBe('离开前把书翻到下一页并立好');
+  });
+
   it('extractWarmupOutcomes：计划为空时一律不摘（不误伤本节知识点）', () => {
     expect(extractWarmupOutcomes(null, [{ name: 'x', status: 'mastered', progress: 100 }])).toEqual([]);
     expect(extractWarmupOutcomes(plan([]), [{ name: 'x', status: 'mastered', progress: 100 }])).toEqual([]);

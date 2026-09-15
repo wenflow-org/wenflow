@@ -1748,18 +1748,26 @@ export class AITeachingOrchestrator {
     const turnRuntimeEnvelope = turnResult?.runtimeEnvelope || null;
     const rawTeachingOutput = extractTeachingOutput(turnResult);
     const promptDebug = extractTeachingPromptDebug(turnResult);
-    const { teachingOutput, existingPoints } = reconcileTeachingKnowledgeState(context, rawTeachingOutput, frozenKnowledgeState);
     // 课内温故结果回收：模型用「计划里的原名字」在 knowledge.points 里报告到期旧知的回捞结果。
-    // 这里把温故点从本节看板里摘出去（历史事故 2e3ca16：跨 path 到期点串进「本节知识点」被
-    // 误显示为「进行中 · x%」，导致课内复习整体下线），只把结果记进 sessionArtifacts.memoryWarmup，
+    // 必须在 reconcileTeachingKnowledgeState 的 slice(0,5) 截断**之前**从原始输出里摘——
+    // 模型通常把温故点排在本节点之后，先截断会直接丢掉温故结果。
+    const rawPoints = Array.isArray(rawTeachingOutput?.knowledge?.points) ? rawTeachingOutput.knowledge.points : [];
+    const warmupOutcomes = extractWarmupOutcomes(context.memoryWarmup, rawPoints);
+    const rawBoardOutput = rawPoints.length > 0
+      ? {
+          ...rawTeachingOutput,
+          knowledge: { ...rawTeachingOutput.knowledge, points: stripWarmupPoints(context.memoryWarmup, rawPoints) },
+        }
+      : rawTeachingOutput;
+    const { teachingOutput, existingPoints } = reconcileTeachingKnowledgeState(context, rawBoardOutput, frozenKnowledgeState);
+    // 到期旧知与本节看板物理分离（历史事故 2e3ca16：跨 path 到期点串进「本节知识点」被
+    // 误显示为「进行中 · x%」，导致课内复习整体下线）：温故点只进 sessionArtifacts.memoryWarmup，
     // 收束时回写记忆引擎（FSRS 重排 dueAt + 落 learner_evidence 供动态预算回校准）。
-    const warmupOutcomes = extractWarmupOutcomes(context.memoryWarmup, teachingOutput.knowledge.points);
-    const boardPoints = stripWarmupPoints(context.memoryWarmup, teachingOutput.knowledge.points);
     const mergedKnowledge = normalizeFrozenKnowledgeState(
       effectiveInitialKnowledgeState,
       knowledgeStateService.merge(
         existingPoints,
-        boardPoints,
+        teachingOutput.knowledge.points,
         session.mode === 'review' // 复习课允许 mastered 降级：复习失败在掌握度数据上真实可见
       )
     );
