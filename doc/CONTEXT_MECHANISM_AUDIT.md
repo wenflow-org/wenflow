@@ -123,8 +123,8 @@
 | skill | 问题 | 优化 |
 |---|---|---|
 | generic-chat | 调用方指令拼进 **system** → 前缀缓存不稳定；history 无界；QA 成功率 16%/34% | 指令改 user 前缀；接统一摘要；加 retry |
-| course-design / basic-evaluator / goal-alignment-checker | 僵尸（零调用） | 下线 |
-| skill-author / skill-compiler | 死代码（路由已删） | 删除 |
+| ~~course-design / basic-evaluator / goal-alignment-checker~~ | ~~僵尸（零调用）~~ **复核（2026-09-15）：这是项目**有意保留**的"僵尸项"**——`retired-skills.ts` 明确记载 2026-08-10 决策：保留注册、移出清理名单（cleanup 删其 `skill_model_configs` 行会**永久丢失**且造成运行期窗口故障），由 `retired:check` 的"活跃守卫"保护；`course-design` 唯一调用点 `designWeekCourses` 无调用者 | **不下线**（改动会被门禁拒绝） |
+| skill-author / skill-compiler | 服务仍在（`services/skill-author`：`draftSkillPrompt`/`compileSkill`），但 **`/api/admin/skill-author/*` 路由已无注册**（`admin-audit.middleware` 仍留着旧路径名）→ 属"路由已删、服务未清"的孤儿；清理须按 `retired-skills.ts` 的**四同步**规则（注册代码/文件/名单/文档） | 若确认弃用：四同步清理 |
 | semantic-freeze-judge | payload = 完整 YAML + 完整编译产物，**无长度上限**；声明 retry 但无实现 | 加字节上限/分块；补 retry |
 
 ---
@@ -138,7 +138,7 @@
 | **P1** | 给大 payload skill 加 **system-hash 稳定性回归**（防动态内容拼进 system，generic-chat 现即犯） | 保住 P0 收益 |
 | **P1** | 修正 §3 的**正确性 bug**：path-reviewer key ✅已修 / opening `priorLearningContext` ✅已修 / referee 缺字段 ❌不成立 / progress-report 恒 0（待做，需接真实指标） | 影响功能正确性，成本极低 |
 | **P2** | 去重复池/去副本（`sessionMessages` 三挂、payload 双键、envelope artifact/nextState 重复） | 体积已小，收益有限，顺手做 |
-| **P2** | per-skill payload 预算护栏 + 紧凑 `JSON.stringify`（去 `null,2`） | 全链 +15~30% token（`null,2` → 紧凑） |
+| ~~**P2**~~ | ~~per-skill payload 预算护栏 + 紧凑 `JSON.stringify`（去 `null,2`）~~ **已完成（2026-09-15）**：`stringifyPayload` 默认紧凑（`PAYLOAD_COMPACT_JSON=0` 回退）；另加**稳定前缀 SSOT + 回归门禁**（`prompts:payload-prefix:check`，见 §7.13） | 全链 -15~30% token；前缀能力有护栏 |
 | **P2** | `modelExposure=projected` 要么实现要么删除；`output`/`runtimeEnvelope.artifact`/`debug` 三同一收敛，debug 改按需 | 声明与实现对齐 |
 | ~~P0~~ | ~~全量历史截断~~ | 实测体积小 → **降级为 P2** |
 
@@ -360,3 +360,19 @@ ORDER BY avg_prompt DESC;
 - 真正的区别是**测试分层**：辅助 = 白盒 + 可人工接管（开发/排障）；黑盒 = 黑盒 + HTTP 契约 + 可见性 + 裁判评估（回归/评测）。
 - **不重叠的是粒度**（复核后更正）：`/sessions/:id/auto`（`executeAutoLoop`）是**有界、同步**的"跑一轮"（驾驶舱传 `maxRounds:10`，返回 `results[]`）；autopilot 是**异步、到终点**的监督器（含 stop 感知、状态持久化、租约、看门狗/重试）。二者共用 `executeSingleStep` 原语，但语义不同 → **不是重复，不应合并**（此前"assisted.auto 与 autopilot 重复"的说法已作废）。
 - `profile.simulationMode`（写入 `'manual'`）**后端只写不读**（仅前端 `VirtualProfile.vue` 当标签显示）→ 属**展示型死配置**。已清理其代码接线（路由 create/update、batch-experiment/batch-job/seeder 的写入、前端展示行与 api 类型）；**DB 列保留**（删除列需迁移，未在共享 dev.db 上动）。
+
+### 7.13 机制收口：紧凑序列化 + 稳定前缀 SSOT/护栏（2026-09-15）
+
+**① 紧凑序列化（#1）**：`prompt-composer.stringifyPayload` 默认 `JSON.stringify(payload)`（`PAYLOAD_COMPACT_JSON=0` 回退 `null,2`）。pretty-print 仅为人可读，对模型语义等价，但缩进/换行让**全链输入多 15~30% token**。调用方单点在 composer，无需逐 skill 改。
+
+**② 稳定前缀 SSOT + 回归门禁（#3）**：
+- `services/payload-stability.ts` **单源声明** 11 个 skill 的 leading 稳定键（此前是逐 skill 手写约定，无护栏）；
+- 门禁 `prompts:payload-prefix:check`：取各 skill 最近 N 条**真实 `prompt_call_logs.userPayload`**，校验「最新一条首键 ∈ 声明稳定段」；report 默认、`--strict` 违规退出 1；已挂入 `prompts:check:all`。
+- 首次运行：声明 11 项（有遥测 11 项）**违规 0**；`stage-designer` 近 30 条稳定占比 7%、`path-reviewer` 3%、`learner-progress-report` 7% —— 因为窗口内多数行发生在默认翻转（07:45）之前，「最新一条」已全部落新序。
+- **一处待观察**：`virtual-learner-persona-designer` 最新一条（08:43）首键是 `preferredLevels`（旧序），而其 ON 分支应为 `candidatePersonas` 先；声明表暂同时容纳两键以避免误报，待有新增量后复核该 skill 是否真的走 ON 分支。
+
+**③ 关于 #2（僵尸/死代码）— 复核后按"设计原由"处理**：
+- `course-design` / `basic-evaluator` / `goal-alignment-checker` **不是可删项**：`skills/retired-skills.ts` 明确记载 2026-08-10 决策——保留注册、移出清理名单（cleanup 删行会导致 `skill_model_configs` **永久丢失** + 运行期窗口故障），由 `retired:check` 的「活跃守卫」保护；任何把它们塞进退役名单的改动会被 CI 拒绝。
+- `skill-author` / `skill-compiler`：服务仍在（`services/skill-author`）但路由已无注册 → 「路由已删、服务未清」的孤儿；按 `retired-skills.ts` 的**四同步**规则清理需专门一次提交。
+
+**④ 验证口径说明**：单键化（08:42）、storyHistory（09:15）、紧凑序列化（12:2x）三项都发生在**跑批停止（08:26）之后**，因此**只有单测/编译产物验证，没有新的实时遥测**；待虚拟实验室跑批再起，可在 `prompt_call_logs` 直接复核 `messages` 单键、`storyHistory` 与紧凑格式。
