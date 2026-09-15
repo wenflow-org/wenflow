@@ -15,7 +15,6 @@ const distinctivePromptContract = {
   context: {
     envelope: 'context-envelope/v1' as const,
     delivery: 'sidecar' as const,
-    modelExposure: 'projected' as const,
   },
   failurePolicy: 'retry' as const,
 }

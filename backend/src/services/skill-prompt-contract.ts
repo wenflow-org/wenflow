@@ -24,7 +24,6 @@ export type SkillPromptSchemaSource =
   | 'none';
 export type SkillPromptOutputEnvelope = 'adapter' | 'model' | 'none';
 export type SkillPromptContextDelivery = 'sidecar' | 'none';
-export type SkillPromptModelExposure = 'projected' | 'none';
 export type SkillPromptFailurePolicy =
   | 'blocking'
   | 'retry'
@@ -68,7 +67,6 @@ export interface SkillPromptContract {
   context: {
     envelope: 'context-envelope/v1' | 'none';
     delivery: SkillPromptContextDelivery;
-    modelExposure: SkillPromptModelExposure;
   };
   failurePolicy: SkillPromptFailurePolicy;
   /** 可选字段角色声明；缺失时不影响契约其他部分。 */
@@ -111,7 +109,6 @@ const SCHEMA_SOURCES: SkillPromptSchemaSource[] = [
 ];
 const OUTPUT_ENVELOPES: SkillPromptOutputEnvelope[] = ['adapter', 'model', 'none'];
 const CONTEXT_DELIVERIES: SkillPromptContextDelivery[] = ['sidecar', 'none'];
-const MODEL_EXPOSURES: SkillPromptModelExposure[] = ['projected', 'none'];
 const FAILURE_POLICIES: SkillPromptFailurePolicy[] = [
   'blocking',
   'retry',
@@ -212,7 +209,6 @@ export function buildDefaultSkillPromptContract(identity: SkillPromptContractIde
     context: {
       envelope: 'context-envelope/v1',
       delivery: 'sidecar',
-      modelExposure: executionMode === 'code-only' ? 'none' : 'projected',
     },
     failurePolicy: inferFailurePolicy(skillId, archetype),
   };
@@ -278,7 +274,6 @@ export function normalizeSkillPromptContract(
     context: {
       envelope: pickOne(context.envelope, ['context-envelope/v1', 'none'] as const, base.context.envelope),
       delivery: pickOne(context.delivery, CONTEXT_DELIVERIES, base.context.delivery),
-      modelExposure: pickOne(context.modelExposure, MODEL_EXPOSURES, base.context.modelExposure),
     },
     failurePolicy: pickOne(candidate.failurePolicy, FAILURE_POLICIES, base.failurePolicy),
     ...(fields ? { fields } : {}),
@@ -342,7 +337,6 @@ export function lintDeclaredSkillPromptContract(
   } else {
     requireOneOf(value.context.envelope, ['context-envelope/v1', 'none'] as const, 'promptContract.context.envelope', issues);
     requireOneOf(value.context.delivery, CONTEXT_DELIVERIES, 'promptContract.context.delivery', issues);
-    requireOneOf(value.context.modelExposure, MODEL_EXPOSURES, 'promptContract.context.modelExposure', issues);
   }
 
   requireOneOf(value.failurePolicy, FAILURE_POLICIES, 'promptContract.failurePolicy', issues);

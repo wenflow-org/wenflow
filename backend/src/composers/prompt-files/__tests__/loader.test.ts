@@ -73,7 +73,7 @@ describe('prompt file loader', () => {
       '  interactionMode: snapshot',
       '  input: { transport: json, schemaSource: skill-definition }',
       '  output: { media: json, schemaSource: runtime-validator, envelope: adapter }',
-      '  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }',
+      '  context: { envelope: context-envelope/v1, delivery: sidecar }',
       '  failurePolicy: best-effort',
       '---',
       '',

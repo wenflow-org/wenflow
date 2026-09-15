@@ -39,7 +39,7 @@ describe('Skill Prompt Contract v2', () => {
       interactionMode: 'snapshot',
       input: { transport: 'json', schemaSource: 'skill-definition' },
       output: { media: 'json', schemaSource: 'runtime-validator', envelope: 'adapter' },
-      context: { envelope: 'none', delivery: 'none', modelExposure: 'none' },
+      context: { envelope: 'none', delivery: 'none' },
       failurePolicy: 'best-effort'
     }, {
       skillId: 'dialogue-concept-extractor',
@@ -117,7 +117,7 @@ describe('Skill Prompt Contract v2', () => {
       interactionMode: 'turn',
       input: { transport: 'json', schemaSource: 'skill-definition' },
       output: { media: 'json', schemaSource: 'runtime-validator', envelope: 'adapter' },
-      context: { envelope: 'context-envelope/v1', delivery: 'sidecar', modelExposure: 'projected' },
+      context: { envelope: 'context-envelope/v1', delivery: 'sidecar' },
       failurePolicy: 'retry',
       fields: {
         state: { direction: 'state', visibility: 'handoff', owner: 'orchestrator' },

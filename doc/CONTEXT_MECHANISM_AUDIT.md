@@ -67,7 +67,7 @@
 | **输入预算** | **无**。所有非 `runtime-override` 的 `maxTokens` 被 floor 到 **131072**；core 里写的 8k/12k 只是**输出**上限 | `backend/src/services/resolve-llm-call-params.ts:142-153` |
 | **压缩** | 仅 teaching：40k 窗口 / 70% 触发 / 保留 12 条 + **规则式** recap；无跨 skill 摘要层 | `backend/src/services/ai-teaching/TeachingContextCompressionService.ts:3-7` |
 | **六材料池（§3）** | 声明/编译期概念；运行时只有 3 个专用装配器（goal/path/teaching），**无通用池注入器**；10 个 aux core **无 `inputs:`** | `backend/src/services/field-dispatcher/index.ts:183-231`；`prompts/core/*.yaml` |
-| **上下文投递** | `contextDelivery=sidecar` **已实现**；`modelExposure=projected` 全 manifest 声明、**零消费**（仅测试） | `backend/src/composers/prompt-composer.ts:200`；`prompts/manifests/*.yaml` |
+| **上下文投递** | `contextDelivery=sidecar` **已实现**；~~`modelExposure=projected`~~ **已删除声明（2026-09-15）**：29 个 manifest + `skill-prompt-contract` 的类型/默认值/normalizer/校验/枚举一并移除（「声明了零消费方」清零） | `backend/src/services/skill-prompt-contract.ts`；`prompts/manifests/*.yaml` |
 | **前缀友好** | 逐 skill 手写约定（goal 稳定键序、teaching 动态子键后置）；无统一机制、无回归护栏 | `backend/src/skills/goal-conversation/index.ts:198-214`；`teaching-turn/index.ts:646-655` |
 | **序列化** | 对象一律 `JSON.stringify(payload, null, 2)`（+15~30% token） | `backend/src/composers/prompt-composer.ts:58-60` |
 | **缓存可观测** | `llm_execution_attempts.promptCacheHitTokens`（DeepSeek `prompt_tokens_details.cached_tokens` / OpenAI `prompt_cache_hit_tokens`） | `backend/src/gateway/api-gateway/executor.ts:770-792` |
@@ -141,7 +141,7 @@
 | **P1** | 修正 §3 的**正确性 bug**：path-reviewer key ✅已修 / opening `priorLearningContext` ✅已修 / referee 缺字段 ❌不成立 / progress-report 恒 0（待做，需接真实指标） | 影响功能正确性，成本极低 |
 | **P2** | 去重复池/去副本（`sessionMessages` 三挂、payload 双键、envelope artifact/nextState 重复） | 体积已小，收益有限，顺手做 |
 | ~~**P2**~~ | ~~per-skill payload 预算护栏 + 紧凑 `JSON.stringify`（去 `null,2`）~~ **已完成（2026-09-15）**：`stringifyPayload` 默认紧凑（`PAYLOAD_COMPACT_JSON=0` 回退）；另加**稳定前缀 SSOT + 回归门禁**（`prompts:payload-prefix:check`，见 §7.13） | 全链 -15~30% token；前缀能力有护栏 |
-| **P2** | `modelExposure=projected` 要么实现要么删除；`output`/`runtimeEnvelope.artifact`/`debug` 三同一收敛，debug 改按需 | 声明与实现对齐 |
+| ~~**P2**~~ | ~~`modelExposure=projected` 要么实现要么删除~~ **已删声明（2026-09-15）**；剩余：`output`/`runtimeEnvelope.artifact`/`debug` 三同一收敛、debug 改按需 | 声明与实现对齐（部分完成） |
 | ~~P0~~ | ~~全量历史截断~~ | 实测体积小 → **降级为 P2** |
 
 ---
@@ -391,15 +391,15 @@ ORDER BY avg_prompt DESC;
 | path 阶段 live 钩子 | **已实装**：按会话传 `systemPromptOverrides.pathAgent` | `path.coordinator.ts:30`、`simulation.coordinator.ts:1055/1192/1678` |
 | 版本化预调 | **已有**：core → `compile-core` → `publish-core` → `versions/rollback/lineage` | `routes/prompt-lab.ts` |
 | 版本漂移记账 | **已有**：`detectPromptDrift(编译产物, ACTIVE)` → `prompt_call_logs.promptDrift` | `composers/drift-detector.ts` |
-| 渐进式投递 | **半成品**：`contextDelivery=sidecar` 已实现；**`modelExposure=projected` 零消费方（未实现）** | manifest / 协议 §2–§3 |
+| 渐进式投递 | `contextDelivery=sidecar` 已实现；~~`modelExposure=projected`~~ **声明已删（2026-09-15：无消费方，「渐进式」只是说法）** | manifest / 协议 §2–§3 |
 | 架构原则 | §3 第 15 行：**控制面（core 文件）与数据面（材料池组装）分离，两面之间只经编译链连接** | `SKILL_PROTOCOL_V4.md` |
 
 ### 8.2 两条路线（互不排斥）
 - **路线 A｜版本链预调（生产前）**：在 prompt-lab 里以 core 草稿 + `compile-core` + **preview（不 publish）** 做预调；上线即 `publish-core`（ACTIVE 版本切换）。运行时若需临时试，用 `systemPromptOverride`（**带内来源已可记账**，当前 override 时 `systemPromptVersion=null`）。
-- **路线 B｜渐进式投递（运行时按需）**：把"按需加载"做在**数据面**——即实现 **`modelExposure=projected` / sidecar 材料投递**：按需把材料**投影/懒加载到 user 段或 sidecar**，**system 段保持版本稳定**。
+- **路线 B｜运行时按需投递**：把「按需加载」做在**数据面**——即用 `contextDelivery=sidecar` 的材料投递，按需把材料**投影到 user 段或 sidecar**，**system 段保持版本稳定**。（原 `modelExposure=projected` 声明已于 2026-09-15 删除：无消费方，只是说法。）
 
 ### 8.3 A1 / A2 边界（结论）
-- **A1（`modelExposure=projected` 实现或删声明）**：是**路线 B 的载体** → 优先做。
+- ~~**A1（`modelExposure=projected` 实现或删声明）**~~ **已按「删声明」处置（2026-09-15）**。
 - **A2（system 稳定性护栏）**：
   - **判据**：同一 (skill, 会话) 内 `systemPromptHash` 相邻调用的**变化率**；**会话内变化 = 违约**；**跨会话/跨版本变化 = 正常**。
   - **必须允许**：版本切换、显式 `systemPromptOverride`、A/B 实验分组（这些变化是"声明的、低频的"，代价只是缓存失效一次）。
@@ -418,7 +418,7 @@ ORDER BY avg_prompt DESC;
 
 | 项 | 复核结论 | 处置 |
 |---|---|---|
-| **A1** `modelExposure=projected` | **仍成立**（全 manifest 声明、零消费方）。但其"实现"就是 §8 的**路线 B（渐进式投递）**，与已冻结的 L2 声明驱动装配同源 | **待你定**：实现 or 删声明 |
+| **A1** `modelExposure=projected` | **已删声明（2026-09-15）**：29 个 manifest + `skill-prompt-contract`（类型/默认值/normalizer/校验/枚举）全部移除，6 个测试同步；`runtime-contract:check`、`core:check` 通过。依据：**它没有任何消费方，「渐进式」只是说法** | ✅ 完成 |
 | **A3** `payload-prefix` 升 strict | **已完成**：新增 `prompts:payload-prefix:check:strict` 并挂进 `prompts:check:all`（本地 0 违规；CI 无遥测则自动跳过） | ✅ 完成 |
 | **B1** enricher 投影 | **已修（2026-09-15）**：`LessonKnowledgeEnrichmentConsumer` 发前剔除 `wrapup.runtimeEnvelope`/`debug`（执行信封元数据，实测**每次稳定 ~2.4–2.8KB**，占单次 payload 10~30%）。`visibleDialogueContext`/`classroomEventHistory` 保留（是 recurringConfusions 的证据基底，不裁） | ✅ 完成 |
 | **B2** semantic-freeze-judge | **已修（2026-09-15）**：① 加**字节上限**（默认 400KB，`SEMANTIC_FREEZE_MAX_BYTES` 可调）→ **超限降级转人工**（不静默截断：判"语义等价"不能截输入）；② manifest 声明的 `failurePolicy=retry` **落到实现**（非法 verdict 重试 1 次） | ✅ 完成 |

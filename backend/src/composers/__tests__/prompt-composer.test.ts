@@ -459,7 +459,7 @@ describe('callPrompt runtime overrides', () => {
             interactionMode: 'snapshot',
             input: { transport: 'yaml', schemaSource: 'external-spec' },
             output: { media: 'markdown', schemaSource: 'external-spec', envelope: 'adapter' },
-            context: { envelope: 'context-envelope/v1', delivery: 'sidecar', modelExposure: 'projected' },
+            context: { envelope: 'context-envelope/v1', delivery: 'sidecar' },
             failurePolicy: 'retry'
           }
         }
@@ -496,7 +496,7 @@ describe('callPrompt runtime overrides', () => {
             interactionMode: 'none',
             input: { transport: 'none', schemaSource: 'none' },
             output: { media: 'none', schemaSource: 'none', envelope: 'none' },
-            context: { envelope: 'none', delivery: 'none', modelExposure: 'none' },
+            context: { envelope: 'none', delivery: 'none' },
             failurePolicy: 'none'
           }
         }
@@ -530,7 +530,7 @@ describe('callPrompt runtime overrides', () => {
       interactionMode: 'turn',
       input: { transport: 'json', schemaSource: 'runtime-validator' },
       output: { media: 'markdown', schemaSource: 'runtime-validator', envelope: 'adapter' },
-      context: { envelope: 'context-envelope/v1', delivery: 'sidecar', modelExposure: 'projected' },
+      context: { envelope: 'context-envelope/v1', delivery: 'sidecar' },
       failurePolicy: 'retry'
     }
 
