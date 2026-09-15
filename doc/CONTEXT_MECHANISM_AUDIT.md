@@ -76,6 +76,8 @@
 
 ## 3. 按阶段 / skill 的上下文问题
 
+> ⚠️ 本章是 **2026-09-14 的审计快照**。各条的最新状态（已修 / 不成立 / 已退役 / 低价值）见 **§7.10、§7.13、§7.14**；排期请以 §7.14 为准。
+
 ### goal
 | skill | 问题 | 优化方向 |
 |---|---|---|
@@ -409,3 +411,29 @@ ORDER BY avg_prompt DESC;
 1. **观测手段**：provider 侧缓存命中是 best-effort，且当前**暂时无法观测缓存率**（待通知）；A2 的"是否真的有害"应先有观测再定 strict。
 2. **分组列缺失**：`prompt_call_logs` 的 `teaching-turn` **无会话分组列**（`pathId/conversationId` 为 NULL）→ 会话内判据在 teaching 侧只能退化为"短窗口变化率"；path/goal 可用 `conversationId/pathId`。
 3. **override 记账**：现在 override 时 `systemPromptVersion=null`，建议补记"来源=override"，以便把"声明变化"与"逐请求漂移"区分开。
+
+### 7.14 剩余待办 · 第二轮逐条复核（2026-09-15）
+
+> 口径：以下每条都**回到代码/真实 payload 核实**，避免按过期结论排期（此前 §7.10 已做过一轮）。
+
+| 项 | 复核结论 | 处置 |
+|---|---|---|
+| **A1** `modelExposure=projected` | **仍成立**（全 manifest 声明、零消费方）。但其"实现"就是 §8 的**路线 B（渐进式投递）**，与已冻结的 L2 声明驱动装配同源 | **待你定**：实现 or 删声明 |
+| **A3** `payload-prefix` 升 strict | **已完成**：新增 `prompts:payload-prefix:check:strict` 并挂进 `prompts:check:all`（本地 0 违规；CI 无遥测则自动跳过） | ✅ 完成 |
+| **B1** enricher 投影 | **成立**：实测一条 29.8KB 中 `visibleDialogueContext` 8.3KB + `classroomEventHistory` 6.5KB + `wrapup` 6.1KB（**合计 ~70%**）；7d avgPT 12.9k、命中 0.8% | 可做（需定投影白名单） |
+| **B2** semantic-freeze-judge | **成立**：payload = `【核心文件】+【编译产物】` 纯文本，**无长度上限**（`services/prompt-lab/semantic-freeze-judge.ts:72`） | 可做（建议**超限转 degraded→转人工**，不静默截断） |
+| **B3** wrapup / peer 重复读 | **基本不成立**：`peer-reinforcement` 只声明 `topic/studentMessage/tutorContext`（**不读 wrapup**）；重复主要在 wrapup↔enricher 数据面 | 降级 |
+| **B4** VL 族 | **成立但属 DB/延迟**：`buildLearnerMemorySnapshot` 以 limit 30/6/8 在 `blackbox-runner.ts:1690/1754/1782` 重复调用；`learnerMemory` 仅百余字节 → token 影响小 | 降级（延迟优化另立项） |
+| **B5** 沙盘 `session.evidence` 同源 | **不成立**：与 `messages` 是**同一数组引用**（非副本）；且 `session-wrapup` 的 `sessionEvidence` 由调用方 `computeSessionEvidence(session)` 提供**聚合**（`AITeachingCoordinator.ts:2271/2307`）→ 该池键**不进任何 payload** | 无需改 |
+| **C1** goal-conversation | **低价值**：实测 payload 仅 **3.2KB**（state 1.2KB / conversationContext 1.05KB），"全量历史"无实害 | 降级 |
+| **C2** path-planning | **成立**：重复文本块（`confirmedProposal`×2、`realProblem`×3、`【强制要求】`×5）+ **死配置**（`includeStructuredData`/`includeConfidenceScores`）+ `scenario` 算了不打印 | 可做（**先清死配置**，小） |
+| **C3** kc-mapper | **低价值**：实测 payload 仅 **3.6KB**（`cognitiveCore` 1.3KB + `milestones` 0.58KB） | 降级 |
+| **C4** learner-model | **不成立**：`agents/learner-model-agent` **无 `maxTokens` 声明**；户口簿 notes 明确"**无 LLM 输入组装**" | 划掉（过期） |
+| **C5** learning-predictor | **成立但属延迟**：`TeachingContextBuilder` 每次建课堂多次 prisma 查询（含 `prediction_records.findFirst`）；非 token 问题 | 降级 |
+| **C6** finalization / state-review | **部分成立（DB）**：`assembleLearningState` 由 dashboard / state-review / learning-state-guidance **各自请求**调用；合并需跨请求缓存 | 降级 |
+| **C7** opening-generator 15s 超时 | **成立**：高频 `CALLER_ABORTED`（实测 08:06–08:24、15:30 同模式）→ **产品可用性问题**，非上下文问题 | 另立项 |
+| **C8** `simulationMode` DB 列 | **成立**：仅清代码接线，**列未迁移**（共享 dev.db 上不动迁移） | 需迁移时再动 |
+| **D** 验证欠账 | **仍欠**：`teaching-turn` 单键 `messages` / `storyHistory` / progress-report 指标**未现场验证**（跑批只到 goal→path；15:30 opening 超时中止未进 learn）；`persona-designer` 首键与代码 ON 分支不一致待复核 | 等跑批/通知 |
+| **E** 文档漂移 | 本轮已加 §3 状态指针 + 本表；`stage-designer` 前缀、`storyPool→storyHistory` 投影、§4 P0 前缀稳定化均已标注 | ✅ 完成 |
+
+**结论（重排后）**：真正"值得做"的只剩 **A1（需你定）**、**B1（enricher 投影）**、**B2（sfj 上限）**、**C2 的死配置清理**；其余已降级为"低价值 / DB 延迟 / 不成立 / 已修"。
