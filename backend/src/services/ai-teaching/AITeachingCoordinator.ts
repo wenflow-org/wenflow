@@ -27,6 +27,8 @@ import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { assembleTeachingTurnChannels } from '../field-dispatcher';
 import { createDomainEvent } from '../../events/contracts';
 import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryService';
+import { replanAttributionService, isCalibratableDirection, type ReplanAttributionEvidence } from './ReplanAttributionService';
+import { insightCalibrationService } from '../learner/insight-calibration.service';
 import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
 import { classifyFinalizationError } from './FinalizationErrors';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
@@ -249,6 +251,53 @@ function normalizeKnowledgePoints(points: TeachingKnowledgePointState[]): Knowle
 
 function parseSessionArtifacts(teachingState: Record<string, any> | null | undefined) {
   return teachingState?.sessionArtifacts || {};
+}
+
+/**
+ * 归因证据（有界、带稳定 id 供模型引用）：本课复盘要点 + 状态信号 + 不稳定概念名单。
+ * 只给"事实"，不给结论——结论是归因层要产出的东西。
+ */
+export function buildReplanAttributionEvidence(input: {
+  wrapup: SessionWrapupArtifact;
+  learnerReplanProjection: any;
+  nextMilestoneTitle?: string | null;
+}): ReplanAttributionEvidence[] {
+  const { wrapup, learnerReplanProjection, nextMilestoneTitle } = input;
+  const evidence: ReplanAttributionEvidence[] = [];
+  const push = (id: string, kind: string, text: string) => {
+    const trimmed = String(text || '').trim();
+    if (trimmed) evidence.push({ id, kind, text: trimmed.slice(0, 120) });
+  };
+
+  const topicSummary = (wrapup as any)?.summary?.topicSummary ?? (wrapup as any)?.topicSummary;
+  push('wrapup:summary', 'session_summary', String(topicSummary || ''));
+  const unresolved = Array.isArray((wrapup as any)?.progress?.stillLearning)
+    ? (wrapup as any).progress.stillLearning
+    : [];
+  push('wrapup:still-learning', 'still_learning', unresolved.slice(0, 4).join('、'));
+  const confusions = Array.isArray((wrapup as any)?.evidence?.topConfusionPoints)
+    ? (wrapup as any).evidence.topConfusionPoints
+    : [];
+  push('wrapup:confusions', 'confusions', confusions.slice(0, 4).join('、'));
+  const movedToReview = Array.isArray((wrapup as any)?.progress?.movedToReview)
+    ? (wrapup as any).progress.movedToReview
+    : [];
+  push('wrapup:moved-to-review', 'moved_to_review', movedToReview.slice(0, 4).join('、'));
+
+  const evaluation = (wrapup as any)?.evaluation;
+  if (evaluation) {
+    push('signal:metrics', 'session_metrics',
+      `sessionKtl=${evaluation.sessionKtl ?? '—'} sessionLss=${evaluation.sessionLss ?? '—'} sessionLf=${evaluation.sessionLf ?? '—'}`);
+  }
+  push('signal:trend', 'recent_trend', String(learnerReplanProjection?.dynamicState?.recentTrend || ''));
+  push('signal:fragile', 'fragile_concepts',
+    (learnerReplanProjection?.mastery?.fragileConcepts ?? []).slice(0, 6).join('、'));
+  push('signal:struggling', 'struggling_concepts',
+    (learnerReplanProjection?.mastery?.strugglingConcepts ?? []).slice(0, 6).join('、'));
+  push('signal:gaps', 'prerequisite_gaps',
+    (learnerReplanProjection?.risk?.prerequisiteGaps ?? []).slice(0, 4).map((gap: any) => `${gap.label}( ${gap.severity} )`).join('、'));
+  push('path:next-milestone', 'next_milestone', String(nextMilestoneTitle || ''));
+  return evidence;
 }
 
 /** 课内温故：模型用「原名字」报告回捞结果，比对走归一化（模型可能换写法） */
@@ -2428,7 +2477,7 @@ export class AITeachingOrchestrator {
       const currentPath = learnerSnapshot.knowledgeMemory.currentPath;
       const currentStageNumber = currentPath?.currentPosition.stageNumber || 1;
       const nextMilestone = currentPath?.milestoneProgress.find((item) => item.stageNumber === currentStageNumber + 1) || null;
-      const advisory = replanAdvisoryService.build({
+      const thresholdAdvisory = replanAdvisoryService.build({
         wrapup: persistedWrapup,
         learnerReplanProjection,
         nextMilestone: nextMilestone ? {
@@ -2438,6 +2487,38 @@ export class AITeachingOrchestrator {
           totalTasks: nextMilestone.totalTasks,
         } : null,
       });
+      // 归因层（阈值召回 + LLM 归因）：只在建议已成立时补"为什么"，失败/超时保留阈值版
+      let advisory = thresholdAdvisory;
+      if (thresholdAdvisory.shouldSuggest) {
+        const attribution = await replanAttributionService.attribute({
+          recall: learnerReplanProjection.signal,
+          allowedRecommendations: thresholdAdvisory.ui.options
+            .map((option) => option.key)
+            .filter((key) => ['keep', 'reinforce', 'slow_down', 'resequence', 'accelerate'].includes(key)),
+          evidence: buildReplanAttributionEvidence({
+            wrapup: persistedWrapup,
+            learnerReplanProjection,
+            nextMilestoneTitle: nextMilestone?.title ?? null,
+          }),
+          pathContext: {
+            milestoneTitle: learnerReplanProjection?.path?.currentPosition?.milestoneTitle ?? null,
+            stageNumber: currentStageNumber,
+          },
+        });
+        advisory = replanAdvisoryService.applyAttribution(thresholdAdvisory, attribution);
+        if (advisory.attribution?.claim && isCalibratableDirection(advisory.recommendation)) {
+          // 可证伪断言单独成列（insightType=replan_attribution），不与状态评审的可靠性混算
+          await insightCalibrationService.recordInsights(session.userId, session.learningPathId || null, [{
+            claim: advisory.attribution.claim,
+            insightType: 'replan_attribution',
+            conceptKeys: [
+              ...(learnerReplanProjection?.mastery?.fragileConcepts ?? []).slice(0, 2),
+              ...(learnerReplanProjection?.mastery?.strugglingConcepts ?? []).slice(0, 2),
+            ],
+            predictedAt: new Date().toISOString(),
+          }]).catch(() => []);
+        }
+      }
       const finalWrapup = {
         ...persistedWrapup,
         learner: {

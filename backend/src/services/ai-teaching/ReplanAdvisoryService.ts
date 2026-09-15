@@ -1,5 +1,6 @@
 ﻿import type { LearnerReplanProjection } from '../../agents/learner-model-agent/types';
 import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
+import type { ReplanAttribution } from './ReplanAttributionService';
 
 export interface ReplanAdvisory {
   shouldSuggest: boolean;
@@ -8,6 +9,8 @@ export interface ReplanAdvisory {
   scope: 'none' | 'next_milestone' | 'downstream_path';
   rationale: string;
   reasonCodes: string[];
+  /** LLM 归因（阈值召回后补的"为什么"）；未启用/失败时为 null */
+  attribution?: ReplanAttributionNote | null;
   ui: {
     title: string;
     body: string;
@@ -17,6 +20,18 @@ export interface ReplanAdvisory {
       description: string;
     }>;
   };
+}
+
+/** 归因注记：LLM 给的主因与方向，附一条可证伪断言（用于事后校准） */
+export interface ReplanAttributionNote {
+  primaryReasonCode: string;
+  reason: string;
+  claim: string;
+  expect: string;
+  checkOn: 'next_lesson' | 'next_task';
+  evidenceRefs: string[];
+  /** 阈值原本给出的方向（归因方向与之不同时留痕，便于事后看分歧） */
+  thresholdRecommendation: string;
 }
 
 interface BuildInput {
@@ -37,6 +52,7 @@ const NO_ADVISORY: ReplanAdvisory = {
   scope: 'none',
   rationale: '',
   reasonCodes: [],
+  attribution: null,
   ui: {
     title: '',
     body: '',
@@ -44,7 +60,41 @@ const NO_ADVISORY: ReplanAdvisory = {
   },
 };
 
+/**
+ * 把 LLM 归因并进建议：**只在建议本身已成立（shouldSuggest）时**才并，
+ * 且方向必须落在本条建议的可选项里（否则 UI 会出现"按钮说一套、推荐说另一套"）；
+ * 不在可选项里时退回阈值方向，但仍保留归因注记（含阈值方向，便于事后看分歧）。
+ */
+export function applyAttribution(
+  advisory: ReplanAdvisory,
+  attribution: ReplanAttribution | null | undefined,
+): ReplanAdvisory {
+  if (!advisory.shouldSuggest || !attribution?.reason) return advisory;
+  const optionKeys = new Set(advisory.ui.options.map((option) => option.key));
+  const recommendation = optionKeys.has(attribution.recommendation)
+    ? (attribution.recommendation as ReplanAdvisory['recommendation'])
+    : advisory.recommendation;
+  return {
+    ...advisory,
+    recommendation,
+    attribution: {
+      primaryReasonCode: attribution.primaryReasonCode,
+      reason: attribution.reason,
+      claim: attribution.claim,
+      expect: attribution.expect,
+      checkOn: attribution.checkOn,
+      evidenceRefs: attribution.evidenceRefs,
+      thresholdRecommendation: advisory.recommendation,
+    },
+  };
+}
+
 export class ReplanAdvisoryService {
+  /** 归因合并（纯函数委托，见 applyAttribution） */
+  applyAttribution(advisory: ReplanAdvisory, attribution: ReplanAttribution | null | undefined): ReplanAdvisory {
+    return applyAttribution(advisory, attribution);
+  }
+
   build(input: BuildInput): ReplanAdvisory {
     const { wrapup, learnerReplanProjection, nextMilestone } = input;
     if (!learnerReplanProjection || !nextMilestone) {

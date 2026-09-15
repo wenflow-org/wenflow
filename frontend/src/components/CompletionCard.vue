@@ -9,6 +9,9 @@
       <div v-if="advisory?.shouldSuggest" class="completion-section advisory-section" :class="`advisory-section--${advisory.priority}`">
         <h4 class="section-title"><el-icon><MagicStick /></el-icon>{{ advisory.ui.title }}</h4>
         <p class="section-content">{{ advisory.ui.body }}</p>
+        <p v-if="advisory.attribution?.reason" class="section-attribution">
+          <span class="attribution-tag">主要因为</span>{{ advisory.attribution.reason }}
+        </p>
         <p class="section-hint">确认后会调整后续学习安排，已完成的内容不会改变。</p>
         <div class="advisory-options">
           <el-button
@@ -308,6 +311,16 @@ const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' :
 .summary-value { font-size: 13px; font-weight: 600; color: var(--green, #2e7d32); }
 .completion-section { margin-bottom: 16px; padding: 12px; background-color: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; }
 .advisory-section { border: 1px solid var(--line, #dfe7d6); }
+.section-attribution { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: var(--ink-2, #475569); }
+.attribution-tag {
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--amber-deep, #b45309);
+  background: rgba(217, 119, 6, 0.12);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+}
 .advisory-section--high { border-color: color-mix(in srgb, var(--red, #ef7578) 45%, var(--line, #dfe7d6)); background: color-mix(in srgb, var(--red, #ef7578) 8%, var(--surface)); }
 .advisory-section--medium { border-color: color-mix(in srgb, var(--amber, #f4aa46) 45%, var(--line, #dfe7d6)); background: color-mix(in srgb, var(--amber, #f4aa46) 10%, var(--surface)); }
 .advisory-section--low { border-color: color-mix(in srgb, var(--green, #1e9e58) 40%, var(--line, #dfe7d6)); background: color-mix(in srgb, var(--green, #1e9e58) 8%, var(--surface)); }

@@ -26,7 +26,8 @@ export type AuxSkillId =
   | 'skill-compiler'
   | 'learner-state-review'
   | 'concept-consolidator'
-  | 'concept-load-estimator';
+  | 'concept-load-estimator'
+  | 'replan-attribution';
 
 // File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
 const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
@@ -37,6 +38,7 @@ const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
   'learner-state-review': loadPromptFile('skill:learner-state-review')?.systemPrompt || '',
   'concept-consolidator': loadPromptFile('skill:concept-consolidator')?.systemPrompt || '',
   'concept-load-estimator': loadPromptFile('skill:concept-load-estimator')?.systemPrompt || '',
+  'replan-attribution': loadPromptFile('skill:replan-attribution')?.systemPrompt || '',
 };
 
 interface AuxPlumbing extends PromptCallContext {
@@ -212,6 +214,7 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
   'learner-state-review': { skillId: 'learner-state-review', displayName: '学习状态评审诊断器', description: '基于状态摘要与证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）', category: 'analysis' },
   'concept-consolidator': { skillId: 'concept-consolidator', displayName: '概念身份归并器', description: '判断多个知识点名字里哪些是同一个概念的不同说法，输出可执行、可审计的归并建议', category: 'analysis' },
   'concept-load-estimator': { skillId: 'concept-load-estimator', displayName: '概念负担判定器', description: '逐概念判定粒度/知识类型/检索难度档位，供温故配额按认知负担裁剪', category: 'analysis' },
+  'replan-attribution': { skillId: 'replan-attribution', displayName: '路径重排归因器', description: '在阈值召回的重排建议上给出主因、方向与一条可证伪断言', category: 'analysis' },
 };
 
 // ============================================================
@@ -492,6 +495,58 @@ async function conceptLoadEstimatorHandler(input: any) {
   });
 }
 
+/**
+ * 路径重排归因器：护栏 = 主因必须来自 recall.reasonCodes、方向必须来自 allowedRecommendations、
+ * 证据引用必须来自输入 evidence。阈值仍是唯一召回门——本 skill 只能在召回允许的范围内选方向。
+ */
+async function replanAttributionHandler(input: any) {
+  return runAux({
+    meta: META['replan-attribution'],
+    input,
+    buildUserPayload: (d) => ({
+      recall: {
+        reasonCodes: Array.isArray(d?.recall?.reasonCodes) ? d.recall.reasonCodes : [],
+        recommendation: asTrimmedString(d?.recall?.recommendation),
+        priority: asTrimmedString(d?.recall?.priority),
+        rationale: asTrimmedString(d?.recall?.rationale),
+      },
+      allowedRecommendations: Array.isArray(d?.allowedRecommendations) ? d.allowedRecommendations : [],
+      evidence: Array.isArray(d?.evidence) ? d.evidence : [],
+      ...(d?.pathContext ? { pathContext: d.pathContext } : {}),
+    }),
+    normalize: (parsed, d) => {
+      const allowedReasons: string[] = (Array.isArray(d?.recall?.reasonCodes) ? d.recall.reasonCodes : [])
+        .map((item: any) => asTrimmedString(item))
+        .filter(Boolean);
+      const allowedRecommendations: string[] = (Array.isArray(d?.allowedRecommendations) ? d.allowedRecommendations : [])
+        .map((item: any) => asTrimmedString(item))
+        .filter(Boolean);
+      const knownEvidenceIds = new Set(
+        (Array.isArray(d?.evidence) ? d.evidence : [])
+          .map((item: any) => asTrimmedString(item?.id))
+          .filter(Boolean),
+      );
+      const recommendation = asTrimmedString(parsed?.recommendation);
+      const primaryReasonCode = asTrimmedString(parsed?.primaryReasonCode);
+      const evidenceRefs = (Array.isArray(parsed?.evidenceRefs) ? parsed.evidenceRefs : [])
+        .map((item: any) => asTrimmedString(item))
+        .filter((id: string) => id && (knownEvidenceIds.size === 0 || knownEvidenceIds.has(id)));
+      return {
+        primaryReasonCode: allowedReasons.includes(primaryReasonCode) ? primaryReasonCode : (allowedReasons[0] || ''),
+        recommendation: allowedRecommendations.includes(recommendation) ? recommendation : 'keep',
+        reason: asTrimmedString(parsed?.reason).slice(0, 60),
+        claim: asTrimmedString(parsed?.claim).slice(0, 80),
+        checkOn: ['next_lesson', 'next_task'].includes(asTrimmedString(parsed?.checkOn)) ? asTrimmedString(parsed.checkOn) : 'next_lesson',
+        expect: asTrimmedString(parsed?.expect).slice(0, 40),
+        evidenceRefs,
+      };
+    },
+    validate: (parsed) => parsed && typeof parsed === 'object'
+      ? { valid: true }
+      : { valid: false, failureReason: 'REPLAN_ATTRIBUTION_OUTPUT_NOT_OBJECT' },
+  });
+}
+
 // ============================================================
 // 注册表
 // ============================================================
@@ -509,4 +564,5 @@ export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillE
   'learner-state-review': learnerStateReviewHandler,
   'concept-consolidator': conceptConsolidatorHandler,
   'concept-load-estimator': conceptLoadEstimatorHandler,
+  'replan-attribution': replanAttributionHandler,
 };

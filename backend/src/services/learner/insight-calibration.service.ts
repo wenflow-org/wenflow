@@ -84,8 +84,14 @@ class InsightCalibrationService {
     return parseJsonSafe<InsightCalibrationPayload>(row?.payload)?.records ?? [];
   }
 
-  async getReliability(userId: string, pathId?: string | null): Promise<InsightReliability> {
-    return computeReliability(await this.getRecords(userId, pathId));
+  async getReliability(
+    userId: string,
+    pathId?: string | null,
+    options: { excludeInsightTypes?: string[] } = {},
+  ): Promise<InsightReliability> {
+    const records = await this.getRecords(userId, pathId);
+    const excluded = new Set(options.excludeInsightTypes ?? []);
+    return computeReliability(excluded.size > 0 ? records.filter((r) => !excluded.has(r.insightType)) : records);
   }
 
   /** 追加待核对洞察（按 claim 去重；已存在的 claim 不重复记录）。 */

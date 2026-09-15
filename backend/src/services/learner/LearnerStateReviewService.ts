@@ -152,7 +152,10 @@ class LearnerStateReviewService {
         })),
       );
     }
-    const calibration = await insightCalibrationService.getReliability(userId, primaryPath.id);
+    const calibration = await insightCalibrationService.getReliability(userId, primaryPath.id, {
+      // 重排归因的断言单独成列（replan_attribution）：不混进状态评审的命中率
+      excludeInsightTypes: ['replan_attribution'],
+    });
 
     const payload: LearnerStateReviewPayload = {
       schemaVersion: 'learner-state-review-v1',

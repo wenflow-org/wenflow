@@ -1,0 +1,26 @@
+version: prompt-lab-manifest/v1
+skillId: replan-attribution
+agentId: skill:replan-attribution
+name: default-skill-replan-attribution
+archetype: distiller
+description: 路径重排归因器
+acceptableAgentIds: [skill:replan-attribution]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: replan-attribution, phases: [attributed], defaultPhase: attributed, terminalPhases: [attributed], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, learner, path, replan, v4]
+notes: 阈值召回 + LLM 归因（replanSignal 由 LearnerSnapshotService.deriveReplanSignal 确定性给出，本 skill 只在召回允许的选项内选方向并归因）；调用方 = ReplanAdvisoryService.attribute（课后 wrap-up，8s 超时失败即回落阈值版）；可证伪断言经 insight-calibration 以 insightType=replan_attribution 单独成列（不与 learner-state-review 的可靠性混算）。

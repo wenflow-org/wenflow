@@ -238,6 +238,16 @@ export interface ReplanAdvisory {
   scope: 'none' | 'next_milestone' | 'downstream_path';
   rationale: string;
   reasonCodes: string[];
+  /** LLM 归因（阈值召回之后补的「为什么」）；未启用/失败时为 null */
+  attribution?: {
+    primaryReasonCode: string;
+    reason: string;
+    claim: string;
+    expect: string;
+    checkOn: 'next_lesson' | 'next_task';
+    evidenceRefs: string[];
+    thresholdRecommendation: string;
+  } | null;
   ui: {
     title: string;
     body: string;
