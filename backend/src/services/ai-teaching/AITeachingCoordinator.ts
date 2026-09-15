@@ -33,6 +33,7 @@ import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
 import { learnerExitService } from '../learner/LearnerExitService';
 import { memoryTraceService, normalizeConceptKey } from '../memory/memory-trace.service';
+import { conceptLoadService } from '../memory/concept-load.service';
 import reviewPlanService, { type ReviewPlan } from '../memory/review-plan.service';
 import { recordMisconceptions } from '../learner/misconception-ledger.service';
 
@@ -2512,6 +2513,8 @@ export class AITeachingOrchestrator {
       learnerStateReviewService.refreshInBackground(session.userId);
       // 概念身份归并（记忆层维护 · 默认观察模式）：课后顺带看一眼是否有同义重复知识点
       conceptConsolidatorService.refreshInBackground(session.userId);
+      // 概念负担档位预热：把 LLM 判定挪出开课关键路径（下节课直接命中缓存）
+      conceptLoadService.warmInBackground(session.userId);
       // 记忆引擎 M2：课后按知识看板状态确定性回写内化强度（best-effort，失败不阻断课堂完成）
       const calibrationBias = learnerSnapshot?.profile?.cognitive?.selfAssessmentAccuracy ?? 'accurate';
       memoryTraceService.recordSessionOutcome(session.userId, session.knowledgeState, 'derived', calibrationBias).catch((error) => {

@@ -18,6 +18,7 @@
  */
 import prisma from '../../config/database';
 import { memoryTraceService, normalizeConceptKey } from './memory-trace.service';
+import { conceptLoadService, mapProfileToLoad, type ConceptLoadProfile } from './concept-load.service';
 import { mapReviewStatusToRating, type ReviewRating } from '../learner/ReviewCompletedConsumer';
 
 /** 基准负担预算（负担单位）：约等于「两个原子点」或「一个复合点 + 一个原子点」 */
@@ -28,6 +29,8 @@ export const LOW_LOAD_BUDGET = 1.0;
 export const HIGH_LOAD_BUDGET = 3.0;
 /** 单节课温故的硬上限（即使预算充裕也不超过） */
 export const MAX_WARMUP_ITEMS = 3;
+/** 只为最急的这么多个候选取 LLM 负担档位（控 token；预算最多 3.0，入选只会落在最急的几个里） */
+export const LOAD_PROFILE_LOOKAHEAD = 12;
 /** 连续失败多少次判定「没学会」→ 退出复习队列，转回路径重学（Anki leech 语义） */
 export const LEECH_CONSECUTIVE_AGAIN = 3;
 /** 连续成功多少次判定「毕业」→ 不再按计划间隔回捞（仅在保留率跌破阈值时才回捞） */
@@ -51,27 +54,37 @@ export interface ConceptLoadEstimate {
 /**
  * 单个知识点的认知负担估计。
  * 因子口径：粒度（复合/超长 → 其实是一个技能簇）、类型（过程型检索需多步）、
- * 生疏度（掌握弱 / 保留率低 → 需要更多轮次）。
+ * 生疏度（掌握弱 → 需要更多轮次）。
+ *
+ * 粒度与类型优先取 **LLM 档位**（`profile`，见 concept-load.service）：正则判不准语义
+ * （`A、B` 可能是并列也可能是修饰），LLM 的误判率更低、且能识别"看着短其实要三步"的点；
+ * 没有档位（LLM 不可用/新概念）时回落到正则版。掌握度因子始终来自数据，不交给模型。
  */
 export function estimateConceptLoad(
   name: string,
-  opts: { masteryScore?: number | null; retention?: number | null } = {},
+  opts: { masteryScore?: number | null; retention?: number | null; profile?: ConceptLoadProfile | null } = {},
 ): ConceptLoadEstimate {
   const text = String(name || '').trim();
   if (!text) return { load: 1, factors: [] };
-  const factors: string[] = [];
-  let load = 1;
 
+  // 规则版（兜底）：正则 + 长度
   const length = [...text].length;
+  const ruleFactors: string[] = [];
+  let ruleLoad = 1;
   const compound = COMPOUND_RE.test(text) || length > 24;
   if (compound) {
-    load *= 1.5;
-    factors.push(length > 24 ? 'granularity:long' : 'granularity:compound');
+    ruleLoad *= 1.5;
+    ruleFactors.push(length > 24 ? 'granularity:long' : 'granularity:compound');
   }
   if (PROCESS_RE.test(text)) {
-    load *= 1.5;
-    factors.push('type:process');
+    ruleLoad *= 1.5;
+    ruleFactors.push('type:process');
   }
+
+  const mapped = mapProfileToLoad({ profile: opts.profile, ruleLoad, ruleFactors });
+  let load = mapped.load;
+  const factors = [...mapped.factors];
+
   const mastery = Number(opts.masteryScore);
   if (Number.isFinite(mastery) && mastery < 0.5) {
     load *= 1.3;
@@ -148,6 +161,8 @@ export interface ReviewPlanDeps {
   findEvidence: (args: Record<string, unknown>) => Promise<Array<Record<string, any>>>;
   findSessions: (args: Record<string, unknown>) => Promise<Array<Record<string, any>>>;
   findPaths: (args: Record<string, unknown>) => Promise<Array<Record<string, any>>>;
+  /** 概念负担档位（**只读缓存**；LLM 判定由课后预热负责，见 concept-load.service） */
+  loadProfiles: (userId: string, conceptKeys: string[]) => Promise<Map<string, ConceptLoadProfile>>;
 }
 
 const defaultDeps: ReviewPlanDeps = {
@@ -155,6 +170,7 @@ const defaultDeps: ReviewPlanDeps = {
   findEvidence: (args) => prisma.learner_evidence.findMany(args as any) as any,
   findSessions: (args) => prisma.teaching_sessions.findMany(args as any) as any,
   findPaths: (args) => prisma.learning_paths.findMany(args as any) as any,
+  loadProfiles: (userId, conceptKeys) => conceptLoadService.resolveCachedProfiles(userId, conceptKeys),
 };
 
 /** 从 learner_evidence 读近期检索结果（review:warmup / review:completed 两类同源） */
@@ -285,7 +301,12 @@ async function resolveOriginPathTitles(
  */
 export async function buildReviewPlan(
   userId: string,
-  options: { now?: Date; maxItems?: number; candidateLimit?: number; deps?: ReviewPlanDeps } = {},
+  options: {
+    now?: Date;
+    maxItems?: number;
+    candidateLimit?: number;
+    deps?: ReviewPlanDeps;
+  } = {},
 ): Promise<ReviewPlan> {
   const deps = options.deps ?? defaultDeps;
   const now = options.now ?? new Date();
@@ -340,14 +361,21 @@ export async function buildReviewPlan(
     })
     .sort((a, b) => urgencyOf(b) - urgencyOf(a));
 
+  // 认知负担档位：只对最急的前 LOAD_PROFILE_LOOKAHEAD 个候选取（LLM 一次判一批），
+  // 其余用规则版兜底 —— 预算最多 3.0，实际入选只会落在最急的几个里，没必要判满 60 个。
+  const lookahead = candidates.slice(0, LOAD_PROFILE_LOOKAHEAD);
+  const profileMap = await deps.loadProfiles(userId, lookahead.map((trace) => trace.label || trace.conceptKey));
+  const loadOf = (trace: (typeof candidates)[number]) => estimateConceptLoad(trace.label || trace.conceptKey, {
+    masteryScore: trace.masteryScore,
+    retention: trace.retention,
+    profile: profileMap.get(normalizeConceptKey(trace.label || trace.conceptKey)) ?? null,
+  });
+
   const picked: typeof candidates = [];
   let usedLoad = 0;
   for (const trace of candidates) {
     if (picked.length >= maxItems) break;
-    const estimate = estimateConceptLoad(trace.label || trace.conceptKey, {
-      masteryScore: trace.masteryScore,
-      retention: trace.retention,
-    });
+    const estimate = loadOf(trace);
     if (picked.length > 0 && usedLoad + estimate.load > budget) continue;
     if (picked.length === 0 && estimate.load > budget) {
       // 预算再低也要接一个最急的点：这节课本来就是为它来的
@@ -362,10 +390,7 @@ export async function buildReviewPlan(
   const origins = await resolveOriginPathTitles(userId, picked.map((trace) => normalizeConceptKey(trace.conceptKey)), deps);
 
   const items: ReviewPlanItem[] = picked.map((trace) => {
-    const estimate = estimateConceptLoad(trace.label || trace.conceptKey, {
-      masteryScore: trace.masteryScore,
-      retention: trace.retention,
-    });
+    const estimate = loadOf(trace);
     const family = normalizeConceptKey(trace.conceptKey);
     return {
       conceptKey: trace.conceptKey,

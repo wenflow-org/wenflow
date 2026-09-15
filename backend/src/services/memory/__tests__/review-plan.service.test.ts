@@ -38,6 +38,8 @@ function buildDeps(over: Partial<ReviewPlanDeps> = {}): ReviewPlanDeps {
     findEvidence: jest.fn().mockResolvedValue([]),
     findSessions: jest.fn().mockResolvedValue([]),
     findPaths: jest.fn().mockResolvedValue([]),
+    // 关键路径只读缓存：默认给空 Map（等价于"还没预热"→ 走规则版）
+    loadProfiles: jest.fn().mockResolvedValue(new Map()),
     ...over,
   };
 }

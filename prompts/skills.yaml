@@ -580,6 +580,21 @@ skills:
           via: service
       sandbox: []
     notes: 记忆层维护型 skill（用户级、跨 path 的身份归并；概念/结构层仍按 path 隔离）；调用方 = ConceptConsolidatorService.buildProjection（memory_traces 活跃概念 ≤60 + learner_evidence.pathId 归属路径），审计与回滚快照落 learner_projections(scope=concept-consolidation)；默认 observe 只记录建议不动数据，apply 只执行 autoApplicable（词面闸门）；触发点同 learner-state-review（AITeachingCoordinator 课后 / learning.service 任务完成）
+
+  - skillId: concept-load-estimator
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/concept-load-estimator.yaml
+    displayName: 概念负担判定器
+    description: 逐概念判定粒度/知识类型/检索难度档位，供温故配额按认知负担裁剪
+    dataSource:
+      db:
+        - table: memory_traces
+          via: service
+        - table: learner_projections
+          via: service
+      sandbox: []
+    notes: CLT 内在负荷判定（LLM 只出档位，数值由 concept-load.service 公式给，见 LEARNER_STATE_REVIEW_DESIGN §2.2）；调用方 = ConceptLoadService.resolveProfiles（按用户缓存到 learner_projections(scope=concept-load)，缺项才调 LLM，失败降级到规则版 estimateConceptLoad）；消费方 = review-plan.service 的温故配额
   - skillId: skill-author
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts

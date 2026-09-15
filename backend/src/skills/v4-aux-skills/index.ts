@@ -25,7 +25,8 @@ export type AuxSkillId =
   | 'skill-author'
   | 'skill-compiler'
   | 'learner-state-review'
-  | 'concept-consolidator';
+  | 'concept-consolidator'
+  | 'concept-load-estimator';
 
 // File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
 const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
@@ -35,6 +36,7 @@ const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
   'skill-compiler': loadPromptFile('skill:skill-compiler')?.systemPrompt || '',
   'learner-state-review': loadPromptFile('skill:learner-state-review')?.systemPrompt || '',
   'concept-consolidator': loadPromptFile('skill:concept-consolidator')?.systemPrompt || '',
+  'concept-load-estimator': loadPromptFile('skill:concept-load-estimator')?.systemPrompt || '',
 };
 
 interface AuxPlumbing extends PromptCallContext {
@@ -209,6 +211,7 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
   'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis' },
   'learner-state-review': { skillId: 'learner-state-review', displayName: '学习状态评审诊断器', description: '基于状态摘要与证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）', category: 'analysis' },
   'concept-consolidator': { skillId: 'concept-consolidator', displayName: '概念身份归并器', description: '判断多个知识点名字里哪些是同一个概念的不同说法，输出可执行、可审计的归并建议', category: 'analysis' },
+  'concept-load-estimator': { skillId: 'concept-load-estimator', displayName: '概念负担判定器', description: '逐概念判定粒度/知识类型/检索难度档位，供温故配额按认知负担裁剪', category: 'analysis' },
 };
 
 // ============================================================
@@ -442,6 +445,53 @@ async function conceptConsolidatorHandler(input: any) {
   });
 }
 
+/**
+ * 概念负担判定器：护栏同样放在 normalize（只认输入里出现过的 conceptKey，枚举兜底）。
+ * LLM 只出**档位**（atomic/cluster、factual/…、low/medium/high），数值权重由
+ * concept-load.service 的公式给 —— 不让模型自报分数（LEARNER_STATE_REVIEW_DESIGN §2.2）。
+ */
+async function conceptLoadEstimatorHandler(input: any) {
+  return runAux({
+    meta: META['concept-load-estimator'],
+    input,
+    buildUserPayload: (d) => ({
+      concepts: (Array.isArray(d.concepts) ? d.concepts : []).map((item: any) => ({
+        conceptKey: asTrimmedString(item?.conceptKey),
+      })).filter((item: any) => item.conceptKey),
+    }),
+    normalize: (parsed, d) => {
+      const known = new Set(
+        (Array.isArray(d?.concepts) ? d.concepts : [])
+          .map((item: any) => asTrimmedString(item?.conceptKey))
+          .filter(Boolean),
+      );
+      const granularityEnum = new Set(['atomic', 'cluster']);
+      const knowledgeTypeEnum = new Set(['factual', 'conceptual', 'procedural', 'metacognitive']);
+      const difficultyEnum = new Set(['low', 'medium', 'high', 'unknown']);
+      const seen = new Set<string>();
+      const concepts = (Array.isArray(parsed?.concepts) ? parsed.concepts : [])
+        .map((item: any) => ({
+          conceptKey: asTrimmedString(item?.conceptKey),
+          granularity: granularityEnum.has(asTrimmedString(item?.granularity)) ? asTrimmedString(item.granularity) : 'atomic',
+          knowledgeType: knowledgeTypeEnum.has(asTrimmedString(item?.knowledgeType)) ? asTrimmedString(item.knowledgeType) : 'conceptual',
+          difficultyBand: difficultyEnum.has(asTrimmedString(item?.difficultyBand)) ? asTrimmedString(item.difficultyBand) : 'unknown',
+          rationale: asTrimmedString(item?.rationale).slice(0, 80),
+        }))
+        // 护栏：只认输入里出现过的原文键，且每个键只取一条
+        .filter((item: any) => item.conceptKey && known.has(item.conceptKey) && !seen.has(item.conceptKey))
+        .map((item: any) => {
+          seen.add(item.conceptKey);
+          return item;
+        })
+        .slice(0, 40);
+      return { concepts };
+    },
+    validate: (parsed) => parsed && typeof parsed === 'object'
+      ? { valid: true }
+      : { valid: false, failureReason: 'CONCEPT_LOAD_ESTIMATOR_OUTPUT_NOT_OBJECT' },
+  });
+}
+
 // ============================================================
 // 注册表
 // ============================================================
@@ -458,4 +508,5 @@ export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillE
   'skill-compiler': skillCompilerHandler,
   'learner-state-review': learnerStateReviewHandler,
   'concept-consolidator': conceptConsolidatorHandler,
+  'concept-load-estimator': conceptLoadEstimatorHandler,
 };

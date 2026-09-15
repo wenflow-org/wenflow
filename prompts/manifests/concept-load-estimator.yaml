@@ -1,0 +1,26 @@
+version: prompt-lab-manifest/v1
+skillId: concept-load-estimator
+agentId: skill:concept-load-estimator
+name: default-skill-concept-load-estimator
+archetype: distiller
+description: 概念负担判定器
+acceptableAgentIds: [skill:concept-load-estimator]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: concept-load-estimator, phases: [load-estimated], defaultPhase: load-estimated, terminalPhases: [load-estimated], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, learner, memory, cognitive-load, v4]
+notes: 单概念认知负担档位（粒度/类型/检索难度）；数值权重由 concept-load.service 的公式给（CLT：配额先给内在负荷留预算）。调用方 = ConceptLoadService.resolveProfiles（按用户缓存，失败降级到规则版 estimateConceptLoad）。
