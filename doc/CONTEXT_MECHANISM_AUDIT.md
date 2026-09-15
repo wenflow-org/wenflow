@@ -135,7 +135,7 @@
 |---|---|---|
 | **P0** | **前缀稳定化**：system + 稳定指令 + 稳定场景/任务块前置，动态快照后置（复刻 goal 42%/path 56% 的做法） | teaching-turn / learn-turn-sim / epistemic-grounding 三个 skill 占 miss 的 63%，命中率仅 23–26%，缓存前缀远未吃满 |
 | ~~**P0**~~ | ~~**`adaptive-guidance-copy` 专项**：40k×**1.8%**、90KB 动态 payload 是单次最贵；裁到必要字段或造稳定前缀~~ **已解决（2026-09-12 22:00 起）**：`LearnerProjectionService.toGuidanceProjection` 已投影（丢 path 整行/`aiPromptTemplate`、knowledgeMemory 明细）→ payload 由 ~94–222KB 降至 **9–22KB** | 已完成，无需再做 |
-| **P1** | 给大 payload skill 加 **system-hash 稳定性回归**（防动态内容拼进 system） | 保住 P0 收益（generic-chat 曾是现成反例，已随退役消失） |
+| ~~**P1**~~（**2026-09-15 修订：降级为"暂缓"+ 改口径**） | ~~给大 payload skill 加 **system-hash 稳定性回归**（防动态内容拼进 system）~~ → 改为**稳定性（report）护栏**：判据是「**同一会话内 system 段逐请求漂移**」，**不是**「system 恒定」；**不得**判红版本切换 / 显式 `systemPromptOverride` / 实验分组。**暂缓实施**，理由与边界见 §8 | 保住前缀收益，同时**不锁死**"live prompt 预调 / 渐进式加载"（§8） |
 | **P1** | 修正 §3 的**正确性 bug**：path-reviewer key ✅已修 / opening `priorLearningContext` ✅已修 / referee 缺字段 ❌不成立 / progress-report 恒 0（待做，需接真实指标） | 影响功能正确性，成本极低 |
 | **P2** | 去重复池/去副本（`sessionMessages` 三挂、payload 双键、envelope artifact/nextState 重复） | 体积已小，收益有限，顺手做 |
 | ~~**P2**~~ | ~~per-skill payload 预算护栏 + 紧凑 `JSON.stringify`（去 `null,2`）~~ **已完成（2026-09-15）**：`stringifyPayload` 默认紧凑（`PAYLOAD_COMPACT_JSON=0` 回退）；另加**稳定前缀 SSOT + 回归门禁**（`prompts:payload-prefix:check`，见 §7.13） | 全链 -15~30% token；前缀能力有护栏 |
@@ -376,3 +376,36 @@ ORDER BY avg_prompt DESC;
 - `skill-author` / `skill-compiler`：**不退役，属"预留能力"**。`0c8105e` 删除的是"自 `871ea4c` 起未挂载的死路由"，并**明确保留底层能力**（service + core prompt + v4-aux 定义）。现归类 `registrationPoint: platform-direct`（service 直调，与 semantic-freeze-judge 同组），**不进业务编排链**；顺带修复 `compileSkill` 失败路径漏 return。恢复只需加回 admin 路由（建议挂 prompt 工程区）。
 
 **④ 验证口径说明**：单键化（08:42）、storyHistory（09:15）、紧凑序列化（12:2x）三项都发生在**跑批停止（08:26）之后**，因此**只有单测/编译产物验证，没有新的实时遥测**；待虚拟实验室跑批再起，可在 `prompt_call_logs` 直接复核 `messages` 单键、`storyHistory` 与紧凑格式。
+
+## 8. live prompt 与渐进式上下文：方向与边界（草案，2026-09-15）
+
+> 目的：为 path/goal 阶段的「**生产前预调 prompt**」与「**渐进式（按需）加载上下文**」两条诉求定边界，
+> 并明确 **A1/A2 各自该做什么**，避免"为了保前缀缓存而把这条路锁死"。
+
+### 8.1 现状盘点（仓库已有的半成品）
+| 能力 | 现状 | 位置 |
+|---|---|---|
+| 运行时覆盖 system | **已有**：`systemPromptOverride`（协议归类为"prompt 调试覆盖"，由执行信封承载，不进材料池） | `composers/types.ts`、`prompt-composer.ts:130/273` |
+| path 阶段 live 钩子 | **已实装**：按会话传 `systemPromptOverrides.pathAgent` | `path.coordinator.ts:30`、`simulation.coordinator.ts:1055/1192/1678` |
+| 版本化预调 | **已有**：core → `compile-core` → `publish-core` → `versions/rollback/lineage` | `routes/prompt-lab.ts` |
+| 版本漂移记账 | **已有**：`detectPromptDrift(编译产物, ACTIVE)` → `prompt_call_logs.promptDrift` | `composers/drift-detector.ts` |
+| 渐进式投递 | **半成品**：`contextDelivery=sidecar` 已实现；**`modelExposure=projected` 零消费方（未实现）** | manifest / 协议 §2–§3 |
+| 架构原则 | §3 第 15 行：**控制面（core 文件）与数据面（材料池组装）分离，两面之间只经编译链连接** | `SKILL_PROTOCOL_V4.md` |
+
+### 8.2 两条路线（互不排斥）
+- **路线 A｜版本链预调（生产前）**：在 prompt-lab 里以 core 草稿 + `compile-core` + **preview（不 publish）** 做预调；上线即 `publish-core`（ACTIVE 版本切换）。运行时若需临时试，用 `systemPromptOverride`（**带内来源已可记账**，当前 override 时 `systemPromptVersion=null`）。
+- **路线 B｜渐进式投递（运行时按需）**：把"按需加载"做在**数据面**——即实现 **`modelExposure=projected` / sidecar 材料投递**：按需把材料**投影/懒加载到 user 段或 sidecar**，**system 段保持版本稳定**。
+
+### 8.3 A1 / A2 边界（结论）
+- **A1（`modelExposure=projected` 实现或删声明）**：是**路线 B 的载体** → 优先做。
+- **A2（system 稳定性护栏）**：
+  - **判据**：同一 (skill, 会话) 内 `systemPromptHash` 相邻调用的**变化率**；**会话内变化 = 违约**；**跨会话/跨版本变化 = 正常**。
+  - **必须允许**：版本切换、显式 `systemPromptOverride`、A/B 实验分组（这些变化是"声明的、低频的"，代价只是缓存失效一次）。
+  - **只拦**：把**逐回合数据**（时间/用户输入/快照）拼进 system 造成的**未声明、逐请求漂移**。
+  - **形态**：与 `prompts:payload-prefix:check` 同族**门禁脚本，先 report**；**暂缓实施**（等 8.4 的口径确认与观测手段）。
+  - **不做**：写成"system 必须字节等于某常量"——那会**判红现有 `systemPromptOverrides.pathAgent`**，把路线 A/B 一起锁死。
+
+### 8.4 待决 / 已知限制
+1. **观测手段**：provider 侧缓存命中是 best-effort，且当前**暂时无法观测缓存率**（待通知）；A2 的"是否真的有害"应先有观测再定 strict。
+2. **分组列缺失**：`prompt_call_logs` 的 `teaching-turn` **无会话分组列**（`pathId/conversationId` 为 NULL）→ 会话内判据在 teaching 侧只能退化为"短窗口变化率"；path/goal 可用 `conversationId/pathId`。
+3. **override 记账**：现在 override 时 `systemPromptVersion=null`，建议补记"来源=override"，以便把"声明变化"与"逐请求漂移"区分开。
