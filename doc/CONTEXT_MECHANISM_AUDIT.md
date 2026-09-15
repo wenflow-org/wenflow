@@ -433,7 +433,24 @@ ORDER BY avg_prompt DESC;
 | **C6** finalization / state-review | **部分成立（DB）**：`assembleLearningState` 由 dashboard / state-review / learning-state-guidance **各自请求**调用；合并需跨请求缓存 | 降级 |
 | **C7** opening-generator 15s 超时 | **成立**：高频 `CALLER_ABORTED`（实测 08:06–08:24、15:30 同模式）→ **产品可用性问题**，非上下文问题 | 另立项 |
 | **C8** `simulationMode` DB 列 | **成立**：仅清代码接线，**列未迁移**（共享 dev.db 上不动迁移） | 需迁移时再动 |
-| **D** 验证欠账 | **仍欠**：`teaching-turn` 单键 `messages` / `storyHistory` / progress-report 指标**未现场验证**（跑批只到 goal→path；15:30 opening 超时中止未进 learn）；`persona-designer` 首键与代码 ON 分支不一致待复核 | 等跑批/通知 |
+| **D** 验证欠账 | **2026-09-15 复验（见 §7.15）**：✅ `storyHistory`（goal-dialogue-sim 现场已是 `storyHistory`、无 `storyPool`）✅ `persona-designer` 首键=`candidatePersonas`（与 ON 分支一致）✅ 紧凑序列化（最新 payload 无换行）✅ progress-report 数据侧（`learning_metrics` **126 行非零** ktl/lf/lss）✅ 缓存率可观测：**近 24h 全局 37.5%**（改造前口径 20.9%）。⏳ 仍待现场：`teaching-turn` 单键（跑批未到 learn，最新仍 08:26）、progress-report 端到端（最新 08:16） | 部分闭环 |
 | **E** 文档漂移 | 本轮已加 §3 状态指针 + 本表；`stage-designer` 前缀、`storyPool→storyHistory` 投影、§4 P0 前缀稳定化均已标注 | ✅ 完成 |
 
 **结论（重排后）**：真正"值得做"的只剩 **A1（需你定）**、**B1（enricher 投影）**、**B2（sfj 上限）**、**C2 的死配置清理**；其余已降级为"低价值 / DB 延迟 / 不成立 / 已修"。
+
+### 7.15 验证复验（2026-09-15 21:xx，缓存率恢复可观测后）
+
+**已在真实链路复验 ✅**
+| 项 | 证据 |
+|---|---|
+| VL **`storyHistory` 投影** | `goal-dialogue-sim` 13:49 payload：含 `storyHistory`（标题+一句话概述）、**无 `storyPool`** |
+| **`persona-designer` 首键** | 21:14 payload 首键 = `candidatePersonas`（与代码 ON 分支一致；此前 `preferredLevels` 不一致已消失） |
+| **紧凑序列化** | 最新 payload 无换行（非 pretty-print） |
+| **progress-report 数据源** | 权威表 `learning_metrics` **126 行 ktl/lf/lss 非零**（例：ktl 1.0 / 7.2，lf 0.93 / 2.7），`getLearningMetrics` 接线有单测 |
+| **缓存率（改造后）** | **近 24h 全局命中 37.5%**（改造前口径 **20.9%**）；`teaching-turn` **40.1%**（原 26.5%）、`goal-conversation` **65.3%**（原 42.4%）、`stage-designer` **41.3%**（原 34.8%）、`learn-turn-sim` **32.7%**（原 23.0%）、`adaptive-guidance-copy` **8.5%**（原 1.8%） |
+
+> 注：24h 窗口含翻转前时段（翻转 07:45），故以上为**偏保守**读数。
+
+**仍待现场（跑批需走到 learn 阶段）⏳**
+- `teaching-turn` 单键 `messages`：最新调用仍为 08:26（旧格式）；代码侧已由单测（12 通过）+ 编译产物输入列表（8 项、无 `visibleDialogueContext`）确定。
+- `learner-progress-report` 端到端：最新 08:16（改造前，ktl/lf=0）；数据侧已如上验证。
