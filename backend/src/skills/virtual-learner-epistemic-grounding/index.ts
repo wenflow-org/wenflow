@@ -4,6 +4,7 @@ import {
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
+import { projectSimulatorPayload } from '../virtual-learner-shared';
 
 export const VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_MAX_TOKENS = 800;
 export const VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_TEMPERATURE = 0.3;
@@ -94,7 +95,7 @@ export async function virtualLearnerEpistemicGrounding(input: any): Promise<Skil
       defaultSystemPrompt: VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-epistemic-grounding' },
-      buildUserPayload,
+      buildUserPayload: (value: any) => projectSimulatorPayload(buildUserPayload(value)),
       validateParsedOutput: (parsed: any) => {
         const g = parsed?.epistemicGrounding;
         const ok = g && typeof g === 'object' && typeof g.sampledCorrectness === 'boolean';

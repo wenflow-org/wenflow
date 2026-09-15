@@ -11,6 +11,7 @@ import {
   type FrictionBudget,
   decideFrictionTrigger,
   PERSONA_FIELD_ANCHORS_HINT,
+  projectSimulatorPayload,
 } from '../virtual-learner-shared';
 
 export const VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_MAX_TOKENS = 1200;
@@ -310,7 +311,7 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
       defaultSystemPrompt: VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-goal-dialogue-simulator' },
-            buildUserPayload,
+            buildUserPayload: (value: any) => projectSimulatorPayload(buildUserPayload(value)),
       validateParsedOutput: (parsed) => ({
         valid: !!safeText(parsed?.reply) && parsed?.learnerState && typeof parsed.learnerState === 'object',
         failureReason: 'missing reply or learnerState'

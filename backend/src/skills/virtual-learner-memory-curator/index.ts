@@ -14,6 +14,7 @@ import { callPrompt } from '../../composers/prompt-composer'
 import { loadPromptFile } from '../../composers/prompt-files/loader'
 import type { SkillDefinition, SkillExecutionResult } from '../protocol'
 import { selfExtractLearnerMemory, type SelfReportedLearnerState } from '../../virtual-lab/learner-memory'
+import { projectSimulatorPayload } from '../virtual-learner-shared'
 
 export const VIRTUAL_LEARNER_MEMORY_CURATOR_MAX_TOKENS = 2400
 export const VIRTUAL_LEARNER_MEMORY_CURATOR_TEMPERATURE = 0.3
@@ -201,7 +202,7 @@ export async function virtualLearnerMemoryCurator(
     defaultSystemPrompt: VIRTUAL_LEARNER_MEMORY_CURATOR_PROMPT,
     requireActivePrompt: true,
     caller: { skillId: 'virtual-learner-memory-curator' },
-    buildUserPayload: (value) => ({
+    buildUserPayload: (value) => projectSimulatorPayload({
       persona: value.persona || null,
       turnSequence: Array.isArray(value.turnSequence) ? value.turnSequence.slice(-24) : [],
       currentTask: value.currentTask || null,

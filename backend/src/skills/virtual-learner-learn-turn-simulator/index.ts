@@ -11,6 +11,7 @@ import {
   type FrictionBudget,
   decideFrictionTrigger,
   PERSONA_FIELD_ANCHORS_HINT,
+  projectSimulatorPayload,
 } from '../virtual-learner-shared';
 import type { EpistemicGrounding } from '../virtual-learner-epistemic-grounding';
 
@@ -379,7 +380,7 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
       defaultSystemPrompt: VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-learn-turn-simulator' },
-            buildUserPayload,
+            buildUserPayload: (value: any) => projectSimulatorPayload(buildUserPayload(value)),
       validateParsedOutput: (parsed: any) => {
         const replyOk = typeof parsed?.reply === 'string' && parsed.reply.trim().length > 0
         const stateOk = parsed?.learnerState && typeof parsed.learnerState === 'object'

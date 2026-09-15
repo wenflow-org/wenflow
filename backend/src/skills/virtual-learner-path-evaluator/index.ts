@@ -11,6 +11,7 @@ import {
   type FrictionBudget,
   decideFrictionTrigger,
   PERSONA_FIELD_ANCHORS_HINT,
+  projectSimulatorPayload,
 } from '../virtual-learner-shared';
 
 export const VIRTUAL_LEARNER_PATH_EVALUATOR_MAX_TOKENS = 1200;
@@ -262,7 +263,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
       defaultSystemPrompt: VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-path-evaluator' },
-            buildUserPayload,
+            buildUserPayload: (value: any) => projectSimulatorPayload(buildUserPayload(value)),
       validateParsedOutput: (parsed) => ({
         valid: !!safeText(parsed?.reaction),
         failureReason: 'missing reaction'
