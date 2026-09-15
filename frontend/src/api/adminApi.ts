@@ -414,6 +414,22 @@ export const adminMemoryTracesApi = {
   }
 };
 
+/**
+ * 记忆与复习观测（记忆层）：到期积压 + 课内温故计划 + 概念归并审计。
+ * 只读；recompute 走 observe（只记录建议，不动 memory_traces）。
+ */
+export const adminMemoryReviewApi = {
+  overview: async (params?: { limit?: number; includeVirtual?: boolean }) => {
+    return adminAxios.get('/admin/memory-review', { params });
+  },
+  detail: async (userId: string) => {
+    return adminAxios.get(`/admin/memory-review/${userId}`);
+  },
+  recompute: async (userId: string) => {
+    return adminAxios.post(`/admin/memory-review/${userId}/recompute`);
+  }
+};
+
 export const adminTeachingSessionsApi = {
   list: async (params?: {
     page?: number;

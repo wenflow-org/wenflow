@@ -87,6 +87,7 @@ const LearnerDetail = asyncPage(() => import('./LearnerDetail.vue'));
 const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
 const UserDetail = asyncPage(() => import('./UserDetail.vue'));
 const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
+const MemoryReview = asyncPage(() => import('./MemoryReview.vue'));
 
 const components: Record<string, unknown> = {
   'overview': Overview,
@@ -100,6 +101,7 @@ const components: Record<string, unknown> = {
   'orchestrator': Orchestrator,
   'prompt-eval': PromptEval,
   'execution-logs': ExecLogs,
+  'memory-review': MemoryReview,
   'audit-logs': AuditLogs,
   'api-config': ApiConfig,
   'addons': Addons,

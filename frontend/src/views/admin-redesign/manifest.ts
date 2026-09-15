@@ -39,5 +39,7 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'ops-center', label: '系统工具', group: '配置', glyph: '维' },
   // 观测组：Token 成本并入执行日志第三 tab（成本分析，2026-09-04）
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志' },
+  // 记忆层可观测（2026-09-15）：到期积压 / 课内温故配额 / 概念归并审计
+  { id: 'memory-review', label: '记忆与复习', group: '观测', glyph: '忆' },
   { id: 'audit-logs', label: '审计日志', group: '观测', glyph: '审' }
 ]
