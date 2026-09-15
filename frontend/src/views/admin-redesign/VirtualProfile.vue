@@ -1251,7 +1251,6 @@ async function loadDetail(id?: string, quiet = false) {
       quality: extractQuality(sessions),
       aiProfile: [
         { label: '知识水平', value: { beginner: '零基础', elementary: '入门', intermediate: '中级', advanced: '进阶' }[String(raw.knowledgeLevel)] || String(raw.knowledgeLevel || '—') },
-        { label: '模拟模式', value: { manual: '手动', auto: '自动' }[String(raw.simulationMode)] || String(raw.simulationMode || '—') },
         { label: '性格基线', value: String(p.emotionalBaseline || p.corePersonality || '—') }
       ],
       simulationBudget: (() => {

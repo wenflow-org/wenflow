@@ -358,5 +358,5 @@ ORDER BY avg_prompt DESC;
 
 - 两者**共用同一层**「虚拟学习者模拟」（`goal-dialogue-sim` / `learn-turn-sim` / `epistemic-grounding` / `memory-curator`），autopilot 也已统一驱动两种模式（`AutopilotMode = 'assisted' | 'blackbox'`）。
 - 真正的区别是**测试分层**：辅助 = 白盒 + 可人工接管（开发/排障）；黑盒 = 黑盒 + HTTP 契约 + 可见性 + 裁判评估（回归/评测）。
-- 可省冗余：`assisted.auto` 与 autopilot 的全自动跑全程重复，可让 `assisted` 只保留"人工单步 + 排障"语义。
-- 附带发现：`profile.simulationMode`（写入 `'manual'`）**只写不读**，疑似死配置。
+- **不重叠的是粒度**（复核后更正）：`/sessions/:id/auto`（`executeAutoLoop`）是**有界、同步**的"跑一轮"（驾驶舱传 `maxRounds:10`，返回 `results[]`）；autopilot 是**异步、到终点**的监督器（含 stop 感知、状态持久化、租约、看门狗/重试）。二者共用 `executeSingleStep` 原语，但语义不同 → **不是重复，不应合并**（此前"assisted.auto 与 autopilot 重复"的说法已作废）。
+- `profile.simulationMode`（写入 `'manual'`）**后端只写不读**（仅前端 `VirtualProfile.vue` 当标签显示）→ 属**展示型死配置**。已清理其代码接线（路由 create/update、batch-experiment/batch-job/seeder 的写入、前端展示行与 api 类型）；**DB 列保留**（删除列需迁移，未在共享 dev.db 上动）。

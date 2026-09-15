@@ -67,7 +67,6 @@ async function createLearner(cfg: BatchLearnerConfig): Promise<string> {
       profile: '{}',
       learningGoal: cfg.learningGoal ?? '',
       knowledgeLevel: 'beginner',
-      simulationMode: 'manual',
       simulationTemperature: 0.8,
       tags: JSON.stringify(['batch-experiment']),
       notes: `批量实验自动创建`,

@@ -244,7 +244,6 @@ class BatchJobService {
         profile: JSON.stringify(profilePayload),
         learningGoal: '',
         knowledgeLevel: 'beginner',
-        simulationMode: 'manual',
         simulationTemperature: 0.8,
         notes: input.note ? `${input.note} · ${input.story}` : input.story,
       },

@@ -1265,7 +1265,6 @@ export const adminVirtualLearnersApi = {
       cognitiveLoadTolerance?: string;
       memoryRepairPattern?: string;
     };
-    simulationMode?: string;
     simulationTemperature?: number;
     personalityTraits?: {
       verbosity?: string;

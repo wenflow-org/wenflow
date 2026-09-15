@@ -86,7 +86,6 @@ async function syncOnePreset(client: PrismaLike, preset: BuiltinLearnerPreset): 
         knowledgeLevel: 'beginner',
         knownConcepts: jsonOrNull(preset.personaSeed.knownConcepts),
         struggleConcepts: jsonOrNull(preset.personaSeed.struggleConcepts),
-        simulationMode: 'manual',
         simulationTemperature: 0.8,
         personalityTraits: jsonOrNull(preset.personaSeed.personalityTraits),
         tags: buildTags(preset),

@@ -1281,7 +1281,6 @@ router.post('/', async (req: Request, res) => {
       knowledgeLevel,
       knownConcepts,
       struggleConcepts,
-      simulationMode,
       simulationPrompt,
       simulationModel,
       simulationTemperature,
@@ -1332,7 +1331,6 @@ router.post('/', async (req: Request, res) => {
         knowledgeLevel: normalizedKnowledgeLevel,
         knownConcepts: knownConcepts ? JSON.stringify(knownConcepts) : null,
         struggleConcepts: struggleConcepts ? JSON.stringify(struggleConcepts) : null,
-        simulationMode: simulationMode || 'manual',
         simulationPrompt,
         simulationModel,
         simulationTemperature: simulationTemperature || 0.8,
@@ -1809,7 +1807,6 @@ router.put('/:id', async (req: Request, res) => {
     if (req.body.knowledgeLevel) updateData.knowledgeLevel = req.body.knowledgeLevel;
     if (req.body.knownConcepts) updateData.knownConcepts = JSON.stringify(req.body.knownConcepts);
     if (req.body.struggleConcepts) updateData.struggleConcepts = JSON.stringify(req.body.struggleConcepts);
-    if (req.body.simulationMode) updateData.simulationMode = req.body.simulationMode;
     if (req.body.simulationPrompt) updateData.simulationPrompt = req.body.simulationPrompt;
     if (req.body.simulationModel) updateData.simulationModel = req.body.simulationModel;
     if (req.body.simulationTemperature) updateData.simulationTemperature = req.body.simulationTemperature;
