@@ -431,7 +431,7 @@ ORDER BY avg_prompt DESC;
 | **C4** learner-model | **不成立**：`agents/learner-model-agent` **无 `maxTokens` 声明**；户口簿 notes 明确"**无 LLM 输入组装**" | 划掉（过期） |
 | **C5** learning-predictor | **成立但属延迟**：`TeachingContextBuilder` 每次建课堂多次 prisma 查询（含 `prediction_records.findFirst`）；非 token 问题 | 降级 |
 | **C6** finalization / state-review | **部分成立（DB）**：`assembleLearningState` 由 dashboard / state-review / learning-state-guidance **各自请求**调用；合并需跨请求缓存 | 降级 |
-| **C7** opening-generator 超时 | **已修（2026-09-15）**：实测 148 次**成功**调用时延 **p50=3.9s / p90=8.2s / p95=11.2s / max=14.1s**，而原 **15s** 恰好切在 p95~max 之间 → 59 次失败**全部停在 15.0–15.8s**（`CALLER_ABORTED`，成功率 71%）。改为 **30s**（>2× max）且支持 `OPENING_GENERATION_TIMEOUT_MS` 覆盖；真失败仍有 `buildDeterministicOpening` 兜底 | ✅ 完成 |
+| **C7** opening-generator 超时 | **已修 + 现场闭环（2026-09-15）**：实测 148 次**成功**调用时延 **p50=3.9s / p90=8.2s / p95=11.2s / max=14.1s**，原 **15s** 恰切在 p95~max 之间 → 59 次失败**全部停在 15.0–15.8s**（`CALLER_ABORTED`）。改为 **30s**（`OPENING_GENERATION_TIMEOUT_MS` 可覆盖）。**现场证据**：修复后出现 **`dur=18620ms 且 success=1`**（旧超时下必被砍），且新失败停在 **`30076ms`**（= 新 30s 上限生效，而非 15s） | ✅ 完成 |
 | **C8** `simulationMode` DB 列 | **成立**：仅清代码接线，**列未迁移**（共享 dev.db 上不动迁移） | 需迁移时再动 |
 | **D** 验证欠账 | **2026-09-15 已闭环**：✅ `storyHistory`（goal-dialogue-sim + learn-turn-sim 现场均为 `storyHistory`、无 `storyPool`）✅ `persona-designer` 首键=`candidatePersonas` ✅ 紧凑序列化 ✅ **`teaching-turn` 单键 `messages`**（22:12 现场：keys 含 `messages`、无 `recentDialogueContext`/`visibleDialogueContext`）✅ **progress-report 指标**（22:02 现场：`ktl=75.2 / lf=28.2 / lss=28.2`，不再恒 0）✅ 缓存率：近 24h 全局 **37.5%**（改造前 20.9%） | ✅ 闭环（见 §7.15） |
 | **E** 文档漂移 | 本轮已加 §3 状态指针 + 本表；`stage-designer` 前缀、`storyPool→storyHistory` 投影、§4 P0 前缀稳定化均已标注 | ✅ 完成 |
@@ -455,3 +455,15 @@ ORDER BY avg_prompt DESC;
 - **`teaching-turn` 单键**：22:12:16 payload keys = `scenario, promptDirectives, learner, controls, knowledge, classroomContext, classroomEventContext, interactionProfile, **messages**, latestLearnerMessage` → `messages` 长度 14；**`recentDialogueContext` / `visibleDialogueContext` 均已消失**；紧凑格式 ✓
 - **`learner-progress-report` 端到端**：22:02:05 任务完成调用 → `metrics={"completionRate":10,"ktl":**75.2**,"lf":**28.2**,"lss":28.2}` → **KTL/LF 不再恒 0**（0–100 display 口径落地）✓
 - **`virtual-learner-learn-turn-simulator`（VL 投影）**：22:12:50 → `storyPool? False` / `storyHistory? True` ✓
+
+### 7.16 C7 现场闭环：开场超时 15s→30s（2026-09-15 22:5x）
+
+**证据（真实链路，驱动 VL 跑到 teaching 后取样）**
+| 时间 | 时延 | 结果 | 说明 |
+|---|---|---|---|
+| 22:51:25 | **18,620 ms** | **success=1** | **旧 15s 下必被砍**的调用，现在成功 → 修复生效 |
+| 22:41:59 | **30,076 ms** | CALLER_ABORTED | 新失败停在 **~30s**（= 新上限），证明超时值确实已从 15s 改为 30s |
+| （历史）08:06–08:24 / 15:30 | 15,0xx–15,8xx ms | CALLER_ABORTED | 旧上限下的失败带（59 次全部落在这里） |
+
+**结论**：修复同时满足两个判据——① 出现 **>15s 且成功**的样本；② 失败带从 15s 迁移到 30s。
+**残留**：仍有单次 >30s 的超时（22:41:59）；若后续实测 30s 挡掉的合法调用仍多，可再抬阈值或给开场加一次重试（当前有 `buildDeterministicOpening` 兜底，不阻断链路）。
