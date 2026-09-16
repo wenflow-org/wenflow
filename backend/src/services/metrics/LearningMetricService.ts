@@ -11,7 +11,12 @@
  */
 
 import prisma from '../../config/database';
-import learningStateService, { toInternalTenScale } from '../learning/learning-state.service';
+import learningStateService, {
+  toInternalTenScale,
+  internalTenToDisplay,
+  asDisplayHundred,
+  asDisplayBalance,
+} from '../learning/learning-state.service';
 import { predictionCalibrationService } from '../learner/PredictionCalibrationService';
 import { logger } from '../../utils/logger';
 import type { DurableDomainEvent } from '../../events/contracts';
@@ -132,20 +137,16 @@ export async function updateLearningMetrics(
       // 现在：入参用 toInternalTenScale 收敛到 0-10（兼容 0-10 / 0-100 两种 caller 口径），
       // 再 ×10 进入 display 契约；EWMA 全程在 display 刻度上做。
       const lss10 = toInternalTenScale(lssScore);
-      const lssDisplay = Math.round(lss10 * 10 * 1000) / 1000;  // 0-10 → 0-100（display 契约）
-      const clamp100 = (value: number) => Math.max(0, Math.min(100, value));
+      // 刻度转换只能走这两个命名函数（品牌类型保证：普通 number 塞不进 display 契约）
+      const lssDisplay = internalTenToDisplay(lss10);
       const prev = previousMetrics ? learningStateService.toDisplayMetrics(previousMetrics) : null;
-      const ktl = prev?.ktl != null
-        ? clamp100(prev.ktl * 0.95 + lssDisplay * 0.05)
-        : clamp100(lssDisplay * 0.5);
-      const lf = prev?.lf != null
-        ? clamp100(prev.lf * 0.7 + lssDisplay * 0.15)
-        : clamp100(lssDisplay * 0.3);
+      const ktl = asDisplayHundred(prev?.ktl != null ? prev.ktl * 0.95 + lssDisplay * 0.05 : lssDisplay * 0.5);
+      const lf = asDisplayHundred(prev?.lf != null ? prev.lf * 0.7 + lssDisplay * 0.15 : lssDisplay * 0.3);
       return {
         lss: lssDisplay,
         ktl,
         lf,
-        lsb: Math.max(-100, Math.min(100, ktl - lf)),
+        lsb: asDisplayBalance(ktl - lf),
         timestamp: asOf,
         source: 'task-completion',
         taskId: input.taskId || null,

@@ -17,6 +17,8 @@ jest.mock('../../../utils/logger', () => ({
 
 import learningStateService, {
   LearningStateRevisionConflictError,
+  asDisplayHundred,
+  asDisplayBalance,
   type LearningStateMetrics
 } from '../learning-state.service'
 
@@ -53,11 +55,12 @@ describe('LearningStateService display metric concurrency', () => {
         lsb: 4,
         timestamp: new Date('2026-07-19T00:02:00.000Z')
       })
+    // display 契约必须经过命名转换器（品牌类型保证：普通 number 塞不进来）
     const derive = jest.fn((previous: LearningStateMetrics | null) => ({
-      lss: (previous?.lss || 0) + 1,
-      ktl: (previous?.ktl || 0) + 1,
-      lf: (previous?.lf || 0) + 1,
-      lsb: previous?.lsb || 0,
+      lss: asDisplayHundred((previous?.lss || 0) + 1),
+      ktl: asDisplayHundred((previous?.ktl || 0) + 1),
+      lf: asDisplayHundred((previous?.lf || 0) + 1),
+      lsb: asDisplayBalance(previous?.lsb || 0),
       source: 'test',
       primaryMetric: 'lsb' as const
     }))
@@ -92,10 +95,10 @@ describe('LearningStateService display metric concurrency', () => {
     })
 
     const result = await learningStateService.commitDisplayMetrics('user-1', {
-      lss: display,
-      ktl: display,
-      lf: display,
-      lsb: -display,
+      lss: asDisplayHundred(display),
+      ktl: asDisplayHundred(display),
+      lf: asDisplayHundred(display),
+      lsb: asDisplayBalance(-display),
       expectedRevision: 0,
       sourceKey: 'test-scale'
     })
@@ -124,10 +127,10 @@ describe('LearningStateService display metric concurrency', () => {
     })
 
     await learningStateService.commitDerivedDisplayMetrics('user-1', () => ({
-      lss: 10,
-      ktl: 10,
-      lf: 10,
-      lsb: 0
+      lss: asDisplayHundred(10),
+      ktl: asDisplayHundred(10),
+      lf: asDisplayHundred(10),
+      lsb: asDisplayBalance(0)
     }), { sourceKey: 'task-completion:task-1' })
 
     expect(learningStateService.getCurrentStateSnapshot)
@@ -192,10 +195,10 @@ describe('LearningStateService display metric concurrency', () => {
       timestamp: asOf
     })
     const derive = jest.fn(() => ({
-      lss: 30,
-      ktl: 40,
-      lf: 20,
-      lsb: 20,
+      lss: asDisplayHundred(30),
+      ktl: asDisplayHundred(40),
+      lf: asDisplayHundred(20),
+      lsb: asDisplayBalance(20),
       timestamp: asOf
     }))
 

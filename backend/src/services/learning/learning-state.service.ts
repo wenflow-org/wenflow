@@ -105,10 +105,13 @@ interface LearningStateMetricPersistOptions {
 }
 
 export interface DisplayMetricCommitInput {
-  lss: number;
-  ktl: number;
-  lf: number;
-  lsb: number;
+  /** display 刻度（0-100）：必须由 internalTenToDisplay / asDisplayHundred 产出。
+   *  品牌类型会让"直接把 0-10 值或未经归一的原始值塞进来"在编译期失败——
+   *  历史事故正是这样发生的（lss=0-10 被当成 0-100，落库时又多除一个 10）。 */
+  lss: DisplayHundred;
+  ktl: DisplayHundred;
+  lf: DisplayHundred;
+  lsb: DisplayBalance;
   expectedRevision: number;
   sourceKey?: string;
   timestamp?: Date;
@@ -244,13 +247,81 @@ export interface InterventionDecision {
 }
 
 /**
- * 0-10 量纲归一（模块级函数，便于写入点直接复用；避免依赖注入/mock 差异）。
+ * ── 量纲品牌类型（把"刻度"从注释变成类型） ─────────────────────────────
+ * 历史事故（2026-09-16 修复）：同一个 `lss` 在落库侧是 0-10、在回调契约里是 0-100，
+ * 而两者都是 `number` —— 于是"多除一个 10"能一路静默通过测试与审阅，线上值被压成 0.4。
+ * 现在：转换函数的输出带品牌，**普通 number 无法直接塞进 display 契约**，
+ * 必须显式经过 `internalTenToDisplay` / `asDisplayHundred`（各自的刻度假设写在函数名与注释里）。
+ */
+export type InternalTen = number & { readonly __scale: 'internal-10' };
+export type InternalBalance = number & { readonly __scale: 'internal-balance' };
+export type DisplayHundred = number & { readonly __scale: 'display-100' };
+export type DisplayBalance = number & { readonly __scale: 'display-balance' };
+
+/**
+ * 0-10 量纲归一（**全库唯一的内部刻度归一入口**）。
  * 规则：>10 视为 0-100 刻度除以 10，否则按 0-10 原样 clamp。
  */
-export function toInternalTenScale(value: number | null | undefined): number {
+export function toInternalTenScale(value: number | null | undefined): InternalTen {
   const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
-  if (numeric > 10) return Math.min(10, Math.max(0, numeric / 10));
-  return Math.min(10, Math.max(0, numeric));
+  if (numeric > 10) return Math.min(10, Math.max(0, numeric / 10)) as InternalTen;
+  return Math.min(10, Math.max(0, numeric)) as InternalTen;
+}
+
+/** -10..10 平衡值归一（>10 / <-10 视为 -100..100 刻度） */
+export function toInternalBalance(value: number | null | undefined): InternalBalance {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  if (numeric > 10 || numeric < -10) return Math.max(-10, Math.min(10, numeric / 10)) as InternalBalance;
+  return Math.max(-10, Math.min(10, numeric)) as InternalBalance;
+}
+
+/** 内部 0-10 → display 0-100（**唯一**的 ×10 出口） */
+export function internalTenToDisplay(value: number | null | undefined): DisplayHundred {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return (Math.round(Math.max(0, Math.min(10, numeric)) * 10 * 1000) / 1000) as DisplayHundred;
+}
+
+/** 已经是 display 0-100 的原始值 → 品牌化（只 clamp，不再换算；假设写在函数名里） */
+export function asDisplayHundred(value: number | null | undefined): DisplayHundred {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return Math.max(0, Math.min(100, numeric)) as DisplayHundred;
+}
+
+/** 已经是 display -100..100 的原始值 → 品牌化 */
+export function asDisplayBalance(value: number | null | undefined): DisplayBalance {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return Math.max(-100, Math.min(100, numeric)) as DisplayBalance;
+}
+
+/**
+ * 量纲自检（落库/读取双侧）：越界即**告警**（不静默），并 clamp 回权威刻度保证可用性。
+ * 说明：这是运行期兜底 —— 编译期由品牌类型拦"刻度混用"，运行期拦"越界脏值"（含历史遗留行）。
+ */
+export function guardInternalScale(
+  input: { lss: number; ktl: number; lf: number; lsb: number },
+  context: string
+): { lss: number; ktl: number; lf: number; lsb: number } {
+  const inRange = (value: number, min: number, max: number) =>
+    Number.isFinite(value) && value >= min - 1e-9 && value <= max + 1e-9;
+  const violations: string[] = [];
+  if (!inRange(input.lss, 0, 10)) violations.push('lss');
+  if (!inRange(input.ktl, 0, 10)) violations.push('ktl');
+  if (!inRange(input.lf, 0, 10)) violations.push('lf');
+  if (!inRange(input.lsb, -10, 10)) violations.push('lsb');
+
+  if (violations.length === 0) return input;
+
+  logger.warn('[scale-guard] 学习状态量纲越界（已 clamp 回 0-10/-10..10）', {
+    context,
+    fields: violations,
+    value: { lss: input.lss, ktl: input.ktl, lf: input.lf, lsb: input.lsb },
+  });
+  return {
+    lss: Number(toInternalTenScale(input.lss)),
+    ktl: Number(toInternalTenScale(input.ktl)),
+    lf: Number(toInternalTenScale(input.lf)),
+    lsb: Number(toInternalBalance(input.lsb)),
+  };
 }
 
 export class LearningStateService {
@@ -265,12 +336,9 @@ export class LearningStateService {
     return Math.max(0, Math.floor(diff / 86400000));
   }
 
+  /** 单一归一入口的别名（历史上这里有一份重复实现，导致"两套刻度"并存） */
   private normalizeTenScale(value: number | null | undefined): number {
-    const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
-    if (numeric > 10) {
-      return Math.min(10, Math.max(0, numeric / 10));
-    }
-    return Math.min(10, Math.max(0, numeric));
+    return toInternalTenScale(value);
   }
 
   /**
@@ -282,11 +350,7 @@ export class LearningStateService {
   }
 
   private normalizeBalanceScale(value: number | null | undefined): number {
-    const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
-    if (numeric > 10 || numeric < -10) {
-      return Math.max(-10, Math.min(10, numeric / 10));
-    }
-    return Math.max(-10, Math.min(10, numeric));
+    return toInternalBalance(value);
   }
 
   private displayTenScaleToInternal(value: number | null | undefined): number {
@@ -412,6 +476,9 @@ export class LearningStateService {
     calculatedAt: Date;
     pathId?: string | null;
   }): LearningStateCommittedSnapshot | null {
+    // 读取侧自检要在**归一之前**：归一会把 40 悄悄变成 4，脏数据就此隐形。
+    // 这里只告警不改行为（值仍由 coerceMetrics 归一），把"列里存了越界/异刻度值"暴露出来。
+    this.reportRawScaleAnomaly(record, 'read:committed-metric-raw');
     const metrics = this.coerceMetrics({
       lss: record.lss,
       ktl: record.ktl,
@@ -426,6 +493,27 @@ export class LearningStateService {
       calculatedAt: record.calculatedAt,
       pathId: record.pathId ?? null,
     };
+  }
+
+  /** 读取侧：列里出现越界值（>10 / <-10 / 非有限数）→ 告警（异刻度或脏写入的可见化） */
+  private reportRawScaleAnomaly(
+    record: { lss: number | null; ktl: number | null; lf: number | null; lsb: number | null },
+    context: string
+  ): void {
+    const inRange = (value: number | null, min: number, max: number) =>
+      value == null || (Number.isFinite(value) && value >= min - 1e-9 && value <= max + 1e-9);
+    const anomalies = [
+      inRange(record.lss, 0, 10) ? null : 'lss',
+      inRange(record.ktl, 0, 10) ? null : 'ktl',
+      inRange(record.lf, 0, 10) ? null : 'lf',
+      inRange(record.lsb, -10, 10) ? null : 'lsb',
+    ].filter(Boolean) as string[];
+    if (anomalies.length === 0) return;
+    logger.warn('[scale-guard] 读取到越界的已提交指标（可能存了 0-100/0-1 等异刻度值）', {
+      context,
+      fields: anomalies,
+      raw: { lss: record.lss, ktl: record.ktl, lf: record.lf, lsb: record.lsb },
+    });
   }
 
   private wrapupSessionToSnapshot(session: {
@@ -1008,6 +1096,9 @@ export class LearningStateService {
         })
       : null;
 
+    // 落库侧自检：任何生产者绕过转换器塞进来的越界值都会在这里被拦下并告警
+    const safeMetrics = guardInternalScale(metrics, 'write:build-metric-create-data');
+
     return {
       id: `lm_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       sourceKey: options.sourceKey || null,
@@ -1015,15 +1106,15 @@ export class LearningStateService {
       pathId: options.pathId || null,
       taskId: options.taskId || null,
       metricType: 'learning_state',
-      value: options.primaryMetric === 'lsb' ? metrics.lsb : metrics.lss,
-      lss: metrics.lss,
-      ktl: metrics.ktl,
-      lf: metrics.lf,
-      lsb: metrics.lsb,
-      lssCurrent: metrics.lss,
-      ktlCurrent: metrics.ktl,
-      lfCurrent: metrics.lf,
-      lsbCurrent: metrics.lsb,
+      value: options.primaryMetric === 'lsb' ? safeMetrics.lsb : safeMetrics.lss,
+      lss: safeMetrics.lss,
+      ktl: safeMetrics.ktl,
+      lf: safeMetrics.lf,
+      lsb: safeMetrics.lsb,
+      lssCurrent: safeMetrics.lss,
+      ktlCurrent: safeMetrics.ktl,
+      lfCurrent: safeMetrics.lf,
+      lsbCurrent: safeMetrics.lsb,
       lssHistory: JSON.stringify(lssHistory),
       metadata,
       calculatedAt: metrics.timestamp,

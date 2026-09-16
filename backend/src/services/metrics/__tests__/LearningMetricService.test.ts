@@ -13,24 +13,25 @@ const mockToDisplayMetrics = jest.fn((metrics: any) => ({
 }))
 
 jest.mock('../../../config/database', () => ({ __esModule: true, default: mockPrisma }))
-// 量纲归一的真实实现（模块级函数，属被测模块的公共接口，mock 需保持一致）
-const toInternalTenScale = (value: any) => {
-  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
-  if (numeric > 10) return Math.min(10, Math.max(0, numeric / 10));
-  return Math.min(10, Math.max(0, numeric));
-};
-
-jest.mock('../../learning/learning-state.service', () => ({
-  __esModule: true,
-  toInternalTenScale,
-  default: {
-    commitDerivedDisplayMetrics: mockCommitDerivedDisplayMetrics,
-    toDisplayMetrics: mockToDisplayMetrics,
-    toInternalTenScale,
-    getCurrentState: jest.fn()
+// 刻度转换函数一律用**真实实现**：mock 里手抄一份就是"两套实现会漂移"的老毛病本身。
+jest.mock('../../learning/learning-state.service', () => {
+  const actual = jest.requireActual('../../learning/learning-state.service')
+  return {
+    __esModule: true,
+    toInternalTenScale: actual.toInternalTenScale,
+    internalTenToDisplay: actual.internalTenToDisplay,
+    asDisplayHundred: actual.asDisplayHundred,
+    asDisplayBalance: actual.asDisplayBalance,
+    default: {
+      commitDerivedDisplayMetrics: mockCommitDerivedDisplayMetrics,
+      toDisplayMetrics: mockToDisplayMetrics,
+      toInternalTenScale: actual.toInternalTenScale,
+      getCurrentState: jest.fn()
+    }
   }
-}))
+})
 
+import { toInternalTenScale } from '../../learning/learning-state.service'
 import {
   reconcileTaskCompletionMetric,
   updateLearningMetrics
@@ -115,17 +116,15 @@ describe('LearningMetricService task completion persistence', () => {
       lf: expect.any(Number),
       lsb: expect.any(Number),
     }))
-    // 回调输出契约 = display（lss/ktl/lf 0-100、lsb -100~100）……
-    for (const key of ['lss', 'ktl', 'lf'] as const) {
-      expect(derived[key]).toBeGreaterThanOrEqual(0)
-      expect(derived[key]).toBeLessThanOrEqual(100)
-    }
-    expect(derived.lsb).toBeGreaterThanOrEqual(-100)
-    expect(derived.lsb).toBeLessThanOrEqual(100)
-    // ……落库后经 displayTenScaleToInternal(/10) 收敛到 internal-10；回归护栏：
-    // 绝不能再出现 0-1 量纲的 lss（历史缺陷特征：lss≈0.4 让消费侧阈值全部失效）
-    expect(toInternalTenScale(derived.lss)).toBeGreaterThan(1)
-    expect(toInternalTenScale(derived.lss)).toBeLessThanOrEqual(10)
+    // 断言**具体刻度**而不是"落在某个范围里"：difficulty 6 → 内部 LSS = 6×10×0.8 ÷10 = 4.8
+    // → display 契约 = 48；无前值：ktl = 48×0.5 = 24、lf = 48×0.3 = 14.4、lsb = 9.6。
+    // 只有具体值才能拦住"多除/少除一个 10"这类错误（范围断言对 0.4 与 40 都放行）。
+    expect(derived.lss).toBe(48)
+    expect(derived.ktl).toBeCloseTo(24, 6)
+    expect(derived.lf).toBeCloseTo(14.4, 6)
+    expect(derived.lsb).toBeCloseTo(9.6, 6)
+    // 落库后经 /10 收敛到 internal-10（品牌类型保证这一步只能走转换器）
+    expect(toInternalTenScale(derived.lss)).toBe(4.8)
     expect(derived.source).toBe('task-completion')
     expect(derived.primaryMetric).toBe('lsb')
   })
