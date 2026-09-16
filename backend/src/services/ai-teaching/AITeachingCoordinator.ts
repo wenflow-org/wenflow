@@ -307,6 +307,14 @@ function warmupKeyOf(name: string): string {
   return normalizeConceptKey(name);
 }
 
+/**
+ * 能代表「当场回捞出了结果」的看板状态。
+ * 提示词要求回捞成功才把温故点推进为 learning / mastered；模型有时会把它标成 'review'
+ * （= 已提问、待作答）或 'pending'（= 尚未处理）——这两种只说明"问过了"，不是作答表现，
+ * 因此**不收录为结果**（否则收束时会按"没答出"落成 again，污染记忆状态与间隔）。
+ */
+const WARMUP_RESULT_STATUSES = new Set(['mastered', 'learning']);
+
 /** 计划内温故点的归一化键集合 */
 function buildWarmupKeySet(plan: ReviewPlan | null | undefined): Set<string> {
   const keys = new Set<string>();
@@ -315,6 +323,38 @@ function buildWarmupKeySet(plan: ReviewPlan | null | undefined): Set<string> {
     if (key) keys.add(key);
   }
   return keys;
+}
+
+/**
+ * 交给模型的本节温故视图：**只保留尚未回捞的点**。
+ * - 已在本节报告过结果的点不再重复问（也避免后续回合覆盖已记录的结果）；
+ * - 全部完成 → 返回 null，提示词走"本节不温故"分支；
+ * - 注意：`stripWarmupPoints` / `extractWarmupOutcomes` 仍须用**完整计划**（它们负责"温故点永不进
+ *   本节看板"），否则模型若在后续回合才报出结果，就会漏摘并串进看板（回归 2e3ca16）。
+ */
+export function pendingWarmupForModel(plan: ReviewPlan | null | undefined): ReviewPlan | null {
+  if (!plan || !Array.isArray(plan.items)) return null;
+  const pending = plan.items.filter((item) => !item?.outcome?.status);
+  if (pending.length === 0) return null;
+  return {
+    ...plan,
+    items: pending,
+    // 与 items 保持一致的视图：只算还没回捞的负担
+    usedLoad: pending.reduce((sum, item) => sum + (Number(item.load) || 0), 0),
+  };
+}
+
+/**
+ * 每回合重建 context 后回填温故计划。
+ * 断点回归（2026-09-16 调查）：计划只在 `startSession` 里赋给 context，而回合侧每回合重建 context，
+ * 于是 `scenario.memoryWarmup` 恒为 null——提示词的温故规则成了死代码，结果也永远摘不到。
+ * 计划持久化在 `sessionArtifacts.memoryWarmup`（开课建立、随回合合并结果），这里必须回填。
+ */
+export function resolveTurnMemoryWarmup(
+  sessionArtifacts: Record<string, any> | null | undefined,
+): ReviewPlan | null {
+  const persisted = sessionArtifacts?.memoryWarmup;
+  return persisted && Array.isArray(persisted.items) && persisted.items.length > 0 ? persisted : null;
 }
 
 /**
@@ -333,9 +373,13 @@ export function extractWarmupOutcomes(
   for (const point of points) {
     const name = String(point?.name || '').trim();
     if (!name || !keys.has(warmupKeyOf(name))) continue;
+    const status = String(point.status || '') || 'learning';
+    // 只有「当场回捞出了结果」的状态才算结果：模型把温故点写回来只为提问（'review'）时，
+    // 它不代表任何作答表现——若当成结果收录，收束时会按"没答出"落成 again，污染记忆状态。
+    if (!WARMUP_RESULT_STATUSES.has(status)) continue;
     outcomes.push({
       conceptKey: name,
-      status: String(point.status || '') || 'learning',
+      status,
       progress: Number(point.progress) || 0,
     });
   }
@@ -1159,7 +1203,7 @@ async function buildTeachingTurnInput(
     lastLessonRecap: context.lastLessonRecap,
     priorLearningContext: context.priorLearningContext,
     learnerInsights: context.learnerInsights ?? null,
-    memoryWarmup: context.memoryWarmup ?? null,
+    memoryWarmup: pendingWarmupForModel(context.memoryWarmup),
     learnerPrediction: context.learnerPrediction
       ? {
           stallRisk: context.learnerPrediction.stallRisk,
@@ -1597,6 +1641,8 @@ export class AITeachingOrchestrator {
           {},
         ),
         sessionArtifacts: {
+          // 计划在 reserve 时建立；这里必须保留（此前整段重写把计划抹掉，导致首个回合就没有温故）
+          ...(memoryWarmup ? { memoryWarmup } : {}),
           initialKnowledgeState: seededKnowledgeState,
           pathBackgroundContext: buildPathBackgroundContext(context),
           endReason: null,
@@ -1789,6 +1835,12 @@ export class AITeachingOrchestrator {
 
     const previousTeachingState = session.teachingState || {};
     const sessionArtifacts = parseSessionArtifacts(previousTeachingState);
+    // 课内温故：计划持久化在 sessionArtifacts（开课时建立、随回合合并结果），
+    // 而 context 每回合重建 → 必须回填，否则模型永远拿不到温故计划、结果也摘不到。
+    const turnMemoryWarmup = resolveTurnMemoryWarmup(sessionArtifacts);
+    if (turnMemoryWarmup) {
+      context.memoryWarmup = turnMemoryWarmup;
+    }
     const effectiveInitialKnowledgeState = cloneKnowledgePoints(
       Array.isArray(sessionArtifacts.initialKnowledgeState) && sessionArtifacts.initialKnowledgeState.length > 0
         ? sessionArtifacts.initialKnowledgeState
