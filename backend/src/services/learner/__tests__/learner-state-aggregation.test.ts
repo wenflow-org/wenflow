@@ -193,11 +193,18 @@ describe('deriveLearningControlState（单课压力起作用的地方 = 课内�
     expect(control.shouldOfferBreak).toBe(true);
   });
 
-  it('无课内状态时回退全局聚合（老行为）', () => {
-    const control = deriveLearningControlState({
+  it('无课内状态（本路径还没历史）→ 不借用别的路径的单课压力降档；疲劳信号仍生效', () => {
+    const stressOnly = deriveLearningControlState({
       dynamicState: dynamicState({ metrics: { lss: 7, ktl: 3, lf: 1, lsb: 2 } }) as any,
       knowledgeMemory: knowledgeMemory(),
     });
-    expect(control.paceMode).toBe('recover');
+    // LSS 是会话级量：没有"本路径"上下文时不能拿全局（可能是别的路径的难课）来降档
+    expect(stressOnly.paceMode).toBe('steady');
+
+    const fatigued = deriveLearningControlState({
+      dynamicState: dynamicState({ metrics: { lss: 7, ktl: 3, lf: 7, lsb: -4 }, fatigueRisk: 'high' }) as any,
+      knowledgeMemory: knowledgeMemory(),
+    });
+    expect(fatigued.paceMode).toBe('recover'); // 疲劳是学习者级信号，不受路径上下文限制
   });
 });

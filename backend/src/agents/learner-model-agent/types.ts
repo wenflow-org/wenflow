@@ -376,6 +376,20 @@ export interface TeachingLearnerProjection {
     recurringConfusions: LearnerRecurringConfusion[];
   };
   learningControlState: LearnerLearningControlState;
+  /**
+   * 任务级难度调整结论（可选）：baseline/adjusted/direction/reasons。
+   * 由 TaskDifficultyAdjustmentService 按学习者状态确定，课堂按此调整本节难度。
+   */
+  taskDifficulty?: {
+    baseline: number;
+    adjusted: number;
+    direction: 'decrease' | 'keep' | 'increase';
+    delta: number;
+    cap: number;
+    capSource: 'low' | 'medium' | 'high';
+    reasons: string[];
+    evidence: Record<string, unknown>;
+  };
   teachingHints: {
     promptEnhancement: string;
     recommendedApproach: string;

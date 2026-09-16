@@ -1,3 +1,4 @@
+import type { TaskDifficultyAdjustment } from './TaskDifficultyAdjustmentService';
 import type {
   LearnerPlanningProjection,
   LearnerReplanProjection,
@@ -164,7 +165,15 @@ export class LearnerProjectionService {
     };
   }
 
-  toTeachingProjection(snapshot: LearnerSnapshot): TeachingLearnerProjection {
+  /**
+   * @param options.taskDifficulty 任务级难度调整结论（由 TaskDifficultyAdjustmentService 判定）。
+   * 作为 learnerProjection 的字段整体注入课堂 prompt，使"这节课的难度"由学习者模型驱动，
+   * 而不是留给模型自行揣测。
+   */
+  toTeachingProjection(
+    snapshot: LearnerSnapshot,
+    options: { taskDifficulty?: TaskDifficultyAdjustment } = {}
+  ): TeachingLearnerProjection {
     const currentPath = snapshot.knowledgeMemory.currentPath;
 
     return {
@@ -207,6 +216,7 @@ export class LearnerProjectionService {
         recurringConfusions: snapshot.knowledgeMemory.globalBackground.recurringConfusions.slice(0, 8),
       },
       learningControlState: snapshot.learningControlState,
+      ...(options.taskDifficulty ? { taskDifficulty: options.taskDifficulty } : {}),
       teachingHints: {
         promptEnhancement: snapshot.teachingHints.promptEnhancement,
         recommendedApproach: snapshot.teachingHints.recommendedApproach,

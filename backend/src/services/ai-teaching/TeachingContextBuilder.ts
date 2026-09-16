@@ -4,6 +4,7 @@ import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefresh
 import { teachingStrategyConfig } from '../../config/pedagogy.config';
 import type { TeachingKnowledgePointState, TeachingSessionRecord } from './TeachingSessionRepository';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
+import { decideTaskDifficulty, resolveBaselineLevel } from '../learner/TaskDifficultyAdjustmentService';
 import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 import { executeSkill } from '../../skills';
 import { learningPredictorDefinition, type LearningPredictorOutput } from '../../skills/learning-predictor';
@@ -751,7 +752,25 @@ export async function buildTeachingScenarioContext(
     taskId: task.id,
     scope: 'teaching',
   });
-  const learnerProjection = learnerProjectionService.toTeachingProjection(learnerSnapshot);
+  const learnerProjection = learnerProjectionService.toTeachingProjection(learnerSnapshot, {
+    // 任务级难度：由学习者状态（课内=本路径、全局=总负担）确定档位，代码判定、可审计（不用 LLM）
+    taskDifficulty: decideTaskDifficulty({
+      baselineLevel: resolveBaselineLevel({
+        cognitiveLoad: (task as any).cognitiveLoad,
+        cognitiveLevel: (task as any).cognitiveLevel,
+      }),
+      globalMetrics: learnerSnapshot.dynamicState.metrics,
+      lessonMetrics: learnerSnapshot.dynamicState.lessonMetrics ?? null,
+      learningControlState: learnerSnapshot.learningControlState,
+      fatigueRisk: learnerSnapshot.dynamicState.fatigueRisk,
+      recommendedPacing: learnerSnapshot.dynamicState.recommendedPacing,
+      knowledgeSignals: {
+        fragileCount: learnerSnapshot.knowledgeMemory.globalSignals.fragileConcepts.length,
+        strugglingCount: learnerSnapshot.knowledgeMemory.globalSignals.strugglingConcepts.length,
+        prerequisiteGapCount: learnerSnapshot.knowledgeMemory.currentPath?.prerequisiteGaps.length ?? 0,
+      },
+    }),
+  });
   const resolvedConcept = resolveTaskConceptFromPath(task, path);
   const persistedLearningObjectives = parseLearningObjectives((task as any).learningObjectives);
   const taskKnowledgeSeeds = buildTaskKnowledgeSeeds({ task, resolvedConcept });

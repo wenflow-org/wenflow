@@ -30,6 +30,7 @@ import {
   derivePacing,
   deriveReplanSignal,
 } from '../services/learner/LearnerSnapshotService';
+import { decideTaskDifficulty, resolveBaselineLevel } from '../services/learner/TaskDifficultyAdjustmentService';
 
 /** EWMA 系数（与 LearningMetricService 的派生公式一致，断言里用来算两种预测值）
  * 注意：lf 的新值系数是 0.15（不是 1-0.7），ktl 的是 0.05（= 1-0.95）—— 公式本身不是严格凸组合。 */
@@ -284,6 +285,55 @@ async function main(): Promise<void> {
       dynamicState: { metrics: tiredMetrics, recentTrend: 'declining', fatigueRisk: 'high' } as any,
       learningControlState: { reviewPriority: 'medium' } as any,
       knowledgeMemory: baseKnowledge,
+    });
+
+    // ── 断言 4：任务级难度由学习者模型驱动，且路径之间隔离
+    const baselineOfMediumTask = resolveBaselineLevel({ cognitiveLoad: 'medium' });
+    const globalOnlyControl = deriveLearningControlState({
+      dynamicState: {
+        metrics: aggregateDay1?.metrics ?? tiredMetrics, recentTrend: 'stable', fatigueRisk: 'low',
+        confidenceTrend: 'stable', recentSessionQuality: 'mixed', recommendedPacing: 'moderate',
+        recommendedInteraction: { hintTiming: 'delayed', encouragement: 'medium', challenge: 'medium' },
+        srlPhase: 'performance',
+      } as any,
+      knowledgeMemory: baseKnowledge,
+    });
+    const decisionForPathA = aggregateDay1 && pathAState && hardLessonControl
+      ? decideTaskDifficulty({
+          baselineLevel: baselineOfMediumTask,
+          globalMetrics: aggregateDay1.metrics,
+          lessonMetrics: { lss: pathAState.lss, ktl: pathAState.ktl, lf: pathAState.lf, lsb: pathAState.lsb },
+          learningControlState: hardLessonControl,
+          fatigueRisk: aggregateDay1.metrics.lf >= 6 ? 'high' : 'low',
+          recommendedPacing: derivePacing(aggregateDay1.metrics.lf, aggregateDay1.metrics.ktl),
+          knowledgeSignals: { fragileCount: 0, strugglingCount: 0, prerequisiteGapCount: 0 },
+        })
+      : null;
+    const decisionForPathB = aggregateDay1
+      ? decideTaskDifficulty({
+          baselineLevel: baselineOfMediumTask,
+          globalMetrics: aggregateDay1.metrics,
+          lessonMetrics: null,                       // 路径 B 此刻还没有历史
+          learningControlState: globalOnlyControl,
+          fatigueRisk: aggregateDay1.metrics.lf >= 6 ? 'high' : 'low',
+          recommendedPacing: derivePacing(aggregateDay1.metrics.lf, aggregateDay1.metrics.ktl),
+          knowledgeSignals: { fragileCount: 0, strugglingCount: 0, prerequisiteGapCount: 0 },
+        })
+      : null;
+
+    assertions.push({
+      name: '任务级难度：同基线任务在"吃过难课的路径"降档、在"新路径"保持（路径隔离）',
+      pass: Boolean(decisionForPathA && decisionForPathB)
+        && decisionForPathA!.direction === 'decrease'
+        && decisionForPathA!.adjusted === baselineOfMediumTask - 1
+        && decisionForPathA!.reasons.includes('lesson_stress_high')
+        && decisionForPathB!.direction === 'keep'
+        && decisionForPathB!.adjusted === baselineOfMediumTask,
+      detail: `基线 ${baselineOfMediumTask}（medium 任务）`
+        + `｜路径A(有历史, lss ${pathAState?.lss}) → ${decisionForPathA?.direction} ${decisionForPathA?.adjusted}`
+        + ` reasons=${JSON.stringify(decisionForPathA?.reasons ?? [])}`
+        + `｜路径B(无历史) → ${decisionForPathB?.direction} ${decisionForPathB?.adjusted}`
+        + ` reasons=${JSON.stringify(decisionForPathB?.reasons ?? [])}`,
     });
 
     assertions.push({

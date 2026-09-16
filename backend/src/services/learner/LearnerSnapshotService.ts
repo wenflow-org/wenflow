@@ -75,8 +75,10 @@ export function deriveLearningControlState(input: {
   const strugglingCount = knowledgeMemory.globalSignals.strugglingConcepts.length;
   const prerequisiteGapCount = knowledgeMemory.currentPath?.prerequisiteGaps.length || 0;
 
-  // 单课压力大 → 课内降档/加支架（LSS 是会话级量，只在这里起作用，不影响全局节奏）
-  const lessonStress = lss >= 6;
+  // 单课压力大 → 课内降档/加支架。
+  // LSS 是**会话级**量：只有拿到了"本节课所在路径"的状态时才成立；
+  // 该路径还没有历史时不借用别的路径的单课压力（跨路径污染），只保留全局疲劳这一路信号。
+  const lessonStress = Boolean(input.lessonMetrics) && lss >= 6;
 
   const paceMode: LearnerLearningControlState['paceMode'] = lf >= 6 || lsb < 0 || lessonStress
     ? 'recover'
