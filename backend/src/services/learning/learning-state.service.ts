@@ -255,15 +255,23 @@ export class LearningStateService {
     }
   }
 
+  /**
+   * 已提交指标的读取条件。
+   * `pathId` 是**可选维度**：不传 = 该学习者的全局序列（历史行为，跨路径合并）；
+   * 传 pathId = 只读该路径的序列（路径级判断用，避免"路径 A 的困难改写路径 B 的自适应"）。
+   */
   private buildCommittedMetricWhere(
     userId: string,
     since?: Date,
     excludedSourceKey?: string,
-    asOf?: Date
+    asOf?: Date,
+    pathId?: string | null
   ) {
     return {
       userId,
       metricType: 'learning_state',
+      // pathId === undefined → 不加维度（维持旧的全局读取）；null → 显式只读"无路径归属"的行
+      ...(pathId === undefined ? {} : { pathId }),
       ...(excludedSourceKey ? { sourceKey: { not: excludedSourceKey } } : {}),
       AND: [
         { metadata: { contains: `"version":"${this.committedMetricVersion}"` } },
@@ -391,10 +399,11 @@ export class LearningStateService {
     userId: string,
     since?: Date,
     excludedSourceKey?: string,
-    asOf?: Date
+    asOf?: Date,
+    pathId?: string | null
   ): Promise<LearningStateCommittedSnapshot[]> {
     const committedRows = await prisma.learning_metrics.findMany({
-      where: this.buildCommittedMetricWhere(userId, since, excludedSourceKey, asOf),
+      where: this.buildCommittedMetricWhere(userId, since, excludedSourceKey, asOf, pathId),
       orderBy: { calculatedAt: 'asc' },
       select: {
         lss: true,
@@ -615,8 +624,8 @@ export class LearningStateService {
   /**
    * 获取用户历史指标
    */
-  async getPreviousMetrics(userId: string): Promise<LearningStateMetrics | null> {
-    const snapshots = await this.listCommittedSnapshots(userId);
+  async getPreviousMetrics(userId: string, options: { pathId?: string | null } = {}): Promise<LearningStateMetrics | null> {
+    const snapshots = await this.listCommittedSnapshots(userId, undefined, undefined, undefined, options.pathId);
     const latestSnapshot = snapshots[snapshots.length - 1] || null;
 
     if (!latestSnapshot) return null;
@@ -647,7 +656,7 @@ export class LearningStateService {
 
   async getCurrentStateSnapshot(
     userId: string,
-    options: { sourceKey?: string; asOf?: Date } = {}
+    options: { sourceKey?: string; asOf?: Date; pathId?: string | null } = {}
   ): Promise<{
     revision: number;
     metrics: LearningStateMetrics | null;
@@ -662,7 +671,8 @@ export class LearningStateService {
       userId,
       undefined,
       options.sourceKey,
-      options.asOf
+      options.asOf,
+      options.pathId
     );
     const latestSnapshot = snapshots[snapshots.length - 1] || null;
     return {
@@ -967,8 +977,12 @@ export class LearningStateService {
   /**
    * 获取当前状态
    */
-  async getCurrentState(userId: string): Promise<LearningStateMetrics | null> {
-    return this.getPreviousMetrics(userId);
+  /**
+   * 当前学习状态。
+   * @param options.pathId 传值 = 只读该路径的状态；不传 = 全局（跨路径合并，维持旧行为）
+   */
+  async getCurrentState(userId: string, options: { pathId?: string | null } = {}): Promise<LearningStateMetrics | null> {
+    return this.getPreviousMetrics(userId, options);
   }
 
   /**

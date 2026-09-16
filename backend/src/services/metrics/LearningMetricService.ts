@@ -26,6 +26,12 @@ export interface LearningStateMetrics {
 export interface SessionMetricsInput {
   userId: string;
   taskId?: string;
+  /**
+   * 所属路径（可选维度）。**必须带上**：学习者可能同时学多条路径/多门课，
+   * 不带路径身份的状态会退化成"无维度全局标量"，导致路径 A 的困难改写路径 B 的自适应
+   * （事件 `task:completed` 里本来就有 pathId，见 learning.service 的 completTask 事件体）。
+   */
+  pathId?: string | null;
   durationMinutes: number;
   lssScore?: number;            // 可选：主观LSS评分
   subjectiveDifficulty?: number; // 1-10 主观难度
@@ -143,6 +149,8 @@ export async function updateLearningMetrics(
         timestamp: asOf,
         source: 'task-completion',
         taskId: input.taskId || null,
+        // 路径身份透传（落库列 + metadata）：否则多路径学习者的状态无法按路径读取
+        pathId: input.pathId ?? null,
         primaryMetric: 'lsb',
       };
     }, {
@@ -177,6 +185,8 @@ export async function reconcileTaskCompletionMetric(
   await updateLearningMetrics({
     userId: event.userId,
     taskId,
+    // 事件体自带 pathId（learning.service 的 task:completed）；缺失保持 null，不阻断
+    pathId: typeof data.pathId === 'string' ? data.pathId : null,
     durationMinutes: typeof data.actualMinutes === 'number' ? data.actualMinutes : 30,
     subjectiveDifficulty: typeof data.subjectiveDifficulty === 'number'
       ? data.subjectiveDifficulty

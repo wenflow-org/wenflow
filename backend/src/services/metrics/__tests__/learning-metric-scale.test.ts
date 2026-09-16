@@ -75,6 +75,34 @@ describe('updateLearningMetrics：LSS 不再被多除一个 10', () => {
     expect((await captured!(null)).lss).toBe(40);
   });
 
+  it('路径身份透传：入参 pathId → 派生输出带 pathId（多路径学习者才可能按路径读）', async () => {
+    let captured: ((previous: any) => any) | null = null;
+    jest.spyOn(learningStateService, 'commitDerivedDisplayMetrics').mockImplementation((async (
+      _userId: string,
+      derive: (previous: any) => any,
+    ) => {
+      captured = derive;
+      return { lss: 1, ktl: 1, lf: 1, lsb: 0, timestamp: new Date() } as any;
+    }) as any);
+    await updateLearningMetrics({
+      userId: 'u1', taskId: 't9', pathId: 'lp-A', durationMinutes: 25, completed: true, subjectiveDifficulty: 6,
+    });
+    expect((await captured!(null)).pathId).toBe('lp-A');
+  });
+
+  it('无路径身份时落 null（不编造路径）', async () => {
+    let captured: ((previous: any) => any) | null = null;
+    jest.spyOn(learningStateService, 'commitDerivedDisplayMetrics').mockImplementation((async (
+      _userId: string,
+      derive: (previous: any) => any,
+    ) => {
+      captured = derive;
+      return { lss: 1, ktl: 1, lf: 1, lsb: 0, timestamp: new Date() } as any;
+    }) as any);
+    await updateLearningMetrics({ userId: 'u1', taskId: 't10', durationMinutes: 25, completed: true });
+    expect((await captured!(null)).pathId).toBeNull();
+  });
+
   it('有前值时 EWMA 全程在同一刻度（前值 0-10 → display 50，与新值 40 收敛）', async () => {
     const derive = await captureDerive();
     const result = await derive({ lss: 5, ktl: 5, lf: 5, lsb: 0, timestamp: new Date() });
