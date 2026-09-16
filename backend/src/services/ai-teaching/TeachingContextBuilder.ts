@@ -174,6 +174,12 @@ export interface TeachingScenarioContext {
     status: string;
     occurrenceCount: number;
   }> | null;
+  /**
+   * 学习笔记：诊断洞察（LLM 出的"为什么卡"，已剔除被证伪的 claim）。
+   * 与 learningState / learnerProjection 一样属于**只读参考**：与课堂实况冲突时以实况为准，
+   * 且不得在 reply 里向学生复述这些内部诊断。
+   */
+  learnerInsights?: Array<{ type: string; claim: string; action: string }> | null;
   /** 任务模式：normal（默认教学）| productiveFailure（有效失败：先让学生挣扎，后整合） */
   taskMode?: 'normal' | 'productiveFailure';
   /**
@@ -847,6 +853,28 @@ export async function buildTeachingScenarioContext(
       }
     : null;
 
+  // 诊断洞察回注（设计 §4：top-N active insights）：只读投影、不调 LLM；失败即视为无洞察。
+  // 动态 import 避免与 LearnerStateReviewService 形成静态循环依赖（同 sandbox-resolver 的既有写法）。
+  let learnerInsights: TeachingScenarioContext['learnerInsights'] = null;
+  try {
+    const { learnerStateReviewService } = await import('../learner/LearnerStateReviewService');
+    const insights = await learnerStateReviewService.getActiveInsights(userId, path.id, { limit: 3 });
+    if (insights.length > 0) {
+      learnerInsights = insights;
+      logger.info('[teaching-context] 注入活跃诊断洞察', {
+        userId,
+        pathId: path.id,
+        count: insights.length,
+        types: insights.map((item) => item.type),
+      });
+    }
+  } catch (error) {
+    logger.warn('[teaching-context] 诊断洞察注入失败（教学照常）', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   const context = {
     userId,
     taskId: task.id,
@@ -901,6 +929,7 @@ export async function buildTeachingScenarioContext(
     learningSignal,
     lastLessonRecap,
     priorLearningContext,
+    learnerInsights,
     interactionProfile: buildInteractionProfile(interactionMeta, previousSession?.messages ?? []),
     learnerPrediction: null,
     priorMisconceptions,

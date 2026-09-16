@@ -1156,6 +1156,7 @@ async function buildTeachingTurnInput(
     learningSignal: context.learningSignal,
     lastLessonRecap: context.lastLessonRecap,
     priorLearningContext: context.priorLearningContext,
+    learnerInsights: context.learnerInsights ?? null,
     memoryWarmup: context.memoryWarmup ?? null,
     learnerPrediction: context.learnerPrediction
       ? {

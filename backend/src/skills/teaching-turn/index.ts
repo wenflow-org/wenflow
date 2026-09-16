@@ -135,6 +135,11 @@ export interface TeachingTurnInput {
       }>;
     } | null;
     /**
+     * 诊断洞察（learner-state-review 出的"为什么卡"，已剔除被证伪的 claim）。
+     * 只读参考：与课堂实况冲突时以实况为准；不得在 reply 里向学生复述内部诊断。
+     */
+    learnerInsights?: Array<{ type?: string; claim?: string; action?: string }> | null;
+    /**
      * 课内温故计划（记忆层）：本节开头要回捞的到期旧知（≤3，已按认知负担预算裁剪）。
      * 与 knowledge.points（本节知识点）物理分离——不要把 items 混进本节看板。
      */

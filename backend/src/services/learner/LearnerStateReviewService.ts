@@ -76,6 +76,57 @@ class LearnerStateReviewService {
     return parseJsonSafe<LearnerStateReviewPayload>(row?.payload);
   }
 
+  /**
+   * 教学侧可用的「活跃诊断洞察」（设计 §4：注入 top-N active insights）。
+   *
+   * 「活跃」的判定用了现有数据，不新增状态位：
+   * - 取最近一次状态评审的 LLM 诊断洞察；
+   * - **已被证伪的不再回注**（该 claim 在 insight-calibration 里 outcome=miss）——闭环就该这样：
+   *   预测被现实打脸的部分不许继续影响教学；
+   * - 按 confidence 降序取前 N 条；只出 type/claim/action（剥离 evidenceRefs / confidence 等内部字段，
+   *   教学侧不需要也不该看到证据 id）。
+   *
+   * 永远不抛错、不调 LLM（读投影），失败返回空数组 —— 教学照常进行，不得因洞察缺失改变默认行为。
+   */
+  async getActiveInsights(
+    userId: string,
+    pathId?: string | null,
+    options: { limit?: number } = {},
+  ): Promise<Array<{ type: string; claim: string; action: string }>> {
+    const limit = Math.max(0, options.limit ?? 3);
+    if (limit === 0) return [];
+    try {
+      const [payload, records] = await Promise.all([
+        this.getLatest(userId, pathId),
+        insightCalibrationService.getRecords(userId, pathId).catch(() => []),
+      ]);
+      const rawInsights = payload?.diagnosis?.insights ?? [];
+      if (rawInsights.length === 0) return [];
+
+      const refuted = new Set(
+        records.filter((record) => record.outcome === 'miss').map((record) => String(record.claim || '').trim().toLowerCase()),
+      );
+      return rawInsights
+        .map((insight) => ({
+          type: String(insight.type || 'strategy_fit'),
+          claim: String(insight.claim || '').trim(),
+          action: String(insight.action || '').trim(),
+          confidence: typeof insight.confidence === 'number' ? insight.confidence : null,
+        }))
+        .filter((insight) => insight.claim && !refuted.has(insight.claim.toLowerCase()))
+        .sort((a, b) => (b.confidence ?? -1) - (a.confidence ?? -1))
+        .slice(0, limit)
+        .map(({ type, claim, action }) => ({ type, claim, action }));
+    } catch (error) {
+      logger.warn('[learner-state-review] 读取活跃洞察失败，教学侧按无洞察处理', {
+        userId,
+        pathId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  }
+
   async refresh(userId: string, pathId?: string | null): Promise<LearnerStateReviewPayload | null> {
     const key = reviewProjectionKey(userId, pathId);
     const pending = this.inflight.get(key);
