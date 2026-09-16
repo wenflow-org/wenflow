@@ -35,6 +35,9 @@ import {
   measureTaskDifficultyEffects,
   recordTaskDifficultyAdjustment,
 } from '../services/learner/TaskDifficultyAdjustmentLedger';
+// 日期模拟的"第 dayIndex 天"用平台规范助手（virtual-lab/simulated-day.service）：
+// 不 mock 时钟，而是把第 N 天映射为 baseDate + N，日界与 getAggregatedState.dayLoad / ReviewQuotaService 同口径。
+import { resolveDayWindow, toDateOnly } from '../services/virtual-lab/simulated-day.service';
 
 /** EWMA 系数（与 LearningMetricService 的派生公式一致，断言里用来算两种预测值）
  * 注意：lf 的新值系数是 0.15（不是 1-0.7），ktl 的是 0.05（= 1-0.95）—— 公式本身不是严格凸组合。 */
@@ -118,20 +121,27 @@ async function main(): Promise<void> {
   if (!user) throw new Error(`用户不存在：${userId}`);
 
   const runId = `sim${Date.now().toString(36)}`;
-  // 时间模型与生产一致：自然衰减按**本地日历日**（getNaturalDayDiff），当日课量按 **UTC 日**（ReviewQuotaService 同口径）。
-  // 因此把课放在上午（本地 09:00 起），并把"观察时刻"取在当天最后一节课后 1 小时 ——
-  // 这样既不会跨本地日（不产生多余衰减），也不会跨 UTC 日（当日课量数得全）。
-  const baseDay = new Date();
-  baseDay.setDate(baseDay.getDate() - 30);
-  const dayStart = (offset: number) => new Date(baseDay.getFullYear(), baseDay.getMonth(), baseDay.getDate() + offset);
-  const lessonTime = (offset: number, indexInDay: number) => new Date(dayStart(offset).getTime() + (9 + indexInDay) * 3600_000);
+  // 起始日：30 天前的 UTC 日（过去 → 聚合读取天然排除学习者真实行）
+  const baseDate = toDateOnly(new Date(Date.now() - 30 * 24 * 3600_000));
+  const dayStart = (offset: number) => resolveDayWindow(baseDate, offset).dayStart;
+  const simulatedDay = (offset: number) => resolveDayWindow(baseDate, offset).simulatedDay;
+  // 课放在当天上午：UTC 09:00 起，一天多节按小时排
+  const lessonTime = (offset: number, indexInDay: number) =>
+    new Date(dayStart(offset).getTime() + (9 + indexInDay) * 3600_000);
+  /**
+   * 观察时刻 = 当天最后一节课后 1 小时。
+   * 说明：**刻意不用 `resolveDayWindow().asOf`（UTC 日末）** —— 自然衰减用的是**本地日**
+   * （`getNaturalDayDiff` 取本地午夜），在 UTC+8 下 UTC 日末已落到次日本地 08:00，
+   * 会让跨天衰减白多算一天。这个"两个日历并存"的不一致是既有事实，这里先绕开并记录，
+   * 不擅自改生产口径（改 `getNaturalDayDiff` 为 UTC 日会影响所有人的恢复窗口）。
+   */
   const dayAsOf = (plan: SimPlan, offset: number) =>
     new Date(dayStart(offset).getTime() + (9 + Math.max(1, lessonsForDay(plan, offset).length)) * 3600_000);
 
   const plan = buildDefaultPlan();
   const pathIds: Record<'A' | 'B' | 'C', string> = { A: `lp_${runId}_a`, B: `lp_${runId}_b`, C: `lp_${runId}_c` };
 
-  console.log(`[sim] 学习者 ${user.name || userId}｜run=${runId}｜模拟天数 ${plan.days}｜起始日 ${dayStart(0).toISOString().slice(0, 10)}`);
+  console.log(`[sim] 学习者 ${user.name || userId}｜run=${runId}｜模拟天数 ${plan.days}｜起始日 ${baseDate}（第 1 天 = ${simulatedDay(0)}）`);
   console.log(`[sim] 模拟路径 A=${pathIds.A}(对照)  B=${pathIds.B}  C=${pathIds.C}(实验:按调整执行)`);
   for (let day = 0; day < plan.days; day += 1) {
     const dayLessons = lessonsForDay(plan, day);

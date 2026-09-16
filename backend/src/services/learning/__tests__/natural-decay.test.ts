@@ -56,6 +56,23 @@ describe('自然衰减（restoreMetrics）', () => {
     expect(decayedLss).toBeGreaterThan(5);                                         // 只降一档（0.82/天）
   });
 
+  it('衰减按**本地日**折算（不是 UTC 日）—— 与虚拟时钟的 UTC 日末口径不同，勿静默改动', () => {
+    const localMidnight = (value: Date) => {
+      const copy = new Date(value);
+      copy.setHours(0, 0, 0, 0);
+      return copy.getTime();
+    };
+    // 用"UTC 日末"作为读取时刻（虚拟时钟 resolveDayWindow().asOf 的取值）：在 UTC+8 下已跨本地日
+    const asOf = at('2026-08-02T23:59:59.999Z');
+    const expectedLocalDays = Math.max(
+      0,
+      Math.round((localMidnight(asOf) - localMidnight(state.timestamp)) / 86400000)
+    );
+    const decayed = learningStateService.restoreMetrics(state, asOf);
+    // 无论机器时区如何，衰减都等于"本地日差"——这条规则本身就是口径，改动它要显式做
+    expect(decayed.lss).toBeCloseTo(7.2 * 0.82 ** expectedLocalDays, 6);
+  });
+
   it('train 负荷衰减明显慢于压力/疲劳（这是"知识练过就留得住"的口径）', () => {
     const d = 10;
     const decayed = learningStateService.restoreMetrics(state, at('2026-08-11T09:00:00Z'));
