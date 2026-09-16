@@ -483,3 +483,25 @@ ORDER BY avg_prompt DESC;
 
 **现场验证**：对上述楔死会话用同 key 重试 → 返回 `…（已将会话标记为 abandoned）`，DB 侧
 `status=abandoned / currentStage=error / terminalCode=BLACKBOX_COMMAND_LOST` ✅
+
+### 7.18 虚拟实验室长跑问题修复（2026-09-16，据外部部署报告复核对齐）
+
+> 来源：另一台机器上的虚拟学习者长跑报告。逐条回代码核实后，**在本仓库落实了 3 项**（其余 2 项建议下一轮）。
+
+**① 容器内预制虚拟学习者真源缺失（报告结论成立）**
+- 现象：启动同步静默跳过 `[builtin-learners] 无可同步的预制条目 → created:0`。
+- 根因：`docker-compose.yml` 只挂 `./prompts:/prompts:ro`；而 loader 读 `__dirname/../../../../virtual-learners/presets.yaml`（`builtin-learners/loader.ts:44`）→ 容器内解析不到。
+- 修复：`backend/Dockerfile` 两个阶段各 `COPY virtual-learners/`（镜像自足）；compose 再加 `./virtual-learners:/virtual-learners:ro` + `VIRTUAL_LEARNER_PRESETS_FILE=/virtual-learners/presets.yaml`（可不重建镜像更新预置）。
+
+**② Path 评审 ↔ 重规划 死循环（报告结论成立，机制已定位到行）**
+- 根因：`resolvePathReview` 先 `reviewPathProposal`（写 `path_review.status='pending'`，`:1835`）→ 再 `replanPathFromReview`，后者守卫是 `status==='replanned'`（`:1927`）→ **守卫被前置写覆盖，永不触发**；且重规划常产出同一条 Path，另一个守卫也放行 → `modify → replan → 再评审` 无限循环。
+- 修复：抽出纯函数 `shouldForceAcceptPathReview()`，判据 **①已对当前这条 Path 重规划过（`replan.resultPathId===learningPathId`）②累计重规划次数达上限（`VIRTUAL_PATH_MAX_REPLANS`，默认 2）**；命中即**强制接受并进入 Learn**，并写 `path-replan-guard` 审计日志（保留学生原始质疑）。新增 `path-replan` 日志用于计数。
+- 单测：`coordinators/__tests__/path-review-guard.test.ts`（7 例，含"产出另一条 Path 时不强制"与"limit=0 立即接受"）。
+
+**③ 空子任务补救（报告提到的"第 1 层"——它没修，本仓库补上）**
+- 现象：里程碑存在但 `subtasks=0` → `startLearningPhase` 抛 `第一个里程碑没有可用任务` → 会话卡在 path/teaching 边界（护栏放行也没用）。
+- 修复：无可用任务时**最多触发一次** `restartPathPhase`（`path-regenerate` 日志计数，`VIRTUAL_PATH_MAX_REGENERATIONS` 默认 1）→ 让 stage-designer 重新产出 subtasks；已重生成过仍为空才抛"需人工介入"。
+
+**未做（建议下一轮，均为高风险/需压测）**
+- **限流器令牌下沉到每次上游 attempt**：现在按「逻辑调用」计数（`rpm-limiter.ts:10`），重试放大 → 6 rpm × 最坏 2 attempt = **12 > 上游 10**；且 `virtualLearnerRpmLimiter` 与 `platformRpmLimiter` **两桶共享同一上游 key**，"精确 6 rpm"不保证总出站 ≤10。
+- **`learnerReady` 收敛保障**：`canCompleteTask = teacherReady && learnerReady`（`simulation.learn.steps.ts:162`）是设计亮点，但"永远 false"会拖成长课（外部报告已见 50 轮）；需上限/升级策略。

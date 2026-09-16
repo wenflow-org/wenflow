@@ -30,6 +30,7 @@ services:
       - wenflow_data:/app/data
       - ./backend/src:/backend/src:ro
       - ./prompts:/prompts:ro
+      - ./virtual-learners:/virtual-learners:ro
     env_file:
       - backend/.env
     environment:
@@ -43,6 +44,10 @@ services:
       - CORE_FILES_DIR=/app/prompts/core
       - SKILLS_FILE=/app/prompts/skills.yaml
       - ORCHESTRATION_DIR=/app/prompts/orchestration
+      # 预制虚拟学习者真源（仓库根 virtual-learners/presets.yaml）：镜像已内置，
+      # 这里再挂一份 + 环境变量指向，便于不重建镜像更新预置；否则启动同步会静默跳过
+      # （[builtin-learners] 无可同步的预制条目 → created:0）
+      - VIRTUAL_LEARNER_PRESETS_FILE=/virtual-learners/presets.yaml
     depends_on:
       migrate:
         condition: service_completed_successfully

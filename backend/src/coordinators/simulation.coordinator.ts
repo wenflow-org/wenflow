@@ -121,8 +121,52 @@ export type {
   AssistedLeaseContext
 } from './simulation.types';
 
-class SimulationOrchestrator {
-  readonly id = COORDINATOR_ID;
+/**
+ * Path 评审 ↔ 重规划 收敛护栏（2026-09-16）
+ *
+ * 背景：`reviewPathProposal` 会把 `path_review.status` 重写为 `'pending'`，令
+ * `replanPathFromReview` 里 `status === 'replanned'` 的守卫**永远无法触发**；而重规划又常产出
+ * 「同一条 Path」（`resultPathId === learningPathId`），于是 `modify → replan → 再评审 → 再 modify`
+ * 无限循环，长期占用并发槽位与出站额度。
+ *
+ * 判据（两条任一命中即不再重规划，强制接受当前 Path 并进入 Learn）：
+ *  ① 已对「当前这条 Path」重规划过（`path_review.replan.resultPathId === session.learningPathId`）；
+ *  ② 累计重规划次数达到上限（`VIRTUAL_PATH_MAX_REPLANS`，默认 2，范围 [0,10]）。
+ *
+ * 另：空子任务补救上限（`VIRTUAL_PATH_MAX_REGENERATIONS`，默认 1）——里程碑无可用任务时最多触发一次路径重生成。
+ */
+const MAX_PATH_REPLANS = (() => {
+  const raw = Number(process.env.VIRTUAL_PATH_MAX_REPLANS);
+  if (!Number.isFinite(raw) || raw < 0) return 2;
+  return Math.min(10, Math.round(raw));
+})();
+
+const MAX_PATH_REGENERATIONS = (() => {
+  const raw = Number(process.env.VIRTUAL_PATH_MAX_REGENERATIONS);
+  if (!Number.isFinite(raw) || raw < 0) return 1;
+  return Math.min(5, Math.round(raw));
+})();
+
+/**
+ * 纯函数：判定是否需要「强制接受当前 Path」（护栏命中）。
+ * 抽成纯函数以便单测覆盖（见 __tests__/path-review-guard.test.ts）。
+ */
+export function shouldForceAcceptPathReview(params: {
+  decision: 'accept' | 'modify' | 'reject' | null | undefined;
+  learningPathId?: string | null;
+  replanResultPathId?: string | null;
+  replanCount: number;
+  limit?: number;
+}): boolean {
+  const { decision, learningPathId, replanResultPathId } = params;
+  if (!decision || decision === 'accept') return false;
+  const limit = typeof params.limit === 'number' ? params.limit : MAX_PATH_REPLANS;
+  const alreadyReplannedThisPath = Boolean(replanResultPathId) && replanResultPathId === learningPathId;
+  const reachedReplanLimit = params.replanCount >= limit;
+  return alreadyReplannedThisPath || reachedReplanLimit;
+}
+
+class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
   private readonly sessionLocks = new Map<string, Promise<void>>();
   private readonly sessionLeaseContext = new AsyncLocalStorage<AssistedLeaseContext>();
 
@@ -567,6 +611,23 @@ class SimulationOrchestrator {
         updatedAt: new Date()
       }
     });
+  }
+
+  /**
+   * 统计会话日志里某个 phase 的条数（只读 logs 列，避开 stageResults 大字段）。
+   * 用于收敛护栏：`path-replan`（重规划次数）/ `path-regenerate`（空子任务重生成次数）。
+   */
+  private async countSessionLogsByPhase(sessionId: string, phase: string): Promise<number> {
+    const session = await prisma.virtual_sessions.findUnique({
+      where: { id: sessionId },
+      select: { logs: true }
+    });
+    if (!session) return 0;
+    let logs: SimulationLogEntry[] = [];
+    try {
+      logs = JSON.parse(session.logs || '[]');
+    } catch { /* 解析失败按 0 计 */ }
+    return logs.filter((entry) => entry?.phase === phase).length;
   }
 
   /**
@@ -1962,6 +2023,11 @@ class SimulationOrchestrator {
       });
       await this.addSessionLog(sessionId, {
         timestamp: new Date().toISOString(),
+        phase: 'path-replan',
+        details: { output: { from: 'path-review', to: 'path', reason: 'path-replanned-awaiting-review', decision: pathReview.decision, sourcePathId: session.learningPathId, resultPathId: learningPathId } }
+      });
+      await this.addSessionLog(sessionId, {
+        timestamp: new Date().toISOString(),
         phase: 'stage-transition',
         details: { output: { from: 'path-review', to: 'path', reason: 'path-replanned-awaiting-review', decision: pathReview.decision, learningPathId } }
       });
@@ -1993,21 +2059,61 @@ class SimulationOrchestrator {
 
     const session = await this.getVirtualSession(sessionId);
 
-    if (review.decision === 'accept') {
+    // 收敛护栏：见 MAX_PATH_REPLANS 注释（根因：status 守卫被 reviewPathProposal 覆盖，永不触发）
+    const pathReviewState: any = parseStageResultsPayload(session.stageResults).path_review || {};
+    const replanCount = await this.countSessionLogsByPhase(sessionId, 'path-replan');
+    const forceAccept = shouldForceAcceptPathReview({
+      decision: review.decision,
+      learningPathId: session.learningPathId,
+      replanResultPathId: pathReviewState?.replan?.resultPathId ?? null,
+      replanCount
+    });
+
+    if (forceAccept) {
+      await this.addSessionLog(sessionId, {
+        timestamp: new Date().toISOString(),
+        phase: 'path-replan-guard',
+        details: {
+          output: {
+            reason: (Boolean(pathReviewState?.replan?.resultPathId) && pathReviewState.replan.resultPathId === session.learningPathId)
+              ? 'path-unchanged-after-replan'
+              : 'replan-limit-reached',
+            decision: review.decision,
+            replanCount,
+            limit: MAX_PATH_REPLANS,
+            learningPathId: session.learningPathId,
+            // 保留学生原始质疑，便于人工复核（护栏不删证据）
+            learnerReaction: pathReviewState?.reaction || null,
+            visibleRequestedChanges: Array.isArray(pathReviewState?.visibleRequestedChanges)
+              ? pathReviewState.visibleRequestedChanges
+              : []
+          }
+        }
+      });
+      logger.warn('[simulation-coordinator] 命中重规划护栏，强制接受当前 Path 并进入 Learn', {
+        sessionId,
+        replanCount,
+        limit: MAX_PATH_REPLANS,
+        alreadyReplannedThisPath: Boolean(pathReviewState?.replan?.resultPathId) && pathReviewState.replan.resultPathId === session.learningPathId,
+        decision: review.decision
+      });
+    }
+
+    if (review.decision === 'accept' || forceAccept) {
       const accepted = await this.acceptPathReview(sessionId);
       if (!accepted.success) return { success: false, decision: review.decision, error: accepted.error };
       if (!options.startLearning) {
-        return { success: true, decision: review.decision, currentStage: 'path', learningPathId: session.learningPathId };
+        return { success: true, decision: forceAccept ? 'accept' : review.decision, currentStage: 'path', learningPathId: session.learningPathId };
       }
       await this.addSessionLog(sessionId, {
         timestamp: new Date().toISOString(),
         phase: 'stage-transition',
-        details: { output: { from: 'path', to: 'teaching', reason: 'path-review-accepted', learningPathId: session.learningPathId } }
+        details: { output: { from: 'path', to: 'teaching', reason: forceAccept ? 'path-review-force-accepted' : 'path-review-accepted', learningPathId: session.learningPathId } }
       });
       const learning = await this.startLearningPhase(sessionId);
       return {
         success: learning.success,
-        decision: review.decision,
+        decision: forceAccept ? 'accept' : review.decision,
         currentStage: learning.success ? 'teaching' : 'path',
         learningPathId: session.learningPathId,
         error: learning.error
@@ -2095,7 +2201,34 @@ class SimulationOrchestrator {
       }
       
       if (!firstTask) {
-        throw new Error('第一个里程碑没有可用任务');
+        // 空子任务补救（2026-09-16）：里程碑存在但无可启动任务时，原先直接抛错 → 会话卡在 path/teaching 边界。
+        // 这里最多触发一次「路径重生成」（restartPathPhase），让 stage-designer 重新产出 subtasks；
+        // 已重生成过仍为空才抛出需人工介入的错误（避免无限重生成）。
+        const regenerations = await this.countSessionLogsByPhase(sessionId, 'path-regenerate');
+        if (regenerations < MAX_PATH_REGENERATIONS) {
+          await this.addSessionLog(sessionId, {
+            timestamp: new Date().toISOString(),
+            phase: 'path-regenerate',
+            details: { output: { reason: 'no-runnable-subtasks', learningPathId: learningPath.id, attempt: regenerations + 1 } }
+          });
+          let restartError: string | undefined;
+          try {
+            const restarted = await this.restartPathPhase(sessionId);
+            if (!restarted.success) restartError = restarted.error;
+          } catch (error) {
+            restartError = asErrorLike(error).message;
+          }
+          logger.warn('[simulation-coordinator] 里程碑无可用任务，已触发路径重生成', {
+            sessionId,
+            learningPathId: learningPath.id,
+            attempt: regenerations + 1,
+            restartError: restartError || null
+          });
+          throw new Error(restartError
+            ? `第一个里程碑没有可用任务（路径重生成失败：${restartError}）`
+            : '第一个里程碑没有可用任务（已触发路径重生成，下一轮将重新进入 Path → Learn）');
+        }
+        throw new Error('第一个里程碑没有可用任务（重生成后仍为空，需人工介入）');
       }
       
       logger.info('[simulation-coordinator] 开始学习阶段', {

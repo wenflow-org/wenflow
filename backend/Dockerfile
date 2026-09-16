@@ -20,6 +20,7 @@ COPY backend/scripts/clean-dist.js backend/scripts/copy-system-prisma-client.js 
 RUN npm run build
 
 COPY prompts/ ./prompts/
+COPY virtual-learners/ ./virtual-learners/
 
 
 FROM node:20-slim AS runtime
@@ -34,6 +35,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist/ ./dist/
 COPY --from=builder /app/prisma/ ./prisma/
 COPY --from=builder /app/prompts/ ./prompts/
+COPY --from=builder /app/virtual-learners/ ./virtual-learners/
 COPY backend/config/ ./config/
 COPY backend/scripts/validate-runtime-environment.js ./scripts/validate-runtime-environment.js
 
