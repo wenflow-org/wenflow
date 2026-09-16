@@ -571,7 +571,7 @@ export class AutopilotService {
             await this.writeState(sessionId, {
               status: 'failed',
               completedAt: new Date().toISOString(),
-              lastError: review.error || 'Path 评审失败'
+              lastError: review.error || '启动 Learn 失败'
             })
             return
           }

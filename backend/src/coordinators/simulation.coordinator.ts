@@ -2073,14 +2073,18 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
     const replanCount = await this.countSessionLogsByPhase(sessionId, 'path-replan');
 
     const review = await this.reviewPathProposal(sessionId);
-    if (!review.success || !review.decision) return { success: false, error: review.error || 'Path 评审失败' };
+    // 评审是**独立旁路**，不做关节守卫：评审失败不阻断 Learn——视为"接受当前 Path"并继续。
+    const reviewFailed = !review.success || !review.decision;
+    const decision: 'accept' | 'modify' | 'reject' = reviewFailed
+      ? 'accept'
+      : (review.decision as 'accept' | 'modify' | 'reject');
 
     const session = await this.getVirtualSession(sessionId);
 
     // 收敛护栏：见 MAX_PATH_REPLANS 注释
     const pathReviewState: any = parseStageResultsPayload(session.stageResults).path_review || {};
-    const forceAccept = shouldForceAcceptPathReview({
-      decision: review.decision,
+    const forceAccept = reviewFailed || shouldForceAcceptPathReview({
+      decision,
       learningPathId: session.learningPathId,
       replanResultPathId: preReviewState?.replan?.resultPathId ?? null,
       replanCount
@@ -2092,10 +2096,12 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         phase: 'path-replan-guard',
         details: {
           output: {
-            reason: (Boolean(preReviewState?.replan?.resultPathId) && preReviewState.replan.resultPathId === session.learningPathId)
-              ? 'path-unchanged-after-replan'
-              : 'replan-limit-reached',
-            decision: review.decision,
+            reason: reviewFailed
+              ? 'review-failed-non-blocking'
+              : (Boolean(preReviewState?.replan?.resultPathId) && preReviewState.replan.resultPathId === session.learningPathId)
+                ? 'path-unchanged-after-replan'
+                : 'replan-limit-reached',
+            decision,
             replanCount,
             limit: MAX_PATH_REPLANS,
             learningPathId: session.learningPathId,
@@ -2107,20 +2113,21 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
           }
         }
       });
-      logger.warn('[simulation-coordinator] 命中重规划护栏，强制接受当前 Path 并进入 Learn', {
+      logger.warn('[simulation-coordinator] 评审按旁路处理（不阻断 Learn）', {
         sessionId,
+        reviewFailed,
         replanCount,
         limit: MAX_PATH_REPLANS,
         alreadyReplannedThisPath: Boolean(preReviewState?.replan?.resultPathId) && preReviewState.replan.resultPathId === session.learningPathId,
-        decision: review.decision
+        decision
       });
     }
 
-    if (review.decision === 'accept' || forceAccept) {
+    if (decision === 'accept' || forceAccept) {
       const accepted = await this.acceptPathReview(sessionId, { force: forceAccept });
-      if (!accepted.success) return { success: false, decision: review.decision, error: accepted.error };
+      if (!accepted.success) return { success: false, decision, error: accepted.error };
       if (!options.startLearning) {
-        return { success: true, decision: forceAccept ? 'accept' : review.decision, currentStage: 'path', learningPathId: session.learningPathId };
+        return { success: true, decision: forceAccept ? 'accept' : decision, currentStage: 'path', learningPathId: session.learningPathId };
       }
       await this.addSessionLog(sessionId, {
         timestamp: new Date().toISOString(),
@@ -2130,7 +2137,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       const learning = await this.startLearningPhase(sessionId);
       return {
         success: learning.success,
-        decision: forceAccept ? 'accept' : review.decision,
+        decision: forceAccept ? 'accept' : decision,
         currentStage: learning.success ? 'teaching' : 'path',
         learningPathId: session.learningPathId,
         error: learning.error
@@ -2141,7 +2148,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
     if (replanned.success) {
       return {
         success: true,
-        decision: review.decision,
+        decision,
         currentStage: 'path',
         learningPathId: replanned.learningPathId
       };
@@ -2155,7 +2162,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       details: {
         output: {
           reason: 'replan-failed-force-accept',
-          decision: review.decision,
+          decision,
           error: replanned.error || null,
           learningPathId: session.learningPathId
         }
@@ -2163,11 +2170,11 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
     });
     logger.warn('[simulation-coordinator] 重规划失败，强制接受当前 Path 以解除学习阻塞', {
       sessionId,
-      decision: review.decision,
+      decision,
       error: replanned.error || null
     });
     const fallbackAccepted = await this.acceptPathReview(sessionId, { force: true });
-    if (!fallbackAccepted.success) return { success: false, decision: review.decision, error: fallbackAccepted.error };
+    if (!fallbackAccepted.success) return { success: false, decision, error: fallbackAccepted.error };
     if (!options.startLearning) {
       return { success: true, decision: 'accept', currentStage: 'path', learningPathId: session.learningPathId };
     }
