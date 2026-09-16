@@ -58,11 +58,13 @@ const PLAN = {
   budget: 2,
   usedLoad: 3.5,
   backlogCount: 4,
+  daily: { date: '2026-09-15', limitLoad: 6, usedLoad: 3.5, remainingLoad: 2.5 },
+  tomorrowCount: 5,
   successRate: null,
   relearnSuggestions: [{ conceptKey: 'c9', label: '老卡点', consecutiveAgain: 3 }],
 };
 
-async function mountDashboard(options: { withPlan?: boolean } = {}) {
+async function mountDashboard(options: { withPlan?: boolean; plan?: Record<string, unknown> } = {}) {
   getStats.mockResolvedValue({});
   getPaths.mockResolvedValue([
     {
@@ -78,7 +80,9 @@ async function mountDashboard(options: { withPlan?: boolean } = {}) {
   getAdaptiveGuidance.mockResolvedValue(null);
   getMock.mockImplementation((url: string) => {
     if (String(url).includes('/ai-teaching/review/plan')) {
-      return options.withPlan === false ? Promise.reject(new Error('offline')) : Promise.resolve({ data: PLAN });
+      return options.withPlan === false
+        ? Promise.reject(new Error('offline'))
+        : Promise.resolve({ data: options.plan ?? PLAN });
     }
     if (String(url).includes('/ai-teaching/review/due')) return Promise.resolve({ data: { items: DUE_ITEMS } });
     if (String(url).includes('/users/me/sessions')) return Promise.resolve({ data: [] });
@@ -134,11 +138,24 @@ describe('V2Dashboard 今日复习卡（重设计）', () => {
     expect(w.find('.review__more').text()).toBe('收起');
   });
 
-  it('入口是「去上课 · 顺带温故」，并说明课上会先花 1–2 分钟回捞', async () => {
+  it('入口是「去上课 · 顺带温故」，并说明课上会先花 1–2 分钟回捞 + 今日额度', async () => {
     const w = await mountDashboard();
     expect(w.find('.review__go').text()).toContain('去上课 · 顺带温故');
     expect(w.find('.review__hint').text()).toContain('回捞这 3 个');
     expect(w.find('.review__hint').text()).toContain('不用额外开一节复习课');
+    expect(w.find('.review__hint').text()).toContain('今日额度 3.5/6');
+  });
+
+  it('明日预告：有明日到期点时显示「明天预计 N」', async () => {
+    const w = await mountDashboard();
+    const stats = w.findAll('.review__stat').map((n) => n.text());
+    expect(stats).toContain('明天预计 5');
+  });
+
+  it('今日额度用完 → 提示顺延到明天', async () => {
+    const w = await mountDashboard({ plan: { ...PLAN, items: [], daily: { date: '2026-09-15', limitLoad: 6, usedLoad: 6, remainingLoad: 0 } } });
+    expect(w.find('.review__hint').text()).toContain('今日温故额度已用完');
+    expect(w.find('.review__hint').text()).toContain('明天继续');
   });
 });
 

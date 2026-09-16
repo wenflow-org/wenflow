@@ -97,6 +97,14 @@
             hint="<70% 收缩预算 / >90% 扩张"
           />
           <MkKpi label="需回路径重学" :value="detail.reviewPlan.relearnSuggestions.length" tone="warn" compact hint="连续没接上，已退出队列" />
+          <MkKpi
+            label="今日额度"
+            :value="`${detail.reviewPlan.daily?.usedLoad ?? 0}/${detail.reviewPlan.daily?.limitLoad ?? '—'}`"
+            :tone="(detail.reviewPlan.daily?.remainingLoad ?? 1) <= 0 ? 'warn' : ''"
+            compact
+            hint="跨会话共享，用完顺延到明天"
+          />
+          <MkKpi label="明日预计" :value="detail.reviewPlan.tomorrowCount ?? 0" compact hint="首页明日预告" />
         </div>
 
         <table v-if="detail.reviewPlan?.items.length" class="mr__table">
@@ -446,28 +454,28 @@ onMounted(async () => {
 .mr { display: grid; gap: 14px; }
 .mr__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .mr__title { margin: 0; font-size: 18px; font-weight: 800; color: var(--mk-ink); }
-.mr__lead { margin: 4px 0 0; font-size: 12px; color: var(--mk-muted, #64748b); max-width: 720px; line-height: 1.6; }
-.mr__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mk-muted, #64748b); }
+.mr__lead { margin: 4px 0 0; font-size: 12px; color: var(--mk-muted, #5b6577); max-width: 720px; line-height: 1.6; }
+.mr__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mk-muted, #5b6577); }
 .mr__kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .mr__kpis--tight { margin-bottom: 10px; }
 .mr__h4 { margin: 14px 0 6px; font-size: 13px; font-weight: 700; color: var(--mk-ink); }
 .mr__table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.mr__table th, .mr__table td { padding: 7px 8px; border-bottom: 1px solid #eef2f7; text-align: left; vertical-align: top; }
-.mr__table th { font-weight: 700; color: var(--mk-faint, #94a3b8); white-space: nowrap; }
+.mr__table th, .mr__table td { padding: 7px 8px; border-bottom: 1px solid var(--mk-line); text-align: left; vertical-align: top; }
+.mr__table th { font-weight: 700; color: var(--mk-faint, #5f6f8c); white-space: nowrap; }
 .mr__num { text-align: right; font-variant-numeric: tabular-nums; }
-.mr__num--warn { color: #b45309; font-weight: 700; }
-.mr__sub { display: block; color: var(--mk-muted, #94a3b8); font-size: 11px; }
-.mr__tag { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #eef2ff; color: #4338ca; font-size: 10px; }
-.mr__row--active { background: #f6f9ff; }
+.mr__num--warn { color: var(--mk-amber); font-weight: 700; }
+.mr__sub { display: block; color: var(--mk-muted, #5b6577); font-size: 11px; }
+.mr__tag { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--mk-blue-bg); color: var(--mk-accent-deep); font-size: 10px; }
+.mr__row--active { background: var(--mk-blue-bg); }
 .mr__actions { display: flex; gap: 6px; }
-.mr__btn { padding: 3px 9px; border: 1px solid #dbe3f0; border-radius: 7px; background: #fff; font-size: 12px; cursor: pointer; }
+.mr__btn { padding: 3px 9px; border: 1px solid var(--mk-line); border-radius: 7px; background: var(--mk-surface); font-size: 12px; cursor: pointer; }
 .mr__btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.mr__error { margin: 6px 0; color: #b91c1c; font-size: 12px; }
+.mr__error { margin: 6px 0; color: var(--mk-red-strong); font-size: 12px; }
 .mr__warn { margin-top: 8px; padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(217, 119, 6, 0.3); background: rgba(217, 119, 6, 0.06); font-size: 12px; }
 .mr__chip { display: inline-block; margin-left: 8px; }
 .mr__detail { display: grid; gap: 14px; }
-.mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #94a3b8); font-size: 11px; }
+.mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: 11px; }
 .mr__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 10px; }
-.mr__warn-inline { color: #b45309; font-size: 11px; }
-.mr__btn--danger { border-color: rgba(185, 28, 28, 0.35); color: #b91c1c; }
+.mr__warn-inline { color: var(--mk-amber); font-size: 11px; }
+.mr__btn--danger { border-color: rgba(185, 28, 28, 0.35); color: var(--mk-red-strong); }
 </style>

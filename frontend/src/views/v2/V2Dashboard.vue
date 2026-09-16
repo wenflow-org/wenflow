@@ -274,6 +274,7 @@
             <div class="review__stats">
               <span v-if="reviewUrgentCount" class="review__stat review__stat--urgent">记忆偏弱 {{ reviewUrgentCount }}</span>
               <span class="review__stat">按计划到期 {{ reviewDue.length - reviewUrgentCount }}</span>
+              <span v-if="(reviewPlan?.tomorrowCount ?? 0) > 0" class="review__stat">明天预计 {{ reviewPlan?.tomorrowCount }}</span>
             </div>
           </div>
           <p class="review__lead">按记忆曲线排期，越靠前越该回捞；右侧为当前记忆强度。</p>
@@ -586,7 +587,14 @@ const reviewDue = ref<Array<{ conceptKey: string; label: string; retention: numb
  * 课内温故计划（记忆层 · 认知负担动态调整）：今天课上实际会接几个、还有多少在排队。
  * 后端按「负担预算」裁剪（复合概念吃更多预算），比 due 列表的接口上限（20）更能代表真实工作量。
  */
-const reviewPlan = ref<{ items: Array<{ conceptKey: string; label: string; retention: number }>; backlogCount: number; budget: number } | null>(null);
+const reviewPlan = ref<{
+  items: Array<{ conceptKey: string; label: string; retention: number }>;
+  backlogCount: number;
+  budget: number;
+  /** 当日额度（跨会话共享）与明日预告 */
+  daily?: { date: string; limitLoad: number; usedLoad: number; remainingLoad: number };
+  tomorrowCount?: number;
+} | null>(null);
 /** 今日复习列表默认预览条数（其余折叠为「还有 N 个」） */
 const REVIEW_PREVIEW = 5;
 const reviewExpanded = ref(false);
@@ -604,7 +612,14 @@ const reviewTitle = computed(() => {
 });
 const reviewFooterHint = computed(() => {
   const planned = reviewPlan.value?.items?.length ?? 0;
-  if (planned > 0) return `上课时会先花 1–2 分钟回捞这 ${planned} 个，不用额外开一节复习课`;
+  const daily = reviewPlan.value?.daily;
+  const quota = daily ? `今日额度 ${daily.usedLoad}/${daily.limitLoad}` : '';
+  if (planned > 0) {
+    return `上课时会先花 1–2 分钟回捞这 ${planned} 个，不用额外开一节复习课${quota ? `（${quota}）` : ''}`;
+  }
+  if (daily && daily.remainingLoad <= 0) {
+    return `今日温故额度已用完（${quota}），剩下的明天继续`;
+  }
   return '到期知识点会在上课时顺带回捞';
 });
 function reviewPct(retention: number): string {

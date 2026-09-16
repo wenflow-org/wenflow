@@ -36,6 +36,7 @@ import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
 import { learnerExitService } from '../learner/LearnerExitService';
 import { memoryTraceService, normalizeConceptKey } from '../memory/memory-trace.service';
 import { conceptLoadService } from '../memory/concept-load.service';
+import { reviewQuotaService } from '../memory/review-quota.service';
 import reviewPlanService, { type ReviewPlan } from '../memory/review-plan.service';
 import { recordMisconceptions } from '../learner/misconception-ledger.service';
 
@@ -1436,6 +1437,18 @@ export class AITeachingOrchestrator {
       knowledgeState: seededKnowledgeState,
       teachingState: memoryWarmup ? { sessionArtifacts: { memoryWarmup } } : null,
     }, RECOVERY_WINDOW_MS);
+
+    // 当日温故额度记账（跨会话共享：一天多节课不会把温故量放大；超额部分顺延到明天）。
+    // fire-and-forget：记账失败只 warn，不阻断开课。
+    if (reservation.created && memoryWarmup && memoryWarmup.items.length > 0) {
+      void reviewQuotaService
+        .reserveDailyQuota(input.userId, {
+          sessionId: reservation.session.id,
+          load: memoryWarmup.usedLoad,
+          keys: memoryWarmup.items.map((item) => item.conceptKey),
+        })
+        .catch(() => null);
+    }
 
     if (!reservation.created) {
       if (reservation.session.status === 'initializing' || reservation.session.status === 'finalizing') {

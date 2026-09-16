@@ -19,6 +19,7 @@
 import prisma from '../../config/database';
 import { memoryTraceService, normalizeConceptKey } from './memory-trace.service';
 import { conceptLoadService, mapProfileToLoad, type ConceptLoadProfile } from './concept-load.service';
+import { getDailyState as defaultGetDailyState, type ReviewDailyState } from './review-quota.service';
 import { mapReviewStatusToRating, type ReviewRating } from '../learner/ReviewCompletedConsumer';
 
 /** 基准负担预算（负担单位）：约等于「两个原子点」或「一个复合点 + 一个原子点」 */
@@ -134,7 +135,7 @@ export interface RelearnSuggestion {
 }
 
 export interface ReviewPlan {
-  /** 本节温故应接的点（按负担预算裁好） */
+  /** 本节温故应接的点（按负担预算裁好；当日额度用完时为空） */
   items: ReviewPlanItem[];
   /** 本次可用负担预算（负担单位） */
   budget: number;
@@ -146,6 +147,15 @@ export interface ReviewPlan {
   successRate: number | null;
   /** 判定为「没学会」、已退出复习队列的点（建议回路径重学） */
   relearnSuggestions: RelearnSuggestion[];
+  /** 当日额度（跨会话共享）：今天还剩多少负担单位可接 */
+  daily: {
+    date: string;
+    limitLoad: number;
+    usedLoad: number;
+    remainingLoad: number;
+  };
+  /** 明天预计到期的点数（首页「明日预告」；不参与选点） */
+  tomorrowCount: number;
 }
 
 /** 数据访问口（默认走 prisma；单测注入替身，避免全局 mock） */
@@ -163,6 +173,10 @@ export interface ReviewPlanDeps {
   findPaths: (args: Record<string, unknown>) => Promise<Array<Record<string, any>>>;
   /** 概念负担档位（**只读缓存**；LLM 判定由课后预热负责，见 concept-load.service） */
   loadProfiles: (userId: string, conceptKeys: string[]) => Promise<Map<string, ConceptLoadProfile>>;
+  /** 当日温故额度（跨会话共享；见 review-quota.service） */
+  getDailyState: (userId: string) => Promise<ReviewDailyState>;
+  /** 明天预计到期的点数（首页"明日预告"，不参与选点） */
+  countDueBetween: (userId: string, from: Date, to: Date) => Promise<number>;
 }
 
 const defaultDeps: ReviewPlanDeps = {
@@ -171,6 +185,10 @@ const defaultDeps: ReviewPlanDeps = {
   findSessions: (args) => prisma.teaching_sessions.findMany(args as any) as any,
   findPaths: (args) => prisma.learning_paths.findMany(args as any) as any,
   loadProfiles: (userId, conceptKeys) => conceptLoadService.resolveCachedProfiles(userId, conceptKeys),
+  getDailyState: (userId) => defaultGetDailyState(userId),
+  countDueBetween: async (userId, from, to) => prisma.memory_traces.count({
+    where: { userId, extractionCount: { gt: 0 }, dueAt: { gt: from, lte: to } },
+  }),
 };
 
 /** 从 learner_evidence 读近期检索结果（review:warmup / review:completed 两类同源） */
@@ -331,14 +349,12 @@ export async function buildReviewPlan(
   // 这里再按族名收敛，避免「换一种说法」重复占用温故预算）
   const byFamily = new Map<string, (typeof due)[number]>();
   const relearn = new Map<string, RelearnSuggestion>();
-  let backlogCount = 0;
   for (const trace of due) {
     if (!trace.conceptKey) continue;
     const family = normalizeConceptKey(trace.conceptKey);
     if (!family) continue;
     // 从未被真正提取过的点没有可回捞的记忆（kt-estimate 孤儿等），不进队列
     if (trace.extractionCount === 0) continue;
-    backlogCount += 1;
     if (leechKeys.has(family)) {
       if (!relearn.has(family)) {
         relearn.set(family, {
@@ -353,13 +369,31 @@ export async function buildReviewPlan(
     if (!existing || isMoreUrgent(trace, existing)) byFamily.set(family, trace);
   }
 
-  const candidates = Array.from(byFamily.values())
+  // 当日额度（跨会话共享）：今天已经接过的量会压缩本节可用预算；
+  // 额度用完则本节不温故（**顺延到明天**，而不是把剩下的今天全倒出来）。
+  const daily = await deps.getDailyState(userId).catch(() => ({
+    date: new Date().toISOString().slice(0, 10),
+    limitLoad: budget,
+    usedLoad: 0,
+    usedCount: 0,
+    // 读不到额度 → 退回"按会话预算走"（不能让一次读失败把温故整个关掉）
+    remainingLoad: budget,
+    reservedKeys: [] as string[],
+  }));
+  const reservedToday = new Set(daily.reservedKeys.map((key) => normalizeConceptKey(key)));
+  const effectiveBudget = Math.round(Math.min(budget, daily.remainingLoad) * 100) / 100;
+
+  // 队列（按**概念族**计，同一概念的多种说法只占一个排队位）：
+  // leech 已转"回路径重学"、毕业点不再按计划间隔回捞 —— 都不算"排队中"。
+  const queue = Array.from(byFamily.values())
     .filter((trace) => {
-      // 毕业：连续成功达阈值 → 不再按计划间隔回捞，只在保留率真跌了才回捞
       const graduated = (successes.get(normalizeConceptKey(trace.conceptKey)) ?? 0) >= GRADUATE_CONSECUTIVE_SUCCESS;
       return !(graduated && trace.reason !== 'below-threshold');
     })
     .sort((a, b) => urgencyOf(b) - urgencyOf(a));
+  const queuedCount = queue.length;
+  // 今天已经接过 → 顺延到明天（同一天不重复占额度），但仍算在排队里
+  const candidates = queue.filter((trace) => !reservedToday.has(normalizeConceptKey(trace.conceptKey)));
 
   // 认知负担档位：只对最急的前 LOAD_PROFILE_LOOKAHEAD 个候选取（LLM 一次判一批），
   // 其余用规则版兜底 —— 预算最多 3.0，实际入选只会落在最急的几个里，没必要判满 60 个。
@@ -375,9 +409,11 @@ export async function buildReviewPlan(
   let usedLoad = 0;
   for (const trace of candidates) {
     if (picked.length >= maxItems) break;
+    // 当日额度已用完 → 今天不再接（顺延），本节进入正常教学
+    if (effectiveBudget <= 0) break;
     const estimate = loadOf(trace);
-    if (picked.length > 0 && usedLoad + estimate.load > budget) continue;
-    if (picked.length === 0 && estimate.load > budget) {
+    if (picked.length > 0 && usedLoad + estimate.load > effectiveBudget) continue;
+    if (picked.length === 0 && estimate.load > effectiveBudget) {
       // 预算再低也要接一个最急的点：这节课本来就是为它来的
       picked.push(trace);
       usedLoad = estimate.load;
@@ -386,6 +422,15 @@ export async function buildReviewPlan(
     picked.push(trace);
     usedLoad = Math.round((usedLoad + estimate.load) * 100) / 100;
   }
+
+  // 明日预告：明天（UTC 日）预计到期的点数，用于首页「明天预计 N 个」
+  const endOfToday = new Date(now);
+  endOfToday.setUTCHours(23, 59, 59, 999);
+  const startOfTomorrow = new Date(endOfToday.getTime() + 1);
+  const endOfTomorrow = new Date(startOfTomorrow.getTime() + 86400_000 - 1);
+  const tomorrowCount = await deps
+    .countDueBetween(userId, endOfToday, endOfTomorrow)
+    .catch(() => 0);
 
   const origins = await resolveOriginPathTitles(userId, picked.map((trace) => normalizeConceptKey(trace.conceptKey)), deps);
 
@@ -406,11 +451,18 @@ export async function buildReviewPlan(
 
   return {
     items,
-    budget,
+    budget: effectiveBudget,
     usedLoad,
-    backlogCount: Math.max(0, backlogCount - items.length),
+    backlogCount: Math.max(0, queuedCount - items.length),
     successRate,
     relearnSuggestions: Array.from(relearn.values()),
+    daily: {
+      date: daily.date,
+      limitLoad: daily.limitLoad,
+      usedLoad: daily.usedLoad,
+      remainingLoad: daily.remainingLoad,
+    },
+    tomorrowCount,
   };
 }
 

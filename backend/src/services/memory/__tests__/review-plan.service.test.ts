@@ -40,6 +40,11 @@ function buildDeps(over: Partial<ReviewPlanDeps> = {}): ReviewPlanDeps {
     findPaths: jest.fn().mockResolvedValue([]),
     // 关键路径只读缓存：默认给空 Map（等价于"还没预热"→ 走规则版）
     loadProfiles: jest.fn().mockResolvedValue(new Map()),
+    // 当日额度：默认给"额度充足"（每天 6.0），单独测配额的用例再覆盖
+    getDailyState: jest.fn().mockResolvedValue({
+      date: '2026-09-15', limitLoad: 6, usedLoad: 0, usedCount: 0, remainingLoad: 6, reservedKeys: [],
+    }),
+    countDueBetween: jest.fn().mockResolvedValue(0),
     ...over,
   };
 }
@@ -225,7 +230,8 @@ describe('buildReviewPlan（课内温故计划）', () => {
     const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
     expect(plan.items).toHaveLength(1);
     expect(plan.items[0].conceptKey).toBe('离开前翻页立好：靠物理状态生效');
-    expect(plan.backlogCount).toBe(1);
+    // 积压按**概念族**计：两条说法是同一族，已被这一条覆盖 → 排队里没有别的概念
+    expect(plan.backlogCount).toBe(0);
   });
 
   it('连续 3 次没接上 → 退出复习队列，转为「回路径重学」建议', async () => {
@@ -328,5 +334,91 @@ describe('buildReviewPlan（课内温故计划）', () => {
     const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
     expect(plan.items).toHaveLength(1);
     expect(plan.items[0].originPathTitle).toBeNull();
+  });
+
+  it('当日额度压缩本节预算（跨会话共享）', async () => {
+    const deps = buildDeps({
+      findEvidence: jest.fn().mockResolvedValue([
+        { payload: JSON.stringify({ conceptKey: 'X', rating: 'easy' }), occurredAt: new Date() },
+      ]),
+      getDailyState: jest.fn().mockResolvedValue({
+        date: '2026-09-15', limitLoad: 6, usedLoad: 5, usedCount: 3, remainingLoad: 1, reservedKeys: [],
+      }),
+      getDueTraces: jest.fn().mockResolvedValue([
+        trace({ conceptKey: 'A', label: 'A', retention: 0.3 }),
+        trace({ conceptKey: 'B', label: 'B', retention: 0.4 }),
+        trace({ conceptKey: 'C', label: 'C', retention: 0.5 }),
+      ]),
+    });
+    const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
+    // 会话预算本来是 3.0（高成功率），被当日剩余额度压到 1.0 → 只接 1 个原子点
+    expect(plan.budget).toBe(1);
+    expect(plan.items).toHaveLength(1);
+    expect(plan.daily).toMatchObject({ limitLoad: 6, usedLoad: 5, remainingLoad: 1 });
+    expect(plan.backlogCount).toBe(2);
+  });
+
+  it('当日额度用完 → 本节不温故（顺延到明天），但仍诚实报出积压与重学建议', async () => {
+    const deps = buildDeps({
+      getDailyState: jest.fn().mockResolvedValue({
+        date: '2026-09-15', limitLoad: 6, usedLoad: 6, usedCount: 4, remainingLoad: 0, reservedKeys: [],
+      }),
+      findEvidence: jest.fn().mockResolvedValue([
+        { payload: JSON.stringify({ conceptKey: '老卡点', rating: 'again' }), occurredAt: new Date() },
+        { payload: JSON.stringify({ conceptKey: '老卡点', rating: 'again' }), occurredAt: new Date() },
+        { payload: JSON.stringify({ conceptKey: '老卡点', rating: 'again' }), occurredAt: new Date() },
+      ]),
+      getDueTraces: jest.fn().mockResolvedValue([
+        trace({ conceptKey: 'A', label: 'A', retention: 0.2 }),
+        trace({ conceptKey: '老卡点', label: '老卡点', retention: 0.1 }),
+      ]),
+    });
+    const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
+    expect(plan.items).toEqual([]);
+    expect(plan.daily.remainingLoad).toBe(0);
+    expect(plan.backlogCount).toBe(1); // 老卡点 被 leech 剔除后不计入积压
+    expect(plan.relearnSuggestions).toHaveLength(1);
+  });
+
+  it('今天已接过的概念顺延到明天（不在同一天重复占额度）', async () => {
+    const deps = buildDeps({
+      getDailyState: jest.fn().mockResolvedValue({
+        date: '2026-09-15', limitLoad: 6, usedLoad: 1, usedCount: 1, remainingLoad: 5, reservedKeys: ['A'],
+      }),
+      getDueTraces: jest.fn().mockResolvedValue([
+        trace({ conceptKey: 'A', label: 'A', retention: 0.1 }),
+        trace({ conceptKey: 'B', label: 'B', retention: 0.4 }),
+      ]),
+    });
+    const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
+    expect(plan.items.map((item) => item.conceptKey)).toEqual(['B']);
+    expect(plan.backlogCount).toBe(1);
+  });
+
+  it('明日预告透传（不参与选点）', async () => {
+    const deps = buildDeps({
+      countDueBetween: jest.fn().mockResolvedValue(7),
+      getDueTraces: jest.fn().mockResolvedValue([trace({ conceptKey: 'A', label: 'A' })]),
+    });
+    const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15T10:00:00Z') });
+    expect(plan.tomorrowCount).toBe(7);
+    // 窗口：今天结束之后 ~ 明天结束之前
+    const [userId, from, to] = (deps.countDueBetween as jest.Mock).mock.calls[0];
+    expect(userId).toBe('u1');
+    expect(from.toISOString()).toBe('2026-09-15T23:59:59.999Z');
+    expect(to.toISOString()).toBe('2026-09-16T23:59:59.999Z');
+  });
+
+  it('额度读取失败 → 退回按会话预算走（不能让一次读失败把温故关掉）', async () => {
+    const deps = buildDeps({
+      getDailyState: jest.fn().mockRejectedValue(new Error('projection down')),
+      getDueTraces: jest.fn().mockResolvedValue([
+        trace({ conceptKey: 'A', label: 'A', retention: 0.3 }),
+        trace({ conceptKey: 'B', label: 'B', retention: 0.4 }),
+      ]),
+    });
+    const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
+    expect(plan.items).toHaveLength(2);
+    expect(plan.budget).toBe(2);
   });
 });

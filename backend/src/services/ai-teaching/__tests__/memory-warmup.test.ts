@@ -12,6 +12,8 @@ const plan = (items: ReviewPlan['items']): ReviewPlan => ({
   backlogCount: 3,
   successRate: null,
   relearnSuggestions: [],
+  daily: { date: '2026-09-15', limitLoad: 6, usedLoad: 1, remainingLoad: 5 },
+  tomorrowCount: 0,
 });
 
 const item = (label: string, conceptKey = label): ReviewPlan['items'][number] => ({
