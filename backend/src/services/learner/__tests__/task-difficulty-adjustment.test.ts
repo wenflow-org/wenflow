@@ -94,9 +94,9 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
     });
     expect(decision.cap).toBe(CHALLENGE_CAP_LIMITS.low);
     expect(decision.adjusted).toBe(4);
-    expect(decision.reasons).toContain('capped_by_challenge_level');
-    // 上限不是"再降一档"：没有独立的降档理由，delta 只来自封顶
-    expect(decision.reasons).not.toContain('challenge_cap_low');
+    // 上限是"封顶"：用独立布尔位标识，不混进"降档证据"，否则会被当成一条可缓解的理由
+    expect(decision.capApplied).toBe(true);
+    expect(decision.reasons).toEqual([]);
   });
 
   it('同一份证据不被算两次：本路径压力大 + 上限 low → 只降一档', () => {
@@ -108,6 +108,17 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
     expect(decision.delta).toBe(-1);
     expect(decision.adjusted).toBe(4);
     expect(decision.reasons).toEqual(['lesson_stress_high']);
+  });
+
+  it('没有本路径历史时，路径级证据（失衡/单课压力）都不参与判定，只走全局层', () => {
+    const decision = decideTaskDifficulty({
+      ...normalInput(),
+      lessonMetrics: null,
+      globalMetrics: metrics(2, 3, 4), // 全局 lsb = -1 → 全局层失衡
+    });
+    expect(decision.reasons).toEqual(['global_imbalance']);
+    expect(decision.reasons).not.toContain('path_load_unbalanced');
+    expect(decision.reasons).not.toContain('lesson_stress_high');
   });
 
   it('有余力（cap high + push + 课内低负荷）→ 升一档，且只升一档', () => {

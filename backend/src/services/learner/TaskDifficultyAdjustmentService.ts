@@ -63,8 +63,10 @@ export interface TaskDifficultyAdjustment {
   /** 上限来源（可审计） */
   cap: number;
   capSource: 'low' | 'medium' | 'high';
-  /** 判定依据（稳定枚举，便于统计与度量） */
+  /** 判定依据（稳定枚举，只含**学习者状态证据**，便于统计与度量） */
   reasons: string[];
+  /** 是否被 challengeLevelCap 截断（上限是"封顶"，不是一条降档证据） */
+  capApplied: boolean;
   /** 参与判定的证据快照（可审计/可回归） */
   evidence: {
     lessonLss: number;
@@ -124,14 +126,16 @@ function collectDecreaseReasons(
   const cap = input.learningControlState?.challengeLevelCap;
 
   // 课内（路径级）：这条路最近本来就吃力 → 这节课降档。
-  // 仅在**有本路径历史**时生效：LSS 是会话级量，本路径还没上过课时
-  // 不能借用别的路径的"最近一课压力"来给这节课降档（那是跨路径污染）。
+  // 仅在**有本路径历史**时生效：本路径还没上过课时，不能借用别的路径的路径级证据
+  // （LSS 是会话级量、balance 是路径自身状态），那是跨路径污染。
   if (lessonScopeIsPath && lesson.lss >= 6) reasons.push('lesson_stress_high');
-  if (lesson.lf >= 6 || lesson.lsb < 0) reasons.push('path_load_unbalanced');
+  if (lessonScopeIsPath && (lesson.lf >= 6 || lesson.lsb < 0)) reasons.push('path_load_unbalanced');
   // 学习者级：总负担重（累）→ 任何路径都别再上强度
   if (input.fatigueRisk === 'high' || input.recommendedPacing === 'slow' || input.globalMetrics.lf >= 6) {
     reasons.push('fatigue_high');
   }
+  // 学习者级：总负荷失衡（例如当天课多）→ 同样降档。层级要说清：这是全局信号，不是"本路径失衡"。
+  if (!lessonScopeIsPath && input.globalMetrics.lsb < 0) reasons.push('global_imbalance');
   // 知识证据：脆弱/挣扎/前置缺口
   const fragile = input.knowledgeSignals?.fragileCount ?? 0;
   const struggling = input.knowledgeSignals?.strugglingCount ?? 0;
@@ -171,7 +175,7 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
 
   const reasons = [...decreaseReasons];
   if (reasons.length === 0 && finalDelta > 0) reasons.push('ready_to_accelerate');
-  if (adjusted < desired) reasons.push('capped_by_challenge_level');
+  const capApplied = adjusted < desired;
 
   return {
     baseline,
@@ -181,6 +185,7 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
     cap,
     capSource,
     reasons,
+    capApplied,
     evidence: {
       lessonLss: lesson.lss,
       lessonKtl: lesson.ktl,

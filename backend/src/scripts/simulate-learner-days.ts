@@ -31,6 +31,10 @@ import {
   deriveReplanSignal,
 } from '../services/learner/LearnerSnapshotService';
 import { decideTaskDifficulty, resolveBaselineLevel } from '../services/learner/TaskDifficultyAdjustmentService';
+import {
+  measureTaskDifficultyEffects,
+  recordTaskDifficultyAdjustment,
+} from '../services/learner/TaskDifficultyAdjustmentLedger';
 
 /** EWMA 系数（与 LearningMetricService 的派生公式一致，断言里用来算两种预测值）
  * 注意：lf 的新值系数是 0.15（不是 1-0.7），ktl 的是 0.05（= 1-0.95）—— 公式本身不是严格凸组合。 */
@@ -42,10 +46,14 @@ const LF_NEW_TERM = 0.15;
 export interface SimLesson {
   /** 相对起始日的天数（0 = 起始日） */
   dayOffset: number;
-  pathKey: 'A' | 'B';
-  /** 1-10 主观难度 */
+  pathKey: 'A' | 'B' | 'C';
+  /** 1-10 主观难度（作为任务基线） */
   difficulty: number;
   durationMinutes: number;
+  /** 是否记录难度调整锚点（留痕，供效果度量对账） */
+  recordAdjustment?: boolean;
+  /** 是否**真的按调整后的难度执行**本节（false = 对照） */
+  applyAdjustment?: boolean;
 }
 
 export interface SimPlan {
@@ -55,7 +63,9 @@ export interface SimPlan {
 
 /**
  * 默认剧本：
- * - 第 1 天：路径 A 连上两节难课（difficulty 9）→ 用于断言"路径隔离"
+ * - 第 1 天：路径 A 连上两节难课（difficulty 9，**只判定不执行** = 对照）
+ *            路径 C 连上两节难课（difficulty 9，**按调整执行** = 实验组）
+ *   → 断言"路径隔离"与"难度调整的效果度量"（同类降档理由是否缓解）
  * - 第 2 天：路径 B 两节常规课（difficulty 5）→ B 应只接自己的第 1 节
  * - 第 3 天：一天三节、跨两条路径 → 用于断言"当日课量 → 全局疲劳"
  */
@@ -63,8 +73,10 @@ export function buildDefaultPlan(): SimPlan {
   return {
     days: 3,
     lessons: [
-      { dayOffset: 0, pathKey: 'A', difficulty: 9, durationMinutes: 45 },
-      { dayOffset: 0, pathKey: 'A', difficulty: 9, durationMinutes: 45 },
+      { dayOffset: 0, pathKey: 'A', difficulty: 9, durationMinutes: 45, recordAdjustment: true },
+      { dayOffset: 0, pathKey: 'A', difficulty: 9, durationMinutes: 45, recordAdjustment: true },
+      { dayOffset: 0, pathKey: 'C', difficulty: 9, durationMinutes: 45, recordAdjustment: true },
+      { dayOffset: 0, pathKey: 'C', difficulty: 9, durationMinutes: 45, recordAdjustment: true, applyAdjustment: true },
       { dayOffset: 1, pathKey: 'B', difficulty: 5, durationMinutes: 30 },
       { dayOffset: 1, pathKey: 'B', difficulty: 5, durationMinutes: 30 },
       { dayOffset: 2, pathKey: 'A', difficulty: 5, durationMinutes: 30 },
@@ -117,10 +129,10 @@ async function main(): Promise<void> {
     new Date(dayStart(offset).getTime() + (9 + Math.max(1, lessonsForDay(plan, offset).length)) * 3600_000);
 
   const plan = buildDefaultPlan();
-  const pathIds: Record<'A' | 'B', string> = { A: `lp_${runId}_a`, B: `lp_${runId}_b` };
+  const pathIds: Record<'A' | 'B' | 'C', string> = { A: `lp_${runId}_a`, B: `lp_${runId}_b`, C: `lp_${runId}_c` };
 
   console.log(`[sim] 学习者 ${user.name || userId}｜run=${runId}｜模拟天数 ${plan.days}｜起始日 ${dayStart(0).toISOString().slice(0, 10)}`);
-  console.log(`[sim] 模拟路径 A=${pathIds.A}  B=${pathIds.B}`);
+  console.log(`[sim] 模拟路径 A=${pathIds.A}(对照)  B=${pathIds.B}  C=${pathIds.C}(实验:按调整执行)`);
   for (let day = 0; day < plan.days; day += 1) {
     const dayLessons = lessonsForDay(plan, day);
     console.log(`  day${day} (${dayStart(day).toISOString().slice(0, 10)}) : ${dayLessons.map((l) => `${l.pathKey} d${l.difficulty}/${l.durationMinutes}min`).join('  ')}`);
@@ -133,13 +145,49 @@ async function main(): Promise<void> {
     return;
   }
 
+  const baseKnowledge = {
+    globalSignals: { fragileConcepts: [], strugglingConcepts: [], masteredConcepts: [] },
+    globalBackground: { blockedFoundations: [] },
+  } as any;
+
+  /** 与课堂接线同口径：用"本节开始前"的路径级状态 + 全局聚合 → 难度决策 */
+  const decideForLesson = async (input: { userId: string; pathId: string; at: Date; baselineLevel: number }) => {
+    const [pathState, globalAggregate] = await Promise.all([
+      learningStateService.getCurrentState(input.userId, { pathId: input.pathId, asOf: input.at }),
+      learningStateService.getAggregatedState(input.userId, { asOf: input.at }),
+    ]);
+    const globalMetrics = globalAggregate?.metrics ?? { lss: 0, ktl: 0, lf: 0, lsb: 0, timestamp: input.at };
+    const control = deriveLearningControlState({
+      dynamicState: {
+        metrics: globalMetrics, recentTrend: 'stable',
+        fatigueRisk: globalMetrics.lf >= 6 ? 'high' : 'low',
+        confidenceTrend: 'stable', recentSessionQuality: 'mixed',
+        recommendedPacing: derivePacing(globalMetrics.lf, globalMetrics.ktl),
+        recommendedInteraction: { hintTiming: 'delayed', encouragement: 'medium', challenge: 'medium' },
+        srlPhase: 'performance',
+      } as any,
+      knowledgeMemory: baseKnowledge,
+      ...(pathState ? { lessonMetrics: { lss: pathState.lss, ktl: pathState.ktl, lf: pathState.lf, lsb: pathState.lsb } } : {}),
+    });
+    const decision = decideTaskDifficulty({
+      baselineLevel: input.baselineLevel,
+      globalMetrics,
+      lessonMetrics: pathState ? { lss: pathState.lss, ktl: pathState.ktl, lf: pathState.lf, lsb: pathState.lsb } : null,
+      learningControlState: control,
+      fatigueRisk: globalMetrics.lf >= 6 ? 'high' : 'low',
+      recommendedPacing: derivePacing(globalMetrics.lf, globalMetrics.ktl),
+      knowledgeSignals: { fragileCount: 0, strugglingCount: 0, prerequisiteGapCount: 0 },
+    });
+    return { decision, pathState, globalMetrics };
+  };
+
   const createdSubtasks: string[] = [];
   const createdSessions: string[] = [];
   const assertions: Assertion[] = [];
 
   try {
     // 1) 建两条模拟路径（+里程碑，subtasks 需要 FK）
-    for (const key of ['A', 'B'] as const) {
+    for (const key of ['A', 'B', 'C'] as const) {
       await prisma.learning_paths.create({
         data: {
           id: pathIds[key], userId, title: `[sim ${runId}] 路径${key}`, status: 'active',
@@ -182,12 +230,36 @@ async function main(): Promise<void> {
         });
         createdSessions.push(sessionId);
 
+        // 难度调整：先按"本节开始前"的状态判定（与课堂接线同口径），再决定本节实际难度
+        let effectiveDifficulty = lesson.difficulty;
+        if (lesson.recordAdjustment || lesson.applyAdjustment) {
+          const decided = await decideForLesson({
+            userId, pathId: pathIds[lesson.pathKey], at, baselineLevel: lesson.difficulty,
+          });
+          if (decided.decision.reasons.length > 0) {
+            await recordTaskDifficultyAdjustment({
+              userId,
+              taskId,
+              pathId: pathIds[lesson.pathKey],
+              sessionId,
+              occurredAt: at,
+              baseline: decided.decision.baseline,
+              adjusted: decided.decision.adjusted,
+              direction: decided.decision.direction,
+              reasons: decided.decision.reasons,
+              applied: lesson.applyAdjustment === true,
+              evidence: decided.decision.evidence as unknown as Record<string, unknown>,
+            });
+          }
+          if (lesson.applyAdjustment) effectiveDifficulty = decided.decision.adjusted;
+        }
+
         await updateLearningMetrics({
           userId,
           taskId,
           pathId: pathIds[lesson.pathKey],
           durationMinutes: lesson.durationMinutes,
-          subjectiveDifficulty: lesson.difficulty,
+          subjectiveDifficulty: effectiveDifficulty,
           completed: true,
           timestamp: at,
         });
@@ -254,10 +326,6 @@ async function main(): Promise<void> {
     // ── 断言 3：信号区分「这门课难」vs「最近太累」
     const aggregateDay1 = await learningStateService.getAggregatedState(userId, { asOf: dayAsOf(plan, 0) });
     const pathAState = await stateAt('A', 0);
-    const baseKnowledge = {
-      globalSignals: { fragileConcepts: [], strugglingConcepts: [], masteredConcepts: [] },
-      globalBackground: { blockedFoundations: [] },
-    } as any;
     const hardLessonControl = aggregateDay1 && pathAState
       ? deriveLearningControlState({
           dynamicState: {
@@ -321,19 +389,36 @@ async function main(): Promise<void> {
         })
       : null;
 
+    const pathLevelReasons = ['lesson_stress_high', 'path_load_unbalanced'];
     assertions.push({
-      name: '任务级难度：同基线任务在"吃过难课的路径"降档、在"新路径"保持（路径隔离）',
+      name: '任务级难度：路径级证据只作用于本路径（A 因本路径压力降档，B 不借用任何路径级证据）',
       pass: Boolean(decisionForPathA && decisionForPathB)
         && decisionForPathA!.direction === 'decrease'
         && decisionForPathA!.adjusted === baselineOfMediumTask - 1
         && decisionForPathA!.reasons.includes('lesson_stress_high')
-        && decisionForPathB!.direction === 'keep'
-        && decisionForPathB!.adjusted === baselineOfMediumTask,
+        && decisionForPathB!.reasons.every((reason) => !pathLevelReasons.includes(reason)),
       detail: `基线 ${baselineOfMediumTask}（medium 任务）`
         + `｜路径A(有历史, lss ${pathAState?.lss}) → ${decisionForPathA?.direction} ${decisionForPathA?.adjusted}`
         + ` reasons=${JSON.stringify(decisionForPathA?.reasons ?? [])}`
         + `｜路径B(无历史) → ${decisionForPathB?.direction} ${decisionForPathB?.adjusted}`
-        + ` reasons=${JSON.stringify(decisionForPathB?.reasons ?? [])}`,
+        + ` reasons=${JSON.stringify(decisionForPathB?.reasons ?? [])}（不得含路径级理由）`,
+    });
+
+    // ── 断言 5：难度调整的效果度量（同类降档理由是否缓解；对照 vs 执行）
+    const { effects, groups } = await measureTaskDifficultyEffects({
+      userId,
+      since: new Date(dayStart(0).getTime() - 3600_000),
+    });
+    const appliedGroup = groups.find((group) => group.reason === 'lesson_stress_high' && group.applied);
+    const controlGroup = groups.find((group) => group.reason === 'lesson_stress_high' && !group.applied);
+    assertions.push({
+      name: '效果度量：按调整执行 → 同类降档理由缓解；只判定不执行（对照）→ 仍触发',
+      pass: Boolean(appliedGroup && controlGroup)
+        && appliedGroup!.relieved === appliedGroup!.total
+        && controlGroup!.relieved === 0,
+      detail: `锚点 ${effects.length} 条｜lesson_stress_high：执行组 缓解 ${appliedGroup?.relieved}/${appliedGroup?.total}`
+        + `（Δlsb ${appliedGroup?.avgLsbDelta}）｜对照组 缓解 ${controlGroup?.relieved}/${controlGroup?.total}`
+        + `（Δlsb ${controlGroup?.avgLsbDelta}）`,
     });
 
     assertions.push({
@@ -363,13 +448,15 @@ async function main(): Promise<void> {
     if (failed > 0) process.exitCode = 1;
   } finally {
     if (args.keep) {
-      console.log(`[sim] --keep：保留模拟数据（run=${runId}，路径 ${pathIds.A} / ${pathIds.B}）`);
+      console.log(`[sim] --keep：保留模拟数据（run=${runId}，路径前缀 lp_${runId}）`);
     } else {
       await prisma.learning_metrics.deleteMany({ where: { userId, taskId: { startsWith: `sim-${runId}` } } });
+      await prisma.learner_evidence.deleteMany({ where: { userId, taskId: { startsWith: `sim-${runId}` } } });
       await prisma.teaching_sessions.deleteMany({ where: { id: { in: createdSessions } } });
       await prisma.subtasks.deleteMany({ where: { id: { in: createdSubtasks } } });
       await prisma.milestones.deleteMany({ where: { id: { startsWith: `ms_${runId}` } } });
-      await prisma.learning_paths.deleteMany({ where: { id: { in: [pathIds.A, pathIds.B] } } });
+      // 按 run 前缀清理（曾用显式路径列表 → 漏掉后来新增的路径 C，留下残渣）
+      await prisma.learning_paths.deleteMany({ where: { id: { startsWith: `lp_${runId}` } } });
       console.log(`[sim] 已清理模拟数据（run=${runId}）`);
     }
   }
