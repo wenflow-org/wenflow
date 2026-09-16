@@ -92,7 +92,7 @@
   padding: 3px 8px;
   border-radius: 6px;
   background: var(--mk-ink, #1a2a44);
-  color: #fff;
+  color: var(--mk-on-fill);
   font-size: 11px;
   font-weight: 600;
   line-height: 1.4;
@@ -128,7 +128,7 @@
   box-sizing: border-box;
 }
 .mk-status__action:hover { border-color: rgba(44, 99, 208, 0.4); }
-.mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
+.mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--mk-on-fill); }
 .mk-status__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .mk-status__actions .mk-status__action { margin-left: 0; }
 /* 状态条可点击计数锚点（P0-3 页头统一：需关注/失败节点等计数可点击筛选；
@@ -141,10 +141,34 @@
   transition: color 0.12s ease, background 0.12s ease;
 }
 .mk-status__meta-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); padding: 2px 6px; margin: -2px -6px; }
-.mk-status__meta-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); padding: 2px 6px; margin: -2px -6px; }
+.mk-status__meta-link--on { color: var(--mk-meta-link-on-fg); background: var(--mk-meta-link-on-bg); padding: 2px 6px; margin: -2px -6px; }
+/* 暗色等价色：原为 LearnerCenter 页面私有补丁，收敛为全局。
+   其余 5 处计数锚点此前无暗色覆盖 → rgba(44,99,208,.08) 落在深底上几乎不可见。 */
+html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 239, 0.14); }
 /* 状态条 meta 语义着色（成功率红/琥珀等；Orchestrator 曾页面私有，全局化） */
 .mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
 .mk-status__meta--warn { color: var(--mk-amber, #d97706); font-weight: 700; }
+/* 状态条内的「筛选生效中」徽章 + 清除按钮（原 ExecLogs 页内私有，收敛为全局：
+   结构上它们是 .mk-status 的组成部分，任何带筛选的页头都会需要）。 */
+.mk-status__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--mk-red-bg);
+  color: var(--mk-red);
+  font-size: var(--mk-fs-12);
+  font-weight: 700;
+}
+.mk-status__clear {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--mk-fs-13);
+  padding: 0 2px;
+}
 
 /* ----- 卡片 ----- */
 .mk-card {
@@ -155,6 +179,135 @@
   /* overflow: clip（而非 hidden）：同样裁圆角溢出，但不产生滚动容器，
      卡内 sticky 表头/操作条才能相对视口吸顶（滚动修复 #1/#9 依赖） */
   overflow: clip;
+}
+/* ----- 实体头（mk-entity：详情页身份区唯一原语）-----
+   取代三份页面私有实现（`.ld-head` LearnerDetail / `.ud-head` UserDetail / `.vp-top` VirtualProfile）。
+   形态：返回行 + 身份行（头像 + 名字/徽章 + 副行 + 主操作）；页头统计（MkKpi）/分区 tab 追加在其后。
+
+   结构（类级原语，与 .mk-card/.mk-status 同族；页面直接写类）：
+     <header class="mk-entity [--flat]">
+       <button class="mk-back">← 返回</button>
+       <div class="mk-entity__main">
+         <span class="mk-entity__avatar [--user|--learner|--round]">首字</span>
+         <div class="mk-entity__id">
+           <div class="mk-entity__name-row">
+             <h1 class="mk-entity__name [--lg]">名字</h1>
+             <span class="mk-entity__badges">…</span>
+           </div>
+           <span class="mk-entity__sub">邮箱 · 角色 · 加入 …</span>
+         </div>
+         <div class="mk-entity__actions">…mk-status__action…</div>
+       </div>
+     </header>
+
+   T2 硬约束 1：详情页头一律走这里，不再新增页面私有的 head/id/name/avatar/sub/actions 类。 */
+.mk-entity {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: var(--mk-surface);
+}
+/* 无卡片形态：头部与页面同平面（用于本身已有页面留白的详情页） */
+.mk-entity--flat { gap: 4px; padding: 0; border: 0; background: none; }
+
+.mk-entity__main { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.mk-entity__avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  color: var(--mk-on-fill);
+  display: grid;
+  place-content: center;
+  font-size: var(--mk-fs-18);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+/* 头像品牌渐变（沿用两种既有形态；明暗同值） */
+.mk-entity__avatar--user { background: linear-gradient(135deg, var(--mk-entity-avatar-user-from), var(--mk-entity-avatar-user-to)); }
+.mk-entity__avatar--learner { background: linear-gradient(135deg, var(--mk-blue, #2c63d0), var(--mk-purple)); }
+/* 圆形头像（虚拟学习者：具体颜色由页面按名称哈希给，原语只管形状） */
+.mk-entity__avatar--round { border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); }
+
+.mk-entity__id { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.mk-entity__name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; flex: 1; }
+.mk-entity__name { margin: 0; font-size: var(--mk-fs-18); line-height: 1.4; }
+.mk-entity__name--lg { font-size: var(--mk-fs-20); letter-spacing: -0.02em; line-height: 1.25; }
+.mk-entity__badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mk-entity__sub { color: var(--mk-faint); font-size: var(--mk-fs-12); }
+.mk-entity__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; flex-shrink: 0; }
+
+/* ----- 区块（mk-section：标题 + 结论 + 明细）-----
+   T2 硬约束 2「结论与细节分层」的载体：**结论行常驻可见**（一句话、加粗），明细收进 <details>。
+
+   用法：
+     <section class="mk-card">
+       <div class="mk-section__head">                        ← 非折叠头
+         <h4 class="mk-section__title">标签</h4>
+         <span class="mk-card__meta">…</span>
+       </div>
+       <p class="mk-section__conclusion">一句话结论</p>         ← 与折叠无关，始终可见
+       <details>
+         <summary class="mk-card__head mk-section__summary">   ← 折叠头（可与 mk-card__head 同用）
+           <h3 class="mk-card__title">明细</h3><span class="mk-card__meta">…</span>
+         </summary>
+         <div class="…页面的正文容器…">…</div>
+       </details>
+     </section>
+
+   注：容器直接复用 `mk-card`，本原语**没有**裸 `.mk-section` 容器类（只提供"头/结论/折叠头"三部分）；
+   折叠头的排版与 `mk-card__head` 同用时归后者（见下面的 :not() 写法）。
+
+   收敛来源：`hc-details__summary` / `fdp__box-summary` / `orch-fold__summary` / `frt__legend-summary`
+   四份各自实现「隐藏默认三角 + ▸/▾ 指示 + pointer/hover」，以及 `msk__sec-head` / `sdp-sec-head`
+   两族同形的区块头。**区块正文不在此列**：正文各页结构不同（引导段落 / 图例分组 / 子组件），
+   属于页面内容，保持页面私有。 */
+.mk-section__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* 区块头标题：类形式给新代码用；元素选择器让既有 <h4> 标记不必改动即可收敛 */
+.mk-section__head h4,
+.mk-section__title {
+  margin: 0;
+  font-size: var(--mk-fs-12);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mk-faint);
+}
+/* 折叠头。与 .mk-card__head 同用时，排版（padding/字号/颜色）交给后者 ——
+   用 :not() 显式表达，不依赖本段与 .mk-card__head 的源码先后顺序。 */
+.mk-section__summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+.mk-section__summary::-webkit-details-marker { display: none; }
+.mk-section__summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--mk-blue);
+  transition: transform 0.16s ease;
+}
+details[open] > .mk-section__summary::before { transform: rotate(90deg); }
+/* 独立使用（不与 mk-card__head 同用）时的缺省排版 */
+.mk-section__summary:not(.mk-card__head) {
+  padding: 10px 14px;
+  font-size: var(--mk-fs-12_5);
+  font-weight: 700;
+  color: var(--mk-ink);
+  transition: color 0.14s ease;
+}
+.mk-section__summary:not(.mk-card__head):hover { color: var(--mk-blue); }
+/* 弱化档：次级折叠头（原 orch/frt 的 muted 基调） */
+.mk-section__summary--muted:not(.mk-card__head) { color: var(--mk-muted); }
+/* 结论行：一句话，加粗，常驻可见 */
+.mk-section__conclusion {
+  margin: 0;
+  padding: 2px 14px 10px;
+  font-size: var(--mk-fs-13);
+  font-weight: 700;
+  color: var(--mk-ink);
 }
 .mk-card__head {
   display: flex;
@@ -167,10 +320,24 @@
 }
 .mk-card__title { margin: 0; font-size: var(--mk-fs-14); font-weight: 700; }
 .mk-card__meta { color: var(--mk-faint); font-size: var(--mk-fs-12_5); }
+/* 卡内小字注解（图表/排行无数据时的说明行）。
+   此前 TokenCost.vue 4 处使用但全局零定义，渲染成无样式裸 <p>（视觉审计 附 A #7）。 */
+.mk-card__note { margin: 0; padding: 8px 2px; color: var(--mk-faint); font-size: var(--mk-fs-12_5); }
 .mk-card__head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 /* 卡头右组的主操作按钮与筛选控件（输入框/下拉/pills）同高：
    原来按钮 34.8px、输入框 41px，同一条工具栏高矮不齐；stretch 到行高即与最高控件齐平。 */
 .mk-card__head-right .mk-btn { align-self: stretch; }
+/* 卡片脚注条：左侧 meta + 右侧操作（原 VirtualProfile 页内私有，收敛为全局） */
+.mk-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--mk-card-foot-line);
+  background: var(--mk-card-foot-bg);
+}
+.mk-card__foot .mk-card__meta { margin-right: auto; }
 
 /* ----- 表格 ----- */
 .mk-table { width: 100%; border-collapse: collapse; }
@@ -182,19 +349,19 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--mk-muted);
-  background: #fafbfc;
+  background: var(--mk-table-head-bg);
   border-bottom: 1px solid var(--mk-line);
   white-space: nowrap;
   transition: background 0.12s, color 0.12s;
 }
 /* 表头 hover 反馈（对齐 AntD：无排序功能时仍给可交互提示的视觉响应） */
-.mk-table th:hover { background: #f2f6fb; color: var(--mk-ink); }
+.mk-table th:hover { background: var(--mk-table-head-hover-bg); color: var(--mk-ink); }
 
 /* ----- 可排序表头（useTableSort） -----
    整格可点（th 上的 @click）+ 内层按钮负责键盘/AT，箭头由 aria-sort 驱动。
    箭头随文本行内、不设固定宽度：fixed 表仍由 colgroup 定宽，不改变既有列宽。 */
 .mk-table th.mk-th--sortable { cursor: pointer; user-select: none; }
-.mk-table th.mk-th--sortable:hover { background: #e9f1fd; }
+.mk-table th.mk-th--sortable:hover { background: var(--mk-table-sort-hover-bg); }
 .mk-table th.mk-th--sortable[aria-sort='ascending'],
 .mk-table th.mk-th--sortable[aria-sort='descending'] { color: var(--mk-ink); }
 .mk-th__btn {
@@ -230,12 +397,12 @@
 }
 .mk-table td {
   padding: 9px 13px;
-  border-bottom: 1px solid #eef1f7;
+  border-bottom: 1px solid var(--mk-table-row-line);
   vertical-align: middle;
 }
 .mk-table tr:last-child td { border-bottom: none; }
 .mk-table tbody tr { transition: background 0.12s; }
-.mk-table tbody tr:hover { background: #f6f9ff; }
+.mk-table tbody tr:hover { background: var(--mk-table-row-hover-bg); }
 .mk-table--click tbody tr { cursor: pointer; }
 /* fixed 档：列宽由 <colgroup> 决定，且**每列都给宽度**（文本列用 --mk-col-text），
    使表格铺满容器时余量按各列宽度权重摊到所有列，而不是全堆进某一列（避免出现超宽空列）。
@@ -291,7 +458,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   line-height: 1;
   cursor: pointer;
 }
-.mk-menu__btn:hover { background: #eef2fa; color: var(--mk-ink); }
+.mk-menu__btn:hover { background: var(--mk-menu-btn-hover-bg); color: var(--mk-ink); }
 .mk-menu__pop {
   position: absolute;
   right: 0;
@@ -323,7 +490,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   cursor: pointer;
   white-space: nowrap;
 }
-.mk-menu__item:hover { background: #f0f5ff; color: var(--mk-ink); }
+.mk-menu__item:hover { background: var(--mk-menu-item-hover-bg); color: var(--mk-ink); }
 .mk-menu__item--danger { color: var(--mk-red, #dc2626); }
 .mk-menu__item--danger:hover { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .mk-menu__sep { height: 1px; margin: 3px 4px; background: var(--mk-line); }
@@ -388,16 +555,16 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   padding: 1px 8px;
 }
 .mk-badge--bad { background: var(--mk-red-bg); color: var(--mk-red); }
-.mk-badge--muted { background: #f0f2f5; color: var(--mk-muted); }
-.mk-badge--info { background: #eff6ff; color: var(--mk-blue); }
+.mk-badge--muted { background: var(--mk-surface-3); color: var(--mk-muted); }
+.mk-badge--info { background: var(--mk-badge-info-bg); color: var(--mk-blue); }
 /* 紧凑变体：行内小标签（10.5px / 1px 8px），替代各页面散落的 gc-tag/ts-tag/ul-tag */
 .mk-badge--sm { font-size: 11px; padding: 1px 8px; letter-spacing: 0.03em; }
 /* 虚拟学习者标记：slate 灰 + 虚线边框（与测试 amber 区分） */
-.mk-badge--virtual { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
+.mk-badge--virtual { background: var(--mk-badge-virtual-bg); color: var(--mk-badge-virtual-fg); border: 1px dashed var(--mk-badge-virtual-line); }
 /* 管理员自身标记：蓝色实心 */
-.mk-badge--self { background: #dbeafe; color: var(--mk-accent-deep, #1f57cc); }
+.mk-badge--self { background: var(--mk-blue-bg-strong); color: var(--mk-accent-deep, #1f57cc); }
 /* 已删除标记：灰色 */
-.mk-badge--deleted { background: #e5e7eb; color: #4b5563; }
+.mk-badge--deleted { background: var(--mk-badge-deleted-bg); color: var(--mk-badge-deleted-fg); }
 /* 直角徽章：需要与文字/表格行对齐的紧凑场景 */
 .mk-badge--chip { border-radius: 4px; }
 
@@ -407,7 +574,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   width: 100%;
   height: 6px;
   border-radius: 99px;
-  background: #eef2fa;
+  background: var(--mk-minibar-bg);
   overflow: hidden;
 }
 .mk-minibar__fill {
@@ -426,16 +593,16 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    SkillFieldRouting / FieldRoutingTable / Skills 三处收敛共用；色值全部走 token */
 .mk-badge--role-hard-required { background: var(--mk-red-bg); color: var(--mk-red-strong); }
 .mk-badge--role-soft-info { background: var(--mk-blue-bg); color: var(--mk-blue); }
-.mk-badge--role-hidden-inference { background: #f4f0ff; color: #7c3aed; }
+.mk-badge--role-hidden-inference { background: var(--mk-badge-hidden-bg); color: var(--mk-badge-hidden-fg); }
 .mk-badge--role-public-reply { background: var(--mk-green-bg); color: var(--mk-green); }
-.mk-badge--role-proposal-output { background: #effcf9; color: var(--mk-teal); }
+.mk-badge--role-proposal-output { background: var(--mk-badge-proposal-bg); color: var(--mk-teal); }
 .mk-badge--role-derived-presentation { background: var(--mk-amber-bg); color: var(--mk-amber); }
-.mk-badge--role-control-signal { background: #f0f2f5; color: var(--mk-muted); }
-.mk-badge--render-visible { background: #e8f7ef; color: var(--mk-green); }
-.mk-badge--render-hidden { background: #f0f2f5; color: var(--mk-muted); }
-.mk-badge--flow-handoff { background: #eef2ff; color: var(--mk-blue); }
-.mk-badge--flow-internal { background: #fdf2f8; color: #be185d; }
-.mk-badge--flow-accumulate { background: #f0fdf4; color: var(--mk-green); }
+.mk-badge--role-control-signal { background: var(--mk-surface-3); color: var(--mk-muted); }
+.mk-badge--render-visible { background: var(--mk-badge-visible-bg); color: var(--mk-green); }
+.mk-badge--render-hidden { background: var(--mk-surface-3); color: var(--mk-muted); }
+.mk-badge--flow-handoff { background: var(--mk-badge-handoff-bg); color: var(--mk-blue); }
+.mk-badge--flow-internal { background: var(--mk-badge-internal-bg); color: var(--mk-badge-internal-fg); }
+.mk-badge--flow-accumulate { background: var(--mk-badge-accumulate-bg); color: var(--mk-green); }
 .mk-badge--lock-system { background: var(--mk-red-bg); color: var(--mk-red); }
 .mk-badge--lock-structure { background: var(--mk-amber-bg); color: var(--mk-amber); border: 1px dashed rgba(180, 83, 9, 0.45); padding: 1px 8px; }
 .mk-badge--lock-editable { background: var(--mk-green-bg); color: var(--mk-green); }
@@ -443,11 +610,11 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-badge--core-missing { background: var(--mk-red-bg); color: var(--mk-red); }
 .mk-badge--core-mismatch, .mk-badge--core-orphan { background: var(--mk-amber-bg); color: var(--mk-amber); }
 /* 完成度五档（draft → live）：实心白字徽章 */
-.mk-badge--rec-draft { background: var(--mk-rec-draft); color: #fff; }
-.mk-badge--rec-handler-ready { background: var(--mk-rec-handler); color: #fff; }
-.mk-badge--rec-core-ready { background: var(--mk-rec-core); color: #fff; }
-.mk-badge--rec-fields-synced { background: var(--mk-rec-synced); color: #fff; }
-.mk-badge--rec-live { background: var(--mk-rec-live); color: #fff; }
+.mk-badge--rec-draft { background: var(--mk-rec-draft); color: var(--mk-on-fill); }
+.mk-badge--rec-handler-ready { background: var(--mk-rec-handler); color: var(--mk-on-fill); }
+.mk-badge--rec-core-ready { background: var(--mk-rec-core); color: var(--mk-on-fill); }
+.mk-badge--rec-fields-synced { background: var(--mk-rec-synced); color: var(--mk-on-fill); }
+.mk-badge--rec-live { background: var(--mk-rec-live); color: var(--mk-on-fill); }
 
 /* ----- 筛选行 ----- */
 .mk-filter {
@@ -483,7 +650,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    width:84px。表单输入框宽度由各自容器（.mk-field width:100% / 内联）决定。 */
 .mk-filter .mk-filter__input,
 .log-advpanel .mk-filter__input { min-width: 180px; }
-.mk-pills { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; }
+.mk-pills { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: var(--mk-pills-bg); border-radius: 10px; }
 /* 主视图切换（.mk-page 的直接子级 pills）：统一左对齐 + 按内容宽度收缩。
    否则在 grid / flex 列容器里会被 justify-self:stretch / align-items:stretch 拉伸成整行
    ——虚拟学习者、执行日志、系统工具曾出现 pills 占满整行的「超长」形态。 */
@@ -502,14 +669,12 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 }
 /* 激活 = 筛选生效：蓝色文字 + 蓝色描边，与"按钮激活"的白底灰边区分 */
 .mk-pill--active {
-  background: #fff;
-  color: var(--mk-blue);
+  background: var(--mk-pill-active-bg);
+  color: var(--mk-pill-active-fg);
   font-weight: 700;
   box-shadow: 0 0 0 1px rgba(44, 99, 208, 0.4), 0 1px 2px rgba(23, 32, 51, 0.08);
 }
 html[data-theme='dark'] .mk-pill--active {
-  background: rgba(91, 141, 239, 0.22);
-  color: #9db8f5;
   box-shadow: 0 0 0 1px rgba(91, 141, 239, 0.45);
 }
 /* 筛选 pill 内的计数徽章：默认弱化，激活态跟随主色 */
@@ -524,11 +689,10 @@ html[data-theme='dark'] .mk-pill--active {
   font-variant-numeric: tabular-nums;
 }
 .mk-pill--active .mk-pill__count {
-  background: rgba(44, 99, 208, 0.14);
-  color: var(--mk-blue);
+  background: var(--mk-pill-count-active-bg);
+  color: var(--mk-pill-count-active-fg);
 }
 html[data-theme='dark'] .mk-pill__count { background: rgba(148, 163, 184, 0.18); }
-html[data-theme='dark'] .mk-pill--active .mk-pill__count { background: rgba(91, 141, 239, 0.24); color: #9db8f5; }
 
 /* 搜索框清空按钮（输入有值时显示）：包一层 .mk-search 提供定位锚点 */
 .mk-search { position: relative; display: inline-flex; align-items: center; }
@@ -546,16 +710,16 @@ html[data-theme='dark'] .mk-pill--active .mk-pill__count { background: rgba(91, 
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: #e2e8f0;
-  color: var(--mk-muted);
+  background: var(--mk-search-clear-bg);
+  color: var(--mk-search-clear-fg);
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
 }
-.mk-search__clear:hover { background: #cbd5e1; color: var(--mk-ink); }
-html[data-theme='dark'] .mk-search__clear { background: #2a3850; color: #9fb0c8; }
+.mk-search__clear:hover { background: var(--mk-search-clear-hover-bg); color: var(--mk-ink); }
 /* 卡头元信息：暗色下 --mk-faint 对比不足（审计 AA 边缘），提到 --mk-muted */
 html[data-theme='dark'] .mk-card__meta { color: var(--mk-muted); }
+html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 
 /* ----- 链接按钮 ----- */
 /* 返回按钮：子页面顶部"← 返回"统一样式（原散落在 ud-back/ld-back/vp-back 三处局部定义） */
@@ -573,7 +737,7 @@ html[data-theme='dark'] .mk-card__meta { color: var(--mk-muted); }
   width: fit-content;
   transition: background 0.12s ease, transform 0.1s ease;
 }
-.mk-back:hover { background: #eff6ff; }
+.mk-back:hover { background: var(--mk-hover-surface); }
 .mk-back:active { transform: translateY(1px); }
 
 .mk-link {
@@ -588,9 +752,15 @@ html[data-theme='dark'] .mk-card__meta { color: var(--mk-muted); }
   border-radius: 6px;
   white-space: nowrap;
 }
-.mk-link:hover { background: #eff6ff; }
+.mk-link:hover { background: var(--mk-hover-surface); }
 .mk-link--danger { color: var(--mk-red, #dc2626); }
 .mk-link--danger:hover { background: var(--mk-red-bg, #fef2f2); }
+/* 链接按钮「激活/展开中」态（ExecLogs 高级筛选、MkCols 列设置共用）。
+   此前全局零定义 → 展开态无任何视觉反馈（视觉审计 附 A #7）。 */
+.mk-link--active { background: var(--mk-hover-surface); }
+.mk-link--active:hover { background: var(--mk-link-active-hover-bg); }
+/* 弱化链接（例：计数为 0 时的次要入口）：原 VirtualLearners 页内私有，收敛为全局 */
+.mk-link--muted { opacity: 0.55; }
 /* 图标按钮：操作列高频操作改为 SVG 图标 + tooltip，节省列宽 */
 .mk-icon-btn {
   display: inline-flex;
@@ -605,7 +775,7 @@ html[data-theme='dark'] .mk-card__meta { color: var(--mk-muted); }
   border-radius: 7px;
   transition: background 0.12s, color 0.12s;
 }
-.mk-icon-btn:hover { background: #eff6ff; color: var(--mk-blue, #2c63d0); }
+.mk-icon-btn:hover { background: var(--mk-hover-surface); color: var(--mk-blue, #2c63d0); }
 .mk-icon-btn--danger:hover { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .mk-icon-btn svg { width: 15px; height: 15px; }
 
@@ -631,7 +801,7 @@ html[data-theme='dark'] .mk-card__meta { color: var(--mk-muted); }
   height: 46px;
   margin-bottom: 6px;
   border-radius: 13px;
-  background: #eef2fa;
+  background: var(--mk-surface-2);
   color: var(--mk-faint);
   display: grid;
   place-items: center;
@@ -643,14 +813,20 @@ html[data-theme='dark'] .mk-card__meta { color: var(--mk-muted); }
   padding: 7px 16px;
   border-radius: 8px;
   border: 1px solid rgba(44, 99, 208, 0.3);
-  background: #eef5ff;
+  background: var(--mk-blue-bg);
   color: var(--mk-blue);
   font: inherit;
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
 }
-.mk-empty__action:hover { background: #dbeafe; }
+.mk-empty__action:hover { background: var(--mk-blue-bg-strong); }
+.mk-empty__action:disabled { cursor: default; opacity: 0.6; }
+
+/* 错误态空态（R3 的第三种状态）：标题用正文色、图标底色换成红系，
+   与「为什么这里是空的」（中性空态）在语义上区分开，而不是各页自己写 --error。 */
+.mk-empty--error strong { color: var(--mk-ink); }
+.mk-empty--error .mk-empty__icon { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 
 /* 稀疏页空态平衡（审计 C2/E5）：min-height + 垂直居中，消除「贴顶 + 大片空白」；
    默认按视口扣除 顶栏52 + 状态条~53 + 页脚~40 + 页面内边距与间距 ≈ 230px 计算，
@@ -659,6 +835,108 @@ html[data-theme='dark'] .mk-card__meta { color: var(--mk-muted); }
   min-height: var(--mk-empty-min-h, calc(100dvh - 230px));
   place-content: center;
 }
+
+/* ----- 加载态（统一形态：spinner + 文案）-----
+   此前各页自搓容器（.dt-loading / .gc-none / .oc-loading / .pe-detail-loading /
+   .be-detail-loading / .sbx__empty / .dfg-empty / .frt__empty …）形态各异，
+   加载文案也各写各的。与 .mk-empty 同一套口径，三种形态：
+     .mk-loading            区块内居中（默认，块级 flex）
+     .mk-loading--inline    抽屉/表格行内/**按钮忙碌态**：inline-flex、左对齐、更紧凑
+     .mk-loading--min       填满视口并垂直居中（整页加载）
+   根节点是 <span>，因此可合法嵌进 <button>。 */
+.mk-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 16px;
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-13);
+}
+.mk-loading--inline {
+  display: inline-flex;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0;
+  font-size: inherit;
+}
+.mk-loading--min { min-height: var(--mk-empty-min-h, calc(100dvh - 230px)); }
+.mk-loading__text { color: var(--mk-muted); }
+
+/* ----- 骨架屏（统一 shimmer）-----
+   此前 5 处各写一套渐变 + keyframes + 暗色覆写，像素级不一致：
+     起始色 #eef2f7 / #eef2f8 / #eef2fa 三种，暗色 #1b2537+#232f45 与 #1d2739+#2a3a55 两套，
+     速度 1.2s / 1.4s，background-size 200% / 220%。
+   收敛为单一定义：形状由各页的布局类负责（尺寸/圆角），shimmer 视觉一律走 .mk-skeleton。 */
+.mk-skeleton {
+  --mk-skel-from: var(--mk-skeleton-from);
+  --mk-skel-to: var(--mk-skeleton-to);
+  /* 显式 block：让宽高在非 grid/flex 父级下也生效（grid/flex 项本就会被 blockify） */
+  display: block;
+  background: linear-gradient(90deg, var(--mk-skel-from) 25%, var(--mk-skel-to) 50%, var(--mk-skel-from) 75%);
+  background-size: 200% 100%;
+  animation: mk-skeleton-shimmer 1.2s ease infinite;
+  border-radius: var(--mk-radius-sm);
+}
+@keyframes mk-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.mk-skeleton--circle { border-radius: 50%; }
+.mk-skeleton--block { border-radius: var(--mk-radius-lg); }
+/* 尊重「减少动态效果」偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .mk-skeleton { animation: none; }
+}
+
+/* ----- 骨架版式（形状层）-----
+   与 .mk-skeleton（视觉层）配合：页面只声明"什么形状"，不再各写一套布局类。
+   用法见 MkSkeleton.vue 的 variant：rows / cards / identity / bars。 */
+.mk-skeleton-rows { display: grid; gap: 8px; }
+.mk-skeleton-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--mk-skel-card-min, 150px), 1fr));
+  gap: 10px;
+}
+/* 固定列数（需要与真实布局逐列对齐时用，如详情页 4 联指标） */
+.mk-skeleton-cards--fixed { grid-template-columns: repeat(var(--mk-skel-cols, 4), minmax(0, 1fr)); }
+.mk-skeleton-identity { display: flex; align-items: center; gap: 14px; }
+.mk-skeleton-identity__lines { display: grid; gap: 6px; flex: 1; max-width: 360px; }
+/* 柱状图骨架：等高容器 + 错落高度（3 档循环），读起来像图表而非进度条 */
+.mk-skeleton-bars { display: flex; align-items: flex-end; gap: 6px; }
+.mk-skeleton-bars > .mk-skeleton { flex: 1; height: 70%; }
+.mk-skeleton-bars > .mk-skeleton:nth-child(2n) { height: 45%; }
+.mk-skeleton-bars > .mk-skeleton:nth-child(3n) { height: 88%; }
+
+/* ----- 分段控件（mk-seg：互斥选项的按钮组）-----
+   与 .mk-pills 的区别是**语义**：pills = 筛选/切换（多标签过滤），seg = 互斥选择（单选）。
+   两者容器形态同源（同 gap/padding/圆角/底色），但激活态不同：
+     pills 激活 = 蓝字 + 蓝环（表示"筛选生效"）
+     seg   激活 = 正文色 + 白底微阴影（表示"当前选中项"，不争夺注意力）
+   提升自 ApiConfig.vue 的 .ac-seg（值原样搬运；底色与激活底改走 token，
+   顺带修好它在暗色下没有覆写、会留浅底的问题）。 */
+.mk-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  background: var(--mk-pills-bg);
+  border-radius: 10px;
+  width: fit-content;
+}
+.mk-seg__item {
+  border: 0;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 7px;
+  font: inherit;
+  font-size: var(--mk-fs-12);
+  font-weight: 600;
+  color: var(--mk-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mk-seg__item--active { background: var(--mk-pill-active-bg); color: var(--mk-ink); box-shadow: 0 1px 2px rgba(23, 32, 51, 0.1); }
 
 /* ----- 弹窗（表单/编辑） ----- */
 .mk-modal {
@@ -694,17 +972,18 @@ html[data-theme='dark'] .mk-card__meta { color: var(--mk-muted); }
 .mk-modal__title { margin: 0; font-size: var(--mk-fs-16); font-weight: 700; }
 .mk-modal__close {
   border: 0;
-  background: #f0f2f5;
+  background: var(--mk-modal-close-bg);
   width: 28px;
   height: 28px;
   border-radius: 7px;
   cursor: pointer;
-  color: #5b6577;
+  color: var(--mk-muted);
   display: grid;
   place-items: center;
   line-height: 1;
   flex-shrink: 0;
 }
+.mk-modal__close:hover { background: var(--mk-modal-close-hover-bg); }
 .mk-modal__body { padding: 16px 18px; display: grid; gap: 14px; overflow-y: auto; min-height: 0; }
 .mk-modal__foot {
   display: flex;
@@ -730,6 +1009,8 @@ html[data-theme='dark'] .mk-card__meta { color: var(--mk-muted); }
 /* 开关布局：label + 控件在同一行，左对齐 */
 .mk-field--switch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mk-field__label { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-muted, #5b6577); }
+/* 字段标签内的次级提示（「（可选）」「（进阶）」等）：原 PromptEval 页内私有，收敛为全局 */
+.mk-field__opt { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 500; }
 .mk-field__req { color: var(--mk-red, #dc2626); font-style: normal; font-weight: 700; margin-left: 2px; }
 .mk-field__hint { font-size: var(--mk-fs-12); color: var(--mk-faint, #8492ab); margin-top: 2px; }
 .mk-field__hint { font-size: var(--mk-fs-12); color: var(--mk-faint, #8492ab); }
@@ -769,7 +1050,9 @@ html[data-theme='dark'] .mk-card__meta { color: var(--mk-muted); }
   box-sizing: border-box;
 }
 .mk-input:focus { border-color: var(--mk-blue, #2c63d0); }
-.mk-input:disabled { background: #f4f6fa; color: var(--mk-faint, #5f6f8c); cursor: not-allowed; }
+.mk-input:disabled { background: var(--mk-input-disabled-bg); color: var(--mk-faint, #5f6f8c); cursor: not-allowed; }
+/* 字段输入禁用态与 .mk-input:disabled 同基调（原只给了暗色值，亮色下无底色） */
+.mk-field__input:disabled { background: var(--mk-input-disabled-bg); }
 textarea.mk-input { line-height: 1.6; resize: vertical; }
 
 /* 按钮 */
@@ -785,18 +1068,18 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   cursor: pointer;
 }
 .mk-btn svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px; }
-.mk-btn:hover { background: #f6f9ff; }
+.mk-btn:hover { background: var(--mk-btn-hover-bg); }
 .mk-btn--primary {
   background: var(--mk-blue, #2c63d0);
   border-color: var(--mk-blue, #2c63d0);
-  color: #fff;
+  color: var(--mk-on-fill);
 }
-.mk-btn--primary:hover { background: #2b64d8; }
+.mk-btn--primary:hover { background: var(--mk-blue-hover); }
 /* 危险按钮：红底白字（规格对齐 .mk-btn--primary），悬停/按下加深 */
 .mk-btn--danger {
   background: var(--mk-red-fill, #dc2626);
   border-color: var(--mk-red-fill, #dc2626);
-  color: #fff;
+  color: var(--mk-on-fill);
 }
 .mk-btn--danger:hover,
 .mk-btn--danger:active {
@@ -813,23 +1096,26 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-btn--danger-ghost:active {
   background: var(--mk-red-fill, #dc2626);
   border-color: var(--mk-red-fill, #dc2626);
-  color: #fff;
+  color: var(--mk-on-fill);
 }
 /* 幽灵按钮：浅蓝底 + 深蓝字 + 蓝描边（次级强调，与主按钮同族） */
 .mk-btn--ghost {
-  background: #eef5ff;
-  border-color: #d6e4ff;
-  color: #1f57cc;
+  background: var(--mk-blue-bg);
+  border-color: var(--mk-ghost-line);
+  color: var(--mk-ghost-fg);
 }
-.mk-btn--ghost:hover { background: #dbeafe; }
+.mk-btn--ghost:hover { background: var(--mk-blue-bg-strong); }
 /* 成功/通过按钮：绿色（解决反馈等正向操作） */
 .mk-btn--ok {
-  background: #ecfdf5;
-  border-color: #bbf7d0;
-  color: #15803d;
+  background: var(--mk-btn-ok-bg);
+  border-color: var(--mk-btn-ok-line);
+  color: var(--mk-btn-ok-fg);
 }
-.mk-btn--ok:hover { background: #d1fae5; border-color: #86efac; }
+.mk-btn--ok:hover { background: var(--mk-btn-ok-bg-hover); border-color: var(--mk-btn-ok-line-hover); }
 .mk-btn--sm { padding: 5px 11px; font-size: var(--mk-fs-12); }
+/* 通栏按钮：弹窗底部主操作占满一行。
+   此前 VirtualLearners.vue:498 使用但全局零定义 → 按钮未按预期占满（视觉审计 附 A #8）。 */
+.mk-btn--block { display: block; width: 100%; }
 .mk-btn:disabled { opacity: 0.65; cursor: not-allowed; }
 
 /* 按压反馈：按钮/状态条操作/筛选胶囊/链接按钮 按下轻微下沉 */
@@ -866,7 +1152,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 }
 .mk-toast--ok { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
 .mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
-.mk-toast--info { background: #eff6ff; color: var(--mk-blue, #2c63d0); }
+.mk-toast--info { background: var(--mk-blue-bg); color: var(--mk-toast-info-fg); }
 
 /* ----- 列表追加脚注（「加载更多」统一形态：与 mk-pagination 页脚同构的虚线分隔行） -----
    适用：分组/明细类列表（会话安全活跃会话、Skill 对账、核心文件清单、执行日志 demo 追加等），
@@ -946,7 +1232,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-drawer__sub { font-size: var(--mk-fs-12_5); color: var(--mk-faint, #5f6f8c); }
 .mk-drawer__close {
   border: 0;
-  background: #f1f5fb;
+  background: var(--mk-drawer-close-bg);
   color: var(--mk-muted, #5b6577);
   width: 28px;
   height: 28px;
@@ -958,56 +1244,22 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   place-items: center;
   line-height: 1;
 }
-.mk-drawer__close:hover { background: #e2eaf7; color: var(--mk-ink, #1a2a44); }
+.mk-drawer__close:hover { background: var(--mk-drawer-close-hover-bg); color: var(--mk-ink, #1a2a44); }
 .mk-drawer__body { overflow-y: auto; padding: 14px 18px 20px; min-width: 0; }
 
 /* ================= 暗色模式（D1）：shared.css 硬编码浅色兜底覆写 =================
    机制：html[data-theme='dark'] 下把散落的浅色背景/悬停/徽章底色替换为深色等价物。
    新代码应优先引用 --mk-* token，此段只兜底存量硬编码。 */
 html[data-theme='dark'] {
-  .mk-table th { background: #141c2b; }
-  .mk-table th:hover { background: #1c2637; color: var(--mk-ink); }
-  .mk-table td { border-bottom-color: #1f2a3d; }
-  .mk-table tbody tr:hover { background: #1a2436; }
-  .mk-menu__btn:hover { background: #222e44; }
-  .mk-menu__item:hover { background: #1f2b40; }
-  .mk-badge--muted { background: #253049; color: var(--mk-muted); }
-  .mk-badge--info { background: rgba(91, 141, 239, 0.18); }
-  .mk-badge--virtual { background: #1c2637; color: #8fa3bd; border-color: #33415c; }
   .mk-badge--self { background: rgba(91, 141, 239, 0.22); }
-  .mk-badge--deleted { background: #252d3d; color: #94a3b8; }
-  .mk-badge--role-hidden-inference { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
-  .mk-badge--role-proposal-output { background: rgba(45, 212, 191, 0.14); }
-  .mk-badge--role-control-signal { background: #253049; }
-  .mk-badge--render-visible { background: rgba(74, 222, 128, 0.16); }
-  .mk-toast--info { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
-  .mk-badge--render-hidden { background: #253049; }
-  .mk-badge--flow-handoff { background: rgba(91, 141, 239, 0.18); }
-  .mk-badge--flow-internal { background: rgba(244, 114, 182, 0.16); color: #f9a8d4; }
-  .mk-badge--flow-accumulate { background: rgba(74, 222, 128, 0.14); }
-  .mk-pills { background: #1d2739; }
-  .mk-back:hover, .mk-link:hover, .mk-icon-btn:hover { background: #1b2740; }
-  .mk-empty__icon { background: #1d2739; }
-  .mk-empty__action { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.35); }
-  .mk-empty__action:hover { background: rgba(91, 141, 239, 0.26); }
-  .mk-minibar { background: #232f45; }
+  .mk-empty__action { border-color: rgba(91, 141, 239, 0.35); }
   .mk-pagination__btn:disabled { background: transparent; }
   .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); }
-  /* 暗色下默认按钮 hover 回深底（原来 #f6f9ff 近白闪） */
-  .mk-btn:hover { background: #1b2740; }
-  .mk-btn--primary:hover { background: #6a9cf3; }
   .mk-btn--danger:hover,
   .mk-btn--danger:active { background: var(--mk-red-fill-strong, #b91c1c); }
-  .mk-btn--ghost { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.4); color: #9db8f5; }
-  .mk-btn--ghost:hover { background: rgba(91, 141, 239, 0.26); }
-  .mk-btn--ok { background: rgba(74, 222, 128, 0.14); border-color: rgba(74, 222, 128, 0.35); color: #6ee7a0; }
-  .mk-btn--ok:hover { background: rgba(74, 222, 128, 0.22); border-color: rgba(74, 222, 128, 0.5); }
   .mk-icon-btn svg { color: var(--mk-faint); }
-  .mk-modal__close, .mk-drawer__close { background: #232f45; color: var(--mk-muted); }
-  .mk-modal__close:hover, .mk-drawer__close:hover { background: #2c3a55; }
   /* 暗色遮罩加深：浅色遮罩 rgba(15,23,42,.36) 在深底上分离度不足 */
   .mk-modal, .mk-drawer__mask { background: rgba(3, 7, 14, 0.62); }
-  .mk-input:disabled, .mk-field__input:disabled { background: #131b29; }
 }
 
 /* 4K 超大屏适配（2000/2800/3600 三档）
@@ -1075,6 +1327,12 @@ html[data-theme='dark'] {
 }
 
 @media (min-width: 2000px) {
+  /* 实体头（原 UserDetail/LearnerDetail 各自的 4K 档，收敛到原语一处） */
+  .mk-entity__avatar { width: 54px; height: 54px; font-size: 21px; }
+  .mk-entity__name { font-size: 21px; }
+  .mk-entity__name--lg { font-size: 23.5px; }
+  .mk-entity__sub { font-size: 14px; }
+  .mk-section__summary:not(.mk-card__head) { padding: 12px 17px; font-size: 14px; }
   /* 列宽 token 4K 档（×≈1.16，比例对齐 ExecLogs 原 72→84→100 档位；ADMIN_COLUMN_WIDTH_SPEC §2.8） */
   :root {
     --mk-col-id: 148px;
@@ -1140,6 +1398,11 @@ html[data-theme='dark'] {
 }
 
 @media (min-width: 2800px) {
+  .mk-entity__avatar { width: 62px; height: 62px; font-size: 24px; }
+  .mk-entity__name { font-size: 24.5px; }
+  .mk-entity__name--lg { font-size: 27.5px; }
+  .mk-entity__sub { font-size: 16.5px; }
+  .mk-section__summary:not(.mk-card__head) { padding: 14px 21px; font-size: 16.5px; }
   .mk-page { font-size: 17px; padding: 22px 28px 32px; gap: 16px; }
   .mk-status { padding: 10px 18px; min-height: 52px; border-radius: 14px; }
   .mk-status__title { font-size: 19px; }
@@ -1187,6 +1450,11 @@ html[data-theme='dark'] {
 
 /* 3600 镜像档：Teleport 到 body 的覆盖层不受壳层 zoom 影响，需独立放大（与各文件 4K 镜像一致） */
 @media (min-width: 3600px) {
+  .mk-entity__avatar { width: 72px; height: 72px; font-size: 28px; }
+  .mk-entity__name { font-size: 28.5px; }
+  .mk-entity__name--lg { font-size: 32px; }
+  .mk-entity__sub { font-size: 19px; }
+  .mk-section__summary:not(.mk-card__head) { padding: 16px 22px; font-size: 18.5px; }
   /* 列宽 token 3600 镜像档（×≈1.4；壳层 zoom 1.3 下实际渲染再等比放大） */
   :root {
     --mk-col-id: 180px;
@@ -1301,18 +1569,15 @@ html[data-theme='dark'] {
   border-radius: 999px;
   border: 0;
   background: var(--mk-red-fill, #dc2626);
-  color: #fff;
+  color: var(--mk-batchbar-danger-fg);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.12s ease;
 }
-.mk-batchbar__danger:hover:not(:disabled) { background: var(--mk-red-strong, #b91c1c); }
+.mk-batchbar__danger:hover:not(:disabled) { background: var(--mk-batchbar-danger-hover-bg); }
 .mk-batchbar__danger:disabled { opacity: 0.45; cursor: not-allowed; }
-html[data-theme='dark'] .mk-batchbar { background: #17202f; border-color: #2a3850; }
-html[data-theme='dark'] .mk-batchbar__danger { background: rgba(248, 113, 113, 0.16); border-color: rgba(248, 113, 113, 0.4); color: #f87171; }
-html[data-theme='dark'] .mk-batchbar__danger:hover:not(:disabled) { background: rgba(248, 113, 113, 0.26); }
 @media (min-width: 2000px) {
   .mk-batchbar { gap: 11px; padding: 10px 14px 10px 18px; font-size: 14px; }
   .mk-batchbar__btn, .mk-batchbar__danger { font-size: 14px; padding: 7px 16px; }
@@ -1333,15 +1598,31 @@ html[data-theme='dark'] .mk-batchbar__danger:hover:not(:disabled) { background: 
   font-weight: 600;
 }
 .mk-alert--ok {
-  background: rgba(16, 185, 129, 0.1);
-  color: #1a7f4b;
+  background: var(--mk-alert-ok-bg);
+  color: var(--mk-alert-ok-fg);
 }
 .mk-alert--info {
-  background: #f4f7fc;
-  color: var(--mk-muted, #5b6577);
+  background: var(--mk-alert-info-bg);
+  color: var(--mk-alert-info-fg);
 }
-html[data-theme='dark'] .mk-alert--ok { background: rgba(74, 222, 128, 0.12); color: #6ee7a0; }
-html[data-theme='dark'] .mk-alert--info { background: #141c2b; color: #94a3b8; }
+
+/* 行式错误横幅（消息 + 重试位）：从 Addons/.ac-error、ApiConfig/.ac-config-error、
+   ExecLogs/.exec-error 三份各自实现收敛而来（原差异只在 padding/radius/按钮样式）。 */
+.mk-alert--row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mk-alert__msg { min-width: 0; }
+.mk-alert__act { flex-shrink: 0; }
+/* 横幅内的重试按钮：取多数形态（红字下划线链接），不额外描边 */
+.mk-alert__btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  white-space: nowrap;
+}
 
 /* ==========================================
    宽屏「推挤式」抽屉：抽屉打开时主内容让出抽屉宽度，
@@ -1352,7 +1633,11 @@ html[data-theme='dark'] .mk-alert--info { background: #141c2b; color: #94a3b8; }
     padding-right: var(--mk-drawer-w, 560px);
     transition: padding-right 0.2s ease;
   }
+  /* 覆盖层通用骨架也应享受推挤式抽屉：原先只挂了 SkillDrawer 的私有类 .msk，
+     导致设计系统规则依赖页面私有实现（审计 §附 A #15）。.msk 为登记在案的例外，保留。 */
+  html.wf-drawer-open .mk-drawer__mask,
   html.wf-drawer-open .msk { pointer-events: none; background: transparent; }
+  html.wf-drawer-open .mk-drawer__panel,
   html.wf-drawer-open .msk__panel { pointer-events: auto; }
 }
 @media (min-width: 2000px) {

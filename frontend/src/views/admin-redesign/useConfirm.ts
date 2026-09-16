@@ -64,6 +64,10 @@ export function askConfirm(opts: ConfirmOptions): Promise<boolean | string | nul
 
 export function settleConfirm(v: boolean | string | null) {
   state.open = false
+  // 关闭即回到空闲态：否则会留下「已关闭但 busy=true」的脏状态（下一个 askConfirm 虽会复位，
+  // 但读状态的人/测试会被误导）
+  state.busy = false
+  state.busyMode = false
   state.resolve?.(v)
   state.resolve = null
 }

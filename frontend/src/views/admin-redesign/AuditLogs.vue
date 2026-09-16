@@ -64,13 +64,15 @@
       </div>
 
     <!-- 加载失败错误态 + 重试 -->
-    <div v-if="loadError" class="audit-error">
-      <div class="audit-error__card">
-        <strong>审计日志加载失败</strong>
-        <span>{{ loadError }}</span>
-        <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" @click="applyFilters">重试</button>
-      </div>
-    </div>
+    <MkEmptyState
+      v-if="loadError"
+      tone="error"
+      title="审计日志加载失败"
+      :description="loadError"
+      action-text="重试"
+      compact
+      @action="applyFilters"
+    />
 
     <!-- 加载中骨架 -->
     <MockSkeletonTable v-else-if="loading && !rows.length" :cols="tab === 'login' ? 5 : 7" :rows="6" />
@@ -244,15 +246,18 @@
     </div>
 
     <!-- 空态 -->
-    <div v-else class="mk-empty">
-      <div class="mk-empty__icon" aria-hidden="true">
+    <MkEmptyState
+      v-else
+      :title="isFiltered ? '当前筛选无审计记录' : tab === 'login' ? '暂无登录审计' : '暂无审计记录'"
+      :description="tab === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕'"
+      :action-text="isFiltered ? '清除筛选' : ''"
+      @action="clearFilters"
+    >
+      <template #icon>
         <svg v-if="tab === 'login'" viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M12.65 10a5.99 5.99 0 0 0-6.88-3.88c-2.29.46-4.15 2.29-4.63 4.58A6.006 6.006 0 0 0 7 18a5.99 5.99 0 0 0 5.65-4H17v2h4v-4h-2v-2h-6.35zM7 14a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" opacity=".85"/></svg>
         <svg v-else viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7v1a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2V9a7 7 0 0 0-7-7zm3 12a1 1 0 0 1 0 2 5.5 5.5 0 0 1-2.5-.6V17a.5.5 0 0 1-1 0v-1.6a5.5 5.5 0 0 1-2.5.6 1 1 0 0 1 0-2 3.5 3.5 0 0 0 0-7 1 1 0 0 1 0-2 5.5 5.5 0 0 1 3.5 2.6V6a.5.5 0 0 1 1 0v.4A5.5 5.5 0 0 1 15 4a1 1 0 0 1 0 2 3.5 3.5 0 0 0 0 7z" opacity=".85"/></svg>
-      </div>
-      <strong>{{ isFiltered ? '当前筛选无审计记录' : tab === 'login' ? '暂无登录审计' : '暂无审计记录' }}</strong>
-      <span>{{ tab === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕' }}</span>
-      <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
-    </div>
+      </template>
+    </MkEmptyState>
     </div>
   </div>
 </template>
@@ -264,6 +269,7 @@ import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
 import { errMsg, shortId } from './live'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from './MkFilterSearch.vue'
+import MkEmptyState from './MkEmptyState.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from './MkCols.vue'
 import { actionText, targetTypeText, ipText, pathActionText } from './statusText'
@@ -559,22 +565,6 @@ function goSessions(username: string) {
 /* 状态条走全局 mk-status 体系（shared.css）；此处不再 scoped 覆盖 */
 
 /* 加载失败错误态 */
-.audit-error { padding: 40px 20px; }
-.audit-error__card {
-  max-width: 460px;
-  margin: 0 auto;
-  display: grid;
-  gap: 10px;
-  justify-items: center;
-  padding: 28px 32px;
-  border: 1px solid var(--mk-line);
-  border-radius: 14px;
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-modal);
-  text-align: center;
-}
-.audit-error__card strong { font-size: var(--mk-fs-14); color: var(--mk-ink); }
-.audit-error__card span { font-size: var(--mk-fs-12_5); color: var(--mk-muted); word-break: break-all; }
 
 .log-body {
   overflow-x: auto;
@@ -834,52 +824,15 @@ html[data-theme='dark'] {
 }
 
 /* ================= D3 表格增强：审计列设置菜单 ================= */
-.al-cols { position: relative; display: inline-flex; }
-.al-cols__menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: var(--mk-z-menu);
-  min-width: 150px;
-  padding: 6px;
-  display: grid;
-  gap: 2px;
-  background: var(--mk-surface, #fff);
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  box-shadow: var(--mk-shadow-pop);
-}
-.al-cols__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 7px;
-  font-size: var(--mk-fs-12_5);
-  color: var(--mk-muted);
-  cursor: pointer;
-  white-space: nowrap;
-  user-select: none;
-}
-.al-cols__item:hover { background: #f0f5ff; }
-html[data-theme='dark'] .al-cols__item:hover { background: #1f2b40; }
-.al-cols__item input { accent-color: var(--mk-blue, #2c63d0); }
-.al-cols__reset {
-  margin-top: 4px;
-  border: 0;
-  background: transparent;
-  padding: 6px 8px;
-  border-radius: 7px;
-  border-top: 1px dashed var(--mk-line);
-  font: inherit;
-  font-size: var(--mk-fs-12);
-  font-weight: 700;
-  color: var(--mk-blue);
-  cursor: pointer;
-  text-align: left;
-}
-.al-cols__reset:hover { background: #eff6ff; }
-html[data-theme='dark'] .al-cols__reset:hover { background: #1f2b40; }
+
+
+
+
+
+
+
+
+
 html[data-theme='dark'] .log-tr--open td { background: #131c2c; }
 html[data-theme='dark'] .log-payload-row td,
 html[data-theme='dark'] .log-payload-row:hover td { background: #101826; }

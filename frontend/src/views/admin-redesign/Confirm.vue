@@ -55,8 +55,17 @@ function confirm() {
   if (confirmState.input) {
     settleConfirm(confirmState.inputValue.trim() || null)
   } else if (confirmState.busyMode) {
-    // busy 模式：确认后不立即关闭，进入 busy 态由业务 done()/failConfirm() 关闭
+    /* busy 模式：**立即 resolve(true)** 让调用方开始干活，同时弹窗保持打开并进入 busy 态
+       （按钮禁用 + 「处理中…」），由业务完成后的 done()/failConfirm() 真正关闭。
+
+       此处必须 resolve：调用方的既有写法是
+         const ok = await askConfirm({ busy: true, … }); if (!ok) return; …业务…; doneConfirm()
+       若像原实现那样只置 busy 而不 settle，调用方会永久挂起、业务代码永不执行、
+       done() 永不被调用 → 弹窗卡死在「处理中…」（死锁，见 __tests__/confirm.busy.test.ts）。 */
+    const resolve = confirmState.resolve
+    confirmState.resolve = null
     confirmState.busy = true
+    resolve?.(true)
   } else {
     settleConfirm(true)
   }

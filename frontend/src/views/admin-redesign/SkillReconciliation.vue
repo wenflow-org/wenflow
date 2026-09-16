@@ -6,7 +6,7 @@
         <span class="mk-card__meta" title="核对四个来源的登记是否一致：配置文件清单（manifest）、系统运行注册（gateway）、生效版本（ACTIVE prompt）、技能登记册">配置文件 × 运行注册 × 生效版本 × 登记册</span>
         <button v-if="recDiff" type="button" class="mk-link sk-rec__clear" @click.stop="clearRecDiff">✕ 清除差集定位</button>
       </div>
-      <div v-if="recLoading" class="sk-rec__loading">加载中…</div>
+      <MkLoading v-if="recLoading" inline />
       <template v-else-if="recReport">
         <div class="sk-rec__pills">
           <span class="mk-pill" :title="`技能登记册全量（含外挂能力）vs 目录`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
@@ -19,14 +19,21 @@
       </template>
     </summary>
 
-    <div v-if="recError" class="mk-empty">
-      <strong>对账数据加载失败</strong>
-      <span>{{ recError }}</span>
-      <button type="button" class="mk-empty__action" @click="refresh">重试</button>
-    </div>
-    <div v-else-if="recLoading && !recReport" class="sk-rec__skeleton">
-      <span v-for="n in 8" :key="n"></span>
-    </div>
+    <MkEmptyState
+      v-if="recError"
+      title="对账数据加载失败"
+      :description="recError"
+      action-text="重试"
+      @action="refresh"
+    />
+    <!-- 行列表骨架（形状走 MkSkeleton，本类只保留卡片内边距） -->
+    <MkSkeleton
+      v-else-if="recLoading && !recReport"
+      class="sk-rec__skeleton"
+      variant="rows"
+      :count="8"
+      :h="26"
+    />
     <template v-else-if="recReport">
       <div class="sk-rec-tools">
         <div class="mk-pills">
@@ -116,10 +123,11 @@
         <span class="mk-card__meta">技能登记册口径 {{ recReport.summary.total }} 条 · {{ recReport.generatedAt ? '对账于 ' + new Date(recReport.generatedAt).toLocaleString() : '' }}</span>
       </div>
     </template>
-    <div v-else class="mk-empty">
-      <strong>暂无对账数据</strong>
-      <span>技能尚未登记，或对账报告暂不可用。可点击「刷新」重试。</span>
-    </div>
+    <MkEmptyState
+      v-else
+      title="暂无对账数据"
+      description="技能尚未登记，或对账报告暂不可用。可点击「刷新」重试。"
+    />
   </details>
 </template>
 
@@ -130,6 +138,9 @@ import { isLive } from "./store";
 import { errMsg } from "./live";
 import { completionMetaOf } from "./glossaryMeta";
 import { useLoadMore } from "./useLoadMore";
+import MkEmptyState from "./MkEmptyState.vue";
+import MkLoading from "./MkLoading.vue";
+import MkSkeleton from "./MkSkeleton.vue";
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from "@/api/adminApi";
 
 const recReport = ref<SkillReconciliationReport | null>(null);
@@ -274,16 +285,14 @@ function openPanel() { recOpen.value = true; }
 .sk-rec__clear { width: fit-content; }
 .sk-rec-flash { animation: sk-rec-flash 1.4s ease 2; }
 @keyframes sk-rec-flash { 0%,100% { background: transparent; } 50% { background: #fdf3e3; } }
-.sk-rec__loading { color: var(--mk-faint); font-size: var(--mk-fs-12); margin-left: auto; }
+
 .sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
 .sk-pill--bad { color: var(--mk-red-strong); background: #fdecec; }
 .sk-pill--warn { color: var(--mk-amber); background: #fdf3e3; }
 .sk-rec__refresh { border: 1px solid var(--mk-line); background: #fff; border-radius: 8px; padding: 3px 10px; font: inherit; font-size: var(--mk-fs-12); color: var(--mk-muted); cursor: pointer; white-space: nowrap; }
 .sk-rec__refresh:hover { border-color: rgba(44,99,208,0.4); color: var(--mk-blue); }
 .sk-rec__refresh:disabled { opacity: 0.5; cursor: default; }
-.sk-rec__skeleton { display: grid; gap: 8px; padding: 12px; }
-.sk-rec__skeleton span { height: 26px; border-radius: 8px; background: linear-gradient(90deg,#eef2fa,#f7f9fc,#eef2fa); background-size: 200% 100%; animation: sk-rec-shimmer 1.2s infinite; }
-@keyframes sk-rec-shimmer { 50% { background-position: -200% 0; } }
+.sk-rec__skeleton { padding: 12px; }
 .sk-rec-table th, .sk-rec-table td { text-align: left; }
 .sk-rec-yn { font-weight: 700; font-size: var(--mk-fs-13); }
 .sk-rec-yn--ok { color: var(--mk-green); }

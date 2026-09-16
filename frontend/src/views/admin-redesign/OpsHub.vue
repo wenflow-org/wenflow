@@ -1,19 +1,25 @@
 <template>
   <div class="mk-page">
-    <div class="mk-status" :class="(wbFailedPaths > 0 || wbDeadLetters > 0) ? 'mk-status--warn' : 'mk-status--ok'">
+    <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">运营中心</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">待处理反馈 {{ wbPendingFeedback }}</span>
-      <span class="mk-status__meta" :class="wbFailedPaths > 0 ? 'mk-status__meta--bad' : ''">失败路径 {{ wbFailedPaths }}</span>
-      <span class="mk-status__meta" :class="wbDeadLetters > 0 ? 'mk-status__meta--bad' : ''">死信 {{ wbDeadLetters }}</span>
+      <span class="mk-status__meta">待处理反馈 {{ wbErrors.feedback ? '—' : wbPendingFeedback }}</span>
+      <span class="mk-status__meta" :class="wbFailedPaths > 0 ? 'mk-status__meta--bad' : ''">失败路径 {{ wbErrors.paths ? '—' : wbFailedPaths }}</span>
+      <span class="mk-status__meta" :class="wbDeadLetters > 0 ? 'mk-status__meta--bad' : ''">死信 {{ wbErrors.dead ? '—' : wbDeadLetters }}</span>
       <span class="mk-status__meta">公告 {{ ann.rows }} 条</span>
+      <span v-if="wbHasError" class="mk-status__meta mk-status__meta--bad" :title="wbErrorText">待办数据加载失败</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="wbLoading" @click="refreshAll">
-          {{ wbLoading ? '刷新中…' : '刷新' }}
+          {{ wbLoading ? '刷新中…' : (wbHasError ? '重试' : '刷新') }}
         </button>
       </span>
     </div>
+
+    <!-- 失败必须显式落地：取不到 ≠ 没事（原实现把失败写成 0，页面伪装成「全部已清零」） -->
+    <p v-if="wbHasError" class="mk-alert" role="alert">
+      待办数据加载失败，对应计数不可信：{{ wbErrorText }}
+    </p>
 
     <!-- 运营待办（全宽：按严重度排序的行动清单，非统计卡） -->
     <section class="mk-card">
@@ -27,8 +33,8 @@
           :key="t.key"
           type="button"
           class="ow-todo"
-          :class="[`ow-todo--${t.severity}`, { 'ow-todo--done': t.count === 0 }]"
-          :title="t.count > 0 ? t.hint : '该事项已清零'"
+          :class="[`ow-todo--${t.severity}`, { 'ow-todo--done': t.count === 0 && !t.failed, 'ow-todo--failed': t.failed }]"
+          :title="t.failed ? '该域数据加载失败，计数不可信' : (t.count > 0 ? t.hint : '该事项已清零')"
           @click="t.action"
         >
           <i class="ow-todo__dot" aria-hidden="true"></i>
@@ -36,8 +42,8 @@
             <strong class="ow-todo__label">{{ t.label }}</strong>
             <em class="ow-todo__hint">{{ t.hint }}</em>
           </span>
-          <b class="ow-todo__count" :class="{ 'ow-todo__count--bad': t.count > 0 }">{{ t.count }}</b>
-          <span class="ow-todo__go">{{ t.count > 0 ? '去处理 →' : '已清零' }}</span>
+          <b class="ow-todo__count" :class="{ 'ow-todo__count--bad': t.count > 0 && !t.failed }">{{ t.failed ? '—' : t.count }}</b>
+          <span class="ow-todo__go">{{ t.failed ? '加载失败' : (t.count > 0 ? '去处理 →' : '已清零') }}</span>
         </button>
       </div>
     </section>
@@ -102,7 +108,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { timeAgo, liveAnnouncements } from './live'
+import { timeAgo, liveAnnouncements, errMsg } from './live'
 import { intent } from './store'
 import { adminFeedbackApi, adminLearningContentApi, adminDevtoolsApi, type LearningContentStats } from '@/api/adminApi'
 import { announcementCounts, segmentPct } from './opsShared'
@@ -113,37 +119,71 @@ const wbFailedPaths = ref(0)
 const wbDeadLetters = ref(0)
 const wbLoading = ref(false)
 const stats = ref<LearningContentStats | null>(null)
+/**
+ * 三个待办域各自的加载失败原因（键存在 = 该域失败）。
+ * 失败必须显式暴露：原先 .catch 一律把计数写成 0，后端故障时本页会伪装成
+ * 「全部已清零」——这是驾驶舱最不可接受的一种假信号（审计 §附 A #2）。
+ */
+const wbErrors = ref<Record<string, string>>({})
 
 async function loadWorkbench() {
   if (wbLoading.value) return
   wbLoading.value = true
-  const [, , dead] = await Promise.all([
+  const errors: Record<string, string> = {}
+  const [feedbackR, statsR, deadR] = await Promise.allSettled([
     // 待处理反馈：后端 status=new 计数（与 Feedback 页口径一致）
-    adminFeedbackApi.list({ limit: 1, status: 'new' })
-      .then((r) => { const d = r.data?.data ?? r.data ?? {}; wbPendingFeedback.value = Number(d.pagination?.total ?? d.total ?? 0) })
-      .catch(() => { wbPendingFeedback.value = 0 }),
+    adminFeedbackApi.list({ limit: 1, status: 'new' }),
     // 失败路径：学习内容 stats（与内容管理页口径一致）
-    adminLearningContentApi.getStats()
-      .then((r) => { const s = (r.data?.data ?? r.data) as LearningContentStats | null; stats.value = s; wbFailedPaths.value = s?.byStatus?.failed ?? 0 })
-      .catch(() => { wbFailedPaths.value = 0 }),
-    // outbox 死信：系统工具页（原运维中心）工具 tab 同源（返回 {deadCount, items}）
-    adminDevtoolsApi.getOutboxDead()
-      .then((r) => {
-        const d = r.data?.data as { deadCount?: number } | null | undefined
-        wbDeadLetters.value = Number(d?.deadCount ?? 0)
-      })
-      .catch(() => { wbDeadLetters.value = 0 })
+    adminLearningContentApi.getStats(),
+    // outbox 死信：系统工具页同源（返回 {deadCount, items}）
+    adminDevtoolsApi.getOutboxDead(),
   ])
+
+  if (feedbackR.status === 'fulfilled') {
+    const d = feedbackR.value.data?.data ?? feedbackR.value.data ?? {}
+    wbPendingFeedback.value = Number(d.pagination?.total ?? d.total ?? 0)
+  } else {
+    errors.feedback = errMsg(feedbackR.reason)
+  }
+
+  if (statsR.status === 'fulfilled') {
+    const s = (statsR.value.data?.data ?? statsR.value.data) as LearningContentStats | null
+    stats.value = s
+    wbFailedPaths.value = s?.byStatus?.failed ?? 0
+  } else {
+    errors.paths = errMsg(statsR.reason)
+  }
+
+  if (deadR.status === 'fulfilled') {
+    const d = deadR.value.data?.data as { deadCount?: number } | null | undefined
+    wbDeadLetters.value = Number(d?.deadCount ?? 0)
+  } else {
+    errors.dead = errMsg(deadR.reason)
+  }
+
+  wbErrors.value = errors
   wbLoading.value = false
-  void dead
 }
 
-/* 待办清单：按严重度排序（坏>警告>中性），零值弱化为「已清零」 */
+/** 任一待办域加载失败 → 页面基调降为 bad（禁止静默归零后仍显示「一切正常」） */
+const wbHasError = computed(() => Object.keys(wbErrors.value).length > 0)
+const wbErrorText = computed(() => Object.values(wbErrors.value).filter(Boolean).join('；'))
+/** 页头基调：任一域失败 → bad；有失败路径/死信 → warn；否则 ok（R2 状态语义表） */
+const statusTone = computed(() =>
+  wbHasError.value
+    ? 'mk-status--bad'
+    : (wbFailedPaths.value > 0 || wbDeadLetters.value > 0)
+      ? 'mk-status--warn'
+      : 'mk-status--ok'
+)
+
+/* 待办清单：按严重度排序（坏>警告>中性），零值弱化为「已清零」；
+   域加载失败时该行显示「—」+「加载失败」，不再伪装成 0 */
 const todoItems = computed(() => [
-  { key: 'feedback', label: '待处理反馈', hint: '学习者低分反馈等待分流', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending },
-  { key: 'paths', label: '生成失败路径', hint: '目标对话产出路径失败，需排查', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths },
-  { key: 'dead', label: 'Outbox 死信', hint: '领域事件投递失败，影响画像/成就', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters },
-  { key: 'draft', label: '草稿公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements },
+  { key: 'feedback', label: '待处理反馈', hint: '学习者低分反馈等待分流', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback },
+  { key: 'paths', label: '生成失败路径', hint: '目标对话产出路径失败，需排查', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths },
+  { key: 'dead', label: 'Outbox 死信', hint: '领域事件投递失败，影响画像/成就', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead },
+  { key: 'draft', label: '草稿公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: false },
 ])
 
 /* 公告三态计数（live 层共享，与侧栏徽章同源） */
@@ -197,10 +237,13 @@ const annBadge = (s: string) =>
 
 /* ===== 跨页深链（运营组内各页均为独立场景，操作对象页唯一） ===== */
 /** 待处理反馈 → 反馈中心（预筛待处理） */
+/** 待处理反馈 → 反馈中心（预筛「待处理」；Feedback onMounted 消费 intent.statusFilter 后清空）。
+    原先只设 scene、由注释「由 Feedback 页默认筛选待处理」承诺，但 Feedback 从未消费该 intent
+    → 用户点「去处理」看到的是全量列表（审计 附 A #11）。 */
 function goFeedbackPending() {
-  intent.scene = 'feedback'
+  intent.statusFilter = 'new'
   intent.quickAction = '' // 确保不触发其他快捷动作
-  // 反馈中心无状态深链参数，直接导航；由 Feedback 页默认筛选待处理
+  intent.scene = 'feedback'
 }
 /** 生成失败路径 → 学习会话页「学习路径」tab（预筛 failed，宿主消费 intent.statusFilter/tab 后清空） */
 function goFailedPaths() {
@@ -308,6 +351,12 @@ html[data-theme='dark'] .ow-todo:hover { background: #1a2436; }
 .ow-todo--done .ow-todo__label, .ow-todo--done .ow-todo__count { color: var(--mk-faint); }
 .ow-todo--done .ow-todo__go { color: var(--mk-green); }
 .ow-todo--done:hover { background: transparent; }
+/* 加载失败：与「已清零」明确区分（灰而非绿，且不弱化为完成态） */
+.ow-todo--failed { cursor: default; }
+.ow-todo--failed .ow-todo__count { color: var(--mk-red); }
+.ow-todo--failed .ow-todo__go { color: var(--mk-red); }
+.ow-todo--failed .ow-todo__dot { background: var(--mk-red); }
+.ow-todo--failed:hover { background: transparent; }
 
 /* 状态面板：比例条 + 行式计数 */
 .ow-state { padding: 8px 14px 12px; display: grid; gap: 10px; }

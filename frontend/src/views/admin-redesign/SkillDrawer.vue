@@ -94,7 +94,7 @@
           </div>
 
           <section class="msk__section">
-            <header class="msk__sec-head">
+            <header class="mk-section__head">
               <h4>最近调用</h4>
               <span v-if="recent.length" class="msk__sec-meta mono">{{ recent.length }}</span>
             </header>
@@ -119,7 +119,7 @@
           <!-- ========== Prompt（只读：生效内容 + 设计页跳转） ========== -->
           <template v-if="activeTab === 'prompt'">
           <section v-if="skillProfile" class="msk__section">
-            <header class="msk__sec-head">
+            <header class="mk-section__head">
               <h4>生效 Prompt</h4>
               <span class="msk__sec-meta">
                 <span class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
@@ -141,7 +141,7 @@
           <!-- ========== 模型配置（抽屉内联表单，与 msk 风格统一；保存落库） ========== -->
           <template v-if="activeTab === 'runtime'">
           <section v-if="skillProfile" class="msk__section">
-            <header class="msk__sec-head">
+            <header class="mk-section__head">
               <h4>模型配置</h4>
               <span class="msk__sec-meta">{{ rtForm.enabled ? '独立路由' : '继承上层 / 平台默认' }}</span>
             </header>
@@ -209,7 +209,7 @@
           <!-- ========== 模型测试（只读探测：指定思考档直发上游，不落库不改配置） ========== -->
           <template v-if="activeTab === 'model-test'">
           <section v-if="skillProfile" class="msk__section">
-            <header class="msk__sec-head">
+            <header class="mk-section__head">
               <h4>模型测试</h4>
               <span class="msk__sec-meta">直发上游 · 不落库</span>
             </header>
@@ -825,20 +825,7 @@ watch(
 
 /* 小节系统 */
 .msk__section { display: grid; gap: 8px; }
-.msk__sec-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.msk__sec-head h4 {
-  margin: 0;
-  font-size: var(--mk-fs-12);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--mk-faint);
-}
+/* 区块头走 .mk-section__head（shared.css） */
 .msk__sec-meta {
   display: inline-flex;
   align-items: center;
@@ -1057,7 +1044,7 @@ watch(
   .msk__row-id { font-size: 12.5px; }
   .msk__row-num { font-size: 12.5px; }
   .msk__note { font-size: 12.5px; }
-  .msk__sec-head h4 { font-size: 13px; }
+  .mk-section__head h4 { font-size: 13px; }
   .msk__sec-meta { font-size: 12.5px; }
   .msk__kv span { font-size: 13px; }
   .msk__code { font-size: 12.5px; }
@@ -1078,7 +1065,7 @@ watch(
   .msk__row-id { font-size: 15px; }
   .msk__row-num { font-size: 15px; }
   .msk__note { font-size: 15px; }
-  .msk__sec-head h4 { font-size: 15.5px; }
+  .mk-section__head h4 { font-size: 15.5px; }
   .msk__sec-meta { font-size: 15px; }
   .msk__kv span { font-size: 15.5px; }
   .msk__code { font-size: 15px; }
@@ -1100,7 +1087,7 @@ watch(
   .msk__row-id { font-size: 17.5px; }
   .msk__row-num { font-size: 17.5px; }
   .msk__note { font-size: 17.5px; }
-  .msk__sec-head h4 { font-size: 18px; }
+  .mk-section__head h4 { font-size: 18px; }
   .msk__sec-meta { font-size: 17.5px; }
   .msk__kv span { font-size: 18px; }
   .msk__code { font-size: 17.5px; }
@@ -1110,7 +1097,7 @@ watch(
 /* ================= 暗色模式（D1 补完）：Skill 抽屉 ================= */
 html[data-theme='dark'] {
   .msk__panel, .msk__head, .msk__body { background: #17202f; border-color: #232f45; }
-  .msk__tab-badge, .msk__badge { background: #253049; }
+  .msk__tab-badge { background: #253049; }
   .mk-pill--active .msk__tab-badge { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
   .msk__close:hover { background: #2c3a55; }
   .msk__row { background: #17202f; border-color: #232f45; }

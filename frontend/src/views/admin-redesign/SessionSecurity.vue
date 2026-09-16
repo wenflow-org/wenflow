@@ -223,11 +223,12 @@
     </div>
 
     <!-- 空态 -->
-    <div v-else class="mk-empty">
-      <div class="mk-empty__icon" aria-hidden="true">🔐</div>
-      <strong>{{ statusFilter ? '当前筛选无会话' : '暂无会话记录' }}</strong>
-      <span>管理员登录后会话会显示在这里，可随时强制下线</span>
-    </div>
+    <MkEmptyState
+      v-else
+      icon="🔐"
+      :title="statusFilter ? '当前筛选无会话' : '暂无会话记录'"
+      description="管理员登录后会话会显示在这里，可随时强制下线"
+    />
     </div>
   </div>
 </template>
@@ -239,9 +240,10 @@ import { adminAuthApi, adminSessionsApi } from '@/api/adminApi'
 import { errMsg } from './live'
 import { useLoadMore } from './useLoadMore'
 import { ipText } from './statusText'
-import { askConfirm } from './useConfirm'
+import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
+import MkEmptyState from './MkEmptyState.vue'
 
 /** admin_sessions 行（与后端 Prisma 模型一致 + adminName/adminEmail 联查字段） */
 interface AdminSessionRow {
@@ -446,14 +448,17 @@ async function revoke(s: AdminSessionRow) {
     title: '强制下线该会话',
     message: `确定强制下线此会话吗？\n设备：${uaFull(s)}\n登录时间：${fmtDateTime(s.issuedAt)}`,
     confirmText: '强制下线',
+    busy: true,
   })
   if (!confirmed) return
   try {
     await adminSessionsApi.revokeAdminSession(s.id)
     s.revokedAt = new Date().toISOString()
     toast.success('会话已强制下线')
+    doneConfirm()
   } catch (e) {
     toast.error(`下线失败：${errMsg(e)}`)
+    failConfirm()
   }
 }
 
@@ -462,6 +467,7 @@ async function revokeAll(g: SessionGroup) {
     title: '下线该管理员全部会话',
     message: `将强制下线「${g.adminName}」除当前登录标签页外的全部 ${g.active.length} 个活跃会话，确定吗？`,
     confirmText: '全部下线',
+    busy: true,
   })
   if (!confirmed) return
   try {
@@ -469,8 +475,10 @@ async function revokeAll(g: SessionGroup) {
     const count = res.data?.data?.count ?? g.active.length
     toast.success(`已下线 ${count} 个会话`)
     await applyFilters()
+    doneConfirm()
   } catch (e) {
     toast.error(`下线失败：${errMsg(e)}`)
+    failConfirm()
   }
 }
 
@@ -530,7 +538,7 @@ onMounted(async () => {
   color: var(--mk-ink);
 }
 .ss-deeplink strong { font-weight: 700; }
-.ss-deeplink__clear { color: var(--mk-active-muted, #64748b); }
+.ss-deeplink__clear { color: var(--mk-muted); }
 
 /* 加载失败错误态 */
 .ss-error { padding: 40px 20px; }

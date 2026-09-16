@@ -1,6 +1,13 @@
 <template>
   <div class="sbx">
-    <div v-if="sandboxError" class="sbx__empty sbx__empty--error">{{ sandboxError }}<button type="button" class="mk-empty__action" @click="loadSandboxView">重试</button></div>
+    <MkEmptyState
+      v-if="sandboxError"
+      tone="error"
+      :title="sandboxError"
+      action-text="重试"
+      compact
+      @action="loadSandboxView"
+    />
     <template v-else-if="sandboxAgents.length">
       <div class="sbx__bar">
         <span class="sbx__bar-meta">共 {{ sandboxAgents.length }} 个 Agent</span>
@@ -47,7 +54,7 @@
         </details>
       </div>
     </template>
-    <p v-else-if="!sandboxLoaded" class="sbx__empty">加载中…</p>
+    <MkLoading v-else-if="!sandboxLoaded" />
     <p v-else class="sbx__empty">暂无登记 Agent（沙盘为空）</p>
   </div>
 </template>
@@ -55,6 +62,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { adminPromptOpsApi } from '@/api/adminApi';
+import MkLoading from './MkLoading.vue';
+import MkEmptyState from './MkEmptyState.vue';
 
 interface SandboxChannel {
   path: string;
@@ -189,7 +198,6 @@ onMounted(() => void loadSandboxView());
 .sbx__src--routing-channel { background: #e8f7ef; color: #15803d; }
 .sbx__handoff { min-width: 0; padding: 0 8px; border-radius: 999px; background: #eef5ff; color: var(--mk-blue, #2c63d0); font-size: var(--mk-fs-11); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sbx__empty { padding: 20px; color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; }
-.sbx__empty--error { color: var(--mk-red, #dc2626); font-weight: 600; }
 
 @media (min-width: 2000px) {
   .sbx__agentdesc { font-size: 13.5px; }

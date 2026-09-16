@@ -11,7 +11,7 @@ html.admin-session-concealed,
 html.admin-session-concealed body,
 body.admin-session-concealed {
   min-height: 100%;
-  background: #f3f6fa;
+  background: var(--mk-overlay-bg);
 }
 
 html.admin-session-concealed body > :not(#admin-session-validation-shell),
@@ -37,16 +37,16 @@ body.admin-session-concealed > #admin-session-validation-shell {
   padding: 24px;
   background:
     radial-gradient(circle at 50% 0%, rgba(44, 99, 208, 0.09), transparent 38%),
-    #f3f6fa;
-  color: #172033;
+    var(--mk-overlay-bg);
+  color: var(--mk-overlay-fg);
 }
 
 .admin-session-validation-card {
   width: min(100%, 440px);
   padding: 32px;
-  border: 1px solid #dbe3ef;
+  border: 1px solid var(--mk-overlay-card-line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--mk-surface);
   box-shadow: 0 18px 48px rgba(22, 34, 55, 0.1);
 }
 
@@ -61,7 +61,7 @@ body.admin-session-concealed > #admin-session-validation-shell {
 
 .admin-session-validation-card h1 {
   margin: 0;
-  color: #172033;
+  color: var(--mk-overlay-fg);
   font-size: clamp(22px, 4vw, 28px);
   line-height: 1.3;
 }
@@ -69,7 +69,7 @@ body.admin-session-concealed > #admin-session-validation-shell {
 .admin-session-validation-detail {
   min-height: 48px;
   margin: 14px 0 24px;
-  color: #5a687d;
+  color: var(--mk-overlay-sub);
   font-size: 14px;
   line-height: 1.7;
 }
@@ -83,10 +83,10 @@ body.admin-session-concealed > #admin-session-validation-shell {
 .admin-session-validation-button {
   min-height: 40px;
   padding: 0 16px;
-  border: 1px solid #cbd6e5;
+  border: 1px solid var(--mk-overlay-btn-line);
   border-radius: 8px;
-  background: #fff;
-  color: #34445b;
+  background: var(--mk-overlay-btn-bg);
+  color: var(--mk-overlay-btn-fg);
   font: inherit;
   font-size: 14px;
   font-weight: 600;
@@ -94,19 +94,19 @@ body.admin-session-concealed > #admin-session-validation-shell {
 }
 
 .admin-session-validation-button:hover:not(:disabled) {
-  border-color: #9eb2cf;
-  background: #f7f9fc;
+  border-color: var(--mk-overlay-btn-hover-line);
+  background: var(--mk-overlay-btn-hover-bg);
 }
 
 .admin-session-validation-button--primary {
   border-color: var(--mk-blue, #2c63d0);
   background: var(--mk-blue, #2c63d0);
-  color: #fff;
+  color: var(--mk-on-fill);
 }
 
 .admin-session-validation-button--primary:hover:not(:disabled) {
-  border-color: #2b64d8;
-  background: #2b64d8;
+  border-color: var(--mk-ep-primary-bg);
+  background: var(--mk-ep-primary-bg);
 }
 
 .admin-session-validation-button:focus-visible {
@@ -132,246 +132,7 @@ body.admin-session-concealed > #admin-session-validation-shell {
 
 /* ================= 最小 EP 覆写（唯一消费方：QuickLearnPanel.vue） ================= */
 
-body.admin-route {
-  /* EP 全局变量 → mk token（品牌蓝统一 #2c63d0；派生 light 档为 #2c63d0 混白计算值） */
-  --el-color-primary: var(--mk-blue, #2c63d0);
-  --el-color-primary-light-3: #6b92de;
-  --el-color-primary-light-5: #96b1e8;
-  --el-color-primary-light-7: #c0d0f1;
-  --el-color-primary-light-8: #d5e0f6;
-  --el-color-primary-light-9: #eaeffa;
-  --el-color-success: var(--mk-green, #15803d);
-  --el-color-success-light-7: #b9d9c5;
-  --el-color-success-light-9: #e8f2ec;
-  --el-color-warning: var(--mk-amber, #b45309);
-  --el-color-danger: var(--mk-red, #dc2626);
-  --el-border-color: var(--mk-line, #e6ebf4);
-  --el-border-color-light: var(--mk-line, #e6ebf4);
-  --el-border-color-lighter: var(--mk-line, #e6ebf4);
-  --el-fill-color-blank: var(--mk-surface, #fff);
-  --el-bg-color: var(--mk-surface, #fff);
-  --el-fill-color-light: #f0f2f5;
-  --el-fill-color-extra-light: #f7f8fa;
-  --el-text-color-primary: var(--mk-ink, #1a2a44);
-  --el-text-color-regular: var(--mk-muted, #5b6577);
-  --el-text-color-secondary: var(--mk-faint, #5f6f8c);
-  /* EP 默认 placeholder #a8abb2 在白底仅 2.3:1，提升至阶内灰 */
-  --el-text-color-placeholder: var(--mk-faint, #5f6f8c);
-}
 
-body.admin-route .el-button {
-  min-height: 34px;
-  padding: 0 13px;
-  border: 1px solid var(--mk-line, #e6ebf4) !important;
-  border-radius: 8px !important;
-  background: var(--mk-surface, #fff) !important;
-  color: var(--mk-muted, #5b6577) !important;
-  font-size: 13px;
-  font-weight: 600 !important;
-  letter-spacing: 0;
-  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.025) !important;
-  transform: none !important;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 90ms ease !important;
-}
-
-body.admin-route .el-button + .el-button {
-  margin-left: 0;
-}
-
-body.admin-route .el-button:hover:not(.is-disabled) {
-  border-color: #b9c6d8 !important;
-  background: #f6f9ff !important;
-  color: var(--mk-ink, #1a2a44) !important;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
-}
-
-body.admin-route .el-button:active:not(.is-disabled) {
-  background: #f0f3f8 !important;
-  box-shadow: none !important;
-  transform: scale(0.98) !important;
-}
-
-body.admin-route .el-button--small {
-  min-height: 30px;
-  padding: 0 10px;
-  font-size: 12px;
-}
-
-body.admin-route .el-button .el-icon {
-  font-size: 13px;
-}
-
-body.admin-route .el-button.is-disabled,
-body.admin-route .el-button.is-disabled:hover {
-  border-color: #e3e8ef !important;
-  background: #f7f8fa !important;
-  color: #a5afbd !important;
-  box-shadow: none !important;
-  opacity: 1;
-}
-
-body.admin-route .el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
-  background: var(--mk-blue, #2c63d0) !important;
-  border-color: var(--mk-blue, #2c63d0) !important;
-  color: #fff !important;
-  box-shadow: 0 1px 2px rgba(44, 99, 208, 0.18) !important;
-}
-
-body.admin-route .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover:not(.is-disabled) {
-  background: #2b64d8 !important;
-  border-color: #2b64d8 !important;
-  color: #fff !important;
-  box-shadow: 0 2px 5px rgba(44, 99, 208, 0.2) !important;
-}
-
-body.admin-route .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):active:not(.is-disabled) {
-  background: var(--mk-accent-deep, #1f57cc) !important;
-  border-color: var(--mk-accent-deep, #1f57cc) !important;
-  box-shadow: none !important;
-}
-
-body.admin-route .el-button.is-plain {
-  background: var(--mk-surface, #fff) !important;
-  border-color: #c6d4ea !important;
-  color: var(--mk-blue, #2c63d0) !important;
-}
-
-body.admin-route .el-button.is-plain:hover:not(.is-disabled) {
-  background: #f3f7fd !important;
-  border-color: #9eb8df !important;
-  color: var(--mk-accent-deep, #1f57cc) !important;
-}
-
-body.admin-route .el-button--danger.is-plain {
-  background: var(--mk-surface, #fff) !important;
-  border-color: #e7bcbc !important;
-  color: #b83232 !important;
-}
-
-body.admin-route .el-button--danger.is-plain:hover:not(.is-disabled) {
-  background: #fff6f6 !important;
-  border-color: #d99b9b !important;
-  color: #a52a2a !important;
-}
-
-body.admin-route .el-button.is-text,
-body.admin-route .el-button.is-link {
-  min-height: 30px;
-  padding: 0 7px;
-  border-color: transparent !important;
-  border-radius: 6px !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-body.admin-route .el-button.is-text:hover:not(.is-disabled),
-body.admin-route .el-button.is-link:hover:not(.is-disabled) {
-  border-color: transparent !important;
-  background: #f0f3f7 !important;
-  box-shadow: none !important;
-}
-
-body.admin-route .el-button--primary.is-text,
-body.admin-route .el-button--primary.is-link {
-  color: var(--mk-blue, #2c63d0) !important;
-}
-
-body.admin-route .el-tag {
-  border-radius: 4px !important;
-  font-weight: 600 !important;
-}
-
-body.admin-route .el-tag--success {
-  background: var(--mk-green-bg, #ecfdf5) !important;
-  border-color: rgba(22, 163, 74, 0.24) !important;
-  color: var(--mk-green, #15803d) !important;
-}
-
-body.admin-route .el-tag--warning {
-  background: var(--mk-amber-bg, #fffbeb) !important;
-  border-color: rgba(217, 119, 6, 0.24) !important;
-  color: var(--mk-amber, #b45309) !important;
-}
-
-body.admin-route .el-tag--danger {
-  background: var(--mk-red-bg, #fef2f2) !important;
-  border-color: rgba(220, 38, 38, 0.24) !important;
-  color: var(--mk-red, #dc2626) !important;
-}
-
-body.admin-route .el-tag--info {
-  background: #f0f2f5 !important;
-  border-color: rgba(100, 116, 139, 0.2) !important;
-  color: var(--mk-muted, #5b6577) !important;
-}
-
-body.admin-route .el-input__wrapper,
-body.admin-route .el-select__wrapper,
-body.admin-route .el-textarea__inner {
-  border-radius: 8px !important;
-  border-color: var(--mk-line, #e6ebf4) !important;
-  box-shadow: 0 0 0 1px var(--mk-line, #e6ebf4) inset !important;
-}
-
-body.admin-route .el-input__wrapper:hover,
-body.admin-route .el-select__wrapper:hover {
-  box-shadow: 0 0 0 1px #c6d4ea inset !important;
-}
-
-body.admin-route .el-input__wrapper.is-focus,
-body.admin-route .el-select__wrapper.is-focused,
-body.admin-route .el-textarea__inner:focus {
-  box-shadow: 0 0 0 1px var(--mk-blue, #2c63d0) inset, 0 0 0 3px rgba(44, 99, 208, 0.12) !important;
-}
-
-body.admin-route .el-dialog {
-  border: 1px solid var(--mk-line, #e6ebf4);
-  background: var(--mk-surface, #fff);
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
-  border-radius: 16px !important;
-  max-width: calc(100vw - 24px);
-}
-
-body.admin-route .el-dialog__header {
-  padding: 16px 20px 14px;
-  margin: 0;
-  border-bottom: 1px solid var(--mk-line, #e6ebf4);
-}
-
-body.admin-route .el-dialog__title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--mk-ink, #1a2a44);
-}
-
-body.admin-route .el-dialog__body {
-  padding: 16px 20px;
-  background: var(--mk-surface, #fff);
-}
-
-body.admin-route .el-dialog__footer {
-  padding: 12px 20px 16px;
-  border-top: 1px solid rgba(209, 218, 235, 0.7);
-}
-
-@media (max-width: 768px) {
-  body.admin-route .el-dialog {
-    width: calc(100vw - 24px) !important;
-    margin-top: 12px !important;
-    max-height: calc(100dvh - 24px);
-  }
-
-  body.admin-route .el-dialog__body {
-    max-height: calc(100dvh - 150px);
-    overflow-y: auto;
-  }
-}
-
-@media (max-width: 768px), (pointer: coarse) {
-  body.admin-route .el-button {
-    min-height: 44px;
-  }
-}
 
 /* 4K 超大屏：整体等比放大（与用户侧 v2 页 zoom 机制一致）。
    zoom 会等比放大 .ac 内所有 100vh/100dvh 尺寸（布局高度 → 渲染高度 ×1.15/×1.3），
@@ -384,9 +145,11 @@ body.admin-route .el-dialog__footer {
 }
 @media (min-width: 3600px) {
   body.admin-route .ac { zoom: 1.3; }
+
   body.admin-route .ac,
   body.admin-route .ac .mshell { min-height: calc(100vh / 1.3); }
 }
+
 
 /* ================= 暗色适配（审计 P2-12）：会话验证遮罩 + EP 最小覆写 =================
    本文件原为纯浅色；以下把硬编码浅色在 data-theme=dark 下改为深色，
@@ -394,74 +157,40 @@ body.admin-route .el-dialog__footer {
 html.admin-session-concealed[data-theme='dark'],
 html.admin-session-concealed[data-theme='dark'] body,
 body.admin-session-concealed[data-theme='dark'] {
-  background: #0f1624;
+  background: var(--mk-bg);
 }
+
 html.admin-session-concealed[data-theme='dark'] body > #admin-session-validation-shell,
 body.admin-session-concealed[data-theme='dark'] > #admin-session-validation-shell {
   background:
     radial-gradient(circle at 50% 0%, rgba(91, 141, 239, 0.12), transparent 38%),
-    #0f1624;
+    var(--mk-bg);
   color: var(--mk-ink, #e6edf7);
 }
+
 html[data-theme='dark'] .admin-session-validation-card {
   background: var(--mk-surface, #17202f);
   border-color: var(--mk-line, #2a3850);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
 }
+
 html[data-theme='dark'] .admin-session-validation-card h1 { color: var(--mk-ink, #e6edf7); }
+
 html[data-theme='dark'] .admin-session-validation-detail { color: var(--mk-muted, #9fb0c8); }
+
 html[data-theme='dark'] .admin-session-validation-button {
-  background: #1b2537;
-  border-color: #2a3850;
+  background: var(--mk-overlay-btn-bg);
+  border-color: var(--mk-line);
   color: var(--mk-ink, #e6edf7);
 }
+
 html[data-theme='dark'] .admin-session-validation-button:hover:not(:disabled) {
-  background: #22304a;
-  border-color: #3a4d6e;
+  background: var(--mk-overlay-btn-hover-bg);
+  border-color: var(--mk-overlay-btn-hover-line);
 }
+
 html[data-theme='dark'] .admin-session-validation-button--primary,
 html[data-theme='dark'] .admin-session-validation-button--primary:hover:not(:disabled) {
   background: var(--mk-blue-fill, #2c63d0);
   border-color: var(--mk-blue-fill, #2c63d0);
-}
-
-html[data-theme='dark'] body.admin-route .el-button:hover:not(.is-disabled) {
-  border-color: #3a4d6e !important;
-  background: #1b2740 !important;
-  color: var(--mk-ink, #e6edf7) !important;
-}
-html[data-theme='dark'] body.admin-route .el-button:active:not(.is-disabled) {
-  background: #22304a !important;
-}
-html[data-theme='dark'] body.admin-route .el-button.is-disabled,
-html[data-theme='dark'] body.admin-route .el-button.is-disabled:hover {
-  border-color: var(--mk-line, #2a3850) !important;
-  background: #141c2b !important;
-  color: #6b7c96 !important;
-}
-html[data-theme='dark'] body.admin-route .el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
-  background: var(--mk-blue-fill, #2c63d0) !important;
-  border-color: var(--mk-blue-fill, #2c63d0) !important;
-}
-html[data-theme='dark'] body.admin-route .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover:not(.is-disabled) {
-  background: #2b64d8 !important;
-  border-color: #2b64d8 !important;
-}
-html[data-theme='dark'] body.admin-route .el-button.is-plain:hover:not(.is-disabled) {
-  background: #1b2740 !important;
-  border-color: #3a4d6e !important;
-  color: var(--mk-blue, #5b8def) !important;
-}
-html[data-theme='dark'] body.admin-route .el-button--danger.is-plain {
-  border-color: #5c2b2b !important;
-  color: #f87171 !important;
-}
-html[data-theme='dark'] body.admin-route .el-button--danger.is-plain:hover:not(.is-disabled) {
-  background: #2a1414 !important;
-  border-color: #7f3a3a !important;
-  color: #fca5a5 !important;
-}
-html[data-theme='dark'] body.admin-route .el-button.is-text:hover:not(.is-disabled),
-html[data-theme='dark'] body.admin-route .el-button.is-link:hover:not(.is-disabled) {
-  background: #1b2740 !important;
 }

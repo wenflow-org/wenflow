@@ -120,6 +120,30 @@ describe('前端术语单源守卫（阶段 1D）', () => {
     }
   });
 
+  it('状态词单源：私有字典/格式化函数不得把 running 译成「运行中」（单源 statusText → 进行中）', () => {
+    // 不断言「运行中」这个子串本身：自由文本里的「运行中的 Prompt」「已在系统运行中注册」
+    // 是运行时/线上语义，不是 running 状态；「运行中…」是动词进行态。
+    // 只禁止把它当成 running 的**译名**（私有字典 / 格式化 return / 计数模板）。
+    const patterns = [
+      /running['"]?\s*:\s*['"]运行中/, // 私有字典 { running: '运行中' }
+      /'running'\)\s*return\s*['"]运行中/, // 私有格式化 if (r === 'running') return '运行中'
+      /运行中\s*\{\{/, // 计数模板「运行中 {{ n }}」
+      /运行中\s*\$\{/, // 模板串里的「… 运行中 ${n}」
+    ];
+    const files = listSourceFiles(ADMIN_REDESIGN_DIR);
+    expect(files.length).toBeGreaterThan(30);
+    for (const file of files) {
+      const src = read(file);
+      for (const re of patterns) {
+        const hit = src.match(re);
+        // jest 的 expect 无消息参数：把「文件 + 命中片段」放进实际值，失败时可直接定位
+        expect(hit ? `${file} 命中「${hit[0]}」` : null).toBeNull();
+      }
+    }
+    // 单源本身：running 的权威译名
+    expect(read('statusText.ts')).toContain("running: '进行中'");
+  });
+
   it('枚举直出守卫：模板文本不得直出英文枚举值', () => {
     const bareEnums = ['degraded', 'visible', 'hidden', 'draft', 'archived', 'published', 'pending', 'offline'];
     for (const file of listVueFiles(ADMIN_REDESIGN_DIR)) {

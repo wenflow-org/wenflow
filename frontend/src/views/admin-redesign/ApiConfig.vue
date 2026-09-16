@@ -11,7 +11,7 @@
       <span v-if="isLive && lastCheckedText" class="mk-status__meta" title="连通性 / 能力探测时间">上次探测：{{ lastCheckedText }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="fetching || !form.apiUrl" @click="fetchModels">
-          <span v-if="fetching"><span class="mk-spinner"></span> 拉取中…</span>
+          <MkLoading v-if="fetching" inline text="拉取中…" />
           <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
         </button>
       </span>
@@ -150,7 +150,7 @@
             </select>
           </label>
           <button type="button" class="mk-btn mk-btn--primary ac-test__btn" :disabled="!models.length || testing" @click="runTest">
-            <span v-if="testing"><span class="mk-spinner"></span> 测试中…</span>
+            <MkLoading v-if="testing" inline text="测试中…" />
             <span v-else>运行测试</span>
           </button>
           <span v-if="testResult" class="ac-test__result">
@@ -172,13 +172,13 @@
         <div class="ac-policy ac-policy--2x2">
           <div class="ac-policy__item">
             <span class="ac-policy__label">Admin 访问范围</span>
-            <div class="ac-seg">
+            <div class="mk-seg">
               <button
                 v-for="opt in accessOptions"
                 :key="opt.id"
                 type="button"
-                class="ac-seg__item"
-                :class="{ 'ac-seg__item--active': policy.adminAccessMode === opt.id }"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': policy.adminAccessMode === opt.id }"
                 @click="policy.adminAccessMode = opt.id; markDirty('policy')"
               >
                 {{ opt.label }}
@@ -198,19 +198,19 @@
           </div>
           <div class="ac-policy__item">
             <span class="ac-policy__label">私有网络服务</span>
-            <div class="ac-seg">
+            <div class="mk-seg">
               <button
                 type="button"
-                class="ac-seg__item"
-                :class="{ 'ac-seg__item--active': policy.allowPrivateNetwork }"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': policy.allowPrivateNetwork }"
                 @click="policy.allowPrivateNetwork = true; markDirty('policy')"
               >
                 允许
               </button>
               <button
                 type="button"
-                class="ac-seg__item"
-                :class="{ 'ac-seg__item--active': !policy.allowPrivateNetwork }"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': !policy.allowPrivateNetwork }"
                 @click="policy.allowPrivateNetwork = false; markDirty('policy')"
               >
                 仅白名单
@@ -233,8 +233,8 @@
             <span class="ac-policy__desc">{{ registrationEnabled ? '任何人可注册' : '仅管理员创建' }}</span>
             <button
               type="button"
-              class="ac-seg__item ac-policy__toggle"
-              :class="{ 'ac-seg__item--active': true }"
+              class="mk-seg__item ac-policy__toggle"
+              :class="{ 'mk-seg__item--active': true }"
               :disabled="registrationBusy"
               @click="toggleRegistration"
             >
@@ -246,18 +246,18 @@
             <span class="ac-policy__label">单 IP 每日注册配额</span>
             <span class="ac-policy__desc">{{ quotaEnabledText }}，超过后该 IP 当天无法再创建账号</span>
             <div class="ac-quota-row">
-              <div class="ac-seg ac-quota-seg" role="group" aria-label="单 IP 每日注册配额开关">
+              <div class="mk-seg ac-quota-seg" role="group" aria-label="单 IP 每日注册配额开关">
                 <button
                   type="button"
-                  class="ac-seg__item"
-                  :class="{ 'ac-seg__item--active': registerIpQuotaEnabled }"
+                  class="mk-seg__item"
+                  :class="{ 'mk-seg__item--active': registerIpQuotaEnabled }"
                   :disabled="quotaBusy"
                   @click="setQuotaEnabled(true)"
                 >启用</button>
                 <button
                   type="button"
-                  class="ac-seg__item"
-                  :class="{ 'ac-seg__item--active': !registerIpQuotaEnabled }"
+                  class="mk-seg__item"
+                  :class="{ 'mk-seg__item--active': !registerIpQuotaEnabled }"
                   :disabled="quotaBusy"
                   @click="setQuotaEnabled(false)"
                 >关闭</button>
@@ -290,9 +290,9 @@
         <span class="mk-badge" :class="healthBadgeCls">{{ healthLabel }}</span>
       </div>
 
-      <div v-if="configLoadFailed && !reliability && !probe.loaded" class="ac-config-error" role="alert">
-        <span>配置读取失败</span>
-        <button type="button" class="mk-link" @click="retryConfigLoad">重试</button>
+      <div v-if="configLoadFailed && !reliability && !probe.loaded" class="mk-alert mk-alert--row ac-config-error" role="alert">
+        <span class="mk-alert__msg">配置读取失败</span>
+        <button type="button" class="mk-alert__btn" @click="retryConfigLoad">重试</button>
       </div>
 
       <div class="ac-body">
@@ -420,7 +420,7 @@
             健康快照不可用
             <button type="button" class="mk-link" :disabled="healthProbing" @click="probeHealth">{{ healthProbing ? '探测中…' : '重试' }}</button>
           </div>
-          <p v-else class="ac-rel__note">健康快照加载中…</p>
+          <MkLoading v-else inline text="健康快照加载中…" />
           <div class="ac-health__foot">
             <span v-if="health?.stale" class="ac-health__stale">快照已过期 · 使用上方「立即探测」或开启能力探针自动刷新</span>
             <span v-else-if="health?.checkedAt" class="ac-health__stale">快照有效 · 最近 {{ timeAgo(health.checkedAt) }} 更新</span>
@@ -465,6 +465,7 @@ import {
   updateRegisterIpQuotaSetting
 } from './live'
 import { askConfirm } from './useConfirm'
+import MkLoading from './MkLoading.vue'
 import { toast } from '@/utils/toast'
 
 /* ---------- AI 能力健康快照 ---------- */
@@ -1186,20 +1187,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
 }
 .ac-sec__save:hover { background: rgba(44, 99, 208, 0.16); }
 .ac-sec__save:disabled { opacity: 0.6; cursor: not-allowed; }
-.ac-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: #eef2fa; border-radius: 10px; width: fit-content; }
-.ac-seg__item {
-  border: 0;
-  background: transparent;
-  padding: 6px 12px;
-  border-radius: 7px;
-  font: inherit;
-  font-size: var(--mk-fs-12);
-  font-weight: 600;
-  color: var(--mk-muted);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.ac-seg__item--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(23, 32, 51, 0.1); }
+/* 分段控件走 .mk-seg（shared.css） */
 
 .ac-textarea { resize: vertical; font-size: var(--mk-fs-12); }
 
@@ -1299,7 +1287,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
 }
 .ac-group__fields .mk-field { margin: 0; }
 /* 单字段分组（超时仅一项）：不拉全宽，保持与多字段组同网格节奏 */
-.ac-group__fields--single { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
 /* 分组副标题：与 ac-sec__title 同族更轻（重试/超时） */
 .ac-group__title {
   font-size: var(--mk-fs-11);
@@ -1327,18 +1315,8 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
   font-weight: 600;
 }
 .ac-rel__error .mk-link { font-size: var(--mk-fs-12); }
-.ac-config-error {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 16px 4px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--mk-red-bg);
-  color: var(--mk-red);
-  font-size: var(--mk-fs-12_5);
-  font-weight: 600;
-}
+/* 配置读取失败条：外形走 .mk-alert--row，本类只保留位置 */
+.ac-config-error { margin: 0 16px 4px; }
 
 .ac-save {
   position: sticky;
@@ -1387,7 +1365,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
   .ac-health__head { grid-template-columns: 10px minmax(0, 1fr) auto; }
   .ac-health__msg { display: none; }
   .ac-health__head span:nth-child(3) { display: none; }
-  .ac-think__fields { grid-template-columns: 1fr; }
+
   .ac-policy { grid-template-columns: 1fr; }
   .ac-policy__item { padding-left: 0; border-left: none; padding-top: 12px; border-top: 1px dashed #e6eaf0; }
   .ac-policy__item:first-child { padding-top: 0; border-top: none; }
@@ -1399,13 +1377,13 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
   .ac-body { gap: 16px; padding: 6px 18px 18px; }
   .mk-field__label { font-size: 13.5px; }
   .ac-model { font-size: 13px; padding: 5px 12px; }
-  .ac-run { padding: 10px 14px; }
+
   .ac-policy { gap: 16px 0; padding: 6px 18px 18px; }
   .ac-policy__label { font-size: 13.5px; }
   .ac-policy__desc { font-size: 13px; }
   .ac-policy__warn { font-size: 13px; }
-  .ac-seg { border-radius: 12px; }
-  .ac-seg__item { font-size: 13.5px; padding: 8px 14px; }
+  .mk-seg { border-radius: 12px; }
+  .mk-seg__item { font-size: 13.5px; padding: 8px 14px; }
   .ac-textarea { font-size: 13.5px; }
   .ac-sec__title { font-size: 13px; }
   .ac-sec__hint { font-size: 12px; }
@@ -1428,12 +1406,12 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
   .ac-body { gap: 18px; padding: 8px 22px 22px; }
   .mk-field__label { font-size: 15.5px; }
   .ac-model { font-size: 15px; padding: 6px 14px; border-radius: 9px; }
-  .ac-run { padding: 12px 16px; }
+
   .ac-policy { gap: 18px 0; padding: 8px 22px 22px; }
   .ac-policy__label { font-size: 15.5px; }
   .ac-policy__desc { font-size: 15px; }
   .ac-policy__warn { font-size: 15px; }
-  .ac-seg__item { font-size: 15.5px; padding: 9px 16px; }
+  .mk-seg__item { font-size: 15.5px; padding: 9px 16px; }
   .ac-textarea { font-size: 15.5px; }
   .ac-sec__title { font-size: 15px; }
   .ac-sec__hint { font-size: 14px; }
@@ -1456,12 +1434,12 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
   .ac-body { gap: 20px; padding: 10px 26px 26px; }
   .mk-field__label { font-size: 18px; }
   .ac-model { font-size: 17.5px; padding: 7px 16px; }
-  .ac-run { padding: 14px 18px; }
+
   .ac-policy { gap: 20px 0; padding: 10px 26px 26px; }
   .ac-policy__label { font-size: 18px; }
   .ac-policy__desc { font-size: 17.5px; }
   .ac-policy__warn { font-size: 17.5px; }
-  .ac-seg__item { font-size: 18px; padding: 11px 19px; }
+  .mk-seg__item { font-size: 18px; padding: 11px 19px; }
   .ac-textarea { font-size: 18px; }
   .ac-sec__title { font-size: 17.5px; }
   .ac-sec__hint { font-size: 16px; }
@@ -1483,8 +1461,8 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
 /* ================= 暗色模式（D1 补完）：模型与接入 ================= */
 html[data-theme='dark'] {
   .ac-key-toggle:hover { background: rgba(91, 141, 239, 0.14); }
-  .ac-seg { background: #1d2739; }
-  .ac-seg__item--active { background: rgba(91, 141, 239, 0.22); color: #9db8f5; box-shadow: none; }
+  .mk-seg { background: #1d2739; }
+  .mk-seg__item--active { background: rgba(91, 141, 239, 0.22); color: #9db8f5; box-shadow: none; }
   .ac-save { background: #141c2b; border-color: #232f45; }
   /* 补漏：密钥切换钮/模型胶囊浅底 */
   .ac-key-toggle,

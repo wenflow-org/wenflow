@@ -4,7 +4,7 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">Skill 运行</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" :title="skillCountHint">{{ liveLoading && !cards.length ? 'Skill 加载中…' : `共 ${cards.length} 个 Skill` }}</span>
+      <MkLoading v-if="liveLoading && !cards.length" inline text="Skill 加载中…" /><span v-else class="mk-status__meta" :title="skillCountHint">共 {{ cards.length }} 个 Skill</span>
       <span v-if="overallRate != null" class="mk-status__meta" :class="rateNumTone === 'bad' ? 'mk-status__meta--bad' : rateNumTone === 'warn' ? 'mk-status__meta--warn' : ''" :title="'窗口内成功率 = 成功调用 / 总调用'">
         成功率 {{ overallRate }}%<template v-if="totalCalls">（{{ okCalls }}/{{ totalCalls }}）</template>
       </span>
@@ -174,17 +174,20 @@
         </button>
       </div>
 
-      <div v-if="skillsError && !cards.length" class="mk-empty">
-        <strong>Skill 数据加载失败</strong>
-        <span>{{ skillsError }}</span>
-        <button type="button" class="mk-empty__action" @click="retrySkills">重试</button>
-      </div>
-      <div v-else-if="!filtered.length" class="mk-empty">
-        <strong>{{ onlyAttention ? '没有需关注的 Skill' : keyword ? '当前筛选无 Skill' : '暂无运行数据' }}</strong>
-        <span v-if="onlyAttention">一切健康。</span>
-        <span v-else-if="keyword">换个关键词试试。</span>
-        <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
-      </div>
+      <MkEmptyState
+        v-if="skillsError && !cards.length"
+        title="Skill 数据加载失败"
+        :description="skillsError"
+        action-text="重试"
+        @action="retrySkills"
+      />
+      <MkEmptyState
+        v-else-if="!filtered.length"
+        :title="onlyAttention ? '没有需关注的 Skill' : keyword ? '当前筛选无 Skill' : '暂无运行数据'"
+        :description="onlyAttention ? '一切健康。' : keyword ? '换个关键词试试。' : ''"
+        :action-text="isFiltered ? '清除筛选' : ''"
+        @action="clearFilters"
+      />
       </template>
       <!-- 客户端分页（统一 mk-pagination 页码器）：列表/网格共用，筛选后按页切片 -->
       <Pagination
@@ -213,6 +216,8 @@ import MkFilterSearch from './MkFilterSearch.vue'
 import Pagination from './Pagination.vue'
 import { useIsNarrow } from './useIsNarrow'
 import { useTableSort } from './useTableSort'
+import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
 type Health = 'ok' | 'idle' | 'error'
@@ -487,7 +492,7 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-dot--ok { background: var(--mk-green); }
 .sk-dot--idle { background: #c3cede; }
 .sk-dot--error { background: var(--mk-red); animation: sk-blink 1.2s ease infinite; }
-.sk-err { color: var(--mk-red); font-weight: 700; }
+
 /* 指标阈值着色 */
 .sk-rate--bad { color: var(--mk-red); font-weight: 700; }
 .sk-rate--warn { color: var(--mk-amber); font-weight: 700; }
@@ -589,7 +594,7 @@ function recGateDetail(completion: SkillCompletion): string {
   .sk-card__flag { font-size: 12px; }
   .sk-dot { width: 10px; height: 10px; }
   .sk-agent-tag { font-size: 12.5px; padding: 3px 11px; }
-  .sk-cols__item { font-size: 13.5px; padding: 7px 9px; }
+
   .sk-id-main { font-size: 13.5px; }
   .sk-name-desc { font-size: 13px; }
 }
@@ -598,7 +603,7 @@ function recGateDetail(completion: SkillCompletion): string {
   .sk-card__flag { font-size: 14px; }
   .sk-dot { width: 12px; height: 12px; }
   .sk-agent-tag { font-size: 14.5px; padding: 4px 13px; }
-  .sk-cols__item { font-size: 16px; padding: 8px 11px; }
+
   .sk-id-main { font-size: 16px; }
   .sk-name-desc { font-size: 15.5px; }
 }
@@ -607,7 +612,7 @@ function recGateDetail(completion: SkillCompletion): string {
   .sk-card__flag { font-size: 16.5px; }
   .sk-dot { width: 14px; height: 14px; }
   .sk-agent-tag { font-size: 17px; padding: 5px 15px; }
-  .sk-cols__item { font-size: 18.5px; padding: 9px 13px; }
+
   .sk-id-main { font-size: 18.5px; }
   .sk-name-desc { font-size: 18px; }
 }
@@ -623,59 +628,22 @@ html[data-theme='dark'] {
 }
 
 /* ================= D3 表格增强：Skill 列设置菜单 ================= */
-.sk-cols { position: relative; display: inline-flex; }
-.sk-cols__menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: var(--mk-z-menu);
-  min-width: 150px;
-  padding: 6px;
-  display: grid;
-  gap: 2px;
-  background: var(--mk-surface, #fff);
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  box-shadow: var(--mk-shadow-pop);
-}
-.sk-cols__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 7px;
-  font-size: var(--mk-fs-12_5);
-  color: var(--mk-muted);
-  cursor: pointer;
-  white-space: nowrap;
-  user-select: none;
-}
-.sk-cols__item:hover { background: #f0f5ff; }
-html[data-theme='dark'] .sk-cols__item:hover { background: #1f2b40; }
-.sk-cols__item input { accent-color: var(--mk-blue, #2c63d0); }
-.sk-cols__reset {
-  margin-top: 4px;
-  border: 0;
-  background: transparent;
-  padding: 6px 8px;
-  border-radius: 7px;
-  border-top: 1px dashed var(--mk-line);
-  font: inherit;
-  font-size: var(--mk-fs-12);
-  font-weight: 700;
-  color: var(--mk-blue);
-  cursor: pointer;
-  text-align: left;
-}
-.sk-cols__reset:hover { background: #eff6ff; }
-html[data-theme='dark'] .sk-cols__reset:hover { background: #1f2b40; }
+
+
+
+
+
+
+
+
+
 @media (min-width: 2000px) {
-  .sk-cols__reset { font-size: 13.5px; padding: 7px 9px; }
+
 }
 @media (min-width: 2800px) {
-  .sk-cols__reset { font-size: 16px; padding: 8px 11px; }
+
 }
 @media (min-width: 3600px) {
-  .sk-cols__reset { font-size: 18.5px; padding: 9px 13px; }
+
 }
 </style>

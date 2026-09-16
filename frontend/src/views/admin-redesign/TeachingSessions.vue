@@ -7,29 +7,8 @@
       <!-- 视图切换 pills 已承载页名（合并宿主形态）：embedded 不再重复标题，独立场景保留 -->
       <strong v-if="!embedded" class="mk-status__title">教学会话</strong>
       <span v-if="!embedded" class="mk-status__sep"></span>
-      <button
-        type="button"
-        class="ts-count-link"
-        :class="{ 'ts-count-link--on': pill === 'active' }"
-        title="点击筛选「进行中」会话"
-        @click="pill = pill === 'active' ? 'all' : 'active'"
-      >进行中 {{ inProgressCount }}</button>
-      <button
-        type="button"
-        class="ts-count-link"
-        :class="{ 'ts-count-link--on': pill === 'missing' }"
-        title="点击筛选「缺总结」会话"
-        @click="pill = pill === 'missing' ? 'all' : 'missing'"
-      >缺总结 {{ missingWrapupCount }}</button>
-      <button
-        type="button"
-        class="ts-count-link"
-        :class="{ 'ts-count-link--on': pill === 'attention' }"
-        title="点击筛选「待关注」会话"
-        @click="pill = pill === 'attention' ? 'all' : 'attention'"
-      >高关注 {{ highAttentionCount }}</button>
       <span v-if="advisoryCount" class="mk-status__meta" title="含建议的会话数">有建议 {{ advisoryCount }}</span>
-      <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ rows.length }} 条 · 仅显示最近 100 条</span>
+      <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ rows.length }} 条 · 仅显示最近 {{ LIST_LIMIT }} 条</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshNow">
           {{ refreshing ? '刷新中…' : '刷新' }}
@@ -37,7 +16,7 @@
       </span>
     </div>
 
-    <!-- 深链未命中提示：?session= 存在但当前列表（最近 100 条）中找不到 -->
+    <!-- 深链未命中提示：?session= 存在但当前列表（最近 LIST_LIMIT 条）中找不到 -->
     <div v-if="deepLinkMiss" class="mk-alert" role="alert">
       未能定位该会话：它可能不在最近 {{ rows.length }} 条记录内，或已被删除。
     </div>
@@ -202,11 +181,13 @@
           </tbody>
         </table>
 
-        <div v-else-if="!loadFailed" class="mk-empty">
-          <strong>{{ rows.length ? '当前筛选无会话' : '暂无教学会话' }}</strong>
-          <span>{{ rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，会话记录将自动出现在这里。' }}</span>
-          <button v-if="isFiltered && rows.length" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
-        </div>
+        <MkEmptyState
+          v-else-if="!loadFailed"
+          :title="rows.length ? '当前筛选无会话' : '暂无教学会话'"
+          :description="rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，会话记录将自动出现在这里。'"
+          :action-text="isFiltered && rows.length ? '清除筛选' : ''"
+          @action="clearFilters"
+        />
       </div>
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
       <Pagination
@@ -353,6 +334,7 @@ import Pagination from './Pagination.vue'
 import MkFilterSearch from './MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from './MkCols.vue'
+import MkEmptyState from './MkEmptyState.vue'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
     count 事件：列表加载完成后上报总条数（宿主「教学 N」徽章） */
@@ -403,13 +385,17 @@ const loadFailed = ref(false)
 /* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后重拉全量并灰标虚拟/测试行 */
 const includeTest = ref(false)
 
+/* 列表拉取上限：文案与实现共用同一常量，避免再次漂移
+   （此前文案写「最近 100 条」而实现是 limit: 1000 —— 审计 附 A #9） */
+const LIST_LIMIT = 1000
+
 /* 静默拉取：成功即整表替换；失败保留旧数据（轮询不闪空态），并标记错误条。
    force = true 绕过页面级 TTL 缓存（显式刷新/口径切换/轮询用） */
 async function fetchRows(force = false): Promise<boolean> {
   // 页面级 TTL 缓存：切换页面回来时跳过重复请求（轮询/显式刷新传 force 不受影响）
   if (!force && isPageCacheFresh('teaching-sessions') && rows.value.length) return true
   try {
-    const res = await adminTeachingSessionsApi.list({ limit: 1000, includeTest: includeTest.value })
+    const res = await adminTeachingSessionsApi.list({ limit: LIST_LIMIT, includeTest: includeTest.value })
     const body = res.data?.data ?? res.data ?? {}
     const items = body.items || []
     rows.value = items.map((s: Record<string, unknown>) => mapRow(s))
@@ -549,8 +535,11 @@ const pills = computed(() => {
   return [
     { id: 'all' as const, label: '全部', count: all.length },
     { id: 'active' as const, label: '进行中', count: all.filter((r) => r.status === 'active').length },
-    { id: 'attention' as const, label: '待关注', count: all.filter((r) => r.attention !== 'low').length },
-    { id: 'missing' as const, label: '缺总结', count: all.filter((r) => r.wrapupStatus === 'missing').length }
+    // 计数与下方 missingWrapupCount / attentionCount 同源：那两者同时服务页头基调，
+    // 避免「同一个 pill 有两个不同数字」（原状态条「高关注」按 attention==='high' 统计，
+    // 而本 pill 的筛选口径是 attention!=='low'，点击后条数对不上 —— 已删该状态条计数）。
+    { id: 'attention' as const, label: '待关注', count: attentionCount.value },
+    { id: 'missing' as const, label: '缺总结', count: missingWrapupCount.value }
   ]
 })
 /* 状态筛选选项（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
@@ -620,13 +609,11 @@ watch(filtered, () => {
   page.value = 1
 })
 
-const inProgressCount = computed(() => rows.value.filter((r) => r.status === 'active').length)
 const advisoryCount = computed(() => rows.value.filter((r) => r.hasAdvisory).length)
 const missingWrapupCount = computed(() => rows.value.filter((r) => r.wrapupStatus === 'missing').length)
 const attentionCount = computed(() => rows.value.filter((r) => r.attention !== 'low').length)
 
-/* ===== 教学概览（ts-dash：会话域结论，状态条承载） ===== */
-const highAttentionCount = computed(() => rows.value.filter((r) => r.attention === 'high').length)
+/* 教学概览（ts-dash：会话域结论，状态条承载基调；逐项计数由卡头 pills 承载，不重复渲染） */
 const tsDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if (!rows.value.length) return 'muted'
   if (missingWrapupCount.value > 0) return 'warn'
@@ -667,7 +654,7 @@ function timelineOf(r: Row): Array<{ text: string; time: string; tone: 'ok' | 'w
 }
 const route = useRoute()
 const router = useRouter()
-/** 深链存在但列表加载后仍未命中（超出最近 100 条 / 已删除） */
+/** 深链存在但列表加载后仍未命中（超出最近 LIST_LIMIT 条 / 已删除） */
 const deepLinkMiss = ref(false)
 watch(
   // 同时监听行数：刷新场景下 immediate 触发时 rows 尚未返回，仅监听 query 会错过恢复时机
@@ -750,16 +737,7 @@ defineExpose({ refreshNow })
 /* 嵌入模式（宿主学习会话页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
 .ts-embedded { flex: 1; min-height: 0; overflow: hidden; }
 /* 页头合并（替代独立状态条）：共 N 条 + 刷新按钮，与概览结论同行 */
-.ts-head-meta { font-size: var(--mk-fs-12_5); color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* 页头计数锚点（与学习者中心 lc-count-link 同形态）：缺总结/高关注可点击筛选 */
-.ts-count-link {
-  border: 0; background: transparent; padding: 2px 6px;
-  font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
-  color: var(--mk-muted); cursor: pointer; border-radius: 6px;
-  transition: color 0.12s ease, background 0.12s ease;
-}
-.ts-count-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); }
-.ts-count-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); }
+/* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136） */
 /* 总结预览行（P1-2）：单行 ellipsis + hover 全文，对齐 Intercom 最后消息预览 */
 .ts-summary-preview {
   display: block;
@@ -791,8 +769,6 @@ defineExpose({ refreshNow })
   font-weight: 700;
   letter-spacing: 0.03em;
 }
-.ts-tag--virtual { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
-.ts-tag--test { background: #fef3c7; color: #b45309; }
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }
 /* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
@@ -812,8 +788,6 @@ defineExpose({ refreshNow })
 .ts-actions .mk-link { padding: 0; }
 /* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字） */
 .ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }
-.ts-go { color: var(--mk-faint); font-weight: 700; }
-.ts-row:hover .ts-go { color: var(--mk-blue); }
 
 /* 加载失败错误条 */
 .ts-error {
@@ -1016,8 +990,6 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 /* ================= 暗色模式（D1 补完）：教学会话 ================= */
 html[data-theme='dark'] {
   .ts-mask { background: rgba(4, 8, 16, 0.55); }
-  .ts-tag--virtual { background: #1c2637; color: #8fa3bd; border-color: #33415c; }
-  .ts-tag--test { background: rgba(251, 191, 36, 0.16); color: #fcd34d; }
   .ts-panel__close { background: #232f45; color: var(--mk-muted); }
   .ts-panel__close:hover { background: #2c3a55; color: var(--mk-ink); }
   .ts-card--advisory { background: #2a2410; border-color: rgba(251, 191, 36, 0.3); }

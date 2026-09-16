@@ -3,7 +3,7 @@
   <div class="sdp-pane sdp-routing">
     <details class="sdp-routing__lineage" @toggle="onLineageToggle">
       <summary>字段血缘（产出字段 → 下游消费者 / 爆炸半径）</summary>
-      <div v-if="lineageLoading" class="sdp-none">血缘加载中…</div>
+      <MkLoading v-if="lineageLoading" inline text="血缘加载中…" />
       <table v-else-if="lineage.length" class="sdp-routing__table">
         <thead><tr><th>字段</th><th>消费者（爆炸半径）</th></tr></thead>
         <tbody>
@@ -30,6 +30,7 @@ import { adminPromptWorkbenchApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import SkillFieldRouting from '../SkillFieldRouting.vue'
 import { errText } from './sdp-shared'
+import MkLoading from '../MkLoading.vue'
 
 const props = defineProps<{ skillId: string }>()
 

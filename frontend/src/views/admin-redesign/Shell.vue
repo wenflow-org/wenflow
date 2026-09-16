@@ -750,7 +750,7 @@ html[data-theme='dark'] .mshell__crumb { background: #141c2b; border-color: #232
 @media (min-width: 1440px) {
   .mshell { grid-template-columns: 240px minmax(0, 1fr); }
   .mshell__item { font-size: 13.5px; padding: 9px 11px; }
-  .mshell__group-title { font-size: 11.5px; }
+  .mshell__group-name { font-size: 11.5px; }
   .mshell__item-badge { font-size: 11.5px; }
   .mshell__logo-full { height: 58px; }
 }
@@ -759,7 +759,7 @@ html[data-theme='dark'] .mshell__crumb { background: #141c2b; border-color: #232
 @media (min-width: 1920px) {
   .mshell { grid-template-columns: 260px minmax(0, 1fr); }
   .mshell__item { font-size: 14px; padding: 10px 12px; }
-  .mshell__group-title { font-size: 12px; }
+  .mshell__group-name { font-size: 12px; }
   .mshell__item-badge { font-size: 12px; }
   .mshell__logo-full { height: 64px; }
 }
@@ -769,7 +769,7 @@ html[data-theme='dark'] .mshell__crumb { background: #141c2b; border-color: #232
   }
   .mshell__side { padding: 18px 14px 14px; gap: 18px; }
   .mshell__logo-full { height: 72px; }
-  .mshell__group-title { font-size: 12.5px; padding: 0 12px 7px; }
+  .mshell__group-name { font-size: 12.5px; padding: 0 12px 7px; }
   .mshell__item { font-size: 14.5px; padding: 11px 12px; gap: 8px; }
   .mshell__item-badge { font-size: 12.5px; padding: 2px 9px; }
   .mshell__foot { font-size: 13px; padding: 10px 12px; }
@@ -782,7 +782,7 @@ html[data-theme='dark'] .mshell__crumb { background: #141c2b; border-color: #232
   }
   .mshell__side { padding: 22px 18px 16px; gap: 22px; }
   .mshell__logo-full { height: 72px; }
-  .mshell__group-title { font-size: 15px; padding: 0 14px 8px; }
+  .mshell__group-name { font-size: 15px; padding: 0 14px 8px; }
   .mshell__item { font-size: 17px; padding: 14px 14px; gap: 10px; border-radius: 10px; }
   .mshell__item-badge { font-size: 14px; padding: 3px 10px; }
   .mshell__foot { font-size: 15px; padding: 12px 14px; }
@@ -800,7 +800,7 @@ html[data-theme='dark'] .mshell__crumb { background: #141c2b; border-color: #232
   }
   .mshell__side { padding: 26px 22px 18px; gap: 26px; }
   .mshell__logo-full { height: 88px; }
-  .mshell__group-title { font-size: 17.5px; padding: 0 16px 9px; }
+  .mshell__group-name { font-size: 17.5px; padding: 0 16px 9px; }
   .mshell__item { font-size: 20px; padding: 16px 16px; gap: 12px; }
   .mshell__item-badge { font-size: 16.5px; padding: 4px 12px; }
   .mshell__foot { font-size: 17.5px; padding: 14px 16px; }

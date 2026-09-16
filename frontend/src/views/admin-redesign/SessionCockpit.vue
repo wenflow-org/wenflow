@@ -2,13 +2,13 @@
   <div class="mk-page cp">
     <!-- ===== 顶部栏：身份 + 状态（控制全部下沉到下方统一控制台） ===== -->
     <header class="cp-topbar">
-      <div class="cp-topbar__row">
+      <div class="mk-status" :class="`mk-status--${headerHealth}`">
+        <span class="mk-status__dot" aria-hidden="true"></span>
         <button type="button" class="mk-back" @click="goBack">← {{ backLabel }}</button>
-        <h1 class="cp-title">会话监控 <span class="cp-title__id mono">{{ shortId }}</span></h1>
-        <div class="cp-topbar__spacer"></div>
+        <strong class="mk-status__title">会话监控 <span class="cp-title__id mono">{{ shortId }}</span></strong>
         <!-- 自动驾驶进行中的状态指示（停止按钮在控制台） -->
-        <span v-if="autopilotRunning" class="cp-topbar__autopilot">▶ 自动驾驶 · {{ Number(autopilot.steps || 0) }} 步</span>
-        <span class="cp-topbar__sep"></span>
+        <span v-if="autopilotRunning" class="mk-status__meta cp-topbar__autopilot">▶ 自动驾驶 · {{ Number(autopilot.steps || 0) }} 步</span>
+        <span class="mk-status__sep"></span>
         <!-- 双轴状态：生命周期徽章（轴 A）+ 阶段条（轴 B） -->
         <RunStateBadge :status="runLifecycleState" :hint="statusTitle" :pulse="autopilotRunning" />
         <RunStageBar
@@ -17,12 +17,12 @@
           :task-progress="runStageTaskProgress"
           :show-task-text="false"
         />
-        <span class="cp-topbar__sep"></span>
-        <span class="cp-topbar__mode">{{ modeText }}</span>
+        <span class="mk-status__sep"></span>
+        <span class="mk-status__meta">{{ modeText }}</span>
         <!-- 日期模拟推进进度（虚拟会话；未开启则显示"未开启"） -->
         <span
           v-if="simClock"
-          class="cp-topbar__mode cp-simday"
+          class="mk-status__meta cp-simday"
           :title="simClock.enabled
             ? `日期模拟：起点 ${simClock.baseDate}；已推进 ${simClock.dayIndex} 天（已过 ${simClock.elapsedDays}/${simClock.maxSimulatedDays}）；课表 ${simClock.courseWeekdays.join('/')} · 每天 ${simClock.lessonsPerDay} 节${simClock.autoAdvance ? ' · 自动推进已开' : ''}`
             : '日期模拟未开启（可在「日期模拟」设置开启）'"
@@ -38,10 +38,21 @@
             : `本会话累计 AI 调用 ${budgetUsage.used}/${budgetUsage.limit}（含重试）；可在画像/故事预算中调整上限`"
         >
           <span class="cp-budget__label">AI 调用</span>
-          <span class="cp-budget__track"><span class="cp-budget__fill" :style="{ width: `${budgetPct}%` }"></span></span>
+          <!-- 进度量化统一走 .mk-minibar：预算三档（默认 / warn / full）与 ok/warn/bad 语义一一对应 -->
+          <span class="mk-minibar cp-budget__track">
+            <i
+              class="mk-minibar__fill"
+              :data-tone="budgetTone === 'full' ? 'bad' : budgetTone === 'warn' ? 'warn' : 'ok'"
+              :style="{ width: `${budgetPct}%` }"
+            ></i>
+          </span>
           <span class="cp-budget__num">{{ budgetUsage.used }}/{{ budgetUsage.unlimited ? '不限' : budgetUsage.limit }}</span>
         </span>
-        <button type="button" class="cp-topbar__btn" :disabled="busy" @click="refresh">刷新</button>
+        <span class="mk-status__actions">
+          <button type="button" class="mk-status__action" :disabled="busy" @click="refresh">
+            {{ busy ? '刷新中…' : '刷新' }}
+          </button>
+        </span>
       </div>
     </header>
 
@@ -98,7 +109,7 @@
               每课回合上限
               <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="每课自动推进的最大对话轮数（自动推进本课与自动驾驶共用）" aria-label="每课回合上限" />
             </label>
-            <!-- 运行中重开本课（失败后的「重试」由生命周期区统一承载，不重复） -->
+            <!-- 进行中重开本课（失败后的「重试」由生命周期区统一承载，不重复） -->
             <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重开本课</button>
           </template>
         </template>
@@ -138,9 +149,7 @@
             <span class="mk-card__meta">{{ pathDetailMeta || '等待 Path 生成' }}</span>
           </div>
           <div class="cp-path-detail">
-            <div v-if="!session" class="cp-path-skel" aria-hidden="true">
-              <div v-for="n in 3" :key="n"></div>
-            </div>
+            <MkSkeleton v-if="!session" variant="rows" :count="3" :h="40" :radius="8" />
             <template v-else>
               <template v-if="hasPath">
                 <div class="cp-path-detail__head">
@@ -487,12 +496,12 @@
       <!-- ===== 右列：阶段卡（按当前阶段） + 运维面板（折叠） ===== -->
       <aside class="cp-sidebar">
         <!-- Goal 阶段卡：预生成 Path（左对话 / 右提案 两列语义） -->
-        <section v-if="!isRealMode && !isBlackbox && activeTab === 'goal'" class="cp-aside-card">
-          <div class="cp-aside-card__head">
-            <h4>预生成 Path <span class="cp-aside-card__dot" :class="hasPath ? 'is-ok' : goalConverged ? 'is-warn' : 'is-muted'"></span></h4>
-            <span class="mk-card__meta">Goal 收敛后生成学习路径方案</span>
+        <section v-if="!isRealMode && !isBlackbox && activeTab === 'goal'" class="mk-card">
+          <div class="mk-card__head">
+            <h4 class="mk-card__title">预生成 Path <span class="cp-aside-dot" :class="hasPath ? 'is-ok' : pathGenerationFailed ? 'is-bad' : goalConverged ? 'is-warn' : 'is-muted'"></span></h4>
+            <span class="mk-card__meta">{{ hasPath ? `已生成 ${pathMilestonesView.length} 个里程碑 · ${learnLessons.length || '—'} 节课` : goalConverged ? '目标已收敛，待生成' : '未生成（目标未收敛）' }}</span>
           </div>
-          <div class="cp-aside-card__body">
+          <div class="cp-aside-body">
             <template v-if="hasPath">
               <div class="cp-aside-state cp-aside-state--ok">
                 <strong>✓ Path 方案已生成</strong>
@@ -522,12 +531,12 @@
         </section>
 
         <!-- Path 阶段卡：Path 评审（左方案 / 右评审 两列语义） -->
-        <section v-if="!isRealMode && !isBlackbox && activeTab === 'path'" class="cp-aside-card">
-          <div class="cp-aside-card__head">
-            <h4>Path 评审 <span class="cp-aside-card__dot" :class="pathReviewStatus ? 'is-ok' : 'is-muted'"></span></h4>
+        <section v-if="!isRealMode && !isBlackbox && activeTab === 'path'" class="mk-card">
+          <div class="mk-card__head">
+            <h4 class="mk-card__title">Path 评审 <span class="cp-aside-dot" :class="pathReviewStatus ? 'is-ok' : 'is-muted'"></span></h4>
             <span class="mk-card__meta">{{ pathReviewStatus ? pathReviewDecisionLabel : '未评审 — 评审只是质量检查，可直接启动 Learn' }}</span>
           </div>
-          <div class="cp-aside-card__body">
+          <div class="cp-aside-body">
             <div class="cp-review-panel__actions">
               <button type="button" class="cp-btn cp-btn--sm" :disabled="reviewPathDisabled" :title="reviewPathTitle" @click="act('reviewPath')">评审</button>
               <button v-if="acceptPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="acceptPathDisabled" :title="acceptPathTitle" @click="act('acceptPath')">接受</button>
@@ -548,12 +557,12 @@
         </section>
 
         <!-- Learn 阶段卡：运行状态（左课堂 / 右监控 两列语义） -->
-        <section v-if="!isRealMode && !isBlackbox && activeTab === 'learning'" class="cp-aside-card">
-          <div class="cp-aside-card__head">
-            <h4>运行状态 <span class="cp-aside-card__dot" :class="autopilotRunning ? 'is-ok' : isPaused ? 'is-warn' : 'is-muted'"></span></h4>
+        <section v-if="!isRealMode && !isBlackbox && activeTab === 'learning'" class="mk-card">
+          <div class="mk-card__head">
+            <h4 class="mk-card__title">运行状态 <span class="cp-aside-dot" :class="`is-${autopilotHealth}`"></span></h4>
             <span class="mk-card__meta">{{ sessionStatusLabel }}</span>
           </div>
-          <div class="cp-aside-card__body">
+          <div class="cp-aside-body">
             <div class="cp-run">
               <div v-if="autopilotResultText && !autopilotRunning" class="cp-run__autopilot-result" :class="{
                 'cp-run__autopilot-result--ok': autopilot.status === 'completed',
@@ -593,12 +602,12 @@
         </section>
 
         <!-- 总结阶段卡：总结统计 -->
-        <section v-if="!isRealMode && !isBlackbox && activeTab === 'wrapup'" class="cp-aside-card">
-          <div class="cp-aside-card__head">
-            <h4>总结统计 <span class="cp-aside-card__dot" :class="hasWrapup ? 'is-ok' : 'is-muted'"></span></h4>
+        <section v-if="!isRealMode && !isBlackbox && activeTab === 'wrapup'" class="mk-card">
+          <div class="mk-card__head">
+            <h4 class="mk-card__title">总结统计 <span class="cp-aside-dot" :class="hasWrapup ? 'is-ok' : 'is-muted'"></span></h4>
             <span class="mk-card__meta">{{ hasWrapup ? '终局总结已生成' : '学习完成后生成' }}</span>
           </div>
-          <div class="cp-aside-card__body">
+          <div class="cp-aside-body">
             <div class="cp-aside-state" :class="hasWrapup ? 'cp-aside-state--ok' : 'cp-aside-state--empty'">
               <span class="cp-aside-state__icon" aria-hidden="true">{{ hasWrapup ? '✓' : '◌' }}</span>
               <strong>{{ completedTaskCount }}/{{ learnLessons.length || '—' }} 课已完成</strong>
@@ -673,7 +682,7 @@
             <div class="cp-logs" ref="logBox" aria-live="polite" aria-label="实时日志" @scroll="onLogScroll">
               <span class="cp-logs__follow" :class="{ 'is-paused': !logFollowsBottom }" :title="logFollowsBottom ? '自动跟随最新日志' : '已暂停跟随'" @click="scrollToBottom">{{ logFollowsBottom ? '⏵' : '⏸' }}</span>
               <template v-if="!session">
-                <div v-for="n in 4" :key="n" class="cp-log-skel" aria-hidden="true"></div>
+                <MkSkeleton v-for="n in 4" :key="n" :h="11" :radius="4" />
               </template>
               <template v-else>
                 <div v-for="(l, i) in filteredLogs" :key="i" class="cp-log" :class="{ 'cp-log--error': l.view.isError }">
@@ -757,6 +766,8 @@ import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
+import MkSkeleton from './MkSkeleton.vue'
+import { runHealthTone, statusText } from './statusText'
 import { parseLogEntry, type LogEntryView } from './sessionLog'
 import { scoreBadgeCls, scoreFillPct, scoreToPct, scoreTone } from './evalScore'
 import { traceSummaryRows, traceRawJson, type TraceKeyValue } from './traceSummary'
@@ -1089,7 +1100,7 @@ const autopilotStartDisabled = computed(() => {
 const autopilotStartTitle = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (isTerminal.value) return '会话已终态，无需启动全自动'
-  if (autopilotRunning.value) return '全自动正在运行中'
+  if (autopilotRunning.value) return '全自动正在进行中'
   return '自动驾驶：后台持续推进，直达 Path 全部任务完成（每课回合数受「每课回合上限」约束；可随时「停止自动驾驶」暂停，进度保留）'
 })
 const autopilotResultText = computed(() => {
@@ -1126,7 +1137,7 @@ const runLifecycleState = computed(() => {
   if (isPaused.value) return 'paused'
   // autopilot 停止 → 已暂停
   if (autopilot.value.status === 'stopped') return 'paused'
-  // 运行中（含手动步进）
+  // 进行中（含手动步进）
   if (st === 'running' || st === 'created') return st === 'created' ? 'created' : 'running'
   return st || 'created'
 })
@@ -1140,6 +1151,28 @@ const runStageTaskProgress = computed(() => {
   if (total <= 0) return null
   return { done, total }
 })
+
+/**
+ * 状态点健康档（R2，与 RunStateBadge 同源：runHealthTone → runStateTone）。
+ * 页头：会话未加载 → muted（「暂无数据」），不猜成「需关注」。
+ */
+const headerHealth = computed(() => runHealthTone(session.value ? runLifecycleState.value : null))
+
+/**
+ * 「运行状态」卡状态点：自动驾驶终态优先，无自动驾驶状态时回到会话生命周期。
+ * 失败 / 未完成（疑似卡死）/ 收尾失败 必须落到 bad —— 与同一张卡里
+ * .cp-run__autopilot-result--bad 的判定保持一致，不再显示灰点。
+ */
+const autopilotHealthState = computed<string | null>(() => {
+  if (autopilotRunning.value) return 'running'
+  if (isPaused.value) return 'paused'
+  const st = String(autopilot.value.status || '').toLowerCase()
+  if (st === 'stopped') return 'paused'
+  if (st === 'incomplete' || st === 'failed' || st === 'finalization_failed') return 'failed'
+  if (st) return st
+  return session.value ? runLifecycleState.value : null
+})
+const autopilotHealth = computed(() => runHealthTone(autopilotHealthState.value))
 
 /* 阶段流：后端 currentStage 枚举是 goal/path/teaching，前端归一为 learning */
 const stageFlow = ['goal', 'path', 'learning', 'wrapup'] as const
@@ -1907,10 +1940,8 @@ function stageMark(st: string) {
 const sessionStatusLabel = computed(() => {
   if (isRealMode.value) return '只读'
   if (autopilotRunning.value) return '自动驾驶'
-  if (session.value?.status === 'running') return '运行中'
-  if (session.value?.status === 'completed') return '已完成'
-  if (session.value?.status === 'failed') return '失败'
-  return ''
+  // 状态词一律走全局字典（单源）：running → 进行中，不再在页内另写一套同义词
+  return statusText(String(session.value?.status ?? ''))
 })
 /** 阶段迷你状态文本 */
 function stageMiniStatus(st: StageKey) {
@@ -2614,51 +2645,14 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 /* ===== Top bar ===== */
 .cp { gap: 0; }
 .cp-topbar {
-  background: var(--mk-surface);
-  border-bottom: 1px solid var(--mk-line);
-  padding: 12px 16px 0;
+  /* 状态条外观（表面/描边/间距/内容协议）由 .mk-status 提供，本类只负责"粘性放置" */
+  background: var(--mk-bg);
   position: sticky;
   top: 0;
   z-index: 10;
   margin: -8px -8px 0;
-}
-.cp-topbar__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding-bottom: 8px;
-}
-.cp-title { margin: 0; font-size: var(--mk-fs-15); line-height: 1.4; }
-.cp-title__id { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 600; }
-.cp-topbar__spacer { flex: 1; }
-.cp-topbar__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.cp-topbar__dot--ok { background: var(--mk-green); }
-.cp-topbar__dot--info { background: var(--mk-blue); }
-.cp-topbar__dot--warn { background: var(--mk-amber); }
-.cp-topbar__dot--bad { background: var(--mk-red); }
-.cp-topbar__dot--muted { background: var(--mk-faint); }
-.cp-topbar__status { font-size: var(--mk-fs-13); font-weight: 700; }
-.cp-topbar__mode { font-size: var(--mk-fs-12); color: var(--mk-faint); }
-.cp-topbar__btn {
-  border: 1px solid var(--mk-line);
-  border-radius: 6px;
-  background: var(--mk-surface);
-  color: var(--mk-ink);
-  font: inherit;
-  font-size: var(--mk-fs-12);
-  font-weight: 600;
-  padding: 4px 10px;
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-.cp-topbar__btn:hover:not(:disabled) { border-color: var(--mk-blue); color: var(--mk-blue); }
-.cp-topbar__btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.cp-topbar__btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
-.cp-topbar__btn--primary:hover:not(:disabled) { opacity: 0.9; }
-.cp-topbar__btn--danger { background: var(--mk-red-fill, #dc2626); border-color: var(--mk-red-fill, #dc2626); color: #fff; }
-.cp-topbar__sep { width: 1px; height: 20px; background: var(--mk-line); flex-shrink: 0; margin: 0 2px; }
-.cp-topbar__autopilot {
+  padding: 8px 8px 0;
+}.cp-topbar__autopilot {
   font-size: var(--mk-fs-12);
   font-weight: 700;
   color: var(--mk-amber);
@@ -2669,27 +2663,26 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 }
 
 /* 预算消耗预警条（顶栏：累积 AI 调用 used/limit，分档变色） */
+/* 预算消耗预警条（顶栏：累积 AI 调用 used/limit，分档变色）
+   进度量化走 .mk-minibar（track/fill 形状与三段 tone 由原语提供），本类只保留胶囊外观与分档底色 */
 .cp-budget {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 3px 10px;
   border-radius: 999px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border: 1px solid var(--mk-line);
+  background: var(--mk-card-foot-bg);
   font-size: var(--mk-fs-11);
   white-space: nowrap;
   cursor: help;
 }
-.cp-budget__label { font-weight: 700; color: #64748b; }
-.cp-budget__track { width: 56px; height: 6px; border-radius: 3px; background: #e2e8f0; overflow: hidden; }
-.cp-budget__fill { display: block; height: 100%; border-radius: 3px; background: #10b981; transition: width 0.3s ease; }
-.cp-budget__num { font-weight: 800; color: #334155; font-variant-numeric: tabular-nums; }
-.cp-budget.is-warn { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.07); }
-.cp-budget.is-warn .cp-budget__fill { background: #f59e0b; }
-.cp-budget.is-full { border-color: rgba(239, 68, 68, 0.5); background: rgba(239, 68, 68, 0.07); }
-.cp-budget.is-full .cp-budget__fill { background: #ef4444; }
-.cp-budget.is-full .cp-budget__num { color: #dc2626; }
+.cp-budget__label { font-weight: 700; color: var(--mk-muted); }
+.cp-budget__track { width: 56px; }
+.cp-budget__num { font-weight: 800; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
+.cp-budget.is-warn { border-color: rgba(245, 158, 11, 0.45); background: var(--mk-amber-bg); }
+.cp-budget.is-full { border-color: rgba(239, 68, 68, 0.5); background: var(--mk-red-bg); }
+.cp-budget.is-full .cp-budget__num { color: var(--mk-red); }
 
 /* ===== 统一控制台（阶段 tab + 该阶段操作，置顶汇聚） ===== */
 .cp-console {
@@ -2707,7 +2700,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-console__tabs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .cp-console__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
 .cp-console__sep { width: 1px; height: 18px; background: var(--mk-line); flex-shrink: 0; }
-.cp-console__spacer { flex: 1; }
+
 .cp-console__note { font-size: var(--mk-fs-12); color: var(--mk-faint); }
 
 /* ----- Stage tabs（pill 形态，置于控制台内） ----- */
@@ -2755,35 +2748,12 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   min-width: 0;
 }
 
-/* ===== 右列阶段卡（goal→预生成 Path / path→评审 / learning→运行 / wrapup→统计） ===== */
-.cp-aside-card {
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-sm);
-  overflow: hidden;
-}
-.cp-aside-card__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--mk-line);
-}
-.cp-aside-card__head h4 {
-  margin: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: var(--mk-fs-12_5);
-  font-weight: 800;
-}
-.cp-aside-card__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-faint); flex-shrink: 0; }
-.cp-aside-card__dot.is-ok { background: var(--mk-green); }
-.cp-aside-card__dot.is-warn { background: var(--mk-amber); }
-.cp-aside-card__dot.is-muted { background: var(--mk-faint); }
-.cp-aside-card__body { padding: 12px 14px; }
+/* ===== 右列阶段卡（goal→预生成 Path / path→评审 / learning→运行 / wrapup→统计） ===== */.cp-aside-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-faint); flex-shrink: 0; }
+.cp-aside-dot.is-ok { background: var(--mk-green); }
+.cp-aside-dot.is-warn { background: var(--mk-amber); }
+.cp-aside-dot.is-bad { background: var(--mk-red); }
+.cp-aside-dot.is-muted { background: var(--mk-faint); }
+.cp-aside-body { padding: 12px 14px; }
 
 /* 阶段卡内的状态块（空态/就绪/进行中） */
 .cp-aside-state {
@@ -2854,20 +2824,10 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 
 /* ----- Run in sidebar ----- */
 .cp-run { display: grid; gap: 10px; }
-.cp-run__actions { display: grid; gap: 6px; }
-.cp-btn--block { width: 100%; justify-content: center; }
-.cp-run__autopilot-alert {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(245, 158, 11, 0.1);
-  font-size: var(--mk-fs-12);
-  font-weight: 700;
-  color: var(--mk-amber);
-}
-.cp-run__autopilot-alert-icon { font-size: var(--mk-fs-14); }
+
+
+
+
 .cp-run__autopilot-result { font-size: var(--mk-fs-12); font-weight: 700; padding: 6px 10px; border-radius: 6px; background: #f8fafc; }
 .cp-run__autopilot-result--ok { color: var(--mk-green, #15803d); }
 .cp-run__autopilot-result--bad { color: var(--mk-red, #b91c1c); }
@@ -2921,10 +2881,8 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-run__readiness--ok { color: var(--mk-green, #15803d); }
 .cp-run__readiness--pending { color: var(--mk-amber, #b45309); }
 .cp-run__readiness--bad { color: var(--mk-red, #b91c1c); }
-.cp-autopilot__badge {
-  font-size: var(--mk-fs-11); font-weight: 700; padding: 3px 8px; border-radius: 999px;
-}
-.cp-autopilot__badge--running { background: rgba(245, 158, 11, 0.14); color: var(--mk-amber, #b45309); }
+
+
 
 /* ----- Logs in sidebar ----- */
 .cp-logs {
@@ -3016,10 +2974,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   color: var(--mk-code-fg); font: 10px/1.5 var(--mk-mono); white-space: pre-wrap;
   word-break: break-all; max-height: 120px; overflow: auto;
 }
-.cp-log-skel { height: 11px; border-radius: 4px; background: linear-gradient(90deg, #eef2fa, #f7f9fc 55%, #eef2fa); background-size: 220% 100%; animation: cp-skel 1.4s ease infinite; }
-@keyframes cp-skel { from { background-position: 120% 0; } to { background-position: -120% 0; } }
-.cp-path-skel { display: grid; gap: 8px; }
-.cp-path-skel > div { height: 40px; border-radius: 8px; background: linear-gradient(90deg, #eef2fa, #f7f9fc 55%, #eef2fa); background-size: 220% 100%; animation: cp-skel 1.4s ease infinite; }
+/* 骨架形状走 MkSkeleton（shimmer/暗色/reduced-motion 均由 .mk-skeleton 统一提供） */
 
 /* Degrade */
 .cp-degrade {
@@ -3359,14 +3314,11 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-lesson-head__state[data-state='done'] { background: var(--mk-green-bg); color: var(--mk-green); }
 .cp-lesson-head__state[data-state='active'] { background: #eff6ff; color: var(--mk-blue); }
 .cp-lesson-head__state[data-state='failed'] { background: var(--mk-red-bg); color: var(--mk-red); }
-.cp-lesson-head__nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.cp-lesson-head__select { max-width: 240px; border: 1px solid var(--mk-line); border-radius: 6px; background: var(--mk-surface); color: var(--mk-muted); padding: 4px 6px; font: inherit; font-size: var(--mk-fs-11); }
-.cp-teaching-history { display: flex; flex-wrap: wrap; gap: 6px; }
-.cp-history-btn {
-  border: 1px solid var(--mk-line); border-radius: 6px; background: var(--mk-surface); color: var(--mk-muted);
-  padding: 4px 7px; font: inherit; font-size: var(--mk-fs-11); cursor: pointer;
-}
-.cp-history-btn:hover, .cp-history-btn.is-current { border-color: var(--mk-blue); color: var(--mk-blue); background: #eff6ff; }
+
+
+
+
+
 
 /* ===== Wrapup 学习报告 ===== */
 .cp-wrapup-lessons {
@@ -3635,11 +3587,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-sidebar { position: static; max-height: none; }
 }
 @media (min-width: 2000px) {
-  .cp-body { grid-template-columns: minmax(0, 1fr) 380px; }
-  .cp-title { font-size: 18px; }
-  .cp-title__id { font-size: 13px; }
-  .cp-topbar__btn { font-size: 13px; }
-  .cp-topbar__status { font-size: 15px; }
+  .cp-body { grid-template-columns: minmax(0, 1fr) 380px; }
   .cp-stage { font-size: 15px; }
   .cp-stage__label { font-size: 15px; }
   .cp-stage__progress { font-size: 12px; }
@@ -3647,8 +3595,8 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-btn--sm { font-size: 12.5px; padding: 6px 12px; }
   .cp-none { font-size: 14px; }
   .cp-sidebar__toggle { font-size: 14px; }
-  .cp-eval-card__label { font-size: 12px; }
-  .cp-eval-card__value { font-size: 14px; }
+
+
   .cp-timeline__kind { font-size: 12px; }
   .cp-timeline__stage { font-size: 12px; }
   .cp-timeline__title { font-size: 13.5px; }
@@ -3714,11 +3662,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-trace-list__body { font-size: 11.5px; }
 }
 @media (min-width: 2800px) {
-  .cp-body { grid-template-columns: minmax(0, 1fr) 440px; }
-  .cp-title { font-size: 21px; }
-  .cp-title__id { font-size: 15.5px; }
-  .cp-topbar__btn { font-size: 15.5px; }
-  .cp-topbar__status { font-size: 17.5px; }
+  .cp-body { grid-template-columns: minmax(0, 1fr) 440px; }
   .cp-stage { font-size: 17.5px; }
   .cp-stage__label { font-size: 17.5px; }
   .cp-stage__progress { font-size: 14px; }
@@ -3726,8 +3670,8 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-btn--sm { font-size: 14.5px; padding: 7px 14px; }
   .cp-none { font-size: 16.5px; }
   .cp-sidebar__toggle { font-size: 16.5px; }
-  .cp-eval-card__label { font-size: 14px; }
-  .cp-eval-card__value { font-size: 16.5px; }
+
+
   .cp-timeline__kind { font-size: 14px; }
   .cp-timeline__stage { font-size: 14px; }
   .cp-timeline__title { font-size: 16px; }
@@ -3794,13 +3738,9 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 }
 
 /* ================= 暗色模式（D1 补完）：会话座舱 ================= */
-html[data-theme='dark'] {
-  .cp-budget__track { background: #232f45; }
-  .cp-stage:hover:not(:disabled) { background: #1f2b40; }
+html[data-theme='dark'] {  .cp-stage:hover:not(:disabled) { background: #1f2b40; }
   .cp-stage--active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
-  .cp-run__autopilot-result { background: #141c2b; }
-  .cp-kv, .cp-kv--wrap, .cp-flag, .cp-budget { background: #141c2b; }
-  .cp-transcript__message { background: #141c2b; border-left-color: #2a3850; }
+  .cp-run__autopilot-result { background: #141c2b; }  .cp-transcript__message { background: #141c2b; border-left-color: #2a3850; }
   .cp-transcript__message.is-teacher { background: rgba(91, 141, 239, 0.12); border-left-color: var(--mk-blue); }
   .cp-transcript__message.is-learner { background: rgba(45, 212, 191, 0.1); border-left-color: var(--mk-teal); }
   .cp-review { background: #141c2b; }
@@ -3809,11 +3749,11 @@ html[data-theme='dark'] {
   .cp-learn-tree__lesson.is-active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; border-left-color: var(--mk-blue); }
   .cp-learn-tree__lesson.is-pending:hover { background: rgba(251, 191, 36, 0.12); color: #fcd34d; }
   .cp-lesson-wrapup__kp-status.is-learning { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
-  .cp-history-btn:hover, .cp-history-btn.is-current { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
-  .cp-lesson-wrapup__ok { background: rgba(74, 222, 128, 0.12); }
-  .cp-wrapup-badge { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
-  .cp-timeline__row { background: #141c2b; }
-  .cp-verdict { background: #141c2b; }
+
+
+
+
+
   .cp-log__phase { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
   /* 补漏：wrapup 分数/卡片/小节/trace 面板/时间线标签 */
   .cp-lesson-wrapup__score { background: #1d2739; color: #9fb0c8; }
@@ -3843,8 +3783,6 @@ html[data-theme='dark'] {
   .cp-lesson-wrapup { background: linear-gradient(135deg, rgba(74, 222, 128, 0.1), #141c2b); }
   .cp-wrapup-stats { background: linear-gradient(135deg, rgba(91, 141, 239, 0.1), #141c2b); }
   .cp-trace-list > li { background: #141c2b; }
-  .cp-log-skel,
-  .cp-path-skel > div { background: linear-gradient(90deg, #1d2739, #2a3a55 55%, #1d2739); }
   .cp-eval__score { background: #1d2739; }
   .cp-finding__sev { background: #253049; }
   .cp-finding__sev[data-sev='minor'] { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
@@ -3861,9 +3799,5 @@ html[data-theme='dark'] {
   .cp-trace-list__metrics > span,
   .cp-trace-list__kv > span { background: #1d2739; }
   .cp-trace-list__flags > span { background: #253049; }
-  .cp-trace-list__flags > span.active { background: rgba(91, 141, 239, 0.16); color: #9db8f5; border-color: rgba(91, 141, 239, 0.45); }
-  .cp-budget { border-color: #2a3850; }
-  .cp-budget__label { color: #9fb0c8; }
-  .cp-budget__num { color: #e6edf7; }
-}
+  .cp-trace-list__flags > span.active { background: rgba(91, 141, 239, 0.16); color: #9db8f5; border-color: rgba(91, 141, 239, 0.45); }}
 </style>

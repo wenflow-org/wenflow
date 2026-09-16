@@ -54,7 +54,7 @@
     >
       <span class="ov-health__dot" aria-hidden="true"></span>
       <strong class="ov-health__title">仿真通道 · {{ simHeadline }}</strong>
-      <span class="ov-health__sub">今日虚拟调用 {{ runStats.todayCalls.toLocaleString() }} · 完成率 {{ runStats.completionRate }}% · 运行中 {{ runStats.running }} · 失败 {{ runStats.failed }}</span>
+      <span class="ov-health__sub">今日虚拟调用 {{ runStats.todayCalls.toLocaleString() }} · 完成率 {{ runStats.completionRate }}% · 进行中 {{ runStats.running }} · 失败 {{ runStats.failed }}</span>
       <span class="brief-card__go">虚拟学习者 →</span>
     </button>
 
@@ -356,13 +356,14 @@
       </section>
     </div>
   </div>
-  <div v-else-if="liveLoading" class="mk-empty mk-empty--min">
-    <p class="brief-card__note"><span class="mk-spinner"></span> 正在加载真实数据…</p>
-  </div>
-  <div v-else class="mk-empty mk-empty--min">
-    <p class="brief-card__note">真实数据暂不可用，请刷新或稍后重试。</p>
-    <button type="button" class="mk-empty__action" @click="retryOverview">重试</button>
-  </div>
+  <MkLoading v-else-if="liveLoading" min text="正在加载真实数据…" />
+  <MkEmptyState
+    v-else
+    min
+    title="真实数据暂不可用，请刷新或稍后重试。"
+    action-text="重试"
+    @action="retryOverview"
+  />
 </template>
 
 <script setup lang="ts">
@@ -373,6 +374,8 @@ import { adminHealthCenterApi } from '@/api/adminApi';
 import { TERMS } from './terms';
 import MkKpi from './MkKpi.vue';
 import MkChart from './MkChart.vue';
+import MkEmptyState from './MkEmptyState.vue';
+import MkLoading from './MkLoading.vue';
 import type { EChartsCoreOption } from 'echarts/core';
 import { useSafePolling } from '@/composables/useSafePolling';
 import { useIsDark } from '@/composables/useIsDark';
@@ -602,7 +605,7 @@ const simTitle = computed(() => {
     `已完成 ${r.completed}`,
     `系统失败 ${r.failed}`,
     `人为终止 ${r.abandoned}`,
-    `运行中 ${r.running}`,
+    `进行中 ${r.running}`,
     '点击进入「虚拟学习者」',
   ].join(' · ')
 })
@@ -995,7 +998,7 @@ watch(liveLoading, (loading) => {
 .wq__bars { display: flex; gap: 2px; height: 8px; border-radius: 99px; overflow: hidden; background: #f0f3f9; }
 .wq__bar { height: 100%; border-radius: 99px; }
 .wq__bar--ok { background: var(--mk-green); }
-.wq__bar--blue { background: var(--mk-blue); }
+
 .wq__bar--warn { background: var(--mk-amber); }
 .wq__bar--bad { background: var(--mk-red); }
 .wq__nums { grid-column: 2; font-size: var(--mk-fs-12); color: var(--mk-faint); }
@@ -1371,9 +1374,9 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .wq__label { font-size: 14px; }
   .wq__nums { font-size: 13.5px; }
   .wq__note { font-size: 14px; }
-  .usage__big strong { font-size: 30px; }
-  .usage__big span { font-size: 13.5px; }
-  .usage__big em { font-size: 14.5px; }
+
+
+
   .usage__label { font-size: 13px; }
   .usage__row { font-size: 14px; }
   .usage__fails li { font-size: 14px; }
@@ -1407,9 +1410,9 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .wq__label { font-size: 16px; }
   .wq__nums { font-size: 15.5px; }
   .wq__note { font-size: 16px; }
-  .usage__big strong { font-size: 34px; }
-  .usage__big span { font-size: 15.5px; }
-  .usage__big em { font-size: 16.5px; }
+
+
+
   .usage__label { font-size: 15px; }
   .usage__row { font-size: 16px; }
   .usage__fails li { font-size: 16px; }
@@ -1441,9 +1444,9 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .wq__label { font-size: 14px; }
   .wq__nums { font-size: 13.5px; }
   .wq__note { font-size: 14px; }
-  .usage__big strong { font-size: 30px; }
-  .usage__big span { font-size: 13.5px; }
-  .usage__big em { font-size: 14.5px; }
+
+
+
   .usage__label { font-size: 13px; }
   .usage__row { font-size: 14px; }
   .usage__fails li { font-size: 14px; }

@@ -58,11 +58,15 @@
           </tbody>
         </table>
       </div>
-      <div v-else-if="defsFailed" class="mk-empty">
-        <span class="mk-empty__icon" aria-hidden="true">!</span>
-        <strong>成就定义加载失败</strong>
-        <button type="button" class="mk-empty__action" @click="loadDefs">重试</button>
-      </div>
+      <MkEmptyState
+        v-else-if="defsFailed"
+        icon="!"
+        title="成就定义加载失败"
+        action-text="重试"
+        @action="loadDefs"
+      />
+      <!-- 原先缺 v-else 兜底：后端返回空数组时卡内什么都不渲染（审计 附 A #10） -->
+      <MkEmptyState v-else icon="◌" title="暂无成就定义" />
     </div>
 
     <!-- 解锁记录 -->
@@ -137,15 +141,20 @@
           </tbody>
         </table>
       </div>
-      <div v-else-if="recordsFailed" class="mk-empty">
-        <span class="mk-empty__icon" aria-hidden="true">!</span>
-        <strong>解锁记录加载失败</strong>
-        <button type="button" class="mk-empty__action" @click="reloadRecords">重试</button>
-      </div>
-      <div v-else class="mk-empty mk-empty--min">
-        <strong>还没有解锁记录</strong>
-        <span>用户完成任务、连续学习、达成里程碑后自动解锁，也可在「成就定义」手动发放。</span>
-      </div>
+      <MkEmptyState
+        v-else-if="recordsFailed"
+        icon="!"
+        title="解锁记录加载失败"
+        action-text="重试"
+        @action="reloadRecords"
+      />
+      <MkEmptyState
+        v-else
+        icon="◌"
+        title="还没有解锁记录"
+        description="用户完成任务、连续学习、达成里程碑后自动解锁，也可在「成就定义」手动发放。"
+        min
+      />
       <Pagination
         v-if="totalRecords > pageSize"
         v-model:page="recordPage"
@@ -217,13 +226,14 @@ import { timeAgo, errMsg } from './live'
 import { adminAchievementsApi, adminUsersApi, type AchievementDef, type AchievementRecord } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
-import { askConfirm } from './useConfirm'
+import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from './MkFilterSearch.vue'
 import AchIcon from './AchIcon.vue'
+import MkEmptyState from './MkEmptyState.vue'
 
 const achTab = ref<'defs' | 'records'>('defs')
 function switchAchTab(t: 'defs' | 'records') {
@@ -350,6 +360,7 @@ async function revoke(r: AchievementRecord & { busy?: boolean }) {
     title: '撤回成就',
     message: `确认撤回「${r.title}」（${r.user?.name || '未知用户'}）？\n将扣回 ${r.xpReward} XP。`,
     confirmText: '撤回',
+    busy: true,
   })
   if (!ok) return
   r.busy = true
@@ -358,8 +369,10 @@ async function revoke(r: AchievementRecord & { busy?: boolean }) {
     records.value = records.value.filter((x) => x.id !== r.id)
     totalRecords.value = Math.max(0, totalRecords.value - 1)
     toast.success('成就已撤回')
+    doneConfirm()
   } catch (e) {
     toast.error(`撤回失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     r.busy = false
   }
@@ -445,7 +458,7 @@ onMounted(() => {
 <style scoped>
 .ac-list { min-height: 120px; }
 .ac-icon { margin-right: 4px; }
-.ac-icon--lg { font-size: 22px; margin-right: 10px; }
+
 
 .ac-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ac-filter .mk-filter__input { min-width: 240px; }

@@ -14,7 +14,7 @@
         :title="`点击筛选「${o.label}」虚拟学习者`"
         @click="stateFilter = stateFilter === o.key ? '' : o.key"
       >{{ o.label }} {{ o.count }}</button>
-      <span class="mk-status__meta" title="当前运行中 + 创建中会话数（含卡死）">活动会话 {{ partition.running + partition.created }}</span>
+      <span class="mk-status__meta" title="当前进行中 + 创建中会话数（含卡死）">活动会话 {{ partition.running + partition.created }}</span>
       <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-status__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
         已截断 · 共 {{ liveVirtualsTotal }} 人
       </span>
@@ -56,8 +56,8 @@
         <template v-else>批量生成中</template>
         <template v-if="batchTask.status === 'running'"> · 身份 {{ batchTask.total - batchTask.personaLeft }}/{{ batchTask.total }}<template v-if="batchTask.totalStories"> · 故事 {{ batchTask.storiesDone }}/{{ batchTask.totalStories }}</template></template>
       </button>
-      <!-- 运行中（前 RUN_CHIPS_LIMIT 个，超出折叠） -->
-      <button v-for="s in visibleRunChips" :key="s.id" type="button" class="vl-running__chip" :title="`${s.runningCount} 个会话运行中 · 点击进入会话座舱`" @click="openRunningSession(s)">
+      <!-- 进行中（前 RUN_CHIPS_LIMIT 个，超出折叠） -->
+      <button v-for="s in visibleRunChips" :key="s.id" type="button" class="vl-running__chip" :title="`${s.runningCount} 个会话进行中 · 点击进入会话座舱`" @click="openRunningSession(s)">
         <span class="vl-running__dot" aria-hidden="true"></span>
         {{ s.name }}<template v-if="s.currentStage"> · {{ stageLabel(s.currentStage) }}</template>
       </button>
@@ -89,15 +89,17 @@
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
-        <div class="mk-card__head-right">
-          <span class="mk-card__meta vl-runstats" title="运行统计（全量口径）：完成率 / 失败率 / 并发 / 今日调用 / 速率">
-            完成率 {{ runStats.completionRate ?? 0 }}% · 失败率 <b class="vl-runstats__tone" :class="{ 'is-bad': (runStats.systemFailureRate ?? 0) > 0 }">{{ runStats.systemFailureRate ?? 0 }}%</b> · 并发 <b class="vl-runstats__tone" :class="{ 'is-bad': concurrencyTone === 'full', 'is-warn': concurrencyTone === 'warn' }">{{ concurrencyText }}</b> · 今日调用 {{ runStats.todayCalls ?? 0 }} · 速率 {{ rateText }}
-          </span>
-          <label class="mk-card__meta vl-rpm" title="虚拟学习者专属出站 RPM 上限（0=不限）；与平台全局速率相互独立，不会挤占真实用户额度">
-            VL RPM
-            <input v-model.number="vlRpm.limit" type="number" min="0" max="100000" step="10" class="mk-filter__input" style="width:72px" @change="saveVlRpm" />
+        <div class="mk-card__head-right vl-head-stats">
+          <!-- 分格指标条：复用 MkStatStrip（标签在上/数值在下的层级 + 窄屏换行），
+               取代此前把 5 项指标用 `·` 串成一行的 .vl-runstats —— 后者 nowrap 叠加
+               卡头 flex-shrink:0，整条宽度溢出卡片后被 .mk-card 的 overflow:clip 裁掉
+               （即「18 / 18 人 · 点…」被切断的成因）。 -->
+          <MkStatStrip :items="runStatItems" />
+          <!-- VL RPM 是「写」控件，与只读指标条以竖线分隔，避免读/写混作一行 -->
+          <label class="vl-rpm" title="虚拟学习者专属出站 RPM 上限（0=不限）；与平台全局速率相互独立，不会挤占真实用户额度">
+            <span class="vl-rpm__label">VL RPM</span>
+            <input v-model.number="vlRpm.limit" type="number" min="0" max="100000" step="10" class="mk-filter__input vl-rpm__input" @change="saveVlRpm" />
           </label>
-          <span class="mk-card__meta">{{ filtered.length }} / {{ samples.length }} 人<template v-if="filtered.length < samples.length">（已筛选）</template> · 点击行查看画像</span>
         </div>
       </div>
 
@@ -148,10 +150,10 @@
             <th
               scope="col"
               class="mk-th--sortable"
-              title="当前运行中/创建中的会话数及最近阶段；点击进入会话座舱"
+              title="当前进行中/创建中的会话数及最近阶段；点击进入会话座舱"
               :aria-sort="vlSortState('running')"
               @click="toggleVlSort('running')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('running')">运行中<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('running')">进行中<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               scope="col"
               class="mk-th--right mk-th--sortable"
@@ -201,7 +203,7 @@
                 <template v-if="s.runningCount > 0 || (s.pausedCount ?? 0) > 0">
                   <RunStateBadge
                     :status="s.runningCount > 0 ? 'running' : 'paused'"
-                    :hint="`${s.runningCount} 个会话运行中 / ${s.pausedCount ?? 0} 个已暂停 · 点击进入会话座舱`"
+                    :hint="`${s.runningCount} 个会话进行中 / ${s.pausedCount ?? 0} 个已暂停 · 点击进入会话座舱`"
                     @click.stop="openRunningSession(s)"
                   />
                   <RunStageBar
@@ -211,7 +213,7 @@
                     :show-task-text="false"
                   />
                 </template>
-                <span v-else class="vl-run vl-run--idle" title="当前没有运行中的会话">空闲</span>
+                <span v-else class="vl-run vl-run--idle" title="当前没有进行中的会话">空闲</span>
                 <span
                   v-if="s.simulation?.enabled"
                   class="mk-badge mk-badge--sm"
@@ -229,8 +231,8 @@
               >{{ s.failedCount }}</button>
             </td>
             <td class="mk-num">
-              <span v-if="s.stalledCount > 0" class="mk-badge mk-badge--sm mk-badge--bad" :title="`${s.stalledCount} 个运行中会话已卡死（超过回收阈值无写入），可在状态条一键回收`">卡死 {{ s.stalledCount }}</span>
-              <span v-else class="mk-num--na" title="无卡死会话">—</span>
+              <span v-if="s.stalledCount > 0" class="mk-badge mk-badge--sm mk-badge--bad" :title="`${s.stalledCount} 个进行中会话已卡死（超过回收阈值无写入），可在状态条一键回收`">卡死 {{ s.stalledCount }}</span>
+              <span v-else class="mk-na" title="无卡死会话">—</span>
             </td>
             <td class="mk-na">{{ s.created }}</td>
             <td>
@@ -264,17 +266,21 @@
       </table>
       </div>
 
-      <div v-else-if="loadFailed" class="mk-empty">
-        <span class="mk-empty__icon" aria-hidden="true">◌</span>
-        <strong>虚拟学习者加载失败</strong>
-        <span>无法从后端拉取虚拟学习者列表。</span>
-        <button type="button" class="mk-empty__action" @click="retryLoad">重试</button>
-      </div>
-      <div v-else class="mk-empty">
-        <strong>{{ samples.length ? '当前筛选无虚拟学习者' : '暂无虚拟学习者' }}</strong>
-        <span>新建虚拟学习者后，在画像页生成故事即可运行。</span>
-        <button v-if="isFiltered && samples.length" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
-      </div>
+      <MkEmptyState
+        v-else-if="loadFailed"
+        icon="◌"
+        title="虚拟学习者加载失败"
+        description="无法从后端拉取虚拟学习者列表。"
+        action-text="重试"
+        @action="retryLoad"
+      />
+      <MkEmptyState
+        v-else
+        :title="samples.length ? '当前筛选无虚拟学习者' : '暂无虚拟学习者'"
+        description="新建虚拟学习者后，在画像页生成故事即可运行。"
+        :action-text="isFiltered && samples.length ? '清除筛选' : ''"
+        @action="clearFilters"
+      />
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
       <Pagination
         v-if="filtered.length"
@@ -613,16 +619,19 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { useSafePolling } from '@/composables/useSafePolling'
-import { askConfirm } from './useConfirm'
+import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from './MkFilterSearch.vue'
+import MkStatStrip from './MkStatStrip.vue'
+import type { MkStatItem } from './MkStatStrip.vue'
 import SimulatedDaySettings from './SimulatedDaySettings.vue'
 import { useTableSort } from './useTableSort'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
 import BatchExperiments from './BatchExperiments.vue'
+import MkEmptyState from './MkEmptyState.vue'
 
 /* 学习者 / 批量实验 tab（批量实验为低频调试工具，折叠进本页） */
 const vlTab = ref<'learners' | 'experiments'>('learners')
@@ -641,7 +650,7 @@ interface Sample {
   goal: string
   storyCount: number
   sessions: number
-  /** 运行中会话数（live：后端全量聚合 runningCount，已扣除暂停的自动驾驶） */
+  /** 进行中会话数（live：后端全量聚合 runningCount，已扣除暂停的自动驾驶） */
   runningCount: number
   /** 已暂停自动驾驶的会话数（autopilot=stopped，会话数据保留） */
   pausedCount: number
@@ -649,7 +658,7 @@ interface Sample {
   failedCount: number
   /** 卡死（running 超回收阈值无写入）会话数 */
   stalledCount: number
-  /** 运行中会话 id（会话样本内，用于「运行中」列直达座舱） */
+  /** 进行中会话 id（会话样本内，用于「进行中」列直达座舱） */
   runningSessionIds: string[]
   /** 已暂停会话 id（autopilot=stopped） */
   pausedSessionIds?: string[]
@@ -668,7 +677,7 @@ interface Sample {
     baseDate: string | null
     autoAdvance: boolean
   } | null
-  /** 最近一个运行中会话的阶段（无运行中时回退最近会话阶段） */
+  /** 最近一个进行中会话的阶段（无进行中时回退最近会话阶段） */
   currentStage: string | null
   /** 原始创建时间（ISO），仅供排序；显示文案见 created */
   createdAt: string
@@ -701,7 +710,7 @@ const stateFilterOptions = computed(() => {
   const count = (pred: (s: Sample) => boolean) => samples.value.filter(pred).length
   return [
     { key: '', label: '全部', count: samples.value.length },
-    { key: 'running', label: '运行中', count: count((s) => s.runningCount > 0) },
+    { key: 'running', label: '进行中', count: count((s) => s.runningCount > 0) },
     { key: 'paused', label: '已暂停', count: count((s) => (s.pausedCount ?? 0) > 0) },
     { key: 'failed', label: '需关注', count: count((s) => s.failedCount > 0) },
   ]
@@ -805,15 +814,18 @@ async function removeSample(s: Sample) {
   const ok = await askConfirm({
     title: '删除虚拟学习者',
     message: `确认删除虚拟学习者「${s.name}」？\n其会话记录将一并清理，该操作不可撤销。`,
-    confirmText: '删除'
+    confirmText: '删除',
+    busy: true
   })
   if (!ok) return
   busyId.value = s.id
   try {
     await liveDeleteVirtual(s.id)
     toast.success(`「${s.name}」已删除`)
+    doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     busyId.value = null
   }
@@ -1156,7 +1168,7 @@ vlRpmPolling.start()
 
 /** 当前有活跃会话的虚拟学习者（"正在运行"条直接列名） */
 const runningSamples = computed(() => samples.value.filter((s) => s.runningCount > 0))
-/** 已暂停自动驾驶的虚拟人：无运行中会话，但有暂停会话（autopilot=stopped） */
+/** 已暂停自动驾驶的虚拟人：无进行中会话，但有暂停会话（autopilot=stopped） */
 const pausedSamples = computed(() => samples.value.filter((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0))
 /* 「正在运行」区折叠：默认显示前 RUN_CHIPS_LIMIT 个 chip，超出折叠（压缩顶部高度，表格尽早露出） */
 const RUN_CHIPS_LIMIT = 4
@@ -1188,7 +1200,7 @@ const partition = computed(() => {
 /* ===== A5 运行统计：完成率/失败率/平均时长/卡死最长分钟（GET /virtual-learners/stats） ===== */
 const runStats = computed(() => liveVirtualRunStats.value)
 
-/** 状态筛选（页头 meta-link）：运行中/已暂停/需关注；点激活项取消筛选 */
+/** 状态筛选（页头 meta-link）：进行中/已暂停/需关注；点激活项取消筛选 */
 const statePillOptions = computed(() => stateFilterOptions.value.filter((o) => o.key))
 
 /** 并发文案：used/limit（满 / 排队） */
@@ -1206,6 +1218,43 @@ const rateText = computed(() => {
     ? `${vlRpm.inFlight} 在途 / ${cap} · 排队 ${vlRpm.queued}`
     : `${vlRpm.inFlight} 在途 / ${cap}`
 })
+
+/** 卡头分格指标条（MkStatStrip）：完成率 / 失败率 / 并发 / 今日调用 / 速率 / 学习者。
+ *  失败率、并发沿用原有分档着色（>0 标红、满额标红、≥70% 标琥珀），口径与 .vl-runstats 时期一致。 */
+const runStatItems = computed<MkStatItem[]>(() => [
+  {
+    label: '完成率',
+    value: `${runStats.value.completionRate ?? 0}%`,
+    title: '全量口径：已完成会话 / 全部会话'
+  },
+  {
+    label: '失败率',
+    value: `${runStats.value.systemFailureRate ?? 0}%`,
+    tone: (runStats.value.systemFailureRate ?? 0) > 0 ? 'bad' : '',
+    title: '全量口径：系统失败占比（>0 标红）'
+  },
+  {
+    label: '并发',
+    value: concurrencyText.value,
+    tone: concurrencyTone.value === 'full' ? 'bad' : concurrencyTone.value === 'warn' ? 'warn' : 'ok',
+    title: '自动驾驶并发配额：使用中 / 上限（满额标红，≥70% 标琥珀）'
+  },
+  {
+    label: '今日调用',
+    value: runStats.value.todayCalls ?? 0,
+    title: '全量口径：今日 AI 调用次数'
+  },
+  {
+    label: '速率',
+    value: rateText.value,
+    title: '虚拟学习者出站速率：在途 / 上限 RPM（与右侧 VL RPM 上限对应）'
+  },
+  {
+    label: '学习者',
+    value: `${filtered.value.length} / ${samples.value.length}`,
+    title: '当前筛选后的行数 / 总数；点击行查看画像'
+  }
+])
 
 /* 仿真概览结论已收敛到单行状态条（KPI/结论随状态条 meta 展示，双块移除） */
 
@@ -1237,7 +1286,8 @@ async function batchLaunchAllStories() {
   const ok = await askConfirm({
     title: '启动全部故事（含自动驾驶）',
     message: `将为选中的 ${ids.length} 个虚拟学习者启动其全部故事的实验会话，共约 ${totalStories} 个会话，并自动开启自动驾驶（直达 Path 全部完成）。\n注意：并发多个自动驾驶对 LLM 压力较大，建议分批（每批 1-2 人）。确认启动？`,
-    confirmText: `启动 ${totalStories} 个会话`
+    confirmText: `启动 ${totalStories} 个会话`,
+    danger: false
   })
   if (!ok) return
   batchActionBusy.value = true
@@ -1315,7 +1365,8 @@ async function batchAutopilotStart() {
   const ok = await askConfirm({
     title: '批量启动自动驾驶',
     message: `将为选中的 ${ids.length} 个虚拟学习者、约 ${candidates} 个最新会话开启自动驾驶（target=final 直达 Path 全部完成）。\n已在运行自动驾驶的会话会自动跳过，不会重复启动。确认启动？`,
-    confirmText: `启动 ${candidates} 个会话的自动驾驶`
+    confirmText: `启动 ${candidates} 个会话的自动驾驶`,
+    danger: false
   })
   if (!ok) return
   batchActionBusy.value = true
@@ -1364,7 +1415,8 @@ async function batchAutopilotStop() {
   const ok = await askConfirm({
     title: '批量停止自动驾驶',
     message: `将停止选中的 ${ids.length} 个虚拟学习者全部故事最新会话的自动驾驶。\n学习进度与对话保留，可随时再次启动。确认停止？`,
-    confirmText: `停止 ${ids.length} 人`
+    confirmText: `停止 ${ids.length} 人`,
+    danger: false
   })
   if (!ok) return
   batchActionBusy.value = true
@@ -1405,7 +1457,7 @@ async function batchAutopilotStop() {
   }
 }
 
-/** 批量终止：对选中虚拟人全部非终态会话（运行中/创建中）标记 abandoned；只改状态不删数据 */
+/** 批量终止：对选中虚拟人全部非终态会话（进行中/创建中）标记 abandoned；只改状态不删数据 */
 async function batchTerminate() {
   const ids = [...selected.value]
   if (!ids.length || batchActionBusy.value) return
@@ -1415,8 +1467,9 @@ async function batchTerminate() {
   }, 0)
   const ok = await askConfirm({
     title: '批量终止会话',
-    message: `确认终止选中的 ${ids.length} 个虚拟学习者全部非终态会话（运行中 ${runningSum} + 创建中）？\n会话将标记为已终止，数据保留，该操作不可撤销。`,
-    confirmText: `终止 ${ids.length} 人`
+    message: `确认终止选中的 ${ids.length} 个虚拟学习者全部非终态会话（进行中 ${runningSum} + 创建中）？\n会话将被标记为「已放弃」（abandoned），数据保留，该操作不可撤销。`,
+    confirmText: `终止 ${ids.length} 人`,
+    busy: true
   })
   if (!ok) return
   batchActionBusy.value = true
@@ -1428,8 +1481,10 @@ async function batchTerminate() {
     toast.success(terminated > 0 ? `已终止 ${terminated} 个会话（跳过已终态 ${skipped}）` : '没有需要终止的非终态会话')
     selected.value = []
     void loadLiveData()
+    doneConfirm()
   } catch (e) {
     toast.error(`批量终止失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     batchActionBusy.value = false
   }
@@ -1449,7 +1504,8 @@ async function batchDelete() {
   const ok = await askConfirm({
     title: '批量删除虚拟学习者',
     message: `确认删除选中的 ${ids.length} 个虚拟学习者？\n将级联删除其全部会话、教学记录、学习数据，该操作不可撤销。`,
-    confirmText: `删除 ${ids.length} 人`
+    confirmText: `删除 ${ids.length} 人`,
+    busy: true
   })
   if (!ok) return
   batchActionBusy.value = true
@@ -1466,8 +1522,10 @@ async function batchDelete() {
     }
     selected.value = []
     void loadLiveData()
+    doneConfirm()
   } catch (e) {
     toast.error(`批量删除失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     batchActionBusy.value = false
   }
@@ -1530,7 +1588,7 @@ function fmtStale(ms: number) {
   return `${(mins / 60).toFixed(1)} 小时无写入`
 }
 
-/** 「运行中」列点击直达会话座舱（画像页入口保持：行点击/画像按钮） */
+/** 「进行中」列点击直达会话座舱（画像页入口保持：行点击/画像按钮） */
 function openRunningSession(s: Sample) {
   const id = s.runningSessionIds[0]
   if (id) openSubPage('session', id)
@@ -1715,7 +1773,6 @@ function startBatchPolling() { batchPolling.start() }
 .mk-actions .mk-icon-btn--text svg { width: 13px; height: 13px; }
 /* 窄屏表格：8 列在 704px 内容区会被压扁操作列，设 min-width 触发 .mk-table-scroll 横向滚动（对齐 AuditLogs 模式） */
 .mk-table-scroll .mk-table { min-width: 860px; }
-.mk-link--muted { opacity: 0.55; }
 .vl-row { cursor: pointer; }
 /* 长期倾向列：单行截断 + title（原可换行撑高行，ADMIN_COLUMN_WIDTH_AUDIT ⑤）；空值统一「未设置」降噪 */
 .vl-goal {
@@ -1727,7 +1784,7 @@ function startBatchPolling() { batchPolling.start() }
   vertical-align: middle;
 }
 .vl-goal--empty { color: var(--mk-faint); font-size: var(--mk-fs-12); }
-/* 状态列：运行中胶囊 / 失败数 / 卡死徽章 分列展示（一列一语义） */
+/* 状态列：进行中胶囊 / 失败数 / 卡死徽章 分列展示（一列一语义） */
 .vl-state-cell { display: flex; align-items: center; min-height: 26px; }
 .vl-run {
   display: inline-flex;
@@ -1750,18 +1807,35 @@ function startBatchPolling() { batchPolling.start() }
   transition: color 0.12s ease, background 0.12s ease;
 }
 .vl-faillink:hover { color: var(--mk-blue); background: #eff6ff; box-shadow: 0 0 0 3px #eff6ff; }
-.mk-num--na { color: var(--mk-faint); font-weight: 600; }
+/* .mk-num--na 已收敛到既有全局 .mk-na（同一张表里两个类表达同一概念） */
 
-/* VL RPM 输入（状态条内）：与分格指标同基线 */
-.vl-rpm { display: inline-flex; align-items: center; gap: 4px; }
+/* 卡头右组：内容为「分格指标条 + VL RPM 控件」，必须允许收缩并换行。
+   全局 .mk-card__head-right 是 flex-shrink:0（适合单个按钮/短 meta），在本页
+   会把整条顶出卡片宽度，再被 .mk-card 的 overflow:clip 裁掉（截断的真正成因）。 */
+.vl-head-stats {
+  flex-shrink: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+/* VL RPM（写控件）：与只读指标条以竖线分隔，避免读/写混作一行 */
+.vl-rpm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 12px;
+  border-left: 1px solid var(--mk-line);
+}
+.vl-rpm__label {
+  font-size: var(--mk-fs-11);
+  font-weight: 600;
+  color: var(--mk-faint);
+  white-space: nowrap;
+}
+.vl-rpm__input { width: 72px; }
 /* VL 语境收窄文本列：两列 --mk-col-text 320→200，列宽和 1314→1074，
    避免「操作」列越出内容区（超出时仍由 .mk-table-scroll 横向滚动兜底）。 */
 .vl-table-scroll { --mk-col-text: 200px; }
-/* 运行统计（卡片头 meta 行）：不换行，失败率/并发按档着色 */
-.vl-runstats { white-space: nowrap; }
-.vl-runstats__tone { font-weight: 700; }
-.vl-runstats__tone.is-bad { color: var(--mk-red, #dc2626); }
-.vl-runstats__tone.is-warn { color: var(--mk-amber, #d97706); }
 .vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 /* 「正在运行」折叠展开按钮 */
@@ -1797,13 +1871,13 @@ function startBatchPolling() { batchPolling.start() }
 .pt-io { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border: 1px solid var(--mk-line, #e1e8f2); border-radius: 10px; padding: 10px 12px; background: var(--mk-surface); }
 .pt-io__col { display: grid; gap: 6px; align-content: start; }
 .pt-io__title { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-muted); }
-.pt-io__row { font-size: var(--mk-fs-12); color: var(--mk-text); line-height: 1.5; word-break: break-word; }
+.pt-io__row { font-size: var(--mk-fs-12); color: var(--mk-ink); line-height: 1.5; word-break: break-word; }
 .pt-io__k { display: inline-block; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-faint, #94a3b8); margin-right: 6px; }
 /* 字段明细 chips */
 .pt-fields { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 4px; }
 .pt-field {
   font-size: var(--mk-fs-11); padding: 1px 7px; border-radius: 6px; font-family: var(--mk-mono, monospace);
-  background: rgba(99, 102, 241, 0.08); color: var(--mk-indigo, #4f46e5); border: 1px solid rgba(99, 102, 241, 0.2);
+  background: rgba(99, 102, 241, 0.08); color: var(--mk-purple); border: 1px solid rgba(99, 102, 241, 0.2);
   word-break: break-all;
 }
 .pt-field b { font-weight: 700; }
@@ -1814,10 +1888,10 @@ function startBatchPolling() { batchPolling.start() }
 .pt-transcript { display: grid; gap: 8px; border-top: 1px dashed var(--mk-line, #e1e8f2); padding-top: 10px; }
 .pt-row { display: grid; grid-template-columns: 92px 1fr; gap: 8px; align-items: start; }
 .pt-role { font-size: var(--mk-fs-11_5); font-weight: 700; padding-top: 3px; }
-.pt-role--agent { color: var(--mk-indigo, #4f46e5); }
+.pt-role--agent { color: var(--mk-purple); }
 .pt-role--learner { color: var(--mk-green, #16a34a); }
 .pt-bubble { display: grid; gap: 4px; }
-.pt-content { font-size: var(--mk-fs-12_5); color: var(--mk-text); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.pt-content { font-size: var(--mk-fs-12_5); color: var(--mk-ink); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 .pt-state { font-size: var(--mk-fs-11); color: var(--mk-faint, #94a3b8); }
 .pt-out {
   margin: 0; font-size: var(--mk-fs-12); color: var(--mk-muted);
@@ -1885,7 +1959,7 @@ html[data-theme='dark'] .pt-field { background: rgba(129, 140, 248, 0.14); color
   box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
   animation: vl-pulse 1.6s infinite;
 }
-.vl-running__label--inline { padding: 3px 10px; border-radius: 999px; background: rgba(16, 185, 129, 0.12); }
+
 .vl-running__chip {
   display: inline-flex;
   align-items: center;
@@ -1976,7 +2050,7 @@ html[data-theme='dark'] .pt-field { background: rgba(129, 140, 248, 0.14); color
 }
 .vl-reclaim-id { font-size: var(--mk-fs-11); color: var(--mk-muted, #5b6577); }
 .vl-reclaim-stale { margin-left: auto; color: var(--mk-red, #dc2626); font-weight: 700; white-space: nowrap; }
-.vl-steps--ok { background: #e8f7ee; color: #1a7f4b; }
+
 .vl-steps {
   margin: 0 0 4px;
   padding: 8px 10px;
@@ -2086,7 +2160,7 @@ html[data-theme='dark'] {
   .vl-running__chip--batch.is-done { color: #4ade80; }
   .vl-running__chip--batch.is-error { color: #f87171; }
   .vl-running__label { color: #4ade80; }
-  .vl-steps--ok { background: rgba(74, 222, 128, 0.12); color: #6ee7a0; }
+
   /* 补漏：折叠展开按钮/回收清单/高级区/人设成功提示（硬编码浅底） */
   .vl-running__more { background: #141c2b; border-color: #2a3850; color: #8fa3bd; }
   .vl-reclaim-item,

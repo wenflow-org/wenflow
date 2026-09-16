@@ -18,10 +18,7 @@
 
     <Shell :current="scene" :crumb="crumbLabel" :crumb-title="crumbTitle" release @navigate="navigate" @glossary="glossaryOpen = true">
       <TabBar v-if="!booting" :tabs="tabItems" :current="scene" @select="navigate" @close="closeTab" @close-others="closeOthers" @close-right="closeRight" @toggle-pin="togglePin" />
-      <div v-if="booting" class="ac-boot">
-        <span class="mk-spinner mk-spinner--lg"></span>
-        加载中…
-      </div>
+      <MkLoading v-if="booting" class="ac-boot" text="加载中…" />
       <component v-else :is="detailComponent || currentComponent" />
     </Shell>
 
@@ -44,10 +41,8 @@
 function asyncPage(loader: () => Promise<any>) {
   return defineAsyncComponent({
     loader,
-    loadingComponent: h('div', { class: 'admin-page-loading' }, [
-      h('span', { class: 'spinner' }),
-      h('p', '加载中…')
-    ]),
+    // 统一加载态：与页面级 MkLoading 同源（原先自搓 .admin-page-loading + 非 mk 的 .spinner）
+    loadingComponent: h(MkLoading, { min: true, text: '加载中…' }),
     delay: 200,
     errorComponent: {
       setup() {
@@ -141,6 +136,7 @@ import TabBar, { type AdminTab } from './TabBar.vue';
 import { MOCK_SCENES } from './manifest';
 import SkillDrawer from './SkillDrawer.vue';
 import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
+import MkLoading from './MkLoading.vue';
 import { intent, subPage, closeSkillDrawer, type SubPageView } from './store';
 import { loadLiveData } from './live';
 import './shared.css';
@@ -422,7 +418,8 @@ onMounted(() => {
   color: #5b6577;
   font-size: var(--mk-fs-14);
 }
-.ac-boot .mk-spinner { width: 16px; height: 16px; border-width: 2px; }
+/* 启动屏 spinner 略大：需 :deep() 才能命中子组件内部节点（scoped 属性不作用于组件内部） */
+.ac-boot :deep(.mk-spinner) { width: 16px; height: 16px; border-width: 2px; }
 
 .ac-error {
   position: fixed;

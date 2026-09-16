@@ -4,7 +4,7 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">批量实验</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">共 {{ experiments.length }} 个实验 · 运行中 {{ runningCount }} · 学习者 {{ learnerTotal }}</span>
+      <span class="mk-status__meta">共 {{ experiments.length }} 个实验 · 进行中 {{ runningCount }} · 学习者 {{ learnerTotal }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建实验</button>
       </span>
@@ -78,17 +78,25 @@
           </tbody>
         </table>
       </div>
-      <div v-else-if="failed" class="mk-empty">
-        <span class="mk-empty__icon" aria-hidden="true">!</span>
-        <strong>批量实验加载失败</strong>
-        <span>无法从服务读取实验列表。</span>
-        <button type="button" class="mk-empty__action" :disabled="loading" @click="load">{{ loading ? '重试中…' : '重试' }}</button>
-      </div>
-      <div v-else class="mk-empty mk-empty--min">
-        <strong>还没有批量实验</strong>
-        <span>一次创建多个虚拟学习者，系统级队列实验：目标 → 路径 → 学习 → 跨日衰减。</span>
-        <button type="button" class="mk-empty__action" @click="openCreate">新建实验</button>
-      </div>
+      <MkEmptyState
+        v-else-if="failed"
+        tone="error"
+        icon="!"
+        title="批量实验加载失败"
+        description="无法从服务读取实验列表。"
+        action-text="重试"
+        action-busy-text="重试中…"
+        :action-busy="loading"
+        @action="load"
+      />
+      <MkEmptyState
+        v-else
+        title="还没有批量实验"
+        description="一次创建多个虚拟学习者，系统级队列实验：目标 → 路径 → 学习 → 跨日衰减。"
+        action-text="新建实验"
+        min
+        @action="openCreate"
+      />
     </div>
 
     <!-- 创建实验弹窗 -->
@@ -151,7 +159,7 @@
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detailOpen = false">✕</button>
           </div>
           <div class="mk-drawer__body">
-            <div v-if="detailLoading" class="be-detail-loading"><span class="mk-spinner"></span> 加载中…</div>
+            <MkLoading v-if="detailLoading" inline />
             <template v-else-if="detailRuns.length">
               <div v-for="r in detailRuns" :key="r.id" class="mk-card be-run">
                 <div class="be-run__head">
@@ -174,10 +182,12 @@
                 </div>
               </div>
             </template>
-            <div v-else class="mk-empty mk-empty--compact">
-              <strong>暂无运行记录</strong>
-              <span>实验创建后由调度器自动推进。</span>
-            </div>
+            <MkEmptyState
+              v-else
+              title="暂无运行记录"
+              description="实验创建后由调度器自动推进。"
+              compact
+            />
           </div>
         </div>
       </div>
@@ -195,6 +205,9 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
+import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
+import { statusText } from './statusText'
 
 /** 嵌入模式：作为虚拟学习者「批量实验」tab 渲染（隐藏页面外壳/状态条） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
@@ -212,7 +225,6 @@ const statusTone = computed(() => (runningCount.value > 0 ? 'mk-status--ok' : 'm
 const runningCount = computed(() => experiments.value.filter((e) => e.status === 'running').length)
 const learnerTotal = computed(() => experiments.value.reduce((s, e) => s + (e.runs?.length || 0), 0))
 
-const statusText = (s: string) => ({ running: '运行中', paused: '已暂停', stopped: '已停止', done: '已完成' }[s] || s)
 const statusBadge = (s: string) =>
   s === 'running' ? 'mk-badge--ok' : s === 'paused' ? 'mk-badge--warn' : s === 'done' ? 'mk-badge--info' : 'mk-badge--muted'
 
@@ -401,6 +413,7 @@ async function advance(experimentId: string, runId: string) {
     title: '推进实验',
     message: '确认将该运行推进一个阶段？会立即改变虚拟学习者的阶段状态。',
     confirmText: '推进',
+    danger: false,
   })
   if (!ok) return
   runBusy.value = true
@@ -421,6 +434,7 @@ async function decay(experimentId: string, runId: string) {
     title: '模拟跨日衰减',
     message: '确认模拟跨日衰减？会按衰减模型更新该运行的学习状态（KTL/LF 等）。',
     confirmText: '模拟衰减',
+    danger: false,
   })
   if (!ok) return
   runBusy.value = true
@@ -465,7 +479,7 @@ load()
 .be-row--head span:last-child { visibility: hidden; }
 .be-budget { height: 34px; }
 
-.be-detail-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
+
 /* 详情 run 卡：mk-card 形态（边框/圆角/背景由全局类提供，此处只留内部布局） */
 .be-run { padding: 12px 14px; display: grid; gap: 8px; margin-bottom: 10px; }
 .be-run__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

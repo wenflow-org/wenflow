@@ -90,11 +90,13 @@
           </tbody>
         </table>
       </div>
-      <div v-else-if="failed" class="mk-empty">
-        <span class="mk-empty__icon" aria-hidden="true">!</span>
-        <strong>通知加载失败</strong>
-        <button type="button" class="mk-empty__action" @click="reload">重试</button>
-      </div>
+      <MkEmptyState
+        v-else-if="failed"
+        icon="!"
+        title="通知加载失败"
+        action-text="重试"
+        @action="reload"
+      />
       <MkEmptyState
         v-else-if="kindFilter || unreadOnly"
         icon="◌"
@@ -207,7 +209,7 @@ import { timeAgo, errMsg } from './live'
 import { adminNotificationsApi, adminUsersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
-import { askConfirm } from './useConfirm'
+import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from './MkEmptyState.vue'
@@ -261,8 +263,9 @@ function clearFilter() {
 }
 const isFiltered = computed(() => !!kindFilter.value || unreadOnly.value)
 
-/* mk-status 只有 ok/warn/bad/muted 四档（shared.css）：有未读用 warn 提示，无未读为 ok */
-const statusTone = computed(() => (unreadTotal.value > 0 ? 'mk-status--warn' : 'mk-status--ok'))
+/* R2 状态语义表：未读是「用户侧状态」，运营无法替用户读 → 不是可行动告警，不得着 warn。
+   页头基调只在加载失败时降级为 bad（原实现按 unreadTotal>0 给 warn，属误报）。 */
+const statusTone = computed(() => (failed.value ? 'mk-status--bad' : 'mk-status--ok'))
 
 const kindText = (k: string) => ({ system: '系统', announcement: '公告', achievement: '成就' }[k] || k)
 const kindBadge = (k: string) =>
@@ -313,6 +316,7 @@ async function remove(n: NotifRow) {
     title: '删除通知',
     message: `确认删除「${n.title}」？`,
     confirmText: '删除',
+    busy: true,
   })
   if (!ok) return
   n.busy = true
@@ -322,8 +326,10 @@ async function remove(n: NotifRow) {
     total.value = Math.max(0, total.value - 1)
     if (!n.isRead) unreadTotal.value = Math.max(0, unreadTotal.value - 1)
     toast.success('通知已删除')
+    doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     n.busy = false
   }

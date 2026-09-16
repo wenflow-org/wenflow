@@ -121,7 +121,7 @@
         </div>
       </div>
     </div>
-    <p v-if="recentLogsLoading" class="sdp-none">日志加载中…</p>
+    <MkLoading v-if="recentLogsLoading" inline text="日志加载中…" />
     <p v-else-if="recentLogsError" class="sdp-none sdp-bad-text">近 8 条日志加载失败。<button type="button" class="mk-link" @click="loadRecentLogs">重试</button></p>
     <p v-else class="sdp-none">近 8 条日志窗口内无调用。</p>
   </section>
@@ -143,6 +143,7 @@ import {
 import { toast } from '@/utils/toast'
 import { fmtMs, shortHash, errText } from './sdp-shared'
 import { humanizeHttpError } from '../terms'
+import MkLoading from '../MkLoading.vue'
 
 hljs.registerLanguage('json', json)
 

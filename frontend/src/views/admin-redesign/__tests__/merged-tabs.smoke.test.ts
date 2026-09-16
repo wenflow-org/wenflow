@@ -75,6 +75,17 @@ async function settle() {
   await flushPromises();
 }
 
+/**
+ * 点击视图切换 pill。
+ * R1（页头职责边界）落地后，pill 是页内唯一的视图切换控件，且文本带计数徽章
+ * （如「学习状态24」），因此按 .mk-pill 定位 + includes 匹配标签。
+ */
+async function clickPill(w: ReturnType<typeof mount>, label: string) {
+  const btn = w.findAll('.mk-pill').find((b) => b.text().includes(label));
+  expect(btn, `未找到视图切换 pill：${label}`).toBeTruthy();
+  await btn!.trigger('click');
+}
+
 describe('合并宿主页（导航收敛 2026-09-04）', () => {
   beforeEach(() => {
     intent.scene = 'overview';
@@ -91,7 +102,7 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     expect(w.findComponent(Users).exists()).toBe(true);
     expect(w.findComponent(LearnerCenter).exists()).toBe(false);
 
-    await w.findAll('button').find((b) => b.text() === '学习状态')!.trigger('click');
+    await clickPill(w, '学习状态');
     await settle();
     expect(w.findComponent(LearnerCenter).exists()).toBe(true);
     expect(w.findComponent(Users).exists()).toBe(false);
@@ -130,12 +141,12 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     expect(w.findComponent(OpsContent).exists()).toBe(false);
     expect(w.findComponent(TeachingSessions).exists()).toBe(false);
 
-    await w.findAll('button').find((b) => b.text() === '教学会话')!.trigger('click');
+    await clickPill(w, '教学会话');
     await settle();
     expect(w.findComponent(TeachingSessions).exists()).toBe(true);
     expect(router.currentRoute.value.query.tab).toBe('teaching');
 
-    await w.findAll('button').find((b) => b.text() === '学习路径')!.trigger('click');
+    await clickPill(w, '学习路径');
     await settle();
     expect(w.findComponent(OpsContent).exists()).toBe(true);
     expect(router.currentRoute.value.query.tab).toBe('paths');
@@ -167,7 +178,7 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     expect(w.findComponent(Announcements).exists()).toBe(true);
     expect(w.findComponent(Notifications).exists()).toBe(false);
 
-    await w.findAll('button').find((b) => b.text() === '站内通知')!.trigger('click');
+    await clickPill(w, '站内通知');
     await settle();
     expect(w.findComponent(Notifications).exists()).toBe(true);
     expect(router.currentRoute.value.query.tab).toBe('inapp');

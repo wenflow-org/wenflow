@@ -209,7 +209,7 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.text()).toContain('保存连接');
     expect(wrapper.text()).not.toContain('保存路由');
     // 修改安全策略（点「仅白名单」）→ 策略组追加
-    const policyButtons = wrapper.findAll('.ac-policy__item .ac-seg__item');
+    const policyButtons = wrapper.findAll('.ac-policy__item .mk-seg__item');
     await policyButtons.find((b) => b.text() === '仅白名单')!.trigger('click');
     await nextTick();
     expect(wrapper.find('.ac-save').text()).toContain('连接 + 策略 · 2 组未保存变更');

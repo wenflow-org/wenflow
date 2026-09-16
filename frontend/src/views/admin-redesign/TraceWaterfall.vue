@@ -236,21 +236,17 @@
           :title="'加载下一页样本'"
           @click="loadMoreWaterfall"
         >
-          {{ waterfallLoading ? '加载中…' : '加载更多样本' }}
+          <MkLoading v-if="waterfallLoading" inline /><template v-else>加载更多样本</template>
         </button>
       </div>
     </div>
 
-    <div v-else class="mk-empty mk-empty--min">
-      <template v-if="viewMode === 'session' && !sessionIds.length">
-        <strong>暂无会话数据</strong>
-        <span>教学 / 目标对话等业务调用产生后，这里按 sessionId 自动跨链路归组。</span>
-      </template>
-      <template v-else>
-        <strong>暂无链路数据</strong>
-        <span>有真实调用发生后，这里按 Trace 展开完整链路。</span>
-      </template>
-    </div>
+    <MkEmptyState
+      v-else
+      min
+      :title="viewMode === 'session' && !sessionIds.length ? '暂无会话数据' : '暂无链路数据'"
+      :description="viewMode === 'session' && !sessionIds.length ? '教学 / 目标对话等业务调用产生后，这里按 sessionId 自动跨链路归组。' : '有真实调用发生后，这里按 Trace 展开完整链路。'"
+    />
   </div>
 </template>
 
@@ -277,6 +273,8 @@ import {
 } from './live'
 import { statusText } from './statusText'
 import { TERMS, errorCodeLabel } from './terms'
+import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 
 const activeTrace = ref('')
 const openSpanId = ref('')
@@ -741,12 +739,6 @@ const verdictText = computed(() => {
 }
 
 /* 链路选择器：替代 pills，避免长 trace ID 挤爆状态条 */
-.wf-title {
-  max-width: 380px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 /* 筛选工具条（独立一行：模式切换/仅失败/排序/搜索；对齐 ExecLogs 卡片头筛选形态） */
 .wf-tracepick {
   display: flex;
@@ -783,10 +775,10 @@ const verdictText = computed(() => {
   align-items: center;
   gap: 10px;
   padding: 8px 14px;
-  border: 1px solid rgba(217, 119, 6, 0.35);
+  border: 1px solid var(--mk-graph-notice-line);
   border-radius: 10px;
-  background: #fff8ec;
-  color: #b45309;
+  background: var(--mk-graph-notice-bg);
+  color: var(--mk-graph-notice-ink);
   font-size: var(--mk-fs-12);
   box-shadow: var(--mk-shadow-sm);
 }
@@ -899,9 +891,9 @@ const verdictText = computed(() => {
   background: var(--mk-line);
 }
 
-.wf-row { border-bottom: 1px solid #f0f2f5; }
+.wf-row { border-bottom: 1px solid var(--mk-graph-row-line); }
 .wf-row:last-of-type { border-bottom: none; }
-.wf-row--open { background: #fafbff; }
+.wf-row--open { background: var(--mk-graph-row-open-bg); }
 .wf-row--err { background: rgba(220, 38, 38, 0.04); }
 .wf-row--err.wf-row--open { background: rgba(220, 38, 38, 0.06); }
 .wf-row__main {
@@ -917,7 +909,7 @@ const verdictText = computed(() => {
   text-align: left;
   cursor: pointer;
 }
-.wf-row__main:hover { background: #f6f9ff; }
+.wf-row__main:hover { background: var(--mk-graph-row-hover-bg); }
 .wf-row--err .wf-row__main:hover { background: rgba(220, 38, 38, 0.06); }
 
 .wf-row__stage {
@@ -954,13 +946,13 @@ const verdictText = computed(() => {
   font-weight: 700;
   flex-shrink: 0;
 }
-.wf-row__kind--flow { background: #eff6ff; color: var(--mk-blue); }
-.wf-row__kind--call { background: #f0f2f5; color: var(--mk-muted); }
+.wf-row__kind--flow { background: var(--mk-blue-bg); color: var(--mk-blue); }
+.wf-row__kind--call { background: var(--mk-graph-tag-bg); color: var(--mk-muted); }
 
 .wf-row__track {
   position: relative;
   height: 20px;
-  background: #f3f5fa;
+  background: var(--mk-graph-track-bg);
   border-radius: 5px;
   overflow: hidden;
 }
@@ -974,9 +966,9 @@ const verdictText = computed(() => {
   padding: 0 6px;
   min-width: 4px;
 }
-.wf-row__bar--ok { background: linear-gradient(90deg, #6aa0ff, #3d7cff); }
-.wf-row__bar--warn { background: linear-gradient(90deg, #fcd34d, #f59e0b); }
-.wf-row__bar--err { background: linear-gradient(90deg, #f87171, #dc2626); }
+.wf-row__bar--ok { background: linear-gradient(90deg, var(--mk-graph-bar-ok-a), var(--mk-graph-bar-ok-b)); }
+.wf-row__bar--warn { background: linear-gradient(90deg, var(--mk-graph-bar-warn-a), var(--mk-graph-bar-warn-b)); }
+.wf-row__bar--err { background: linear-gradient(90deg, var(--mk-graph-bar-err-a), var(--mk-graph-bar-err-b)); }
 
 .wf-row__dur { font-size: var(--mk-fs-11); color: var(--mk-muted); text-align: right; }
 .wf-row__arrow { font-size: var(--mk-fs-11); color: var(--mk-faint); transition: transform 0.15s ease; }
@@ -984,7 +976,7 @@ const verdictText = computed(() => {
 .wf-row__gw {
   font-size: var(--mk-fs-11);
   color: var(--mk-faint);
-  background: #f0f2f5;
+  background: var(--mk-graph-fact-bg);
   border-radius: 4px;
   padding: 1px 6px;
   white-space: nowrap;
@@ -993,7 +985,7 @@ const verdictText = computed(() => {
 .wf-row__errcode {
   font-size: var(--mk-fs-11);
   font-weight: 700;
-  color: #dc2626;
+  color: var(--mk-graph-err-ink);
   background: rgba(220, 38, 38, 0.08);
   border-radius: 4px;
   padding: 1px 6px;
@@ -1014,11 +1006,11 @@ const verdictText = computed(() => {
 .wf-fact {
   font-size: var(--mk-fs-11);
   color: var(--mk-muted);
-  background: #f0f2f5;
+  background: var(--mk-graph-fact-bg);
   border-radius: 4px;
   padding: 2px 8px;
 }
-.wf-fact--bad { color: #dc2626; background: rgba(220, 38, 38, 0.08); }
+.wf-fact--bad { color: var(--mk-graph-err-ink); background: rgba(220, 38, 38, 0.08); }
 .wf-fact--warn { color: var(--mk-amber); background: rgba(217, 119, 6, 0.1); font-weight: 700; }
 .wf-prompt {
   border-left: 3px solid rgba(217, 119, 6, 0.4);
@@ -1038,9 +1030,9 @@ const verdictText = computed(() => {
   border-left: 3px solid var(--mk-green);
   border-radius: 8px;
   padding: 7px 10px;
-  background: #fff;
+  background: var(--mk-graph-attempt-bg);
 }
-.wf-attempt--fail { border-left-color: var(--mk-red); background: #fffafa; }
+.wf-attempt--fail { border-left-color: var(--mk-red); background: var(--mk-graph-attempt-fail-bg); }
 .wf-attempt--retry { border-left-color: var(--mk-amber); }
 .wf-attempt__no { font-family: var(--mk-mono); font-size: var(--mk-fs-11); font-weight: 800; color: var(--mk-muted); }
 .wf-attempt__retry { font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-amber); }
@@ -1081,7 +1073,7 @@ const verdictText = computed(() => {
   padding: 12px 14px;
   border-radius: 10px;
   border: 1px solid rgba(220, 38, 38, 0.2);
-  background: #fef8f8;
+  background: var(--mk-graph-verdict-bg);
   display: grid;
   gap: 4px;
 }
@@ -1144,18 +1136,17 @@ const verdictText = computed(() => {
 
 /* ================= 暗色模式（D1 补完）：Trace 链路 ================= */
 html[data-theme='dark'] {
-  .wf-row--open { background: #1b2740; }
-  .wf-row__main:hover { background: #1b2740; }
-  .wf-row__kind--flow { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
-  .wf-row__kind--call { background: #253049; color: #9fb0c8; }
-  .wf-attempt--fail { background: #241a1a; border-left-color: var(--mk-red); }
-  .wf-slow { background: rgba(251, 191, 36, 0.1); }
-  .wf-payload { background: #0f1624; border-color: #232f45; color: var(--mk-pre-fg); }
-  .wf-summary, .wf-detail { background: #131b2a; border-color: #232f45; }
+  .wf-row--open { background: var(--mk-graph-row-open-bg); }
+  .wf-row__main:hover { background: var(--mk-graph-row-hover-bg); }
+  .wf-row__kind--flow { background: var(--mk-blue-bg); color: var(--mk-graph-blue-kind-ink); }
+  .wf-row__kind--call { background: var(--mk-graph-tag-bg); color: var(--mk-muted); }
+  .wf-attempt--fail { background: var(--mk-graph-attempt-fail-bg); border-left-color: var(--mk-red); }
+  .wf-payload { background: var(--mk-bg); border-color: var(--mk-graph-line); color: var(--mk-pre-fg); }
+  .wf-summary, .wf-detail { background: var(--mk-graph-summary-bg); border-color: var(--mk-graph-line); }
   /* 补漏：分隔线/轨道/标签/结论条（此前硬编码浅色在暗色下残留） */
-  .wf-row { border-bottom-color: #232f45; }
-  .wf-row__track, .wf-row__gw, .wf-fact { background: #1b2537; }
-  .wf-verdict { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.3); }
-  .wf-notice { background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.3); }
+  .wf-row { border-bottom-color: var(--mk-graph-row-line); }
+  .wf-row__track, .wf-row__gw, .wf-fact { background: var(--mk-graph-fact-bg); }
+  .wf-verdict { background: var(--mk-graph-verdict-bg); border-color: rgba(248, 113, 113, 0.3); }
+  .wf-notice { background: var(--mk-graph-notice-bg); border-color: var(--mk-graph-notice-line); }
 }
 </style>

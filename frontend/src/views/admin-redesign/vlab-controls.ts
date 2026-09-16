@@ -8,7 +8,7 @@
  * ── 生命周期状态机（与后端 virtual_sessions 对齐）────────────────────────────
  *   idle        无会话（或全部终态之外无活动会话）
  *   created     会话刚创建（currentStage=goal，尚未推进）
- *   running     运行中（goal/path/teaching 任一阶段；autopilot 可在跑）
+ *   running     进行中（goal/path/teaching 任一阶段；autopilot 可在跑）
  *   paused      running + teaching.paused（管理员冻结；无写入属预期，不算卡死）
  *   failed      已失败（可重试：从第一个未完成课程续传，保留已完成进度）
  *   abandoned   已终止/已回收（运维清理，可重试续传或删除）
@@ -58,7 +58,7 @@ export interface VsControlDef {
 export const VS_STATE_META: Record<VsLifecycleState, VsStateMeta> = {
   idle:      { label: '无活动会话', hint: '尚无会话或全部会话已终态；可用「运行」启动新会话', tone: 'muted' },
   created:   { label: '创建中', hint: '会话已创建，尚未开始推进（Goal 阶段起点）', tone: 'warn' },
-  running:   { label: '运行中', hint: '学习推进中（Goal/Path/Learn）；可暂停或进入座舱', tone: 'ok' },
+  running:   { label: '进行中', hint: '学习推进中（Goal/Path/Learn）；可暂停或进入座舱', tone: 'ok' },
   paused:    { label: '已暂停', hint: '管理员冻结：自动推进已停止，无写入不算卡死，可继续或终止', tone: 'warn' },
   failed:    { label: '已失败', hint: '可重试：从第一个未完成课程续传，已完成进度保留', tone: 'bad' },
   abandoned: { label: '已终止', hint: '已被终止/回收；可重试续传或删除', tone: 'bad' },

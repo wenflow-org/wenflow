@@ -20,38 +20,39 @@
     </div>
 
     <!-- 加载失败（优先于空态） -->
-    <div v-if="loadFailed && !summary" class="mk-empty mk-empty--min">
-      <span class="mk-empty__icon" aria-hidden="true">◌</span>
-      <strong>Token 成本数据加载失败</strong>
-      <span>无法从后端拉取用量统计，请重试或稍后再来。</span>
-      <button type="button" class="mk-empty__action" @click="() => load(true)">重试</button>
-    </div>
+    <MkEmptyState
+      v-if="loadFailed && !summary"
+      icon="◌"
+      min
+      title="Token 成本数据加载失败"
+      description="无法从后端拉取用量统计，请重试或稍后再来。"
+      action-text="重试"
+      @action="() => load(true)"
+    />
 
     <!-- 首载骨架：KPI 卡 + 趋势图 + 排行占位（对齐全站 MockSkeleton 语言） -->
     <template v-else-if="!summary && loading">
       <div class="tc-filterbar tc-filterbar--skeleton"></div>
       <section class="tc-overview">
-        <div v-for="i in 3" :key="i" class="mk-kpi tc-skel-kpi"><i class="tc-skel tc-skel--kpi-num"></i><i class="tc-skel tc-skel--kpi-label"></i></div>
+        <div v-for="i in 3" :key="i" class="mk-kpi tc-skel-kpi"><MkSkeleton w="60%" :h="26" /><MkSkeleton w="40%" :h="12" /></div>
       </section>
       <section class="mk-card">
-        <div class="mk-card__head"><i class="tc-skel tc-skel--title"></i></div>
-        <div class="tc-skel-chart">
-          <i v-for="i in 7" :key="i" class="tc-skel tc-skel--bar"></i>
-        </div>
+        <div class="mk-card__head"><MkSkeleton w="180" :h="14" /></div>
+        <MkSkeleton class="tc-skel-pad" variant="bars" :count="7" :h="150" :radius="4" />
       </section>
       <section class="mk-card">
-        <div class="mk-card__head"><i class="tc-skel tc-skel--title"></i></div>
-        <div class="tc-skel-rows">
-          <i v-for="i in 4" :key="i" class="tc-skel tc-skel--row"></i>
-        </div>
+        <div class="mk-card__head"><MkSkeleton w="180" :h="14" /></div>
+        <MkSkeleton class="tc-skel-pad" variant="rows" :count="4" :h="22" :radius="8" />
       </section>
     </template>
 
     <!-- 整页无数据（真实空态）：summary 为空且已加载完成 -->
-    <div v-else-if="!summary && !loading" class="mk-empty mk-empty--min">
-      <strong>暂无 Token 成本数据</strong>
-      <span>近 {{ days }} 天没有任何 LLM 调用记录，产生调用后这里会展示用量与成本。</span>
-    </div>
+    <MkEmptyState
+      v-else-if="!summary && !loading"
+      min
+      title="暂无 Token 成本数据"
+      :description="`近 ${days} 天没有任何 LLM 调用记录，产生调用后这里会展示用量与成本。`"
+    />
 
     <template v-else>
       <!-- 筛选条（范围 + 数据范围，独立一行，对齐 TraceWaterfall 筛选条形态） -->
@@ -179,6 +180,8 @@ import { adminTokenCostApi } from '@/api/adminApi'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkKpi from './MkKpi.vue'
 import TcRankTable, { type RankRow } from './TcRankTable.vue'
+import MkEmptyState from './MkEmptyState.vue'
+import MkSkeleton from './MkSkeleton.vue'
 import { toast } from '@/utils/toast'
 
 /** 嵌入模式：作为「执行日志」页「成本分析」tab 渲染（仅去掉外层壳，状态条/筛选/排行保留） */
@@ -471,32 +474,6 @@ html[data-theme='dark'] {
 /* 首载骨架：KPI 卡 / 趋势图 / 排行行 占位（skeleton shimmer 对齐 SkillReconciliation sk-rec__skeleton 手法） */
 .tc-filterbar--skeleton { height: 44px; }
 .tc-skel-kpi { display: grid; gap: 8px; }
-.tc-skel-kpi .tc-skel { display: block; }
-.tc-skel {
-  display: block;
-  border-radius: 6px;
-  background: linear-gradient(90deg, #eef2fa, #f7f9fc, #eef2fa);
-  background-size: 200% 100%;
-  animation: tc-skel-shimmer 1.2s infinite;
-}
-@keyframes tc-skel-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-.tc-skel--kpi-num { width: 60%; height: 26px; }
-.tc-skel--kpi-label { width: 40%; height: 12px; }
-.tc-skel--title { width: 180px; height: 14px; }
-.tc-skel-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  height: 150px;
-  padding: 12px 16px 16px;
-}
-.tc-skel--bar { flex: 1; height: 70%; border-radius: 4px 4px 0 0; }
-.tc-skel--bar:nth-child(2n) { height: 45%; }
-.tc-skel--bar:nth-child(3n) { height: 85%; }
-.tc-skel-rows { display: grid; gap: 10px; padding: 12px 16px 16px; }
-.tc-skel--row { height: 22px; border-radius: 8px; }
-html[data-theme='dark'] .tc-skel {
-  background: linear-gradient(90deg, #1f2b40, #26334d, #1f2b40);
-  background-size: 200% 100%;
-}
+/* 骨架内边距（形状由 MkSkeleton 提供） */
+.tc-skel-pad { padding: 12px 16px 16px; }
 </style>

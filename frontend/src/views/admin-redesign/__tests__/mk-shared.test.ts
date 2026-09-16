@@ -13,12 +13,12 @@ describe('MkStatStrip', () => {
     const w = mount(MkStatStrip, {
       props: {
         items: [
-          { label: '运行中', value: 0 },
+          { label: '进行中', value: 0 },
           { label: '完成率', value: '0%' },
         ],
       },
     })
-    expect(w.text()).toContain('运行中 0')
+    expect(w.text()).toContain('进行中 0')
     expect(w.text()).toContain('完成率 0%')
     expect(w.findAll('.mk-stat')).toHaveLength(2)
   })
@@ -27,7 +27,7 @@ describe('MkStatStrip', () => {
     const w = mount(MkStatStrip, {
       props: {
         items: [
-          { key: 'running', label: '运行中', value: 3, clickable: true, active: true },
+          { key: 'running', label: '进行中', value: 3, clickable: true, active: true },
           { key: 'paused', label: '已暂停', value: 1, clickable: true },
           { label: '今日调用', value: 5 },
         ],
@@ -74,5 +74,40 @@ describe('MkEmptyState', () => {
       props: { title: '还没有记录', description: '稍后再来。' },
     })
     expect(w.find('.mk-empty__action').exists()).toBe(false)
+  })
+
+  /* R3 的第三种状态：错误态。此前 9 个页面各写 --error 容器 + 手拼重试按钮，
+     现由 tone="error" + actionBusy 表达。 */
+  it('tone=error：加 --error 修饰并带 role=alert（错误可被读屏播报）', () => {
+    const w = mount(MkEmptyState, { props: { tone: 'error', title: '审计日志加载失败' } })
+    expect(w.classes()).toContain('mk-empty--error')
+    expect(w.attributes('role')).toBe('alert')
+  })
+
+  it('中性空态不加 --error、也不加 role（空态不该被当成告警播报）', () => {
+    const w = mount(MkEmptyState, { props: { title: '暂无反馈数据' } })
+    expect(w.classes()).not.toContain('mk-empty--error')
+    expect(w.attributes('role')).toBeUndefined()
+  })
+
+  it('actionBusy：按钮禁用并换成进行中文案，且不再 emit action', async () => {
+    const w = mount(MkEmptyState, {
+      props: { title: '加载失败', actionText: '重试', actionBusyText: '重试中…' },
+    })
+    const btn = () => w.find('.mk-empty__action')
+    expect(btn().text()).toBe('重试')
+    expect(btn().attributes('disabled')).toBeUndefined()
+
+    await w.setProps({ actionBusy: true })
+    expect(btn().text()).toBe('重试中…')
+    expect(btn().attributes('disabled')).toBeDefined()
+    await btn().trigger('click')
+    expect(w.emitted('action')).toBeUndefined()
+  })
+
+  it('actionBusy 但未给 actionBusyText：只禁用、不改文案（不猜动作语义）', () => {
+    const w = mount(MkEmptyState, { props: { title: 'x', actionText: '重新探测', actionBusy: true } })
+    expect(w.find('.mk-empty__action').text()).toBe('重新探测')
+    expect(w.find('.mk-empty__action').attributes('disabled')).toBeDefined()
   })
 })

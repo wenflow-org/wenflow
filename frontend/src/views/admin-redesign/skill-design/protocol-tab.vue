@@ -201,7 +201,8 @@
             </div>
           </section>
         </template>
-        <p v-else class="sdp-none">{{ coreMissing ? '该 Skill 暂无核心文件' : '加载中…' }}</p>
+        <MkLoading v-else-if="!coreMissing" inline />
+        <p v-else class="sdp-none">该 Skill 暂无核心文件</p>
       </div>
 
       <!-- 源码视图（YAML 语法高亮覆盖层） -->
@@ -299,6 +300,7 @@ import { adminPromptWorkbenchApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
 import { toast } from '@/utils/toast'
 import { coreEditorState, coreShortHash, errText } from './sdp-shared'
+import MkLoading from '../MkLoading.vue'
 
 hljs.registerLanguage('yaml', yaml)
 

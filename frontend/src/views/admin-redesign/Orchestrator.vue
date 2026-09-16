@@ -49,7 +49,7 @@
         @stage="onStageChange"
       />
       <details class="orch-fold">
-        <summary class="orch-fold__summary">
+        <summary class="mk-section__summary mk-section__summary--muted">
           字段路由与编排文件
           <span class="orch-fold__meta">{{ current.skills.length }} Skill · 点开批量查阅 / 编辑编排 YAML</span>
         </summary>
@@ -58,7 +58,7 @@
         </div>
       </details>
       <details class="orch-fold" :open="governOpen">
-        <summary class="orch-fold__summary">
+        <summary class="mk-section__summary mk-section__summary--muted">
           治理：{{ TERMS.driftContract }}报告 + 变更审计
           <span class="orch-fold__meta">编辑后核对文件与库一致</span>
         </summary>
@@ -68,8 +68,8 @@
       </details>
     </template>
     <div v-else class="orch-tabpane">
-      <p v-if="pageLoading" class="mk-empty"><span class="mk-spinner"></span> 编排数据加载中…</p>
-      <p v-else class="mk-empty">暂无编排阶段数据</p>
+      <MkLoading v-if="pageLoading" text="编排数据加载中…" />
+      <MkEmptyState v-else title="暂无编排阶段数据" />
     </div>
   </div>
 </template>
@@ -85,6 +85,8 @@ import FieldRoutingTable from './FieldRoutingTable.vue'
 import DataFlowGraph from './DataFlowGraph.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
+import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 
 const viewMode = ref<'stage' | 'sandbox'>('stage')
 /** 编辑页内治理折叠区（漂移/审计）：?tab=drift 深链时自动展开 */
@@ -326,17 +328,7 @@ void stageTitle.value
   border: 1px solid var(--mk-line); border-radius: 10px;
   background: var(--mk-surface);
 }
-.orch-fold__summary {
-  padding: 10px 14px;
-  display: flex; align-items: center; gap: 10px;
-  font-size: var(--mk-fs-12); font-weight: 800; color: var(--mk-muted);
-  cursor: pointer; user-select: none;
-  list-style: none;
-}
-.orch-fold__summary::-webkit-details-marker { display: none; }
-.orch-fold__summary::before { content: '▸ '; color: var(--mk-blue); }
-details[open].orch-fold .orch-fold__summary::before { content: '▾ '; }
-.orch-fold__summary:hover { color: var(--mk-blue); }
+/* 折叠头走 .mk-section__summary（shared.css） */
 .orch-fold__meta { font-size: var(--mk-fs-11); font-weight: 600; color: var(--mk-faint); }
 .orch-fold__body { padding: 0 14px 14px; }
 
@@ -361,7 +353,6 @@ details[open].orch-fold .orch-fold__summary::before { content: '▾ '; }
   .orch-stage-tab { padding: 11px 16px; }
   .orch-stage-tab__name { font-size: 14.5px; }
   .orch-stage-tab__meta { font-size: 12px; }
-  .orch-fold__summary { padding: 12px 16px; font-size: 13.5px; }
   .orch-fold__meta { font-size: 12.5px; }
   .orch-fold__body { padding: 0 16px 16px; }
   .orch-pane-head { padding: 12px 16px; }
@@ -373,7 +364,6 @@ details[open].orch-fold .orch-fold__summary::before { content: '▾ '; }
   .orch-stage-tab { padding: 13px 19px; }
   .orch-stage-tab__name { font-size: 17px; }
   .orch-stage-tab__meta { font-size: 14px; }
-  .orch-fold__summary { padding: 14px 19px; font-size: 16px; }
   .orch-fold__meta { font-size: 14.5px; }
   .orch-fold__body { padding: 0 19px 19px; }
   .orch-pane-head { padding: 14px 19px; }
@@ -385,7 +375,6 @@ details[open].orch-fold .orch-fold__summary::before { content: '▾ '; }
   .orch-stage-tab { padding: 15px 22px; }
   .orch-stage-tab__name { font-size: 20px; }
   .orch-stage-tab__meta { font-size: 16.5px; }
-  .orch-fold__summary { padding: 16px 22px; font-size: 18.5px; }
   .orch-fold__meta { font-size: 17px; }
   .orch-fold__body { padding: 0 22px 22px; }
   .orch-pane-head { padding: 16px 22px; }
@@ -408,8 +397,7 @@ html[data-theme='dark'] {
 
   /* 折叠层（字段路由 / 治理） */
   .orch-fold { background: #141c2b; border-color: #232f45; }
-  .orch-fold__summary { color: #9fb0c8; }
-  .orch-fold__summary:hover { color: var(--mk-blue); }
+  /* 折叠头基调由 .mk-section__summary--muted / :hover 提供（原 #9fb0c8 即 --mk-muted 暗色值） */
 
   /* 沙盘顶部条返回按钮 */
   .orch-pane-back { background: #17202f; border-color: #232f45; color: #9fb0c8; }

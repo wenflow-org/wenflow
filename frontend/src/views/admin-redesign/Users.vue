@@ -50,12 +50,14 @@
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !users.length || (deletedLoading && !users.length)" :cols="7" />
-      <div v-else-if="loadFailed" class="mk-empty">
-        <span class="mk-empty__icon" aria-hidden="true">◌</span>
-        <strong>数据加载失败</strong>
-        <span>无法从后端拉取用户列表。</span>
-        <button type="button" class="mk-empty__action" @click="retryLoad">重试</button>
-      </div>
+      <MkEmptyState
+        v-else-if="loadFailed"
+        icon="◌"
+        title="数据加载失败"
+        description="无法从后端拉取用户列表。"
+        action-text="重试"
+        @action="retryLoad"
+      />
       <div v-else-if="filtered.length" class="mk-table-scroll">
         <table class="mk-table mk-table--fixed">
           <!-- 列宽单一来源：<colgroup> + token。「用户」不设宽度＝auto 吸收列，
@@ -252,7 +254,7 @@ import { openSubPage, intent, isLive } from './store'
 import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, liveUsersTotal, liveSetUsersIncludeTest, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData } from './live'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
-import { askConfirm } from './useConfirm'
+import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from './MkFilterSearch.vue'
@@ -560,7 +562,8 @@ async function batchDelete() {
   const ok = await askConfirm({
     title: '批量删除用户',
     message: `确认批量删除 ${ids.length} 个用户？删除后用户将无法登录，历史数据保留，可在后台恢复。`,
-    confirmText: `删除 ${ids.length} 个用户`
+    confirmText: `删除 ${ids.length} 个用户`,
+    busy: true
   })
   if (!ok) return
   batchBusy.value = true
@@ -570,8 +573,10 @@ async function batchDelete() {
     liveUsers.value = liveUsers.value.filter((u) => !removed.has(u.id))
     toast.success(`已删除 ${ids.length} 个用户`)
     selected.value = []
+    doneConfirm()
   } catch (e) {
     toast.error(`批量删除失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     batchBusy.value = false
   }
@@ -637,15 +642,18 @@ async function removeUser(u: UserRow) {
   const ok = await askConfirm({
     title: '删除用户',
     message: `确认删除用户「${u.name}」（${u.email}）？\n删除后用户将无法登录，历史数据保留，可在后台恢复。`,
-    confirmText: '删除'
+    confirmText: '删除',
+    busy: true
   })
   if (!ok) return
   u.busy = true
   try {
     await liveDeleteUser(u.id)
     toast.success(`「${u.name}」已删除`)
+    doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     u.busy = false
   }
@@ -656,7 +664,8 @@ async function restoreUserRow(u: UserRow) {
   const ok = await askConfirm({
     title: '恢复用户',
     message: `确认恢复用户「${u.name}」（${u.email}）？\n恢复后该用户可重新登录，历史数据原样保留。`,
-    confirmText: '恢复'
+    confirmText: '恢复',
+    danger: false
   })
   if (!ok) return
   u.busy = true
@@ -780,50 +789,13 @@ html[data-theme='dark'] {
 }
 
 /* ================= D3 表格增强：用户列设置菜单 ================= */
-.ul-cols { position: relative; display: inline-flex; }
-.ul-cols__menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: var(--mk-z-menu);
-  min-width: 150px;
-  padding: 6px;
-  display: grid;
-  gap: 2px;
-  background: var(--mk-surface, #fff);
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  box-shadow: var(--mk-shadow-pop);
-}
-.ul-cols__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 7px;
-  font-size: var(--mk-fs-12_5);
-  color: var(--mk-muted);
-  cursor: pointer;
-  white-space: nowrap;
-  user-select: none;
-}
-.ul-cols__item:hover { background: #f0f5ff; }
-html[data-theme='dark'] .ul-cols__item:hover { background: #1f2b40; }
-.ul-cols__item input { accent-color: var(--mk-blue, #2c63d0); }
-.ul-cols__reset {
-  margin-top: 4px;
-  border: 0;
-  background: transparent;
-  padding: 6px 8px;
-  border-radius: 7px;
-  border-top: 1px dashed var(--mk-line);
-  font: inherit;
-  font-size: var(--mk-fs-12);
-  font-weight: 700;
-  color: var(--mk-blue);
-  cursor: pointer;
-  text-align: left;
-}
-.ul-cols__reset:hover { background: #eff6ff; }
-html[data-theme='dark'] .ul-cols__reset:hover { background: #1f2b40; }
+
+
+
+
+
+
+
+
+
 </style>

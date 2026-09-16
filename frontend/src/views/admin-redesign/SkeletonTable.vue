@@ -4,7 +4,7 @@
       <span
         v-for="j in cols"
         :key="j"
-        class="skl__bar"
+        class="mk-skeleton skl__bar"
         :style="{ width: barWidth(i, j), maxWidth: '100%' }"
       ></span>
     </div>
@@ -30,23 +30,12 @@ function barWidth(i: number, j: number) {
   gap: 14px;
   align-items: center;
   padding: 13px 14px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--mk-line, #e6ebf4);
 }
 .skl:last-child { border-bottom: none; }
-.skl__bar {
-  height: 12px;
-  border-radius: 6px;
-  background: linear-gradient(90deg, #eef2f7 25%, #f7f9fc 50%, #eef2f7 75%);
-  background-size: 200% 100%;
-  animation: skl-shimmer 1.2s ease infinite;
-}
-@keyframes skl-shimmer {
-  to { background-position: -200% 0; }
-}
+/* shimmer 视觉统一走 .mk-skeleton（shared.css，含暗色与 prefers-reduced-motion）；本类只管形状 */
+.skl__bar { height: 12px; }
 
-/* 暗色模式：亮灰渐变换深底等阶（原来 #eef2f7/#f7f9fc 每页加载闪白条） */
+/* 暗色模式 */
 html[data-theme='dark'] .skl { border-bottom-color: #232f45; }
-html[data-theme='dark'] .skl__bar {
-  background: linear-gradient(90deg, #1d2739 25%, #2a3a55 50%, #1d2739 75%);
-}
 </style>

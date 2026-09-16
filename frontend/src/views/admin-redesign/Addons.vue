@@ -21,9 +21,9 @@
         <h3 class="mk-card__title">外挂能力</h3>
         <span class="mk-card__meta">由白名单登记，新能力接入后自动列出</span>
       </div>
-      <div v-if="configsFailed" class="ac-error" role="alert">
-        <span>能力配置加载失败，以下表格为占位状态，无法反映真实接入情况。</span>
-        <button type="button" class="mk-link" @click="loadConfigs">重试</button>
+      <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
+        <span class="mk-alert__msg">能力配置加载失败，以下表格为占位状态，无法反映真实接入情况。</span>
+        <button type="button" class="mk-alert__btn" @click="loadConfigs">重试</button>
       </div>
       <div class="mk-table-scroll">
         <table v-if="capabilityRows.length" class="mk-table mk-table--fixed">
@@ -71,12 +71,15 @@
           </tbody>
         </table>
 
-        <div v-if="!capabilityRows.length && !loading" class="mk-empty mk-empty--min">
-          <span class="mk-empty__icon" aria-hidden="true">⌥</span>
-          <strong>暂无外挂能力</strong>
-          <span>后续接入生图、网页搜索等能力后会在这里列出，并进行模型与超时配置。</span>
-          <button type="button" class="mk-empty__action" @click="goConfig">前往模型与接入配置 →</button>
-        </div>
+        <MkEmptyState
+          v-if="!capabilityRows.length && !loading"
+          icon="⌥"
+          title="暂无外挂能力"
+          description="后续接入生图、网页搜索等能力后会在这里列出，并进行模型与超时配置。"
+          action-text="前往模型与接入配置 →"
+          min
+          @action="goConfig"
+        />
       </div>
     </div>
 
@@ -116,12 +119,19 @@
           </div>
         </div>
       </div>
-      <div v-else class="mk-empty mk-empty--min">
-        <strong>{{ mcpLoading ? '加载中…' : mcpFailed ? 'MCP 服务加载失败' : '暂无 MCP 服务' }}</strong>
-        <span v-if="!mcpLoading && !mcpFailed">MCP 工具（如网页搜索、生图）在此登记，供外挂能力调用。</span>
-        <span v-else-if="mcpFailed">无法从后端拉取 MCP 服务列表。</span>
-        <button v-if="mcpFailed" type="button" class="mk-empty__action" :disabled="mcpLoading" @click="loadMcpTools">重试</button>
-      </div>
+      <MkLoading v-else-if="mcpLoading" min />
+      <MkEmptyState
+        v-else
+        :tone="mcpFailed ? 'error' : 'neutral'"
+        :icon="mcpFailed ? '!' : ''"
+        :title="mcpFailed ? 'MCP 服务加载失败' : '暂无 MCP 服务'"
+        :description="mcpFailed ? '无法从后端拉取 MCP 服务列表。' : 'MCP 工具（如网页搜索、生图）在此登记，供外挂能力调用。'"
+        :action-text="mcpFailed ? '重试' : ''"
+        action-busy-text="重试中…"
+        :action-busy="mcpLoading"
+        min
+        @action="loadMcpTools"
+      />
     </div>
 
     </div>
@@ -195,7 +205,9 @@ import { EXTRA_COMPONENT_VISIBLE_SKILLS, EXTRA_CAPABILITY_META } from '@/views/a
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
-import { askConfirm } from './useConfirm'
+import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
+import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 import { toast } from '@/utils/toast'
 
 const router = useRouter()
@@ -389,15 +401,18 @@ async function removeTool(t: McpTool) {
   const ok = await askConfirm({
     title: '删除 MCP 服务',
     message: `确认删除「${t.name}」（${t.id}）？\n删除后依赖它的外挂能力将无法调用。`,
-    confirmText: '删除'
+    confirmText: '删除',
+    busy: true
   })
   if (!ok) return
   try {
     await adminMcpApi.removeTool(t.id)
     await loadMcpTools()
     toast.success('MCP 服务已删除')
+    doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
+    failConfirm()
   }
 }
 
@@ -465,20 +480,8 @@ function goConfig() {
   .ac-cards--side { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
 
-/* 能力配置加载失败错误条 */
-.ac-error {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 12px 16px 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--mk-red-bg);
-  color: var(--mk-red);
-  font-size: var(--mk-fs-12_5);
-  font-weight: 600;
-}
-.ac-error .mk-link { color: var(--mk-red); text-decoration: underline; }
+/* 能力配置加载失败错误条：外形走 .mk-alert--row，本类只保留卡内位置 */
+.ac-error { margin: 12px 16px 0; }
 
 
 /* ② MCP 服务行 */

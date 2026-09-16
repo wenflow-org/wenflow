@@ -6,20 +6,6 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">用户与学习者</strong>
       <span class="mk-status__sep"></span>
-      <button
-        type="button"
-        class="pp-count-link"
-        :class="{ 'pp-count-link--on': tab === 'account' }"
-        title="平台账号数（真实用户，不含测试/虚拟）· 点击切换到「账号管理」"
-        @click="switchTab('account')"
-      >用户 {{ userCount }}</button>
-      <button
-        type="button"
-        class="pp-count-link"
-        :class="{ 'pp-count-link--on': tab === 'state' }"
-        title="学习画像份数（每位用户 1 份，与「用户」是同一批人）· 点击切换到「学习状态」"
-        @click="switchTab('state')"
-      >学习者 {{ domainCount.learners }}</button>
       <span
         class="mk-status__meta"
         :title="tab === 'state' ? '账号数与学习画像份数覆盖同一批真实用户，合计不重复计人' : '平台真实用户数（不含测试/虚拟）'"
@@ -30,20 +16,20 @@
       </span>
     </div>
 
-    <!-- 视图切换 pills（次级切换，紧随状态条；对齐观测组执行日志 tab 形态） -->
+    <!-- 视图切换 pills（唯一的 tab 控件）：各视图计数随 pill 呈现，状态条不再放同义可点计数 -->
     <div class="mk-pills pp-tabs">
       <button
         type="button"
         class="mk-pill"
         :class="{ 'mk-pill--active': tab === 'account' }"
         @click="switchTab('account')"
-      >账号管理</button>
+      >账号管理<span class="mk-pill__count">{{ userCount }}</span></button>
       <button
         type="button"
         class="mk-pill"
         :class="{ 'mk-pill--active': tab === 'state' }"
         @click="switchTab('state')"
-      >学习状态</button>
+      >学习状态<span class="mk-pill__count">{{ domainCount.learners }}</span></button>
     </div>
 
     <!-- 账号管理：Users（embedded 不含状态条，计数上报宿主；新建用户入口在卡头） -->
@@ -136,15 +122,8 @@ watch(
    原覆盖在 ≥1440px 档位与 .mk-page 的 px 内边距脱节，导致本页状态条起始位置/宽度
    与单页容器（如虚拟学习者）不一致。子页签与嵌入页自行承担内容间距。 */
 .pp-tabs { width: fit-content; }
-/* 页头计数锚点（与学习会话宿主 gc-count-link 同形态）：用户/学习者可点击切视图 */
-.pp-count-link {
-  border: 0; background: transparent; padding: 2px 6px;
-  font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
-  color: var(--mk-muted); cursor: pointer; border-radius: 6px;
-  transition: color 0.12s ease, background 0.12s ease;
-}
-.pp-count-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); }
-.pp-count-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); }
+/* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136）：
+   原先每页复制一份 pp-/lc-/ts-/gc-/oc-/ms- 私有实现，视觉细节互相漂移。 */
 /* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度，表格区内滚 */
 .pp-host > .mk-page--fill {
   flex: 1 1 auto;

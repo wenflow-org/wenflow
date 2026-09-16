@@ -35,7 +35,7 @@
       <div v-else class="mk-status mk-status--muted">
         <span class="mk-status__dot"></span>
         <strong class="mk-status__title">{{ skillId }}</strong>
-        <span v-if="loading" class="mk-status__meta">加载中…</span>
+        <MkLoading v-if="loading" inline />
         <span v-else-if="loadFailed" class="mk-status__meta mk-status__meta--bad">概览加载失败</span>
         <span class="mk-status__actions">
           <button v-if="loadFailed && !loading" type="button" class="mk-status__action" @click="loadAll">重试</button>
@@ -52,10 +52,11 @@
       <span>请修改文件并通过部署同步处理</span>
     </div>
 
-    <div v-if="notFound" class="mk-empty">
-      <strong>未找到 Skill「{{ skillId }}」</strong>
-      <span>它可能未注册或 ID 有误。</span>
-    </div>
+    <MkEmptyState
+      v-if="notFound"
+      :title="`未找到 Skill「${skillId}」`"
+      description="它可能未注册或 ID 有误。"
+    />
 
     <template v-if="overview">
       <!-- Tabs（单层 6 tab：协议 / 试跑 / 版本 / 运行时 / 工程 / 字段路由） -->
@@ -131,6 +132,8 @@ import RoutingTab from './skill-design/routing-tab.vue'
 import './shared.css'
 import { TERMS } from './terms'
 import { toast } from '@/utils/toast'
+import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 
 /* ---------- 路由与基础 ---------- */
 const route = useRoute()
@@ -260,7 +263,8 @@ async function loadAll() {
     const ok = await askConfirm({
       title: '刷新设计页',
       message: '当前 Skill 有未保存的修改，刷新后将丢失，确定刷新？',
-      confirmText: '刷新并放弃修改'
+      confirmText: '刷新并放弃修改',
+      danger: false
     })
     if (!ok) return
   }
@@ -308,7 +312,8 @@ watch(agentIdParam, async (id) => {
     const ok = await askConfirm({
       title: '切换 Skill',
       message: '当前 Skill 有未保存的修改，切换后将丢失，确定离开？',
-      confirmText: '离开并放弃修改'
+      confirmText: '离开并放弃修改',
+      danger: false
     })
     if (!ok) {
       // 取消：回滚 URL，不执行任何重置（回弹再进 watcher 时因 id === lastAgentId 直接跳过）
@@ -329,7 +334,8 @@ onBeforeRouteLeave(async () => {
   const ok = await askConfirm({
     title: '离开设计页',
     message: '当前 Skill 有未保存的修改，离开后将丢失，确定离开？',
-    confirmText: '离开并放弃修改'
+    confirmText: '离开并放弃修改',
+    danger: false
   })
   return ok === true
 })

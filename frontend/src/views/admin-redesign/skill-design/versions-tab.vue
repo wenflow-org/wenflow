@@ -2,11 +2,11 @@
   <!-- 版本：核心文件版本（协议发布） + Prompt 版本（单一入口，原协议 pill 已并入） -->
   <div class="sdp-versions">
     <section class="sdp-eng">
-      <header class="sdp-sec-head">
+      <header class="mk-section__head">
         <h4>核心文件版本（协议发布）</h4>
         <span class="sdp-sec-meta">{{ coreVersions.length }} 个 · 回滚会替换磁盘文件与 ACTIVE</span>
       </header>
-      <div class="mk-table-wrap">
+      <div class="sdp-table-wrap">
         <table class="sdp-pw__table">
           <thead>
             <tr><th>版本</th><th title="coreHash">核心哈希</th><th title="coreVer">核心版本</th><th>状态</th><th>发布者</th><th></th></tr>
@@ -36,12 +36,12 @@
     </section>
 
     <section class="sdp-eng">
-      <header class="sdp-sec-head">
+      <header class="mk-section__head">
         <h4>Prompt 版本</h4>
         <span class="sdp-sec-meta">{{ promptVersions.length }} 个版本</span>
       </header>
       <p v-if="versionMsg" class="sdp-versions-msg" :class="{ 'is-err': versionErr }">{{ versionMsg }}</p>
-      <div class="mk-table-wrap">
+      <div class="sdp-table-wrap">
         <table class="mk-table">
           <thead>
             <tr>
@@ -265,7 +265,7 @@ watch(
 .sdp-versions { display: grid; gap: 16px; }
 .sdp-versions-msg { margin: 0; font-size: 11.5px; color: var(--mk-green); font-weight: 600; display: flex; gap: 8px; align-items: center; }
 .sdp-versions-msg.is-err { color: var(--mk-red); }
-.mk-table-wrap {
+.sdp-table-wrap {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   overflow-x: auto;
@@ -344,26 +344,13 @@ watch(
 
 /* 分区头 */
 .sdp-eng { display: grid; gap: 8px; }
-.sdp-sec-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.sdp-sec-head h4 {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--mk-faint);
-}
+/* 区块头走 .mk-section__head（shared.css） */
 .sdp-sec-meta { font-size: 11px; color: var(--mk-faint); display: inline-flex; gap: 10px; align-items: center; }
 .sdp-none { margin: 0; font-size: 12px; color: var(--mk-faint); }
 
 /* 4K：字号跟随壳层放大 */
 @media (min-width: 3600px) {
-  .sdp-sec-head h4 { font-size: 17.5px; }
+  .mk-section__head h4 { font-size: 17.5px; }
   .sdp-sec-meta { font-size: 17.5px; }
   .sdp-versions-msg { font-size: 18px; }
   .sdp-vtag { font-size: 16.5px; padding: 2px 9px; }
@@ -375,7 +362,7 @@ watch(
 }
 
 /* 暗色模式 */
-[data-theme='dark'] .mk-table-wrap { background: #17202f; }
+[data-theme='dark'] .sdp-table-wrap { background: #17202f; }
 [data-theme='dark'] .sdp-diff { background: #17202f; }
 [data-theme='dark'] .sdp-diff__head { background: #1b2638; }
 

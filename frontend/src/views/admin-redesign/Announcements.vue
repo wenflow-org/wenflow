@@ -90,19 +90,26 @@
       </table>
       </div>
 
-      <div v-else-if="liveFailed" class="mk-empty">
-        <span class="mk-empty__icon" aria-hidden="true">!</span>
-        <strong>公告加载失败</strong>
-        <span>无法从服务读取公告列表。</span>
-        <button type="button" class="mk-empty__action" :disabled="liveRetrying" @click="retryLive">{{ liveRetrying ? '重试中…' : '重试' }}</button>
-      </div>
+      <MkEmptyState
+        v-else-if="liveFailed"
+        tone="error"
+        icon="!"
+        title="公告加载失败"
+        description="无法从服务读取公告列表。"
+        action-text="重试"
+        action-busy-text="重试中…"
+        :action-busy="liveRetrying"
+        @action="retryLive"
+      />
 
-      <div v-else class="mk-empty mk-empty--min">
-        <strong>{{ isFiltered ? '没有匹配的公告' : '还没有公告' }}</strong>
-        <span>{{ isFiltered ? '放宽筛选条件试试。' : '维护通知、功能发布、政策变更都会在这里汇总。' }}</span>
-        <button v-if="isFiltered" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
-        <button v-else type="button" class="mk-empty__action" @click="openCreate">新建公告</button>
-      </div>
+      <MkEmptyState
+        v-else
+        :title="isFiltered ? '没有匹配的公告' : '还没有公告'"
+        :description="isFiltered ? '放宽筛选条件试试。' : '维护通知、功能发布、政策变更都会在这里汇总。'"
+        :action-text="isFiltered ? '清除筛选' : '新建公告'"
+        min
+        @action="isFiltered ? clearFilters() : openCreate()"
+      />
     </div>
 
     <!-- 新建 / 编辑公告 -->
@@ -182,10 +189,11 @@ import { adminAnnouncementsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
-import { askConfirm } from './useConfirm'
+import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkFilterSearch from './MkFilterSearch.vue'
+import MkEmptyState from './MkEmptyState.vue'
 
 /** 嵌入模式：作为「通知与公告」页「公告」tab 渲染（仅去掉外层壳，状态条/新建/编辑弹窗保留）。
     count 事件：公告总数上报（宿主「公告 N」徽章；embedded 才消费） */
@@ -322,15 +330,18 @@ async function remove(r: Row) {
   const ok = await askConfirm({
     title: '删除公告',
     message: `确认删除公告「${r.title}」？\n该操作不可撤销。`,
-    confirmText: '删除'
+    confirmText: '删除',
+    busy: true
   })
   if (!ok) return
   r.busy = true
   try {
     await liveDeleteAnnouncement(r.id)
     toast.success('公告已删除')
+    doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     r.busy = false
   }

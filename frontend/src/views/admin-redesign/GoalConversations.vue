@@ -6,38 +6,17 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">学习会话</strong>
       <span class="mk-status__sep"></span>
-      <button
-        type="button"
-        class="gc-count-link"
-        :class="{ 'gc-count-link--on': gcTab === 'teaching' }"
-        title="点击切换到「教学会话」视图"
-        @click="switchGcTab('teaching')"
-      >教学 {{ domainCount.teaching }}</button>
-      <button
-        type="button"
-        class="gc-count-link"
-        :class="{ 'gc-count-link--on': gcTab === 'conversations' }"
-        title="点击切换到「目标对话」视图"
-        @click="switchGcTab('conversations')"
-      >对话 {{ domainCount.conversations }}</button>
-      <button
-        type="button"
-        class="gc-count-link"
-        :class="{ 'gc-count-link--on': gcTab === 'paths' }"
-        title="点击切换到「学习路径」视图"
-        @click="switchGcTab('paths')"
-      >路径 {{ domainCount.paths }}</button>
       <span class="mk-status__meta" title="学习会话三视图合计（教学会话 + 目标对话 + 学习路径，均为仅真实口径）">共 {{ domainTotal }} 项</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" @click="refreshActive">刷新</button>
       </span>
     </div>
 
-    <!-- 视图切换 pills（次级切换，紧随状态条；对齐观测组执行日志 tab 形态） -->
+    <!-- 视图切换 pills（唯一的 tab 控件）：各视图计数随 pill 呈现，状态条不再放同义可点计数 -->
     <div class="mk-pills gc-tabs">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'teaching' }" @click="switchGcTab('teaching')">教学会话</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'conversations' }" @click="switchGcTab('conversations')">目标对话</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'paths' }" @click="switchGcTab('paths')">学习路径</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'teaching' }" @click="switchGcTab('teaching')">教学会话<span class="mk-pill__count">{{ domainCount.teaching }}</span></button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'conversations' }" @click="switchGcTab('conversations')">目标对话<span class="mk-pill__count">{{ domainCount.conversations }}</span></button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'paths' }" @click="switchGcTab('paths')">学习路径<span class="mk-pill__count">{{ domainCount.paths }}</span></button>
     </div>
 
     <!-- ===== Tab0: 教学会话（嵌入 TeachingSessions 组件；embedded 不含状态条，计数上报宿主） ===== -->
@@ -47,10 +26,11 @@
     <template v-if="gcTab === 'conversations'">
 
     <!-- 空态：无数据时显示（live 列表为空） -->
-    <div v-if="!rows.length && !loading" class="mk-empty">
-      <strong>暂无 Goal 会话数据</strong>
-      <span>学习者发起目标对话后自动呈现。</span>
-    </div>
+    <MkEmptyState
+      v-if="!rows.length && !loading"
+      title="暂无 Goal 会话数据"
+      description="学习者发起目标对话后自动呈现。"
+    />
 
     <template v-else>
       <!-- 列表 -->
@@ -177,12 +157,15 @@
           </tbody>
         </table>
         </div>
-        <div v-else class="mk-empty">
-          <span v-if="!loading" class="mk-empty__icon" aria-hidden="true">◌</span>
-          <strong>{{ loading ? '加载中…' : (keyword || statusFilter ? '当前筛选无匹配' : '暂无目标对话') }}</strong>
-          <span v-if="!loading">{{ keyword || statusFilter ? '放宽筛选条件试试。' : (includeTest ? '全量口径下暂无目标对话。' : '默认仅展示真实用户；切换「含模拟」可查看全部。') }}</span>
-          <button v-if="isFiltered && !loading" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
-        </div>
+        <MkLoading v-else-if="loading" />
+        <MkEmptyState
+          v-else
+          icon="◌"
+          :title="keyword || statusFilter ? '当前筛选无匹配' : '暂无目标对话'"
+          :description="keyword || statusFilter ? '放宽筛选条件试试。' : (includeTest ? '全量口径下暂无目标对话。' : '默认仅展示真实用户；切换「含模拟」可查看全部。')"
+          :action-text="isFiltered ? '清除筛选' : ''"
+          @action="clearFilters"
+        />
         <!-- 客户端分页（P2：76 行单页直排 → mk-pagination 统一分页器，15-30-50-100 条/页） -->
         <Pagination
           v-if="filtered.length"
@@ -229,7 +212,7 @@
               <div><span>完成</span><strong>{{ detail.completedAt || '—' }}</strong></div>
             </div>
 
-            <p v-if="detailLoading" class="gc-none"><span class="mk-spinner" aria-hidden="true"></span> 正在加载对话详情…</p>
+            <MkLoading v-if="detailLoading" inline text="正在加载对话详情…" />
 
             <!-- P0 修复：详情加载失败行内提示 + 重试 -->
             <div v-if="detailError" class="gc-error" role="alert">
@@ -321,13 +304,15 @@ import { useRoute, useRouter } from 'vue-router'
 import { isLive, intent } from './store'
 import { useSessionDrill } from './useSessionDrill'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
-import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS } from './statusText'
+import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS, statusText } from './statusText'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
-import { askConfirm } from './useConfirm'
+import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from './MkFilterSearch.vue'
+import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 import { useTableSort } from './useTableSort'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from './MkCols.vue'
@@ -541,7 +526,8 @@ const statusPills = computed(() => {
   ]
 })
 
-const statusLabel = (s: string) => ({ active: '进行中', completed: '已完成', cancelled: '已取消' })[s] || s || '—'
+/** 状态词一律走全局字典（单源）；空值给「—」。原私有字典与 statusText 逐条重合，故删除 */
+const statusLabel = (s: string) => statusText(s) || '—'
 const statusBadge = (s: string) =>
   s === 'completed' ? 'mk-badge--ok' : s === 'active' ? 'mk-badge--info' : s === 'cancelled' ? 'mk-badge--warn' : 'mk-badge--muted'
 
@@ -799,7 +785,8 @@ async function remove(r: Row) {
   const ok = await askConfirm({
     title: '删除目标对话',
     message: `确认删除「${r.userName}」的这条 Goal 会话？\n该操作不可撤销。`,
-    confirmText: '删除'
+    confirmText: '删除',
+    busy: true
   })
   if (!ok) return
   try {
@@ -810,8 +797,10 @@ async function remove(r: Row) {
       closeDetail()
     }
     toast.success('会话已删除')
+    doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
+    failConfirm()
   }
 }
 
@@ -846,7 +835,6 @@ onMounted(() => {
 /* 目标对话内联内容（状态条 + 卡片）：同为 fill 列的直接子级，卡片弹性填满 */
 .gc-host > .mk-status { flex: none; }
 /* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
-.gc-dash__stack { padding: 0; }
 .gc-row { cursor: pointer; }
 /* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
 .gc-tags { display: flex; gap: 5px; margin-top: 2px; }
@@ -947,29 +935,7 @@ onMounted(() => {
 .gc-conf__bar { width: 72px; }
 
 /* 状态条完成率堆叠条（G3） */
-.gc-stack { display: inline-flex; align-items: center; gap: 6px; }
-.gc-stack__bar {
-  display: inline-flex;
-  width: 120px;
-  height: 6px;
-  border-radius: 99px;
-  overflow: hidden;
-  background: #f0f3f9;
-}
-.gc-stack__seg { height: 100%; min-width: 0; }
-.gc-stack__seg--active { background: var(--mk-blue); }
-.gc-stack__seg--completed { background: var(--mk-green); }
-.gc-stack__seg--cancelled { background: var(--mk-amber); }
-.gc-stack em { font-style: normal; font-size: var(--mk-fs-11); color: var(--mk-faint); white-space: nowrap; }
-/* 页头计数锚点（与教学会话 ts-count-link 同形态）：进行中/已完成可点击筛选 */
-.gc-count-link {
-  border: 0; background: transparent; padding: 2px 6px;
-  font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
-  color: var(--mk-muted); cursor: pointer; border-radius: 6px;
-  transition: color 0.12s ease, background 0.12s ease;
-}
-.gc-count-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); }
-.gc-count-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); }
+/* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136） */
 
 /* 理解与方案卡片 */
 .gc-insight {
@@ -1113,34 +1079,6 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
 }
 .gc-btn-link:hover { text-decoration: underline; }
 /* 按钮规格对齐 .mk-btn（8x16 / 12.5px）；危险操作实心红（与 .mk-btn--danger 一致） */
-.gc-btn-primary {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 0;
-  background: var(--mk-blue);
-  color: #fff;
-  font: inherit;
-  font-size: var(--mk-fs-12_5);
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.gc-btn-primary:hover:not(:disabled) { background: #2b64d8; }
-.gc-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-.gc-btn-danger {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--mk-red-fill, #dc2626);
-  background: var(--mk-red-fill, #dc2626);
-  color: #fff;
-  font: inherit;
-  font-size: var(--mk-fs-12_5);
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.gc-btn-danger:hover:not(:disabled) { background: #b91c1c; border-color: #b91c1c; }
-.gc-btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
 
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大 */
@@ -1198,7 +1136,6 @@ html[data-theme='dark'] {
   .gc-msg--assistant .gc-msg__bubble,
   .gc-msg--unknown .gc-msg__bubble { background: #1b2433; border-color: #2a3850; }
   .gc-msg--user .gc-msg__bubble { background: #16233a; border-color: #27405f; }
-  .gc-stack__bar { background: #232f45; }
   .gc-insight__row { border-bottom-color: #1e2839; }
   .gc-mask { background: rgba(4, 8, 16, 0.55); }
   .gc-stage-cell__dot { background: #2a3850; }

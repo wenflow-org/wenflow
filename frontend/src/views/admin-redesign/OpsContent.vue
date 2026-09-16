@@ -8,15 +8,15 @@
       <span class="mk-status__sep"></span>
       <button
         type="button"
-        class="oc-count-link"
-        :class="{ 'oc-count-link--on': statusFilter === 'active' }"
+        class="mk-status__meta-link"
+        :class="{ 'mk-status__meta-link--on': statusFilter === 'active' }"
         title="点击筛选「学习中」路径"
         @click="statusFilter = statusFilter === 'active' ? '' : 'active'"
       >学习中 {{ byStatus('active') }}</button>
       <button
         type="button"
-        class="oc-count-link"
-        :class="{ 'oc-count-link--on': statusFilter === 'completed' }"
+        class="mk-status__meta-link"
+        :class="{ 'mk-status__meta-link--on': statusFilter === 'completed' }"
         title="点击筛选「已完成」路径"
         @click="statusFilter = statusFilter === 'completed' ? '' : 'completed'"
       >已完成 {{ byStatus('completed') }}</button>
@@ -163,12 +163,15 @@
           </tbody>
         </table>
       </div>
-      <div v-else class="mk-empty">
-        <span v-if="!loading" class="mk-empty__icon" aria-hidden="true">◌</span>
-        <strong>{{ loading ? '加载中…' : (keyword || statusFilter ? '当前筛选无匹配' : '没有学习路径') }}</strong>
-        <span v-if="!loading">{{ keyword || statusFilter ? '放宽筛选条件试试。' : '用户的目标对话生成路径后，会出现在这里。' }}</span>
-        <button v-if="isFiltered && !loading" type="button" class="mk-empty__action" @click="clearFilters">清除筛选</button>
-      </div>
+      <MkLoading v-else-if="loading" />
+      <MkEmptyState
+        v-else
+        icon="◌"
+        :title="keyword || statusFilter ? '当前筛选无匹配' : '没有学习路径'"
+        :description="keyword || statusFilter ? '放宽筛选条件试试。' : '用户的目标对话生成路径后，会出现在这里。'"
+        :action-text="isFiltered ? '清除筛选' : ''"
+        @action="clearFilters"
+      />
 
       <Pagination
         v-if="filtered.length > pageSize"
@@ -192,7 +195,7 @@
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detailOpen = false">✕</button>
           </div>
           <div class="mk-drawer__body">
-            <div v-if="detailLoading" class="oc-loading"><span class="mk-spinner"></span> 加载中…</div>
+            <MkLoading v-if="detailLoading" inline />
             <template v-else-if="detail">
               <p v-if="detail.description" class="oc-desc">{{ detail.description }}</p>
               <div v-for="m in detail.milestones" :key="m.id" class="oc-milestone">
@@ -225,9 +228,11 @@ import { timeAgo, errMsg, shortId } from './live'
 import { intent } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
 import MkFilterSearch from './MkFilterSearch.vue'
+import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 import { useTableSort } from './useTableSort'
 import { useRowMenu } from './useRowMenu'
-import { askConfirm } from './useConfirm'
+import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
@@ -373,6 +378,7 @@ async function archive(p: PathRow) {
     title: '下线路径',
     message: `确认下线「${p.title}」？\n用户端将无法继续学习该路径。`,
     confirmText: '下线',
+    busy: true,
   })
   if (!ok) return
   p.busy = true
@@ -381,8 +387,10 @@ async function archive(p: PathRow) {
     p.status = 'archived'
     toast.success('路径已下线')
     void loadStats()
+    doneConfirm()
   } catch (e) {
     toast.error(`下线失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     p.busy = false
   }
@@ -394,6 +402,7 @@ async function restore(p: PathRow) {
     title: '恢复路径',
     message: `确认恢复「${p.title}」？恢复后用户端立即可见并继续学习该路径。`,
     confirmText: '恢复',
+    danger: false,
   })
   if (!ok) return
   p.busy = true
@@ -414,6 +423,7 @@ async function remove(p: PathRow) {
     title: '删除路径',
     message: `确认删除「${p.title}」？\n将级联删除其全部里程碑与子任务，不可撤销。`,
     confirmText: '删除',
+    busy: true,
   })
   if (!ok) return
   p.busy = true
@@ -422,8 +432,10 @@ async function remove(p: PathRow) {
     rows.value = rows.value.filter((x) => x.id !== p.id)
     toast.success('路径已删除')
     void loadStats()
+    doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     p.busy = false
   }
@@ -483,15 +495,7 @@ defineExpose({ reload })
 </script>
 
 <style scoped>
-/* 页头计数锚点（与教学会话 ts-count-link / 目标对话 gc-count-link 同形态）：学习中/已完成可点击筛选 */
-.oc-count-link {
-  border: 0; background: transparent; padding: 2px 6px;
-  font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
-  color: var(--mk-muted); cursor: pointer; border-radius: 6px;
-  transition: color 0.12s ease, background 0.12s ease;
-}
-.oc-count-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); }
-.oc-count-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); }
+/* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136） */
 /* 嵌入模式（目标对话页「学习路径」tab）：fill 容器内占满，主卡片弹性 */
 .oc-embedded { flex: 1; min-height: 0; overflow: hidden; }
 .oc-error {
@@ -525,7 +529,6 @@ defineExpose({ reload })
   color: var(--mk-muted);
 }
 
-.oc-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
 .oc-desc { color: var(--mk-muted); font-size: var(--mk-fs-12_5); margin: 0 0 12px; }
 .oc-milestone {
   border: 1px solid var(--mk-line);

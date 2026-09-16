@@ -4,7 +4,7 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">系统工具</strong>
       <span class="mk-status__sep"></span>
-      <span v-if="tab === 'tools'" class="mk-status__meta" :class="{ 'is-bad': deadCount > 0 }">outbox 死信 {{ deadCount }}</span>
+      <span v-if="tab === 'tools'" class="mk-status__meta" :class="deadCount > 0 ? 'mk-status__meta--bad' : ''">outbox 死信 {{ deadCount }}</span>
       <span v-else class="mk-status__meta">CSV 下载 · UTF-8（Excel 可直接打开）</span>
       <span class="mk-status__actions">
         <button v-if="tab === 'tools'" type="button" class="mk-status__action" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
@@ -78,7 +78,7 @@
           </button>
         </div>
       </div>
-      <div v-if="deadLoading" class="dt-loading"><span class="mk-spinner"></span> 加载中…</div>
+      <MkLoading v-if="deadLoading" />
       <template v-else-if="deadItems.length">
         <div class="mk-table-scroll">
           <table class="mk-table mk-table--fixed">
@@ -124,14 +124,19 @@
           <button type="button" class="mk-link" @click="loadDead">刷新</button>
         </div>
       </template>
-      <div v-else-if="deadFailed" class="mk-empty mk-empty--compact">
-        <strong>死信清单加载失败</strong>
-        <button type="button" class="mk-empty__action" @click="loadDead">重试</button>
-      </div>
-      <div v-else class="mk-empty mk-empty--compact">
-        <strong>没有死信事件</strong>
-        <span>outbox 全部正常投递，worker 无积压。</span>
-      </div>
+      <MkEmptyState
+        v-else-if="deadFailed"
+        title="死信清单加载失败"
+        action-text="重试"
+        compact
+        @action="loadDead"
+      />
+      <MkEmptyState
+        v-else
+        title="没有死信事件"
+        description="outbox 全部正常投递，worker 无积压。"
+        compact
+      />
     </section>
     </template>
 
@@ -203,6 +208,8 @@ import { timeAgo, errMsg, shortId } from './live'
 import { askConfirm } from './useConfirm'
 import { adminDevtoolsApi, adminAxios } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
+import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 
 const tab = ref<'tools' | 'export'>('tools')
 function switchTab(t: 'tools' | 'export') {
@@ -268,6 +275,7 @@ async function requeueAll() {
     title: '重放全部死信',
     message: `将重放全部 ${deadCount.value} 条死信事件并重新投递，可能产生重复的业务副作用。确定继续？`,
     confirmText: '重放全部',
+    danger: false,
   })
   if (!ok) return
   requeueBusy.value = true
@@ -290,6 +298,7 @@ async function requeueOne(eventType: string) {
     title: '重放该类型死信',
     message: `将重放事件类型「${eventType}」的全部死信（当前清单内 ${count} 条），可能产生重复的业务副作用。确定继续？`,
     confirmText: '重放该类',
+    danger: false,
   })
   if (!ok) return
   requeueBusy.value = true
@@ -419,7 +428,7 @@ void loadDead()
   word-break: break-all;
 }
 
-.dt-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 32px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
+
 .dt-err {
   display: inline-block;
   max-width: 320px;

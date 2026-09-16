@@ -33,6 +33,12 @@ const STATUS_TEXT: Record<string, string> = {
   closed: '已关闭',
   created: '已创建',
   abandoned: '已放弃',
+  stopped: '已停止',
+  done: '已完成',
+  // 结果态（虚拟会话试跑 / 课程执行的既有枚举，词沿用页面现状）
+  incomplete: '未收束',
+  aborted: '已中止',
+  interrupted: '已中断',
   finalizing: '收尾中',
   finalization_failed: '收尾失败',
   // 虚拟会话生命周期（双轴：轴 A 生命周期 + 轴 B 阶段进度）
@@ -424,6 +430,31 @@ export function isRunTerminal(s: string | null | undefined): boolean {
 export function isRunActive(s: string | null | undefined): boolean {
   const key = String(s || '').toLowerCase()
   return ['running', 'active', 'in_progress', 'queued', 'pausing', 'resuming', 'created', 'pending'].includes(key)
+}
+
+/**
+ * 会话生命周期 → **状态点健康档**（R2 四档 ok/warn/bad/muted）。
+ *
+ * 与 runStateTone 同源（同一份状态判定，不另立一套），把 8 个徽章档折叠为 4 个健康档：
+ * - `ok`    ← ok / running：进行中或已完成，**用户无需行动**
+ * - `bad`   ← bad：失败，**需立即行动**（禁止静默降级为灰）
+ * - `warn`  ← warn / queued / paused / 已放弃：**需关注且运营可行动**（重试、重启、清理）
+ * - `muted` ← 空值 / 未知状态：无数据或不适用（**不是 ok**）
+ *
+ * 用于页头状态点与卡片状态点：颜色语义全局唯一，hover 提示文案（正常/需关注/异常/暂无数据）
+ * 随之成立，不会出现「有数据的会话被标成『暂无数据』」。
+ */
+export function runHealthTone(s: string | null | undefined): 'ok' | 'warn' | 'bad' | 'muted' {
+  const key = String(s || '').toLowerCase()
+  if (!key) return 'muted'
+  const tone = runStateTone(key)
+  if (tone === 'ok' || tone === 'running') return 'ok'
+  if (tone === 'bad') return 'bad'
+  // 已放弃/已取消：终态但非「正常」，运营可行动（重启、清理）
+  if (['abandoned', 'cancelled', 'canceled'].includes(key)) return 'warn'
+  // 未知状态：不适用，不猜
+  if (tone === 'muted') return 'muted'
+  return 'warn'
 }
 
 /* ============================================================

@@ -13,18 +13,24 @@
       </span>
     </div>
 
-    <div v-if="failed" class="mk-empty mk-empty--min">
-      <span class="mk-empty__icon" aria-hidden="true">◌</span>
-      <strong>健康报告加载失败</strong>
-      <span>{{ errorText }}</span>
-      <button type="button" class="mk-empty__action" :disabled="loading" @click="refresh(true)">{{ loading ? '重试中…' : '重试' }}</button>
-    </div>
+    <MkEmptyState
+      v-if="failed"
+      tone="error"
+      icon="!"
+      title="健康报告加载失败"
+      :description="errorText"
+      action-text="重试"
+      action-busy-text="重试中…"
+      :action-busy="loading"
+      min
+      @action="refresh(true)"
+    />
 
     <template v-if="displayReport">
       <!-- 面向运营的一句话引导（与健康检查/漂移等折叠 section 同形态：mk-card + hc-details 折叠头） -->
       <section class="mk-card">
-        <details class="hc-details">
-          <summary class="mk-card__head hc-details__summary">
+        <details>
+          <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">本页看什么？</h3>
             <span class="mk-card__meta">系统健康 13 项检查 · Skill 是否健康运行 · 点开看术语速查</span>
           </summary>
@@ -79,8 +85,8 @@
 
       <!-- 健康检查 -->
       <section class="mk-card" id="hc-health">
-        <details class="hc-details" open>
-          <summary class="mk-card__head hc-details__summary">
+        <details open>
+          <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">健康检查</h3>
             <span class="mk-card__meta">{{ displayReport.health.summary.total }} 项</span>
             <span class="mk-badge" :class="healthAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'">{{ healthAbnormal > 0 ? `${healthAbnormal} 异常` : '无异常' }}</span>
@@ -136,8 +142,8 @@
 
       <!-- 漂移：配置与生效不一致（改完配置没同步/发布，普通运营可理解为「配置改了但没生效」） -->
       <section v-if="driftAny" class="mk-card" id="hc-drift">
-        <details class="hc-details" open>
-          <summary class="mk-card__head hc-details__summary">
+        <details open>
+          <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">{{ TERMS.driftContract }}</h3>
             <span class="mk-card__meta">{{ driftActionable }} 项需处理</span>
             <span v-if="drift.runtime" class="mk-card__meta">遥测 {{ drift.runtime }} 条</span>
@@ -166,20 +172,21 @@
 
       <!-- 技能对账（SkillReconciliation 自身即是 mk-card，外层仅作滚动锚点，避免卡中卡） -->
       <section id="hc-recon" class="hc-anchor">
-        <SkillReconciliation ref="reconRef" />
+        <!-- @openSkill 此前未绑定 → 对账行点击无反应（审计 附 A #5）。绑定到全局 skill 抽屉。 -->
+        <SkillReconciliation ref="reconRef" @openSkill="openSkillDrawer" />
       </section>
 
       <!-- 完成度分布 -->
       <section class="mk-card" id="hc-completion">
-        <details class="hc-details">
-          <summary class="mk-card__head hc-details__summary">
+        <details>
+          <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">完成度分布</h3>
             <span class="mk-card__meta">{{ completionLive }} / {{ reconciliation.total }} 已上线</span>
           </summary>
           <div class="hc-completion">
             <div v-for="tier in completionTiers" :key="tier.status" class="hc-completion__bar">
               <span class="hc-completion__label">{{ tier.label }}</span>
-              <span class="hc-completion__track"><i :style="{ width: Math.max((tierCount(tier.status) / Math.max(reconciliation.total, 1)) * 100, 0) + '%' }" :class="`hc-completion__fill--${tier.status}`"></i></span>
+              <span class="mk-minibar hc-completion__track"><i class="mk-minibar__fill" :style="{ width: Math.max((tierCount(tier.status) / Math.max(reconciliation.total, 1)) * 100, 0) + '%' }" :class="`hc-completion__fill--${tier.status}`"></i></span>
               <span class="hc-completion__num">{{ tierCount(tier.status) }}</span>
             </div>
           </div>
@@ -196,7 +203,7 @@ import { toast } from '@/utils/toast'
 import { errMsg, timeAgo } from './live'
 import { askConfirm } from './useConfirm'
 import { useSafePolling } from '@/composables/useSafePolling'
-import { isLive } from './store'
+import { isLive, openSkillDrawer } from './store'
 import {
   adminHealthCenterApi,
   type HealthCenterItem,
@@ -210,6 +217,7 @@ import { TERMS } from './terms'
 import { COMPLETION_META, SEMANTICS_META } from './glossaryMeta'
 import { EXTRA_CAPABILITY_SKILLS } from '@/views/admin/capabilityCatalog'
 import MkKpi from './MkKpi.vue'
+import MkEmptyState from './MkEmptyState.vue'
 import SkillReconciliation from './SkillReconciliation.vue'
 
 const reconRef = ref<{ openPanel?: () => void } | null>(null)
@@ -433,6 +441,7 @@ async function fix(id: HealthCenterItemId) {
     title: '一键修复',
     message: `将执行「${item?.label || id}」的自动修复：编译相关 core 文件、执行 DB 对账并重写 agent-snapshots。执行前自动备份、结果写入审计日志。`,
     confirmText: '执行修复',
+    danger: false,
   })
   if (!ok) return
   fixingId.value = id
@@ -482,9 +491,7 @@ defineExpose({ refresh })
 /* 滚动锚点（技能对账外层：组件自身即卡，这里只留定位不留卡盒） */
 .hc-anchor { scroll-margin-top: 14px; }
 
-/* 可折叠 */
-.hc-details__summary { cursor: pointer; user-select: none; list-style: none; }
-.hc-details__summary::-webkit-details-marker { display: none; }
+/* 可折叠头走 .mk-section__summary（shared.css） */
 
 /* 面向运营的一句话引导（折叠区正文；容器已用 mk-card + hc-details 折叠头，与各 section 同形态） */
 .hc-guide__body { padding: 10px 14px 12px; display: grid; gap: 6px; }
@@ -532,8 +539,8 @@ defineExpose({ refresh })
 .hc-completion { display: grid; gap: 8px; padding: 14px 16px; }
 .hc-completion__bar { display: flex; align-items: center; gap: 10px; }
 .hc-completion__label { font-size: var(--mk-fs-11); font-weight: 700; width: 100px; flex-shrink: 0; color: var(--mk-muted); }
-.hc-completion__track { flex: 1; height: 8px; border-radius: 4px; background: var(--mk-line); overflow: hidden; }
-.hc-completion__track i { display: block; height: 100%; border-radius: 4px; transition: width 0.3s ease; }
+/* 进度条统一走 .mk-minibar（shared.css）；本类只保留布局与完成度色调 */
+.hc-completion__track { flex: 1; }
 .hc-completion__fill--draft { background: var(--mk-rec-draft); }
 .hc-completion__fill--handler-ready { background: var(--mk-rec-handler); }
 .hc-completion__fill--core-ready { background: var(--mk-rec-core); }

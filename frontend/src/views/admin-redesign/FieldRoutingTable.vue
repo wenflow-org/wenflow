@@ -44,7 +44,7 @@
 
     <!-- 图例：角色 / render / 锁定 / 流转 一句话人话表（可折叠） -->
     <details class="frt__legend" :open="legendOpen" @toggle="legendOpen = ($event.target as HTMLDetailsElement).open">
-      <summary class="frt__legend-summary">图例：字段角色 / 对外可见性 / 锁定 / 流转 —— 不懂就看这里</summary>
+      <summary class="mk-section__summary mk-section__summary--muted">图例：字段角色 / 对外可见性 / 锁定 / 流转 —— 不懂就看这里</summary>
       <div class="frt__legend-body">
         <div class="frt__legend-group frt__legend-group--roles">
           <h5 class="frt__legend-title">字段角色（promptRole）</h5>
@@ -138,8 +138,8 @@
       <span v-if="filterActive" class="frt__filter-count">命中 {{ filteredTotal }} / {{ routings.length }} 行</span>
     </div>
 
-    <div v-if="loading" class="frt__empty">加载中…</div>
-    <div v-else-if="error" class="frt__empty">{{ error }}<button type="button" class="mk-empty__action" @click="loadStage">重试</button></div>
+    <MkLoading v-if="loading" />
+    <MkEmptyState v-else-if="error" tone="error" :title="error" action-text="重试" compact @action="loadStage" />
     <template v-else>
       <div v-for="agent in agents" :key="agent.agentId" class="frt__agent">
         <div class="frt__agenthead">
@@ -301,6 +301,8 @@ import { TERMS } from './terms';
 import Pagination from './Pagination.vue';
 import MkFilterSearch from './MkFilterSearch.vue';
 import { useTableSort } from './useTableSort';
+import MkLoading from './MkLoading.vue';
+import MkEmptyState from './MkEmptyState.vue';
 
 interface FieldItem {
   fieldId: string;
@@ -688,6 +690,7 @@ async function forceSync() {
     title: TERMS.syncToDb,
     message: `将对「${props.stage}」阶段执行全量对账：以编排 YAML 为唯一声明源，覆写 agent_contracts / field_definitions / agent_field_routings 三表；admin 覆盖行跳过（只报告不改）。`,
     confirmText: '执行同步',
+    danger: false,
   })
   if (!ok) return
   orchMsg.value = '';
@@ -804,26 +807,8 @@ watch(() => props.stage, () => void loadStage());
   background: var(--mk-surface, #fff);
   box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06));
 }
-.frt__legend-summary {
-  padding: 9px 14px;
-  cursor: pointer;
-  user-select: none;
-  font-size: var(--mk-fs-12_5);
-  font-weight: 700;
-  color: var(--mk-muted, #5b6577);
-  list-style: none;
-  transition: color 0.14s ease;
-}
-.frt__legend-summary::-webkit-details-marker { display: none; }
-.frt__legend-summary::before {
-  content: '▸';
-  display: inline-block;
-  margin-right: 7px;
-  color: var(--mk-blue, #2c63d0);
-  transition: transform 0.14s ease;
-}
-.frt__legend[open] .frt__legend-summary::before { transform: rotate(90deg); }
-.frt__legend-summary:hover { color: var(--mk-ink, #1a2a44); }
+/* 折叠头走 .mk-section__summary（shared.css） */
+/* hover 基调由 .mk-section__summary 提供（统一 → --mk-blue） */
 .frt__legend-body {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
@@ -976,14 +961,12 @@ watch(() => props.stage, () => void loadStage());
 .frt__orch-quick-item b { margin-right: 4px; color: var(--mk-ink, #1a2a44); }
 
 .frt__handoff { max-width: var(--mk-col-id); color: var(--mk-faint, var(--mk-faint-soft)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.frt__empty { padding: 30px; color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; }
 .frt__emptyrow { color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; padding: 14px; }
 
 @media (min-width: 2000px) {
   .frt__toolbar-btn { font-size: 14px; padding: 10px 20px; }
   .frt__toolbar-hint { font-size: 13.5px; }
   .frt__notice { font-size: 13.5px; padding: 9px 14px; }
-  .frt__legend-summary { font-size: 14px; padding: 11px 17px; }
   .frt__legend-title { font-size: 12px; }
   .frt__legend-loading { font-size: 13px; }
   .frt__legend-en { font-size: 12px; }
@@ -1005,7 +988,6 @@ watch(() => props.stage, () => void loadStage());
   .frt__toolbar-btn { font-size: 16.5px; padding: 12px 24px; }
   .frt__toolbar-hint { font-size: 16px; }
   .frt__notice { font-size: 16px; padding: 11px 17px; }
-  .frt__legend-summary { font-size: 16.5px; padding: 13px 21px; }
   .frt__legend-title { font-size: 14px; }
   .frt__legend-loading { font-size: 15.5px; }
   .frt__legend-en { font-size: 14px; }
@@ -1036,13 +1018,13 @@ html[data-theme='dark'] {
   .frt-syncbar { background: #1b2a45; border-color: rgba(91, 141, 239, 0.4); }
   .frt-syncbar--muted { background: #141c2b; }
   .frt-syncbar__badge--muted { background: #253049; }
-  .frt__tablewrap { background: #141c2b; }
+
   .frt__agenthead { background: #131b2a; }
   /* agent 卡片标题：暗色下从近白降为柔和浅灰蓝（与编排图一致） */
   .frt__agentname { color: #c7d3e8; }
   .frt__agentcount { background: #253049; }
   .frt__persist--alias { background: rgba(251, 191, 36, 0.12); }
-  .frt__fieldrow:hover { background: #1b2740; }
+
 
   .frt__orch-summary { background: #101826; }
   .frt__orch-textarea { background: #0f1624; }

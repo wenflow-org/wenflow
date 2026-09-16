@@ -81,7 +81,7 @@ describe('虚拟学习者定位（D1）', () => {
     expect(bar.exists()).toBe(true);
     expect(bar.text()).toContain('共 0 人');
     // 分区筛选计数（画像口径）
-    expect(bar.text()).toContain('运行中 0');
+    expect(bar.text()).toContain('进行中 0');
     expect(bar.text()).toContain('已暂停 0');
     expect(bar.text()).toContain('需关注 0');
     expect(bar.text()).not.toContain('创建中');

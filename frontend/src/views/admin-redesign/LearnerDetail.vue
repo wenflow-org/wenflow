@@ -1,43 +1,39 @@
 <template>
   <div v-if="detailError" class="mk-page ld">
-    <div class="mk-empty">
-      <span class="mk-empty__icon" aria-hidden="true">◌</span>
-      <strong>详情加载失败</strong>
-      <span>暂时无法获取该学习者的完整快照。</span>
-      <button type="button" class="mk-empty__action" @click="loadDetail(subPage?.id)">重试</button>
-    </div>
+    <MkEmptyState
+      icon="◌"
+      title="详情加载失败"
+      description="暂时无法获取该学习者的完整快照。"
+      action-text="重试"
+      @action="loadDetail(subPage?.id)"
+    />
   </div>
   <div v-else-if="loading" class="mk-page ld">
     <button type="button" class="mk-back" @click="closeSubPage">← 用户与学习者</button>
-    <div class="mk-empty mk-empty--min">
-      <span class="mk-spinner" aria-hidden="true"></span>
-      <strong>正在加载学习者详情…</strong>
-    </div>
+    <MkLoading min text="正在加载学习者详情…" />
   </div>
   <div v-else-if="d" class="mk-page ld">
 
-    <!-- 头部卡（布局重构：返回独立成行 + 身份 + 徽章 + 操作，与 UserDetail 页头卡同形态） -->
-    <header class="ld-head">
+    <!-- 头部卡（T2：身份区走 .mk-entity 唯一原语） -->
+    <header class="mk-entity">
       <button type="button" class="mk-back" @click="closeSubPage">← 用户与学习者</button>
-      <div class="ld-head__top">
-        <div class="ld-id">
-          <span class="ld-avatar">{{ d.name.charAt(0) }}</span>
-          <div class="ld-id__main">
-            <div class="ld-id__name-row">
-              <h1 class="ld-name">{{ d.name }}</h1>
-              <span class="ld-badges">
-                <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
-                <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
-                <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">快照 {{ d.snapshot.version }} · {{ d.snapshot.generatedAt }}</span>
-              </span>
-            </div>
-            <span class="ld-sub">{{ d.email }} · 加入 {{ d.joined || '—' }}</span>
+      <div class="mk-entity__main">
+        <span class="mk-entity__avatar mk-entity__avatar--learner">{{ d.name.charAt(0) }}</span>
+        <div class="mk-entity__id">
+          <div class="mk-entity__name-row">
+            <h1 class="mk-entity__name">{{ d.name }}</h1>
+            <span class="mk-entity__badges">
+              <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
+              <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
+              <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">快照 {{ d.snapshot.version }} · {{ d.snapshot.generatedAt }}</span>
+            </span>
           </div>
-          <div class="ld-id__actions">
-            <button type="button" class="mk-status__action" :disabled="recomputing" @click="recompute">
-              {{ recomputing ? '重算中…' : '重算快照' }}
-            </button>
-          </div>
+          <span class="mk-entity__sub">{{ d.email }} · 加入 {{ d.joined || '—' }}</span>
+        </div>
+        <div class="mk-entity__actions">
+          <button type="button" class="mk-status__action" :disabled="recomputing" @click="recompute">
+            {{ recomputing ? '重算中…' : '重算快照' }}
+          </button>
         </div>
       </div>
     </header>
@@ -67,7 +63,7 @@
           <div class="ld-progress">
             <strong>{{ d.path }}</strong>
             <span class="ld-progress__stage">{{ d.stage }}</span>
-            <div class="ld-progress__bar"><i :style="{ width: d.pct + '%' }"></i></div>
+            <span class="mk-minibar ld-progress__bar"><i class="mk-minibar__fill" :style="{ width: d.pct + '%' }"></i></span>
             <p class="ld-progress__task">正在做：{{ d.task || '—' }}</p>
             <p v-if="milestoneTasks" class="ld-progress__task">当前里程碑：已完成 {{ milestoneTasks.done }}/{{ milestoneTasks.total }} 个任务</p>
           </div>
@@ -78,7 +74,17 @@
             <h3 class="mk-card__title">概念掌握</h3>
             <span class="mk-card__meta">{{ conceptBars.length }} 个概念</span>
           </div>
-          <div v-if="conceptBars.length" class="ld-bars">
+          <!-- T2 硬约束 2：结论行常驻（数字全部由现有 conceptBars 的 tone 派生，未新增判断） -->
+          <p v-if="conceptBars.length" class="mk-section__conclusion">
+            共 {{ conceptBars.length }} 个概念：{{ conceptBars.filter((c) => c.tone === 'ok').length }} 个转移就绪、{{
+              conceptBars.filter((c) => c.tone === 'warn' || c.tone === 'bad').length
+            }} 个待巩固<template v-if="conceptBars.filter((c) => c.tone === 'muted').length"
+              >、{{ conceptBars.filter((c) => c.tone === 'muted').length }} 个证据不足</template
+            >。
+          </p>
+          <details v-if="conceptBars.length" class="ld-bars-details">
+            <summary class="mk-section__summary">逐概念明细</summary>
+            <div class="ld-bars">
             <div v-for="c in conceptBars" :key="c.label" class="ld-bar">
               <div class="ld-bar__head">
                 <strong :title="`转移就绪：${c.readiness} · 误解风险：${c.risk}`">{{ c.label }}</strong>
@@ -88,11 +94,12 @@
                   <span v-if="c.evidenceCount > 0" class="ld-bar__ev" :title="`证据 ${c.evidenceCount} 条`">{{ c.evidenceCount }} 证据</span>
                 </span>
               </div>
-              <div class="ld-bar__track">
-                <i :class="`ld-bar__fill is-${c.tone}`" :style="{ width: c.width + '%' }"></i>
-              </div>
+              <span class="mk-minibar ld-bar__track">
+                <i class="mk-minibar__fill" :data-tone="c.tone === 'muted' ? undefined : c.tone" :class="{ 'ld-bar__fill--muted': c.tone === 'muted' }" :style="{ width: c.width + '%' }"></i>
+              </span>
             </div>
-          </div>
+            </div>
+          </details>
           <p v-else class="ld-none">
             {{ '暂无概念账本数据' }}
             <span class="ld-none__hint">重算快照后由知识记忆服务生成。</span>
@@ -349,7 +356,15 @@
             <h3 class="mk-card__title">证据时间线</h3>
             <span class="mk-card__meta">{{ evidence.length }} 条学习事件 · 点色=信号，条=置信</span>
           </div>
-          <div v-if="evidence.length" class="ld-evidence">
+          <!-- T2 硬约束 2「结论与细节分层」：结论行常驻可见，明细折叠。
+               结论文字完全取自本卡已有数据（条数 + 卡片里本来就标的「证据不足」），未新增判断。 -->
+          <p v-if="evidence.length" class="mk-section__conclusion">
+            共 {{ evidence.length }} 条学习事件，其中
+            {{ evidence.filter((e) => evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)).length }} 条置信度低于 50%（仅供参照）。
+          </p>
+          <details v-if="evidence.length" class="ld-ev-details">
+            <summary class="mk-section__summary">逐条明细</summary>
+            <div class="ld-evidence">
             <div v-for="(e, i) in evidence" :key="i" class="ld-ev">
               <span class="ld-ev__rail" aria-hidden="true"></span>
               <span
@@ -382,6 +397,7 @@
               <span class="ld-ev__time">{{ e.time }}</span>
             </div>
           </div>
+          </details>
           <p v-else class="ld-none">
             {{ '暂无证据记录' }}
             <span class="ld-none__hint">学习事件累积后自动生成。</span>
@@ -395,9 +411,9 @@
             <div class="mk-card__head">
               <h3 class="mk-card__title">学习压力记录</h3>
               <div class="ld-load__controls">
-                <div class="ld-load__seg">
-                  <button type="button" class="ld-load__seg-item" :class="{ 'is-on': loadRange === 42 }" @click="loadRange = 42">42 天</button>
-                  <button type="button" class="ld-load__seg-item" :class="{ 'is-on': loadRange === 90 }" @click="loadRange = 90">90 天</button>
+                <div class="mk-seg">
+                  <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': loadRange === 42 }" @click="loadRange = 42">42 天</button>
+                  <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': loadRange === 90 }" @click="loadRange = 90">90 天</button>
                 </div>
               </div>
             </div>
@@ -455,9 +471,9 @@
                     </span>
                   </span>
                 </div>
-                <div class="ld-bar__track">
-                  <i :class="`ld-bar__fill is-${c.tone}`" :style="{ width: c.width + '%' }"></i>
-                </div>
+                <span class="mk-minibar ld-bar__track">
+                  <i class="mk-minibar__fill" :data-tone="c.tone === 'muted' ? undefined : c.tone" :class="{ 'ld-bar__fill--muted': c.tone === 'muted' }" :style="{ width: c.width + '%' }"></i>
+                </span>
               </div>
             </div>
           </section>
@@ -484,10 +500,12 @@
                   <em>&nbsp;</em>
                 </div>
               </div>
-              <div class="ld-cal__buckets">
+              <details class="ld-cal-details">
+                <summary class="mk-section__summary">校准分布与最近预测</summary>
+                <div class="ld-cal__buckets">
                 <div v-for="b in predictionCalib?.stats.calibration ?? []" :key="b.range" class="ld-cal__bucket">
                   <span class="ld-cal__range">{{ b.range }}</span>
-                  <span class="ld-cal__bar"><i :style="{ width: calBarWidth(b) }"></i></span>
+                  <span class="mk-minibar ld-cal__bar"><i class="mk-minibar__fill" data-tone="warn" :style="{ width: calBarWidth(b) }"></i></span>
                   <span class="ld-cal__val">{{ b.hardRate != null ? `${Math.round(b.hardRate * 100)}%` : '—' }} (n={{ b.n }})</span>
                 </div>
               </div>
@@ -500,6 +518,7 @@
                   </span>
                 </div>
               </div>
+              </details>
             </div>
           </section>
         </div>
@@ -521,6 +540,8 @@ import { toast } from '@/utils/toast'
 import type { EChartsCoreOption } from 'echarts/core'
 import MkChart from './MkChart.vue'
 import MkKpi from './MkKpi.vue'
+import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 import { useIsDark } from '@/composables/useIsDark'
 
 const isDark = useIsDark()
@@ -1278,42 +1299,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 <style scoped>
 .ld { gap: 16px; }
-/* 头部卡（布局重构）：返回 + 身份 + 徽章 + 操作合并，与 UserDetail 页头卡同形态 */
-.ld-head {
-  display: grid;
-  gap: 12px;
-  padding: 16px 18px 14px;
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: var(--mk-surface);
-}
-.ld-head__top { display: flex; align-items: flex-start; gap: 12px; }
-.ld-id {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex: 1;
-  min-width: 0;
-}
-.ld-id__main { display: grid; gap: 2px; min-width: 0; }
-.ld-id__name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ld-id__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
-.ld-avatar {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, var(--mk-blue, #2c63d0), var(--mk-purple));
-  color: #fff;
-  display: grid;
-  place-content: center;
-  font-size: var(--mk-fs-18);
-  font-weight: 700;
-  flex-shrink: 0;
-}
-.ld-id h3,
-.ld-name { margin: 0; font-size: var(--mk-fs-18); line-height: 1.4; }
-.ld-sub { color: var(--mk-faint); font-size: var(--mk-fs-12); }
-.ld-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 页头身份区走 .mk-entity（shared.css） */
 
 .ld-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .ld-tabpage { display: grid; gap: 14px; align-content: start; }
@@ -1332,21 +1318,12 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-progress { padding: 16px; display: grid; gap: 8px; }
 .ld-progress strong { font-size: var(--mk-fs-15); }
 .ld-progress__stage { color: var(--mk-muted); font-size: var(--mk-fs-12_5); }
-.ld-progress__bar {
-  height: 8px;
-  border-radius: 4px;
-  background: #eef2fa;
-  overflow: hidden;
-  margin: 4px 0;
-}
-.ld-progress__bar i { display: block; height: 100%; background: linear-gradient(90deg, #6aa0ff, var(--mk-blue, #2c63d0)); }
+/* 进度条统一走 .mk-minibar（shared.css）；本类只保留外边距 */
+.ld-progress__bar { margin: 4px 0; }
 .ld-progress__task { margin: 0; font-size: var(--mk-fs-12_5); color: var(--mk-muted); }
 
-.ld-concepts { padding: 16px; display: grid; gap: 14px; }
-.ld-concept-group { display: grid; gap: 7px; }
 .ld-concept-label { font-size: var(--mk-fs-11); font-weight: 700; letter-spacing: 0.04em; }
 .ld-concept-label--ok { color: var(--mk-green); }
-.ld-concept-label--warn { color: var(--mk-amber); }
 .ld-concept-label--bad { color: var(--mk-red); }
 .ld-concept-list { display: flex; gap: 6px; flex-wrap: wrap; }
 .ld-concept {
@@ -1356,7 +1333,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   font-weight: 600;
 }
 .ld-concept--ok { background: var(--mk-green-bg); color: var(--mk-green); }
-.ld-concept--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .ld-concept--bad { background: var(--mk-red-bg); color: var(--mk-red); }
 
 /* 概念掌握条（conceptLedger 图形化） */
@@ -1383,17 +1359,9 @@ function barToneBadge(tone: ConceptBarTone): string {
   cursor: help;
 }
 .ld-bar__ev--zero { background: #f4f6fa; color: var(--mk-faint); }
-.ld-bar__track {
-  height: 8px;
-  border-radius: 4px;
-  background: #eef2fa;
-  overflow: hidden;
-}
-.ld-bar__fill { display: block; height: 100%; border-radius: 4px; min-width: 3px; }
-.ld-bar__fill.is-ok { background: linear-gradient(90deg, #86efac, #22c55e); }
-.ld-bar__fill.is-warn { background: linear-gradient(90deg, #fcd34d, #f59e0b); }
-.ld-bar__fill.is-bad { background: linear-gradient(90deg, #fca5a5, #dc2626); }
-.ld-bar__fill.is-muted { background: linear-gradient(90deg, #d1d5db, #9ca3af); }
+/* 分布条统一走 .mk-minibar + data-tone（原为 4 套渐变，属 §4 点名的违规）；
+   muted 档原语没有，保留本页一个色调类 */
+.ld-bar__fill--muted { background: var(--mk-faint); }
 
 .ld-trend {
   display: flex;
@@ -1630,13 +1598,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 /* ---------- 学习压力曲线（健康度/疲劳度 EWMA，风格对齐用户侧 V2LearningState） ---------- */
 .ld-load__controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.ld-load__stats { font-size: var(--mk-fs-12); color: var(--mk-muted); font-variant-numeric: tabular-nums; font-weight: 600; }
-.ld-load__seg { display: inline-flex; padding: 3px; background: #eef2fa; border-radius: 9px; gap: 2px; }
-.ld-load__seg-item {
-  border: 0; background: transparent; padding: 4px 10px; border-radius: 7px;
-  font: inherit; font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-muted); cursor: pointer;
-}
-.ld-load__seg-item.is-on { background: #fff; color: var(--mk-blue); box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12); }
+/* 分段控件（42/90 天）走 .mk-seg（shared.css） */
 .ld-load__body { padding: 12px 14px 14px; display: grid; gap: 10px; }
 .ld-load__legend { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; font-size: var(--mk-fs-11); color: var(--mk-muted); }
 .ld-load__dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 5px; }
@@ -1644,9 +1606,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-load__dot.is-lf { background: var(--mk-red); }
 .ld-load__dot.is-lsb { background: var(--mk-green); }
 .ld-load__chip { margin-left: auto; font-size: var(--mk-fs-11); font-weight: 800; padding: 2px 9px; border-radius: 999px; }
-.ld-load__chip--fresh { color: var(--mk-green); background: var(--mk-green-bg); }
-.ld-load__chip--optimal { color: var(--mk-amber); background: var(--mk-amber-bg); }
-.ld-load__chip--risk { color: var(--mk-red); background: var(--mk-red-bg); }
 .ld-load__info { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; font-size: var(--mk-fs-12); color: var(--mk-muted); border-top: 1px dashed var(--mk-line); padding-top: 8px; }
 .ld-load__info b { color: var(--mk-ink); }
 .ld-load__info .is-lss-t { color: var(--mk-blue); font-weight: 700; }
@@ -1667,8 +1626,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-cal__buckets { display: grid; gap: 6px; }
 .ld-cal__bucket { display: grid; grid-template-columns: 52px 1fr 72px; align-items: center; gap: 8px; font-size: var(--mk-fs-11); }
 .ld-cal__range { color: var(--mk-faint); font-variant-numeric: tabular-nums; }
-.ld-cal__bar { display: block; height: 8px; border-radius: 99px; background: #eef2fa; overflow: hidden; }
-.ld-cal__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #fbbf24, #f59e0b); min-width: 4px; transition: width 0.15s ease; }
+/* 校准分布条走 .mk-minibar + data-tone（原为琥珀渐变） */
 .ld-cal__val { color: var(--mk-muted); font-variant-numeric: tabular-nums; text-align: right; }
 .ld-cal__recent { display: grid; gap: 0; border-top: 1px dashed var(--mk-line); padding-top: 8px; }
 .ld-cal__row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: var(--mk-fs-11); border-bottom: 1px solid #f6f7f9; }
@@ -1691,9 +1649,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .ld-avatar { width: 54px; height: 54px; font-size: 21px; }
-  .ld-id h3, .ld-name { font-size: 21px; }
-  .ld-sub { font-size: 14px; }
   .ld-none { font-size: 14.5px; }
   .ld-progress strong { font-size: 17.5px; }
   .ld-progress__stage, .ld-progress__task { font-size: 14.5px; }
@@ -1701,7 +1656,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-concept { font-size: 14px; }
   .ld-bar__head strong { font-size: 14.5px; }
   .ld-bar__risk, .ld-bar__ev { font-size: 12px; }
-  .ld-bar__track { height: 8px; }
   .ld-actions p { font-size: 14.5px; }
   .ld-actions__k { font-size: 12px; }
   .ld-chip { font-size: 12px; }
@@ -1718,8 +1672,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-none { padding: 21px 19px; }
   .ld-none__hint { font-size: 13.5px; }
   .ld-progress { padding: 18px; gap: 9px; }
-  .ld-progress__bar { height: 9px; }
-  .ld-concepts { padding: 18px; }
   .ld-concept { padding: 4px 12px; }
   .ld-bars { padding: 16px 18px 18px; }
   .ld-actions { padding: 16px 18px; }
@@ -1737,9 +1689,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号沿用 2000 档的基础上再升一档，对齐 mk 体系 2800（17px 级） */
-  .ld-avatar { width: 62px; height: 62px; font-size: 24px; }
-  .ld-id h3, .ld-name { font-size: 24.5px; }
-  .ld-sub { font-size: 16.5px; }
   .ld-none { font-size: 17px; }
   .ld-progress strong { font-size: 20.5px; }
   .ld-progress__stage, .ld-progress__task { font-size: 17px; }
@@ -1747,7 +1696,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-concept { font-size: 16.5px; }
   .ld-bar__head strong { font-size: 17px; }
   .ld-bar__risk, .ld-bar__ev { font-size: 14px; }
-  .ld-bar__track { height: 10px; }
   .ld-actions p { font-size: 17px; }
   .ld-actions__k { font-size: 14px; }
   .ld-chip { font-size: 14px; }
@@ -1764,8 +1712,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-none { padding: 25px 22px; }
   .ld-none__hint { font-size: 16px; }
   .ld-progress { padding: 21px; gap: 10px; }
-  .ld-progress__bar { height: 11px; }
-  .ld-concepts { padding: 21px; }
   .ld-concept { padding: 4px 14px; }
   .ld-bars { padding: 19px 21px 21px; }
   .ld-actions { padding: 19px 21px; }
@@ -1783,9 +1729,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
-  .ld-avatar { width: 72px; height: 72px; font-size: 28px; }
-  .ld-id h3, .ld-name { font-size: 28.5px; }
-  .ld-sub { font-size: 19px; }
   .ld-none { font-size: 20px; }
   .ld-progress strong { font-size: 24px; }
   .ld-progress__stage, .ld-progress__task { font-size: 20px; }
@@ -1793,7 +1736,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-concept { font-size: 19px; }
   .ld-bar__head strong { font-size: 20px; }
   .ld-bar__risk, .ld-bar__ev { font-size: 16.5px; }
-  .ld-bar__track { height: 12px; }
   .ld-actions p { font-size: 20px; }
   .ld-actions__k { font-size: 16.5px; }
   .ld-chip { font-size: 16.5px; }
@@ -1810,8 +1752,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-none { padding: 29px 26px; }
   .ld-none__hint { font-size: 18.5px; }
   .ld-progress { padding: 25px; gap: 12px; }
-  .ld-progress__bar { height: 13px; }
-  .ld-concepts { padding: 25px; }
   .ld-concept { padding: 5px 16px; }
   .ld-bars { padding: 22px 25px 25px; }
   .ld-actions { padding: 22px 25px; }
@@ -1834,29 +1774,18 @@ html[data-theme='dark'] {
   .ld-progress__bar,
   .ld-bar__track,
   .ld-bar__ev--zero,
-  .ld-trend__track,
   .ld-cal__bar,
   .ld-cal__outcome.is-pending,
   .ld-ev__signal.is-muted,
-  .ld-load__seg,
-  .ld-badge-seg { background: #232f45; }
   /* 分隔线（进度/趋势/会话/证据/日历） */
   .ld-trend,
   .ld-session,
   .ld-ev,
   .ld-cal__row,
   .ld-bar__ev { border-bottom-color: #232f45; }
-  /* 淡蓝底（hover/摘要） */
-  .ld-badge-seg.is-on,
-  .ld-concept-legend__seg--hot { background: rgba(91, 141, 239, 0.18); }
   /* 语义渐变（warn/bad 用暗色系，避免浅红/浅琥珀过亮） */
-  .ld-bar__fill.is-warn,
-  .ld-trend__bar--up { background: linear-gradient(90deg, #b45309, #92400e); }
-  .ld-bar__fill.is-bad,
   .ld-trend__bar--down { background: linear-gradient(90deg, #b91c1c, #7f1d1d); }
-  .ld-bar__fill.is-muted { background: linear-gradient(90deg, #4a5874, #33415c); }
   .ld-bar__ev { background: #232f45; }
-  .ld-bar__fill.is-ok { background: linear-gradient(90deg, #16a34a, #15803d); }
   .ld-kv__row,
   .ld-mt th,
   .ld-mt td { border-bottom-color: #232f45; }
@@ -1866,6 +1795,5 @@ html[data-theme='dark'] {
   .ld-actions__k { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
   .ld-chip { background: #253049; color: #9fb0c8; }
   .ld-ev__confbar { background: #232f45; }
-  .ld-load__seg-item.is-on { background: rgba(91, 141, 239, 0.22); color: #9db8f5; box-shadow: none; }
 }
 </style>

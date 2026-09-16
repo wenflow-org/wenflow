@@ -19,7 +19,8 @@ import {
   sessionProgressText,
   sessionProgressTone,
   sessionProgressDone,
-  GOAL_STAGE_TOTAL
+  GOAL_STAGE_TOTAL,
+  runHealthTone
 } from '../statusText';
 
 describe('statusText', () => {
@@ -275,5 +276,57 @@ describe('sessionProgress（教学会话进度列单源：任务 x/y + 迷你条
     expect(sessionProgressDone('timeout')).toBe(false);
     expect(sessionProgressDone('')).toBe(false);
     expect(sessionProgressDone(null)).toBe(false);
+  });
+});
+
+describe('runHealthTone（R2 状态点四档：ok/warn/bad/muted）', () => {  it('R2 硬约束 2：失败/超时必须落到 bad，不得静默降级为灰', () => {
+    expect(runHealthTone('failed')).toBe('bad');
+    expect(runHealthTone('error')).toBe('bad');
+    expect(runHealthTone('timeout')).toBe('bad');
+    expect(runHealthTone('FAILED')).toBe('bad');
+  });
+
+  it('进行中与已完成 → ok（一切正常且用户无需行动）', () => {
+    expect(runHealthTone('running')).toBe('ok');
+    expect(runHealthTone('active')).toBe('ok');
+    expect(runHealthTone('in_progress')).toBe('ok');
+    expect(runHealthTone('completed')).toBe('ok');
+    expect(runHealthTone('succeeded')).toBe('ok');
+  });
+
+  it('未开始/排队/暂停/已放弃 → warn（需关注且运营可行动）', () => {
+    expect(runHealthTone('created')).toBe('warn');
+    expect(runHealthTone('pending')).toBe('warn');
+    expect(runHealthTone('queued')).toBe('warn');
+    expect(runHealthTone('paused')).toBe('warn');
+    expect(runHealthTone('abandoned')).toBe('warn');
+    expect(runHealthTone('cancelled')).toBe('warn');
+  });
+
+  it('空值与未知状态 → muted（无数据/不适用，不是 ok）', () => {
+    expect(runHealthTone('')).toBe('muted');
+    expect(runHealthTone(null)).toBe('muted');
+    expect(runHealthTone(undefined)).toBe('muted');
+    expect(runHealthTone('something-unknown')).toBe('muted');
+  });
+
+  it('与 runStateTone 同源：ok/running 折叠为 ok，bad 保持 bad', () => {
+    for (const s of ['running', 'completed', 'active']) expect(runHealthTone(s)).toBe('ok');
+    for (const s of ['failed', 'error', 'timeout']) expect(runHealthTone(s)).toBe('bad');
+  });
+});
+
+describe('结果态方言收敛（统一走字典单源）', () => {
+  it('原页面私有写法一律改由 statusText 给出', () => {
+    // 曾散落在 VirtualProfile.formatRunResult / QuickLearnPanel.statusLabel / 终止确认文案
+    expect(statusText('created')).toBe('已创建'); // 页内曾写「创建中」
+    expect(statusText('incomplete')).toBe('未收束');
+    expect(statusText('failed')).toBe('失败'); // 页内曾写「已失败」/「未完成」
+    expect(statusText('error')).toBe('错误');
+    expect(statusText('abandoned')).toBe('已放弃'); // 页内曾写「已终止」
+    expect(statusText('aborted')).toBe('已中止');
+    expect(statusText('interrupted')).toBe('已中断');
+    expect(statusText('stopped')).toBe('已停止'); // BatchExperiments 枚举
+    expect(statusText('done')).toBe('已完成');
   });
 });

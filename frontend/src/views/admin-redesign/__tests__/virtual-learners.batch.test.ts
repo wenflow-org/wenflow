@@ -2,14 +2,15 @@
  * VirtualLearners P1 批量管理与生命周期视图（A1/A2）测试：
  * 分区计数状态条（全量口径）/ 已截断提示 / 复选框批量条 /
  * 批量终止（profileIds → terminate 端点）/ 批量清理卡死与一键回收（reclaim-stale dryRun → 确认落地）/
- * 运行中列直达座舱 / 卡死·失败 bad 色标注 / 批量删除标记待 2B
+ * 进行中列直达座舱 / 卡死·失败 bad 色标注 / 批量删除标记待 2B
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import VirtualLearners from '../VirtualLearners.vue';
+import Confirm from '../Confirm.vue';
 import { liveVirtuals, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats } from '../live';
-import { settleConfirm } from '../useConfirm';
+import { settleConfirm, confirmState } from '../useConfirm';
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
@@ -152,7 +153,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     // 会话口径：活动 = running 2 + created 3
     expect(w.text()).toContain('活动会话 5');
     // 画像口径分区筛选计数
-    expect(w.text()).toContain('运行中 1');
+    expect(w.text()).toContain('进行中 1');
     expect(w.text()).toContain('已暂停 1');
     expect(w.text()).toContain('需关注 1');
     expect(w.text()).toContain('已截断 · 共 80 人');
@@ -241,8 +242,44 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(terminateMock).toHaveBeenCalledWith({ profileIds: ['vl-1', 'vl-2'], dryRun: false });
   });
 
-  it('批量终止：确认取消时不调端点', async () => {
-    liveVirtuals.value = [makeVirtual(1, { runningCount: 1 })];
+  it('批量终止（busy 端到端）：真点弹窗确认 → 进入「处理中…」防重复提交 → 业务结束后弹窗自动关闭', async () => {
+    liveVirtuals.value = [makeVirtual(1, { runningCount: 2 })];
+    const w = await mountPage();
+    // 真实挂载确认框（页面只负责发起 askConfirm；弹窗由全局单例 Confirm 承载）
+    const dialog = mount(Confirm, { attachTo: document.body });
+
+    await w.find<HTMLInputElement>('tbody input[type="checkbox"]').setValue(true);
+    await nextTick();
+    findBtn(w, '批量终止').trigger('click');
+    await nextTick();
+
+    // 发起后：弹窗打开且处于 busy 模式，但尚未忙碌
+    expect(confirmState.open).toBe(true);
+    expect(confirmState.busyMode).toBe(true);
+    expect(confirmState.busy).toBe(false);
+
+    // 真点「确认」（Confirm Teleport 到 body，故从 document 取）
+    const btns = [...document.querySelectorAll<HTMLButtonElement>('.mk-confirm button')];
+    expect(btns).toHaveLength(2); // [0] 取消 / [1] 确认
+    btns[1].click();
+    await nextTick();
+
+    // 关键：已进入 busy（按钮禁用 = 防重复提交），且弹窗**仍开着**由业务收尾
+    expect(confirmState.busy).toBe(true);
+    expect(confirmState.open).toBe(true);
+    expect(document.querySelector('.mk-confirm')?.textContent).toContain('处理中');
+    expect(terminateMock).toHaveBeenCalledWith({ profileIds: ['vl-1'], dryRun: false });
+
+    // 业务结束 → 弹窗自动关闭并回到空闲态
+    await flushPromises();
+    expect(confirmState.open).toBe(false);
+    expect(confirmState.busy).toBe(false);
+
+    dialog.unmount();
+    w.unmount();
+  });
+
+  it('批量终止：确认取消时不调端点', async () => {    liveVirtuals.value = [makeVirtual(1, { runningCount: 1 })];
     const w = await mountPage();
     await w.find<HTMLInputElement>('tbody input[type="checkbox"]').setValue(true);
     await nextTick();
@@ -296,7 +333,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(reclaimMock).toHaveBeenNthCalledWith(2, { dryRun: false });
   });
 
-  it('「运行中」列点击直达会话座舱（openSubPage session）', async () => {
+  it('「进行中」列点击直达会话座舱（openSubPage session）', async () => {
     liveVirtuals.value = [makeVirtual(1, { runningCount: 1, runningSessionIds: ['run-1'], currentStage: 'goal' })];
     const w = await mountPage();
     await w.find('.rs-badge').trigger('click');
@@ -312,7 +349,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const failCell = w.findAll('tbody tr td').find((td) => (td.text() || '').trim() === '2');
     expect(failCell).toBeTruthy();
     expect(w.find('.vl-faillink.vl-num--bad').exists()).toBe(true);
-    // 运行中列只表达生命周期/阶段，不混入失败/卡死徽章
+    // 进行中列只表达生命周期/阶段，不混入失败/卡死徽章
     expect(w.find('.vl-state-cell .mk-badge--bad').exists()).toBe(false);
   });
 });

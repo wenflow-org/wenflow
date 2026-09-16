@@ -91,12 +91,14 @@
           </tbody>
         </table>
       </div>
-      <div v-else-if="casesFailed" class="mk-empty">
-        <span class="mk-empty__icon" aria-hidden="true">!</span>
-        <strong>评估用例加载失败</strong>
-        <span>无法从服务读取用例列表。</span>
-        <button type="button" class="mk-empty__action" @click="reloadCases">重试</button>
-      </div>
+      <MkEmptyState
+        v-else-if="casesFailed"
+        icon="!"
+        title="评估用例加载失败"
+        description="无法从服务读取用例列表。"
+        action-text="重试"
+        @action="reloadCases"
+      />
       <MkEmptyState
         v-else
         icon="◌"
@@ -160,11 +162,13 @@
           </tbody>
         </table>
       </div>
-      <div v-else-if="runsFailed" class="mk-empty">
-        <span class="mk-empty__icon" aria-hidden="true">!</span>
-        <strong>评估历史加载失败</strong>
-        <button type="button" class="mk-empty__action" @click="reloadRuns">重试</button>
-      </div>
+      <MkEmptyState
+        v-else-if="runsFailed"
+        icon="!"
+        title="评估历史加载失败"
+        action-text="重试"
+        @action="reloadRuns"
+      />
       <MkEmptyState
         v-else
         icon="◌"
@@ -352,7 +356,7 @@
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="runDetailOpen = false">✕</button>
           </div>
           <div class="mk-drawer__body">
-            <div v-if="runDetailLoading" class="pe-detail-loading"><span class="mk-spinner"></span> 加载中…</div>
+            <MkLoading v-if="runDetailLoading" inline />
             <template v-else-if="runDetail">
               <div class="pe-run-summary">
                 <MkKpi label="通过率" :value="`${runDetail.summary.passRate ?? 0}%`" />
@@ -388,7 +392,7 @@
                   <p v-if="res.output?.userVisible" class="pe-result-row__out">{{ res.output.userVisible }}</p>
                 </div>
               </div>
-              <div v-else class="mk-empty mk-empty--compact"><strong>无结果明细</strong></div>
+              <MkEmptyState v-else compact title="无结果明细" />
             </template>
           </div>
         </div>
@@ -408,6 +412,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkKpi from './MkKpi.vue'
 import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 
 interface EvalCase {
   id: string
@@ -487,7 +492,10 @@ const runsLoading = ref(false)
 const casesFailed = ref(false)
 const runsFailed = ref(false)
 
-const statusTone = computed(() => 'mk-status--ok')
+/* 页面基调必须反映加载失败：原为硬编码 'mk-status--ok'，接口挂了顶栏仍是绿色「正常」（审计 附 A #4） */
+const statusTone = computed(() =>
+  (casesFailed.value || runsFailed.value) ? 'mk-status--bad' : 'mk-status--ok'
+)
 const lastRunText = computed(() => (runs.value.length ? `最近 ${timeAgo(runs.value[0]?.createdAt)}` : '暂无评估记录'))
 const lastRunHint = computed(() => (runs.value[0] ? `通过率 ${runs.value[0].summary.passRate ?? 0}%` : ''))
 
@@ -1038,9 +1046,9 @@ void reloadRuns()
   padding: 8px 12px;
   margin-bottom: 4px;
 }
-.pe-guide__title { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-indigo, #4f46e5); }
+.pe-guide__title { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-purple); }
 .pe-guide__steps { font-size: var(--mk-fs-12); color: var(--mk-muted); line-height: 1.5; }
-.mk-field__opt { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 500; }
+/* .mk-field__opt（字段标签内的「（可选）」次级提示）已提升为全局，见 shared.css */
 
 /* ===== 学生输入：标准 tab ===== */
 .pe-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
@@ -1104,7 +1112,7 @@ void reloadRuns()
   gap: 8px;
   font-size: var(--mk-fs-13);
   font-weight: 700;
-  color: var(--mk-text);
+  color: var(--mk-ink);
   user-select: none;
 }
 .pe-expect summary::-webkit-details-marker { display: none; }
@@ -1132,19 +1140,19 @@ void reloadRuns()
   padding: 4px 0;
   user-select: none;
 }
-.pe-adv summary:hover { color: var(--mk-indigo, #4f46e5); }
+.pe-adv summary:hover { color: var(--mk-purple); }
 .pe-adv__hint { font-size: var(--mk-fs-11); font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
 
 /* 模拟对话轨迹 */
 .pe-transcript { display: grid; gap: 6px; margin-top: 6px; }
 .pe-transcript__row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; font-size: var(--mk-fs-12); }
 .pe-transcript__role { font-weight: 700; padding-top: 2px; }
-.pe-transcript__role--goal { color: var(--mk-indigo, #6366f1); }
+.pe-transcript__role--goal { color: var(--mk-purple); }
 .pe-transcript__role--learner { color: var(--mk-green); }
 .pe-transcript__content { color: var(--mk-muted); line-height: 1.6; word-break: break-all; }
 .pe-transcript__meta { grid-column: 2; font-size: var(--mk-fs-11); color: var(--mk-faint); }
 
-.pe-detail-loading { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 40px 0; color: var(--mk-muted); font-size: var(--mk-fs-13); }
+
 /* 运行概要：MkKpi 网格容器（统计卡本体由 MkKpi 提供） */
 .pe-run-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .pe-results { display: grid; gap: 8px; }

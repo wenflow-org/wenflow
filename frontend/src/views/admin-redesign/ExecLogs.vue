@@ -44,9 +44,9 @@
     <template v-if="elTab === 'logs'">
     <!-- 日志流 -->
     <!-- P0 修复：加载失败显示错误横幅 + 重试，不再伪装成「暂无日志」 -->
-    <div v-if="liveLogsError" class="exec-error" role="alert">
-      <span>{{ liveLogsError }}</span>
-      <button type="button" @click="retryLiveLogs">重试</button>
+    <div v-if="liveLogsError" class="mk-alert mk-alert--row" role="alert">
+      <span class="mk-alert__msg">{{ liveLogsError }}</span>
+      <button type="button" class="mk-alert__btn" @click="retryLiveLogs">重试</button>
     </div>
     <MockSkeletonTable v-else-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="4" :rows="6" />
     <div v-else-if="filtered.length" class="mk-card mk-card--fill">
@@ -185,7 +185,7 @@
                       <span v-if="log.errorCode" class="tline__errcode">{{ errorCodeLabel(log.errorCode) ?? log.errorCode }}</span>
                       <span v-if="log.statusCode && log.statusCode >= 400">HTTP {{ log.statusCode }}</span>
                     </div>
-                    <p v-if="detailLoading === log.id" class="tline__none"><span class="mk-spinner" aria-hidden="true"></span> 拉取日志详情中…</p>
+                    <MkLoading v-if="detailLoading === log.id" inline text="拉取日志详情中…" />
                       <template v-else-if="detailCache[log.id]">
                         <!-- 重试时间线：网关升级后的逐次尝试遥测 -->
                         <div v-if="detailCache[log.id].attempts.length" class="tline__section">
@@ -256,11 +256,12 @@
       <Pagination v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" />
     </div>
 
-    <div v-else class="mk-empty">
-      <strong v-if="traceMiss">未找到「{{ traceMiss }}」的日志（可能超出保留期或 ID 不完整）</strong>
-      <strong v-else>{{ isFiltered ? '当前筛选无日志' : '暂无日志' }}</strong>
+    <MkEmptyState
+      v-else
+      :title="traceMiss ? `未找到「${traceMiss}」的日志（可能超出保留期或 ID 不完整）` : isFiltered ? '当前筛选无日志' : '暂无日志'"
+    >
       <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
-    </div>
+    </MkEmptyState>
     </template>
   </div>
 </template>
@@ -273,6 +274,8 @@ import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogs
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from './MkCols.vue'
+import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from './MkFilterSearch.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
@@ -717,27 +720,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 <style scoped>
 /* 全宽布局（与其他管理台页面一致）：9 列固定宽度，宽屏下剩余空间由各列按比例均摊，
    空白分散到每一列而不是堆在消息列（fixed table-layout 规范行为） */
-/* 状态条走全局 mk-status 体系；此处仅扩展终端页专属的筛选徽章类 */
-
-.mk-status__filter {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--mk-red-bg);
-  color: var(--mk-red);
-  font-size: var(--mk-fs-12);
-  font-weight: 700;
-}
-.mk-status__clear {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font-size: var(--mk-fs-13);
-  padding: 0 2px;
-}
+/* 状态条筛选徽章 / 清除按钮已提升为全局 .mk-status__filter / .mk-status__clear（见 shared.css） */
 
 .log-advpanel {
   flex-basis: 100%;
@@ -761,35 +744,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   white-space: nowrap;
 }
 
-/* P0 修复：执行日志加载失败横幅（对齐 ts-error 规范） */
-.exec-error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: var(--mk-red-bg, #fef2f2);
-  border: 1px solid rgba(220, 38, 38, 0.3);
-  color: var(--mk-red, #dc2626);
-  font-size: var(--mk-fs-13);
-  font-weight: 600;
-}
-.exec-error button {
-  border: 1px solid rgba(220, 38, 38, 0.4);
-  background: transparent;
-  color: var(--mk-red, #dc2626);
-  border-radius: 8px;
-  padding: 4px 12px;
-  font: inherit;
-  font-size: var(--mk-fs-12_5);
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.exec-error button:hover {
-  background: rgba(220, 38, 38, 0.12);
-}
+/* 加载失败横幅：外形走 .mk-alert--row（shared.css），已不再需要本页私有样式 */
 
 /* 表头与列表布局见下方 exec-* 区块 */
 
@@ -1133,7 +1088,7 @@ html[data-theme='dark'] .tline-attempt--fail { background: rgba(220, 38, 38, 0.0
 
 /* ================= 暗色模式（D1 补完）：执行日志终端页 ================= */
 html[data-theme='dark'] {
-  .log-status { background: #141c2b; border-color: #232f45; }
+
   .exec-row--open { background: #1b2740; }
   .exec-detail td { background: #131b2a; }
   .exec-detail__box { background: #0f1624; border-color: #232f45; }
@@ -1141,56 +1096,18 @@ html[data-theme='dark'] {
   .tline { background: #131b2a; border-color: #232f45; }
   .tline-attempt { background: #17202f; border-color: #232f45; }
   .tline-attempt--fail { background: #241a1a; border-left-color: var(--mk-red); }
-  .exec-error { background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.35); color: #fca5a5; }
-  .exec-cols__menu { background: #17202f; border-color: #232f45; }
-  .exec-cols__item:hover { background: #1f2b40; }
+
+
 }
 
 /* ================= D3 表格增强：列设置菜单 ================= */
-.exec-cols { position: relative; display: inline-flex; }
-.exec-cols__menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: var(--mk-z-menu);
-  min-width: 150px;
-  padding: 6px;
-  display: grid;
-  gap: 2px;
-  background: var(--mk-surface, #fff);
-  border: 1px solid var(--mk-line);
-  border-radius: 10px;
-  box-shadow: var(--mk-shadow-pop);
-}
-.exec-cols__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 7px;
-  font-size: var(--mk-fs-12_5);
-  color: var(--mk-muted);
-  cursor: pointer;
-  white-space: nowrap;
-  user-select: none;
-}
-.exec-cols__item:hover { background: #f0f5ff; }
-html[data-theme='dark'] .exec-cols__item:hover { background: #1f2b40; }
-.exec-cols__item input { accent-color: var(--mk-blue, #2c63d0); }
-.exec-cols__reset {
-  margin-top: 4px;
-  border: 0;
-  background: transparent;
-  padding: 6px 8px;
-  border-radius: 7px;
-  border-top: 1px dashed var(--mk-line);
-  font: inherit;
-  font-size: var(--mk-fs-12);
-  font-weight: 700;
-  color: var(--mk-blue);
-  cursor: pointer;
-  text-align: left;
-}
-.exec-cols__reset:hover { background: #eff6ff; }
-html[data-theme='dark'] .exec-cols__reset:hover { background: #1f2b40; }
+
+
+
+
+
+
+
+
+
 </style>

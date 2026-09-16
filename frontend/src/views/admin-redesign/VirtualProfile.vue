@@ -1,19 +1,20 @@
 ﻿<template>
   <div v-if="detailError" class="mk-page vp">
-    <div class="mk-empty">
-      <span class="mk-empty__icon" aria-hidden="true">◌</span>
-      <strong>画像加载失败</strong>
-      <span>暂时无法获取该虚拟学习者的画像与故事池。</span>
-      <button type="button" class="mk-empty__action" @click="loadDetail(subPage?.id)">重试</button>
-    </div>
+    <MkEmptyState
+      icon="◌"
+      title="画像加载失败"
+      description="暂时无法获取该虚拟学习者的画像与故事池。"
+      action-text="重试"
+      @action="loadDetail(subPage?.id)"
+    />
   </div>
   <div v-else-if="d" class="mk-page vp">
-    <header class="vp-top">
+    <header class="mk-entity mk-entity--flat">
       <button type="button" class="mk-back" @click="closeSubPage">← 虚拟学习者</button>
-      <div class="vp-top__main">
-        <span class="vp-avatar" :class="avatarClassOf(d.name)" aria-hidden="true">{{ d.name.slice(0, 1) }}</span>
-        <div class="vp-top__meta">
-          <h1 class="vp-top__name">{{ d.name }}</h1>
+      <div class="mk-entity__main">
+        <span class="mk-entity__avatar mk-entity__avatar--round" :class="avatarClassOf(d.name)" aria-hidden="true">{{ d.name.slice(0, 1) }}</span>
+        <div class="mk-entity__name-row">
+          <h1 class="mk-entity__name mk-entity__name--lg">{{ d.name }}</h1>
           <span v-if="d.archetype" class="mk-badge mk-badge--info">{{ d.archetype }}</span>
           <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
           <span v-if="d.goal" class="vp-top__goal" :title="'长期倾向：影响模拟行为与学习需求'">长期倾向：{{ d.goal }}</span>
@@ -27,7 +28,7 @@
             <template v-else>未评估</template>
           </span>
         </div>
-        <div v-if="isLive" class="vp-top__actions">
+        <div v-if="isLive" class="mk-entity__actions">
           <!-- 生命周期控制条（统一模型 vlab-controls：状态徽章 + 该状态合法操作；
                操作/文案/确认全部来自单一来源，三层同语义） -->
           <span class="vp-life" :class="`vp-life--${lifeTone}`" :title="lifeHint">
@@ -63,7 +64,7 @@
     <div class="vp-overview">
       <MkKpi label="故事" :value="displayStories.length" hint="故事池" :title="'故事池数量（含草稿/已就绪）；点击查看故事池'" clickable @click="activeTab = 'stories'" />
       <MkKpi label="会话" :value="allRuns.length" hint="累计实验会话" :title="'全部运行记录（含终态）；点击查看运行列表'" clickable @click="activeTab = 'runs'" />
-      <MkKpi label="运行中" :value="runningCount" :tone="runningCount > 0 ? 'ok' : ''" hint="运行中 + 创建中" :title="'当前运行中/创建中的会话数'" clickable @click="activeTab = 'runs'" />
+      <MkKpi label="进行中" :value="runningCount" :tone="runningCount > 0 ? 'ok' : ''" hint="进行中 + 创建中" :title="'当前进行中/创建中的会话数'" clickable @click="activeTab = 'runs'" />
       <MkKpi label="已失败" :value="failedCount" :tone="failedCount > 0 ? 'bad' : ''" hint="失败或已终止" :title="'失败与终止会话数（可重试续传，不丢进度）'" clickable @click="activeTab = 'runs'" />
     </div>
 
@@ -167,27 +168,28 @@
               :disabled="memoryLoading"
               @click="loadMemory(true)"
             >
-              {{ memoryLoading ? '加载中…' : '刷新' }}
+              <MkLoading v-if="memoryLoading" inline /><template v-else>刷新</template>
             </button>
           </div>
 
-          <div v-if="isLive && memoryLoading && !memoryData" class="vp-empty-state">
-            <span class="vp-empty-state__icon" aria-hidden="true">◌</span>
-            <strong>正在读取记忆…</strong>
-          </div>
+          <MkLoading v-if="isLive && memoryLoading && !memoryData" text="正在读取记忆…" />
 
-          <div v-else-if="isLive && memoryLoadFailed" class="vp-empty-state">
-            <span class="vp-empty-state__icon" aria-hidden="true">◌</span>
-            <strong>记忆池加载失败</strong>
-            <p>暂时无法读取该虚拟学习者的记忆数据。</p>
-            <button type="button" class="mk-empty__action" @click="loadMemory(true)">重试</button>
-          </div>
+          <MkEmptyState
+            v-else-if="isLive && memoryLoadFailed"
+            tone="error"
+            title="记忆池加载失败"
+            description="暂时无法读取该虚拟学习者的记忆数据。"
+            action-text="重试"
+            compact
+            @action="loadMemory(true)"
+          />
 
-          <div v-else-if="isLive && memoryEmpty" class="vp-empty-state">
-            <span class="vp-empty-state__icon" aria-hidden="true">◌</span>
-            <strong>记忆池还是空的</strong>
-            <p>完成课程后，学到的概念和做过的事会沉淀到这里。<br />还没有学习记录时，记忆池为空是正常的。</p>
-          </div>
+          <MkEmptyState
+            v-else-if="isLive && memoryEmpty"
+            title="记忆池还是空的"
+            description="完成课程后，学到的概念和做过的事会沉淀到这里。还没有学习记录时，记忆池为空是正常的。"
+            compact
+          />
 
           <template v-else>
             <!-- 概览 -->
@@ -331,11 +333,12 @@
             </button>
           </div>
           <!-- 空态三态：底层无故事 / 筛选无匹配（故事存在但过滤后为空） -->
-          <div v-if="isLive && !stories.length" class="vp-empty-state">
-            <span class="vp-empty-state__icon" aria-hidden="true">◌</span>
-            <strong>故事池为空</strong>
-            <p>故事产生学习需求；点击「生成故事」由 AI 根据画像与倾向产出开场故事。</p>
-          </div>
+          <MkEmptyState
+            v-if="isLive && !stories.length"
+            title="故事池为空"
+            description="故事产生学习需求；点击「生成故事」由 AI 根据画像与倾向产出开场故事。"
+            compact
+          />
           <div v-else-if="isLive && !displayStories.length && storyFilter" class="vp-none">
             当前筛选无匹配
             <button type="button" class="mk-link" @click="storyFilter = ''">查看全部故事</button>
@@ -395,7 +398,7 @@
                 </div>
                 <div class="vp-story__ops" @click.stop>
                   <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" :title="'用这个故事启动一次新的实验会话（进入座舱）'" @click="runStory(s, i)">
-                    {{ running ? '运行中…' : '▶ 运行' }}
+                    {{ running ? '进行中…' : '▶ 运行' }}
                   </button>
                   <button type="button" class="mk-link" :disabled="storyBusy" title="编辑故事：标题、概述、故事级预算（留空继承角色级）" @click="openEditStory(i)">编辑</button>
                   <button type="button" class="mk-link mk-link--danger" :disabled="storyBusy" title="删除该故事（不可恢复）" @click="removeStory(i)">删除</button>
@@ -602,22 +605,23 @@
 
   <div v-else class="mk-page">
     <button type="button" class="mk-back" @click="closeSubPage">← 虚拟学习者</button>
-    <div class="mk-empty">
-      <strong>加载中…</strong>
-      <span>正在拉取真实画像。</span>
-    </div>
+    <MkEmptyState
+      title="加载中…"
+      description="正在拉取真实画像。"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { statusText } from './statusText'
 import { subPage, closeSubPage, openSubPage, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import QuickLearnPanel from '@/views/admin/components/virtual/QuickLearnPanel.vue'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
-import { askConfirm } from './useConfirm'
+import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import {
   VS_STATE_META,
@@ -629,6 +633,8 @@ import {
 import MkKpi from './MkKpi.vue'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
+import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 import DayTimeline from './DayTimeline.vue'
 import { useSafePolling } from '@/composables/useSafePolling'
 import {
@@ -785,7 +791,8 @@ async function batchAutopilotStories(action: 'start' | 'stop') {
   const ok = await askConfirm({
     title: `批量${verb}`,
     message: `将${action === 'start' ? '为' : '停止'}勾选的 ${withSession.length} 个故事的最新会话${action === 'start' ? '开启自动驾驶（target=final 直达 Path 全部完成），已运行的自动跳过' : '的自动驾驶，学习进度保留'}`,
-    confirmText: verb
+    confirmText: verb,
+    danger: false
   })
   if (!ok) return
 
@@ -828,26 +835,34 @@ async function batchRemoveStories() {
   const ok = await askConfirm({
     title: '批量删除故事',
     message: `确认删除勾选的 ${targets.length} 个故事？\n关联的运行记录将一并清理，该操作不可撤销。`,
-    confirmText: '批量删除'
+    confirmText: '批量删除',
+    busy: true
   })
   if (!ok) return
   storyBusy.value = true
   let done = 0
   // 索引随删除变化：必须从后往前删，避免删第 0 个后第 1 个顶上来导致错位
   const indexes = targets.map(({ i }) => i).sort((a, b) => b - a)
-  for (const i of indexes) {
-    try {
-      await adminVirtualLearnersApi.deleteStory(id, i)
-      done++
-    } catch (e) {
-      toast.error(`删除第 ${i + 1} 个故事失败：${errMsg(e)}`)
+  try {
+    for (const i of indexes) {
+      try {
+        await adminVirtualLearnersApi.deleteStory(id, i)
+        done++
+      } catch (e) {
+        toast.error(`删除第 ${i + 1} 个故事失败：${errMsg(e)}`)
+      }
     }
-  }
-  storyBusy.value = false
-  if (done > 0) {
-    selectedStoryKeys.value = new Set()
-    await loadDetail(id)
-    toast.success(`已删除 ${done} 个故事`)
+    storyBusy.value = false
+    if (done > 0) {
+      selectedStoryKeys.value = new Set()
+      await loadDetail(id)
+      toast.success(`已删除 ${done} 个故事`)
+    }
+    doneConfirm()
+  } catch (e) {
+    storyBusy.value = false
+    failConfirm()
+    throw e
   }
 }
 /** 详情加载失败（无列表兜底数据时）→ 明确错误态 + 重试 */
@@ -869,7 +884,7 @@ const storyFilterOptions = computed(() => {
   const completed = count((s) => !!s.latestRun && String(s.latestRun.status || '').toLowerCase() === 'completed')
   return [
     { key: '', label: '全部', count: base.length },
-    { key: 'running', label: '运行中', count: running },
+    { key: 'running', label: '进行中', count: running },
     { key: 'paused', label: '已暂停', count: paused },
     { key: 'failed', label: '需关注', count: failed },
     { key: 'completed', label: '已完成', count: completed },
@@ -1482,7 +1497,8 @@ async function removeStory(index: number) {
   const ok = await askConfirm({
     title: '删除故事',
     message: `确认删除第 ${index + 1} 个故事？\n关联的运行记录将一并清理，该操作不可撤销。`,
-    confirmText: '删除'
+    confirmText: '删除',
+    busy: true
   })
   if (!ok) return
   storyBusy.value = true
@@ -1490,8 +1506,10 @@ async function removeStory(index: number) {
     await adminVirtualLearnersApi.deleteStory(id, index)
     await loadDetail(id)
     toast.success('故事已删除')
+    doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     storyBusy.value = false
   }
@@ -1527,7 +1545,8 @@ async function removeSession(sessionId: string) {
   const ok = await askConfirm({
     title: '删除会话',
     message: '确认删除该会话？\n运行记录将一并清理，该操作不可撤销。',
-    confirmText: '删除'
+    confirmText: '删除',
+    busy: true
   })
   if (!ok) return
   sessionBusy.value = true
@@ -1536,8 +1555,10 @@ async function removeSession(sessionId: string) {
     const id = subPage.value?.id
     if (id) await loadDetail(id)
     toast.success('会话已删除')
+    doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     sessionBusy.value = false
   }
@@ -1551,7 +1572,7 @@ const failedCount = computed(() =>
 )
 
 /* ===== 会话状态管理 ===== */
-/** 当前活跃会话 ID（运行中或最近失败的） */
+/** 当前活跃会话 ID（进行中或最近失败的） */
 const activeSessionId = computed(() => {
   const runs = allRuns.value
   // 优先找 running
@@ -1731,18 +1752,11 @@ function formatRunStage(stage: string) {
 
 function formatRunResult(result: string) {
   const r = String(result || '').toLowerCase()
-  if (r.includes('goal') && !['running', 'created', 'completed', 'failed', 'error', 'timeout'].includes(r)) {
-    return 'Goal'
-  }
-  if (r === 'running') return '运行中'
-  if (r === 'created') return '创建中'
-  if (r === 'completed' || r === 'success' || r === 'succeeded') return '已完成'
-  if (r === 'incomplete') return '未收束'
-  if (r === 'failed' || r === 'error') return '已失败'
-  if (r === 'abandoned') return '已终止'
-  if (r === 'timeout') return '超时'
-  if (r === 'paused') return '已暂停'
-  return result || '—'
+  // 非 running/created/… 的 goal* 值（如 goal_reached）单独给「Goal」
+  if (r.includes('goal') && !['running', 'created', 'completed', 'failed', 'error', 'timeout'].includes(r)) return 'Goal'
+  // 状态词一律走全局字典（单源）；字典未覆盖的值不直出英文枚举
+  const t = statusText(r)
+  return t === r || !t ? '—' : t
 }
 
 /**
@@ -1808,7 +1822,7 @@ function avatarClassOf(name: string): string {
   return `vp-avatar--${h % 8}`
 }
 
-/* ---- 运行中会话的静默轮询刷新（setTimeout 链 + 并发守卫 + 指数退避） ---- */
+/* ---- 进行中会话的静默轮询刷新（setTimeout 链 + 并发守卫 + 指数退避） ---- */
 const VLAB_POLL_MS = 30_000
 const { start: startPolling, stop: stopPolling } = useSafePolling(
   async () => {
@@ -1857,30 +1871,8 @@ async function quietReload(id: string) {
   gap: 18px;
   padding: 18px 22px 28px;
 }
-.vp-top {
-  display: grid;
-  gap: 4px;
-}
-.vp-top__main {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
-/* 首字头像：与虚拟学习者列表同色板（按名称哈希取色，同一人恒定同色） */
-.vp-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: var(--mk-fs-18);
-  font-weight: 800;
-  flex-shrink: 0;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
-}
+/* 页头身份区走 .mk-entity（shared.css）：--flat + --round 头像 + --lg 名字。
+   以下是头像色板（按名称哈希取色，同一人恒定同色）：只给 background，形状来自原语。 */
 .vp-avatar--0 { background: #3b82f6; }
 .vp-avatar--1 { background: #8b5cf6; }
 .vp-avatar--2 { background: #10b981; }
@@ -1889,44 +1881,9 @@ async function quietReload(id: string) {
 .vp-avatar--5 { background: #06b6d4; }
 .vp-avatar--6 { background: #ec4899; }
 .vp-avatar--7 { background: #64748b; }
-.vp-back {
-  border: 0;
-  background: transparent;
-  color: var(--mk-blue);
-  font: inherit;
-  font-size: var(--mk-fs-13);
-  font-weight: 700;
-  cursor: pointer;
-  padding: 2px 6px;
-  margin: -2px -6px;
-  border-radius: 6px;
-  width: fit-content;
-  transition: background 0.14s ease, transform 0.1s ease;
-}
-.vp-back:hover { background: #eff6ff; }
-.vp-back:active { transform: translateY(1px); }
-.vp-top__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.vp-top__name {
-  margin: 0;
-  font-size: var(--mk-fs-20);
-  letter-spacing: -0.02em;
-  line-height: 1.25;
-}
 .vp-top__level { font-size: var(--mk-fs-12); color: var(--mk-faint); font-weight: 700; }
-.vp-top__actions {
-  margin-left: auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-/* 生命周期状态徽章（vlab-controls 唯一语义：运行中/已暂停/已失败/已终止/已完成…） */
+/* 页头主操作走 .mk-entity__actions（shared.css） */
+/* 生命周期状态徽章（vlab-controls 唯一语义：进行中/已暂停/已失败/已终止/已完成…） */
 .vp-life {
   display: inline-flex;
   align-items: center;
@@ -1945,21 +1902,10 @@ async function quietReload(id: string) {
 .vp-life--warn .vp-life__dot { background: var(--mk-amber); }
 .vp-life--bad .vp-life__dot { background: var(--mk-red); }
 .vp-life--muted .vp-life__dot { background: var(--mk-faint); }
-.vp-top__actions .mk-status__action--danger { color: var(--mk-red); border-color: rgba(220, 38, 38, 0.35); }
-.vp-top__actions .mk-status__action--danger:hover { border-color: var(--mk-red); background: #fef2f2; }
+.mk-entity__actions .mk-status__action--danger { color: var(--mk-red); border-color: rgba(220, 38, 38, 0.35); }
+.mk-entity__actions .mk-status__action--danger:hover { border-color: var(--mk-red); background: #fef2f2; }
 
 /* 故事池空态（与全站空数据态同一语言） */
-.vp-empty-state {
-  display: grid;
-  justify-items: center;
-  gap: 6px;
-  padding: 36px 20px;
-  text-align: center;
-}
-.vp-empty-state__icon { font-size: 30px; line-height: 1; color: var(--mk-faint); }
-.vp-empty-state strong { font-size: var(--mk-fs-13); font-weight: 800; }
-.vp-empty-state p { margin: 0; font-size: var(--mk-fs-12); line-height: 1.6; color: var(--mk-muted); max-width: 340px; }
-
 /* 概览统计：KPI 四卡（全站 MkKpi 语言；点击跳转对应页签） */
 .vp-overview {
   display: grid;
@@ -1986,32 +1932,12 @@ async function quietReload(id: string) {
 }
 .vp-top__goal--none { color: var(--mk-faint); font-weight: 500; }
 /* 工作流指引 */
-.vp-guide {
-  margin: 10px 0 0;
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.vp-guide__icon { font-size: var(--mk-fs-15); flex-shrink: 0; }
-.vp-guide__steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.vp-guide__step {
-  font: inherit; font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-faint);
-  padding: 3px 9px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap;
-  background: transparent; cursor: pointer; transition: background 0.12s ease;
-}
-.vp-guide__step:hover { background: #eef5ff; color: var(--mk-blue, #2c63d0); }
-.vp-guide__step.is-done { color: #047857; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.25); }
-.vp-guide__step.is-active { color: #047857; background: rgba(16, 185, 129, 0.14); border-color: rgba(16, 185, 129, 0.4); }
-.vp-guide__arrow { font-size: var(--mk-fs-12); color: #c4ccd9; font-weight: 700; }
-.vp-guide__hint { font-size: var(--mk-fs-12); color: var(--mk-muted); margin-left: auto; max-width: 480px; text-align: right; }
 
 /* 分页：统一 mk-pills 分段控件 */
 .vp-tabs { width: fit-content; }
+/* 空态文案基类：原先只有 ≥2000px 的字号/内边距覆写、缺基础规则，导致故事池与
+   运行记录的空文案没有颜色与内边距（审计 附 A #6）。与 .ld-none / .ud-none 同规格。 */
+.vp-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-12_5); }
 .vp-tab__count {
   font-family: var(--mk-mono, ui-monospace, monospace);
   font-size: var(--mk-fs-11);
@@ -2076,16 +2002,7 @@ async function quietReload(id: string) {
 @media (max-width: 700px) {
   .vp-budget { grid-template-columns: 1fr; }
 }
-.mk-card__foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 10px 18px;
-  border-top: 1px solid #f0f2f5;
-  background: #fafbfe;
-}
-.mk-card__foot .mk-card__meta { margin-right: auto; }
+/* .mk-card__foot 基础规则与暗色已提升为全局（见 shared.css）；此处仅保留本页的宽屏内边距档位 */
 
 .vp-stories-head {
   margin-left: auto;
@@ -2273,15 +2190,6 @@ async function quietReload(id: string) {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.35; transform: scale(0.8); }
 }
-.vp-story-runs__more {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 2px 2px;
-  font-size: var(--mk-fs-11);
-  color: var(--mk-faint);
-}
 
 /* V3：仿真质量常驻徽章 */
 .vp-quality {
@@ -2334,7 +2242,6 @@ async function quietReload(id: string) {
 .vp-run-group__body { display: grid; }
 
 
-.vp-runs { display: grid; gap: 6px; padding: 8px; }
 /* 运行记录：三行卡片（阶段+结果 / 时间 / 操作） */
 .vp-run {
   display: grid;
@@ -2382,16 +2289,6 @@ async function quietReload(id: string) {
 .vp-run__ops .mk-link { font-size: var(--mk-fs-12); }
 
 
-.vp-next {
-  margin: 0 18px 12px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: #eef5ff;
-  border: 1px solid rgba(44, 99, 208, 0.18);
-  color: var(--mk-accent-deep, #1f57cc);
-  font-size: var(--mk-fs-13);
-  line-height: 1.6;
-}
 .vp-fallback {
   display: flex;
   align-items: center;
@@ -2405,109 +2302,17 @@ async function quietReload(id: string) {
   font-size: var(--mk-fs-12_5);
   font-weight: 600;
 }
-.vp-tools {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  padding: 4px 16px 12px;
-}
-.vp-tool {
-  border: 1px solid var(--mk-line);
-  background: #fff;
-  border-radius: 10px;
-  padding: 10px 12px;
-  font: inherit;
-  font-size: var(--mk-fs-12_5);
-  font-weight: 700;
-  color: var(--mk-muted);
-  cursor: pointer;
-  text-align: center;
-}
-.vp-tool:hover:not(:disabled) {
-  border-color: rgba(44, 99, 208, 0.35);
-  color: var(--mk-blue);
-  background: #f7faff;
-}
-.vp-tool:disabled { opacity: 0.55; cursor: default; }
-.vp-tool--primary {
-  grid-column: 1 / -1;
-  background: linear-gradient(135deg, var(--mk-blue, #2c63d0), var(--mk-accent-deep, #1f57cc));
-  border-color: transparent;
-  color: #fff;
-}
-.vp-tool--primary:hover:not(:disabled) {
-  color: #fff;
-  background: linear-gradient(135deg, #2f6eef, #1a4fbf);
-}
-.vp-tools__hint {
-  margin: 0 16px 14px;
-  font-size: var(--mk-fs-12);
-  color: var(--mk-faint);
-  line-height: 1.5;
-}
 
 @media (max-width: 1100px) {
   .vp { padding: 16px; }
-  .vp-overview__goal { margin-left: 0; flex-basis: 100%; }
 }
 
 /* =====故事高级诊断折叠区 ===== */
-.vp-story-item__advanced {
-  margin-top: 4px;
-  font-size: var(--mk-fs-11);
-}
-.vp-story-item__advanced > summary {
-  list-style: none;
-  cursor: pointer;
-  color: var(--mk-faint);
-  font-weight: 700;
-  padding: 2px 0;
-}
-.vp-story-item__advanced > summary::-webkit-details-marker { display: none; }
-.vp-story-item__advanced > summary::before { content: '▸'; margin-right: 4px; font-size: var(--mk-fs-11); }
-.vp-story-item__advanced[open] > summary::before { content: '▾'; }
 
-.vp-adv-body {
-  padding: 6px 0 2px;
-  display: grid;
-  gap: 8px;
-}
-.vp-adv-row {
-  display: grid;
-  grid-template-columns: 76px 1fr;
-  gap: 8px;
-  align-items: start;
-  font-size: var(--mk-fs-12);
-  color: var(--mk-muted);
-  line-height: 1.5;
-}
-.vp-adv-row__label { color: var(--mk-faint); font-weight: 700; }
-.vp-adv-row ul { margin: 0; padding-left: 16px; color: var(--mk-ink); }
-.vp-adv-row--text p { margin: 0; color: var(--mk-ink); }
-.vp-adv-row--object pre {
-  margin: 0;
-  padding: 6px 8px;
-  background: #f8fafc;
-  border: 1px solid var(--mk-line);
-  border-radius: 4px;
-  font-size: var(--mk-fs-11);
-  color: var(--mk-ink);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 180px;
-  overflow-y: auto;
-}
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .vp-back { font-size: 15px; }
-  .vp-top__name { font-size: 23.5px; }
   .vp-top__level { font-size: 13.5px; }
-  .vp-avatar { width: 52px; height: 52px; font-size: 21px; }
-  .vp-overview__item b { font-size: 18px; }
-  .vp-overview__item span { font-size: 13px; }
-  .vp-overview__goal span { font-size: 13px; }
-  .vp-overview__goal strong { font-size: 14.5px; }
   .vp-hero__story { font-size: 16.5px; }
   .vp-trait { font-size: 14px; }
   .vp-goal span { font-size: 13.5px; }
@@ -2521,14 +2326,9 @@ async function quietReload(id: string) {
   .vp-run__result, .vp-run__sub { font-size: 13px; }
   .vp-run-group__head strong { font-size: 14px; }
   .vp-none { font-size: 15px; }
-  .vp-next { font-size: 15px; }
-  .vp-tool { font-size: 14.5px; }
-  .vp-adv-row { font-size: 13.5px; }
-  .vp-adv-row--object pre { font-size: 12.5px; }
   .vp-tab__count { font-size: 13px; margin-left: 4px; }
   .vp-fallback { font-size: 14.5px; padding: 12px 16px; }
   .vp-overview { gap: 12px; }
-  .vp-overview__item { padding: 12px 16px; }
   .vp-trait { padding: 5px 13px; }
   .vp-goal { padding: 14px 16px; }
   .vp-profile__row { grid-template-columns: 126px minmax(0, 1fr); padding: 14px 21px; }
@@ -2539,24 +2339,10 @@ async function quietReload(id: string) {
   .vp-run { padding: 11px 14px; }
   .vp-run-groups { padding: 14px; }
   .vp-none { padding: 21px; }
-  .vp-next { padding: 14px 16px; }
-  .vp-tools { padding: 5px 19px 14px; }
-  .vp-tool { padding: 12px 14px; }
-  .vp-adv-row { grid-template-columns: 88px 1fr; }
-  .vp-adv-row--object pre { padding: 7px 10px; max-height: 210px; }
-  .vp-story-item__advanced { font-size: 13px; }
-  .vp-story-item__advanced > summary::before { font-size: 12px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
-  .vp-back { font-size: 17.5px; }
-  .vp-top__name { font-size: 27.5px; }
   .vp-top__level { font-size: 16px; }
-  .vp-avatar { width: 60px; height: 60px; font-size: 24px; }
-  .vp-overview__item b { font-size: 20px; }
-  .vp-overview__item span { font-size: 15px; }
-  .vp-overview__goal span { font-size: 15px; }
-  .vp-overview__goal strong { font-size: 16.5px; }
   .vp-hero__story { font-size: 19.5px; }
   .vp-trait { font-size: 16.5px; }
   .vp-goal span { font-size: 16px; }
@@ -2570,14 +2356,9 @@ async function quietReload(id: string) {
   .vp-run__result, .vp-run__sub { font-size: 15.5px; }
   .vp-run-group__head strong { font-size: 16.5px; }
   .vp-none { font-size: 17.5px; }
-  .vp-next { font-size: 17.5px; }
-  .vp-tool { font-size: 17px; }
-  .vp-adv-row { font-size: 16px; }
-  .vp-adv-row--object pre { font-size: 14.5px; }
   .vp-tab__count { font-size: 15.5px; margin-left: 5px; }
   .vp-fallback { font-size: 17px; padding: 14px 19px; }
   .vp-overview { gap: 14px; }
-  .vp-overview__item { padding: 14px 19px; }
   .vp-trait { padding: 6px 15px; }
   .vp-goal { padding: 16px 19px; }
   .vp-profile__row { grid-template-columns: 148px minmax(0, 1fr); padding: 16px 24px; }
@@ -2588,24 +2369,10 @@ async function quietReload(id: string) {
   .vp-run { padding: 13px 16px; }
   .vp-run-groups { padding: 16px; }
   .vp-none { padding: 24px; }
-  .vp-next { padding: 16px 19px; }
-  .vp-tools { padding: 6px 22px 16px; }
-  .vp-tool { padding: 14px 16px; }
-  .vp-adv-row { grid-template-columns: 103px 1fr; }
-  .vp-adv-row--object pre { padding: 8px 12px; max-height: 245px; }
-  .vp-story-item__advanced { font-size: 15px; }
-  .vp-story-item__advanced > summary::before { font-size: 14px; }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
-  .vp-back { font-size: 20.5px; }
-  .vp-top__name { font-size: 32px; }
   .vp-top__level { font-size: 18.5px; }
-  .vp-avatar { width: 68px; height: 68px; font-size: 27px; }
-  .vp-overview__item b { font-size: 22px; }
-  .vp-overview__item span { font-size: 17px; }
-  .vp-overview__goal span { font-size: 17px; }
-  .vp-overview__goal strong { font-size: 19px; }
   .vp-hero__story { font-size: 22.5px; }
   .vp-trait { font-size: 19px; }
   .vp-goal span { font-size: 18.5px; }
@@ -2619,14 +2386,9 @@ async function quietReload(id: string) {
   .vp-run__result, .vp-run__sub { font-size: 18px; }
   .vp-run-group__head strong { font-size: 19.5px; }
   .vp-none { font-size: 20.5px; }
-  .vp-next { font-size: 20.5px; }
-  .vp-tool { font-size: 20px; }
-  .vp-adv-row { font-size: 19px; }
-  .vp-adv-row--object pre { font-size: 17px; }
   .vp-tab__count { font-size: 18px; margin-left: 6px; }
   .vp-fallback { font-size: 20px; padding: 16px 22px; }
   .vp-overview { gap: 16px; }
-  .vp-overview__item { padding: 16px 22px; }
   .vp-trait { padding: 7px 18px; }
   .vp-goal { padding: 19px 22px; }
   .vp-profile__row { grid-template-columns: 174px minmax(0, 1fr); padding: 19px 28px; }
@@ -2637,13 +2399,6 @@ async function quietReload(id: string) {
   .vp-run { padding: 15px 19px; }
   .vp-run-groups { padding: 19px; }
   .vp-none { padding: 28px; }
-  .vp-next { padding: 19px 22px; }
-  .vp-tools { padding: 7px 26px 19px; }
-  .vp-tool { padding: 16px 19px; }
-  .vp-adv-row { grid-template-columns: 121px 1fr; }
-  .vp-adv-row--object pre { padding: 9px 14px; max-height: 285px; }
-  .vp-story-item__advanced { font-size: 17.5px; }
-  .vp-story-item__advanced > summary::before { font-size: 16px; }
 }
 
 /* ===== 记忆池 ===== */
@@ -2654,16 +2409,16 @@ async function quietReload(id: string) {
   padding: 16px 18px;
 }
 .vp-memory__stat {
-  border: 1px solid var(--el-border-color-lighter, #e8ecf2);
+  border: 1px solid var(--mk-line);
   border-radius: 10px;
   padding: 10px 12px;
   background: #fafbfd;
   display: grid;
   gap: 2px;
 }
-.vp-memory__stat strong { font-size: var(--mk-fs-20); line-height: 1.2; color: var(--mk-ok, #1f9d55); }
+.vp-memory__stat strong { font-size: var(--mk-fs-20); line-height: 1.2; color: var(--mk-green); }
 .vp-memory__stat span { font-size: var(--mk-fs-12); color: var(--mk-faint, #8a94a6); }
-.vp-memory__stat--warn strong { color: var(--mk-warn, #c78200); }
+.vp-memory__stat--warn strong { color: var(--mk-amber); }
 .vp-memory__group {
   padding: 4px 18px 18px;
 }
@@ -2677,7 +2432,7 @@ async function quietReload(id: string) {
   margin: 0;
   font-size: var(--mk-fs-13);
   font-weight: 700;
-  color: var(--mk-strong, #232a35);
+  color: var(--mk-ink);
 }
 .vp-tags {
   display: flex;
@@ -2750,10 +2505,10 @@ async function quietReload(id: string) {
   gap: 3px;
   min-width: 0;
 }
-.vp-memory__completed-body strong { font-size: var(--mk-fs-13); color: var(--mk-strong, #232a35); }
+.vp-memory__completed-body strong { font-size: var(--mk-fs-13); color: var(--mk-ink); }
 .vp-memory__deliverable {
   font-size: var(--mk-fs-12);
-  color: var(--mk-text, #4a5568);
+  color: var(--mk-muted);
 }
 .vp-memory__delta {
   font-size: var(--mk-fs-12);
@@ -2763,9 +2518,7 @@ async function quietReload(id: string) {
 
 /* ================= 暗色模式（D1 补完）：虚拟画像页 ================= */
 html[data-theme='dark'] {
-  .vp-top, .vp-head, .vp-guide, .vp-tabbar, .vp-panel { background: #141c2b; border-color: #232f45; }
-  .vp-back:hover { background: #1f2b40; }
-  .vp-guide__step:hover { background: rgba(91, 141, 239, 0.14); color: #7aa2ff; }
+  .vp-top { background: #141c2b; border-color: #232f45; }
   .vp-tab { background: #1b2537; }
   .vp-tab.is-active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
   .vp-story__row:hover { background: #1b2740; }
@@ -2774,8 +2527,6 @@ html[data-theme='dark'] {
   .vp-quality--warn { color: #fcd34d; background: rgba(251, 191, 36, 0.12); }
   .vp-quality--bad { color: #fca5a5; background: rgba(248, 113, 113, 0.12); }
   .vp-quality--none { background: #253049; }
-  .vp-badge, .vp-chip { background: #253049; }
-  .vp-empty { background: #131b2a; }
   .vp-top__goal { background: #1b2537; }
   .vp-life--ok { background: rgba(74, 222, 128, 0.12); }
   .vp-life--warn { background: rgba(251, 191, 36, 0.12); }
@@ -2792,15 +2543,10 @@ html[data-theme='dark'] {
   .vp-run-group__head { background: #1b2537; }
   .vp-run { background: #141c2b; border-color: #232f45; }
   .vp-run:hover { background: #1b2740; }
-  .vp-next { background: #1b2537; border-color: #232f45; }
-  .vp-tool { background: #141c2b; border-color: #232f45; color: #9fb0c8; }
-  .vp-tool--primary { background: rgba(91, 141, 239, 0.18); color: #9db8f5; }
   .vp-memory__stat { background: #141c2b; border-color: #232f45; }
   .vp-tag--warn { background: rgba(251, 191, 36, 0.12); color: #fcd34d; }
   .vp-pk { background: #141c2b; border-color: #232f45; }
-  .vp-adv-row--object pre { background: #0f1624; color: var(--mk-pre-fg); }
 
-  .mk-card__foot { background: #141c2b; }
   .vp-tag--ok { background: rgba(62, 201, 132, 0.14); color: #3ec984; }
   .vp-memory__completed-item { background: #141c2b; }
   .vp-memory__completed-dot { background: rgba(62, 201, 132, 0.25); }

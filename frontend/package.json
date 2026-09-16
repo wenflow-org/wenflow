@@ -13,6 +13,8 @@
     "lint": "eslint src vite.config.ts --ext .vue,.js,.jsx,.ts,.tsx --ignore-path .gitignore",
     "lint:fix": "npm run lint -- --fix",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "design:check": "node scripts/check-design-system.mjs",
+    "design:baseline": "node scripts/check-design-system.mjs --update",
     "format": "prettier --write src/"
   },
   "dependencies": {

@@ -13,7 +13,7 @@
           新建 Skill
         </button>
         <button type="button" class="mk-status__action" :disabled="loading" @click="loadList">
-          <span v-if="loading"><span class="mk-spinner"></span> 刷新中…</span><span v-else>刷新</span>
+          <MkLoading v-if="loading" inline text="刷新中…" /><span v-else>刷新</span>
         </button>
       </span>
     </div>
@@ -69,13 +69,14 @@
           加载更多（已显示 {{ shownCores.length }} / {{ cores.length }}）
         </button>
       </div>
-      <div v-if="!cores.length && !loading" class="mk-empty">
-        <span v-if="!loadError" class="mk-empty__icon" aria-hidden="true">◌</span>
-        <strong>{{ loadError ? '清单加载失败' : '未发现核心文件' }}</strong>
-        <span v-if="loadError">{{ loadError }}</span>
-        <button v-if="loadError" type="button" class="mk-empty__action" @click="loadList">重试</button>
-        <span v-else>编辑与发布入口在 Skill 设计页的「协议」页签。</span>
-      </div>
+      <MkEmptyState
+        v-if="!cores.length && !loading"
+        :icon="loadError ? '' : '◌'"
+        :title="loadError ? '清单加载失败' : '未发现核心文件'"
+        :description="loadError || '编辑与发布入口在 Skill 设计页的「协议」页签。'"
+        :action-text="loadError ? '重试' : ''"
+        @action="loadList"
+      />
     </section>
 
     <!-- 新建 Skill 弹窗（scaffold 一条龙） -->
@@ -181,6 +182,8 @@ import { adminPromptWorkbenchApi, adminSkillsApi, type SkillScaffoldMeta, type S
 import { useEscape } from './useEscape';
 import { useOverlay, useMaskClose } from './useOverlay';
 import { useLoadMore } from './useLoadMore';
+import MkEmptyState from './MkEmptyState.vue';
+import MkLoading from './MkLoading.vue';
 import { intent } from './store'
 import { toast } from '@/utils/toast'
 
@@ -456,7 +459,7 @@ html[data-theme='dark'] {
   .sc-msg { background: #141c2b; border-color: #232f45; }
   .sc-msg--error { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.35); }
   .sc-badge-kind { background: #253049; }
-  .sc-msg--warn { background: rgba(251, 191, 36, 0.1); }
+
   /* 补漏：输入框/代码块浅底 */
   .sc-field__input { background: #141c2b; }
   .sc-result__pre { background: #0f1624; color: var(--mk-pre-fg); }

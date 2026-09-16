@@ -82,14 +82,14 @@ const form = reactive({ ...DEFAULT })
 const dirty = ref(false)
 const saving = ref(false)
 
-function apply(raw: any) {
+function apply(raw: Partial<typeof DEFAULT> | null | undefined) {
   form.enabled = raw?.enabled === true
   form.defaultDailyMinutesCap = Number(raw?.defaultDailyMinutesCap ?? DEFAULT.defaultDailyMinutesCap)
   form.defaultDaysPerWeek = Number(raw?.defaultDaysPerWeek ?? DEFAULT.defaultDaysPerWeek)
   form.defaultPaceDaysPerAdvance = Number(raw?.defaultPaceDaysPerAdvance ?? DEFAULT.defaultPaceDaysPerAdvance)
   form.maxSimulatedDays = Number(raw?.maxSimulatedDays ?? DEFAULT.maxSimulatedDays)
-  form.courseWeekdays = Array.isArray(raw?.courseWeekdays) && raw.courseWeekdays.length
-    ? [...raw.courseWeekdays]
+  form.courseWeekdays = Array.isArray(raw?.courseWeekdays) && raw!.courseWeekdays.length
+    ? [...raw!.courseWeekdays]
     : [...DEFAULT.courseWeekdays]
   form.lessonsPerDay = Number(raw?.lessonsPerDay ?? DEFAULT.lessonsPerDay)
   form.autoAdvanceEnabled = raw?.autoAdvanceEnabled === true
@@ -133,13 +133,13 @@ onMounted(load)
 </script>
 
 <style scoped>
-.sd-settings { border: 1px solid var(--mk-border, #e5e5e5); border-radius: 8px; padding: 10px 12px; margin-top: 8px; }
+.sd-settings { border: 1px solid var(--mk-line); border-radius: 8px; padding: 10px 12px; margin-top: 8px; }
 .sd-settings__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sd-settings__title { font-weight: 600; font-size: 13px; }
 .sd-switch { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
 .sd-settings__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 12px; margin-top: 8px; }
 .sd-settings__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
-.sd-settings__hint { font-size: 12px; color: var(--mk-text-muted, #888); }
+.sd-settings__hint { font-size: 12px; color: var(--mk-faint); }
 .sd-weekdays { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; font-size: 12px; }
 .sd-weekday { display: flex; align-items: center; gap: 4px; cursor: pointer; }
 </style>

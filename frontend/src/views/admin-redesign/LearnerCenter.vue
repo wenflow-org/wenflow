@@ -7,15 +7,15 @@
       <span class="mk-status__meta">{{ rows.length }} 位学习者</span>
       <button
         type="button"
-        class="lc-count-link"
-        :class="{ 'lc-count-link--on': pill === 'risk' }"
+        class="mk-status__meta-link"
+        :class="{ 'mk-status__meta-link--on': pill === 'risk' }"
         :title="'点击筛选「需关注」学习者（趋势下降 / 疲劳中高 / 有风险）'"
         @click="pill = pill === 'risk' ? 'all' : 'risk'"
       >需关注 {{ riskCount }}</button>
       <button
         type="button"
-        class="lc-count-link"
-        :class="{ 'lc-count-link--on': pill === 'stale' }"
+        class="mk-status__meta-link"
+        :class="{ 'mk-status__meta-link--on': pill === 'stale' }"
         :title="'点击筛选「低置信」学习者（快照置信度低于 50%）'"
         @click="pill = pill === 'stale' ? 'all' : 'stale'"
       >低置信 {{ lowConfCount }}</button>
@@ -64,12 +64,14 @@
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="8" />
-      <div v-else-if="loadFailed" class="mk-empty">
-        <span class="mk-empty__icon" aria-hidden="true">◌</span>
-        <strong>学习者快照加载失败</strong>
-        <span>无法从后端拉取学习者状态。</span>
-        <button type="button" class="mk-empty__action" @click="retryLoad">重试</button>
-      </div>
+      <MkEmptyState
+        v-else-if="loadFailed"
+        icon="◌"
+        title="学习者快照加载失败"
+        description="无法从后端拉取学习者状态。"
+        action-text="重试"
+        @action="retryLoad"
+      />
       <div v-else-if="filtered.length" class="mk-table-scroll">
       <table class="mk-table mk-table--fixed">
         <colgroup>
@@ -146,10 +148,11 @@
       </table>
       </div>
 
-      <div v-else class="mk-empty">
-        <strong>{{ pill === 'all' ? '暂无学习者快照' : '当前分组暂无学习者' }}</strong>
-        <span>{{ pill === 'all' ? '学习者产生学习行为后，快照将自动生成。' : '该风险分组暂无匹配的学习者。' }}</span>
-      </div>
+      <MkEmptyState
+        v-else
+        :title="pill === 'all' ? '暂无学习者快照' : '当前分组暂无学习者'"
+        :description="pill === 'all' ? '学习者产生学习行为后，快照将自动生成。' : '该风险分组暂无匹配的学习者。'"
+      />
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
       <Pagination
         v-if="filtered.length"
@@ -210,6 +213,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from './MkFilterSearch.vue'
+import MkEmptyState from './MkEmptyState.vue'
 import MkCols from './MkCols.vue'
 import { adminNotificationsApi } from '@/api/adminApi'
 
@@ -471,22 +475,12 @@ async function recomputeAll() {
 /* 嵌入模式（宿主 People 页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
 .lc-embedded { flex: 1; min-height: 0; overflow: hidden; }
 .lc-row { cursor: pointer; }
-/* 页头计数锚点（P0-3）：需关注/低置信可点击筛选 */
-.lc-count-link {
-  border: 0; background: transparent; padding: 0;
-  font: inherit; font-size: var(--mk-fs-12_5); font-weight: 700;
-  color: var(--mk-muted); cursor: pointer;
-  border-radius: 6px;
-  transition: color 0.12s ease, background 0.12s ease;
-}
-.lc-count-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); padding: 2px 6px; margin: -2px -6px; }
-.lc-count-link--on { color: var(--mk-blue); background: rgba(44, 99, 208, 0.12); padding: 2px 6px; margin: -2px -6px; }
+/* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136）。
+   注意：本页原先是 6 份副本里唯一补了暗色覆盖的，该暗色规则已提升为全局，
+   因此其余页面的计数锚点在暗色下也不再几乎不可见。 */
 /* 趋势列（P0-1 信号可视化）：箭头 + 迷你条 + 文字（无历史序列时的三态可视化；
    lssHistory 暴露后可升级真 sparkline） */
 .trend { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.trend--up { color: var(--mk-green); }
-.trend--down { color: var(--mk-red); }
-.trend--flat { color: var(--mk-muted); }
 .lc-trend { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: var(--mk-fs-12); color: var(--mk-muted); white-space: nowrap; cursor: help; }
 .lc-trend--up { color: var(--mk-green); }
 .lc-trend--down { color: var(--mk-red); }
@@ -510,17 +504,6 @@ async function recomputeAll() {
 .conf { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-muted); cursor: help; }
 .conf__lack { font-style: normal; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
 .conf--low { color: var(--mk-amber); }
-.lc-tag-test {
-  display: inline-block;
-  margin-top: 2px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: var(--mk-fs-11);
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  background: #fef3c7;
-  color: #b45309;
-}
 
 @media (min-width: 2000px) {
   .risk-text { font-size: 14px; }
@@ -533,8 +516,7 @@ async function recomputeAll() {
 .lc-intervene--hot { color: var(--mk-amber); }
 html[data-theme='dark'] .lc-intervene--hot { color: #fbbf24; }
 /* 暗色：页头计数锚点激活态转暗色蓝 */
-html[data-theme='dark'] .lc-count-link:hover { background: rgba(91, 141, 239, 0.14); }
-html[data-theme='dark'] .lc-count-link--on { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
+/* 计数锚点的暗色覆盖已提升到 shared.css 全局（原为本页私有） */
 .lc-iv__risk {
   display: grid;
   gap: 4px;

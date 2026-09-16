@@ -1,11 +1,8 @@
 <template>
   <div class="sfr">
     <!-- 加载 / 失败降级 -->
-    <div v-if="loading" class="sfr__empty">加载中…</div>
-    <div v-else-if="error" class="sfr__empty">
-      <p class="sfr__error-text">{{ error }}</p>
-      <button type="button" class="mk-empty__action" @click="load">重试</button>
-    </div>
+    <MkLoading v-if="loading" />
+    <MkEmptyState v-else-if="error" tone="error" :title="error" action-text="重试" compact @action="load" />
     <template v-else-if="data">
       <!-- 状态条（mk-status 白底统一形态） -->
       <div class="mk-status" :class="syncToneTone">
@@ -211,6 +208,8 @@ import { useRouter } from 'vue-router'
 import { adminFieldRoutingsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
 import FieldAddWizard from './FieldAddWizard.vue'
 import MkFilterSearch from './MkFilterSearch.vue'
+import MkLoading from './MkLoading.vue'
+import MkEmptyState from './MkEmptyState.vue'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import { TERMS } from './terms'
@@ -665,27 +664,19 @@ onMounted(() => void load())
 .sfr__persist--alias { color: var(--mk-amber, #b45309); background: #fffbeb; border-radius: 5px; padding: 0 5px; }
 
 /* core 状态列 */
-.sfr__empty { padding: 30px; color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; }
 .sfr__emptyrow { color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; padding: 14px; }
-.sfr__error-text { margin: 0 0 10px; font-size: 12.5px; line-height: 1.6; }
 
 /* 4K：字段路由表内容跟随全站节奏 */
 @media (min-width: 2000px) {
-  .sfr__empty { font-size: 14px; padding: 34px; }
   .sfr__emptyrow { font-size: 14px; }
-  .sfr__error-text { font-size: 14px; }
   .sfr__persist { font-size: 12.5px; }
 }
 @media (min-width: 2800px) {
-  .sfr__empty { font-size: 16.5px; padding: 40px; }
   .sfr__emptyrow { font-size: 16.5px; }
-  .sfr__error-text { font-size: 16.5px; }
   .sfr__persist { font-size: 14.5px; }
 }
 @media (min-width: 3600px) {
-  .sfr__empty { font-size: 19.5px; padding: 47px; }
   .sfr__emptyrow { font-size: 19.5px; }
-  .sfr__error-text { font-size: 19.5px; }
   .sfr__persist { font-size: 17px; }
 }
 

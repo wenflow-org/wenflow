@@ -3,21 +3,22 @@
     归属说明（2026-08 admin 管理面审计 A6.4）：
     本组件位于旧版 admin 目录（views/admin/components/virtual/），但为「仍在使用的活组件」，
     被 admin-redesign 的 VirtualProfile.vue（画像页「账号自动学习」）唯一复用，非废弃残留。
-    依赖：后端 virtual-quick-learn.ts 6 端点 + quick-learn.service.ts；frontend admin-theme.css 的
-    最小 EP 覆写块唯一消费方即本组件。请勿按残留清理；清理前需先处理画像页入口与 EP 覆写依赖。
+    依赖：后端 virtual-quick-learn.ts 6 端点 + quick-learn.service.ts。
+    2026-09 已从 Element Plus 组件重写为 mk-* 原语：admin-theme.css 的 `body.admin-route .el-*`
+    覆写块与 `--el-*` 变量不再被本组件消费（EP 只剩下 ElLoading/ElMessage 这类服务）。
   -->
-  <el-dialog
-    :model-value="visible"
-    title="账号自动学习"
-    width="680px"
-    :close-on-click-modal="false"
-    @update:model-value="emit('update:visible', $event)"
-    @closed="handleClosed"
-  >
+  <Teleport to="body">
+    <div v-if="visible" class="mk-modal">
+      <div class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="账号自动学习">
+        <div class="mk-modal__head">
+          <h3 class="mk-modal__title">账号自动学习</h3>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
+        </div>
+        <div class="mk-modal__body">
     <div class="quick-learn">
-      <el-alert type="info" :closable="false" class="quick-learn__notice">
+      <div class="mk-alert mk-alert--info" role="status">
         以该虚拟学习者绑定的平台账号完成真实 Learn 流程；路径、课堂、任务完成和学习状态都会写回这个账号。
-      </el-alert>
+      </div>
 
       <div class="ql-account-brief" aria-label="自动学习边界">
         <div class="ql-account-brief__item">
@@ -38,67 +39,76 @@
       <section v-if="!currentRun" class="ql-section">
         <div class="ql-section__head">
           <span class="ql-section__title">选择该账号要学习的任务</span>
-          <el-button text size="small" :loading="tasksLoading" @click="loadTasks">刷新</el-button>
+          <button type="button" class="mk-link" :disabled="tasksLoading" @click="loadTasks">
+            {{ tasksLoading ? '刷新中…' : '刷新' }}
+          </button>
         </div>
         <p class="ql-section__hint">只列出这个虚拟账号名下的路径和任务；需要复用别人的路径时，先复制到该账号名下。</p>
-        <el-select v-model="selectedTaskId" placeholder="选择该虚拟账号名下的任务" filterable class="ql-task-select">
-          <el-option-group v-for="path in taskTree" :key="path.pathId" :label="path.title">
-            <el-option
+        <!-- 原生 select：EP 的 filterable 无法一对一映射（原生下拉不支持搜索），列表按路径分组后规模可控 -->
+        <select v-model="selectedTaskId" class="mk-field__select ql-task-select">
+          <option value="" disabled>选择该虚拟账号名下的任务</option>
+          <optgroup v-for="path in taskTree" :key="path.pathId" :label="path.title">
+            <option
               v-for="option in flattenTasks(path)"
               :key="option.taskId"
               :value="option.taskId"
-              :label="option.label"
               :disabled="!option.learnable"
-            />
-          </el-option-group>
-        </el-select>
+            >
+              {{ option.label }}{{ option.learnable ? '' : '（不可学）' }}
+            </option>
+          </optgroup>
+        </select>
         <div class="ql-run-config">
           <span class="ql-label">本节课最多</span>
-          <el-input-number v-model="maxTurns" :min="1" :max="40" size="small" />
+          <input v-model.number="maxTurns" type="number" min="1" max="40" class="mk-field__input ql-num" />
           <span class="ql-label">故事</span>
-          <el-select v-model="selectedStoryId" placeholder="单课故事（可选）" clearable filterable size="small" class="ql-story-select">
-            <el-option
-              v-for="s in storyOptions"
-              :key="s.id"
-              :value="s.id"
-              :label="s.title"
-            />
-          </el-select>
+          <select v-model="selectedStoryId" class="mk-field__select ql-story-select">
+            <option value="">单课故事（可选）</option>
+            <option v-for="s in storyOptions" :key="s.id" :value="s.id">{{ s.title }}</option>
+          </select>
           <span class="ql-label">摩擦</span>
-          <el-select v-model="frictionBudget" size="small" class="ql-friction-select">
-            <el-option value="none" label="无（合作）" />
-            <el-option value="low" label="低" />
-            <el-option value="normal" label="正常" />
-            <el-option value="high" label="高" />
-            <el-option value="stress_test" label="压力测试" />
-          </el-select>
-          <el-button type="primary" :disabled="!selectedTaskId" :loading="starting" @click="startRun">
-            让账号开始学习
-          </el-button>
+          <select v-model="frictionBudget" class="mk-field__select ql-friction-select">
+            <option value="none">无（合作）</option>
+            <option value="low">低</option>
+            <option value="normal">正常</option>
+            <option value="high">高</option>
+            <option value="stress_test">压力测试</option>
+          </select>
+          <button
+            type="button"
+            class="mk-btn mk-btn--primary"
+            :disabled="!selectedTaskId || starting"
+            @click="startRun"
+          >
+            {{ starting ? '开始中…' : '让账号开始学习' }}
+          </button>
         </div>
         <p class="ql-section__hint">故事可选：选中后单课会带有故事情境（非空时学习者有背景）；摩擦控制本课行为弧线（none=纯合作，normal=真实人物常态）。</p>
 
-        <el-collapse class="ql-fixture">
-          <el-collapse-item title="没有可学任务？把已有路径复制到该虚拟账号" name="fixture">
-            <div class="ql-fixture__body">
-              <el-input
-                v-model="fixtureSourcePathId"
-                placeholder="源学习路径 ID（复制后成为该账号自己的路径）"
-                size="small"
-                clearable
-              />
-              <el-button size="small" :loading="cloning" :disabled="!fixtureSourcePathId.trim()" @click="cloneFixture">
-                复制到该账号
-              </el-button>
-            </div>
-          </el-collapse-item>
-        </el-collapse>
+        <details class="ql-fixture">
+          <summary class="mk-section__summary">没有可学任务？把已有路径复制到该虚拟账号</summary>
+          <div class="ql-fixture__body">
+            <input
+              v-model="fixtureSourcePathId"
+              class="mk-field__input"
+              placeholder="源学习路径 ID（复制后成为该账号自己的路径）"
+            />
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :disabled="!fixtureSourcePathId.trim() || cloning"
+              @click="cloneFixture"
+            >
+              {{ cloning ? '复制中…' : '复制到该账号' }}
+            </button>
+          </div>
+        </details>
 
         <!-- 历史运行 -->
         <div v-if="historyRuns.length" class="ql-history">
           <div class="ql-section__title">最近自动学习</div>
           <div v-for="run in historyRuns" :key="run.runId" class="ql-history-item" @click="loadRun(run.runId)">
-            <el-tag :type="statusTagType(run.status)" size="small">{{ statusLabel(run.status) }}</el-tag>
+            <span class="mk-badge" :class="statusBadgeTone(run.status)">{{ statusLabel(run.status) }}</span>
             <span class="ql-history-item__meta">{{ run.turns }} 轮 · {{ formatTime(run.createdAt) }}</span>
             <span class="ql-history-item__open">打开 →</span>
           </div>
@@ -110,20 +120,20 @@
         <div class="ql-status" :class="`ql-status--${currentRun.status}`">
           <template v-if="running">
             <div class="ql-status__main">
-              <span class="ql-status__spinner" />
+              <MkLoading inline text="" />
               <div>
                 <div class="ql-status__title">虚拟账号正在上这节课</div>
                 <div class="ql-status__desc">真实 Teaching Session 正在生成课堂记录；完成后直接进入前台视角验收。</div>
               </div>
             </div>
-            <el-button size="small" type="danger" plain @click="abortRun">中止</el-button>
+            <button type="button" class="mk-btn mk-btn--danger-ghost mk-btn--sm" @click="abortRun">中止</button>
           </template>
           <template v-else>
             <div class="ql-status__main">
               <div>
                 <div class="ql-status__title">
                   {{ resultTitle }}
-                  <el-tag :type="statusTagType(currentRun.status)" size="small">{{ statusLabel(currentRun.status) }}</el-tag>
+                  <span class="mk-badge" :class="statusBadgeTone(currentRun.status)">{{ statusLabel(currentRun.status) }}</span>
                 </div>
                 <div class="ql-status__desc">{{ resultDesc }}</div>
                 <div v-if="currentRun.error" class="ql-status__error">{{ currentRun.error }}</div>
@@ -143,86 +153,98 @@
             <div class="ql-section__title">平台账号验收入口</div>
             <p class="ql-entries__hint">下面打开的都是普通前台页面，只是通过投影 token 切到这个虚拟学习者账号。</p>
             <div class="ql-entries__actions">
-              <el-button type="primary" :loading="openingFrontend" @click="openFrontend('path')">学习路径</el-button>
-              <el-button
-                :disabled="!currentRun.teachingSessionId"
-                :loading="openingFrontend"
+              <button
+                type="button"
+                class="mk-btn mk-btn--primary"
+                :disabled="openingFrontend"
+                @click="openFrontend('path')"
+              >
+                学习路径
+              </button>
+              <button
+                type="button"
+                class="mk-btn"
+                :disabled="!currentRun.teachingSessionId || openingFrontend"
                 @click="openFrontend('evaluation')"
               >
                 课程结果
-              </el-button>
-              <el-button :loading="openingFrontend" @click="openFrontend('task')">本节课 Learn</el-button>
-              <el-button :loading="openingFrontend" @click="openFrontend('learning-state')">学习状态</el-button>
-              <el-button
+              </button>
+              <button type="button" class="mk-btn" :disabled="openingFrontend" @click="openFrontend('task')">
+                本节课 Learn
+              </button>
+              <button type="button" class="mk-btn" :disabled="openingFrontend" @click="openFrontend('learning-state')">
+                学习状态
+              </button>
+              <button
                 v-if="report?.downstream?.nextTask"
-                :loading="openingFrontend"
+                type="button"
+                class="mk-btn"
+                :disabled="openingFrontend"
                 @click="openFrontend('next-task')"
               >
                 下一任务
-              </el-button>
-              <el-button plain :loading="openingFrontend" @click="openFrontend('dashboard')">学习首页</el-button>
+              </button>
+              <button type="button" class="mk-btn mk-btn--ghost" :disabled="openingFrontend" @click="openFrontend('dashboard')">
+                学习首页
+              </button>
             </div>
           </div>
 
-          <el-collapse v-if="report" class="ql-tech-detail">
-            <el-collapse-item title="传播报告（开发者）" name="tech">
-              <div class="ql-delta__row">
-                <span class="ql-label">指标变化</span>
-                <span v-if="report.learnerDelta.metrics.changed.length === 0">无变化</span>
-                <span v-for="field in report.learnerDelta.metrics.changed" :key="field" class="ql-chip">
-                  {{ field }}: {{ formatMetric(report.learnerDelta.metrics.before[field]) }} →
-                  {{ formatMetric(report.learnerDelta.metrics.after[field]) }}
-                </span>
-              </div>
-              <div class="ql-delta__row">
-                <span class="ql-label">新掌握</span>
-                <span v-if="!report.learnerDelta.knowledge.newMastered.length">无</span>
-                <el-tag
-                  v-for="item in report.learnerDelta.knowledge.newMastered"
-                  :key="item"
-                  size="small"
-                  type="success"
-                  effect="plain"
-                  class="ql-tag"
-                >
-                  {{ item }}
-                </el-tag>
-              </div>
-              <div class="ql-delta__row">
-                <span class="ql-label">新混淆</span>
-                <span v-if="!report.learnerDelta.knowledge.newRecurringConfusions.length">无</span>
-                <el-tag
-                  v-for="item in report.learnerDelta.knowledge.newRecurringConfusions"
-                  :key="item"
-                  size="small"
-                  type="warning"
-                  effect="plain"
-                  class="ql-tag"
-                >
-                  {{ item }}
-                </el-tag>
-              </div>
-              <div class="ql-delta__row">
-                <span class="ql-label">路径调整</span>
-                <span>{{ report.downstream.replan.signalChanged ? '信号已变化' : '信号无变化' }}</span>
-                <span v-if="report.downstream.replan.after?.shouldSuggest" class="ql-chip ql-chip--warn">
-                  建议调整（{{ report.downstream.replan.after.priority }}）
-                </span>
-              </div>
-              <div v-if="report.lifecycle.warnings?.length" class="ql-warnings">
-                <div v-for="(warning, index) in report.lifecycle.warnings" :key="index">⚠ {{ warning }}</div>
-              </div>
-            </el-collapse-item>
-          </el-collapse>
+          <details v-if="report" class="ql-tech-detail">
+            <summary class="mk-section__summary">传播报告（开发者）</summary>
+            <div class="ql-delta__row">
+              <span class="ql-label">指标变化</span>
+              <span v-if="report.learnerDelta.metrics.changed.length === 0">无变化</span>
+              <span v-for="field in report.learnerDelta.metrics.changed" :key="field" class="ql-chip">
+                {{ field }}: {{ formatMetric(report.learnerDelta.metrics.before[field]) }} →
+                {{ formatMetric(report.learnerDelta.metrics.after[field]) }}
+              </span>
+            </div>
+            <div class="ql-delta__row">
+              <span class="ql-label">新掌握</span>
+              <span v-if="!report.learnerDelta.knowledge.newMastered.length">无</span>
+              <span
+                v-for="item in report.learnerDelta.knowledge.newMastered"
+                :key="item"
+                class="mk-badge mk-badge--ok ql-tag"
+              >
+                {{ item }}
+              </span>
+            </div>
+            <div class="ql-delta__row">
+              <span class="ql-label">新混淆</span>
+              <span v-if="!report.learnerDelta.knowledge.newRecurringConfusions.length">无</span>
+              <span
+                v-for="item in report.learnerDelta.knowledge.newRecurringConfusions"
+                :key="item"
+                class="mk-badge mk-badge--warn ql-tag"
+              >
+                {{ item }}
+              </span>
+            </div>
+            <div class="ql-delta__row">
+              <span class="ql-label">路径调整</span>
+              <span>{{ report.downstream.replan.signalChanged ? '信号已变化' : '信号无变化' }}</span>
+              <span v-if="report.downstream.replan.after?.shouldSuggest" class="ql-chip ql-chip--warn">
+                建议调整（{{ report.downstream.replan.after.priority }}）
+              </span>
+            </div>
+            <div v-if="report.lifecycle.warnings?.length" class="ql-warnings">
+              <div v-for="(warning, index) in report.lifecycle.warnings" :key="index">⚠ {{ warning }}</div>
+            </div>
+          </details>
 
           <div class="ql-actions">
-            <el-button text @click="resetRun">再学一课</el-button>
-            <el-button text @click="emit('update:visible', false)">关闭</el-button>
+            <button type="button" class="mk-link" @click="resetRun">再学一课</button>
+            <button type="button" class="mk-link" @click="close">关闭</button>
           </div>
         </template>
       </section>
     </div>
-  </el-dialog>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -232,6 +254,9 @@ import { askConfirm } from '@/views/admin-redesign/useConfirm'
 import { adminApi } from '@/api/adminApi'
 import { setProjectionToken } from '@/utils/projection'
 import { useSafePolling } from '@/composables/useSafePolling'
+import MkLoading from '@/views/admin-redesign/MkLoading.vue'
+import { statusText } from '@/views/admin-redesign/statusText'
+import { useEscape } from '@/views/admin-redesign/useEscape'
 
 const props = defineProps<{
   visible: boolean
@@ -375,22 +400,16 @@ function isActiveStatus(status: string) {
 }
 
 function statusLabel(status: string) {
-  const labels: Record<string, string> = {
-    queued: '排队中',
-    running: '运行中',
-    completed: '已完成',
-    failed: '未完成',
-    aborted: '已中止',
-    interrupted: '已中断',
-  }
-  return labels[status] || status
+  // 状态词走全局字典（单源）：failed → 失败，不再页内另译「未完成」
+  return statusText(String(status || ''))
 }
 
-function statusTagType(status: string) {
-  if (status === 'completed') return 'success'
-  if (status === 'failed' || status === 'interrupted') return 'danger'
-  if (status === 'aborted') return 'warning'
-  return 'info'
+/** 运行状态 → mk-badge 基调类（对齐原 EP type 的 success/danger/warning/info 语义） */
+function statusBadgeTone(status: string) {
+  if (status === 'completed') return 'mk-badge--ok'
+  if (status === 'failed' || status === 'interrupted') return 'mk-badge--bad'
+  if (status === 'aborted') return 'mk-badge--warn'
+  return 'mk-badge--info'
 }
 
 function techClass(ok: boolean | undefined) {
@@ -583,6 +602,12 @@ function handleClosed() {
   pollingRunId.value = null
 }
 
+/** 关闭弹窗：父层用 v-model:visible 控制；这里同步收尾（等价原 EP @closed 的语义） */
+function close() {
+  emit('update:visible', false)
+  handleClosed()
+}
+
 watch(
   () => props.visible,
   (visible) => {
@@ -596,6 +621,10 @@ watch(
     }
   }
 )
+
+// Esc 关闭（原 EP el-dialog 自带；换成 mk-modal 后需显式登记）。遮罩点击不关闭，
+// 与原 :close-on-click-modal="false" 一致。
+useEscape(() => props.visible, close)
 </script>
 
 <style scoped>
@@ -611,22 +640,22 @@ watch(
 }
 
 .ql-account-brief__item {
-  border: 1px solid var(--el-border-color-lighter);
+  border: 1px solid var(--mk-line);
   border-radius: 8px;
   padding: 9px 10px;
-  background: var(--el-fill-color-extra-light);
+  background: var(--mk-bg);
   display: grid;
   gap: 3px;
 }
 
 .ql-account-brief__item span {
   font-size: 11px;
-  color: var(--el-text-color-secondary);
+  color: var(--mk-faint);
 }
 
 .ql-account-brief__item strong {
   font-size: 12px;
-  color: var(--el-text-color-primary);
+  color: var(--mk-ink);
 }
 
 .ql-section {
@@ -643,7 +672,7 @@ watch(
 .ql-section__title {
   font-weight: 600;
   font-size: 13px;
-  color: var(--el-text-color-primary);
+  color: var(--mk-ink);
   margin-bottom: 8px;
 }
 
@@ -652,7 +681,7 @@ watch(
   margin: -2px 0 10px;
   font-size: 12px;
   line-height: 1.6;
-  color: var(--el-text-color-secondary);
+  color: var(--mk-faint);
 }
 
 .ql-task-select {
@@ -673,7 +702,7 @@ watch(
 
 .ql-label {
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--mk-faint);
   min-width: 56px;
 }
 
@@ -701,35 +730,35 @@ watch(
 }
 
 .ql-history-item:hover {
-  background: var(--el-fill-color-light);
+  background: var(--mk-surface-3);
 }
 
 .ql-history-item__meta {
-  color: var(--el-text-color-secondary);
+  color: var(--mk-faint);
   font-size: 12px;
   flex: 1;
 }
 
 .ql-history-item__open {
-  color: var(--el-color-primary);
+  color: var(--mk-blue);
   font-size: 12px;
 }
 
 .ql-status {
-  border: 1px solid var(--el-border-color-lighter);
+  border: 1px solid var(--mk-line);
   border-radius: 8px;
   padding: 14px;
   margin-bottom: 14px;
 }
 
 .ql-status--running {
-  border-color: var(--el-color-primary-light-7);
-  background: var(--el-color-primary-light-9);
+  border-color: var(--mk-blue-bg-strong);
+  background: var(--mk-blue-bg);
 }
 
 .ql-status--completed {
-  border-color: var(--el-color-success-light-7);
-  background: var(--el-color-success-light-9);
+  border-color: var(--mk-green-bg);
+  background: var(--mk-green-bg);
 }
 
 .ql-status__main {
@@ -739,15 +768,7 @@ watch(
   gap: 12px;
 }
 
-.ql-status__spinner {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--el-color-primary-light-5);
-  border-top-color: var(--el-color-primary);
-  border-radius: 50%;
-  animation: ql-spin 0.9s linear infinite;
-  flex-shrink: 0;
-}
+
 
 @keyframes ql-spin {
   to {
@@ -765,13 +786,13 @@ watch(
 
 .ql-status__desc {
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--mk-faint);
   margin-top: 4px;
 }
 
 .ql-status__error {
   font-size: 12px;
-  color: var(--el-color-danger);
+  color: var(--mk-red);
   margin-top: 6px;
 }
 
@@ -787,7 +808,7 @@ watch(
 }
 
 .ql-tech--ok {
-  color: var(--el-color-success);
+  color: var(--mk-green);
 }
 
 .ql-tech--ok::before {
@@ -795,7 +816,7 @@ watch(
 }
 
 .ql-tech--fail {
-  color: var(--el-color-danger);
+  color: var(--mk-red);
 }
 
 .ql-tech--fail::before {
@@ -826,14 +847,14 @@ watch(
 }
 
 .ql-chip {
-  background: var(--el-fill-color-light);
+  background: var(--mk-surface-3);
   border-radius: 4px;
   padding: 2px 8px;
   font-size: 12px;
 }
 
 .ql-chip--warn {
-  color: var(--el-color-warning);
+  color: var(--mk-amber);
 }
 
 .ql-tag {
@@ -843,7 +864,7 @@ watch(
 .ql-warnings {
   margin-top: 8px;
   font-size: 12px;
-  color: var(--el-color-warning);
+  color: var(--mk-amber);
 }
 
 .ql-actions {

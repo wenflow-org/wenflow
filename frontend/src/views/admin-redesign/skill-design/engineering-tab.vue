@@ -2,7 +2,7 @@
   <!-- 工程：基础信息 / 运行时契约 / 协议视图 / Skill 规则总览（低频只读区块） -->
   <div class="sdp-pane">
     <section class="sdp-eng">
-      <header class="sdp-sec-head"><h4>基础信息</h4></header>
+      <header class="mk-section__head"><h4>基础信息</h4></header>
       <table class="sdp-kv">
         <tbody>
           <tr><th title="kind">类型</th><td><code class="mono">{{ overview.kind }}</code></td></tr>
@@ -25,7 +25,7 @@
     </section>
 
     <section v-if="overview.runtimeContract" class="sdp-eng">
-      <header class="sdp-sec-head">
+      <header class="mk-section__head">
         <h4>运行时契约</h4>
         <span class="sdp-sec-meta mono">{{ overview.runtimeContractSource === 'manifest' ? 'prompts/manifests' : 'buildDefaultRuntimeContract' }}</span>
       </header>
@@ -44,7 +44,7 @@
     </section>
 
     <section class="sdp-eng">
-      <header class="sdp-sec-head">
+      <header class="mk-section__head">
         <h4>协议视图</h4>
         <span class="sdp-sec-meta">{{ protocols.length ? `${protocols.length} 组协议` : '' }}</span>
       </header>
@@ -63,7 +63,7 @@
     </section>
 
     <section class="sdp-eng">
-      <header class="sdp-sec-head">
+      <header class="mk-section__head">
         <h4>Skill 规则总览</h4>
         <span class="sdp-sec-meta" v-if="rulesOverview?.summary">
           {{ rulesOverview.summary.totalRules ?? 0 }} 规则 · {{ rulesOverview.summary.totalPrefixes ?? 0 }} 前缀
@@ -190,20 +190,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
 .sdp-bad-text { color: var(--mk-red); font-weight: 700; }
 .sdp-none { margin: 0; font-size: 12px; color: var(--mk-faint); }
 .sdp-eng { display: grid; gap: 8px; }
-.sdp-sec-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.sdp-sec-head h4 {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--mk-faint);
-}
+/* 区块头走 .mk-section__head（shared.css） */
 .sdp-sec-meta { font-size: 11px; color: var(--mk-faint); display: inline-flex; gap: 10px; align-items: center; }
 .sdp-kv {
   width: 100%;
@@ -271,7 +258,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
 
 /* 4K：字号跟随壳层放大 */
 @media (min-width: 3600px) {
-  .sdp-sec-head h4 { font-size: 17.5px; }
+  .mk-section__head h4 { font-size: 17.5px; }
   .sdp-sec-meta { font-size: 17.5px; }
   .sdp-kv { font-size: 18px; }
   .sdp-kv th { font-size: 17px; padding: 10px 16px; }

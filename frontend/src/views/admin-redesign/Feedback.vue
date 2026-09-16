@@ -24,12 +24,15 @@
     </div>
 
     <!-- 加载失败（首载无数据时优先于空态展示，含重试） -->
-    <div v-if="loadFailed && !rows.length" class="mk-empty mk-empty--min">
-      <span class="mk-empty__icon" aria-hidden="true">◌</span>
-      <strong>反馈数据加载失败</strong>
-      <span>无法从后端拉取反馈列表。</span>
-      <button type="button" class="mk-empty__action" @click="() => load(true)">重试</button>
-    </div>
+    <MkEmptyState
+      v-if="loadFailed && !rows.length"
+      icon="◌"
+      title="反馈数据加载失败"
+      description="无法从后端拉取反馈列表。"
+      action-text="重试"
+      min
+      @action="() => load(true)"
+    />
 
     <template v-else>
       <!-- 列表 -->
@@ -132,14 +135,7 @@
           </tbody>
         </table>
         </div>
-        <MkEmptyState
-          v-else-if="loading"
-          min
-          title="加载中…"
-          description="正在从后端拉取反馈。"
-        >
-          <template #icon><span class="mk-spinner" aria-hidden="true"></span></template>
-        </MkEmptyState>
+        <MkLoading v-else-if="loading" min text="正在从后端拉取反馈。" />
         <MkEmptyState
           v-else
           icon="◌"
@@ -230,7 +226,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { isLive } from './store'
+import { isLive, intent } from './store'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { adminFeedbackApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
@@ -240,6 +236,7 @@ import Pagination from './Pagination.vue'
 import MkFilterSearch from './MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from './MkLoading.vue'
 
 type Status = 'new' | 'triaged' | 'resolved' | 'dismissed'
 
@@ -447,6 +444,12 @@ async function save(status: Status) {
 }
 
 onMounted(() => {
+  /* 深链：运营中心「待处理反馈」→ 预筛待处理（消费后清空，避免菜单直达被残留污染；
+     与 GoalConversations 消费 intent.statusFilter==='failed' 同构） */
+  if (intent.statusFilter === 'new') {
+    statusFilter.value = 'new'
+    intent.statusFilter = ''
+  }
   void load()
 })
 </script>

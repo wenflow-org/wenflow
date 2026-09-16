@@ -40,7 +40,6 @@ module.exports = {
     "src/views/admin-redesign/AdminConsole.vue",
     "src/views/admin-redesign/DataFlowGraph.vue",
     "src/views/admin-redesign/FieldAddWizard.vue",
-    "src/views/admin-redesign/FieldFlowGraph.vue",
     "src/views/admin-redesign/FieldRoutingTable.vue",
     "src/views/admin-redesign/HealthCenter.vue",
     "src/views/admin-redesign/MemoryReview.vue",

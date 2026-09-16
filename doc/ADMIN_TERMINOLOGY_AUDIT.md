@@ -52,7 +52,29 @@ node_config_changes / orchestration-prune、落库对账、合同维度、健康
 ### §4.5 文档引用
 源码中出现的 `doc/*.md` 引用必须真实存在（本文即真源）。
 
+### §4.6 状态词单源（本次新增）
+`running` 的展示词统一「**进行中**」（单源 `statusText.ts`）。页面**不得**再写私有字典 / 格式化函数把它译成「运行中」。
+
+守卫（`terminology-guard.test.ts`）按**译名位置**断言，而不是禁「运行中」这个子串：
+
+```
+/running['"]?\s*:\s*['"]运行中/        // 私有字典 { running: '运行中' }
+/'running'\)\s*return\s*['"]运行中/    // 私有格式化 if (r === 'running') return '运行中'
+/运行中\s*\{\{/                        // 计数模板「运行中 {{ n }}」
+/运行中\s*\$\{/                        // 模板串「… 运行中 ${n}」
+```
+
+**故意放行**的「运行中」（它们是别的语义，禁掉会逼出错误文案）：
+
+| 位置 | 语义 | 例 |
+|---|---|---|
+| 自由文本 | 运行时 / 线上 | 「源文件与**运行中**的 Prompt 不一致」（`SkillDesignPage`）、「是否已在系统**运行中**注册」（`SkillReconciliation`） |
+| 动词进行态 | 「运行」这个动作正在发生 | 「**运行中**…」（`skill-design/trial-tab.vue` 试跑按钮） |
+| 内部注释 | 非 UI 文案 | `live.ts` / `vlab.ts` 注释里的「运行中会话」 |
+
 ## §5 已知的历史疏漏（已修）
+
+- 会话状态 `running` **一处「进行中」（`statusText` 徽章）、一处「运行中」（页内私有字典 / 计数说明）** —— 同义不同词（`ADMIN_PAGE_TEMPLATES` 附清单第 409 行也记过「顶栏 `进行中` 与右栏 `运行状态 运行中`」）→ **统一「进行中」**，并把 `BatchExperiments` 私有 `statusText`、`GoalConversations` 私有 `statusLabel`、`VirtualProfile.formatRunResult` 的 running 分支改为引用共享单源（48 处文案）。
 
 - `degraded` 在会话座舱一处翻译、一处直出 → 统一「降级」。
 - 版本表 `{{ v.status }}` 直出 `ACTIVE` → `versionStatusText()`。

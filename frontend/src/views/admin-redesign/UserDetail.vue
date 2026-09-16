@@ -1,24 +1,22 @@
 <template>
   <div v-if="d" class="mk-page ud">
-    <!-- 页头卡（布局重构：返回独立成行 + 身份 + 统计，对齐 HubSpot/SF record header） -->
-    <header class="ud-head">
+    <!-- 页头卡（T2：身份区走 .mk-entity 唯一原语） -->
+    <header class="mk-entity">
       <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
-      <div class="ud-head__top">
-        <div class="ud-id">
-          <span class="ud-avatar">{{ d.name.charAt(0) }}</span>
-          <div class="ud-id__main">
-            <div class="ud-id__name-row">
-              <h1 class="ud-name">{{ d.name }}</h1>
-              <span v-if="isDeleted" class="mk-badge mk-badge--sm mk-badge--deleted">已删除</span>
-            </div>
-            <span class="ud-sub">{{ d.email }} · {{ d.role }} · 加入 {{ d.joined }}</span>
+      <div class="mk-entity__main">
+        <span class="mk-entity__avatar mk-entity__avatar--user">{{ d.name.charAt(0) }}</span>
+        <div class="mk-entity__id">
+          <div class="mk-entity__name-row">
+            <h1 class="mk-entity__name">{{ d.name }}</h1>
+            <span v-if="isDeleted" class="mk-badge mk-badge--sm mk-badge--deleted">已删除</span>
           </div>
-          <div class="ud-id__actions">
-            <button v-if="isDeleted" type="button" class="mk-status__action" :disabled="restoring" @click="doRestore">
-              {{ restoring ? '恢复中…' : '恢复用户' }}
-            </button>
-            <button type="button" class="mk-status__action" @click="toLearner">查看学习者画像 →</button>
-          </div>
+          <span class="mk-entity__sub">{{ d.email }} · {{ d.role }} · 加入 {{ d.joined }}</span>
+        </div>
+        <div class="mk-entity__actions">
+          <button v-if="isDeleted" type="button" class="mk-status__action" :disabled="restoring" @click="doRestore">
+            {{ restoring ? '恢复中…' : '恢复用户' }}
+          </button>
+          <button type="button" class="mk-status__action" @click="toLearner">查看学习者画像 →</button>
         </div>
       </div>
       <div class="ud-kpis">
@@ -40,7 +38,7 @@
                 <strong>{{ p.title }}</strong>
                 <span>{{ p.stage }}</span>
               </div>
-              <div class="ud-path__bar"><i :style="{ width: p.pct + '%' }" :class="{ warn: p.tone === 'warn' }"></i></div>
+              <span class="mk-minibar"><i class="mk-minibar__fill" :style="{ width: p.pct + '%' }" :data-tone="p.tone === 'warn' ? 'warn' : undefined"></i></span>
               <span class="ud-path__pct">{{ p.pct }}%</span>
             </div>
             <p v-if="!d.recentPaths.length" class="ud-none">该用户暂无学习路径记录。开始一条学习路径后，这里会显示各路径的阶段与进度明细。</p>
@@ -99,31 +97,22 @@
 
   <div v-else-if="detailError" class="mk-page ud">
     <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
-    <div class="mk-empty">
-      <span class="mk-empty__icon" aria-hidden="true">◌</span>
-      <strong>详情加载失败</strong>
-      <span>暂时无法获取该用户的完整信息。</span>
-      <button type="button" class="mk-empty__action" @click="loadDetail">重试</button>
-    </div>
+    <MkEmptyState
+      icon="◌"
+      title="详情加载失败"
+      description="暂时无法获取该用户的完整信息。"
+      action-text="重试"
+      @action="loadDetail"
+    />
   </div>
 
   <div v-else class="mk-page ud">
     <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
-    <!-- 骨架屏（P0-2：替代纯文字 loading，避免布局跳动） -->
+    <!-- 骨架屏（P0-2：替代纯文字 loading，避免布局跳动）。形状走 MkSkeleton 版式。 -->
     <div class="ud-skel" aria-hidden="true">
-      <div class="ud-skel__id">
-        <span class="ud-skel__avatar"></span>
-        <div class="ud-skel__lines">
-          <i class="ud-skel__line ud-skel__line--name"></i>
-          <i class="ud-skel__line ud-skel__line--sub"></i>
-        </div>
-      </div>
-      <div class="ud-skel__stats">
-        <i v-for="n in 4" :key="n" class="ud-skel__stat"></i>
-      </div>
-      <div class="ud-skel__grid">
-        <i v-for="n in 2" :key="n" class="ud-skel__card"></i>
-      </div>
+      <MkSkeleton variant="identity" :avatar="48" />
+      <MkSkeleton variant="cards" :count="4" :h="64" :cols="4" :radius="10" />
+      <MkSkeleton variant="cards" :count="2" :h="140" :cols="2" :radius="12" />
     </div>
   </div>
 </template>
@@ -132,6 +121,8 @@
 import { computed, ref, watch } from 'vue'
 import { subPage, closeSubPage, openSubPage } from './store'
 import MkKpi from './MkKpi.vue'
+import MkEmptyState from './MkEmptyState.vue'
+import MkSkeleton from './MkSkeleton.vue'
 import { liveUsers, timeAgo, errMsg } from './live'
 import { adminUsersApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
@@ -273,7 +264,8 @@ async function doRestore() {
   const ok = await askConfirm({
     title: '恢复用户',
     message: `确认恢复用户「${liveDetail.value?.name || id}」？\n恢复后该用户可重新登录，历史数据原样保留。`,
-    confirmText: '恢复'
+    confirmText: '恢复',
+    danger: false
   })
   if (!ok) return
   restoring.value = true
@@ -356,49 +348,10 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 <style scoped>
 .ud { gap: 16px; }
 /* 骨架屏（P0-2）：加载中替代纯文字，避免布局跳动 */
+/* 骨架形状（shimmer 视觉统一走 .mk-skeleton） */
+/* 骨架版式（形状）走 MkSkeleton；本类只管外层堆叠 */
 .ud-skel { display: grid; gap: 14px; padding-top: 8px; }
-.ud-skel__id { display: flex; align-items: center; gap: 14px; }
-.ud-skel__avatar { width: 48px; height: 48px; border-radius: 12px; background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 50%, #eef2f8 75%); background-size: 200% 100%; animation: ud-skel-shimmer 1.2s infinite; }
-.ud-skel__lines { display: grid; gap: 6px; flex: 1; max-width: 360px; }
-.ud-skel__line { height: 14px; border-radius: 6px; background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 50%, #eef2f8 75%); background-size: 200% 100%; animation: ud-skel-shimmer 1.2s infinite; }
-.ud-skel__line--name { width: 55%; height: 18px; }
-.ud-skel__line--sub { width: 80%; height: 12px; }
-.ud-skel__stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.ud-skel__stat { height: 64px; border-radius: 10px; background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 50%, #eef2f8 75%); background-size: 200% 100%; animation: ud-skel-shimmer 1.2s infinite; }
-.ud-skel__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.ud-skel__card { height: 140px; border-radius: 12px; background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 50%, #eef2f8 75%); background-size: 200% 100%; animation: ud-skel-shimmer 1.2s infinite; }
-@keyframes ud-skel-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line, html[data-theme='dark'] .ud-skel__stat, html[data-theme='dark'] .ud-skel__card { background: linear-gradient(90deg, #1b2537 25%, #232f45 50%, #1b2537 75%); background-size: 200% 100%; }
-/* 页头卡（布局重构）：返回 + 身份 + 统计合并，HubSpot/SF record header 形态 */
-.ud-head {
-  display: grid;
-  gap: 14px;
-  padding: 16px 18px 14px;
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: var(--mk-surface);
-}
-.ud-head__top { display: flex; align-items: flex-start; gap: 12px; }
-.ud-id { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
-.ud-id__main { display: grid; gap: 2px; min-width: 0; }
-.ud-id__name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ud-id__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
-.ud-avatar {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #31b16f, #43b0d8);
-  color: #fff;
-  display: grid;
-  place-content: center;
-  font-size: var(--mk-fs-18);
-  font-weight: 700;
-  flex-shrink: 0;
-}
-.ud-id h3 { margin: 0; font-size: var(--mk-fs-18); }
-.ud-name { margin: 0; font-size: var(--mk-fs-18); line-height: 1.4; }
-.ud-sub { color: var(--mk-faint); font-size: var(--mk-fs-12); }
-
+/* 页头身份区走 .mk-entity（shared.css）；本页只保留页头内的统计行 */
 /* 统计行（设计语言统一：MkKpi；页头内网格） */
 .ud-kpis {
   display: grid;
@@ -427,9 +380,8 @@ html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line
 .ud-path__main { display: grid; min-width: 0; }
 .ud-path__main strong { font-size: var(--mk-fs-13); }
 .ud-path__main span { font-size: var(--mk-fs-12); color: var(--mk-faint); }
-.ud-path__bar { height: 6px; border-radius: 3px; background: var(--mk-line, #eef2fa); overflow: hidden; }
-.ud-path__bar i { display: block; height: 100%; background: linear-gradient(90deg, #6aa0ff, var(--mk-blue, #2c63d0)); }
-.ud-path__bar i.warn { background: linear-gradient(90deg, #fcd34d, #f59e0b); }
+/* 进度条统一走 .mk-minibar（shared.css），填充色走 data-tone
+   （原为渐变：linear-gradient(#6aa0ff→蓝) / (#fcd34d→#f59e0b)，属 §4 点名的违规） */
 .ud-path__pct { font-size: var(--mk-fs-12); color: var(--mk-muted); text-align: right; font-variant-numeric: tabular-nums; }
 .ud-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-12_5); }
 
@@ -499,9 +451,6 @@ html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .ud-avatar { width: 54px; height: 54px; font-size: 21px; }
-  .ud-id h3, .ud-name { font-size: 21px; }
-  .ud-sub { font-size: 14px; }
   .ud-path__main strong { font-size: 15px; }
   .ud-path__main span { font-size: 13.5px; }
   .ud-path__pct { font-size: 14px; }
@@ -515,9 +464,6 @@ html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
-  .ud-avatar { width: 62px; height: 62px; font-size: 24px; }
-  .ud-id h3, .ud-name { font-size: 24.5px; }
-  .ud-sub { font-size: 16.5px; }
   .ud-path__main strong { font-size: 17.5px; }
   .ud-path__main span { font-size: 16px; }
   .ud-path__pct { font-size: 16.5px; }
@@ -531,9 +477,6 @@ html[data-theme='dark'] .ud-skel__avatar, html[data-theme='dark'] .ud-skel__line
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
-  .ud-avatar { width: 72px; height: 72px; font-size: 28px; }
-  .ud-id h3, .ud-name { font-size: 28.5px; }
-  .ud-sub { font-size: 19px; }
   .ud-path__main strong { font-size: 20.5px; }
   .ud-path__main span { font-size: 18.5px; }
   .ud-path__pct { font-size: 19px; }

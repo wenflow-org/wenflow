@@ -2,7 +2,7 @@
   <div class="fdp">
     <!-- 新建字段引导 -->
     <details class="fdp__box">
-      <summary class="fdp__box-summary">新建字段（编辑编排文件）</summary>
+      <summary class="mk-section__summary">新建字段（编辑编排文件）</summary>
       <div class="fdp__guide">
         <p class="fdp__guide-text">
           新建字段请直接编辑编排文件，保存后新字段/新路由立即进入数据库（已有行修改见下方漂移报告）。
@@ -15,9 +15,17 @@
 
     <!-- 漂移报告 -->
     <details class="fdp__box" open>
-      <summary class="fdp__box-summary">漂移报告（{{ TERMS.driftContractQualified }}：编排文件 vs 数据库，admin 编辑行豁免）</summary>
+      <summary class="mk-section__summary">漂移报告（{{ TERMS.driftContractQualified }}：编排文件 vs 数据库，admin 编辑行豁免）</summary>
       <div v-if="driftLoading" class="fdp__empty">检测中…</div>
-      <div v-else-if="driftFailed" class="fdp__empty fdp__empty--error">漂移检测失败：无法连接字段路由服务，请稍后重试。<button type="button" class="mk-empty__action" @click="loadDrift">重试</button></div>
+      <MkEmptyState
+        v-else-if="driftFailed"
+        tone="error"
+        title="漂移检测失败"
+        description="无法连接字段路由服务，请稍后重试。"
+        action-text="重试"
+        compact
+        @action="loadDrift"
+      />
       <div v-else-if="drift.items.length === 0" class="fdp__empty"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg> 无漂移（编排文件与数据库一致）</div>
       <ul v-else class="fdp__drift-list">
         <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
@@ -33,7 +41,7 @@
 
     <!-- 审计 -->
     <details class="fdp__box">
-      <summary class="fdp__box-summary">最近变更（审计）</summary>
+      <summary class="mk-section__summary">最近变更（审计）</summary>
       <ul v-if="changes.length" class="fdp__changes-list">
         <li v-for="(c, i) in changes" :key="i" class="fdp__change">
           <span class="fdp__change-kind">{{ String(c.changeType || '—') }}</span>
@@ -41,7 +49,15 @@
           <span class="mono">{{ String(c.targetId || '') }}</span>
         </li>
       </ul>
-      <p v-else-if="changesFailed" class="fdp__empty fdp__empty--error">变更记录加载失败：无法连接审计服务，请稍后重试。<button type="button" class="mk-empty__action" @click="loadChanges">重试</button></p>
+      <MkEmptyState
+        v-else-if="changesFailed"
+        tone="error"
+        title="变更记录加载失败"
+        description="无法连接审计服务，请稍后重试。"
+        action-text="重试"
+        compact
+        @action="loadChanges"
+      />
       <p v-else class="fdp__empty">暂无变更记录</p>
     </details>
   </div>
@@ -51,6 +67,7 @@
 import { onMounted, ref, watch } from 'vue';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 import { TERMS } from './terms';
+import MkEmptyState from './MkEmptyState.vue';
 
 const props = defineProps<{ stage: string }>();
 
@@ -120,28 +137,8 @@ watch(() => props.stage, () => {
   box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06));
   overflow: hidden;
 }
-.fdp__box-summary {
-  padding: 11px 14px;
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--mk-fs-12_5);
-  font-weight: 700;
-  color: var(--mk-ink, #1a2a44);
-  list-style: none;
-  user-select: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.fdp__box-summary::-webkit-details-marker { display: none; }
-.fdp__box-summary::before {
-  content: '▸';
-  font-size: var(--mk-fs-11);
-  color: var(--mk-faint, var(--mk-faint-soft));
-  transition: transform 0.16s ease;
-}
-.fdp__box[open] > .fdp__box-summary::before { transform: rotate(90deg); }
-.fdp__box[open] > .fdp__box-summary { border-bottom: 1px solid var(--mk-line, #e6ebf4); }
+/* 折叠头走 .mk-section__summary（shared.css）；展开态的底分隔线是本页特性，保留 */
+.fdp__box[open] > .mk-section__summary { border-bottom: 1px solid var(--mk-line, #e6ebf4); }
 .fdp__guide { display: grid; gap: 8px; padding: 12px 14px; }
 .fdp__guide-text { margin: 0; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-12_5); line-height: 1.6; }
 .fdp__guide-file {
@@ -210,10 +207,8 @@ watch(() => props.stage, () => {
 }
 .fdp__change-target { color: var(--mk-muted, #5b6577); }
 .fdp__empty { padding: 20px; color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; }
-.fdp__empty--error { color: var(--mk-red, #dc2626); font-weight: 600; }
 
 @media (min-width: 2000px) {
-  .fdp__box-summary { font-size: 14px; padding: 13px 17px; }
   .fdp__guide { padding: 14px 17px; }
   .fdp__guide-text { font-size: 14px; }
   .fdp__guide-file { font-size: 14px; padding: 9px 14px; }
@@ -228,7 +223,6 @@ watch(() => props.stage, () => {
 }
 
 @media (min-width: 2800px) {
-  .fdp__box-summary { font-size: 16.5px; padding: 15px 21px; }
   .fdp__guide { padding: 17px 21px; }
   .fdp__guide-text { font-size: 16.5px; }
   .fdp__guide-file { font-size: 16.5px; padding: 11px 17px; }
