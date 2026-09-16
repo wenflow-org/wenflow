@@ -17,7 +17,9 @@ import { learnerProjectionService, type ReviewProjection } from './LearnerProjec
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
 import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
-import { conceptBeliefService } from './concept-belief.service';
+import { conceptBeliefService, resolveBktParamsForDifficulty } from './concept-belief.service';
+import { conceptLoadService } from '../memory/concept-load.service';
+import { normalizeConceptKey } from '../memory/memory-trace.service';
 import { insightCalibrationService, type InsightReliability } from './insight-calibration.service';
 
 export const REVIEW_PROJECTION_SCOPE = 'review';
@@ -169,10 +171,18 @@ class LearnerStateReviewService {
     // 3a：用诊断观测做 BKT 时序更新（零训练），并把信念摘要附入评审载荷
     let beliefs: Record<string, number> | null = null;
     if (diagnosis?.conceptAssessments?.length) {
+      // 难度档位来自 concept-load 的 LLM 判定（**只读缓存**，不在此处调 LLM）；
+      // 缺档位即走 medium，行为与旧版一致。
+      const conceptKeys = diagnosis.conceptAssessments.map((item) => item.conceptKey);
+      const profiles = await conceptLoadService.resolveCachedProfiles(userId, conceptKeys).catch(() => new Map());
       const updated = await conceptBeliefService.applyObservations(
         userId,
         primaryPath.id,
-        diagnosis.conceptAssessments.map((item) => ({ conceptKey: item.conceptKey, observed: item.observed === 'mastered' })),
+        diagnosis.conceptAssessments.map((item) => {
+          const profile = profiles.get(normalizeConceptKey(item.conceptKey));
+          const { params, tier } = resolveBktParamsForDifficulty(profile?.difficultyBand ?? null);
+          return { conceptKey: item.conceptKey, observed: item.observed === 'mastered', params, tier };
+        }),
       );
       if (updated) {
         beliefs = Object.fromEntries(Object.entries(updated.beliefs).map(([key, value]) => [key, value.pKnowL]));
