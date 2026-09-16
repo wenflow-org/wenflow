@@ -273,18 +273,26 @@ export class ProfileAggregator {
   
   private async fetchMetricsData(userId: string): Promise<LearningState | null> {
     try {
-      const [latestMetrics, trends] = await Promise.all([
-        learningStateService.getCurrentState(userId),
+      // 学习者级状态 = 按路径保守聚合 + 当日课量疲劳加成（不再取"最近一条行"）
+      const [aggregated, trends] = await Promise.all([
+        learningStateService.getAggregatedState(userId),
         learningStateService.getTrends(userId, 7),
       ]);
 
-      if (!latestMetrics) return null;
+      if (!aggregated) return null;
+
+      logger.debug('[profile-aggregator] 学习者级状态聚合', {
+        userId: userId.slice(0, 8),
+        pathCount: aggregated.perPath.length,
+        dayLoad: aggregated.dayLoad,
+        metrics: aggregated.metrics,
+      });
 
       return {
-        ktl: latestMetrics.ktl,
-        lf: latestMetrics.lf,
-        lss: latestMetrics.lss,
-        lsb: latestMetrics.lsb,
+        ktl: aggregated.metrics.ktl,
+        lf: aggregated.metrics.lf,
+        lss: aggregated.metrics.lss,
+        lsb: aggregated.metrics.lsb,
         masteryByTopic: {},
         recentProgress: this.inferProgress(trends),
         streak: 0

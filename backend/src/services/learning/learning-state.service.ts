@@ -150,6 +150,60 @@ export interface LearningStateSessionTimelineEntry {
 interface LearningStateCommittedSnapshot {
   metrics: LearningStateMetrics;
   calculatedAt: Date;
+  pathId?: string | null;
+}
+
+/**
+ * 学习者级（全局）状态：**按路径保守聚合 + 当日课量累积项**。
+ *
+ * 为什么不是"最近一条行"：学习者可能同时学多条路径，最近一条行只代表"最后写的那条路径"，
+ * 于是"今天上了一门难课"会被当成"这周很累"（单课判断污染总负担），而且随时是哪条路径最后写
+ * 就会跳变。这里改为：每条路径取各自最新状态，再对**负荷类**指标取 max（保守：任一路径的
+ * 高负荷都算数），并叠加**当日课量**的疲劳累积项（课时数 / 时长）。
+ * 单课难易仍由路径级状态负责（见 LearnerSnapshotService 的课内控制状态）。
+ */
+export interface AggregatedLearningState {
+  /** 聚合后的学习者级状态（供全局节奏 / 疲劳 / 重排信号使用） */
+  metrics: LearningStateMetrics;
+  /** 各路径的最新状态（供路径级判断使用，如课内难度与支架） */
+  perPath: Array<{ pathId: string; metrics: LearningStateMetrics; calculatedAt: Date }>;
+  /** 实际参与聚合的路径（= 活跃窗口内的路径；为空时回退到最近一条路径） */
+  activePathIds: string[];
+  /** 当日课量及其疲劳加成（可观测，便于对账与调参） */
+  dayLoad: { lessons: number; minutes: number; fatigueBonus: number };
+  /** 最近一条状态行的时间（新鲜度，不参与聚合） */
+  latestAt: Date | null;
+}
+
+/**
+ * 参与全局聚合的"活跃路径"窗口（天）。
+ * 超过该窗口没动静的路径不再参与投票：一条两个月没动的路径，其峰值与衰减基线都会污染
+ * "当前总负担"的判断（实证：某学习者的 ktl 4.4 来自 7 月）。窗口内没有活跃路径时回退最近一条路径。
+ */
+export const AGGREGATION_ACTIVE_WINDOW_DAYS = 14;
+
+/** 当日课量的疲劳加成规则（唯一口径，便于调参/对账） */export const DAY_LOAD_FATIGUE_RULES = {
+  /** 每天第 1 节课不额外加成；之后每多一节课的加成 */
+  perExtraLesson: 0.5,
+  maxLessonBonus: 2.0,
+  /** 当日累计学习时长（分钟）超过该值后开始计时长加成 */
+  freeMinutes: 90,
+  /** 每多 30 分钟的加成 */
+  perExtra30Minutes: 0.25,
+  maxMinutesBonus: 1.5,
+} as const;
+
+/** 当日课量 → 疲劳加成（纯函数，便于测试与对账） */
+export function computeDayLoadFatigueBonus(input: { lessons: number; minutes: number }): number {
+  const lessonBonus = Math.min(
+    DAY_LOAD_FATIGUE_RULES.maxLessonBonus,
+    Math.max(0, input.lessons - 1) * DAY_LOAD_FATIGUE_RULES.perExtraLesson
+  );
+  const minutesBonus = Math.min(
+    DAY_LOAD_FATIGUE_RULES.maxMinutesBonus,
+    Math.max(0, (input.minutes - DAY_LOAD_FATIGUE_RULES.freeMinutes) / 30) * DAY_LOAD_FATIGUE_RULES.perExtra30Minutes
+  );
+  return Math.round((lessonBonus + minutesBonus) * 1000) / 1000;
 }
 
 // 认知层级
@@ -356,6 +410,7 @@ export class LearningStateService {
     lf: number | null;
     lsb: number | null;
     calculatedAt: Date;
+    pathId?: string | null;
   }): LearningStateCommittedSnapshot | null {
     const metrics = this.coerceMetrics({
       lss: record.lss,
@@ -369,6 +424,7 @@ export class LearningStateService {
     return {
       metrics,
       calculatedAt: record.calculatedAt,
+      pathId: record.pathId ?? null,
     };
   }
 
@@ -411,6 +467,7 @@ export class LearningStateService {
         lf: true,
         lsb: true,
         calculatedAt: true,
+        pathId: true,
       },
     });
 
@@ -995,6 +1052,76 @@ export class LearningStateService {
    */
   async getCurrentState(userId: string, options: { pathId?: string | null } = {}): Promise<LearningStateMetrics | null> {
     return this.getPreviousMetrics(userId, options);
+  }
+
+  /**
+   * 学习者级状态 = **按路径最新状态保守聚合（max）+ 当日课量疲劳加成**。
+   * 见 `AggregatedLearningState` 的说明：全局管"总负担/节奏"，路径级管"单课难易"。
+   * 没有任何状态行时返回 null（调用方自行决定回退）。
+   */
+  async getAggregatedState(
+    userId: string,
+    options: { asOf?: Date } = {}
+  ): Promise<AggregatedLearningState | null> {
+    const asOf = options.asOf ?? new Date();
+    const snapshots = await this.listCommittedSnapshots(userId, undefined, undefined, asOf);
+    if (snapshots.length === 0) return null;
+
+    // 每条路径只保留最新一行（ASC 遍历 → 后者覆盖）；无路径归属的行单独兜底，不参与 max
+    const latestByPath = new Map<string, LearningStateCommittedSnapshot>();
+    for (const snapshot of snapshots) {
+      latestByPath.set(snapshot.pathId || '', snapshot);
+    }
+    const perPath = [...latestByPath.entries()]
+      .filter(([key]) => key.length > 0)
+      .map(([pathId, snapshot]) => ({
+        pathId,
+        // 与读取路径同口径：按自然衰减折算到 asOf。
+        // 否则一条两个月没动的路径会永远用它当时的峰值把全局疲劳顶住（实证见过 ktl 4.4 来自 7 月）。
+        metrics: this.restoreMetrics(snapshot.metrics, asOf),
+        calculatedAt: snapshot.calculatedAt,
+      }));
+    // 只让"活跃路径"参与投票（陈年峰值不参与），窗口内为空则回退最近一条路径
+    const windowStart = new Date(asOf.getTime() - AGGREGATION_ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const activeEntries = perPath.filter((entry) => entry.calculatedAt >= windowStart);
+    const votingEntries = activeEntries.length > 0 ? activeEntries : perPath;
+    const pool = votingEntries.length > 0
+      ? votingEntries.map((entry) => entry.metrics)
+      : [this.restoreMetrics(snapshots[snapshots.length - 1].metrics, asOf)];
+
+    const dayLoad = await this.resolveDayLoad(userId, asOf);
+    const fatigueBonus = computeDayLoadFatigueBonus(dayLoad);
+    const round = (value: number) => Math.round(value * 1000) / 1000;
+
+    const lss = round(Math.max(...pool.map((metrics) => metrics.lss)));
+    const ktl = round(Math.max(...pool.map((metrics) => metrics.ktl)));
+    const lf = round(Math.min(10, Math.max(...pool.map((metrics) => metrics.lf)) + fatigueBonus));
+
+    return {
+      metrics: { lss, ktl, lf, lsb: round(ktl - lf), timestamp: asOf },
+      perPath,
+      activePathIds: votingEntries.map((entry) => entry.pathId),
+      dayLoad: { ...dayLoad, fatigueBonus },
+      latestAt: snapshots[snapshots.length - 1].calculatedAt,
+    };
+  }
+
+  /**
+   * 当日（UTC 日）课量：完成的课节数 + 累计学习时长。
+   * 用 UTC 日与每日温故配额（ReviewQuotaService）保持一致口径，避免跨时区口径漂移。
+   */
+  private async resolveDayLoad(userId: string, asOf: Date): Promise<{ lessons: number; minutes: number }> {
+    const dayStart = new Date(Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate()));
+    const [lessons, sessions] = await Promise.all([
+      prisma.subtasks.count({
+        where: { userId, status: 'completed', completedAt: { gte: dayStart, lte: asOf } },
+      }),
+      prisma.teaching_sessions.aggregate({
+        _sum: { duration: true },
+        where: { userId, startTime: { gte: dayStart, lte: asOf } },
+      }),
+    ]);
+    return { lessons, minutes: sessions._sum.duration || 0 };
   }
 
   /**

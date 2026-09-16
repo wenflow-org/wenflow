@@ -42,9 +42,14 @@ function deriveSrlPhase(latestSession: { updatedAt?: Date; status?: string } | n
   return 'self-reflection';
 }
 
-function derivePacing(lss: number, lf: number, ktl: number): 'slow' | 'moderate' | 'fast' {
-  if (lf >= 6 || lss >= 6) return 'slow';
-  if (ktl >= 5 && lf <= 3 && lss <= 4) return 'fast';
+/**
+ * 全局节奏：只看"总负担"（负荷 ktl / 疲劳 lf）。
+ * LSS 是**单课**压力，不再在这里决定全局节奏（否则"今天这门课很难"会被当成"这周很累"）；
+ * 单课压力的去处是课内控制状态（LearnerSnapshotService.deriveLearningControlState）。
+ */
+export function derivePacing(lf: number, ktl: number): 'slow' | 'moderate' | 'fast' {
+  if (lf >= 6) return 'slow';
+  if (ktl >= 5 && lf <= 3) return 'fast';
   return 'moderate';
 }
 
@@ -54,23 +59,32 @@ function deriveSessionQuality(ktl: number, lf: number): 'strong' | 'mixed' | 'we
   return 'mixed';
 }
 
-function deriveLearningControlState(input: {
+export function deriveLearningControlState(input: {
   dynamicState: LearnerDynamicState;
   knowledgeMemory: LearnerKnowledgeMemory;
+  /**
+   * 课内判断用的状态：优先取"本节课所在路径"的状态（该路径无历史时回退全局聚合）。
+   * 全局聚合管节奏/疲劳，路径级管单课难易 —— 分母（同一路径的基线）对了，难易判断才有意义。
+   */
+  lessonMetrics?: { lss: number; ktl: number; lf: number; lsb: number };
 }): LearnerLearningControlState {
   const { dynamicState, knowledgeMemory } = input;
-  const { lss, ktl, lf, lsb } = dynamicState.metrics;
+  const lesson = input.lessonMetrics ?? dynamicState.metrics;
+  const { lss, ktl, lf, lsb } = lesson;
   const fragileCount = knowledgeMemory.globalSignals.fragileConcepts.length;
   const strugglingCount = knowledgeMemory.globalSignals.strugglingConcepts.length;
   const prerequisiteGapCount = knowledgeMemory.currentPath?.prerequisiteGaps.length || 0;
 
-  const paceMode: LearnerLearningControlState['paceMode'] = lf >= 6 || lsb < 0
+  // 单课压力大 → 课内降档/加支架（LSS 是会话级量，只在这里起作用，不影响全局节奏）
+  const lessonStress = lss >= 6;
+
+  const paceMode: LearnerLearningControlState['paceMode'] = lf >= 6 || lsb < 0 || lessonStress
     ? 'recover'
     : dynamicState.recentTrend === 'improving' && ktl >= 5 && lf <= 3 && lss <= 4
       ? 'push'
       : 'steady';
 
-  const conceptLoad: LearnerLearningControlState['conceptLoad'] = lf >= 6 || lsb < 0
+  const conceptLoad: LearnerLearningControlState['conceptLoad'] = lf >= 6 || lsb < 0 || lessonStress
     ? 'low'
     : dynamicState.recentTrend === 'improving' && ktl >= 6 && prerequisiteGapCount === 0
       ? 'high'
@@ -202,6 +216,9 @@ export class LearnerSnapshotService {
     };
 
     const metrics = profile.learning;
+    // 课内（路径级）状态：全局 metrics 管节奏/疲劳，课内难度与支架按本路径状态判断
+    const lessonScopePathId = input.learningPathId || knowledgeMemory.currentPath?.learningPathId || null;
+    const lessonMetrics = await this.resolveLessonState(input.userId, lessonScopePathId);
     const dynamicState: LearnerDynamicState = {
       metrics: {
         lss: metrics.lss,
@@ -213,7 +230,7 @@ export class LearnerSnapshotService {
       fatigueRisk: deriveFatigueRisk(metrics.lf),
       confidenceTrend: profile.emotional.confidenceLevel === 'anxious' ? 'falling' : profile.emotional.confidenceLevel === 'confident' ? 'rising' : 'stable',
       recentSessionQuality: deriveSessionQuality(metrics.ktl, metrics.lf),
-      recommendedPacing: derivePacing(metrics.lss, metrics.lf, metrics.ktl),
+      recommendedPacing: derivePacing(metrics.lf, metrics.ktl),
       recommendedInteraction: {
         hintTiming: personalization.config.interaction.hintTiming,
         encouragement: personalization.config.interaction.encouragementFrequency,
@@ -221,6 +238,8 @@ export class LearnerSnapshotService {
       },
       // SRL 三阶段（Zimmerman 2000）：活跃会话=performance，刚完结=reflection，否则=forethought
       srlPhase: deriveSrlPhase(latestSession),
+      lessonScopePathId,
+      ...(lessonMetrics ? { lessonMetrics } : {}),
     };
 
     const currentPath = knowledgeMemory.currentPath
@@ -245,6 +264,7 @@ export class LearnerSnapshotService {
     const learningControlState = deriveLearningControlState({
       dynamicState,
       knowledgeMemory: finalKnowledgeMemory,
+      lessonMetrics,
     });
     const replanSignal = deriveReplanSignal({
       dynamicState,
@@ -321,6 +341,9 @@ export class LearnerSnapshotService {
       contentHints: personalizationEngine.generateContentHints(profile),
     };
 
+    // 课内（路径级）状态：全局 metrics 管节奏/疲劳，课内难度与支架按本路径状态判断
+    const lessonScopePathId = input.learningPathId || knowledgeMemory.currentPath?.learningPathId || null;
+    const lessonMetrics = await this.resolveLessonState(input.userId, lessonScopePathId);
     const dynamicState: LearnerDynamicState = {
       metrics: {
         lss: input.metrics.lss,
@@ -332,13 +355,15 @@ export class LearnerSnapshotService {
       fatigueRisk: deriveFatigueRisk(input.metrics.lf),
       confidenceTrend: profile.emotional.confidenceLevel === 'anxious' ? 'falling' : profile.emotional.confidenceLevel === 'confident' ? 'rising' : 'stable',
       recentSessionQuality: deriveSessionQuality(input.metrics.ktl, input.metrics.lf),
-      recommendedPacing: derivePacing(input.metrics.lss, input.metrics.lf, input.metrics.ktl),
+      recommendedPacing: derivePacing(input.metrics.lf, input.metrics.ktl),
       recommendedInteraction: {
         hintTiming: personalization.config.interaction.hintTiming,
         encouragement: personalization.config.interaction.encouragementFrequency,
         challenge: personalization.config.interaction.challengeFrequency,
       },
       srlPhase: deriveSrlPhase(latestSession),
+      lessonScopePathId,
+      ...(lessonMetrics ? { lessonMetrics } : {}),
     };
 
     const currentPath = knowledgeMemory.currentPath
@@ -363,6 +388,7 @@ export class LearnerSnapshotService {
     const learningControlState = deriveLearningControlState({
       dynamicState,
       knowledgeMemory: finalKnowledgeMemory,
+      lessonMetrics,
     });
     const replanSignal = deriveReplanSignal({
       dynamicState,
@@ -398,6 +424,20 @@ export class LearnerSnapshotService {
       knowledgeMemory: finalKnowledgeMemory,
       teachingHints,
     };
+  }
+
+  /**
+   * 课内（路径级）状态：本节课所在路径的最新状态。
+   * 该路径还没有任何历史时返回 undefined（调用方回退到全局聚合 —— 与写入侧的"冷启动继承"同口径）。
+   */
+  private async resolveLessonState(
+    userId: string,
+    pathId?: string | null
+  ): Promise<{ lss: number; ktl: number; lf: number; lsb: number } | undefined> {
+    if (!pathId) return undefined;
+    const state = await learningStateService.getCurrentState(userId, { pathId }).catch(() => null);
+    if (!state) return undefined;
+    return { lss: state.lss, ktl: state.ktl, lf: state.lf, lsb: state.lsb };
   }
 
   private async resolvePathSummary(learningPathId: string): Promise<string | null> {

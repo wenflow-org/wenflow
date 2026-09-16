@@ -114,6 +114,18 @@ export interface LearnerDynamicState {
     lf: number;
     lsb: number;
   };
+  /**
+   * 课内判断所用的路径（缺省 = 全局聚合）。全局 metrics 管节奏/疲劳，
+   * 课内难度与支架按本路径的状态判断（见 LearnerSnapshotService）。
+   */
+  lessonScopePathId?: string | null;
+  /** 课内判断所用的指标（路径级；缺省时等于 metrics） */
+  lessonMetrics?: {
+    lss: number;
+    ktl: number;
+    lf: number;
+    lsb: number;
+  };
   recentTrend: 'improving' | 'stable' | 'declining';
   fatigueRisk: 'low' | 'medium' | 'high';
   confidenceTrend: 'rising' | 'stable' | 'falling';
