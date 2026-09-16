@@ -76,14 +76,27 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
     expect(decision.reasons).toContain('fatigue_high');
   });
 
-  it('知识证据（脆弱/挣扎/前置缺口）各降一档，但累计最多 -2', () => {
+  it('知识证据（脆弱/挣扎/前置缺口）**不再降档**：只挡升档，档位保持基线（政策，§3.10）', () => {
     const decision = decideTaskDifficulty({
       ...normalInput(),
       knowledgeSignals: { fragileCount: 1, strugglingCount: 1, prerequisiteGapCount: 2 },
     });
-    expect(decision.delta).toBe(-2);
-    expect(decision.adjusted).toBe(3);
+    expect(decision.delta).toBe(0);
+    expect(decision.adjusted).toBe(5);
+    expect(decision.direction).toBe('keep');
+    // 理由仍然全部留痕（模型据此给支架）
     expect(decision.reasons).toEqual(['fragile_concepts', 'struggling_concepts', 'prerequisite_gaps']);
+  });
+
+  it('负荷类理由才降档；知识类不叠加降档深度（1 负荷 + 1 知识 → 只 -1）', () => {
+    const decision = decideTaskDifficulty({
+      ...normalInput(),
+      lessonMetrics: metrics(7.2, 3.7, 2.4), // 课内压力大
+      knowledgeSignals: { fragileCount: 3, strugglingCount: 0, prerequisiteGapCount: 0 },
+    });
+    expect(decision.delta).toBe(-1);
+    expect(decision.adjusted).toBe(4);
+    expect(decision.reasons).toEqual(['lesson_stress_high', 'fragile_concepts']);
   });
 
   it('challengeLevelCap=low → 封顶 4（封顶不额外计一档，理由是"被上限截断"）', () => {
@@ -121,7 +134,7 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
     expect(decision.reasons).not.toContain('lesson_stress_high');
   });
 
-  it('有余力（cap high + push + 课内低负荷）→ 升一档，且只升一档', () => {
+  it('有余力（cap high + 课内低负荷）→ 升一档，且只升一档', () => {
     const decision = decideTaskDifficulty({
       ...normalInput(),
       lessonMetrics: metrics(3, 6, 2),
@@ -132,15 +145,43 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
     expect(decision.reasons).toEqual(['ready_to_accelerate']);
   });
 
-  it('只要存在降档理由，就不升档', () => {
+  it('升档门槛不再重复消费同一份证据：cap high 即视为有余力（不再额外要求 paceMode/ktl/lf）', () => {
+    const decision = decideTaskDifficulty({
+      ...normalInput(),
+      lessonMetrics: metrics(4, 5, 2.5), // ktl=5 刚好、lf=2.5；旧门槛要求 ktl≥5 && lf≤3 && paceMode='push'
+      learningControlState: { paceMode: 'steady', conceptLoad: 'high', challengeLevelCap: 'high' },
+    });
+    expect(decision.delta).toBe(1);
+    expect(decision.reasons).toEqual(['ready_to_accelerate']);
+  });
+
+  it('上一节课紧绷（lss>4）→ 即使上限允许也不升档', () => {
+    const decision = decideTaskDifficulty({
+      ...normalInput(),
+      lessonMetrics: metrics(4.5, 6, 2),
+      learningControlState: { paceMode: 'push', conceptLoad: 'high', challengeLevelCap: 'high' },
+    });
+    expect(decision.direction).toBe('keep');
+    expect(decision.delta).toBe(0);
+  });
+
+  it('只要存在任何理由（含知识类），就不升档', () => {
     const decision = decideTaskDifficulty({
       ...normalInput(),
       lessonMetrics: metrics(3, 6, 2),
       learningControlState: { paceMode: 'push', conceptLoad: 'high', challengeLevelCap: 'high' },
       knowledgeSignals: { fragileCount: 1, strugglingCount: 0, prerequisiteGapCount: 0 },
     });
-    expect(decision.direction).toBe('decrease');
-    expect(decision.reasons).toContain('fragile_concepts');
+    expect(decision.direction).toBe('keep');
+    expect(decision.delta).toBe(0);
+    expect(decision.reasons).toEqual(['fragile_concepts']);
+  });
+
+  it('台账"可度量理由"与判定器"负荷类理由"是同一集合（单一事实源）', async () => {
+    const ledger = await import('../TaskDifficultyAdjustmentLedger');
+    expect([...ledger.METRIC_BASED_REASONS].sort()).toEqual(
+      [...(await import('../TaskDifficultyAdjustmentService')).LOAD_BASED_DECREASE_REASONS].sort(),
+    );
   });
 
   it('难度永远落在 [1, cap] 内，且不越过 0-10 刻度', () => {

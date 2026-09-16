@@ -17,17 +17,13 @@
 import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
 import type { TaskDifficultyAdjustment } from './TaskDifficultyAdjustmentService';
+import { LOAD_BASED_DECREASE_REASONS } from './TaskDifficultyAdjustmentService';
 
 export const ADJUSTMENT_EVIDENCE_TYPE = 'task:difficulty:adjustment';
 export const ADJUSTMENT_EVIDENCE_KEY = 'difficulty-adjustment';
 
-/** 可由指标复算的降档理由（判定器里与指标直接对应的那三条） */
-export const METRIC_BASED_REASONS = [
-  'lesson_stress_high',
-  'path_load_unbalanced',
-  'fatigue_high',
-  'global_imbalance',
-] as const;
+/** 可由指标复算的降档理由（= 判定器里的负荷类理由；单一事实源在 TaskDifficultyAdjustmentService） */
+export const METRIC_BASED_REASONS = LOAD_BASED_DECREASE_REASONS;
 
 export interface TaskDifficultyMetricsSnapshot {
   lss: number;

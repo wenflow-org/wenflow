@@ -116,8 +116,36 @@ export function resolveBaselineLevel(input: {
   return 5;
 }
 
-/** 降档理由（每条 -1，合计最多 -2） */
-function collectDecreaseReasons(
+/**
+ * 负荷/压力类理由：**这是"要不要降档"的刹车**——学习者当下确实在吃力。
+ * （与台账 `METRIC_BASED_REASONS` 同一集合：这四条都能由指标复算，因而可度量。）
+ */
+export const LOAD_BASED_DECREASE_REASONS = [
+  'lesson_stress_high',
+  'path_load_unbalanced',
+  'fatigue_high',
+  'global_imbalance',
+] as const;
+
+/**
+ * 知识类理由：说的是"该教什么/该补什么"，**不是"这节课该多难"**。
+ *
+ * 政策（2026-09-16 决定，见审计文档 §4.2(2)/§3.10）：它们
+ * **不再降档**，只**挡升档**（存在时档位保持基线）。
+ * 原因：脆弱/挣扎/前置缺口在学新内容途中几乎恒大于 0，若允许它们降档，就会变成
+ * "每节课都被系统性降一档、且升档前提（无任何理由）永远不成立"——即"只有刹车没有油门"。
+ * 知识面的处理交给 `conceptLoad` / `shouldPreferConsolidation` / 支架提示（它们本来就在做）。
+ */
+export const KNOWLEDGE_DECREASE_REASONS = [
+  'fragile_concepts',
+  'struggling_concepts',
+  'prerequisite_gaps',
+] as const;
+
+const LOAD_BASED_REASON_SET = new Set<string>(LOAD_BASED_DECREASE_REASONS);
+
+/** 判定理由（含知识类）：**全部**留痕并展示给模型（模型据此给支架），但只有负荷类参与降档 */
+function collectReasons(
   input: TaskDifficultyInput,
   lesson: TaskDifficultyMetrics,
   lessonScopeIsPath: boolean
@@ -138,7 +166,7 @@ function collectDecreaseReasons(
   // 该信号在别处还有另一处消费：重排信号里的 `lsb_negative`（建议减速/补强）——
   // 节奏（derivePacing）刻意**不再**重复消费它，否则同一个信号会同时压低难度、放慢节奏、触发重排，三处叠加。
   if (!lessonScopeIsPath && input.globalMetrics.lsb < 0) reasons.push('global_imbalance');
-  // 知识证据：脆弱/挣扎/前置缺口
+  // 知识证据：脆弱/挣扎/前置缺口（只挡升档，不降档）
   const fragile = input.knowledgeSignals?.fragileCount ?? 0;
   const struggling = input.knowledgeSignals?.strugglingCount ?? 0;
   const gaps = input.knowledgeSignals?.prerequisiteGapCount ?? 0;
@@ -149,12 +177,17 @@ function collectDecreaseReasons(
   return reasons;
 }
 
-/** 升档资格：要求课内明确"有余力"，任何降档理由都会取消资格 */
-function canIncrease(input: TaskDifficultyInput, lesson: TaskDifficultyMetrics, decreaseReasons: string[]): boolean {
-  if (decreaseReasons.length > 0) return false;
+/**
+ * 升档资格：**有余力**才升。要求
+ * ① 上限允许（`challengeLevelCap === 'high'`——它本身已蕴含"节奏可推、负荷有余"，故不再重复判 paceMode/ktl/lf，
+ *    否则是同一份证据被算两次、并把升档口收窄到几乎打不开）；
+ * ② 上一节课不紧绷（`lesson.lss <= 4`）。
+ * 任何一条理由（含知识类）都会取消资格 → 存在理由时档位只可能"保持"或"降"。
+ */
+function canIncrease(input: TaskDifficultyInput, lesson: TaskDifficultyMetrics, reasons: string[]): boolean {
+  if (reasons.length > 0) return false;
   const control = input.learningControlState;
-  if (!control || control.challengeLevelCap !== 'high' || control.paceMode !== 'push') return false;
-  return lesson.ktl >= 5 && lesson.lf <= 3 && lesson.lss <= 4;
+  return Boolean(control && control.challengeLevelCap === 'high') && lesson.lss <= 4;
 }
 
 export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficultyAdjustment {
@@ -163,9 +196,11 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
   const capSource = (input.learningControlState?.challengeLevelCap as 'low' | 'medium' | 'high') || 'medium';
   const cap = CHALLENGE_CAP_LIMITS[capSource] ?? CHALLENGE_CAP_LIMITS.medium;
 
-  const decreaseReasons = collectDecreaseReasons(input, lesson, lessonProvided);
-  let delta = -Math.min(decreaseReasons.length, 2);
-  if (canIncrease(input, lesson, decreaseReasons)) delta = 1;
+  const reasons = collectReasons(input, lesson, lessonProvided);
+  // 只有负荷类理由降档（知识类只挡升档）；合计最多 -2
+  const loadReasons = reasons.filter((reason) => LOAD_BASED_REASON_SET.has(reason));
+  let delta = -Math.min(loadReasons.length, 2);
+  if (canIncrease(input, lesson, reasons)) delta = 1;
   if (!Number.isFinite(delta)) delta = 0;
 
   const baseline = clamp(Math.round(input.baselineLevel), DIFFICULTY_RANGE.min, DIFFICULTY_RANGE.max);
@@ -175,8 +210,8 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
   const adjusted = clamp(desired, DIFFICULTY_RANGE.min, ceiling);
   const finalDelta = adjusted - baseline;
 
-  const reasons = [...decreaseReasons];
-  if (reasons.length === 0 && finalDelta > 0) reasons.push('ready_to_accelerate');
+  const finalReasons = [...reasons];
+  if (finalReasons.length === 0 && finalDelta > 0) finalReasons.push('ready_to_accelerate');
   const capApplied = adjusted < desired;
 
   return {
@@ -186,7 +221,7 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
     delta: finalDelta,
     cap,
     capSource,
-    reasons,
+    reasons: finalReasons,
     capApplied,
     evidence: {
       lessonLss: lesson.lss,
