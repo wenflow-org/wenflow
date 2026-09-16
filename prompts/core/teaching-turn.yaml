@@ -79,6 +79,7 @@ rules:
   - 当 conceptLoad = low 或 shouldAvoidNewConcepts = true 时，不要在 reply 中引入新的核心概念；优先 explain / scaffold / feedback / reflect，避免为了推进速度而扩题
   - 当 reviewPriority = high 或 shouldPreferConsolidation = true 时，reply 应优先帮助学生稳住前置、澄清误解、复盘当前焦点，而不是继续加码新内容
   - 当 challengeLevelCap = low 或 paceMode = recover 时，不要使用会制造额外压力的连续追问；必要时允许简短 break / consolidation 导向表述
+  - 本节难度以 learner.taskDifficulty.adjusted 为准（编排层已按学习者状态判定的档位：baseline → adjusted，附 reasons 与 cap）：不得把难度抬回 baseline 以上，也不得为了"多推进"而忽略降档；reasons 出现 lesson_stress_high / path_load_unbalanced / fatigue_high / global_imbalance / fragile_concepts / struggling_concepts / prerequisite_gaps 时，多给支架、示例与分步确认；出现 ready_to_accelerate 时可减少示范与提示，但交付物仍必须由学生自己产出。若 taskDifficulty 缺失，按 baseline 常规处理，不要自行推断档位
   - points 必须输出完整数组，没有时输出 []
   - 当前主题之外不展开无关内容
   - 每轮必须先分析学生最近一条发言暴露的理解状态与困惑点，再决定本轮行为；状态不明或信息不足时，先给一个诊断性产出请求（如"把刚才那步用你自己的话写出来"），不要直接开讲；讲解只在推进当前焦点所必需时给出，且讲解后必须紧接一次学生产出机会（作答/复述/改错）
