@@ -182,6 +182,29 @@ export function resolveSimulationClock(input: SimulationClockInput): SimulationC
   };
 }
 
+export interface TemporalContext {
+  simulatedNow: string;
+  simulatedDay: string;
+  dayIndex: number;
+  elapsedDays: number;
+  timezone: string;
+  /** 距上一次学习几天（可选；缺省不注入，由调用方补） */
+  sinceLastSessionDays?: number | null;
+}
+
+/** 仅为"已开启日期模拟"的会话产出 temporalContext；否则返回 null（输入里省略该键 = 现网不变）。 */
+export function temporalContextFromClock(clock: SimulationClockView | null | undefined): TemporalContext | null {
+  if (!clock || !clock.enabled) return null;
+  const window = resolveDayWindow(clock.baseDate, clock.dayIndex);
+  return {
+    simulatedNow: clock.simulatedNow,
+    simulatedDay: window.simulatedDay,
+    dayIndex: clock.dayIndex,
+    elapsedDays: clock.elapsedDays,
+    timezone: clock.timezone,
+  };
+}
+
 /** 单日聚合（注入 deps，便于单测）。 */
 export async function buildDayEntry(
   userId: string,
@@ -334,6 +357,27 @@ class SimulatedDayService {
       sessionStatus: session.status,
       currentStage: session.currentStage,
     });
+  }
+
+  /**
+   * 从"已加载的会话"派生 temporalContext（免二次查询；供虚拟学习者技能注入"第几天/已过几天"）。
+   * 仅当日期模拟开启且被显式启用时返回；否则 null（技能输入里省略该键 = 现网不变）。
+   */
+  async getTemporalContext(session: {
+    stageResults: string | null;
+    createdAt: Date;
+    virtual_learner_profiles?: { profile?: string | null } | null;
+  }): Promise<TemporalContext | null> {
+    const settings = await getVirtualLabSettings().catch(() => ({ ...DEFAULT_VIRTUAL_LAB_SETTINGS }));
+    const stageResults = safeJsonParse<Record<string, any>>(session.stageResults, {});
+    const profileData = safeJsonParse<Record<string, any>>(session.virtual_learner_profiles?.profile, {});
+    const clock = resolveSimulationClock({
+      stageResultsClock: stageResults?.simulationClock ?? null,
+      profileClock: profileData?.simulationClock ?? null,
+      settings: settings.dateSimulation,
+      sessionCreatedAt: session.createdAt,
+    });
+    return temporalContextFromClock(clock);
   }
 
   /** 会话按天时间线（只读）。baseDate 缺省取时钟；范围用设置护栏夹紧。 */

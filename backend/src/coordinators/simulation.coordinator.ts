@@ -30,6 +30,7 @@ import {
 import { safeJsonParse } from '../utils/safe-json';
 import { asErrorLike } from '../virtual-lab/vlab-types';
 import { resolveSessionBudget } from '../virtual-lab/session-budget';
+import simulatedDayService from '../services/virtual-lab/simulated-day.service';
 import type { LeaseClientLike } from '../virtual-lab/vlab-types';
 import type {
   SimulationMilestone,
@@ -2763,6 +2764,9 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         });
       }
 
+      // 日期模拟：把"第几天/已过几天"作为可选输入注入（未开启则为 null，输入里省略 = 现网不变）
+      const temporalContext = await simulatedDayService.getTemporalContext(session).catch(() => null);
+
       const virtualReplyOutput = await this.retryLearnUpstream(sessionId, 'simulate-teaching-turn', () => executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
         learner: {
           profile: profile.profile || {},
@@ -2791,6 +2795,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         knowledgeSnapshot,
         learnerMemory: learnerMemoryForSimulator,
         epistemicGrounding,
+        ...(temporalContext ? { temporalContext } : {}),
         frictionBudget: getSessionFrictionBudget(session),
       }));
 
