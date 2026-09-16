@@ -8,6 +8,7 @@ import {
   collectCourseDayIndexes,
   planClockAdvance,
   resolutionEnteredLearn,
+  summarizeDayLearning,
   buildDayEntry,
   buildDayTimeline,
   type SimulatedDayDeps,
@@ -87,6 +88,21 @@ describe('simulated-day 纯函数', () => {
     expect(resolutionEnteredLearn({ success: true })).toBe(false);
     expect(resolutionEnteredLearn(null)).toBe(false);
     expect(resolutionEnteredLearn(undefined)).toBe(false);
+  });
+
+  it('summarizeDayLearning：零节成功 → started=false（回滚当天，不白烧模拟日）', () => {
+    // 会话已 failed/停止：executeAutoLearning 立即失败 → 旧实现仍记 started:true, chunks:1
+    expect(summarizeDayLearning([{ success: false, error: '学习已停止（failed）' }]))
+      .toEqual({ started: false, chunks: 0, error: '学习已停止（failed）' });
+    // 缺省原因
+    expect(summarizeDayLearning([])).toEqual({ started: false, chunks: 0, error: expect.stringContaining('未推进模拟日') });
+    // 至少一节成功 → 当天成立，chunks 只数成功课次
+    expect(summarizeDayLearning([{ success: true }, { success: false, error: 'x' }]))
+      .toEqual({ started: true, chunks: 1 });
+    expect(summarizeDayLearning([{ success: true }, { success: true }]))
+      .toEqual({ started: true, chunks: 2 });
+    // 容错：null/非数组
+    expect(summarizeDayLearning([null, undefined])).toMatchObject({ started: false, chunks: 0 });
   });
 });
 

@@ -431,6 +431,22 @@ export function resolutionEnteredLearn(
   return stage === 'teaching' || stage === 'learn';
 }
 
+/**
+ * 「推进并上课」当天成果汇总：**只有至少一节课成功**才算这天被真正用掉。
+ *
+ * 反例（实测）：会话已 failed/停止时 `executeAutoLearning` 立即返回失败，旧实现仍
+ * `started:true, chunks:1` → 时钟照推、当天没有任何教学产物（白烧一个模拟日）。
+ */
+export function summarizeDayLearning(
+  attempts: Array<{ success?: boolean; error?: string | null } | null | undefined>,
+): { started: boolean; chunks: number; error?: string } {
+  const list = Array.isArray(attempts) ? attempts : [];
+  const chunks = list.filter((item) => item?.success === true).length;
+  if (chunks > 0) return { started: true, chunks };
+  const reason = list.find((item) => item?.error)?.error || null;
+  return { started: false, chunks: 0, error: reason || '当天未能完成任何一节课（未推进模拟日）' };
+}
+
 class SimulatedDayService {
   /** 会话模拟时钟（默认关；未配置时以会话创建日为 baseDate、dayIndex=0）。 */
   async getSimulationClock(sessionId: string): Promise<SimulationClockView | null> {

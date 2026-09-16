@@ -26,7 +26,7 @@ import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
 import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
-import { simulatedDayService, resolveSimulationClock, planClockAdvance, resolveDayWindow, resolutionEnteredLearn } from '../../services/virtual-lab/simulated-day.service';
+import { simulatedDayService, resolveSimulationClock, planClockAdvance, resolveDayWindow, resolutionEnteredLearn, summarizeDayLearning } from '../../services/virtual-lab/simulated-day.service';
 import { runWithSimulatedClock } from '../../services/virtual-lab/simulation-clock-context';
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
 import { getVirtualLabSettings, updateVirtualLabSettings, DEFAULT_VIRTUAL_LAB_SETTINGS } from '../../services/virtual-lab-settings.service';
@@ -3139,15 +3139,16 @@ async function runDayLearning(
     });
     const maxTurns = Math.max(1, budget.turnChunkPerLesson);
     const lessons = Math.max(1, Math.min(10, input.lessonsPerDay));
-    let chunks = 0;
+    const attempts: Array<{ success?: boolean; error?: string }> = [];
     for (let i = 0; i < lessons; i += 1) {
       const r = await simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones: 1, maxTurns });
-      chunks += 1;
+      attempts.push({ success: r?.success === true, error: r?.error });
       if (!r?.success) break;
       const after = await prisma.virtual_sessions.findUnique({ where: { id: sessionId }, select: { status: true } });
       if (after?.status === 'completed') break;
     }
-    return { started: true, chunks };
+    // 零节成功（如会话已 failed/停止、上游抖动）→ started:false，路由回滚时钟，不白烧一天。
+    return summarizeDayLearning(attempts);
   } catch (error) {
     return { started: false, chunks: 0, error: asErrorLike(error).message };
   }
