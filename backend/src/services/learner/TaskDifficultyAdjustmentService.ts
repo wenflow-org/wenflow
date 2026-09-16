@@ -135,6 +135,8 @@ function collectDecreaseReasons(
     reasons.push('fatigue_high');
   }
   // 学习者级：总负荷失衡（例如当天课多）→ 同样降档。层级要说清：这是全局信号，不是"本路径失衡"。
+  // 该信号在别处还有另一处消费：重排信号里的 `lsb_negative`（建议减速/补强）——
+  // 节奏（derivePacing）刻意**不再**重复消费它，否则同一个信号会同时压低难度、放慢节奏、触发重排，三处叠加。
   if (!lessonScopeIsPath && input.globalMetrics.lsb < 0) reasons.push('global_imbalance');
   // 知识证据：脆弱/挣扎/前置缺口
   const fragile = input.knowledgeSignals?.fragileCount ?? 0;

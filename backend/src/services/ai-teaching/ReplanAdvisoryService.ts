@@ -164,11 +164,14 @@ export class ReplanAdvisoryService {
       strugglingConcepts.length > 0 ||
       repeatedConfusion
     );
+    // 层级要对齐：`ktl` 是**本会话**的训练负荷（这节课练得扎实，会话量纲 0-10），
+    // 而"能不能加速"是**学习者级**判断 —— 后者必须看学习者级疲劳/负荷，
+    // 不能拿单会话的 lss/lf 当全局闸门（"这节课难" ≠ "这个人该慢下来"）。
     const canAccelerate = (
       currentMilestoneComplete &&
       (ktl !== null && ktl >= 7) &&
-      (lss !== null && lss <= 4.5) &&
-      (lf !== null && lf <= 4.5) &&
+      learnerReplanProjection.risk.fatigueRisk === 'low' &&
+      learnerSignal?.priority !== 'high' &&
       confidence >= 0.6 &&
       fragileConcepts.length === 0 &&
       strugglingConcepts.length === 0 &&

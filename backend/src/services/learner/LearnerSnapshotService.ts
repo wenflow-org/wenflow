@@ -43,9 +43,12 @@ function deriveSrlPhase(latestSession: { updatedAt?: Date; status?: string } | n
 }
 
 /**
- * 全局节奏：只看"总负担"（负荷 ktl / 疲劳 lf）。
- * LSS 是**单课**压力，不再在这里决定全局节奏（否则"今天这门课很难"会被当成"这周很累"）；
- * 单课压力的去处是课内控制状态（LearnerSnapshotService.deriveLearningControlState）。
+ * 全局节奏：只看"累积负荷/疲劳"（lf、ktl）。
+ * - LSS 是**单课**压力，不在这里决定全局节奏（否则"今天这门课很难"会被当成"这周很累"）；
+ *   单课压力的去处是课内控制状态（deriveLearningControlState）。
+ * - "总负荷失衡"（`lsb < 0`，例如当天课多）**不在这里重复消费**：它已由两处各司其职地消费——
+ *   难度判定里的 `global_imbalance`（降档）与重排信号里的 `lsb_negative`（建议减速/补强）。
+ *   节奏只回答"该快还是该慢"，失衡走"要不要重排"。
  */
 export function derivePacing(lf: number, ktl: number): 'slow' | 'moderate' | 'fast' {
   if (lf >= 6) return 'slow';
@@ -138,7 +141,14 @@ export function deriveReplanSignal(input: {
 
   const highRisk = dynamicState.metrics.lf >= 6 || dynamicState.metrics.lsb < 0 || prerequisiteGapCount > 0 || blockedCount > 0;
   const mediumRisk = learningControlState.reviewPriority === 'high' || fragileCount > 0 || strugglingCount > 0 || dynamicState.recentTrend === 'declining';
-  const accelerateReady = dynamicState.metrics.ktl >= 6 && dynamicState.metrics.lf <= 3 && dynamicState.metrics.lss <= 4 && fragileCount === 0 && strugglingCount === 0;
+  // 加速资格：学习者级（总负荷 ktl/lf）+ 路径级（paceMode 不是 recover）+ 知识证据。
+  // 不再看全局 `lss`：它 = 各路径里"最近一课最难"的那节课，用它给整个学习者判"能否加速"
+  // 正是"单课量决定全局判断"的老毛病；路径是否吃力由 learningControlState.paceMode 表达。
+  const accelerateReady = dynamicState.metrics.ktl >= 6
+    && dynamicState.metrics.lf <= 3
+    && learningControlState.paceMode !== 'recover'
+    && fragileCount === 0
+    && strugglingCount === 0;
 
   if (accelerateReady) {
     return {

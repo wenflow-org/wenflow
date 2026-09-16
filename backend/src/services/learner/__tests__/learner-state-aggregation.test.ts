@@ -9,7 +9,7 @@
  */
 import prisma from '../../../config/database';
 import learningStateService, { computeDayLoadFatigueBonus } from '../../learning/learning-state.service';
-import { derivePacing, deriveLearningControlState } from '../LearnerSnapshotService';
+import { derivePacing, deriveLearningControlState, deriveReplanSignal } from '../LearnerSnapshotService';
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
@@ -135,6 +135,50 @@ describe('getCurrentState 支持 asOf（历史重放：行过滤与自然衰减�
     // 行是过去的：按"现在"折算会明显衰减（LSS 日因子 0.82）
     expect(atNow!.lss).toBeLessThan(5);
     expect(listSpy).toHaveBeenLastCalledWith('u1', undefined, undefined, undefined, 'lp-A');
+  });
+});
+
+describe('deriveReplanSignal（层级对齐：加速资格不看"任一路径最近一课最难"）', () => {
+  const knowledgeMemory = {
+    globalSignals: { fragileConcepts: [], strugglingConcepts: [], masteredConcepts: [] },
+    globalBackground: { blockedFoundations: [] },
+  } as any;
+
+  it('全局 lss 很高（别的路径的难课）但本路径不在 recover → 仍可判"可以加速"', () => {
+    const signal = deriveReplanSignal({
+      dynamicState: {
+        metrics: { lss: 9, ktl: 7, lf: 2, lsb: 5 },   // 全局 lss 9 来自"任一路径最近一课最难"
+        recentTrend: 'stable', fatigueRisk: 'low',
+      } as any,
+      learningControlState: { paceMode: 'push' } as any,
+      knowledgeMemory,
+    });
+    expect(signal.recommendation).toBe('accelerate');
+  });
+
+  it('本路径处于 recover（路径级证据）→ 不再判"可以加速"', () => {
+    const signal = deriveReplanSignal({
+      dynamicState: {
+        metrics: { lss: 2, ktl: 7, lf: 2, lsb: 5 },
+        recentTrend: 'stable', fatigueRisk: 'low',
+      } as any,
+      learningControlState: { paceMode: 'recover' } as any,
+      knowledgeMemory,
+    });
+    expect(signal.recommendation).not.toBe('accelerate');
+  });
+
+  it('总负荷失衡（全局 lsb<0）的消费去处：重排信号给 lsb_negative（而节奏不重复消费）', () => {
+    const signal = deriveReplanSignal({
+      dynamicState: {
+        metrics: { lss: 2, ktl: 4, lf: 5, lsb: -1 },
+        recentTrend: 'stable', fatigueRisk: 'medium',
+      } as any,
+      learningControlState: { paceMode: 'steady', reviewPriority: 'medium' } as any,
+      knowledgeMemory,
+    });
+    expect(signal.reasonCodes).toContain('lsb_negative');
+    expect(derivePacing(5, 4)).toBe('moderate'); // 节奏只看累积负荷/疲劳，不重复消费失衡
   });
 });
 
