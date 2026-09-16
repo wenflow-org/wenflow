@@ -11,7 +11,7 @@
  */
 
 import prisma from '../../config/database';
-import learningStateService from '../learning/learning-state.service';
+import learningStateService, { toInternalTenScale } from '../learning/learning-state.service';
 import { predictionCalibrationService } from '../learner/PredictionCalibrationService';
 import { logger } from '../../utils/logger';
 import type { DurableDomainEvent } from '../../events/contracts';
@@ -116,21 +116,30 @@ export async function updateLearningMetrics(
     const sourceKey = input.taskId ? `task-completion:${input.taskId}` : undefined;
     const asOf = input.timestamp || new Date();
     const committedMetrics = await learningStateService.commitDerivedDisplayMetrics(input.userId, async previousMetrics => {
-      // KTL/LF 收敛（2026-08）：统一走 learning-state 的 0-10 EWMA 语义（主状态机），
-      // 不再使用本文件第三套 0-100 私有公式（此前 0-100 值写入 internal-10 字段属语义不一致）
-      const lss10 = Math.max(0, Math.min(10, lssScore / 10));
+      // 量纲修复（2026-09-16）：这个回调的输出契约是 **display 刻度**（commitDisplayMetrics 会
+      // 用 displayTenScaleToInternal 除以 10 落库）。此前这里同时混了两套刻度：
+      //   ① `lss10 = lssScore / 10`（0-100 私有公式时代的遗留除法，而 calculateLSS 已 clamp 0-10）
+      //   ② `prev = toDisplayMetrics(previousMetrics)`（0-100）却与 0-1 的 lss10 一起做 EWMA
+      // 结果线上出现 lss=0.4 / ktl≈1 / lf≈1 / lsb≈0 的"毫无压力"状态，而消费侧阈值按 0-10 写
+      // （lf≥6 判疲劳、ktl≥6 判可加速），导致 20 人中 17 人的难度/节奏自适应静默失效
+      // （审计：src/scripts/audit-learning-metrics-scale.ts）。
+      // 现在：入参用 toInternalTenScale 收敛到 0-10（兼容 0-10 / 0-100 两种 caller 口径），
+      // 再 ×10 进入 display 契约；EWMA 全程在 display 刻度上做。
+      const lss10 = toInternalTenScale(lssScore);
+      const lssDisplay = Math.round(lss10 * 10 * 1000) / 1000;  // 0-10 → 0-100（display 契约）
+      const clamp100 = (value: number) => Math.max(0, Math.min(100, value));
       const prev = previousMetrics ? learningStateService.toDisplayMetrics(previousMetrics) : null;
       const ktl = prev?.ktl != null
-        ? Math.max(0, Math.min(10, prev.ktl * 0.95 + lss10 * 0.05))
-        : Math.max(0, Math.min(10, lss10 * 0.5));
+        ? clamp100(prev.ktl * 0.95 + lssDisplay * 0.05)
+        : clamp100(lssDisplay * 0.5);
       const lf = prev?.lf != null
-        ? Math.max(0, Math.min(10, prev.lf * 0.7 + lss10 * 0.15))
-        : Math.max(0, Math.min(10, lss10 * 0.3));
+        ? clamp100(prev.lf * 0.7 + lssDisplay * 0.15)
+        : clamp100(lssDisplay * 0.3);
       return {
-        lss: lss10,
+        lss: lssDisplay,
         ktl,
         lf,
-        lsb: Math.max(-10, Math.min(10, ktl - lf)),
+        lsb: Math.max(-100, Math.min(100, ktl - lf)),
         timestamp: asOf,
         source: 'task-completion',
         taskId: input.taskId || null,

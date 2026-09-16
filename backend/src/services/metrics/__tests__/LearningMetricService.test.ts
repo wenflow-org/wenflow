@@ -13,11 +13,20 @@ const mockToDisplayMetrics = jest.fn((metrics: any) => ({
 }))
 
 jest.mock('../../../config/database', () => ({ __esModule: true, default: mockPrisma }))
+// 量纲归一的真实实现（模块级函数，属被测模块的公共接口，mock 需保持一致）
+const toInternalTenScale = (value: any) => {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  if (numeric > 10) return Math.min(10, Math.max(0, numeric / 10));
+  return Math.min(10, Math.max(0, numeric));
+};
+
 jest.mock('../../learning/learning-state.service', () => ({
   __esModule: true,
+  toInternalTenScale,
   default: {
     commitDerivedDisplayMetrics: mockCommitDerivedDisplayMetrics,
     toDisplayMetrics: mockToDisplayMetrics,
+    toInternalTenScale,
     getCurrentState: jest.fn()
   }
 }))
@@ -82,7 +91,7 @@ describe('LearningMetricService task completion persistence', () => {
     await expect(deriveMetrics(null)).resolves.toEqual(expect.objectContaining({ timestamp: occurredAt }))
   })
 
-  it('derives 0-10 display metrics via the learning-state EWMA semantics (KTL/LF 收敛)', async () => {
+  it('派生回调输出 display 刻度（0-100），落库时再收敛到 internal-10（KTL/LF EWMA）', async () => {
     const asOf = new Date('2026-07-19T08:30:00.000Z')
     mockPrisma.teaching_sessions.findMany.mockResolvedValue([])
     let derived: any = null
@@ -106,11 +115,17 @@ describe('LearningMetricService task completion persistence', () => {
       lf: expect.any(Number),
       lsb: expect.any(Number),
     }))
-    // 0-10 尺度（internal-10）：所有值在 [-10, 10] 内，不再产出 0-100
-    for (const key of ['lss', 'ktl', 'lf', 'lsb'] as const) {
-      expect(derived[key]).toBeGreaterThanOrEqual(-10)
-      expect(derived[key]).toBeLessThanOrEqual(10)
+    // 回调输出契约 = display（lss/ktl/lf 0-100、lsb -100~100）……
+    for (const key of ['lss', 'ktl', 'lf'] as const) {
+      expect(derived[key]).toBeGreaterThanOrEqual(0)
+      expect(derived[key]).toBeLessThanOrEqual(100)
     }
+    expect(derived.lsb).toBeGreaterThanOrEqual(-100)
+    expect(derived.lsb).toBeLessThanOrEqual(100)
+    // ……落库后经 displayTenScaleToInternal(/10) 收敛到 internal-10；回归护栏：
+    // 绝不能再出现 0-1 量纲的 lss（历史缺陷特征：lss≈0.4 让消费侧阈值全部失效）
+    expect(toInternalTenScale(derived.lss)).toBeGreaterThan(1)
+    expect(toInternalTenScale(derived.lss)).toBeLessThanOrEqual(10)
     expect(derived.source).toBe('task-completion')
     expect(derived.primaryMetric).toBe('lsb')
   })

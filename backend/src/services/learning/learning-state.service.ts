@@ -189,6 +189,16 @@ export interface InterventionDecision {
   reasoning: string;       // 决策理由
 }
 
+/**
+ * 0-10 量纲归一（模块级函数，便于写入点直接复用；避免依赖注入/mock 差异）。
+ * 规则：>10 视为 0-100 刻度除以 10，否则按 0-10 原样 clamp。
+ */
+export function toInternalTenScale(value: number | null | undefined): number {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  if (numeric > 10) return Math.min(10, Math.max(0, numeric / 10));
+  return Math.min(10, Math.max(0, numeric));
+}
+
 export class LearningStateService {
   private readonly committedMetricVersion = 'state-v2';
 
@@ -207,6 +217,14 @@ export class LearningStateService {
       return Math.min(10, Math.max(0, numeric / 10));
     }
     return Math.min(10, Math.max(0, numeric));
+  }
+
+  /**
+   * 公开的 0-10 归一（供其它写入点复用，避免各自拍量纲）。
+   * 规则：>10 视为 0-100 刻度除以 10，否则按 0-10 原样 clamp。
+   */
+  toInternalTenScale(value: number | null | undefined): number {
+    return toInternalTenScale(value);
   }
 
   private normalizeBalanceScale(value: number | null | undefined): number {
