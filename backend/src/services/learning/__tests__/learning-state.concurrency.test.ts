@@ -19,6 +19,8 @@ import learningStateService, {
   LearningStateRevisionConflictError,
   asDisplayHundred,
   asDisplayBalance,
+  toInternalTenScale,
+  toInternalBalance,
   type LearningStateMetrics
 } from '../learning-state.service'
 
@@ -30,17 +32,17 @@ describe('LearningStateService display metric concurrency', () => {
 
   it('recomputes derived metrics from the latest committed snapshot after a CAS conflict', async () => {
     const firstSnapshot: LearningStateMetrics = {
-      lss: 2,
-      ktl: 2,
-      lf: 1,
-      lsb: 1,
+      lss: toInternalTenScale(2),
+      ktl: toInternalTenScale(2),
+      lf: toInternalTenScale(1),
+      lsb: toInternalBalance(1),
       timestamp: new Date('2026-07-19T00:00:00.000Z')
     }
     const latestSnapshot: LearningStateMetrics = {
-      lss: 6,
-      ktl: 7,
-      lf: 3,
-      lsb: 4,
+      lss: toInternalTenScale(6),
+      ktl: toInternalTenScale(7),
+      lf: toInternalTenScale(3),
+      lsb: toInternalBalance(4),
       timestamp: new Date('2026-07-19T00:01:00.000Z')
     }
     jest.spyOn(learningStateService, 'getCurrentStateSnapshot')
@@ -49,10 +51,10 @@ describe('LearningStateService display metric concurrency', () => {
     const commit = jest.spyOn(learningStateService, 'commitDisplayMetrics')
       .mockRejectedValueOnce(new LearningStateRevisionConflictError())
       .mockResolvedValueOnce({
-        lss: 7,
-        ktl: 8,
-        lf: 4,
-        lsb: 4,
+        lss: toInternalTenScale(7),
+        ktl: toInternalTenScale(8),
+        lf: toInternalTenScale(4),
+        lsb: toInternalBalance(4),
         timestamp: new Date('2026-07-19T00:02:00.000Z')
       })
     // display 契约必须经过命名转换器（品牌类型保证：普通 number 塞不进来）
@@ -119,10 +121,10 @@ describe('LearningStateService display metric concurrency', () => {
     jest.spyOn(learningStateService, 'getCurrentStateSnapshot')
       .mockResolvedValue({ revision: 2, metrics: null })
     jest.spyOn(learningStateService, 'commitDisplayMetrics').mockResolvedValue({
-      lss: 1,
-      ktl: 1,
-      lf: 1,
-      lsb: 0,
+      lss: toInternalTenScale(1),
+      ktl: toInternalTenScale(1),
+      lf: toInternalTenScale(1),
+      lsb: toInternalBalance(0),
       timestamp: new Date()
     })
 
@@ -145,10 +147,10 @@ describe('LearningStateService display metric concurrency', () => {
 
   it('reuses an existing stable metric without replacing or reordering it', async () => {
     const existing = {
-      lss: 1,
-      ktl: 2,
-      lf: 0.5,
-      lsb: 1.5,
+      lss: toInternalTenScale(1),
+      ktl: toInternalTenScale(2),
+      lf: toInternalTenScale(0.5),
+      lsb: toInternalBalance(1.5),
       timestamp: new Date('2026-07-19T00:00:00.000Z')
     }
     jest.spyOn(learningStateService, 'getCommittedMetricBySourceKey').mockResolvedValue(existing)
@@ -188,10 +190,10 @@ describe('LearningStateService display metric concurrency', () => {
       [predecessor, future].filter((row) => row.calculatedAt <= where.calculatedAt.lte)
     ))
     const commit = jest.spyOn(learningStateService, 'commitDisplayMetrics').mockResolvedValue({
-      lss: 3,
-      ktl: 4,
-      lf: 2,
-      lsb: 2,
+      lss: toInternalTenScale(3),
+      ktl: toInternalTenScale(4),
+      lf: toInternalTenScale(2),
+      lsb: toInternalBalance(2),
       timestamp: asOf
     })
     const derive = jest.fn(() => ({

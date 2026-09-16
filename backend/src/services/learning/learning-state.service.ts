@@ -38,10 +38,19 @@ export interface LSSInputs {
 
 // 学习状态指标
 export interface LearningStateMetrics {
-  lss: number;  // Learning Stress Score (0-10)
-  ktl: number;  // Knowledge Training Load (0-10)
-  lf: number;   // Learning Fatigue (0-10)
-  lsb: number;  // Learning State Balance (-10 to +10)
+  lss: InternalTen;      // Learning Stress Score（0-10，品牌类型防止与 display 混淆）
+  ktl: InternalTen;      // Knowledge Training Load（0-10）
+  lf: InternalTen;       // Learning Fatigue（0-10）
+  lsb: InternalBalance;  // Learning State Balance（-10..+10）
+  timestamp: Date;
+}
+
+/** display 刻度指标（0-100 / -100..100）：与内部刻度**不同类型**，杜绝两者互相赋值 */
+export interface DisplayMetrics {
+  lss: DisplayHundred;
+  ktl: DisplayHundred;
+  lf: DisplayHundred;
+  lsb: DisplayBalance;
   timestamp: Date;
 }
 
@@ -337,7 +346,7 @@ export class LearningStateService {
   }
 
   /** 单一归一入口的别名（历史上这里有一份重复实现，导致"两套刻度"并存） */
-  private normalizeTenScale(value: number | null | undefined): number {
+  private normalizeTenScale(value: number | null | undefined): InternalTen {
     return toInternalTenScale(value);
   }
 
@@ -349,18 +358,18 @@ export class LearningStateService {
     return toInternalTenScale(value);
   }
 
-  private normalizeBalanceScale(value: number | null | undefined): number {
+  private normalizeBalanceScale(value: number | null | undefined): InternalBalance {
     return toInternalBalance(value);
   }
 
-  private displayTenScaleToInternal(value: number | null | undefined): number {
+  private displayTenScaleToInternal(value: number | null | undefined): InternalTen {
     const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
-    return Math.max(0, Math.min(100, numeric)) / 10;
+    return (Math.max(0, Math.min(100, numeric)) / 10) as InternalTen;
   }
 
-  private displayBalanceScaleToInternal(value: number | null | undefined): number {
+  private displayBalanceScaleToInternal(value: number | null | undefined): InternalBalance {
     const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
-    return Math.max(-100, Math.min(100, numeric)) / 10;
+    return (Math.max(-100, Math.min(100, numeric)) / 10) as InternalBalance;
   }
 
   private parseMetricMetadata(raw: string | null | undefined): Record<string, any> | null {
@@ -461,9 +470,9 @@ export class LearningStateService {
 
     return {
       lss: this.normalizeTenScale(input.lss),
-      ktl: currentKTL,
-      lf: currentLF,
-      lsb: currentLSB,
+      ktl: toInternalTenScale(currentKTL),
+      lf: toInternalTenScale(currentLF),
+      lsb: toInternalBalance(currentLSB),
       timestamp,
     };
   }
@@ -632,13 +641,13 @@ export class LearningStateService {
       : null;
   }
 
-  toDisplayMetrics(metrics: LearningStateMetrics): LearningStateMetrics {
+  toDisplayMetrics(metrics: LearningStateMetrics): DisplayMetrics {
     return {
       ...metrics,
-      lss: Number((metrics.lss * 10).toFixed(2)),
-      ktl: Number((metrics.ktl * 10).toFixed(2)),
-      lf: Number((metrics.lf * 10).toFixed(2)),
-      lsb: Number((metrics.lsb * 10).toFixed(2)),
+      lss: asDisplayHundred(Number((metrics.lss * 10).toFixed(2))),
+      ktl: asDisplayHundred(Number((metrics.ktl * 10).toFixed(2))),
+      lf: asDisplayHundred(Number((metrics.lf * 10).toFixed(2))),
+      lsb: asDisplayBalance(Number((metrics.lsb * 10).toFixed(2))),
     };
   }
 
@@ -672,7 +681,7 @@ export class LearningStateService {
       lss: this.normalizeTenScale(decayedLss),
       ktl: this.normalizeTenScale(decayedKtl),
       lf: this.normalizeTenScale(decayedLf),
-      lsb: decayedLsb,
+      lsb: toInternalBalance(decayedLsb),
       timestamp: asOf,
     };
   }
@@ -1201,7 +1210,13 @@ export class LearningStateService {
     const lf = round(Math.min(10, Math.max(...pool.map((metrics) => metrics.lf)) + fatigueBonus));
 
     return {
-      metrics: { lss, ktl, lf, lsb: round(ktl - lf), timestamp: asOf },
+      metrics: {
+        lss: toInternalTenScale(lss),
+        ktl: toInternalTenScale(ktl),
+        lf: toInternalTenScale(lf),
+        lsb: toInternalBalance(round(ktl - lf)),
+        timestamp: asOf,
+      },
       perPath,
       activePathIds: votingEntries.map((entry) => entry.pathId),
       dayLoad: { ...dayLoad, fatigueBonus },
@@ -1666,9 +1681,11 @@ export class LearningStateService {
         }
 
         const displayDayMetrics = dayMetrics.map((m) => this.toDisplayMetrics(m));
+        // display 刻度是品牌类型（number 的子类型）：`typeof === 'number'` 的守卫不再需要，
+        // 保留"有效值"过滤只为了剔除 NaN/非有限值。
         const validLss = displayDayMetrics
-          .map((m) => m.lss)
-          .filter((value): value is number => typeof value === 'number');
+          .map((m) => Number(m.lss))
+          .filter((value) => Number.isFinite(value));
         const avgLss = validLss.length > 0
           ? validLss.reduce((sum, value) => sum + value, 0) / validLss.length
           : null;
