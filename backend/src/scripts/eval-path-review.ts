@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 一次性诊断脚本：需穿透动态 JSON 与私有方法 */
 /**
  * 单点测试（**只读，不覆写**）：对指定/最近一条真实路径调用 path-reviewer skill，
  * 必要时（`--replan`）再 dry 跑一次"重规划生成"，用于判断路径重排这条链是否可用。
