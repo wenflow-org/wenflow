@@ -6,16 +6,29 @@
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import CompletionCard from '../CompletionCard.vue';
+import type { ReplanAdvisory, WrapupArtifact } from '@/api/aiTeaching';
 
 const wrapup = {
+  status: 'complete',
+  sources: { summary: 'model', evaluation: 'model' },
   summary: { topicSummary: 't', knowledgeSummary: 'k', practiceAdvice: 'p', learningEvaluation: 'e' },
-  evaluation: {},
-  progress: { newlyMastered: [], movedToReview: [], stillLearning: [] },
-  actionPlan: [],
-  evidence: { topConfusionPoints: [] },
-} as any;
+  evaluation: {
+    lss: 0, ktl: 0, lf: 0, lsb: 0, messageCount: 0, avgUnderstanding: 0, duration: 0,
+  },
+  progress: { newlyMastered: [], movedToReview: [], stillLearning: [], unchangedMastered: [] },
+  evidence: {
+    turnCount: 0,
+    avgUnderstanding: null,
+    avgEngagement: null,
+    dominantCognitiveLevel: null,
+    lastCognitiveLevel: null,
+    topConfusionPoints: [],
+    emotionalSignals: { positive: 0, neutral: 0, frustrated: 0, confused: 0 },
+    completionCandidateSeen: false,
+  },
+} as WrapupArtifact;
 
-function mountCard(advisory: Record<string, unknown> | null) {
+function mountCard(advisory: ReplanAdvisory | null) {
   return mount(CompletionCard, {
     props: {
       topic: '测试主题',
