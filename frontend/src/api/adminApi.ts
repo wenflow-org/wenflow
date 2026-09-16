@@ -1495,7 +1495,7 @@ export const adminVirtualLearnersApi = {
     data: {
       frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
       model?: string | null;
-      simulationClock?: { baseDate?: string; enabled?: boolean };
+      simulationClock?: { baseDate?: string; enabled?: boolean; autoAdvance?: boolean };
     }
   ) => {
     return adminAxios.put(`/admin/virtual-learners/sessions/${sessionId}/simulation-config`, data);
@@ -1504,6 +1504,11 @@ export const adminVirtualLearnersApi = {
   /** 重置会话日期模拟进度（dayIndex=0、清空 history；可选重设 baseDate） */
   resetVirtualSessionClock: async (sessionId: string, data: { baseDate?: string } = {}) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/simulation-clock/reset`, data);
+  },
+
+  /** 推进日期模拟：按课表向前推进 days 个"上课日"（跳过非上课日） */
+  advanceVirtualSessionDay: async (sessionId: string, data: { days?: number } = {}) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/advance-day`, data);
   },
 
   restartVirtualSessionPath: async (sessionId: string) => {

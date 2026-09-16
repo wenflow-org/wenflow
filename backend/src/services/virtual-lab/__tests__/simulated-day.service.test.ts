@@ -4,6 +4,9 @@ import {
   resolveDayWindow,
   resolveSimulationClock,
   temporalContextFromClock,
+  isCourseDay,
+  collectCourseDayIndexes,
+  planClockAdvance,
   buildDayEntry,
   buildDayTimeline,
   type SimulatedDayDeps,
@@ -153,5 +156,46 @@ describe('buildDayEntry / buildDayTimeline（注入 deps）', () => {
 
     const clamped = await buildDayTimeline({ userId: 'u1', baseDate: '2026-09-16', fromDay: 1, toDay: 99, maxDays: 2 }, makeDeps());
     expect(clamped.days.map((d) => d.dayIndex)).toEqual([1, 2]);
+  });
+});
+
+describe('课表与推进（isCourseDay / collectCourseDayIndexes / planClockAdvance）', () => {
+  // 2026-09-14 是周一；WEEK = 周一..周五
+  const WEEK = [1, 2, 3, 4, 5];
+
+  it('isCourseDay：按 UTC 星期判定（周末非上课日）', () => {
+    expect(isCourseDay('2026-09-14', 0, WEEK)).toBe(true); // Mon
+    expect(isCourseDay('2026-09-14', 4, WEEK)).toBe(true); // Fri
+    expect(isCourseDay('2026-09-14', 5, WEEK)).toBe(false); // Sat
+    expect(isCourseDay('2026-09-14', 6, WEEK)).toBe(false); // Sun
+  });
+
+  it('collectCourseDayIndexes：跳过非上课日，收集 N 个上课日', () => {
+    expect(collectCourseDayIndexes('2026-09-14', 0, WEEK, 3)).toEqual([1, 2, 3]);
+    // 从周五(4) 起：周六/周日跳过 → 下周一(7)、周二(8)
+    expect(collectCourseDayIndexes('2026-09-14', 4, WEEK, 2)).toEqual([7, 8]);
+  });
+
+  it('planClockAdvance：推进 N 个上课日；到上限返回 null', () => {
+    const clock = resolveSimulationClock({
+      stageResultsClock: { baseDate: '2026-09-14', dayIndex: 0 },
+      profileClock: { enabled: true },
+      settings: { ...SETTINGS, courseWeekdays: WEEK, lessonsPerDay: 2, maxSimulatedDays: 3 },
+      sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
+    });
+    const plan = planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 2);
+    expect(plan?.indexes).toEqual([1, 2]);
+    expect(plan?.nextClock.dayIndex).toBe(2);
+    expect(plan?.nextClock.advancedTimes).toBe(2);
+    expect(plan?.nextClock.history).toHaveLength(2);
+    expect(plan?.nextClock.simulatedNow).toBe('2026-09-16T23:59:59.999Z');
+
+    const atLimit = resolveSimulationClock({
+      stageResultsClock: { baseDate: '2026-09-14', dayIndex: 3 },
+      profileClock: { enabled: true },
+      settings: { ...SETTINGS, courseWeekdays: WEEK, maxSimulatedDays: 3 },
+      sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
+    });
+    expect(planClockAdvance(atLimit, { baseDate: '2026-09-14', dayIndex: 3 }, 1)).toBeNull();
   });
 });

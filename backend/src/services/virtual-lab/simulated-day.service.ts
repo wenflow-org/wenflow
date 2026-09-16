@@ -10,6 +10,7 @@
  */
 import prisma from '../../config/database';
 import { safeJsonParse } from '../../utils/safe-json';
+import { logger } from '../../utils/logger';
 import learningStateService, { type AggregatedLearningState } from '../learning/learning-state.service';
 import { derivePacing } from '../learner/LearnerSnapshotService';
 import {
@@ -42,6 +43,12 @@ export interface SimulationClockView {
   simulatedNow: string;    // ISO
   /** 护栏：单会话最多模拟天数（来自设置） */
   maxSimulatedDays: number;
+  /** 会话级自动推进开关（落在 stageResults.simulationClock.autoAdvance） */
+  autoAdvance: boolean;
+  /** 课表：一周中上课的星期（0=周日 … 6=周六） */
+  courseWeekdays: number[];
+  /** 课表：每天安排几节 */
+  lessonsPerDay: number;
 }
 
 export interface SimulatedDayTask {
@@ -143,6 +150,8 @@ export interface SimulationClockInput {
     simulatedNow?: string | null;
     dayIndex?: number | null;
     timezone?: string | null;
+    autoAdvance?: boolean | null;
+    enabled?: boolean | null;
   } | null;
   profileClock?: { enabled?: boolean | null; startDate?: string | null } | null;
   settings: VirtualLabDateSimulationSettings;
@@ -155,7 +164,7 @@ export interface SimulationClockInput {
 
 /** 解析会话的模拟时钟（session > profile > global 优先级；默认关）。 */
 export function resolveSimulationClock(input: SimulationClockInput): SimulationClockView {
-  const enabled = input.profileClock?.enabled ?? input.settings.enabled;
+  const enabled = input.stageResultsClock?.enabled ?? input.profileClock?.enabled ?? input.settings.enabled;
   const baseDateRaw = input.profileClock?.startDate
     || input.stageResultsClock?.baseDate
     || toDateOnly(input.sessionCreatedAt);
@@ -179,7 +188,39 @@ export function resolveSimulationClock(input: SimulationClockInput): SimulationC
     elapsedDays,
     simulatedNow,
     maxSimulatedDays: input.settings.maxSimulatedDays,
+    autoAdvance: input.stageResultsClock?.autoAdvance === true,
+    courseWeekdays: [...input.settings.courseWeekdays],
+    lessonsPerDay: input.settings.lessonsPerDay,
   };
+}
+
+/** 是否为课表内的上课日（0=周日 … 6=周六，UTC 日界） */
+export function isCourseDay(baseDate: string | Date, dayIndex: number, courseWeekdays: number[]): boolean {
+  const weekdays = courseWeekdays.length ? courseWeekdays : [1, 2, 3, 4, 5];
+  const day = new Date(parseDateOnly(baseDate).getTime() + Math.max(0, Math.trunc(dayIndex)) * DAY_MS);
+  return weekdays.includes(day.getUTCDay());
+}
+
+/**
+ * 从 fromDayIndex 之后，收集 count 个"上课日"的 dayIndex（按课表跳过非上课日）。
+ * 用于手动/自动推进：推进 N 个上课日，而不是 N 个自然日。
+ */
+export function collectCourseDayIndexes(
+  baseDate: string | Date,
+  fromDayIndex: number,
+  courseWeekdays: number[],
+  count: number,
+): number[] {
+  const total = Math.max(0, Math.trunc(count));
+  const result: number[] = [];
+  let cursor = Math.max(0, Math.trunc(fromDayIndex));
+  // 最多向后找 total*7 + 7 天，防止课表为空时死循环
+  const hardLimit = cursor + total * 7 + 7;
+  while (result.length < total && cursor < hardLimit) {
+    cursor += 1;
+    if (isCourseDay(baseDate, cursor, courseWeekdays)) result.push(cursor);
+  }
+  return result;
 }
 
 export interface TemporalContext {
@@ -329,6 +370,42 @@ export async function buildDayTimeline(
 
 /* ============ DB 绑定入口 ============ */
 
+/** 纯函数：按课表把时钟推进 days 个"上课日"（返回 null = 已到上限/课表为空）。 */
+export function planClockAdvance(
+  clock: SimulationClockView,
+  rawClock: Record<string, any> | null | undefined,
+  days: number,
+  now: Date = new Date(),
+): { indexes: number[]; nextClock: Record<string, any> } | null {
+  const want = Math.max(1, Math.trunc(days) || 1);
+  const indexes = collectCourseDayIndexes(clock.baseDate, clock.dayIndex, clock.courseWeekdays, want)
+    .filter((index) => index <= clock.maxSimulatedDays);
+  if (!indexes.length) return null;
+
+  const history = Array.isArray(rawClock?.history) ? [...rawClock!.history] : [];
+  for (const index of indexes) {
+    const win = resolveDayWindow(clock.baseDate, index);
+    history.push({
+      dayIndex: index,
+      simulatedDay: win.simulatedDay,
+      advancedAt: now.toISOString(),
+      plannedLessons: clock.lessonsPerDay,
+    });
+  }
+  const lastIndex = indexes[indexes.length - 1];
+  const lastWindow = resolveDayWindow(clock.baseDate, lastIndex);
+  return {
+    indexes,
+    nextClock: {
+      ...(rawClock || {}),
+      dayIndex: lastIndex,
+      simulatedNow: lastWindow.asOf.toISOString(),
+      advancedTimes: (Number(rawClock?.advancedTimes) || 0) + indexes.length,
+      history: history.slice(-200),
+    },
+  };
+}
+
 class SimulatedDayService {
   /** 会话模拟时钟（默认关；未配置时以会话创建日为 baseDate、dayIndex=0）。 */
   async getSimulationClock(sessionId: string): Promise<SimulationClockView | null> {
@@ -399,6 +476,64 @@ class SimulatedDayService {
     const toDay = input.toDay ?? Math.min(maxDays, Math.max(fromDay, clock?.dayIndex ?? 0));
     return buildDayTimeline({ userId: session.userId, baseDate, fromDay, toDay, maxDays });
   }
+}
+
+/**
+ * 自动推进（一次性扫描）：对开启日期模拟且 `autoAdvance=true` 的非终态会话，各推进 1 个上课日。
+ * 仅写 `stageResults.simulationClock`（时钟簿记）；"当天任务的重放执行"归系统层（P2）。
+ */
+export async function advanceAutoSessionsOnce(now: Date = new Date()): Promise<{ scanned: number; advanced: string[] }> {
+  const settings = await getVirtualLabSettings().catch(() => ({ ...DEFAULT_VIRTUAL_LAB_SETTINGS }));
+  if (!settings.dateSimulation.enabled || !settings.dateSimulation.autoAdvanceEnabled) {
+    return { scanned: 0, advanced: [] };
+  }
+  const sessions = await prisma.virtual_sessions.findMany({
+    where: { status: { in: ['running', 'created'] } },
+    orderBy: { updatedAt: 'desc' },
+    take: 50,
+    select: { id: true, userId: true, stageResults: true, createdAt: true, virtualProfileId: true },
+  });
+  const advanced: string[] = [];
+  for (const session of sessions) {
+    const stageResults = safeJsonParse<Record<string, any>>(session.stageResults, {});
+    const rawClock = stageResults?.simulationClock;
+    if (rawClock?.enabled !== true || rawClock?.autoAdvance !== true) continue;
+    const profile = await prisma.virtual_learner_profiles
+      .findUnique({ where: { id: session.virtualProfileId }, select: { profile: true } })
+      .catch(() => null);
+    const profileData = safeJsonParse<Record<string, any>>(profile?.profile, {});
+    const clock = resolveSimulationClock({
+      stageResultsClock: rawClock,
+      profileClock: profileData?.simulationClock ?? null,
+      settings: settings.dateSimulation,
+      sessionCreatedAt: session.createdAt,
+      now,
+    });
+    const plan = planClockAdvance(clock, rawClock, 1, now);
+    if (!plan) continue;
+    await prisma.virtual_sessions.update({
+      where: { id: session.id },
+      data: { stageResults: JSON.stringify({ ...stageResults, simulationClock: plan.nextClock }), updatedAt: new Date() },
+    });
+    advanced.push(session.id);
+  }
+  return { scanned: sessions.length, advanced };
+}
+
+let simDaySchedulerStarted = false;
+
+/** 注册自动推进调度（默认 5min 一次；env `VLAB_DAY_ADVANCE_TICK_MS`，最小 10s）。默认关（settings.enabled=false 时直接返回）。 */
+export function startSimulatedDayScheduler(): void {
+  if (simDaySchedulerStarted) return;
+  simDaySchedulerStarted = true;
+  const raw = Number(process.env.VLAB_DAY_ADVANCE_TICK_MS);
+  const tickMs = Number.isFinite(raw) && raw >= 10_000 ? raw : 300_000;
+  setInterval(() => {
+    advanceAutoSessionsOnce().catch((error) => {
+      logger.warn('[simulated-day] 自动推进失败', { error: error instanceof Error ? error.message : String(error) });
+    });
+  }, tickMs);
+  logger.info('[simulated-day] 自动推进调度已启动', { tickMs });
 }
 
 export const simulatedDayService = new SimulatedDayService();

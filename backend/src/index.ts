@@ -48,6 +48,7 @@ import { aiCapabilityHealthService } from './services/ai-capability-health.servi
 import { getRuntimeCapabilityProbeEnabled } from './services/capability-probe-settings.service';
 import { logRetentionService } from './services/log-retention.service';
 import { startBatchExperimentScheduler } from './services/virtual-lab/batch-experiment.service';
+import { startSimulatedDayScheduler } from './services/virtual-lab/simulated-day.service';
 import { auditCleanupService } from './services/audit-cleanup.service';
 import { virtualSessionReclaimService } from './virtual-lab/session-reclaim.service';
 import { existsSync } from 'fs';
@@ -549,6 +550,8 @@ export async function startServer() {
     auditCleanupService.start(lifecycle);
     virtualSessionReclaimService.start(lifecycle);
     startBatchExperimentScheduler();
+    // 日期模拟自动推进（默认关；仅对 simulationClock.autoAdvance=true 的非终态会话生效）
+    startSimulatedDayScheduler();
     // 进程重启后内存自动驾驶循环已清空：复位 DB 中残留的 running/queued 僵尸态，避免永久阻塞重启
     await autopilotService.reconcileStaleRuns().catch((err) => {
       logger.warn('[startup] 自动驾驶僵尸状态对账失败（不阻断启动）', {

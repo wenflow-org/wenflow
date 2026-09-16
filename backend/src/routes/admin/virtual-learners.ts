@@ -26,9 +26,9 @@ import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
 import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
-import { simulatedDayService } from '../../services/virtual-lab/simulated-day.service';
+import { simulatedDayService, resolveSimulationClock, planClockAdvance } from '../../services/virtual-lab/simulated-day.service';
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
-import { getVirtualLabSettings, updateVirtualLabSettings } from '../../services/virtual-lab-settings.service';
+import { getVirtualLabSettings, updateVirtualLabSettings, DEFAULT_VIRTUAL_LAB_SETTINGS } from '../../services/virtual-lab-settings.service';
 import { applyRpmLimitsFromSettings, getRpmLimitStats } from '../../services/rpm-limit-config.service';
 import { virtualCleanupService } from '../../services/virtual-lab/virtual-cleanup.service';
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
@@ -2995,6 +2995,9 @@ router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) =
       if (simulationClock.enabled !== undefined && typeof simulationClock.enabled !== 'boolean') {
         return res.status(400).json({ success: false, error: 'simulationClock.enabled 必须是布尔值' });
       }
+      if (simulationClock.autoAdvance !== undefined && typeof simulationClock.autoAdvance !== 'boolean') {
+        return res.status(400).json({ success: false, error: 'simulationClock.autoAdvance 必须是布尔值' });
+      }
     }
 
     const result = await runAssistedSessionMutation(sessionId, async (session, assertLeaseOwned) => {
@@ -3011,6 +3014,7 @@ router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) =
             ...((stageResults as any).simulationClock || {}),
             ...(simulationClock.baseDate ? { baseDate: String(simulationClock.baseDate).slice(0, 10) } : {}),
             ...(typeof simulationClock.enabled === 'boolean' ? { enabled: simulationClock.enabled } : {}),
+            ...(typeof simulationClock.autoAdvance === 'boolean' ? { autoAdvance: simulationClock.autoAdvance } : {}),
           }
         } : {})
       };
@@ -3080,6 +3084,65 @@ router.post('/sessions/:sessionId/simulation-clock/reset', async (req: Request, 
   } catch (error) {
     logger.error('重置模拟时钟失败:', error);
     sendVirtualSessionError(res, error, '重置模拟时钟失败');
+  }
+});
+
+/**
+ * POST /api/admin/virtual-learners/sessions/:sessionId/advance-day
+ * 推进日期模拟：按课表向前推进 days 个"上课日"（跳过非上课日），只写时钟簿记。
+ * 当天任务的重放执行归系统层（P2）；本端点保证手动/自动推进都走同一套课表与护栏。
+ */
+router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
+  try {
+    const { sessionId } = req.params;
+    const days = req.body?.days === undefined ? 1 : Number(req.body.days);
+    if (!Number.isFinite(days) || days < 1 || days > 60) {
+      return res.status(400).json({ success: false, error: 'days 必须是 1..60 的数字' });
+    }
+
+    const result = await runAssistedSessionMutation(sessionId, async (session, assertLeaseOwned) => {
+      const settings = await getVirtualLabSettings().catch(() => ({ ...DEFAULT_VIRTUAL_LAB_SETTINGS }));
+      const stageResults = parseJson<StageResults>(session.stageResults, {});
+      const rawClock = (stageResults as any).simulationClock || {};
+      const profile = await prisma.virtual_learner_profiles
+        .findUnique({ where: { id: session.virtualProfileId }, select: { profile: true } })
+        .catch(() => null);
+      const profileData = parseJson<Record<string, unknown>>(profile?.profile, {});
+      const clock = resolveSimulationClock({
+        stageResultsClock: rawClock,
+        profileClock: (profileData as any)?.simulationClock ?? null,
+        settings: settings.dateSimulation,
+        sessionCreatedAt: session.createdAt,
+      });
+      if (!clock.enabled) {
+        const err: any = new Error('日期模拟未开启，请先在「日期模拟」设置中开启');
+        err.statusCode = 409;
+        throw err;
+      }
+      const plan = planClockAdvance(clock, rawClock, days);
+      if (!plan) {
+        const err: any = new Error(`已达模拟天数上限（${clock.maxSimulatedDays}）或课表为空`);
+        err.statusCode = 409;
+        throw err;
+      }
+      const nextStageResults = {
+        ...stageResults,
+        simulationClock: { ...(rawClock || {}), enabled: true, ...plan.nextClock },
+      };
+      await assertLeaseOwned();
+      await prisma.virtual_sessions.update({
+        where: { id: sessionId },
+        data: { stageResults: JSON.stringify(nextStageResults), updatedAt: new Date() },
+      });
+      await assertLeaseOwned();
+      return { advancedDayIndexes: plan.indexes };
+    });
+
+    const clock = await simulatedDayService.getSimulationClock(sessionId);
+    res.json({ success: true, data: { ...result, clock } });
+  } catch (error) {
+    logger.error('推进日期模拟失败:', error);
+    sendVirtualSessionError(res, error, '推进日期模拟失败');
   }
 });
 

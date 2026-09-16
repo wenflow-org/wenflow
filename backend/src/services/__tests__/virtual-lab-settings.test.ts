@@ -42,8 +42,18 @@ describe('virtual-lab-settings · dateSimulation（默认关）', () => {
     }));
   });
 
-  it('merge：只发 rpm 不重置 dateSimulation；只发 dateSimulation 不重置 rpm', () => {
-    const existing = normalizeVirtualLabSettings({
+  it('课表字段：courseWeekdays 去重排序+范围过滤；lessonsPerDay 夹紧 1..10', () => {
+    const s = normalizeVirtualLabSettings({
+      dateSimulation: { courseWeekdays: [5, 1, 1, 9, -1, '3'], lessonsPerDay: 99 },
+    } as any);
+    expect(s.dateSimulation.courseWeekdays).toEqual([1, 3, 5]);
+    expect(s.dateSimulation.lessonsPerDay).toBe(10);
+
+    const fallback = normalizeVirtualLabSettings({ dateSimulation: { courseWeekdays: [] } } as any);
+    expect(fallback.dateSimulation.courseWeekdays).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('merge：只发 rpm 不重置 dateSimulation；只发 dateSimulation 不重置 rpm', () => {    const existing = normalizeVirtualLabSettings({
       virtualLearnerRpmLimit: 300,
       dateSimulation: { enabled: true, maxSimulatedDays: 30 },
     } as any);

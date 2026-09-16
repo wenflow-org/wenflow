@@ -31,6 +31,10 @@ export interface VirtualLabDateSimulationSettings {
   pauseOnIntervention: boolean;
   /** 批量/自动学习是否自动跨日 */
   autoAdvanceEnabled: boolean;
+  /** 课表：一周中上课的星期（0=周日 … 6=周六）；推进时跳过非上课日 */
+  courseWeekdays: number[];
+  /** 课表：每天安排几节 */
+  lessonsPerDay: number;
 }
 
 export interface VirtualLabSettings {
@@ -52,6 +56,8 @@ export const DEFAULT_VIRTUAL_LAB_SETTINGS: VirtualLabSettings = {
     maxSimulatedDays: 90,
     pauseOnIntervention: false,
     autoAdvanceEnabled: false,
+    courseWeekdays: [1, 2, 3, 4, 5],
+    lessonsPerDay: 1,
   }
 };
 
@@ -79,6 +85,17 @@ function clampString(value: unknown, fallback: string, maxLength = 64): string {
   return text ? text.slice(0, maxLength) : fallback;
 }
 
+function normalizeWeekdays(value: unknown, fallback: number[]): number[] {
+  if (!Array.isArray(value)) return [...fallback];
+  const set = new Set<number>();
+  for (const item of value) {
+    const n = Number(item);
+    if (Number.isInteger(n) && n >= 0 && n <= 6) set.add(n);
+  }
+  const arr = [...set].sort((a, b) => a - b);
+  return arr.length ? arr : [...fallback];
+}
+
 function normalizeDateSimulation(input: unknown): VirtualLabDateSimulationSettings {
   const raw = input && typeof input === 'object' ? input as Record<string, unknown> : {};
   const d = DEFAULT_VIRTUAL_LAB_SETTINGS.dateSimulation;
@@ -91,6 +108,8 @@ function normalizeDateSimulation(input: unknown): VirtualLabDateSimulationSettin
     maxSimulatedDays: clampInteger(raw.maxSimulatedDays, d.maxSimulatedDays, 1, 365),
     pauseOnIntervention: clampBoolean(raw.pauseOnIntervention, d.pauseOnIntervention),
     autoAdvanceEnabled: clampBoolean(raw.autoAdvanceEnabled, d.autoAdvanceEnabled),
+    courseWeekdays: normalizeWeekdays(raw.courseWeekdays, d.courseWeekdays),
+    lessonsPerDay: clampInteger(raw.lessonsPerDay, d.lessonsPerDay, 1, 10),
   };
 }
 
