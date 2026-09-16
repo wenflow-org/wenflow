@@ -8,6 +8,9 @@ const mockPrisma: any = {
     findMany: jest.fn(),
     updateMany: jest.fn()
   },
+  milestones: {
+    findMany: jest.fn()
+  },
   $transaction: jest.fn()
 }
 const mockRunBackgroundTask = jest.fn()
@@ -47,6 +50,7 @@ describe('LearningService stale core recovery', () => {
       return { count: 1 }
     })
     mockPrisma.learning_paths.findMany.mockResolvedValue([])
+    mockPrisma.milestones.findMany.mockResolvedValue([])
     mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma))
     jest.spyOn(learningService as any, 'updatePathGenerationStatus').mockResolvedValue(undefined)
   })
@@ -239,6 +243,20 @@ describe('LearningService stale core recovery', () => {
     await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(1)
 
     expect(append).toHaveBeenCalledWith(expect.objectContaining({ id: 'path-1' }), expect.anything(), ['ms-1'])
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('追加式自愈：replace 预算已被顶满但仍有空白阶段 → 改用追加通道（真实卡死路径场景）', async () => {
+    mockPrisma.learning_paths.findMany.mockResolvedValue([stageDesignCandidate({ stageDesignRetryCount: 3 })])
+    jest.spyOn(learningService as any, 'getEnrichmentRetryReferenceTime').mockReturnValue(0)
+    jest.spyOn(learningService as any, 'listEmptyMilestoneIds').mockResolvedValue(['ms-1', 'ms-2'])
+    const append = jest.spyOn(learningService as any, 'queuePathEnrichmentAppend')
+      .mockResolvedValue({ retryCount: 1, runId: 'run-append' })
+    const replace = jest.spyOn(learningService as any, 'queuePathEnrichmentRetry')
+
+    await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(1)
+
+    expect(append).toHaveBeenCalledWith(expect.objectContaining({ id: 'path-1' }), expect.anything(), ['ms-1', 'ms-2'])
     expect(replace).not.toHaveBeenCalled()
   })
 

@@ -855,6 +855,25 @@ class LearningService {
   }
 
   /**
+   * 追加式补齐的目标阶段（无则空数组）：生成在途时返回空（避免与在途生成重复）。
+   * 供后台自愈环在 replace 通道不可用/预算耗尽时选路。
+   */
+  private async resolveAppendMilestoneIds(
+    pathId: string,
+    generationStatus: ParsedPathGenerationStatus | null,
+    activeRun: PersistedPathGenerationRun | null,
+    pathUpdatedAt: Date
+  ): Promise<string[]> {
+    const generationInFlight = (activeRun != null
+        && (activeRun.status === 'queued' || activeRun.status === 'processing')
+        && !isGenerationRunStale(activeRun))
+      || (generationStatus?.stageDesign === 'processing'
+        && !isStageDesignStale(generationStatus, pathUpdatedAt));
+    if (generationInFlight) return [];
+    return this.listEmptyMilestoneIds(pathId);
+  }
+
+  /**
    * 追加式补齐：仅对"零子任务"阶段生成任务（不删除、不覆盖既有任务）。
    *
    * 场景：`replace-tasks` 被路径变更保护拦下（路径已有已完成课堂证据）而阶段却为空的死局
@@ -1333,26 +1352,23 @@ class LearningService {
       const activeRun = await this.getActiveGenerationRun(path.id, path.activeGenerationRunId);
       const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
       const canReplace = retry.allowed && retry.retryType === 'stageDesign';
+      const replaceBudgetLeft = (generationStatus.stageDesignRetryCount || 0) < ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length;
+      const useReplace = canReplace && replaceBudgetLeft;
 
-      // 追加式自愈：replace 不可用（典型：已有课堂证据被保护 → 永久冲突，旧实现直接"顶满终止"）时，
-      // 若仍有"空白阶段"，改走追加通道（只创建、不删除，不会与证据冲突）。
-      // 它有**独立预算** stageDesignAppendCount，不占用 / 不被 replace 的预算拖累。
+      // 追加式自愈（两个入口）：
+      //  ① replace 不可用（既非 failed 也非 stale）；或
+      //  ② replace 预算已被耗尽（典型：被课堂证据永久冲突反复顶满）
+      // 只要仍有"空白阶段"就改走追加通道（只创建、不删除，不会与证据冲突）。
+      // 生成在途时一律不追加（resolveAppendMilestoneIds 内已判，避免与在途生成重复）。
       let appendMilestoneIds: string[] = [];
-      if (!canReplace) {
-        const generationInFlight = (activeRun != null
-            && (activeRun.status === 'queued' || activeRun.status === 'processing')
-            && !isGenerationRunStale(activeRun))
-          || (generationStatus?.stageDesign === 'processing'
-            && !isStageDesignStale(generationStatus, path.updatedAt));
-        if (generationInFlight) continue;
-        appendMilestoneIds = await this.listEmptyMilestoneIds(path.id);
+      if (!useReplace) {
+        appendMilestoneIds = await this.resolveAppendMilestoneIds(path.id, generationStatus, activeRun, path.updatedAt);
         if (appendMilestoneIds.length === 0) continue;
       }
-      const appendMode = appendMilestoneIds.length > 0;
 
-      const retryCount = appendMode
-        ? (generationStatus.stageDesignAppendCount || 0)
-        : (generationStatus.stageDesignRetryCount || 0);
+      const retryCount = useReplace
+        ? (generationStatus.stageDesignRetryCount || 0)
+        : (generationStatus.stageDesignAppendCount || 0);
       if (retryCount >= ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length) {
         continue;
       }
@@ -1364,10 +1380,10 @@ class LearningService {
       }
 
       try {
-        if (appendMode) {
-          await this.queuePathEnrichmentAppend(path, generationStatus, appendMilestoneIds);
-        } else {
+        if (useReplace) {
           await this.queuePathEnrichmentRetry(path, generationStatus);
+        } else {
+          await this.queuePathEnrichmentAppend(path, generationStatus, appendMilestoneIds);
         }
         retriedCount += 1;
       } catch (error) {
@@ -1376,15 +1392,16 @@ class LearningService {
         // P4：失败也必须把重试计数落库。原实现只在 queuePathEnrichmentRetry 成功、
         // 且预检通过之后才自增计数（createAndClaimGenerationRun 的 guard 在计数写入之前），
         // 预检一抛错计数就停在 0，于是每分钟按「第 1 次、延迟 1 分钟」无限重试。
-        // 对不可自愈的路径变更冲突直接把次数顶到上限，终止自动重试。
+        // 对不可自愈的路径变更冲突直接把次数顶到上限，终止自动重试
+        //（replace 顶满后，下一次轮询会自动改用追加通道，见上）。
         const terminal = TERMINAL_STAGE_DESIGN_RETRY_CODES.has(errorCode);
         const nextRetryCount = terminal
           ? ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length
           : retryCount + 1;
         await this.updatePathGenerationStatus(path.id, {
-          ...(appendMode
-            ? { stageDesignAppendCount: nextRetryCount }
-            : { stageDesignRetryCount: nextRetryCount }),
+          ...(useReplace
+            ? { stageDesignRetryCount: nextRetryCount }
+            : { stageDesignAppendCount: nextRetryCount }),
           lastStageDesignRetryAt: new Date().toISOString(),
           lastError: error instanceof Error ? error.message : String(error),
           updatedAt: new Date().toISOString()
@@ -1392,7 +1409,7 @@ class LearningService {
         logger.warn('自动继续生成阶段任务失败', {
           pathId: path.id,
           retryCount: nextRetryCount,
-          appendMode,
+          appendMode: !useReplace,
           terminal,
           ...(errorCode ? { errorCode } : {}),
           error: error instanceof Error ? error.message : String(error)
