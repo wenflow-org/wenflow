@@ -144,12 +144,6 @@ const MAX_PATH_REPLANS = (() => {
   return Math.min(10, Math.round(raw));
 })();
 
-const MAX_PATH_REGENERATIONS = (() => {
-  const raw = Number(process.env.VIRTUAL_PATH_MAX_REGENERATIONS);
-  if (!Number.isFinite(raw) || raw < 0) return 1;
-  return Math.min(5, Math.round(raw));
-})();
-
 /**
  * 纯函数：判定是否需要「强制接受当前 Path」（护栏命中）。
  * 抽成纯函数以便单测覆盖（见 __tests__/path-review-guard.test.ts）。
@@ -618,7 +612,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
 
   /**
    * 统计会话日志里某个 phase 的条数（只读 logs 列，避开 stageResults 大字段）。
-   * 用于收敛护栏：`path-replan`（重规划次数）/ `path-regenerate`（空子任务重生成次数）。
+   * 用于收敛护栏：`path-replan`（重规划次数）。
    */
   private async countSessionLogsByPhase(sessionId: string, phase: string): Promise<number> {
     const session = await prisma.virtual_sessions.findUnique({
@@ -2264,34 +2258,44 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       }
       
       if (!firstTask) {
-        // 空子任务补救（2026-09-16）：里程碑存在但无可启动任务时，原先直接抛错 → 会话卡在 path/teaching 边界。
-        // 这里最多触发一次「路径重生成」（restartPathPhase），让 stage-designer 重新产出 subtasks；
-        // 已重生成过仍为空才抛出需人工介入的错误（避免无限重生成）。
-        const regenerations = await this.countSessionLogsByPhase(sessionId, 'path-regenerate');
-        if (regenerations < MAX_PATH_REGENERATIONS) {
-          await this.addSessionLog(sessionId, {
-            timestamp: new Date().toISOString(),
-            phase: 'path-regenerate',
-            details: { output: { reason: 'no-runnable-subtasks', learningPathId: learningPath.id, attempt: regenerations + 1 } }
-          });
-          let restartError: string | undefined;
-          try {
-            const restarted = await this.restartPathPhase(sessionId);
-            if (!restarted.success) restartError = restarted.error;
-          } catch (error) {
-            restartError = asErrorLike(error).message;
-          }
-          logger.warn('[simulation-coordinator] 里程碑无可用任务，已触发路径重生成', {
-            sessionId,
-            learningPathId: learningPath.id,
-            attempt: regenerations + 1,
-            restartError: restartError || null
-          });
-          throw new Error(restartError
-            ? `第一个里程碑没有可用任务（路径重生成失败：${restartError}）`
-            : '第一个里程碑没有可用任务（已触发路径重生成，下一轮将重新进入 Path → Learn）');
+        // 子任务由「阶段设计」异步产出：generateLearningPath 里 stage-enrichment 走 runBackgroundTask
+        // 且**不 await**——所以刚生成完的 Path 常见「里程碑已建、子任务尚未落库」。
+        // 此处**不得删库重建**：restartPathPhase 会重启同一竞态，并在 learning_paths.delete 后留下
+        // 孤儿里程碑（实测：3 条路径共 11 个零子任务里程碑）。应按生成状态处置——
+        //   仍在生成 → 如实上报"未就绪"，让调用方稍后重试；
+        //   确实失败/超时 → 触发官方阶段设计重试（同一个 Path 重跑 stage-designer，不删库）。
+        let retryAccepted: { accepted?: boolean; retryCount?: number } | null = null;
+        let notReadyReason: string | undefined;
+        try {
+          retryAccepted = await learningService.retryPathEnrichment(session.learningPathId, session.userId);
+        } catch (error: unknown) {
+          notReadyReason = asErrorLike(error).message;
         }
-        throw new Error('第一个里程碑没有可用任务（重生成后仍为空，需人工介入）');
+
+        await this.addSessionLog(sessionId, {
+          timestamp: new Date().toISOString(),
+          phase: 'path-enrichment-not-ready',
+          details: {
+            output: {
+              reason: 'no-runnable-subtasks',
+              learningPathId: learningPath.id,
+              retryTriggered: retryAccepted?.accepted === true,
+              retryCount: retryAccepted?.retryCount ?? null,
+              notReadyReason: notReadyReason || null
+            }
+          }
+        });
+
+        logger.warn('[simulation-coordinator] 里程碑无可用任务：阶段设计未就绪（不删路径）', {
+          sessionId,
+          learningPathId: learningPath.id,
+          retryTriggered: retryAccepted?.accepted === true,
+          notReadyReason: notReadyReason || null
+        });
+
+        throw new Error(retryAccepted?.accepted
+          ? `第一个里程碑没有可用任务（阶段任务生成中：已触发阶段设计重试 #${retryAccepted.retryCount ?? '?'}，请稍后重试）`
+          : `第一个里程碑没有可用任务（阶段设计未就绪：${notReadyReason || '未知原因'}）`);
       }
       
       logger.info('[simulation-coordinator] 开始学习阶段', {
