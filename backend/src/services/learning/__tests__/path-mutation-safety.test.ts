@@ -252,4 +252,26 @@ describe('path mutation safety', () => {
       }
     });
   });
+
+  describe('append-tasks（追加式：只创建、不删除/不覆盖）', () => {
+    it('必须限定到具体阶段，否则拒绝（防止误用为全局重建）', async () => {
+      const tx = createTx([]);
+      await expect(assertPathMutationSafe(tx, 'path-1', 'append-tasks'))
+        .rejects.toMatchObject({ status: 409, code: 'PATH_APPEND_SCOPE_REQUIRED' });
+    });
+
+    it('目标阶段非空即拒绝（追加只能作用于空白阶段）', async () => {
+      const tx = createTx([{ id: 'task-1', status: 'todo' }]);
+      await expect(assertPathMutationSafe(tx, 'path-1', 'append-tasks', { milestoneIds: ['ms-1'] }))
+        .rejects.toMatchObject({ status: 409, code: 'PATH_APPEND_STAGE_NOT_EMPTY' });
+    });
+
+    it('空白阶段：即使路径已有已完成课堂证据也放行（创建不构成删除/覆盖）', async () => {
+      const tx = createTx([], { completedEvidence: { id: 'ev-1' } });
+      await expect(assertPathMutationSafe(tx, 'path-1', 'append-tasks', { milestoneIds: ['ms-1'] }))
+        .resolves.toBeUndefined();
+      // 放行即返回：不应再走"删除或覆盖"类检查
+      expect(tx.learner_evidence.findFirst).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -1,4 +1,4 @@
-export type PathMutationKind = 'replace-path' | 'replace-tasks' | 'replan-stage' | 'delete-path';
+export type PathMutationKind = 'replace-path' | 'replace-tasks' | 'replan-stage' | 'delete-path' | 'append-tasks';
 
 export interface PathMutationScope {
   milestoneId?: string;
@@ -43,7 +43,8 @@ const PATH_MUTATION_MESSAGES: Record<PathMutationKind, string> = {
   'replace-path': '学习路径已有学习进度，不能覆盖重新生成',
   'replace-tasks': '学习路径已有学习进度，不能重新生成阶段任务',
   'replan-stage': '学习路径仍有进行中的任务，不能调整后续阶段',
-  'delete-path': '学习路径已有学习进度，不能删除'
+  'delete-path': '学习路径已有学习进度，不能删除',
+  'append-tasks': '只能向空白阶段追加任务，不能删除或覆盖已有任务'
 };
 
 export class PathMutationConflictError extends Error {
@@ -237,6 +238,24 @@ export async function assertPathMutationSafe(
       status: true
     }
   });
+
+  // 追加式创建（append-tasks）：只创建、不删除/不覆盖 → 不适用"删除或覆盖"类保护；
+  // 但自带两条自约束：① 必须限定到具体阶段；② 目标阶段必须为空（无任何任务）。
+  if (kind === 'append-tasks') {
+    if (!scope.milestoneIds || scope.milestoneIds.length === 0) {
+      throw new PathMutationConflictError(
+        '追加任务必须限定到具体阶段',
+        'PATH_APPEND_SCOPE_REQUIRED'
+      );
+    }
+    if (tasks.length > 0) {
+      throw new PathMutationConflictError(
+        PATH_MUTATION_MESSAGES['append-tasks'],
+        'PATH_APPEND_STAGE_NOT_EMPTY'
+      );
+    }
+    return;
+  }
 
   const blockedTaskStatuses = kind === 'replan-stage'
     ? new Set(['in_progress'])

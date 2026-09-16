@@ -25,6 +25,7 @@ import {
   createAndClaimPathGenerationRun,
   getSafeGenerationErrorMessage,
   isGenerationRunStale,
+  isStageDesignStale,
   resolveGenerationRetry,
   type PathGenerationRollbackSnapshotV1,
   type PathGenerationPhase,
@@ -835,6 +836,75 @@ class LearningService {
       generationRunId: run.id,
       userProfile: {}
     }, analysis), { pathId: path.id, runId: run.id, userId: path.userId });
+
+    return { retryCount, runId: run.id };
+  }
+
+  /** 列出"零子任务且未完成"的阶段 id（追加式补齐的合法目标）。 */
+  private async listEmptyMilestoneIds(pathId: string): Promise<string[]> {
+    const milestones = await prisma.milestones.findMany({
+      where: {
+        learningPathId: pathId,
+        status: { not: 'completed' },
+        subtasks: { none: {} }
+      },
+      select: { id: true },
+      orderBy: { stageNumber: 'asc' }
+    });
+    return milestones.map((milestone) => milestone.id);
+  }
+
+  /**
+   * 追加式补齐：仅对"零子任务"阶段生成任务（不删除、不覆盖既有任务）。
+   *
+   * 场景：`replace-tasks` 被路径变更保护拦下（路径已有已完成课堂证据）而阶段却为空的死局
+   * （实测：3 条路径共 11 个零子任务里程碑）——**创建任务不构成"删除或覆盖"**，
+   * 故走 `append-tasks` 契约（自带"必须限定到空白阶段"约束），合规且不丢任何证据。
+   */
+  private async queuePathEnrichmentAppend(
+    path: {
+      id: string; userId: string; subject?: string | null; description?: string | null;
+      title?: string | null; name?: string | null; deadline?: Date | null; deadlineText?: string | null;
+      aiPromptTemplate?: string | null; activeGenerationRunId?: string | null;
+    },
+    generationStatus: ParsedPathGenerationStatus | null,
+    milestoneIds: string[]
+  ): Promise<{ retryCount: number; runId: string }> {
+    const retryCount = (generationStatus?.stageDesignRetryCount || 0) + 1;
+    const retryAt = new Date().toISOString();
+    const run = await this.createAndClaimGenerationRun(
+      path.id,
+      'stageDesign',
+      'stageDesign',
+      0,
+      'append-tasks',
+      path.activeGenerationRunId,
+      { milestoneIds }
+    );
+
+    await this.updatePathGenerationStatus(path.id, {
+      stageDesign: 'processing',
+      lastError: null,
+      stageDesignRetryCount: retryCount,
+      lastStageDesignRetryAt: retryAt,
+      updatedAt: retryAt
+    }, run.id);
+
+    const analysis = {
+      ...this.parsePathPromptTemplate(path.aiPromptTemplate || null),
+      subject: path.subject || '综合'
+    };
+
+    runBackgroundTask('learning.path.stage-enrichment-append', () => this.enrichLearningPathWithAnderson(path.id, run.id, {
+      userId: path.userId,
+      description: path.description || path.title || path.name || '个性化学习路径',
+      subject: path.subject || undefined,
+      deadline: path.deadline || undefined,
+      deadlineText: path.deadlineText || undefined,
+      sourceConversationId: generationStatus?.sourceConversationId || undefined,
+      generationRunId: run.id,
+      userProfile: {}
+    }, analysis, { appendOnly: true }), { pathId: path.id, runId: run.id, userId: path.userId });
 
     return { retryCount, runId: run.id };
   }
@@ -2028,7 +2098,8 @@ class LearningService {
     pathId: string,
     runId: string,
     data: GeneratePathData,
-    analysis: any
+    analysis: any,
+    options: { appendOnly?: boolean } = {}
   ): Promise<void> {
     const startTime = Date.now();
     const triggerSource = data.sourceConversationId ? 'goal-conversation' : 'api';
@@ -2043,8 +2114,17 @@ class LearningService {
           : persistedRun
         : null;
       if (!run || run.status !== 'processing') throw new Error('GENERATION_RUN_FENCED');
+      // 追加模式：只对"空白阶段"生成任务（不删除、不覆盖）→ 走 append-tasks 契约。
+      const appendOnly = options.appendOnly === true;
+      const appendMilestoneIds = appendOnly ? await this.listEmptyMilestoneIds(pathId) : [];
+      if (appendOnly && appendMilestoneIds.length === 0) throw new Error('PATH_APPEND_NO_EMPTY_STAGE');
       await assertGenerationRunFence(prisma, pathId, runId);
-      await assertPathMutationSafe(prisma, pathId, 'replace-tasks');
+      await assertPathMutationSafe(
+        prisma,
+        pathId,
+        appendOnly ? 'append-tasks' : 'replace-tasks',
+        appendOnly ? { milestoneIds: appendMilestoneIds } : {}
+      );
       stopHeartbeat = this.startGenerationHeartbeat(pathId, runId);
 
       await this.recordPathGenerationStageLog({
@@ -2083,6 +2163,11 @@ class LearningService {
 
       if (!learningPath) {
         throw new Error('PATH_ENRICHMENT_TARGET_NOT_FOUND');
+      }
+      if (appendOnly) {
+        // 追加模式只处理"空白阶段"：其余阶段一概不碰（不删除、不覆盖任何既有任务）。
+        learningPath.milestones = learningPath.milestones.filter((milestone) => appendMilestoneIds.includes(milestone.id));
+        if (learningPath.milestones.length === 0) throw new Error('PATH_APPEND_NO_EMPTY_STAGE');
       }
       if (learningPath.milestones.length === 0) {
         throw new Error('PATH_STAGE_DESIGN_HAS_NO_STAGES');
@@ -2289,9 +2374,16 @@ class LearningService {
           data: { updatedAt: new Date() }
         });
         if (lockedPath.count !== 1) throw new Error('GENERATION_RUN_FENCED');
-        await assertPathMutationSafe(tx, pathId, 'replace-tasks');
+        await assertPathMutationSafe(
+          tx,
+          pathId,
+          appendOnly ? 'append-tasks' : 'replace-tasks',
+          appendOnly ? { milestoneIds: appendMilestoneIds } : {}
+        );
         for (const milestone of learningPath.milestones) {
-          await tx.subtasks.deleteMany({ where: { milestoneId: milestone.id } });
+          if (!appendOnly) {
+            await tx.subtasks.deleteMany({ where: { milestoneId: milestone.id } });
+          }
           const stageOutput = stageDesignOutputs.find((item) => item.milestoneId === milestone.id);
           const stageTasks = stageOutput?.subtasks || [];
           // 阶段估时回写：以本阶段任务分钟汇总为准（ceil 到整小时），供各处展示与路径汇总使用
@@ -3175,20 +3267,43 @@ class LearningService {
     const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
     const activeRun = await this.getActiveGenerationRun(path.id, path.activeGenerationRunId);
     const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
-    if (!retry.allowed || retry.retryType !== 'stageDesign') {
-      throw new Error(activeRun?.status === 'succeeded' || generationStatus?.stageDesign === 'succeeded'
-        ? '阶段任务已经准备完成，无需重试'
-        : '阶段任务仍在生成中，请稍后查看');
+    if (retry.allowed && retry.retryType === 'stageDesign') {
+      const queued = await this.queuePathEnrichmentRetry(path, generationStatus);
+      return {
+        accepted: true,
+        retryType: 'stageDesign' as const,
+        mode: 'replace' as const,
+        retryCount: queued.retryCount,
+        runId: queued.runId
+      };
     }
 
-    const queued = await this.queuePathEnrichmentRetry(path, generationStatus);
+    // 标准 replace-tasks 不可用（典型：路径已有课堂证据被保护，删除/覆盖被拒）时，
+    // 若仍存在"空白阶段"，用**追加式**补齐（只创建、不删除 → 合规且不丢证据）。
+    // 注意：生成仍在进行中（且未超时）时不得追加，否则与在途生成重复。
+    const generationInFlight = (activeRun != null
+        && (activeRun.status === 'queued' || activeRun.status === 'processing')
+        && !isGenerationRunStale(activeRun))
+      || (generationStatus?.stageDesign === 'processing'
+        && !isStageDesignStale(generationStatus, path.updatedAt));
+    if (!generationInFlight) {
+      const emptyMilestoneIds = await this.listEmptyMilestoneIds(path.id);
+      if (emptyMilestoneIds.length > 0) {
+        const queued = await this.queuePathEnrichmentAppend(path, generationStatus, emptyMilestoneIds);
+        return {
+          accepted: true,
+          retryType: 'stageDesign' as const,
+          mode: 'append' as const,
+          retryCount: queued.retryCount,
+          runId: queued.runId,
+          emptyMilestoneCount: emptyMilestoneIds.length
+        };
+      }
+    }
 
-    return {
-      accepted: true,
-      retryType: 'stageDesign',
-      retryCount: queued.retryCount,
-      runId: queued.runId
-    };
+    throw new Error(activeRun?.status === 'succeeded' || generationStatus?.stageDesign === 'succeeded'
+      ? '阶段任务已经准备完成，无需重试'
+      : '阶段任务仍在生成中，请稍后查看');
   }
 
   async getPathGenerationRetry(pathId: string, userId: string) {

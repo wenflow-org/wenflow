@@ -2264,7 +2264,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         // 孤儿里程碑（实测：3 条路径共 11 个零子任务里程碑）。应按生成状态处置——
         //   仍在生成 → 如实上报"未就绪"，让调用方稍后重试；
         //   确实失败/超时 → 触发官方阶段设计重试（同一个 Path 重跑 stage-designer，不删库）。
-        let retryAccepted: { accepted?: boolean; retryCount?: number } | null = null;
+        let retryAccepted: { accepted?: boolean; retryCount?: number; mode?: string } | null = null;
         let notReadyReason: string | undefined;
         try {
           retryAccepted = await learningService.retryPathEnrichment(session.learningPathId, session.userId);
@@ -2293,8 +2293,9 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
           notReadyReason: notReadyReason || null
         });
 
+        const retryLabel = retryAccepted?.mode === 'append' ? '追加空白阶段任务' : '阶段设计重试';
         throw new Error(retryAccepted?.accepted
-          ? `第一个里程碑没有可用任务（阶段任务生成中：已触发阶段设计重试 #${retryAccepted.retryCount ?? '?'}，请稍后重试）`
+          ? `第一个里程碑没有可用任务（阶段任务生成中：已触发${retryLabel} #${retryAccepted.retryCount ?? '?'}，请稍后重试）`
           : `第一个里程碑没有可用任务（阶段设计未就绪：${notReadyReason || '未知原因'}）`);
       }
       

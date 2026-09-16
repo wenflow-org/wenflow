@@ -109,4 +109,16 @@ describe('startLearningPhase：里程碑无可用子任务时不删路径', () =
     expect(mockRetryPathEnrichment).toHaveBeenCalledWith('path-1', 'user-1')
     expect(mockPathDelete).not.toHaveBeenCalled()
   })
+
+  it('追加式补齐（已有课堂证据的空白阶段）→ 文案标明追加，仍不删路径', async () => {
+    mockRetryPathEnrichment.mockResolvedValue({
+      accepted: true, retryType: 'stageDesign', mode: 'append', retryCount: 1, runId: 'run-3', emptyMilestoneCount: 2
+    })
+
+    const result = await coordinator.startLearningPhase('sim-1')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/已触发追加空白阶段任务 #1/)
+    expect(mockPathDelete).not.toHaveBeenCalled()
+  })
 })
