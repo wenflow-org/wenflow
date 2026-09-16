@@ -16,6 +16,7 @@
  */
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
+import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 
 /** 每日温故负担上限（负担单位）：≈ 3 节课 × 会话基准预算 2.0 */
 export const DEFAULT_DAILY_LOAD_LIMIT = 6.0;
@@ -70,8 +71,8 @@ export function resolveDailyLoadLimit(): number {
   return Math.min(raw, 100);
 }
 
-/** UTC 日期口径（与 goal_scheduling_ledger 一致） */
-export function quotaDateKey(now: Date = new Date()): string {
+/** UTC 日期口径（与 goal_scheduling_ledger 一致）；走模拟时钟，与写侧同一口径 */
+export function quotaDateKey(now: Date = simulatedNowOr()): string {
   return now.toISOString().slice(0, 10);
 }
 
@@ -89,7 +90,7 @@ export async function getDailyState(
   options: { now?: Date; deps?: ReviewQuotaDeps; limitLoad?: number } = {},
 ): Promise<ReviewDailyState> {
   const deps = options.deps ?? defaultDeps;
-  const now = options.now ?? new Date();
+  const now = options.now ?? simulatedNowOr();
   const date = quotaDateKey(now);
   const limitLoad = options.limitLoad ?? resolveDailyLoadLimit();
   try {
@@ -120,7 +121,7 @@ export async function reserveDailyQuota(
   options: { now?: Date; deps?: ReviewQuotaDeps; limitLoad?: number } = {},
 ): Promise<ReviewDailyState | null> {
   const deps = options.deps ?? defaultDeps;
-  const now = options.now ?? new Date();
+  const now = options.now ?? simulatedNowOr();
   const date = quotaDateKey(now);
   const limitLoad = options.limitLoad ?? resolveDailyLoadLimit();
   if (!input.keys.length || !(input.load > 0)) return getDailyState(userId, { now, deps, limitLoad });

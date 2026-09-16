@@ -292,7 +292,7 @@ class MemoryTraceService {
     intervalDays: number;
     reason: 'below-threshold' | 'interval-elapsed' | 'never-seen' | 'not-due';
   }>> {
-    const now = options.now ?? new Date();
+    const now = options.now ?? simulatedNowOr();
     const retentionTargetDays = Number.isFinite(options.retentionTargetDays)
       ? (options.retentionTargetDays as number)
       : DEFAULT_RETENTION_TARGET_DAYS;
@@ -354,7 +354,7 @@ class MemoryTraceService {
   /** 保留率快照（读取时计算，不落库） */
   async getRetentionSnapshot(
     userId: string,
-    now: Date = new Date(),
+    now: Date = simulatedNowOr(),
   ): Promise<Array<{
     conceptKey: string;
     label: string | null;

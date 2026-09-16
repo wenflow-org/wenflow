@@ -13,6 +13,7 @@ import {
   type ReviewPlanDeps,
   type WarmupOutcome,
 } from '../review-plan.service';
+import { runWithSimulatedClock } from '../../virtual-lab/simulation-clock-context';
 
 const trace = (over: Partial<{ conceptKey: string; label: string | null; masteryScore: number; retention: number; reason: string; extractionCount: number }> = {}) => ({
   conceptKey: 'CAP 定理',
@@ -176,6 +177,15 @@ describe('loadRecentOutcomes（结果读回）', () => {
 });
 
 describe('buildReviewPlan（课内温故计划）', () => {
+  it('读侧走模拟时钟：日期模拟下"到期"判定不会与写侧口径打架（回归）', async () => {
+    const asOf = new Date('2026-11-05T08:00:00Z');
+    const getDueTraces = jest.fn().mockResolvedValue([]);
+    await runWithSimulatedClock(asOf, () =>
+      buildReviewPlan('u-sim', { deps: buildDeps({ getDueTraces }) }),
+    );
+    // 传给到期查询的 now 必须是模拟时刻（否则模拟到未来时永远算不出到期）
+    expect((getDueTraces.mock.calls[0][1] as { now: Date }).now.toISOString()).toBe(asOf.toISOString());
+  });
   it('按负担预算裁剪：两个原子点用满 2.0 预算，第三个不再接', async () => {
     const deps = buildDeps({
       getDueTraces: jest.fn().mockResolvedValue([

@@ -21,6 +21,7 @@ import { memoryTraceService, normalizeConceptKey } from './memory-trace.service'
 import { conceptLoadService, mapProfileToLoad, type ConceptLoadProfile } from './concept-load.service';
 import { getDailyState as defaultGetDailyState, type ReviewDailyState } from './review-quota.service';
 import { mapReviewStatusToRating, type ReviewRating } from '../learner/ReviewCompletedConsumer';
+import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 
 /** 基准负担预算（负担单位）：约等于「两个原子点」或「一个复合点 + 一个原子点」 */
 export const BASE_LOAD_BUDGET = 2.0;
@@ -341,7 +342,9 @@ export async function buildReviewPlan(
   } = {},
 ): Promise<ReviewPlan> {
   const deps = options.deps ?? defaultDeps;
-  const now = options.now ?? new Date();
+  // 读侧也要走模拟时钟：写侧（dueAt/lastSeenAt 由 memory-trace 写入）用的是 simulatedNowOr()，
+  // 若读侧用墙钟，日期模拟下"到期"会算错（模拟到未来 → 永远算不出到期；模拟到过去 → 全部算到期）。
+  const now = options.now ?? simulatedNowOr();
   const maxItems = Math.max(1, options.maxItems ?? MAX_WARMUP_ITEMS);
   const candidateLimit = Math.max(maxItems, options.candidateLimit ?? 60);
 
@@ -386,7 +389,7 @@ export async function buildReviewPlan(
   // 当日额度（跨会话共享）：今天已经接过的量会压缩本节可用预算；
   // 额度用完则本节不温故（**顺延到明天**，而不是把剩下的今天全倒出来）。
   const daily = await deps.getDailyState(userId).catch(() => ({
-    date: new Date().toISOString().slice(0, 10),
+    date: now.toISOString().slice(0, 10),
     limitLoad: budget,
     usedLoad: 0,
     usedCount: 0,

@@ -7,6 +7,7 @@ import {
   reviewDailyQuotaKey,
   type ReviewQuotaDeps,
 } from '../review-quota.service';
+import { getSimulatedAsOf, runWithSimulatedClock } from '../../virtual-lab/simulation-clock-context';
 
 function build(over: Partial<ReviewQuotaDeps> = {}) {
   const writes = { write: jest.fn().mockResolvedValue({}) };
@@ -25,6 +26,16 @@ describe('额度口径', () => {
     expect(quotaDateKey(new Date('2026-09-16T00:00:00Z'))).toBe('2026-09-16');
     expect(quotaDateKey(new Date('2026-09-16T23:59:59Z'))).toBe('2026-09-16');
     expect(reviewDailyQuotaKey('u1', '2026-09-16')).toBe('review-daily-quota-v1:u1:2026-09-16');
+  });
+
+  it('模拟时钟上下文内：日期键走模拟日（读侧与写侧同口径，回归"日期模拟下到期算错"）', () => {
+    const asOf = new Date('2026-10-01T10:00:00Z');
+    runWithSimulatedClock(asOf, () => {
+      expect(quotaDateKey()).toBe('2026-10-01');
+    });
+    // 上下文外仍等价墙钟（现网行为零变化）
+    expect(getSimulatedAsOf()).toBeNull();
+    expect(quotaDateKey(new Date('2026-09-16T23:59:59Z'))).toBe('2026-09-16');
   });
 
   it('上限默认 6.0（≈3 节课 × 会话基准预算 2.0），env 可覆盖、非法值回落', () => {

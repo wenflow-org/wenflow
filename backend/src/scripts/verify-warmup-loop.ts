@@ -93,6 +93,15 @@ async function main(): Promise<void> {
   const persisted = artifacts1.memoryWarmup;
   const obs1 = !!persisted && Array.isArray(persisted.items) && persisted.items.length > 0;
   console.log(`[verify] 观测1 计划落库=${obs1 ? 'PASS' : 'FAIL'}（items=${persisted?.items?.length ?? 0}）${obs1 ? '' : ' ← 断点1 未修复'}`);
+  if (before.items.length > 0 && !obs1) {
+    // 虚拟学习者是**共享资源**：并行 worker 的会话会改写同一批 memory_traces（dueAt/mastery/load），
+    // 于是"脚本预演有样本、开课却 0 条"多半是竞态而不是产品缺陷。
+    // 判别线索：同一概念两次复算的 `load` 是否变了（变了 = trace 被改写过）。
+    console.log(
+      `[verify] ⚠️ 预演有 ${before.items.length} 条、开课 0 条 —— 优先怀疑并发写入竞态（或当日额度被吃满）。` +
+        ` 当前 daily=${JSON.stringify(before.daily)}；建议换一个不被占用的虚拟学习者重跑。`
+    );
+  }
 
   // ── 观测点 6：难度调整锚点是否落库（P0-2：生产路径此前只有模拟脚本在留痕）
   const anchor = await prisma.learner_evidence.findFirst({
