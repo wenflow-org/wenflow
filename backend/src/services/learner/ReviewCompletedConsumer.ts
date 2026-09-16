@@ -83,6 +83,17 @@ export class ReviewCompletedConsumer {
         const conceptKey = String(item.conceptKey || '').trim();
         if (!conceptKey) continue;
 
+        // 现有记忆状态：既是 FSRS 前值，也是 elapsedDays 的来源（必须在写证据前读到）
+        const existing = await tx.memory_traces.findUnique({
+          where: { userId_conceptKey: { userId: event.userId, conceptKey } }
+        });
+        // 距**上一次接触**的间隔（天）：这是"保持率 × 间隔"曲线的横轴。
+        // 此前证据里只有结果、没有间隔 → 无法回答"隔多久还记不记得"，也就无法本地校准调度参数。
+        // 无前次记录（首次）为 null，不参与曲线。
+        const elapsedDays = existing
+          ? Math.round(((event.occurredAt.getTime() - existing.lastSeenAt.getTime()) / DAY_MS) * 100) / 100
+          : null;
+
         // 1) 复习观测 → learner_evidence（可追溯、可重放，供画像/BKT）
         await tx.learner_evidence.create({
           data: {
@@ -97,7 +108,8 @@ export class ReviewCompletedConsumer {
               rating: item.rating,
               status: item.status,
               progress: item.progress,
-              masteryScore: item.masteryScore
+              masteryScore: item.masteryScore,
+              elapsedDays
             }),
             confidence: item.rating === 'again' ? 0.6 : 0.9,
             occurredAt: event.occurredAt
@@ -107,9 +119,6 @@ export class ReviewCompletedConsumer {
         // 2) 调度数据源 → memory_traces（FSRS-6 DSR 调度：按成绩更新稳定性/难度/到期时间）
         const now = new Date();
         const grade = RATING_TO_GRADE[item.rating];
-        const existing = await tx.memory_traces.findUnique({
-          where: { userId_conceptKey: { userId: event.userId, conceptKey } }
-        });
         const prev: FsrsMemoryState | null = existing
           ? (existing.fsrsStability !== null && existing.fsrsStability !== undefined
             ? {
