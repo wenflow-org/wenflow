@@ -114,7 +114,7 @@ export function deriveLearningControlState(input: {
   };
 }
 
-function deriveReplanSignal(input: {
+export function deriveReplanSignal(input: {
   dynamicState: LearnerDynamicState;
   learningControlState: LearnerLearningControlState;
   knowledgeMemory: LearnerKnowledgeMemory;

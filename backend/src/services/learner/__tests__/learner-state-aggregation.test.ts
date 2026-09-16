@@ -116,8 +116,29 @@ describe('getAggregatedState（按路径 max 聚合 + 当日课量）', () => {
   });
 });
 
-describe('derivePacing（全局节奏只看总负担，不再由单课 LSS 决定）', () => {
-  it('LSS 已不在入参里：高 ktl + 低疲劳 → fast，疲劳高 → slow', () => {
+describe('getCurrentState 支持 asOf（历史重放：行过滤与自然衰减都按 asOf，而不是"现在"）', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('asOf = 该行时间 → 不衰减；缺省 asOf → 按"现在"衰减', async () => {
+    const at = new Date('2026-07-01T09:00:00Z');
+    const listSpy = jest.spyOn(learningStateService as any, 'listCommittedSnapshots').mockResolvedValue([
+      { metrics: { lss: 5, ktl: 4, lf: 3, lsb: 1, timestamp: at }, calculatedAt: at, pathId: 'lp-A' },
+    ]);
+
+    const atThatTime = await learningStateService.getCurrentState('u1', { pathId: 'lp-A', asOf: at });
+    expect(atThatTime!.lss).toBeCloseTo(5, 6);
+    expect(listSpy).toHaveBeenCalledWith('u1', undefined, undefined, at, 'lp-A');
+
+    const atNow = await learningStateService.getCurrentState('u1', { pathId: 'lp-A' });
+    // 行是过去的：按"现在"折算会明显衰减（LSS 日因子 0.82）
+    expect(atNow!.lss).toBeLessThan(5);
+    expect(listSpy).toHaveBeenLastCalledWith('u1', undefined, undefined, undefined, 'lp-A');
+  });
+});
+
+describe('derivePacing（全局节奏只看总负担，不再由单课 LSS 决定）', () => {  it('LSS 已不在入参里：高 ktl + 低疲劳 → fast，疲劳高 → slow', () => {
     expect(derivePacing(2, 5)).toBe('fast');
     expect(derivePacing(6, 5)).toBe('slow');
     expect(derivePacing(3, 4)).toBe('moderate');

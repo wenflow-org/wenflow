@@ -681,13 +681,21 @@ export class LearningStateService {
   /**
    * 获取用户历史指标
    */
-  async getPreviousMetrics(userId: string, options: { pathId?: string | null } = {}): Promise<LearningStateMetrics | null> {
-    const snapshots = await this.listCommittedSnapshots(userId, undefined, undefined, undefined, options.pathId);
+  /**
+   * 前一条已提交状态。
+   * `asOf` 传值 = 以该时刻为基准（同时按该时刻过滤历史行、并按该时刻折算自然衰减）；
+   * 不传 = 以当前时刻为准（旧行为）。
+   */
+  async getPreviousMetrics(
+    userId: string,
+    options: { pathId?: string | null; asOf?: Date } = {}
+  ): Promise<LearningStateMetrics | null> {
+    const snapshots = await this.listCommittedSnapshots(userId, undefined, undefined, options.asOf, options.pathId);
     const latestSnapshot = snapshots[snapshots.length - 1] || null;
 
     if (!latestSnapshot) return null;
 
-    return this.restoreMetrics(latestSnapshot.metrics);
+    return this.restoreMetrics(latestSnapshot.metrics, options.asOf ?? new Date());
   }
 
   async getCommittedMetricBySourceKey(
@@ -1049,8 +1057,12 @@ export class LearningStateService {
   /**
    * 当前学习状态。
    * @param options.pathId 传值 = 只读该路径的状态；不传 = 全局（跨路径合并，维持旧行为）
+   * @param options.asOf   传值 = 以该时刻为准（历史重放/回溯校验用）；不传 = 当前时刻
    */
-  async getCurrentState(userId: string, options: { pathId?: string | null } = {}): Promise<LearningStateMetrics | null> {
+  async getCurrentState(
+    userId: string,
+    options: { pathId?: string | null; asOf?: Date } = {}
+  ): Promise<LearningStateMetrics | null> {
     return this.getPreviousMetrics(userId, options);
   }
 
