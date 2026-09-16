@@ -227,6 +227,30 @@ describe('LearningService.completeTask milestone progression', () => {
     expect(outbox).toHaveLength(0)
   })
 
+  it('日期模拟：传 asOf 时结算时间戳落模拟日（不落真墙钟）', async () => {
+    const asOf = new Date('2026-02-03T23:59:59.999Z')
+
+    await learningService.completeTask({ taskId: 'task-2', userId, asOf })
+
+    // subtask 完成时间（驱动完成类 evidence / 学习指标 / 时间线聚合）
+    expect((tasks[1] as any).completedAt).toEqual(asOf)
+    // 里程碑关闭时间
+    expect(milestones[0].completedAt).toEqual(asOf)
+    // task:completed 事件时间（reconcileTaskCompletionMetric 用 event.occurredAt 落指标）
+    expect(outbox.find(item => item.eventType === 'task:completed')?.occurredAt).toEqual(asOf)
+  })
+
+  it('日期模拟：缺省 asOf 时保持现网行为（真墙钟）', async () => {
+    const before = Date.now()
+
+    await learningService.completeTask({ taskId: 'task-2', userId })
+
+    const after = Date.now()
+    const at = new Date((tasks[1] as any).completedAt).getTime()
+    expect(at).toBeGreaterThanOrEqual(before - 1000)
+    expect(at).toBeLessThanOrEqual(after + 1000)
+  })
+
   it('回滚冲突生成时不会把已取消的旧 worker 恢复为可运行状态', async () => {
     const restoreTx = {
       learning_paths: {

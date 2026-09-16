@@ -366,7 +366,7 @@ export class TeachingSessionRepository {
         operationId: null,
         operationKind: null,
         operationLeaseExpiresAt: null,
-        endTime: new Date(),
+        endTime: simulatedNowOr(),
         revision: { increment: 1 },
         updatedAt: new Date()
       }
@@ -1143,7 +1143,7 @@ export class TeachingSessionRepository {
         },
         data: {
           status: 'completed',
-          endTime: new Date(),
+          endTime: simulatedNowOr(),
           duration: payload.duration ?? null,
           messages: JSON.stringify(payload.messages),
           knowledgeState: JSON.stringify(payload.knowledgeState),
@@ -1283,7 +1283,7 @@ export class TeachingSessionRepository {
       },
       data: {
         status: 'timeout',
-        endTime: new Date(),
+        endTime: simulatedNowOr(),
         operationId: null,
         operationKind: null,
         operationLeaseExpiresAt: null,
@@ -1311,7 +1311,7 @@ export class TeachingSessionRepository {
       },
       data: {
         status: 'timeout',
-        endTime: new Date(),
+        endTime: simulatedNowOr(),
         operationId: null,
         operationKind: null,
         operationLeaseExpiresAt: null,

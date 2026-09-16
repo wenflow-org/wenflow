@@ -602,7 +602,7 @@ function buildClassroomEvent(
   return {
     type,
     summary,
-    occurredAt: new Date().toISOString(),
+    occurredAt: simulatedNowOr().toISOString(),
     payload,
   };
 }
@@ -3078,7 +3078,7 @@ export class AITeachingOrchestrator {
     try {
       await teachingSessionRepository.commitLifecycleState(sessionId, operationClaim.operationId, {
         status: 'discarded',
-        endTime: new Date(),
+        endTime: simulatedNowOr(),
         duration: computeEffectiveDurationMinutes(operationClaim.session),
         clearOpenKey: true,
         teachingState: buildTeachingStateWithArtifacts(operationClaim.session.teachingState, {

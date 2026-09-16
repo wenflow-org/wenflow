@@ -4083,7 +4083,9 @@ class LearningService {
         );
       }
 
-      const completedAt = new Date();
+      // 日期模拟：任务结算的业务时间戳（subtasks.completedAt / 完成类 evidence / 里程碑）
+      // 必须在模拟时钟下落到模拟日；无模拟上下文时 asOf 缺省 → new Date()，现网行为不变。
+      const completedAt = data.asOf ?? new Date();
       const completionResult = await prisma.$transaction(async (tx) => {
         const lockedPath = await tx.learning_paths.updateMany({
           where: { id: pathId, userId: data.userId },

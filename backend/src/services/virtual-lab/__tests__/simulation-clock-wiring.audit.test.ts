@@ -57,4 +57,23 @@ describe('模拟时钟接线审计（防退化）', () => {
     const text = read('coordinators/simulation.coordinator.ts');
     expect(text).toMatch(/review-failed-non-blocking/);
   });
+
+  it('任务结算的业务时间戳走模拟时钟（不再落真墙钟）', () => {
+    // learning.service：任务完成时间戳——驱动 subtasks.completedAt / 完成类 evidence /
+    // 里程碑状态 / task:completed 事件（→ 学习指标 recordedAt/calculatedAt）
+    expect(read('services/learning/learning.service.ts'))
+      .toMatch(/const completedAt = data\.asOf \?\? new Date\(\)/);
+
+    // 课堂结束时间：不得再出现真墙钟 endTime（含 finalize / timeout / fail / discard）
+    for (const rel of [
+      'services/ai-teaching/TeachingSessionRepository.ts',
+      'services/ai-teaching/AITeachingCoordinator.ts',
+    ]) {
+      expect(read(rel)).not.toMatch(/endTime: new Date\(\)/);
+    }
+
+    // 课堂内事件时间线（classroomEventHistory）走模拟时钟
+    expect(read('services/ai-teaching/AITeachingCoordinator.ts'))
+      .toMatch(/occurredAt: simulatedNowOr\(\)\.toISOString\(\)/);
+  });
 });
