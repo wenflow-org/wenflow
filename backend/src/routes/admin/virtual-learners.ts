@@ -1522,11 +1522,29 @@ router.get('/', async (req: Request, res) => {
           taskTotal: Number(latestSession.totalTasks) || 0,
         };
       }
+      // 日期模拟进度（只读）：优先会话时钟，其次画像级；供列表「模拟进度」列
+      let simulation: { enabled: boolean; dayIndex: number; baseDate: string | null; autoAdvance: boolean } | null = null;
+      {
+        let sr: Record<string, any> = {};
+        if (latestSession) {
+          try { sr = JSON.parse(String(latestSession.stageResults || '{}')); } catch { /* 忽略 */ }
+        }
+        const clock = sr?.simulationClock || (profileData as Record<string, any>)?.simulationClock || null;
+        if (clock && typeof clock === 'object') {
+          simulation = {
+            enabled: clock.enabled === true,
+            dayIndex: Number(clock.dayIndex) || 0,
+            baseDate: typeof clock.baseDate === 'string' ? clock.baseDate : null,
+            autoAdvance: clock.autoAdvance === true,
+          };
+        }
+      }
       return {
         ...p,
         email: p.users.email,
         userName: p.users.name,
         profile: profileData,
+        simulation,
         knownConcepts: p.knownConcepts ? JSON.parse(p.knownConcepts) : [],
         struggleConcepts: p.struggleConcepts ? JSON.parse(p.struggleConcepts) : [],
         personalityTraits: p.personalityTraits ? JSON.parse(p.personalityTraits) : {},
