@@ -17,6 +17,7 @@ const usersFindMany = jest.fn()
 const tracesGroupBy = jest.fn()
 const tracesFindMany = jest.fn()
 const projectionsFindMany = jest.fn()
+const evidenceFindMany = jest.fn()
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
@@ -24,6 +25,7 @@ jest.mock('../../../config/database', () => ({
     users: { findUnique: usersFindUnique, findMany: usersFindMany },
     memory_traces: { groupBy: tracesGroupBy, findMany: tracesFindMany },
     learner_projections: { findMany: projectionsFindMany },
+    learner_evidence: { findMany: evidenceFindMany },
   },
 }))
 
@@ -41,17 +43,30 @@ const getAudit = jest.fn()
 const consolidate = jest.fn()
 const applyProposals = jest.fn()
 const rollbackMerge = jest.fn()
+const listAppliedMerges = jest.fn()
 jest.mock('../../../services/learner/ConceptConsolidatorService', () => ({
   CONSOLIDATION_AUDIT_PROJECTION_SCOPE: 'concept-consolidation',
+  MERGE_RECORD_EVIDENCE_TYPE: 'concept:merge:applied',
+  parseMergeRecord: (payload: string | null) => {
+    if (!payload) return null
+    try { return JSON.parse(payload) } catch { return null }
+  },
   conceptConsolidatorService: {
     getAudit: (...args: any[]) => getAudit(...args),
     consolidate: (...args: any[]) => consolidate(...args),
     applyProposals: (...args: any[]) => applyProposals(...args),
     rollbackMerge: (...args: any[]) => rollbackMerge(...args),
+    listAppliedMerges: (...args: any[]) => listAppliedMerges(...args),
   },
 }))
 
 import memoryReviewRouter from '../memory-review'
+
+const mergeRecord = (over: Record<string, unknown> = {}) => ({
+  mergeId: 'mrg_1', canonical: '离开前翻页立好', aliases: ['离开前翻页立好：动作先于评价'],
+  winnerId: 'r1', mergedFields: {}, winnerBefore: { id: 'r1' }, deletedRows: [{ id: 'r2', conceptKey: 'b' }],
+  appliedAt: '2026-09-15T00:00:00Z', rolledBackAt: null, ...over,
+})
 
 function getRouteHandler(router: any, path: string, method: string): RouteHandler {
   const layer = router.stack.find(
@@ -95,6 +110,10 @@ const auditPayload = {
 beforeEach(() => {
   jest.clearAllMocks()
   usersFindUnique.mockResolvedValue({ isAdmin: true })
+  // 缺省：没有按次留档凭据、没有审计（各用例按需覆盖）
+  evidenceFindMany.mockResolvedValue([])
+  projectionsFindMany.mockResolvedValue([])
+  listAppliedMerges.mockResolvedValue([])
 })
 
 describe('权限', () => {
@@ -181,6 +200,35 @@ describe('单用户明细', () => {
     expect(body.reviewPlan.backlogCount).toBe(7)
     expect(body.reviewPlan.relearnSuggestions).toHaveLength(1)
     expect(body.audit.mode).toBe('observe')
+  })
+
+  it('归并凭据按次留档展示：窗口外的旧归并也看得见、已回滚的单独列出', async () => {
+    usersFindUnique.mockImplementation(async (args: any) => (
+      args?.select?.isAdmin ? { isAdmin: true } : { id: 'u1', name: '小明', email: null, isVirtualLearner: false }
+    ))
+    buildReviewPlan.mockResolvedValue(null)
+    tracesFindMany.mockResolvedValue([])
+    // 审计窗口里只剩一条"无凭据的旧归并"（本改动之前执行的）
+    getAudit.mockResolvedValue({
+      schemaVersion: 'concept-merge-audits-v1', generatedAt: '2026-09-15T00:00:00Z', mode: 'apply',
+      projectionFingerprint: 'fp', candidateCount: 0, proposals: [], ambiguous: [], dropCandidates: [],
+      appliedMerges: [mergeRecord({ mergeId: undefined, canonical: '窗口内的旧归并' })],
+      stats: { candidates: 0, proposed: 0, autoApplicable: 0, applied: 1, deleted: 1 },
+    })
+    // 按次留档：一条仍可回滚（已滚出审计窗口）+ 一条已回滚
+    listAppliedMerges.mockResolvedValue([
+      mergeRecord({ mergeId: 'mrg_live', canonical: '已滚出窗口但仍可回滚' }),
+      mergeRecord({ mergeId: 'mrg_done', canonical: '已经回滚过的', rolledBackAt: '2026-09-16T00:00:00Z' }),
+    ])
+
+    const res = await run(getRouteHandler(memoryReviewRouter, '/:userId', 'get'), { ...adminReq, params: { userId: 'u1' } })
+    const view = res.body.data.appliedMerges
+
+    expect(listAppliedMerges).toHaveBeenCalledWith('u1', { includeRolledBack: true })
+    expect(view.rollbackable.map((m: any) => m.canonical)).toEqual(['已滚出窗口但仍可回滚'])
+    expect(view.rollbackable[0].deletedRows).toBe(1)
+    expect(view.rolledBack.map((m: any) => m.canonical)).toEqual(['已经回滚过的'])
+    expect(view.legacyWindowOnly.map((m: any) => m.canonical)).toEqual(['窗口内的旧归并'])
   })
 
   it('用户不存在 → 404', async () => {

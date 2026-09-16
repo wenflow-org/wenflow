@@ -41,6 +41,7 @@
             <th class="mr__num">可自动</th>
             <th class="mr__num">需人工看</th>
             <th class="mr__num">已执行/删除</th>
+            <th class="mr__num">可回滚</th>
             <th>最近观察</th>
             <th></th>
           </tr>
@@ -62,6 +63,7 @@
             <td class="mr__num">{{ row.audit?.autoApplicable ?? '—' }}</td>
             <td class="mr__num">{{ row.audit?.ambiguous ?? '—' }}</td>
             <td class="mr__num">{{ row.audit ? `${row.audit.applied}/${row.audit.deleted}` : '—' }}</td>
+            <td class="mr__num">{{ rollbackableCount(row) }}</td>
             <td>{{ row.audit ? `${row.audit.mode} · ${timeAgo(row.audit.generatedAt)}` : '未观察' }}</td>
             <td class="mr__actions">
               <button type="button" class="mr__btn" @click="openDetail(row.userId)">明细</button>
@@ -240,14 +242,14 @@
           </table>
           <p v-else class="mr__sub">没有待人工确认项。</p>
 
-          <h4 class="mr__h4">已执行归并（可回滚）</h4>
-          <table v-if="detail.audit.appliedMerges.length" class="mr__table">
+          <h4 class="mr__h4">已执行归并（可回滚 · 按次留档）</h4>
+          <table v-if="rollbackableMerges.length" class="mr__table">
             <thead><tr><th>规范键</th><th>别名</th><th class="mr__num">删除条数</th><th>执行时间</th><th></th></tr></thead>
             <tbody>
-              <tr v-for="merge in detail.audit.appliedMerges" :key="`${merge.canonical}-${merge.appliedAt}`">
+              <tr v-for="merge in rollbackableMerges" :key="merge.mergeId || `${merge.canonical}-${merge.appliedAt}`">
                 <td>{{ merge.canonical }}</td>
                 <td class="mr__sub">{{ merge.aliases.join(' / ') }}</td>
-                <td class="mr__num">{{ merge.deletedRows.length }}</td>
+                <td class="mr__num">{{ merge.deletedRows }}</td>
                 <td>{{ new Date(merge.appliedAt).toLocaleString() }}</td>
                 <td>
                   <button type="button" class="mr__btn" :disabled="busy" @click="rollbackOne(merge.canonical)">回滚</button>
@@ -255,7 +257,15 @@
               </tr>
             </tbody>
           </table>
-          <p v-else class="mr__sub">还没有执行过任何合并（数据未被改动）。</p>
+          <p v-else class="mr__sub">没有可回滚的归并。</p>
+          <p v-if="legacyWindowOnlyMerges.length" class="mr__sub">
+            另有 {{ legacyWindowOnlyMerges.length }} 条早期归并：凭据只在审计窗口内（仍可回滚，但没有长期留档）——
+            {{ legacyWindowOnlyMerges.map((m) => m.canonical).slice(0, 3).join('、') }}
+          </p>
+          <p v-if="rolledBackMerges.length" class="mr__sub">
+            已回滚 {{ rolledBackMerges.length }} 条（保留凭据痕迹，不再重复回滚）：
+            {{ rolledBackMerges.map((m) => m.canonical).slice(0, 3).join('、') }}
+          </p>
         </template>
       </div>
     </div>
@@ -292,7 +302,28 @@ interface OverviewRow {
   traces: number
   due: number
   audit: AuditUserSummary | null
+  /** 按次留档的归并凭据计数（权威；审计滚动窗口之外的历史归并也计入） */
+  merges?: { rollbackable: number; rolledBack: number }
 }
+
+interface AppliedMergeView {
+  mergeId: string | null
+  canonical: string
+  aliases: string[]
+  appliedAt: string
+  rolledBackAt: string | null
+  deletedRows: number
+}
+
+const rollbackableCount = (row: OverviewRow) => {
+  const merges = row.merges
+  if (!merges) return '—'
+  return merges.rolledBack > 0 ? `${merges.rollbackable}（已回滚 ${merges.rolledBack}）` : String(merges.rollbackable)
+}
+
+const rollbackableMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.rollbackable ?? [])
+const rolledBackMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.rolledBack ?? [])
+const legacyWindowOnlyMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.legacyWindowOnly ?? [])
 
 const loading = ref(false)
 const busy = ref(false)
@@ -311,6 +342,7 @@ const totals = ref({
   deleted: 0
 })
 const selectedId = ref('')
+// detail.appliedMerges = 按次留档的归并凭据视图（rollbackable / rolledBack / legacyWindowOnly）
 const detail = ref<any>(null)
 const route = useRoute()
 /** 勾选状态（key = 规范键）；默认只勾「可自动执行」的 */

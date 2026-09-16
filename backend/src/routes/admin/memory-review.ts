@@ -18,6 +18,9 @@ import { reviewPlanService } from '../../services/memory/review-plan.service';
 import {
   conceptConsolidatorService,
   CONSOLIDATION_AUDIT_PROJECTION_SCOPE,
+  MERGE_RECORD_EVIDENCE_TYPE,
+  parseMergeRecord,
+  type AppliedConceptMerge,
   type ConceptConsolidationAudit,
 } from '../../services/learner/ConceptConsolidatorService';
 import { fsrsRetrievability, fsrsStateFromLegacy, type FsrsMemoryState } from '../../services/memory/fsrs';
@@ -86,7 +89,7 @@ router.get('/', async (req, res) => {
         })).map((row) => row.id);
 
     const baseWhere = virtualIds.length > 0 ? { userId: { notIn: virtualIds } } : {};
-    const [traceCounts, dueCounts, audits] = await Promise.all([
+    const [traceCounts, dueCounts, audits, mergeRecords] = await Promise.all([
       prisma.memory_traces.groupBy({ by: ['userId'], where: baseWhere, _count: { _all: true } }),
       prisma.memory_traces.groupBy({
         by: ['userId'],
@@ -102,17 +105,34 @@ router.get('/', async (req, res) => {
         where: { scope: CONSOLIDATION_AUDIT_PROJECTION_SCOPE },
         select: { userId: true, payload: true, generatedAt: true },
       }),
+      // 按次留档的归并凭据（权威、长期有效）：概览必须基于它，否则"审计窗口滚出去的旧归并"在界面上消失
+      prisma.learner_evidence.findMany({
+        where: { evidenceType: MERGE_RECORD_EVIDENCE_TYPE },
+        select: { userId: true, payload: true },
+      }),
     ]);
 
     const dueByUser = new Map(dueCounts.map((row) => [row.userId, row._count._all]));
     const auditByUser = new Map(audits.map((row) => [row.userId, row]));
+    // 归并凭据按用户汇总：仍可回滚 / 已回滚（凭据不删，保留审计痕迹）
+    const mergesByUser = new Map<string, { rollbackable: number; rolledBack: number }>();
+    for (const row of mergeRecords) {
+      const record = parseMergeRecord(row.payload);
+      if (!record) continue;
+      const bucket = mergesByUser.get(row.userId) ?? { rollbackable: 0, rolledBack: 0 };
+      if (record.rolledBackAt) bucket.rolledBack += 1;
+      else bucket.rollbackable += 1;
+      mergesByUser.set(row.userId, bucket);
+    }
     const rows = traceCounts
       .map((row) => {
         const audit = parseAudit(auditByUser.get(row.userId)?.payload ?? null);
+        const merges = mergesByUser.get(row.userId) ?? { rollbackable: 0, rolledBack: 0 };
         return {
           userId: row.userId,
           traces: row._count._all,
           due: dueByUser.get(row.userId) ?? 0,
+          merges,
           audit: audit
             ? {
                 mode: audit.mode,
@@ -150,8 +170,12 @@ router.get('/', async (req, res) => {
       ambiguous: 0,
       applied: 0,
       deleted: 0,
+      rollbackableMerges: 0,
+      rolledBackMerges: 0,
     };
     for (const row of rows) {
+      totals.rollbackableMerges += row.merges.rollbackable;
+      totals.rolledBackMerges += row.merges.rolledBack;
       if (!row.audit) continue;
       totals.proposed += row.audit.proposed;
       totals.autoApplicable += row.audit.autoApplicable;
@@ -217,6 +241,28 @@ router.get('/:userId', async (req, res) => {
       }),
       conceptConsolidatorService.getAudit(userId).catch(() => null),
     ]);
+    // 归并凭据视图（按次留档，权威）：界面据此判断"还能不能回滚"，
+    // 而不是看审计 blob 的滚动窗口——窗口外的旧归并同样可以回滚。
+    const mergeCredentials = await conceptConsolidatorService
+      .listAppliedMerges(userId, { includeRolledBack: true })
+      .catch(() => [] as AppliedConceptMerge[]);
+    const toMergeView = (merge: AppliedConceptMerge) => ({
+      mergeId: merge.mergeId ?? null,
+      canonical: merge.canonical,
+      aliases: merge.aliases,
+      appliedAt: merge.appliedAt,
+      rolledBackAt: merge.rolledBackAt ?? null,
+      deletedRows: merge.deletedRows.length,
+    });
+    const credentialIds = new Set(mergeCredentials.map((merge) => merge.mergeId));
+    const appliedMerges = {
+      rollbackable: mergeCredentials.filter((merge) => !merge.rolledBackAt).map(toMergeView),
+      rolledBack: mergeCredentials.filter((merge) => merge.rolledBackAt).map(toMergeView),
+      /** 本改动之前执行的旧归并：凭据只在审计窗口内（仍可回滚，但没有长期留档） */
+      legacyWindowOnly: (audit?.appliedMerges ?? [])
+        .filter((merge) => !merge.mergeId || !credentialIds.has(merge.mergeId))
+        .map(toMergeView),
+    };
 
     const now = new Date();
     const dueTraces = traces
@@ -273,6 +319,7 @@ router.get('/:userId', async (req, res) => {
         duePreview: dueTraces.slice(0, 20),
         duplicatedFamilies,
         audit,
+        appliedMerges,
       },
     });
   } catch (error: any) {
