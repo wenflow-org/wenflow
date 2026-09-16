@@ -117,8 +117,8 @@ async function main(): Promise<void> {
   const firstLabel = before.items[0]?.label ?? '上次那个点';
   const studentLines = notRecalled
     ? [
-        '老师我准备好了。',
-        `关于「${firstLabel}」我猜是……看颜色？我对这个只有个很模糊的印象，说不出具体的判据。`,
+        '老师，先按老规矩带我回捞一下上次那个点吧，我试着回忆。',
+        `关于「${firstLabel}」我猜是……看颜色？我只有个模糊印象，说不出具体判据。`,
         '那我还是没抓住，先记下来吧。',
       ]
     : [

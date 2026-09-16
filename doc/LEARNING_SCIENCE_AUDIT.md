@@ -353,13 +353,44 @@ unknown       1          1     100%          1     100%
 **为什么 E2E 还没见到 `again`（关键发现）**：现行提示词契约要求
 "答不出 → 给一条最小提示 → 一句话对照 → **推进为 learning 或 mastered**"，
 模型因此**总会把点推进**——在它的表达里根本不存在"给了提示仍然答不出"这个结果。
-⇒ **C 的后半（改提示词契约，允许并要求标记"仍答不出"）才是让它真正生效的一步。**
+⇒ **C 的后半（改提示词契约）才是让它真正生效的一步**（已于 §3.13 完成并实测）。
 
 **另一个观察**：模型有时**整节课跳过温故**（同一份计划、相同输入，一次做一次不做）——
 遵守率有波动，宜在同一处提示词改动里一起收紧。
 
 **顺带**：新增 `src/scripts/wake-hanging-sessions.ts`——走后端自己的收束路径唤醒 `active/paused`
 悬挂会话（后端重启或本地验证中断常留下悬挂行，会占住 `openKey`，让后续开课撞冲突）。
+
+## 3.13 C 后半：温故契约发布（教学回合 v15）+ 失败分支端到端实测（2026-09-17）
+
+**改动**（只改 `prompts/core/teaching-turn.yaml` 的那一条，**不加新状态**——`review` 本就是合法状态）：
+
+1. 开场从"不要跳过"收紧为"**只要 items 非空，就必须在进入本节新内容之前**先用 1–2 分钟回捞，不得跳过、也不得推迟到课中"；
+2. 结果契约补上缺失的那一档："学生自己说出来（最多给过一条最小提示）→ 推进为 `learning`/`mastered`；**给了最小提示后仍然说不出来 → status 保持 `review`、progress 记实际（通常 0）**，不要为了'看起来有推进'而虚报——系统按这个状态判定'这次没答出'并据此调整后续温故量与间隔"。
+
+**发布**：`compile-core-file --skill=teaching-turn --write`（产物 diff 仅 2 行：规则 + `coreHash`）→ `prompts:sync`（`updated: skill:teaching-turn`）→ 运行时 **ACTIVE v15**（v14 归档，已核对新文本入库）。
+**门禁**：`prompts:core:check` 29/29 in-sync、`prompts:lint` 29/29、`prompts:snapshots:check` 一致。
+
+**端到端实测**（虚拟学习者阿哲，"答不出"的学生脚本）：
+
+```
+观测1 计划落库      PASS（items=1）
+观测2/3 模型问了    PASS（第 1 回合就回捞该点；三回合都没推进 → 保持未解决）
+观测4 证据          PASS  review:result:真实投入与报价数字之间的折算关系
+                          rating=again  status=not-recalled  progress=0  confidence=0.6  •  带 elapsedDays
+观测5 预算回校准     PASS  successRate=0 → budget 1（低档）——失败第一次真正压低了预算
+观测6 难度锚点       PASS  direction=keep  applied=false
+                          reasons=[fragile_concepts, struggling_concepts, prerequisite_gaps]
+```
+
+这一次运行同时证实了四件事：
+
+1. **失败入库通道生效**（`askedAt` → `not-recalled` → `again`）——此前失败永不入库；
+2. **契约改动生效**（模型终于有一个诚实的"仍答不出"表达方式）；
+3. **P1-1 政策生效**：只有知识类理由时 `direction=keep`（不再降档），且 `applied=false` 自然成为台账的对照分组（§3.10）；
+4. **失败真正进入记忆**：FSRS 记 `again` + 证据落库 + 预算下调 + 保持曲线首次拿到失分点（§3.8）。
+
+**遗留（下一轮）**：① 保持曲线的"间隔"目前只有少数样本，仍不够拟合；② 账本与"日窗口"在跨 UTC 日界附近出现过一次"脚本预演 1 条 / 开课 0 条"的漂移（该轮验证因此空跑），属配额账本与模拟时钟的口径问题，值得单独核；③ A（收窄入库）尚未做。
 
 ## 4. 科学性评估（逐机制对照文献）
 
