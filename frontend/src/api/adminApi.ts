@@ -1492,9 +1492,18 @@ export const adminVirtualLearnersApi = {
 
   updateSessionSimulationConfig: async (
     sessionId: string,
-    data: { frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test'; model?: string | null }
+    data: {
+      frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
+      model?: string | null;
+      simulationClock?: { baseDate?: string; enabled?: boolean };
+    }
   ) => {
     return adminAxios.put(`/admin/virtual-learners/sessions/${sessionId}/simulation-config`, data);
+  },
+
+  /** 重置会话日期模拟进度（dayIndex=0、清空 history；可选重设 baseDate） */
+  resetVirtualSessionClock: async (sessionId: string, data: { baseDate?: string } = {}) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/simulation-clock/reset`, data);
   },
 
   restartVirtualSessionPath: async (sessionId: string) => {

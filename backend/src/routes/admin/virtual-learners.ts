@@ -2975,7 +2975,7 @@ router.post('/sessions/:sessionId/wrapup', async (req: Request, res) => {
 router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const { frictionBudget, model } = req.body || {};
+    const { frictionBudget, model, simulationClock } = req.body || {};
 
     if (frictionBudget && !SIMULATION_FRICTION_BUDGETS.includes(frictionBudget)) {
       return res.status(400).json({ success: false, error: 'frictionBudget 不合法' });
@@ -2983,8 +2983,21 @@ router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) =
     if (model !== undefined && model !== null && typeof model !== 'string') {
       return res.status(400).json({ success: false, error: 'model 必须是字符串' });
     }
+    // 日期模拟时钟（配置项）：baseDate=起点（YYYY-MM-DD）、enabled=会话级开关覆盖。
+    // dayIndex/history 属推进进度，由 advance-day 写，不在此接受。
+    if (simulationClock !== undefined) {
+      if (!simulationClock || typeof simulationClock !== 'object') {
+        return res.status(400).json({ success: false, error: 'simulationClock 必须是对象' });
+      }
+      if (simulationClock.baseDate !== undefined && !/^\d{4}-\d{2}-\d{2}/.test(String(simulationClock.baseDate))) {
+        return res.status(400).json({ success: false, error: 'simulationClock.baseDate 必须是 YYYY-MM-DD' });
+      }
+      if (simulationClock.enabled !== undefined && typeof simulationClock.enabled !== 'boolean') {
+        return res.status(400).json({ success: false, error: 'simulationClock.enabled 必须是布尔值' });
+      }
+    }
 
-    const simulationConfig = await runAssistedSessionMutation(sessionId, async (session, assertLeaseOwned) => {
+    const result = await runAssistedSessionMutation(sessionId, async (session, assertLeaseOwned) => {
       const stageResults = parseJson<StageResults>(session.stageResults, {});
       const nextStageResults = {
         ...stageResults,
@@ -2992,7 +3005,14 @@ router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) =
           ...(stageResults.simulationConfig || {}),
           ...(frictionBudget ? { frictionBudget } : {}),
           ...(typeof model === 'string' && model.trim() ? { model: model.trim() } : {})
-        }
+        },
+        ...(simulationClock ? {
+          simulationClock: {
+            ...((stageResults as any).simulationClock || {}),
+            ...(simulationClock.baseDate ? { baseDate: String(simulationClock.baseDate).slice(0, 10) } : {}),
+            ...(typeof simulationClock.enabled === 'boolean' ? { enabled: simulationClock.enabled } : {}),
+          }
+        } : {})
       };
 
       await assertLeaseOwned();
@@ -3005,16 +3025,61 @@ router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) =
       });
 
       await assertLeaseOwned();
-      return nextStageResults.simulationConfig;
+      return nextStageResults;
     });
 
     res.json({
       success: true,
-      data: { simulationConfig }
+      data: {
+        simulationConfig: result.simulationConfig,
+        simulationClock: (result as any).simulationClock ?? null,
+      }
     });
   } catch (error) {
     logger.error('更新 simulation-config 失败:', error);
     sendVirtualSessionError(res, error, '更新 simulation-config 失败');
+  }
+});
+
+/**
+ * POST /api/admin/virtual-learners/sessions/:sessionId/simulation-clock/reset
+ * 重置日期模拟进度（dayIndex=0、清空 history；可选重设 baseDate）。只对虚拟学习者。
+ */
+router.post('/sessions/:sessionId/simulation-clock/reset', async (req: Request, res) => {
+  try {
+    const { sessionId } = req.params;
+    const nextBaseDate = req.body?.baseDate;
+    if (nextBaseDate !== undefined && !/^\d{4}-\d{2}-\d{2}/.test(String(nextBaseDate))) {
+      return res.status(400).json({ success: false, error: 'baseDate 必须是 YYYY-MM-DD' });
+    }
+
+    await runAssistedSessionMutation(sessionId, async (session, assertLeaseOwned) => {
+      const stageResults = parseJson<StageResults>(session.stageResults, {});
+      const prevClock = ((stageResults as any).simulationClock || {}) as Record<string, unknown>;
+      const nextClock: Record<string, unknown> = {
+        ...prevClock,
+        dayIndex: 0,
+        simulatedNow: null,
+        advancedTimes: 0,
+        history: [],
+      };
+      if (nextBaseDate) nextClock.baseDate = String(nextBaseDate).slice(0, 10);
+      const nextStageResults = { ...stageResults, simulationClock: nextClock };
+
+      await assertLeaseOwned();
+      await prisma.virtual_sessions.update({
+        where: { id: sessionId },
+        data: { stageResults: JSON.stringify(nextStageResults), updatedAt: new Date() },
+      });
+      await assertLeaseOwned();
+      return nextClock;
+    });
+
+    const clock = await simulatedDayService.getSimulationClock(sessionId);
+    res.json({ success: true, data: clock });
+  } catch (error) {
+    logger.error('重置模拟时钟失败:', error);
+    sendVirtualSessionError(res, error, '重置模拟时钟失败');
   }
 });
 

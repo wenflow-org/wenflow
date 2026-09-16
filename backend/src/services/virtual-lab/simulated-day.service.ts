@@ -37,6 +37,8 @@ export interface SimulationClockView {
   timezone: string;
   baseDate: string;        // 'YYYY-MM-DD'
   dayIndex: number;        // 1-based 语义：已推进的天数（0=尚未推进）
+  /** 自 baseDate 起已过的自然日天数（派生，用于"进度"展示；夹紧到 [0, maxSimulatedDays]） */
+  elapsedDays: number;
   simulatedNow: string;    // ISO
   /** 护栏：单会话最多模拟天数（来自设置） */
   maxSimulatedDays: number;
@@ -147,6 +149,8 @@ export interface SimulationClockInput {
   sessionCreatedAt: Date;
   sessionStatus?: string | null;
   currentStage?: string | null;
+  /** 计算 elapsedDays 的"现在"（缺省真墙钟；测试可注入） */
+  now?: Date;
 }
 
 /** 解析会话的模拟时钟（session > profile > global 优先级；默认关）。 */
@@ -160,6 +164,11 @@ export function resolveSimulationClock(input: SimulationClockInput): SimulationC
   const window = resolveDayWindow(baseDate, dayIndex);
   const timezone = input.stageResultsClock?.timezone || input.settings.timezone;
   const simulatedNow = input.stageResultsClock?.simulatedNow || window.asOf.toISOString();
+  const now = input.now ?? new Date();
+  const elapsedDays = Math.min(
+    input.settings.maxSimulatedDays,
+    Math.max(0, Math.floor((now.getTime() - parseDateOnly(baseDate).getTime()) / DAY_MS)),
+  );
 
   return {
     enabled,
@@ -167,6 +176,7 @@ export function resolveSimulationClock(input: SimulationClockInput): SimulationC
     timezone,
     baseDate,
     dayIndex,
+    elapsedDays,
     simulatedNow,
     maxSimulatedDays: input.settings.maxSimulatedDays,
   };
