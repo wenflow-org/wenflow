@@ -43,6 +43,7 @@ module.exports = {
     "src/views/admin-redesign/FieldFlowGraph.vue",
     "src/views/admin-redesign/FieldRoutingTable.vue",
     "src/views/admin-redesign/HealthCenter.vue",
+    "src/views/admin-redesign/MemoryReview.vue",
     "src/views/admin-redesign/OpsCenter.vue",
     "src/views/admin-redesign/Orchestrator.vue",
     "src/views/admin-redesign/PromptEval.vue",

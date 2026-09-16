@@ -20,18 +20,22 @@ function writeTempYaml(content: string): string {
 }
 
 describe('skills-file loader（P0 户口簿）', () => {
-  it('加载真实 prompts/skills.yaml：28 条活跃登记，kind/stage 分布符合规格', () => {
+  it('加载真实 prompts/skills.yaml：活跃登记完整、kind/stage 分布符合规格', () => {
     const book = parseSkillsFile(SKILLS_FILE_PATH);
     expect(book.version).toBe(1);
-    expect(book.skills.length).toBe(28);
 
+    // 计数不硬编码（新增/退役 skill 不应触发测试改动）：只断言结构不变量——
+    // 每条登记都落在合法 kind 中、三类之和 == 活跃集、skillId 全表唯一。
     const byKind = (kind: string) => book.skills.filter((entry) => entry.kind === kind);
-    expect(byKind('mainline').length).toBe(20);
-    expect(byKind('handler-only').length).toBe(2);
-    expect(byKind('aux').length).toBe(6);
+    const KINDS = ['mainline', 'handler-only', 'aux'] as const;
+    expect(book.skills.every((entry) => (KINDS as readonly string[]).includes(entry.kind))).toBe(true);
+    expect(KINDS.reduce((sum, kind) => sum + byKind(kind).length, 0)).toBe(book.skills.length);
+    expect(new Set(book.skills.map((entry) => entry.skillId)).size).toBe(book.skills.length);
 
     const mainlineStages = byKind('mainline').map((entry) => entry.stage);
     expect(mainlineStages.every((stage) => ['goal', 'path', 'teaching', 'profile', 'simulation'].includes(stage!))).toBe(true);
+    // 规格：主链五个阶段各有 mainline 归属（按阶段集合对账，不数条数）
+    expect([...new Set(mainlineStages)].sort()).toEqual(['goal', 'path', 'profile', 'simulation', 'teaching']);
 
     const handlerOnly = byKind('handler-only');
     expect(handlerOnly.every((entry) => entry.noPromptFile === true)).toBe(true);
@@ -50,9 +54,11 @@ describe('skills-file loader（P0 户口簿）', () => {
     }
   });
 
-  it('派生视图：活跃集 28 条、parentAgent 归属映射（保序）', () => {
+  it('派生视图：活跃集与登记一致、parentAgent 归属映射（保序）', () => {
     const book = loadSkillsBookRaw();
-    expect(getActiveSkillIds(book).size).toBe(28);
+    // 活跃集 == 登记条数（不硬编码数字）；成员映射按 parentAgent 派生、保序
+    expect(getActiveSkillIds(book).size).toBe(book.skills.length);
+    expect(getActiveSkillIds(book).size).toBe(new Set(book.skills.map((entry) => entry.skillId)).size);
     const members = getParentAgentMembers(book);
     expect(members.get('goal-agent')).toEqual(['skill:goal-conversation']);
     expect(members.get('path-agent')).toEqual(['skill:path-planning', 'skill:stage-designer', 'skill:path-reviewer', 'skill:kc-mapper']);

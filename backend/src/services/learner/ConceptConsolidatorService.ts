@@ -125,7 +125,7 @@ export function consolidationAuditKey(userId: string): string {
 function normalizeForCompare(text: string): string {
   return String(text || '')
     .replace(/\s+/g, '')
-    .replace(/[「」『』“”‘’"'（）()【】\[\]]/g, '')
+    .replace(/[「」『』“”‘’"'（）()【】[\]]/g, '')
     .replace(/[。．.，,、；;：:！!？?~～\-—…=＝→]/g, '')
     .toLowerCase();
 }
