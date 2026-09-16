@@ -59,16 +59,6 @@ describe('simulated-day 纯函数', () => {
     expect(clock.simulatedNow).toBe('2026-09-05T23:59:59.999Z');
   });
 
-  it('resolveSimulationClock：elapsedDays 由 baseDate→now 派生并夹紧到上限', () => {
-    const clock = resolveSimulationClock({
-      settings: { ...SETTINGS, enabled: true, maxSimulatedDays: 10 },
-      sessionCreatedAt: new Date('2026-09-01T00:00:00Z'),
-      now: new Date('2026-09-16T12:00:00Z'),
-    });
-    // 09-01 → 09-16 = 15 天，夹紧到 maxSimulatedDays=10
-    expect(clock.elapsedDays).toBe(10);
-  });
-
   it('temporalContextFromClock：未开启返回 null；开启时给出 simulatedDay = baseDate + dayIndex', () => {
     expect(temporalContextFromClock({ ...resolveSimulationClock({ settings: SETTINGS, sessionCreatedAt: new Date() }) })).toBeNull();
     const clock = resolveSimulationClock({
@@ -76,13 +66,11 @@ describe('simulated-day 纯函数', () => {
       profileClock: { enabled: true },
       settings: SETTINGS,
       sessionCreatedAt: new Date('2026-09-01T00:00:00Z'),
-      now: new Date('2026-09-05T12:00:00Z'),
     });
     const ctx = temporalContextFromClock(clock);
     expect(ctx).toEqual(expect.objectContaining({
       simulatedDay: '2026-09-05',
       dayIndex: 4,
-      elapsedDays: 4,
       timezone: 'Asia/Shanghai',
     }));
   });

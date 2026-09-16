@@ -24,7 +24,7 @@
           v-if="simClock"
           class="mk-status__meta cp-simday"
           :title="simClock.enabled
-            ? `日期模拟：起点 ${simClock.baseDate}；已推进 ${simClock.dayIndex} 天（已过 ${simClock.elapsedDays}/${simClock.maxSimulatedDays}）；课表 ${simClock.courseWeekdays.join('/')} · 每天 ${simClock.lessonsPerDay} 节${simClock.autoAdvance ? ' · 自动推进已开' : ''}`
+            ? `日期模拟：起点 ${simClock.baseDate}；已推进 ${simClock.dayIndex}/${simClock.maxSimulatedDays} 天；课表 ${simClock.courseWeekdays.join('/')} · 每天 ${simClock.lessonsPerDay} 节${simClock.autoAdvance ? ' · 自动推进已开' : ''}`
             : '日期模拟未开启（可在「日期模拟」设置开启）'"
         >
           模拟 {{ simClock.enabled ? `第 ${simClock.dayIndex} 天` : '未开启' }}
@@ -1969,7 +1969,6 @@ const simClock = ref<{
   enabled: boolean
   baseDate: string
   dayIndex: number
-  elapsedDays: number
   maxSimulatedDays: number
   autoAdvance: boolean
   courseWeekdays: number[]

@@ -37,7 +37,6 @@ async function advanceOne(sessionId: string, now: Date): Promise<boolean> {
       profileClock: profileData?.simulationClock ?? null,
       settings: settings.dateSimulation,
       sessionCreatedAt: session.createdAt,
-      now,
     });
     const plan = planClockAdvance(clock, rawClock, 1, now);
     if (!plan) return false;
