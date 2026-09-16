@@ -83,7 +83,8 @@
             同族重复 {{ detail.summary.duplicatedFamilies }} 组 / {{ detail.summary.duplicatedTraces }} 条 ·
             从未提取 {{ detail.summary.neverExtracted }} · 有 FSRS 状态 {{ detail.summary.withFsrsState }}
           </span>
-          <button type="button" class="mr__btn" @click="detail = null">收起</button>
+          <button type="button" class="mr__btn" @click="copyDeepLink">复制深链</button>
+          <button type="button" class="mr__btn" @click="closeDetail">收起</button>
         </div>
 
         <h4 class="mr__h4">课内温故计划（本节该接几个）</h4>
@@ -274,7 +275,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { adminMemoryReviewApi } from '@/api/adminApi'
 import MkKpi from './MkKpi.vue'
 import MkEmptyState from './MkEmptyState.vue'
@@ -345,6 +346,7 @@ const selectedId = ref('')
 // detail.appliedMerges = 按次留档的归并凭据视图（rollbackable / rolledBack / legacyWindowOnly）
 const detail = ref<any>(null)
 const route = useRoute()
+const router = useRouter()
 /** 勾选状态（key = 规范键）；默认只勾「可自动执行」的 */
 const selected = ref<Record<string, boolean>>({})
 
@@ -451,10 +453,46 @@ async function openDetail(userId: string) {
     const res: any = await adminMemoryReviewApi.detail(userId)
     detail.value = res.data?.data ?? res.data ?? null
     resetSelection(detail.value?.audit)
+    // 双向深链：选中即写进 URL，页面可收藏/分享（进来时靠 route.query.userId 落位）
+    if (route.query.userId !== userId) {
+      router.replace({ query: { ...route.query, userId } })
+    }
   } catch (e) {
     error.value = errMsg(e)
+    // 坏深链（用户不存在/被删除）→ 清掉参数，避免地址栏一直挂着一个打不开的 id
+    detail.value = null
+    if (route.query.userId) {
+      const next = { ...route.query }
+      delete next.userId
+      router.replace({ query: next })
+    }
   } finally {
     busy.value = false
+  }
+}
+
+/** 收起明细：同时清掉 URL 上的 userId（否则刷新又会弹回来） */
+function closeDetail() {
+  detail.value = null
+  selectedId.value = ''
+  if (route.query.userId) {
+    const next = { ...route.query }
+    delete next.userId
+    router.replace({ query: next })
+  }
+}
+
+/** 复制当前学习者的深链（供运维贴到工单/IM，不必手拼 URL） */
+async function copyDeepLink() {
+  const userId = selectedId.value || String(route.query.userId || '')
+  if (!userId) return
+  const link = `${window.location.origin}${route.path}?userId=${encodeURIComponent(userId)}`
+  try {
+    await navigator.clipboard.writeText(link)
+    toast.success('深链已复制')
+  } catch {
+    // 剪贴板不可用（非安全上下文等）→ 至少把链接展示出来，不让操作静默失败
+    toast.error(link)
   }
 }
 

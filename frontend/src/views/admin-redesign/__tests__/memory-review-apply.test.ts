@@ -19,7 +19,13 @@ vi.mock('@/api/adminApi', () => ({
 const askConfirm = vi.hoisted(() => vi.fn());
 vi.mock('../useConfirm', () => ({ askConfirm }));
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }) }));
+const routerReplace = vi.hoisted(() => vi.fn());
+const routeQuery = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
+vi.mock('vue-router', () => ({
+  // query 用 getter：真实路由里 replace 之后组件读到的就是新 query（按值捕获会永远是旧的）
+  useRoute: () => ({ get query() { return routeQuery.value }, path: '/admin/memory-review' }),
+  useRouter: () => ({ replace: routerReplace }),
+}));
 
 import MemoryReview from '../MemoryReview.vue';
 
@@ -55,6 +61,15 @@ const AUDIT = {
 const DETAIL = {
   user: { id: 'u1', name: '小明' },
   summary: { traces: 4, due: 2, duplicatedFamilies: 1, duplicatedTraces: 2, neverExtracted: 0, withFsrsState: 0 },
+  // 按次留档的归并凭据视图（界面据此判断"还能不能回滚"，与审计滚动窗口无关）
+  appliedMerges: {
+    rollbackable: [{
+      mergeId: 'mrg_1', canonical: '离开前翻页立好', aliases: ['离开前翻页立好：动作先于评价'],
+      appliedAt: '2026-09-15T11:00:00.000Z', rolledBackAt: null, deletedRows: 1,
+    }],
+    rolledBack: [],
+    legacyWindowOnly: [],
+  },
   reviewPlan: { items: [], budget: 2, usedLoad: 0, backlogCount: 5, successRate: 0.8, relearnSuggestions: [] },
   duePreview: [],
   duplicatedFamilies: [],
@@ -137,28 +152,33 @@ describe('MemoryReview 归并执行交互', () => {
       data: {
         data: {
           ...DETAIL,
-          audit: {
-            ...AUDIT,
-            mode: 'apply',
-            proposals: [],
-            appliedMerges: [{
-              canonical: '离开前翻页立好',
-              aliases: ['离开前翻页立好：动作先于评价'],
-              winnerId: 'r1',
-              mergedFields: {},
-              winnerBefore: {},
-              deletedRows: [{ id: 'r2' }],
-              appliedAt: '2026-09-15T11:00:00.000Z',
-            }],
-          },
+          // 审计滚动窗口里**已经没有**这条归并（被挤掉了），但按次留档仍有凭据 → 界面必须还能回滚
+          audit: { ...AUDIT, mode: 'apply', proposals: [], appliedMerges: [] },
         },
       },
     });
     await w.findAll('button').find((b) => b.text() === '明细')!.trigger('click');
     await flushPromises();
 
-    await w.findAll('button').find((b) => b.text() === '回滚')!.trigger('click');
+    const rollbackBtn = w.findAll('button').find((b) => b.text() === '回滚');
+    expect(rollbackBtn, '窗口外的旧归并也要给出回滚入口').toBeTruthy();
+    await rollbackBtn!.trigger('click');
     await flushPromises();
     expect(rollback).toHaveBeenCalledWith('u1', ['离开前翻页立好']);
+  });
+
+  it('深链：选中写入 URL、收起清掉参数（可收藏/分享）', async () => {
+    routeQuery.value = {};
+    const w = await mountPage();
+    await w.findAll('button').find((b) => b.text() === '明细')!.trigger('click');
+    await flushPromises();
+    expect(routerReplace).toHaveBeenCalledWith({ query: { userId: 'u1' } });
+
+    // 真实路由里 replace 之后 query 会变成 { userId }，这里同步模拟
+    routeQuery.value = { userId: 'u1' };
+    routerReplace.mockClear();
+    await w.findAll('button').find((b) => b.text() === '收起')!.trigger('click');
+    await flushPromises();
+    expect(routerReplace).toHaveBeenCalledWith({ query: {} });
   });
 });
