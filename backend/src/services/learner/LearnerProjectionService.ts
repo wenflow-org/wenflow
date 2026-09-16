@@ -1,4 +1,9 @@
-import type { LearnerReplanProjection, LearnerSnapshot, TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
+import type {
+  LearnerPlanningProjection,
+  LearnerReplanProjection,
+  LearnerSnapshot,
+  TeachingLearnerProjection,
+} from '../../agents/learner-model-agent/types';
 
 /** dashboard / learning-state 呈现层（adaptive-guidance-copy）专用投影：裁剪掉与文案无关的大字段 */
 export interface GuidanceCopyProjection {
@@ -250,6 +255,57 @@ export class LearnerProjectionService {
         taskMastery: currentPath.taskMastery,
       },
       signal: snapshot.replanSignal,
+    };
+  }
+  /**
+   * 规划投影：给**新建路径**用（此刻还没有 currentPath，只有该学习者的学习历史）。
+   *
+   * 动机：初始规划此前只有用户在 goal 阶段的自述（baseline/背景），**学习证据一律不参与**——
+   * 于是首版路径的难度是"盲排"，同一个学习者第二次建路径时，之前踩过的坑不会影响新路径。
+   * 这里把已有的学习证据（已稳/脆弱/挣扎的概念、阻塞地基、反复误解、指标与节奏）裁成
+   * 一份有界投影，交给 path-planning 做难度校准。
+   *
+   * 无学习历史（全空）→ 返回 null：冷启动行为与之前完全一致，不注入噪声。
+   */
+  toPlanningProjection(snapshot: LearnerSnapshot): LearnerPlanningProjection | null {
+    const signals = snapshot.knowledgeMemory.globalSignals;
+    const background = snapshot.knowledgeMemory.globalBackground;
+    const mastered = signals.masteredConcepts ?? [];
+    const fragile = signals.fragileConcepts ?? [];
+    const struggling = signals.strugglingConcepts ?? [];
+    const blocked = background?.blockedFoundations ?? [];
+    const confusions = background?.recurringConfusions ?? [];
+    const ledgerSize = background?.conceptLedger?.length ?? 0;
+
+    const hasLearningHistory = mastered.length + fragile.length + struggling.length + blocked.length
+      + confusions.length + ledgerSize > 0;
+    if (!hasLearningHistory) return null;
+
+    return {
+      hasLearningHistory: true,
+      metrics: snapshot.dynamicState?.metrics
+        ? {
+            lss: snapshot.dynamicState.metrics.lss,
+            ktl: snapshot.dynamicState.metrics.ktl,
+            lf: snapshot.dynamicState.metrics.lf,
+            lsb: snapshot.dynamicState.metrics.lsb,
+          }
+        : null,
+      recommendedPacing: snapshot.dynamicState?.recommendedPacing ?? 'moderate',
+      recentTrend: snapshot.dynamicState?.recentTrend ?? 'stable',
+      fatigueRisk: snapshot.dynamicState?.fatigueRisk ?? 'low',
+      paceMode: snapshot.learningControlState?.paceMode ?? 'steady',
+      challengeLevelCap: snapshot.learningControlState?.challengeLevelCap ?? 'medium',
+      masteredConcepts: mastered.slice(0, 8),
+      fragileConcepts: fragile.slice(0, 8),
+      strugglingConcepts: struggling.slice(0, 8),
+      blockedFoundations: blocked.slice(0, 5),
+      recurringConfusions: confusions.slice(0, 5).map((item) => ({
+        concept: String(item.label || item.conceptKey || '').slice(0, 40),
+        note: String(item.pattern || '').slice(0, 60),
+        count: Number(item.count) || 0,
+      })).filter((item) => item.concept),
+      conceptLedgerSize: ledgerSize,
     };
   }
 }

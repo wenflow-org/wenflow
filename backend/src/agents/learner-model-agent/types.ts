@@ -281,6 +281,24 @@ export interface LearnerTeachingHints {
   riskFactors: string[];
 }
 
+export interface LearnerPlanningProjection {
+  /** 恒为 true（无历史时返回 null 而不是带 false 的对象，避免给规划注入噪声） */
+  hasLearningHistory: boolean;
+  metrics: { lss: number; ktl: number; lf: number; lsb: number } | null;
+  recommendedPacing: string;
+  recentTrend: string;
+  fatigueRisk: string;
+  paceMode: string;
+  challengeLevelCap: string;
+  /** 已稳 / 脆弱 / 挣扎 / 阻塞地基 / 反复误解（各截断，供 prompt 做难度校准） */
+  masteredConcepts: string[];
+  fragileConcepts: string[];
+  strugglingConcepts: string[];
+  blockedFoundations: string[];
+  recurringConfusions: Array<{ concept: string; note: string; count: number }>;
+  conceptLedgerSize: number;
+}
+
 export interface LearnerSnapshot {
   snapshotVersion: 'learner-snapshot-v1';
   scope: {

@@ -1698,6 +1698,29 @@ class LearningService {
           resources: { timeBudget: data.userProfile?.timePerDay || null },
         });
       if (framedNormalizedInput) {
+        // 学习者学习证据回注（仅新建路径）：同一个学习者第二次建路径时，之前踩过的坑要影响首版难度，
+        // 否则首版是"盲排"。无学习历史 → 不注入（冷启动行为不变）。best-effort，失败不影响生成。
+        try {
+          const snapshot = await learnerSnapshotRefreshService.refresh({
+            userId: data.userId,
+            scope: 'global',
+          });
+          const planningProjection = learnerProjectionService.toPlanningProjection(snapshot);
+          if (planningProjection) {
+            framedNormalizedInput.learnerLearningContext = planningProjection;
+            logger.info('[path-generation] 注入学习者学习证据（首版难度校准）', {
+              userId: data.userId,
+              fragile: planningProjection.fragileConcepts.length,
+              struggling: planningProjection.strugglingConcepts.length,
+              blocked: planningProjection.blockedFoundations.length,
+            });
+          }
+        } catch (error) {
+          logger.warn('[path-generation] 学习者学习证据注入失败（按盲排生成）', {
+            userId: data.userId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         data.userProfile = {
           ...(data.userProfile || {}),
           normalizedInput: framedNormalizedInput,

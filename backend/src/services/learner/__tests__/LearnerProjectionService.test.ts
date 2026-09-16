@@ -1,5 +1,4 @@
 import { learnerProjectionService } from '../LearnerProjectionService';
-
 function heavySnapshot() {
   return {
     snapshotVersion: 'learner-snapshot-v1',
@@ -95,5 +94,46 @@ describe('LearnerProjectionService.toGuidanceProjection', () => {
     // 逐任务/逐证据明细不进入诊断投影
     expect(JSON.stringify(review)).not.toContain('taskMastery');
     expect(JSON.stringify(review).length).toBeLessThan(3000);
+  });
+});
+
+describe('toPlanningProjection（新建路径时的难度校准证据）', () => {
+  it('冷启动（无任何学习证据）→ null（不注入噪声，行为与原先一致）', () => {
+    const empty = {
+      ...heavySnapshot(),
+      knowledgeMemory: {
+        globalSignals: { masteredConcepts: [], fragileConcepts: [], strugglingConcepts: [] },
+        globalBackground: { reusableFoundations: [], blockedFoundations: [], conceptLedger: [], recurringConfusions: [], transferSignals: [] },
+      },
+    };
+    expect(learnerProjectionService.toPlanningProjection(empty as any)).toBeNull();
+  });
+
+  it('有学习历史 → 带上证据与节奏，且各项截断（有界）', () => {
+    const snapshot = heavySnapshot();
+    // 造足量概念，验证截断
+    snapshot.knowledgeMemory.globalSignals.fragileConcepts = Array.from({ length: 30 }, (_, i) => `f${i}`);
+    snapshot.knowledgeMemory.globalSignals.strugglingConcepts = Array.from({ length: 30 }, (_, i) => `s${i}`);
+    const projection = learnerProjectionService.toPlanningProjection(snapshot as any)!;
+    expect(projection.hasLearningHistory).toBe(true);
+    expect(projection.metrics).toEqual({ lss: 4, ktl: 5, lf: 3, lsb: 1 });
+    expect(projection.recommendedPacing).toBe('moderate');
+    expect(projection.blockedFoundations).toEqual(['b1']);
+    expect(projection.fragileConcepts).toHaveLength(8);
+    expect(projection.strugglingConcepts).toHaveLength(8);
+    expect(projection.recurringConfusions).toHaveLength(5);
+    expect(projection.recurringConfusions[0]).toMatchObject({ concept: 'x0', note: 'p' });
+    expect(projection.conceptLedgerSize).toBe(60);
+    // 有界：不含逐任务/逐证据明细，体积可控（prompt 预算）
+    expect(JSON.stringify(projection)).not.toContain('taskMastery');
+    expect(JSON.stringify(projection).length).toBeLessThan(2000);
+  });
+
+  it('只有 conceptLedger 也算有历史（上过课但还没沉淀概念信号）', () => {
+    const snapshot = heavySnapshot();
+    snapshot.knowledgeMemory.globalSignals = { masteredConcepts: [], fragileConcepts: [], strugglingConcepts: [] };
+    snapshot.knowledgeMemory.globalBackground.blockedFoundations = [];
+    snapshot.knowledgeMemory.globalBackground.recurringConfusions = [];
+    expect(learnerProjectionService.toPlanningProjection(snapshot as any)?.conceptLedgerSize).toBe(60);
   });
 });
