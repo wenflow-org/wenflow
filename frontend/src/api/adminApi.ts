@@ -1271,7 +1271,19 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get('/admin/virtual-learners/settings');
   },
 
-  updateVirtualLabSettings: async (data: { virtualLearnerRpmLimit: number }) => {
+  updateVirtualLabSettings: async (data: {
+    virtualLearnerRpmLimit?: number;
+    dateSimulation?: {
+      enabled?: boolean;
+      timezone?: string;
+      defaultDailyMinutesCap?: number;
+      defaultDaysPerWeek?: number;
+      defaultPaceDaysPerAdvance?: number;
+      maxSimulatedDays?: number;
+      pauseOnIntervention?: boolean;
+      autoAdvanceEnabled?: boolean;
+    };
+  }) => {
     return adminAxios.put('/admin/virtual-learners/settings', data);
   },
 
