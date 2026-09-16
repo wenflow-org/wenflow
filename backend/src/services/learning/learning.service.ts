@@ -4292,9 +4292,12 @@ class LearningService {
             select: { id: true }
           });
           if (linkedGoal) {
-            const nowDate = new Date();
+            const nowDate = data.asOf ?? new Date();
             const pad = (n: number) => String(n).padStart(2, '0');
-            const todayKey = `${nowDate.getFullYear()}-${pad(nowDate.getMonth() + 1)}-${pad(nowDate.getDate())}`;
+            // 模拟时钟（asOf）下用 UTC 日（与日期模拟/当日课量同口径）；缺省保持本地日（现网不变）
+            const todayKey = data.asOf
+              ? nowDate.toISOString().slice(0, 10)
+              : `${nowDate.getFullYear()}-${pad(nowDate.getMonth() + 1)}-${pad(nowDate.getDate())}`;
             await prisma.goal_scheduling_ledger.upsert({
               where: { userId_goalId_date: { userId: data.userId, goalId: linkedGoal.id, date: todayKey } },
               update: { consumedMinutes: { increment: actualMinutes }, updatedAt: nowDate },
@@ -4314,7 +4317,7 @@ class LearningService {
 
       // 更新连续学习天数（best-effort，不影响任务完成）
       try {
-        const today = new Date();
+        const today = data.asOf ?? new Date();
         const todayStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
 
         const user = await prisma.users.findUnique({

@@ -32,6 +32,7 @@ import { asErrorLike } from '../virtual-lab/vlab-types';
 import { resolveSessionBudget } from '../virtual-lab/session-budget';
 import simulatedDayService from '../services/virtual-lab/simulated-day.service';
 import { simulatedNowOr } from '../services/virtual-lab/simulation-clock-context';
+import { isSimulatedClockActive } from '../services/virtual-lab/simulation-clock-context';
 import type { LeaseClientLike } from '../virtual-lab/vlab-types';
 import type {
   SimulationMilestone,
@@ -843,7 +844,9 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         userId: session.userId,
         actualMinutes: taskMatch.task.estimatedMinutes || 30,
         notes: '虚拟学习者完成当前 task 的教学会话',
-        rating: 5
+        rating: 5,
+        // 日期模拟：台账/streak 落在模拟日（无模拟上下文时不传 → 现网行为不变）
+        ...(isSimulatedClockActive() ? { asOf: simulatedNowOr() } : {}),
       });
       // 记忆回写：画像概念 + 成果物登记（best-effort，失败不阻断）
       await persistAssistedLearnerMemory(sessionId, session, taskMatch.task);

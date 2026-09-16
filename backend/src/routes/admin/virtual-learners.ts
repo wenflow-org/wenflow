@@ -3207,6 +3207,16 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
             profileData: profileData as Record<string, unknown>,
           }),
         );
+        if (!learning.started) {
+          // P0：当天启动/执行失败 → 回滚时钟，不"烧掉"这一天（避免 advance 成功但当天无数据）
+          await assertLeaseOwned();
+          await prisma.virtual_sessions.update({
+            where: { id: sessionId },
+            data: { stageResults: JSON.stringify({ ...stageResults, simulationClock: rawClock }), updatedAt: new Date() },
+          });
+          await assertLeaseOwned();
+          return { advancedDayIndexes: [], simulatedDay: dayWindow.simulatedDay, learning, reverted: true };
+        }
       }
       return { advancedDayIndexes: plan.indexes, simulatedDay: dayWindow.simulatedDay, learning };
     });

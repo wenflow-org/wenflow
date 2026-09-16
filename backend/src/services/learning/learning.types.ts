@@ -300,4 +300,6 @@ export interface CompleteTaskData {
   subjectiveDifficulty?: number;
   notes?: string;
   rating?: number;
+  /** 业务时间（日期模拟用）：提供时台账日期按 UTC 日、streak 以该时刻推进；缺省=真墙钟（现网不变） */
+  asOf?: Date;
 }

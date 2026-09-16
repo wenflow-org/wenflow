@@ -10,7 +10,6 @@
  */
 import prisma from '../../config/database';
 import { safeJsonParse } from '../../utils/safe-json';
-import { logger } from '../../utils/logger';
 import learningStateService, { type AggregatedLearningState } from '../learning/learning-state.service';
 import { derivePacing } from '../learner/LearnerSnapshotService';
 import {
@@ -252,25 +251,45 @@ export async function buildDayEntry(
   baseDate: string,
   dayIndex: number,
   deps: SimulatedDayDeps = defaultDeps,
+  now: Date = new Date(),
 ): Promise<SimulatedDayEntry> {
   const win = resolveDayWindow(baseDate, dayIndex);
+  // P0 护栏：模拟读不得越过真实"现在"（防把真实历史卷进聚合）；未来日直接返回空（不读）
+  const asOf = new Date(Math.min(win.asOf.getTime(), now.getTime()));
+  const isFuture = win.dayStart.getTime() > now.getTime();
+  if (isFuture) {
+    return {
+      dayIndex,
+      simulatedDay: win.simulatedDay,
+      asOf: asOf.toISOString(),
+      dayLoad: null,
+      metrics: null,
+      pacing: null,
+      perPath: [],
+      signals: [],
+      tasks: [],
+      difficultyAdjustments: [],
+      reviewQuota: { limitLoad: 0, usedLoad: 0, remainingLoad: 0, usedCount: 0 },
+      memory: { traceCount: 0, dueCount: 0, fragileCount: 0, stableCount: 0, avgRetention: null },
+    };
+  }
   const [state, quota, dueTraces, retention, tasks, sessions, evidence] = await Promise.all([
-    deps.getAggregatedState(userId, { asOf: win.asOf }).catch(() => null),
-    deps.getDailyQuota(userId, { now: win.asOf }).catch(() => ({
+    deps.getAggregatedState(userId, { asOf }).catch(() => null),
+    deps.getDailyQuota(userId, { now: asOf }).catch(() => ({
       date: win.simulatedDay, limitLoad: 0, usedLoad: 0, usedCount: 0, remainingLoad: 0, reservedKeys: [],
     } as ReviewDailyState)),
-    deps.getDueTraces(userId, { now: win.asOf, limit: 50 }).catch(() => []),
-    deps.getRetentionSnapshot(userId, win.asOf).catch(() => []),
+    deps.getDueTraces(userId, { now: asOf, limit: 50 }).catch(() => []),
+    deps.getRetentionSnapshot(userId, asOf).catch(() => []),
     deps.findTasks({
-      where: { userId, status: 'completed', completedAt: { gte: win.dayStart, lte: win.dayEnd } },
+      where: { userId, status: 'completed', completedAt: { gte: win.dayStart, lte: asOf } },
       select: { id: true, title: true, estimatedMinutes: true, cognitiveLoad: true, completedAt: true },
     }).catch(() => []),
     deps.findSessions({
-      where: { userId, startTime: { gte: win.dayStart, lte: win.dayEnd } },
+      where: { userId, startTime: { gte: win.dayStart, lte: asOf } },
       select: { taskId: true, duration: true },
     }).catch(() => []),
     deps.findEvidence({
-      where: { userId, evidenceType: ADJUSTMENT_EVIDENCE_TYPE, occurredAt: { gte: win.dayStart, lte: win.dayEnd } },
+      where: { userId, evidenceType: ADJUSTMENT_EVIDENCE_TYPE, occurredAt: { gte: win.dayStart, lte: asOf } },
       select: { taskId: true, payload: true, occurredAt: true },
     }).catch(() => []),
   ]);
@@ -309,7 +328,7 @@ export async function buildDayEntry(
   }
 
   // 记忆：仅统计"该模拟日当天已存在"的痕迹（lastSeenAt <= asOf），避免未来痕迹倒灌
-  const inWindowTraces = retention.filter((trace) => !trace.lastSeenAt || trace.lastSeenAt.getTime() <= win.asOf.getTime());
+  const inWindowTraces = retention.filter((trace) => !trace.lastSeenAt || trace.lastSeenAt.getTime() <= asOf.getTime());
   const avgRetention = inWindowTraces.length > 0
     ? Math.round((inWindowTraces.reduce((sum, trace) => sum + trace.retention, 0) / inWindowTraces.length) * 1000) / 1000
     : null;
@@ -317,7 +336,7 @@ export async function buildDayEntry(
   return {
     dayIndex,
     simulatedDay: win.simulatedDay,
-    asOf: win.asOf.toISOString(),
+    asOf: asOf.toISOString(),
     dayLoad: state?.dayLoad ?? null,
     metrics,
     pacing: metrics ? derivePacing(metrics.lf, metrics.ktl) : null,
@@ -357,13 +376,14 @@ export async function buildDayEntry(
 export async function buildDayTimeline(
   input: { userId: string; baseDate: string; fromDay?: number; toDay: number; maxDays?: number },
   deps: SimulatedDayDeps = defaultDeps,
+  now: Date = new Date(),
 ): Promise<DayTimeline> {
   const maxDays = Math.max(0, Math.trunc(input.maxDays ?? 365));
   const fromDay = Math.max(0, Math.trunc(input.fromDay ?? 0));
   const toDay = Math.min(maxDays, Math.max(fromDay, Math.trunc(input.toDay)));
   const days: SimulatedDayEntry[] = [];
   for (let dayIndex = fromDay; dayIndex <= toDay; dayIndex += 1) {
-    days.push(await buildDayEntry(input.userId, input.baseDate, dayIndex, deps));
+    days.push(await buildDayEntry(input.userId, input.baseDate, dayIndex, deps, now));
   }
   return { baseDate: toDateOnly(parseDateOnly(input.baseDate)), fromDay, toDay, days };
 }
@@ -379,7 +399,9 @@ export function planClockAdvance(
 ): { indexes: number[]; nextClock: Record<string, any> } | null {
   const want = Math.max(1, Math.trunc(days) || 1);
   const indexes = collectCourseDayIndexes(clock.baseDate, clock.dayIndex, clock.courseWeekdays, want)
-    .filter((index) => index <= clock.maxSimulatedDays);
+    .filter((index) => index <= clock.maxSimulatedDays)
+    // P0 护栏：不推进到"未来日"（避免 asOf 越过真实现在、把真实历史卷进聚合）
+    .filter((index) => resolveDayWindow(clock.baseDate, index).dayStart.getTime() <= now.getTime());
   if (!indexes.length) return null;
 
   const history = Array.isArray(rawClock?.history) ? [...rawClock!.history] : [];
@@ -476,64 +498,6 @@ class SimulatedDayService {
     const toDay = input.toDay ?? Math.min(maxDays, Math.max(fromDay, clock?.dayIndex ?? 0));
     return buildDayTimeline({ userId: session.userId, baseDate, fromDay, toDay, maxDays });
   }
-}
-
-/**
- * 自动推进（一次性扫描）：对开启日期模拟且 `autoAdvance=true` 的非终态会话，各推进 1 个上课日。
- * 仅写 `stageResults.simulationClock`（时钟簿记）；"当天任务的重放执行"归系统层（P2）。
- */
-export async function advanceAutoSessionsOnce(now: Date = new Date()): Promise<{ scanned: number; advanced: string[] }> {
-  const settings = await getVirtualLabSettings().catch(() => ({ ...DEFAULT_VIRTUAL_LAB_SETTINGS }));
-  if (!settings.dateSimulation.enabled || !settings.dateSimulation.autoAdvanceEnabled) {
-    return { scanned: 0, advanced: [] };
-  }
-  const sessions = await prisma.virtual_sessions.findMany({
-    where: { status: { in: ['running', 'created'] } },
-    orderBy: { updatedAt: 'desc' },
-    take: 50,
-    select: { id: true, userId: true, stageResults: true, createdAt: true, virtualProfileId: true },
-  });
-  const advanced: string[] = [];
-  for (const session of sessions) {
-    const stageResults = safeJsonParse<Record<string, any>>(session.stageResults, {});
-    const rawClock = stageResults?.simulationClock;
-    if (rawClock?.enabled !== true || rawClock?.autoAdvance !== true) continue;
-    const profile = await prisma.virtual_learner_profiles
-      .findUnique({ where: { id: session.virtualProfileId }, select: { profile: true } })
-      .catch(() => null);
-    const profileData = safeJsonParse<Record<string, any>>(profile?.profile, {});
-    const clock = resolveSimulationClock({
-      stageResultsClock: rawClock,
-      profileClock: profileData?.simulationClock ?? null,
-      settings: settings.dateSimulation,
-      sessionCreatedAt: session.createdAt,
-      now,
-    });
-    const plan = planClockAdvance(clock, rawClock, 1, now);
-    if (!plan) continue;
-    await prisma.virtual_sessions.update({
-      where: { id: session.id },
-      data: { stageResults: JSON.stringify({ ...stageResults, simulationClock: plan.nextClock }), updatedAt: new Date() },
-    });
-    advanced.push(session.id);
-  }
-  return { scanned: sessions.length, advanced };
-}
-
-let simDaySchedulerStarted = false;
-
-/** 注册自动推进调度（默认 5min 一次；env `VLAB_DAY_ADVANCE_TICK_MS`，最小 10s）。默认关（settings.enabled=false 时直接返回）。 */
-export function startSimulatedDayScheduler(): void {
-  if (simDaySchedulerStarted) return;
-  simDaySchedulerStarted = true;
-  const raw = Number(process.env.VLAB_DAY_ADVANCE_TICK_MS);
-  const tickMs = Number.isFinite(raw) && raw >= 10_000 ? raw : 300_000;
-  setInterval(() => {
-    advanceAutoSessionsOnce().catch((error) => {
-      logger.warn('[simulated-day] 自动推进失败', { error: error instanceof Error ? error.message : String(error) });
-    });
-  }, tickMs);
-  logger.info('[simulated-day] 自动推进调度已启动', { tickMs });
 }
 
 export const simulatedDayService = new SimulatedDayService();

@@ -48,7 +48,7 @@ import { aiCapabilityHealthService } from './services/ai-capability-health.servi
 import { getRuntimeCapabilityProbeEnabled } from './services/capability-probe-settings.service';
 import { logRetentionService } from './services/log-retention.service';
 import { startBatchExperimentScheduler } from './services/virtual-lab/batch-experiment.service';
-import { startSimulatedDayScheduler } from './services/virtual-lab/simulated-day.service';
+import { startSimulatedDayScheduler } from './services/virtual-lab/simulated-day-scheduler';
 import { auditCleanupService } from './services/audit-cleanup.service';
 import { virtualSessionReclaimService } from './virtual-lab/session-reclaim.service';
 import { existsSync } from 'fs';

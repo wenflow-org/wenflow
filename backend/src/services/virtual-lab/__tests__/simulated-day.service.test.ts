@@ -123,8 +123,10 @@ function makeDeps(overrides: Partial<SimulatedDayDeps> = {}): SimulatedDayDeps {
 }
 
 describe('buildDayEntry / buildDayTimeline（注入 deps）', () => {
+  const NOW = new Date('2026-09-20T12:00:00Z');
+
   it('按 asOf 聚合出负担/节奏/信号/任务/调整/配额/记忆（且过滤未来痕迹）', async () => {
-    const entry = await buildDayEntry('u1', '2026-09-16', 0, makeDeps());
+    const entry = await buildDayEntry('u1', '2026-09-16', 0, makeDeps(), NOW);
     expect(entry.simulatedDay).toBe('2026-09-16');
     expect(entry.dayLoad).toEqual({ lessons: 3, minutes: 90, fatigueBonus: 1 });
     expect(entry.metrics).toEqual({ lss: 4, ktl: 6, lf: 7, lsb: -1 });
@@ -142,7 +144,7 @@ describe('buildDayEntry / buildDayTimeline（注入 deps）', () => {
   it('无状态行时 metrics/pacing 为 null，仍返回结构（不抛错）', async () => {
     const entry = await buildDayEntry('u1', '2026-09-16', 0, makeDeps({
       getAggregatedState: jest.fn(async () => null) as any,
-    }));
+    }), NOW);
     expect(entry.metrics).toBeNull();
     expect(entry.pacing).toBeNull();
     expect(entry.dayLoad).toBeNull();
@@ -150,12 +152,22 @@ describe('buildDayEntry / buildDayTimeline（注入 deps）', () => {
   });
 
   it('buildDayTimeline：from/to 夹紧，逐日展开', async () => {
-    const timeline = await buildDayTimeline({ userId: 'u1', baseDate: '2026-09-16', fromDay: 0, toDay: 2 }, makeDeps());
+    const timeline = await buildDayTimeline({ userId: 'u1', baseDate: '2026-09-16', fromDay: 0, toDay: 2 }, makeDeps(), NOW);
     expect(timeline.days.map((d) => d.simulatedDay)).toEqual(['2026-09-16', '2026-09-17', '2026-09-18']);
     expect(timeline.baseDate).toBe('2026-09-16');
 
-    const clamped = await buildDayTimeline({ userId: 'u1', baseDate: '2026-09-16', fromDay: 1, toDay: 99, maxDays: 2 }, makeDeps());
+    const clamped = await buildDayTimeline({ userId: 'u1', baseDate: '2026-09-16', fromDay: 1, toDay: 99, maxDays: 2 }, makeDeps(), NOW);
     expect(clamped.days.map((d) => d.dayIndex)).toEqual([1, 2]);
+  });
+
+  it('P0 护栏：未来日返回空且不读（防把真实历史卷进聚合）', async () => {
+    const deps = makeDeps();
+    // baseDate 2026-09-16，dayIndex 3 = 2026-09-19；now=2026-09-17 → 未来日
+    const entry = await buildDayEntry('u1', '2026-09-16', 3, deps, new Date('2026-09-17T00:00:00Z'));
+    expect(entry.dayLoad).toBeNull();
+    expect(entry.tasks).toEqual([]);
+    expect(entry.memory.traceCount).toBe(0);
+    expect(deps.getAggregatedState).not.toHaveBeenCalled();
   });
 });
 
@@ -183,7 +195,7 @@ describe('课表与推进（isCourseDay / collectCourseDayIndexes / planClockAdv
       settings: { ...SETTINGS, courseWeekdays: WEEK, lessonsPerDay: 2, maxSimulatedDays: 3 },
       sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
     });
-    const plan = planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 2);
+    const plan = planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 2, new Date('2026-09-20T12:00:00Z'));
     expect(plan?.indexes).toEqual([1, 2]);
     expect(plan?.nextClock.dayIndex).toBe(2);
     expect(plan?.nextClock.advancedTimes).toBe(2);
@@ -196,6 +208,19 @@ describe('课表与推进（isCourseDay / collectCourseDayIndexes / planClockAdv
       settings: { ...SETTINGS, courseWeekdays: WEEK, maxSimulatedDays: 3 },
       sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
     });
-    expect(planClockAdvance(atLimit, { baseDate: '2026-09-14', dayIndex: 3 }, 1)).toBeNull();
+    expect(planClockAdvance(atLimit, { baseDate: '2026-09-14', dayIndex: 3 }, 1, new Date('2026-09-20T12:00:00Z'))).toBeNull();
+  });
+
+  it('P0 护栏：planClockAdvance 不推进到未来日', () => {
+    const clock = resolveSimulationClock({
+      stageResultsClock: { baseDate: '2026-09-14', dayIndex: 0 },
+      profileClock: { enabled: true },
+      settings: { ...SETTINGS, courseWeekdays: WEEK },
+      sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
+    });
+    // now = 09-14 当天：下一个上课日 09-15 的 dayStart 已 > now → 无可推进
+    expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-14T12:00:00Z'))).toBeNull();
+    // now = 09-15：第 1 天可推进
+    expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-15T12:00:00Z'))?.indexes).toEqual([1]);
   });
 });
