@@ -24,6 +24,7 @@
         <span class="dt-clock__meta">课表 {{ weekdaysLabel(clock.courseWeekdays) }} · 每天 {{ clock.lessonsPerDay }} 节</span>
         <button type="button" class="mk-link" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 1 个上课日（跳过非上课日）' : '请先开启日期模拟'" @click="advance(1)">推进 1 天</button>
         <button type="button" class="mk-link" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 5 个上课日' : '请先开启日期模拟'" @click="advance(5)">推进 5 天</button>
+        <button type="button" class="mk-link" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '推进 1 天并真实跑当天课程（业务时间戳落在模拟日；每节消耗 AI 调用）' : '请先开启日期模拟'" @click="advance(1, true)">推进并上课</button>
         <label class="dt-auto" :title="clock.enabled ? '开启后由后台按课表自动推进（仅时钟簿记；当天任务重放归系统层）' : '请先开启日期模拟'">
           <input
             type="checkbox"
@@ -149,11 +150,11 @@ function pickErr(e: unknown, fallback: string): string {
   return anyErr?.response?.data?.error || anyErr?.message || fallback
 }
 
-async function advance(days: number) {
+async function advance(days: number, runTasks = false) {
   if (!props.sessionId) return
   advancing.value = true
   try {
-    await adminVirtualLearnersApi.advanceVirtualSessionDay(props.sessionId, { days })
+    await adminVirtualLearnersApi.advanceVirtualSessionDay(props.sessionId, { days, runTasks })
     await load()
   } catch (e) {
     error.value = pickErr(e, '推进失败')
