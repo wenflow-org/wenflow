@@ -112,12 +112,20 @@ async function main(): Promise<void> {
 
   // ── 回合（学生发言）
   // 说明：本脚本验证的是**管道**，因此第 1 轮由「学生」主动把到期点回忆出来（不依赖模型是否记得先提问）。
+  // `--not-recalled`：换成"答不出"的学生脚本，用于验证**失败也能入库**（§3.9/§3.11）。
+  const notRecalled = process.argv.includes('--not-recalled');
   const firstLabel = before.items[0]?.label ?? '上次那个点';
-  const studentLines = [
-    `老师，我先自己把上次那个点捞一遍：「${firstLabel}」——我的回忆是：只有判断流程走到需要验证的那一步时才触发数据流，触发前要先把验证参数定下来，否则拿回来的数据没法判定。你看这样算想起来了吗？`,
-    '我再补一句：参数和触发条件是绑在一起的，缺了参数就没法判定对错。',
-    '好，那我们进今天的内容吧。',
-  ];
+  const studentLines = notRecalled
+    ? [
+        '老师我准备好了。',
+        `关于「${firstLabel}」我猜是……看颜色？我对这个只有个很模糊的印象，说不出具体的判据。`,
+        '那我还是没抓住，先记下来吧。',
+      ]
+    : [
+        `老师，我先自己把上次那个点捞一遍：「${firstLabel}」——我的回忆是：只有判断流程走到需要验证的那一步时才触发数据流，触发前要先把验证参数定下来，否则拿回来的数据没法判定。你看这样算想起来了吗？`,
+        '我再补一句：参数和触发条件是绑在一起的，缺了参数就没法判定对错。',
+        '好，那我们进今天的内容吧。',
+      ];
   for (let i = 0; i < turns; i += 1) {
     const beforeTurn = await prisma.teaching_sessions.findUnique({ where: { id: sessionId }, select: { revision: true } });
     const reply = await aiTeachingOrchestrator.processStudentMessage(sessionId, studentLines[Math.min(i, studentLines.length - 1)], {

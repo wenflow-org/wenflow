@@ -73,6 +73,70 @@ function derivedClosureOperationId(operationId: string): string {
   return `${operationId}#closure`;
 }
 
+export interface WarmupReviewItem {
+  conceptKey: string;
+  label: string | null;
+  status: string;
+  progress: number;
+  masteryScore: number;
+  rating: ReturnType<typeof mapReviewStatusToRating>['rating'];
+}
+
+/** 温故点在会话里的持久化子集（ReviewPlanItem 的收束侧视图） */
+interface PersistedWarmupItem {
+  conceptKey?: string;
+  label?: string;
+  outcome?: { status?: string; progress?: number } | null;
+  askedAt?: string;
+}
+
+/**
+ * 收集要回写记忆引擎的温故点（收束时）：
+ * 1. **有结果**的点（mastered / learning）→ 按结果映射评分；
+ * 2. **问过了但始终没推进**（有 `askedAt`、无 `outcome`）且学习者在该点之后**还有发言**
+ *    → 判为**没答出**（again）。这是"失败"唯一的入库通道：不记失败，成功率与保持曲线就只剩上界，
+ *    leech（连续答不出）与队列自净也永远不会触发（审计 §3.9 / §3.11）。
+ *    若该点是最后一轮才问出来的（其后没有学习者发言），不计——那是"没来得及答"，不是"答不出"。
+ */
+export function collectWarmupReviewItems(
+  items: PersistedWarmupItem[] | null | undefined,
+  hasLearnerTurnAfter: (iso: string) => boolean,
+): WarmupReviewItem[] {
+  const result: WarmupReviewItem[] = [];
+  for (const item of items || []) {
+    const conceptKey = String(item?.conceptKey || '').trim();
+    if (!conceptKey) continue;
+    const label = typeof item?.label === 'string' ? item.label : null;
+
+    if (item?.outcome?.status) {
+      const status = String(item.outcome.status);
+      const progress = Number(item.outcome.progress) || 0;
+      const { rating, masteryScore } = mapReviewStatusToRating(status, progress);
+      result.push({ conceptKey, label, status, progress, masteryScore, rating });
+      continue;
+    }
+
+    if (item?.askedAt && hasLearnerTurnAfter(String(item.askedAt))) {
+      // 'not-recalled' 不是看板状态，只是回写口径：映射器对未知状态回落为 again
+      const { rating, masteryScore } = mapReviewStatusToRating('not-recalled', 0);
+      result.push({ conceptKey, label, status: 'not-recalled', progress: 0, masteryScore, rating });
+    }
+  }
+  return result;
+}
+
+/** 该时刻之后学习者是否还有发言（= 确实给了作答机会） */
+export function hasLearnerTurnAfter(session: TeachingSessionRecord, iso: string): boolean {
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return false;
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  return messages.some((message) => {
+    if ((message as { role?: string })?.role !== 'user') return false;
+    const ts = Date.parse(String((message as { timestamp?: string })?.timestamp || ''));
+    return Number.isFinite(ts) && ts > at;
+  });
+}
+
 export class SessionFinalizationService {
   async finalize(input: FinalizeSessionInput) {
     const session = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
@@ -408,21 +472,8 @@ export class SessionFinalizationService {
     try {
       const plan = (session.teachingState as Record<string, any> | null)?.sessionArtifacts?.memoryWarmup;
       const items: any[] = Array.isArray(plan?.items) ? plan.items : [];
-      const reviewed = items.filter((item) => item?.conceptKey && item?.outcome?.status);
-      if (reviewed.length === 0) return;
-      const payload = reviewed.map((item) => {
-        const status = String(item.outcome.status);
-        const progress = Number(item.outcome.progress) || 0;
-        const { rating, masteryScore } = mapReviewStatusToRating(status, progress);
-        return {
-          conceptKey: String(item.conceptKey),
-          label: typeof item.label === 'string' ? item.label : null,
-          status,
-          progress,
-          masteryScore,
-          rating,
-        };
-      });
+      const payload = collectWarmupReviewItems(items, (iso) => hasLearnerTurnAfter(session, iso));
+      if (payload.length === 0) return;
       await this.enqueueReviewCompletedEvent(session, payload);
       logger.info('[SessionFinalization] 课内温故结果已回写记忆引擎', {
         sessionId: session.id,

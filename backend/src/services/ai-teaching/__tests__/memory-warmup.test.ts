@@ -114,6 +114,17 @@ describe('课内温故：到期旧知与本节知识点看板物理分离（回�
     expect(matchWarmupItem(shortPlan, '触发条件')?.conceptKey).toBe('k1');
   });
 
+  it('matchWarmupItem：调序+截断也认（实测模型把"整合输出8月龄食物质地安全判据"写成"食物质地安全判据整合"）', () => {
+    const reordered = plan([item('整合输出8月龄食物质地安全判据', 'k-texture')]);
+    expect(matchWarmupItem(reordered, '食物质地安全判据整合')?.conceptKey).toBe('k-texture');
+    expect(matchWarmupItem(reordered, '食物质地安全判据')?.conceptKey).toBe('k-texture');
+    // 差异更大的写法不认（不能放宽成"看起来像"）
+    expect(matchWarmupItem(reordered, '食物硬度与易碎度的安全边界')).toBeNull();
+    expect(matchWarmupItem(reordered, '食物质地与呛咳风险的对照表')).toBeNull();
+    // 但"计划名被包住"的更长写法仍认（同一概念的补充说法）
+    expect(matchWarmupItem(reordered, '整合输出8月龄食物质地安全判据与验证参数')?.conceptKey).toBe('k-texture');
+  });
+
   it('stripWarmupPoints：温故点绝不进本节看板（跨 path 到期点串进看板是历史事故的根因）', () => {
     const board = [
       { name: '本节新知 A', status: 'learning', progress: 40 },

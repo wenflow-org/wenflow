@@ -319,6 +319,9 @@ const WARMUP_RESULT_STATUSES = new Set(['mastered', 'learning']);
 /** 保守包含匹配的长度门槛（归一化后字符数）：短名包含关系太容易误伤，宁可不匹配 */
 export const WARMUP_FUZZY_MIN_LENGTH = 8;
 
+/** 字符重合率下限（以较短名为分母）：低于它就不再视为同一概念 */
+export const WARMUP_FUZZY_OVERLAP_MIN = 0.8;
+
 /**
  * 把「模型回写的点位名」对到计划项上（保守匹配）。
  *
@@ -349,7 +352,38 @@ export function matchWarmupItem(
     if (key.length < WARMUP_FUZZY_MIN_LENGTH || target.length < WARMUP_FUZZY_MIN_LENGTH) return false;
     return key.includes(target) || target.includes(key);
   });
-  return contained.length === 1 ? contained[0] : null;
+  if (contained.length === 1) return contained[0];
+  if (contained.length > 1) return null;
+
+  // 3) 同字异序：模型常把中文概念名调序（实测 "整合输出8月龄食物质地安全判据" → 写回 "
+  //    食物质地安全判据整合"）。字符多重集完全相同的两个名字几乎不可能指不同概念 → 唯一命中就认。
+  const sameChars = items.filter((item) => {
+    const key = warmupKeyOf(item.label || item.conceptKey);
+    if (key.length !== target.length || key.length < WARMUP_FUZZY_MIN_LENGTH) return false;
+    return [...key].sort().join('') === [...target].sort().join('');
+  });
+  if (sameChars.length === 1) return sameChars[0];
+  if (sameChars.length > 1) return null;
+
+  // 4) 最后退一步：**调序 + 截断**同时出现（实测那次就是丢了"输出/8月龄"）。按字符重合率（不看顺序），
+  //    以较短名为分母要求 ≥ 0.8，双方均 ≥ 8 字，且唯一命中。
+  //    再松就会开始误伤本节知识点（误判会把知识点从看板摘掉）——宁可漏摘。
+  const similar = items.filter((item) => {
+    const key = warmupKeyOf(item.label || item.conceptKey);
+    if (key.length < WARMUP_FUZZY_MIN_LENGTH || target.length < WARMUP_FUZZY_MIN_LENGTH) return false;
+    const shortName = key.length <= target.length ? key : target;
+    const pool = [...(key.length <= target.length ? target : key)];
+    let hit = 0;
+    for (const char of shortName) {
+      const index = pool.indexOf(char);
+      if (index >= 0) {
+        pool.splice(index, 1);
+        hit += 1;
+      }
+    }
+    return hit / shortName.length >= WARMUP_FUZZY_OVERLAP_MIN;
+  });
+  return similar.length === 1 ? similar[0] : null;
 }
 
 /**
@@ -422,6 +456,34 @@ export function stripWarmupPoints<T extends { name: string }>(
 ): T[] {
   if (!plan || !Array.isArray(points)) return points;
   return points.filter((point) => !matchWarmupItem(plan, String(point?.name || '')));
+}
+
+/**
+ * 标记「模型真的把这个温故点问出来了」（首次）。
+ *
+ * 与 `mergeWarmupOutcomes`（记录**结果**）分开：模型常把温故点以 `review`/`pending` 写回
+ * （= 我已经问了/正要问），这不是作答表现，但它证明**确实发生了这次回捞**。
+ * 结算时凭它把"问过、但始终没推进"判定为**没答出**——否则失败永不入库：
+ * 成功率与保持曲线只剩上界，leech（连续答不出）与队列自净也永远不会触发。
+ */
+export function markWarmupAsked(
+  plan: ReviewPlan | null | undefined,
+  points: Array<{ name: string }> | null | undefined,
+  askedAt: string,
+): ReviewPlan | null {
+  if (!plan || !Array.isArray(plan.items) || !Array.isArray(points)) return plan ?? null;
+  const matched = new Set<string>();
+  for (const point of points) {
+    const item = matchWarmupItem(plan, String(point?.name || ''));
+    if (item) matched.add(item.conceptKey);
+  }
+  if (matched.size === 0) return plan;
+  return {
+    ...plan,
+    items: plan.items.map((item) =>
+      matched.has(item.conceptKey) && !item.askedAt ? { ...item, askedAt } : item,
+    ),
+  };
 }
 
 /** 把温故结果并进持久化计划项（按归一化键匹配） */
@@ -2271,16 +2333,18 @@ export class AITeachingOrchestrator {
       sessionArtifacts: {
         ...parseSessionArtifacts(session.teachingState),
         initialKnowledgeState: effectiveInitialKnowledgeState,
-        // 课内温故结果：只更新实测过的点，计划其余部分原样保留（含负担预算与积压计数）
-        ...(warmupOutcomes.length > 0
-          ? {
-              memoryWarmup: mergeWarmupOutcomes(
-                parseSessionArtifacts(session.teachingState).memoryWarmup || context.memoryWarmup,
-                warmupOutcomes,
-                new Date().toISOString(),
-              ),
-            }
-          : {}),
+        // 课内温故：① 标记"模型真的问出来了"（含 review/pending——问过 ≠ 有结果）
+        // ② 合并实测结果；计划其余部分原样保留（含负担预算与积压计数）
+        ...(() => {
+          const persistedPlan =
+            parseSessionArtifacts(session.teachingState).memoryWarmup || context.memoryWarmup;
+          if (!persistedPlan) return {};
+          const asked = markWarmupAsked(persistedPlan, rawPoints, new Date().toISOString());
+          const merged = warmupOutcomes.length > 0
+            ? mergeWarmupOutcomes(asked, warmupOutcomes, new Date().toISOString())
+            : asked;
+          return merged ? { memoryWarmup: merged } : {};
+        })(),
         // 冻结的收束目标集：只增一次，后续回合沿用（防止目标集随模型新增/改名膨胀）
         completionTargets,
         pathBackgroundContext: sessionArtifacts.pathBackgroundContext || buildPathBackgroundContext(context),

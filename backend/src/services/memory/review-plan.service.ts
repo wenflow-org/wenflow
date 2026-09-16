@@ -126,6 +126,12 @@ export interface ReviewPlanItem {
   originPathTitle: string | null;
   /** 本堂课内温故的实测结果（教学回合报告，收束时回写记忆引擎）；未温故为 undefined */
   outcome?: { status: string; progress: number; reviewedAt: string };
+  /**
+   * 模型**真的把该点问出来了**的时刻（首次）。它不等于"有结果"：
+   * 结算时「问过了但始终没推进」= 学习者没答出 → 按失败留痕（否则失败永不入库，
+   * 成功率与保持曲线都只是上界，leech/自净也永远不会触发）。
+   */
+  askedAt?: string;
 }
 
 export interface RelearnSuggestion {
