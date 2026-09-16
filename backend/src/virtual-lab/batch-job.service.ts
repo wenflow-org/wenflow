@@ -11,13 +11,13 @@
  */
 import { prisma } from '../config/database';
 import { runBackgroundTask } from '../services/background-task-tracker.service';
-import { executeSkill } from '../skills';
-import { virtualLearnerPersonaDesignerDefinition } from '../skills/virtual-learner-persona-designer';
-import { virtualLearnerScenarioDesignerDefinition } from '../skills/virtual-learner-scenario-designer';
+import {
+  provisionVirtualProfile,
+  generateAndApplyPersona,
+  generateAndApplyStory,
+} from './learner-provisioning';
 import { safeJsonParse } from '../utils/safe-json';
 import { logger } from '../utils/logger';
-import { randomUUID, randomBytes } from 'crypto';
-import bcrypt from 'bcryptjs';
 
 export interface BatchQueueItem {
   profileId: string;
@@ -221,86 +221,50 @@ class BatchJobService {
 
   /** 创建学习者（users + virtual_learner_profiles） */
   private async createLearner(input: { name: string; cohort?: string; note?: string; story: string }) {
-    const email = `virtual_${randomUUID().substring(0, 8)}@test.local`;
-    const hashedPassword = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
-    const user = await prisma.users.create({
-      data: {
-        id: randomUUID(),
-        email,
-        name: input.name,
-        password: hashedPassword,
-        role: 'user',
-        currentLevel: 'beginner',
-        isAdmin: false,
-        isVirtualLearner: true,
-        updatedAt: new Date(),
-      },
+    const result = await provisionVirtualProfile({
+      name: input.name,
+      notes: input.note ? `${input.note} · ${input.story}` : input.story,
     });
-    const profilePayload = input.cohort ? { background: input.cohort } : { background: input.story };
-    const profile = await prisma.virtual_learner_profiles.create({
-      data: {
-        id: randomUUID(),
-        userId: user.id,
-        profile: JSON.stringify(profilePayload),
-        learningGoal: '',
-        knowledgeLevel: 'beginner',
-        simulationTemperature: 0.8,
-        notes: input.note ? `${input.note} · ${input.story}` : input.story,
-      },
-    });
-    return profile;
+    // 初始 profile 写 cohort/background（batch 特有字段，factory 不含）
+    if (result.profileId && input.cohort) {
+      await prisma.virtual_learner_profiles.update({
+        where: { id: result.profileId },
+        data: { profile: JSON.stringify({ background: input.cohort }) },
+      });
+    }
+    // 返回兼容结构（保持 submit 调用方不变）
+    return { id: result.profileId, userId: result.userId };
   }
 
-  /** 生成身份并更新画像 */
+  /** 生成身份并更新画像（重试 3 次语义保留在 batch 层） */
   private async generatePersonaAndUpdate(item: BatchQueueItem, jobId: string, cohort?: string): Promise<void> {
-    let seed: Record<string, unknown> | null = null;
+    let ok = false;
     let lastErr: unknown = null;
-    for (let attempt = 0; attempt < 3 && !seed; attempt++) {
+    for (let attempt = 0; attempt < 3 && !ok; attempt++) {
       try {
-        const result = await executeSkill(virtualLearnerPersonaDesignerDefinition, {
-          existingPersonaSeed: {
-            name: item.name,
-            nameHint: item.name,
-            ...(cohort ? { notes: cohort, background: cohort } : {}),
-          },
+        // 保留 batch 的既有身份 seed（name + cohort/background），由 factory 统一写回
+        await generateAndApplyPersona(item.profileId, {
+          existingNameHint: item.name,
+          existingBackground: cohort || undefined,
+          requireComplete: true,
         });
-        // executeSkill 已把结果拆包到 output：personaSeed 在顶层；这里兼容两种结构，
-        // 避免再次读取 result.output 造成双重拆包（QA ISSUE-003 二次根因）。
-        const output = (result?.personaSeed ? result : result?.output) || {};
-        const candidate = (output.personaSeed || output.profile || output) as Record<string, unknown> | null;
-        if (candidate && typeof candidate === 'object' && String(candidate.nameHint || '').trim() && String(candidate.background || '').trim()) {
-          seed = candidate;
-        } else {
-          lastErr = new Error('personaSeed 缺 nameHint/background，重试');
-        }
+        ok = true;
       } catch (e) {
         lastErr = e;
         await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
       }
     }
-    if (!seed) throw lastErr || new Error('身份生成失败（多次尝试仍缺字段）');
-
-    const nameFromSeed = String(seed.name || seed.nameHint || seed.occupation || '').trim();
-    const profilePayload: Record<string, unknown> = { ...seed };
-    if (item.name !== nameFromSeed) {
-      await prisma.users.update({ where: { id: (await prisma.virtual_learner_profiles.findUnique({ where: { id: item.profileId } }))?.userId || '' }, data: { name: nameFromSeed || item.name } }).catch(() => {});
-    }
-    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: item.profileId } });
-    if (!profile) throw new Error('学习者不存在');
-    const existing = safeJsonParse<Record<string, unknown>>(profile.profile, {});
-    await prisma.virtual_learner_profiles.update({
-      where: { id: item.profileId },
-      data: { profile: JSON.stringify({ ...existing, ...profilePayload }) },
-    });
+    if (!ok) throw lastErr || new Error('身份生成失败（多次尝试仍缺字段）');
   }
 
-  /** 生成故事（每次 1 个） */
+  /** 生成故事（每次 1 个，失败重试 3 次，与 draft-stories 路由逻辑一致） */
   private async generateStory(item: BatchQueueItem, jobId: string): Promise<void> {
     let ok = false;
     let lastErr: unknown = null;
     for (let attempt = 0; attempt < 3 && !ok; attempt++) {
       try {
-        await this.draftStory(item.profileId);
+        const applied = await generateAndApplyStory(item.profileId);
+        if (!applied) throw new Error('故事生成未返回 story');
         ok = true;
       } catch (e) {
         lastErr = e;
@@ -308,45 +272,6 @@ class BatchJobService {
       }
     }
     if (!ok) throw lastErr || new Error('故事生成失败');
-  }
-
-  /** 单次故事生成（与 draft-stories 路由同逻辑：existingPersonaSeed 兜底补全） */
-  private async draftStory(profileId: string): Promise<void> {
-    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: profileId } });
-    if (!profile) throw new Error('学习者不存在');
-    const profileData = safeJsonParse<Record<string, unknown>>(profile.profile, {});
-    const existingStoryPool = Array.isArray(profileData.storyPool) ? profileData.storyPool : [];
-    // 兜底补全（与 draft-stories 路由一致）：避免身份不完整导致故事失败
-    const personaSeedForStory: Record<string, unknown> = { ...profileData };
-    if (!String(personaSeedForStory.education || '').trim()) personaSeedForStory.education = '在职学习';
-    if (!['reading', 'watching', 'doing', 'listening'].includes(String(personaSeedForStory.learningStyle || ''))) personaSeedForStory.learningStyle = 'doing';
-    if (!Number.isFinite(Number(personaSeedForStory.age))) personaSeedForStory.age = 28;
-    if (!Array.isArray(personaSeedForStory.knownConcepts) || !personaSeedForStory.knownConcepts.length) personaSeedForStory.knownConcepts = ['基础概念'];
-    if (!Array.isArray(personaSeedForStory.struggleConcepts) || !personaSeedForStory.struggleConcepts.length) personaSeedForStory.struggleConcepts = ['方法不清晰'];
-    if (!Array.isArray(personaSeedForStory.emotionalTriggers) || !personaSeedForStory.emotionalTriggers.length) personaSeedForStory.emotionalTriggers = ['遇到挫折'];
-    if (!Array.isArray(personaSeedForStory.failurePatterns) || !personaSeedForStory.failurePatterns.length) personaSeedForStory.failurePatterns = ['半途而废'];
-    if (!['internal', 'external', 'both', 'none'].includes(String(personaSeedForStory.motivationType || ''))) personaSeedForStory.motivationType = 'internal';
-    if (!['minimal', 'moderate', 'abundant'].includes(String(personaSeedForStory.availableTime || ''))) personaSeedForStory.availableTime = 'moderate';
-
-    const result = await executeSkill(virtualLearnerScenarioDesignerDefinition, {
-      recentScenarioHints: [],
-      existingPersonaSeed: personaSeedForStory,
-      existingStoryPool,
-      targetStoryCount: 1,
-    });
-    // 同上：executeSkill 已拆包，story 在顶层（兼容旧结构兜底）
-    const newStory = result?.story ?? result?.output?.story;
-    if (!newStory) throw new Error('故事生成未返回 story');
-    const storyWithStatus = { ...newStory, createdAt: new Date().toISOString() };
-    await prisma.virtual_learner_profiles.update({
-      where: { id: profileId },
-      data: {
-        profile: JSON.stringify({
-          ...profileData,
-          storyPool: [...existingStoryPool, storyWithStatus],
-        }),
-      },
-    });
   }
 }
 

@@ -6,18 +6,20 @@
  *
  * 数据：batch_experiments + batch_experiment_runs 两张表（schema.prisma）。
  * 驱动：startBatchExperimentScheduler() 定时轮询推进（每 30s 扫 active runs，busy 防重入）。
+ *
+ * 创建/身份/故事：统一调用 virtual-lab/learner-provisioning（唯一实现）。
  */
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
 import { createSessionForProfile, getStoryPool } from '../../virtual-lab/session-factory';
-import { executeSkill } from '../../skills';
-import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-learner-persona-designer';
-import { virtualLearnerScenarioDesignerDefinition } from '../../skills/virtual-learner-scenario-designer';
+import {
+  provisionVirtualProfile,
+  generateAndApplyPersona,
+  generateAndApplyStory,
+} from '../../virtual-lab/learner-provisioning';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { memoryTraceService } from '../memory/memory-trace.service';
-import bcrypt from 'bcryptjs';
-import { randomUUID } from 'node:crypto';
 
 export interface BatchLearnerConfig {
   name: string;
@@ -45,99 +47,27 @@ async function getRun(runId: string) {
 
 /** 创建虚拟学习者（users + profile），返回 profileId */
 async function createLearner(cfg: BatchLearnerConfig): Promise<string> {
-  const email = `virtual_${randomUUID().substring(0, 8)}@test.local`;
-  const password = bcrypt.hashSync(randomUUID(), 10);
-  const user = await prisma.users.create({
-    data: {
-      id: randomUUID(),
-      email,
-      name: cfg.name,
-      password,
-      role: 'user',
-      currentLevel: 'beginner',
-      isAdmin: false,
-      isVirtualLearner: true,
-      updatedAt: new Date(),
-    },
+  const result = await provisionVirtualProfile({
+    name: cfg.name,
+    learningGoal: cfg.learningGoal ?? '',
+    tags: ['batch-experiment'],
+    notes: '批量实验自动创建',
   });
-  const profile = await prisma.virtual_learner_profiles.create({
-    data: {
-      id: randomUUID(),
-      userId: user.id,
-      profile: '{}',
-      learningGoal: cfg.learningGoal ?? '',
-      knowledgeLevel: 'beginner',
-      simulationTemperature: 0.8,
-      tags: JSON.stringify(['batch-experiment']),
-      notes: `批量实验自动创建`,
-    },
-  });
-  return profile.id;
+  return result.profileId;
 }
 
 /** 生成人设（LLM）并写回 profile；失败不阻断（用基础档案继续） */
 async function draftPersona(profileId: string, sampleType?: string): Promise<void> {
-  try {
-    const result = await executeSkill(virtualLearnerPersonaDesignerDefinition, {
-      preferredLevels: ['beginner'],
-      existingPersonaSeed: {},
-      ...(sampleType === 'student'
-        ? {
-            recentPersonaHints: ['本次明确生成传统学生样本：学段与年级、目标考试或升学节点、学期节奏（课表/晚自习/假期）、成绩自评、家长与老师的外部期望必须全部具体；emotionalTriggers/failurePatterns 写学生真实模式（家长问成绩、排名下滑、考前突击遗忘等）。'],
-          }
-        : {}),
-    });
-    const personaSeed = result?.personaSeed;
-    if (personaSeed && typeof personaSeed === 'object') {
-      const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: profileId } });
-      const existing = safeJson<Record<string, unknown>>(profile?.profile, {});
-      await prisma.virtual_learner_profiles.update({
-        where: { id: profileId },
-        data: { profile: JSON.stringify({ ...existing, ...personaSeed }) },
-      });
-    }
-  } catch (e) {
-    logger.warn('[batch-experiment] persona generation failed, using basic profile', { profileId, error: String(e) });
-  }
+  await generateAndApplyPersona(profileId, {
+    studentHints: sampleType === 'student' ? ['本次明确生成传统学生样本：学段与年级、目标考试或升学节点、学期节奏（课表/晚自习/假期）、成绩自评、家长与老师的外部期望必须全部具体；emotionalTriggers/failurePatterns 写学生真实模式（家长问成绩、排名下滑、考前突击遗忘等）。'] : undefined,
+  });
 }
 
 /** 生成故事（LLM）并写回 storyPool；失败不阻断（会话启动再报错） */
 async function draftStory(profileId: string, sampleType?: string): Promise<void> {
-  try {
-    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: profileId } });
-    if (!profile) return;
-    const profileData = safeJson<Record<string, any>>(profile.profile, {});
-    const existingStoryPool = Array.isArray(profileData.storyPool) ? profileData.storyPool : [];
-    if (existingStoryPool.length > 0) return;
-    const result = await executeSkill(virtualLearnerScenarioDesignerDefinition, {
-      preferredMotivations: undefined,
-      candidateDomains: undefined,
-      candidatePersonas: undefined,
-      ...(sampleType === 'student'
-        ? {
-            recentScenarioHints: ['本次明确生成传统学生样本的故事：sourceType 取 study 或 goalType 取 exam_prep，必须写清考试节点与时间压力、课纲既定的学习内容、老师布置的作业情境、家长与老师的期望、同学比较环境；pressurePoints/behaviorHooks 写学生真实卡点。'],
-          }
-        : {}),
-      existingPersonaSeed: profileData,
-      existingStoryPool,
-      targetStoryCount: 1,
-    });
-    const newStory = result?.story;
-    if (newStory) {
-      const storyWithStatus = { ...newStory, createdAt: new Date().toISOString() };
-      await prisma.virtual_learner_profiles.update({
-        where: { id: profileId },
-        data: {
-          profile: JSON.stringify({
-            ...profileData,
-            storyPool: [...existingStoryPool, storyWithStatus],
-          }),
-        },
-      });
-    }
-  } catch (e) {
-    logger.warn('[batch-experiment] story generation failed', { profileId, error: String(e) });
-  }
+  await generateAndApplyStory(profileId, {
+    extraHints: sampleType === 'student' ? ['本次明确生成传统学生样本的故事：sourceType 取 study 或 goalType 取 exam_prep，必须写清考试节点与时间压力、课纲既定的学习内容、老师布置的作业情境、家长与老师的期望、同学比较环境；pressurePoints/behaviorHooks 写学生真实卡点。'] : undefined,
+  });
 }
 
 /** 快照：memory_traces + learner_evidence 摘要 → checkpoints/decaySims 追加 */
