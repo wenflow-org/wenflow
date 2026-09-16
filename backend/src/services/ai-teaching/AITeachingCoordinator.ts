@@ -25,6 +25,7 @@ import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSn
 import { learnerStateReviewService } from '../learner/LearnerStateReviewService';
 import { conceptConsolidatorService } from '../learner/ConceptConsolidatorService';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
+import { recordTaskDifficultyAdjustment } from '../learner/TaskDifficultyAdjustmentLedger';
 import { assembleTeachingTurnChannels } from '../field-dispatcher';
 import { createDomainEvent } from '../../events/contracts';
 import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryService';
@@ -1396,6 +1397,59 @@ export class AITeachingOrchestrator {
     await this.idleCheckInFlight;
   }
 
+  /**
+   * 难度调整锚点：开课时把本节难度判定留痕，供"这个调整到底有没有用"与下一条同路径状态对账。
+   *
+   * 为什么放生产：此前 `recordTaskDifficultyAdjustment` 的唯一调用者是模拟脚本，
+   * 于是效果度量（`relieved` / `still_triggered`）在真实课上从未运行过——只能看过程，不能审计。
+   *
+   * 口径（诚实边界，与台账注释一致）：
+   * - 只留"有调整理由"的锚点（无理由即无调整，无从度量）；
+   * - `applied` = 档位**真的变了**（`adjusted !== baseline`）。生产把档位注入提示词，学生看到的
+   *   就是调整后的难度；生产**没有随机对照组**，因此 `applied=false` 的自然对照只来自
+   *   "理由触发但被地板/上限吃掉、档位没动"这类情形——它同样进对照统计，不是假对照；
+   * - 幂等键 = `taskId`（重复开课/恢复只更新同一条锚点）；
+   * - `occurredAt` 用模拟时钟（虚拟实验室回放历史日期时必须与状态写入同一时钟）。
+   */
+  private async recordTaskDifficultyAnchor(
+    context: TeachingScenarioContext,
+    sessionId: string,
+  ): Promise<void> {
+    const decision = context.learnerProjection?.taskDifficulty;
+    if (!decision || !Array.isArray(decision.reasons) || decision.reasons.length === 0) return;
+    try {
+      await recordTaskDifficultyAdjustment({
+        userId: context.userId,
+        taskId: context.taskId,
+        pathId: context.learningPathId ?? null,
+        milestoneId: context.milestoneId ?? null,
+        sessionId,
+        occurredAt: simulatedNowOr(),
+        baseline: decision.baseline,
+        adjusted: decision.adjusted,
+        direction: decision.direction,
+        reasons: decision.reasons,
+        applied: decision.adjusted !== decision.baseline,
+        evidence: {
+          ...decision.evidence,
+          delta: decision.delta,
+          cap: decision.cap,
+          capSource: decision.capSource,
+          // 投影层不带 capApplied，这里按同一口径复算（是否被上限封住）
+          capBound: decision.adjusted === decision.cap,
+          deliveryMode: 'prompt-injection',
+          hasRandomizedControl: false,
+        } as unknown as Record<string, unknown>,
+      });
+    } catch (error) {
+      logger.warn('[AITeaching] 难度锚点留痕失败（不阻断开课）', {
+        userId: context.userId,
+        taskId: context.taskId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   async startSession(input: TeachingSessionStartInput): Promise<{
     sessionId: string;
     subject: string;
@@ -1659,6 +1713,9 @@ export class AITeachingOrchestrator {
         userId: input.userId,
         taskId: input.taskId,
       });
+
+      // 难度调整锚点：开课时留痕一次（幂等键 = taskId），使效果度量能在真实课上运行
+      await this.recordTaskDifficultyAnchor(context, session.id);
 
       return {
         sessionId: session.id,

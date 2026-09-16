@@ -8,9 +8,12 @@
  *   3 结果是否摘取（items[].outcome）
  *   4 是否产生 review:completed 证据
  *   5 预算是否分档（successRate 由 null 变为数值；样本 1/1 成功 → 预期 3.0 高档）
+ *   6 难度调整锚点是否落库（P0-2；本节没有降档/升档理由时按设计不留痕）
  *
  * 用法：
- *   npx ts-node --transpile-only src/scripts/verify-warmup-loop.ts [--user=<ID>] [--turns=2]
+ *   npx ts-node --transpile-only src/scripts/verify-warmup-loop.ts [--user=<ID>] [--turns=2] [--start-only]
+ *
+ * `--start-only`：只开课 + 查观测 1/6，跳过回合与结算（省 LLM 调用）。
  *
  * 注意：会真实开课（LLM 调用 + 写会话/证据数据），目标应为**虚拟学习者**。
  */
@@ -90,6 +93,22 @@ async function main(): Promise<void> {
   const persisted = artifacts1.memoryWarmup;
   const obs1 = !!persisted && Array.isArray(persisted.items) && persisted.items.length > 0;
   console.log(`[verify] 观测1 计划落库=${obs1 ? 'PASS' : 'FAIL'}（items=${persisted?.items?.length ?? 0}）${obs1 ? '' : ' ← 断点1 未修复'}`);
+
+  // ── 观测点 6：难度调整锚点是否落库（P0-2：生产路径此前只有模拟脚本在留痕）
+  const anchor = await prisma.learner_evidence.findFirst({
+    where: { taskId: target.taskId, evidenceType: 'task:difficulty:adjustment' },
+    select: { payload: true },
+  });
+  console.log(
+    `[verify] 观测6 难度锚点落库=${anchor ? 'PASS' : '未触发'}${
+      anchor ? ` → ${String(anchor.payload).slice(0, 170)}` : '（本节没有任何降档/升档理由，按设计不留痕）'
+    }`
+  );
+
+  if (process.argv.includes('--start-only')) {
+    console.log('[verify] --start-only：跳过回合与结算（省 LLM 调用）');
+    return;
+  }
 
   // ── 回合（学生发言）
   // 说明：本脚本验证的是**管道**，因此第 1 轮由「学生」主动把到期点回忆出来（不依赖模型是否记得先提问）。

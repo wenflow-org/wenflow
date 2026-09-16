@@ -213,6 +213,31 @@ sessionArtifacts: {
 1. **未作答的点不会被"收紧"**：只有 `mastered`/`learning` 算结果 → 学生答不出时不产生任何记忆更新，也就没有 lapse 语义（与 §4.2(1) 的 `lapses≈0` 同一根源）。
 2. **随堂温故会吃掉当日额度**：验证中见到 `当日剩余额度=0`（上限 6.0）→ 当天再开课就温故不了；额度与"每课 1–2 条"叠加后，实际能覆盖的到期量很小（§3.3）。
 3. **分档是跳变的**：只有 `<0.7` / `>0.9` 两个阈值，中间带（0.7–0.9）恒为基准 2.0；样本少时档位会因单次结果剧烈跳动（1/1 成功即跳到高档）。
+4. **结果摘取依赖"模型用原名字回写"**：两次全流程验证里，一次正常摘到（`…口径配对 → mastered`），一次没摘到——模型把温故点用**近义说法**问出来、没按计划原名字写进 `knowledge.points`，`normalizeConceptKey` 就匹配不上。⇒ 摘取对"换名"不稳，是下一步该收紧的点（提示词要求 + 匹配放宽，二选一或并用）。
+
+## 3.7 P0-2 修复记录：难度锚点接进生产（2026-09-16）
+
+**问题**：`recordTaskDifficultyAdjustment` 的唯一调用者是模拟脚本 → "难度调整有没有用"在真实课上从未被审计过。
+
+**修复**：开课路径新增 `AITeachingOrchestrator.recordTaskDifficultyAnchor`（在 `startSession` 内、`completeInitialization` 之后调用）：
+
+- 只留"有降档/升档理由"的锚点（无理由 = 无调整，无从度量）；
+- 幂等键 = `taskId`（重复开课/会话恢复只更新同一条）；
+- `occurredAt` 用**模拟时钟**（虚拟实验室回放历史日期时，必须与状态写入同一时钟，否则对账取不到"下一条状态"）；
+- `applied = adjusted !== baseline`（档位**真的变了**）。生产没有随机对照组，`applied=false` 的自然对照只来自"理由触发但被地板/上限吃掉、档位没动"这类情形——该语义与"无随机对照"一并写进 evidence（`deliveryMode` / `hasRandomizedControl`）。
+
+**回看工具**：`src/scripts/audit-difficulty-ledger.ts`（只读；按 `reason|applied` 出缓解率，并给 Δlsb/Δlf 均值）。
+
+**真实数据首次出结果**（小陈，n=1，仅证明机制跑通，不构成任何结论）：
+
+```
+st_17887  5→3  applied=true
+reasons=[path_load_unbalanced, fragile_concepts, struggling_concepts, prerequisite_gaps]
+outcome=still_triggered  still=[path_load_unbalanced] ｜ Δlsb=-0.224  Δlf=+0.334
+汇总：path_load_unbalanced|applied=true → n=1, relieved=0, rate=0%
+```
+
+值得注意：这次判据**没有**自证有效（`relieved=0`）——说明"降档必然被判有效"的风险至少在单例上没有被自动化乐观化。
 
 ## 4. 科学性评估（逐机制对照文献）
 
@@ -350,7 +375,7 @@ sessionArtifacts: {
 - `buildReviewPlan` 的 `successRate` 从 `-` 变为数值；
 - 连续课累计后，预算从基准 2.0 **分档**到 1.0 / 3.0 至少各一次。
 
-### P0-2 难度调整落生产锚点（一行）
+### P0-2 难度调整落生产锚点（一行）—— **已完成并验证（§3.7）**
 
 在 `TeachingContextBuilder` 计算档位处调用 `recordTaskDifficultyAdjustment`（与模拟脚本同一入口）。
 **验收**：真实课产生 `task:difficulty:adjustment` 证据；回看脚本能对真实数据出 `relievedRate`，且 `applied` 不再恒等于模拟值。
