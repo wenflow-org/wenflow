@@ -41,6 +41,9 @@ export interface RetentionBucketStat {
   total: number;
   success: number;
   successRate: number | null;
+  /** 宽松口径：FSRS 语义下 hard 也是"回忆出来了"，只有 again 算失败 */
+  successLenient: number;
+  successRateLenient: number | null;
   avgMastery: number | null;
 }
 
@@ -57,21 +60,34 @@ export function retentionBucketOf(elapsedDays: number | null | undefined): Reten
   return '>30d';
 }
 
-/** 检索成功口径与动态预算保持一致：good / easy 视为成功（hard 与 again 计入失败） */
+/** 检索成功口径（严）：good / easy 才算"干净答出"——动态预算用的就是这个 */
 export function isRetrievalSuccess(rating: string): boolean {
   return rating === 'good' || rating === 'easy';
 }
 
+/**
+ * 检索成功口径（宽）：按 FSRS 语义，**只有 again 是失败**——hard 也是"回忆出来了，只是费力"。
+ * 两个口径都给出来，是因为"learning（推进但未掌握）该不该算成功"有歧义：
+ * 提示词把 learning 也归为"回捞成功"，而写证据时它落到 FSRS 的 hard 上 →
+ * 严口径会把"有进展的复习"记成失败、进而压低预算（摩擦口径）；宽口径则把它记为成功。
+ * 这里**不替使用者做选择**，两个口径同时呈现（见审计文档 §3.9）。
+ */
+export function isRetrievalSuccessLenient(rating: string): boolean {
+  return String(rating) !== 'again';
+}
+
 export function buildRetentionCurve(observations: RetentionObservation[]): RetentionBucketStat[] {
-  const acc = new Map<RetentionBucket, { total: number; success: number; masterySum: number; masteryN: number }>();
+  const acc = new Map<RetentionBucket, { total: number; success: number; successLenient: number; masterySum: number; masteryN: number }>();
   for (const bucket of RETENTION_BUCKETS) {
-    acc.set(bucket, { total: 0, success: 0, masterySum: 0, masteryN: 0 });
+    acc.set(bucket, { total: 0, success: 0, successLenient: 0, masterySum: 0, masteryN: 0 });
   }
   for (const observation of observations) {
     const bucket = retentionBucketOf(observation.elapsedDays);
     const entry = acc.get(bucket)!;
     entry.total += 1;
-    if (isRetrievalSuccess(String(observation.rating))) entry.success += 1;
+    const rating = String(observation.rating);
+    if (isRetrievalSuccess(rating)) entry.success += 1;
+    if (isRetrievalSuccessLenient(rating)) entry.successLenient += 1;
     const mastery = Number(observation.masteryScore);
     if (Number.isFinite(mastery)) {
       entry.masterySum += mastery;
@@ -80,11 +96,14 @@ export function buildRetentionCurve(observations: RetentionObservation[]): Reten
   }
   return RETENTION_BUCKETS.map((bucket) => {
     const entry = acc.get(bucket)!;
+    const rate = (value: number) => (entry.total > 0 ? Math.round((value / entry.total) * 100) / 100 : null);
     return {
       bucket,
       total: entry.total,
       success: entry.success,
-      successRate: entry.total > 0 ? Math.round((entry.success / entry.total) * 100) / 100 : null,
+      successRate: rate(entry.success),
+      successLenient: entry.successLenient,
+      successRateLenient: rate(entry.successLenient),
       avgMastery: entry.masteryN > 0 ? Math.round((entry.masterySum / entry.masteryN) * 1000) / 1000 : null,
     };
   });

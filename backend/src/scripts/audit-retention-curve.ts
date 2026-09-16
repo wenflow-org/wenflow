@@ -48,15 +48,21 @@ function printCurve(title: string, observations: RetentionObservation[]): void {
     console.log('  （无样本：需要先在课内温故/复习课里真正回捞到结果）');
     return;
   }
-  console.log('  间隔桶        样本  成功  成功率  平均掌握度   说明');
+  console.log('  间隔桶        样本  严口径成功  严成功率  宽口径成功  宽成功率  平均掌握度   说明');
   for (const stat of curve) {
     if (stat.total === 0) continue;
+    const pct = (value: number | null) => (value === null ? '-' : `${(value * 100).toFixed(0)}%`);
     console.log(
-      `  ${stat.bucket.padEnd(10)} ${String(stat.total).padStart(5)} ${String(stat.success).padStart(5)} ` +
-        `${(stat.successRate === null ? '-' : `${(stat.successRate * 100).toFixed(0)}%`).padStart(6)} ` +
+      `  ${stat.bucket.padEnd(10)} ${String(stat.total).padStart(5)} ${String(stat.success).padStart(10)} ` +
+        `${pct(stat.successRate).padStart(8)} ${String(stat.successLenient).padStart(10)} ` +
+        `${pct(stat.successRateLenient).padStart(8)} ` +
         `${(stat.avgMastery === null ? '-' : stat.avgMastery.toFixed(3)).padStart(9)}   ${RETENTION_BUCKET_EXPLANATION[stat.bucket]}`
     );
   }
+  console.log(
+    '  口径：严 = 仅 good/easy 算"干净答出"（动态预算用的就是这个）；宽 = 仅 again 算失败（FSRS 语义，hard 也是回忆出来了）。\n' +
+      '        两者都要看：learning（推进但未掌握）在严口径下被记成失败——会把"有进展的复习"读成退步。'
+  );
   const withoutInterval = curve.find((stat) => stat.bucket === 'unknown');
   if (withoutInterval && withoutInterval.total > 0) {
     console.log(`  ⚠️ ${withoutInterval.total} 条没有 elapsedDays（首次接触或写入该字段之前的数据）`);

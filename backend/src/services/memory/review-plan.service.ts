@@ -228,7 +228,15 @@ export async function loadRecentOutcomes(
   }
 }
 
-/** 成功率：good/easy 视为检索成功（hard/again 计入失败，有益困难区间靠它校准） */
+/**
+ * 成功率：good/easy 视为检索成功（hard/again 计入失败，有益困难区间靠它校准）。
+ *
+ * ⚠️ 口径说明（2026-09-16 审计 §3.9）：这是**摩擦口径**，不是 FSRS 语义。
+ * FSRS 里 hard 也是"回忆出来了，只是费力"；而写证据时 `learning`（推进但未掌握）会落到 hard，
+ * 于是"有进展的复习"被记成失败、拉低预算（实测：一节有进展的课把 successRate 打到 0）。
+ * 分析侧请同时看宽口径（`retention-curve.isRetrievalSuccessLenient`），不要只依赖本函数。
+ * 另注：目前**失败（未答出）不产生证据** → 本成功率是**上界**，不是真值。
+ */
 export function computeSuccessRate(outcomes: WarmupOutcome[]): number | null {
   if (outcomes.length === 0) return null;
   const success = outcomes.filter((item) => item.rating === 'good' || item.rating === 'easy').length;

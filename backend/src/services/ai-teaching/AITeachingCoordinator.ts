@@ -39,7 +39,7 @@ import { learnerExitService } from '../learner/LearnerExitService';
 import { memoryTraceService, normalizeConceptKey } from '../memory/memory-trace.service';
 import { conceptLoadService } from '../memory/concept-load.service';
 import { reviewQuotaService } from '../memory/review-quota.service';
-import reviewPlanService, { type ReviewPlan } from '../memory/review-plan.service';
+import reviewPlanService, { type ReviewPlan, type ReviewPlanItem } from '../memory/review-plan.service';
 import { recordMisconceptions } from '../learner/misconception-ledger.service';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
@@ -316,14 +316,40 @@ function warmupKeyOf(name: string): string {
  */
 const WARMUP_RESULT_STATUSES = new Set(['mastered', 'learning']);
 
-/** 计划内温故点的归一化键集合 */
-function buildWarmupKeySet(plan: ReviewPlan | null | undefined): Set<string> {
-  const keys = new Set<string>();
-  for (const item of plan?.items || []) {
+/** 保守包含匹配的长度门槛（归一化后字符数）：短名包含关系太容易误伤，宁可不匹配 */
+export const WARMUP_FUZZY_MIN_LENGTH = 8;
+
+/**
+ * 把「模型回写的点位名」对到计划项上（保守匹配）。
+ *
+ * 为什么需要退一步：实测两次全流程验证，一次摘到、一次没摘到——模型用**近义/截断**说法
+ * 回写点位（提示词要求"用计划里的原名字"，但不总是遵守），结果**随机丢样本**，
+ * 而样本正是动态预算与保持曲线的输入。
+ *
+ * 为什么必须保守：温故点会被**从本节看板摘除**（回归 2e3ca16），一旦误判，
+ * 本节知识点会被当成温故点摘掉。因此：
+ * 1) 先精确（归一化后相等）；计划内自身歧义 → 放弃；
+ * 2) 再退一步做包含匹配，但要求**双方长度 ≥ 门槛**且**唯一命中**；否则放弃（宁缺勿错）。
+ */
+export function matchWarmupItem(
+  plan: ReviewPlan | null | undefined,
+  name: string,
+): ReviewPlanItem | null {
+  const items = (plan?.items || []).filter((item) => item && (item.label || item.conceptKey));
+  if (items.length === 0) return null;
+  const target = warmupKeyOf(String(name || ''));
+  if (!target) return null;
+
+  const exact = items.filter((item) => warmupKeyOf(item.label || item.conceptKey) === target);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return null;
+
+  const contained = items.filter((item) => {
     const key = warmupKeyOf(item.label || item.conceptKey);
-    if (key) keys.add(key);
-  }
-  return keys;
+    if (key.length < WARMUP_FUZZY_MIN_LENGTH || target.length < WARMUP_FUZZY_MIN_LENGTH) return false;
+    return key.includes(target) || target.includes(key);
+  });
+  return contained.length === 1 ? contained[0] : null;
 }
 
 /**
@@ -368,18 +394,20 @@ export function extractWarmupOutcomes(
   plan: ReviewPlan | null | undefined,
   points: Array<{ name: string; status: string; progress: number }> | null | undefined,
 ): Array<{ conceptKey: string; status: string; progress: number }> {
-  const keys = buildWarmupKeySet(plan);
-  if (keys.size === 0 || !Array.isArray(points)) return [];
+  if (!plan || !Array.isArray(points)) return [];
   const outcomes: Array<{ conceptKey: string; status: string; progress: number }> = [];
   for (const point of points) {
     const name = String(point?.name || '').trim();
-    if (!name || !keys.has(warmupKeyOf(name))) continue;
+    if (!name) continue;
+    const matched = matchWarmupItem(plan, name);
+    if (!matched) continue;
     const status = String(point.status || '') || 'learning';
     // 只有「当场回捞出了结果」的状态才算结果：模型把温故点写回来只为提问（'review'）时，
     // 它不代表任何作答表现——若当成结果收录，收束时会按"没答出"落成 again，污染记忆状态。
     if (!WARMUP_RESULT_STATUSES.has(status)) continue;
     outcomes.push({
-      conceptKey: name,
+      // 用**计划项的规范键**（而非模型当时的写法）：记忆引擎按它定位 memory_traces
+      conceptKey: matched.conceptKey,
       status,
       progress: Number(point.progress) || 0,
     });
@@ -392,9 +420,8 @@ export function stripWarmupPoints<T extends { name: string }>(
   plan: ReviewPlan | null | undefined,
   points: T[],
 ): T[] {
-  const keys = buildWarmupKeySet(plan);
-  if (keys.size === 0) return points;
-  return points.filter((point) => !keys.has(warmupKeyOf(String(point?.name || ''))));
+  if (!plan || !Array.isArray(points)) return points;
+  return points.filter((point) => !matchWarmupItem(plan, String(point?.name || '')));
 }
 
 /** 把温故结果并进持久化计划项（按归一化键匹配） */

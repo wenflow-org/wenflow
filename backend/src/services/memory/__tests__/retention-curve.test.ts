@@ -1,6 +1,7 @@
 import {
   buildRetentionCurve,
   isRetrievalSuccess,
+  isRetrievalSuccessLenient,
   retentionBucketOf,
 } from '../retention-curve';
 
@@ -47,6 +48,24 @@ describe('保持率 × 间隔：分桶与曲线（P0-3）', () => {
     expect(byBucket['unknown']).toMatchObject({ total: 1, success: 1 });
     // 空桶不给假数据
     expect(byBucket['7-14d']).toMatchObject({ total: 0, success: 0, successRate: null, avgMastery: null });
+  });
+
+  it('两个口径同时给：strict（仅 good/easy）与 lenient（仅 again 是失败）', () => {
+    const curve = buildRetentionCurve([
+      { elapsedDays: 5, rating: 'hard', masteryScore: 0.5 },   // 有进展的复习
+      { elapsedDays: 5, rating: 'again', masteryScore: 0.5 },  // 真没答出
+    ]);
+    const stat = curve.find((entry) => entry.bucket === '3-7d')!;
+    expect(stat).toMatchObject({
+      total: 2,
+      success: 0,
+      successRate: 0,            // 严口径：hard 不算"干净答出"（动态预算用的就是这个）
+      successLenient: 1,
+      successRateLenient: 0.5,   // 宽口径：hard 也是回忆出来了
+    });
+    expect(isRetrievalSuccess('hard')).toBe(false);
+    expect(isRetrievalSuccessLenient('hard')).toBe(true);
+    expect(isRetrievalSuccessLenient('again')).toBe(false);
   });
 
   it('buildRetentionCurve：无样本时全为 0，不抛错', () => {

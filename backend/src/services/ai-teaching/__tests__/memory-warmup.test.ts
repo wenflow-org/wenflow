@@ -1,5 +1,6 @@
 import {
   extractWarmupOutcomes,
+  matchWarmupItem,
   mergeWarmupOutcomes,
   pendingWarmupForModel,
   resolveTurnMemoryWarmup,
@@ -81,6 +82,36 @@ describe('课内温故：到期旧知与本节知识点看板物理分离（回�
     ]);
     expect(answered).toHaveLength(1);
     expect(answered[0].status).toBe('mastered');
+  });
+
+  it('matchWarmupItem：模型用近义/截断写法回写也能对上，且 conceptKey 归到计划项', () => {
+    const planWithLongLabel = plan([item('离开前把书翻到下一页并立好', 'leave-book-open')]);
+    // 精确（含归一化：冒号后缀差异）
+    expect(matchWarmupItem(planWithLongLabel, '离开前把书翻到下一页并立好')?.conceptKey).toBe('leave-book-open');
+    // 截断写法（包含关系 + 长度足够 + 唯一命中）
+    const truncated = matchWarmupItem(planWithLongLabel, '离开前把书翻到下一页');
+    expect(truncated?.conceptKey).toBe('leave-book-open');
+    // 结果摘取时 conceptKey 用计划项的规范键（记忆引擎按它定位 memory_traces）
+    const outcomes = extractWarmupOutcomes(planWithLongLabel, [
+      { name: '离开前把书翻到下一页', status: 'mastered', progress: 90 },
+    ]);
+    expect(outcomes).toEqual([{ conceptKey: 'leave-book-open', status: 'mastered', progress: 90 }]);
+  });
+
+  it('matchWarmupItem：保守边界——短名/歧义/无关一律不匹配（误判会摘掉本节知识点）', () => {
+    // 短于门槛（8 字）时不做包含匹配，避免"数据流"这类短名误伤
+    const shortPlan = plan([item('触发条件', 'k1')]);
+    expect(matchWarmupItem(shortPlan, '触发')).toBeNull();
+    // 歧义：两个计划项都能包含该写法 → 放弃（宁缺勿错）
+    const ambiguous = plan([
+      item('判断流程中数据流的按需触发条件与验证参数', 'k1'),
+      item('判断流程中数据流的按需触发时机与顺序', 'k2'),
+    ]);
+    expect(matchWarmupItem(ambiguous, '判断流程中数据流的按需触发')).toBeNull();
+    // 无关点：不匹配（这条不能被当作温故结果）
+    expect(matchWarmupItem(warmup, '本节一个完全无关的新知识点')).toBeNull();
+    // 精确命中即使短名也认（主路径不受门槛限制）
+    expect(matchWarmupItem(shortPlan, '触发条件')?.conceptKey).toBe('k1');
   });
 
   it('stripWarmupPoints：温故点绝不进本节看板（跨 path 到期点串进看板是历史事故的根因）', () => {
