@@ -13,7 +13,7 @@
           {{ clock.enabled ? '日期模拟已开启' : '日期模拟未开启' }}
         </span>
         <span class="dt-clock__meta">起点 {{ clock.baseDate }}</span>
-        <span class="dt-clock__meta">已推进 {{ clock.dayIndex }} 天 · 已过 {{ clock.elapsedDays }} / {{ clock.maxSimulatedDays }} 天</span>
+        <span class="dt-clock__meta">已推进 {{ clock.dayIndex }} / {{ clock.maxSimulatedDays }} 天</span>
         <span class="dt-clock__meta">{{ clock.timezone }}</span>
         <button type="button" class="mk-link" :disabled="resetting" title="重置推进进度（dayIndex=0、清空 history；不回改已写时间戳）" @click="resetClock">
           {{ resetting ? '重置中…' : '重置进度' }}
@@ -108,7 +108,6 @@ interface SimulationClock {
   timezone: string
   baseDate: string
   dayIndex: number
-  elapsedDays: number
   maxSimulatedDays: number
   autoAdvance: boolean
   courseWeekdays: number[]
