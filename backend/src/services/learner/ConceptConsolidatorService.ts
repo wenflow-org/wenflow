@@ -67,19 +67,13 @@ export interface ConceptConsolidationAudit {
   proposals: ConceptMergeProposal[];
   ambiguous: Array<{ a: string; b: string; reason: string }>;
   dropCandidates: Array<{ conceptKey: string; reason: string }>;
-  /** 执行记录（observe 模式恒为空；执行后写入，含回滚所需的整行前后快照） */
-  appliedMerges: Array<{
-    canonical: string;
-    aliases: string[];
-    winnerId: string;
-    /** 并合后写进胜出者的字段（dueAt 取最早、mastery 取最高、ktMasteryEma 按观测加权…） */
-    mergedFields: Record<string, unknown>;
-    /** 胜出者合并前整行（回滚用） */
-    winnerBefore: Record<string, unknown> | null;
-    /** 被删除行的整行快照（回滚用；不是只存 id） */
-    deletedRows: Array<Record<string, unknown>>;
-    appliedAt: string;
-  }>;
+  /**
+   * 执行记录（observe 模式恒为空）。
+   * 注意：这里的数组只是"审计 blob 里的近期视图"（滚动窗口），
+   * **回滚凭据的权威来源是按次留档**（`learner_evidence`，见 `AppliedConceptMerge`）——
+   * 否则跑到第 101 次归并，更早的凭据就会被窗口挤掉（回滚过期）。
+   */
+  appliedMerges: AppliedConceptMerge[];
   stats: {
     candidates: number;
     proposed: number;
@@ -87,6 +81,53 @@ export interface ConceptConsolidationAudit {
     applied: number;
     deleted: number;
   };
+}
+
+/** 一次归并执行的**按次凭据**：写入 learner_evidence，长期可回滚（不被审计窗口挤掉） */
+export interface AppliedConceptMerge {
+  /** 本次执行的唯一凭据 id（按次留档主键，幂等） */
+  mergeId: string;
+  canonical: string;
+  aliases: string[];
+  winnerId: string;
+  /** 并合后写进胜出者的字段（dueAt 取最早、mastery 取最高、ktMasteryEma 按观测加权…） */
+  mergedFields: Record<string, unknown>;
+  /** 胜出者合并前整行（回滚用） */
+  winnerBefore: Record<string, unknown> | null;
+  /** 被删除行的整行快照（回滚用；不是只存 id） */
+  deletedRows: Array<Record<string, unknown>>;
+  appliedAt: string;
+  /** 已回滚时间；有值 = 凭据仍在（审计痕迹）但不再作为可回滚目标（幂等） */
+  rolledBackAt?: string | null;
+}
+
+export const MERGE_RECORD_EVIDENCE_TYPE = 'concept:merge:applied';
+export const MERGE_RECORD_EVIDENCE_KEY = 'concept-merge';
+
+/** 稳定 mergeId：同一 (canonical, winnerId, appliedAt) 恒等 → 重复写不会产生重复凭据 */
+export function buildMergeId(canonical: string, winnerId: string, appliedAt: string): string {
+  return `mrg_${createHash('sha1').update(`${canonical}|${winnerId}|${appliedAt}`).digest('hex').slice(0, 16)}`;
+}
+
+export function parseMergeRecord(payload: string | null | undefined): AppliedConceptMerge | null {
+  if (!payload) return null;
+  try {
+    const parsed = JSON.parse(payload);
+    if (!parsed || typeof parsed !== 'object' || !parsed.mergeId || !parsed.canonical) return null;
+    return {
+      mergeId: String(parsed.mergeId),
+      canonical: String(parsed.canonical),
+      aliases: Array.isArray(parsed.aliases) ? parsed.aliases.map(String) : [],
+      winnerId: String(parsed.winnerId || ''),
+      mergedFields: parsed.mergedFields && typeof parsed.mergedFields === 'object' ? parsed.mergedFields : {},
+      winnerBefore: parsed.winnerBefore && typeof parsed.winnerBefore === 'object' ? parsed.winnerBefore : null,
+      deletedRows: Array.isArray(parsed.deletedRows) ? parsed.deletedRows : [],
+      appliedAt: String(parsed.appliedAt || ''),
+      rolledBackAt: typeof parsed.rolledBackAt === 'string' ? parsed.rolledBackAt : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export interface ConceptConsolidatorDeps {
@@ -100,6 +141,10 @@ export interface ConceptConsolidatorDeps {
   callSkill: (input: Record<string, unknown>) => Promise<{ success: boolean; output?: any; error?: any }>;
   /** 回滚用：按整行快照重建被删除的痕迹 */
   createTraces: (args: Record<string, unknown>) => Promise<unknown>;
+  /** 按次留档：写/更新一条归并凭据（幂等） */
+  recordMerge: (args: Record<string, unknown>) => Promise<unknown>;
+  /** 按次留档：读归并凭据（回滚的权威来源） */
+  findMerges: (args: Record<string, unknown>) => Promise<Array<Record<string, any>>>;
 }
 
 const defaultDeps: ConceptConsolidatorDeps = {
@@ -115,6 +160,8 @@ const defaultDeps: ConceptConsolidatorDeps = {
   }) as any,
   writeAudit: (args) => prisma.learner_projections.upsert(args as any) as any,
   callSkill: (input) => executeSkillWithResult(auxSkillDefinitionMap['concept-consolidator'], input as any) as any,
+  recordMerge: (args) => prisma.learner_evidence.upsert(args as any) as any,
+  findMerges: (args) => prisma.learner_evidence.findMany(args as any) as any,
 };
 
 export function consolidationAuditKey(userId: string): string {
@@ -554,24 +601,34 @@ class ConceptConsolidatorService {
     canonicals: string[],
   ): Promise<{ audit: ConceptConsolidationAudit | null; rolledBack: number; skipped: string[] }> {
     const audit = await this.getAudit(userId);
-    if (!audit) return { audit: null, rolledBack: 0, skipped: [] };
     const wanted = new Set(canonicals.map((item) => String(item || '').trim()).filter(Boolean));
-    const targets = audit.appliedMerges.filter((merge) => wanted.has(merge.canonical));
+    if (wanted.size === 0) return { audit, rolledBack: 0, skipped: [] };
+
+    // 凭据来源：① 按次留档（权威，长期有效，不被审计滚动窗口挤掉）
+    //           ② 审计 blob 里的近期视图（兼容本改动之前执行过的归并）
+    const durable = await this.listAppliedMerges(userId).catch((error) => {
+      logger.warn('[concept-consolidator] 读取归并凭据失败，回退到审计内视图', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [] as AppliedConceptMerge[];
+    });
+    const durableTargets = durable.filter((merge) => wanted.has(merge.canonical));
+    const coveredIds = new Set(durableTargets.map((merge) => merge.mergeId));
+    const blobTargets = (audit?.appliedMerges ?? []).filter((merge) =>
+      wanted.has(merge.canonical) && (!merge.mergeId || !coveredIds.has(merge.mergeId))
+    );
+    const targets = [...durableTargets, ...blobTargets];
     const skipped = Array.from(wanted).filter((canonical) => !targets.some((merge) => merge.canonical === canonical));
     if (targets.length === 0) return { audit, rolledBack: 0, skipped };
 
     let rolledBack = 0;
+    const rolledBackIds: string[] = [];
     for (const target of targets) {
       try {
-        if (target.winnerBefore && target.winnerId) {
-          const { id, ...restore } = target.winnerBefore as Record<string, unknown>;
-          await this.deps.updateTrace({ where: { id: target.winnerId }, data: restore });
-        }
-        const rows = (target.deletedRows || []).filter((row) => row && (row as any).id && (row as any).conceptKey);
-        if (rows.length > 0) {
-          await this.deps.createTraces({ data: rows });
-        }
+        await this.revertMerge(target);
         rolledBack += 1;
+        if (target.mergeId) rolledBackIds.push(target.mergeId);
       } catch (error) {
         logger.warn('[concept-consolidator] 单条回滚失败（跳过）', {
           userId,
@@ -581,10 +638,23 @@ class ConceptConsolidatorService {
       }
     }
 
+    // 标记凭据已回滚：既保证幂等（不会回滚两次），又保留审计痕迹（记录本身不删）
+    const rolledBackAt = new Date().toISOString();
+    for (const target of targets) {
+      if (!target.mergeId || !rolledBackIds.includes(target.mergeId)) continue;
+      await this.recordMerge(userId, { ...target, rolledBackAt }).catch(() => undefined);
+    }
+
+    if (!audit) {
+      logger.info('[concept-consolidator] 归并已回滚（无审计视图，按留档凭据）', { userId, rolledBack });
+      return { audit: null, rolledBack, skipped };
+    }
+
+    const rolledBackCanonicals = new Set(targets.map((merge) => merge.canonical));
     const next: ConceptConsolidationAudit = {
       ...audit,
       generatedAt: new Date().toISOString(),
-      appliedMerges: audit.appliedMerges.filter((merge) => !targets.some((item) => item.canonical === merge.canonical)),
+      appliedMerges: audit.appliedMerges.filter((merge) => !rolledBackCanonicals.has(merge.canonical)),
       stats: {
         ...audit.stats,
         applied: Math.max(0, audit.stats.applied - rolledBack),
@@ -594,6 +664,60 @@ class ConceptConsolidatorService {
     await this.writeAudit(userId, next);
     logger.info('[concept-consolidator] 归并已回滚', { userId, rolledBack });
     return { audit: next, rolledBack, skipped };
+  }
+
+  /** 按整行快照还原一次归并（回滚与"凭据落库失败时的当场撤销"共用） */
+  private async revertMerge(merge: AppliedConceptMerge): Promise<void> {
+    if (merge.winnerBefore && merge.winnerId) {
+      const { id, ...restore } = merge.winnerBefore as Record<string, unknown>;
+      await this.deps.updateTrace({ where: { id: merge.winnerId }, data: restore });
+    }
+    const rows = (merge.deletedRows || []).filter((row) => row && (row as any).id && (row as any).conceptKey);
+    if (rows.length > 0) {
+      await this.deps.createTraces({ data: rows });
+    }
+  }
+
+  /** 按次留档：写/更新一条归并凭据（幂等，事件键 = mergeId） */
+  private async recordMerge(userId: string, merge: AppliedConceptMerge): Promise<void> {
+    await this.deps.recordMerge({
+      where: { eventId_evidenceKey: { eventId: merge.mergeId, evidenceKey: MERGE_RECORD_EVIDENCE_KEY } },
+      create: {
+        id: `ev_${merge.mergeId}`,
+        eventId: merge.mergeId,
+        evidenceKey: MERGE_RECORD_EVIDENCE_KEY,
+        userId,
+        pathId: null,
+        taskId: null,
+        evidenceType: MERGE_RECORD_EVIDENCE_TYPE,
+        payload: JSON.stringify(merge),
+        confidence: 1,
+        occurredAt: new Date(merge.appliedAt || Date.now()),
+      },
+      update: {
+        payload: JSON.stringify(merge),
+      },
+    });
+  }
+
+  /**
+   * 列出该用户的归并凭据（按次留档）。
+   * 默认只看"仍可回滚"的（未被标记 rolledBackAt）；`includeRolledBack` 用于审计视图。
+   */
+  async listAppliedMerges(
+    userId: string,
+    options: { includeRolledBack?: boolean } = {}
+  ): Promise<AppliedConceptMerge[]> {
+    const rows = await this.deps.findMerges({
+      where: { userId, evidenceType: MERGE_RECORD_EVIDENCE_TYPE },
+      orderBy: { occurredAt: 'asc' },
+      select: { payload: true },
+    });
+    const merges = rows.flatMap((row) => {
+      const parsed = parseMergeRecord(row.payload);
+      return parsed ? [parsed] : [];
+    });
+    return options.includeRolledBack ? merges : merges.filter((merge) => !merge.rolledBackAt);
   }
 
   /** 写审计（upsert 到 learner_projections） */
@@ -639,15 +763,27 @@ class ConceptConsolidatorService {
         if (plan.deletedRows.length > 0) {
           await this.deps.deleteTraces({ where: { id: { in: plan.deletedRows.map((row) => row.id) } } });
         }
-        applied.push({
+        const appliedAt = new Date().toISOString();
+        const merge: AppliedConceptMerge = {
+          mergeId: buildMergeId(plan.canonical, plan.winnerId, appliedAt),
           canonical: plan.canonical,
           aliases: plan.aliases,
           winnerId: plan.winnerId,
           mergedFields: plan.mergedFields,
           winnerBefore: plan.winnerBefore,
           deletedRows: plan.deletedRows,
-          appliedAt: new Date().toISOString(),
-        });
+          appliedAt,
+          rolledBackAt: null,
+        };
+        try {
+          // 凭据与改动"同生共死"：落不进凭据就当场把这次改动撤销，
+          // 绝不留下"改了数据却没有回滚凭据"的状态（那等于不可回滚）。
+          await this.recordMerge(userId, merge);
+        } catch (recordError) {
+          await this.revertMerge(merge).catch(() => undefined);
+          throw recordError;
+        }
+        applied.push(merge);
       } catch (error) {
         logger.warn('[concept-consolidator] 单条归并执行失败（跳过，不影响其余）', {
           userId,

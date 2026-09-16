@@ -232,6 +232,7 @@ describe('ConceptConsolidatorService', () => {
       deleteTraces: jest.fn().mockResolvedValue({}),
       createTraces: jest.fn().mockResolvedValue({}),
       writeAudit: jest.fn().mockResolvedValue({}),
+      recordMerge: jest.fn().mockResolvedValue({}),
     };
     const deps: ConceptConsolidatorDeps = {
       findTraces: jest.fn().mockResolvedValue(projectionRows),
@@ -242,6 +243,8 @@ describe('ConceptConsolidatorService', () => {
       findPaths: jest.fn().mockResolvedValue([]),
       readAudit: jest.fn().mockResolvedValue(null),
       writeAudit: writes.writeAudit,
+      recordMerge: writes.recordMerge,
+      findMerges: jest.fn().mockResolvedValue([]),
       callSkill: jest.fn().mockResolvedValue({
         success: true,
         output: {
@@ -419,5 +422,77 @@ describe('ConceptConsolidatorService', () => {
     await service.consolidate('u1', { now: new Date() });
     const payload = (deps.callSkill as jest.Mock).mock.calls[0][0];
     expect(payload.candidates).toHaveLength(MAX_CANDIDATES);
+  });
+
+  describe('按次留档：回滚凭据不过期', () => {
+    const durableMerge = (over: Record<string, unknown> = {}) => ({
+      mergeId: 'mrg_deadbeef',
+      canonical: '离开前翻页立好',
+      aliases: ['离开前翻页立好：动作先于评价'],
+      winnerId: 'r1',
+      mergedFields: { dueAt: new Date('2026-09-14'), extractionCount: 7 },
+      winnerBefore: { id: 'r1', conceptKey: '离开前翻页立好', dueAt: null, extractionCount: 3 },
+      deletedRows: [{ id: 'r2', conceptKey: '离开前翻页立好：动作先于评价', ktMasteryEma: 0.7 }],
+      appliedAt: '2026-09-15T00:00:00Z',
+      rolledBackAt: null,
+      ...over,
+    });
+
+    it('审计窗口里已没有这条归并（滚动挤掉了）→ 仍能按留档凭据回滚', async () => {
+      const { service, writes } = build({
+        findMerges: jest.fn().mockResolvedValue([{ payload: JSON.stringify(durableMerge()) }]),
+      });
+      // 没有审计视图也要能回滚（凭据是权威来源）
+      const result = await service.rollbackMerge('u1', ['离开前翻页立好']);
+
+      expect(result.rolledBack).toBe(1);
+      expect(result.skipped).toEqual([]);
+      expect(writes.updateTrace).toHaveBeenCalledWith({
+        where: { id: 'r1' },
+        data: { conceptKey: '离开前翻页立好', dueAt: null, extractionCount: 3 },
+      });
+      expect(writes.createTraces).toHaveBeenCalledWith({
+        data: [{ id: 'r2', conceptKey: '离开前翻页立好：动作先于评价', ktMasteryEma: 0.7 }],
+      });
+    });
+
+    it('回滚后标记凭据（不删痕迹），二次回滚幂等 → skipped', async () => {
+      const { service, writes } = build({
+        findMerges: jest.fn().mockResolvedValue([{ payload: JSON.stringify(durableMerge()) }]),
+      });
+      await service.rollbackMerge('u1', ['离开前翻页立好']);
+
+      const updates = (writes.recordMerge as jest.Mock).mock.calls
+        .map((call) => call[0]?.update?.payload)
+        .filter(Boolean)
+        .map((payload: string) => JSON.parse(payload));
+      expect(updates).toHaveLength(1);
+      expect(updates[0].rolledBackAt).toBeTruthy();
+      expect(updates[0].mergeId).toBe('mrg_deadbeef');
+
+      // 第二次：已标记的凭据不再作为可回滚目标
+      (service as any).deps.findMerges = jest.fn().mockResolvedValue([
+        { payload: JSON.stringify(durableMerge({ rolledBackAt: '2026-09-16T00:00:00Z' })) },
+      ]);
+      (writes.updateTrace as jest.Mock).mockClear();
+      const again = await service.rollbackMerge('u1', ['离开前翻页立好']);
+      expect(again.rolledBack).toBe(0);
+      expect(again.skipped).toContain('离开前翻页立好');
+      expect(writes.updateTrace).not.toHaveBeenCalled();
+    });
+
+    it('凭据写不进去 → 当次改动当场撤销（绝不留下"改了数据却没有回滚凭据"的状态）', async () => {
+      const { service, writes } = await buildWithAudit({
+        recordMerge: jest.fn().mockRejectedValue(new Error('db down')),
+      });
+      const result = await service.applyProposals('u1', ['离开前翻页立好']);
+
+      expect(result.applied).toBe(0);            // 没留下"改了却没凭据"的状态
+      expect(writes.createTraces).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'r2' })],
+      });
+      const restore = (writes.updateTrace as jest.Mock).mock.calls.at(-1)?.[0];
+      expect(restore?.data).toMatchObject({ conceptKey: '离开前翻页立好' });
+    });
   });
 });
