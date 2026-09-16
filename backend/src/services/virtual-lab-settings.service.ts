@@ -10,14 +10,49 @@ import { logger } from '../utils/logger';
 const VIRTUAL_LAB_SETTING_KEY = 'virtualLab';
 const RUNTIME_CACHE_TTL_MS = 30_000;
 
+/**
+ * 日期模拟（虚拟侧）：控制"学习分散在各自然天"的仿真推进。
+ * 设计见 doc/local/VIRTUAL_LEARNER_SIMULATED_DAY_DRAFT.md §八（默认关闭，现网零变化）。
+ */
+export interface VirtualLabDateSimulationSettings {
+  /** 默认 false：未开启时任何推进/时间线都不生效（现网零变化） */
+  enabled: boolean;
+  /** 模拟时区（默认与日界实现一致） */
+  timezone: string;
+  /** 每次推进的每日学习时长上限（分钟） */
+  defaultDailyMinutesCap: number;
+  /** 每周学习天数（0 = 不限） */
+  defaultDaysPerWeek: number;
+  /** 每次推进跨几个自然日 */
+  defaultPaceDaysPerAdvance: number;
+  /** 单会话最多模拟天数（护栏） */
+  maxSimulatedDays: number;
+  /** 触发高优先级干预时暂停推进 */
+  pauseOnIntervention: boolean;
+  /** 批量/自动学习是否自动跨日 */
+  autoAdvanceEnabled: boolean;
+}
+
 export interface VirtualLabSettings {
   /** 虚拟学习者专属出站 LLM 请求速率上限（RPM）；0 = 不限 */
   virtualLearnerRpmLimit: number;
+  /** 虚拟侧日期模拟设置（默认关） */
+  dateSimulation: VirtualLabDateSimulationSettings;
 }
 
 export const DEFAULT_VIRTUAL_LAB_SETTINGS: VirtualLabSettings = {
   // 默认不限，避免未配置时改变现网行为
-  virtualLearnerRpmLimit: 0
+  virtualLearnerRpmLimit: 0,
+  dateSimulation: {
+    enabled: false,
+    timezone: 'Asia/Shanghai',
+    defaultDailyMinutesCap: 45,
+    defaultDaysPerWeek: 5,
+    defaultPaceDaysPerAdvance: 1,
+    maxSimulatedDays: 90,
+    pauseOnIntervention: false,
+    autoAdvanceEnabled: false,
+  }
 };
 
 let runtimeCache: { value: VirtualLabSettings; expiresAt: number } | null = null;
@@ -32,6 +67,52 @@ function clampInteger(value: unknown, fallback: number, min: number, max: number
   return Math.min(max, Math.max(min, Math.round(numeric)));
 }
 
+function clampBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return fallback;
+}
+
+function clampString(value: unknown, fallback: string, maxLength = 64): string {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text ? text.slice(0, maxLength) : fallback;
+}
+
+function normalizeDateSimulation(input: unknown): VirtualLabDateSimulationSettings {
+  const raw = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+  const d = DEFAULT_VIRTUAL_LAB_SETTINGS.dateSimulation;
+  return {
+    enabled: clampBoolean(raw.enabled, d.enabled),
+    timezone: clampString(raw.timezone, d.timezone),
+    defaultDailyMinutesCap: clampInteger(raw.defaultDailyMinutesCap, d.defaultDailyMinutesCap, 5, 480),
+    defaultDaysPerWeek: clampInteger(raw.defaultDaysPerWeek, d.defaultDaysPerWeek, 0, 7),
+    defaultPaceDaysPerAdvance: clampInteger(raw.defaultPaceDaysPerAdvance, d.defaultPaceDaysPerAdvance, 1, 30),
+    maxSimulatedDays: clampInteger(raw.maxSimulatedDays, d.maxSimulatedDays, 1, 365),
+    pauseOnIntervention: clampBoolean(raw.pauseOnIntervention, d.pauseOnIntervention),
+    autoAdvanceEnabled: clampBoolean(raw.autoAdvanceEnabled, d.autoAdvanceEnabled),
+  };
+}
+
+/**
+ * 深合并：现有 PUT 可能只带一个块（如 VL RPM 输入框只发 virtualLearnerRpmLimit），
+ * 不能因此把 dateSimulation 重置回默认。逐块合并后再归一。
+ */
+export function mergeVirtualLabSettings(
+  existing: Partial<VirtualLabSettings> | null | undefined,
+  input: Partial<VirtualLabSettings>
+): Partial<VirtualLabSettings> {
+  const base = existing ?? DEFAULT_VIRTUAL_LAB_SETTINGS;
+  return {
+    ...base,
+    ...input,
+    dateSimulation: normalizeDateSimulation({
+      ...(base.dateSimulation || DEFAULT_VIRTUAL_LAB_SETTINGS.dateSimulation),
+      ...(input.dateSimulation || {}),
+    }),
+  };
+}
+
 export function normalizeVirtualLabSettings(
   input: Partial<VirtualLabSettings> | null | undefined
 ): VirtualLabSettings {
@@ -41,7 +122,8 @@ export function normalizeVirtualLabSettings(
       DEFAULT_VIRTUAL_LAB_SETTINGS.virtualLearnerRpmLimit,
       0,
       100_000
-    )
+    ),
+    dateSimulation: normalizeDateSimulation(input?.dateSimulation),
   };
 }
 
@@ -60,7 +142,10 @@ export async function getVirtualLabSettings(): Promise<VirtualLabSettings> {
 export async function updateVirtualLabSettings(
   input: Partial<VirtualLabSettings>
 ): Promise<VirtualLabSettings> {
-  const value = normalizeVirtualLabSettings(input);
+  // 深合并：现有 PUT 可能只带 virtualLearnerRpmLimit（如 VL RPM 输入框），
+  // 不能因此把 dateSimulation 重置回默认。
+  const existing = await getVirtualLabSettings().catch(() => ({ ...DEFAULT_VIRTUAL_LAB_SETTINGS }));
+  const value = normalizeVirtualLabSettings(mergeVirtualLabSettings(existing, input));
   await systemPrisma.platform_settings.upsert({
     where: { key: VIRTUAL_LAB_SETTING_KEY },
     update: { value: JSON.stringify(value) },

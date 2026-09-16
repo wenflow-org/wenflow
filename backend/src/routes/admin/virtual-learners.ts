@@ -26,6 +26,7 @@ import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
 import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
+import { simulatedDayService } from '../../services/virtual-lab/simulated-day.service';
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
 import { getVirtualLabSettings, updateVirtualLabSettings } from '../../services/virtual-lab-settings.service';
 import { applyRpmLimitsFromSettings, getRpmLimitStats } from '../../services/rpm-limit-config.service';
@@ -2042,6 +2043,56 @@ router.get('/sessions/:sessionId', async (req: Request, res) => {
   }
 });
 
+/**
+ * GET /api/admin/virtual-learners/sessions/:sessionId/simulation-clock
+ * 会话的模拟时钟（只读）：默认关（enabled=false，status='disabled'）。
+ * 设计：doc/local/VIRTUAL_LEARNER_SIMULATED_DAY_DRAFT.md §8.2/C2①。
+ */
+router.get('/sessions/:sessionId/simulation-clock', async (req: Request, res) => {
+  try {
+    const clock = await simulatedDayService.getSimulationClock(req.params.sessionId);
+    if (!clock) {
+      return res.status(404).json({ success: false, error: '会话不存在' });
+    }
+    res.json({ success: true, data: clock });
+  } catch (error) {
+    logger.error('读取模拟时钟失败:', error);
+    res.status(500).json({ success: false, error: error.message || '读取模拟时钟失败' });
+  }
+});
+
+/**
+ * GET /api/admin/virtual-learners/sessions/:sessionId/day-timeline?from=&to=&baseDate=
+ * 会话按天时间线（只读聚合）：负担/状态/干预/难度调整/温故额度/记忆，全部按 asOf 读回。
+ * 数据源均为已落地读写缝（getAggregatedState / ReviewQuotaService / learner_evidence ...），不新增实体。
+ */
+router.get('/sessions/:sessionId/day-timeline', async (req: Request, res) => {
+  try {
+    const fromDay = req.query.from !== undefined ? Number(req.query.from) : undefined;
+    const toDay = req.query.to !== undefined ? Number(req.query.to) : undefined;
+    const baseDate = typeof req.query.baseDate === 'string' ? req.query.baseDate : undefined;
+    if (fromDay !== undefined && !Number.isFinite(fromDay)) {
+      return res.status(400).json({ success: false, error: 'from 必须是数字' });
+    }
+    if (toDay !== undefined && !Number.isFinite(toDay)) {
+      return res.status(400).json({ success: false, error: 'to 必须是数字' });
+    }
+    const timeline = await simulatedDayService.getDayTimeline({
+      sessionId: req.params.sessionId,
+      baseDate,
+      fromDay,
+      toDay,
+    });
+    if (!timeline) {
+      return res.status(404).json({ success: false, error: '会话不存在' });
+    }
+    res.json({ success: true, data: timeline });
+  } catch (error) {
+    logger.error('读取按天时间线失败:', error);
+    res.status(500).json({ success: false, error: error.message || '读取按天时间线失败' });
+  }
+});
+
 router.post('/:id/projection-token', async (req: Request, res) => {
   try {
     const { id } = req.params;
@@ -2621,8 +2672,10 @@ router.post('/sessions/:sessionId/review-path', async (req: Request, res) => {
  */
 router.post('/sessions/:sessionId/accept-path', async (req: Request, res) => {
   try {
+    // force=true：运维强制接受当前 Path（评审为旁路，modify/reject 时不得堵死后续学习）
+    const force = req.body?.force === true;
     const result = await runAssistedSessionMutation(req.params.sessionId, () =>
-      simulationCoordinator.acceptPathReview(req.params.sessionId)
+      simulationCoordinator.acceptPathReview(req.params.sessionId, { force })
     );
     res.json({ success: result.success, data: result, error: result.error });
   } catch (error) {
@@ -2767,7 +2820,9 @@ router.get('/sessions/:sessionId/path-status', async (req: Request, res) => {
           updatedAt: learningPath.updatedAt,
           milestones: learningPath.milestones,
           stages: learningPath.stages || learningPath.milestones,
-          totalStages: learningPath.totalStages || learningPath.totalMilestones
+          totalStages: learningPath.totalStages || learningPath.totalMilestones,
+          // 路径体量（goal 层 scope_size 决定）：供前端展示体量徽章 + 里程碑/子任务目标
+          planningHints: (learningPath as any).processDetail?.framing?.normalizedInput?.planningHints ?? null
         },
         pathContext
       }

@@ -1400,8 +1400,10 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/review-path`);
   },
 
-  acceptVirtualSessionPath: async (sessionId: string) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/accept-path`);
+  acceptVirtualSessionPath: async (sessionId: string, options: { force?: boolean } = {}) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/accept-path`, {
+      force: options.force === true,
+    });
   },
 
   replanVirtualSessionPath: async (sessionId: string) => {
@@ -1410,6 +1412,19 @@ export const adminVirtualLearnersApi = {
 
   getVirtualSessionPathStatus: async (sessionId: string) => {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/path-status`);
+  },
+
+  /** 会话模拟时钟（日期模拟，只读）：默认关（enabled=false） */
+  getVirtualSessionSimulationClock: async (sessionId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/simulation-clock`);
+  },
+
+  /** 会话按天时间线（日期模拟，只读聚合）：负担/状态/干预/难度调整/温故额度/记忆 */
+  getVirtualSessionDayTimeline: async (
+    sessionId: string,
+    params: { from?: number; to?: number; baseDate?: string } = {},
+  ) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/day-timeline`, { params });
   },
 
   startVirtualLearning: async (sessionId: string, data?: { taskId?: string }) => {
