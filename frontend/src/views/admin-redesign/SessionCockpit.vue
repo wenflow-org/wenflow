@@ -1612,11 +1612,17 @@ const reviewMatchesCurrentPath = computed(() =>
   !!pathId.value && firstText(pathReview.value.reviewedPathId) === pathId.value
 )
 const reviewAwaitingDecision = computed(() => pathReviewStatus.value === 'pending' && reviewMatchesCurrentPath.value)
-const acceptPathVisible = computed(() => reviewAwaitingDecision.value && pathReviewDecision.value === 'accept')
+/* 评审是独立质量旁路，不得成为 Learn 闸门：
+   decision=accept → 确认接受；decision=modify/reject → 仍提供「强制接受当前 Path」逃生口，
+   避免评审把下一步学习堵死（也可点「按意见重规划」继续修正）。 */
+const acceptPathVisible = computed(() => reviewAwaitingDecision.value)
 const acceptPathDisabled = computed(() => !!assistedControlBlockReason.value)
-const acceptPathTitle = computed(() =>
-  assistedControlBlockReason.value || '确认接受评审结论；之后仍需手动启动 Learn'
-)
+const acceptPathTitle = computed(() => {
+  if (assistedControlBlockReason.value) return assistedControlBlockReason.value
+  return pathReviewDecision.value === 'accept'
+    ? '确认接受评审结论；之后仍需手动启动 Learn'
+    : '强制接受当前 Path（评审为独立旁路，不阻塞 Learn）；之后仍需手动启动 Learn'
+})
 const replanPathVisible = computed(() =>
   reviewAwaitingDecision.value && ['modify', 'reject'].includes(pathReviewDecision.value)
 )
@@ -2403,7 +2409,9 @@ async function act(kind: string) {
         await adminVirtualLearnersApi.reviewVirtualSessionPath(id)
         break
       case 'acceptPath':
-        await adminVirtualLearnersApi.acceptVirtualSessionPath(id)
+        await adminVirtualLearnersApi.acceptVirtualSessionPath(id, {
+          force: pathReviewDecision.value !== 'accept',
+        })
         break
       case 'replanPath':
         await adminVirtualLearnersApi.replanVirtualSessionPath(id)

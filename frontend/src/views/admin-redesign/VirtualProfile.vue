@@ -406,6 +406,28 @@
           </div>
         </section>
 
+        <section v-if="activeTab === 'timeline'" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">日程 · 日期模拟</h3>
+            <span class="mk-badge mk-badge--muted">{{ timelineSessionOptions.length }} 个会话</span>
+          </div>
+          <p class="vp-timeline__hint">
+            按自然日聚合该会话的学习负担、学习状态、系统干预与难度调整（只读；数据源为已落地的学习状态聚合 / 温故配额 / 难度调整留痕）。日期模拟默认关闭，此处展示的是既有历史的自然日读数。
+          </p>
+          <p v-if="!timelineSessionOptions.length" class="vp-timeline__empty">
+            暂无可查看的会话：该虚拟人还没有历史会话，先运行一次故事或账号自动学习。
+          </p>
+          <template v-else>
+            <label class="mk-field vp-timeline__picker">
+              <span class="mk-field__label">会话</span>
+              <select v-model="timelineSessionId" class="mk-field__select">
+                <option v-for="opt in timelineSessionOptions" :key="opt.sessionId" :value="opt.sessionId">{{ opt.label }}</option>
+              </select>
+            </label>
+            <DayTimeline v-if="timelineSessionId" :session-id="timelineSessionId" :from="0" :to="29" />
+          </template>
+        </section>
+
         <section v-if="activeTab === 'runs'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">全部运行</h3>
@@ -607,6 +629,7 @@ import {
 import MkKpi from './MkKpi.vue'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
+import DayTimeline from './DayTimeline.vue'
 import { useSafePolling } from '@/composables/useSafePolling'
 import {
   extractQuality,
@@ -833,7 +856,7 @@ const detailError = ref(false)
 const fallbackNotice = ref(false)
 
 /* 分页：故事池是主工作区（默认页），记忆池/画像/运行各归其页 */
-type ProfileTab = 'stories' | 'runs' | 'profile' | 'memory'
+type ProfileTab = 'stories' | 'runs' | 'timeline' | 'profile' | 'memory'
 const activeTab = ref<ProfileTab>('stories')
 
 const storyFilter = ref('')
@@ -1623,6 +1646,7 @@ const tabs = computed(() => {
   const list: Array<{ key: ProfileTab; label: string; count?: number }> = [
     { key: 'stories', label: '故事池', count: displayStories.value.length },
     { key: 'runs', label: '运行', count: (d.value?.runs || []).length },
+    { key: 'timeline', label: '日程', count: timelineSessionOptions.value.length },
     { key: 'memory', label: '记忆池', count: memoryCount.value },
     { key: 'profile', label: '画像' }
   ]
@@ -1639,6 +1663,26 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* 全部运行 feed（人物级全量运行流） */
 const allRuns = computed<RunItem[]>(() => (d.value?.runs || []).slice(0, RUNS_TAB_WINDOW))
+
+/* ---- 日程 tab：日期模拟按天时间线（只读聚合） ---- */
+const timelineSessionId = ref('')
+const timelineSessionOptions = computed(() =>
+  allRuns.value
+    .filter((r) => !!r.sessionId)
+    .map((r) => ({
+      sessionId: String(r.sessionId),
+      label: `${formatRunResult(r.result)} · ${r.storyTitle || '未关联故事'} · ${timeAgo(r.time)}`,
+    })),
+)
+watch(
+  () => timelineSessionOptions.value.length,
+  () => {
+    if (!timelineSessionId.value && timelineSessionOptions.value.length) {
+      timelineSessionId.value = timelineSessionOptions.value[0].sessionId
+    }
+  },
+  { immediate: true },
+)
 
 /* 单个故事的运行历史（运行 tab 分组用） */
 function runsForStory(story: StoryItem): RunItem[] {

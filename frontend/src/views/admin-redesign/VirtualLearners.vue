@@ -101,6 +101,8 @@
         </div>
       </div>
 
+      <SimulatedDaySettings />
+
       <MockSkeletonTable v-if="liveLoading && !samples.length" :cols="6" />
       <div v-else-if="filtered.length" class="mk-table-scroll vl-table-scroll">
       <table class="mk-table mk-table--click mk-table--fixed">
@@ -611,6 +613,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from './MkFilterSearch.vue'
+import SimulatedDaySettings from './SimulatedDaySettings.vue'
 import { useTableSort } from './useTableSort'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
