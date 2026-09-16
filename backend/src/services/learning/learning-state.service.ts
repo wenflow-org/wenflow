@@ -336,13 +336,18 @@ export function guardInternalScale(
 export class LearningStateService {
   private readonly committedMetricVersion = 'state-v2';
 
+  /**
+   * 自然衰减用的"过了几天"。
+   *
+   * 口径统一到 **UTC 日界**（2026-09-16 起）：每日温故配额（ReviewQuotaService）、当日课量
+   * （getAggregatedState.dayLoad）、日期模拟（resolveDayWindow）都用 UTC 日，只有衰减此前用
+   * 本地日 —— 于是 UTC+8 下"用规范 asOf（UTC 日末）读当天的课"会白多衰减一天。
+   * 现在四个口径一致；顺带一个好处：UTC 没有夏令时，日差恒为整数（本地日界在 DST 切换日会错半天）。
+   */
   private getNaturalDayDiff(from: Date, to: Date): number {
-    const start = new Date(from);
-    const end = new Date(to);
-    start.setHours(0, 0, 0, 0);
-    end.setHours(0, 0, 0, 0);
-    const diff = end.getTime() - start.getTime();
-    return Math.max(0, Math.floor(diff / 86400000));
+    const start = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
+    const end = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
+    return Math.max(0, Math.floor((end - start) / 86400000));
   }
 
   /** 单一归一入口的别名（历史上这里有一份重复实现，导致"两套刻度"并存） */

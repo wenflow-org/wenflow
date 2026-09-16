@@ -17,9 +17,8 @@ const state = {
 };
 
 describe('自然衰减（restoreMetrics）', () => {
-  it('同一天不衰减（注意：日差按**本地日**午夜计算，不是 UTC 日）', () => {
-    // 09:00Z 与 20:00Z 在 UTC+8 下是同一本地日（17:00 / 次日 04:00 就跨日了——此处特意选同日的 10:00Z）
-    const same = learningStateService.restoreMetrics(state, at('2026-08-01T10:00:00Z'));
+  it('同一天不衰减（日差按 **UTC 日界**，与配额/当日课量/日模拟同口径）', () => {
+    const same = learningStateService.restoreMetrics(state, at('2026-08-01T20:00:00Z'));
     expect(same.lss).toBeCloseTo(7.2, 6);
     expect(same.ktl).toBeCloseTo(3.7, 6);
     expect(same.lf).toBeCloseTo(2.4, 6);
@@ -56,21 +55,24 @@ describe('自然衰减（restoreMetrics）', () => {
     expect(decayedLss).toBeGreaterThan(5);                                         // 只降一档（0.82/天）
   });
 
-  it('衰减按**本地日**折算（不是 UTC 日）—— 与虚拟时钟的 UTC 日末口径不同，勿静默改动', () => {
-    const localMidnight = (value: Date) => {
-      const copy = new Date(value);
-      copy.setHours(0, 0, 0, 0);
-      return copy.getTime();
-    };
-    // 用"UTC 日末"作为读取时刻（虚拟时钟 resolveDayWindow().asOf 的取值）：在 UTC+8 下已跨本地日
+  it('日差按 UTC 日界（机器在哪个时区都一样）', () => {
+    const utcMidnight = (value: Date) => Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
     const asOf = at('2026-08-02T23:59:59.999Z');
-    const expectedLocalDays = Math.max(
-      0,
-      Math.round((localMidnight(asOf) - localMidnight(state.timestamp)) / 86400000)
-    );
-    const decayed = learningStateService.restoreMetrics(state, asOf);
-    // 无论机器时区如何，衰减都等于"本地日差"——这条规则本身就是口径，改动它要显式做
-    expect(decayed.lss).toBeCloseTo(7.2 * 0.82 ** expectedLocalDays, 6);
+    const expectedUtcDays = Math.round((utcMidnight(asOf) - utcMidnight(state.timestamp)) / 86400000);
+    expect(learningStateService.restoreMetrics(state, asOf).lss)
+      .toBeCloseTo(7.2 * 0.82 ** expectedUtcDays, 6);
+  });
+
+  it('回归：用日期模拟的规范 asOf（UTC 日末）读"当天的课"，不再白多衰减一天', () => {
+    // 这是把衰减统一到 UTC 日界的直接动机：此前 UTC+8 下 09:00Z 的课在当天 23:59:59.999Z 读会多算一天
+    const asOfSameDay = at('2026-08-01T23:59:59.999Z');
+    const sameDay = learningStateService.restoreMetrics(state, asOfSameDay);
+    expect(sameDay.lss).toBeCloseTo(7.2, 6);
+    expect(sameDay.lf).toBeCloseTo(2.4, 6);
+
+    // 次日读：恰好一天衰减
+    const nextDay = learningStateService.restoreMetrics(state, at('2026-08-02T00:00:00.000Z'));
+    expect(nextDay.lss).toBeCloseTo(7.2 * 0.82, 6);
   });
 
   it('train 负荷衰减明显慢于压力/疲劳（这是"知识练过就留得住"的口径）', () => {

@@ -129,14 +129,11 @@ async function main(): Promise<void> {
   const lessonTime = (offset: number, indexInDay: number) =>
     new Date(dayStart(offset).getTime() + (9 + indexInDay) * 3600_000);
   /**
-   * 观察时刻 = 当天最后一节课后 1 小时。
-   * 说明：**刻意不用 `resolveDayWindow().asOf`（UTC 日末）** —— 自然衰减用的是**本地日**
-   * （`getNaturalDayDiff` 取本地午夜），在 UTC+8 下 UTC 日末已落到次日本地 08:00，
-   * 会让跨天衰减白多算一天。这个"两个日历并存"的不一致是既有事实，这里先绕开并记录，
-   * 不擅自改生产口径（改 `getNaturalDayDiff` 为 UTC 日会影响所有人的恢复窗口）。
+   * 观察时刻 = 规范助手的 `asOf`（当天 23:59:59.999，UTC 日末）。
+   * 之所以能直接用：自然衰减已统一到 **UTC 日界**（与日模拟/每日配额/当日课量同口径），
+   * 当天写完的课在当天日末读到的日差是 0，不会再出现"白多衰减一天"。
    */
-  const dayAsOf = (plan: SimPlan, offset: number) =>
-    new Date(dayStart(offset).getTime() + (9 + Math.max(1, lessonsForDay(plan, offset).length)) * 3600_000);
+  const dayAsOf = (offset: number) => resolveDayWindow(baseDate, offset).asOf;
 
   const plan = buildDefaultPlan();
   const pathIds: Record<'A' | 'B' | 'C', string> = { A: `lp_${runId}_a`, B: `lp_${runId}_b`, C: `lp_${runId}_c` };
@@ -286,7 +283,7 @@ async function main(): Promise<void> {
     }
 
     const stateAt = async (pathKey: 'A' | 'B', day: number) =>
-      learningStateService.getCurrentState(userId, { pathId: pathIds[pathKey], asOf: dayAsOf(plan, day) });
+      learningStateService.getCurrentState(userId, { pathId: pathIds[pathKey], asOf: dayAsOf(day) });
 
     // ── 断言 1：路径隔离（B 的第 2 节课接 B 的第 1 节，而不是 A 的最后那节）
     const b1 = rowByLesson.get('1-0');
@@ -313,7 +310,7 @@ async function main(): Promise<void> {
     const day3 = lessonsForDay(plan, 2);
     const day3Minutes = day3.reduce((sum, lesson) => sum + lesson.durationMinutes, 0);
     const expectedBonus = computeDayLoadFatigueBonus({ lessons: day3.length, minutes: day3Minutes });
-    const aggregateDay3 = await learningStateService.getAggregatedState(userId, { asOf: dayAsOf(plan, 2) });
+    const aggregateDay3 = await learningStateService.getAggregatedState(userId, { asOf: dayAsOf(2) });
     const perLessonLssOk = day3.every((lesson, index) => {
       const row = rowByLesson.get(`2-${index}`);
       // 完成态 LSS：difficulty × 10 × 0.8 → 归一到 0-10 → 落库
@@ -334,7 +331,7 @@ async function main(): Promise<void> {
     });
 
     // ── 断言 3：信号区分「这门课难」vs「最近太累」
-    const aggregateDay1 = await learningStateService.getAggregatedState(userId, { asOf: dayAsOf(plan, 0) });
+    const aggregateDay1 = await learningStateService.getAggregatedState(userId, { asOf: dayAsOf(0) });
     const pathAState = await stateAt('A', 0);
     const hardLessonControl = aggregateDay1 && pathAState
       ? deriveLearningControlState({
@@ -433,13 +430,13 @@ async function main(): Promise<void> {
 
     // ── 断言 6：跨天恢复 —— 状态按日因子衰减；超过活跃窗口的路径不再参与全局投票
     const decayDayMs = 24 * 3600_000;
-    const pathAAtDay2 = await learningStateService.getCurrentState(userId, { pathId: pathIds.A, asOf: dayAsOf(plan, 2) });
+    const pathAAtDay2 = await learningStateService.getCurrentState(userId, { pathId: pathIds.A, asOf: dayAsOf(2) });
     const pathAAtPlus3 = await learningStateService.getCurrentState(userId, {
       pathId: pathIds.A,
-      asOf: new Date(dayAsOf(plan, 2).getTime() + 3 * decayDayMs),
+      asOf: new Date(dayAsOf(2).getTime() + 3 * decayDayMs),
     });
     const pathAAtPlus20Agg = await learningStateService.getAggregatedState(userId, {
-      asOf: new Date(dayAsOf(plan, 2).getTime() + 20 * decayDayMs),
+      asOf: new Date(dayAsOf(2).getTime() + 20 * decayDayMs),
     });
     const simPaths = [pathIds.A, pathIds.B, pathIds.C];
     const stillVotingAt20 = (pathAAtPlus20Agg?.activePathIds ?? []).filter((id) => simPaths.includes(id));
