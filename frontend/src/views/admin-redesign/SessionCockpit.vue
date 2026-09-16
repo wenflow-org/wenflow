@@ -19,6 +19,16 @@
         />
         <span class="cp-topbar__sep"></span>
         <span class="cp-topbar__mode">{{ modeText }}</span>
+        <!-- 日期模拟推进进度（虚拟会话；未开启则显示"未开启"） -->
+        <span
+          v-if="simClock"
+          class="cp-topbar__mode cp-simday"
+          :title="simClock.enabled
+            ? `日期模拟：起点 ${simClock.baseDate}；已推进 ${simClock.dayIndex} 天（已过 ${simClock.elapsedDays}/${simClock.maxSimulatedDays}）；课表 ${simClock.courseWeekdays.join('/')} · 每天 ${simClock.lessonsPerDay} 节${simClock.autoAdvance ? ' · 自动推进已开' : ''}`
+            : '日期模拟未开启（可在「日期模拟」设置开启）'"
+        >
+          模拟 {{ simClock.enabled ? `第 ${simClock.dayIndex} 天` : '未开启' }}
+        </span>
         <!-- 预算消耗预警条（累积 AI 调用）：成本护栏。无配置时显示「不限」，不猜默认值 -->
         <span
           class="cp-budget"
@@ -1923,6 +1933,28 @@ function stageMiniStatus(st: StageKey) {
 }
 
 /* 数据加载 */
+/** 日期模拟时钟（只读）：虚拟会话顶部显示"第 N 天"推进进度 */
+const simClock = ref<{
+  enabled: boolean
+  baseDate: string
+  dayIndex: number
+  elapsedDays: number
+  maxSimulatedDays: number
+  autoAdvance: boolean
+  courseWeekdays: number[]
+  lessonsPerDay: number
+} | null>(null)
+
+async function loadSimClock(id: string) {
+  try {
+    const res = await adminVirtualLearnersApi.getVirtualSessionSimulationClock(id)
+    if (sessionId.value !== id) return
+    simClock.value = res.data?.data ?? res.data ?? null
+  } catch {
+    if (sessionId.value === id) simClock.value = null
+  }
+}
+
 async function refresh() {
   const id = sessionId.value
   if (!id) return
@@ -1960,6 +1992,7 @@ async function refresh() {
     parseBlackbox()
     await Promise.all([
       loadLogs(),
+      loadSimClock(id),
       isBlackbox.value ? Promise.resolve() : loadPathStatus(),
       isBlackbox.value ? Promise.resolve() : loadTeachingDetail()
     ])
