@@ -221,6 +221,41 @@ describe('LearningService stale core recovery', () => {
     expect(queue).not.toHaveBeenCalled()
     expect((learningService as any).updatePathGenerationStatus).not.toHaveBeenCalled()
   })
+
+  it('追加式自愈：replace 不可用（课堂证据永久冲突）但存在空白阶段 → 走追加通道', async () => {
+    const recent = new Date().toISOString()
+    mockPrisma.learning_paths.findMany.mockResolvedValue([{
+      ...stageDesignCandidate(),
+      // pending + 刚更新 → resolveGenerationRetry 不 allowed（既非 failed 也非 stale）
+      aiPromptTemplate: JSON.stringify({ _generation: { stageDesign: 'pending', updatedAt: recent } }),
+      updatedAt: new Date(recent)
+    }])
+    jest.spyOn(learningService as any, 'getEnrichmentRetryReferenceTime').mockReturnValue(0)
+    jest.spyOn(learningService as any, 'listEmptyMilestoneIds').mockResolvedValue(['ms-1'])
+    const append = jest.spyOn(learningService as any, 'queuePathEnrichmentAppend')
+      .mockResolvedValue({ retryCount: 1, runId: 'run-append' })
+    const replace = jest.spyOn(learningService as any, 'queuePathEnrichmentRetry')
+
+    await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(1)
+
+    expect(append).toHaveBeenCalledWith(expect.objectContaining({ id: 'path-1' }), expect.anything(), ['ms-1'])
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('追加式自愈：没有空白阶段时不触发（保留原"不可自愈则放弃"语义）', async () => {
+    const recent = new Date().toISOString()
+    mockPrisma.learning_paths.findMany.mockResolvedValue([{
+      ...stageDesignCandidate(),
+      aiPromptTemplate: JSON.stringify({ _generation: { stageDesign: 'pending', updatedAt: recent } }),
+      updatedAt: new Date(recent)
+    }])
+    jest.spyOn(learningService as any, 'listEmptyMilestoneIds').mockResolvedValue([])
+    const append = jest.spyOn(learningService as any, 'queuePathEnrichmentAppend')
+
+    await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(0)
+
+    expect(append).not.toHaveBeenCalled()
+  })
 })
 
 function stageDesignCandidate(overrides: { stageDesignRetryCount?: number } = {}) {

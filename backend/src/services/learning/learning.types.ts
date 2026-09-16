@@ -109,6 +109,8 @@ export interface PathGenerationStatusPatch {
   triggerSource?: string | null;
   updatedAt?: string;
   stageDesignRetryCount?: number;
+  /** 追加式补齐（append-tasks）的独立预算：replace 被课堂证据永久拦下时另走此通道 */
+  stageDesignAppendCount?: number;
   lastStageDesignRetryAt?: string | null;
   scene?: Record<string, any> | null;
 }
@@ -122,6 +124,8 @@ export interface ParsedPathGenerationStatus {
   triggerSource?: string | null;
   updatedAt?: string | null;
   stageDesignRetryCount?: number;
+  /** 追加式补齐（append-tasks）的独立预算 */
+  stageDesignAppendCount?: number;
   lastStageDesignRetryAt?: string | null;
   scene?: Record<string, any> | null;
 }

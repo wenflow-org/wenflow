@@ -559,6 +559,9 @@ export function parsePathGenerationStatus(raw: string | null): ParsedPathGenerat
       stageDesignRetryCount: typeof generation.stageDesignRetryCount === 'number'
         ? generation.stageDesignRetryCount
         : 0,
+      stageDesignAppendCount: typeof generation.stageDesignAppendCount === 'number'
+        ? generation.stageDesignAppendCount
+        : 0,
       lastStageDesignRetryAt: typeof generation.lastStageDesignRetryAt === 'string'
         ? generation.lastStageDesignRetryAt
         : null,

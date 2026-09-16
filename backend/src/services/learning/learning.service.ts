@@ -870,7 +870,7 @@ class LearningService {
     generationStatus: ParsedPathGenerationStatus | null,
     milestoneIds: string[]
   ): Promise<{ retryCount: number; runId: string }> {
-    const retryCount = (generationStatus?.stageDesignRetryCount || 0) + 1;
+    const appendCount = (generationStatus?.stageDesignAppendCount || 0) + 1;
     const retryAt = new Date().toISOString();
     const run = await this.createAndClaimGenerationRun(
       path.id,
@@ -885,7 +885,8 @@ class LearningService {
     await this.updatePathGenerationStatus(path.id, {
       stageDesign: 'processing',
       lastError: null,
-      stageDesignRetryCount: retryCount,
+      // 独立预算：不占用 replace 的重试次数（replace 可能已被永久冲突耗尽）
+      stageDesignAppendCount: appendCount,
       lastStageDesignRetryAt: retryAt,
       updatedAt: retryAt
     }, run.id);
@@ -906,7 +907,7 @@ class LearningService {
       userProfile: {}
     }, analysis, { appendOnly: true }), { pathId: path.id, runId: run.id, userId: path.userId });
 
-    return { retryCount, runId: run.id };
+    return { retryCount: appendCount, runId: run.id };
   }
 
   private generateDisplayLabel(knowledgeType?: string | null, cognitiveLevel?: string | null): string | null {
@@ -1331,11 +1332,27 @@ class LearningService {
       const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
       const activeRun = await this.getActiveGenerationRun(path.id, path.activeGenerationRunId);
       const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
-      if (!retry.allowed || retry.retryType !== 'stageDesign') {
-        continue;
-      }
+      const canReplace = retry.allowed && retry.retryType === 'stageDesign';
 
-      const retryCount = generationStatus.stageDesignRetryCount || 0;
+      // 追加式自愈：replace 不可用（典型：已有课堂证据被保护 → 永久冲突，旧实现直接"顶满终止"）时，
+      // 若仍有"空白阶段"，改走追加通道（只创建、不删除，不会与证据冲突）。
+      // 它有**独立预算** stageDesignAppendCount，不占用 / 不被 replace 的预算拖累。
+      let appendMilestoneIds: string[] = [];
+      if (!canReplace) {
+        const generationInFlight = (activeRun != null
+            && (activeRun.status === 'queued' || activeRun.status === 'processing')
+            && !isGenerationRunStale(activeRun))
+          || (generationStatus?.stageDesign === 'processing'
+            && !isStageDesignStale(generationStatus, path.updatedAt));
+        if (generationInFlight) continue;
+        appendMilestoneIds = await this.listEmptyMilestoneIds(path.id);
+        if (appendMilestoneIds.length === 0) continue;
+      }
+      const appendMode = appendMilestoneIds.length > 0;
+
+      const retryCount = appendMode
+        ? (generationStatus.stageDesignAppendCount || 0)
+        : (generationStatus.stageDesignRetryCount || 0);
       if (retryCount >= ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length) {
         continue;
       }
@@ -1347,7 +1364,11 @@ class LearningService {
       }
 
       try {
-        await this.queuePathEnrichmentRetry(path, generationStatus);
+        if (appendMode) {
+          await this.queuePathEnrichmentAppend(path, generationStatus, appendMilestoneIds);
+        } else {
+          await this.queuePathEnrichmentRetry(path, generationStatus);
+        }
         retriedCount += 1;
       } catch (error) {
         const rawCode = (error as { code?: unknown })?.code;
@@ -1361,7 +1382,9 @@ class LearningService {
           ? ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length
           : retryCount + 1;
         await this.updatePathGenerationStatus(path.id, {
-          stageDesignRetryCount: nextRetryCount,
+          ...(appendMode
+            ? { stageDesignAppendCount: nextRetryCount }
+            : { stageDesignRetryCount: nextRetryCount }),
           lastStageDesignRetryAt: new Date().toISOString(),
           lastError: error instanceof Error ? error.message : String(error),
           updatedAt: new Date().toISOString()
@@ -1369,6 +1392,7 @@ class LearningService {
         logger.warn('自动继续生成阶段任务失败', {
           pathId: path.id,
           retryCount: nextRetryCount,
+          appendMode,
           terminal,
           ...(errorCode ? { errorCode } : {}),
           error: error instanceof Error ? error.message : String(error)
