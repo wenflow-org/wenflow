@@ -1193,7 +1193,8 @@ export class LearningStateService {
         metrics: this.restoreMetrics(snapshot.metrics, asOf),
         calculatedAt: snapshot.calculatedAt,
       }));
-    // 只让"活跃路径"参与投票（陈年峰值不参与），窗口内为空则回退最近一条路径
+    // 只让"活跃路径"参与投票（陈年峰值不参与）；窗口内为空 = 学习者已经闲置，
+    // 此时回退到**全部路径**（它们都已按 asOf 折算衰减，取 max 等价于"最近活动的那条"）
     const windowStart = new Date(asOf.getTime() - AGGREGATION_ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
     const activeEntries = perPath.filter((entry) => entry.calculatedAt >= windowStart);
     const votingEntries = activeEntries.length > 0 ? activeEntries : perPath;

@@ -421,6 +421,37 @@ async function main(): Promise<void> {
         + `（Δlsb ${controlGroup?.avgLsbDelta}）`,
     });
 
+    // ── 断言 6：跨天恢复 —— 状态按日因子衰减；超过活跃窗口的路径不再参与全局投票
+    const decayDayMs = 24 * 3600_000;
+    const pathAAtDay2 = await learningStateService.getCurrentState(userId, { pathId: pathIds.A, asOf: dayAsOf(plan, 2) });
+    const pathAAtPlus3 = await learningStateService.getCurrentState(userId, {
+      pathId: pathIds.A,
+      asOf: new Date(dayAsOf(plan, 2).getTime() + 3 * decayDayMs),
+    });
+    const pathAAtPlus20Agg = await learningStateService.getAggregatedState(userId, {
+      asOf: new Date(dayAsOf(plan, 2).getTime() + 20 * decayDayMs),
+    });
+    const simPaths = [pathIds.A, pathIds.B, pathIds.C];
+    const stillVotingAt20 = (pathAAtPlus20Agg?.activePathIds ?? []).filter((id) => simPaths.includes(id));
+
+    const decayDays = 3;
+    const decayExpectedLss = Number(pathAAtDay2?.lss) * 0.82 ** decayDays;
+    const decayExpectedKtl = Number(pathAAtDay2?.ktl) * 0.99 ** decayDays;
+    const decayExpectedLf = 1.2 + (Number(pathAAtDay2?.lf) - 1.2) * 0.74 ** decayDays;
+    const decayOk = Boolean(pathAAtDay2 && pathAAtPlus3)
+      && Math.abs(Number(pathAAtPlus3!.lss) - decayExpectedLss) < 1e-6
+      && Math.abs(Number(pathAAtPlus3!.ktl) - decayExpectedKtl) < 1e-6
+      && Math.abs(Number(pathAAtPlus3!.lf) - decayExpectedLf) < 1e-6;
+
+    assertions.push({
+      name: '跨天恢复：状态按日因子衰减（LSS×0.82^d / KTL×0.99^d / LF→基线1.2 的0.74^d），超窗口不再投票',
+      pass: decayOk && stillVotingAt20.length === 0,
+      detail: `+3 天：lss ${pathAAtPlus3?.lss}（期望 ${decayExpectedLss.toFixed(4)}）`
+        + ` ktl ${pathAAtPlus3?.ktl}（期望 ${decayExpectedKtl.toFixed(4)}）`
+        + ` lf ${pathAAtPlus3?.lf}（期望 ${decayExpectedLf.toFixed(4)}）→ ${decayOk ? '吻合' : '不符'}`
+        + `｜+20 天仍在投票的模拟路径：${stillVotingAt20.length} 条（期望 0，活跃窗口 14 天）`,
+    });
+
     assertions.push({
       name: '信号区分：单课难 → 课内降档、全局节奏不变；最近太累 → 全局 slow + fatigue_high',
       pass: Boolean(aggregateDay1 && pathAState && hardLessonControl && hardLessonReplan)
