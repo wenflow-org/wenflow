@@ -416,6 +416,21 @@ export function planClockAdvance(
   };
 }
 
+/**
+ * 评审结论是否**真正进入了 Learn**（teaching/learn 阶段）。
+ *
+ * `resolvePathReview({startLearning:true})` 在 `decision=modify` 且重规划成功时返回
+ * `success:true` 但 `currentStage` 仍为 `path`——此时当天并没有上课。调用方（推进并上课）
+ * 必须据此判定"这一天是否真的用掉了"，否则会 advance 成功却"烧掉"一个模拟日。
+ */
+export function resolutionEnteredLearn(
+  resolution: { success?: boolean; currentStage?: string | null } | null | undefined,
+): boolean {
+  if (!resolution?.success) return false;
+  const stage = String(resolution.currentStage ?? '');
+  return stage === 'teaching' || stage === 'learn';
+}
+
 class SimulatedDayService {
   /** 会话模拟时钟（默认关；未配置时以会话创建日为 baseDate、dayIndex=0）。 */
   async getSimulationClock(sessionId: string): Promise<SimulationClockView | null> {

@@ -26,7 +26,7 @@ import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
 import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
-import { simulatedDayService, resolveSimulationClock, planClockAdvance, resolveDayWindow } from '../../services/virtual-lab/simulated-day.service';
+import { simulatedDayService, resolveSimulationClock, planClockAdvance, resolveDayWindow, resolutionEnteredLearn } from '../../services/virtual-lab/simulated-day.service';
 import { runWithSimulatedClock } from '../../services/virtual-lab/simulation-clock-context';
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
 import { getVirtualLabSettings, updateVirtualLabSettings, DEFAULT_VIRTUAL_LAB_SETTINGS } from '../../services/virtual-lab-settings.service';
@@ -3123,6 +3123,15 @@ async function runDayLearning(
     if (!['teaching', 'learn'].includes(String(current.currentStage))) {
       const review = await simulationCoordinator.resolvePathReview(sessionId, { startLearning: true });
       if (!review.success) return { started: false, chunks: 0, error: review.error || 'Path 评审/启动 Learn 失败' };
+      // 评审可能"成功"但并未进入 Learn（decision=modify→重规划，currentStage 仍为 path）：
+      // 当天并未上课，必须回滚（不能推进成功却烧掉一天）。
+      if (!resolutionEnteredLearn(review)) {
+        return {
+          started: false,
+          chunks: 0,
+          error: `Path 评审未进入 Learn（decision=${review.decision || 'unknown'}，stage=${review.currentStage || 'unknown'}）`,
+        };
+      }
     }
     const budget = resolveSessionBudget({
       stageResults: input.stageResults as any,

@@ -7,6 +7,7 @@ import {
   isCourseDay,
   collectCourseDayIndexes,
   planClockAdvance,
+  resolutionEnteredLearn,
   buildDayEntry,
   buildDayTimeline,
   type SimulatedDayDeps,
@@ -73,6 +74,19 @@ describe('simulated-day 纯函数', () => {
       dayIndex: 4,
       timezone: 'Asia/Shanghai',
     }));
+  });
+
+  it('resolutionEnteredLearn：只有真正进入 teaching/learn 才算"这天上了课"', () => {
+    // 正常进入 Learn
+    expect(resolutionEnteredLearn({ success: true, currentStage: 'teaching' })).toBe(true);
+    expect(resolutionEnteredLearn({ success: true, currentStage: 'learn' })).toBe(true);
+    // decision=modify→重规划成功：success=true 但仍是 path（当天没上课 → 必须回滚）
+    expect(resolutionEnteredLearn({ success: true, currentStage: 'path' })).toBe(false);
+    // 评审失败 / 缺参
+    expect(resolutionEnteredLearn({ success: false, currentStage: 'teaching' })).toBe(false);
+    expect(resolutionEnteredLearn({ success: true })).toBe(false);
+    expect(resolutionEnteredLearn(null)).toBe(false);
+    expect(resolutionEnteredLearn(undefined)).toBe(false);
   });
 });
 
