@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 import { logger } from '../../utils/logger';
 import prisma from '../../config/database';
+import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import learningStateService, { LearningStateMetrics } from '../learning/learning-state.service';
 import type { SessionWrapupArtifact, SessionWrapupSummary } from '../../skills/session-wrapup';
 import { teachingTurnAgentDefinition, type TeachingTurnInput, type TeachingTurnOutput } from '../../skills/teaching-turn';
@@ -767,7 +768,7 @@ function computeEffectiveDurationMinutes(session: TeachingSessionRecord) {
     }
   }
 
-  const rawDuration = Math.max(1, Math.round((Date.now() - session.startTime.getTime() - pausedDurationMs) / 60000));
+  const rawDuration = Math.max(1, Math.round((simulatedNowOr().getTime() - session.startTime.getTime() - pausedDurationMs) / 60000));
 
   // idle 封顶：按消息时间戳间隔估算活跃时长（间隔 > 30 分钟视为暂停，与 timeout-fallback 规则一致），
   // 防止合盖睡眠/进程被杀等无 pagehide 场景把 idle 时间算入学习时长

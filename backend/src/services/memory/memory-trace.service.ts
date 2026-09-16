@@ -8,6 +8,7 @@
  * - getRetentionSnapshot：读取时计算保留率快照
  */
 import prisma from '../../config/database';
+import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import {
   reviewIntervalDays,
   clamp01,
@@ -189,7 +190,7 @@ class MemoryTraceService {
     const stability = ALLOWED_STABILITY.includes(input.stability as MemoryStability)
       ? (input.stability as MemoryStability)
       : 'developing';
-    const now = new Date();
+    const now = simulatedNowOr();
     let dueAt = this.computeDueAt(input, now, false);  // legacy: 保守不判首次
     let fsrsStability: number | null = null;
     let fsrsDifficulty: number | null = null;
@@ -397,7 +398,7 @@ class MemoryTraceService {
   ): Promise<void> {
     if (!items || items.length === 0) return;
     const ALPHA = 0.2;
-    const now = new Date();
+    const now = simulatedNowOr();
     for (const item of items) {
       const key = normalizeConceptKey(item.conceptKey);
       if (!key) continue;
@@ -447,7 +448,7 @@ class MemoryTraceService {
             lastReviewAt: trace.lastSeenAt,
           }
         : fsrsStateFromLegacy(trace.masteryScore, trace.extractionCount, trace.lastSeenAt);
-      const now = new Date();
+      const now = simulatedNowOr();
       const result = fsrsSchedule(prev, grade, now);
       // 语义干扰矩阵：活跃误解 → 稳定性降低（下次复习更早，对比式纠错）
       const activeMisconceptions = await getActiveForConcepts(userId, [key], 1);

@@ -11,6 +11,7 @@
  */
 
 import prisma from '../../config/database';
+import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import learningStateService, {
   toInternalTenScale,
   internalTenToDisplay,
@@ -125,7 +126,7 @@ export async function updateLearningMetrics(
         input.durationMinutes
       );
     const sourceKey = input.taskId ? `task-completion:${input.taskId}` : undefined;
-    const asOf = input.timestamp || new Date();
+    const asOf = input.timestamp || simulatedNowOr();
     const committedMetrics = await learningStateService.commitDerivedDisplayMetrics(input.userId, async previousMetrics => {
       // 量纲修复（2026-09-16）：这个回调的输出契约是 **display 刻度**（commitDisplayMetrics 会
       // 用 displayTenScaleToInternal 除以 10 落库）。此前这里同时混了两套刻度：

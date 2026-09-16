@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import prisma from '../../config/database';
+import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import type { DurableDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
 import {
@@ -195,7 +196,7 @@ export class TeachingSessionRepository {
     input: CreateTeachingSessionInput,
     recoveryWindowMs?: number
   ): Promise<{ session: TeachingSessionRecord; created: boolean; operationId: string | null }> {
-    const now = new Date();
+    const now = simulatedNowOr();
     const operationId = randomUUID();
     const openKey = buildOpenKey(input.userId, input.taskId);
 
@@ -296,6 +297,8 @@ export class TeachingSessionRepository {
             taskType: input.taskType,
             mode: input.mode || 'tutor',
             status: 'initializing',
+            // 业务时间戳：模拟时钟上下文内 = 模拟日（默认 new Date()，现网不变）
+            startTime: now,
             messages: JSON.stringify(input.messages || []),
             knowledgeState: JSON.stringify(input.knowledgeState || []),
             teachingState: input.teachingState ? JSON.stringify(input.teachingState) : null,

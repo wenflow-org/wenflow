@@ -26,7 +26,8 @@ import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
 import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
-import { simulatedDayService, resolveSimulationClock, planClockAdvance } from '../../services/virtual-lab/simulated-day.service';
+import { simulatedDayService, resolveSimulationClock, planClockAdvance, resolveDayWindow } from '../../services/virtual-lab/simulated-day.service';
+import { runWithSimulatedClock } from '../../services/virtual-lab/simulation-clock-context';
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
 import { getVirtualLabSettings, updateVirtualLabSettings, DEFAULT_VIRTUAL_LAB_SETTINGS } from '../../services/virtual-lab-settings.service';
 import { applyRpmLimitsFromSettings, getRpmLimitStats } from '../../services/rpm-limit-config.service';
@@ -3106,14 +3107,54 @@ router.post('/sessions/:sessionId/simulation-clock/reset', async (req: Request, 
 });
 
 /**
+ * 在模拟时钟上下文里跑"当天"的学习：path→teaching（必要时），按课表每天最多 lessonsPerDay 节。
+ * 调用方已在会话租约内（runAssistedSessionMutation），故此处不再自持租约，避免自锁。
+ */
+async function runDayLearning(
+  sessionId: string,
+  input: { lessonsPerDay: number; stageResults: Record<string, unknown>; profileData: Record<string, unknown> },
+): Promise<{ started: boolean; chunks: number; error?: string }> {
+  try {
+    const current = await prisma.virtual_sessions.findUnique({
+      where: { id: sessionId },
+      select: { currentStage: true, status: true },
+    });
+    if (!current) return { started: false, chunks: 0, error: '会话不存在' };
+    if (!['teaching', 'learn'].includes(String(current.currentStage))) {
+      const review = await simulationCoordinator.resolvePathReview(sessionId, { startLearning: true });
+      if (!review.success) return { started: false, chunks: 0, error: review.error || 'Path 评审/启动 Learn 失败' };
+    }
+    const budget = resolveSessionBudget({
+      stageResults: input.stageResults as any,
+      profileData: input.profileData as any,
+    });
+    const maxTurns = Math.max(1, budget.turnChunkPerLesson);
+    const lessons = Math.max(1, Math.min(10, input.lessonsPerDay));
+    let chunks = 0;
+    for (let i = 0; i < lessons; i += 1) {
+      const r = await simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones: 1, maxTurns });
+      chunks += 1;
+      if (!r?.success) break;
+      const after = await prisma.virtual_sessions.findUnique({ where: { id: sessionId }, select: { status: true } });
+      if (after?.status === 'completed') break;
+    }
+    return { started: true, chunks };
+  } catch (error) {
+    return { started: false, chunks: 0, error: asErrorLike(error).message };
+  }
+}
+
+/**
  * POST /api/admin/virtual-learners/sessions/:sessionId/advance-day
- * 推进日期模拟：按课表向前推进 days 个"上课日"（跳过非上课日），只写时钟簿记。
- * 当天任务的重放执行归系统层（P2）；本端点保证手动/自动推进都走同一套课表与护栏。
+ * 推进日期模拟：按课表向前推进 days 个"上课日"（跳过非上课日）。
+ * runTasks=true 时，在**模拟时钟上下文**内真实跑当天的学习（每天最多 lessonsPerDay 节），
+ * 课堂/记忆/指标的业务时间戳落在模拟日（无上下文时等价于真墙钟 → 现网不变）。
  */
 router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
     const days = req.body?.days === undefined ? 1 : Number(req.body.days);
+    const runTasks = req.body?.runTasks === true;
     if (!Number.isFinite(days) || days < 1 || days > 60) {
       return res.status(400).json({ success: false, error: 'days 必须是 1..60 的数字' });
     }
@@ -3143,6 +3184,8 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
         err.statusCode = 409;
         throw err;
       }
+      const lastIndex = plan.indexes[plan.indexes.length - 1];
+      const dayWindow = resolveDayWindow(clock.baseDate, lastIndex);
       const nextStageResults = {
         ...stageResults,
         simulationClock: { ...(rawClock || {}), enabled: true, ...plan.nextClock },
@@ -3153,7 +3196,19 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
         data: { stageResults: JSON.stringify(nextStageResults), updatedAt: new Date() },
       });
       await assertLeaseOwned();
-      return { advancedDayIndexes: plan.indexes };
+
+      let learning: { started: boolean; chunks: number; error?: string } | null = null;
+      if (runTasks) {
+        // 模拟日窗口内跑当天学习：写入点（课堂/记忆/指标）用该 asOf，落在模拟日
+        learning = await runWithSimulatedClock(dayWindow.asOf, () =>
+          runDayLearning(sessionId, {
+            lessonsPerDay: clock.lessonsPerDay,
+            stageResults: nextStageResults as unknown as Record<string, unknown>,
+            profileData: profileData as Record<string, unknown>,
+          }),
+        );
+      }
+      return { advancedDayIndexes: plan.indexes, simulatedDay: dayWindow.simulatedDay, learning };
     });
 
     const clock = await simulatedDayService.getSimulationClock(sessionId);

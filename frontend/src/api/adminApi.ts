@@ -1506,8 +1506,8 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/simulation-clock/reset`, data);
   },
 
-  /** 推进日期模拟：按课表向前推进 days 个"上课日"（跳过非上课日） */
-  advanceVirtualSessionDay: async (sessionId: string, data: { days?: number } = {}) => {
+  /** 推进日期模拟：按课表向前推进 days 个"上课日"（跳过非上课日）；runTasks=true 时在该模拟日真实跑课 */
+  advanceVirtualSessionDay: async (sessionId: string, data: { days?: number; runTasks?: boolean } = {}) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/advance-day`, data);
   },
 

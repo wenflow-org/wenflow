@@ -31,6 +31,7 @@ import { safeJsonParse } from '../utils/safe-json';
 import { asErrorLike } from '../virtual-lab/vlab-types';
 import { resolveSessionBudget } from '../virtual-lab/session-budget';
 import simulatedDayService from '../services/virtual-lab/simulated-day.service';
+import { simulatedNowOr } from '../services/virtual-lab/simulation-clock-context';
 import type { LeaseClientLike } from '../virtual-lab/vlab-types';
 import type {
   SimulationMilestone,
@@ -454,7 +455,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         taskId: nextProgress.currentTask.id
       })
     );
-    const now = new Date().toISOString();
+    const now = simulatedNowOr().toISOString();
     const teachingSessionHistory = [
       ...(Array.isArray(learningState.teachingSessionHistory) ? learningState.teachingSessionHistory : []),
       {

@@ -17,6 +17,7 @@
 
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
+import { simulatedNowOr } from '../services/virtual-lab/simulation-clock-context';
 import { memoryTraceService } from '../services/memory/memory-trace.service';
 
 /** 轻量 JSON 解析（不依赖 session-factory，避免经 blackbox-runner 的循环依赖） */
@@ -358,7 +359,7 @@ export async function recordCompletedArtifact(input: {
       masteredConcepts: masteredNames.slice(0, 8),
       memoryDelta: input.memoryDelta || null,
       selfCalibration: input.memoryCurated?.selfCalibration || null,
-      completedAt: new Date().toISOString(),
+      completedAt: simulatedNowOr().toISOString(),
     };
     const next = [
       entry,
