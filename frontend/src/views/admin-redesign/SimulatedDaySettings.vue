@@ -25,6 +25,23 @@
         <input v-model.number="form.maxSimulatedDays" type="number" min="1" max="365" class="mk-field__input" @input="dirty = true" />
       </label>
     </div>
+    <div class="sd-weekdays">
+      <span class="mk-field__label">上课星期</span>
+      <label v-for="d in WEEKDAYS" :key="d.value" class="sd-weekday">
+        <input v-model="form.courseWeekdays" type="checkbox" :value="d.value" @change="dirty = true" />
+        {{ d.label }}
+      </label>
+    </div>
+    <div class="sd-settings__grid">
+      <label class="mk-field">
+        <span class="mk-field__label">每天安排几节</span>
+        <input v-model.number="form.lessonsPerDay" type="number" min="1" max="10" class="mk-field__input" @input="dirty = true" />
+      </label>
+      <label class="sd-switch" title="开启后由后台调度按课表自动推进（仅时钟簿记；当天任务重放归系统层）">
+        <input v-model="form.autoAdvanceEnabled" type="checkbox" @change="dirty = true" />
+        <span>允许自动推进</span>
+      </label>
+    </div>
     <div class="sd-settings__foot">
       <span class="sd-settings__hint">默认关闭；只对虚拟学习者生效，不影响真实用户。</span>
       <button type="button" class="mk-btn mk-btn--primary" :disabled="!dirty || saving" @click="save">
@@ -46,7 +63,20 @@ const DEFAULT = {
   defaultDaysPerWeek: 5,
   defaultPaceDaysPerAdvance: 1,
   maxSimulatedDays: 90,
+  courseWeekdays: [1, 2, 3, 4, 5],
+  lessonsPerDay: 1,
+  autoAdvanceEnabled: false,
 }
+
+const WEEKDAYS = [
+  { value: 1, label: '周一' },
+  { value: 2, label: '周二' },
+  { value: 3, label: '周三' },
+  { value: 4, label: '周四' },
+  { value: 5, label: '周五' },
+  { value: 6, label: '周六' },
+  { value: 0, label: '周日' },
+]
 
 const form = reactive({ ...DEFAULT })
 const dirty = ref(false)
@@ -58,6 +88,11 @@ function apply(raw: any) {
   form.defaultDaysPerWeek = Number(raw?.defaultDaysPerWeek ?? DEFAULT.defaultDaysPerWeek)
   form.defaultPaceDaysPerAdvance = Number(raw?.defaultPaceDaysPerAdvance ?? DEFAULT.defaultPaceDaysPerAdvance)
   form.maxSimulatedDays = Number(raw?.maxSimulatedDays ?? DEFAULT.maxSimulatedDays)
+  form.courseWeekdays = Array.isArray(raw?.courseWeekdays) && raw.courseWeekdays.length
+    ? [...raw.courseWeekdays]
+    : [...DEFAULT.courseWeekdays]
+  form.lessonsPerDay = Number(raw?.lessonsPerDay ?? DEFAULT.lessonsPerDay)
+  form.autoAdvanceEnabled = raw?.autoAdvanceEnabled === true
 }
 
 async function load() {
@@ -79,6 +114,9 @@ async function save() {
       defaultDaysPerWeek: clamp(form.defaultDaysPerWeek, 0, 7),
       defaultPaceDaysPerAdvance: clamp(form.defaultPaceDaysPerAdvance, 1, 30),
       maxSimulatedDays: clamp(form.maxSimulatedDays, 1, 365),
+      courseWeekdays: [...form.courseWeekdays].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort((a, b) => a - b),
+      lessonsPerDay: clamp(form.lessonsPerDay, 1, 10),
+      autoAdvanceEnabled: form.autoAdvanceEnabled,
     }
     const res = await adminVirtualLearnersApi.updateVirtualLabSettings({ dateSimulation: payload })
     apply((res.data?.data ?? res.data)?.settings?.dateSimulation)
@@ -102,4 +140,6 @@ onMounted(load)
 .sd-settings__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 12px; margin-top: 8px; }
 .sd-settings__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
 .sd-settings__hint { font-size: 12px; color: var(--mk-text-muted, #888); }
+.sd-weekdays { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; font-size: 12px; }
+.sd-weekday { display: flex; align-items: center; gap: 4px; cursor: pointer; }
 </style>

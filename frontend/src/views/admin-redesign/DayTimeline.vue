@@ -20,6 +20,21 @@
         </button>
       </div>
 
+      <div class="dt-controls">
+        <span class="dt-clock__meta">课表 {{ weekdaysLabel(clock.courseWeekdays) }} · 每天 {{ clock.lessonsPerDay }} 节</span>
+        <button type="button" class="mk-link" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 1 个上课日（跳过非上课日）' : '请先开启日期模拟'" @click="advance(1)">推进 1 天</button>
+        <button type="button" class="mk-link" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 5 个上课日' : '请先开启日期模拟'" @click="advance(5)">推进 5 天</button>
+        <label class="dt-auto" :title="clock.enabled ? '开启后由后台按课表自动推进（仅时钟簿记；当天任务重放归系统层）' : '请先开启日期模拟'">
+          <input
+            type="checkbox"
+            :checked="clock.autoAdvance"
+            :disabled="advancing || !clock.enabled"
+            @change="toggleAuto(($event.target as HTMLInputElement).checked)"
+          />
+          自动推进
+        </label>
+      </div>
+
       <p v-if="!clock.enabled" class="dt-hint">
         日期模拟默认关闭。下方按天读数是该会话既有历史的自然日聚合（以会话创建日为第 1 天），可直接用于负担/干预观测。
       </p>
@@ -94,6 +109,9 @@ interface SimulationClock {
   dayIndex: number
   elapsedDays: number
   maxSimulatedDays: number
+  autoAdvance: boolean
+  courseWeekdays: number[]
+  lessonsPerDay: number
 }
 interface DayEntry {
   dayIndex: number
@@ -119,6 +137,43 @@ const error = ref('')
 const clock = ref<SimulationClock | null>(null)
 const days = ref<DayEntry[]>([])
 const resetting = ref(false)
+const advancing = ref(false)
+
+const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六']
+function weekdaysLabel(weekdays: number[]): string {
+  if (!weekdays || !weekdays.length) return '每天'
+  return weekdays.map((d) => `周${WEEKDAY_LABELS[d] ?? d}`).join('、')
+}
+function pickErr(e: unknown, fallback: string): string {
+  const anyErr = e as any
+  return anyErr?.response?.data?.error || anyErr?.message || fallback
+}
+
+async function advance(days: number) {
+  if (!props.sessionId) return
+  advancing.value = true
+  try {
+    await adminVirtualLearnersApi.advanceVirtualSessionDay(props.sessionId, { days })
+    await load()
+  } catch (e) {
+    error.value = pickErr(e, '推进失败')
+  } finally {
+    advancing.value = false
+  }
+}
+
+async function toggleAuto(next: boolean) {
+  if (!props.sessionId) return
+  advancing.value = true
+  try {
+    await adminVirtualLearnersApi.updateSessionSimulationConfig(props.sessionId, { simulationClock: { autoAdvance: next } })
+    await load()
+  } catch (e) {
+    error.value = pickErr(e, '切换自动推进失败')
+  } finally {
+    advancing.value = false
+  }
+}
 
 async function resetClock() {
   if (!props.sessionId) return
@@ -183,6 +238,8 @@ watch(() => props.sessionId, load, { immediate: true })
 .dt-clock__badge.is-on { background: rgba(46, 160, 67, 0.12); color: #2ea043; }
 .dt-clock__badge.is-off { background: rgba(140, 140, 140, 0.12); color: #888; }
 .dt-clock__meta { color: var(--mk-text-muted, #888); }
+.dt-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; }
+.dt-auto { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; }
 .dt-hint { margin: 0; font-size: 12px; color: var(--mk-text-muted, #888); }
 .dt-day { border: 1px solid var(--mk-border, #e5e5e5); border-radius: 8px; padding: 10px 12px; }
 .dt-day__head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
