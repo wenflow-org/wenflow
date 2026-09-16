@@ -212,6 +212,11 @@
                   />
                 </template>
                 <span v-else class="vl-run vl-run--idle" title="当前没有运行中的会话">空闲</span>
+                <span
+                  v-if="s.simulation?.enabled"
+                  class="mk-badge mk-badge--sm"
+                  :title="`日期模拟：第 ${s.simulation.dayIndex} 天${s.simulation.baseDate ? ' · 起点 ' + s.simulation.baseDate : ''}${s.simulation.autoAdvance ? ' · 自动推进' : ''}`"
+                >模拟 第 {{ s.simulation.dayIndex }} 天</span>
               </div>
             </td>
             <td class="mk-num">
@@ -655,6 +660,13 @@ interface Sample {
     learnStarted: boolean
     taskDone: number
     taskTotal: number
+  } | null
+  /** 日期模拟进度（只读）：会话时钟或画像级；无则 null */
+  simulation?: {
+    enabled: boolean
+    dayIndex: number
+    baseDate: string | null
+    autoAdvance: boolean
   } | null
   /** 最近一个运行中会话的阶段（无运行中时回退最近会话阶段） */
   currentStage: string | null
