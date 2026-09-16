@@ -848,17 +848,29 @@ export class LearningStateService {
     derive: (
       previousMetrics: LearningStateMetrics | null
     ) => Promise<Omit<DisplayMetricCommitInput, 'expectedRevision'>> | Omit<DisplayMetricCommitInput, 'expectedRevision'>,
-    options: { sourceKey?: string; reuseExisting?: boolean; asOf?: Date } = {}
+    options: { sourceKey?: string; reuseExisting?: boolean; asOf?: Date; pathId?: string } = {}
   ): Promise<LearningStateMetrics> {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       if (options.sourceKey && options.reuseExisting) {
         const existing = await this.getCommittedMetricBySourceKey(userId, options.sourceKey);
         if (existing) return existing;
       }
-      const snapshot = await this.getCurrentStateSnapshot(userId, {
+      let snapshot = await this.getCurrentStateSnapshot(userId, {
         sourceKey: options.sourceKey,
-        asOf: options.asOf
+        asOf: options.asOf,
+        pathId: options.pathId
       });
+      // EWMA 链按路径隔离：学习者可能同时学多条路径，若"前值"取全局最新，
+      // 路径 A 的一节课会接在路径 B 的状态后面继续演变（跨路径污染）。
+      // 冷启动继承：该路径还没有任何历史时，别从"零"开始 —— 回退到学习者全局最新状态，
+      // 避免"新路径的第一节课"把已经累了一天的学习者当成满血新人；
+      // 一旦该路径有了自己的历史，就只在路径内延续。
+      if (options.pathId !== undefined && snapshot.metrics === null) {
+        snapshot = await this.getCurrentStateSnapshot(userId, {
+          sourceKey: options.sourceKey,
+          asOf: options.asOf
+        });
+      }
       const input = await derive(snapshot.metrics);
       try {
         return await this.commitDisplayMetrics(userId, {

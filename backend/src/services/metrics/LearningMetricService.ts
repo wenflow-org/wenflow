@@ -156,7 +156,10 @@ export async function updateLearningMetrics(
     }, {
       sourceKey,
       reuseExisting: !!sourceKey,
-      ...(input.timestamp ? { asOf: input.timestamp } : {})
+      ...(input.timestamp ? { asOf: input.timestamp } : {}),
+      // 前值也按路径取（有值才传）：路径内延续自己的 EWMA，路径之间不互相污染；
+      // 该路径尚无历史时由服务层回退到全局最新状态（冷启动继承）。
+      ...(typeof input.pathId === 'string' && input.pathId.length > 0 ? { pathId: input.pathId } : {})
     });
     const displayMetrics = learningStateService.toDisplayMetrics(committedMetrics);
 

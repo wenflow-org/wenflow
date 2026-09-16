@@ -110,3 +110,87 @@ describe('updateLearningMetrics：LSS 不再被多除一个 10', () => {
     expect(result.lf).toBeCloseTo(50 * 0.7 + 40 * 0.15, 5);
   });
 });
+
+describe('EWMA 前值按路径隔离（路径之间不互相污染）', () => {
+  const state = (ktl: number, lf: number) => ({ lss: 2, ktl, lf, lsb: ktl - lf, timestamp: new Date() });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('该路径有历史 → 前值取该路径，不读全局', async () => {
+    const snapshotCalls: any[] = [];
+    jest.spyOn(learningStateService, 'getCurrentStateSnapshot').mockImplementation((async (
+      _userId: string,
+      options: any,
+    ) => {
+      snapshotCalls.push(options);
+      return { revision: 1, metrics: state(3, 1) };
+    }) as any);
+    jest.spyOn(learningStateService, 'commitDisplayMetrics').mockResolvedValue(state(3, 1) as any);
+
+    const derive = jest.fn(() => ({ lss: 40, ktl: 0, lf: 0, lsb: 0, pathId: 'lp-A' }));
+    await learningStateService.commitDerivedDisplayMetrics('u1', derive as any, { pathId: 'lp-A' });
+
+    expect(snapshotCalls).toHaveLength(1);
+    expect(snapshotCalls[0].pathId).toBe('lp-A');
+    expect(derive).toHaveBeenCalledWith(expect.objectContaining({ ktl: 3 }));
+  });
+
+  it('该路径无历史 → 回退全局（冷启动继承，不从零开始）', async () => {
+    const snapshotCalls: any[] = [];
+    jest.spyOn(learningStateService, 'getCurrentStateSnapshot').mockImplementation((async (
+      _userId: string,
+      options: any,
+    ) => {
+      snapshotCalls.push(options);
+      return options.pathId === undefined
+        ? { revision: 2, metrics: state(6, 5) }
+        : { revision: 2, metrics: null };
+    }) as any);
+    jest.spyOn(learningStateService, 'commitDisplayMetrics').mockResolvedValue(state(6, 5) as any);
+
+    const derive = jest.fn(() => ({ lss: 40, ktl: 0, lf: 0, lsb: 0, pathId: 'lp-new' }));
+    await learningStateService.commitDerivedDisplayMetrics('u1', derive as any, { pathId: 'lp-new' });
+
+    expect(snapshotCalls).toHaveLength(2);
+    expect(snapshotCalls[0].pathId).toBe('lp-new');
+    expect(snapshotCalls[1].pathId).toBeUndefined();
+    expect(derive).toHaveBeenCalledWith(expect.objectContaining({ ktl: 6 }));
+  });
+
+  it('不传 pathId → 维持旧的全局读取（一次、不带维度）', async () => {
+    const snapshotCalls: any[] = [];
+    jest.spyOn(learningStateService, 'getCurrentStateSnapshot').mockImplementation((async (
+      _userId: string,
+      options: any,
+    ) => {
+      snapshotCalls.push(options);
+      return { revision: 3, metrics: state(6, 5) };
+    }) as any);
+    jest.spyOn(learningStateService, 'commitDisplayMetrics').mockResolvedValue(state(6, 5) as any);
+
+    await learningStateService.commitDerivedDisplayMetrics('u1', (() => ({ lss: 40, ktl: 0, lf: 0, lsb: 0 })) as any);
+
+    expect(snapshotCalls).toHaveLength(1);
+    expect(snapshotCalls[0].pathId).toBeUndefined();
+  });
+
+  it('写入侧把 pathId 转交给服务层；无路径时不传（走全局）', async () => {
+    const optionsSeen: any[] = [];
+    jest.spyOn(learningStateService, 'commitDerivedDisplayMetrics').mockImplementation((async (
+      _userId: string,
+      _derive: unknown,
+      options: any,
+    ) => {
+      optionsSeen.push(options);
+      return state(1, 1) as any;
+    }) as any);
+
+    await updateLearningMetrics({ userId: 'u1', taskId: 't20', pathId: 'lp-A', durationMinutes: 25, completed: true });
+    await updateLearningMetrics({ userId: 'u1', taskId: 't21', durationMinutes: 25, completed: true });
+
+    expect(optionsSeen[0].pathId).toBe('lp-A');
+    expect(optionsSeen[1].pathId).toBeUndefined();
+  });
+});
