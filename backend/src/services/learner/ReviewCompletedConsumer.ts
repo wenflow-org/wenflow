@@ -137,7 +137,7 @@ export class ReviewCompletedConsumer {
             ? {
                 stability: existing.fsrsStability,
                 difficulty: existing.fsrsDifficulty ?? 5,
-                reps: existing.extractionCount,
+                reps: existing.fsrsReps ?? existing.extractionCount,
                 lapses: existing.fsrsLapses ?? 0,
                 lastReviewAt: existing.lastSeenAt,
               }
@@ -169,6 +169,7 @@ export class ReviewCompletedConsumer {
             fsrsStability: adjustedStability,
             fsrsDifficulty: result.state.difficulty,
             fsrsLapses: result.state.lapses,
+            fsrsReps: result.state.reps,
           },
           update: {
             label: item.label ?? undefined,
@@ -181,6 +182,7 @@ export class ReviewCompletedConsumer {
             fsrsStability: adjustedStability,
             fsrsDifficulty: result.state.difficulty,
             fsrsLapses: result.state.lapses,
+            fsrsReps: result.state.reps,
           }
         });
       }

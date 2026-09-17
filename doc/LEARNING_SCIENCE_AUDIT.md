@@ -756,7 +756,7 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
 | **P1** | ~~**BKT 零消费**（写了不用）~~ → **已决策（2026-09-17，§7 P1-3）**：保留投影（E4 底座），补参数约束校验 + 一处**有界**消费（信念背离 → 回路径重学建议），仍不驱动间隔/难度 | §4.2(3)【B】 |
 | **P1** | 到期积压无治理（435 到期 / 每课 1 条） | §3.3【A】 |
 | **P2** | ~~`checkpointHistory`~~ → **已消费（2026-09-17）**：写侧补 `title/type`，读侧注入 `teaching-turn` 的 `scenario.checkpointHistory`（摘要：计数 + 最近 5 条），提示词要求"未通过的点换表征再确认、不得向学生汇报统计"；`session_load`、`helpSeekingType`、`rsmAttempts` 生成但无消费者（未处理） | 【B】 |
-| **P2** | ~~`mode=review` 双写调度（可能重复排期/重复计数）~~ → **已修（2026-09-17：单一写入者）**；~~`lapses` 恒 0~~ → **已落库**；`reps` 与 `extractionCount` 可能发散（未处理） | 【B】 |
+| **P2** | ~~`mode=review` 双写调度（可能重复排期/重复计数）~~ → **已修（2026-09-17：单一写入者）**；~~`lapses` 恒 0~~ → **已落库**；~~`reps` 与 `extractionCount` 可能发散~~ → **已修（2026-09-17：`fsrsReps` 真列，口径=FSRS 调度过的复习数）** | 【B】 |
 | **P2** | ~~无法按会话核算 token/成本（日志表无 `sessionId` 外键）~~ → **已具备（2026-09-17）**：`agent_call_logs.sessionId` 升为真列 + `(sessionId, calledAt)` 索引 + 历史回填 + 只读聚合脚本 `audit-session-cost.ts`。**已知缺口**：会话内触发的 aux skill（learner-state-review / concept-consolidator 等）未传 `sessionId`，在脚本里归入"(无会话)"栏 | 【B】 |
 
 ### 5.3 循环性风险（工程上最需要注意的一点）
@@ -852,7 +852,13 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
   `ReviewCompletedConsumer`（含误解干扰 ×0.85）。原状是同一成绩被应用 **2~3 次**
   （`recordExtraction(fsrsGrade)` + `bumpReviewInterval` + 事件消费者），间隔被过度拉长、计数重复自增；
 - 补 `lapses` 记录——**已做（2026-09-17）**：新增 `memory_traces.fsrsLapses` + 读写打通；口径见 §4.2(1)（**不改调度**）；
-- `reps` 与 `extractionCount` 可能发散——**未处理**（`reps` 直接取 `extractionCount`，语义上把"提取"等同于"复习"）；
+- `reps` 与 `extractionCount` 可能发散——**已修（2026-09-17）**：新增 `memory_traces.fsrsReps` 真列，
+  写入侧落 `result.card.reps`、读取侧优先真列（历史行回退 `extractionCount`）。
+  实测口径：`reps` **不影响**当前调度结果（给定 stability/difficulty 时 reps=0/3/20 产出相同），
+  但错的口径会污染 E4 拟合/回看 ⇒ 按"数据正确性"修，而不是按"调度影响"修；
+- `session_load`（每次课末写一条 `learning_metrics`）——**判定为有意的研究仪器，非缺陷**：
+  它是 E5（状态量效度：与 PaaS/NASA-TLX 自评对照）所需的**每课负荷分布**原始数据；与 `learning_state`
+  行已按 `metricType` 隔离（不会污染状态读取）。当前无读侧 = "等实验用"，已在 §8 E5 登记；
 - `checkpointHistory` 只写不读——**已消费（2026-09-17）**：写侧补 `title/type`，读侧把摘要（计数 + 最近 5 条）
   注入 `teaching-turn` 的 `scenario.checkpointHistory`，并在提示词里要求"未通过的点换表征再确认、不得向学生汇报统计"。
   **实测评估**（同一情境跑两次，真实模型）：无历史 → 模型重复原要求；有"1 个未通过" → 模型换表征拆小步

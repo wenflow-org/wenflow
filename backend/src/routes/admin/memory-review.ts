@@ -50,6 +50,7 @@ function retentionOf(trace: {
   fsrsStability: number | null;
   fsrsDifficulty: number | null;
   fsrsLapses: number | null;
+  fsrsReps: number | null;
   masteryScore: number;
   extractionCount: number;
   lastSeenAt: Date | null;
@@ -59,7 +60,7 @@ function retentionOf(trace: {
     ? {
         stability: trace.fsrsStability,
         difficulty: trace.fsrsDifficulty ?? 5,
-        reps: trace.extractionCount,
+        reps: trace.fsrsReps ?? trace.extractionCount,
         lapses: trace.fsrsLapses ?? 0,
         lastReviewAt: trace.lastSeenAt,
       }
@@ -239,6 +240,7 @@ router.get('/:userId', async (req, res) => {
           fsrsStability: true,
           fsrsDifficulty: true,
           fsrsLapses: true,
+          fsrsReps: true,
         },
       }),
       conceptConsolidatorService.getAudit(userId).catch(() => null),

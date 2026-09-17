@@ -198,6 +198,7 @@ class MemoryTraceService {
     let fsrsStability: number | null = null;
     let fsrsDifficulty: number | null = null;
     let fsrsLapses: number | null = null;
+    let fsrsReps: number | null = null;
 
     if (input.fsrsGrade !== undefined) {
       const existing = await this.getTrace(input.userId, conceptKey);
@@ -207,7 +208,8 @@ class MemoryTraceService {
           ? {
               stability: existing.fsrsStability,
               difficulty: existing.fsrsDifficulty ?? 5,
-              reps: existing.extractionCount,
+              // reps 用真列（历史行回退 extractionCount：口径不同但总比没有好，见迁移注释）
+              reps: existing.fsrsReps ?? existing.extractionCount,
               lapses: existing.fsrsLapses ?? 0,
               lastReviewAt: existing.lastSeenAt,
             }
@@ -217,6 +219,7 @@ class MemoryTraceService {
       fsrsStability = result.state.stability;
       fsrsDifficulty = result.state.difficulty;
       fsrsLapses = result.state.lapses;
+      fsrsReps = result.state.reps;
       const rawDue = new Date(now.getTime() + result.intervalDays * DAY_MS);
       dueAt = this.snapToActiveWindow(rawDue, now, isFirstExtraction);
     }
@@ -239,6 +242,7 @@ class MemoryTraceService {
         fsrsStability,
         fsrsDifficulty,
         fsrsLapses,
+        fsrsReps,
         // 来源路径只在**首次创建**时写；update 不碰（originPathTitle 的语义是"最早出现"）
         pathId: input.pathId ?? null,
       },
@@ -253,6 +257,7 @@ class MemoryTraceService {
         ...(fsrsStability !== null ? { fsrsStability } : {}),
         ...(fsrsDifficulty !== null ? { fsrsDifficulty } : {}),
         ...(fsrsLapses !== null ? { fsrsLapses } : {}),
+        ...(fsrsReps !== null ? { fsrsReps } : {}),
       },
     });
   }

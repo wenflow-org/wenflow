@@ -691,6 +691,7 @@ model memory_traces {
   fsrsStability   Float?    // FSRS-6 稳定性（天）：回忆率降到 desiredRetention 所需时间；null = 未初始化（走 legacy ACT-R 兜底）
   fsrsDifficulty  Float?    // FSRS-6 难度（1-10）：null = 未初始化
   fsrsLapses      Int?      // FSRS-6 累计失误次数（Review/Relearning 态再判 Again 时 +1）：null = 未初始化。注：short-term 关闭下不改变调度，只作计数（卡壳率/leech/E4）
+  fsrsReps        Int?      // FSRS-6 累计复习次数（**只计 FSRS 调度过的复习**，≠ extractionCount）：null = 未初始化
   ktMasteryEma    Float?    // θ−d 知识状态 EMA（LLM ktEstimate 的跨会话滑动平均，α=0.2；null = 未初始化）
   pathId          String?   // 来源路径（写入时从会话带入）：温故解释"这是你在《X》里学过的"、按路径看待办
   createdAt       DateTime  @default(now())

@@ -67,6 +67,7 @@ router.get('/', async (req, res) => {
         fsrsStability: true,
         fsrsDifficulty: true,
         fsrsLapses: true,
+        fsrsReps: true,
         ktMasteryEma: true,
         dueAt: true,
         updatedAt: true,
@@ -80,7 +81,7 @@ router.get('/', async (req, res) => {
         const state: FsrsMemoryState = {
           stability: t.fsrsStability,
           difficulty: t.fsrsDifficulty ?? 5,
-          reps: t.extractionCount,
+          reps: t.fsrsReps ?? t.extractionCount,
           lapses: t.fsrsLapses ?? 0,
           lastReviewAt: t.lastSeenAt,
         };

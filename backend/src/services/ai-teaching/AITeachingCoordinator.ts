@@ -3253,6 +3253,7 @@ export class AITeachingOrchestrator {
           fsrsStability: true,
           fsrsDifficulty: true,
           fsrsLapses: true,
+          fsrsReps: true,
           extractionCount: true,
           lastSeenAt: true,
         },
@@ -3263,7 +3264,7 @@ export class AITeachingOrchestrator {
           const state: FsrsMemoryState = {
             stability: t.fsrsStability as number,
             difficulty: t.fsrsDifficulty ?? 5,
-            reps: t.extractionCount,
+            reps: t.fsrsReps ?? t.extractionCount,
             lapses: t.fsrsLapses ?? 0,
             lastReviewAt: t.lastSeenAt as Date,
           };
