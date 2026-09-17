@@ -100,6 +100,23 @@ export function validateStageDesignerOutput(parsed: any) {
   return { valid: true as const };
 }
 
+/**
+ * 规则 39 以 `milestone.loadTarget` 为键，但 path 层只把它写在
+ * `cognitiveCore.loadProfile.stageLoadDistribution[]`（按 stageNumber 索引）里——
+ * 此前两个调用点都不注入该键 ⇒ 规则永不生效（审计 §3.19 P1⑤）。
+ * 这里按 stageNumber 取回并挂到 milestone 上；找不到就不加（规则文本本就写"若输入提供"）。
+ */
+export function withLoadTargetForMilestone(milestone: any, cognitiveCore: any): any {
+  if (!milestone || typeof milestone !== 'object') return milestone;
+  if (normalizeString(milestone.loadTarget)) return milestone; // 已提供则不覆盖
+  const distribution = cognitiveCore?.loadProfile?.stageLoadDistribution;
+  const stageNumber = Number(milestone.stageNumber ?? milestone.stage);
+  if (!Array.isArray(distribution) || !Number.isFinite(stageNumber)) return milestone;
+  const hit = distribution.find((item: any) => Number(item?.stageNumber) === stageNumber);
+  const loadTarget = normalizeString(hit?.loadTarget);
+  return loadTarget ? { ...milestone, loadTarget } : milestone;
+}
+
 export async function stageDesigner(input: any): Promise<SkillExecutionResult<any>> {
   try {
     const milestone = input?.milestone && typeof input.milestone === 'object' ? input.milestone : null;
@@ -118,12 +135,12 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
         ? {
             cognitiveCore: payload.cognitiveCore,
             normalizedInput: payload.normalizedInput || null,
-            milestone: payload.milestone,
+            milestone: withLoadTargetForMilestone(payload.milestone, payload.cognitiveCore),
             previousMilestone: payload.previousMilestone || null,
             repairHints: payload.repairHints || null,
           }
         : {
-            milestone: payload.milestone,
+            milestone: withLoadTargetForMilestone(payload.milestone, payload.cognitiveCore),
             previousMilestone: payload.previousMilestone || null,
             cognitiveCore: payload.cognitiveCore,
             normalizedInput: payload.normalizedInput || null,

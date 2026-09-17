@@ -51,6 +51,7 @@ import { assembleStageDesignerChannels } from '../field-dispatcher';
 import { stageDesignerDefinition } from '../../skills/stage-designer';
 import { pathAgentDefinition } from '../../skills/path-planning';
 import { pathReviewerDefinition } from '../../skills/path-reviewer';
+import { buildPathReviewerGoalContext } from './path-reviewer-context';
 import { kcMapperDefinition } from '../../skills/kc-mapper';
 import { sessionFinalizationService } from '../ai-teaching/SessionFinalizationService';
 
@@ -2711,11 +2712,13 @@ class LearningService {
             milestones: analysis.suggestedMilestones,
             estimatedHours: analysis.estimatedTotalHours,
           },
-          goalContext: {
-            surfaceGoal: (data as any).description,
+          // 目标上下文（含 successCriteria——yaml 声明且 Practicality 评分要用，此前漏传，§3.19 P1⑥）
+          goalContext: buildPathReviewerGoalContext({
+            description: (data as any).description,
             confirmedProposal: (data as any).confirmedProposal,
             learnerProfile: (data as any).userProfile?.learnerProfile,
-          },
+            analysis,
+          }),
           prerequisiteTree: ((analysis.cognitiveCore || analysis.cognitiveDesign) as any)?.prerequisiteTree,
         });
         if (reviewResult?.success && reviewResult?.output) {

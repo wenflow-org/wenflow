@@ -191,7 +191,11 @@ export async function virtualLearnerReferee(input: VirtualLearnerRefereeInput): 
       publicTrace: value.publicTrace,
       refereeTrace: value.refereeTrace,
       control: value.control,
-      experimentSummary: value.experimentSummary
+      experimentSummary: value.experimentSummary,
+      // 断链修复（§3.19 P1⑨）：yaml 声明了这两个输入、代码打分也在用（goalUnderstanding 依赖
+      // storyMeta.realProblem；evidenceSufficiency 依赖 metricCompleteness），但此前没发给模型。
+      storyMeta: value.storyMeta ?? null,
+      metricCompleteness: value.metricCompleteness ?? null,
     }),
     validateParsedOutput: parsed => ({
       valid: !!parsed?.scores && Array.isArray(parsed?.findings) && Array.isArray(parsed?.evidence),
