@@ -103,6 +103,17 @@ export class AutopilotQueueFullError extends Error {
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'abandoned'])
 
+/** 周期对账间隔：把「进程重启/异常退出」留下的状态错位在 1 个周期内收敛 */
+const AUTOPILOT_RECONCILE_INTERVAL_MS = 5 * 60 * 1000
+
+/** 会话终态 → 自动驾驶应收敛到的终态（避免「终态会话仍显示运行中」） */
+function autopilotStatusForTerminalSession(sessionStatus: string): AutopilotState['status'] {
+  if (sessionStatus === 'completed') return 'completed'
+  if (sessionStatus === 'failed') return 'failed'
+  // abandoned（含僵尸回收）：既非用户暂停也非完成，用 incomplete 表达「未跑完」
+  return 'incomplete'
+}
+
 /** stageResults JSON 解析（带类型参数的 safeJsonParse，fallback 缺省空对象） */
 function parseStageResults(value: string | null | undefined): StageResults {
   return safeJsonParse<StageResults>(value, {})
@@ -130,6 +141,9 @@ export class AutopilotService {
 
   /** drainQueue 防重入 */
   private draining = false
+
+  /** 周期对账定时器（启动自愈 + 运行期状态错位收敛） */
+  private reconcileTimer: NodeJS.Timeout | null = null
 
   /** 读取会话的 autopilot 状态（stageResults.autopilot） */
   static readState(session: { stageResults: string | null }): AutopilotState {
@@ -286,27 +300,39 @@ export class AutopilotService {
   }
 
   /**
-   * 启动时对账：进程重启后内存 runningSessions/pendingQueue 已清空，
-   * 但 DB 里可能残留 autopilot.status='running'/'queued'（僵尸态），会永久阻塞重新启动。
-   * 这里把非终态会话的僵尸自动驾驶状态复位为 idle，使其可被重新拉起。
-   * 返回复位数量。
+   * 启动/周期对账：进程重启后内存 runningSessions/pendingQueue 已清空，
+   * 但 DB 里可能残留 autopilot.status='running'/'queued'（僵尸态）。
+   *
+   * 两类都要收敛（否则前端看到自相矛盾的状态）：
+   *  - 会话仍在进行（created/running）：复位为 idle，可重新拉起；
+   *  - 会话**已终态**（completed/failed/abandoned）：自动驾驶不可能仍在运行，
+   *    收敛为与之匹配的终态（completed/failed/incomplete）——旧实现排除了终态会话，
+   *    导致「session=failed + autopilot=running」永久残留。
+   *
+   * 进程内正在跑的会话（runningSessions / pendingQueue）一律跳过——因此可安全周期执行。
+   * 返回收敛数量。
    */
   async reconcileStaleRuns(): Promise<number> {
     const sessions = await prisma.virtual_sessions.findMany({
-      where: { status: { notIn: ['completed', 'failed', 'abandoned'] } },
-      select: { id: true, stageResults: true }
+      select: { id: true, status: true, stageResults: true }
     })
     let reconciled = 0
     for (const s of sessions) {
+      if (this.runningSessions.has(s.id) || this.isQueued(s.id)) continue
       const stageResults = parseStageResults(s.stageResults)
       const ap = stageResults.autopilot as AutopilotState | undefined
       if (!ap || (ap.status !== 'running' && ap.status !== 'queued')) continue
+      const sessionStatus = String(s.status || '')
+      const terminal = TERMINAL_STATUSES.has(sessionStatus)
       stageResults.autopilot = {
         ...ap,
-        status: 'idle',
+        status: terminal ? autopilotStatusForTerminalSession(sessionStatus) : 'idle',
         stopRequested: false,
         queuePosition: null,
-        lastError: '进程重启，自动驾驶已中断（可重新启动）'
+        completedAt: terminal ? (ap.completedAt || new Date().toISOString()) : ap.completedAt,
+        lastError: terminal
+          ? `会话已 ${sessionStatus}，自动驾驶不可能仍在运行（对账收敛）`
+          : '进程重启，自动驾驶已中断（可重新启动）'
       }
       await prisma.virtual_sessions.update({
         where: { id: s.id },
@@ -315,9 +341,28 @@ export class AutopilotService {
       reconciled += 1
     }
     if (reconciled > 0) {
-      logger.info('[autopilot] 启动对账：复位僵尸自动驾驶状态', { reconciled })
+      logger.info('[autopilot] 对账：收敛僵尸自动驾驶状态', { reconciled })
     }
     return reconciled
+  }
+
+  /** 周期对账（与启动对账同一实现；进程内活跃运行会被自动跳过）。 */
+  startReconcileScheduler(): void {
+    if (this.reconcileTimer) return
+    this.reconcileTimer = setInterval(() => {
+      void this.reconcileStaleRuns().catch((error) => {
+        logger.warn('[autopilot] 周期对账失败', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+      })
+    }, AUTOPILOT_RECONCILE_INTERVAL_MS)
+    this.reconcileTimer.unref?.()
+  }
+
+  stopReconcileScheduler(): void {
+    if (!this.reconcileTimer) return
+    clearInterval(this.reconcileTimer)
+    this.reconcileTimer = null
   }
 
   private removeFromQueue(sessionId: string): boolean {

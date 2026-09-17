@@ -153,6 +153,38 @@ describe('AutopilotService 全自动模式', () => {
     expect(String(firstPatch.autopilot.lastError)).toContain('进程重启')
   })
 
+  it('对账：终态会话残留的 autopilot=running/queued 收敛为匹配终态（旧实现排除了终态会话，永久残留）', async () => {
+    mockSessionFindMany.mockResolvedValue([
+      { id: 'z1', status: 'failed', stageResults: JSON.stringify({ autopilot: { status: 'running' } }) },
+      { id: 'z2', status: 'completed', stageResults: JSON.stringify({ autopilot: { status: 'queued', queuePosition: 1 } }) },
+      { id: 'z3', status: 'abandoned', stageResults: JSON.stringify({ autopilot: { status: 'running' } }) }
+    ])
+
+    const reconciled = await service.reconcileStaleRuns()
+
+    expect(reconciled).toBe(3)
+    const statusOf = (i: number) => JSON.parse((mockSessionUpdate.mock.calls[i][0] as any).data.stageResults).autopilot
+    expect(statusOf(0).status).toBe('failed')
+    expect(statusOf(1).status).toBe('completed')
+    expect(statusOf(2).status).toBe('incomplete')
+    // 终态收敛也要清掉排队位次与停止请求，避免前端显示矛盾
+    expect(statusOf(1).queuePosition).toBeNull()
+    expect(statusOf(0).stopRequested).toBe(false)
+  })
+
+  it('对账：进程内正在跑的会话被跳过（因此可安全周期执行）', async () => {
+    mockSessionFindMany.mockResolvedValue([
+      { id: 'live', status: 'running', stageResults: JSON.stringify({ autopilot: { status: 'running' } }) }
+    ])
+    ;(service as any).runningSessions.add('live')
+
+    const reconciled = await service.reconcileStaleRuns()
+
+    expect(reconciled).toBe(0)
+    expect(mockSessionUpdate).not.toHaveBeenCalled()
+    ;(service as any).runningSessions.delete('live')
+  })
+
   it('assisted 全链路：goal → path → 逐课 → 达到最终目标（completed）', async () => {
     mockExecuteSingleStep.mockImplementation(async () => {
       sessionRecord.currentStage = 'path'

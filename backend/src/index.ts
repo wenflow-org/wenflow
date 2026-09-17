@@ -558,6 +558,8 @@ export async function startServer() {
         error: err instanceof Error ? err.message : String(err),
       });
     });
+    // 运行期状态错位（如会话已终态但 autopilot 仍 running）也靠同一实现周期收敛
+    autopilotService.startReconcileScheduler();
     // 出站 RPM 限流配置对齐（平台全局 + 虚拟学习者专属两条通道）
     startRpmLimitSync();
     assertStartupActive();
@@ -773,6 +775,7 @@ export async function shutdown(signal: string) {
       await logRetentionService.stop();
       await auditCleanupService.stop();
       await virtualSessionReclaimService.stop();
+      autopilotService.stopReconcileScheduler();
       await aiCapabilityHealthService.stop();
     },
     teaching: aiTeachingOrchestrator,
