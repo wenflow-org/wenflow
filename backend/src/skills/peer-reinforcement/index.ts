@@ -67,7 +67,10 @@ export const peerAgentDefinition: AgentDefinition = {
         description: '教学对话上下文'
       },
       cognitiveLevel: { type: 'string', description: '学生认知层级' },
-      understanding: { type: 'number', description: '学生理解度 (0-1)' }
+      understanding: { type: 'number', description: '学生理解度 (0-1)' },
+      // 规则 41 的"高负荷/受挫 → 先共情 + 小例子"分支需要这两个字段才可达（此前未提供，§3.19 P0②）
+      loadIndex: { type: ['number', 'null'], description: '本轮认知负荷 (0-1)，未知为 null' },
+      emotionalState: { type: ['string', 'null'], description: '本轮情绪（positive/neutral/frustrated/confused/bored），未知为 null' }
     },
     required: ['topic', 'strategy', 'tutorContext']
   },

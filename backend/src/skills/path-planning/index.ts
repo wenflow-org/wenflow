@@ -40,7 +40,47 @@ function normalizePromptStringArray(value: any): string[] {
     .filter((item): item is string => !!item);
 }
 
-function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
+/**
+ * 学习证据投影 → 提示词友好形态（规则 53 用）。
+ *
+ * **断链修复（审计 §3.19 P0①）**：`learnerLearningContext` 由 `learning.service` 在新建路径时赋值，
+ * 但本 skill 的输入构造函数此前不包含它 → 规则 53「按已学证据校准首版难度与前置假设」永不生效
+ * （路径生成实际上没看学习者证据）。这里做形状收敛 + 上限保护，避免把整份投影塞进提示词。
+ */
+function buildLearningContextForPrompt(raw: any): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const labels = (value: any, limit: number): string[] =>
+    (Array.isArray(value) ? value : [])
+      .map((item) => normalizePromptString(item?.label || item?.conceptKey || item?.name || (typeof item === 'string' ? item : null)))
+      .filter((item): item is string => !!item)
+      .slice(0, limit);
+  const confusions = (Array.isArray(raw.recurringConfusions) ? raw.recurringConfusions : [])
+    .slice(0, 5)
+    .map((item: any) => ({
+      concept: normalizePromptString(item?.concept)?.slice(0, 40) || null,
+      note: normalizePromptString(item?.note)?.slice(0, 60) || null,
+      count: Number(item?.count) || 0,
+    }))
+    .filter((item: { concept: string | null }) => !!item.concept);
+
+  return {
+    hasLearningHistory: raw.hasLearningHistory === true,
+    masteredConcepts: labels(raw.masteredConcepts, 8),
+    fragileConcepts: labels(raw.fragileConcepts, 8),
+    strugglingConcepts: labels(raw.strugglingConcepts, 8),
+    blockedFoundations: labels(raw.blockedFoundations, 5),
+    recurringConfusions: confusions,
+    conceptLedgerSize: Number(raw.conceptLedgerSize) || 0,
+    recommendedPacing: normalizePromptString(raw.recommendedPacing),
+    recentTrend: normalizePromptString(raw.recentTrend),
+    fatigueRisk: normalizePromptString(raw.fatigueRisk),
+    paceMode: normalizePromptString(raw.paceMode),
+    challengeLevelCap: normalizePromptString(raw.challengeLevelCap),
+  };
+}
+
+/** 导出以便回归测试（§3.19 P0①：learnerLearningContext 必须真正进入提示词） */
+export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
   if (!normalizedInput || typeof normalizedInput !== 'object') return null;
 
   const learnerProfile = normalizedInput.learnerProfile && typeof normalizedInput.learnerProfile === 'object'
@@ -132,6 +172,10 @@ function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
             sessionsLengthMin: Number.isFinite(normalizedInput.timeDimensions.sessionsLengthMin) ? normalizedInput.timeDimensions.sessionsLengthMin : null,
           }
         : null,
+      // 学习证据（规则 53 的唯一依据）：无学习历史时**不出现该键**，冷启动行为与原先完全一致
+      ...(buildLearningContextForPrompt(normalizedInput.learnerLearningContext)
+        ? { learnerLearningContext: buildLearningContextForPrompt(normalizedInput.learnerLearningContext) }
+        : {}),
     },
   };
 }

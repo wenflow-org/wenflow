@@ -1187,7 +1187,24 @@ async function commitSessionLoadMetric(session: TeachingSessionRecord): Promise<
   });
 }
 
-function computeSessionEvidence(session: TeachingSessionRecord) {  // 排除检查点合成消息（非真实学生话语），避免污染理解/参与度统计
+/**
+ * 伴学策略（peer-reinforcement 规则的"手法"）由**代码**按认知层级选定。
+ *
+ * 断链修复（审计 §3.19 P0②）：此前两处调用都硬编码 `strategy: 'feynman'`，
+ * 使 skill 规则 38「understand→类比 / apply→反例边界 / analyze+→辩论费曼」永不触发。
+ * 分工与全仓一致：代码给档位/枚举，prompt 负责"怎么说"。
+ */
+export function pickPeerStrategy(
+  cognitiveLevel: unknown,
+): 'analogy' | 'counterexample' | 'debate' {
+  const level = String(cognitiveLevel || '').trim().toLowerCase();
+  if (level === 'analyze' || level === 'evaluate' || level === 'create') return 'debate';
+  if (level === 'apply') return 'counterexample';
+  return 'analogy'; // remember / understand / 未知：先用类比搭桥
+}
+
+/** 导出以便回归测试（§3.19 P0③：wrapup 声明了 loadIndex 均值/峰值，必须真的给） */
+export function computeSessionEvidence(session: TeachingSessionRecord) {  // 排除检查点合成消息（非真实学生话语），避免污染理解/参与度统计
   const analyzedMessages = session.messages.filter((message) => !!message.analysis && !message.checkpoint);
   const avg = (values: number[]) => values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   const understandingScores = analyzedMessages
@@ -1195,6 +1212,10 @@ function computeSessionEvidence(session: TeachingSessionRecord) {  // 排除检�
     .filter((value) => Number.isFinite(value));
   const engagementScores = analyzedMessages
     .map((message) => Number(message.analysis?.engagement))
+    .filter((value) => Number.isFinite(value));
+  // 认知负荷：session-wrapup 的规则声明了"loadIndex 均值与峰值"，但此前从未提供（审计 §3.19 P0③）
+  const loadIndexScores = analyzedMessages
+    .map((message) => Number(message.analysis?.loadIndex))
     .filter((value) => Number.isFinite(value));
 
   const confusionCounter = new Map<string, number>();
@@ -1248,6 +1269,8 @@ function computeSessionEvidence(session: TeachingSessionRecord) {  // 排除检�
     topConfusionPoints,
     emotionalSignals,
     completionCandidateSeen,
+    avgLoadIndex: avg(loadIndexScores) === null ? null : Math.round((avg(loadIndexScores) as number) * 1000) / 1000,
+    maxLoadIndex: loadIndexScores.length > 0 ? Math.round(Math.max(...loadIndexScores) * 1000) / 1000 : null,
   };
 }
 
@@ -2113,7 +2136,9 @@ export class AITeachingOrchestrator {
     if (peerTriggered) {
       const peerInput = {
         topic: session.topic,
-        strategy: 'feynman' as const,
+        // 策略由代码按认知层级选定（prompt 规则 38 只负责"怎么说"）：
+        // 此前硬编码 'feynman'，使「understand→类比 / apply→反例 / analyze+→辩论」永不触发（§3.19 P0②）。
+        strategy: pickPeerStrategy(teachingOutput.analysis.cognitiveLevel),
         studentMessage: message,
         tutorContext: updatedMessages.slice(-6).map((item) => ({
           role: item.role,
@@ -2121,6 +2146,9 @@ export class AITeachingOrchestrator {
         })),
         cognitiveLevel: teachingOutput.analysis.cognitiveLevel,
         understanding: teachingOutput.analysis.understanding,
+        // 规则 41 的"高负荷/受挫"分支需要这两个字段才可达（此前未提供）
+        loadIndex: teachingOutput.analysis.loadIndex ?? null,
+        emotionalState: teachingOutput.analysis.emotionalState ?? null,
       };
       try {
         const peerResult = await executeSkill(peerAgentDefinition, {
@@ -3522,17 +3550,20 @@ export class AITeachingOrchestrator {
       .filter((item: any) => item.peer === true)
       .map((item: any) => ({ role: item.role, content: item.content }));
 
+    const peerState = (session.teachingState as any)?.analysis ?? {};
     const peerResult = await executeSkill(peerAgentDefinition, {
       input: {
         topic: session.topic,
-        strategy: 'feynman',
+        strategy: pickPeerStrategy(peerState.cognitiveLevel),
         studentMessage: message,
         tutorContext: session.messages.slice(-6).map((item) => ({
           role: item.role,
           content: item.content,
         })),
-        cognitiveLevel: (session.teachingState as any)?.analysis?.cognitiveLevel,
-        understanding: (session.teachingState as any)?.analysis?.understanding,
+        cognitiveLevel: peerState.cognitiveLevel,
+        understanding: peerState.understanding,
+        loadIndex: peerState.loadIndex ?? null,
+        emotionalState: peerState.emotionalState ?? null,
         peerHistory,
       },
       context: {

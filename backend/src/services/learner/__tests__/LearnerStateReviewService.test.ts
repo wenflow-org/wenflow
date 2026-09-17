@@ -85,6 +85,28 @@ describe('LearnerStateReviewService (Slice 2a)', () => {
     expect(payload?.diagnosis).toBeNull()
   })
 
+  it('上一轮洞察回注 priorInsights（回归 §3.19 P0④：此前硬编码 []）', async () => {
+    // 上一次评审的载荷（含 2 条洞察，按 confidence 降序应保留顺序）
+    findUnique.mockResolvedValue({
+      payload: JSON.stringify({
+        diagnosis: {
+          insights: [
+            { type: 'prerequisite_gap', claim: 'old-claim-low', action: 'a1', confidence: 0.4 },
+            { type: 'strategy_fit', claim: 'old-claim-high', action: 'a2', confidence: 0.9 },
+          ],
+        },
+      }),
+    })
+    await learnerStateReviewService.refresh('u1', 'lp1')
+
+    const input = (executeSkillWithResult as jest.Mock).mock.calls.at(-1)![1] as {
+      priorInsights: Array<{ type: string; claim: string; action: string }>
+    }
+    expect(input.priorInsights.map((item) => item.claim)).toEqual(['old-claim-high', 'old-claim-low'])
+    // 只出 type/claim/action（不外泄 confidence/evidenceRefs 等内部字段）
+    expect(Object.keys(input.priorInsights[0]).sort()).toEqual(['action', 'claim', 'type'])
+  })
+
   it('getLatest 解析已存储载荷', async () => {
     findUnique.mockResolvedValue({ payload: JSON.stringify({ schemaVersion: 'learner-state-review-v1', insights: [] }) })
     const latest = await learnerStateReviewService.getLatest('u1', 'lp1')

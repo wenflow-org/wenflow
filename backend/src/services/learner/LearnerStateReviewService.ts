@@ -276,7 +276,10 @@ async function runModelDiagnosis(
       learnerDigest: projection.learnerDigest,
       knowledgeDigest: projection.knowledgeDigest,
       recentEvidence: buildRecentEvidence(learnerSnapshot),
-      priorInsights: [],
+      // 上一轮评审的洞察回注（此前硬编码 []）：让模型能"接着上次说"，而不是每轮都从零开始（审计 §3.19 P0④）
+      priorInsights: await learnerStateReviewService
+        .getActiveInsights(userId, pathId, { limit: 5 })
+        .catch(() => []),
     });
     const output: any = (result as any)?.output;
     if (output && (output.insights?.length || output.conceptAssessments?.length || output.narrative)) {
