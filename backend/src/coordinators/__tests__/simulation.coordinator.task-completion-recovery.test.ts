@@ -75,6 +75,15 @@ jest.mock('../../utils/logger', () => ({
     error: jest.fn()
   }
 }))
+// 日期模拟上下文由 simcoordinator 在 Learn 路径上注入（71d09f47）；本套用例不覆盖
+// 模拟时钟，统一返回 null（= 未开启日期模拟，输入里省略该键）。不 mock 会打到真实
+// systemPrisma，在假时钟/无 DB 环境下悬挂导致用例超时。
+jest.mock('../../services/virtual-lab/simulated-day.service', () => ({
+  __esModule: true,
+  default: { getTemporalContext: jest.fn().mockResolvedValue(null) },
+  simulatedDayService: { getTemporalContext: jest.fn().mockResolvedValue(null) },
+  temporalContextFromClock: jest.fn(() => null)
+}))
 
 import { SimulationOrchestrator } from '../simulation.coordinator'
 
