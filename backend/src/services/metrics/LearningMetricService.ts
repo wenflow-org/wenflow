@@ -49,6 +49,12 @@ export interface SessionMetricsInput {
 /**
  * 计算学习压力评分 (LSS - Learning Stress Score)
  *
+ * **定位（2026-09-17 显式化，审计 §4.3）**：这是**任务完成口径的显示层近似**（0-100），
+ * 输入只有"完成与否 / 主观难度 / 时长 / 任务类型"（`task:completed` 事件能拿到的那些）。
+ * 它**不是**系统状态里的 LSS 真源：真源是 `learning-state.service.calculateLSS(inputs)`（0-10，
+ * 带认知负荷/效率/时间比/完成率/类型五因子），会话结算走那条路。
+ * 二者经由 `toInternalTenScale`（>10 即 /10）在同一刻度上汇合，因此这里必须保持 0-100 口径。
+ *
  * LSS 综合考虑：
  * 1. 任务完成率（完成任务压力大，未完成任务压力更大）
  * 2. 主观难度（1-10）
@@ -111,6 +117,18 @@ export function calculateEWMA(
 }
 
 /**
+ * KTL/LF 的 EWMA 系数（与 learning-state.service 的 λ 法则**同一条**，且必须归一化：α + (1−α) = 1）。
+ *
+ * 历史缺陷（2026-09-17 修，审计 §4.3）：LF 曾是 `prev*0.70 + current*0.15`（**系数和 0.85**）。
+ * 后果不是"衰减更快"，而是**稳态被系统性压到一半**：对恒定输入 c，稳态 = 0.15c/(1−0.70) = 0.5c。
+ * 于是消费侧疲劳阈值（`lf ≥ 6` 判疲劳）实际要求真实疲劳达到 ~12（量程外）——疲劳保护近乎失效。
+ * 归一化后两侧同源：λ = 前值权重，半衰期 = ln(0.5)/ln(λ)（KTL ≈ 13.5 天、LF ≈ 1.9 天）
+ * —— 这正是消费侧阈值（lf≥6 判疲劳）所假设的刻度与速度。
+ */
+const KTL_EWMA_LAMBDA = 0.95;
+const LF_EWMA_LAMBDA = 0.70;
+
+/**
  * 更新学习指标
  *
  * 核心函数：在每次学习会话结束时调用
@@ -141,8 +159,8 @@ export async function updateLearningMetrics(
       // 刻度转换只能走这两个命名函数（品牌类型保证：普通 number 塞不进 display 契约）
       const lssDisplay = internalTenToDisplay(lss10);
       const prev = previousMetrics ? learningStateService.toDisplayMetrics(previousMetrics) : null;
-      const ktl = asDisplayHundred(prev?.ktl != null ? prev.ktl * 0.95 + lssDisplay * 0.05 : lssDisplay * 0.5);
-      const lf = asDisplayHundred(prev?.lf != null ? prev.lf * 0.7 + lssDisplay * 0.15 : lssDisplay * 0.3);
+      const ktl = asDisplayHundred(prev?.ktl != null ? prev.ktl * KTL_EWMA_LAMBDA + lssDisplay * (1 - KTL_EWMA_LAMBDA) : lssDisplay * 0.5);
+      const lf = asDisplayHundred(prev?.lf != null ? prev.lf * LF_EWMA_LAMBDA + lssDisplay * (1 - LF_EWMA_LAMBDA) : lssDisplay * 0.3);
       return {
         lss: lssDisplay,
         ktl,

@@ -107,7 +107,7 @@ describe('updateLearningMetrics：LSS 不再被多除一个 10', () => {
     const derive = await captureDerive();
     const result = await derive({ lss: 5, ktl: 5, lf: 5, lsb: 0, timestamp: new Date() });
     expect(result.ktl).toBeCloseTo(50 * 0.95 + 40 * 0.05, 5);
-    expect(result.lf).toBeCloseTo(50 * 0.7 + 40 * 0.15, 5);
+    expect(result.lf).toBeCloseTo(50 * 0.7 + 40 * 0.30, 5);
   });
 });
 

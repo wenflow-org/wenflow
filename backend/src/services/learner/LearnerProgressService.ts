@@ -1,6 +1,6 @@
 import { executeSkill, auxSkillDefinitionMap } from '../../skills';
 import { calculateCognitiveEngagement, CognitiveEngagementInput } from '../learning/cognitive-engagement.service';
-import { getLearningMetrics } from '../metrics/LearningMetricService';
+import { getLearningMetrics, calculateLSS as calculateDisplayLss } from '../metrics/LearningMetricService';
 import type { LearningSignal, ProgressMetrics } from '../../agents/protocol';
 
 const THRESHOLDS = {
@@ -122,10 +122,18 @@ class LearnerProgressService {
     };
   }
 
+  /**
+   * 单任务快照的显示层 LSS（0-100 口径）。
+   *
+   * 2026-09-17 收敛（审计 §4.3）：此前这里是**第三套** LSS 公式
+   * （`difficulty × min(timeSpent/60, 2) × subjectiveDifficulty/5 × 10`），
+   * 与 `metrics/LearningMetricService.calculateLSS`（任务完成口径）和
+   * `learning-state.service.calculateLSS`（状态真源，0-10 五因子）三者互不相同、同名却不同值。
+   * 现改为**委托**任务完成口径的唯一显示层近似函数：显示层只有一套公式。
+   * （调用点仍以权威 state 的 0-100 display 值优先，本函数只在"无权威记录"时兜底。）
+   */
   private calculateLSS(difficulty: number, timeSpent: number, subjectiveDifficulty: number): number {
-    const timeFactor = Math.min(timeSpent / 60, 2);
-    const subjectiveFactor = subjectiveDifficulty / 5;
-    return Math.min(difficulty * timeFactor * subjectiveFactor * 10, 100);
+    return calculateDisplayLss(true, subjectiveDifficulty || difficulty, timeSpent);
   }
 
   private detectSignals(metrics: ProgressMetrics, data: Partial<LearnerProgressTaskData & LearnerProgressSessionData>): LearningSignal[] {

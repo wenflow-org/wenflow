@@ -4,8 +4,8 @@
  * 
  * 核心公式：
  * - LSS (Learning Stress Score): 学习压力评分
- * - KTL (Knowledge Training Load): 知识训练负荷 (EWMA, λ=0.95, 42天半衰期)
- * - LF (Learning Fatigue): 学习疲劳度 (EWMA, λ=0.70, 7天半衰期)
+ * - KTL (Knowledge Training Load): 知识训练负荷 (EWMA, λ=0.95, 半衰期 ≈ 13.5 天)
+ * - LF (Learning Fatigue): 学习疲劳度 (EWMA, λ=0.70, 半衰期 ≈ 1.9 天)
  * - LSB (Learning State Balance) = KTL - LF: 学习状态平衡值
  */
 
@@ -737,7 +737,7 @@ export class LearningStateService {
   /**
    * 计算 KTL (Knowledge Training Load)
    * 公式：KTL_t = λ × KTL_{t-1} + (1-λ) × LSS_t
-   * λ = 0.95 (42天半衰期)
+   * λ = 0.95 (半衰期 = ln(0.5)/ln(0.95) ≈ 13.5 天)
    */
   calculateKTL(previousKTL: number, currentLSS: number): number {
     const ktl = 
@@ -749,7 +749,7 @@ export class LearningStateService {
   /**
    * 计算 LF (Learning Fatigue)
    * 公式：LF_t = λ_short × LF_{t-1} + (1-λ_short) × LSS_t
-   * λ = 0.70 (7天半衰期)
+   * λ = 0.70 (半衰期 = ln(0.5)/ln(0.70) ≈ 1.9 天)
    */
   calculateLF(previousLF: number, currentLSS: number): number {
     const lf = 

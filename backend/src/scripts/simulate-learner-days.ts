@@ -39,12 +39,13 @@ import {
 // 不 mock 时钟，而是把第 N 天映射为 baseDate + N，日界与 getAggregatedState.dayLoad / ReviewQuotaService 同口径。
 import { resolveDayWindow, toDateOnly } from '../services/virtual-lab/simulated-day.service';
 
-/** EWMA 系数（与 LearningMetricService 的派生公式一致，断言里用来算两种预测值）
- * 注意：lf 的新值系数是 0.15（不是 1-0.7），ktl 的是 0.05（= 1-0.95）—— 公式本身不是严格凸组合。 */
+/** EWMA 系数（与 LearningMetricService 的派生公式一致，断言里用来算预测值）
+ * 归一化凸组合：ktl = 0.95/0.05、lf = 0.70/0.30。
+ * （2026-09-17 修：lf 新值系数原为 0.15、系数和 0.85 → 稳态被压到 0.5c，疲劳阈值实际失效；审计 §4.3） */
 const KTL_LAMBDA = 0.95;
 const KTL_NEW_TERM = 0.05;
 const LF_LAMBDA = 0.7;
-const LF_NEW_TERM = 0.15;
+const LF_NEW_TERM = 0.3;
 
 export interface SimLesson {
   /** 相对起始日的天数（0 = 起始日） */
