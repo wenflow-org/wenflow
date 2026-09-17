@@ -280,7 +280,10 @@
           </div>
         </section>
         <section v-if="memoryTraces.length" class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">记忆痕迹与保持率（FSRS）</h3></div>
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">记忆痕迹与保持率（FSRS）</h3>
+            <button type="button" class="mk-link" @click="goMemoryReview">记忆与复习 →</button>
+          </div>
           <table class="ld-mt">
             <thead>
               <tr><th>概念</th><th>掌握度</th><th>稳定性（天）</th><th>难度</th><th>保持率</th><th>到期</th></tr>
@@ -533,7 +536,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
-import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
+import { conceptBarTone, conceptBarWidth, memoryReviewUrl, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -634,6 +637,16 @@ function goUser() {
   const id = subPage.value?.id
   if (!id) return
   openSubPage('user', id, { includeTest: subPage.value?.includeTest })
+}
+
+/**
+ * 记忆与复习（归并凭据 / 回滚 / 到期明细）：跨页深链到 `/admin/memory-review?userId=…`。
+ * 该页已支持 `userId` 深链（见 MemoryReview.vue 的 onMounted 注释），此前缺的正是"从学习者详情进去"这一环。
+ */
+function goMemoryReview() {
+  const id = subPage.value?.id
+  if (!id) return
+  void tabRouter.push(memoryReviewUrl(id))
 }
 
 watch(

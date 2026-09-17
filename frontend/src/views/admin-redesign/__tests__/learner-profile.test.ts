@@ -6,16 +6,7 @@
  * - LearnerDetail tab 归一化（6 → 3 旧名重定向）
  */
 import { describe, expect, it } from 'vitest';
-import {
-  isTestAccountUser,
-  levelFromXp,
-  levelLabel,
-  conceptBarTone,
-  conceptBarWidth,
-  transferReadinessZh,
-  misconceptionRiskZh,
-  normalizeLearnerTab,
-} from '../learner-profile';
+import { isTestAccountUser, levelFromXp, levelLabel, conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, memoryReviewUrl } from '../learner-profile';
 
 describe('isTestAccountUser（测试/虚拟账号识别，与后端同源）', () => {
   it('虚拟学习者：id 以 virtual_ 开头或邮箱 @test.local / virtual_ 前缀', () => {
@@ -109,5 +100,19 @@ describe('normalizeLearnerTab（6 tab → 3 tab 深链重定向）', () => {
     expect(normalizeLearnerTab(undefined)).toBe('overview');
     expect(normalizeLearnerTab('whatever')).toBe('overview');
     expect(normalizeLearnerTab('COGNITIVE')).toBe('profile');
+  });
+});
+
+describe('memoryReviewUrl（跨组件深链契约）', () => {
+  it('参数名与 MemoryReview 约定一致（userId）', () => {
+    expect(memoryReviewUrl('u-123')).toBe('/admin/memory-review?userId=u-123');
+  });
+
+  it('特殊字符要转义（学习者 id 里出现过冒号/中文）', () => {
+    expect(memoryReviewUrl('a b:c')).toBe('/admin/memory-review?userId=a%20b%3Ac');
+  });
+
+  it('空值不抛错（详情页拿不到 id 时按钮不渲染，但函数要稳）', () => {
+    expect(memoryReviewUrl('')).toBe('/admin/memory-review?userId=');
   });
 });

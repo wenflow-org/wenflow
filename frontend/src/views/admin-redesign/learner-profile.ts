@@ -88,3 +88,13 @@ export function normalizeLearnerTab(tab: unknown): LearnerTab {
   const t = String(tab || '').toLowerCase()
   return TAB_REDIRECT[t] || 'overview'
 }
+
+/**
+ * 学习者详情 → 「记忆与复习」的跨页深链。
+ *
+ * 契约：参数名必须是 `userId`（`MemoryReview.vue` 的 onMounted 读的就是 `route.query.userId`）。
+ * 抽成纯函数是为了把这条**跨组件契约**钉进测试——两侧各自改参数名是这类跳转最常见的静默失效。
+ */
+export function memoryReviewUrl(userId: string): string {
+  return `/admin/memory-review?userId=${encodeURIComponent(String(userId || ''))}`
+}
