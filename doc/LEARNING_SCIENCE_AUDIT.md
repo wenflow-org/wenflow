@@ -478,6 +478,43 @@ kt-estimate 那 116 条因为 lastSeenAt 为 null，被 `getDueTraces` 的"never
 日期跨到 09-17 后那条被自然衰减（算出 `1.2+(9.5−1.2)×0.74+2.0 = 9.342`，断言假失败）。
 已锚定 `asOf`。（这类"随日历到期"的测试会被任何人撞上。）
 
+## 3.17 **从零验证**：空库起步，整条闭环自己长出来（2026-09-17）
+
+此前所有验证都建立在**带历史包袱**的虚拟学习者上（几十条遗留 trace、几十条到期）——无法回答
+"这套东西在没有历史数据时能不能自己长出来"。为此新增
+`src/scripts/verify-from-zero.ts`：**新建虚拟学习者** → 生产链路生成路径 → 上课 → 跨天 → 再上课，
+用当前代码 + 真实 LLM 跑，逐项核对。
+
+```
+PASS 0  造人            user=dd0a42d0（isVirtualLearner=true）profile=ae1dbbf3
+PASS 1  路径            path=lp_1789605 里程碑=3 首任务=「通读短文并标记核心主张句」
+PASS 1b 空库起步        起步时 memory_traces=0（确认无历史）
+PASS 2  首课无温故       warmupItems=0 ← 从零没有到期点，**不该温故**（空计划分支正确）
+PASS 2b 课后长出记忆     memory_traces=2（起步 0）
+PASS 2c 课后落状态       learning_state 行=1
+PASS 2d 首课无复习证据   review:completed=0
+PASS 3  跨 3 天后有温故  warmupItems=1 →「主张与证据的关系标注」   ← 第 1 节的点到期了
+PASS 4  温故结果入库     rating=hard status=learning progress=60 **elapsedDays=3**
+INFO 5  难度锚点=1；计划 backlog=0 successRate=0
+```
+
+**这一跑的分量**：
+
+- 它一次性验证了 **造人 → 路径 → 任务 → 上课 → 记忆入库 → 跨天到期 → 温故 → 结果回写** 全链，
+  **不依赖任何历史数据**；
+- 观测 3 同时是 §3.14 **时钟修复的端到端证据**：读侧若仍用墙钟，第 2 节课（模拟 +3 天）就会
+  "永远算不出到期"、温故不会出现；
+- 观测 4 的 `elapsedDays=3` 说明保持曲线的横轴在**空库起步**时也正常；
+- 观测 2 反向证明了"**没有到期点就不温故**"这条边界（不是所有课都硬塞温故）。
+
+**过程中的两个工程细节**（已写进脚本注释，供后来者）：
+① 阶段任务由**后台任务**生成（`runBackgroundTask('learning.path.stage-enrichment')`），
+`generate()` 返回时任务还没落库 → 必须轮询等待（生产线里由前端轮询 run 状态）；
+② 时钟工具在 `services/virtual-lab/`（不是 `virtual-lab/`），脚本里容易写错。
+
+**复现**：`npx ts-node --transpile-only src/scripts/verify-from-zero.ts --turns=2 --days=3`
+（会真实新建一个虚拟学习者；跑完可用 `audit-warmup-loop.ts` / `audit-difficulty-ledger.ts` / `audit-retention-curve.ts` 回看）
+
 ## 4. 科学性评估（逐机制对照文献）
 
 ### 4.1 有依据且实现得当的部分
