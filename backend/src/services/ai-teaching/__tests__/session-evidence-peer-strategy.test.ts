@@ -1,4 +1,4 @@
-import { computeSessionEvidence, pickPeerStrategy } from '../AITeachingCoordinator';
+import { computeSessionEvidence, pickPeerStrategy, shouldEmitCheckpoint } from '../AITeachingCoordinator';
 
 /**
  * 回归（审计 §3.19）：
@@ -56,6 +56,38 @@ describe('wrapup 会话证据：解法尝试台账 rsmAttempts（2026-09-17 起�
     const evidence = computeSessionEvidence(asSession({ messages: [{ role: 'assistant', analysis: { rsmAttempts } }] }));
     expect(evidence.rsmAttempts).toHaveLength(5);
     expect(evidence.rsmAttempts![0].method).toBe('方法4');
+  });
+});
+
+describe('shouldEmitCheckpoint：出题触发由代码给（2026-09-17）', () => {
+  const session = (understanding: number | null, messageCount = 10) => ({
+    messages: [
+      ...Array.from({ length: Math.max(0, messageCount - 1) }, () => ({ role: 'user' as const })),
+      { role: 'assistant' as const, ...(understanding === null ? {} : { analysis: { understanding } }) },
+    ],
+  });
+
+  it('无待处理题 + 有进展 + 不在收尾 → 出题', () => {
+    expect(shouldEmitCheckpoint(session(0.8), {})).toBe(true);
+  });
+
+  it('已有待处理检查点 → 不出（不堆题）', () => {
+    expect(shouldEmitCheckpoint(session(0.8), { pendingCheckpoint: { id: 'cp1' } })).toBe(false);
+  });
+
+  it('距上次检查点不足 4 条消息 → 不出（与事后门一致）', () => {
+    expect(shouldEmitCheckpoint(session(0.8, 10), { lastCheckpointTurn: 8 })).toBe(false);
+    expect(shouldEmitCheckpoint(session(0.8, 10), { lastCheckpointTurn: 5 })).toBe(true);
+  });
+
+  it('收尾阶段 → 不出', () => {
+    expect(shouldEmitCheckpoint(session(0.8), { classroomContext: { stage: { current: 'ready_to_close' } } })).toBe(false);
+    expect(shouldEmitCheckpoint(session(0.8), { classroomContext: { stage: { current: 'wrapup' } } })).toBe(false);
+  });
+
+  it('上一轮没有进展（understanding < 0.6 或缺失）→ 不出', () => {
+    expect(shouldEmitCheckpoint(session(0.4), {})).toBe(false);
+    expect(shouldEmitCheckpoint(session(null), {})).toBe(false);
   });
 });
 

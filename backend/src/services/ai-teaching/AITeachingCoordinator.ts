@@ -218,6 +218,34 @@ interface ProcessStudentMessageOptions {
 
 const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
 
+/** 检查点最小间隔（条消息）：与 `processStudentMessage` 事后门保持一致 */
+const CHECKPOINT_MIN_TURNS = 4;
+/** 触发检查点所需"上一轮确有进展"的理解度门槛 */
+const CHECKPOINT_TRIGGER_MIN_UNDERSTANDING = 0.6;
+
+/**
+ * 检查点**触发**（2026-09-17）：由**代码**决定"何时探测"，模型只负责"探测什么"（出题 + 答案键）。
+ *
+ * 背景：此前触发完全由模型自决（提示词写"满足全部条件才输出"），实测最近 60 个会话**零检查点**
+ * ⇒ 独立传感器没有样本 ⇒ 成功率带永远打不开（§7 P1-1 的前置）。触发条件都是可复算的，本就该由代码给。
+ *
+ * 条件（全部满足）：① 没有待处理检查点（不堆题）；② 距上次检查点 ≥ `CHECKPOINT_MIN_TURNS` 条消息；
+ * ③ 不在收尾阶段；④ 上一轮确有进展（最近一条带 analysis 的助手回合 understanding ≥ 门槛）。
+ */
+export function shouldEmitCheckpoint(
+  session: { messages: Array<{ role: string; analysis?: any }> },
+  teachingState: Record<string, any> | null | undefined,
+): boolean {
+  if (getPendingCheckpoint(teachingState)) return false;
+  const lastTurn = Number(teachingState?.lastCheckpointTurn);
+  if (Number.isFinite(lastTurn) && session.messages.length - lastTurn < CHECKPOINT_MIN_TURNS) return false;
+  const stage = String(teachingState?.classroomContext?.stage?.current ?? '');
+  if (stage === 'ready_to_close' || stage === 'wrapup') return false;
+  const lastAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
+  const understanding = Number(lastAnalysis?.understanding);
+  return Number.isFinite(understanding) && understanding >= CHECKPOINT_TRIGGER_MIN_UNDERSTANDING;
+}
+
 function buildSessionId(userId: string) {
   return `teaching_${userId}_${randomUUID()}`;
 }
@@ -1637,6 +1665,8 @@ async function buildTeachingTurnInput(
     controls: {
       mode: session.mode as TeachingMode,
       teachingControlContext: channels['controls.teachingControlContext'] || teachingControlContext,
+      // 出题触发由代码给（2026-09-17）：模型只出题与答案键，不再自行决定"什么时候探测"
+      emitCheckpoint: shouldEmitCheckpoint(session, teachingState),
     }
   };
 }

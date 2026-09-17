@@ -222,6 +222,11 @@ export interface TeachingTurnInput {
   controls?: {
     mode?: 'tutor' | 'peer' | 'debate';
     teachingControlContext?: Record<string, any>;
+    /**
+     * 出题触发（2026-09-17）：**由代码给出**——true 时本轮必须产出 `control.checkpoint`（含答案键），
+     * false/缺失时不得产出。理由：此前完全由模型自决，实测最近 60 个会话零检查点 ⇒ 独立传感器没有样本。
+     */
+    emitCheckpoint?: boolean;
   };
   classroomContext?: Record<string, any>;
   classroomEventContext?: Record<string, any>;

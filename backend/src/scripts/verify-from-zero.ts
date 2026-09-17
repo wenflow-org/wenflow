@@ -55,12 +55,69 @@ async function drainOutbox(): Promise<void> {
 }
 
 /** 跑一节课：开课 → N 个学生回合 → 结算。返回开课时的温故计划条数。 */
+/**
+ * 虚拟学习者作答检查点（2026-09-17）。
+ *
+ * 为什么需要：检查点此前**从不出题/从不被作答**（实测最近 60 个会话零检查点、零证据）⇒
+ * 独立成功率带（§7 P1-1）永远没有样本。这里让端到端把「出题 → 代码裁决 → 证据留痕」真的跑一遍。
+ * 作答策略**可复算**：`correct=true` 按答案键作答、`false` 故意答错，从而同时覆盖两条判定路径。
+ * 返回裁决结果（含从证据回读的 `judgedBy`，因此这条也顺带验证了证据写入）。
+ */
+async function answerPendingCheckpoint(
+  sessionId: string,
+  correct: boolean,
+): Promise<{ checkpointId: string; type: string; passed: boolean; judgedBy: string | null } | null> {
+  const row = await prisma.teaching_sessions.findUnique({
+    where: { id: sessionId },
+    select: { teachingState: true, revision: true },
+  });
+  let state: Record<string, any> = {};
+  try {
+    state = JSON.parse(String(row?.teachingState ?? '{}'));
+  } catch {
+    return null;
+  }
+  const checkpoint = state?.pendingCheckpoint ?? state?.sessionArtifacts?.pendingCheckpoint ?? null;
+  if (!checkpoint?.id) return null;
+
+  const payload: { selectedOptionIds?: string[]; answerText?: string } = {};
+  if (checkpoint.type === 'short_answer') {
+    const keywords: string[] = Array.isArray(checkpoint.expectedKeywords) ? checkpoint.expectedKeywords : [];
+    payload.answerText = correct ? keywords.join('，') : '我想不起来了';
+  } else {
+    const optionIds: string[] = (checkpoint.options || []).map((option: any) => option?.id).filter(Boolean);
+    const key: string[] = Array.isArray(checkpoint.correctOptionIds) ? checkpoint.correctOptionIds : [];
+    payload.selectedOptionIds = correct ? key : optionIds.filter((id) => !key.includes(id)).slice(0, 1);
+    if (!payload.selectedOptionIds || payload.selectedOptionIds.length === 0) return null;
+  }
+
+  const result = await aiTeachingOrchestrator.submitCheckpoint(
+    sessionId,
+    checkpoint.id,
+    payload,
+    row?.revision ?? 0,
+  );
+  // judgedBy 不在返回值里：从留痕里回读（同时验证证据确实写进去了）
+  const evidence = await prisma.learner_evidence.findFirst({
+    where: { evidenceKey: `checkpoint:result:${checkpoint.id}` },
+    orderBy: { occurredAt: 'desc' },
+    select: { payload: true },
+  });
+  let judgedBy: string | null = null;
+  try {
+    judgedBy = JSON.parse(String(evidence?.payload ?? '{}'))?.judgedBy ?? null;
+  } catch {
+    judgedBy = null;
+  }
+  return { checkpointId: checkpoint.id, type: checkpoint.type, passed: result.passed === true, judgedBy };
+}
+
 async function runLesson(input: {
   userId: string;
   taskId: string;
   turns: number;
   studentLines: string[];
-}): Promise<{ sessionId: string; warmupItems: number; planLabels: string[]; originTitles: string[] }> {
+}): Promise<{ sessionId: string; warmupItems: number; planLabels: string[]; originTitles: string[]; checkpointResults: Array<{ checkpointId: string; type: string; passed: boolean; judgedBy: string | null }> }> {
   const session = await aiTeachingOrchestrator.startSession({ userId: input.userId, taskId: input.taskId });
   const sessionId = session.sessionId;
   const row = await prisma.teaching_sessions.findUnique({
@@ -78,6 +135,7 @@ async function runLesson(input: {
     ? plan.items.map((item: any) => String(item?.originPathTitle ?? '')).filter(Boolean)
     : [];
 
+  const checkpointResults: Array<{ checkpointId: string; type: string; passed: boolean; judgedBy: string | null }> = [];
   for (let i = 0; i < input.turns; i += 1) {
     const current = await prisma.teaching_sessions.findUnique({ where: { id: sessionId }, select: { revision: true } });
     await aiTeachingOrchestrator.processStudentMessage(
@@ -85,6 +143,9 @@ async function runLesson(input: {
       input.studentLines[Math.min(i, input.studentLines.length - 1)],
       { expectedRevision: current?.revision ?? 0 },
     );
+    // 若本轮出了检查点，虚拟学习者作答（交替对/错，覆盖两条判定路径）
+    const answered = await answerPendingCheckpoint(sessionId, i % 2 === 0).catch(() => null);
+    if (answered) checkpointResults.push(answered);
   }
   const fresh = await prisma.teaching_sessions.findUnique({ where: { id: sessionId }, select: { revision: true } });
   await sessionFinalizationService.finalize({
@@ -96,7 +157,7 @@ async function runLesson(input: {
     endReason: 'manual-end',
   } as never);
   await drainOutbox();
-  return { sessionId, warmupItems: labels.length, planLabels: labels, originTitles };
+  return { sessionId, warmupItems: labels.length, planLabels: labels, originTitles, checkpointResults };
 }
 
 async function main(): Promise<void> {
@@ -202,6 +263,29 @@ async function main(): Promise<void> {
     '7 温故项带来源路径',
     lesson2.originTitles.length > 0,
     lesson2.originTitles.length > 0 ? lesson2.originTitles.join('、') : '（无来源标题）',
+  );
+
+  // ── 8 检查点：代码裁决 + 留痕（独立传感器；§7 P1-1 的前置）
+  const checkpointEvidence = await prisma.learner_evidence.findMany({
+    where: { userId: provisioned.userId, evidenceType: 'checkpoint:result' },
+    select: { payload: true },
+    orderBy: { occurredAt: 'desc' },
+    take: 5,
+  });
+  const judgedByCode = checkpointEvidence.filter((row) => {
+    try {
+      return JSON.parse(String(row.payload))?.judgedBy === 'code';
+    } catch {
+      return false;
+    }
+  }).length;
+  ok(
+    '8 检查点由代码裁决并留痕',
+    judgedByCode > 0,
+    `${judgedByCode}/${checkpointEvidence.length} 条 judgedBy=code｜本课作答 ${lesson2.checkpointResults.length} 次：` +
+      lesson2.checkpointResults
+        .map((item) => `${item.type}=${item.passed ? '通过' : '不通过'}(${item.judgedBy ?? '无证据'})`)
+        .join('、') || '（本轮未出检查点）',
   );
 
   // ── 5 难度锚点 / 保持曲线
