@@ -28,10 +28,7 @@ import { seedSkillModelConfigsIfEmpty } from './services/seed-skill-model-config
 import { dashboardGuidanceSnapshotService } from './services/learner/DashboardGuidanceSnapshotService';
 import { DurableEventConsumerRegistry } from './events/consumer-registry';
 import { DurableOutboxWorker } from './events/outbox.worker';
-import { learnerEvidenceProjector } from './services/learner/LearnerEvidenceProjector';
-import { learnerSnapshotRefreshService } from './services/learner/LearnerSnapshotRefreshService';
-import { learnerProfileService } from './services/learner/LearnerProfileService';
-import { lessonKnowledgeEnrichmentConsumer } from './services/learner/LessonKnowledgeEnrichmentConsumer';
+import { handleLearnerEvent, LEARNER_EVENT_TYPES } from './events/learner-event-consumer';
 import { reviewCompletedConsumer } from './services/learner/ReviewCompletedConsumer';
 import { quickLearnService } from './virtual-lab/quick-learn/quick-learn.service';
 import { reconcileTaskCompletionMetric } from './services/metrics/LearningMetricService';
@@ -683,30 +680,7 @@ export async function startServer() {
       durableConsumers.register(['review:completed'], async (event) => {
         await reviewCompletedConsumer.handle(event);
       });
-      durableConsumers.register([
-        'goal:understanding:updated',
-        'task:completed',
-        'lesson:completed',
-        'path:created',
-        'path:generated',
-        'path:adjusted',
-        'path:completed'
-      ], async (event) => {
-        await learnerEvidenceProjector.handle(event);
-        await lessonKnowledgeEnrichmentConsumer.handle(event);
-        if (!event.userId) return;
-        learnerProfileService.clear(event.userId);
-        const data = event.data || {};
-        await learnerSnapshotRefreshService.refresh({
-          userId: event.userId,
-          pathId: data.pathId || undefined,
-          milestoneId: data.milestoneId || undefined,
-          taskId: data.taskId || undefined,
-          scope: data.pathId ? (data.taskId ? 'teaching' : 'path') : 'global',
-          lastEventId: event.id,
-          lastEventAt: event.occurredAt
-        });
-      });
+      durableConsumers.register(LEARNER_EVENT_TYPES, handleLearnerEvent);
       outboxWorker = new DurableOutboxWorker(durableConsumers);
       outboxWorker.start();
 
