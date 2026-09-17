@@ -10,6 +10,8 @@
  * File-as-Truth：ACTIVE prompt 的 T/maxTokens 优先于 skill_model_configs（route）。
  */
 
+import { getModelMaxOutputTokens } from '../config/models.config';
+
 export type LlmParamSource =
   | 'runtime-override'
   | 'active-prompt'
@@ -62,6 +64,10 @@ export interface ResolveLlmGenerationParamsInput {
     temperature?: number | null;
     maxTokens?: number | null;
   } | null;
+  /** 路由层是否显式指定了 skill 级模型（skill_model_configs.model 非空）。
+   *  true 时 model 优先级为 runtimeOverride > route > active-prompt > codeDefaults，
+   *  让 skill 级模型路由优先于 prompt 继承的平台默认模型。 */
+  routeModelExplicit?: boolean;
 }
 
 function nonEmptyString(value: unknown): string | undefined {
@@ -109,12 +115,21 @@ export function resolveLlmGenerationParams(
   const code = input.codeDefaults || {};
   const route = input.routeFallback || null;
 
-  const model = pickString([
-    { value: override.model, source: 'runtime-override' },
-    { value: prompt?.model, source: 'active-prompt' },
-    { value: code.model, source: 'code-defaults' },
-    { value: route?.model, source: 'route-fallback' },
-  ]);
+  const model = pickString(
+    input.routeModelExplicit
+      ? [
+          { value: override.model, source: 'runtime-override' },
+          { value: route?.model, source: 'route-fallback' },
+          { value: prompt?.model, source: 'active-prompt' },
+          { value: code.model, source: 'code-defaults' },
+        ]
+      : [
+          { value: override.model, source: 'runtime-override' },
+          { value: prompt?.model, source: 'active-prompt' },
+          { value: code.model, source: 'code-defaults' },
+          { value: route?.model, source: 'route-fallback' },
+        ]
+  );
 
   const temperature = pickNumber([
     { value: override.temperature, source: 'runtime-override' },
@@ -139,16 +154,20 @@ export function resolveLlmGenerationParams(
     }
   }
 
-  // 全局默认 maxTokens = 128k（2026-09-03 定案：v4-flash 思考模式从同一输出预算扣 token，
-  // max 档实测 reasoning 可烧 12k+，32k 不够长输出；128k 在上游 384K 输出上限内）：
+  // 全局默认 maxTokens floor：按最终解析出的模型取上游输出上限（deepseek=128k，agnes=64k）。
   // 除「运行时显式覆盖（runtime-override，调试/低耗可调小）」外，prompt/code/route
-  // 任何来源解析出的 maxTokens 若低于 128k 一律抬到 131072——给足输出上限，避免长输出被截断漏字段。
+  // 任何来源解析出的 maxTokens 若低于该上限一律抬到模型上限——给足输出预算，避免长输出被截断漏字段。
   if (maxTokens.source !== 'runtime-override') {
-    const floor = 131072;
+    const modelFloor = model.value
+      ? (getModelMaxOutputTokens(model.value) ?? 131072)
+      : 131072;
     if (maxTokens.value === undefined) {
-      maxTokens = { value: floor, source: 'code-defaults' };
-    } else if (maxTokens.value < floor) {
-      maxTokens = { value: floor, source: maxTokens.source };
+      maxTokens = { value: modelFloor, source: 'code-defaults' };
+    } else if (maxTokens.value < modelFloor) {
+      maxTokens = { value: modelFloor, source: maxTokens.source };
+    } else if (maxTokens.value > modelFloor) {
+      // 显式配置超过模型上限时压回上限（防止上游 400：max_tokens exceeds limit）
+      maxTokens = { value: modelFloor, source: maxTokens.source };
     }
   }
 
@@ -219,6 +238,7 @@ export async function resolveLlmCallParams(
 
   let routeFallback: ResolveLlmGenerationParamsInput['routeFallback'] = null;
   let routeResolved = false;
+  let routeModelExplicit = false;
   if (input.includeRouteFallback !== false) {
     try {
       const { getAPIGateway } = await import('../gateway/api-gateway');
@@ -235,6 +255,7 @@ export async function resolveLlmCallParams(
         temperature: route.temperature,
         maxTokens: route.maxTokens,
       };
+      routeModelExplicit = route.modelExplicit === true;
     } catch {
       routeFallback = null;
     }
@@ -245,6 +266,7 @@ export async function resolveLlmCallParams(
     promptConfig,
     codeDefaults: input.codeDefaults,
     routeFallback,
+    routeModelExplicit,
   });
 
   return {

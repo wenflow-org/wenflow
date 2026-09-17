@@ -38,6 +38,10 @@ import { teachingStrategySelector as teachingStrategySelectorFn } from './teachi
 export { mcpToolDefinition } from './mcp-tool';
 import { executeMcpTool as executeMcpToolFn } from './mcp-tool';
 
+// 网页搜索能力（非 LLM 外挂能力）
+export { webSearchDefinition } from './web-search';
+import { executeWebSearch as executeWebSearchFn } from './web-search';
+
 // v4 辅助 LLM Skills（由原遗留插件/旁路迁入）
 import { auxSkillDefinitions, auxSkillHandlers } from './v4-aux-skills';
 export { auxSkillDefinitions, auxSkillDefinitionMap } from './v4-aux-skills';
@@ -113,6 +117,7 @@ import { virtualLearnerActorAuditorDefinition } from './virtual-learner-actor-au
 import { pathReviewerDefinition, pathReviewer as pathReviewerFn } from './path-reviewer';
 import { kcMapperDefinition, kcMapper as kcMapperFn } from './kc-mapper';
 import { mcpToolDefinition } from './mcp-tool';
+import { webSearchDefinition } from './web-search';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   stageDesignerDefinition,
@@ -131,6 +136,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   pathReviewerDefinition,
   kcMapperDefinition,
   mcpToolDefinition,
+  webSearchDefinition,
   ...auxSkillDefinitions,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
   {
@@ -213,6 +219,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'path-reviewer': pathReviewerFn,
   'kc-mapper': kcMapperFn,
   'mcp-tool': executeMcpToolFn,
+  'web-search': executeWebSearchFn,
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
   'goal-conversation': (input: any) => runGoalConversationAgent(input),

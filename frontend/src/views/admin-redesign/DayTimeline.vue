@@ -1,6 +1,6 @@
 <template>
   <div class="cp-day-timeline">
-    <div v-if="loading" class="dt-state">加载中…</div>
+    <MkLoading v-if="loading" text="加载中…" />
     <div v-else-if="error" class="dt-state dt-state--error">
       <span>{{ error }}</span>
       <button type="button" class="mk-link" @click="load">重试</button>
@@ -101,6 +101,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
+import MkLoading from './MkLoading.vue'
+import { errMsg } from './live'
 
 interface SimulationClock {
   enabled: boolean
@@ -182,8 +184,8 @@ async function resetClock() {
   try {
     await adminVirtualLearnersApi.resetVirtualSessionClock(props.sessionId)
     await load()
-  } catch (e: any) {
-    error.value = e?.response?.data?.error || e?.message || '重置失败'
+  } catch (e) {
+    error.value = errMsg(e)
   } finally {
     resetting.value = false
   }
@@ -217,8 +219,8 @@ async function load() {
     clock.value = clockRes.data?.data ?? clockRes.data ?? null
     const timeline = timelineRes.data?.data ?? timelineRes.data
     days.value = Array.isArray(timeline?.days) ? timeline.days : []
-  } catch (e: any) {
-    error.value = e?.response?.data?.error || e?.message || '加载日程失败'
+  } catch (e) {
+    error.value = errMsg(e)
     clock.value = null
     days.value = []
   } finally {
@@ -231,33 +233,33 @@ watch(() => props.sessionId, load, { immediate: true })
 
 <style scoped>
 .cp-day-timeline { display: flex; flex-direction: column; gap: 12px; }
-.dt-state { padding: 16px; color: var(--mk-text-muted, #888); font-size: 13px; }
-.dt-state--error { color: var(--mk-danger, #d33); display: flex; gap: 8px; align-items: center; }
+.dt-state { padding: 16px; color: var(--mk-faint); font-size: 13px; }
+.dt-state--error { color: var(--mk-red); display: flex; gap: 8px; align-items: center; }
 .dt-clock { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; }
 .dt-clock__badge { padding: 2px 8px; border-radius: 999px; font-weight: 600; }
-.dt-clock__badge.is-on { background: rgba(46, 160, 67, 0.12); color: #2ea043; }
-.dt-clock__badge.is-off { background: rgba(140, 140, 140, 0.12); color: #888; }
-.dt-clock__meta { color: var(--mk-text-muted, #888); }
+.dt-clock__badge.is-on { background: var(--mk-green-bg); color: var(--mk-green); }
+.dt-clock__badge.is-off { background: var(--mk-surface-3); color: var(--mk-faint); }
+.dt-clock__meta { color: var(--mk-faint); }
 .dt-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; }
 .dt-auto { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; }
-.dt-hint { margin: 0; font-size: 12px; color: var(--mk-text-muted, #888); }
-.dt-day { border: 1px solid var(--mk-border, #e5e5e5); border-radius: 8px; padding: 10px 12px; }
+.dt-hint { margin: 0; font-size: 12px; color: var(--mk-faint); }
+.dt-day { border: 1px solid var(--mk-line); border-radius: 8px; padding: 10px 12px; }
 .dt-day__head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .dt-day__label { font-weight: 600; }
-.dt-day__date { color: var(--mk-text-muted, #888); font-size: 12px; }
+.dt-day__date { color: var(--mk-faint); font-size: 12px; }
 .dt-chip { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: rgba(140, 140, 140, 0.12); }
-.dt-chip--warn { background: rgba(210, 150, 0, 0.14); color: #a07000; }
-.dt-chip--pace-slow { background: rgba(210, 90, 0, 0.14); color: #b35a00; }
-.dt-chip--pace-fast { background: rgba(46, 120, 220, 0.14); color: #2e78dc; }
-.dt-metrics { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; font-size: 12px; color: var(--mk-text-muted, #888); }
-.dt-metric b { color: var(--mk-text, #222); }
+.dt-chip--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
+.dt-chip--pace-slow { background: var(--mk-amber-bg); color: var(--mk-amber-fill); }
+.dt-chip--pace-fast { background: var(--mk-blue-bg); color: var(--mk-blue); }
+.dt-metrics { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; font-size: 12px; color: var(--mk-faint); }
+.dt-metric b { color: var(--mk-ink); }
 .dt-tasks { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
 .dt-task { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
 .dt-task__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dt-task__meta { color: var(--mk-text-muted, #888); flex: 0 0 auto; }
+.dt-task__meta { color: var(--mk-faint); flex: 0 0 auto; }
 .dt-adjust { margin-top: 8px; font-size: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.dt-adjust__label { color: var(--mk-text-muted, #888); }
+.dt-adjust__label { color: var(--mk-faint); }
 .dt-adjust__item { background: rgba(140, 140, 140, 0.1); padding: 1px 6px; border-radius: 4px; }
-.dt-adjust__item em { font-style: normal; margin-left: 4px; color: var(--mk-text-muted, #888); }
-.dt-paths { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--mk-text-muted, #888); }
+.dt-adjust__item em { font-style: normal; margin-left: 4px; color: var(--mk-faint); }
+.dt-paths { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--mk-faint); }
 </style>

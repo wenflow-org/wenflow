@@ -397,6 +397,17 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Tool',
     noPromptFile: true
+  },
+  {
+    id: 'skill:web-search',
+    name: '网页搜索 Skill',
+    description: '调用外部搜索 provider（TinyFish / Tavily / Exa）检索网页并返回结构化结果',
+    category: 'tool',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Tool',
+    noPromptFile: true
   }
 ];
 

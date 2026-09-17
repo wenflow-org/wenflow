@@ -45,6 +45,52 @@ describe('resolveLlmGenerationParams (source-level single read path)', () => {
     expect(resolved.sources.model).toBe('runtime-override')
   })
 
+  it('prefers route model over prompt when skill explicitly configured a model (routeModelExplicit)', () => {
+    // skill_model_configs.model 显式指定时，skill 级模型优先于 prompt 继承的平台默认模型
+    const resolved = resolveLlmGenerationParams({
+      promptConfig: { model: 'deepseek-v4-flash', temperature: 0.7, maxTokens: 8000 },
+      routeFallback: { model: 'agnes-3.0-flash', temperature: 0.7, maxTokens: 8000 },
+      routeModelExplicit: true,
+    })
+
+    expect(resolved.model).toBe('agnes-3.0-flash')
+    expect(resolved.sources.model).toBe('route-fallback')
+    // 非 model 参数仍由 prompt 优先（File-as-Truth 不变）
+    expect(resolved.temperature).toBe(0.7)
+  })
+
+  it('keeps prompt model priority when route model is inherited (routeModelExplicit=false)', () => {
+    const resolved = resolveLlmGenerationParams({
+      promptConfig: { model: 'deepseek-v4-flash', temperature: 0.7, maxTokens: 8000 },
+      routeFallback: { model: 'deepseek-v4-flash', temperature: 0.5, maxTokens: 2000 },
+      routeModelExplicit: false,
+    })
+
+    expect(resolved.model).toBe('deepseek-v4-flash')
+    expect(resolved.sources.model).toBe('active-prompt')
+  })
+
+  it('caps maxTokens to model output limit (agnes=65536) instead of 128k floor', () => {
+    const resolved = resolveLlmGenerationParams({
+      promptConfig: { model: 'agnes-3.0-flash', temperature: 0.7, maxTokens: 8000 },
+      routeFallback: { model: 'agnes-3.0-flash', temperature: 0.7, maxTokens: 8000 },
+      routeModelExplicit: true,
+    })
+
+    expect(resolved.model).toBe('agnes-3.0-flash')
+    expect(resolved.maxTokens).toBe(65536)
+    expect(resolved.request.max_tokens).toBe(65536)
+  })
+
+  it('keeps 128k floor for deepseek models', () => {
+    const resolved = resolveLlmGenerationParams({
+      promptConfig: { model: 'deepseek-v4-flash', temperature: 0.7, maxTokens: 8000 },
+    })
+
+    expect(resolved.model).toBe('deepseek-v4-flash')
+    expect(resolved.maxTokens).toBe(131072)
+  })
+
   it('applies minMaxTokens floor below 128k without inventing lower prompt values', () => {
     const resolved = resolveLlmGenerationParams({
       promptConfig: { maxTokens: 500 },

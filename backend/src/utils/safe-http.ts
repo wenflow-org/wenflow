@@ -9,7 +9,23 @@ const DEFAULT_TIMEOUT_MS = 15_000
 export const SAFE_HTTP_MAX_TIMEOUT_MS = 300_000
 const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 const DEFAULT_MAX_REDIRECTS = 3
-const SENSITIVE_REDIRECT_HEADERS = new Set(['authorization', 'cookie', 'proxy-authorization'])
+const SENSITIVE_REDIRECT_HEADERS = new Set(['authorization', 'cookie', 'proxy-authorization', 'x-api-key'])
+
+/**
+ * 显式信任的域名白名单（SAFE_HTTP_TRUSTED_HOSTS，逗号分隔；精确匹配，不支持通配）。
+ *
+ * 命中时跳过“基于 DNS 解析地址”的 SSRF 拒绝。用途：fake-IP / TUN 代理的开发环境会把
+ * 公网域名解析到 198.18.0.0/15 等保留段（Clash 等），按默认策略必然被拒，无法联外网。
+ * 默认空 = 现有 SSRF 策略完全不变；生产环境如无特殊需要不要配置。
+ */
+function isTrustedHostname(hostname: string): boolean {
+  const serialized = String(process.env.SAFE_HTTP_TRUSTED_HOSTS || '').trim()
+  if (!serialized) return false
+  return serialized
+    .split(',')
+    .map(item => item.trim().toLowerCase().replace(/^\[|\]$/g, ''))
+    .some(item => item === hostname)
+}
 
 export class UnsafeUrlError extends Error {
   constructor(message: string) {
@@ -409,6 +425,14 @@ export async function validateExternalUrl(
   )
   if (!addresses.length) {
     throw new UnsafeUrlError('域名未解析到可用地址')
+  }
+  // 显式信任的域名跳过地址段拒绝（fake-IP 代理开发环境；白名单默认空，策略不变）
+  if (isTrustedHostname(hostname)) {
+    return {
+      url,
+      address: addresses[0].address,
+      family: addresses[0].family as 4 | 6
+    }
   }
   if (addresses.some(item => isAlwaysBlockedAddress(item.address))) {
     throw new UnsafeUrlError('域名解析到了 Link-local、元数据或保留地址')

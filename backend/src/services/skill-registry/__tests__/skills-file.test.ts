@@ -39,7 +39,10 @@ describe('skills-file loader（P0 户口簿）', () => {
 
     const handlerOnly = byKind('handler-only');
     expect(handlerOnly.every((entry) => entry.noPromptFile === true)).toBe(true);
-    expect(handlerOnly.map((entry) => entry.skillId).sort()).toEqual(['learner-model', 'mcp-tool']);
+    // 与文件头"计数不硬编码"一致：只断言已知成员存在，新增 handler-only 不再需要改本测试
+    expect(handlerOnly.map((entry) => entry.skillId)).toEqual(
+      expect.arrayContaining(['learner-model', 'mcp-tool', 'web-search'])
+    );
 
     const learnerModel = byKind('handler-only').find((entry) => entry.skillId === 'learner-model')!;
     expect(resolveRegistrationPoint(learnerModel)).toBe('agents');

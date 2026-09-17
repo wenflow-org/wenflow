@@ -25,33 +25,33 @@ interface SkillModelSeedEntry {
  *   实时对话/高频/短输出 → deepseek-v4-flash（TTFT 更快）
  *   全部 thinkingMode=disabled（实测思考档在两个模型上均为纯负担：TTFT 30-120s/524 限流/输出更短）
  *
+ * 2026-09-15 切换：deepseek 资源紧张（tps 低），全部 13 个 mainline skill 暂用 agnes-3.0-flash
+ *   （OpenAI-compatible，TPS 更高）；平台默认模型（platform_api_configs.defaultModel）仍为 deepseek，
+ *   本次仅 skill 调用模型切到 agnes，后续恢复时改回本表即可。
+ *
  * - aux/handler-only skill 不在此表（未在此配置即沿用平台默认，见 runSeedIfEmpty）
  * - 虚拟学习者 5 个 skill 继承 flash + disabled（未在此显式配置）
  */
 export const SKILL_MODEL_SEED: SkillModelSeedEntry[] = [
-  // ===== pro 组（后台设计/判断/评审/教学质量关键，低频或质量优先）=====
-  { skillId: 'path-planning',                    model: 'deepseek-v4-pro', thinkingMode: 'disabled' },
-  { skillId: 'kc-mapper',                        model: 'deepseek-v4-pro', thinkingMode: 'disabled' },
-  { skillId: 'path-reviewer',                    model: 'deepseek-v4-pro', thinkingMode: 'disabled' },
-  { skillId: 'stage-designer',                   model: 'deepseek-v4-pro', thinkingMode: 'disabled' },
-  { skillId: 'lesson-knowledge-enricher',        model: 'deepseek-v4-pro', thinkingMode: 'disabled' },
-  { skillId: 'virtual-learner-persona-designer', model: 'deepseek-v4-pro', thinkingMode: 'disabled' },
-  // teaching-turn：2026-09-05 质量对照实测（虚拟学习者数据）——pro-disabled 追问为开放建构式
-  // （认知层 analyze/理解度 0.92），flash-disabled 为验证式（understand）；实时代价仅 5.9→10.8s 可接受
-  { skillId: 'teaching-turn',                    model: 'deepseek-v4-pro', thinkingMode: 'disabled' },
-
-  // ===== flash 组（实时对话/高频/短输出）=====
-  { skillId: 'goal-conversation',                model: 'deepseek-v4-flash', thinkingMode: 'disabled' },
-  { skillId: 'teaching-opening-generator',       model: 'deepseek-v4-flash', thinkingMode: 'disabled' },
-  { skillId: 'peer-reinforcement',               model: 'deepseek-v4-flash', thinkingMode: 'disabled' },
-  { skillId: 'adaptive-guidance-copy',           model: 'deepseek-v4-flash', thinkingMode: 'disabled' },
-  { skillId: 'session-wrapup',                   model: 'deepseek-v4-flash', thinkingMode: 'disabled' },
-  { skillId: 'learning-predictor',               model: 'deepseek-v4-flash', thinkingMode: 'disabled' },
-  { skillId: 'virtual-learner-goal-dialogue-simulator',    model: 'deepseek-v4-flash', thinkingMode: 'disabled' },
-  { skillId: 'virtual-learner-learn-turn-simulator',       model: 'deepseek-v4-flash', thinkingMode: 'disabled' },
-  { skillId: 'virtual-learner-memory-curator',             model: 'deepseek-v4-flash', thinkingMode: 'disabled' },
-  { skillId: 'virtual-learner-path-evaluator',             model: 'deepseek-v4-flash', thinkingMode: 'disabled' },
-  { skillId: 'virtual-learner-scenario-designer',          model: 'deepseek-v4-flash', thinkingMode: 'disabled' },
+  // ===== 全部 skill 暂用 agnes-3.0-flash（2026-09-15，deepseek tps 紧张）=====
+  { skillId: 'path-planning',                    model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'kc-mapper',                        model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'path-reviewer',                    model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'stage-designer',                   model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'lesson-knowledge-enricher',        model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'virtual-learner-persona-designer', model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'teaching-turn',                    model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'goal-conversation',                model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'teaching-opening-generator',       model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'peer-reinforcement',               model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'adaptive-guidance-copy',           model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'session-wrapup',                   model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'learning-predictor',               model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'virtual-learner-goal-dialogue-simulator',    model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'virtual-learner-learn-turn-simulator',       model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'virtual-learner-memory-curator',             model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'virtual-learner-path-evaluator',             model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'virtual-learner-scenario-designer',          model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
 
   // semantic-freeze-judge（守门 skill，必须关闭思考，实测中强制 disabled）
   { skillId: 'semantic-freeze-judge',            model: '', thinkingMode: 'disabled' },

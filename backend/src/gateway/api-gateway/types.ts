@@ -27,6 +27,8 @@ export interface ResolvedRoute {
   model: string;
   /** 推理模型（用户双模型配置：reasoningModel / 平台 defaultReasoningModel），供两段式调用使用 */
   reasoningModel?: string;
+  /** 模型是否由 skill 级配置显式指定（true=skill_model_configs.model 非空；false=继承上层默认） */
+  modelExplicit?: boolean;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
   reasoningEffort?: 'default' | 'low' | 'high' | 'max';
   temperature: number;

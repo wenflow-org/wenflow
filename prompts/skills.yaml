@@ -514,6 +514,17 @@ skills:
       sandbox: []
     notes: handler 直读反例（P4 例外账）——handler 直读 user_mcp_configs（mcp-tool/index.ts:80 getUserMcpRuntimeConfig）与 config/mcp.json 平台工具（:126），外部调用 mcpGateway（:95/:140）；api 类由 mcpTools 字段承担，dataSource.db 保持空
 
+  - skillId: web-search
+    kind: handler-only
+    handlerRef: backend/src/skills/web-search/index.ts
+    noPromptFile: true
+    displayName: 网页搜索 Skill
+    description: 调用外部搜索 provider（TinyFish / Tavily / Exa）检索网页并返回结构化结果
+    dataSource:
+      db: []
+      sandbox: []
+    notes: handler-only 外挂能力——handler 委托 backend/src/services/search（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制）；provider 与密钥由 SEARCH_PROVIDER / SEARCH_API_KEY 等环境变量承担，无 DB 直读，dataSource.db 保持空
+
   # ============ aux（10 条，不进字段路由；v4-aux-skills 注册） ============
   - skillId: teaching-opening-generator
     kind: aux

@@ -163,6 +163,8 @@ export class APIRouter {
         endpoint,
         apiKey,
         model,
+        // 标记 skill 级是否显式指定了模型（供 resolve-llm-call-params 决定优先级）
+        modelExplicit: Boolean(config.model),
         thinkingMode: this.normalizeThinkingMode(config.thinkingMode || inheritedRoute.thinkingMode),
         reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort || inheritedRoute.reasoningEffort),
         // Phase 2：生成参数 T/maxTokens 不由 skill_model_configs 覆盖（File-as-Truth / resolveLlmGenerationParams）

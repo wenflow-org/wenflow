@@ -11,8 +11,10 @@ export interface ModelDefinition {
   id: string;
   label: string;
   tier: 'chat' | 'reasoning';
-  provider: 'deepseek';
+  provider: 'deepseek' | 'agnes';
   supportsThinking?: boolean;
+  /** 输出 token 上限（上游硬限制）；resolve-llm-call-params 的全局 maxTokens floor 按此封顶 */
+  maxOutputTokens?: number;
   description?: string;
 }
 
@@ -26,6 +28,7 @@ export const AVAILABLE_MODELS: ModelDefinition[] = [
     tier: 'chat',
     provider: 'deepseek',
     supportsThinking: true,
+    maxOutputTokens: 131072,
     description: '快速响应，适合日常对话和轻量级任务'
   },
   {
@@ -34,7 +37,17 @@ export const AVAILABLE_MODELS: ModelDefinition[] = [
     tier: 'reasoning',
     provider: 'deepseek',
     supportsThinking: true,
+    maxOutputTokens: 131072,
     description: '强大推理能力，适合复杂任务和深度思考'
+  },
+  {
+    id: 'agnes-3.0-flash',
+    label: 'Agnes 3.0 Flash',
+    tier: 'chat',
+    provider: 'agnes',
+    supportsThinking: false,
+    maxOutputTokens: 65536,
+    description: '轻量快速模型，TPS 高，适合现阶段 skill 高频调用（暂代 deepseek 作为 skill 调用模型）'
   }
 ];
 
@@ -90,6 +103,13 @@ export function isReasoningModel(modelId: string): boolean {
  */
 export function getModelLabel(modelId: string): string {
   return MODEL_MAP.get(modelId)?.label ?? modelId;
+}
+
+/**
+ * 获取模型的输出 token 上限（上游硬限制）；未知模型返回 null（由调用方决定默认 floor）。
+ */
+export function getModelMaxOutputTokens(modelId: string): number | null {
+  return MODEL_MAP.get(modelId)?.maxOutputTokens ?? null;
 }
 
 /**
