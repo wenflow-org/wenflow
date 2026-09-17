@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { timeAgo, errMsg, shortId, liveNavBadges, alarmNavBadges, liveVirtuals, liveSkillProfiles, liveExtraProfiles, liveAnnouncements, totalPagesOf, mapLogsToSpans, gatewayPairWindowMs, mergeSpanPages } from '../live';
 import { liveSpans } from '../store';
 import type { TraceSpan } from '../store';
+import { EXTRA_CAPABILITY_SKILLS } from '@/views/admin/capabilityCatalog';
 
 describe('live.timeAgo', () => {
   beforeEach(() => {
@@ -95,8 +96,9 @@ describe('live.liveNavBadges（侧栏徽章推导）', () => {
     liveSpans.value = [];
   });
 
-  it('无动态数据时仅 addons 由静态外挂能力清单兜底（size=3）', () => {
-    expect(liveNavBadges.value).toEqual({ addons: '3' });
+  it('无动态数据时仅 addons 由静态外挂能力清单兜底（size=清单长度）', () => {
+    // 计数不硬编码：新增/退役外挂能力（如 web-fetch）不应触发测试改动
+    expect(liveNavBadges.value).toEqual({ addons: String(EXTRA_CAPABILITY_SKILLS.length) });
   });
 
   it('按域填充计数徽章', () => {
