@@ -301,6 +301,14 @@ export interface TeachingTurnOutput {
       type: 'short_answer' | 'single_choice' | 'multi_choice';
       options?: Array<{ id: string; text: string }>;
       hint?: string;
+      /**
+       * 答案键（2026-09-17，审计 §7 P1-1）：有了它，作答对错由**代码裁决**（独立于模型自评的传感器）。
+       * - 选择题：`correctOptionIds`（必须是 options 里真实存在的 id；单选只留一个）
+       * - 简答：`expectedKeywords`（1-4 条、每条 ≤40 字，须能在学生作答里直接检出的要点）
+       * **绝不把答案键呈现给学生**（reply / options.text / hint 里都不得出现答案或"正确选项是…"）。
+       */
+      correctOptionIds?: string[];
+      expectedKeywords?: string[];
     };
     /**
      * 课内温故的**结构化结果**（2026-09-17 起为结果判定的唯一通道）。
@@ -622,10 +630,29 @@ function normalizeCheckpoint(value: Record<string, any>): NonNullable<TeachingTu
   const type = wantsChoice && options.length >= 2
     ? (value.type as 'single_choice' | 'multi_choice')
     : 'short_answer';
+  // 答案键（2026-09-17，审计 §7 P1-1「独立传感器」）：只在校验得住时才留下——
+  // 选择题的 id 必须真实存在于 options（否则是模型编的，宁可没有键，也不要做错误的代码裁决）；
+  // 简答要点限 1-4 条、每条 ≤40 字。键**不下发给学生**（coordinator 侧负责剥离）。
+  const optionIds = new Set(options.map((option) => option.id));
+  const correctOptionIds = type !== 'short_answer' && Array.isArray(value.correctOptionIds)
+    ? Array.from(new Set(value.correctOptionIds
+        .filter((id: any) => typeof id === 'string' && optionIds.has(id))
+        .map((id: string) => id.trim())
+        .filter(Boolean)))
+    : [];
+  if (type === 'single_choice' && correctOptionIds.length > 1) correctOptionIds.length = 1;
+  const expectedKeywords = type === 'short_answer' && Array.isArray(value.expectedKeywords)
+    ? value.expectedKeywords
+        .filter((keyword: any) => typeof keyword === 'string' && keyword.trim())
+        .map((keyword: string) => keyword.trim().slice(0, 40))
+        .slice(0, 4)
+    : [];
   return {
     question: String(value.question).trim(),
     type,
     ...(type !== 'short_answer' ? { options } : {}),
+    ...(correctOptionIds.length > 0 ? { correctOptionIds } : {}),
+    ...(expectedKeywords.length > 0 ? { expectedKeywords } : {}),
     ...(typeof value.hint === 'string' && value.hint.trim() ? { hint: value.hint.trim() } : {}),
   };
 }

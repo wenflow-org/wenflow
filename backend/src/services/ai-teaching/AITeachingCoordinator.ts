@@ -60,6 +60,10 @@ export interface TeachingCheckpoint {
   options?: Array<{ id: string; text: string }>;
   allowSkip?: boolean;
   contextHint?: string;
+  /** 答案键（服务端保存，**不下发给学生**）：选择题的正确选项 id */
+  correctOptionIds?: string[];
+  /** 答案键：简答题的必备要点（代码按包含判定） */
+  expectedKeywords?: string[];
 }
 
 export interface CheckpointSubmitPayload {
@@ -198,6 +202,10 @@ export function buildSessionOpeningScene(opts: {
 interface ProcessStudentMessageOptions {
   operationClaim?: TeachingSessionOperationClaim;
   checkpointId?: string;
+  /** 检查点的**代码裁决**结果（提交侧按答案键算出；缺省 = 无答案键，退回模型派生判定） */
+  checkpointJudgement?: CheckpointCodeJudgement | null;
+  /** 原始作答（供检查点结果留痕；不含答案键） */
+  checkpointSubmission?: { selectedOptionIds?: string[]; answerText?: string };
   expectedRevision?: number;
   /** 前端交互特征（认知负荷量测 · 前端情报层）：随学生消息落库并注入教学上下文 */
   interactionMeta?: InteractionMetaRecord | null;
@@ -1355,6 +1363,157 @@ export function summarizeCheckpointHistory(raw: unknown): {
       ...(typeof row?.understanding === 'number' ? { understanding: row.understanding } : {}),
     })),
   };
+}
+
+export interface CheckpointCodeJudgement {
+  /** code = 代码按答案键裁决（独立传感器）；model-reference = 无答案键，退回模型/完成度派生（同步标记，不冒充独立） */
+  judgedBy: 'code' | 'model-reference';
+  passed: boolean;
+  detail: string;
+}
+
+/** 归一化选项 id 集合（大小写/空白容错） */
+function normalizeIdSet(ids: unknown): Set<string> {
+  if (!Array.isArray(ids)) return new Set();
+  return new Set(ids
+    .filter((id): id is string => typeof id === 'string')
+    .map((id) => id.trim().toLowerCase())
+    .filter(Boolean));
+}
+
+/** 归一化待比对文本：小写、去空白与常见标点（简答要点的保守包含判定） */
+function normalizeForMatch(text: unknown): string {
+  return String(text ?? '')
+    .toLowerCase()
+    .replace(/[\s，。、；：！？,.;:!?（）()【】\[\]"'“”‘’—-]/g, '');
+}
+
+/**
+ * **代码裁决**检查点作答（2026-09-17，审计 §7 P1-1「独立传感器」）。
+ *
+ * 原理：此前 `passed` 由 `completionReady || 当前点已被判 mastered` 反推——**答案是模型自己的判断**，
+ * 于是"检查点通过率"与"模型认为学习者懂不懂"是同一条序列（自证回路，§5.3）。
+ * 有了答案键（`control.checkpoint.correctOptionIds` / `expectedKeywords`），对错可以由代码判定，
+ * 这才是可用于闭环控制的、独立于 LLM 自评的观测量。
+ *
+ * 边界（诚实标注，不假装独立）：
+ * - 没有答案键 → 返回 `null`，调用方退回旧的模型派生判定，并在证据里标 `judgedBy='model-reference'`；
+ * - 简答按"要点是否出现"保守判定：宁可**漏判通过**，不误判通过（避免鼓励背关键词）；
+ * - 这仍是**弱独立**：题目与答案键都由 LLM 产出，独立的是"评判学习者"这一步。
+ */
+export function judgeCheckpointAnswer(
+  checkpoint: Pick<TeachingCheckpoint, 'type' | 'correctOptionIds' | 'expectedKeywords'>,
+  submission: { selectedOptionIds?: string[]; answerText?: string },
+): CheckpointCodeJudgement | null {
+  if (checkpoint.type === 'single_choice' || checkpoint.type === 'multi_choice') {
+    const key = normalizeIdSet(checkpoint.correctOptionIds);
+    if (key.size === 0) return null;
+    const chosen = normalizeIdSet(submission?.selectedOptionIds);
+    const passed = chosen.size === key.size && Array.from(chosen).every((id) => key.has(id));
+    // detail 用**原始写法**（便于事后人工复核），比对用归一化集合
+    const original = (ids: unknown) => Array.from(new Set((Array.isArray(ids) ? ids : [])
+      .filter((id): id is string => typeof id === 'string')
+      .map((id) => id.trim())
+      .filter(Boolean)));
+    const keyText = original(checkpoint.correctOptionIds).join('/');
+    const chosenText = original(submission?.selectedOptionIds).join('/') || '空';
+    return {
+      judgedBy: 'code',
+      passed,
+      detail: passed
+        ? `选项集合与答案键一致（${keyText}）`
+        : `选项集合不一致（正确 ${keyText}，作答 ${chosenText}）`,
+    };
+  }
+
+  const keywords = (checkpoint.expectedKeywords || []).map(normalizeForMatch).filter(Boolean);
+  if (keywords.length === 0) return null;
+  const text = normalizeForMatch(submission?.answerText);
+  const missing = keywords.filter((keyword) => !text.includes(keyword));
+  return {
+    judgedBy: 'code',
+    passed: missing.length === 0,
+    detail: missing.length === 0 ? '作答包含全部要点' : `缺少要点：${missing.join('/')}`,
+  };
+}
+
+/**
+ * 检查点结果留痕（`learner_evidence` type=`checkpoint:result`）。
+ *
+ * 为什么单独留痕：这是**独立于 LLM 自评**的第一手观测（`judgedBy='code'` 时）——
+ * 第 3 步的"目标成功率带"（§7 P1-1）与效度检验（§8 E5）都以它为输入。
+ * 无答案键时也照记，但标 `judgedBy='model-reference'`，**不得**混进独立信号。
+ * 置信度按来源给：code=0.95（可复算）、model-reference=0.6（模型派生，含自证风险）。
+ */
+async function recordCheckpointResultEvidence(
+  session: TeachingSessionRecord,
+  checkpoint: TeachingCheckpoint,
+  result: {
+    passed: boolean;
+    judgedBy: 'code' | 'model-reference';
+    detail: string | null;
+    submission: { selectedOptionIds?: string[] };
+  },
+): Promise<void> {
+  try {
+    const at = new Date();
+    await prisma.learner_evidence.create({
+      data: {
+        id: `lev_cp_${checkpoint.id}_${at.getTime()}`,
+        eventId: `checkpoint:${checkpoint.id}:${at.getTime()}`,
+        evidenceKey: `checkpoint:result:${checkpoint.id}`,
+        userId: session.userId,
+        pathId: session.learningPathId ?? null,
+        taskId: session.taskId ?? null,
+        sessionId: session.id,
+        evidenceType: 'checkpoint:result',
+        payload: JSON.stringify({
+          checkpointId: checkpoint.id,
+          type: checkpoint.type,
+          passed: result.passed,
+          judgedBy: result.judgedBy,
+          detail: result.detail,
+          ...(result.submission.selectedOptionIds?.length
+            ? { selectedOptionIds: result.submission.selectedOptionIds }
+            : {}),
+        }),
+        confidence: result.judgedBy === 'code' ? 0.95 : 0.6,
+        occurredAt: at,
+      },
+    });
+    logger.info('[AITeaching] 检查点结果留痕', {
+      sessionId: session.id,
+      checkpointId: checkpoint.id,
+      passed: result.passed,
+      judgedBy: result.judgedBy,
+    });
+  } catch (error) {
+    logger.warn('[AITeaching] 检查点结果留痕失败（不影响判定与课堂）', {
+      sessionId: session.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * 剥离检查点答案键（客户端投影前调用）：答案键只用于服务端代码裁决，**绝不下发**。
+ * 覆盖两处暴露面：`pendingCheckpoint` 本身，以及原样返回的 `teachingState`（其中也存了一份）。
+ */
+export function stripCheckpointAnswerKeys<T extends Record<string, any> | null | undefined>(teachingState: T): T {
+  if (!teachingState || typeof teachingState !== 'object') return teachingState;
+  const clone: Record<string, any> = { ...(teachingState as Record<string, any>) };
+  const stripOne = (checkpoint: any) => {
+    if (!checkpoint || typeof checkpoint !== 'object') return checkpoint;
+    const { correctOptionIds, expectedKeywords, ...rest } = checkpoint;
+    void correctOptionIds;
+    void expectedKeywords;
+    return rest;
+  };
+  if (clone.pendingCheckpoint) clone.pendingCheckpoint = stripOne(clone.pendingCheckpoint);
+  if (clone.sessionArtifacts && typeof clone.sessionArtifacts === 'object' && clone.sessionArtifacts.pendingCheckpoint) {
+    clone.sessionArtifacts = { ...clone.sessionArtifacts, pendingCheckpoint: stripOne(clone.sessionArtifacts.pendingCheckpoint) };
+  }
+  return clone as T;
 }
 
 async function buildTeachingTurnInput(
@@ -2530,17 +2689,24 @@ export class AITeachingOrchestrator {
           ...(checkpointCandidate.options ? { options: checkpointCandidate.options } : {}),
           allowSkip: true,
           ...(checkpointCandidate.hint ? { contextHint: checkpointCandidate.hint } : {}),
+          // 答案键（服务端保存，客户端投影会剥离）：用于代码裁决，保证"对错"不来自模型自评
+          ...(checkpointCandidate.correctOptionIds?.length ? { correctOptionIds: checkpointCandidate.correctOptionIds } : {}),
+          ...(checkpointCandidate.expectedKeywords?.length ? { expectedKeywords: checkpointCandidate.expectedKeywords } : {}),
         };
         teachingState.lastCheckpointTurn = updatedMessages.length;
       }
 
-      let checkpointResolution: { passed: boolean; understanding: number } | undefined;
+      let checkpointResolution: { passed: boolean; understanding: number; judgedBy: 'code' | 'model-reference' } | undefined;
       if (submittedCheckpoint) {
         const understanding = Number(teachingOutput.analysis?.understanding ?? 0);
         const currentPoint = effectiveTeachingOutput.knowledge.currentPoint?.trim().toLowerCase();
-        const passed = completionReady || !!currentPoint && mergedKnowledge.some(
+        const modelDerivedPassed = completionReady || !!currentPoint && mergedKnowledge.some(
           (point) => point.name.trim().toLowerCase() === currentPoint && point.status === 'mastered'
         );
+        // 独立传感器优先（2026-09-17）：有答案键就按**代码裁决**，否则退回模型派生并如实标注来源
+        const codeJudgement = options.checkpointJudgement ?? null;
+        const judgedBy: 'code' | 'model-reference' = codeJudgement?.judgedBy === 'code' ? 'code' : 'model-reference';
+        const passed = judgedBy === 'code' ? codeJudgement!.passed : modelDerivedPassed;
         const checkpointHistory = Array.isArray(teachingState.checkpointHistory)
           ? [...teachingState.checkpointHistory]
           : [];
@@ -2551,7 +2717,16 @@ export class AITeachingOrchestrator {
           type: submittedCheckpoint.type,
           submittedAt: new Date().toISOString(),
           passed,
+          judgedBy,
           understanding,
+        });
+
+        // 检查点结果留痕（learner_evidence）：独立传感器的原始观测，供 §7 P1-1 的成功率带与控制律消费
+        void recordCheckpointResultEvidence(session, submittedCheckpoint, {
+          passed,
+          judgedBy,
+          detail: codeJudgement?.detail ?? null,
+          submission: { selectedOptionIds: options.checkpointSubmission?.selectedOptionIds },
         });
 
         // 仅答对时消费检查点；答错保留 pendingCheckpoint（同一 cpId 可重答，
@@ -2563,7 +2738,7 @@ export class AITeachingOrchestrator {
           teachingState.sessionArtifacts = nextSessionArtifacts;
         }
         teachingState.checkpointHistory = checkpointHistory.slice(-20);
-        checkpointResolution = { passed, understanding };
+        checkpointResolution = { passed, understanding, judgedBy };
       }
 
       await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
@@ -3078,11 +3253,12 @@ export class AITeachingOrchestrator {
       duration: session.duration,
       status: session.status,
       messages: session.messages,
-      state: session.teachingState || {},
+      state: stripCheckpointAnswerKeys(session.teachingState || {}),
       knowledgePoints: session.knowledgeState,
       wrapup: session.wrapup,
       advisory: (session.advisory as ReplanAdvisory | null) || null,
-      pendingCheckpoint: getPendingCheckpoint(session.teachingState),
+      // 答案键剔除后再给客户端：它只用于服务端代码裁决（审计 §7 P1-1）
+      pendingCheckpoint: stripCheckpointAnswerKeys({ pendingCheckpoint: getPendingCheckpoint(session.teachingState) }).pendingCheckpoint ?? null,
       revision: session.revision,
     };
   }
@@ -3164,7 +3340,17 @@ export class AITeachingOrchestrator {
       const turn = await this.processStudentMessage(
         sessionId,
         `理解检查：${checkpoint.question}\n我的答案：${answer}`,
-        { operationClaim, checkpointId }
+        {
+          operationClaim,
+          checkpointId,
+          // 代码裁决（答案键存在时）：把"对错"从模型自评里剥离出来（审计 §7 P1-1）
+          checkpointJudgement: judgeCheckpointAnswer(checkpoint, payload),
+          checkpointSubmission: {
+            selectedOptionIds: payload.selectedOptionIds,
+            // 简答不落原文（可能含学生隐私细节），只留长度特征
+            ...(payload.answerText ? { answerText: undefined } : {}),
+          },
+        }
       );
       const passed = turn.checkpointResolution?.passed === true;
       const hint = !passed && turn.analysis?.confusionPoints?.length
