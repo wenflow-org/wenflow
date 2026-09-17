@@ -14,6 +14,7 @@ function sanitizeToolResponse(tool: IMcpToolConfig) {
     name: tool.name,
     description: tool.description,
     type: tool.type,
+    transport: tool.transport || 'http',
     endpoint: tool.endpoint,
     enabled: tool.enabled,
     userAccessible: !!tool.userAccessible,
@@ -34,12 +35,14 @@ router.get('/', async (_req: Request, res: Response) => {
           name: t.name,
           description: t.description,
           type: t.type,
+          transport: t.transport || 'http',
           endpoint: t.endpoint,
           enabled: t.enabled,
           userAccessible: !!t.userAccessible,
           hasApiKey: !!t.apiKey,
         })),
-        servers: status.servers,
+        // 外挂服务/供应商连接（展示 + 健康检查；不参与运行时模型路由）
+        providers: status.providers,
         toolStatus: status.tools,
       },
     });
@@ -52,7 +55,7 @@ router.get('/', async (_req: Request, res: Response) => {
 /** POST /tools — 新增平台 MCP 工具 */
 router.post('/tools', async (req: Request, res: Response) => {
   try {
-    const { id, name, type = 'http', endpoint, description = '', enabled = true, userAccessible = false, apiKey, config } = req.body || {};
+    const { id, name, type = 'http', transport = 'http', endpoint, description = '', enabled = true, userAccessible = false, apiKey, config } = req.body || {};
     if (!id || !String(id).trim() || !TOOL_ID_PATTERN.test(String(id))) {
       return res.status(400).json({ success: false, error: '工具 ID 必填，仅允许字母数字与 . _ : -' });
     }
@@ -66,11 +69,15 @@ router.post('/tools', async (req: Request, res: Response) => {
     if (cfg.tools.some((t) => t.id === id)) {
       return res.status(400).json({ success: false, error: `工具 ${id} 已存在` });
     }
+    if (transport !== 'http' && transport !== 'mcp') {
+      return res.status(400).json({ success: false, error: 'transport 只能是 http 或 mcp' });
+    }
     const next: IMcpToolConfig = {
       id,
       name: String(name).trim(),
       description: String(description || ''),
       type: String(type),
+      transport: transport === 'mcp' ? 'mcp' : 'http',
       endpoint: String(endpoint).trim(),
       ...(apiKey ? { apiKey: String(apiKey) } : {}),
       enabled: enabled !== false,
@@ -97,11 +104,15 @@ router.put('/tools/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: '工具不存在' });
     }
     const cur = cfg.tools[idx];
-    const { name, type, endpoint, description, enabled, userAccessible, apiKey, config } = req.body || {};
+    const { name, type, transport, endpoint, description, enabled, userAccessible, apiKey, config } = req.body || {};
+    if (transport !== undefined && transport !== 'http' && transport !== 'mcp') {
+      return res.status(400).json({ success: false, error: 'transport 只能是 http 或 mcp' });
+    }
     const next: IMcpToolConfig = {
       ...cur,
       ...(name !== undefined ? { name: String(name).trim() } : {}),
       ...(type !== undefined ? { type: String(type) } : {}),
+      ...(transport !== undefined ? { transport: transport === 'mcp' ? 'mcp' : 'http' } : {}),
       ...(endpoint !== undefined ? { endpoint: String(endpoint).trim() } : {}),
       ...(description !== undefined ? { description: String(description) } : {}),
       ...(enabled !== undefined ? { enabled: enabled !== false } : {}),
@@ -143,7 +154,26 @@ router.delete('/tools/:id', async (req: Request, res: Response) => {
   }
 });
 
-/** POST /tools/:id/test — 连通性测试（本地工具用极简参数探测，远端工具按 endpoint 直连） */
+/** GET /tools/:id/mcp-tools — 列出真 MCP server 发现的工具（?refresh=1 强制重取） */
+router.get('/tools/:id/mcp-tools', async (req: Request, res: Response) => {
+  try {
+    const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
+    const tools = await mcpGateway.listMcpServerTools(req.params.id, { refresh });
+    res.json({ success: true, data: { tools } });
+  } catch (error: any) {
+    const code = typeof error?.code === 'string' ? error.code : '';
+    if (code === 'MCP_SERVER_NOT_FOUND') {
+      return res.status(404).json({ success: false, error: 'MCP server 不存在' });
+    }
+    if (code === 'MCP_SERVER_TRANSPORT_MISMATCH') {
+      return res.status(400).json({ success: false, error: '该工具不是 MCP server（transport != mcp）' });
+    }
+    logger.error('[admin-mcp] list mcp tools failed:', error);
+    res.status(502).json({ success: false, error: String(error?.message || 'MCP 工具发现失败').slice(0, 200) });
+  }
+});
+
+/** POST /tools/:id/test — 连通性测试（MCP server 走握手 + tools/list；其余按 endpoint 直连） */
 router.post('/tools/:id/test', async (req: Request, res: Response) => {
   try {
     const tool = mcpGateway.getTool(req.params.id);
@@ -151,6 +181,30 @@ router.post('/tools/:id/test', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: '工具不存在' });
     }
     const started = Date.now();
+
+    if ((tool.transport || 'http') === 'mcp') {
+      try {
+        const tools = await mcpGateway.listMcpServerTools(tool.id, { refresh: true });
+        return res.json({
+          success: true,
+          data: {
+            ok: true,
+            latencyMs: Date.now() - started,
+            preview: `发现 ${tools.length} 个工具：${tools.map((t) => t.name).join(', ')}`.slice(0, 200),
+          },
+        });
+      } catch (discoverError: any) {
+        return res.json({
+          success: false,
+          data: {
+            ok: false,
+            latencyMs: Date.now() - started,
+            error: String(discoverError?.message || discoverError || 'MCP 握手/发现失败').slice(0, 200),
+          },
+        });
+      }
+    }
+
     try {
       const result = await mcpGateway.callTool(tool.id, { probe: true });
       res.json({

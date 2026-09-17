@@ -1034,6 +1034,12 @@ export const adminMcpApi = {
   },
   testTool: async (id: string) => {
     return adminAxios.post(`/admin/mcp/tools/${encodeURIComponent(id)}/test`);
+  },
+  /** 列出真 MCP server 发现到的工具（transport='mcp'）；refresh=true 强制重取 */
+  listMcpTools: async (id: string, refresh = false) => {
+    return adminAxios.get(`/admin/mcp/tools/${encodeURIComponent(id)}/mcp-tools`, {
+      params: refresh ? { refresh: 1 } : undefined
+    });
   }
 };
 

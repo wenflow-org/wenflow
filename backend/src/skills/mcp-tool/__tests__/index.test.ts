@@ -259,4 +259,100 @@ describe('mcp-tool capability', () => {
     }))
     expect(getUserMcpRuntimeConfig).not.toHaveBeenCalled()
   })
+
+  describe('真 MCP server 的 <serverId>:<toolName> 寻址', () => {
+    const mcpServer = {
+      id: 'tavily',
+      name: 'Tavily MCP',
+      description: '',
+      type: 'mcp',
+      transport: 'mcp' as const,
+      endpoint: 'https://tavily.example/mcp',
+      enabled: true
+    }
+
+    it('用户侧 MCP server：解析出 toolName 并透传', async () => {
+      getUserMcpRuntimeConfig.mockResolvedValue({
+        tools: [mcpServer],
+        servers: [],
+        routingStrategy: 'priority',
+        fallbackEnabled: true,
+        healthCheck: null
+      })
+
+      const result = await runWithContext({ userId: 'user-1' }, () => executeMcpTool({
+        toolId: 'tavily:tavily_search',
+        params: { query: 'x' }
+      }))
+
+      expect(result).toEqual(expect.objectContaining({
+        success: true,
+        output: { toolId: 'tavily:tavily_search', source: 'user', result: { remote: true } }
+      }))
+      expect(callConfiguredTool).toHaveBeenCalledWith(mcpServer, { query: 'x' }, {
+        allowLocal: false,
+        privateNetworkPolicy: 'public-only',
+        mcpToolName: 'tavily_search'
+      })
+      expect(callTool).not.toHaveBeenCalled()
+    })
+
+    it('平台侧 MCP server：普通用户在 userAccessible 下以 mcpToolName 调用', async () => {
+      getTool.mockImplementation((id: string) => (
+        id === 'tavily' ? { ...mcpServer, userAccessible: true } : undefined
+      ))
+      getUserMcpRuntimeConfig.mockResolvedValue(null)
+
+      const result = await runWithContext({ userId: 'user-1', userRole: 'user' }, () => executeMcpTool({
+        toolId: 'tavily:tavily_search',
+        params: { query: 'lesson' }
+      }))
+
+      expect(result).toEqual(expect.objectContaining({
+        success: true,
+        output: { toolId: 'tavily:tavily_search', source: 'platform', result: { remote: true } }
+      }))
+      expect(callConfiguredTool).toHaveBeenCalledWith(expect.objectContaining({ id: 'tavily' }), { query: 'lesson' }, {
+        allowLocal: false,
+        privateNetworkPolicy: 'public-only',
+        mcpToolName: 'tavily_search'
+      })
+    })
+
+    it('平台侧 MCP server 未对普通用户开放时不解析引用', async () => {
+      getTool.mockImplementation((id: string) => (
+        id === 'tavily' ? { ...mcpServer, userAccessible: false } : undefined
+      ))
+      getUserMcpRuntimeConfig.mockResolvedValue(null)
+
+      const result = await runWithContext({ userId: 'user-1', userRole: 'user' }, () => executeMcpTool({
+        toolId: 'tavily:tavily_search',
+        params: {}
+      }))
+
+      expect(result).toEqual(expect.objectContaining({
+        success: false,
+        error: expect.objectContaining({ code: 'MCP_TOOL_NOT_FOUND' })
+      }))
+      expect(callConfiguredTool).not.toHaveBeenCalled()
+      expect(callTool).not.toHaveBeenCalled()
+    })
+
+    it('前缀不是 MCP server 时，不做引用解析（回退为未找到）', async () => {
+      getTool.mockImplementation((id: string) => (
+        id === 'plain' ? { ...mcpServer, id: 'plain', transport: 'http' } : undefined
+      ))
+      getUserMcpRuntimeConfig.mockResolvedValue(null)
+
+      const result = await runWithContext({ userId: 'user-1', userRole: 'user' }, () => executeMcpTool({
+        toolId: 'plain:something',
+        params: {}
+      }))
+
+      expect(result).toEqual(expect.objectContaining({
+        success: false,
+        error: expect.objectContaining({ code: 'MCP_TOOL_NOT_FOUND' })
+      }))
+    })
+  })
 })

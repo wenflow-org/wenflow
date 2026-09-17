@@ -11,7 +11,11 @@ vi.mock('@/api/userCustom', () => ({
   updateUserApiConfig: vi.fn(async () => ({ data: {} })),
   disableUserApiConfig: vi.fn(async () => ({ data: {} })),
   testApiConnection: vi.fn(async () => ({ data: {} })),
-  fetchApiModels: vi.fn(async () => ({ data: { models: [] } }))
+  fetchApiModels: vi.fn(async () => ({ data: { models: [] } })),
+  // MCP 区块（Settings 页新增）所需，缺失会让 onMounted 的 loadMcpConfig 抛错
+  getUserMcpConfig: vi.fn(async () => ({ data: { data: { tools: [] } } })),
+  updateUserMcpConfig: vi.fn(async () => ({ data: { data: {} } })),
+  executeMcpTool: vi.fn(async () => ({ data: { data: {} } }))
 }));
 
 vi.mock('../../utils/toast', () => ({

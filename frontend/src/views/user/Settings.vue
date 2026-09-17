@@ -122,6 +122,114 @@
           </article>
         </aside>
       </div>
+
+      <!-- 我的 MCP 工具（独立于自定义 API 的加载状态） -->
+      <article class="uc-card">
+        <div class="uc-card__head">
+          <div>
+            <h3>我的 MCP 工具</h3>
+            <p>接入你自己的 MCP 服务或 HTTP 工具，供学习对话按需调用</p>
+          </div>
+          <button type="button" class="uc-btn uc-btn--primary" @click="openMcpCreate">新增工具</button>
+        </div>
+
+        <div v-if="mcpError" class="uc-errorbar" role="alert">
+          {{ mcpError }}
+          <button type="button" class="uc-errorbar__retry" @click="loadMcpConfig">重新加载</button>
+        </div>
+        <div v-else-if="mcpLoading" class="uc-loading">
+          <span class="uc-spinner"></span>
+          加载 MCP 工具…
+        </div>
+        <p v-else-if="!mcpTools.length" class="mcp-empty">
+          还没有配置 MCP 工具。新增一个 MCP 服务后，它的工具会由服务端自动发现。
+        </p>
+        <ul v-else class="mcp-list">
+          <li v-for="t in mcpTools" :key="t.id" class="mcp-item">
+            <span class="mcp-item__kind" :class="{ 'is-mcp': t.transport === 'mcp' }">
+              {{ t.transport === 'mcp' ? 'MCP' : 'HTTP' }}
+            </span>
+            <div class="mcp-item__main">
+              <strong>{{ t.name }}</strong>
+              <span class="mcp-item__sub" :title="t.endpoint">{{ t.id }} · {{ t.endpoint }}</span>
+            </div>
+            <span class="uc-badge" :class="t.enabled ? 'uc-badge--ok' : 'uc-badge--muted'">
+              {{ t.enabled ? '启用' : '停用' }}
+            </span>
+            <input
+              v-if="t.transport === 'mcp'"
+              v-model="mcpToolName[t.id]"
+              class="uc-field__input mcp-item__toolname"
+              placeholder="工具名，如 tavily_search"
+              :disabled="mcpTestingId === t.id"
+            />
+            <div class="mcp-item__actions">
+              <button type="button" class="uc-btn" :disabled="mcpTestingId === t.id" @click="testMcpTool(t)">
+                {{ mcpTestingId === t.id ? '测试中…' : '测试' }}
+              </button>
+              <button type="button" class="uc-btn" :disabled="mcpSaving" @click="openMcpEdit(t)">编辑</button>
+              <button type="button" class="uc-btn uc-btn--danger" :disabled="mcpSaving" @click="removeMcpTool(t)">删除</button>
+            </div>
+          </li>
+        </ul>
+
+        <!-- 新增 / 编辑表单 -->
+        <div v-if="mcpFormOpen" class="mcp-form">
+          <div class="api-form__grid">
+            <label class="uc-field">
+              <span class="uc-field__label">ID</span>
+              <input v-model="mcpForm.id" class="uc-field__input" placeholder="如 my-search" :disabled="!!mcpEditingId" />
+            </label>
+            <label class="uc-field">
+              <span class="uc-field__label">名称</span>
+              <input v-model="mcpForm.name" class="uc-field__input" placeholder="如 我的搜索服务" />
+            </label>
+          </div>
+          <div class="api-form__grid">
+            <label class="uc-field">
+              <span class="uc-field__label">连接方式</span>
+              <select v-model="mcpForm.transport" class="uc-field__input">
+                <option value="http">HTTP 接口</option>
+                <option value="mcp">MCP 服务</option>
+              </select>
+            </label>
+            <label class="uc-field">
+              <span class="uc-field__label">状态</span>
+              <select v-model="mcpForm.enabled" class="uc-field__input">
+                <option :value="true">启用</option>
+                <option :value="false">停用</option>
+              </select>
+            </label>
+          </div>
+          <label class="uc-field">
+            <span class="uc-field__label">{{ mcpForm.transport === 'mcp' ? 'MCP 服务地址' : 'Endpoint' }}</span>
+            <input
+              v-model="mcpForm.endpoint"
+              class="uc-field__input"
+              :placeholder="mcpForm.transport === 'mcp' ? 'https://…/mcp' : 'https://…'"
+            />
+          </label>
+          <label class="uc-field">
+            <span class="uc-field__label">API Key（可选）</span>
+            <input
+              v-model="mcpForm.apiKey"
+              type="password"
+              class="uc-field__input"
+              :placeholder="mcpFormHadKey ? '已保存，留空继续使用' : '如 sk-…'"
+            />
+          </label>
+          <p v-if="mcpForm.transport === 'mcp'" class="mcp-hint">
+            MCP 服务的工具由服务端 <code>tools/list</code> 自动发现，无需逐个登记；测试与调用时以
+            <code>{{ mcpForm.id || 'id' }}:&lt;toolName&gt;</code> 寻址。
+          </p>
+          <div class="action-buttons">
+            <button type="button" class="uc-btn uc-btn--primary" :disabled="mcpSaving" @click="saveMcpTool">
+              {{ mcpSaving ? '保存中…' : '保存' }}
+            </button>
+            <button type="button" class="uc-btn" :disabled="mcpSaving" @click="mcpFormOpen = false">取消</button>
+          </div>
+        </div>
+      </article>
     </div>
   </CapabilityShell>
 </template>
@@ -131,7 +239,17 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { askConfirm, doneConfirm, failConfirm } from '@/views/admin-redesign/useConfirm';
 import { toast } from '../../utils/toast';
-import { disableUserApiConfig, fetchApiModels, getUserApiConfig, testApiConnection, updateUserApiConfig } from '@/api/userCustom';
+import {
+  disableUserApiConfig,
+  executeMcpTool,
+  fetchApiModels,
+  getUserApiConfig,
+  getUserMcpConfig,
+  testApiConnection,
+  updateUserApiConfig,
+  updateUserMcpConfig,
+  type UserMcpToolConfig
+} from '@/api/userCustom';
 import '@/components/user/uc.css';
 
 const saving = ref(false);
@@ -155,7 +273,7 @@ const apiConfig = reactive({
 });
 
 onMounted(async () => {
-  await loadApiConfig();
+  await Promise.all([loadApiConfig(), loadMcpConfig()]);
 });
 
 const loadApiConfig = async () => {
@@ -341,6 +459,162 @@ const handleEnabledChange = () => {
     }
   });
 };
+
+/* ==================== 我的 MCP 工具 ==================== */
+
+/** 与后端 MCP_TOOL_ID_PATTERN 对齐 */
+const MCP_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+
+const mcpTools = ref<UserMcpToolConfig[]>([]);
+const mcpLoading = ref(false);
+const mcpSaving = ref(false);
+const mcpError = ref('');
+const mcpFormOpen = ref(false);
+const mcpEditingId = ref('');
+const mcpFormHadKey = ref(false);
+const mcpTestingId = ref('');
+/** 每个 MCP server 的测试工具名（用于拼 serverId:toolName 寻址） */
+const mcpToolName = reactive<Record<string, string>>({});
+const mcpForm = reactive({
+  id: '',
+  name: '',
+  transport: 'http' as 'http' | 'mcp',
+  endpoint: '',
+  apiKey: '',
+  enabled: true,
+});
+
+const errorText = (error: any): string =>
+  error?.response?.data?.error?.message || error?.response?.data?.error || error?.message || '未知错误';
+
+const loadMcpConfig = async () => {
+  mcpLoading.value = true;
+  mcpError.value = '';
+  try {
+    const res = await getUserMcpConfig();
+    const data = res.data?.data ?? res.data ?? {};
+    mcpTools.value = Array.isArray(data.tools) ? data.tools : [];
+  } catch {
+    mcpError.value = '无法读取 MCP 配置，请检查网络或服务状态。';
+  } finally {
+    mcpLoading.value = false;
+  }
+};
+
+const openMcpCreate = () => {
+  mcpEditingId.value = '';
+  mcpFormHadKey.value = false;
+  Object.assign(mcpForm, { id: '', name: '', transport: 'http', endpoint: '', apiKey: '', enabled: true });
+  mcpFormOpen.value = true;
+};
+
+const openMcpEdit = (tool: UserMcpToolConfig) => {
+  mcpEditingId.value = tool.id;
+  mcpFormHadKey.value = Boolean(tool.apiKeyConfigured);
+  Object.assign(mcpForm, {
+    id: tool.id,
+    name: tool.name || tool.id,
+    transport: (tool.transport || 'http') as 'http' | 'mcp',
+    endpoint: tool.endpoint || '',
+    apiKey: '',
+    enabled: tool.enabled !== false,
+  });
+  mcpFormOpen.value = true;
+};
+
+/** 新增或更新单个工具：读改写整表 tools（后端按 id 保留未回传的 apiKey） */
+const saveMcpTool = async () => {
+  const id = mcpForm.id.trim().toLowerCase();
+  const name = mcpForm.name.trim();
+  const endpoint = mcpForm.endpoint.trim();
+
+  if (!id) return toast.warning('请填写工具 ID');
+  if (!MCP_ID_PATTERN.test(id)) return toast.warning('工具 ID 仅允许字母数字与 . _ : -');
+  if (!name) return toast.warning('请填写名称');
+  if (!endpoint) return toast.warning('请填写 Endpoint');
+  if (!isValidEndpoint(endpoint)) return toast.warning('Endpoint 格式不正确，请输入以 http:// 或 https:// 开头的 URL');
+
+  // 编辑时 id 不可改，存在即为「更新」；新增时重复 id 才是冲突
+  const isEditing = Boolean(mcpEditingId.value);
+  const exists = mcpTools.value.some((t) => t.id.toLowerCase() === id);
+  if (!isEditing && exists) {
+    return toast.warning(`工具 ${id} 已存在`);
+  }
+
+  const next: UserMcpToolConfig = {
+    id,
+    name,
+    description: '',
+    type: mcpForm.transport === 'mcp' ? 'mcp' : 'remote',
+    transport: mcpForm.transport,
+    endpoint,
+    enabled: mcpForm.enabled,
+    ...(mcpForm.apiKey ? { apiKey: mcpForm.apiKey } : {}),
+  };
+
+  const tools = exists
+    ? mcpTools.value.map((t) => (t.id.toLowerCase() === id ? { ...t, ...next } : t))
+    : [...mcpTools.value, next];
+
+  mcpSaving.value = true;
+  try {
+    await updateUserMcpConfig({ tools });
+    await loadMcpConfig();
+    mcpFormOpen.value = false;
+    toast.success(exists ? 'MCP 工具已更新' : 'MCP 工具已新增');
+  } catch (error: any) {
+    toast.error(`保存失败：${errorText(error)}`);
+  } finally {
+    mcpSaving.value = false;
+  }
+};
+
+const removeMcpTool = async (tool: UserMcpToolConfig) => {
+  const ok = await askConfirm({
+    title: '删除 MCP 工具',
+    message: `确认删除「${tool.name}」（${tool.id}）？删除后对话将无法再调用它。`,
+    confirmText: '删除',
+    danger: true,
+    busy: true
+  });
+  if (!ok) return;
+
+  mcpSaving.value = true;
+  try {
+    const tools = mcpTools.value.filter((t) => t.id.toLowerCase() !== tool.id.toLowerCase());
+    await updateUserMcpConfig({ tools });
+    await loadMcpConfig();
+    toast.success('MCP 工具已删除');
+    doneConfirm();
+  } catch (error: any) {
+    toast.error(`删除失败：${errorText(error)}`);
+    failConfirm();
+  } finally {
+    mcpSaving.value = false;
+  }
+};
+
+/** 测试：HTTP 直接执行；MCP 需带工具名，以 id:toolName 寻址 */
+const testMcpTool = async (tool: UserMcpToolConfig) => {
+  let callId = tool.id;
+  if (tool.transport === 'mcp') {
+    const toolName = (mcpToolName[tool.id] || '').trim();
+    if (!toolName) return toast.warning('请先填写该 MCP 服务的工具名（如 tavily_search）');
+    callId = `${tool.id}:${toolName}`;
+  }
+
+  mcpTestingId.value = tool.id;
+  try {
+    const res = await executeMcpTool(callId, {});
+    const data = res.data?.data ?? res.data;
+    const preview = typeof data === 'string' ? data.slice(0, 80) : JSON.stringify(data).slice(0, 80);
+    toast.success(`调用成功：${preview || '（空返回）'}`);
+  } catch (error: any) {
+    toast.error(`调用失败：${errorText(error)}`);
+  } finally {
+    mcpTestingId.value = '';
+  }
+};
 </script>
 
 <style scoped>
@@ -521,5 +795,115 @@ const handleEnabledChange = () => {
 
 .model-more {
   color: var(--muted, #5b6577);
+}
+
+/* ==================== 我的 MCP 工具 ==================== */
+.mcp-empty {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed var(--line, #e3e9f4);
+  border-radius: 12px;
+  background: var(--canvas, #f3f6fb);
+  font-size: 13px;
+  color: var(--muted, #5b6577);
+  text-align: center;
+}
+
+.mcp-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.mcp-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #e3e9f4);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+}
+
+.mcp-item__kind {
+  display: inline-grid;
+  place-items: center;
+  min-width: 46px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  background: var(--canvas, #f3f6fb);
+  color: var(--faint, #67758f);
+}
+
+.mcp-item__kind.is-mcp {
+  background: rgba(52, 120, 246, 0.1);
+  color: var(--blue-deep, #1f57cc);
+}
+
+.mcp-item__main {
+  flex: 1 1 200px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mcp-item__main strong {
+  font-size: 13.5px;
+  color: var(--ink, #172033);
+}
+
+.mcp-item__sub {
+  font-size: 12px;
+  color: var(--faint, #67758f);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+}
+
+.mcp-item__toolname {
+  flex: 0 1 180px;
+  min-width: 140px;
+}
+
+.mcp-item__actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.mcp-form {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line, #e3e9f4);
+  display: grid;
+  gap: 14px;
+  max-width: 640px;
+}
+
+.mcp-hint {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--canvas, #f3f6fb);
+  border: 1px dashed var(--line, #e3e9f4);
+  font-size: 12.5px;
+  color: var(--muted, #5b6577);
+  line-height: 1.7;
+}
+
+.mcp-hint code {
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 11.5px;
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--blue-deep, #1f57cc);
+  padding: 1px 5px;
+  border-radius: 5px;
 }
 </style>

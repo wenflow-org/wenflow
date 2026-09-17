@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { McpGateway, mcpGateway } from '../McpGateway'
@@ -22,7 +22,7 @@ describe('McpGateway filesystem tool', () => {
     await writeFile(configPath, JSON.stringify({
       version: '1',
       description: 'test',
-      servers: [],
+      providers: [],
       tools: [{
         id: 'file-reader',
         name: '文件读取',
@@ -65,5 +65,75 @@ describe('McpGateway filesystem tool', () => {
       enabled: true
     }, { path: './uploads/lesson.txt' }, { allowLocal: false }))
       .rejects.toThrow('不允许执行服务器本地')
+  })
+})
+
+describe('McpGateway 配置字段归一（servers → providers）', () => {
+  let workspace: string
+
+  afterAll(() => {
+    mcpGateway.destroy()
+  })
+
+  beforeEach(async () => {
+    workspace = await mkdtemp(join(tmpdir(), 'wenflow-mcp-legacy-'))
+  })
+
+  afterEach(async () => {
+    await rm(workspace, { recursive: true, force: true })
+  })
+
+  async function loadWith(raw: Record<string, unknown>): Promise<{ gateway: McpGateway; configPath: string }> {
+    const configPath = join(workspace, 'mcp.json')
+    await writeFile(configPath, JSON.stringify(raw))
+    return { gateway: new McpGateway(configPath), configPath }
+  }
+
+  const routing = { strategy: 'priority', fallback: false, healthCheck: { enabled: false, interval: 30000 } }
+
+  it('旧字段 servers 加载时迁移为 providers，写回后旧键被清除', async () => {
+    const { gateway, configPath } = await loadWith({
+      version: '1',
+      description: 'legacy',
+      servers: [{
+        id: 'openai', name: 'OpenAI', type: 'openai',
+        endpoint: 'https://api.openai.com/v1', apiKey: 'k',
+        models: [], defaultModel: 'gpt-4', priority: 1, enabled: true,
+        config: { timeout: 1000 }
+      }],
+      tools: [],
+      routing
+    })
+
+    expect(gateway.getConfig().providers).toHaveLength(1)
+    expect(gateway.getStatus().providers[0]).toMatchObject({ id: 'openai', name: 'OpenAI' })
+
+    await gateway.updateConfig({ tools: [] })
+    const onDisk = JSON.parse(await readFile(configPath, 'utf-8'))
+    expect(onDisk.servers).toBeUndefined()
+    expect(onDisk.providers).toHaveLength(1)
+
+    gateway.destroy()
+  })
+
+  it('新字段 providers 生效；两者都缺省时归一为空数组', async () => {
+    const { gateway } = await loadWith({
+      version: '1',
+      description: 'new',
+      providers: [{
+        id: 'p1', name: 'P1', type: 'openai', endpoint: 'https://p1',
+        apiKey: '', models: [], defaultModel: 'm', priority: 1, enabled: true, config: {}
+      }],
+      tools: [],
+      routing
+    })
+    expect(gateway.getConfig().providers.map((p) => p.id)).toEqual(['p1'])
+    gateway.destroy()
+
+    const { gateway: emptyGateway } = await loadWith({
+      version: '1', description: 'empty', tools: [], routing
+    })
+    expect(emptyGateway.getConfig().providers).toEqual([])
+    emptyGateway.destroy()
   })
 })

@@ -9,12 +9,13 @@
 
 import { searchWeb } from '../../services/search';
 import { SearchError } from '../../services/search/types';
-import type { SearchDomainType, SearchResultItem } from '../../services/search/types';
+import type { SearchDepth, SearchDomainType, SearchResultItem } from '../../services/search/types';
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
 
 export interface WebSearchInput {
   query: string;
   maxResults?: number;
+  depth?: SearchDepth;
   location?: string;
   language?: string;
   recencyMinutes?: number;
@@ -52,6 +53,7 @@ export const webSearchDefinition: SkillDefinition = {
     properties: {
       query: { type: 'string', description: '搜索查询词', required: true },
       maxResults: { type: 'number', description: '返回条数（默认 10，上限 50）' },
+      depth: { type: 'string', description: '检索深度：advanced（默认，更准，约 2 倍额度）| basic（更快更省）' },
       location: { type: 'string', description: '地域（ISO 国家码，如 US / CN）' },
       language: { type: 'string', description: '语言（ISO 语言码，如 en / zh）' },
       recencyMinutes: { type: 'number', description: '时效窗口（分钟，与 afterDate/beforeDate 互斥）' },
@@ -117,6 +119,7 @@ export async function executeWebSearch(
       {
         query,
         maxResults: input.maxResults,
+        depth: input.depth,
         location: input.location,
         language: input.language,
         recencyMinutes: input.recencyMinutes,

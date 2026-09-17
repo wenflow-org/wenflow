@@ -9,11 +9,23 @@ export type SearchProviderId = 'tinyfish' | 'tavily' | 'exa';
 
 export type SearchDomainType = 'web' | 'news' | 'research_paper';
 
+/**
+ * 检索深度（质量 vs 成本）：
+ * - basic：浅层检索，快、省额度；
+ * - advanced：深层检索，返回更相关，约 2 倍额度。
+ *
+ * 不传 = provider 默认。**Tavily 的默认是 advanced**（实体型查询在 basic 下相关性会显著劣化）。
+ * 无对应概念的 provider（TinyFish / Exa）将其作为"尽力而为的提示"忽略，不阻断请求。
+ */
+export type SearchDepth = 'basic' | 'advanced';
+
 export interface SearchQuery {
   /** 查询词（必填） */
   query: string;
   /** 期望返回条数；provider 各自的硬上限由 adapter 负责钳制 */
   maxResults?: number;
+  /** 检索深度；不传 = provider 默认（Tavily 为 advanced） */
+  depth?: SearchDepth;
   /** 地域（ISO 国家码，如 US / CN） */
   location?: string;
   /** 语言（ISO 语言码，如 en / zh） */

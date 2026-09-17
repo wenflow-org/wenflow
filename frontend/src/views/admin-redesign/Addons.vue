@@ -98,10 +98,23 @@
             <strong>{{ t.name }}</strong>
             <span class="ac-mcp__id mono">{{ t.id }}</span>
           </div>
-          <span class="ac-mcp__type mono">{{ mcpTypeText(t.type) }}</span>
+          <span class="ac-mcp__type mono">
+            <span v-if="t.transport === 'mcp'" class="mk-badge mk-badge--info">MCP</span>
+            <template v-else>{{ mcpTypeText(t.type) }}</template>
+          </span>
           <span class="ac-mcp__endpoint mono" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
           <span class="mk-badge" :class="t.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ t.enabled ? '启用' : '停用' }}</span>
           <div class="mk-actions">
+            <button
+              v-if="t.transport === 'mcp'"
+              type="button"
+              class="mk-link"
+              :disabled="discoveringId === t.id"
+              :title="discoveredMap[t.id]?.join(', ') || '连接该 MCP 服务并发现其工具'"
+              @click="discoverTools(t)"
+            >
+              {{ discoveringId === t.id ? '发现中…' : (discoveredMap[t.id] ? `工具 ${discoveredMap[t.id].length}` : '发现工具') }}
+            </button>
             <button type="button" class="mk-link" :disabled="testingId === t.id" @click="testTool(t)">
               {{ testingId === t.id ? '测试中…' : '测试' }}
             </button>
@@ -155,10 +168,17 @@
             <input v-model="toolForm.name" class="mk-field__input" placeholder="如 网页搜索" />
             <span v-if="toolErrors.name" class="mk-field__err">{{ toolErrors.name }}</span>
           </label>
-          <div class="ac-mcp__formrow">
+          <div class="ac-mcp__formrow ac-mcp__formrow--three">
             <label class="mk-field">
-              <span class="mk-field__label">类型</span>
-              <select v-model="toolForm.type" class="mk-field__select">
+              <span class="mk-field__label">连接方式</span>
+              <select v-model="toolForm.transport" class="mk-field__select">
+                <option value="http">HTTP 接口</option>
+                <option value="mcp">MCP 服务</option>
+              </select>
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">类型（标注）</span>
+              <select v-model="toolForm.type" class="mk-field__select" :disabled="toolForm.transport === 'mcp'">
                 <option value="http">HTTP 接口</option>
                 <option value="code">代码执行</option>
                 <option value="search">搜索</option>
@@ -175,9 +195,18 @@
             </label>
           </div>
           <label class="mk-field">
-            <span class="mk-field__label">Endpoint</span>
-            <input v-model="toolForm.endpoint" class="mk-field__input" placeholder="https://… 或 local / ${ENV_VAR}" />
+            <span class="mk-field__label">{{ toolForm.transport === 'mcp' ? 'MCP 服务地址' : 'Endpoint' }}</span>
+            <input
+              v-model="toolForm.endpoint"
+              class="mk-field__input"
+              :placeholder="toolForm.transport === 'mcp' ? 'https://…/mcp' : 'https://… 或 local / ${ENV_VAR}'"
+            />
           </label>
+          <p v-if="toolForm.transport === 'mcp'" class="ac-mcp__hint">
+            MCP 服务的工具由服务端 <code>tools/list</code> 动态发现，不在本页逐个登记；调用时以
+            <code>{{ toolForm.id || 'serverId' }}:&lt;toolName&gt;</code> 寻址（如
+            <code>{{ toolForm.id || 'serverId' }}:tavily_search</code>）。保存后可在列表中「发现工具」查看。
+          </p>
           <label class="mk-field">
             <span class="mk-field__label">描述（可选）</span>
             <textarea v-model="toolForm.description" class="mk-field__textarea" rows="2" placeholder="这个工具做什么"></textarea>
@@ -308,6 +337,8 @@ interface McpTool {
   name: string
   description: string
   type: string
+  /** 'http'（通用端点）/ 'mcp'（真 MCP server，工具运行时发现） */
+  transport: string
   endpoint: string
   enabled: boolean
 }
@@ -328,6 +359,7 @@ async function loadMcpTools() {
       name: String(t.name || t.id || ''),
       description: String(t.description || ''),
       type: String(t.type || 'http'),
+      transport: String(t.transport || 'http'),
       endpoint: String(t.endpoint || ''),
       enabled: t.enabled !== false
     }))
@@ -352,7 +384,7 @@ watch(
 const toolOpen = ref(false)
 const toolEditingId = ref('')
 const toolSaving = ref(false)
-const toolForm = ref({ id: '', name: '', type: 'http', endpoint: '', description: '', enabled: true })
+const toolForm = ref({ id: '', name: '', transport: 'http', type: 'http', endpoint: '', description: '', enabled: true })
 const toolErrors = ref<{ id?: string; name?: string; endpoint?: string }>({})
 useEscape(() => toolOpen.value, () => { toolOpen.value = false })
 const panelRef = ref<HTMLElement | null>(null)
@@ -362,14 +394,22 @@ useMaskClose(maskRef, () => { toolOpen.value = false })
 
 function openToolCreate() {
   toolEditingId.value = ''
-  toolForm.value = { id: '', name: '', type: 'http', endpoint: '', description: '', enabled: true }
+  toolForm.value = { id: '', name: '', transport: 'http', type: 'http', endpoint: '', description: '', enabled: true }
   toolErrors.value = {}
   toolOpen.value = true
 }
 
 function openToolEdit(t: McpTool) {
   toolEditingId.value = t.id
-  toolForm.value = { id: t.id, name: t.name, type: t.type, endpoint: t.endpoint, description: t.description, enabled: t.enabled }
+  toolForm.value = {
+    id: t.id,
+    name: t.name,
+    transport: t.transport || 'http',
+    type: t.type,
+    endpoint: t.endpoint,
+    description: t.description,
+    enabled: t.enabled
+  }
   toolErrors.value = {}
   toolOpen.value = true
 }
@@ -448,6 +488,28 @@ async function testTool(t: McpTool) {
   }
 }
 
+/* ---------- MCP 工具发现（transport='mcp'）：工具由服务端 tools/list 动态给出 ---------- */
+const discoveringId = ref('')
+const discoveredMap = ref<Record<string, string[]>>({})
+
+async function discoverTools(t: McpTool) {
+  if (discoveringId.value) return
+  discoveringId.value = t.id
+  try {
+    const res = await adminMcpApi.listMcpTools(t.id, true)
+    const body = res.data?.data ?? {}
+    const names = ((body.tools || []) as Array<Record<string, unknown>>)
+      .map((tool) => String(tool.name || ''))
+      .filter(Boolean)
+    discoveredMap.value = { ...discoveredMap.value, [t.id]: names }
+    toast.success(`「${t.name}」发现 ${names.length} 个工具`)
+  } catch (e) {
+    toast.error(`发现工具失败：${errMsg(e)}`)
+  } finally {
+    discoveringId.value = ''
+  }
+}
+
 /* ---------- 跳转 ---------- */
 function goLogs(skillId: string) {
   investigateAgent(skillId)
@@ -521,6 +583,22 @@ function goConfig() {
   text-overflow: ellipsis;
 }
 .ac-mcp__formrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ac-mcp__formrow--three { grid-template-columns: 1fr 1fr 1fr; }
+/* MCP 服务提示：说明工具是运行时发现的，避免误以为要逐个登记 */
+.ac-mcp__hint {
+  margin: -6px 0 0;
+  font-size: var(--mk-fs-11);
+  line-height: 1.65;
+  color: var(--mk-faint);
+}
+.ac-mcp__hint code {
+  font-family: var(--mk-mono);
+  font-size: var(--mk-fs-11);
+  background: #eef2fa;
+  color: var(--mk-muted);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
 
 /* MCP 卡片作为容器：行按「卡片自身宽度」重排，而非视口宽度
    （并栏时卡片可能远窄于视口，视口断点不触发） */
@@ -576,5 +654,6 @@ function goConfig() {
 html[data-theme='dark'] {
   .ac-error { background: rgba(248, 113, 113, 0.1); }
   .ac-mcp__dot.is-off { background: #4a5874; }
+  .ac-mcp__hint code { background: #253049; color: var(--mk-muted, #9fb0c8); }
 }
 </style>

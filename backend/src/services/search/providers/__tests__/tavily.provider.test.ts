@@ -67,7 +67,8 @@ describe('TavilySearchProvider', () => {
     const body = options.body as Record<string, unknown>;
     expect(body).toMatchObject({
       query: 'ai news',
-      search_depth: 'basic',
+      // 未显式传 depth 时默认 advanced（basic 对实体型查询相关性显著劣化）
+      search_depth: 'advanced',
       max_results: 5,
       topic: 'news',
       time_range: 'day',
@@ -83,6 +84,12 @@ describe('TavilySearchProvider', () => {
     expect(toTavilyTimeRange(2880)).toBe('week');
     expect(toTavilyTimeRange(20_000)).toBe('month');
     expect(toTavilyTimeRange(1_000_000)).toBe('year');
+  });
+
+  it('depth 缺省为 advanced，可显式降级为 basic', () => {
+    expect(buildTavilyRequestBody({ query: 'q' })).toMatchObject({ search_depth: 'advanced' });
+    expect(buildTavilyRequestBody({ query: 'q', depth: 'advanced' })).toMatchObject({ search_depth: 'advanced' });
+    expect(buildTavilyRequestBody({ query: 'q', depth: 'basic' })).toMatchObject({ search_depth: 'basic' });
   });
 
   it('日期过滤映射为 start_date / end_date 并开启 published_date', () => {

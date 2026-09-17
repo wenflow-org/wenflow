@@ -1,5 +1,5 @@
 import prisma from '../../config/database';
-import type { IMcpServerConfig, IMcpToolConfig } from '../../core/mcp/McpGateway';
+import type { IMcpProviderConfig, IMcpToolConfig } from '../../core/mcp/McpGateway';
 import { z } from 'zod';
 import { isIP } from 'net';
 import {
@@ -16,8 +16,13 @@ export const USER_MCP_SECRET_CONTEXTS = {
   healthCheck: 'main.user_mcp_configs.healthCheck',
 } as const;
 
-export type UserMcpServerConfig = Pick<IMcpServerConfig, 'id' | 'name' | 'endpoint'>
-  & Partial<Omit<IMcpServerConfig, 'id' | 'name' | 'endpoint'>>;
+/**
+ * 用户侧「外挂服务/供应商」配置（user_mcp_configs.servers）。
+ *
+ * 命名保留 servers 以兼容 DB 列与既有 API；语义与平台侧 providers 一致（LLM 供应商连接）。
+ */
+export type UserMcpServerConfig = Pick<IMcpProviderConfig, 'id' | 'name' | 'endpoint'>
+  & Partial<Omit<IMcpProviderConfig, 'id' | 'name' | 'endpoint'>>;
 
 export interface UserMcpRuntimeConfig {
   servers: UserMcpServerConfig[];
@@ -197,10 +202,13 @@ const runtimeMcpToolSchema = z.object({
   name: z.string().trim().max(100).optional(),
   description: z.string().trim().max(1000).optional(),
   type: z.string().trim().min(1).max(64).optional(),
+  /** 'http'（默认，通用 HTTP 端点）/ 'mcp'（真 MCP server，工具运行时发现） */
+  transport: z.enum(['http', 'mcp']).optional(),
   endpoint: createMcpEndpointSchema('工具'),
   apiKey: z.string().max(8192).optional(),
   config: z.object({
     timeout: z.number().int().min(100).max(MAX_MCP_TOOL_TIMEOUT_MS).optional(),
+    toolsTtlMs: z.number().int().min(0).max(86_400_000).optional(),
   }).optional(),
   enabled: z.boolean().optional().default(true),
 }).transform(tool => ({
@@ -208,6 +216,8 @@ const runtimeMcpToolSchema = z.object({
   name: tool.name || tool.id,
   description: tool.description || '',
   type: tool.type || 'remote',
+  // 仅在显式声明 mcp 时落字段，其余保持原样（transport 缺省即 http，向后兼容既有数据）
+  ...(tool.transport === 'mcp' ? { transport: 'mcp' as const } : {}),
   endpoint: tool.endpoint,
   enabled: tool.enabled,
   ...(tool.apiKey === undefined ? {} : { apiKey: tool.apiKey }),

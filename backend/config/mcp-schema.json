@@ -2,17 +2,17 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://wenflow.local/schemas/mcp.json",
   "title": "WenFlow MCP / 外挂能力配置",
-  "description": "backend/config/mcp.json 的结构定义。注意区分：servers 是“外挂服务/供应商”的连接与状态（仅供管理端展示与健康检查，不参与运行时模型路由）；运行时模型路由的真实来源是 system 库 platform_api_configs（管理端「模型与接入」）。tools 是平台 MCP 工具；endpoint 为 local 时走本机执行。",
+  "description": "backend/config/mcp.json 的结构定义。注意区分：providers 是“外挂服务/供应商（LLM 供应商）”的连接与状态（仅供管理端展示与健康检查，不参与运行时模型路由）；运行时模型路由的真实来源是 system 库 platform_api_configs（管理端「模型与接入」）。tools 是平台 MCP 工具，transport=mcp 时该条目代表一个真 MCP server（工具运行时经 tools/list 发现）；endpoint 为 local 时走本机执行。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "servers", "tools"],
+  "required": ["version", "providers", "tools"],
   "properties": {
     "$schema": { "type": "string" },
     "version": { "type": "string" },
     "description": { "type": "string" },
-    "servers": {
+    "providers": {
       "type": "array",
-      "description": "外挂服务/供应商连接信息。仅用于状态与健康检查展示；不参与运行时模型路由。",
+      "description": "外挂服务/供应商（LLM 供应商）连接信息。仅用于状态与健康检查展示；不参与运行时模型路由。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -41,7 +41,7 @@
     },
     "tools": {
       "type": "array",
-      "description": "平台 MCP 工具。type 常见取值：http | code | search | filesystem | image（对远程工具不参与执行分支）；endpoint=local 走本机执行。",
+      "description": "平台 MCP 工具。transport=http（默认）时为通用 HTTP 端点；transport=mcp 时该条目代表一个真 MCP server（endpoint 为其地址，工具运行时经 tools/list 发现，按 <id>:<toolName> 寻址）。type 常见取值：http | code | search | filesystem | image（对远程工具不参与执行分支）；endpoint=local 走本机执行。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -51,6 +51,7 @@
           "name": { "type": "string" },
           "description": { "type": "string" },
           "type": { "type": "string" },
+          "transport": { "enum": ["http", "mcp"] },
           "endpoint": { "type": "string" },
           "apiKey": { "type": "string" },
           "userAccessible": { "type": "boolean" },

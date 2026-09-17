@@ -22,24 +22,31 @@ export function migrateMcpSecrets(apply: boolean, configPath = MCP_CONFIG_PATH):
   validateSecretEncryptionConfig(true);
 
   const content = fs.readFileSync(configPath, 'utf-8').replace(/^\uFEFF/, '');
-  const config = JSON.parse(content) as { servers?: Array<{ id: string; apiKey?: string }> };
-  const servers = Array.isArray(config.servers) ? config.servers : [];
+  const config = JSON.parse(content) as {
+    providers?: Array<{ id: string; apiKey?: string }>;
+    /** 旧字段名（历史配置） */
+    servers?: Array<{ id: string; apiKey?: string }>;
+  };
+  // 兼容旧字段名：历史配置用 servers 表示外挂服务/供应商
+  const providers = Array.isArray(config.providers)
+    ? config.providers
+    : (Array.isArray(config.servers) ? config.servers : []);
 
   let changed = false;
-  for (const server of servers) {
-    const apiKey = server.apiKey;
+  for (const provider of providers) {
+    const apiKey = provider.apiKey;
     if (!apiKey || ENV_TEMPLATE_PATTERN.test(apiKey) || isEncryptedSecret(apiKey)) continue;
     stats.scanned++;
     stats.pending++;
     if (apply) {
       try {
         const encrypted = encryptSecret(apiKey, MCP_SECRET_CONTEXT) ?? apiKey;
-        server.apiKey = encrypted;
+        provider.apiKey = encrypted;
         changed = true;
         stats.migrated++;
       } catch (error) {
         stats.failed++;
-        console.error(`[mcp-secret-migration] server id=${server.id} failed: ${error instanceof Error ? error.message : String(error)}`);
+        console.error(`[mcp-secret-migration] provider id=${provider.id} failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }

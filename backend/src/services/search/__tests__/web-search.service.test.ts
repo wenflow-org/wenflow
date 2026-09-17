@@ -53,6 +53,21 @@ describe('searchWeb 编排', () => {
     ).rejects.toMatchObject({ code: 'SEARCH_QUERY_INVALID' });
   });
 
+  it('depth 只接受 basic / advanced', async () => {
+    await expect(
+      searchWeb({ query: 'q', depth: 'deep' as never })
+    ).rejects.toMatchObject({ code: 'SEARCH_QUERY_INVALID' });
+  });
+
+  it('depth 透传给 provider（缺省不改写，由 provider 决定默认）', async () => {
+    const provider = fakeProvider('tinyfish', async () => ({ results: [], page: 0 }));
+    await searchWeb({ query: 'q', depth: 'basic' }, { providers: { tinyfish: provider } });
+    expect(provider.search).toHaveBeenCalledWith(
+      expect.objectContaining({ query: 'q', depth: 'basic' }),
+      expect.anything()
+    );
+  });
+
   it('没有可用 provider 时抛 SEARCH_PROVIDER_NOT_CONFIGURED', async () => {
     const provider = fakeProvider('tinyfish', async () => ({ results: [], page: 0 }), false);
 

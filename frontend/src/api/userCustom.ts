@@ -208,10 +208,12 @@ export interface UserMcpToolConfig {
   name: string;
   description: string;
   type: string;
+  /** 'http'（默认，通用 HTTP 端点）/ 'mcp'（真 MCP server，工具由服务端发现，按 id:toolName 寻址） */
+  transport?: 'http' | 'mcp';
   endpoint: string;
   apiKey?: string;
   apiKeyConfigured?: boolean;
-  config?: { timeout?: number };
+  config?: { timeout?: number; toolsTtlMs?: number };
   enabled: boolean;
 }
 

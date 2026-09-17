@@ -24,6 +24,9 @@ const searchQuerySchema = z
       .min(1, 'query 不能为空')
       .max(2000, 'query 不能超过 2000 个字符'),
     maxResults: z.number({ invalid_type_error: 'maxResults 必须是数字' }).int('maxResults 必须是整数').min(1, 'maxResults 不能小于 1').max(50, 'maxResults 不能超过 50').optional(),
+    depth: z.enum(['basic', 'advanced'], {
+      errorMap: () => ({ message: 'depth 仅支持 basic 或 advanced' }),
+    }).optional(),
     location: z.string({ invalid_type_error: 'location 必须是字符串' }).trim().max(64, 'location 不能超过 64 个字符').optional(),
     language: z.string({ invalid_type_error: 'language 必须是字符串' }).trim().max(32, 'language 不能超过 32 个字符').optional(),
     recencyMinutes: z.number({ invalid_type_error: 'recencyMinutes 必须是数字' }).int('recencyMinutes 必须是整数').min(1, 'recencyMinutes 不能小于 1').max(5_256_000, 'recencyMinutes 不能超过 5256000').optional(),

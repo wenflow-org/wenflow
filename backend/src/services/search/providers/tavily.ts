@@ -27,6 +27,8 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 /** Tavily max_results 上限 20 */
 const MAX_RESULTS = 20;
 const DEFAULT_LIMIT = 10;
+/** 未显式指定 depth 时的检索深度（advanced = 2 credits，basic = 1） */
+const DEFAULT_SEARCH_DEPTH = 'advanced';
 const PROVIDER_LABEL = 'Tavily';
 
 export interface TavilyProviderConfig {
@@ -74,7 +76,8 @@ export function buildTavilyRequestBody(query: SearchQuery): Record<string, unkno
 
   const body: Record<string, unknown> = {
     query: query.query,
-    search_depth: 'basic',
+    // 默认 advanced：basic 对实体型查询相关性显著劣化（实测 "Tavily search API" 会返回 api.org 等无关结果）
+    search_depth: query.depth || DEFAULT_SEARCH_DEPTH,
     max_results: Math.min(query.maxResults ?? DEFAULT_LIMIT, MAX_RESULTS),
   };
   if (query.domainType === 'news') body.topic = 'news';

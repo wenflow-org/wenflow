@@ -278,3 +278,46 @@ describe('用户 MCP 配置 Schema', () => {
     }
   })
 })
+
+describe('用户 MCP 工具的 transport 支持', () => {
+  it('transport=mcp 落字段；缺省不落（向后兼容既有数据）', () => {
+    const withTransport = normalizeStoredUserMcpTools([{
+      id: 'tavily',
+      name: 'Tavily MCP',
+      transport: 'mcp',
+      endpoint: 'https://tavily.example/mcp',
+      enabled: true
+    }])
+    expect(withTransport).toHaveLength(1)
+    expect(withTransport[0]).toMatchObject({ id: 'tavily', transport: 'mcp' })
+
+    const legacy = normalizeStoredUserMcpTools([{
+      id: 'legacy',
+      endpoint: 'https://legacy.example/api',
+      enabled: true
+    }])
+    expect(legacy).toHaveLength(1)
+    expect(legacy[0].transport).toBeUndefined()
+  })
+
+  it('非法 transport 值被拒绝（工具被丢弃）', () => {
+    const tools = normalizeStoredUserMcpTools([{
+      id: 'bad',
+      endpoint: 'https://bad.example/api',
+      transport: 'grpc',
+      enabled: true
+    }])
+    expect(tools).toHaveLength(0)
+  })
+
+  it('toolsTtlMs 可配置（MCP 工具发现缓存 TTL）', () => {
+    const tools = normalizeStoredUserMcpTools([{
+      id: 'tavily',
+      endpoint: 'https://tavily.example/mcp',
+      transport: 'mcp',
+      config: { toolsTtlMs: 60000 },
+      enabled: true
+    }])
+    expect(tools[0].config).toMatchObject({ toolsTtlMs: 60000 })
+  })
+})

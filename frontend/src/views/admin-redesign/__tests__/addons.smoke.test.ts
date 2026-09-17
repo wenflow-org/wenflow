@@ -10,9 +10,10 @@ import { nextTick } from 'vue';
 import Addons from '../Addons.vue';
 import { dataSource } from '../store';
 
-const { configsMock, mcpListMock } = vi.hoisted(() => ({
+const { configsMock, mcpListMock, listMcpToolsMock } = vi.hoisted(() => ({
   configsMock: vi.fn(),
-  mcpListMock: vi.fn()
+  mcpListMock: vi.fn(),
+  listMcpToolsMock: vi.fn()
 }));
 
 function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
@@ -27,7 +28,7 @@ function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
 
 vi.mock('@/api/adminApi', () => ({
   adminSkillsApi: apiObject({ getSkillModelConfigs: configsMock }),
-  adminMcpApi: apiObject({ list: mcpListMock })
+  adminMcpApi: apiObject({ list: mcpListMock, listMcpTools: listMcpToolsMock })
 }));
 
 async function mountLive() {
@@ -42,6 +43,10 @@ async function mountLive() {
 beforeEach(() => {
   configsMock.mockReset();
   mcpListMock.mockReset();
+  listMcpToolsMock.mockReset();
+  listMcpToolsMock.mockResolvedValue({
+    data: { data: { tools: [{ name: 'tavily_search' }, { name: 'tavily_map' }] } }
+  });
   configsMock.mockResolvedValue({
     data: {
       data: {
@@ -90,6 +95,49 @@ describe('Addons 外挂能力列（P1：51px 截断修复）', () => {
     for (const s of subs) {
       expect(s.attributes('title')).toBe(s.text());
     }
+    wrapper.unmount();
+  });
+});
+
+describe('Addons MCP 服务（transport 支持）', () => {
+  function withTools(tools: Array<Record<string, unknown>>) {
+    mcpListMock.mockResolvedValue({ data: { data: { tools } } });
+  }
+
+  it('transport=mcp 行显示 MCP 标记与「发现工具」入口；普通行不显示', async () => {
+    withTools([
+      { id: 'tavily', name: 'Tavily MCP', description: '', type: 'http', transport: 'mcp', endpoint: 'https://x/mcp', enabled: true },
+      { id: 'plain', name: '普通 HTTP', description: '', type: 'search', endpoint: 'https://y/api', enabled: true }
+    ]);
+    const wrapper = await mountLive();
+    const rows = wrapper.findAll('.ac-mcp__row');
+    expect(rows).toHaveLength(2);
+
+    expect(rows[0].find('.mk-badge--info').exists()).toBe(true);
+    expect(rows[0].text()).toContain('发现工具');
+    expect(rows[0].text()).toContain('MCP');
+
+    expect(rows[1].find('.mk-badge--info').exists()).toBe(false);
+    expect(rows[1].text()).not.toContain('发现工具');
+    expect(rows[1].text()).toContain('搜索');
+
+    wrapper.unmount();
+  });
+
+  it('点击「发现工具」调用 listMcpTools 并显示数量', async () => {
+    withTools([
+      { id: 'tavily', name: 'Tavily MCP', description: '', type: 'http', transport: 'mcp', endpoint: 'https://x/mcp', enabled: true }
+    ]);
+    const wrapper = await mountLive();
+    const button = wrapper.findAll('.ac-mcp__row .mk-link').find((b) => b.text().includes('发现工具'));
+    expect(button, '应存在「发现工具」按钮').toBeTruthy();
+
+    await button!.trigger('click');
+    await flushPromises();
+
+    expect(listMcpToolsMock).toHaveBeenCalledWith('tavily', true);
+    expect(wrapper.find('.ac-mcp__row').text()).toContain('工具 2');
+
     wrapper.unmount();
   });
 });

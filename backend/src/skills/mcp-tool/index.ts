@@ -52,7 +52,24 @@ const MCP_ERROR_MESSAGES: Record<string, string> = {
   MCP_UPSTREAM_HTTP_ERROR: 'MCP 上游工具返回错误',
   MCP_UPSTREAM_UNAVAILABLE: 'MCP 上游工具暂时不可用',
   MCP_UPSTREAM_TIMEOUT: 'MCP 上游工具响应超时',
+  // 真 MCP server（transport='mcp'）
+  MCP_SERVER_NOT_FOUND: 'MCP server 不存在或未启用',
+  MCP_SERVER_TRANSPORT_MISMATCH: '该配置不是 MCP server',
+  MCP_TOOL_NAME_REQUIRED: '调用 MCP server 需指定工具名（形如 serverId:toolName）',
+  MCP_UPSTREAM_TOOL_ERROR: 'MCP 工具返回错误',
+  MCP_JSONRPC_ERROR: 'MCP 协议错误',
+  MCP_TRANSPORT_ERROR: 'MCP 传输失败',
+  MCP_UNAUTHORIZED: 'MCP server 鉴权失败',
+  MCP_EMPTY_RESPONSE: 'MCP server 返回空响应',
+  MCP_ENDPOINT_REQUIRED: 'MCP endpoint 不能为空',
 };
+
+/** 解析 `<serverId>:<toolName>` 引用（与 McpGateway 同一寻址约定） */
+function splitMcpToolRef(toolId: string): { serverId: string; toolName: string } | null {
+  const index = toolId.indexOf(':');
+  if (index <= 0 || index === toolId.length - 1) return null;
+  return { serverId: toolId.slice(0, index), toolName: toolId.slice(index + 1) };
+}
 
 export async function executeMcpTool(input: McpToolInput): Promise<SkillExecutionResult<McpToolOutput>> {
   const startedAt = Date.now();
@@ -76,6 +93,9 @@ export async function executeMcpTool(input: McpToolInput): Promise<SkillExecutio
   try {
     const requestContext = getRequestContext();
     const userId = requestContext.userId;
+    const privilegedCaller = requestContext.userRole === 'admin' || userId === 'system';
+    const ref = splitMcpToolRef(toolId);
+
     if (userId && userId !== 'system') {
       const userConfig = await getUserMcpRuntimeConfig(userId);
       const userTool = userConfig?.tools.find((tool) => tool.id.toLowerCase() === toolId);
@@ -104,6 +124,36 @@ export async function executeMcpTool(input: McpToolInput): Promise<SkillExecutio
         };
       }
 
+      // 用户侧 MCP server 的 `<serverId>:<toolName>` 引用
+      if (ref) {
+        const userServer = userConfig?.tools.find(
+          (tool) => tool.id.toLowerCase() === ref.serverId && tool.transport === 'mcp'
+        );
+        if (userServer) {
+          if (!userServer.enabled) {
+            throw Object.assign(new Error(`MCP server ${ref.serverId} 已被用户禁用`), {
+              code: 'MCP_TOOL_DISABLED',
+            });
+          }
+          if (isLocalMcpTool(userServer)) {
+            throw Object.assign(new Error('用户 MCP 配置不允许声明服务器本地工具'), {
+              code: 'MCP_USER_LOCAL_TOOL_FORBIDDEN',
+            });
+          }
+          const result = await mcpGateway.callConfiguredTool(userServer, input.params || {}, {
+            allowLocal: false,
+            privateNetworkPolicy: 'public-only',
+            mcpToolName: ref.toolName,
+            signal: input.signal,
+          });
+          return {
+            success: true,
+            output: { toolId, source: 'user', result },
+            duration: Date.now() - startedAt,
+          };
+        }
+      }
+
       if (userConfig?.invalidToolIds?.includes(toolId)) {
         throw Object.assign(new Error(`用户 MCP 工具 ${toolId} 配置无效`), {
           code: 'MCP_TOOL_CONFIG_INVALID',
@@ -124,30 +174,55 @@ export async function executeMcpTool(input: McpToolInput): Promise<SkillExecutio
     }
 
     const platformTool = mcpGateway.getTool(toolId);
-    if (!platformTool) {
-      throw Object.assign(new Error(`平台 MCP 配置中不存在工具 ${toolId}`), {
-        code: 'MCP_TOOL_NOT_FOUND',
-      });
-    }
-    const privilegedCaller = requestContext.userRole === 'admin' || userId === 'system';
-    if (!privilegedCaller && (platformTool.userAccessible !== true || isLocalMcpTool(platformTool))) {
-      throw Object.assign(new Error(`平台 MCP 配置中不存在工具 ${toolId}`), {
-        code: 'MCP_TOOL_NOT_FOUND',
-      });
+    if (platformTool) {
+      if (!privilegedCaller && (platformTool.userAccessible !== true || isLocalMcpTool(platformTool))) {
+        throw Object.assign(new Error(`平台 MCP 配置中不存在工具 ${toolId}`), {
+          code: 'MCP_TOOL_NOT_FOUND',
+        });
+      }
+
+      const result = privilegedCaller
+        ? await mcpGateway.callTool(toolId, input.params || {}, { signal: input.signal })
+        : await mcpGateway.callConfiguredTool(platformTool, input.params || {}, {
+            allowLocal: false,
+            privateNetworkPolicy: 'public-only',
+            signal: input.signal,
+          });
+      return {
+        success: true,
+        output: { toolId, source: 'platform', result },
+        duration: Date.now() - startedAt,
+      };
     }
 
-    const result = privilegedCaller
-      ? await mcpGateway.callTool(toolId, input.params || {}, { signal: input.signal })
-      : await mcpGateway.callConfiguredTool(platformTool, input.params || {}, {
-          allowLocal: false,
-          privateNetworkPolicy: 'public-only',
-          signal: input.signal,
-        });
-    return {
-      success: true,
-      output: { toolId, source: 'platform', result },
-      duration: Date.now() - startedAt,
-    };
+    // 平台侧 MCP server 的 `<serverId>:<toolName>` 引用
+    if (ref) {
+      const platformServer = mcpGateway.getTool(ref.serverId);
+      if (platformServer && platformServer.transport === 'mcp') {
+        if (!privilegedCaller && platformServer.userAccessible !== true) {
+          throw Object.assign(new Error(`平台 MCP 配置中不存在工具 ${toolId}`), {
+            code: 'MCP_TOOL_NOT_FOUND',
+          });
+        }
+        const result = privilegedCaller
+          ? await mcpGateway.callTool(toolId, input.params || {}, { signal: input.signal })
+          : await mcpGateway.callConfiguredTool(platformServer, input.params || {}, {
+              allowLocal: false,
+              privateNetworkPolicy: 'public-only',
+              mcpToolName: ref.toolName,
+              signal: input.signal,
+            });
+        return {
+          success: true,
+          output: { toolId, source: 'platform', result },
+          duration: Date.now() - startedAt,
+        };
+      }
+    }
+
+    throw Object.assign(new Error(`平台 MCP 配置中不存在工具 ${toolId}`), {
+      code: 'MCP_TOOL_NOT_FOUND',
+    });
   } catch (error: any) {
     const code = error?.code && MCP_ERROR_MESSAGES[error.code]
       ? error.code
