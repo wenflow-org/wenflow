@@ -52,6 +52,53 @@ describe('课内温故：到期旧知与本节知识点看板物理分离（回�
     expect(outcomes[1].status).toBe('learning');
   });
 
+  it('extractWarmupOutcomes（结构化通道，2026-09-17）：control.warmupOutcomes 直接落结果，不依赖名字回写', () => {
+    // 关键回归：模型只报了结构化结果、**没有**把温故点写进 knowledge.points（本轮从零回归的失败场景）
+    const outcomes = extractWarmupOutcomes(warmup, [
+      { name: '本节新知 A', status: 'learning', progress: 40 },
+    ], [
+      { conceptKey: '离开前把书翻到下一页并立好', recall: 'unaided', evidence: '学生自己说出来了' },
+      { conceptKey: '短离开是收尾的一部分', recall: 'failed' },
+    ]);
+    expect(outcomes).toEqual([
+      { conceptKey: '离开前把书翻到下一页并立好', status: 'mastered', progress: 100 },
+      // 用**计划项**的规范键回报（模型可只给近义说法）
+      { conceptKey: '短离开是收尾的一部分：非收工', status: 'not-recalled', progress: 0 },
+    ]);
+  });
+
+  it('extractWarmupOutcomes：itemIndex 按"模型看到的待回捞视图"解析（不是完整计划下标）', () => {
+    const withOutcome = plan([
+      item('已回捞过的点', '已回捞过的点'),
+      item('待回捞 A', '待回捞 A'),
+      item('待回捞 B', '待回捞 B'),
+    ]);
+    withOutcome.items[0] = { ...withOutcome.items[0], outcome: { status: 'mastered', progress: 100, reviewedAt: 'x' } };
+    // 模型看到的是 pending 视图（[待回捞 A, 待回捞 B]）→ itemIndex 1 应为「待回捞 B」
+    const outcomes = extractWarmupOutcomes(withOutcome, null, [{ itemIndex: 1, recall: 'with-hint' }]);
+    expect(outcomes).toEqual([{ conceptKey: '待回捞 B', status: 'learning', progress: 50 }]);
+  });
+
+  it('extractWarmupOutcomes：结构化优先于名字匹配（同一点只落一次，以结构化等级为准）', () => {
+    const outcomes = extractWarmupOutcomes(warmup, [
+      { name: '离开前把书翻到下一页并立好', status: 'learning', progress: 30 },
+    ], [
+      { conceptKey: '离开前把书翻到下一页并立好', recall: 'unaided' },
+    ]);
+    expect(outcomes).toEqual([
+      { conceptKey: '离开前把书翻到下一页并立好', status: 'mastered', progress: 100 },
+    ]);
+  });
+
+  it('extractWarmupOutcomes：结构化条目定位不到计划项 / 等级非法 → 丢弃（不猜等级）', () => {
+    const outcomes = extractWarmupOutcomes(warmup, null, [
+      { conceptKey: '完全不相关的点', recall: 'unaided' },
+      { itemIndex: 99, recall: 'unaided' },
+      { conceptKey: '离开前把书翻到下一页并立好', recall: 'unknown' as any },
+    ]);
+    expect(outcomes).toEqual([]);
+  });
+
   it('extractWarmupOutcomes：温故点排在本节点之后也不丢（截断前摘取，回归 slice(0,5) 丢结果）', () => {
     const outcomes = extractWarmupOutcomes(warmup, [
       { name: '本节点 1', status: 'learning', progress: 30 },

@@ -214,6 +214,8 @@ sessionArtifacts: {
 2. **随堂温故会吃掉当日额度**：验证中见到 `当日剩余额度=0`（上限 6.0）→ 当天再开课就温故不了；额度与"每课 1–2 条"叠加后，实际能覆盖的到期量很小（§3.3）。→ **已修（2026-09-17）**：给单节课加**当日剩余份额上限**（`SESSION_DAILY_SHARE_CAP=0.6`，下限 `1.0`），当天第一节课不再把额度一次吃光；额度读不到时不启用该上限（保持"按会话预算走"的兜底语义）。
 3. **分档是跳变的**：只有 `<0.7` / `>0.9` 两个阈值，中间带（0.7–0.9）恒为基准 2.0；样本少时档位会因单次结果剧烈跳动（1/1 成功即跳到高档）。→ **已修（2026-09-17）**：加**样本下限** `MIN_BUDGET_SAMPLE=5`，样本不足一律取基准（`computeLoadBudget(rate, sampleSize)`）。
 4. **结果摘取依赖"模型用原名字回写"**：两次全流程验证里，一次正常摘到（`…口径配对 → mastered`），一次没摘到——模型把温故点用**近义说法**问出来、没按计划原名字写进 `knowledge.points`，`normalizeConceptKey` 就匹配不上。⇒ 摘取对"换名"不稳，是下一步该收紧的点（提示词要求 + 匹配放宽，二选一或并用）。
+   → **已彻底修（2026-09-17）**：见 §7 P0-1 补记——结果改由**结构化字段** `control.warmupOutcomes` 承载（代码不做名字匹配），并加采样率留痕；
+   同时匹配侧放宽（调序/截断）作为兼容通道保留。
 
 ## 3.7 P0-2 修复记录：难度锚点接进生产（2026-09-16）
 
@@ -796,6 +798,27 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
 - `buildReviewPlan` 的 `successRate` 从 `-` 变为数值；
 - 连续课累计后，预算从基准 2.0 **分档**到 1.0 / 3.0 至少各一次。
 
+**补记（2026-09-17）：结果通道改造为结构化 —— 从"靠模型自觉"变成"有契约"**
+
+上面三条验收的前提是"模型把温故结果回写进 `knowledge.points`"。实测这条不稳定：
+两次全流程验证一次摘到一次没摘到；本轮又从零回归复现了**成功方向**的漏报
+（温故点在会话消息里出现 5 次、却没进 `knowledge.points` ⇒ `outcome` 恒 null）。
+
+改造（两半，缺一不可）：
+1. **输出契约**：`teaching-turn` 的 `control.warmupOutcomes`（`{conceptKey|itemIndex, recall, evidence?}`），
+   `recall` 是"给了多少帮助才想起来"的三档：`unaided` / `with-hint` / `failed`（desirable difficulty 的直接观测量）；
+   规则独立成条，并显式提示"**答对时最容易漏报**"、"报告时点以学生这一次作答为准"（不把随后的提示算成 with-hint）。
+2. **代码裁决**：`extractWarmupOutcomes` 首选结构化通道（`itemIndex` 相对模型看到的待回捞视图解析，
+   否则按 `normalizeConceptKey` 匹配），旧的名字匹配只作兼容；`knowledge.points` 不再参与结果判定。
+
+**验收证据（用真实模型 + 真实链路，2026-09-17）**：
+- 隔离评估（两种作答）：答对 → `recall: "unaided"`；答不出 → `recall: "failed"`（首版规则曾误报 `with-hint`，已按"报告时点"修正）；
+- 从零回归：日志 `温故结构化结果 {reported:1, extracted:1, settled:1, dropped:0, recalls:["unaided"]}`，
+  观测 4 的入库结果由过去的"丢失/again"变为 **`rating: "easy", status: "mastered", progress: 100, masteryScore: 0.9`** ——
+  **成功方向第一次被如实记录**（老通道根本修不了这个方向）；
+- 采样率留痕：`reported/extracted/settled/dropped` 进日志，仅在"学生确有机会作答却没报"时告警
+  （避免"这轮刚问、还没答"的误报）。
+
 ### P0-2 难度调整落生产锚点（一行）—— **已完成并验证（§3.7）**
 
 在 `TeachingContextBuilder` 计算档位处调用 `recordTaskDifficultyAdjustment`（与模拟脚本同一入口）。
@@ -889,6 +912,10 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
   **没有该点** ⇒ 按名字摘取自然落空、`memoryWarmup.items[0].outcome` 为 null、无 `review:warmup` 证据。
   此前修的只是**匹配侧**（调序/截断），这一半是**模型不按规则回写**。待办：把温故结果从
   "要求模型写进 knowledge.points" 改成**确定性输出字段**（结构契约），不再依赖提示词依从性。
+  → **已完成（2026-09-17）**：`teaching-turn` 输出新增 `control.warmupOutcomes`
+  （三档召回等级 `unaided`/`with-hint`/`failed`），`extractWarmupOutcomes` **首选**该通道、代码不做名字匹配，
+  旧通道仅作兼容；并加**采样率留痕**（`reported/extracted/settled/dropped` + recall 分布），
+  仅在"学生确有机会作答却没报"时告警。见 §7 P0-1 补记与 §3.6 问题④。
 
 ---
 

@@ -317,6 +317,17 @@ function warmupKeyOf(name: string): string {
  */
 const WARMUP_RESULT_STATUSES = new Set(['mastered', 'learning']);
 
+/**
+ * 结构化召回等级 → 看板状态/进度（2026-09-17）。
+ * 与 `mapReviewStatusToRating` 的口径对齐：unaided→easy(0.9)、with-hint→hard(0.5)、failed→again(0.5)。
+ * "给了多少帮助才想起来"是 desirable difficulty 的直接观测量，比"是否答出"二分更有信息量。
+ */
+const WARMUP_RECALL_TO_STATUS: Record<'unaided' | 'with-hint' | 'failed', { status: string; progress: number }> = {
+  unaided: { status: 'mastered', progress: 100 },
+  'with-hint': { status: 'learning', progress: 50 },
+  failed: { status: 'not-recalled', progress: 0 },
+};
+
 /** 保守包含匹配的长度门槛（归一化后字符数）：短名包含关系太容易误伤，宁可不匹配 */
 export const WARMUP_FUZZY_MIN_LENGTH = 8;
 
@@ -420,32 +431,59 @@ export function resolveTurnMemoryWarmup(
 }
 
 /**
- * 从教学回合的 knowledge.points 里摘出「课内温故」的结果。
+ * 从教学回合的输出里摘出「课内温故」的结果。
+ *
+ * **两条通道，结构化优先（2026-09-17，审计 §3.6 问题④的另一半）**：
+ * ① `control.warmupOutcomes`（首选）：模型直接报"给了多少帮助才想起来"（unaided / with-hint / failed），
+ *    代码据此落结果——**不做名字匹配**，因此不再依赖"模型必须把温故点按原名回写进 knowledge.points"。
+ *    实测背景：靠回写 + 名字匹配时，两次全流程验证一次摘到一次没摘到（本轮从零回归里温故点在消息中
+ *    出现 5 次、却没进 knowledge.points ⇒ 摘取饿死、outcome 恒 null）。
+ * ② `knowledge.points` 名字匹配（兼容）：老行为，结构化缺失时兜底。
+ *
  * 到期旧知必须与本节点看板**物理分离**——历史事故 2e3ca16：日常课把跨 path 到期点注入
  * seededKnowledgeState，结果串进「本节知识点」且被前端 isCurrent 误显示为「进行中 · x%」，
- * 于是整个课内复习机制被下线。这里改走独立通道（只取结果，不进看板）。
+ * 于是整个课内复习机制被下线。这里仍走独立通道（只取结果，不进看板）。
  */
 export function extractWarmupOutcomes(
   plan: ReviewPlan | null | undefined,
   points: Array<{ name: string; status: string; progress: number }> | null | undefined,
+  structured?: Array<{ conceptKey?: string; itemIndex?: number; recall: 'unaided' | 'with-hint' | 'failed'; evidence?: string }> | null,
 ): Array<{ conceptKey: string; status: string; progress: number }> {
-  if (!plan || !Array.isArray(points)) return [];
+  if (!plan) return [];
   const outcomes: Array<{ conceptKey: string; status: string; progress: number }> = [];
-  for (const point of points) {
-    const name = String(point?.name || '').trim();
-    if (!name) continue;
-    const matched = matchWarmupItem(plan, name);
-    if (!matched) continue;
-    const status = String(point.status || '') || 'learning';
-    // 只有「当场回捞出了结果」的状态才算结果：模型把温故点写回来只为提问（'review'）时，
-    // 它不代表任何作答表现——若当成结果收录，收束时会按"没答出"落成 again，污染记忆状态。
-    if (!WARMUP_RESULT_STATUSES.has(status)) continue;
-    outcomes.push({
-      // 用**计划项的规范键**（而非模型当时的写法）：记忆引擎按它定位 memory_traces
-      conceptKey: matched.conceptKey,
-      status,
-      progress: Number(point.progress) || 0,
-    });
+  const pushOnce = (item: ReviewPlanItem, status: string, progress: number) => {
+    const key = warmupKeyOf(item.conceptKey);
+    if (outcomes.some((existing) => warmupKeyOf(existing.conceptKey) === key)) return;
+    // 用**计划项的规范键**（而非模型当时的写法）：记忆引擎按它定位 memory_traces
+    outcomes.push({ conceptKey: item.conceptKey, status, progress });
+  };
+
+  // ① 结构化通道：itemIndex 相对的是**模型看到的待回捞视图**（pendingWarmupForModel），不是完整计划
+  const pendingView = pendingWarmupForModel(plan)?.items ?? [];
+  for (const entry of structured || []) {
+    if (!entry) continue;
+    const index = Number.isInteger(entry.itemIndex) ? Number(entry.itemIndex) : -1;
+    const byIndex = index >= 0 && index < pendingView.length ? pendingView[index] : null;
+    const item = byIndex ?? matchWarmupItem(plan, String(entry.conceptKey || ''));
+    if (!item) continue;
+    const mapped = WARMUP_RECALL_TO_STATUS[entry.recall];
+    if (!mapped) continue;
+    pushOnce(item, mapped.status, mapped.progress);
+  }
+
+  // ② 兼容通道：模型把温故点按原名写回 knowledge.points（仅在结构化没给这个点时生效）
+  if (Array.isArray(points)) {
+    for (const point of points) {
+      const name = String(point?.name || '').trim();
+      if (!name) continue;
+      const matched = matchWarmupItem(plan, name);
+      if (!matched) continue;
+      const status = String(point.status || '') || 'learning';
+      // 只有「当场回捞出了结果」的状态才算结果：模型把温故点写回来只为提问（'review'）时，
+      // 它不代表任何作答表现——若当成结果收录，收束时会按"没答出"落成 again，污染记忆状态。
+      if (!WARMUP_RESULT_STATUSES.has(status)) continue;
+      pushOnce(matched, status, Number(point.progress) || 0);
+    }
   }
   return outcomes;
 }
@@ -2097,11 +2135,18 @@ export class AITeachingOrchestrator {
     const turnRuntimeEnvelope = turnResult?.runtimeEnvelope || null;
     const rawTeachingOutput = extractTeachingOutput(turnResult);
     const promptDebug = extractTeachingPromptDebug(turnResult);
-    // 课内温故结果回收：模型用「计划里的原名字」在 knowledge.points 里报告到期旧知的回捞结果。
+    // 课内温故结果回收：**首选**模型的结构化结果 control.warmupOutcomes（2026-09-17 起），
+    // 兼容它仍按「计划里的原名字」写进 knowledge.points 的老行为。
     // 必须在 reconcileTeachingKnowledgeState 的 slice(0,5) 截断**之前**从原始输出里摘——
     // 模型通常把温故点排在本节点之后，先截断会直接丢掉温故结果。
     const rawPoints = Array.isArray(rawTeachingOutput?.knowledge?.points) ? rawTeachingOutput.knowledge.points : [];
-    const warmupOutcomes = extractWarmupOutcomes(context.memoryWarmup, rawPoints);
+    const warmupOutcomes = extractWarmupOutcomes(
+      context.memoryWarmup,
+      rawPoints,
+      rawTeachingOutput?.control?.warmupOutcomes,
+    );
+    // 待回捞点数（模型看到的那份视图）：用于"该报却没报"的告警口径
+    const pendingItems = pendingWarmupForModel(context.memoryWarmup)?.items.length ?? 0;
     const rawBoardOutput = rawPoints.length > 0
       ? {
           ...rawTeachingOutput,
@@ -2421,6 +2466,35 @@ export class AITeachingOrchestrator {
           const merged = warmupOutcomes.length > 0
             ? mergeWarmupOutcomes(asked, warmupOutcomes, new Date().toISOString())
             : asked;
+          // 采样率可观测（2026-09-17）：结构化通道是温故结果的唯一可靠来源，
+          // 因此"模型报了几条 / 代码落地几条 / 丢弃几条"必须留痕——否则丢样本只能靠事后猜。
+          if (Array.isArray(rawTeachingOutput?.control?.warmupOutcomes) && rawTeachingOutput.control.warmupOutcomes.length > 0) {
+            const reported = rawTeachingOutput.control.warmupOutcomes.length;
+            const settled = (merged?.items || []).filter((item) => item?.outcome?.status).length;
+            logger.info('[AITeaching] 温故结构化结果', {
+              sessionId,
+              reported,
+              extracted: warmupOutcomes.length,
+              settled,
+              dropped: reported - warmupOutcomes.length,
+              recalls: rawTeachingOutput.control.warmupOutcomes.map((entry: any) => entry?.recall ?? null),
+            });
+          } else if (pendingItems > 0) {
+            // 有待回捞点却没报结构化结果 → 可能是"这轮刚问、学生还没答"（正常），也可能是真丢样本。
+            // 只在**学生确有机会作答**时告警：该点此前已被问过（askedAt）且其后有学生发言。
+            const askedEarlier = (persistedPlan.items || []).filter((item) => item?.askedAt && !item?.outcome?.status);
+            const hadAnswerChance = askedEarlier.some((item) => (session.messages || []).some((message) => {
+              if (message?.role !== 'user') return false;
+              const at = Date.parse(String(message.timestamp || ''));
+              return Number.isFinite(at) && at > Date.parse(String(item.askedAt));
+            }));
+            if (hadAnswerChance) {
+              logger.warn('[AITeaching] 学生已作答但模型未报 control.warmupOutcomes（温故结果丢失）', {
+                sessionId,
+                pendingItems,
+              });
+            }
+          }
           return merged ? { memoryWarmup: merged } : {};
         })(),
         // 冻结的收束目标集：只增一次，后续回合沿用（防止目标集随模型新增/改名膨胀）

@@ -302,6 +302,28 @@ export interface TeachingTurnOutput {
       options?: Array<{ id: string; text: string }>;
       hint?: string;
     };
+    /**
+     * 课内温故的**结构化结果**（2026-09-17 起为结果判定的唯一通道）。
+     *
+     * 为什么加这个字段：此前结果只能靠"模型把温故点按原名回写进 knowledge.points"，代码再按名字匹配
+     * （`extractWarmupOutcomes`）。实测两次全流程验证一次摘到、一次没摘到（本轮从零回归里
+     * 温故点在消息中出现 5 次、却没进 knowledge.points）——**靠提示词依从性当传感器，约 50% 丢样本**。
+     * 现在结果由本字段直接承载，代码不做名字匹配即可入库（knowledge.points 仍照写，供看板显示）。
+     *
+     * 召回等级按"给了多少帮助才想起来"（desirable difficulty 的观测量）：
+     * - `unaided`：无提示自己说出来
+     * - `with-hint`：给了一条最小提示后说出来
+     * - `failed`：给了最小提示仍说不出来
+     */
+    warmupOutcomes?: Array<{
+      /** 计划项的名字（与 scenario.memoryWarmup.items[].label 一致），与 itemIndex 至少给一个 */
+      conceptKey?: string;
+      /** 计划项下标（0 基）；与 conceptKey 同时给时以 itemIndex 为准 */
+      itemIndex?: number;
+      recall: 'unaided' | 'with-hint' | 'failed';
+      /** 可选：学生原话片段（供事后核对，不进看板） */
+      evidence?: string;
+    }>;
   };
 }
 
@@ -545,8 +567,47 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
       ...(typeof control.checkpoint?.question === 'string' && control.checkpoint.question.trim()
         ? { checkpoint: normalizeCheckpoint(control.checkpoint) }
         : {}),
+      ...(normalizeWarmupOutcomes(control.warmupOutcomes) ?? {}),
     },
   };
+}
+
+/**
+ * 归一化课内温故的结构化结果（契约见 TeachingTurnOutput.control.warmupOutcomes）。
+ * 规则（与其它可选输出的归一化同风格：宁缺毋滥，不编造）：
+ * - 每条必须能定位到计划项（`itemIndex` 非负整数，或非空 `conceptKey`），否则丢弃；
+ * - `recall` 只认三值（大小写/空格容错）；缺失或非法 → 丢弃该条（**不默认猜成一个等级**）；
+ * - 去重（同一下标/键只留第一条）；最多 5 条（温故上限 3 个点，留冗余）。
+ */
+function normalizeWarmupOutcomes(
+  value: unknown,
+): { warmupOutcomes: NonNullable<TeachingTurnOutput['control']['warmupOutcomes']> } | null {
+  if (!Array.isArray(value)) return null;
+  const allowed = new Set(['unaided', 'with-hint', 'failed']);
+  const seen = new Set<string>();
+  const items: NonNullable<TeachingTurnOutput['control']['warmupOutcomes']> = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') continue;
+    const entry = raw as Record<string, any>;
+    const index = Number.isInteger(entry.itemIndex) && entry.itemIndex >= 0 ? Number(entry.itemIndex) : undefined;
+    const conceptKey = typeof entry.conceptKey === 'string' ? entry.conceptKey.trim().slice(0, 200) : '';
+    if (index === undefined && !conceptKey) continue;
+    const recall = typeof entry.recall === 'string' ? entry.recall.trim().toLowerCase() : '';
+    if (!allowed.has(recall)) continue;
+    const dedupeKey = index !== undefined ? `i:${index}` : `k:${conceptKey}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    items.push({
+      ...(index !== undefined ? { itemIndex: index } : {}),
+      ...(conceptKey ? { conceptKey } : {}),
+      recall: recall as 'unaided' | 'with-hint' | 'failed',
+      ...(typeof entry.evidence === 'string' && entry.evidence.trim()
+        ? { evidence: entry.evidence.trim().slice(0, 200) }
+        : {}),
+    });
+    if (items.length >= 5) break;
+  }
+  return items.length > 0 ? { warmupOutcomes: items } : null;
 }
 
 /** 归一化可选检查点输出：question 必填、type/options 兜底校验 */
