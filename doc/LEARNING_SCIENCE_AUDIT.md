@@ -571,6 +571,88 @@ PASS 7  温故项带来源路径   「科普论证复述入门」          ← �
 - **未纳入范围**：显式复习课（`mode='review'`）走的是另一条选点（`LearnerExitService.getDueReview`），
   保持全局——那是学习者**主动要复习**，不属于"本节温故范围"的语义。
 
+## 3.19 skill 层全链路调查（2026-09-17；回应"课堂 skill 有没有做动态"）
+
+**方法**：29 个 `prompts/core/*.yaml`（唯一事实源）按链路分三组**逐条读完**（课堂 6 / 路径 10 / 学习者模型 11），
+每个 skill 记录：消费的动态输入、显式自适应规则（带阈值）、产出与回馈、与代码的重复/冲突、缺口、跨课记忆/自校准。
+
+### (1) 结论先行：**skill 层的动态远比我此前讲的密集——我的旧判断要修正**
+
+| skill | 自适应规则 | 双向 | 带阈值 | 跨课记忆 |
+|---|---|---|---|---|
+| `teaching-turn` | **~22 条** | 是 | 是（loadIndex 0.3 / 0.6–0.8 / 0.85；understanding≥0.8；连续 2 轮；样本 <3/<5；检查点 ≥4 轮）| 是 |
+| `goal-conversation` | ~21 条 | 是（收敛节奏）| 是（overall<60、≥1 轮具体场景、<2 轮禁 confirmed）| 是（自管 state）|
+| `path-planning` | ~13 条 | 是 | 是（milestone 3-6、hub 复用、相邻新概念≤2…）| 是（reviewerFeedback / learnerReplanProjection）|
+| `session-wrapup` | ~8 条 | 是（自评即权威指标）| 是（8-10/5-7/1-4、retrievability<0.8）| 是（reviewHints）|
+| `stage-designer` | 9 条 | 部分 | 是（loadTarget 分档、ICAP 非递减）| 复用重排投影 |
+| 其余 24 个 | 0–6 条 | 多为单向（文案/报告）| 部分是 | 少 |
+
+**课内那条带确实存在**：`teaching-turn` 规则 92 的三路由（`loadIndex<0.3` 且正答 → 抛高阶边界用例/反常识反问；
+`0.6–0.8`"愤悱带" → 只给一条最小提示；`>0.85` → 共情 + 拆步）+ 规则 64（轻松达标→升级／反复失败→降级）+
+规则 109（bored → 换 challenge/reflect）。⇒ **逐回合、双向、有带**。我在对话里说错的那句已当场更正。
+
+### (2) 最重要的结构性发现：分工是「**prompt 定语义/分档，代码定数值/裁决**」
+
+`taskDifficulty.adjusted`（代码 `decideTaskDifficulty`）、`learningControlState.*`（代码 `deriveLearningControlState`）、
+`loadIndex` → `determineNextStage`（代码路由）、BKT 数值（代码 `concept-belief`）、referee/actor-auditor 的
+verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是纪律，不是缺陷**——
+与我一直在做的"LLM 只出观测、档位/数值由代码给"一致。skill 层负责的是**怎么教**，代码层负责**该多难/该多少量**。
+
+### (3) 但查出 12 处**断链 / 死规则 / 双源**（前 4 条本次已亲自复核 ✓）
+
+**P0（规则写了，数据没喂 / 恒值）**
+
+1. **`path-planning` 的 `learnerLearningContext` 是死规则** —— 值在 `learning.service.ts:1821` 赋好，
+   但 `path-planning/index.ts` 的 `buildPromptFriendlyNormalizedInput` **不包含该字段**，全仓再无引用
+   ⇒ 规则 53「按 mastered/fragile/struggling/blocked 校准路径」**永不生效**（**路径生成实际上没看学习者证据**）。【✓复核】
+2. **`peer-reinforcement` 的 `strategy` 恒为 `'feynman'`**（`AITeachingCoordinator.ts:2116,3528`）
+   ⇒ 规则 38「按 `cognitiveLevel` 选手法（类比/反例/辩论）」永不触发；规则 41 的"高负荷"分支因输入无
+   `loadIndex/emotionalState` **不可达**。【✓复核】
+3. **`session-wrapup` 声称有 loadIndex 均值/峰值，实际没有** —— `computeSessionEvidence` 返回
+   （`AITeachingCoordinator.ts:1242-1251`）不含任何 loadIndex；`session_load` 只落 `learning_metrics`、从不进 wrapup payload
+   ⇒ 规则 29/43 按高负荷判定的分支无据。【✓复核】
+4. **`learner-state-review` 的 `priorInsights` 硬编码 `[]`**（`LearnerStateReviewService.ts:279`）
+   ⇒ 历史洞察的自反馈断链（每次评审看不到上次的洞察）。【✓复核】
+
+**P1**
+
+5. `stage-designer` 规则 39 依赖 `milestone.loadTarget`，代码从不注入 → 死规则。
+6. `path-reviewer`：`successCriteria` 未传；yaml 的 input ref（`sandbox:path.normalizedInput.prerequisiteTree`）与代码实传（`analysis.cognitiveCore.prerequisiteTree`）不符。
+7. **replan 召回两套阈值并存**：`LearnerSnapshotService.deriveReplanSignal`（7 reasonCodes）vs `ReplanAdvisoryService.build`（另含 lss≥6 / movedToReview / ktl≥7）→ skill 收到的 `reasonCodes` 与实际召回方向可能不一致。
+8. 4 个 skill 的 yaml **没有 `inputs:` 契约段**（`teaching-opening-generator` / `adaptive-guidance-copy` / `learner-progress-report` / `replan-attribution`）→ 契约只在代码里，迁移风险。
+9. `virtual-learner-referee` 的 `buildUserPayload` 漏发 `storyMeta/metricCompleteness`，但代码用它们打分、yaml 也声明为输入。
+
+**P2（口径 / 理念）**
+
+10. `teaching-turn` 自相矛盾：规则 82「不得自行推断难度档位」vs 规则 108 要求模型自估 `ktEstimate.currentTaskDifficulty`。
+11. `memory-curator`「自评 0.5–0.65 算嘴硬」vs 代码 fallback 阈值 0.65/0.4 —— 口径不一致。
+12. `persona-designer` yaml 要求"禁止兜底句"，代码 normalize 却大量默认值回填 —— 理念冲突（保成功率优先）。
+    另有两处**双源并存**：`recommendedPacing`（runtimeSignals）与 `learningControlState.paceMode`；`loadIndex` 模型自产又自消费、代码也消费。
+
+### (4) 正面的资产：4 处**自我校准**闭环（真实学习者侧只有 2 处）
+
+| skill | 校准方式 |
+|---|---|
+| `learning-predictor` | 预测 → 任务后回填 → 命中率/校准桶 → `reliability` 回注教学（样本 <5 不引用）|
+| `learner-state-review` | 可证伪断言 → hit/miss → hitRate；**被证伪的 claim 不再回注教学** |
+| `virtual-learner-memory-curator` | `selfCalibration` → 回写画像 `selfAssessmentAccuracy` |
+| `virtual-learner-actor-auditor` | `frictionCalibration<60` → 回写 `frictionBudget` |
+
+（后两处在**虚拟学习者**侧，不影响真实学习者。）
+
+### (5) 对前面章节的修正
+
+- **§4.2(2) / §3.10「只有刹车没有油门」只在"跨课档位"成立**（`taskDifficulty` 确实只看状态理由）；
+  **课内不成立**——`teaching-turn` 有 ~22 条双向规则（含 loadIndex 三路由带）。
+- **第三件（目标成功率带）要重新表述**：缺的不是"动态"，而是
+  ① 课内那条带的横轴是**负荷**（loadIndex），不是**成功率**（85% 规则针对错误率，两者相关但不等价）；
+  ② 三条升/降判据（三路由 / cognitiveLevel / bored）彼此独立、**没有统一目标带**；
+  ③ 课内动态**不带跨课记忆**（跨课输入有 lastLessonRecap/behavioralProfile，但没有"最近几节 loadIndex/正答分布"这种**带**）。
+
+### (6) 优先级（据本次调查重排）
+
+**先修断链（便宜、确定、影响大），再谈新测量**：P0 → ①②③④；P1 → ⑤–⑨；P2 → ⑩–⑫；最后才是第三件（目标带 + 独立信号）。
+
 ## 4. 科学性评估（逐机制对照文献）
 
 ### 4.1 有依据且实现得当的部分
@@ -605,6 +687,9 @@ PASS 7  温故项带来源路径   「科普论证复述入门」          ← �
 - **后果**：系统是一个纯阻尼控制器，其稳态就是**最低难度档**。更糟的是，它的"成功"判据是"下一条同路径状态不再触发同类降档理由"（`TaskDifficultyAdjustmentLedger.ts:238-255`）——而降档本身就会让状态回落，所以**它几乎必然报告自己有效**（自我印证的度量）。
 - 与 85% 目标的关系：难度降 → 成功率升到 `>0.9` → 预算升（3.0），但**难度档位不会跟着升**。于是系统会稳定在"高成功率 + 低难度"，这与"把错误率维持在 15%"的文献目标**方向相反**。
   → **已修（结构部分）**：见 §3.10（知识类理由不再降档 + 升档门槛去掉重复消费）；"目标成功率带"的双向闭环仍待定信号。
+  ⚠️ **限定范围（2026-09-17 补）**：本条的"纯阻尼/没有油门"**只对"跨课档位"成立**。**课内**的动态在 skill 层——
+  `teaching-turn` 有 ~22 条带阈值的双向规则（loadIndex 三路由 0.3/0.6–0.8/0.85、cognitiveLevel 升降、bored 判定），
+  详见 §3.19。
 
 **(3) 知识追踪（BKT）：公式对，但既没拟合、也没消费**
 
