@@ -408,6 +408,17 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Tool',
     noPromptFile: true
+  },
+  {
+    id: 'skill:web-fetch',
+    name: '网页抓取 Skill',
+    description: '调用外部抓取 provider（TinyFish / Tavily / Exa）取回指定 URL 的正文内容',
+    category: 'tool',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Tool',
+    noPromptFile: true
   }
 ];
 

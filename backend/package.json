@@ -46,6 +46,7 @@
     "prompts:runtime-contract:check": "npm run runtime:validate && ts-node src/scripts/check-prompt-runtime-contract-metadata-parity.ts",
     "llm:calls:check": "ts-node src/scripts/check-llm-call-boundary.ts",
     "search:check": "ts-node src/scripts/check-web-search.ts",
+    "fetch:check": "ts-node src/scripts/check-web-fetch.ts",
     "prompts:compile-all": "ts-node src/scripts/compile-core-files.ts",
     "verify:kv-prefix-cache": "ts-node src/scripts/verify-kv-prefix-cache.ts",
     "prisma:generate": "npm run prisma:generate:all",

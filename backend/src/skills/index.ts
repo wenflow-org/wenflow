@@ -42,6 +42,10 @@ import { executeMcpTool as executeMcpToolFn } from './mcp-tool';
 export { webSearchDefinition } from './web-search';
 import { executeWebSearch as executeWebSearchFn } from './web-search';
 
+// 网页抓取能力（非 LLM 外挂能力；与 web-search 并列：search 找 URL，fetch 取正文）
+export { webFetchDefinition } from './web-fetch';
+import { executeWebFetch as executeWebFetchFn } from './web-fetch';
+
 // v4 辅助 LLM Skills（由原遗留插件/旁路迁入）
 import { auxSkillDefinitions, auxSkillHandlers } from './v4-aux-skills';
 export { auxSkillDefinitions, auxSkillDefinitionMap } from './v4-aux-skills';
@@ -118,6 +122,7 @@ import { pathReviewerDefinition, pathReviewer as pathReviewerFn } from './path-r
 import { kcMapperDefinition, kcMapper as kcMapperFn } from './kc-mapper';
 import { mcpToolDefinition } from './mcp-tool';
 import { webSearchDefinition } from './web-search';
+import { webFetchDefinition } from './web-fetch';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   stageDesignerDefinition,
@@ -137,6 +142,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   kcMapperDefinition,
   mcpToolDefinition,
   webSearchDefinition,
+  webFetchDefinition,
   ...auxSkillDefinitions,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
   {
@@ -220,6 +226,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'kc-mapper': kcMapperFn,
   'mcp-tool': executeMcpToolFn,
   'web-search': executeWebSearchFn,
+  'web-fetch': executeWebFetchFn,
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
   'goal-conversation': (input: any) => runGoalConversationAgent(input),

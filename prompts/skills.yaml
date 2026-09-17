@@ -525,6 +525,17 @@ skills:
       sandbox: []
     notes: handler-only 外挂能力——handler 委托 backend/src/services/search（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制）；provider 与密钥由 SEARCH_PROVIDER / SEARCH_API_KEY 等环境变量承担，无 DB 直读，dataSource.db 保持空
 
+  - skillId: web-fetch
+    kind: handler-only
+    handlerRef: backend/src/skills/web-fetch/index.ts
+    noPromptFile: true
+    displayName: 网页抓取 Skill
+    description: 调用外部抓取 provider（TinyFish / Tavily / Exa）取回指定 URL 的正文内容
+    dataSource:
+      db: []
+      sandbox: []
+    notes: handler-only 外挂能力——handler 委托 backend/src/services/fetch（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制）；provider 与密钥由 FETCH_PROVIDER / FETCH_API_KEY（缺省复用 SEARCH_API_KEY）等环境变量承担，无 DB 直读，dataSource.db 保持空
+
   # ============ aux（10 条，不进字段路由；v4-aux-skills 注册） ============
   - skillId: teaching-opening-generator
     kind: aux
