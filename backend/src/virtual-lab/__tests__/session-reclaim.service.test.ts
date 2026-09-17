@@ -1,8 +1,10 @@
 import {
   VirtualSessionReclaimService,
   resolveStaleSessionThresholdMs,
+  resolveFastStaleThresholdMs,
   resolveReclaimIntervalMs,
-  DEFAULT_STALE_SESSION_HOURS
+  DEFAULT_STALE_SESSION_HOURS,
+  DEFAULT_FAST_STALE_MINUTES
 } from '../session-reclaim.service'
 import { logger } from '../../utils/logger'
 
@@ -142,6 +144,60 @@ describe('VirtualSessionReclaimService', () => {
     expect(resolveStaleSessionThresholdMs('abc')).toBe(DEFAULT_STALE_SESSION_HOURS * 60 * 60 * 1000)
     expect(resolveReclaimIntervalMs('30')).toBe(30 * 60 * 1000)
     expect(resolveReclaimIntervalMs('0')).toBe(15 * 60 * 1000)
+  })
+
+  it('短周期收敛：阈值取 fastThresholdMs、reason=stale-session-short（审计可区分）', async () => {
+    mockFindMany.mockResolvedValue([staleSession()])
+    mockFindFirst.mockResolvedValue(null)
+    mockUpdate.mockResolvedValue({})
+    mockAuditCreate.mockResolvedValue({})
+    const fastMs = 30 * 60 * 1000
+    const service = new VirtualSessionReclaimService({
+      database: mockDatabase,
+      thresholdMs: 24 * 60 * 60 * 1000,
+      fastThresholdMs: fastMs
+    })
+
+    const result = await service.runFastReclaimOnce({ now: NOW })
+
+    expect(result.thresholdMs).toBe(fastMs)
+    // 查询窗口按短阈值（NOW - 30min），而不是 24h
+    expect(mockFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ updatedAt: { lt: new Date(NOW.getTime() - fastMs) } })
+    }))
+    const stageResults = JSON.parse(mockUpdate.mock.calls[0][0].data.stageResults)
+    expect(stageResults.staleReclaim).toEqual(expect.objectContaining({
+      reason: 'stale-session-short',
+      thresholdMs: fastMs
+    }))
+    const auditCall = mockAuditCreate.mock.calls[0][0].data
+    expect(JSON.parse(auditCall.afterJson)).toEqual(expect.objectContaining({
+      reason: 'stale-session-short',
+      thresholdMs: fastMs
+    }))
+  })
+
+  it('在途自动化（autopilot running）的会话跳过：短周期收敛不得误杀正在跑的会话', async () => {
+    mockFindMany.mockResolvedValue([
+      staleSession({ stageResults: JSON.stringify({ autopilot: { status: 'running' } }) })
+    ])
+    mockFindFirst.mockResolvedValue(null)
+    const service = new VirtualSessionReclaimService({
+      database: mockDatabase,
+      thresholdMs: 24 * 60 * 60 * 1000,
+      fastThresholdMs: 30 * 60 * 1000
+    })
+
+    const result = await service.runFastReclaimOnce({ now: NOW })
+
+    expect(result).toMatchObject({ scanned: 1, reclaimed: 0, skippedActiveAutopilot: 1 })
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('fast 阈值解析：默认 30 分钟、env 可覆盖、非法回退默认', () => {
+    expect(resolveFastStaleThresholdMs(undefined)).toBe(DEFAULT_FAST_STALE_MINUTES * 60 * 1000)
+    expect(resolveFastStaleThresholdMs('10')).toBe(10 * 60 * 1000)
+    expect(resolveFastStaleThresholdMs('abc')).toBe(DEFAULT_FAST_STALE_MINUTES * 60 * 1000)
   })
 
   it('回收中途进入 draining 时停止后续处理', async () => {

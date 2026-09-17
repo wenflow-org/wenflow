@@ -557,6 +557,13 @@ export async function startServer() {
     });
     // 运行期状态错位（如会话已终态但 autopilot 仍 running）也靠同一实现周期收敛
     autopilotService.startReconcileScheduler();
+    // 重启后立即做一次「短周期收敛」：把重启前在跑、重启后已无驱动的虚拟会话从「假运行中」
+    // 收敛掉（阈值默认 30min；硬阈值 24h 回收继续兜底）。仅虚拟实验室会话，不影响真实用户课堂。
+    await virtualSessionReclaimService.runFastReclaimOnce().catch((err) => {
+      logger.warn('[startup] 虚拟会话短周期收敛失败（不阻断启动）', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
     // 出站 RPM 限流配置对齐（平台全局 + 虚拟学习者专属两条通道）
     startRpmLimitSync();
     assertStartupActive();

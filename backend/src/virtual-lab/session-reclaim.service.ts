@@ -14,10 +14,25 @@ import { logger } from '../utils/logger';
 import type { ApplicationLifecycle } from '../services/application-lifecycle.service';
 
 export const DEFAULT_STALE_SESSION_HOURS = 24;
+/**
+ * 「短周期收敛」阈值（分钟）。
+ * 进程重启后，留在 `running/created` 但已无任何驱动的虚拟会话，不必等 24h 才收敛——
+ * 旧行为下前端最长会看到 24h 的「假运行中」。只作用于虚拟实验室会话（`virtual_sessions`），
+ * 不影响真实用户的课堂（`teaching_sessions`）。
+ */
+export const DEFAULT_FAST_STALE_MINUTES = 30;
 export const DEFAULT_RECLAIM_INTERVAL_MS = 15 * 60 * 1000;
 export const RECLAIM_BATCH_SIZE = 50;
 
 const MILLIS_PER_HOUR = 60 * 60 * 1000;
+const MILLIS_PER_MINUTE = 60 * 1000;
+
+/** 阈值的人类可读化（<1h 用分钟） */
+function formatThreshold(thresholdMs: number): string {
+  return thresholdMs < MILLIS_PER_HOUR
+    ? `${Math.round(thresholdMs / MILLIS_PER_MINUTE)} 分钟`
+    : `${Math.round(thresholdMs / MILLIS_PER_HOUR)} 小时`;
+}
 
 export interface StaleSessionReclaimEntry {
   id: string;
@@ -35,6 +50,8 @@ export interface StaleSessionReclaimResult {
   skippedActiveLease: number;
   /** 管理员主动暂停（teaching.paused=true）的会话：无写入是预期行为，跳过回收 */
   skippedPaused: number;
+  /** 仍有在途自动化（autopilot running/queued）的会话：有驱动，跳过 */
+  skippedActiveAutopilot: number;
   sessions: StaleSessionReclaimEntry[];
 }
 
@@ -46,6 +63,16 @@ export function resolveStaleSessionThresholdMs(value: string | undefined): numbe
     return DEFAULT_STALE_SESSION_HOURS * MILLIS_PER_HOUR;
   }
   return parsed * MILLIS_PER_HOUR;
+}
+
+export function resolveFastStaleThresholdMs(value: string | undefined): number {
+  if (!value || value.trim() === '') return DEFAULT_FAST_STALE_MINUTES * MILLIS_PER_MINUTE;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    logger.warn(`[session-reclaim] VLAB_STALE_SESSION_FAST_MINUTES 无效（${value}），使用默认 ${DEFAULT_FAST_STALE_MINUTES} 分钟`);
+    return DEFAULT_FAST_STALE_MINUTES * MILLIS_PER_MINUTE;
+  }
+  return parsed * MILLIS_PER_MINUTE;
 }
 
 export function resolveReclaimIntervalMs(value: string | undefined): number {
@@ -77,18 +104,24 @@ export class VirtualSessionReclaimService {
   private inFlight = false;
   private readonly database: ReclaimDatabase;
   private readonly thresholdMs: number;
+  private readonly fastThresholdMs: number;
   private readonly intervalMs: number;
   private lifecycle: Pick<ApplicationLifecycle, 'isDraining'> | null;
 
-  constructor(options: { database?: ReclaimDatabase; thresholdMs?: number; intervalMs?: number; lifecycle?: Pick<ApplicationLifecycle, 'isDraining'> | null } = {}) {
+  constructor(options: { database?: ReclaimDatabase; thresholdMs?: number; fastThresholdMs?: number; intervalMs?: number; lifecycle?: Pick<ApplicationLifecycle, 'isDraining'> | null } = {}) {
     this.database = options.database ?? prisma;
     this.thresholdMs = options.thresholdMs ?? resolveStaleSessionThresholdMs(process.env.VLAB_STALE_SESSION_HOURS);
+    this.fastThresholdMs = options.fastThresholdMs ?? resolveFastStaleThresholdMs(process.env.VLAB_STALE_SESSION_FAST_MINUTES);
     this.intervalMs = options.intervalMs ?? resolveReclaimIntervalMs(process.env.VLAB_RECLAIM_INTERVAL_MINUTES);
     this.lifecycle = options.lifecycle ?? null;
   }
 
   getThresholdMs(): number {
     return this.thresholdMs;
+  }
+
+  getFastThresholdMs(): number {
+    return this.fastThresholdMs;
   }
 
   getIntervalMs(): number {
@@ -101,7 +134,12 @@ export class VirtualSessionReclaimService {
     this.timer = setInterval(() => {
       if (this.inFlight) return;
       this.inFlight = true;
-      void this.runReclaimOnce().catch((error) => {
+      void (async () => {
+        // ① 硬阈值（默认 24h）：保留原语义与审计 reason
+        await this.runReclaimOnce();
+        // ② 短周期收敛（默认 30min）：把「重启后无驱动却仍显示运行中」的窗口从 24h 缩到分钟级
+        await this.runFastReclaimOnce();
+      })().catch((error) => {
         logger.warn('[session-reclaim] 周期回收失败', {
           error: error instanceof Error ? error.message : String(error)
         });
@@ -112,6 +150,7 @@ export class VirtualSessionReclaimService {
     this.timer.unref?.();
     logger.info('[session-reclaim] 虚拟会话僵尸回收定时任务已启动', {
       thresholdMs: this.thresholdMs,
+      fastThresholdMs: this.fastThresholdMs,
       intervalMs: this.intervalMs
     });
   }
@@ -128,10 +167,20 @@ export class VirtualSessionReclaimService {
 
   /** 执行一轮回收：running/created 超阈值且无活跃租约 → 标记 failed + 审计。dryRun 只报告不改状态。
    *  options.profileIds 提供时只扫描指定虚拟人的会话（管理面「批量清理卡死」按选中行过滤）。 */
-  async runReclaimOnce(options: { dryRun?: boolean; now?: Date; profileIds?: string[] } = {}): Promise<StaleSessionReclaimResult> {
+  async runReclaimOnce(options: {
+    dryRun?: boolean;
+    now?: Date;
+    profileIds?: string[];
+    /** 覆盖阈值（短周期收敛用）；缺省 = 硬阈值（默认 24h） */
+    thresholdMs?: number;
+    /** 留痕用的原因码；缺省 = 'stale-session-timeout' */
+    reason?: string;
+  } = {}): Promise<StaleSessionReclaimResult> {
     const dryRun = options.dryRun ?? false;
     const now = options.now ?? new Date();
-    const threshold = new Date(now.getTime() - this.thresholdMs);
+    const thresholdMs = options.thresholdMs ?? this.thresholdMs;
+    const reason = options.reason ?? 'stale-session-timeout';
+    const threshold = new Date(now.getTime() - thresholdMs);
     const profileIds = Array.isArray(options.profileIds) && options.profileIds.length ? options.profileIds : null;
     const sessions = await this.database.virtual_sessions.findMany({
       where: {
@@ -146,11 +195,12 @@ export class VirtualSessionReclaimService {
 
     const result: StaleSessionReclaimResult = {
       dryRun,
-      thresholdMs: this.thresholdMs,
+      thresholdMs,
       scanned: sessions.length,
       reclaimed: 0,
       skippedActiveLease: 0,
       skippedPaused: 0,
+      skippedActiveAutopilot: 0,
       sessions: []
     };
 
@@ -184,9 +234,21 @@ export class VirtualSessionReclaimService {
         result.skippedPaused += 1;
         continue;
       }
+      // 仍有在途自动化（autopilot running/queued）→ 有驱动，跳过（短周期收敛尤其需要这层保护）
+      let autopilotActive = false;
+      try {
+        const autopilot = JSON.parse(session.stageResults || '{}')?.autopilot;
+        autopilotActive = autopilot?.status === 'running' || autopilot?.status === 'queued';
+      } catch {
+        autopilotActive = false;
+      }
+      if (autopilotActive) {
+        result.skippedActiveAutopilot += 1;
+        continue;
+      }
       result.sessions.push(entry);
       if (!dryRun) {
-        await this.reclaimSession(session, staleMs, now);
+        await this.reclaimSession(session, staleMs, now, thresholdMs, reason);
       }
       result.reclaimed += 1;
     }
@@ -202,8 +264,21 @@ export class VirtualSessionReclaimService {
     return result;
   }
 
+  /**
+   * 短周期收敛一轮：阈值取 `fastThresholdMs`（默认 30 分钟），其余保护（活跃租约 /
+   * teaching.paused / 在途 autopilot）与硬阈值一致。用于把「进程重启后无驱动却仍显示运行中」
+   * 的窗口从 24h 缩到分钟级；硬阈值回收仍继续兜底。
+   */
+  async runFastReclaimOnce(options: { dryRun?: boolean; now?: Date; profileIds?: string[] } = {}): Promise<StaleSessionReclaimResult> {
+    return this.runReclaimOnce({
+      ...options,
+      thresholdMs: this.fastThresholdMs,
+      reason: 'stale-session-short'
+    });
+  }
+
   /** 标记单个僵尸会话为 failed：只改状态 + 审计，不删除任何数据 */
-  private async reclaimSession(session: SessionRow, staleMs: number, now: Date) {
+  private async reclaimSession(session: SessionRow, staleMs: number, now: Date, thresholdMs: number, reason: string) {
     const reclaimedAt = now.toISOString();
     let stageResults: any = {};
     try {
@@ -212,10 +287,10 @@ export class VirtualSessionReclaimService {
       stageResults = {};
     }
     stageResults.staleReclaim = {
-      reason: 'stale-session-timeout',
+      reason,
       reclaimedAt,
       staleMs,
-      thresholdMs: this.thresholdMs,
+      thresholdMs,
       previousStatus: session.status
     };
     // autopilot 状态同步收口（与批量终止同款）：避免「已回收」但仍显示「自动运行中」
@@ -235,8 +310,8 @@ export class VirtualSessionReclaimService {
       timestamp: reclaimedAt,
       phase: 'error',
       details: {
-        error: `僵尸会话自动回收：${session.status} 超过 ${Math.round(this.thresholdMs / MILLIS_PER_HOUR)} 小时无写入`,
-        output: { action: 'stale-session-reclaim', previousStatus: session.status, staleMs }
+        error: `僵尸会话自动回收：${session.status} 超过 ${formatThreshold(thresholdMs)}无写入`,
+        output: { action: 'stale-session-reclaim', reason, thresholdMs, previousStatus: session.status, staleMs }
       }
     });
 
@@ -262,7 +337,7 @@ export class VirtualSessionReclaimService {
         targetType: 'virtual-session',
         targetId: session.id,
         beforeJson: JSON.stringify(before),
-        afterJson: JSON.stringify({ status: 'abandoned', reclaimedAt }),
+        afterJson: JSON.stringify({ status: 'abandoned', reclaimedAt, reason, thresholdMs }),
         method: 'SYSTEM',
         path: '/system/virtual-session-reclaim',
         statusCode: 200,
@@ -273,6 +348,8 @@ export class VirtualSessionReclaimService {
     logger.warn('[session-reclaim] 僵尸虚拟会话已标记 abandoned', {
       sessionId: session.id,
       previousStatus: session.status,
+      reason,
+      thresholdMs,
       staleMs
     });
   }
