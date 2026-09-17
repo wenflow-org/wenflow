@@ -1106,6 +1106,14 @@ async continueConversation(
   /**
    * 重新生成学习路径（基于已完成的对话）
    */
+  /**
+   * 同步重新生成并落库一版路径（完成态）。
+   *
+   * ⚠️ 入口语义（审计 §1.1）：本方法是**虚拟学习者 path-review→replan** 的入口——
+   * `simulation.coordinator` 调完后立刻读 `internal.core.learningPath.id`，因此必须同步生成。
+   * 真实用户「再补充点信息」**不得**走这里（那会绕过显式确认）；用户侧走
+   * `continueConversation`（`step()`）：只更新方案、停在 proposing，等 confirmProposal 才生成。
+   */
   async regeneratePath(
     conversationId: string,
     userId: string,

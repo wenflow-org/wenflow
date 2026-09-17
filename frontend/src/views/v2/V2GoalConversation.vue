@@ -768,8 +768,9 @@ async function doSupplement() {
     await live.supplement(t);
     supplementText.value = '';
     supplementMode.value = false;
-    // supplement 走 /regenerate（同步生成路径）：成功后直接进入 done 态展示路径入口，
-    // 避免响应无 confirmedProposal 导致方案浮层消失的死胡同与重复确认生成的重复路径
+    // 补充说明 = 一次普通回合：后端只更新方案（understanding / confirmedProposal）、
+    // **不生成路径**（生成须用户显式确认，README:113）。因此通常停在 preview 继续让用户确认；
+    // 仅当会话本身已完成（learningPath / isCompleted）时才进 done。
     if (live.learningPath || live.isCompleted || live.stage === 'completed' || live.stage === 'ready') {
       phase.value = 'done';
     } else {

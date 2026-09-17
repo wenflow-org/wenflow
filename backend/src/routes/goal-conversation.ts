@@ -307,32 +307,47 @@ router.post('/:conversationId/regenerate', authMiddleware, goalConversationUserL
   try {
     const userId = req.user?.userId;
     const { conversationId } = req.params;
-    const adjustments = typeof req.body?.adjustments === 'string' ? req.body.adjustments : undefined;
+    const adjustments = typeof req.body?.adjustments === 'string' ? req.body.adjustments.trim() : undefined;
 
     if (!userId) {
       return res.status(401).json({ success: false, error: '用户未认证' });
     }
 
-    if (adjustments && adjustments.length > GOAL_INPUT_MAX_CHARS) {
+    if (!adjustments) {
+      return res.status(400).json({ success: false, error: '补充内容不能为空' });
+    }
+
+    if (adjustments.length > GOAL_INPUT_MAX_CHARS) {
       return res.status(400).json({ success: false, error: `调整说明不能超过 ${GOAL_INPUT_MAX_CHARS} 字符` });
     }
 
+    // 用户侧「再补充点信息」= 一次**普通回合**：只更新方案（understanding / confirmedProposal）、
+    // 停在 proposing，等用户显式确认后才生成路径（README:113）。**本入口不再同步生成路径**。
+    // 说明（审计 §1.1）：`regeneratePath` 有两个消费方——真实用户（本入口）与虚拟学习者的
+    // path-review→replan（`simulation.coordinator` 直调 service）。同步生成是**虚拟侧**所需
+    // （它紧接着要读 learningPath.id），因此按**入口分流**：本入口走 step()，虚拟侧保持直调不变。
     if (String(req.headers?.accept || '').includes('text/event-stream')) {
       return handleStreamingGoal(
         req,
         res,
-        () => requirementOrchestrator.regenerate(conversationId, userId, adjustments?.trim() || undefined),
+        () => requirementOrchestrator.step(conversationId, adjustments, userId, {
+          contextMode: getContextMode(req.body),
+          meta: sanitizeMeta(req.body?.meta)
+        }),
         (result) => goalEnvelopeForRequest(req, result, conversationId)
       );
     }
 
-    const result = await requirementOrchestrator.regenerate(conversationId, userId, adjustments?.trim() || undefined);
+    const result = await requirementOrchestrator.step(conversationId, adjustments, userId, {
+      contextMode: getContextMode(req.body),
+      meta: sanitizeMeta(req.body?.meta)
+    });
     return res.json({
       success: true,
       data: goalEnvelopeForRequest(req, result, conversationId)
     });
   } catch (error: any) {
-    logger.error('重新生成路径失败:', error);
+    logger.error('补充方案失败:', error);
     // 409 必须**透传真实 code**（与 learning.ts 的 sendPathMutationConflict 一致）。
     // 旧实现把所有 409 一律改写成 PATH_GENERATION_RUN_CHANGED「路径正在生成中」，
     // 于是 PATH_MUTATION_HAS_LEARNING_PROGRESS 等真实冲突被误报，用户反复重试且监控按错 code 分支（审计 §1.2）。

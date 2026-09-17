@@ -157,7 +157,7 @@ describe('goal-conversation public route contracts', () => {
     });
   });
 
-  it('uses the route conversation ID when POST /:conversationId/regenerate output omits it', async () => {
+  it('补充说明走普通回合（step）且**不同步生成路径**，返回信封带会话 ID（审计 §1.1）', async () => {
     const result = goalResult({
       internal: {
         ...goalResult().internal,
@@ -167,7 +167,7 @@ describe('goal-conversation public route contracts', () => {
         },
       },
     });
-    mockRequirementOrchestrator.regenerate.mockResolvedValue(result);
+    mockRequirementOrchestrator.step.mockResolvedValue(result);
     const handler = getRouteHandler('/:conversationId/regenerate');
     const res = createResponse();
 
@@ -177,25 +177,38 @@ describe('goal-conversation public route contracts', () => {
       body: { adjustments: '  增加项目练习  ' },
     }, res);
 
-    expect(mockRequirementOrchestrator.regenerate).toHaveBeenCalledWith(
+    expect(mockRequirementOrchestrator.step).toHaveBeenCalledWith(
       'conversation-route-regenerate',
-      'user-1',
       '增加项目练习',
+      'user-1',
+      expect.any(Object),
     );
+    // 关键回归：用户入口不得触碰「同步生成并锁定路径」——那是虚拟侧 path-review→replan 的直调入口
+    expect(mockRequirementOrchestrator.regenerate).not.toHaveBeenCalled();
     expectPublicGoalEnvelope(res.json.mock.calls[0][0], {
       conversationId: 'conversation-route-regenerate',
       runtimeEnvelope: result.runtimeEnvelope,
     });
   });
 
-  it('regenerate 的 409 透传真实冲突 code，不再一律误报「路径正在生成中」（审计 §1.2）', async () => {
-    mockRequirementOrchestrator.regenerate.mockRejectedValue(
+  it('补充说明：空内容 400 且不产生回合（避免空 LLM 回合）', async () => {
+    const handler = getRouteHandler('/:conversationId/regenerate');
+    const res = createResponse();
+
+    await handler({ user: { userId: 'user-1' }, params: { conversationId: 'c1' }, body: {} }, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockRequirementOrchestrator.step).not.toHaveBeenCalled();
+  });
+
+  it('补充说明的 409 透传真实冲突 code，不再一律误报「路径正在生成中」（审计 §1.2）', async () => {
+    mockRequirementOrchestrator.step.mockRejectedValue(
       new PathMutationConflictError('学习路径已有学习进度，不能覆盖', 'PATH_MUTATION_HAS_LEARNING_PROGRESS')
     );
     const handler = getRouteHandler('/:conversationId/regenerate');
     const res = createResponse();
 
-    await handler({ user: { userId: 'user-1' }, params: { conversationId: 'c1' }, body: {} }, res);
+    await handler({ user: { userId: 'user-1' }, params: { conversationId: 'c1' }, body: { adjustments: '调整一下' } }, res);
 
     expect(res.status).toHaveBeenCalledWith(409);
     expect(res.json).toHaveBeenCalledWith({

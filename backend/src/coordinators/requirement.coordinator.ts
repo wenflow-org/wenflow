@@ -27,6 +27,12 @@ class RequirementCoordinator {
     return goalConversationService.continueConversation(conversationId, reply, userId, options);
   }
 
+  /**
+   * ⚠️ 同步生成并锁定一版路径（**非用户入口**）。
+   * 用户侧「再补充点信息」走 `step()`（只更新方案、等显式确认，README:113）；
+   * 虚拟学习者 path-review→replan 直调 `goalConversationService.regeneratePath`。
+   * 保留本方法仅为兼容非用户调用方，请勿从用户路由接入。
+   */
   async regenerate(conversationId: string, userId: string, adjustments?: string) {
     logger.info('[requirement-coordinator] regenerate', {
       agentId: this.id,
