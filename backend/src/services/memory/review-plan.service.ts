@@ -39,6 +39,24 @@ export const LEECH_CONSECUTIVE_AGAIN = 3;
 export const GRADUATE_CONSECUTIVE_SUCCESS = 5;
 /** 动态预算回看的最近检索次数 */
 const OUTCOME_WINDOW = 40;
+/**
+ * 切换预算档位所需的最小结果样本数（2026-09-17，审计 §3.6 问题③）。
+ *
+ * 此前只有 `<0.7` / `>0.9` 两个阈值、没有样本下限 ⇒ **单次结果就能把档位顶到极值**
+ * （实测：1/1 成功 → successRate=1.0 → 预算直接跳到高档 3.0），档位在样本少时剧烈跳动。
+ * 样本不足时保持基准，等样本攒够再分档。
+ */
+export const MIN_BUDGET_SAMPLE = 5;
+/**
+ * 单节课最多可占用的"当日剩余额度"比例（2026-09-17，审计 §3.6 问题②）。
+ *
+ * 当日额度（默认 6.0，≈ 3 节课）是跨会话共享的；此前单节课可一次把剩余额度全吃掉，
+ * 于是"当天的第一节课温故完，后面几节课就一点都温故不了"。给单节课加份额上限，
+ * 让额度在一天内的多节课之间摊开。
+ */
+export const SESSION_DAILY_SHARE_CAP = 0.6;
+/** 单节课的额度下限（负担单位）：剩余不多时也保留这么多，避免"当天第二节课完全不能温故" */
+export const SESSION_DAILY_SHARE_FLOOR = 1.0;
 /** 单元点负担上限（防止多因子连乘放大到一个点吃掉整个预算） */
 const MAX_SINGLE_LOAD = 3.0;
 
@@ -91,9 +109,20 @@ export function estimateConceptLoad(
   return { load: Math.min(MAX_SINGLE_LOAD, Math.round(mapped.load * 100) / 100), factors: [...mapped.factors] };
 }
 
-/** 成功率 → 负担预算（动态：偏低收缩、偏高扩张、无样本取基准） */
-export function computeLoadBudget(successRate: number | null | undefined): number {
+/**
+ * 成功率 → 负担预算（动态：偏低收缩、偏高扩张、无样本/样本不足取基准）
+ *
+ * 2026-09-17 加**样本下限**（审计 §3.6 问题③）：此前无下限，单次结果即可跳档
+ * （1/1 成功 → 高档 3.0；1/1 失败 → 低档 1.0）。现要求至少 `MIN_BUDGET_SAMPLE` 条结果才分档。
+ *
+ * @param successRate 近期检索成功率（null/NaN = 无样本）
+ * @param sampleSize 该成功率背后的结果条数（缺省 0 = 不足 → 基准）
+ */
+export function computeLoadBudget(successRate: number | null | undefined, sampleSize = 0): number {
   if (successRate === null || successRate === undefined || !Number.isFinite(successRate)) {
+    return BASE_LOAD_BUDGET;
+  }
+  if (!Number.isFinite(sampleSize) || sampleSize < MIN_BUDGET_SAMPLE) {
     return BASE_LOAD_BUDGET;
   }
   if (successRate < 0.7) return LOW_LOAD_BUDGET;
@@ -367,7 +396,8 @@ export async function buildReviewPlan(
 
   const outcomes = await loadRecentOutcomes(userId, OUTCOME_WINDOW, deps);
   const successRate = computeSuccessRate(outcomes);
-  const budget = computeLoadBudget(successRate);
+  // 样本量一并传入：样本不足时不分档（防"1/1 成功即跳高档"，审计 §3.6 问题③）
+  const budget = computeLoadBudget(successRate, outcomes.length);
   const failures = consecutiveFailures(outcomes);
   const successes = consecutiveSuccesses(outcomes);
 
@@ -408,17 +438,29 @@ export async function buildReviewPlan(
 
   // 当日额度（跨会话共享）：今天已经接过的量会压缩本节可用预算；
   // 额度用完则本节不温故（**顺延到明天**，而不是把剩下的今天全倒出来）。
-  const daily = await deps.getDailyState(userId).catch(() => ({
-    date: now.toISOString().slice(0, 10),
-    limitLoad: budget,
-    usedLoad: 0,
-    usedCount: 0,
-    // 读不到额度 → 退回"按会话预算走"（不能让一次读失败把温故整个关掉）
-    remainingLoad: budget,
-    reservedKeys: [] as string[],
-  }));
+  const dailyRead = await deps.getDailyState(userId)
+    .then((state) => ({ ok: true as const, state }))
+    .catch(() => ({
+      ok: false as const,
+      state: {
+        date: now.toISOString().slice(0, 10),
+        limitLoad: budget,
+        usedLoad: 0,
+        usedCount: 0,
+        // 读不到额度 → 退回"按会话预算走"（不能让一次读失败把温故整个关掉）
+        remainingLoad: budget,
+        reservedKeys: [] as string[],
+      },
+    }));
+  const daily = dailyRead.state;
   const reservedToday = new Set(daily.reservedKeys.map((key) => normalizeConceptKey(key)));
-  const effectiveBudget = Math.round(Math.min(budget, daily.remainingLoad) * 100) / 100;
+  // 单节课份额上限（审计 §3.6 问题②）：不让当天第一节课把剩余额度一次吃光；
+  // 下限 SESSION_DAILY_SHARE_FLOOR 保证"剩余很少时"行为与旧版一致（额度本身仍是硬约束）。
+  // 额度**读不到**时不启用份额上限（fallback 的语义就是"没有额度信息，按会话预算走"）。
+  const sessionShareCap = dailyRead.ok
+    ? Math.max(SESSION_DAILY_SHARE_FLOOR, daily.remainingLoad * SESSION_DAILY_SHARE_CAP)
+    : Number.POSITIVE_INFINITY;
+  const effectiveBudget = Math.round(Math.min(budget, daily.remainingLoad, sessionShareCap) * 100) / 100;
 
   // 队列（按**概念族**计，同一概念的多种说法只占一个排队位）：
   // leech 已转"回路径重学"、毕业点不再按计划间隔回捞 —— 都不算"排队中"。

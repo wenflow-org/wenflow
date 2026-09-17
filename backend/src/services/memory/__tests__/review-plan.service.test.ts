@@ -10,6 +10,7 @@ import {
   BASE_LOAD_BUDGET,
   HIGH_LOAD_BUDGET,
   LOW_LOAD_BUDGET,
+  MIN_BUDGET_SAMPLE,
   type ReviewPlanDeps,
   type WarmupOutcome,
 } from '../review-plan.service';
@@ -104,17 +105,24 @@ describe('computeLoadBudget（动态预算：由检索成功率校准）', () =>
   });
 
   it('成功率偏低（<70%）→ 收缩预算', () => {
-    expect(computeLoadBudget(0.5)).toBe(LOW_LOAD_BUDGET);
+    expect(computeLoadBudget(0.5, 8)).toBe(LOW_LOAD_BUDGET);
   });
 
   it('成功率偏高（>90%）→ 扩张预算', () => {
-    expect(computeLoadBudget(0.95)).toBe(HIGH_LOAD_BUDGET);
+    expect(computeLoadBudget(0.95, 8)).toBe(HIGH_LOAD_BUDGET);
   });
 
   it('有益困难区间（70%–90%）→ 基准预算', () => {
-    expect(computeLoadBudget(0.7)).toBe(BASE_LOAD_BUDGET);
-    expect(computeLoadBudget(0.85)).toBe(BASE_LOAD_BUDGET);
-    expect(computeLoadBudget(0.9)).toBe(BASE_LOAD_BUDGET);
+    expect(computeLoadBudget(0.7, 8)).toBe(BASE_LOAD_BUDGET);
+    expect(computeLoadBudget(0.85, 8)).toBe(BASE_LOAD_BUDGET);
+    expect(computeLoadBudget(0.9, 8)).toBe(BASE_LOAD_BUDGET);
+  });
+
+  it('样本不足（<5）→ 基准预算：单次结果不能把档位顶到极值（审计 §3.6 问题③）', () => {
+    expect(computeLoadBudget(1.0, 1)).toBe(BASE_LOAD_BUDGET);
+    expect(computeLoadBudget(0.0, 3)).toBe(BASE_LOAD_BUDGET);
+    expect(computeLoadBudget(1.0)).toBe(BASE_LOAD_BUDGET); // 不传样本量 = 视为不足
+    expect(computeLoadBudget(0.95, MIN_BUDGET_SAMPLE)).toBe(HIGH_LOAD_BUDGET); // 恰好够 → 分档
   });
 });
 
@@ -220,9 +228,13 @@ describe('buildReviewPlan（课内温故计划）', () => {
 
   it('预算收缩到 1.0 时仍接住最急的那个点（这节课就是为它来的）', async () => {
     const deps = buildDeps({
+      // 5 条 again = 样本够且成功率 0 → 才收缩到低档（样本不足时保持基准，见 computeLoadBudget 用例）
       findEvidence: jest.fn().mockResolvedValue([
         { payload: JSON.stringify({ conceptKey: '复合点', rating: 'again' }), occurredAt: new Date() },
-        { payload: JSON.stringify({ conceptKey: '其它', rating: 'again' }), occurredAt: new Date() },
+        ...Array.from({ length: 4 }, (_, i) => ({
+          payload: JSON.stringify({ conceptKey: `其它${i}`, rating: 'again' }),
+          occurredAt: new Date(),
+        })),
       ]),
       getDueTraces: jest.fn().mockResolvedValue([
         trace({ conceptKey: '复合点', label: '翻页与立好的配合', retention: 0.2 }),
@@ -293,11 +305,15 @@ describe('buildReviewPlan（课内温故计划）', () => {
     expect(plan.backlogCount).toBe(0);
   });
 
-  it('高成功率 → 预算扩张，能带 3 个原子点', async () => {
+  it('高成功率（样本充足）→ 预算扩张，能带 3 个原子点', async () => {
     const deps = buildDeps({
-      findEvidence: jest.fn().mockResolvedValue([
-        { payload: JSON.stringify({ conceptKey: 'X', rating: 'easy' }), occurredAt: new Date() },
-      ]),
+      // 6 条 easy = 样本够 → 才允许分档（样本不足时保持基准，见 computeLoadBudget 用例）
+      findEvidence: jest.fn().mockResolvedValue(
+        Array.from({ length: 6 }, () => ({
+          payload: JSON.stringify({ conceptKey: 'X', rating: 'easy' }),
+          occurredAt: new Date(),
+        })),
+      ),
       getDueTraces: jest.fn().mockResolvedValue([
         trace({ conceptKey: 'A', retention: 0.3 }),
         trace({ conceptKey: 'B', retention: 0.4 }),
@@ -433,11 +449,45 @@ describe('buildReviewPlan（课内温故计划）', () => {
       ]),
     });
     const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
-    // 会话预算本来是 3.0（高成功率），被当日剩余额度压到 1.0 → 只接 1 个原子点
+    // 只有 1 条结果（样本不足）→ 会话预算取基准 2.0，再被当日剩余额度压到 1.0 → 只接 1 个原子点
     expect(plan.budget).toBe(1);
     expect(plan.items).toHaveLength(1);
     expect(plan.daily).toMatchObject({ limitLoad: 6, usedLoad: 5, remainingLoad: 1 });
     expect(plan.backlogCount).toBe(2);
+  });
+
+  it('单节课份额上限：不让当天第一节课把剩余额度一次吃光（审计 §3.6 问题②）', async () => {
+    const easy = Array.from({ length: 6 }, () => ({
+      payload: JSON.stringify({ conceptKey: 'X', rating: 'easy' }),
+      occurredAt: new Date(),
+    }));
+    const deps = buildDeps({
+      // 样本够（6 条全 easy）→ 会话预算 3.0（高档）
+      findEvidence: jest.fn().mockResolvedValue(easy),
+      // 当日剩余 3.0：旧版会一次吃掉 3.0；本节份额上限 = max(1.0, 3.0×0.6) = 1.8
+      getDailyState: jest.fn().mockResolvedValue({
+        date: '2026-09-15', limitLoad: 6, usedLoad: 3, usedCount: 2, remainingLoad: 3, reservedKeys: [],
+      }),
+      getDueTraces: jest.fn().mockResolvedValue([
+        trace({ conceptKey: 'A', label: 'A', retention: 0.3 }),
+        trace({ conceptKey: 'B', label: 'B', retention: 0.4 }),
+        trace({ conceptKey: 'C', label: 'C', retention: 0.5 }),
+      ]),
+    });
+    const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
+    expect(plan.budget).toBe(1.8);
+
+    // 额度充足（剩余 6.0 > 3.6）时份额上限不生效，高档预算照常给足
+    const rich = buildDeps({
+      findEvidence: jest.fn().mockResolvedValue(easy),
+      getDueTraces: jest.fn().mockResolvedValue([
+        trace({ conceptKey: 'A', label: 'A', retention: 0.3 }),
+        trace({ conceptKey: 'B', label: 'B', retention: 0.4 }),
+        trace({ conceptKey: 'C', label: 'C', retention: 0.5 }),
+      ]),
+    });
+    const richPlan = await buildReviewPlan('u1', { deps: rich, now: new Date('2026-09-15') });
+    expect(richPlan.budget).toBe(HIGH_LOAD_BUDGET);
   });
 
   it('当日额度用完 → 本节不温故（顺延到明天），但仍诚实报出积压与重学建议', async () => {
