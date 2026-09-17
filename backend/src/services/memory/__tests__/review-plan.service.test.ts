@@ -73,10 +73,14 @@ describe('estimateConceptLoad（单个知识点的认知负担）', () => {
     expect(estimateConceptLoad('收尾流程').factors).toContain('type:process');
   });
 
-  it('生疏（掌握弱）→ ×1.3；掌握稳的不加价', () => {
-    expect(estimateConceptLoad('CAP 定理', { masteryScore: 0.3 }).load).toBe(1.3);
-    expect(estimateConceptLoad('CAP 定理', { masteryScore: 0.3 }).factors).toContain('unfamiliar:mastery');
+  it('生疏（掌握弱）**不再加价**——它本来就是到期的原因，不是额外的负担（语义修复）', () => {
+    expect(estimateConceptLoad('CAP 定理', { masteryScore: 0.3 }).load).toBe(1);
+    expect(estimateConceptLoad('CAP 定理', { masteryScore: 0.3 }).factors).not.toContain('unfamiliar:mastery');
     expect(estimateConceptLoad('CAP 定理', { masteryScore: 0.85 }).load).toBe(1);
+  });
+
+  it('两个原子点正好吃满基准预算（这就是「2.0 ≈ 两个原子点」的可达性）', () => {
+    expect(estimateConceptLoad('CAP 定理').load + estimateConceptLoad('幂等性').load).toBe(BASE_LOAD_BUDGET);
   });
 
   it('多因子连乘有上限（不会一个点吃掉整个预算）', () => {
@@ -84,7 +88,7 @@ describe('estimateConceptLoad（单个知识点的认知负担）', () => {
       masteryScore: 0.2,
     });
     expect(result.load).toBeLessThanOrEqual(3);
-    expect(result.factors.length).toBeGreaterThan(2);
+    expect(result.factors).toEqual(expect.arrayContaining(['granularity:long', 'type:process']));
   });
 
   it('空名字回退为 1', () => {

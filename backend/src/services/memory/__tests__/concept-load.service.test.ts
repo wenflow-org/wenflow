@@ -103,14 +103,15 @@ describe('estimateConceptLoad 优先用 LLM 档位（正则误判被替掉）', 
     expect(withProfile.factors).toEqual([]);
   });
 
-  it('LLM 看出正则漏掉的技能簇 → 采用 LLM 并标 llm: 因子；掌握弱仍按数据加价', () => {
+  it('LLM 看出正则漏掉的技能簇 → 采用 LLM 并标 llm: 因子（掌握弱不再额外加价，见 §3.16）', () => {
     const name = 'CAP 定理';
     const withProfile = estimateConceptLoad(name, {
       masteryScore: 0.3,
       profile: profile({ conceptKey: name, label: name, granularity: 'cluster', difficultyBand: 'high' }),
     });
-    expect(withProfile.factors).toEqual(expect.arrayContaining(['llm:cluster', 'llm:hard', 'unfamiliar:mastery']));
-    expect(withProfile.load).toBeCloseTo(Math.min(3, GRANULARITY_FACTOR * HARD_FACTOR * 1.3), 2);
+    expect(withProfile.factors).toEqual(expect.arrayContaining(['llm:cluster', 'llm:hard']));
+    expect(withProfile.factors).not.toContain('unfamiliar:mastery');
+    expect(withProfile.load).toBeCloseTo(Math.min(3, GRANULARITY_FACTOR * HARD_FACTOR), 2);
   });
 
   it('无档位时行为与旧版一致（回归）', () => {

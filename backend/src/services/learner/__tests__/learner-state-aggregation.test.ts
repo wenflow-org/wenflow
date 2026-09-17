@@ -89,7 +89,11 @@ describe('getAggregatedState（按路径 max 聚合 + 当日课量）', () => {
     (prisma.subtasks.count as jest.Mock).mockResolvedValue(10);
     (prisma.teaching_sessions.aggregate as jest.Mock).mockResolvedValue({ _sum: { duration: 0 } });
 
-    const aggregated = await learningStateService.getAggregatedState('u1');
+    // 必须锚定 asOf：不传就会用真实墙钟，而快照时间戳是固定的 → 每过一天这条会被自然衰减掉
+    // （2026-09-17 实测：ld 衰减后 9.5→7.342，+2.0 加成 = 9.342，断言假失败）
+    const aggregated = await learningStateService.getAggregatedState('u1', {
+      asOf: new Date('2026-09-16T04:00:00Z'),
+    });
     expect(aggregated!.metrics.lf).toBe(10);
   });
 

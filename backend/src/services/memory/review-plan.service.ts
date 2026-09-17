@@ -23,7 +23,7 @@ import { getDailyState as defaultGetDailyState, type ReviewDailyState } from './
 import { mapReviewStatusToRating, type ReviewRating } from '../learner/ReviewCompletedConsumer';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 
-/** 基准负担预算（负担单位）：约等于「两个原子点」或「一个复合点 + 一个原子点」 */
+/** 基准负担预算（负担单位）：约等于**两个原子点**（1.0+1.0），或一个复合/流程点（1.5） */
 export const BASE_LOAD_BUDGET = 2.0;
 /** 成功率偏低（点太难/预算偏高）时的收缩预算 */
 export const LOW_LOAD_BUDGET = 1.0;
@@ -84,16 +84,11 @@ export function estimateConceptLoad(
   }
 
   const mapped = mapProfileToLoad({ profile: opts.profile, ruleLoad, ruleFactors });
-  let load = mapped.load;
-  const factors = [...mapped.factors];
-
-  const mastery = Number(opts.masteryScore);
-  if (Number.isFinite(mastery) && mastery < 0.5) {
-    load *= 1.3;
-    factors.push('unfamiliar:mastery');
-  }
-
-  return { load: Math.min(MAX_SINGLE_LOAD, Math.round(load * 100) / 100), factors };
+  // 掌握度**不作为负担乘数**（2026-09-17 修正）：到期项几乎必然掌握弱，×1.3 等于给**每一条**统一加价，
+  // 只把预算语义"2.0 ≈ 两个原子点"架空（1.3×2 > 2.0 ⇒ 永远只装得下 1 条，吞吐被腰斩），
+  // 却不提供任何区分度（"生疏"本来就是它到期的原因，选点顺序也已按保留率从低到高排）。
+  // 真正有区分度的是复合/流程（结构复杂度），保留。
+  return { load: Math.min(MAX_SINGLE_LOAD, Math.round(mapped.load * 100) / 100), factors: [...mapped.factors] };
 }
 
 /** 成功率 → 负担预算（动态：偏低收缩、偏高扩张、无样本取基准） */
