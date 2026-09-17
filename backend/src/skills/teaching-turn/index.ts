@@ -165,7 +165,7 @@ export interface TeachingTurnInput {
       usedLoad?: number;
       backlogCount?: number;
       successRate?: number | null;
-      relearnSuggestions?: Array<{ conceptKey?: string; label?: string; consecutiveAgain?: number }>;
+      relearnSuggestions?: Array<{ conceptKey?: string; label?: string; consecutiveAgain?: number; reason?: string }>;
     } | null;
     /** 前端交互特征情报（认知负荷量测）：本轮统计 + 近轮对比，仅供判断 loadIndex */
     interactionProfile?: {

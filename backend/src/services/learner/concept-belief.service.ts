@@ -5,6 +5,12 @@
  * - 观测来自 LLM 诊断（learner-state-review 的 conceptAssessments.observed：mastered|not）
  * - 代码用 BKT 公式做时序信念更新（4 个可配置标量，按需分档）
  * - 落 `learner_projections`（scope='beliefs'），按 (userId, pathId) 幂等
+ *
+ * **角色与诚实边界（2026-09-17，审计 §4.2(3) / §7 P1-3）**：
+ * - 参数是**未拟合的先验**（不是拟合结果），已补经典约束校验（`validateBktParams`，启动即校验分档表）；
+ * - 观测是 LLM 的语义判断，**不满足 BKT 的"单技能二值作答"假设** ⇒ 不宜作为调度真值；
+ * - 因此 pKnowL **不驱动间隔/难度**，只用于一个**有界判定**：与状态背离时的重学建议
+ *   （见 `review-plan.service` 的 `belief-divergence`：状态说掌握、信念说没掌握 → 建议回路径重学）。
  */
 
 import prisma from '../../config/database';
@@ -43,8 +49,33 @@ export const DEFAULT_BKT_PARAMS: BktParams = { pL0: 0.3, pT: 0.15, pG: 0.25, pS:
 export const BKT_PARAM_TIERS: Record<'easy' | 'medium' | 'hard', BktParams> = {
   easy: { pL0: 0.4, pT: 0.2, pG: 0.15, pS: 0.08 },
   medium: DEFAULT_BKT_PARAMS,
-  hard: { pL0: 0.2, pT: 0.1, pG: 0.35, pS: 0.15 },
+  // 难点档位（2026-09-17 约束修正）：原为 pG 0.35 / pS 0.15，**违反经典参数约束**
+  // （Baker 等建议 pG<0.5、pS<0.5；Corbett & Anderson 1995 更严：pG<0.3、pS<0.1，且 pG+pS<1）。
+  // 现收敛到 pG 0.25 / pS 0.1："难点噪声更大"的意图改由更低的 pT（0.1）与 pL0（0.2）承担——
+  // 即"一次机会不足以跨越、起点先验更低"，而不是靠违规的猜对/失误率。
+  hard: { pL0: 0.2, pT: 0.1, pG: 0.25, pS: 0.1 },
 };
+
+/**
+ * BKT 参数约束校验（零训练先验的护栏）。
+ * 违反约束不会抛错（历史信念已按旧参数算过），但会记一条 warn 供排查——
+ * 审计 §4.2(3) 指出参数既未拟合、又未校验，这里是"至少把校验补上"的那一半。
+ */
+export function validateBktParams(params: BktParams, label: string): string[] {
+  const issues: string[] = [];
+  const { pL0, pT, pG, pS } = params;
+  for (const [name, value] of Object.entries({ pL0, pT, pG, pS })) {
+    if (!Number.isFinite(value) || value < 0 || value > 1) issues.push(`${name} 不在 0-1：${value}`);
+  }
+  if (pG + pS >= 1) issues.push(`pG+pS≥1（不可辨识）：${pG}+${pS}`);
+  if (pG >= 0.3) issues.push(`pG≥0.3 超出 Corbett & Anderson 1995 建议：${pG}`);
+  if (pS > 0.1) issues.push(`pS>0.1 超出 Corbett & Anderson 1995 建议：${pS}`);
+  if (issues.length > 0) logger.warn('[bkt] 参数违反经典约束（零训练先验）', { label, issues });
+  return issues;
+}
+
+// 启动即校验分档参数表：违反约束在启动日志里 warn（而不是静默使用违规参数）
+for (const [tier, params] of Object.entries(BKT_PARAM_TIERS)) validateBktParams(params, `tier:${tier}`);
 
 /** 难度档位 → BKT 参数（unknown/null 走 medium） */
 export function resolveBktParamsForDifficulty(

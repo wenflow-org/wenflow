@@ -14,6 +14,8 @@ import {
   conceptBeliefService,
   beliefProjectionKey,
   DEFAULT_BKT_PARAMS,
+  BKT_PARAM_TIERS,
+  validateBktParams,
 } from '../concept-belief.service'
 
 describe('concept-belief.service (BKT, 零训练)', () => {
@@ -59,5 +61,19 @@ describe('concept-belief.service (BKT, 零训练)', () => {
     const payload = await conceptBeliefService.applyObservations('u1', 'lp1', [{ conceptKey: 'c1', observed: false }])
     expect(payload?.beliefs.c1.observations).toBe(4)
     expect(payload?.beliefs.c1.pKnowL).toBeLessThan(0.8)
+  })
+})
+
+describe('BKT 参数约束（审计 §4.2(3)：此前既未拟合、也未校验）', () => {
+  it('全部分档参数都满足经典约束（pG<0.3、pS≤0.1、pG+pS<1、各值在 0-1）', () => {
+    for (const [tier, params] of Object.entries(BKT_PARAM_TIERS)) {
+      expect(validateBktParams(params, tier)).toEqual([])
+    }
+  })
+
+  it('违规参数会被点名（pG 0.35 / pS 0.15 的旧 hard 档就是反例）', () => {
+    const issues = validateBktParams({ pL0: 0.2, pT: 0.1, pG: 0.35, pS: 0.15 }, 'legacy-hard')
+    expect(issues.join('｜')).toContain('pG≥0.3')
+    expect(issues.join('｜')).toContain('pS>0.1')
   })
 })

@@ -274,8 +274,38 @@ describe('buildReviewPlan（课内温故计划）', () => {
     const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
     expect(plan.items).toHaveLength(0);
     expect(plan.relearnSuggestions).toEqual([
-      { conceptKey: '老卡点', label: '老卡点', consecutiveAgain: 3 },
+      { conceptKey: '老卡点', label: '老卡点', consecutiveAgain: 3, reason: 'leech' },
     ]);
+  });
+
+  it('信念背离：状态说掌握、BKT 信念很低 → 进重学建议（不占温故名额）', async () => {
+    const deps = buildDeps({
+      getDueTraces: jest.fn().mockResolvedValue([
+        trace({ conceptKey: '虚高掌握点', label: '虚高掌握点', masteryScore: 0.9, retention: 0.3 }),
+        trace({ conceptKey: '正常点', label: '正常点', masteryScore: 0.8, retention: 0.4 }),
+      ]),
+      loadConceptBeliefs: jest.fn().mockResolvedValue(new Map<string, number>([
+        ['虚高掌握点', 0.1], // masteryScore 0.9 但信念 0.1 → 背离
+        ['正常点', 0.85],
+      ])),
+    });
+    const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
+    expect(plan.relearnSuggestions).toEqual([
+      { conceptKey: '虚高掌握点', label: '虚高掌握点', consecutiveAgain: 0, reason: 'belief-divergence' },
+    ]);
+    expect(plan.items.map((item) => item.conceptKey)).toEqual(['正常点']);
+  });
+
+  it('信念读不到（dep 缺省/读失败）→ 不产生背离建议，其余行为不变', async () => {
+    const deps = buildDeps({
+      getDueTraces: jest.fn().mockResolvedValue([
+        trace({ conceptKey: 'A', label: 'A', masteryScore: 0.9, retention: 0.3 }),
+      ]),
+      loadConceptBeliefs: jest.fn().mockRejectedValue(new Error('projection down')),
+    });
+    const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
+    expect(plan.relearnSuggestions).toHaveLength(0);
+    expect(plan.items.map((item) => item.conceptKey)).toEqual(['A']);
   });
 
   it('毕业：连续 5 次成功 → 不再按计划间隔回捞，但保留率跌破阈值时仍回捞', async () => {

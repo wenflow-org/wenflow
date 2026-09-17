@@ -21,6 +21,7 @@ import { memoryTraceService, normalizeConceptKey } from './memory-trace.service'
 import { conceptLoadService, mapProfileToLoad, type ConceptLoadProfile } from './concept-load.service';
 import { getDailyState as defaultGetDailyState, type ReviewDailyState } from './review-quota.service';
 import { mapReviewStatusToRating, type ReviewRating } from '../learner/ReviewCompletedConsumer';
+import { conceptBeliefService } from '../learner/concept-belief.service';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 
 /** 基准负担预算（负担单位）：约等于**两个原子点**（1.0+1.0），或一个复合/流程点（1.5） */
@@ -57,6 +58,18 @@ export const MIN_BUDGET_SAMPLE = 5;
 export const SESSION_DAILY_SHARE_CAP = 0.6;
 /** 单节课的额度下限（负担单位）：剩余不多时也保留这么多，避免"当天第二节课完全不能温故" */
 export const SESSION_DAILY_SHARE_FLOOR = 1.0;
+/**
+ * 信念背离判定（2026-09-17，审计 §4.2(3)/§7 P1-3：`pKnowL` 此前零下游消费）。
+ *
+ * 语义：状态/自评说"掌握了"（masteryScore ≥ `BELIEF_DIVERGENCE_MASTERY`）但 BKT 信念仍很低
+ * （pKnowL ≤ `BELIEF_DIVERGENCE_PKNOWL`）→ 判为"记住了答案但没形成理解"，
+ * 建议**回路径重学**而不是继续按间隔回捞。
+ *
+ * 边界（刻意不做的事）：**不改间隔、不改难度档位** —— BKT 参数未拟合、观测不满足其假设
+ * （LLM 语义判断 ≠ 单技能二值作答），只允许它影响"这条建议"，不允许它改调度真值。
+ */
+export const BELIEF_DIVERGENCE_MASTERY = 0.7;
+export const BELIEF_DIVERGENCE_PKNOWL = 0.2;
 /** 单元点负担上限（防止多因子连乘放大到一个点吃掉整个预算） */
 const MAX_SINGLE_LOAD = 3.0;
 
@@ -162,7 +175,15 @@ export interface ReviewPlanItem {
 export interface RelearnSuggestion {
   conceptKey: string;
   label: string;
+  /** 连续答错次数（leech 判定用）；信念背离判定不适用时为 0（见 reason） */
   consecutiveAgain: number;
+  /**
+   * 触发原因：
+   * - `leech`：连续答错 ≥ LEECH_CONSECUTIVE_AGAIN → 退出复习队列，回路径重学；
+   * - `belief-divergence`（2026-09-17）：状态/自评显示已掌握，但 BKT 信念仍很低 →
+   *   更像"记住了答案没形成理解"，继续按间隔回捞收益低，建议回路径重学。
+   */
+  reason: 'leech' | 'belief-divergence';
 }
 
 export interface ReviewPlan {
@@ -208,6 +229,11 @@ export interface ReviewPlanDeps {
   getDailyState: (userId: string) => Promise<ReviewDailyState>;
   /** 明天预计到期的点数（首页"明日预告"，不参与选点） */
   countDueBetween: (userId: string, from: Date, to: Date) => Promise<number>;
+  /**
+   * 概念信念（BKT `pKnowL`，**只读**）：仅用于"状态说掌握、信念说没掌握"的背离判定
+   * （`belief-divergence` → 回路径重学建议）。**不参与间隔/难度/排序**（见常量注释的边界）。
+   */
+  loadConceptBeliefs?: (userId: string, pathId: string | null) => Promise<Map<string, number>>;
 }
 
 const defaultDeps: ReviewPlanDeps = {
@@ -220,6 +246,13 @@ const defaultDeps: ReviewPlanDeps = {
   countDueBetween: async (userId, from, to) => prisma.memory_traces.count({
     where: { userId, extractionCount: { gt: 0 }, dueAt: { gt: from, lte: to } },
   }),
+  // 概念信念（只读）：背离判定用；读不到就当没有信念（不影响其余行为）
+  loadConceptBeliefs: async (userId, pathId) => {
+    const payload = await conceptBeliefService.getBeliefs(userId, pathId);
+    return new Map(
+      Object.entries(payload?.beliefs ?? {}).map(([key, value]) => [normalizeConceptKey(key), value.pKnowL]),
+    );
+  },
 };
 
 /** 从 learner_evidence 读近期检索结果（review:warmup / review:completed 两类同源） */
@@ -414,6 +447,10 @@ export async function buildReviewPlan(
   // 这里再按族名收敛，避免「换一种说法」重复占用温故预算）
   const byFamily = new Map<string, (typeof due)[number]>();
   const relearn = new Map<string, RelearnSuggestion>();
+  // 概念信念（BKT pKnowL，只读；缺省/读失败 = 无信念 → 不参与判定）
+  const beliefs = deps.loadConceptBeliefs
+    ? await deps.loadConceptBeliefs(userId, scopePathId).catch(() => new Map<string, number>())
+    : new Map<string, number>();
   for (const trace of due) {
     if (!trace.conceptKey) continue;
     const family = normalizeConceptKey(trace.conceptKey);
@@ -428,6 +465,24 @@ export async function buildReviewPlan(
           conceptKey: family,
           label: trace.label || trace.conceptKey,
           consecutiveAgain: failures.get(family) ?? LEECH_CONSECUTIVE_AGAIN,
+          reason: 'leech',
+        });
+      }
+      continue;
+    }
+    // 信念背离（2026-09-17，审计 §4.2(3)：pKnowL 此前零下游消费）：
+    // 状态/自评说"掌握了"但 BKT 信念仍很低 → 判为"记住了答案没形成理解"，
+    // 继续按间隔回捞收益低 → 建议回路径重学（只产建议，**不改间隔/档位**）。
+    const pKnowL = beliefs.get(family);
+    if (pKnowL !== undefined
+      && pKnowL <= BELIEF_DIVERGENCE_PKNOWL
+      && Number(trace.masteryScore) >= BELIEF_DIVERGENCE_MASTERY) {
+      if (!relearn.has(family)) {
+        relearn.set(family, {
+          conceptKey: family,
+          label: trace.label || trace.conceptKey,
+          consecutiveAgain: 0,
+          reason: 'belief-divergence',
         });
       }
       continue;
