@@ -64,6 +64,8 @@ model agent_call_logs {
   finishReason      String?
   completionId      String?
   errorCategory     String?
+  // 所属教学会话（2026-09-17 从 metadata JSON 升为真列）：用于按会话核算 token/成本
+  sessionId         String?
 
   @@index([agentId, calledAt])
   @@index([calledAt])
@@ -72,6 +74,7 @@ model agent_call_logs {
   @@index([sourceEntry])
   @@index([userId])
   @@index([agentId])
+  @@index([sessionId, calledAt])
   @@index([parentExecutionId, calledAt])
   @@index([promptCallId, calledAt])
   @@index([executionLayer, calledAt])

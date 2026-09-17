@@ -754,7 +754,7 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
 | **P1** | 到期积压无治理（435 到期 / 每课 1 条） | §3.3【A】 |
 | **P2** | ~~`checkpointHistory`~~ → **已消费（2026-09-17）**：写侧补 `title/type`，读侧注入 `teaching-turn` 的 `scenario.checkpointHistory`（摘要：计数 + 最近 5 条），提示词要求"未通过的点换表征再确认、不得向学生汇报统计"；`session_load`、`helpSeekingType`、`rsmAttempts` 生成但无消费者（未处理） | 【B】 |
 | **P2** | ~~`mode=review` 双写调度（可能重复排期/重复计数）~~ → **已修（2026-09-17：单一写入者）**；~~`lapses` 恒 0~~ → **已落库**；`reps` 与 `extractionCount` 可能发散（未处理） | 【B】 |
-| **P2** | 无法按会话核算 token/成本（日志表无 `sessionId` 外键） | 【B】 |
+| **P2** | ~~无法按会话核算 token/成本（日志表无 `sessionId` 外键）~~ → **已具备（2026-09-17）**：`agent_call_logs.sessionId` 升为真列 + `(sessionId, calledAt)` 索引 + 历史回填 + 只读聚合脚本 `audit-session-cost.ts`。**已知缺口**：会话内触发的 aux skill（learner-state-review / concept-consolidator 等）未传 `sessionId`，在脚本里归入"(无会话)"栏 | 【B】 |
 
 ### 5.3 循环性风险（工程上最需要注意的一点）
 
@@ -839,7 +839,13 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
 - `checkpointHistory` 只写不读——**已消费（2026-09-17）**：写侧补 `title/type`，读侧把摘要（计数 + 最近 5 条）
   注入 `teaching-turn` 的 `scenario.checkpointHistory`，并在提示词里要求"未通过的点换表征再确认、不得向学生汇报统计"。
   **实测评估**（同一情境跑两次，真实模型）：无历史 → 模型重复原要求；有"1 个未通过" → 模型换表征拆小步
-  （"证据得是原话本身而不是解释"+ 两个小动作），且全程未出现"检查点/通过率"等系统词。
+  （"证据得是原话本身而不是解释"+ 两个小动作），且全程未出现"检查点/通过率"等系统词；
+- 无法按会话核算 token/成本——**已具备（2026-09-17）**：`agent_call_logs.sessionId` 从 metadata JSON 升为
+  真列 + `(sessionId, calledAt)` 索引（迁移 `20260917020000`），写入侧补列、历史行尽力回填，
+  新增只读脚本 `audit-session-cost.ts`（`--session` / `--user` / `--top`，按 skill 分解）。
+  实测：新学习者 3 个会话共 119,820 tokens，最贵会话 46,082（teaching-turn 40,867 + session-wrapup 5,215）。
+  **已知缺口**：会话内触发的 aux skill（`learner-state-review`/`concept-consolidator` 等）未传 `sessionId`
+  → 在脚本里落在"(无会话)"栏（口径可见、不隐藏），待后续按调用点逐个补齐。
 
 ---
 

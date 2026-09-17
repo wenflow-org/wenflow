@@ -838,6 +838,8 @@ export class APIExecutor {
       userId: context.userId || 'system',
       sourceEntry: context.sourceEntry || 'platform',
       traceId: context.traceId || null,
+      // 会话归因（2026-09-17）：从 metadata JSON 升为真列，供"按会话核算 token/成本"聚合
+      sessionId: context.sessionId || null,
       callerAgent: context.callerAgent || null,
       userRole: context.userRole || 'user',
       input: JSON.stringify(this.sanitizeRequest(request)).slice(0, 1000),
