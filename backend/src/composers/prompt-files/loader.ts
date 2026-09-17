@@ -1,11 +1,12 @@
 ﻿/**
  * Prompt 文件加载器
  *
- * 设计原则（File-as-Truth）：
- * - prompts/ 目录下的 .md 文件是 prompt 的唯一权威源（进 git）
- * - 每个文件 = 一个能力单元（agent/skill）的当前 active prompt
- * - 文件顶部使用 YAML frontmatter 声明元数据（agentId / 参数等），正文为 systemPrompt
- * - DB 仅作运行时镜像与统计载体，由启动/手动 sync 从文件刷新，可随时重建
+ * 真源层级（与 README「Prompt 工程体系」一致，审计 §5.1）：
+ * - **真源**：`prompts/core/*.yaml`（唯一人工编辑入口，进 git）
+ * - **编译产物**：`prompts/<agent>.md`（运行时读此；由 core.yaml compile → publish 生成）
+ * - **运行时镜像**：DB `agent_prompts` / `ai_agent_prompts`（可随时由产物重建，**不是第二个真源**）
+ * 每个 .md = 一个能力单元（agent/skill）的当前 active prompt；文件顶部 YAML frontmatter 声明元数据
+ * （agentId / 参数等），正文为 systemPrompt。
  *
  * 文件命名：agentId 中的冒号(:)在文件名中用点(.)替代，
  * 例如 agentId "skill:peer-reinforcement" -> 文件 "skill.peer-reinforcement.md"
@@ -67,6 +68,9 @@ export interface PromptFileScanResult {
 export const PROMPTS_DIR = process.env.PROMPTS_DIR
   ? path.resolve(process.env.PROMPTS_DIR)
   : path.resolve(__dirname, '../../../../prompts');
+
+/** 「编译产物缺失」告警去重（每个 agentId 每进程只告警一次） */
+const warnedMissingPromptFiles = new Set<string>();
 
 /** agentId -> 文件名（不含扩展名） */
 export function agentIdToFileBase(agentId: string): string {
@@ -253,7 +257,18 @@ export function loadAllPromptFiles(): PromptFile[] {
 export function loadPromptFile(agentId: string): PromptFile | null {
   const fileBase = agentIdToFileBase(agentId);
   const filePath = path.join(PROMPTS_DIR, `${fileBase}.md`);
-  if (!fs.existsSync(filePath)) return null;
+  if (!fs.existsSync(filePath)) {
+    // 编译产物缺失：明确告警而非静默回退（DB 只是镜像，不应成为第二个真源——审计 §5.1）。
+    // 每个 agentId 只告警一次，避免 20+ skill 在模块顶层同步调用时刷屏。
+    if (!warnedMissingPromptFiles.has(agentId)) {
+      warnedMissingPromptFiles.add(agentId);
+      logger.warn('[prompt-files] 编译产物 .md 缺失，回退 DB ACTIVE prompt（请确认 core.yaml 已 compile + publish）', {
+        agentId,
+        filePath
+      });
+    }
+    return null;
+  }
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
     return parsePromptFile(filePath, raw);
