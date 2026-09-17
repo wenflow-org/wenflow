@@ -7,6 +7,24 @@ const POLL_INTERVAL_MS = 1000;
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_ATTEMPTS = 8;
 
+/**
+ * 需要「同用户队头保护」的事件类型。
+ *
+ * 学习者线对顺序敏感：快照刷新按 `lastEventId` 幂等、证据按累加投影，若同一用户的后一个事件
+ * 先于前一个事件被消费，旧事件回填会覆盖新状态（画像回退）。此前只有 `task:completed` 有这层保护，
+ * `lesson:completed` / `path:*` / `goal:understanding:updated` 都没有——同一用户连上两节课时，
+ * 前一课若退避重投，后一课会被提前消费。
+ */
+const ORDERED_EVENT_TYPES = new Set([
+  'task:completed',
+  'lesson:completed',
+  'goal:understanding:updated',
+  'path:created',
+  'path:generated',
+  'path:adjusted',
+  'path:completed'
+]);
+
 export class DurableOutboxWorker {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
@@ -72,15 +90,17 @@ export class DurableOutboxWorker {
       take: 20
     });
 
-    const taskUsersSeen = new Set<string>();
+    const orderedUsersSeen = new Set<string>();
     for (const record of records) {
       if (this.stopping) return;
-      if (record.eventType === 'task:completed' && record.userId) {
-        if (taskUsersSeen.has(record.userId)) continue;
-        taskUsersSeen.add(record.userId);
+      if (ORDERED_EVENT_TYPES.has(record.eventType) && record.userId) {
+        // 同用户 + 同类型只放行队首；后面的等前一事件落定（published/死信）再消费
+        const seenKey = `${record.eventType}:${record.userId}`;
+        if (orderedUsersSeen.has(seenKey)) continue;
+        orderedUsersSeen.add(seenKey);
         const oldestUnresolved = await prisma.domain_event_outbox.findFirst({
           where: {
-            eventType: 'task:completed',
+            eventType: record.eventType,
             userId: record.userId,
             status: { in: ['pending', 'processing'] }
           },

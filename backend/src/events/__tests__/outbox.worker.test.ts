@@ -14,7 +14,7 @@ jest.mock('../../utils/logger', () => ({
 
 import { DurableOutboxWorker } from '../outbox.worker'
 
-describe('DurableOutboxWorker task ordering', () => {
+describe('DurableOutboxWorker same-user ordering', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     records.length = 0
@@ -72,6 +72,30 @@ describe('DurableOutboxWorker task ordering', () => {
 
     expect(dispatched).toEqual(['old-user-1', 'user-2-event'])
     expect(records.find(record => record.id === 'new-user-1')?.status).toBe('pending')
+  })
+
+  it('lesson:completed 同样受同用户队头保护（旧实现只保护 task:completed，画像会乱序回退）', async () => {
+    const base = new Date(Date.now() - 10_000)
+    records.push(
+      buildRecord('old-lesson-1', 'user-1', base, 'lesson:completed'),
+      buildRecord('new-lesson-1', 'user-1', new Date(base.getTime() + 1000), 'lesson:completed'),
+      buildRecord('lesson-user-2', 'user-2', new Date(base.getTime() + 2000), 'lesson:completed')
+    )
+    const dispatched: string[] = []
+    const registry = {
+      dispatch: jest.fn(async (event: any) => {
+        dispatched.push(event.id)
+        if (event.id === 'old-lesson-1') throw new Error('temporary failure')
+      })
+    }
+
+    const worker = new DurableOutboxWorker(registry as any)
+    await worker.runOnce()
+
+    // 队首退避 → 同用户后一课被阻塞；另一用户不受影响
+    expect(dispatched).toEqual(['old-lesson-1', 'lesson-user-2'])
+    expect(records.find(record => record.id === 'new-lesson-1')?.status).toBe('pending')
+    expect(records.find(record => record.id === 'lesson-user-2')?.status).toBe('published')
   })
 
   it('marks task events dead at max attempts so later same-user events are not blocked forever', async () => {
