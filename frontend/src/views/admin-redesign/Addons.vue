@@ -594,7 +594,7 @@ function goConfig() {
 .ac-mcp__hint code {
   font-family: var(--mk-mono);
   font-size: var(--mk-fs-11);
-  background: #eef2fa;
+  background: var(--mk-surface-2);
   color: var(--mk-muted);
   padding: 1px 4px;
   border-radius: 4px;
@@ -653,7 +653,7 @@ function goConfig() {
 /* ================= 暗色模式（D1 补完）：外挂能力 ================= */
 html[data-theme='dark'] {
   .ac-error { background: rgba(248, 113, 113, 0.1); }
-  .ac-mcp__dot.is-off { background: #4a5874; }
-  .ac-mcp__hint code { background: #253049; color: var(--mk-muted, #9fb0c8); }
+  /* .ac-mcp__dot.is-off 不再重写：基础规则已走 var(--mk-faint)，暗色下自动取 #6b7c96 */
+  .ac-mcp__hint code { background: var(--mk-surface-3); color: var(--mk-muted, #9fb0c8); }
 }
 </style>
