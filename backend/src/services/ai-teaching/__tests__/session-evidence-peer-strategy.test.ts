@@ -30,6 +30,35 @@ describe('wrapup 会话证据：loadIndex 均值与峰值（P0③）', () => {
   });
 });
 
+describe('wrapup 会话证据：解法尝试台账 rsmAttempts（2026-09-17 起被消费）', () => {
+  it('汇总逐回合的 rsmAttempts，最多最近 5 条，且过滤空 method', () => {
+    const evidence = computeSessionEvidence(
+      asSession({
+        messages: [
+          { role: 'assistant', analysis: { understanding: 0.5, rsmAttempts: [{ method: '顺推法', outcome: '失败', evidence: '3 天' }] } },
+          { role: 'user', analysis: { understanding: 0.6, rsmAttempts: [{ method: '  ', outcome: 'x' }, { method: '逆推法', outcome: '成功', evidence: '5 天' }] } },
+        ],
+      }),
+    );
+    expect(evidence.rsmAttempts).toEqual([
+      { method: '顺推法', outcome: '失败', evidence: '3 天' },
+      { method: '逆推法', outcome: '成功', evidence: '5 天' },
+    ]);
+  });
+
+  it('没有台账时字段缺失（wrapup 规则据此走常规总结，不编造尝试）', () => {
+    const evidence = computeSessionEvidence(asSession({ messages: [{ role: 'user', analysis: { understanding: 0.5 } }] }));
+    expect(evidence.rsmAttempts).toBeUndefined();
+  });
+
+  it('超过 5 条只保留最近 5 条', () => {
+    const rsmAttempts = Array.from({ length: 8 }, (_, i) => ({ method: `方法${i + 1}`, outcome: 'x', evidence: 'y' }));
+    const evidence = computeSessionEvidence(asSession({ messages: [{ role: 'assistant', analysis: { rsmAttempts } }] }));
+    expect(evidence.rsmAttempts).toHaveLength(5);
+    expect(evidence.rsmAttempts![0].method).toBe('方法4');
+  });
+});
+
 describe('伴学策略由认知层级决定（P0②）', () => {
   it('analyze/evaluate/create → debate；apply → counterexample；其余/未知 → analogy', () => {
     expect(pickPeerStrategy('analyze')).toBe('debate');

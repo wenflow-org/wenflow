@@ -200,6 +200,10 @@ export interface TeachingScenarioContext {
     frustrationRate: number | null;
     knowledgeMasteryEma: number | null;
     sampleSize: number;
+    /** 求助行为（2026-09-17 起被消费）：最近几轮的求助原话，供提示词做软拦截（别直接给答案） */
+    recentHelpSeeking?: string[];
+    /** 求助次数（窗口内），用于判断"是不是在反复要答案" */
+    helpSeekingCount?: number;
   } | null;
 }
 
@@ -1124,6 +1128,13 @@ async function fetchBehavioralProfile(userId: string): Promise<TeachingScenarioC
     let maxCount = 0;
     for (const [e, count] of emotionCounts) { if (count > maxCount) { maxCount = count; dominantEmotion = e; } }
 
+    // 求助行为（2026-09-17 起被消费；此前 teaching-turn 每轮产出 helpSeekingType 却没人读，审计 §5.2 P2 尾巴）：
+    // 只给"最近几轮的原话 + 次数"，供提示词做**软拦截**——学生反复直接要答案时，先给最小提示/反问，
+    // 而不是把答案交出去（该字段的产出方注释本就写着"供后台统计与软拦截"）。
+    const helpSeeking = allAnalysis
+      .map((analysis) => (typeof analysis?.helpSeekingType === 'string' ? analysis.helpSeekingType.trim() : ''))
+      .filter((value) => value.length > 0);
+
     return {
       avgUnderstanding: understandings.length > 0 ? Math.round(avg(understandings) * 100) / 100 : null,
       avgLoadIndex: loadIndices.length > 0 ? Math.round(avg(loadIndices) * 100) / 100 : null,
@@ -1132,6 +1143,9 @@ async function fetchBehavioralProfile(userId: string): Promise<TeachingScenarioC
       frustrationRate: emotions.length > 0 ? Math.round((frustratedCount / emotions.length) * 100) / 100 : null,
       knowledgeMasteryEma: ktMasteryAvg !== null ? Math.round(ktMasteryAvg * 100) / 100 : null,
       sampleSize: allAnalysis.length,
+      ...(helpSeeking.length > 0
+        ? { recentHelpSeeking: helpSeeking.slice(-5), helpSeekingCount: helpSeeking.length }
+        : {}),
     };
   } catch { return null; }
 }

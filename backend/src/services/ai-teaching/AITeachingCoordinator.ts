@@ -1260,6 +1260,18 @@ export function computeSessionEvidence(session: TeachingSessionRecord) {  // 排
   const completionCandidateSeen = !!session.messages.find((message) => message.analysis?.completionCandidate === true)
     || !!(session.teachingState as any)?.completionCandidate;
 
+  // 解法尝试台账（2026-09-17 起被消费；此前 teaching-turn 每轮产出 rsmAttempts 却没人读，审计 §5.2 P2 尾巴）。
+  // 只取最近 5 条，交给 wrapup 做"方法层面"的整合（哪种方法有效、为什么）。
+  const rsmAttempts = analyzedMessages
+    .flatMap((message) => Array.isArray(message.analysis?.rsmAttempts) ? message.analysis!.rsmAttempts : [])
+    .filter((attempt: any) => attempt && typeof attempt.method === 'string' && attempt.method.trim())
+    .slice(-5)
+    .map((attempt: any) => ({
+      method: String(attempt.method).trim().slice(0, 200),
+      outcome: typeof attempt.outcome === 'string' ? attempt.outcome.trim().slice(0, 200) : '',
+      evidence: typeof attempt.evidence === 'string' ? attempt.evidence.trim().slice(0, 200) : '',
+    }));
+
   return {
     turnCount: session.messages.filter((message) => message.role === 'user').length,
     avgUnderstanding: avg(understandingScores),
@@ -1271,6 +1283,7 @@ export function computeSessionEvidence(session: TeachingSessionRecord) {  // 排
     completionCandidateSeen,
     avgLoadIndex: avg(loadIndexScores) === null ? null : Math.round((avg(loadIndexScores) as number) * 1000) / 1000,
     maxLoadIndex: loadIndexScores.length > 0 ? Math.round(Math.max(...loadIndexScores) * 1000) / 1000 : null,
+    ...(rsmAttempts.length > 0 ? { rsmAttempts } : {}),
   };
 }
 

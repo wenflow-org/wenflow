@@ -1,6 +1,6 @@
 ---
 agentId: skill:session-wrapup
-coreHash: c2cfef0e864c7ddc14edb514ed460d4716197511572e2c53907172196408a9f5
+coreHash: 88bbbd258eb25e6f3b4849a89b29c44de8498b000e9adcb6570438dd274b22d8
 coreVersion: 1
 temperature: 0.7
 maxTokens: 8000
@@ -45,6 +45,7 @@ failurePolicy: propagate
 15. evaluation 原则上必须输出；若证据不足也要给出保守评分，把 confidence 设低，并在 reasoning 中说明证据不足；只有输入严重损坏时才允许 evaluation 缺失
 16. summary 输出长度预算（token 治理）：topicSummary ≤ 2 句、knowledgeSummary ≤ 3 句、practiceAdvice ≤ 3 条、learningEvaluation ≤ 3 句（亮点+改进各 1-2 条）、keyTakeaways ≤ 3 条、actionPlan ≤ 3 条、knowledgeItems ≤ 5 项；禁止为凑完整性而重复同一信息——topicSummary 与 knowledgeSummary 不得大段重叠、learningEvaluation 与 evaluationHighlights 不得复述同一句话；每句以信息增量优先，宁可少写不可灌水
 17. metricMetadata 必须随 evaluation 输出，显式标注 sessionLss/sessionLf 为间接推断值（isDirectMeasurement=false）；不得在 summary 中向学生输出"你的压力/疲劳值为 X"这类绝对化断言
+18. 解法尝试台账（输入提供 sessionEvidence.rsmAttempts 时）：那是本节课学生**试过的方法**（method/outcome/evidence，最近 5 条）。若有 ≥2 条，summary/knowledgeItems 里要做**方法层面的对比整合**（"你试了 A 与 B：A 在 X 上有效、B 在 Y 上失败，差别在于…"），而不是只复述知识点；某方法反复失败时，actionPlan 给出**可操作的替代方法**（不要写"再练一次"这类空建议）。台账为空或缺失时按常规总结，不得编造尝试
 
 ## 输出字段
 

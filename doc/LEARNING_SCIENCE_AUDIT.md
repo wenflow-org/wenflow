@@ -755,7 +755,7 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
 | **P1** | ~~**两套 LSS** 公式并存；**LF 三套法则**（含系数和 0.85 未归一）；KTL/LF 半衰期注释与实现不符~~ → **已收口（2026-09-17，§7 P1-2）** | §4.3【B】 |
 | **P1** | ~~**BKT 零消费**（写了不用）~~ → **已决策（2026-09-17，§7 P1-3）**：保留投影（E4 底座），补参数约束校验 + 一处**有界**消费（信念背离 → 回路径重学建议），仍不驱动间隔/难度 | §4.2(3)【B】 |
 | **P1** | 到期积压无治理（435 到期 / 每课 1 条） | §3.3【A】 |
-| **P2** | ~~`checkpointHistory`~~ → **已消费（2026-09-17）**：写侧补 `title/type`，读侧注入 `teaching-turn` 的 `scenario.checkpointHistory`（摘要：计数 + 最近 5 条），提示词要求"未通过的点换表征再确认、不得向学生汇报统计"；`session_load`、`helpSeekingType`、`rsmAttempts` 生成但无消费者（未处理） | 【B】 |
+| **P2** | ~~`checkpointHistory`~~ → **已消费（2026-09-17）**：写侧补 `title/type`，读侧注入 `teaching-turn` 的 `scenario.checkpointHistory`（摘要：计数 + 最近 5 条），提示词要求"未通过的点换表征再确认、不得向学生汇报统计"；~~`helpSeekingType`/`rsmAttempts`~~ → **已消费（2026-09-17）**：求助→软拦截、解法台账→wrapup 方法整合；`session_load` = E5 研究仪器（已登记，非缺陷） | 【B】 |
 | **P2** | ~~`mode=review` 双写调度（可能重复排期/重复计数）~~ → **已修（2026-09-17：单一写入者）**；~~`lapses` 恒 0~~ → **已落库**；~~`reps` 与 `extractionCount` 可能发散~~ → **已修（2026-09-17：`fsrsReps` 真列，口径=FSRS 调度过的复习数）** | 【B】 |
 | **P2** | ~~无法按会话核算 token/成本（日志表无 `sessionId` 外键）~~ → **已具备（2026-09-17）**：`agent_call_logs.sessionId` 升为真列 + `(sessionId, calledAt)` 索引 + 历史回填 + 只读聚合脚本 `audit-session-cost.ts`。**已知缺口**：会话内触发的 aux skill（learner-state-review / concept-consolidator 等）未传 `sessionId`，在脚本里归入"(无会话)"栏 | 【B】 |
 
@@ -857,8 +857,19 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
   实测口径：`reps` **不影响**当前调度结果（给定 stability/difficulty 时 reps=0/3/20 产出相同），
   但错的口径会污染 E4 拟合/回看 ⇒ 按"数据正确性"修，而不是按"调度影响"修；
 - `session_load`（每次课末写一条 `learning_metrics`）——**判定为有意的研究仪器，非缺陷**：
-  它是 E5（状态量效度：与 PaaS/NASA-TLX 自评对照）所需的**每课负荷分布**原始数据；与 `learning_state`
-  行已按 `metricType` 隔离（不会污染状态读取）。当前无读侧 = "等实验用"，已在 §8 E5 登记；
+  它是 E5（状态量效度：与 PaaS/NASA-TLX 自评对照）所需的**每课负荷分布**原始数据；
+  与 `learning_state` 行已按 `metricType` 隔离（不会污染状态读取）。当前无读侧 = "等实验用"，已在 §8 E5 登记；
+- `helpSeekingType` / `rsmAttempts`（teaching-turn 每回合产出）——**已消费（2026-09-17）**：
+  此前只写在 `message.analysis` 里、没人读。现 `helpSeekingType` 汇总进行为画像
+  （`behavioralProfile.recentHelpSeeking/helpSeekingCount`：最近 5 条原话 + 次数）供**软拦截**；
+  `rsmAttempts` 进 `computeSessionEvidence`（最近 5 条解法尝试台账）供 **wrapup 做方法层面的整合**。
+  **用真实模型评估产出**（改完实测，两处都跑了）：
+  - 求助画像：**首版规则被实测否掉**——写的是"先给最小提示"，模型却回"**我马上帮你做**两件事"（更迁就，方向反了）；
+    改成"**产出量不因求助次数放宽**、不得提出代劳（"我来帮你做/你把原文发来我就写"）、每次只加一级提示"后复测 →
+    "我不能直接给完整答案，得靠你自己做出来才算真会。咱们换个简单起点：先只看文章开头，用你自己的一句话…"
+    （**不代劳 + 起点降一级**）✓
+  - 解法台账：wrapup 产出直接做方法对比（"通过对比顺推法与逆推法…"、keyTakeaways 讲方法适用性、
+    actionPlan 给"整理两种方法适用场景对比表"），而不是只复述知识点 ✓
 - `checkpointHistory` 只写不读——**已消费（2026-09-17）**：写侧补 `title/type`，读侧把摘要（计数 + 最近 5 条）
   注入 `teaching-turn` 的 `scenario.checkpointHistory`，并在提示词里要求"未通过的点换表征再确认、不得向学生汇报统计"。
   **实测评估**（同一情境跑两次，真实模型）：无历史 → 模型重复原要求；有"1 个未通过" → 模型换表征拆小步

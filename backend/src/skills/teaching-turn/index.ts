@@ -207,6 +207,9 @@ export interface TeachingTurnInput {
       frustrationRate: number | null;
       knowledgeMasteryEma: number | null;
       sampleSize: number;
+      /** 求助行为（2026-09-17 起被消费）：最近几轮的求助原话 + 次数，供软拦截（别直接给答案） */
+      recentHelpSeeking?: string[];
+      helpSeekingCount?: number;
     } | null;
   };
   knowledge: {
