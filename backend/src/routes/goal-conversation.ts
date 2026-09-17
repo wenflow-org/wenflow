@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
 import { gatewayErrorHttpStatus } from '../utils/gateway-http-status';
 import requirementOrchestrator from '../coordinators/requirement.coordinator';
+import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
 import { PromptStreamEvent, setRequestContext } from '../gateway/api-gateway/context';
 
 const router = express.Router();
@@ -332,9 +333,23 @@ router.post('/:conversationId/regenerate', authMiddleware, goalConversationUserL
     });
   } catch (error: any) {
     logger.error('重新生成路径失败:', error);
-    // 并发生成冲突（claimPathCoreGeneration）应返回 409，与 learning.ts 的 sendPathMutationConflict 一致
-    if (error?.status === 409 || error?.code === 'PATH_GENERATION_RUN_CHANGED') {
-      return res.status(409).json({ success: false, error: { message: '路径正在生成中，请稍后再试', code: 'PATH_GENERATION_RUN_CHANGED', status: 409 } });
+    // 409 必须**透传真实 code**（与 learning.ts 的 sendPathMutationConflict 一致）。
+    // 旧实现把所有 409 一律改写成 PATH_GENERATION_RUN_CHANGED「路径正在生成中」，
+    // 于是 PATH_MUTATION_HAS_LEARNING_PROGRESS 等真实冲突被误报，用户反复重试且监控按错 code 分支（审计 §1.2）。
+    if (isPathMutationConflictError(error) || error?.code === 'PATH_GENERATION_RUN_CHANGED' || error?.status === 409) {
+      const code = typeof error?.code === 'string' && error.code ? error.code : 'CONFLICT';
+      const message = code === 'PATH_GENERATION_RUN_CHANGED'
+        ? '路径正在生成中，请稍后再试'
+        : (error?.message || '路径变更冲突，请稍后再试');
+      return res.status(409).json({
+        success: false,
+        error: {
+          message,
+          code,
+          status: 409,
+          ...(error?.details ? { details: error.details } : {})
+        }
+      });
     }
     const gateway = gatewayErrorHttpStatus(error);
     if (gateway) {

@@ -14,6 +14,7 @@ jest.mock('../../middleware/auth.middleware', () => ({
 jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn() } }));
 
 import router from '../goal-conversation';
+import { PathMutationConflictError } from '../../services/learning/path-mutation-safety';
 
 function getRouteHandler(path: string) {
   const layer = (router as any).stack.find((item: any) => item.route?.path === path && item.route?.methods?.post);
@@ -184,6 +185,26 @@ describe('goal-conversation public route contracts', () => {
     expectPublicGoalEnvelope(res.json.mock.calls[0][0], {
       conversationId: 'conversation-route-regenerate',
       runtimeEnvelope: result.runtimeEnvelope,
+    });
+  });
+
+  it('regenerate 的 409 透传真实冲突 code，不再一律误报「路径正在生成中」（审计 §1.2）', async () => {
+    mockRequirementOrchestrator.regenerate.mockRejectedValue(
+      new PathMutationConflictError('学习路径已有学习进度，不能覆盖', 'PATH_MUTATION_HAS_LEARNING_PROGRESS')
+    );
+    const handler = getRouteHandler('/:conversationId/regenerate');
+    const res = createResponse();
+
+    await handler({ user: { userId: 'user-1' }, params: { conversationId: 'c1' }, body: {} }, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: {
+        message: '学习路径已有学习进度，不能覆盖',
+        code: 'PATH_MUTATION_HAS_LEARNING_PROGRESS',
+        status: 409,
+      },
     });
   });
 
