@@ -19,6 +19,7 @@ import {
   ConceptLoadService,
   type ConceptLoadProfile,
 } from '../services/memory/concept-load.service';
+import { getDailyState as defaultGetDailyState } from '../services/memory/review-quota.service';
 
 interface Args {
   user: string | null;
@@ -168,6 +169,13 @@ async function main(): Promise<void> {
     findEvidence: (args2: Record<string, unknown>) => prisma.learner_evidence.findMany(args2 as any) as any,
     findSessions: (args2: Record<string, unknown>) => prisma.teaching_sessions.findMany(args2 as any) as any,
     findPaths: (args2: Record<string, unknown>) => prisma.learning_paths.findMany(args2 as any) as any,
+    // 当日额度与明日到期数（ReviewPlanDeps 在 quota 改动后新增）：按生产同一实现取，
+    // 否则两次对比会因依赖缺失而抛错（本脚本的对比前提是"除档位来源外，其余条件完全相同"）。
+    getDailyState: (userId: string) => defaultGetDailyState(userId),
+    countDueBetween: (userId: string, from: Date, to: Date) =>
+      prisma.memory_traces.count({
+        where: { userId, extractionCount: { gt: 0 }, dueAt: { gt: from, lte: to } },
+      }),
   };
   // 规则版：档位来源给空 Map（等价于"还没预热"）
   const rulePlan = await buildReviewPlan(user.id, {
