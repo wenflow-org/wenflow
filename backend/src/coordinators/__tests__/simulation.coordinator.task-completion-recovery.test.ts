@@ -387,8 +387,38 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
   })
 
   it('教学上游重试耗尽后将 Learn 标为失败并保留当前 task 供重启', async () => {
-    mockProcessStudentMessage.mockRejectedValue(new Error('API request canceled'))
+    // 用"可重试但非中止"的错误（超时）来测"重试耗尽 → 终局 failed"；
+    // 中止类（caller_abort / canceled）走"非终局、可续跑"，见下一个用例（跑数观察 #3）。
+    mockProcessStudentMessage.mockRejectedValue(new Error('connection timeout'))
     // 重试退避是真实 sleep（8 次尝试共 2+4+6+8+10+12+14=56s），用假时钟快进避免测试超时
+    jest.useFakeTimers()
+    try {
+      const pending = coordinator.executeLearningStep('simulation-1')
+      await jest.advanceTimersByTimeAsync(80_000)
+      const result = await pending
+      const learning = getLearningState()
+
+      expect(result).toEqual(expect.objectContaining({
+        success: false,
+        error: 'connection timeout'
+      }))
+      expect(mockProcessStudentMessage).toHaveBeenCalledTimes(8)
+      expect(sessionRecord.status).toBe('failed')
+      expect(sessionRecord.currentStage).toBe('teaching')
+      expect(learning.taskRuntime).toEqual(expect.objectContaining({
+        status: 'error',
+        taskId: 'task-1',
+        error: 'connection timeout'
+      }))
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('上游被中止（caller_abort / canceled）不终局化：Learn 保持可续跑、task 保留', async () => {
+    // 网关在 caller 取消/进程重启时抛 GatewayExecutionError('API request canceled', category=caller_abort)
+    const aborted = Object.assign(new Error('API request canceled'), { code: 'CALLER_ABORTED', category: 'caller_abort' })
+    mockProcessStudentMessage.mockRejectedValue(aborted)
     jest.useFakeTimers()
     try {
       const pending = coordinator.executeLearningStep('simulation-1')
@@ -400,14 +430,11 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
         success: false,
         error: 'API request canceled'
       }))
-      expect(mockProcessStudentMessage).toHaveBeenCalledTimes(8)
-      expect(sessionRecord.status).toBe('failed')
-      expect(sessionRecord.currentStage).toBe('teaching')
-      expect(learning.taskRuntime).toEqual(expect.objectContaining({
-        status: 'error',
-        taskId: 'task-1',
-        error: 'API request canceled'
-      }))
+      // 关键回归（跑数观察 #3）：中止 ≠ 终局失败——不写成 failed（否则需人工 restart-learning）
+      expect(sessionRecord.status).not.toBe('failed')
+      // 当前 task 保留、且不置 error 态（可续跑）
+      expect(learning.taskRuntime.taskId).toBe('task-1')
+      expect(learning.taskRuntime.status).not.toBe('error')
     } finally {
       jest.useRealTimers()
     }

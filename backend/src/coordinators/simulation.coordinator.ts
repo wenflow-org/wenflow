@@ -68,6 +68,8 @@ import {
   countTaskProgress,
   isRetryableLearnUpstreamError,
   isRequestAborted,
+  isAbortLikeLearnError,
+  isPathReviewAlreadyAcceptedForCurrentPath,
   boundTaskCompletionError,
   findTaskInPath,
   buildProgressAfterTaskCompletion,
@@ -2066,6 +2068,26 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
     const preReviewState: any = parseStageResultsPayload(preSession.stageResults).path_review || {};
     const replanCount = await this.countSessionLogsByPhase(sessionId, 'path-replan');
 
+    // 幂等短路（虚拟学习者跑数观察 #1）：当前 Path 已（含 force）接受过评审 → **不重跑评审 LLM**，
+    // 只重试"进入 Learn"。否则每次 advance-day 都要白跑一次评审并反复触顶 replan 上限。
+    const alreadyAcceptedForCurrentPath = isPathReviewAlreadyAcceptedForCurrentPath(
+      parseStageResultsPayload(preSession.stageResults),
+      preSession.learningPathId
+    );
+    if (alreadyAcceptedForCurrentPath) {
+      if (!options.startLearning) {
+        return { success: true, decision: 'accept', currentStage: 'path', learningPathId: preSession.learningPathId };
+      }
+      const learning = await this.startLearningPhase(sessionId);
+      return {
+        success: learning.success,
+        decision: 'accept',
+        currentStage: learning.success ? 'teaching' : 'path',
+        learningPathId: preSession.learningPathId,
+        error: learning.error
+      };
+    }
+
     const review = await this.reviewPathProposal(sessionId);
     // 评审是**独立旁路**，不做关节守卫：评审失败不阻断 Learn——视为"接受当前 Path"并继续。
     const reviewFailed = !review.success || !review.decision;
@@ -2855,6 +2877,9 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       const nextTaskIdx = currentTaskIdx;
       const nextMilestoneIdx = currentMilestoneIdx;
       let learningStepError: string | null = null;
+      // 中止类（客户端断开 / 进程重启取消 in-flight 上游）：**非终局**，保留 task 可续跑，
+      // 不把会话打成 failed（见 isAbortLikeLearnError 注释 / 跑数观察 #3）。
+      let learningStepInterrupted: string | null = null;
       let closureDecision: LearningClosureDecision | null = null;
       let shouldStopCurrentTask = false;
 
@@ -3018,24 +3043,47 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
             shouldStopCurrentTask = true;
           }
         } catch (err: unknown) {
-          logger.warn('[simulation-coordinator] AI教学响应失败，已停止当前学习步骤', {
-            sessionId,
-            error: asErrorLike(err).message
-          });
-          learningStepError = asErrorLike(err).message || '教学响应失败';
-          aiResponse = `当前教学会话不可继续：${learningStepError}。请重新开始当前 task 或人工检查。`;
-          logs.push({
-            timestamp: new Date().toISOString(),
-            phase: 'error',
-            details: {
-              error: asErrorLike(err).message || '教学响应失败',
-              output: {
-                currentTask: currentTask.title,
-                currentMilestone: currentMilestone.title,
-                action: 'teaching-step-stopped'
+          const failureMessage = asErrorLike(err).message || '教学响应失败';
+          if (isAbortLikeLearnError(err)) {
+            // 中止（客户端断开 / 进程重启取消 in-flight 调用）：**非终局**——不把会话打成 failed，
+            // 保留当前 task 供续跑；当天按"未开始"回滚，下一次 advance 可重试。
+            learningStepInterrupted = failureMessage;
+            logger.warn('[simulation-coordinator] Learn 被中止（非终局，可续跑）', {
+              sessionId,
+              error: failureMessage
+            });
+            logs.push({
+              timestamp: new Date().toISOString(),
+              phase: 'teaching-interrupted',
+              details: {
+                error: failureMessage,
+                output: {
+                  currentTask: currentTask.title,
+                  currentMilestone: currentMilestone.title,
+                  action: 'teaching-step-interrupted'
+                }
               }
-            }
-          });
+            });
+          } else {
+            logger.warn('[simulation-coordinator] AI教学响应失败，已停止当前学习步骤', {
+              sessionId,
+              error: failureMessage
+            });
+            learningStepError = failureMessage;
+            aiResponse = `当前教学会话不可继续：${learningStepError}。请重新开始当前 task 或人工检查。`;
+            logs.push({
+              timestamp: new Date().toISOString(),
+              phase: 'error',
+              details: {
+                error: failureMessage,
+                output: {
+                  currentTask: currentTask.title,
+                  currentMilestone: currentMilestone.title,
+                  action: 'teaching-step-stopped'
+                }
+              }
+            });
+          }
         }
       } else {
         learningStepError = '当前 Learn 没有绑定教学会话';
@@ -3107,7 +3155,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       await this.addSessionLogs(sessionId, logs);
       
       return {
-        success: !learningStepError,
+        success: !learningStepError && !learningStepInterrupted,
         userMessage: virtualReplyResult.userVisible,
         aiResponse,
         milestoneProgress: {
@@ -3123,7 +3171,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         taskCompleted: false,
         ...(shouldStopCurrentTask ? { currentTaskStopped: true } : {}),
         logs,
-        error: learningStepError || undefined
+        error: learningStepError || learningStepInterrupted || undefined
       };
     } catch (error: unknown) {
       const durationMs = Date.now() - startTime;

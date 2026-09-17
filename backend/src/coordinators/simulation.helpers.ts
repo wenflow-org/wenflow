@@ -99,6 +99,42 @@ export function isRequestAborted(): boolean {
   }
 }
 
+/**
+ * 当前 Path 是否已（含 force）接受过评审。
+ *
+ * 用于跳过"重复评审"（虚拟学习者跑数观察 #1）：`resolvePathReview` 若看不到已接受状态，
+ * 每次 `advance-day` 都会重跑一次评审 LLM 并反复触顶 replan 上限。
+ * 条件：`path_review.status === 'accepted'` 且 `reviewedPathId` 与当前 path 一致
+ * （Path 换版后 reviewedPathId 会不同 → 仍需重新评审）。
+ */
+export function isPathReviewAlreadyAcceptedForCurrentPath(
+  stageResults: unknown,
+  learningPathId: string | null | undefined
+): boolean {
+  if (!learningPathId || !stageResults || typeof stageResults !== 'object') return false;
+  const review = (stageResults as Record<string, unknown>).path_review;
+  if (!review || typeof review !== 'object') return false;
+  const state = review as Record<string, unknown>;
+  return state.status === 'accepted' && state.reviewedPathId === learningPathId;
+}
+
+/**
+ * 中止类错误（客户端断开 / 进程重启导致 in-flight 上游调用被取消）。
+ *
+ * 与 `isRetryableLearnUpstreamError` 的区别是**语义**：这里回答"是不是被中止"，
+ * 用于决定**是否把虚拟会话终局化（failed）**，而不是"能否重试"。
+ *
+ * 背景（虚拟学习者跑数观察 #3）：`advance-day runTasks` 在 HTTP 请求上下文里跑，
+ * 另一次进程重启把 in-flight LLM 调用取消 → `API request canceled` → 被当作"上游重试耗尽"
+ * → 会话 **failed**（不可恢复）。而正确语义是"中断、保留当前 task 可续跑"。
+ */
+export function isAbortLikeLearnError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code === 'REQUEST_ABORTED' || code === 'ABORT_ERR' || code === 'ECONNRESET') return true;
+  const message = String(asErrorLike(error).message || error || '').toLowerCase();
+  return /request_aborted|api request canceled|aborted|abort_err|econnreset|socket hang up|请求已取消/.test(message);
+}
+
 export function boundTaskCompletionError(error: unknown): string {
   const message = asErrorLike(error).message || String(error || '任务完成失败');
   return message.length > 1000 ? `${message.slice(0, 997)}...` : message;

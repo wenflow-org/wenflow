@@ -23,6 +23,8 @@ import {
   resolveSimLearnerState,
   isRetryableLearnUpstreamError,
   boundTaskCompletionError,
+  isAbortLikeLearnError,
+  isPathReviewAlreadyAcceptedForCurrentPath,
   parseProfileData
 } from '../simulation.helpers'
 import type { VirtualLearnerProfile } from '../simulation.types'
@@ -445,6 +447,33 @@ describe('misc pure helpers', () => {
     expect(isRetryableLearnUpstreamError('response does not contain valid json')).toBe(false)
     expect(isRetryableLearnUpstreamError('retry_budget_exhausted')).toBe(false)
     expect(isRetryableLearnUpstreamError('random domain failure')).toBe(false)
+  })
+
+  it('isAbortLikeLearnError：中止类（客户端断开/进程重启取消）非终局，可续跑', () => {
+    // 中止类（跑数观察 #3 的三种实况）
+    expect(isAbortLikeLearnError(new Error('API request canceled'))).toBe(true)
+    expect(isAbortLikeLearnError(new Error('request_aborted：请求已取消，停止 Learn 上游调用'))).toBe(true)
+    const econnreset = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })
+    expect(isAbortLikeLearnError(econnreset)).toBe(true)
+    // 真正的中止 ≠ 上游重试耗尽：可重试（isRetryable）但语义是"中止"
+    expect(isRetryableLearnUpstreamError(new Error('API request canceled'))).toBe(true)
+    // 非中止：应走终局 failed
+    expect(isAbortLikeLearnError(new Error('Learn 上游调用重试耗尽：timeout'))).toBe(false)
+    expect(isAbortLikeLearnError(new Error('structured_output_invalid'))).toBe(false)
+    expect(isAbortLikeLearnError(null)).toBe(false)
+  })
+
+  it('isPathReviewAlreadyAcceptedForCurrentPath：已接受的当前 Path 才短路（换版需重评）', () => {
+    const accepted = { path_review: { status: 'accepted', reviewedPathId: 'lp_1' } }
+    expect(isPathReviewAlreadyAcceptedForCurrentPath(accepted, 'lp_1')).toBe(true)
+    // Path 换版（评审针对旧版）→ 不短路
+    expect(isPathReviewAlreadyAcceptedForCurrentPath(accepted, 'lp_2')).toBe(false)
+    // 未接受 / 缺字段
+    expect(isPathReviewAlreadyAcceptedForCurrentPath({ path_review: { status: 'pending', reviewedPathId: 'lp_1' } }, 'lp_1')).toBe(false)
+    expect(isPathReviewAlreadyAcceptedForCurrentPath({ path_review: { status: 'accepted' } }, 'lp_1')).toBe(false)
+    expect(isPathReviewAlreadyAcceptedForCurrentPath({}, 'lp_1')).toBe(false)
+    expect(isPathReviewAlreadyAcceptedForCurrentPath(accepted, null)).toBe(false)
+    expect(isPathReviewAlreadyAcceptedForCurrentPath(null, 'lp_1')).toBe(false)
   })
 
   it('boundTaskCompletionError truncates over 1000 chars', () => {

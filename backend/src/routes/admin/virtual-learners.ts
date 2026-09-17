@@ -3110,6 +3110,28 @@ router.post('/sessions/:sessionId/simulation-clock/reset', async (req: Request, 
  * 在模拟时钟上下文里跑"当天"的学习：path→teaching（必要时），按课表每天最多 lessonsPerDay 节。
  * 调用方已在会话租约内（runAssistedSessionMutation），故此处不再自持租约，避免自锁。
  */
+/**
+ * 原子合并 stageResults 顶层键（读-改-写同一事务）。
+ *
+ * 为什么必须原子（虚拟学习者跑数观察 #1 的根因）：`advance-day` 若用**请求开始时的快照**整列回写，
+ * 会覆盖当天学习过程中写入的 `path_review` / `runtimeStats` / `teaching` 等键。实测：回滚分支把
+ * 当天写好的 `path_review`（含 `status:'accepted'`）抹掉 → 第二天 `runDayLearning` 见不到"已接受"
+ * → **重新跑一次评审 LLM**、反复触顶 replan 上限。
+ */
+async function mergeSessionStageResults(sessionId: string, patch: Record<string, unknown>): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.virtual_sessions.findUnique({
+      where: { id: sessionId },
+      select: { stageResults: true },
+    });
+    const stageResults = parseJson<Record<string, unknown>>(current?.stageResults, {});
+    await tx.virtual_sessions.update({
+      where: { id: sessionId },
+      data: { stageResults: JSON.stringify({ ...stageResults, ...patch }), updatedAt: new Date() },
+    });
+  });
+}
+
 async function runDayLearning(
   sessionId: string,
   input: { lessonsPerDay: number; stageResults: Record<string, unknown>; profileData: Record<string, unknown> },
@@ -3196,15 +3218,11 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
       }
       const lastIndex = plan.indexes[plan.indexes.length - 1];
       const dayWindow = resolveDayWindow(clock.baseDate, lastIndex);
-      const nextStageResults = {
-        ...stageResults,
-        simulationClock: { ...(rawClock || {}), enabled: true, ...plan.nextClock },
-      };
+      const nextClock = { ...(rawClock || {}), enabled: true, ...plan.nextClock };
+      const nextStageResults = { ...stageResults, simulationClock: nextClock };
       await assertLeaseOwned();
-      await prisma.virtual_sessions.update({
-        where: { id: sessionId },
-        data: { stageResults: JSON.stringify(nextStageResults), updatedAt: new Date() },
-      });
+      // 原子合并（不用请求开始时的快照整列回写，避免覆盖学习中写入的其它键）
+      await mergeSessionStageResults(sessionId, { simulationClock: nextClock });
       await assertLeaseOwned();
 
       let learning: { started: boolean; chunks: number; error?: string } | null = null;
@@ -3218,12 +3236,11 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
           }),
         );
         if (!learning.started) {
-          // P0：当天启动/执行失败 → 回滚时钟，不"烧掉"这一天（避免 advance 成功但当天无数据）
+          // P0：当天启动/执行失败 → 回滚时钟，不"烧掉"这一天（避免 advance 成功但当天无数据）。
+          // 只回滚 simulationClock 这一个键（原子合并），**不得**用旧快照整列回写——那会丢掉当天写好的
+          // path_review/runtimeStats（实测会导致每天重新评审）。
           await assertLeaseOwned();
-          await prisma.virtual_sessions.update({
-            where: { id: sessionId },
-            data: { stageResults: JSON.stringify({ ...stageResults, simulationClock: rawClock }), updatedAt: new Date() },
-          });
+          await mergeSessionStageResults(sessionId, { simulationClock: rawClock });
           await assertLeaseOwned();
           return { advancedDayIndexes: [], simulatedDay: dayWindow.simulatedDay, learning, reverted: true };
         }
