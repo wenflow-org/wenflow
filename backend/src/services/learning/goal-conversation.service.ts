@@ -7,6 +7,7 @@ import { goalConversationAgentDefinition } from '../../skills/goal-conversation'
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
+import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
 import learningService from './learning.service';
 import { createDomainEvent } from '../../events/contracts';
@@ -286,45 +287,67 @@ class GoalConversationService {
       learningPath?: { id: string; status?: string } | null;
       appendMessage?: { role: 'user' | 'ai'; content: string };
       mutateCollectedData?: (data: Record<string, any>) => void;
+      /** 传值 = revision 条件更新（CAS）；失配返回 false 且不写入（审计 §1.4） */
+      expectedRevision?: number;
     } = {}
-  ): Promise<void> {
-    await prisma.$transaction(async (tx) => {
-      const conversation = await tx.goal_conversations.findUnique({
-        where: { id: conversationId }
-      });
-      if (!conversation) throw new Error('对话会话不存在');
-
-      const collectedData = JSON.parse(conversation.collectedData || '{}');
-      collectedData.stage = stage;
-      options.mutateCollectedData?.(collectedData);
-
-      if (options.learningPath !== undefined) {
-        collectedData.learningPath = options.learningPath;
+  ): Promise<boolean> {
+    return applyConversationLifecycle(
+      prisma as unknown as ConversationLifecycleDb,
+      conversationId,
+      {
+        ...options,
+        stage,
+        sanitizeContent: (text: string) => this.sanitizeVisibleContent(text)
       }
+    );
+  }
 
-      if (options.appendMessage) {
-        collectedData.messages = Array.isArray(collectedData.messages) ? collectedData.messages : [];
-        collectedData.messages.push({
-          role: options.appendMessage.role,
-          content: this.sanitizeVisibleContent(options.appendMessage.content),
-          time: new Date().toISOString()
-        });
-      }
-
-      await tx.goal_conversations.update({
-        where: { id: conversationId },
-        data: {
-          stage,
-          collectedData: JSON.stringify(collectedData),
-          // S1 数据质量修复：messages 列与 collectedData.messages 双写，
-          // 避免 messages 列停留在初始 '[]'（schema 必填列，真实历史只写进了 collectedData）
-          ...(options.appendMessage ? { messages: JSON.stringify(collectedData.messages) } : {}),
-          status: options.status,
-          completedAt: options.completedAt,
-          learningPathId: options.learningPathId
+  /**
+   * 确认完成后的对外信封（幂等复用 / 并发落败方复用赢家结果时使用）。
+   * 注意：路径仍在生成时与已完成时的文案不同。
+   */
+  private buildConfirmedResult(
+    conversationId: string,
+    data: Record<string, any>,
+    learningPath: { id: string; status?: string } | null
+  ) {
+    const generating = !learningPath || learningPath.status === 'generating';
+    return {
+      userVisible: generating
+        ? '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。'
+        : '学习路径已经生成，可以去查看啦！',
+      internal: {
+        core: {
+          conversationId,
+          stage: 'completed',
+          confidence: data.confidence || 0.9,
+          isCompleted: true,
+          learningPath
+        },
+        ext: {
+          goalConversation: {
+            understanding: data.understanding || {},
+            nextQuestions: [],
+            quickReplies: [],
+            collected: data.collected || {}
+          }
         }
-      });
-    });
+      }
+    };
+  }
+
+  /** 并发确认的落败方：读最新状态，返回赢家已绑定的路径（不再创建/绑定任何新路径） */
+  private async resolveConcurrentConfirmation(conversationId: string, fallbackData: Record<string, any>) {
+    const latest = await prisma.goal_conversations.findUnique({ where: { id: conversationId } });
+    const latestData = latest?.collectedData ? JSON.parse(latest.collectedData) : fallbackData;
+    const winnerPath = latest?.learningPathId
+      ? await prisma.learning_paths.findFirst({ where: { id: latest.learningPathId } })
+      : null;
+    return this.buildConfirmedResult(
+      conversationId,
+      latestData,
+      winnerPath ? { id: winnerPath.id, status: winnerPath.status } : null
+    );
   }
 
   /**
@@ -473,6 +496,15 @@ async continueConversation(
         if (conversation.stage === 'proposing' && confirmProposal) {
           const data = JSON.parse(conversation.collectedData || '{}');
           const understanding = data.understanding || {};
+
+          // 幂等快路径（审计 §1.4）：该对话已确认过（并发重试/双击的第二次请求）→
+          // 直接复用已存在的路径，不再新建占位路径。
+          if (conversation.learningPathId) {
+            const existingPath = await prisma.learning_paths.findFirst({ where: { id: conversation.learningPathId } });
+            if (existingPath) {
+              return this.buildConfirmedResult(conversationId, data, { id: existingPath.id, status: existingPath.status });
+            }
+          }
           
           try {
             const seedResult = {
@@ -496,13 +528,24 @@ async continueConversation(
             const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, seedResult);
             const runId = await learningService.claimPathCoreGeneration(placeholderPath.id, null);
 
-            await this.updateConversationLifecycle(conversationId, 'completed', {
+            // 原子确认（审计 §1.4）：以 revision 条件把「确认权 + 占位路径」一次性绑定。
+            // 并发/重试的落败方 CAS 失配：不写库、不推进对话，并作废自己刚建的占位路径。
+            const confirmed = await this.updateConversationLifecycle(conversationId, 'completed', {
               status: 'completed',
               completedAt: new Date(),
               learningPathId: placeholderPath.id,
               learningPath: { id: placeholderPath.id, status: 'generating' },
-              appendMessage: { role: 'user', content: userReply }
+              appendMessage: { role: 'user', content: userReply },
+              expectedRevision: conversation.revision
             });
+
+            if (!confirmed) {
+              // 落败方：标记占位路径 failed（不会被生成恢复/自动重试），并复用赢家已绑定的路径
+              await learningService
+                .markActiveGenerationFailed(placeholderPath.id, new Error('并发确认，本条占位路径作废'), runId)
+                .catch(() => undefined);
+              return this.resolveConcurrentConfirmation(conversationId, data);
+            }
 
             pathOrchestrator.runGoalAsync(
               {
