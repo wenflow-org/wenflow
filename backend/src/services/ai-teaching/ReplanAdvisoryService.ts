@@ -2,6 +2,8 @@
 import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
 import type { ReplanAttribution } from './ReplanAttributionService';
 
+import type { LearnerReplanSignal } from '../../agents/learner-model-agent/types';
+
 export interface ReplanAdvisory {
   shouldSuggest: boolean;
   priority: 'none' | 'low' | 'medium' | 'high';
@@ -86,6 +88,26 @@ export function applyAttribution(
       evidenceRefs: attribution.evidenceRefs,
       thresholdRecommendation: advisory.recommendation,
     },
+  };
+}
+
+/**
+ * 归因 skill 的召回输入：**只从建议本身派生**（单一来源）。
+ *
+ * 断链修复（审计 §3.19 P1⑦）：此前 `recall` 传的是信号层 `learnerReplanProjection.signal`，
+ * 而 `allowedRecommendations` 来自建议层 —— 两套阈值各自成立，会出现
+ * 「允许的动作是 accelerate，但可选原因码里没有 ready_to_accelerate」这类不一致
+ * （`high_risk` / `moved_to_review` / `repeated_confusion` 更是只有建议层才有）。
+ * 现在召回与动作同源：都取自最终 advisory。
+ */
+export function toAttributionRecall(advisory: ReplanAdvisory): LearnerReplanSignal {
+  return {
+    shouldSuggest: advisory.shouldSuggest,
+    priority: advisory.priority,
+    recommendation: advisory.recommendation,
+    scope: advisory.scope,
+    rationale: advisory.rationale,
+    reasonCodes: [...advisory.reasonCodes],
   };
 }
 

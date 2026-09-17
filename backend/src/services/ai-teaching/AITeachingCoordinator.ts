@@ -28,7 +28,7 @@ import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { recordTaskDifficultyAdjustment } from '../learner/TaskDifficultyAdjustmentLedger';
 import { assembleTeachingTurnChannels } from '../field-dispatcher';
 import { createDomainEvent } from '../../events/contracts';
-import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryService';
+import { replanAdvisoryService, toAttributionRecall, type ReplanAdvisory } from './ReplanAdvisoryService';
 import { replanAttributionService, isCalibratableDirection, type ReplanAttributionEvidence } from './ReplanAttributionService';
 import { insightCalibrationService } from '../learner/insight-calibration.service';
 import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
@@ -2737,7 +2737,9 @@ export class AITeachingOrchestrator {
       let advisory = thresholdAdvisory;
       if (thresholdAdvisory.shouldSuggest) {
         const attribution = await replanAttributionService.attribute({
-          recall: learnerReplanProjection.signal,
+          // 召回与动作**同源**（都来自最终 advisory）：此前取信号层 signal，与 allowedRecommendations
+          // 属两套阈值，会导致"允许的动作没有对应原因码"（§3.19 P1⑦）
+          recall: toAttributionRecall(thresholdAdvisory),
           allowedRecommendations: thresholdAdvisory.ui.options
             .map((option) => option.key)
             .filter((key) => ['keep', 'reinforce', 'slow_down', 'resequence', 'accelerate'].includes(key)),
