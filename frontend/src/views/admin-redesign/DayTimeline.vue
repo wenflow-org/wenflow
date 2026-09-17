@@ -146,9 +146,13 @@ function weekdaysLabel(weekdays: number[]): string {
   if (!weekdays || !weekdays.length) return '每天'
   return weekdays.map((d) => `周${WEEKDAY_LABELS[d] ?? d}`).join('、')
 }
+interface ApiErrorLike {
+  response?: { data?: { error?: string } }
+  message?: string
+}
 function pickErr(e: unknown, fallback: string): string {
-  const anyErr = e as any
-  return anyErr?.response?.data?.error || anyErr?.message || fallback
+  const err = e as ApiErrorLike
+  return err?.response?.data?.error || err?.message || fallback
 }
 
 async function advance(days: number, runTasks = false) {
