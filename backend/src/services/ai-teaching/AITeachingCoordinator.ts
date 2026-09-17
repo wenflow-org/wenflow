@@ -585,10 +585,24 @@ function getPendingCheckpoint(teachingState: Record<string, any> | null | undefi
     || null;
 }
 
+/**
+ * 教学阶段。
+ *
+ * **产出集合 = {opening, teaching, intervention, ready_to_close}**：
+ * `classroomContext.stage.current` 的唯一推进来源是 `determineNextStage`；新课堂由
+ * `initialClassroomStage()` 恒初始化为 `opening`。
+ *
+ * `checkpoint` / `wrapup` 保留在联合类型里，但它们**不是阶段值**：
+ * - 检查点是**回合内控制对象**（`control.checkpoint` → `pendingCheckpoint`，只出现在回合内，
+ *   见 README「检查点仅在回合内出现」），通过 `submitCheckpoint` + 代码裁决闭环；
+ * - `wrapup` 是收尾语义（由 `ready_to_close` + `sessionArtifacts.endReason` 表达）。
+ * 因此代码中 `stage === 'checkpoint' | 'wrapup'` 的分支均为**防御性**（兼容历史持久化值），当前不可达。
+ */
 type LearnStage = 'opening' | 'teaching' | 'intervention' | 'checkpoint' | 'ready_to_close' | 'wrapup';
 
-function mapOpeningModeToStage(openingMode: string | null | undefined): LearnStage {
-  return openingMode ? 'opening' : 'opening';
+/** 新课堂初始阶段恒为 `opening`（开场定位）。旧实现写作 `openingMode ? 'opening' : 'opening'`（恒真三目），已收敛。 */
+function initialClassroomStage(): LearnStage {
+  return 'opening';
 }
 
 function dedupeStringList(values: Array<string | null | undefined>): string[] {
@@ -767,6 +781,10 @@ function detectEndIntent(message: string) {
   return { isEndIntent: false, reason: '' };
 }
 
+/**
+ * 阶段推进的**唯一来源**。产出仅 `{opening, teaching, intervention, ready_to_close}`——
+ * 不产出 `checkpoint`/`wrapup`（见 `LearnStage` 注释：检查点是回合内控制对象，wrapup 是收尾语义）。
+ */
 function determineNextStage(params: {
   currentStage: LearnStage;
   teachingOutput: TeachingTurnOutput;
@@ -1413,7 +1431,7 @@ function normalizeIdSet(ids: unknown): Set<string> {
 function normalizeForMatch(text: unknown): string {
   return String(text ?? '')
     .toLowerCase()
-    .replace(/[\s，。、；：！？,.;:!?（）()【】\[\]"'“”‘’—-]/g, '');
+    .replace(/[\s，。、；：！？,.;:!?（）()【】[\]"'“”‘’—-]/g, '');
 }
 
 /**
@@ -2038,7 +2056,7 @@ export class AITeachingOrchestrator {
         }),
         classroomContext: {
           stage: {
-            current: mapOpeningModeToStage(opening.mode),
+            current: initialClassroomStage(),
             goal: '完成本节课切入点定位',
             reason: '新课堂启动，进入开场定位',
           },
@@ -2072,13 +2090,13 @@ export class AITeachingOrchestrator {
         ],
         stageHistory: [
           {
-            stage: mapOpeningModeToStage(opening.mode),
+            stage: initialClassroomStage(),
             reason: '新课堂启动，进入开场定位',
             enteredAt: new Date().toISOString(),
           },
         ],
         teachingControlContext: buildTeachingControlContext(
-          mapOpeningModeToStage(opening.mode),
+          initialClassroomStage(),
           context,
           buildLearnerStateContext(context, null),
           {},
