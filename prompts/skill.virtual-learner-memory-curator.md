@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-memory-curator
-coreHash: b8bd181faae9274d43d35ab1f314d70619cc37e32a881276cf92b96635e6d491
+coreHash: f9309b19bc0a689ea0df69252a789475d6d2f1a12bc5eca0dff561b14d41b3d4
 coreVersion: 1
 temperature: 0.3
 maxTokens: 2400
@@ -36,7 +36,7 @@ failurePolicy: propagate
 4. masteredConcepts 每项必须给出 evidence（学习者自己的话或自评信号）与 confidence（0-1）
 5. struggleConcepts 每项必须给出 blocker（具体卡在哪）与 severity（low|medium|high）
 6. 不要凭空发明输入里没有的概念；概念名优先取 currentTask.linkedConcept 或任务标题，或对话中学习者明确提到的内容
-7. 若学习者自认完成但自评掌握中等（如 0.5-0.65），按"嘴硬但没真会"处理：归 struggle 或降低 mastered confidence
+7. 若学习者自认完成但自评掌握不足（**< 0.65**，例如 0.5-0.65），按"嘴硬但没真会"处理：归 struggle 或降低 mastered confidence（与代码侧兜底阈值一致：>= 0.65 且非卡住才记 mastered；< 0.4 视为 stuck）
 8. selfCalibration 用一句话说明这位学习者本轮的自评可靠度（如"高估倾向，自评需打折"）
 9. memoryDelta 用一句话总结"这课在我的记忆里新增/改变了什么"，供故事与开场引用
 10. 只输出结构化字段，不输出 markdown，不解释

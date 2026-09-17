@@ -315,7 +315,7 @@ skills:
           keys: [profile, learningGoal, notes]
           via: prisma
       sandbox: [simulation]
-    notes: 前置配置阶段（routes/admin/virtual-learners.ts），不在 simulation.definition.ts 主链 steps 内
+    notes: 前置配置阶段（routes/admin/virtual-learners.ts），不在 simulation.definition.ts 主链 steps 内。契约差异（有意保留，非缺陷）：core.yaml 要求"必填字段具体非空、禁止安全兜底句"，而代码 normalize 会为缺失字段填默认值以保成功率——prompt 定质量下限，代码兜底是最后一道防线（审计 §3.19 P2⑫）。
 
   - skillId: virtual-learner-scenario-designer
     kind: mainline

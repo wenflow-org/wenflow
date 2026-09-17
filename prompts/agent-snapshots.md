@@ -362,6 +362,7 @@ sandbox:simulation-agent.refereeTrace
 sandbox:simulation-agent.story
 sandbox:simulation-agent.storyMeta
 sandbox:simulation-agent.task
+sandbox:simulation-agent.temporalContext
 sandbox:simulation-agent.turnSequence
 sandbox:simulation-agent.visibleContext
 ```
