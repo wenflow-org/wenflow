@@ -1,6 +1,6 @@
 ---
 agentId: skill:replan-attribution
-coreHash: 6d15644ecb443b2a4a0dfd5d49954b942af8cf471095002b8cbc507e00c074ec
+coreHash: 3e9bfbe6dff31cb16b436582fe730e0b2aa1005bf07be7d0fd8ddadc1bba4d2c
 coreVersion: 1
 temperature: 0.3
 maxTokens: 1200
@@ -18,6 +18,12 @@ failurePolicy: propagate
 - path：路径与确认方案上下文
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
 - state：平台维护的主记忆快照（当前值，含 stage）
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「recall（object）」`sandbox:profile.replanSignal`（编排注入） — 阈值召回（reasonCodes/priority/recommendation/scope/rationale；与允许动作同源）
+- 「allowedRecommendations（string[]）」`sandbox:teaching.allowedRecommendations`（编排注入） — 允许的输出方向白名单（取自 advisory 的 ui.options）
+- 「evidence（object[]）」`sandbox:teaching.attributionEvidence`（编排注入） — 可引用的证据条目（evidenceRefs 必须取自这里）
+- 「pathContext（object?）」`sandbox:path.currentPosition`（编排注入） — 路径当前位置上下文
 
 ## 执行规则
 

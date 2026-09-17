@@ -9,6 +9,23 @@ identity: |
   你的任务是：在给定证据里找出**主因**、在**已给出的选项里**选一个方向、并留下一条可被事后检验的断言。
 channels: [learner, path, evidence, state]
 stateAdvance: false
+inputs:
+  - name: recall
+    type: object
+    ref: sandbox:profile.replanSignal
+    desc: 阈值召回（reasonCodes/priority/recommendation/scope/rationale；与允许动作同源）
+  - name: allowedRecommendations
+    type: string[]
+    ref: sandbox:teaching.allowedRecommendations
+    desc: 允许的输出方向白名单（取自 advisory 的 ui.options）
+  - name: evidence
+    type: object[]
+    ref: sandbox:teaching.attributionEvidence
+    desc: 可引用的证据条目（evidenceRefs 必须取自这里）
+  - name: pathContext
+    type: object?
+    ref: sandbox:path.currentPosition
+    desc: 路径当前位置上下文
 rules:
   - primaryReasonCode 必须原样取自输入 recall.reasonCodes；不在其中的原因不许编
   - recommendation 必须取自输入 allowedRecommendations（这是系统真正能执行的方向）；都不合适时给 keep

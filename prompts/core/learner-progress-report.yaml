@@ -5,6 +5,19 @@ identity: |
   你是学习进展报告生成器。基于任务学习数据、指标与学习信号，生成一段内部用于学习者状态中心的简短分析。
 channels: [task, learner, evidence, state]
 stateAdvance: false
+inputs:
+  - name: task
+    type: object
+    ref: sandbox:teaching.taskSnapshot
+    desc: 本次任务快照（title/timeSpent/difficulty）
+  - name: metrics
+    type: object
+    ref: sandbox:profile.metrics
+    desc: 学习指标（completionRate/ktl/lf/lss，0-100 展示量纲）
+  - name: signals
+    type: string[]
+    ref: sandbox:profile.progressSignals
+    desc: 代码判定的进展信号（已预格式化；模型不复核阈值）
 rules:
   - 只能基于输入中的任务信息、指标和信号进行分析
   - 语气亲切、具体、鼓励，但不替用户做学习决策

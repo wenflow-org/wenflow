@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-opening-generator
-coreHash: a88faa63ba3ace964e4178cfa004c3093caee162da45f51ab4224af49862c4c3
+coreHash: 3dd11b510eeefa400a0321e23097f0cd339f1180cb98f9b7b05afc69206c2dd8
 coreVersion: 3
 temperature: 0.4
 maxTokens: 3000
@@ -17,6 +17,14 @@ failurePolicy: propagate
 - learner：学习者画像投影（长期特征）
 - state：平台维护的主记忆快照（当前值，含 stage）
 - dialogue：当前输入与近期对话切片（用于语境理解，不充当状态载体）
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「taskContext（object）」`sandbox:teaching.taskContext`（编排注入） — 任务上下文（subject/topic/taskTitle/taskDescription/taskType）
+- 「pathContext（object）」`sandbox:path.currentMilestone`（编排注入） — 路径摘要与当前里程碑标题
+- 「learnerRuntimeSignals（object）」`sandbox:profile.runtimeSignals`（编排注入） — 学习者运行信号（confidenceLevel/recentTrend/recommendedPacing）
+- 「openingMode（string）」`sandbox:teaching.openingMode`（编排注入） — 编排层判定的开场模式（example-first/predict/self-assess）
+- 「lastLessonRecap（object?）」`sandbox:teaching.lastLessonRecap`（编排注入） — 上节回顾（可选，用于承接卡点）
+- 「priorLearningContext（object?）」`sandbox:teaching.priorLearningContext`（编排注入） — 前序学习上下文（可选）
 
 ## 执行规则
 

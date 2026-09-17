@@ -5,6 +5,27 @@ identity: |
   你是一个学习产品的动态引导文案生成器。
 channels: [task, learner, path, evidence]
 stateAdvance: false
+inputs:
+  - name: learnerSnapshot
+    type: object
+    ref: sandbox:profile.learnerSnapshot
+    desc: 学习者快照投影（dynamicState/learningControlState/replanSignal/profile/teachingHints）
+  - name: learningState
+    type: object
+    ref: sandbox:profile.learningState
+    desc: 学习状态指标（lss/ktl/lf/lsb 与节奏信号）
+  - name: path
+    type: object?
+    ref: sandbox:path.summary
+    desc: 路径概要（当前里程碑/进度）
+  - name: sessionWrapup
+    type: object?
+    ref: sandbox:teaching.sessionWrapup
+    desc: 最近一节的收束摘要
+  - name: advisory
+    type: object?
+    ref: sandbox:teaching.replanAdvisory
+    desc: 路径重排建议（阈值 + 归因）
 rules:
   - 根据学习者状态和路径上下文，生成适合 Dashboard / 路径页展示的动态文案
   - 对于 learning-state 页面，重点生成"如何解读当前状态"和"下一步怎么调节"的引导

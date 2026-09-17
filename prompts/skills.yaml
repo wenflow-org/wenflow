@@ -231,7 +231,7 @@ skills:
           via: service
         - table: learning_metrics
           via: service
-      sandbox: []
+      sandbox: [path, profile, teaching]
     notes: dashboard 侧调用（services/learner/DashboardGuidanceSnapshotService），不在 ai-teaching.definition.ts steps 内；contracts 有登记
 
   # ============ profile-agent 下辖（handler-only 优先于 mainline，保持派生 agentMembers 顺序） ============
@@ -550,7 +550,7 @@ skills:
           via: service
         - table: learner_evidence
           via: service
-      sandbox: []
+      sandbox: [path, profile, teaching]
     notes: v4-aux 旁挂 teaching-agent（ai-teaching.definition.ts step 2）；输入 = buildTeachingScenarioContext 产物（AITeachingCoordinator.ts:1010/1144）
 
   - skillId: learner-progress-report
@@ -561,7 +561,7 @@ skills:
     description: 基于学习指标和信号生成简短进展反馈
     dataSource:
       db: []
-      sandbox: []
+      sandbox: [profile, teaching]
     notes: metrics/signals 由调用方内存计算（LearnerProgressService.ts:81-90 getCurrentMetrics 不落库），触发链 learning.service.ts:5343（任务完成）→ LearnerProgressService.ts:251 executeSkill；无 DB 直读
 
   - skillId: learner-state-review
@@ -615,7 +615,7 @@ skills:
     description: 在阈值召回的重排建议上给出主因、方向与一条可证伪断言
     dataSource:
       db: []
-      sandbox: []
+      sandbox: [path, profile, teaching]
     notes: 阈值召回 + LLM 归因（deriveReplanSignal 仍是唯一召回门，本 skill 只在召回允许的选项内选方向）；调用方 = ReplanAdvisoryService.attribute（课后 wrap-up，超时/失败即回落阈值版）；输出断言经 insight-calibration 以 insightType=replan_attribution 单独统计
   - skillId: skill-author
     kind: aux
