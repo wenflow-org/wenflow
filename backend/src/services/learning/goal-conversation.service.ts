@@ -6,6 +6,7 @@ import { executeSkill } from '../../skills';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
+import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
 import learningService from './learning.service';
 import { createDomainEvent } from '../../events/contracts';
@@ -91,7 +92,6 @@ function buildGoalNormalizedState(data: any): GoalNormalizedStateV1 {
  * 4. 用户参与：方案轮廓先确认，再生成详细路径
  */
 class GoalConversationService {
-  private readonly RECENT_CONTEXT_LIMIT = 20;
   private readonly MAX_FORMAT_RETRIES = 2;
 
   private sanitizeVisibleContent(text: string): string {
@@ -655,9 +655,10 @@ async continueConversation(
       const previousState = this.buildPreviousState(data, conversation.stage);
       const previousUnderstanding = previousState.understanding || data.understanding || {};
 
-      // 正式链路固定使用完整可见历史 + state-first，与测试模式保持一致。
-      const contextMode = 'full';
-      const selectedHistory = history;
+      // 契约 contextMode：'full'（全量 + state-first）/ 'recent'（仅最近 RECENT_CONTEXT_LIMIT 条）。
+      // 旧实现忽略该字段、恒用全量，契约被静默忽略（审计 §1.3）；结构化状态仍完整传入，不受截断影响。
+      const contextMode: 'recent' | 'full' = options?.contextMode === 'recent' ? 'recent' : 'full';
+      const selectedHistory = selectGoalHistory(history, contextMode, RECENT_CONTEXT_LIMIT);
 
       // L2 声明化装配（只读对账）：状态池形状由 sandbox-resolver 的 goal provider 声明，
       // 本链只提供原始 context（previousState + 可见历史）。缺键打 warn，不阻断。
