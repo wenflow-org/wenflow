@@ -752,7 +752,7 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
 | **P1** | ~~**两套 LSS** 公式并存；**LF 三套法则**（含系数和 0.85 未归一）；KTL/LF 半衰期注释与实现不符~~ → **已收口（2026-09-17，§7 P1-2）** | §4.3【B】 |
 | **P1** | **BKT 零消费**（写了不用） | §4.2(3)【B】 |
 | **P1** | 到期积压无治理（435 到期 / 每课 1 条） | §3.3【A】 |
-| **P2** | `session_load`（54 条）、`checkpointHistory`、`helpSeekingType`、`rsmAttempts` 生成但无消费者 | 【B】 |
+| **P2** | ~~`checkpointHistory`~~ → **已消费（2026-09-17）**：写侧补 `title/type`，读侧注入 `teaching-turn` 的 `scenario.checkpointHistory`（摘要：计数 + 最近 5 条），提示词要求"未通过的点换表征再确认、不得向学生汇报统计"；`session_load`、`helpSeekingType`、`rsmAttempts` 生成但无消费者（未处理） | 【B】 |
 | **P2** | ~~`mode=review` 双写调度（可能重复排期/重复计数）~~ → **已修（2026-09-17：单一写入者）**；~~`lapses` 恒 0~~ → **已落库**；`reps` 与 `extractionCount` 可能发散（未处理） | 【B】 |
 | **P2** | 无法按会话核算 token/成本（日志表无 `sessionId` 外键） | 【B】 |
 
@@ -835,7 +835,11 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
   `ReviewCompletedConsumer`（含误解干扰 ×0.85）。原状是同一成绩被应用 **2~3 次**
   （`recordExtraction(fsrsGrade)` + `bumpReviewInterval` + 事件消费者），间隔被过度拉长、计数重复自增；
 - 补 `lapses` 记录——**已做（2026-09-17）**：新增 `memory_traces.fsrsLapses` + 读写打通；口径见 §4.2(1)（**不改调度**）；
-- `reps` 与 `extractionCount` 可能发散——**未处理**（`reps` 直接取 `extractionCount`，语义上把"提取"等同于"复习"）。
+- `reps` 与 `extractionCount` 可能发散——**未处理**（`reps` 直接取 `extractionCount`，语义上把"提取"等同于"复习"）；
+- `checkpointHistory` 只写不读——**已消费（2026-09-17）**：写侧补 `title/type`，读侧把摘要（计数 + 最近 5 条）
+  注入 `teaching-turn` 的 `scenario.checkpointHistory`，并在提示词里要求"未通过的点换表征再确认、不得向学生汇报统计"。
+  **实测评估**（同一情境跑两次，真实模型）：无历史 → 模型重复原要求；有"1 个未通过" → 模型换表征拆小步
+  （"证据得是原话本身而不是解释"+ 两个小动作），且全程未出现"检查点/通过率"等系统词。
 
 ---
 

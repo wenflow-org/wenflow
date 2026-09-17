@@ -1274,6 +1274,37 @@ export function computeSessionEvidence(session: TeachingSessionRecord) {  // 排
   };
 }
 
+/**
+ * 检查点历史摘要（2026-09-17 起**被消费**；此前 `checkpointHistory` 只写不读，审计 §5.2 P2）。
+ *
+ * 只给模型"最近发生了什么、哪些没通过"，用于**换表征再确认**——不铺原始 20 条（噪声）。
+ * 返回 null = 本节课还没有检查点记录（模型据此不改变默认行为）。
+ */
+export function summarizeCheckpointHistory(raw: unknown): {
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  recent: Array<{ title: string; passed: boolean; skipped?: boolean; understanding?: number }>;
+} | null {
+  const rows = Array.isArray(raw) ? raw : [];
+  if (rows.length === 0) return null;
+  const passed = rows.filter((row) => row?.passed === true).length;
+  const skipped = rows.filter((row) => row?.skipped === true).length;
+  return {
+    total: rows.length,
+    passed,
+    failed: rows.length - passed - skipped,
+    skipped,
+    recent: rows.slice(-5).map((row) => ({
+      title: String(row?.title ?? row?.checkpointId ?? ''),
+      passed: row?.passed === true,
+      ...(row?.skipped === true ? { skipped: true } : {}),
+      ...(typeof row?.understanding === 'number' ? { understanding: row.understanding } : {}),
+    })),
+  };
+}
+
 async function buildTeachingTurnInput(
   session: TeachingSessionRecord,
   context: TeachingScenarioContext
@@ -1316,6 +1347,8 @@ async function buildTeachingTurnInput(
     lastLessonRecap: context.lastLessonRecap,
     priorLearningContext: context.priorLearningContext,
     learnerInsights: context.learnerInsights ?? null,
+    // 检查点历史（写侧 2026-09-17 起补 title/type）：让模型知道哪些点没通过，换表征再确认
+    checkpointHistory: summarizeCheckpointHistory(teachingState.checkpointHistory),
     memoryWarmup: pendingWarmupForModel(context.memoryWarmup),
     learnerPrediction: context.learnerPrediction
       ? {
@@ -2425,6 +2458,9 @@ export class AITeachingOrchestrator {
           : [];
         checkpointHistory.push({
           checkpointId: submittedCheckpoint.id,
+          // title/type 一并留档（2026-09-17）：此前只记 id/passed，读侧无法知道"没通过的是什么题"
+          title: submittedCheckpoint.title,
+          type: submittedCheckpoint.type,
           submittedAt: new Date().toISOString(),
           passed,
           understanding,
@@ -2993,6 +3029,8 @@ export class AITeachingOrchestrator {
           : [];
         history.push({
           checkpointId,
+          title: checkpoint.title,
+          type: checkpoint.type,
           submittedAt: new Date().toISOString(),
           passed: false,
           skipped: true,

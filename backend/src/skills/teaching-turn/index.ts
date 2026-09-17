@@ -139,6 +139,14 @@ export interface TeachingTurnInput {
      * 只读参考：与课堂实况冲突时以实况为准；不得在 reply 里向学生复述内部诊断。
      */
     learnerInsights?: Array<{ type?: string; claim?: string; action?: string }> | null;
+    /** 本节课理解检查点历史摘要（2026-09-17 起被消费）：未通过/跳过的点用于换表征再确认 */
+    checkpointHistory?: {
+      total: number;
+      passed: number;
+      failed: number;
+      skipped: number;
+      recent: Array<{ title: string; passed: boolean; skipped?: boolean; understanding?: number }>;
+    } | null;
     /**
      * 课内温故计划（记忆层）：本节开头要回捞的到期旧知（≤3，已按认知负担预算裁剪）。
      * 与 knowledge.points（本节知识点）物理分离——不要把 items 混进本节看板。
