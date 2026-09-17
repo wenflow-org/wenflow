@@ -49,6 +49,11 @@ export interface TaskDifficultyInput {
     strugglingCount?: number;
     prerequisiteGapCount?: number;
   } | null;
+  /**
+   * 独立成功率带判定（2026-09-17，§7 P1-1）：来自**代码裁决**的检查点结果
+   * （`resolveSuccessBandVerdict`）。缺省 = 无独立样本 → 走旧的 canIncrease 口径（行为不变）。
+   */
+  successBand?: { action: 'downgrade' | 'hold' | 'upgrade'; rate: number | null; sample: number } | null;
 }
 
 export type TaskDifficultyDirection = 'decrease' | 'keep' | 'increase';
@@ -83,6 +88,10 @@ export interface TaskDifficultyAdjustment {
     strugglingCount: number;
     prerequisiteGapCount: number;
     lessonScopeIsPath: boolean;
+    /** 独立成功率带（§7 P1-1）：动作 / 成功率 / 样本数（无样本时 rate=null、sample=0） */
+    successBandAction: 'downgrade' | 'hold' | 'upgrade';
+    successBandRate: number | null;
+    successBandSample: number;
   };
 }
 
@@ -144,6 +153,15 @@ export const KNOWLEDGE_DECREASE_REASONS = [
 
 const LOAD_BASED_REASON_SET = new Set<string>(LOAD_BASED_DECREASE_REASONS);
 
+/**
+ * 独立成功率带给出的**降档**理由（§7 P1-1）：也计入 delta，但**刻意不进**台账的可度量集合——
+ * 它的效果判据是"成功率回到带内"（独立传感器），而不是"同类理由不再出现"（后者自我印证，审计 §4.2(2)）。
+ */
+export const BAND_DECREASE_REASONS = ['success_rate_below_band'] as const;
+
+/** 真正参与 delta 的降档理由集合（负荷类 + 带） */
+const DECREASE_REASON_SET = new Set<string>([...LOAD_BASED_DECREASE_REASONS, ...BAND_DECREASE_REASONS]);
+
 /** 判定理由（含知识类）：**全部**留痕并展示给模型（模型据此给支架），但只有负荷类参与降档 */
 function collectReasons(
   input: TaskDifficultyInput,
@@ -197,10 +215,20 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
   const cap = CHALLENGE_CAP_LIMITS[capSource] ?? CHALLENGE_CAP_LIMITS.medium;
 
   const reasons = collectReasons(input, lesson, lessonProvided);
-  // 只有负荷类理由降档（知识类只挡升档）；合计最多 -2
-  const loadReasons = reasons.filter((reason) => LOAD_BASED_REASON_SET.has(reason));
-  let delta = -Math.min(loadReasons.length, 2);
-  if (canIncrease(input, lesson, reasons)) delta = 1;
+  // 独立成功率带（§7 P1-1）：低于带 → 降档理由；高于带 → 升档理由（带是主指标）
+  const bandAction = input.successBand?.action ?? 'hold';
+  if (bandAction === 'downgrade') reasons.push('success_rate_below_band');
+  if (bandAction === 'upgrade') reasons.push('success_rate_above_band');
+  // 只有负荷类理由降档（知识类只挡升档）；合计最多 -2；带理由计入降档
+  const decreaseReasons = reasons.filter((reason) => DECREASE_REASON_SET.has(reason));
+  let delta = -Math.min(decreaseReasons.length, 2);
+  if (bandAction === 'upgrade') {
+    // 带高于上沿 = 太容易：直接升一档，**不再**要求"无任何理由 + cap=high"同时成立
+    // （旧口径正是"只有刹车没有油门"的来源，审计 §4.2(2)）。安全仍由 ceiling 封顶兜底。
+    delta = 1;
+  } else if (canIncrease(input, lesson, reasons.filter((reason) => reason !== 'success_rate_above_band'))) {
+    delta = 1;
+  }
   if (!Number.isFinite(delta)) delta = 0;
 
   const baseline = clamp(Math.round(input.baselineLevel), DIFFICULTY_RANGE.min, DIFFICULTY_RANGE.max);
@@ -238,6 +266,9 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
       strugglingCount: input.knowledgeSignals?.strugglingCount ?? 0,
       prerequisiteGapCount: input.knowledgeSignals?.prerequisiteGapCount ?? 0,
       lessonScopeIsPath: lessonProvided,
+      successBandAction: bandAction,
+      successBandRate: input.successBand?.rate ?? null,
+      successBandSample: input.successBand?.sample ?? 0,
     },
   };
 }

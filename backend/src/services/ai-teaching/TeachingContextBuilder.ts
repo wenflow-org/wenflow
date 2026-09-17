@@ -5,6 +5,7 @@ import { teachingStrategyConfig } from '../../config/pedagogy.config';
 import type { TeachingKnowledgePointState, TeachingSessionRecord } from './TeachingSessionRepository';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { decideTaskDifficulty, resolveBaselineLevel } from '../learner/TaskDifficultyAdjustmentService';
+import { resolveSuccessBandVerdict } from '../learner/independent-success-band.service';
 import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 import { executeSkill } from '../../skills';
 import { learningPredictorDefinition, type LearningPredictorOutput } from '../../skills/learning-predictor';
@@ -773,6 +774,9 @@ export async function buildTeachingScenarioContext(
         strugglingCount: learnerSnapshot.knowledgeMemory.globalSignals.strugglingConcepts.length,
         prerequisiteGapCount: learnerSnapshot.knowledgeMemory.currentPath?.prerequisiteGaps.length ?? 0,
       },
+      // 独立成功率带（§7 P1-1）：只用**代码裁决**的检查点结果驱动档位；
+      // 无样本 → hold → 退回旧的 canIncrease 口径（行为与改造前一致）
+      successBand: await resolveSuccessBandVerdict(userId, { pathId: path.id }).catch(() => null),
     }),
   });
   const resolvedConcept = resolveTaskConceptFromPath(task, path);

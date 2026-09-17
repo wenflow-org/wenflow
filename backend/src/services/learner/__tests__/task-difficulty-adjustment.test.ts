@@ -34,6 +34,60 @@ describe('resolveBaselineLevel（任务基线是确定的，不随表述漂移�
   });
 });
 
+describe('decideTaskDifficulty：独立成功率带（§7 P1-1，2026-09-17）', () => {
+  it('低于带 + 样本足够 → 降一档，理由码 success_rate_below_band', () => {
+    const decision = decideTaskDifficulty({
+      ...normalInput(),
+      successBand: { action: 'downgrade', rate: 0.5, sample: 10 },
+    });
+    expect(decision.delta).toBe(-1);
+    expect(decision.direction).toBe('decrease');
+    expect(decision.reasons).toContain('success_rate_below_band');
+    expect(decision.evidence.successBandRate).toBe(0.5);
+    expect(decision.evidence.successBandSample).toBe(10);
+  });
+
+  it('高于带 → **即使存在知识类理由也升档**（带是主指标；旧口径"无任何理由"是只有刹车没有油门）', () => {
+    const legacy = decideTaskDifficulty({
+      ...normalInput(),
+      learningControlState: { paceMode: 'steady', conceptLoad: 'medium', challengeLevelCap: 'high' } as const,
+      knowledgeSignals: { fragileCount: 2, strugglingCount: 1, prerequisiteGapCount: 0 },
+    });
+    // 旧口径：知识类理由挡升档 → 保持
+    expect(legacy.direction).toBe('keep');
+
+    const withBand = decideTaskDifficulty({
+      ...normalInput(),
+      learningControlState: { paceMode: 'steady', conceptLoad: 'medium', challengeLevelCap: 'high' } as const,
+      knowledgeSignals: { fragileCount: 2, strugglingCount: 1, prerequisiteGapCount: 0 },
+      successBand: { action: 'upgrade', rate: 0.97, sample: 12 },
+    });
+    expect(withBand.delta).toBe(1);
+    expect(withBand.direction).toBe('increase');
+    expect(withBand.reasons).toContain('success_rate_above_band');
+    expect(withBand.reasons).toContain('fragile_concepts'); // 理由仍留痕（模型据此给支架），只是不再一票否决
+  });
+
+  it('带内 / 样本不足（hold）→ 行为与改造前一致（不因带而调整）', () => {
+    const inside = decideTaskDifficulty({ ...normalInput(), successBand: { action: 'hold', rate: 0.85, sample: 20 } });
+    expect(inside.direction).toBe('keep');
+    expect(inside.reasons).toEqual([]);
+
+    const tooFew = decideTaskDifficulty({ ...normalInput(), successBand: { action: 'hold', rate: 1.0, sample: 2 } });
+    expect(tooFew.direction).toBe('keep');
+  });
+
+  it('升档仍受 challengeLevelCap 封顶（cap=medium 时升档被 ceiling 吃掉）', () => {
+    const decision = decideTaskDifficulty({
+      ...normalInput(),
+      successBand: { action: 'upgrade', rate: 0.97, sample: 12 },
+    });
+    expect(decision.cap).toBe(CHALLENGE_CAP_LIMITS.medium);
+    expect(decision.adjusted).toBeLessThanOrEqual(CHALLENGE_CAP_LIMITS.medium);
+    expect(decision.reasons).toContain('success_rate_above_band');
+  });
+});
+
 describe('decideTaskDifficulty（调整档位与依据）', () => {
   it('状态正常 → 保持基线，无依据码', () => {
     const decision = decideTaskDifficulty(normalInput());
