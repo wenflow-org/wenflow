@@ -59,6 +59,9 @@ export function evaluateSuccessBand(rate: number | null, sample: number): Succes
   return { action: 'hold', rate, sample, reason: `成功率 ${rate.toFixed(2)} 落在带内（${SUCCESS_BAND_LOW}–${SUCCESS_BAND_HIGH}）` };
 }
 
+/** 检查点结果 payload 的最小形状（只读我们关心的字段，避免 any） */
+type CheckpointResultPayload = { judgedBy?: unknown; passed?: unknown };
+
 /**
  * 读取该学习者（可限路径）**代码裁决**的检查点成功率。
  * 只认 `judgedBy='code'`：无答案键的检查点记为 `model-reference`，是模型自评，不进带。
@@ -83,9 +86,9 @@ export async function loadCodeJudgedSuccess(
     let codePassed = 0;
     let codeSample = 0;
     for (const row of rows) {
-      let parsed: any = null;
+      let parsed: CheckpointResultPayload | null = null;
       try {
-        parsed = JSON.parse(String(row.payload || '{}'));
+        parsed = JSON.parse(String(row.payload || '{}')) as CheckpointResultPayload;
       } catch {
         continue;
       }

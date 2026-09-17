@@ -91,11 +91,12 @@ describe('课内温故：到期旧知与本节知识点看板物理分离（回�
   });
 
   it('extractWarmupOutcomes：结构化条目定位不到计划项 / 等级非法 → 丢弃（不猜等级）', () => {
-    const outcomes = extractWarmupOutcomes(warmup, null, [
+    const entries = [
       { conceptKey: '完全不相关的点', recall: 'unaided' },
       { itemIndex: 99, recall: 'unaided' },
-      { conceptKey: '离开前把书翻到下一页并立好', recall: 'unknown' as any },
-    ]);
+      { conceptKey: '离开前把书翻到下一页并立好', recall: 'unknown' },
+    ] as unknown as Parameters<typeof extractWarmupOutcomes>[2];
+    const outcomes = extractWarmupOutcomes(warmup, null, entries);
     expect(outcomes).toEqual([]);
   });
 

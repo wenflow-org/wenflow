@@ -57,13 +57,13 @@ async function main() {
   });
   const byType = new Map<string, { total: number; passed: number; code: number }>();
   for (const row of rows) {
-    let parsed: any = null;
+    let parsed: { type?: unknown; passed?: unknown; judgedBy?: unknown } | null = null;
     try {
-      parsed = JSON.parse(String(row.payload || '{}'));
+      parsed = JSON.parse(String(row.payload || '{}')) as { type?: unknown; passed?: unknown; judgedBy?: unknown };
     } catch {
       continue;
     }
-    const type = String(parsed?.type ?? 'unknown');
+    const type = typeof parsed?.type === 'string' ? parsed.type : 'unknown';
     const bucket = byType.get(type) ?? { total: 0, passed: 0, code: 0 };
     bucket.total += 1;
     if (parsed?.passed === true) bucket.passed += 1;
@@ -83,17 +83,22 @@ async function main() {
   });
   console.log(`[band] 最近 ${anchors.length} 次难度锚点：`);
   for (const anchor of anchors) {
-    let parsed: any = null;
+    let parsed: { baseline?: unknown; adjusted?: unknown; direction?: unknown; reasons?: unknown } | null = null;
     try {
-      parsed = JSON.parse(String(anchor.payload || '{}'));
+      parsed = JSON.parse(String(anchor.payload || '{}')) as { baseline?: unknown; adjusted?: unknown; direction?: unknown; reasons?: unknown };
     } catch {
       continue;
     }
-    const reasons: string[] = Array.isArray(parsed?.reasons) ? parsed.reasons : [];
+    const reasons: string[] = Array.isArray(parsed?.reasons)
+      ? parsed.reasons.filter((reason): reason is string => typeof reason === 'string')
+      : [];
     const bandReason = reasons.find((reason) => reason.startsWith('success_rate_'));
+    const baseline = `baseline=${Number(parsed?.baseline)}`;
+    const adjusted = `adjusted=${Number(parsed?.adjusted)}`;
+    const direction = String(parsed?.direction ?? '');
     console.log(
-      `    · ${anchor.occurredAt.toISOString().slice(0, 16)} baseline=${parsed?.baseline} adjusted=${parsed?.adjusted}` +
-        ` ${parsed?.direction}${bandReason ? `  ← ${bandReason}` : ''}`,
+      `    · ${anchor.occurredAt.toISOString().slice(0, 16)} ${baseline} ${adjusted}` +
+        ` ${direction}${bandReason ? `  ← ${bandReason}` : ''}`,
     );
   }
   console.log(
