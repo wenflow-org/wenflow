@@ -245,6 +245,7 @@ import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
+import { localDateKeyFromIso } from '@/utils/date';
 import { unwrap, unwrapArray } from './unwrap';
 
 type MetricKey = 'lsb' | 'lss' | 'ktl' | 'lf';
@@ -475,7 +476,9 @@ async function loadTrends() {
     if (seq !== trendSeq) return;
     const trendData = unwrap<{ trends?: Array<{ date: string; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null }> }>(trendRes);
     stateTrends.value = (trendData?.trends || []).map((t) => ({
-      date: String(t.date).slice(0, 10),
+      // 后端回的是本地零点 Date 的 ISO 序列化（UTC），必须按本地时区还原，
+      // 否则 UTC+8 会整体前移一天（与 V2LearningHistory 同一口径问题）
+      date: localDateKeyFromIso(String(t.date)),
       ktl: typeof t.ktl === 'number' ? t.ktl : null,
       lf: typeof t.lf === 'number' ? t.lf : null,
       lsb: typeof t.lsb === 'number' ? t.lsb : null
@@ -484,7 +487,7 @@ async function loadTrends() {
     const list = unwrapArray(sessionRes);
     const map = new Map<string, number>();
     for (const s of list) {
-      const key = String(s.startTime || '').slice(0, 10);
+      const key = localDateKeyFromIso(typeof s.startTime === 'string' ? s.startTime : null);
       if (!key) continue;
       const duration = typeof s.durationMinutes === 'number' ? s.durationMinutes : 0;
       map.set(key, (map.get(key) ?? 0) + duration);

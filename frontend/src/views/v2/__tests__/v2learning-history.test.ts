@@ -24,14 +24,14 @@ const SESSIONS = [
   { id: 's5', taskId: 't5', taskTitle: '任务五', status: 'discarded', startTime: '2026-09-14T08:00:00Z', durationMinutes: 93 },
 ];
 
-async function mountHistory() {
+async function mountHistory(sessions: unknown[] = SESSIONS) {
   getMock.mockImplementation((url: string, config?: { params?: { limit?: number } }) => {
     if (String(url).includes('/learning/stats')) {
       return Promise.resolve({ data: { time: { totalMinutes: 120, activeLearningDays: 3 } } });
     }
     if (String(url).includes('/users/me/sessions')) {
-      if (config?.params?.limit === 1) return Promise.resolve({ data: [], total: SESSIONS.length });
-      return Promise.resolve({ data: SESSIONS, total: SESSIONS.length });
+      if (config?.params?.limit === 1) return Promise.resolve({ data: [], total: sessions.length });
+      return Promise.resolve({ data: sessions, total: sessions.length });
     }
     return Promise.resolve({ data: {} });
   });
@@ -68,5 +68,18 @@ describe('V2LearningHistory', () => {
     );
     expect(listCalls.length).toBeGreaterThan(0);
     expect(listCalls[0][1]?.params).toMatchObject({ page: 1, limit: 30 });
+  });
+
+  /**
+   * 日期归组口径（2026-09-18 走查）：刚上完的课必须归到「今天」。
+   * 旧实现用 `String(iso).slice(0,10)`（UTC 切日），UTC+8 用户在 00:00–08:00
+   * 学完的课会落到「昨天」——这条断言用「现在」来锁住该行为。
+   */
+  it('按本地日期归组：时间戳为「现在」的会话必须归到「今天」', async () => {
+    const w = await mountHistory([
+      { id: 's-now', taskId: 't-now', taskTitle: '刚上完的课', status: 'paused', startTime: new Date().toISOString(), durationMinutes: 0 },
+    ]);
+    const labels = w.findAll('.history__day-head strong').map((n) => n.text());
+    expect(labels).toEqual(['今天']);
   });
 });

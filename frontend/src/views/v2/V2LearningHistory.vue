@@ -103,6 +103,7 @@ import request from '@/utils/api';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
+import { localDateKeyFromIso } from '@/utils/date';
 import { unwrap } from './unwrap';
 
 interface SessionRecord {
@@ -219,7 +220,12 @@ interface DayGroup {
   items: SessionRecord[];
 }
 
-const dayKey = (iso?: string | null) => (iso ? String(iso).slice(0, 10) : '');
+/**
+ * 会话归属的本地日期键。
+ * 勿用 `String(iso).slice(0, 10)`：那是 UTC 切日，UTC+8 用户 00:00–08:00 学完的课
+ * 会被归到「昨天」（2026-09-18 走查实测）。
+ */
+const dayKey = (iso?: string | null) => localDateKeyFromIso(iso);
 
 const dayLabel = (dateKey: string) => {
   const today = new Date();

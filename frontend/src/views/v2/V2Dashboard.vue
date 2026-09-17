@@ -531,6 +531,7 @@ import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
+import { localDateKey, localDateKeyFromIso } from '@/utils/date';
 import { unwrapArray } from './unwrap';
 
 const router = useRouter();
@@ -937,15 +938,10 @@ const nearestAchievement = computed(() => {
   };
 });
 
-// 本地时区日期键（拍板 2026-08-21）：此前 toISOString() 按 UTC 切日，
-// UTC+8 用户凌晨 0-8 点的学习被记进「昨天」，与预算卡的服务端本地口径互相矛盾
-function localDateKey(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+// 本地时区日期键（口径与实现统一到 @/utils/date；此前是各页面各写一份）
 /** 会话归属的本地日期键（与 minutesByDate 同口径；勿用 toISOString，UTC+8 凌晨会前移一天） */
 function sessionLocalDate(s: { startTime?: string | null }): string {
-  return s.startTime ? localDateKey(new Date(s.startTime)) : '';
+  return localDateKeyFromIso(s.startTime);
 }
 const todayStr = localDateKey(new Date());
 
