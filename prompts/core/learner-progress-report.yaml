@@ -6,18 +6,14 @@ identity: |
 channels: [task, learner, evidence, state]
 stateAdvance: false
 inputs:
-  - name: task
+  - name: sessionEvidence
     type: object
-    ref: sandbox:teaching.taskSnapshot
-    desc: 本次任务快照（title/timeSpent/difficulty）
-  - name: metrics
+    ref: sandbox:teaching.session.evidence
+    desc: 会话证据（回合数/理解均值/困惑点/情绪/负荷）——task 与 signals 由调用方在此之上算出
+  - name: learnerSnapshotDynamic
     type: object
-    ref: sandbox:profile.metrics
-    desc: 学习指标（completionRate/ktl/lf/lss，0-100 展示量纲）
-  - name: signals
-    type: string[]
-    ref: sandbox:profile.progressSignals
-    desc: 代码判定的进展信号（已预格式化；模型不复核阈值）
+    ref: sandbox:profile.snapshot.dynamicState
+    desc: 学习者动态指标（completionRate/ktl/lf/lss 等，metrics 的来源）
 rules:
   - 只能基于输入中的任务信息、指标和信号进行分析
   - 语气亲切、具体、鼓励，但不替用户做学习决策

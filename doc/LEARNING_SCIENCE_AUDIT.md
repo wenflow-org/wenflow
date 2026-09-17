@@ -622,6 +622,14 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
 6. `path-reviewer`：`successCriteria` 未传；yaml 的 input ref（`sandbox:path.normalizedInput.prerequisiteTree`）与代码实传（`analysis.cognitiveCore.prerequisiteTree`）不符。
 7. **replan 召回两套阈值并存**：`LearnerSnapshotService.deriveReplanSignal`（7 reasonCodes）vs `ReplanAdvisoryService.build`（另含 lss≥6 / movedToReview / ktl≥7）→ skill 收到的 `reasonCodes` 与实际召回方向可能不一致。
 8. 4 个 skill 的 yaml **没有 `inputs:` 契约段**（`teaching-opening-generator` / `adaptive-guidance-copy` / `learner-progress-report` / `replan-attribution`）→ 契约只在代码里，迁移风险。
+   → **已补（2026-09-17），但第一版被 CI 抓到缺陷**：我最初按"代码 payload 字段"写了 `sandbox:teaching.openingMode` 这类路径，
+   而沙盘路径注册表（`agent-contract-view`：输入通道 / 输出字段 / `SANDBOX_EXTRA_KEYS`）里**没有这些键** ⇒
+   `prompts:check:all` 的 **strict 对账**报 18 个 `sandbox-path-unregistered`。
+   修正为**注册表里真实存在的键**（如 `teaching.scenario` / `teaching.learner.learnerProjection` /
+   `profile.snapshot.replanSignal` / `teaching.session.wrapup` / `path.path.summary`），并把"调用方派生的字段"写进 `desc`；
+   同步 `skills.yaml` 的 `dataSource.sandbox` 两向对齐。**教训**：87 步"补契约"必须把
+   `prompts:check:all`（含 inputs↔handoff strict 对账）列入门禁清单——我当时只跑了前缀两向比对的子集，漏了这条严格门禁。
+
 9. `virtual-learner-referee` 的 `buildUserPayload` 漏发 `storyMeta/metricCompleteness`，但代码用它们打分、yaml 也声明为输入。
 
 **P2（口径 / 理念）**

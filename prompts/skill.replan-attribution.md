@@ -1,6 +1,6 @@
 ---
 agentId: skill:replan-attribution
-coreHash: 3e9bfbe6dff31cb16b436582fe730e0b2aa1005bf07be7d0fd8ddadc1bba4d2c
+coreHash: e482a53337068dfc402f87bcd1bac7957e24de6b3b22b7eead6fd5e572872248
 coreVersion: 1
 temperature: 0.3
 maxTokens: 1200
@@ -20,10 +20,9 @@ failurePolicy: propagate
 - state：平台维护的主记忆快照（当前值，含 stage）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
-- 「recall（object）」`sandbox:profile.replanSignal`（编排注入） — 阈值召回（reasonCodes/priority/recommendation/scope/rationale；与允许动作同源）
-- 「allowedRecommendations（string[]）」`sandbox:teaching.allowedRecommendations`（编排注入） — 允许的输出方向白名单（取自 advisory 的 ui.options）
-- 「evidence（object[]）」`sandbox:teaching.attributionEvidence`（编排注入） — 可引用的证据条目（evidenceRefs 必须取自这里）
-- 「pathContext（object?）」`sandbox:path.currentPosition`（编排注入） — 路径当前位置上下文
+- 「replanSignal（object）」`sandbox:profile.snapshot.replanSignal`（编排注入） — 阈值召回（reasonCodes/priority/recommendation/scope/rationale）——归因必须在它允许的方向内选
+- 「sessionWrapup（object）」`sandbox:teaching.session.wrapup`（编排注入） — 课后收束（含未解决点与困惑），即归因证据（evidence）的来源
+- 「pathSummary（string）」`sandbox:path.path.summary`（编排注入） — 路径概要——路径位置上下文（pathContext）
 
 ## 执行规则
 

@@ -6,30 +6,18 @@ identity: |
 channels: [task, learner, state, dialogue]
 stateAdvance: false
 inputs:
-  - name: taskContext
+  - name: scenarioContext
     type: object
-    ref: sandbox:teaching.taskContext
-    desc: 任务上下文（subject/topic/taskTitle/taskDescription/taskType）
-  - name: pathContext
+    ref: sandbox:teaching.scenario
+    desc: 任务与路径上下文（subject/topic/taskTitle/taskDescription/taskType、当前里程碑）——调用方据此派生开场内容
+  - name: learnerProjection
     type: object
-    ref: sandbox:path.currentMilestone
-    desc: 路径摘要与当前里程碑标题
-  - name: learnerRuntimeSignals
+    ref: sandbox:teaching.learner.learnerProjection
+    desc: 学习者运行信号（confidenceLevel/recentTrend/recommendedPacing）与开场模式判定所需的状态投影
+  - name: sessionInfo
     type: object
-    ref: sandbox:profile.runtimeSignals
-    desc: 学习者运行信号（confidenceLevel/recentTrend/recommendedPacing）
-  - name: openingMode
-    type: string
-    ref: sandbox:teaching.openingMode
-    desc: 编排层判定的开场模式（example-first/predict/self-assess）
-  - name: lastLessonRecap
-    type: object?
-    ref: sandbox:teaching.lastLessonRecap
-    desc: 上节回顾（可选，用于承接卡点）
-  - name: priorLearningContext
-    type: object?
-    ref: sandbox:teaching.priorLearningContext
-    desc: 前序学习上下文（可选）
+    ref: sandbox:teaching.session.info
+    desc: 会话信息（学科/主题/时长）；openingMode 由编排层判定，随该上下文一同给出
 rules:
   - message 用于开场定位，必须自然、简短，不像系统通知
   - question 是开场的一句可选引导（低门槛、可答可不答），不是必须回答的待办问题：

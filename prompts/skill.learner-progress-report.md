@@ -1,6 +1,6 @@
 ---
 agentId: skill:learner-progress-report
-coreHash: 044503bc00a63405557cb3b3cdc1b406a425f9c3de9f9f3e8c7550ad88f60adc
+coreHash: eadc7fc5cbb78d654a819bbe472fb80cdbb5b3baeb86552141b3da916a33b79e
 coreVersion: 1
 temperature: 0.4
 maxTokens: 1200
@@ -19,9 +19,8 @@ failurePolicy: propagate
 - state：平台维护的主记忆快照（当前值，含 stage）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
-- 「task（object）」`sandbox:teaching.taskSnapshot`（编排注入） — 本次任务快照（title/timeSpent/difficulty）
-- 「metrics（object）」`sandbox:profile.metrics`（编排注入） — 学习指标（completionRate/ktl/lf/lss，0-100 展示量纲）
-- 「signals（string[]）」`sandbox:profile.progressSignals`（编排注入） — 代码判定的进展信号（已预格式化；模型不复核阈值）
+- 「sessionEvidence（object）」`sandbox:teaching.session.evidence`（编排注入） — 会话证据（回合数/理解均值/困惑点/情绪/负荷）——task 与 signals 由调用方在此之上算出
+- 「learnerSnapshotDynamic（object）」`sandbox:profile.snapshot.dynamicState`（编排注入） — 学习者动态指标（completionRate/ktl/lf/lss 等，metrics 的来源）
 
 ## 执行规则
 

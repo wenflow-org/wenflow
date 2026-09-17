@@ -10,22 +10,18 @@ identity: |
 channels: [learner, path, evidence, state]
 stateAdvance: false
 inputs:
-  - name: recall
+  - name: replanSignal
     type: object
-    ref: sandbox:profile.replanSignal
-    desc: 阈值召回（reasonCodes/priority/recommendation/scope/rationale；与允许动作同源）
-  - name: allowedRecommendations
-    type: string[]
-    ref: sandbox:teaching.allowedRecommendations
-    desc: 允许的输出方向白名单（取自 advisory 的 ui.options）
-  - name: evidence
-    type: object[]
-    ref: sandbox:teaching.attributionEvidence
-    desc: 可引用的证据条目（evidenceRefs 必须取自这里）
-  - name: pathContext
-    type: object?
-    ref: sandbox:path.currentPosition
-    desc: 路径当前位置上下文
+    ref: sandbox:profile.snapshot.replanSignal
+    desc: 阈值召回（reasonCodes/priority/recommendation/scope/rationale）——归因必须在它允许的方向内选
+  - name: sessionWrapup
+    type: object
+    ref: sandbox:teaching.session.wrapup
+    desc: 课后收束（含未解决点与困惑），即归因证据（evidence）的来源
+  - name: pathSummary
+    type: string
+    ref: sandbox:path.path.summary
+    desc: 路径概要——路径位置上下文（pathContext）
 rules:
   - primaryReasonCode 必须原样取自输入 recall.reasonCodes；不在其中的原因不许编
   - recommendation 必须取自输入 allowedRecommendations（这是系统真正能执行的方向）；都不合适时给 keep

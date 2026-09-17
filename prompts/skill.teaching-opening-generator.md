@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-opening-generator
-coreHash: 3dd11b510eeefa400a0321e23097f0cd339f1180cb98f9b7b05afc69206c2dd8
+coreHash: 1b6384808fc477d63c7d9760d2686fa14d8a32ae1fd097414a223ce5d5a85ca3
 coreVersion: 3
 temperature: 0.4
 maxTokens: 3000
@@ -19,12 +19,9 @@ failurePolicy: propagate
 - dialogue：当前输入与近期对话切片（用于语境理解，不充当状态载体）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
-- 「taskContext（object）」`sandbox:teaching.taskContext`（编排注入） — 任务上下文（subject/topic/taskTitle/taskDescription/taskType）
-- 「pathContext（object）」`sandbox:path.currentMilestone`（编排注入） — 路径摘要与当前里程碑标题
-- 「learnerRuntimeSignals（object）」`sandbox:profile.runtimeSignals`（编排注入） — 学习者运行信号（confidenceLevel/recentTrend/recommendedPacing）
-- 「openingMode（string）」`sandbox:teaching.openingMode`（编排注入） — 编排层判定的开场模式（example-first/predict/self-assess）
-- 「lastLessonRecap（object?）」`sandbox:teaching.lastLessonRecap`（编排注入） — 上节回顾（可选，用于承接卡点）
-- 「priorLearningContext（object?）」`sandbox:teaching.priorLearningContext`（编排注入） — 前序学习上下文（可选）
+- 「scenarioContext（object）」`sandbox:teaching.scenario`（编排注入） — 任务与路径上下文（subject/topic/taskTitle/taskDescription/taskType、当前里程碑）——调用方据此派生开场内容
+- 「learnerProjection（object）」`sandbox:teaching.learner.learnerProjection`（编排注入） — 学习者运行信号（confidenceLevel/recentTrend/recommendedPacing）与开场模式判定所需的状态投影
+- 「sessionInfo（object）」`sandbox:teaching.session.info`（编排注入） — 会话信息（学科/主题/时长）；openingMode 由编排层判定，随该上下文一同给出
 
 ## 执行规则
 

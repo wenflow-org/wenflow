@@ -1,6 +1,6 @@
 ---
 agentId: skill:adaptive-guidance-copy
-coreHash: e0c5a8b6f4ca58b821628f8951afa6044067f80278ec40661214290853eda25a
+coreHash: 3f24a7365154eadcf42c31807910f421dcfdefff38fec1082c943cdb12a26679
 coreVersion: 1
 temperature: 0.6
 maxTokens: 4000
@@ -19,11 +19,10 @@ failurePolicy: propagate
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
-- 「learnerSnapshot（object）」`sandbox:profile.learnerSnapshot`（编排注入） — 学习者快照投影（dynamicState/learningControlState/replanSignal/profile/teachingHints）
-- 「learningState（object）」`sandbox:profile.learningState`（编排注入） — 学习状态指标（lss/ktl/lf/lsb 与节奏信号）
-- 「path（object?）」`sandbox:path.summary`（编排注入） — 路径概要（当前里程碑/进度）
-- 「sessionWrapup（object?）」`sandbox:teaching.sessionWrapup`（编排注入） — 最近一节的收束摘要
-- 「advisory（object?）」`sandbox:teaching.replanAdvisory`（编排注入） — 路径重排建议（阈值 + 归因）
+- 「learnerSnapshotDynamic（object）」`sandbox:profile.snapshot.dynamicState`（编排注入） — 学习者动态状态（负荷/节奏/趋势）——快照投影的来源
+- 「learningControlState（object）」`sandbox:profile.snapshot.learningControlState`（编排注入） — 学习控制状态（paceMode/challengeLevelCap/conceptLoad）与运行时信号
+- 「replanSignal（object）」`sandbox:profile.snapshot.replanSignal`（编排注入） — 重排信号（阈值召回 + 归因），即文案里的 advisory 来源
+- 「sessionWrapup（object）」`sandbox:teaching.session.wrapup`（编排注入） — 最近一节的收束摘要（可选）——无历史时缺失
 
 ## 执行规则
 
