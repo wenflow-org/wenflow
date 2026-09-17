@@ -92,6 +92,8 @@ export interface MemoryTraceInput {
   masteryScore: number;
   stability?: MemoryStability;
   source?: string;
+  /** 来源路径（首次出现的路径；已有值不覆盖——originPathTitle 的语义是"最早出现"） */
+  pathId?: string | null;
   /** 下次到期时间（物化 dueAt；缺省按 ACT-R 间隔规则计算） */
   dueAt?: Date | null;
   /** 复习间隔因子（用于计算 dueAt；默认沿用现有 intervalFactor 语义） */
@@ -233,6 +235,8 @@ class MemoryTraceService {
         dueAt,
         fsrsStability,
         fsrsDifficulty,
+        // 来源路径只在**首次创建**时写；update 不碰（originPathTitle 的语义是"最早出现"）
+        pathId: input.pathId ?? null,
       },
       update: {
         label: input.label ?? undefined,
@@ -254,6 +258,7 @@ class MemoryTraceService {
     items: SessionKnowledgeOutcome[],
     source = 'derived',
     calibrationBias: 'overconfident' | 'accurate' | 'underconfident' = 'accurate',
+    pathId: string | null = null,
   ): Promise<number> {
     let count = 0;
     for (const item of items) {
@@ -266,6 +271,7 @@ class MemoryTraceService {
         masteryScore,
         stability,
         source,
+        pathId,
       });
       count += 1;
     }
@@ -291,6 +297,7 @@ class MemoryTraceService {
     retention: number;
     intervalDays: number;
     reason: 'below-threshold' | 'interval-elapsed' | 'never-seen' | 'not-due';
+    pathId: string | null;
   }>> {
     const now = options.now ?? simulatedNowOr();
     const retentionTargetDays = Number.isFinite(options.retentionTargetDays)
@@ -325,6 +332,7 @@ class MemoryTraceService {
         retention: fsrsRetentionOfTrace(trace, now),
         intervalDays: fsrsIntervalDaysOfTrace(trace),
         reason: 'interval-elapsed' as const,
+        pathId: trace.pathId ?? null,
       })),
       ...legacy
         .map((trace) => {
@@ -341,6 +349,7 @@ class MemoryTraceService {
             retention,
             intervalDays: fsrsIntervalDaysOfTrace(trace),
             reason: 'below-threshold' as const,
+            pathId: trace.pathId ?? null,
           };
         })
         .filter((item): item is NonNullable<typeof item> => item !== null),
@@ -395,6 +404,7 @@ class MemoryTraceService {
   async applyKtEstimate(
     userId: string,
     items: Array<{ conceptKey: string; mastery: number }>,
+    pathId: string | null = null,
   ): Promise<void> {
     if (!items || items.length === 0) return;
     const ALPHA = 0.2;
@@ -424,6 +434,7 @@ class MemoryTraceService {
             ktMasteryEma: mastery,
             extractionCount: 0,
             source: 'kt-estimate',
+            pathId,
           },
         });
       }

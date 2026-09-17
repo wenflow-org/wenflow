@@ -438,6 +438,7 @@ export class SessionFinalizationService {
           masteryScore: mastery,
           stability: p.status === 'mastered' ? 'stable' : 'fragile',
           source: 'derived',
+          pathId: session.learningPathId ?? null,
           fsrsGrade: fsrsGrade as 1 | 2 | 3 | 4,
         });
         // FSRS-6 DSR 调度：复习成功按成绩更新 stability/difficulty

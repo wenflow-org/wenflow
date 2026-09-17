@@ -2440,7 +2440,7 @@ export class AITeachingOrchestrator {
         void memoryTraceService.applyKtEstimate(session.userId, ktConceptMastery.map((c) => ({
           conceptKey: c.conceptKey,
           mastery: c.mastery,
-        }))).catch((error) => {
+        })), session.learningPathId ?? null).catch((error) => {
           logger.warn('[AITeachingCoordinator] ktEstimate EMA 回写失败', { error: error instanceof Error ? error.message : String(error) });
         });
       }
@@ -2813,7 +2813,14 @@ export class AITeachingOrchestrator {
       conceptLoadService.warmInBackground(session.userId);
       // 记忆引擎 M2：课后按知识看板状态确定性回写内化强度（best-effort，失败不阻断课堂完成）
       const calibrationBias = learnerSnapshot?.profile?.cognitive?.selfAssessmentAccuracy ?? 'accurate';
-      memoryTraceService.recordSessionOutcome(session.userId, session.knowledgeState, 'derived', calibrationBias).catch((error) => {
+      memoryTraceService.recordSessionOutcome(
+        session.userId,
+        session.knowledgeState,
+        'derived',
+        calibrationBias,
+        // 记忆条目的来源路径：用于温故解释"这是你在《X》里学过的"，以及按路径看待办
+        session.learningPathId ?? null,
+      ).catch((error) => {
         logger.warn('[AITeaching] 记忆痕迹回写失败', {
           sessionId,
           userId: session.userId,

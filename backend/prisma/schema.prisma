@@ -688,6 +688,7 @@ model memory_traces {
   fsrsStability   Float?    // FSRS-6 稳定性（天）：回忆率降到 desiredRetention 所需时间；null = 未初始化（走 legacy ACT-R 兜底）
   fsrsDifficulty  Float?    // FSRS-6 难度（1-10）：null = 未初始化
   ktMasteryEma    Float?    // θ−d 知识状态 EMA（LLM ktEstimate 的跨会话滑动平均，α=0.2；null = 未初始化）
+  pathId          String?   // 来源路径（写入时从会话带入）：温故解释"这是你在《X》里学过的"、按路径看待办
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -695,6 +696,7 @@ model memory_traces {
   @@index([userId, lastSeenAt])
   @@index([userId, stability])
   @@index([userId, dueAt])
+  @@index([userId, pathId])
 }
 
 model user_agent_configs {

@@ -278,34 +278,49 @@ export function consecutiveSuccesses(outcomes: WarmupOutcome[]): Map<string, num
 /** 到期点 → 教学场景里给学生的「这是什么」一句来源（跨 path 时避免困惑） */
 async function resolveOriginPathTitles(
   userId: string,
-  conceptKeys: string[],
+  picked: Array<{ conceptKey: string; pathId?: string | null }>,
   deps: ReviewPlanDeps,
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>();
-  if (conceptKeys.length === 0) return result;
+  if (picked.length === 0) return result;
   try {
-    const evidence = await deps.findEvidence({
-      where: {
-        userId,
-        sessionId: { not: null },
-        evidenceKey: { in: conceptKeys.map((key) => `review:result:${key}`) },
-      },
-      select: { evidenceKey: true, sessionId: true },
-      take: 60,
-    });
     const pathIdByKey = new Map<string, string>();
-    const sessionIds = Array.from(new Set(evidence.map((row) => row.sessionId).filter(Boolean) as string[]));
-    if (sessionIds.length === 0) return result;
-    const sessions = await deps.findSessions({
-      where: { id: { in: sessionIds } },
-      select: { id: true, learningPathId: true },
-    });
-    const pathIdBySession = new Map(sessions.map((row) => [row.id, row.learningPathId]));
-    for (const row of evidence) {
-      const key = String(row.evidenceKey || '').replace(/^review:result:/, '');
-      const pathId = row.sessionId ? pathIdBySession.get(row.sessionId) : null;
-      if (key && pathId && !pathIdByKey.has(key)) pathIdByKey.set(key, pathId);
+
+    // ① 痕迹自带来源路径（新数据）：**不依赖"是否复习过"**，所以首次温故也能说清来源
+    for (const trace of picked) {
+      const key = normalizeConceptKey(trace.conceptKey);
+      if (key && trace.pathId) pathIdByKey.set(key, trace.pathId);
     }
+
+    // ② 老数据没有 pathId：回落到"曾经复习过 → 那次复习所在会话的路径"反查（尽力而为）
+    const missing = picked
+      .map((trace) => normalizeConceptKey(trace.conceptKey))
+      .filter((key) => key && !pathIdByKey.has(key));
+    if (missing.length > 0) {
+      const evidence = await deps.findEvidence({
+        where: {
+          userId,
+          sessionId: { not: null },
+          evidenceKey: { in: missing.map((key) => `review:result:${key}`) },
+        },
+        select: { evidenceKey: true, sessionId: true },
+        take: 60,
+      });
+      const sessionIds = Array.from(new Set(evidence.map((row) => row.sessionId).filter(Boolean) as string[]));
+      if (sessionIds.length > 0) {
+        const sessions = await deps.findSessions({
+          where: { id: { in: sessionIds } },
+          select: { id: true, learningPathId: true },
+        });
+        const pathIdBySession = new Map(sessions.map((row) => [row.id, row.learningPathId]));
+        for (const row of evidence) {
+          const key = String(row.evidenceKey || '').replace(/^review:result:/, '');
+          const pathId = row.sessionId ? pathIdBySession.get(row.sessionId) : null;
+          if (key && pathId && !pathIdByKey.has(key)) pathIdByKey.set(key, pathId);
+        }
+      }
+    }
+
     const pathIds = Array.from(new Set(pathIdByKey.values()));
     if (pathIds.length === 0) return result;
     const paths = await deps.findPaths({
@@ -444,7 +459,7 @@ export async function buildReviewPlan(
     .countDueBetween(userId, endOfToday, endOfTomorrow)
     .catch(() => 0);
 
-  const origins = await resolveOriginPathTitles(userId, picked.map((trace) => normalizeConceptKey(trace.conceptKey)), deps);
+  const origins = await resolveOriginPathTitles(userId, picked, deps);
 
   const items: ReviewPlanItem[] = picked.map((trace) => {
     const estimate = loadOf(trace);

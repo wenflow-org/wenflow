@@ -60,7 +60,7 @@ async function runLesson(input: {
   taskId: string;
   turns: number;
   studentLines: string[];
-}): Promise<{ sessionId: string; warmupItems: number; planLabels: string[] }> {
+}): Promise<{ sessionId: string; warmupItems: number; planLabels: string[]; originTitles: string[] }> {
   const session = await aiTeachingOrchestrator.startSession({ userId: input.userId, taskId: input.taskId });
   const sessionId = session.sessionId;
   const row = await prisma.teaching_sessions.findUnique({
@@ -74,6 +74,9 @@ async function runLesson(input: {
     plan = null;
   }
   const labels: string[] = Array.isArray(plan?.items) ? plan.items.map((item: any) => String(item.label)) : [];
+  const originTitles: string[] = Array.isArray(plan?.items)
+    ? plan.items.map((item: any) => String(item?.originPathTitle ?? '')).filter(Boolean)
+    : [];
 
   for (let i = 0; i < input.turns; i += 1) {
     const current = await prisma.teaching_sessions.findUnique({ where: { id: sessionId }, select: { revision: true } });
@@ -93,7 +96,7 @@ async function runLesson(input: {
     endReason: 'manual-end',
   } as never);
   await drainOutbox();
-  return { sessionId, warmupItems: labels.length, planLabels: labels };
+  return { sessionId, warmupItems: labels.length, planLabels: labels, originTitles };
 }
 
 async function main(): Promise<void> {
@@ -186,6 +189,20 @@ async function main(): Promise<void> {
     take: 3,
   });
   ok('4 温故结果入库', reviewEvidence2.length > 0, reviewEvidence2.map((row) => String(row.payload).slice(0, 110)).join(' ｜ '));
+
+  // ── 6 记忆条目带来源路径（A′ 的前置：溯源；写入时从会话带入）
+  const tracesWithPath = await prisma.memory_traces.count({
+    where: { userId: provisioned.userId, pathId: { not: null } },
+  });
+  const tracesAll = await prisma.memory_traces.count({ where: { userId: provisioned.userId } });
+  ok('6 记忆条目带来源路径', tracesWithPath > 0, `${tracesWithPath}/${tracesAll} 条有 pathId`);
+
+  // ── 7 温故项能说清来源（**首次温故即可**，不再依赖"曾经复习过"）
+  ok(
+    '7 温故项带来源路径',
+    lesson2.originTitles.length > 0,
+    lesson2.originTitles.length > 0 ? lesson2.originTitles.join('、') : '（无来源标题）',
+  );
 
   // ── 5 难度锚点 / 保持曲线
   const anchors = await prisma.learner_evidence.count({

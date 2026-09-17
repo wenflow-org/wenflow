@@ -350,6 +350,46 @@ describe('buildReviewPlan（课内温故计划）', () => {
     expect(plan.items[0].originPathTitle).toBeNull();
   });
 
+  it('痕迹自带 pathId → 直接给出源路径标题，**不再依赖"曾经复习过"**（首次温故也能说清来源）', async () => {
+    const findEvidence = jest.fn().mockResolvedValue([]);
+    const deps = buildDeps({
+      findEvidence,
+      findPaths: jest.fn().mockResolvedValue([{ id: 'p-origin', title: '分布式系统入门' }]),
+      getDueTraces: jest.fn().mockResolvedValue([
+        { ...trace({ conceptKey: 'CAP 定理', label: 'CAP 定理' }), pathId: 'p-origin' },
+      ]),
+    });
+    const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
+    expect(plan.items[0].originPathTitle).toBe('分布式系统入门');
+    // 关键：没有走"来源反查"那条路（它只服务老数据；注意成功率查询也会用 findEvidence，故按 select 精确判定）
+    const originLookups = findEvidence.mock.calls.filter((args: any[]) => args?.[0]?.select?.evidenceKey);
+    expect(originLookups).toHaveLength(0);
+  });
+
+  it('痕迹有 pathId、老数据没有 → 两者可共存（各自解析）', async () => {
+    const deps = buildDeps({
+      findEvidence: jest.fn().mockImplementation(async (args: any) => {
+        if (args?.select?.evidenceKey) {
+          return [{ evidenceKey: 'review:result:幂等性', sessionId: 's9' }];
+        }
+        return [];
+      }),
+      findSessions: jest.fn().mockResolvedValue([{ id: 's9', learningPathId: 'p-old' }]),
+      findPaths: jest.fn().mockResolvedValue([
+        { id: 'p-origin', title: '新路径' },
+        { id: 'p-old', title: '老路径' },
+      ]),
+      getDueTraces: jest.fn().mockResolvedValue([
+        { ...trace({ conceptKey: 'CAP 定理', label: 'CAP 定理', retention: 0.2 }), pathId: 'p-origin' },
+        { ...trace({ conceptKey: '幂等性', label: '幂等性', retention: 0.3 }) },
+      ]),
+    });
+    const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
+    const byKey = Object.fromEntries(plan.items.map((item) => [item.conceptKey, item.originPathTitle]));
+    expect(byKey['CAP 定理']).toBe('新路径');
+    expect(byKey['幂等性']).toBe('老路径');
+  });
+
   it('当日额度压缩本节预算（跨会话共享）', async () => {
     const deps = buildDeps({
       findEvidence: jest.fn().mockResolvedValue([

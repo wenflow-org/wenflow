@@ -79,6 +79,15 @@ export class ReviewCompletedConsumer {
       });
       if (consumed) return;
 
+      // 本次复习发生的路径（会话 → 路径）：只在**首次创建**痕迹时写入，
+      // 已有痕迹保留最早来源（originPathTitle = "最早出现的路径"）
+      const sessionPathId = data.sessionId
+        ? (await tx.teaching_sessions.findUnique({
+            where: { id: data.sessionId },
+            select: { learningPathId: true },
+          }))?.learningPathId ?? null
+        : null;
+
       for (const item of items) {
         const conceptKey = String(item.conceptKey || '').trim();
         if (!conceptKey) continue;
@@ -146,6 +155,7 @@ export class ReviewCompletedConsumer {
             lastSeenAt: now,
             extractionCount: 1,
             source: 'review-event',
+            pathId: sessionPathId,
             dueAt,
             fsrsStability: result.state.stability,
             fsrsDifficulty: result.state.difficulty,

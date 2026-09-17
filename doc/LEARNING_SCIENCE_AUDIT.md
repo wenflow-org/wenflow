@@ -515,6 +515,48 @@ INFO 5  难度锚点=1；计划 backlog=0 successRate=0
 **复现**：`npx ts-node --transpile-only src/scripts/verify-from-zero.ts --turns=2 --days=3`
 （会真实新建一个虚拟学习者；跑完可用 `audit-warmup-loop.ts` / `audit-difficulty-ledger.ts` / `audit-retention-curve.ts` 回看）
 
+## 3.18 A′ 实施：先否证两个便宜口径，再补上真正的缺失（溯源）——2026-09-17
+
+### (1) 先量：两个"便宜口径"都不可用
+
+| 候选口径 | 实测保留率 | 结论 |
+|---|---|---|
+| 只复习"最近 14 天接触过"的旧知 | **100%**（到期项本来就都是最近接触的） | 过滤 0%，**无效** |
+| 只复习"命中本路径任务目标/标题"的旧知 | **0–1%**（如 1/86、0/46） | 几乎全砍，**等于关掉温故** |
+
+副作用认知：把范围限定成"只复习当前路径"还会**违反既有设计**——跨路径复习是刻意支持的
+（`originPathTitle` 的用途就是解释"这是你在《X》里学过的"）。
+
+### (2) 根因：记忆条目**没有路径身份**
+
+`memory_traces` 此前没有 `pathId`；`originPathTitle` 只能靠"曾经复习过 → 那次会话的路径"反查，
+所以**首次温故永远说不清来源**，按路径限定范围也无从实现。
+
+### (3) 落地（本次）
+
+- **`memory_traces.pathId`**（迁移 `20260917000000_memory_trace_origin_path` + 索引）；
+- **写入侧带上来源路径**：`recordSessionOutcome`（课末看板）、`recordExtraction`（复习提取）、
+  `applyKtEstimate`（回合观测）、`ReviewCompletedConsumer`（复习事件首建）——统一从会话带入；
+  **只在首次创建时写，更新不覆盖**（`originPathTitle` 的语义是"最早出现"）；
+- **`originPathTitle` 改为 pathId 优先**，老数据再回落到证据反查（兼容，不迁移历史行）；
+- 顺手把读侧的 `getDueTraces` 也带出 `pathId`。
+
+### (4) 立刻可见的收益
+
+**首次温故就能说清来源**（此前必须"曾经复习过"才有）。从零验证复跑（12 项全绿）：
+
+```
+PASS 4  温故结果入库     rating=again status=not-recalled elapsedDays=3   ← 失败通道
+PASS 6  记忆条目带来源路径 4/4 条有 pathId
+PASS 7  温故项带来源路径   「科普论证复述入门」          ← 首次温故即带出路径标题
+```
+
+### (5) 仍未做：范围的**过滤**
+
+现在 pathId 有了，'只复习某条路径的旧知' 距实现只差一个过滤条件——但**口径要你定**：
+只当前路径 / 最近活跃路径（14 天）/ 不限（现状）。注意上面 (1) 的测量：单靠"名字匹配"不可行，
+必须用 pathId 这类**结构身份**。
+
 ## 4. 科学性评估（逐机制对照文献）
 
 ### 4.1 有依据且实现得当的部分
