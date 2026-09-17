@@ -454,6 +454,11 @@ export class LearningStateService {
     };
   }
 
+  /**
+   * 投影下一份状态。
+   * 注意：`ktlInput` / `lfInput` 缺省时都回落到 `lss`——调用方若想要**独立**的负荷/疲劳观测量，
+   * 必须显式传入（结课路径即如此，审计 §3.2）。
+   */
   private projectState(
     previousMetrics: LearningStateMetrics | null,
     input: {
@@ -872,6 +877,14 @@ export class LearningStateService {
     return metrics;
   }
 
+  /**
+   * 回合内**运行时临时态**（仅供课内展示/节奏提示，**不落库**）。
+   *
+   * ⚠️ 语义边界（审计 §3.2）：这里只传了 `{ lss }`，`projectState` 会用 `ktlInput ?? lss` /
+   * `lfInput ?? lss` 兜底，于是 KTL/LF 退化成「对同一个 LSS 输入的快/慢 EWMA」——
+   * 它**不是**独立的负荷/疲劳观测量。权威状态走结课路径 `prepareSessionScoreCommit`，
+   * 独立传入 `sessionKtl` / `sessionLf`；需要权威 KTL/LF 时不要读本函数的返回值。
+   */
   calculateRuntimeState(previousMetrics: LearningStateMetrics | null, inputs: LSSInputs): LearningStateMetrics {
     const currentLSS = this.calculateLSS(inputs);
     return this.projectState(previousMetrics, { lss: currentLSS });
