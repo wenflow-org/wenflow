@@ -349,6 +349,13 @@ export async function buildReviewPlan(
     maxItems?: number;
     candidateLimit?: number;
     deps?: ReviewPlanDeps;
+    /**
+     * 本节的路径（范围口径：**只复习当前路径**的旧知）。
+     * - 传入且痕迹有来源路径 → 只保留同一路径的；
+     * - 痕迹 pathId 为空（迁移前的历史行，无法判断归属）→ **仍可复习**，避免老数据一刀切失效；
+     * - 不传（脚本/后台回看）→ 不启用范围过滤（与旧行为一致）。
+     */
+    pathId?: string | null;
   } = {},
 ): Promise<ReviewPlan> {
   const deps = options.deps ?? defaultDeps;
@@ -370,6 +377,7 @@ export async function buildReviewPlan(
       .map(([key]) => key),
   );
 
+  const scopePathId = options.pathId ?? null;
   const due = await deps.getDueTraces(userId, { limit: candidateLimit, now }) as Awaited<ReturnType<typeof memoryTraceService.getDueTraces>>;
 
   // 同族去重：同一概念的多种说法只保留最急迫的一条（normalizeConceptKey 已归一化，
@@ -380,6 +388,8 @@ export async function buildReviewPlan(
     if (!trace.conceptKey) continue;
     const family = normalizeConceptKey(trace.conceptKey);
     if (!family) continue;
+    // 范围过滤（只当前路径）：来源明确且不是本节路径的旧知不进本节队列
+    if (scopePathId && trace.pathId && trace.pathId !== scopePathId) continue;
     // 从未被真正提取过的点没有可回捞的记忆（kt-estimate 孤儿等），不进队列
     if (trace.extractionCount === 0) continue;
     if (leechKeys.has(family)) {

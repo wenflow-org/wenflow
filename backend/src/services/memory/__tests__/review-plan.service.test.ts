@@ -337,6 +337,34 @@ describe('buildReviewPlan（课内温故计划）', () => {
     expect(plan.items[0].originPathTitle).toBe('分布式系统入门');
   });
 
+  it('范围（只当前路径）：来源明确的异路径旧知不进队列；**无来源路径的历史行仍可复习**', async () => {
+    const deps = buildDeps({
+      getDueTraces: jest.fn().mockResolvedValue([
+        { ...trace({ conceptKey: '本路径的点', label: '本路径的点', retention: 0.2 }), pathId: 'p-cur' },
+        { ...trace({ conceptKey: '别路径的点', label: '别路径的点', retention: 0.1 }), pathId: 'p-other' },
+        { ...trace({ conceptKey: '历史旧点', label: '历史旧点', retention: 0.3 }), pathId: null },
+      ]),
+    });
+    const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15'), pathId: 'p-cur' });
+    const keys = plan.items.map((item) => item.conceptKey);
+    expect(keys).toContain('本路径的点');
+    expect(keys).toContain('历史旧点'); // 迁移前历史行：不判断归属，仍可复习
+    expect(keys).not.toContain('别路径的点'); // 最急迫（retention 最低）但属别的路径 → 不进
+    // backlog 也按范围算（不再把别的路径的算进"排队中"）
+    expect(plan.backlogCount).toBe(0);
+  });
+
+  it('范围：不传 pathId 时不启用过滤（脚本/后台回看与旧行为一致）', async () => {
+    const deps = buildDeps({
+      getDueTraces: jest.fn().mockResolvedValue([
+        { ...trace({ conceptKey: 'A 点', label: 'A 点', retention: 0.2 }), pathId: 'p-1' },
+        { ...trace({ conceptKey: 'B 点', label: 'B 点', retention: 0.1 }), pathId: 'p-2' },
+      ]),
+    });
+    const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15') });
+    expect(plan.items.map((item) => item.conceptKey)).toContain('B 点');
+  });
+
   it('来源解析抛错不影响计划生成', async () => {
     const deps = buildDeps({
       findEvidence: jest.fn().mockImplementation(async (args: any) => {

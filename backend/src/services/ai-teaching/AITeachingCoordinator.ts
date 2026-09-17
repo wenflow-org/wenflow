@@ -1597,7 +1597,10 @@ export class AITeachingOrchestrator {
     let memoryWarmup: ReviewPlan | null = null;
     if (input.mode !== 'review') {
       try {
-        const plan = await reviewPlanService.buildReviewPlan(input.userId);
+        // 范围口径（只当前路径）：温故只回捞本节所属路径的旧知（历史行无来源路径时仍可复习）
+        const plan = await reviewPlanService.buildReviewPlan(input.userId, {
+          pathId: context.learningPathId ?? null,
+        });
         if (plan.items.length > 0) {
           memoryWarmup = plan;
           context.memoryWarmup = plan;
