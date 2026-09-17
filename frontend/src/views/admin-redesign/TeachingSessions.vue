@@ -201,20 +201,21 @@
 
     <!-- 详情抽屉 -->
     <Teleport to="body">
-      <div v-if="detail" ref="maskRef" class="ts-mask">
-        <aside ref="panelRef" class="ts-panel" role="dialog" aria-label="会话详情">
-          <header class="ts-panel__head">
-            <div class="ts-panel__title">
+      <div v-if="detail" ref="maskRef" class="mk-drawer">
+        <div class="mk-drawer__mask" @click="closeDetail"></div>
+        <aside ref="panelRef" class="mk-drawer__panel" role="dialog" aria-label="会话详情">
+          <header class="mk-drawer__head">
+            <div class="ts-detail__title">
               <span class="mk-badge" :class="attentionBadge(detail.attention)">
                 {{ detail.attention === 'high' ? '高关注' : detail.attention === 'medium' ? '中关注' : '低关注' }}
               </span>
-              <h3>{{ detail.topic }}</h3>
-              <span class="ts-panel__id">{{ detail.id }}</span>
+              <h3 class="mk-drawer__title">{{ detail.topic }}</h3>
+              <span class="mk-drawer__sub mono">{{ detail.id }}</span>
             </div>
-            <button type="button" class="ts-panel__close" aria-label="关闭" @click="closeDetail">✕</button>
+            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeDetail">✕</button>
           </header>
 
-          <div class="ts-panel__body">
+          <div class="mk-drawer__body ts-detail__body">
             <!-- P2-2 抽屉 tabs（对齐 LangSmith side panel） -->
             <div class="ts-tabs" role="tablist" aria-label="会话详情分区">
               <button
@@ -803,42 +804,11 @@ defineExpose({ refreshNow })
   font-weight: 600;
 }
 
-.ts-mask {
-  position: fixed;
-  inset: 0;
-  z-index: var(--mk-z-drawer);
-  background: rgba(15, 23, 42, 0.36);
-  display: flex;
-  justify-content: flex-end;
-}
-.ts-panel {
-  width: var(--mk-drawer-w, 560px);
-  max-width: 100vw;
-  height: 100%;
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-drawer);
-  display: grid;
-  grid-template-rows: auto 1fr;
-  animation: ts-in 0.2s ease;
-}
 
 /* 4K 断点见文件末尾（需在基础样式之后定义） */
-@keyframes ts-in { from { transform: translateX(30px); opacity: 0; } }
-.ts-panel__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--mk-line);
-}
-.ts-panel__title { display: grid; gap: 6px; justify-items: start; }
-.ts-panel__title h3 { margin: 0; font-size: var(--mk-fs-16); }
-.ts-panel__id { font-family: var(--mk-mono); font-size: var(--mk-fs-11); color: var(--mk-faint); word-break: break-all; }
-.ts-panel__close { border: 0; background: var(--mk-close-bg, #f0f2f5); width: 30px; height: 30px; border-radius: 8px; cursor: pointer; color: var(--mk-muted); transition: background 0.12s, color 0.12s; }
-.ts-panel__close:hover { background: var(--mk-line, #e2eaf7); color: var(--mk-ink); }
-.ts-panel__body { padding: 16px 18px; display: grid; gap: 16px; align-content: start; overflow-y: auto; }
 /* P2-2 抽屉 tabs（对齐 AntD Tabs 下划线式：选中态底部 2px 品牌蓝 + 蓝字） */
+.ts-detail__title { display: grid; gap: 6px; justify-items: start; }
+.ts-detail__body { display: grid; gap: 16px; align-content: start; }
 .ts-tabs { display: flex; gap: 2px; padding-bottom: 0; border-bottom: 1px solid var(--mk-line); position: sticky; top: 0; background: var(--mk-surface); z-index: 1; }
 html[data-theme='dark'] .ts-tabs { background: var(--mk-surface); }
 .ts-tabs__item {
@@ -944,11 +914,6 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {
-  .ts-panel { width: var(--mk-drawer-w-lg, 700px); }
-  .ts-panel__head { padding: 20px 24px; }
-  .ts-panel__title h3 { font-size: 19px; }
-  .ts-panel__id { font-size: 12.5px; }
-  .ts-panel__body { padding: 20px 24px; }
   .ts-facts span { font-size: 13px; }
   .ts-facts strong { font-size: 14.5px; }
   .ts-section h4 { font-size: 13px; }
@@ -958,11 +923,6 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
   .ts-more { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
-  .ts-panel { width: var(--mk-drawer-w-xl, 880px); }
-  .ts-panel__head { padding: 24px 30px; }
-  .ts-panel__title h3 { font-size: 23px; }
-  .ts-panel__id { font-size: 15px; }
-  .ts-panel__body { padding: 24px 30px; }
   .ts-facts span { font-size: 15.5px; }
   .ts-facts strong { font-size: 17px; }
   .ts-section h4 { font-size: 15.5px; }
@@ -973,11 +933,6 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-  .ts-panel { width: var(--mk-drawer-w-xxl, 1040px); }
-  .ts-panel__head { padding: 28px 36px; }
-  .ts-panel__title h3 { font-size: 27px; }
-  .ts-panel__id { font-size: 17.5px; }
-  .ts-panel__body { padding: 28px 36px; }
   .ts-facts span { font-size: 18px; }
   .ts-facts strong { font-size: 20px; }
   .ts-section h4 { font-size: 18px; }
@@ -989,9 +944,6 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 
 /* ================= 暗色模式（D1 补完）：教学会话 ================= */
 html[data-theme='dark'] {
-  .ts-mask { background: rgba(4, 8, 16, 0.55); }
-  .ts-panel__close { background: #232f45; color: var(--mk-muted); }
-  .ts-panel__close:hover { background: #2c3a55; color: var(--mk-ink); }
   .ts-card--advisory { background: #2a2410; border-color: rgba(251, 191, 36, 0.3); }
   .ts-json { background: #0f1624; color: var(--mk-pre-fg); }
 }

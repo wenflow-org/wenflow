@@ -104,9 +104,9 @@
             </thead>
             <tbody>
               <tr v-for="item in deadItems" :key="item.id">
-                <td><span class="mono">{{ item.eventType }}</span></td>
+                <td><span class="mono" :title="item.eventType">{{ item.eventType }}</span></td>
                 <td><span class="mono mk-cell-text">{{ shortId(item.userId || '—', 10, 4) }}</span></td>
-                <td><span class="mono mk-cell-text">{{ shortId(item.aggregateId || '—', 10, 4) }}</span></td>
+                <td><span class="mono mk-cell-text" :title="item.aggregateId || ''">{{ shortId(item.aggregateId || '—', 10, 4) }}</span></td>
                 <td class="mk-num">{{ item.attemptCount }}</td>
                 <td><span class="dt-err" :title="item.lastError || ''">{{ item.lastError || '—' }}</span></td>
                 <td :title="fmtDate(item.occurredAt)">{{ timeAgo(item.occurredAt) }}</td>

@@ -55,7 +55,7 @@
             </label>
 
             <label class="faw__field">
-              <span>promptRole（角色） <em class="faw__req">*</em></span>
+              <span>角色（promptRole） <em class="faw__req">*</em></span>
               <select v-model="form.role" class="mk-input">
                 <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
               </select>

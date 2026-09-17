@@ -180,7 +180,7 @@
                 <td class="frt__fieldcell">
                   <span class="mono frt__field" :title="row.fieldId">{{ row.fieldId }}</span>
                   <span v-if="pathParts(row.fieldId).length > 1" class="frt__fieldpath" :title="row.fieldId">{{ pathParts(row.fieldId).join(' · ') }}</span>
-                  <span v-if="pathOf(row.fieldId)" class="frt__fieldpath" :title="`抽取路径（pathInRawOutput）：${pathOf(row.fieldId)}`">抽取 → {{ pathOf(row.fieldId) }}</span>
+                  <span v-if="pathOf(row.fieldId)" class="frt__fieldpath" :title="`抽取路径（pathInRawOutput）：${pathOf(row.fieldId)}`">抽取 → {{ String(pathOf(row.fieldId)).split('.').pop() }}</span>
                 </td>
                 <td class="frt__meaning">
                   <span class="frt__meaning-text" :title="meaningTitle(row)">{{ descOf(row.fieldId) || '—' }}</span>
@@ -252,7 +252,7 @@
           <!-- 值域速查条：编辑时对照填写 -->
           <div class="frt__orch-quick">
             <span class="frt__orch-quick-title">值域速查：</span>
-            <span class="frt__orch-quick-item"><b>promptRole</b>{{ roleNames }}</span>
+            <span class="frt__orch-quick-item"><b>字段角色</b>{{ roleNames }}（promptRole）</span>
             <span class="frt__orch-quick-item"><b>对外可见性</b>可见 / 隐藏（render）</span>
             <span class="frt__orch-quick-item"><b>流转去向</b>阶段名（goal/path/teaching/profile/simulation）或 agent / skill:（handoff）</span>
             <span class="frt__orch-quick-item"><b>落库键</b>仅落库键与 fieldId 不一致时标注（persistKey）</span>

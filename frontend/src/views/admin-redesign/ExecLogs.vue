@@ -28,7 +28,7 @@
     </div>
 
     <!-- 日志 / Trace 链路 / 成本分析 tab（Trace 为执行日志下钻视图；成本分析为同源观测并入） -->
-    <div class="mk-pills el-tabs">
+    <div class="mk-pills">
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'logs' }" @click="switchElTab('logs')">日志</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'trace' }" @click="switchElTab('trace')">Trace 链路</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'cost' }" @click="switchElTab('cost')">成本分析</button>

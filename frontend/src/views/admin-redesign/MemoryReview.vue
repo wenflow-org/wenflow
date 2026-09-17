@@ -1,18 +1,27 @@
 <template>
   <div class="mr">
-    <header class="mr__head">
-      <div>
-        <h2 class="mr__title">记忆与复习观测</h2>
-        <p class="mr__lead">
-          记忆层（用户级、跨 path）：到期积压、课内温故配额、概念归并审计。
-          归并默认<strong>观察模式</strong>——只记录建议，不动 memory_traces。
-        </p>
-      </div>
+    <header class="mk-status" :class="`mk-status--${headTone}`">
+      <span class="mk-status__dot" aria-hidden="true"></span>
+      <strong class="mk-status__title">记忆与复习观测</strong>
+      <span class="mk-status__sep"></span>
+      <span class="mk-status__meta">用户 {{ totals.users }} · 记忆痕迹 {{ totals.traces }} · 当前到期 {{ totals.due }}</span>
+      <span class="mk-status__actions">
+        <button type="button" class="mk-status__action" :disabled="loading" @click="loadOverview">
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
+      </span>
+    </header>
+    <p class="mr__lead">
+      记忆层（用户级、跨 path）：到期积压、课内温故配额、概念归并审计。
+      归并默认<strong>观察模式</strong>——只记录建议，不动 memory_traces。
+    </p>
+    <!-- R1：筛选控件不得进状态条，独立成筛选行 -->
+    <div class="mr__filter">
       <label class="mr__toggle">
         <input v-model="includeVirtual" type="checkbox" @change="loadOverview" />
         包含虚拟学习者
       </label>
-    </header>
+    </div>
 
     <div class="mr__kpis">
       <MkKpi label="用户" :value="totals.users" compact />
@@ -331,6 +340,8 @@ const busy = ref(false)
 const error = ref('')
 const includeVirtual = ref(false)
 const rows = ref<OverviewRow[]>([])
+/** 页头状态档（R2）：到期积压 > 0 = 需关注且运营可行动；未加载 = 无数据（不猜） */
+const headTone = computed(() => (loading.value || !totals.value.users ? 'muted' : totals.value.due > 0 ? 'warn' : 'ok'))
 const totals = ref({
   users: 0,
   traces: 0,
@@ -342,8 +353,7 @@ const totals = ref({
   applied: 0,
   deleted: 0
 })
-const selectedId = ref('')
-// detail.appliedMerges = 按次留档的归并凭据视图（rollbackable / rolledBack / legacyWindowOnly）
+const selectedId = ref('')// detail.appliedMerges = 按次留档的归并凭据视图（rollbackable / rolledBack / legacyWindowOnly）
 const detail = ref<any>(null)
 const route = useRoute()
 const router = useRouter()
@@ -522,9 +532,8 @@ onMounted(async () => {
 
 <style scoped>
 .mr { display: grid; gap: 14px; }
-.mr__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.mr__title { margin: 0; font-size: 18px; font-weight: 800; color: var(--mk-ink); }
 .mr__lead { margin: 4px 0 0; font-size: 12px; color: var(--mk-muted, #5b6577); max-width: 720px; line-height: 1.6; }
+.mr__filter { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
 .mr__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mk-muted, #5b6577); }
 .mr__kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .mr__kpis--tight { margin-bottom: 10px; }

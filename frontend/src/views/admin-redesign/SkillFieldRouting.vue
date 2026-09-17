@@ -137,7 +137,7 @@
             <tr v-for="row in rows" :key="row.fieldId">
               <td class="sfr__fieldcell">
                 <span class="mono sfr__field" :title="row.fieldId">{{ row.fieldId }}</span>
-                <span v-if="row.pathInRawOutput" class="sfr__fieldpath" :title="`抽取路径（pathInRawOutput）：${row.pathInRawOutput}`">抽取 → {{ row.pathInRawOutput }}</span>
+                <span v-if="row.pathInRawOutput" class="sfr__fieldpath" :title="`抽取路径（pathInRawOutput）：${row.pathInRawOutput}`">抽取 → {{ String(row.pathInRawOutput).split('.').pop() }}</span>
               </td>
               <td class="sfr__meaning">
                 <span class="sfr__meaning-text" :title="row.desc">{{ row.desc || '—' }}</span>
@@ -154,7 +154,7 @@
               <td>{{ row.internal ? '是' : '否' }}</td>
               <td>{{ row.accumulate ? '是' : '否' }}</td>
               <td>
-                <span class="mono sfr__persist" :class="{ 'sfr__persist--alias': row.persistKey !== row.fieldId }" :title="row.persistKey === row.fieldId ? '落库键与字段名一致' : `值实际写入 ${row.persistKey}`">{{ row.persistKey }}</span>
+                <span class="mono sfr__persist" :class="{ 'sfr__persist--alias': row.persistKey !== row.fieldId }" :title="row.persistKey === row.fieldId ? '落库键与字段名一致' : `值实际写入 ${row.persistKey}`">{{ row.persistKey === row.fieldId ? '同字段名' : '别名' }}</span>
               </td>
               <td><span class="mk-badge" :class="`mk-badge--lock-${row.lockLevel}`" :title="lockHintOf(row.lockLevel)">{{ lockLabelOf(row.lockLevel) }}</span></td>
               <td>

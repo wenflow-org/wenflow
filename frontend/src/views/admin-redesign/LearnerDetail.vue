@@ -484,7 +484,8 @@
           <section v-if="predictionCalib && (predictionCalib.stats.total > 0 || predictionCalib.recent.length)" class="mk-card">
             <div class="mk-card__head">
               <h3 class="mk-card__title">预测校准</h3>
-              <span class="mk-card__meta">预测器实证命中率（非自报置信度）</span>
+              <!-- 结论常驻：卡头给结论（就地派生），原「非自报置信度」说明降级到 title -->
+              <span class="mk-card__meta" title="预测器实证命中率（非自报置信度）">{{ calibConclusion }}</span>
             </div>
             <div class="ld-cal">
               <div class="ld-cal__hits">
@@ -1272,6 +1273,14 @@ function loadZoneOf(p: LoadPoint): 'fresh' | 'optimal' | 'risk' {
 const loadZoneCls = (z: 'fresh' | 'optimal' | 'risk') => (z === 'fresh' ? '--fresh' : z === 'optimal' ? '--optimal' : '--risk')
 
 /* ---------- 预测校准（实证命中率） ---------- */
+/** 预测校准结论（卡头结论常驻，就地派生；无样本时保持说明文案） */
+const calibConclusion = computed(() => {
+  const s = predictionCalib.value?.stats
+  if (!s || !(s.total > 0)) return '预测器实证命中率（非自报置信度）'
+  const pct = (r: number | null | undefined) => (r != null ? `${Math.round(r * 100)}%` : '—')
+  return `卡壳 ${pct(s.stallHitRate)} · 基调 ${pct(s.toneHitRate)} · n=${s.total}`
+})
+
 function calHitCls(rate: number | null | undefined): string {
   if (rate == null) return ''
   return rate >= 0.7 ? 'is-good' : rate >= 0.5 ? 'is-mid' : 'is-bad'

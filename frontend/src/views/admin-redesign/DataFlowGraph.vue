@@ -368,14 +368,15 @@
 
     <!-- 字段详情抽屉（含行级编辑，同步回写编排文件） -->
     <Teleport to="body">
-      <div v-if="selected" class="dfg-drawer-mask" @click.self="selected = null">
-        <aside class="dfg-drawer" role="dialog" aria-label="字段详情" :style="semanticVars">
-          <div class="dfg-drawer__head">
+      <div v-if="selected" class="mk-drawer">
+        <div class="mk-drawer__mask" @click="selected = null"></div>
+        <aside class="mk-drawer__panel dfg-drawer" role="dialog" aria-label="字段详情" :style="semanticVars">
+          <div class="mk-drawer__head">
             <div>
-              <h3 class="dfg-drawer__title mono">{{ selected.fieldId }}</h3>
-              <p class="dfg-drawer__sub">{{ selected.description || '—' }}</p>
+              <h3 class="mk-drawer__title mono">{{ selected.fieldId }}</h3>
+              <p class="mk-drawer__sub">{{ selected.description || '—' }}</p>
             </div>
-            <button type="button" class="mk-modal__close" aria-label="关闭" @click="selected = null">✕</button>
+            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="selected = null">✕</button>
           </div>
 
           <div class="dfg-drawer__body">
@@ -1418,29 +1419,8 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-empty { padding: 40px; text-align: center; color: var(--mk-faint); }
 
 /* ========== 抽屉 ========== */
-.dfg-drawer-mask {
-  position: fixed; inset: 0; z-index: 300;
-  background: rgba(15, 23, 42, 0.4);
-  display: flex; justify-content: flex-end;
-}
-.dfg-drawer {
-  width: var(--mk-drawer-w, 560px);
-  max-width: 100%;
-  height: 100%;
-  background: var(--mk-graph-canvas);
-  display: flex; flex-direction: column;
-  box-shadow: -8px 0 30px rgba(15, 23, 42, 0.12);
-  animation: dfg-slide 0.22s ease;
-}
-@keyframes dfg-slide { from { transform: translateX(24px); opacity: 0; } }
-.dfg-drawer__head {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
-  padding: 16px 18px 12px;
-  border-bottom: 1px solid var(--mk-line);
-}
-.dfg-drawer__title { font-size: var(--mk-fs-14); font-weight: 800; color: var(--mk-ink); word-break: break-all; }
-.dfg-drawer__sub { margin-top: 3px; font-size: var(--mk-fs-12); color: var(--mk-muted); }
-.dfg-drawer__body { flex: 1; overflow-y: auto; padding: 14px 18px 24px; display: grid; gap: 16px; align-content: start; }
+.dfg-drawer { background: var(--mk-graph-canvas); }
+.dfg-drawer__body { display: grid; gap: 16px; align-content: start; }
 
 .dfg-dl { margin: 0; display: grid; gap: 7px; }
 .dfg-dl__title { margin: 0 0 8px; font-size: var(--mk-fs-11); font-weight: 800; color: var(--mk-blue); text-transform: uppercase; letter-spacing: 0.04em; }
@@ -1531,7 +1511,6 @@ html[data-theme='dark'] {
   .dfg-legend__item:hover { background: var(--mk-graph-hover-bg); }
   .dfg-legend__item.is-on { background: rgba(91, 141, 239, 0.18); border-color: rgba(91, 141, 239, 0.45); color: var(--mk-graph-blue-ink); }
   .dfg-drawer { background: var(--mk-graph-canvas); }
-  .dfg-drawer__head { border-bottom-color: var(--mk-graph-line); }
   .dfg-drawer__body { background: var(--mk-graph-canvas); }
   .dfg-flow { background: var(--mk-graph-flow-bg); border-color: var(--mk-graph-flow-line); }
   .dfg-flow__chip--soft { background: var(--mk-graph-flow-soft-bg); color: var(--mk-graph-flow-soft-ink); }
@@ -1547,7 +1526,6 @@ html[data-theme='dark'] {
   .dfg-tag--internal { background: var(--mk-graph-flag-purple-bg); color: var(--mk-graph-flag-purple-ink); }
   .dfg-tag--accum { background: var(--mk-amber-bg); color: var(--mk-graph-warn-ink); }
   .dfg-drawer { color: var(--mk-ink); }
-  .dfg-drawer__head { color: var(--mk-ink); }
   .dfg-dl__row { color: var(--mk-ink); }
   .dfg-edit__row { color: var(--mk-ink); }
   .dfg-edit__actions { color: var(--mk-ink); }

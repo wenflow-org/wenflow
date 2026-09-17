@@ -183,17 +183,18 @@
 
     <!-- 详情面板 -->
     <Teleport to="body">
-      <div v-if="detail" ref="maskRef" class="gc-mask">
-        <aside ref="panelRef" class="gc-panel" role="dialog" aria-label="会话详情">
-          <header class="gc-panel__head">
-            <div class="gc-panel__title">
+      <div v-if="detail" ref="maskRef" class="mk-drawer">
+        <div class="mk-drawer__mask" @click="closeDetail"></div>
+        <aside ref="panelRef" class="mk-drawer__panel" role="dialog" aria-label="会话详情">
+          <header class="mk-drawer__head">
+            <div class="gc-detail__title">
               <span class="mk-badge" :class="statusBadge(detail.status)">{{ statusLabel(detail.status) }}</span>
-              <h3>{{ detail.userName }} 的目标对话</h3>
-              <span class="gc-panel__id mono">{{ detail.id }}</span>
+              <h3 class="mk-drawer__title">{{ detail.userName }} 的目标对话</h3>
+              <span class="mk-drawer__sub mono">{{ detail.id }}</span>
             </div>
-            <button type="button" class="gc-panel__close" aria-label="关闭" @click="closeDetail">✕</button>
+            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeDetail">✕</button>
           </header>
-          <div ref="bodyRef" class="gc-panel__body">
+          <div ref="bodyRef" class="mk-drawer__body gc-detail__body">
             <div class="gc-facts">
               <div><span>邮箱</span><strong :title="detail.userEmail">{{ detail.userEmail || '—' }}</strong></div>
               <div>
@@ -867,48 +868,10 @@ onMounted(() => {
 }
 
 /* 详情面板（与 ts/pcl 面板同构） */
-.gc-mask {
-  position: fixed;
-  inset: 0;
-  z-index: var(--mk-z-drawer);
-  background: rgba(15, 23, 42, 0.36);
-  display: flex;
-  justify-content: flex-end;
-}
-.gc-panel {
-  width: var(--mk-drawer-w, 560px);
-  max-width: 100vw;
-  height: 100%;
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-drawer);
-  display: grid;
-  grid-template-rows: auto 1fr;
-  animation: gc-in 0.2s ease;
-}
+.gc-detail__title { display: grid; gap: 6px; justify-items: start; }
+.gc-detail__body { display: grid; gap: 16px; align-content: start; }
 
 
-@keyframes gc-in { from { transform: translateX(30px); opacity: 0; } }
-.gc-panel__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--mk-line);
-}
-.gc-panel__title { display: grid; gap: 6px; justify-items: start; }
-.gc-panel__title h3 { margin: 0; font-size: var(--mk-fs-16); }
-.gc-panel__id { font-size: var(--mk-fs-11); color: var(--mk-faint); word-break: break-all; }
-.gc-panel__close {
-  border: 0;
-  background: var(--mk-close-bg, #f0f2f5);
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--mk-muted);
-}
-.gc-panel__body { padding: 16px 18px; display: grid; gap: 16px; align-content: start; overflow-y: auto; }
 
 .gc-facts {
   display: grid;
@@ -1083,11 +1046,6 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大 */
 @media (min-width: 2000px) {
-  .gc-panel { width: var(--mk-drawer-w-lg, 700px); }
-  .gc-panel__head { padding: 20px 24px; }
-  .gc-panel__title h3 { font-size: 19px; }
-  .gc-panel__id { font-size: 12.5px; }
-  .gc-panel__body { padding: 20px 24px; }
   .gc-facts span { font-size: 13px; }
   .gc-facts strong { font-size: 14.5px; }
   .gc-section h4 { font-size: 13px; }
@@ -1098,11 +1056,6 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
   .mk-btn--sm { font-size: 14px; }
 }
 @media (min-width: 2800px) {
-  .gc-panel { width: var(--mk-drawer-w-xl, 880px); }
-  .gc-panel__head { padding: 24px 30px; }
-  .gc-panel__title h3 { font-size: 23px; }
-  .gc-panel__id { font-size: 15px; }
-  .gc-panel__body { padding: 24px 30px; }
   .gc-facts span { font-size: 15.5px; }
   .gc-facts strong { font-size: 17px; }
   .gc-section h4 { font-size: 15.5px; }
@@ -1114,11 +1067,6 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-  .gc-panel { width: var(--mk-drawer-w-xxl, 1040px); }
-  .gc-panel__head { padding: 28px 36px; }
-  .gc-panel__title h3 { font-size: 27px; }
-  .gc-panel__id { font-size: 17.5px; }
-  .gc-panel__body { padding: 28px 36px; }
   .gc-facts span { font-size: 18px; }
   .gc-facts strong { font-size: 20px; }
   .gc-section h4 { font-size: 18px; }
@@ -1137,7 +1085,6 @@ html[data-theme='dark'] {
   .gc-msg--unknown .gc-msg__bubble { background: #1b2433; border-color: #2a3850; }
   .gc-msg--user .gc-msg__bubble { background: #16233a; border-color: #27405f; }
   .gc-insight__row { border-bottom-color: #1e2839; }
-  .gc-mask { background: rgba(4, 8, 16, 0.55); }
   .gc-stage-cell__dot { background: #2a3850; }
   .gc-error { border-color: rgba(248, 113, 113, 0.35); }
 }
