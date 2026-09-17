@@ -3214,6 +3214,7 @@ export class AITeachingOrchestrator {
           conceptKey: true,
           fsrsStability: true,
           fsrsDifficulty: true,
+          fsrsLapses: true,
           extractionCount: true,
           lastSeenAt: true,
         },
@@ -3225,7 +3226,7 @@ export class AITeachingOrchestrator {
             stability: t.fsrsStability as number,
             difficulty: t.fsrsDifficulty ?? 5,
             reps: t.extractionCount,
-            lapses: 0,
+            lapses: t.fsrsLapses ?? 0,
             lastReviewAt: t.lastSeenAt as Date,
           };
           return {

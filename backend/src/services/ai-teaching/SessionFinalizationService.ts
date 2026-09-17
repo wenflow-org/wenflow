@@ -13,7 +13,6 @@ import {
 } from './TeachingSessionRepository';
 import { logger } from '../../utils/logger';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
-import { memoryTraceService } from '../memory/memory-trace.service';
 import { mapReviewStatusToRating } from '../learner/ReviewCompletedConsumer';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
@@ -169,8 +168,9 @@ export class SessionFinalizationService {
           logger.warn('[finalize] 复习课完成标记写入失败（不影响收束）:', error);
         });
       }
-      // 断链修复 P0-1/2：复习结果回写记忆引擎（fire-and-forget 保留）+ 事件化（走 outbox 事件链）
-      const reviewItems = await this.applyReviewExtraction(completedSession);
+      // 断链修复 P0-1/2 + 单一写入者（2026-09-17）：复习结果**只采集**，写入统一走 review:completed
+      // 事件消费者（幂等/可重放）。此前这里还直写记忆引擎，与消费者叠加成 2~3 次应用（审计 §4.2(1)）。
+      const reviewItems = await this.collectReviewOutcomes(completedSession);
       if (reviewItems.length > 0) {
         await this.enqueueReviewCompletedEvent(completedSession, reviewItems);
       }
@@ -384,11 +384,17 @@ export class SessionFinalizationService {
   }
 
   /**
-   * 复习课完成回写：看板中已推进（非 review/pending）的复习点 → 记忆引擎 recordExtraction
-   * （复习即提取：extractionCount+1、lastSeenAt 刷新；best-effort，失败不阻断收束）
-   * 返回已推进的复习点列表（供 review:completed 事件发出）。
+   * 复习课结果**采集**（不写库）：把看板中已推进（非 review/pending）的复习点映射为
+   * `review:completed` 的事件项，返回给调用方发事件。
+   *
+   * 2026-09-17（审计 §4.2(1) / §5.2 P2「双写」）：此前这里同时做三件事——
+   * `recordExtraction(fsrsGrade)` 写一次 FSRS、紧接着 `bumpReviewInterval(grade)` 又写一次，
+   * 事件消费者读到的已是"应用过两次"的状态、再应用第三次 ⇒ 间隔被过度拉长、
+   * `extractionCount` 重复自增。现在**只采集**：记忆引擎的唯一写入者是
+   * `ReviewCompletedConsumer`（幂等 + 可重放）；误解干扰（活跃误解 → stability ×0.85）
+   * 也随之下移到该消费者，避免两条路径分叉。
    */
-  private async applyReviewExtraction(session: TeachingSessionRecord): Promise<Array<{
+  private async collectReviewOutcomes(session: TeachingSessionRecord): Promise<Array<{
     conceptKey: string;
     label: string | null;
     status: string;
@@ -411,47 +417,24 @@ export class SessionFinalizationService {
         (p: any) => p && typeof p.name === 'string' && p.status && p.status !== 'review' && p.status !== 'pending'
       );
       if (progressed.length === 0) return [];
-      const items: Array<{
-        conceptKey: string;
-        label: string | null;
-        status: string;
-        progress: number;
-        masteryScore: number;
-        rating: 'again' | 'hard' | 'good' | 'easy';
-      }> = [];
-      for (const p of progressed) {
-        const mastery = p.status === 'mastered' ? (Number(p.progress) >= 100 ? 0.9 : 0.85) : 0.5;
-        const rating = p.status === 'mastered' ? (Number(p.progress) >= 100 ? 'easy' : 'good') : 'hard';
-        const fsrsGrade = rating === 'easy' ? 4 : rating === 'good' ? 3 : rating === 'hard' ? 2 : 1;
-        items.push({
-          conceptKey: p.name,
-          label: p.name,
-          status: p.status,
-          progress: Number(p.progress) || 0,
-          masteryScore: mastery,
-          rating: rating as 'again' | 'hard' | 'good' | 'easy',
-        });
-        await memoryTraceService.recordExtraction({
-          userId: session.userId,
-          conceptKey: p.name,
-          label: p.name,
-          masteryScore: mastery,
-          stability: p.status === 'mastered' ? 'stable' : 'fragile',
-          source: 'derived',
-          pathId: session.learningPathId ?? null,
-          fsrsGrade: fsrsGrade as 1 | 2 | 3 | 4,
-        });
-        // FSRS-6 DSR 调度：复习成功按成绩更新 stability/difficulty
-        await memoryTraceService.bumpReviewInterval(session.userId, p.name, fsrsGrade as 1 | 2 | 3 | 4);
-      }
-      logger.info('[SessionFinalization] 复习完成回写记忆引擎', {
+      const items = progressed.map((p: any) => ({
+        conceptKey: p.name,
+        label: p.name,
+        status: p.status,
+        progress: Number(p.progress) || 0,
+        masteryScore: p.status === 'mastered' ? (Number(p.progress) >= 100 ? 0.9 : 0.85) : 0.5,
+        rating: (p.status === 'mastered'
+          ? (Number(p.progress) >= 100 ? 'easy' : 'good')
+          : 'hard') as 'again' | 'hard' | 'good' | 'easy',
+      }));
+      logger.info('[SessionFinalization] 复习结果已采集（由事件消费者写入记忆引擎）', {
         sessionId: session.id,
         userId: session.userId,
-        extractionCount: progressed.length,
+        itemCount: items.length,
       });
       return items;
     } catch (error) {
-      logger.warn('[SessionFinalization] 复习回写失败（不影响收束）', {
+      logger.warn('[SessionFinalization] 复习结果采集失败（不影响收束）', {
         sessionId: session.id,
         error: error instanceof Error ? error.message : String(error),
       });

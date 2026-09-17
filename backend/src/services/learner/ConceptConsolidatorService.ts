@@ -340,6 +340,8 @@ export function buildMergedFields(members: TraceRow[], winner: TraceRow, canonic
   if (bestFsrs) {
     merged.fsrsStability = bestFsrs.fsrsStability;
     merged.fsrsDifficulty = bestFsrs.fsrsDifficulty ?? null;
+    // 失误次数随稳定性的同一成员一起带走（Relearning 判据，不能与 stability 分家）
+    merged.fsrsLapses = bestFsrs.fsrsLapses ?? null;
   }
   return merged;
 }

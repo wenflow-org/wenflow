@@ -674,7 +674,7 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
 
 | 问题 | 影响 |
 |---|---|
-| **`lapses` 恒为 0**（`ReviewCompletedConsumer.ts:119` 等 5 处硬编码，schema 无该列） | FSRS 的 `Relearning` 状态**不可达**；卡壳与"第一次学"无法区分 |
+| ~~**`lapses` 恒为 0**~~ → **已落库（2026-09-17）**（新增列 `memory_traces.fsrsLapses`，5 处硬编码改为读列/写结果） | **口径修正（实测）**：`enable_short_term: false` 下 lapses **不改变** stability/difficulty/interval（ts-fsrs 内部据此判 `Relearning`，但短期步进关闭时与 `Review` 同结果）⇒ 价值在**计数本身**（卡壳率 / leech 判定 / E4 参数拟合维度），不是"间隔变短" |
 | `enable_short_term: false` | 短期学习步进关闭，首日节奏退化为近似固定 1 天 |
 | **直接用默认参数、无按用户优化** | FSRS 默认 17 参数在基准里 log loss 0.36–0.38（优化后 0.33）→ **兑现不了选型收益** |
 | **无逾期补偿 / 无积压上限 / 无 cram 模式** | 435 条到期 + 每课 1 条 → 积压单调增长（§3.3） |
@@ -753,7 +753,7 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
 | **P1** | **BKT 零消费**（写了不用） | §4.2(3)【B】 |
 | **P1** | 到期积压无治理（435 到期 / 每课 1 条） | §3.3【A】 |
 | **P2** | `session_load`（54 条）、`checkpointHistory`、`helpSeekingType`、`rsmAttempts` 生成但无消费者 | 【B】 |
-| **P2** | `mode=review` 双写调度（可能重复排期/重复计数）；`lapses` 恒 0；`reps` 与 `extractionCount` 可能发散 | 【B】 |
+| **P2** | ~~`mode=review` 双写调度（可能重复排期/重复计数）~~ → **已修（2026-09-17：单一写入者）**；~~`lapses` 恒 0~~ → **已落库**；`reps` 与 `extractionCount` 可能发散（未处理） | 【B】 |
 | **P2** | 无法按会话核算 token/成本（日志表无 `sessionId` 外键） | 【B】 |
 
 ### 5.3 循环性风险（工程上最需要注意的一点）
@@ -830,7 +830,12 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
 
 ### P2 积压与重复治理
 
-- 到期 > N（如 30）时开启清账模式或提高每课配额上限；复核 `mode=review` 的双写；补 `lapses` 记录。
+- 到期 > N（如 30）时开启清账模式或提高每课配额上限——**部分已做**（`ReviewQuotaService` 每日额度 + 顺延，`dc8e05a9`）；
+- 复核 `mode=review` 的双写——**已做（2026-09-17）**：复习结果改为**只采集**，记忆引擎的唯一写入者是
+  `ReviewCompletedConsumer`（含误解干扰 ×0.85）。原状是同一成绩被应用 **2~3 次**
+  （`recordExtraction(fsrsGrade)` + `bumpReviewInterval` + 事件消费者），间隔被过度拉长、计数重复自增；
+- 补 `lapses` 记录——**已做（2026-09-17）**：新增 `memory_traces.fsrsLapses` + 读写打通；口径见 §4.2(1)（**不改调度**）；
+- `reps` 与 `extractionCount` 可能发散——**未处理**（`reps` 直接取 `extractionCount`，语义上把"提取"等同于"复习"）。
 
 ---
 

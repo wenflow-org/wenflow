@@ -20,10 +20,14 @@ import type { DurableDomainEvent } from '../../events/contracts';
 import { logger } from '../../utils/logger';
 import { clamp01 } from '../memory/actr';
 import { fsrsSchedule, fsrsStateFromLegacy, type FsrsGradeCode, type FsrsMemoryState } from '../memory/fsrs';
+import { getActiveForConcepts } from './misconception-ledger.service';
 
 const CONSUMER_ID = 'review-completed-consumer-v1';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 活跃误解对稳定性的惩罚（与旧直写路径 bumpReviewInterval 同值）：下次复习更早，做对比式纠错 */
+const MISCONCEPTION_STABILITY_MULTIPLIER = 0.85;
 
 /** rating → FSRS grade（again=Again, hard=Hard, good=Good, easy=Easy） */
 const RATING_TO_GRADE: Record<ReviewRating, FsrsGradeCode> = {
@@ -134,13 +138,18 @@ export class ReviewCompletedConsumer {
                 stability: existing.fsrsStability,
                 difficulty: existing.fsrsDifficulty ?? 5,
                 reps: existing.extractionCount,
-                lapses: 0,
+                lapses: existing.fsrsLapses ?? 0,
                 lastReviewAt: existing.lastSeenAt,
               }
             : fsrsStateFromLegacy(existing.masteryScore, existing.extractionCount, existing.lastSeenAt))
           : null;
         const result = fsrsSchedule(prev, grade, now);
-        const dueAt = new Date(now.getTime() + result.intervalDays * DAY_MS);
+        // 语义干扰矩阵（2026-09-17 自旧直写路径 bumpReviewInterval 下移，保持"单一写入者"）：
+        // 活跃误解 → 稳定性 ×0.85、到期更早。复习课与课内温故两条来路行为一致。
+        const activeMisconceptions = await getActiveForConcepts(event.userId, [conceptKey], 1).catch(() => []);
+        const interferenceMultiplier = activeMisconceptions.length > 0 ? MISCONCEPTION_STABILITY_MULTIPLIER : 1;
+        const adjustedStability = result.state.stability * interferenceMultiplier;
+        const dueAt = new Date(now.getTime() + Math.round(result.intervalDays * interferenceMultiplier) * DAY_MS);
         await tx.memory_traces.upsert({
           where: {
             userId_conceptKey: { userId: event.userId, conceptKey }
@@ -151,25 +160,27 @@ export class ReviewCompletedConsumer {
             conceptKey,
             label: item.label ?? null,
             masteryScore: clamp01(item.masteryScore),
-            stability: item.rating === 'again' ? 'fragile' : 'stable',
+            stability: item.status === 'mastered' ? 'stable' : 'fragile',
             lastSeenAt: now,
             extractionCount: 1,
             source: 'review-event',
             pathId: sessionPathId,
             dueAt,
-            fsrsStability: result.state.stability,
+            fsrsStability: adjustedStability,
             fsrsDifficulty: result.state.difficulty,
+            fsrsLapses: result.state.lapses,
           },
           update: {
             label: item.label ?? undefined,
             masteryScore: clamp01(item.masteryScore),
-            stability: item.rating === 'again' ? 'fragile' : 'stable',
+            stability: item.status === 'mastered' ? 'stable' : 'fragile',
             lastSeenAt: now,
             extractionCount: { increment: 1 },
             source: 'review-event',
             dueAt,
-            fsrsStability: result.state.stability,
+            fsrsStability: adjustedStability,
             fsrsDifficulty: result.state.difficulty,
+            fsrsLapses: result.state.lapses,
           }
         });
       }

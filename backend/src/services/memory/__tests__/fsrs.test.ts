@@ -85,6 +85,41 @@ describe('fsrs 调度核心', () => {
   })
 })
 
+describe('fsrs lapses（2026-09-17 起落库；此前 5 处硬编码 0、schema 无列）', () => {
+  it('Review 态的卡再判 Again → lapses 递增（卡壳与"第一次学"从此可区分）', () => {
+    const now = new Date()
+    const base = fsrsSchedule(null, Rating.Good, now).state
+    const reviewed = fsrsSchedule(base, Rating.Good, new Date(now.getTime() + 3 * DAY_MS)).state
+    expect(reviewed.lapses).toBe(0)
+    const lapsed = fsrsSchedule(reviewed, Rating.Again, new Date(now.getTime() + 6 * DAY_MS)).state
+    expect(lapsed.lapses).toBe(1)
+  })
+
+  /**
+   * 刻画性断言（实测 2026-09-17）：在 `enable_short_term: false` 下，lapses **不改变**
+   * stability/difficulty/interval —— ts-fsrs 内部虽据此把卡判为 Relearning，但短期步进关闭时
+   * Relearning 与 Review 的调度结果相同。
+   * ⇒ 落库 lapses 的价值在**计数本身**（卡壳率/leech 判定/E4 参数拟合的必需维度），
+   *   而不是"间隔因此变短"。若将来打开 enable_short_term，此断言会失败 = 提醒行为已变。
+   */
+  it('（刻画）lapses 不改调度：同一成绩下 stability/difficulty/interval 与 lapses 无关', () => {
+    const now = new Date()
+    const reviewed = fsrsSchedule(
+      fsrsSchedule(null, Rating.Good, now).state,
+      Rating.Good,
+      new Date(now.getTime() + 3 * DAY_MS),
+    ).state
+    for (const grade of [1, 2, 3, 4] as const) {
+      const at = new Date(now.getTime() + 10 * DAY_MS)
+      const asReview = fsrsSchedule({ ...reviewed, lapses: 0 }, grade, at)
+      const asRelearning = fsrsSchedule({ ...reviewed, lapses: 2 }, grade, at)
+      expect(asRelearning.state.stability).toBe(asReview.state.stability)
+      expect(asRelearning.state.difficulty).toBe(asReview.state.difficulty)
+      expect(asRelearning.intervalDays).toBe(asReview.intervalDays)
+    }
+  })
+})
+
 describe('fsrs 可提取率', () => {
   it('无状态返回 0', () => {
     expect(fsrsRetrievability(fsrsEmptyState(), new Date())).toBe(0)

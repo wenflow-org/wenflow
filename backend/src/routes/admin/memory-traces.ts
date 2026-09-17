@@ -66,6 +66,7 @@ router.get('/', async (req, res) => {
         lastSeenAt: true,
         fsrsStability: true,
         fsrsDifficulty: true,
+        fsrsLapses: true,
         ktMasteryEma: true,
         dueAt: true,
         updatedAt: true,
@@ -80,7 +81,7 @@ router.get('/', async (req, res) => {
           stability: t.fsrsStability,
           difficulty: t.fsrsDifficulty ?? 5,
           reps: t.extractionCount,
-          lapses: 0,
+          lapses: t.fsrsLapses ?? 0,
           lastReviewAt: t.lastSeenAt,
         };
         retrievability = Math.round(fsrsRetrievability(state, now) * 100) / 100;

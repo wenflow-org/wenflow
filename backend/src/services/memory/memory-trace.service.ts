@@ -22,13 +22,13 @@ import {
   type FsrsGradeCode,
   type FsrsMemoryState,
 } from './fsrs';
-import { getActiveForConcepts } from '../learner/misconception-ledger.service';
 
 /** FSRS 统一保留率（#8 legacy 退役）：trace 有 FSRS 状态用 FSRS，否则 fsrsStateFromLegacy 推导 */
 function fsrsRetentionOfTrace(
   trace: {
     fsrsStability: number | null;
     fsrsDifficulty: number | null;
+    fsrsLapses: number | null;
     masteryScore: number;
     extractionCount: number;
     lastSeenAt: Date | null;
@@ -41,7 +41,8 @@ function fsrsRetentionOfTrace(
         stability: trace.fsrsStability,
         difficulty: trace.fsrsDifficulty ?? 5,
         reps: trace.extractionCount,
-        lapses: 0,
+        // 失误次数落库后（2026-09-17）从列里读：它是 `State.Relearning` 的唯一判据（fsrs.ts）
+        lapses: trace.fsrsLapses ?? 0,
         lastReviewAt: trace.lastSeenAt,
       }
     : fsrsStateFromLegacy(trace.masteryScore, trace.extractionCount, trace.lastSeenAt);
@@ -196,6 +197,7 @@ class MemoryTraceService {
     let dueAt = this.computeDueAt(input, now, false);  // legacy: 保守不判首次
     let fsrsStability: number | null = null;
     let fsrsDifficulty: number | null = null;
+    let fsrsLapses: number | null = null;
 
     if (input.fsrsGrade !== undefined) {
       const existing = await this.getTrace(input.userId, conceptKey);
@@ -206,7 +208,7 @@ class MemoryTraceService {
               stability: existing.fsrsStability,
               difficulty: existing.fsrsDifficulty ?? 5,
               reps: existing.extractionCount,
-              lapses: 0,
+              lapses: existing.fsrsLapses ?? 0,
               lastReviewAt: existing.lastSeenAt,
             }
           : fsrsStateFromLegacy(existing.masteryScore, existing.extractionCount, existing.lastSeenAt))
@@ -214,6 +216,7 @@ class MemoryTraceService {
       const result = fsrsSchedule(prev, input.fsrsGrade, now);
       fsrsStability = result.state.stability;
       fsrsDifficulty = result.state.difficulty;
+      fsrsLapses = result.state.lapses;
       const rawDue = new Date(now.getTime() + result.intervalDays * DAY_MS);
       dueAt = this.snapToActiveWindow(rawDue, now, isFirstExtraction);
     }
@@ -235,6 +238,7 @@ class MemoryTraceService {
         dueAt,
         fsrsStability,
         fsrsDifficulty,
+        fsrsLapses,
         // 来源路径只在**首次创建**时写；update 不碰（originPathTitle 的语义是"最早出现"）
         pathId: input.pathId ?? null,
       },
@@ -248,6 +252,7 @@ class MemoryTraceService {
         dueAt,
         ...(fsrsStability !== null ? { fsrsStability } : {}),
         ...(fsrsDifficulty !== null ? { fsrsDifficulty } : {}),
+        ...(fsrsLapses !== null ? { fsrsLapses } : {}),
       },
     });
   }
@@ -441,45 +446,9 @@ class MemoryTraceService {
     }
   }
 
-  /**
-   * FSRS-6 调度更新：复习成功后按成绩更新 FSRS 状态（Dsr 稳定性/难度）；grade 未提供时走 legacy SM-2 ×2。
-   */
-  async bumpReviewInterval(userId: string, conceptKey: string, grade?: FsrsGradeCode): Promise<void> {
-    const key = normalizeConceptKey(conceptKey);
-    if (!key) return;
-    if (grade !== undefined) {
-      const trace = await this.getTrace(userId, key);
-      if (!trace) return;
-      const prev: FsrsMemoryState = trace.fsrsStability !== null && trace.fsrsStability !== undefined
-        ? {
-            stability: trace.fsrsStability,
-            difficulty: trace.fsrsDifficulty ?? 5,
-            reps: trace.extractionCount,
-            lapses: 0,
-            lastReviewAt: trace.lastSeenAt,
-          }
-        : fsrsStateFromLegacy(trace.masteryScore, trace.extractionCount, trace.lastSeenAt);
-      const now = simulatedNowOr();
-      const result = fsrsSchedule(prev, grade, now);
-      // 语义干扰矩阵：活跃误解 → 稳定性降低（下次复习更早，对比式纠错）
-      const activeMisconceptions = await getActiveForConcepts(userId, [key], 1);
-      const interferenceMultiplier = activeMisconceptions.length > 0 ? 0.85 : 1;
-      const adjustedStability = result.state.stability * interferenceMultiplier;
-      const rawDue = new Date(now.getTime() + Math.round(result.intervalDays * interferenceMultiplier) * DAY_MS);
-      const isFirstExtraction = trace.extractionCount === 0;
-      await prisma.memory_traces.updateMany({
-        where: { userId, conceptKey: key },
-        data: {
-          fsrsStability: adjustedStability,
-          fsrsDifficulty: result.state.difficulty,
-          dueAt: this.snapToActiveWindow(rawDue, now, isFirstExtraction),
-        },
-      });
-      return;
-    }
-    // legacy SM-2（intervalFactor ×2）已退役：FSRS 已全面接管，无 grade 时不再更新 legacy 间隔因子。
-    // 唯一调用方 SessionFinalizationService 已恒传 grade，此分支为死代码。
-  }
+  // 注：复习结果的 FSRS 写入自 2026-09-17 起是**单一写入者** = `ReviewCompletedConsumer`
+  // （含误解干扰 ×0.85）。此前的 `bumpReviewInterval` 已删除：它与 `recordExtraction(fsrsGrade)`
+  // 在同一条收束路径上把同一成绩应用两次，再叠加事件消费者 → 间隔被过度拉长、计数重复自增。
 }
 
 /** 默认复习目标保留时间（天）：路径跨度的保守估计，调用方可按路径时长覆盖 */

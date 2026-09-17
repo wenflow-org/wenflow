@@ -1,0 +1,14 @@
+-- AddColumn: memory_traces.fsrsLapses（FSRS-6 累计失误次数）
+-- 目的（审计 §4.2(1) / §5.2 P2）：`lapses` 此前在 5 处硬编码为 0、schema 无该列 →
+-- 「卡壳」与「第一次学」在数据上无法区分，也无法按卡壳率做 leech 判定 / E4（参数本地化）拟合。
+--
+-- 语义：只在**已在 Review/Relearning 态**的卡被判 Again 时 +1（ts-fsrs 的 lapses 定义），
+-- 新卡首次判 Again 不计；写入者 = ReviewCompletedConsumer（2026-09-17 起唯一写入者）。
+-- 历史行留 NULL = 未初始化（读取侧按 0 处理，等价于旧行为）。
+--
+-- ⚠️ 口径修正（实测 2026-09-17）：在 `enable_short_term: false` 下，lapses **不改变**
+-- stability/difficulty/interval —— ts-fsrs 内部据 lapses 判 `State.Relearning`，但短期步进关闭时
+-- 它与 `State.Review` 的调度结果相同（见 `fsrs.test.ts` 的刻画性断言）。
+-- ⇒ 本列的价值是**计数本身**（卡壳率 / leech / E4 的必需维度），**不是**"间隔因此变短"；
+--   不要把它写成"Relearning 带来的调度影响"。若将来打开 enable_short_term，该断言会失败 = 提醒行为已变。
+ALTER TABLE "memory_traces" ADD COLUMN "fsrsLapses" INTEGER;

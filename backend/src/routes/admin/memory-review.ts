@@ -49,6 +49,7 @@ function parseAudit(payload: string | null): ConceptConsolidationAudit | null {
 function retentionOf(trace: {
   fsrsStability: number | null;
   fsrsDifficulty: number | null;
+  fsrsLapses: number | null;
   masteryScore: number;
   extractionCount: number;
   lastSeenAt: Date | null;
@@ -59,7 +60,7 @@ function retentionOf(trace: {
         stability: trace.fsrsStability,
         difficulty: trace.fsrsDifficulty ?? 5,
         reps: trace.extractionCount,
-        lapses: 0,
+        lapses: trace.fsrsLapses ?? 0,
         lastReviewAt: trace.lastSeenAt,
       }
     : fsrsStateFromLegacy(trace.masteryScore, trace.extractionCount, trace.lastSeenAt);
@@ -237,6 +238,7 @@ router.get('/:userId', async (req, res) => {
           dueAt: true,
           fsrsStability: true,
           fsrsDifficulty: true,
+          fsrsLapses: true,
         },
       }),
       conceptConsolidatorService.getAudit(userId).catch(() => null),
