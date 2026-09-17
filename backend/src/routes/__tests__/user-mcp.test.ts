@@ -142,10 +142,10 @@ describe('用户 MCP 路由', () => {
       'fallbackEnabled 必须是布尔值'
     ],
     [
-      '错误服务器结构',
-      { servers: { id: 'main' } },
-      'MCP_SERVERS_INVALID',
-      'MCP servers 必须是数组'
+      '错误供应商结构',
+      { providers: { id: 'main' } },
+      'MCP_PROVIDERS_INVALID',
+      'MCP providers 必须是数组'
     ]
   ])('写入前拒绝%s', async (_caseName, body, code, message) => {
     const req: any = { user: { userId: 'user-1' }, body }
@@ -207,7 +207,7 @@ describe('用户 MCP 路由', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
-  it('添加服务器前执行同一套 Schema 校验和规范化', async () => {
+  it('添加供应商前执行同一套 Schema 校验和规范化', async () => {
     findUnique.mockResolvedValue(null)
     create.mockResolvedValue({})
     const req: any = {
@@ -224,17 +224,17 @@ describe('用户 MCP 路由', () => {
     const res = createResponse()
     const next = jest.fn()
 
-    await routes['POST /servers'](req, res, next)
+    await routes['POST /providers'](req, res, next)
 
     const createdData = create.mock.calls[0][0].data
-    expect(JSON.parse(createdData.servers)).toEqual([{
+    expect(JSON.parse(createdData.providers)).toEqual([{
       id: 'primary',
       name: '主服务',
       endpoint: 'https://api.example/v1',
       apiKey: '',
       enabled: true
     }])
-    expect(res.body.data.servers[0]).toEqual(expect.objectContaining({
+    expect(res.body.data.providers[0]).toEqual(expect.objectContaining({
       id: 'primary',
       name: '主服务',
       endpoint: 'https://api.example/v1',
@@ -243,7 +243,7 @@ describe('用户 MCP 路由', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
-  it('添加服务器时拒绝危险 URL', async () => {
+  it('添加供应商时拒绝危险 URL', async () => {
     const req: any = {
       user: { userId: 'user-1' },
       body: { id: 'main', name: '主服务', endpoint: 'file:///etc/passwd' }
@@ -251,22 +251,22 @@ describe('用户 MCP 路由', () => {
     const res = createResponse()
     const next = jest.fn()
 
-    await routes['POST /servers'](req, res, next)
+    await routes['POST /providers'](req, res, next)
 
     expect(res.statusCode).toBe(400)
     expect(res.body.error).toEqual(expect.objectContaining({
-      code: 'MCP_SERVER_CONFIG_INVALID',
-      message: '服务器 endpoint 仅允许 HTTPS'
+      code: 'MCP_PROVIDER_CONFIG_INVALID',
+      message: '供应商 endpoint 仅允许 HTTPS'
     }))
     expect(findUnique).not.toHaveBeenCalled()
     expect(create).not.toHaveBeenCalled()
     expect(next).not.toHaveBeenCalled()
   })
 
-  it('添加服务器时清理无效历史项而不阻断合法写入', async () => {
+  it('添加供应商时清理无效历史项而不阻断合法写入', async () => {
     findUnique.mockResolvedValue({
       userId: 'user-1',
-      servers: JSON.stringify([{ legacy: true }]),
+      providers: JSON.stringify([{ legacy: true }]),
       tools: '[]',
       routingStrategy: 'priority',
       fallbackEnabled: true,
@@ -279,15 +279,15 @@ describe('用户 MCP 路由', () => {
     const res = createResponse()
     const next = jest.fn()
 
-    await routes['POST /servers'](req, res, next)
+    await routes['POST /providers'](req, res, next)
 
-    const stored = JSON.parse(update.mock.calls[0][0].data.servers)
+    const stored = JSON.parse(update.mock.calls[0][0].data.providers)
     expect(stored).toEqual([{
       id: 'main',
       name: '主服务',
       endpoint: 'https://api.example/v1'
     }])
-    expect(res.body.data.servers).toEqual([{
+    expect(res.body.data.providers).toEqual([{
       id: 'main',
       name: '主服务',
       endpoint: 'https://api.example/v1'
@@ -327,7 +327,7 @@ describe('用户 MCP 路由', () => {
   it('部分更新时保留未提交的 MCP 配置字段', async () => {
     findUnique.mockResolvedValue({
       userId: 'user-1',
-      servers: JSON.stringify([{ id: 'server-1', endpoint: 'https://api.example' }]),
+      providers: JSON.stringify([{ id: 'provider-1', endpoint: 'https://api.example' }]),
       tools: JSON.stringify([{ id: 'search', endpoint: 'https://tools.example/search', enabled: true }]),
       routingStrategy: 'latency',
       fallbackEnabled: false,
@@ -349,14 +349,14 @@ describe('用户 MCP 路由', () => {
         tools: '[]'
       })
     })
-    expect(update.mock.calls[0][0].data).not.toHaveProperty('servers')
+    expect(update.mock.calls[0][0].data).not.toHaveProperty('providers')
     expect(update.mock.calls[0][0].data).not.toHaveProperty('routingStrategy')
     expect(update.mock.calls[0][0].data).not.toHaveProperty('fallbackEnabled')
     expect(update.mock.calls[0][0].data).not.toHaveProperty('healthCheck')
     expect(res.body.data).toEqual({
-      servers: [{
-        id: 'server-1',
-        name: 'server-1',
+      providers: [{
+        id: 'provider-1',
+        name: 'provider-1',
         endpoint: 'https://api.example',
         enabled: true
       }],
@@ -371,7 +371,7 @@ describe('用户 MCP 路由', () => {
   it('无关部分更新不会清除非数组历史配置', async () => {
     findUnique.mockResolvedValue({
       userId: 'user-1',
-      servers: JSON.stringify({ legacy: true }),
+      providers: JSON.stringify({ legacy: true }),
       tools: '{bad-json',
       routingStrategy: 'priority',
       fallbackEnabled: true,
@@ -392,10 +392,10 @@ describe('用户 MCP 路由', () => {
         fallbackEnabled: false
       })
     })
-    expect(update.mock.calls[0][0].data).not.toHaveProperty('servers')
+    expect(update.mock.calls[0][0].data).not.toHaveProperty('providers')
     expect(update.mock.calls[0][0].data).not.toHaveProperty('tools')
     expect(res.body.data).toEqual(expect.objectContaining({
-      servers: [],
+      providers: [],
       tools: [],
       fallbackEnabled: false
     }))
@@ -405,7 +405,7 @@ describe('用户 MCP 路由', () => {
   it('历史标量 healthCheck 不会在读取或部分更新时回显', async () => {
     findUnique.mockResolvedValue({
       userId: 'user-1',
-      servers: '[]',
+      providers: '[]',
       tools: '[]',
       routingStrategy: 'priority',
       fallbackEnabled: true,
@@ -449,7 +449,7 @@ describe('用户 MCP 路由', () => {
       process.env.SECRET_ENCRYPTION_KEYS = `new:${Buffer.alloc(32, 4).toString('base64')}`
       findUnique.mockResolvedValue({
         userId: 'user-1',
-        servers: '[]',
+        providers: '[]',
         tools,
         routingStrategy: 'priority',
         fallbackEnabled: true,

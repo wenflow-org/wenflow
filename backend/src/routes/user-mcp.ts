@@ -7,22 +7,22 @@ import { preserveNestedSecrets, preserveNestedSecretsById, toSecretSafeResponse 
 import { getGateway } from '../gateway';
 import {
   normalizeStoredUserMcpHealthCheck,
-  normalizeStoredUserMcpServers,
+  normalizeStoredUserMcpProviders,
   normalizeStoredUserMcpTools,
   parseUserMcpConfigUpdate,
-  parseUserMcpServers,
+  parseUserMcpProviders,
   parseUserMcpSecretJsonSafe,
   serializeUserMcpSecretJson,
   USER_MCP_SECRET_CONTEXTS,
 } from '../services/mcp/user-mcp-config.service';
 
-const SERVERS_CONTEXT = USER_MCP_SECRET_CONTEXTS.servers;
+const PROVIDERS_CONTEXT = USER_MCP_SECRET_CONTEXTS.providers;
 const TOOLS_CONTEXT = USER_MCP_SECRET_CONTEXTS.tools;
 const HEALTH_CONTEXT = USER_MCP_SECRET_CONTEXTS.healthCheck;
 const USER_MCP_VALIDATION_CODES = new Set([
   'MCP_CONFIG_INVALID',
-  'MCP_SERVERS_INVALID',
-  'MCP_SERVER_CONFIG_INVALID',
+  'MCP_PROVIDERS_INVALID',
+  'MCP_PROVIDER_CONFIG_INVALID',
   'MCP_TOOLS_INVALID',
   'MCP_TOOL_CONFIG_INVALID',
   'MCP_USER_LOCAL_TOOL_FORBIDDEN'
@@ -78,7 +78,7 @@ router.get('/', async (req, res, next) => {
       res.json({
         success: true,
         data: {
-          servers: [],
+          providers: [],
           tools: [],
           routingStrategy: 'priority',
           fallbackEnabled: true,
@@ -91,8 +91,8 @@ router.get('/', async (req, res, next) => {
     res.json({
       success: true,
       data: {
-        servers: toSecretSafeResponse(normalizeStoredUserMcpServers(
-          parseSecretJson(config.servers, SERVERS_CONTEXT, [])
+        providers: toSecretSafeResponse(normalizeStoredUserMcpProviders(
+          parseSecretJson(config.providers, PROVIDERS_CONTEXT, [])
         )),
         tools: toSecretSafeResponse(normalizeStoredUserMcpTools(
           parseSecretJson(config.tools, TOOLS_CONTEXT, [])
@@ -113,14 +113,14 @@ router.get('/', async (req, res, next) => {
 router.put('/', async (req, res, next) => {
   try {
     const userId = req.user.userId;
-    const { servers, tools, routingStrategy, fallbackEnabled, healthCheck } = parseUserMcpConfigUpdate(req.body);
+    const { providers, tools, routingStrategy, fallbackEnabled, healthCheck } = parseUserMcpConfigUpdate(req.body);
 
     let config = await prisma.user_mcp_configs.findUnique({
       where: { userId }
     });
 
-    const existingServers = normalizeStoredUserMcpServers(
-      parseSecretJson(config?.servers || null, SERVERS_CONTEXT, [])
+    const existingProviders = normalizeStoredUserMcpProviders(
+      parseSecretJson(config?.providers || null, PROVIDERS_CONTEXT, [])
     );
     const existingTools = normalizeStoredUserMcpTools(
       parseSecretJson(config?.tools || null, TOOLS_CONTEXT, [])
@@ -128,9 +128,9 @@ router.put('/', async (req, res, next) => {
     const existingHealthCheck = normalizeStoredUserMcpHealthCheck(
       parseSecretJson(config?.healthCheck || null, HEALTH_CONTEXT, null)
     );
-    const mergedServers = servers === undefined
-      ? existingServers
-      : preserveNestedSecretsById(Array.isArray(servers) ? servers : [], existingServers);
+    const mergedProviders = providers === undefined
+      ? existingProviders
+      : preserveNestedSecretsById(Array.isArray(providers) ? providers : [], existingProviders);
     const mergedTools = tools === undefined
       ? existingTools
       : preserveNestedSecretsById(tools, existingTools);
@@ -144,7 +144,7 @@ router.put('/', async (req, res, next) => {
 
     if (config) {
       const data: any = { updatedAt: new Date() };
-      if (servers !== undefined) data.servers = serializeSecretJson(mergedServers, SERVERS_CONTEXT);
+      if (providers !== undefined) data.providers = serializeSecretJson(mergedProviders, PROVIDERS_CONTEXT);
       if (tools !== undefined) data.tools = serializeSecretJson(mergedTools, TOOLS_CONTEXT);
       if (routingStrategy !== undefined) data.routingStrategy = nextRoutingStrategy;
       if (fallbackEnabled !== undefined) data.fallbackEnabled = nextFallbackEnabled;
@@ -156,7 +156,7 @@ router.put('/', async (req, res, next) => {
     } else {
       const data: any = {
         id: uuidv4(),
-        servers: serializeSecretJson(mergedServers, SERVERS_CONTEXT),
+        providers: serializeSecretJson(mergedProviders, PROVIDERS_CONTEXT),
         tools: serializeSecretJson(mergedTools, TOOLS_CONTEXT),
         routingStrategy: nextRoutingStrategy,
         fallbackEnabled: nextFallbackEnabled,
@@ -172,7 +172,7 @@ router.put('/', async (req, res, next) => {
     res.json({
       success: true,
       data: {
-        servers: toSecretSafeResponse(mergedServers),
+        providers: toSecretSafeResponse(mergedProviders),
         tools: toSecretSafeResponse(mergedTools),
         routingStrategy: nextRoutingStrategy,
         fallbackEnabled: nextFallbackEnabled,
@@ -185,8 +185,8 @@ router.put('/', async (req, res, next) => {
   }
 });
 
-// 获取服务器列表
-router.get('/servers', async (req, res, next) => {
+// 获取供应商列表
+router.get('/providers', async (req, res, next) => {
   try {
     const userId = req.user.userId;
 
@@ -194,7 +194,7 @@ router.get('/servers', async (req, res, next) => {
       where: { userId }
     });
 
-    if (!config || !config.servers) {
+    if (!config || !config.providers) {
       res.json({
         success: true,
         data: []
@@ -202,43 +202,43 @@ router.get('/servers', async (req, res, next) => {
       return;
     }
 
-    const servers = normalizeStoredUserMcpServers(parseSecretJson(config.servers, SERVERS_CONTEXT, []));
+    const providers = normalizeStoredUserMcpProviders(parseSecretJson(config.providers, PROVIDERS_CONTEXT, []));
     res.json({
       success: true,
-      data: toSecretSafeResponse(servers)
+      data: toSecretSafeResponse(providers)
     });
   } catch (error) {
     next(error);
   }
 });
 
-// 添加服务器
-router.post('/servers', async (req, res, next) => {
+// 添加供应商
+router.post('/providers', async (req, res, next) => {
   try {
     const userId = req.user.userId;
-    let server = parseUserMcpServers([req.body])[0];
+    let provider = parseUserMcpProviders([req.body])[0];
 
     let config = await prisma.user_mcp_configs.findUnique({
       where: { userId }
     });
 
-    let servers = [];
-    if (config && config.servers) {
-      servers = normalizeStoredUserMcpServers(parseSecretJson(config.servers, SERVERS_CONTEXT, []));
+    let providers = [];
+    if (config && config.providers) {
+      providers = normalizeStoredUserMcpProviders(parseSecretJson(config.providers, PROVIDERS_CONTEXT, []));
     }
 
-    server = preserveNestedSecretsById([server], servers)[0];
+    provider = preserveNestedSecretsById([provider], providers)[0];
 
     // 检查是否已存在
-    const existingIndex = servers.findIndex((s: any) => (
-      String(s.id || '').trim().toLowerCase() === server.id.toLowerCase()
+    const existingIndex = providers.findIndex((s: any) => (
+      String(s.id || '').trim().toLowerCase() === provider.id.toLowerCase()
     ));
     if (existingIndex >= 0) {
-      servers[existingIndex] = server;
+      providers[existingIndex] = provider;
     } else {
-      servers.push(server);
+      providers.push(provider);
     }
-    servers = parseUserMcpServers(servers);
+    providers = parseUserMcpProviders(providers);
 
     config = await prisma.user_mcp_configs.findUnique({
       where: { userId }
@@ -248,14 +248,14 @@ router.post('/servers', async (req, res, next) => {
       config = await prisma.user_mcp_configs.update({
         where: { userId },
         data: {
-          servers: serializeSecretJson(servers, SERVERS_CONTEXT),
+          providers: serializeSecretJson(providers, PROVIDERS_CONTEXT),
           updatedAt: new Date()
         }
       });
     } else {
       const data: any = {
         id: uuidv4(),
-        servers: serializeSecretJson(servers, SERVERS_CONTEXT),
+        providers: serializeSecretJson(providers, PROVIDERS_CONTEXT),
         tools: serializeSecretJson([], TOOLS_CONTEXT),
         routingStrategy: 'priority',
         fallbackEnabled: true,
@@ -270,7 +270,7 @@ router.post('/servers', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: { servers: toSecretSafeResponse(servers) }
+      data: { providers: toSecretSafeResponse(providers) }
     });
   } catch (error: any) {
     if (sendUserMcpValidationError(error, res)) return;
@@ -278,8 +278,8 @@ router.post('/servers', async (req, res, next) => {
   }
 });
 
-// 删除服务器
-router.delete('/servers/:id', async (req, res, next) => {
+// 删除供应商
+router.delete('/providers/:id', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
@@ -288,28 +288,28 @@ router.delete('/servers/:id', async (req, res, next) => {
       where: { userId }
     });
 
-    if (!config || !config.servers) {
+    if (!config || !config.providers) {
       return res.status(404).json({
         success: false,
         error: { message: '配置不存在' }
       });
     }
 
-    let servers = normalizeStoredUserMcpServers(parseSecretJson(config.servers, SERVERS_CONTEXT, []));
+    let providers = normalizeStoredUserMcpProviders(parseSecretJson(config.providers, PROVIDERS_CONTEXT, []));
     const normalizedId = id.trim().toLowerCase();
-    servers = servers.filter((s: any) => String(s.id || '').trim().toLowerCase() !== normalizedId);
+    providers = providers.filter((s: any) => String(s.id || '').trim().toLowerCase() !== normalizedId);
 
     await prisma.user_mcp_configs.update({
       where: { userId },
       data: {
-        servers: serializeSecretJson(servers, SERVERS_CONTEXT),
+        providers: serializeSecretJson(providers, PROVIDERS_CONTEXT),
         updatedAt: new Date()
       }
     });
 
     res.json({
       success: true,
-      data: { servers: toSecretSafeResponse(servers) }
+      data: { providers: toSecretSafeResponse(providers) }
     });
   } catch (error) {
     next(error);
@@ -369,7 +369,7 @@ router.post('/tools/:id/execute', async (req, res) => {
   }
 });
 
-// 测试服务器连接
+// 测试供应商连接
 router.post('/test-connection', async (req, res, next) => {
   try {
     const { endpoint, apiKey } = req.body;
@@ -382,7 +382,7 @@ router.post('/test-connection', async (req, res, next) => {
     }
 
     try {
-      const normalizedEndpoint = parseUserMcpServers([{
+      const normalizedEndpoint = parseUserMcpProviders([{
         id: 'connection-test',
         name: 'connection-test',
         endpoint
@@ -431,26 +431,26 @@ router.get('/status', async (req, res, next) => {
       where: { userId }
     });
 
-    if (!config || !config.servers) {
+    if (!config || !config.providers) {
       res.json({
         success: true,
-        data: { servers: [] }
+        data: { providers: [] }
       });
       return;
     }
 
-    const servers = normalizeStoredUserMcpServers(parseSecretJson(config.servers, SERVERS_CONTEXT, []));
+    const providers = normalizeStoredUserMcpProviders(parseSecretJson(config.providers, PROVIDERS_CONTEXT, []));
     // 安全加固：并发探测上限（分片串行），防止 /status 被用作并发出站请求放大面
     const MAX_CONCURRENT_STATUS_CHECKS = 5;
-    const probeServer = async (server: any) => {
+    const probeServer = async (provider: any) => {
       try {
         const headers: any = { 'Content-Type': 'application/json' };
-        if (server.apiKey) {
-          headers['Authorization'] = `Bearer ${server.apiKey}`;
+        if (provider.apiKey) {
+          headers['Authorization'] = `Bearer ${provider.apiKey}`;
         }
 
         const startTime = Date.now();
-        const response = await safeHttpRequest(`${server.endpoint}/models`, {
+        const response = await safeHttpRequest(`${provider.endpoint}/models`, {
           headers,
           timeoutMs: 3000,
           privateNetworkPolicy: 'public-only'
@@ -461,15 +461,15 @@ router.get('/status', async (req, res, next) => {
         const duration = Date.now() - startTime;
 
         return {
-          id: server.id,
-          name: server.name,
+          id: provider.id,
+          name: provider.name,
           status: 'online',
           responseTime: duration
         };
       } catch {
         return {
-          id: server.id,
-          name: server.name,
+          id: provider.id,
+          name: provider.name,
           status: 'offline',
           responseTime: null
         };
@@ -477,14 +477,14 @@ router.get('/status', async (req, res, next) => {
     };
 
     const statuses: any[] = [];
-    for (let i = 0; i < servers.length; i += MAX_CONCURRENT_STATUS_CHECKS) {
-      const chunk = servers.slice(i, i + MAX_CONCURRENT_STATUS_CHECKS);
+    for (let i = 0; i < providers.length; i += MAX_CONCURRENT_STATUS_CHECKS) {
+      const chunk = providers.slice(i, i + MAX_CONCURRENT_STATUS_CHECKS);
       statuses.push(...(await Promise.all(chunk.map(probeServer))));
     }
 
     res.json({
       success: true,
-      data: { servers: statuses }
+      data: { providers: statuses }
     });
   } catch (error) {
     next(error);

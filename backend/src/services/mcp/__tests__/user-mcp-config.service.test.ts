@@ -12,7 +12,7 @@ import {
   normalizeStoredUserMcpHealthCheck,
   normalizeStoredUserMcpTools,
   parseUserMcpConfigUpdate,
-  parseUserMcpServers,
+  parseUserMcpProviders,
   parseUserMcpTools,
   serializeUserMcpSecretJson,
   USER_MCP_SECRET_CONTEXTS
@@ -102,8 +102,8 @@ describe('用户 MCP 配置 Schema', () => {
     ])).toThrow('工具 endpoint 不允许包含查询参数或片段')
   })
 
-  it('校验服务器字段、URL、重复 ID 和默认顶层类型', () => {
-    expect(parseUserMcpServers([{
+  it('校验供应商字段、URL、重复 ID 和默认顶层类型', () => {
+    expect(parseUserMcpProviders([{
       id: ' primary ',
       name: ' 主服务 ',
       endpoint: 'https://api.example/v1',
@@ -117,13 +117,13 @@ describe('用户 MCP 配置 Schema', () => {
       config: { timeout: 1000 }
     }])
 
-    expect(() => parseUserMcpServers([
+    expect(() => parseUserMcpProviders([
       { id: 'main', name: 'A', endpoint: 'https://a.example' },
       { id: 'MAIN', name: 'B', endpoint: 'https://b.example' }
-    ])).toThrow('MCP 服务器 ID 重复: main')
-    expect(() => parseUserMcpServers([
+    ])).toThrow('MCP 供应商 ID 重复: main')
+    expect(() => parseUserMcpProviders([
       { id: 'main', name: 'A', endpoint: 'ftp://a.example' }
-    ])).toThrow('服务器 endpoint 仅允许 HTTPS')
+    ])).toThrow('供应商 endpoint 仅允许 HTTPS')
   })
 
   it('拒绝错误的顶层字段类型和未知字段', () => {
@@ -154,9 +154,9 @@ describe('用户 MCP 配置 Schema', () => {
     }))
   })
 
-  it('历史 server 脏数据不阻断旧版远程工具运行时读取', async () => {
+  it('历史 provider 脏数据不阻断旧版远程工具运行时读取', async () => {
     userMcpFindUnique.mockResolvedValue({
-      servers: JSON.stringify([{ legacy: true }]),
+      providers: JSON.stringify([{ legacy: true }]),
       tools: JSON.stringify([{
         id: 'Legacy-Search',
         endpoint: 'https://legacy.example/tool',
@@ -168,7 +168,7 @@ describe('用户 MCP 配置 Schema', () => {
     })
 
     await expect(getUserMcpRuntimeConfig('user-1')).resolves.toEqual({
-      servers: [],
+      providers: [],
       tools: [{
         id: 'legacy-search',
         name: 'legacy-search',
@@ -198,7 +198,7 @@ describe('用户 MCP 配置 Schema', () => {
 
   it('仅有损坏历史工具时保留其 ID 以阻止平台同名 fallback', async () => {
     userMcpFindUnique.mockResolvedValue({
-      servers: '[]',
+      providers: '[]',
       tools: JSON.stringify([{
         id: 'Platform-Search',
         endpoint: 'invalid-url',
@@ -210,7 +210,7 @@ describe('用户 MCP 配置 Schema', () => {
     })
 
     await expect(getUserMcpRuntimeConfig('user-1')).resolves.toEqual({
-      servers: [],
+      providers: [],
       tools: [],
       invalidToolIds: ['platform-search'],
       routingStrategy: 'priority',
@@ -230,7 +230,7 @@ describe('用户 MCP 配置 Schema', () => {
 
   it('损坏或非数组配置安全降级，允许后续写入自愈', async () => {
     userMcpFindUnique.mockResolvedValue({
-      servers: '{bad-json',
+      providers: '{bad-json',
       tools: JSON.stringify({ id: 'not-an-array' }),
       routingStrategy: 'priority',
       fallbackEnabled: true,
@@ -238,7 +238,7 @@ describe('用户 MCP 配置 Schema', () => {
     })
 
     await expect(getUserMcpRuntimeConfig('user-1')).resolves.toEqual({
-      servers: [],
+      providers: [],
       tools: [],
       toolsConfigInvalid: true,
       routingStrategy: 'priority',
@@ -262,7 +262,7 @@ describe('用户 MCP 配置 Schema', () => {
       process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID = 'new'
       process.env.SECRET_ENCRYPTION_KEYS = `new:${Buffer.alloc(32, 2).toString('base64')}`
       userMcpFindUnique.mockResolvedValue({
-        servers: '[]',
+        providers: '[]',
         tools,
         routingStrategy: 'priority',
         fallbackEnabled: true,

@@ -217,7 +217,8 @@ export interface UserMcpToolConfig {
   enabled: boolean;
 }
 
-export interface UserMcpServerConfig {
+/** 用户侧「外挂服务/供应商」（LLM 供应商连接）；原名 servers，易与 MCP server 混淆 */
+export interface UserMcpProviderConfig {
   id: string;
   name: string;
   endpoint: string;
@@ -261,7 +262,7 @@ export const getUserMcpConfig = async () => {
 };
 
 export const updateUserMcpConfig = async (data: {
-  servers?: UserMcpServerConfig[];
+  providers?: UserMcpProviderConfig[];
   tools?: UserMcpToolConfig[];
   routingStrategy?: UserMcpRoutingStrategy;
   fallbackEnabled?: boolean;
@@ -276,16 +277,16 @@ export const executeMcpTool = async (id: string, params: Record<string, unknown>
   });
 };
 
-export const getMcpServers = async () => {
-  return await api.get(`${API_BASE}/mcp/servers`);
+export const getMcpProviders = async () => {
+  return await api.get(`${API_BASE}/mcp/providers`);
 };
 
-export const addMcpServer = async (server: UserMcpServerConfig) => {
-  return await api.post(`${API_BASE}/mcp/servers`, server);
+export const addMcpProvider = async (provider: UserMcpProviderConfig) => {
+  return await api.post(`${API_BASE}/mcp/providers`, provider);
 };
 
-export const deleteMcpServer = async (id: string) => {
-  return await api.delete(`${API_BASE}/mcp/servers/${id}`);
+export const deleteMcpProvider = async (id: string) => {
+  return await api.delete(`${API_BASE}/mcp/providers/${id}`);
 };
 
 export const testMcpConnection = async (data: {

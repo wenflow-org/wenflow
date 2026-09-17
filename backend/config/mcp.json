@@ -65,16 +65,6 @@
   ],
   "tools": [
     {
-      "id": "web-search",
-      "name": "网页搜索",
-      "description": "搜索互联网内容",
-      "type": "search",
-      "endpoint": "${SEARCH_API_URL}",
-      "apiKey": "${SEARCH_API_KEY}",
-      "userAccessible": false,
-      "enabled": false
-    },
-    {
       "id": "file-reader",
       "name": "文件读取",
       "description": "读取本地文件",

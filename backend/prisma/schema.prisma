@@ -758,7 +758,8 @@ model user_api_configs {
 model user_mcp_configs {
   id              String   @id
   userId          String   @unique
-  servers         String
+  /// 外挂服务（LLM 供应商）连接配置；原名为 servers，与 MCP server 语义混淆
+  providers       String
   tools           String
   routingStrategy String   @default("priority")
   fallbackEnabled Boolean  @default(true)

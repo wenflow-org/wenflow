@@ -11,21 +11,25 @@ import {
 import { isAlwaysBlockedAddress, isLocalOrPrivateAddress } from '../../utils/safe-http';
 
 export const USER_MCP_SECRET_CONTEXTS = {
-  servers: 'main.user_mcp_configs.servers',
+  /**
+   * ⚠️ 该字符串是 AES-GCM 的 AAD（加密参数），**必须冻结**，不随列名/类型改名而改变，
+   * 否则已加密的 apiKey 将无法解密（列 user_mcp_configs.providers 原名 servers）。
+   */
+  providers: 'main.user_mcp_configs.servers',
   tools: 'main.user_mcp_configs.tools',
   healthCheck: 'main.user_mcp_configs.healthCheck',
 } as const;
 
 /**
- * 用户侧「外挂服务/供应商」配置（user_mcp_configs.servers）。
+ * 用户侧「外挂服务/供应商」配置（user_mcp_configs.providers）。
  *
- * 命名保留 servers 以兼容 DB 列与既有 API；语义与平台侧 providers 一致（LLM 供应商连接）。
+ * 语义与平台侧 providers 一致（LLM 供应商连接）；原名 servers，易与 MCP server 混淆。
  */
-export type UserMcpServerConfig = Pick<IMcpProviderConfig, 'id' | 'name' | 'endpoint'>
+export type UserMcpProviderConfig = Pick<IMcpProviderConfig, 'id' | 'name' | 'endpoint'>
   & Partial<Omit<IMcpProviderConfig, 'id' | 'name' | 'endpoint'>>;
 
 export interface UserMcpRuntimeConfig {
-  servers: UserMcpServerConfig[];
+  providers: UserMcpProviderConfig[];
   tools: IMcpToolConfig[];
   invalidToolIds?: string[];
   toolsConfigInvalid?: boolean;
@@ -35,19 +39,19 @@ export interface UserMcpRuntimeConfig {
 }
 
 export interface UserMcpConfigUpdate {
-  servers?: UserMcpServerConfig[];
+  providers?: UserMcpProviderConfig[];
   tools?: IMcpToolConfig[];
   routingStrategy?: 'priority' | 'latency' | 'round-robin';
   fallbackEnabled?: boolean;
   healthCheck?: Record<string, unknown> | null;
 }
 
-const MAX_USER_MCP_SERVERS = 50;
+const MAX_USER_MCP_PROVIDERS = 50;
 const MAX_USER_MCP_TOOLS = 100;
 const MAX_MCP_TOOL_TIMEOUT_MS = 300_000;
 const MCP_TOOL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
-function createMcpEndpointSchema(subject: '服务器' | '工具') {
+function createMcpEndpointSchema(subject: '供应商' | '工具') {
   return z.string({
     required_error: `${subject} endpoint 必填`,
     invalid_type_error: `${subject} endpoint 必须是字符串`,
@@ -85,52 +89,52 @@ function createMcpEndpointSchema(subject: '服务器' | '工具') {
     });
 }
 
-const mcpServerSchema = z.object({
+const mcpProviderSchema = z.object({
   id: z.string({
-    required_error: '服务器 id 必填',
-    invalid_type_error: '服务器 id 必须是字符串',
-  }).trim().min(1, '服务器 id 不能为空').max(64, '服务器 id 不能超过 64 个字符')
-    .regex(MCP_TOOL_ID_PATTERN, '服务器 id 只能包含字母、数字、点、下划线、冒号和连字符')
+    required_error: '供应商 id 必填',
+    invalid_type_error: '供应商 id 必须是字符串',
+  }).trim().min(1, '供应商 id 不能为空').max(64, '供应商 id 不能超过 64 个字符')
+    .regex(MCP_TOOL_ID_PATTERN, '供应商 id 只能包含字母、数字、点、下划线、冒号和连字符')
     .transform(value => value.toLowerCase()),
   name: z.string({
-    required_error: '服务器 name 必填',
-    invalid_type_error: '服务器 name 必须是字符串',
-  }).trim().min(1, '服务器 name 不能为空').max(100, '服务器 name 不能超过 100 个字符'),
+    required_error: '供应商 name 必填',
+    invalid_type_error: '供应商 name 必须是字符串',
+  }).trim().min(1, '供应商 name 不能为空').max(100, '供应商 name 不能超过 100 个字符'),
   type: z.enum(['openai', 'anthropic', 'openai-compatible'], {
-    errorMap: () => ({ message: '服务器 type 仅支持 openai、anthropic 或 openai-compatible' }),
+    errorMap: () => ({ message: '供应商 type 仅支持 openai、anthropic 或 openai-compatible' }),
   }).optional(),
-  endpoint: createMcpEndpointSchema('服务器'),
-  apiKey: z.string({ invalid_type_error: '服务器 apiKey 必须是字符串' })
-    .max(8192, '服务器 apiKey 不能超过 8192 个字符')
+  endpoint: createMcpEndpointSchema('供应商'),
+  apiKey: z.string({ invalid_type_error: '供应商 apiKey 必须是字符串' })
+    .max(8192, '供应商 apiKey 不能超过 8192 个字符')
     .optional(),
   models: z.array(
-    z.string({ invalid_type_error: '服务器 model 必须是字符串' })
-      .trim().min(1, '服务器 model 不能为空').max(200, '服务器 model 不能超过 200 个字符')
-  ).max(200, '服务器 models 不能超过 200 项').optional(),
-  defaultModel: z.string({ invalid_type_error: '服务器 defaultModel 必须是字符串' })
-    .trim().min(1, '服务器 defaultModel 不能为空').max(200, '服务器 defaultModel 不能超过 200 个字符')
+    z.string({ invalid_type_error: '供应商 model 必须是字符串' })
+      .trim().min(1, '供应商 model 不能为空').max(200, '供应商 model 不能超过 200 个字符')
+  ).max(200, '供应商 models 不能超过 200 项').optional(),
+  defaultModel: z.string({ invalid_type_error: '供应商 defaultModel 必须是字符串' })
+    .trim().min(1, '供应商 defaultModel 不能为空').max(200, '供应商 defaultModel 不能超过 200 个字符')
     .optional(),
-  priority: z.number({ invalid_type_error: '服务器 priority 必须是数字' })
-    .int('服务器 priority 必须是整数').min(0, '服务器 priority 不能小于 0')
-    .max(10_000, '服务器 priority 不能超过 10000').optional(),
-  enabled: z.boolean({ invalid_type_error: '服务器 enabled 必须是布尔值' }).optional(),
+  priority: z.number({ invalid_type_error: '供应商 priority 必须是数字' })
+    .int('供应商 priority 必须是整数').min(0, '供应商 priority 不能小于 0')
+    .max(10_000, '供应商 priority 不能超过 10000').optional(),
+  enabled: z.boolean({ invalid_type_error: '供应商 enabled 必须是布尔值' }).optional(),
   config: z.object({
-    temperature: z.number({ invalid_type_error: '服务器 config.temperature 必须是数字' })
-      .min(0, '服务器 config.temperature 不能小于 0')
-      .max(2, '服务器 config.temperature 不能超过 2')
+    temperature: z.number({ invalid_type_error: '供应商 config.temperature 必须是数字' })
+      .min(0, '供应商 config.temperature 不能小于 0')
+      .max(2, '供应商 config.temperature 不能超过 2')
       .optional(),
-    maxTokens: z.number({ invalid_type_error: '服务器 config.maxTokens 必须是数字' })
-      .int('服务器 config.maxTokens 必须是整数')
-      .min(1, '服务器 config.maxTokens 不能小于 1')
-      .max(2_000_000, '服务器 config.maxTokens 不能超过 2000000')
+    maxTokens: z.number({ invalid_type_error: '供应商 config.maxTokens 必须是数字' })
+      .int('供应商 config.maxTokens 必须是整数')
+      .min(1, '供应商 config.maxTokens 不能小于 1')
+      .max(2_000_000, '供应商 config.maxTokens 不能超过 2000000')
       .optional(),
-    timeout: z.number({ invalid_type_error: '服务器 config.timeout 必须是数字' })
-      .int('服务器 config.timeout 必须是整数')
-      .min(100, '服务器 config.timeout 不能小于 100 毫秒')
+    timeout: z.number({ invalid_type_error: '供应商 config.timeout 必须是数字' })
+      .int('供应商 config.timeout 必须是整数')
+      .min(100, '供应商 config.timeout 不能小于 100 毫秒')
       .max(MAX_MCP_TOOL_TIMEOUT_MS, `服务器 config.timeout 不能超过 ${MAX_MCP_TOOL_TIMEOUT_MS} 毫秒`)
       .optional(),
-  }).strict('服务器 config 包含不支持的字段').optional(),
-}).strict('服务器包含不支持的字段');
+  }).strict('供应商 config 包含不支持的字段').optional(),
+}).strict('供应商包含不支持的字段');
 
 const mcpToolSchema = z.object({
   id: z.string({
@@ -169,11 +173,11 @@ const mcpToolSchema = z.object({
   }),
 }).strict('工具包含不支持的字段');
 
-const runtimeMcpServerSchema = z.object({
+const runtimeMcpProviderSchema = z.object({
   id: z.string().trim().min(1).max(64).regex(MCP_TOOL_ID_PATTERN).transform(value => value.toLowerCase()),
   name: z.string().trim().max(100).optional(),
   type: z.enum(['openai', 'anthropic', 'openai-compatible']).optional(),
-  endpoint: createMcpEndpointSchema('服务器'),
+  endpoint: createMcpEndpointSchema('供应商'),
   apiKey: z.string().max(8192).optional(),
   models: z.array(z.string().trim().min(1).max(200)).max(200).optional(),
   defaultModel: z.string().trim().min(1).max(200).optional(),
@@ -252,7 +256,7 @@ const mcpHealthCheckSchema = z.object({
 }).strict('healthCheck 包含不支持的字段');
 
 const userMcpConfigUpdateSchema = z.object({
-  servers: z.unknown().optional(),
+  providers: z.unknown().optional(),
   tools: z.unknown().optional(),
   routingStrategy: z.enum(['priority', 'latency', 'round-robin'], {
     errorMap: () => ({ message: 'routingStrategy 仅支持 priority、latency 或 round-robin' }),
@@ -322,43 +326,43 @@ export function isLocalMcpTool(tool: Pick<IMcpToolConfig, 'endpoint'>): boolean 
   return typeof tool?.endpoint === 'string' && tool.endpoint.trim().toLowerCase() === 'local';
 }
 
-export function parseUserMcpServers(servers: unknown): UserMcpServerConfig[] {
-  assertNoEncryptedSecretInput(servers, 'servers', 'MCP_SERVER_CONFIG_INVALID');
-  if (!Array.isArray(servers)) {
-    throw createUserMcpValidationError('MCP_SERVERS_INVALID', 'MCP servers 必须是数组');
+export function parseUserMcpProviders(providers: unknown): UserMcpProviderConfig[] {
+  assertNoEncryptedSecretInput(providers, 'providers', 'MCP_PROVIDER_CONFIG_INVALID');
+  if (!Array.isArray(providers)) {
+    throw createUserMcpValidationError('MCP_PROVIDERS_INVALID', 'MCP providers 必须是数组');
   }
-  if (servers.length > MAX_USER_MCP_SERVERS) {
+  if (providers.length > MAX_USER_MCP_PROVIDERS) {
     throw createUserMcpValidationError(
-      'MCP_SERVER_CONFIG_INVALID',
-      `MCP 服务器数量不能超过 ${MAX_USER_MCP_SERVERS}`,
-      [{ path: 'servers', message: `最多允许 ${MAX_USER_MCP_SERVERS} 个服务器` }]
+      'MCP_PROVIDER_CONFIG_INVALID',
+      `MCP 供应商数量不能超过 ${MAX_USER_MCP_PROVIDERS}`,
+      [{ path: 'providers', message: `最多允许 ${MAX_USER_MCP_PROVIDERS} 个供应商` }]
     );
   }
 
-  const parsed = z.array(mcpServerSchema).safeParse(stripSecretConfiguredMarkers(servers));
+  const parsed = z.array(mcpProviderSchema).safeParse(stripSecretConfiguredMarkers(providers));
   if (!parsed.success) {
-    const details = parsed.error.issues.map(issue => formatValidationIssue(issue, 'servers'));
+    const details = parsed.error.issues.map(issue => formatValidationIssue(issue, 'providers'));
     throw createUserMcpValidationError(
-      'MCP_SERVER_CONFIG_INVALID',
-      details[0]?.message || 'MCP 服务器配置无效',
+      'MCP_PROVIDER_CONFIG_INVALID',
+      details[0]?.message || 'MCP 供应商配置无效',
       details
     );
   }
 
   const seenIds = new Set<string>();
-  for (const server of parsed.data) {
-    const normalizedId = server.id.toLowerCase();
+  for (const provider of parsed.data) {
+    const normalizedId = provider.id.toLowerCase();
     if (seenIds.has(normalizedId)) {
       throw createUserMcpValidationError(
-        'MCP_SERVER_CONFIG_INVALID',
-        `MCP 服务器 ID 重复: ${server.id}`,
-        [{ path: 'servers', message: `服务器 ID ${server.id} 重复` }]
+        'MCP_PROVIDER_CONFIG_INVALID',
+        `MCP 供应商 ID 重复: ${provider.id}`,
+        [{ path: 'providers', message: `供应商 ID ${provider.id} 重复` }]
       );
     }
     seenIds.add(normalizedId);
   }
 
-  return parsed.data as UserMcpServerConfig[];
+  return parsed.data as UserMcpProviderConfig[];
 }
 
 export function parseUserMcpTools(tools: unknown): IMcpToolConfig[] {
@@ -442,15 +446,15 @@ function parseRuntimeUserMcpTools(tools: unknown): {
   return { tools: result, invalidToolIds: Array.from(invalidIds), configInvalid };
 }
 
-export function normalizeStoredUserMcpServers(servers: unknown): UserMcpServerConfig[] {
-  if (!Array.isArray(servers)) return [];
-  const result: UserMcpServerConfig[] = [];
+export function normalizeStoredUserMcpProviders(providers: unknown): UserMcpProviderConfig[] {
+  if (!Array.isArray(providers)) return [];
+  const result: UserMcpProviderConfig[] = [];
   const seenIds = new Set<string>();
-  for (const candidate of servers) {
-    const parsed = runtimeMcpServerSchema.safeParse(candidate);
+  for (const candidate of providers) {
+    const parsed = runtimeMcpProviderSchema.safeParse(candidate);
     if (!parsed.success || seenIds.has(parsed.data.id)) continue;
     seenIds.add(parsed.data.id);
-    result.push(parsed.data as UserMcpServerConfig);
+    result.push(parsed.data as UserMcpProviderConfig);
   }
   return result;
 }
@@ -484,8 +488,8 @@ export function parseUserMcpConfigUpdate(input: unknown): UserMcpConfigUpdate {
     fallbackEnabled: parsed.data.fallbackEnabled,
     healthCheck: parsed.data.healthCheck,
   };
-  if (parsed.data.servers !== undefined) {
-    result.servers = parseUserMcpServers(parsed.data.servers);
+  if (parsed.data.providers !== undefined) {
+    result.providers = parseUserMcpProviders(parsed.data.providers);
   }
   if (parsed.data.tools !== undefined) {
     result.tools = parseUserMcpTools(parsed.data.tools);
@@ -522,9 +526,9 @@ export async function getUserMcpRuntimeConfig(userId: string): Promise<UserMcpRu
   const config = await prisma.user_mcp_configs.findUnique({ where: { userId } });
   if (!config) return null;
 
-  const servers = parseUserMcpSecretJsonSafe<unknown>(
-    config.servers,
-    USER_MCP_SECRET_CONTEXTS.servers,
+  const providers = parseUserMcpSecretJsonSafe<unknown>(
+    config.providers,
+    USER_MCP_SECRET_CONTEXTS.providers,
     []
   );
   const toolsResult = parseUserMcpSecretJsonSafeResult<unknown>(
@@ -540,7 +544,7 @@ export async function getUserMcpRuntimeConfig(userId: string): Promise<UserMcpRu
   const parsedTools = parseRuntimeUserMcpTools(toolsResult.value);
 
   return {
-    servers: normalizeStoredUserMcpServers(servers),
+    providers: normalizeStoredUserMcpProviders(providers),
     tools: parsedTools.tools,
     ...(parsedTools.invalidToolIds.length > 0 ? { invalidToolIds: parsedTools.invalidToolIds } : {}),
     ...(toolsResult.malformedJson || parsedTools.configInvalid ? { toolsConfigInvalid: true } : {}),
