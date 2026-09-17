@@ -29,6 +29,7 @@ import { recordTaskDifficultyAdjustment } from '../learner/TaskDifficultyAdjustm
 import { assembleTeachingTurnChannels } from '../field-dispatcher';
 import { createDomainEvent } from '../../events/contracts';
 import { replanAdvisoryService, toAttributionRecall, type ReplanAdvisory } from './ReplanAdvisoryService';
+import { runWithTeachingSession } from './teaching-session-context';
 import { replanAttributionService, isCalibratableDirection, type ReplanAttributionEvidence } from './ReplanAttributionService';
 import { insightCalibrationService } from '../learner/insight-calibration.service';
 import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
@@ -2785,7 +2786,8 @@ export class AITeachingOrchestrator {
       // 归因层（阈值召回 + LLM 归因）：只在建议已成立时补"为什么"，失败/超时保留阈值版
       let advisory = thresholdAdvisory;
       if (thresholdAdvisory.shouldSuggest) {
-        const attribution = await replanAttributionService.attribute({
+        // 会话作用域：让 aux skill 的 LLM 调用带上 sessionId（成本可归到这节课，审计 §5.2 P2）
+        const attribution = await runWithTeachingSession(session.id, () => replanAttributionService.attribute({
           // 召回与动作**同源**（都来自最终 advisory）：此前取信号层 signal，与 allowedRecommendations
           // 属两套阈值，会导致"允许的动作没有对应原因码"（§3.19 P1⑦）
           recall: toAttributionRecall(thresholdAdvisory),
@@ -2801,7 +2803,7 @@ export class AITeachingOrchestrator {
             milestoneTitle: learnerReplanProjection?.path?.currentPosition?.milestoneTitle ?? null,
             stageNumber: currentStageNumber,
           },
-        });
+        }));
         advisory = replanAdvisoryService.applyAttribution(thresholdAdvisory, attribution);
         if (advisory.attribution?.claim && isCalibratableDirection(advisory.recommendation)) {
           // 可证伪断言单独成列（insightType=replan_attribution），不与状态评审的可靠性混算
@@ -2887,12 +2889,14 @@ export class AITeachingOrchestrator {
         throw error;
       }
 
-      dashboardGuidanceSnapshotService.refreshInBackground(session.userId, 'lesson-wrapup');
-      learnerStateReviewService.refreshInBackground(session.userId);
+      // 课后刷新统一包进「当前教学会话」作用域：这些 aux skill 的 LLM 调用据此可归到本节
+      // （此前不传 sessionId，成本落在 agent_call_logs 的"(无会话)"栏——审计 §5.2 P2 尾巴）
+      runWithTeachingSession(session.id, () => dashboardGuidanceSnapshotService.refreshInBackground(session.userId, 'lesson-wrapup'));
+      runWithTeachingSession(session.id, () => learnerStateReviewService.refreshInBackground(session.userId));
       // 概念身份归并（记忆层维护 · 默认观察模式）：课后顺带看一眼是否有同义重复知识点
-      conceptConsolidatorService.refreshInBackground(session.userId);
+      runWithTeachingSession(session.id, () => conceptConsolidatorService.refreshInBackground(session.userId));
       // 概念负担档位预热：把 LLM 判定挪出开课关键路径（下节课直接命中缓存）
-      conceptLoadService.warmInBackground(session.userId);
+      runWithTeachingSession(session.id, () => conceptLoadService.warmInBackground(session.userId));
       // 记忆引擎 M2：课后按知识看板状态确定性回写内化强度（best-effort，失败不阻断课堂完成）
       const calibrationBias = learnerSnapshot?.profile?.cognitive?.selfAssessmentAccuracy ?? 'accurate';
       memoryTraceService.recordSessionOutcome(

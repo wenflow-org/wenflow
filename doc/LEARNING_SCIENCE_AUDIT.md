@@ -878,8 +878,17 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
   真列 + `(sessionId, calledAt)` 索引（迁移 `20260917020000`），写入侧补列、历史行尽力回填，
   新增只读脚本 `audit-session-cost.ts`（`--session` / `--user` / `--top`，按 skill 分解）。
   实测：新学习者 3 个会话共 119,820 tokens，最贵会话 46,082（teaching-turn 40,867 + session-wrapup 5,215）。
-  **已知缺口**：会话内触发的 aux skill（`learner-state-review`/`concept-consolidator` 等）未传 `sessionId`
-  → 在脚本里落在"(无会话)"栏（口径可见、不隐藏），待后续按调用点逐个补齐。
+  **归属已补全（2026-09-17 后续）**：此前会话内触发的 aux skill（`learner-state-review`/`concept-consolidator`/
+  `concept-load-estimator`/`replan-attribution`）不传 `sessionId`，成本落在"(无会话)"栏；
+  现用 `AsyncLocalStorage` 在收束流程声明"当前教学会话"（`teaching-session-context.ts`），
+  `v4-aux-skills` 的 `runAux` 兜底读取 ⇒ 这些调用自动归到本课。
+  复测（新学习者）：最贵会话分解已含 `learner-state-review` 2,148 / `replan-attribution` 1,262 /
+  `concept-consolidator` 806 / `concept-load-estimator` 633 tokens（"（无会话）"只剩开课前的路径生成等）；
+- **新观察（2026-09-17）**：`fail 4 温故结果入库` 在本轮从零回归里复现了"模型没回写"那一半——
+  温故点「论据类型识别」在会话消息里出现 5 次（模型确实问了），但最终 `knowledgeState` 里
+  **没有该点** ⇒ 按名字摘取自然落空、`memoryWarmup.items[0].outcome` 为 null、无 `review:warmup` 证据。
+  此前修的只是**匹配侧**（调序/截断），这一半是**模型不按规则回写**。待办：把温故结果从
+  "要求模型写进 knowledge.points" 改成**确定性输出字段**（结构契约），不再依赖提示词依从性。
 
 ---
 

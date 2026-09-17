@@ -12,6 +12,7 @@
  *     __onFailure: 'throw' | 'fallback'，覆盖 core 声明的默认策略（用于必须保持既有抛出契约的调用点）。
  */
 import { callPrompt } from '../../composers/prompt-composer';
+import { currentTeachingSessionId } from '../../services/ai-teaching/teaching-session-context';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import type { PromptCallContext } from '../../composers/types';
 import type { SkillDefinition, SkillExecutionResult } from '../protocol';
@@ -153,6 +154,11 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
         : { valid: false, failureReason: `${opts.meta.skillId.toUpperCase().replace(/-/g, '_')}_OUTPUT_EMPTY` }),
     }, domain, {
       ...promptContext,
+      // 会话归属兜底（审计 §5.2 P2 尾巴）：调用方没显式给 sessionId 时，用「当前教学会话」作用域的值——
+      // 收束流程里的 aux skill 因此能把 LLM 成本归到那一节课（不在作用域内则为 undefined，行为同改造前）
+      ...(promptContext.sessionId || !currentTeachingSessionId()
+        ? {}
+        : { sessionId: currentTeachingSessionId() as string }),
       ...(Object.keys(generationOverride).length > 0 ? { generationOverride } : {}),
     });
     if (!result.success || result.output === undefined || result.output === null) {
