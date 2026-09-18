@@ -57,3 +57,43 @@ describe('virtual-learner-learn-turn-simulator 失败显式传播', () => {
     expect(result.output).toBeUndefined()
   })
 })
+
+describe('virtual-learner-learn-turn-simulator · 检查点作答（P1-3）', () => {
+  const withCheckpoint: LearnLearnerSimulationInput = {
+    ...input,
+    pendingCheckpoint: {
+      id: 'cp1',
+      type: 'single_choice',
+      question: '哪个是条件类型？',
+      options: [{ id: 'A', text: 'T extends U' }, { id: 'B', text: 'Array<T>' }],
+      allowSkip: true,
+    },
+  }
+
+  it('选择题：保留真实存在的选项 id，丢弃编造的 id', () => {
+    const output = normalizeOutput(
+      { reply: '我选 B。', checkpointAnswer: { selectedOptionIds: ['B', 'ZZZ'], confidence: 0.7 } },
+      withCheckpoint,
+    )
+    expect(output.checkpointAnswer).toEqual({ selectedOptionIds: ['B'], confidence: 0.7 })
+  })
+
+  it('简答题：保留 answerText', () => {
+    const shortInput: LearnLearnerSimulationInput = {
+      ...input,
+      pendingCheckpoint: { id: 'cp2', type: 'short_answer', question: '说说为什么' },
+    }
+    const output = normalizeOutput({ reply: '因为擦除。', checkpointAnswer: { answerText: '  因为类型擦除  ' } }, shortInput)
+    expect(output.checkpointAnswer).toEqual({ answerText: '因为类型擦除' })
+  })
+
+  it('没有待答检查点时，不产出 checkpointAnswer', () => {
+    const output = normalizeOutput({ reply: '继续吧。', checkpointAnswer: { selectedOptionIds: ['A'] } }, input)
+    expect(output.checkpointAnswer).toBeUndefined()
+  })
+
+  it('草案无效（选项 id 全不存在）→ 不产出，交给 runner 兜底', () => {
+    const output = normalizeOutput({ reply: '……', checkpointAnswer: { selectedOptionIds: ['ZZZ'] } }, withCheckpoint)
+    expect(output.checkpointAnswer).toBeUndefined()
+  })
+})

@@ -61,6 +61,7 @@ import { safeJsonParse } from '../utils/safe-json'
 import { bumpFrictionBudget, normalizeFrictionBudget } from '../skills/virtual-learner-shared'
 import type { SkillDefinition } from '../skills/protocol'
 import { asErrorLike } from './vlab-types'
+import { buildCheckpointAction } from './blackbox-checkpoint'
 import type {
   ActorProfileSnapshot,
   BlackboxRunState,
@@ -819,6 +820,12 @@ export class BlackboxVirtualLearnerRunner {
         }
       } else if (action.type === 'confirm_complete') {
         result = await this.completeCurrentTask(session, state, adapter, control, latestObservation)
+      } else if (action.type === 'submit_answer' && action.checkpointId) {
+        // 检查点走专用提交接口（P1-3）：普通聊天接口不判定对错、也不会消费待答检查点
+        if (!control.teachingSessionId) {
+          throw new BlackboxRunStateError('当前没有可交互的教学会话', 'BLACKBOX_TEACHING_NOT_AVAILABLE')
+        }
+        result = await adapter.submitTeachingCheckpoint(control.teachingSessionId, control.teachingRevision, action)
       } else if (action.type === 'skip') {
         throw new BlackboxRunStateError('平台当前没有公开的跳过任务动作', 'BLACKBOX_SKIP_UNSUPPORTED')
       } else {
@@ -944,20 +951,24 @@ export class BlackboxVirtualLearnerRunner {
             knowledgeSnapshot: await this.buildLearnerKnowledgeSnapshot(session.userId, latest.visibleTask),
             learnerMemory: await this.buildLearnerMemoryForSimulator(session.userId),
             epistemicGrounding,
-            frictionBudget: snapshot.frictionBudget
+            frictionBudget: snapshot.frictionBudget,
+            // 有待答检查点时把题目交给模拟器（不含答案键），让它按人设作答
+            pendingCheckpoint: latest.visibleCheckpoint || null
           },
           snapshot,
           'teaching'
         )
-        action = latest.availableActions.includes('confirm_complete')
-          && output.learnerFeedback?.selfReportedTaskDone === true
-          && output.learnerFeedback?.stopAsking === true
-          ? { type: 'confirm_complete' }
-          : output.learnerState?.wantsHint
-            ? { type: 'request_hint', text: output.reply }
-          : output.learnerState?.wantsWorkedExample
-            ? { type: 'request_example', text: output.reply }
-            : { type: 'chat', text: output.reply }
+        action = latest.visibleCheckpoint
+          ? buildCheckpointAction(latest.visibleCheckpoint, output.checkpointAnswer)
+          : latest.availableActions.includes('confirm_complete')
+            && output.learnerFeedback?.selfReportedTaskDone === true
+            && output.learnerFeedback?.stopAsking === true
+            ? { type: 'confirm_complete' }
+            : output.learnerState?.wantsHint
+              ? { type: 'request_hint', text: output.reply }
+            : output.learnerState?.wantsWorkedExample
+              ? { type: 'request_example', text: output.reply }
+              : { type: 'chat', text: output.reply }
         await this.persistPrivateState(session, state, 'teaching', {
           ...output.learnerState,
           learnerFeedback: output.learnerFeedback,

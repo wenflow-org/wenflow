@@ -63,6 +63,17 @@ export interface LearnLearnerSimulationInput {
   epistemicGrounding?: EpistemicGrounding | null;
   /** 控制学习者对抗度. 默认 'normal' */
   frictionBudget?: FrictionBudget;
+  /**
+   * 当前待作答的理解检查点（不含答案键）。有值时应按人设给出 `checkpointAnswer`，
+   * 而不是继续闲聊——平台在待答检查点未消费前不会出下一题。
+   */
+  pendingCheckpoint?: {
+    id: string;
+    type: 'single_choice' | 'multi_choice' | 'short_answer';
+    question: string;
+    options?: Array<{ id: string; text: string }>;
+    allowSkip?: boolean;
+  } | null;
 }
 
 export interface LearnLearnerSimulationOutput {
@@ -101,6 +112,15 @@ export interface LearnLearnerSimulationOutput {
       learnerState: string[];
       learnerFeedback: string[];
     };
+  };
+  /**
+   * 对 `pendingCheckpoint` 的作答草案（仅在有检查点时产出）。
+   * `selectedOptionIds` 必须是题目里真实存在的选项 id；简答题用 `answerText`。
+   */
+  checkpointAnswer?: {
+    selectedOptionIds?: string[];
+    answerText?: string;
+    confidence?: number;
   };
 }
 
@@ -203,6 +223,32 @@ function buildFallback(input: LearnLearnerSimulationInput): LearnLearnerSimulati
   };
 }
 
+/**
+ * 检查点作答草案归一化：只在**有待答检查点**时产出；选项 id 必须是题目里真实存在的，
+ * 避免模型编造 id 导致提交被判"选项无效"。
+ */
+function normalizeCheckpointAnswer(
+  raw: any,
+  checkpoint: LearnLearnerSimulationInput['pendingCheckpoint']
+): LearnLearnerSimulationOutput['checkpointAnswer'] {
+  if (!checkpoint) return undefined;
+  const validIds = new Set((checkpoint.options || []).map((option) => option.id));
+  const selected = Array.isArray(raw?.selectedOptionIds)
+    ? raw.selectedOptionIds
+        .map((item: any) => safeText(item))
+        .filter((id: string) => validIds.has(id))
+        .slice(0, 4)
+    : [];
+  const answerText = safeText(raw?.answerText).slice(0, 200);
+  const confidence = typeof raw?.confidence === 'number' ? clamp01(raw.confidence, 0.5) : undefined;
+  if (!selected.length && !answerText) return undefined;
+  return {
+    ...(selected.length ? { selectedOptionIds: selected } : {}),
+    ...(answerText ? { answerText } : {}),
+    ...(confidence !== undefined ? { confidence } : {}),
+  };
+}
+
 function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): LearnLearnerSimulationOutput {
   const fallback = buildFallback(input);
   const rawState = parsed?.learnerState && typeof parsed.learnerState === 'object' ? parsed.learnerState : {};
@@ -231,6 +277,7 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
   const feedbackBlockers = normalizeStringArray(rawFeedback.remainingBlockers);
   const wantsMoreHelp = safeBool(rawFeedback.wantsMoreHelp, fallbackFeedback.wantsMoreHelp);
   const selfReportedTaskDone = safeBool(rawFeedback.selfReportedTaskDone, fallbackFeedback.selfReportedTaskDone) && !wantsMoreHelp && feedbackBlockers.length === 0;
+  const checkpointAnswer = normalizeCheckpointAnswer(parsed?.checkpointAnswer, input.pendingCheckpoint);
 
   return {
     reply: cropReply(parsed?.reply || fallback.reply, phaseFocus),
@@ -250,7 +297,8 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
       stateChangeReason: sanitizeVisibleContent(parsed?.debug?.stateChangeReason || ''),
       // 归一化补齐检测：LLM 未输出的状态字段由代码用 fallback 默认值填充，供审计区分
       normalizedFallback,
-    }
+    },
+    ...(checkpointAnswer ? { checkpointAnswer } : {}),
   };
 }
 
@@ -353,6 +401,7 @@ export const virtualLearnerLearnTurnSimulatorDefinition: SkillDefinition = {
       previousLearnerState: { type: 'object', description: '上一轮学习者主观状态' },
       currentTask: { type: 'object', description: '当前 task 信息' },
       knowledgeSnapshot: { type: 'array', description: '当前任务知识看板' },
+      pendingCheckpoint: { type: 'object', description: '当前待作答的理解检查点（不含答案键）' },
     },
   },
   outputSchema: {
@@ -362,6 +411,7 @@ export const virtualLearnerLearnTurnSimulatorDefinition: SkillDefinition = {
       emotion: { type: 'string', description: '当前情绪' },
       learnerState: { type: 'object', description: 'Learn 阶段学习者主观状态' },
       learnerFeedback: { type: 'object', description: '学习者对当前 task 是否学完的自我反馈' },
+      checkpointAnswer: { type: 'object', description: '对 pendingCheckpoint 的作答草案' },
       debug: { type: 'object', description: '调试信息' },
     },
   },

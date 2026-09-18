@@ -2,7 +2,7 @@ export type LearnerAction =
   | { type: 'chat'; text: string }
   | { type: 'request_hint'; text: string }
   | { type: 'request_example'; text: string }
-  | { type: 'submit_answer'; answer: string }
+  | { type: 'submit_answer'; answer: string; checkpointId?: string; selectedOptionIds?: string[]; skip?: boolean }
   | { type: 'submit_code'; code: string }
   | { type: 'confirm_proposal'; text: string }
   | { type: 'start_learning'; taskId?: string }
@@ -30,6 +30,17 @@ export type LearnerObservation = {
     description?: string | null
     /** 任务锚定概念（平台侧真实字段，供模拟器知识看板使用） */
     linkedConcept?: string
+  }
+  /**
+   * 待作答的理解检查点（**不含答案键**；答案键只在服务端保留）。
+   * 有值时可用 `submit_answer`（带 `checkpointId`）走检查点提交接口，而不是普通聊天接口。
+   */
+  visibleCheckpoint?: {
+    id: string
+    type: 'single_choice' | 'multi_choice' | 'short_answer'
+    question: string
+    options?: Array<{ id: string; text: string }>
+    allowSkip?: boolean
   }
   availableActions: LearnerAction['type'][]
   lastActionResult?: {

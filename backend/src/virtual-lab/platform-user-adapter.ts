@@ -264,6 +264,7 @@ export class PlatformUserAdapter {
     const platformText = result?.aiResponse || ''
     const shouldConfirmEnd = result?.shouldConfirmEnd === true
     const nextRevision = requireTeachingRevision(result?.revision, 'Teaching 消息')
+    const visibleCheckpoint = this.checkpointFromPlatform(result?.checkpoint)
     return {
       observation: {
         stage: result?.autoEnded ? 'completed' : 'teaching',
@@ -271,6 +272,8 @@ export class PlatformUserAdapter {
           { role: 'learner', content: message },
           ...(platformText ? [{ role: 'platform' as const, content: platformText }] : [])
         ],
+        // 有题意在必答的检查点：暴露题目（不含答案键），供虚拟学习者作答
+        ...(visibleCheckpoint ? { visibleCheckpoint } : {}),
         availableActions: result?.autoEnded
           ? []
           : [
@@ -296,6 +299,86 @@ export class PlatformUserAdapter {
         state: result?.state || null,
         strategies: result?.strategies || [],
         completionCandidate: result?.isCompletion === true
+      }
+    }
+  }
+
+  /**
+   * 平台下发的检查点 → 观察面（**只取可下发字段**；答案键从不在此出现）。
+   */
+  private checkpointFromPlatform(checkpoint: unknown): LearnerObservation['visibleCheckpoint'] | undefined {
+    if (!checkpoint || typeof checkpoint !== 'object') return undefined
+    const record = checkpoint as Record<string, unknown>
+    if (typeof record.id !== 'string' || !record.id) return undefined
+    const type = record.type === 'single_choice' || record.type === 'multi_choice' || record.type === 'short_answer'
+      ? record.type
+      : 'short_answer'
+    const options = Array.isArray(record.options)
+      ? record.options
+          .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+          .filter((item) => typeof item.id === 'string')
+          .map((item) => ({ id: item.id as string, text: typeof item.text === 'string' ? item.text : '' }))
+      : []
+    return {
+      id: record.id,
+      type,
+      question: typeof record.question === 'string' ? record.question : '',
+      ...(options.length ? { options } : {}),
+      ...(record.allowSkip === true ? { allowSkip: true } : {}),
+    }
+  }
+
+  /**
+   * 提交理解检查点：走**检查点提交接口**（而非普通聊天接口）。
+   *
+   * 18 号复核报告 P1-3 的修复点之一：此前 `submit_answer` 被映射成一条聊天消息发往
+   * `/messages`，平台既不会判定对错、也不会再出新题 → 黑盒链路遇到检查点即卡死。
+   */
+  async submitTeachingCheckpoint(
+    sessionId: string,
+    revision: number | null | undefined,
+    action: Extract<LearnerAction, { type: 'submit_answer' }>
+  ): Promise<PlatformInteractionResult> {
+    if (!action.checkpointId) {
+      throw new PlatformAdapterError('提交检查点缺少 checkpointId', 400)
+    }
+    const expectedRevision = await this.resolveTeachingRevision(sessionId, revision)
+    const payload = action.skip === true
+      ? { skip: true, revision: expectedRevision }
+      : {
+          ...(action.selectedOptionIds?.length
+            ? { selectedOptionIds: action.selectedOptionIds }
+            : { answerText: action.answer }),
+          revision: expectedRevision,
+        }
+    const response = await this.transport.request<any>({
+      method: 'POST',
+      url: `/ai-teaching/sessions/${encodeURIComponent(sessionId)}/checkpoints/${encodeURIComponent(action.checkpointId)}/submit`,
+      data: payload,
+      headers: await this.headers()
+    })
+    const result = unwrap<any>(response)
+    const feedback = typeof result?.feedback === 'string' ? result.feedback : ''
+    const nextRevision = requireTeachingRevision(result?.revision, '检查点提交')
+    return {
+      observation: {
+        stage: 'teaching',
+        visibleMessages: [
+          { role: 'learner', content: action.skip === true ? '（跳过这个检查点）' : action.answer },
+          ...(feedback ? [{ role: 'platform' as const, content: feedback }] : [])
+        ],
+        availableActions: ['chat', 'request_hint', 'request_example', 'submit_answer', 'submit_code', 'abandon'],
+        lastActionResult: { status: 'success', visibleMessage: feedback }
+      },
+      control: {
+        teachingSessionId: sessionId,
+        teachingRevision: nextRevision,
+        platformStage: 'teaching',
+        rawTraceId: traceIdFrom(response.headers)
+      },
+      diagnostic: {
+        // 旁路裁判可读，绝不传入下一轮虚拟学习者 Observation。
+        checkpoint: { passed: result?.passed === true, nextAction: result?.nextAction || null }
       }
     }
   }
