@@ -718,12 +718,15 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit', async (req:
     }
 
     const { sessionId, checkpointId } = req.params;
+    const skip = req.body?.skip === true;
     const selectedOptionIds = Array.isArray(req.body?.selectedOptionIds)
       ? req.body.selectedOptionIds.filter((value: unknown) => typeof value === 'string' && value.trim())
       : undefined;
     const answerText = typeof req.body?.answerText === 'string' ? req.body.answerText.trim() : undefined;
 
-    if ((!selectedOptionIds || selectedOptionIds.length === 0) && !answerText) {
+    // 「跳过」请求只带 skip 标志、没有作答内容；放行给协调器（由它按 checkpoint.allowSkip 裁定）。
+    // 此前这里无条件要求作答内容，导致 skip 必然 400，而协调器里的 skip 分支成了死代码。
+    if (!skip && (!selectedOptionIds || selectedOptionIds.length === 0) && !answerText) {
       return sendValidationError(res, '缺少作答内容');
     }
 
@@ -731,6 +734,7 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit', async (req:
     const result = await aiTeachingCoordinator.submitCheckpoint(sessionId, checkpointId, {
       selectedOptionIds,
       answerText,
+      ...(skip ? { skip: true } : {}),
     }, requireExpectedRevision(req.body?.revision));
 
     return res.json({ success: true, data: result });

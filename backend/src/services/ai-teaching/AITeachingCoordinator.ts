@@ -3375,6 +3375,10 @@ export class AITeachingOrchestrator {
     try {
       // 跳过检查点：清除待处理检查点（记录历史，允许后续生成新检查点），不触发教学回合
       if (payload?.skip === true) {
+        // 只有出题时声明了 allowSkip 才允许跳过（声明与行为一致；此前 allowSkip 只是下发给客户端的装饰）
+        if (checkpoint.allowSkip !== true) {
+          throw new Error('该检查点不允许跳过');
+        }
         const teachingState: Record<string, any> = { ...(session.teachingState || {}) };
         delete teachingState.pendingCheckpoint;
         const nextArtifacts = { ...parseSessionArtifacts(teachingState) };

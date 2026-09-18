@@ -242,6 +242,32 @@ describe('ai-teaching routes', () => {
     });
   });
 
+  it('「跳过检查点」放行并把 skip 透传给协调器（此前必然 400）', async () => {
+    mockCoordinator.submitCheckpoint.mockResolvedValue({
+      passed: false,
+      feedback: '已跳过这个检查点，我们继续。',
+      nextAction: 'continue',
+    });
+
+    const handler = getRouteHandler('/sessions/:sessionId/checkpoints/:checkpointId/submit');
+    const res = createResponse();
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1', checkpointId: 'checkpoint-1' },
+      body: { skip: true, revision: 4 },
+    }, res);
+
+    expect(mockCoordinator.submitCheckpoint).toHaveBeenCalledWith('session-1', 'checkpoint-1', {
+      selectedOptionIds: undefined,
+      answerText: undefined,
+      skip: true,
+    }, 4);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: { passed: false, feedback: '已跳过这个检查点，我们继续。', nextAction: 'continue' },
+    });
+  });
+
   it('拒绝空的理解检查答案', async () => {
     const handler = getRouteHandler('/sessions/:sessionId/checkpoints/:checkpointId/submit');
     const res = createResponse();
