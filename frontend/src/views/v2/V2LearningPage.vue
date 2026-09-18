@@ -305,13 +305,14 @@
               @keydown.enter="skipCheckpoint"
             >跳过</span>
             <span
-              v-if="checkpointSubmitting"
+              v-if="checkpointSubmitting && !checkpointStreaming"
               class="btn-ghost"
               role="button"
               tabindex="0"
               @click="dismissCheckpoint"
               @keydown.enter="dismissCheckpoint"
             >继续 ›</span>
+            <span v-else-if="checkpointStreaming" class="checkpoint__streaming">导师正在讲解…</span>
           </div>
           </div>
         </Transition>
@@ -601,6 +602,8 @@ const checkpointPassed = ref(false);
 const checkpointPending = ref(false);
 /** 检查点通过后的展示窗口内锁：防止 1.6s 内重复提交同一检查点 */
 const checkpointSubmitting = ref(false);
+/** 代码裁决已出、导师讲解仍在流式到达（期间不给「继续」，避免讲解被截断） */
+const checkpointStreaming = ref(false);
 
 const completed = ref(false);
 /** 恢复会话提示条：mode=resumed 且回填到历史时显示「已恢复上次进度」，附重新开始出口 */
@@ -1371,6 +1374,7 @@ function resetCheckpointUi() {
   checkpointFeedback.value = '';
   checkpointPassed.value = false;
   checkpointSubmitting.value = false;
+  checkpointStreaming.value = false;
   selectedOptions.value = [];
   answerText.value = '';
 }
@@ -1409,12 +1413,43 @@ async function submitCheckpoint() {
   if (checkpoint.value.options?.length) payload.selectedOptionIds = selectedOptions.value;
   else payload.answerText = answerText.value;
   checkpointPending.value = true;
+  checkpointFeedback.value = '';
+  checkpointStreaming.value = false;
   try {
-    const r = await aiTeachingAPI.submitCheckpoint(session.value.sessionId, checkpoint.value.id, payload, session.value.revision) as unknown as Record<string, any>;
+    const checkpointId = checkpoint.value.id;
+    const sessionId = session.value.sessionId;
+    const revision = session.value.revision;
+    let streamed = '';
+    let r: Record<string, any>;
+    try {
+      // 流式提交（走查 B-1）：先到 `judgement`（代码裁决的对错，立即可得），
+      // 导师讲解随后用 delta 逐段补齐；因此用户可以"秒知对错"而不用干等整个教学回合。
+      r = await aiTeachingAPI.streamSubmitCheckpoint(sessionId, checkpointId, payload, revision, {
+        onJudgement: (j: { passed: boolean; judgedBy: string; detail: string | null }) => {
+          checkpointPassed.value = j.passed === true;
+          // 立即上锁：代码已判定，不再允许重交（重交必然 404，见走查 P2）
+          checkpointSubmitting.value = true;
+          checkpointStreaming.value = true;
+          checkpointFeedback.value = j.passed
+            ? '回答正确。导师接着讲…'
+            : '这道没答对，导师正在给你讲…';
+        },
+        onDelta: (t: string) => {
+          streamed += t;
+          checkpointFeedback.value = streamed;
+        },
+      }) as unknown as Record<string, any>;
+    } catch (streamError: any) {
+      // 连接层失败且**未收到任何内容**时才安全回退（收到过 judgement/delta 就不能重发：
+      // 服务端可能已经消费了检查点）
+      if (!streamError?.transport) throw streamError;
+      r = await aiTeachingAPI.submitCheckpoint(sessionId, checkpointId, payload, revision) as unknown as Record<string, any>;
+    }
     session.value.revision = r.revision ?? session.value.revision + 1;
     checkpointPassed.value = r.passed === true;
     // 后端把整段导师回复放在 feedback（答错时即纠正正文），需要留足阅读时间
     checkpointFeedback.value = r.feedback || (r.passed ? '回答正确' : r.hint || '再想想');
+    checkpointStreaming.value = false;
     // 提交成功后服务端已消费该检查点：一律上锁。
     // 答错时旧实现保持可提交（nextAction='review'），用户重交必然 404（走查 P2）
     checkpointSubmitting.value = true;
