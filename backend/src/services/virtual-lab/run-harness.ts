@@ -136,7 +136,7 @@ export function classifyAdvanceResponse(input: { httpStatus: number; body?: unkn
     }
     const terminal = terminalKindFromMessage(errorText);
     if (terminal !== 'fatal') return done(terminal, errorText);
-    if (/租约|busy|进行中/.test(errorText)) {
+    if (/租约|busy|进行中|正在执行|稍后重试/.test(errorText)) {
       return done('retryable', `会话忙：${errorText}`);
     }
     return done('fatal', errorText || 'success=false');

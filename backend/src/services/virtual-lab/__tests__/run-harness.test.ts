@@ -33,6 +33,13 @@ describe('classifyAdvanceResponse（advance-day 处置分类）', () => {
     expect(busy.kind).toBe('retryable');
   });
 
+  it('200·success=false 的"会话正在执行其他写操作" → retryable（文案防御）', () => {
+    expect(classifyAdvanceResponse({
+      httpStatus: 200,
+      body: { success: false, error: '当前模拟会话正在执行其他写操作，请稍后重试' },
+    }).kind).toBe('retryable');
+  });
+
   it('认证/参数错误 → fatal', () => {
     expect(classifyAdvanceResponse({ httpStatus: 401 }).kind).toBe('fatal');
     expect(classifyAdvanceResponse({ httpStatus: 400, body: { error: 'days 必须是 1..60 的数字' } }).kind).toBe('fatal');
