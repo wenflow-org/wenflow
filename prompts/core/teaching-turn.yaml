@@ -161,7 +161,7 @@ fields:
     desc: |-
       本轮流程控制信号（交编排层仲裁），结构 { "isCompletionCandidate": boolean, "shouldTriggerPeer": boolean, "checkpoint": 可选对象 }
       checkpoint 结构（可选，不满足条件就不输出）：
-      { "question": "检查点问题", "type": "short_answer|single_choice|multi_choice", "options": [{ "id": "A", "text": "选项" }]（选择题必填，2-4 项）, "hint": "可选提示" }
+      { "question": "检查点问题", "type": "short_answer|single_choice|multi_choice", "options": [{ "id": "A", "text": "选项" }]（选择题必填，2-4 项）, "correctOptionIds": ["A"]（选择题**必填**：正确选项 id，必须是 options 里真实存在的 id；单选只给一个）, "expectedKeywords": ["核心词"]（简答题**必填**：1-3 个"任何正确作答都会出现的核心词"）, "hint": "可选提示" }
     turn: true
 constraints:
   - 不得要求学生依赖图片、视频、音频等非文本媒介

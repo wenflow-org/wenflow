@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-turn
-coreHash: 0ab45238545190de3b8987fa0a85e1bae24279f49afeca127c52bdee3beeec6c
+coreHash: 963b237bd927bbafe6ce17cd2c884a1de1a91bc262e264ebeb543233ac2db0fe
 coreVersion: 1
 temperature: 0.7
 maxTokens: 12000
@@ -134,7 +134,7 @@ failurePolicy: retry
 - pedagogy · object — 本轮教学策略，结构 { "strategies": string[] }；strategies 只能从以下枚举中选：explain, demonstrate, scaffold, drill, diagnose, feedback, motivate, reflect（当轮）
 - control · object — 本轮流程控制信号（交编排层仲裁），结构 { "isCompletionCandidate": boolean, "shouldTriggerPeer": boolean, "checkpoint": 可选对象 }
 checkpoint 结构（可选，不满足条件就不输出）：
-{ "question": "检查点问题", "type": "short_answer|single_choice|multi_choice", "options": [{ "id": "A", "text": "选项" }]（选择题必填，2-4 项）, "hint": "可选提示" }（当轮）
+{ "question": "检查点问题", "type": "short_answer|single_choice|multi_choice", "options": [{ "id": "A", "text": "选项" }]（选择题必填，2-4 项）, "correctOptionIds": ["A"]（选择题**必填**：正确选项 id，必须是 options 里真实存在的 id；单选只给一个）, "expectedKeywords": ["核心词"]（简答题**必填**：1-3 个"任何正确作答都会出现的核心词"）, "hint": "可选提示" }（当轮）
 
 ## 边界约束
 
