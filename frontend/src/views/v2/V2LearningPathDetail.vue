@@ -37,7 +37,7 @@
 
       <!-- 失败 -->
       <div v-else-if="loadError" class="errorbar">
-        路径详情加载失败。<button type="button" class="errorbar__retry" @click="load()">重试</button>
+        路径详情加载失败（可能服务正在启动）。<button type="button" class="errorbar__retry" @click="load()">重试</button>
       </div>
 
       <template v-else-if="path">
@@ -583,6 +583,7 @@ import {
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
+import { retryOnceOnTransient } from '@/utils/retry';
 
 const route = useRoute();
 const router = useRouter();
@@ -688,7 +689,8 @@ async function load(silent = false) {
   if (!silent) loading.value = true;
   loadError.value = false;
   try {
-    const p = await learningAPI.getPathDetail(pathId.value) as unknown as Record<string, any>;
+    // 启动/重启窗口内的 5xx 会自己好（走查 N3）：静默重试一次再报错
+    const p = await retryOnceOnTransient(() => learningAPI.getPathDetail(pathId.value)) as unknown as Record<string, any>;
     path.value = p;
     lifecycle.value = p.generationLifecycle ?? null;
     if (p.generationLifecycle && p.generationLifecycle.phase !== 'ready') {
