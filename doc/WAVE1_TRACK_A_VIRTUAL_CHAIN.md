@@ -142,9 +142,9 @@ export function snapshotDegradationCounters(): Record<string, number>;
 **回归**：Track A 相关 23 套件 / 298 用例全绿；`tsc`、`eslint` 干净；
 `prompts:core:check` / `lint 29-0` / `snapshots:check` / `runtime-contract` / `fields-sync` / `yaml:check C1~C5` / `handoff:strict` 全过；`sync-core` already-in-sync。
 
-**遗留（不属于本流）**：`src/services/memory/__tests__/concept-load.service.test.ts` 与
-`review-plan.service.test.ts` 两个套件当前因**另一进程在途改动** `src/skills/teaching-turn/index.ts:788`
-的 TS2339（`timestamp` 属性不存在）而无法运行（ts-jest 编译失败），与本流改动无关；待其修复合入后应恢复。
+**遗留（不属于本流）**：执行期间 `concept-load.service.test.ts` / `review-plan.service.test.ts` 一度因
+另一进程在途改动 `src/skills/teaching-turn/index.ts:788` 的 TS2339（`timestamp`）无法运行；该进程随后以
+`a83b1793 perf(teaching-turn): 历史消息瘦身` 修复，复跑 `src/services/memory` 已 **8 套件 / 112 用例全绿**。
 
 **给 Track B 的交接**：`backend/src/skills/degradation-telemetry.ts` 已就绪（含 `recordDegradation` /
 `snapshotDegradationCounters` / `resetDegradationCounters` / `degradationCause`），B1/B2 可直接 import。
