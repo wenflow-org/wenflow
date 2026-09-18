@@ -96,6 +96,38 @@ describe('goal-conversation 流式渐进渲染', () => {
     expect(env.userVisible).toBe('最终回复');
   });
 
+  it('SSE 409 冲突：不作为恢复信封下发，但保留真实 code/状态/冲突细节（P1-6）', async () => {
+    const conflictDetails = { sessions: [{ id: 's1', title: '进行中的课堂' }] };
+    driveSse([
+      ['error', {
+        code: 'PATH_MUTATION_HAS_OPEN_SESSION',
+        status: 409,
+        message: '当前有进行中的课堂，请先结束后再调整目标',
+        data: { details: conflictDetails }
+      }]
+    ]);
+
+    const err = await streamReplyGoalConversation('gc_test_1', '确认调整', {}).catch((e) => e);
+
+    expect(err.code).toBe('PATH_MUTATION_HAS_OPEN_SESSION');
+    expect(err.status).toBe(409);
+    expect(err.message).toBe('当前有进行中的课堂，请先结束后再调整目标');
+    // 关键：409 的 data 是 { details }，绝不能当恢复信封（否则 UI 会按"缺字段"重置目标对话）
+    expect(err.recoveryEnvelope).toBeUndefined();
+    // 冲突细节仍要留给 UI 呈现
+    expect(err.conflictDetails).toEqual(conflictDetails);
+  });
+
+  it('SSE 422 结构化输出错误：仍作为恢复信封下发（回归护栏）', async () => {
+    const envelope = makeEnvelope('模型部分产出');
+    driveSse([
+      ['error', { code: 'STRUCTURED_OUTPUT_INVALID', status: 422, message: 'STRUCTURED_OUTPUT_INVALID', data: envelope }]
+    ]);
+
+    const err = await streamReplyGoalConversation('gc_test_1', '继续', {}).catch((e) => e);
+    expect(err.recoveryEnvelope).toEqual(envelope);
+  });
+
   it('流式请求中止（abort）时正常 reject', async () => {
     const controller = new AbortController();
     sseMock.streamSsePost.mockImplementationOnce((_url: string, _body: unknown) => {

@@ -355,7 +355,13 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
     }
     failed.value = action;
     if (action !== 'start' && action !== 'supplement') {
-      pushMessage({ role: 'ai', content: '这次没有成功处理你的回答，点下方「重试」继续。', time: nowTime(), failed: true });
+      // 服务端业务错误（SSE 带内 error，serverError=true）优先展示真实原因
+      // （如「有进行中的课堂」），而不是笼统的"这次没有成功处理"；恢复信封场景已在上方 return。
+      const business = e as { serverError?: boolean; message?: string };
+      const content = business.serverError === true && typeof business.message === 'string' && business.message
+        ? business.message
+        : '这次没有成功处理你的回答，点下方「重试」继续。';
+      pushMessage({ role: 'ai', content, time: nowTime(), failed: true });
     }
     throw e;
   } finally {

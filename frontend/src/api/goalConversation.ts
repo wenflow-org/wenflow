@@ -189,7 +189,7 @@ async function streamGoalRequest(
   return new Promise<GoalConversationEnvelope>((resolve, reject) => {
     let envelope: GoalConversationEnvelope | null = null;
     let receivedAnything = false;
-    let serverError: { code?: string; status?: number; message: string; data?: unknown } | null = null;
+    let serverError: { code?: string; status?: number; message: string; data?: unknown; details?: unknown } | null = null;
     let settled = false;
     const settleReject = (error: unknown) => {
       if (settled) return;
@@ -208,11 +208,16 @@ async function streamGoalRequest(
           if (typeof data?.text === 'string') onDelta?.(data.text);
         } else if (event === 'error') {
           receivedAnything = true;
+          // 恢复信封**只在 422/结构化输出错误**时成立（对齐后端 `resolveGoalError`）。
+          // 其余错误（如 409 路径变更冲突）的 data 是 `{ details }` 这类业务细节：若把它当恢复
+          // 信封喂给 `applyEnvelope`，会按"缺字段"把目标对话重置、且不弹任何提示（18 号复核报告 P1-6）。
+          const isRecoveryEnvelope = data?.status === 422 || data?.code === 'STRUCTURED_OUTPUT_INVALID';
           serverError = {
             code: data?.code,
             status: data?.status,
             message: data?.message || '处理失败',
-            data: data?.data
+            data: isRecoveryEnvelope ? data?.data : undefined,
+            details: data?.data?.details
           };
         }
       }
@@ -226,6 +231,7 @@ async function streamGoalRequest(
             code: serverError.code,
             status: serverError.status,
             recoveryEnvelope: serverError.data,
+            conflictDetails: serverError.details,
             serverError: true
           }));
         } else {
