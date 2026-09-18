@@ -167,6 +167,187 @@ export function shouldForceAcceptPathReview(params: {
   return alreadyReplannedThisPath || reachedReplanLimit;
 }
 
+/**
+ * 教学检查点消费（assisted 链路）——纯函数决策 + 结果归一化。
+ *
+ * 背景：`executeLearningStep`（`POST /advance-day` 的 `runTasks:true` 路径）此前只把学习者的
+ * 聊天回复交给 `processStudentMessage`，**从不读取** `getSessionDetail` 暴露的
+ * `pendingCheckpoint`、也从不调用 `submitCheckpoint`。结果：一旦教学系统出题，
+ * 待答检查点永远挂着，`learner_evidence(type='checkpoint:result')`（成功带传感器的输入）
+ * 一条也不会写。黑盒链路已用 `buildCheckpointAction` 做对了（见 virtual-lab/blackbox-*），
+ * 这里按同思路抽出纯函数，便于单测覆盖 assisted 路径。
+ */
+
+type ProcessTeachingTurnResult = Awaited<ReturnType<typeof aiTeachingOrchestrator.processStudentMessage>>;
+type CheckpointSubmitOutcome = Awaited<ReturnType<typeof aiTeachingOrchestrator.submitCheckpoint>>;
+
+/** getSessionDetail 返回的待答检查点（答案键已被教学协调器剥离）。 */
+export interface PendingTeachingCheckpoint {
+  id: string;
+  type?: 'single_choice' | 'multi_choice' | 'short_answer' | string;
+  question?: string;
+  options?: Array<{ id: string; text: string }>;
+  allowSkip?: boolean;
+  [key: string]: unknown;
+}
+
+/** 模拟器返回的检查点作答草案。 */
+export interface SimulatorCheckpointAnswer {
+  selectedOptionIds?: string[];
+  answerText?: string;
+  confidence?: number;
+}
+
+/** 提交检查点的载荷（与 CheckpointSubmitPayload 的字段一致）。 */
+export interface CheckpointSubmitPayloadLike {
+  selectedOptionIds?: string[];
+  answerText?: string;
+}
+
+export type CheckpointSubmitDecision =
+  | { kind: 'submit'; checkpointId: string; payload: CheckpointSubmitPayloadLike }
+  | { kind: 'process-message' };
+
+/**
+ * 纯决策：本轮该「提交检查点」还是「走普通聊天回合」。
+ *
+ * 仅当同时满足「存在待答检查点」且「模拟器给出可用作答」时才提交；否则一律走原路径，
+ * 保证无检查点时的行为与改动前一致。作答归一化对齐 `submitCheckpoint` 的校验：
+ * - 选择题：只保留题目里真实存在的选项 id（非法 id 丢弃）；单选只取一个；
+ * - 简答题：只认 `answerText`（选择题答案键对简答无效）；
+ * - 无有效载荷（空选项/空文本）→ 退回聊天，避免提交必然失败的 payload。
+ */
+export function resolveCheckpointSubmitAction(params: {
+  pendingCheckpoint?: PendingTeachingCheckpoint | null;
+  checkpointAnswer?: SimulatorCheckpointAnswer | null;
+}): CheckpointSubmitDecision {
+  const checkpoint = params.pendingCheckpoint;
+  const answer = params.checkpointAnswer;
+  if (!checkpoint || typeof checkpoint.id !== 'string' || checkpoint.id.length === 0) {
+    return { kind: 'process-message' };
+  }
+  if (!answer || typeof answer !== 'object') {
+    return { kind: 'process-message' };
+  }
+
+  const answerText = typeof answer.answerText === 'string' && answer.answerText.trim().length > 0
+    ? answer.answerText.trim()
+    : undefined;
+
+  if (checkpoint.type === 'short_answer') {
+    return answerText
+      ? { kind: 'submit', checkpointId: checkpoint.id, payload: { answerText } }
+      : { kind: 'process-message' };
+  }
+
+  const optionIds = new Set(
+    (Array.isArray(checkpoint.options) ? checkpoint.options : [])
+      .map((option) => option?.id)
+      .filter((id): id is string => typeof id === 'string')
+  );
+  const validSelected = (Array.isArray(answer.selectedOptionIds) ? answer.selectedOptionIds : [])
+    .filter((id): id is string => typeof id === 'string' && id.length > 0 && (optionIds.size === 0 || optionIds.has(id)));
+  const selectedOptionIds = checkpoint.type === 'single_choice' ? validSelected.slice(0, 1) : validSelected;
+
+  if (selectedOptionIds.length > 0) {
+    return { kind: 'submit', checkpointId: checkpoint.id, payload: { selectedOptionIds } };
+  }
+  if (answerText) {
+    return { kind: 'submit', checkpointId: checkpoint.id, payload: { answerText } };
+  }
+  return { kind: 'process-message' };
+}
+
+/**
+ * 教学回合结果的归一化形状：普通聊天回合与检查点提交回合共用同一套字段读取，
+ * 避免调用方为两条路径各写一份日志/收束逻辑。
+ */
+export interface NormalizedTeachingTurn {
+  aiResponse: string;
+  revision: number;
+  knowledgePoints: any[];
+  isCompletion: boolean;
+  autoEnded: boolean;
+  cognitiveLevel: unknown;
+  knowledgePoint: unknown;
+  strategies: string[];
+  peerTriggered: boolean;
+  peerMessage: unknown;
+  currentState: unknown;
+  promptDebug: unknown;
+  /** 供 computeClosureDecision 使用的教师侧信号（字段与 processStudentMessage 结果一致）。 */
+  closureSignal: {
+    isCompletion: boolean;
+    autoEnded: boolean;
+    promptDebug?: any;
+  };
+}
+
+/** 普通聊天回合 → 归一化结果（字段与改动前逐字一致）。 */
+export function normalizeProcessTeachingTurn(result: ProcessTeachingTurnResult): NormalizedTeachingTurn {
+  return {
+    aiResponse: result.aiResponse || '',
+    revision: result.revision,
+    knowledgePoints: result.knowledgePoints || [],
+    isCompletion: result.isCompletion,
+    autoEnded: result.autoEnded || false,
+    cognitiveLevel: result.analysis?.cognitiveLevel,
+    knowledgePoint: result.knowledgePoint || null,
+    strategies: result.strategies || [],
+    peerTriggered: result.peerTriggered || false,
+    peerMessage: result.peerMessage || null,
+    currentState: result.currentState || null,
+    promptDebug: result.promptDebug || null,
+    closureSignal: {
+      isCompletion: result.isCompletion,
+      autoEnded: result.autoEnded || false,
+      promptDebug: result.promptDebug,
+    }
+  };
+}
+
+/**
+ * 检查点提交结果 → 归一化结果。
+ *
+ * `CheckpointSubmitResult` 只暴露 `{ passed, feedback, hint, nextAction, revision }`，
+ * 没有聊天回合的 `isCompletion` / `autoEnded` / `analysis` 等字段（内部教学回合的这些信号
+ * 未透出）。这里如实降为「未收束」并只带代码裁决诊断，绝不伪造教师收束信号——
+ * 宁可不在本回合结束 task，也不让检查点提交误触发收束。
+ */
+export function normalizeCheckpointSubmitTurn(result: CheckpointSubmitOutcome): NormalizedTeachingTurn {
+  return {
+    aiResponse: result.feedback || '',
+    revision: result.revision,
+    knowledgePoints: [],
+    isCompletion: false,
+    autoEnded: false,
+    cognitiveLevel: undefined,
+    knowledgePoint: null,
+    strategies: [],
+    peerTriggered: false,
+    peerMessage: null,
+    currentState: null,
+    promptDebug: {
+      checkpoint: {
+        passed: result.passed === true,
+        nextAction: result.nextAction,
+        hint: result.hint || null,
+      }
+    },
+    closureSignal: {
+      isCompletion: false,
+      autoEnded: false,
+      promptDebug: {
+        checkpoint: {
+          passed: result.passed === true,
+          nextAction: result.nextAction,
+          hint: result.hint || null,
+        }
+      }
+    }
+  };
+}
+
 class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
   private readonly sessionLocks = new Map<string, Promise<void>>();
   private readonly sessionLeaseContext = new AsyncLocalStorage<AssistedLeaseContext>();
@@ -511,6 +692,57 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       throw new Error('课堂缺少有效 revision');
     }
     return detail.revision;
+  }
+
+  /**
+   * 执行一个教学回合：有待答检查点且模拟器给出作答 → 提交检查点（消费 pendingCheckpoint，
+   * 由教学协调器写 `learner_evidence(checkpoint:result)`）；否则走原聊天路径。
+   *
+   * 提交失败（revision 冲突 / 检查点已失效 / 作答非法等）→ 记警告并**回退**到
+   * `processStudentMessage`，绝不阻断学习循环（与黑盒链路的兜底语义一致）。
+   */
+  private async runTeachingTurn(params: {
+    sessionId: string;
+    teachingSessionId: string;
+    learnerMessage: string;
+    teachingRevision: number | undefined;
+    pendingCheckpoint: PendingTeachingCheckpoint | null;
+    checkpointAnswer: SimulatorCheckpointAnswer | null;
+  }): Promise<NormalizedTeachingTurn> {
+    const action = resolveCheckpointSubmitAction({
+      pendingCheckpoint: params.pendingCheckpoint,
+      checkpointAnswer: params.checkpointAnswer,
+    });
+
+    if (action.kind === 'submit') {
+      try {
+        const submitResult = await this.retryLearnUpstream(params.sessionId, 'submit-checkpoint', () =>
+          aiTeachingOrchestrator.submitCheckpoint(
+            params.teachingSessionId,
+            action.checkpointId,
+            action.payload,
+            params.teachingRevision
+          )
+        );
+        return normalizeCheckpointSubmitTurn(submitResult);
+      } catch (checkpointError) {
+        logger.warn('[simulation-coordinator] 提交理解检查点失败，回退到普通教学回合', {
+          sessionId: params.sessionId,
+          teachingSessionId: params.teachingSessionId,
+          checkpointId: action.checkpointId,
+          error: asErrorLike(checkpointError).message || String(checkpointError),
+        });
+      }
+    }
+
+    const turn = await this.retryLearnUpstream(params.sessionId, 'process-teaching-turn', () =>
+      aiTeachingOrchestrator.processStudentMessage(
+        params.teachingSessionId,
+        params.learnerMessage,
+        { expectedRevision: params.teachingRevision }
+      )
+    );
+    return normalizeProcessTeachingTurn(turn);
   }
 
   private async getVirtualSession(sessionId: string): Promise<VirtualSessionWithProfile> {
@@ -2818,6 +3050,23 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         Number(temporalContext?.dayIndex) || 0
       ).catch(() => []);
 
+      // 教学检查点消费（assisted 链路）：先取当前课堂（答案键已被 getSessionDetail 剥离）。
+      // 仅当存在待答检查点时注入模拟器输入；读取失败/无检查点一律按原路径继续，不阻断学习。
+      const teachingSessionId = learningState.teachingSessionId;
+      let pendingCheckpoint: PendingTeachingCheckpoint | null = null;
+      if (teachingSessionId) {
+        try {
+          const teachingDetail = await aiTeachingOrchestrator.getSessionDetail(teachingSessionId, session.userId);
+          pendingCheckpoint = (teachingDetail?.pendingCheckpoint as unknown as PendingTeachingCheckpoint | null) || null;
+        } catch (checkpointDetailError) {
+          logger.warn('[simulation-coordinator] 读取待答理解检查点失败（按无检查点继续）', {
+            sessionId,
+            teachingSessionId,
+            error: asErrorLike(checkpointDetailError).message || String(checkpointDetailError),
+          });
+        }
+      }
+
       const virtualReplyOutput = await this.retryLearnUpstream(sessionId, 'simulate-teaching-turn', () => executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
         learner: {
           profile: profile.profile || {},
@@ -2846,6 +3095,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         knowledgeSnapshot,
         learnerMemory: learnerMemoryForSimulator,
         ...(memoryRecall.length ? { memoryRecall } : {}),
+        ...(pendingCheckpoint ? { pendingCheckpoint } : {}),
         epistemicGrounding,
         ...(temporalContext ? { temporalContext } : {}),
         frictionBudget: getSessionFrictionBudget(session),
@@ -2897,7 +3147,6 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       let closureDecision: LearningClosureDecision | null = null;
       let shouldStopCurrentTask = false;
 
-      const teachingSessionId = learningState.teachingSessionId;
       let teachingRevision = teachingSessionId
         ? await this.resolveTeachingRevision(teachingSessionId, session.userId, learningState.teachingRevision)
         : undefined;
@@ -2906,24 +3155,25 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         try {
           const aiResponseStart = Date.now();
           await this.assertCurrentSessionLeaseOwned(sessionId);
-          const aiResult = await this.retryLearnUpstream(sessionId, 'process-teaching-turn', () =>
-            aiTeachingOrchestrator.processStudentMessage(
-              teachingSessionId,
-              virtualReplyResult.userVisible,
-              { expectedRevision: teachingRevision }
-            )
-          );
+          const aiResult = await this.runTeachingTurn({
+            sessionId,
+            teachingSessionId,
+            learnerMessage: virtualReplyResult.userVisible,
+            teachingRevision,
+            pendingCheckpoint,
+            checkpointAnswer: virtualReplyOutput?.checkpointAnswer || null,
+          });
           teachingRevision = aiResult.revision;
           
           aiResponse = aiResult.aiResponse || '';
           
           // 记忆引擎：教学回合后增量写 memory_traces（知识看板状态 → 内化强度）
-          persistKnowledgeState(session.userId, aiResult.knowledgePoints || []);
+          persistKnowledgeState(session.userId, aiResult.knowledgePoints);
           // 画像回写：掌握 → knownConcepts，仍在学/需复习 → struggleConcepts
-          void persistProfileConcepts(sessionId, session.userId, aiResult.knowledgePoints || []);
+          void persistProfileConcepts(sessionId, session.userId, aiResult.knowledgePoints);
           
           closureDecision = computeClosureDecision(
-            aiResult,
+            aiResult.closureSignal,
             virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null
           );
 
@@ -2936,11 +3186,11 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
                 aiResponse,
                 isCompletion: aiResult.isCompletion,
                 autoEnded: aiResult.autoEnded || false,
-                cognitiveLevel: aiResult.analysis?.cognitiveLevel,
+                cognitiveLevel: aiResult.cognitiveLevel,
                 knowledgePoint: aiResult.knowledgePoint || null,
-                knowledgePoints: aiResult.knowledgePoints || [],
-                strategies: aiResult.strategies || [],
-                peerTriggered: aiResult.peerTriggered || false,
+                knowledgePoints: aiResult.knowledgePoints,
+                strategies: aiResult.strategies,
+                peerTriggered: aiResult.peerTriggered,
                 peerMessage: aiResult.peerMessage || null,
                 currentState: aiResult.currentState || null,
                 promptDebug: aiResult.promptDebug || null,
