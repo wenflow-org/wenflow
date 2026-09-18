@@ -26,6 +26,7 @@ import 'dotenv/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
+  beginRunAttempt,
   classifyAdvanceResponse,
   classifySessionStatus,
   createRunState,
@@ -339,6 +340,14 @@ async function main(): Promise<void> {
   log(`已登录 ${args.baseUrl}（admin=${args.adminName}）`);
 
   let state = loadState(args.statePath);
+  if (state) {
+    // 续跑：清空上一轮 findings（只反映本次运行；历史见 <state>.log），否则汇总会混入已失效的问题
+    const staleFindings = state.findings.length;
+    state = beginRunAttempt(state);
+    if (staleFindings > 0) {
+      log(`（已清空上一轮的 ${staleFindings} 条 findings；历史见 ${args.statePath}.log）`);
+    }
+  }
   const resumeSessionId = args.resumeSessionId || state?.sessionId || null;
 
   if (resumeSessionId) {

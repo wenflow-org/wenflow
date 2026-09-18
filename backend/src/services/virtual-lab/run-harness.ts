@@ -229,6 +229,17 @@ export function parseRunState(raw: unknown): RunState | null {
 }
 
 /**
+ * 开始一次新的运行尝试：清空 findings。
+ *
+ * 断点续跑的 state 会带着**上一轮**的 findings；若不清空，本轮的最终汇总会把上一轮
+ * 已失效的问题混进来（实测：续跑成功后汇总里仍留着上一轮的 `retry-exhausted`）。
+ * 历史记录保留在同目录的 `<state>.log` 里，不丢信息。
+ */
+export function beginRunAttempt(state: RunState): RunState {
+  return { ...state, findings: [], updatedAt: new Date().toISOString() };
+}
+
+/**
  * 解析 CLI 参数（`--k=v` / 开关）。凭据只从 env 取，**不落到命令行历史**。
  * env：`VIRTUAL_LAB_BASE_URL`、`E2E_ADMIN_NAME`、`E2E_ADMIN_PASSWORD`。
  */

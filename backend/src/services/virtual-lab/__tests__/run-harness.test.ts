@@ -1,4 +1,5 @@
 import {
+  beginRunAttempt,
   classifyAdvanceResponse,
   classifySessionStatus,
   createRunState,
@@ -215,5 +216,14 @@ describe('RunState（断点续跑状态）', () => {
     expect(parsed!.sessionId).toBe('vs1');
     expect(parsed!.round).toBe(3);
     expect(parsed!.findings).toEqual([{ code: 'x', detail: 'y' }]);
+  });
+
+  it('beginRunAttempt：续跑时清空上一轮 findings（历史留在 .log）', () => {
+    const resumed = parseRunState({ version: 1, sessionId: 'vs1', round: 2, findings: [{ code: 'old', detail: '上一轮' }] })!;
+    const fresh = beginRunAttempt(resumed);
+    expect(fresh.findings).toEqual([]);
+    // 进度与身份保留
+    expect(fresh.sessionId).toBe('vs1');
+    expect(fresh.round).toBe(2);
   });
 });
