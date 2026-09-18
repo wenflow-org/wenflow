@@ -156,10 +156,15 @@ function estimateActiveMinutes(
 
   let activeMinutes = 0;
   for (let i = 1; i < times.length; i++) {
+    // 间隔 > 30 分钟视为离开（与 timeout-fallback 规则一致）
     activeMinutes += Math.min((times[i] - times[i - 1]) / 60000, 30);
   }
-  // 首条消息前的引导段 + 最后活动后的收尾窗各按最多 30 分钟计
-  const messageCap = Math.round(activeMinutes + 60);
+  // 首尾窗按**实测**补：首条消息前的引导段 + 最后活动后的收尾段，各封顶 10 分钟。
+  // （旧实现是固定 +60 分钟，对"消息少、挂得久"的会话明显偏松——走查 N6：
+  //   学习台出现「今日已学 67 / 60 分钟」这类只能靠墙钟解释的数字。）
+  const leadInMinutes = Math.min(Math.max((times[0] - startMs) / 60000, 0), 10);
+  const tailMinutes = Math.min(Math.max((endMs - times[times.length - 1]) / 60000, 0), 10);
+  const messageCap = Math.round(activeMinutes + leadInMinutes + tailMinutes);
   return Math.max(1, Math.min(wallMinutes, messageCap));
 }
 
