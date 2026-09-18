@@ -9,6 +9,7 @@ import {
   planClockAdvance,
   resolutionEnteredLearn,
   summarizeDayLearning,
+  shouldAdvanceSimulationClock,
   buildDayEntry,
   buildDayTimeline,
   type SimulatedDayDeps,
@@ -139,6 +140,20 @@ function makeDeps(overrides: Partial<SimulatedDayDeps> = {}): SimulatedDayDeps {
     ...overrides,
   };
 }
+
+describe('shouldAdvanceSimulationClock（跑数观察 #4：不上课就不推进）', () => {
+  it('runTasks=true：只有当天确实上了课才推进时钟', () => {
+    expect(shouldAdvanceSimulationClock({ runTasks: true, learning: { started: true } })).toBe(true)
+    expect(shouldAdvanceSimulationClock({ runTasks: true, learning: { started: false } })).toBe(false)
+    expect(shouldAdvanceSimulationClock({ runTasks: true, learning: null })).toBe(false)
+    expect(shouldAdvanceSimulationClock({ runTasks: true })).toBe(false)
+  })
+
+  it('runTasks=false（纯记账）：照旧推进', () => {
+    expect(shouldAdvanceSimulationClock({ runTasks: false, learning: null })).toBe(true)
+    expect(shouldAdvanceSimulationClock({ runTasks: false })).toBe(true)
+  })
+})
 
 describe('buildDayEntry / buildDayTimeline（注入 deps）', () => {
   const NOW = new Date('2026-09-20T12:00:00Z');

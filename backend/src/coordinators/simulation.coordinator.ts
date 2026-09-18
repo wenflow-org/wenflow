@@ -2247,7 +2247,9 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       });
       
       if (!learningPath || !learningPath.milestones.length) {
-        throw new Error('学习路径或里程碑不存在');
+        // 里程碑由「阶段设计」异步产出：刚生成完的 Path 常见"路径行已在、里程碑尚未落库"（跑数观察 #6）。
+        // 这是**尚未就绪**（可重试），不是"不存在"——措辞要如实，避免误导运维排查。
+        throw new Error('学习路径尚未就绪（里程碑生成中），请稍后重试');
       }
 
       let firstMilestone = learningPath.milestones[0];

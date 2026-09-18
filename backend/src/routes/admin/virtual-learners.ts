@@ -26,7 +26,7 @@ import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
 import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
-import { simulatedDayService, resolveSimulationClock, planClockAdvance, resolveDayWindow, resolutionEnteredLearn, summarizeDayLearning } from '../../services/virtual-lab/simulated-day.service';
+import { simulatedDayService, resolveSimulationClock, planClockAdvance, resolveDayWindow, resolutionEnteredLearn, summarizeDayLearning, shouldAdvanceSimulationClock } from '../../services/virtual-lab/simulated-day.service';
 import { runWithSimulatedClock } from '../../services/virtual-lab/simulation-clock-context';
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
 import { getVirtualLabSettings, updateVirtualLabSettings, DEFAULT_VIRTUAL_LAB_SETTINGS } from '../../services/virtual-lab-settings.service';
@@ -3220,10 +3220,6 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
       const dayWindow = resolveDayWindow(clock.baseDate, lastIndex);
       const nextClock = { ...(rawClock || {}), enabled: true, ...plan.nextClock };
       const nextStageResults = { ...stageResults, simulationClock: nextClock };
-      await assertLeaseOwned();
-      // 原子合并（不用请求开始时的快照整列回写，避免覆盖学习中写入的其它键）
-      await mergeSessionStageResults(sessionId, { simulationClock: nextClock });
-      await assertLeaseOwned();
 
       let learning: { started: boolean; chunks: number; error?: string } | null = null;
       if (runTasks) {
@@ -3235,16 +3231,16 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
             profileData: profileData as Record<string, unknown>,
           }),
         );
-        if (!learning.started) {
-          // P0：当天启动/执行失败 → 回滚时钟，不"烧掉"这一天（避免 advance 成功但当天无数据）。
-          // 只回滚 simulationClock 这一个键（原子合并），**不得**用旧快照整列回写——那会丢掉当天写好的
-          // path_review/runtimeStats（实测会导致每天重新评审）。
-          await assertLeaseOwned();
-          await mergeSessionStageResults(sessionId, { simulationClock: rawClock });
-          await assertLeaseOwned();
-          return { advancedDayIndexes: [], simulatedDay: dayWindow.simulatedDay, learning, reverted: true };
-        }
       }
+      // 只有当天确实上了课（或纯记账 runTasks=false）才推进模拟时钟；未推进 = 该模拟日不被消耗、可重试。
+      // 不再"先推进再回滚"（跑数观察 #4：回滚只回滚时钟、回滚不了当天已写入的课堂/记忆/锚点）。
+      if (!shouldAdvanceSimulationClock({ runTasks, learning })) {
+        return { advancedDayIndexes: [], simulatedDay: dayWindow.simulatedDay, learning, reverted: true };
+      }
+      await assertLeaseOwned();
+      // 只有当天确实上了课（或纯记账 runTasks=false）才推进模拟时钟；原子合并，不整列覆盖。
+      await mergeSessionStageResults(sessionId, { simulationClock: nextClock });
+      await assertLeaseOwned();
       return { advancedDayIndexes: plan.indexes, simulatedDay: dayWindow.simulatedDay, learning };
     });
 

@@ -437,6 +437,23 @@ export function resolutionEnteredLearn(
  * 反例（实测）：会话已 failed/停止时 `executeAutoLearning` 立即返回失败，旧实现仍
  * `started:true, chunks:1` → 时钟照推、当天没有任何教学产物（白烧一个模拟日）。
  */
+/**
+ * 是否推进模拟时钟（跑数观察 #4）。
+ *
+ * 规则：`runTasks=false`（纯记账）→ 推进；`runTasks=true` → **只有当天确实上了课（started=true）才推进**。
+ * 未推进时该模拟日不被消耗，调用方可重试同一天。
+ *
+ * 关键：不再"先推进再回滚"——回滚只回滚得了 `simulationClock` 一个字段，回滚不了当天已写入的
+ * 课堂/记忆/难度锚点，会造成"日期被回滚、数据却留着"的口径分裂。
+ */
+export function shouldAdvanceSimulationClock(input: {
+  runTasks: boolean;
+  learning?: { started?: boolean } | null;
+}): boolean {
+  if (!input.runTasks) return true;
+  return input.learning?.started === true;
+}
+
 export function summarizeDayLearning(
   attempts: Array<{ success?: boolean; error?: string | null } | null | undefined>,
 ): { started: boolean; chunks: number; error?: string } {
