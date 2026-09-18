@@ -194,6 +194,9 @@ class MemoryTraceService {
       ? (input.stability as MemoryStability)
       : 'developing';
     const now = simulatedNowOr();
+    // 先读旧痕迹：既供 FSRS 调度使用，也用于判定"该概念是否已有 FSRS 排程"
+    //（决定 update 能否覆盖 dueAt——见下方 preserveDueAt，18 号报告 N5）。
+    const existing = await this.getTrace(input.userId, conceptKey);
     let dueAt = this.computeDueAt(input, now, false);  // legacy: 保守不判首次
     let fsrsStability: number | null = null;
     let fsrsDifficulty: number | null = null;
@@ -201,7 +204,6 @@ class MemoryTraceService {
     let fsrsReps: number | null = null;
 
     if (input.fsrsGrade !== undefined) {
-      const existing = await this.getTrace(input.userId, conceptKey);
       const isFirstExtraction = !existing || existing.extractionCount === 0;
       const prev: FsrsMemoryState | null = existing
         ? (existing.fsrsStability !== null && existing.fsrsStability !== undefined
@@ -223,6 +225,12 @@ class MemoryTraceService {
       const rawDue = new Date(now.getTime() + result.intervalDays * DAY_MS);
       dueAt = this.snapToActiveWindow(rawDue, now, isFirstExtraction);
     }
+
+    // 已按 FSRS 排程过的概念，在"没有新评级"的普通课里保持其 dueAt 不变
+    //（首次创建仍写 legacy dueAt，保证新概念有初始排程）。
+    const preserveDueAt = input.fsrsGrade === undefined
+      && existing !== null && existing !== undefined
+      && existing.fsrsStability !== null && existing.fsrsStability !== undefined;
 
     await prisma.memory_traces.upsert({
       where: {
@@ -253,7 +261,10 @@ class MemoryTraceService {
         lastSeenAt: now,
         extractionCount: { increment: 1 },
         source: input.source ?? undefined,
-        dueAt,
+        // 无显式评级时**不覆盖**已有 FSRS 排程的 dueAt（18 号报告 N5）：
+        // 普通课（recordSessionOutcome 不传 fsrsGrade）只更新掌握度/内化强度，
+        // 不应把 FSRS 的长间隔压回 ~1 天（旧实现每节课都写 dueAt=now+1d）。
+        ...(preserveDueAt ? {} : { dueAt }),
         ...(fsrsStability !== null ? { fsrsStability } : {}),
         ...(fsrsDifficulty !== null ? { fsrsDifficulty } : {}),
         ...(fsrsLapses !== null ? { fsrsLapses } : {}),
