@@ -811,7 +811,8 @@ export async function buildTeachingScenarioContext(
   const learningSignal = typeof learningSignalRaw === 'string' && learningSignalRaw.trim()
     ? learningSignalRaw.trim()
     : null;
-  const behavioralProfile = await fetchBehavioralProfile(userId);
+  // 传入本节课（进行中）会话：行为画像/求助软拦截必须看到"本课内"的表现（18 号报告 N9）
+  const behavioralProfile = await fetchBehavioralProfile(userId, previousSession);
   const milestone = task.milestones;
   const taskProfile = {
     knowledgeType: (task as any).knowledgeType || null,
@@ -1107,7 +1108,10 @@ async function fetchLatestKnowledgeSummary(userId: string): Promise<string | und
 }
 
 /** 行为投影器（LLM-KT Behavioral Dynamics Projector）：近期回合级行为动态压缩 */
-async function fetchBehavioralProfile(userId: string): Promise<TeachingScenarioContext['behavioralProfile']> {
+export async function fetchBehavioralProfile(
+  userId: string,
+  currentSession?: { messages?: unknown } | null,
+): Promise<TeachingScenarioContext['behavioralProfile']> {
   try {
     const recentSessions = await prisma.teaching_sessions.findMany({
       where: { userId, status: 'completed' },
@@ -1115,11 +1119,17 @@ async function fetchBehavioralProfile(userId: string): Promise<TeachingScenarioC
       take: 3,
       select: { messages: true },
     });
+    // **本节课（进行中）的消息也必须计入**（18 号报告 N9）：求助软拦截最需要生效的场景正是
+    // "本节课里连续直接要答案"，而此前只统计 status='completed' 的历史会话 → 本节课计数恒为 0。
+    // 顺序按时间升序（历史由旧到新 + 本节课最后），这样 `recentHelpSeeking.slice(-5)` 取的是最近 5 条。
+    const orderedMessageLists: unknown[][] = [
+      ...[...recentSessions].reverse().map((session) => (Array.isArray(session.messages) ? session.messages : [])),
+      ...(currentSession && Array.isArray(currentSession.messages) ? [currentSession.messages] : []),
+    ];
     const allAnalysis: any[] = [];
-    for (const session of recentSessions) {
-      const msgs = Array.isArray(session.messages) ? session.messages : [];
-      for (const msg of msgs) {
-        if (msg.role === 'assistant' && msg.analysis) allAnalysis.push(msg.analysis);
+    for (const msgs of orderedMessageLists) {
+      for (const msg of msgs as any[]) {
+        if (msg?.role === 'assistant' && msg?.analysis) allAnalysis.push(msg.analysis);
       }
     }
     if (allAnalysis.length === 0) return null;
