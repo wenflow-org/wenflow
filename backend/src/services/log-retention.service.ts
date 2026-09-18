@@ -11,6 +11,12 @@ export const LOG_RETENTION_CUTOFF_BUFFER_MS = 60 * 60 * 1000;
 export const LOG_RETENTION_BATCH_SIZE = 5000;
 /** 旧虚拟会话 `logs` 裁剪后的字节预算（比写入期预算更小：这些是过期现场，只留尾部） */
 export const DEFAULT_VIRTUAL_SESSION_LOG_MAX_BYTES = 256 * 1024;
+/**
+ * 虚拟会话 logs 的**冷却窗**（小时）。日志保留窗是 90 天，但会话轨迹"冷得很快"：
+ * 实测 >24h 的 26 个会话就占 91 MB（总 92 MB），且状态全是终态。等 90 天等于不回收。
+ * 冷却窗内的会话由写入期预算（默认 2 MB）兜住，不会被这里裁。
+ */
+export const DEFAULT_VIRTUAL_SESSION_LOG_TRIM_AFTER_HOURS = 24;
 
 const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
 const MILLIS_PER_HOUR = 60 * 60 * 1000;
@@ -119,6 +125,14 @@ export function resolveVirtualSessionLogMaxBytes(env: Record<string, string | un
   return Math.floor(parsed);
 }
 
+export function resolveVirtualSessionLogTrimAfterHours(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.VIRTUAL_SESSION_LOG_TRIM_AFTER_HOURS;
+  if (!raw || raw.trim() === '') return DEFAULT_VIRTUAL_SESSION_LOG_TRIM_AFTER_HOURS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_VIRTUAL_SESSION_LOG_TRIM_AFTER_HOURS;
+  return Math.floor(parsed);
+}
+
 export interface LogRetentionServiceOptions {
   database?: LogRetentionDatabase;
   retentionDays?: number;
@@ -126,6 +140,8 @@ export interface LogRetentionServiceOptions {
   dryRun?: boolean;
   /** 旧虚拟会话 logs 裁剪预算（字节）；<=0 则关闭该步骤 */
   virtualSessionLogMaxBytes?: number;
+  /** 虚拟会话 logs 的冷却窗（小时，默认 24）；<=0 则关闭该步骤 */
+  virtualSessionLogTrimAfterHours?: number;
   lifecycle?: Pick<ApplicationLifecycle, 'isDraining'>;
 }
 
@@ -138,6 +154,7 @@ export class LogRetentionService {
   private readonly intervalMs: number;
   private readonly dryRun: boolean;
   private readonly virtualSessionLogMaxBytes: number;
+  private readonly virtualSessionLogTrimAfterHours: number;
   private lifecycle: Pick<ApplicationLifecycle, 'isDraining'> | null;
 
   constructor(options: LogRetentionServiceOptions = {}) {
@@ -146,6 +163,7 @@ export class LogRetentionService {
     this.intervalMs = options.intervalMs ?? resolveLogRetentionIntervalMs(process.env.LOG_RETENTION_INTERVAL_HOURS);
     this.dryRun = options.dryRun ?? isLogRetentionDryRun(process.env.LOG_RETENTION_DRY_RUN);
     this.virtualSessionLogMaxBytes = options.virtualSessionLogMaxBytes ?? resolveVirtualSessionLogMaxBytes();
+    this.virtualSessionLogTrimAfterHours = options.virtualSessionLogTrimAfterHours ?? resolveVirtualSessionLogTrimAfterHours();
     this.lifecycle = options.lifecycle ?? null;
   }
 
@@ -252,7 +270,7 @@ export class LogRetentionService {
       });
     }
 
-    const virtualSessions = await this.trimVirtualSessionLogs(cutoff);
+    const virtualSessions = await this.trimVirtualSessionLogs();
 
     await this.checkpoint();
 
@@ -272,19 +290,21 @@ export class LogRetentionService {
    * 为什么需要：虚拟会话的 `logs` 是追加式轨迹，实测有**单行 31.9 MB**（整表 92 MB 几乎全在此）。
    * VACUUM 只回收 freelist 空闲页，**不会**缩小仍存活的大字段——必须先把列裁小。
    */
-  private async trimVirtualSessionLogs(cutoff: Date): Promise<VirtualSessionTrimResult> {
+  private async trimVirtualSessionLogs(): Promise<VirtualSessionTrimResult> {
     const startedAt = Date.now();
     const budget = this.virtualSessionLogMaxBytes;
     const delegate = (this.database as unknown as { virtual_sessions?: VirtualSessionLogModel }).virtual_sessions;
-    if (budget <= 0 || !delegate?.findMany || !delegate?.update) {
+    if (budget <= 0 || this.virtualSessionLogTrimAfterHours <= 0 || !delegate?.findMany || !delegate?.update) {
       return { scanned: 0, trimmed: 0, durationMs: 0 };
     }
+    // 冷却窗（默认 24h）而非 90 天日志保留窗：会话轨迹冷得快，等 90 天等于不回收
+    const trimCutoff = new Date(startedAt - this.virtualSessionLogTrimAfterHours * MILLIS_PER_HOUR);
     let cursor: string | null = null;
     let scanned = 0;
     let trimmed = 0;
     for (;;) {
       const rows = await delegate.findMany({
-        where: { updatedAt: { lt: cutoff } },
+        where: { updatedAt: { lt: trimCutoff } },
         orderBy: { id: 'asc' },
         take: LOG_RETENTION_BATCH_SIZE,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -317,6 +337,7 @@ export class LogRetentionService {
       scanned,
       trimmed,
       budget,
+      trimAfterHours: this.virtualSessionLogTrimAfterHours,
       dryRun: this.dryRun,
       durationMs
     });

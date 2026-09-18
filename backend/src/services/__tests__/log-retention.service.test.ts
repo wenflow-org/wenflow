@@ -334,7 +334,7 @@ describe('LogRetentionService · 旧虚拟会话 logs 裁剪', () => {
   const hugeLogs = (count: number) =>
     JSON.stringify(Array.from({ length: count }, (_, i) => ({ phase: 'teaching-response', index: i, aiResponse: 'x'.repeat(2000) })))
 
-  it('超预算的旧会话 logs 被裁到预算内，只改列不删行', async () => {
+  it('超预算的旧会话 logs 被裁到预算内，只改列不删行（冷却窗=24h，不是 90 天日志保留窗）', async () => {
     const raw = hugeLogs(200) // ≈ 400 KB
     mockVirtualSessionsFindMany.mockResolvedValue([{ id: 'vs1', logs: raw }])
     const service = new LogRetentionService({ virtualSessionLogMaxBytes: 64 * 1024 })
@@ -348,6 +348,12 @@ describe('LogRetentionService · 旧虚拟会话 logs 裁剪', () => {
     expect(updateArg.data.logs.length).toBeLessThanOrEqual(64 * 1024)
     // 保留最新现场
     expect(JSON.parse(updateArg.data.logs).at(-1).index).toBe(199)
+
+    // 回归护栏：查询条件必须用 24h 冷却窗（此前误用 90 天保留窗 → 永远扫不到、回收不到）
+    const where = mockVirtualSessionsFindMany.mock.calls[0][0].where
+    const ageHours = (Date.now() - where.updatedAt.lt.getTime()) / 3600000
+    expect(ageHours).toBeGreaterThan(23)
+    expect(ageHours).toBeLessThan(25)
   })
 
   it('已在预算内的会话不动（避免无谓写）', async () => {
