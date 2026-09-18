@@ -94,14 +94,15 @@ export class DurableOutboxWorker {
     for (const record of records) {
       if (this.stopping) return;
       if (ORDERED_EVENT_TYPES.has(record.eventType) && record.userId) {
-        // 同用户 + 同类型只放行队首；后面的等前一事件落定（published/死信）再消费
-        const seenKey = `${record.eventType}:${record.userId}`;
-        if (orderedUsersSeen.has(seenKey)) continue;
-        orderedUsersSeen.add(seenKey);
+        // 同用户只放行队首——**跨类型也算序**（18 号报告 N7）：学习者的快照刷新按 `lastEventId`
+        // 幂等回写，若「后到的 task:completed」先于「更早的 lesson:completed」消费，
+        // 会用更旧的事件回填画像。此前按 `eventType:userId` 分键，跨类型仍可乱序。
+        if (orderedUsersSeen.has(record.userId)) continue;
+        orderedUsersSeen.add(record.userId);
         const oldestUnresolved = await prisma.domain_event_outbox.findFirst({
           where: {
-            eventType: record.eventType,
             userId: record.userId,
+            eventType: { in: [...ORDERED_EVENT_TYPES] },
             status: { in: ['pending', 'processing'] }
           },
           orderBy: [{ occurredAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],

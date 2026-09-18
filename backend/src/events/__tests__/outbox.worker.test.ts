@@ -24,7 +24,9 @@ describe('DurableOutboxWorker same-user ordering', () => {
         || a.createdAt.getTime() - b.createdAt.getTime()
         || a.id.localeCompare(b.id)))
     mockPrisma.domain_event_outbox.findFirst.mockImplementation(async ({ where }: any) => records
-      .filter(record => record.eventType === where.eventType
+      .filter(record => (Array.isArray(where.eventType?.in)
+          ? where.eventType.in.includes(record.eventType)
+          : record.eventType === where.eventType)
         && record.userId === where.userId
         && where.status.in.includes(record.status))
       .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime()
@@ -96,6 +98,28 @@ describe('DurableOutboxWorker same-user ordering', () => {
     expect(dispatched).toEqual(['old-lesson-1', 'lesson-user-2'])
     expect(records.find(record => record.id === 'new-lesson-1')?.status).toBe('pending')
     expect(records.find(record => record.id === 'lesson-user-2')?.status).toBe('published')
+  })
+
+  it('跨类型也按用户排头：更早的 lesson:completed 未决时，后到的 task:completed 被阻塞（18 号报告 N7）', async () => {
+    const base = new Date(Date.now() - 10_000)
+    records.push(
+      buildRecord('old-lesson', 'user-1', base, 'lesson:completed'),
+      buildRecord('new-task', 'user-1', new Date(base.getTime() + 1000), 'task:completed')
+    )
+    const dispatched: string[] = []
+    const registry = {
+      dispatch: jest.fn(async (event: any) => { dispatched.push(event.id) })
+    }
+
+    const worker = new DurableOutboxWorker(registry as any)
+    await worker.runOnce()
+
+    // 只消费更早的 lesson；更晚的 task 让位（旧实现按 eventType:userId 分键，会两个都消费）
+    expect(dispatched).toEqual(['old-lesson'])
+    expect(records.find(record => record.id === 'new-task')?.status).toBe('pending')
+
+    await worker.runOnce()
+    expect(dispatched).toEqual(['old-lesson', 'new-task'])
   })
 
   it('marks task events dead at max attempts so later same-user events are not blocked forever', async () => {
