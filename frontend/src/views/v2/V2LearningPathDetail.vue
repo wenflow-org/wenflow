@@ -1214,7 +1214,10 @@ const sceneRows = computed(() => {
   const s = sceneSummary.value;
   if (!s || typeof s === 'string') return [];
   const rows: Array<{ label: string; value: string }> = [];
-  if (s.firstDeliverable) rows.push({ label: '第一阶段产出', value: String(s.firstDeliverable) });
+  // 该字段是**整条路径**的首份产出（confirmedProposal.first_deliverable），
+  // 与目标对话预览里同一字段的「预计产出」对齐；旧标签「第一阶段产出」会让人
+  // 以为它是阶段 1 的产出（走查 P6）
+  if (s.firstDeliverable) rows.push({ label: '预计产出', value: String(s.firstDeliverable) });
   if (s.targetState) rows.push({ label: '目标状态', value: String(s.targetState) });
   // 规划焦点（confirmedProposal.keyStages）与左侧阶段列表重复，不再在此展示
   // 注意：excludedScope/「先不学」不展示——不学的内容无需让用户确认，避免不必要的顾虑（与 goal 预览一致）

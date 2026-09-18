@@ -121,7 +121,7 @@ describe('V2LearningPathDetail Hero', () => {
     await flushPromises();
     expect(w.find('.sidecard__intent-title').text()).toBe('二战在家备考不崩');
     expect(w.find('.sidecard__rows').text()).not.toContain('规划焦点');
-    expect(w.find('.sidecard__rows').text()).toContain('第一阶段产出');
+    expect(w.find('.sidecard__rows').text()).toContain('预计产出');
     // 问题背景默认折叠，点击后展开
     expect(w.find('.sidecard__bg-text').exists()).toBe(false);
     await w.find('.sidecard__bg-head').trigger('click');
