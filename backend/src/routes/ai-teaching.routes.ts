@@ -348,7 +348,12 @@ const handleStreamingSession = async (
   req: any,
   res: any,
   task: () => Promise<Record<string, unknown>>,
-  sessionId?: string
+  sessionId?: string,
+  /**
+   * 可选前奏：在跑 task（含 LLM 回合）**之前**先推一个事件。
+   * 用于"代码已经判定了对错、不必等模型讲解"的场景（走查 B-1）。
+   */
+  prelude?: (emit: (event: string, data: unknown) => void) => void | Promise<void>
 ) => {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -372,6 +377,7 @@ const handleStreamingSession = async (
   setRequestContext({ streamRequest, sessionId, sourceEntry: 'platform' });
 
   try {
+    if (prelude) await prelude((event, data) => writeSseEvent(res, event, data));
     const data = await task();
     writeSseEvent(res, 'final', data);
     writeSseEvent(res, 'done', {});
@@ -742,6 +748,52 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit', async (req:
     logger.error('提交理解检查失败:', error);
     return sendTeachingError(res, error, '提交理解检查失败');
   }
+});
+
+/**
+ * 流式提交理解检查（走查 B-1）
+ *
+ * 与上面非流式版的差别：**先把代码裁决的对错推给客户端**（`judgement` 事件，
+ * 纯计算、立即可得），再跑教学回合并把导师讲解流式推给客户端（`delta` → `final`）。
+ * 动因：检查点的对错由答案键算出，此前却要等一整个教学回合（实测 60–80s）才知道。
+ * 非流式版保留：不支持的客户端与兜底路径继续可用。
+ *
+ * POST /api/ai-teaching/sessions/:sessionId/checkpoints/:checkpointId/submit/stream
+ */
+router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit/stream', async (req: any, res) => {
+  const userId = req.user?.userId;
+  if (!userId) {
+    return sendUnauthorized(res);
+  }
+
+  const { sessionId, checkpointId } = req.params;
+  const selectedOptionIds = Array.isArray(req.body?.selectedOptionIds)
+    ? req.body.selectedOptionIds.filter((value: unknown) => typeof value === 'string' && value.trim())
+    : undefined;
+  const answerText = typeof req.body?.answerText === 'string' ? req.body.answerText.trim() : undefined;
+
+  if ((!selectedOptionIds || selectedOptionIds.length === 0) && !answerText) {
+    return sendValidationError(res, '缺少作答内容');
+  }
+  const revision = requireExpectedRevision(req.body?.revision);
+
+  try {
+    await teachingSessionRepository.assertOwnership(sessionId, userId);
+  } catch (error: any) {
+    // 鉴权/归属失败要在 SSE 头之前返回 JSON，客户端才能按普通错误处理
+    return sendTeachingError(res, error, '无权访问该会话');
+  }
+
+  await handleStreamingSession(
+    req,
+    res,
+    () => aiTeachingCoordinator.submitCheckpoint(sessionId, checkpointId, { selectedOptionIds, answerText }, revision) as unknown as Promise<Record<string, unknown>>,
+    sessionId,
+    async (emit) => {
+      const early = await aiTeachingCoordinator.judgeCheckpointSubmission(sessionId, checkpointId, { selectedOptionIds, answerText });
+      if (early) emit('judgement', early);
+    }
+  );
 });
 
 /**

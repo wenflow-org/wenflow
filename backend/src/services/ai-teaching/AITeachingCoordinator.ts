@@ -3462,6 +3462,31 @@ export class AITeachingOrchestrator {
     }
   }
 
+  /**
+   * 只做**代码裁决**（不跑教学回合）：供流式提交先把"对错"回给用户。
+   *
+   * 走查 B-1：检查点的对错由答案键算出（`judgedBy='code'`），本可立即告知，
+   * 但此前要等一整个教学回合（实测 60–80s 的「判定中…」）才知道结果。
+   * 返回 null 表示不可提前裁决（无待处理检查点 / 无答案键）⇒ 客户端照旧等 final。
+   */
+  async judgeCheckpointSubmission(
+    sessionId: string,
+    checkpointId: string,
+    payload: { selectedOptionIds?: string[]; answerText?: string }
+  ): Promise<{ passed: boolean; judgedBy: string; detail: string | null } | null> {
+    const session = await teachingSessionRepository.getById(sessionId);
+    if (!session) return null;
+    const checkpoint = getPendingCheckpoint(session.teachingState);
+    if (!checkpoint || checkpoint.id !== checkpointId) return null;
+    const judgement = judgeCheckpointAnswer(checkpoint, payload);
+    if (!judgement) return null;
+    return {
+      passed: judgement.passed === true,
+      judgedBy: judgement.judgedBy,
+      detail: judgement.detail ?? null,
+    };
+  }
+
   async pauseSession(
     sessionId: string,
     userId: string,

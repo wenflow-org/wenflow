@@ -711,6 +711,79 @@ export const aiTeachingAPI = {
   async submitCheckpoint(sessionId: string, checkpointId: string, payload: CheckpointSubmitPayload, revision: number): Promise<CheckpointSubmitResult> {
     const result = await api.post(`/ai-teaching/sessions/${sessionId}/checkpoints/${checkpointId}/submit`, { ...payload, revision }, { timeout: AI_REQUEST_TIMEOUT });
     return result.data || result;
+  },
+
+  /**
+   * SSE 流式提交检查点（走查 B-1）。
+   *
+   * 与非流式版的差别：服务端先推 `judgement` —— **代码裁决**的对错（纯计算、
+   * 立即可得），随后才跑教学回合并把导师讲解用 `delta` 逐段推来，最后 `final`。
+   * 动因：对错本可立即告知，此前却要等一整个教学回合（实测 60–80s）才知道。
+   *
+   * 失败语义与 streamSendMessage 一致：`transport=true` 表示连接层失败且**未收到任何内容**
+   * （调用方可安全回退到非流式重发）；`serverError=true` 为服务端业务失败（不可重发）。
+   */
+  async streamSubmitCheckpoint(
+    sessionId: string,
+    checkpointId: string,
+    payload: CheckpointSubmitPayload,
+    revision: number,
+    handlers: {
+      onJudgement?: (judgement: { passed: boolean; judgedBy: string; detail: string | null }) => void;
+      onDelta?: (text: string) => void;
+      onRestart?: () => void;
+      signal?: AbortSignal;
+    } = {}
+  ): Promise<CheckpointSubmitResult> {
+    return new Promise<CheckpointSubmitResult>((resolve, reject) => {
+      let result: CheckpointSubmitResult | null = null;
+      let serverError: string | null = null;
+      let receivedAnything = false;
+      let settled = false;
+      streamSsePost(
+        `/ai-teaching/sessions/${sessionId}/checkpoints/${checkpointId}/submit/stream`,
+        { ...payload, revision },
+        {
+          signal: handlers.signal,
+          onEvent: (event, data) => {
+            if (event === 'judgement') {
+              receivedAnything = true;
+              const j = (data?.judgement ?? data) as { passed: boolean; judgedBy: string; detail: string | null };
+              handlers.onJudgement?.(j);
+            } else if (event === 'delta' && typeof data?.text === 'string') {
+              receivedAnything = true;
+              handlers.onDelta?.(data.text);
+            } else if (event === 'restart') {
+              receivedAnything = true;
+              handlers.onRestart?.();
+            } else if (event === 'final') {
+              receivedAnything = true;
+              result = (data?.data ?? data) as CheckpointSubmitResult;
+            } else if (event === 'error') {
+              serverError = String(data?.message || '提交失败');
+            } else if (event === 'done') {
+              if (settled) return;
+              settled = true;
+              if (serverError) {
+                reject(Object.assign(new Error(serverError), { serverError: true }));
+                return;
+              }
+              if (result) {
+                resolve(result);
+                return;
+              }
+              reject(Object.assign(new Error('提交失败'), { serverError: true }));
+            }
+          },
+        }
+      ).catch((error) => {
+        if (settled) return;
+        settled = true;
+        reject(Object.assign(error instanceof Error ? error : new Error('提交失败'), {
+          transport: !receivedAnything,
+        }));
+      });
+    });
   }
 };
 
