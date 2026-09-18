@@ -181,6 +181,9 @@ export async function assembleLearningState(
       total: subtasks.length,
       completed: completedSubtasks.length,
       inProgress: inProgressSubtasks.length,
+      // 已启动 = 已完成 + 进行中：给文案层一个**可直接引用**的口径，
+      // 避免把 completed/total 说成「已启动 X/总」（走查 P10）
+      started: completedSubtasks.length + inProgressSubtasks.length,
       todo: todoSubtasks.length,
       completionRate: subtasks.length > 0 ? Number((completedSubtasks.length / subtasks.length * 100).toFixed(1)) : 0,
     },
