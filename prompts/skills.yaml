@@ -536,6 +536,17 @@ skills:
       sandbox: []
     notes: handler-only 外挂能力——handler 委托 backend/src/services/fetch（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制）；provider 与密钥由 FETCH_PROVIDER / FETCH_API_KEY（缺省复用 SEARCH_API_KEY）等环境变量承担，无 DB 直读，dataSource.db 保持空
 
+  - skillId: text-to-image
+    kind: handler-only
+    handlerRef: backend/src/skills/text-to-image/index.ts
+    noPromptFile: true
+    displayName: 文生图 Skill
+    description: 调用外部文生图 provider（Agnes / OpenAI 兼容端点）按 prompt 生成图片
+    dataSource:
+      db: []
+      sandbox: []
+    notes: handler-only 外挂能力——handler 委托 backend/src/services/image（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制）；provider 与密钥由 IMAGE_PROVIDER / IMAGE_API_URL / IMAGE_API_KEY / IMAGE_MODEL 等环境变量承担，无 DB 直读，dataSource.db 保持空
+
   # ============ aux（10 条，不进字段路由；v4-aux-skills 注册） ============
   - skillId: teaching-opening-generator
     kind: aux

@@ -47,6 +47,7 @@
     "llm:calls:check": "ts-node src/scripts/check-llm-call-boundary.ts",
     "search:check": "ts-node src/scripts/check-web-search.ts",
     "fetch:check": "ts-node src/scripts/check-web-fetch.ts",
+    "image:check": "ts-node src/scripts/check-text-to-image.ts",
     "mcp:check": "ts-node src/scripts/check-mcp-client.ts",
     "prompts:compile-all": "ts-node src/scripts/compile-core-files.ts",
     "verify:kv-prefix-cache": "ts-node src/scripts/verify-kv-prefix-cache.ts",

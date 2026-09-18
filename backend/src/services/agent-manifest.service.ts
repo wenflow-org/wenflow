@@ -419,6 +419,17 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Tool',
     noPromptFile: true
+  },
+  {
+    id: 'skill:text-to-image',
+    name: '文生图 Skill',
+    description: '调用外部文生图 provider（Agnes / OpenAI 兼容端点）按 prompt 生成图片',
+    category: 'tool',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Tool',
+    noPromptFile: true
   }
 ];
 
