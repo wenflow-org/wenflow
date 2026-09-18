@@ -160,8 +160,11 @@ export interface SimulationClockInput {
 /** 解析会话的模拟时钟（session > profile > global 优先级；默认关）。 */
 export function resolveSimulationClock(input: SimulationClockInput): SimulationClockView {
   const enabled = input.stageResultsClock?.enabled ?? input.profileClock?.enabled ?? input.settings.enabled;
-  const baseDateRaw = input.profileClock?.startDate
-    || input.stageResultsClock?.baseDate
+  // baseDate 与 enabled 同口径：session > profile > 会话创建日。
+  // （18 号报告观察项：此前写成 profile 优先，与注释相反 → 画像一旦配了 startDate，
+  //   管理端在会话上设的 baseDate 会被静默忽略。）
+  const baseDateRaw = input.stageResultsClock?.baseDate
+    || input.profileClock?.startDate
     || toDateOnly(input.sessionCreatedAt);
   const baseDate = toDateOnly(parseDateOnly(baseDateRaw));
   const dayIndex = Math.max(0, Math.trunc(Number(input.stageResultsClock?.dayIndex) || 0));

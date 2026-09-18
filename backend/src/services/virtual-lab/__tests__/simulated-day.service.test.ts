@@ -62,6 +62,18 @@ describe('simulated-day 纯函数', () => {
     expect(clock.simulatedNow).toBe('2026-09-05T23:59:59.999Z');
   });
 
+  it('resolveSimulationClock：baseDate 优先级 session > profile（18 号报告观察项）', () => {
+    const clock = resolveSimulationClock({
+      // 会话级设置必须覆盖画像级——否则管理端在会话上设的日期会被静默忽略
+      stageResultsClock: { baseDate: '2026-09-20', dayIndex: 2 },
+      profileClock: { enabled: true, startDate: '2026-09-01' },
+      settings: SETTINGS,
+      sessionCreatedAt: new Date('2026-09-10T12:00:00Z'),
+    });
+    expect(clock.baseDate).toBe('2026-09-20');
+    expect(clock.dayIndex).toBe(2);
+  });
+
   it('temporalContextFromClock：未开启返回 null；开启时给出 simulatedDay = baseDate + dayIndex', () => {
     expect(temporalContextFromClock({ ...resolveSimulationClock({ settings: SETTINGS, sessionCreatedAt: new Date() }) })).toBeNull();
     const clock = resolveSimulationClock({

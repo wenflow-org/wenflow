@@ -3190,6 +3190,14 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
     if (!Number.isFinite(days) || days < 1 || days > 60) {
       return res.status(400).json({ success: false, error: 'days 必须是 1..60 的数字' });
     }
+    // 跑课只针对"某一天"：days>1 时只会用最后一天的窗口跑课，中间模拟日被静默跳过
+    // （18 号报告观察项）。显式拒绝，多天推进请用 runTasks=false（纯记账）。
+    if (runTasks && days > 1) {
+      return res.status(400).json({
+        success: false,
+        error: 'runTasks 模式一次只能推进 1 天；如需一次推进多天请用 runTasks=false（仅推进时钟）',
+      });
+    }
 
     const result = await runAssistedSessionMutation(sessionId, async (session, assertLeaseOwned) => {
       const settings = await getVirtualLabSettings().catch(() => ({ ...DEFAULT_VIRTUAL_LAB_SETTINGS }));
