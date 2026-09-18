@@ -3,8 +3,10 @@
  */
 import {
   CHALLENGE_CAP_LIMITS,
+  D_FLOOR_ABSOLUTE,
   decideTaskDifficulty,
   resolveBaselineLevel,
+  resolveDifficultyFloor,
 } from '../TaskDifficultyAdjustmentService';
 
 const metrics = (lss: number, ktl: number, lf: number) => ({ lss, ktl, lf, lsb: ktl - lf });
@@ -309,5 +311,69 @@ describe('decideTaskDifficulty：连续受挫只降档/减速（§4.5）', () =>
     expect(decideTaskDifficulty({ ...normalInput(), recentFrustrationStreak: null }).direction).toBe('keep');
     expect(decideTaskDifficulty({ ...normalInput(), recentFrustrationStreak: Number.NaN }).direction).toBe('keep');
     expect(decideTaskDifficulty({ ...normalInput(), recentFrustrationStreak: -3 }).direction).toBe('keep');
+  });
+});
+
+/**
+ * 最小挑战保底（D_floor，2026-09-18 · Q13）：
+ * 降档最多低于基线 1 档、且绝对值不低于 3；只约束降档，不影响升档与封顶。
+ */
+describe('decideTaskDifficulty：最小挑战保底 D_floor', () => {
+  it('resolveDifficultyFloor：低基线不被抬升，高基线最多降 1 档、且不低于 3', () => {
+    expect(resolveDifficultyFloor(1)).toBe(1);
+    expect(resolveDifficultyFloor(2)).toBe(2);
+    expect(resolveDifficultyFloor(3)).toBe(D_FLOOR_ABSOLUTE);
+    expect(resolveDifficultyFloor(4)).toBe(3);
+    expect(resolveDifficultyFloor(5)).toBe(4);
+    expect(resolveDifficultyFloor(7)).toBe(6);
+    expect(resolveDifficultyFloor(10)).toBe(9);
+  });
+
+  it('两条降档理由（原可 -2）被地板抬回，最多 -1', () => {
+    const decision = decideTaskDifficulty({
+      ...normalInput(),
+      lessonMetrics: metrics(7.5, 4, 6.5), // lesson_stress_high + path_load_unbalanced
+      globalMetrics: metrics(2, 3, 6.5),   // fatigue_high（global lf>=6）
+    });
+    // 原逻辑 delta=-2 → adjusted 3；地板 = 4 → 抬回 4
+    expect(decision.floor).toBe(4);
+    expect(decision.floorApplied).toBe(true);
+    expect(decision.delta).toBe(-1);
+    expect(decision.adjusted).toBe(4);
+    expect(decision.direction).toBe('decrease');
+  });
+
+  it('低基线（3）遇降档理由 → 绝对地板 3，不再下探', () => {
+    const decision = decideTaskDifficulty({
+      ...normalInput(),
+      baselineLevel: 3,
+      globalMetrics: metrics(2, 3, 7), // fatigue_high
+    });
+    expect(decision.floor).toBe(D_FLOOR_ABSOLUTE);
+    expect(decision.adjusted).toBe(D_FLOOR_ABSOLUTE);
+    expect(decision.delta).toBe(0);
+    expect(decision.floorApplied).toBe(true);
+  });
+
+  it('地板不影响升档', () => {
+    const decision = decideTaskDifficulty({
+      ...normalInput(),
+      lessonMetrics: metrics(3, 6, 2),
+      learningControlState: { paceMode: 'push', conceptLoad: 'high', challengeLevelCap: 'high' },
+    });
+    expect(decision.delta).toBe(1);
+    expect(decision.floorApplied).toBe(false);
+  });
+
+  it('地板不干扰封顶：cap=low 仍把基线 7 压到 4，且不误报地板生效', () => {
+    const decision = decideTaskDifficulty({
+      ...normalInput(),
+      baselineLevel: 7,
+      learningControlState: { paceMode: 'recover', conceptLoad: 'low', challengeLevelCap: 'low' },
+    });
+    expect(decision.floor).toBe(6);
+    expect(decision.capApplied).toBe(true);
+    expect(decision.floorApplied).toBe(false);
+    expect(decision.adjusted).toBe(CHALLENGE_CAP_LIMITS.low);
   });
 });

@@ -25,6 +25,21 @@ export const CHALLENGE_CAP_LIMITS: Record<'low' | 'medium' | 'high', number> = {
 /** 难度取值域（与 LSS/KTL 的 0-10 刻度一致） */
 export const DIFFICULTY_RANGE = { min: 1, max: 10 } as const;
 
+/**
+ * 最小挑战保底（D_floor，2026-09-18 · Wave1 Track B / Q13）：
+ * 防"自我实现预言"——被判定为弱的学习者若每节课都被系统性降档，会长期得不到 ZPD 挑战。
+ * 口径（政策，可调）：降档最多低于**任务基线** `D_FLOOR_MAX_DROP` 档，且绝对值不低于 `D_FLOOR_ABSOLUTE`。
+ * 只约束**降档**：升档不受地板影响；`challengeLevelCap` 仍是独立上限（封顶不额外计一档）。
+ */
+export const D_FLOOR_MAX_DROP = 1;
+export const D_FLOOR_ABSOLUTE = 3;
+
+/** 任务基线的降档地板（1-10）。 */
+export function resolveDifficultyFloor(baselineLevel: number): number {
+  const baseline = clamp(Math.round(baselineLevel), DIFFICULTY_RANGE.min, DIFFICULTY_RANGE.max);
+  return Math.max(baseline - D_FLOOR_MAX_DROP, Math.min(D_FLOOR_ABSOLUTE, baseline), DIFFICULTY_RANGE.min);
+}
+
 export interface TaskDifficultyMetrics {
   lss: number;
   ktl: number;
@@ -74,6 +89,10 @@ export interface TaskDifficultyAdjustment {
   /** 上限来源（可审计） */
   cap: number;
   capSource: 'low' | 'medium' | 'high';
+  /** 本任务基线的降档地板（1-10；最小挑战保底） */
+  floor: number;
+  /** 是否被降档地板抬回（有降档理由但未降到地板以下） */
+  floorApplied: boolean;
   /** 判定依据（稳定枚举，只含**学习者状态证据**，便于统计与度量） */
   reasons: string[];
   /** 是否被 challengeLevelCap 截断（上限是"封顶"，不是一条降档证据） */
@@ -98,6 +117,9 @@ export interface TaskDifficultyAdjustment {
     successBandAction: 'downgrade' | 'hold' | 'upgrade';
     successBandRate: number | null;
     successBandSample: number;
+    /** 最小挑战保底（D_floor）：地板值 / 是否被地板抬回 */
+    floor: number;
+    floorApplied: boolean;
   };
 }
 
@@ -252,14 +274,18 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
 
   const baseline = clamp(Math.round(input.baselineLevel), DIFFICULTY_RANGE.min, DIFFICULTY_RANGE.max);
   const ceiling = Math.min(cap, DIFFICULTY_RANGE.max);
+  const floor = resolveDifficultyFloor(baseline);
   const desired = clamp(baseline + delta, DIFFICULTY_RANGE.min, DIFFICULTY_RANGE.max);
+  // 最小挑战保底（D_floor）：只作用于**降档**——升档不受地板影响。
+  const floored = delta < 0 ? Math.max(desired, floor) : desired;
   // 上限是**封顶**，不额外计一档（否则"本路径压力大"会被算两次：一次降档、一次封顶）
-  const adjusted = clamp(desired, DIFFICULTY_RANGE.min, ceiling);
+  const adjusted = clamp(floored, DIFFICULTY_RANGE.min, ceiling);
   const finalDelta = adjusted - baseline;
 
   const finalReasons = [...reasons];
   if (finalReasons.length === 0 && finalDelta > 0) finalReasons.push('ready_to_accelerate');
   const capApplied = adjusted < desired;
+  const floorApplied = delta < 0 && floored > desired;
 
   return {
     baseline,
@@ -268,6 +294,8 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
     delta: finalDelta,
     cap,
     capSource,
+    floor,
+    floorApplied,
     reasons: finalReasons,
     capApplied,
     evidence: {
@@ -288,8 +316,10 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
       successBandAction: bandAction,
       successBandRate: input.successBand?.rate ?? null,
       successBandSample: input.successBand?.sample ?? 0,
+      floor,
+      floorApplied,
     },
   };
 }
 
-export const taskDifficultyAdjustmentService = { resolveBaselineLevel, decideTaskDifficulty };
+export const taskDifficultyAdjustmentService = { resolveBaselineLevel, decideTaskDifficulty, resolveDifficultyFloor };
