@@ -336,6 +336,7 @@
               :class="{ 'composer__send--off': !input.trim() || checkpointPending }"
               role="button"
               tabindex="0"
+              aria-label="发送"
               @click="send"
               @keydown.enter="send"
             >
