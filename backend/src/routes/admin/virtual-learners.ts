@@ -26,8 +26,9 @@ import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
 import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
+import { buildRetentionSeriesForConcepts, type RetentionConceptInput } from '../../services/memory/retention-series';
 import { simulatedDayService, resolveSimulationClock, planClockAdvance, resolveDayWindow, resolutionEnteredLearn, summarizeDayLearning, shouldAdvanceSimulationClock } from '../../services/virtual-lab/simulated-day.service';
-import { runWithSimulatedClock } from '../../services/virtual-lab/simulation-clock-context';
+import { runWithSimulatedClock, simulatedNowOr } from '../../services/virtual-lab/simulation-clock-context';
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
 import { getVirtualLabSettings, updateVirtualLabSettings, DEFAULT_VIRTUAL_LAB_SETTINGS } from '../../services/virtual-lab-settings.service';
 import { applyRpmLimitsFromSettings, getRpmLimitStats } from '../../services/rpm-limit-config.service';
@@ -763,16 +764,49 @@ router.get('/:id/memory', async (req: Request, res) => {
 
     const memory = await buildLearnerMemorySnapshot(profile.userId, { limit: 12 });
 
+    // Q2/Q8 记忆看板：在既有聚合之上，补一条纯函数派生的遗忘曲线（只增字段，不改既有形状）。
+    // 数据源与排期同源：memory_traces（含 FSRS 状态列），桶分类沿用上面的 mastered/dueReview。
+    const asOf = simulatedNowOr();
+    const dueNames = new Set(memory.dueReview.map((item) => item.name));
+    const masteredNames = new Set(memory.mastered.map((item) => item.name));
+    const traces = await prisma.memory_traces.findMany({
+      where: { userId: profile.userId },
+      orderBy: { lastSeenAt: 'desc' },
+    });
+    const concepts = buildRetentionSeriesForConcepts(
+      traces.map((trace): RetentionConceptInput => ({
+        conceptKey: trace.conceptKey,
+        label: trace.label,
+        bucket: dueNames.has(trace.conceptKey)
+          ? 'due'
+          : masteredNames.has(trace.conceptKey)
+            ? 'mastered'
+            : 'other',
+        stabilityLabel: trace.stability,
+        fsrsStability: trace.fsrsStability,
+        fsrsDifficulty: trace.fsrsDifficulty,
+        fsrsLapses: trace.fsrsLapses,
+        fsrsReps: trace.fsrsReps,
+        masteryScore: trace.masteryScore,
+        extractionCount: trace.extractionCount,
+        lastSeenAt: trace.lastSeenAt,
+      })),
+      { asOf, max: 8 },
+    );
+
     return res.json({
       success: true,
       data: {
         profileId: id,
         updatedAt: profile.updatedAt,
+        asOf: asOf.toISOString(),
         mastered: memory.mastered.map((item) => ({ name: item.name })),
         dueReview: memory.dueReview.map((item) => ({ name: item.name, retention: item.progress / 100 })),
         struggling: memory.struggling.map((item) => ({ name: item.name })),
         recentCompleted: memory.recentCompleted,
         recentTaskTitles: memory.recentTaskTitles,
+        // 每个有痕迹的概念：stability（天）/ lastSeenAt / extractionCount / 当前 retention + 遗忘曲线
+        concepts,
         counts: {
           mastered: memory.mastered.length,
           dueReview: memory.dueReview.length,

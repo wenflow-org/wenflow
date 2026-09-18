@@ -239,6 +239,31 @@
               </div>
             </div>
 
+            <!-- 记忆保持曲线（Q2/Q8）：到期 / 已掌握概念的保留率随天数衰减 -->
+            <div v-if="memoryCurveConcepts.length" class="vp-memory__group">
+              <div class="vp-memory__group-head">
+                <h4 class="vp-memory__group-title">记忆保持曲线</h4>
+                <span class="mk-card__meta">横轴＝距上次复习天数 · 纵轴＝预计还记得的比例</span>
+              </div>
+              <p class="vp-memory__curve-hint">
+                老师下次会先带你回捞这些点：曲线越陡、当前保留越低，越优先回捞。
+              </p>
+              <div class="vp-memory__curve-legend">
+                <span
+                  v-for="(item, i) in memoryChartLegend"
+                  :key="`mc-${i}-${item.name}`"
+                  class="vp-memory__curve-legend-item"
+                >
+                  <i class="vp-memory__curve-dot" :style="{ background: item.color }" aria-hidden="true"></i>
+                  <span class="vp-memory__curve-name" :title="item.name">{{ item.name }}</span>
+                  <span class="vp-memory__curve-now" :class="{ 'is-due': item.due }">
+                    现在 {{ item.currentPercent }}%<template v-if="item.elapsedDays > 0"> · 已过 {{ item.elapsedDays }} 天</template>
+                  </span>
+                </span>
+              </div>
+              <MkChart :option="memoryChartOption" height="240px" />
+            </div>
+
             <!-- 易混淆 / 卡点 -->
             <div v-if="memoryStruggling.length" class="vp-memory__group">
               <div class="vp-memory__group-head">
@@ -612,6 +637,93 @@
   </div>
 </template>
 
+<script lang="ts">
+/**
+ * 记忆保持曲线（Q2 记忆看板）纯函数：ECharts option 构造器。
+ * 放在普通 <script> 块以便单测直接 import（与 AdminConsole.vue 的注册表同法）；
+ * 逻辑全部无副作用，空数据返回可渲染的空 option（不抛错）。
+ */
+import type { EChartsCoreOption } from 'echarts/core'
+
+/** 看板曲线配色（按概念顺序取色；与图例同一顺序，保证颜色一致） */
+export const MEMORY_CURVE_COLORS = ['#2c63d0', '#dc2626', '#15803d', '#b7791f', '#7c3aed', '#0891b2'] as const
+
+export function memoryCurveColor(index: number): string {
+  return MEMORY_CURVE_COLORS[index % MEMORY_CURVE_COLORS.length]
+}
+
+export interface MemoryCurveConcept {
+  name: string
+  label?: string | null
+  bucket?: 'due' | 'mastered' | 'other'
+  curve: {
+    days: number[]
+    retention: number[]
+    elapsedDays: number
+    currentRetention: number
+  }
+}
+
+function memoryDayLabel(day: number): string {
+  return day === 0 ? '刚复习' : `第${day}天`
+}
+
+/** 遗忘曲线 x 轴为采样日 [0,1,3,7,14,30]；y 轴统一 0-1（百分比展示） */
+export function buildMemoryRetentionChartOption(
+  concepts: MemoryCurveConcept[],
+  options: { isDark?: boolean } = {}
+): EChartsCoreOption {
+  const days = Array.isArray(concepts[0]?.curve?.days) ? concepts[0].curve.days : []
+  const labels = days.map(memoryDayLabel)
+  const axisLine = options.isDark ? 'rgba(230,237,247,0.22)' : 'rgba(23,32,51,0.15)'
+  const splitLine = options.isDark ? 'rgba(230,237,247,0.08)' : 'rgba(23,32,51,0.06)'
+  const series = concepts.map((concept, index) => {
+    const color = memoryCurveColor(index)
+    return {
+      name: concept.label || concept.name || `概念${index + 1}`,
+      type: 'line' as const,
+      data: Array.isArray(concept.curve?.retention) ? concept.curve.retention : [],
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 4,
+      connectNulls: true,
+      lineStyle: { width: 2, color },
+      itemStyle: { color }
+    }
+  })
+  return {
+    animationDuration: 400,
+    grid: { left: 42, right: 16, top: 16, bottom: 26 },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      valueFormatter: (value: unknown) => (value == null ? '—' : `${Math.round(Number(value) * 100)}%`)
+    },
+    legend: { show: false },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: axisLine } },
+      axisTick: { show: false },
+      axisLabel: { color: '#8492ab', fontSize: 11 }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      max: 1,
+      splitLine: { lineStyle: { color: splitLine } },
+      axisLabel: {
+        color: '#8492ab',
+        fontSize: 11,
+        formatter: (value: number) => `${Math.round(value * 100)}%`
+      }
+    },
+    series
+  }
+}
+</script>
+
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { statusText } from './statusText'
@@ -635,8 +747,10 @@ import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
 import MkEmptyState from './MkEmptyState.vue'
 import MkLoading from './MkLoading.vue'
+import MkChart from './MkChart.vue'
 import DayTimeline from './DayTimeline.vue'
 import { useSafePolling } from '@/composables/useSafePolling'
+import { useIsDark } from '@/composables/useIsDark'
 import {
   extractQuality,
   RUNS_TAB_WINDOW,
@@ -719,6 +833,8 @@ interface StoryItem {
 }
 
 const liveDetail = ref<Detail | null>(null)
+/** 主题感知：图表坐标轴/网格线颜色随暗色切换（与 LearnerDetail 负荷曲线同源） */
+const isDark = useIsDark()
 const stories = ref<StoryItem[]>([])
 const selectedStoryId = ref<string | null>(null)
 /** 故事多选（对齐一级页批量操作）：勾选多个故事后可批量运行/删除；与单选运行目标并存 */
@@ -1341,6 +1457,26 @@ watch(
 )
 
 /* ===== 记忆池 ===== */
+/** 单条概念的遗忘曲线（后端 retention-series 派生） */
+interface MemoryConceptCurve {
+  days: number[]
+  retention: number[]
+  elapsedDays: number
+  currentRetention: number
+}
+/** 单条概念的完整记忆读数（stability 天 / lastSeenAt / extractionCount / 当前 retention + 曲线） */
+interface MemoryConcept {
+  name: string
+  label: string | null
+  masteryScore: number
+  stability: number
+  stabilityLabel?: string | null
+  lastSeenAt: string | null
+  extractionCount: number
+  retention: number
+  bucket: 'due' | 'mastered' | 'other'
+  curve: MemoryConceptCurve
+}
 interface MemoryData {
   mastered: Array<{ name: string }>
   dueReview: Array<{ name: string; retention: number }>
@@ -1355,6 +1491,9 @@ interface MemoryData {
     selfCalibration?: string | null
   }>
   counts: { mastered: number; dueReview: number; struggling: number; completed: number }
+  /** Q2/Q8：有痕迹概念的遗忘曲线（可空，旧响应兼容） */
+  concepts?: MemoryConcept[]
+  asOf?: string
 }
 const memoryData = ref<MemoryData | null>(null)
 const memoryLoading = ref(false)
@@ -1374,6 +1513,29 @@ const memoryEmpty = computed(() => {
   return c.mastered + c.dueReview + c.struggling + c.completed === 0
 })
 
+/** 看板曲线：到期 / 已掌握概念（后端已按 due→mastered、当前保留率升序排序并截断） */
+const memoryCurveConcepts = computed(() =>
+  (memoryData.value?.concepts || []).filter(
+    (c) =>
+      (c.bucket === 'due' || c.bucket === 'mastered') &&
+      Array.isArray(c.curve?.retention) &&
+      c.curve.retention.length > 0
+  )
+)
+const memoryChartOption = computed<EChartsCoreOption>(() =>
+  buildMemoryRetentionChartOption(memoryCurveConcepts.value, { isDark: isDark.value })
+)
+/** 图例与曲线同序取色（memoryCurveColor(index)），并给出当前保留率/已过天数 */
+const memoryChartLegend = computed(() =>
+  memoryCurveConcepts.value.map((c, index) => ({
+    name: c.label || c.name,
+    color: memoryCurveColor(index),
+    currentPercent: Math.round((c.curve?.currentRetention ?? c.retention ?? 0) * 100),
+    elapsedDays: c.curve?.elapsedDays ?? 0,
+    due: c.bucket === 'due'
+  }))
+)
+
 async function loadMemory(force = false) {
   const id = subPage.value?.id
   if (!id) return
@@ -1389,7 +1551,9 @@ async function loadMemory(force = false) {
       dueReview: Array.isArray(d.dueReview) ? d.dueReview : [],
       struggling: Array.isArray(d.struggling) ? d.struggling : [],
       recentCompleted: Array.isArray(d.recentCompleted) ? d.recentCompleted : [],
-      counts: d.counts || { mastered: 0, dueReview: 0, struggling: 0, completed: 0 }
+      counts: d.counts || { mastered: 0, dueReview: 0, struggling: 0, completed: 0 },
+      concepts: Array.isArray(d.concepts) ? (d.concepts as MemoryConcept[]) : [],
+      asOf: typeof d.asOf === 'string' ? d.asOf : undefined
     }
   } catch {
     memoryLoadFailed.value = true
@@ -2473,6 +2637,46 @@ async function quietReload(id: string) {
   font-size: var(--mk-fs-12);
   color: var(--mk-faint, #8a94a6);
 }
+/* 记忆保持曲线（Q2/Q8）：说明 + 概念图例（与曲线同序取色）+ ECharts */
+.vp-memory__curve-hint {
+  margin: 0 0 10px;
+  font-size: var(--mk-fs-12);
+  color: var(--mk-muted);
+  line-height: 1.6;
+}
+.vp-memory__curve-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 10px;
+}
+.vp-memory__curve-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--mk-fs-12);
+  min-width: 0;
+}
+.vp-memory__curve-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.vp-memory__curve-name {
+  font-weight: 700;
+  color: var(--mk-ink);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vp-memory__curve-now {
+  color: var(--mk-faint, #8a94a6);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.vp-memory__curve-now.is-due { color: var(--mk-amber); font-weight: 700; }
 .vp-memory__completed {
   display: grid;
   gap: 8px;
