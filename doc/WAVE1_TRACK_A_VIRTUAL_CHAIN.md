@@ -126,3 +126,25 @@ export function snapshotDegradationCounters(): Record<string, number>;
 4. `failurePolicy` 取值收敛，scaffold 不再写 `fallback`。
 5. 虚拟链路两处真静默改为结构化降级（有测试、计数可读）。
 6. 相关套件全绿（模拟器、virtual-lab、memory、fields-sync、prompts 门禁）。
+
+---
+
+## 6. 执行记录（2026-09-18，已完成）
+
+| 项 | 提交 | 结果 |
+|---|---|---|
+| A1 检查点/时间上下文进 payload | `59483516` | 两分支透传（白名单投影，无答案键）；测试 4 例 |
+| A2 运行时定义补齐 | `83c26460` | definition.ts + SkillDefinition 同步；snapshots/runtime-contract 过 |
+| A3 时间上下文打通 + ACT-R 死代码清理 | `338c7717` | `previousCourseDayGap`（课表口径，首日省略键）；删 4 个死函数；yaml 去 `elapsedDays` |
+| A5 降级遥测 + 虚拟侧两处真静默 | `c1f83891` | 新增 `skills/degradation-telemetry.ts`（Track B 直接 import）；learner-memory / simulated-day 打标 |
+| A4 failurePolicy 收敛 | `955dbcdc` | 可写词表收敛为 retry\|propagate；scaffold 默认 retry |
+
+**回归**：Track A 相关 23 套件 / 298 用例全绿；`tsc`、`eslint` 干净；
+`prompts:core:check` / `lint 29-0` / `snapshots:check` / `runtime-contract` / `fields-sync` / `yaml:check C1~C5` / `handoff:strict` 全过；`sync-core` already-in-sync。
+
+**遗留（不属于本流）**：`src/services/memory/__tests__/concept-load.service.test.ts` 与
+`review-plan.service.test.ts` 两个套件当前因**另一进程在途改动** `src/skills/teaching-turn/index.ts:788`
+的 TS2339（`timestamp` 属性不存在）而无法运行（ts-jest 编译失败），与本流改动无关；待其修复合入后应恢复。
+
+**给 Track B 的交接**：`backend/src/skills/degradation-telemetry.ts` 已就绪（含 `recordDegradation` /
+`snapshotDegradationCounters` / `resetDegradationCounters` / `degradationCause`），B1/B2 可直接 import。
