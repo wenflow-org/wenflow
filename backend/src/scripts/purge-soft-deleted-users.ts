@@ -4,10 +4,11 @@
  * 软删除只做标记（deletedAt/deletedBy），历史数据长期保留；本脚本用于
  * 满足合规/存储清理需求时的彻底清除。流程：
  *   ① 查目标软删用户（deletedAt 非空，按 --before / --ids 过滤）
- *   ② 清 9 张无 FK 表（memory_traces / learner_evidence / learner_projections /
+ *   ② 清 11 张无 FK 表（memory_traces / learner_evidence / learner_projections /
  *      virtual_quick_learn_runs / goal_scheduling_ledger / agent_call_logs /
- *      prompt_call_logs / llm_execution_attempts / domain_event_outbox 的
- *      userId 匹配行）——这些表没有外键，users 级联不会波及
+ *      prompt_call_logs / llm_execution_attempts / domain_event_outbox /
+ *      prediction_records / misconception_ledger 的 userId 匹配行）——
+ *      这些表没有外键，users 级联不会波及
  *   ③ prisma.users.deleteMany（触发其余带 FK 表的级联删除）
  *   ④ 输出每用户每表统计
  *
@@ -27,7 +28,7 @@
 import 'dotenv/config';
 import prisma from '../config/database';
 
-/** 9 张无 FK 表：无外键约束，users 级联删除不会波及，必须先手动清 userId 行 */
+/** 11 张无 FK 表：无外键约束，users 级联删除不会波及，必须先手动清 userId 行 */
 const FK_LESS_TABLES = [
   'memory_traces',
   'learner_evidence',
@@ -37,7 +38,9 @@ const FK_LESS_TABLES = [
   'agent_call_logs',
   'prompt_call_logs',
   'llm_execution_attempts',
-  'domain_event_outbox'
+  'domain_event_outbox',
+  'prediction_records',
+  'misconception_ledger'
 ] as const;
 
 type FkLessTable = (typeof FK_LESS_TABLES)[number];
@@ -76,15 +79,47 @@ export function parsePurgeArgs(argv: string[]): PurgeArgs {
   return args;
 }
 
-async function main(): Promise<void> {
-  const { before, ids, dryRun } = parsePurgeArgs(process.argv.slice(2));
+export interface PurgeResult {
+  /** 实际纳入清理的目标用户数（不含被跳过的虚拟学习者） */
+  targetCount: number;
+  /** 被跳过的虚拟学习者底层账号数 */
+  virtualSkipped: number;
+  /** 每表合计（dry-run 为预估，apply 为实际删除） */
+  tableTotals: Record<string, number>;
+  /** 每用户每表行数 */
+  perUser: Record<string, Record<string, number>>;
+}
+
+/** purge 所需的数据库访问面（可注入，便于单测断言删除调用） */
+interface PurgeDatabase {
+  users: {
+    findMany: (args: unknown) => Promise<Array<{
+      id: string;
+      email: string | null;
+      name: string | null;
+      deletedAt: Date;
+      deletedBy: string | null;
+    }>>;
+    deleteMany: (args: unknown) => Promise<{ count: number }>;
+  };
+  virtual_learner_profiles: {
+    findMany: (args: unknown) => Promise<Array<{ userId: string }>>;
+  };
+}
+
+/** 执行软删用户硬清理（物理删除）；返回清理统计，行为与原 main 一致。 */
+export async function purgeSoftDeletedUsers(
+  args: PurgeArgs,
+  database: PurgeDatabase = prisma as unknown as PurgeDatabase
+): Promise<PurgeResult> {
+  const { before, ids, dryRun } = args;
 
   const where: any = { deletedAt: { not: null } };
   if (before) where.deletedAt = { lt: before };
   if (ids.length > 0) where.id = { in: ids };
 
   // ① 查目标软删用户
-  const targets = await prisma.users.findMany({
+  const targets = await database.users.findMany({
     where,
     select: { id: true, email: true, name: true, deletedAt: true, deletedBy: true },
     orderBy: { deletedAt: 'desc' }
@@ -92,11 +127,11 @@ async function main(): Promise<void> {
 
   if (targets.length === 0) {
     console.log('[purge] 无匹配的已软删用户（已清理或过滤条件无命中）');
-    return;
+    return { targetCount: 0, virtualSkipped: 0, tableTotals: {}, perUser: {} };
   }
 
   // 虚拟学习者保护：跳过并告警，绝不物理清除（虚拟学习者保持物理删除口径，不应出现在软删列表中）
-  const virtualProfiles = await prisma.virtual_learner_profiles.findMany({
+  const virtualProfiles = await database.virtual_learner_profiles.findMany({
     where: { userId: { in: targets.map((t) => t.id) } },
     select: { userId: true }
   });
@@ -107,7 +142,7 @@ async function main(): Promise<void> {
   }
   if (purgeTargets.length === 0) {
     console.log('[purge] 目标全部为虚拟学习者账号，无可清理用户');
-    return;
+    return { targetCount: 0, virtualSkipped: virtualIds.size, tableTotals: {}, perUser: {} };
   }
 
   const userIds = purgeTargets.map((t) => t.id);
@@ -116,7 +151,7 @@ async function main(): Promise<void> {
   const perUser: Record<string, Record<string, number>> = {};
   for (const t of purgeTargets) perUser[t.id] = {};
   const tableTotals: Record<string, number> = {};
-  const tableModel = prisma as unknown as Record<FkLessTable, {
+  const tableModel = database as unknown as Record<FkLessTable, {
     groupBy: (args: unknown) => Promise<Array<{ userId: string; _count: { _all: number } }>>;
     deleteMany: (args: unknown) => Promise<{ count: number }>;
   }>;
@@ -143,7 +178,7 @@ async function main(): Promise<void> {
 
   // ③ 物理删除 users（触发 FK 级联：路径/会话/成就等带外键的子表）
   if (!dryRun) {
-    const result = await prisma.users.deleteMany({
+    const result = await database.users.deleteMany({
       where: { id: { in: userIds }, deletedAt: { not: null } }
     });
     if (result.count !== purgeTargets.length) {
@@ -166,6 +201,17 @@ async function main(): Promise<void> {
       .join(' ');
     console.log(`  ${t.id}（${t.email || t.name}）deletedAt=${t.deletedAt.toISOString()}${t.deletedBy ? ` deletedBy=${t.deletedBy}` : ''}${detail ? ` · ${detail}` : ''}`);
   }
+
+  return {
+    targetCount: purgeTargets.length,
+    virtualSkipped: virtualIds.size,
+    tableTotals,
+    perUser
+  };
+}
+
+async function main(): Promise<void> {
+  await purgeSoftDeletedUsers(parsePurgeArgs(process.argv.slice(2)));
 }
 
 if (require.main === module) {

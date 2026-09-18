@@ -24,6 +24,8 @@ const tables = [
   'learner_evidence',
   'learner_projections',
   'memory_traces',
+  'prediction_records',
+  'misconception_ledger',
   'virtual_quick_learn_runs',
   'goal_scheduling_ledger',
   'domain_event_outbox',
@@ -85,6 +87,8 @@ describe('VirtualCleanupService.cascadeDeleteProfile', () => {
     db.teaching_sessions.deleteMany.mockResolvedValue({ count: 3 })
     db.learning_paths.deleteMany.mockResolvedValue({ count: 2 })
     db.agent_call_logs.deleteMany.mockResolvedValue({ count: 9 })
+    db.prediction_records.deleteMany.mockResolvedValue({ count: 4 })
+    db.misconception_ledger.deleteMany.mockResolvedValue({ count: 5 })
 
     const manifest = await service.cascadeDeleteProfile('profile-1', { adminId: 'admin-1' })
 
@@ -93,6 +97,8 @@ describe('VirtualCleanupService.cascadeDeleteProfile', () => {
     expect(manifest.learningPaths).toBe(2)
     expect(manifest.learnerEvidence).toBe(7)
     expect(manifest.agentCallLogs).toBe(9)
+    expect(manifest.predictionRecords).toBe(4)
+    expect(manifest.misconceptionLedger).toBe(5)
     expect(manifest.userId).toBe('user-1')
 
     expect(mockSessionDeleteMany).toHaveBeenCalledWith({ where: { virtualProfileId: 'profile-1' } })
@@ -100,6 +106,8 @@ describe('VirtualCleanupService.cascadeDeleteProfile', () => {
     expect(db.learner_evidence.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } })
     expect(db.learner_projections.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } })
     expect(db.memory_traces.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } })
+    expect(db.prediction_records.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } })
+    expect(db.misconception_ledger.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } })
     expect(db.virtual_quick_learn_runs.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } })
     expect(db.agent_call_logs.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } })
     expect(db.prompt_call_logs.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } })
@@ -111,6 +119,8 @@ describe('VirtualCleanupService.cascadeDeleteProfile', () => {
   it('写 admin_audit_logs 级联审计（before=清理范围，after=删除清单）', async () => {
     db.learner_evidence.deleteMany.mockResolvedValue({ count: 7 })
     db.teaching_sessions.deleteMany.mockResolvedValue({ count: 3 })
+    db.prediction_records.deleteMany.mockResolvedValue({ count: 4 })
+    db.misconception_ledger.deleteMany.mockResolvedValue({ count: 5 })
 
     await service.cascadeDeleteProfile('profile-1', { adminId: 'admin-1', adminName: 'admin@x' })
 
@@ -127,6 +137,8 @@ describe('VirtualCleanupService.cascadeDeleteProfile', () => {
     const after = JSON.parse(auditCall.afterJson)
     expect(after.deletedTeachingSessions).toBe(3)
     expect(after.deletedEvidence).toBe(7)
+    expect(after.deletedPredictionRecords).toBe(4)
+    expect(after.deletedMisconceptions).toBe(5)
     expect(after.deletedSessions).toEqual(['session-1', 'session-2'])
     expect(JSON.parse(auditCall.beforeJson)).toEqual({
       profileId: 'profile-1',

@@ -8,7 +8,8 @@
  * - 仅限 isVirtualLearner 用户；真实用户数据一律不触碰（409 保护）。
  * - 显式删除无 users 外键的孤儿表（learner_evidence / learner_projections / memory_traces /
  *   agent_call_logs / prompt_call_logs / llm_execution_attempts / goal_scheduling_ledger /
- *   domain_event_outbox / virtual_quick_learn_runs），避免残留孤儿行。
+ *   domain_event_outbox / virtual_quick_learn_runs / prediction_records /
+ *   misconception_ledger），避免残留孤儿行。
  * - 有 FK 的表（teaching_sessions / learning_paths / goal_conversations / achievements 等）
  *   同样显式删除，以便在清理清单（admin_audit_logs）中留下可核对的删除量。
  * - 每个级联操作写一条 action=virtual-cascade-delete 的审计记录（before=清理范围，after=删除清单）。
@@ -33,6 +34,8 @@ export interface CascadeDeleteManifest {
   learnerEvidence: number;
   learnerProjections: number;
   memoryTraces: number;
+  predictionRecords: number;
+  misconceptionLedger: number;
   quickLearnRuns: number;
   goalSchedulingLedger: number;
   domainEventOutbox: number;
@@ -74,6 +77,8 @@ type CleanupDatabase = Pick<
   | 'learner_evidence'
   | 'learner_projections'
   | 'memory_traces'
+  | 'prediction_records'
+  | 'misconception_ledger'
   | 'virtual_quick_learn_runs'
   | 'goal_scheduling_ledger'
   | 'domain_event_outbox'
@@ -153,6 +158,8 @@ export class VirtualCleanupService {
         learnerEvidence: 0,
         learnerProjections: 0,
         memoryTraces: 0,
+        predictionRecords: 0,
+        misconceptionLedger: 0,
         quickLearnRuns: 0,
         goalSchedulingLedger: 0,
         domainEventOutbox: 0,
@@ -165,6 +172,8 @@ export class VirtualCleanupService {
       result.learnerEvidence = (await tx.learner_evidence.deleteMany({ where: { userId } })).count;
       result.learnerProjections = (await tx.learner_projections.deleteMany({ where: { userId } })).count;
       result.memoryTraces = (await tx.memory_traces.deleteMany({ where: { userId } })).count;
+      result.predictionRecords = (await tx.prediction_records.deleteMany({ where: { userId } })).count;
+      result.misconceptionLedger = (await tx.misconception_ledger.deleteMany({ where: { userId } })).count;
       result.quickLearnRuns = (await tx.virtual_quick_learn_runs.deleteMany({ where: { userId } })).count;
       result.goalSchedulingLedger = (await tx.goal_scheduling_ledger.deleteMany({ where: { userId } })).count;
       result.domainEventOutbox = (await tx.domain_event_outbox.deleteMany({ where: { userId } })).count;
@@ -218,6 +227,8 @@ export class VirtualCleanupService {
       deletedEvidence: manifest.learnerEvidence,
       deletedProjections: manifest.learnerProjections,
       deletedMemoryTraces: manifest.memoryTraces,
+      deletedPredictionRecords: manifest.predictionRecords,
+      deletedMisconceptions: manifest.misconceptionLedger,
       deletedLogs: manifest.agentCallLogs + manifest.promptCallLogs,
       deletedLlmAttempts: manifest.llmExecutionAttempts
     };
