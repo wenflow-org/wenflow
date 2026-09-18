@@ -264,6 +264,70 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
   },
+  // ============ 课内/课后平台内部 aux skill ============
+  // 走查 N1：这 4 个此前**没登记进 manifest**，于是绕过了「userVisible=false 不进
+  // 用户 AI 任务列表」的过滤，在通知中心显示成 4 条没有名字的「AI 任务」。
+  // 它们都是平台内部机制（不是用户发起的动作），一律 userVisible: false。
+  {
+    id: 'skill:learner-progress-report',
+    name: '学习进度报告 Skill',
+    description: '生成学习进度报告文本（供学习台/画像消费的平台内部调用）',
+    category: 'profile',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Profile',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
+  },
+  {
+    id: 'skill:learner-state-review',
+    name: '学习状态复盘 Skill',
+    description: '课内状态复盘（LLM 观测）：给出"为什么卡、下一步怎么调"的诊断判断',
+    category: 'profile',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Profile',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
+  },
+  {
+    id: 'skill:concept-consolidator',
+    name: '概念归并 Skill',
+    description: '判断哪些知识点名字其实是同一个概念的不同说法，输出可执行的归并建议',
+    category: 'profile',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Profile',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.2, maxTokens: 4000 }
+  },
+  {
+    id: 'skill:concept-load-estimator',
+    name: '概念负担评估 Skill',
+    description: '逐条判断知识点的真实负担：装了 1 个还是几个概念、陈述性/程序性、检索难度档',
+    category: 'profile',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Profile',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.2, maxTokens: 4000 }
+  },
+  {
+    id: 'skill:replan-attribution',
+    name: '重排归因 Skill',
+    description: '在给定证据里找出路径值得重排的主因、在候选方向里选一个并留下可检验断言',
+    category: 'profile',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Profile',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.3, maxTokens: 4000 }
+  },
   {
     id: 'skill:learning-predictor',
     name: '学习表现预测 Skill',

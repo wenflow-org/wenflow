@@ -69,6 +69,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { getAgentLogs } from '@/api/userCustom';
+import { agentLabelOf } from './agent-labels';
 
 interface BusyItem { key: string; title: string; detail?: string }
 interface FeedEvent { key: string; label: string; subject?: string; text: string; time: string; tone: 'ok' | 'err' | 'muted'; rawTime: number }
@@ -120,42 +121,6 @@ function timeAgo(iso: string): string {
 }
 
 /** agentId 语义化映射（后端注册的官方 agent 名称） */
-const AGENT_LABEL: Record<string, string> = {
-  'skill:path-planning': '生成学习路径',
-  'skill:goal-conversation': '目标澄清对话',
-  'skill:teaching-turn': '课堂互动处理',
-  'skill:peer-reinforcement': '伴学回应',
-  'skill:session-wrapup': '生成课后总结',
-  'skill:learner-model': '更新学习画像',
-  'skill:stage-designer': '设计阶段任务',
-  'skill:path-reviewer': '评审路径',
-  'skill:kc-mapper': '整理知识组件',
-  'skill:teaching-opening-generator': '生成教学开场',
-  'path-agent': '路径生成',
-  'ai-teaching-agent': '课堂处理',
-  'ai-tutor': '伴学回应',
-  'system-canary': '系统自检',
-  'learner-model-agent': '更新学习画像'
-};
-/** path-agent 阶段流水 phase → 用户可读的阶段名 */
-const PATH_PHASE_LABEL: Record<string, string> = {
-  core: '主结构生成',
-  stageDesign: '阶段任务设计',
-  started: '启动',
-  succeeded: '完成',
-  failed: '失败',
-};
-function agentLabelOf(agentId: string, phase?: string | null): string {
-  if (agentId === 'path-agent') {
-    if (phase) return PATH_PHASE_LABEL[phase] ? `路径生成 · ${PATH_PHASE_LABEL[phase]}` : `路径生成 · ${phase}`;
-    return '路径生成';
-  }
-  return AGENT_LABEL[agentId] ?? fallbackLabel(agentId);
-}
-const fallbackLabel = (_agentId: string) => {
-  // 未登记 agent 的兜底：不泄露内部代号（原样取 `-` 末段会向用户暴露 generator/copy 等内部名）
-  return 'AI 任务';
-};
 
 interface AgentLog {
   id: string; agentId: string; success: boolean; durationMs?: number;
