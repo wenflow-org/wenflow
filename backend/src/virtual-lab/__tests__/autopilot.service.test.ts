@@ -36,7 +36,8 @@ jest.mock('../blackbox-runner', () => ({
   __esModule: true,
   default: {
     runCommand: mockRunCommand,
-    autoStep: mockAutoStep
+    autoStep: mockAutoStep,
+    observe: jest.fn()
   }
 }))
 jest.mock('../../utils/logger', () => ({
@@ -451,7 +452,7 @@ describe('AutopilotService 全自动模式', () => {
     expect(mockRunCommand).toHaveBeenCalledTimes(1)
   })
 
-  it('blackbox 阶段级：Path 等待期间不空转，就绪即停（completedStage=path，不调用 step）', async () => {
+  it('blackbox 阶段级：Path 等待期间**主动刷新观察**，就绪即停（completedStage=path，不推 step）', async () => {
     sessionRecord = buildSession('path', 'running', {
       experiment: { mode: 'blackbox-api' },
       blackbox: {
@@ -460,16 +461,15 @@ describe('AutopilotService 全自动模式', () => {
       }
     })
     mockAutoStep.mockResolvedValue({})
-    mockRunCommand.mockResolvedValue({ result: { stage: 'path' }, reused: false })
-    // 等待分支暂停时注入「已就绪」（出现 start_learning）→ 下轮循环直接达成，不推 step
-    jest.spyOn(service as any, 'pause').mockImplementation(async () => {
-      const sr = JSON.parse(sessionRecord.stageResults)
-      const trace = sr.blackbox.publicTrace
-      const latest = trace[trace.length - 1]?.observation
-      if (!latest?.availableActions?.includes('start_learning')) {
-        trace.push({ observation: { stage: 'path', availableActions: ['start_learning'] } })
+    // 真实的 observe 会向 publicTrace 追加一条最新快照。这里模拟"路径生成完成后再刷新即就绪"：
+    // 关键是由**服务自己**发起 observe（kind='observe'），而不是测试在 pause() 里替它造假。
+    mockRunCommand.mockImplementation(async (options: any) => {
+      if (options?.kind === 'observe') {
+        const sr = JSON.parse(sessionRecord.stageResults)
+        sr.blackbox.publicTrace.push({ observation: { stage: 'path', availableActions: ['start_learning'] } })
         sessionRecord.stageResults = JSON.stringify(sr)
       }
+      return { result: { stage: 'path' }, reused: false }
     })
 
     await service.start('s1', { target: 'stage' })
@@ -477,6 +477,10 @@ describe('AutopilotService 全自动模式', () => {
 
     expect(final.status).toBe('completed')
     expect(final.completedStage).toBe('path')
-    expect(mockRunCommand).not.toHaveBeenCalled()
+    // 等待超时前至少发生一次观察刷新（此前快照永不更新 → 死等 10 分钟）
+    const observeCalls = mockRunCommand.mock.calls.filter((call) => call[0]?.kind === 'observe')
+    expect(observeCalls.length).toBeGreaterThanOrEqual(1)
+    // 等待期不得推进教学步
+    expect(mockAutoStep).not.toHaveBeenCalled()
   })
 })

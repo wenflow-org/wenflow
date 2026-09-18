@@ -28,6 +28,8 @@ const AUTOPILOT_LESSON_RECOVERY_LIMIT = 3
 const AUTOPILOT_BLACKBOX_STEP_RETRIES = 3
 /** 黑盒 waitingForObservation（path 生成中等）连续空等上限：超过判定死等退出 */
 const AUTOPILOT_WAIT_OBSERVATION_LIMIT_MS = 10 * 60 * 1000
+/** 等待态主动刷新观察的最小间隔（太密会产生大量 observe 命令与轨迹快照；15s 足够及时） */
+const AUTOPILOT_OBSERVE_REFRESH_INTERVAL_MS = 15 * 1000
 /** 迭代间最小间隔（防止热循环打满数据库） */
 const AUTOPILOT_LOOP_PAUSE_MS = 1500
 /**
@@ -838,6 +840,40 @@ export class AutopilotService {
     }
   }
 
+  /**
+   * 主动刷新黑盒平台观察（向 `publicTrace` 追加一条最新快照）。
+   *
+   * 为什么等待分支必须调用：`readBlackboxObservation` 读的是**轨迹最后一条快照**，
+   * 而快照只由 `observe` / `autoStep` 写入。path 阶段的解锁动作 `start_learning` 只有在
+   * 平台侧路径生成完成后**再刷新一次观察**才会出现在 `availableActions` 里。
+   * 若等待时只 `pause()`，后端永远不会自己产生新快照 → `start_learning` 永不出现 →
+   * 死等到 10 分钟超时（真实链路实测：path 阶段空转 7.8 分钟后超时失败）。
+   *
+   * 观察类命令用时间戳做 commandId：它不参与"同 key 续跑"，否则会被幂等复用而刷不出新快照。
+   */
+  private async refreshBlackboxObservation(sessionId: string): Promise<void> {
+    const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } })
+    if (!session) return
+    const stageResults = parseStageResults(session.stageResults)
+    const trace = Array.isArray(stageResults.blackbox?.publicTrace) ? stageResults.blackbox.publicTrace : []
+    try {
+      await blackboxVirtualLearnerRunner.runCommand({
+        sessionId,
+        operatorId: 'autopilot',
+        commandId: `autopilot-observe-${Date.now()}`,
+        kind: 'observe',
+        request: {},
+        expectedTraceCount: trace.length
+      }, () => blackboxVirtualLearnerRunner.observe(sessionId, 'autopilot'))
+    } catch (error: unknown) {
+      // 刷新失败不致命：等待循环会按间隔再试，超时上限仍然生效
+      logger.warn('[autopilot] 刷新黑盒观察失败（等待中继续）', {
+        sessionId,
+        error: asErrorLike(error).message
+      })
+    }
+  }
+
   /** 黑盒终态收口：completed（runCompleted/会话完成）或 failed，并落状态 */
   private async settleBlackboxTerminal(sessionId: string, runId: string, completedStage?: string | null) {
     const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } })
@@ -859,6 +895,8 @@ export class AutopilotService {
   private async executeBlackboxLoop(sessionId: string, runId: string): Promise<void> {
     let stepIndex = 0
     let waitingSince: number | null = null
+    /** 上次主动刷新观察的时刻（节流，避免等待期高频 observe） */
+    let lastObserveRefreshAt = 0
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -889,10 +927,16 @@ export class AutopilotService {
           })
           return
         }
+        // 主动刷新观察：快照不刷新 → start_learning 永不出现（否则死等到超时）
+        if (Date.now() - lastObserveRefreshAt >= AUTOPILOT_OBSERVE_REFRESH_INTERVAL_MS) {
+          lastObserveRefreshAt = Date.now()
+          await this.refreshBlackboxObservation(sessionId)
+        }
         await this.pause()
         continue
       }
       waitingSince = null
+      lastObserveRefreshAt = 0
 
       stepIndex += 1
       const result = await this.blackboxAdvance(sessionId, stepIndex)
@@ -1059,6 +1103,8 @@ export class AutopilotService {
   private async executeBlackboxStageLoop(sessionId: string, runId: string): Promise<void> {
     let stepIndex = 0
     let waitingSince: number | null = null
+    /** 上次主动刷新观察的时刻（节流，避免等待期高频 observe） */
+    let lastObserveRefreshAt = 0
     let baselineTaskId: string | null = null
 
     // eslint-disable-next-line no-constant-condition
@@ -1122,6 +1168,11 @@ export class AutopilotService {
               lastError: 'Path 生成等待超时（10 分钟无进展）'
             })
             return
+          }
+          // 主动刷新观察：快照不刷新 → start_learning 永不出现（否则死等到超时）
+          if (Date.now() - lastObserveRefreshAt >= AUTOPILOT_OBSERVE_REFRESH_INTERVAL_MS) {
+            lastObserveRefreshAt = Date.now()
+            await this.refreshBlackboxObservation(sessionId)
           }
           await this.pause()
           continue
