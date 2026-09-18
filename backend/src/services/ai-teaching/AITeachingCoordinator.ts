@@ -1545,6 +1545,37 @@ async function recordCheckpointResultEvidence(
  * 剥离检查点答案键（客户端投影前调用）：答案键只用于服务端代码裁决，**绝不下发**。
  * 覆盖两处暴露面：`pendingCheckpoint` 本身，以及原样返回的 `teachingState`（其中也存了一份）。
  */
+/**
+ * 消息响应里下发的 `checkpoint`：**必须先剥离答案键**。
+ *
+ * 为什么单独抽出来（18 号报告 N1）：`/messages`（含 SSE final）此前直接下发
+ * `getPendingCheckpoint(teachingState)`，而 `pendingCheckpoint` 里带着 `correctOptionIds` /
+ * `expectedKeywords`——答案键一旦下发，"代码裁决独立传感器"的反作弊前提就失效了。
+ * `/detail` 早已剥离，这里补齐唯一遗漏的出口。
+ */
+export function checkpointForMessageResult(
+  teachingState: Record<string, any> | null | undefined
+): TeachingCheckpoint | null {
+  const stripped = stripCheckpointAnswerKeys({ pendingCheckpoint: getPendingCheckpoint(teachingState) });
+  return stripped.pendingCheckpoint ?? null;
+}
+
+/**
+ * 组装本回合 `teachingState`：**先继承上一回合顶层状态，再覆盖本回合字段**。
+ *
+ * 为什么必须继承（18 号报告 N2）：本函数此前用 `{ ...currentState(运行时指标), ... }` 重建，
+ * 而运行时指标里**没有** `pendingCheckpoint` / `lastCheckpointTurn` / `checkpointHistory`——
+ * 它们只存在于上一回合的顶层。于是每次重建都把它们丢掉：
+ * 答错后 `getPendingCheckpoint` 返回 null → `submitCheckpoint` 报"理解检查不存在或已处理"，
+ * `checkpointHistory` 永远为空（DB 实测 220 会话仅 2 条）。
+ */
+export function inheritTeachingState<T extends Record<string, any>>(
+  previousTeachingState: Record<string, any> | null | undefined,
+  turnState: T
+): T & Record<string, any> {
+  return { ...(previousTeachingState || {}), ...turnState };
+}
+
 export function stripCheckpointAnswerKeys<T extends Record<string, any> | null | undefined>(teachingState: T): T {
   if (!teachingState || typeof teachingState !== 'object') return teachingState;
   const clone: Record<string, any> = { ...(teachingState as Record<string, any>) };
@@ -2644,7 +2675,7 @@ export class AITeachingOrchestrator {
       taskType: normalizedTaskType,
     });
 
-      const teachingState: Record<string, any> = {
+      const turnState: Record<string, any> = {
       ...currentState,
       analysis: effectiveTeachingOutput.analysis,
       strategies: effectiveTeachingOutput.pedagogy.strategies,
@@ -2714,6 +2745,9 @@ export class AITeachingOrchestrator {
             : parseSessionArtifacts(session.teachingState).endReason,
       },
       };
+      // 继承上一回合顶层状态后再覆盖本回合字段：否则 pendingCheckpoint / lastCheckpointTurn /
+      // checkpointHistory 会在每次重建时丢失（18 号报告 N2）。
+      const teachingState: Record<string, any> = inheritTeachingState(previousTeachingState, turnState);
 
       // 检查点产生：teaching-turn 可选输出 control.checkpoint，按规则落库为 pendingCheckpoint
       const checkpointCandidate = teachingOutput.control.checkpoint;
@@ -2852,7 +2886,7 @@ export class AITeachingOrchestrator {
           ? 'completion-candidate' as const
           : null,
       recovered,
-        checkpoint: getPendingCheckpoint(teachingState),
+        checkpoint: checkpointForMessageResult(teachingState),
         checkpointResolution,
         revision: session.revision + 1,
       };

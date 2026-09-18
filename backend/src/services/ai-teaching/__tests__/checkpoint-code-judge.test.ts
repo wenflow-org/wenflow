@@ -5,7 +5,7 @@
  * 答案是模型自己的判断，于是"检查点通过率"与"模型认为学习者懂不懂"是同一条序列（自证回路）。
  * 有了答案键，对错由代码判定，才是可用于闭环控制的独立观测量。
  */
-import { judgeCheckpointAnswer, stripCheckpointAnswerKeys } from '../AITeachingCoordinator';
+import { judgeCheckpointAnswer, stripCheckpointAnswerKeys, checkpointForMessageResult, inheritTeachingState } from '../AITeachingCoordinator';
 
 describe('judgeCheckpointAnswer：选择题按答案键做集合比对', () => {
   const single = { type: 'single_choice' as const, correctOptionIds: ['B'] };
@@ -84,5 +84,52 @@ describe('stripCheckpointAnswerKeys：答案键绝不下发', () => {
   it('空/非对象输入原样返回', () => {
     expect(stripCheckpointAnswerKeys(null)).toBeNull();
     expect(stripCheckpointAnswerKeys(undefined)).toBeUndefined();
+  });
+});
+
+describe('checkpointForMessageResult：消息响应出口也剥离答案键（18 号报告 N1）', () => {
+  it('顶层 pendingCheckpoint 带答案键时，下发版本不含 correctOptionIds/expectedKeywords', () => {
+    const out = checkpointForMessageResult({
+      pendingCheckpoint: { id: 'cp1', question: 'Q', type: 'single_choice', correctOptionIds: ['B'], expectedKeywords: ['事实'] },
+    });
+    expect(out).toEqual({ id: 'cp1', question: 'Q', type: 'single_choice' });
+    expect(out).not.toHaveProperty('correctOptionIds');
+    expect(out).not.toHaveProperty('expectedKeywords');
+  });
+
+  it('只在 sessionArtifacts 里存了一份时同样剥离', () => {
+    const out = checkpointForMessageResult({
+      sessionArtifacts: { pendingCheckpoint: { id: 'cp2', correctOptionIds: ['A'] } },
+    });
+    expect(out).toEqual({ id: 'cp2' });
+  });
+
+  it('无检查点 → null', () => {
+    expect(checkpointForMessageResult(null)).toBeNull();
+    expect(checkpointForMessageResult({})).toBeNull();
+  });
+});
+
+describe('inheritTeachingState：跨回合继承顶层状态（18 号报告 N2）', () => {
+  it('继承上一回合的 pendingCheckpoint / lastCheckpointTurn / checkpointHistory', () => {
+    const prev = {
+      pendingCheckpoint: { id: 'cp1', correctOptionIds: ['B'] },
+      lastCheckpointTurn: 5,
+      checkpointHistory: [{ checkpointId: 'cp0', passed: true }],
+      lss: 3,
+    };
+    const next = inheritTeachingState(prev, { lss: 4, analysis: { understanding: 0.7 } });
+
+    expect(next.pendingCheckpoint).toEqual({ id: 'cp1', correctOptionIds: ['B'] });
+    expect(next.lastCheckpointTurn).toBe(5);
+    expect(next.checkpointHistory).toHaveLength(1);
+    // 本回合字段覆盖旧值
+    expect(next.lss).toBe(4);
+    expect(next.analysis).toEqual({ understanding: 0.7 });
+  });
+
+  it('无上一回合状态时等价于本回合字段', () => {
+    expect(inheritTeachingState(null, { a: 1 })).toEqual({ a: 1 });
+    expect(inheritTeachingState(undefined, { a: 1 })).toEqual({ a: 1 });
   });
 });
