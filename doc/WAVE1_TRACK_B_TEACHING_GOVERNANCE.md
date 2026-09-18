@@ -114,3 +114,21 @@
 3. 教学内容有"不确定降断言"规则，且经编译/守门发布。
 4. `D_floor` + 支架 fading 生效；独立锚题探针产出 code 判定证据。
 5. 相关套件全绿（ai-teaching、learner、prompts 门禁、routing/contract）。
+
+---
+
+## 6. 执行记录（2026-09-18）
+
+| 项 | 提交 | 结果 |
+|---|---|---|
+| B1 真实侧静默降级 + DNR | `21738b8d` | LearnerExitService / ReviewCompletedConsumer 两处真静默改结构化打标；新增只读 DNR 脚本（近似，非真 SLO）；含 `misconception-ledger.service.ts` 的 `rethrowOnError` 小改（使上层能归因） |
+| B2 输入围栏 + 注入条款 | `5f59c904` + `6285168d` | `input-fence.ts`（纯函数，datamark）+ teaching-turn 三条注入/防套取规则；**修正**：围栏只作用于模型 payload，落库保持学生原文（`fenceLearnerMessagesForModel`） |
+| B3 教学内容诚实 | `760ff281` | teaching-turn / session-wrapup 各加 3 条"知识性断言降断言/不编造具体值/数学可复核"规则；门禁 29-0、sync in-sync |
+| B4 公平最小层（一）D_floor | `a97fcc24` | 降档最多低于基线 1 档且绝对值≥3；只约束降档；输出/evidence 增 `floor`/`floorApplied`；learner+coordinators 33 套件 289 例通过 |
+| B4 公平最小层（二）审计 | `e643d494` | 纯函数公平审计 + 只读脚本（默认排除虚拟学习者）；标记"连续低于基线/总是降档/多数贴地板/均值≥1 档"候选 |
+
+**回归**：B1 相关（learner/ai-teaching/contract/routes）与 B4（learner/coordinators）套件全绿；prompts 门禁 lint 29/29、core:check 29 in-sync、snapshots/handoff/fields-sync 0 违规；`tsc`/`eslint` 干净。
+
+**B4 未做（有意延后，非遗漏）**：
+- **独立锚题探针**：需要与检查点出题/证据写入的运行时集成（属教学链路核心），本波未动，留作 Wave 2 首项（已有 D_floor 作为结构性护栏 + 公平审计作为观测面）。
+- **支架双向退出（fading）**：复核后确认 `adjusted` 每任务都由基线重算，负荷理由消失即自动撤回支架；"升档口"由成功率带承担（N3 修复后已能打开）。若再加一条独立 fading 规则，会与"知识类理由只挡升档"的既有政策冲突，故不加。
