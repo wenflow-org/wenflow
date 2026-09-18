@@ -231,7 +231,13 @@ const CHECKPOINT_TRIGGER_MIN_UNDERSTANDING = 0.6;
  * ⇒ 独立传感器没有样本 ⇒ 成功率带永远打不开（§7 P1-1 的前置）。触发条件都是可复算的，本就该由代码给。
  *
  * 条件（全部满足）：① 没有待处理检查点（不堆题）；② 距上次检查点 ≥ `CHECKPOINT_MIN_TURNS` 条消息；
- * ③ 不在收尾阶段；④ 上一轮确有进展（最近一条带 analysis 的助手回合 understanding ≥ 门槛）。
+ * ③ 不在 `wrapup`；④ 上一轮确有进展（最近一条带 analysis 的助手回合 understanding ≥ 门槛）。
+ *
+ * **允许 `ready_to_close`（18 号报告 N3）**：原先 ③ 把 `ready_to_close` 一并排除，但它恰恰是
+ * "理解度高 → 完成候选 → 待收尾"的常见落点——与 ④ 叠加后，常规课几乎永远凑不齐条件
+ * （DB 实测 220 会话 `pendingCheckpoint` 0 条、`checkpointHistory` 仅 2 条）。
+ * "收尾当轮"是否真的落库另有护栏（协调器建检查点时的 `!completionReady`），
+ * 因此这里放开**不会**留下"没人答的检查点"。
  */
 export function shouldEmitCheckpoint(
   session: { messages: Array<{ role: string; analysis?: any }> },
@@ -241,7 +247,7 @@ export function shouldEmitCheckpoint(
   const lastTurn = Number(teachingState?.lastCheckpointTurn);
   if (Number.isFinite(lastTurn) && session.messages.length - lastTurn < CHECKPOINT_MIN_TURNS) return false;
   const stage = String(teachingState?.classroomContext?.stage?.current ?? '');
-  if (stage === 'ready_to_close' || stage === 'wrapup') return false;
+  if (stage === 'wrapup') return false;
   const lastAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
   const understanding = Number(lastAnalysis?.understanding);
   return Number.isFinite(understanding) && understanding >= CHECKPOINT_TRIGGER_MIN_UNDERSTANDING;

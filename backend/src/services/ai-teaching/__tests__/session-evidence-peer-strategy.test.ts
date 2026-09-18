@@ -80,8 +80,8 @@ describe('shouldEmitCheckpoint：出题触发由代码给（2026-09-17）', () =
     expect(shouldEmitCheckpoint(session(0.8, 10), { lastCheckpointTurn: 5 })).toBe(true);
   });
 
-  it('收尾阶段 → 不出', () => {
-    expect(shouldEmitCheckpoint(session(0.8), { classroomContext: { stage: { current: 'ready_to_close' } } })).toBe(false);
+  it('ready_to_close 可以出题（18 号报告 N3：它正是"待收尾确认"的落点）；wrapup 不出', () => {
+    expect(shouldEmitCheckpoint(session(0.8), { classroomContext: { stage: { current: 'ready_to_close' } } })).toBe(true);
     expect(shouldEmitCheckpoint(session(0.8), { classroomContext: { stage: { current: 'wrapup' } } })).toBe(false);
   });
 
