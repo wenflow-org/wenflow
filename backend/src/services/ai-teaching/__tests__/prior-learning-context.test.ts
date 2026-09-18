@@ -8,7 +8,7 @@
  * 于是 `priorLearningContext` 恒为真值，开场提示词第 45 条便指示模型
  * 「开场可自然带一句'前面 X 已经稳了'」。
  */
-import { buildPriorMilestoneMastery } from '../TeachingContextBuilder';
+import { buildPriorMilestoneMastery, readRecentFrustrationStreak } from '../TeachingContextBuilder';
 
 const snapshotWith = (milestoneProgress: unknown) => ({
   knowledgeMemory: { currentPath: { milestoneProgress } },
@@ -39,5 +39,31 @@ describe('buildPriorMilestoneMastery（前序阶段掌握汇总）', () => {
     expect(buildPriorMilestoneMastery({})).toEqual([]);
     expect(buildPriorMilestoneMastery(snapshotWith('not-an-array'))).toEqual([]);
     expect(buildPriorMilestoneMastery(snapshotWith([null, { stageNumber: 'x' }]))).toEqual([]);
+  });
+});
+
+/**
+ * 情感闭环（§4.5）的取数口：连续受挫轮数来自上一节课的会话状态。
+ * 只读且必须防御式——"读不到"不能被当成"受挫"（否则会莫名降档）。
+ */
+describe('readRecentFrustrationStreak（上一节课的连续受挫轮数）', () => {
+  it('对象形态：取 learnerStateContext.frustratedStreak', () => {
+    expect(readRecentFrustrationStreak({ teachingState: { learnerStateContext: { frustratedStreak: 3 } } })).toBe(3);
+  });
+
+  it('字符串形态（JSON 列）同样能取', () => {
+    expect(readRecentFrustrationStreak({
+      teachingState: JSON.stringify({ learnerStateContext: { frustratedStreak: 2 } }),
+    })).toBe(2);
+  });
+
+  it('缺失/非法/负数一律 0（读不到 ≠ 受挫）', () => {
+    expect(readRecentFrustrationStreak(null)).toBe(0);
+    expect(readRecentFrustrationStreak(undefined)).toBe(0);
+    expect(readRecentFrustrationStreak({})).toBe(0);
+    expect(readRecentFrustrationStreak({ teachingState: 'not-json' })).toBe(0);
+    expect(readRecentFrustrationStreak({ teachingState: { learnerStateContext: {} } })).toBe(0);
+    expect(readRecentFrustrationStreak({ teachingState: { learnerStateContext: { frustratedStreak: -1 } } })).toBe(0);
+    expect(readRecentFrustrationStreak({ teachingState: { learnerStateContext: { frustratedStreak: 'x' } } })).toBe(0);
   });
 });

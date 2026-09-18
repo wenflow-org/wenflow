@@ -50,6 +50,7 @@ import {
 } from '../services/learner/independent-success-band.service';
 import { DEFAULT_BKT_PARAMS, BKT_PARAM_TIERS } from '../services/learner/concept-belief.service';
 import { FSRS_DEFAULT_RETENTION, FSRS_MIN_FIRST_INTERVAL_DAYS } from '../services/memory/fsrs';
+import { FRUSTRATION_DECREASE_MIN_STREAK } from '../services/learner/TaskDifficultyAdjustmentService';
 import {
   CHECKPOINT_MIN_TURNS,
   CHECKPOINT_TRIGGER_MIN_UNDERSTANDING,
@@ -199,6 +200,16 @@ export const SCIENTIFIC_CONSTANTS: ScientificConstant[] = [
     source: '文献',
     ref: '同上约束（2026-09-17 由 0.15 修正到 0.1，原值违反约束）',
     resolve: () => BKT_PARAM_TIERS.hard.pS,
+  },
+
+  // ---------- 情感闭环（§4.5）：软传感器只做减速 ----------
+  {
+    key: 'emotion.frustration.minStreakToDecelerate',
+    value: 2,
+    source: '工程启发式',
+    note: '连续受挫 ≥2 轮才降档：与 PF 逃生舱同阈值（避免单轮情绪波动就降档）。'
+      + '软传感器（LLM 观测的 emotionalState）**只允许降档/减速**，结构上不可能成为升档依据。',
+    resolve: () => FRUSTRATION_DECREASE_MIN_STREAK,
   },
 
   // ---------- 检查点：出题时机（代码给时机，模型给内容） ----------

@@ -266,3 +266,48 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
     });
   });
 });
+
+/**
+ * 情感闭环（§4.5）：连续受挫 → 降档/减速的信号化。
+ * 纪律：`emotionalState`/`frustratedStreak` 是 **LLM 软传感器**，
+ * **只允许降档/减速**，绝不能成为升档依据。
+ */
+describe('decideTaskDifficulty：连续受挫只降档/减速（§4.5）', () => {
+  const upgradeReady = () => ({
+    ...normalInput(),
+    learningControlState: { paceMode: 'push', conceptLoad: 'low', challengeLevelCap: 'high' } as const,
+    successBand: { action: 'upgrade' as const, rate: 1, sample: 10 },
+  });
+
+  it('基线自检：无受挫时该输入确实会升档（否则下面的对比没意义）', () => {
+    expect(decideTaskDifficulty(upgradeReady()).direction).toBe('increase');
+  });
+
+  it('连续受挫 ≥2 轮 → 降档，理由计入（软传感器只做减速）', () => {
+    const d = decideTaskDifficulty({ ...normalInput(), recentFrustrationStreak: 2 });
+    expect(d.direction).toBe('decrease');
+    expect(d.reasons).toContain('frustration_streak');
+    expect(d.adjusted).toBeLessThan(d.baseline);
+  });
+
+  it('只受挫 1 轮 → 不动（与 PF 逃生舱同阈值 2）', () => {
+    const d = decideTaskDifficulty({ ...normalInput(), recentFrustrationStreak: 1 });
+    expect(d.direction).toBe('keep');
+    expect(d.reasons).not.toContain('frustration_streak');
+  });
+
+  it('受挫中遇到"带说太容易" → 暂缓升档（既不升、也不额外降）', () => {
+    const baseline = decideTaskDifficulty(upgradeReady());
+    const frustrated = decideTaskDifficulty({ ...upgradeReady(), recentFrustrationStreak: 2 });
+    expect(frustrated.direction).toBe('keep');
+    expect(frustrated.adjusted).toBe(baseline.baseline);
+    expect(frustrated.adjusted).toBeLessThan(baseline.adjusted);
+  });
+
+  it('缺省/非法值一律按 0（读不到 ≠ 受挫）', () => {
+    expect(decideTaskDifficulty(normalInput()).direction).toBe('keep');
+    expect(decideTaskDifficulty({ ...normalInput(), recentFrustrationStreak: null }).direction).toBe('keep');
+    expect(decideTaskDifficulty({ ...normalInput(), recentFrustrationStreak: Number.NaN }).direction).toBe('keep');
+    expect(decideTaskDifficulty({ ...normalInput(), recentFrustrationStreak: -3 }).direction).toBe('keep');
+  });
+});

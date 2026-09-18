@@ -685,9 +685,9 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
 | 问题 | 影响 |
 |---|---|
 | ~~**`lapses` 恒为 0**~~ → **已落库（2026-09-17）**（新增列 `memory_traces.fsrsLapses`，5 处硬编码改为读列/写结果） | **口径修正（实测）**：`enable_short_term: false` 下 lapses **不改变** stability/difficulty/interval（ts-fsrs 内部据此判 `Relearning`，但短期步进关闭时与 `Review` 同结果）⇒ 价值在**计数本身**（卡壳率 / leech 判定 / E4 参数拟合维度），不是"间隔变短" |
-| `enable_short_term: false` | 短期学习步进关闭，首日节奏退化为近似固定 1 天 |
+| `enable_short_term: false` | 短期学习步进关闭，首日节奏退化为近似固定 1 天。**决定（2026-09-18）：维持**——开启短期步进会让同日多次复习排进同一天，与"到期 > 0 才排"的配额口径打架；代价（首日≈1 天）已知且可接受。 |
 | **直接用默认参数、无按用户优化** | FSRS 默认 17 参数在基准里 log loss 0.36–0.38（优化后 0.33）→ **兑现不了选型收益** |
-| **无逾期补偿 / 无积压上限 / 无 cram 模式** | 435 条到期 + 每课 1 条 → 积压单调增长（§3.3） |
+| **无逾期补偿 / 无积压上限 / 无 cram 模式** | 435 条到期 + 每课 1 条 → 积压单调增长（§3.3）。**决定（2026-09-18）：不加 cram，维持"每日额度 + 顺延 + 单节课份额上限"三件套**——FSRS 的下次间隔从**实际复习日**起算（代码注释与实现一致），**逾期不会复合放大**，因此不需要额外的 overdue compensation；而 cram 是拿保留率换吞吐，缺证据支持。触发再议的条件：逾期分布显示复习长期挤在极少数天（用 `audit-review-loop.ts` 回看）。 |
 | `mode=review` 走**两条写路径**（`applyReviewExtraction` 直接写 + `review:completed` 消费者再写一次 FSRS） | 可能重复调度 / `extractionCount` 重复自增【B】 |
 
 **(2) 难度自适应：一个**「只有刹车、没有油门」**的控制律 —— 这是最深的科学性风险**
@@ -741,7 +741,18 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
   `frustratedStreak` **已进一处决策**（PF 模式逃生舱：连续 ≥2 轮受挫 → `ready_to_close`，`AITeachingCoordinator:821`），
   但**仍不进难度/节奏**；`emotionalState`/`engagement` 只进提示词上下文。→ 未闭环部分：受挫/疲劳 → **节奏与支架**的信号化
   （注意：这些是 LLM 观测=软传感器，只宜作"降档/减速"方向，不能作升档依据）。毅力、自我效能、目标定向均未建模。
+  - **已闭环（2026-09-18）**：连续受挫 → **降档/减速**。`frustratedStreak` 由
+    `TeachingContextBuilder.readRecentFrustrationStreak()` 从上一节课状态取出，喂给
+    `decideTaskDifficulty.recentFrustrationStreak`，命中（≥2 轮）时产生降档理由 `frustration_streak`
+    ⇒ 计入 delta（降档）并挡升档；**同口径常量已登记**（`emotion.frustration.minStreakToDecelerate`）。
+    另一处补丁：`bandAction === 'upgrade'`（带说太容易）时若正处受挫中 → **暂缓升档（hold）**，
+    既不升也不额外降（同一份软信号不用两次）。软传感器**结构上无升档路径**（不在 `canIncrease` 可达集合里）。
 - **社会/同伴**：有 `peer-reinforcement`，但不进入学习者状态回路。
+  - **决定（2026-09-18）：保持不进**。理由：同伴介入后的表现**不是独立证据**（有外援），
+    计入掌握会把"被扶着做出来"记成"自己会了"——与 §7 P1-1 的"独立成功率带只收 `judgedBy='code'`
+    的独立信号"直接冲突。现状：peer 只影响当轮教学（更小步骤/例子），不进 `learner_evidence` 与状态量。
+    将来若要建模"受援程度"，应作为**独立字段**（assisted / unaided 标记，与温故结果三档同一思路），
+    而不是混进掌握度。
 - **结果测量**：无延迟后测/迁移测（见 §6）。
 
 ---

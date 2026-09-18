@@ -50,6 +50,12 @@ export interface TaskDifficultyInput {
     prerequisiteGapCount?: number;
   } | null;
   /**
+   * 最近一次课上的**连续受挫轮数**（软传感器，§4.5 情感闭环）。
+   * 纪律：软传感器**只允许减速/降档**——它在 `LOAD_BASED_DECREASE_REASONS` 里，
+   * 因此只压 delta 向下、并挡升档；永远不会成为升档依据。
+   */
+  recentFrustrationStreak?: number | null;
+  /**
    * 独立成功率带判定（2026-09-17，§7 P1-1）：来自**代码裁决**的检查点结果
    * （`resolveSuccessBandVerdict`）。缺省 = 无独立样本 → 走旧的 canIncrease 口径（行为不变）。
    */
@@ -134,7 +140,14 @@ export const LOAD_BASED_DECREASE_REASONS = [
   'path_load_unbalanced',
   'fatigue_high',
   'global_imbalance',
+  'frustration_streak',
 ] as const;
+
+/**
+ * 触发「连续受挫→降档」的最小轮数：与 PF 逃生舱同一阈值（§4.5 情感闭环）。
+ * 单独抽成常量便于回看与测试；也登记进 constants-provenance。
+ */
+export const FRUSTRATION_DECREASE_MIN_STREAK = 2;
 
 /**
  * 知识类理由：说的是"该教什么/该补什么"，**不是"这节课该多难"**。
@@ -180,10 +193,13 @@ function collectReasons(
   if (input.fatigueRisk === 'high' || input.recommendedPacing === 'slow' || input.globalMetrics.lf >= 6) {
     reasons.push('fatigue_high');
   }
-  // 学习者级：总负荷失衡（例如当天课多）→ 同样降档。层级要说清：这是全局信号，不是"本路径失衡"。
+  // 学习者级：总负担失衡（例如当天课多）→ 同样降档。层级要说清：这是全局信号，不是"本路径失衡"。
   // 该信号在别处还有另一处消费：重排信号里的 `lsb_negative`（建议减速/补强）——
   // 节奏（derivePacing）刻意**不再**重复消费它，否则同一个信号会同时压低难度、放慢节奏、触发重排，三处叠加。
   if (!lessonScopeIsPath && input.globalMetrics.lsb < 0) reasons.push('global_imbalance');
+  // 情感（软传感器，§4.5）：连续受挫 → 降档/减速。**只降不升**——它在 LOAD_BASED 集合里，
+  // 结构上就进不了 canIncrease 的升档路径（软传感器不得作为升档依据）。
+  if ((input.recentFrustrationStreak ?? 0) >= FRUSTRATION_DECREASE_MIN_STREAK) reasons.push('frustration_streak');
   // 知识证据：脆弱/挣扎/前置缺口（只挡升档，不降档）
   const fragile = input.knowledgeSignals?.fragileCount ?? 0;
   const struggling = input.knowledgeSignals?.strugglingCount ?? 0;
@@ -222,10 +238,13 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
   // 只有负荷类理由降档（知识类只挡升档）；合计最多 -2；带理由计入降档
   const decreaseReasons = reasons.filter((reason) => DECREASE_REASON_SET.has(reason));
   let delta = -Math.min(decreaseReasons.length, 2);
+  // 情感（软传感器，§4.5）：连续受挫中 → 不升。**只做减速**：可以延缓升档，不参与升档；
+  // 同时也不在这里额外降一档（它已经作为降档理由计入上面的 delta），避免同一份软信号用两次。
+  const frustrationActive = (input.recentFrustrationStreak ?? 0) >= FRUSTRATION_DECREASE_MIN_STREAK;
   if (bandAction === 'upgrade') {
     // 带高于上沿 = 太容易：直接升一档，**不再**要求"无任何理由 + cap=high"同时成立
     // （旧口径正是"只有刹车没有油门"的来源，审计 §4.2(2)）。安全仍由 ceiling 封顶兜底。
-    delta = 1;
+    delta = frustrationActive ? 0 : 1;
   } else if (canIncrease(input, lesson, reasons.filter((reason) => reason !== 'success_rate_above_band'))) {
     delta = 1;
   }

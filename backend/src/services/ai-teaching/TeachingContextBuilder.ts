@@ -666,7 +666,30 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
 }
 
 /**
- * 汇总前序阶段掌握（供 priorLearningContext.priorMilestoneMastery）。
+ * 取**上一节课**留下的「连续受挫轮数」（§4.5 情感闭环：受挫 → 降档/减速的信号化）。
+ *
+ * 数据源：`teachingState.learnerStateContext.frustratedStreak`（回合级计算、随会话状态持久化）。
+ * 防御式只读：任何缺失/非法都按 0（= 不降档），避免"读不到"被误当成"受挫"。
+ *
+ * @internal 导出供单测
+ */
+export function readRecentFrustrationStreak(previousSession: unknown): number {
+  const raw = (previousSession as { teachingState?: unknown } | null | undefined)?.teachingState;
+  let parsed: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return 0;
+    }
+  }
+  const streak = (parsed as { learnerStateContext?: { frustratedStreak?: unknown } } | null | undefined)
+    ?.learnerStateContext?.frustratedStreak;
+  const n = Number(streak);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** 汇总前序阶段掌握（供 priorLearningContext.priorMilestoneMastery）。
  *
  * 只保留**确有前序进展**的阶段（completedTasks > 0）：全新学习者的当前路径上
  * 所有阶段都是 `completedTasks: 0 / masteryState: 'unknown'`，若照单全收，
@@ -788,6 +811,9 @@ export async function buildTeachingScenarioContext(
         strugglingCount: learnerSnapshot.knowledgeMemory.globalSignals.strugglingConcepts.length,
         prerequisiteGapCount: learnerSnapshot.knowledgeMemory.currentPath?.prerequisiteGaps.length ?? 0,
       },
+      // 情感（软传感器，§4.5）：取**上一节课**留下的连续受挫轮数——软传感器只允许降档/减速，
+      // 服务内部把它归入 LOAD_BASED_DECREASE_REASONS（结构上不可能成为升档依据）。
+      recentFrustrationStreak: readRecentFrustrationStreak(previousSession),
       // 独立成功率带（§7 P1-1）：只用**代码裁决**的检查点结果驱动档位；
       // 无样本 → hold → 退回旧的 canIncrease 口径（行为与改造前一致）
       successBand: await resolveSuccessBandVerdict(userId, { pathId: path.id }).catch(() => null),
