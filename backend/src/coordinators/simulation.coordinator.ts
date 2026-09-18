@@ -31,6 +31,7 @@ import { safeJsonParse } from '../utils/safe-json';
 import { asErrorLike } from '../virtual-lab/vlab-types';
 import { resolveSessionBudget } from '../virtual-lab/session-budget';
 import simulatedDayService from '../services/virtual-lab/simulated-day.service';
+import { appendSimulationLog, boundSimulationLog } from '../services/virtual-lab/simulation-log-buffer';
 import { simulatedNowOr } from '../services/virtual-lab/simulation-clock-context';
 import { isSimulatedClockActive } from '../services/virtual-lab/simulation-clock-context';
 import type { LeaseClientLike } from '../virtual-lab/vlab-types';
@@ -600,7 +601,8 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       logs = JSON.parse(session.logs || '[]');
     } catch { /* 解析失败时保留默认值 */ }
 
-    logs.push(log);
+    // 按**字节预算**封顶（实测出现过单行 31.9 MB：765 条 teaching-response，单条最大 123 KB）
+    logs = appendSimulationLog(logs, log);
 
     await this.assertCurrentSessionLeaseOwned(sessionId);
     await prisma.virtual_sessions.update({
@@ -814,7 +816,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         completedTasks: options.resetTaskProgress ? 0 : session.completedTasks,
         totalTasks: options.resetTaskProgress ? 0 : session.totalTasks,
         stageResults: JSON.stringify(stageResults),
-        logs: JSON.stringify(nextLogs),
+        logs: JSON.stringify(boundSimulationLog(nextLogs)),
         completedAt: options.clearCompletedAt ? null : session.completedAt,
         updatedAt: new Date()
       }

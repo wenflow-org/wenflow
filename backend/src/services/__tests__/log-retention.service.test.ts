@@ -7,6 +7,8 @@ const mockPromptDeleteMany = jest.fn()
 const mockLoginAttemptsFindMany = jest.fn()
 const mockLoginAttemptsDeleteMany = jest.fn()
 const mockQueryRawUnsafe = jest.fn()
+const mockVirtualSessionsFindMany = jest.fn()
+const mockVirtualSessionsUpdate = jest.fn()
 const mockLogger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
 const mockRunBackgroundTask = jest.fn()
 
@@ -17,6 +19,7 @@ jest.mock('../../config/database', () => ({
     llm_execution_attempts: { findMany: mockLlmFindMany, deleteMany: mockLlmDeleteMany },
     prompt_call_logs: { findMany: mockPromptFindMany, deleteMany: mockPromptDeleteMany },
     login_attempts: { findMany: mockLoginAttemptsFindMany, deleteMany: mockLoginAttemptsDeleteMany },
+    virtual_sessions: { findMany: mockVirtualSessionsFindMany, update: mockVirtualSessionsUpdate },
     $queryRawUnsafe: mockQueryRawUnsafe
   }
 }))
@@ -86,6 +89,8 @@ describe('LogRetentionService', () => {
     mockLlmFindMany.mockResolvedValue([])
     mockPromptFindMany.mockResolvedValue([])
     mockLoginAttemptsFindMany.mockResolvedValue([])
+    mockVirtualSessionsFindMany.mockResolvedValue([])
+    mockVirtualSessionsUpdate.mockResolvedValue({})
     mockQueryRawUnsafe.mockResolvedValue([])
   })
 
@@ -313,5 +318,65 @@ describe('LogRetentionService', () => {
     release()
     await Promise.all([running, stopping])
     expect(stopped).toBe(true)
+  })
+})
+
+describe('LogRetentionService · 旧虚拟会话 logs 裁剪', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockAgentFindMany.mockResolvedValue([])
+    mockLlmFindMany.mockResolvedValue([])
+    mockPromptFindMany.mockResolvedValue([])
+    mockLoginAttemptsFindMany.mockResolvedValue([])
+    mockQueryRawUnsafe.mockResolvedValue([])
+  })
+
+  const hugeLogs = (count: number) =>
+    JSON.stringify(Array.from({ length: count }, (_, i) => ({ phase: 'teaching-response', index: i, aiResponse: 'x'.repeat(2000) })))
+
+  it('超预算的旧会话 logs 被裁到预算内，只改列不删行', async () => {
+    const raw = hugeLogs(200) // ≈ 400 KB
+    mockVirtualSessionsFindMany.mockResolvedValue([{ id: 'vs1', logs: raw }])
+    const service = new LogRetentionService({ virtualSessionLogMaxBytes: 64 * 1024 })
+
+    const result = await service.run()
+
+    expect(result!.virtualSessions).toMatchObject({ scanned: 1, trimmed: 1 })
+    expect(mockVirtualSessionsUpdate).toHaveBeenCalledTimes(1)
+    const updateArg = mockVirtualSessionsUpdate.mock.calls[0][0]
+    expect(updateArg.where).toEqual({ id: 'vs1' })
+    expect(updateArg.data.logs.length).toBeLessThanOrEqual(64 * 1024)
+    // 保留最新现场
+    expect(JSON.parse(updateArg.data.logs).at(-1).index).toBe(199)
+  })
+
+  it('已在预算内的会话不动（避免无谓写）', async () => {
+    mockVirtualSessionsFindMany.mockResolvedValue([{ id: 'vs2', logs: '[{"phase":"goal"}]' }])
+    const service = new LogRetentionService({ virtualSessionLogMaxBytes: 64 * 1024 })
+
+    const result = await service.run()
+
+    expect(result!.virtualSessions).toMatchObject({ scanned: 1, trimmed: 0 })
+    expect(mockVirtualSessionsUpdate).not.toHaveBeenCalled()
+  })
+
+  it('dryRun：只统计不写库', async () => {
+    mockVirtualSessionsFindMany.mockResolvedValue([{ id: 'vs3', logs: hugeLogs(200) }])
+    const service = new LogRetentionService({ virtualSessionLogMaxBytes: 64 * 1024, dryRun: true })
+
+    const result = await service.run()
+
+    expect(result!.virtualSessions).toMatchObject({ scanned: 1, trimmed: 1 })
+    expect(mockVirtualSessionsUpdate).not.toHaveBeenCalled()
+  })
+
+  it('logs 非法 JSON：不动（宁可不裁也不毁数据）', async () => {
+    mockVirtualSessionsFindMany.mockResolvedValue([{ id: 'vs4', logs: '{不是 JSON'.padEnd(200 * 1024, 'x') }])
+    const service = new LogRetentionService({ virtualSessionLogMaxBytes: 64 * 1024 })
+
+    const result = await service.run()
+
+    expect(result!.virtualSessions).toMatchObject({ scanned: 1, trimmed: 0 })
+    expect(mockVirtualSessionsUpdate).not.toHaveBeenCalled()
   })
 })

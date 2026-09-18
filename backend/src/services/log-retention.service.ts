@@ -2,12 +2,15 @@ import prisma from '../config/database';
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 import { runBackgroundTask } from './background-task-tracker.service';
+import { boundSimulationLog } from './virtual-lab/simulation-log-buffer';
 import type { ApplicationLifecycle } from './application-lifecycle.service';
 
 export const DEFAULT_LOG_RETENTION_DAYS = 90;
 export const DEFAULT_LOG_RETENTION_INTERVAL_HOURS = 6;
 export const LOG_RETENTION_CUTOFF_BUFFER_MS = 60 * 60 * 1000;
 export const LOG_RETENTION_BATCH_SIZE = 5000;
+/** 旧虚拟会话 `logs` 裁剪后的字节预算（比写入期预算更小：这些是过期现场，只留尾部） */
+export const DEFAULT_VIRTUAL_SESSION_LOG_MAX_BYTES = 256 * 1024;
 
 const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
 const MILLIS_PER_HOUR = 60 * 60 * 1000;
@@ -36,8 +39,25 @@ export interface LogRetentionRunResult {
   cutoff: Date;
   skipped?: boolean;
   tables: LogRetentionTableResult[];
+  /** 旧虚拟会话 `logs` 裁剪结果（只裁列、不删行） */
+  virtualSessions?: VirtualSessionTrimResult;
   totalDeletedRows: number;
   durationMs: number;
+}
+
+export interface VirtualSessionTrimResult {
+  scanned: number;
+  trimmed: number;
+  durationMs: number;
+}
+
+/**
+ * 旧虚拟会话 logs 裁剪用的最小委托（仅用到 findMany/update，便于单测注入 mock）。
+ * `updatedAt` 不参与裁剪条件之外的排序，故可安全按 id 游标翻页。
+ */
+interface VirtualSessionLogModel {
+  findMany(args: Record<string, unknown>): Promise<Array<{ id: string; logs: string | null }>>;
+  update(args: { where: { id: string }; data: { logs: string } }): Promise<unknown>;
 }
 
 interface LogRetentionFindManyArgs {
@@ -91,11 +111,21 @@ export function isLogRetentionDryRun(value: string | undefined): boolean {
   return value === '1';
 }
 
+export function resolveVirtualSessionLogMaxBytes(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.VIRTUAL_SESSION_LOG_RETENTION_MAX_BYTES;
+  if (!raw || raw.trim() === '') return DEFAULT_VIRTUAL_SESSION_LOG_MAX_BYTES;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 16 * 1024) return DEFAULT_VIRTUAL_SESSION_LOG_MAX_BYTES;
+  return Math.floor(parsed);
+}
+
 export interface LogRetentionServiceOptions {
   database?: LogRetentionDatabase;
   retentionDays?: number;
   intervalMs?: number;
   dryRun?: boolean;
+  /** 旧虚拟会话 logs 裁剪预算（字节）；<=0 则关闭该步骤 */
+  virtualSessionLogMaxBytes?: number;
   lifecycle?: Pick<ApplicationLifecycle, 'isDraining'>;
 }
 
@@ -107,6 +137,7 @@ export class LogRetentionService {
   private readonly retentionDays: number;
   private readonly intervalMs: number;
   private readonly dryRun: boolean;
+  private readonly virtualSessionLogMaxBytes: number;
   private lifecycle: Pick<ApplicationLifecycle, 'isDraining'> | null;
 
   constructor(options: LogRetentionServiceOptions = {}) {
@@ -114,6 +145,7 @@ export class LogRetentionService {
     this.retentionDays = options.retentionDays ?? resolveLogRetentionDays(process.env.LOG_RETENTION_DAYS);
     this.intervalMs = options.intervalMs ?? resolveLogRetentionIntervalMs(process.env.LOG_RETENTION_INTERVAL_HOURS);
     this.dryRun = options.dryRun ?? isLogRetentionDryRun(process.env.LOG_RETENTION_DRY_RUN);
+    this.virtualSessionLogMaxBytes = options.virtualSessionLogMaxBytes ?? resolveVirtualSessionLogMaxBytes();
     this.lifecycle = options.lifecycle ?? null;
   }
 
@@ -220,15 +252,75 @@ export class LogRetentionService {
       });
     }
 
+    const virtualSessions = await this.trimVirtualSessionLogs(cutoff);
+
     await this.checkpoint();
 
     return {
       dryRun: this.dryRun,
       cutoff,
       tables,
+      virtualSessions,
       totalDeletedRows: tables.reduce((sum, item) => sum + item.deletedRows, 0),
       durationMs: Date.now() - startedAt
     };
+  }
+
+  /**
+   * 旧虚拟会话 `logs` 裁剪：只改列、不删行。
+   *
+   * 为什么需要：虚拟会话的 `logs` 是追加式轨迹，实测有**单行 31.9 MB**（整表 92 MB 几乎全在此）。
+   * VACUUM 只回收 freelist 空闲页，**不会**缩小仍存活的大字段——必须先把列裁小。
+   */
+  private async trimVirtualSessionLogs(cutoff: Date): Promise<VirtualSessionTrimResult> {
+    const startedAt = Date.now();
+    const budget = this.virtualSessionLogMaxBytes;
+    const delegate = (this.database as unknown as { virtual_sessions?: VirtualSessionLogModel }).virtual_sessions;
+    if (budget <= 0 || !delegate?.findMany || !delegate?.update) {
+      return { scanned: 0, trimmed: 0, durationMs: 0 };
+    }
+    let cursor: string | null = null;
+    let scanned = 0;
+    let trimmed = 0;
+    for (;;) {
+      const rows = await delegate.findMany({
+        where: { updatedAt: { lt: cutoff } },
+        orderBy: { id: 'asc' },
+        take: LOG_RETENTION_BATCH_SIZE,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        select: { id: true, logs: true }
+      });
+      if (rows.length === 0) break;
+      for (const row of rows) {
+        scanned += 1;
+        const raw = typeof row.logs === 'string' ? row.logs : '';
+        if (raw.length <= budget) continue;
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          // 解析不了的不动：宁可不裁，也不毁数据
+          continue;
+        }
+        const bounded = JSON.stringify(boundSimulationLog(Array.isArray(parsed) ? parsed : [], budget));
+        if (bounded.length >= raw.length) continue;
+        if (!this.dryRun) {
+          await delegate.update({ where: { id: row.id }, data: { logs: bounded } });
+        }
+        trimmed += 1;
+      }
+      cursor = rows[rows.length - 1].id;
+      if (rows.length < LOG_RETENTION_BATCH_SIZE) break;
+    }
+    const durationMs = Date.now() - startedAt;
+    logger.info('[log-retention] 虚拟会话 logs 裁剪完成', {
+      scanned,
+      trimmed,
+      budget,
+      dryRun: this.dryRun,
+      durationMs
+    });
+    return { scanned, trimmed, durationMs };
   }
 
   /** 分页循环删除：每次取最旧的一批，直到空批；每批独立事务（Prisma 自动） */
