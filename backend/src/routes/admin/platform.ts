@@ -41,6 +41,8 @@ import { aiCapabilityHealthService } from '../../services/ai-capability-health.s
 import { loadSkillsBookRaw, getActiveSkillIds } from '../../services/skill-registry/skills-file';
 import { analyzeW2 } from '../../services/skills-readiness.service';
 import { deriveTeachingSessionProgress } from './teaching-sessions.progress';
+import { aggregateHandoffEdgeUsage } from '../../services/topology/handoff-edge-usage';
+import { attachEdgeStats } from '../../services/topology/topology-edge-stats';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -1289,7 +1291,7 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
     const since = sinceMs ? new Date(Date.now() - sinceMs) : null;
     const agentCallWhere = since ? { calledAt: { gte: since } } : {};
 
-    const [skillStatsMap, callGroups, successGroups] = await Promise.all([
+    const [skillStatsMap, callGroups, successGroups, edgeLogRows] = await Promise.all([
       getUnifiedSkillStats(skillIds, statsRange as any),
       prisma.agent_call_logs.groupBy({
         by: ['agentId'],
@@ -1301,6 +1303,13 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
         by: ['agentId', 'success'],
         where: agentCallWhere,
         _count: { _all: true }
+      }),
+      // Q9 后续：隶属边（callerAgent → agentId）运行时用量；同一窗口，纯 join 在下方完成
+      prisma.agent_call_logs.findMany({
+        where: agentCallWhere,
+        select: { callerAgent: true, agentId: true, success: true, calledAt: true },
+        orderBy: { calledAt: 'desc' },
+        take: 200000
       }),
     ]);
 
@@ -1398,18 +1407,27 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
       }
     }
 
+    // Q9 后续：把窗口内已聚合的 handoff 边用量贴到 membership 边（caller=agent.id → callee=skill.id）
+    const edgeUsage = aggregateHandoffEdgeUsage(edgeLogRows, since ? { since } : {});
+    const edgesWithStats = attachEdgeStats(edges, edgeUsage.edges, statsRange);
+
     const summary = {
       agentCount: topAgents.length,
       skillCount: nodes.filter(n => n.type === 'skill').length,
       totalCalls: nodes.reduce((s, n) => s + (n.stats?.totalCalls || 0), 0),
       unhealthyCount: nodes.filter(n => n.stats?.totalCalls > 0 && (n.stats.successRate ?? 100) < 90).length,
       idleCount: nodes.filter(n => n.type === 'skill' && (!n.stats?.totalCalls || n.stats.totalCalls === 0)).length,
+      // 隶属边运行时用量（附加字段，保持向后兼容）
+      edgeCount: edgesWithStats.length,
+      activeEdgeCount: edgesWithStats.filter(e => e.stats.totalCalls > 0).length,
+      deadEdgeCount: edgesWithStats.filter(e => e.stats.dead).length,
+      edgeTotalCalls: edgesWithStats.reduce((s, e) => s + e.stats.totalCalls, 0),
       range
     };
 
     res.json({
       success: true,
-      data: { nodes, edges, summary }
+      data: { nodes, edges: edgesWithStats, summary }
     });
   } catch (error: any) {
     logger.error('[admin-topology] 加载拓扑失败', { error });

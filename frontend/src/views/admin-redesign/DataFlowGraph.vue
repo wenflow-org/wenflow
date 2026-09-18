@@ -14,6 +14,14 @@
             <span class="dfg-meta" :class="{ 'dfg-meta--bad': flow.stats.failed > 0 }">
               {{ fmtCalls(flow.stats.calls) }} 调用<template v-if="flow.stats.failed"> · {{ fmtCalls(flow.stats.failed) }}✗</template>
             </span>
+            <span
+              v-if="flow.edgeStats"
+              class="dfg-meta"
+              :class="{ 'dfg-meta--bad': flow.edgeStats.deadEdgeCount > 0 }"
+              :title="edgeSummaryTitle(flow.edgeStats)"
+            >
+              ⇄ 交接边 {{ flow.edgeStats.usedEdgeCount }}/{{ flow.edgeStats.edgeCount }} 活跃<template v-if="flow.edgeStats.deadEdgeCount"> · {{ flow.edgeStats.deadEdgeCount }} 死边</template>
+            </span>
           </template>
         </div>
         <div class="dfg-toolbar__controls">
@@ -216,7 +224,7 @@
           </section>
 
           <!-- Skill 步骤卡 -->
-          <section v-else :data-card-key="step.agentId" class="dfg-step" :class="{ 'has-inputs': step.inputChips.length, 'is-flash': flashKey === step.agentId }" :style="{ '--hz': stepHue(step) }">
+          <section v-else :data-card-key="step.agentId" class="dfg-step" :class="{ 'has-inputs': step.inputChips.length, 'is-flash': flashKey === step.agentId, 'is-dead-edge': step.handoff?.dead }" :style="{ '--hz': stepHue(step) }">
             <header class="dfg-step__head">
               <span class="dfg-step__idx">{{ step.index }}</span>
               <strong class="dfg-step__name">{{ step.name }}</strong>
@@ -226,6 +234,12 @@
               <template v-if="step.calls != null">
                 <span class="dfg-step__stat" :class="{ 'is-err': step.failed > 0 }">{{ fmtCalls(step.calls) }} 调用<template v-if="step.failed"> · {{ fmtCalls(step.failed) }}✗</template></span>
               </template>
+              <span
+                v-if="step.handoff"
+                class="dfg-edge-stat"
+                :class="{ 'is-dead': step.handoff.dead, 'is-warn': !step.handoff.dead && (step.handoff.successRate ?? 100) < 90 }"
+                :title="edgeTitle(step)"
+              >⇄ {{ step.handoff.dead ? '死边' : `${fmtCalls(step.handoff.calls)} · ${step.handoff.successRate ?? '—'}%` }}</span>
               <span class="dfg-step__spacer"></span>
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
               <span v-if="step.loopOver" class="dfg-step__cond" :title="`循环 ${step.loopOver}`">循环：{{ step.loopOver }}</span>
@@ -488,12 +502,12 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { adminFieldRoutingsApi, adminRuntimeDefinitionsApi } from '@/api/adminApi'
+import { adminAgentTopologyApi, adminFieldRoutingsApi, adminRuntimeDefinitionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
-import { liveTopoNodes } from './live'
+import { liveTopoNodes, liveTopoRange } from './live'
 import {
-  buildStageFlow, fmtCalls, familyHue, type FlowChip, type FlowStep, type StageFlow, type DefStepLike,
+  buildStageFlow, fmtCalls, familyHue, type FlowChip, type FlowStep, type StageFlow, type DefStepLike, type TopoEdgeLike,
   STAGE_ORDER, STAGE_LABELS,
 } from './dataFlow'
 import type { StageDetailLike } from './fieldFlowLayout'
@@ -511,6 +525,8 @@ const error = ref('')
 const detailByStage = ref<Record<string, StageDetailLike | null>>({})
 const orchDefs = ref<Record<string, DefStepLike[]>>({})
 const stageNames = ref<Record<string, string>>({})
+/** 拓扑隶属边（含后端 Q9 边用量 stats）；供步骤卡渲染边宽/成功率/死边 */
+const topoEdges = ref<TopoEdgeLike[]>([])
 const showHidden = ref(false)
 const edgeFaded = ref(true) // 默认淡化连线（悬停/聚焦点亮）；关 = 不画步间连线（端口徽标仍可用）
 const query = ref('')
@@ -531,10 +547,14 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [stagesRes, defRes] = await Promise.all([
+    const [stagesRes, defRes, topoRes] = await Promise.all([
       adminFieldRoutingsApi.getStages().catch(() => null),
       adminRuntimeDefinitionsApi.getOrchestratorDefinitions().catch(() => null),
+      adminAgentTopologyApi.getTopology(liveTopoRange.value).catch(() => null),
     ])
+    // 隶属边用量与节点统计同源（同 range）；拉取失败时置空 → 图退回无边缘统计
+    const topoBody = topoRes?.data?.data ?? topoRes?.data ?? {}
+    topoEdges.value = Array.isArray(topoBody.edges) ? (topoBody.edges as TopoEdgeLike[]) : []
     const stagesBody = stagesRes?.data?.data as { stages?: Array<{ id: string; displayName: string }> } | undefined
     if (stagesBody?.stages?.length) {
       stageNames.value = Object.fromEntries(stagesBody.stages.map((s) => [s.id, (s.displayName || '').replace(/阶段$/, '')]))
@@ -595,7 +615,7 @@ const flows = computed<Record<string, StageFlow>>(() => {
   for (const sid of STAGE_ORDER) {
     const d = detailByStage.value[sid]
     if (!d) continue
-    out[sid] = buildStageFlow(sid, d, detailByStage.value, defByAgent[`${sid}-agent`] || [], topo as any, names)
+    out[sid] = buildStageFlow(sid, d, detailByStage.value, defByAgent[`${sid}-agent`] || [], topo as any, names, topoEdges.value)
   }
   return out
 })
@@ -1002,6 +1022,28 @@ function chipTitle(c: FlowChip) {
   if (c.persistKey && c.persistKey !== c.fieldId) parts.push(`落库键：${c.persistKey}`)
   return parts.join('\n')
 }
+
+/** 隶属边 tooltip：调用/失败/成功率/末次出现（Q9 边用量） */
+function edgeTitle(step: FlowStep) {
+  const h = step.handoff
+  if (!h) return ''
+  const rate = h.successRate == null ? '—' : `${h.successRate}%`
+  const last = h.lastSeenAt ? new Date(h.lastSeenAt).toLocaleString() : '窗口内无记录'
+  return [
+    `隶属交接边 ${flow.value?.agentId || ''} → ${step.agentId}`,
+    `调用 ${h.calls} 次 · 失败 ${h.failed} · 成功率 ${rate}`,
+    `末次出现：${last}`,
+    h.dead ? '⚠ 窗口内零调用（死边候选）' : '',
+  ].filter(Boolean).join('\n')
+}
+
+/** 阶段边用量汇总 tooltip */
+function edgeSummaryTitle(s: NonNullable<StageFlow['edgeStats']>) {
+  return [
+    `本阶段隶属边 ${s.edgeCount} 条 · 窗口内活跃 ${s.usedEdgeCount} · 零调用 ${s.deadEdgeCount}`,
+    `边调用合计 ${s.totalCalls} · 失败 ${s.failed}`,
+  ].join('\n')
+}
 function openField(c: FlowChip) {
   selected.value = c
   focusId.value = c.id
@@ -1320,6 +1362,15 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-step__agent { font-size: 11px; color: var(--mk-faint); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dfg-step__stat { flex-shrink: 0; font-size: 10.5px; font-weight: 800; color: var(--mk-muted); font-variant-numeric: tabular-nums; }
 .dfg-step__stat.is-err { color: var(--mk-red); }
+/* 隶属边用量徽标（Q9）：正常=蓝、低成功率=琥珀、死边=灰 */
+.dfg-edge-stat {
+  flex-shrink: 0; font-size: 10.5px; font-weight: 800; font-variant-numeric: tabular-nums;
+  color: var(--mk-blue); background: var(--mk-blue-bg);
+  border-radius: 6px; padding: 1px 7px; white-space: nowrap;
+}
+.dfg-edge-stat.is-warn { color: var(--mk-amber); background: var(--mk-amber-bg); }
+.dfg-edge-stat.is-dead { color: var(--mk-faint); background: var(--mk-graph-badge-bg); }
+.dfg-step.is-dead-edge { border-style: dashed; }
 .dfg-step__spacer { flex: 1; }
 .dfg-step__cond {
   flex-shrink: 0; font-size: 10.5px; font-weight: 700; color: var(--mk-amber);
