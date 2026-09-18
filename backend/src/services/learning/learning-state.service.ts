@@ -13,12 +13,12 @@ import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 
 // EWMA 配置（半衰期按日更新折算：h = ln(0.5)/ln(λ)）
-const EWMA_CONFIG = {
+export const EWMA_CONFIG = {
   KTL_LAMBDA: 0.95,  // 半衰期 ≈ 13.5 天（周衰减 0.95^7 ≈ 0.70）
   LF_LAMBDA: 0.70,   // 半衰期 ≈ 1.9 天
 };
 
-const NATURAL_DECAY = {
+export const NATURAL_DECAY = {
   LSS_DAILY_FACTOR: 0.82,
   KTL_DAILY_FACTOR: 0.99,
   LF_DAILY_FACTOR: 0.74,

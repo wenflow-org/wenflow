@@ -125,8 +125,8 @@ export function calculateEWMA(
  * 归一化后两侧同源：λ = 前值权重，半衰期 = ln(0.5)/ln(λ)（KTL ≈ 13.5 天、LF ≈ 1.9 天）
  * —— 这正是消费侧阈值（lf≥6 判疲劳）所假设的刻度与速度。
  */
-const KTL_EWMA_LAMBDA = 0.95;
-const LF_EWMA_LAMBDA = 0.70;
+export const KTL_EWMA_LAMBDA = 0.95;
+export const LF_EWMA_LAMBDA = 0.70;
 
 /**
  * 更新学习指标

@@ -220,9 +220,9 @@ interface ProcessStudentMessageOptions {
 const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 /** 检查点最小间隔（条消息）：与 `processStudentMessage` 事后门保持一致 */
-const CHECKPOINT_MIN_TURNS = 4;
+export const CHECKPOINT_MIN_TURNS = 4;
 /** 触发检查点所需"上一轮确有进展"的理解度门槛 */
-const CHECKPOINT_TRIGGER_MIN_UNDERSTANDING = 0.6;
+export const CHECKPOINT_TRIGGER_MIN_UNDERSTANDING = 0.6;
 
 /**
  * 检查点**触发**（2026-09-17）：由**代码**决定"何时探测"，模型只负责"探测什么"（出题 + 答案键）。
