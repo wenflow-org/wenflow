@@ -52,6 +52,23 @@ describe('classifyAdvanceResponse（advance-day 处置分类）', () => {
     }).kind).toBe('day-not-started');
   });
 
+  it('会话终局：advance-day 报"已完成/已失败" → completed/failed（不再误判为 fatal 或 advanced）', () => {
+    expect(classifyAdvanceResponse({
+      httpStatus: 200,
+      body: { success: false, error: '会话已完成，无法继续推进' },
+    }).kind).toBe('completed');
+
+    expect(classifyAdvanceResponse({
+      httpStatus: 409,
+      body: { success: false, error: '会话已失败（finalization_failed）' },
+    }).kind).toBe('failed');
+
+    expect(classifyAdvanceResponse({
+      httpStatus: 200,
+      body: { success: true, data: { simulatedDay: '2026-09-02', learning: { started: true, chunks: 2 } } },
+    }).kind).toBe('advanced');
+  });
+
   it('成功上课 → advanced，带模拟日与课次', () => {
     const outcome = classifyAdvanceResponse({
       httpStatus: 200,

@@ -80,6 +80,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
 
+/** 从错误文案识别"会话已终局"（已完成/已失败）；识别不出返回 fatal（未知错误需人看）。 */
+function terminalKindFromMessage(message: string): 'completed' | 'failed' | 'fatal' {
+  if (/会话已完成|已完成|completed/i.test(message)) return 'completed';
+  if (/会话已失败|已失败|failed/i.test(message)) return 'failed';
+  return 'fatal';
+}
+
 /**
  * `POST /sessions/:id/advance-day` 的响应 → 处置分类（纯函数，供 harness 决策）。
  *
@@ -107,18 +114,26 @@ export function classifyAdvanceResponse(input: { httpStatus: number; body?: unkn
     return { kind: 'fatal', simulatedDay, lessons, detail: `http=${input.httpStatus} 认证失败（检查 E2E_ADMIN_NAME/PASSWORD）` };
   }
   if (input.httpStatus === 409) {
-    // 409 有两种语义：时钟/天数上限（终局）vs 会话租约忙（可重试）
+    // 409 有三种语义：会话已终局（完成/失败）、时钟/天数上限（终止）、会话租约忙（可重试）
+    const terminal = terminalKindFromMessage(errorText);
+    if (terminal !== 'fatal') {
+      return { kind: terminal, simulatedDay, lessons, detail: errorText };
+    }
     if (/已达模拟天数上限|课表为空|日期模拟未开启/.test(errorText)) {
       return { kind: 'fatal', simulatedDay, lessons, detail: `http=409 ${errorText}` };
     }
     return { kind: 'retryable', simulatedDay, lessons, detail: `http=409 会话忙（${errorText || '租约冲突'}）` };
   }
   if (input.httpStatus !== 200) {
-    return { kind: 'fatal', simulatedDay, lessons, detail: `http=${input.httpStatus} ${errorText}`.trim() };
+    return { kind: terminalKindFromMessage(errorText), simulatedDay, lessons, detail: `http=${input.httpStatus} ${errorText}`.trim() };
   }
   if (isRecord(body) && body.success === false) {
     if (/未就绪|生成中|尚未就绪/.test(errorText)) {
       return { kind: 'day-not-started', simulatedDay, lessons: 0, detail: `路径未就绪：${errorText}` };
+    }
+    const terminal = terminalKindFromMessage(errorText);
+    if (terminal !== 'fatal') {
+      return { kind: terminal, simulatedDay, lessons, detail: errorText };
     }
     if (/租约|busy|进行中/.test(errorText)) {
       return { kind: 'retryable', simulatedDay, lessons, detail: `会话忙：${errorText}` };

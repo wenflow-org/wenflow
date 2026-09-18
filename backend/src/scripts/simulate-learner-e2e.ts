@@ -242,6 +242,14 @@ async function runDailyLoop(args: HarnessArgs, state: RunState, statePath: strin
       continue;
     }
 
+    if (outcome.kind === 'completed') {
+      log(`advance-day 报告会话已完成（${outcome.detail}）`);
+      return 'completed';
+    }
+    if (outcome.kind === 'failed') {
+      addFinding(state, 'advance-day-session-failed', outcome.detail);
+      return 'failed';
+    }
     if (outcome.kind === 'fatal') {
       addFinding(state, 'advance-day-fatal', outcome.detail);
       return 'failed';
