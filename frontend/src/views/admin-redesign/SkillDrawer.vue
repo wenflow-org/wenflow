@@ -273,7 +273,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   intent,
@@ -310,14 +310,7 @@ const skillProfile = computed(() => {
 })
 const entity = computed(() => skillProfile.value)
 
-/* 宽屏「推挤式」抽屉：打开时给 <html> 挂标记，主内容让出抽屉宽度（规则见 shared.css），
-   避免浮层遮住右侧列且无法查看。窄屏仍为浮层遮罩。 */
-watch(entity, (v) => {
-  if (typeof document !== 'undefined') document.documentElement.classList.toggle('wf-drawer-open', !!v)
-}, { immediate: true })
-onBeforeUnmount(() => {
-  if (typeof document !== 'undefined') document.documentElement.classList.remove('wf-drawer-open')
-})
+/* 宽屏「推挤式」抽屉已废弃（见 shared.css 说明）：抽屉打开只是浮层，不改页面布局。 */
 
 /* 身份色：与 Agent 拓扑同套阶段色（按所属 Agent 取色） */
 const tone = computed(() => {

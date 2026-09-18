@@ -24,7 +24,7 @@
 
   /* 层级 token：抽屉/弹窗/菜单统一 z-index，避免散落硬编码 */
   --mk-z-menu: 60;
-  --mk-z-drawer: 200;
+  --mk-z-drawer: 240;
   --mk-z-sidebar: 220;
   --mk-z-modal: 300;
   --mk-z-toast: 400;

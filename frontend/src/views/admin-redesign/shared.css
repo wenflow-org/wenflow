@@ -1197,6 +1197,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   z-index: var(--mk-z-drawer);
   display: flex;
   justify-content: flex-end;
+  overscroll-behavior: contain;
 }
 .mk-drawer__mask {
   position: absolute;
@@ -1213,6 +1214,9 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   background: var(--mk-surface, #fff);
   box-shadow: var(--mk-shadow-drawer);
   animation: mk-drawer-in 0.18s ease;
+  /* 子元素不得撑开面板或越界（宽内容只在 __body 内滚动） */
+  min-width: 0;
+  overflow: hidden;
 }
 /* 宽版抽屉（含表格/多列的详情）：统一比常规高一档 */
 .mk-drawer__panel--wide { width: var(--mk-drawer-w-lg, 700px); }
@@ -1245,7 +1249,22 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   line-height: 1;
 }
 .mk-drawer__close:hover { background: var(--mk-drawer-close-hover-bg); color: var(--mk-ink, #1a2a44); }
-.mk-drawer__body { overflow-y: auto; padding: 14px 18px 20px; min-width: 0; }
+.mk-drawer__body {
+  overflow-y: auto;
+  padding: 14px 18px 20px;
+  min-width: 0;
+  /* 宽内容只在本层滚动，且不把滚动链传给页面；滚动条常驻以免内容变化时抖动 */
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+/* 抽屉内的代码 / 表格自己滚，不撑宽正文（长 id、JSON、宽表是横向滚动的常见来源） */
+.mk-drawer__body pre { max-width: 100%; overflow-x: auto; }
+.mk-drawer__body pre code { word-break: normal; white-space: pre; }
+.mk-drawer__body table { max-width: 100%; }
+/* 窄屏：抽屉变成全宽面板（浮层语义下比留一条缝更可用） */
+@media (max-width: 720px) {
+  .mk-drawer__panel { width: 100vw; }
+}
 
 /* ================= 暗色模式（D1）：shared.css 硬编码浅色兜底覆写 =================
    机制：html[data-theme='dark'] 下把散落的浅色背景/悬停/徽章底色替换为深色等价物。
@@ -1625,27 +1644,8 @@ html[data-theme='dark'] {
 }
 
 /* ==========================================
-   宽屏「推挤式」抽屉：抽屉打开时主内容让出抽屉宽度，
-   避免浮层遮住右侧列且无法查看（标记见 SkillDrawer.vue 的 wf-drawer-open）
+   抽屉一律为「浮层」：不做推挤式布局
+   —— 曾实现过宽屏推挤（抽屉打开时主区让出抽屉宽度），但实测会把主区压窄，
+   让本来就宽的表格容器凭空多出横向滚动条（1440 宽实测 +156px），用户读到的
+   是「一开抽屉页面就横向滚动」的 bug。抽屉的职责是聚焦详情，不改页面布局。
    ========================================== */
-@media (min-width: 1440px) {
-  html.wf-drawer-open .mshell__main {
-    padding-right: var(--mk-drawer-w, 560px);
-    transition: padding-right 0.2s ease;
-  }
-  /* 覆盖层通用骨架也应享受推挤式抽屉：原先只挂了 SkillDrawer 的私有类 .msk，
-     导致设计系统规则依赖页面私有实现（审计 §附 A #15）。.msk 为登记在案的例外，保留。 */
-  html.wf-drawer-open .mk-drawer__mask,
-  html.wf-drawer-open .msk { pointer-events: none; background: transparent; }
-  html.wf-drawer-open .mk-drawer__panel,
-  html.wf-drawer-open .msk__panel { pointer-events: auto; }
-}
-@media (min-width: 2000px) {
-  html.wf-drawer-open .mshell__main { padding-right: var(--mk-drawer-w-lg, 700px); }
-}
-@media (min-width: 2800px) {
-  html.wf-drawer-open .mshell__main { padding-right: var(--mk-drawer-w-xl, 880px); }
-}
-@media (min-width: 3600px) {
-  html.wf-drawer-open .mshell__main { padding-right: var(--mk-drawer-w-xxl, 1040px); }
-}
