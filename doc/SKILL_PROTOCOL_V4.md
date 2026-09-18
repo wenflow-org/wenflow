@@ -58,6 +58,12 @@ outputMedia: enum            # 可选，json（默认）| markdown | text；决�
 deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5.4（仅 outputMedia=json 时生效）
 ```
 
+> **`params.maxTokens` 的运行时口径（2026-09-18 补，审计观察项）**：它是**下限请求**，不是有效上限。
+> `services/resolve-llm-call-params.ts` 解析出最终模型后，会把低于该模型输出上限的 `maxTokens`
+> 一律**抬到模型上限**（deepseek=128k / agnes=64k），以避免长输出被截断漏字段；显式配置超过模型上限则压回上限。
+> 唯一例外是"运行时显式覆盖"（`runtime-override`，调试/低耗时才可调小）。
+> 因此 core 文件里的 `maxTokens`（多为 1200–8000）只表达"至少给这么多预算"，**实际有效上限由模型决定**。
+
 ### 2.3 字段类型受控词表
 
 `string | number | boolean | enum | object | object[] | string[]`
