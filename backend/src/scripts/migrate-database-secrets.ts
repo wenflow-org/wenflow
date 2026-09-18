@@ -103,7 +103,7 @@ export async function migrateDatabaseSecrets(apply: boolean): Promise<MigrationS
     prisma.user_api_configs.findMany({ select: { id: true, apiKey: true } }),
     prisma.user_agent_model_configs.findMany({ select: { id: true, apiKey: true } }),
     prisma.user_agent_configs.findMany({ select: { id: true, systemPrompt: true } }),
-    prisma.user_mcp_configs.findMany({ select: { id: true, servers: true, tools: true, healthCheck: true } })
+    prisma.user_mcp_configs.findMany({ select: { id: true, providers: true, tools: true, healthCheck: true } })
   ]);
 
   await migrateScalarRows('platform_api_configs.apiKey', 'system.platform_api_configs.apiKey', platform,
@@ -128,7 +128,7 @@ export async function migrateDatabaseSecrets(apply: boolean): Promise<MigrationS
     stats
   );
 
-  for (const column of ['servers', 'tools', 'healthCheck'] as const) {
+  for (const column of ['providers', 'tools', 'healthCheck'] as const) {
     await migrateJsonColumn(
       `user_mcp_configs.${column}`,
       `main.user_mcp_configs.${column}`,

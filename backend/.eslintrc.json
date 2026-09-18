@@ -233,6 +233,7 @@
         "src/services/ai-teaching/__tests__/prior-learning-recap.test.ts",
         "src/services/ai-teaching/__tests__/replan-attribution.test.ts",
         "src/services/ai-teaching/__tests__/session-finalization.service.test.ts",
+        "src/services/ai-teaching/__tests__/warmup-writeback.test.ts",
         "src/services/ai/ai.service.ts",
         "src/services/apiConfig.service.ts",
         "src/services/auth/__tests__/auth.service.test.ts",

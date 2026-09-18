@@ -68,7 +68,7 @@ describe('数据库 Secret 迁移', () => {
   it('审计根标量 healthCheck Secret 但不写库', async () => {
     mainMcpFindMany.mockResolvedValue([{
       id: 'mcp-1',
-      servers: '[]',
+      providers: '[]',
       tools: '[]',
       healthCheck: JSON.stringify('Bearer legacy-secret')
     }])
@@ -85,7 +85,7 @@ describe('数据库 Secret 迁移', () => {
     process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID = 'current'
     mainMcpFindMany.mockResolvedValue([{
       id: 'mcp-1',
-      servers: '[]',
+      providers: '[]',
       tools: '[]',
       healthCheck: JSON.stringify(oldEnvelope)
     }])
