@@ -322,7 +322,55 @@
 
 ---
 
-## 8. 附：关键证据索引
+## 8. 执行进展（2026-09-18 → 09-19）
+
+> 本文件原有结论与优先级不改；这里是"按三波路线做了什么"的台账（每条含提交）。
+
+### 第一波：传感器与诚实层（全部完成）
+| 项 | 提交 |
+|---|---|
+| A1 检查点/时间上下文补进模拟器 payload（修 P1-3 半截线） | `59483516` |
+| A2 运行时定义与 SkillDefinition 补齐 | `83c26460` |
+| A3 `sinceLastSessionDays` 打通 + 删 ACT-R 死代码 | `338c7717` |
+| A4 `failurePolicy` 收敛为 retry\|propagate | `955dbcdc` |
+| A5 降级遥测共享接口 + 虚拟侧两处真静默 | `c1f83891` |
+| B1 真实侧静默降级打标 + DNR 脚本 | `21738b8d` |
+| B2 输入围栏 + 注入条款（+只作用 payload 的修正） | `5f59c904`、`6285168d` |
+| B3 教学内容诚实（降断言/不编造/可复核） | `760ff281` |
+| B4 D_floor 最小挑战保底 | `a97fcc24` |
+| B4 难度分配公平审计（只读） | `e643d494` |
+
+### 第二波：实验室保真 + 可解释（主体完成）
+| 项 | 提交 |
+|---|---|
+| Q4 概率化记忆：纯模块（SplitMix64 + 混淆竞争） | `b6d0dd9d` |
+| Q4 集成：`memoryRecall` 接入 assisted + blackbox 两路 | `db3aba11` |
+| **assisted 路径消费待答检查点**（E2E 发现的真缺口） | `8fd12657` |
+| Q2/Q8 记忆看板 + 保留率曲线 | `e5e9e6e5` |
+| Q5 Agent 自述生成器 | `7cea371d` |
+| Q9 交接边用量聚合 + 拓扑图接线 | `8b92d09b`、`79bdadf6` |
+| Q1 复习选点质量只读度量 | `46853be9` |
+| Q7 轻量真值发现（多源加权 + 元认知校准） | `1e1b0fba` |
+| Q13 难度分层审计（虚拟 cohort） | `c13dee5b` |
+| 锚题探针**纯决策层** | `dfe30482` |
+| 数据治理基线（Q16） | `1d3b55ef` |
+| 删除覆盖补漏（`prediction_records`/`misconception_ledger`） | `2d205f9b` |
+| Q11b strict JSON Schema 纯编译器（未接线） | `0d4aa01b` |
+
+### VL 验证（真实跑数）
+- assisted E2E（`advance-day runTasks`）8 天 × 2 节：链路健康；`temporalContext.sinceLastSessionDays` 计算正确（跨周末 3／工作日 1）；`memoryRecall` 真进 payload。
+- 修复后复跑：`checkpoint:result = 9`（全部 `judgedBy:"code"`）、`pendingCheckpoint` 清空 → **成功率带传感器在该路径通了**。
+- 附带观察：一次 `TEACHING_TURN_REPLY_MISSING` 导致 session-failed（普通教学回合模型未产出 reply），建议后续加"缺 reply 重试/降级"护栏。
+
+### 仍未做（明确延后）
+- **锚题探针接线**（纯层已就绪，接线 3 步见 `anchor-probe.ts` 头注）。
+- **Q11b 接线前置**：core loader 需结构化承载 `enumValues` / 嵌套 `properties`，否则 strict schema 会误拒未声明子字段；影响面最大，需单独评估。
+- **Q18 真实用户实验基建 / Q19 生命周期 / Q20 单位经济**：按本文件"缺基建/无对象"结论继续延后。
+- `login_attempts` 是否纳入删除覆盖（它按用户名/IP 而非 userId，需另行判断）。
+
+---
+
+## 9. 附：关键证据索引
 
 - 记忆/排期：`backend/src/services/memory/{fsrs,actr,memory-trace.service,retention-curve,review-plan.service,review-quota.service}.ts`
 - 虚拟记忆：`backend/src/virtual-lab/learner-memory.ts`、`backend/src/coordinators/simulation.memory.ts`、`backend/src/skills/virtual-learner-shared/schemas.ts`
