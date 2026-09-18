@@ -43,7 +43,7 @@ import { conceptLoadService } from '../memory/concept-load.service';
 import { reviewQuotaService } from '../memory/review-quota.service';
 import reviewPlanService, { type ReviewPlan, type ReviewPlanItem } from '../memory/review-plan.service';
 import { recordMisconceptions } from '../learner/misconception-ledger.service';
-import { fenceLearnerMessage } from './input-fence';
+import { fenceLearnerMessagesForModel } from './input-fence';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
 const AI_TEACHING_AGENT_ID = 'teaching-agent';
@@ -2325,9 +2325,9 @@ export class AITeachingOrchestrator {
           ...session.messages,
           {
             role: 'user',
-            // B2/Q14：学习者消息进入教学链路前过输入围栏——正常文本原样；
-            // 疑似注入被转义并标注为不可信数据（见 input-fence.ts），不改变正常教学语义。
-            content: fenceLearnerMessage(message),
+            // 落库保持**学生原文**（原始证据，供人工复核/前端展示）。
+            // B2/Q14 的输入围栏只作用于"喂给模型的那一份"（见下方 buildTeachingTurnInput 前的映射）。
+            content: message,
             timestamp: new Date().toISOString(),
             // 检查点合成消息打标记：进入教学上下文供模型分析答案，但不参与学生行为证据统计
             ...(options.checkpointId ? { checkpoint: true } : {}),
@@ -2358,7 +2358,9 @@ export class AITeachingOrchestrator {
 
     const turnInput = await buildTeachingTurnInput({
       ...session,
-      messages: updatedMessages,
+      // B2/Q14：喂给模型前对学习者消息做输入围栏（正常文本原样；疑似注入被打标为不可信数据）。
+      // 落库消息保持原文（见上方 updatedMessages），因此这里传的是围栏后的浅拷贝。
+      messages: fenceLearnerMessagesForModel(updatedMessages),
       knowledgeState: frozenKnowledgeState,
     }, context);
     // 教学回合 wall-clock 超时兜底：LLM 挂起时避免操作租约（30min）被占导致会话内所有操作 409 BUSY；

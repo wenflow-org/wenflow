@@ -120,3 +120,19 @@ export function fenceLearnerInput(text: string): LearnerInputFence {
 export function fenceLearnerMessage(text: string): string {
   return fenceLearnerInput(text).content;
 }
+
+/**
+ * 组装**模型 payload** 专用：只对学习者角色（`role==='user'`）消息做围栏，返回浅拷贝，
+ * **不修改原数组与原消息**。正常文本命中 identity 时连对象都不复制。
+ *
+ * 为什么不在落库时围栏：学生会话消息是"原始证据"，必须保留原文供人工复核与前端展示；
+ * 围栏只作用于"喂给模型的那一份"（见 AITeachingCoordinator.processStudentMessage）。
+ */
+export function fenceLearnerMessagesForModel<T extends { role?: string; content?: string }>(messages: T[]): T[] {
+  if (!Array.isArray(messages)) return messages;
+  return messages.map((message) => {
+    if (!message || message.role !== 'user' || typeof message.content !== 'string') return message;
+    const content = fenceLearnerMessage(message.content);
+    return content === message.content ? message : { ...message, content };
+  });
+}
