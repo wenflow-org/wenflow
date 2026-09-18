@@ -92,15 +92,91 @@ export function resolvePathSubject(subject: unknown, fallbackTitle: string): str
   return fallbackTitle;
 }
 
+/** JSON 列（Prisma 里是字符串）→ 对象/数组；已是对象则原样返回 */
+function parseJsonColumn(value: unknown): any {
+  if (value && typeof value === 'object') return value;
+  if (typeof value !== 'string') return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+/** 消息时间戳（升序，毫秒） */
+function readMessageTimestamps(messages: unknown): number[] {
+  const list = parseJsonColumn(messages);
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((m: any) => (m?.timestamp ? new Date(m.timestamp).getTime() : NaN))
+    .filter((t: number) => Number.isFinite(t))
+    .sort((a: number, b: number) => a - b);
+}
+
 /**
- * 会话有效时长（分钟）统一口径：优先 duration 列（收束时已扣除暂停/idle 并封顶），
- * 无 duration 的历史会话才用 endTime−startTime 兜底并封顶 30 分钟。
+ * 未结束会话的活跃时长估算（口径同 AITeachingCoordinator.computeEffectiveDurationMinutes）：
+ * - 结束时刻取「暂停中 → pausedAt；否则 → updatedAt（最后一次动作）」，
+ *   而不是 now —— 否则把「离开之后放置的时间」越算越多；
+ * - 减去累计暂停时长；
+ * - 再用消息时间戳间隔（>30 分钟视为离开）给出的活跃时长封顶，
+ *   防止合盖/杀进程等无 pagehide 场景把 idle 算进学习时长。
+ */
+function estimateActiveMinutes(
+  session: { messages?: unknown; teachingState?: unknown; updatedAt?: Date | string | null } | null | undefined,
+  startMs: number
+): number {
+  const state = parseJsonColumn(session?.teachingState);
+  const artifacts = (state?.sessionArtifacts && typeof state.sessionArtifacts === 'object')
+    ? state.sessionArtifacts
+    : (state && typeof state === 'object' ? state : {});
+  let pausedDurationMs = Number(artifacts?.pausedDurationMs ?? 0);
+  if (!Number.isFinite(pausedDurationMs) || pausedDurationMs < 0) pausedDurationMs = 0;
+
+  const times = readMessageTimestamps(session?.messages);
+  const pausedAtMs = typeof artifacts?.pausedAt === 'string' ? new Date(artifacts.pausedAt).getTime() : NaN;
+  const updatedAtMs = session?.updatedAt ? new Date(session.updatedAt).getTime() : NaN;
+  // 终点信号优先级：暂停中 → pausedAt（那一刻离开）；否则 → updatedAt（最后一次动作）。
+  // 两者都没有时，仅当有消息可封顶才允许用 now；否则不猜（返回 0，保持旧行为）。
+  const endMs = Number.isFinite(pausedAtMs)
+    ? pausedAtMs
+    : (Number.isFinite(updatedAtMs) ? updatedAtMs : (times.length > 0 ? Date.now() : NaN));
+  if (!Number.isFinite(endMs)) return 0;
+
+  const wallMinutes = Math.max(1, Math.round((endMs - startMs - pausedDurationMs) / 60000));
+  if (times.length === 0) return wallMinutes;
+
+  let activeMinutes = 0;
+  for (let i = 1; i < times.length; i++) {
+    activeMinutes += Math.min((times[i] - times[i - 1]) / 60000, 30);
+  }
+  // 首条消息前的引导段 + 最后活动后的收尾窗各按最多 30 分钟计
+  const messageCap = Math.round(activeMinutes + 60);
+  return Math.max(1, Math.min(wallMinutes, messageCap));
+}
+
+/**
+ * 会话有效时长（分钟）统一口径。
+ *
+ * 优先级：
+ * 1. `duration` 列（收束时已扣除暂停/idle 并封顶）；
+ * 2. `endTime − startTime`（超时等未写 duration 的历史会话），封顶 30 分钟；
+ * 3. **未结束的会话**（active/paused）：按 startTime → 最后活动（扣暂停）估算，
+ *    并用消息时间戳间隔封顶 —— 缺这一档时，「学了一节课后暂停/离开」在
+ *    学习历史、学习台、学习状态里会显示 0 分钟
+ *    （走查 P9 实测：学了约 10 分钟 → 学习历史「累计时长 0 分钟」）。
+ *
  * 学习历史的「累计时长」、/learning/stats、学习状态聚合都走这里，避免各页各算。
+ * 注意：调用方查询会话时需带上 status/messages/teachingState/updatedAt，
+ * 否则只能退化为第 1、2 档（见 /learning/stats 与 assemble-learning-state 的 select）。
  */
 export function normalizeSessionDurationMinutes(session: {
   duration?: number | null;
   startTime?: Date | string | null;
   endTime?: Date | string | null;
+  status?: string | null;
+  messages?: unknown;
+  teachingState?: unknown;
+  updatedAt?: Date | string | null;
 }): number {
   const rawDuration = session.duration ?? 0;
   if (rawDuration > 0) {
@@ -112,7 +188,8 @@ export function normalizeSessionDurationMinutes(session: {
   if (Number.isFinite(start) && Number.isFinite(end)) {
     return Math.max(1, Math.min(30, Math.round((end - start) / 60000)));
   }
-  return 0;
+  if (!Number.isFinite(start)) return 0;
+  return estimateActiveMinutes(session, start);
 }
 
 export function normalizeStringArray(value: any): string[] {

@@ -115,7 +115,17 @@ export async function assembleLearningState(
     // 与 /learning/stats、/users/me/sessions 同口径：只排除被回收重开的 superseded。
     prisma.teaching_sessions.findMany({
       where: { userId, status: { notIn: ['superseded'] } },
-      select: { duration: true, startTime: true, endTime: true },
+      select: {
+        duration: true,
+        startTime: true,
+        endTime: true,
+        // 未结束会话（active/paused）的时长需按活跃时长估算，
+        // 见 normalizeSessionDurationMinutes（走查 P9）
+        status: true,
+        messages: true,
+        teachingState: true,
+        updatedAt: true,
+      },
     }),
   ]);
 

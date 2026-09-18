@@ -4598,6 +4598,12 @@ class LearningService {
           duration: true,
           startTime: true,
           endTime: true,
+          // 未结束会话（active/paused）的时长需按活跃时长估算，见
+          // normalizeSessionDurationMinutes（走查 P9）
+          status: true,
+          messages: true,
+          teachingState: true,
+          updatedAt: true,
         },
       });
       const totalMinutes = sessions.reduce((sum, session) => sum + normalizeSessionDurationMinutes(session), 0);

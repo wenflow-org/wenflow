@@ -102,7 +102,66 @@ describe('normalizeSessionDurationMinutes（会话时长统一口径）', () => 
     })).toBe(30);
   });
 
-  it('既无 duration 也无 endTime 返回 0', () => {
+  it('既无 duration 也无 endTime 返回 0（无终点信号时不猜）', () => {
     expect(normalizeSessionDurationMinutes({ duration: null, startTime: new Date(), endTime: null })).toBe(0);
+  });
+
+  /**
+   * 走查 P9：学了一节课后暂停/离开，此前在历史/学习台显示 0 分钟。
+   * 未结束会话按「startTime → 最后活动（扣暂停）」估算，并用消息间隔封顶。
+   */
+  describe('未结束会话（active/paused）的活跃时长估算', () => {
+    const startTime = new Date('2026-09-17T16:11:00Z');
+    const messages = [
+      { role: 'assistant', timestamp: '2026-09-17T16:11:34Z' },
+      { role: 'user', timestamp: '2026-09-17T16:12:22Z' },
+      { role: 'assistant', timestamp: '2026-09-17T16:13:10Z' },
+      { role: 'user', timestamp: '2026-09-17T16:16:00Z' },
+      { role: 'assistant', timestamp: '2026-09-17T16:21:00Z' },
+    ];
+
+    it('暂停中：按 pausedAt 收束，而不是按「现在」越算越多', () => {
+      const minutes = normalizeSessionDurationMinutes({
+        duration: null,
+        startTime,
+        endTime: null,
+        status: 'paused',
+        messages,
+        teachingState: { sessionArtifacts: { pausedAt: '2026-09-17T16:22:00Z' } },
+        updatedAt: new Date('2026-09-17T16:22:00Z'),
+      });
+      // 16:11 → 16:22 = 11 分钟；消息间隔给出的下界（≈10 + 60 收尾窗）不构成上限
+      expect(minutes).toBe(11);
+    });
+
+    it('累计暂停时长被扣除（暂停过又回来）', () => {
+      const minutes = normalizeSessionDurationMinutes({
+        duration: null,
+        startTime,
+        endTime: null,
+        status: 'active',
+        messages,
+        teachingState: { sessionArtifacts: { pausedDurationMs: 30 * 60 * 1000, pausedAt: null } },
+        updatedAt: new Date('2026-09-17T16:41:00Z'),
+      });
+      // 30 分钟墙钟 − 30 分钟暂停 = 0 → 取 1 分钟下限
+      expect(minutes).toBe(1);
+    });
+
+    it('消息间隔 >30 分钟视为离开，长挂机不会把 idle 算进学习时长', () => {
+      const minutes = normalizeSessionDurationMinutes({
+        duration: null,
+        startTime,
+        endTime: null,
+        status: 'active',
+        messages: [
+          { role: 'assistant', timestamp: '2026-09-17T16:11:00Z' },
+          { role: 'user', timestamp: '2026-09-17T18:11:00Z' }, // 隔了 2 小时
+        ],
+        updatedAt: new Date('2026-09-17T18:11:00Z'),
+      });
+      // 墙钟 120 分钟被消息封顶（间隔按 30 计 + 60 收尾窗 = 90）
+      expect(minutes).toBe(90);
+    });
   });
 });
