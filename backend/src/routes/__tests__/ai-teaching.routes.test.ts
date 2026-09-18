@@ -177,11 +177,43 @@ describe('ai-teaching routes', () => {
         peerStrategy: 'feynman',
         peerFollowUpQuestions: ['你能用自己的话讲一遍吗？'],
         checkpoint: { id: 'checkpoint-1', question: '何时使用 infer？' },
-        promptDebug: { promptId: 'prompt-1' },
-        peerDebug: { traceId: 'peer-1' },
+        // 提示词调试信封默认不下发（见 promptDebugEnabled）
+        promptDebug: null,
+        peerDebug: null,
         revision: 8,
       },
     });
+  });
+
+  it('promptDebug/peerDebug 默认不下发；PROMPT_DEBUG_ENVELOPE=1 时才带回（18 号报告衍生观察项）', async () => {
+    mockCoordinator.processStudentMessage.mockResolvedValue({
+      aiResponse: 'x',
+      analysis: { cognitiveLevel: 'apply', levelScore: 4, understanding: 0.5, confusionPoints: [], engagement: 0.5, emotionalState: 'focused' },
+      currentState: { lss: 5, ktl: 5, lf: 5, lsb: 0 },
+      strategies: [], knowledgePoint: null, knowledgePoints: [],
+      isCompletion: false, shouldConfirmEnd: false, endReason: null, recovered: false,
+      advisory: null, peerTriggered: false, peerMessage: null, peerStrategy: null, peerFollowUpQuestions: [],
+      checkpoint: null,
+      promptDebug: { promptId: 'p1', systemPrompt: '完整提示词' },
+      peerDebug: { traceId: 't1' },
+      revision: 1,
+    });
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const req = () => ({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { message: 'x', revision: 0 } });
+
+    const resDefault = createResponse();
+    await handler(req(), resDefault);
+    expect(resDefault.json.mock.calls[0][0].data.promptDebug).toBeNull();
+    expect(resDefault.json.mock.calls[0][0].data.peerDebug).toBeNull();
+
+    process.env.PROMPT_DEBUG_ENVELOPE = '1';
+    try {
+      const resDebug = createResponse();
+      await handler(req(), resDebug);
+      expect(resDebug.json.mock.calls[0][0].data.promptDebug).toEqual({ promptId: 'p1', systemPrompt: '完整提示词' });
+    } finally {
+      delete process.env.PROMPT_DEBUG_ENVELOPE;
+    }
   });
 
   it('校验归属并提交理解检查', async () => {
