@@ -217,7 +217,7 @@ interface ProcessStudentMessageOptions {
   kind?: 'message' | 'resume-continue';
 }
 
-const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
+export const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 /** 检查点最小间隔（条消息）：与 `processStudentMessage` 事后门保持一致 */
 export const CHECKPOINT_MIN_TURNS = 4;
