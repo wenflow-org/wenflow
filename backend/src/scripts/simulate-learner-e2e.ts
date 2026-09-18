@@ -39,8 +39,13 @@ import {
 } from '../services/virtual-lab/run-harness';
 
 const GOAL_MAX_STEPS = 14;
-const NOT_READY_POLL_MS = 20_000;
+/** 同一天"未就绪"时的重试间隔（不消耗模拟日，Fix D） */
+const NOT_READY_POLL_MS = 30_000;
 const DAY_LOOP_RETRY_LIMIT = 12;
+/** 被限流（429）时的等待：限流窗口通常按分钟计，用固定较长等待而非指数短退避 */
+const RATE_LIMIT_WAIT_MS = 60_000;
+/** 单次 HTTP 请求上限：`advance-day runTasks` 会同步跑完当天课程，实测可达 ~5 分钟 */
+const REQUEST_TIMEOUT_MS = 30 * 60_000;
 const ORIGIN = 'http://localhost:5173';
 
 /**
@@ -77,6 +82,22 @@ function log(line: string): void {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Node 内置 fetch（undici）默认 `headersTimeout = 300s`：而 `advance-day runTasks` 会
+ * **同步跑完当天课程**（实测 ~5 分钟），于是请求总在 300s 处被 undici 掐断——表现为
+ * `TypeError: fetch failed` / `UND_ERR_HEADERS_TIMEOUT`，且 `AbortSignal.timeout` **覆盖不了它**。
+ * 这里关掉 undici 自身的 headers/body 超时，统一交给 `REQUEST_TIMEOUT_MS`。
+ *
+ * undici 非本包直接依赖（随环境传递安装），故防御式加载：缺失只告警、不阻断。
+ */
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Agent, setGlobalDispatcher } = require('undici');
+  setGlobalDispatcher(new Agent({ headersTimeout: 0, bodyTimeout: 0, connectTimeout: 30_000 }));
+} catch (error) {
+  log(`⚠ 未能加载 undici 关闭默认 headersTimeout(300s)：长耗时的 advance-day 可能被中断（${(error as Error).message}）`);
+}
+
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
@@ -110,7 +131,7 @@ async function api(method: string, urlPath: string, body?: unknown): Promise<Api
         ...(cookie ? { Cookie: cookie } : {}),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(15 * 60_000),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     let parsed: Record<string, unknown> | null = null;
     try { parsed = asRecord(await response.json()); } catch { parsed = null; }
@@ -202,9 +223,11 @@ async function driveGoalPhase(args: HarnessArgs, state: RunState, statePath: str
   return true;
 }
 
-/** 逐日上课：未就绪等就绪（不烧日）、可重试问题退避、终局返回。 */
+/** 逐日上课：未就绪重试同日（不烧日）、可重试退避、限流长等、终局返回。 */
 async function runDailyLoop(args: HarnessArgs, state: RunState, statePath: string | null): Promise<'completed' | 'failed' | 'exhausted'> {
   let transportRetries = 0;
+  /** 同一天"未就绪"的起始时刻；推进/终局时清零 */
+  let notReadySince: number | null = null;
   while (state.round < args.maxDays) {
     const dayLabel = state.round + 1;
     const started = Date.now();
@@ -214,33 +237,35 @@ async function runDailyLoop(args: HarnessArgs, state: RunState, statePath: strin
 
     if (outcome.kind === 'retryable') {
       transportRetries += 1;
-      log(`[day${dayLabel}] ${seconds}s 可重试（${outcome.detail}）→ 退避 ${Math.round(nextBackoffMs(transportRetries) / 1000)}s`);
+      // 限流（429）窗口通常按分钟计：固定长等，别用指数短退避继续撞
+      const waitMs = outcome.httpStatus === 429 ? RATE_LIMIT_WAIT_MS : nextBackoffMs(transportRetries);
+      log(`[day${dayLabel}] ${seconds}s 可重试（${outcome.detail}）→ 等 ${Math.round(waitMs / 1000)}s`);
       if (transportRetries > DAY_LOOP_RETRY_LIMIT) {
         addFinding(state, 'retry-exhausted', `连续 ${transportRetries} 次可重试：${outcome.detail}`);
         return 'failed';
       }
-      await sleep(nextBackoffMs(transportRetries));
+      await sleep(waitMs);
       continue;
     }
     transportRetries = 0;
 
     if (outcome.kind === 'day-not-started') {
-      // 路径生成窗口内：等就绪后重试**同一天**，不消耗模拟日（Fix D）
-      const deadline = Date.now() + args.readyTimeoutMs;
-      const pathStatus = await makeApi(args.baseUrl, 'GET', `/api/admin/virtual-learners/sessions/${state.sessionId}/path-status`);
-      let ready = isPathReady(asRecord(pathStatus.body?.data));
-      while (!ready && Date.now() < deadline) {
-        log(`[day${dayLabel}] 路径未就绪（${outcome.detail}）→ ${Math.round(NOT_READY_POLL_MS / 1000)}s 后重试同日`);
-        await sleep(NOT_READY_POLL_MS);
-        const again = await makeApi(args.baseUrl, 'GET', `/api/admin/virtual-learners/sessions/${state.sessionId}/path-status`);
-        ready = isPathReady(asRecord(again.body?.data));
-      }
-      if (!ready) {
-        addFinding(state, 'path-not-ready-timeout', `${Math.round(args.readyTimeoutMs / 1000)}s 内路径未就绪：${outcome.detail}`);
+      // 路径生成窗口内：**不消耗模拟日**，退避后重试同一天（Fix D）。
+      // `advance-day` 本身是权威就绪信号；path-status 只用于日志诊断、不作等待门
+      // ——否则一旦它被限流/异常（返回体无 data）就会 `isPathReady=false` 死等到超时。
+      if (notReadySince === null) notReadySince = Date.now();
+      const waitedMinutes = ((Date.now() - notReadySince) / 60_000).toFixed(1);
+      if (Date.now() - notReadySince > args.readyTimeoutMs) {
+        addFinding(state, 'path-not-ready-timeout', `同日未就绪累计 ${waitedMinutes} 分钟：${outcome.detail}`);
         return 'failed';
       }
+      const pathStatus = await makeApi(args.baseUrl, 'GET', `/api/admin/virtual-learners/sessions/${state.sessionId}/path-status`);
+      log(`[day${dayLabel}] 未就绪（${outcome.detail}；已等 ${waitedMinutes} 分｜path-status http=${pathStatus.status}`
+        + ` ready=${isPathReady(asRecord(pathStatus.body?.data))}）→ ${Math.round(NOT_READY_POLL_MS / 1000)}s 后重试同日`);
+      await sleep(NOT_READY_POLL_MS);
       continue;
     }
+    notReadySince = null;
 
     if (outcome.kind === 'completed') {
       log(`advance-day 报告会话已完成（${outcome.detail}）`);

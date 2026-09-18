@@ -27,6 +27,8 @@ export type AdvanceKind =
 
 export interface AdvanceOutcome {
   kind: AdvanceKind;
+  /** 本次请求的 HTTP 状态（0 = 网络中断），供调用方做 429 等差异化退避 */
+  httpStatus: number;
   /** 模拟日（YYYY-MM-DD，UTC）；未知为 null */
   simulatedDay: string | null;
   /** 当天完成的课次数（响应里的 learning.chunks，未知为 null） */
@@ -95,6 +97,7 @@ function terminalKindFromMessage(message: string): 'completed' | 'failed' | 'fat
  * 必须重试同一天（对应 Fix D），不能计入 maxDays。
  */
 export function classifyAdvanceResponse(input: { httpStatus: number; body?: unknown }): AdvanceOutcome {
+  const { httpStatus } = input;
   const body = input.body;
   const data = isRecord(body) ? (isRecord(body.data) ? body.data : null) : null;
   const errorText = isRecord(body) ? asString(body.error) : '';
@@ -103,55 +106,48 @@ export function classifyAdvanceResponse(input: { httpStatus: number; body?: unkn
     : data && typeof data.simulatedDay === 'number' ? String(data.simulatedDay) : null;
   const learning = data && isRecord(data.learning) ? data.learning : null;
   const lessons = learning && typeof learning.chunks === 'number' ? learning.chunks : null;
+  const done = (kind: AdvanceKind, detail: string, overrides: Partial<AdvanceOutcome> = {}): AdvanceOutcome =>
+    ({ kind, httpStatus, simulatedDay, lessons, detail, ...overrides });
 
-  if (input.httpStatus === 0) {
-    return { kind: 'retryable', simulatedDay: null, lessons: null, detail: '网络中断（后端可能正在重启）' };
+  if (httpStatus === 0) {
+    return done('retryable', '网络中断（后端可能正在重启）', { simulatedDay: null, lessons: null });
   }
-  if (RETRYABLE_HTTP.has(input.httpStatus)) {
-    return { kind: 'retryable', simulatedDay, lessons, detail: `http=${input.httpStatus}（上游/网关繁忙）` };
+  if (RETRYABLE_HTTP.has(httpStatus)) {
+    return done('retryable', `http=${httpStatus}（上游/网关繁忙）`);
   }
-  if (input.httpStatus === 401 || input.httpStatus === 403) {
-    return { kind: 'fatal', simulatedDay, lessons, detail: `http=${input.httpStatus} 认证失败（检查 E2E_ADMIN_NAME/PASSWORD）` };
+  if (httpStatus === 401 || httpStatus === 403) {
+    return done('fatal', `http=${httpStatus} 认证失败（检查 E2E_ADMIN_NAME/PASSWORD）`);
   }
-  if (input.httpStatus === 409) {
+  if (httpStatus === 409) {
     // 409 有三种语义：会话已终局（完成/失败）、时钟/天数上限（终止）、会话租约忙（可重试）
     const terminal = terminalKindFromMessage(errorText);
-    if (terminal !== 'fatal') {
-      return { kind: terminal, simulatedDay, lessons, detail: errorText };
-    }
+    if (terminal !== 'fatal') return done(terminal, errorText);
     if (/已达模拟天数上限|课表为空|日期模拟未开启/.test(errorText)) {
-      return { kind: 'fatal', simulatedDay, lessons, detail: `http=409 ${errorText}` };
+      return done('fatal', `http=409 ${errorText}`);
     }
-    return { kind: 'retryable', simulatedDay, lessons, detail: `http=409 会话忙（${errorText || '租约冲突'}）` };
+    return done('retryable', `http=409 会话忙（${errorText || '租约冲突'}）`);
   }
-  if (input.httpStatus !== 200) {
-    return { kind: terminalKindFromMessage(errorText), simulatedDay, lessons, detail: `http=${input.httpStatus} ${errorText}`.trim() };
+  if (httpStatus !== 200) {
+    return done(terminalKindFromMessage(errorText), `http=${httpStatus} ${errorText}`.trim());
   }
   if (isRecord(body) && body.success === false) {
     if (/未就绪|生成中|尚未就绪/.test(errorText)) {
-      return { kind: 'day-not-started', simulatedDay, lessons: 0, detail: `路径未就绪：${errorText}` };
+      return done('day-not-started', `路径未就绪：${errorText}`, { lessons: 0 });
     }
     const terminal = terminalKindFromMessage(errorText);
-    if (terminal !== 'fatal') {
-      return { kind: terminal, simulatedDay, lessons, detail: errorText };
-    }
+    if (terminal !== 'fatal') return done(terminal, errorText);
     if (/租约|busy|进行中/.test(errorText)) {
-      return { kind: 'retryable', simulatedDay, lessons, detail: `会话忙：${errorText}` };
+      return done('retryable', `会话忙：${errorText}`);
     }
-    return { kind: 'fatal', simulatedDay, lessons, detail: errorText || 'success=false' };
+    return done('fatal', errorText || 'success=false');
   }
   if (data?.reverted === true) {
-    return { kind: 'day-not-started', simulatedDay, lessons: 0, detail: '时钟未推进（当天未上课，模拟日未消耗）' };
+    return done('day-not-started', '时钟未推进（当天未上课，模拟日未消耗）', { lessons: 0 });
   }
   if (learning && learning.started === false) {
-    return {
-      kind: 'day-not-started',
-      simulatedDay,
-      lessons: 0,
-      detail: `当天未开课：${asString(learning.error) || '路径未就绪'}`,
-    };
+    return done('day-not-started', `当天未开课：${asString(learning.error) || '路径未就绪'}`, { lessons: 0 });
   }
-  return { kind: 'advanced', simulatedDay, lessons, detail: `模拟日 ${simulatedDay ?? '?'} 已推进` };
+  return done('advanced', `模拟日 ${simulatedDay ?? '?'} 已推进`);
 }
 
 /** 会话 status → 阶段（终局判定；未知值一律视为进行中，由 maxDays 兜底） */
@@ -162,14 +158,19 @@ export function classifySessionStatus(status: unknown): SessionPhase {
 }
 
 /**
- * `GET /sessions/:id/path-status` → 路径是否就绪（有路径 + 有可教的当前子任务）。
- * 仅用于日志/提前等待；即使本函数判断有偏，advance-day 的 `day-not-started` 也会兜住。
+ * `GET /sessions/:id/path-status` → 路径是否就绪。
+ *
+ * 权威信号是 `path.canStartLearning`（`learning.service` 依据 path 状态 + 阶段生成状态 + 任务数算出）。
+ * 注意：**本函数只用于日志/诊断**，不作为 harness 的等待门——`advance-day` 才是权威就绪信号，
+ * 否则一旦 path-status 不可用（限流/异常）就会死等到超时。
  */
 export function isPathReady(data: unknown): boolean {
   if (!isRecord(data)) return false;
   if (asString(data.learningPathId).length === 0) return false;
+  const path = isRecord(data.path) ? data.path : null;
+  if (path && typeof path.canStartLearning === 'boolean') return path.canStartLearning;
   const status = asString(data.status);
-  if (['generating', 'not_started', 'not_found', 'archived', 'deleted'].includes(status)) return false;
+  if (['generating', 'not_started', 'not_found', 'failed', 'archived', 'deleted'].includes(status)) return false;
   const pathContext = isRecord(data.pathContext) ? data.pathContext : null;
   return asString(pathContext?.currentTaskTitle).length > 0;
 }
@@ -240,7 +241,8 @@ export function parseHarnessArgs(argv: string[], env: Record<string, string | un
     learningGoal: '端到端跑数：验证虚拟学习者在日期模拟下能连续多日上课',
     maxDays: 6,
     baseDaysAgo: 21,
-    readyTimeoutMs: 15 * 60_000,
+    // 路径生成 + 阶段设计可能耗时数分钟；同一天"未就绪"累计超过该时长才放弃
+    readyTimeoutMs: 30 * 60_000,
     keep: false,
     statePath: null,
     resumeSessionId: null,

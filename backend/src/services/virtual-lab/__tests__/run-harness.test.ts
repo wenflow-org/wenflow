@@ -13,6 +13,9 @@ describe('classifyAdvanceResponse（advance-day 处置分类）', () => {
   it('网络中断/网关繁忙 → retryable', () => {
     expect(classifyAdvanceResponse({ httpStatus: 0 }).kind).toBe('retryable');
     expect(classifyAdvanceResponse({ httpStatus: 503, body: {} }).kind).toBe('retryable');
+    const limited = classifyAdvanceResponse({ httpStatus: 429, body: {} });
+    expect(limited.kind).toBe('retryable');
+    expect(limited.httpStatus).toBe(429); // 供调用方做限流专属长退避
     expect(classifyAdvanceResponse({ httpStatus: 504, body: {} }).kind).toBe('retryable');
   });
 
@@ -90,7 +93,7 @@ describe('classifySessionStatus', () => {
   });
 });
 
-describe('isPathReady（路径就绪代理判定）', () => {
+describe('isPathReady（路径就绪判定；权威信号 path.canStartLearning）', () => {
   it('未生成/无当前子任务 → 未就绪', () => {
     expect(isPathReady(null)).toBe(false);
     expect(isPathReady({ learningPathId: null, status: 'generating', pathContext: null })).toBe(false);
@@ -100,6 +103,21 @@ describe('isPathReady（路径就绪代理判定）', () => {
 
   it('有路径 + 有当前子任务 → 就绪', () => {
     expect(isPathReady({ learningPathId: 'lp1', status: 'active', pathContext: { currentTaskTitle: '任务一' } })).toBe(true);
+  });
+
+  it('path.canStartLearning 存在时以它为准（权威信号）', () => {
+    // 阶段任务还在生成：即便有 currentTaskTitle，也不该视为就绪
+    expect(isPathReady({
+      learningPathId: 'lp1', status: 'active',
+      path: { canStartLearning: false },
+      pathContext: { currentTaskTitle: '任务一' },
+    })).toBe(false);
+    // 生成完成：就绪
+    expect(isPathReady({
+      learningPathId: 'lp1', status: 'active',
+      path: { canStartLearning: true },
+      pathContext: { currentTaskTitle: null },
+    })).toBe(true);
   });
 });
 
