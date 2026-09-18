@@ -71,7 +71,7 @@ export const SESSION_DAILY_SHARE_FLOOR = 1.0;
 export const BELIEF_DIVERGENCE_MASTERY = 0.7;
 export const BELIEF_DIVERGENCE_PKNOWL = 0.2;
 /** 单元点负担上限（防止多因子连乘放大到一个点吃掉整个预算） */
-const MAX_SINGLE_LOAD = 3.0;
+export const MAX_SINGLE_LOAD = 3.0;
 
 const COMPOUND_RE = /[、和与及/／→=＝；;,，]/;
 const PROCESS_RE = /(流程|步骤|顺序|先.{0,6}再|之后|然后|第[一二三四]步)/;

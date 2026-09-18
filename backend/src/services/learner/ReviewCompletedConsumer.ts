@@ -28,7 +28,7 @@ const CONSUMER_ID = 'review-completed-consumer-v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** 活跃误解对稳定性的惩罚（与旧直写路径 bumpReviewInterval 同值）：下次复习更早，做对比式纠错 */
-const MISCONCEPTION_STABILITY_MULTIPLIER = 0.85;
+export const MISCONCEPTION_STABILITY_MULTIPLIER = 0.85;
 
 /** rating → FSRS grade（again=Again, hard=Hard, good=Good, easy=Easy） */
 const RATING_TO_GRADE: Record<ReviewRating, FsrsGradeCode> = {
