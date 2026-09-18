@@ -37,6 +37,23 @@ describe('SCIENTIFIC_CONSTANTS（登记表自洽）', () => {
       expect(c.ref && c.ref.trim().length).toBeGreaterThan(0);
     }
   });
+
+  it('覆盖状态回路的关键区域（登记目标 ≥30 项）', () => {
+    expect(SCIENTIFIC_CONSTANTS.length).toBeGreaterThanOrEqual(30);
+    const keys = new Set(SCIENTIFIC_CONSTANTS.map((c) => c.key));
+    // 抽查：状态聚合 / 难度上限 / 复习额度 / BKT 分档 / 检查点 都在册
+    for (const key of [
+      'state.aggregation.activeWindowDays',
+      'difficulty.challengeCap.high',
+      'review.dailyLoadLimit',
+      'review.minBudgetSample',
+      'belief.bkt.easy.pL0',
+      'belief.bkt.hard.pT',
+      'warmup.fuzzy.minLength',
+    ]) {
+      expect(keys.has(key)).toBe(true);
+    }
+  });
 });
 
 describe('checkConstants（检查器能抓到什么）', () => {
