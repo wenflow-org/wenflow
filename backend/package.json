@@ -31,6 +31,8 @@
     "prompts:check-handoff": "ts-node src/scripts/check-input-handoffs.ts",
     "prompts:snapshots": "ts-node src/scripts/generate-agent-snapshots.ts",
     "prompts:snapshots:check": "ts-node src/scripts/generate-agent-snapshots.ts --check",
+    "prompts:self-intro": "ts-node src/scripts/generate-agents-self-intro.ts",
+    "prompts:self-intro:check": "ts-node src/scripts/generate-agents-self-intro.ts --check",
     "prompts:seed-routings": "ts-node src/scripts/seed-field-routings.ts",
     "prompts:drift-check": "ts-node src/scripts/field-routing-drift-probe.ts --check",
     "retired:check": "ts-node src/scripts/check-retired-skill-lists.ts",
