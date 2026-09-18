@@ -665,12 +665,26 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
   }
 }
 
-/** 汇总前序阶段掌握（供 priorLearningContext.priorMilestoneMastery） */
-function buildPriorMilestoneMastery(learnerSnapshot: any): TeachingScenarioContext['priorLearningContext'] extends infer _ ? NonNullable<TeachingScenarioContext['priorLearningContext']>['priorMilestoneMastery'] : never {
+/**
+ * 汇总前序阶段掌握（供 priorLearningContext.priorMilestoneMastery）。
+ *
+ * 只保留**确有前序进展**的阶段（completedTasks > 0）：全新学习者的当前路径上
+ * 所有阶段都是 `completedTasks: 0 / masteryState: 'unknown'`，若照单全收，
+ * `priorLearningContext` 会恒为真值，开场就会凭空声称
+ * 「前面关于 X 的基础已经建立好」（走查 P3 实测）。
+ *
+ * @internal 导出供单测锁定上述口径
+ */
+export function buildPriorMilestoneMastery(learnerSnapshot: any): TeachingScenarioContext['priorLearningContext'] extends infer _ ? NonNullable<TeachingScenarioContext['priorLearningContext']>['priorMilestoneMastery'] : never {
   const progress = learnerSnapshot?.knowledgeMemory?.currentPath?.milestoneProgress;
   if (!Array.isArray(progress)) return [];
   return progress
-    .filter((item: any) => item && typeof item.stageNumber === 'number' && typeof item.masteryState === 'string')
+    .filter((item: any) =>
+      item
+      && typeof item.stageNumber === 'number'
+      && typeof item.masteryState === 'string'
+      && Number(item.completedTasks) > 0
+    )
     .map((item: any) => ({
       stageNumber: item.stageNumber,
       title: typeof item.title === 'string' ? item.title : '',
