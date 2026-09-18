@@ -146,7 +146,7 @@ export function buildCoreSkeleton(skillId: string): CoreFile {
       },
     ],
     constraints: [],
-    params: { temperature: 0.5, maxTokens: 4000, failurePolicy: 'fallback' },
+    params: { temperature: 0.5, maxTokens: 4000, failurePolicy: 'retry' },
     deltaOutput: false,
     outputMedia: 'json',
   };

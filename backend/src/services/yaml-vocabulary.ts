@@ -42,16 +42,17 @@ export type VisibilityPreset = (typeof VISIBILITY_PRESETS)[number];
 
 /**
  * core params.failurePolicy（业务意图词表，SKILL_PROTOCOL_V4 §2.4.4）
- * 2026-08-11：fallback 已退役（纯重试+明确失败改造），存量 core 已收敛为 retry/propagate；
- * 词表保留 fallback 仅为兼容历史数据，中期收敛为 retry | propagate 两值。
+ * 2026-08-11：fallback 已退役（纯重试+明确失败改造）；
+ * 2026-09-18：从**可写词表**移除，新 core 文件必须用 retry | propagate。
+ * （历史 `deterministic-fallback` 仅存于已退役的残留 manifest，无 core 入口。）
  */
-export const FAILURE_POLICY_CORE = ['retry', 'fallback', 'propagate'] as const;
+export const FAILURE_POLICY_CORE = ['retry', 'propagate'] as const;
 export type CoreFailurePolicy = (typeof FAILURE_POLICY_CORE)[number];
 
 /** manifest promptContract.failurePolicy（运行时契约词表，skill-prompt-contract §v2） */
 export const FAILURE_POLICY_MANIFEST = [
   'retry',
-  'deterministic-fallback',
+  'deterministic-fallback', // 仅历史残留 manifest（concept-priority / path-adjustment-generator，2026-08-09 退役）
   'blocking',
   'best-effort',
   'none',
@@ -60,15 +61,12 @@ export type ManifestFailurePolicy = (typeof FAILURE_POLICY_MANIFEST)[number];
 
 /**
  * core → manifest 失败策略映射（唯一映射表）：
- * retry⇔retry、fallback⇔deterministic-fallback、propagate⇔blocking；
- * best-effort/none 无 core 对应，返回 undefined。
+ * retry⇔retry、propagate⇔blocking；best-effort/none/已退役的 deterministic-fallback 返回 undefined。
  */
 export function manifestFailurePolicyOf(core: string): ManifestFailurePolicy | undefined {
   switch (core) {
     case 'retry':
       return 'retry';
-    case 'fallback':
-      return 'deterministic-fallback';
     case 'propagate':
       return 'blocking';
     default:
@@ -76,15 +74,14 @@ export function manifestFailurePolicyOf(core: string): ManifestFailurePolicy | u
   }
 }
 
-/** manifest → core 失败策略映射（manifestFailurePolicyOf 的反向；best-effort/none 无 core 对应返回 undefined） */
+/** manifest → core 失败策略映射（manifestFailurePolicyOf 的反向；无 core 对应返回 undefined） */
 export function coreFailurePolicyOf(manifest: string): CoreFailurePolicy | undefined {
   switch (manifest) {
     case 'retry':
       return 'retry';
-    case 'deterministic-fallback':
-      return 'fallback';
     case 'blocking':
       return 'propagate';
+    // deterministic-fallback / best-effort / none：退役或 core 侧无对应
     default:
       return undefined;
   }

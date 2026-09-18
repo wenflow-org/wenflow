@@ -9,7 +9,7 @@
  *   - aux / handler-only 差异（无编排契约、handler-only 无 core/noPromptFile=true）
  *   - 冲突与输入校验（manifest 占用 / alias 占用 / mainline 必填）
  *   - 备份（写盘前备份受影响文件到 prompts/backups/scaffold/<ts>/）
- *   - 骨架形状（channels [task] / TODO 占位 / params fallback）
+ *   - 骨架形状（channels [task] / TODO 占位 / params retry）
  */
 import * as fs from 'fs';
 import * as os from 'os';
@@ -200,7 +200,7 @@ describe('skill-scaffold：mainline 全量创建', () => {
     }
   });
 
-  it('core 骨架形状：channels [task] / TODO 占位 / params fallback，约束符合任务清单', async () => {
+  it('core 骨架形状：channels [task] / TODO 占位 / params retry，约束符合任务清单', async () => {
     const core = buildCoreSkeleton('test-scaffold-demo');
     expect(core.channels).toEqual(['task']);
     expect(core.baseVersion).toBe(1);
@@ -211,7 +211,8 @@ describe('skill-scaffold：mainline 全量创建', () => {
       { name: 'reply', type: 'string', optional: false, desc: expect.stringContaining('TODO'), turn: false },
     ]);
     expect(core.constraints).toEqual([]);
-    expect(core.params).toEqual({ temperature: 0.5, maxTokens: 4000, failurePolicy: 'fallback' });
+    // fallback 已退役（2026-09-18 从可写词表移除）：新 skill 骨架用 retry
+    expect(core.params).toEqual({ temperature: 0.5, maxTokens: 4000, failurePolicy: 'retry' });
   });
 
   it('备份：写盘前备份受影响文件到 prompts/backups/scaffold/<ts>/（新文件不备份）', async () => {
