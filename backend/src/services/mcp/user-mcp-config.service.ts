@@ -156,6 +156,10 @@ const mcpToolSchema = z.object({
     invalid_type_error: '工具 type 必须是字符串',
   }).trim().min(1, '工具 type 不能为空').max(64, '工具 type 不能超过 64 个字符')
     .regex(MCP_TOOL_ID_PATTERN, '工具 type 只能包含字母、数字、点、下划线、冒号和连字符'),
+  /** 'http'（默认，通用 HTTP 端点）/ 'mcp'（真 MCP server，工具运行时发现） */
+  transport: z.enum(['http', 'mcp'], {
+    errorMap: () => ({ message: '工具 transport 仅支持 http 或 mcp' }),
+  }).optional(),
   endpoint: createMcpEndpointSchema('工具'),
   apiKey: z.string({ invalid_type_error: '工具 apiKey 必须是字符串' })
     .max(8192, '工具 apiKey 不能超过 8192 个字符')
@@ -166,12 +170,28 @@ const mcpToolSchema = z.object({
       .min(100, '工具 config.timeout 不能小于 100 毫秒')
       .max(MAX_MCP_TOOL_TIMEOUT_MS, `工具 config.timeout 不能超过 ${MAX_MCP_TOOL_TIMEOUT_MS} 毫秒`)
       .optional(),
+    toolsTtlMs: z.number({ invalid_type_error: '工具 config.toolsTtlMs 必须是数字' })
+      .int('工具 config.toolsTtlMs 必须是整数')
+      .min(0, '工具 config.toolsTtlMs 不能小于 0')
+      .max(86_400_000, '工具 config.toolsTtlMs 不能超过 86400000')
+      .optional(),
   }).strict('工具 config 包含不支持的字段').optional(),
   enabled: z.boolean({
     required_error: '工具 enabled 必填',
     invalid_type_error: '工具 enabled 必须是布尔值',
   }),
-}).strict('工具包含不支持的字段');
+}).strict('工具包含不支持的字段').transform(tool => ({
+  id: tool.id,
+  name: tool.name,
+  description: tool.description,
+  type: tool.type,
+  // 仅在显式声明 mcp 时落字段（缺省即 http），与读取侧 runtimeMcpToolSchema 保持同一约定
+  ...(tool.transport === 'mcp' ? { transport: 'mcp' as const } : {}),
+  endpoint: tool.endpoint,
+  enabled: tool.enabled,
+  ...(tool.apiKey === undefined ? {} : { apiKey: tool.apiKey }),
+  ...(tool.config === undefined ? {} : { config: tool.config }),
+}));
 
 const runtimeMcpProviderSchema = z.object({
   id: z.string().trim().min(1).max(64).regex(MCP_TOOL_ID_PATTERN).transform(value => value.toLowerCase()),

@@ -368,6 +368,40 @@ describe('用户 MCP 路由', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
+  it('保存带 transport 的工具不再 400（前端每次保存都带该字段）', async () => {
+    findUnique.mockResolvedValue({
+      userId: 'user-1',
+      providers: '[]',
+      tools: '[]',
+      routingStrategy: 'priority',
+      fallbackEnabled: true,
+      healthCheck: 'null'
+    })
+    const req: any = {
+      user: { userId: 'user-1' },
+      body: {
+        tools: [{
+          id: 'tavily',
+          name: 'Tavily MCP',
+          description: '',
+          type: 'mcp',
+          transport: 'mcp',
+          endpoint: 'https://tavily.example/mcp',
+          enabled: true
+        }]
+      }
+    }
+    const res = createResponse()
+    const next = jest.fn()
+
+    await routes['PUT /'](req, res, next)
+
+    expect(res.statusCode).toBe(200)
+    expect(next).not.toHaveBeenCalled()
+    expect(JSON.parse(update.mock.calls[0][0].data.tools)[0])
+      .toMatchObject({ id: 'tavily', transport: 'mcp' })
+  })
+
   it('无关部分更新不会清除非数组历史配置', async () => {
     findUnique.mockResolvedValue({
       userId: 'user-1',

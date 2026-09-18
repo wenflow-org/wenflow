@@ -321,3 +321,40 @@ describe('用户 MCP 工具的 transport 支持', () => {
     expect(tools[0].config).toMatchObject({ toolsTtlMs: 60000 })
   })
 })
+
+/**
+ * 写入路径（parseUserMcpTools）回归：
+ * 前端保存时**总是**带 transport，而该 schema 是 .strict()——漏配 transport 会让每次保存都 400。
+ */
+describe('用户 MCP 工具写入路径接受 transport', () => {
+  const base = {
+    id: 'my-tool',
+    name: '我的工具',
+    description: '',
+    type: 'remote',
+    endpoint: 'https://a.example/api',
+    enabled: true
+  }
+
+  it('transport=http / mcp 均可写入（http 为缺省，归一秒掉）', () => {
+    const http = parseUserMcpTools([{ ...base, transport: 'http' }])
+    expect(http).toHaveLength(1)
+    expect(http[0].transport).toBeUndefined()
+
+    const mcp = parseUserMcpTools([{ ...base, transport: 'mcp' }])
+    expect(mcp).toHaveLength(1)
+    expect(mcp[0].transport).toBe('mcp')
+  })
+
+  it('写入后读回一致（写读同一套 transport 约定）', () => {
+    const written = parseUserMcpTools([{ ...base, transport: 'mcp', config: { toolsTtlMs: 60000 } }])
+    const readBack = normalizeStoredUserMcpTools(written)
+    expect(readBack[0]).toMatchObject({ id: 'my-tool', transport: 'mcp' })
+    expect(readBack[0].config).toMatchObject({ toolsTtlMs: 60000 })
+  })
+
+  it('非法 transport 报 MCP_TOOL_CONFIG_INVALID（不再因未知键而 400）', () => {
+    expect(() => parseUserMcpTools([{ ...base, transport: 'grpc' }]))
+      .toThrow(/transport 仅支持 http 或 mcp/)
+  })
+})
