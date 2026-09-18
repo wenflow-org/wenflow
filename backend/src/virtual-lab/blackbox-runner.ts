@@ -56,6 +56,7 @@ import {
   type LessonKnowledgePoint,
   type SelfReportedLearnerState,
 } from './learner-memory'
+import { buildMemoryRecallHints, type MemoryRecallHint } from './memory-recall'
 
 import { safeJsonParse } from '../utils/safe-json'
 import { bumpFrictionBudget, normalizeFrictionBudget } from '../skills/virtual-learner-shared'
@@ -949,7 +950,7 @@ export class BlackboxVirtualLearnerRunner {
             previousLearnerState: state.blackbox?.learnerPrivateState?.teaching || null,
             currentTask: latest.visibleTask || null,
             knowledgeSnapshot: await this.buildLearnerKnowledgeSnapshot(session.userId, latest.visibleTask),
-            learnerMemory: await this.buildLearnerMemoryForSimulator(session.userId),
+            ...(await this.buildLearnerMemoryContextForSimulator(session.userId, sessionId, history.length)),
             epistemicGrounding,
             frictionBudget: snapshot.frictionBudget,
             // 有待答检查点时把题目交给模拟器（不含答案键），让它按人设作答
@@ -1854,6 +1855,34 @@ export class BlackboxVirtualLearnerRunner {
       dueReview: memory.dueReview.map((item) => item.name),
       struggling: memory.struggling.map((item) => item.name),
       recentCompleted: memory.recentTaskTitles,
+    };
+  }
+
+  /**
+   * Q4：组装 learnerMemory + 到期旧知的概率化提取提示（确定性，可回放）。
+   * 只读、不改状态；按 (会话, stepIndex, 概念) 派生随机流。
+   */
+  private async buildLearnerMemoryContextForSimulator(
+    userId: string,
+    sessionId: string,
+    stepIndex: number
+  ): Promise<{ learnerMemory: { mastered: string[]; dueReview: string[]; struggling: string[]; recentCompleted: string[] } | null; memoryRecall: MemoryRecallHint[] }> {
+    const memory = await buildLearnerMemorySnapshot(userId, { limit: 8 }).catch(() => null);
+    if (!memory) return { learnerMemory: null, memoryRecall: [] };
+    return {
+      learnerMemory: {
+        mastered: memory.mastered.map((item) => item.name),
+        dueReview: memory.dueReview.map((item) => item.name),
+        struggling: memory.struggling.map((item) => item.name),
+        recentCompleted: memory.recentTaskTitles,
+      },
+      memoryRecall: buildMemoryRecallHints({
+        memory,
+        experimentRunSeed: sessionId,
+        virtualLearnerId: userId,
+        sessionId,
+        stepIndex: Number.isFinite(stepIndex) ? stepIndex : 0,
+      }),
     };
   }
 

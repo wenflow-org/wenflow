@@ -112,6 +112,7 @@ import {
 import {
   persistKnowledgeState,
   buildAssistedLearnerMemory,
+  buildAssistedMemoryRecall,
   persistAssistedLearnerMemory,
   persistProfileConcepts
 } from './simulation.memory';
@@ -2810,6 +2811,12 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
 
       // 日期模拟：把"第几天/已过几天"作为可选输入注入（未开启则为 null，输入里省略 = 现网不变）
       const temporalContext = await simulatedDayService.getTemporalContext(session).catch(() => null);
+      // Q4：到期旧知的概率化提取判定（代码裁决，确定性可回放；按模拟日作为步进种子，同一天内稳定）
+      const memoryRecall = await buildAssistedMemoryRecall(
+        session.userId,
+        session.id,
+        Number(temporalContext?.dayIndex) || 0
+      ).catch(() => []);
 
       const virtualReplyOutput = await this.retryLearnUpstream(sessionId, 'simulate-teaching-turn', () => executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
         learner: {
@@ -2838,6 +2845,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         },
         knowledgeSnapshot,
         learnerMemory: learnerMemoryForSimulator,
+        ...(memoryRecall.length ? { memoryRecall } : {}),
         epistemicGrounding,
         ...(temporalContext ? { temporalContext } : {}),
         frictionBudget: getSessionFrictionBudget(session),

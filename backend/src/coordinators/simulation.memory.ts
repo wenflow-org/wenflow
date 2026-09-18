@@ -12,6 +12,7 @@ import {
 import { executeSkill, virtualLearnerMemoryCuratorDefinition } from '../skills';
 import { safeJsonParse } from '../utils/safe-json';
 import { parseStageResultsPayload } from './simulation.helpers';
+import { buildMemoryRecallHints, type MemoryRecallHint } from '../virtual-lab/memory-recall';
 import type { SimulationMilestone, SimulationTask, VirtualSessionWithProfile } from '../virtual-lab/vlab-types';
 
 /**
@@ -57,6 +58,26 @@ export async function buildAssistedLearnerMemory(
     struggling: memory.struggling.map((item) => item.name),
     recentCompleted: memory.recentTaskTitles,
   };
+}
+
+/**
+ * 组装 assisted 模式的「概率化提取」提示（Q4）：对到期复习点按 (会话, 天, 概念) 做确定性提取判定。
+ * 只读、不改状态；失败静默返回空（不影响教学）。
+ */
+export async function buildAssistedMemoryRecall(
+  userId: string,
+  sessionId: string,
+  stepIndex: number
+): Promise<MemoryRecallHint[]> {
+  const memory = await buildLearnerMemorySnapshot(userId, { limit: 8 }).catch(() => null);
+  if (!memory) return [];
+  return buildMemoryRecallHints({
+    memory,
+    experimentRunSeed: sessionId,
+    virtualLearnerId: userId,
+    sessionId,
+    stepIndex: Number.isFinite(stepIndex) ? stepIndex : 0,
+  });
 }
 
 /**

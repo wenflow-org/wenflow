@@ -346,6 +346,7 @@ sandbox:simulation-agent.learner
 sandbox:simulation-agent.learnerMemory
 sandbox:simulation-agent.learnerPrivateState
 sandbox:simulation-agent.learnerState
+sandbox:simulation-agent.memoryRecall
 sandbox:simulation-agent.metricCompleteness
 sandbox:simulation-agent.pathProposal
 sandbox:simulation-agent.persona

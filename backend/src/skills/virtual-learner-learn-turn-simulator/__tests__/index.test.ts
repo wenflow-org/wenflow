@@ -98,6 +98,7 @@ describe('virtual-learner-learn-turn-simulator payload 透传（检查点 / 时�
   async function capturedPayload(payloadInput: LearnLearnerSimulationInput): Promise<{
     pendingCheckpoint?: { id?: string; question?: string; options?: Array<{ id: string; text: string }>; allowSkip?: boolean };
     temporalContext?: { simulatedDay?: string; dayIndex?: number; sinceLastSessionDays?: number | null };
+    memoryRecall?: Array<{ conceptKey: string; status: string; outputConceptKey?: string }>;
   }> {
     await virtualLearnerLearnTurnSimulator(payloadInput)
     const spec = mockCallPrompt.mock.calls[0][0]
@@ -134,6 +135,22 @@ describe('virtual-learner-learn-turn-simulator payload 透传（检查点 / 时�
     const payload = await capturedPayload(withCheckpoint)
     expect(payload.pendingCheckpoint?.id).toBe('cp_1')
     expect(payload.temporalContext?.dayIndex).toBe(3)
+  })
+
+  it('memoryRecall 进 payload（同概念时省略 outputConceptKey）；缺省不注入', async () => {
+    const withRecall: LearnLearnerSimulationInput = {
+      ...input,
+      memoryRecall: [
+        { conceptKey: '二分查找', status: 'VAGUE' },
+        { conceptKey: '防抖', status: 'CONFUSED', outputConceptKey: '节流' },
+      ],
+    }
+    const payload = await capturedPayload(withRecall)
+    expect(payload.memoryRecall).toEqual([
+      { conceptKey: '二分查找', status: 'VAGUE' },
+      { conceptKey: '防抖', status: 'CONFUSED', outputConceptKey: '节流' },
+    ])
+    expect(await capturedPayload(input)).not.toHaveProperty('memoryRecall')
   })
 })
 

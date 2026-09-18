@@ -17,6 +17,7 @@ export const virtualLearnerLearnTurnSimulatorRuntimeDefinition: RuntimeDefinitio
       knowledgeSnapshot: { type: 'array', description: '当前任务知识看板' },
       learnerMemory: { type: 'object', description: '学习者长期记忆（已掌握/到期复习/最近完成）' },
       temporalContext: { type: 'object', description: '日期模拟时间上下文（可选）' },
+      memoryRecall: { type: 'array', description: '代码裁决的到期点概率化提取结果（Q4）' },
       epistemicGrounding: { type: 'object', description: '本轮认知判决（硬约束）' },
       pendingCheckpoint: { type: 'object', description: '当前待作答的理解检查点（不含答案键）' },
     },
@@ -34,7 +35,7 @@ export const virtualLearnerLearnTurnSimulatorRuntimeDefinition: RuntimeDefinitio
     },
   },
   variableBindings: {
-    consumes: ['learner', 'story', 'visibleContext', 'currentPhase', 'previousLearnerState', 'currentTask', 'knowledgeSnapshot', 'learnerMemory', 'temporalContext', 'epistemicGrounding', 'pendingCheckpoint'],
+    consumes: ['learner', 'story', 'visibleContext', 'currentPhase', 'previousLearnerState', 'currentTask', 'knowledgeSnapshot', 'learnerMemory', 'temporalContext', 'memoryRecall', 'epistemicGrounding', 'pendingCheckpoint'],
     produces: ['reply', 'emotion', 'learnerState', 'learnerFeedback', 'checkpointAnswer', 'debug'],
   },
   capabilities: ['learn-stage-learner-simulation', 'visible-context-roleplay', 'short-teaching-reply'],

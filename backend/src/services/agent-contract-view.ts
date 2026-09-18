@@ -139,6 +139,7 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'recentScenarioHints',
     'learnerMemory',
     'temporalContext',
+    'memoryRecall',
     'persona',
     'turnSequence',
     'existingKnown',

@@ -85,6 +85,15 @@ export interface LearnLearnerSimulationInput {
     timezone?: string;
     sinceLastSessionDays?: number | null;
   } | null;
+  /**
+   * 代码裁决的"这次还能不能想起来"观测（Q4）：对到期复习点的**概率化提取**结果。
+   * 模拟器据此人设化表达（CLEAR 顺畅、VAGUE 含糊/舌尖、CONFUSED 记成别的、FAILED 记不得）。
+   */
+  memoryRecall?: Array<{
+    conceptKey: string;
+    status: 'CLEAR' | 'VAGUE' | 'CONFUSED' | 'FAILED';
+    outputConceptKey?: string;
+  }> | null;
 }
 
 export interface LearnLearnerSimulationOutput {
@@ -358,6 +367,18 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
   const friction = decideFrictionTrigger(input.frictionBudget);
   const temporalContext = input.temporalContext || null;
   const pendingCheckpoint = projectPendingCheckpoint(input.pendingCheckpoint);
+  const memoryRecall = Array.isArray(input.memoryRecall)
+    ? input.memoryRecall
+        .filter((item) => item && typeof item.conceptKey === 'string' && ['CLEAR', 'VAGUE', 'CONFUSED', 'FAILED'].includes(String(item.status)))
+        .slice(0, 6)
+        .map((item) => ({
+          conceptKey: item.conceptKey,
+          status: item.status,
+          ...(item.outputConceptKey && item.outputConceptKey !== item.conceptKey
+            ? { outputConceptKey: item.outputConceptKey }
+            : {})
+        }))
+    : [];
 
   const body = {
     learner: input.learner || {},
@@ -382,6 +403,7 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
         }
       : null,
     epistemicGrounding: input.epistemicGrounding || null,
+    ...(memoryRecall.length ? { memoryRecall } : {}),
     friction: {
       budget: friction.budget,
       triggerProbability: friction.triggered ? 1 : 0,
@@ -415,6 +437,7 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
       knowledgeSnapshot: body.knowledgeSnapshot,
       ...(temporalContext ? { temporalContext } : {}),
       learnerMemory: body.learnerMemory,
+      ...(memoryRecall.length ? { memoryRecall } : {}),
       epistemicGrounding: body.epistemicGrounding,
       friction: body.friction,
       visibleContext: body.visibleContext,
@@ -442,6 +465,7 @@ export const virtualLearnerLearnTurnSimulatorDefinition: SkillDefinition = {
       knowledgeSnapshot: { type: 'array', description: '当前任务知识看板' },
       learnerMemory: { type: 'object', description: '学习者长期记忆（已掌握/到期复习/最近完成）' },
       temporalContext: { type: 'object', description: '日期模拟时间上下文（可选）' },
+      memoryRecall: { type: 'array', description: '代码裁决的到期点概率化提取结果（Q4）' },
       epistemicGrounding: { type: 'object', description: '本轮认知判决（硬约束）' },
       pendingCheckpoint: { type: 'object', description: '当前待作答的理解检查点（不含答案键）' },
     },
