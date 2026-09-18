@@ -151,7 +151,7 @@
         </div>
 
         <div ref="scrollEl" class="tutor__scroll" @scroll="updateNearBottom">
-          <template v-for="m in msgs" :key="m.id">
+          <template v-for="(m, mi) in msgs" :key="m.id">
             <div v-if="m.role === 'user'" class="msg msg--user" :class="{ 'msg--editing': editingMsgId === m.id }">
               <!-- 编辑态：textarea 替换气泡 -->
               <div v-if="editingMsgId === m.id" class="msg__edit">
@@ -194,7 +194,7 @@
                   @copy="copyMessage(m.text)"
                   @feedback="(up) => sendMessageFeedback(m, up)"
                 />
-                <span v-if="m.confusion?.length" class="msg__chip msg__chip--confuse">捕获到卡点「{{ m.confusion.join('、') }}」· 导师会在这里多做确认</span>
+                <span v-if="showConfusionAt(mi)" class="msg__chip msg__chip--confuse">捕获到卡点「{{ (m.confusion || []).join('、') }}」· 导师会在这里多做确认</span>
                 <div class="msg__meta">
                   问流导师 · {{ m.time }}
                   <span v-if="m.failed" class="msg__retry" @click="retryLast">重试</span>
@@ -553,6 +553,18 @@ function pushMsg(m: ChatMsg): ChatMsg {
   const withId: ChatMsg = { ...m, id: m.id ?? `lm_${Date.now().toString(36)}_${++msgSeq}` };
   msgs.value.push(withId);
   return withId;
+}
+/**
+ * 卡点条只在「与上一条消息的卡点不同」时展示。
+ * 分析里的 confusionPoints 会被逐轮带下去（同一卡点能连挂好几轮），
+ * 全量展示会让人以为系统没在看进展（走查 P4）。
+ */
+function showConfusionAt(i: number): boolean {
+  const list = msgs.value;
+  const cur = Array.isArray(list[i]?.confusion) ? list[i]!.confusion!.join('、') : '';
+  if (!cur) return false;
+  const prev = i > 0 && Array.isArray(list[i - 1]?.confusion) ? list[i - 1]!.confusion!.join('、') : '';
+  return cur !== prev;
 }
 const quickReplies = ref<string[]>([]);
 /** 开场摸底引导（opening.question 收敛进行动台面板的一行小字，不再单独成待答气泡）；仅在有动作选项时收进面板 */
