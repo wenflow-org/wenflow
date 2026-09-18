@@ -20,6 +20,10 @@
 - [`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md)
   - 20 问（十二问 + 八问）方案 × 真实代码逐条核验 + 与项目业务对齐的升级方向（三波）
   - 结论口径：哪些方案已过期/记错、哪些现在能做、哪些缺基建；含核验中发现的即刻可修缺陷
+- [`WAVE1_TRACK_A_VIRTUAL_CHAIN.md`](./WAVE1_TRACK_A_VIRTUAL_CHAIN.md)
+  - 第一波 · Track A：虚拟学习者链路修复（检查点 payload / 定义漂移 / 时间上下文 / 策略收敛 / 虚拟侧降级）
+- [`WAVE1_TRACK_B_TEACHING_GOVERNANCE.md`](./WAVE1_TRACK_B_TEACHING_GOVERNANCE.md)
+  - 第一波 · Track B：真实教学侧治理（静默降级 / 语义安全 / 内容诚实 / 公平最小层）
 - [`EDUCATIONAL_THEORY_MAP.md`](./EDUCATIONAL_THEORY_MAP.md)
   - 教育理论地图（理念宪法）：教学/心理/神经科学/LLM 理论 × 落点索引
   - 全部文献经联网核实（含 DOI/arXiv 链接）；prompt 规则与指标设计的理论依据引用源
