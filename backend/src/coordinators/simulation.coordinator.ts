@@ -2031,7 +2031,9 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       });
       await this.addSessionLog(sessionId, {
         timestamp: new Date().toISOString(),
-        phase: 'path-replan',
+        // 收尾日志与"请求"日志分属不同 phase：否则一次重规划写 2 条 'path-replan'，
+        // countSessionLogsByPhase 会双计 → 重规划上限（2）在第 1 次就命中、提前 force-accept（18 号报告观察项）。
+        phase: 'path-replan-completed',
         details: { output: { from: 'path-review', to: 'path', reason: 'path-replanned-awaiting-review', decision: pathReview.decision, sourcePathId: session.learningPathId, resultPathId: learningPathId } }
       });
       await this.addSessionLog(sessionId, {

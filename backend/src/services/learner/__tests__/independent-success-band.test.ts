@@ -68,6 +68,16 @@ describe('loadCodeJudgedSuccess（只认代码裁决）', () => {
     expect(await loadCodeJudgedSuccess('u1')).toEqual({ rate: null, sample: 0, passed: 0 });
   });
 
+  it('简答（short_answer，关键词判定、系统性低估）不进带（18 号报告 N6）', async () => {
+    findMany.mockResolvedValue([
+      { payload: JSON.stringify({ judgedBy: 'code', passed: true, type: 'single_choice' }) },
+      { payload: JSON.stringify({ judgedBy: 'code', passed: false, type: 'short_answer' }) },
+      { payload: JSON.stringify({ judgedBy: 'code', passed: false, type: 'short_answer' }) },
+    ]);
+    // 只算那道选择题：1/1，而不是 1/3 把成功率拖低触发误降档
+    expect(await loadCodeJudgedSuccess('u1')).toEqual({ rate: 1, sample: 1, passed: 1 });
+  });
+
   it('读取失败 → 按无样本处理（不让一次读失败影响档位）', async () => {
     findMany.mockRejectedValue(new Error('db down'));
     expect(await loadCodeJudgedSuccess('u1')).toEqual({ rate: null, sample: 0, passed: 0 });

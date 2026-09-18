@@ -174,7 +174,7 @@ export interface SimulationContext {
 
 export interface SimulationLogEntry {
   timestamp: string;
-  phase: 'virtual-reply' | 'goal-response' | 'stage-transition' | 'path-review' | 'path-replan' | 'path-replan-guard' | 'path-regenerate' | 'path-enrichment-not-ready' | 'teaching-reply' | 'teaching-response' | 'teaching-start' | 'teaching-interrupted' | 'error';
+  phase: 'virtual-reply' | 'goal-response' | 'stage-transition' | 'path-review' | 'path-replan' | 'path-replan-completed' | 'path-replan-guard' | 'path-regenerate' | 'path-enrichment-not-ready' | 'teaching-reply' | 'teaching-response' | 'teaching-start' | 'teaching-interrupted' | 'error';
   durationMs?: number;
   details: {
     input?: any;

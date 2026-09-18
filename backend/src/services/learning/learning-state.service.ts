@@ -1255,7 +1255,14 @@ export class LearningStateService {
       }),
       prisma.teaching_sessions.aggregate({
         _sum: { duration: true },
-        where: { userId, startTime: { gte: dayStart, lte: asOf } },
+        // 只统计"真实学习时长"：排除被替换/丢弃/失败的会话，否则同一节课会被重复计入
+        // （重开一节 → superseded + 新会话），把时长加成顶高 → 全局 lf 虚高 →
+        // 误判疲劳减速/降档/重排（18 号报告 N8）。
+        where: {
+          userId,
+          startTime: { gte: dayStart, lte: asOf },
+          status: { notIn: ['superseded', 'discarded', 'failed', 'finalization_failed'] },
+        },
       }),
     ]);
     return { lessons, minutes: sessions._sum.duration || 0 };

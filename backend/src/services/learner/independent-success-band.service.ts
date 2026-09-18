@@ -60,7 +60,7 @@ export function evaluateSuccessBand(rate: number | null, sample: number): Succes
 }
 
 /** 检查点结果 payload 的最小形状（只读我们关心的字段，避免 any） */
-type CheckpointResultPayload = { judgedBy?: unknown; passed?: unknown };
+type CheckpointResultPayload = { judgedBy?: unknown; passed?: unknown; type?: unknown };
 
 /**
  * 读取该学习者（可限路径）**代码裁决**的检查点成功率。
@@ -93,6 +93,9 @@ export async function loadCodeJudgedSuccess(
         continue;
       }
       if (parsed?.judgedBy !== 'code') continue; // 模型派生判定不进带（避免自证回路）
+      // 简答按"关键词是否出现"保守判定，对措辞敏感、**系统性低估**，会拖低成功率带触发误降档
+      // （18 号报告 N6）。结论与注释一致：只让选择题等可按集合精确判定的进带。
+      if (parsed?.type === 'short_answer') continue;
       codeSample += 1;
       if (parsed.passed === true) codePassed += 1;
     }
