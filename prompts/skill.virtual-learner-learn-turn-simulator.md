@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-learn-turn-simulator
-coreHash: 20de4c6427d7012284e7271ef8c39b12adefab5585ae1c69cfe46ce2a83bf25e
+coreHash: 81a5be569d56ac843d7676a78c84e72c391116aeaf72f326939411115391a46b
 coreVersion: 1
 temperature: 0.7
 maxTokens: 2000
@@ -36,10 +36,9 @@ failurePolicy: propagate
 - 「temporalContext（object）」`sandbox:simulation.temporalContext`（编排注入） — 会话的"日期模拟"上下文（**可选**，仅日期模拟开启时注入）：
 · simulatedDay（string）当前模拟日（YYYY-MM-DD）
 · dayIndex（number）会话内第几天（0=尚未推进）
-· elapsedDays（number）自起点已过的自然日数
 · simulatedNow（string）模拟当前时刻（ISO）
 · timezone（string）模拟时区
-· sinceLastSessionDays（number，可选）距上一次学习几天
+· sinceLastSessionDays（number，可选）距上一个上课日的自然日数（课表口径；缺失=没有"上一次学习"，不得提及时间跨度）
 - 「epistemicGrounding（object）」`skill:virtual-learner-epistemic-grounding.epistemicGrounding` — 本轮认知判决（物理两阶段第一段产出，硬约束）：sampledCorrectness/blockedConcept/errorPattern/masteryProb
 
 ## 执行规则

@@ -194,6 +194,22 @@ export function isCourseDay(baseDate: string | Date, dayIndex: number, courseWee
 }
 
 /**
+ * 距"上一次学习"的自然日数（课表口径）：当前 dayIndex 与最近一个上课日 dayIndex 的差。
+ * - `dayIndex<=0`（尚未推进）→ null：没有"上一次学习"。
+ * - 往前找最近的**上课日**（含起点日 0，因为起点日也可能是上课日）；本次推进之前若没有任何
+ *   上课日 → null。
+ * 说明：虚拟会话逐日推进，实际学习发生在课表内的上课日；跨周末会自然得到 2~3 天。
+ */
+export function previousCourseDayGap(baseDate: string, dayIndex: number, courseWeekdays: number[]): number | null {
+  const day = Math.max(0, Math.trunc(dayIndex));
+  if (day <= 0) return null;
+  for (let cursor = day - 1; cursor >= 0; cursor -= 1) {
+    if (isCourseDay(baseDate, cursor, courseWeekdays)) return day - cursor;
+  }
+  return null;
+}
+
+/**
  * 从 fromDayIndex 之后，收集 count 个"上课日"的 dayIndex（按课表跳过非上课日）。
  * 用于手动/自动推进：推进 N 个上课日，而不是 N 个自然日。
  */
@@ -228,11 +244,14 @@ export interface TemporalContext {
 export function temporalContextFromClock(clock: SimulationClockView | null | undefined): TemporalContext | null {
   if (!clock || !clock.enabled) return null;
   const window = resolveDayWindow(clock.baseDate, clock.dayIndex);
+  const sinceLastSessionDays = previousCourseDayGap(clock.baseDate, clock.dayIndex, clock.courseWeekdays);
   return {
     simulatedNow: clock.simulatedNow,
     simulatedDay: window.simulatedDay,
     dayIndex: clock.dayIndex,
     timezone: clock.timezone,
+    // 无"上一次学习"时**省略该键**（而不是给 null）：prompt 规则以"键缺失=不得提及时间跨度"为准
+    ...(sinceLastSessionDays !== null ? { sinceLastSessionDays } : {}),
   };
 }
 

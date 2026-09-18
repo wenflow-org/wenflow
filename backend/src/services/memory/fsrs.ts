@@ -155,8 +155,8 @@ export function fsrsSchedule(
 }
 
 /**
- * 当前可提取率（幂律遗忘曲线），对应 ACT-R calculateRetention 的等效输出。
- * 接口保持与 actr.calculateRetention 相似（供 due 判定与展示复用）。
+ * 当前可提取率（FSRS-6 幂律遗忘曲线）。替代了早期 ACT-R 幂律实现
+ * （`actr.calculateRetention` 已于 2026-09-18 作为死代码删除）。
  */
 export function fsrsRetrievability(state: FsrsMemoryState, now: Date): number {
   if (!state || state.stability <= 0 || !state.lastReviewAt) return 0;

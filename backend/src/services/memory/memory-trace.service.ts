@@ -330,7 +330,7 @@ class MemoryTraceService {
     const limit = Number.isInteger(options.limit) && (options.limit as number) > 0 ? options.limit : 20;
 
     // 断链修复 P0-6：优先 SQL 直查 dueAt <= now（物化到期），解决全表扫；
-    // 老数据 dueAt 为 null 的仍走惰性 isReviewDue 兜底合并。
+    // 老数据（dueAt 为 null）在下方按 FSRS 保留率跌破阈值惰性判定，而非 SQL 物化到期。
     const [materialized, legacy] = await Promise.all([
       prisma.memory_traces.findMany({
         where: { userId, dueAt: { lte: now } },

@@ -6,6 +6,7 @@ import {
   temporalContextFromClock,
   isCourseDay,
   collectCourseDayIndexes,
+  previousCourseDayGap,
   planClockAdvance,
   resolutionEnteredLearn,
   summarizeDayLearning,
@@ -231,6 +232,32 @@ describe('课表与推进（isCourseDay / collectCourseDayIndexes / planClockAdv
     expect(collectCourseDayIndexes('2026-09-14', 0, WEEK, 3)).toEqual([1, 2, 3]);
     // 从周五(4) 起：周六/周日跳过 → 下周一(7)、周二(8)
     expect(collectCourseDayIndexes('2026-09-14', 4, WEEK, 2)).toEqual([7, 8]);
+  });
+
+  it('previousCourseDayGap：首日 null，跨周末给出 3 天（课表口径）', () => {
+    // baseDate 2026-09-14 周一；day0=周一 … day4=周五、day5=周六、day6=周日、day7=下周一
+    expect(previousCourseDayGap('2026-09-14', 0, WEEK)).toBeNull();
+    expect(previousCourseDayGap('2026-09-14', 1, WEEK)).toBe(1); // 周二 ← 周一
+    expect(previousCourseDayGap('2026-09-14', 4, WEEK)).toBe(1); // 周五 ← 周四
+    expect(previousCourseDayGap('2026-09-14', 7, WEEK)).toBe(3); // 下周一 ← 周五（跨周末）
+  });
+
+  it('temporalContextFromClock：跨周末注入 sinceLastSessionDays；首日省略该键', () => {
+    const firstDay = resolveSimulationClock({
+      stageResultsClock: { baseDate: '2026-09-14', dayIndex: 0 },
+      profileClock: { enabled: true },
+      settings: { ...SETTINGS, courseWeekdays: WEEK },
+      sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
+    });
+    expect(temporalContextFromClock(firstDay)).not.toHaveProperty('sinceLastSessionDays');
+
+    const nextMonday = resolveSimulationClock({
+      stageResultsClock: { baseDate: '2026-09-14', dayIndex: 7 },
+      profileClock: { enabled: true },
+      settings: { ...SETTINGS, courseWeekdays: WEEK },
+      sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
+    });
+    expect(temporalContextFromClock(nextMonday)?.sinceLastSessionDays).toBe(3);
   });
 
   it('planClockAdvance：推进 N 个上课日；到上限返回 null', () => {
