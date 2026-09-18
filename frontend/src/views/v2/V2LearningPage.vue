@@ -1470,10 +1470,22 @@ async function submitCheckpoint() {
       await resyncSessionRevision();
       toast.info('这个检查点已经提交过了，已为你同步进度');
     } else {
-      checkpointFeedback.value = '提交失败，再试一次';
+      // 判错路径已经「上锁 + 只有继续按钮」，若此后流断掉（讲解没到 final），
+      // 必须把讲解中状态清掉，否则卡片会永远卡在「导师正在讲解…」没有出口
+      // （子代理回归走查发现的边界）。对错已由代码裁决得到，保留它即可。
+      if (checkpointStreaming.value) {
+        checkpointStreaming.value = false;
+        checkpointFeedback.value = checkpointPassed.value
+          ? '回答正确（导师讲解未能送达，可继续）。'
+          : '这道没答对（导师讲解未能送达，可继续）。';
+        toast.info('导师讲解没能送达，对错判定不受影响，可继续。');
+      } else {
+        checkpointFeedback.value = '提交失败，再试一次';
+      }
     }
   } finally {
     checkpointPending.value = false;
+    checkpointStreaming.value = false;
   }
 }
 
