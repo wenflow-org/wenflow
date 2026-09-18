@@ -1,11 +1,15 @@
 ﻿/**
  * Prompt 文件加载器
  *
- * 真源层级（与 README「Prompt 工程体系」一致，审计 §5.1）：
- * - **真源**：`prompts/core/*.yaml`（唯一人工编辑入口，进 git）
- * - **编译产物**：`prompts/<agent>.md`（运行时读此；由 core.yaml compile → publish 生成）
- * - **运行时镜像**：DB `agent_prompts` / `ai_agent_prompts`（可随时由产物重建，**不是第二个真源**）
- * 每个 .md = 一个能力单元（agent/skill）的当前 active prompt；文件顶部 YAML frontmatter 声明元数据
+ * 真源与**读取顺序**（18 号报告观察项 O3；此前本注释把顺序写反了）：
+ * - **人工真源**：`prompts/core/*.yaml`（唯一人工编辑入口，进 git）
+ * - **发布（publish）**：同时写回两处——编译产物 `prompts/<agent>.md` 与 DB `agent_prompts`(ACTIVE)
+ * - **运行时读取顺序**：`systemPromptOverride → DB ACTIVE prompt → 编译产物 .md`（见
+ *   `composers/prompt-composer.ts`，`.md` 即 `spec.defaultSystemPrompt`）——即 **DB 是第一读取源**，
+ *   `.md` 是该能力的**默认实现/兜底**（DB 无 ACTIVE 时使用）。
+ *   「File-as-Truth」描述的是**创作与发布方向**（core.yaml 是唯一被人工编辑的真源，DB/产物可重建），
+ *   **不是**运行时读取顺序。
+ * 每个 .md = 一个能力单元（agent/skill）的默认 prompt；文件顶部 YAML frontmatter 声明元数据
  * （agentId / 参数等），正文为 systemPrompt。
  *
  * 文件命名：agentId 中的冒号(:)在文件名中用点(.)替代，
@@ -258,11 +262,12 @@ export function loadPromptFile(agentId: string): PromptFile | null {
   const fileBase = agentIdToFileBase(agentId);
   const filePath = path.join(PROMPTS_DIR, `${fileBase}.md`);
   if (!fs.existsSync(filePath)) {
-    // 编译产物缺失：明确告警而非静默回退（DB 只是镜像，不应成为第二个真源——审计 §5.1）。
+    // 编译产物缺失 = **默认实现**缺失（运行时优先读 DB ACTIVE prompt；DB 也没有 ACTIVE 时才会用到这里的 .md）。
+    // 明确告警而非静默：请确认 core.yaml 已 compile + publish。
     // 每个 agentId 只告警一次，避免 20+ skill 在模块顶层同步调用时刷屏。
     if (!warnedMissingPromptFiles.has(agentId)) {
       warnedMissingPromptFiles.add(agentId);
-      logger.warn('[prompt-files] 编译产物 .md 缺失，回退 DB ACTIVE prompt（请确认 core.yaml 已 compile + publish）', {
+      logger.warn('[prompt-files] 编译产物 .md 缺失：DB 无 ACTIVE prompt 时该能力将没有默认提示词（请确认 core.yaml 已 compile + publish）', {
         agentId,
         filePath
       });
