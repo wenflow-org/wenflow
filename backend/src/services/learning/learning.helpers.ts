@@ -21,7 +21,11 @@ import type { PathGenerationPhase } from './path-generation-status';
  * - path.estimatedHours / milestone.estimatedHours 在骨架期由 path-planning LLM 粗估，
  *   与 stage-designer 逐任务产出的 estimatedMinutes 系统性脱节（无生成后校准），
  *   长期出现「路径 40h 但任务合计 12h」之类的偏差。
- * - 展示一律改由任务分钟汇总推导：阶段小时 = Σ任务分钟/60 向上取整；路径小时 = Σ阶段小时。
+ * - 展示改由任务分钟汇总推导：
+ *   阶段小时 = 该阶段任务分钟/60 向上取整（阶段级粗粒度，允许整点）；
+ *   路径小时 = **全部任务分钟合计/60**（1 位小数）＋无任务阶段的 LLM 原值
+ *   —— 不再 Σ 阶段取整值：零头各自进位会把总量抬高（走查 P8：
+ *   375min=6.25h 被算成 2+2+3=7h）。
  * - 无任务或生成中（骨架期）时保留 LLM 原值（此时任务分钟尚不存在，原估是唯一参考）。
  * 原始 LLM 估算保留在 estimatedHoursRaw 供内部评估/诊断使用。
  */
@@ -43,16 +47,21 @@ export function normalizePathHoursFromTasks(
     return { ...m, estimatedHours: normalized, estimatedHoursRaw: rawHours };
   });
 
-  // 路径级归一：Σ阶段归一小时（全任务阶段）或回退原值
+  // 路径级归一：按**真实任务分钟**一次性换算（1 位小数），与任务明细可核对；
+  // 无任务的阶段（骨架期/未展开）仍按其 LLM 原值计入，避免丢估算。
+  // 旧实现是 Σ「各阶段向上取整后的小时」——每阶段的零头各自进位再累加，
+  // 系统性偏高（走查 P8：45+60+45+75+60+90 = 375min = 6.25h，旧算法 2+2+3 = 7h）。
   const allTasks = normalizedMilestones.flatMap((m: any) => m?.subtasks || []);
   const rawPathHours = typeof path.estimatedHours === 'number' && path.estimatedHours > 0 ? path.estimatedHours : null;
   if (allTasks.length === 0) {
     return { estimatedHours: rawPathHours, estimatedHoursRaw: rawPathHours, milestones: normalizedMilestones };
   }
-  const normalizedPathHours = normalizedMilestones.reduce(
-    (sum: number, m: any) => sum + (typeof m.estimatedHours === 'number' ? m.estimatedHours : 0),
-    0
-  );
+  const totalTaskMinutes = allTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+  const tasklessStageHours = normalizedMilestones.reduce((sum: number, m: any) => {
+    const tasks = Array.isArray(m?.subtasks) ? m.subtasks : [];
+    return sum + (tasks.length === 0 && typeof m?.estimatedHours === 'number' ? m.estimatedHours : 0);
+  }, 0);
+  const normalizedPathHours = Math.round(((totalTaskMinutes / 60) + tasklessStageHours) * 10) / 10;
   return {
     estimatedHours: Math.max(1, normalizedPathHours),
     estimatedHoursRaw: rawPathHours,

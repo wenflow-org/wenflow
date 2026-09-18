@@ -5,7 +5,7 @@ import { normalizePathHoursFromTasks } from '../learning.service';
  * 骨架期 path-planning 的 LLM 粗估只保留在 estimatedHoursRaw 供内部参考。
  */
 describe('normalizePathHoursFromTasks', () => {
-  it('路径小时 = Σ阶段任务分钟汇总（ceil），LLM 粗估保留在 raw', () => {
+  it('路径小时 = 全部任务分钟合计（1 位小数），不 Σ 阶段取整值；LLM 粗估保留在 raw', () => {
     const path = {
       estimatedHours: 40,
       milestones: [
@@ -36,12 +36,26 @@ describe('normalizePathHoursFromTasks', () => {
     // 阶段1: (60+90+45)=195min → ceil(3.25)=4h；阶段2: (120+90)=210min → ceil(3.5)=4h
     expect(result.milestones[0].estimatedHours).toBe(4);
     expect(result.milestones[1].estimatedHours).toBe(4);
-    // 路径 = Σ阶段 = 8h（不再是 LLM 粗估 40h）
-    expect(result.estimatedHours).toBe(8);
+    // 路径 = 全部任务合计 405min = 6.75h → 6.8（不再 Σ 阶段取整值 4+4=8）
+    expect(result.estimatedHours).toBe(6.8);
     // LLM 粗估保留供内部参考
     expect(result.estimatedHoursRaw).toBe(40);
     expect(result.milestones[0].estimatedHoursRaw).toBe(24);
     expect(result.milestones[1].estimatedHoursRaw).toBe(16);
+  });
+
+  it('走查 P8 回归：375 分钟 → 6.3 小时（不再因逐阶段进位算成 7）', () => {
+    const path = {
+      estimatedHours: 8,
+      milestones: [
+        { id: 'm1', subtasks: [{ id: 't1', estimatedMinutes: 45 }, { id: 't2', estimatedMinutes: 60 }] },
+        { id: 'm2', subtasks: [{ id: 't3', estimatedMinutes: 45 }, { id: 't4', estimatedMinutes: 75 }] },
+        { id: 'm3', subtasks: [{ id: 't5', estimatedMinutes: 60 }, { id: 't6', estimatedMinutes: 90 }] },
+      ],
+    };
+    const result = normalizePathHoursFromTasks(path as any);
+    // 45+60+45+75+60+90 = 375min = 6.25h → 6.3（旧实现 2+2+3 = 7）
+    expect(result.estimatedHours).toBe(6.3);
   });
 
   it('分钟数向上取整到整小时（至少 1h）', () => {
