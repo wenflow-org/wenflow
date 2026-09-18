@@ -212,6 +212,21 @@ export function normalizeFrictionBudget(value: unknown): FrictionBudget {
   return DEFAULT_FRICTION_BUDGET;
 }
 
+/** 摩擦预算档位阶梯（低 → 高）。 */
+export const FRICTION_BUDGET_LADDER: FrictionBudget[] = ['none', 'low', 'normal', 'high', 'stress_test'];
+
+/**
+ * 上调一档摩擦预算（已到顶或未知档位则原样返回）。
+ *
+ * 用于 TIR 反馈闭环：角色审计 `frictionCalibration < 60` → 让虚拟学习者"更多挣扎/求助"。
+ * 注意读方是 `stageResults.simulationConfig.frictionBudget`（会话级标签），不是画像级数字。
+ */
+export function bumpFrictionBudget(budget: FrictionBudget): FrictionBudget {
+  const index = FRICTION_BUDGET_LADDER.indexOf(budget);
+  if (index < 0) return budget;
+  return FRICTION_BUDGET_LADDER[Math.min(FRICTION_BUDGET_LADDER.length - 1, index + 1)];
+}
+
 export interface FrictionDecision {
   budget: FrictionBudget;
   /** 本轮是否触发对抗行为（编排层按 triggerProbability 采样决定，不交给 LLM 自行把握） */

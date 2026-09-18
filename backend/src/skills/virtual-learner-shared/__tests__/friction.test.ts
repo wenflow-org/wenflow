@@ -2,8 +2,22 @@ import {
   decideFrictionTrigger,
   getFrictionGuidance,
   normalizeFrictionBudget,
+  bumpFrictionBudget,
   DEFAULT_FRICTION_BUDGET,
 } from '../schemas'
+
+describe('bumpFrictionBudget（TIR 反馈上调一档，18 号报告观察项）', () => {
+  it('按阶梯上调：none→low→normal→high→stress_test', () => {
+    expect(bumpFrictionBudget('none')).toBe('low')
+    expect(bumpFrictionBudget('low')).toBe('normal')
+    expect(bumpFrictionBudget('normal')).toBe('high')
+    expect(bumpFrictionBudget('high')).toBe('stress_test')
+  })
+
+  it('已到顶则原样返回（不越界）', () => {
+    expect(bumpFrictionBudget('stress_test')).toBe('stress_test')
+  })
+})
 
 describe('virtual-learner friction budget', () => {
   it('none 永不触发，guidance 为完全合作文本', () => {

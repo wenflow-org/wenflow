@@ -58,6 +58,7 @@ import {
 } from './learner-memory'
 
 import { safeJsonParse } from '../utils/safe-json'
+import { bumpFrictionBudget, normalizeFrictionBudget } from '../skills/virtual-learner-shared'
 import type { SkillDefinition } from '../skills/protocol'
 import { asErrorLike } from './vlab-types'
 import type {
@@ -742,24 +743,39 @@ export class BlackboxVirtualLearnerRunner {
       data: { stageResults: JSON.stringify(nextState), updatedAt: new Date() }
     })
 
-    // TIR 反馈闭环：auditor frictionCalibration < 60 → 自动调整 persona frictionBudget
-    if (report?.success && report?.output?.scores?.frictionCalibration < 60) {
+    // TIR 反馈闭环：auditor frictionCalibration < 60 → **上调本会话**的 frictionBudget 档位
+    //（让虚拟学习者更多挣扎/求助，更真实）。
+    //
+    // 修复（18 号报告观察项「TIR 摩擦反馈死写」，实测共**两处**）：
+    //  ① 触发条件原写 `report.success && report.output.scores...`，但 `executeSkill` 返回的就是
+    //     技能输出本身（`src/skills/index.ts` 返回 `result.output`）→ `report.output` 恒 undefined，
+    //     条件恒 false，这条环路**从未真正跑过**；
+    //  ② 写入画像级 `profile.frictionBudget`（数字 1-10），而读方 `getSessionFrictionBudget` 读的是
+    //     **会话级** `stageResults.simulationConfig.frictionBudget`（none/low/normal/high/stress_test 标签）。
+    const reportRecord = report as unknown as Record<string, unknown>;
+    const auditScores = (reportRecord.scores
+      ?? (reportRecord.output as Record<string, unknown> | undefined)?.scores) as
+      | { frictionCalibration?: unknown }
+      | undefined;
+    const frictionCalibration = Number(auditScores?.frictionCalibration);
+    if (Number.isFinite(frictionCalibration) && frictionCalibration < 60) {
       try {
-        const profile = await prisma.virtual_learner_profiles.findUnique({ where: { userId: session.userId } });
-        if (profile) {
-          const profileData = safeJsonParse<Record<string, any>>(profile.profile, {});
-          const currentFriction = typeof profileData.frictionBudget === 'number' ? profileData.frictionBudget : 5;
-          // 摩擦校准偏低 → 增加摩擦预算（让学习者更多挣扎/求助，更真实）
-          const adjusted = Math.min(10, Math.max(1, currentFriction + 1));
-          await prisma.virtual_learner_profiles.update({
-            where: { userId: session.userId },
-            data: { profile: JSON.stringify({ ...profileData, frictionBudget: adjusted }), updatedAt: new Date() },
+        const stateRecord = nextState as unknown as Record<string, unknown>;
+        const simulationConfig = (stateRecord.simulationConfig as Record<string, unknown> | undefined) ?? {};
+        const currentBudget = normalizeFrictionBudget(simulationConfig.frictionBudget);
+        const adjustedBudget = bumpFrictionBudget(currentBudget);
+        if (adjustedBudget !== currentBudget) {
+          stateRecord.simulationConfig = { ...simulationConfig, frictionBudget: adjustedBudget };
+          await this.assertCurrentLease(session.id);
+          await prisma.virtual_sessions.update({
+            where: { id: sessionId },
+            data: { stageResults: JSON.stringify(nextState), updatedAt: new Date() },
           });
-          logger.info('[vlab-auditor] TIR 反馈：frictionBudget 已调整', {
+          logger.info('[vlab-auditor] TIR 反馈：本会话 frictionBudget 已上调', {
             userId: session.userId,
-            previous: currentFriction,
-            adjusted,
-            frictionCalibration: report.output.scores.frictionCalibration,
+            previous: currentBudget,
+            adjusted: adjustedBudget,
+            frictionCalibration,
           });
         }
       } catch (tirError) {

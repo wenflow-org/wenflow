@@ -36,7 +36,9 @@ jest.mock('../../config/database', () => ({
       update: jest.fn()
     },
     virtual_learner_profiles: {
-      findUnique: jest.fn()
+      findUnique: jest.fn(),
+      // TIR 反馈修复后不再写画像级 frictionBudget；保留 mock 以便断言"未被调用"
+      update: jest.fn()
     },
     virtual_experiment_commands: {
       findUnique: jest.fn(),
@@ -2052,6 +2054,55 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const reused = await runner.actorAudit('vs1', 'admin1')
     expect(reused.reused).toBe(true)
     expect(executeSkill).not.toHaveBeenCalled()
+  })
+
+  it('TIR 反馈上调**本会话** frictionBudget：写读同源（18 号报告观察项·死写修复）', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    let currentSession: any = {
+      ...sessionWith(
+        { conversationId: 'g1', runCompleted: true, terminalReason: 'completed' },
+        { goal: { trust: 0.5 }, teaching: { phaseFocus: 'reflecting' } }
+      ),
+      status: 'completed',
+      currentStage: 'completed',
+      createdAt: new Date('2026-07-14T10:00:00.000Z'),
+      completedAt: new Date('2026-07-14T10:10:00.000Z')
+    }
+    const state = JSON.parse(currentSession.stageResults)
+    state.story = { hiddenDetails: ['x'], disclosurePlan: { timing: 'late' } }
+    state.simulationConfig = { frictionBudget: 'high' } // 读方 getSessionFrictionBudget 读这里
+    state.blackbox.publicTrace = [{
+      timestamp: '2026-07-14T10:01:00.000Z',
+      observation: { stage: 'goal', visibleMessages: [{ role: 'learner', content: '公开行为' }], availableActions: ['chat'] },
+      control: { conversationId: 'g1' }
+    }]
+    currentSession.stageResults = JSON.stringify(state)
+    runner.getSession = jest.fn(async () => currentSession)
+    ;(prisma.virtual_learner_profiles.findUnique as jest.Mock).mockResolvedValue({
+      id: 'vp1', learningGoal: '测试目标', profile: JSON.stringify({ role: '店长' }),
+      knownConcepts: '[]', struggleConcepts: '[]', personalityTraits: '{}'
+    })
+    ;(prisma.virtual_sessions.update as jest.Mock).mockImplementation(async ({ data }: any) => {
+      currentSession = { ...currentSession, ...data }
+      return currentSession
+    })
+    ;(prisma.virtual_learner_profiles.update as jest.Mock).mockClear()
+    ;(executeSkill as jest.Mock).mockResolvedValue({
+      verdict: 'credible',
+      scores: {
+        overall: 60, personaConsistency: 60, storyConsistency: 60, disclosureDiscipline: 60,
+        frictionCalibration: 30, stateContinuity: 60, behaviorPlausibility: 60, evidenceSufficiency: 60
+      },
+      findings: [], recommendations: [], evidence: []
+    })
+
+    await runner.actorAudit('vs1', 'admin1')
+
+    // 会话级档位被上调一档（high → stress_test）
+    const persisted = JSON.parse(currentSession.stageResults)
+    expect(persisted.simulationConfig.frictionBudget).toBe('stress_test')
+    // 不再写画像级那个"无人读取"的键
+    expect(prisma.virtual_learner_profiles.update).not.toHaveBeenCalled()
   })
 
   it('角色审计优先使用实验创建快照，不受画像后续修改影响', async () => {
