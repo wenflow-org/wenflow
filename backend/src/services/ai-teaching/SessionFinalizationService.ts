@@ -13,10 +13,8 @@ import {
 } from './TeachingSessionRepository';
 import { logger } from '../../utils/logger';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
-import { mapReviewStatusToRating } from '../learner/ReviewCompletedConsumer';
-import { createDomainEvent } from '../../events/contracts';
-import { enqueueDomainEvent } from '../../events/outbox.repository';
-import prisma from '../../config/database';
+// 课内温故回写抽到叶子模块（避免本服务 ↔ AITeachingCoordinator 成环，18 号报告 N10）
+import { applyWarmupExtractionForSession, enqueueReviewCompletedEvent } from './warmup-writeback';
 
 export interface FinalizeSessionInput {
   sessionId: string;
@@ -72,69 +70,9 @@ function derivedClosureOperationId(operationId: string): string {
   return `${operationId}#closure`;
 }
 
-export interface WarmupReviewItem {
-  conceptKey: string;
-  label: string | null;
-  status: string;
-  progress: number;
-  masteryScore: number;
-  rating: ReturnType<typeof mapReviewStatusToRating>['rating'];
-}
-
-/** 温故点在会话里的持久化子集（ReviewPlanItem 的收束侧视图） */
-interface PersistedWarmupItem {
-  conceptKey?: string;
-  label?: string;
-  outcome?: { status?: string; progress?: number } | null;
-  askedAt?: string;
-}
-
-/**
- * 收集要回写记忆引擎的温故点（收束时）：
- * 1. **有结果**的点（mastered / learning）→ 按结果映射评分；
- * 2. **问过了但始终没推进**（有 `askedAt`、无 `outcome`）且学习者在该点之后**还有发言**
- *    → 判为**没答出**（again）。这是"失败"唯一的入库通道：不记失败，成功率与保持曲线就只剩上界，
- *    leech（连续答不出）与队列自净也永远不会触发（审计 §3.9 / §3.11）。
- *    若该点是最后一轮才问出来的（其后没有学习者发言），不计——那是"没来得及答"，不是"答不出"。
- */
-export function collectWarmupReviewItems(
-  items: PersistedWarmupItem[] | null | undefined,
-  hasLearnerTurnAfter: (iso: string) => boolean,
-): WarmupReviewItem[] {
-  const result: WarmupReviewItem[] = [];
-  for (const item of items || []) {
-    const conceptKey = String(item?.conceptKey || '').trim();
-    if (!conceptKey) continue;
-    const label = typeof item?.label === 'string' ? item.label : null;
-
-    if (item?.outcome?.status) {
-      const status = String(item.outcome.status);
-      const progress = Number(item.outcome.progress) || 0;
-      const { rating, masteryScore } = mapReviewStatusToRating(status, progress);
-      result.push({ conceptKey, label, status, progress, masteryScore, rating });
-      continue;
-    }
-
-    if (item?.askedAt && hasLearnerTurnAfter(String(item.askedAt))) {
-      // 'not-recalled' 不是看板状态，只是回写口径：映射器对未知状态回落为 again
-      const { rating, masteryScore } = mapReviewStatusToRating('not-recalled', 0);
-      result.push({ conceptKey, label, status: 'not-recalled', progress: 0, masteryScore, rating });
-    }
-  }
-  return result;
-}
-
-/** 该时刻之后学习者是否还有发言（= 确实给了作答机会） */
-export function hasLearnerTurnAfter(session: TeachingSessionRecord, iso: string): boolean {
-  const at = Date.parse(iso);
-  if (!Number.isFinite(at)) return false;
-  const messages = Array.isArray(session.messages) ? session.messages : [];
-  return messages.some((message) => {
-    if ((message as { role?: string })?.role !== 'user') return false;
-    const ts = Date.parse(String((message as { timestamp?: string })?.timestamp || ''));
-    return Number.isFinite(ts) && ts > at;
-  });
-}
+// 课内温故回写的实现已迁到 `warmup-writeback.ts`；此处 re-export 保持既有引用（含测试）不变。
+export { collectWarmupReviewItems, hasLearnerTurnAfter } from './warmup-writeback';
+export type { WarmupReviewItem } from './warmup-writeback';
 
 export class SessionFinalizationService {
   async finalize(input: FinalizeSessionInput) {
@@ -172,7 +110,7 @@ export class SessionFinalizationService {
       // 事件消费者（幂等/可重放）。此前这里还直写记忆引擎，与消费者叠加成 2~3 次应用（审计 §4.2(1)）。
       const reviewItems = await this.collectReviewOutcomes(completedSession);
       if (reviewItems.length > 0) {
-        await this.enqueueReviewCompletedEvent(completedSession, reviewItems);
+        await enqueueReviewCompletedEvent(completedSession, reviewItems);
       }
       return this.completedResponse(completedSession, result.operationId, {
         status: 'skipped',
@@ -443,74 +381,11 @@ export class SessionFinalizationService {
   }
 
   /**
-   * 复习结果事件化（断链修复 P0-1）：复习课收束后发出 review:completed 事件，
-   * 让复习结果走 outbox 事件链（可追溯、可重放、可幂等），替代纯旁路直写。
-   */
-  /**
-   * 课内温故回写（记忆层闭环）：把本堂课内温故的实测结果送进复习事件链。
-   * 与复习课同源（review:completed → ReviewCompletedConsumer：写 learner_evidence + FSRS 重排 dueAt），
-   * 于是同时闭合两个环：① 调度（下次什么时候再捞）② 动态负担预算（成功率高就多带一个、低就收缩）。
-   * 只处理「教学回合真的报告了结果」的点；没接上的点留在计划里，下次课继续。
+   * 课内温故回写（记忆层闭环）：把本堂课内温故的实测结果送进复习事件链
+   * （实现见叶子模块 `warmup-writeback.ts`；与超时兜底共用同一实现）。
    */
   private async applyWarmupExtraction(session: TeachingSessionRecord): Promise<void> {
-    try {
-      const plan = (session.teachingState as Record<string, any> | null)?.sessionArtifacts?.memoryWarmup;
-      const items: any[] = Array.isArray(plan?.items) ? plan.items : [];
-      const payload = collectWarmupReviewItems(items, (iso) => hasLearnerTurnAfter(session, iso));
-      if (payload.length === 0) return;
-      await this.enqueueReviewCompletedEvent(session, payload);
-      logger.info('[SessionFinalization] 课内温故结果已回写记忆引擎', {
-        sessionId: session.id,
-        userId: session.userId,
-        itemCount: payload.length,
-      });
-    } catch (error) {
-      logger.warn('[SessionFinalization] 课内温故回写失败（不影响收束）', {
-        sessionId: session.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  private async enqueueReviewCompletedEvent(
-    session: TeachingSessionRecord,
-    items: Array<{
-      conceptKey: string;
-      label: string | null;
-      status: string;
-      progress: number;
-      masteryScore: number;
-      rating: 'again' | 'hard' | 'good' | 'easy';
-    }>,
-  ): Promise<void> {
-    if (items.length === 0) return;
-    try {
-      const event = createDomainEvent({
-        type: 'review:completed',
-        aggregateType: 'review',
-        aggregateId: session.id,
-        userId: session.userId,
-        source: 'session-finalization',
-        data: {
-          sessionId: session.id,
-          mode: session.mode || 'review',
-          reviewItems: items,
-        },
-      });
-      await prisma.$transaction(async (tx) => {
-        await enqueueDomainEvent(tx, event);
-      });
-      logger.info('[SessionFinalization] review:completed 事件已入队', {
-        sessionId: session.id,
-        userId: session.userId,
-        itemCount: items.length,
-      });
-    } catch (error) {
-      logger.warn('[SessionFinalization] review:completed 事件入队失败（不影响收束）', {
-        sessionId: session.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    return applyWarmupExtractionForSession(session);
   }
 }
 

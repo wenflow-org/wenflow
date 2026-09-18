@@ -16,6 +16,7 @@ import {
   type TeachingSessionOperationClaim,
   type TeachingSessionRecord,
 } from './TeachingSessionRepository';
+import { applyWarmupExtractionForSession } from './warmup-writeback';
 import { knowledgeStateService, COMPLETION_TARGET_PROGRESS_FLOOR } from './KnowledgeStateService';
 import { peerTriggerService } from './PeerTriggerService';
 import { teachingContextCompressionService } from './TeachingContextCompressionService';
@@ -3922,6 +3923,9 @@ export class AITeachingOrchestrator {
         return;
       }
       logger.info('[AITeaching] 超时会话已写入兜底学习记录', { sessionId, durationMinutes });
+      // 兜底收尾也要回写课内温故（18 号报告 N10）：课上作答后直接超时/放弃，
+      // 温故结果此前永不落地（正常 end_only / complete_task 路径早已回写）。失败不影响兜底。
+      await applyWarmupExtractionForSession(session);
     } catch (error) {
       logger.warn('[AITeaching] 超时会话兜底记录写入失败', {
         sessionId,
