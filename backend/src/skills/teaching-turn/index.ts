@@ -767,6 +767,29 @@ function normalizeHelpSeekingType(value: any): { helpSeekingType?: string } {
   return t ? { helpSeekingType: t } : {};
 }
 
+/**
+ * 上线载荷里的对话历史：只保留 角色 / 内容 / 时间（走查 B-3）。
+ *
+ * 此前每条消息的 `analysis`（理解度/困惑点/情绪/负荷…）随历史一起进载荷，但
+ * **teaching-turn 的规则与代码都不读历史消息的 analysis** —— 规则里的
+ * `analysis.*`（第 87/104/108/109 条）指的是**本轮要产出的** analysis，
+ * 上一轮的分析另走 `analysisStage`（双引擎试点）单独字段。
+ * 而 `session-wrapup` 的输入是**另处组装**且明确声明"含 analysis 标注"，
+ * 因此不受此处影响。
+ * 收益：逐条 analysis 让单轮 prompt 多出约 1–2k tokens（首轮实测 ~14.5k），
+ * 裁掉可降 TTFT；不影响模型可见的对话文本。
+ * 时间戳同样不发：skill 的输入契约就是 `{ role, content }`，且 prompt 未引用
+ * 消息时间（节奏信息走 `interactionProfile` 的 idleMsBefore 等更精确的字段）。
+ */
+export function toWireMessages(
+  messages: TeachingTurnInput['messages']
+): Array<{ role: string; content: string }> {
+  return (Array.isArray(messages) ? messages : []).map((message) => ({
+    role: message.role,
+    content: message.content,
+  }));
+}
+
 function buildPromptInput(input: TeachingTurnInput) {
   const strategyGuidancePrompt = buildStrategyGuidancePrompt(input);
   const taskExecutionPrompt = buildTaskExecutionPrompt(input);
@@ -799,7 +822,7 @@ function buildPromptInput(input: TeachingTurnInput) {
       classroomEventContext: input.classroomEventContext,
       interactionProfile: scenarioInteractionProfile ?? null,
       ...(scenarioCompression ? { contextCompression: scenarioCompression } : {}),
-      messages: input.messages,
+      messages: toWireMessages(input.messages),
       latestLearnerMessage,
       ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
     };
@@ -818,7 +841,7 @@ function buildPromptInput(input: TeachingTurnInput) {
     classroomContext: input.classroomContext,
     classroomEventContext: input.classroomEventContext,
     interactionProfile: scenarioInteractionProfile ?? null,
-    messages: input.messages,
+    messages: toWireMessages(input.messages),
     latestLearnerMessage,
     // 双引擎试点：第一段（推理模型）产出的 analysis 作为第二段的既定认知判定
     ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
@@ -840,7 +863,7 @@ function buildAnalysisOnlyPayload(input: TeachingTurnInput) {
 
 function evaluateAcceptanceCriteriaEvidence(input: TeachingTurnInput) {
   return evaluateByCriteria({
-    messages: input.messages,
+    messages: toWireMessages(input.messages),
     acceptanceCriteria: input.scenario.currentTaskContext?.acceptanceCriteria,
     mode: 'criteria'
   });
@@ -848,7 +871,7 @@ function evaluateAcceptanceCriteriaEvidence(input: TeachingTurnInput) {
 
 function evaluateCompletionByTaskProfile(input: TeachingTurnInput) {
   return evaluateByProfile({
-    messages: input.messages,
+    messages: toWireMessages(input.messages),
     taskType: input.scenario.taskType,
     knowledgeType: input.scenario.taskProfile?.knowledgeType,
     cognitiveLevel: input.scenario.taskProfile?.cognitiveLevel,
