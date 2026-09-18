@@ -160,8 +160,40 @@ describe('normalizeSessionDurationMinutes（会话时长统一口径）', () => 
         ],
         updatedAt: new Date('2026-09-17T18:11:00Z'),
       });
-      // 墙钟 120 分钟被消息封顶（间隔按 30 计 + 60 收尾窗 = 90）
-      expect(minutes).toBe(90);
+      // 墙钟 120 分钟被消息封顶：那 2 小时只按 30 分钟计，且首尾窗实测为 0（走查 N6）
+      expect(minutes).toBe(30);
+    });
+
+    it('首尾窗按实测计入（封顶各 10 分钟）——不再用固定 +60 分钟', () => {
+      const minutes = normalizeSessionDurationMinutes({
+        duration: null,
+        startTime,                                     // 16:11:00
+        endTime: null,
+        status: 'active',
+        messages: [
+          { role: 'assistant', timestamp: '2026-09-17T16:20:00Z' }, // 引导段 9 分钟
+          { role: 'user', timestamp: '2026-09-17T16:25:00Z' },
+        ],
+        updatedAt: new Date('2026-09-17T16:33:00Z'),   // 收尾段 8 分钟
+      });
+      // 间隔 5 + 引导 9 + 收尾 8 = 22（墙钟 22 分钟，取小者）
+      expect(minutes).toBe(22);
+    });
+
+    it('挂机很久但消息少时，不再被固定的 +60 分钟抬高（走查 N6）', () => {
+      const minutes = normalizeSessionDurationMinutes({
+        duration: null,
+        startTime,
+        endTime: null,
+        status: 'active',
+        messages: [
+          { role: 'assistant', timestamp: '2026-09-17T16:11:00Z' },
+          { role: 'user', timestamp: '2026-09-17T16:13:00Z' },
+        ],
+        updatedAt: new Date('2026-09-17T17:30:00Z'),   // 之后挂机 77 分钟
+      });
+      // 活跃 2 分钟 + 收尾窗封顶 10 分钟 = 12（旧口径会给出 62）
+      expect(minutes).toBe(12);
     });
   });
 });
