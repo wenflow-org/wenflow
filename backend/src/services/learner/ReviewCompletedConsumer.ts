@@ -21,6 +21,7 @@ import { logger } from '../../utils/logger';
 import { clamp01 } from '../memory/actr';
 import { fsrsSchedule, fsrsStateFromLegacy, type FsrsGradeCode, type FsrsMemoryState } from '../memory/fsrs';
 import { getActiveForConcepts } from './misconception-ledger.service';
+import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
 
 const CONSUMER_ID = 'review-completed-consumer-v1';
 
@@ -92,6 +93,9 @@ export class ReviewCompletedConsumer {
           }))?.learningPathId ?? null
         : null;
 
+      // B1/Q3：本轮有多少条目的"误解干扰"读取降级（数据不全时仍写证据，但显式打标）
+      let degradedItems = 0;
+
       for (const item of items) {
         const conceptKey = String(item.conceptKey || '').trim();
         if (!conceptKey) continue;
@@ -106,6 +110,28 @@ export class ReviewCompletedConsumer {
         const elapsedDays = existing
           ? Math.round(((event.occurredAt.getTime() - existing.lastSeenAt.getTime()) / DAY_MS) * 100) / 100
           : null;
+
+        // 语义干扰矩阵（2026-09-17 自旧直写路径 bumpReviewInterval 下移，保持"单一写入者"）：
+        // 活跃误解 → 稳定性 ×0.85、到期更早。复习课与课内温故两条来路行为一致。
+        // 读取失败：结构化降级 + 在证据载荷里标记 degraded（数据不全），但不改变 FSRS 领域语义
+        // （退化为"无干扰"的保底行为，与旧 .catch(()=>[]) 一致）。
+        let activeMisconceptions: Awaited<ReturnType<typeof getActiveForConcepts>> = [];
+        let misconceptionLookupDegraded = false;
+        try {
+          activeMisconceptions = await getActiveForConcepts(event.userId, [conceptKey], 1, { rethrowOnError: true });
+        } catch (error) {
+          misconceptionLookupDegraded = true;
+          degradedItems += 1;
+          recordDegradation({
+            source: 'learner/ReviewCompletedConsumer',
+            faultCategory: 'DB_READ_FAILED',
+            severity: 'P2_DEGRADED',
+            impactedDimensions: ['memoryTraces.interference', `concept:${conceptKey}`],
+            mitigationApplied: 'skip-misconception-interference',
+            rootCauseMessage: degradationCause(error),
+          });
+        }
+        const interferenceMultiplier = activeMisconceptions.length > 0 ? MISCONCEPTION_STABILITY_MULTIPLIER : 1;
 
         // 1) 复习观测 → learner_evidence（可追溯、可重放，供画像/BKT）
         await tx.learner_evidence.create({
@@ -122,7 +148,9 @@ export class ReviewCompletedConsumer {
               status: item.status,
               progress: item.progress,
               masteryScore: item.masteryScore,
-              elapsedDays
+              elapsedDays,
+              // B1：读取降级时显式标记，供下游识别"干扰项缺失 ≠ 没有误解"
+              ...(misconceptionLookupDegraded ? { degraded: true } : {})
             }),
             confidence: item.rating === 'again' ? 0.6 : 0.9,
             occurredAt: event.occurredAt
@@ -144,10 +172,6 @@ export class ReviewCompletedConsumer {
             : fsrsStateFromLegacy(existing.masteryScore, existing.extractionCount, existing.lastSeenAt))
           : null;
         const result = fsrsSchedule(prev, grade, now);
-        // 语义干扰矩阵（2026-09-17 自旧直写路径 bumpReviewInterval 下移，保持"单一写入者"）：
-        // 活跃误解 → 稳定性 ×0.85、到期更早。复习课与课内温故两条来路行为一致。
-        const activeMisconceptions = await getActiveForConcepts(event.userId, [conceptKey], 1).catch(() => []);
-        const interferenceMultiplier = activeMisconceptions.length > 0 ? MISCONCEPTION_STABILITY_MULTIPLIER : 1;
         const adjustedStability = result.state.stability * interferenceMultiplier;
         const dueAt = new Date(now.getTime() + Math.round(result.intervalDays * interferenceMultiplier) * DAY_MS);
         await tx.memory_traces.upsert({
@@ -199,6 +223,7 @@ export class ReviewCompletedConsumer {
         userId: event.userId,
         sessionId: data.sessionId,
         itemCount: items.length,
+        ...(degradedItems > 0 ? { degradedItems } : {}),
       });
     });
   }

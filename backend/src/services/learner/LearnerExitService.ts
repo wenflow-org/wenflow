@@ -15,6 +15,7 @@ import { learnerSnapshotService, LearnerSnapshotService } from './LearnerSnapsho
 import { memoryTraceService } from '../memory/memory-trace.service';
 import { getActiveForConcepts } from './misconception-ledger.service';
 import { getLevelFromXp } from './level.util';
+import { recordDegradation, degradationCause, type DegradationTelemetry } from '../../skills/degradation-telemetry';
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
 
 export interface LearnerExitDueReviewItem {
@@ -36,7 +37,20 @@ export interface LearnerExitView {
   snapshot: LearnerSnapshot;
   dueReview: LearnerExitDueReviewItem[];
   accountView: LearnerExitAccountView;
+  /**
+   * B1/Q3：本轮出口是否发生降级（数据不全）。正常为空；仅用于把"数据不全"显式带进下游，
+   * 不改变任何领域语义（dueReview/accountView 的形状与含义不变）。
+   */
+  degraded?: DegradationTelemetry[];
 }
+
+/**
+ * getDueReview 的返回类型：仍是数组（调用方按数组消费不变），降级时在数组上附挂
+ * 非索引属性 `degraded`（`JSON.stringify`/`for..of`/`.map` 均不受影响）。
+ */
+export type LearnerExitDueReviewResult = LearnerExitDueReviewItem[] & {
+  degraded?: DegradationTelemetry[];
+};
 
 /**
  * 交错排序：相邻复习项不共享 conceptKey（交错学习——训练学生从题目特征自主判断策略）。
@@ -106,11 +120,18 @@ export class LearnerExitService {
       this.getAccountView(scope.userId),
     ]);
 
-    return { snapshot, dueReview, accountView };
+    return {
+      snapshot,
+      dueReview,
+      accountView,
+      ...(Array.isArray(dueReview?.degraded) && dueReview.degraded.length > 0
+        ? { degraded: dueReview.degraded }
+        : {}),
+    };
   }
 
   /** 到期复习点（记忆引擎 M2 的只读出口；交错排序：相邻项不共享 conceptKey，训练策略选择） */
-  async getDueReview(userId: string, limit = 5): Promise<LearnerExitDueReviewItem[]> {
+  async getDueReview(userId: string, limit = 5): Promise<LearnerExitDueReviewResult> {
     // 获取更多候选（2×），以便交错后仍有足够条目
     const traces = await memoryTraceService.getDueTraces(userId, { limit: Math.max(limit, limit * 2) });
     const items = traces.map((t) => ({
@@ -125,9 +146,12 @@ export class LearnerExitService {
     // 高 σ 概念对：查询活跃误解的 canonicalLabel，识别语义混淆对
     const conceptKeys = items.map((i) => i.conceptKey);
     const confusablePairs = new Map<string, Set<string>>();
+    const degraded: DegradationTelemetry[] = [];
     if (conceptKeys.length > 0) {
       try {
-        const activeMisconceptions = await getActiveForConcepts(userId, conceptKeys, 20);
+        // rethrowOnError：让本出口用自己的 source 打降级并把"数据不全"带进下游，
+        // 而不是把失败计到共享读函数名下（见 misconception-ledger.service）。
+        const activeMisconceptions = await getActiveForConcepts(userId, conceptKeys, 20, { rethrowOnError: true });
         // 按 canonicalLabel 分组：同一 label 下的概念互不可邻
         const labelGroups = new Map<string, Set<string>>();
         for (const m of activeMisconceptions) {
@@ -147,13 +171,22 @@ export class LearnerExitService {
             confusablePairs.set(key, neighbors);
           }
         }
-      } catch {
-        // 查询失败静默降级，不影响复习队列
+      } catch (error) {
+        // 查询失败：结构化降级（保留复习队列，仅放弃混淆对隔开），并在返回值上标记 degraded
+        degraded.push(recordDegradation({
+          source: 'learner/LearnerExitService',
+          faultCategory: 'DB_READ_FAILED',
+          severity: 'P2_DEGRADED',
+          impactedDimensions: ['dueReview.confusablePairs'],
+          mitigationApplied: 'skip-confusable-interleaving',
+          rootCauseMessage: degradationCause(error),
+        }));
       }
     }
 
     // 交错排序：相邻复习项不共享 conceptKey，且不互不可邻（高 σ 语义混淆对隔开）
-    const interleaved = interleaveByConcept(items, limit, confusablePairs);
+    const interleaved = interleaveByConcept(items, limit, confusablePairs) as LearnerExitDueReviewResult;
+    if (degraded.length > 0) interleaved.degraded = degraded;
     return interleaved;
   }
 

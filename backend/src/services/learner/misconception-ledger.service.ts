@@ -10,6 +10,17 @@
 import prisma from '../../config/database';
 import { createHash } from 'crypto';
 import { logger } from '../../utils/logger';
+import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
+
+/**
+ * 读取选项（B1/Q3）：
+ * - 默认 `rethrowOnError=false`：内部记结构化降级后返回 []，保持既有"查询失败不阻断"语义；
+ * - `rethrowOnError=true`：把错误抛给调用方，让调用方用**自己的 source** 打降级标记并把
+ *   "数据不全"带进下游（真实教学侧两处出口用这个，避免把降级计到共享读函数名下）。
+ */
+export interface ActiveMisconceptionLookupOptions {
+  rethrowOnError?: boolean;
+}
 
 export interface MisconceptionInput {
   conceptKey: string;
@@ -103,6 +114,7 @@ export async function getActiveForConcepts(
   userId: string,
   conceptKeys: string[],
   limit = 5,
+  options: ActiveMisconceptionLookupOptions = {},
 ): Promise<MisconceptionRow[]> {
   if (!conceptKeys || conceptKeys.length === 0) return [];
   try {
@@ -116,6 +128,16 @@ export async function getActiveForConcepts(
       take: limit,
     });
   } catch (error) {
+    // 允许降级，不允许未打标的降级：默认路径记结构化遥测（保留既有 warn 供人读）
+    if (options.rethrowOnError) throw error;
+    recordDegradation({
+      source: 'learner/misconception-ledger',
+      faultCategory: 'DB_READ_FAILED',
+      severity: 'P2_DEGRADED',
+      impactedDimensions: ['misconception.active'],
+      mitigationApplied: 'return-empty-active-misconceptions',
+      rootCauseMessage: degradationCause(error),
+    });
     logger.warn('[misconception-ledger] 查询误解失败', { userId, error: error instanceof Error ? error.message : String(error) });
     return [];
   }
