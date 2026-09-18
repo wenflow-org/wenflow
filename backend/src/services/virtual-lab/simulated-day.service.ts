@@ -26,6 +26,7 @@ import {
   getVirtualLabSettings,
   type VirtualLabDateSimulationSettings,
 } from '../virtual-lab-settings.service';
+import { recordDegradation, degradationCause, type DegradationTelemetry } from '../../skills/degradation-telemetry';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -80,6 +81,8 @@ export interface SimulatedDayEntry {
   difficultyAdjustments: SimulatedDayAdjustment[];
   reviewQuota: { limitLoad: number; usedLoad: number; remainingLoad: number; usedCount: number };
   memory: { traceCount: number; dueCount: number; fragileCount: number; stableCount: number; avgRetention: number | null };
+  /** 非空表示本日聚合是**降级产物**（某路读取失败→保底值） */
+  degraded?: DegradationTelemetry[];
 }
 
 export interface DayTimeline {
@@ -283,25 +286,37 @@ export async function buildDayEntry(
       memory: { traceCount: 0, dueCount: 0, fragileCount: 0, stableCount: 0, avgRetention: null },
     };
   }
+  const degraded: DegradationTelemetry[] = [];
+  const degradeTo = <T>(dimension: string, fallback: T, mitigation: string) => (error: unknown): T => {
+    degraded.push(recordDegradation({
+      source: 'virtual-lab/simulated-day',
+      faultCategory: 'DB_READ_FAILED',
+      severity: 'P2_DEGRADED',
+      impactedDimensions: [dimension],
+      mitigationApplied: mitigation,
+      rootCauseMessage: degradationCause(error),
+    }));
+    return fallback;
+  };
   const [state, quota, dueTraces, retention, tasks, sessions, evidence] = await Promise.all([
-    deps.getAggregatedState(userId, { asOf }).catch(() => null),
-    deps.getDailyQuota(userId, { now: asOf }).catch(() => ({
+    deps.getAggregatedState(userId, { asOf }).catch(degradeTo('dayLoad', null, 'return-null-day-load')),
+    deps.getDailyQuota(userId, { now: asOf }).catch(degradeTo('reviewQuota', {
       date: win.simulatedDay, limitLoad: 0, usedLoad: 0, usedCount: 0, remainingLoad: 0, reservedKeys: [],
-    } as ReviewDailyState)),
-    deps.getDueTraces(userId, { now: asOf, limit: 50 }).catch(() => []),
-    deps.getRetentionSnapshot(userId, asOf).catch(() => []),
+    } as ReviewDailyState, 'return-zero-quota')),
+    deps.getDueTraces(userId, { now: asOf, limit: 50 }).catch(degradeTo('dueTraces', [], 'return-empty-due')),
+    deps.getRetentionSnapshot(userId, asOf).catch(degradeTo('retention', [], 'return-empty-retention')),
     deps.findTasks({
       where: { userId, status: 'completed', completedAt: { gte: win.dayStart, lte: asOf } },
       select: { id: true, title: true, estimatedMinutes: true, cognitiveLoad: true, completedAt: true },
-    }).catch(() => []),
+    }).catch(degradeTo('tasks', [], 'return-empty-tasks')),
     deps.findSessions({
       where: { userId, startTime: { gte: win.dayStart, lte: asOf } },
       select: { taskId: true, duration: true },
-    }).catch(() => []),
+    }).catch(degradeTo('sessions', [], 'return-empty-sessions')),
     deps.findEvidence({
       where: { userId, evidenceType: ADJUSTMENT_EVIDENCE_TYPE, occurredAt: { gte: win.dayStart, lte: asOf } },
       select: { taskId: true, payload: true, occurredAt: true },
-    }).catch(() => []),
+    }).catch(degradeTo('difficultyAdjustments', [], 'return-empty-adjustments')),
   ]);
 
   const minutesByTask = new Map<string, number>();
@@ -380,6 +395,7 @@ export async function buildDayEntry(
       stableCount: inWindowTraces.filter((trace) => trace.stability === 'stable').length,
       avgRetention,
     },
+    ...(degraded.length ? { degraded } : {}),
   };
 }
 

@@ -247,6 +247,22 @@ describe('buildLearnerMemorySnapshot', () => {
       recentTaskTitles: [],
     });
   });
+
+  it('画像读取抛错 → 空快照但带 degraded（不再静默）', async () => {
+    mockFindUnique.mockRejectedValue(new Error('db down'));
+    const memory = await buildLearnerMemorySnapshot('u1');
+    expect(memory.mastered).toEqual([]);
+    expect(memory.degraded?.some((d) => d.source === 'virtual-lab/learner-memory')).toBe(true);
+    expect(memory.degraded?.some((d) => d.impactedDimensions.includes('profile'))).toBe(true);
+  });
+
+  it('到期线索读取抛错 → dueReview 保底为空且打标', async () => {
+    mockFindUnique.mockResolvedValue(profileRow({ knownConcepts: ['a'], struggleConcepts: [], recentCompleted: [] }));
+    mockGetDueTraces.mockRejectedValue(new Error('trace down'));
+    const memory = await buildLearnerMemorySnapshot('u1');
+    expect(memory.dueReview).toEqual([]);
+    expect(memory.degraded?.some((d) => d.impactedDimensions.includes('dueReview'))).toBe(true);
+  });
 });
 
 describe('recordCompletedArtifact', () => {

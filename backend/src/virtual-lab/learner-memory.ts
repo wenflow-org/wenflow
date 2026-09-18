@@ -19,6 +19,7 @@ import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { simulatedNowOr } from '../services/virtual-lab/simulation-clock-context';
 import { memoryTraceService } from '../services/memory/memory-trace.service';
+import { recordDegradation, degradationCause, type DegradationTelemetry } from '../skills/degradation-telemetry';
 
 /** 轻量 JSON 解析（不依赖 session-factory，避免经 blackbox-runner 的循环依赖） */
 function safeJsonParse<T>(value: string | null | undefined, fallback: T): T {
@@ -160,6 +161,8 @@ export interface LearnerMemorySnapshot {
   }>;
   /** 最近完成任务的标题列表（轻量版，供模拟器自然引用） */
   recentTaskTitles: string[];
+  /** 非空表示本次快照是**降级产物**（读取失败→保底值），不可当作"确实没有记忆" */
+  degraded?: DegradationTelemetry[];
 }
 
 const MASTERED_STATUSES = new Set(['mastered']);
@@ -261,11 +264,32 @@ export async function buildLearnerMemorySnapshot(
   };
   if (!userId) return empty;
 
+  const degraded: DegradationTelemetry[] = [];
   const [profile, dueTraces] = await Promise.all([
-    prisma.virtual_learner_profiles.findUnique({ where: { userId } }).catch(() => null),
-    memoryTraceService.getDueTraces(userId, { limit }).catch(() => []),
+    prisma.virtual_learner_profiles.findUnique({ where: { userId } }).catch((error: unknown) => {
+      degraded.push(recordDegradation({
+        source: 'virtual-lab/learner-memory',
+        faultCategory: 'DB_READ_FAILED',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['profile'],
+        mitigationApplied: 'return-empty-snapshot',
+        rootCauseMessage: degradationCause(error),
+      }));
+      return null;
+    }),
+    memoryTraceService.getDueTraces(userId, { limit }).catch((error: unknown) => {
+      degraded.push(recordDegradation({
+        source: 'virtual-lab/learner-memory',
+        faultCategory: 'DB_READ_FAILED',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['dueReview'],
+        mitigationApplied: 'return-empty-due',
+        rootCauseMessage: degradationCause(error),
+      }));
+      return [] as Awaited<ReturnType<typeof memoryTraceService.getDueTraces>>;
+    }),
   ]);
-  if (!profile) return empty;
+  if (!profile) return degraded.length ? { ...empty, degraded } : empty;
 
   const profileData = safeJsonParse<Record<string, any>>(profile.profile, {});
   const knownConcepts = Array.isArray(profileData.knownConcepts) ? profileData.knownConcepts : [];
@@ -307,6 +331,7 @@ export async function buildLearnerMemorySnapshot(
     struggling,
     recentCompleted,
     recentTaskTitles: recentCompleted.map((item) => item.title),
+    ...(degraded.length ? { degraded } : {}),
   };
 }
 

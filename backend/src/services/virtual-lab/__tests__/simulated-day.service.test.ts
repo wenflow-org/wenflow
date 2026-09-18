@@ -16,6 +16,7 @@ import {
   type SimulatedDayDeps,
 } from '../simulated-day.service';
 import { DEFAULT_VIRTUAL_LAB_SETTINGS } from '../../virtual-lab-settings.service';
+import { resetDegradationCounters, snapshotDegradationCounters } from '../../../skills/degradation-telemetry';
 
 const SETTINGS = { ...DEFAULT_VIRTUAL_LAB_SETTINGS.dateSimulation };
 
@@ -214,6 +215,16 @@ describe('buildDayEntry / buildDayTimeline（注入 deps）', () => {
     expect(entry.tasks).toEqual([]);
     expect(entry.memory.traceCount).toBe(0);
     expect(deps.getAggregatedState).not.toHaveBeenCalled();
+  });
+
+  it('某路读取失败 → 该维度保底且 entry.degraded 打标（不再静默）', async () => {
+    resetDegradationCounters();
+    const entry = await buildDayEntry('u1', '2026-09-16', 0, makeDeps({
+      getDueTraces: jest.fn(async () => { throw new Error('boom') }) as any,
+    }), NOW);
+    expect(entry.memory.dueCount).toBe(0);
+    expect(entry.degraded?.some((d) => d.impactedDimensions.includes('dueTraces'))).toBe(true);
+    expect(snapshotDegradationCounters()['virtual-lab/simulated-day']).toBeGreaterThanOrEqual(1);
   });
 });
 
