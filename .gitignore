@@ -238,6 +238,7 @@ doc/*
 !doc/LEARNING_SCIENCE_AUDIT.md
 !doc/AGENT_IO_DESIGN_V3.md
 !doc/SKILL_DEVELOPMENT_GUIDE.md
+!doc/UPGRADE_DIRECTION_20Q.md
 doc/local/
 
 # Playwright MCP 会话临时文件

@@ -17,6 +17,9 @@
 - [`NON_FUNCTIONAL_GOVERNANCE_PLAN.md`](./NON_FUNCTIONAL_GOVERNANCE_PLAN.md)
   - 安全、可靠性、测试、部署、可观测性、性能和数据治理统一清单
   - 发布阻断项、实施波次和发布验收标准
+- [`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md)
+  - 20 问（十二问 + 八问）方案 × 真实代码逐条核验 + 与项目业务对齐的升级方向（三波）
+  - 结论口径：哪些方案已过期/记错、哪些现在能做、哪些缺基建；含核验中发现的即刻可修缺陷
 - [`EDUCATIONAL_THEORY_MAP.md`](./EDUCATIONAL_THEORY_MAP.md)
   - 教育理论地图（理念宪法）：教学/心理/神经科学/LLM 理论 × 落点索引
   - 全部文献经联网核实（含 DOI/arXiv 链接）；prompt 规则与指标设计的理论依据引用源
