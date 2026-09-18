@@ -59,6 +59,17 @@ const resolveGoalError = (error: any, req: Request): { status: number; code: str
       data: goalEnvelopeForRequest(req, error.result)
     };
   }
+  // 路径变更冲突：透传真实 code（如 PATH_MUTATION_HAS_LEARNING_PROGRESS / PATH_MUTATION_HAS_OPEN_SESSION）
+  // 与挡路课堂清单 details。此前只在 `/regenerate` 透传，`/reply` + SSE 落到 500/INTERNAL_ERROR，
+  // 用户看不到真实原因、无法按 code 自救（18 号报告 N4）。冲突文案是面向用户的，可安全回显。
+  if (isPathMutationConflictError(error)) {
+    return {
+      status: 409,
+      code: typeof error?.code === 'string' ? error.code : 'CONFLICT',
+      message: error?.message || '路径变更冲突，请稍后再试',
+      ...(error?.details ? { data: { details: error.details } } : {}),
+    };
+  }
   const raw = error instanceof Error ? error.message : String(error || '处理失败');
   // 安全加固：仅白名单消息可回显，其余一律脱敏为通用文案（防止内部错误/堆栈泄漏）
   const safe = raw === '对话会话不存在';
@@ -292,6 +303,19 @@ router.post('/:conversationId/reply', authMiddleware, goalConversationUserLimite
         success: false,
         error: 'STRUCTURED_OUTPUT_INVALID',
         data: goalEnvelopeForRequest(req, error.result, req.params.conversationId)
+      });
+    }
+    // 路径变更冲突：与 `/regenerate` 一致地透传真实 code/details（18 号报告 N4）。
+    // 前端"确认"走本端点且默认 SSE；后端若把它降级为 500/INTERNAL_ERROR，用户看不到真实冲突与挡路课堂。
+    if (isPathMutationConflictError(error)) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          message: error?.message || '路径变更冲突，请稍后再试',
+          code: typeof error?.code === 'string' ? error.code : 'CONFLICT',
+          status: 409,
+          ...(error?.details ? { details: error.details } : {})
+        }
       });
     }
     const gateway = gatewayErrorHttpStatus(error);

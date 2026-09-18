@@ -221,6 +221,29 @@ describe('goal-conversation public route contracts', () => {
     });
   });
 
+  it('/reply 的 409 透传真实冲突 code 与挡路课堂清单（18 号报告 N4）', async () => {
+    mockRequirementOrchestrator.step.mockRejectedValue(
+      new PathMutationConflictError('学习路径仍有进行中的任务，不能调整后续阶段', 'PATH_MUTATION_HAS_OPEN_SESSION', {
+        sessions: [{
+          sessionId: 's1', taskId: 't1', taskTitle: '任务', status: 'active', revision: 1, topic: null, updatedAt: null,
+        }],
+      })
+    );
+    const handler = getRouteHandler('/:conversationId/reply');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { conversationId: 'c1' },
+      body: { input: { text: '确认' }, confirmProposal: true },
+    }, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.error).toMatchObject({ code: 'PATH_MUTATION_HAS_OPEN_SESSION', status: 409 });
+    expect(payload.error.details.sessions).toHaveLength(1);
+  });
+
   it('projects synthetic POST /start requests into the synthetic-user-v1 DTO only', async () => {
     mockRequirementOrchestrator.start.mockResolvedValue(goalResult({
       internal: {
