@@ -140,4 +140,60 @@ describe('useGoalLive 流式渐进渲染', () => {
     expect(live.sending).toBe(false);
     expect(live.failed).toBe('start');
   });
+
+  /**
+   * 走查 P7：目标对话可能给出「4 段大纲 + scope_size=small(2~3 段)」这类
+   * 自相矛盾的输出，生成时会被夹回 3 段，而预览此前照抄 4 段 ⇒ 承诺 4 段、
+   * 实际 3 段。后端改为回吐生成口径（plannedMilestones / previewStages）后，
+   * 预览的计数与列表都必须用该口径。
+   */
+  it('预览阶段列表取生成口径（previewStages 截到 plannedMilestones）', async () => {
+    driveStream([], makeEnvelope({
+      internal: {
+        core: { conversationId: 'c1', stage: 'proposing', confidence: 0.8, isCompleted: false },
+        ext: {
+          goalConversation: {
+            understanding: {},
+            confirmedProposal: {
+              real_problem: '每周手动整理 Excel 周报太耗时',
+              first_deliverable: '跑通一次自动读取',
+              key_stages: ['阶段A', '阶段B', '阶段C', '阶段D'],
+              scope_size: 'small',
+              plannedMilestones: 3,
+              previewStages: ['阶段A', '阶段B', '阶段C'],
+            },
+          },
+        },
+      },
+    }));
+    const live = useGoalLive();
+    live.reset();
+    await live.send('开始');
+
+    expect(live.proposal?.stages).toEqual(['阶段A', '阶段B', '阶段C']);
+    // 承诺数量用生成口径（plannedMilestones=3），与列表一致
+    expect(live.proposal?.stageCount).toBe(3);
+  });
+
+  it('后端未回吐生成口径时退回 key_stages（兼容旧会话）', async () => {
+    driveStream([], makeEnvelope({
+      internal: {
+        core: { conversationId: 'c1', stage: 'proposing', confidence: 0.8, isCompleted: false },
+        ext: {
+          goalConversation: {
+            understanding: {},
+            confirmedProposal: {
+              real_problem: 'x',
+              key_stages: ['甲', '乙'],
+            },
+          },
+        },
+      },
+    }));
+    const live = useGoalLive();
+    live.reset();
+    await live.send('开始');
+
+    expect(live.proposal?.stages).toEqual(['甲', '乙']);
+  });
 });

@@ -1,5 +1,53 @@
-import { inferMaxWeeksFromTimeHorizon, derivePlanningHints } from '../path-planning-hints';
+import { inferMaxWeeksFromTimeHorizon, derivePlanningHints, derivePlannedOutline } from '../path-planning-hints';
 import { paceSignalRangeConfig } from '../../../config/pedagogy.config';
+
+/**
+ * 走查 P7：预览承诺的阶段数必须与真实生成一致。
+ * 目标对话可能给出 self-contradictory 的 key_stages × scope_size，
+ * 生成时按 scope 夹；预览必须用同一计算。
+ */
+describe('derivePlannedOutline（预览口径与生成同源）', () => {
+  it('4 段大纲 + scope_size=small(2~3) → 生成口径 3 段，且列表截到 3', () => {
+    const result = derivePlannedOutline({
+      key_stages: ['环境搭建与基础认知', 'Python 操作 Excel 核心技能', '周报自动化脚本开发与调试', '流程优化与异常处理'],
+      scope_size: 'small',
+    });
+    expect(result.plannedMilestones).toBe(3);
+    expect(result.stages).toHaveLength(4); // 清洗只剔操作性阶段；截断由预览按 plannedMilestones 做
+  });
+
+  it('scope 与大纲自洽时不缩水（medium + 4 段 → 4）', () => {
+    const result = derivePlannedOutline({
+      key_stages: ['一', '二', '三', '四'],
+      scope_size: 'medium',
+    });
+    expect(result.plannedMilestones).toBe(4);
+  });
+
+  it('缺 scope_size 时按段数归一（下限 2）', () => {
+    expect(derivePlannedOutline({ key_stages: ['一'] }).plannedMilestones).toBe(2);
+    expect(derivePlannedOutline({ key_stages: [] }).plannedMilestones).toBeNull();
+  });
+
+  it('剔除操作性阶段（与生成时的清洗一致）', () => {
+    const result = derivePlannedOutline({
+      key_stages: ['环境搭建', '4. 梳理本周任务清单', '脚本开发'],
+      scope_size: 'medium',
+    });
+    expect(result.stages).toEqual(['环境搭建', '脚本开发']);
+    // 承诺数量以生成口径为准：medium 的下限是 3 ⇒ 生成 3 段
+    // （列表只是「大致阶段」种子，故可能少于承诺数量）
+    expect(result.plannedMilestones).toBe(3);
+  });
+
+  it('兼容 camelCase 键（handoff 形态）', () => {
+    expect(derivePlannedOutline({ keyStages: ['一', '二', '三'], scopeSize: 'small' }).plannedMilestones).toBe(3);
+  });
+
+  it('非对象输入安全返回', () => {
+    expect(derivePlannedOutline(null)).toEqual({ plannedMilestones: null, stages: [] });
+  });
+});
 
 describe('inferMaxWeeksFromTimeHorizon（自由文本周数兜底）', () => {
   const cases: Array<{ input: string | null; expected: number | null; label: string }> = [

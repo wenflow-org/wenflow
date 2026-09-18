@@ -6,6 +6,7 @@ import { executeSkill } from '../../skills';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
+import { derivePlannedOutline } from './path-planning-hints';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
@@ -160,11 +161,26 @@ class GoalConversationService {
       quickReplies: Array.isArray(ext.quickReplies) ? ext.quickReplies : undefined,
       collected: ext.collected || {},
       structuredData: ext.structuredData,
-      confirmedProposal: ext.confirmedProposal,
+      confirmedProposal: this.withPlannedOutline(ext.confirmedProposal),
       confidenceScores: ext.confidenceScores,
       motivationSignal: ext.motivationSignal,
       miFrames: ext.miFrames
     };
+  }
+
+  /**
+   * 预览口径修正（走查 P7）：给 confirmedProposal 附加生成口径的
+   * `plannedMilestones` 与清洗后的 `previewStages`。
+   *
+   * 目标对话的 key_stages 与 scope_size 由同一次 LLM 输出、可以自相矛盾
+   * （例：4 段 + small=2~3 段），生成时按 scope 夹回 3 段，而预览照抄 4 段
+   * ⇒ 承诺 4 段、实际 3 段。这里让预览直接用生成同一套计算，不改生成行为。
+   * 派生字段是确定性重算，持久化后重读会覆盖为同值。
+   */
+  private withPlannedOutline(confirmedProposal: any): any {
+    if (!confirmedProposal || typeof confirmedProposal !== 'object') return confirmedProposal;
+    const { plannedMilestones, stages } = derivePlannedOutline(confirmedProposal);
+    return { ...confirmedProposal, plannedMilestones, previewStages: stages };
   }
 
   private getStructuredOutputValid(aiResponse: any): boolean {

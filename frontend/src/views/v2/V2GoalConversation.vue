@@ -315,7 +315,7 @@
             </div>
 
             <div v-if="live.proposal.stages.length" class="proposal__stages">
-              <span class="proposal__stages-label">路径大纲 · {{ live.proposal.stages.length }} 个阶段</span>
+              <span class="proposal__stages-label">路径大纲 · {{ live.proposal.stageCount }} 个阶段</span>
               <ol>
                 <li v-for="(s, i) in live.proposal.stages" :key="i" class="pstep"><i>{{ i + 1 }}</i><div><strong>{{ s }}</strong></div></li>
               </ol>

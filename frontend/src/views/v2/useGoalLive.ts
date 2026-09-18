@@ -166,11 +166,19 @@ const proposal = computed(() => {
     cp.first_deliverable, cp.expected_outcome, cp.outcome,
     understanding.value.success_criteria?.observable_result
   );
-  const stages = toList(cp.key_stages ?? cp.stages ?? cp.outline).slice(0, 5);
+  // 预览口径与生成一致（走查 P7）：后端给出 plannedMilestones（与路径生成的
+  // targetMilestones 同源）与 previewStages（已剔除操作性阶段）时优先采用，
+  // 避免「预览承诺 4 段、实际只生成 3 段」。
+  // 承诺数量用 stageCount（生成口径）；列表是种子大纲，截到同一数量。
+  const plannedMilestones = typeof cp.plannedMilestones === 'number' ? cp.plannedMilestones : null;
+  const previewStages = toList(cp.previewStages);
+  const stages = (previewStages.length ? previewStages : toList(cp.key_stages ?? cp.stages ?? cp.outline))
+    .slice(0, plannedMilestones ?? 5);
+  const stageCount = plannedMilestones ?? stages.length;
   const skip = toList(cp.out_of_scope ?? cp.not_now ?? cp.exclude).slice(0, 6);
   const probes = toProbes(cp.prerequisiteDiagnostics ?? cp.prerequisite_diagnostics ?? cp.prerequisite_diagnostics_list);
   if (!problem && !outcome && stages.length === 0) return null;
-  return { problem, outcome, stages, skip, probes };
+  return { problem, outcome, stages, stageCount, skip, probes };
 });
 
 /** 前置探测题（goal-conversation prerequisiteDiagnostics）→ 展示结构 */

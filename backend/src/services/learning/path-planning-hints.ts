@@ -279,6 +279,33 @@ export function derivePlanningHints(
 }
 
 /**
+ * 预览用：按**路径生成同一口径**归一「用户确认的大纲」。
+ *
+ * 返回 plannedMilestones（与 path-planning 的 planningHints.targetMilestones 同源）
+ * 与 stages（已剔除「操作性阶段」，与生成时的清洗一致）。
+ *
+ * 背景（走查 P7）：目标对话让 LLM 同时给 key_stages（如 4 段）与 scope_size
+ * （如 small = 2~3 段），两者可自相矛盾；生成时会被 scope 夹回 3 段，
+ * 而预览直接照抄 4 段 ⇒ 承诺 4 段、实际 3 段。这里让预览改用同一计算。
+ */
+export function derivePlannedOutline(confirmedProposal: any): {
+  plannedMilestones: number | null;
+  stages: string[];
+} {
+  const rawKeyStages = normalizeStringArray(
+    confirmedProposal?.key_stages ?? confirmedProposal?.keyStages
+  );
+  const stages = rawKeyStages.filter((item) => !isOperationalStageLike(item));
+  const scopeSize = normalizeScopeSize(
+    confirmedProposal?.scope_size ?? confirmedProposal?.scopeSize
+  );
+  // targetMilestones 只由「阶段数 + scope_size」决定，其余入参不影响计数
+  const hints = derivePlanningHints(null, null, null, null, stages, null, scopeSize);
+  const planned = typeof hints?.targetMilestones === 'number' ? hints.targetMilestones : null;
+  return { plannedMilestones: planned, stages };
+}
+
+/**
  * 把任意结构的 normalizedInput 做确定性清洗并附加 planningHints。
  * 原 skill 的 LLM 环节被证明信息零增量（seed 覆盖模型输出），此处即其确定性替代。
  * 输入缺字段保持缺失，不猜测、不扩写。
