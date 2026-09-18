@@ -38,6 +38,33 @@ export const FORBIDDEN_PLATFORM_FIELDS = ['success', 'quality', 'stage', 'raw'] 
 
 const FIELD_NAME_PATTERN = /^[a-z][A-Za-z0-9_]*$/;
 
+/**
+ * 递归解析字段声明：可选地带上**结构化** `enumValues` / 嵌套 `properties`（Q11 前置）。
+ * 两者缺省时行为与旧版完全一致（向后兼容）。
+ */
+function parseFieldDeclaration(field: Record<string, unknown>): CoreFieldSpec {
+  const type = String(field.type ?? '').trim();
+  const spec: CoreFieldSpec = {
+    name: String(field.name ?? '').trim(),
+    type,
+    optional: type.endsWith('?'),
+    desc: String(field.desc ?? '').trim(),
+    turn: field.turn === true,
+  };
+  const enumValues = asStringList(field.enumValues);
+  if (enumValues && enumValues.length) {
+    const cleaned = enumValues.map((value) => value.trim()).filter((value) => value.length > 0);
+    if (cleaned.length) spec.enumValues = cleaned;
+  }
+  if (Array.isArray(field.properties) && field.properties.length) {
+    const nested = field.properties
+      .filter((item): item is Record<string, unknown> => isPlainObject(item))
+      .map((item) => parseFieldDeclaration(item));
+    if (nested.length) spec.properties = nested;
+  }
+  return spec;
+}
+
 export interface CoreFieldSpec {
   name: string;
   /** 受控类型，可带 ? 后缀（如 `object?`） */
@@ -48,6 +75,16 @@ export interface CoreFieldSpec {
   desc: string;
   /** 当轮消费即弃 */
   turn: boolean;
+  /**
+   * enum 的候选值（结构化声明，可选；缺省时 enum 值只在 desc 里，无法生成 strict schema）。
+   * 仅对 `enum` 类型有意义。
+   */
+  enumValues?: string[];
+  /**
+   * object / object[] 的子字段（结构化声明，可选；递归同构）。
+   * 缺省时子字段只在 desc 里，strict JSON Schema 会误拒未声明子字段。
+   */
+  properties?: CoreFieldSpec[];
 }
 
 export interface CoreFileParams {
@@ -330,6 +367,20 @@ export function validateCoreFileShape(raw: unknown): CoreFileIssue[] {
       if (field.turn !== undefined && typeof field.turn !== 'boolean') {
         issues.push({ code: 'field-turn-invalid', message: `${label}.turn 必须是布尔值` });
       }
+      if (field.enumValues !== undefined) {
+        const values = asStringList(field.enumValues);
+        if (!values || values.length === 0) {
+          issues.push({ code: 'field-enumValues-invalid', message: `${label}.enumValues 必须是非空字符串数组` });
+        }
+      }
+      if (field.properties !== undefined) {
+        const baseType = String(field.type ?? '').replace(/\?$/, '');
+        if (!Array.isArray(field.properties) || field.properties.length === 0) {
+          issues.push({ code: 'field-properties-invalid', message: `${label}.properties 必须是非空对象数组` });
+        } else if (baseType !== 'object' && baseType !== 'object[]') {
+          issues.push({ code: 'field-properties-unsupported', message: `${label}.properties 仅适用于 object / object[]` });
+        }
+      }
     });
   }
 
@@ -411,16 +462,7 @@ export function normalizeCoreFile(raw: Record<string, unknown>): CoreFile {
         }
       : {}),
     rules: (raw.rules as string[]).map((r) => r.trim()),
-    fields: (raw.fields as Array<Record<string, unknown>>).map((field) => {
-      const type = String(field.type).trim();
-      return {
-        name: String(field.name).trim(),
-        type,
-        optional: type.endsWith('?'),
-        desc: String(field.desc).trim(),
-        turn: field.turn === true,
-      };
-    }),
+    fields: (raw.fields as Array<Record<string, unknown>>).map((field) => parseFieldDeclaration(field)),
     constraints: (raw.constraints as string[]).map((c) => c.trim()),
     params: {
       temperature: (raw.params as Record<string, unknown>).temperature as number,

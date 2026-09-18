@@ -34,7 +34,7 @@ describe('core-yaml-writer', () => {
       ],
       constraints: ['约束一'],
       examples: ['示例一'],
-      params: { temperature: 0.7, maxTokens: 8000, failurePolicy: 'fallback' },
+      params: { temperature: 0.7, maxTokens: 8000, failurePolicy: 'retry' },
       deltaOutput: true,
       outputMedia: 'markdown',
       filePath: 'virtual',

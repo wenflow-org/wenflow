@@ -61,7 +61,7 @@ describe('core-file-loader：parseCoreFile / validateCoreFileShape', () => {
       rules: ['r'],
       fields: [{ name: 'f', type: 'string', desc: 'd' }],
       constraints: [],
-      params: { temperature: 0.5, maxTokens: 100, failurePolicy: 'fallback' },
+      params: { temperature: 0.5, maxTokens: 100, failurePolicy: 'retry' },
     } as never);
     expect(raw.stateAdvance).toBe(false);
     expect(raw.deltaOutput).toBe(false);
@@ -178,5 +178,76 @@ describe('core-file-loader：scanCoreFiles / loadCoreFile', () => {
     const scan = scanCoreFiles(path.join(tmpDir, 'not-exist'));
     expect(scan.files).toEqual([]);
     expect(scan.diagnostics).toEqual([]);
+  });
+});
+
+describe('core-file-loader：结构化 enumValues / 嵌套 properties（Q11 前置）', () => {
+  const STRUCTURED_YAML = `
+skillId: goal-conversation
+baseVersion: 1
+identity: |
+  学习目标澄清助手。
+channels: [dialogue, state]
+rules:
+  - 保持简洁
+fields:
+  - name: stance
+    type: enum
+    desc: 对提案的态度
+    enumValues: [agree, uncertain, divergent]
+  - name: plan
+    type: object
+    desc: 方案
+    properties:
+      - { name: title, type: string, desc: 标题 }
+      - { name: steps, type: "string[]", desc: 步骤 }
+  - name: items
+    type: object[]
+    desc: 条目
+    properties:
+      - { name: label, type: string, desc: 名称 }
+constraints: []
+params: { temperature: 0.7, maxTokens: 8000, failurePolicy: retry }
+`;
+
+  it('enum 的结构化候选值被解析；object/object[] 的嵌套子字段递归解析', () => {
+    const parsed = parseCoreFile('/tmp/core/x.yaml', STRUCTURED_YAML);
+    expect(parsed.diagnostics).toEqual([]);
+    const core = parsed.core!;
+    expect(core.fields[0].enumValues).toEqual(['agree', 'uncertain', 'divergent']);
+    expect(core.fields[1].properties?.map((f) => f.name)).toEqual(['title', 'steps']);
+    expect(core.fields[1].properties?.[1]).toMatchObject({ name: 'steps', type: 'string[]' });
+    expect(core.fields[2].properties?.map((f) => f.name)).toEqual(['label']);
+  });
+
+  it('未声明时保持向后兼容：不产生 enumValues / properties 键', () => {
+    const core = loadValidCore();
+    expect(core.fields[0]).not.toHaveProperty('enumValues');
+    expect(core.fields[0]).not.toHaveProperty('properties');
+    expect(core.fields[2]).not.toHaveProperty('properties');
+  });
+
+  it('校验：enumValues 必须非空字符串数组；properties 仅适用 object/object[]', () => {
+    const base = {
+      skillId: 'x', baseVersion: 1, identity: 'id', channels: ['dialogue'], rules: ['r'],
+      constraints: [], params: { temperature: 0.7, maxTokens: 100, failurePolicy: 'retry' },
+    };
+    const emptyEnum = validateCoreFileShape({
+      ...base,
+      fields: [{ name: 'a', type: 'enum', desc: 'd', enumValues: [] }],
+    });
+    expect(emptyEnum.some((issue) => issue.code === 'field-enumValues-invalid')).toBe(true);
+
+    const badProps = validateCoreFileShape({
+      ...base,
+      fields: [{ name: 'a', type: 'string', desc: 'd', properties: [{ name: 'b', type: 'string', desc: 'd' }] }],
+    });
+    expect(badProps.some((issue) => issue.code === 'field-properties-unsupported')).toBe(true);
+
+    const emptyProps = validateCoreFileShape({
+      ...base,
+      fields: [{ name: 'a', type: 'object', desc: 'd', properties: [] }],
+    });
+    expect(emptyProps.some((issue) => issue.code === 'field-properties-invalid')).toBe(true);
   });
 });
