@@ -74,6 +74,17 @@ export interface LearnLearnerSimulationInput {
     options?: Array<{ id: string; text: string }>;
     allowSkip?: boolean;
   } | null;
+  /**
+   * 日期模拟的时间上下文（**可选**，仅日期模拟开启时注入）。
+   * 注意：此前只声明在 yaml / 调用方，payload 未透传 → 对应的 "temporalContext" 规则是死的。
+   */
+  temporalContext?: {
+    simulatedNow?: string;
+    simulatedDay?: string;
+    dayIndex?: number;
+    timezone?: string;
+    sinceLastSessionDays?: number | null;
+  } | null;
 }
 
 export interface LearnLearnerSimulationOutput {
@@ -315,6 +326,27 @@ const LEARN_FEEDBACK_FIELDS = [
 
 export { normalizeOutput, LEARN_STATE_FIELDS, LEARN_FEEDBACK_FIELDS };
 
+/**
+ * 检查点 → payload 的**白名单投影**：只保留学习者可见字段。
+ * 用白名单而非透传，确保将来契约追加答案键类字段时不会被带进给模型的输入。
+ */
+function projectPendingCheckpoint(checkpoint: LearnLearnerSimulationInput['pendingCheckpoint']) {
+  if (!checkpoint || typeof checkpoint !== 'object') return null;
+  const options = Array.isArray(checkpoint.options)
+    ? checkpoint.options
+        .filter((option) => option && typeof option.id === 'string')
+        .map((option) => ({ id: option.id, text: typeof option.text === 'string' ? option.text : '' }))
+    : [];
+  const projected: Record<string, unknown> = {
+    id: typeof checkpoint.id === 'string' ? checkpoint.id : '',
+    type: checkpoint.type,
+    question: typeof checkpoint.question === 'string' ? checkpoint.question : '',
+  };
+  if (options.length) projected.options = options;
+  if (checkpoint.allowSkip !== undefined) projected.allowSkip = checkpoint.allowSkip === true;
+  return projected;
+}
+
 function buildUserPayload(input: LearnLearnerSimulationInput) {
   const history = Array.isArray(input.visibleContext?.history)
     ? input.visibleContext.history.map((message) => ({
@@ -324,6 +356,8 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
     : [];
 
   const friction = decideFrictionTrigger(input.frictionBudget);
+  const temporalContext = input.temporalContext || null;
+  const pendingCheckpoint = projectPendingCheckpoint(input.pendingCheckpoint);
 
   const body = {
     learner: input.learner || {},
@@ -336,6 +370,7 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
     previousLearnerState: input.previousLearnerState || null,
     currentTask: input.currentTask || null,
     knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : [],
+    ...(temporalContext ? { temporalContext } : {}),
     learnerMemory: input.learnerMemory && typeof input.learnerMemory === 'object'
       ? {
           mastered: Array.isArray(input.learnerMemory.mastered) ? input.learnerMemory.mastered.slice(0, 8) : [],
@@ -359,9 +394,11 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
         'reply only as the learner, in 1-2 short sentences',
         'apply friction.guidance to calibrate adversarial/failure/emotional patterns this turn',
         'let personaAnchorHint fields implicitly steer reply style (especially verbosity, confusionStyle, helpSeekingPattern)',
-        'you may naturally reference your learnerMemory (things you previously learned or completed) when relevant, but never name the field'
+        'you may naturally reference your learnerMemory (things you previously learned or completed) when relevant, but never name the field',
+        'when pendingCheckpoint is present, answer it via checkpointAnswer (pick real option ids, never invent); otherwise omit checkpointAnswer'
       ]
-    }
+    },
+    ...(pendingCheckpoint ? { pendingCheckpoint } : {})
   };
 
   // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：常量/慢变块（task/personaAnchorHint/story/learner）前置，
@@ -376,10 +413,12 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
       previousLearnerState: body.previousLearnerState,
       currentTask: body.currentTask,
       knowledgeSnapshot: body.knowledgeSnapshot,
+      ...(temporalContext ? { temporalContext } : {}),
       learnerMemory: body.learnerMemory,
       epistemicGrounding: body.epistemicGrounding,
       friction: body.friction,
       visibleContext: body.visibleContext,
+      ...(pendingCheckpoint ? { pendingCheckpoint } : {}),
     };
   }
   return body;
