@@ -28,6 +28,23 @@ import { conceptConsolidatorService } from '../learner/ConceptConsolidatorServic
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { recordTaskDifficultyAdjustment } from '../learner/TaskDifficultyAdjustmentLedger';
 import { assembleTeachingTurnChannels } from '../field-dispatcher';
+import {
+  evaluateAnchorProbeOutcome,
+  selectAnchorCandidates,
+  shouldRunAnchorProbe,
+  type AnchorProbePlan,
+} from '../learner/anchor-probe';
+import {
+  ANCHOR_RESULT_LOOKBACK,
+  anchorResultEvidenceKey,
+  buildAnchorCandidatesFromLearnerSignals,
+  buildAnchorPromptTarget,
+  buildAnchorResultEvidence,
+  buildAnchorSignalSource,
+  deriveTurnsSinceLastProbe,
+  summarizeAnchorEvidence,
+  type AnchorPromptTarget,
+} from './anchor-probe-emit';
 import { createDomainEvent } from '../../events/contracts';
 import { replanAdvisoryService, toAttributionRecall, type ReplanAdvisory } from './ReplanAdvisoryService';
 import { runWithTeachingSession } from './teaching-session-context';
@@ -66,6 +83,16 @@ export interface TeachingCheckpoint {
   correctOptionIds?: string[];
   /** 答案键：简答题的必备要点（代码按包含判定） */
   expectedKeywords?: string[];
+  /**
+   * 独立锚题探针标记（Q13/B4）：仅当本轮由 `anchor-probe` 选定目标时才存在。
+   * 探针结果只写 `learner_evidence: anchor:result` 作为**待复核信号**，绝不静默改写掌握/难度/BKT。
+   * 非锚题检查点不带该字段（保持与历史产出逐字节一致）。
+   */
+  purpose?: 'anchor';
+  /** 锚题目标概念（注入提示词、写入证据行，便于人工复核） */
+  anchorConceptKey?: string;
+  /** 锚题期望信念：mastered→答错即 false_mastery；struggling→答对即 false_struggle */
+  anchorExpectedBelief?: 'mastered' | 'struggling';
 }
 
 export interface CheckpointSubmitPayload {
@@ -1550,6 +1577,132 @@ async function recordCheckpointResultEvidence(
 }
 
 /**
+ * 独立锚题探针 · 回合内目标解析（本接线里唯一的 I/O 点）。
+ *
+ * 仅在**本轮满足出检查点条件**（`emitCheckpoint=true`，即 `shouldEmitCheckpoint` 为真）时才接线——
+ * 探针复用检查点这一个测量槽位（`anchor-probe` 纪律 3：不与检查点抢采样）。随后：
+ * 1. 读该学习者最近 `anchor:result` 证据，聚合出 `lastProbeAt` / `probesSinceLastFlag`；
+ * 2. 用 `shouldRunAnchorProbe` 过闸（间隔 72h、轮次、退避、无 pending 检查点）；
+ * 3. 从已在上下文里的 `learnerProjection`（跨路径记忆信号）构建候选，`limit:1` 选一个目标。
+ *
+ * 任何一步不满足 / 读取失败 → 返回 null，链路**与不接线时逐字节一致**（不注入、不落标记、不写证据）。
+ * 数据来源：`learnerProjection.relevantKnowledge.mastered/struggling`（由 memory_traces + 会话看板派生）；
+ * `fragile` 被有意排除，`turnsSinceLastProbe` 用 `消息数 − lastCheckpointTurn` 近似，详见 anchor-probe-emit.ts。
+ */
+async function resolveAnchorProbeTarget(params: {
+  userId: string;
+  teachingState: Record<string, any> | null | undefined;
+  emitCheckpoint: boolean;
+  learnerProjection: TeachingScenarioContext['learnerProjection'] | null | undefined;
+  messageCount: number;
+  now: Date;
+}): Promise<AnchorProbePlan | null> {
+  if (!params.emitCheckpoint) return null;
+  try {
+    const rows = await prisma.learner_evidence.findMany({
+      where: { userId: params.userId, evidenceType: 'anchor:result' },
+      orderBy: { occurredAt: 'desc' },
+      take: ANCHOR_RESULT_LOOKBACK,
+      select: { occurredAt: true, payload: true },
+    });
+    const { lastProbeAt, probesSinceLastFlag } = summarizeAnchorEvidence(rows);
+    const decision = shouldRunAnchorProbe({
+      now: params.now,
+      lastProbeAt,
+      hasPendingCheckpoint: getPendingCheckpoint(params.teachingState) !== null,
+      turnsSinceLastProbe: deriveTurnsSinceLastProbe(
+        params.messageCount,
+        params.teachingState?.lastCheckpointTurn,
+      ),
+      probesSinceLastFlag,
+    });
+    if (!decision.shouldRun) return null;
+
+    const candidates = buildAnchorCandidatesFromLearnerSignals(
+      buildAnchorSignalSource(params.learnerProjection),
+    );
+    const plans = selectAnchorCandidates(candidates, { limit: 1 });
+    return plans[0] ?? null;
+  } catch (error) {
+    logger.warn('[anchor-probe] 目标解析失败（本轮不投放，链路照常）', {
+      userId: params.userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * 独立锚题结果留痕（`learner_evidence` type=`anchor:result`）。
+ *
+ * 触发条件（全部满足）：该检查点带 `purpose='anchor'`、由**代码裁决**（`judgedBy='code'`，纪律 1）、
+ * 且 `anchorExpectedBelief` 合法。`evaluateAnchorProbeOutcome` 只产出"证伪/一致"标记，
+ * **绝不改写** knowledge/mastery/difficulty/BKT（纪律 2）；证伪时打 `warn` 提示人工复核。
+ *
+ * 幂等：`(eventId, evidenceKey)` 由 checkpointId 派生并命中唯一约束，同一检查点重复提交只保留一行
+ * （答错重答时按最新一次结果 upsert），不会重复计数。
+ */
+async function recordAnchorProbeResult(
+  session: TeachingSessionRecord,
+  checkpoint: TeachingCheckpoint,
+  passed: boolean,
+): Promise<void> {
+  const expected = checkpoint.anchorExpectedBelief;
+  if (expected !== 'mastered' && expected !== 'struggling') return;
+  try {
+    const outcome = evaluateAnchorProbeOutcome({ expected, passed });
+    const row = buildAnchorResultEvidence({
+      checkpointId: checkpoint.id,
+      conceptKey: checkpoint.anchorConceptKey ?? null,
+      expected,
+      passed,
+      signal: outcome.signal,
+      falsified: outcome.falsified,
+      userId: session.userId,
+      pathId: session.learningPathId ?? null,
+      taskId: session.taskId ?? null,
+      sessionId: session.id,
+      occurredAt: simulatedNowOr(),
+    });
+    const { eventId, evidenceKey } = anchorResultEvidenceKey(checkpoint.id);
+    await prisma.learner_evidence.upsert({
+      where: { eventId_evidenceKey: { eventId, evidenceKey } },
+      create: row,
+      update: {
+        payload: row.payload,
+        confidence: row.confidence,
+        occurredAt: row.occurredAt,
+      },
+    });
+    if (outcome.falsified) {
+      logger.warn('[anchor-probe] 独立锚题证伪既有信念（仅标记待复核，不改写掌握/难度/BKT）', {
+        sessionId: session.id,
+        checkpointId: checkpoint.id,
+        conceptKey: checkpoint.anchorConceptKey ?? null,
+        expected,
+        passed,
+        signal: outcome.signal,
+      });
+    } else {
+      logger.info('[anchor-probe] 独立锚题结果留痕', {
+        sessionId: session.id,
+        checkpointId: checkpoint.id,
+        conceptKey: checkpoint.anchorConceptKey ?? null,
+        expected,
+        passed,
+        signal: outcome.signal,
+      });
+    }
+  } catch (error) {
+    logger.warn('[anchor-probe] 探针结果留痕失败（不影响判定与课堂）', {
+      sessionId: session.id,
+      checkpointId: checkpoint.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
  * 剥离检查点答案键（客户端投影前调用）：答案键只用于服务端代码裁决，**绝不下发**。
  * 覆盖两处暴露面：`pendingCheckpoint` 本身，以及原样返回的 `teachingState`（其中也存了一份）。
  */
@@ -1603,7 +1756,8 @@ export function stripCheckpointAnswerKeys<T extends Record<string, any> | null |
 
 async function buildTeachingTurnInput(
   session: TeachingSessionRecord,
-  context: TeachingScenarioContext
+  context: TeachingScenarioContext,
+  options: { anchorTarget?: AnchorProbePlan | null } = {},
 ): Promise<TeachingTurnInput> {
   const compression = teachingContextCompressionService.compress(session.messages);
   const teachingState = session.teachingState || {};
@@ -1708,6 +1862,19 @@ async function buildTeachingTurnInput(
   // 配置式输入通道（P2 声明 + 本链运行时消费）：routings 表 teaching-agent 通道行抽值优先，缺失回退既有组装
   const { channels } = await assembleTeachingTurnChannels({ session, teachingState, context }).catch(() => ({ channels: {}, skipped: [] }));
 
+  const anchorTarget = options.anchorTarget ?? null;
+  const controls: TeachingTurnInput['controls'] & { anchorProbe?: AnchorPromptTarget } = {
+    mode: session.mode as TeachingMode,
+    teachingControlContext: channels['controls.teachingControlContext'] || teachingControlContext,
+    // 出题触发由代码给（2026-09-17）：模型只出题与答案键，不再自行决定"什么时候探测"
+    emitCheckpoint: shouldEmitCheckpoint(session, teachingState),
+  };
+  // 独立锚题探针（Q13/B4）：仅当本轮由代码选定目标时注入——提示词据此把本次检查点改成
+  // 对该概念的独立复测（见 prompts/core/teaching-turn.yaml 的锚题约束）。目标为 null 时不注入任何字段。
+  if (anchorTarget) {
+    controls.anchorProbe = buildAnchorPromptTarget(anchorTarget);
+  }
+
   return {
     messages: compression.messages,
     learner: channels['learner.learnerProjection'] || context.learnerProjection,
@@ -1719,12 +1886,7 @@ async function buildTeachingTurnInput(
         ? channels['knowledge.state']
         : session.knowledgeState),
     },
-    controls: {
-      mode: session.mode as TeachingMode,
-      teachingControlContext: channels['controls.teachingControlContext'] || teachingControlContext,
-      // 出题触发由代码给（2026-09-17）：模型只出题与答案键，不再自行决定"什么时候探测"
-      emitCheckpoint: shouldEmitCheckpoint(session, teachingState),
-    }
+    controls
   };
 }
 
@@ -2356,13 +2518,25 @@ export class AITeachingOrchestrator {
       session.knowledgeState,
     );
 
+    // 独立锚题探针（Q13/B4）：只在"本轮会出检查点"时才可能投放（复用检查点槽位，纪律 3）。
+    // 目标由代码选定后注入本轮提示词（buildTeachingTurnInput → controls.anchorProbe），
+    // 并在落库 pendingCheckpoint 时打上 purpose='anchor'（见下方检查点产生分支）。
+    const anchorTarget = await resolveAnchorProbeTarget({
+      userId: session.userId,
+      teachingState: previousTeachingState,
+      emitCheckpoint: shouldEmitCheckpoint(session, previousTeachingState),
+      learnerProjection: context.learnerProjection,
+      messageCount: updatedMessages.length,
+      now: simulatedNowOr(),
+    });
+
     const turnInput = await buildTeachingTurnInput({
       ...session,
       // B2/Q14：喂给模型前对学习者消息做输入围栏（正常文本原样；疑似注入被打标为不可信数据）。
       // 落库消息保持原文（见上方 updatedMessages），因此这里传的是围栏后的浅拷贝。
       messages: fenceLearnerMessagesForModel(updatedMessages),
       knowledgeState: frozenKnowledgeState,
-    }, context);
+    }, context, { anchorTarget });
     // 教学回合 wall-clock 超时兜底：LLM 挂起时避免操作租约（30min）被占导致会话内所有操作 409 BUSY；
     // 超时走 releaseOperation + 客户端重试路径（revision 未递增，重试安全）。
     // 阈值对齐 platform_settings.aiReliability.defaultRequestTimeoutMs（300s）：
@@ -2786,6 +2960,15 @@ export class AITeachingOrchestrator {
           // 答案键（服务端保存，客户端投影会剥离）：用于代码裁决，保证"对错"不来自模型自评
           ...(checkpointCandidate.correctOptionIds?.length ? { correctOptionIds: checkpointCandidate.correctOptionIds } : {}),
           ...(checkpointCandidate.expectedKeywords?.length ? { expectedKeywords: checkpointCandidate.expectedKeywords } : {}),
+          // 独立锚题标记（Q13/B4）：本轮由代码选定锚题目标时打标，随 inheritTeachingState 跨回合继承；
+          // 不含答案键，因此 stripCheckpointAnswerKeys 会原样保留（见 checkpointForMessageResult）
+          ...(anchorTarget
+            ? {
+                purpose: 'anchor' as const,
+                anchorConceptKey: anchorTarget.conceptKey,
+                anchorExpectedBelief: anchorTarget.expected,
+              }
+            : {}),
         };
         teachingState.lastCheckpointTurn = updatedMessages.length;
       }
@@ -2822,6 +3005,12 @@ export class AITeachingOrchestrator {
           detail: codeJudgement?.detail ?? null,
           submission: { selectedOptionIds: options.checkpointSubmission?.selectedOptionIds },
         });
+
+        // 独立锚题探针（Q13/B4）：仅对带 purpose='anchor' 的检查点、且**代码裁决**（纪律 1）时
+        // 另写一行 anchor:result 作为"待复核"信号；只标记、不改写掌握/难度/BKT（纪律 2）。
+        if (submittedCheckpoint.purpose === 'anchor' && judgedBy === 'code') {
+          void recordAnchorProbeResult(session, submittedCheckpoint, passed);
+        }
 
         // 仅答对时消费检查点；答错保留 pendingCheckpoint（同一 cpId 可重答，
         // 前端答错反馈后再次提交不会落入「理解检查不存在或已处理」）
