@@ -43,6 +43,7 @@ import { conceptLoadService } from '../memory/concept-load.service';
 import { reviewQuotaService } from '../memory/review-quota.service';
 import reviewPlanService, { type ReviewPlan, type ReviewPlanItem } from '../memory/review-plan.service';
 import { recordMisconceptions } from '../learner/misconception-ledger.service';
+import { fenceLearnerMessage } from './input-fence';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
 const AI_TEACHING_AGENT_ID = 'teaching-agent';
@@ -217,7 +218,7 @@ interface ProcessStudentMessageOptions {
   kind?: 'message' | 'resume-continue';
 }
 
-const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
+export const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 /** 检查点最小间隔（条消息）：与 `processStudentMessage` 事后门保持一致 */
 export const CHECKPOINT_MIN_TURNS = 4;
@@ -2324,7 +2325,9 @@ export class AITeachingOrchestrator {
           ...session.messages,
           {
             role: 'user',
-            content: message,
+            // B2/Q14：学习者消息进入教学链路前过输入围栏——正常文本原样；
+            // 疑似注入被转义并标注为不可信数据（见 input-fence.ts），不改变正常教学语义。
+            content: fenceLearnerMessage(message),
             timestamp: new Date().toISOString(),
             // 检查点合成消息打标记：进入教学上下文供模型分析答案，但不参与学生行为证据统计
             ...(options.checkpointId ? { checkpoint: true } : {}),
