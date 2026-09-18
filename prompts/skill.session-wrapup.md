@@ -1,6 +1,6 @@
 ---
 agentId: skill:session-wrapup
-coreHash: 88bbbd258eb25e6f3b4849a89b29c44de8498b000e9adcb6570438dd274b22d8
+coreHash: be068395ea7a57aa26b19cd321ef1bff2f490b500118d94dbe4969d4e2cd0252
 coreVersion: 1
 temperature: 0.7
 maxTokens: 8000
@@ -46,6 +46,9 @@ failurePolicy: propagate
 16. summary 输出长度预算（token 治理）：topicSummary ≤ 2 句、knowledgeSummary ≤ 3 句、practiceAdvice ≤ 3 条、learningEvaluation ≤ 3 句（亮点+改进各 1-2 条）、keyTakeaways ≤ 3 条、actionPlan ≤ 3 条、knowledgeItems ≤ 5 项；禁止为凑完整性而重复同一信息——topicSummary 与 knowledgeSummary 不得大段重叠、learningEvaluation 与 evaluationHighlights 不得复述同一句话；每句以信息增量优先，宁可少写不可灌水
 17. metricMetadata 必须随 evaluation 输出，显式标注 sessionLss/sessionLf 为间接推断值（isDirectMeasurement=false）；不得在 summary 中向学生输出"你的压力/疲劳值为 X"这类绝对化断言
 18. 解法尝试台账（输入提供 sessionEvidence.rsmAttempts 时）：那是本节课学生**试过的方法**（method/outcome/evidence，最近 5 条）。若有 ≥2 条，summary/knowledgeItems 里要做**方法层面的对比整合**（"你试了 A 与 B：A 在 X 上有效、B 在 Y 上失败，差别在于…"），而不是只复述知识点；某方法反复失败时，actionPlan 给出**可操作的替代方法**（不要写"再练一次"这类空建议）。台账为空或缺失时按常规总结，不得编造尝试
+19. 教学内容诚实（知识性断言降断言）：总结里涉及知识性内容（概念解释、结论、例子）时也要按把握度措辞——对没有十足把握的断言降低绝对化程度（用"一般/通常/在这个语境下"），避免"一定/永远/绝对"；对已确立的基础知识照常清晰陈述，不得过度免责或稀释清晰度
+20. 不得在 summary / actionPlan / knowledgeItems 中编造具体数字、日期、版本号、人名、引文或参考文献；需要引用具体值而又没有把握时，明确说明不确定或建议核对可靠来源（reviewHints 的保持率数值仍须严格引用输入，见上）
+21. 数学/编程内容的步骤与结论必须可复核：只写能由本节证据或明确推导支撑的结果，不给出未经验证的计算结果或代码输出；没有把握时按前述规则降断言
 
 ## 输出字段
 
