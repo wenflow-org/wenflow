@@ -1353,7 +1353,7 @@ class LearningService {
       const activeRun = await this.getActiveGenerationRun(path.id, path.activeGenerationRunId);
       const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
       const canReplace = retry.allowed && retry.retryType === 'stageDesign';
-      const replaceBudgetLeft = (generationStatus.stageDesignRetryCount || 0) < ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length;
+      const replaceBudgetLeft = (generationStatus?.stageDesignRetryCount || 0) < ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length;
       const useReplace = canReplace && replaceBudgetLeft;
 
       // 追加式自愈（两个入口）：
@@ -1368,8 +1368,8 @@ class LearningService {
       }
 
       const retryCount = useReplace
-        ? (generationStatus.stageDesignRetryCount || 0)
-        : (generationStatus.stageDesignAppendCount || 0);
+        ? (generationStatus?.stageDesignRetryCount || 0)
+        : (generationStatus?.stageDesignAppendCount || 0);
       if (retryCount >= ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length) {
         continue;
       }
