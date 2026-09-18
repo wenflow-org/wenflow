@@ -41,7 +41,11 @@ import {
 const GOAL_MAX_STEPS = 14;
 /** 同一天"未就绪"时的重试间隔（不消耗模拟日，Fix D） */
 const NOT_READY_POLL_MS = 30_000;
-const DAY_LOOP_RETRY_LIMIT = 12;
+/**
+ * 连续"可重试"的总时长预算。不能按次数：会话租约 TTL 为 10 分钟，一次被杀掉的
+ * `advance-day` 会留下未过期的租约，后续请求持续 409「会话忙」——必须能等过 TTL。
+ */
+const RETRY_BUDGET_MS = 20 * 60_000;
 /** 被限流（429）时的等待：限流窗口通常按分钟计，用固定较长等待而非指数短退避 */
 const RATE_LIMIT_WAIT_MS = 60_000;
 /** 单次 HTTP 请求上限：`advance-day runTasks` 会同步跑完当天课程，实测可达 ~5 分钟 */
@@ -228,6 +232,8 @@ async function runDailyLoop(args: HarnessArgs, state: RunState, statePath: strin
   let transportRetries = 0;
   /** 同一天"未就绪"的起始时刻；推进/终局时清零 */
   let notReadySince: number | null = null;
+  /** 连续"可重试"的起始时刻；出现任何非可重试结果时清零 */
+  let retrySince: number | null = null;
   while (state.round < args.maxDays) {
     const dayLabel = state.round + 1;
     const started = Date.now();
@@ -237,17 +243,21 @@ async function runDailyLoop(args: HarnessArgs, state: RunState, statePath: strin
 
     if (outcome.kind === 'retryable') {
       transportRetries += 1;
-      // 限流（429）窗口通常按分钟计：固定长等，别用指数短退避继续撞
-      const waitMs = outcome.httpStatus === 429 ? RATE_LIMIT_WAIT_MS : nextBackoffMs(transportRetries);
-      log(`[day${dayLabel}] ${seconds}s 可重试（${outcome.detail}）→ 等 ${Math.round(waitMs / 1000)}s`);
-      if (transportRetries > DAY_LOOP_RETRY_LIMIT) {
-        addFinding(state, 'retry-exhausted', `连续 ${transportRetries} 次可重试：${outcome.detail}`);
+      if (retrySince === null) retrySince = Date.now();
+      const waitedMinutes = ((Date.now() - retrySince) / 60_000).toFixed(1);
+      if (Date.now() - retrySince > RETRY_BUDGET_MS) {
+        addFinding(state, 'retry-exhausted', `连续可重试累计 ${waitedMinutes} 分钟：${outcome.detail}`);
         return 'failed';
       }
+      // 限流（429）窗口通常按分钟计：固定长等，别用指数短退避继续撞
+      const waitMs = outcome.httpStatus === 429 ? RATE_LIMIT_WAIT_MS : nextBackoffMs(transportRetries);
+      log(`[day${dayLabel}] ${seconds}s 可重试（${outcome.detail}）→ 等 ${Math.round(waitMs / 1000)}s`
+        + `（累计 ${waitedMinutes}/${Math.round(RETRY_BUDGET_MS / 60_000)} 分）`);
       await sleep(waitMs);
       continue;
     }
     transportRetries = 0;
+    retrySince = null;
 
     if (outcome.kind === 'day-not-started') {
       // 路径生成窗口内：**不消耗模拟日**，退避后重试同一天（Fix D）。
