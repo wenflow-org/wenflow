@@ -276,18 +276,42 @@
                 :type="checkpoint.type === 'multi_choice' ? 'checkbox' : 'radio'"
                 :value="opt.id"
                 :checked="selectedOptions.includes(opt.id)"
+                :disabled="checkpointPending || checkpointSubmitting"
                 @change="toggleOption(opt.id)"
               />
               {{ opt.text }}
             </label>
           </template>
-          <textarea v-else v-model="answerText" class="checkpoint__input" rows="3" placeholder="写下你的答案…"></textarea>
+          <textarea v-else v-model="answerText" class="checkpoint__input" rows="3" :disabled="checkpointPending || checkpointSubmitting" placeholder="写下你的答案…"></textarea>
           <div v-if="checkpointFeedback" class="checkpoint__feedback" :class="{ 'checkpoint__feedback--ok': checkpointPassed }">
             {{ checkpointFeedback }}
           </div>
           <div class="checkpoint__actions">
-            <span class="btn-primary" role="button" tabindex="0" @click="submitCheckpoint" @keydown.enter="submitCheckpoint">提交</span>
-            <span v-if="checkpoint.allowSkip !== false" class="btn-ghost" role="button" tabindex="0" @click="skipCheckpoint" @keydown.enter="skipCheckpoint">跳过</span>
+            <span
+              v-if="!checkpointSubmitting"
+              class="btn-primary"
+              :class="{ 'btn-primary--off': checkpointPending }"
+              role="button"
+              :tabindex="checkpointPending ? -1 : 0"
+              @click="submitCheckpoint"
+              @keydown.enter="submitCheckpoint"
+            >{{ checkpointPending ? '判定中…' : '提交' }}</span>
+            <span
+              v-if="checkpoint.allowSkip !== false && !checkpointPending && !checkpointSubmitting"
+              class="btn-ghost"
+              role="button"
+              tabindex="0"
+              @click="skipCheckpoint"
+              @keydown.enter="skipCheckpoint"
+            >跳过</span>
+            <span
+              v-if="checkpointSubmitting"
+              class="btn-ghost"
+              role="button"
+              tabindex="0"
+              @click="dismissCheckpoint"
+              @keydown.enter="dismissCheckpoint"
+            >继续 ›</span>
           </div>
           </div>
         </Transition>
@@ -441,6 +465,7 @@ import { feedbackApi } from '@/api/feedback';
 import AiContentNote from '@/components/AiContentNote.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import { toast } from '@/utils/toast';
+import { isCheckpointAlreadyHandled } from '@/utils/checkpoint';
 import { useInteractionMeta } from '@/composables/useInteractionMeta';
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
@@ -478,8 +503,12 @@ useKeyboardShortcuts([
         streamAbort = null;
         return;
       }
-      // 检查点可见：跳过
-      if (checkpoint.value && !checkpointSubmitting.value) {
+      // 检查点可见：已提交（含答错上锁）时 Esc 收起，未提交时才「跳过」
+      if (checkpoint.value && checkpointSubmitting.value) {
+        dismissCheckpoint();
+        return;
+      }
+      if (checkpoint.value) {
         skipCheckpoint();
         return;
       }
@@ -1322,8 +1351,38 @@ function toggleOption(id: string) {
   }
 }
 
+/** 收起检查点卡片并复位本地状态 */
+function resetCheckpointUi() {
+  window.clearTimeout(checkpointCloseTimer);
+  checkpoint.value = null;
+  checkpointFeedback.value = '';
+  checkpointPassed.value = false;
+  checkpointSubmitting.value = false;
+  selectedOptions.value = [];
+  answerText.value = '';
+}
+
+/** 用户读完反馈后手动收起检查点（答错时不再提供重交入口） */
+function dismissCheckpoint() {
+  resetCheckpointUi();
+}
+
+/** 尽力向前同步 revision（撞上「已处理」时用；失败不阻断，下次进页面会重拉） */
+async function resyncSessionRevision(): Promise<void> {
+  if (!session.value) return;
+  try {
+    const detail = await aiTeachingAPI.getSessionDetail(session.value.sessionId);
+    if (detail && Number.isInteger(detail.revision)) session.value.revision = detail.revision;
+  } catch {
+    /* 忽略 */
+  }
+}
+
 async function submitCheckpoint() {
-  if (!checkpoint.value || !session.value || typing.value || checkpointSubmitting.value) return;
+  // checkpointPending 必须一并拦住：提交请求内含一次教学回合（LLM，数十秒），
+  // 期间再点一次会打出第二个必然失败的请求（走查实测：第一次 200、第二次 404
+  // → 误报「提交失败，再试一次」，且卡片留在页面上反复失败）
+  if (!checkpoint.value || !session.value || typing.value || checkpointSubmitting.value || checkpointPending.value) return;
   // 空值校验：空选项/空简答直接提示，不消耗一轮 AI 判定
   if (checkpoint.value.options?.length && !selectedOptions.value.length) {
     checkpointFeedback.value = '请先选择一个选项';
@@ -1341,12 +1400,13 @@ async function submitCheckpoint() {
     const r = await aiTeachingAPI.submitCheckpoint(session.value.sessionId, checkpoint.value.id, payload, session.value.revision) as unknown as Record<string, any>;
     session.value.revision = r.revision ?? session.value.revision + 1;
     checkpointPassed.value = r.passed === true;
+    // 后端把整段导师回复放在 feedback（答错时即纠正正文），需要留足阅读时间
     checkpointFeedback.value = r.feedback || (r.passed ? '回答正确' : r.hint || '再想想');
-    if (r.passed || r.nextAction === 'continue') {
-      // 通过后立即锁住本次检查点（3s 展示窗口内不可重复提交）；
-      // 延长自 1.6s：反馈需要时间阅读，避免「刚看到答对了就消失」
-      checkpointSubmitting.value = true;
-      // 记录 timer 并在下次提交/卸载时清理，避免前一次 timeout 清掉新反馈
+    // 提交成功后服务端已消费该检查点：一律上锁。
+    // 答错时旧实现保持可提交（nextAction='review'），用户重交必然 404（走查 P2）
+    checkpointSubmitting.value = true;
+    if (r.passed) {
+      // 答对：3s 后自动收起；延长自 1.6s，避免「刚看到答对了就消失」
       window.clearTimeout(checkpointCloseTimer);
       checkpointCloseTimer = window.setTimeout(() => {
         checkpoint.value = null;
@@ -1354,8 +1414,16 @@ async function submitCheckpoint() {
         checkpointSubmitting.value = false;
       }, 3000);
     }
-  } catch {
-    checkpointFeedback.value = '提交失败，再试一次';
+    // 答错：保留卡片让用户读完纠正，由「继续 ›」/Esc 收起（不再提供重交入口）
+  } catch (e: any) {
+    if (isCheckpointAlreadyHandled(e)) {
+      // 服务端已消费（重复提交 / 响应丢失后重试）：不算失败，收起卡片并向前同步
+      resetCheckpointUi();
+      await resyncSessionRevision();
+      toast.info('这个检查点已经提交过了，已为你同步进度');
+    } else {
+      checkpointFeedback.value = '提交失败，再试一次';
+    }
   } finally {
     checkpointPending.value = false;
   }
