@@ -38,7 +38,29 @@
     <TraceWaterfall v-if="elTab === 'trace'" embedded />
 
     <!-- ===== Tab3: 成本分析（嵌入 TokenCost 组件，观测同域并入 2026-09-04） ===== -->
-    <TokenCost v-if="elTab === 'cost'" embedded />
+    <template v-if="elTab === 'cost'">
+      <!-- 成本金额条：读取 token-cost 端点新增的金额字段；单价未配置时显式提示「单价未配置」（绝不用 0 冒充） -->
+      <div class="mk-card cost-strip" :class="{ 'cost-strip--unknown': !costPricingKnown }">
+        <div class="cost-strip__main">
+          <span class="cost-strip__label">调用成本（近 7 天）</span>
+          <strong v-if="costLoading" class="cost-strip__value">统计中…</strong>
+          <strong v-else-if="costUsd !== null" class="cost-strip__value mono">≈ ${{ fmtCostUsd(costUsd) }}</strong>
+          <strong v-else-if="costPricedCalls === 0 && costMissingCalls === 0" class="cost-strip__value cost-strip__value--unknown">无调用</strong>
+          <strong v-else class="cost-strip__value cost-strip__value--unknown">单价未配置</strong>
+          <span class="cost-strip__hint">
+            <template v-if="costUsd !== null">
+              已定价 {{ costPricedCalls }} 次<template v-if="costMissingCalls > 0"> · {{ costMissingCalls }} 次未定价（未计入）</template>
+            </template>
+            <template v-else-if="costPricedCalls === 0 && costMissingCalls === 0">近 7 天没有带 token 的 LLM 调用</template>
+            <template v-else>models.config.ts 的 pricing 尚未填权威单价，暂不展示金额</template>
+          </span>
+        </div>
+        <div v-if="missingPricingModels.length" class="cost-strip__missing" :title="missingPricingModels.join('、')">
+          待补单价模型 {{ missingPricingModels.length }} 个：{{ missingPricingModels.join('、') }}
+        </div>
+      </div>
+      <TokenCost embedded />
+    </template>
 
     <!-- ===== Tab1: 日志流（默认） ===== -->
     <template v-if="elTab === 'logs'">
@@ -280,6 +302,7 @@ import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
 import TokenCost from './TokenCost.vue'
+import { adminTokenCostApi } from '@/api/adminApi'
 import { TERMS, errorCodeLabel } from './terms'
 import { useTableSort } from './useTableSort'
 
@@ -304,6 +327,47 @@ function switchElTab(t: ElTab) {
   elTab.value = t
   if (route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
 }
+
+/* 成本金额条（成本 tab）：读取 token-cost 端点新增的金额字段（近 7 天口径，与嵌入组件同源）。
+   单价未配置时后端返回 usd=null，这里显示「单价未配置」而非 0 / 空白；
+   pricingStatus.missingPricingModels 给出运维补价清单。 */
+const costLoading = ref(false)
+const costLoaded = ref(false)
+const costUsd = ref<number | null>(null)
+const costPricingKnown = ref(false)
+const costPricedCalls = ref(0)
+const costMissingCalls = ref(0)
+const missingPricingModels = ref<string[]>([])
+
+function fmtCostUsd(v: number): string {
+  if (!Number.isFinite(v) || v < 0) return '0.000000'
+  return v.toFixed(6)
+}
+
+async function loadCostSummary() {
+  if (costLoading.value) return
+  costLoading.value = true
+  try {
+    const res = await adminTokenCostApi.getSummary({ days: 7, includeTest: false })
+    const totals = res.data?.data?.totals ?? null
+    costUsd.value = totals?.usd ?? null
+    costPricingKnown.value = totals?.pricingKnown ?? false
+    costPricedCalls.value = totals?.pricedCalls ?? 0
+    costMissingCalls.value = totals?.callsMissingPricing ?? 0
+    missingPricingModels.value = res.data?.pricingStatus?.missingPricingModels ?? []
+    costLoaded.value = true
+  } catch {
+    // 金额条为辅助信息：失败静默（嵌入的 TokenCost 组件自身有加载失败提示/重试）
+    costUsd.value = null
+    costPricingKnown.value = false
+  } finally {
+    costLoading.value = false
+  }
+}
+/* 进入成本 tab 时懒加载一次（深链 ?tab=cost 由 route watch 改写 elTab 后触发） */
+watch(elTab, (t) => {
+  if (t === 'cost' && !costLoaded.value) void loadCostSummary()
+}, { immediate: true })
 /** 切到 Trace tab 并让瀑布聚焦指定链路/会话（openTrace/openSession 深链接入） */
 function showTrace(traceId?: string, sessionId?: string) {
   elTab.value = 'trace'
@@ -1109,5 +1173,29 @@ html[data-theme='dark'] {
 
 
 
+
+/* ================= 成本金额条（成本 tab 顶部） ================= */
+.cost-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+}
+.cost-strip__main { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.cost-strip__label { color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-12, 12px); font-weight: 600; }
+.cost-strip__value { font-size: 18px; font-weight: 750; color: var(--mk-green, #16a34a); font-variant-numeric: tabular-nums; }
+.cost-strip__value--unknown { color: var(--mk-amber, #d97706); }
+.cost-strip__hint { color: var(--mk-faint, #5f6f8c); font-size: var(--mk-fs-12, 12px); }
+.cost-strip__missing {
+  margin-left: auto;
+  max-width: 52%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mk-amber, #d97706);
+  font-size: var(--mk-fs-12, 12px);
+}
+.cost-strip--unknown { border-left: 3px solid var(--mk-amber, #d97706); }
 
 </style>

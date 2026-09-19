@@ -72,7 +72,7 @@ export interface SummarizeCostsOptions {
 /** 金额保留到 12 位小数：足够表达单次调用的微额成本，同时抹掉浮点尾差（避免 3.3e-6 变成 3.3000000000000004e-6） */
 const USD_PRECISION = 1e-12;
 
-function roundUsd(value: number): number {
+export function roundUsd(value: number): number {
   return Math.round(value / USD_PRECISION) * USD_PRECISION;
 }
 

@@ -246,3 +246,61 @@ describe('GET /token-cost/by-model', () => {
     expect(body.data.items[0].tokens).toBe(800);
   });
 });
+
+describe('GET /token-cost · 成本字段与 pricingStatus', () => {
+  beforeEach(() => { jest.clearAllMocks(); __clearTokenCacheForTests(); });
+
+  it('summary 响应：新增成本字段 + 顶层 pricingStatus；单价未配置时 usd=null（不用 0 冒充）', async () => {
+    mockUsers.findMany.mockResolvedValue([{ id: 'u1' }]);
+    mockAgentCallLogs.findMany
+      .mockResolvedValueOnce([
+        tokenRow('teaching-turn', 'u1', 'deepseek-v4-flash', 1000),
+        tokenRow('teaching-turn', 'u1', 'agnes-3.0-flash', 500),
+      ])
+      .mockResolvedValueOnce([]);
+
+    const handler = getRouteHandler('/summary', 'get');
+    const res = createResponse();
+    await handler(createRequest({ days: '7' }), res);
+
+    const body = res.json.mock.calls[0][0];
+    expect(body.success).toBe(true);
+    // 顶层 pricingStatus：models.config.ts 的 pricing 仍为空 → 出现过的模型都进待补清单
+    expect(body.pricingStatus.configuredModels).toEqual([]);
+    expect(body.pricingStatus.missingPricingModels).toEqual(['deepseek-v4-flash', 'agnes-3.0-flash']);
+    // totals 成本字段
+    expect(body.data.totals.usd).toBeNull();
+    expect(body.data.totals.pricingKnown).toBe(false);
+    expect(body.data.totals.callsMissingPricing).toBe(2);
+    expect(body.data.totals.pricedCalls).toBe(0);
+    // 既有字段语义/名字不变
+    expect(body.data.totals.tokens).toBe(1500);
+    expect(body.data.totals.calls).toBe(0);
+  });
+
+  it('by-model 条目：携带 usd/pricingKnown/callsMissingPricing/pricedCalls', async () => {
+    mockUsers.findMany.mockResolvedValue([]);
+    mockAgentCallLogs.findMany
+      .mockResolvedValueOnce([
+        tokenRow('teaching-turn', 'u1', 'deepseek-v4-flash', 800),
+        tokenRow('teaching-turn', 'u1', 'deepseek-v4-flash', 200),
+      ])
+      .mockResolvedValueOnce([]);
+
+    const handler = getRouteHandler('/by-model', 'get');
+    const res = createResponse();
+    await handler(createRequest({ days: '7' }), res);
+
+    const body = res.json.mock.calls[0][0];
+    expect(body.pricingStatus.missingPricingModels).toEqual(['deepseek-v4-flash']);
+    const item = body.data.items[0];
+    expect(item.key).toBe('deepseek-v4-flash');
+    expect(item.usd).toBeNull();
+    expect(item.pricingKnown).toBe(false);
+    expect(item.callsMissingPricing).toBe(2);
+    expect(item.pricedCalls).toBe(0);
+    expect(item.calls).toBe(2);
+    expect(item.promptTokens).toBe(800); // floor(800*0.8)=640 + floor(200*0.8)=160
+    expect(item.completionTokens).toBe(200); // (800-640) + (200-160)
+  });
+});
