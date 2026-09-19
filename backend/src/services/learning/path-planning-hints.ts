@@ -40,6 +40,30 @@ function isOperationalStageLike(value: string | null): boolean {
     || new RegExp(matchPattern).test(value);
 }
 
+/** 学习者负荷画像（可选）：可用时间与认知负荷耐受。仅在显式传入时影响推导。 */
+export interface LearnerLoadProfile {
+  /** 可用时间枚举或自由文本，如 'minimal' | 'moderate' | 'abundant' */
+  availableTime?: string | null;
+  /** 认知负荷耐受描述（自由文本），如 '信息一多就容易乱' */
+  loadTolerance?: string | null;
+}
+
+/** 可用时间是否紧：枚举 minimal，或自由文本里的碎片化/极少信号。 */
+function isMinimalAvailabilitySignal(value: string): boolean {
+  const text = value.trim().toLowerCase();
+  if (!text) return false;
+  if (text === 'minimal' || text === 'very_low' || text === 'verylow') return true;
+  return /(minimal|very\s*low|几乎没有|极少|很少|碎片|零碎|不固定|不稳定|抽不出|时间紧|紧张|有限)/.test(text);
+}
+
+/** 认知负荷耐受是否极低：能识别"关页面/合电脑/三步以上就放弃/信息一多"这类信号。 */
+function isLowLoadToleranceSignal(value: string): boolean {
+  const text = value.trim();
+  if (!text) return false;
+  if (/^(low|very\s*low|低|极低)$/i.test(text)) return true;
+  return /(关(掉|闭)?\s*页面|合(上)?\s*电脑|三步以上|超过三步|信息一多|一多就|太长|看不下去|坐不住|坚持不了|容易放弃|轻言放弃|分心|浮躁|耐受(很|较|非常)?低|承载(很|较|非常)?低)/.test(text);
+}
+
 /**
  * 中文数字/时间短语 → 周数的确定性兜底解析。
  * 仅用于 timeDimensions.totalWeeks 缺失时钳制 maxWeeks（紧迫场景兜底），
@@ -164,7 +188,8 @@ export function derivePlanningHints(
   timeBudgetCadence: TimeBudgetCadence | null,
   keyStages: string[],
   timeDimensions?: { totalWeeks?: number | null; estimatedHours?: number | null; sessionsPerWeek?: number | null; sessionsLengthMin?: number | null } | null,
-  scopeSize?: ScopeSize | null
+  scopeSize?: ScopeSize | null,
+  learnerLoadProfile?: LearnerLoadProfile | null
 ): PlanningHints {
   const paceSignal = inferPaceSignal(timeHorizon);
   const keyStageCount = keyStages.length;
@@ -184,7 +209,7 @@ export function derivePlanningHints(
   // 现在 milestone 数被 scope_size 钳制：micro 顶多 2、small 顶多 3、medium 顶多 5、large 顶多 8。
   const scopeMilestoneCap = scopeConfig ? scopeConfig.milestoneRange[1] : 8;
   const scopeMilestoneFloor = scopeConfig ? scopeConfig.milestoneRange[0] : 2;
-  const targetMilestones: number | null = scope
+  let targetMilestones: number | null = scope
     ? (keyStageCount > 0
         ? Math.min(scopeMilestoneCap, Math.max(scopeMilestoneFloor, keyStageCount))
         : scopeMilestoneFloor)
@@ -197,7 +222,7 @@ export function derivePlanningHints(
   const inferredWeeks = Number.isFinite(timeDimensions?.totalWeeks) && (timeDimensions!.totalWeeks as number) > 0
     ? (timeDimensions!.totalWeeks as number)
     : inferMaxWeeksFromTimeHorizon(timeHorizon);
-  const maxWeeks: number = inferredWeeks
+  let maxWeeks: number = inferredWeeks
     ? Math.min(52, Math.max(1, Math.ceil(inferredWeeks * 1.2)))
     : paceConfig.maxWeeks;
 
@@ -205,7 +230,7 @@ export function derivePlanningHints(
     ? Number(timePerSession.match(/(\d+)/)?.[1])
     : null;
 
-  const subtaskMinutesRange: [number, number] = Number.isFinite(parsedSessionMinutes)
+  let subtaskMinutesRange: [number, number] = Number.isFinite(parsedSessionMinutes)
     ? [
         Math.max(15, Math.round((parsedSessionMinutes as number) * 0.3)),
         Math.max(30, Math.min(120, Math.round((parsedSessionMinutes as number) * 0.8))),
@@ -223,6 +248,35 @@ export function derivePlanningHints(
       milestoneRange = [Math.max(floors.milestoneRange[0], milestoneRange[0] - 1), Math.max(floors.milestoneRange[1], milestoneRange[1] - 1)];
       conceptRange = [Math.max(floors.conceptRange[0], conceptRange[0] - 1), Math.max(floors.conceptRange[1], conceptRange[1] - 1)];
       subtasksPerStageRange = [Math.max(floors.subtasksPerStageRange[0], subtasksPerStageRange[0] - 1), Math.max(floors.subtasksPerStageRange[1], subtasksPerStageRange[1] - 1)];
+    }
+  }
+
+  // 学习者负荷画像收紧（可选、加性）：仅在调用方显式传入 learnerLoadProfile 时生效，
+  // 不传时行为与今天完全一致。用于把「虚拟学习者的可用时间/认知负荷耐受」纳入体量推导，
+  // 避免生成本人根本跑不动的路径（紧预算/低耐受 → 更少里程碑、更短单任务、更短周期、更少任务）。
+  const loadProfile = learnerLoadProfile && typeof learnerLoadProfile === 'object' ? learnerLoadProfile : null;
+  if (loadProfile) {
+    const availableTimeText = normalizeString(loadProfile.availableTime);
+    const loadToleranceText = normalizeString(loadProfile.loadTolerance);
+    const isTightAvailability = availableTimeText ? isMinimalAvailabilitySignal(availableTimeText) : false;
+    // 碎片化节奏（按天/按次）在传入负荷画像时视为紧预算信号
+    const isFragmentedCadence = timeBudgetCadence === 'per_day' || timeBudgetCadence === 'per_session';
+    const isLowTolerance = loadToleranceText ? isLowLoadToleranceSignal(loadToleranceText) : false;
+
+    if (isTightAvailability || isFragmentedCadence || isLowTolerance) {
+      // 里程碑上界 ≤2
+      milestoneRange = [Math.min(milestoneRange[0], 2), Math.min(milestoneRange[1], 2)];
+      if (targetMilestones !== null) targetMilestones = Math.min(targetMilestones, 2);
+      // 单任务分钟上界 ≤45
+      subtaskMinutesRange = [Math.min(subtaskMinutesRange[0], 45), Math.min(subtaskMinutesRange[1], 45)];
+      // 周期上界 ≤2 周
+      maxWeeks = Math.min(maxWeeks, 2);
+      // 每阶段任务数上界：一般负荷收紧到 4，极低耐受再收到 3
+      const loadSubtasksCap = isLowTolerance ? 3 : 4;
+      subtasksPerStageRange = [
+        Math.min(subtasksPerStageRange[0], loadSubtasksCap),
+        Math.min(subtasksPerStageRange[1], loadSubtasksCap),
+      ];
     }
   }
 
@@ -256,13 +310,18 @@ export function derivePlanningHints(
     targetMilestones !== null && estimatedHoursTotal !== null
       ? Math.min(subtasksCap, Math.max(2, Math.round(estimatedHoursTotal / targetMilestones / 1.0)))
       : null;
-  // 无总学时信息时兜底取区间下限而非中点：预算未知时宁可给少不给多，避免小问题被硬撑成多节课
+  // 无总学时信息时兜底：单阶段至少 2 个任务（预算未知时保守，但不再落到 1），
+  // 上限仍受 subtasksPerStageRange 钳制。避免 micro + 学时缺失时产出"2 里程碑 × 1 任务"的空壳路径。
   const paceFloor = subtasksPerStageRange[0];
+  const fallbackPerStage = Math.min(subtasksCap, Math.max(paceFloor, 2));
   const targetSubtasksPerStage: number | null =
-    perStageFromHours ?? (targetMilestones !== null ? paceFloor : null);
-  // 有目标时 subtasksPerStageRange 同步精确化
+    perStageFromHours ?? (targetMilestones !== null ? fallbackPerStage : null);
+  // 学时反推时区间精确化为 [target, target]（沿用旧行为）；
+  // 兜底时区间与目标自洽但不塌成单点：下界抬到 ≥2，上界保留 subtasksCap。
   const effectiveSubtasksPerStageRange: [number, number] = targetSubtasksPerStage !== null
-    ? [targetSubtasksPerStage, targetSubtasksPerStage]
+    ? (perStageFromHours !== null
+        ? [targetSubtasksPerStage, targetSubtasksPerStage]
+        : [fallbackPerStage, subtasksCap])
     : subtasksPerStageRange;
 
   return {
@@ -338,7 +397,12 @@ export function buildFramedNormalizedInput(input: any): any {
   const timeDimensions = input.timeDimensions && typeof input.timeDimensions === 'object'
     ? input.timeDimensions
     : null;
-  const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize);
+  // 可选负荷信号：仅当调用方显式在 normalizedInput 上提供 learnerLoadProfile 时才影响推导，
+  // 缺失（真实用户现有链路）时与今天完全一致。
+  const learnerLoadProfile = input.learnerLoadProfile && typeof input.learnerLoadProfile === 'object'
+    ? input.learnerLoadProfile
+    : null;
+  const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize, learnerLoadProfile);
 
   return {
     ...input,

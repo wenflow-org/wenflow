@@ -151,9 +151,10 @@ describe('scope_size（问题规模钳制里程碑数）', () => {
     expect(hints.targetMilestones).toBe(5);
     expect(hints.scopeSize).toBeNull();
   });
-  it('scope_size 改变 subtasksPerStageRange：micro 兜底下限 1', () => {
+  it('scope_size 改变 subtasksPerStageRange：micro 兜底不再落到 1', () => {
     const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2'], null, 'micro');
-    expect(hints.targetSubtasksPerStage).toBe(1);
+    expect(hints.targetSubtasksPerStage).toBe(2);
+    expect(hints.subtasksPerStageRange).toEqual([2, 3]);
   });
 });
 
@@ -201,9 +202,9 @@ describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数�
 
   it('estimatedHours 与频率都缺失时用 pace 档位下限兜底（不再 null）', () => {
     const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3'], null);
-    // extended subtasksPerStageRange=[4,6]，下限 4
+    // extended subtasksPerStageRange=[4,6]，兜底目标取下限 4；区间保留 [4,6] 不再塌成单点
     expect(hints.targetSubtasksPerStage).toBe(4);
-    expect(hints.subtasksPerStageRange).toEqual([4, 4]);
+    expect(hints.subtasksPerStageRange).toEqual([4, 6]);
   });
 
   it('每阶段任务数超出范围时按 pace 区间上限夹取（无 scope 时 standard 上限 5）', () => {
@@ -236,5 +237,77 @@ describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数�
     const hints = derivePlanningHints('三个月', null, null, null, [], null);
     expect(hints.targetSubtasksPerStage).toBeNull();
     expect(hints.subtasksPerStageRange).toEqual(paceSignalRangeConfig.extended.subtasksPerStageRange);
+  });
+});
+
+describe('缺陷修复：学时未知时每阶段任务数不再落到 1', () => {
+  it('scope=micro 且 estimatedHours 缺失 → targetSubtasksPerStage >= 2 且落在返回区间内', () => {
+    const micro = derivePlanningHints('三个月', null, null, null, ['S1', 'S2'], null, 'micro');
+    expect(micro.targetSubtasksPerStage).toBeGreaterThanOrEqual(2);
+    expect(micro.subtasksPerStageRange[0]).toBeLessThanOrEqual(micro.targetSubtasksPerStage as number);
+    expect(micro.subtasksPerStageRange[1]).toBeGreaterThanOrEqual(micro.targetSubtasksPerStage as number);
+    expect(micro.subtasksPerStageRange).toEqual([2, 3]);
+  });
+
+  it('无 scope 且学时/频率都缺失 → 目标仍 >= 2 且不塌成单点区间', () => {
+    const hints = derivePlanningHints(null, null, null, null, ['S1', 'S2', 'S3'], null);
+    expect(hints.targetSubtasksPerStage).toBeGreaterThanOrEqual(2);
+    expect(hints.subtasksPerStageRange[0]).toBeLessThanOrEqual(hints.targetSubtasksPerStage as number);
+    expect(hints.subtasksPerStageRange[1]).toBeGreaterThanOrEqual(hints.targetSubtasksPerStage as number);
+    // 旧行为会把区间精确化成 [target,target]，现在兜底保留 [≥2, cap]
+    expect(hints.subtasksPerStageRange).toEqual([3, 5]);
+  });
+
+  it('estimatedHours 存在时行为不变（区间仍精确化为 [target,target]）', () => {
+    const hints = derivePlanningHints(
+      '三个月', null, null, null, ['S1', 'S2', 'S3'],
+      { totalWeeks: 12, estimatedHours: 12, sessionsPerWeek: null, sessionsLengthMin: null }
+    );
+    expect(hints.targetSubtasksPerStage).toBe(4);
+    expect(hints.subtasksPerStageRange).toEqual([4, 4]);
+    expect(hints.milestoneRange).toEqual([3, 3]);
+    expect(hints.maxWeeks).toBe(15);
+  });
+});
+
+describe('可选负荷画像 learnerLoadProfile（加性参数，不传零差异）', () => {
+  it('紧预算 + 极低耐受 → 收紧里程碑数 / 单任务分钟 / 周期 / 每阶段任务数', () => {
+    const tightened = derivePlanningHints(
+      '三个月', null, null, null, ['S1', 'S2', 'S3'], null, 'medium',
+      { availableTime: 'minimal', loadTolerance: '信息一多就容易乱，三步以上就放弃' }
+    );
+    expect(tightened.targetMilestones).toBe(2);
+    expect(tightened.milestoneRange).toEqual([2, 2]);
+    expect(tightened.subtaskMinutesRange).toEqual([30, 45]);
+    expect(tightened.maxWeeks).toBe(2);
+    // medium 下界本就是 3；低耐受把上界从 5 收到 3
+    expect(tightened.subtasksPerStageRange).toEqual([3, 3]);
+    expect(tightened.targetSubtasksPerStage).toBe(3);
+  });
+
+  it('碎片化节奏（per_day）在传入负荷画像时也触发收紧', () => {
+    const withoutCadence = derivePlanningHints(
+      '三个月', null, null, null, ['S1', 'S2', 'S3'], null, 'medium',
+      { availableTime: 'moderate' }
+    );
+    const withCadence = derivePlanningHints(
+      '三个月', null, null, 'per_day', ['S1', 'S2', 'S3'], null, 'medium',
+      { availableTime: 'moderate' }
+    );
+    expect(withoutCadence.maxWeeks).toBe(16); // moderate + 无 cadence：仅按三个月推断（12.9×1.2→16），不收紧
+    expect(withCadence.maxWeeks).toBe(2);     // per_day + 负荷画像：触发收紧
+    expect(withCadence.subtaskMinutesRange[1]).toBeLessThanOrEqual(45);
+  });
+
+  it('不传 learnerLoadProfile 与传入非紧画像逐字段一致（加性参数零差异）', () => {
+    const without = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3'], null, 'medium');
+    const nonTight = derivePlanningHints(
+      '三个月', null, null, null, ['S1', 'S2', 'S3'], null, 'medium',
+      { availableTime: 'abundant', loadTolerance: '较高，能长时间专注' }
+    );
+    expect(nonTight).toEqual(without);
+    // 非紧画像也不改变 defect-1 修复后的兜底结果
+    expect(without.targetSubtasksPerStage).toBe(3);
+    expect(without.subtasksPerStageRange).toEqual([3, 5]);
   });
 });
