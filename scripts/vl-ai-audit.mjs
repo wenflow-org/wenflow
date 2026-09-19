@@ -39,6 +39,8 @@ const CONCURRENCY = Math.min(Number(arg('concurrency', 5)) || 5, 5); // 硬性�
 const RUNS = Math.max(1, Number(arg('runs', 3)) || 3);
 const PATH_RUNS = Math.max(1, Number(arg('path-runs', 1)) || 1);
 const LIMIT = Number(arg('limit', 0)) || 0;
+/** 取故事的哪一篇：first（默认）| last | 数字下标。多故事样本（如基准学习者追加新故事后）用 last 对齐。 */
+const STORY_SEL = String(arg('story') || 'first');
 
 const keyFile = arg('key-file') || process.env.EVAL_KEY_FILE;
 const KEY = process.env.EVAL_API_KEY
@@ -50,11 +52,23 @@ const db = new DatabaseSync(DB, { readOnly: true });
 const all = (sql, p = []) => db.prepare(sql).all(...p);
 const clip = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const jparse = (s) => { try { return JSON.parse(s || '{}') || {}; } catch { return {}; } };
+/** 按 --story 选取要评审的那一篇故事（默认 first）。 */
+function pickStory(storyPool) {
+  const list = Array.isArray(storyPool) ? storyPool : [];
+  if (!list.length) return {};
+  if (STORY_SEL === 'last') return list[list.length - 1] || {};
+  if (/^\d+$/.test(STORY_SEL)) return list[Number(STORY_SEL)] || {};
+  return list[0] || {};
+}
 
 const learners = all(
-  `SELECT p.userId, u.name, p.profile, p.knowledgeLevel, lp.id AS pathId, lp.title AS pathTitle, lp.estimatedHours
+  // 注意：不要 LEFT JOIN learning_paths——一人多条路径会让同一学习者出现多行（审计重复计数）。
+  // 用子查询取"最近一条路径"即可。
+  `SELECT p.userId, u.name, p.profile, p.knowledgeLevel,
+          (SELECT lp.id FROM learning_paths lp WHERE lp.userId = p.userId ORDER BY lp.updatedAt DESC LIMIT 1) AS pathId,
+          (SELECT lp.title FROM learning_paths lp WHERE lp.userId = p.userId ORDER BY lp.updatedAt DESC LIMIT 1) AS pathTitle,
+          (SELECT lp.estimatedHours FROM learning_paths lp WHERE lp.userId = p.userId ORDER BY lp.updatedAt DESC LIMIT 1) AS estimatedHours
      FROM virtual_learner_profiles p JOIN users u ON u.id = p.userId
-     LEFT JOIN learning_paths lp ON lp.userId = p.userId
     WHERE p.notes LIKE ? OR p.tags LIKE ?
     ORDER BY u.name`,
   [`%${TAG}%`, `%${TAG}%`],
@@ -63,7 +77,7 @@ const learners = all(
 const cases = [];
 for (const l of learners) {
   const pr = jparse(l.profile);
-  const st = (pr.storyPool || [])[0] || {};
+  const st = pickStory(pr.storyPool);
   const gs = st.goalSeed && typeof st.goalSeed === 'object' ? st.goalSeed : {};
   const stages = l.pathId
     ? all('SELECT id, stageNumber, title, goal FROM milestones WHERE learningPathId=? ORDER BY stageNumber', [l.pathId])
@@ -252,7 +266,7 @@ await Promise.all(Array.from({ length: Math.min(CONCURRENCY, todo.length) }, () 
 const outDir = path.join(ROOT, 'backend', 'vlab-runs');
 fs.mkdirSync(outDir, { recursive: true });
 const outFile = String(arg('out') || path.join(outDir, `${TAG}-ai-audit-${MODEL}${RUNS > 1 ? `-x${RUNS}` : ''}${PHASE !== 'both' ? `-${PHASE}` : ''}.json`));
-fs.writeFileSync(outFile, JSON.stringify({ tag: TAG, model: MODEL, phase: PHASE, runs: RUNS, pathRuns: PATH_RUNS, concurrency: CONCURRENCY, generatedAt: new Date().toISOString(), results }, null, 2), 'utf8');
+fs.writeFileSync(outFile, JSON.stringify({ tag: TAG, model: MODEL, phase: PHASE, runs: RUNS, pathRuns: PATH_RUNS, concurrency: CONCURRENCY, storySel: STORY_SEL, generatedAt: new Date().toISOString(), results }, null, 2), 'utf8');
 
 const cnt = (key) => { const m = new Map(); for (const r of results) { if (!r) continue; const k = r[key]; if (k != null) m.set(k, (m.get(k) || 0) + 1); } return m; };
 const fmt = (m) => [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join('  ');
