@@ -11,12 +11,13 @@ import ApiConfig from '../ApiConfig.vue';
 import { dataSource } from '../store';
 import { liveApiConfig } from '../live';
 
-const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock } = vi.hoisted(() => ({
+const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock, getModelRegistryMock } = vi.hoisted(() => ({
   getConfigMock: vi.fn(),
   getCapabilitiesMock: vi.fn(),
   probeCapabilitiesMock: vi.fn(),
   getProbeSettingsMock: vi.fn(),
   getReliabilityMock: vi.fn(),
+  getModelRegistryMock: vi.fn(),
 }));
 
 function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
@@ -63,7 +64,8 @@ vi.mock('@/api/adminApi', () => ({
   adminDashboardApi: apiObject(),
   adminLearnerModelsApi: apiObject(),
   adminApiConfigApi: apiObject({
-    getConfig: getConfigMock
+    getConfig: getConfigMock,
+    getModelRegistry: getModelRegistryMock
   }),
   adminAgentsApi: apiObject(),
   adminAgentTopologyApi: apiObject(),
@@ -112,6 +114,42 @@ describe('ApiConfig P1 修复批', () => {
     probeCapabilitiesMock.mockReset();
     getProbeSettingsMock.mockReset();
     getReliabilityMock.mockReset();
+    getModelRegistryMock.mockReset();
+    getModelRegistryMock.mockResolvedValue({
+      data: {
+        data: {
+          generatedAt: '2026-09-19T12:00:00.000Z',
+          models: [
+            {
+              id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', tier: 'chat', provider: 'deepseek',
+              capabilities: { supportsThinking: true, supportsReasoningEffort: true },
+              limits: { maxOutputTokens: 131072, defaultMaxTokens: 32768, reasoningReserveTokens: 8192, maxParallelRequests: null },
+              fallbacks: ['agnes-3.0-flash'], pricingConfigured: false
+            },
+            {
+              id: 'agnes-3.0-flash', label: 'Agnes 3.0 Flash', tier: 'chat', provider: 'agnes',
+              capabilities: { supportsThinking: false, supportsReasoningEffort: false },
+              limits: { maxOutputTokens: 65536, defaultMaxTokens: 32768, reasoningReserveTokens: 0, maxParallelRequests: null },
+              fallbacks: [], pricingConfigured: false
+            }
+          ],
+          aliases: [
+            {
+              alias: 'chat', source: 'code', members: ['deepseek-v4-flash', 'agnes-3.0-flash'], dbMembers: null,
+              selected: 'deepseek-v4-flash', selectedWhenRequiringThinking: 'deepseek-v4-flash', degradedWhenRequiringThinking: false
+            }
+          ],
+          defaults: {
+            defaultModelConfigured: 'chat', defaultModelResolved: 'deepseek-v4-flash', defaultModelSource: 'alias',
+            defaultReasoningModelConfigured: null, defaultReasoningModelResolved: null, defaultReasoningModelSource: 'unset'
+          },
+          fallbackChains: [{ model: 'deepseek-v4-flash', fallbacks: ['agnes-3.0-flash'] }],
+          cooldowns: [],
+          warnings: ['示例告警'],
+          deprecatedPromptModelCount: 0
+        }
+      }
+    });
     dataSource.value = 'live';
     liveApiConfig.value = null;
     getConfigMock.mockResolvedValue({
@@ -222,6 +260,38 @@ describe('ApiConfig P1 修复批', () => {
     const wrapper = await mountApiConfig();
     expect(wrapper.find('.mk-status').text()).toContain('上次探测');
     expect(wrapper.find('.ac-sec__sub').text()).toContain('最近探测');
+    wrapper.unmount();
+  });
+
+  it('模型总览 tab：切换后渲染只读总览，状态条显示模型数与提示数', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    const pill = wrapper.findAll('.mk-pill').find((b) => b.text().includes('模型总览'));
+    expect(pill, '应存在「模型总览」tab').toBeTruthy();
+
+    await pill!.trigger('click');
+    await flushPromises();
+    await nextTick();
+    await flushPromises();
+
+    expect(getModelRegistryMock).toHaveBeenCalled();
+    expect(wrapper.text()).toContain('模型：2 个');
+    expect(wrapper.text()).toContain('提示：1 条');
+    // 总览是只读的：不应出现保存按钮
+    expect(wrapper.text()).toContain('只读');
+    wrapper.unmount();
+  });
+
+  it('路由默认支持逻辑别名：输入框可填 chat（不再受模型清单未拉取限制）', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    const input = wrapper.find('input[list="ac-model-options"]');
+    expect(input.exists(), '路由默认应为可输入（支持别名）').toBe(true);
+
+    await input.setValue('chat');
+    await nextTick();
+    // 输入即标脏 → 出现分段保存入口
+    expect(wrapper.text()).toContain('保存路由');
     wrapper.unmount();
   });
 });

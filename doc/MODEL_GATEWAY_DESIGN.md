@@ -321,7 +321,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 | **P1** | 部署级 cooldown + fallback 链 + `TRUNCATED_EMPTY_OUTPUT` 分类与定向重试 | **已实现** | 新增 `api-gateway/deployment-health.ts`；`api-gateway/executor.ts`；`config/models.config.ts`（`fallbacks`） |
 | **P2** | ①别名层（code 注册表 + DB 覆盖 + 能力过滤）✅ ②超时口径统一 ✅ ③降级记账 ✅ ④per-model 并发闸门（默认不限）✅ ⑤只读总览 API（方案 B）✅ | **已完成** | `config/models.config.ts`、`gateway/api-gateway/{model-alias,model-concurrency}.ts`、`services/model-registry.service.ts`、`routes/admin/model-registry.ts` |
 | — | **未采纳**：能力元数据 DB 化（方案 A：新建 system 表 + 迁移）——模型能力仍以代码注册表为唯一写源；`frontend` 展示待空窗期 | — | — |
-| **P3** | 管理端可视化（别名→部署、per-deployment 健康、成本） | 待做 | `frontend/src/views/admin-redesign/ApiConfig.vue`、`routes/admin/*` |
+| **P3** | 管理端可视化：**已做** —— ①`模型总览` tab（只读，消费 `/api/admin/model-registry`：默认解析 / 别名映射与降级标记 / 能力与限额 / 部署冷却 / 配置提示）②「路由默认」由 `<select>` 改为可输入的别名候选（`chat`/`reasoning`/`light`，候选来自后端注册表，未拉取清单也能填）。**未做**：成本视图、别名成员的可视化编辑（方案 A 未采纳） | **部分完成** | `frontend/src/views/admin-redesign/{ApiConfig.vue,ModelRegistryOverview.vue}`、`frontend/src/api/adminApi.ts` |
 
 **P0 验收**：
 - `npx jest src/services/__tests__/resolve-llm-call-params.test.ts src/gateway --runInBand` 全绿
