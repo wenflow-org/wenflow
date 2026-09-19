@@ -1,9 +1,9 @@
 import express from 'express';
-import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
 import { predictionCalibrationService } from '../../services/learner/PredictionCalibrationService';
 import learningStateService from '../../services/learning/learning-state.service';
+import { checkIsAdmin } from '../../services/admin-access.service';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -19,12 +19,7 @@ function safeJsonParse<T>(raw: string | null | undefined): T | null {
 }
 
 async function ensureAdmin(userId?: string) {
-  if (!userId) return false;
-  const operator = await prisma.users.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true },
-  });
-  return !!operator?.isAdmin;
+  return checkIsAdmin(userId);
 }
 
 router.get('/', async (req, res) => {
@@ -58,11 +53,7 @@ router.get('/', async (req, res) => {
 /** 详情/证据默认视图：虚拟学习者需显式 includeTest=true 才可查（默认 404，不删数据只改默认视图） */
 async function ensureVirtualVisible(userId: string, includeTest: boolean): Promise<boolean> {
   if (includeTest) return true;
-  const target = await prisma.users.findUnique({
-    where: { id: userId },
-    select: { isVirtualLearner: true },
-  });
-  return target ? !target.isVirtualLearner : true;
+  return !(await learnerSnapshotRefreshService.isVirtualLearner(userId));
 }
 
 router.get('/:userId', async (req, res) => {
@@ -157,26 +148,11 @@ router.get('/:userId/evidence', async (req, res) => {
 
     // 目标/路径域证据：直接从 learner_evidence 表取（goal:understanding:updated / path:created / path:generated / path:adjusted / path:completed），
     // 与教学证据合并为完整时间线（这些事件原本只用于画像聚合，不在时间线展示——调查结论 1）
-    const domainItems = await prisma.learner_evidence.findMany({
-      where: {
-        userId: req.params.userId,
-        evidenceType: {
-          in: ['goal:understanding:updated', 'path:created', 'path:generated', 'path:adjusted', 'path:completed'],
-        },
-      },
-      orderBy: { occurredAt: 'desc' },
-      take: 30,
-      select: {
-        id: true,
-        evidenceType: true,
-        confidence: true,
-        occurredAt: true,
-        pathId: true,
-        taskId: true,
-        sessionId: true,
-        payload: true,
-      },
-    });
+    const domainItems = await learnerSnapshotRefreshService.listDomainEvidence(
+      req.params.userId,
+      ['goal:understanding:updated', 'path:created', 'path:generated', 'path:adjusted', 'path:completed'],
+      30,
+    );
 
     const domainEvidence = domainItems.map((e) => {
       const payload = safeJsonParse<Record<string, any>>(e.payload) || {};
@@ -245,23 +221,7 @@ router.get('/:userId/predictions', async (req, res) => {
     // 实证命中率 + 校准桶（预测器可信度的统计口径）
     const stats = await predictionCalibrationService.empiricalStats(req.params.userId);
     // 最近预测记录（含回写结果），供前端展示"预测 vs 实际"
-    const recentRows = await prisma.prediction_records.findMany({
-      where: { userId: req.params.userId },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-      select: {
-        id: true,
-        taskId: true,
-        stallRisk: true,
-        predictedTone: true,
-        suggestedDepth: true,
-        focusConcepts: true,
-        rationale: true,
-        outcome: true,
-        createdAt: true,
-        outcomeAt: true,
-      },
-    });
+    const recentRows = await predictionCalibrationService.listRecentRecords(req.params.userId, 10);
 
     return res.json({
       success: true,

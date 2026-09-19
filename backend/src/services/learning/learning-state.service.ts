@@ -773,6 +773,15 @@ export class LearningStateService {
     return Math.max(-10, Math.min(10, lsb)); // 限制在 -10 到 +10
   }
 
+  /** devtools 时间推进：取用户最近一条原生 learning_metrics 行（不折算、不提交） */
+  async getLatestMetricRecord(userId: string) {
+    return prisma.learning_metrics.findFirst({
+      where: { userId },
+      orderBy: { calculatedAt: 'desc' },
+      select: { lss: true, ktl: true, lf: true, lsb: true, calculatedAt: true },
+    });
+  }
+
   async getLatestCommittedMetricBefore(userId: string, before: Date): Promise<LearningStateMetrics | null> {
     const snapshots = await this.listCommittedSnapshots(userId);
 

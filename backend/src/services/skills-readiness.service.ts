@@ -384,3 +384,15 @@ export function resetSkillsReadinessCache(): void {
   cachedReport = null;
   lastComputedAt = 0;
 }
+
+/**
+ * 生产装配：以 system 库单例为查询适配器执行 readiness 检查，供路由层直接调用，
+ * 避免 `routes/**` 直接 import system-database（边界棘轮）。动态 import 与
+ * skill-completion.service 的 defaultActivePromptIds 同款，避免模块加载期副作用。
+ */
+export async function checkSkillsReadinessFromSystemDb(
+  options?: { skipCache?: boolean },
+): Promise<SkillsReadinessReport> {
+  const systemPrisma = (await import('../config/system-database')).default;
+  return checkSkillsReadiness(systemPrisma as unknown as SkillsReadinessQueryAdapter, options);
+}

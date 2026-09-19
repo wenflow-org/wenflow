@@ -159,6 +159,29 @@ export class DurableOutboxWorker {
 }
 
 /**
+ * 死信清单（运维查看）：count + 最近 50 条 dead 行（occurredAt 升序）。
+ * 供 GET /api/admin/devtools/outbox/dead 消费；DB 访问从 routes 收敛到本模块。
+ */
+export async function getDeadOutboxSummary() {
+  const deadCount = await prisma.domain_event_outbox.count({ where: { status: 'dead' } });
+  const items = await prisma.domain_event_outbox.findMany({
+    where: { status: 'dead' },
+    orderBy: [{ occurredAt: 'asc' }],
+    take: 50,
+    select: {
+      id: true,
+      eventType: true,
+      userId: true,
+      aggregateId: true,
+      attemptCount: true,
+      lastError: true,
+      occurredAt: true
+    }
+  });
+  return { deadCount, items };
+}
+
+/**
  * 死信重置：dead → pending，清零尝试计数并立即可投递。
  * 背景：dead 是无出口终态（worker 不会再拾取），此前没有任何管理手段把
  * 修复后的死信重新入队。运维修复根因后调用本函数重放。

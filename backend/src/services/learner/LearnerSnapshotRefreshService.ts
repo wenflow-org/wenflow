@@ -245,6 +245,40 @@ export class LearnerSnapshotRefreshService {
     };
   }
 
+  /**
+   * 目标/路径域证据时间线（learner-models 详情/证据端点）：
+   * 按 evidenceType 白名单取最近 N 条，occurredAt 倒序。
+   */
+  async listDomainEvidence(userId: string, evidenceTypes: string[], take: number) {
+    return prisma.learner_evidence.findMany({
+      where: {
+        userId,
+        evidenceType: { in: evidenceTypes },
+      },
+      orderBy: { occurredAt: 'desc' },
+      take,
+      select: {
+        id: true,
+        evidenceType: true,
+        confidence: true,
+        occurredAt: true,
+        pathId: true,
+        taskId: true,
+        sessionId: true,
+        payload: true,
+      },
+    });
+  }
+
+  /** 目标用户是否虚拟学习者（learner-models 默认视图准入判断） */
+  async isVirtualLearner(userId: string): Promise<boolean> {
+    const target = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { isVirtualLearner: true },
+    });
+    return !!target?.isVirtualLearner;
+  }
+
   private buildKey(input: LearnerSnapshotRefreshInput) {
     return [
       'learner-snapshot-v1',

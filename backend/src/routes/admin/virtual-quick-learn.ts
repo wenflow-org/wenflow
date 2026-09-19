@@ -9,10 +9,13 @@
  */
 
 import express from 'express';
-import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { pathFixtureService } from '../../services/learning/path-fixture.service';
 import { quickLearnService } from '../../virtual-lab/quick-learn/quick-learn.service';
+import {
+  findVirtualLearnerProfileById,
+  listActiveLearnablePaths,
+} from '../../services/virtual-lab/virtual-quick-learn.service';
 
 const router = express.Router();
 
@@ -51,7 +54,7 @@ router.post('/:id/quick-learn/fixtures', async (req: any, res) => {
       return res.status(400).json({ success: false, error: 'titlePrefix 不合法' });
     }
 
-    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: req.params.id } });
+    const profile = await findVirtualLearnerProfileById(req.params.id);
     if (!profile) return res.status(404).json({ success: false, error: '虚拟学习者不存在' });
 
     const result = await pathFixtureService.clonePathToUser(sourcePathId.trim(), profile.userId, {
@@ -70,20 +73,10 @@ router.post('/:id/quick-learn/fixtures', async (req: any, res) => {
  */
 router.get('/:id/quick-learn/tasks', async (req: any, res) => {
   try {
-    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: req.params.id } });
+    const profile = await findVirtualLearnerProfileById(req.params.id);
     if (!profile) return res.status(404).json({ success: false, error: '虚拟学习者不存在' });
 
-    const paths = await prisma.learning_paths.findMany({
-      where: { userId: profile.userId, status: 'active' },
-      orderBy: { updatedAt: 'desc' },
-      take: 20,
-      include: {
-        milestones: {
-          orderBy: { order: 'asc' },
-          include: { subtasks: { orderBy: { order: 'asc' } } },
-        },
-      },
-    });
+    const paths = await listActiveLearnablePaths(profile.userId);
 
     const data = paths.map((path) => ({
       pathId: path.id,
@@ -150,7 +143,7 @@ router.post('/:id/quick-learn/runs', async (req: any, res) => {
  */
 router.get('/:id/quick-learn/runs', async (req: any, res) => {
   try {
-    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id: req.params.id } });
+    const profile = await findVirtualLearnerProfileById(req.params.id);
     if (!profile) return res.status(404).json({ success: false, error: '虚拟学习者不存在' });
     const page = Number(req.query.page) || 1;
     const pageSize = Number(req.query.pageSize) || 20;

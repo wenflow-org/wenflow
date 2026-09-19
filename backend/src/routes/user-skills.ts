@@ -1,7 +1,11 @@
 // 用户 Skill 配置路由（只读模式）
 // 用户只能查看系统配置的 Skills，不能创建、修改或执行自定义代码
 import express from 'express';
-import prisma from '../config/database';
+import {
+  listUserSkillConfigs,
+  findUserSkillConfig,
+  setUserSkillEnabled,
+} from '../services/user-skill-config.service';
 
 const router = express.Router();
 
@@ -11,27 +15,10 @@ router.get('/', async (req, res, next) => {
     const userId = req.user.userId;
     const enabled = req.query.enabled as string;
 
-    const where: any = { userId };
-    
-    if (enabled !== undefined) {
-      where.enabled = enabled === 'true';
-    }
-
-    const skills = await prisma.user_skill_configs.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        skillName: true,
-        enabled: true,
-        sourceType: true,
-        endpoint: true,
-        parameters: true,
-        stats: true,
-        createdAt: true,
-        updatedAt: true
-      }
-    });
+    const skills = await listUserSkillConfigs(
+      userId,
+      enabled !== undefined ? enabled === 'true' : undefined,
+    );
 
     res.json({
       success: true,
@@ -49,12 +36,7 @@ router.get('/:name', async (req, res, next) => {
     const userId = req.user.userId;
     const { name } = req.params;
 
-    const skill = await prisma.user_skill_configs.findFirst({
-      where: {
-        userId,
-        skillName: name
-      }
-    });
+    const skill = await findUserSkillConfig(userId, name);
 
     if (!skill) {
       return res.status(404).json({
@@ -79,9 +61,7 @@ router.post('/:name/enable', async (req, res, next) => {
     const { name } = req.params;
     const { enabled } = req.body;
 
-    const skill = await prisma.user_skill_configs.findFirst({
-      where: { userId, skillName: name }
-    });
+    const skill = await findUserSkillConfig(userId, name);
 
     if (!skill) {
       return res.status(404).json({
@@ -90,10 +70,7 @@ router.post('/:name/enable', async (req, res, next) => {
       });
     }
 
-    await prisma.user_skill_configs.update({
-      where: { id: skill.id },
-      data: { enabled: enabled !== false, updatedAt: new Date() }
-    });
+    await setUserSkillEnabled(skill.id, enabled !== false);
 
     res.json({
       success: true,

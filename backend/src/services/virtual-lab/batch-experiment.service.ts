@@ -418,6 +418,48 @@ export async function createExperiment(
   return experiment;
 }
 
+/** 列表：最近 50 个实验（含 run 进度摘要） */
+export function listExperiments() {
+  return prisma.batch_experiments.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+    include: {
+      runs: {
+        select: {
+          id: true,
+          learnerName: true,
+          frictionBudget: true,
+          phase: true,
+          status: true,
+          completedTasks: true,
+          totalTasks: true,
+          updatedAt: true,
+        },
+      },
+    },
+  });
+}
+
+/** 详情：单实验 + 全量 runs（按 createdAt 升序） */
+export function getExperimentDetail(id: string) {
+  return prisma.batch_experiments.findUnique({
+    where: { id },
+    include: { runs: { orderBy: { createdAt: 'asc' } } },
+  });
+}
+
+/** 停止实验：实验置 stopped，未完成 runs 置 failed */
+export async function stopExperiment(id: string): Promise<void> {
+  await prisma.batch_experiments.update({
+    where: { id },
+    data: { status: 'stopped', updatedAt: new Date() },
+  });
+  await prisma.batch_experiment_runs.updateMany({
+    where: { experimentId: id, status: 'active' },
+    data: { status: 'failed', lastError: '实验已手动停止', updatedAt: new Date() },
+  });
+}
+
 /** 手动推进一个 run（供页面调试） */
 export async function manualAdvance(runId: string) {
   return advanceRun(runId);

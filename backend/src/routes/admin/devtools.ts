@@ -1,18 +1,13 @@
 import express, { Request, Response } from 'express';
-import prisma from '../../config/database';
 import learningStateService from '../../services/learning/learning-state.service';
 import { learnerSnapshotService } from '../../services/learner/LearnerSnapshotService';
-import { requeueDeadOutboxEvents } from '../../events/outbox.worker';
+import { requeueDeadOutboxEvents, getDeadOutboxSummary } from '../../events/outbox.worker';
+import { checkIsAdmin } from '../../services/admin-access.service';
 
 const router = express.Router();
 
 async function ensureAdmin(userId?: string) {
-  if (!userId) return false;
-  const operator = await prisma.users.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true },
-  });
-  return !!operator?.isAdmin;
+  return checkIsAdmin(userId);
 }
 
 router.post('/devtools/advance-time', async (req: Request, res: Response) => {
@@ -37,17 +32,7 @@ router.post('/devtools/advance-time', async (req: Request, res: Response) => {
       });
     }
 
-    const latestMetric = await prisma.learning_metrics.findFirst({
-      where: { userId: targetUserId },
-      orderBy: { calculatedAt: 'desc' },
-      select: {
-        lss: true,
-        ktl: true,
-        lf: true,
-        lsb: true,
-        calculatedAt: true,
-      }
-    });
+    const latestMetric = await learningStateService.getLatestMetricRecord(targetUserId);
 
     const before = await learnerSnapshotService.getSnapshot({
       userId: targetUserId,
@@ -117,21 +102,7 @@ router.get('/devtools/outbox/dead', async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
 
-    const deadCount = await prisma.domain_event_outbox.count({ where: { status: 'dead' } });
-    const items = await prisma.domain_event_outbox.findMany({
-      where: { status: 'dead' },
-      orderBy: [{ occurredAt: 'asc' }],
-      take: 50,
-      select: {
-        id: true,
-        eventType: true,
-        userId: true,
-        aggregateId: true,
-        attemptCount: true,
-        lastError: true,
-        occurredAt: true
-      }
-    });
+    const { deadCount, items } = await getDeadOutboxSummary();
 
     return res.json({
       success: true,

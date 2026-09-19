@@ -3,7 +3,6 @@
  * 挂载: /api/admin/batch-experiments
  */
 import { Router, Request, Response } from 'express';
-import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import {
   createExperiment,
@@ -11,6 +10,9 @@ import {
   manualDecay,
   manualSnapshot,
   startBatchExperimentScheduler,
+  listExperiments,
+  getExperimentDetail,
+  stopExperiment,
   BatchLearnerConfig,
 } from '../../services/virtual-lab/batch-experiment.service';
 
@@ -19,24 +21,7 @@ const router = Router();
 /** 列表 */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const experiments = await prisma.batch_experiments.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-      include: {
-        runs: {
-          select: {
-            id: true,
-            learnerName: true,
-            frictionBudget: true,
-            phase: true,
-            status: true,
-            completedTasks: true,
-            totalTasks: true,
-            updatedAt: true,
-          },
-        },
-      },
-    });
+    const experiments = await listExperiments();
     res.json({ success: true, data: experiments });
   } catch (error) {
     res.status(500).json({ success: false, error: String((error as Error).message || error) });
@@ -83,10 +68,7 @@ router.post('/', async (req: Request, res: Response) => {
 /** 详情 */
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const experiment = await prisma.batch_experiments.findUnique({
-      where: { id: req.params.id },
-      include: { runs: { orderBy: { createdAt: 'asc' } } },
-    });
+    const experiment = await getExperimentDetail(req.params.id);
     if (!experiment) return res.status(404).json({ success: false, error: '实验不存在' });
     res.json({ success: true, data: experiment });
   } catch (error) {
@@ -97,14 +79,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 /** 停止实验 */
 router.post('/:id/stop', async (req: Request, res: Response) => {
   try {
-    await prisma.batch_experiments.update({
-      where: { id: req.params.id },
-      data: { status: 'stopped', updatedAt: new Date() },
-    });
-    await prisma.batch_experiment_runs.updateMany({
-      where: { experimentId: req.params.id, status: 'active' },
-      data: { status: 'failed', lastError: '实验已手动停止', updatedAt: new Date() },
-    });
+    await stopExperiment(req.params.id);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, error: String((error as Error).message || error) });

@@ -134,6 +134,26 @@ export class PredictionCalibrationService {
       calibration: buckets.map((b) => ({ ...b, hardRate: b.n ? +(b.hard / b.n).toFixed(3) : null })),
     };
   }
+  /** 最近预测记录（含回写结果），供 learner-models 前端展示「预测 vs 实际」 */
+  async listRecentRecords(userId: string, take: number) {
+    return prisma.prediction_records.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: {
+        id: true,
+        taskId: true,
+        stallRisk: true,
+        predictedTone: true,
+        suggestedDepth: true,
+        focusConcepts: true,
+        rationale: true,
+        outcome: true,
+        createdAt: true,
+        outcomeAt: true,
+      },
+    });
+  }
 }
 
 export const predictionCalibrationService = new PredictionCalibrationService();

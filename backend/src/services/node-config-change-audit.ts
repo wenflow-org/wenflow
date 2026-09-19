@@ -54,6 +54,17 @@ export async function writeNodeConfigChange(
   return (created && (created as { id?: string }).id) || fallbackId;
 }
 
+/**
+ * 生产装配：写入 **system 库** node_config_changes（动态 import 避免加载期副作用）。
+ * 供 routes 层调用，避免 `routes/**` 直接 import config/system-database（边界棘轮）。
+ */
+export async function writeNodeConfigChangeToSystemDb(
+  input: NodeConfigChangeAuditInput,
+): Promise<string> {
+  const systemPrisma = (await import('../config/system-database')).default;
+  return writeNodeConfigChange(systemPrisma as unknown as NodeConfigChangeWriter, input);
+}
+
 /** 文本摘要（编排保存审计 before/after 用）：行数 + 字符数 + sha1 短哈希 */
 export function summarizeTextDigest(content: string): { lineCount: number; charCount: number; sha1: string } {
   return {

@@ -5,8 +5,6 @@
  */
 
 import { Router, Request, Response } from 'express';
-import prisma from '../../config/database';
-import systemPrisma from '../../config/system-database';
 import { getGateway } from '../../gateway';
 import { APIRouter } from '../../gateway/api-gateway/router';
 import { AgentConfigService } from '../../services/agentConfig.service';
@@ -30,10 +28,16 @@ import { VIRTUAL_LEARNER_REFEREE_PROMPT } from '../../skills/virtual-learner-ref
 import { VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT } from '../../skills/virtual-learner-actor-auditor';
 import { GOAL_UNDERSTANDING_COMPOSER_PROMPT } from '../../skills/goal-understanding-composer';
 import { ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT } from '../../skills/acceptance-evidence-evaluator';
-import { checkSkillsReadiness } from '../../services/skills-readiness.service';
+import { checkSkillsReadinessFromSystemDb } from '../../services/skills-readiness.service';
 import { analyzeW2 } from '../../services/skills-readiness.service';
 import { loadSkillsBookRaw } from '../../services/skill-registry/skills-file';
 import { getSkillCompletion } from '../../services/skill-registry/skill-completion.service';
+import { listSkillRegistrationNames } from '../../services/skill-registry/skill-registration.service';
+import {
+  listAgentPromptVersions,
+  findAgentContract,
+  listActiveAgentPromptAgentIds,
+} from '../../services/agent-prompt.service';
 import {
   scaffoldSkill,
   getScaffoldMeta,
@@ -42,7 +46,7 @@ import {
 } from '../../services/skill-registry/skill-scaffold.service';
 import { listRawManifestEntries } from '../../services/agent-manifest.service';
 import { loadOrchestrationFiles } from '../../services/field-routing/orchestration-file';
-import { writeNodeConfigChange } from '../../services/node-config-change-audit';
+import { writeNodeConfigChangeToSystemDb } from '../../services/node-config-change-audit';
 
 const router = Router();
 
@@ -209,7 +213,7 @@ router.post('/scaffold', async (req: Request, res: Response) => {
     try {
       const actorId = (req as Request & { user?: { userId?: string } }).user?.userId || 'admin';
       const body = (req.body || {}) as { stage?: string; parentAgent?: string };
-      await writeNodeConfigChange(systemPrisma, {
+      await writeNodeConfigChangeToSystemDb({
         changeType: 'skill-scaffold',
         targetTable: 'skills',
         targetId: outcome.skillId,
@@ -809,24 +813,8 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
         : 'all';
 
     const [promptVersions, contract, effective, unifiedStats] = await Promise.all([
-      systemPrisma.agent_prompts.findMany({
-        where: { agentId: canonicalId },
-        orderBy: { version: 'desc' },
-        select: {
-          id: true,
-          version: true,
-          name: true,
-          description: true,
-          status: true,
-          temperature: true,
-          maxTokens: true,
-          model: true,
-          createdAt: true,
-          updatedAt: true,
-          publishedAt: true
-        }
-      }),
-      systemPrisma.agent_contracts.findUnique({ where: { agentId: canonicalId } }),
+      listAgentPromptVersions(canonicalId),
+      findAgentContract(canonicalId),
       resolveEffectiveSkillRuntimeConfig(shortSkillId),
       getUnifiedSkillStats([shortSkillId], normalizedRange),
     ]);
@@ -949,13 +937,8 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
         .map((item) => item.id.slice('skill:'.length)),
     );
     const [activeRows, registrations] = await Promise.all([
-      systemPrisma.agent_prompts.findMany({
-        where: { status: 'ACTIVE' },
-        select: { agentId: true },
-      }),
-      systemPrisma.skill_registrations.findMany({
-        select: { name: true },
-      }),
+      listActiveAgentPromptAgentIds(),
+      listSkillRegistrationNames(),
     ]);
     const activeIds = new Set(activeRows.map((row) => row.agentId));
     const registeredNames = new Set(registrations.map((row) => row.name));
@@ -1044,7 +1027,7 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
 router.get('/readiness', async (req: Request, res: Response) => {
   try {
     const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
-    const report = await checkSkillsReadiness(systemPrisma as any, { skipCache: refresh });
+    const report = await checkSkillsReadinessFromSystemDb({ skipCache: refresh });
     res.json({ success: true, data: report });
   } catch (error: any) {
     res.status(500).json({

@@ -60,3 +60,37 @@ export function listAgentPrompts(where: Prisma.agent_promptsWhereInput) {
 export function findAgentPromptById(id: string) {
   return systemPrisma.agent_prompts.findUnique({ where: { id } });
 }
+
+/** GET /admin/skills/:skillId/workbench-meta：按 agentId 列出 Prompt 版本（不含 systemPrompt 大字段） */
+export function listAgentPromptVersions(agentId: string) {
+  return systemPrisma.agent_prompts.findMany({
+    where: { agentId },
+    orderBy: { version: 'desc' },
+    select: {
+      id: true,
+      version: true,
+      name: true,
+      description: true,
+      status: true,
+      temperature: true,
+      maxTokens: true,
+      model: true,
+      createdAt: true,
+      updatedAt: true,
+      publishedAt: true,
+    },
+  });
+}
+
+/** GET /admin/skills/:skillId/workbench-meta：按 agentId 读取字段契约 */
+export function findAgentContract(agentId: string) {
+  return systemPrisma.agent_contracts.findUnique({ where: { agentId } });
+}
+
+/** GET /admin/skills/reconciliation：全部 ACTIVE prompt 的 agentId 集合 */
+export function listActiveAgentPromptAgentIds() {
+  return systemPrisma.agent_prompts.findMany({
+    where: { status: 'ACTIVE' },
+    select: { agentId: true },
+  });
+}

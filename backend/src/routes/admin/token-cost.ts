@@ -21,9 +21,7 @@
  */
 
 import express, { Request, Response } from 'express';
-import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
-import { REAL_USER_WHERE as REAL_USER_WHERE_UTILS } from '../../utils/test-account';
 import { listAgentManifest } from '../../services/agent-manifest.service';
 import {
   accumulateCost,
@@ -33,16 +31,15 @@ import {
   type CostBucket,
   type PricingStatus,
 } from '../../services/cost/call-cost-aggregation';
+import {
+  resolveRealUserIds,
+  findTokenCostRows,
+  listUsersBasicInfo,
+} from '../../services/cost/token-cost.service';
 import { logger } from '../../utils/logger';
 
 const router = express.Router();
 router.use(authMiddleware);
-
-/** 真实用户过滤：虚拟/测试账号排除 + 软删排除（与 platform.ts 同口径） */
-const REAL_USER_WHERE = {
-  ...REAL_USER_WHERE_UTILS,
-  deletedAt: null,
-};
 
 /** agentId / skillId → 可读名映射（manifest 单点；未收录原样展示） */
 function buildAgentNameMap(): Record<string, string> {
@@ -85,11 +82,6 @@ export function parseMetadataSkillId(metadata: string | null): string | null {
   } catch {
     return null;
   }
-}
-
-async function resolveRealUserIds(): Promise<string[]> {
-  const ids = (await prisma.users.findMany({ where: REAL_USER_WHERE, select: { id: true } })).map((u) => u.id);
-  return ids;
 }
 
 /** 排行条目：沿用既有 token 字段，附加成本字段（usd=null 表示单价未配置，不用 0 冒充） */
@@ -167,16 +159,7 @@ async function loadTokenData(days: number, includeTest: boolean) {
   // userId 过滤：真实用户口径时排除虚拟/测试（userId 不在真实集合 → 剔除；null/孤儿同样剔除）
   const userScope = realUserIds ? { userId: { in: realUserIds } } : {};
 
-  const [tokenRows, callRows] = await Promise.all([
-    prisma.agent_call_logs.findMany({
-      where: { executionLayer: 'api-gateway', tokensUsed: { gt: 0 }, calledAt: { gte: since }, ...userScope },
-      select: { metadata: true, userId: true, model: true, tokensUsed: true, promptTokens: true, completionTokens: true, success: true, calledAt: true, sessionId: true, agentId: true },
-    }),
-    prisma.agent_call_logs.findMany({
-      where: { calledAt: { gte: since }, ...userScope },
-      select: { agentId: true, success: true, calledAt: true },
-    }),
-  ]);
+  const [tokenRows, callRows] = await findTokenCostRows({ since, userScope });
 
   // —— token 维度排行 ——
   const skillMap = new Map<string, RankEntry>();
@@ -326,7 +309,7 @@ router.get('/by-user', async (req: Request, res: Response) => {
     const top = data.byUser.slice(0, limit);
     const ids = top.map((r) => r.key).filter((k) => k !== '未归因');
     const users = ids.length
-      ? await prisma.users.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } })
+      ? await listUsersBasicInfo(ids)
       : [];
     const userMap = new Map(users.map((u) => [u.id, u]));
     const items = top.map((r) => {
