@@ -440,7 +440,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 ### Wave 3（Q7 真值发现接线）
 | 项 | 提交 | 结果 |
 |---|---|---|
-| Q7 多源真值发现接入概念状态裁决 | `fa265f48` | 生产消费点在 `LearnerStateReviewService.perform`（原第 3a 段，`backend/src/services/learner/LearnerStateReviewService.ts:186-219`）：LLM `conceptAssessments` 不再直接驱动 BKT，而是与 `learner_evidence:anchor:result`（代码裁决锚题，`judgedBy='code'`）经新增纯模块 `backend/src/services/learner/concept-truth-fusion.ts` → `truth-discovery.discoverTruth` **加权融合**。代码裁决优先（一条 `code_judged` 0.95 压过 `llm_inference` 0.50 / `self_report` 0.20）；**单源时融合值=原二值**（行为不变）。来源拆解（`dominantSource`/`contributions`/`disagreement`/元认知校准/缺源 `sourceStatus`）写入评审载荷 `truthDiscovery`（`learner_projections` scope=review，可审计）。锚题证据读取失败记 `DB_READ_FAILED` 降级遥测并把 `code_judged` 标 `read_failed`（不静默当成「无证据」）。新增纯单测 13 例 + 服务集成回归 3 例 |
+| Q7 多源真值发现接入概念状态裁决 | `fa265f48` | 生产消费点在 `LearnerStateReviewService.perform`（原第 3a 段，`backend/src/services/learner/LearnerStateReviewService.ts:186-219`）：LLM `conceptAssessments` 不再直接驱动 BKT，而是与 `learner_evidence:anchor:result`（代码裁决锚题，`judgedBy='code'`）经新增纯模块 `backend/src/services/learner/concept-truth-fusion.ts` → `truth-discovery.discoverTruth` **加权融合**。代码裁决优先（一条 `code_judged` 0.95 压过 `llm_inference` 0.50 / `self_report` 0.20）；**单源时融合值=原二值**（行为不变）。来源拆解（`dominantSource`/`contributions`/`disagreement`/元认知校准/缺源 `sourceStatus`）写入评审载荷 `truthDiscovery`（`learner_projections` scope=review，可审计）。锚题证据读取失败记 `DB_READ_FAILED` 降级遥测并把 `code_judged` 标 `read_failed`（不静默当成「无证据」）。新增纯单测 12 例 + 服务集成回归 3 例 |
 
 ### VL 验证结果（真实跑数）
 - assisted E2E（`advance-day runTasks`）8 天 × 2 节：链路健康；`temporalContext.sinceLastSessionDays` 计算正确（跨周末 3 / 工作日 1）；
