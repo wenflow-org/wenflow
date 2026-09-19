@@ -1583,7 +1583,11 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       endTime,
       errorCategory
     } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
+    /* 分页参数校验（UI 复查实测：page=abc / limit=abc / page=-1 会让 Prisma 收到 NaN/-1 直接 500）。
+       与 learning-content 路由同一范式：夹到合法范围，绝不把 NaN 传进 Prisma。 */
+    const pageNum = Math.max(1, Math.floor(Number(page)) || 1);
+    const limitNum = Math.min(200, Math.max(1, Math.floor(Number(limit)) || 20));
+    const skip = (pageNum - 1) * limitNum;
 
     /* 服务端排序：白名单 + 方向校验（非法 400，与 timeRange 一致）。
        只暴露 agent_call_logs 自身列——token 列不参与：前端「输入 / 输出」是同 trace
@@ -1891,7 +1895,7 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       prisma.agent_call_logs.findMany({
         where,
         skip,
-        take: Number(limit),
+        take: limitNum,
         orderBy: logOrderBy,
         select: {
           id: true,
@@ -2017,8 +2021,8 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         },
         pagination: {
           total,
-          page: Number(page),
-          limit: Number(limit),
+          page: pageNum,
+          limit: limitNum,
         },
       },
     });
