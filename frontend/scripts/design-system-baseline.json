@@ -44,7 +44,12 @@
     "src/views/admin-redesign/TeachingSessions.vue": 5,
     "src/views/admin-redesign/TokenCost.vue": 6,
     "src/views/admin-redesign/Users.vue": 5,
-    "src/views/admin-redesign/VirtualLearners.vue": 52,
+    "src/views/admin-redesign/VirtualLearnerBatchCreate.vue": 1,
+    "src/views/admin-redesign/VirtualLearnerCreate.vue": 8,
+    "src/views/admin-redesign/VirtualLearnerPromptTest.vue": 5,
+    "src/views/admin-redesign/VirtualLearnerReclaim.vue": 5,
+    "src/views/admin-redesign/VirtualLearnerRunningBar.vue": 27,
+    "src/views/admin-redesign/VirtualLearners.vue": 11,
     "src/views/admin-redesign/VirtualProfile.vue": 81
   },
   "deadClasses": {},
