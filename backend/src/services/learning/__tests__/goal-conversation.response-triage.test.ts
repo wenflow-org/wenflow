@@ -229,6 +229,28 @@ describe('responseTriage 落库与透传', () => {
     expect(persisted.responseTriage).toEqual(expect.objectContaining({ mode: 'emotional_support' }));
     expect(persisted.understanding.primary_block_type).toBe('emotion_relationship');
   });
+
+  it('第二轴：capability + support_need=emotional → combination（有真实可学缺口也出负向出口）', async () => {
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({
+      userVisible: '这一版方向先聚焦对焦与光线。',
+      understanding: {
+        real_problem: '拍孙子时只会直接按大圆钮、不知先点脸对焦，被孙子一句"这拍的啥呀"否定后不敢再拍',
+        primary_block_type: 'capability',
+        recurrence: 'recurring',
+        block_type_evidence: '缺对焦概念与操作；被否定后信心受挫、怕再拍糊',
+        support_need: 'emotional',
+      },
+      confirmedProposal: { learning_direction: '手机摄影基础操作', key_stages: ['S1'] },
+    }));
+
+    const result = await goalConversationService.continueConversation('conv-1', '我试试', 'user-1');
+
+    expect(result.userVisible).toContain('系统判断');
+    const persisted = JSON.parse(conversationRecord.collectedData);
+    expect(persisted.responseTriage).toEqual(expect.objectContaining({ mode: 'combination' }));
+    // 真实可学缺口不被丢弃：仍照常推进路径生成
+    expect(persisted.understanding.primary_block_type).toBe('capability');
+  });
 });
 
 describe('advisory 默认仍推进路径生成（零行为变化）', () => {
