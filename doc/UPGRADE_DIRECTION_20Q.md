@@ -51,7 +51,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 | 8 | **如何测量学习效果** | 观测层（保留率曲线）+ 选点质量 | ✅ 延迟锚题（`dc8f3c83`） |
 | 9 | 编排/拓扑 = **直观看到字段命中上下游** | 已改名「**逻辑图**（字段数据旅程）」+ 字段级运行时命中 | ✅ |
 | 10 | 前端可视化建字段 → **功能自定义增强** | 字段编辑/编译/发布已做；运行时自定义（`accumulate`/L2）未做 | 视场景 |
-| 11 | prompt 编程语言（**类型/字段化功能/逻辑值**） | `SKILL_PROTOCOL_V4` + `core.yaml` 即它；strict schema 编译器已接入输出校验器（`collectSchemaLimitations` 门禁 + 降级即回退，见 §8 Wave 3，`ac5ae8bc`） | core yaml 声明结构化 `enumValues`/嵌套 `properties` 以点亮严格路径（可选） |
+| 11 | prompt 编程语言（**类型/字段化功能/逻辑值**） | `SKILL_PROTOCOL_V4` + `core.yaml` 即它；strict schema 已接入输出校验器（`ac5ae8bc`）**并已在 `concept-load-estimator` 点亮**（声明结构化子属性 → 严格路径生效） | ✅ |
 | 12 | 材料组织：**组装 vs 通用泛化** | 未做（等场景）；已定 B 路线优先 | 待场景 |
 
 ### 附：AI 补的 8 问（治理/商业轴，**不作北星**）
@@ -68,7 +68,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 | 20 成本 | 轻量保留：token 面板 + 单价纯函数；单位经济/预算**不做** |
 
 **剩余可选（按北星排序）**：① Q1 复习容量（等数据）；② ✅ Q7 真值发现接线（`fa265f48`，见 §8 Wave 3）；③ Q10 运行时自定义（视场景）；
-④ Q11 点亮严格路径（可选）；⑤ Q12 材料组织（待场景）；⑥ Q20 补权威单价（外部输入）。
+④ Q12 材料组织（待场景）；⑤ Q20 补权威单价（外部输入）。
 
 ---
 
@@ -164,7 +164,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
   **网关完全不支持结构化输出**（`gateway/**` 无 `response_format/json_schema`）→ 第三档"约束解码"落不了地。
 - **处置**：**不追第三档**；第二档增强已做编译器 `0d4aa01b` + core loader 承载 `enumValues`/嵌套 `properties` `126e05c7`；
   严格 schema 已接入输出校验器（`collectSchemaLimitations` 门禁 + 任一降级限制即回退宽容路径，见 §8 Wave 3，`ac5ae8bc`）。
-  **剩余可选**：在 core yaml 声明结构化 `enumValues`/嵌套 `properties` 以点亮严格路径；reasoning 字段前置。
+  **剩余可选**：reasoning 字段前置（严格路径已在 `concept-load-estimator` 点亮，见 §8 Wave 3）。
 
 #### Q18 真实用户实验基建
 - **分级**：**不做（商业级/无对象）**。
@@ -276,7 +276,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 ### ① 现在就能做（北星内、无商业依赖）
 - **Q8 测量深化**：✅ 延迟锚题复用已落地（复用 Q13 探针，按 UTC 自然日间隔复测已完成点保持率，`dc8f3c83`；数据供给/时钟域修复 `b5f49c52`）。
 - **Q1 复习容量（替代排序）**：在已量化的选点质量上决定是否需要 LLM listwise。
-- **Q11b strict JSON Schema 接线**：✅ 已接入 `skill-output-validator`（`ac5ae8bc`）；**点亮**需 core yaml 声明结构化 `enumValues`/`properties`（可选）。**Q10 `accumulate`** 视场景。
+- **Q11b strict JSON Schema**：✅ 已接入（`ac5ae8bc`）**并已在 `concept-load-estimator` 点亮**（core 声明结构化子属性 → 严格路径生效，见 §8 Wave 3）。**Q10 `accumulate`** 视场景。
 - **Q7 真值发现接线**：✅ 已接入 `LearnerStateReviewService`（LLM 概念观测 × 代码裁决锚题 → `concept-truth-fusion` 融合；代码裁决优先、来源拆解落评审投影），`fa265f48`（见 §8 Wave 3）。
 - **契约漂移清理**：✅ 已 triage + 修复（Q9，见 §8 Wave 3，`ccc4d8bd`/`656c9d0f`）；历史计数不随运行时容错变化。
 - **Q20 token 面板**：面板已在（`execution-logs` 成本分析 tab）；补权威单价即可出金额（外部输入）。
@@ -313,7 +313,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 **剩余可选（北星内，非阻塞）**：
 1. **Q1 复习容量（替代排序）**。
 2. ~~**Q7 真值发现接线**~~ ✅ 已接线（`fa265f48`，见 §8 Wave 3）。
-3. **Q10 `accumulate` 运行时**（视场景）；**Q11 点亮严格路径**（core yaml 声明结构化字段，可选）。
+3. **Q10 `accumulate` 运行时**（视场景）。
 4. **Q20 token 面板**：补权威单价即可出金额（外部输入）。
 
 **明确不做**：第三波"规模化前置"（Q18 分流 / Q19 winback / Q20 单位经济）——无对象、无长期服务（见 §7）。
@@ -442,6 +442,11 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 |---|---|---|
 | Q7 多源真值发现接入概念状态裁决 | `fa265f48` | 生产消费点在 `LearnerStateReviewService.perform`（原第 3a 段，`backend/src/services/learner/LearnerStateReviewService.ts:186-219`）：LLM `conceptAssessments` 不再直接驱动 BKT，而是与 `learner_evidence:anchor:result`（代码裁决锚题，`judgedBy='code'`）经新增纯模块 `backend/src/services/learner/concept-truth-fusion.ts` → `truth-discovery.discoverTruth` **加权融合**。代码裁决优先（一条 `code_judged` 0.95 压过 `llm_inference` 0.50 / `self_report` 0.20）；**单源时融合值=原二值**（行为不变）。来源拆解（`dominantSource`/`contributions`/`disagreement`/元认知校准/缺源 `sourceStatus`）写入评审载荷 `truthDiscovery`（`learner_projections` scope=review，可审计）。锚题证据读取失败记 `DB_READ_FAILED` 降级遥测并把 `code_judged` 标 `read_failed`（不静默当成「无证据」）。新增纯单测 12 例 + 服务集成回归 3 例 |
 
+### Wave 3（Q11 点亮严格路径）
+| 项 | 提交 | 结果 |
+|---|---|---|
+| 试点 `concept-load-estimator` 声明结构化子属性 | （随本批） | core yaml 的 `concepts(object[])` 由 desc 文本改为结构化 `properties`（`conceptKey` string + `granularity`/`knowledgeType`/`difficultyBand` 三个 enum + `rationale` string）→ `hasStructuredDeclaration` 真、编译无 `object-properties-unavailable` → **严格 JSON Schema 路径对该 skill 生效**；新增验收测试 5 例（合法通过 / 嵌套 enum 越界 `enum-out-of-range` / 未知子字段 `unknown-property` / 缺嵌套必填 `missing-nested-required`，均带 `path`）。**行为变更提示**：该 skill 原无自有校验，严格层是新增的一道检查（越界/缺字段会失败）；如需回退，删除该 yaml 的 `properties` 块即可 |
+
 ### VL 验证结果（真实跑数）
 - assisted E2E（`advance-day runTasks`）8 天 × 2 节：链路健康；`temporalContext.sinceLastSessionDays` 计算正确（跨周末 3 / 工作日 1）；
   `memoryRecall` 真进 payload。
@@ -453,8 +458,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 **回归**：全仓 **327/327 套件、2808 例通过**；`tsc` / `eslint` / prompts 门禁全过。
 
 ### 仍未做（明确延后 / 不做）
-- **Q11b 接线**：✅ 已接入输出校验器（`ac5ae8bc`，见 §8 Wave 3）；仍需在 core yaml 声明 `enumValues`/嵌套 `properties`
-  才会点亮严格路径（当前全部回退宽容，无误拒风险）。
+- **Q11b 接线**：✅ 已接入输出校验器（`ac5ae8bc`）**并已点亮**——`concept-load-estimator` 在 core yaml 声明结构化子属性后，严格路径对其生效（见 §8 Wave 3）。其余 skill 仍回退宽容（无结构化声明），按需逐个点亮。
 - **锚题探针调优**：接线已完成；锚题 `checkpoint:result` 是否应从成功率带样本排除，待产品定夺。
 - **Q1 复习容量**：见 §6 剩余可选（Q8 延迟锚题复用已落地，见 §8 Wave 3）。
 - **商业级轴**：Q16 合规重层 / Q17 教师升级 / Q18 实验基建 / Q20 单位经济 = 不做（§7）。

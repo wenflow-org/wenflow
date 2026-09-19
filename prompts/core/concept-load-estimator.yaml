@@ -23,7 +23,26 @@ rules:
 fields:
   - name: concepts
     type: "object[]"
-    desc: "逐概念的负担档位，每项 { conceptKey, granularity: atomic|cluster, knowledgeType: factual|conceptual|procedural|metacognitive, difficultyBand: low|medium|high|unknown, rationale }；conceptKey 必须是输入里出现过的原文"
+    desc: "逐概念的负担档位；conceptKey 必须是输入里出现过的原文"
+    properties:
+      - name: conceptKey
+        type: string
+        desc: 概念名原文（必须取自输入，禁止新造/改写）
+      - name: granularity
+        type: enum
+        enumValues: [atomic, cluster]
+        desc: atomic=一个可独立回忆单元；cluster=并列或含多步骤/多判定标准
+      - name: knowledgeType
+        type: enum
+        enumValues: [factual, conceptual, procedural, metacognitive]
+        desc: 知识类型（术语事实/关系原理/步骤流程/策略自省）
+      - name: difficultyBand
+        type: enum
+        enumValues: [low, medium, high, unknown]
+        desc: 从零回忆难度（单事实/需组织解释/多步推理；指向不明=unknown）
+      - name: rationale
+        type: string
+        desc: 一句话判断依据（≤40 字，不复述名字）
 constraints:
   - 不输出任何数值分数、百分比或掌握度
   - 不引用输入之外的概念名
