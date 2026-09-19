@@ -39,11 +39,26 @@ export const ANCHOR_PROBE_MIN_TURNS_BETWEEN = 6;
  */
 export const ANCHOR_PROBE_MAX_PROBES_SINCE_FLAG = 3;
 
+/**
+ * 延迟锚题（Q8 测量深化）的默认最小自然日间隔（UTC 日界）：已掌握/完成点距上次接触达到该天数
+ * 即做一次保持率复测，产出"间隔 vs 保持率"样本。env `TEACHING_DELAYED_ANCHOR_DAYS` 可覆盖。
+ */
+export const ANCHOR_PROBE_DEFAULT_DELAYED_DAYS = 7;
+/** 延迟锚题间隔下限（天）：至少间隔 1 个自然日才构成"延迟" */
+export const ANCHOR_PROBE_MIN_DELAYED_DAYS = 1;
+
 /** 学习者对某概念的当前信念（`learning` 无法形成可证伪的预期，不作探针目标） */
 export type AnchorBelief = 'mastered' | 'struggling' | 'learning';
 
 /** 探针期望的两种可证伪预期 */
 export type AnchorExpectation = 'mastered' | 'struggling';
+
+/**
+ * 探针种类：
+ * - `independent`：独立证伪探针（Q13/B4）——对"已掌握/挣扎"信念换来源复测；
+ * - `delayed`：延迟锚题（Q8 测量深化）——对**已完成的已掌握点**在 N 个自然日后复测保持率。
+ */
+export type AnchorKind = 'independent' | 'delayed';
 
 /** 证伪信号：假掌握 / 假挣扎 / 一致 / 无法判定 */
 export type AnchorProbeSignal = 'false_mastery' | 'false_struggle' | 'consistent' | 'inconclusive';
@@ -65,6 +80,35 @@ export interface AnchorProbePlan {
   conceptKey: string;
   expected: AnchorExpectation;
   reason: string;
+  /** 探针种类；缺省视为 `independent`（保持历史产出形状兼容） */
+  kind?: AnchorKind;
+  /** 延迟锚题（`kind='delayed'`）距上次接触的自然日间隔（UTC 日界），用于"间隔 vs 保持率" */
+  intervalDays?: number;
+}
+
+/**
+ * 一个"已完成/已掌握"候选（Q8 延迟锚题；来自学习者记忆账本，由调用方注入；本模块不读）。
+ * `completedAt` 取该概念**最近一次接触/完成**时间，作为"间隔"的计时起点。
+ */
+export interface AnchorCompletedCandidate {
+  conceptKey: string;
+  /** 完成/最近一次见到该概念的时间（ISO / epoch ms / Date） */
+  completedAt: string | number | Date;
+  /** 0-1 掌握分（可选，仅透传留档） */
+  masteryScore?: number | null;
+  /** 记忆保持度（0-1，可选，仅透传留档） */
+  retention?: number | null;
+}
+
+export interface SelectDelayedAnchorCandidatesOptions {
+  /** 当前时间（调用方注入，本模块不读系统时钟） */
+  now: string | number | Date;
+  /** 最小自然日间隔；默认 {@link ANCHOR_PROBE_DEFAULT_DELAYED_DAYS}，下限 1 */
+  minIntervalDays?: number | null;
+  /** 最近一次锚题结果时间；距今不足 `minIntervalDays` 个自然日 → 冷却，不重复投放 */
+  lastProbeAt?: string | number | Date | null;
+  /** 最多返回几个目标；默认 1，钳制到 [1, 3] */
+  limit?: number | null;
 }
 
 /** 探针结果归因（纯映射；`falsified=true` 只代表"标记待复核"） */
@@ -140,6 +184,25 @@ function normalizeScore(value: number): number {
 }
 
 /**
+ * UTC 自然日差（纯函数，日界对齐）：`to` 的 UTC 日历日 − `from` 的 UTC 日历日，恒为非负整数。
+ * 与 `learning-state.service` 的自然衰减 / `simulated-day.service` 的日窗口同口径（UTC 日界）。
+ * 任一输入非法 → null（调用方据此判定"无信息"，不误判为到点）。
+ */
+export function utcNaturalDayDiff(
+  from: string | number | Date | null | undefined,
+  to: string | number | Date | null | undefined,
+): number | null {
+  const fromMs = toEpochMs(from);
+  const toMs = toEpochMs(to);
+  if (fromMs === null || toMs === null) return null;
+  const a = new Date(fromMs);
+  const b = new Date(toMs);
+  const start = Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), a.getUTCDate());
+  const end = Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate());
+  return Math.max(0, Math.floor((end - start) / 86_400_000));
+}
+
+/**
  * 稳定比较器：先按信念优先级（mastered → struggling），
  * 组内按"可疑程度"排（mastered 高分优先 / struggling 低分优先），
  * 最后用 conceptKey 字典序兜底。**不含时间/随机**，故完全确定。
@@ -204,6 +267,72 @@ export function selectAnchorCandidates(
     if (plans.length >= limit) break;
   }
 
+  return plans;
+}
+
+/**
+ * 选择要投放的**延迟锚题**目标（纯函数，Q8 测量深化）。
+ *
+ * 与 `selectAnchorCandidates`（独立证伪）的区别：延迟锚题面向**已经完成的已掌握点**，
+ * 唯一闸门是"距上次接触 ≥ N 个**自然日**（UTC 日界）"——目标是采样"间隔 vs 保持率"，
+ * 而非证伪某个信念。因此：
+ * - 期望恒为 `mastered`（完成点若答错 = 保持失败，仍走 `false_mastery` 归因）；
+ * - 排序：`(intervalDays 降序, conceptKey 升序)`，与输入顺序无关（确定性）；最久未接触者优先，
+ *   信息量（遗忘幅度）最大；
+ * - `lastProbeAt` 全局冷却：最近一次锚题距今不足 `minIntervalDays` → 返回空，避免同一窗口内
+ *   每回合重复投放同一批陈旧点；
+ * - `now` 非法 / 候选为空 / 全部未到间隔 → 空数组（调用方跳过本类探针，链路照常）。
+ */
+export function selectDelayedAnchorCandidates(
+  candidates: AnchorCompletedCandidate[],
+  options: SelectDelayedAnchorCandidatesOptions,
+): AnchorProbePlan[] {
+  if (!Array.isArray(candidates) || candidates.length === 0) return [];
+  const now = toEpochMs(options?.now);
+  if (now === null) return [];
+
+  const rawDays = options?.minIntervalDays;
+  const safeDays = Number.isFinite(rawDays as number) ? Math.floor(rawDays as number) : ANCHOR_PROBE_DEFAULT_DELAYED_DAYS;
+  const minDays = Math.max(ANCHOR_PROBE_MIN_DELAYED_DAYS, safeDays);
+
+  // 全局冷却：最近一次锚题（任意种类）距今不足最小间隔自然日 → 本窗口不再投放
+  if (options?.lastProbeAt !== null && options?.lastProbeAt !== undefined) {
+    const sinceLast = utcNaturalDayDiff(options.lastProbeAt, now);
+    if (sinceLast !== null && sinceLast < minDays) return [];
+  }
+
+  const rawLimit = options?.limit ?? 1;
+  const safeLimit = Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 1;
+  const limit = Math.max(ANCHOR_PROBE_MIN_LIMIT, Math.min(ANCHOR_PROBE_MAX_LIMIT, safeLimit));
+
+  const eligible = candidates
+    .map((candidate) => {
+      if (!candidate || typeof candidate.conceptKey !== 'string') return null;
+      const conceptKey = candidate.conceptKey.trim();
+      if (!conceptKey) return null;
+      const intervalDays = utcNaturalDayDiff(candidate.completedAt, now);
+      if (intervalDays === null || intervalDays < minDays) return null;
+      return { conceptKey, intervalDays };
+    })
+    .filter((item): item is { conceptKey: string; intervalDays: number } => item !== null)
+    .sort((a, b) => {
+      if (a.intervalDays !== b.intervalDays) return b.intervalDays - a.intervalDays;
+      if (a.conceptKey < b.conceptKey) return -1;
+      if (a.conceptKey > b.conceptKey) return 1;
+      return 0;
+    });
+
+  const plans: AnchorProbePlan[] = [];
+  for (const item of eligible) {
+    plans.push({
+      conceptKey: item.conceptKey,
+      expected: 'mastered',
+      kind: 'delayed',
+      intervalDays: item.intervalDays,
+      reason: `已完成点距上次接触 ${item.intervalDays} 个自然日（≥${minDays}）→ 延迟锚题复测保持率`,
+    });
+    if (plans.length >= limit) break;
+  }
   return plans;
 }
 

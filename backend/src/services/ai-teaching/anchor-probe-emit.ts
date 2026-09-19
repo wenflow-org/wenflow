@@ -19,8 +19,10 @@
  * （`selectAnchorCandidates` 的降/升序），不写入任何状态；同一批候选的输出完全确定。
  */
 import type {
+  AnchorCompletedCandidate,
   AnchorConceptCandidate,
   AnchorExpectation,
+  AnchorKind,
   AnchorProbePlan,
   AnchorProbeSignal,
 } from '../learner/anchor-probe';
@@ -29,6 +31,15 @@ import type {
 export const ANCHOR_MASTERED_SCORE = 0.9;
 /** 挣扎信念的确定性分值（同上） */
 export const ANCHOR_STRUGGLING_SCORE = 0.2;
+
+/** 延迟锚题（Q8）默认最小自然日间隔；env `TEACHING_DELAYED_ANCHOR_DAYS` 覆盖 */
+export const DEFAULT_DELAYED_ANCHOR_DAYS = 7;
+
+/** 延迟锚题间隔解析：env `TEACHING_DELAYED_ANCHOR_DAYS` 优先，非法/缺失回退默认值（下限 1 天） */
+export function resolveDelayedAnchorDays(raw?: string | null): number {
+  const parsed = Number(String(raw ?? '').trim());
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : DEFAULT_DELAYED_ANCHOR_DAYS;
+}
 
 /** `anchor:result` 证据回看条数：退避计数只需要最近一段连续记录，50 条足够覆盖最大退避窗口 */
 export const ANCHOR_RESULT_LOOKBACK = 50;
@@ -109,6 +120,29 @@ export function buildAnchorCandidatesFromLearnerSignals(
   for (const key of source?.struggling || []) {
     const candidate = toCandidate(key, 'struggling', ANCHOR_STRUGGLING_SCORE);
     if (candidate) candidates.push(candidate);
+  }
+  return candidates;
+}
+
+/**
+ * 构建「已完成点」候选（Q8 延迟锚题，纯函数）。
+ *
+ * 数据来源与独立探针同源：`relevantKnowledge.mastered`（已稳/已完成概念标签）+
+ * `lastSeenAtByConcept`（概念账本最近接触时间）。只有带**有效 lastSeenAt** 的已掌握点才可作
+ * 延迟锚题目标——间隔必须能算出来，宁可少测也不造时间。struggling 与无时间戳者一律排除。
+ * `lastSeenAt` 即"完成/最近接触"起点，间隔在 `selectDelayedAnchorCandidates` 内按自然日计算。
+ */
+export function buildDelayedAnchorCandidatesFromLearnerSignals(
+  source: AnchorLearnerSignalSource | null | undefined,
+): AnchorCompletedCandidate[] {
+  const lastSeen = source?.lastSeenAtByConcept || {};
+  const candidates: AnchorCompletedCandidate[] = [];
+  for (const key of source?.mastered || []) {
+    const trimmed = typeof key === 'string' ? key.trim() : '';
+    if (!trimmed) continue;
+    const completedAt = lastSeen[trimmed];
+    if (!completedAt) continue;
+    candidates.push({ conceptKey: trimmed, completedAt, masteryScore: ANCHOR_MASTERED_SCORE });
   }
   return candidates;
 }
@@ -204,6 +238,10 @@ export interface AnchorResultEvidenceInput {
   passed: boolean | null;
   signal: AnchorProbeSignal;
   falsified: boolean;
+  /** 探针种类（Q8）：缺省不写入 payload，保持历史独立探针证据逐字节兼容 */
+  anchorKind?: AnchorKind | null;
+  /** 延迟锚题的自然日间隔（`anchorKind='delayed'` 时写入，用于"间隔 vs 保持率"） */
+  intervalDays?: number | null;
   userId: string;
   pathId?: string | null;
   taskId?: string | null;
@@ -237,6 +275,9 @@ export function anchorResultEvidenceKey(checkpointId: string): { eventId: string
  * 装一条 `anchor:result` 证据（纯函数）。**只承载"待复核"信号**：conceptKey/expected/passed/
  * signal/falsified 留档供人工复核，不包含也不触发任何掌握度/难度/BKT 改写。
  * confidence 固定 0.95（仅在 `judgedBy='code'` 路径写入，与检查点代码裁决同源）。
+ *
+ * Q8 扩展：可带 `anchorKind`（independent/delayed）与延迟锚题的 `intervalDays`，
+ * 供"间隔 vs 保持率"分析；缺省时不写这两个键，历史独立探针证据形状不变。
  */
 export function buildAnchorResultEvidence(input: AnchorResultEvidenceInput): AnchorResultEvidenceShape {
   const { eventId, evidenceKey } = anchorResultEvidenceKey(input.checkpointId);
@@ -256,6 +297,10 @@ export function buildAnchorResultEvidence(input: AnchorResultEvidenceInput): Anc
       passed: input.passed ?? null,
       falsified: input.falsified,
       signal: input.signal,
+      ...(input.anchorKind ? { anchorKind: input.anchorKind } : {}),
+      ...(input.anchorKind === 'delayed' && Number.isFinite(input.intervalDays)
+        ? { intervalDays: input.intervalDays }
+        : {}),
     }),
     confidence: 0.95,
     occurredAt: input.occurredAt,

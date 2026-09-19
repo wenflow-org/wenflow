@@ -3,13 +3,17 @@
  * 选择排序/上限/去重、排期闸门（检查点优先、间隔/轮次/退避）、结果归因与确定性。
  */
 import {
+  ANCHOR_PROBE_DEFAULT_DELAYED_DAYS,
   ANCHOR_PROBE_DEFAULT_LIMIT,
   ANCHOR_PROBE_INTERVAL_MS,
   ANCHOR_PROBE_MAX_PROBES_SINCE_FLAG,
   ANCHOR_PROBE_MIN_TURNS_BETWEEN,
   evaluateAnchorProbeOutcome,
   selectAnchorCandidates,
+  selectDelayedAnchorCandidates,
   shouldRunAnchorProbe,
+  utcNaturalDayDiff,
+  type AnchorCompletedCandidate,
   type AnchorConceptCandidate,
 } from '../anchor-probe';
 
@@ -215,5 +219,99 @@ describe('evaluateAnchorProbeOutcome（结果归因）', () => {
       falsified: false,
       signal: 'inconclusive',
     });
+  });
+});
+
+describe('utcNaturalDayDiff（UTC 自然日差）', () => {
+  it('按 UTC 日界取整：跨小时但同日为 0，跨到次日为 1', () => {
+    expect(utcNaturalDayDiff('2026-09-01T23:00:00.000Z', '2026-09-01T23:59:00.000Z')).toBe(0);
+    expect(utcNaturalDayDiff('2026-09-01T23:00:00.000Z', '2026-09-02T00:10:00.000Z')).toBe(1);
+    expect(utcNaturalDayDiff('2026-09-01T00:00:00.000Z', '2026-09-08T00:00:00.000Z')).toBe(7);
+  });
+
+  it('夏令时/本地时区不参与：恒为 UTC 日差；未来时间为 0（不清负）', () => {
+    // 本地（运行环境）时区无关：同一时刻不同写法结果一致
+    expect(utcNaturalDayDiff(new Date('2026-09-01T12:00:00Z'), Date.parse('2026-09-10T00:00:00Z'))).toBe(9);
+    expect(utcNaturalDayDiff('2026-09-10T00:00:00.000Z', '2026-09-01T00:00:00.000Z')).toBe(0);
+  });
+
+  it('任一输入非法/缺失 → null（无信息，不误判到点）', () => {
+    expect(utcNaturalDayDiff(null, Date.now())).toBeNull();
+    expect(utcNaturalDayDiff('not-a-date', Date.now())).toBeNull();
+    expect(utcNaturalDayDiff(Date.now(), Number.NaN)).toBeNull();
+  });
+});
+
+describe('selectDelayedAnchorCandidates（Q8 延迟锚题：自然日间隔门 + 目标选择）', () => {
+  const NOW = '2026-09-19T12:00:00.000Z';
+  const completed = (
+    conceptKey: string,
+    completedAt: string,
+    over: Partial<AnchorCompletedCandidate> = {},
+  ): AnchorCompletedCandidate => ({ conceptKey, completedAt, ...over });
+
+  it('间隔门：不足 N 天不选，达到/超过 N 天选中并带 intervalDays', () => {
+    const candidates = [
+      completed('too-soon', '2026-09-13T12:00:00.000Z'), // 6 天
+      completed('just-due', '2026-09-12T12:00:00.000Z'), // 7 天
+      completed('overdue', '2026-09-01T12:00:00.000Z'), // 18 天
+    ];
+    const plans = selectDelayedAnchorCandidates(candidates, { now: NOW, minIntervalDays: 7, limit: 3 });
+    expect(plans.map((p) => p.conceptKey)).toEqual(['overdue', 'just-due']);
+    expect(plans[0]).toMatchObject({ expected: 'mastered', kind: 'delayed', intervalDays: 18 });
+    expect(plans[1].intervalDays).toBe(7);
+  });
+
+  it('默认间隔为 7 天；最久未接触者优先，同间隔用 conceptKey 字典序兜底（确定性）', () => {
+    const candidates = [
+      completed('b', '2026-09-05T00:00:00.000Z'), // 14 天
+      completed('a', '2026-09-05T00:00:00.000Z'), // 14 天
+      completed('c', '2026-09-18T00:00:00.000Z'), // 1 天 → 排除
+      completed('old', '2026-08-20T00:00:00.000Z'), // 30 天
+    ];
+    const plans = selectDelayedAnchorCandidates(candidates, { now: NOW, limit: 3 });
+    expect(ANCHOR_PROBE_DEFAULT_DELAYED_DAYS).toBe(7);
+    expect(plans.map((p) => p.conceptKey)).toEqual(['old', 'a', 'b']);
+    // 输入顺序无关
+    const reversed = selectDelayedAnchorCandidates([...candidates].reverse(), { now: NOW, limit: 3 });
+    expect(reversed.map((p) => p.conceptKey)).toEqual(plans.map((p) => p.conceptKey));
+  });
+
+  it('无目标：空输入 / 非法 completedAt / 全部未到间隔 → 空数组', () => {
+    expect(selectDelayedAnchorCandidates([], { now: NOW })).toEqual([]);
+    expect(selectDelayedAnchorCandidates([
+      completed('bad-time', 'not-a-date'),
+      completed('  ', '2026-09-01T00:00:00.000Z'),
+      completed('fresh', '2026-09-19T00:00:00.000Z'),
+    ], { now: NOW })).toEqual([]);
+  });
+
+  it('now 非法 → 空数组（不依赖系统时钟）', () => {
+    expect(selectDelayedAnchorCandidates([completed('x', '2026-01-01T00:00:00.000Z')], { now: 'nope' })).toEqual([]);
+    expect(selectDelayedAnchorCandidates([completed('x', '2026-01-01T00:00:00.000Z')], { now: Number.NaN })).toEqual([]);
+  });
+
+  it('全局冷却：最近一次锚题距今不足最小间隔 → 不投放（避免同窗口重复）', () => {
+    const candidates = [completed('stale', '2026-08-01T00:00:00.000Z')];
+    // lastProbeAt 3 天前（< 7）→ 冷却
+    expect(selectDelayedAnchorCandidates(candidates, {
+      now: NOW,
+      lastProbeAt: '2026-09-16T12:00:00.000Z',
+    })).toEqual([]);
+    // lastProbeAt 8 天前（≥ 7）→ 可投放
+    expect(selectDelayedAnchorCandidates(candidates, {
+      now: NOW,
+      lastProbeAt: '2026-09-11T12:00:00.000Z',
+    })).toHaveLength(1);
+    // 从未投放 → 可投放
+    expect(selectDelayedAnchorCandidates(candidates, { now: NOW, lastProbeAt: null })).toHaveLength(1);
+  });
+
+  it('limit 钳制：默认 1，下限 1、硬上限 3', () => {
+    const many = ['a', 'b', 'c', 'd'].map((k) => completed(k, '2026-08-01T00:00:00.000Z'));
+    expect(selectDelayedAnchorCandidates(many, { now: NOW })).toHaveLength(1);
+    expect(selectDelayedAnchorCandidates(many, { now: NOW, limit: 0 })).toHaveLength(1);
+    expect(selectDelayedAnchorCandidates(many, { now: NOW, limit: 99 })).toHaveLength(3);
+    expect(selectDelayedAnchorCandidates(many, { now: NOW, limit: Number.NaN })).toHaveLength(1);
   });
 });

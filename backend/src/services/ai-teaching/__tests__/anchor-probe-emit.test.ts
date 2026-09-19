@@ -8,15 +8,18 @@
 import {
   ANCHOR_MASTERED_SCORE,
   ANCHOR_STRUGGLING_SCORE,
+  DEFAULT_DELAYED_ANCHOR_DAYS,
   anchorResultEvidenceKey,
   buildAnchorCandidatesFromLearnerSignals,
   buildAnchorPromptTarget,
   buildAnchorResultEvidence,
   buildAnchorSignalSource,
+  buildDelayedAnchorCandidatesFromLearnerSignals,
   deriveTurnsSinceLastProbe,
+  resolveDelayedAnchorDays,
   summarizeAnchorEvidence,
 } from '../anchor-probe-emit';
-import { shouldRunAnchorProbe, selectAnchorCandidates } from '../../learner/anchor-probe';
+import { selectDelayedAnchorCandidates, shouldRunAnchorProbe, selectAnchorCandidates } from '../../learner/anchor-probe';
 import {
   checkpointForMessageResult,
   stripCheckpointAnswerKeys,
@@ -254,5 +257,99 @@ describe('锚题字段在答案键剥离/下发后存续（不含答案键）', 
     const out = checkpointForMessageResult({ pendingCheckpoint: anchorCheckpoint });
     expect(out).toMatchObject({ purpose: 'anchor', anchorConceptKey: '剪辑节奏', anchorExpectedBelief: 'mastered' });
     expect(out).not.toHaveProperty('correctOptionIds');
+  });
+});
+
+describe('Q8 延迟锚题：已完成点候选 + 间隔解析 + 触发联动', () => {
+  it('resolveDelayedAnchorDays：env 解析，非法/缺失回退默认 7，下限 1', () => {
+    expect(DEFAULT_DELAYED_ANCHOR_DAYS).toBe(7);
+    expect(resolveDelayedAnchorDays(undefined)).toBe(7);
+    expect(resolveDelayedAnchorDays('')).toBe(7);
+    expect(resolveDelayedAnchorDays('14')).toBe(14);
+    expect(resolveDelayedAnchorDays('7.9')).toBe(7);
+    expect(resolveDelayedAnchorDays('0')).toBe(7);
+    expect(resolveDelayedAnchorDays('-3')).toBe(7);
+    expect(resolveDelayedAnchorDays('abc')).toBe(7);
+  });
+
+  it('buildDelayedAnchorCandidatesFromLearnerSignals：只取带 lastSeenAt 的 mastered 标签', () => {
+    const candidates = buildDelayedAnchorCandidatesFromLearnerSignals({
+      mastered: ['m1', '  ', 'no-time', 'm2'],
+      struggling: ['s1'],
+      lastSeenAtByConcept: { m1: '2026-09-01T00:00:00.000Z', s1: '2026-09-02T00:00:00.000Z' },
+    });
+    expect(candidates).toEqual([
+      { conceptKey: 'm1', completedAt: '2026-09-01T00:00:00.000Z', masteryScore: ANCHOR_MASTERED_SCORE },
+    ]);
+    expect(buildDelayedAnchorCandidatesFromLearnerSignals(null)).toEqual([]);
+  });
+
+  it('触发联动：已掌握点经 7 个自然日后被选中（kind=delayed + intervalDays）', () => {
+    const source = buildAnchorSignalSource({
+      relevantKnowledge: { mastered: ['剪辑节奏'], fragile: [], struggling: [] },
+      backgroundKnowledge: {
+        recentConceptLedger: [{ conceptKey: 'kc-1', label: '剪辑节奏', lastSeenAt: '2026-09-01T00:00:00.000Z' }],
+      },
+    });
+    const plans = selectDelayedAnchorCandidates(
+      buildDelayedAnchorCandidatesFromLearnerSignals(source),
+      { now: '2026-09-19T12:00:00.000Z', minIntervalDays: resolveDelayedAnchorDays('7'), limit: 1 },
+    );
+    expect(plans).toHaveLength(1);
+    expect(plans[0]).toMatchObject({ conceptKey: '剪辑节奏', expected: 'mastered', kind: 'delayed', intervalDays: 18 });
+  });
+
+  it('触发联动：未到间隔 / 有近期证据冷却 → 无目标', () => {
+    const source = buildAnchorSignalSource({
+      relevantKnowledge: { mastered: ['新点'], fragile: [], struggling: [] },
+      backgroundKnowledge: {
+        recentConceptLedger: [{ conceptKey: '新点', label: '新点', lastSeenAt: '2026-09-18T00:00:00.000Z' }],
+      },
+    });
+    const candidates = buildDelayedAnchorCandidatesFromLearnerSignals(source);
+    expect(selectDelayedAnchorCandidates(candidates, { now: '2026-09-19T12:00:00.000Z' })).toEqual([]);
+  });
+
+  it('延迟锚题证据行：payload 带 anchorKind=delayed 与 intervalDays，其余字段不变', () => {
+    const row = buildAnchorResultEvidence({
+      checkpointId: 'cp_d1',
+      conceptKey: '剪辑节奏',
+      expected: 'mastered',
+      passed: false,
+      signal: 'false_mastery',
+      falsified: true,
+      anchorKind: 'delayed',
+      intervalDays: 18,
+      userId: 'u1',
+      occurredAt: new Date('2026-09-19T12:00:00.000Z'),
+    });
+    expect(JSON.parse(row.payload)).toEqual({
+      checkpointId: 'cp_d1',
+      conceptKey: '剪辑节奏',
+      expected: 'mastered',
+      passed: false,
+      falsified: true,
+      signal: 'false_mastery',
+      anchorKind: 'delayed',
+      intervalDays: 18,
+    });
+    expect(row.payload).not.toContain('correctOptionIds');
+  });
+
+  it('独立探针证据行不带 anchorKind/intervalDays（历史形状兼容）', () => {
+    const row = buildAnchorResultEvidence({
+      checkpointId: 'cp_i1',
+      conceptKey: '转场',
+      expected: 'struggling',
+      passed: true,
+      signal: 'false_struggle',
+      falsified: true,
+      anchorKind: 'independent',
+      userId: 'u1',
+      occurredAt: new Date('2026-09-19T12:00:00.000Z'),
+    });
+    const payload = JSON.parse(row.payload);
+    expect(payload.anchorKind).toBe('independent');
+    expect(payload).not.toHaveProperty('intervalDays');
   });
 });

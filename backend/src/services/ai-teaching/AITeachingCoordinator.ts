@@ -31,6 +31,7 @@ import { assembleTeachingTurnChannels } from '../field-dispatcher';
 import {
   evaluateAnchorProbeOutcome,
   selectAnchorCandidates,
+  selectDelayedAnchorCandidates,
   shouldRunAnchorProbe,
   type AnchorProbePlan,
 } from '../learner/anchor-probe';
@@ -41,10 +42,13 @@ import {
   buildAnchorPromptTarget,
   buildAnchorResultEvidence,
   buildAnchorSignalSource,
+  buildDelayedAnchorCandidatesFromLearnerSignals,
   deriveTurnsSinceLastProbe,
+  resolveDelayedAnchorDays,
   summarizeAnchorEvidence,
   type AnchorPromptTarget,
 } from './anchor-probe-emit';
+import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
 import { createDomainEvent } from '../../events/contracts';
 import { replanAdvisoryService, toAttributionRecall, type ReplanAdvisory } from './ReplanAdvisoryService';
 import { runWithTeachingSession } from './teaching-session-context';
@@ -93,6 +97,13 @@ export interface TeachingCheckpoint {
   anchorConceptKey?: string;
   /** 锚题期望信念：mastered→答错即 false_mastery；struggling→答对即 false_struggle */
   anchorExpectedBelief?: 'mastered' | 'struggling';
+  /**
+   * 锚题种类（Q8 测量深化）：`independent`（Q13 独立证伪，缺省） / `delayed`（延迟保持率复测）。
+   * 随 `inheritTeachingState` 跨回合继承，供结果留痕区分两类探针。
+   */
+  anchorKind?: 'independent' | 'delayed';
+  /** 延迟锚题的自然日间隔（UTC 日界，仅 `anchorKind='delayed'`）；用于"间隔 vs 保持率" */
+  anchorIntervalDays?: number;
 }
 
 export interface CheckpointSubmitPayload {
@@ -1577,13 +1588,15 @@ async function recordCheckpointResultEvidence(
 }
 
 /**
- * 独立锚题探针 · 回合内目标解析（本接线里唯一的 I/O 点）。
+ * 锚题探针 · 回合内目标解析（本接线里唯一的 I/O 点）。
  *
  * 仅在**本轮满足出检查点条件**（`emitCheckpoint=true`，即 `shouldEmitCheckpoint` 为真）时才接线——
- * 探针复用检查点这一个测量槽位（`anchor-probe` 纪律 3：不与检查点抢采样）。随后：
- * 1. 读该学习者最近 `anchor:result` 证据，聚合出 `lastProbeAt` / `probesSinceLastFlag`；
- * 2. 用 `shouldRunAnchorProbe` 过闸（间隔 72h、轮次、退避、无 pending 检查点）；
- * 3. 从已在上下文里的 `learnerProjection`（跨路径记忆信号）构建候选，`limit:1` 选一个目标。
+ * 探针复用检查点这一个测量槽位（`anchor-probe` 纪律 3：不与检查点抢采样）。随后按优先级解析：
+ * 1. **延迟锚题（Q8）**：已掌握/已完成点距上次接触达到 N 个自然日（UTC 日界，env
+ *    `TEACHING_DELAYED_ANCHOR_DAYS`，默认 7）→ 做一次保持率复测，产出"间隔 vs 保持率"样本；
+ *    以 `lastProbeAt` 做同间隔冷却，避免同一窗口内重复投放。
+ * 2. **独立证伪探针（Q13/B4）**：用 `shouldRunAnchorProbe` 过闸（间隔 72h、轮次、退避、无 pending 检查点），
+ *    从 `mastered/struggling` 候选 `limit:1` 选一个目标。
  *
  * 任何一步不满足 / 读取失败 → 返回 null，链路**与不接线时逐字节一致**（不注入、不落标记、不写证据）。
  * 数据来源：`learnerProjection.relevantKnowledge.mastered/struggling`（由 memory_traces + 会话看板派生）；
@@ -1606,6 +1619,21 @@ async function resolveAnchorProbeTarget(params: {
       select: { occurredAt: true, payload: true },
     });
     const { lastProbeAt, probesSinceLastFlag } = summarizeAnchorEvidence(rows);
+    const signalSource = buildAnchorSignalSource(params.learnerProjection);
+
+    // 优先：延迟锚题（Q8 测量深化）——已完成点经过 N 个自然日后复测保持率。
+    const delayedPlans = selectDelayedAnchorCandidates(
+      buildDelayedAnchorCandidatesFromLearnerSignals(signalSource),
+      {
+        now: params.now,
+        minIntervalDays: resolveDelayedAnchorDays(process.env.TEACHING_DELAYED_ANCHOR_DAYS),
+        lastProbeAt,
+        limit: 1,
+      },
+    );
+    if (delayedPlans[0]) return delayedPlans[0];
+
+    // 其次：独立证伪探针（Q13/B4）
     const decision = shouldRunAnchorProbe({
       now: params.now,
       lastProbeAt,
@@ -1618,15 +1646,22 @@ async function resolveAnchorProbeTarget(params: {
     });
     if (!decision.shouldRun) return null;
 
-    const candidates = buildAnchorCandidatesFromLearnerSignals(
-      buildAnchorSignalSource(params.learnerProjection),
-    );
+    const candidates = buildAnchorCandidatesFromLearnerSignals(signalSource);
     const plans = selectAnchorCandidates(candidates, { limit: 1 });
     return plans[0] ?? null;
   } catch (error) {
+    // 允许降级，不允许未打标的降级：读取失败 → 本轮不投放，结构化遥测留痕，链路照常。
     logger.warn('[anchor-probe] 目标解析失败（本轮不投放，链路照常）', {
       userId: params.userId,
       error: error instanceof Error ? error.message : String(error),
+    });
+    recordDegradation({
+      source: 'ai-teaching/anchor-probe',
+      faultCategory: 'DB_READ_FAILED',
+      severity: 'P3_NOTICE',
+      impactedDimensions: ['anchorProbeTarget'],
+      mitigationApplied: 'return-null-skip-turn',
+      rootCauseMessage: degradationCause(error),
     });
     return null;
   }
@@ -1651,6 +1686,7 @@ async function recordAnchorProbeResult(
   if (expected !== 'mastered' && expected !== 'struggling') return;
   try {
     const outcome = evaluateAnchorProbeOutcome({ expected, passed });
+    const anchorKind = checkpoint.anchorKind ?? 'independent';
     const row = buildAnchorResultEvidence({
       checkpointId: checkpoint.id,
       conceptKey: checkpoint.anchorConceptKey ?? null,
@@ -1658,6 +1694,8 @@ async function recordAnchorProbeResult(
       passed,
       signal: outcome.signal,
       falsified: outcome.falsified,
+      anchorKind,
+      intervalDays: checkpoint.anchorIntervalDays ?? null,
       userId: session.userId,
       pathId: session.learningPathId ?? null,
       taskId: session.taskId ?? null,
@@ -1680,6 +1718,8 @@ async function recordAnchorProbeResult(
         checkpointId: checkpoint.id,
         conceptKey: checkpoint.anchorConceptKey ?? null,
         expected,
+        anchorKind,
+        intervalDays: checkpoint.anchorIntervalDays ?? null,
         passed,
         signal: outcome.signal,
       });
@@ -1689,6 +1729,8 @@ async function recordAnchorProbeResult(
         checkpointId: checkpoint.id,
         conceptKey: checkpoint.anchorConceptKey ?? null,
         expected,
+        anchorKind,
+        intervalDays: checkpoint.anchorIntervalDays ?? null,
         passed,
         signal: outcome.signal,
       });
@@ -2968,13 +3010,17 @@ export class AITeachingOrchestrator {
           // 答案键（服务端保存，客户端投影会剥离）：用于代码裁决，保证"对错"不来自模型自评
           ...(checkpointCandidate.correctOptionIds?.length ? { correctOptionIds: checkpointCandidate.correctOptionIds } : {}),
           ...(checkpointCandidate.expectedKeywords?.length ? { expectedKeywords: checkpointCandidate.expectedKeywords } : {}),
-          // 独立锚题标记（Q13/B4）：本轮由代码选定锚题目标时打标，随 inheritTeachingState 跨回合继承；
-          // 不含答案键，因此 stripCheckpointAnswerKeys 会原样保留（见 checkpointForMessageResult）
+          // 锚题标记（Q13/B4 独立证伪；Q8 延迟保持率复测）：本轮由代码选定锚题目标时打标，
+          // 随 inheritTeachingState 跨回合继承；不含答案键，因此 stripCheckpointAnswerKeys 会原样保留
           ...(anchorTarget
             ? {
                 purpose: 'anchor' as const,
                 anchorConceptKey: anchorTarget.conceptKey,
                 anchorExpectedBelief: anchorTarget.expected,
+                anchorKind: anchorTarget.kind ?? 'independent',
+                ...(anchorTarget.kind === 'delayed' && Number.isFinite(anchorTarget.intervalDays)
+                  ? { anchorIntervalDays: anchorTarget.intervalDays as number }
+                  : {}),
               }
             : {}),
         };
