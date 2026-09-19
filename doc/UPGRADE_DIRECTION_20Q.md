@@ -346,6 +346,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 - **Q20 单位经济**：无收入对象。若商业化：`models.config.ts` 单价表 → 只读金额报表 → per-user/session 归因 → 软告警 → 硬上限；
   注意 `agent_call_logs.promptTokens` 粗算会**高估**缓存部分，精确口径须用 `llm_execution_attempts` 的 `promptCacheHit/MissTokens`。
 - **Q17 教师升级流程**：依赖长期服务对象，不做。
+- **Demo 就绪功能**：**不做**——"Demo"是项目**定位**（对外展示的实验体验），不是待建功能；"不空屏/不卡/不报错"已由既有的静默降级（Q3）、路径失败自愈、教学回合可续跑覆盖，**不另建走查/冒烟机制**。
 
 ---
 
