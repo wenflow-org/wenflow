@@ -1324,7 +1324,7 @@ onBeforeUnmount(() => {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 .kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
 .badge { padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; }

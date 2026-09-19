@@ -166,7 +166,7 @@ function isActive(t: { match: string[] }) {
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e3e9f4);
   border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
+  box-shadow: var(--shadow-sm);
   backdrop-filter: none;
 }
 

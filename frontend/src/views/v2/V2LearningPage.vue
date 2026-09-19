@@ -1952,7 +1952,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
+  box-shadow: var(--shadow-sm);
   display: grid; gap: 8px;
   flex: 0 0 auto;
 }
@@ -2730,7 +2730,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 .replies__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px 9px; }
 .replies__kicker {

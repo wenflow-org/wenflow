@@ -274,7 +274,7 @@ onMounted(load);
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .overview { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }

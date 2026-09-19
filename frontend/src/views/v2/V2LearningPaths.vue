@@ -464,7 +464,7 @@ onBeforeUnmount(() => {
   border-radius: 16px;
   padding: 18px 20px;
   display: flex; flex-direction: column; gap: 12px;
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
+  box-shadow: var(--shadow-sm);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
   cursor: pointer;
 }
