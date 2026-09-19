@@ -47,7 +47,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 | 4 | 越久遗忘越高 → **抽到几率越低**（随机） | 概率化提取（**扮演可信度**）+ 确定性 PRNG；未用于排程（方向矛盾已识别） | ✅ |
 | 5 | 每个 agent 写自述/功能说明 | 自动生成自述 + 人写"缘由"手册 | ✅ |
 | 6 | **学习者中心**：通用 vs 特异 | 仅有分散说明（`LEARNER_MODEL_ARCHITECTURE` / 理论地图） | ✅ 说明文档 `docs/LEARNER_CENTER_AND_STATE_FUSION.md` |
-| 7 | 聚合/拆分/融合/评估"**怎么做到的**" | 架构说明已写；但 **`truth-discovery` 多源融合无生产消费者（未接线）** | ✅ 说明文档 `docs/LEARNER_CENTER_AND_STATE_FUSION.md`；融合接线（可选） |
+| 7 | 聚合/拆分/融合/评估"**怎么做到的**" | 架构说明已写；`truth-discovery` 多源融合**已接进概念状态裁决**（代码裁决优先，`fa265f48`） | ✅ 说明文档 `docs/LEARNER_CENTER_AND_STATE_FUSION.md`；✅ 融合接线（`fa265f48`） |
 | 8 | **如何测量学习效果** | 观测层（保留率曲线）+ 选点质量 | ✅ 延迟锚题（`dc8f3c83`） |
 | 9 | 编排/拓扑 = **直观看到字段命中上下游** | 已改名「**逻辑图**（字段数据旅程）」+ 字段级运行时命中 | ✅ |
 | 10 | 前端可视化建字段 → **功能自定义增强** | 字段编辑/编译/发布已做；运行时自定义（`accumulate`/L2）未做 | 视场景 |
@@ -67,7 +67,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 | 19 生命周期 | 部分：真实侧长间隔信号 + 流失信号只读；winback/召回**不做** |
 | 20 成本 | 轻量保留：token 面板 + 单价纯函数；单位经济/预算**不做** |
 
-**剩余可选（按北星排序）**：① Q1 复习容量（等数据）；② Q7 真值发现接线（可选）；③ Q10 运行时自定义（视场景）；
+**剩余可选（按北星排序）**：① Q1 复习容量（等数据）；② ✅ Q7 真值发现接线（`fa265f48`，见 §8 Wave 3）；③ Q10 运行时自定义（视场景）；
 ④ Q11 点亮严格路径（可选）；⑤ Q12 材料组织（待场景）；⑥ Q20 补权威单价（外部输入）。
 
 ---
@@ -277,7 +277,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 - **Q8 测量深化**：✅ 延迟锚题复用已落地（复用 Q13 探针，按 UTC 自然日间隔复测已完成点保持率，`dc8f3c83`；数据供给/时钟域修复 `b5f49c52`）。
 - **Q1 复习容量（替代排序）**：在已量化的选点质量上决定是否需要 LLM listwise。
 - **Q11b strict JSON Schema 接线**：✅ 已接入 `skill-output-validator`（`ac5ae8bc`）；**点亮**需 core yaml 声明结构化 `enumValues`/`properties`（可选）。**Q10 `accumulate`** 视场景。
-- **Q7 真值发现接线**：模块已实现（`1e1b0fba`）但无生产消费者（可选）。
+- **Q7 真值发现接线**：✅ 已接入 `LearnerStateReviewService`（LLM 概念观测 × 代码裁决锚题 → `concept-truth-fusion` 融合；代码裁决优先、来源拆解落评审投影），`fa265f48`（见 §8 Wave 3）。
 - **契约漂移清理**：✅ 已 triage + 修复（Q9，见 §8 Wave 3，`ccc4d8bd`/`656c9d0f`）；历史计数不随运行时容错变化。
 - **Q20 token 面板**：面板已在（`execution-logs` 成本分析 tab）；补权威单价即可出金额（外部输入）。
 
@@ -312,7 +312,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 
 **剩余可选（北星内，非阻塞）**：
 1. **Q1 复习容量（替代排序）**。
-2. **Q7 真值发现接线**（能力已实现，无生产消费者）。
+2. ~~**Q7 真值发现接线**~~ ✅ 已接线（`fa265f48`，见 §8 Wave 3）。
 3. **Q10 `accumulate` 运行时**（视场景）；**Q11 点亮严格路径**（core yaml 声明结构化字段，可选）。
 4. **Q20 token 面板**：补权威单价即可出金额（外部输入）。
 
@@ -436,6 +436,11 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 | 导航阶段 1：低频页折入 tab 宿主 | `65d0dfa2` | 侧栏 18→14 项 / 7→6 组：运营中心（待办·反馈·成就·公告·站内通知）、模型与接入（+外挂能力）、系统工具（+会话安全）宿主化；记忆与复习归位「教学」；9 条旧 URL 重定向 |
 | Q2 代码拆分：`VirtualLearners.vue` 拆 7 子组件 | `a9a7ac7e` | 父页 2192→775 行（无行为变更；前端 518 例全过） |
 | 导航阶段 2：虚拟学习者独立成「虚拟实验」组 | `fb11aa33` | 侧栏 15 项 / 7 组；「批量实验」由 tab 提升为独立页（`BatchExperiments` 本已支持独立模式） |
+
+### Wave 3（Q7 真值发现接线）
+| 项 | 提交 | 结果 |
+|---|---|---|
+| Q7 多源真值发现接入概念状态裁决 | `fa265f48` | 生产消费点在 `LearnerStateReviewService.perform`（原第 3a 段，`backend/src/services/learner/LearnerStateReviewService.ts:186-219`）：LLM `conceptAssessments` 不再直接驱动 BKT，而是与 `learner_evidence:anchor:result`（代码裁决锚题，`judgedBy='code'`）经新增纯模块 `backend/src/services/learner/concept-truth-fusion.ts` → `truth-discovery.discoverTruth` **加权融合**。代码裁决优先（一条 `code_judged` 0.95 压过 `llm_inference` 0.50 / `self_report` 0.20）；**单源时融合值=原二值**（行为不变）。来源拆解（`dominantSource`/`contributions`/`disagreement`/元认知校准/缺源 `sourceStatus`）写入评审载荷 `truthDiscovery`（`learner_projections` scope=review，可审计）。锚题证据读取失败记 `DB_READ_FAILED` 降级遥测并把 `code_judged` 标 `read_failed`（不静默当成「无证据」）。新增纯单测 13 例 + 服务集成回归 3 例 |
 
 ### VL 验证结果（真实跑数）
 - assisted E2E（`advance-day runTasks`）8 天 × 2 节：链路健康；`temporalContext.sinceLastSessionDays` 计算正确（跨周末 3 / 工作日 1）；
