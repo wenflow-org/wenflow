@@ -1,5 +1,12 @@
 /**
  * Admin 控制台：场景清单（侧栏单一数据源）
+ *
+ * 导航一级收敛（阶段 1，2026-09-19）：低频页折入 tab 宿主，侧栏由 19 项/6 组收敛为 14 项/6 组。
+ * - 运营中心（ops-hub）成为 tab 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知；
+ *   feedback / ops-achievements / messages 场景下线（其 URL 重定向到对应 tab）。
+ * - 模型与接入（api-config）成为 tab 宿主：接入与模型 · 外挂能力；addons 场景下线。
+ * - 系统工具（ops-center）成为 tab 宿主：运维工具 · 数据导出 · 会话安全；session-security 场景下线。
+ * - 记忆与复习（memory-review）由「观测」移入「教学」；Skill 组本阶段保持不变。
  */
 
 export interface MockSceneDef {
@@ -16,30 +23,24 @@ export interface MockSceneDef {
 
 export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'overview', label: '平台总览', group: '总览', glyph: '览', pinned: true },
-  // 学习者组：同域双子视图已合并为单页 tab（2026-09-04 导航收敛拍板）——
-  // 用户+学习者中心 → 「用户与学习者」（?tab=account|state）；
-  // 教学会话+目标对话（含学习路径）→ 「学习会话」（?tab=teaching|conversations|paths）
-  { id: 'people', label: '用户与学习者', group: '学习者', glyph: '人' },
-  { id: 'sessions', label: '学习会话', group: '学习者', glyph: '会' },
-  { id: 'virtual-learners', label: '虚拟学习者', group: '学习者', glyph: '拟' },
-  { id: 'orchestrator', label: '编排结构', group: 'Skill 管理', glyph: '流' },
-  { id: 'skills', label: 'Skill 运行', group: 'Skill 管理', glyph: '能' },
-  { id: 'prompt-eval', label: 'Prompt 评估', group: 'Skill 管理', glyph: '评' },
-  { id: 'health-center', label: '健康中心', group: 'Skill 管理', glyph: '健' },
-  // 运营组：运营中心为纯工作台（待办指挥中枢）；成就/反馈为独立页（拆分拍板 2026-09-03）；
-  // 公告+站内通知合并为「通知与公告」（2026-09-04；数据层仍独立，页面级 tab 收敛双入口）
-  { id: 'ops-hub', label: '运营中心', group: '运营', glyph: '营' },
-  { id: 'ops-achievements', label: '成就管理', group: '运营', glyph: '勋' },
-  { id: 'feedback', label: '反馈中心', group: '运营', glyph: '馈' },
-  { id: 'messages', label: '通知与公告', group: '运营', glyph: '信' },
-  // 配置组：原「运维中心」改名「系统工具」并移入配置（与「运营中心」一字之差易混淆，2026-09-04）
-  { id: 'api-config', label: '模型与接入', group: '配置', glyph: '安' },
-  { id: 'addons', label: '外挂能力', group: '配置', glyph: '件' },
-  { id: 'session-security', label: '会话安全', group: '配置', glyph: '锁' },
-  { id: 'ops-center', label: '系统工具', group: '配置', glyph: '维' },
-  // 观测组：Token 成本并入执行日志第三 tab（成本分析，2026-09-04）
+  // 教学组：用户与学习者（?tab=account|state）、学习会话（?tab=teaching|conversations|paths）、
+  // 虚拟学习者（含批量实验 ?tab=experiments）、记忆与复习（阶段 1 由「观测」移入）
+  { id: 'people', label: '用户与学习者', group: '教学', glyph: '人' },
+  { id: 'sessions', label: '学习会话', group: '教学', glyph: '会' },
+  { id: 'virtual-learners', label: '虚拟学习者', group: '教学', glyph: '拟' },
+  { id: 'memory-review', label: '记忆与复习', group: '教学', glyph: '忆' },
+  // Skill 组：本阶段保持不变（编排结构 / Skill 运行 / Prompt 评估 / 健康中心）
+  { id: 'orchestrator', label: '编排结构', group: 'Skill', glyph: '流' },
+  { id: 'skills', label: 'Skill 运行', group: 'Skill', glyph: '能' },
+  { id: 'prompt-eval', label: 'Prompt 评估', group: 'Skill', glyph: '评' },
+  { id: 'health-center', label: '健康中心', group: 'Skill', glyph: '健' },
+  // 观测组：Token 成本并入执行日志第三 tab（成本分析）；记忆与复习移出后只剩日志双子页
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志' },
-  // 记忆层可观测（2026-09-15）：到期积压 / 课内温故配额 / 概念归并审计
-  { id: 'memory-review', label: '记忆与复习', group: '观测', glyph: '忆' },
-  { id: 'audit-logs', label: '审计日志', group: '观测', glyph: '审' }
+  { id: 'audit-logs', label: '审计日志', group: '观测', glyph: '审' },
+  // 系统组：原「配置」组改名；模型与接入成为 tab 宿主（接入与模型 · 外挂能力）；
+  // 系统工具成为 tab 宿主（运维工具 · 数据导出 · 会话安全）
+  { id: 'api-config', label: '模型与接入', group: '系统', glyph: '安' },
+  { id: 'ops-center', label: '系统工具', group: '系统', glyph: '维' },
+  // 运营组：运营中心为 tab 宿主（运营待办 · 反馈 · 成就 · 公告 · 站内通知）
+  { id: 'ops-hub', label: '运营中心', group: '运营', glyph: '营' }
 ]

@@ -97,14 +97,40 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.path).toBe('/admin/sessions');
     expect(router.currentRoute.value.query.tab).toBe('paths');
     await router.push('/admin/announcements');
-    expect(router.currentRoute.value.path).toBe('/admin/messages');
+    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
     expect(router.currentRoute.value.query.tab).toBe('announce');
     await router.push('/admin/notifications');
-    expect(router.currentRoute.value.path).toBe('/admin/messages');
+    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
     expect(router.currentRoute.value.query.tab).toBe('inapp');
     await router.push('/admin/token-cost');
     expect(router.currentRoute.value.path).toBe('/admin/execution-logs');
     expect(router.currentRoute.value.query.tab).toBe('cost');
+  });
+
+  it('导航一级收敛（阶段 1）：退役场景 URL 重定向到对应宿主 + tab', async () => {
+    const cases: Array<[string, string, string]> = [
+      ['/admin/feedback', '/admin/ops-hub', 'feedback'],
+      ['/admin/ops-achievements', '/admin/ops-hub', 'achievements'],
+      ['/admin/achievements', '/admin/ops-hub', 'achievements'],
+      ['/admin/messages', '/admin/ops-hub', 'announce'],
+      ['/admin/announcements', '/admin/ops-hub', 'announce'],
+      ['/admin/notifications', '/admin/ops-hub', 'inapp'],
+      ['/admin/addons', '/admin/api-config', 'addons'],
+      ['/admin/external-capabilities', '/admin/api-config', 'addons'],
+      ['/admin/session-security', '/admin/ops-center', 'security'],
+    ];
+    for (const [from, toPath, tab] of cases) {
+      await router.push(from);
+      expect(router.currentRoute.value.path, `${from} 未重定向到 ${toPath}`).toBe(toPath);
+      expect(router.currentRoute.value.query.tab, `${from} tab 应为 ${tab}`).toBe(tab);
+    }
+  });
+
+  it('退役场景深链保留业务 query（会话安全 ?user= 透传）', async () => {
+    await router.push('/admin/session-security?user=admin');
+    expect(router.currentRoute.value.path).toBe('/admin/ops-center');
+    expect(router.currentRoute.value.query.tab).toBe('security');
+    expect(router.currentRoute.value.query.user).toBe('admin');
   });
 });
 

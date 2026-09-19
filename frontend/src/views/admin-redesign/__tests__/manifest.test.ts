@@ -39,9 +39,28 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('每页必须属于导航分组之一（侧栏组名稳定，防分组漂移）', () => {
-    const groups = new Set(MOCK_SCENES.map((s) => s.group));
-    expect(groups).toEqual(new Set(['总览', '学习者', 'Skill 管理', '运营', '配置', '观测']));
+  it('导航一级收敛（阶段 1）：6 分组 / 14 场景与目标 IA 完全一致', () => {
+    expect(MOCK_SCENES).toHaveLength(14);
+    // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
+    const groups = MOCK_SCENES.map((s) => s.group);
+    expect([...new Set(groups)]).toEqual(['总览', '教学', 'Skill', '观测', '系统', '运营']);
+    const byGroup: Record<string, string[]> = {};
+    for (const s of MOCK_SCENES) (byGroup[s.group] ||= []).push(s.id);
+    expect(byGroup).toEqual({
+      总览: ['overview'],
+      教学: ['people', 'sessions', 'virtual-learners', 'memory-review'],
+      Skill: ['orchestrator', 'skills', 'prompt-eval', 'health-center'],
+      观测: ['execution-logs', 'audit-logs'],
+      系统: ['api-config', 'ops-center'],
+      运营: ['ops-hub']
+    });
+  });
+
+  it('退役场景（已折入宿主 tab）不再出现在侧栏清单', () => {
+    const ids = new Set(MOCK_SCENES.map((s) => s.id));
+    for (const retired of ['feedback', 'ops-achievements', 'messages', 'addons', 'session-security']) {
+      expect(ids.has(retired), `退役场景「${retired}」不应在侧栏清单`).toBe(false);
+    }
   });
 
   it('侧栏徽章 key 必须指向存在的场景（防悬空徽章：公告曾因 manifest 缺 announcements 而悬空）', async () => {

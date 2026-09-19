@@ -1,7 +1,7 @@
 <template>
-  <div class="mk-page">
-    <!-- 状态条 -->
-    <div class="mk-status" :class="capabilityRows.length ? 'mk-status--ok' : 'mk-status--muted'">
+  <div :class="embedded ? 'add-embedded' : 'mk-page'">
+    <!-- 状态条（embedded 时由模型与接入宿主承载域计数，不再渲染） -->
+    <div v-if="!embedded" class="mk-status" :class="capabilityRows.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">外挂能力</strong>
       <span class="mk-status__sep"></span>
@@ -241,6 +241,11 @@ import { toast } from '@/utils/toast'
 
 const router = useRouter()
 
+/** 嵌入模式：作为「模型与接入」页「外挂能力」tab 渲染（仅去掉外层状态条；宿主承载域计数与刷新）。
+    count 事件：外挂能力数上报（宿主「外挂能力 N」徽章） */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const emit = defineEmits<{ (e: 'count', total: number): void }>()
+
 /* ---------- ① 外挂能力（白名单驱动） ---------- */
 interface CapabilityRow {
   id: string
@@ -324,6 +329,11 @@ const capabilityRows = computed<CapabilityRow[]>(() => {
   return out
 })
 
+/* 宿主域计数徽章（embedded 才消费）：能力数就绪/变化即上报 */
+watch(capabilityRows, (rows) => {
+  emit('count', rows.length)
+}, { immediate: true })
+
 const mcpCount = computed(() => capabilityRows.value.filter((r) => r.type === 'mcp').length)
 const capabilityCount = computed(() => capabilityRows.value.filter((r) => r.type === 'capability').length)
 const readyCount = computed(() => capabilityRows.value.filter((r) => r.ready).length)
@@ -379,6 +389,9 @@ watch(
   },
   { immediate: true }
 )
+
+/** 宿主刷新联动（模型与接入宿主「刷新」按钮 → 重拉能力配置与 MCP 服务） */
+defineExpose({ refresh: () => { void loadConfigs(); void loadMcpTools() } })
 
 /* ---------- MCP 服务弹窗 ---------- */
 const toolOpen = ref(false)
@@ -522,6 +535,8 @@ function goConfig() {
 </script>
 
 <style scoped>
+/* 嵌入模式（模型与接入宿主 flex 列内）：占满剩余高度并内滚（对齐 oc-embedded 先例） */
+.add-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .mono { font-family: var(--mk-mono); font-size: var(--mk-fs-12); }
 
 /* 能力列：主名 + ID 双行，最小宽度兜底（原 51px 截断至 1-2 字符；并栏/窄卡下不被其余列挤压，

@@ -1,21 +1,48 @@
 <template>
-  <div class="mk-page">
-    <div class="mk-status" :class="statusTone">
+  <div class="mk-page mk-page--fill oh-host">
+    <!-- 页面级状态条：tab 相关域计数 + 刷新/重试（域计数由激活子视图上报，对齐消息/用户宿主） -->
+    <div class="mk-status" :class="hostTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">运营中心</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">待处理反馈 {{ wbErrors.feedback ? '—' : wbPendingFeedback }}</span>
-      <span class="mk-status__meta" :class="wbFailedPaths > 0 ? 'mk-status__meta--bad' : ''">失败路径 {{ wbErrors.paths ? '—' : wbFailedPaths }}</span>
-      <span class="mk-status__meta" :class="wbDeadLetters > 0 ? 'mk-status__meta--bad' : ''">死信 {{ wbErrors.dead ? '—' : wbDeadLetters }}</span>
-      <span class="mk-status__meta">公告 {{ ann.rows }} 条</span>
-      <span v-if="wbHasError" class="mk-status__meta mk-status__meta--bad" :title="wbErrorText">待办数据加载失败</span>
+      <template v-if="tab === 'todo'">
+        <span class="mk-status__meta">待处理反馈 {{ wbErrors.feedback ? '—' : wbPendingFeedback }}</span>
+        <span class="mk-status__meta" :class="wbFailedPaths > 0 ? 'mk-status__meta--bad' : ''">失败路径 {{ wbErrors.paths ? '—' : wbFailedPaths }}</span>
+        <span class="mk-status__meta" :class="wbDeadLetters > 0 ? 'mk-status__meta--bad' : ''">死信 {{ wbErrors.dead ? '—' : wbDeadLetters }}</span>
+        <span class="mk-status__meta">公告 {{ ann.rows }} 条</span>
+        <span v-if="wbHasError" class="mk-status__meta mk-status__meta--bad" :title="wbErrorText">待办数据加载失败</span>
+      </template>
+      <template v-else-if="tab === 'feedback'">
+        <span class="mk-status__meta">共 {{ domainCount.feedback }} 条反馈</span>
+      </template>
+      <template v-else-if="tab === 'achievements'">
+        <span class="mk-status__meta">解锁 {{ domainCount.achievements }}</span>
+      </template>
+      <template v-else-if="tab === 'announce'">
+        <span class="mk-status__meta">公告 {{ domainCount.announce }} 条</span>
+      </template>
+      <template v-else>
+        <span class="mk-status__meta">站内通知 {{ domainCount.inapp }} 条</span>
+      </template>
       <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="wbLoading" @click="refreshAll">
-          {{ wbLoading ? '刷新中…' : (wbHasError ? '重试' : '刷新') }}
+        <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshActive">
+          {{ refreshing ? '刷新中…' : (tab === 'todo' && wbHasError ? '重试' : '刷新') }}
         </button>
       </span>
     </div>
 
+    <!-- 视图切换 pills（唯一的 tab 控件）：各视图计数随 pill 呈现 -->
+    <div class="mk-pills oh-tabs">
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'todo' }" @click="switchTab('todo')">运营待办</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'feedback' }" @click="switchTab('feedback')">反馈<span class="mk-pill__count">{{ domainCount.feedback }}</span></button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'achievements' }" @click="switchTab('achievements')">成就<span class="mk-pill__count">{{ domainCount.achievements }}</span></button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'announce' }" @click="switchTab('announce')">公告<span class="mk-pill__count">{{ domainCount.announce }}</span></button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'inapp' }" @click="switchTab('inapp')">站内通知<span class="mk-pill__count">{{ domainCount.inapp }}</span></button>
+    </div>
+
+    <!-- ===== Tab1: 运营待办（原运营中心全量内容） ===== -->
+    <template v-if="tab === 'todo'">
+    <div class="oh-body">
     <!-- 失败必须显式落地：取不到 ≠ 没事（原实现把失败写成 0，页面伪装成「全部已清零」） -->
     <p v-if="wbHasError" class="mk-alert" role="alert">
       待办数据加载失败，对应计数不可信：{{ wbErrorText }}
@@ -103,15 +130,103 @@
         </button>
       </div>
     </section>
+    </div><!-- /oh-body -->
+    </template>
+
+    <!-- ===== Tab2: 反馈（Feedback embedded） ===== -->
+    <Feedback v-else-if="tab === 'feedback'" ref="feedbackRef" embedded @count="onDomainCount('feedback', $event)" />
+    <!-- ===== Tab3: 成就（OpsAchievements embedded） ===== -->
+    <OpsAchievements v-else-if="tab === 'achievements'" ref="achievementsRef" embedded @count="onDomainCount('achievements', $event)" />
+    <!-- ===== Tab4: 公告（Announcements embedded） ===== -->
+    <Announcements v-else-if="tab === 'announce'" ref="announceRef" embedded @count="onDomainCount('announce', $event)" />
+    <!-- ===== Tab5: 站内通知（Notifications embedded） ===== -->
+    <Notifications v-else ref="notifRef" embedded @count="onDomainCount('inapp', $event)" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { timeAgo, liveAnnouncements, errMsg } from './live'
 import { intent } from './store'
 import { adminFeedbackApi, adminLearningContentApi, adminDevtoolsApi, type LearningContentStats } from '@/api/adminApi'
 import { announcementCounts, segmentPct } from './opsShared'
+import Feedback from './Feedback.vue'
+import OpsAchievements from './OpsAchievements.vue'
+import Announcements from './Announcements.vue'
+import Notifications from './Notifications.vue'
+
+/* ===== 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知（阶段 1 导航收敛） =====
+   低频页折入 tab 宿主；?tab= 双向同步，深链/刷新/前进后退可寻址（对齐消息/用户宿主约定） */
+const OH_TABS = ['todo', 'feedback', 'achievements', 'announce', 'inapp'] as const
+type OhTab = (typeof OH_TABS)[number]
+const tab = ref<OhTab>('todo')
+const route = useRoute()
+const router = useRouter()
+
+/** 宿主域计数（由激活子视图上报）：反馈总数 / 解锁数 / 公告数 / 通知数 */
+const domainCount = ref<{ feedback: number; achievements: number; announce: number; inapp: number }>({
+  feedback: 0,
+  achievements: 0,
+  announce: 0,
+  inapp: 0
+})
+function onDomainCount(domain: keyof typeof domainCount.value, n: number) {
+  domainCount.value[domain] = n
+}
+const feedbackRef = ref<{ refresh?: () => void } | null>(null)
+const achievementsRef = ref<{ refresh?: () => void } | null>(null)
+const announceRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
+const notifRef = ref<{ reload?: () => void; openSend?: () => void } | null>(null)
+const refreshing = ref(false)
+async function refreshActive() {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    if (tab.value === 'todo') await loadWorkbench()
+    else if (tab.value === 'feedback') feedbackRef.value?.refresh?.()
+    else if (tab.value === 'achievements') achievementsRef.value?.refresh?.()
+    else if (tab.value === 'announce') announceRef.value?.refresh?.()
+    else notifRef.value?.reload?.()
+  } finally {
+    refreshing.value = false
+  }
+}
+
+/* URL ↔ tab 双向同步：?tab=todo|feedback|achievements|announce|inapp */
+watch(
+  () => route?.query?.tab,
+  (t) => {
+    const v = typeof t === 'string' && (OH_TABS as readonly string[]).includes(t) ? (t as OhTab) : null
+    if (v && v !== tab.value) tab.value = v
+    else if (!v && tab.value !== 'todo') tab.value = 'todo'
+  },
+  { immediate: true }
+)
+function switchTab(t: OhTab) {
+  tab.value = t
+  if (route && router && route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
+}
+
+/* intent 深链：跨页跳转带 tab（待处理反馈 → feedback / 公告管理 → announce） */
+watch(
+  () => intent.tab,
+  (t) => {
+    if (t && (OH_TABS as readonly string[]).includes(t)) {
+      tab.value = t as OhTab
+      intent.tab = ''
+    }
+  },
+  { immediate: true }
+)
+/* intent 快捷动作「新建公告」：确保落在公告 tab（Announcements 挂载后自行消费 quickAction） */
+watch(
+  () => intent.quickAction,
+  (a) => {
+    if (a === 'create-announcement' && tab.value !== 'announce') tab.value = 'announce'
+  },
+  { immediate: true }
+)
 
 /* ===== 运营待办：反馈待处理 / 失败路径 / 死信 / 草稿公告 ===== */
 const wbPendingFeedback = ref(0)
@@ -176,6 +291,12 @@ const statusTone = computed(() =>
       ? 'mk-status--warn'
       : 'mk-status--ok'
 )
+/** 宿主状态条基调：待办 tab 沿用三域聚合；其余 tab 按域计数 ok/muted */
+const hostTone = computed(() => {
+  if (tab.value === 'todo') return statusTone.value
+  const n = domainCount.value[tab.value as keyof typeof domainCount.value] || 0
+  return n > 0 ? 'mk-status--ok' : 'mk-status--muted'
+})
 
 /* 待办清单：按严重度排序（坏>警告>中性），零值弱化为「已清零」；
    域加载失败时该行显示「—」+「加载失败」，不再伪装成 0 */
@@ -243,7 +364,8 @@ const annBadge = (s: string) =>
 function goFeedbackPending() {
   intent.statusFilter = 'new'
   intent.quickAction = '' // 确保不触发其他快捷动作
-  intent.scene = 'feedback'
+  intent.tab = 'feedback' // 宿主 tab 切换（Feedback onMounted 消费 statusFilter 后清空）
+  intent.scene = 'ops-hub'
 }
 /** 生成失败路径 → 学习会话页「学习路径」tab（预筛 failed，宿主消费 intent.statusFilter/tab 后清空） */
 function goFailedPaths() {
@@ -260,14 +382,10 @@ function goContent() {
   intent.tab = 'paths'
   intent.scene = 'sessions'
 }
-/** 公告管理页（通知与公告 · 公告 tab） */
+/** 公告管理（运营中心 · 公告 tab） */
 function goAnnouncements() {
   intent.tab = 'announce'
-  intent.scene = 'messages'
-}
-/** 手动整体刷新：待办聚合 + 公告 live 计数（公告列表由 live 层管理，此处仅触发重拉） */
-async function refreshAll() {
-  await loadWorkbench()
+  intent.scene = 'ops-hub'
 }
 
 /* 默认进入即拉取待办聚合（公告计数由 live 层加载） */
@@ -277,6 +395,20 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* ================= 宿主布局（tab 宿主：运营待办内滚；嵌入子页占满剩余高度） ================= */
+.oh-tabs { width: fit-content; }
+/* 待办 tab：内容在宿主 flex 列内独立滚动（状态条/pills 固定） */
+.oh-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+/* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度 */
+.oh-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
+
 /* ================= 运营工作台（待办清单 + 状态面板，区别于 Dashboard 统计卡） ================= */
 /* 状态面板：路径 / 公告并列（行式计数 + 比例条，非 KPI 卡） */
 .ow-panels {

@@ -284,8 +284,13 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/api-config'
   },
   {
+    // 导航一级收敛（阶段 1）：外挂能力折入「模型与接入」宿主 tab
+    path: '/admin/addons',
+    redirect: (to) => ({ path: '/admin/api-config', query: { ...to.query, tab: 'addons' } })
+  },
+  {
     path: '/admin/external-capabilities',
-    redirect: '/admin/addons'
+    redirect: (to) => ({ path: '/admin/api-config', query: { ...to.query, tab: 'addons' } })
   },
   {
     path: '/admin/orchestration',
@@ -311,17 +316,36 @@ const routes: RouteRecordRaw[] = [
     redirect: () => ({ path: '/admin/sessions', query: { tab: 'paths' } })
   },
   {
-    // 导航收敛 2026-09-04：公告+站内通知合并为「通知与公告」（数据层独立，页面级 tab 收敛双入口）
+    // 导航一级收敛 2026-09-19（阶段 1）：公告/站内通知折入「运营中心」宿主 tab
     path: '/admin/announcements',
-    redirect: () => ({ path: '/admin/messages', query: { tab: 'announce' } })
+    redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'announce' } })
   },
   {
     path: '/admin/notifications',
-    redirect: () => ({ path: '/admin/messages', query: { tab: 'inapp' } })
+    redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'inapp' } })
+  },
+  {
+    path: '/admin/messages',
+    redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'announce' } })
+  },
+  {
+    // 反馈中心折入「运营中心」宿主 tab
+    path: '/admin/feedback',
+    redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'feedback' } })
+  },
+  {
+    // 成就管理折入「运营中心」宿主 tab
+    path: '/admin/ops-achievements',
+    redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'achievements' } })
   },
   {
     path: '/admin/achievements',
-    redirect: '/admin/ops-achievements'
+    redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'achievements' } })
+  },
+  {
+    // 会话安全折入「系统工具」宿主 tab（保留 ?user= 深链筛选）
+    path: '/admin/session-security',
+    redirect: (to) => ({ path: '/admin/ops-center', query: { ...to.query, tab: 'security' } })
   },
   {
     // Token 成本已并入执行日志第三 tab（成本分析），旧 URL 兼容

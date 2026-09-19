@@ -100,9 +100,9 @@ describe('虚拟学习者定位（D1）', () => {
     wrapper.unmount();
   });
 
-  it('manifest 导航中虚拟学习者归入「学习者」组（仿真定位提示；2026-09-04 收敛单条目分组）', () => {
+  it('manifest 导航中虚拟学习者归入「教学」组（阶段 1：原「学习者」组更名并纳入记忆与复习）', () => {
     const scene = MOCK_SCENES.find((s) => s.id === 'virtual-learners');
     expect(scene).toBeDefined();
-    expect(scene!.group).toBe('学习者');
+    expect(scene!.group).toBe('教学');
   });
 });

@@ -555,9 +555,9 @@ onMounted(() => {
   void applyFilters()
 })
 
-/** 会话安全深链：?user=用户名 → 只看该用户当前会话 */
+/** 会话安全深链：?user=用户名 → 只看该用户当前会话（系统工具宿主「会话安全」tab） */
 function goSessions(username: string) {
-  void router.push({ path: '/admin/session-security', query: { user: username } })
+  void router.push({ path: '/admin/ops-center', query: { tab: 'security', user: username } })
 }
 </script>
 

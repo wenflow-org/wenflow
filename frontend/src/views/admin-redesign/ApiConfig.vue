@@ -1,23 +1,37 @@
 <template>
-  <div class="mk-page">
-    <!-- 单行健康条 -->
+  <div class="mk-page mk-page--fill ac-host">
+    <!-- 单行健康条（模型 tab 展示接入态；外挂能力 tab 展示能力数） -->
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">模型与接入</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" title="服务商 API Key 是否已配置">密钥：{{ keySet ? '已配置' : '未配置' }}</span>
-      <span class="mk-status__meta" :title="modelListTitle">模型清单：{{ models.length ? `${models.length} 个` : '未拉取' }}</span>
-      <span class="mk-status__meta" :title="routeTitle">默认路由：{{ routeCount }}/3</span>
-      <span v-if="isLive && lastCheckedText" class="mk-status__meta" title="连通性 / 能力探测时间">上次探测：{{ lastCheckedText }}</span>
+      <template v-if="tab === 'model'">
+        <span class="mk-status__meta" title="服务商 API Key 是否已配置">密钥：{{ keySet ? '已配置' : '未配置' }}</span>
+        <span class="mk-status__meta" :title="modelListTitle">模型清单：{{ models.length ? `${models.length} 个` : '未拉取' }}</span>
+        <span class="mk-status__meta" :title="routeTitle">默认路由：{{ routeCount }}/3</span>
+        <span v-if="isLive && lastCheckedText" class="mk-status__meta" title="连通性 / 能力探测时间">上次探测：{{ lastCheckedText }}</span>
+      </template>
+      <template v-else>
+        <span class="mk-status__meta">外挂能力 {{ addonsCount }} 个</span>
+      </template>
       <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="fetching || !form.apiUrl" @click="fetchModels">
+        <button v-if="tab === 'model'" type="button" class="mk-status__action" :disabled="fetching || !form.apiUrl" @click="fetchModels">
           <MkLoading v-if="fetching" inline text="拉取中…" />
           <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
         </button>
+        <button v-else type="button" class="mk-status__action" @click="addonsRef?.refresh?.()">刷新</button>
       </span>
     </div>
 
+    <!-- 视图切换 pills（唯一的 tab 控件）：接入与模型 / 外挂能力（阶段 1 导航收敛） -->
+    <div class="mk-pills ac-tabs">
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'model' }" @click="switchTab('model')">接入与模型</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'addons' }" @click="switchTab('addons')">外挂能力<span class="mk-pill__count">{{ addonsCount }}</span></button>
+    </div>
 
+    <!-- ===== Tab1: 接入与模型（原 ApiConfig 全量内容） ===== -->
+    <template v-if="tab === 'model'">
+    <div class="ac-tab-body">
     <!-- 主布局：左列(接入与模型+安全与访问 纵向) / 右列(AI 调用与健康) -->
     <div class="ac-layout">
       <div class="ac-layout__main">
@@ -441,12 +455,19 @@
         {{ saving ? '保存中…' : '保存变更' }}
       </button>
     </div>
+    </div><!-- /ac-tab-body -->
+    </template>
+
+    <!-- ===== Tab2: 外挂能力（Addons embedded） ===== -->
+    <Addons v-else ref="addonsRef" embedded @count="addonsCount = $event" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { dataSource, isLive } from './store'
+import Addons from './Addons.vue'
 import {
   liveApiConfig as cfg,
   liveFetchModels,
@@ -467,6 +488,29 @@ import {
 import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { toast } from '@/utils/toast'
+
+/* ---------- 宿主：接入与模型 · 外挂能力（阶段 1 导航收敛） ----------
+   ?tab=model|addons 双向同步；外挂能力 tab 嵌入 Addons（embedded，域计数上报宿主） */
+const AC_TABS = ['model', 'addons'] as const
+type AcTab = (typeof AC_TABS)[number]
+const tab = ref<AcTab>('model')
+const route = useRoute()
+const router = useRouter()
+const addonsCount = ref(0)
+const addonsRef = ref<{ refresh?: () => void } | null>(null)
+watch(
+  () => route?.query?.tab,
+  (t) => {
+    const v = typeof t === 'string' && (AC_TABS as readonly string[]).includes(t) ? (t as AcTab) : null
+    if (v && v !== tab.value) tab.value = v
+    else if (!v && tab.value !== 'model') tab.value = 'model'
+  },
+  { immediate: true }
+)
+function switchTab(t: AcTab) {
+  tab.value = t
+  if (route && router && route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
+}
 
 /* ---------- AI 能力健康快照 ---------- */
 interface CapHealth {
@@ -1018,6 +1062,20 @@ async function saveQuota(enabled: boolean, quota: number) {
 </script>
 
 <style scoped>
+/* ================= 宿主布局（tab 宿主：模型 tab 内滚；嵌入子页占满剩余高度） ================= */
+.ac-tabs { width: fit-content; }
+/* 模型 tab：内容在宿主 flex 列内独立滚动（状态条/pills 固定；底部保存条 sticky 于滚动容器） */
+.ac-tab-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+/* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度 */
+.ac-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
+
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
 .ac-row { display: grid; gap: 14px; align-items: end; }

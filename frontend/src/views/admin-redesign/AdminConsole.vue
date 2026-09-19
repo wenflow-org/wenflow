@@ -67,15 +67,10 @@ const Orchestrator = asyncPage(() => import('./Orchestrator.vue'));
 const ExecLogs = asyncPage(() => import('./ExecLogs.vue'));
 const AuditLogs = asyncPage(() => import('./AuditLogs.vue'));
 const ApiConfig = asyncPage(() => import('./ApiConfig.vue'));
-const Addons = asyncPage(() => import('./Addons.vue'));
-const SessionSecurity = asyncPage(() => import('./SessionSecurity.vue'));
 const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
 const HealthCenter = asyncPage(() => import('./HealthCenter.vue'));
-const Messages = asyncPage(() => import('./Messages.vue'));
-const Feedback = asyncPage(() => import('./Feedback.vue'));
 const PromptEval = asyncPage(() => import('./PromptEval.vue'));
 const OpsHub = asyncPage(() => import('./OpsHub.vue'));
-const OpsAchievements = asyncPage(() => import('./OpsAchievements.vue'));
 const OpsCenter = asyncPage(() => import('./OpsCenter.vue'));
 const LearnerDetail = asyncPage(() => import('./LearnerDetail.vue'));
 const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
@@ -87,9 +82,10 @@ const components: Record<string, unknown> = {
   'overview': Overview,
   // 导航收敛 2026-09-04：users+learner-center → people；teaching-sessions+goal-conversations → sessions；
   // announcements+notifications → messages；token-cost → execution-logs（成本分析 tab）
+  // 导航一级收敛 2026-09-19（阶段 1）：feedback/ops-achievements/messages → ops-hub 宿主 tab；
+  // addons → api-config 宿主 tab；session-security → ops-center 宿主 tab（场景下线，URL 重定向兼容）
   'people': People,
   'sessions': Sessions,
-  feedback: Feedback,
   'virtual-learners': VirtualLearners,
   'skills': Skills,
   'orchestrator': Orchestrator,
@@ -98,15 +94,11 @@ const components: Record<string, unknown> = {
   'memory-review': MemoryReview,
   'audit-logs': AuditLogs,
   'api-config': ApiConfig,
-  'addons': Addons,
-  'session-security': SessionSecurity,
   // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，
   // 健康中心 hash/yaml 跳转深链至此，勿删注册
   'skill-workbench': PromptWorkbench,
   'health-center': HealthCenter,
   'ops-hub': OpsHub,
-  'ops-achievements': OpsAchievements,
-  'messages': Messages,
   'ops-center': OpsCenter
 };
 

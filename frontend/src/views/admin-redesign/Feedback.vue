@@ -1,7 +1,7 @@
 <template>
-  <div class="mk-page mk-page--fill">
-    <!-- 状态条 -->
-    <div class="mk-status" :class="pendingCount > 0 ? 'mk-status--warn' : 'mk-status--ok'">
+  <div :class="embedded ? 'mk-page--fill fb-embedded' : 'mk-page mk-page--fill'">
+    <!-- 状态条（embedded 时由运营中心宿主承载域计数，不再渲染） -->
+    <div v-if="!embedded" class="mk-status" :class="pendingCount > 0 ? 'mk-status--warn' : 'mk-status--ok'">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">反馈中心</strong>
       <span class="mk-status__sep"></span>
@@ -238,6 +238,11 @@ import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 
+/** 嵌入模式：作为运营中心「反馈」tab 渲染（仅去掉外层状态条；宿主承载域计数）。
+    count 事件：反馈总数上报（宿主「反馈 N」徽章） */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const emit = defineEmits<{ (e: 'count', total: number): void }>()
+
 type Status = 'new' | 'triaged' | 'resolved' | 'dismissed'
 
 interface Row {
@@ -275,6 +280,11 @@ const rows = ref<Row[]>([])
 const total = ref(0)
 const pendingCount = ref(0)
 const recent30 = ref<number | null>(null)
+
+/** 宿主域计数徽章（embedded 才消费）：总数就绪/变化即上报 */
+watch(total, (n) => {
+  emit('count', n)
+}, { immediate: true })
 const keyword = ref('')
 const statusFilter = ref('')
 const lowOnly = ref(false)
@@ -443,6 +453,9 @@ async function save(status: Status) {
   }
 }
 
+/** 宿主刷新联动（运营中心宿主「刷新」按钮 → 强制重拉） */
+defineExpose({ refresh: () => { void load(true) } })
+
 onMounted(() => {
   /* 深链：运营中心「待处理反馈」→ 预筛待处理（消费后清空，避免菜单直达被残留污染；
      与 GoalConversations 消费 intent.statusFilter==='failed' 同构） */
@@ -455,6 +468,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 嵌入模式（运营中心宿主 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
+.fb-embedded { flex: 1; min-height: 0; overflow: hidden; }
 .fb-row { cursor: pointer; }
 .fb-rating { font-size: var(--mk-fs-12); color: var(--mk-muted); }
 .fb-rating b { font-size: var(--mk-fs-12_5); color: var(--mk-ink); }

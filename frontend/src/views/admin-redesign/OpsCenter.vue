@@ -1,24 +1,28 @@
 <template>
-  <div class="mk-page">
+  <div class="mk-page mk-page--fill oc-host">
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">系统工具</strong>
       <span class="mk-status__sep"></span>
       <span v-if="tab === 'tools'" class="mk-status__meta" :class="deadCount > 0 ? 'mk-status__meta--bad' : ''">outbox 死信 {{ deadCount }}</span>
-      <span v-else class="mk-status__meta">CSV 下载 · UTF-8（Excel 可直接打开）</span>
+      <span v-else-if="tab === 'export'" class="mk-status__meta">CSV 下载 · UTF-8（Excel 可直接打开）</span>
+      <span v-else class="mk-status__meta">管理员会话 {{ securityCount }} 个</span>
       <span class="mk-status__actions">
         <button v-if="tab === 'tools'" type="button" class="mk-status__action" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
+        <button v-else-if="tab === 'security'" type="button" class="mk-status__action" @click="securityRef?.refresh?.()">刷新</button>
       </span>
     </div>
 
-    <!-- 工具/导出 tab 切换（独立一行，对齐 TraceWaterfall 筛选条形态） -->
+    <!-- 工具/导出/会话安全 tab 切换（唯一的 tab 控件） -->
     <div class="mk-pills oc-tabs">
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'tools' }" @click="switchTab('tools')">运维工具</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'export' }" @click="switchTab('export')">数据导出</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'security' }" @click="switchTab('security')">会话安全<span class="mk-pill__count">{{ securityCount }}</span></button>
     </div>
 
     <!-- ===== Tab1: 运维工具 ===== -->
     <template v-if="tab === 'tools'">
+    <div class="oc-tab-body">
     <!-- 时间推进模拟 -->
     <section class="mk-card">
       <div class="mk-card__head">
@@ -138,10 +142,12 @@
         compact
       />
     </section>
+    </div><!-- /oc-tab-body -->
     </template>
 
     <!-- ===== Tab2: 数据导出 ===== -->
-    <template v-else>
+    <template v-else-if="tab === 'export'">
+    <div class="oc-tab-body">
       <section class="mk-card">
         <div class="mk-card__head">
           <h4 class="mk-card__title">业务数据</h4>
@@ -198,7 +204,11 @@
           </ul>
         </div>
       </section>
+    </div><!-- /oc-tab-body -->
     </template>
+
+    <!-- ===== Tab3: 会话安全（SessionSecurity embedded） ===== -->
+    <SessionSecurity v-else ref="securityRef" embedded @count="securityCount = $event" />
   </div>
 </template>
 
@@ -211,14 +221,19 @@ import { adminDevtoolsApi, adminAxios } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import SessionSecurity from './SessionSecurity.vue'
 
-/* 工具/导出 tab（运维工具 / 数据导出）：URL 查询驱动（?tab=），
-   旧深链 /admin/export-data、/admin/devtools 经路由重定向带 query 落地 */
-const OC_TABS = ['tools', 'export'] as const
+/* 工具/导出/会话安全 tab（阶段 1 导航收敛：会话安全折入系统工具）：
+   URL 查询驱动（?tab=），旧深链 /admin/export-data、/admin/devtools、
+   /admin/session-security 经路由重定向带 query 落地 */
+const OC_TABS = ['tools', 'export', 'security'] as const
 type OcTab = (typeof OC_TABS)[number]
 const tab = ref<OcTab>('tools')
 const route = useRoute()
 const router = useRouter()
+/** 会话安全域计数（SessionSecurity embedded 上报） */
+const securityCount = ref(0)
+const securityRef = ref<{ refresh?: () => void } | null>(null)
 /* URL → tab（深链/刷新/前进后退）；非法值回落 tools。组件单测可无 router 挂载，故访问保持可选 */
 watch(
   () => route?.query.tab,
@@ -408,6 +423,18 @@ void loadDead()
 </script>
 
 <style scoped>
+/* ================= 宿主布局（tab 宿主：工具/导出内滚；嵌入子页占满剩余高度） ================= */
+/* 工具/导出 tab：内容在宿主 flex 列内独立滚动（状态条/pills 固定） */
+.oc-tab-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+/* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度 */
+.oc-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
 .dt-body { padding: 14px; display: grid; gap: 14px; }
 /* 工具/导出 tab 条（独立一行卡片形态，对齐全站筛选条） */
 .oc-tabs {
@@ -415,7 +442,6 @@ void loadDead()
   border: 1px solid var(--mk-line);
   border-radius: 10px;
   background: var(--mk-surface);
-  margin-bottom: 12px;
 }
 .dt-grid { display: grid; grid-template-columns: 1.6fr 0.7fr 1.4fr auto; gap: 12px; align-items: end; }
 .dt-actions { display: grid; gap: 6px; }

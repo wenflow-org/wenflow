@@ -1,6 +1,6 @@
 <template>
-  <div class="mk-page">
-    <div class="mk-status mk-status--ok">
+  <div :class="embedded ? 'oa-embedded' : 'mk-page'">
+    <div v-if="!embedded" class="mk-status mk-status--ok">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">成就管理</strong>
       <span class="mk-status__sep"></span>
@@ -235,6 +235,11 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import AchIcon from './AchIcon.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 
+/** 嵌入模式：作为运营中心「成就」tab 渲染（仅去掉外层状态条；宿主承载域计数与刷新）。
+    count 事件：解锁总数上报（宿主「成就 N」徽章） */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const emit = defineEmits<{ (e: 'count', total: number): void }>()
+
 const achTab = ref<'defs' | 'records'>('defs')
 function switchAchTab(t: 'defs' | 'records') {
   achTab.value = t
@@ -293,6 +298,11 @@ const totalUnlocked = computed(() => {
   const sum = defs.value.reduce((n, d) => n + (d.unlockCount || 0), 0)
   return sum > 0 ? sum : totalRecords.value
 })
+
+/** 宿主域计数徽章（embedded 才消费）：解锁总数就绪/变化即上报 */
+watch(totalUnlocked, (n) => {
+  emit('count', n)
+}, { immediate: true })
 const recordPage = ref(1)
 const pageSize = ref(20)
 const recordsLoading = ref(false)
@@ -450,12 +460,17 @@ async function confirmGrant() {
   }
 }
 
+/** 宿主刷新联动（运营中心宿主「刷新」按钮 → 重拉定义与记录） */
+defineExpose({ refresh: () => { void loadDefs(); void reloadRecords() } })
+
 onMounted(() => {
   void loadDefs()
 })
 </script>
 
 <style scoped>
+/* 嵌入模式（运营中心宿主 flex 列内）：占满剩余高度并内滚（对齐 oc-embedded 先例） */
+.oa-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .ac-list { min-height: 120px; }
 .ac-icon { margin-right: 4px; }
 

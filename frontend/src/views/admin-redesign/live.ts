@@ -1843,10 +1843,9 @@ export const liveNavBadges = computed<Record<string, string>>(() => {
   if (virtuals > 0) out['virtual-learners'] = String(virtuals)
   const skills = liveSkillProfiles.value.length
   if (skills > 0) out.skills = String(skills)
-  const addons = liveExtraProfiles.value.length || EXTRA_COMPONENT_VISIBLE_SKILLS.size
-  if (addons > 0) out.addons = String(addons)
+  // 公告已折入运营中心 tab（阶段 1 导航收敛）：徽章挂到 ops-hub（messages 场景下线）
   const published = liveAnnouncements.value.filter((a) => a.status === 'published').length
-  if (published > 0) out.messages = String(published)
+  if (published > 0) out['ops-hub'] = String(published)
   // 事故信号：近 7 天失败数（>0 时侧栏亮红）
   const failed = (liveSpans.value || []).filter((s) => s.status === 'err').length
   if (failed > 0) out['execution-logs'] = String(failed)
