@@ -298,12 +298,12 @@ onUnmounted(() => {
 
 <style scoped>
 .hn {
-  --ink: #172033;
-  --muted: #5b6577;
-  --faint: #8492ab;
-  --line: rgba(23, 32, 51, 0.08);
-  --canvas: #f3f6fb;
-  --surface: #fff;
+  --ink: var(--mk-ink);
+  --muted: var(--mk-muted);
+  --faint: var(--mk-faint);
+  --line: var(--mk-line);
+  --canvas: var(--mk-bg);
+  --surface: var(--mk-surface);
   --surface-soft: rgba(255, 255, 255, 0.88);   /* 玻璃卡片默认底 */
   --surface-tint: rgba(255, 255, 255, 0.92);   /* 高亮/描边卡片顶底 */
   --surface-strong: #fff;                      /* 纯色面板（气泡内标签等） */
@@ -322,12 +322,12 @@ onUnmounted(() => {
   --accent: #8d6bff;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   [data-theme='dark'] & {
-    --ink: #e6edf7;
-    --muted: #9aa8bf;
-    --faint: #7d8ba3;
-    --line: rgba(230, 237, 247, 0.14);
-    --canvas: #0f1620;
-    --surface: #182230;
+    --ink: var(--mk-ink);
+    --muted: var(--mk-muted);
+    --faint: var(--mk-faint);
+    --line: var(--mk-line);
+    --canvas: var(--mk-bg);
+    --surface: var(--mk-surface);
     --surface-soft: rgba(24, 34, 48, 0.72);
     --surface-tint: rgba(26, 37, 53, 0.85);
     --surface-strong: #1a2535;

@@ -131,7 +131,7 @@
      ========================================== */
   
   /* 背景 */
-  --bg-body: var(--neutral-100);
+  --bg-body: var(--mk-bg);
   --bg-surface: var(--neutral-50);
   --bg-elevated: var(--neutral-50);
   --bg-muted: var(--neutral-200);
@@ -140,9 +140,9 @@
   --bg-active: var(--neutral-300);
   
   /* 文字 */
-  --text-primary: var(--neutral-900);
+  --text-primary: var(--mk-ink);
   --text-secondary: var(--neutral-700);
-  --text-muted: var(--neutral-600);
+  --text-muted: var(--mk-muted);
   --text-disabled: var(--neutral-500);
   --text-inverse: var(--neutral-50);
   --text-on-primary: #FFFFFF;
@@ -155,7 +155,7 @@
   --text-on-danger-light: #1A252F;
   
   /* 边框 */
-  --border-default: var(--neutral-200);
+  --border-default: var(--mk-line);
   --border-light: var(--neutral-300);
   --border-dark: var(--neutral-400);
   --border-focus: var(--color-primary);
@@ -378,7 +378,7 @@
   --neutral-950: #FFFFFF;
   
   /* 暗色模式背景 */
-  --bg-body: #0F1820;
+  --bg-body: var(--mk-bg);
   --bg-surface: var(--neutral-50);
   --bg-elevated: var(--neutral-100);
   --bg-muted: var(--neutral-200);
@@ -387,9 +387,9 @@
   --bg-active: var(--neutral-400);
   
   /* 暗色模式文字 */
-  --text-primary: var(--neutral-900);
+  --text-primary: var(--mk-ink);
   --text-secondary: var(--neutral-700);
-  --text-muted: var(--neutral-600);
+  --text-muted: var(--mk-muted);
   --text-disabled: var(--neutral-500);
   --text-inverse: var(--neutral-950);
   --text-on-primary: #0F1820;
@@ -402,7 +402,7 @@
   --text-on-danger-light: #EDF2F6;
   
   /* 暗色模式边框 */
-  --border-default: var(--neutral-300);
+  --border-default: var(--mk-line);
   --border-light: var(--neutral-200);
   --border-dark: var(--neutral-400);
   --border-focus: var(--color-primary-light);
