@@ -16,11 +16,16 @@ import { safeHttpRequest, safeHttpStreamRequest, SafeHttpBodyLimitError, UnsafeU
 import { isEncryptedSecret } from '../../utils/secret-crypto';
 import { telemetryWriter } from '../../services/telemetry-writer.service';
 import { GatewayExecutionError, parseRetryAfterMs } from './failure-classification';
-import { consumeUpstreamAttempt, createRetryBudget } from './retry-budget';
+import { consumeUpstreamAttempt, createRetryBudget, RETRY_BUDGET_HARD_LIMITS } from './retry-budget';
 import { hoistLlmParamsFromContext } from '../../services/resolve-llm-call-params';
 import { SseParser } from '../../utils/sse-parser';
 
-const MAX_SINGLE_ATTEMPT_TIMEOUT_MS = 300_000;
+/**
+ * 单次上游 attempt 的超时硬上限。
+ * 与平台可靠性配置（`RETRY_BUDGET_HARD_LIMITS.maxRequestTimeoutMs`）保持**单一来源**，
+ * 避免出现「配置宣称 600s、执行器截断 300s」的口径矛盾（见 doc/MODEL_GATEWAY_DESIGN.md §4.5）。
+ */
+const MAX_SINGLE_ATTEMPT_TIMEOUT_MS = RETRY_BUDGET_HARD_LIMITS.maxRequestTimeoutMs;
 /** 流式响应的空闲超时：两次数据块间隔超过该值即判定超时（数据流动时重置） */
 const STREAM_IDLE_TIMEOUT_MS = 60_000;
 /** 流式响应累计字节上限 */
@@ -963,6 +968,8 @@ export class APIExecutor {
       metadata: JSON.stringify({
         layer: 'api-gateway-v2', executionLayer: 'api-gateway',
         executionMode,
+        // 降级记账：本次调用是作为 fallback 发起时的来源模型（P1，见 §4.5）
+        fallbackFrom: context.fallbackFrom || null,
         skillId: context.skillId || null, agentId: context.agentId || null,
         sessionId: context.sessionId || null,
         conversationId: context.conversationId || null,
