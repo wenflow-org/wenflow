@@ -1,7 +1,6 @@
 {
   "note": "ESLint 数据库边界基线（棘轮：只降不升）。src/routes/**（不含测试）禁止直接 import config/database、config/system-database、generated/system-client、@prisma/client；此清单为存量豁免，只能用 `npm --prefix backend run boundaries:update` 收缩，禁止新增。",
   "violations": [
-    "src/routes/adaptive-guidance.routes.ts",
     "src/routes/admin-auth.ts",
     "src/routes/admin/achievements.ts",
     "src/routes/admin/agent-prompts.ts",
@@ -12,7 +11,6 @@
     "src/routes/admin/export.ts",
     "src/routes/admin/field-routings.ts",
     "src/routes/admin/goal-conversations.ts",
-    "src/routes/admin/health-center.ts",
     "src/routes/admin/learner-models.ts",
     "src/routes/admin/learning-content.ts",
     "src/routes/admin/memory-review.ts",
@@ -30,9 +28,6 @@
     "src/routes/admin/users.ts",
     "src/routes/admin/virtual-learners.ts",
     "src/routes/admin/virtual-quick-learn.ts",
-    "src/routes/ai-teaching.routes.ts",
-    "src/routes/announcements.ts",
-    "src/routes/auth.ts",
     "src/routes/learning.ts",
     "src/routes/notifications.ts",
     "src/routes/prompt-lab.ts",

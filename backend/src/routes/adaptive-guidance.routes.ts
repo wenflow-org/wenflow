@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { dashboardGuidanceSnapshotService } from '../services/learner/DashboardGuidanceSnapshotService';
 import { learningStateGuidanceService } from '../services/learner/LearningStateGuidanceService';
+import authService from '../services/auth/auth.service';
 import { logger } from '../utils/logger';
-import prisma from '../config/database';
 
 const router = Router();
 
@@ -19,15 +19,9 @@ router.get('/copy', async (req: any, res) => {
     const view = typeof req.query.view === 'string' ? req.query.view : 'dashboard';
     // 安全加固：不再信任客户端 X-Source-Entry 头，debug 决策仅基于服务端会话身份
     const debugOperatorId = req.user?.projection?.issuedByAdminId || userId;
-    const debugOperator = req.user?.isAdmin === true
-      ? { isAdmin: true }
-      : debugOperatorId
-        ? await prisma.users.findUnique({
-            where: { id: debugOperatorId },
-            select: { isAdmin: true }
-          }).catch(() => null)
-        : null;
-    const canIncludeDebug = req.user?.isAdmin === true || debugOperator?.isAdmin === true;
+    // req.user.isAdmin 为真时短路，避免多余查询
+    const canIncludeDebug = req.user?.isAdmin === true
+      || (debugOperatorId ? (await authService.isUserAdmin(debugOperatorId)) === true : false);
 
     // adaptive-guidance-copy 现在只作为 dashboard snapshot 对外提供。
     // 支持 dashboard（快照）与 learning-state（按需生成 + 内存缓存）两种视图

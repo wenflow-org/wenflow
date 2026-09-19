@@ -253,6 +253,33 @@ class AuthService {
     }
   }
 
+  /**
+   * 刷新会话用：按 id 读取用户的 tokenVersion 与软删标记。
+   * 只负责取数，401 判定由调用方（路由）保持。
+   */
+  async findRefreshSessionUser(userId: string) {
+    return prisma.users.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, deletedAt: true, tokenVersion: true }
+    });
+  }
+
+  /**
+   * 查询用户是否为管理员（仅服务端身份的调试可见性判定等场景）。
+   * 查询失败返回 null，与既有 `.catch(() => null)` 语义一致。
+   */
+  async isUserAdmin(userId: string): Promise<boolean | null> {
+    try {
+      const operator = await prisma.users.findUnique({
+        where: { id: userId },
+        select: { isAdmin: true }
+      });
+      return operator ? operator.isAdmin === true : false;
+    } catch {
+      return null;
+    }
+  }
+
   // 生成旧版单 token（保留供 verifyToken 等场景使用）
   private generateToken(payload: JWTPayload): string {
     return signSessionToken(payload, 'user', this.JWT_EXPIRES_IN as any);

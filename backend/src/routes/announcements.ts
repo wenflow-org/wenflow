@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import prisma from '../config/database';
+import { listActiveAnnouncements } from '../services/announcements.service';
 import { logger } from '../utils/logger';
 
 /**
@@ -10,23 +10,7 @@ const router = express.Router();
 
 router.get('/active', async (_req: Request, res: Response) => {
   try {
-    const now = new Date();
-    const items = await prisma.announcements.findMany({
-      where: {
-        status: 'published',
-        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }]
-      },
-      orderBy: { publishedAt: 'desc' },
-      take: 3,
-      select: {
-        id: true,
-        title: true,
-        body: true,
-        severity: true,
-        publishedAt: true,
-        expiresAt: true
-      }
-    });
+    const items = await listActiveAnnouncements();
     res.json({ success: true, data: { items } });
   } catch (error) {
     logger.error('[announcements] active failed:', error);

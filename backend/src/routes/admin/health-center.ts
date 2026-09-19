@@ -10,33 +10,18 @@
  */
 
 import { Router, Request, Response } from 'express';
-import systemPrisma from '../../config/system-database';
-import prisma from '../../config/database';
 import {
+  buildHealthCenterFixDeps,
+  createHealthCenterDbAdapter,
   getHealthCenterReport,
   runHealthCenterFix,
-  type HealthCenterDbAdapter,
-  type HealthCenterFixDeps,
 } from '../../services/health-center.service';
 import { getHealthCenterSummaryReport } from '../../services/health-center-summary.service';
-import { compileAllCorePromptFiles } from '../../scripts/compile-core-files';
-import { ensureCoreAgentPrompts } from '../../scripts/seed-core-agent-prompts';
-import { syncStageFieldRoutingsFromFile } from '../../services/field-routing-bootstrap.service';
-import { loadOrchestrationFiles } from '../../services/field-routing/orchestration-file';
-import {
-  AGENT_SNAPSHOTS_TARGET,
-  generateAgentSnapshotsContent,
-} from '../../scripts/generate-agent-snapshots';
-import * as fs from 'fs';
 
 const router = Router();
 
-// 系统库三表 + 主库 prompt_call_logs（运行时 promptDrift 遥测）
-const db = Object.assign(
-  Object.create(systemPrisma),
-  systemPrisma,
-  { prompt_call_logs: prisma.prompt_call_logs },
-) as unknown as HealthCenterDbAdapter;
+// 系统库三表 + 主库 prompt_call_logs（运行时 promptDrift 遥测）；适配器由 service 层组装
+const db = createHealthCenterDbAdapter();
 
 // ============================================================
 // GET /api/admin/health-center
@@ -74,25 +59,6 @@ router.get('/summary', async (req: Request, res: Response) => {
   }
 });
 
-function buildFixDeps(): HealthCenterFixDeps {
-  return {
-    compileAllCorePromptFiles: () => compileAllCorePromptFiles(),
-    ensureCoreAgentPromptsSync: () => ensureCoreAgentPrompts(systemPrisma as any, 'sync'),
-    syncAllFieldRoutings: async () => {
-      const reports = [];
-      for (const stage of loadOrchestrationFiles()) {
-        reports.push(await syncStageFieldRoutingsFromFile(systemPrisma as any, stage));
-      }
-      return reports;
-    },
-    renderAgentSnapshots: () => generateAgentSnapshotsContent(),
-    writeAgentSnapshots: async (content) => {
-      await fs.promises.writeFile(AGENT_SNAPSHOTS_TARGET, content, 'utf-8');
-      return AGENT_SNAPSHOTS_TARGET;
-    },
-  };
-}
-
 // ============================================================
 // POST /api/admin/health-center/fix
 // body: { id: 'w4-corehash' | 'field-routing' | 'field-routing-contract' | 'snapshots' }
@@ -107,7 +73,7 @@ router.post('/fix', async (req: Request, res: Response) => {
     }
 
     const actorId = (req as Request & { user?: { userId?: string } }).user?.userId || 'admin';
-    const result = await runHealthCenterFix({ db, id, deps: buildFixDeps(), actorId });
+    const result = await runHealthCenterFix({ db, id, deps: buildHealthCenterFixDeps(), actorId });
 
     if (result.ok === false) {
       return res.status(result.status).json({

@@ -8,6 +8,8 @@ const mockRunFix = jest.fn();
 const mockGetSummary = jest.fn();
 
 jest.mock('../../../services/health-center.service', () => ({
+  createHealthCenterDbAdapter: () => ({}),
+  buildHealthCenterFixDeps: () => ({}),
   getHealthCenterReport: (...args: unknown[]) => mockGetReport(...args),
   runHealthCenterFix: (...args: unknown[]) => mockRunFix(...args),
 }));

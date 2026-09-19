@@ -44,6 +44,7 @@ import {
 } from '../scripts/check-core-fields-sync';
 import {
   detectFieldRoutingDrift,
+  syncStageFieldRoutingsFromFile,
   type FieldRoutingDriftReport,
   type FieldRoutingFullSyncReport,
 } from './field-routing-bootstrap.service';
@@ -62,6 +63,10 @@ import {
   checkAgentSnapshotsDrift,
   generateAgentSnapshotsContent,
 } from '../scripts/generate-agent-snapshots';
+import { compileAllCorePromptFiles } from '../scripts/compile-core-files';
+import { ensureCoreAgentPrompts } from '../scripts/seed-core-agent-prompts';
+import systemPrisma from '../config/system-database';
+import prisma from '../config/database';
 import {
   loadOrchestrationFiles,
   type OrchestrationStage,
@@ -739,6 +744,38 @@ export interface HealthCenterFixDeps {
   syncAllFieldRoutings: () => Promise<FieldRoutingFullSyncReport[]>;
   renderAgentSnapshots: () => Promise<string>;
   writeAgentSnapshots: (content: string) => Promise<string>;
+}
+
+/**
+ * 组装健康中心 DB 适配器：系统库三表 + 主库 prompt_call_logs（运行时 promptDrift 遥测）。
+ * 由 service 层持有 DB 客户端，routes 层只消费适配器，避免越层直连。
+ */
+export function createHealthCenterDbAdapter(): HealthCenterDbAdapter {
+  return Object.assign(
+    Object.create(systemPrisma),
+    systemPrisma,
+    { prompt_call_logs: prisma.prompt_call_logs },
+  ) as unknown as HealthCenterDbAdapter;
+}
+
+/** 组装一键修复依赖（与路由层解耦，保持原实现与行为不变） */
+export function buildHealthCenterFixDeps(): HealthCenterFixDeps {
+  return {
+    compileAllCorePromptFiles: () => compileAllCorePromptFiles(),
+    ensureCoreAgentPromptsSync: () => ensureCoreAgentPrompts(systemPrisma as any, 'sync'),
+    syncAllFieldRoutings: async () => {
+      const reports: FieldRoutingFullSyncReport[] = [];
+      for (const stage of loadOrchestrationFiles()) {
+        reports.push(await syncStageFieldRoutingsFromFile(systemPrisma as any, stage));
+      }
+      return reports;
+    },
+    renderAgentSnapshots: () => generateAgentSnapshotsContent(),
+    writeAgentSnapshots: async (content) => {
+      await fs.promises.writeFile(AGENT_SNAPSHOTS_TARGET, content, 'utf-8');
+      return AGENT_SNAPSHOTS_TARGET;
+    },
+  };
 }
 
 export interface HealthCenterFixInput {

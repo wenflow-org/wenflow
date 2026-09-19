@@ -327,11 +327,7 @@ router.post('/refresh', async (req, res, next) => {
     const payload = verifyRefreshToken(refreshTokenCookie);
 
     // 查找用户，校验 tokenVersion 与未被软删
-    const prisma = (await import('../config/database')).default;
-    const userRecord = await prisma.users.findUnique({
-      where: { id: payload.userId },
-      select: { id: true, name: true, deletedAt: true, tokenVersion: true }
-    });
+    const userRecord = await authService.findRefreshSessionUser(payload.userId);
 
     if (!userRecord || userRecord.deletedAt) {
       return res.status(401).json({
