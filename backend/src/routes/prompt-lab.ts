@@ -11,6 +11,7 @@ import yaml from 'js-yaml';
 import { randomUUID as uuidv4 } from 'crypto';
 import systemPrisma from '../config/system-database';
 import { logger } from '../utils/logger';
+import { withSystemTransaction } from '../utils/with-transaction';
 import { getAPIGateway } from '../gateway/api-gateway';
 import { promptCache } from '../services/cache/prompt-cache.service';
 import {
@@ -691,7 +692,7 @@ router.post('/publish-core', async (req, res) => {
 
       // H1 ② 同一事务内完成 DB create + 旧 ACTIVE 归档：
       // 任一失败整体回滚，DB 内永远只有一个 ACTIVE 版本。
-      const { promptId, newVersion } = await systemPrisma.$transaction(async (tx) => {
+      const { promptId, newVersion } = await withSystemTransaction(async (tx) => {
         const latest = await tx.agent_prompts.findFirst({
           where: { agentId },
           orderBy: { version: 'desc' },
