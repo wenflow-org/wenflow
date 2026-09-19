@@ -240,8 +240,10 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/skill-workbench'
   },
   {
+    // 会话座舱是二级页（非 URL 页面）：旧深链落到虚拟学习者宿主 + sub-page query，
+    // 由 AdminConsole 的 ?view=&id= 契约恢复座舱（view=session = 虚拟会话控制台）
     path: '/admin/virtual-session/:sessionId',
-    redirect: '/admin/virtual-learners'
+    redirect: (to) => ({ path: '/admin/virtual-learners', query: { view: 'session', id: String(to.params.sessionId) } })
   },
   {
     // 旧深链兜底：虚拟学习者子页（原 :pathMatch 捕获，至少一段避免空匹配自循环）→ 列表页
@@ -273,9 +275,9 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/execution-logs'
   },
   {
-    // 批量实验已并入虚拟学习者（tab），旧 URL 兼容
+    // 批量实验已并入虚拟学习者（tab），旧 URL 兼容；深链需带 tab 交由宿主恢复子视图
     path: '/admin/batch-experiments',
-    redirect: '/admin/virtual-learners'
+    redirect: () => ({ path: '/admin/virtual-learners', query: { tab: 'experiments' } })
   },
   {
     path: '/admin/models',
@@ -291,12 +293,13 @@ const routes: RouteRecordRaw[] = [
   },
   {
     // 合并后旧路径兼容：运维工具/数据导出 → 运维中心；内容管理/成就管理 → 运营中心
+    // 深链需带 tab 交由 OpsCenter 恢复子视图（tools=运维工具 / export=数据导出）
     path: '/admin/devtools',
-    redirect: '/admin/ops-center'
+    redirect: () => ({ path: '/admin/ops-center', query: { tab: 'tools' } })
   },
   {
     path: '/admin/export-data',
-    redirect: '/admin/ops-center'
+    redirect: () => ({ path: '/admin/ops-center', query: { tab: 'export' } })
   },
   {
     // 内容管理（学习路径）已并入「学习会话」页（同域治理视图），旧 URL / ops-content 兼容直达路径 tab

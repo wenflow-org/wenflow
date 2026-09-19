@@ -203,7 +203,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { timeAgo, errMsg, shortId } from './live'
 import { askConfirm } from './useConfirm'
 import { adminDevtoolsApi, adminAxios } from '@/api/adminApi'
@@ -211,10 +212,28 @@ import { toast } from '@/utils/toast'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 
-const tab = ref<'tools' | 'export'>('tools')
-function switchTab(t: 'tools' | 'export') {
+/* 工具/导出 tab（运维工具 / 数据导出）：URL 查询驱动（?tab=），
+   旧深链 /admin/export-data、/admin/devtools 经路由重定向带 query 落地 */
+const OC_TABS = ['tools', 'export'] as const
+type OcTab = (typeof OC_TABS)[number]
+const tab = ref<OcTab>('tools')
+const route = useRoute()
+const router = useRouter()
+/* URL → tab（深链/刷新/前进后退）；非法值回落 tools。组件单测可无 router 挂载，故访问保持可选 */
+watch(
+  () => route?.query.tab,
+  (t) => {
+    const v = typeof t === 'string' && (OC_TABS as readonly string[]).includes(t) ? (t as OcTab) : null
+    if (v && v !== tab.value) tab.value = v
+    else if (!v && tab.value !== 'tools') tab.value = 'tools'
+  },
+  { immediate: true }
+)
+function switchTab(t: OcTab) {
   tab.value = t
   if (t === 'tools' && !deadLoaded.value) void loadDead()
+  /* URL 同步（?tab=…）：深链/刷新/前进后退可寻址 */
+  if (route && route.query.tab !== t) void router?.replace({ query: { ...route.query, tab: t } })
 }
 
 const refreshing = ref(false)

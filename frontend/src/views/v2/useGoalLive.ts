@@ -4,8 +4,11 @@
  */
 import { computed, reactive, ref } from 'vue';
 import {
-  GOAL_CONVERSATION_CID_KEY as CID_KEY,
-  GOAL_CONVERSATION_MSGS_KEY as MSG_KEY
+  getGoalConversationCid,
+  getGoalConversationMsgs,
+  setGoalConversationCid,
+  setGoalConversationMsgs,
+  removeGoalConversationStorage
 } from '@/utils/sessionCleanup';
 import {
   startGoalConversation,
@@ -209,7 +212,13 @@ function toProbes(raw: unknown): Array<{
     .slice(0, 2);
 }
 
-function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string; replaceMessages?: boolean } = {}, gen = generation) {
+/** 恢复信封是否代表一次失败（结构化输出连续校验失败等），用于补上重试入口 */
+function isFailedEnvelope(env: GoalConversationEnvelope): boolean {
+  const state = env.runtimeEnvelope?.businessState;
+  return state?.status === 'failed' || state?.reason === 'STRUCTURED_OUTPUT_INVALID';
+}
+
+function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string; replaceMessages?: boolean; markFailed?: boolean } = {}, gen = generation) {
   // 会话代次不一致：会话已被重置，丢弃过期响应
   if (gen !== generation) return;
   // final 到达：流式气泡完成，以官方消息为准
@@ -222,7 +231,7 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
 
   if (core?.conversationId) {
     conversationId.value = core.conversationId;
-    localStorage.setItem(CID_KEY, core.conversationId);
+    setGoalConversationCid(core.conversationId);
   }
   // stage 兜底：后端字段缺省时按已开始对话处理（澄清阶段），避免 started=true 但
   // stage='' 的非法组合（A1：此前会导致 stageIndex 无意义回退第 1 步但无文案）
@@ -279,7 +288,14 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
       }
     }
   }
-  localStorage.setItem(MSG_KEY, JSON.stringify(messages.value.slice(-60)));
+  // 失败信封（如结构化输出连续未通过校验）：给最后一条 AI 消息补 failed 标记，
+  // 页面即可用既有 msg__retry 提供「重试」入口，消除「提示重试却无处可点」的死路
+  if (opts.markFailed) {
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      if (messages.value[i].role === 'ai') { messages.value[i].failed = true; break; }
+    }
+  }
+  setGoalConversationMsgs(JSON.stringify(messages.value.slice(-60)));
   started.value = true;
 }
 
@@ -322,8 +338,14 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
       // 离页中止：不重发也不弹重试
       if (e.cancelled) throw streamError;
       if (e.recoveryEnvelope) {
-        // 422 恢复信封：模型部分产出可用，应用后视为本轮已处理
-        applyEnvelope(e.recoveryEnvelope, { userText: action === 'supplement' ? '' : text }, gen);
+        // 422 恢复信封：模型部分产出可用，先落屏；若信封标记失败（如结构化输出连续校验失败），
+        // 同步置 failed 并给消息打 failed 标记，让页面既有「重试」入口可用
+        const recoveryFailed = isFailedEnvelope(e.recoveryEnvelope);
+        applyEnvelope(e.recoveryEnvelope, {
+          userText: action === 'supplement' ? '' : text,
+          markFailed: recoveryFailed
+        }, gen);
+        if (recoveryFailed) failed.value = action;
       } else if (!e.transport) {
         throw streamError;
       } else {
@@ -350,7 +372,12 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
     const axiosErr = e as { status?: number; response?: { data?: { error?: string; data?: GoalConversationEnvelope } } };
     const axiosRecovery = axiosErr?.response?.data?.data;
     if (axiosRecovery && (axiosErr.response?.data?.error === 'STRUCTURED_OUTPUT_INVALID' || axiosErr.status === 422)) {
-      applyEnvelope(axiosRecovery, { userText: action === 'supplement' ? '' : text }, gen);
+      const recoveryFailed = isFailedEnvelope(axiosRecovery);
+      applyEnvelope(axiosRecovery, {
+        userText: action === 'supplement' ? '' : text,
+        markFailed: recoveryFailed
+      }, gen);
+      if (recoveryFailed) failed.value = action;
       return;
     }
     failed.value = action;
@@ -386,7 +413,7 @@ async function send(text: string, skipUserPush = false) {
   // 先上屏，再等 AI（与 supplement 一致）；skipUserPush=true 时调用方已替换消息（内联编辑）
   if (!skipUserPush) pushMessage({ role: 'user', content: t, time: nowTime() });
   started.value = true;
-  localStorage.setItem(MSG_KEY, JSON.stringify(messages.value.slice(-60)));
+  setGoalConversationMsgs(JSON.stringify(messages.value.slice(-60)));
   const meta = metaTracker.collect(t);
   if (!conversationId.value) {
     await run('start', t, meta);
@@ -399,7 +426,7 @@ async function confirm() {
   if (!conversationId.value || sending.value) return;
   const label = '确认并生成路径';
   pushMessage({ role: 'user', content: label, time: nowTime() });
-  localStorage.setItem(MSG_KEY, JSON.stringify(messages.value.slice(-60)));
+  setGoalConversationMsgs(JSON.stringify(messages.value.slice(-60)));
   await run('confirm', label);
 }
 
@@ -432,7 +459,7 @@ async function retry() {
 }
 
 async function resume(): Promise<boolean> {
-  const cid = localStorage.getItem(CID_KEY);
+  const cid = getGoalConversationCid();
   if (!cid) return false;
   return resumeById(cid);
 }
@@ -445,7 +472,7 @@ async function resumeById(cid: string): Promise<boolean> {
     const env = await getGoalConversation(cid);
     applyEnvelope(env, { replaceMessages: true }, gen);
     if (gen === generation && messages.value.length === 0) {
-      const cached = localStorage.getItem(MSG_KEY);
+      const cached = getGoalConversationMsgs();
       if (cached) messages.value = JSON.parse(cached) as LiveMessage[];
     }
     return true;
@@ -458,7 +485,7 @@ async function resumeById(cid: string): Promise<boolean> {
 }
 
 function hasSession(): boolean {
-  return !!localStorage.getItem(CID_KEY);
+  return !!getGoalConversationCid();
 }
 
 function reset(clearStorage = true) {
@@ -483,8 +510,7 @@ function reset(clearStorage = true) {
   failed.value = '';
   started.value = false;
   if (clearStorage) {
-    localStorage.removeItem(CID_KEY);
-    localStorage.removeItem(MSG_KEY);
+    removeGoalConversationStorage();
   }
 }
 

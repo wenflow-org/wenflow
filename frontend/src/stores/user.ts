@@ -4,7 +4,13 @@ import { ref, computed } from 'vue';
 import { userAPI, type UserProfile, type UpdateProfileData } from '../api/user';
 import { authAPI } from '../api/auth';
 import api, { USER_SESSION_KEY, hasUserSession } from '../utils/api';
-import { clearUserLocalState } from '../utils/sessionCleanup';
+import {
+  clearUserLocalState,
+  currentUserId,
+  dropLegacyGoalConversationStorage,
+  migrateLegacyGoalConversationStorage,
+  removeGoalConversationStorage
+} from '../utils/sessionCleanup';
 import { toast } from '../utils/toast';
 
 export const useUserStore = defineStore('user', () => {
@@ -19,6 +25,13 @@ export const useUserStore = defineStore('user', () => {
   const userXP = computed(() => user.value?.xp || 0);
 
   function markLoggedIn(profile: Pick<UserProfile, 'id' | 'name'>) {
+    // 切号（未登出直接换账号）：清掉上个账号的目标会话缓存，避免新账号看到残留
+    const previousId = currentUserId();
+    if (previousId && previousId !== profile.id) {
+      removeGoalConversationStorage(previousId);
+    }
+    // 旧版未作用域缓存无法本地核实归属：登录动作一律丢弃，绝不迁移给新账号
+    dropLegacyGoalConversationStorage();
     hasSession.value = true;
     user.value = profile as UserProfile;
     localStorage.setItem(USER_SESSION_KEY, '1');
@@ -122,9 +135,15 @@ export const useUserStore = defineStore('user', () => {
     if (storedUser && hasSession.value) {
       try {
         user.value = JSON.parse(storedUser);
+        // 升级一次性迁移：启动时无切号动作，残留旧键必属当前登录用户，归到其作用域键
+        if (user.value?.id) migrateLegacyGoalConversationStorage(user.value.id);
       } catch (err) {
         localStorage.removeItem('user');
+        dropLegacyGoalConversationStorage();
       }
+    } else {
+      // 未登录：旧版未作用域缓存不再保留，避免下个账号在登录页/页面看到残留
+      dropLegacyGoalConversationStorage();
     }
   }
 

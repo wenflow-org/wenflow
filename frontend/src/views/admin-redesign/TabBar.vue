@@ -1,6 +1,7 @@
 <template>
   <div class="mk-tabbar" @click="onBarClick">
     <button
+      v-if="overflowing"
       type="button"
       class="mk-tabbar__scrollbtn"
       :disabled="!canLeft"
@@ -34,6 +35,7 @@
     </div>
 
     <button
+      v-if="overflowing"
       type="button"
       class="mk-tabbar__scrollbtn"
       :disabled="!canRight"
@@ -105,6 +107,8 @@ const emit = defineEmits<{
 const scrollRef = ref<HTMLElement | null>(null)
 const canLeft = ref(false)
 const canRight = ref(false)
+/** 标签条是否真的溢出（决定左右滚动按钮是否渲染）：实测 scrollWidth/clientWidth，不用固定宽度猜 */
+const overflowing = ref(false)
 const overflowOpen = ref(false)
 
 function updateArrows() {
@@ -112,6 +116,8 @@ function updateArrows() {
   if (!el) return
   canLeft.value = el.scrollLeft > 1
   canRight.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+  // 按钮只在溢出时渲染；判定用滚动容器的实测宽度，且在隐藏态下收敛（无按钮时更宽，仍溢出才是真溢出）
+  overflowing.value = el.scrollWidth > el.clientWidth + 1
 }
 function scrollByDir(dir: -1 | 1) {
   const el = scrollRef.value
@@ -194,6 +200,8 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
 })
 watch(() => props.tabs.length, () => { void nextTick(updateArrows) })
+// 标签文案变化（重命名/加载后 label 更新）也会改变内容宽度 → 重新测量
+watch(() => props.tabs.map((t) => `${t.id}\u0001${t.label}`).join('\u0002'), () => { void nextTick(updateArrows) })
 watch(() => props.current, () => { void nextTick(() => { updateArrows(); scrollActiveIntoView() }) })
 </script>
 

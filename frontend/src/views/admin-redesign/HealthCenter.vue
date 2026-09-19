@@ -26,7 +26,24 @@
       @action="refresh(true)"
     />
 
-    <template v-if="displayReport">
+    <!-- 首载骨架（R3）：状态条保持可用，内容区用共享 MkSkeleton 版式占位，避免数秒空白 -->
+    <div v-else-if="loading && !displayReport" class="hc-skel" aria-hidden="true">
+      <section class="mk-card">
+        <div class="hc-guide__body"><MkSkeleton variant="rows" :count="2" :h="12" :jitter="true" /></div>
+      </section>
+      <div class="hc-summary">
+        <div v-for="i in 4" :key="i" class="mk-kpi hc-skel__kpi">
+          <MkSkeleton w="48%" :h="12" />
+          <MkSkeleton w="64%" :h="26" :radius="8" />
+        </div>
+      </div>
+      <section class="mk-card">
+        <div class="mk-card__head"><MkSkeleton w="140" :h="14" /></div>
+        <MkSkeleton class="hc-skel__rows" variant="rows" :count="7" :h="22" :radius="8" />
+      </section>
+    </div>
+
+    <template v-else-if="displayReport">
       <!-- 面向运营的一句话引导（与健康检查/漂移等折叠 section 同形态：mk-card + hc-details 折叠头） -->
       <section class="mk-card">
         <details>
@@ -218,6 +235,7 @@ import { COMPLETION_META, SEMANTICS_META } from './glossaryMeta'
 import { EXTRA_CAPABILITY_SKILLS } from '@/views/admin/capabilityCatalog'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import SkillReconciliation from './SkillReconciliation.vue'
 
 const reconRef = ref<{ openPanel?: () => void } | null>(null)
@@ -488,6 +506,9 @@ defineExpose({ refresh })
 <style scoped>
 /* 概要 KPI（共享 MkKpi 组件：标签 + 数字 + 副行，点击跳转锚点） */
 .hc-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+/* 首载骨架（R3）：形状由 MkSkeleton 提供，本类只补占位布局与间距 */
+.hc-skel__kpi { display: grid; gap: 8px; align-content: start; }
+.hc-skel__rows { padding: 12px 16px 14px; }
 /* 滚动锚点（技能对账外层：组件自身即卡，这里只留定位不留卡盒） */
 .hc-anchor { scroll-margin-top: 14px; }
 

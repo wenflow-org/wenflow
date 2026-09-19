@@ -36,8 +36,8 @@
 
     <!-- 学习者 / 批量实验 tab 切换 -->
     <div class="mk-pills vl-tabs">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': vlTab === 'learners' }" @click="vlTab = 'learners'">学习者</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': vlTab === 'experiments' }" @click="vlTab = 'experiments'">批量实验</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': vlTab === 'learners' }" @click="switchVlTab('learners')">学习者</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': vlTab === 'experiments' }" @click="switchVlTab('experiments')">批量实验</button>
     </div>
 
     <!-- ===== Tab2: 批量实验（嵌入 BatchExperiments 组件） ===== -->
@@ -612,6 +612,7 @@
 
 <script setup lang="ts">
 import { computed, ref, reactive, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency } from './live'
 import { adminVirtualLearnersApi, adminPromptOpsApi } from '@/api/adminApi'
@@ -634,7 +635,28 @@ import BatchExperiments from './BatchExperiments.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 
 /* 学习者 / 批量实验 tab（批量实验为低频调试工具，折叠进本页） */
-const vlTab = ref<'learners' | 'experiments'>('learners')
+const VL_TABS = ['learners', 'experiments'] as const
+type VlTab = (typeof VL_TABS)[number]
+const vlTab = ref<VlTab>('learners')
+const route = useRoute()
+const router = useRouter()
+/* URL → tab（合并宿主深链：/admin/virtual-learners?tab=experiments）；非法值回落 learners。
+   对齐 GoalConversations 的查询驱动约定，保证 /admin/batch-experiments 旧深链选中子视图。
+   组件单测可无 router 挂载，故 route/router 访问保持可选。 */
+watch(
+  () => route?.query.tab,
+  (t) => {
+    const v = typeof t === 'string' && (VL_TABS as readonly string[]).includes(t) ? (t as VlTab) : null
+    if (v && v !== vlTab.value) vlTab.value = v
+    else if (!v && vlTab.value !== 'learners') vlTab.value = 'learners'
+  },
+  { immediate: true }
+)
+function switchVlTab(t: VlTab) {
+  vlTab.value = t
+  /* URL 同步（?tab=…）：深链/刷新/前进后退可寻址；保留 view/id 等其它 query */
+  if (route && route.query.tab !== t) void router?.replace({ query: { ...route.query, tab: t } })
+}
 
 /* 头像色板：按名称哈希取色，同一人恒定同色 */
 const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#64748b']
