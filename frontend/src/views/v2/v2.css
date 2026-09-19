@@ -1,13 +1,15 @@
 ﻿/* V2 共享设计变量与基础类 */
 
 /* ====== 全局变量定义在 :root，所有元素可继承 ====== */
+/* token 归一口径（2026-09-19）：中性色/结构项以 --mk-* 为准（admin 设计系统），
+   本块只做别名转接；语义色（blue/green/red/amber/accent/cyan）暂保留待最后一批统一。 */
 :root {
-  --ink: #172033;
-  --muted: #5b6577;
-  --faint: #67758f;
-  --line: #e3e9f4;
-  --canvas: #f3f6fb;
-  --surface: #ffffff;
+  --ink: var(--mk-ink);
+  --muted: var(--mk-muted);
+  --faint: var(--mk-faint);
+  --line: var(--mk-line);
+  --canvas: var(--mk-bg);
+  --surface: var(--mk-surface);
   --blue: #3478f6;
   --blue-deep: #1f57cc;
   --accent: #8d6bff;
@@ -27,12 +29,12 @@
   --red-ink: #c0454a;
 }
 [data-theme='dark'] {
-  --ink: #e6edf7;
-  --muted: #9aa8bf;
-  --faint: #7d8ba3;
-  --line: #2a3648;
-  --canvas: #0f1620;
-  --surface: #182230;
+  --ink: var(--mk-ink);
+  --muted: var(--mk-muted);
+  --faint: var(--mk-faint);
+  --line: var(--mk-line);
+  --canvas: var(--mk-bg);
+  --surface: var(--mk-surface);
   --blue: #4d8bf8;
   --blue-deep: #6fa3ff;
   --accent: #a78bff;
