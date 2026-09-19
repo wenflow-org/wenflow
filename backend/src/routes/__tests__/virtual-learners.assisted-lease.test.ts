@@ -78,6 +78,9 @@ jest.mock('../../config/database', () => ({
     achievements: { deleteMany: mockAchievementDeleteMany },
     content_feedback: { deleteMany: mockContentFeedbackDeleteMany },
     projection_access_grants: { deleteMany: mockProjectionGrantDeleteMany },
+    // 删除覆盖补漏（2d205f9b）：两表也纳入级联，mock 需提供对应委托
+    prediction_records: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    misconception_ledger: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     admin_audit_logs: { create: mockAdminAuditLogCreate },
     $transaction: mockTransaction
   }
@@ -223,6 +226,8 @@ describe('assisted virtual learner route leases', () => {
       achievements: { deleteMany: mockAchievementDeleteMany },
       content_feedback: { deleteMany: mockContentFeedbackDeleteMany },
       projection_access_grants: { deleteMany: mockProjectionGrantDeleteMany },
+      prediction_records: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      misconception_ledger: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
       admin_audit_logs: { create: mockAdminAuditLogCreate }
     }))
   })
