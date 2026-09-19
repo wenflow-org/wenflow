@@ -242,7 +242,12 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
   ③平台默认模型的**解析结果与来源**（别名 / 具体 / 未配置）、
   ④降级链、⑤**当前冷却中的部署**（进程内快照）、⑥配置漂移告警（未注册模型、别名为空、模型未被引用、废弃 `prompt.model` 副本数）。
   该接口**不做写操作**（方案 B），模型能力仍以代码注册表为唯一写源。
-- **待做**：`llm_execution_attempts` 增 `deploymentId` / `fallbackIndex` 真列；接上 `model-cost.ts`（`pricing` 补齐后）产出金额；`frontend` 总览页（待前端空窗期）。
+- **成本金额已接线**：`services/cost/call-cost-aggregation.ts`（纯函数）提供按模型/会话/技能/节点的金额聚合，
+  管理端 `routes/admin/token-cost.ts` 的排行条目与 `totals` 追加 `usd / pricingKnown / callsMissingPricing / pricedCalls`，
+  响应顶层新增 `pricingStatus`（列出「已配置 / 待补单价」模型）；前端成本 tab 有金额条。
+  **单价未配置时 `usd: null` 且显示「单价未配置」，绝不用 0 冒充**（`models.config.pricing` 仍为空，待财务权威单价）。
+- **待做**：`llm_execution_attempts` 增 `deploymentId` / `fallbackIndex` 真列；补权威单价；成本金额条与内嵌组件的
+  时间窗口对齐；`bySession` 增加会话维度端点。
 
 ### 4.8 ⑧ 切换与回滚
 
@@ -296,6 +301,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 3. **prompt-ops 预览解析器**不再回读 `row.model` / `active.model`（预览用显式指定或平台默认模型）。
 4. **读模型统一（单一视图）**：`skill-runtime-contract.service` 的 `llmRequest` 增加 `deprecatedPromptModel`，管理端可据此提示清理历史副本。
 5. **无行为变化**：当前平台 `defaultModel` 与 30 条副本同为 `deepseek-v4-flash`，因此顺序调整**当天零差异**；但它解锁了"改一处即全量生效"。
+6. **清理历史副本（已完成）**：`scripts/clear-deprecated-prompt-model.ts`（默认 dry-run，`--apply` 才写库；幂等；先备份 `system.db`）已于 2026-09-19 清理 **30 条** ACTIVE 行的 `model` 副本 ⇒ 只读总览的 `deprecatedPromptModelCount = 0`；`skill_model_configs.model`（18 条）未触碰。
 
 **不做**：不删 `agent_prompts.model` 列（保留兼容与审计）；不把 `temperature/maxTokens` 搬出提示词工件（捆绑派理由成立：审查局部性、回滚粒度、作者上下文）。
 
@@ -321,7 +327,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 | **P1** | 部署级 cooldown + fallback 链 + `TRUNCATED_EMPTY_OUTPUT` 分类与定向重试 | **已实现** | 新增 `api-gateway/deployment-health.ts`；`api-gateway/executor.ts`；`config/models.config.ts`（`fallbacks`） |
 | **P2** | ①别名层（code 注册表 + DB 覆盖 + 能力过滤）✅ ②超时口径统一 ✅ ③降级记账 ✅ ④per-model 并发闸门（默认不限）✅ ⑤只读总览 API（方案 B）✅ | **已完成** | `config/models.config.ts`、`gateway/api-gateway/{model-alias,model-concurrency}.ts`、`services/model-registry.service.ts`、`routes/admin/model-registry.ts` |
 | — | **未采纳**：能力元数据 DB 化（方案 A：新建 system 表 + 迁移）——模型能力仍以代码注册表为唯一写源；`frontend` 展示待空窗期 | — | — |
-| **P3** | 管理端可视化：**已做** —— ①`模型总览` tab（只读，消费 `/api/admin/model-registry`：默认解析 / 别名映射与降级标记 / 能力与限额 / 部署冷却 / 配置提示）②「路由默认」由 `<select>` 改为可输入的别名候选（`chat`/`reasoning`/`light`，候选来自后端注册表，未拉取清单也能填）。**未做**：成本视图、别名成员的可视化编辑（方案 A 未采纳） | **部分完成** | `frontend/src/views/admin-redesign/{ApiConfig.vue,ModelRegistryOverview.vue}`、`frontend/src/api/adminApi.ts` |
+| **P3** | 管理端可视化：**已做** —— ①`模型总览` tab（只读，消费 `/api/admin/model-registry`：默认解析 / 别名映射与降级标记 / 能力与限额 / 部署冷却 / 配置提示）②「路由默认」由 `<select>` 改为可输入的别名候选（`chat`/`reasoning`/`light`，候选来自后端注册表，未拉取清单也能填）③执行日志成本 tab 金额条（缺单价显示「未配置」）。**未做**：金额条与内嵌组件时间窗口对齐、`bySession` 端点、别名成员可视化编辑（方案 A 未采纳） | **基本完成** | `frontend/src/views/admin-redesign/{ApiConfig.vue,ModelRegistryOverview.vue,ExecLogs.vue}`、`frontend/src/api/adminApi.ts`、`services/cost/call-cost-aggregation.ts` |
 
 **P0 验收**：
 - `npx jest src/services/__tests__/resolve-llm-call-params.test.ts src/gateway --runInBand` 全绿
