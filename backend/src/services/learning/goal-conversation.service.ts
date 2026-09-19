@@ -13,6 +13,19 @@ import {
 } from './learner-load-profile';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
+import systemPrisma from '../../config/system-database';
+import {
+  DEFAULT_RESPONSE_TRIAGE_ENFORCEMENT,
+  RESPONSE_TRIAGE_KEY,
+  RESPONSE_TRIAGE_PENDING_KEY,
+  RESPONSE_TRIAGE_SETTING_KEY,
+  buildTriageAdvisoryLine,
+  normalizeResponseTriageEnforcementMode,
+  resolveResponseTriageFromCollectedData,
+  triageGoalResponse,
+  type ResponseTriage,
+  type ResponseTriageEnforcementMode,
+} from './response-triage';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
 import learningService from './learning.service';
 import { createDomainEvent } from '../../events/contracts';
@@ -162,6 +175,44 @@ class GoalConversationService {
         error: error instanceof Error ? error.message : String(error)
       });
     }
+  }
+
+  /**
+   * 分诊执行模式（平台设置 platform_settings.responseTriageMode，默认 advisory）。
+   * 复用既有「systemPrisma.platform_settings.findUnique({ where: { key } })」读取方式；
+   * 读取失败/无记录一律回退默认值 —— 保证线上默认零行为变化。
+   */
+  private async resolveResponseTriageEnforcementMode(): Promise<ResponseTriageEnforcementMode> {
+    try {
+      const stored = await systemPrisma.platform_settings.findUnique({
+        where: { key: RESPONSE_TRIAGE_SETTING_KEY }
+      });
+      return normalizeResponseTriageEnforcementMode(stored?.value);
+    } catch (error) {
+      logger.warn('[goal-conversation] 读取 responseTriageMode 平台设置失败，回退默认 advisory', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return DEFAULT_RESPONSE_TRIAGE_ENFORCEMENT;
+    }
+  }
+
+  /**
+   * advisory 负向出口：当本轮已产出提议且分诊 mode !== learning_path 时，
+   * 在面向用户/模拟者的提议文本末尾追加一行可读结论。
+   * 直接原地修改 `aiResponse.userVisible`，使落库消息与返回值一致；默认无命中时零改动。
+   */
+  private applyResponseTriageAdvisoryLine(
+    aiResponse: any,
+    mode: ResponseTriageEnforcementMode
+  ): ResponseTriage {
+    const triage = triageGoalResponse(this.getGoalExt(aiResponse?.internal).understanding);
+    if (mode === 'advisory'
+      && this.getGoalExt(aiResponse?.internal).confirmedProposal
+      && typeof aiResponse?.userVisible === 'string') {
+      const line = buildTriageAdvisoryLine(triage);
+      if (line) aiResponse.userVisible = `${aiResponse.userVisible}${line}`;
+    }
+    return triage;
   }
 
   private hasContinueDiscussIntent(text: string) {
@@ -320,7 +371,11 @@ class GoalConversationService {
           ...(overrides?.learningPath !== undefined ? { learningPath: overrides.learningPath } : {})
         },
         ext: {
-          goalConversation: goalExt
+          goalConversation: {
+            ...goalExt,
+            // 分诊结论（纯函数）：随结果透出，供虚拟会话遥测统计「分诊命中率」
+            responseTriage: triageGoalResponse(goalExt.understanding)
+          }
         }
       }
     };
@@ -464,6 +519,8 @@ class GoalConversationService {
 
       // 让AI生成第一个回复
       const aiResponse = await this.callAI(conversation.id, initialGoal, true, userId, options);
+      // 分诊负向出口（advisory）：在 withConversationId 快照前原地追加提议结论
+      this.applyResponseTriageAdvisoryLine(aiResponse, await this.resolveResponseTriageEnforcementMode());
       const responseWithConversationId = this.withConversationId(aiResponse, conversation.id);
 
       if (!this.getStructuredOutputValid(aiResponse)) {
@@ -571,7 +628,57 @@ async continueConversation(
               return this.buildConfirmedResult(conversationId, data, { id: existingPath.id, status: existingPath.status });
             }
           }
-          
+
+          // ── 分诊负向出口（gated 模式）：非学习路径且尚未被显式放行时，不自动推进路径生成，
+          //    把分诊结论作为待确认项写回 collectedData.responseTriagePending，保持可手动推进。
+          //    再次确认（responseTriagePending 已存在）即放行，走下方原路径生成逻辑。
+          //    默认 advisory 下此分支不进入，现有行为零变化。
+          const triageMode = await this.resolveResponseTriageEnforcementMode();
+          const storedTriage = resolveResponseTriageFromCollectedData(data);
+          const triagePending = (data as Record<string, unknown>)[RESPONSE_TRIAGE_PENDING_KEY];
+          if (triageMode === 'gated'
+            && storedTriage
+            && storedTriage.mode !== 'learning_path'
+            && !triagePending) {
+            const pendingTriage: ResponseTriage = {
+              ...storedTriage,
+              reasons: [...storedTriage.reasons, 'gated：分诊结论待用户确认，暂不自动生成路径'],
+            };
+            await this.updateConversationLifecycle(conversationId, 'proposing', {
+              status: 'active',
+              appendMessage: { role: 'user', content: userReply },
+              mutateCollectedData: (currentData) => {
+                currentData[RESPONSE_TRIAGE_KEY] = storedTriage;
+                currentData[RESPONSE_TRIAGE_PENDING_KEY] = pendingTriage;
+              },
+            });
+            logger.info('[goal-conversation] gated 分诊拦截：非学习路径结论待确认，暂不生成路径', {
+              conversationId,
+              mode: storedTriage.mode,
+            });
+            const gatedLine = buildTriageAdvisoryLine(pendingTriage).trim();
+            return {
+              userVisible: `${gatedLine}\n\n若仍希望直接生成学习路径，请再次确认；也可以先补充说明，我们再一起调整方向。`,
+              internal: {
+                core: {
+                  conversationId,
+                  stage: 'proposing',
+                  confidence: data.confidence || 0,
+                  isCompleted: false,
+                },
+                ext: {
+                  goalConversation: {
+                    understanding,
+                    nextQuestions: [],
+                    quickReplies: [],
+                    collected: data.collected || {},
+                    responseTriage: pendingTriage,
+                  },
+                },
+              },
+            };
+          }
+
           try {
             const seedResult = {
               userVisible: '',
@@ -658,6 +765,8 @@ async continueConversation(
 
       // 调用AI生成回复。先不写当前用户消息，避免本轮输入重复进入上下文。
       const aiResponse = await this.callAI(conversation.id, userReply, false, userId, options);
+      // 分诊负向出口（advisory）：在 withConversationId 快照前原地追加提议结论
+      this.applyResponseTriageAdvisoryLine(aiResponse, await this.resolveResponseTriageEnforcementMode());
       const responseWithConversationId = this.withConversationId(aiResponse, conversationId);
 
       if (!this.getStructuredOutputValid(aiResponse)) {
@@ -923,6 +1032,11 @@ async continueConversation(
     // 保存 understanding 供前端展示
     data.understanding = goalExt.understanding || data.understanding || {};
 
+    // 响应分诊（纯函数，advisory 默认）：整包读改写只新增顶层键，不破坏既有键。
+    // 落 collectedData.responseTriage 供后续确认提议读取/遥测统计「分诊命中率」。
+    const responseTriage = triageGoalResponse(data.understanding);
+    data[RESPONSE_TRIAGE_KEY] = responseTriage;
+
     // 保存 stage（优先 envelope.phase）
     data.stage = stage;
 
@@ -993,7 +1107,8 @@ async continueConversation(
             understanding: data.understanding,
             normalizedGoalState: data.normalizedGoalState,
             confirmedProposal: data.confirmedProposal || null,
-            structuredData: data.structuredData || null
+            structuredData: data.structuredData || null,
+            responseTriage
           }
         }));
       });
@@ -1018,6 +1133,9 @@ async continueConversation(
     const goalExt = this.getGoalExt(aiResponse.internal);
     const understanding = goalExt.understanding || data.understanding || {};
     const confirmedProposal = goalExt.confirmedProposal ?? data.confirmedProposal ?? null;
+    // 响应分诊（纯函数）：透传进 GoalPathRequest.responseTriage（仅类型/透传，不改 path 生成逻辑）。
+    const responseTriage = resolveResponseTriageFromCollectedData(data)
+      || triageGoalResponse(understanding);
     const conversationHistory = Array.isArray(data.messages)
       ? data.messages
           .map((message: any) => ({
@@ -1063,6 +1181,8 @@ async continueConversation(
       // 虚拟学习者负荷画像（会话创建时写入 collectedData）；真实用户缺失 → null，
       // path.coordinator 的体量推导与今天完全一致。
       learnerLoadProfile: resolveLearnerLoadProfileFromCollectedData(data),
+      // 响应分诊结论（advisory 默认；path 侧仅类型透传，不改变生成逻辑）
+      responseTriage,
       systemPromptOverrides: systemPromptOverrides?.pathAgent
         ? { pathAgent: systemPromptOverrides.pathAgent }
         : undefined,
