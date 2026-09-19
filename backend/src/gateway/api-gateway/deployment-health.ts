@@ -49,6 +49,28 @@ export function resetDeploymentHealth(): void {
   cooldowns.clear();
 }
 
+export interface CooldownSnapshot {
+  key: string;
+  providerId: string;
+  endpoint: string;
+  model: string;
+  remainingMs: number;
+}
+
+/** 当前处于冷却期的部署快照（只读；供管理端"模型配置总览"展示）。 */
+export function listCoolingDowns(now: number = Date.now()): CooldownSnapshot[] {
+  const out: CooldownSnapshot[] = [];
+  for (const [key, until] of cooldowns.entries()) {
+    if (until <= now) {
+      cooldowns.delete(key);
+      continue;
+    }
+    const [providerId = '', endpoint = '', model = ''] = key.split('|');
+    out.push({ key, providerId, endpoint, model, remainingMs: until - now });
+  }
+  return out.sort((a, b) => b.remainingMs - a.remainingMs);
+}
+
 /**
  * 哪些错误类值得「换部署」而不是继续重试：
  * - rate_limit：换模型/端点通常有效（限流常在部署粒度）

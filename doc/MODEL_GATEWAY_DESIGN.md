@@ -234,6 +234,16 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 - `llm_execution_attempts` 增 `deploymentId` / `fallbackIndex`；`agent_call_logs` 增实际模型与原始请求模型。
 - 接上 `model-cost.ts`（`pricing` 补齐后）产出金额。
 
+**已实现（P2 ①③⑤）**：
+- 降级记账：`agent_call_logs.metadata.fallbackFrom`（复用现有 JSON 列）。
+- **只读总览**：`GET /api/admin/model-registry`（`services/model-registry.service.ts`）——读模型统一，汇聚
+  ①每个模型的能力与限额（`supportsThinking` / `supportsReasoningEffort` / 输出上限 / 缺省 / 推理预留 / 并发上限）、
+  ②别名映射（成员、DB 覆盖声明、默认选中、`requireThinking` 下的选中与降级标记）、
+  ③平台默认模型的**解析结果与来源**（别名 / 具体 / 未配置）、
+  ④降级链、⑤**当前冷却中的部署**（进程内快照）、⑥配置漂移告警（未注册模型、别名为空、模型未被引用、废弃 `prompt.model` 副本数）。
+  该接口**不做写操作**（方案 B），模型能力仍以代码注册表为唯一写源。
+- **待做**：`llm_execution_attempts` 增 `deploymentId` / `fallbackIndex` 真列；接上 `model-cost.ts`（`pricing` 补齐后）产出金额；`frontend` 总览页（待前端空窗期）。
+
 ### 4.8 ⑧ 切换与回滚
 
 | 需求 | 手段 |
@@ -309,7 +319,8 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 |---|---|---|---|
 | **P0** | 能力注册表（per-model）+ `maxTokens` 语义修正 + thinking 预算分离 | **已实现** | `config/models.config.ts`、`services/resolve-llm-call-params.ts`、`gateway/api-gateway/executor.ts` |
 | **P1** | 部署级 cooldown + fallback 链 + `TRUNCATED_EMPTY_OUTPUT` 分类与定向重试 | **已实现** | 新增 `api-gateway/deployment-health.ts`；`api-gateway/executor.ts`；`config/models.config.ts`（`fallbacks`） |
-| **P2** | ①别名层（code 注册表 + DB 覆盖 + 能力过滤）✅ ②超时口径统一 ✅ ③降级记账（`agent_call_logs.metadata.fallbackFrom`）✅ ④per-model 并发闸门（默认不限，opt-in）✅ ⑤**待做**：能力元数据 DB 化 | **部分完成** | `config/models.config.ts`、`api-gateway/model-alias.ts`、`api-gateway/model-concurrency.ts`、`api-gateway/router.ts`、`api-gateway/executor.ts` |
+| **P2** | ①别名层（code 注册表 + DB 覆盖 + 能力过滤）✅ ②超时口径统一 ✅ ③降级记账 ✅ ④per-model 并发闸门（默认不限）✅ ⑤只读总览 API（方案 B）✅ | **已完成** | `config/models.config.ts`、`gateway/api-gateway/{model-alias,model-concurrency}.ts`、`services/model-registry.service.ts`、`routes/admin/model-registry.ts` |
+| — | **未采纳**：能力元数据 DB 化（方案 A：新建 system 表 + 迁移）——模型能力仍以代码注册表为唯一写源；`frontend` 展示待空窗期 | — | — |
 | **P3** | 管理端可视化（别名→部署、per-deployment 健康、成本） | 待做 | `frontend/src/views/admin-redesign/ApiConfig.vue`、`routes/admin/*` |
 
 **P0 验收**：
