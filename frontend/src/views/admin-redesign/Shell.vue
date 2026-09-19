@@ -709,8 +709,8 @@ function groupBadgeTitle(title: string): string {
 .mshell__main { display: grid; grid-template-rows: 1fr; min-width: 0; height: 100%; min-height: 0; }
 /* 内容区：应用式布局的唯一滚动容器（侧栏/工具行固定，内容区内滚；
    列表页用 .mk-page--fill 让表格区内滚、分页器吸底。
-   flex 列：TabBar（.mk-tabbar）固定吸顶，页面块（其余子元素）独占剩余高度并内滚，
-   fill 页 height:100% 相对页面块计算 → 无 TabBar 38px 导致的整页多余滚动 */
+   flex 列：面包屑（.mshell__crumb，仅子页）固定，页面块（其余子元素）独占剩余高度并内滚）
+   注：原多标签栏（.mk-tabbar）已删除，每个页面因此多回 36px 可用高度 */
 .mshell__content {
   display: flex;
   flex-direction: column;
@@ -718,7 +718,7 @@ function groupBadgeTitle(title: string): string {
   min-height: 0;
   overflow: hidden;
 }
-.mshell__content > :not(.mk-tabbar):not(.mshell__crumb) {
+.mshell__content > :not(.mshell__crumb) {
   flex: 1;
   min-height: 0;
   overflow-y: auto;

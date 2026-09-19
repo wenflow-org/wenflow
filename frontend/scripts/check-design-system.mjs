@@ -56,11 +56,11 @@ const PRIMITIVE_FILES = [
  * 判定依据——这些是"被页面复用"的构件，而非页面：
  *   - Mk*.vue（MkKpi / MkStatStrip / MkEmptyState / MkChart / MkCols / MkFilterSearch …），
  *     自 admin-redesign/ 迁至中立的 src/components/mk/
- *   - 外壳与全站通用控件（Shell / TabBar / Pagination / SkeletonTable / 状态与图标徽章 / 确认层）
+ *   - 外壳与全站通用控件（Shell / Pagination / SkeletonTable / 状态与图标徽章 / 确认层）
  * 页面（admin 各场景与详情页）不在此列 → 不允许新增 mk- 类。
  */
 const PRIMITIVE_VUE = new Set([
-  'Shell.vue', 'TabBar.vue', 'Confirm.vue', 'Pagination.vue', 'SkeletonTable.vue',
+  'Shell.vue', 'Confirm.vue', 'Pagination.vue', 'SkeletonTable.vue',
   'RunStateBadge.vue', 'RunStageBar.vue', 'AchIcon.vue', 'DataScopeToggle.vue',
 ])
 const isPrimitiveLayer = (relPath) => {

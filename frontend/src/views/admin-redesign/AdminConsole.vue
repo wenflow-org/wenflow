@@ -17,7 +17,6 @@
     </div>
 
     <Shell :current="scene" :crumb="crumbLabel" :crumb-title="crumbTitle" release @navigate="navigate" @glossary="glossaryOpen = true">
-      <TabBar v-if="!booting" :tabs="tabItems" :current="scene" @select="navigate" @close="closeTab" @close-others="closeOthers" @close-right="closeRight" @toggle-pin="togglePin" />
       <MkLoading v-if="booting" class="ac-boot" text="加载中…" />
       <component v-else :is="detailComponent || currentComponent" />
     </Shell>
@@ -132,8 +131,6 @@ export const DETAIL_COMPONENTS: Readonly<Record<string, unknown>> = detailCompon
 import { computed, defineAsyncComponent, h, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Shell from './Shell.vue';
-import TabBar, { type AdminTab } from './TabBar.vue';
-import { MOCK_SCENES } from './manifest';
 import SkillDrawer from './SkillDrawer.vue';
 import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
@@ -293,73 +290,12 @@ function navigate(id: string) {
   scene.value = id;
 }
 
-/* —— D2 多标签页：访问历史 tab 栏（有序去重 + localStorage 持久化 + 固定/右键菜单）。
-   仅作为「快捷往返」层，不改变 scene/URL 单值机制（组件状态不 keep-alive）。 */
-const TABS_KEY = 'wf_admin_tabs'
-const PINNED_KEY = 'wf_admin_pinned_tabs'
-const openTabs = ref<string[]>([scene.value])
-const pinnedTabs = ref<Set<string>>(new Set())
+/* 多标签页已删除（2026-09-19）：实测切标签不保状态（无 keep-alive，滚动/筛选被重置）、切走丢 URL 查询，
+   却常驻 36px 并复制侧栏导航。子页/子标签现已全部 URL 直达，导航统一为「侧栏 + 面包屑 + 深链」。 */
 try {
-  const saved = JSON.parse(localStorage.getItem(TABS_KEY) || '[]') as unknown
-  if (Array.isArray(saved) && saved.length) {
-    const valid = saved.filter((x): x is string => typeof x === 'string' && !!components[x])
-    if (valid.length) openTabs.value = valid
-    if (!valid.includes(scene.value)) openTabs.value.push(scene.value)
-  }
-  const savedPin = JSON.parse(localStorage.getItem(PINNED_KEY) || '[]') as unknown
-  if (Array.isArray(savedPin)) pinnedTabs.value = new Set(savedPin.filter((x): x is string => typeof x === 'string'))
+  localStorage.removeItem('wf_admin_tabs')
+  localStorage.removeItem('wf_admin_pinned_tabs')
 } catch { /* 隐私模式忽略 */ }
-
-watch(scene, (s) => {
-  if (!openTabs.value.includes(s)) openTabs.value.push(s)
-  persistTabs()
-})
-
-function persistTabs() {
-  try {
-    localStorage.setItem(TABS_KEY, JSON.stringify(openTabs.value))
-    localStorage.setItem(PINNED_KEY, JSON.stringify([...pinnedTabs.value]))
-  } catch { /* ignore */ }
-}
-
-const tabItems = computed<AdminTab[]>(() =>
-  openTabs.value
-    .map((id) => MOCK_SCENES.find((s) => s.id === id))
-    .filter((s): s is NonNullable<typeof s> => !!s)
-    .map((s) => ({ id: s.id, label: s.label, title: `${s.group} / ${s.label}`, pinned: pinnedTabs.value.has(s.id) }))
-)
-
-function closeTab(id: string) {
-  const idx = openTabs.value.indexOf(id)
-  if (idx === -1 || openTabs.value.length <= 1 || pinnedTabs.value.has(id)) return
-  openTabs.value = openTabs.value.filter((t) => t !== id)
-  pinnedTabs.value.delete(id)
-  persistTabs()
-  // 关闭的是当前页 → 切到相邻 tab（优先右侧，否则左侧）
-  if (id === scene.value) {
-    const next = openTabs.value[Math.min(idx, openTabs.value.length - 1)]
-    if (next && next !== scene.value) navigate(next)
-  }
-}
-function closeOthers(id: string) {
-  openTabs.value = openTabs.value.filter((t) => t === id || pinnedTabs.value.has(t))
-  persistTabs()
-  if (id !== scene.value) navigate(id)
-}
-function closeRight(id: string) {
-  const idx = openTabs.value.indexOf(id)
-  if (idx === -1) return
-  openTabs.value = openTabs.value.slice(0, idx + 1)
-  persistTabs()
-  if (openTabs.value.indexOf(scene.value) === -1) navigate(id)
-}
-function togglePin(id: string) {
-  const next = new Set(pinnedTabs.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  pinnedTabs.value = next
-  persistTabs()
-}
 
 async function boot() {
   booting.value = true;
