@@ -101,7 +101,10 @@
 #### Q5 给每个 agent 写自述
 - **核验**：✅ 素材全齐：29 个 `prompts/core/*.yaml` 全含 `identity`；`agent-snapshots.md` 是**字段接口文档**（不是人话自述）；
   已有生成脚本范式 `scripts/generate-agent-snapshots.ts`（含 drift 检查）。
-- **贴合**：高（降低维护/协作出错）。**处置**：可做（一天、低风险）。
+- **贴合**：高（降低维护/协作出错）。**处置**：✅ 完成。
+  - **机械自述**（自动生成）：`prompts/AGENTS_SELF_INTRO.md`（`7cea371d`，含 `prompts:self-intro:check` 漂移门禁）。
+  - **缘由手册**（人写、开发者向）：`doc/AGENT_SKILL_MANUAL.md`（`08dff27e`），已并入 `SKILL_DEVELOPMENT_GUIDE.md §0`；
+    明确标注"**开发文档，不是平台功能/能力说明**"；并诚实列出来源不可考的 6 处缘由。
 
 #### Q7 聚合 / 拆分 / 融合 / 评估
 - **核验**：✅ outbox/inbox + `learner_evidence` 只追加；`ConceptConsolidatorService` 已实现"LLM 可证伪建议 + 代码执行 + 留档 + 回滚"
@@ -110,10 +113,14 @@
   ES/CQRS 大重构缓。
 
 #### Q9 字段命中上下游（逻辑图）与调用用量
-- **结论**：**字段命中上下游 = 逻辑图（字段数据旅程/血缘）**；调用用量 = 拓扑属性（附于逻辑图）。不建独立拓扑图；字段级运行时命中待做。
-- **核验**：🟡 节点级 runtime 计数**已有**（`Orchestrator.vue:253`、`live.ts` 从 `agent_call_logs` 聚合）；Q9 后续已把 **agent→skill 调用用量**聚合为逻辑图上的注解；
-  字段级**运行时命中**（真实字段上下游流向计数）尚无 metric，也没有按 caller→callee+字段聚合日志的工具；12 处断链/死规则/双源已在 `LEARNING_SCIENCE_AUDIT.md:603-640` 记档。
-- **贴合**：中。**处置**：逻辑图（字段数据旅程/血缘）已呈现字段命中上下游；调用用量作为拓扑属性附于其上，**不建独立拓扑图**；字段级运行时命中待做（低风险只读聚合 `agent_call_logs.callerAgent`）。
+- **结论**：**字段命中上下游 = 逻辑图（字段数据旅程/血缘）**；调用用量 = 拓扑属性（附于逻辑图）。**不建独立拓扑图**。
+- **核验（已更新）**：🟢
+  - 节点级 runtime 计数已有（`Orchestrator.vue:253`、`live.ts` 从 `agent_call_logs` 聚合）；
+  - **agent→skill 调用用量**已聚合为逻辑图注解（`8b92d09b`、`79bdadf6`）；
+  - **字段级运行时命中**已实现并叠加到逻辑图：纯聚合 `field-hit-rates.ts` + 只读 CLI（`c5a91e58`），拓扑响应增 `fieldStats`、前端按 `produced/dead/drift` 着色、死 routing 边虚线（`612d04ac`）；口径 caveat（media/`deltaOutput`/归一化）已随实现标注。
+  - 12 处断链/死规则/双源已在 `LEARNING_SCIENCE_AUDIT.md:603-640` 记档。
+- **贴合**：高。**处置**：✅ 完成（逻辑图叠字段级命中 + 调用用量；**不建独立拓扑图**）。
+- **实测信号**（只读冒烟）：30 skill / **18 死字段** / **9 契约漂移** / 10 死边候选；`teaching-turn` 偶发把嵌套键顶到顶层、`virtual-learner-scenario-designer` 泄露 persona 子字段。
 
 #### Q10 前端可视化创建字段 + Q11 Prompt DSL / Zod
 - **核验**：🟡
@@ -262,7 +269,7 @@
 - **Q13 公平最小层**：`D_floor`（不可永远贴地板）+ 支架双向退出 + 独立锚题探针。
 - **Q16 合规基线**：数据分类矩阵 + 同意/未成年人策略 + "自述覆盖推断" + 用户数据导出（虚拟 cleanup 已是范式）。
 - **Q5 agent 自述生成器**（一天）。
-- **Q9 调用用量（附于逻辑图）**（只读聚合 `agent_call_logs`）。
+- **Q9 字段命中（逻辑图）+ 调用用量**（只读聚合 `agent_call_logs` / `prompt_call_logs.extractedJson`）。
 
 ### 可做但需小设计（低-中基建）
 - **Q4 虚拟学习者概率记忆**：概率提取 + 复用 friction 注入 rng 范式 + 混淆对先走 LLM 离线判；**前置：D1/D4 + `dueReview` 带 retention**。
@@ -299,7 +306,7 @@
 ### 第二波：实验室保真 + 可解释（中低成本）
 6. Q4 概率化记忆（强度确定 + 提取概率 + 混淆对离线表 + 确定性 PRNG；虚拟调度与真实按 `isVirtualLearner` 隔离）。
 7. Q2 记忆看板（先统一展示口径，再画曲线）+ Q8 保持率曲线进 admin。
-8. Q5 agent 自述生成器 + Q9 调用用量（附于逻辑图）。
+8. Q5 agent 自述生成器（并入开发手册）＋ Q9 字段级命中/调用用量（逻辑图）。
 9. Q7 轻量真值发现（自评↔真值差 = 元认知校准）。
 - **验收**：虚拟学习者"越久越含糊/易记错"可复现（同种子回放一致）；看板与排期同源；逻辑图能看出未调用（死边候选）。
 
@@ -348,8 +355,8 @@
 | Q4 集成：`memoryRecall` 接入 assisted + blackbox 两路 | `db3aba11` |
 | **assisted 路径消费待答检查点**（E2E 发现的真缺口） | `8fd12657` |
 | Q2/Q8 记忆看板 + 保留率曲线 | `e5e9e6e5` |
-| Q5 Agent 自述生成器 | `7cea371d` |
-| Q9 调用用量聚合（agent→skill，附于字段数据旅程/逻辑图） | `8b92d09b`、`79bdadf6` |
+| Q5 Agent 自述（机械生成 `prompts/AGENTS_SELF_INTRO.md` + 缘由手册 `doc/AGENT_SKILL_MANUAL.md`） | `7cea371d`、`08dff27e` |
+| Q9 字段命中上下游（逻辑图）+ 调用用量 | `8b92d09b`、`79bdadf6`、`52d6cfaf`、`c5a91e58`、`612d04ac` |
 | Q1 复习选点质量只读度量 | `46853be9` |
 | Q7 轻量真值发现（多源加权 + 元认知校准） | `1e1b0fba` |
 | Q13 难度分层审计（虚拟 cohort） | `c13dee5b` |
