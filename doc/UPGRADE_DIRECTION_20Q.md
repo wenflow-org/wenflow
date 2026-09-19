@@ -353,9 +353,11 @@
 | Q7 轻量真值发现（多源加权 + 元认知校准） | `1e1b0fba` |
 | Q13 难度分层审计（虚拟 cohort） | `c13dee5b` |
 | 锚题探针**纯决策层** | `dfe30482` |
+| **锚题探针接线**（教学链：目标注入 + 判定打标 + `anchor:result` 留痕，只标记不改写） | `152713f2` |
 | 数据治理基线（Q16） | `1d3b55ef` |
-| 删除覆盖补漏（`prediction_records`/`misconception_ledger`） | `2d205f9b` |
-| Q11b strict JSON Schema 纯编译器（未接线） | `0d4aa01b` |
+| 删除覆盖补漏（`prediction_records`/`misconception_ledger`） | `2d205f9b`（含路由测试回归修复 `345e4550`） |
+| Q11b strict JSON Schema 纯编译器 | `0d4aa01b` |
+| Q11b 接线前置：core loader 结构化承载 `enumValues`/嵌套 `properties` | `126e05c7` |
 
 ### VL 验证（真实跑数）
 - assisted E2E（`advance-day runTasks`）8 天 × 2 节：链路健康；`temporalContext.sinceLastSessionDays` 计算正确（跨周末 3／工作日 1）；`memoryRecall` 真进 payload。
@@ -363,8 +365,8 @@
 - 附带观察：一次 `TEACHING_TURN_REPLY_MISSING` 导致 session-failed（普通教学回合模型未产出 reply），建议后续加"缺 reply 重试/降级"护栏。
 
 ### 仍未做（明确延后）
-- **锚题探针接线**（纯层已就绪，接线 3 步见 `anchor-probe.ts` 头注）。
-- **Q11b 接线前置**：core loader 需结构化承载 `enumValues` / 嵌套 `properties`，否则 strict schema 会误拒未声明子字段；影响面最大，需单独评估。
+- **Q11b 接线后续**：前置已就绪（`126e05c7`），但还需 ① 在 core yaml 声明 `enumValues` / 嵌套 `properties`，② 把 `compileStrictJsonSchema` 接入 `skill-output-validator`（用 `collectSchemaLimitations` 做门禁，避免误拒）。
+- **锚题探针调优**：接线已完成（`152713f2`），但当前锚题只在"已掌握/挣扎"两种信念上选靶；锚题 `checkpoint:result` 是否应从成功率带样本中排除，需产品定夺。
 - **Q18 真实用户实验基建 / Q19 生命周期 / Q20 单位经济**：按本文件"缺基建/无对象"结论继续延后。
 - `login_attempts` 是否纳入删除覆盖（它按用户名/IP 而非 userId，需另行判断）。
 
