@@ -127,19 +127,30 @@
 
 <script setup lang="ts">
 import { computed, h, onMounted, onUnmounted, reactive, watch } from 'vue';
-/* element-plus 图标已移除（依赖整体下线）：本地同名字形组件替代，模板无需改动。
-   视觉差异：由 EP 线性 SVG 变为同义字形（✓ / 📄 / 📈 …），尺寸与位置沿用 .completion-icon */
-const GLYPHS: Record<string, string> = { CircleCheckFilled: '✓', MagicStick: '✨', Document: '📄', Opportunity: '💡', DataAnalysis: '📊', TrendCharts: '📈', Collection: '📚', Compass: '🧭', VideoPause: '⏸' };
-const glyph = (name: string) => () => h('span', { class: 'completion-glyph' }, GLYPHS[name] ?? '•');
-const CircleCheckFilled = glyph('CircleCheckFilled');
-const MagicStick = glyph('MagicStick');
-const Document = glyph('Document');
-const Opportunity = glyph('Opportunity');
-const DataAnalysis = glyph('DataAnalysis');
-const TrendCharts = glyph('TrendCharts');
-const Collection = glyph('Collection');
-const Compass = glyph('Compass');
-const VideoPause = glyph('VideoPause');
+/* element-plus 图标已移除（依赖整体下线）：改用内联 SVG，无依赖、随 currentColor 取色、随字号缩放。
+   数据来自本地常量（静态可信标记，不经用户输入）。 */
+const ICONS: Record<string, string> = {
+  CircleCheckFilled: `<circle cx="10" cy="10" r="8.2" fill="currentColor"/><path d="M6.1 10.4l2.6 2.6 5.2-5.4" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>`,
+  VideoPause: `<rect x="4.8" y="3.8" width="3.6" height="12.4" rx="1.3"/><rect x="11.6" y="3.8" width="3.6" height="12.4" rx="1.3"/>`,
+  Compass: `<circle cx="10" cy="10" r="7.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M13.3 6.7l-1.9 4.7-4.7 1.9 1.9-4.7z" fill="currentColor"/>`,
+  Document: `<path d="M6.1 2.6h5L15.3 6.8v10.6H6.1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M11 2.8v4.2h4.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>`,
+  Collection: `<rect x="3" y="4.4" width="3.2" height="11.2" rx="1"/><rect x="8.4" y="4.4" width="3.2" height="11.2" rx="1"/><rect x="13.8" y="4.4" width="3.2" height="11.2" rx="1"/>`,
+  TrendCharts: `<path d="M3 15.6l4.2-4.7 3 2.7 6.4-7.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>`,
+  DataAnalysis: `<rect x="3.8" y="10" width="3.2" height="7" rx="1"/><rect x="8.4" y="6.3" width="3.2" height="10.7" rx="1"/><rect x="13" y="3.2" width="3.2" height="13.8" rx="1"/>`,
+  MagicStick: `<path d="M3.8 16.4L14.4 5.8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M15.4 3.1l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z"/>`,
+  Opportunity: `<path d="M10 2.7a5.3 5.3 0 0 0-3.1 9.6c.5.4.8.9.9 1.5h4.4c.1-.6.4-1.1.9-1.5A5.3 5.3 0 0 0 10 2.7z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.3 15.7h3.4M8.9 17.9h2.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`,
+};
+const icon = (name: string) => () =>
+  h('svg', { viewBox: '0 0 20 20', width: '1em', height: '1em', 'aria-hidden': 'true', innerHTML: ICONS[name] ?? '' });
+const CircleCheckFilled = icon('CircleCheckFilled');
+const MagicStick = icon('MagicStick');
+const Document = icon('Document');
+const Opportunity = icon('Opportunity');
+const DataAnalysis = icon('DataAnalysis');
+const TrendCharts = icon('TrendCharts');
+const Collection = icon('Collection');
+const Compass = icon('Compass');
+const VideoPause = icon('VideoPause');
 import MarkdownRenderer from './MarkdownRenderer.vue';
 import type { ReplanAdvisory, WrapupArtifact } from '@/api/aiTeaching';
 

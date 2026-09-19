@@ -100,4 +100,10 @@ describe('CompletionCard 归因注记', () => {
     const w = mountCard({ ...baseAdvisory, shouldSuggest: false });
     expect(w.find('.advisory-section').exists()).toBe(false);
   });
+
+  it('图标以内联 SVG 渲染（element-plus 已移除，无字形回退）', () => {
+    const w = mountCard(baseAdvisory);
+    expect(w.findAll('svg').length).toBeGreaterThan(0);
+    expect(w.html()).not.toContain('completion-glyph');
+  });
 });
