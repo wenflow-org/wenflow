@@ -68,7 +68,6 @@ const ExecLogs = asyncPage(() => import('./ExecLogs.vue'));
 const AuditLogs = asyncPage(() => import('./AuditLogs.vue'));
 const ApiConfig = asyncPage(() => import('./ApiConfig.vue'));
 const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
-const HealthCenter = asyncPage(() => import('./HealthCenter.vue'));
 const PromptEval = asyncPage(() => import('./PromptEval.vue'));
 const OpsHub = asyncPage(() => import('./OpsHub.vue'));
 const OpsCenter = asyncPage(() => import('./OpsCenter.vue'));
@@ -85,6 +84,7 @@ const components: Record<string, unknown> = {
   // announcements+notifications → messages；token-cost → execution-logs（成本分析 tab）
   // 导航一级收敛 2026-09-19（阶段 1）：feedback/ops-achievements/messages → ops-hub 宿主 tab；
   // addons → api-config 宿主 tab；session-security → ops-center 宿主 tab（场景下线，URL 重定向兼容）
+  // 阶段 3（2026-09-19）：health-center → skills 宿主 tab（健康检查/漂移/对账），场景下线
   'people': People,
   'sessions': Sessions,
   'virtual-learners': VirtualLearners,
@@ -99,7 +99,6 @@ const components: Record<string, unknown> = {
   // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，
   // 健康中心 hash/yaml 跳转深链至此，勿删注册
   'skill-workbench': PromptWorkbench,
-  'health-center': HealthCenter,
   'ops-hub': OpsHub,
   'ops-center': OpsCenter
 };

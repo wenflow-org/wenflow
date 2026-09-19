@@ -39,8 +39,8 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('导航（阶段 2）：7 分组 / 15 场景与目标 IA 完全一致', () => {
-    expect(MOCK_SCENES).toHaveLength(15);
+  it('导航（阶段 3）：7 分组 / 14 场景与目标 IA 完全一致', () => {
+    expect(MOCK_SCENES).toHaveLength(14);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
     const groups = MOCK_SCENES.map((s) => s.group);
     expect([...new Set(groups)]).toEqual(['总览', '教学', '虚拟实验', 'Skill', '观测', '系统', '运营']);
@@ -50,7 +50,7 @@ describe('AdminConsole 页面注册表', () => {
       总览: ['overview'],
       教学: ['people', 'sessions', 'memory-review'],
       虚拟实验: ['virtual-learners', 'batch-experiments'],
-      Skill: ['orchestrator', 'skills', 'prompt-eval', 'health-center'],
+      Skill: ['orchestrator', 'skills', 'prompt-eval'],
       观测: ['execution-logs', 'audit-logs'],
       系统: ['api-config', 'ops-center'],
       运营: ['ops-hub']
@@ -59,7 +59,7 @@ describe('AdminConsole 页面注册表', () => {
 
   it('退役场景（已折入宿主 tab）不再出现在侧栏清单', () => {
     const ids = new Set(MOCK_SCENES.map((s) => s.id));
-    for (const retired of ['feedback', 'ops-achievements', 'messages', 'addons', 'session-security']) {
+    for (const retired of ['feedback', 'ops-achievements', 'messages', 'addons', 'session-security', 'health-center']) {
       expect(ids.has(retired), `退役场景「${retired}」不应在侧栏清单`).toBe(false);
     }
   });

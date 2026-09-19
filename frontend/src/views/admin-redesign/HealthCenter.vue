@@ -1,6 +1,6 @@
 <template>
-  <div class="mk-page">
-    <div class="mk-status" :class="`mk-status--${barTone}`">
+  <div :class="embedded ? 'mk-page--fill hc-embedded' : 'mk-page'">
+    <div v-if="!embedded" class="mk-status" :class="`mk-status--${barTone}`">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">健康中心</strong>
       <span class="mk-status__sep"></span>
@@ -44,8 +44,9 @@
     </div>
 
     <template v-else-if="displayReport">
-      <!-- 面向运营的一句话引导（与健康检查/漂移等折叠 section 同形态：mk-card + hc-details 折叠头） -->
-      <section class="mk-card">
+      <!-- 面向运营的一句话引导（与健康检查/漂移等折叠 section 同形态：mk-card + hc-details 折叠头）
+           单视图模式仅在健康检查 tab 展示，避免「漂移/对账」tab 出现全量导语 -->
+      <section v-if="showView('health')" class="mk-card">
         <details>
           <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">本页看什么？</h3>
@@ -69,7 +70,7 @@
           :tone="healthAbnormal > 0 ? 'warn' : 'ok'"
           clickable
           :title="`${displayReport.health.summary.total} 项健康检查，${healthAbnormal} 项异常`"
-          @click="scrollTo('health')"
+          @click="kpiGo('health')"
         />
         <MkKpi
           :label="TERMS.driftContract"
@@ -78,7 +79,7 @@
           :tone="driftActionable > 0 ? 'warn' : 'ok'"
           clickable
           :title="driftCardTitle"
-          @click="scrollTo('drift')"
+          @click="kpiGo('drift')"
         />
         <MkKpi
           :label="TERMS.reconcile"
@@ -87,7 +88,7 @@
           :tone="reconAbnormal > 0 ? 'warn' : 'ok'"
           clickable
           :title="reconCardTitle"
-          @click="scrollTo('recon')"
+          @click="kpiGo('recon')"
         />
         <MkKpi
           label="已上线"
@@ -96,12 +97,12 @@
           tone="ok"
           clickable
           title="完成度已达 live 档的技能数"
-          @click="scrollTo('completion')"
+          @click="kpiGo('completion')"
         />
       </div>
 
       <!-- 健康检查 -->
-      <section class="mk-card" id="hc-health">
+      <section v-if="showView('health')" class="mk-card" id="hc-health">
         <details open>
           <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">健康检查</h3>
@@ -158,7 +159,7 @@
       </section>
 
       <!-- 漂移：配置与生效不一致（改完配置没同步/发布，普通运营可理解为「配置改了但没生效」） -->
-      <section v-if="driftAny" class="mk-card" id="hc-drift">
+      <section v-if="showView('drift') && driftAny" class="mk-card" id="hc-drift">
         <details open>
           <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">{{ TERMS.driftContract }}</h3>
@@ -188,13 +189,13 @@
       </section>
 
       <!-- 技能对账（SkillReconciliation 自身即是 mk-card，外层仅作滚动锚点，避免卡中卡） -->
-      <section id="hc-recon" class="hc-anchor">
+      <section v-if="showView('recon')" id="hc-recon" class="hc-anchor">
         <!-- @openSkill 此前未绑定 → 对账行点击无反应（审计 附 A #5）。绑定到全局 skill 抽屉。 -->
         <SkillReconciliation ref="reconRef" @openSkill="openSkillDrawer" />
       </section>
 
-      <!-- 完成度分布 -->
-      <section class="mk-card" id="hc-completion">
+      <!-- 完成度分布（归属对账视图：完成度即对账 completion 映射的来源） -->
+      <section v-if="showView('recon')" class="mk-card" id="hc-completion">
         <details>
           <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">完成度分布</h3>
@@ -237,6 +238,15 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import SkillReconciliation from './SkillReconciliation.vue'
+
+/* ---------- 宿主契约（skills 宿主 tab 化）：view 单选视图 + embedded 嵌入形态 ----------
+   - 缺省 view = 原全量页（健康检查 + 漂移 + 对账 + 完成度），保证独立挂载/测试行为不变；
+   - view=health|drift|recon = 仅渲染对应区块（宿主 4 tab 之一），不再嵌套 pills（R1）；
+   - embedded：隐藏自身状态条（计数由宿主状态条承载）、上报 @count、refresh 供宿主刷新。 */
+type HcView = 'health' | 'drift' | 'recon'
+const props = withDefaults(defineProps<{ view?: HcView; embedded?: boolean }>(), { embedded: false })
+const emit = defineEmits<{ (e: 'count', n: number): void; (e: 'navigate', v: HcView): void }>()
+const showView = (v: HcView) => !props.view || props.view === v
 
 const reconRef = ref<{ openPanel?: () => void } | null>(null)
 
@@ -297,6 +307,18 @@ function scrollTo(id: string) {
   el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
+/** 概要卡跳转：本视图内锚点滚动；跨视图（宿主 tab 化后）改为通知宿主切换 tab */
+function kpiGo(target: 'health' | 'drift' | 'recon' | 'completion') {
+  if (target === 'completion') {
+    // 完成度归属对账视图
+    if (props.view && props.view !== 'recon') { emit('navigate', 'recon'); return }
+    scrollTo('completion')
+    return
+  }
+  if (props.view && props.view !== target) { emit('navigate', target); return }
+  scrollTo(target)
+}
+
 const router = useRouter()
 const route = useRoute()
 
@@ -330,6 +352,17 @@ const reconciliation = computed<HealthReconciliationSummary>(
 const distribution = computed(() => displayReport.value?.completion.distribution || {})
 const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
 const topAbnormal = computed(() => healthAbnormal.value + (displayReport.value?.global.abnormalSkills ?? 0))
+
+/** 宿主域计数（embedded 消费）：按当前视图上报「需关注」项数，供宿主状态条展示 */
+watch(
+  [displayReport, () => props.view],
+  () => {
+    const v = props.view
+    const n = v === 'drift' ? driftActionable.value : v === 'recon' ? reconAbnormal.value : topAbnormal.value
+    emit('count', n)
+  },
+  { immediate: true }
+)
 
 /** 客户端聚合严重度计数（服务端 summary 不输出 ok/warn/error 明细） */
 const counts = computed(() => {
@@ -504,6 +537,8 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
+/* 嵌入模式（skills 宿主 flex 列内）：占满剩余高度并内滚（对齐 fb-embedded / add-embedded 先例） */
+.hc-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* 概要 KPI（共享 MkKpi 组件：标签 + 数字 + 副行，点击跳转锚点） */
 .hc-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 /* 首载骨架（R3）：形状由 MkSkeleton 提供，本类只补占位布局与间距 */

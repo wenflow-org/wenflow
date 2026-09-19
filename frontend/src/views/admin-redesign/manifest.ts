@@ -10,6 +10,10 @@
  *
  * 阶段 2（2026-09-19）：虚拟学习者独立成「虚拟实验」组（个体实验 / 规模实验），
  * 「批量实验」由 virtual-learners 的 tab 提升为独立场景；侧栏 15 项/7 组。
+ *
+ * 阶段 3（2026-09-19）：健康中心折入「Skill 运行」（skills）宿主 tab：
+ * Skill 运行 · 健康检查 · 漂移 · 对账；health-center 场景下线（URL 重定向到 ?tab=health）；
+ * 侧栏由 15 项/7 组收敛为 14 项/7 组。
  */
 
 export interface MockSceneDef {
@@ -33,11 +37,11 @@ export const MOCK_SCENES: MockSceneDef[] = [
   // 虚拟实验组：虚拟学习者实验室独立成组（个体实验 / 规模实验）
   { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟实验', glyph: '拟' },
   { id: 'batch-experiments', label: '批量实验', group: '虚拟实验', glyph: '批' },
-  // Skill 组：本阶段保持不变（编排结构 / Skill 运行 / Prompt 评估 / 健康中心）
+  // Skill 组：阶段 3 收敛——健康中心折入「Skill 运行」宿主 tab（?tab=health/drift/recon），
+  // 场景下线，Skill 组由 4 项收敛为 3 项（orchestrator · skills · prompt-eval）
   { id: 'orchestrator', label: '编排结构', group: 'Skill', glyph: '流' },
   { id: 'skills', label: 'Skill 运行', group: 'Skill', glyph: '能' },
   { id: 'prompt-eval', label: 'Prompt 评估', group: 'Skill', glyph: '评' },
-  { id: 'health-center', label: '健康中心', group: 'Skill', glyph: '健' },
   // 观测组：Token 成本并入执行日志第三 tab（成本分析）；记忆与复习移出后只剩日志双子页
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志' },
   { id: 'audit-logs', label: '审计日志', group: '观测', glyph: '审' },

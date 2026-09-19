@@ -146,7 +146,7 @@ async function mountRecon() {
     history: createMemoryHistory(),
     routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
   });
-  await router.push('/admin/health-center');
+  await router.push('/admin/skills?tab=recon');
   await router.isReady();
   const wrapper = mount(SkillReconciliation, { global: { plugins: [router] } });
   await flushPromises();
@@ -216,6 +216,53 @@ describe('Skill 目录 P1 修复批', () => {
     const recRowTexts = wrapper.findAll('.sk-rec-table tbody tr.sk-row').map((r) => r.text());
     expect(recRowTexts.some((t) => t.includes('live-a'))).toBe(false);
     expect(wrapper.findAll('.sk-rec-table tbody tr.sk-row').some((r) => r.text().includes('未注册'))).toBe(true);
+    wrapper.unmount();
+  });
+});
+
+/* 阶段 3 导航收敛：健康中心折入 skills 宿主 tab（唯一 tab 控件，?tab= 双向同步） */
+async function mountHost(path: string) {
+  dataSource.value = 'live';
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+  });
+  await router.push(path);
+  await router.isReady();
+  const wrapper = mount(Skills, { global: { plugins: [router] } });
+  await flushPromises();
+  await nextTick();
+  await flushPromises();
+  return { wrapper, router };
+}
+
+describe('Skill 宿主 tab 化（健康中心折入）', () => {
+  beforeEach(() => {
+    getReconciliationMock.mockReset();
+    dataSource.value = 'live';
+    liveSkillProfiles.value = [];
+    liveSkillStatsMap.value = null;
+  });
+
+  it('?tab=health 落在健康检查 tab：4 个 tab 齐全且唯一 tab 控件', async () => {
+    const { wrapper } = await mountHost('/admin/skills?tab=health');
+    const tabs = wrapper.findAll('.skills-tabs .mk-pill');
+    expect(tabs.map((t) => t.text())).toEqual(['Skill 运行', '健康检查', '漂移', '对账']);
+    expect(tabs.find((t) => t.text() === '健康检查')!.classes()).toContain('mk-pill--active');
+    // 嵌入的健康中心渲染（隐藏自身状态条 → 由宿主承载）
+    expect(wrapper.find('.hc-embedded').exists()).toBe(true);
+    expect(wrapper.find('.hc-embedded .mk-status').exists()).toBe(false);
+    // 非 run tab 不渲染运行目录表
+    expect(wrapper.find('.sk-table').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('点击「对账」切换 tab 并同步 ?tab=recon', async () => {
+    const { wrapper, router } = await mountHost('/admin/skills');
+    await wrapper.findAll('.skills-tabs .mk-pill').find((t) => t.text() === '对账')!.trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.query.tab).toBe('recon');
+    expect(wrapper.find('.hc-embedded').exists()).toBe(true);
     wrapper.unmount();
   });
 });

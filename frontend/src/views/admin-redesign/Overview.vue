@@ -36,7 +36,7 @@
       class="ov-health"
       :class="`ov-health--${healthTone}`"
       :title="'查看健康中心完整检查清单'"
-      @click="jump('health-center')"
+      @click="jump('skills', 'health')"
     >
       <span class="ov-health__dot" aria-hidden="true"></span>
       <strong class="ov-health__title">{{ healthText }}</strong>

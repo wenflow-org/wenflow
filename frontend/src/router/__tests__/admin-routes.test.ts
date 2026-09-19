@@ -154,10 +154,18 @@ describe('Admin 主路由解析', () => {
     expect(router.currentRoute.value.params.page).toBe('skill-workbench');
   });
 
-  it('/admin/health-center → AdminConsole 场景（健康中心独立页）', async () => {
-    await router.push('/admin/health-center');
+  it('/admin/health-center → /admin/skills?tab=health（健康中心折入 Skill 宿主）', async () => {
+    await router.push('/admin/health-center?refresh=1');
     expect(router.currentRoute.value.name).toBe('AdminConsole');
-    expect(router.currentRoute.value.params.page).toBe('health-center');
+    expect(router.currentRoute.value.params.page).toBe('skills');
+    expect(router.currentRoute.value.query.tab).toBe('health');
+    expect(router.currentRoute.value.query.refresh).toBe('1');
+  });
+
+  it('/admin/health → /admin/skills?tab=health（直觉 URL 兼容）', async () => {
+    await router.push('/admin/health');
+    expect(router.currentRoute.value.params.page).toBe('skills');
+    expect(router.currentRoute.value.query.tab).toBe('health');
   });
 
   it('未知 page 仍解析到 AdminConsole（组件内回退 overview）', async () => {

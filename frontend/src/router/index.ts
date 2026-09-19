@@ -262,8 +262,13 @@ const routes: RouteRecordRaw[] = [
   },
   {
     // 直链兼容：用户直觉 URL → 实际 scene ID（manifest 命名与直觉 URL 不一致时兜底）
+    // 阶段 3（2026-09-19）：健康中心折入「Skill 运行」宿主 tab（保留来路 query）
     path: '/admin/health',
-    redirect: '/admin/health-center'
+    redirect: (to) => ({ path: '/admin/skills', query: { ...to.query, tab: 'health' } })
+  },
+  {
+    path: '/admin/health-center',
+    redirect: (to) => ({ path: '/admin/skills', query: { ...to.query, tab: 'health' } })
   },
   {
     path: '/admin/traces',

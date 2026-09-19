@@ -1,28 +1,44 @@
 <template>
-  <div class="mk-page mk-page--fill">
-    <div class="mk-status" :class="statusTone">
+  <div class="mk-page mk-page--fill skills-host">
+    <div class="mk-status" :class="hostTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">Skill 运行</strong>
       <span class="mk-status__sep"></span>
-      <MkLoading v-if="liveLoading && !cards.length" inline text="Skill 加载中…" /><span v-else class="mk-status__meta" :title="skillCountHint">共 {{ cards.length }} 个 Skill</span>
-      <span v-if="overallRate != null" class="mk-status__meta" :class="rateNumTone === 'bad' ? 'mk-status__meta--bad' : rateNumTone === 'warn' ? 'mk-status__meta--warn' : ''" :title="'窗口内成功率 = 成功调用 / 总调用'">
-        成功率 {{ overallRate }}%<template v-if="totalCalls">（{{ okCalls }}/{{ totalCalls }}）</template>
-      </span>
-      <button
-        v-if="errorCount > 0"
-        type="button"
-        class="mk-status__meta-link"
-        :class="{ 'mk-status__meta-link--on': onlyAttention }"
-        :title="'窗口内出现失败调用的节点数；点击筛选「仅看需关注」'"
-        @click="onlyAttention = !onlyAttention"
-      >失败节点 {{ errorCount }}</button>
-      <span v-if="idleCount > 0" class="mk-status__meta" title="窗口内无调用的 Skill 数">空闲 {{ idleCount }}</span>
-      <span v-if="avgLatencyText !== '—'" class="mk-status__meta" title="成功调用平均耗时（按调用量加权）">平均耗时 {{ avgLatencyText }}</span>
+      <template v-if="tab === 'run'">
+        <MkLoading v-if="liveLoading && !cards.length" inline text="Skill 加载中…" /><span v-else class="mk-status__meta" :title="skillCountHint">共 {{ cards.length }} 个 Skill</span>
+        <span v-if="overallRate != null" class="mk-status__meta" :class="rateNumTone === 'bad' ? 'mk-status__meta--bad' : rateNumTone === 'warn' ? 'mk-status__meta--warn' : ''" :title="'窗口内成功率 = 成功调用 / 总调用'">
+          成功率 {{ overallRate }}%<template v-if="totalCalls">（{{ okCalls }}/{{ totalCalls }}）</template>
+        </span>
+        <button
+          v-if="errorCount > 0"
+          type="button"
+          class="mk-status__meta-link"
+          :class="{ 'mk-status__meta-link--on': onlyAttention }"
+          :title="'窗口内出现失败调用的节点数；点击筛选「仅看需关注」'"
+          @click="onlyAttention = !onlyAttention"
+        >失败节点 {{ errorCount }}</button>
+        <span v-if="idleCount > 0" class="mk-status__meta" title="窗口内无调用的 Skill 数">空闲 {{ idleCount }}</span>
+        <span v-if="avgLatencyText !== '—'" class="mk-status__meta" title="成功调用平均耗时（按调用量加权）">平均耗时 {{ avgLatencyText }}</span>
+      </template>
+      <template v-else>
+        <span class="mk-status__meta" :class="hcCount > 0 ? 'mk-status__meta--bad' : ''">{{ hcStatusLabel }}</span>
+      </template>
       <span class="mk-status__actions">
-        <span class="mk-status__meta">{{ rangeLabel }}</span>
+        <span v-if="tab === 'run'" class="mk-status__meta">{{ rangeLabel }}</span>
+        <button v-else type="button" class="mk-status__action" :disabled="hcRefreshing" @click="refreshHc">{{ hcRefreshing ? '刷新中…' : '刷新' }}</button>
       </span>
     </div>
 
+    <!-- 视图切换 pills（唯一的 tab 控件）：Skill 运行 / 健康检查 / 漂移 / 对账（健康中心折入） -->
+    <div class="mk-pills skills-tabs">
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'run' }" @click="switchTab('run')">Skill 运行</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'health' }" @click="switchTab('health')">健康检查</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'drift' }" @click="switchTab('drift')">漂移</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'recon' }" @click="switchTab('recon')">对账</button>
+    </div>
+
+    <!-- ===== Tab1: Skill 运行（原 Skills.vue 全量内容） ===== -->
+    <template v-if="tab === 'run'">
     <!-- 主视图切换（统一样板：状态条正下方的独立一行，按内容宽度、左对齐） -->
     <div class="mk-pills" role="tablist" aria-label="视图模式切换">
       <button type="button" role="tab" class="mk-pill" :aria-selected="view === 'list'" :class="{ 'mk-pill--active': view === 'list' }" @click="view = 'list'">列表</button>
@@ -198,14 +214,24 @@
         :showTotal="true"
       />
     </div>
+    </template>
 
-    
+    <!-- ===== Tab2-4: 健康检查 / 漂移 / 对账（HealthCenter embedded，同一报表，view 切换不重挂载） ===== -->
+    <HealthCenter
+      v-else
+      ref="hcRef"
+      :view="hcView"
+      embedded
+      @count="hcCount = $event"
+      @navigate="switchTab"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { skillStatOf, openSkillDrawer, isLive } from './store'
+import { useRoute, useRouter } from 'vue-router'
+import { skillStatOf, openSkillDrawer, isLive, intent } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
 import { COMPLETION_META, completionMetaOf } from './glossaryMeta'
@@ -218,7 +244,60 @@ import { useIsNarrow } from './useIsNarrow'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import HealthCenter from './HealthCenter.vue'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
+
+/* ================= 宿主：Skill 运行 · 健康检查 · 漂移 · 对账（阶段 3 导航收敛） =================
+   健康中心由独立场景折入本宿主 tab（侧栏 15→14 项）；?tab= 双向同步，深链/刷新/前进后退可寻址；
+   唯一 tab 控件 = 本行 pills（健康中心内不再嵌套 pills，R1）。 */
+const SKILLS_TABS = ['run', 'health', 'drift', 'recon'] as const
+type SkillsTab = (typeof SKILLS_TABS)[number]
+const tab = ref<SkillsTab>('run')
+const route = useRoute()
+const router = useRouter()
+const hcRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
+const hcCount = ref(0)
+const hcRefreshing = ref(false)
+/** 健康中心嵌入视图：run tab 未激活时才挂载，run 不会出现 */
+const hcView = computed<'health' | 'drift' | 'recon'>(() => (tab.value === 'run' ? 'health' : tab.value))
+const hcStatusLabel = computed(() => {
+  if (tab.value === 'health') return `健康检查异常 ${hcCount.value}`
+  if (tab.value === 'drift') return `需处理 ${hcCount.value}`
+  return `对账异常 ${hcCount.value}`
+})
+watch(
+  () => route?.query?.tab,
+  (t) => {
+    const v = typeof t === 'string' && (SKILLS_TABS as readonly string[]).includes(t) ? (t as SkillsTab) : null
+    if (v && v !== tab.value) tab.value = v
+    else if (!v && tab.value !== 'run') tab.value = 'run'
+  },
+  { immediate: true }
+)
+function switchTab(t: SkillsTab) {
+  tab.value = t
+  if (route && router && route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
+}
+/* 跨页深链（如总览「健康中心」入口）：intent.tab=health → 落在健康检查 tab */
+watch(
+  () => intent.tab,
+  (t) => {
+    if (t && (SKILLS_TABS as readonly string[]).includes(t)) {
+      tab.value = t as SkillsTab
+      intent.tab = ''
+    }
+  },
+  { immediate: true }
+)
+async function refreshHc() {
+  if (hcRefreshing.value) return
+  hcRefreshing.value = true
+  try {
+    await hcRef.value?.refresh?.(true)
+  } finally {
+    hcRefreshing.value = false
+  }
+}
 
 type Health = 'ok' | 'idle' | 'error'
 /** 目录表行（档案 + 实时统计 + 健康态） */
@@ -383,6 +462,8 @@ watch(filtered, () => {
 })
 
 const statusTone = computed(() => (errorCount.value ? 'mk-status--bad' : activeCount.value ? 'mk-status--ok' : 'mk-status--muted'))
+/** 宿主状态条基调：run 沿用原三态；健康/漂移/对账按各自需关注计数（>0 → bad） */
+const hostTone = computed(() => (tab.value === 'run' ? statusTone.value : hcCount.value > 0 ? 'mk-status--bad' : 'mk-status--ok'))
 
 const successRate = (s: { calls: number; errors: number }) =>
   s.calls ? `${(((s.calls - s.errors) / s.calls) * 100).toFixed(0)}%` : '—'
@@ -461,6 +542,11 @@ function recGateDetail(completion: SkillCompletion): string {
 </script>
 
 <style scoped>
+/* ================= 宿主布局（tab 宿主：运行 tab 内滚；嵌入子页占满剩余高度） ================= */
+.skills-tabs { width: fit-content; }
+/* 子组件根节点（.mk-page--fill + embedded 类）：占满剩余高度 */
+.skills-host > .hc-embedded { flex: 1 1 auto; min-height: 0; }
+
 /* 列表视图 */
 .sk-row { cursor: pointer; }
 .sk-cell { display: flex; align-items: center; gap: 10px; }
