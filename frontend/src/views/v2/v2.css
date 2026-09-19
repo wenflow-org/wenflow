@@ -2,7 +2,7 @@
 
 /* ====== 全局变量定义在 :root，所有元素可继承 ====== */
 /* token 归一口径（2026-09-19）：中性色/结构项以 --mk-* 为准（admin 设计系统），
-   本块只做别名转接；语义色（blue/green/red/amber/accent/cyan）暂保留待最后一批统一。 */
+   本块只做别名转接；语义色同样以 mk 为准（blue/green/amber/red/accent），blue-deep/cyan 及 -ink 变体因 mk 无对应档暂留字面量。 */
 :root {
   --ink: var(--mk-ink);
   --muted: var(--mk-muted);
@@ -10,13 +10,13 @@
   --line: var(--mk-line);
   --canvas: var(--mk-bg);
   --surface: var(--mk-surface);
-  --blue: #3478f6;
+  --blue: var(--mk-blue);
   --blue-deep: #1f57cc;
-  --accent: #8d6bff;
+  --accent: var(--mk-purple);
   --cyan: #43b0d8;
-  --green: #1e9e58;
-  --amber: #f4aa46;
-  --red: #ef7578;
+  --green: var(--mk-green);
+  --amber: var(--mk-amber);
+  --red: var(--mk-red);
   --bubble-ai-bg: #f2f6fc;
   --supplement-bg: #fafcff;
   --v2nav-bg: rgba(255, 255, 255, 0.86);
