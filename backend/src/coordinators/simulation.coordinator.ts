@@ -2070,11 +2070,20 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       throw new Error('无法推进 Path：Goal 对话缺少正式诉求，请先恢复 Goal 对话');
     }
     const pathAgentOverrides = getSessionPromptOverrides(session)?.pathAgent;
+    // 负荷画像：虚拟学习者的人设里有 availableTime / cognitiveLoadTolerance（自由文本），
+    // 透传给 derivePlanningHints 收紧"紧预算/低耐受"者的体量（里程碑数/单任务分钟/周期）。
+    // 真实用户链路不构造该字段 ⇒ 体量推导行为不变。
+    const personaData = safeJsonParse<Record<string, unknown>>(session.virtual_learner_profiles.profile, {});
+    const learnerLoadProfile = {
+      availableTime: typeof personaData.availableTime === 'string' ? personaData.availableTime : null,
+      loadTolerance: typeof personaData.cognitiveLoadTolerance === 'string' ? personaData.cognitiveLoadTolerance : null,
+    };
     const request: GoalPathRequest = {
       userId: session.userId,
       sourceConversationId: session.goalConversationId as string,
       source: 'goal',
       rawGoal: pathRawGoal.rawGoal,
+      learnerLoadProfile: learnerLoadProfile.availableTime || learnerLoadProfile.loadTolerance ? learnerLoadProfile : null,
       visibleSummary: buildGoalPathVisibleSummary({
         understanding: collectedData.understanding || {},
         confirmedProposal: collectedData.confirmedProposal || null,

@@ -105,6 +105,34 @@ describe('path.coordinator normalizedInputV1 配置式装配', () => {
     expect(ni.planningHints.paceSignal).toBeDefined()
   })
 
+  it('learnerLoadProfile 透传并真正收紧体量（虚拟学习者负荷接线）', async () => {
+    const tightenedInput = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+      learnerLoadProfile: { availableTime: 'minimal', loadTolerance: '低——步骤一多就烦' },
+    } as any)
+    const baseInput = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+    } as any)
+
+    const tightened = tightenedInput.userProfile.normalizedInput
+    const base = baseInput.userProfile.normalizedInput
+
+    // 1) 画像本身透传进 normalizedInput
+    expect(tightened.learnerLoadProfile).toEqual({ availableTime: 'minimal', loadTolerance: '低——步骤一多就烦' })
+    // 2) 未传时不注入（真实用户链路行为不变）
+    expect(base.learnerLoadProfile ?? null).toBeNull()
+    // 3) 真正影响到 planningHints（收紧紧预算/低耐受）
+    expect(tightened.planningHints.subtaskMinutesRange[1]).toBeLessThanOrEqual(45)
+    expect(tightened.planningHints.subtaskMinutesRange[1])
+      .toBeLessThanOrEqual(base.planningHints.subtaskMinutesRange[1])
+    expect(tightened.planningHints.maxWeeks).toBeLessThanOrEqual(2)
+    expect(tightened.planningHints.maxWeeks).toBeLessThanOrEqual(base.planningHints.maxWeeks)
+  })
+
   it('handoff 缺失字段时回退 visibleSummary（不丢数据）', async () => {
     const partial = await pathOrchestrator.previewNormalizedGoalInput({
       userId: 'user-1',

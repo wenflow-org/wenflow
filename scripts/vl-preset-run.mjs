@@ -26,6 +26,8 @@ const RETRIES = Math.max(1, Number(arg('retries', 3)) || 3);
 const BACKOFF = Math.max(0, Number(arg('backoff', 60)) || 60);   // 秒，逐次翻倍
 const GAP = Math.max(0, Number(arg('gap', 5)) || 5);             // 秒，学习者之间的间隔
 const DRY = process.argv.includes('--dry-run');
+/** 只跑指定学习者（逗号分隔的姓名或 presetKey），便于做"改动前后"对比验收。 */
+const ONLY = String(arg('only', '') || '').split(',').map((s) => s.trim()).filter(Boolean);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- 基准学习者 + 现状 ----------
@@ -37,11 +39,15 @@ const presets = db.prepare(
     ORDER BY u.name`,
 ).all();
 const q1 = (sql, p = []) => db.prepare(sql).get(...p);
-const state = presets.map((r) => {
+const stateAll = presets.map((r) => {
   const sessions = q1('SELECT COUNT(*) c FROM virtual_sessions WHERE userId=?', [r.userId])?.c || 0;
   const lp = q1('SELECT id, createdAt FROM learning_paths WHERE userId=? ORDER BY updatedAt DESC LIMIT 1', [r.userId]);
   return { ...r, sessions, pathId: lp?.id || null, pathCreatedAt: lp?.createdAt || null };
 });
+const state = ONLY.length
+  ? stateAll.filter((s) => ONLY.includes(s.name) || ONLY.includes(s.presetKey))
+  : stateAll;
+if (ONLY.length) console.log(`--only 过滤：${state.map((s) => s.name).join('、') || '(无匹配)'}`);
 console.log(`基准学习者 ${presets.length} 人｜并发 ${CONCURRENCY}｜每人最多重试 ${RETRIES} 次（退避 ${BACKOFF}s 起，翻倍）｜间隔 ${GAP}s${DRY ? '（DRY RUN）' : ''}`);
 if (DRY) {
   for (const s of state) console.log(`  ${String(s.name).padEnd(8)} ${String(s.presetKey).padEnd(32)} 会话=${s.sessions} 路径=${s.pathId ? 'Y(' + new Date(Number(s.pathCreatedAt)).toISOString().slice(5, 16) + ')' : 'N'}`);
