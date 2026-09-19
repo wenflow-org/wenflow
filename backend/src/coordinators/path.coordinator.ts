@@ -5,7 +5,7 @@ import {
   runBackgroundTask
 } from '../services/background-task-tracker.service';
 import learningService from '../services/learning/learning.service';
-import { buildFramedNormalizedInput } from '../services/learning/path-planning-hints';
+import { buildFramedNormalizedInput, type LearnerLoadProfile } from '../services/learning/path-planning-hints';
 import {
   getPathAgentInputConfig,
   type PathAgentInputConfig
@@ -104,6 +104,12 @@ interface NormalizedPathInputV1 {
   } | null;
   /** 前置知识探测结果（goal 层透传，path-planning 读入 prerequisiteTree.knownConcepts） */
   prerequisiteCheckResults?: PrerequisiteCheckResult[];
+  /**
+   * 学习者负荷画像（可用时间 / 负荷耐受文本）。仅**虚拟学习者**链路会带（来自
+   * `virtual_learner_profiles.profile`）；真实用户缺省 `null` ⇒ 体量推导行为不变。
+   * 由 `derivePlanningHints` 消费以收紧紧预算/低耐受者的里程碑数、单任务分钟与周期。
+   */
+  learnerLoadProfile?: LearnerLoadProfile | null;
 }
 
 export interface GoalPathRequest {
@@ -126,6 +132,8 @@ export interface GoalPathRequest {
   prerequisiteCheckResults?: PrerequisiteCheckResult[] | null;
   /** goal→path 配置式值流转字段（routings 表 goal-agent 交付行抽取，装配时优先于 visibleSummary） */
   goalHandoffFields?: Record<string, any> | null;
+  /** 学习者负荷画像（虚拟学习者链路注入 `availableTime`/`cognitiveLoadTolerance`；真实用户不传 ⇒ 行为不变） */
+  learnerLoadProfile?: LearnerLoadProfile | null;
   systemPromptOverrides?: {
     pathAgent?: string;
   };
@@ -193,7 +201,8 @@ class PathCoordinator {
   private buildNormalizedInputV1(
     handoffFields: Record<string, any> | null,
     visibleSummary: GoalPathVisibleSummary | null | undefined,
-    rawGoal: string | null | undefined
+    rawGoal: string | null | undefined,
+    learnerLoadProfile: LearnerLoadProfile | null = null
   ): NormalizedPathInputV1 {
     const pick = (handoffKey: string): any => {
       const value = handoffFields?.[handoffKey];
@@ -255,6 +264,9 @@ class PathCoordinator {
         scopeSize: str('confirmedProposal.scope_size', visibleSummary?.confirmedProposal?.scopeSize ?? null),
       } : null,
       timeDimensions: visibleSummary?.timeDimensions ?? null,
+      learnerLoadProfile: learnerLoadProfile && (learnerLoadProfile.availableTime || learnerLoadProfile.loadTolerance)
+        ? learnerLoadProfile
+        : null,
     };
   }
   private buildNormalizedGoalInput(input: GoalPathRequest, config: PathAgentInputConfig): PathGenerationInput {
@@ -316,7 +328,8 @@ class PathCoordinator {
     const normalizedInputV1 = this.buildNormalizedInputV1(
       goalFinalPayload.goalHandoffFields || null,
       visibleSummary,
-      goalFinalPayload.rawGoal
+      goalFinalPayload.rawGoal,
+      input.learnerLoadProfile ?? null
     );
     if (goalFinalPayload.prerequisiteCheckResults?.length) {
       normalizedInputV1.prerequisiteCheckResults = goalFinalPayload.prerequisiteCheckResults;
