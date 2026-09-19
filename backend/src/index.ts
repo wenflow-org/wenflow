@@ -230,6 +230,7 @@ import adminMemoryReviewRoutes from './routes/admin/memory-review';
 import adminAnnouncementsRoutes from './routes/admin/announcements';
 import announcementsRoutes from './routes/announcements';
 import adminVirtualLearnersRoutes from './routes/admin/virtual-learners';
+import adminModelRegistryRoutes from './routes/admin/model-registry';
 import adminSessionConsoleRoutes from './routes/admin/session-console';
 import adminVirtualQuickLearnRoutes from './routes/admin/virtual-quick-learn';
 import adminBatchExperimentsRoutes from './routes/admin/batch-experiments';
@@ -360,6 +361,7 @@ app.use('/api/admin/memory-traces', ...adminRouteMiddleware, adminMemoryTracesRo
 app.use('/api/admin/memory-review', ...adminRouteMiddleware, adminMemoryReviewRoutes);
 app.use('/api/admin/goal-conversations', ...adminRouteMiddleware, adminGoalConversationsRoutes);
 app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualLearnersRoutes);
+app.use('/api/admin/model-registry', ...adminRouteMiddleware, adminModelRegistryRoutes);
 app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualQuickLearnRoutes);
 app.use('/api/admin/batch-experiments', ...adminRouteMiddleware, adminBatchExperimentsRoutes);
 app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminProjectionAccessGrantsRoutes);
