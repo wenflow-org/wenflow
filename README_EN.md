@@ -129,12 +129,12 @@ The admin panel lives at `/admin` with 18 scene pages (grouped by the sidebar), 
 
 - **Overview**: platform overview — current system health, the model with the highest failure rate, and items requiring investigation
 - **Learners**: people & learners (accounts / learning state tabs) — learning state, risk and fatigue, with manual snapshot recompute; learning sessions (teaching sessions / goal conversations / learning paths tabs); virtual learners
-- **Skill Management**: orchestration structure (stage lanes + topology stats), Skill runtime (success rate, failing nodes, idle and average-latency monitoring), Skill design page (secondary page: protocol editing, compile, gate checks, publish, rollback, version diff, trial runs — including one-click rerun of the last real call), Prompt evaluation, health center
+- **Skill Management**: orchestration structure (stage lanes + field data journey / logic diagram + call usage), Skill runtime (success rate, failing nodes, idle and average-latency monitoring), Skill design page (secondary page: protocol editing, compile, gate checks, publish, rollback, version diff, trial runs — including one-click rerun of the last real call), Prompt evaluation, health center
 - **Operations**: ops hub (todo workbench), achievements, feedback center, notifications & announcements (announce / in-app tabs)
 - **Configuration**: models & access (routing / connectivity / network boundary / retry & timeout), add-ons, session security, system tools (ops tools + data export)
 - **Observability**: execution logs (logs / trace waterfall / cost analysis tabs, with retry timelines, auto-refresh, export), audit logs
 
-> Note: the topology view has been merged into the "Orchestration Structure" page; the trace waterfall and token cost analysis are now tabs inside "Execution Logs"; batch experiments have been merged into "Virtual Learners". The authoritative scene list is `frontend/src/views/admin-redesign/manifest.ts`.
+> Note: the field data journey (logic diagram) has been merged into the "Orchestration Structure" page; the trace waterfall and token cost analysis are now tabs inside "Execution Logs"; batch experiments have been merged into "Virtual Learners". The authoritative scene list is `frontend/src/views/admin-redesign/manifest.ts`.
 
 ### Prompt Engineering (Prompt Lab v4, File-as-Truth)
 
