@@ -34,17 +34,7 @@
       </span>
     </div>
 
-    <!-- 学习者 / 批量实验 tab 切换 -->
-    <div class="mk-pills vl-tabs">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': vlTab === 'learners' }" @click="switchVlTab('learners')">学习者</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': vlTab === 'experiments' }" @click="switchVlTab('experiments')">批量实验</button>
-    </div>
-
-    <!-- ===== Tab2: 批量实验（嵌入 BatchExperiments 组件） ===== -->
-    <BatchExperiments v-if="vlTab === 'experiments'" embedded />
-
-    <!-- ===== Tab1: 学习者列表（默认） ===== -->
-    <template v-if="vlTab === 'learners'">
+    <!-- 学习者列表（「批量实验」已独立成页：/admin/batch-experiments） -->
     <!-- 正在运行：列出有活跃会话的虚拟学习者（折叠：默认前 8 个，展开看全部）；批量生成也在此显示 -->
     <VirtualLearnerRunningBar
       v-if="(runningSamples.length || pausedSamples.length || batchTask?.active) && isLive"
@@ -272,23 +262,17 @@
       @reclaim="onBatchReclaim"
     />
 
-    </template>
-
-    <!-- 一键回收 / 新建 / 启动 / 批量新建 / 单步测试：拆分为独立子组件（各自 Teleport 到 body）。
-         始终挂载（状态常驻），由 render 控制 Teleport 是否渲染——与拆分前「弹窗状态在父 setup、
-         渲染受 vlTab 条件模板约束」完全一致：在「批量实验」tab 触发的动作会保留状态，切回
-         「学习者」后按原样呈现。 -->
-    <VirtualLearnerReclaim ref="reclaimRef" :render="vlTab === 'learners'" @done="onReclaimDone" />
-    <VirtualLearnerCreate ref="createRef" :render="vlTab === 'learners'" />
-    <VirtualLearnerLaunch ref="launchRef" :render="vlTab === 'learners'" />
-    <VirtualLearnerBatchCreate ref="batchCreateRef" :render="vlTab === 'learners'" />
-    <VirtualLearnerPromptTest ref="promptRef" :render="vlTab === 'learners'" />
+    <!-- 一键回收 / 新建 / 启动 / 批量新建 / 单步测试：拆分为独立子组件（各自 Teleport 到 body）。 -->
+    <VirtualLearnerReclaim ref="reclaimRef" @done="onReclaimDone" />
+    <VirtualLearnerCreate ref="createRef" />
+    <VirtualLearnerLaunch ref="launchRef" />
+    <VirtualLearnerBatchCreate ref="batchCreateRef" />
+    <VirtualLearnerPromptTest ref="promptRef" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, reactive, watch, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
@@ -305,7 +289,6 @@ import SimulatedDaySettings from './SimulatedDaySettings.vue'
 import { useTableSort } from './useTableSort'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
-import BatchExperiments from './BatchExperiments.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import VirtualLearnerRunningBar from './VirtualLearnerRunningBar.vue'
 import VirtualLearnerReclaim from './VirtualLearnerReclaim.vue'
@@ -315,30 +298,6 @@ import VirtualLearnerBatchCreate from './VirtualLearnerBatchCreate.vue'
 import VirtualLearnerBatchBar from './VirtualLearnerBatchBar.vue'
 import VirtualLearnerPromptTest from './VirtualLearnerPromptTest.vue'
 import type { VirtualLearnerRow as Sample, BatchTask } from './virtualLearnersTypes'
-
-/* 学习者 / 批量实验 tab（批量实验为低频调试工具，折叠进本页） */
-const VL_TABS = ['learners', 'experiments'] as const
-type VlTab = (typeof VL_TABS)[number]
-const vlTab = ref<VlTab>('learners')
-const route = useRoute()
-const router = useRouter()
-/* URL → tab（合并宿主深链：/admin/virtual-learners?tab=experiments）；非法值回落 learners。
-   对齐 GoalConversations 的查询驱动约定，保证 /admin/batch-experiments 旧深链选中子视图。
-   组件单测可无 router 挂载，故 route/router 访问保持可选。 */
-watch(
-  () => route?.query.tab,
-  (t) => {
-    const v = typeof t === 'string' && (VL_TABS as readonly string[]).includes(t) ? (t as VlTab) : null
-    if (v && v !== vlTab.value) vlTab.value = v
-    else if (!v && vlTab.value !== 'learners') vlTab.value = 'learners'
-  },
-  { immediate: true }
-)
-function switchVlTab(t: VlTab) {
-  vlTab.value = t
-  /* URL 同步（?tab=…）：深链/刷新/前进后退可寻址；保留 view/id 等其它 query */
-  if (route && route.query.tab !== t) void router?.replace({ query: { ...route.query, tab: t } })
-}
 
 /* 头像色板：按名称哈希取色，同一人恒定同色 */
 const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#64748b']

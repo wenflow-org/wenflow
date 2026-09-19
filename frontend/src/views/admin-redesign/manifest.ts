@@ -7,6 +7,9 @@
  * - 模型与接入（api-config）成为 tab 宿主：接入与模型 · 外挂能力；addons 场景下线。
  * - 系统工具（ops-center）成为 tab 宿主：运维工具 · 数据导出 · 会话安全；session-security 场景下线。
  * - 记忆与复习（memory-review）由「观测」移入「教学」；Skill 组本阶段保持不变。
+ *
+ * 阶段 2（2026-09-19）：虚拟学习者独立成「虚拟实验」组（个体实验 / 规模实验），
+ * 「批量实验」由 virtual-learners 的 tab 提升为独立场景；侧栏 15 项/7 组。
  */
 
 export interface MockSceneDef {
@@ -23,12 +26,13 @@ export interface MockSceneDef {
 
 export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'overview', label: '平台总览', group: '总览', glyph: '览', pinned: true },
-  // 教学组：用户与学习者（?tab=account|state）、学习会话（?tab=teaching|conversations|paths）、
-  // 虚拟学习者（含批量实验 ?tab=experiments）、记忆与复习（阶段 1 由「观测」移入）
+  // 教学组：真实学习者 / 会话 / 复习（虚拟学习者已独立成组）
   { id: 'people', label: '用户与学习者', group: '教学', glyph: '人' },
   { id: 'sessions', label: '学习会话', group: '教学', glyph: '会' },
-  { id: 'virtual-learners', label: '虚拟学习者', group: '教学', glyph: '拟' },
   { id: 'memory-review', label: '记忆与复习', group: '教学', glyph: '忆' },
+  // 虚拟实验组：虚拟学习者实验室独立成组（个体实验 / 规模实验）
+  { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟实验', glyph: '拟' },
+  { id: 'batch-experiments', label: '批量实验', group: '虚拟实验', glyph: '批' },
   // Skill 组：本阶段保持不变（编排结构 / Skill 运行 / Prompt 评估 / 健康中心）
   { id: 'orchestrator', label: '编排结构', group: 'Skill', glyph: '流' },
   { id: 'skills', label: 'Skill 运行', group: 'Skill', glyph: '能' },

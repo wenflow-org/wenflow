@@ -353,19 +353,11 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.find('.vl-state-cell .mk-badge--bad').exists()).toBe(false);
   });
 
-  it('弹窗受 tab 条件渲染（拆分后语义保持）：批量实验 tab 触发的「新建」保留状态，切回学习者后呈现', async () => {
+  it('「新建」触发新建弹窗（阶段 2：批量实验已独立成页，弹窗不再受 tab 门控）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    // 切到「批量实验」tab
-    await findBtn(w, '批量实验').trigger('click');
-    await nextTick();
-    // 状态条「新建」触发弹窗：状态置位，但 Teleport 受 tab 条件约束不渲染
     const createBtn = w.findAll('button').find((b) => b.text() === '新建')!;
     await createBtn.trigger('click');
-    await nextTick();
-    expect(document.body.textContent).not.toContain('新建虚拟学习者');
-    // 切回「学习者」tab：弹窗按原样呈现（状态未丢）
-    await findBtn(w, '学习者').trigger('click');
     await nextTick();
     await nextTick();
     expect(document.body.textContent).toContain('新建虚拟学习者');

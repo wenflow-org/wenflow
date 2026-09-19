@@ -77,6 +77,7 @@ const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
 const UserDetail = asyncPage(() => import('./UserDetail.vue'));
 const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
 const MemoryReview = asyncPage(() => import('./MemoryReview.vue'));
+const BatchExperiments = asyncPage(() => import('./BatchExperiments.vue'));
 
 const components: Record<string, unknown> = {
   'overview': Overview,
@@ -92,6 +93,7 @@ const components: Record<string, unknown> = {
   'prompt-eval': PromptEval,
   'execution-logs': ExecLogs,
   'memory-review': MemoryReview,
+  'batch-experiments': BatchExperiments,
   'audit-logs': AuditLogs,
   'api-config': ApiConfig,
   // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，

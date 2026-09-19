@@ -38,7 +38,7 @@ describe('Shell 导航', () => {
   it('导航分组齐全且顺序稳定（总览为置顶入口，不进分组）', () => {
     const wrapper = mountShell();
     const groups = wrapper.findAll('.mshell__group-name').map((n) => n.text());
-    expect(groups).toEqual(['教学', 'Skill', '观测', '系统', '运营']);
+    expect(groups).toEqual(['教学', '虚拟实验', 'Skill', '观测', '系统', '运营']);
   });
 
   it('置顶入口（pinned）渲染在分组上方且无组标题', () => {

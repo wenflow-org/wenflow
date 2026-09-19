@@ -274,11 +274,9 @@ const routes: RouteRecordRaw[] = [
     path: '/admin/trace-waterfall',
     redirect: '/admin/execution-logs'
   },
-  {
-    // 批量实验已并入虚拟学习者（tab），旧 URL 兼容；深链需带 tab 交由宿主恢复子视图
-    path: '/admin/batch-experiments',
-    redirect: () => ({ path: '/admin/virtual-learners', query: { tab: 'experiments' } })
-  },
+  // 阶段 2（2026-09-19）：「批量实验」由 virtual-learners 的 tab 提升为独立场景。
+  // /admin/batch-experiments 直连由 /admin/:page 兜底渲染；旧的合并宿主深链
+  // /admin/virtual-learners?tab=experiments 不再需要（落到学习者列表，行为优雅降级）。
   {
     path: '/admin/models',
     redirect: '/admin/api-config'
