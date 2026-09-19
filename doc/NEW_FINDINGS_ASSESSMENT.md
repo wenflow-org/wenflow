@@ -93,3 +93,19 @@
 | 3 | **#1 真实侧时间信号** | 产品价值最高，但需先定阈值/行为 | 低-中（+决策） |
 
 > 三项都**不在**本次 Wave 1/Wave 2 的既定范围内，属验证过程中新发现；建议作为 Wave 2.5 处理。
+
+---
+
+## 5. 修复记录（2026-09-19，已完成）
+
+| 项 | 修复 | 提交 |
+|---|---|---|
+| **#2 路径失败无自愈** | `path-status` 增 `pathGeneration {pathId,status,retryAllowed,retryType,reason}`；失败**即时判终局**（不再空等 30 分钟）+ **有界自愈重试**（`core`/`stageDesign`，最多 2 次，新增 `POST /sessions/:id/retry-path-generation`） | `eb2f3bc9` |
+| **#3 教学回合失败终局化** | 步骤级有界重试（≤2 次，仅命中已知校验码）；耗尽 → **可续跑暂停**（`status` 保持 `running` + `runtimeStats.lastError` 标记 + `teaching-step-paused`），**明确禁止伪造教师回复**；harness 识别为 `retryable` 而非终局 | `f2548c7d` |
+| **#1 真实侧时间信号** | `controls.temporalGap = { daysSinceLastSession, isLongGap }`（同路径上一场 `endTime`，回退 recap 源；默认阈值 14 天，env `TEACHING_TEMPORAL_LONG_GAP_DAYS` 可覆盖）+ teaching-turn 一条"长间隔先回捞/更保守"规则；无前序会话则字段省略、行为不变 | `b6a6afd6` |
+
+**验证**：全仓 **327/327 套件、2808 例通过**；`tsc` / `eslint` / prompts 门禁全过。
+
+**残余与边界**
+- #3：`lessonsPerDay>1` 且当天前一节已成功时，暂停任务**次日**继续（不强制同日重跑）；`isTeachingTurnHiccupError` 为保守白名单，新校验码回落旧终局行为（有意，避免把真实契约错误当无限暂停）。
+- 三项均**未**在真实模型长跑中复测（仅单测 + 门禁）；收尾 E2E 受并发进程争用影响，未能稳定跑到终态。
