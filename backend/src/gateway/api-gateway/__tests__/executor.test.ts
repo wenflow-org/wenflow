@@ -18,7 +18,8 @@ jest.mock('../../../services/agentRequestTimeout.service', () => ({
 jest.mock('../../../config/models.config', () => ({
   supportsThinkingMode: () => false,
   getModelDefinition: jest.fn(() => undefined),
-  getModelFallbacks: jest.fn(() => [])
+  getModelFallbacks: jest.fn(() => []),
+  getModelMaxParallelRequests: jest.fn(() => null)
 }))
 
 jest.mock('../../../utils/safe-http', () => ({
@@ -36,6 +37,7 @@ import { logger } from '../../../utils/logger'
 import { safeHttpRequest, safeHttpStreamRequest } from '../../../utils/safe-http'
 import { getModelDefinition, getModelFallbacks } from '../../../config/models.config'
 import { resetDeploymentHealth } from '../deployment-health'
+import { getInFlight, resetModelConcurrency } from '../model-concurrency'
 
 const safeHttpRequestMock = safeHttpRequest as jest.Mock
 const streamRequestMock = safeHttpStreamRequest as jest.Mock
@@ -755,5 +757,51 @@ describe('APIExecutor P1：降级链 + 截断空输出', () => {
     expect(safeHttpRequestMock).toHaveBeenCalledTimes(2)
     expect(safeHttpRequestMock.mock.calls[0][1].body.thinking).toBeUndefined()
     expect(safeHttpRequestMock.mock.calls[1][1].body.thinking).toEqual({ type: 'disabled' })
+  })
+})
+
+describe('APIExecutor P2：本地并发闸门', () => {
+  const definitionMock = getModelDefinition as jest.Mock
+
+  beforeEach(() => {
+    jest.restoreAllMocks()
+    safeHttpRequestMock.mockReset()
+    streamRequestMock.mockReset()
+    agentLogCreate.mockReset().mockResolvedValue({})
+    attemptCreate.mockReset().mockResolvedValue({})
+    definitionMock.mockReturnValue(undefined)
+    resetModelConcurrency()
+  })
+
+  it('配置上限后，超出的并发请求不发往上游（与 429 同构 → 走失败/降级链路）', async () => {
+    // 通过 models.config 的能力注册表声明 test-model 的并发上限 = 1
+    definitionMock.mockImplementation((id: string) => (id === 'test-model' ? { id, maxParallelRequests: 1 } : undefined))
+    let releaseHttp: (value: any) => void = () => {}
+    safeHttpRequestMock.mockImplementation(() => new Promise((resolve) => { releaseHttp = resolve }))
+
+    const first = new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }] },
+      { traceId: 'trace-conc-1', retryBudget: createRetryBudget({ maxTransportRetries: 0, maxUpstreamAttempts: 1 }) }
+    )
+    await Promise.resolve()
+
+    const second = new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }] },
+      { traceId: 'trace-conc-2', retryBudget: createRetryBudget({ maxTransportRetries: 0, maxUpstreamAttempts: 1 }) }
+    )
+    await expect(second).rejects.toBeDefined()
+    expect(safeHttpRequestMock).toHaveBeenCalledTimes(1)
+
+    releaseHttp(jsonResponse(200, {
+      id: 'completion-conc',
+      model: 'test-model',
+      choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }]
+    }))
+    const response = await first
+    expect(response.choices[0].message.content).toBe('ok')
+    // 释放后槽位归还（部署键 = provider|endpoint|model）
+    expect(getInFlight('test-provider|https://example.com|test-model')).toBe(0)
   })
 })
