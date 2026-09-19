@@ -7,6 +7,25 @@
  * 更新模型时只需修改这个文件
  */
 
+/**
+ * 模型单价（USD / 1M tokens）。
+ *
+ * ⚠️ 这是**占位结构**：数值必须来自【财务权威单价源】。
+ * - 不要凭经验估算，也不要把厂商页面临时价当权威值。
+ * - 三个字段都可选；某字段未配置（undefined）表示"该口径金额未知"，
+ *   成本计算器会返回 `usd: null / pricingKnown: false`，**不会**用 0 冒充成本。
+ * - 仅改价时才更新此表；首版不含 `effectiveFrom`，调价历史见
+ *   `doc/SCALE_PREREQUISITES_DESIGN.md` Q20 §3.2（后续可增量迁到系统库 `model_pricing`）。
+ */
+export interface ModelPricing {
+  /** 未命中缓存的输入 token 单价（USD / 1M tokens） */
+  inputPer1M?: number;
+  /** 命中 KV 前缀缓存的输入 token 单价（USD / 1M tokens）；缺省时按 inputPer1M 全价计（不折扣） */
+  cachedInputPer1M?: number;
+  /** 输出 token 单价（USD / 1M tokens） */
+  outputPer1M?: number;
+}
+
 export interface ModelDefinition {
   id: string;
   label: string;
@@ -15,6 +34,11 @@ export interface ModelDefinition {
   supportsThinking?: boolean;
   /** 输出 token 上限（上游硬限制）；resolve-llm-call-params 的全局 maxTokens floor 按此封顶 */
   maxOutputTokens?: number;
+  /**
+   * 可选单价（USD / 1M tokens），只影响只读成本核算，**不影响模型选择/路由行为**。
+   * 默认留空 = 金额未知；权威价格落地后再逐模型补齐。
+   */
+  pricing?: ModelPricing;
   description?: string;
 }
 
