@@ -107,6 +107,8 @@ onUnmounted(() => {
 
 <style scoped>
 .mknav {
+  --ink: var(--mk-ink);
+  --line: var(--mk-line);
   --blue: #3478f6;
   --blue-deep: #1f57cc;
   --nav-bg: rgba(255, 255, 255, 0.88);
@@ -117,6 +119,8 @@ onUnmounted(() => {
   --link-row-bg: #f7faff;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   [data-theme='dark'] & {
+    --ink: var(--mk-ink);
+    --line: var(--mk-line);
     --blue: #4d8bf8;
     --blue-deep: #6fa3ff;
     --nav-bg: rgba(15, 22, 32, 0.88);
