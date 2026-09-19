@@ -241,6 +241,7 @@ doc/*
 !doc/AGENT_SKILL_MANUAL.md
 !doc/UPGRADE_DIRECTION_20Q.md
 !doc/LEARNER_CENTER_AND_STATE_FUSION.md
+!doc/MODEL_GATEWAY_DESIGN.md
 doc/local/
 
 # Playwright MCP 会话临时文件

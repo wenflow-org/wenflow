@@ -16,7 +16,8 @@ jest.mock('../../../services/agentRequestTimeout.service', () => ({
 }))
 
 jest.mock('../../../config/models.config', () => ({
-  supportsThinkingMode: () => false
+  supportsThinkingMode: () => false,
+  getModelDefinition: () => undefined
 }))
 
 jest.mock('../../../utils/safe-http', () => ({

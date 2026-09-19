@@ -10,7 +10,12 @@
  * File-as-Truth：ACTIVE prompt 的 T/maxTokens 优先于 skill_model_configs（route）。
  */
 
-import { getModelMaxOutputTokens } from '../config/models.config';
+import { getModelDefinition } from '../config/models.config';
+
+/** 调用方未声明输出预算、且模型未配置 defaultMaxTokens 时的全局兜底 */
+export const GLOBAL_DEFAULT_MAX_TOKENS = 8192;
+/** 输出预算下限：低于该值不再下调（截断保护） */
+export const MIN_OUTPUT_TOKENS = 256;
 
 export type LlmParamSource =
   | 'runtime-override'
@@ -154,20 +159,28 @@ export function resolveLlmGenerationParams(
     }
   }
 
-  // 全局默认 maxTokens floor：按最终解析出的模型取上游输出上限（deepseek=128k，agnes=64k）。
-  // 除「运行时显式覆盖（runtime-override，调试/低耗可调小）」外，prompt/code/route
-  // 任何来源解析出的 maxTokens 若低于该上限一律抬到模型上限——给足输出预算，避免长输出被截断漏字段。
+  // 输出预算策略（2026-09 修正，见 doc/MODEL_GATEWAY_DESIGN.md §4.3）：
+  //   `maxOutputTokens` 是**模型能力上限**，不是请求参数。
+  //   - 调用方声明（prompt/code/route）即权威意图，只做上下界 clamp
+  //   - 未声明 → 模型 defaultMaxTokens，其次全局兜底
+  //   - runtime-override 保持豁免（调试/低耗可显式调小；越界由调用方负责）
+  // 旧实现把任何非 runtime-override 的声明值**无条件抬到模型硬上限**（deepseek=131072），
+  // 使 prompts/core/*.yaml 的 params.maxTokens（800~32000）全部失效。
   if (maxTokens.source !== 'runtime-override') {
-    const modelFloor = model.value
-      ? (getModelMaxOutputTokens(model.value) ?? 131072)
-      : 131072;
+    const modelDef = model.value ? getModelDefinition(model.value) : undefined;
     if (maxTokens.value === undefined) {
-      maxTokens = { value: modelFloor, source: 'code-defaults' };
-    } else if (maxTokens.value < modelFloor) {
-      maxTokens = { value: modelFloor, source: maxTokens.source };
-    } else if (maxTokens.value > modelFloor) {
+      maxTokens = {
+        value: modelDef?.defaultMaxTokens ?? GLOBAL_DEFAULT_MAX_TOKENS,
+        source: 'code-defaults',
+      };
+    }
+    if (maxTokens.value < MIN_OUTPUT_TOKENS) {
+      maxTokens = { value: MIN_OUTPUT_TOKENS, source: maxTokens.source };
+    }
+    const modelMax = modelDef?.maxOutputTokens;
+    if (modelMax !== undefined && maxTokens.value > modelMax) {
       // 显式配置超过模型上限时压回上限（防止上游 400：max_tokens exceeds limit）
-      maxTokens = { value: modelFloor, source: maxTokens.source };
+      maxTokens = { value: modelMax, source: maxTokens.source };
     }
   }
 

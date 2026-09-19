@@ -18,6 +18,8 @@ import {
   type SkillStatsRange,
 } from '../../services/skill-runtime-contract.service';
 import { STAGE_DESIGNER_PROMPT } from '../../skills/stage-designer';
+import { buildThinkingPolicy, type ReasoningEffort, type ThinkingMode } from '../../gateway/api-gateway/thinking-policy';
+import { GLOBAL_DEFAULT_MAX_TOKENS } from '../../services/resolve-llm-call-params';
 import { ADAPTIVE_GUIDANCE_COPY_PROMPT } from '../../skills/adaptive-guidance-copy';
 import { VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT } from '../../skills/virtual-learner-persona-designer';
 import { VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT } from '../../skills/virtual-learner-scenario-designer';
@@ -381,20 +383,27 @@ router.post('/:name/model-probe', async (req: Request, res: Response) => {
     const userMsg = body.testInput?.trim() || '请用一句简短的中文说明你接到的指令并输出一个最小 JSON 示例。';
     const timeoutMs = Math.min(180_000, Math.max(10_000, Number(body.timeoutMs) || 180_000));
 
+    // 与运行时同源：输出预算取 ACTIVE prompt 声明值（不再硬编码 131072），
+    // 思考字段按模型能力 + 预算分离构造（见 doc/MODEL_GATEWAY_DESIGN.md §4.3/§4.4）。
+    const declaredMaxTokens = typeof active?.maxTokens === 'number' ? active.maxTokens : undefined;
+    const thinkingPolicy = buildThinkingPolicy({
+      modelId: route.model,
+      thinkingMode: thinkingMode as ThinkingMode,
+      reasoningEffort: effectiveEffort as ReasoningEffort,
+      maxTokens: declaredMaxTokens,
+    });
+
     const requestBody: Record<string, any> = {
       model: route.model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMsg },
       ],
-      max_tokens: 131072,
+      max_tokens: thinkingPolicy.maxTokens ?? declaredMaxTokens ?? GLOBAL_DEFAULT_MAX_TOKENS,
       stream: true,
       stream_options: { include_usage: true },
-      ...(thinkingMode === 'disabled'
-        ? { thinking: { type: 'disabled' } }
-        : thinkingMode === 'enabled'
-          ? { thinking: { type: 'enabled' }, ...(effectiveEffort !== 'default' ? { reasoning_effort: effectiveEffort } : {}) }
-          : {}),
+      ...(thinkingPolicy.thinking ? { thinking: thinkingPolicy.thinking } : {}),
+      ...(thinkingPolicy.reasoningEffort ? { reasoning_effort: thinkingPolicy.reasoningEffort } : {}),
     };
 
     const ctrl = new AbortController();

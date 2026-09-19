@@ -3,7 +3,7 @@ import { logger } from '../../utils/logger';
 import { redactLogValue } from '../../utils/secret-redaction';
 import { ResolvedRoute, ChatRequest, ChatResponse, ExecutionContext } from './types';
 import { getDefaultAIRequestTimeoutMs } from '../../services/agentRequestTimeout.service';
-import { supportsThinkingMode } from '../../config/models.config';
+import { buildThinkingPolicy, type ReasoningEffort, type ThinkingMode } from './thinking-policy';
 import { safeHttpRequest, safeHttpStreamRequest, SafeHttpBodyLimitError, UnsafeUrlError } from '../../utils/safe-http';
 import { isEncryptedSecret } from '../../utils/secret-crypto';
 import { telemetryWriter } from '../../services/telemetry-writer.service';
@@ -902,16 +902,20 @@ export class APIExecutor {
     });
   }
 
+  /**
+   * 按**模型能力**构造思考相关字段（见 doc/MODEL_GATEWAY_DESIGN.md §4.4）。
+   * 具体策略在纯函数 `buildThinkingPolicy` 内，便于单测与预览复用。
+   */
   private applyThinkingMode(route: ResolvedRoute, requestBody: ChatRequest): void {
-    const modelId = String(requestBody.model || route.model || '');
-    if (!supportsThinkingMode(modelId)) return;
-    if (route.thinkingMode === 'enabled' || route.thinkingMode === 'disabled') {
-      requestBody.thinking = { type: route.thinkingMode };
-    }
-    if (route.thinkingMode !== 'disabled'
-      && (route.reasoningEffort === 'low' || route.reasoningEffort === 'high' || route.reasoningEffort === 'max')) {
-      requestBody.reasoning_effort = route.reasoningEffort;
-    }
+    const policy = buildThinkingPolicy({
+      modelId: String(requestBody.model || route.model || ''),
+      thinkingMode: route.thinkingMode as ThinkingMode,
+      reasoningEffort: route.reasoningEffort as ReasoningEffort,
+      maxTokens: typeof requestBody.max_tokens === 'number' ? requestBody.max_tokens : undefined,
+    });
+    if (policy.thinking) requestBody.thinking = policy.thinking;
+    if (policy.reasoningEffort) requestBody.reasoning_effort = policy.reasoningEffort;
+    if (policy.maxTokens !== undefined) requestBody.max_tokens = policy.maxTokens;
   }
 
   private delay(ms: number, signal?: AbortSignal): Promise<void> {

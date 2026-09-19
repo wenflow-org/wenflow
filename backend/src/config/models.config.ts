@@ -32,8 +32,24 @@ export interface ModelDefinition {
   tier: 'chat' | 'reasoning';
   provider: 'deepseek' | 'agnes';
   supportsThinking?: boolean;
-  /** 输出 token 上限（上游硬限制）；resolve-llm-call-params 的全局 maxTokens floor 按此封顶 */
+  /** 是否支持 `reasoning_effort` 字段（不支持时即使 supportsThinking 也不发该字段） */
+  supportsReasoningEffort?: boolean;
+  /**
+   * 输出 token 硬上限（上游限制）。语义 = **能力上限**，不是请求参数：
+   * 只在调用方声明值越界时用于封顶（见 doc/MODEL_GATEWAY_DESIGN.md §4.3）。
+   */
   maxOutputTokens?: number;
+  /**
+   * 调用方（prompt/code/route）**未声明**输出预算时的缺省值。
+   * 未配置则回退 `GLOBAL_DEFAULT_MAX_TOKENS`。
+   */
+  defaultMaxTokens?: number;
+  /**
+   * 开启思考（`thinking:{type:'enabled'}`）时，为推理额外预留的 token 预算。
+   * 与输出预算**分离**：最终 `max_tokens = 声明输出 + reasoningReserveTokens`（不超过硬上限），
+   * 避免推理消耗吃光输出预算导致 `content` 为空。
+   */
+  reasoningReserveTokens?: number;
   /**
    * 可选单价（USD / 1M tokens），只影响只读成本核算，**不影响模型选择/路由行为**。
    * 默认留空 = 金额未知；权威价格落地后再逐模型补齐。
@@ -52,7 +68,10 @@ export const AVAILABLE_MODELS: ModelDefinition[] = [
     tier: 'chat',
     provider: 'deepseek',
     supportsThinking: true,
+    supportsReasoningEffort: true,
     maxOutputTokens: 131072,
+    defaultMaxTokens: 32768,
+    reasoningReserveTokens: 8192,
     description: '快速响应，适合日常对话和轻量级任务'
   },
   {
@@ -61,7 +80,10 @@ export const AVAILABLE_MODELS: ModelDefinition[] = [
     tier: 'reasoning',
     provider: 'deepseek',
     supportsThinking: true,
+    supportsReasoningEffort: true,
     maxOutputTokens: 131072,
+    defaultMaxTokens: 32768,
+    reasoningReserveTokens: 16384,
     description: '强大推理能力，适合复杂任务和深度思考'
   },
   {
@@ -70,7 +92,9 @@ export const AVAILABLE_MODELS: ModelDefinition[] = [
     tier: 'chat',
     provider: 'agnes',
     supportsThinking: false,
+    supportsReasoningEffort: false,
     maxOutputTokens: 65536,
+    defaultMaxTokens: 32768,
     description: '轻量快速模型，TPS 高，适合现阶段 skill 高频调用（暂代 deepseek 作为 skill 调用模型）'
   }
 ];
@@ -134,6 +158,26 @@ export function getModelLabel(modelId: string): string {
  */
 export function getModelMaxOutputTokens(modelId: string): number | null {
   return MODEL_MAP.get(modelId)?.maxOutputTokens ?? null;
+}
+
+/** 取模型完整定义（能力注册表入口）。 */
+export function getModelDefinition(modelId: string): ModelDefinition | undefined {
+  return MODEL_MAP.get(modelId);
+}
+
+/** 调用方未声明输出预算时的模型级缺省值；未配置返回 null。 */
+export function getModelDefaultMaxTokens(modelId: string): number | null {
+  return MODEL_MAP.get(modelId)?.defaultMaxTokens ?? null;
+}
+
+/** 开启思考时为推理预留的额外 token 预算（与输出预算分离）；未配置返回 0。 */
+export function getModelReasoningReserveTokens(modelId: string): number {
+  return MODEL_MAP.get(modelId)?.reasoningReserveTokens ?? 0;
+}
+
+/** 模型是否支持 `reasoning_effort` 字段。 */
+export function supportsReasoningEffort(modelId: string): boolean {
+  return MODEL_MAP.get(modelId)?.supportsReasoningEffort ?? false;
 }
 
 /**
