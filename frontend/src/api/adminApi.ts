@@ -682,6 +682,14 @@ export const adminApiConfigApi = {
     privateNetworkHosts: string[];
   }) => {
     return adminAxios.put('/admin/api-config/network-policy', data);
+  },
+
+  /**
+   * 模型配置总览（只读）：能力注册表 / 别名映射 / 默认解析 / 降级链 / 部署冷却 / 配置漂移告警。
+   * 模型能力的唯一写源仍是后端代码注册表（doc/MODEL_GATEWAY_DESIGN.md §4.7）。
+   */
+  getModelRegistry: async () => {
+    return adminAxios.get('/admin/model-registry');
   }
 };
 

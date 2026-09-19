@@ -11,6 +11,11 @@
         <span class="mk-status__meta" :title="routeTitle">默认路由：{{ routeCount }}/3</span>
         <span v-if="isLive && lastCheckedText" class="mk-status__meta" title="连通性 / 能力探测时间">上次探测：{{ lastCheckedText }}</span>
       </template>
+      <template v-else-if="tab === 'overview'">
+        <span class="mk-status__meta" title="后端能力注册表（唯一写源）中的模型数">模型：{{ registryCount.models }} 个</span>
+        <span class="mk-status__meta" :title="registryCount.warnings ? '存在配置漂移提示' : '无配置漂移'">提示：{{ registryCount.warnings }} 条</span>
+        <span class="mk-status__meta">只读</span>
+      </template>
       <template v-else>
         <span class="mk-status__meta">外挂能力 {{ addonsCount }} 个</span>
       </template>
@@ -19,13 +24,15 @@
           <MkLoading v-if="fetching" inline text="拉取中…" />
           <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
         </button>
+        <button v-else-if="tab === 'overview'" type="button" class="mk-status__action" @click="registryRef?.refresh?.(true)">刷新</button>
         <button v-else type="button" class="mk-status__action" @click="addonsRef?.refresh?.()">刷新</button>
       </span>
     </div>
 
-    <!-- 视图切换 pills（唯一的 tab 控件）：接入与模型 / 外挂能力（阶段 1 导航收敛） -->
+    <!-- 视图切换 pills（唯一的 tab 控件）：接入与模型 / 模型总览 / 外挂能力 -->
     <div class="mk-pills ac-tabs">
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'model' }" @click="switchTab('model')">接入与模型</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'overview' }" @click="switchTab('overview')">模型总览</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'addons' }" @click="switchTab('addons')">外挂能力<span class="mk-pill__count">{{ addonsCount }}</span></button>
     </div>
 
@@ -86,33 +93,47 @@
             </div>
           </div>
         </label>
-        <div class="ac-sec__title">路由默认<span class="ac-sec__hint">模型清单未拉取时此项只读，展示的是当前生效值</span><button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button></div>
+        <div class="ac-sec__title">路由默认<span class="ac-sec__hint">可填具体模型 id，也可填逻辑别名（chat / reasoning / light）；清单未拉取时也能直接输入</span><button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button></div>
         <div class="ac-row ac-row--3">
           <label class="mk-field">
             <span class="mk-field__label">对话默认</span>
-            <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultModel" title="清单未拉取时只读，展示当前生效值" @change="form.defaultModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
-              <option v-if="!models.length && !form.defaultModel" value="">未设置</option>
-              <option v-if="!models.length && form.defaultModel" :value="form.defaultModel">{{ form.defaultModel }}（当前生效）</option>
-              <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-            </select>
+            <input
+              class="mk-filter__input mono"
+              list="ac-model-options"
+              :value="form.defaultModel"
+              placeholder="模型 id 或别名"
+              title="可填逻辑别名（chat / reasoning / light），或从已拉取清单中选择"
+              @input="form.defaultModel = ($event.target as HTMLInputElement).value; markDirty('route')"
+            />
           </label>
           <label class="mk-field">
             <span class="mk-field__label">推理默认</span>
-            <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultReasoningModel" title="清单未拉取时只读，展示当前生效值" @change="form.defaultReasoningModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
-              <option v-if="!models.length && !form.defaultReasoningModel" value="">未设置</option>
-              <option v-if="!models.length && form.defaultReasoningModel" :value="form.defaultReasoningModel">{{ form.defaultReasoningModel }}（当前生效）</option>
-              <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-            </select>
+            <input
+              class="mk-filter__input mono"
+              list="ac-model-options"
+              :value="form.defaultReasoningModel"
+              placeholder="模型 id 或别名"
+              title="推理档：别名 reasoning 会按能力过滤到支持思考的成员"
+              @input="form.defaultReasoningModel = ($event.target as HTMLInputElement).value; markDirty('route')"
+            />
           </label>
           <label class="mk-field">
             <span class="mk-field__label">评估默认</span>
-            <select class="mk-filter__select" :disabled="!models.length" :value="form.defaultEvaluationModel" title="清单未拉取时只读，展示当前生效值" @change="form.defaultEvaluationModel = ($event.target as HTMLSelectElement).value; markDirty('route')">
-              <option v-if="!models.length && !form.defaultEvaluationModel" value="">未设置</option>
-              <option v-if="!models.length && form.defaultEvaluationModel" :value="form.defaultEvaluationModel">{{ form.defaultEvaluationModel }}（当前生效）</option>
-              <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-            </select>
+            <input
+              class="mk-filter__input mono"
+              list="ac-model-options"
+              :value="form.defaultEvaluationModel"
+              placeholder="模型 id 或别名"
+              title="评估档：同样支持逻辑别名"
+              @input="form.defaultEvaluationModel = ($event.target as HTMLInputElement).value; markDirty('route')"
+            />
           </label>
         </div>
+        <!-- 路由默认的候选：已拉取模型清单 + 后端注册表里的逻辑别名 -->
+        <datalist id="ac-model-options">
+          <option v-for="m in models" :key="`model-${m}`" :value="m" />
+          <option v-for="a in aliasOptions" :key="`alias-${a}`" :value="a" />
+        </datalist>
 
         <!-- 默认思考：平台级开关 + 强度（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖） -->
         <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖</span><button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button></div>
@@ -458,16 +479,20 @@
     </div><!-- /ac-tab-body -->
     </template>
 
-    <!-- ===== Tab2: 外挂能力（Addons embedded） ===== -->
+    <!-- ===== Tab2: 模型总览（只读；消费 /api/admin/model-registry） ===== -->
+    <ModelRegistryOverview v-else-if="tab === 'overview'" ref="registryRef" @count="registryCount = $event" />
+
+    <!-- ===== Tab3: 外挂能力（Addons embedded） ===== -->
     <Addons v-else ref="addonsRef" embedded @count="addonsCount = $event" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource, isLive } from './store'
 import Addons from './Addons.vue'
+import ModelRegistryOverview from './ModelRegistryOverview.vue'
 import {
   liveApiConfig as cfg,
   liveFetchModels,
@@ -477,7 +502,7 @@ import {
   timeAgo,
   errMsg
 } from './live'
-import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi } from '@/api/adminApi'
+import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi, adminApiConfigApi } from '@/api/adminApi'
 import {
   registrationEnabled,
   registerIpQuotaEnabled,
@@ -489,15 +514,32 @@ import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { toast } from '@/utils/toast'
 
-/* ---------- 宿主：接入与模型 · 外挂能力（阶段 1 导航收敛） ----------
-   ?tab=model|addons 双向同步；外挂能力 tab 嵌入 Addons（embedded，域计数上报宿主） */
-const AC_TABS = ['model', 'addons'] as const
+/* ---------- 宿主：接入与模型 · 模型总览 · 外挂能力 ----------
+   ?tab=model|overview|addons 双向同步；模型总览嵌入只读 ModelRegistryOverview，
+   外挂能力嵌入 Addons（embedded，域计数上报宿主） */
+const AC_TABS = ['model', 'overview', 'addons'] as const
 type AcTab = (typeof AC_TABS)[number]
 const tab = ref<AcTab>('model')
 const route = useRoute()
 const router = useRouter()
 const addonsCount = ref(0)
 const addonsRef = ref<{ refresh?: () => void } | null>(null)
+const registryCount = ref({ models: 0, warnings: 0 })
+const registryRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
+
+/** 逻辑别名候选（来自后端只读总览，避免前端硬编码与注册表漂移） */
+const aliasOptions = ref<string[]>([])
+onMounted(async () => {
+  try {
+    const res = await adminApiConfigApi.getModelRegistry()
+    const aliases = res?.data?.data?.aliases
+    aliasOptions.value = Array.isArray(aliases)
+      ? aliases.map((item: { alias: string }) => item.alias).filter(Boolean)
+      : []
+  } catch {
+    aliasOptions.value = []
+  }
+})
 watch(
   () => route?.query?.tab,
   (t) => {
