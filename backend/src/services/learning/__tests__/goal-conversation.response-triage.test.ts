@@ -209,6 +209,26 @@ describe('responseTriage 落库与透传', () => {
     const persisted = JSON.parse(conversationRecord.collectedData);
     expect(persisted.responseTriage).toEqual(expect.objectContaining({ mode: 'learning_path' }));
   });
+
+  it('提示词口径（snake_case）同样触发分诊与负向出口（锁定 prompt↔分诊契约）', async () => {
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({
+      userVisible: '这一版方向先聚焦坡道起步。',
+      understanding: {
+        real_problem: '一上坡就熄火，不敢开了',
+        primary_block_type: 'emotion_relationship',
+        recurrence: 'recurring',
+        block_type_evidence: '一想到上坡就手心出汗，怕再熄火',
+      },
+      confirmedProposal: { learning_direction: '坡道起步', key_stages: ['S1'] },
+    }));
+
+    const result = await goalConversationService.continueConversation('conv-1', '我试试', 'user-1');
+
+    expect(result.userVisible).toContain('系统判断');
+    const persisted = JSON.parse(conversationRecord.collectedData);
+    expect(persisted.responseTriage).toEqual(expect.objectContaining({ mode: 'emotional_support' }));
+    expect(persisted.understanding.primary_block_type).toBe('emotion_relationship');
+  });
 });
 
 describe('advisory 默认仍推进路径生成（零行为变化）', () => {
