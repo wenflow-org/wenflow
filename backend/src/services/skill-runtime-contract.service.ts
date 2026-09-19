@@ -40,12 +40,14 @@ export interface EffectiveSkillRuntimeConfig {
     source: 'skill-override' | 'agent-or-platform' | 'platform-default' | 'unresolved';
     hasSkillOverride: boolean;
   };
-  /** 实际 LLM 请求参数（callPrompt 路径）：ACTIVE prompt 优先于 route */
+  /** 实际 LLM 请求参数（callPrompt 路径）：模型绑定来自 route；prompt 只贡献 temperature/maxTokens 意图 */
   llmRequest: {
     model: string | null;
     temperature: number | null;
     maxTokens: number | null;
     source: 'active-prompt' | 'route' | 'none';
+    /** 历史遗留：ACTIVE prompt 上的 model 副本已废弃（运行时仅作最后兜底）。非 null = 建议清理 */
+    deprecatedPromptModel?: string | null;
     activePrompt: {
       id: string;
       version: number;
@@ -295,7 +297,8 @@ export async function getUnifiedSkillStat(
 /**
  * 统一生效配置：
  * - route：平台 → agent → skill_model_configs（与 resolveRoute 一致）
- * - llmRequest：ACTIVE agent_prompts 覆盖 model/temp/maxTokens（与 callPrompt 一致）
+ * - llmRequest：模型绑定来自 route；ACTIVE prompt 只贡献 temperature/maxTokens 意图（与 callPrompt 一致）
+* - deprecatedPromptModel：ACTIVE prompt 上残留的 model 副本（已废弃，供清理提示）
  */
 export async function resolveEffectiveSkillRuntimeConfig(
   skillId: string
@@ -405,6 +408,9 @@ export async function resolveEffectiveSkillRuntimeConfig(
       temperature: llmTemperature,
       maxTokens: llmMaxTokens,
       source: llmSource,
+      deprecatedPromptModel: typeof activePrompt?.model === 'string' && activePrompt.model.trim()
+        ? activePrompt.model.trim()
+        : null,
       activePrompt: activePrompt
         ? {
             id: activePrompt.id,

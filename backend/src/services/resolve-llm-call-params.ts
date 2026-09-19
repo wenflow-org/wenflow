@@ -69,10 +69,6 @@ export interface ResolveLlmGenerationParamsInput {
     temperature?: number | null;
     maxTokens?: number | null;
   } | null;
-  /** 路由层是否显式指定了 skill 级模型（skill_model_configs.model 非空）。
-   *  true 时 model 优先级为 runtimeOverride > route > active-prompt > codeDefaults，
-   *  让 skill 级模型路由优先于 prompt 继承的平台默认模型。 */
-  routeModelExplicit?: boolean;
 }
 
 function nonEmptyString(value: unknown): string | undefined {
@@ -120,21 +116,16 @@ export function resolveLlmGenerationParams(
   const code = input.codeDefaults || {};
   const route = input.routeFallback || null;
 
-  const model = pickString(
-    input.routeModelExplicit
-      ? [
-          { value: override.model, source: 'runtime-override' },
-          { value: route?.model, source: 'route-fallback' },
-          { value: prompt?.model, source: 'active-prompt' },
-          { value: code.model, source: 'code-defaults' },
-        ]
-      : [
-          { value: override.model, source: 'runtime-override' },
-          { value: prompt?.model, source: 'active-prompt' },
-          { value: code.model, source: 'code-defaults' },
-          { value: route?.model, source: 'route-fallback' },
-        ]
-  );
+  // 模型绑定只来自「模型/路由层」：runtimeOverride > route > codeDefaults。
+  // `agent_prompts.model`（active-prompt）是历史遗留的**绑定副本**，已废弃，仅作最后兜底——
+  // 否则它会抢走 route 的权威，导致「改平台默认模型对已 seed 的 skill 不生效」
+  // （2026-09 实测：30/30 ACTIVE prompt 带 model 副本；见 doc/MODEL_GATEWAY_DESIGN.md §4.9）。
+  const model = pickString([
+    { value: override.model, source: 'runtime-override' },
+    { value: route?.model, source: 'route-fallback' },
+    { value: code.model, source: 'code-defaults' },
+    { value: prompt?.model, source: 'active-prompt' },
+  ]);
 
   const temperature = pickNumber([
     { value: override.temperature, source: 'runtime-override' },
@@ -251,7 +242,6 @@ export async function resolveLlmCallParams(
 
   let routeFallback: ResolveLlmGenerationParamsInput['routeFallback'] = null;
   let routeResolved = false;
-  let routeModelExplicit = false;
   if (input.includeRouteFallback !== false) {
     try {
       const { getAPIGateway } = await import('../gateway/api-gateway');
@@ -268,7 +258,6 @@ export async function resolveLlmCallParams(
         temperature: route.temperature,
         maxTokens: route.maxTokens,
       };
-      routeModelExplicit = route.modelExplicit === true;
     } catch {
       routeFallback = null;
     }
@@ -279,7 +268,6 @@ export async function resolveLlmCallParams(
     promptConfig,
     codeDefaults: input.codeDefaults,
     routeFallback,
-    routeModelExplicit,
   });
 
   return {

@@ -17,7 +17,8 @@ jest.mock('../../../services/agentRequestTimeout.service', () => ({
 
 jest.mock('../../../config/models.config', () => ({
   supportsThinkingMode: () => false,
-  getModelDefinition: () => undefined
+  getModelDefinition: jest.fn(() => undefined),
+  getModelFallbacks: jest.fn(() => [])
 }))
 
 jest.mock('../../../utils/safe-http', () => ({
@@ -33,6 +34,8 @@ import type { RetryBudget } from '../retry-budget'
 import { createRetryBudget } from '../retry-budget'
 import { logger } from '../../../utils/logger'
 import { safeHttpRequest, safeHttpStreamRequest } from '../../../utils/safe-http'
+import { getModelDefinition, getModelFallbacks } from '../../../config/models.config'
+import { resetDeploymentHealth } from '../deployment-health'
 
 const safeHttpRequestMock = safeHttpRequest as jest.Mock
 const streamRequestMock = safeHttpStreamRequest as jest.Mock
@@ -667,5 +670,87 @@ describe('APIExecutor streaming (SSE)', () => {
     expect(bodies[1].stream_options).toBeUndefined()
     expect(bodies[1].stream).toBe(true)
     expect(response.choices[0].message.content).toBe('retried')
+  })
+})
+
+describe('APIExecutor P1：降级链 + 截断空输出', () => {
+  const fallbacksMock = getModelFallbacks as jest.Mock
+  const definitionMock = getModelDefinition as jest.Mock
+
+  beforeEach(() => {
+    jest.restoreAllMocks()
+    safeHttpRequestMock.mockReset()
+    streamRequestMock.mockReset()
+    agentLogCreate.mockReset().mockResolvedValue({})
+    attemptCreate.mockReset().mockResolvedValue({})
+    fallbacksMock.mockReturnValue([])
+    definitionMock.mockReturnValue(undefined)
+    resetDeploymentHealth()
+  })
+
+  it('主候选 429 耗尽后降级到 fallback 模型', async () => {
+    fallbacksMock.mockReturnValue(['fallback-model'])
+    definitionMock.mockImplementation((id: string) => (id === 'fallback-model' ? { id } : undefined))
+    safeHttpRequestMock
+      .mockResolvedValueOnce(jsonResponse(429, { error: 'rate limited' }))
+      .mockResolvedValueOnce(jsonResponse(200, {
+        id: 'completion-fallback',
+        model: 'fallback-model',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'from-fallback' }, finish_reason: 'stop' }]
+      }))
+
+    const response = await new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }] },
+      { traceId: 'trace-fallback', retryBudget: createRetryBudget({ maxTransportRetries: 0, maxUpstreamAttempts: 2 }) }
+    )
+
+    expect(response.choices[0].message.content).toBe('from-fallback')
+    expect(safeHttpRequestMock).toHaveBeenCalledTimes(2)
+    expect(safeHttpRequestMock.mock.calls[0][1].body.model).toBe('test-model')
+    expect(safeHttpRequestMock.mock.calls[1][1].body.model).toBe('fallback-model')
+  })
+
+  it('不可降级的错误类（如 protocol）不会触发 fallback', async () => {
+    fallbacksMock.mockReturnValue(['fallback-model'])
+    definitionMock.mockImplementation((id: string) => (id === 'fallback-model' ? { id } : undefined))
+    safeHttpRequestMock.mockResolvedValueOnce(jsonResponse(200, {
+      id: 'completion-bad',
+      model: 'test-model',
+      choices: [{ index: 0, message: { role: 'assistant', content: '' }, finish_reason: 'stop' }]
+    }))
+
+    await expect(new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }] },
+      { traceId: 'trace-no-fallback', retryBudget: createRetryBudget({ maxTransportRetries: 0, maxUpstreamAttempts: 2 }) }
+    )).rejects.toMatchObject({ code: 'INVALID_RESPONSE_SCHEMA' })
+    expect(safeHttpRequestMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('空内容 + finish_reason=length → 关闭思考重试（TRUNCATED_EMPTY_OUTPUT）', async () => {
+    safeHttpRequestMock
+      .mockResolvedValueOnce(jsonResponse(200, {
+        id: 'completion-truncated',
+        model: 'test-model',
+        choices: [{ index: 0, message: { role: 'assistant', content: '' }, finish_reason: 'length' }]
+      }))
+      .mockResolvedValueOnce(jsonResponse(200, {
+        id: 'completion-ok',
+        model: 'test-model',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }]
+      }))
+    jest.spyOn(APIExecutor.prototype as any, 'delay').mockResolvedValue(undefined)
+
+    const response = await new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }] },
+      { traceId: 'trace-truncated' }
+    )
+
+    expect(response.choices[0].message.content).toBe('ok')
+    expect(safeHttpRequestMock).toHaveBeenCalledTimes(2)
+    expect(safeHttpRequestMock.mock.calls[0][1].body.thinking).toBeUndefined()
+    expect(safeHttpRequestMock.mock.calls[1][1].body.thinking).toEqual({ type: 'disabled' })
   })
 })

@@ -1673,7 +1673,7 @@ async function resolvePrompt(
       systemPrompt: row.systemPrompt,
       source: 'version',
       promptVersion: row.version,
-      model: payload.model || row.model || null,
+      model: payload.model || null,
     };
   }
 
@@ -1686,7 +1686,7 @@ async function resolvePrompt(
       systemPrompt: row.systemPrompt,
       source: 'version',
       promptVersion: row.version,
-      model: payload.model || row.model || null,
+      model: payload.model || null,
     };
   }
 
@@ -1699,7 +1699,7 @@ async function resolvePrompt(
     systemPrompt: active.systemPrompt,
     source: 'active',
     promptVersion: active.version,
-    model: payload.model || active.model || null,
+    model: payload.model || null,
   };
 }
 

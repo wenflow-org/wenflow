@@ -51,6 +51,11 @@ export interface ModelDefinition {
    */
   reasoningReserveTokens?: number;
   /**
+   * 降级候选（主模型在「可降级错误」上耗尽重试后按序尝试）。
+   * 空/未配置 = 不降级（默认）。见 doc/MODEL_GATEWAY_DESIGN.md §4.5。
+   */
+  fallbacks?: string[];
+  /**
    * 可选单价（USD / 1M tokens），只影响只读成本核算，**不影响模型选择/路由行为**。
    * 默认留空 = 金额未知；权威价格落地后再逐模型补齐。
    */
@@ -72,6 +77,7 @@ export const AVAILABLE_MODELS: ModelDefinition[] = [
     maxOutputTokens: 131072,
     defaultMaxTokens: 32768,
     reasoningReserveTokens: 8192,
+    fallbacks: ['agnes-3.0-flash'],
     description: '快速响应，适合日常对话和轻量级任务'
   },
   {
@@ -84,6 +90,7 @@ export const AVAILABLE_MODELS: ModelDefinition[] = [
     maxOutputTokens: 131072,
     defaultMaxTokens: 32768,
     reasoningReserveTokens: 16384,
+    fallbacks: ['deepseek-v4-flash'],
     description: '强大推理能力，适合复杂任务和深度思考'
   },
   {
@@ -178,6 +185,20 @@ export function getModelReasoningReserveTokens(modelId: string): number {
 /** 模型是否支持 `reasoning_effort` 字段。 */
 export function supportsReasoningEffort(modelId: string): boolean {
   return MODEL_MAP.get(modelId)?.supportsReasoningEffort ?? false;
+}
+
+/** 取模型的降级候选（已过滤不存在的模型 id 与重复项）；未配置返回空数组。 */
+export function getModelFallbacks(modelId: string): string[] {
+  const declared = MODEL_MAP.get(modelId)?.fallbacks ?? [];
+  const seen = new Set<string>([modelId]);
+  const out: string[] = [];
+  for (const id of declared) {
+    const trimmed = typeof id === 'string' ? id.trim() : '';
+    if (!trimmed || seen.has(trimmed) || !MODEL_MAP.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
 }
 
 /**

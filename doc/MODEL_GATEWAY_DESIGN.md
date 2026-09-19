@@ -202,9 +202,13 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
  └─ 耗尽 → 同别名换部署 → 跨别名降级 → default 兜底
 ```
 
-- 新增：部署级 cooldown（内存 + 可选落库，Redis 非必需）、fallback 遍历、`RetryPolicy` 按错误类配置。
-- 语义失败单列 `TRUNCATED_EMPTY_OUTPUT`（`content` 空 且 `finish_reason=length`）：**定向**重试（降低/关闭思考预算 → 若仍空再提输出预算），而不是整包翻倍重跑。
-- 超时口径统一（当前 600s 宣称 vs 300s 实际截断必须对齐）。
+**已实现（P1）**：
+- **部署级 cooldown**：`deployment-health.ts`，键 = `providerId|endpoint|model`；仅「可降级错误类」触发；进程内实现，不引入 Redis。
+- **降级链**：模型声明 `fallbacks`（`models.config.ts`）。当前默认：`deepseek-v4-pro → deepseek-v4-flash`、`deepseek-v4-flash → agnes-3.0-flash`（同层互为备份；agnes 无思考能力，由 `thinking-policy` 自动裁剪字段）。限一跳，且仅在 `!streamStarted`（内容未透传）时生效。
+- **可降级错误类**：`rate_limit` / `provider_http` / `network` / `provider_timeout`；**不含** `quota`（账号/余额级，换模型无效）、`authentication`、`configuration`、`protocol`。
+- **降级记账**：失败候选与降级调用**各自成行**（`agent_call_logs`），降级请求上下文带 `ExecutionContext.fallbackFrom`（不发给上游）；冷却中候选会被跳过。
+- **语义失败定向重试**：`TRUNCATED_EMPTY_OUTPUT`（`content` 空 且 `finish_reason=length`）判为可重试，重试时**关闭思考**（不是整包翻倍 maxTokens）。
+- **未做（留 P2）**：降级次数落库字段（`attempted_fallbacks` / `original_model_group` 式）、provider 级多部署负载均衡、超时口径统一（当前 600s 宣称 vs 300s 实际截断）。
 
 ### 4.6 ⑥ 并发配额
 
@@ -227,6 +231,52 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 
 ---
 
+### 4.9 提示词工件（prompt artifact）vs 模型绑定的边界
+
+**原则**：**文本 + 意图（intent）归提示词工件；绑定 + 能力（binding / capability）归模型层；提示词工件永远不承载 `model`。**
+
+两种流派都存在且都成熟：
+
+| 流派 | 代表 | 做法 | 成立条件 |
+|---|---|---|---|
+| **Prompt-Ops（捆绑派）** | LangSmith Prompt Hub、Humanloop、PromptLayer、Langfuse、Braintrust | prompt 版本**捆绑** model + 参数 | 发布单元＝"这条 prompt 配这套设置"，A/B 与回滚需要整体一致 |
+| **SDK / Gateway（分离派）** | Vercel AI SDK（`generateText({model, prompt})`）、OpenCode（agent config 指定 model）、LiteLLM、LangChain `init_chat_model` | 模型独立成注册表，prompt 只是文本 | 换模型不动 N 条 prompt；能力/限额/降级集中一处 |
+
+两者在生产的**收敛点一致**：prompt 可以携带「意图」，但**不能携带「绑定」**；意图在构造请求时由模型能力 **clamp**（即 §4.3 / §4.4）。
+
+字段归属：
+
+| 参数 | 归属层 | 判定 |
+|---|---|---|
+| 正文 / rules / fields | 提示词工件 | 保留 |
+| `temperature` | 提示词工件（意图） | **保留**（抽取类 0.2 vs 创作类 0.9，是真·prompt 属性） |
+| `maxTokens` | 提示词工件（预算**请求**） | **保留**，由模型 `maxOutputTokens` clamp（§4.3） |
+| `failurePolicy` / 输出契约 | 提示词工件（意图） | 保留 |
+| **`model`** | **模型层（绑定）** | **禁止出现在提示词工件** |
+| `thinkingMode` / `reasoningEffort` | 模型层（绑定，按能力推导） | 不在 prompt；由 `thinking-policy` 决定（§4.4） |
+| `endpoint` / `apiKey` / `timeout` / `retries` | 模型 / 路由层 | 不在 prompt |
+
+**本仓库实测到的反例（2026-09）**：
+
+| 事实 | 数值 / 证据 |
+|---|---|
+| ACTIVE `agent_prompts` 带 `model` 副本 | **30 / 30** |
+| `skill_model_configs` 显式指定 model | 18 / 23 |
+| seed 写模型绑定 | `seed-core-agent-prompts.ts` → `model: defaultModel \|\| null`（发布路径写 `null` ✓，seed 写副本 ✗） |
+| 解析顺序后果 | `routeModelExplicit ? [override, route, prompt, code] : [override, prompt, code, route]` ⇒ **无 skill 级绑定（model 为空）的 12 个技能被 `prompt.model` 副本压过平台默认** ⇒ 改平台 `defaultModel` 对这 12 个技能无效 |
+
+**落地（本次已实现）**：
+
+1. **解析顺序**收敛为 `runtimeOverride > route > codeDefaults > prompt.model`；`prompt.model` 降为**最后兜底**，`routeModelExplicit` 开关删除（不再需要）。
+2. **seed 不再写模型绑定**：`agent_prompts.model` 恒为 `null`；`matchesSeedConfig` 不再把 `model` 纳入漂移比较（历史副本不会阻止/触发重新 seed）。
+3. **prompt-ops 预览解析器**不再回读 `row.model` / `active.model`（预览用显式指定或平台默认模型）。
+4. **读模型统一（单一视图）**：`skill-runtime-contract.service` 的 `llmRequest` 增加 `deprecatedPromptModel`，管理端可据此提示清理历史副本。
+5. **无行为变化**：当前平台 `defaultModel` 与 30 条副本同为 `deepseek-v4-flash`，因此顺序调整**当天零差异**；但它解锁了"改一处即全量生效"。
+
+**不做**：不删 `agent_prompts.model` 列（保留兼容与审计）；不把 `temperature/maxTokens` 搬出提示词工件（捆绑派理由成立：审查局部性、回滚粒度、作者上下文）。
+
+---
+
 ## 5. 关键决策与取舍
 
 | 决策 | 取舍 |
@@ -244,7 +294,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 | 阶段 | 内容 | 状态 | 涉及文件 |
 |---|---|---|---|
 | **P0** | 能力注册表（per-model）+ `maxTokens` 语义修正 + thinking 预算分离 | **已实现** | `config/models.config.ts`、`services/resolve-llm-call-params.ts`、`gateway/api-gateway/executor.ts` |
-| **P1** | 部署级 cooldown + fallback 链 + 降级记账字段 + `TRUNCATED_EMPTY_OUTPUT` 分类 | 待做 | `api-gateway/executor.ts`、新增 `deployment-health.ts`、`failure-classification.ts` |
+| **P1** | 部署级 cooldown + fallback 链 + `TRUNCATED_EMPTY_OUTPUT` 分类与定向重试 | **已实现** | 新增 `api-gateway/deployment-health.ts`；`api-gateway/executor.ts`；`config/models.config.ts`（`fallbacks`） |
 | **P2** | 别名/部署表 + 能力元数据 DB 化 + `require_parameters` 路由 + per-model 并发 | 待做 | `prisma/system/schema.prisma`、`api-gateway/router.ts`、`rpm-limiter.ts` |
 | **P3** | 管理端可视化（别名→部署、per-deployment 健康、成本） | 待做 | `frontend/src/views/admin-redesign/ApiConfig.vue`、`routes/admin/*` |
 
