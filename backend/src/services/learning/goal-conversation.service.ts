@@ -6,7 +6,11 @@ import { executeSkill } from '../../skills';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
-import { derivePlannedOutline } from './path-planning-hints';
+import { derivePlannedOutline, type LearnerLoadProfile } from './path-planning-hints';
+import {
+  normalizeLearnerLoadProfile,
+  resolveLearnerLoadProfileFromCollectedData,
+} from './learner-load-profile';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
@@ -23,6 +27,12 @@ interface GoalConversationOptions {
   };
   /** 前端交互特征（认知负荷量测 · 前端情报层）：随用户消息落库，供后续多目标核算等使用 */
   meta?: Record<string, number> | null;
+  /**
+   * 会话级学习者负荷画像（可选）。仅**虚拟学习者**链路会提供，落到
+   * `collectedData.learnerLoadProfile`，后续 `buildGoalPathRequest` 读回透传给 Path。
+   * 真实用户不传 ⇒ 不落库、不参与体量推导（行为与今天完全一致）。
+   */
+  learnerLoadProfile?: LearnerLoadProfile | null;
 }
 
 interface GoalNormalizedStateV1 {
@@ -120,6 +130,37 @@ class GoalConversationService {
       return messages.some((m: any) => m?.role === 'ai' || m?.role === 'assistant');
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * 把负荷画像合并进既有会话的 `collectedData`（复用未完成会话时补写）。
+   * 整包读改写、只新增顶层键；不改 revision（不干扰 saveMessage/updateCollectedData 的 CAS）。
+   * 失败不阻断会话创建（画像只是体量推导的增强信号）。
+   */
+  private async persistLoadProfileIntoConversation(
+    conversationId: string,
+    profile: LearnerLoadProfile
+  ): Promise<void> {
+    try {
+      const current = await prisma.goal_conversations.findUnique({ where: { id: conversationId } });
+      if (!current) return;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(current.collectedData || '{}');
+      } catch {
+        data = {};
+      }
+      data.learnerLoadProfile = profile;
+      await prisma.goal_conversations.update({
+        where: { id: conversationId },
+        data: { collectedData: JSON.stringify(data) }
+      });
+    } catch (error) {
+      logger.warn('写入会话负荷画像失败（不影响会话创建）', {
+        conversationId,
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 
@@ -383,12 +424,18 @@ class GoalConversationService {
         orderBy: { createdAt: 'desc' }
       });
 
+      // 负荷画像（虚拟学习者链路提供；真实用户为空 ⇒ 零写入、零行为变化）
+      const loadProfile = normalizeLearnerLoadProfile(options?.learnerLoadProfile);
+
       if (conversation && !this.hasAiReplyInCollectedData(conversation)) {
         logger.warn('复用未完成的相同目标会话（防止重复 active 会话堆积）', {
           userId,
           initialGoal,
           existingConversationId: conversation.id
         });
+        if (loadProfile) {
+          await this.persistLoadProfileIntoConversation(conversation.id, loadProfile);
+        }
       } else {
         conversation = await prisma.goal_conversations.create({
           data: {
@@ -406,7 +453,10 @@ class GoalConversationService {
               confirmedProposal: null,
               structuredData: null,
               confidenceScores: null,
-              learningPath: null
+              learningPath: null,
+              // 顶层承载负荷画像：后续 updateCollectedData / lifecycle 都是整包读改写，
+              // 未知顶层键会被原样保留（不会被覆盖），故放在这里最稳。
+              ...(loadProfile ? { learnerLoadProfile: loadProfile } : {})
             })
           }
         });
@@ -1010,6 +1060,9 @@ async continueConversation(
       structuredData: (data as any)?.structuredData || null,
       conversationHistory,
       finalUserVisible: aiResponse.userVisible || null,
+      // 虚拟学习者负荷画像（会话创建时写入 collectedData）；真实用户缺失 → null，
+      // path.coordinator 的体量推导与今天完全一致。
+      learnerLoadProfile: resolveLearnerLoadProfileFromCollectedData(data),
       systemPromptOverrides: systemPromptOverrides?.pathAgent
         ? { pathAgent: systemPromptOverrides.pathAgent }
         : undefined,

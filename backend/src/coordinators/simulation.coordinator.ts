@@ -1488,12 +1488,22 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         });
 
         await this.assertCurrentSessionLeaseOwned(input.sessionId);
+        // 负荷画像：仅在画像确实带信号时才附加选项（无信号时 options 形状与改动前逐字节一致）。
+        // 随 Goal 会话落库（collectedData.learnerLoadProfile），让"生成路径"的真实入口
+        // （goal-conversation.service.buildGoalPathRequest）也能拿到并收紧体量。
+        const learnerAvailableTime = profile.profile.availableTime ?? null;
+        const learnerLoadTolerance = profile.profile.cognitiveLoadTolerance ?? null;
         // goal agent 开场回应是真实 LLM 调用，计入会话 AI 调用预算
         const goalResult = await this.retryLearnUpstream(input.sessionId, 'goal-opening-turn', () =>
           goalConversationService.startConversation(
             input.userId,
             openingReply,
-            { systemPromptOverrides: getSessionPromptOverrides(session) }
+            {
+              systemPromptOverrides: getSessionPromptOverrides(session),
+              ...(learnerAvailableTime || learnerLoadTolerance
+                ? { learnerLoadProfile: { availableTime: learnerAvailableTime, loadTolerance: learnerLoadTolerance } }
+                : {}),
+            }
           )
         );
         
