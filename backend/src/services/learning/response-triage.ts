@@ -21,9 +21,14 @@
  *     evidence / real_problem / pain_points 命中"具体技能/可学习成分" → combination。
  *  5. oneoff_operation → combination（一次性操作含少量可学习成分）。
  *  6. urgency 极高且 constraints_and_boundaries 非空 → confidence 降一档，并写入 reasons。
+ *  7. 第二轴 support_need（none | emotional | referral，"除学习外是否还需要别的支持"）叠加：
+ *     非 none 时把 learning_path 抬升为 combination；emotional_support × referral / referral × emotional
+ *     也归 combination；none 时完全不改变上表（零变化）。
+ *     动机：primary_block_type 回答"要学什么"，support_need 回答"还要不要补情绪/现实支持"，
+ *     二者是不同维度（实测 8 例情绪主导语料里 5 例确有真实可学缺口，若只用第一轴会被压成 learning_path）。
  *
  * 兼容口径：字段既接受 goal 产出的 snake_case（real_problem / constraints_and_boundaries /
- * primary_block_type 等），也接受 scenario 标注的 camelCase（primaryBlockType 等）。
+ * primary_block_type / support_need 等），也接受 scenario 标注的 camelCase（primaryBlockType 等）。
  */
 export const PRIMARY_BLOCK_TYPES = [
   'capability',
@@ -34,6 +39,15 @@ export const PRIMARY_BLOCK_TYPES = [
 ] as const;
 
 export type PrimaryBlockType = (typeof PRIMARY_BLOCK_TYPES)[number];
+
+/**
+ * 第二轴：除学习之外的支持需求（与 primary_block_type 独立，可同时存在）。
+ *  - none      ＝ 学习路径本身足够
+ *  - emotional ＝ 情绪/信心/羞耻/恐惧主导，需先稳定情绪再学
+ *  - referral  ＝ 现实条件/资源/流程/他人配合阻塞，需先解决外部问题
+ */
+export const SUPPORT_NEEDS = ['none', 'emotional', 'referral'] as const;
+export type SupportNeed = (typeof SUPPORT_NEEDS)[number];
 
 export const RESPONSE_TRIAGE_MODES = [
   'learning_path',
@@ -67,6 +81,8 @@ export interface ResponseTriageInput {
   primaryBlockType?: unknown;
   recurrence?: unknown;
   blockTypeEvidence?: unknown;
+  /** 第二轴：none | emotional | referral（缺失/非法视为 none，零变化） */
+  supportNeed?: unknown;
   motivation?: unknown;
   urgency?: unknown;
   constraintsAndBoundaries?: unknown;
@@ -150,9 +166,16 @@ export function normalizeResponseTriageEnforcementMode(
   return text === 'gated' ? 'gated' : DEFAULT_RESPONSE_TRIAGE_ENFORCEMENT;
 }
 
+/** support_need 归一化：缺失/非法一律 `none`（保证「模型没给该字段」时零变化）。 */
+export function normalizeSupportNeed(value: string | null | undefined): SupportNeed {
+  return value === 'emotional' || value === 'referral' ? value : 'none';
+}
+
 /**
- * 依据 goal understanding 的阻塞类型标注做确定性分诊。
- * 缺字段/形状非法一律容忍，按 learning_path + low 处理（等价于「不拦截」）。
+ * 依据 goal understanding 做确定性分诊（两轴）：
+ *  - primary_block_type（"要学什么"）→ 基础模式；
+ *  - support_need（"除学习外还要什么"）→ 在基础模式上叠加出负向出口。
+ * 缺字段/形状非法一律容忍：两轴都缺 → learning_path + low（等价于「不拦截」）。
  */
 export function triageGoalResponse(input: ResponseTriageInput | null | undefined): ResponseTriage {
   const understanding = asObject(input);
@@ -166,8 +189,24 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
     'constraints_and_boundaries',
   ]);
   const painPoints = pickStringArray(understanding, ['painPoints', 'pain_points']);
+  const supportNeed = normalizeSupportNeed(pickString(understanding, ['supportNeed', 'support_need']));
 
   if (isUnknownBlockType(blockType)) {
+    // 阻塞类型缺失（模型证据不足）：若已明确表达支持需求，仍按需求出负向出口；否则不拦截。
+    if (supportNeed === 'emotional') {
+      return {
+        mode: 'emotional_support',
+        confidence: 'medium',
+        reasons: ['缺少阻塞类型标注，但用户表达了情绪/信心支持需求'],
+      };
+    }
+    if (supportNeed === 'referral') {
+      return {
+        mode: 'referral',
+        confidence: 'medium',
+        reasons: ['缺少阻塞类型标注，但存在现实条件/资源/流程支持需求'],
+      };
+    }
     return {
       mode: 'learning_path',
       confidence: 'low',
@@ -175,7 +214,30 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
     };
   }
 
-  switch (blockType as PrimaryBlockType) {
+  const base = triageByBlockType(blockType as PrimaryBlockType, {
+    recurrence,
+    evidence,
+    realProblem,
+    painPoints,
+    urgency,
+    constraints,
+  });
+  return applySupportNeed(base, supportNeed);
+}
+
+interface BlockTypeContext {
+  recurrence: string | null;
+  evidence: string | null;
+  realProblem: string | null;
+  painPoints: string[];
+  urgency: string | null;
+  constraints: string[];
+}
+
+/** 第一轴：仅按 primary_block_type（"要学什么"）决定基础模式；support_need 由 applySupportNeed 叠加。 */
+function triageByBlockType(blockType: PrimaryBlockType, ctx: BlockTypeContext): ResponseTriage {
+  const { recurrence, evidence, realProblem, painPoints, urgency, constraints } = ctx;
+  switch (blockType) {
     case 'capability': {
       const hasRecurringOrEvidence = recurrence === 'recurring' || !!evidence;
       return finalize(
@@ -265,6 +327,31 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
         reasons: ['缺少阻塞类型标注，默认按能力缺口处理'],
       };
   }
+}
+
+/**
+ * 第二轴叠加（support_need）：非 none 时在基础模式上抬升为负向出口。
+ *  - learning_path + (emotional | referral) → combination（既要学、也要补）
+ *  - emotional_support + referral → combination
+ *  - referral + emotional → combination
+ *  - support_need=none 或已被覆盖 → 原样返回（零变化）
+ */
+function applySupportNeed(base: ResponseTriage, supportNeed: SupportNeed): ResponseTriage {
+  if (supportNeed === 'none') return base;
+  const needReason =
+    supportNeed === 'emotional'
+      ? 'support_need=emotional（情绪/信心阻力）'
+      : 'support_need=referral（现实条件/资源/流程阻塞）';
+  const conflicts =
+    base.mode === 'learning_path' ||
+    (base.mode === 'emotional_support' && supportNeed === 'referral') ||
+    (base.mode === 'referral' && supportNeed === 'emotional');
+  if (!conflicts) return base;
+  return {
+    mode: 'combination',
+    confidence: base.confidence,
+    reasons: [...base.reasons, `${needReason} → 学习路径 + 补充支持组合`],
+  };
 }
 
 const ADVISORY_BY_MODE: Record<Exclude<ResponseTriageMode, 'learning_path'>, string> = {

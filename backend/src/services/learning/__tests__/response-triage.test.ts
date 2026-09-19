@@ -9,6 +9,7 @@ import {
   RESPONSE_TRIAGE_KEY,
   buildTriageAdvisoryLine,
   normalizeResponseTriageEnforcementMode,
+  normalizeSupportNeed,
   resolveResponseTriageFromCollectedData,
   triageGoalResponse,
 } from '../response-triage';
@@ -108,6 +109,52 @@ describe('triageGoalResponse 规则表', () => {
     });
     expect(result.mode).toBe('learning_path');
     expect(result.confidence).toBe('high');
+  });
+});
+
+describe('第二轴 support_need（除学习外的支持需求）', () => {
+  it('capability + support_need=emotional → combination（不丢掉真实可学缺口）', () => {
+    const result = triageGoalResponse({
+      primary_block_type: 'capability',
+      recurrence: 'recurring',
+      support_need: 'emotional',
+    });
+    expect(result.mode).toBe('combination');
+    expect(result.reasons.join('')).toContain('support_need=emotional');
+  });
+
+  it('capability + support_need=none → 仍是 learning_path（零变化）', () => {
+    const result = triageGoalResponse({ primary_block_type: 'capability', support_need: 'none' });
+    expect(result.mode).toBe('learning_path');
+  });
+
+  it('缺失 / 非法 support_need 一律视为 none（零变化）', () => {
+    expect(triageGoalResponse({ primary_block_type: 'capability' }).mode).toBe('learning_path');
+    expect(triageGoalResponse({ primary_block_type: 'capability', support_need: 'whatever' }).mode).toBe('learning_path');
+    expect(normalizeSupportNeed('emotional')).toBe('emotional');
+    expect(normalizeSupportNeed('referral')).toBe('referral');
+    expect(normalizeSupportNeed('')).toBe('none');
+    expect(normalizeSupportNeed(null)).toBe('none');
+  });
+
+  it('environment_tooling 无可学习成分 + support_need=emotional → combination', () => {
+    const result = triageGoalResponse({ primary_block_type: 'environment_tooling', support_need: 'emotional' });
+    expect(result.mode).toBe('combination');
+  });
+
+  it('emotion_relationship + support_need=referral → combination（两个专门需求叠加）', () => {
+    const result = triageGoalResponse({ primary_block_type: 'emotion_relationship', support_need: 'referral' });
+    expect(result.mode).toBe('combination');
+  });
+
+  it('blockType 缺失但 support_need 明确 → 仍出负向出口（不因缺标注而漏掉）', () => {
+    expect(triageGoalResponse({ support_need: 'emotional' }).mode).toBe('emotional_support');
+    expect(triageGoalResponse({ support_need: 'referral' }).mode).toBe('referral');
+    expect(triageGoalResponse({ support_need: 'none' }).mode).toBe('learning_path');
+  });
+
+  it('capability + support_need=referral → combination（现实中阻塞 + 有东西要学）', () => {
+    expect(triageGoalResponse({ primary_block_type: 'capability', support_need: 'referral' }).mode).toBe('combination');
   });
 });
 

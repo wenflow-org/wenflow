@@ -9,17 +9,19 @@
 import { sanitizeUnderstanding } from '../index';
 
 describe('sanitizeUnderstanding · 阻塞类型诊断字段', () => {
-  it('保留 primary_block_type / recurrence / block_type_evidence', () => {
+  it('保留 primary_block_type / recurrence / block_type_evidence / support_need', () => {
     const out = sanitizeUnderstanding({
       real_problem: '一上坡就熄火，不敢开了',
-      primary_block_type: 'emotion_relationship',
+      primary_block_type: 'capability',
       recurrence: 'recurring',
       block_type_evidence: '一想到上坡就手心出汗',
+      support_need: 'emotional',
     });
 
-    expect(out.primary_block_type).toBe('emotion_relationship');
+    expect(out.primary_block_type).toBe('capability');
     expect(out.recurrence).toBe('recurring');
     expect(out.block_type_evidence).toBe('一想到上坡就手心出汗');
+    expect(out.support_need).toBe('emotional');
     expect(out.real_problem).toBe('一上坡就熄火，不敢开了');
   });
 
@@ -29,11 +31,13 @@ describe('sanitizeUnderstanding · 阻塞类型诊断字段', () => {
       primary_block_type: '待确认',
       recurrence: '',
       block_type_evidence: '未明确',
+      support_need: '待确认',
     });
 
     expect(out.primary_block_type).toBeUndefined();
     expect(out.recurrence).toBeUndefined();
     expect(out.block_type_evidence).toBeUndefined();
+    expect(out.support_need).toBeUndefined();
     expect(out.real_problem).toBe('写不出结论');
   });
 
