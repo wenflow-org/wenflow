@@ -43,6 +43,16 @@ import { analyzeW2 } from '../../services/skills-readiness.service';
 import { deriveTeachingSessionProgress } from './teaching-sessions.progress';
 import { aggregateHandoffEdgeUsage } from '../../services/topology/handoff-edge-usage';
 import { attachEdgeStats } from '../../services/topology/topology-edge-stats';
+import { aggregateFieldHitRates, skillIdFromAgentId } from '../../services/topology/field-hit-rates';
+import {
+  attachFieldStats,
+  collectDeadRoutingEdges,
+  toSkillSummaries,
+  type RoutingEdgeLike,
+} from '../../services/topology/topology-field-stats';
+import { scanCoreFiles } from '../../services/prompt-lab/core-file-loader';
+import { loadOrchestrationFiles } from '../../services/field-routing/orchestration-file';
+import { EXEMPT_ROOT_NAMES } from '../../scripts/check-core-fields-sync';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -1249,6 +1259,80 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
     });
   }
 });
+/**
+ * 字段级运行时命中率 query 上限（与 edges 路径的 200k 行上限同量级）。
+ * ⚠ 性能：`prompt_call_logs.findMany` 走 `agentId startsWith 'skill:'` + 窗口，
+ * 最坏扫描 200k 行；声明字段 / routing 图每次请求只读扫描 core / orchestration 目录。
+ * 结果只做纯 join，无写库；`fieldStats` 计算失败时降级为 null（不阻断拓扑响应）。
+ */
+const FIELD_STATS_ROW_CAP = 200000;
+
+/** Q9 后半程：把窗口内 prompt_call_logs 聚合出的字段命中率贴到逻辑图字段节点 / routing 边（纯 join） */
+function buildFieldStatsBlock(
+  rows: ReadonlyArray<{ agentId: string | null; extractedJson: string | null }>,
+  range: string,
+) {
+  // 声明字段（只读扫描 core 文件；与 CLI audit-field-hit-rates 同源）
+  const { files: coreFiles } = scanCoreFiles();
+  const declaredFieldsBySkill: Record<string, string[]> = {};
+  for (const core of coreFiles) {
+    declaredFieldsBySkill[core.skillId] = core.fields.map((field) => field.name);
+  }
+
+  const aggregation = aggregateFieldHitRates(rows, { declaredFieldsBySkill });
+
+  // 逻辑图字段节点 / routing 边（只读编排文件；仅 `skill:*` 产出行，与前端 DataFlowGraph 同源）
+  const nodesByKey = new Map<string, { agentId: string; fieldId: string }>();
+  const routingEdges: RoutingEdgeLike[] = [];
+  for (const stage of loadOrchestrationFiles()) {
+    for (const routing of stage.routings) {
+      if (!skillIdFromAgentId(routing.agentId)) continue;
+      const key = `${routing.agentId}\u0000${routing.fieldId}`;
+      if (!nodesByKey.has(key)) nodesByKey.set(key, { agentId: routing.agentId, fieldId: routing.fieldId });
+      routingEdges.push({
+        id: key,
+        agentId: routing.agentId,
+        fieldId: routing.fieldId,
+        handoff: routing.handoff,
+        stage: stage.stage,
+      });
+    }
+  }
+
+  const fields = attachFieldStats([...nodesByKey.values()], aggregation)
+    .map((node) => ({ agentId: node.agentId, fieldId: node.fieldId, ...node.fieldStats }))
+    .sort((a, b) => a.agentId.localeCompare(b.agentId) || a.fieldId.localeCompare(b.fieldId));
+
+  const deadRoutingEdges = collectDeadRoutingEdges(routingEdges, aggregation, EXEMPT_ROOT_NAMES);
+  const skills = toSkillSummaries(aggregation);
+
+  const countByStatus = (status: 'produced' | 'dead' | 'drift') =>
+    fields.filter((field) => field.status === status).length;
+
+  return {
+    range,
+    source: 'prompt_call_logs' as const,
+    queryCap: FIELD_STATS_ROW_CAP,
+    // 口径 caveat（解读前必读）：媒体产物 / deltaOutput / 校验归一化会造成死字段、漂移误报，
+    // 详见 field-hit-rates.ts 头注；分母为窗口内该 skill 全部调用（含失败 / 解析失败行）。
+    totalRows: aggregation.totalRows,
+    consideredRows: aggregation.consideredRows,
+    skippedMissingAgent: aggregation.skippedMissingAgent,
+    skippedNonSkillAgent: aggregation.skippedNonSkillAgent,
+    totals: {
+      skills: skills.length,
+      fields: fields.length,
+      produced: countByStatus('produced'),
+      dead: countByStatus('dead'),
+      drift: countByStatus('drift'),
+      deadRoutingEdges: deadRoutingEdges.length,
+    },
+    skills,
+    fields,
+    deadRoutingEdges,
+  };
+}
+
 router.get('/agents/topology', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
@@ -1290,8 +1374,12 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
           : null;
     const since = sinceMs ? new Date(Date.now() - sinceMs) : null;
     const agentCallWhere = since ? { calledAt: { gte: since } } : {};
+    // 字段命中率来自 prompt_call_logs（时间列为 createdAt，与 agent_call_logs.calledAt 不同表同窗口）
+    const fieldLogWhere: any = since
+      ? { createdAt: { gte: since }, agentId: { startsWith: 'skill:' } }
+      : { agentId: { startsWith: 'skill:' } };
 
-    const [skillStatsMap, callGroups, successGroups, edgeLogRows] = await Promise.all([
+    const [skillStatsMap, callGroups, successGroups, edgeLogRows, fieldLogRows] = await Promise.all([
       getUnifiedSkillStats(skillIds, statsRange as any),
       prisma.agent_call_logs.groupBy({
         by: ['agentId'],
@@ -1310,6 +1398,13 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
         select: { callerAgent: true, agentId: true, success: true, calledAt: true },
         orderBy: { calledAt: 'desc' },
         take: 200000
+      }),
+      // Q9 后半程：字段级命中率（extractedJson 顶层键）；同窗口、独立表、只读，纯 join 在下方完成
+      prisma.prompt_call_logs.findMany({
+        where: fieldLogWhere,
+        select: { agentId: true, extractedJson: true },
+        orderBy: { createdAt: 'desc' },
+        take: FIELD_STATS_ROW_CAP
       }),
     ]);
 
@@ -1411,6 +1506,14 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
     const edgeUsage = aggregateHandoffEdgeUsage(edgeLogRows, since ? { since } : {});
     const edgesWithStats = attachEdgeStats(edges, edgeUsage.edges, statsRange);
 
+    // Q9 后半程：字段级运行时命中率（附加字段，保持向后兼容；失败降级为 null，不阻断拓扑响应）
+    let fieldStats: ReturnType<typeof buildFieldStatsBlock> | null = null;
+    try {
+      fieldStats = buildFieldStatsBlock(fieldLogRows, statsRange);
+    } catch (error) {
+      logger.warn('[admin-topology] 字段命中率计算失败，已降级为 null', { error });
+    }
+
     const summary = {
       agentCount: topAgents.length,
       skillCount: nodes.filter(n => n.type === 'skill').length,
@@ -1427,7 +1530,7 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      data: { nodes, edges: edgesWithStats, summary }
+      data: { nodes, edges: edgesWithStats, summary, fieldStats }
     });
   } catch (error: any) {
     logger.error('[admin-topology] 加载拓扑失败', { error });

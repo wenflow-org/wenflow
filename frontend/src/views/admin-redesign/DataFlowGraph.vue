@@ -22,6 +22,14 @@
             >
               ⇄ 调用用量 {{ flow.edgeStats.usedEdgeCount }}/{{ flow.edgeStats.edgeCount }} 活跃<template v-if="flow.edgeStats.deadEdgeCount"> · {{ flow.edgeStats.deadEdgeCount }} 死边</template>
             </span>
+            <span
+              v-if="flow.fieldStats"
+              class="dfg-meta"
+              :class="{ 'dfg-meta--bad': flow.fieldStats.deadCount > 0 || flow.fieldStats.driftCount > 0 }"
+              :title="fieldSummaryTitle(flow.fieldStats)"
+            >
+              ◇ 字段 {{ flow.fieldStats.producedCount }}/{{ flow.fieldStats.fieldCount }} 产出<template v-if="flow.fieldStats.deadCount"> · {{ flow.fieldStats.deadCount }} 死</template><template v-if="flow.fieldStats.driftCount"> · {{ flow.fieldStats.driftCount }} 漂移</template>
+            </span>
           </template>
         </div>
         <div class="dfg-toolbar__controls">
@@ -112,7 +120,7 @@
                 :stroke="e.hue"
                 :stroke-width="e.highlight ? 2.2 : 1.2"
                 :opacity="e.op"
-                :class="{ 'is-hot': e.highlight }"
+                :class="{ 'is-hot': e.highlight, 'is-dead': e.dead }"
                 stroke-linecap="round"
               />
               <circle :cx="e.x1" :cy="e.y1" r="3" :fill="e.hue" :opacity="e.dotOp" />
@@ -246,6 +254,12 @@
                 :class="{ 'is-dead': step.handoff.dead, 'is-warn': !step.handoff.dead && (step.handoff.successRate ?? 100) < 90 }"
                 :title="edgeTitle(step)"
               >⇄ {{ step.handoff.dead ? '未调用' : `${fmtCalls(step.handoff.calls)} · ${step.handoff.successRate ?? '—'}%` }}</span>
+              <span
+                v-if="step.fieldStat && (step.fieldStat.dead || step.fieldStat.drift)"
+                class="dfg-field-stat"
+                :class="{ 'is-dead': step.fieldStat.dead > 0, 'is-drift': step.fieldStat.dead === 0 && step.fieldStat.drift > 0 }"
+                :title="`字段运行时：产出 ${step.fieldStat.produced} · 死字段 ${step.fieldStat.dead} · 漂移 ${step.fieldStat.drift}`"
+              >◇ {{ step.fieldStat.produced }} 产出<template v-if="step.fieldStat.dead"> · {{ step.fieldStat.dead }} 死</template><template v-if="step.fieldStat.drift"> · {{ step.fieldStat.drift }} 漂移</template></span>
               <span class="dfg-step__spacer"></span>
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
               <span v-if="step.loopOver" class="dfg-step__cond" :title="`循环 ${step.loopOver}`">循环：{{ step.loopOver }}</span>
@@ -386,6 +400,16 @@
       <span class="dfg-legend__hint">点色块字段 / 族名可高亮「同一条数据的旅程」</span>
     </div>
 
+    <!-- 字段运行时命中率图例（Q9 后半程；无数据时不渲染） -->
+    <div v-if="flow && flow.fieldStats" class="dfg-field-legend">
+      <span class="dfg-field-legend__title">字段运行时</span>
+      <span class="dfg-field-legend__item"><i class="dfg-field-legend__dot is-produced"></i>产出 {{ flow.fieldStats.producedCount }}</span>
+      <span class="dfg-field-legend__item"><i class="dfg-field-legend__dot is-dead"></i>死字段 {{ flow.fieldStats.deadCount }}</span>
+      <span class="dfg-field-legend__item"><i class="dfg-field-legend__dot is-drift"></i>契约漂移 {{ flow.fieldStats.driftCount }}</span>
+      <span v-if="flow.fieldStats.deadRoutingEdges" class="dfg-field-legend__item"><i class="dfg-field-legend__dash"></i>死 routing 边 {{ flow.fieldStats.deadRoutingEdges }}</span>
+      <span class="dfg-field-legend__hint" :title="fieldSummaryTitle(flow.fieldStats)">命中率来自 prompt_call_logs 窗口聚合（悬停字段卡看 hits/调用/命中率）</span>
+    </div>
+
     <!-- 字段详情抽屉（含行级编辑，同步回写编排文件） -->
     <Teleport to="body">
       <div v-if="selected" class="mk-drawer">
@@ -514,6 +538,7 @@ import { toast } from '@/utils/toast'
 import { liveTopoNodes, liveTopoRange } from './live'
 import {
   buildStageFlow, fmtCalls, familyHue, type FlowChip, type FlowStep, type StageFlow, type DefStepLike, type TopoEdgeLike,
+  type FieldStat, type FieldStatsBlock,
   STAGE_ORDER, STAGE_LABELS,
 } from './dataFlow'
 import type { StageDetailLike } from './fieldFlowLayout'
@@ -533,6 +558,8 @@ const orchDefs = ref<Record<string, DefStepLike[]>>({})
 const stageNames = ref<Record<string, string>>({})
 /** 调用隶属边（agent→skill，含后端 Q9 调用用量 stats）；供步骤卡渲染调用量/成功率/未调用 */
 const topoEdges = ref<TopoEdgeLike[]>([])
+/** 字段级运行时命中率块（后端 Q9 后半程；缺省 = 旧后端，无视觉变化） */
+const fieldStatsRaw = ref<FieldStatsBlock | null>(null)
 const showHidden = ref(false)
 const edgeFaded = ref(true) // 默认淡化连线（悬停/聚焦点亮）；关 = 不画步间连线（端口徽标仍可用）
 const query = ref('')
@@ -561,6 +588,8 @@ async function load() {
     // 隶属边用量与节点统计同源（同 range）；拉取失败时置空 → 图退回无边缘统计
     const topoBody = topoRes?.data?.data ?? topoRes?.data ?? {}
     topoEdges.value = Array.isArray(topoBody.edges) ? (topoBody.edges as TopoEdgeLike[]) : []
+    // 字段命中率与拓扑同源同响应；缺失 / 旧后端 → null（图退回无字段状态）
+    fieldStatsRaw.value = (topoBody.fieldStats as FieldStatsBlock | null) ?? null
     const stagesBody = stagesRes?.data?.data as { stages?: Array<{ id: string; displayName: string }> } | undefined
     if (stagesBody?.stages?.length) {
       stageNames.value = Object.fromEntries(stagesBody.stages.map((s) => [s.id, (s.displayName || '').replace(/阶段$/, '')]))
@@ -621,7 +650,7 @@ const flows = computed<Record<string, StageFlow>>(() => {
   for (const sid of STAGE_ORDER) {
     const d = detailByStage.value[sid]
     if (!d) continue
-    out[sid] = buildStageFlow(sid, d, detailByStage.value, defByAgent[`${sid}-agent`] || [], topo as any, names, topoEdges.value)
+    out[sid] = buildStageFlow(sid, d, detailByStage.value, defByAgent[`${sid}-agent`] || [], topo as any, names, topoEdges.value, fieldStatsRaw.value)
   }
   return out
 })
@@ -675,7 +704,13 @@ const semanticVars: Record<string, string> = {
 
 /* ================= 可见性与折叠 ================= */
 /** 步骤卡 + 可见芯片副本（flowSteps 元素类型；模板 / 折叠 / 轨道线共用） */
-type WalkStep = FlowStep & { inputChips: FlowChip[]; outputChips: FlowChip[]; chips: FlowChip[] }
+type WalkStep = FlowStep & {
+  inputChips: FlowChip[]
+  outputChips: FlowChip[]
+  chips: FlowChip[]
+  /** 本步骤产出字段的运行时状态计数（Q9 后半程；无数据时全 0） */
+  fieldStat: { produced: number; dead: number; drift: number }
+}
 function visibleChips(chips: FlowChip[]) {
   return showHidden.value ? chips : chips.filter((c) => c.render === 'visible' || c.handoffTargets.length > 0 || c.accumulate)
 }
@@ -712,12 +747,24 @@ const exitShown = computed(() => (expandedEntry.value ? flow.value?.exit || [] :
 const flowSteps = computed(() => {
   const f = flow.value
   if (!f) return []
-  return f.steps.map((s) => ({
-    ...s,
-    inputChips: visibleChips(s.inputs),
-    outputChips: visibleChips(s.outputs),
-    chips: [...visibleChips(s.inputs), ...visibleChips(s.outputs)],
-  }))
+  return f.steps.map((s) => {
+    const inputChips = visibleChips(s.inputs)
+    const outputChips = visibleChips(s.outputs)
+    const fieldStat = { produced: 0, dead: 0, drift: 0 }
+    for (const c of outputChips) {
+      if (!c.field) continue
+      if (c.field.status === 'dead') fieldStat.dead++
+      else if (c.field.status === 'drift') fieldStat.drift++
+      else fieldStat.produced++
+    }
+    return {
+      ...s,
+      inputChips,
+      outputChips,
+      chips: [...inputChips, ...outputChips],
+      fieldStat,
+    }
+  })
 })
 
 /* ================= 行程高亮 ================= */
@@ -757,6 +804,8 @@ function chipClass(c: FlowChip, role: string) {
     'is-inner': role === 'in',
     'is-exit': role === 'exit',
     'is-entry': role === 'entry',
+    'is-field-dead': c.field?.status === 'dead',
+    'is-field-drift': c.field?.status === 'drift',
   }
 }
 function onQueryInput() {
@@ -820,6 +869,8 @@ const edgeGeoms = ref<EdgeGeom[]>([])
     fieldId: string
     from: string
     to: string
+    /** 产出字段为死字段（Q9 后半程；虚线灰渲染） */
+    dead: boolean
   }
   const FAR_SPAN = 700
   const laneOf = (i: number) => i % 4
@@ -963,6 +1014,7 @@ function renderEdges() {
       dimmed,
       mode,
       fieldId: e.fieldId, from: e.from, to: e.to,
+      dead: !!e.dead,
     })
   }
   // far 徽标聚合（同 peer 多字段计一次）
@@ -1021,8 +1073,19 @@ watch(familyFocus, () => { if (nodeRects.value.size) renderEdges() })
 watch(edgeFaded, () => { if (nodeRects.value.size) renderEdges() })
 
 /* ================= 抽屉 ================= */
+function fieldPct(rate: number): string {
+  return `${Math.round(rate * 1000) / 10}%`
+}
+
+/** 字段运行时状态行（tooltip；死字段/漂移/正常产出） */
+function fieldStatLine(f: FieldStat): string {
+  const label = f.status === 'dead' ? '死字段（声明/路由根窗口内零产出）' : f.status === 'drift' ? '契约漂移（产出但 core 未声明）' : '正常产出'
+  return `字段命中：${f.hits}/${f.totalCalls} = ${fieldPct(f.hitRate)} · ${label}`
+}
+
 function chipTitle(c: FlowChip) {
   const parts = [c.description || c.fieldId]
+  if (c.field) parts.push(fieldStatLine(c.field))
   if (c.handoffTargets.length) parts.push(`移交 → ${c.handoffTargets.join(', ')}`)
   if (c.pathInRawOutput) parts.push(`抽取路径：${c.pathInRawOutput}`)
   if (c.persistKey && c.persistKey !== c.fieldId) parts.push(`落库键：${c.persistKey}`)
@@ -1048,6 +1111,16 @@ function edgeSummaryTitle(s: NonNullable<StageFlow['edgeStats']>) {
   return [
     `本阶段调用用量 ${s.edgeCount} 条（agent→skill）· 窗口内活跃 ${s.usedEdgeCount} · 零调用 ${s.deadEdgeCount}`,
     `调用合计 ${s.totalCalls} · 失败 ${s.failed}`,
+  ].join('\n')
+}
+
+/** 阶段字段级运行时命中率汇总 tooltip（Q9 后半程） */
+function fieldSummaryTitle(s: NonNullable<StageFlow['fieldStats']>) {
+  return [
+    '字段级运行时命中率（prompt_call_logs 窗口聚合 · 顶层键口径）',
+    `本阶段字段 ${s.fieldCount} · 产出 ${s.producedCount} · 死字段 ${s.deadCount} · 漂移 ${s.driftCount}`,
+    `死 routing 边 ${s.deadRoutingEdges}`,
+    '⚠ 媒体产物 / deltaOutput / 校验归一化会造成死字段、漂移误报',
   ].join('\n')
 }
 function openField(c: FlowChip) {
@@ -1285,6 +1358,7 @@ function stepHue(step: FlowStep): string {
 }
 .dfg-pipe.is-dimmed { opacity: 1; }
 .dfg-edges { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3; }
+.dfg-edges path.is-dead { stroke: var(--mk-faint); stroke-dasharray: 4 3; }
 .dfg-edges path.is-hot { stroke-dasharray: 5 4; animation: dfg-flow 0.7s linear infinite; }
 @keyframes dfg-flow { to { stroke-dashoffset: -9; } }
 
@@ -1386,6 +1460,14 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 }
 .dfg-edge-stat.is-warn { color: var(--mk-amber); background: var(--mk-amber-bg); }
 .dfg-edge-stat.is-dead { color: var(--mk-faint); background: var(--mk-graph-badge-bg); }
+/* 字段运行时状态徽标（Q9 后半程）：死字段=灰、漂移=琥珀 */
+.dfg-field-stat {
+  flex-shrink: 0; font-size: 10.5px; font-weight: 800; font-variant-numeric: tabular-nums;
+  color: var(--mk-muted); background: var(--mk-graph-badge-bg);
+  border-radius: 6px; padding: 1px 7px; white-space: nowrap;
+}
+.dfg-field-stat.is-dead { color: var(--mk-faint); }
+.dfg-field-stat.is-drift { color: var(--mk-amber); background: var(--mk-amber-bg); }
 .dfg-step.is-dead-edge { border-style: dashed; }
 .dfg-step__spacer { flex: 1; }
 .dfg-step__cond {
@@ -1459,6 +1541,17 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
   max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .dfg-chip__to--stage { background: color-mix(in srgb, var(--hz) 12%, var(--mk-graph-node-bg)); color: var(--mk-ink); font-weight: 800; }
+/* 字段运行时状态：死字段=灰虚线（声明/路由根窗口内零产出）、漂移=琥珀（产出但未声明） */
+.dfg-chip.is-field-dead {
+  border-style: dashed; border-color: var(--mk-line); border-left-color: var(--mk-faint);
+}
+.dfg-chip.is-field-dead .dfg-chip__name { color: var(--mk-faint); }
+.dfg-chip.is-field-dead .dfg-chip__dot { background: var(--mk-faint) !important; }
+.dfg-chip.is-field-drift {
+  border-color: color-mix(in srgb, var(--mk-amber) 55%, var(--mk-line));
+  border-left-color: var(--mk-amber);
+}
+.dfg-chip.is-field-drift .dfg-chip__dot { background: var(--mk-amber) !important; }
 
 /* 图例（数据族） */
 .dfg-legend {
@@ -1481,6 +1574,23 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-legend__item:hover { background: var(--mk-blue-bg); }
 .dfg-legend__item.is-on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
 .dfg-legend__hint { margin-left: auto; font-size: var(--mk-fs-11); color: var(--mk-faint); }
+
+/* 字段运行时命中率图例（Q9 后半程） */
+.dfg-field-legend {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 7px 14px; margin-top: 6px;
+  border: 1px dashed var(--mk-line); border-radius: 10px;
+  background: var(--mk-surface);
+  font-size: var(--mk-fs-11); color: var(--mk-muted);
+}
+.dfg-field-legend__title { font-weight: 800; color: var(--mk-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.dfg-field-legend__item { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
+.dfg-field-legend__dot { width: 8px; height: 8px; border-radius: 50%; }
+.dfg-field-legend__dot.is-produced { background: var(--mk-blue); }
+.dfg-field-legend__dot.is-dead { background: var(--mk-faint); }
+.dfg-field-legend__dot.is-drift { background: var(--mk-amber); }
+.dfg-field-legend__dash { width: 14px; height: 0; border-top: 2px dashed var(--mk-faint); }
+.dfg-field-legend__hint { margin-left: auto; color: var(--mk-faint); }
 
 /* 空态 */
 .dfg-empty { padding: 40px; text-align: center; color: var(--mk-faint); }
@@ -1577,6 +1687,9 @@ html[data-theme='dark'] {
   .dfg-legend { background: var(--mk-graph-canvas); }
   .dfg-legend__item:hover { background: var(--mk-graph-hover-bg); }
   .dfg-legend__item.is-on { background: rgba(91, 141, 239, 0.18); border-color: rgba(91, 141, 239, 0.45); color: var(--mk-graph-blue-ink); }
+  .dfg-field-legend { background: var(--mk-graph-canvas); }
+  .dfg-chip.is-field-dead { border-color: var(--mk-line); border-left-color: var(--mk-faint); }
+  .dfg-field-stat { background: var(--mk-graph-badge-bg); color: var(--mk-muted); }
   .dfg-drawer { background: var(--mk-graph-canvas); }
   .dfg-drawer__body { background: var(--mk-graph-canvas); }
   .dfg-flow { background: var(--mk-graph-flow-bg); border-color: var(--mk-graph-flow-line); }
