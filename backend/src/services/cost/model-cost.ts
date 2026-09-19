@@ -3,7 +3,7 @@
  *
  * 这是 Q20「单位经济」的机制层第一步：只把「token → 金额」的换算做成可测的纯函数，
  * 单价仍是 `models.config.ts` 里的占位空表（等财务权威值）。设计口径见
- * `doc/SCALE_PREREQUISITES_DESIGN.md` §3.2。
+ * `doc/UPGRADE_DIRECTION_20Q.md` §2 Q20 / §7。
  *
  * 口径约定：
  * - 粗算（agent_call_logs）：只用 promptTokens / completionTokens，`cachedTokens` 缺省为 0，

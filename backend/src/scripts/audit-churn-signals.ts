@@ -8,7 +8,7 @@
  *   1. `teaching_sessions.startTime`（真实教学会话，最可靠的学习活动）
  *   2. `learner_evidence.occurredAt`（学习证据事件，如温故/检查点）
  *   3. `users.lastLoginAt`（**兜底**：无任何学习活动时）
- * 设计依据：`doc/SCALE_PREREQUISITES_DESIGN.md` §2.2(a)。
+ * 设计依据：`doc/UPGRADE_DIRECTION_20Q.md` §2 Q19。
  * 与设计的细微差异：本脚本对 (1)(2) 取**较新者**而非严格按顺序取，
  * 以免"有会话但之后还有温故"时低估活跃；`lastLoginAt` 仅在没有学习活动时兜底。
  *

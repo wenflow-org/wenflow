@@ -1,35 +1,53 @@
-# 20 问方案 × WenFlow 真实业务：逐条核验与升级方向（2026-09-18）
+# 20 问方案 × WenFlow：教学实验/Demo 定位下的逐条核验与升级方向（2026-09-19 合并版）
 
-> 缘起：`doc/20questions/` 下的 `TWELVE_QUESTIONS_INVESTIGATION.md`（十二问）、`EIGHT_ADDITIONAL_QUESTIONS_INVESTIGATION.md`（八问）、
-> `GEMINI_DEEP_RESEARCH_ANSWERS.md`（外部方案原文）、`COGNITIVE_DYNAMICS_REPORT_REVIEW.md`（第二份外部报告核对）——该目录为本机过程材料，不入库。
-> 任务：这些文档列举了 20 个问题与大量方案，**要拿它们和真实项目业务对一遍**——哪些成立、哪些已过期、哪些记错、
-> 哪些该现在做、哪些缺基建，最终给出下一步升级方向。
-> 方法：不采信文档结论，**逐条回代码复核**（7 路并行深查 + 关键项人工复验）；核验结论一律带 `文件:行`。
-> 性质：**调查 + 决策建议**，不含代码改动（例外见 §4 的四个"即刻可修缺陷"，仅列出、未改）。
-> 说明：本文是入库的结论/方向文档（`doc/UPGRADE_DIRECTION_20Q.md`）；其引用的 20 问原始调查与外部方案原文
-> 仍留在本机 `doc/20questions/`（`doc/*` 被 `.gitignore` 忽略，属过程材料，不进仓库）。
+> 缘起：`doc/20questions/` 下的十二问、八问调查与外部方案原文（`doc/*` 为**本机过程材料，不入库**）列举了 20 个问题与大量方案，
+> 本工作把它们与真实项目业务逐条对过——哪些成立、哪些过期、哪些记错、哪些现在做。
+> 方法：不采信文档结论，**逐条回代码复核**，核验结论带 `文件:行`。
+> 性质：**调查 + 决策建议**（不含代码改动；例外见 §4 的即刻可修缺陷，均已落地）。
+>
+> **本文是合并后的单一结论文档**：原第一波并行流（Track A/B）、Q16 隐私/数据治理基线、Q18/Q19/Q20 规模化前置设计、
+> 虚拟验证新发现评估等六份文档的结论已全部并入本文并随之删除。`doc/AGENT_SKILL_MANUAL.md`（开发者手册）、
+> `doc/SKILL_DEVELOPMENT_GUIDE.md`、`doc/ADMIN_PAGE_TEMPLATES.md` 仍为独立文档。
+>
+> **定位（本文一切取舍的前提，来自项目 owner）**：本项目是 **教学实验 / Demo 平台，MIT 许可、非商业**。
+> **会有真实用户，但不提供长期服务**——它首先是一次 **demo / showcase 体验**。因此：
+> 优先级 = **实验有效性 + 教学闭环可观测**（虚拟学习者实验室、测量、教学机制）；
+> **商业级轴不在范围**（或只保留已落地的零成本部分）：内容审核重层、同意/法务/未成年人、单位经济/预算、
+> 真实用户实验基建、教师升级流程、材料库（无场景）。已建成的**零成本护栏保留但不再加码**：输入围栏、内容降断言、
+> 删除卫生、token 面板。
 
 ---
 
 ## 0. 一句话结论
 
-20 问的**方法论层（双传感器、ZPD 支架撤除、静默降级治理、指令层级、OLM 自述优先、MRT、分层路由、成本护栏）
-基本正确且值得采纳**；但它们的**优先级是按"成熟工业 ITS"排的**，与 WenFlow 的真实阶段（早期原型 + 虚拟学习者实验室 + 无向量/Redis/沙箱/本地模型的 SQLite 栈）错位。
+20 问的**方法论层（双传感器、ZPD 支架、静默降级治理、指令层级、OLM 自述、MRT、分层路由、成本护栏）
+基本正确且值得采纳**；但它们的**优先级是按"成熟工业 ITS"排的**，与本项目"教学实验 / Demo、
+有真实用户但无长期服务"的定位错位——大部分"上线前置"其实是**商业级前置，不在范围内**。
 
-按真实业务重排后，下一步升级方向是：
+在本定位下，结论是：**in-scope（实验有效性 + 教学闭环可观测）的 20 问已基本做完**（详见 §0.5）。
+下一步只剩**少量可选深化**：Q8 测量深化（延迟锚题复用）、Q1 复习容量（替代排序）、Q10/Q11 工程主线、
+契约漂移清理、Q20 token 面板。已落地的零成本护栏保持现状，**不再加码**。
 
-1. **先修"传感器与诚实层"**（成本最低、直接决定后面所有结论可不可信）：修好检查点/时间上下文的**半截线**、
-   给真静默失败加降级标记、教学内容补"不确定降断言"。
-2. **再做"虚拟学习者记忆保真 + 记忆看板"**（虚拟实验室是本项目**唯一**的验证手段，保真度就是产品力）。
-3. **同步补"安全与合规最小层"**（注入围栏、防套取、内容审核单层、隐私分类/同意/自述优先）——这是**上线真实用户的前置**，
-   与阶段无关。
-4. **明确缓做**：独立 reranker、embedding/向量、RAG 溯源、代码沙箱、约束解码、真实用户分流/MRT、单位经济——
-   全部依赖**当前不存在的基础设施**，早期做了是重复造轮子。
+> 关键反转（相对早期结论）：八问与第二份报告的核心论据"检查点几乎不产生 → 成功率带永远打不开"
+> **已经过期**：最近一轮修复放开了 `ready_to_close` 出题，并补齐答案键示例、skip 路由、黑盒消费三处断点
+> （VL 验证 `checkpoint:result = 9`，全部 `judgedBy:"code"`）。
 
-> 关键反转：八问 §13 与第二份报告的核心论据"检查点几乎不产生 → 成功率带油门永远打不开 → 系统稳态=最低难度档"
-> **已经过期**。最近一轮修复放开了 `ready_to_close` 出题，并补上了答案键示例、skip 路由、黑盒消费三处断点
-> （`doc/re_test/2026-09-18-deploy-and-verify.md` N3 已验证首条检查点落地）。公平性该做的变成了
-> **D_floor（最小挑战保底）+ 支架双向退出 + 独立锚题探针**，而不是"修一个坏掉的油门"。
+---
+
+## 0.5 20 问覆盖小结（本定位下的范围判定）
+
+| 分级 | 问题 | 状态 |
+|---|---|---|
+| **核心（该做）** | Q1 复习选点/容量、Q2 记忆看板、Q3 静默降级、Q4 概率化记忆、Q5 Agent 自述/手册、Q7 轻量真值发现、Q8 测量、Q9 字段命中/逻辑图、Q10 字段可视化、Q11 Prompt DSL、Q13 教育公平、Q19 生命周期/长间隔 | **已基本完成**；Q1/Q8/Q10/Q11 有可选深化 |
+| **轻量保留（零成本已落地，不再加码）** | Q14 安全防御、Q15 内容正确性、Q16 隐私/同意/伦理（仅删除卫生）、Q20 成本（仅 token 面板） | **已落地最小层**；重层不做 |
+| **不做（商业级/无对象）** | Q6 学习者模型维度（OLM 仲裁）、Q12 材料库、Q17 教师升级流程、Q18 真实用户实验基建 | 无对象；若商业化见 §7 |
+
+**剩余可选（in-scope 内尚未做的）**
+1. **Q8 测量深化**：复用 Q13 的独立锚题探针做**延迟锚题复测**（当前锚题只在"已掌握/挣扎"两信念上选靶）。
+2. **Q1 复习容量（替代排序）**：在已量化的"选点质量"基线上，决定是否需要 LLM listwise 容量排序。
+3. **Q10/Q11 工程主线**：Q11b strict JSON Schema **接线** `skill-output-validator`（编译器已就绪）；`accumulate` 运行时功能化仅在场景需要时做。
+4. **契约漂移清理**：Q9 实测仍有 9 处契约漂移 / 18 死字段 / 10 死边候选。
+5. **Q20 token 面板**：面板与单价纯函数已就位，缺的只是**权威单价数值**（外部财务输入，非工程）。
 
 ---
 
@@ -37,359 +55,357 @@
 
 | 维度 | 事实 | 对方案的约束 |
 |---|---|---|
-| 阶段 | **早期实验性原型**（README「项目状态」自述）；Demo 站定期清库；无真实用户规模化 | 真实用户实验（Q18/MRT）、流失召回（Q19）、单位经济（Q20）**没有对象**，只能先建观测或延后 |
+| 定位 | **教学实验 / Demo 平台，MIT、非商业**；会有真实用户但**无长期服务**，首先是可展示的实验体验 | 商业级前置（合规、审核、单位经济、真实用户实验基建）**不做**；升级只服务"实验有效 + 教学闭环可观测" |
 | 核心命题 | "学习始于对真实问题的澄清"；5 类能力（问题定义/系统思维/判断力/AI 协作/创造力） | 升级应服务"问题→路径→教学闭环"的质量，而非通用 agent 平台能力 |
-| 验证手段 | **虚拟学习者实验室**（黑盒模拟 + 裁判 + 角色保真审计） | 实验室保真度 = 产品的测量仪器；记忆保真（Q4）因此是产品级，而非玩物 |
-| 技术栈 | SQLite 双库；依赖仅 15 个；**无向量库 / 无图库 / 无 Redis / 无本地小模型 / 无沙箱**；模型走 OpenAI 兼容网关 | 一切"向量/沙箱/小模型/约束解码"方案=从零建基建 |
+| 验证手段 | **虚拟学习者实验室**（黑盒模拟 + 裁判 + 角色保真审计）——本项目**唯一**的验证手段 | 实验室保真度 = 产品的测量仪器；记忆保真（Q4）是实验有效性，而非玩物 |
+| 技术栈 | SQLite 双库；依赖仅 15 个；**无向量库 / 无图库 / 无 Redis / 无本地小模型 / 无沙箱**；模型走 OpenAI 兼容网关 | 一切"向量/沙箱/小模型/约束解码"方案=从零建基建，不做 |
 | 工程纪律 | `core.yaml` 唯一人工源 + 编译链 + 守门三查；**LLM 只出观测/建议，档位/排序/状态由代码裁决**；`SkillResult.quality` 质量标记；outbox/inbox 事件链 | 单源化、软约束、可回滚是硬约束；方案必须落进这套纪律 |
 | 自动出题分工 | 时机由代码（`shouldEmitCheckpoint`）定；内容+答案键由 `teaching-turn` 定；判分由 `judgeCheckpointAnswer` 代码定 | Q13/Q14/Q15 的增量都要挂进这条链，不能另起 |
-| 学习者模型自认边界 | `LEARNING_SCIENCE_AUDIT.md`：「控制回路已接线，传感器多为代理量，记忆环路刚通电，结果测量刚建最小层」 | 升级优先级应给"传感器质量"与"诚实性"，而非更多控制回路 |
+| 学习者模型自认边界 | `LEARNING_SCIENCE_AUDIT.md`：「控制回路已接线，传感器多为代理量，记忆环路刚通电，结果测量刚建最小层」 | 升级优先级给"传感器质量"与"诚实性"，而非更多控制回路或商业治理 |
+
+> 已保留的零成本护栏（不加码）：输入围栏 `ai-teaching/input-fence.ts`、教学内容降断言、删除卫生（覆盖矩阵补漏）、token 面板。
 
 ---
 
 ## 2. 逐条核验（20 问 + 外部方案）
 
-图例：核验=✅ 成立 / 🟡 部分 / ⚠️ 已过期 / ❌ 记错或不存在；贴合=与当前业务的贴合度；处置=可做 / 缓做 / 缺基建。
+图例：核验=✅ 成立 / 🟡 部分 / ⚠️ 已过期 / ❌ 记错或不存在；
+分级=**核心（该做）** / **轻量保留（零成本已落地，不再加码）** / **不做（商业级/无对象）**。
 
 ### A. 认知 / 学习层
 
-#### Q4 虚拟学习者概率化记忆（文档评为"最明确、最有产品价值"）
-- **核验**：🟡 主体成立，且有**比文档更好的落地条件**。
-  - 记忆确实只是三桶静态标签：`learner-memory.ts:142-163`（mastered/dueReview/struggling），引用全靠 LLM 采样，无概率机制。
-  - **FSRS 保留率已算、且已到模拟器**：`simulation.memory.ts:66-80` 把 dueReview 的 retention 变成 `knowledgeSnapshot.progress`；
-    但 `simulation.memory.ts:52-59` 又把 `learnerMemory.dueReview` **map 成纯名字**，把数值丢了——概率提取所需的 strength 就在手边，被丢掉了。
-  - **可注入随机先例只有一处**：`virtual-learner-shared/schemas.ts:243-255` `decideFrictionTrigger(budget, random=Math.random)`，
-    测试注入 `()=>0.299`（`friction.test.ts:30-38`）。全仓无其它可注入 rng，**无任何 PRNG helper**。
-  - **解耦的对象搞清了**：虚拟学习者与真实用户**同表**（`memory_traces` 无 `isVirtualLearner` 列，`schema.prisma:677-705`），
-    靠 `userId` 隔离；虚拟会话**确实**写自己的 FSRS/痕迹（`simulation.memory.ts:33`、`ReviewCompletedConsumer`）。
-    Gemini 说的"影子沙箱"在本项目 = **在调度侧按 `isVirtualLearner` 过滤**，不是建第二个库。
-- **核验出的文档缺陷**：`sinceLastSessionDays` 是**死字段**（`simulated-day.service.ts:218-225` 只声明，`temporalContextFromClock` 从不赋值）；
-  模拟器 payload 里 `temporalContext` 也被丢弃（见 §4）。
-- **贴合**：高。**处置**：可做（低-中）。**前置**：`learnerMemory.dueReview` 先带上 retention 数值。
-- **警告**：Gemini 原文的 FSRS 公式漏 `/81`（项目真值 `19/81`，`fsrs.ts:166-168`）、混淆池参数会吃掉 VAGUE/FAILED——
-  文档已标注，**落地时以项目公式为准**。混淆对依赖 embedding（无）→ 用 LLM 离线判 + 留档（复用 `ConceptConsolidatorService` 范式）。
+#### Q4 虚拟学习者概率化记忆
+- **分级**：**核心（该做）**。
+- **核验**：🟡→✅ 记忆原为三桶静态标签（`learner-memory.ts:142-163`）；FSRS 保留率已算并到模拟器（`simulation.memory.ts:66-80`），
+  但 `:52-59` 把 `dueReview` map 成纯名字丢掉数值；可注入 rng 仅一处（`virtual-learner-shared/schemas.ts:243-255` `decideFrictionTrigger`）。
+  虚拟学习者与真实用户**同表按 `userId` 隔离**（`schema.prisma:677-705`）。
+- **处置**：✅ 完成——纯模块（SplitMix64 + 混淆竞争）`b6d0dd9d`、集成 `db3aba11`（`memoryRecall` 进 assisted + blackbox）、
+  assisted 消费待答检查点 `8fd12657`。
+- **警告**：以项目 FSRS 公式为准（`fsrs.ts:166-168`，`19/81`）；混淆对依赖 embedding（无）→ 复用 LLM 离线判定 + 留档。
 
 #### Q8 测量学习效果（可证伪）
-- **核验**：🟡 结果测量层**存在但是孤岛**：`retention-curve.ts` 的 `buildRetentionCurve` 唯一非测试消费者是只读脚本
-  `scripts/audit-retention-curve.ts:16-19`，无 route/service 引用；数据源 `learner_evidence('review:completed')` 的
-  `elapsedDays/rating` 由 `ReviewCompletedConsumer.ts:111-130` 写入，**数据够算**。
-- **贴合**：中（MRT 需要真实用户，当前没有）。**处置**：先激活观测层（把保持率曲线暴露到 admin）；MRT 缓。
+- **分级**：**核心（该做）**。
+- **核验**：🟡 结果测量层曾为孤岛（`retention-curve.ts` 消费者仅只读脚本）；数据源 `learner_evidence('review:completed')` 数据够算
+  （`ReviewCompletedConsumer.ts:111-130`）。MRT 需真实用户（无对象）。
+- **处置**：✅ 最小层：保留率曲线进 admin `e5e9e6e5`。**剩余可选**：延迟锚题复用（复用 Q13 探针）。
 
-#### Q19 生命周期（冷启动/流失/回归）
-- **核验**：🟡 冷启动继承 ✅（`learning-state.service.ts:1043-1053`、`LearnerSnapshotService.ts:441-453`、`LearningMetricService.ts:180-182`）；
-  churn/winback/dormant **零命中** ✅；`sinceLastSessionDays` 死字段 ✅；streak/成就 ✅ 但**无免死/修复**。
-- **贴合**：中（真实用户规模化后）。**处置**：**"回归重校准"与 Q4 同源**（离开越久→记忆越不可靠→教学更保守），
-  可复用 `temporalContext`，但**必须先修死字段**。低成本。
+#### Q19 生命周期（冷启动/长间隔/流失/回归）
+- **分级**：**核心（该做）**（winback/streak 免死等产品功能除外）。
+- **核验**：🟡 冷启动继承 ✅（`learning-state.service.ts:1043-1053` 等）；churn/winback/dormant 零命中 ✅；
+  `sinceLastSessionDays` 过去只服务虚拟链路；streak 无免死/修复。
+- **处置**：✅ 真实侧长间隔重校准 `b6a6afd6`（`controls.temporalGap = {daysSinceLastSession, isLongGap}`，默认 14 天）；
+  休眠/流失只读审计（`learner/churn-signals.ts` + `scripts/audit-churn-signals.ts`，行为代理、非因果）。
+  winback 通知 / streak 免死 = 产品功能，**不做**。
 
 ### B. 机制 / 工程层
 
-#### Q1 排序模型 / reranker
-- **核验**：✅ 无 embedding / 无 reranker / 无向量库（全仓 grep 零命中；依赖表见 `backend/package.json`）；候选集极小；
-  且**已有确定性 urgency 排序 + 交错**（`review-plan.service.ts`；CHANGELOG「到期复习点自动交错排序」）。
-- **贴合**：高（不引重基建，符合纪律）。**处置**：**慎做/低优先**。真缺口是"易混对"语义维度，但相似度来源（向量）不存在，
-  先用 LLM 离线判定 + 台账。**建议先量化"复习选点质量"**（可复用 Q8 的观测层）再决定要不要 LLM listwise。
-- **提醒**：外部方案 `scheduleReviewPack` 依赖 `semanticEmbedding`，在本项目落不了地；其 MMR 思想可无向量近似（用 LLM 判定的易混对当相似度）。
+#### Q1 排序模型 / reranker / 复习容量
+- **分级**：**核心（该做）**——只做"复习容量/选点质量"，**不引向量/reranker**。
+- **核验**：✅ 无 embedding/reranker/向量库；候选集极小；已有确定性 urgency 排序 + 交错（`review-plan.service.ts`）。
+  外部 `scheduleReviewPack` 依赖 `semanticEmbedding`，在本项目落不了地。
+- **处置**：先量化已落地（只读度量 `46853be9`）。**剩余可选**：复习容量（替代排序）——量化后决定是否需要 LLM listwise。
 
 #### Q2 虚拟学习者拆分 + 记忆看板
-- **核验**：🟡 **不是"纯前端、数据已齐"**。
-  - API 在：`GET /:id/memory`（`routes/admin/virtual-learners.ts:756-782`）返回 `mastered/dueReview{name,retention}/struggling/...`。
-  - 前端现状：`VirtualProfile.vue:226-240` 是标签+保留率数字；`MemoryReview.vue` 是表格；**全站唯一的 ECharts 曲线是负荷曲线**
-    （`LearnerDetail.vue:1176` 的 LSS/LF/LSB）——**mastery/stability/retention 没有曲线**。
-  - 更全的 `getRetentionSnapshot`（含 stability/lastSeenAt）**没被该端点使用**（只被 simulated-day/batch-experiment 用）。
-- **贴合**：高（实验室可解释性）。**处置**：可做（前端新画图 + 后端小改/暴露更全字段）。**前置**：统一展示口径（见下）。
+- **分级**：**核心（该做）**。
+- **核验**：🟡→✅ API `GET /:id/memory`（`routes/admin/virtual-learners.ts:756-782`）；此前前端无 mastery/stability/retention 曲线
+  （唯一曲线是负荷曲线 `LearnerDetail.vue:1176`）。
+- **处置**：✅ 完成：记忆看板 + 保留率曲线 `e5e9e6e5`。
 
 #### Q5 给每个 agent 写自述
-- **核验**：✅ 素材全齐：29 个 `prompts/core/*.yaml` 全含 `identity`；`agent-snapshots.md` 是**字段接口文档**（不是人话自述）；
-  已有生成脚本范式 `scripts/generate-agent-snapshots.ts`（含 drift 检查）。
-- **贴合**：高（降低维护/协作出错）。**处置**：✅ 完成。
-  - **机械自述**（自动生成）：`prompts/AGENTS_SELF_INTRO.md`（`7cea371d`，含 `prompts:self-intro:check` 漂移门禁）。
-  - **缘由手册**（人写、开发者向）：`doc/AGENT_SKILL_MANUAL.md`（`08dff27e`），已并入 `SKILL_DEVELOPMENT_GUIDE.md §0`；
-    明确标注"**开发文档，不是平台功能/能力说明**"；并诚实列出来源不可考的 6 处缘由。
+- **分级**：**核心（该做）**。
+- **核验**：✅ 素材全齐：29 个 `prompts/core/*.yaml` 全含 `identity`；生成脚本范式已有（含 drift 检查）。
+- **处置**：✅ 完成：机械自述 `prompts/AGENTS_SELF_INTRO.md`（`7cea371d`，含漂移门禁）；
+  缘由手册 `doc/AGENT_SKILL_MANUAL.md`（`08dff27e`，开发者向、明确非平台功能说明）。
 
-#### Q7 聚合 / 拆分 / 融合 / 评估
-- **核验**：✅ outbox/inbox + `learner_evidence` 只追加；`ConceptConsolidatorService` 已实现"LLM 可证伪建议 + 代码执行 + 留档 + 回滚"
-  （= 外部方案的"第二阶段"）；缺第一阶段向量粗筛；delta 三态已试点（goal-conversation）；**真值发现未做**。
-- **贴合**：中。**处置**：**真值发现可小做**（代码裁决 w 高、LLM 推断中、自评低——自评与真值之差=元认知校准偏置，项目已有 calibration 概念）；
-  ES/CQRS 大重构缓。
+#### Q7 聚合 / 拆分 / 融合 / 真值发现
+- **分级**：**核心（该做）**（ES/CQRS 大重构除外）。
+- **核验**：✅ outbox/inbox + 只追加证据；`ConceptConsolidatorService` 已实现"LLM 建议 + 代码执行 + 留档 + 回滚"；真值发现原未做。
+- **处置**：✅ 轻量真值发现 `1e1b0fba`（代码裁决 0.95 > 结构化选择 0.75 > LLM 推断 0.50 > 自评 0.20；差值=元认知校准）。
+  ES/CQRS 大重构 = **不做**。
 
 #### Q9 字段命中上下游（逻辑图）与调用用量
-- **结论**：**字段命中上下游 = 逻辑图（字段数据旅程/血缘）**；调用用量 = 拓扑属性（附于逻辑图）。**不建独立拓扑图**。
-- **核验（已更新）**：🟢
-  - 节点级 runtime 计数已有（`Orchestrator.vue:253`、`live.ts` 从 `agent_call_logs` 聚合）；
-  - **agent→skill 调用用量**已聚合为逻辑图注解（`8b92d09b`、`79bdadf6`）；
-  - **字段级运行时命中**已实现并叠加到逻辑图：纯聚合 `field-hit-rates.ts` + 只读 CLI（`c5a91e58`），拓扑响应增 `fieldStats`、前端按 `produced/dead/drift` 着色、死 routing 边虚线（`612d04ac`）；口径 caveat（media/`deltaOutput`/归一化）已随实现标注。
-  - 12 处断链/死规则/双源已在 `LEARNING_SCIENCE_AUDIT.md:603-640` 记档。
-- **贴合**：高。**处置**：✅ 完成（逻辑图叠字段级命中 + 调用用量；**不建独立拓扑图**）。
-- **实测信号**（只读冒烟）：30 skill / **18 死字段** / **9 契约漂移** / 10 死边候选；`teaching-turn` 偶发把嵌套键顶到顶层、`virtual-learner-scenario-designer` 泄露 persona 子字段。
+- **分级**：**核心（该做）**。
+- **核验（已更新）**：🟢 节点级 runtime 计数已有；agent→skill 调用用量已聚合为逻辑图注解（`8b92d09b`、`79bdadf6`）；
+  **字段级运行时命中**已实现并叠图：纯聚合 `field-hit-rates.ts` + 只读 CLI（`c5a91e58`），拓扑响应增 `fieldStats`、
+  前端按 `produced/dead/drift` 着色、死 routing 边虚线（`612d04ac`）；结构图改称「字段数据旅程（逻辑图）」、⇄ 文案改「调用用量」
+  （`52d6cfaf`），残留文案同步（`6cba6768`）。12 处断链/死规则记档于 `LEARNING_SCIENCE_AUDIT.md:603-640`。
+- **处置**：✅ 完成（**不建独立拓扑图**）。**实测信号**：30 skill / **18 死字段** / **9 契约漂移** / 10 死边候选。
 
-#### Q10 前端可视化创建字段 + Q11 Prompt DSL / Zod
-- **核验**：🟡
-  - DSL 侧 ✅：受控词表 `yaml-vocabulary.ts:17-25`（7 类型）、编译链 `core-compiler.ts`、守门三查（结构/字段冻结/含义冻结，
-    `routes/prompt-lab.ts:515-554` + `semantic-freeze-judge.ts`）、后置校验器 `skill-output-validator.ts`（已接入 composer 并在失败时重试）。
-  - **网关完全不支持结构化输出**：全 `backend/src/gateway/**` 无 `response_format/json_schema/json_object`（唯一命中在图片服务）；
-    `executor.ts:594-604` 只透传 model/temperature/max_tokens → **第三档"约束解码"落不了地**。
-  - 字段可视化：组件齐（`FieldRoutingTable/FieldAddWizard/SkillFieldRouting/SkillDesignPage`）、三级锁齐
-    （`routes/admin/field-routings.ts:32-38`）；**`accumulate` 确实只产 prompt 标签不落库**（`prompt-composer/index.ts:108-118`）。
-- **贴合**：中。**处置**：
-  - **不追第三档约束解码**（网关 + 无本地 XGrammar/vLLM = 缺基建）。当前上限就是第二档（软约束+校验重试），
-    可低风险增强：把字段表**编译成 JSON Schema** 供 `skill-output-validator` 使用 + **reasoning 字段前置**（零成本 prompt 约束，防 Tam et al. 2024）。
-  - Q10 的 `accumulate` 运行时功能化属 L2 议题，缓。
+#### Q10 前端可视化创建字段
+- **分级**：**核心（该做，工程主线）**。
+- **核验**：🟡 组件齐（`FieldRoutingTable/FieldAddWizard/SkillFieldRouting/SkillDesignPage`）、三级锁齐；
+  `accumulate` 只产 prompt 标签不落库（`prompt-composer/index.ts:108-118`）。
+- **处置**：工程主线；`accumulate` 运行时功能化属 L2 议题，**仅场景需要时做**。
+
+#### Q11 Prompt DSL / Zod / 约束解码
+- **分级**：**核心（该做，工程主线）**。
+- **核验**：🟡 DSL ✅（受控词表 `yaml-vocabulary.ts`、编译链 `core-compiler.ts`、守门三查、后置校验器 `skill-output-validator.ts`）；
+  **网关完全不支持结构化输出**（`gateway/**` 无 `response_format/json_schema`）→ 第三档"约束解码"落不了地。
+- **处置**：**不追第三档**；第二档增强已做编译器 `0d4aa01b` + core loader 承载 `enumValues`/嵌套 `properties` `126e05c7`。
+  **剩余可选**：把 `compileStrictJsonSchema` 接入 `skill-output-validator`（用 `collectSchemaLimitations` 做门禁），reasoning 字段前置。
 
 #### Q18 真实用户实验基建
-- **核验**：✅ 全无。只有虚拟模拟 A/B（`scripts/simulate-learner-days.ts:9-12` 的 `lp_sim_<run>_A/B`）；
-  `prediction_records` 是校准台账、`review-quota` 是每日配额、`batch_experiments` 是虚拟批量；**无 feature flag、无用户哈希分流**。
-- **贴合**：低（无真实用户）。**处置**：缓（Q16 合规是更前置）。**提醒**：外部报告默认的"MurmurHash 分流 + 五大实验组件"是真实用户量级才需要。
+- **分级**：**不做（商业级/无对象）**。
+- **核验**：✅ 全无 feature flag / 用户哈希分流；只有虚拟模拟 A/B（`scripts/simulate-learner-days.ts:9-12`）；
+  `prediction_records` 是校准台账、`review-quota` 是每日配额、`batch_experiments` 是虚拟批量。
+- **处置**：**不做**——无真实 cohort 对象；若商业化需从零建（见 §7）。
 
 ### C. 可靠 / 治理层
 
-#### Q3 静默降级（文档评为高优先、审计价值大）
-- **核验**：✅ 问题确凿、✅ 方向正确、🟡 细节有两处要修正。
-  - `quality` 在（`skills/outcome.ts:55-62` 四态；`protocol.ts:87-91` 另一类型五态含 `cache`）；**`DegradationTelemetry` 全仓 0 命中**。
-  - **真静默**（无日志/无标记/无事件）：`learner-memory.ts:264-268`、`simulated-day.service.ts:267-286`、
-    `LearnerExitService.ts:150-152`、`ReviewCompletedConsumer.ts:149`（模块头自述"失败静默丢失，不进事件链，不可追溯"）。
-  - **已被部分观测**（别误改）：`session-wrapup` 失败走 `buildFallbackSummary` + `quality='fallback'`；
-    `TeachingContextBuilder.ts:658-664`、`SessionFinalizationService.ts:343-380` 有 warn。
-  - **注意**：`getDueTraces`/`LearnerSnapshotService.getSnapshot` **内部不吞**，是**调用方**吞——改错地方会漏掉真实静默点。
-  - DNR/结构化 degraded 字段/混沌套件**皆无**；`failurePolicy: fallback` **未彻底退役**（见 §4）。
-- **贴合**：高（防"自信的错"，与"LLM 观测 + 代码裁决"纪律一致）。**处置**：**可做（低-中）**。最小版：给 4 处真静默加结构化降级标记
-  + 一个 DNR 统计脚本 + 顺手收敛 fallback 残留。
+#### Q3 静默降级
+- **分级**：**核心（该做）**。
+- **核验**：✅ 问题确凿。真静默原 4 处：`learner-memory.ts:264-268`、`simulated-day.service.ts:267-286`、
+  `LearnerExitService.ts:150-152`、`ReviewCompletedConsumer.ts:149`（模块头自述"失败静默丢失"）；`DegradationTelemetry` 原 0 命中；
+  `failurePolicy: fallback` 原未彻底退役。
+- **处置**：✅ 最小层——虚拟侧降级遥测（新增 `skills/degradation-telemetry.ts`）`c1f83891`；
+  真实侧两处真静默打标 + DNR 只读脚本 `21738b8d`；`failurePolicy` 收敛为 `retry|propagate` `955dbcdc`。
+  约定：**允许降级，不允许未打标降级**。
 
 #### Q17 人的监督与逃逸舱
-- **核验**：🟡 机制在，但**文档文件归属写错**：`replanSignal/requireConfirmation` 在 `services/learning/learning.service.ts:3947-3988`
-  （真实学习者侧，preview+确认），**不在** `simulation.coordinator.ts`；虚拟侧是人工端点（`virtual-learners.ts:2690/2708`）。
-  health-center 是**运维层**（`health-center.ts:96-101` 只处理基线漂移），无学生困境升级/可疑输出复核队列。
-- **贴合**：中（真实用户规模化后）。**处置**：缓；低成本项（给完成判定/检查点留人工复核入口）可并入 Q3。
+- **分级**：**不做（商业级/无对象）**。
+- **核验**：🟡 机制在（`replanSignal/requireConfirmation` 在 `services/learning/learning.service.ts:3947-3988`，真实学习者侧预览+确认；
+  虚拟侧是人工端点 `routes/admin/virtual-learners.ts:2690/2708`）；health-center 是运维层，无学生困境升级/可疑输出复核队列。
+- **处置**：**不做**——教师升级工作流依赖长期服务对象；低成本完成判定/检查点复核入口已由 Q3 的降级打标与 DNR 观测覆盖。
 
 #### Q20 成本与可持续
-- **核验**：🟡 细节要纠正：
-  - `costCeiling` 是**调用次数上限、不是钱**，且仅虚拟（`virtual-lab/session-budget.ts:10-24`）。
-  - `agent_call_logs.sessionId` 真列 + token 列 ✅，`scripts/audit-session-cost.ts` 只给 token/调用数，
-    **明说缺"按模型单价"权威表、不换算金额**。
-  - **无 per-user 预算、无单位经济**；模型路由是**静态 tier**（`models.config.ts` / `router.ts:136-158`），
-    **无成本/复杂度驱动路由**。
-- **贴合**：中（规模化前必答）。**处置**：缓。低成本项：补一张模型单价表 → 现有 token 日志即可出金额。
+- **分级**：**轻量保留（只做 token 面板，不再加码）**。
+- **核验**：🟡 `costCeiling` 是**调用次数、不是钱**，且仅虚拟（`virtual-lab/session-budget.ts:10-24`）；
+  `agent_call_logs.sessionId` 真列 + token 列 ✅，但缺按模型单价表；无 per-user 预算、无单位经济；路由是静态 tier。
+- **处置**：✅ token 面板 + 单价纯函数 `services/cost/model-cost.ts`（单价仍是占位空表，未知单价返回 `usd:null` 不冒充 0）。
+  per-user 预算 / 单位经济 / 成本驱动路由 = **不做**（见 §7）。
 
 ### D. 伦理 / 内容层
 
-#### Q13 教育公平与自我实现预言（八问评 P1；第二份报告评 P0）
-- **核验**：🟡 **问题真、但核心论据已过期，且细节需更正**。
-  - 降档理由现在是 **5 条负荷类**（新增 `frustration_streak`，`TaskDifficultyAdjustmentService.ts:138-144`），非文档说的 4 条；
-    知识类 3 条**只挡升档**（`:221-225`）；**但 band `upgrade` 会绕过知识阻挡直接 +1**（`:244-247`）；
-    且 `challengeLevelCap==='high'` ⇔ `paceMode==='push'`（`LearnerSnapshotService.ts:114`），"去掉 paceMode 重复证据"并未完全成立。
-  - **油门前提已过期**：`shouldEmitCheckpoint` 已放行 `ready_to_close`（`AITeachingCoordinator.ts:242-254`），
-    协调器护栏 `!completionReady` 只在"本轮已可收尾"时挡（`:2761-2769`，而 `ready_to_close` 可来自 PF 逃生梯，不必然 completionReady）；
-    答案键示例、skip 路由、黑盒消费三处已修；报告 N3 已验证首条检查点落地。**残余门是统计性的**（`SUCCESS_BAND_MIN_SAMPLE=6`/用户），非结构性。
-  - **`D_floor` 不存在**：只有 clamp 到 1（`:26,253-257`；测试 `task-difficulty-adjustment.test.ts:241-249` 断言"落回 1"）；无横向重路由。
-  - **无公平审计**：无分层；真实用户**无任何 cohort/保护属性**（`schema.prisma:810-856`）；难度台账只在 `reasons.length>0` 写
-    （`AITeachingCoordinator.ts:1861`），且每 task 覆盖、无 `keep` 记录、无对照臂（`hasRandomizedControl:false`）。
-- **贴合**：高（"学习者中心"理念的自洽性）。**处置**：**可做（低成本、高价值）**：
-  **D_floor + 支架双向退出（fading）+ 独立锚题探针**；审计先做"行为代理变量分层统计"简版，**不要** VAE/DRO。
-  分层对象可先用**虚拟学习者**（有 persona/分层标签），绕开真实用户无属性的问题。
+#### Q13 教育公平与自我实现预言
+- **分级**：**核心（该做）**。
+- **核验**：🟡 问题真、核心论据已过期、细节需更正：降档理由现为 5 条负荷类（含 `frustration_streak`）；知识类只挡升档但 band `upgrade` 可绕过；
+  原**无 D_floor**（只有 clamp 到 1）、无公平审计。分层对象可先用虚拟学习者（有 persona 标签），绕开真实用户无属性问题。
+- **处置**：✅ 最小层：D_floor `a97fcc24`、难度分配公平审计（只读）`e643d494`、锚题探针纯决策 `dfe30482`、接线 `152713f2`
+  （目标注入 + 判定打标 + `anchor:result` 留痕，只标记不改写）、虚拟 cohort 分层审计 `c13dee5b`。
+  **支架 fading 复核后不做**：`adjusted` 每任务由基线重算，负荷理由消失即自动撤回，再加独立规则会与"知识类只挡升档"政策冲突。
+  不做 VAE/DRO。
 
-#### Q14 安全与滥用防御（八问评 P0）
-- **核验**：✅ **完全确凿**：`teaching-turn.yaml` 无任何注入防御/指令层级、无输入围栏（学习者消息原样进 `messages`，
-  `AITeachingCoordinator.ts:2323-2336`，`teaching-turn/index.ts:770-825` 无 sanitize）；**零内容审核**；**零系统提示防套取**；
-  答案农场仅软规则（`teaching-turn.yaml:107`）。**对照**：虚拟侧既有 prompt 条款（`virtual-learner-learn-turn-simulator.yaml:66`、
-  `virtual-learner-actor-auditor.yaml:41`、`skill.virtual-learner-referee.md:61`）**又有代码级 `sanitizeVisibleContent`**
-  （`skills/virtual-learner-learn-turn-simulator/index.ts:164-171`）——**现成范式，直接镜像到真实教学侧**。
-- **贴合**：**最高**（真实学生与 AI 对话；涉青少年则是合规硬约束）。**处置**：**可做（低成本、立刻）**：
-  镜像注入条款 + 代码级 sanitize/datamarking + 防套取 + 单层 LLM 审核（**不需要** DeBERTa/Aho-Corasick 小模型栈）。
+#### Q14 安全与滥用防御
+- **分级**：**轻量保留（零成本已落地，不再加码）**。
+- **核验**：✅ 完全确凿：`teaching-turn.yaml` 原无注入防御/指令层级/输入围栏（学习者消息原样进 `messages`）、零内容审核、零防套取；
+  虚拟侧既有 prompt 条款 + 代码级 `sanitizeVisibleContent` 可镜像。
+- **处置**：✅ 最小层：教学链路输入围栏 + 注入/防套取条款 `5f59c904`；修正为围栏只作用于模型 payload、落库保持学生原文 `6285168d`。
+  **不加** DeBERTa/Aho-Corasick 小模型栈、**不加** LLM 审核层。
 
-#### Q15 内容正确性（八问评 P0）
-- **核验**：✅ **完全确凿**：讲解/例子/总结全部 LLM 实时生成，无 RAG/无引用/无事实校验；`web-search/web-fetch` 存在但
-  **不在教学链路**（只注册进 Capability Runtime）；检查点判**学生**不判**老师**（`AITeachingCoordinator.ts:1457-1491`，代码自述"弱独立"）。
-  🟡 **一处修正**："不确定降断言"文化**存在但只在 meta 技能**（learning-predictor/lesson-knowledge-enricher/replan-attribution/
-  concept-consolidator/learner-state-review/session-wrapup），**教学内容本身没有**。
-- **贴合**：高（"AI 老师能不能信"是产品根本）。**处置**：**可做（低成本）**：教学内容补"不确定降断言强度" + 算数/代码类轻校验；
-  RAG 溯源/沙箱 = 缺基建，缓（呼应 Q12）。
+#### Q15 内容正确性
+- **分级**：**轻量保留（零成本已落地，不再加码）**。
+- **核验**：✅ 讲解/例子/总结全 LLM 实时生成、无 RAG/无引用/无事实校验；检查点判**学生**不判**老师**；
+  "不确定降断言"原仅存在于 meta 技能，教学内容本身没有。
+- **处置**：✅ 最小层：教学内容"不确定降断言/不编造具体值/数学可复核" `760ff281`。
+  RAG 溯源/引用哈希/闭域检索/代码沙箱 = **不做**。
 
-#### Q16 隐私、同意与伦理边界（八问评 P1）
-- **核验**：🟡 问题真，但**文档对"敏感字段"有夸大**：
-  - **真实用户**画像（`agents/learner-model-agent/types.ts`）推断的是认知画像（`metacognitionLevel/thinkingStyle/selfAssessmentAccuracy`）
-    + 情绪画像（`motivationTrigger/confidenceLevel/frustrationTolerance`）+ 自由文本叙事；其中 **`frustrationTolerance` 是死默认**
-    （aggregator 只填 3 个字段）、`BehavioralBaseline` 已死（`fetchBaselineData` 返回 null）。
-  - **`helpSeekingPattern/adversarialPattern/emotionalTriggers/failurePatterns/...` 这些密集心理特征在虚拟 persona**
-    （`virtual-learner-shared/schemas.ts:30-69`，LLM 生成的合成人设，可含 `age`），**不是真实用户**。
-  - 合规材料：**无同意/未成年人/COPPA/FERPA**；但 `NON_FUNCTIONAL_GOVERNANCE_PLAN.md:735` NF-P2-1 已把它列为"**需决策**"（非空白，但未做）。
-  - 删除能力**比文档说的强**：虚拟级联删（`virtual-cleanup.service.ts`，硬拒真实用户 409）**覆盖派生数据**
-    （`learner_evidence/learner_projections/memory_traces` 等）；真实用户有软删（`routes/users.ts:222-274`）+ 手动 purge 脚本
-    （`purge-soft-deleted-users.ts`，覆盖派生数据，含 `--dry-run`）。缺的是**自动保留/TTL、用户自助数据导出**。
-- **贴合**：高（合规=上线前提；"自述 vs 推断"与 OLM 一致）。**处置**：**可做（产品/数据设计，低基建）**：
-  数据分类矩阵 + 同意/未成年人策略 + "自述覆盖推断"仲裁 + 用户数据导出；虚拟 cleanup 已是现成范式。
+#### Q16 隐私、同意与伦理边界
+- **分级**：**轻量保留（仅删除卫生；零成本已落地，不再加码）**。
+- **核验**：🟡 问题真但文档对"敏感字段"有夸大：密集心理特征只在**虚拟 persona**（合成人设，非真实用户）；
+  真实用户只存认知画像 + 情绪画像 + 叙事，且 `frustrationTolerance`/`BehavioralBaseline` 是死默认。
+  删除能力比文档说的强（虚拟级联 + 真实 purge 覆盖派生数据），缺自动 TTL / 自助导出；原漏 `prediction_records`/`misconception_ledger`。
+- **处置**：✅ 删除覆盖补漏 `2d205f9b`（回归修复 `345e4550`）。
+  同意/未成年人/自述优先仲裁/导出=删除同矩阵/保留 TTL = **商业级，不做**（理由与商业化代价见 §7）。
 
 #### Q6 学习者模型维度
-- **核验**：🟡 认知/元认知/情感/行为已实现；SDT 归属感/成长型思维缺；**无 OLM 自述仲裁**（无"自述覆盖推断"逻辑）。
-- **贴合**：中。**处置**：把 **OLM"自述优先"并入 Q16**；量表/贝叶斯融合暂缓。
+- **分级**：**不做（商业级/无对象）**。
+- **核验**：🟡 认知/元认知/情感/行为已实现；SDT 归属感/成长型思维缺；无 OLM 自述仲裁（无"自述覆盖推断"）。
+- **处置**：**不做**——现有维度够实验用；OLM"自述优先"属用户权利/治理（Q16 商业级），量表/贝叶斯融合不做。
 
-#### Q12 材料/资料组织
+#### Q12 材料 / 资料组织
+- **分级**：**不做（商业级/无对象）**。
 - **核验**：✅ 无 materials 实体、无 multipart 上传；`web-search/web-fetch` 有但不接教学；`course-design` 已退役。
-- **贴合**：中（等场景）。**处置**：缓（B 路线：上传→解析→注入 evidence，复用现有外挂能力）。
+- **处置**：**不做/待场景**（若将来要，B 路线：上传→解析→注入 evidence，复用现有外挂能力）。
 
 ---
 
 ## 3. 核验发现：文档"未记 / 记错 / 已过期"清单
 
-| # | 类型 | 内容 | 证据 |
+| # | 类型 | 内容 | 证据 | 现状 |
+|---|---|---|---|---|
+| 1 | ⚠️ 已过期 | "检查点几乎不产生 → 油门打不开" | `AITeachingCoordinator.ts:242-254` 已放行 `ready_to_close`；VL 验证 `checkpoint:result=9` | ✅ 已修 |
+| 2 | ⚠️ 已过期 | "排期/展示不同源" | `preserveDueAt` 已在（`memory-trace.service.ts:229-233,264-267`） | 残留 legacy 首次创建 / `lastSeenAt` 刷新 |
+| 3 | ❌ 记错（文件归属） | `replanSignal/requireConfirmation` 记在 `simulation.coordinator.ts` | 实际在 `learning.service.ts:3947-3988` | 保留 |
+| 4 | ❌ 记错（数据） | 降档理由是 4 条负荷类 | 现为 **5 条**（含 `frustration_streak`） | 保留 |
+| 5 | ❌ 夸大 | 学习者模型密集心理特征 | 真实用户只存认知+情绪+叙事；密集特征在虚拟 persona；两个死字段 | 保留 |
+| 6 | ❌ 夸大 | "删除能力只覆盖部分记录" | 虚拟级联 + 真实 purge 已覆盖派生数据；缺自动 TTL/自助导出 | ✅ 覆盖补漏 `2d205f9b` |
+| 7 | ❌ 未记 | 网关不支持 `response_format/json_schema` | `gateway/**` 无命中 → 第三档约束解码落不了地 | 保留（不做第三档） |
+| 8 | ❌ 未记 | `failurePolicy: fallback` 未彻底退役 | 词表 + 2 manifest + scaffold 默认 | ✅ 收敛 `955dbcdc` |
+| 9 | ❌ 未记 | `actr.ts` 的 `calculateRetention/isReviewDue` 已 test-only | 生产 import 只剩 3 项；`memory-trace.service.ts:333` 注释过期 | ✅ 清理 `338c7717` |
+| 10 | ❌ 未记 | `sinceLastSessionDays` 死字段 | 只声明、无赋值 | ✅ 打通 `338c7717`；真实侧另补 `b6a6afd6` |
+| 11 | ❌ 未记 | `costCeiling` 是调用次数不是钱；无单价表 | `virtual-lab/session-budget.ts:10-24` | 保留（轻量，token 面板已做） |
+| 12 | ❌ 未记 | 前端无 mastery/stability/retention 曲线 | `LearnerDetail.vue:1176` 只有负荷曲线 | ✅ 修复 `e5e9e6e5` |
+
+---
+
+## 4. 即刻可修缺陷（已全部落地）
+
+| # | 缺陷 | 影响 | 修复 |
 |---|---|---|---|
-| 1 | ⚠️ **已过期** | "检查点几乎不产生 → 油门打不开" | `AITeachingCoordinator.ts:242-254` 已放行 `ready_to_close`；N3 已验证；残门是 `SUCCESS_BAND_MIN_SAMPLE=6` |
-| 2 | ⚠️ **已过期** | "排期/展示不同源"（§2.1 排期侧） | `preserveDueAt` 已在（`memory-trace.service.ts:229-233,264-267`）；残留：首次创建走 legacy、`lastSeenAt` 仍被刷新 |
-| 3 | ❌ **记错（文件归属）** | `replanSignal/requireConfirmation` 在 `simulation.coordinator.ts:1933/1976` | 实际在 `learning.service.ts:3947-3988`；`simulation.coordinator.ts` 那两行是函数收尾括号 |
-| 4 | ❌ **记错（数据）** | 降档理由是 4 条负荷类 | 现为 **5 条**（新增 `frustration_streak`，2026-09-18） |
-| 5 | ❌ **夸大** | 学习者模型密集心理特征 | 真实用户只存认知+情绪+叙事；密集心理特征在虚拟 persona；`frustrationTolerance`/`BehavioralBaseline` 是死字段 |
-| 6 | ❌ **夸大** | "删除能力只覆盖部分记录" | 虚拟级联 + 真实 purge **已覆盖派生数据**；缺的是自动 TTL 与自助导出 |
-| 7 | ❌ **未记** | 网关不支持 `response_format/json_schema` | `gateway/**` 无命中 → 第三档约束解码落不了地 |
-| 8 | ❌ **未记** | `failurePolicy: fallback` 未彻底退役 | `yaml-vocabulary.ts:48` 仍列；2 个 manifest 用 `deterministic-fallback`；**scaffold 默认仍写 fallback**（`skill-scaffold.service.ts:149`） |
-| 9 | ❌ **未记** | `actr.ts` 的 `calculateRetention/isReviewDue` 已 test-only | 生产 import 只剩 `reviewIntervalDays/clamp01/DEFAULT_RETENTION_THRESHOLD`；`memory-trace.service.ts:333` 注释过期 |
-| 10 | ❌ **未记** | `sinceLastSessionDays` 死字段 | 只声明、无赋值（`simulated-day.service.ts:218-237`） |
-| 11 | ❌ **未记** | `costCeiling` 是调用次数不是钱；无单价表 | `virtual-lab/session-budget.ts:10-24`；`audit-session-cost.ts:11,142` |
-| 12 | ❌ **未记** | 前端无 mastery/stability/retention 曲线（只有负荷曲线） | `LearnerDetail.vue:1176`；`MemoryReview.vue`/`VirtualProfile.vue` 是表格/标签 |
+| **D1** | 模拟器 `buildUserPayload` 丢弃 `pendingCheckpoint`/`temporalContext` | 检查点黑盒消费是半截线 | `59483516`（两分支白名单投影，无答案键） |
+| **D2** | 模拟器 `definition.ts` 与运行时 `SkillDefinition` 漂移 | snapshots/守门口径不一致 | `83c26460` |
+| **D3** | `failurePolicy: fallback` 残留（含 scaffold 默认） | 新 skill 继续生成退役策略值 | `955dbcdc` |
+| **D4** | `sinceLastSessionDays` 死字段 + `actr.ts` 死代码/过期注释 | Q19/Q4 时间维度落空 | `338c7717` |
 
 ---
 
-## 4. 核验中发现的四个"即刻可修"缺陷（未改，建议进第一波）
+## 5. 可行性分级（方案 → 本定位）
 
-| # | 缺陷 | 影响 | 证据 |
-|---|---|---|---|
-| **D1** | 模拟器 `buildUserPayload` **丢弃 `pendingCheckpoint` 与 `temporalContext`**（两个分支都丢） | 最近落地的 P1-3"黑盒消费检查点"是**半截线**：LLM 看不到结构化题目/选项与时间上下文；`normalizeCheckpointAnswer` 只能靠历史文本猜 | `virtual-learner-learn-turn-simulator/index.ts:318-386`（body 与 stable-prefix 分支均无这两个字段） |
-| **D2** | 模拟器 `definition.ts` 与运行时 `SkillDefinition` / 契约漂移 | 缺 `learnerMemory`/`epistemicGrounding`/`pendingCheckpoint`/`checkpointAnswer`；snapshots/守门口径与实际不一致 | `definition.ts:8-33` vs `index.ts:394-417` |
-| **D3** | `failurePolicy: fallback` 残留（尤其 **scaffold 默认**） | 新 skill 会继续生成本应退役的策略值，纪律滑坡 | `yaml-vocabulary.ts:48`、`prompts/manifests/concept-priority.yaml:17`、`path-adjustment-generator.yaml:17`、`skill-scaffold.service.ts:149` |
-| **D4** | `sinceLastSessionDays` 死字段 + `actr.ts` 死代码/过期注释 | Q19"回归重校准"与 Q4 时间维度都指着它，却是空的 | `simulated-day.service.ts:218-237`；`memory-trace.service.ts:333` |
+### ① 现在就能做（实验核心）
+- **Q8 测量深化**：延迟锚题复用（复用 Q13 探针，当前只覆盖"已掌握/挣扎"两信念）。
+- **Q1 复习容量（替代排序）**：在已量化的选点质量上决定是否需要 LLM listwise。
+- **Q10/Q11 工程主线**：Q11b strict JSON Schema 接入 `skill-output-validator`；`accumulate` 运行时功能化仅在场景需要时做。
+- **契约漂移清理**：Q9 实测 9 漂移 / 18 死字段 / 10 死边候选。
+- **Q20 token 面板**：面板与单价纯函数已就位；缺权威单价数值（外部财务输入）。
 
-> D1/D2 直接决定"检查点出题"这条刚修好的链是否**真的端到端可用**——建议在任何"记忆保真/看板/公平"之前先修。
+### ② 轻量保留（已做，不再加码）
+- **Q14 输入围栏 + 注入/防套取条款**（`5f59c904` + `6285168d`）——**不加**审核重层。
+- **Q15 教学内容降断言/不编造/可复核**（`760ff281`）——**不加** RAG/沙箱。
+- **Q16 删除卫生/数据覆盖补漏**（`2d205f9b`）——同意/未成年人/导出等重层不做。
+- **Q20 token 面板 / 单价纯函数**（`services/cost/model-cost.ts`）——预算与单位经济不做。
+- **Q3 降级打标 + DNR**（`c1f83891` / `21738b8d`）——维持最小层，不扩成故障注入套件。
 
----
-
-## 5. 可行性分级（方案 → 真实业务）
-
-### 现在就能做（低基建、低风险、高杠杆）
-- **修 D1/D2/D4**（检查点 payload 与定义漂移、死字段）——见 §4。
-- **Q3 静默降级最小层**：4 处真静默加结构化 `degraded` 标记 + DNR 脚本；收敛 `failurePolicy` 残留（D3）。
-- **Q14 安全最小层**：镜像虚拟侧注入条款 + 代码级 sanitize/datamarking + 防系统提示套取。
-- **Q15 内容诚实最小层**：教学内容"不确定降断言强度"（复用 meta 技能已有的 hedging 文化）。
-- **Q13 公平最小层**：`D_floor`（不可永远贴地板）+ 支架双向退出 + 独立锚题探针。
-- **Q16 合规基线**：数据分类矩阵 + 同意/未成年人策略 + "自述覆盖推断" + 用户数据导出（虚拟 cleanup 已是范式）。
-- **Q5 agent 自述生成器**（一天）。
-- **Q9 字段命中（逻辑图）+ 调用用量**（只读聚合 `agent_call_logs` / `prompt_call_logs.extractedJson`）。
-
-### 可做但需小设计（低-中基建）
-- **Q4 虚拟学习者概率记忆**：概率提取 + 复用 friction 注入 rng 范式 + 混淆对先走 LLM 离线判；**前置：D1/D4 + `dueReview` 带 retention**。
-- **Q2 记忆看板**：前端新画曲线 + 后端暴露 `getRetentionSnapshot` 字段；**前置：统一展示口径（`lastSeenAt` 语义）**。
-- **Q7 真值发现（轻量）**：代码裁决 > 结构化选择 > LLM 推断 > 自评，派生元认知校准偏置。
-- **Q11 增强（第二档）**：字段表 → JSON Schema 供后置校验；reasoning 字段前置。
-- **Q8 观测激活**：把 `retention-curve` 孤岛接进 admin。
-
-### 缺基建 / 当前无对象（缓做，别现在动）
-- 独立 reranker / embedding / 向量库（Q1、Q7 粗筛、Q4 混淆对在线部分）。
-- RAG 溯源 / 引用哈希 / 闭域检索（Q12、Q15 长期）。
-- 代码沙箱 / WASM SymPy / Firecracker（Q15 工具校验）。
-- 约束解码 / XGrammar / 本地小模型栈（Q11 第三档）。
-- 真实用户分流 / feature flag / MRT（Q18、Q8 因果）。
-- 单位经济 / per-user 成本预算 / 成本驱动路由（Q20）。
-- 小模型多级内容审核（Q14 的 DeBERTa/Aho-Corasick 层）——先用单层 LLM。
-- 流失预测 / winback / streak 免死（Q19 产品功能）。
+### ③ 不做（商业级，若将来商业化需从零建）
+- 内容审核重层（小模型栈 / 多级审核）。
+- 同意、法务、未成年人、自述优先仲裁、数据主体导出、保留 TTL。
+- 单位经济、per-user 预算、成本驱动路由。
+- 真实用户实验基建（feature flag / 哈希分流 / MRT）。
+- 教师升级流程 / 可疑输出复核队列。
+- 材料库 / 上传解析。
+- RAG 溯源 / 向量库 / embedding / reranker / 代码沙箱 / 约束解码 / 本地小模型。
 
 ---
 
-## 6. 升级路线建议（三波）
+## 6. 升级路线建议（按新定位重新基线）
 
-> 排序原则：**先让"测量与诚实"可信 → 再让"实验室保真"更强 → 最后才上依赖新基建的研究型/规模化能力**。
+> 排序原则：**先让"测量与诚实"可信 → 再让"实验室保真"更强**；依赖新基建或商业对象的全部不做。
 
-### 第一波：传感器与诚实层（低成本，解锁后续所有判断）
-1. 修 D1/D2（检查点端到端）与 D4（死字段/死代码）；顺带收敛 D3。
-2. Q3 静默降级最小层 + DNR；把"允许降级、不允许未打标降级"写成显式约定。
-3. Q14 注入围栏 + 防套取；Q15 教学内容降断言。
-4. Q13 D_floor + 支架 fading + 独立锚题探针。
-5. Q16 合规基线（同意/未成年人/自述优先/导出）。
-- **验收**：学情快照失败会带 `degraded` 且教学链路显式提示"数据不全"；检查点题目真正进 payload 并能被黑盒作答；
-  被降档组有最小挑战保底与探针复测；能导出单个学习者的全量数据。
+**已基本完成**：
+- **Wave 1（传感器与诚实层）**：检查点端到端 D1/D2、死字段/死代码 D4、策略收敛 D3、静默降级（虚拟+真实）+ DNR、
+  Q14 输入围栏、Q15 内容降断言、Q13 D_floor + 公平审计 + 锚题探针、Q16 删除覆盖补漏。
+- **Wave 2（实验室保真 + 可解释）**：Q4 概率化记忆、Q2/Q8 记忆看板 + 保留率曲线、Q5 自述/手册、Q9 字段命中 + 调用用量、
+  Q1 选点质量、Q7 轻量真值发现、Q11b JSON Schema 编译器、Q19 真实侧长间隔信号。
+- **Wave 2.5（验证中新发现）**：路径生成失败自愈、教学回合抖动可续跑暂停、真实侧长间隔信号（详见 §8）。
 
-### 第二波：实验室保真 + 可解释（中低成本）
-6. Q4 概率化记忆（强度确定 + 提取概率 + 混淆对离线表 + 确定性 PRNG；虚拟调度与真实按 `isVirtualLearner` 隔离）。
-7. Q2 记忆看板（先统一展示口径，再画曲线）+ Q8 保持率曲线进 admin。
-8. Q5 agent 自述生成器（并入开发手册）＋ Q9 字段级命中/调用用量（逻辑图）。
-9. Q7 轻量真值发现（自评↔真值差 = 元认知校准）。
-- **验收**：虚拟学习者"越久越含糊/易记错"可复现（同种子回放一致）；看板与排期同源；逻辑图能看出未调用（死边候选）。
+**剩余可选（实验核心，非阻塞）**：
+1. **Q8 测量深化**：延迟锚题复用。
+2. **Q1 复习容量（替代排序）**。
+3. **Q10/Q11 工程主线**：Q11b 接线；`accumulate` 视场景。
+4. **契约漂移清理**。
+5. **Q20 token 面板**：补权威单价即可出金额。
 
-### 第三波：规模化前置（等真实用户或明确需求）
-10. Q11 第二档增强（JSON Schema 校验；reasoning 前置）；Q20 单价表 + per-user 监控。
-11. Q18 分流基建（用户哈希 + feature flag）→ 再谈 MRT；Q19 回归重校准 + 流失信号。
-12. 按需再评估：RAG/沙箱/约束解码/reranker（届时问"是否真有场景"）。
-- **验收**：能在一个真实 cohort 上做无偏对比；成本可按用户归因。
+**明确不做**：第三波"规模化前置"（Q18 分流 / Q19 winback / Q20 单位经济）——无对象、无长期服务（见 §7）。
 
 ---
 
-## 7. 与既有治理计划的边界（避免重复建设）
+## 7. 与既有治理计划的边界（不做 + 理由 + 若商业化的代价）
 
-| 层 | 已被谁覆盖 | 本文新增落点 |
+| 层 | 已被谁覆盖 | 本定位处置 |
 |---|---|---|
-| 基础设施安全 | `NON_FUNCTIONAL_GOVERNANCE_PLAN.md`（41 条 NF）+ `SECURITY.md` | Q14 的 **LLM 语义安全**不在此层 |
-| 教育科学性 | `LEARNING_SCIENCE_AUDIT.md` / `EDUCATIONAL_THEORY_MAP.md` | Q13/Q8 与它衔接（审计已自认阻尼陷阱/观察非因果） |
-| Prompt 工程 | `SKILL_PROTOCOL_V4.md` / `AGENT_IO_DESIGN_V3.md` | Q11 增强（第二档）；Q14 防套取与其相关 |
-| 数据治理 | NF-P2-1（需决策，未做） | Q16 的**伦理/同意**与它角度不同（工程删除矩阵 vs 伦理） |
-| 教育/内容/伦理 | **几乎空白** | Q13/Q14/Q15/Q16 全在此层 |
+| 基础设施安全 | `NON_FUNCTIONAL_GOVERNANCE_PLAN.md`（41 条 NF）+ `SECURITY.md` | 维持；不涉及 |
+| 教育科学性 | `LEARNING_SCIENCE_AUDIT.md` / `EDUCATIONAL_THEORY_MAP.md` | Q13/Q8 与其衔接（已自认阻尼陷阱/观察非因果） |
+| Prompt 工程 | `SKILL_PROTOCOL_V4.md` / `AGENT_IO_DESIGN_V3.md` | 轻量保留（Q11 第二档、Q14 防套取） |
+| 数据治理 | NF-P2-1（需决策，未做） | **不做**（见下） |
+| 教育/内容/伦理 | 原几乎空白 | Q14/Q15 轻量保留；Q13 核心最小层 |
+
+**PRIVACY（Q16）结论并入——不做，理由与商业化代价**
+- 原基线覆盖：数据分类矩阵、同意台账 `consent_records`、未成年人年龄门/家长同意、"自述优先"OLM 仲裁、
+  导出=删除同一覆盖矩阵、学习数据保留 TTL。
+- **为什么不做**：无长期服务、真实用户不是被服务的长期数据主体；合规文档需法域/法务拍板，与 Demo 定位不匹配。
+- **若商业化需从零建**：`consent_records{userId,purposeCode,version,grantedAt,revokedAt,source}`、年龄区间采集与监护人同意、
+  未成年人关闭心理推断/实验、`selfReported*` 平行值 + `provenance` 仲裁、`LEARNER_DATA_COVERAGE` 单源矩阵 + 主体导出端点、按类保留 TTL。
+- **已保留的零成本部分**：删除覆盖补漏（`prediction_records`/`misconception_ledger`，`2d205f9b`）——删除卫生属于"诚实"而非合规重层。
+
+**SCALE（Q18/Q19/Q20）结论并入——不做，理由与商业化代价**
+- **Q18 真实用户实验基建**：无真实 cohort 对象。若商业化：复用 `SplitMix64PRNG`（sha256 种子）做稳定分桶 + 仓库内配置注册表
+  （不落库、kill-switch）+ `learner_evidence` 记曝光/结果 + 合规门 + SRM 只读审计，再谈 MRT。
+- **Q19 生命周期产品功能**：冷启动继承与长间隔重校准已做；churn/winback/dormant 分布可用只读脚本从既有时间戳推导。
+  若商业化再加：winback 通知（需独立同意依据）、streak 免死/补签（复用 `learner_projections`，避免加列）。
+- **Q20 单位经济**：无收入对象。若商业化：`models.config.ts` 单价表 → 只读金额报表 → per-user/session 归因 → 软告警 → 硬上限；
+  注意 `agent_call_logs.promptTokens` 粗算会**高估**缓存部分，精确口径须用 `llm_execution_attempts` 的 `promptCacheHit/MissTokens`。
+- **Q17 教师升级流程**：依赖长期服务对象，不做。
 
 ---
 
 ## 8. 执行进展（2026-09-18 → 09-19）
 
-> 本文件原有结论与优先级不改；这里是"按三波路线做了什么"的台账（每条含提交）。
+> 本文件原有结论与优先级不改；这里是"按路线做了什么"的台账（每条含提交）。原 Track A/B 与 Wave-2 记录已合并至此。
 
-### 第一波：传感器与诚实层（全部完成）
-| 项 | 提交 |
-|---|---|
-| A1 检查点/时间上下文补进模拟器 payload（修 P1-3 半截线） | `59483516` |
-| A2 运行时定义与 SkillDefinition 补齐 | `83c26460` |
-| A3 `sinceLastSessionDays` 打通 + 删 ACT-R 死代码 | `338c7717` |
-| A4 `failurePolicy` 收敛为 retry\|propagate | `955dbcdc` |
-| A5 降级遥测共享接口 + 虚拟侧两处真静默 | `c1f83891` |
-| B1 真实侧静默降级打标 + DNR 脚本 | `21738b8d` |
-| B2 输入围栏 + 注入条款（+只作用 payload 的修正） | `5f59c904`、`6285168d` |
-| B3 教学内容诚实（降断言/不编造/可复核） | `760ff281` |
-| B4 D_floor 最小挑战保底 | `a97fcc24` |
-| B4 难度分配公平审计（只读） | `e643d494` |
+### Wave 1 · Track A（虚拟学习者链路）
+| 项 | 提交 | 结果 |
+|---|---|---|
+| A1 检查点/时间上下文补进模拟器 payload | `59483516` | 两分支白名单投影（无答案键）；测试 4 例 |
+| A2 运行时定义与 `SkillDefinition` 补齐 | `83c26460` | definition + 运行时同步；snapshots/runtime-contract 过 |
+| A3 `sinceLastSessionDays` 打通 + ACT-R 死代码清理 | `338c7717` | `previousCourseDayGap`（课表口径，首日省略键）；删 4 死函数 |
+| A5 降级遥测 + 虚拟侧两处真静默 | `c1f83891` | 新增 `skills/degradation-telemetry.ts`；learner-memory / simulated-day 打标 |
+| A4 `failurePolicy` 收敛 | `955dbcdc` | 可写词表收敛为 `retry|propagate`；scaffold 默认 retry |
 
-### 第二波：实验室保真 + 可解释（主体完成）
+### Wave 1 · Track B（真实教学侧治理）
+| 项 | 提交 | 结果 |
+|---|---|---|
+| B1 真实侧静默降级 + DNR | `21738b8d` | LearnerExitService / ReviewCompletedConsumer 结构化打标；只读 DNR 脚本（近似，非真 SLO） |
+| B2 输入围栏 + 注入条款 | `5f59c904` + `6285168d` | `input-fence.ts`（datamark）；修正为只作用 payload、落库保原文 |
+| B3 教学内容诚实 | `760ff281` | teaching-turn / session-wrapup 各加 3 条规则；门禁 29-0 |
+| B4 公平最小层（一）`D_floor` | `a97fcc24` | 降档最多低于基线 1 档且绝对值≥3；输出/evidence 增 `floor`/`floorApplied` |
+| B4 公平最小层（二）审计 | `e643d494` | 纯函数公平审计 + 只读脚本（默认排除虚拟学习者） |
+
+### Wave 2（实验室保真 + 可解释）
 | 项 | 提交 |
 |---|---|
 | Q4 概率化记忆：纯模块（SplitMix64 + 混淆竞争） | `b6d0dd9d` |
-| Q4 集成：`memoryRecall` 接入 assisted + blackbox 两路 | `db3aba11` |
-| **assisted 路径消费待答检查点**（E2E 发现的真缺口） | `8fd12657` |
+| Q4 集成：`memoryRecall` 接入 assisted + blackbox | `db3aba11` |
+| assisted 路径消费待答检查点（E2E 真缺口） | `8fd12657` |
 | Q2/Q8 记忆看板 + 保留率曲线 | `e5e9e6e5` |
-| Q5 Agent 自述（机械生成 `prompts/AGENTS_SELF_INTRO.md` + 缘由手册 `doc/AGENT_SKILL_MANUAL.md`） | `7cea371d`、`08dff27e` |
-| Q9 字段命中上下游（逻辑图）+ 调用用量 | `8b92d09b`、`79bdadf6`、`52d6cfaf`、`c5a91e58`、`612d04ac` |
+| Q5 机械自述 + 缘由手册 `doc/AGENT_SKILL_MANUAL.md` | `7cea371d`、`08dff27e` |
+| Q9 调用用量聚合（逻辑图注解） | `8b92d09b`、`79bdadf6` |
+| Q9 结构图改称「字段数据旅程（逻辑图）」+ 文案 | `52d6cfaf`、`6cba6768` |
+| Q9 字段级运行时命中：聚合 CLI + 叠图着色/死边虚线 | `c5a91e58`、`612d04ac` |
 | Q1 复习选点质量只读度量 | `46853be9` |
 | Q7 轻量真值发现（多源加权 + 元认知校准） | `1e1b0fba` |
 | Q13 难度分层审计（虚拟 cohort） | `c13dee5b` |
-| 锚题探针**纯决策层** | `dfe30482` |
-| **锚题探针接线**（教学链：目标注入 + 判定打标 + `anchor:result` 留痕，只标记不改写） | `152713f2` |
-| 数据治理基线（Q16） | `1d3b55ef` |
-| 删除覆盖补漏（`prediction_records`/`misconception_ledger`） | `2d205f9b`（含路由测试回归修复 `345e4550`） |
-| Q11b strict JSON Schema 纯编译器 | `0d4aa01b` |
-| Q11b 接线前置：core loader 结构化承载 `enumValues`/嵌套 `properties` | `126e05c7` |
+| Q13 锚题探针纯决策层 / 接线（目标注入 + 判定打标 + `anchor:result`） | `dfe30482`、`152713f2` |
+| Q16 删除覆盖补漏 `prediction_records`/`misconception_ledger`（+路由测试回归） | `2d205f9b`、`345e4550` |
+| Q11b strict JSON Schema 编译器 / core loader 承载 `enumValues` | `0d4aa01b`、`126e05c7` |
 
-### VL 验证（真实跑数）
-- assisted E2E（`advance-day runTasks`）8 天 × 2 节：链路健康；`temporalContext.sinceLastSessionDays` 计算正确（跨周末 3／工作日 1）；`memoryRecall` 真进 payload。
-- 修复后复跑：`checkpoint:result = 9`（全部 `judgedBy:"code"`）、`pendingCheckpoint` 清空 → **成功率带传感器在该路径通了**。
-- 附带观察：一次 `TEACHING_TURN_REPLY_MISSING` 导致 session-failed（普通教学回合模型未产出 reply），建议后续加"缺 reply 重试/降级"护栏。
+### Wave 2.5（VL 验证中的三项新发现与修复）
+| 项 | 提交 | 结果 |
+|---|---|---|
+| #2 路径失败无自愈 | `eb2f3bc9` | `path-status` 增 `pathGeneration{...}`；失败**即时判终局**（不再空等 30 分钟）+ **有界自愈重试**（core/stageDesign，≤2 次） |
+| #3 教学回合失败终局化 | `f2548c7d` | 步骤级有界重试（≤2，仅命中已知校验码）；耗尽 → **可续跑暂停**（保持 `running` + `lastError` + `teaching-step-paused`），**禁止伪造教师回复** |
+| #1 真实侧时间信号 | `b6a6afd6` | `controls.temporalGap = {daysSinceLastSession, isLongGap}`（同路径上一场 `endTime`，默认阈值 14 天，env 可覆盖）+ teaching-turn"长间隔先回捞"规则 |
 
-### 仍未做（明确延后）
-- **Q11b 接线后续**：前置已就绪（`126e05c7`），但还需 ① 在 core yaml 声明 `enumValues` / 嵌套 `properties`，② 把 `compileStrictJsonSchema` 接入 `skill-output-validator`（用 `collectSchemaLimitations` 做门禁，避免误拒）。
-- **锚题探针调优**：接线已完成（`152713f2`），但当前锚题只在"已掌握/挣扎"两种信念上选靶；锚题 `checkpoint:result` 是否应从成功率带样本中排除，需产品定夺。
-- **Q18 真实用户实验基建 / Q19 生命周期 / Q20 单位经济**：按本文件"缺基建/无对象"结论继续延后。
-- `login_attempts` 是否纳入删除覆盖（它按用户名/IP 而非 userId，需另行判断）。
+### VL 验证结果（真实跑数）
+- assisted E2E（`advance-day runTasks`）8 天 × 2 节：链路健康；`temporalContext.sinceLastSessionDays` 计算正确（跨周末 3 / 工作日 1）；
+  `memoryRecall` 真进 payload。
+- 修复后复跑：**`checkpoint:result = 9`（全部 `judgedBy:"code"`）**，`pendingCheckpoint` 清空 → 成功率带传感器在该路径打通。
+- **环境争用说明**：收尾 E2E 受另一进程并发改动影响，未能稳定跑到终态；单测/门禁与上述结果以无争用批次为准。
+- 三项 Wave 2.5 修复**未**在真实模型长跑中复测（仅单测 + 门禁）；`f2548c7d` 的 `isTeachingTurnHiccupError` 为保守白名单，
+  新校验码回落旧终局行为（有意，避免把真实契约错误当无限暂停）。
+
+**回归**：全仓 **327/327 套件、2808 例通过**；`tsc` / `eslint` / prompts 门禁全过。
+
+### 仍未做（明确延后 / 不做）
+- **Q11b 接线**：编译器已就绪（`0d4aa01b`/`126e05c7`），还需在 core yaml 声明 `enumValues`/嵌套 `properties`，并把
+  `compileStrictJsonSchema` 接入 `skill-output-validator`（用 `collectSchemaLimitations` 门禁，避免误拒）。
+- **锚题探针调优**：接线已完成；锚题 `checkpoint:result` 是否应从成功率带样本排除，待产品定夺。
+- **Q8 延迟锚题复用 / Q1 复习容量**：见 §6 剩余可选。
+- **商业级轴**：Q16 合规重层 / Q17 教师升级 / Q18 实验基建 / Q20 单位经济 = 不做（§7）。
+- `login_attempts` 是否纳入删除覆盖（按用户名/IP 而非 userId），待场景。
 
 ---
 
 ## 9. 附：关键证据索引
 
-- 记忆/排期：`backend/src/services/memory/{fsrs,actr,memory-trace.service,retention-curve,review-plan.service,review-quota.service}.ts`
+- 记忆/排期：`backend/src/services/memory/{fsrs,actr,memory-trace.service,retention-curve,review-plan.service,review-quota.service,probabilistic-recall}.ts`
 - 虚拟记忆：`backend/src/virtual-lab/learner-memory.ts`、`backend/src/coordinators/simulation.memory.ts`、`backend/src/skills/virtual-learner-shared/schemas.ts`
 - 模拟器：`backend/src/skills/virtual-learner-learn-turn-simulator/{index.ts,definition.ts}`、`prompts/core/virtual-learner-learn-turn-simulator.yaml`
-- 难度/公平：`backend/src/services/learner/{TaskDifficultyAdjustmentService,independent-success-band.service,LearnerSnapshotService}.ts`、`backend/src/services/ai-teaching/AITeachingCoordinator.ts`
-- 降级/质量：`backend/src/skills/outcome.ts`、`backend/src/services/telemetry-writer.service.ts`、`backend/src/services/{log-retention.service,yaml-vocabulary.ts}`
-- 安全/内容：`prompts/core/{teaching-turn,session-wrapup,stage-designer}.yaml`、`backend/src/skills/{web-search,web-fetch}/index.ts`
-- 隐私：`backend/src/agents/learner-model-agent/types.ts`、`backend/src/services/virtual-lab/virtual-cleanup.service.ts`、`backend/src/routes/users.ts`、`backend/src/scripts/purge-soft-deleted-users.ts`、`doc/NON_FUNCTIONAL_GOVERNANCE_PLAN.md:735`
+- 难度/公平：`backend/src/services/learner/{TaskDifficultyAdjustmentService,independent-success-band.service,IndependentAnchorProbeService,LearnerSnapshotService}.ts`、`backend/src/services/ai-teaching/AITeachingCoordinator.ts`
+- 降级/质量：`backend/src/skills/{outcome.ts,degradation-telemetry.ts}`、`backend/src/scripts/audit-degradation-rate.ts`、`backend/src/services/yaml-vocabulary.ts`
+- 安全/内容：`backend/src/services/ai-teaching/input-fence.ts`、`prompts/core/{teaching-turn,session-wrapup}.yaml`
+- 隐私/删除：`backend/src/agents/learner-model-agent/types.ts`、`backend/src/services/virtual-lab/virtual-cleanup.service.ts`、`backend/src/routes/users.ts`、`backend/src/scripts/purge-soft-deleted-users.ts`、`doc/NON_FUNCTIONAL_GOVERNANCE_PLAN.md:735`
+- 生命周期/成本：`backend/src/services/learner/{churn-signals,truth-discovery}.ts`、`backend/src/scripts/audit-churn-signals.ts`、`backend/src/services/cost/model-cost.ts`、`backend/src/config/models.config.ts`
 - 人在环：`backend/src/services/learning/learning.service.ts:3947-3988`、`backend/src/routes/admin/virtual-learners.ts:2690/2708`
 - DSL：`backend/src/services/yaml-vocabulary.ts`、`backend/src/services/prompt-lab/{core-compiler,core-file-loader}.ts`、`backend/src/services/skill-output-validator.ts`、`backend/src/gateway/api-gateway/{executor,router}.ts`
-- 前端：`frontend/src/views/admin-redesign/{VirtualProfile,LearnerDetail,MemoryReview,Orchestrator,DataFlowGraph,FieldAddWizard,SkillFieldRouting}.vue`、`frontend/src/views/admin-redesign/live.ts`、`dataFlow.ts`
-- 结果测量/成本：`backend/src/services/memory/retention-curve.ts`、`backend/src/scripts/{audit-retention-curve,audit-session-cost}.ts`
+- 字段命中/逻辑图：`backend/src/services/admin/field-hit-rates.ts`、`frontend/src/views/admin-redesign/{Orchestrator,DataFlowGraph}.vue`、`frontend/src/views/admin-redesign/live.ts`
+- 前端：`frontend/src/views/admin-redesign/{VirtualProfile,LearnerDetail,MemoryReview,FieldAddWizard,SkillFieldRouting}.vue`
+- 结果测量：`backend/src/services/memory/retention-curve.ts`、`backend/src/scripts/audit-retention-curve.ts`

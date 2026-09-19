@@ -21,14 +21,9 @@
   - 安全、可靠性、测试、部署、可观测性、性能和数据治理统一清单
   - 发布阻断项、实施波次和发布验收标准
 - [`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md)
-  - 20 问（十二问 + 八问）方案 × 真实代码逐条核验 + 与项目业务对齐的升级方向（三波）
-  - 结论口径：哪些方案已过期/记错、哪些现在能做、哪些缺基建；含核验中发现的即刻可修缺陷
-- [`PRIVACY_DATA_GOVERNANCE_BASELINE.md`](./PRIVACY_DATA_GOVERNANCE_BASELINE.md)
-  - Q16 数据治理基线：数据分类矩阵（行为/学习状态/认知画像/情绪推断/自由文本/虚拟合成人设）+ 差距清单 + 同意/未成年人/自述优先(OLM)/导出=删除同覆盖矩阵/保留期建议 + 需产品/法务拍板的决策点
-- [`WAVE1_TRACK_A_VIRTUAL_CHAIN.md`](./WAVE1_TRACK_A_VIRTUAL_CHAIN.md)
-  - 第一波 · Track A：虚拟学习者链路修复（检查点 payload / 定义漂移 / 时间上下文 / 策略收敛 / 虚拟侧降级）
-- [`WAVE1_TRACK_B_TEACHING_GOVERNANCE.md`](./WAVE1_TRACK_B_TEACHING_GOVERNANCE.md)
-  - 第一波 · Track B：真实教学侧治理（静默降级 / 语义安全 / 内容诚实 / 公平最小层）
+  - **20 问合并总纲（单一结论文档）**：教学实验/Demo 定位下的逐条核验（Q1–Q20）+ 分级（核心/轻量保留/不做）+ 升级方向
+  - 原第一波 Track A/B、Q16 数据治理基线、Q18–Q20 规模化前置、虚拟验证新发现评估的结论已全部并入本文
+  - 结论口径：哪些方案已过期/记错、哪些是本定位下的实验核心、哪些属商业级不做；含核验中发现的即刻可修缺陷与提交台账
 - [`EDUCATIONAL_THEORY_MAP.md`](./EDUCATIONAL_THEORY_MAP.md)
   - 教育理论地图（理念宪法）：教学/心理/神经科学/LLM 理论 × 落点索引
   - 全部文献经联网核实（含 DOI/arXiv 链接）；prompt 规则与指标设计的理论依据引用源
@@ -38,11 +33,6 @@
 - [`CONTEXT_MECHANISM_AUDIT.md`](./CONTEXT_MECHANISM_AUDIT.md)
   - 各阶段 skill 的**上下文机制审计**：真实调用遥测（输入体积 / 前缀缓存命中率）+ 优化方向
   - 结论：体积不是瓶颈，真正的杠杆是**前缀缓存命中率**（全局 20.9%）
-- [`SCALE_PREREQUISITES_DESIGN.md`](./SCALE_PREREQUISITES_DESIGN.md)
-  - 规模化前置设计基线（Q18 真实用户实验 / Q19 学习者生命周期 / Q20 单位经济）：现状核实 + 最小可行设计 + 前置决策点 + 验收里程碑
-  - 承接 `UPGRADE_DIRECTION_20Q.md`「第三波 · 规模化前置」结论，仅为设计，不含实现
-- [`NEW_FINDINGS_ASSESSMENT.md`](./NEW_FINDINGS_ASSESSMENT.md)
-  - 虚拟学习者验证过程中新发现的三项问题评估（真实侧时间信号 / 路径失败无自愈 / 教学回合失败终局化）+ 优先级建议
 
 ## Agent 与场景
 

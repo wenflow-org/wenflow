@@ -1,7 +1,7 @@
 /**
  * 学习者休眠 / 流失信号（Q19 · 只读、纯函数）
  *
- * 背景：`doc/SCALE_PREREQUISITES_DESIGN.md` §2（Q19）指出，冷启动继承已实现，但真实教学链
+ * 背景：`doc/UPGRADE_DIRECTION_20Q.md` §2 Q19 指出，冷启动继承已实现，但真实教学链
  * **没有时间跨度信号**，`churn / winback / dormant` 全仓零命中。本模块是 Q19 的第一个最小步骤：
  * 只从**既有时间戳**推导"距上次活跃多久、处于哪一档、风险分多高"，
  * **不写库、不改 schema、不接路由、不跑 prompts、不发 LLM**。

@@ -15,7 +15,7 @@
  * - 三个字段都可选；某字段未配置（undefined）表示"该口径金额未知"，
  *   成本计算器会返回 `usd: null / pricingKnown: false`，**不会**用 0 冒充成本。
  * - 仅改价时才更新此表；首版不含 `effectiveFrom`，调价历史见
- *   `doc/SCALE_PREREQUISITES_DESIGN.md` Q20 §3.2（后续可增量迁到系统库 `model_pricing`）。
+ *   `doc/UPGRADE_DIRECTION_20Q.md` §2 Q20 / §7（后续可增量迁到系统库 `model_pricing`）。
  */
 export interface ModelPricing {
   /** 未命中缓存的输入 token 单价（USD / 1M tokens） */
