@@ -937,7 +937,7 @@ function shuffleScenes() {
   color: var(--green);
   background: rgba(49, 177, 111, 0.1);
   border: 1px solid rgba(49, 177, 111, 0.3);
-  padding: 3px 9px; border-radius: 999px;
+  padding: 3px 9px; border-radius: var(--mk-radius-pill);
 }
 .nav__avatar { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; }
 .nav__avatar i {
@@ -1013,7 +1013,7 @@ function shuffleScenes() {
 .errorbar {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   background: color-mix(in srgb, var(--red) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
   color: var(--red, #c0454a);
@@ -1031,7 +1031,7 @@ function shuffleScenes() {
 .cards-nav__btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; padding: 0;
-  border: 0; border-radius: 8px;
+  border: 0; border-radius: var(--mk-radius-md);
   background: transparent; color: var(--faint);
   font: inherit; cursor: pointer;
   transition: color .15s ease, background .15s ease;
@@ -1074,7 +1074,7 @@ function shuffleScenes() {
   display: flex; align-items: flex-end; gap: 10px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--mk-radius-modal);
   padding: 8px 8px 8px 16px;
   min-height: 54px;
   box-shadow: 0 6px 20px rgba(23, 32, 51, 0.06);
@@ -1095,7 +1095,7 @@ function shuffleScenes() {
   align-self: center;
 }
 .composer__send {
-  width: 40px; height: 40px; border-radius: 12px;
+  width: 40px; height: 40px; border-radius: var(--mk-radius-xl);
   display: grid; place-items: center;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff; cursor: pointer;
@@ -1146,7 +1146,7 @@ function shuffleScenes() {
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--mk-radius-modal);
   padding: 16px;
   display: flex; flex-direction: column; gap: 12px;
   min-height: 0;
@@ -1172,7 +1172,7 @@ function shuffleScenes() {
   position: relative;
   display: grid; grid-template-columns: 20px 1fr; gap: 9px;
   padding: 8px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   border: 1px solid transparent;
   transition: background .15s ease;
 }
@@ -1211,7 +1211,7 @@ function shuffleScenes() {
   position: absolute; top: 8px; right: 8px;
   font-size: 10px; font-weight: 800; color: var(--green);
   background: rgba(49, 177, 111, 0.12);
-  padding: 2px 7px; border-radius: 999px;
+  padding: 2px 7px; border-radius: var(--mk-radius-pill);
 }
 .panel__tip {
   font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px;
@@ -1226,7 +1226,7 @@ function shuffleScenes() {
   display: flex; flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--mk-radius-modal);
   overflow: hidden;
   min-height: 0;
   height: 100%;
@@ -1242,14 +1242,14 @@ function shuffleScenes() {
   margin-left: auto;
   border: 1px solid rgba(44, 99, 208, 0.35);
   background: color-mix(in srgb, var(--blue, #3478f6) 10%, var(--surface)); color: var(--blue-deep, #2c63d0);
-  border-radius: 999px; padding: 4px 12px;
+  border-radius: var(--mk-radius-pill); padding: 4px 12px;
   font-size: 12px; font-weight: 700; cursor: pointer;
 }
 .chat__show-proposal:hover { background: color-mix(in srgb, var(--blue, #3478f6) 18%, var(--surface)); }
 .stage-nav__item {
   display: inline-flex; align-items: center; gap: 7px;
   font-size: 12px; font-weight: 700; color: var(--faint);
-  padding: 5px 10px; border-radius: 999px;
+  padding: 5px 10px; border-radius: var(--mk-radius-pill);
 }
 .stage-nav__item i {
   width: 17px; height: 17px; border-radius: 50%;
@@ -1297,7 +1297,7 @@ function shuffleScenes() {
   width: 24px; height: 24px;
   display: grid; place-items: center;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-md);
   background: var(--surface);
   color: var(--faint);
   font-size: 12px;
@@ -1319,7 +1319,7 @@ function shuffleScenes() {
 .msg__edit-input {
   width: 100%;
   border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   padding: 9px 12px;
   font: inherit; font-size: 13.5px; line-height: 1.6;
   color: var(--ink);
@@ -1331,7 +1331,7 @@ function shuffleScenes() {
 .msg__edit-save, .msg__edit-cancel {
   font-size: 12px; font-weight: 700;
   padding: 5px 14px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   cursor: pointer;
 }
 .msg__edit-save {
@@ -1359,7 +1359,7 @@ function shuffleScenes() {
 .msg__bubble--html :deep(code) {
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   color: var(--blue-deep);
-  padding: 1px 6px; border-radius: 6px;
+  padding: 1px 6px; border-radius: var(--mk-radius-sm);
   font-size: 12.5px;
 }
 /* 流式渐进渲染气泡：末尾光标提示仍在生成 */
@@ -1389,7 +1389,7 @@ function shuffleScenes() {
 .msg__bubble--typing i:nth-child(3) { animation-delay: .3s; }
 @keyframes typing { 0%, 60%, 100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
 .msg__avatar {
-  width: 30px; height: 30px; border-radius: 10px;
+  width: 30px; height: 30px; border-radius: var(--mk-radius-lg);
   background: linear-gradient(135deg, var(--blue), var(--accent));
   color: #fff; font-size: 13px; font-weight: 800;
   display: grid; place-items: center;
@@ -1433,7 +1433,7 @@ function shuffleScenes() {
   width: 100%;
   text-align: left;
   padding: 9px 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   border: 1px solid transparent;
   background: color-mix(in srgb, var(--blue) 5%, transparent);
   color: var(--muted);
@@ -1459,7 +1459,7 @@ function shuffleScenes() {
 .msg__replies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .msg__reply {
   padding: 5px 10px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   border: 1px solid var(--line);
   background: var(--surface, #fff);
   color: var(--muted);
@@ -1527,7 +1527,7 @@ function shuffleScenes() {
   width: 100%;
   text-align: left;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   background: color-mix(in srgb, var(--surface) 92%, var(--blue) 8%);
   border: 1px solid color-mix(in srgb, var(--blue) 20%, transparent);
   display: grid; gap: 6px;
@@ -1546,7 +1546,7 @@ function shuffleScenes() {
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   padding: 6px 14px;
   cursor: pointer;
   transition: background 0.15s ease;
@@ -1559,7 +1559,7 @@ function shuffleScenes() {
 .proposal__row {
   display: grid; gap: 4px;
   padding: 11px 14px;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   border: 1px solid #e8eefb;
   text-align: left;
@@ -1576,12 +1576,12 @@ function shuffleScenes() {
 .pstep {
   display: grid; gap: 8px; align-content: start;
   padding: 12px 10px;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line);
   background: var(--surface, #fbfcff);
 }
 .pstep i {
-  width: 22px; height: 22px; border-radius: 8px;
+  width: 22px; height: 22px; border-radius: var(--mk-radius-md);
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff; font-size: 12px; font-weight: 800; font-style: normal;
   display: grid; place-items: center;
@@ -1591,7 +1591,7 @@ function shuffleScenes() {
   width: 100%;
   font-size: 12px; color: var(--muted);
   border: 1px dashed var(--line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   padding: 9px 12px;
   background: var(--supplement-bg, #fafcff);
   text-align: left;
@@ -1602,7 +1602,7 @@ function shuffleScenes() {
 .probe {
   display: grid; gap: 8px;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line);
   background: var(--surface, #fbfcff);
 }
@@ -1610,7 +1610,7 @@ function shuffleScenes() {
 .probe__opts { display: flex; gap: 8px; flex-wrap: wrap; }
 .probe__opt {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 12px; border-radius: 10px;
+  padding: 7px 12px; border-radius: var(--mk-radius-lg);
   border: 1px solid var(--line);
   background: transparent;
   font-size: 12.5px; color: var(--ink);
@@ -1625,7 +1625,7 @@ function shuffleScenes() {
 .proposal__actions--center { justify-content: center; }
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 11px 22px; border-radius: 12px;
+  padding: 11px 22px; border-radius: var(--mk-radius-xl);
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff; font-size: 14px; font-weight: 700;
   box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent);
@@ -1634,7 +1634,7 @@ function shuffleScenes() {
 .btn-primary--lg { padding: 13px 26px; font-size: 15px; }
 .btn-primary--off { opacity: .55; cursor: default; box-shadow: none; }
 .btn-ghost {
-  padding: 11px 18px; border-radius: 12px;
+  padding: 11px 18px; border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
@@ -1651,7 +1651,7 @@ function shuffleScenes() {
 .proposal__supplement-input {
   border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
   background: color-mix(in srgb, var(--amber) 7%, transparent);
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   padding: 12px 14px;
   font: inherit; font-size: 13px; color: var(--ink);
   resize: none; outline: none;
@@ -1668,7 +1668,7 @@ function shuffleScenes() {
 @keyframes spin { to { transform: rotate(360deg); } }
 .skeleton { display: grid; gap: 8px; width: 100%; }
 .skeleton i {
-  height: 12px; border-radius: 6px;
+  height: 12px; border-radius: var(--mk-radius-sm);
   background: linear-gradient(90deg, #edf1f8 25%, #f7faff 50%, #edf1f8 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease infinite;
@@ -1755,7 +1755,7 @@ function shuffleScenes() {
   width: 56px;
   height: 56px;
   object-fit: contain;
-  border-radius: 16px;
+  border-radius: var(--mk-radius-modal);
   box-shadow: 0 10px 24px rgba(23, 32, 51, 0.12);
 }
 </style>

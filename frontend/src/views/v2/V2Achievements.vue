@@ -273,7 +273,7 @@ onMounted(load);
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--mk-radius-modal);
   box-shadow: var(--shadow-sm);
 }
 
@@ -287,7 +287,7 @@ onMounted(load);
 .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .filter {
   border: 1px solid var(--line); background: var(--surface, #fff);
-  border-radius: 999px; padding: 7px 15px;
+  border-radius: var(--mk-radius-pill); padding: 7px 15px;
   font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
   cursor: pointer; transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
@@ -369,7 +369,7 @@ onMounted(load);
 /* ── Rarity tag ── */
 .ach-rarity {
   font-size: 10px; font-weight: 800;
-  padding: 2px 7px; border-radius: 999px;
+  padding: 2px 7px; border-radius: var(--mk-radius-pill);
   letter-spacing: 0.3px;
 }
 .rarity--common { color: var(--mk-faint); background: rgba(103,117,143,0.1); }
@@ -378,7 +378,7 @@ onMounted(load);
 .rarity--epic { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 
 /* ── Badge ── */
-.ach-card__badge { font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; }
+.ach-card__badge { font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-radius: var(--mk-radius-pill); }
 .ach-card__badge--on { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .ach-card__badge--off { color: var(--muted); background: var(--line, #e8edf5); }
 .ach-card__name { font-size: 15px; }
@@ -396,7 +396,7 @@ onMounted(load);
 .ach-share {
   position: absolute; top: 8px; right: 8px;
   width: 28px; height: 28px;
-  border-radius: 8px; border: 0;
+  border-radius: var(--mk-radius-md); border: 0;
   background: rgba(0,0,0,0.04);
   color: var(--faint);
   display: grid; place-items: center;
@@ -429,7 +429,7 @@ onMounted(load);
 .errorbar {
   display: flex; align-items: center; gap: 8px;
   padding: 12px 16px;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   background: color-mix(in srgb, var(--red) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
   color: var(--red, #c0454a);
@@ -437,7 +437,7 @@ onMounted(load);
 }
 .errorbar__retry { text-decoration: underline; cursor: pointer; font-weight: 800; }
 .btn-ghost {
-  padding: 9px 16px; border-radius: 12px;
+  padding: 9px 16px; border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 13px; font-weight: 700; color: var(--muted);
   cursor: pointer;
@@ -450,7 +450,7 @@ onMounted(load);
 .ach-toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
   background: #1e293b; color: #fff;
-  padding: 10px 20px; border-radius: 12px;
+  padding: 10px 20px; border-radius: var(--mk-radius-xl);
   font-size: 13px; font-weight: 600;
   box-shadow: 0 8px 24px rgba(0,0,0,0.18);
   z-index: 9999;

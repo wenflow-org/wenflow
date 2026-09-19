@@ -1323,11 +1323,11 @@ onBeforeUnmount(() => {
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--mk-radius-modal);
   box-shadow: var(--shadow-sm);
 }
 .kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
-.badge { padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+.badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 11px; font-weight: 800; }
 .badge--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
 
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; padding: 26px 28px; align-items: center; }
@@ -1359,14 +1359,14 @@ onBeforeUnmount(() => {
   display: grid; gap: 2px;
   padding: 9px 14px;
   background: var(--canvas, #f7faff); border: 1px solid var(--line, #e8eefb);
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   font-size: 11.5px; color: var(--faint);
 }
 .metric b { font-size: 14px; color: var(--ink); }
 .hero__actions { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 11px 22px; border-radius: 12px;
+  padding: 11px 22px; border-radius: var(--mk-radius-xl);
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff; font-size: 14px; font-weight: 700;
   box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent);
@@ -1374,7 +1374,7 @@ onBeforeUnmount(() => {
 }
 .btn-primary--block { justify-content: center; width: 100%; }
 .btn-ghost {
-  padding: 10px 18px; border-radius: 12px;
+  padding: 10px 18px; border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
@@ -1421,7 +1421,7 @@ onBeforeUnmount(() => {
   font: inherit; text-align: left; cursor: pointer;
 }
 .stage__no {
-  width: 30px; height: 30px; border-radius: 10px;
+  width: 30px; height: 30px; border-radius: var(--mk-radius-lg);
   background: #eef2f8; color: var(--faint);
   font-size: 13px; font-weight: 800;
   display: grid; place-items: center;
@@ -1485,7 +1485,7 @@ onBeforeUnmount(() => {
 .sidecard__meta { display: flex; gap: 8px; flex-wrap: wrap; }
 .sidecard--current { border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
 .tag {
-  padding: 4px 10px; border-radius: 999px;
+  padding: 4px 10px; border-radius: var(--mk-radius-pill);
   background: var(--line, #f1f5fb); border: 1px solid var(--line);
   font-size: 11.5px; font-weight: 600; color: var(--muted);
 }
@@ -1543,7 +1543,7 @@ onBeforeUnmount(() => {
 .genbar__text p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
 .objectives {
   margin: 0 0 8px; padding: 10px 12px 10px 28px;
-  background: var(--canvas, #f7faff); border: 1px solid var(--line, #e8eefb); border-radius: 10px;
+  background: var(--canvas, #f7faff); border: 1px solid var(--line, #e8eefb); border-radius: var(--mk-radius-lg);
   display: grid; gap: 4px;
 }
 .objectives li { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
@@ -1575,7 +1575,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   gap: 2px;
   background: color-mix(in srgb, var(--line, #e4e9f2) 45%, transparent);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-md);
   padding: 2px;
   width: fit-content;
 }
@@ -1585,7 +1585,7 @@ onBeforeUnmount(() => {
   gap: 4px;
   padding: 3px 9px;
   min-height: 24px;
-  border: none; border-radius: 6px;
+  border: none; border-radius: var(--mk-radius-sm);
   background: transparent;
   font-size: 12px; font-weight: 500;
   line-height: 1.4;
@@ -1663,7 +1663,7 @@ onBeforeUnmount(() => {
 .tl__row {
   display: flex; align-items: flex-start; gap: 12px;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -1710,7 +1710,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   font-size: 11px; font-weight: 700;
   white-space: nowrap;
 }
@@ -1772,7 +1772,7 @@ onBeforeUnmount(() => {
 .tl__task {
   display: flex; align-items: center; gap: 10px;
   padding: 7px 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   cursor: pointer;
   transition: background 0.15s;
   position: relative;
@@ -1918,7 +1918,7 @@ onBeforeUnmount(() => {
 .adjust-dialog__close {
   flex: 0 0 auto;
   width: 26px; height: 26px;
-  border: 0; border-radius: 8px;
+  border: 0; border-radius: var(--mk-radius-md);
   background: transparent; color: #8492ab;
   display: grid; place-items: center;
   cursor: pointer;
@@ -1930,7 +1930,7 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; gap: 12px;
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid #dde5f1; border-radius: 12px;
+  border: 1px solid #dde5f1; border-radius: var(--mk-radius-xl);
   background: #fff; text-align: left;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
@@ -1943,7 +1943,7 @@ onBeforeUnmount(() => {
 }
 .adjust-mode__icon {
   flex: 0 0 auto;
-  width: 34px; height: 34px; border-radius: 10px;
+  width: 34px; height: 34px; border-radius: var(--mk-radius-lg);
   display: grid; place-items: center;
   font-size: 16px; font-weight: 700; color: var(--blue);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
@@ -1958,7 +1958,7 @@ onBeforeUnmount(() => {
   margin-bottom: 10px;
   padding: 7px 12px;
   font-size: 12.5px; font-weight: 700;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   color: var(--blue-ink); background: rgba(52, 120, 246, 0.1);
 }
 .adjust-form__mode-hint--rebuild { color: var(--amber-ink); background: rgba(244, 170, 70, 0.14); }
@@ -1977,7 +1977,7 @@ onBeforeUnmount(() => {
   color: #9a4b08;
   background: color-mix(in srgb, var(--amber) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
 }
 .adjust-form__hint {
   margin: 8px 0 0;
@@ -2000,7 +2000,7 @@ onBeforeUnmount(() => {
   color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
-  padding: 2px 8px; border-radius: 999px;
+  padding: 2px 8px; border-radius: var(--mk-radius-pill);
 }
 .clear-sessions__head p {
   margin: 0;
@@ -2020,7 +2020,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid #e3e9f2;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   background: #fff;
 }
 .clear-sessions__item-main {
@@ -2045,7 +2045,7 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   font-size: 12px;
   padding: 7px 12px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-md);
 }
 [data-theme='dark'] .clear-sessions__head p { color: var(--mk-muted); }
 [data-theme='dark'] .clear-sessions__item {
@@ -2074,7 +2074,7 @@ onBeforeUnmount(() => {
   text-align: left;
   padding: 8px 10px;
   border: 1px solid #e3e9f2;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   background: #fff;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -2100,7 +2100,7 @@ onBeforeUnmount(() => {
   max-width: 300px;
   padding: 5px 8px;
   border: 1px solid #d6dfeb;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-md);
   background: #fff;
   font-size: 12px;
   color: #1c2b45;
@@ -2124,7 +2124,7 @@ onBeforeUnmount(() => {
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, transparent), color-mix(in srgb, var(--blue) 4%, transparent));
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
 }
 .ai-advice__head {
   display: flex;
@@ -2137,7 +2137,7 @@ onBeforeUnmount(() => {
   color: var(--purple-ink);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  padding: 2px 8px; border-radius: 999px;
+  padding: 2px 8px; border-radius: var(--mk-radius-pill);
 }
 .ai-advice__verdict {
   font-size: 14px; font-weight: 800;
@@ -2153,7 +2153,7 @@ onBeforeUnmount(() => {
   font-size: 12.5px; line-height: 1.6;
   color: #5a6b85;
   background: rgba(255, 255, 255, 0.55);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-md);
   padding: 8px 10px;
 }
 .ai-advice__chips {
@@ -2170,7 +2170,7 @@ onBeforeUnmount(() => {
   font-size: 11px; font-weight: 600;
   color: var(--blue-ink);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   padding: 2px 9px;
 }
 .ai-advice__chip--warn {
@@ -2194,7 +2194,7 @@ onBeforeUnmount(() => {
   min-height: 96px;
   padding: 10px 12px;
   border: 1px solid #d9e1ee;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-md);
   font-size: 13.5px;
   line-height: 1.6;
   resize: vertical;

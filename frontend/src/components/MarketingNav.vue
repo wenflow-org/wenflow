@@ -167,7 +167,7 @@ onUnmounted(() => {
 }
 .mknav__link {
   padding: 8px 14px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   font-size: 14px;
   font-weight: 700;
   color: color-mix(in srgb, var(--ink) 72%, #fff);
@@ -193,7 +193,7 @@ onUnmounted(() => {
   justify-content: center;
   min-height: 42px;
   padding: 0 16px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   font-size: 14px;
   font-weight: 800;
   text-decoration: none;
@@ -278,7 +278,7 @@ onUnmounted(() => {
   }
   .mknav__drawer a:not(.mknav__btn) {
     padding: 12px;
-    border-radius: 12px;
+    border-radius: var(--mk-radius-xl);
     text-decoration: none;
     color: var(--ink);
     font-weight: 700;

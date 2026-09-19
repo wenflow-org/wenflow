@@ -734,13 +734,13 @@ onMounted(() => {
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--mk-radius-modal);
   box-shadow: var(--shadow-sm);
 }
 .card-head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
 .muted { font-size: 12px; color: var(--faint); }
 .btn-ghost {
-  padding: 10px 18px; border-radius: 12px;
+  padding: 10px 18px; border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
@@ -751,7 +751,7 @@ onMounted(() => {
 .metric small { font-size: 12px; color: var(--faint); font-weight: 700; }
 .metric__value { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
 .metric__value i { font-size: 13px; font-style: normal; font-weight: 600; color: var(--faint); }
-.metric__note { width: fit-content; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; }
+.metric__note { width: fit-content; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: var(--mk-radius-pill); }
 .metric__note--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .metric__note--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
 .metric__note--purple { color: var(--accent); background: rgba(141, 107, 255, 0.12); }
@@ -764,9 +764,9 @@ onMounted(() => {
 
 /* ---------- 趋势图 ---------- */
 .chart { padding: 20px 22px; display: grid; gap: 16px; }
-.seg { display: inline-flex; padding: 3px; background: var(--line, #eef2fa); border-radius: 10px; gap: 2px; }
+.seg { display: inline-flex; padding: 3px; background: var(--line, #eef2fa); border-radius: var(--mk-radius-lg); gap: 2px; }
 .seg__item {
-  border: 0; background: transparent; padding: 5px 11px; border-radius: 8px;
+  border: 0; background: transparent; padding: 5px 11px; border-radius: var(--mk-radius-md);
   font: inherit; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer;
 }
 .seg__item--on { background: var(--surface, #fff); color: var(--ink); box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12); }
@@ -790,7 +790,7 @@ onMounted(() => {
   font-size: 12px; font-weight: 800; color: var(--blue-deep);
   border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
-  padding: 7px 13px; border-radius: 999px;
+  padding: 7px 13px; border-radius: var(--mk-radius-pill);
   cursor: pointer; white-space: nowrap;
 }
 .sug__cta:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
@@ -832,12 +832,12 @@ onMounted(() => {
   font: inherit; font-size: 12px; font-weight: 800; color: var(--blue-deep);
   border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
-  padding: 7px 16px; border-radius: 999px; cursor: pointer;
+  padding: 7px 16px; border-radius: var(--mk-radius-pill); cursor: pointer;
 }
 .chart__retry:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 .chart__empty {
   padding: 30px 0; text-align: center; color: var(--faint); font-size: 13px;
-  border: 1px dashed var(--line); border-radius: 12px; background: var(--canvas, #fafcff);
+  border: 1px dashed var(--line); border-radius: var(--mk-radius-xl); background: var(--canvas, #fafcff);
 }
 .sug--critical { border-color: color-mix(in srgb, var(--red) 35%, transparent); }
 .sug--warning { border-color: color-mix(in srgb, var(--amber) 35%, transparent); }
@@ -854,7 +854,7 @@ onMounted(() => {
   font-size: 12.5px; font-weight: 600; color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 30%, transparent);
-  border-radius: 10px; padding: 9px 12px;
+  border-radius: var(--mk-radius-lg); padding: 9px 12px;
 }
 .guide__foot {
   display: grid; gap: 6px;
@@ -872,7 +872,7 @@ onMounted(() => {
 
 /* ---------- AI 决策记录 ---------- */
 .decisions { padding: 20px 22px; display: grid; gap: 12px; }
-.review { margin-top: 14px; padding: 16px 18px; border: 1px solid var(--line, #e5e7eb); border-radius: 12px; }
+.review { margin-top: 14px; padding: 16px 18px; border: 1px solid var(--line, #e5e7eb); border-radius: var(--mk-radius-xl); }
 .review__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .review__title { margin: 0; font-size: 15px; }
 .review__src { font-size: 11px; color: var(--faint, #6b7280); }
@@ -885,7 +885,7 @@ onMounted(() => {
   display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: start;
   padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas, #fbfcff);
 }
-.dec__tag { font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+.dec__tag { font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: var(--mk-radius-pill); white-space: nowrap; }
 .dec__tag--blue { color: var(--blue-ink); background: rgba(52, 120, 246, 0.1); }
 .dec__tag--purple { color: var(--purple-ink); background: rgba(141, 107, 255, 0.12); }
 .dec__tag--cyan { color: #3593b5; background: color-mix(in srgb, var(--cyan) 12%, transparent); }
@@ -922,7 +922,7 @@ onMounted(() => {
 .ff-form-chip {
   margin-left: auto;
   font-size: 11.5px; font-weight: 800;
-  padding: 4px 11px; border-radius: 999px;
+  padding: 4px 11px; border-radius: var(--mk-radius-pill);
 }
 .ff-form-chip--fresh { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .ff-form-chip--optimal { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }

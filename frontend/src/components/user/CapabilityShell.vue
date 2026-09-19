@@ -123,7 +123,7 @@ function isActive(t: { match: string[] }) {
 
 .uc__tab {
   padding: 8px 16px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   font-size: 13px;
   font-weight: 700;
   color: var(--muted, #5b6577);
@@ -165,7 +165,7 @@ function isActive(t: { match: string[] }) {
 .uc__body :deep(.logs-list) {
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e3e9f4);
-  border-radius: 16px;
+  border-radius: var(--mk-radius-modal);
   box-shadow: var(--shadow-sm);
   backdrop-filter: none;
 }

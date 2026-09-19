@@ -221,7 +221,7 @@ onUnmounted(() => {
   justify-content: center;
   min-height: 42px;
   padding: 0 16px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   font-size: 14px;
   font-weight: 800;
   text-decoration: none;
@@ -315,7 +315,7 @@ main {
 .vn-pill {
   width: fit-content;
   padding: 7px 12px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   background: color-mix(in srgb, var(--blue) 9%, transparent);
   color: var(--blue-deep);
   font-size: 12px;
@@ -508,7 +508,7 @@ main {
   margin: 0 -12px;
   border-top: 1px solid var(--line);
   align-items: start;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   transition: background 0.25s var(--ease), padding 0.25s var(--ease);
 }
 .vn-cap__list li:hover {

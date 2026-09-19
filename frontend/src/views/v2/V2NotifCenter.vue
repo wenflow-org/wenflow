@@ -412,7 +412,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   border: 0;
   background: transparent;
   color: var(--muted, #5b6577);
@@ -431,7 +431,7 @@ onBeforeUnmount(() => {
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   background: #e5484d;
   color: #fff;
   font-size: 10px;
@@ -565,7 +565,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   cursor: pointer;
   padding: 4px 6px;
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
 }
 .nc__more:hover, .nc__readall:hover { background: color-mix(in srgb, var(--blue) 8%, transparent); }
 
@@ -589,7 +589,7 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 10px;
   padding: 9px 8px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   align-items: center;
 }
 .nc__task--running { background: color-mix(in srgb, var(--blue, #3478f6) 5%, transparent); }
@@ -614,7 +614,7 @@ onBeforeUnmount(() => {
   font-weight: 800;
   color: var(--blue-deep, #1f57cc);
   background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   padding: 1px 7px;
   flex-shrink: 0;
 }
@@ -625,7 +625,7 @@ onBeforeUnmount(() => {
   color: var(--faint, #8492ab);
   cursor: pointer;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
   display: grid;
   place-items: center;
   flex: 0 0 auto;
@@ -662,7 +662,7 @@ onBeforeUnmount(() => {
   color: var(--blue, #3478f6);
   background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   flex-shrink: 0;
 }
 .nc__task-detail { font-size: 12px; color: var(--muted, #5b6577); }
@@ -688,7 +688,7 @@ onBeforeUnmount(() => {
   color: var(--faint, #8492ab);
   cursor: pointer;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
   flex-shrink: 0;
 }
 .nc__task-dismiss:hover { background: rgba(229, 72, 77, 0.1); color: var(--red-ink); }
@@ -712,7 +712,7 @@ onBeforeUnmount(() => {
   color: var(--blue-deep, #1f57cc);
   background: color-mix(in srgb, var(--blue) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   padding: 5px 14px;
   cursor: pointer;
 }

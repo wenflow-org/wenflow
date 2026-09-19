@@ -437,7 +437,7 @@ main {
 .hn-pill {
   width: fit-content;
   padding: 7px 12px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   background: color-mix(in srgb, var(--blue) 9%, transparent);
   color: var(--blue-deep);
   font-size: 12px;
@@ -472,7 +472,7 @@ main {
   justify-content: center;
   min-height: 44px;
   padding: 0 18px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   font-size: 15px;
   font-weight: 800;
   text-decoration: none;
@@ -594,7 +594,7 @@ main {
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
 }
 .hn-chip--green {
   color: var(--green-deep);
@@ -655,7 +655,7 @@ main {
   border: 1px solid var(--line);
   background: var(--surface-strong);
   padding: 5px 10px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
 }
 .hn-tag--on {
   color: var(--blue-deep);
@@ -672,7 +672,7 @@ main {
   gap: 4px;
   margin-top: 8px;
   padding: 14px;
-  border-radius: 16px;
+  border-radius: var(--mk-radius-modal);
   background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
   border: 1px solid color-mix(in srgb, var(--blue) 12%, transparent);
 }
@@ -792,7 +792,7 @@ main {
 .hn-stage__go {
   display: inline-flex;
   padding: 10px 16px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   font-size: 13px;
   font-weight: 800;
   color: #fff;
@@ -982,7 +982,7 @@ main {
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 8%, transparent);
   padding: 4px 9px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
 }
 
 /* Idea asymmetric */
@@ -1072,7 +1072,7 @@ main {
 }
 .hn-desk__copy li {
   padding: 14px 16px;
-  border-radius: 16px;
+  border-radius: var(--mk-radius-modal);
   background: var(--surface-soft);
   border: 1px solid var(--line);
   font-size: 14px;
@@ -1103,7 +1103,7 @@ main {
   display: grid;
   gap: 3px;
   padding: 12px 14px;
-  border-radius: 16px;
+  border-radius: var(--mk-radius-modal);
   background: var(--surface-tint);
   border: 1px solid var(--line);
 }

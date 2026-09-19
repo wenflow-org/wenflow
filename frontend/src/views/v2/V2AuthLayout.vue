@@ -195,7 +195,7 @@ const isDark = useIsDark();
 }
 .demo__msg--ai p { margin: 0; color: var(--ink); }
 .demo__avatar {
-  width: 24px; height: 24px; border-radius: 8px;
+  width: 24px; height: 24px; border-radius: var(--mk-radius-md);
   background: #fff; border: 1px solid var(--line);
   display: grid; place-items: center; flex: 0 0 auto;
 }
@@ -204,7 +204,7 @@ const isDark = useIsDark();
 .demo__chip {
   font-size: 11px; font-weight: 600; color: var(--muted);
   border: 1px solid var(--line); background: #fff;
-  padding: 4px 10px; border-radius: 999px;
+  padding: 4px 10px; border-radius: var(--mk-radius-pill);
 }
 .demo__chip--on {
   color: var(--blue-deep);
@@ -237,7 +237,7 @@ const isDark = useIsDark();
 .mark--asking { border: 2px solid var(--blue); }
 .demo__field--asking {
   background: color-mix(in srgb, var(--blue) 6%, transparent);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-md);
   margin: -3px -6px;
   padding: 3px 6px;
 }

@@ -432,14 +432,14 @@ onBeforeUnmount(() => {
 
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 11px 22px; border-radius: 12px;
+  padding: 11px 22px; border-radius: var(--mk-radius-xl);
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff; font-size: 14px; font-weight: 700;
   box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent);
   cursor: pointer; text-decoration: none;
 }
 .btn-ghost {
-  padding: 10px 18px; border-radius: 12px;
+  padding: 10px 18px; border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
@@ -448,7 +448,7 @@ onBeforeUnmount(() => {
 .filters { display: flex; gap: 8px; flex-wrap: wrap; }
 .filter {
   border: 1px solid var(--line); background: var(--surface, #fff);
-  border-radius: 999px; padding: 8px 15px;
+  border-radius: var(--mk-radius-pill); padding: 8px 15px;
   font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
   cursor: pointer; transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
@@ -461,7 +461,7 @@ onBeforeUnmount(() => {
   position: relative;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--mk-radius-modal);
   padding: 18px 20px;
   display: flex; flex-direction: column; gap: 12px;
   box-shadow: var(--shadow-sm);
@@ -493,7 +493,7 @@ onBeforeUnmount(() => {
 .pcard--failed .pcard__thumb { background: linear-gradient(135deg, var(--red), var(--amber)); }
 .pcard__body { flex: 1; min-width: 0; }
 .pcard__head-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
-.pcard__badge { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; flex: 0 0 auto; }
+.pcard__badge { padding: 3px 9px; border-radius: var(--mk-radius-pill); font-size: 11px; font-weight: 800; flex: 0 0 auto; }
 .pcard__badge--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .pcard__badge--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
 .pcard__badge--cyan { color: var(--blue-deep, #2b7a99); background: rgba(67, 176, 216, 0.14); }
@@ -540,7 +540,7 @@ onBeforeUnmount(() => {
 .pcard--generating .pcard__skeleton { flex: 1; align-content: center; }
 .pcard__skeleton { display: grid; gap: 8px; }
 .pcard__skeleton i {
-  height: 11px; border-radius: 6px;
+  height: 11px; border-radius: var(--mk-radius-sm);
   background: linear-gradient(90deg, color-mix(in srgb, var(--surface) 55%, var(--canvas)) 25%, var(--surface) 50%, color-mix(in srgb, var(--surface) 55%, var(--canvas)) 75%);
   background-size: 200% 100%;
   animation: paths-shimmer 1.5s ease infinite;
@@ -550,7 +550,7 @@ onBeforeUnmount(() => {
   font-size: 12.5px; line-height: 1.6; color: var(--red, #c0454a);
   background: color-mix(in srgb, var(--red) 7%, transparent);
   border: 1px dashed color-mix(in srgb, var(--red) 35%, transparent);
-  border-radius: 10px; padding: 9px 12px;
+  border-radius: var(--mk-radius-lg); padding: 9px 12px;
 }
 /* 失败：原因区弹性拉伸，重试按钮压底（与 ready 卡内容高度对齐） */
 .pcard--failed .pcard__fail-reason { flex: 1; display: grid; align-content: center; }
@@ -570,7 +570,7 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; gap: 9px;
   background: var(--ink); color: #fff;
   font-size: 13px; font-weight: 600;
-  padding: 11px 16px; border-radius: 12px;
+  padding: 11px 16px; border-radius: var(--mk-radius-xl);
   box-shadow: 0 16px 40px rgba(23, 32, 51, 0.3);
 }
 .toast__icon {
@@ -594,12 +594,12 @@ onBeforeUnmount(() => {
 .pcard__menu {
   position: absolute; top: 26px; right: 0; z-index: 10;
   background: var(--surface, #fff); border: 1px solid var(--line);
-  border-radius: 12px; padding: 5px;
+  border-radius: var(--mk-radius-xl); padding: 5px;
   box-shadow: 0 12px 30px rgba(23, 32, 51, 0.14);
   display: grid; min-width: 120px;
 }
 .pcard__menu-item {
-  padding: 8px 11px; border-radius: 8px;
+  padding: 8px 11px; border-radius: var(--mk-radius-md);
   font-size: 12.5px; font-weight: 600; color: var(--muted);
   cursor: pointer; white-space: nowrap;
   text-align: left;
@@ -612,7 +612,7 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; gap: 9px;
   font-size: 12.5px; color: var(--muted);
   background: var(--canvas, #fafcff); border: 1px dashed var(--line);
-  border-radius: 10px; padding: 8px 11px;
+  border-radius: var(--mk-radius-lg); padding: 8px 11px;
 }
 .pcard__confirm-yes { color: var(--red, #c0454a); font-weight: 800; cursor: pointer; }
 .pcard__confirm-no { color: var(--faint); font-weight: 600; cursor: pointer; }

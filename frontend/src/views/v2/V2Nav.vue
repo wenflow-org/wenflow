@@ -178,7 +178,7 @@ onUnmounted(() => {
 }
 /* 主导航链接：44px 高 + 14.5px 字号（比 CTA 更突出，主次层级正确） */
 .v2nav__links a {
-  padding: 11px 16px; border-radius: 999px;
+  padding: 11px 16px; border-radius: var(--mk-radius-pill);
   font-size: 14.5px; font-weight: 700; color: var(--muted, #5b6577);
   cursor: pointer; text-decoration: none; transition: color 0.14s ease, background 0.14s ease;
 }
@@ -190,7 +190,7 @@ onUnmounted(() => {
    导致文字竖排换行、按钮纵向膨胀超出导航栏并裁出视口顶部（ISSUE-001）。 */
 .v2nav__cta {
   display: inline-flex; align-items: center; justify-content: center;
-  min-height: 36px; padding: 0 14px; border-radius: 999px;
+  min-height: 36px; padding: 0 14px; border-radius: var(--mk-radius-pill);
   background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
   color: #fff; font-size: 13px; font-weight: 800;
   box-shadow: 0 6px 14px color-mix(in srgb, var(--blue) 26%, transparent);
@@ -213,7 +213,7 @@ onUnmounted(() => {
   background: transparent;
   border: 0;
   padding: 5px 10px 5px 5px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   cursor: pointer;
   font: inherit;
   transition: background 0.15s ease;
@@ -240,7 +240,7 @@ onUnmounted(() => {
   right: 0;
   min-width: 160px;
   padding: 6px;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e3e9f4);
   box-shadow: 0 16px 40px rgba(23, 32, 51, 0.12);
@@ -265,7 +265,7 @@ onUnmounted(() => {
   text-align: left;
   padding: 10px 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-md);
   background: transparent;
   font: inherit;
   font-size: 13px;
@@ -353,7 +353,7 @@ onUnmounted(() => {
     justify-items: center;
     gap: 3px;
     padding: 6px 2px 4px;
-    border-radius: 12px;
+    border-radius: var(--mk-radius-xl);
     color: var(--muted, #5b6577);
     text-decoration: none;
   }

@@ -316,7 +316,7 @@ function goDashboard() {
   letter-spacing: 0.02em;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 8%, transparent);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
 }
 
 .ob__title {
@@ -349,7 +349,7 @@ function goDashboard() {
   padding: 12px 10px 10px;
   flex: 1;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   background: color-mix(in srgb, var(--surface) 96%, var(--canvas));
 }
 .ob__flow-item i {
@@ -393,7 +393,7 @@ function goDashboard() {
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
 }
 .ob__chip--green {
   color: #0f8a4d;
@@ -431,7 +431,7 @@ function goDashboard() {
   font-weight: 700;
   color: var(--muted);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   padding: 3px 9px;
 }
 .ob__demo-tags span.is-on {
@@ -448,7 +448,7 @@ function goDashboard() {
   gap: 2px;
   padding: 9px 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   background: var(--surface);
   opacity: 0.72;
 }
@@ -501,7 +501,7 @@ function goDashboard() {
   gap: 8px 10px;
   padding: 11px 12px;
   border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
 }
 /* 第 3 步：竖向堆叠（chip 在上、标题在下，与真实学习台「今日行动」样式一致，避免任何横向重叠） */
@@ -518,7 +518,7 @@ function goDashboard() {
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 12%, transparent);
   padding: 5px 7px;
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
   white-space: nowrap;
 }
 .ob__demo-action__body { display: grid; gap: 3px; min-width: 0; }
@@ -536,7 +536,7 @@ function goDashboard() {
   gap: 2px;
   padding: 9px 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   background: var(--surface);
 }
 .ob__demo-metrics small { font-size: 10.5px; color: var(--faint); }
@@ -562,7 +562,7 @@ function goDashboard() {
   font-weight: 700;
   color: var(--muted);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   padding: 4px 10px;
   background: var(--surface);
 }
@@ -575,7 +575,7 @@ function goDashboard() {
   background: none; border: 0;
   padding: 8px 10px;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-md);
 }
 .ob__back:hover { color: var(--blue-deep); background: rgba(52,120,246,0.06); }
 
@@ -589,7 +589,7 @@ function goDashboard() {
   color: #fff;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   cursor: pointer;
   box-shadow: 0 8px 20px color-mix(in srgb, var(--blue) 25%, transparent);
   transition: transform 0.18s, box-shadow 0.18s;
@@ -623,7 +623,7 @@ function goDashboard() {
   border: 0;
   padding: 4px 8px;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-md);
   transition: color 0.15s, background 0.15s;
 }
 .ob__later:hover {
@@ -632,7 +632,7 @@ function goDashboard() {
 }
 
 @media (max-width: 480px) {
-  .ob__card { padding: 22px 16px 18px; border-radius: 16px; }
+  .ob__card { padding: 22px 16px 18px; border-radius: var(--mk-radius-modal); }
   .ob__title { font-size: 18px; }
   .ob__progress span { width: 24px; }
   .ob__flow-item { padding: 10px 6px 8px; }

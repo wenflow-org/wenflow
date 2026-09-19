@@ -409,7 +409,7 @@ onMounted(() => {
 .history__dot {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   background: var(--faint, #67758f);
   flex: none;
 }
@@ -454,7 +454,7 @@ onMounted(() => {
   padding: 5px 12px;
   border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   white-space: nowrap;
   transition: background 0.15s ease;
 }
@@ -466,7 +466,7 @@ onMounted(() => {
   text-decoration: none;
   padding: 5px 12px;
   border: 1px solid var(--line, #e3e9f4);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   white-space: nowrap;
   transition: color 0.15s ease, border-color 0.15s ease;
 }

@@ -151,7 +151,7 @@ function goLogin() {
 .field__input {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   padding: 11px 14px;
   font: inherit; font-size: 14px;
   color: var(--ink);
@@ -179,7 +179,7 @@ function goLogin() {
   align-items: center;
   gap: 8px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   background: color-mix(in srgb, var(--red) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
   color: var(--red-ink);

@@ -204,7 +204,7 @@ onMounted(loadStatus);
 .field__input {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   padding: 11px 14px;
   font: inherit; font-size: 14px;
   color: var(--ink);
@@ -239,7 +239,7 @@ onMounted(loadStatus);
   cursor: pointer;
   padding: 5px 6px;
   min-height: 24px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-md);
 }
 .switch button:hover { text-decoration: underline; }
 
@@ -287,7 +287,7 @@ onMounted(loadStatus);
   right: 5px; top: 50%;
   transform: translateY(-50%);
   width: 34px; height: 34px;
-  border: 0; border-radius: 8px;
+  border: 0; border-radius: var(--mk-radius-md);
   background: transparent;
   color: var(--faint);
   cursor: pointer;
