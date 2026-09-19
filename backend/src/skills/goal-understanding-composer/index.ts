@@ -76,7 +76,7 @@ export function sanitizeUnderstanding(understanding: any): any {
     cognitive_profile: { ...(understanding.cognitive_profile || {}) },
     emotional_profile: { ...(understanding.emotional_profile || {}) }
   }
-  const topLevelKeys = ['surface_goal', 'real_problem', 'motivation', 'urgency', 'pain_points', 'background_experience', 'learning_signal', 'goal_orientation', 'cognitive_bandwidth']
+  const topLevelKeys = ['surface_goal', 'real_problem', 'motivation', 'urgency', 'pain_points', 'background_experience', 'learning_signal', 'goal_orientation', 'cognitive_bandwidth', 'primary_block_type', 'recurrence', 'block_type_evidence']
   topLevelKeys.forEach((key) => {
     if (isPlaceholderValue(sanitized[key])) { delete sanitized[key] }
   })
