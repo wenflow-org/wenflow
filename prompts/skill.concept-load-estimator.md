@@ -1,6 +1,6 @@
 ---
 agentId: skill:concept-load-estimator
-coreHash: 961e67ddcd94c17b9f3ee025f484caee302dcafa3d41402e55063eb3bbd93f4d
+coreHash: 0cf536e6b72c8dfea8c14feb0ab3604c30eea0c7de87034bb14b737d2ce9d00d
 coreVersion: 1
 temperature: 0.2
 maxTokens: 2000
@@ -32,7 +32,7 @@ failurePolicy: propagate
 
 ## 输出字段
 
-- concepts · object[] — 逐概念的负担档位，每项 { conceptKey, granularity: atomic|cluster, knowledgeType: factual|conceptual|procedural|metacognitive, difficultyBand: low|medium|high|unknown, rationale }；conceptKey 必须是输入里出现过的原文
+- concepts · object[] — 逐概念的负担档位；conceptKey 必须是输入里出现过的原文
 
 ## 边界约束
 

@@ -67,23 +67,35 @@ export function normalizeCoreFormInput(
     (CORE_CHANNELS as readonly string[]).includes(c)
   ) as CoreChannel[];
 
-  const fields = (Array.isArray(raw.fields) ? raw.fields : [])
-    .filter((field) => field && typeof field === 'object')
-    .map((field) => {
-      const item = field as Record<string, unknown>;
-      const baseType = String(item.type ?? 'string').trim().replace(/\?$/, '');
-      const type = (CORE_FIELD_TYPES as readonly string[]).includes(baseType)
-        ? `${baseType}${String(item.type ?? '').trim().endsWith('?') ? '?' : ''}`
-        : String(item.type ?? 'string').trim();
-      return {
-        name: String(item.name ?? '').trim(),
-        type,
-        optional: type.endsWith('?'),
-        desc: String(item.desc ?? '').trim(),
-        turn: item.turn === true,
-      };
-    })
-    .filter((field) => field.name || field.desc);
+  const normalizeFieldList = (items: unknown[]): CoreFile['fields'] =>
+    items
+      .filter((field) => field && typeof field === 'object')
+      .map((field): CoreFile['fields'][number] => {
+        const item = field as Record<string, unknown>;
+        const baseType = String(item.type ?? 'string').trim().replace(/\?$/, '');
+        const type = (CORE_FIELD_TYPES as readonly string[]).includes(baseType)
+          ? `${baseType}${String(item.type ?? '').trim().endsWith('?') ? '?' : ''}`
+          : String(item.type ?? 'string').trim();
+        const spec: CoreFile['fields'][number] = {
+          name: String(item.name ?? '').trim(),
+          type,
+          optional: type.endsWith('?'),
+          desc: String(item.desc ?? '').trim(),
+          turn: item.turn === true,
+        };
+        // Q11：结构化 enum 候选值 / 嵌套 object 子字段需 round-trip 保留（与 core-file-loader 读取口径一致）
+        const enumValues = Array.isArray(item.enumValues)
+          ? item.enumValues.map((v) => String(v).trim()).filter((v) => v.length > 0)
+          : [];
+        if (enumValues.length) spec.enumValues = enumValues;
+        if (Array.isArray(item.properties) && item.properties.length) {
+          spec.properties = normalizeFieldList(item.properties);
+        }
+        return spec;
+      })
+      .filter((field) => field.name || field.desc);
+
+  const fields = normalizeFieldList(Array.isArray(raw.fields) ? raw.fields : []);
 
   const rawParams = (raw.params && typeof raw.params === 'object' ? raw.params : {}) as Record<string, unknown>;
   const failurePolicy = (CORE_FAILURE_POLICIES as readonly string[]).includes(String(rawParams.failurePolicy))
@@ -158,6 +170,19 @@ export function normalizeCoreFormInput(
  * 缺省使用标准头。
  */
 export function serializeCoreFile(core: CoreFile, headerComment?: string): string {
+  // Q11：结构化 enumValues / 嵌套 properties 需 round-trip 保留（与 core-file-loader 读取口径一致）
+  const serializeFieldList = (items: CoreFile['fields']): Record<string, unknown>[] =>
+    items.map((field) => ({
+      name: field.name,
+      type: field.type,
+      desc: field.desc,
+      ...(field.turn ? { turn: true } : {}),
+      ...(field.enumValues && field.enumValues.length ? { enumValues: field.enumValues } : {}),
+      ...(field.properties && field.properties.length
+        ? { properties: serializeFieldList(field.properties) }
+        : {}),
+    }));
+
   const doc: Record<string, unknown> = {
     skillId: core.skillId,
     baseVersion: core.baseVersion,
@@ -176,12 +201,7 @@ export function serializeCoreFile(core: CoreFile, headerComment?: string): strin
         }
       : {}),
     rules: core.rules,
-    fields: core.fields.map((field) => ({
-      name: field.name,
-      type: field.type,
-      desc: field.desc,
-      ...(field.turn ? { turn: true } : {}),
-    })),
+    fields: serializeFieldList(core.fields),
     constraints: core.constraints,
     ...(core.examples && core.examples.length ? { examples: core.examples } : {}),
     params: {
