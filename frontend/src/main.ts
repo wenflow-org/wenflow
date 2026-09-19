@@ -45,13 +45,6 @@ const ADMIN_SESSION_CONCEALED_CLASS = 'admin-session-concealed';
 const ADMIN_SESSION_SHELL_ID = 'admin-session-validation-shell';
 // Element Plus 已从 markup 移除，下列选择器已不可达；因其为纯防御性（隐藏游离弹层）
 // 且属"依赖去留"范畴，按上游代理建议保留原样，交由所有者决定。
-const ADMIN_OVERLAY_SELECTOR = [
-  'body > .el-popper',
-  'body > .el-overlay',
-  'body > .el-message',
-  'body > .el-notification',
-  'body > .el-loading-mask'
-].join(', ');
 
 let adminLoginRedirecting = false;
 let adminSessionValidationInFlight: Promise<void> | null = null;
@@ -131,9 +124,6 @@ function markAdminOverlaysConcealed(): void {
     code: 'Escape',
     bubbles: true
   }));
-  document.querySelectorAll<HTMLElement>(ADMIN_OVERLAY_SELECTOR).forEach((element) => {
-    element.classList.add('admin-bfcache-overlay-concealed');
-  });
 }
 
 function concealAdminApp(): void {

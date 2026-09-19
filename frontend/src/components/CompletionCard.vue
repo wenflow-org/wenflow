@@ -126,8 +126,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, watch } from 'vue';
-import { CircleCheckFilled, VideoPause, Compass, Document, Collection, TrendCharts, DataAnalysis, MagicStick, Opportunity } from '@element-plus/icons-vue';
+import { computed, h, onMounted, onUnmounted, reactive, watch } from 'vue';
+/* element-plus 图标已移除（依赖整体下线）：本地同名字形组件替代，模板无需改动。
+   视觉差异：由 EP 线性 SVG 变为同义字形（✓ / 📄 / 📈 …），尺寸与位置沿用 .completion-icon */
+const GLYPHS: Record<string, string> = { CircleCheckFilled: '✓', MagicStick: '✨', Document: '📄', Opportunity: '💡', DataAnalysis: '📊', TrendCharts: '📈', Collection: '📚', Compass: '🧭', VideoPause: '⏸' };
+const glyph = (name: string) => () => h('span', { class: 'completion-glyph' }, GLYPHS[name] ?? '•');
+const CircleCheckFilled = glyph('CircleCheckFilled');
+const MagicStick = glyph('MagicStick');
+const Document = glyph('Document');
+const Opportunity = glyph('Opportunity');
+const DataAnalysis = glyph('DataAnalysis');
+const TrendCharts = glyph('TrendCharts');
+const Collection = glyph('Collection');
+const Compass = glyph('Compass');
+const VideoPause = glyph('VideoPause');
 import MarkdownRenderer from './MarkdownRenderer.vue';
 import type { ReplanAdvisory, WrapupArtifact } from '@/api/aiTeaching';
 

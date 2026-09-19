@@ -11,14 +11,6 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn() })
 }));
 
-vi.mock('element-plus', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('element-plus')>();
-  return {
-    ...actual,
-    ElMessageBox: { alert: vi.fn(), confirm: vi.fn() }
-  };
-});
-
 const getSessionDetailMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/api/aiTeaching', () => ({
