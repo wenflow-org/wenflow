@@ -9,7 +9,6 @@
 export type StoryDemandSource =
   | 'story.visibleOpening'
   | 'story.goalSeed.surfaceGoal'
-  | 'story.goalSeed.realProblem'
   | 'story.triggerEvent'
   | 'story.outline'
   | 'profile.learningGoal'
@@ -49,10 +48,12 @@ export function resolveStorySessionDemand(params: {
   const storyId = asText(story?.storyId || story?.id) || null;
   const { surfaceGoal, realProblem } = pickGoalSeed(story);
 
+  // 注意：`goalSeed.realProblem` 是**设计者给的诊断结论**（隐藏层），不得作为开场诉求——
+  // 否则等于让学习者在第一句话里就把"答案"说出来（泄题）。
+  // 兜底链只允许"学习者自己说得出口"的内容；缺诉求时应落到画像长期倾向或直接报缺，由调用方拒绝推进。
   const candidates: Array<{ text: string; source: StoryDemandSource }> = [
     { text: asText(story?.visibleOpening), source: 'story.visibleOpening' },
     { text: surfaceGoal, source: 'story.goalSeed.surfaceGoal' },
-    { text: realProblem, source: 'story.goalSeed.realProblem' },
     { text: asText(story?.triggerEvent || story?.storyTriggerEvent), source: 'story.triggerEvent' },
     { text: asText(story?.outline || story?.storyOutline), source: 'story.outline' },
     { text: asText(params.profileLearningGoal), source: 'profile.learningGoal' },

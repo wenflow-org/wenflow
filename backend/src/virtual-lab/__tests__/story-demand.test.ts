@@ -43,6 +43,27 @@ describe('story-demand (故事需求经 Goal 传递，不改 Path)', () => {
     expect(r.source).toBe('profile.learningGoal');
   });
 
+  it('不再把 goalSeed.realProblem（设计者的诊断）当作开场诉求', () => {
+    const r = resolveStorySessionDemand({
+      story: { storyId: 's3', goalSeed: { realProblem: '截止日前逃避写作（诊断结论）' } },
+      profileLearningGoal: '画像倾向',
+    });
+    // realProblem 不得成为开场白：兜底链跳过它，落到画像长期倾向
+    expect(r.source).toBe('profile.learningGoal');
+    expect(r.text).toBe('画像倾向');
+    // 但仍作为元数据返回（供调用方/审计使用）
+    expect(r.realProblem).toBe('截止日前逃避写作（诊断结论）');
+  });
+
+  it('只有 realProblem 且无画像倾向时 → 返回空，由调用方拒绝推进（宁可报缺也不泄题）', () => {
+    const r = resolveStorySessionDemand({
+      story: { storyId: 's4', goalSeed: { realProblem: '诊断结论' } },
+      profileLearningGoal: null,
+    });
+    expect(r.text).toBe('');
+    expect(r.source).toBe('none');
+  });
+
   it('Path rawGoal 优先 Goal conversation.description（正式传递）', () => {
     const r = resolvePathRawGoalFromSession({
       goalConversationDescription: '开场已写入 Goal 的诉求',
