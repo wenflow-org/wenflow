@@ -70,6 +70,7 @@ export function versionStatusText(s: string | null | undefined): string {
 const STAGE_TEXT: Record<string, string> = {
   understanding: '澄清中',
   proposal: '方案收敛中',
+  proposing: '方案收敛中', // UI 复查补充：阶段枚举 proposing 此前不在字典里，被原样直出
   planning: '规划中',
   completed: '已完成',
   failed: '失败',
