@@ -1,30 +1,30 @@
 <template>
   <div class="completion-card">
     <div class="completion-header">
-      <el-icon :size="24" color="var(--green, #2e7d32)"><CircleCheckFilled /></el-icon>
+      <span class="completion-icon completion-icon--header" aria-hidden="true"><CircleCheckFilled /></span>
       <h3 class="completion-title">本次学习已结束</h3>
     </div>
 
     <div class="completion-body">
       <div v-if="advisory?.shouldSuggest" class="completion-section advisory-section" :class="`advisory-section--${advisory.priority}`">
-        <h4 class="section-title"><el-icon><MagicStick /></el-icon>{{ advisory.ui.title }}</h4>
+        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><MagicStick /></span>{{ advisory.ui.title }}</h4>
         <p class="section-content">{{ advisory.ui.body }}</p>
         <p v-if="advisory.attribution?.reason" class="section-attribution">
           <span class="attribution-tag">主要因为</span>{{ advisory.attribution.reason }}
         </p>
         <p class="section-hint">确认后会调整后续学习安排，已完成的内容不会改变。</p>
         <div class="advisory-options">
-          <el-button
+          <button
             v-for="option in advisory.ui.options"
             :key="option.key"
-            size="small"
-            :type="isAdjustmentAction(option.key) ? 'primary' : 'default'"
-            plain
+            type="button"
+            class="completion-btn completion-btn--small"
+            :class="isAdjustmentAction(option.key) ? 'completion-btn--primary' : 'completion-btn--default'"
             :disabled="busy"
             @click="emit('advisory-action', option.key)"
           >
             {{ option.label }}
-          </el-button>
+          </button>
         </div>
       </div>
 
@@ -36,17 +36,17 @@
       </div>
 
       <div class="completion-section">
-        <h4 class="section-title"><el-icon><Document /></el-icon>主题总结</h4>
+        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Document /></span>主题总结</h4>
         <p class="section-content">{{ summary.topicSummary }}</p>
       </div>
 
       <div v-if="progressHighlights.length" class="completion-section">
-        <h4 class="section-title"><el-icon><Opportunity /></el-icon>本节进展</h4>
+        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Opportunity /></span>本节进展</h4>
         <ul class="knowledge-list">
           <li v-for="item in progressHighlights" :key="item.title" class="knowledge-item">
             <div class="knowledge-head">
               <span class="knowledge-name">{{ item.title }}</span>
-              <el-tag size="small" :type="item.type">{{ item.label }}</el-tag>
+              <span class="status-tag" :class="tagClass(item.type)">{{ item.label }}</span>
               <router-link
                 v-if="item.type === 'danger' && taskId"
                 :to="`/learn/${taskId}?mode=review`"
@@ -59,7 +59,7 @@
       </div>
 
       <div v-if="evaluation" class="completion-section">
-        <h4 class="section-title"><el-icon><DataAnalysis /></el-icon>本节表现</h4>
+        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><DataAnalysis /></span>本节表现</h4>
         <p class="section-hint">{{ sessionInterpretation }}</p>
         <div class="metrics-grid metrics-grid--three">
           <div v-for="item in sessionMetricCards" :key="item.key" class="metric-card" :class="`metric-card--${item.tone}`">
@@ -71,7 +71,7 @@
       </div>
 
       <div v-if="evaluation" class="completion-section">
-        <h4 class="section-title"><el-icon><TrendCharts /></el-icon>长期状态四维</h4>
+        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><TrendCharts /></span>长期状态四维</h4>
         <p class="section-hint">{{ longTermInterpretation }}</p>
         <div class="metrics-grid">
           <div v-for="item in longTermMetricCards" :key="item.key" class="metric-card" :class="`metric-card--${item.tone}`">
@@ -83,12 +83,12 @@
       </div>
 
       <div class="completion-section">
-        <h4 class="section-title"><el-icon><Collection /></el-icon>知识点掌握</h4>
+        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Collection /></span>知识点掌握</h4>
         <ul v-if="knowledgeItems.length" class="knowledge-list">
           <li v-for="item in knowledgeItems" :key="item.name" class="knowledge-item">
             <div class="knowledge-head">
               <span class="knowledge-name">{{ item.name }}</span>
-              <el-tag size="small" :type="getKnowledgeTagType(item.status)">{{ getKnowledgeStatusLabel(item.status) }}</el-tag>
+              <span class="status-tag" :class="tagClass(getKnowledgeTagType(item.status))">{{ getKnowledgeStatusLabel(item.status) }}</span>
             </div>
             <p class="knowledge-evidence">{{ item.evidence }}</p>
           </li>
@@ -97,18 +97,18 @@
       </div>
 
       <div v-if="keyTakeaways.length" class="completion-section">
-        <h4 class="section-title"><el-icon><Collection /></el-icon>关键收获</h4>
+        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Collection /></span>关键收获</h4>
         <ol class="ordered-list"><li v-for="(item, idx) in keyTakeaways" :key="`${idx}-${item}`">{{ item }}</li></ol>
       </div>
 
       <div class="completion-section">
-        <h4 class="section-title"><el-icon><Compass /></el-icon>下一步建议</h4>
+        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Compass /></span>下一步建议</h4>
         <ol v-if="actionPlan.length" class="ordered-list"><li v-for="(item, idx) in actionPlan" :key="`${idx}-${item}`">{{ item }}</li></ol>
         <div v-else class="section-content"><MarkdownRenderer :content="summary.practiceAdvice" /></div>
       </div>
 
       <div class="completion-section">
-        <h4 class="section-title"><el-icon><TrendCharts /></el-icon>学习评价</h4>
+        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><TrendCharts /></span>学习评价</h4>
         <div v-if="hasHighlights" class="evaluation-block">
           <p v-if="formattedStrengths" class="evaluation-line"><strong>亮点：</strong>{{ formattedStrengths }}</p>
           <p v-if="formattedImprovements" class="evaluation-line"><strong>改进：</strong>{{ formattedImprovements }}</p>
@@ -118,9 +118,9 @@
     </div>
 
     <div class="completion-actions">
-      <el-button :disabled="busy" @click="emit('action', 'continue-task')">继续练习</el-button>
-      <el-button :disabled="busy" @click="emit('action', 'end')"><el-icon><VideoPause /></el-icon>返回学习路径</el-button>
-      <el-button type="primary" :loading="busy" @click="emit('action', 'complete-task')">完成任务</el-button>
+      <button type="button" class="completion-btn completion-btn--action completion-btn--default" :disabled="busy" @click="emit('action', 'continue-task')">继续练习</button>
+      <button type="button" class="completion-btn completion-btn--action completion-btn--default" :disabled="busy" @click="emit('action', 'end')"><span class="completion-icon" aria-hidden="true"><VideoPause /></span>返回学习路径</button>
+      <button type="button" class="completion-btn completion-btn--action completion-btn--primary" :disabled="busy" @click="emit('action', 'complete-task')"><span v-if="busy" class="spinner--sm completion-spinner" aria-hidden="true"></span>完成任务</button>
     </div>
   </div>
 </template>
@@ -299,6 +299,15 @@ const formattedImprovements = computed(() => (evaluationHighlights.value ? forma
 
 const getKnowledgeTagType = (s: string) => (s === 'mastered' ? 'success' : s === 'learning' ? 'warning' : s === 'review' ? 'danger' : 'info');
 const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' : s === 'learning' ? '继续练习' : s === 'review' ? '建议回看' : '尚未展开');
+
+/* el-tag type → 学习组件 .status-tag 变体。色 token 与旧 EP 覆写一一对应：
+   success=success-*、warning=efficient-*、danger=warning-*、info=pending-*。 */
+const tagClass = (type: string) => ({
+  'status-tag--completed': type === 'success',
+  'status-tag--warning': type === 'danger',
+  'status-tag--pending': type === 'info',
+  'status-tag--efficient': type === 'warning',
+});
 </script>
 
 <style scoped>
@@ -325,6 +334,11 @@ const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' :
 .advisory-section--medium { border-color: color-mix(in srgb, var(--amber, #f4aa46) 45%, var(--line, #dfe7d6)); background: color-mix(in srgb, var(--amber, #f4aa46) 10%, var(--surface)); }
 .advisory-section--low { border-color: color-mix(in srgb, var(--green, #1e9e58) 40%, var(--line, #dfe7d6)); background: color-mix(in srgb, var(--green, #1e9e58) 8%, var(--surface)); }
 .section-title { margin: 0 0 10px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--green, #1b5e20); }
+/* 图标容器：等价 el-icon（1em、居中、继承字色/字号），移除 EP 依赖 */
+.completion-icon { display: inline-flex; align-items: center; justify-content: center; width: 1em; height: 1em; line-height: 1; font-size: inherit; flex: none; }
+.completion-icon svg { width: 1em; height: 1em; }
+.completion-icon--header { width: 24px; height: 24px; font-size: 24px; color: var(--green, #2e7d32); }
+.section-title .completion-icon { color: var(--accent, #3478f6); }
 .section-hint { margin: 0 0 10px; font-size: 12px; color: var(--muted, #607d8b); }
 .review-link { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--red, #b3261e); text-decoration: none; }
 .review-link:hover { text-decoration: underline; }
@@ -352,6 +366,25 @@ const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' :
 .evaluation-block { display: grid; gap: 8px; }
 .evaluation-line { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink, #37474f); }
 .completion-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+
+/* 状态标签：以 .status-tag 原语为基，尺寸对齐旧 el-tag small（色 token 不变） */
+.completion-card .status-tag { justify-content: center; gap: 0; height: 20px; padding: 0 7px; line-height: 1; letter-spacing: normal; text-transform: none; }
+.status-tag--efficient { background: var(--color-efficient-bg); color: var(--color-efficient-dark); border: 1px solid var(--color-efficient-border); }
+
+/* 第一方按钮：视觉对齐原 el-button 及其全局 EP 覆写（tremor-theme / design-system） */
+.completion-btn { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; white-space: nowrap; vertical-align: middle; cursor: pointer; font-family: inherit; line-height: 1; border: 1px solid transparent; border-radius: 999px; transition: all 180ms ease; }
+.completion-btn--action { height: 38px; padding: 0 18px; font-size: 13px; border-radius: 10px; font-weight: 600; }
+.completion-btn--small { height: 24px; padding: 5px 11px; font-size: 12px; }
+.completion-btn--default { background: var(--bg-surface); border-color: var(--border-default); color: var(--text-primary); font-weight: 600; }
+/* 底部动作按钮此前走 el-button 默认型（灰色文字），非 --default 型；对齐其视觉 */
+.completion-btn--action.completion-btn--default { color: var(--muted, #5b6577); }
+.completion-btn--default:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--color-primary); color: var(--color-primary); }
+.completion-btn--primary { background: var(--color-primary); border-color: var(--color-primary); color: var(--text-on-primary); font-weight: var(--font-medium); box-shadow: 0 14px 28px color-mix(in srgb, var(--color-primary) 24%, transparent); }
+.completion-btn--primary:hover:not(:disabled) { background: var(--color-primary-dark); border-color: var(--color-primary-dark); color: var(--text-on-primary); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.completion-btn--primary:active:not(:disabled) { transform: translateY(0); }
+.completion-btn:disabled { cursor: not-allowed; }
+.completion-btn + .completion-btn { margin-left: 12px; }
+.completion-spinner { margin-right: 6px; }
 @media (max-width: 900px) { .metrics-grid--three { grid-template-columns: 1fr; } }
 @media (max-width: 640px) {
   .completion-summary,
@@ -364,8 +397,8 @@ const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' :
     align-items: stretch;
   }
 
-  .completion-actions :deep(.el-button),
-  .advisory-options :deep(.el-button) {
+  .completion-actions .completion-btn,
+  .advisory-options .completion-btn {
     width: 100%;
     margin-left: 0;
   }

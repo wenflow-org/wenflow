@@ -1,23 +1,20 @@
 <template>
-  <el-config-provider :locale="zhCn">
-    <div id="app">
-      <a href="#app-main" class="skip-link">跳到主要内容</a>
-      <AnnouncementBanner />
-      <div id="app-main" tabindex="-1">
-        <RouterView v-slot="{ Component }">
-          <transition name="route-fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </RouterView>
-      </div>
-      <ToastHost />
-      <MockConfirm />
+  <div id="app">
+    <a href="#app-main" class="skip-link">跳到主要内容</a>
+    <AnnouncementBanner />
+    <div id="app-main" tabindex="-1">
+      <RouterView v-slot="{ Component }">
+        <transition name="route-fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </RouterView>
     </div>
-  </el-config-provider>
+    <ToastHost />
+    <MockConfirm />
+  </div>
 </template>
 
 <script setup lang="ts">
-import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import { useUserStore } from './stores/user';
 import ToastHost from './components/ui/ToastHost.vue';
 import AnnouncementBanner from './components/AnnouncementBanner.vue';

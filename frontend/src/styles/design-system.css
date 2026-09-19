@@ -678,96 +678,6 @@ pre code {
 }
 
 /* ==========================================
-   Element Plus 按钮样式覆盖
-   ========================================== */
-
-/* 覆盖所有 primary 按钮为渐变风格 */
-.el-button--primary {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark)) !important;
-  border-color: transparent !important;
-  border-radius: 999px !important;
-  font-weight: 600 !important;
-  box-shadow: 0 14px 28px rgba(52, 120, 246, 0.24);
-}
-
-.el-button--primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 18px 36px rgba(52, 120, 246, 0.3);
-}
-
-/* 覆盖 success 按钮 */
-.el-button--success {
-  background: linear-gradient(135deg, var(--color-success), #248a53) !important;
-  border-color: transparent !important;
-  border-radius: 999px !important;
-  font-weight: 600 !important;
-  box-shadow: 0 14px 28px rgba(49, 177, 111, 0.24);
-}
-
-.el-button--success:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 18px 36px rgba(49, 177, 111, 0.3);
-}
-
-/* 覆盖 danger 按钮 */
-.el-button--danger {
-  background: linear-gradient(135deg, var(--color-danger), var(--color-danger-dark)) !important;
-  border-color: transparent !important;
-  border-radius: 999px !important;
-  font-weight: 600 !important;
-  box-shadow: 0 14px 28px rgba(239, 117, 120, 0.24);
-}
-
-.el-button--danger:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 18px 36px rgba(239, 117, 120, 0.3);
-}
-
-/* 覆盖 warning 按钮为 danger 风格（统一危险操作） */
-.el-button--warning {
-  background: linear-gradient(135deg, var(--color-danger), var(--color-danger-dark)) !important;
-  border-color: transparent !important;
-  border-radius: 999px !important;
-  font-weight: 600 !important;
-  box-shadow: 0 14px 28px rgba(239, 117, 120, 0.24);
-}
-
-/* 覆盖 plain/ghost 按钮 */
-.el-button--default:not(.el-button--primary):not(.el-button--success):not(.el-button--danger):not(.el-button--warning) {
-  border-color: var(--lab-color-border);
-  background: color-mix(in srgb, var(--lab-color-surface-alt) 80%, white);
-  color: var(--lab-color-text);
-  border-radius: 999px !important;
-  font-weight: 600 !important;
-}
-
-.el-button--default:not(.el-button--primary):not(.el-button--success):not(.el-button--danger):not(.el-button--warning):hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-/* el-button 文本（link）型保留方角，不强制圆角 */
-.el-button.is-link,
-.el-button.is-text {
-  border-radius: 6px !important;
-}
-
-/* 链接按钮样式统一 */
-.el-button.is-link {
-  font-weight: 600;
-}
-
-/* 按钮动画 */
-.el-button {
-  transition: all 180ms ease;
-}
-
-/* 小按钮圆角 */
-.el-button--small {
-  border-radius: var(--lab-radius-button-small);
-}
-
-/* ==========================================
    Admin 页面公共组件（风格 A · 扁平干净）
    ========================================== */
 
@@ -931,29 +841,6 @@ pre code {
   box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
 }
 
-.admin-list-card .el-table {
-  --el-table-border-color: rgba(52, 120, 246, 0.06);
-  background: transparent;
-}
-
-.admin-list-card .el-table th.el-table__cell {
-  background: rgba(52, 120, 246, 0.03);
-  font-weight: 700;
-  font-size: 0.8125rem;
-  color: #7085a6;
-}
-
-.admin-list-card .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
-  background: rgba(52, 120, 246, 0.015);
-}
-
-.admin-list-card .el-table .el-table__row:hover > td.el-table__cell {
-  background: rgba(52, 120, 246, 0.03);
-}
-
-.admin-list-card .el-table td.el-table__cell {
-  border-bottom-color: rgba(52, 120, 246, 0.04);
-}
 
 /* ==========================================
    全局按钮系统（用户端）

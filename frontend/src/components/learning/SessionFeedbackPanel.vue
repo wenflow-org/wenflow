@@ -65,14 +65,17 @@
 
         <label class="session-feedback__comment">
           <span>补充说明，可选</span>
-          <el-input
-            v-model="comment"
-            type="textarea"
-            :rows="3"
-            maxlength="1000"
-            show-word-limit
-            placeholder="例如：哪个解释、例子或理解检查让你感到困难？"
-          />
+          <div class="feedback-textarea">
+            <textarea
+              v-model="comment"
+              class="feedback-textarea__inner"
+              :rows="3"
+              maxlength="1000"
+              placeholder="例如：哪个解释、例子或理解检查让你感到困难？"
+              aria-describedby="session-feedback-comment-count"
+            ></textarea>
+            <span id="session-feedback-comment-count" class="feedback-textarea__count">{{ comment.length }} / 1000</span>
+          </div>
         </label>
       </div>
 
@@ -83,14 +86,15 @@
 
       <div class="session-feedback__actions">
         <p>反馈不会影响任务完成状态，你可以随时修改。</p>
-        <el-button
-          type="primary"
-          :loading="submitting"
+        <button
+          type="button"
+          class="feedback-btn feedback-btn--primary"
           :disabled="rating === 0 || submitting || !dirty"
           @click="submit"
         >
+          <span v-if="submitting" class="spinner--sm feedback-btn__spinner" aria-hidden="true"></span>
           {{ saved ? '更新反馈' : '提交反馈' }}
-        </el-button>
+        </button>
       </div>
     </template>
   </section>
@@ -382,6 +386,101 @@ onMounted(load)
   line-height: 1.6;
 }
 
+/* 补充说明输入：等价旧 el-input textarea（含字数），移除 EP 依赖 */
+.feedback-textarea {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  vertical-align: bottom;
+}
+
+.feedback-textarea__inner {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 11px;
+  border: none;
+  border-radius: 4px;
+  background: var(--bg-surface, #fff);
+  color: var(--text-primary, #172033);
+  box-shadow: 0 0 0 1px var(--border-default, #dce4ef) inset;
+  font-family: inherit;
+  font-size: var(--text-sm, 14px);
+  line-height: 1.5;
+  resize: vertical;
+  transition: box-shadow var(--transition-fast, 150ms ease);
+}
+
+.feedback-textarea__inner::placeholder {
+  color: var(--text-muted, #607086);
+}
+
+.feedback-textarea__inner:hover {
+  box-shadow: 0 0 0 1px var(--border-dark, #ced4da) inset;
+}
+
+.feedback-textarea__inner:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--color-primary, #3478f6) inset;
+}
+
+.feedback-textarea__count {
+  position: absolute;
+  right: 10px;
+  bottom: 5px;
+  background: var(--bg-surface, #fff);
+  color: var(--text-muted, #909399);
+  font-size: 12px;
+  line-height: 14px;
+}
+
+/* 提交按钮：视觉对齐原 el-button--primary 及其全局覆写 */
+.feedback-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1;
+  height: 32px;
+  padding: 8px 15px;
+  font-size: 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  transition: all var(--transition-fast, 150ms ease);
+}
+
+.feedback-btn--primary {
+  background: var(--color-primary, #3478f6);
+  border-color: var(--color-primary, #3478f6);
+  color: var(--text-on-primary, #fff);
+  font-weight: var(--font-medium, 500);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--color-primary, #3478f6) 24%, transparent);
+}
+
+.feedback-btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-dark, #1f57cc);
+  border-color: var(--color-primary-dark, #1f57cc);
+  color: var(--text-on-primary, #fff);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm, 0 2px 4px rgba(44, 62, 80, 0.06));
+}
+
+.feedback-btn--primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.feedback-btn:disabled {
+  cursor: not-allowed;
+}
+
+.feedback-btn__spinner {
+  margin-right: 6px;
+}
+
 @media (max-width: 640px) {
   .session-feedback {
     padding: 20px 18px;
@@ -402,7 +501,7 @@ onMounted(load)
     width: 100%;
   }
 
-  .session-feedback__actions :deep(.el-button) {
+  .session-feedback__actions .feedback-btn {
     width: 100%;
   }
 }

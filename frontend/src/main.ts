@@ -1,10 +1,5 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import { ElLoading } from 'element-plus';
-// 组件样式由 unplugin-vue-components 按需注入；仅函数式服务需显式引入
-import 'element-plus/es/components/loading/style/css';
-import 'element-plus/es/components/message/style/css';
-import 'element-plus/es/components/message-box/style/css';
 
 import App from './App.vue';
 import router from './router';
@@ -18,7 +13,6 @@ import {
   setAdminProtectedLocationResolver
 } from './api/adminApi';
 import './styles/main.css';
-import './styles/tremor-theme.css';  // Element Plus 兼容覆写（原 Tremor 主题）
 import './styles/admin-theme.css';
 import './views/v2/v2.css';          // V2 设计系统（全局加载，防止路由切换闪烁）
 
@@ -49,6 +43,8 @@ setAdminProtectedLocationResolver(currentRouteRequiresAdminAuth);
 
 const ADMIN_SESSION_CONCEALED_CLASS = 'admin-session-concealed';
 const ADMIN_SESSION_SHELL_ID = 'admin-session-validation-shell';
+// Element Plus 已从 markup 移除，下列选择器已不可达；因其为纯防御性（隐藏游离弹层）
+// 且属"依赖去留"范畴，按上游代理建议保留原样，交由所有者决定。
 const ADMIN_OVERLAY_SELECTOR = [
   'body > .el-popper',
   'body > .el-overlay',
@@ -197,9 +193,7 @@ const pinia = createPinia();
 
 app.use(pinia);
 app.use(router);
-// Element Plus 组件由 unplugin-vue-components 按需自动引入；
-// 此处仅注册全局指令与语言包（locale 通过 App.vue 的 el-config-provider 下发）
-app.use(ElLoading);
+// 第一方指令注册（用户侧已无 Element Plus 组件用法）
 app.directive('reveal', vReveal);
 
 // 渲染期未捕获错误的最后防线：至少落盘，避免静默丢失
