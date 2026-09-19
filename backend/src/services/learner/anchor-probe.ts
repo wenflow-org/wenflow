@@ -111,6 +111,30 @@ export interface SelectDelayedAnchorCandidatesOptions {
   limit?: number | null;
 }
 
+/** 延迟锚题候选被跳过的原因（供调用方留痕；绝不静默丢弃） */
+export type DelayedAnchorSkipReason = 'invalid-time' | 'future-timestamp' | 'below-min-days';
+
+/** 一个被跳过的延迟锚题候选及其原因（`completedAt > now` 即跨时钟域/未来时间戳） */
+export interface DelayedAnchorSkippedCandidate {
+  conceptKey: string;
+  /** 原始完成/最近接触时间（可能非法） */
+  completedAt: string | number | Date;
+  /** 距 `now` 的 UTC 自然日间隔；无法解析 → null */
+  intervalDays: number | null;
+  reason: DelayedAnchorSkipReason;
+}
+
+/**
+ * 延迟锚题选择结果：命中计划 + 被跳过诊断 + 全局冷却标记。
+ * 调用方据此对"跨时钟域/非法时间"打结构化遥测（观测层），而不是依赖钳制静默吞掉。
+ */
+export interface DelayedAnchorSelection {
+  plans: AnchorProbePlan[];
+  skipped: DelayedAnchorSkippedCandidate[];
+  /** 全局冷却生效（最近一次锚题距今不足 `minIntervalDays`）→ 本轮不投放 */
+  cooldown: boolean;
+}
+
 /** 探针结果归因（纯映射；`falsified=true` 只代表"标记待复核"） */
 export interface AnchorProbeOutcome {
   falsified: boolean;
@@ -287,9 +311,25 @@ export function selectDelayedAnchorCandidates(
   candidates: AnchorCompletedCandidate[],
   options: SelectDelayedAnchorCandidatesOptions,
 ): AnchorProbePlan[] {
-  if (!Array.isArray(candidates) || candidates.length === 0) return [];
+  return partitionDelayedAnchorCandidates(candidates, options).plans;
+}
+
+/**
+ * 选择延迟锚题目标并**保留被跳过的候选诊断**（纯函数，Q8 测量深化 + 跨时钟域防御）。
+ *
+ * 与 {@link selectDelayedAnchorCandidates} 的差异只有返回值：这里同时给出 `skipped`，
+ * 让调用方对"非法时间 / 时间晚于 now（真墙钟 vs 模拟时钟，跨域）"打结构化遥测，
+ * 而不是依赖 `utcNaturalDayDiff` 的 `Math.max(0, …)` 静默钳成 0 后当作"未到间隔"。
+ * 其余语义（冷却、间隔门、排序、limit）与 `selectDelayedAnchorCandidates` 完全一致。
+ */
+export function partitionDelayedAnchorCandidates(
+  candidates: AnchorCompletedCandidate[],
+  options: SelectDelayedAnchorCandidatesOptions,
+): DelayedAnchorSelection {
+  const empty: DelayedAnchorSelection = { plans: [], skipped: [], cooldown: false };
+  if (!Array.isArray(candidates) || candidates.length === 0) return empty;
   const now = toEpochMs(options?.now);
-  if (now === null) return [];
+  if (now === null) return empty;
 
   const rawDays = options?.minIntervalDays;
   const safeDays = Number.isFinite(rawDays as number) ? Math.floor(rawDays as number) : ANCHOR_PROBE_DEFAULT_DELAYED_DAYS;
@@ -298,29 +338,54 @@ export function selectDelayedAnchorCandidates(
   // 全局冷却：最近一次锚题（任意种类）距今不足最小间隔自然日 → 本窗口不再投放
   if (options?.lastProbeAt !== null && options?.lastProbeAt !== undefined) {
     const sinceLast = utcNaturalDayDiff(options.lastProbeAt, now);
-    if (sinceLast !== null && sinceLast < minDays) return [];
+    if (sinceLast !== null && sinceLast < minDays) {
+      return { plans: [], skipped: [], cooldown: true };
+    }
   }
 
   const rawLimit = options?.limit ?? 1;
   const safeLimit = Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 1;
   const limit = Math.max(ANCHOR_PROBE_MIN_LIMIT, Math.min(ANCHOR_PROBE_MAX_LIMIT, safeLimit));
 
-  const eligible = candidates
-    .map((candidate) => {
-      if (!candidate || typeof candidate.conceptKey !== 'string') return null;
-      const conceptKey = candidate.conceptKey.trim();
-      if (!conceptKey) return null;
-      const intervalDays = utcNaturalDayDiff(candidate.completedAt, now);
-      if (intervalDays === null || intervalDays < minDays) return null;
-      return { conceptKey, intervalDays };
-    })
-    .filter((item): item is { conceptKey: string; intervalDays: number } => item !== null)
-    .sort((a, b) => {
-      if (a.intervalDays !== b.intervalDays) return b.intervalDays - a.intervalDays;
-      if (a.conceptKey < b.conceptKey) return -1;
-      if (a.conceptKey > b.conceptKey) return 1;
-      return 0;
-    });
+  const skipped: DelayedAnchorSkippedCandidate[] = [];
+  const eligible: Array<{ conceptKey: string; intervalDays: number }> = [];
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate.conceptKey !== 'string') continue;
+    const conceptKey = candidate.conceptKey.trim();
+    if (!conceptKey) continue;
+
+    const completedAtMs = toEpochMs(candidate.completedAt);
+    if (completedAtMs === null) {
+      skipped.push({ conceptKey, completedAt: candidate.completedAt, intervalDays: null, reason: 'invalid-time' });
+      continue;
+    }
+    // 跨时钟域防御：候选时间晚于 now（真墙钟时间戳混入模拟时钟）→ 显式跳过并留痕，
+    // 不依赖 utcNaturalDayDiff 的 Math.max(0, …) 钳制（避免"未来时间"被当成"今天刚见过"）。
+    if (completedAtMs > now) {
+      skipped.push({ conceptKey, completedAt: candidate.completedAt, intervalDays: null, reason: 'future-timestamp' });
+      continue;
+    }
+
+    const intervalDays = utcNaturalDayDiff(candidate.completedAt, now);
+    if (intervalDays === null || intervalDays < minDays) {
+      skipped.push({
+        conceptKey,
+        completedAt: candidate.completedAt,
+        intervalDays: intervalDays ?? null,
+        reason: 'below-min-days',
+      });
+      continue;
+    }
+    eligible.push({ conceptKey, intervalDays });
+  }
+
+  eligible.sort((a, b) => {
+    if (a.intervalDays !== b.intervalDays) return b.intervalDays - a.intervalDays;
+    if (a.conceptKey < b.conceptKey) return -1;
+    if (a.conceptKey > b.conceptKey) return 1;
+    return 0;
+  });
 
   const plans: AnchorProbePlan[] = [];
   for (const item of eligible) {
@@ -333,7 +398,7 @@ export function selectDelayedAnchorCandidates(
     });
     if (plans.length >= limit) break;
   }
-  return plans;
+  return { plans, skipped, cooldown: false };
 }
 
 /**

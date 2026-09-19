@@ -11,7 +11,8 @@
  * memory_traces + 会话知识看板派生）：
  * - `relevantKnowledge.mastered`   → 跨路径「已稳」概念标签（concept.label）
  * - `relevantKnowledge.struggling` → 跨路径「挣扎」概念标签（status=learning 且 masteryScore<0.55）
- * - `backgroundKnowledge.recentConceptLedger[].lastSeenAt` → 可选的 lastSeenAt 富化（仅透传）
+ * - `backgroundKnowledge.recentConceptLedger[].lastSeenAt` → 展示用（12 条）lastSeenAt 富化
+ * - `masteredLastSeenAt`（调用方从**全量**账本派生）→ 延迟锚题专用 lastSeenAt；**不受 12 条截断**
  * - **`relevantKnowledge.fragile` 不参与**：脆弱是保持风险，不构成"假掌握 / 假挣扎"这种可证伪的预期，
  *   强行当 struggling 会制造语义错误的证伪信号；宁可不测。
  *
@@ -63,6 +64,44 @@ export interface AnchorLearnerSignalSource {
   struggling?: string[] | null;
   /** 概念标签 → lastSeenAt（ISO）的可选映射（来自 recentConceptLedger，仅透传） */
   lastSeenAtByConcept?: Record<string, string | null | undefined> | null;
+  /**
+   * **全量**已掌握概念的 lastSeenAt（键为 conceptKey 或 label），来自权威账本、**不经过
+   * `recentConceptLedger.slice(0, 12)` 截断**。延迟锚题据此为"已掌握但排在 12 名开外"的
+   * 老概念补上时间戳——否则它们永远进不了延迟复测（Q8 延迟锚题数据供给 bug）。
+   */
+  masteredLastSeenAt?: Record<string, string | null | undefined> | null;
+}
+
+/**
+ * 从权威概念账本按 conceptKey/label 两种写法，抽取**全量**已掌握概念的 lastSeenAt（纯函数）。
+ *
+ * 只保留与 `mastered` 名单匹配的键；账本项无有效 lastSeenAt 时跳过（宁可少测也不造假时间）。
+ * 该映射不被任何展示用切片裁剪，专供延迟锚题候选富化。
+ */
+export function buildMasteredLastSeenAtMap(
+  ledger: Array<{ conceptKey?: string | null; label?: string | null; lastSeenAt?: string | null }> | null | undefined,
+  mastered: string[] | null | undefined,
+): Record<string, string> {
+  const wanted = new Set(
+    (Array.isArray(mastered) ? mastered : [])
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter(Boolean),
+  );
+  const map: Record<string, string> = {};
+  if (wanted.size === 0) return map;
+  for (const item of Array.isArray(ledger) ? ledger : []) {
+    const lastSeenAt = typeof item?.lastSeenAt === 'string' ? item.lastSeenAt.trim() : '';
+    if (!lastSeenAt) continue;
+    const conceptKey = typeof item?.conceptKey === 'string' ? item.conceptKey.trim() : '';
+    const label = typeof item?.label === 'string' ? item.label.trim() : '';
+    // 命中判定：conceptKey 或 label 任一在 mastered 名单内即可（mastered 名单用的是 label）
+    const matched = (conceptKey && wanted.has(conceptKey)) || (label && wanted.has(label));
+    if (!matched) continue;
+    // 命中后 conceptKey 与 label 两种写法都写入，供候选按任一 key 富化
+    if (conceptKey && !map[conceptKey]) map[conceptKey] = lastSeenAt;
+    if (label && !map[label]) map[label] = lastSeenAt;
+  }
+  return map;
 }
 
 function toIsoString(value: Date | string | null | undefined): string | null {
@@ -90,13 +129,26 @@ function payloadFalsified(payload: string | null | undefined): boolean {
 }
 
 /**
+ * 按概念标签取"最近接触时间"：**全量已掌握映射优先**（不被 12 条账本切片截断），
+ * 缺失时回退最近账本切片。空串/非字符串一律当无信息（不造时间）。
+ */
+function pickLastSeenAt(
+  source: AnchorLearnerSignalSource | null | undefined,
+  conceptKey: string,
+): string | null {
+  const full = source?.masteredLastSeenAt?.[conceptKey];
+  if (typeof full === 'string' && full) return full;
+  const sliced = source?.lastSeenAtByConcept?.[conceptKey];
+  return typeof sliced === 'string' && sliced ? sliced : null;
+}
+
+/**
  * 把投影信号翻译成 `AnchorConceptCandidate[]`（纯函数）。
  * 空/非字符串标签被丢弃；重复标签由 `selectAnchorCandidates` 去重。
  */
 export function buildAnchorCandidatesFromLearnerSignals(
   source: AnchorLearnerSignalSource | null | undefined,
 ): AnchorConceptCandidate[] {
-  const lastSeen = source?.lastSeenAtByConcept || {};
   const toCandidate = (
     key: string | null | undefined,
     belief: AnchorConceptCandidate['belief'],
@@ -108,7 +160,7 @@ export function buildAnchorCandidatesFromLearnerSignals(
       conceptKey: trimmed,
       belief,
       masteryScore,
-      lastSeenAt: lastSeen[trimmed] ?? null,
+      lastSeenAt: pickLastSeenAt(source, trimmed),
     };
   };
 
@@ -135,12 +187,12 @@ export function buildAnchorCandidatesFromLearnerSignals(
 export function buildDelayedAnchorCandidatesFromLearnerSignals(
   source: AnchorLearnerSignalSource | null | undefined,
 ): AnchorCompletedCandidate[] {
-  const lastSeen = source?.lastSeenAtByConcept || {};
   const candidates: AnchorCompletedCandidate[] = [];
   for (const key of source?.mastered || []) {
     const trimmed = typeof key === 'string' ? key.trim() : '';
     if (!trimmed) continue;
-    const completedAt = lastSeen[trimmed];
+    // 全量已掌握映射优先 → 老概念即使排在 recentConceptLedger 12 名开外也能拿到时间戳
+    const completedAt = pickLastSeenAt(source, trimmed);
     if (!completedAt) continue;
     candidates.push({ conceptKey: trimmed, completedAt, masteryScore: ANCHOR_MASTERED_SCORE });
   }
@@ -164,6 +216,12 @@ export function buildAnchorSignalSource(
       recentConceptLedger?: Array<{ conceptKey?: string | null; label?: string | null; lastSeenAt?: string | null }> | null;
     } | null;
   } | null | undefined,
+  /**
+   * 全量已掌握概念 lastSeenAt（由调用方在构建投影处从权威账本派生，见
+   * `buildMasteredLastSeenAtMap`）。**不经过 recentConceptLedger 12 条截断**，
+   * 供延迟锚题为 12 名开外的老概念补时间戳。
+   */
+  masteredLastSeenAt?: Record<string, string | null | undefined> | null,
 ): AnchorLearnerSignalSource {
   const lastSeenAtByConcept: Record<string, string> = {};
   for (const item of projection?.backgroundKnowledge?.recentConceptLedger || []) {
@@ -174,10 +232,16 @@ export function buildAnchorSignalSource(
       if (trimmed) lastSeenAtByConcept[trimmed] = item.lastSeenAt;
     }
   }
+  const fullMasteredLastSeenAt: Record<string, string> = {};
+  for (const [key, value] of Object.entries(masteredLastSeenAt || {})) {
+    const trimmed = typeof key === 'string' ? key.trim() : '';
+    if (trimmed && typeof value === 'string' && value) fullMasteredLastSeenAt[trimmed] = value;
+  }
   return {
     mastered: projection?.relevantKnowledge?.mastered ?? [],
     struggling: projection?.relevantKnowledge?.struggling ?? [],
     lastSeenAtByConcept,
+    masteredLastSeenAt: fullMasteredLastSeenAt,
   };
 }
 

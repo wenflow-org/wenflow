@@ -232,7 +232,10 @@ export class LearnerKnowledgeMemoryService {
           sourceType: 'task-label',
           taskId: task.id,
           milestoneId: milestone.id,
-          seenAt: (task.completedAt || task.updatedAt).toISOString(),
+          // 时钟域：只用业务写入的 completedAt（模拟链路经 simulatedNowOr/asOf 落模拟日）；
+          // 绝不回退 Prisma @updatedAt（真墙钟基础设施列）——否则真/模拟时间混入 lastSeenAt，
+          // 使延迟锚题跨域比较。无 completedAt = 无"接触"证据，宁可不记时间。
+          seenAt: task.completedAt ? task.completedAt.toISOString() : undefined,
           label: conceptKey,
         });
         conceptSignals.set(conceptKey, current);
@@ -259,6 +262,9 @@ export class LearnerKnowledgeMemoryService {
       const summaryPayload = wrapup?.summary || null;
       const evaluationPayload = wrapup?.evaluation || null;
       const happenedAt = (session.endTime || session.updatedAt).toISOString();
+      // 时钟域：概念"最近可见"只用会话业务结束时间 endTime（模拟链路经 simulatedNowOr 落模拟日）。
+      // 会话未结束（endTime=null）时不回退 updatedAt（真墙钟）——无结束时间 = 不记 seenAt。
+      const sessionSeenAt = session.endTime ? session.endTime.toISOString() : undefined;
 
       for (const point of knowledgeState) {
         const conceptKey = normalizeConceptKey(point.name);
@@ -272,7 +278,7 @@ export class LearnerKnowledgeMemoryService {
           sourceType: 'session-knowledge',
           taskId: session.taskId,
           milestoneId: session.milestoneId,
-          seenAt: happenedAt,
+          seenAt: sessionSeenAt,
           label: point.name,
         });
         conceptSignals.set(conceptKey, current);
@@ -311,7 +317,10 @@ export class LearnerKnowledgeMemoryService {
         sourceType: 'memory-trace',
         taskId: undefined,
         milestoneId: undefined,
-        seenAt: (trace.lastSeenAt || trace.updatedAt).toISOString(),
+        // 时钟域：只用记忆引擎写入的业务 lastSeenAt（simulatedNowOr 落模拟日）。
+        // KT-only 痕迹（applyKtEstimate 创建）lastSeenAt=null 表示"从未提取/从未真正见过"，
+        // 不回退 updatedAt（真墙钟），否则会给已掌握概念注入未来时间戳。无 lastSeenAt = 不记时间。
+        seenAt: trace.lastSeenAt ? trace.lastSeenAt.toISOString() : undefined,
         label: trace.label || trace.conceptKey,
       });
       conceptSignals.set(conceptKey, current);
@@ -333,7 +342,8 @@ export class LearnerKnowledgeMemoryService {
             sourceType: 'derived',
             taskId: session.taskId,
             milestoneId: session.milestoneId,
-            seenAt: happenedAt,
+            // 与 session-knowledge 同源同口径：只认会话业务结束时间，不回退 updatedAt（真墙钟）
+            seenAt: sessionSeenAt,
             label: item.name,
           });
           conceptSignals.set(conceptKey, current);

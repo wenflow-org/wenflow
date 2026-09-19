@@ -15,11 +15,17 @@ import {
   buildAnchorResultEvidence,
   buildAnchorSignalSource,
   buildDelayedAnchorCandidatesFromLearnerSignals,
+  buildMasteredLastSeenAtMap,
   deriveTurnsSinceLastProbe,
   resolveDelayedAnchorDays,
   summarizeAnchorEvidence,
 } from '../anchor-probe-emit';
-import { selectDelayedAnchorCandidates, shouldRunAnchorProbe, selectAnchorCandidates } from '../../learner/anchor-probe';
+import {
+  partitionDelayedAnchorCandidates,
+  selectDelayedAnchorCandidates,
+  shouldRunAnchorProbe,
+  selectAnchorCandidates,
+} from '../../learner/anchor-probe';
 import {
   checkpointForMessageResult,
   stripCheckpointAnswerKeys,
@@ -53,8 +59,8 @@ describe('buildAnchorSignalSource：只取 mastered/struggling，fragile 排除'
   });
 
   it('空/缺失投影 → 空信号源（不抛错）', () => {
-    expect(buildAnchorSignalSource(null)).toEqual({ mastered: [], struggling: [], lastSeenAtByConcept: {} });
-    expect(buildAnchorSignalSource({})).toEqual({ mastered: [], struggling: [], lastSeenAtByConcept: {} });
+    expect(buildAnchorSignalSource(null)).toEqual({ mastered: [], struggling: [], lastSeenAtByConcept: {}, masteredLastSeenAt: {} });
+    expect(buildAnchorSignalSource({})).toEqual({ mastered: [], struggling: [], lastSeenAtByConcept: {}, masteredLastSeenAt: {} });
   });
 });
 
@@ -351,5 +357,78 @@ describe('Q8 延迟锚题：已完成点候选 + 间隔解析 + 触发联动', (
     const payload = JSON.parse(row.payload);
     expect(payload.anchorKind).toBe('independent');
     expect(payload).not.toHaveProperty('intervalDays');
+  });
+});
+
+describe('Q8 延迟锚题数据供给修复：全量 masteredLastSeenAt 不被账本 slice(0,12) 饿死', () => {
+  const NOW = '2026-09-09T12:00:00.000Z'; // 模拟日 now
+  const OLD_SEEN = '2026-09-01T00:00:00.000Z'; // 模拟日 8 天前（≥7）
+  const freshEntry = (i: number) => ({
+    conceptKey: `fresh-${i}`,
+    label: `新点${i}`,
+    lastSeenAt: '2026-09-08T00:00:00.000Z',
+  });
+  // 展示/提示词用切片：12 条近期条目，**不含**老概念（正是它把老概念挤出时间戳映射）
+  const recentConceptLedger = Array.from({ length: 12 }, (_, i) => freshEntry(i));
+  // 权威全量账本：老概念排在 12 名开外
+  const fullLedger = [
+    ...recentConceptLedger,
+    { conceptKey: 'kc-old', label: '老概念', lastSeenAt: OLD_SEEN },
+  ];
+  const projection = {
+    relevantKnowledge: { mastered: ['老概念'], fragile: [], struggling: [] },
+    backgroundKnowledge: { recentConceptLedger },
+  };
+
+  it('buildMasteredLastSeenAtMap：只保留 mastered 名单，按 conceptKey/label 两种写法', () => {
+    expect(buildMasteredLastSeenAtMap(fullLedger, ['老概念'])).toEqual({ 老概念: OLD_SEEN, 'kc-old': OLD_SEEN });
+    expect(buildMasteredLastSeenAtMap(fullLedger, [])).toEqual({});
+    expect(buildMasteredLastSeenAtMap(fullLedger, ['不存在的点'])).toEqual({});
+    expect(buildMasteredLastSeenAtMap(null, ['老概念'])).toEqual({});
+  });
+
+  it('(a)(b) 仅有 slice(0,12) 时老概念被饿死；传入全量映射后产出 kind=delayed 计划', () => {
+    // 旧行为（只吃 recentConceptLedger）：老概念无 lastSeenAt → 候选为空（复现线上 bug 的数据供给断点）
+    expect(buildDelayedAnchorCandidatesFromLearnerSignals(buildAnchorSignalSource(projection))).toEqual([]);
+
+    // 修复后：全量映射补齐 lastSeenAt（不受切片影响）→ 延迟锚题照常触发
+    const masteredMap = buildMasteredLastSeenAtMap(fullLedger, projection.relevantKnowledge.mastered);
+    const source = buildAnchorSignalSource(projection, masteredMap);
+    expect(source.masteredLastSeenAt).toEqual({ 老概念: OLD_SEEN, 'kc-old': OLD_SEEN });
+
+    const candidates = buildDelayedAnchorCandidatesFromLearnerSignals(source);
+    expect(candidates).toEqual([
+      { conceptKey: '老概念', completedAt: OLD_SEEN, masteryScore: ANCHOR_MASTERED_SCORE },
+    ]);
+    const plans = selectDelayedAnchorCandidates(candidates, { now: NOW, minIntervalDays: 7, limit: 1 });
+    expect(plans).toHaveLength(1);
+    expect(plans[0]).toMatchObject({ conceptKey: '老概念', expected: 'mastered', kind: 'delayed', intervalDays: 8 });
+  });
+
+  it('(c) 全量映射混入跨时钟域未来时间戳 → partition 跳过并带 future-timestamp 标签，不静默计数', () => {
+    const futureMap = buildMasteredLastSeenAtMap(
+      [{ conceptKey: 'kc-future', label: '未来点', lastSeenAt: '2026-09-19T05:00:00.000Z' }],
+      ['未来点'],
+    );
+    const source = buildAnchorSignalSource(
+      {
+        relevantKnowledge: { mastered: ['未来点'], fragile: [], struggling: [] },
+        backgroundKnowledge: { recentConceptLedger: [] },
+      },
+      futureMap,
+    );
+    const selection = partitionDelayedAnchorCandidates(
+      buildDelayedAnchorCandidatesFromLearnerSignals(source),
+      { now: NOW, minIntervalDays: 7, limit: 1 },
+    );
+    expect(selection.plans).toEqual([]);
+    expect(selection.skipped).toEqual([
+      {
+        conceptKey: '未来点',
+        completedAt: '2026-09-19T05:00:00.000Z',
+        intervalDays: null,
+        reason: 'future-timestamp',
+      },
+    ]);
   });
 });

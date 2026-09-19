@@ -12,6 +12,7 @@ import {
   type TeachingSessionRecord
 } from './TeachingSessionRepository';
 import { logger } from '../../utils/logger';
+import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 // 课内温故回写抽到叶子模块（避免本服务 ↔ AITeachingCoordinator 成环，18 号报告 N10）
 import { applyWarmupExtractionForSession, enqueueReviewCompletedEvent } from './warmup-writeback';
@@ -217,7 +218,10 @@ export class SessionFinalizationService {
         taskId: session.taskId,
         userId: session.userId,
         actualMinutes: input.actualMinutes,
-        subjectiveDifficulty: input.subjectiveDifficulty
+        subjectiveDifficulty: input.subjectiveDifficulty,
+        // 时钟域：模拟链路下把任务完成时间落在模拟日（无模拟上下文时 simulatedNowOr() === new Date()，
+        // 现网行为不变）。否则 completedAt 会用真墙钟，污染概念账本 lastSeenAt → 延迟锚题跨域比较。
+        asOf: simulatedNowOr(),
       });
       await leaseGuard.assertOwned();
       const completedSession = await teachingSessionRepository.completeFinalizationStep(

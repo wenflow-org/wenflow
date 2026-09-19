@@ -30,8 +30,8 @@ import { recordTaskDifficultyAdjustment } from '../learner/TaskDifficultyAdjustm
 import { assembleTeachingTurnChannels } from '../field-dispatcher';
 import {
   evaluateAnchorProbeOutcome,
+  partitionDelayedAnchorCandidates,
   selectAnchorCandidates,
-  selectDelayedAnchorCandidates,
   shouldRunAnchorProbe,
   type AnchorProbePlan,
 } from '../learner/anchor-probe';
@@ -1607,6 +1607,8 @@ async function resolveAnchorProbeTarget(params: {
   teachingState: Record<string, any> | null | undefined;
   emitCheckpoint: boolean;
   learnerProjection: TeachingScenarioContext['learnerProjection'] | null | undefined;
+  /** 全量已掌握概念 lastSeenAt（不受 recentConceptLedger 12 条截断；见 TeachingContextBuilder） */
+  masteredLastSeenAt?: Record<string, string> | null;
   messageCount: number;
   now: Date;
 }): Promise<AnchorProbePlan | null> {
@@ -1619,10 +1621,10 @@ async function resolveAnchorProbeTarget(params: {
       select: { occurredAt: true, payload: true },
     });
     const { lastProbeAt, probesSinceLastFlag } = summarizeAnchorEvidence(rows);
-    const signalSource = buildAnchorSignalSource(params.learnerProjection);
+    const signalSource = buildAnchorSignalSource(params.learnerProjection, params.masteredLastSeenAt);
 
     // 优先：延迟锚题（Q8 测量深化）——已完成点经过 N 个自然日后复测保持率。
-    const delayedPlans = selectDelayedAnchorCandidates(
+    const delayed = partitionDelayedAnchorCandidates(
       buildDelayedAnchorCandidatesFromLearnerSignals(signalSource),
       {
         now: params.now,
@@ -1631,7 +1633,31 @@ async function resolveAnchorProbeTarget(params: {
         limit: 1,
       },
     );
-    if (delayedPlans[0]) return delayedPlans[0];
+    // 跨时钟域/非法时间戳：显式跳过并留痕（绝不静默钳制）。正常"未到间隔"不在此列，避免噪声。
+    const crossDomain = delayed.skipped.filter((item) => item.reason === 'future-timestamp');
+    const invalidTime = delayed.skipped.filter((item) => item.reason === 'invalid-time');
+    if (crossDomain.length > 0 || invalidTime.length > 0) {
+      logger.warn('[anchor-probe] 延迟锚题候选时间戳异常，已跳过并留痕（跨时钟域/非法时间）', {
+        userId: params.userId,
+        now: params.now.toISOString(),
+        crossDomain: crossDomain.map((item) => ({ conceptKey: item.conceptKey, completedAt: item.completedAt })),
+        invalidTime: invalidTime.map((item) => ({ conceptKey: item.conceptKey, completedAt: item.completedAt })),
+      });
+    }
+    if (crossDomain.length > 0) {
+      recordDegradation({
+        source: 'ai-teaching/anchor-probe',
+        faultCategory: 'SCHEMA_VIOLATION',
+        severity: 'P3_NOTICE',
+        impactedDimensions: ['anchorProbe.delayed.completedAt'],
+        mitigationApplied: 'skip-cross-domain-candidate',
+        rootCauseMessage: `delayed anchor candidate timestamp after now (clock-domain mismatch): ${crossDomain
+          .map((item) => item.conceptKey)
+          .join(',')
+          .slice(0, 200)}`,
+      });
+    }
+    if (delayed.plans[0]) return delayed.plans[0];
 
     // 其次：独立证伪探针（Q13/B4）
     const decision = shouldRunAnchorProbe({
@@ -2576,6 +2602,8 @@ export class AITeachingOrchestrator {
       teachingState: previousTeachingState,
       emitCheckpoint: shouldEmitCheckpoint(session, previousTeachingState),
       learnerProjection: context.learnerProjection,
+      // Q8 数据供给：全量已掌握 lastSeenAt（不被 recentConceptLedger 12 条截断）
+      masteredLastSeenAt: context.anchorMasteredLastSeenAt,
       messageCount: updatedMessages.length,
       now: simulatedNowOr(),
     });

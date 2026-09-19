@@ -9,6 +9,7 @@ import {
   ANCHOR_PROBE_MAX_PROBES_SINCE_FLAG,
   ANCHOR_PROBE_MIN_TURNS_BETWEEN,
   evaluateAnchorProbeOutcome,
+  partitionDelayedAnchorCandidates,
   selectAnchorCandidates,
   selectDelayedAnchorCandidates,
   shouldRunAnchorProbe,
@@ -313,5 +314,59 @@ describe('selectDelayedAnchorCandidates（Q8 延迟锚题：自然日间隔门 +
     expect(selectDelayedAnchorCandidates(many, { now: NOW, limit: 0 })).toHaveLength(1);
     expect(selectDelayedAnchorCandidates(many, { now: NOW, limit: 99 })).toHaveLength(3);
     expect(selectDelayedAnchorCandidates(many, { now: NOW, limit: Number.NaN })).toHaveLength(1);
+  });
+});
+
+describe('partitionDelayedAnchorCandidates（C：跨时钟域防御，跳过即留痕）', () => {
+  const NOW = '2026-09-08T23:59:59.999Z'; // 模拟日 now；真墙钟时间戳（09-19）会晚于它
+  const completed = (
+    conceptKey: string,
+    completedAt: string,
+    over: Partial<AnchorCompletedCandidate> = {},
+  ): AnchorCompletedCandidate => ({ conceptKey, completedAt, ...over });
+
+  it('候选时间晚于 now（真墙钟混入模拟时钟）→ 跳过并带 future-timestamp 标签，不产出计划', () => {
+    const selection = partitionDelayedAnchorCandidates(
+      [completed('真钟点', '2026-09-19T05:00:00.000Z')],
+      { now: NOW, minIntervalDays: 7 },
+    );
+    expect(selection.plans).toEqual([]);
+    expect(selection.cooldown).toBe(false);
+    expect(selection.skipped).toEqual([
+      {
+        conceptKey: '真钟点',
+        completedAt: '2026-09-19T05:00:00.000Z',
+        intervalDays: null,
+        reason: 'future-timestamp',
+      },
+    ]);
+    // 旧路径（selectDelayedAnchorCandidates）语义不变：同样不投放（但不再能区分原因）
+    expect(selectDelayedAnchorCandidates([completed('真钟点', '2026-09-19T05:00:00.000Z')], {
+      now: NOW,
+      minIntervalDays: 7,
+    })).toEqual([]);
+  });
+
+  it('非法时间 → invalid-time；未到间隔 → below-min-days；达到间隔 → plans', () => {
+    const selection = partitionDelayedAnchorCandidates(
+      [
+        completed('坏时间', 'not-a-date'),
+        completed('新点', '2026-09-08T00:00:00.000Z'),
+        completed('老点', '2026-09-01T00:00:00.000Z'),
+      ],
+      { now: NOW, minIntervalDays: 7, limit: 3 },
+    );
+    expect(selection.plans.map((p) => p.conceptKey)).toEqual(['老点']);
+    expect(selection.plans[0]).toMatchObject({ kind: 'delayed', intervalDays: 7, expected: 'mastered' });
+    const byKey = Object.fromEntries(selection.skipped.map((item) => [item.conceptKey, item.reason]));
+    expect(byKey).toEqual({ 坏时间: 'invalid-time', 新点: 'below-min-days' });
+  });
+
+  it('全局冷却时 cooldown=true 且不产出候选诊断（与旧语义一致：整体不投放）', () => {
+    const selection = partitionDelayedAnchorCandidates(
+      [completed('老点', '2026-09-01T00:00:00.000Z')],
+      { now: NOW, minIntervalDays: 7, lastProbeAt: '2026-09-07T00:00:00.000Z' },
+    );
+    expect(selection).toEqual({ plans: [], skipped: [], cooldown: true });
   });
 });

@@ -12,6 +12,7 @@ import { learningPredictorDefinition, type LearningPredictorOutput } from '../..
 import { predictionCalibrationService } from '../learner/PredictionCalibrationService';
 import { getActiveForConcepts } from '../learner/misconception-ledger.service';
 import type { ReviewPlan } from '../memory/review-plan.service';
+import { buildMasteredLastSeenAtMap } from './anchor-probe-emit';
 import { logger } from '../../utils/logger';
 
 export interface TeachingScenarioContext {
@@ -83,6 +84,12 @@ export interface TeachingScenarioContext {
     lsb: number;
   } | null;
   learnerProjection: TeachingLearnerProjection;
+  /**
+   * 延迟锚题（Q8）专用：**全量**已掌握概念的 lastSeenAt（键为 conceptKey/label），
+   * 由权威账本 `conceptLedger` 派生、**不经 `recentConceptLedger.slice(0, 12)` 截断**。
+   * 只供 `resolveAnchorProbeTarget` 消费，**不注入 LLM 提示词**（`buildTeachingTurnInput` 不转发本字段）。
+   */
+  anchorMasteredLastSeenAt: Record<string, string>;
   pathContext: {
     pathTitle?: string;
     pathSummary?: string | null;
@@ -910,6 +917,17 @@ export async function buildTeachingScenarioContext(
       successBand: await resolveSuccessBandVerdict(userId, { pathId: path.id }).catch(() => null),
     }),
   });
+  // Q8 延迟锚题数据供给修复：从**未截断**的权威来源为所有已掌握概念派生 lastSeenAt。
+  // 优先 currentPath.conceptStates（全量、正是 masteredConcepts 的出处），再并入全局账本；
+  // 两条都不受 recentConceptLedger.slice(0,12)（乃至账本内部 40/60 条）截断——否则排在后面的
+  // 老概念永远拿不到时间戳，延迟锚题在真实长跑中永不触发。只在此处查表（probe 保持纯函数无 I/O）。
+  const anchorMasteredLastSeenAt = buildMasteredLastSeenAtMap(
+    [
+      ...(learnerSnapshot.knowledgeMemory.currentPath?.conceptStates ?? []),
+      ...learnerSnapshot.knowledgeMemory.globalBackground.conceptLedger,
+    ],
+    learnerSnapshot.knowledgeMemory.globalSignals.masteredConcepts,
+  );
   const resolvedConcept = resolveTaskConceptFromPath(task, path);
   const persistedLearningObjectives = parseLearningObjectives((task as any).learningObjectives);
   const taskKnowledgeSeeds = buildTaskKnowledgeSeeds({ task, resolvedConcept });
@@ -1087,6 +1105,7 @@ export async function buildTeachingScenarioContext(
       lsb: learningState.lsb,
     } : null,
     learnerProjection,
+    anchorMasteredLastSeenAt,
     pathContext: {
       pathTitle: path.title || path.name,
       pathSummary: parsePathSummary(path.aiPromptTemplate),
