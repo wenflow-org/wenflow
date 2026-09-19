@@ -3,9 +3,11 @@ import {
   classifyAdvanceResponse,
   classifyPathGeneration,
   classifySessionStatus,
+  classifyTeachingTurnPause,
   createRunState,
   defaultLearnerName,
   isPathReady,
+  isRetryableTeachingPauseMessage,
   nextBackoffMs,
   parseHarnessArgs,
   parseRunState,
@@ -81,6 +83,35 @@ describe('classifyAdvanceResponse（advance-day 处置分类）', () => {
     }).kind).toBe('advanced');
   });
 
+  it('教学回合模型抖动（新发现问题 #3）→ retryable（可续跑，不按未就绪空等）', () => {
+    const outcome = classifyAdvanceResponse({
+      httpStatus: 200,
+      body: {
+        success: true,
+        data: {
+          reverted: true,
+          simulatedDay: '2026-09-03',
+          learning: { started: false, chunks: 0, error: 'TEACHING_TURN_REPLY_MISSING' },
+        },
+      },
+    });
+    expect(outcome.kind).toBe('retryable');
+    expect(outcome.lessons).toBe(0);
+    expect(outcome.detail).toContain('TEACHING_TURN_REPLY_MISSING');
+
+    // 后端暂停标记的 code 同样可识别
+    expect(classifyAdvanceResponse({
+      httpStatus: 200,
+      body: { success: true, data: { reverted: true, learning: { started: false, chunks: 0, error: 'TEACHING_TURN_STEP_PAUSED' } } },
+    }).kind).toBe('retryable');
+
+    // 普通"未就绪"仍为 day-not-started（不误伤路径生成窗口）
+    expect(classifyAdvanceResponse({
+      httpStatus: 200,
+      body: { success: true, data: { reverted: true, learning: { started: false, chunks: 0, error: '学习路径尚未就绪' } } },
+    }).kind).toBe('day-not-started');
+  });
+
   it('成功上课 → advanced，带模拟日与课次', () => {
     const outcome = classifyAdvanceResponse({
       httpStatus: 200,
@@ -99,6 +130,40 @@ describe('classifySessionStatus', () => {
     expect(classifySessionStatus('running')).toBe('active');
     expect(classifySessionStatus('paused')).toBe('active');
     expect(classifySessionStatus(undefined)).toBe('active');
+  });
+
+  it('带可续跑暂停标记时，failed 不按终局上报（新发现问题 #3）', () => {
+    expect(classifySessionStatus('failed', { retryablePause: true })).toBe('active');
+    expect(classifySessionStatus('failed', { retryablePause: false })).toBe('failed');
+    // completed 不受暂停标记影响
+    expect(classifySessionStatus('completed', { retryablePause: true })).toBe('completed');
+  });
+});
+
+describe('classifyTeachingTurnPause（runtimeStats.lastError → 可续跑暂停）', () => {
+  it('后端暂停标记 retryable=true → paused', () => {
+    const signal = classifyTeachingTurnPause({
+      runtimeStats: {
+        lastError: { code: 'TEACHING_TURN_STEP_PAUSED', message: 'TEACHING_TURN_REPLY_MISSING', retryable: true, at: '2026-09-19T00:00:00.000Z' },
+      },
+    });
+    expect(signal.paused).toBe(true);
+    expect(signal.code).toBe('TEACHING_TURN_STEP_PAUSED');
+    expect(signal.message).toBe('TEACHING_TURN_REPLY_MISSING');
+    expect(signal.at).toBe('2026-09-19T00:00:00.000Z');
+  });
+
+  it('无标记 / 字段缺失 → 未暂停', () => {
+    expect(classifyTeachingTurnPause(undefined).paused).toBe(false);
+    expect(classifyTeachingTurnPause({}).paused).toBe(false);
+    expect(classifyTeachingTurnPause({ runtimeStats: { aiCalls: 3 } }).paused).toBe(false);
+    expect(classifyTeachingTurnPause({ runtimeStats: { lastError: { code: 'SOMETHING_ELSE', retryable: false } } }).paused).toBe(false);
+  });
+
+  it('isRetryableTeachingPauseMessage 只认抖动码', () => {
+    expect(isRetryableTeachingPauseMessage('TEACHING_TURN_REPLY_MISSING')).toBe(true);
+    expect(isRetryableTeachingPauseMessage('TEACHING_TURN_STEP_PAUSED')).toBe(true);
+    expect(isRetryableTeachingPauseMessage('学习路径尚未就绪')).toBe(false);
   });
 });
 

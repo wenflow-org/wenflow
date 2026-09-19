@@ -168,6 +168,32 @@ export function shouldForceAcceptPathReview(params: {
 }
 
 /**
+ * 教学回合「模型抖动」的步骤级兜底重试参数（新发现问题 #3）。
+ *
+ * 背景：`TEACHING_TURN_REPLY_MISSING` 之类结构化校验失败在 prompt 级已重试 2 次
+ * （见 skills/teaching-turn 的 retryStrategy），失败后抛出的错误**不匹配**
+ * `isRetryableLearnUpstreamError` 的正则，于是 `retryLearnUpstream` 一次即抛 →
+ * 整个助手会话被标记 `failed`（终局，需人工续跑）。实测约 1/3 跑数受影响。
+ *
+ * 处置：在步骤层再做至多 2 次短退避重试；仍失败则**暂停本回合（不终局）**，
+ * 保留同一 task 供下一次 `advance-day runTasks` 重试。
+ */
+const TEACHING_TURN_STEP_RETRY_ATTEMPTS = 2;
+const TEACHING_TURN_STEP_RETRY_DELAY_MS = 1500;
+
+/**
+ * 是否属于「教学回合模型抖动」类错误（用于步骤级重试 / 非终局暂停判定）。
+ *
+ * 只认结构化校验类失败（reply 缺失/必填块缺失/完成语义不一致/输出非对象），
+ * **不**把未知错误当作可恢复——避免把真正的业务/契约错误拖成无限暂停。
+ * 中止类、预算类、Provider 类错误分别由各自既有机制处理，不在此列。
+ */
+export function isTeachingTurnHiccupError(error: unknown): boolean {
+  const message = String(asErrorLike(error).message || error || '');
+  return /TEACHING_TURN_(REPLY_MISSING|REQUIRED_BLOCK_MISSING|REPLY_COMPLETION_MISMATCH|OUTPUT_NOT_OBJECT|OUTPUT_INVALID)/i.test(message);
+}
+
+/**
  * 教学检查点消费（assisted 链路）——纯函数决策 + 结果归一化。
  *
  * 背景：`executeLearningStep`（`POST /advance-day` 的 `runTasks:true` 路径）此前只把学习者的
@@ -281,6 +307,16 @@ export interface NormalizedTeachingTurn {
     autoEnded: boolean;
     promptDebug?: any;
   };
+}
+
+/** runTeachingTurn 及其步骤级重试包装共用的入参。 */
+interface RunTeachingTurnParams {
+  sessionId: string;
+  teachingSessionId: string;
+  learnerMessage: string;
+  teachingRevision: number | undefined;
+  pendingCheckpoint: PendingTeachingCheckpoint | null;
+  checkpointAnswer: SimulatorCheckpointAnswer | null;
 }
 
 /** 普通聊天回合 → 归一化结果（字段与改动前逐字一致）。 */
@@ -701,14 +737,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
    * 提交失败（revision 冲突 / 检查点已失效 / 作答非法等）→ 记警告并**回退**到
    * `processStudentMessage`，绝不阻断学习循环（与黑盒链路的兜底语义一致）。
    */
-  private async runTeachingTurn(params: {
-    sessionId: string;
-    teachingSessionId: string;
-    learnerMessage: string;
-    teachingRevision: number | undefined;
-    pendingCheckpoint: PendingTeachingCheckpoint | null;
-    checkpointAnswer: SimulatorCheckpointAnswer | null;
-  }): Promise<NormalizedTeachingTurn> {
+  private async runTeachingTurn(params: RunTeachingTurnParams): Promise<NormalizedTeachingTurn> {
     const action = resolveCheckpointSubmitAction({
       pendingCheckpoint: params.pendingCheckpoint,
       checkpointAnswer: params.checkpointAnswer,
@@ -743,6 +772,43 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       )
     );
     return normalizeProcessTeachingTurn(turn);
+  }
+
+  /**
+   * 教学回合的步骤级有界重试（新发现问题 #3）。
+   *
+   * 仅对「模型抖动」类错误（`isTeachingTurnHiccupError`）追加至多
+   * `TEACHING_TURN_STEP_RETRY_ATTEMPTS` 次短退避尝试；其余错误原样抛出，交给上层按既有
+   * 语义处理（中止/预算/终局）。每次尝试仍复用 `runTeachingTurn` → `retryLearnUpstream`
+   * （含单次 300s wall-clock 超时约束），不改变 prompt 级 `maxAttempts: 2`。
+   *
+   * 边界（**禁止伪造教师回复**）：本方法只在失败之间重试，**不**生成、**不**合成任何教师
+   * `reply`。若重试全部耗尽，调用方（`executeLearningStep`）把会话降级为可续跑暂停，
+   * 绝不产出兜底教师话术冒充教学。
+   */
+  private async runTeachingTurnWithStepRetry(params: RunTeachingTurnParams): Promise<NormalizedTeachingTurn> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= TEACHING_TURN_STEP_RETRY_ATTEMPTS; attempt += 1) {
+      if (attempt > 0) {
+        if (isRequestAborted()) break;
+        logger.warn('[simulation-coordinator] 教学回合失败，步骤级额外重试（非终局）', {
+          sessionId: params.sessionId,
+          teachingSessionId: params.teachingSessionId,
+          attempt,
+          maxExtraAttempts: TEACHING_TURN_STEP_RETRY_ATTEMPTS,
+          error: asErrorLike(lastError).message || String(lastError),
+        });
+        await new Promise(resolve => setTimeout(resolve, TEACHING_TURN_STEP_RETRY_DELAY_MS * attempt));
+      }
+      try {
+        await this.assertCurrentSessionLeaseOwned(params.sessionId);
+        return await this.runTeachingTurn(params);
+      } catch (error: unknown) {
+        lastError = error;
+        if (!isTeachingTurnHiccupError(error) || attempt === TEACHING_TURN_STEP_RETRY_ATTEMPTS) break;
+      }
+    }
+    throw lastError;
   }
 
   private async getVirtualSession(sessionId: string): Promise<VirtualSessionWithProfile> {
@@ -999,6 +1065,84 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         error: asErrorLike(persistError).message || String(persistError),
         stack: persistError instanceof Error ? persistError.stack : undefined,
         sourceError: asErrorLike(error).message || String(error)
+      });
+    }
+  }
+
+  /**
+   * 教学回合因「模型抖动」暂停（新发现问题 #3）：落可重试标记，**不把会话打成 failed**。
+   *
+   * 会话 status 枚举（created/running/completed/failed/abandoned）**无法表达 paused**，
+   * 且 `teaching.paused` 已被管理员手动暂停占用（语义完全不同，误用会让 UI 显示"已暂停"）。
+   * 因此这里保持 `running`，以 `runtimeStats.lastError`（`retryable:true`）作为可续跑暂停的
+   * 权威标记：下一次 `advance-day runTasks` 见到同一 task 会重新推进该回合。
+   *
+   * 边界：**不写入任何教师 reply**，本方法只记录错误标记。
+   */
+  private async persistTeachingPauseMarker(sessionId: string, error: unknown): Promise<void> {
+    const message = boundTaskCompletionError(error);
+    const at = new Date().toISOString();
+    try {
+      await prisma.$transaction(async (tx) => {
+        const session = await tx.virtual_sessions.findUnique({
+          where: { id: sessionId },
+          select: { stageResults: true }
+        });
+        if (!session) return;
+        const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
+        const stats = (stageResults.runtimeStats || {}) as Record<string, unknown>;
+        stageResults.runtimeStats = {
+          ...stats,
+          lastError: {
+            code: 'TEACHING_TURN_STEP_PAUSED',
+            message,
+            stage: 'teaching',
+            retryable: true,
+            at
+          }
+        };
+        await tx.virtual_sessions.update({
+          where: { id: sessionId },
+          data: { stageResults: JSON.stringify(stageResults), updatedAt: new Date() }
+        });
+      });
+    } catch (markError: unknown) {
+      logger.warn('[simulation-coordinator] 写入教学暂停标记失败（会话仍为 running，可续跑）', {
+        sessionId,
+        error: asErrorLike(markError).message || String(markError)
+      });
+    }
+  }
+
+  /**
+   * 清除上一次教学暂停标记（仅当存在时写库）。
+   *
+   * 无标记时**零写入**，保证正常成功路径与改动前逐字节一致；有标记时在本次步骤开始时清除，
+   * 若本回合再次抖动则由 `persistTeachingPauseMarker` 重新写入，避免陈旧标记污染 harness 判定。
+   */
+  private async clearTeachingPauseMarker(sessionId: string): Promise<void> {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const session = await tx.virtual_sessions.findUnique({
+          where: { id: sessionId },
+          select: { stageResults: true }
+        });
+        if (!session) return;
+        const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
+        const stats = (stageResults.runtimeStats || {}) as Record<string, unknown>;
+        if (!stats.lastError) return;
+        const nextStats = { ...stats };
+        delete nextStats.lastError;
+        stageResults.runtimeStats = nextStats;
+        await tx.virtual_sessions.update({
+          where: { id: sessionId },
+          data: { stageResults: JSON.stringify(stageResults), updatedAt: new Date() }
+        });
+      });
+    } catch (clearError: unknown) {
+      logger.warn('[simulation-coordinator] 清除教学暂停标记失败（不阻断主流程）', {
+        sessionId,
+        error: asErrorLike(clearError).message || String(clearError)
       });
     }
   }
@@ -2795,7 +2939,11 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       if (!session.learningPathId) {
         throw new Error('学习路径不存在');
       }
-      
+
+      // 清除上一次教学暂停留下的可重试标记（仅当存在时写库；无标记 → 零写入，成功路径不变）。
+      // 若本回合再次抖动，稍后会重新写入。
+      await this.clearTeachingPauseMarker(sessionId);
+
       const stageResults: StageResults = parseStageResultsPayload(session.stageResults)
 
       const learningState = (stageResults.teaching || {}) as TeachingState;
@@ -3237,6 +3385,9 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       // 中止类（客户端断开 / 进程重启取消 in-flight 上游）：**非终局**，保留 task 可续跑，
       // 不把会话打成 failed（见 isAbortLikeLearnError 注释 / 跑数观察 #3）。
       let learningStepInterrupted: string | null = null;
+      // 教学回合「模型抖动」暂停（新发现问题 #3）：**非终局**，保留 task 可续跑，
+      // 不把会话打成 failed，只落 runtimeStats.lastError 标记。
+      let learningStepPaused: string | null = null;
       let closureDecision: LearningClosureDecision | null = null;
       let shouldStopCurrentTask = false;
 
@@ -3248,7 +3399,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         try {
           const aiResponseStart = Date.now();
           await this.assertCurrentSessionLeaseOwned(sessionId);
-          const aiResult = await this.runTeachingTurn({
+          const aiResult = await this.runTeachingTurnWithStepRetry({
             sessionId,
             teachingSessionId,
             learnerMessage: virtualReplyResult.userVisible,
@@ -3421,6 +3572,30 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
                 }
               }
             });
+          } else if (isTeachingTurnHiccupError(err)) {
+            // 新发现问题 #3：模型抖动（如 TEACHING_TURN_REPLY_MISSING）在 prompt 级 2 次 +
+            // 步骤级额外重试后仍失败 → **非终局暂停**，不把会话打成 failed。
+            // 边界（禁止伪造教师回复）：这里不合成任何兜底 reply/教师话术，只落可重试标记，
+            // 保留同一 task 与课堂 revision，下一次 advance-day 重新推进同一回合。
+            learningStepPaused = failureMessage;
+            logger.warn('[simulation-coordinator] 教学回合模型抖动，暂停本回合（非终局，可续跑）', {
+              sessionId,
+              error: failureMessage
+            });
+            logs.push({
+              timestamp: new Date().toISOString(),
+              // 复用既有的「非终局中断」phase（类型白名单无 paused），以 action 区分暂停语义
+              phase: 'teaching-interrupted',
+              details: {
+                error: failureMessage,
+                output: {
+                  currentTask: currentTask.title,
+                  currentMilestone: currentMilestone.title,
+                  action: 'teaching-step-paused',
+                  retryable: true
+                }
+              }
+            });
           } else {
             logger.warn('[simulation-coordinator] AI教学响应失败，已停止当前学习步骤', {
               sessionId,
@@ -3457,6 +3632,20 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
             }
           }
         });
+      }
+
+      // 新发现问题 #3：教学回合模型抖动 → 非终局暂停。此处**提前返回**，不进入
+      // buildNextLearningState / 终局写库：既不追加任何 assistant 消息（杜绝伪教师回复），
+      // 也不把会话打成 failed；只落可重试标记并保留同一 task 供下一次 advance-day 重试。
+      if (learningStepPaused) {
+        await this.persistTeachingPauseMarker(sessionId, learningStepPaused);
+        await this.addSessionLogs(sessionId, logs);
+        return {
+          success: false,
+          aiResponse: '教学回合暂时未能生成，已暂停本回合（可续跑）。',
+          logs,
+          error: learningStepPaused
+        };
       }
       
       const isPathCompleted = nextMilestoneIdx >= milestones.length;

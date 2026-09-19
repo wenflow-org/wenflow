@@ -30,6 +30,7 @@ import {
   classifyAdvanceResponse,
   classifyPathGeneration,
   classifySessionStatus,
+  classifyTeachingTurnPause,
   createRunState,
   defaultLearnerName,
   isPathReady,
@@ -332,14 +333,21 @@ async function runDailyLoop(args: HarnessArgs, state: RunState, statePath: strin
     persist(statePath, state);
 
     const detail = await makeApi(args.baseUrl, 'GET', `/api/admin/virtual-learners/sessions/${state.sessionId}`);
-    const phase = classifySessionStatus(sessionFields(detail.body).status);
+    const detailFields = sessionFields(detail.body);
+    // 新发现问题 #3：教学回合模型抖动是**可续跑暂停**（后端保持 running + runtimeStats.lastError），
+    // 不应被当成终局 session-failed。带该标记时按进行中处理，下一轮 advance-day 会重试同一回合。
+    const teachingPause = classifyTeachingTurnPause(asRecord(asRecord(detail.body?.data).stageResults));
+    const phase = classifySessionStatus(detailFields.status, { retryablePause: teachingPause.paused });
     if (phase === 'completed') {
       log(`本会话已完成（round ${state.round}，simDay=${outcome.simulatedDay}）`);
       return 'completed';
     }
     if (phase === 'failed') {
-      addFinding(state, 'session-failed', `round ${state.round} stage=${sessionFields(detail.body).currentStage}`);
+      addFinding(state, 'session-failed', `round ${state.round} stage=${detailFields.currentStage}`);
       return 'failed';
+    }
+    if (teachingPause.paused) {
+      log(`[day${dayLabel}] 教学回合暂停（可续跑）：code=${teachingPause.code ?? 'unknown'}，下一轮将继续推进同一 task`);
     }
   }
   return 'exhausted';

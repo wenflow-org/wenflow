@@ -39,6 +39,47 @@ export interface AdvanceOutcome {
 /** 会话阶段（终局判定） */
 export type SessionPhase = 'active' | 'completed' | 'failed';
 
+/**
+ * 教学回合「模型抖动」暂停的识别（新发现问题 #3）。
+ *
+ * 与后端 `TEACHING_TURN_STEP_PAUSED` 标记（`runtimeStats.lastError`）以及 teaching-turn 的
+ * 结构化校验失败码对应：这类失败是**可续跑暂停**，不是会话终局，harness 应重试同一天。
+ */
+const TEACHING_TURN_RETRYABLE_PATTERN = /TEACHING_TURN_STEP_PAUSED|TEACHING_TURN_(REPLY_MISSING|REQUIRED_BLOCK_MISSING|REPLY_COMPLETION_MISMATCH|OUTPUT_NOT_OBJECT|OUTPUT_INVALID)/i;
+
+/** 文案/错误码是否表示"教学回合模型抖动（可重试同一天）"。 */
+export function isRetryableTeachingPauseMessage(message: string): boolean {
+  return TEACHING_TURN_RETRYABLE_PATTERN.test(message);
+}
+
+export interface TeachingPauseSignal {
+  paused: boolean;
+  code: string | null;
+  message: string | null;
+  at: string | null;
+}
+
+/**
+ * 从会话详情 `stageResults` 读取教学暂停标记（后端新发现问题 #3 写入
+ * `runtimeStats.lastError = { code, message, stage, retryable, at }`）。
+ *
+ * 权威判据是 `retryable === true`（或 code/message 命中抖动模式）；字段缺失 → 未暂停，
+ * 与改动前行为一致。
+ */
+export function classifyTeachingTurnPause(stageResults: unknown): TeachingPauseSignal {
+  const empty: TeachingPauseSignal = { paused: false, code: null, message: null, at: null };
+  if (!isRecord(stageResults)) return empty;
+  const stats = isRecord(stageResults.runtimeStats) ? stageResults.runtimeStats : null;
+  const lastError = stats && isRecord(stats.lastError) ? stats.lastError : null;
+  if (!lastError) return empty;
+  const code = asString(lastError.code) || null;
+  const message = asString(lastError.message) || null;
+  const retryable = lastError.retryable === true
+    || isRetryableTeachingPauseMessage(code || '')
+    || isRetryableTeachingPauseMessage(message || '');
+  return { paused: retryable, code, message, at: asString(lastError.at) || null };
+}
+
 export interface RunFinding {
   code: string;
   detail: string;
@@ -141,6 +182,12 @@ export function classifyAdvanceResponse(input: { httpStatus: number; body?: unkn
     }
     return done('fatal', errorText || 'success=false');
   }
+  // 新发现问题 #3：教学回合模型抖动 → 后端保持 running 并回滚当天（reverted），
+  // 属**可重试同一天**，不能当成"路径未就绪"空等。后端会在下一次 advance-day 重试同一回合。
+  const learningError = learning ? asString(learning.error) : '';
+  if (learningError && isRetryableTeachingPauseMessage(learningError)) {
+    return done('retryable', `教学回合模型抖动（可续跑，重试同一天）：${learningError.slice(0, 160)}`, { lessons: 0 });
+  }
   if (data?.reverted === true) {
     return done('day-not-started', '时钟未推进（当天未上课，模拟日未消耗）', { lessons: 0 });
   }
@@ -150,10 +197,19 @@ export function classifyAdvanceResponse(input: { httpStatus: number; body?: unkn
   return done('advanced', `模拟日 ${simulatedDay ?? '?'} 已推进`);
 }
 
-/** 会话 status → 阶段（终局判定；未知值一律视为进行中，由 maxDays 兜底） */
-export function classifySessionStatus(status: unknown): SessionPhase {
+/**
+ * 会话 status → 阶段（终局判定；未知值一律视为进行中，由 maxDays 兜底）。
+ *
+ * `retryablePause=true`（会话详情带 `classifyTeachingTurnPause().paused`）时，即便后端因历史
+ * 路径写入了 `failed`，也按**进行中**处理——新发现问题 #3 的暂停是可续跑的，harness 应重试
+ * 而非直接上报 `session-failed`。`completed` 不受影响。
+ */
+export function classifySessionStatus(
+  status: unknown,
+  options: { retryablePause?: boolean } = {}
+): SessionPhase {
   if (status === 'completed') return 'completed';
-  if (status === 'failed') return 'failed';
+  if (status === 'failed') return options.retryablePause === true ? 'active' : 'failed';
   return 'active';
 }
 
