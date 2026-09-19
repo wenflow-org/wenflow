@@ -403,6 +403,98 @@
       "rules": {
         "@typescript-eslint/no-explicit-any": "off"
       }
+    },
+    {
+      "files": [
+        "src/routes/**/*.ts"
+      ],
+      "excludedFiles": [
+        "src/routes/**/__tests__/**",
+        "src/routes/**/*.test.ts",
+        "src/routes/**/*.spec.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/config/database",
+                  "**/config/database/**",
+                  "**/config/system-database",
+                  "**/config/system-database/**",
+                  "**/generated/system-client",
+                  "**/generated/system-client/**",
+                  "@prisma/client",
+                  "@prisma/client/**"
+                ],
+                "message": "routes 层禁止直接 import 数据库客户端（config/database、config/system-database、@prisma/client、generated/system-client）：请下沉到 service/repository 层。存量豁免见 eslint-boundary-baseline.json（棘轮：只降不升）。"
+              }
+            ]
+          }
+        ],
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "ImportExpression > Literal[value=/(?:^|\\/)(?:config\\/(?:database|system-database)|generated\\/system-client)$|^@prisma\\/client(?:\\/|$)/]",
+            "message": "routes 层禁止动态 import 数据库客户端（config/database、config/system-database、@prisma/client、generated/system-client）：请下沉到 service/repository 层。"
+          },
+          {
+            "selector": "CallExpression[callee.name='require'] > Literal[value=/(?:^|\\/)(?:config\\/(?:database|system-database)|generated\\/system-client)$|^@prisma\\/client(?:\\/|$)/]",
+            "message": "routes 层禁止 require 数据库客户端（config/database、config/system-database、@prisma/client、generated/system-client）：请下沉到 service/repository 层。"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/routes/adaptive-guidance.routes.ts",
+        "src/routes/admin-auth.ts",
+        "src/routes/admin/achievements.ts",
+        "src/routes/admin/agent-prompts.ts",
+        "src/routes/admin/announcements.ts",
+        "src/routes/admin/audit-logs.ts",
+        "src/routes/admin/batch-experiments.ts",
+        "src/routes/admin/devtools.ts",
+        "src/routes/admin/export.ts",
+        "src/routes/admin/field-routings.ts",
+        "src/routes/admin/goal-conversations.ts",
+        "src/routes/admin/health-center.ts",
+        "src/routes/admin/learner-models.ts",
+        "src/routes/admin/learning-content.ts",
+        "src/routes/admin/memory-review.ts",
+        "src/routes/admin/memory-traces.ts",
+        "src/routes/admin/notifications.ts",
+        "src/routes/admin/platform.ts",
+        "src/routes/admin/projection-access-grants.ts",
+        "src/routes/admin/prompt-ops.ts",
+        "src/routes/admin/runtime-definitions.ts",
+        "src/routes/admin/session-console.ts",
+        "src/routes/admin/sessions.ts",
+        "src/routes/admin/skills.ts",
+        "src/routes/admin/teaching-sessions.progress.ts",
+        "src/routes/admin/token-cost.ts",
+        "src/routes/admin/users.ts",
+        "src/routes/admin/virtual-learners.ts",
+        "src/routes/admin/virtual-quick-learn.ts",
+        "src/routes/ai-teaching.routes.ts",
+        "src/routes/announcements.ts",
+        "src/routes/auth.ts",
+        "src/routes/learning.ts",
+        "src/routes/notifications.ts",
+        "src/routes/prompt-lab.ts",
+        "src/routes/user-agents.ts",
+        "src/routes/user-api-config.ts",
+        "src/routes/user-developer.ts",
+        "src/routes/user-mcp.ts",
+        "src/routes/user-skills.ts",
+        "src/routes/users.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": "off",
+        "no-restricted-syntax": "off"
+      }
     }
   ],
   "ignorePatterns": [

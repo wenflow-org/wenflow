@@ -12,6 +12,8 @@
     "test:watch": "jest --watch",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
+    "boundaries:check": "node scripts/check-route-db-boundary.mjs",
+    "boundaries:update": "node scripts/check-route-db-boundary.mjs --update",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test:ci": "jest --runInBand",
     "test:coverage": "jest --runInBand --coverage",
