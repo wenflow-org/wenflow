@@ -79,6 +79,27 @@ function isAllowedEnum<T extends string>(value: any, allowed: T[]): value is T {
   return allowed.includes(value);
 }
 
+// 问题类型标注（core.yaml fields.goalSeed 定义）：主阻塞类型 + 复发性 + 判定依据。
+// 枚举值必须与 prompts/core/virtual-learner-scenario-designer.yaml 保持一致。
+export const PRIMARY_BLOCK_TYPES = [
+  'capability',
+  'oneoff_operation',
+  'environment_tooling',
+  'permission_process',
+  'emotion_relationship',
+] as const;
+export type PrimaryBlockType = typeof PRIMARY_BLOCK_TYPES[number];
+
+export const RECURRENCE_TYPES = ['once', 'recurring'] as const;
+export type RecurrenceType = typeof RECURRENCE_TYPES[number];
+
+/** normalizeStory 里 goalSeed 的三个问题类型标注字段（均可空，非法/缺失时置 null）。 */
+export interface GoalSeedBlockAnnotation {
+  primaryBlockType: PrimaryBlockType | null;
+  recurrence: RecurrenceType | null;
+  blockTypeEvidence: string | null;
+}
+
 /**
  * 清洗传入的 existingPersonaSeed 中 enum 字段到白名单内。
  *
@@ -146,7 +167,7 @@ function normalizeProblemKnowledge(raw: any) {
   }
 }
 
-function normalizeStory(raw: any) {
+export function normalizeStory(raw: any) {
   const goalSeed = raw?.goalSeed && typeof raw.goalSeed === 'object' ? raw.goalSeed : {};
 
   return {
@@ -166,6 +187,10 @@ function normalizeStory(raw: any) {
       goalType: isAllowedEnum(goalSeed.goalType, ['problem_driven', 'foundation_building', 'project_based', 'exam_prep', 'interest_exploration']) ? goalSeed.goalType : null,
       surfaceGoal: normalizeString(goalSeed.surfaceGoal),
       realProblem: normalizeString(goalSeed.realProblem),
+      // 问题类型标注：非法枚举 / 缺失一律置 null，不默认成 capability，避免把模型偏向藏起来。
+      primaryBlockType: isAllowedEnum(goalSeed.primaryBlockType, [...PRIMARY_BLOCK_TYPES]) ? goalSeed.primaryBlockType : null,
+      recurrence: isAllowedEnum(goalSeed.recurrence, [...RECURRENCE_TYPES]) ? goalSeed.recurrence : null,
+      blockTypeEvidence: normalizeString(goalSeed.blockTypeEvidence),
       motivation: normalizeString(goalSeed.motivation),
       urgencyHint: normalizeString(goalSeed.urgencyHint),
       constraints: normalizeStringArray(goalSeed.constraints),
@@ -270,7 +295,7 @@ function normalizeScenarioOutput(raw: any) {
   };
 }
 
-function validateScenarioOutput(parsed: any): { valid: boolean; failureReason?: string } {
+export function validateScenarioOutput(parsed: any): { valid: boolean; failureReason?: string } {
   const personaSeed = parsed?.personaSeed;
   const story = parsed?.story;
 
@@ -409,6 +434,24 @@ function validateScenarioOutput(parsed: any): { valid: boolean; failureReason?: 
 
   if (!isAllowedEnum(goalSeed.goalType, ['problem_driven', 'foundation_building', 'project_based', 'exam_prep', 'interest_exploration'])) {
     return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: story.goalSeed.goalType is invalid' };
+  }
+
+  // 问题类型标注为选填：模型偶尔漏产出或给出非法枚举时只告警、不阻断造人流程；
+  // 缺失/非法值由 normalizeStory 统一置 null，便于后续统计回填率。
+  const missingBlockAnnotationFields: string[] = [];
+  if (!isAllowedEnum(goalSeed.primaryBlockType, [...PRIMARY_BLOCK_TYPES])) {
+    missingBlockAnnotationFields.push('primaryBlockType');
+  }
+  if (!isAllowedEnum(goalSeed.recurrence, [...RECURRENCE_TYPES])) {
+    missingBlockAnnotationFields.push('recurrence');
+  }
+  if (!normalizeString(goalSeed.blockTypeEvidence)) {
+    missingBlockAnnotationFields.push('blockTypeEvidence');
+  }
+  if (missingBlockAnnotationFields.length > 0) {
+    logger.warn('[virtual-learner-scenario-designer] goalSeed 缺少问题类型标注字段（非阻塞，已置 null）', {
+      fields: missingBlockAnnotationFields,
+    });
   }
 
   return { valid: true };

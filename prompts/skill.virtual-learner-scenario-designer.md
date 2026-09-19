@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-scenario-designer
-coreHash: f94c94f1dfc918a186485d69bde25b0d90b3c5516162cdcd93924d4b84412bee
+coreHash: 8b8dc2d00da4d58810156a72b45bc2418967f96e6df24adbdce7cdc07f658d62
 coreVersion: 1
 temperature: 0.9
 maxTokens: 8000
@@ -88,7 +88,11 @@ failurePolicy: retry
 · misdiagnosis（string）他以为自己的问题是什么，但不一定对
 · pressurePoints / behaviorHooks（string[]）这个故事会优先触发的情绪压力点/典型反应模式
 · problemKnowledge（object）{ "domainFamiliarity": "low|medium|high", "knownConcepts": [], "struggleConcepts": [], "selfAssessment": "", "hiddenGaps": [] }
-· goalSeed（object）{ "domain", "goalType", "surfaceGoal", "realProblem", "motivation", "urgencyHint", "constraints": [], "expectedOutcome" }
+· goalSeed（object）{ "domain", "goalType", "surfaceGoal", "realProblem", "primaryBlockType", "recurrence", "blockTypeEvidence", "motivation", "urgencyHint", "constraints": [], "expectedOutcome" }
+· realProblem（string）真正卡住他的是什么，必须包含"具体场景 + 具体障碍"，例如"账号被管理员锁了，他不知道该找谁开"。禁止用"缺乏…能力/认知"这类笼统句式收尾；只有确实缺少可迁移的底层理解/框架、且能说清缺的是什么时，才允许写成能力缺口。若真正卡住他的是操作不熟 / 系统坏了 / 权限被卡 / 情绪过不去，就照实写，不要翻译成"缺乏系统操作能力"。正例："想用公司新版报销系统，但没人告诉他入口在哪，他反复问同事还是走错流程"；反例："缺乏系统操作能力，需要学习相关认知"。
+· primaryBlockType（enum，必填）capability | oneoff_operation | environment_tooling | permission_process | emotion_relationship。含义：capability＝存在可迁移的概念/技能缺口，必须"建立认知结构 + 多步练习"；oneoff_operation＝一次性具体操作/工具用法，学会点哪里即可，十几分钟能解决；environment_tooling＝设备/软件/网络/配置/环境阻塞，修好系统即可；permission_process＝账号/权限/审批/流程/交接/他人配合阻塞；emotion_relationship＝情绪调节/恐惧/面子/焦虑/人际冲突是主要阻塞。判定口径（写死）："哪个阻塞不解决，其它做什么都白搭"就是 primaryBlockType。判定依据必须是故事事实（storyOutline / triggerEvent / hiddenDetails / problemKnowledge / misdiagnosis）；必须先定 primaryBlockType，再写 realProblem，两者必须一致。
+· recurrence（enum）once | recurring：这件事是一次性还是会反复发生——只有反复发生才可能是能力缺口。
+· blockTypeEvidence（string，≤60字）：引用故事里的一句话作为判定依据。
 · disclosurePlan（object）{ "opening": 首轮最可能的开场表达 1-2 句, "revelationTriggers": [], "resistancePoints": [], "idealProbe": "" }
 - consistencyNotes · string[] — 2-4 条故事与 persona 的一致性校验点（pressurePoints/behaviorHooks/visibleOpening 与 persona 对应字段如何对齐）
 

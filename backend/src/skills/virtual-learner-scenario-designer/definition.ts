@@ -24,6 +24,19 @@ export const virtualLearnerScenarioDesignerRuntimeDefinition: RuntimeDefinitionR
     properties: {
       goalSeed: { type: 'object' },
       personaSeed: { type: 'object' },
+      story: {
+        type: 'object',
+        properties: {
+          goalSeed: {
+            type: 'object',
+            properties: {
+              primaryBlockType: { type: ['string', 'null'] },
+              recurrence: { type: ['string', 'null'] },
+              blockTypeEvidence: { type: ['string', 'null'] },
+            },
+          },
+        },
+      },
       situationSeed: { type: 'object' },
       stories: { type: 'array' },
       consistencyNotes: { type: 'array' },
