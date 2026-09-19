@@ -8,7 +8,7 @@
  * 事实源与语义（与后端字段路由矩阵一致，不造数据）：
  * - routing 行 = 「agentId 产出的 fieldId，handoff 交给哪些目标」（agentId ∈ skill:* 或 &lt;stage&gt;-agent）
  * - 步骤顺序 = 编排文件 defSteps（服务步骤如实标注 unresolved，与状态条「未解析」同口径）
- * - 调用统计 = 运行时拓扑 skill 节点（liveTopoNodes），桥接 agent 为其下 skill 聚合
+ * - 调用统计 = 运行时 agent/skill 节点（liveTopoNodes），桥接 agent 为其下 skill 聚合
  */
 import { shortName, type StageDetailLike } from './fieldFlowLayout'
 
@@ -134,13 +134,13 @@ export interface FlowStep {
   loopOver?: string
   condition?: string
   unresolved: boolean
-  calls: number | null       // 拓扑统计（有即显示）
+  calls: number | null       // 调用用量（有即显示）
   failed: number
   inputs: FlowChip[]         // 流入本步骤的字段（routing.handoff ∋ agentId）
   outputs: FlowChip[]        // 本步骤产出的字段（routing.agentId = agentId / bridge 归属）
   /** 步骤归属阶段（cross-agent 步骤标记来自其它阶段） */
   fromStage?: string
-  /** 隶属边（<stage>-agent → 本 Skill）运行时用量；null = 无数据（未接入 / 拉取失败） */
+  /** 调用隶属边（<stage>-agent → 本 Skill，agent→skill）运行时用量；null = 无数据（未接入 / 拉取失败） */
   handoff: EdgeStat | null
 }
 
@@ -165,7 +165,7 @@ export interface StageFlow {
   steps: FlowStep[]
   edges: FlowEdge[]
   stats: { calls: number; failed: number; rate: number }
-  /** 本阶段隶属边用量汇总；null = 无数据（未接入 / 拉取失败） */
+  /** 本阶段调用用量汇总；null = 无数据（未接入 / 拉取失败） */
   edgeStats: {
     edgeCount: number
     usedEdgeCount: number
@@ -185,7 +185,7 @@ export interface TopoNodeLike {
   stats: { totalCalls: number; failed: number }
 }
 
-/** 拓扑隶属边（后端 Q9 后续：`{ id, source, target, type, stats }`；stats 可缺省） */
+/** 调用隶属边（agent→skill，后端 Q9：`{ id, source, target, type, stats }`；stats 可缺省） */
 export interface TopoEdgeLike {
   id?: string
   source: string
@@ -199,7 +199,7 @@ export interface TopoEdgeLike {
   } | null
 }
 
-/** 隶属边运行时用量（前端投影；与后端 EdgeRuntimeStats 对齐并补 dead 判定） */
+/** 调用隶属边运行时用量（agent→skill，前端投影；与后端 EdgeRuntimeStats 对齐并补 dead 判定） */
 export interface EdgeStat {
   calls: number
   failed: number
@@ -215,7 +215,7 @@ function edgeStatKey(source: string, target: string): string {
 }
 
 /**
- * 把后端拓扑 edges 投影成 `caller\0callee → EdgeStat` 索引（纯函数）。
+ * 把后端调用隶属边（agent→skill）edges 投影成 `caller\0callee → EdgeStat` 索引（纯函数）。
  * 缺失 stats 视作零调用死边；successRate 缺失时由 calls/failed 现算。
  */
 export function indexEdgeStats(edges: readonly TopoEdgeLike[] | null | undefined): Map<string, EdgeStat> {
@@ -291,7 +291,7 @@ export function buildStageFlow(
   const myAgents = detail.agents.map((a) => a.agentId)
   const myIdentity = identityOf(stageId, myAgents)
   const fieldById = new Map(detail.fields.map((f) => [f.fieldId, f]))
-  // 隶属边用量索引（后端已聚合；缺省 = 无数据，不渲染边统计）
+  // 调用用量索引（后端已聚合；缺省 = 无数据，不渲染调用统计）
   const edgeStatIndex = topoEdges && topoEdges.length ? indexEdgeStats(topoEdges) : null
 
   const chipOf = (r: StageDetailLike['routings'][number]): FlowChip => {
@@ -435,7 +435,7 @@ export function buildStageFlow(
     }
     const resolvedName = def?.resolved?.displayName || ''
     const owner = isSkill || isBridge ? undefined : ownerStageOf(a)
-    // orphan：已注册 agent（agents 清单/拓扑统计），但无字段契约（0 routing 行）且不在 defSteps
+    // orphan：已注册 agent（agents 清单/调用统计），但无字段契约（0 routing 行）且不在 defSteps
     // 如实呈现为「无契约 Skill」：保留调用统计（健康信号），标注 no-contract 而非误导性「0 产出」
     const isOrphan = isSkill && !outputs.length && !inputs.length && !def
     const kind = isBridge ? 'bridge-entry' as const
@@ -444,7 +444,7 @@ export function buildStageFlow(
           : owner ? 'cross-agent' as const
             : (def?.resolved?.kind === 'service' ? 'service' as const : 'skill' as const)
     const name = isBridge ? `${stageName}闸口` : resolvedName || a.replace(/^skill:/, '')
-    // 隶属边 = 本阶段 agent → 本 Skill（与后端 membership 边同口径）
+    // 调用隶属边 = 本阶段 agent → 本 Skill（agent→skill，与后端 membership 边同口径）
     const handoff = isSkill && edgeStatIndex ? (edgeStatIndex.get(edgeStatKey(agentId, a)) || null) : null
     steps.push({
       index: i + 1,
@@ -501,7 +501,7 @@ export function buildStageFlow(
     }
   }
   const stat = aggregateOf(agentId)
-  // 隶属边汇总：仅统计本阶段 agent 发出的边（与 membership 边一一对应）
+  // 调用用量汇总：仅统计本阶段 agent 发出的边（agent→skill，与 membership 边一一对应）
   let stageEdgeStats: StageFlow['edgeStats'] = null
   if (edgeStatIndex && topoEdges) {
     let edgeCount = 0

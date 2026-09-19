@@ -20,7 +20,7 @@
               :class="{ 'dfg-meta--bad': flow.edgeStats.deadEdgeCount > 0 }"
               :title="edgeSummaryTitle(flow.edgeStats)"
             >
-              ⇄ 交接边 {{ flow.edgeStats.usedEdgeCount }}/{{ flow.edgeStats.edgeCount }} 活跃<template v-if="flow.edgeStats.deadEdgeCount"> · {{ flow.edgeStats.deadEdgeCount }} 死边</template>
+              ⇄ 调用用量 {{ flow.edgeStats.usedEdgeCount }}/{{ flow.edgeStats.edgeCount }} 活跃<template v-if="flow.edgeStats.deadEdgeCount"> · {{ flow.edgeStats.deadEdgeCount }} 死边</template>
             </span>
           </template>
         </div>
@@ -46,6 +46,12 @@
           </label>
         </div>
       </div>
+
+      <!-- 图性质说明：本图是字段数据旅程（逻辑图·字段血缘），非拓扑图 -->
+      <p class="dfg-caption">
+        <strong>字段数据旅程（逻辑图 · 字段血缘）</strong>——按字段流转组织；
+        <b class="dfg-caption__ann">⇄</b> 数字为 <span class="mono">agent→skill</span> 调用用量注解
+      </p>
 
       <!-- 旅程概览条：上一阶段 ⇣ 本 Agent ⇣ 下一阶段（一眼看清跨越边界） -->
       <div v-if="flow" class="dfg-journey">
@@ -239,7 +245,7 @@
                 class="dfg-edge-stat"
                 :class="{ 'is-dead': step.handoff.dead, 'is-warn': !step.handoff.dead && (step.handoff.successRate ?? 100) < 90 }"
                 :title="edgeTitle(step)"
-              >⇄ {{ step.handoff.dead ? '死边' : `${fmtCalls(step.handoff.calls)} · ${step.handoff.successRate ?? '—'}%` }}</span>
+              >⇄ {{ step.handoff.dead ? '未调用' : `${fmtCalls(step.handoff.calls)} · ${step.handoff.successRate ?? '—'}%` }}</span>
               <span class="dfg-step__spacer"></span>
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
               <span v-if="step.loopOver" class="dfg-step__cond" :title="`循环 ${step.loopOver}`">循环：{{ step.loopOver }}</span>
@@ -525,7 +531,7 @@ const error = ref('')
 const detailByStage = ref<Record<string, StageDetailLike | null>>({})
 const orchDefs = ref<Record<string, DefStepLike[]>>({})
 const stageNames = ref<Record<string, string>>({})
-/** 拓扑隶属边（含后端 Q9 边用量 stats）；供步骤卡渲染边宽/成功率/死边 */
+/** 调用隶属边（agent→skill，含后端 Q9 调用用量 stats）；供步骤卡渲染调用量/成功率/未调用 */
 const topoEdges = ref<TopoEdgeLike[]>([])
 const showHidden = ref(false)
 const edgeFaded = ref(true) // 默认淡化连线（悬停/聚焦点亮）；关 = 不画步间连线（端口徽标仍可用）
@@ -1023,25 +1029,25 @@ function chipTitle(c: FlowChip) {
   return parts.join('\n')
 }
 
-/** 隶属边 tooltip：调用/失败/成功率/末次出现（Q9 边用量） */
+/** 调用用量 tooltip：agent→skill 调用/失败/成功率/末次出现（Q9 注解） */
 function edgeTitle(step: FlowStep) {
   const h = step.handoff
   if (!h) return ''
   const rate = h.successRate == null ? '—' : `${h.successRate}%`
   const last = h.lastSeenAt ? new Date(h.lastSeenAt).toLocaleString() : '窗口内无记录'
   return [
-    `隶属交接边 ${flow.value?.agentId || ''} → ${step.agentId}`,
+    `调用用量 ${flow.value?.agentId || ''} → ${step.agentId}（agent→skill 注解）`,
     `调用 ${h.calls} 次 · 失败 ${h.failed} · 成功率 ${rate}`,
     `末次出现：${last}`,
-    h.dead ? '⚠ 窗口内零调用（死边候选）' : '',
+    h.dead ? '⚠ 窗口内零调用（未调用 / 死边候选）' : '',
   ].filter(Boolean).join('\n')
 }
 
-/** 阶段边用量汇总 tooltip */
+/** 阶段调用用量汇总 tooltip（agent→skill） */
 function edgeSummaryTitle(s: NonNullable<StageFlow['edgeStats']>) {
   return [
-    `本阶段隶属边 ${s.edgeCount} 条 · 窗口内活跃 ${s.usedEdgeCount} · 零调用 ${s.deadEdgeCount}`,
-    `边调用合计 ${s.totalCalls} · 失败 ${s.failed}`,
+    `本阶段调用用量 ${s.edgeCount} 条（agent→skill）· 窗口内活跃 ${s.usedEdgeCount} · 零调用 ${s.deadEdgeCount}`,
+    `调用合计 ${s.totalCalls} · 失败 ${s.failed}`,
   ].join('\n')
 }
 function openField(c: FlowChip) {
@@ -1196,6 +1202,16 @@ function stepHue(step: FlowStep): string {
 }
 .dfg-search__clear:hover { background: var(--mk-graph-clear-bg-hover); color: var(--mk-ink); }
 .dfg-switch { display: inline-flex; align-items: center; gap: 5px; font-size: var(--mk-fs-12); color: var(--mk-muted); cursor: pointer; }
+
+/* 图性质说明（字段数据旅程 / 逻辑图） */
+.dfg-caption {
+  margin: 0; padding: 5px 14px;
+  background: var(--mk-graph-canvas-2);
+  border-bottom: 1px solid var(--mk-line);
+  font-size: var(--mk-fs-11); color: var(--mk-faint);
+}
+.dfg-caption strong { color: var(--mk-muted); font-weight: 800; }
+.dfg-caption__ann { color: var(--mk-blue); font-weight: 800; }
 
 /* 旅程概览条 */
 .dfg-journey {
@@ -1362,7 +1378,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-step__agent { font-size: 11px; color: var(--mk-faint); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dfg-step__stat { flex-shrink: 0; font-size: 10.5px; font-weight: 800; color: var(--mk-muted); font-variant-numeric: tabular-nums; }
 .dfg-step__stat.is-err { color: var(--mk-red); }
-/* 隶属边用量徽标（Q9）：正常=蓝、低成功率=琥珀、死边=灰 */
+/* 调用用量徽标（agent→skill，Q9）：正常=蓝、低成功率=琥珀、未调用=灰 */
 .dfg-edge-stat {
   flex-shrink: 0; font-size: 10.5px; font-weight: 800; font-variant-numeric: tabular-nums;
   color: var(--mk-blue); background: var(--mk-blue-bg);
