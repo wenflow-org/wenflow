@@ -65,7 +65,6 @@ module.exports = {
     "src/views/v2/V2LearningPaths.vue",
     "src/views/v2/V2LearningState.vue",
     "src/views/v2/V2NotifCenter.vue",
-    "src/views/v2/V2Runtime.vue",
     "src/views/v2/useGoalLive.ts"
   ],
       rules: {

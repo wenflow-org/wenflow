@@ -18,7 +18,7 @@ import {
   setAdminProtectedLocationResolver
 } from './api/adminApi';
 import './styles/main.css';
-import './styles/tremor-theme.css';  // Tremor 风格主题
+import './styles/tremor-theme.css';  // Element Plus 兼容覆写（原 Tremor 主题）
 import './styles/admin-theme.css';
 import './views/v2/v2.css';          // V2 设计系统（全局加载，防止路由切换闪烁）
 

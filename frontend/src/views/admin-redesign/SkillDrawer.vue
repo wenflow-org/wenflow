@@ -1,8 +1,10 @@
 <template>
   <Teleport to="body">
-    <div v-if="entity" ref="maskRef" class="msk">      <aside ref="panelRef" class="msk__panel" role="dialog" aria-label="详情">
+    <div v-if="entity" class="mk-drawer">
+      <div ref="maskRef" class="mk-drawer__mask" @click="closeSkillDrawer"></div>
+      <aside ref="panelRef" class="mk-drawer__panel msk__panel" role="dialog" aria-label="详情">
         <!-- 头部：身份区（阶段色 + 类别图标 + 状态 chips） -->
-        <header class="msk__head" :style="{ '--hue': tone.hue, '--soft': tone.soft }">
+        <header class="mk-drawer__head msk__head" :style="{ '--hue': tone.hue, '--soft': tone.soft }">
           <div class="msk__id-row">
             <span class="msk__icon" aria-hidden="true">
               <svg v-if="iconKey === 'analysis'" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
@@ -29,10 +31,10 @@
               </svg>
             </span>
             <div class="msk__titlebox">
-              <h3 class="msk__name">{{ entity.name }}</h3>
-              <span class="msk__id mono">{{ entity.id }}</span>
+              <h3 class="mk-drawer__title">{{ entity.name }}</h3>
+              <span class="mk-drawer__sub msk__id mono">{{ entity.id }}</span>
             </div>
-            <button type="button" class="msk__close" aria-label="关闭" @click="closeSkillDrawer">✕</button>
+            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeSkillDrawer">✕</button>
           </div>
           <div class="msk__chips">
             <span class="mk-badge" :class="stat.errors ? 'mk-badge--bad' : 'mk-badge--ok'">
@@ -62,7 +64,7 @@
           </button>
         </nav>
 
-        <div class="msk__body">
+        <div class="mk-drawer__body msk__body">
           <!-- ========== 概览（只读） ========== -->
           <template v-if="activeTab === 'overview'">          <!-- 指标条 -->
           <div class="msk__stats">
@@ -639,30 +641,9 @@ watch(
 </script>
 
 <style scoped>
-/* ========== 遮罩与面板 ========== */
-.msk {
-  position: fixed;
-  inset: 0;
-  z-index: var(--mk-z-drawer);
-  background: rgba(15, 23, 42, 0.45);
-  display: flex;
-  justify-content: flex-end;
-}
-.msk__panel {
-  width: var(--mk-drawer-w, 560px);
-  max-width: 100vw;
-  height: 100%;
-  background: #fff;
-  box-shadow: var(--mk-shadow-drawer);
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-  animation: msk-in 0.2s ease;
-}
-
-
-@keyframes msk-in {
-  from { transform: translateX(30px); opacity: 0; }
-}
+/* ========== 面板：容器/遮罩/头/体/关闭按钮走 .mk-drawer 原语 ==========
+   面板比原语多一行 tabs（头 / 页签 / 正文），故只覆写网格行。 */
+.msk__panel { grid-template-rows: auto auto 1fr; }
 
 /* ========== 页签（统一 mk-pills 分段控件） ========== */
 .msk__tabs {
@@ -687,12 +668,13 @@ watch(
 .mk-pill--active .msk__tab-badge { background: #dbe9ff; color: var(--mk-accent-deep); }
 
 /* ========== 头部身份区 ========== */
+/* 身份台：内边距/底边/标题/副题/关闭按钮走 .mk-drawer 原语；此处只留页面私有的纵向网格 + 阶段色渐变 */
 .msk__head {
-  padding: 16px 18px 14px;
-  border-bottom: 1px solid var(--mk-line);
-  background: linear-gradient(180deg, var(--soft, rgba(44, 99, 208, 0.06)), rgba(255, 255, 255, 0) 90%);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
+  min-width: 0;
+  background: linear-gradient(180deg, var(--soft, rgba(44, 99, 208, 0.06)), rgba(255, 255, 255, 0) 90%);
 }
 .msk__id-row {
   display: flex;
@@ -712,33 +694,8 @@ watch(
 }
 .msk__icon svg { width: 19px; height: 19px; }
 .msk__titlebox { min-width: 0; flex: 1; padding-top: 1px; }
-.msk__name {
-  margin: 0;
-  font-size: var(--mk-fs-16);
-  font-weight: 600;
-  color: #16233c;
-  line-height: 1.3;
-}
-.msk__id {
-  display: block;
-  margin-top: 2px;
-  font-size: var(--mk-fs-12_5);
-  color: var(--mk-faint);
-  word-break: break-all;
-}
-.msk__close {
-  border: 0;
-  background: var(--mk-close-bg, #f0f2f5);
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-13);
-  flex-shrink: 0;
-  transition: background 0.15s ease;
-}
-.msk__close:hover { background: #e6eaf2; }
+/* 长 id 任意断行：配合面板 min-width:0 / overflow:hidden 不撑宽（字号/颜色走 .mk-drawer__sub） */
+.msk__id { display: block; margin-top: 2px; word-break: break-all; }
 
 .msk__chips {
   display: flex;
@@ -759,13 +716,11 @@ watch(
   overflow: hidden;
 }
 
-/* ========== 正文 ========== */
+/* ========== 正文：内边距/滚动走 .mk-drawer__body 原语；此处只补纵向排布 ========== */
 .msk__body {
-  padding: 14px 18px 20px;
   display: grid;
   gap: 16px;
   align-content: start;
-  overflow-y: auto;
 }
 
 /* 指标条 */
@@ -1021,15 +976,9 @@ watch(
 }
 
 
-/* 4K：抽屉加宽 + 字号跟随壳层放大（原 460px + 10px 是全站最小） */
+/* 4K：面板宽/头/体/关闭按钮由 .mk-drawer 全局档接管；此处只放大页面私有内容字号 */
 @media (min-width: 2000px) {
-  .msk__panel { width: var(--mk-drawer-w-lg, 700px); }
-  .msk__head { padding: 20px 24px; }
-  .msk__name { font-size: 19px; }
   .msk__id { font-size: 12.5px; }
-  .msk__body { padding: 20px 24px; }
-  .msk__close { width: 34px; height: 34px; font-size: 16px; }
-  .msk__chip { font-size: 12.5px; }
   .msk__tab-badge { font-size: 12px; }
   .msk__stat span { font-size: 12px; }
   .msk__stat strong { font-size: 18px; }
@@ -1044,13 +993,7 @@ watch(
   .msk__prompt { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
-  .msk__panel { width: var(--mk-drawer-w-xl, 880px); }
-  .msk__head { padding: 24px 30px; }
-  .msk__name { font-size: 23px; }
   .msk__id { font-size: 15px; }
-  .msk__body { padding: 24px 30px; }
-  .msk__close { width: 40px; height: 40px; font-size: 19px; }
-  .msk__chip { font-size: 15px; }
   .msk__tab-badge { font-size: 14px; }
   .msk__stat span { font-size: 14px; }
   .msk__stat strong { font-size: 22px; }
@@ -1065,14 +1008,8 @@ watch(
   .msk__prompt { font-size: 16px; }
 }
 @media (min-width: 3600px) {
-  /* 4K（抽屉 Teleport 到 body，无 zoom）：面板再加宽、字号继续放大 */
-  .msk__panel { width: var(--mk-drawer-w-xxl, 1040px); }
-  .msk__head { padding: 28px 36px; }
-  .msk__name { font-size: 27px; }
+  /* 4K（抽屉 Teleport 到 body，无 zoom）：字号继续放大（面板宽/头/体由 mk-drawer 全局档接管） */
   .msk__id { font-size: 17.5px; }
-  .msk__body { padding: 28px 36px; }
-  .msk__close { width: 47px; height: 47px; font-size: 22px; }
-  .msk__chip { font-size: 17.5px; }
   .msk__tab-badge { font-size: 16.5px; }
   .msk__stat span { font-size: 16.5px; }
   .msk__stat strong { font-size: 26px; }
@@ -1089,10 +1026,10 @@ watch(
 
 /* ================= 暗色模式（D1 补完）：Skill 抽屉 ================= */
 html[data-theme='dark'] {
-  .msk__panel, .msk__head, .msk__body { background: #17202f; border-color: #232f45; }
+  /* 头部身份台渐变仅亮色生效；暗色回到面板表面色（面板底色由 .mk-drawer__panel 原语接管） */
+  .msk__head { background: var(--mk-surface); }
   .msk__tab-badge { background: #253049; }
   .mk-pill--active .msk__tab-badge { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
-  .msk__close:hover { background: #2c3a55; }
   .msk__row { background: #17202f; border-color: #232f45; }
   .msk__row:hover { background: #1b2740; }
   .msk__primary-link:hover { background: rgba(91, 141, 239, 0.14); }
@@ -1106,7 +1043,6 @@ html[data-theme='dark'] {
   /* 文字色补漏 */
   .msk__stat strong,
   .msk__kv strong,
-  .msk__name,
   .msk__row-title { color: var(--mk-ink, #e6edf7); }
   .msk__desc,
   .msk__prompt,

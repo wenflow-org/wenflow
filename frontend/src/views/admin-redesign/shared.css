@@ -1189,8 +1189,9 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 }
 @keyframes mk-spin { to { transform: rotate(360deg); } }
 
-/* ----- 抽屉（mk-drawer：覆盖层通用骨架，AdminGlossaryDrawer 迁入目标；
-   SkillDrawer 因密集内容保持自身 msk- 档位，属登记在案的例外） ----- */
+/* ----- 抽屉（mk-drawer：覆盖层通用骨架）。收敛情况：
+   已全部迁入：GoalConversations / TeachingSessions / DataFlowGraph / SkillDrawer / AdminGlossaryDrawer / Feedback 等；
+   页面仅保留各自的额外类（如 agd__panel / msk__head 的布局补充）。 ----- */
 .mk-drawer {
   position: fixed;
   inset: 0;
