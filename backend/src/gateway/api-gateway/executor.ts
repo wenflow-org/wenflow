@@ -4,6 +4,14 @@ import { redactLogValue } from '../../utils/secret-redaction';
 import { ResolvedRoute, ChatRequest, ChatResponse, ExecutionContext } from './types';
 import { getDefaultAIRequestTimeoutMs } from '../../services/agentRequestTimeout.service';
 import { buildThinkingPolicy, type ReasoningEffort, type ThinkingMode } from './thinking-policy';
+import { getModelDefinition, getModelFallbacks } from '../../config/models.config';
+import {
+  clearCooldown,
+  deploymentKey,
+  isCoolingDown,
+  isFallbackWorthyCategory,
+  markCoolingDown
+} from './deployment-health';
 import { safeHttpRequest, safeHttpStreamRequest, SafeHttpBodyLimitError, UnsafeUrlError } from '../../utils/safe-http';
 import { isEncryptedSecret } from '../../utils/secret-crypto';
 import { telemetryWriter } from '../../services/telemetry-writer.service';
@@ -17,6 +25,8 @@ const MAX_SINGLE_ATTEMPT_TIMEOUT_MS = 300_000;
 const STREAM_IDLE_TIMEOUT_MS = 60_000;
 /** 流式响应累计字节上限 */
 const STREAM_MAX_RESPONSE_BYTES = 20 * 1024 * 1024;
+/** 降级链最多候选数（主模型 + N 个 fallback），用于限制质量漂移与成本（见 §4.5） */
+const MAX_MODEL_CANDIDATES = 2;
 
 interface RequestResult {
   response: ChatResponse;
@@ -126,6 +136,15 @@ export class APIExecutor {
       throw error;
     }
 
+    const primaryModel = String(request.model || route.model || '');
+    const primaryHealthKey = deploymentKey({
+      providerId: route.providerId,
+      endpoint: route.endpoint,
+      model: primaryModel
+    });
+    /** 定向重试时替换的请求体（如关闭思考）；默认即调用方请求 */
+    let currentRequest: ChatRequest = request;
+
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (!consumeUpstreamAttempt(retryBudget, attempt > 1)) {
         lastError = this.buildRetryBudgetError(lastError as GatewayExecutionError | null);
@@ -134,7 +153,7 @@ export class APIExecutor {
       attemptsMade = attempt;
       const attemptStartedAt = new Date();
       try {
-        const result = await this.executeRequest(route, request, normalizedContext, streamDeltaHandler);
+        const result = await this.executeRequest(route, currentRequest, normalizedContext, streamDeltaHandler);
         lastStatusCode = result.statusCode;
         const completedAt = new Date();
         const record: AttemptRecord = {
@@ -173,6 +192,7 @@ export class APIExecutor {
           attemptTelemetryComplete,
           maxAttempts
         );
+        clearCooldown(primaryHealthKey);
         return result.response;
       } catch (error) {
         lastError = this.normalizeExecutionError(error);
@@ -207,6 +227,11 @@ export class APIExecutor {
             retryBudgetExhausted = true;
             willRetry = false;
           }
+        }
+        if (willRetry && executionError.code === 'TRUNCATED_EMPTY_OUTPUT') {
+          // 语义失败定向重试：空内容 + finish_reason=length 时关闭思考（不翻倍 maxTokens）。
+          // 见 doc/MODEL_GATEWAY_DESIGN.md §4.5。
+          currentRequest = { ...currentRequest, thinking: { type: 'disabled' }, reasoning_effort: undefined };
         }
         const completedAt = new Date();
         const backoffMs = willRetry
@@ -294,6 +319,39 @@ export class APIExecutor {
       attemptTelemetryComplete,
       maxAttempts
     );
+    // 降级：主候选在「值得换部署」的错误上耗尽重试 → 换 fallback 模型重跑（限一跳）。
+    // 见 doc/MODEL_GATEWAY_DESIGN.md §4.5（成熟参照：LiteLLM fallbacks + deployment cooldown）。
+    const fallbackModel = this.resolveModelCandidates(primaryModel)[1];
+    const terminalError = lastError as GatewayExecutionError | null;
+    if (
+      !normalizedContext.fallbackFrom
+      && fallbackModel
+      && !streamStarted
+      && terminalError
+      && isFallbackWorthyCategory(terminalError.category)
+      && retryBudget.used.upstreamAttempts < retryBudget.limits.maxUpstreamAttempts
+      && !isCoolingDown(deploymentKey({
+        providerId: route.providerId,
+        endpoint: route.endpoint,
+        model: fallbackModel
+      }))
+    ) {
+      markCoolingDown(primaryHealthKey);
+      logger.warn('[api-gateway] 主候选耗尽，降级到 fallback 模型', {
+        traceId,
+        llmRequestId,
+        primaryModel,
+        fallbackModel,
+        errorCategory: terminalError.category,
+        statusCode: lastStatusCode
+      });
+      return this.execute(
+        route,
+        { ...request, model: fallbackModel },
+        { ...normalizedContext, fallbackFrom: primaryModel }
+      );
+    }
+
     throw finalError;
   }
 
@@ -599,8 +657,27 @@ export class APIExecutor {
       temperature: hoisted.temperature ?? route.temperature,
       max_tokens: hoisted.max_tokens ?? route.maxTokens
     };
+    // 调用方**显式**声明 thinking 时以调用方为准（定向重试：截断空输出 → 关闭思考重试），
+    // 否则按路由档位 + 模型能力推导。
+    const explicitThinking = requestBody.thinking;
     this.applyThinkingMode(route, requestBody);
+    if (explicitThinking) {
+      requestBody.thinking = explicitThinking;
+      if (explicitThinking.type === 'disabled') delete requestBody.reasoning_effort;
+    }
     return requestBody;
+  }
+
+  /** 降级候选链：主模型 + 声明的 fallback（去重、过滤未知模型、限量）。 */
+  private resolveModelCandidates(primaryModel: string): string[] {
+    if (!primaryModel) return [primaryModel];
+    const candidates = [primaryModel];
+    for (const fallback of getModelFallbacks(primaryModel)) {
+      if (candidates.length >= MAX_MODEL_CANDIDATES) break;
+      if (!getModelDefinition(fallback)) continue;
+      candidates.push(fallback);
+    }
+    return candidates;
   }
 
   /** 解析并校验完整 JSON chat completion 信封（缓冲路径与流式 JSON 回退共用） */
@@ -622,14 +699,30 @@ export class APIExecutor {
         : rawResponse) as ChatResponse;
       if (!parsedResponse || typeof parsedResponse !== 'object'
         || !Array.isArray(parsedResponse.choices)
-        || parsedResponse.choices.length === 0
-        || typeof parsedResponse.choices[0]?.message?.content !== 'string'
-        || !parsedResponse.choices[0].message.content.trim()) {
+        || parsedResponse.choices.length === 0) {
         throw new GatewayExecutionError(
           `API returned an invalid chat completion envelope from ${requestUrl}. Body preview: ${this.truncate(responseText, 300)}`,
           {
             category: 'protocol', code: 'INVALID_RESPONSE_SCHEMA', statusCode,
             requestUrl, contentType, retryable: false
+          }
+        );
+      }
+      const firstChoice: any = parsedResponse.choices[0];
+      const content = firstChoice?.message?.content;
+      if (typeof content !== 'string' || !content.trim()) {
+        // 语义失败单列：思考/输出预算耗尽导致 content 为空（finish_reason=length）。
+        // 可重试，且重试时关闭思考（定向调整，而非整包翻倍 maxTokens）。
+        const truncated = String(firstChoice?.finish_reason || '') === 'length';
+        throw new GatewayExecutionError(
+          truncated
+            ? `API returned empty content with finish_reason=length (reasoning consumed the output budget) from ${requestUrl}. Body preview: ${this.truncate(responseText, 300)}`
+            : `API returned an invalid chat completion envelope from ${requestUrl}. Body preview: ${this.truncate(responseText, 300)}`,
+          {
+            category: 'protocol',
+            code: truncated ? 'TRUNCATED_EMPTY_OUTPUT' : 'INVALID_RESPONSE_SCHEMA',
+            statusCode, requestUrl, contentType,
+            retryable: truncated
           }
         );
       }

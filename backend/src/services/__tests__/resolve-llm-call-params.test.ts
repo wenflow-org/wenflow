@@ -84,12 +84,11 @@ describe('resolveLlmGenerationParams (source-level single read path)', () => {
     expect(resolved.sources.model).toBe('runtime-override')
   })
 
-  it('prefers route model over prompt when skill explicitly configured a model (routeModelExplicit)', () => {
-    // skill_model_configs.model 显式指定时，skill 级模型优先于 prompt 继承的平台默认模型
+  it('模型绑定来自路由层：route 优先于 prompt 的 model 副本', () => {
+    // skill_model_configs 显式指定模型时（route.model），不再需要 routeModelExplicit 开关
     const resolved = resolveLlmGenerationParams({
       promptConfig: { model: 'deepseek-v4-flash', temperature: 0.7, maxTokens: 8000 },
       routeFallback: { model: 'agnes-3.0-flash', temperature: 0.7, maxTokens: 8000 },
-      routeModelExplicit: true,
     })
 
     expect(resolved.model).toBe('agnes-3.0-flash')
@@ -99,14 +98,21 @@ describe('resolveLlmGenerationParams (source-level single read path)', () => {
     expect(resolved.maxTokens).toBe(8000)
   })
 
-  it('keeps prompt model priority when route model is inherited (routeModelExplicit=false)', () => {
+  it('prompt.model 已废弃：即使 route 继承默认模型，也由 route 决定（不再被副本抢占）', () => {
     const resolved = resolveLlmGenerationParams({
       promptConfig: { model: 'deepseek-v4-flash', temperature: 0.7, maxTokens: 8000 },
-      routeFallback: { model: 'deepseek-v4-flash', temperature: 0.5, maxTokens: 2000 },
-      routeModelExplicit: false,
+      routeFallback: { model: 'platform-default-model', temperature: 0.5, maxTokens: 2000 },
     })
 
-    expect(resolved.model).toBe('deepseek-v4-flash')
+    expect(resolved.model).toBe('platform-default-model')
+    expect(resolved.sources.model).toBe('route-fallback')
+  })
+
+  it('prompt.model 仅在所有绑定来源都缺失时兜底', () => {
+    const resolved = resolveLlmGenerationParams({
+      promptConfig: { model: 'legacy-prompt-model', maxTokens: 2000 },
+    })
+    expect(resolved.model).toBe('legacy-prompt-model')
     expect(resolved.sources.model).toBe('active-prompt')
   })
 

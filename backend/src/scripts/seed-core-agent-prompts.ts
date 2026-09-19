@@ -319,7 +319,8 @@ async function createPromptSeedRecord(
       systemPrompt: seed.systemPrompt,
       temperature: seed.temperature,
       maxTokens: seed.maxTokens,
-      model: defaultModel || null,
+      // 提示词工件不承载模型绑定（模型只来自路由层；见 doc/MODEL_GATEWAY_DESIGN.md §4.9）
+      model: null,
       status: 'ACTIVE',
       createdBy,
       publishedAt: new Date(),
@@ -366,11 +367,12 @@ export function matchesSeedConfig(activePrompt: {
   maxTokens: number | null;
   model: string | null;
   metadata?: string | null;
-}, seed: CoreAgentPromptSeed, defaultModel: string): boolean {
+}, seed: CoreAgentPromptSeed, _defaultModel?: string): boolean {
+  // `model` 不参与比较：提示词工件已不承载模型绑定（见 doc/MODEL_GATEWAY_DESIGN.md §4.9），
+  // 历史行上的 model 副本不应触发/阻止重新 seed。
   return normalizePromptText(activePrompt.systemPrompt) === normalizePromptText(seed.systemPrompt)
     && Number(activePrompt.temperature ?? seed.temperature) === Number(seed.temperature)
     && Number(activePrompt.maxTokens ?? seed.maxTokens) === Number(seed.maxTokens)
-    && (!defaultModel || String(activePrompt.model || '') === defaultModel)
     && normalizeMetadataForCompare(activePrompt.metadata) === normalizeMetadataForCompare(seed.metadata);
 }
 
@@ -463,7 +465,8 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
           systemPrompt: seed.systemPrompt,
           temperature: seed.temperature,
           maxTokens: seed.maxTokens,
-          model: defaultModel || null,
+          // 提示词工件不承载模型绑定（模型只来自路由层；见 doc/MODEL_GATEWAY_DESIGN.md §4.9）
+          model: null,
           status: 'ACTIVE',
           createdBy: 'system-sync',
           publishedAt: new Date(),

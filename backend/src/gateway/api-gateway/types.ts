@@ -109,6 +109,8 @@ export interface ExecutionContext {
   runId?: string;
   requestPath?: string;
   abortSignal?: AbortSignal;
+  /** 降级来源模型：本次请求是作为 fallback 被发起的（不发给上游，仅用于遥测/日志） */
+  fallbackFrom?: string;
   /** 流式模式下逐段透传内容增量；与 request.stream 配合启用流式执行路径 */
   onStreamChunk?: (delta: string) => void;
   [key: string]: any;
