@@ -240,6 +240,7 @@ doc/*
 !doc/SKILL_DEVELOPMENT_GUIDE.md
 !doc/AGENT_SKILL_MANUAL.md
 !doc/UPGRADE_DIRECTION_20Q.md
+!doc/LEARNER_CENTER_AND_STATE_FUSION.md
 doc/local/
 
 # Playwright MCP 会话临时文件
