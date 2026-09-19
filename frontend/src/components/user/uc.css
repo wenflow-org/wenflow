@@ -10,7 +10,8 @@
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e3e9f4);
   border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
+  /* 归一到统一层级刻度（原为写死的双层阴影） */
+  box-shadow: var(--shadow-sm);
   padding: 20px 22px;
   min-width: 0;
 }
@@ -68,7 +69,7 @@
 }
 
 .uc-btn:hover:not(:disabled) {
-  border-color: rgba(52, 120, 246, 0.35);
+  border-color: color-mix(in srgb, var(--blue) 35%, transparent);
   color: var(--blue-deep, #1f57cc);
   transform: translateY(-1px);
 }
@@ -86,25 +87,25 @@
   border: 0;
   background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
   color: #fff;
-  box-shadow: 0 10px 22px rgba(52, 120, 246, 0.22);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 22%, transparent);
 }
 
 .uc-btn--primary:hover:not(:disabled) {
   color: #fff;
   border-color: transparent;
-  box-shadow: 0 14px 28px rgba(52, 120, 246, 0.34);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--blue) 34%, transparent);
 }
 
 .uc-btn--danger {
-  border-color: rgba(239, 117, 120, 0.4);
-  color: #c0454a;
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+  color: var(--red-ink);
   background: var(--surface, #fff);
 }
 
 .uc-btn--danger:hover:not(:disabled) {
-  border-color: rgba(239, 117, 120, 0.6);
-  color: #c0454a;
-  background: rgba(239, 117, 120, 0.06);
+  border-color: color-mix(in srgb, var(--red) 60%, transparent);
+  color: var(--red-ink);
+  background: color-mix(in srgb, var(--red) 6%, transparent);
 }
 
 .uc-btn--sm {
@@ -123,7 +124,7 @@
 }
 
 .uc-btn--link:hover:not(:disabled) {
-  background: rgba(52, 120, 246, 0.08);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
   color: var(--blue-deep, #1f57cc);
   transform: none;
 }
@@ -166,7 +167,7 @@
 }
 
 .uc-field--error .uc-field__input {
-  border-color: rgba(239, 117, 120, 0.6);
+  border-color: color-mix(in srgb, var(--red) 60%, transparent);
 }
 
 .uc-field--error .uc-field__input:focus {
@@ -175,7 +176,7 @@
 
 .uc-field__error {
   font-size: 11.5px;
-  color: #c0454a;
+  color: var(--red-ink);
   font-weight: 600;
 }
 
@@ -208,7 +209,7 @@ select.uc-field__input {
   border-radius: 12px;
   background: rgba(239, 117, 120, 0.08);
   border: 1px solid rgba(239, 117, 120, 0.3);
-  color: #c0454a;
+  color: var(--red-ink);
   font-size: 13px;
   font-weight: 600;
   flex-wrap: wrap;
@@ -258,7 +259,7 @@ select.uc-field__input {
 
 .uc-badge--ok { color: #1d7a4c; background: rgba(30, 158, 88, 0.1); }
 .uc-badge--warn { color: #b3540a; background: rgba(244, 170, 70, 0.14); }
-.uc-badge--bad { color: #c0454a; background: rgba(239, 117, 120, 0.1); }
+.uc-badge--bad { color: var(--red-ink); background: rgba(239, 117, 120, 0.1); }
 .uc-badge--info { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.1); }
 .uc-badge--muted { color: var(--faint, #67758f); background: rgba(103, 117, 143, 0.1); }
 
