@@ -238,7 +238,7 @@ onUnmounted(() => {
 .vn-btn--primary {
   color: #fff;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  box-shadow: 0 16px 34px rgba(52, 120, 246, 0.22);
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--blue) 22%, transparent);
 }
 .vn-btn--ghost {
   color: var(--ink);
@@ -271,14 +271,14 @@ onUnmounted(() => {
   height: 480px;
   top: 60px;
   right: -140px;
-  background: radial-gradient(circle, rgba(52, 120, 246, 0.34), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--blue) 34%, transparent), transparent 70%);
 }
 .vn-orb--b {
   width: 360px;
   height: 360px;
   top: 380px;
   left: -120px;
-  background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 20%, transparent), transparent 70%);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -316,7 +316,7 @@ main {
   width: fit-content;
   padding: 7px 12px;
   border-radius: 999px;
-  background: rgba(52, 120, 246, 0.09);
+  background: color-mix(in srgb, var(--blue) 9%, transparent);
   color: var(--blue-deep);
   font-size: 12px;
   font-weight: 900;
@@ -356,7 +356,7 @@ main {
   padding: 32px;
   border-radius: 28px;
   background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
-  border: 1px solid rgba(52, 120, 246, 0.16);
+  border: 1px solid color-mix(in srgb, var(--blue) 16%, transparent);
   box-shadow: 0 28px 80px rgba(58, 101, 197, 0.12);
   backdrop-filter: blur(14px);
   overflow: hidden;
@@ -372,7 +372,7 @@ main {
   font-size: 120px;
   line-height: 1;
   font-weight: 900;
-  color: rgba(52, 120, 246, 0.08);
+  color: color-mix(in srgb, var(--blue) 8%, transparent);
   pointer-events: none;
 }
 .vn-hero__aside span:not(.vn-hero__quote):not(.vn-hero__seal) {
@@ -391,7 +391,7 @@ main {
   gap: 6px;
   margin-top: 6px;
   padding-top: 14px;
-  border-top: 1px dashed rgba(52, 120, 246, 0.2);
+  border-top: 1px dashed color-mix(in srgb, var(--blue) 20%, transparent);
 }
 .vn-hero__seal i {
   width: 7px;
@@ -623,7 +623,7 @@ main {
   height: 300px;
   transform: translateX(50%);
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(52, 120, 246, 0.18), transparent 68%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--blue) 18%, transparent), transparent 68%);
   filter: blur(40px);
   pointer-events: none;
 }

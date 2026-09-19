@@ -260,7 +260,7 @@ html, body {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
 [data-theme='dark'] .tutor__resume {
-  background: linear-gradient(135deg, rgba(77, 139, 248, 0.14), rgba(141, 107, 255, 0.08));
+  background: linear-gradient(135deg, rgba(77, 139, 248, 0.14), color-mix(in srgb, var(--accent) 8%, transparent));
   border-color: rgba(77, 139, 248, 0.35);
 }
 [data-theme='dark'] .tutor__resume-restart {
@@ -354,14 +354,14 @@ html, body {
   font-size: 14px;
   font-family: inherit;
   font-weight: 700;
-  box-shadow: 0 10px 22px rgba(52, 120, 246, 0.3);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent);
   cursor: pointer;
   text-decoration: none;
   transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
 }
 .v2-page .btn-primary:not(:disabled):hover {
   transform: translateY(-2px);
-  box-shadow: 0 14px 28px rgba(52, 120, 246, 0.34);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--blue) 34%, transparent);
 }
 .v2-page .btn-primary:not(:disabled):active {
   transform: translateY(0) scale(0.98);
@@ -386,7 +386,7 @@ html, body {
   transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 .v2-page .btn-ghost:not(:disabled):hover {
-  border-color: rgba(52, 120, 246, 0.35);
+  border-color: color-mix(in srgb, var(--blue) 35%, transparent);
   color: var(--blue-deep);
   transform: translateY(-2px);
 }
@@ -400,8 +400,8 @@ html, body {
   gap: 8px;
   padding: 12px 16px;
   border-radius: 12px;
-  background: rgba(239, 117, 120, 0.08);
-  border: 1px solid rgba(239, 117, 120, 0.3);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
   color: var(--red-ink);
   font-size: 13px;
   font-weight: 600;
@@ -456,7 +456,7 @@ html, body {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  border: 4px solid rgba(52, 120, 246, 0.15);
+  border: 4px solid color-mix(in srgb, var(--blue) 15%, transparent);
   border-top-color: var(--blue);
   animation: v2-spin 0.9s linear infinite;
 }
@@ -621,7 +621,7 @@ html[data-theme='dark'] .tip__icon { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); 
 html[data-theme='dark'] .quick__item { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
 html[data-theme='dark'] .sheet { box-shadow: -24px 0 60px rgba(0, 0, 0, 0.45); }
 html[data-theme='dark'] .composer__box { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28); }
-html[data-theme='dark'] .composer__box--active { box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.18), 0 6px 20px rgba(0, 0, 0, 0.28); }
+html[data-theme='dark'] .composer__box--active { box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent), 0 6px 20px rgba(0, 0, 0, 0.28); }
 html[data-theme='dark'] .proposal { box-shadow: 0 28px 70px rgba(0, 0, 0, 0.45); }
 html[data-theme='dark'] .msg__avatar { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
 html[data-theme='dark'] .login-gate__logo { box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4); }

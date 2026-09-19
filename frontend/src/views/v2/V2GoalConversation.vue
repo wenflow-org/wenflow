@@ -816,21 +816,21 @@ const scenePool = [
     title: '用 Python 自动化 Excel 报表',
     desc: '每天省下的复制粘贴时间，一周就能看到',
     seed: '我想用 Python 自动化处理 Excel 报表，每天能节省时间',
-    bg: 'rgba(52,120,246,.12)', ink: '#1f57cc',
+    bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>'
   },
   {
     title: '提升职场沟通表达',
     desc: '从下一次周会发言开始练，场景化拆解',
     seed: '我想学会沟通技巧，提高职场表达和人际交往能力',
-    bg: 'rgba(141,107,255,.13)', ink: '#6b4ae0',
+    bg: 'color-mix(in srgb, var(--accent) 13%, transparent)', ink: 'var(--purple-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM7 9h10v2H7V9zm6 5H7v-2h6v2zm4-6H7V6h10v2z"/></svg>'
   },
   {
     title: '用 AI 做自媒体副业',
     desc: '围绕你的账号定位，搭一条内容生产流程',
     seed: '我想做自媒体副业，用 AI 工具提高内容创作效率',
-    bg: 'rgba(67,176,216,.14)', ink: '#3593b5',
+    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: '#3593b5',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h4a2 2 0 0 1 2 2v1.28c.6.35 1 .98 1 1.72a2 2 0 0 1-1 1.73V17a2 2 0 0 1-2 2h-4v1.27c.6.34 1 .99 1 1.73a2 2 0 1 1-4 0c0-.74.4-1.39 1-1.73V19H7a2 2 0 0 1-2-2v-3.27A2 2 0 0 1 4 12c0-.74.4-1.38 1-1.72V9a2 2 0 0 1 2-2h4V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/></svg>'
   },
   {
@@ -844,14 +844,14 @@ const scenePool = [
     title: '用 SQL 做数据分析',
     desc: '能从数据库里查数、会看数、会讲数',
     seed: '我想学会 SQL 数据分析，能自己从数据库里查数据',
-    bg: 'rgba(67,176,216,.14)', ink: '#2a8fb3',
+    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: '#2a8fb3',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2C7.6 2 4 3.8 4 6v12c0 2.2 3.6 4 8 4s8-1.8 8-4V6c0-2.2-3.6-4-8-4zm0 2c3.9 0 6 1.5 6 2s-2.1 2-6 2-6-1.5-6-2 2.1-2 6-2zm6 14c0 .5-2.1 2-6 2s-6-1.5-6-2v-3.2C7.7 17.5 9.8 18 12 18s4.3-.5 6-1.2V18zm0-5.5c0 .5-2.1 2-6 2s-6-1.5-6-2V9.3C7.7 10.5 9.8 11 12 11s4.3-.5 6-1.2V12.5z"/></svg>'
   },
   {
     title: '掌握 Git 版本控制',
     desc: '提交、分支、回滚，代码管理不再手忙脚乱',
     seed: '我想掌握 Git 版本控制，工作中代码管理不再混乱',
-    bg: 'rgba(244,170,70,.14)', ink: '#c97f1e',
+    bg: 'color-mix(in srgb, var(--amber) 14%, transparent)', ink: '#c97f1e',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 2a3 3 0 0 0-1 5.83v8.34A3.001 3.001 0 1 0 9 16.17V12h4a3 3 0 0 0 3-3V7.83A3 3 0 1 0 14 8v1a1 1 0 0 1-1 1H8V7.83A3 3 0 0 0 7 2zm0 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm10 8a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM7 16a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>'
   },
   {
@@ -865,7 +865,7 @@ const scenePool = [
     title: '搭建个人知识库',
     desc: '学过的内容沉淀下来，能真正用起来',
     seed: '我想搭建自己的知识管理系统，学过的内容能真正用起来',
-    bg: 'rgba(52,120,246,.12)', ink: '#1f57cc',
+    bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 4h7v7H4V4zm2 2v3h3V6H6zm7-2h7v7h-7V4zm2 2v3h3V6h-3zM4 13h7v7H4v-7zm2 2v3h3v-3H6zm7-2h7v7h-7v-7zm2 2v3h3v-3h-3z"/></svg>'
   },
   {
@@ -879,21 +879,21 @@ const scenePool = [
     title: '学习时间管理',
     desc: '一天的事排得明明白白，告别忙乱',
     seed: '我想学习时间管理，把每天的工作安排得有条不紊',
-    bg: 'rgba(67,176,216,.14)', ink: '#3593b5',
+    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: '#3593b5',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-12h-2v6l5 3 1-1.6-4-2.4V8z"/></svg>'
   },
   {
     title: '学会基础理财规划',
     desc: '工资存得住、钱能生钱，从记账开始',
     seed: '我想学会基础理财规划，工资能存得住、钱能生钱',
-    bg: 'rgba(244,170,70,.14)', ink: '#c97f1e',
+    bg: 'color-mix(in srgb, var(--amber) 14%, transparent)', ink: '#c97f1e',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M21 7H6a1 1 0 0 1 0-2h13V3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zm-6 7.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>'
   },
   {
     title: '学会写技术文档',
     desc: '结构、示例、可读性，让文档真正有人读',
     seed: '我想学会写技术文档，把知识表达清楚让别人能看懂',
-    bg: 'rgba(141,107,255,.13)', ink: '#6b4ae0',
+    bg: 'color-mix(in srgb, var(--accent) 13%, transparent)', ink: 'var(--purple-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M21 4H3a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1zM7 6h12v2H7V6zm0 5h12v2H7v-2zm0 5h8v2H7v-2z"/></svg>'
   }
 ];
@@ -982,18 +982,18 @@ function shuffleScenes() {
 .resume {
   display: inline-flex; align-items: center; gap: 10px;
   padding: 11px 16px;
-  background: linear-gradient(135deg, rgba(52, 120, 246, 0.07), rgba(141, 107, 255, 0.05));
-  border: 1px solid rgba(52, 120, 246, 0.25);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 7%, transparent), color-mix(in srgb, var(--accent) 5%, transparent));
+  border: 1px solid color-mix(in srgb, var(--blue) 25%, transparent);
   border-radius: 14px;
   font: inherit; text-align: left; cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
-.resume:hover { border-color: rgba(52, 120, 246, 0.5); box-shadow: 0 8px 20px rgba(52, 120, 246, 0.12); }
+.resume:hover { border-color: color-mix(in srgb, var(--blue) 50%, transparent); box-shadow: 0 8px 20px color-mix(in srgb, var(--blue) 12%, transparent); }
 .resume__dot {
   width: 9px; height: 9px; border-radius: 50%;
   background: var(--blue);
-  box-shadow: 0 0 0 4px rgba(52, 120, 246, 0.18);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 18%, transparent);
   flex: 0 0 auto;
   animation: pulse 1.6s ease-in-out infinite;
 }
@@ -1014,8 +1014,8 @@ function shuffleScenes() {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 14px;
   border-radius: 12px;
-  background: rgba(239, 117, 120, 0.08);
-  border: 1px solid rgba(239, 117, 120, 0.3);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
   color: var(--red, #c0454a);
   font-size: 13px; font-weight: 600;
 }
@@ -1050,8 +1050,8 @@ function shuffleScenes() {
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
 .scene-card:hover:not(:disabled) {
-  border-color: rgba(52, 120, 246, 0.45);
-  box-shadow: 0 10px 26px rgba(52, 120, 246, 0.12);
+  border-color: color-mix(in srgb, var(--blue) 45%, transparent);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--blue) 12%, transparent);
   transform: translateY(-1px);
 }
 .scene-card:disabled { opacity: .55; cursor: default; }
@@ -1081,8 +1081,8 @@ function shuffleScenes() {
 }
 /* 有内容/聚焦：柔和提示 —— 细蓝边 + 淡外发光（替代原整圈硬蓝边） */
 .composer__box--active {
-  border-color: rgba(52, 120, 246, 0.55);
-  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12), 0 6px 20px rgba(23, 32, 51, 0.06);
+  border-color: color-mix(in srgb, var(--blue) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent), 0 6px 20px rgba(23, 32, 51, 0.06);
 }
 .composer__textarea {
   flex: 1;
@@ -1099,7 +1099,7 @@ function shuffleScenes() {
   display: grid; place-items: center;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff; cursor: pointer;
-  box-shadow: 0 8px 16px rgba(52, 120, 246, 0.3);
+  box-shadow: 0 8px 16px color-mix(in srgb, var(--blue) 30%, transparent);
   flex: 0 0 auto;
   border: 0;
   transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
@@ -1318,7 +1318,7 @@ function shuffleScenes() {
 }
 .msg__edit-input {
   width: 100%;
-  border: 1px solid rgba(52, 120, 246, 0.4);
+  border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
   border-radius: 12px;
   padding: 9px 12px;
   font: inherit; font-size: 13.5px; line-height: 1.6;
@@ -1357,7 +1357,7 @@ function shuffleScenes() {
 .msg__bubble--html :deep(ul), .msg__bubble--html :deep(ol) { margin: 4px 0; padding-left: 18px; }
 .msg__bubble--html :deep(li) { margin: 2px 0; }
 .msg__bubble--html :deep(code) {
-  background: rgba(52, 120, 246, 0.1);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
   color: var(--blue-deep);
   padding: 1px 6px; border-radius: 6px;
   font-size: 12.5px;
@@ -1435,7 +1435,7 @@ function shuffleScenes() {
   padding: 9px 12px;
   border-radius: 10px;
   border: 1px solid transparent;
-  background: rgba(52, 120, 246, 0.05);
+  background: color-mix(in srgb, var(--blue) 5%, transparent);
   color: var(--muted);
   font: inherit;
   font-size: 13px;
@@ -1444,16 +1444,16 @@ function shuffleScenes() {
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 .replies-panel__option:hover {
-  background: rgba(52, 120, 246, 0.11);
+  background: color-mix(in srgb, var(--blue) 11%, transparent);
   color: var(--ink);
 }
 .replies-panel__option--active {
-  border-color: rgba(52, 120, 246, 0.45);
-  background: rgba(52, 120, 246, 0.1);
+  border-color: color-mix(in srgb, var(--blue) 45%, transparent);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
   color: var(--blue-deep);
 }
 .replies-panel__option--active:hover {
-  background: rgba(52, 120, 246, 0.16);
+  background: color-mix(in srgb, var(--blue) 16%, transparent);
 }
 /* P2-14：历史轮次的快捷补充 chip（随消息渲染，点选填入输入框；选中态跟随输入草稿） */
 .msg__replies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
@@ -1477,7 +1477,7 @@ function shuffleScenes() {
   border-radius: 50%;
   background: var(--blue);
   flex: none;
-  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 15%, transparent);
 }
 .replies-panel__check {
   width: 16px; height: 16px;
@@ -1516,7 +1516,7 @@ function shuffleScenes() {
   max-height: 100%;
   overflow-y: auto;
   background: var(--surface);
-  border: 1px solid rgba(52, 120, 246, 0.22);
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
   border-radius: 20px;
   box-shadow: 0 28px 70px rgba(23, 32, 51, 0.16);
   padding: 26px 28px;
@@ -1529,7 +1529,7 @@ function shuffleScenes() {
   padding: 12px 14px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--surface) 92%, var(--blue) 8%);
-  border: 1px solid rgba(52, 120, 246, 0.2);
+  border: 1px solid color-mix(in srgb, var(--blue) 20%, transparent);
   display: grid; gap: 6px;
 }
 .proposal__stream-label { font-size: 11px; font-weight: 800; color: var(--blue-deep); letter-spacing: .04em; }
@@ -1544,14 +1544,14 @@ function shuffleScenes() {
   display: inline-flex; align-items: center; gap: 6px;
   font: inherit; font-size: 12px; font-weight: 700;
   color: var(--blue-deep);
-  background: rgba(52, 120, 246, 0.08);
-  border: 1px solid rgba(52, 120, 246, 0.35);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
   border-radius: 999px;
   padding: 6px 14px;
   cursor: pointer;
   transition: background 0.15s ease;
 }
-.proposal__stop:hover { background: rgba(52, 120, 246, 0.14); }
+.proposal__stop:hover { background: color-mix(in srgb, var(--blue) 14%, transparent); }
 .proposal__eyebrow { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
 .proposal__title { margin: 0; font-size: 21px; letter-spacing: -0.01em; }
 .proposal__generating-note { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.7; max-width: 44ch; }
@@ -1628,7 +1628,7 @@ function shuffleScenes() {
   padding: 11px 22px; border-radius: 12px;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff; font-size: 14px; font-weight: 700;
-  box-shadow: 0 10px 22px rgba(52, 120, 246, 0.3);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent);
   cursor: pointer; text-decoration: none;
 }
 .btn-primary--lg { padding: 13px 26px; font-size: 15px; }
@@ -1649,8 +1649,8 @@ function shuffleScenes() {
 }
 .proposal__supplement { display: grid; gap: 12px; width: 100%; }
 .proposal__supplement-input {
-  border: 1px solid rgba(244, 170, 70, 0.45);
-  background: rgba(244, 170, 70, 0.07);
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  background: color-mix(in srgb, var(--amber) 7%, transparent);
   border-radius: 12px;
   padding: 12px 14px;
   font: inherit; font-size: 13px; color: var(--ink);
@@ -1661,7 +1661,7 @@ function shuffleScenes() {
 /* 生成中 */
 .spinner {
   width: 44px; height: 44px; border-radius: 50%;
-  border: 4px solid rgba(52, 120, 246, 0.15);
+  border: 4px solid color-mix(in srgb, var(--blue) 15%, transparent);
   border-top-color: var(--blue);
   animation: spin 0.9s linear infinite;
 }

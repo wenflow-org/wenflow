@@ -175,12 +175,12 @@ onUnmounted(() => {
   transition: background 0.2s var(--ease), color 0.2s var(--ease);
 }
 .mknav__link:hover {
-  background: rgba(52, 120, 246, 0.08);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
   color: var(--blue-deep);
 }
 .mknav__link.is-on {
   color: var(--blue-deep);
-  background: rgba(52, 120, 246, 0.1);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
 }
 .mknav__acts {
   display: flex;
@@ -210,7 +210,7 @@ onUnmounted(() => {
 .mknav__btn--primary {
   color: #fff;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  box-shadow: 0 16px 34px rgba(52, 120, 246, 0.22);
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--blue) 22%, transparent);
 }
 .mknav__btn--ghost {
   color: var(--ink);
@@ -286,7 +286,7 @@ onUnmounted(() => {
   }
   .mknav__drawer .mknav__link.is-on {
     color: var(--blue-deep);
-    background: rgba(52, 120, 246, 0.1);
+    background: color-mix(in srgb, var(--blue) 10%, transparent);
   }
   [data-theme='dark'] .mknav__drawer .mknav__link.is-on {
     background: rgba(77, 139, 248, 0.18);

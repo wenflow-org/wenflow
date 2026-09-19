@@ -83,8 +83,8 @@ const isDark = useIsDark();
 .auth__bg {
   position: absolute; inset: 0; pointer-events: none;
   background:
-    radial-gradient(560px 300px at 12% -4%, rgba(52, 120, 246, 0.07), transparent 60%),
-    radial-gradient(480px 260px at 88% 104%, rgba(141, 107, 255, 0.06), transparent 60%);
+    radial-gradient(560px 300px at 12% -4%, color-mix(in srgb, var(--blue) 7%, transparent), transparent 60%),
+    radial-gradient(480px 260px at 88% 104%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 60%);
   overflow: hidden;
 }
 .auth__bg::before,
@@ -99,12 +99,12 @@ const isDark = useIsDark();
 .auth__bg::before {
   width: 420px; height: 420px;
   top: -90px; right: -120px;
-  background: radial-gradient(circle, rgba(52, 120, 246, 0.32), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--blue) 32%, transparent), transparent 70%);
 }
 .auth__bg::after {
   width: 340px; height: 340px;
   bottom: -70px; left: -110px;
-  background: radial-gradient(circle, rgba(141, 107, 255, 0.24), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 24%, transparent), transparent 70%);
 }
 @media (prefers-reduced-motion: no-preference) {
   .auth__bg::before { animation: auth-orb-a 24s ease-in-out infinite; }
@@ -158,8 +158,8 @@ const isDark = useIsDark();
 /* 右：演示（柔和蓝调分区） */
 .auth__demo-side {
   background:
-    radial-gradient(320px 220px at 90% 0%, rgba(141, 107, 255, 0.1), transparent 65%),
-    linear-gradient(160deg, rgba(52, 120, 246, 0.07), rgba(67, 176, 216, 0.04));
+    radial-gradient(320px 220px at 90% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 65%),
+    linear-gradient(160deg, color-mix(in srgb, var(--blue) 7%, transparent), color-mix(in srgb, var(--cyan) 4%, transparent));
   border-left: 1px solid var(--line);
   padding: 26px 26px 28px;
   display: grid;
@@ -184,7 +184,7 @@ const isDark = useIsDark();
   padding: 9px 13px;
   border-radius: 14px 14px 4px 14px;
   max-width: 88%;
-  box-shadow: 0 6px 14px rgba(52, 120, 246, 0.22);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--blue) 22%, transparent);
 }
 .demo__msg--ai { display: flex; gap: 9px; align-items: flex-start; }
 .demo__msg--ai > div {
@@ -208,8 +208,8 @@ const isDark = useIsDark();
 }
 .demo__chip--on {
   color: var(--blue-deep);
-  border-color: rgba(52, 120, 246, 0.4);
-  background: rgba(52, 120, 246, 0.07);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+  background: color-mix(in srgb, var(--blue) 7%, transparent);
 }
 
 .demo__panel {
@@ -236,7 +236,7 @@ const isDark = useIsDark();
 .mark--done { background: var(--mk-green-fill, #15803d); border: 0; color: #fff; }
 .mark--asking { border: 2px solid var(--blue); }
 .demo__field--asking {
-  background: rgba(52, 120, 246, 0.06);
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
   border-radius: 8px;
   margin: -3px -6px;
   padding: 3px 6px;
@@ -289,8 +289,8 @@ const isDark = useIsDark();
   animation: auth-ask 2.2s ease-in-out 2.4s infinite;
 }
 @keyframes auth-ask {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(52, 120, 246, 0.3); }
-  50% { box-shadow: 0 0 0 5px rgba(52, 120, 246, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 30%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--blue) 0%, transparent); }
 }
 @media (prefers-reduced-motion: reduce) {
   .anim-msg, .anim-field, .anim-field .mark--done { animation: none; opacity: 1; transform: none; }
@@ -343,7 +343,7 @@ const isDark = useIsDark();
 [data-theme='dark'] .mark { border-color: var(--line); }
 [data-theme='dark'] .auth__demo-side {
   background:
-    radial-gradient(320px 220px at 90% 0%, rgba(141, 107, 255, 0.12), transparent 65%),
-    linear-gradient(160deg, rgba(52, 120, 246, 0.08), rgba(67, 176, 216, 0.05));
+    radial-gradient(320px 220px at 90% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 65%),
+    linear-gradient(160deg, color-mix(in srgb, var(--blue) 8%, transparent), color-mix(in srgb, var(--cyan) 5%, transparent));
 }
 </style>

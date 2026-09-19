@@ -208,10 +208,10 @@ function formatDate(d?: string | Date) {
 }
 
 function rarityOf(xp: number): { label: string; cls: string; color: string } {
-  if (xp >= 200) return { label: '史诗', cls: 'rarity--epic', color: '#8d6bff' }
-  if (xp >= 100) return { label: '稀有', cls: 'rarity--rare', color: '#3478f6' }
-  if (xp >= 50) return { label: '精良', cls: 'rarity--uncommon', color: '#1e9e58' }
-  return { label: '普通', cls: 'rarity--common', color: '#67758f' }
+  if (xp >= 200) return { label: '史诗', cls: 'rarity--epic', color: 'var(--accent)' }
+  if (xp >= 100) return { label: '稀有', cls: 'rarity--rare', color: 'var(--blue)' }
+  if (xp >= 50) return { label: '精良', cls: 'rarity--uncommon', color: 'var(--green)' }
+  return { label: '普通', cls: 'rarity--common', color: 'var(--mk-faint)' }
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -372,10 +372,10 @@ onMounted(load);
   padding: 2px 7px; border-radius: 999px;
   letter-spacing: 0.3px;
 }
-.rarity--common { color: #67758f; background: rgba(103,117,143,0.1); }
+.rarity--common { color: var(--mk-faint); background: rgba(103,117,143,0.1); }
 .rarity--uncommon { color: var(--green-ink); background: rgba(30,158,88,0.1); }
-.rarity--rare { color: #3478f6; background: rgba(52,120,246,0.1); }
-.rarity--epic { color: #8d6bff; background: rgba(141,107,255,0.12); }
+.rarity--rare { color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+.rarity--epic { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 
 /* ── Badge ── */
 .ach-card__badge { font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; }
@@ -421,7 +421,7 @@ onMounted(load);
 .ach__loading { display: grid; justify-items: center; gap: 12px; padding: 64px 0; color: var(--faint); font-size: 13px; }
 .spinner {
   width: 36px; height: 36px; border-radius: 50%;
-  border: 4px solid rgba(52, 120, 246, 0.15);
+  border: 4px solid color-mix(in srgb, var(--blue) 15%, transparent);
   border-top-color: var(--blue, #3478f6);
   animation: ach-spin 0.9s linear infinite;
 }
@@ -430,8 +430,8 @@ onMounted(load);
   display: flex; align-items: center; gap: 8px;
   padding: 12px 16px;
   border-radius: 12px;
-  background: rgba(239, 117, 120, 0.08);
-  border: 1px solid rgba(239, 117, 120, 0.3);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
   color: var(--red, #c0454a);
   font-size: 13px; font-weight: 600;
 }

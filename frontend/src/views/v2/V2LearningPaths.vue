@@ -92,7 +92,7 @@
             <!-- generating：生成中 -->
             <template v-else-if="card.kind === 'generating'">
               <div class="pcard__generating">
-                <span class="spinner--sm spinner" style="border-color: rgba(67,176,216,.3); border-top-color: #43b0d8;"></span>
+                <span class="spinner--sm spinner" style="border-color: color-mix(in srgb, var(--cyan) 30%, transparent); border-top-color: var(--cyan);"></span>
                 <span>{{ card.phaseText }}</span>
               </div>
               <div class="pcard__skeleton"><i style="width: 76%"></i><i style="width: 52%"></i><i style="width: 64%"></i></div>
@@ -435,7 +435,7 @@ onBeforeUnmount(() => {
   padding: 11px 22px; border-radius: 12px;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff; font-size: 14px; font-weight: 700;
-  box-shadow: 0 10px 22px rgba(52, 120, 246, 0.3);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent);
   cursor: pointer; text-decoration: none;
 }
 .btn-ghost {
@@ -468,7 +468,7 @@ onBeforeUnmount(() => {
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
   cursor: pointer;
 }
-.pcard:hover { border-color: rgba(52, 120, 246, 0.3); box-shadow: 0 14px 34px rgba(23, 32, 51, 0.09); transform: translateY(-1px); }
+.pcard:hover { border-color: color-mix(in srgb, var(--blue) 30%, transparent); box-shadow: 0 14px 34px rgba(23, 32, 51, 0.09); transform: translateY(-1px); }
 /* 状态色侧条 */
 .pcard::before {
   content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
@@ -479,7 +479,7 @@ onBeforeUnmount(() => {
 .pcard--generating::before { background: var(--cyan); }
 .pcard--failed::before { background: linear-gradient(180deg, var(--red), var(--amber)); }
 .pcard--generating { background: linear-gradient(180deg, rgba(67, 176, 216, 0.04), var(--surface) 55%); }
-.pcard--failed { border-color: rgba(239, 117, 120, 0.3); }
+.pcard--failed { border-color: color-mix(in srgb, var(--red) 30%, transparent); }
 .pcard__head { display: flex; align-items: center; gap: 12px; }
 .pcard__thumb {
   width: 36px; height: 36px; border-radius: 11px;
@@ -489,7 +489,7 @@ onBeforeUnmount(() => {
 }
 .pcard--ready .pcard__thumb { background: linear-gradient(135deg, var(--blue), var(--cyan)); }
 .pcard--completed .pcard__thumb { background: linear-gradient(135deg, var(--green), #58c98f); }
-.pcard--generating .pcard__thumb { background: linear-gradient(135deg, #43b0d8, #7cc7e2); }
+.pcard--generating .pcard__thumb { background: linear-gradient(135deg, var(--cyan), #7cc7e2); }
 .pcard--failed .pcard__thumb { background: linear-gradient(135deg, var(--red), var(--amber)); }
 .pcard__body { flex: 1; min-width: 0; }
 .pcard__head-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
@@ -548,8 +548,8 @@ onBeforeUnmount(() => {
 @keyframes paths-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .pcard__fail-reason {
   font-size: 12.5px; line-height: 1.6; color: var(--red, #c0454a);
-  background: rgba(239, 117, 120, 0.07);
-  border: 1px dashed rgba(239, 117, 120, 0.35);
+  background: color-mix(in srgb, var(--red) 7%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--red) 35%, transparent);
   border-radius: 10px; padding: 9px 12px;
 }
 /* 失败：原因区弹性拉伸，重试按钮压底（与 ready 卡内容高度对齐） */
@@ -563,7 +563,7 @@ onBeforeUnmount(() => {
 }
 .empty__illus { display: flex; gap: 6px; }
 .empty__illus span { width: 26px; height: 8px; border-radius: 99px; background: #e7edf7; }
-.empty__illus span:nth-child(2) { background: rgba(52, 120, 246, 0.3); }
+.empty__illus span:nth-child(2) { background: color-mix(in srgb, var(--blue) 30%, transparent); }
 
 .toast {
   position: fixed; top: 76px; right: 24px; z-index: 50;
@@ -621,8 +621,8 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; gap: 10px;
   padding: 11px 15px;
   border-radius: 13px;
-  background: rgba(52, 120, 246, 0.07);
-  border: 1px solid rgba(52, 120, 246, 0.25);
+  background: color-mix(in srgb, var(--blue) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 25%, transparent);
   color: var(--blue-deep);
   font-size: 13px; font-weight: 600;
 }

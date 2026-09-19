@@ -567,7 +567,7 @@ onBeforeUnmount(() => {
   padding: 4px 6px;
   border-radius: 6px;
 }
-.nc__more:hover, .nc__readall:hover { background: rgba(52, 120, 246, 0.08); }
+.nc__more:hover, .nc__readall:hover { background: color-mix(in srgb, var(--blue) 8%, transparent); }
 
 /* AI 任务 */
 .nc__section { padding: 10px 8px; }
@@ -710,13 +710,13 @@ onBeforeUnmount(() => {
 .nc__retry {
   font: inherit; font-size: 12px; font-weight: 700;
   color: var(--blue-deep, #1f57cc);
-  background: rgba(52, 120, 246, 0.08);
-  border: 1px solid rgba(52, 120, 246, 0.35);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
   border-radius: 999px;
   padding: 5px 14px;
   cursor: pointer;
 }
-.nc__retry:hover { background: rgba(52, 120, 246, 0.14); }
+.nc__retry:hover { background: color-mix(in srgb, var(--blue) 14%, transparent); }
 
 /* ================= 暗色模式 ================= */
 [data-theme='dark'] .nc__bell { color: var(--muted, #9aa8bf); }

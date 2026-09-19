@@ -452,13 +452,13 @@ onMounted(() => {
   color: var(--blue-deep, #1f57cc);
   text-decoration: none;
   padding: 5px 12px;
-  border: 1px solid rgba(52, 120, 246, 0.4);
-  background: rgba(52, 120, 246, 0.06);
+  border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
   border-radius: 999px;
   white-space: nowrap;
   transition: background 0.15s ease;
 }
-.history__resume:hover { background: rgba(52, 120, 246, 0.12); }
+.history__resume:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 
 .history__feedback {
   font-size: 12px; font-weight: 800;

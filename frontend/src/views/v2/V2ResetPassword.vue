@@ -161,8 +161,8 @@ function goLogin() {
   box-sizing: border-box;
 }
 .field__input:focus {
-  border-color: rgba(52, 120, 246, 0.55);
-  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12);
+  border-color: color-mix(in srgb, var(--blue) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
 }
 .field__error { font-size: 11.5px; color: var(--red-ink); font-weight: 600; }
 
@@ -180,8 +180,8 @@ function goLogin() {
   gap: 8px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: rgba(239, 117, 120, 0.08);
-  border: 1px solid rgba(239, 117, 120, 0.3);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
   color: var(--red-ink);
   font-size: 13px;
   font-weight: 600;

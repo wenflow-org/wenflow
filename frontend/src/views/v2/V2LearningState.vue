@@ -598,12 +598,12 @@ const guideActions = computed(() => {
     }
   };
   const iconFor = (to?: string) => {
-    if (to === 'path-detail') return { icon: svgLayers, bg: 'rgba(52,120,246,.12)', ink: '#1f57cc' };
-    if (to === 'achievements') return { icon: svgMedal2, bg: 'rgba(141,107,255,.13)', ink: '#6b4ae0' };
-    if (to === 'create-goal') return { icon: svgPlus, bg: 'rgba(67,176,216,.14)', ink: '#3593b5' };
-    if (to === 'learning-state') return { icon: svgBulb, bg: 'rgba(244,170,70,.16)', ink: '#b3540a' };
-    if (to === 'continue-learning') return { icon: svgPlay, bg: 'rgba(49,177,111,.12)', ink: '#1d7a4c' };
-    return { icon: svgHome, bg: 'rgba(52,120,246,.12)', ink: '#1f57cc' };
+    if (to === 'path-detail') return { icon: svgLayers, bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)' };
+    if (to === 'achievements') return { icon: svgMedal2, bg: 'color-mix(in srgb, var(--accent) 13%, transparent)', ink: 'var(--purple-ink)' };
+    if (to === 'create-goal') return { icon: svgPlus, bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: '#3593b5' };
+    if (to === 'learning-state') return { icon: svgBulb, bg: 'color-mix(in srgb, var(--amber) 16%, transparent)', ink: 'var(--amber-ink)' };
+    if (to === 'continue-learning') return { icon: svgPlay, bg: 'rgba(49,177,111,.12)', ink: 'var(--green-ink)' };
+    return { icon: svgHome, bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)' };
   };
   const seen = new Set<string>();
   return list
@@ -635,8 +635,8 @@ const warningRows = computed(() =>
       title: w.title || '学习预警',
       message: w.message || w.suggestion || '',
       level: isCritical ? 'critical' : 'warning',
-      bg: isCritical ? 'rgba(239,117,120,.12)' : 'rgba(244,170,70,.14)',
-      ink: isCritical ? '#c0454a' : '#b3540a',
+      bg: isCritical ? 'color-mix(in srgb, var(--red) 12%, transparent)' : 'color-mix(in srgb, var(--amber) 14%, transparent)',
+      ink: isCritical ? 'var(--red-ink)' : 'var(--amber-ink)',
       icon: svgWarn
     };
   })
@@ -652,7 +652,7 @@ const suggestionCards = computed(() => {
       title: '节奏建议',
       message: sug.message + (sug.action ? `（${sug.action}）` : ''),
       level: sug.level || 'info',
-      bg: 'rgba(52,120,246,.12)', ink: '#1f57cc', icon: svgBulb,
+      bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)', icon: svgBulb,
       cta: '去调整', to: '/learning-paths'
     });
   }
@@ -662,8 +662,8 @@ const suggestionCards = computed(() => {
       title: w.title || '学习预警',
       message: w.message || w.suggestion || '',
       level: isCritical ? 'critical' : 'warning',
-      bg: isCritical ? 'rgba(239,117,120,.12)' : 'rgba(244,170,70,.14)',
-      ink: isCritical ? '#c0454a' : '#b3540a',
+      bg: isCritical ? 'color-mix(in srgb, var(--red) 12%, transparent)' : 'color-mix(in srgb, var(--amber) 14%, transparent)',
+      ink: isCritical ? 'var(--red-ink)' : 'var(--amber-ink)',
       icon: svgWarn
     });
   }
@@ -788,12 +788,12 @@ onMounted(() => {
 .sug__body p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 .sug__cta {
   font-size: 12px; font-weight: 800; color: var(--blue-deep);
-  border: 1px solid rgba(52, 120, 246, 0.4);
-  background: rgba(52, 120, 246, 0.06);
+  border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
   padding: 7px 13px; border-radius: 999px;
   cursor: pointer; white-space: nowrap;
 }
-.sug__cta:hover { background: rgba(52, 120, 246, 0.12); }
+.sug__cta:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 .sug__done {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 12px; font-weight: 800; color: var(--green);
@@ -810,9 +810,9 @@ onMounted(() => {
 .legend li { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--muted); line-height: 1.6; }
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
 .dot--green { background: #31b16f; }
-.dot--blue { background: #3478f6; }
-.dot--purple { background: #8d6bff; }
-.dot--amber { background: #f4aa46; }
+.dot--blue { background: var(--blue); }
+.dot--purple { background: var(--accent); }
+.dot--amber { background: var(--amber); }
 
 @media (max-width: 900px) {
   .state__main { padding: 16px 14px 32px; }
@@ -830,17 +830,17 @@ onMounted(() => {
 .chart__retry {
   margin-top: 10px;
   font: inherit; font-size: 12px; font-weight: 800; color: var(--blue-deep);
-  border: 1px solid rgba(52, 120, 246, 0.4);
-  background: rgba(52, 120, 246, 0.06);
+  border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
   padding: 7px 16px; border-radius: 999px; cursor: pointer;
 }
-.chart__retry:hover { background: rgba(52, 120, 246, 0.12); }
+.chart__retry:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 .chart__empty {
   padding: 30px 0; text-align: center; color: var(--faint); font-size: 13px;
   border: 1px dashed var(--line); border-radius: 12px; background: var(--canvas, #fafcff);
 }
-.sug--critical { border-color: rgba(239, 117, 120, 0.35); }
-.sug--warning { border-color: rgba(244, 170, 70, 0.35); }
+.sug--critical { border-color: color-mix(in srgb, var(--red) 35%, transparent); }
+.sug--warning { border-color: color-mix(in srgb, var(--amber) 35%, transparent); }
 .state__main { width: 100%; }
 </style>
 
@@ -852,8 +852,8 @@ onMounted(() => {
 .guide__warn {
   display: flex; align-items: center; gap: 8px;
   font-size: 12.5px; font-weight: 600; color: var(--amber-ink);
-  background: rgba(244, 170, 70, 0.1);
-  border: 1px solid rgba(244, 170, 70, 0.3);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 30%, transparent);
   border-radius: 10px; padding: 9px 12px;
 }
 .guide__foot {
@@ -888,7 +888,7 @@ onMounted(() => {
 .dec__tag { font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
 .dec__tag--blue { color: var(--blue-ink); background: rgba(52, 120, 246, 0.1); }
 .dec__tag--purple { color: var(--purple-ink); background: rgba(141, 107, 255, 0.12); }
-.dec__tag--cyan { color: #3593b5; background: rgba(67, 176, 216, 0.12); }
+.dec__tag--cyan { color: #3593b5; background: color-mix(in srgb, var(--cyan) 12%, transparent); }
 .dec__tag--amber { color: var(--amber-ink); background: rgba(244, 170, 70, 0.14); }
 .dec__tag--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .dec__body { display: grid; gap: 6px; }
@@ -913,12 +913,12 @@ onMounted(() => {
   font-size: 12px; color: var(--muted);
 }
 .ff-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
-.ff-dot--fitness { background: #3478f6; }
-.ff-dot--fatigue { background: #8d6bff; }
+.ff-dot--fitness { background: var(--blue); }
+.ff-dot--fatigue { background: var(--accent); }
 .ff-dot--lsb { background: #31b16f; }
 .ff-dot--fresh { background: #31b16f; }
-.ff-dot--optimal { background: #3478f6; }
-.ff-dot--risk { background: #ef7578; }
+.ff-dot--optimal { background: var(--blue); }
+.ff-dot--risk { background: var(--red); }
 .ff-form-chip {
   margin-left: auto;
   font-size: 11.5px; font-weight: 800;
@@ -930,15 +930,15 @@ onMounted(() => {
 
 .ff-chart { width: 100%; }
 .ff-chart svg { display: block; width: 100%; height: auto; }
-.ff-bar { fill: rgba(52, 120, 246, 0.14); }
+.ff-bar { fill: color-mix(in srgb, var(--blue) 14%, transparent); }
 .ff-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.ff-line--fitness { stroke: #3478f6; }
-.ff-line--fatigue { stroke: #8d6bff; }
+.ff-line--fitness { stroke: var(--blue); }
+.ff-line--fatigue { stroke: var(--accent); }
 .ff-line--lsb { stroke: #31b16f; }
 .ff-cursor { stroke: color-mix(in srgb, var(--ink) 20%, transparent); stroke-width: 1; stroke-dasharray: 3 3; }
 .ff-pt { stroke: #fff; stroke-width: 2; }
-.ff-pt--fitness { fill: #3478f6; }
-.ff-pt--fatigue { fill: #8d6bff; }
+.ff-pt--fitness { fill: var(--blue); }
+.ff-pt--fatigue { fill: var(--accent); }
 .ff-pt--lsb { fill: #31b16f; }
 
 .ff-info {

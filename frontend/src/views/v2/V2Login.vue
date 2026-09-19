@@ -175,11 +175,11 @@ onMounted(() => {
   box-sizing: border-box;
 }
 .field__input:focus {
-  border-color: rgba(52, 120, 246, 0.55);
-  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12);
+  border-color: color-mix(in srgb, var(--blue) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
 }
-.field--error .field__input { border-color: rgba(239, 117, 120, 0.6); }
-.field--error .field__input:focus { box-shadow: 0 0 0 3px rgba(239, 117, 120, 0.12); }
+.field--error .field__input { border-color: color-mix(in srgb, var(--red) 60%, transparent); }
+.field--error .field__input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 12%, transparent); }
 .field__error { font-size: 11.5px; color: var(--red-ink); font-weight: 600; }
 
 .btn-primary--block {
@@ -243,7 +243,7 @@ onMounted(() => {
   position: relative;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
-.remember-cb:hover { border-color: rgba(52, 120, 246, 0.5); }
+.remember-cb:hover { border-color: color-mix(in srgb, var(--blue) 50%, transparent); }
 .remember-cb:checked { background: var(--blue); border-color: var(--blue); }
 .remember-cb:checked::after {
   content: '';

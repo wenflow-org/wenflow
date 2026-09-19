@@ -42,15 +42,15 @@
      中性色系（亮色模式）
      ========================================== */
   --neutral-50: #FFFFFF;
-  --neutral-100: #F8F9FA;
-  --neutral-200: #E9ECEF;
+  --neutral-100: var(--mk-bg);
+  --neutral-200: var(--mk-line);
   --neutral-300: #DEE2E6;
   --neutral-400: #CED4DA;
   --neutral-500: #ADB5BD;
-  --neutral-600: #6C757D;
+  --neutral-600: var(--mk-muted);
   --neutral-700: #5F6B7C;
   --neutral-800: #495057;
-  --neutral-900: #2C3E50;
+  --neutral-900: var(--mk-ink);
   --neutral-950: #1A252F;
   
   /* ==========================================

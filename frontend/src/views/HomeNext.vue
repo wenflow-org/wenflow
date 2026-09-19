@@ -380,14 +380,14 @@ onUnmounted(() => {
   height: 520px;
   top: 80px;
   right: -140px;
-  background: radial-gradient(circle, rgba(52, 120, 246, 0.36), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--blue) 36%, transparent), transparent 70%);
 }
 .hn-orb--b {
   width: 420px;
   height: 420px;
   top: 480px;
   left: -140px;
-  background: radial-gradient(circle, rgba(141, 107, 255, 0.22), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -438,7 +438,7 @@ main {
   width: fit-content;
   padding: 7px 12px;
   border-radius: 999px;
-  background: rgba(52, 120, 246, 0.09);
+  background: color-mix(in srgb, var(--blue) 9%, transparent);
   color: var(--blue-deep);
   font-size: 12px;
   font-weight: 900;
@@ -490,7 +490,7 @@ main {
 .hn-btn--primary {
   color: #fff;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  box-shadow: 0 16px 34px rgba(52, 120, 246, 0.22);
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--blue) 22%, transparent);
 }
 .hn-btn--ghost {
   color: var(--ink);
@@ -577,7 +577,7 @@ main {
 .hn-stage__desk {
   transform: rotate(1.2deg) translateX(18px);
   background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
-  border-color: rgba(52, 120, 246, 0.14);
+  border-color: color-mix(in srgb, var(--blue) 14%, transparent);
 }
 .hn-stage__bar {
   display: flex;
@@ -592,7 +592,7 @@ main {
   font-size: 11px;
   font-weight: 800;
   color: var(--blue-deep);
-  background: rgba(52, 120, 246, 0.1);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
   padding: 4px 10px;
   border-radius: 999px;
 }
@@ -659,8 +659,8 @@ main {
 }
 .hn-tag--on {
   color: var(--blue-deep);
-  border-color: rgba(52, 120, 246, 0.35);
-  background: rgba(52, 120, 246, 0.08);
+  border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
 }
 [data-theme='dark'] .hn-tag--on {
   border-color: rgba(111, 163, 255, 0.45);
@@ -674,7 +674,7 @@ main {
   padding: 14px;
   border-radius: 16px;
   background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
-  border: 1px solid rgba(52, 120, 246, 0.12);
+  border: 1px solid color-mix(in srgb, var(--blue) 12%, transparent);
 }
 [data-theme='dark'] .hn-stage__result {
   border-color: rgba(111, 163, 255, 0.22);
@@ -736,8 +736,8 @@ main {
   animation: hn-glow 1.8s var(--ease) 1;
 }
 @keyframes hn-glow {
-  0% { box-shadow: 0 0 0 0 rgba(52, 120, 246, 0.35); }
-  100% { box-shadow: 0 0 0 18px rgba(52, 120, 246, 0); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 35%, transparent); }
+  100% { box-shadow: 0 0 0 18px color-mix(in srgb, var(--blue) 0%, transparent); }
 }
 .hn-stage__from {
   margin: 0 0 6px;
@@ -797,7 +797,7 @@ main {
   font-weight: 800;
   color: #fff;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  box-shadow: 0 12px 24px rgba(52, 120, 246, 0.22);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--blue) 22%, transparent);
 }
 
 /* Band full-bleed */
@@ -828,7 +828,7 @@ main {
 }
 .hn-band__side--on {
   background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
-  border-color: rgba(52, 120, 246, 0.16);
+  border-color: color-mix(in srgb, var(--blue) 16%, transparent);
 }
 [data-theme='dark'] .hn-band__side--on {
   border-color: rgba(111, 163, 255, 0.25);
@@ -862,7 +862,7 @@ main {
   font-size: 24px;
   font-weight: 900;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  box-shadow: 0 14px 30px rgba(52, 120, 246, 0.25);
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--blue) 25%, transparent);
 }
 .hn-band__arrow span {
   display: block;
@@ -910,7 +910,7 @@ main {
   margin-bottom: -28px;
 }
 .hn-flow__path {
-  stroke: #3478f6;
+  stroke: var(--blue);
   stroke-width: 3;
   stroke-linecap: round;
   opacity: 0.35;
@@ -963,7 +963,7 @@ main {
   font-size: 14px;
   font-weight: 900;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  box-shadow: 0 12px 24px rgba(52, 120, 246, 0.22);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--blue) 22%, transparent);
 }
 .hn-flow__grid strong {
   font-size: 16px;
@@ -980,7 +980,7 @@ main {
   font-size: 11px;
   font-weight: 800;
   color: var(--blue-deep);
-  background: rgba(52, 120, 246, 0.08);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
   padding: 4px 9px;
   border-radius: 999px;
 }
@@ -1146,7 +1146,7 @@ main {
   height: 300px;
   transform: translateX(50%);
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(52, 120, 246, 0.18), transparent 68%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--blue) 18%, transparent), transparent 68%);
   filter: blur(40px);
   pointer-events: none;
 }

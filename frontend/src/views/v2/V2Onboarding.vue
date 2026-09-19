@@ -215,8 +215,8 @@ function goDashboard() {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(560px 300px at 12% -4%, rgba(52,120,246,0.07), transparent 60%),
-    radial-gradient(480px 260px at 88% 104%, rgba(141,107,255,0.06), transparent 60%);
+    radial-gradient(560px 300px at 12% -4%, color-mix(in srgb, var(--blue) 7%, transparent), transparent 60%),
+    radial-gradient(480px 260px at 88% 104%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 60%);
   overflow: hidden;
 }
 .ob__bg::before,
@@ -230,12 +230,12 @@ function goDashboard() {
 .ob__bg::before {
   width: 420px; height: 420px;
   top: -90px; right: -120px;
-  background: radial-gradient(circle, rgba(52,120,246,0.32), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--blue) 32%, transparent), transparent 70%);
 }
 .ob__bg::after {
   width: 340px; height: 340px;
   bottom: -70px; left: -110px;
-  background: radial-gradient(circle, rgba(141,107,255,0.24), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 24%, transparent), transparent 70%);
 }
 @media (prefers-reduced-motion: no-preference) {
   .ob__bg::before { animation: ob-orb-a 24s ease-in-out infinite; }
@@ -315,7 +315,7 @@ function goDashboard() {
   font-weight: 800;
   letter-spacing: 0.02em;
   color: var(--blue-deep);
-  background: rgba(52,120,246,0.08);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
   border-radius: 999px;
 }
 
@@ -357,7 +357,7 @@ function goDashboard() {
   font-size: 11px;
   font-weight: 800;
   color: var(--blue-deep);
-  background: rgba(52,120,246,0.1);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
   width: 20px; height: 20px;
   display: grid; place-items: center;
   border-radius: 50%;
@@ -391,7 +391,7 @@ function goDashboard() {
   font-size: 10.5px;
   font-weight: 700;
   color: var(--blue-deep);
-  background: rgba(52,120,246,0.1);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
   padding: 3px 8px;
   border-radius: 999px;
 }
@@ -414,8 +414,8 @@ function goDashboard() {
   justify-self: end;
   border-radius: 10px 10px 3px 10px;
   color: var(--ink);
-  background: rgba(52,120,246,0.1);
-  border: 1px solid rgba(52,120,246,0.16);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 16%, transparent);
 }
 .ob__bubble--ai {
   color: var(--ink);
@@ -436,8 +436,8 @@ function goDashboard() {
 }
 .ob__demo-tags span.is-on {
   color: var(--blue-deep);
-  border-color: rgba(52,120,246,0.45);
-  background: rgba(52,120,246,0.07);
+  border-color: color-mix(in srgb, var(--blue) 45%, transparent);
+  background: color-mix(in srgb, var(--blue) 7%, transparent);
 }
 
 /* 路径演示（第 3 步） */
@@ -471,8 +471,8 @@ function goDashboard() {
 }
 .ob__stage.is-on {
   opacity: 1;
-  border-color: rgba(52,120,246,0.45);
-  box-shadow: 0 0 0 3px rgba(52,120,246,0.08);
+  border-color: color-mix(in srgb, var(--blue) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 8%, transparent);
 }
 .ob__stage.is-on i {
   color: #fff;
@@ -500,9 +500,9 @@ function goDashboard() {
   flex-wrap: wrap;
   gap: 8px 10px;
   padding: 11px 12px;
-  border: 1px solid rgba(52,120,246,0.22);
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
   border-radius: 10px;
-  background: rgba(52,120,246,0.06);
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
 }
 /* 第 3 步：竖向堆叠（chip 在上、标题在下，与真实学习台「今日行动」样式一致，避免任何横向重叠） */
 .ob__demo-action--stack {
@@ -516,7 +516,7 @@ function goDashboard() {
   font-weight: 800;
   line-height: 1;
   color: var(--blue-deep);
-  background: rgba(52,120,246,0.12);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
   padding: 5px 7px;
   border-radius: 6px;
   white-space: nowrap;
@@ -591,12 +591,12 @@ function goDashboard() {
   border: 0;
   border-radius: 12px;
   cursor: pointer;
-  box-shadow: 0 8px 20px rgba(52,120,246,0.25);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--blue) 25%, transparent);
   transition: transform 0.18s, box-shadow 0.18s;
 }
 .ob__cta:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 28px rgba(52,120,246,0.3);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--blue) 30%, transparent);
 }
 .ob__cta:active {
   transform: translateY(0) scale(0.97);
@@ -628,7 +628,7 @@ function goDashboard() {
 }
 .ob__later:hover {
   color: var(--blue-deep);
-  background: rgba(52,120,246,0.06);
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
 }
 
 @media (max-width: 480px) {
