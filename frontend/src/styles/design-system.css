@@ -161,12 +161,12 @@
   --border-focus: var(--color-primary);
   
   /* 阴影 */
-  --shadow-xs: 0 1px 2px rgba(44, 62, 80, 0.05);
-  --shadow-sm: 0 2px 4px rgba(44, 62, 80, 0.06);
-  --shadow-md: 0 4px 8px rgba(44, 62, 80, 0.08);
-  --shadow-lg: 0 8px 16px rgba(44, 62, 80, 0.1);
-  --shadow-xl: 0 16px 32px rgba(44, 62, 80, 0.12);
-  --shadow-2xl: 0 24px 48px rgba(44, 62, 80, 0.15);
+  --shadow-xs: var(--mk-shadow-sm);
+  --shadow-sm: var(--mk-shadow-sm);
+  --shadow-md: var(--mk-shadow-pop);
+  --shadow-lg: var(--mk-shadow-pop);
+  --shadow-xl: var(--mk-shadow-modal);
+  --shadow-2xl: var(--mk-shadow-modal);
   
   /* ==========================================
      排版系统
@@ -218,13 +218,15 @@
   /* ==========================================
      圆角系统
      ========================================== */
+  /* 刻度类归一口径（2026-09-19）：以 --mk-* 为准，旧名保留为别名（调用方无需改动）。
+     radius 按同名档换算（lg 12→10、xl 16→12、2xl 24→16）；shadow 按量级折叠到 mk 的三档。 */
   --radius-none: 0;
-  --radius-sm: 0.25rem;   /* 4px */
-  --radius-md: 0.5rem;    /* 8px */
-  --radius-lg: 0.75rem;   /* 12px */
-  --radius-xl: 1rem;      /* 16px */
-  --radius-2xl: 1.5rem;   /* 24px */
-  --radius-full: 9999px;
+  --radius-sm: var(--mk-radius-sm);    /* → mk sm(6)  */
+  --radius-md: var(--mk-radius-md);    /* → mk md(8)  */
+  --radius-lg: var(--mk-radius-lg);    /* → mk lg(10) */
+  --radius-xl: var(--mk-radius-xl);    /* → mk xl(12) */
+  --radius-2xl: var(--mk-radius-modal); /* → mk modal(16) */
+  --radius-full: var(--mk-radius-pill);
   
   /* ==========================================
      过渡动画（Fluent Design 曲线）
@@ -408,12 +410,12 @@
   --border-focus: var(--color-primary-light);
   
   /* 暗色模式阴影 */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.35);
-  --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.4);
-  --shadow-2xl: 0 24px 48px rgba(0, 0, 0, 0.45);
+  --shadow-xs: var(--mk-shadow-sm);
+  --shadow-sm: var(--mk-shadow-sm);
+  --shadow-md: var(--mk-shadow-pop);
+  --shadow-lg: var(--mk-shadow-pop);
+  --shadow-xl: var(--mk-shadow-modal);
+  --shadow-2xl: var(--mk-shadow-modal);
   
   /* 暗色模式 Fluent 材质 */
   --acrylic-bg-light: rgba(30, 45, 58, 0.74);
