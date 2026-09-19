@@ -16,6 +16,7 @@
  *   }
  */
 import prisma from '../../config/database';
+import { withTransaction } from '../../utils/with-transaction';
 import type { DurableDomainEvent } from '../../events/contracts';
 import { logger } from '../../utils/logger';
 import { clamp01 } from '../memory/actr';
@@ -78,7 +79,7 @@ export class ReviewCompletedConsumer {
     const items = Array.isArray(data.reviewItems) ? data.reviewItems : [];
     if (items.length === 0) return;
 
-    await prisma.$transaction(async (tx) => {
+    await withTransaction(async (tx) => {
       const consumed = await tx.domain_event_inbox.findUnique({
         where: { consumerId_eventId: { consumerId: CONSUMER_ID, eventId: event.id } }
       });
@@ -225,7 +226,7 @@ export class ReviewCompletedConsumer {
         itemCount: items.length,
         ...(degradedItems > 0 ? { degradedItems } : {}),
       });
-    });
+    }, { label: 'learner.review-completed-consumer' });
   }
 }
 

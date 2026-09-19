@@ -18,6 +18,7 @@
 import prisma from '../../config/database';
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../../utils/logger';
+import { runWithTransaction } from '../../utils/with-transaction';
 
 export interface CascadeDeleteManifest {
   profileId: string;
@@ -137,7 +138,7 @@ export class VirtualCleanupService {
       userEmail: user?.email ?? null
     };
 
-    const manifest = await this.database.$transaction(async tx => {
+    const manifest = await runWithTransaction(this.database, async tx => {
       const sessions = await tx.virtual_sessions.findMany({
         where: { virtualProfileId: profileId },
         select: { id: true }

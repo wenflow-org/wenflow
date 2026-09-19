@@ -1,5 +1,6 @@
 import express from 'express';
 import prisma from '../config/database';
+import { withTransaction } from '../utils/with-transaction';
 import { logger } from '../utils/logger';
 
 const router = express.Router();
@@ -220,7 +221,7 @@ router.post('/access-grants', async (req: any, res) => {
     }
 
     const now = new Date();
-    const grant = await prisma.$transaction(async (tx) => {
+    const grant = await withTransaction(async (tx) => {
       await tx.projection_access_grants.updateMany({
         where: {
           userId,
@@ -239,7 +240,7 @@ router.post('/access-grants', async (req: any, res) => {
           expiresAt
         }
       });
-    });
+    }, { label: 'user-developer.createGrant' });
 
     res.status(201).json({
       success: true,

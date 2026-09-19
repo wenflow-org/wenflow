@@ -19,6 +19,7 @@ import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
+import { withTransaction } from '../../utils/with-transaction';
 
 export interface ClonePathFixtureOptions {
   titlePrefix?: string;
@@ -73,7 +74,9 @@ export class PathFixtureService {
     const title = `${titlePrefix}${source.title}`.slice(0, 200);
     let taskCount = 0;
 
-    const fixturePathId = await prisma.$transaction(async (tx) => {
+    const fixturePathId = await withTransaction(async (tx) => {
+      // 事务可能因瞬时冲突整体重试：回调内的计数必须随每次尝试重置，避免重复累加
+      taskCount = 0;
       const now = new Date();
       const pathData: Prisma.learning_pathsUncheckedCreateInput = {
         id: randomUUID(),
@@ -159,7 +162,7 @@ export class PathFixtureService {
       }
 
       return fixturePath.id;
-    });
+    }, { label: 'path-fixture.clone' });
 
     logger.info('[PathFixture] 克隆学习路径夹具成功', {
       sourcePathId,

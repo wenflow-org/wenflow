@@ -9,6 +9,7 @@
  */
 
 import type { PrismaClient } from '../generated/system-client';
+import { runWithTransaction } from '../utils/with-transaction';
 import { loadAllPromptFiles, type PromptFile } from '../composers/prompt-files/loader';
 import { computeCoreHash, loadCoreFile } from '../services/prompt-lab/core-file-loader';
 import {
@@ -443,7 +444,7 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
     });
     const nextVersion = Math.max((latest?.version || 0) + 1, (activePrompt.version || 0) + 1);
 
-    await prisma.$transaction(async (tx) => {
+    await runWithTransaction(prisma, async (tx) => {
       await tx.agent_prompts.updateMany({
         where: {
           agentId: { in: acceptableIds },
@@ -475,7 +476,7 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
           ...(seed.coreVersion === undefined ? {} : { coreVersion: seed.coreVersion }),
         },
       });
-    });
+    }, { label: 'seed-core-agent-prompts.sync' });
 
     updated.push(seed.agentId);
   }

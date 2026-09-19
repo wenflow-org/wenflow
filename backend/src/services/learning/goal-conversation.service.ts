@@ -2,6 +2,7 @@
 // 核心理念：穿透表象，找到真问题，渐进式收集信息
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
+import { withTransaction } from '../../utils/with-transaction';
 import { executeSkill } from '../../skills';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
@@ -1081,7 +1082,7 @@ async continueConversation(
     }
 
     try {
-      await prisma.$transaction(async (tx) => {
+      await withTransaction(async (tx) => {
         const updated = await tx.goal_conversations.updateMany({
           where: { id: conversationId, revision: conversation.revision },
           data: {
@@ -1111,7 +1112,7 @@ async continueConversation(
             responseTriage
           }
         }));
-      });
+      }, { label: 'goal-conversation.persistUnderstanding' });
       return;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

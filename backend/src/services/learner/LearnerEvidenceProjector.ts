@@ -1,4 +1,5 @@
 import prisma from '../../config/database';
+import { withTransaction } from '../../utils/with-transaction';
 import type { DurableDomainEvent } from '../../events/contracts';
 
 const CONSUMER_ID = 'learner-evidence-projector-v1';
@@ -11,7 +12,7 @@ export class LearnerEvidenceProjector {
   async handle(event: DurableDomainEvent): Promise<void> {
     if (!event.userId) return;
 
-    await prisma.$transaction(async (tx) => {
+    await withTransaction(async (tx) => {
       const consumed = await tx.domain_event_inbox.findUnique({
         where: { consumerId_eventId: { consumerId: CONSUMER_ID, eventId: event.id } }
       });
@@ -71,7 +72,7 @@ export class LearnerEvidenceProjector {
           eventId: event.id
         }
       });
-    });
+    }, { label: 'learner.learner-evidence-projector' });
   }
 }
 

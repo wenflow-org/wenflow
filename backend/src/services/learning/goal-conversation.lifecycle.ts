@@ -8,6 +8,8 @@
  * 纯依赖注入（`db`），便于单测；服务层直接传 prisma。
  */
 
+import { runWithTransaction } from '../../utils/with-transaction';
+
 export interface ConversationLifecycleMessage {
   role: 'user' | 'ai';
   content: string;
@@ -56,7 +58,7 @@ export async function applyConversationLifecycle(
   options: ConversationLifecycleOptions
 ): Promise<boolean> {
   try {
-    await db.$transaction(async (tx) => {
+    await runWithTransaction(db, async (tx) => {
       const conversation = await tx.goal_conversations.findUnique({ where: { id: conversationId } });
       if (!conversation) throw new Error('对话会话不存在');
 
@@ -101,7 +103,7 @@ export async function applyConversationLifecycle(
         data,
       });
       if (updated.count !== 1) throw new LifecycleRevisionMismatch();
-    });
+    }, { label: 'goal-conversation.lifecycle' });
     return true;
   } catch (error) {
     if (error instanceof LifecycleRevisionMismatch) return false;

@@ -11,6 +11,7 @@ import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
+import { withTransaction } from '../../utils/with-transaction';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
 import { getGateway } from '../../gateway';
 import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-learner-persona-designer';
@@ -3201,7 +3202,7 @@ router.post('/sessions/:sessionId/simulation-clock/reset', async (req: Request, 
  * → **重新跑一次评审 LLM**、反复触顶 replan 上限。
  */
 async function mergeSessionStageResults(sessionId: string, patch: Record<string, unknown>): Promise<void> {
-  await prisma.$transaction(async (tx) => {
+  await withTransaction(async (tx) => {
     const current = await tx.virtual_sessions.findUnique({
       where: { id: sessionId },
       select: { stageResults: true },
@@ -3211,7 +3212,7 @@ async function mergeSessionStageResults(sessionId: string, patch: Record<string,
       where: { id: sessionId },
       data: { stageResults: JSON.stringify({ ...stageResults, ...patch }), updatedAt: new Date() },
     });
-  });
+  }, { label: 'virtual-learners.mergeSessionStageResults' });
 }
 
 async function runDayLearning(
@@ -3546,7 +3547,7 @@ router.delete('/sessions/:sessionId', async (req: Request, res) => {
 
       let deletedTeachingCount = 0;
       await assertLeaseOwned();
-      await prisma.$transaction(async tx => {
+      await withTransaction(async tx => {
         await assertLeaseOwned(tx);
         const teachingSessionScopes: Prisma.teaching_sessionsWhereInput[] = [];
         const teachingSessionId = parseLearningProgress(leasedSession).teachingSessionId;
@@ -3623,7 +3624,7 @@ router.delete('/sessions/:sessionId', async (req: Request, res) => {
         await tx.virtual_sessions.delete({
           where: { id: sessionId }
         });
-      });
+      }, { label: 'virtual-learners.cascadeDeleteSession' });
 
       return { session: leasedSession, deletedTeachingCount };
     }, { skipFinalLeaseCheck: true });

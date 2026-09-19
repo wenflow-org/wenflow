@@ -10,6 +10,7 @@
  */
 
 import prisma from '../../config/database';
+import { withTransaction } from '../../utils/with-transaction';
 import { logger } from '../../utils/logger';
 
 // EWMA 配置（半衰期按日更新折算：h = ln(0.5)/ln(λ)）
@@ -1149,7 +1150,7 @@ export class LearningStateService {
   }
 
   private async commitPreparedMetric(prepared: PreparedLearningStateMetricCommit): Promise<void> {
-    await prisma.$transaction(async (tx) => {
+    await withTransaction(async (tx) => {
       const claimed = await tx.users.updateMany({
         where: {
           id: prepared.userId,
@@ -1166,7 +1167,7 @@ export class LearningStateService {
         await tx.learning_metrics.deleteMany({ where: { sourceKey: prepared.data.sourceKey } });
       }
       await tx.learning_metrics.create({ data: prepared.data as any });
-    });
+    }, { label: 'learning-state.commitPreparedMetric' });
   }
 
   /**

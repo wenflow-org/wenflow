@@ -1,4 +1,5 @@
 import prisma from '../../config/database';
+import { withTransaction } from '../../utils/with-transaction';
 import type { DurableDomainEvent } from '../../events/contracts';
 import { executeSkill } from '../../skills';
 import { lessonKnowledgeEnricherDefinition, type LessonKnowledgeEnricherOutput } from '../../skills/lesson-knowledge-enricher';
@@ -78,7 +79,7 @@ export class LessonKnowledgeEnrichmentConsumer {
       transferSignals: enriched?.transferSignals || [],
     };
 
-    await prisma.$transaction(async (tx) => {
+    await withTransaction(async (tx) => {
       const consumed = await tx.domain_event_inbox.findUnique({
         where: { consumerId_eventId: { consumerId: CONSUMER_ID, eventId: event.id } }
       });
@@ -121,7 +122,7 @@ export class LessonKnowledgeEnrichmentConsumer {
           eventId: event.id
         }
       });
-    });
+    }, { label: 'learner.lesson-knowledge-enrichment-consumer' });
   }
 }
 

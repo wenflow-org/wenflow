@@ -8,6 +8,7 @@ import { logger } from '../../utils/logger';
 import { REAL_USER_WHERE } from '../../utils/test-account';
 import { ACHIEVEMENTS } from '../../services/achievements/achievement-system';
 import achievementService from '../../services/achievements/achievement.service';
+import { withTransaction } from '../../utils/with-transaction';
 
 const router = express.Router();
 
@@ -156,7 +157,7 @@ router.post('/grant', async (req: Request, res: Response) => {
     }
 
     const unlockedAt = new Date();
-    const record = await prisma.$transaction(async (tx) => {
+    const record = await withTransaction(async (tx) => {
       const created = await tx.achievements.create({
         data: {
           id: `ach_${userId}_${def.id}`,
@@ -173,7 +174,7 @@ router.post('/grant', async (req: Request, res: Response) => {
       });
       await achievementService.addXp(userId, def.xpReward, tx);
       return created;
-    });
+    }, { label: 'admin.achievements.grant' });
 
     setAuditAction(res, 'achievement.grant', { targetType: 'user', targetId: userId });
     setAuditBefore(res, null);

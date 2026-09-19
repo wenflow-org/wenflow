@@ -1,3 +1,5 @@
+import { runWithTransaction } from '../../utils/with-transaction';
+
 export type PathGenerationPhase = 'core' | 'stageDesign';
 export type PathGenerationRunStatus = 'queued' | 'processing' | 'succeeded' | 'failed' | 'cancelled';
 export type PathGenerationRetryType = 'core' | 'stageDesign';
@@ -241,7 +243,7 @@ export async function createAndClaimPathGenerationRun(
   }
 ) {
   const now = input.now || new Date();
-  return prisma.$transaction(async (tx: any) => {
+  return runWithTransaction(prisma, async (tx: any) => {
     const path = await tx.learning_paths.findUnique({
       where: { id: input.pathId },
       select: {
@@ -379,7 +381,7 @@ export async function createAndClaimPathGenerationRun(
       heartbeatAt: now,
       leaseExpiresAt
     };
-  });
+  }, { label: 'path-generation.createAndClaimRun' });
 }
 
 export async function claimExpiredGenerationRun(
@@ -396,7 +398,7 @@ export async function claimExpiredGenerationRun(
   }
 ): Promise<ExpiredGenerationRunClaimOutcome> {
   const now = input.now || new Date();
-  return prisma.$transaction(async (tx: any) => {
+  return runWithTransaction(prisma, async (tx: any) => {
     const path = await tx.learning_paths.findUnique({
       where: { id: input.pathId },
       select: {
@@ -455,5 +457,5 @@ export async function claimExpiredGenerationRun(
     }
 
     return { claimed: true, pathRestored, pathState };
-  });
+  }, { label: 'path-generation.claimExpiredRun' });
 }

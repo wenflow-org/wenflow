@@ -11,6 +11,7 @@
  * 只处理"教学回合真的报告了结果"的点；没接上的点留在计划里，下次课继续。
  */
 import prisma from '../../config/database';
+import { withTransaction } from '../../utils/with-transaction';
 import { logger } from '../../utils/logger';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
@@ -99,9 +100,9 @@ export async function enqueueReviewCompletedEvent(
         reviewItems: items,
       },
     });
-    await prisma.$transaction(async (tx) => {
+    await withTransaction(async (tx) => {
       await enqueueDomainEvent(tx, event);
-    });
+    }, { label: 'warmup-writeback.enqueueReviewCompleted' });
     logger.info('[warmup-writeback] review:completed 事件已入队', {
       sessionId: session.id,
       userId: session.userId,

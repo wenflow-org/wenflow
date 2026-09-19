@@ -2,6 +2,7 @@
 // Achievement Service - Handle achievements unlocking and tracking
 
 import prisma from '../../config/database';
+import { withTransaction } from '../../utils/with-transaction';
 import type { Prisma } from '@prisma/client';
 import { logger } from '../../utils/logger';
 import AchievementSystem, { ACHIEVEMENTS, type AchievementDefinition } from './achievement-system';
@@ -72,7 +73,7 @@ class AchievementService {
 
         const unlockedAt = new Date();
         try {
-          await prisma.$transaction(async (tx) => {
+          await withTransaction(async (tx) => {
             await tx.achievements.create({
               data: {
                 id: achievementRecordId(userId, achievement.id),
@@ -88,7 +89,7 @@ class AchievementService {
               }
             });
             await this.addXp(userId, achievement.xpReward, tx);
-          });
+          }, { label: 'achievements.unlock' });
         } catch (error) {
           // 稳定主键充当并发 claim；另一请求已解锁时不重复发放 XP。
           if ((error as { code?: string })?.code === 'P2002') continue;

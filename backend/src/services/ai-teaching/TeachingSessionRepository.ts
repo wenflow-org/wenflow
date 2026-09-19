@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import prisma from '../../config/database';
+import { withTransaction } from '../../utils/with-transaction';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import type { DurableDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
@@ -201,7 +202,7 @@ export class TeachingSessionRepository {
     const openKey = buildOpenKey(input.userId, input.taskId);
 
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await withTransaction(async (tx) => {
         const task = await tx.subtasks.findFirst({
           where: { id: input.taskId, userId: input.userId },
           select: { id: true }
@@ -568,7 +569,8 @@ export class TeachingSessionRepository {
       markTaskInProgress?: boolean;
       allowedStatuses?: string[];
     }
-  ): Promise<void> {    await prisma.$transaction(async (tx) => {
+  ): Promise<void> {
+    await withTransaction(async (tx) => {
       const updated = await tx.teaching_sessions.updateMany({
         where: {
           id: sessionId,
@@ -689,7 +691,7 @@ export class TeachingSessionRepository {
     const leaseOwner = randomUUID();
     const leaseExpiresAt = new Date(now.getTime() + FINALIZATION_LEASE_MS);
 
-    return prisma.$transaction(async (tx) => {
+    return withTransaction(async (tx) => {
       const currentRecord = await tx.teaching_sessions.findUnique({ where: { id: sessionId } });
       if (!currentRecord) throw new Error('会话不存在或已结束');
       const current = mapRecord(currentRecord);
@@ -897,7 +899,7 @@ export class TeachingSessionRepository {
   ): Promise<Date> {
     const now = new Date();
     const leaseExpiresAt = new Date(now.getTime() + FINALIZATION_LEASE_MS);
-    await prisma.$transaction(async (tx) => {
+    await withTransaction(async (tx) => {
       const operation = await tx.session_finalization_operations.updateMany({
         where: {
           sessionId,
@@ -938,7 +940,7 @@ export class TeachingSessionRepository {
     errorCode: string,
     retryable = true
   ): Promise<void> {
-    await prisma.$transaction(async (tx) => {
+    await withTransaction(async (tx) => {
       const currentRecord = await tx.teaching_sessions.findUnique({ where: { id: sessionId } });
       if (!currentRecord || currentRecord.operationId !== leaseOwner) return;
       const current = mapRecord(currentRecord);
@@ -1017,7 +1019,7 @@ export class TeachingSessionRepository {
     action: Exclude<FinalizeAction, 'end_only'>,
     result: Record<string, any>
   ): Promise<TeachingSessionRecord> {
-    return prisma.$transaction(async (tx) => {
+    return withTransaction(async (tx) => {
       const now = new Date();
       const currentRecord = await tx.teaching_sessions.findUnique({ where: { id: sessionId } });
       if (
@@ -1099,7 +1101,7 @@ export class TeachingSessionRepository {
     event: DurableDomainEvent,
     metricCommit?: TeachingLearningStateCommit | null
   ): Promise<void> {
-    await prisma.$transaction(async (tx) => {
+    await withTransaction(async (tx) => {
       const now = new Date();
       const operation = await tx.session_finalization_operations.findFirst({
         where: {
@@ -1213,7 +1215,7 @@ export class TeachingSessionRepository {
     });
     let recovered = 0;
     for (const operation of operations) {
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await withTransaction(async (tx) => {
         const claimed = await tx.session_finalization_operations.updateMany({
           where: {
             id: operation.id,

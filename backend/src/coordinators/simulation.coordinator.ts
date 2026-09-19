@@ -11,6 +11,7 @@ import { randomUUID as uuidv4 } from 'crypto';
 import { AsyncLocalStorage } from 'async_hooks';
 import { logger } from '../utils/logger';
 import prisma from '../config/database';
+import { withTransaction } from '../utils/with-transaction';
 import goalConversationService from '../services/learning/goal-conversation.service';
 import learningService from '../services/learning/learning.service';
 import { assertPathMutationSafe } from '../services/learning/path-mutation-safety';
@@ -624,7 +625,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
   private async consumeAiCall(sessionId: string, count: number): Promise<void> {
     if (!Number.isFinite(count) || count < 1) return;
     try {
-      await prisma.$transaction(async (tx) => {
+      await withTransaction(async (tx) => {
         const session = await tx.virtual_sessions.findUnique({
           where: { id: sessionId },
           select: { stageResults: true }
@@ -984,7 +985,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
   private async updateStageResults(sessionId: string, stage: string, result: Record<string, unknown>) {
     await this.assertCurrentSessionLeaseOwned(sessionId);
     // 事务内原子读-改-写，防止并发覆盖（step 更新 goal 与 advanceToPathGeneration 更新 path 同时写入）
-    await prisma.$transaction(async (tx) => {
+    await withTransaction(async (tx) => {
       const session = await tx.virtual_sessions.findUnique({
         where: { id: sessionId },
         select: { stageResults: true }
@@ -1083,7 +1084,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
     const message = boundTaskCompletionError(error);
     const at = new Date().toISOString();
     try {
-      await prisma.$transaction(async (tx) => {
+      await withTransaction(async (tx) => {
         const session = await tx.virtual_sessions.findUnique({
           where: { id: sessionId },
           select: { stageResults: true }
@@ -1122,7 +1123,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
    */
   private async clearTeachingPauseMarker(sessionId: string): Promise<void> {
     try {
-      await prisma.$transaction(async (tx) => {
+      await withTransaction(async (tx) => {
         const session = await tx.virtual_sessions.findUnique({
           where: { id: sessionId },
           select: { stageResults: true }
