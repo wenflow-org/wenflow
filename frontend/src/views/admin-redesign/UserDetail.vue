@@ -120,9 +120,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { subPage, closeSubPage, openSubPage } from './store'
-import MkKpi from './MkKpi.vue'
-import MkEmptyState from './MkEmptyState.vue'
-import MkSkeleton from './MkSkeleton.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { liveUsers, timeAgo, errMsg } from './live'
 import { adminUsersApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'

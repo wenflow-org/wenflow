@@ -273,8 +273,8 @@ import {
 } from './live'
 import { statusText } from './statusText'
 import { TERMS, errorCodeLabel } from './terms'
-import MkEmptyState from './MkEmptyState.vue'
-import MkLoading from './MkLoading.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 
 const activeTrace = ref('')
 const openSpanId = ref('')

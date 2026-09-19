@@ -216,8 +216,8 @@ import {
 import { TERMS } from './terms'
 import { COMPLETION_META, SEMANTICS_META } from './glossaryMeta'
 import { EXTRA_CAPABILITY_SKILLS } from '@/views/admin/capabilityCatalog'
-import MkKpi from './MkKpi.vue'
-import MkEmptyState from './MkEmptyState.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import SkillReconciliation from './SkillReconciliation.vue'
 
 const reconRef = ref<{ openPanel?: () => void } | null>(null)

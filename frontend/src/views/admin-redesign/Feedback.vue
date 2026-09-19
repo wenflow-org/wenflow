@@ -233,10 +233,10 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import Pagination from './Pagination.vue'
-import MkFilterSearch from './MkFilterSearch.vue'
+import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
-import MkEmptyState from './MkEmptyState.vue'
-import MkLoading from './MkLoading.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 
 type Status = 'new' | 'triaged' | 'resolved' | 'dismissed'
 

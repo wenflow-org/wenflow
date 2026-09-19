@@ -243,7 +243,7 @@ import { ipText } from './statusText'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
-import MkEmptyState from './MkEmptyState.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 
 /** admin_sessions 行（与后端 Prisma 模型一致 + adminName/adminEmail 联查字段） */
 interface AdminSessionRow {

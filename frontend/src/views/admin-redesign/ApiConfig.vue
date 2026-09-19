@@ -465,7 +465,7 @@ import {
   updateRegisterIpQuotaSetting
 } from './live'
 import { askConfirm } from './useConfirm'
-import MkLoading from './MkLoading.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 import { toast } from '@/utils/toast'
 
 /* ---------- AI 能力健康快照 ---------- */

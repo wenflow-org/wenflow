@@ -101,7 +101,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
-import MkLoading from './MkLoading.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 import { errMsg } from './live'
 
 interface SimulationClock {

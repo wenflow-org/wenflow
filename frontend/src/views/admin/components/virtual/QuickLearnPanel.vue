@@ -254,7 +254,7 @@ import { askConfirm } from '@/views/admin-redesign/useConfirm'
 import { adminApi } from '@/api/adminApi'
 import { setProjectionToken } from '@/utils/projection'
 import { useSafePolling } from '@/composables/useSafePolling'
-import MkLoading from '@/views/admin-redesign/MkLoading.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 import { statusText } from '@/views/admin-redesign/statusText'
 import { useEscape } from '@/views/admin-redesign/useEscape'
 

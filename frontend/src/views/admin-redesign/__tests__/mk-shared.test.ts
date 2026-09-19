@@ -5,8 +5,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import MkStatStrip from '../MkStatStrip.vue'
-import MkEmptyState from '../MkEmptyState.vue'
+import MkStatStrip from '@/components/mk/MkStatStrip.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 
 describe('MkStatStrip', () => {
   it('渲染标签与数值（保持 `标签 数值` 的文本，供页头断言/读屏顺序）', () => {

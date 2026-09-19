@@ -67,7 +67,7 @@
 import { onMounted, ref, watch } from 'vue';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 import { TERMS } from './terms';
-import MkEmptyState from './MkEmptyState.vue';
+import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 
 const props = defineProps<{ stage: string }>();
 

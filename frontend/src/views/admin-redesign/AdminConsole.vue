@@ -136,10 +136,10 @@ import TabBar, { type AdminTab } from './TabBar.vue';
 import { MOCK_SCENES } from './manifest';
 import SkillDrawer from './SkillDrawer.vue';
 import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
-import MkLoading from './MkLoading.vue';
+import MkLoading from '@/components/mk/MkLoading.vue';
 import { intent, subPage, closeSkillDrawer, type SubPageView } from './store';
 import { loadLiveData } from './live';
-import './shared.css';
+import '@/styles/mk-primitives.css';
 
 const scene = ref('overview');
 const glossaryOpen = ref(false);

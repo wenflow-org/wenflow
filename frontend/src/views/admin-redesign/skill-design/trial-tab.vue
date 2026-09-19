@@ -143,7 +143,7 @@ import {
 import { toast } from '@/utils/toast'
 import { fmtMs, shortHash, errText } from './sdp-shared'
 import { humanizeHttpError } from '../terms'
-import MkLoading from '../MkLoading.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 
 hljs.registerLanguage('json', json)
 

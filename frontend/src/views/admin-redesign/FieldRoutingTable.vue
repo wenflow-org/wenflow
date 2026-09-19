@@ -299,10 +299,10 @@ import { toast } from '@/utils/toast';
 import { askConfirm } from './useConfirm';
 import { TERMS } from './terms';
 import Pagination from './Pagination.vue';
-import MkFilterSearch from './MkFilterSearch.vue';
+import MkFilterSearch from '@/components/mk/MkFilterSearch.vue';
 import { useTableSort } from './useTableSort';
-import MkLoading from './MkLoading.vue';
-import MkEmptyState from './MkEmptyState.vue';
+import MkLoading from '@/components/mk/MkLoading.vue';
+import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 
 interface FieldItem {
   fieldId: string;

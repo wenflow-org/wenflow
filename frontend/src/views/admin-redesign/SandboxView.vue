@@ -62,8 +62,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { adminPromptOpsApi } from '@/api/adminApi';
-import MkLoading from './MkLoading.vue';
-import MkEmptyState from './MkEmptyState.vue';
+import MkLoading from '@/components/mk/MkLoading.vue';
+import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 
 interface SandboxChannel {
   path: string;

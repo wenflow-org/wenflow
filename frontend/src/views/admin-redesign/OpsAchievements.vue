@@ -231,9 +231,9 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
-import MkFilterSearch from './MkFilterSearch.vue'
+import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import AchIcon from './AchIcon.vue'
-import MkEmptyState from './MkEmptyState.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 
 const achTab = ref<'defs' | 'records'>('defs')
 function switchAchTab(t: 'defs' | 'records') {

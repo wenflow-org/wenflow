@@ -300,7 +300,7 @@ import { adminPromptWorkbenchApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
 import { toast } from '@/utils/toast'
 import { coreEditorState, coreShortHash, errText } from './sdp-shared'
-import MkLoading from '../MkLoading.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 
 hljs.registerLanguage('yaml', yaml)
 

@@ -4,13 +4,13 @@
  *
  * 八条规则：
  *  1) mk- 前缀类禁止在页面 scoped 内定义
- *     —— mk- 前缀 = 全局原语，只有 src/styles/*.css 与 admin-redesign/shared.css 可以定义。
+ *     —— mk- 前缀 = 全局原语，只有 src/styles/*.css（含 mk-primitives.css）与原语组件可以定义。
  *        在页面里定义会让"全局原语"事实上分裂成每页一套（审计 §附 A #13）。
  *  2) 模板中引用的 mk-* 类必须已定义
  *     —— 防止幽灵类：mk-btn--block / mk-card__note / mk-link--active 曾零定义却被引用，
  *        渲染成无样式元素且无人发现（审计 §附 A #7 #8）。
  *  3) 硬编码 hex 色值不得超过基线（棘轮机制：只降不升）
- *     —— 治理面 = 页面 scoped 块 + **admin 原语层 CSS**（shared.css / main.css / admin-*.css）。
+ *     —— 治理面 = 页面 scoped 块 + **admin 原语层 CSS**（mk-primitives.css / main.css / admin-*.css）。
  *        基线存于 scripts/design-system-baseline.json。
  *  4) 页面不得手写 .mk-empty 结构（用 MkEmptyState）
  *  5) 页面不得手写加载态（用 MkLoading）
@@ -36,14 +36,16 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const SRC = join(ROOT, 'src')
-const ADMIN = join(SRC, 'views', 'admin-redesign')
 const BASELINE_PATH = join(ROOT, 'scripts', 'design-system-baseline.json')
 
 const ADMIN_PREFIX = 'src/views/admin-redesign/'
+const MK_PREFIX = 'src/components/mk/'
+/** 中立原语层 CSS（由 admin-redesign/shared.css 迁出，仍由 admin 入口懒加载） */
+const MK_PRIMITIVES_CSS = posix.join('src', 'styles', 'mk-primitives.css')
 
 /** 允许定义 mk- 前缀类的文件（全局原语层） */
 const PRIMITIVE_FILES = [
-  posix.join('src', 'views', 'admin-redesign', 'shared.css'),
+  MK_PRIMITIVES_CSS,
   ...readdirSync(join(SRC, 'styles'))
     .filter((f) => f.endsWith('.css'))
     .map((f) => posix.join('src', 'styles', f)),
@@ -52,7 +54,8 @@ const PRIMITIVE_FILES = [
 /**
  * 原语层组件：允许在自己的 scoped 内定义 mk- 类。
  * 判定依据——这些是"被页面复用"的构件，而非页面：
- *   - Mk*.vue（MkKpi / MkStatStrip / MkEmptyState / MkChart / MkCols / MkFilterSearch）
+ *   - Mk*.vue（MkKpi / MkStatStrip / MkEmptyState / MkChart / MkCols / MkFilterSearch …），
+ *     自 admin-redesign/ 迁至中立的 src/components/mk/
  *   - 外壳与全站通用控件（Shell / TabBar / Pagination / SkeletonTable / 状态与图标徽章 / 确认层）
  * 页面（admin 各场景与详情页）不在此列 → 不允许新增 mk- 类。
  */
@@ -64,6 +67,8 @@ const isPrimitiveLayer = (relPath) => {
   const base = relPath.split('/').pop()
   return PRIMITIVE_VUE.has(base) || /^Mk[A-Z]/.test(base)
 }
+/** 本守卫治理的目录：admin-redesign 页面 + 中立原语层组件（Mk*.vue 迁出后仍在治理面内） */
+const isGoverned = (relPath) => relPath.startsWith(ADMIN_PREFIX) || relPath.startsWith(MK_PREFIX)
 
 const rel = (p) => posix.join(...relative(ROOT, p).split(/[\\/]/))
 
@@ -104,14 +109,14 @@ function collectDefinedPrimitives() {
 }
 
 
-const vueFiles = walk(join(SRC, 'views'))
+const vueFiles = [...walk(join(SRC, 'views')), ...walk(join(SRC, 'components', 'mk'))]
 
 /**
  * 规则 8 的 token 字典：全 src 里声明的 `--mk-*`（定义面取全量，引用面再收窄）。
- * 引用面收窄到 admin-redesign + src/styles，与规则 3 一致。
+ * 引用面收窄到 admin-redesign + 原语层 mk/ + src/styles，与规则 3 一致。
  */
 const definedTokens = new Set()
-// 定义面 = 原语 CSS（shared.css + src/styles/*.css）+ 全部 .vue（页面可定义局部自定义属性）
+// 定义面 = 原语 CSS（mk-primitives.css + src/styles/*.css）+ 全部 .vue（页面可定义局部自定义属性）
 for (const p of [...PRIMITIVE_FILES.map((r) => join(ROOT, r)), ...walk(SRC)]) {
   if (!existsSync(p)) continue
   for (const m of readFileSync(p, 'utf8').matchAll(/--(mk-[a-zA-Z0-9-]+)\s*:/g)) definedTokens.add(m[1])
@@ -163,7 +168,7 @@ const HEX = /#[0-9a-fA-F]{3,8}\b/g
 /**
  * 规则 3 的治理面：页面 scoped 块 + **admin 原语层 CSS**。
  *
- * 为什么必须带上 CSS：`walk()` 只收 .vue，于是 shared.css / main.css / admin-*.css 里的
+ * 为什么必须带上 CSS：`walk()` 只收 .vue，于是 mk-primitives.css / main.css / admin-*.css 里的
  * 硬编码色值**完全不在计数内** —— 原语层可以无声堆积颜色（#eef2fa / #eef5ff / #dbeafe
  * 以及一串暗色补丁就是这么来的）。原语层恰恰是设计系统的最后一道防线。
  *
@@ -172,7 +177,7 @@ const HEX = /#[0-9a-fA-F]{3,8}\b/g
  * 与本守卫"只管 admin-redesign、不与并行开发打架"的既有边界不符。
  */
 const HEX_CSS_TARGETS = [
-  posix.join('src', 'views', 'admin-redesign', 'shared.css'),
+  MK_PRIMITIVES_CSS,
   posix.join('src', 'styles', 'main.css'),
   ...readdirSync(join(SRC, 'styles'))
     .filter((f) => f.startsWith('admin-') && f.endsWith('.css'))
@@ -183,7 +188,7 @@ const HEX_CSS_TARGETS = [
  * 数一段 CSS 里的硬编码色值。
  *  - var(--token, #fallback) 的兜底是有意写法（全站通用），先剔除再数，否则基线虚高。
  *  - src/styles/* 是 token 的定义处（:root / html[data-theme]），定义行是合法值 → 剔除；
- *    shared.css 只放组件类（token 已上移至 main.css），其自定义属性是组件局部变量，
+ *    mk-primitives.css 只放组件类（token 已上移至 main.css），其自定义属性是组件局部变量，
  *    **不算**合法定义 —— 否则任何颜色都能靠 `--x: #hex` 洗白。
  */
 function countHardcodedHex(css, { tokenDefsAreLegal = false } = {}) {
@@ -206,10 +211,10 @@ const deadClasses = [] // 规则 7
 const badTokens = [] // 规则 8
 const hexCounts = {} // 规则 3
 
-/* 规则 8：var(--mk-*) 引用的 token 必须已定义（引用面 = admin-redesign + src/styles） */
+/* 规则 8：var(--mk-*) 引用的 token 必须已定义（引用面 = admin-redesign + 原语层 mk/ + src/styles） */
 const tokenRefTargets = walk(SRC).filter((abs) => {
   const r = rel(abs)
-  return r.startsWith(ADMIN_PREFIX) || r.startsWith(posix.join('src', 'styles') + '/')
+  return isGoverned(r) || r.startsWith(posix.join('src', 'styles') + '/')
 })
 for (const abs of tokenRefTargets) {
   const relPath = rel(abs)
@@ -247,9 +252,9 @@ for (const abs of vueFiles) {
       badDefinitions.push({ file: relPath, line: i + 1, cls: m[1] })
     })
     // 规则 3：硬编码 hex（仅统计 scoped，非 scoped 块多为自包含原语副本，另行处理）
-    //   仅统计 admin-redesign：那才是本守卫治理的面；views/v2 等用户侧界面不受此门禁约束，
+    //   仅统计 admin-redesign 与原语层 mk/：那才是本守卫治理的面；views/v2 等用户侧界面不受此门禁约束，
     //   否则会与并行开发互相打架。
-    if (scoped && relPath.startsWith(ADMIN_PREFIX)) {
+    if (scoped && isGoverned(relPath)) {
       // var(--token, #fallback) 里的 fallback 是有意兜底（全站通用写法），不是硬编码违规：
       // 先剔除再计数，否则基线被 fallback 虚高、并产生假回退。
       const hits = countHardcodedHex(css)
@@ -277,7 +282,7 @@ for (const abs of vueFiles) {
 
   // 规则 4：页面模板不得手写 .mk-empty 结构（应使用 MkEmptyState 共用组件）
   //   \bmk-empty\b 只命中独立的 mk-empty 类 token，不会误伤 mk-empty__icon / --min
-  if (!primitiveLayer && relPath.startsWith(ADMIN_PREFIX)) {
+  if (!primitiveLayer && isGoverned(relPath)) {
     for (const m of tpl.matchAll(/class="([^"]*\bmk-empty\b[^"]*)"/g)) {
       handRolledEmpty.push({ file: relPath, cls: m[1] })
     }
@@ -296,7 +301,7 @@ for (const abs of vueFiles) {
   //   就是手工 grep 出来的）。判定刻意保守：名字只要在「模板 + 脚本」文本里出现过就算用过；
   //   模板字面量拼类名（`x--${tone}`）退一步用「去掉末段的类名前缀」再匹配；跳过 :deep()。
   const seenDead = new Set()
-  if (relPath.startsWith(ADMIN_PREFIX)) for (const { scoped, css } of styleBlocks(text)) {
+  if (isGoverned(relPath)) for (const { scoped, css } of styleBlocks(text)) {
     if (!scoped) continue
     // 先剥注释：注释里出现的 ".css" 之类会被选择器抽取误当成类名
     const body = css.replace(/\/\*[\s\S]*?\*\//g, '')
@@ -323,7 +328,7 @@ for (const relPath of HEX_CSS_TARGETS) {
   const abs = join(ROOT, relPath)
   if (!existsSync(abs)) continue
   const n = countHardcodedHex(readFileSync(abs, 'utf8'), {
-    tokenDefsAreLegal: relPath.startsWith('src/styles/'),
+    tokenDefsAreLegal: relPath.startsWith('src/styles/') && relPath !== MK_PRIMITIVES_CSS,
   })
   if (n) hexCounts[relPath] = (hexCounts[relPath] || 0) + n
 }
@@ -365,7 +370,7 @@ let failed = false
 if (badDefinitions.length) {
   failed = true
   console.log(`\n✖ 规则 1：mk- 前缀类禁止在页面 scoped 内定义（${badDefinitions.length} 处）`)
-  console.log('  mk- 前缀 = 全局原语。通用则提升到 admin-redesign/shared.css；页面专用请改用页面前缀。')
+  console.log('  mk- 前缀 = 全局原语。通用则提升到 src/styles/mk-primitives.css；页面专用请改用页面前缀。')
   for (const v of badDefinitions) console.log(`    ${v.file}:${v.line}  .${v.cls}`)
 }
 
@@ -400,7 +405,7 @@ if (handRolledLoading.length) {
 if (handRolledSkeleton.length) {
   failed = true
   console.log(`\n✖ 规则 6：页面自搓了骨架 shimmer（${handRolledSkeleton.length} 处）`)
-  console.log('  shimmer 视觉统一走 shared.css 的 .mk-skeleton（暗色与 prefers-reduced-motion 已处理）；')
+  console.log('  shimmer 视觉统一走 mk-primitives.css 的 .mk-skeleton（暗色与 prefers-reduced-motion 已处理）；')
   console.log('  页面只负责形状：给占位元素加 class="mk-skeleton"，保留各页的尺寸/圆角类。')
   for (const v of handRolledSkeleton) console.log(`    ${v.file}`)
 }

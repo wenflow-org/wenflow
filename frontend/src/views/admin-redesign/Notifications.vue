@@ -212,7 +212,7 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
-import MkEmptyState from './MkEmptyState.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import Pagination from './Pagination.vue'
 
 /** 嵌入模式：作为「通知与公告」页「站内通知」tab 渲染（仅去掉外层壳，状态条/发送弹窗保留）。

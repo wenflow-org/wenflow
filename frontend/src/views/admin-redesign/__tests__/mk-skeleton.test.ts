@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import MkSkeleton from '../MkSkeleton.vue'
+import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 
 describe('MkSkeleton', () => {
   it('block（默认）：单块，w/h/radius 落到内联样式，circle 加圆类', () => {

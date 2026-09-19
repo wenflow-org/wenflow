@@ -30,7 +30,7 @@ import { adminPromptWorkbenchApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import SkillFieldRouting from '../SkillFieldRouting.vue'
 import { errText } from './sdp-shared'
-import MkLoading from '../MkLoading.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 
 const props = defineProps<{ skillId: string }>()
 

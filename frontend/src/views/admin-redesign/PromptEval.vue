@@ -410,9 +410,9 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
-import MkKpi from './MkKpi.vue'
-import MkEmptyState from './MkEmptyState.vue'
-import MkLoading from './MkLoading.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 
 interface EvalCase {
   id: string

@@ -129,11 +129,11 @@ import VersionsTab from './skill-design/versions-tab.vue'
 import RuntimeTab from './skill-design/runtime-tab.vue'
 import EngineeringTab from './skill-design/engineering-tab.vue'
 import RoutingTab from './skill-design/routing-tab.vue'
-import './shared.css'
+import '@/styles/mk-primitives.css'
 import { TERMS } from './terms'
 import { toast } from '@/utils/toast'
-import MkEmptyState from './MkEmptyState.vue'
-import MkLoading from './MkLoading.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 
 /* ---------- 路由与基础 ---------- */
 const route = useRoute()

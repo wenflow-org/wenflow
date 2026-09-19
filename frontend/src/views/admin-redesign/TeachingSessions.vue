@@ -332,10 +332,10 @@ import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
-import MkFilterSearch from './MkFilterSearch.vue'
+import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
-import MkCols from './MkCols.vue'
-import MkEmptyState from './MkEmptyState.vue'
+import MkCols from '@/components/mk/MkCols.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
     count 事件：列表加载完成后上报总条数（宿主「教学 N」徽章） */

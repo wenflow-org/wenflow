@@ -742,12 +742,12 @@ import {
   type VsControlKey,
   type VsLifecycleState
 } from './vlab-controls'
-import MkKpi from './MkKpi.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
-import MkEmptyState from './MkEmptyState.vue'
-import MkLoading from './MkLoading.vue'
-import MkChart from './MkChart.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
+import MkChart from '@/components/mk/MkChart.vue'
 import DayTimeline from './DayTimeline.vue'
 import { useSafePolling } from '@/composables/useSafePolling'
 import { useIsDark } from '@/composables/useIsDark'

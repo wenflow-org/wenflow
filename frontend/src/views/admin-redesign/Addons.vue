@@ -235,8 +235,8 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
-import MkEmptyState from './MkEmptyState.vue'
-import MkLoading from './MkLoading.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 import { toast } from '@/utils/toast'
 
 const router = useRouter()

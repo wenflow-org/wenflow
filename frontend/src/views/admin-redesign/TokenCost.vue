@@ -178,10 +178,10 @@ import { isLive, intent } from './store'
 import { errMsg, isPageCacheFresh, markPageFetched } from './live'
 import { adminTokenCostApi } from '@/api/adminApi'
 import DataScopeToggle from './DataScopeToggle.vue'
-import MkKpi from './MkKpi.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import TcRankTable, { type RankRow } from './TcRankTable.vue'
-import MkEmptyState from './MkEmptyState.vue'
-import MkSkeleton from './MkSkeleton.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { toast } from '@/utils/toast'
 
 /** 嵌入模式：作为「执行日志」页「成本分析」tab 渲染（仅去掉外层壳，状态条/筛选/排行保留） */

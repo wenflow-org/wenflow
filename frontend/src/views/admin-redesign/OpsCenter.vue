@@ -208,8 +208,8 @@ import { timeAgo, errMsg, shortId } from './live'
 import { askConfirm } from './useConfirm'
 import { adminDevtoolsApi, adminAxios } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
-import MkEmptyState from './MkEmptyState.vue'
-import MkLoading from './MkLoading.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 
 const tab = ref<'tools' | 'export'>('tools')
 function switchTab(t: 'tools' | 'export') {

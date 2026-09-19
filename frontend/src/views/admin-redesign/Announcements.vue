@@ -192,8 +192,8 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
-import MkFilterSearch from './MkFilterSearch.vue'
-import MkEmptyState from './MkEmptyState.vue'
+import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 
 /** 嵌入模式：作为「通知与公告」页「公告」tab 渲染（仅去掉外层壳，状态条/新建/编辑弹窗保留）。
     count 事件：公告总数上报（宿主「公告 N」徽章；embedded 才消费） */

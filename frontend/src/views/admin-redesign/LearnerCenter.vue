@@ -212,9 +212,9 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
-import MkFilterSearch from './MkFilterSearch.vue'
-import MkEmptyState from './MkEmptyState.vue'
-import MkCols from './MkCols.vue'
+import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkCols from '@/components/mk/MkCols.vue'
 import { adminNotificationsApi } from '@/api/adminApi'
 
 /** 嵌入模式：作为「用户与学习者」页「学习状态」tab 渲染（仅去掉外层壳，状态条/列表/干预弹窗保留）。

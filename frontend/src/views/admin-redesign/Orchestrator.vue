@@ -85,8 +85,8 @@ import FieldRoutingTable from './FieldRoutingTable.vue'
 import DataFlowGraph from './DataFlowGraph.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
-import MkEmptyState from './MkEmptyState.vue'
-import MkLoading from './MkLoading.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 
 const viewMode = ref<'stage' | 'sandbox'>('stage')
 /** 编辑页内治理折叠区（漂移/审计）：?tab=drift 深链时自动展开 */

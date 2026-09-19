@@ -205,8 +205,8 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
-import MkEmptyState from './MkEmptyState.vue'
-import MkLoading from './MkLoading.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 import { statusText } from './statusText'
 
 /** 嵌入模式：作为虚拟学习者「批量实验」tab 渲染（隐藏页面外壳/状态条） */

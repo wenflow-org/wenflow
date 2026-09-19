@@ -517,8 +517,8 @@ import {
   STAGE_ORDER, STAGE_LABELS,
 } from './dataFlow'
 import type { StageDetailLike } from './fieldFlowLayout'
-import MkLoading from './MkLoading.vue'
-import MkEmptyState from './MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { AGENT_TONES } from './store'
 
 /* ================= props / emits（与 FieldFlowGraph 同接口，Orchestrator 无缝替换） ================= */

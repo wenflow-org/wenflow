@@ -182,8 +182,8 @@ import { adminPromptWorkbenchApi, adminSkillsApi, type SkillScaffoldMeta, type S
 import { useEscape } from './useEscape';
 import { useOverlay, useMaskClose } from './useOverlay';
 import { useLoadMore } from './useLoadMore';
-import MkEmptyState from './MkEmptyState.vue';
-import MkLoading from './MkLoading.vue';
+import MkEmptyState from '@/components/mk/MkEmptyState.vue';
+import MkLoading from '@/components/mk/MkLoading.vue';
 import { intent } from './store'
 import { toast } from '@/utils/toast'
 

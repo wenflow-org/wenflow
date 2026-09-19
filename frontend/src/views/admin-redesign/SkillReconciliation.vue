@@ -138,9 +138,9 @@ import { isLive } from "./store";
 import { errMsg } from "./live";
 import { completionMetaOf } from "./glossaryMeta";
 import { useLoadMore } from "./useLoadMore";
-import MkEmptyState from "./MkEmptyState.vue";
-import MkLoading from "./MkLoading.vue";
-import MkSkeleton from "./MkSkeleton.vue";
+import MkEmptyState from "@/components/mk/MkEmptyState.vue";
+import MkLoading from "@/components/mk/MkLoading.vue";
+import MkSkeleton from "@/components/mk/MkSkeleton.vue";
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from "@/api/adminApi";
 
 const recReport = ref<SkillReconciliationReport | null>(null);
