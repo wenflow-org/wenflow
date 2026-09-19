@@ -21,6 +21,9 @@ const ALLOWED_EMOTIONAL_STATES = ['positive', 'neutral', 'frustrated', 'confused
 const ALLOWED_KNOWLEDGE_STATUSES = ['pending', 'learning', 'mastered', 'review'] as const;
 const ALLOWED_LOAD_BASIS = ['semantic', 'structure', 'pacing', 'combined', 'absent'] as const;
 
+/** knowledge 对象的子字段：Q9 契约漂移容错时按此名单从顶层回填（见 resolveKnowledgeBlock） */
+const KNOWLEDGE_SUBFIELD_KEYS = ['currentPoint', 'points', 'confirmCheck'] as const;
+
 export interface TeachingTurnInput {
   messages: Array<{ role: MessageRole; content: string }>;
   learner: TeachingLearnerProjection;
@@ -452,13 +455,30 @@ function filterOverlyBroadKnowledgePoints(points: Array<{ name: string; status: 
   const filtered = points.filter((point) => normalizeConceptName(point.name) !== coreConcept);
   return filtered.length > 0 ? filtered : points;
 }
+/**
+ * Q9 契约漂移容错：模型偶发把 knowledge 的子字段（currentPoint / points / confirmCheck）平铺到顶层，
+ * 而不是包在 `knowledge` 对象里（field-hit-rate 审计实测漂移，多为输出格式抖动，非第二套契约）。
+ * 这里把它们回填进 `knowledge`：正常嵌套形态优先，平铺键仅在嵌套缺失该键时兜底——
+ * 避免因整块知识看板被静默丢弃而丢失课堂状态。不改变正常输出语义。
+ */
+function resolveKnowledgeBlock(parsed: Record<string, any>): Record<string, any> {
+  const nested = parsed.knowledge && typeof parsed.knowledge === 'object' && !Array.isArray(parsed.knowledge)
+    ? parsed.knowledge
+    : {};
+  const block: Record<string, any> = { ...nested };
+  for (const key of KNOWLEDGE_SUBFIELD_KEYS) {
+    if (block[key] === undefined && parsed[key] !== undefined) block[key] = parsed[key];
+  }
+  return block;
+}
+
 function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput): TeachingTurnOutput {
   const reply = typeof parsed.reply === 'string' && parsed.reply.trim()
     ? parsed.reply.trim()
     : '我们继续沿着这个主题往下学。';
 
   const analysis = parsed.analysis && typeof parsed.analysis === 'object' ? parsed.analysis : {};
-  const knowledge = parsed.knowledge && typeof parsed.knowledge === 'object' ? parsed.knowledge : {};
+  const knowledge = resolveKnowledgeBlock(parsed);
   const pedagogy = parsed.pedagogy && typeof parsed.pedagogy === 'object' ? parsed.pedagogy : {};
   const control = parsed.control && typeof parsed.control === 'object' ? parsed.control : {};
   const points = Array.isArray(knowledge.points) ? knowledge.points : [];
@@ -894,7 +914,15 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
     return { valid: false, failureReason: 'TEACHING_TURN_REPLY_MISSING' };
   }
 
-  if (!parsed.analysis || typeof parsed.analysis !== 'object' || !parsed.knowledge || typeof parsed.knowledge !== 'object' || !parsed.pedagogy || typeof parsed.pedagogy !== 'object' || !parsed.control || typeof parsed.control !== 'object') {
+  // Q9 契约漂移容错：knowledge 缺失时允许其子字段平铺在顶层（见 resolveKnowledgeBlock），
+  // 避免模型把 knowledge 拆平时整轮被判缺块丢弃。
+  const hasNestedKnowledge = !!parsed.knowledge
+    && typeof parsed.knowledge === 'object'
+    && !Array.isArray(parsed.knowledge);
+  const hasFlatKnowledge = KNOWLEDGE_SUBFIELD_KEYS.some((key) => parsed[key] !== undefined);
+  if (!parsed.analysis || typeof parsed.analysis !== 'object'
+    || (!hasNestedKnowledge && !hasFlatKnowledge)
+    || !parsed.pedagogy || typeof parsed.pedagogy !== 'object' || !parsed.control || typeof parsed.control !== 'object') {
     return { valid: false, failureReason: 'TEACHING_TURN_REQUIRED_BLOCK_MISSING' };
   }
 
@@ -902,7 +930,8 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
   const rawCompletionCandidate = parsed.control?.isCompletionCandidate === true;
   // 2026-08-30：完成一致性校验不再使用关键词硬匹配（evaluateByCriteria/evaluateByProfile），
   // 改为 LLM 语义判定 + 知识硬门禁：模型说完成 + 知识点全 mastered 才允许宣布完成。
-  const rawPoints = Array.isArray(parsed.knowledge?.points) ? parsed.knowledge.points : [];
+  const resolvedKnowledge = resolveKnowledgeBlock(parsed);
+  const rawPoints = Array.isArray(resolvedKnowledge.points) ? resolvedKnowledge.points : [];
   const inputPointMap = new Map(
     (Array.isArray(input.knowledge?.points) ? input.knowledge.points : [])
       .filter((point) => typeof point?.name === 'string' && point.name.trim())
@@ -940,6 +969,11 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
   },
   buildUserPayload: (input) => buildPromptInput(input),
   normalizeOutput: (parsed, input) => normalizeOutput(parsed, input),
+  // Q9 契约漂移容错：core fields 契约校验前把平铺的 knowledge 子字段收敛回 knowledge 对象，
+  // 不改变最终业务形态（最终形态仍由 normalizeOutput 决定）。
+  coerceParsedForContract: (parsed) => (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? { ...parsed, knowledge: resolveKnowledgeBlock(parsed) }
+    : parsed),
   validateParsedOutput: (parsed, input) => validateTeachingTurnOutput(parsed, input),
   mapEnvelope: (output, _input, runtimeContract) => {
     const isCompletion = !!output.control?.isCompletionCandidate;

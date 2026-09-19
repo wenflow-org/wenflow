@@ -168,4 +168,80 @@ describe('teaching-turn canonical artifact', () => {
     const teaching = (output.internal?.ext as any)?.teaching as TeachingTurnOutput;
     expect(teaching.knowledge.confirmCheck).toBeUndefined();
   })
+
+  it('Q9 契约漂移容错：把平铺到顶层的 knowledge 子字段收敛回 knowledge（不丢看板）', async () => {
+    let capturedSpec: any = null
+    mockCallPrompt.mockImplementation(async (spec: any) => {
+      capturedSpec = spec
+      return { success: true, output: artifact, runtimeEnvelope: null, debug: {} }
+    })
+    await teachingTurnAgentHandler(input)
+
+    const flat = {
+      reply: '我们接着看这个点。',
+      analysis: {
+        cognitiveLevel: 'understand', levelScore: 2, understanding: 0.6,
+        confusionPoints: [], engagement: 0.7, emotionalState: 'neutral',
+        loadIndex: 0.4, loadBasis: 'semantic',
+      },
+      // 模型抖动：knowledge 子字段平铺在顶层（没有 knowledge 对象）
+      currentPoint: '闭包',
+      points: [{ name: '闭包', status: 'learning', progress: 40 }],
+      confirmCheck: {
+        prompt: '这个点感觉怎么样？',
+        actions: [
+          { label: '掌握了，继续', message: '这个点我掌握了，继续往下' },
+          { label: '再讲一遍', message: '这个点还不太清楚，换个方式讲' },
+        ],
+      },
+      pedagogy: { strategies: ['explain'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }
+
+    expect(capturedSpec.validateParsedOutput(flat, input)).toEqual({ valid: true })
+
+    const coerced = capturedSpec.coerceParsedForContract(flat, input)
+    expect(coerced.knowledge).toMatchObject({
+      currentPoint: '闭包',
+      points: [{ name: '闭包', status: 'learning', progress: 40 }],
+    })
+
+    const normalized = capturedSpec.normalizeOutput(flat, input)
+    expect(normalized.knowledge.currentPoint).toBe('闭包')
+    expect(normalized.knowledge.points).toEqual([{ name: '闭包', status: 'learning', progress: 40 }])
+    expect(normalized.knowledge.confirmCheck).toEqual({
+      prompt: '这个点感觉怎么样？',
+      actions: [
+        { label: '掌握了，继续', message: '这个点我掌握了，继续往下' },
+        { label: '再讲一遍', message: '这个点还不太清楚，换个方式讲' },
+      ],
+    })
+  })
+
+  it('Q9 契约漂移容错：嵌套 knowledge 存在时优先于顶层同名平铺键', async () => {
+    let capturedSpec: any = null
+    mockCallPrompt.mockImplementation(async (spec: any) => {
+      capturedSpec = spec
+      return { success: true, output: artifact, runtimeEnvelope: null, debug: {} }
+    })
+    await teachingTurnAgentHandler(input)
+
+    const both = {
+      reply: '继续。',
+      analysis: {
+        cognitiveLevel: 'understand', levelScore: 2, understanding: 0.6,
+        confusionPoints: [], engagement: 0.7, emotionalState: 'neutral',
+        loadIndex: 0.4, loadBasis: 'semantic',
+      },
+      knowledge: { currentPoint: '嵌套点', points: [{ name: '嵌套点', status: 'learning', progress: 80 }] },
+      currentPoint: '平铺点',
+      points: [{ name: '平铺点', status: 'pending', progress: 0 }],
+      pedagogy: { strategies: ['explain'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }
+
+    const normalized = capturedSpec.normalizeOutput(both, input)
+    expect(normalized.knowledge.currentPoint).toBe('嵌套点')
+    expect(normalized.knowledge.points).toEqual([{ name: '嵌套点', status: 'learning', progress: 80 }])
+  })
 })
