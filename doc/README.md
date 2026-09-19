@@ -38,6 +38,8 @@
 - [`SCALE_PREREQUISITES_DESIGN.md`](./SCALE_PREREQUISITES_DESIGN.md)
   - 规模化前置设计基线（Q18 真实用户实验 / Q19 学习者生命周期 / Q20 单位经济）：现状核实 + 最小可行设计 + 前置决策点 + 验收里程碑
   - 承接 `UPGRADE_DIRECTION_20Q.md`「第三波 · 规模化前置」结论，仅为设计，不含实现
+- [`NEW_FINDINGS_ASSESSMENT.md`](./NEW_FINDINGS_ASSESSMENT.md)
+  - 虚拟学习者验证过程中新发现的三项问题评估（真实侧时间信号 / 路径失败无自愈 / 教学回合失败终局化）+ 优先级建议
 
 ## Agent 与场景
 
