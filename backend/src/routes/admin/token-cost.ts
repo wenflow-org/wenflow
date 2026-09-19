@@ -25,6 +25,14 @@ import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { REAL_USER_WHERE as REAL_USER_WHERE_UTILS } from '../../utils/test-account';
 import { listAgentManifest } from '../../services/agent-manifest.service';
+import {
+  accumulateCost,
+  createCostBucket,
+  describePricingStatus,
+  summarizeCallCosts,
+  type CostBucket,
+  type PricingStatus,
+} from '../../services/cost/call-cost-aggregation';
 import { logger } from '../../utils/logger';
 
 const router = express.Router();
@@ -84,13 +92,11 @@ async function resolveRealUserIds(): Promise<string[]> {
   return ids;
 }
 
-interface RankEntry {
+/** 排行条目：沿用既有 token 字段，附加成本字段（usd=null 表示单价未配置，不用 0 冒充） */
+interface RankEntry extends CostBucket {
   key: string;
   display: string;
   tokens: number;
-  promptTokens: number;
-  completionTokens: number;
-  calls: number;
   failed: number;
 }
 
@@ -101,11 +107,13 @@ interface RankEntry {
 const TOKEN_CACHE_TTL_MS = 30_000;
 
 interface TokenDataResult {
-  totals: { tokens: number; promptTokens: number; completionTokens: number; calls: number; failed: number };
+  totals: CostBucket & { tokens: number; failed: number };
   trend: Array<{ date: string; tokens: number; calls: number; failed: number }>;
   bySkill: RankEntry[];
   byUser: RankEntry[];
   byModel: RankEntry[];
+  /** 已出现模型的单价配置状态（运维补价清单） */
+  pricingStatus: PricingStatus;
 }
 
 const tokenCache = new Map<string, { expires: number; data: TokenDataResult }>();
@@ -162,7 +170,7 @@ async function loadTokenData(days: number, includeTest: boolean) {
   const [tokenRows, callRows] = await Promise.all([
     prisma.agent_call_logs.findMany({
       where: { executionLayer: 'api-gateway', tokensUsed: { gt: 0 }, calledAt: { gte: since }, ...userScope },
-      select: { metadata: true, userId: true, model: true, tokensUsed: true, promptTokens: true, completionTokens: true, success: true, calledAt: true },
+      select: { metadata: true, userId: true, model: true, tokensUsed: true, promptTokens: true, completionTokens: true, success: true, calledAt: true, sessionId: true, agentId: true },
     }),
     prisma.agent_call_logs.findMany({
       where: { calledAt: { gte: since }, ...userScope },
@@ -198,15 +206,18 @@ async function loadTokenData(days: number, includeTest: boolean) {
     for (let i = 0; i < maps.length; i += 1) {
       const key = entries[i][0];
       const display = entries[i][1];
-      const e = maps[i].get(key) || { key, display, tokens: 0, promptTokens: 0, completionTokens: 0, calls: 0, failed: 0 };
+      const e = maps[i].get(key) || { key, display, tokens: 0, failed: 0, ...createCostBucket() };
       e.tokens += t;
-      e.promptTokens += r.promptTokens || 0;
-      e.completionTokens += r.completionTokens || 0;
-      e.calls += 1;
       if (r.success === false) e.failed += 1;
+      // 成本单遍累加：calls/promptTokens/completionTokens/金额一次写入（agent_call_logs 无缓存明细 → 缓存按 0 全价计）
+      accumulateCost(e, r);
       maps[i].set(key, e);
     }
   }
+
+  // 总量成本：只对带 token 的 gateway 行（与 token 排行同源）；单价未配置时 usd=null
+  const costTotals = summarizeCallCosts(tokenRows);
+  const pricingStatus = describePricingStatus(tokenRows.map((r) => r.model));
 
   // —— 调用/失败计数补全（全量行，含 skill 层）——
   const callCount = callRows.length;
@@ -248,11 +259,17 @@ async function loadTokenData(days: number, includeTest: boolean) {
       completionTokens: totalCompletion,
       calls: callCount,
       failed: callFailed,
+      // 新增成本字段（语义不变，仅追加）：usd=null 表示无已定价调用；pricingKnown 为 false 时金额不完整
+      usd: costTotals.usd,
+      pricingKnown: costTotals.pricingKnown,
+      callsMissingPricing: costTotals.callsMissingPricing,
+      pricedCalls: costTotals.pricedCalls,
     },
     trend: [...daily.values()],
     bySkill: sortByTokens(skillMap),
     byUser: sortByTokens(userMap),
     byModel: sortByTokens(modelMap),
+    pricingStatus,
   };
 }
 
@@ -266,6 +283,8 @@ router.get('/summary', async (req: Request, res: Response) => {
     const data = await loadTokenDataCached(days, includeTest);
     res.json({
       success: true,
+      // 响应顶层：运维据此定位待补单价的模型（configuredModels / missingPricingModels）
+      pricingStatus: data.pricingStatus,
       data: {
         days,
         includeTest,
@@ -287,7 +306,7 @@ router.get('/by-skill', async (req: Request, res: Response) => {
     const days = parseDays(req.query.days);
     const includeTest = parseIncludeTest(req.query.includeTest);
     const data = await loadTokenDataCached(days, includeTest);
-    res.json({ success: true, data: { days, includeTest, items: data.bySkill } });
+    res.json({ success: true, pricingStatus: data.pricingStatus, data: { days, includeTest, items: data.bySkill } });
   } catch (error: any) {
     logger.error('token-cost by-skill 失败:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -315,7 +334,7 @@ router.get('/by-user', async (req: Request, res: Response) => {
       return { ...r, name: u?.name || null, email: u?.email || null };
     });
 
-    res.json({ success: true, data: { days, includeTest, items } });
+    res.json({ success: true, pricingStatus: data.pricingStatus, data: { days, includeTest, items } });
   } catch (error: any) {
     logger.error('token-cost by-user 失败:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -330,7 +349,7 @@ router.get('/by-model', async (req: Request, res: Response) => {
     const days = parseDays(req.query.days);
     const includeTest = parseIncludeTest(req.query.includeTest);
     const data = await loadTokenDataCached(days, includeTest);
-    res.json({ success: true, data: { days, includeTest, items: data.byModel } });
+    res.json({ success: true, pricingStatus: data.pricingStatus, data: { days, includeTest, items: data.byModel } });
   } catch (error: any) {
     logger.error('token-cost by-model 失败:', error);
     res.status(500).json({ success: false, error: error.message });
