@@ -402,6 +402,11 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 |---|---|---|
 | Q8 延迟锚题复测（已完成点 · 自然日间隔 → 保持率样本） | `dc8f3c83` | `anchor-probe` 增 `utcNaturalDayDiff` + `selectDelayedAnchorCandidates`（UTC 自然日间隔门、`lastProbeAt` 冷却、最久未接触优先）；`anchor-probe-emit` 增延迟候选构建与 `TEACHING_DELAYED_ANCHOR_DAYS`（默认 7）；`anchor:result` payload 增 `anchorKind`/`intervalDays`；仍是**只观测不改写**（不重写掌握/难度/BKT、不伪造教师回复），读取失败结构化降级打标 |
 
+### Wave 3（Q8 延迟锚题修复）
+| 项 | 提交 | 机制发现与修复 |
+|---|---|---|
+| Q8 延迟锚题数据供给修复（真实 8 天 VL 长跑：延迟锚题永不触发） | `b5f49c52` | **机制**（`anchorKind:'delayed'` 恒不命中，两条 `anchor:result` 均为 `independent`）：延迟候选的 `lastSeenAt` 来源是 `LearnerProjectionService.toTeachingProjection` 的 `recentConceptLedger = conceptLedger.slice(0, 12)`；12 条被**真墙钟**时间戳占满，而真正到期（模拟 `2026-09-01`、`mastered`）的老概念排在 12 名开外 → 无时间戳被排除；真墙钟与探针的模拟 `now` 跨域比较，被 `utcNaturalDayDiff` 的 `Math.max(0,…)` 钳成 0 → 永不触发。真墙钟混入账本有两条写路径：① `memory-trace.service.ts` 的 `applyKtEstimate`（`backend/src/services/memory/memory-trace.service.ts:448-460`）创建 KT-only 痕迹时**不写 `lastSeenAt`**，而 `LearnerKnowledgeMemoryService` 的 `seenAt`（`backend/src/services/learner/LearnerKnowledgeMemoryService.ts` 旧码 `trace.lastSeenAt \|\| trace.updatedAt`）回退 Prisma `@updatedAt`（真墙钟基础设施列）；② `SessionFinalizationService`（`backend/src/services/ai-teaching/SessionFinalizationService.ts:216` 旧码）完成任务未传 `asOf`，`completedAt` 落真墙钟。**修复**：A（数据供给）`TeachingContextBuilder` 从**全量** `conceptStates`/`conceptLedger` 派生 `anchorMasteredLastSeenAt`，经 `buildAnchorSignalSource` 注入延迟候选，不再依赖 12 条切片；B（时钟域）账本 `seenAt` 只用业务写入的 `completedAt`/`endTime`/`lastSeenAt`（`simulatedNowOr`/`asOf` 落模拟日），缺则**不记**、绝不回退 `updatedAt`，并给 `SessionFinalizationService` 补 `asOf: simulatedNowOr()`；C（防御）新增纯函数 `partitionDelayedAnchorCandidates`，检出 `completedAt > now`（跨域/未来）→ 跳过 + `future-timestamp` 标签 + 结构化降级留痕，不再依赖 `Math.max(0,…)` 静默钳制。独立探针行为不变，仍**只观测不改写** |
+
 ### Wave 3（契约漂移清理）
 | 项 | 提交 | 结果 |
 |---|---|---|
