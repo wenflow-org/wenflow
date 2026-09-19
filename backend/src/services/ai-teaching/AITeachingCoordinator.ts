@@ -6,7 +6,7 @@ import learningStateService, { LearningStateMetrics } from '../learning/learning
 import type { SessionWrapupArtifact, SessionWrapupSummary } from '../../skills/session-wrapup';
 import { teachingTurnAgentDefinition, type TeachingTurnInput, type TeachingTurnOutput } from '../../skills/teaching-turn';
 import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, sessionWrapupAgentDefinition, peerAgentDefinition } from '../../skills';
-import { buildTeachingScenarioContext, type TeachingScenarioContext, type InteractionMetaRecord } from './TeachingContextBuilder';
+import { buildTeachingScenarioContext, type TeachingScenarioContext, type InteractionMetaRecord, type TeachingTemporalGap } from './TeachingContextBuilder';
 import { fsrsRetrievability, type FsrsMemoryState } from '../memory/fsrs';
 import {
   teachingSessionRepository,
@@ -1863,7 +1863,11 @@ async function buildTeachingTurnInput(
   const { channels } = await assembleTeachingTurnChannels({ session, teachingState, context }).catch(() => ({ channels: {}, skipped: [] }));
 
   const anchorTarget = options.anchorTarget ?? null;
-  const controls: TeachingTurnInput['controls'] & { anchorProbe?: AnchorPromptTarget } = {
+  const controls: TeachingTurnInput['controls'] & {
+    anchorProbe?: AnchorPromptTarget;
+    /** 真实侧时间信号（跨会话长间隔）：无前序会话时为 undefined，不注入该字段 */
+    temporalGap?: TeachingTemporalGap;
+  } = {
     mode: session.mode as TeachingMode,
     teachingControlContext: channels['controls.teachingControlContext'] || teachingControlContext,
     // 出题触发由代码给（2026-09-17）：模型只出题与答案键，不再自行决定"什么时候探测"
@@ -1873,6 +1877,10 @@ async function buildTeachingTurnInput(
   // 对该概念的独立复测（见 prompts/core/teaching-turn.yaml 的锚题约束）。目标为 null 时不注入任何字段。
   if (anchorTarget) {
     controls.anchorProbe = buildAnchorPromptTarget(anchorTarget);
+  }
+  // 真实侧时间信号（Q19 真实侧）：有前序会话才注入；无前序时字段缺失，提示词行为不变。
+  if (context.temporalGap) {
+    controls.temporalGap = context.temporalGap;
   }
 
   return {

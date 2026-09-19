@@ -118,6 +118,12 @@ export interface TeachingScenarioContext {
       lastActionPlan: string[];
     } | null;
   } | null;
+  /**
+   * 真实侧时间信号（跨会话"时间维度"）：距上一节相关课程结束的间隔。
+   * 无前序会话（或缺 endTime）时为 null——调用方应省略该字段，行为与改造前一致。
+   * 消费方：AITeachingCoordinator 注入 `controls.temporalGap`，提示词据此对长间隔回归更保守。
+   */
+  temporalGap: TeachingTemporalGap | null;
   /** 结构化前序学习上下文（供开场 UI/承接叙事消费，lastLessonRecap 的富化版） */
   priorLearningContext: {
     hasPriorLearning: boolean;
@@ -456,6 +462,80 @@ function determineTaskMode(
   return 'normal';
 }
 
+/** 真实侧长间隔阈值（天）：距上一节课达到该天数即视为"保留率下降"的长间隔回归。 */
+export const DEFAULT_TEMPORAL_LONG_GAP_DAYS = 14;
+
+/** 长间隔阈值解析：env `TEACHING_TEMPORAL_LONG_GAP_DAYS` 优先，非法/缺失回退默认值。 */
+export function resolveTemporalLongGapThresholdDays(raw?: string | null): number {
+  const parsed = Number(String(raw ?? '').trim());
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TEMPORAL_LONG_GAP_DAYS;
+}
+
+export interface TeachingTemporalGap {
+  /** 距上一节相关课程结束的天数（保留 1 位小数） */
+  daysSinceLastSession: number;
+  /** 是否达到长间隔阈值（`>= thresholdDays`） */
+  isLongGap: boolean;
+}
+
+/**
+ * 纯函数：由"上一节相关课程 endTime"计算时间间隔信号。
+ * - 无可用 endTime（null/undefined/非法）→ null（调用方省略字段，行为不变）
+ * - now 早于 endTime（时钟漂移）→ 归零，不产生负数
+ * - isLongGap 判定为 `>= thresholdDays`（默认 {@link DEFAULT_TEMPORAL_LONG_GAP_DAYS}）
+ */
+export function computeTemporalGap(
+  lastSessionEndTime: Date | string | null | undefined,
+  now: Date = new Date(),
+  thresholdDays: number = DEFAULT_TEMPORAL_LONG_GAP_DAYS,
+): TeachingTemporalGap | null {
+  if (!lastSessionEndTime) return null;
+  const end = lastSessionEndTime instanceof Date ? lastSessionEndTime : new Date(lastSessionEndTime);
+  const endMs = end.getTime();
+  if (!Number.isFinite(endMs)) return null;
+  const threshold = Number.isFinite(thresholdDays) && thresholdDays > 0
+    ? thresholdDays
+    : DEFAULT_TEMPORAL_LONG_GAP_DAYS;
+  const days = Math.max(0, (now.getTime() - endMs) / (24 * 60 * 60 * 1000));
+  return {
+    daysSinceLastSession: Math.round(days * 10) / 10,
+    isLongGap: days >= threshold,
+  };
+}
+
+/**
+ * 取同一用户、同路径上**最近一节已完成课**的 endTime（排除当前进行中的会话）。
+ * 供真实侧时间信号主数据源；查询异常静默降级为 null（教学照常）。
+ */
+export async function fetchLatestPriorSessionEndTime(params: {
+  userId: string;
+  learningPathId: string;
+  excludeSessionId?: string | null;
+}): Promise<Date | null> {
+  const { userId, learningPathId, excludeSessionId } = params;
+  try {
+    const row = await prisma.teaching_sessions.findFirst({
+      where: {
+        userId,
+        learningPathId,
+        status: 'completed',
+        endTime: { not: null },
+        ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
+      },
+      orderBy: { endTime: 'desc' },
+      select: { endTime: true },
+    });
+    return row?.endTime ?? null;
+  } catch (error) {
+    logger.warn('[TeachingContext] 拉取上一节结束时间失败（静默降级）', {
+      error: error instanceof Error ? error.message : String(error),
+      userId,
+      learningPathId,
+    });
+    return null;
+  }
+}
+
 /**
  * 拉取前序课程摘要（跨节承接数据源），按路径位置选择：
  * 1) 同 milestone 前一任务（同阶段内顺序接续）
@@ -470,7 +550,12 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
   currentTaskId: string;
   currentStageNumber: number;
   milestoneTitle: string;
-}): Promise<{ recap: TeachingScenarioContext['lastLessonRecap']; sameTaskSessions: number }> {
+}): Promise<{
+  recap: TeachingScenarioContext['lastLessonRecap'];
+  sameTaskSessions: number;
+  /** 实际被选为 recap 源的那节课的 endTime（时间信号的兜底源；无 recap 时为 null） */
+  lastSourceEndTime: Date | null;
+}> {
   const {
     userId,
     learningPathId,
@@ -479,7 +564,8 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
     currentStageNumber,
     milestoneTitle,
   } = params;
-  const empty = (): { recap: null; sameTaskSessions: 0 } => ({ recap: null, sameTaskSessions: 0 });
+  const empty = (): { recap: null; sameTaskSessions: 0; lastSourceEndTime: null } =>
+    ({ recap: null, sameTaskSessions: 0, lastSourceEndTime: null });
 
   try {
     // 同路径阶段顺序
@@ -569,7 +655,7 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
             wrapup: { not: null },
           },
           orderBy: { endTime: 'desc' },
-          select: { topic: true, wrapup: true },
+          select: { topic: true, wrapup: true, endTime: true },
         })
       : null;
     if (prevTaskSessions) {
@@ -583,6 +669,7 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
             sourceTaskTitle: prevTaskInMilestone?.title || null,
           },
           sameTaskSessions: sameTaskSessions.length,
+          lastSourceEndTime: prevTaskSessions.endTime ?? null,
         };
       }
     }
@@ -603,7 +690,7 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
               wrapup: { not: null },
             },
             orderBy: { endTime: 'desc' },
-            select: { topic: true, wrapup: true },
+            select: { topic: true, wrapup: true, endTime: true },
           })
         : null;
       if (prevMsSessions) {
@@ -617,6 +704,7 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
               sourceTaskTitle: null,
             },
             sameTaskSessions: sameTaskSessions.length,
+            lastSourceEndTime: prevMsSessions.endTime ?? null,
           };
         }
       }
@@ -634,6 +722,7 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
             sourceTaskTitle: null,
           },
           sameTaskSessions: sameTaskSessions.length,
+          lastSourceEndTime: sameTaskLatest?.endTime ?? null,
         };
       }
     }
@@ -648,13 +737,15 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
         wrapup: { not: null },
       },
       orderBy: { endTime: 'desc' },
-      select: { topic: true, wrapup: true },
+      select: { topic: true, wrapup: true, endTime: true },
     });
     if (lastEnded) {
       const recap = toRecap(lastEnded, 'last-any');
-      if (recap) return { recap, sameTaskSessions: sameTaskSessions.length };
+      if (recap) {
+        return { recap, sameTaskSessions: sameTaskSessions.length, lastSourceEndTime: lastEnded.endTime ?? null };
+      }
     }
-    return { recap: null, sameTaskSessions: sameTaskSessions.length };
+    return { recap: null, sameTaskSessions: sameTaskSessions.length, lastSourceEndTime: null };
   } catch (error) {
     logger.warn('[TeachingContext] 拉取前序课程摘要失败（静默降级）', {
       error: error instanceof Error ? error.message : String(error),
@@ -881,7 +972,7 @@ export async function buildTeachingScenarioContext(
     : Math.max(1, orderedTasks.findIndex((item: any) => item.id === task.id) + 1);
 
   // 前序学习上下文：按路径位置接续（同阶段前一任务 → 上一阶段 → 同任务历史 → 最近任意）
-  const { recap: lastLessonRecap, sameTaskSessions } = await fetchPriorLearningRecap({
+  const { recap: lastLessonRecap, sameTaskSessions, lastSourceEndTime } = await fetchPriorLearningRecap({
     userId,
     learningPathId: path.id,
     currentMilestoneId: task.milestoneId,
@@ -889,6 +980,18 @@ export async function buildTeachingScenarioContext(
     currentStageNumber: Number.isFinite(Number(milestone.stageNumber)) ? Number(milestone.stageNumber) : 1,
     milestoneTitle: milestone.title || milestone.goal || '当前阶段',
   });
+  // 真实侧时间信号：优先"同路径最近一节已完成课"的 endTime；查询无果/异常时兜底用 recap 源课 endTime。
+  // 无任何前序（含 endTime）→ null，调用方省略 controls.temporalGap，行为与改造前一致。
+  const latestPriorSessionEndTime = await fetchLatestPriorSessionEndTime({
+    userId,
+    learningPathId: path.id,
+    excludeSessionId: previousSession?.id ?? null,
+  });
+  const temporalGap = computeTemporalGap(
+    latestPriorSessionEndTime ?? lastSourceEndTime,
+    new Date(),
+    resolveTemporalLongGapThresholdDays(process.env.TEACHING_TEMPORAL_LONG_GAP_DAYS),
+  );
   const priorMilestoneMastery = buildPriorMilestoneMastery(learnerSnapshot);
   const priorLearningContext: TeachingScenarioContext['priorLearningContext'] = (lastLessonRecap || sameTaskSessions > 0 || priorMilestoneMastery.length > 0)
     ? {
@@ -996,6 +1099,7 @@ export async function buildTeachingScenarioContext(
       } : null,
     learningSignal,
     lastLessonRecap,
+    temporalGap,
     priorLearningContext,
     learnerInsights,
     interactionProfile: buildInteractionProfile(interactionMeta, previousSession?.messages ?? []),

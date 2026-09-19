@@ -78,6 +78,25 @@ describe('fetchPriorLearningRecap（按路径位置接续前序）', () => {
     expect(recap?.sameTaskHistory).toBeUndefined();
   });
 
+  it('同时回传 recap 源课的 endTime（真实侧时间信号的兜底源）', async () => {
+    mockMilestones();
+    mockTasksInMilestone([
+      { id: 'task-a', title: '任务A' },
+      { id: 'task-b', title: '任务B' },
+    ]);
+    prisma.teaching_sessions.findMany.mockResolvedValue([]); // 同任务历史为空
+    const endTime = new Date('2026-09-10T10:00:00Z');
+    prisma.teaching_sessions.findFirst.mockResolvedValue({
+      topic: '任务A',
+      endTime,
+      wrapup: JSON.stringify(wrapup('任务A总结')),
+    });
+
+    const { recap, lastSourceEndTime } = await fetchPriorLearningRecap(base);
+    expect(recap?.relation).toBe('same-milestone-prev-task');
+    expect(lastSourceEndTime).toBe(endTime);
+  });
+
   it('同阶段无前一任务时接续上一阶段（prev-milestone）', async () => {
     mockMilestones();
     mockTasksInMilestone([{ id: 'task-b', title: '任务B' }]); // 第一个任务，无前一任务
@@ -150,7 +169,8 @@ describe('fetchPriorLearningRecap（按路径位置接续前序）', () => {
     prisma.subtasks.findMany.mockResolvedValue([]);
     prisma.teaching_sessions.findFirst.mockResolvedValue(null);
 
-    const { recap } = await fetchPriorLearningRecap(base);
+    const { recap, lastSourceEndTime } = await fetchPriorLearningRecap(base);
     expect(recap).toBeNull();
+    expect(lastSourceEndTime).toBeNull();
   });
 });
