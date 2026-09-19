@@ -1,19 +1,11 @@
 import express from 'express';
-import prisma from '../../config/database';
+import { checkIsAdmin } from '../../services/admin-access.service';
+import { listAdminMemoryTraces } from '../../services/memory/memory-trace.service';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { fsrsRetrievability, type FsrsMemoryState } from '../../services/memory/fsrs';
 
 const router = express.Router();
 router.use(authMiddleware);
-
-async function ensureAdmin(userId?: string) {
-  if (!userId) return false;
-  const operator = await prisma.users.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true },
-  });
-  return !!operator?.isAdmin;
-}
 
 /**
  * GET /api/admin/memory-traces
@@ -27,7 +19,7 @@ async function ensureAdmin(userId?: string) {
  */
 router.get('/', async (req, res) => {
   try {
-    const allowed = await ensureAdmin(req.user?.userId);
+    const allowed = await checkIsAdmin(req.user?.userId);
     if (!allowed) {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
@@ -37,42 +29,7 @@ router.get('/', async (req, res) => {
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
     const includeVirtual = String(req.query.includeVirtual || '') === 'true';
 
-    // memory_traces.userId 是纯字符串列、无 user 关系，不能写 where: { user: {...} }（Prisma 直接抛错 → 500）。
-    // 默认排除虚拟学习者：先取虚拟 id 集合，再用 userId.notIn；与指定 userId 用 AND 组合（避免键覆盖）。
-    const virtualIds = includeVirtual
-      ? []
-      : (await prisma.users.findMany({
-          where: { isVirtualLearner: true },
-          select: { id: true },
-        })).map((u) => u.id);
-
-    const traces = await prisma.memory_traces.findMany({
-      where: {
-        AND: [
-          ...(userId ? [{ userId }] : []),
-          ...(virtualIds.length ? [{ userId: { notIn: virtualIds } }] : []),
-        ],
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: limit,
-      select: {
-        id: true,
-        userId: true,
-        conceptKey: true,
-        label: true,
-        masteryScore: true,
-        stability: true,
-        extractionCount: true,
-        lastSeenAt: true,
-        fsrsStability: true,
-        fsrsDifficulty: true,
-        fsrsLapses: true,
-        fsrsReps: true,
-        ktMasteryEma: true,
-        dueAt: true,
-        updatedAt: true,
-      },
-    });
+    const traces = await listAdminMemoryTraces({ userId, includeVirtual, limit });
 
     const now = new Date();
     const rows = traces.map((t) => {

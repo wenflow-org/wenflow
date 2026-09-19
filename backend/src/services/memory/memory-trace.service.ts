@@ -467,6 +467,56 @@ class MemoryTraceService {
   // 在同一条收束路径上把同一成绩应用两次，再叠加事件消费者 → 间隔被过度拉长、计数重复自增。
 }
 
+/** 管理端「记忆痕迹」列表查询参数（memory-traces 路由下沉） */
+export interface AdminMemoryTraceListQuery {
+  userId?: string;
+  includeVirtual: boolean;
+  limit: number;
+}
+
+/**
+ * 管理端「记忆痕迹」列表：默认排除虚拟学习者。
+ *
+ * memory_traces.userId 是纯字符串列、无 user 关系，不能写 where: { user: {...} }（Prisma 直接抛错 → 500）。
+ * 默认排除虚拟学习者：先取虚拟 id 集合，再用 userId.notIn；与指定 userId 用 AND 组合（避免键覆盖）。
+ */
+export async function listAdminMemoryTraces(query: AdminMemoryTraceListQuery) {
+  const virtualIds = query.includeVirtual
+    ? []
+    : (await prisma.users.findMany({
+        where: { isVirtualLearner: true },
+        select: { id: true },
+      })).map((u) => u.id);
+
+  return prisma.memory_traces.findMany({
+    where: {
+      AND: [
+        ...(query.userId ? [{ userId: query.userId }] : []),
+        ...(virtualIds.length ? [{ userId: { notIn: virtualIds } }] : []),
+      ],
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: query.limit,
+    select: {
+      id: true,
+      userId: true,
+      conceptKey: true,
+      label: true,
+      masteryScore: true,
+      stability: true,
+      extractionCount: true,
+      lastSeenAt: true,
+      fsrsStability: true,
+      fsrsDifficulty: true,
+      fsrsLapses: true,
+      fsrsReps: true,
+      ktMasteryEma: true,
+      dueAt: true,
+      updatedAt: true,
+    },
+  });
+}
+
 /** 默认复习目标保留时间（天）：路径跨度的保守估计，调用方可按路径时长覆盖 */
 export const DEFAULT_RETENTION_TARGET_DAYS = 7;
 

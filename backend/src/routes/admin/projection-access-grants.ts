@@ -1,24 +1,15 @@
 import express from 'express';
-import prisma from '../../config/database';
+import { checkIsAdmin } from '../../services/admin-access.service';
+import {
+  listProjectionAccessGrantsWithUser,
+  findProjectionAccessGrantWithUser,
+} from '../../services/projection-access-grant.service';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { signProjectionToken } from '../../utils/projection-token';
 
 const router = express.Router();
 
 router.use(authMiddleware);
-
-async function ensureAdmin(userId?: string) {
-  if (!userId) {
-    return false;
-  }
-
-  const operator = await prisma.users.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true }
-  });
-
-  return !!operator?.isAdmin;
-}
 
 function parseScopeDefinition(value: string | null | undefined) {
   if (!value) {
@@ -66,7 +57,7 @@ function formatGrant(grant: any) {
 
 router.get('/', async (req: any, res) => {
   try {
-    const allowed = await ensureAdmin(req.user?.userId);
+    const allowed = await checkIsAdmin(req.user?.userId);
     if (!allowed) {
       return res.status(403).json({
         success: false,
@@ -102,15 +93,7 @@ router.get('/', async (req: any, res) => {
       ];
     }
 
-    const grants = await prisma.projection_access_grants.findMany({
-      where,
-      include: {
-        users: {
-          select: { id: true, name: true, email: true }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    const grants = await listProjectionAccessGrantsWithUser(where);
 
     res.json({
       success: true,
@@ -129,7 +112,7 @@ router.get('/', async (req: any, res) => {
 router.post('/:grantId/projection-token', async (req: any, res) => {
   try {
     const operatorId = req.user?.userId;
-    const allowed = await ensureAdmin(operatorId);
+    const allowed = await checkIsAdmin(operatorId);
     if (!allowed) {
       return res.status(403).json({
         success: false,
@@ -137,14 +120,7 @@ router.post('/:grantId/projection-token', async (req: any, res) => {
       });
     }
 
-    const grant = await prisma.projection_access_grants.findUnique({
-      where: { id: req.params.grantId },
-      include: {
-        users: {
-          select: { id: true, name: true, email: true }
-        }
-      }
-    });
+    const grant = await findProjectionAccessGrantWithUser(req.params.grantId);
 
     if (!grant) {
       return res.status(404).json({

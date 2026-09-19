@@ -1,6 +1,10 @@
 import express from 'express';
-import prisma from '../config/database';
-import { withTransaction } from '../utils/with-transaction';
+import {
+  listProjectionAccessGrants,
+  findUserProjectionAccessGrant,
+  createProjectionAccessGrant,
+  revokeProjectionAccessGrant,
+} from '../services/projection-access-grant.service';
 import { logger } from '../utils/logger';
 
 const router = express.Router();
@@ -133,10 +137,7 @@ router.get('/access-grants', async (req: any, res) => {
       where.expiresAt = { lte: now };
     }
 
-    const grants = await prisma.projection_access_grants.findMany({
-      where,
-      orderBy: { createdAt: 'desc' }
-    });
+    const grants = await listProjectionAccessGrants(where);
 
     res.json({
       success: true,
@@ -220,27 +221,13 @@ router.post('/access-grants', async (req: any, res) => {
       });
     }
 
-    const now = new Date();
-    const grant = await withTransaction(async (tx) => {
-      await tx.projection_access_grants.updateMany({
-        where: {
-          userId,
-          revokedAt: null,
-          expiresAt: { gt: now }
-        },
-        data: { revokedAt: now }
-      });
-
-      return tx.projection_access_grants.create({
-        data: {
-          userId,
-          scope: normalizeProjectionScope(req.body?.scope),
-          scopeDefinition,
-          purpose,
-          expiresAt
-        }
-      });
-    }, { label: 'user-developer.createGrant' });
+    const grant = await createProjectionAccessGrant({
+      userId,
+      scope: normalizeProjectionScope(req.body?.scope),
+      scopeDefinition,
+      purpose,
+      expiresAt,
+    });
 
     res.status(201).json({
       success: true,
@@ -264,12 +251,7 @@ router.post('/access-grants/:grantId/revoke', async (req: any, res) => {
     const userId = req.user?.userId;
     const grantId = req.params.grantId;
 
-    const existing = await prisma.projection_access_grants.findFirst({
-      where: {
-        id: grantId,
-        userId
-      }
-    });
+    const existing = await findUserProjectionAccessGrant(grantId, userId);
 
     if (!existing) {
       return res.status(404).json({
@@ -280,15 +262,7 @@ router.post('/access-grants/:grantId/revoke', async (req: any, res) => {
 
     const now = new Date();
     // 修复：revoke 只撤销目标 grant（此前缺 id 条件会连带撤销该用户全部活跃 grant）
-    await prisma.projection_access_grants.updateMany({
-      where: {
-        id: grantId,
-        userId,
-        revokedAt: null,
-        expiresAt: { gt: now }
-      },
-      data: { revokedAt: now }
-    });
+    await revokeProjectionAccessGrant(grantId, userId, now);
 
     const grant = existing.revokedAt
       ? existing

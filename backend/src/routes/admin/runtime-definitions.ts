@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
-import prisma from '../../config/database';
-import systemPrisma from '../../config/system-database';
+import { listActiveAgentPrompts } from '../../services/agent-prompt.service';
+import { listPromptCallLogs } from '../../services/prompt-call-log.service';
 import {
   listAgentManifest,
   getAgentManifest,
@@ -80,23 +80,7 @@ router.get('/agents', async (_req: Request, res: Response) => {
   const skillEntries = manifest.filter((entry) => entry.kind === 'skill');
 
   const agentIds = skillEntries.map((entry) => entry.id);
-  const activePrompts = await systemPrisma.agent_prompts.findMany({
-    where: {
-      agentId: { in: agentIds },
-      status: 'ACTIVE',
-    },
-    select: {
-      agentId: true,
-      id: true,
-      version: true,
-      name: true,
-      updatedAt: true,
-      publishedAt: true,
-      temperature: true,
-      maxTokens: true,
-      model: true,
-    },
-  });
+  const activePrompts = await listActiveAgentPrompts(agentIds);
   const promptMap = new Map(activePrompts.map((item) => [item.agentId, item]));
 
   res.json({
@@ -142,19 +126,14 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
     : null;
   const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
 
-  const rows = await prisma.prompt_call_logs.findMany({
-    where: {
-      ...(agentId ? { agentId } : {}),
-      ...(pathId ? { pathId } : {}),
-      ...(pipelineRunId ? { pipelineRunId } : {}),
-      ...(traceId ? { traceId } : {}),
-      ...(parentExecutionId ? { parentExecutionId } : {}),
-      ...(status === 'success' ? { success: true } : {}),
-      ...(status === 'error' ? { success: false } : {}),
-      ...(status === 'drift' ? { promptDrift: true } : {}),
-    },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
+  const rows = await listPromptCallLogs({
+    agentId,
+    pathId,
+    pipelineRunId,
+    traceId,
+    parentExecutionId,
+    status,
+    limit,
   });
 
   res.json({

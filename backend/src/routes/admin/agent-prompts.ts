@@ -12,7 +12,10 @@
  */
 
 import { Router, Request, Response } from 'express';
-import systemPrisma from '../../config/system-database';
+import {
+  listAgentPrompts,
+  findAgentPromptById,
+} from '../../services/agent-prompt.service';
 import { logger } from '../../utils/logger';
 import { getAgentManifest, getCanonicalAgentId } from '../../services/agent-manifest.service';
 import { rejectAgentPromptMutation } from '../../middleware/prompt-file-truth.middleware';
@@ -46,30 +49,7 @@ router.get('/', async (req: Request, res: Response) => {
       where.status = status as string;
     }
 
-    const prompts = await systemPrisma.agent_prompts.findMany({
-      where,
-      orderBy: [
-        { agentId: 'asc' },
-        { version: 'desc' },
-      ],
-      select: {
-        id: true,
-        agentId: true,
-        version: true,
-        name: true,
-        description: true,
-        status: true,
-        model: true,
-        temperature: true,
-        maxTokens: true,
-        useCount: true,
-        avgLatency: true,
-        successRate: true,
-        createdBy: true,
-        createdAt: true,
-        // 不包含 systemPrompt，避免数据过大
-      },
-    });
+    const prompts = await listAgentPrompts(where);
 
     // 按 agentId 分组
     const grouped = prompts.reduce((acc: any, prompt) => {
@@ -113,8 +93,8 @@ router.get('/compare', async (req: Request, res: Response) => {
     }
 
     const [promptA, promptB] = await Promise.all([
-      systemPrisma.agent_prompts.findUnique({ where: { id: idA } }),
-      systemPrisma.agent_prompts.findUnique({ where: { id: idB } }),
+      findAgentPromptById(idA),
+      findAgentPromptById(idB),
     ]);
 
     if (!promptA) return res.status(404).json({ success: false, error: `Prompt ${idA} 未找到` });

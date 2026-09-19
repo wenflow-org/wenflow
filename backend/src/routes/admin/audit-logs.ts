@@ -4,7 +4,11 @@
 // 与 platform.ts agents/logs 同款筛选风格：精确时间优先、快捷 timeRange 兜底、非法参数 400。
 import { Router } from 'express';
 import { Request, Response, NextFunction } from 'express';
-import prisma from '../../config/database';
+import {
+  countAuditLogs,
+  findAuditLogs,
+  type AuditLogScope,
+} from '../../services/audit-log.service';
 
 const router = Router();
 
@@ -120,25 +124,14 @@ function canonicalizeAuditAction(action: string): string {
     .replace(/\/(gc|user|vs|virt|session)_[A-Za-z0-9]+/g, '/:id');
 }
 
-interface AuditQueryModel {
-  count: (args: { where: Record<string, unknown> }) => Promise<number>;
-  findMany: (args: {
-    where: Record<string, unknown>;
-    orderBy: Record<string, unknown> | Array<Record<string, unknown>>;
-    skip: number;
-    take: number;
-  }) => Promise<Array<Record<string, unknown>>>;
-}
-
 interface AuditFilter {
-  scope: 'operation' | 'login';
-  model: AuditQueryModel;
+  scope: AuditLogScope;
   where: Record<string, unknown>;
 }
 
 /** 组装筛选：scope=operation → admin_audit_logs；scope=login → login_attempts */
 function buildFilter(query: Record<string, unknown>): AuditFilter {
-  const scope = query.scope === 'login' ? 'login' : 'operation';
+  const scope: AuditLogScope = query.scope === 'login' ? 'login' : 'operation';
   const where: Record<string, unknown> = {};
 
   const timeWhere = buildTimeWhere(query);
@@ -154,7 +147,7 @@ function buildFilter(query: Record<string, unknown>): AuditFilter {
     if (keyword) {
       where.OR = LOGIN_KEYWORD_FIELDS.map((field) => ({ [field]: { contains: keyword } }));
     }
-    return { scope, model: prisma.login_attempts as unknown as AuditQueryModel, where };
+    return { scope, where };
   }
 
   const adminId = optionalString(query.adminId);
@@ -172,7 +165,7 @@ function buildFilter(query: Record<string, unknown>): AuditFilter {
   if (keyword) {
     where.OR = OPERATION_KEYWORD_FIELDS.map((field) => ({ [field]: { contains: keyword } }));
   }
-  return { scope, model: prisma.admin_audit_logs as unknown as AuditQueryModel, where };
+  return { scope, where };
 }
 
 function handleError(error: unknown, res: Response, next: NextFunction) {
@@ -189,16 +182,16 @@ function handleError(error: unknown, res: Response, next: NextFunction) {
 // 注意：/stats 必须先于 / 注册（Express 匹配顺序）
 router.get('/stats', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { scope, model, where } = buildFilter(req.query as Record<string, unknown>);
+    const { scope, where } = buildFilter(req.query as Record<string, unknown>);
     const [total, failed] = await Promise.all([
-      model.count({ where }),
-      model.count({ where: { ...where, success: false } }),
+      countAuditLogs(scope, where),
+      countAuditLogs(scope, { ...where, success: false }),
     ]);
     // P2-16：失败按动作聚合（TOP 5），给「失败 N」一个可下钻的入口。
     // 用 findMany + 归一化归并（而非 groupBy action）：老数据 action 含动态 id，直接 groupBy 会被拆散。
     let failureByAction: Array<{ action: string; count: number }> = [];
     if (scope === 'operation' && failed > 0) {
-      const failedRows = await prisma.admin_audit_logs.findMany({
+      const failedRows = await findAuditLogs(scope, {
         where: { ...where, success: false },
         select: { action: true },
         orderBy: { createdAt: 'desc' },
@@ -224,7 +217,7 @@ router.get('/stats', async (req: Request, res: Response, next: NextFunction) => 
 // 分页查询：scope=operation → data.logs；scope=login → data.attempts；均带 pagination
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { scope, model, where } = buildFilter(req.query as Record<string, unknown>);
+    const { scope, where } = buildFilter(req.query as Record<string, unknown>);
     const page = parsePositiveInt(req.query.page, 1, 'page');
     const limit = parsePositiveInt(req.query.limit, DEFAULT_LIMIT, 'limit');
     if (limit > MAX_LIMIT) {
@@ -247,8 +240,8 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       : [{ createdAt: orderRaw }, { id: 'desc' }];
 
     const [total, rows] = await Promise.all([
-      model.count({ where }),
-      model.findMany({
+      countAuditLogs(scope, where),
+      findAuditLogs(scope, {
         where,
         orderBy,
         skip: (page - 1) * limit,
