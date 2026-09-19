@@ -51,7 +51,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 | 8 | **如何测量学习效果** | 观测层（保留率曲线）+ 选点质量 | ✅ 延迟锚题（`dc8f3c83`） |
 | 9 | 编排/拓扑 = **直观看到字段命中上下游** | 已改名「**逻辑图**（字段数据旅程）」+ 字段级运行时命中 | ✅ |
 | 10 | 前端可视化建字段 → **功能自定义增强** | 字段编辑/编译/发布已做；运行时自定义（`accumulate`/L2）未做 | 视场景 |
-| 11 | prompt 编程语言（**类型/字段化功能/逻辑值**） | `SKILL_PROTOCOL_V4` + `core.yaml` 即它；strict schema 编译器就绪、未接线 | 接线（可选） |
+| 11 | prompt 编程语言（**类型/字段化功能/逻辑值**） | `SKILL_PROTOCOL_V4` + `core.yaml` 即它；strict schema 编译器已接入输出校验器（`collectSchemaLimitations` 门禁 + 降级即回退，见 §8 Wave 3，`ac5ae8bc`） | core yaml 声明结构化 `enumValues`/嵌套 `properties` 以点亮严格路径（可选） |
 | 12 | 材料组织：**组装 vs 通用泛化** | 未做（等场景）；已定 B 路线优先 | 待场景 |
 
 ### 附：AI 补的 8 问（治理/商业轴，**不作北星**）
@@ -162,8 +162,9 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 - **分级**：**核心（该做，工程主线）**。
 - **核验**：🟡 DSL ✅（受控词表 `yaml-vocabulary.ts`、编译链 `core-compiler.ts`、守门三查、后置校验器 `skill-output-validator.ts`）；
   **网关完全不支持结构化输出**（`gateway/**` 无 `response_format/json_schema`）→ 第三档"约束解码"落不了地。
-- **处置**：**不追第三档**；第二档增强已做编译器 `0d4aa01b` + core loader 承载 `enumValues`/嵌套 `properties` `126e05c7`。
-  **剩余可选**：把 `compileStrictJsonSchema` 接入 `skill-output-validator`（用 `collectSchemaLimitations` 做门禁），reasoning 字段前置。
+- **处置**：**不追第三档**；第二档增强已做编译器 `0d4aa01b` + core loader 承载 `enumValues`/嵌套 `properties` `126e05c7`；
+  严格 schema 已接入输出校验器（`collectSchemaLimitations` 门禁 + 任一降级限制即回退宽容路径，见 §8 Wave 3，`ac5ae8bc`）。
+  **剩余可选**：在 core yaml 声明结构化 `enumValues`/嵌套 `properties` 以点亮严格路径；reasoning 字段前置。
 
 #### Q18 真实用户实验基建
 - **分级**：**不做（商业级/无对象）**。
@@ -418,6 +419,11 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 | virtual-learner-actor-auditor / -referee 死字段 | 10 | (b) 手动旁路（`condition: manual`，窗口内 0 调用） | 不动作 |
 | 死边候选（两虚拟审计 skill → simulation-agent） | 10 | (b) 同上（手动触发、本窗口未跑） | 不动作 |
 
+### Wave 3（Q11b 严格 schema 接线）
+| 项 | 提交 | 结果 |
+|---|---|---|
+| Q11b 严格 JSON Schema 接入输出校验器（纯增量·结构化声明 opt-in·按声明门禁） | `ac5ae8bc` | `skill-output-validator` 增严格层：`compileStrictJsonSchema` + `collectSchemaLimitations` 门禁——先要求声明实际携带结构化 `enumValues`/嵌套 `properties`（opt-in），再要求编译无 `enum-values-unavailable`/`object-properties-unavailable` 降级限制，任一不满足即回退既有宽容路径（避免空 `{}` strict object 误拒，且不改动现存 skill 行为）；新增失败码 `nested-type-mismatch`/`missing-nested-required`/`unknown-property` 且 issue 带 `path`（如 `goalSeed.primaryBlockType`/`points[0].name`）；core loader 递归透传结构化 `enumValues`/`properties`；新增 22 例纯单测（嵌套/结构化 enum/`additionalProperties:false` 通过失败 + 降级/无结构回退不变）。**当前 core 未声明结构化信息，运行时全部回退，宽容行为不变** |
+
 ### VL 验证结果（真实跑数）
 - assisted E2E（`advance-day runTasks`）8 天 × 2 节：链路健康；`temporalContext.sinceLastSessionDays` 计算正确（跨周末 3 / 工作日 1）；
   `memoryRecall` 真进 payload。
@@ -429,8 +435,8 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 **回归**：全仓 **327/327 套件、2808 例通过**；`tsc` / `eslint` / prompts 门禁全过。
 
 ### 仍未做（明确延后 / 不做）
-- **Q11b 接线**：编译器已就绪（`0d4aa01b`/`126e05c7`），还需在 core yaml 声明 `enumValues`/嵌套 `properties`，并把
-  `compileStrictJsonSchema` 接入 `skill-output-validator`（用 `collectSchemaLimitations` 门禁，避免误拒）。
+- **Q11b 接线**：✅ 已接入输出校验器（`ac5ae8bc`，见 §8 Wave 3）；仍需在 core yaml 声明 `enumValues`/嵌套 `properties`
+  才会点亮严格路径（当前全部回退宽容，无误拒风险）。
 - **锚题探针调优**：接线已完成；锚题 `checkpoint:result` 是否应从成功率带样本排除，待产品定夺。
 - **Q1 复习容量**：见 §6 剩余可选（Q8 延迟锚题复用已落地，见 §8 Wave 3）。
 - **商业级轴**：Q16 合规重层 / Q17 教师升级 / Q18 实验基建 / Q20 单位经济 = 不做（§7）。
