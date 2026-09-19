@@ -400,6 +400,24 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 |---|---|---|
 | Q8 延迟锚题复测（已完成点 · 自然日间隔 → 保持率样本） | `dc8f3c83` | `anchor-probe` 增 `utcNaturalDayDiff` + `selectDelayedAnchorCandidates`（UTC 自然日间隔门、`lastProbeAt` 冷却、最久未接触优先）；`anchor-probe-emit` 增延迟候选构建与 `TEACHING_DELAYED_ANCHOR_DAYS`（默认 7）；`anchor:result` payload 增 `anchorKind`/`intervalDays`；仍是**只观测不改写**（不重写掌握/难度/BKT、不伪造教师回复），读取失败结构化降级打标 |
 
+### Wave 3（契约漂移清理）
+| 项 | 提交 | 结果 |
+|---|---|---|
+| Q9 契约漂移清理（triage + 修复） | `ccc4d8bd` | 运行时容错：teaching-turn 平铺的 `currentPoint/points/confirmCheck` 收敛回 `knowledge`（validate/coerce/normalize 三处）+ 2 例回归；其余按 (b)/(c) 登记不动作 |
+
+**审计命令**：`npx ts-node --transpile-only src/scripts/audit-field-hit-rates.ts --days=30`（只读、不写库）。
+**修复前 → 修复后**：`driftFields 49 → 49`、`deadFields 15 → 15`、`deadRoutingEdges 10 → 10`（30 skill / 14624 行）。
+注：审计统计 `extractedJson`（**归一化前**原始解析），历史行已落库，故运行时容错**不改变历史计数**；teaching-turn 的 3 条漂移 **100% 来自 1 条失败行**（`TEACHING_TURN_REPLY_MISSING`），成功回合 2523/2523 只含 5 个声明顶层字段。修复是防御性的：避免后续若出现"reply 齐全但 knowledge 被拆平"的回合丢掉整块知识看板。
+
+| 项 | 计数 | 分类 | 处置 |
+|---|---|---|---|
+| generic-chat 漂移字段 | 40 | (c) 已退役（`1990ca29`，末次调用=退役当日） | 不动作：无 core 契约可漂移 |
+| teaching-turn 顶层 `currentPoint/points/confirmCheck` | 3 | (a) 模型输出抖动 | 已修（`ccc4d8bd`） |
+| virtual-learner-scenario-designer persona 子字段 | 6 | (b) 另一进程占用 | **跳过**（工作树并发约束） |
+| skill-author / skill-compiler 死字段 | 5 | (b) 预留 aux（`platform-direct` 未接线；skill-author 为 markdown 媒体产物） | 不动作（core 声明保留以保哈希） |
+| virtual-learner-actor-auditor / -referee 死字段 | 10 | (b) 手动旁路（`condition: manual`，窗口内 0 调用） | 不动作 |
+| 死边候选（两虚拟审计 skill → simulation-agent） | 10 | (b) 同上（手动触发、本窗口未跑） | 不动作 |
+
 ### VL 验证结果（真实跑数）
 - assisted E2E（`advance-day runTasks`）8 天 × 2 节：链路健康；`temporalContext.sinceLastSessionDays` 计算正确（跨周末 3 / 工作日 1）；
   `memoryRecall` 真进 payload。
