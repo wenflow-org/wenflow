@@ -165,12 +165,6 @@ onUnmounted(() => {
 
 <style scoped>
 .vn {
-  --ink: var(--mk-ink);
-  --muted: var(--mk-muted);
-  --faint: var(--mk-faint);
-  --line: var(--mk-line);
-  --canvas: var(--mk-bg);
-  --surface: var(--mk-surface);
   --surface-soft: rgba(255, 255, 255, 0.88);   /* 玻璃卡片默认底 */
   --surface-tint: rgba(255, 255, 255, 0.92);   /* 高亮面板底色 */
   --surface-strong: #fff;                      /* 纯色面板（按钮等） */
@@ -184,12 +178,6 @@ onUnmounted(() => {
   --blue-deep: #1f57cc;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   [data-theme='dark'] & {
-    --ink: var(--mk-ink);
-    --muted: var(--mk-muted);
-    --faint: var(--mk-faint);
-    --line: var(--mk-line);
-    --canvas: var(--mk-bg);
-    --surface: var(--mk-surface);
     --surface-soft: rgba(24, 34, 48, 0.72);
     --surface-tint: rgba(26, 37, 53, 0.85);
     --surface-strong: #1a2535;

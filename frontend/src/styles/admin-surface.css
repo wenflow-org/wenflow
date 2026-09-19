@@ -21,13 +21,13 @@
   /* 文字 */
   --text-primary: var(--mk-ink);
   --text-secondary: var(--mk-muted);
-  --text-muted: #64748b;
+  --text-muted: var(--mk-muted);
   --text-tertiary: #64748b;
 
   /* 边框 / 品牌 */
   --border-subtle: #e1e8f2;
   --border-light: #e1e8f2;
-  --border-default: #e1e8f2;
+  --border-default: var(--mk-line);
   --brand-primary: var(--mk-blue);
   --brand-soft: #eef5ff;
 
