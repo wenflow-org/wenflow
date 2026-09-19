@@ -1,6 +1,7 @@
 import {
   beginRunAttempt,
   classifyAdvanceResponse,
+  classifyPathGeneration,
   classifySessionStatus,
   createRunState,
   defaultLearnerName,
@@ -126,6 +127,34 @@ describe('isPathReady（路径就绪判定；权威信号 path.canStartLearning�
       path: { canStartLearning: true },
       pathContext: { currentTaskTitle: null },
     })).toBe(true);
+  });
+});
+
+describe('classifyPathGeneration（路径生成失败信号）', () => {
+  it('字段缺失/未失败 → pending（保持"继续等"行为）', () => {
+    expect(classifyPathGeneration(undefined).state).toBe('pending');
+    expect(classifyPathGeneration(null).state).toBe('pending');
+    expect(classifyPathGeneration({}).state).toBe('pending');
+    expect(classifyPathGeneration({ pathId: 'lp1', status: 'active', retryAllowed: false, retryType: null }).state).toBe('pending');
+    expect(classifyPathGeneration({ pathId: 'lp1', status: 'generating', retryAllowed: true, retryType: 'core' }).state).toBe('pending');
+  });
+
+  it('status=failed 且允许重试 → failed-retryable（带 pathId/retryType）', () => {
+    const core = classifyPathGeneration({ pathId: 'lp1', status: 'failed', retryAllowed: true, retryType: 'core' });
+    expect(core.state).toBe('failed-retryable');
+    expect(core.pathId).toBe('lp1');
+    expect(core.retryType).toBe('core');
+
+    const stage = classifyPathGeneration({ pathId: 'lp2', status: 'failed', retryAllowed: true, retryType: 'stageDesign' });
+    expect(stage.state).toBe('failed-retryable');
+    expect(stage.retryType).toBe('stageDesign');
+    expect(stage.retryAllowed).toBe(true);
+  });
+
+  it('status=failed 但不可重试（或缺少 retryType）→ failed-terminal（立即止损）', () => {
+    expect(classifyPathGeneration({ pathId: 'lp1', status: 'failed', retryAllowed: false, retryType: null }).state).toBe('failed-terminal');
+    expect(classifyPathGeneration({ pathId: 'lp1', status: 'failed', retryAllowed: true, retryType: null }).state).toBe('failed-terminal');
+    expect(classifyPathGeneration({ pathId: 'lp1', status: 'failed' }).state).toBe('failed-terminal');
   });
 });
 

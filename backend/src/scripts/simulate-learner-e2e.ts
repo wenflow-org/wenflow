@@ -28,6 +28,7 @@ import * as path from 'path';
 import {
   beginRunAttempt,
   classifyAdvanceResponse,
+  classifyPathGeneration,
   classifySessionStatus,
   createRunState,
   defaultLearnerName,
@@ -49,6 +50,11 @@ const NOT_READY_POLL_MS = 30_000;
 const RETRY_BUDGET_MS = 20 * 60_000;
 /** 被限流（429）时的等待：限流窗口通常按分钟计，用固定较长等待而非指数短退避 */
 const RATE_LIMIT_WAIT_MS = 60_000;
+/**
+ * 路径生成**失败**后的有界自愈重试次数（触发平台既有重试入口）。
+ * 与 `advance-day` 的「未就绪」不同：失败是确定态，不能无限等；重试仍失败即立即上报失败。
+ */
+const MAX_PATH_GENERATION_RETRIES = 2;
 /** 单次 HTTP 请求上限：`advance-day runTasks` 会同步跑完当天课程，实测可达 ~5 分钟 */
 const REQUEST_TIMEOUT_MS = 30 * 60_000;
 const ORIGIN = 'http://localhost:5173';
@@ -235,6 +241,8 @@ async function runDailyLoop(args: HarnessArgs, state: RunState, statePath: strin
   let notReadySince: number | null = null;
   /** 连续"可重试"的起始时刻；出现任何非可重试结果时清零 */
   let retrySince: number | null = null;
+  /** 已触发的路径生成自愈重试次数（有界，见 MAX_PATH_GENERATION_RETRIES） */
+  let pathGenerationRetries = 0;
   while (state.round < args.maxDays) {
     const dayLabel = state.round + 1;
     const started = Date.now();
@@ -271,8 +279,35 @@ async function runDailyLoop(args: HarnessArgs, state: RunState, statePath: strin
         return 'failed';
       }
       const pathStatus = await makeApi(args.baseUrl, 'GET', `/api/admin/virtual-learners/sessions/${state.sessionId}/path-status`);
+      const pathStatusData = asRecord(pathStatus.body?.data);
+      const pathGeneration = classifyPathGeneration(pathStatusData.pathGeneration);
+      // 路径生成**失败**（非"还没好"）：立即止损，不再空等 readyTimeoutMs。
+      if (pathGeneration.state === 'failed-retryable' && pathGenerationRetries < MAX_PATH_GENERATION_RETRIES) {
+        pathGenerationRetries += 1;
+        log(`[day${dayLabel}] 路径生成失败（pathId=${pathGeneration.pathId ?? '?'} retryType=${pathGeneration.retryType ?? 'none'}）`
+          + ` → 自愈重试 ${pathGenerationRetries}/${MAX_PATH_GENERATION_RETRIES}`);
+        const retryResponse = await makeApi(
+          args.baseUrl, 'POST',
+          `/api/admin/virtual-learners/sessions/${state.sessionId}/retry-path-generation`, {}
+        );
+        if (retryResponse.status === 200 && retryResponse.body?.success !== false) {
+          notReadySince = Date.now(); // 重试已受理：重新计时等待生成结果
+          await sleep(NOT_READY_POLL_MS);
+          continue;
+        }
+        addFinding(state, 'path-retry-trigger-failed',
+          `pathId=${pathGeneration.pathId ?? '?'} http=${retryResponse.status} ${JSON.stringify(retryResponse.body?.error ?? '')}`.slice(0, 240));
+        return 'failed';
+      }
+      if (pathGeneration.state === 'failed-retryable' || pathGeneration.state === 'failed-terminal') {
+        addFinding(state, 'path-generation-failed',
+          `pathId=${pathGeneration.pathId ?? '?'} status=${pathGeneration.status}`
+          + ` retryType=${pathGeneration.retryType ?? 'none'} retryAllowed=${pathGeneration.retryAllowed}`
+          + ` 已重试=${pathGenerationRetries}/${MAX_PATH_GENERATION_RETRIES}：${outcome.detail}`.slice(0, 280));
+        return 'failed';
+      }
       log(`[day${dayLabel}] 未就绪（${outcome.detail}；已等 ${waitedMinutes} 分｜path-status http=${pathStatus.status}`
-        + ` ready=${isPathReady(asRecord(pathStatus.body?.data))}）→ ${Math.round(NOT_READY_POLL_MS / 1000)}s 后重试同日`);
+        + ` ready=${isPathReady(pathStatusData)}）→ ${Math.round(NOT_READY_POLL_MS / 1000)}s 后重试同日`);
       await sleep(NOT_READY_POLL_MS);
       continue;
     }

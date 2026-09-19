@@ -175,6 +175,50 @@ export function isPathReady(data: unknown): boolean {
   return asString(pathContext?.currentTaskTitle).length > 0;
 }
 
+/**
+ * `path-status.pathGeneration` → 路径生成**失败**信号（纯函数）。
+ *
+ * 背景（新发现问题 #2）：路径生成失败时 `learning_paths.status='failed'`，但 harness 只把
+ * `advance-day` 的「未就绪」当作等待信号，于是空等满 `readyTimeoutMs`（默认 30 分钟）才报泛化的
+ * `path-not-ready-timeout`。本函数把「已经失败」从「还没好」里拆出来，供 harness 立即止损
+ * 或触发有界自愈重试。
+ *
+ * 权威信号来自后端 admin `path-status` 的 `pathGeneration`
+ * （`pathId / status / retryAllowed / retryType`，由 `learning.service.getPathGenerationRetry` 计算）。
+ * 字段缺失/不可解析 → `pending`，保持与改动前一致的「继续等」行为。
+ */
+export type PathGenerationState = 'pending' | 'failed-retryable' | 'failed-terminal';
+
+export interface PathGenerationSignal {
+  state: PathGenerationState;
+  pathId: string | null;
+  /** `learning_paths.status` */
+  status: string;
+  retryAllowed: boolean;
+  retryType: 'core' | 'stageDesign' | null;
+}
+
+export function classifyPathGeneration(raw: unknown): PathGenerationSignal {
+  if (!isRecord(raw)) {
+    return { state: 'pending', pathId: null, status: '', retryAllowed: false, retryType: null };
+  }
+  const pathId = asString(raw.pathId) || null;
+  const status = asString(raw.status);
+  const retryAllowed = raw.retryAllowed === true;
+  const retryType = raw.retryType === 'core' || raw.retryType === 'stageDesign' ? raw.retryType : null;
+  if (status === 'failed') {
+    return {
+      // 允许重试但拿不到 retryType 时按终局处理：宁可失败上报，也不打无类型重试。
+      state: retryAllowed && retryType ? 'failed-retryable' : 'failed-terminal',
+      pathId,
+      status,
+      retryAllowed,
+      retryType,
+    };
+  }
+  return { state: 'pending', pathId, status, retryAllowed, retryType };
+}
+
 /** 指数退避（毫秒）：attempt 从 1 起 */
 export function nextBackoffMs(attempt: number, baseMs = 5_000, maxMs = 60_000): number {
   const exponent = Math.max(0, Math.floor(attempt) - 1);

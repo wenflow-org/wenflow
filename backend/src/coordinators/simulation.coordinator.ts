@@ -1910,6 +1910,38 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
   }
 
   
+  /**
+   * 会话的 Goal 对话 → GoalPathRequest（Path 生成/重试共用）。
+   * 与 `advanceToPathGeneration` 原先的内联构造逐字段一致，抽成纯装配以便重试复用。
+   */
+  private buildGoalPathRequest(
+    session: VirtualSessionWithProfile,
+    conversation: { collectedData: string | null; description: string | null }
+  ): { request: GoalPathRequest; rawGoalSource: string | undefined } {
+    const collectedData: Record<string, unknown> = safeJsonParse<Record<string, unknown>>(conversation.collectedData, {});
+    const pathRawGoal = resolvePathRawGoalFromSession({
+      goalConversationDescription: conversation.description,
+    });
+    if (!pathRawGoal.rawGoal) {
+      throw new Error('无法推进 Path：Goal 对话缺少正式诉求，请先恢复 Goal 对话');
+    }
+    const pathAgentOverrides = getSessionPromptOverrides(session)?.pathAgent;
+    const request: GoalPathRequest = {
+      userId: session.userId,
+      sourceConversationId: session.goalConversationId as string,
+      source: 'goal',
+      rawGoal: pathRawGoal.rawGoal,
+      visibleSummary: buildGoalPathVisibleSummary({
+        understanding: collectedData.understanding || {},
+        confirmedProposal: collectedData.confirmedProposal || null,
+        collected: collectedData.collected || {},
+      }),
+      conversationHistory: (Array.isArray(collectedData.messages) ? collectedData.messages : []) as ConversationHistoryItem[],
+      systemPromptOverrides: pathAgentOverrides ? { pathAgent: pathAgentOverrides } : undefined
+    };
+    return { request, rawGoalSource: pathRawGoal.source };
+  }
+
   async advanceToPathGeneration(sessionId: string): Promise<{
     success: boolean;
     learningPathId?: string;
@@ -1930,8 +1962,6 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       if (!conversation) {
         throw new Error('Goal对话记录不存在');
       }
-      
-      const collectedData: Record<string, unknown> = safeJsonParse<Record<string, unknown>>(conversation.collectedData, {});
       
       if (session.learningPathId) {
         // 会话上的 Path 指针可能因外部删除/重建而过期，校验后再复用。
@@ -1954,33 +1984,12 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
 
       // Path 不读 story、不特判虚拟人：只消费 Goal 对话产物。
       // rawGoal 优先 conversation.description（= 故事需求经开场传入的正式链路）。
-      const pathRawGoal = resolvePathRawGoalFromSession({
-        goalConversationDescription: conversation.description,
-      });
-      if (!pathRawGoal.rawGoal) {
-        throw new Error('无法推进 Path：Goal 对话缺少正式诉求，请先恢复 Goal 对话');
-      }
-
-      const pathRequest: GoalPathRequest = {
-        userId: session.userId,
-        sourceConversationId: session.goalConversationId,
-        source: 'goal',
-        rawGoal: pathRawGoal.rawGoal,
-        visibleSummary: buildGoalPathVisibleSummary({
-          understanding: collectedData.understanding || {},
-          confirmedProposal: collectedData.confirmedProposal || null,
-          collected: collectedData.collected || {},
-        }),
-        conversationHistory: (Array.isArray(collectedData.messages) ? collectedData.messages : []) as ConversationHistoryItem[],
-        systemPromptOverrides: getSessionPromptOverrides(session)?.pathAgent
-          ? { pathAgent: getSessionPromptOverrides(session)?.pathAgent }
-          : undefined
-      };
+      const { request: pathRequest, rawGoalSource } = this.buildGoalPathRequest(session, conversation);
       
       logger.info('[simulation-coordinator] 开始路径生成', {
         sessionId,
         userId: session.userId,
-        rawGoalSource: pathRawGoal.source,
+        rawGoalSource,
       });
       
       const pathResult = await pathCoordinator.generateFromGoal(pathRequest);
@@ -2037,6 +2046,90 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         success: false,
         error: asErrorLike(error).message
       };
+    }
+  }
+
+  /**
+   * 重试失败的路径生成（虚拟实验室自愈，新发现问题 #2）。
+   *
+   * 复用平台既有重试语义（与用户侧 PATCH /paths/:pathId/retry 同源）：
+   * - `stageDesign` → `learningService.retryPathEnrichment`（补齐阶段任务，不删路径）；
+   * - `core` → 先 `claimPathCoreGeneration` 原子认领，再以**同一 Goal 诉求**异步重跑主结构，
+   *   失败时经 onError 落回官方 `markActiveGenerationFailed`（保持 run/path 状态一致）。
+   *
+   * 是否可重试由 `getPathGenerationRetry` 守卫；调用方的**次数上限**由 harness 控制。
+   */
+  async retryPathGeneration(sessionId: string): Promise<{
+    success: boolean;
+    retryType?: 'core' | 'stageDesign';
+    mode?: string;
+    runId?: string;
+    error?: string;
+  }> {
+    let learningPathId: string | null = null;
+    try {
+      const session = await this.getVirtualSession(sessionId);
+      if (!session.learningPathId) {
+        throw new Error('学习路径不存在，无法重试路径生成');
+      }
+      const pathId = session.learningPathId;
+      learningPathId = pathId;
+
+      const retry = await learningService.getPathGenerationRetry(pathId, session.userId);
+      if (!retry.allowed || !retry.retryType) {
+        return {
+          success: false,
+          error: retry.reason === 'completed' ? '路径已经生成完成，无需重试' : '当前生成任务未失败或未过期，不能重试'
+        };
+      }
+
+      if (retry.retryType === 'stageDesign') {
+        const result = await learningService.retryPathEnrichment(pathId, session.userId);
+        await this.addSessionLog(sessionId, {
+          timestamp: new Date().toISOString(),
+          phase: 'path-regenerate',
+          details: {
+            output: {
+              retryType: 'stageDesign',
+              mode: result?.mode ?? null,
+              retryCount: result?.retryCount ?? null,
+              runId: result?.runId ?? null,
+              learningPathId: pathId
+            }
+          }
+        });
+        return { success: true, retryType: 'stageDesign', mode: result?.mode, runId: result?.runId };
+      }
+
+      if (!session.goalConversationId) {
+        throw new Error('Goal对话不存在，无法重试路径主结构生成');
+      }
+      const conversation = await this.getGoalConversation(session.goalConversationId, session.userId);
+      if (!conversation) {
+        throw new Error('Goal对话记录不存在');
+      }
+
+      const runId = await learningService.claimPathCoreGeneration(pathId, retry.expectedActiveGenerationRunId);
+      const { request } = this.buildGoalPathRequest(session, conversation);
+      pathCoordinator.runGoalAsync({ ...request, existingPathId: pathId, generationRunId: runId }, {
+        onError: async (error) => {
+          logger.error(`[simulation-coordinator] 重试生成路径失败：${pathId}`, error);
+          await learningService.markActiveGenerationFailed(pathId, error, runId);
+        }
+      });
+      await this.addSessionLog(sessionId, {
+        timestamp: new Date().toISOString(),
+        phase: 'path-regenerate',
+        details: { output: { retryType: 'core', runId, learningPathId: pathId } }
+      });
+      return { success: true, retryType: 'core', runId };
+    } catch (error: unknown) {
+      logger.error('[simulation-coordinator] 路径生成重试失败', {
+        sessionId,
+        learningPathId,
+        error: asErrorLike(error).message
+      });
+      return { success: false, error: asErrorLike(error).message };
     }
   }
   

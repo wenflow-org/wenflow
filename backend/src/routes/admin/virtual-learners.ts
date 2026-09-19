@@ -2843,6 +2843,33 @@ router.get('/sessions/:sessionId/path-status', async (req: Request, res) => {
       teachingStrategyGuidance: null
     };
 
+    // 路径生成重试信号（新发现问题 #2）：让跑数 harness 能把「生成失败」与「还没好」区分开，
+    // 失败时立即止损而不是空等 readyTimeoutMs，并在允许时触发有界自愈重试。
+    // 与用户侧 PATCH /paths/:pathId/retry 同源（learningService.getPathGenerationRetry）。
+    let pathGeneration: {
+      pathId: string;
+      status: string;
+      retryAllowed: boolean;
+      retryType: 'core' | 'stageDesign' | null;
+      reason: string;
+    } | null = null;
+    try {
+      const retry = await learningService.getPathGenerationRetry(learningPath.id, session.userId);
+      pathGeneration = {
+        pathId: learningPath.id,
+        status: learningPath.status,
+        retryAllowed: retry.allowed,
+        retryType: retry.retryType,
+        reason: retry.reason
+      };
+    } catch (retryError) {
+      logger.warn('[virtual-learners] path-status 读取生成重试状态失败', {
+        sessionId,
+        learningPathId: learningPath.id,
+        error: (retryError as Error).message
+      });
+    }
+
     res.json({
       success: true,
       data: {
@@ -2877,6 +2904,7 @@ router.get('/sessions/:sessionId/path-status', async (req: Request, res) => {
           // 路径体量（goal 层 scope_size 决定）：供前端展示体量徽章 + 里程碑/子任务目标
           planningHints: (learningPath as any).processDetail?.framing?.normalizedInput?.planningHints ?? null
         },
+        pathGeneration,
         pathContext
       }
     });
@@ -2886,6 +2914,26 @@ router.get('/sessions/:sessionId/path-status', async (req: Request, res) => {
       success: false,
       error: error.message || '查询路径状态失败'
     });
+  }
+});
+
+/**
+ * 触发失败的路径生成重试（虚拟实验室自愈入口）。
+ * POST /api/admin/virtual-learners/sessions/:sessionId/retry-path-generation
+ *
+ * 平台既有用户侧重试（PATCH /paths/:pathId/retry）要求 path 属主本人令牌；harness 持管理员
+ * 会话，故此处用**模拟会话自身的 userId** 复用同一 learningService 重试逻辑（core / stageDesign）。
+ * 有界次数由调用方（harness）控制；单次是否可重试仍由 getPathGenerationRetry 守卫。
+ */
+router.post('/sessions/:sessionId/retry-path-generation', async (req: Request, res) => {
+  try {
+    const result = await runAssistedSessionMutation(req.params.sessionId, () =>
+      simulationCoordinator.retryPathGeneration(req.params.sessionId)
+    );
+    res.json({ success: result.success, data: result, error: result.error });
+  } catch (error) {
+    logger.error('重试路径生成失败:', error);
+    sendVirtualSessionError(res, error, '重试路径生成失败');
   }
 });
 
