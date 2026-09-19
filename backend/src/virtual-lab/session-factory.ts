@@ -25,6 +25,21 @@ function normalizeText(value: any) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * 审计标注（`primaryBlockType` / `blockTypeEvidence` / `recurrence`）是**作者/评审侧**元数据，
+ * 不进入模拟学习者的上下文：避免"观测影响被测对象"——扮演者若知道自己被标成
+ * permission_process / emotion_relationship，可能改变表演。只影响 storyContext，
+ * 不改存储里的 `virtual_learner_profiles.profile.storyPool`（源头标注仍在）。
+ */
+const AUTHOR_ANNOTATION_KEYS = ['primaryBlockType', 'blockTypeEvidence', 'recurrence'] as const;
+
+export function stripAuthorAnnotations(goalSeed: any): any {
+  if (!goalSeed || typeof goalSeed !== 'object') return null;
+  const rest = { ...goalSeed };
+  for (const key of AUTHOR_ANNOTATION_KEYS) delete rest[key];
+  return rest;
+}
+
 function normalizeStoryId(value: any) {
   return normalizeText(value).toLowerCase();
 }
@@ -214,7 +229,7 @@ export async function createSessionForProfile(
         pressurePoints: Array.isArray(story.pressurePoints) ? story.pressurePoints : [],
         behaviorHooks: Array.isArray(story.behaviorHooks) ? story.behaviorHooks : [],
         problemKnowledge: story.problemKnowledge || null,
-        goalSeed: story.goalSeed || null,
+        goalSeed: stripAuthorAnnotations(story.goalSeed),
         disclosurePlan: story.disclosurePlan || null,
         // 故事级预算覆盖（可选）：单步重试 / 会话总 AI 调用上限；缺省继承角色级
         budget: story.budget && typeof story.budget === 'object'
