@@ -207,7 +207,7 @@
                 @click="toggleAlSort('success')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('success')">结果<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th>原因</th>
-              <th class="mk-th--right">操作</th>
+              <th class="mk-th--right al-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -222,7 +222,7 @@
               <td class="log-ip mono" :title="a.ip || ''">{{ ipText(a.ip) }}</td>
               <td><span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span></td>
               <td class="log-reason" :title="a.reason || ''">{{ reasonText(a.reason) }}</td>
-              <td class="mk-th--right">
+              <td class="mk-th--right al-act">
                 <button
                   v-if="a.success && a.username"
                   type="button"
@@ -650,6 +650,9 @@ function goSessions(username: string) {
   vertical-align: middle;
 }
 /* 非 API 动作（中文标签）：中性蓝 chip */
+/* UI 复查 #11：操作列是末列，贴表格右缘过紧，补右留白 */
+.al-act { padding-right: 16px; }
+
 .log-action {
   display: inline-block;
   font-size: var(--mk-fs-12_5);

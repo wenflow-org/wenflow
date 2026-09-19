@@ -122,7 +122,7 @@
                 </div>
               </td>
               <td v-if="!gcHiddenCols.has('summary')"><span class="gc-summary" :title="r.summary">{{ r.summary }}</span></td>
-              <td v-if="!gcHiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span></td>
+              <td v-if="!gcHiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(r.status)" :title="statusHint(r.status)">{{ statusLabel(r.status) }}</span></td>
               <td v-if="!gcHiddenCols.has('stage')">
                 <div class="gc-stage-cell">
                   <div class="gc-stage-cell__head">
@@ -531,6 +531,15 @@ const statusPills = computed(() => {
 const statusLabel = (s: string) => statusText(s) || '—'
 const statusBadge = (s: string) =>
   s === 'completed' ? 'mk-badge--ok' : s === 'active' ? 'mk-badge--info' : s === 'cancelled' ? 'mk-badge--warn' : 'mk-badge--muted'
+
+/** 状态原因提示（UI 复查 #18）：回收机制会把约 30 分钟无心跳的会话标为 abandoned，
+ *  列表里给一句解释，避免「会话莫名停下」；不新增后端字段，仅是文案。 */
+const statusHint = (s: string | null | undefined) => {
+  const k = String(s || '').toLowerCase()
+  if (k === 'abandoned') return '会话已中止：通常因长时间无心跳被自动回收；可从故事行重新启动'
+  if (k === 'failed') return '会话失败：可在会话座舱查看失败原因与日志'
+  return ''
+}
 
 /** 阶段过程点条工具提示（人话）：当前第 n/total 步（创建→澄清→方案→完成） */
 function stageDotsTitle(r: Row): string {
