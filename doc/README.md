@@ -11,6 +11,9 @@
   - 后续 AI 开发、重构的最高指导准则（v4.1：新增 §2.6 编排文件章节，编排文件为字段路由唯一源）
 - [`SKILL_DEVELOPMENT_GUIDE.md`](./SKILL_DEVELOPMENT_GUIDE.md)
   - Skill 开发指南（开发者向）：选型 → scaffold → 接线 → 加字段 → 门禁 → 发布 → 测试（2026-08-12）
+- [`AGENT_SKILL_MANUAL.md`](./AGENT_SKILL_MANUAL.md)
+  - Agent / Skill 全景与缘由（开发者向）：每个顶层 Agent 与 Skill 的**为什么**（功能缘由 / 设计意图 / 边界 / 五阶段数据旅程）
+  - 与自动生成的 `prompts/AGENTS_SELF_INTRO.md`（机械附录，只有 what）互补，是 "how-to" 开发指南前面的 "why"；**开发文档，不是平台功能/能力说明**
 
 ## 架构与治理
 
