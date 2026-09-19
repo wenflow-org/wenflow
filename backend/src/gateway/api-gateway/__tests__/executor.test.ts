@@ -327,7 +327,7 @@ describe('APIExecutor retry attempts', () => {
     expect(metadata.attemptTelemetryComplete).toBe(false)
   })
 
-  it('将单次请求超时硬限制为 300 秒并写入一致遥测', async () => {
+  it('单次请求超时硬上限与平台可靠性配置同源（600 秒），并写入一致遥测', async () => {
     safeHttpRequestMock.mockResolvedValue(jsonResponse(200, {
       id: 'completion-timeout-cap',
       model: 'test-model',
@@ -342,11 +342,11 @@ describe('APIExecutor retry attempts', () => {
 
     expect(safeHttpRequestMock).toHaveBeenCalledWith(
       'https://example.com/v1/chat/completions',
-      expect.objectContaining({ timeoutMs: 300_000 })
+      expect.objectContaining({ timeoutMs: 600_000 })
     )
     expect(attemptCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({
       configuredTimeoutMs: 600_000,
-      effectiveTimeoutMs: 300_000
+      effectiveTimeoutMs: 600_000
     }))
   })
 
@@ -709,6 +709,9 @@ describe('APIExecutor P1：降级链 + 截断空输出', () => {
     expect(safeHttpRequestMock).toHaveBeenCalledTimes(2)
     expect(safeHttpRequestMock.mock.calls[0][1].body.model).toBe('test-model')
     expect(safeHttpRequestMock.mock.calls[1][1].body.model).toBe('fallback-model')
+    // 降级记账：降级那一行 agent_call_logs 的 metadata 带 fallbackFrom
+    const fallbackMeta = JSON.parse(agentLogCreate.mock.calls.at(-1)![0].data.metadata)
+    expect(fallbackMeta.fallbackFrom).toBe('test-model')
   })
 
   it('不可降级的错误类（如 protocol）不会触发 fallback', async () => {

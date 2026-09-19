@@ -5,6 +5,7 @@ import { CallerInfo, ResolvedRoute } from './types';
 import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.service';
 import { decryptSecret, SecretCryptoError } from '../../utils/secret-crypto';
 import { endpointsMatch } from '../../utils/endpoint-identity';
+import { selectModelForAlias } from './model-alias';
 
 const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
 const AGENT_KEY_CONTEXT = 'system.agent_model_configs.apiKey';
@@ -51,20 +52,44 @@ export class APIRouter {
     };
   }
 
-  private resolveModel(configModel?: string | null): string {
+  private resolveModel(configModel?: string | null, aliasOverrides?: Record<string, string[]> | null): string {
     const model = (configModel || process.env.AI_MODEL || '').trim();
     if (!model) {
       throw new Error('AI model is not configured. Set admin defaultModel or AI_MODEL.');
     }
-    return model;
+    // 逻辑别名（chat / light …）展开为具体部署；具体模型 id 原样返回
+    return selectModelForAlias(model, { overrides: aliasOverrides })?.model ?? model;
   }
 
-  private resolveReasoningModel(configModel?: string | null): string {
+  private resolveReasoningModel(configModel?: string | null, aliasOverrides?: Record<string, string[]> | null): string {
     const model = (configModel || process.env.AI_MODEL_REASONING || process.env.AI_MODEL || '').trim();
     if (!model) {
       throw new Error('AI reasoning model is not configured. Set admin defaultReasoningModel or AI_MODEL_REASONING.');
     }
-    return model;
+    // reasoning 别名按能力过滤：优先 supportsThinking 的成员（require_parameters 思路）
+    return selectModelForAlias(model, { overrides: aliasOverrides, requireThinking: true })?.model ?? model;
+  }
+
+  /** platform_api_configs 的别名覆盖（此前为只回显的死字段，现作为别名映射的动态来源）。 */
+  private platformAliasOverrides(config: {
+    chatModels?: string | null;
+    reasoningModels?: string | null;
+    lightModels?: string | null;
+  }): Record<string, string[]> {
+    const parse = (raw?: string | null): string[] => {
+      if (!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.map((item) => String(item)) : [];
+      } catch {
+        return [];
+      }
+    };
+    return {
+      chat: parse(config.chatModels),
+      reasoning: parse(config.reasoningModels),
+      light: parse(config.lightModels)
+    };
   }
 
   async resolve(caller: CallerInfo, userId?: string): Promise<ResolvedRoute> {
@@ -412,7 +437,7 @@ export class APIRouter {
         providerId: 'platform',
         endpoint: config.apiUrl || this.resolveBaseEndpoint(),
         apiKey: this.resolvePlatformApiKey(config, config.apiUrl || this.resolveBaseEndpoint()),
-        model: this.resolveModel(config.defaultModel),
+        model: this.resolveModel(config.defaultModel, this.platformAliasOverrides(config)),
         thinkingMode: this.normalizeThinkingMode(config.defaultThinkingMode || 'default'),
         reasoningEffort: this.normalizeReasoningEffort(config.defaultReasoningEffort || 'default'),
         temperature: config.defaultTemperature ?? 0.7,

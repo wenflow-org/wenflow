@@ -171,6 +171,13 @@ export interface ModelDefinition {
 - 别名 → 部署列表（带 `priority` / `weight` / `enabled`），策略：优先级优先、同级加权。
 - **激活现有死字段**：`platform_api_configs.chatModels/reasoningModels/lightModels` 从"回显字段"升级为"别名映射来源"，比新造概念更省。
 
+**已实现（P2 ①）**：
+- 别名注册表：`config/models.config.ts` 的 `MODEL_ALIASES`（`chat` / `reasoning` / `light`）+ `getModelAliasMembers`（过滤未注册模型、去重、保序）。
+- 纯函数解析：`api-gateway/model-alias.ts` 的 `selectModelForAlias(value, { overrides, requireThinking })`——**能力过滤**（`require_parameters` 思路）：`requireThinking` 时只选 `supportsThinking` 的成员；无成员满足则降级为第一位并标记 `degraded`（请求侧由 `thinking-policy` 自动裁剪字段，不会发错参数）。
+- 路由接线：`APIRouter.resolveModel` / `resolveReasoningModel` 展开别名；`getPlatformDefault` 传入 `chatModels/reasoningModels/lightModels` 作为 DB 覆盖（DB 优先于代码注册表）。
+- 向后兼容：具体模型 id / 未知值原样返回（非别名 ⇒ 行为与改动前完全一致）。
+- **待做**：别名权重与健康感知选路（多部署负载均衡）、管理端可视化。
+
 ### 4.3 ③ 参数解析策略（P0 已实现）
 
 **语义修正**：`maxOutputTokens` = 硬上限；`defaultMaxTokens` = 缺省值；声明值 = 权威意图。
@@ -208,7 +215,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 - **可降级错误类**：`rate_limit` / `provider_http` / `network` / `provider_timeout`；**不含** `quota`（账号/余额级，换模型无效）、`authentication`、`configuration`、`protocol`。
 - **降级记账**：失败候选与降级调用**各自成行**（`agent_call_logs`），降级请求上下文带 `ExecutionContext.fallbackFrom`（不发给上游）；冷却中候选会被跳过。
 - **语义失败定向重试**：`TRUNCATED_EMPTY_OUTPUT`（`content` 空 且 `finish_reason=length`）判为可重试，重试时**关闭思考**（不是整包翻倍 maxTokens）。
-- **未做（留 P2）**：降级次数落库字段（`attempted_fallbacks` / `original_model_group` 式）、provider 级多部署负载均衡、超时口径统一（当前 600s 宣称 vs 300s 实际截断）。
+- **未做（留 P2 ④）**：provider 级多部署负载均衡、per-model 并发上限。
 
 ### 4.6 ⑥ 并发配额
 
@@ -295,7 +302,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 |---|---|---|---|
 | **P0** | 能力注册表（per-model）+ `maxTokens` 语义修正 + thinking 预算分离 | **已实现** | `config/models.config.ts`、`services/resolve-llm-call-params.ts`、`gateway/api-gateway/executor.ts` |
 | **P1** | 部署级 cooldown + fallback 链 + `TRUNCATED_EMPTY_OUTPUT` 分类与定向重试 | **已实现** | 新增 `api-gateway/deployment-health.ts`；`api-gateway/executor.ts`；`config/models.config.ts`（`fallbacks`） |
-| **P2** | 别名/部署表 + 能力元数据 DB 化 + `require_parameters` 路由 + per-model 并发 | 待做 | `prisma/system/schema.prisma`、`api-gateway/router.ts`、`rpm-limiter.ts` |
+| **P2** | ①别名层（code 注册表 + DB 覆盖 + 能力过滤）✅ ②超时口径统一 ✅ ③降级记账（`agent_call_logs.metadata.fallbackFrom`）✅ ④**待做**：能力元数据 DB 化、per-model 并发 | **部分完成** | `config/models.config.ts`、`api-gateway/model-alias.ts`、`api-gateway/router.ts`、`api-gateway/executor.ts` |
 | **P3** | 管理端可视化（别名→部署、per-deployment 健康、成本） | 待做 | `frontend/src/views/admin-redesign/ApiConfig.vue`、`routes/admin/*` |
 
 **P0 验收**：

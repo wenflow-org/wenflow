@@ -64,6 +64,49 @@ export interface ModelDefinition {
 }
 
 /**
+ * 逻辑别名 → 部署（模型 id）列表。
+ *
+ * 业务/配置只写**别名**（`chat` / `reasoning` / `light`），由别名层展开为具体模型：
+ * - 换模型只改这里（或 DB 覆盖），不动任何 skill/提示词；
+ * - `reasoning` 别名在解析时会按能力过滤（只选 `supportsThinking` 的模型）。
+ *
+ * DB 覆盖来源：`platform_api_configs.chatModels / reasoningModels / lightModels`
+ * （此前是只回显的死字段，现作为别名映射的动态来源）。见 doc/MODEL_GATEWAY_DESIGN.md §4.2。
+ */
+export const MODEL_ALIASES: Record<string, string[]> = {
+  chat: ['deepseek-v4-flash', 'agnes-3.0-flash'],
+  reasoning: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+  light: ['agnes-3.0-flash'],
+};
+
+/** 是否为已声明的逻辑别名（大小写不敏感）。 */
+export function isModelAlias(value: string): boolean {
+  const key = String(value || '').trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(MODEL_ALIASES, key);
+}
+
+/**
+ * 展开别名成员：DB 覆盖优先，其次代码注册表；过滤未注册/重复的模型 id，保留声明顺序。
+ */
+export function getModelAliasMembers(
+  alias: string,
+  overrides?: Record<string, string[] | null | undefined> | null
+): string[] {
+  const key = String(alias || '').trim().toLowerCase();
+  const override = overrides?.[key];
+  const declared = (override && override.length ? override : MODEL_ALIASES[key]) ?? [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of declared) {
+    const trimmed = typeof id === 'string' ? id.trim() : '';
+    if (!trimmed || seen.has(trimmed) || !MODEL_MAP.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+/**
  * 可用模型列表
  */
 export const AVAILABLE_MODELS: ModelDefinition[] = [
