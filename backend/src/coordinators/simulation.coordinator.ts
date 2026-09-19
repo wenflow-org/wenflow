@@ -1523,6 +1523,8 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
               stage: goalResult.internal.core.stage,
               confidence: goalResult.internal.core.confidence,
               conversationId: goalResult.internal.core.conversationId,
+              // 分诊命中率遥测：goal 结果透出的 responseTriage.mode（缺失为 null，默认行为不变）
+              responseTriageMode: goalResult.internal.ext?.goalConversation?.responseTriage?.mode ?? null,
               quickReplies: goalResult.internal.ext?.goalConversation?.quickReplies?.map(q =>
                 typeof q === 'string' ? q : q.text
               ) || []
@@ -1649,6 +1651,12 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         )
       );
       
+      // 分诊命中率遥测：goal 结果透出的 responseTriage（缺失为 null，默认行为不变）
+      // continueConversation 返回联合形状，部分分支不带该字段，故按可选读取。
+      const goalResponseTriage = (goalResult.internal.ext?.goalConversation as
+        | { responseTriage?: { mode?: string } | null }
+        | undefined)?.responseTriage ?? null;
+
       logs.push({
         timestamp: new Date().toISOString(),
         phase: 'goal-response',
@@ -1658,6 +1666,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
             userVisible: goalResult.userVisible,
             stage: goalResult.internal.core.stage,
             confidence: goalResult.internal.core.confidence,
+            responseTriageMode: goalResponseTriage?.mode ?? null,
             quickReplies: goalResult.internal.ext?.goalConversation?.quickReplies?.map(q =>
               typeof q === 'string' ? q : q.text
             ) || []
@@ -1698,7 +1707,9 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
           learningPathId: updatedConversation?.learningPathId,
           learnerState: finalGoalLearnerState,
           concernPool,
-          disclosedConcerns: nextDisclosedConcerns
+          disclosedConcerns: nextDisclosedConcerns,
+          // 分诊命中率遥测：落 stageResults.goal.responseTriage（无迁移）
+          responseTriage: goalResponseTriage
         });
         
         logs.push({

@@ -6,6 +6,7 @@ import {
 } from '../services/background-task-tracker.service';
 import learningService from '../services/learning/learning.service';
 import { buildFramedNormalizedInput, type LearnerLoadProfile } from '../services/learning/path-planning-hints';
+import type { ResponseTriage } from '../services/learning/response-triage';
 import {
   getPathAgentInputConfig,
   type PathAgentInputConfig
@@ -134,6 +135,11 @@ export interface GoalPathRequest {
   goalHandoffFields?: Record<string, any> | null;
   /** 学习者负荷画像（虚拟学习者链路注入 `availableTime`/`cognitiveLoadTolerance`；真实用户不传 ⇒ 行为不变） */
   learnerLoadProfile?: LearnerLoadProfile | null;
+  /**
+   * 响应分诊结论（goal 层透传，advisory 默认）。仅承载/透传，**不参与 path 生成逻辑**；
+   * 缺失（真实用户/旧会话）⇒ undefined，生成行为与今天完全一致。
+   */
+  responseTriage?: ResponseTriage | null;
   systemPromptOverrides?: {
     pathAgent?: string;
   };
