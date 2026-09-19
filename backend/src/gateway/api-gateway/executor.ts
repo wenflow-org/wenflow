@@ -12,6 +12,7 @@ import {
   isFallbackWorthyCategory,
   markCoolingDown
 } from './deployment-health';
+import { getModelMaxParallelRequests, releaseSlot, tryAcquireSlot } from './model-concurrency';
 import { safeHttpRequest, safeHttpStreamRequest, SafeHttpBodyLimitError, UnsafeUrlError } from '../../utils/safe-http';
 import { isEncryptedSecret } from '../../utils/secret-crypto';
 import { telemetryWriter } from '../../services/telemetry-writer.service';
@@ -158,7 +159,31 @@ export class APIExecutor {
       attemptsMade = attempt;
       const attemptStartedAt = new Date();
       try {
-        const result = await this.executeRequest(route, currentRequest, normalizedContext, streamDeltaHandler);
+        // 本地 per-模型 并发闸门（未配置上限时不生效，零行为变化）：
+        // 超限与上游 429 同构，交回统一退避/降级链路（见 doc/MODEL_GATEWAY_DESIGN.md §4.6）。
+        const concurrencyKey = deploymentKey({
+          providerId: route.providerId,
+          endpoint: route.endpoint,
+          model: currentRequest.model || route.model
+        });
+        const concurrencyLimit = getModelMaxParallelRequests(currentRequest.model || route.model);
+        if (!tryAcquireSlot(concurrencyKey, concurrencyLimit)) {
+          throw new GatewayExecutionError(
+            `本地并发已达上限（${concurrencyLimit}），暂缓发起上游请求`,
+            {
+              category: 'rate_limit',
+              code: 'LOCAL_CONCURRENCY_LIMIT',
+              statusCode: 429,
+              retryable: true
+            }
+          );
+        }
+        let result: RequestResult;
+        try {
+          result = await this.executeRequest(route, currentRequest, normalizedContext, streamDeltaHandler);
+        } finally {
+          releaseSlot(concurrencyKey);
+        }
         lastStatusCode = result.statusCode;
         const completedAt = new Date();
         const record: AttemptRecord = {

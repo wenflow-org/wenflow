@@ -56,6 +56,11 @@ export interface ModelDefinition {
    */
   fallbacks?: string[];
   /**
+   * 本地并发上限（同模型同时进行的上游请求数）。未配置 = 不限（默认）。
+   * 超限与上游 429 同构，交回统一退避/降级链路；见 doc/MODEL_GATEWAY_DESIGN.md §4.6。
+   */
+  maxParallelRequests?: number;
+  /**
    * 可选单价（USD / 1M tokens），只影响只读成本核算，**不影响模型选择/路由行为**。
    * 默认留空 = 金额未知；权威价格落地后再逐模型补齐。
    */

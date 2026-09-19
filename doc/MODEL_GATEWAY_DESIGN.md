@@ -222,6 +222,13 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 - 从"全局逻辑调用 RPM 桶"升级为 **per-model/部署** 并发 + rpm；缺省由 `rpm` 推导。
 - 满额**立即拒绝**（不排队），拒绝本身不触发 cooldown。
 
+**已实现（P2 ④）**：`api-gateway/model-concurrency.ts`
+- 键 = 部署（`providerId|endpoint|model`），计数进程内。
+- **默认不限**：未配置 `models.config.maxParallelRequests` 即完全不生效（零行为变化、零开销）。限值是运维决策，不靠猜（成熟参照：LiteLLM `max_parallel_requests`）。
+- 超限抛 `LOCAL_CONCURRENCY_LIMIT`（`rate_limit` / 429 / 可重试），与上游 429**同构** ⇒ 直接复用统一的退避与降级链路（配合 §4.5，饱和的主模型可自动让位给 fallback）。
+- 槽位在 `finally` 中释放，异常路径不泄漏。
+- **待做**：由 `rpm`/`tpm` 自动推导上限、多实例共享计数（需 Redis）。
+
 ### 4.7 ⑦ 可观测
 
 - `llm_execution_attempts` 增 `deploymentId` / `fallbackIndex`；`agent_call_logs` 增实际模型与原始请求模型。
@@ -302,7 +309,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 |---|---|---|---|
 | **P0** | 能力注册表（per-model）+ `maxTokens` 语义修正 + thinking 预算分离 | **已实现** | `config/models.config.ts`、`services/resolve-llm-call-params.ts`、`gateway/api-gateway/executor.ts` |
 | **P1** | 部署级 cooldown + fallback 链 + `TRUNCATED_EMPTY_OUTPUT` 分类与定向重试 | **已实现** | 新增 `api-gateway/deployment-health.ts`；`api-gateway/executor.ts`；`config/models.config.ts`（`fallbacks`） |
-| **P2** | ①别名层（code 注册表 + DB 覆盖 + 能力过滤）✅ ②超时口径统一 ✅ ③降级记账（`agent_call_logs.metadata.fallbackFrom`）✅ ④**待做**：能力元数据 DB 化、per-model 并发 | **部分完成** | `config/models.config.ts`、`api-gateway/model-alias.ts`、`api-gateway/router.ts`、`api-gateway/executor.ts` |
+| **P2** | ①别名层（code 注册表 + DB 覆盖 + 能力过滤）✅ ②超时口径统一 ✅ ③降级记账（`agent_call_logs.metadata.fallbackFrom`）✅ ④per-model 并发闸门（默认不限，opt-in）✅ ⑤**待做**：能力元数据 DB 化 | **部分完成** | `config/models.config.ts`、`api-gateway/model-alias.ts`、`api-gateway/model-concurrency.ts`、`api-gateway/router.ts`、`api-gateway/executor.ts` |
 | **P3** | 管理端可视化（别名→部署、per-deployment 健康、成本） | 待做 | `frontend/src/views/admin-redesign/ApiConfig.vue`、`routes/admin/*` |
 
 **P0 验收**：
