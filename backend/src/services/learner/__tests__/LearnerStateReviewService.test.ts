@@ -1,9 +1,10 @@
 const findUnique = jest.fn()
 const upsert = jest.fn()
+const learnerEvidenceFindMany = jest.fn()
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
-  default: { learner_projections: { findUnique, upsert } },
+  default: { learner_projections: { findUnique, upsert }, learner_evidence: { findMany: learnerEvidenceFindMany } },
 }))
 jest.mock('../../background-task-tracker.service', () => ({ runBackgroundTask: jest.fn() }))
 jest.mock('../assemble-learning-state', () => ({ assembleLearningState: jest.fn() }))
@@ -43,6 +44,7 @@ describe('LearnerStateReviewService (Slice 2a)', () => {
       warnings: [],
     })
     upsert.mockResolvedValue({})
+    learnerEvidenceFindMany.mockResolvedValue([])
     ;(executeSkillWithResult as jest.Mock).mockResolvedValue({ success: true, output: { insights: [], conceptAssessments: [], falsifiableClaims: [], narrative: '' } })
   })
 
@@ -121,5 +123,65 @@ describe('LearnerStateReviewService (Slice 2a)', () => {
     const payload = await learnerStateReviewService.refresh('u1')
     expect(payload).toBeNull()
     expect(upsert).not.toHaveBeenCalled()
+  })
+
+  describe('Q7 真值发现接线', () => {
+    function mockDiagnosis() {
+      (executeSkillWithResult as jest.Mock).mockResolvedValue({
+        success: true,
+        output: {
+          insights: [],
+          conceptAssessments: [{ conceptKey: 'c1', observed: 'mastered', masteryBand: 'high', rationale: '', evidenceRefs: [] }],
+          falsifiableClaims: [],
+          narrative: 'n',
+        },
+      })
+    }
+
+    it('代码裁决锚题与 LLM 冲突时以代码为准，并把来源拆解落进评审载荷', async () => {
+      mockDiagnosis()
+      findUnique.mockResolvedValue(null)
+      learnerEvidenceFindMany.mockResolvedValue([
+        { payload: JSON.stringify({ conceptKey: 'c1', passed: false }), confidence: 0.95 },
+      ])
+      const payload = await learnerStateReviewService.refresh('u1', 'lp1')
+
+      expect(learnerEvidenceFindMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ userId: 'u1', pathId: 'lp1', evidenceType: 'anchor:result' }),
+      }))
+      const audit = payload?.truthDiscovery?.[0]
+      expect(audit?.observed).toBe(false)
+      expect(audit?.dominantSource).toBe('code_judged')
+      expect(audit?.sourceStatus.code_judged).toBe('ok')
+      // 落库载荷带留痕（可审计）
+      const saved = JSON.parse(upsert.mock.calls.at(-1)![0].create.payload)
+      expect(saved.truthDiscovery[0].dominantSource).toBe('code_judged')
+      expect(saved.truthDiscovery[0].contributions).toHaveLength(2)
+    })
+
+    it('单一来源（仅 LLM）行为不变：判掌握，代码源标 missing', async () => {
+      mockDiagnosis()
+      findUnique.mockResolvedValue(null)
+      learnerEvidenceFindMany.mockResolvedValue([])
+      const payload = await learnerStateReviewService.refresh('u1', 'lp1')
+
+      const audit = payload?.truthDiscovery?.[0]
+      expect(audit?.value).toBe(1)
+      expect(audit?.observed).toBe(true)
+      expect(audit?.sourceStatus.code_judged).toBe('missing')
+      expect(payload?.beliefs?.c1).toBeGreaterThan(0.3)
+    })
+
+    it('代码证据读取失败：结构化打标 read_failed，不静默降级', async () => {
+      mockDiagnosis()
+      findUnique.mockResolvedValue(null)
+      learnerEvidenceFindMany.mockRejectedValue(new Error('db down'))
+      const payload = await learnerStateReviewService.refresh('u1', 'lp1')
+
+      const audit = payload?.truthDiscovery?.[0]
+      expect(audit?.sourceStatus.code_judged).toBe('read_failed')
+      // 读取失败不阻断 LLM 单源观测
+      expect(audit?.observed).toBe(true)
+    })
   })
 })

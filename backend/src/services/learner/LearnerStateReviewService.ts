@@ -21,8 +21,18 @@ import { conceptBeliefService, resolveBktParamsForDifficulty } from './concept-b
 import { conceptLoadService } from '../memory/concept-load.service';
 import { normalizeConceptKey } from '../memory/memory-trace.service';
 import { insightCalibrationService, type InsightReliability } from './insight-calibration.service';
+import {
+  adjudicateConceptTruth,
+  parseAnchorCodeClaims,
+  type ConceptTruthAdjudication,
+  type ConceptTruthClaimInput,
+} from './concept-truth-fusion';
+import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
 
 export const REVIEW_PROJECTION_SCOPE = 'review';
+
+/** 读取代码裁决锚题证据的窗口（按 occurredAt 倒序取最近 N 条，控查询规模）。 */
+export const CODE_CLAIM_LOOKBACK = 200;
 
 export interface LearnerStateReviewDiagnosisInsight {
   type: string;
@@ -61,6 +71,11 @@ export interface LearnerStateReviewPayload {
   beliefs?: Record<string, number> | null;
   /** 诊断可信度（3b）：历史断言命中率；样本 <5 时 hitRate 为 null */
   calibration?: InsightReliability | null;
+  /**
+   * Q7 多源真值裁决留痕：每个诊断概念的来源拆解（谁赢了 / 分歧度 / 元认知校准 / 缺源标注）。
+   * 落进本评审投影（`learner_projections` scope=review），可审计、可回溯；无诊断时为 null。
+   */
+  truthDiscovery?: ConceptTruthAdjudication[] | null;
 }
 
 export function reviewProjectionKey(userId: string, pathId?: string | null): string {
@@ -168,22 +183,36 @@ class LearnerStateReviewService {
 
     const { source, diagnosis } = await runModelDiagnosis(learnerSnapshot, projection, userId, primaryPath.id);
 
-    // 3a：用诊断观测做 BKT 时序更新（零训练），并把信念摘要附入评审载荷
+    // 3a：用诊断观测做 BKT 时序更新（零训练），并把信念摘要附入评审载荷。
+    // Q7 接线：观测不再直接采用 LLM 的 mastered/not，而是把 LLM 推断与**代码裁决锚题**等
+    // 多源主张交给 truth-discovery 融合——代码裁决优先，LLM/自评不静默覆盖（来源拆解留痕）。
     let beliefs: Record<string, number> | null = null;
+    let truthDiscovery: ConceptTruthAdjudication[] | null = null;
     if (diagnosis?.conceptAssessments?.length) {
+      const conceptKeys = diagnosis.conceptAssessments.map((item) => item.conceptKey);
       // 难度档位来自 concept-load 的 LLM 判定（**只读缓存**，不在此处调 LLM）；
       // 缺档位即走 medium，行为与旧版一致。
-      const conceptKeys = diagnosis.conceptAssessments.map((item) => item.conceptKey);
-      const profiles = await conceptLoadService.resolveCachedProfiles(userId, conceptKeys).catch(() => new Map());
-      const updated = await conceptBeliefService.applyObservations(
-        userId,
-        primaryPath.id,
-        diagnosis.conceptAssessments.map((item) => {
+      const [profiles, codeClaims] = await Promise.all([
+        conceptLoadService.resolveCachedProfiles(userId, conceptKeys).catch(() => new Map()),
+        loadCodeJudgedConceptClaims(userId, primaryPath.id, conceptKeys),
+      ]);
+      const adjudications = diagnosis.conceptAssessments.map((item) => adjudicateConceptTruth({
+        conceptKey: item.conceptKey,
+        llm: [{ value: item.observed === 'mastered' ? 1 : 0 }],
+        code: codeClaims.claims.get(normalizeConceptKey(item.conceptKey)) ?? [],
+        sourceStatus: codeClaims.readFailed ? { code_judged: 'read_failed' } : undefined,
+      }));
+      truthDiscovery = adjudications;
+
+      const observations = adjudications
+        .map((adjudication, index) => ({ adjudication, item: diagnosis.conceptAssessments[index] }))
+        .filter(({ adjudication }) => adjudication.hasEvidence)
+        .map(({ adjudication, item }) => {
           const profile = profiles.get(normalizeConceptKey(item.conceptKey));
           const { params, tier } = resolveBktParamsForDifficulty(profile?.difficultyBand ?? null);
-          return { conceptKey: item.conceptKey, observed: item.observed === 'mastered', params, tier };
-        }),
-      );
+          return { conceptKey: item.conceptKey, observed: adjudication.observed, params, tier };
+        });
+      const updated = await conceptBeliefService.applyObservations(userId, primaryPath.id, observations);
       if (updated) {
         beliefs = Object.fromEntries(Object.entries(updated.beliefs).map(([key, value]) => [key, value.pKnowL]));
       }
@@ -230,6 +259,7 @@ class LearnerStateReviewService {
       diagnosis,
       beliefs,
       calibration,
+      truthDiscovery,
     };
 
     await prisma.learner_projections.upsert({
@@ -301,6 +331,45 @@ async function runModelDiagnosis(
     });
   }
   return { source: 'rules', diagnosis: null };
+}
+
+/**
+ * Q7：读取**代码裁决**的概念级锚题证据（`learner_evidence: anchor:result`），按概念归一化分组。
+ *
+ * - 读取失败不静默：记结构化降级遥测，并把 `code_judged` 标 `read_failed`，融合留痕区分
+ *   「读不到」与「无证据」，绝不把读取失败当作"LLM 说了算"。
+ * - 与写入侧一致：锚题证据仅在 `judgedBy='code'` 路径写入（见 AITeachingCoordinator），
+ *   故此处按 `code_judged` 来源参与融合。
+ */
+async function loadCodeJudgedConceptClaims(
+  userId: string,
+  pathId: string,
+  conceptKeys: string[],
+): Promise<{ claims: Map<string, ConceptTruthClaimInput[]>; readFailed: boolean }> {
+  const wanted = new Set(conceptKeys.map((key) => normalizeConceptKey(key)).filter(Boolean));
+  if (wanted.size === 0) return { claims: new Map(), readFailed: false };
+  try {
+    const rows = await prisma.learner_evidence.findMany({
+      where: { userId, pathId, evidenceType: 'anchor:result' },
+      orderBy: { occurredAt: 'desc' },
+      take: CODE_CLAIM_LOOKBACK,
+      select: { payload: true, confidence: true },
+    });
+    const all = parseAnchorCodeClaims(rows, normalizeConceptKey);
+    const claims = new Map<string, ConceptTruthClaimInput[]>();
+    for (const [key, list] of all) if (wanted.has(key)) claims.set(key, list);
+    return { claims, readFailed: false };
+  } catch (error) {
+    recordDegradation({
+      source: 'learner/learner-state-review',
+      faultCategory: 'DB_READ_FAILED',
+      severity: 'P3_NOTICE',
+      impactedDimensions: ['concept.truth.code_judged'],
+      mitigationApplied: 'llm-only-fusion',
+      rootCauseMessage: degradationCause(error),
+    });
+    return { claims: new Map(), readFailed: true };
+  }
 }
 
 /** 从证据引用反查概念（供 3b 校准把断言关联到概念）。 */
