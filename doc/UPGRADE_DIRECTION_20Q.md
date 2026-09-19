@@ -48,7 +48,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 | 5 | 每个 agent 写自述/功能说明 | 自动生成自述 + 人写"缘由"手册 | ✅ |
 | 6 | **学习者中心**：通用 vs 特异 | 仅有分散说明（`LEARNER_MODEL_ARCHITECTURE` / 理论地图） | ✅ 说明文档 `docs/LEARNER_CENTER_AND_STATE_FUSION.md` |
 | 7 | 聚合/拆分/融合/评估"**怎么做到的**" | 架构说明 + 轻量真值发现 | ✅ 说明文档 `docs/LEARNER_CENTER_AND_STATE_FUSION.md` |
-| 8 | **如何测量学习效果** | 观测层（保留率曲线）+ 选点质量 | 延迟锚题（可选深化） |
+| 8 | **如何测量学习效果** | 观测层（保留率曲线）+ 选点质量 | ✅ 延迟锚题（`dc8f3c83`） |
 | 9 | 编排/拓扑 = **直观看到字段命中上下游** | 已改名「**逻辑图**（字段数据旅程）」+ 字段级运行时命中 | ✅ |
 | 10 | 前端可视化建字段 → **功能自定义增强** | 字段编辑/编译/发布已做；运行时自定义（`accumulate`/L2）未做 | 视场景 |
 | 11 | prompt 编程语言（**类型/字段化功能/逻辑值**） | `SKILL_PROTOCOL_V4` + `core.yaml` 即它；strict schema 编译器就绪、未接线 | 接线（可选） |
@@ -108,7 +108,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 - **分级**：**核心（该做）**。
 - **核验**：🟡 结果测量层曾为孤岛（`retention-curve.ts` 消费者仅只读脚本）；数据源 `learner_evidence('review:completed')` 数据够算
   （`ReviewCompletedConsumer.ts:111-130`）。MRT 需真实用户（无对象）。
-- **处置**：✅ 最小层：保留率曲线进 admin `e5e9e6e5`。**剩余可选**：延迟锚题复用（复用 Q13 探针）。
+- **处置**：✅ 最小层：保留率曲线进 admin `e5e9e6e5`；✅ 延迟锚题复用（复用 Q13 探针，`dc8f3c83`）。
 
 #### Q19 生命周期（冷启动/长间隔/流失/回归）
 - **分级**：**核心（该做）**（winback/streak 免死等产品功能除外）。
@@ -273,7 +273,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 ## 5. 可行性分级（方案 → 本定位）
 
 ### ① 现在就能做（北星内、无商业依赖）
-- **Q8 测量深化**：延迟锚题复用（复用 Q13 探针，当前只覆盖"已掌握/挣扎"两信念）。
+- **Q8 测量深化**：✅ 延迟锚题复用已落地（复用 Q13 探针，按 UTC 自然日间隔复测已完成点保持率，`dc8f3c83`）。
 - **Q1 复习容量（替代排序）**：在已量化的选点质量上决定是否需要 LLM listwise。
 - **Q11b strict JSON Schema 接线** `skill-output-validator`；**Q10 `accumulate`** 视场景。
 - **契约漂移清理**：Q9 实测 9 漂移 / 18 死字段 / 10 死边候选。
@@ -395,6 +395,11 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 | #3 教学回合失败终局化 | `f2548c7d` | 步骤级有界重试（≤2，仅命中已知校验码）；耗尽 → **可续跑暂停**（保持 `running` + `lastError` + `teaching-step-paused`），**禁止伪造教师回复** |
 | #1 真实侧时间信号 | `b6a6afd6` | `controls.temporalGap = {daysSinceLastSession, isLongGap}`（同路径上一场 `endTime`，默认阈值 14 天，env 可覆盖）+ teaching-turn"长间隔先回捞"规则 |
 
+### Wave 3（测量深化）
+| 项 | 提交 | 结果 |
+|---|---|---|
+| Q8 延迟锚题复测（已完成点 · 自然日间隔 → 保持率样本） | `dc8f3c83` | `anchor-probe` 增 `utcNaturalDayDiff` + `selectDelayedAnchorCandidates`（UTC 自然日间隔门、`lastProbeAt` 冷却、最久未接触优先）；`anchor-probe-emit` 增延迟候选构建与 `TEACHING_DELAYED_ANCHOR_DAYS`（默认 7）；`anchor:result` payload 增 `anchorKind`/`intervalDays`；仍是**只观测不改写**（不重写掌握/难度/BKT、不伪造教师回复），读取失败结构化降级打标 |
+
 ### VL 验证结果（真实跑数）
 - assisted E2E（`advance-day runTasks`）8 天 × 2 节：链路健康；`temporalContext.sinceLastSessionDays` 计算正确（跨周末 3 / 工作日 1）；
   `memoryRecall` 真进 payload。
@@ -409,7 +414,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 - **Q11b 接线**：编译器已就绪（`0d4aa01b`/`126e05c7`），还需在 core yaml 声明 `enumValues`/嵌套 `properties`，并把
   `compileStrictJsonSchema` 接入 `skill-output-validator`（用 `collectSchemaLimitations` 门禁，避免误拒）。
 - **锚题探针调优**：接线已完成；锚题 `checkpoint:result` 是否应从成功率带样本排除，待产品定夺。
-- **Q8 延迟锚题复用 / Q1 复习容量**：见 §6 剩余可选。
+- **Q1 复习容量**：见 §6 剩余可选（Q8 延迟锚题复用已落地，见 §8 Wave 3）。
 - **商业级轴**：Q16 合规重层 / Q17 教师升级 / Q18 实验基建 / Q20 单位经济 = 不做（§7）。
 - `login_attempts` 是否纳入删除覆盖（按用户名/IP 而非 userId），待场景。
 
