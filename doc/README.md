@@ -35,6 +35,9 @@
 - [`CONTEXT_MECHANISM_AUDIT.md`](./CONTEXT_MECHANISM_AUDIT.md)
   - 各阶段 skill 的**上下文机制审计**：真实调用遥测（输入体积 / 前缀缓存命中率）+ 优化方向
   - 结论：体积不是瓶颈，真正的杠杆是**前缀缓存命中率**（全局 20.9%）
+- [`SCALE_PREREQUISITES_DESIGN.md`](./SCALE_PREREQUISITES_DESIGN.md)
+  - 规模化前置设计基线（Q18 真实用户实验 / Q19 学习者生命周期 / Q20 单位经济）：现状核实 + 最小可行设计 + 前置决策点 + 验收里程碑
+  - 承接 `UPGRADE_DIRECTION_20Q.md`「第三波 · 规模化前置」结论，仅为设计，不含实现
 
 ## Agent 与场景
 
