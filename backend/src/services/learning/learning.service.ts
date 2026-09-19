@@ -1,6 +1,7 @@
 // 学习服务
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
+import { withTransaction } from '../../utils/with-transaction';
 import stateTrackingService from './learning-state.service';
 import achievementService from '../achievements/achievement.service';
 import type { AgentInput } from '../../agents/protocol';
@@ -162,7 +163,7 @@ class LearningService {
       : 'PATH_MUTATION_CONFLICT');
     const runStatus = options.runStatus || 'cancelled';
 
-    await prisma.$transaction(async (tx) => {
+    await withTransaction(async (tx) => {
       const path = await tx.learning_paths.findUnique({
         where: { id: pathId },
         select: {
@@ -312,7 +313,7 @@ class LearningService {
     const now = new Date();
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    return prisma.$transaction(async (tx) => {
+    return withTransaction(async (tx) => {
       const failed = await tx.path_generation_runs.updateMany({
         where: {
           id: runId,
@@ -1071,7 +1072,7 @@ class LearningService {
     expectedRunStatus: 'processing' | 'failed' = 'processing'
   ): Promise<void> {
     try {
-      await prisma.$transaction(async (tx) => {
+      await withTransaction(async (tx) => {
         if (runId) await assertGenerationRunFence(tx, pathId, runId, expectedRunStatus);
         const existing = await tx.learning_paths.findUnique({
           where: { id: pathId },
@@ -1950,7 +1951,7 @@ class LearningService {
     const pathTitle = cleanPathTitle(analysis.pathName || `${analysis.subject || '个性化'}学习路径`);
     const pathSubject = resolvePathSubject(analysis.subject, pathTitle);
 
-    const learningPath = await prisma.$transaction(async (tx) => {
+    const learningPath = await withTransaction(async (tx) => {
       let path;
       if (data.existingPathId) {
         if (!runId) throw new Error('GENERATION_RUN_REQUIRED');
@@ -2409,7 +2410,9 @@ class LearningService {
         }
       }
 
-      await prisma.$transaction(async (tx) => {
+      await withTransaction(async (tx) => {
+        // 事务可能因瞬时冲突整体重试：计数必须随每次尝试重置，避免重复累加
+        designedTaskCount = 0;
         await assertGenerationRunFence(tx, pathId, runId);
         const lockedPath = await tx.learning_paths.updateMany({
           where: { id: pathId, activeGenerationRunId: runId },
@@ -3478,7 +3481,7 @@ class LearningService {
   // 删除学习路径
   async deleteLearningPath(pathId: string, userId: string) {
     try {
-      await prisma.$transaction(async (tx) => {
+      await withTransaction(async (tx) => {
         const path = await tx.learning_paths.findUnique({
           where: { id: pathId },
           select: { userId: true }
@@ -3584,7 +3587,7 @@ class LearningService {
     const newTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
     assertStageTasksPresent(milestone.stageNumber, newTasks);
 
-    await prisma.$transaction(async (tx) => {
+    await withTransaction(async (tx) => {
       await assertGenerationRunFence(tx, path.id, runId);
       await claimPathReplanSnapshot(tx, snapshot);
       await assertPathMutationSafe(tx, path.id, 'replan-stage', {
@@ -3838,6 +3841,7 @@ class LearningService {
       }
 
       // 预检：无进行中任务/未结束课堂（提交期逐阶段各自乐观锁 claim + 安全检查）
+      // 只读校验事务（无写入）：保留裸 $transaction 以维持只读快照语义，本轮不接入写入封装
       await prisma.$transaction(async (tx) => {
         await assertGenerationRunFence(tx, pathId, runId);
         await assertPathMutationSafe(tx, pathId, 'replan-stage', {
@@ -3857,7 +3861,7 @@ class LearningService {
       );
 
       // 收尾：run 成功落库（阶段任务已逐阶段写入）
-      await prisma.$transaction(async (tx) => {
+      await withTransaction(async (tx) => {
         await assertGenerationRunFence(tx, pathId, runId);
         await tx.path_generation_runs.update({
           where: { id: runId },
@@ -4245,7 +4249,7 @@ class LearningService {
       // 日期模拟：任务结算的业务时间戳（subtasks.completedAt / 完成类 evidence / 里程碑）
       // 必须在模拟时钟下落到模拟日；无模拟上下文时 asOf 缺省 → new Date()，现网行为不变。
       const completedAt = data.asOf ?? new Date();
-      const completionResult = await prisma.$transaction(async (tx) => {
+      const completionResult = await withTransaction(async (tx) => {
         const lockedPath = await tx.learning_paths.updateMany({
           where: { id: pathId, userId: data.userId },
           data: { updatedAt: completedAt }
