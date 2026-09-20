@@ -13,11 +13,15 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-vue': ['vue', 'vue-router', 'pinia'],
-          'vendor-content': ['markdown-it', 'dompurify', 'highlight.js', 'markdown-it-texmath'],
-          mermaid: ['mermaid'],
-          katex: ['katex']
+        // 函数形式分包:对象形式会把 Vite 的 __vitePreload 助手卷进具名分块,
+        // 导致入口被 modulepreload mermaid/vendor-content(首屏强载 ~1MB 无关 JS)。
+        // mermaid/katex 不再具名:mermaid 本就是动态 import 自然独立成块(且按图类型再拆),
+        // katex 由默认算法收敛进共享 chunk,均不进首屏。
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (/[\\/]node_modules[\\/](vue|vue-router|pinia|@vue)[\\/]/.test(id)) return 'vendor-vue';
+          if (/[\\/]node_modules[\\/](markdown-it|markdown-it-texmath|dompurify|highlight\.js)[\\/]/.test(id)) return 'vendor-content';
+          return undefined;
         }
       }
     }
