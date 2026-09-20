@@ -65,6 +65,58 @@ import { reviewQuotaService } from '../memory/review-quota.service';
 import reviewPlanService, { type ReviewPlan, type ReviewPlanItem } from '../memory/review-plan.service';
 import { recordMisconceptions } from '../learner/misconception-ledger.service';
 import { fenceLearnerMessagesForModel } from './input-fence';
+import {
+  WARMUP_FUZZY_MIN_LENGTH,
+  WARMUP_FUZZY_OVERLAP_MIN,
+  matchWarmupItem,
+  pendingWarmupForModel,
+  resolveTurnMemoryWarmup,
+  extractWarmupOutcomes,
+  stripWarmupPoints,
+  markWarmupAsked,
+  mergeWarmupOutcomes,
+} from './teaching-warmup';
+import { CHECKPOINT_MIN_TURNS, CHECKPOINT_TRIGGER_MIN_UNDERSTANDING, parseSessionArtifacts } from './checkpoint-shared';
+export { CHECKPOINT_MIN_TURNS, CHECKPOINT_TRIGGER_MIN_UNDERSTANDING, parseSessionArtifacts } from './checkpoint-shared';
+import { resolveAnchorProbeTarget, recordCheckpointResultEvidence, recordAnchorProbeResult } from './teaching-checkpoint';
+import {
+  TeachingCheckpoint,
+  CheckpointSubmitPayload,
+  CheckpointSubmitResult,
+  shouldEmitCheckpoint,
+  summarizeCheckpointHistory,
+  CheckpointCodeJudgement,
+  judgeCheckpointAnswer,
+  checkpointForMessageResult,
+  inheritTeachingState,
+  stripCheckpointAnswerKeys,
+  getPendingCheckpoint,
+} from './teaching-checkpoint';
+
+export {
+  WARMUP_FUZZY_MIN_LENGTH,
+  WARMUP_FUZZY_OVERLAP_MIN,
+  matchWarmupItem,
+  pendingWarmupForModel,
+  resolveTurnMemoryWarmup,
+  extractWarmupOutcomes,
+  stripWarmupPoints,
+  markWarmupAsked,
+  mergeWarmupOutcomes,
+} from './teaching-warmup';
+export {
+  TeachingCheckpoint,
+  CheckpointSubmitPayload,
+  CheckpointSubmitResult,
+  shouldEmitCheckpoint,
+  summarizeCheckpointHistory,
+  CheckpointCodeJudgement,
+  judgeCheckpointAnswer,
+  checkpointForMessageResult,
+  inheritTeachingState,
+  stripCheckpointAnswerKeys,
+  getPendingCheckpoint,
+} from './teaching-checkpoint';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
 const AI_TEACHING_AGENT_ID = 'teaching-agent';
@@ -73,52 +125,6 @@ export interface KnowledgePointStatus {
   name: string;
   status: 'pending' | 'learning' | 'mastered' | 'review';
   progress: number;
-}
-
-export interface TeachingCheckpoint {
-  id: string;
-  type: 'single_choice' | 'multi_choice' | 'short_answer';
-  title: string;
-  question: string;
-  options?: Array<{ id: string; text: string }>;
-  allowSkip?: boolean;
-  contextHint?: string;
-  /** 答案键（服务端保存，**不下发给学生**）：选择题的正确选项 id */
-  correctOptionIds?: string[];
-  /** 答案键：简答题的必备要点（代码按包含判定） */
-  expectedKeywords?: string[];
-  /**
-   * 独立锚题探针标记（Q13/B4）：仅当本轮由 `anchor-probe` 选定目标时才存在。
-   * 探针结果只写 `learner_evidence: anchor:result` 作为**待复核信号**，绝不静默改写掌握/难度/BKT。
-   * 非锚题检查点不带该字段（保持与历史产出逐字节一致）。
-   */
-  purpose?: 'anchor';
-  /** 锚题目标概念（注入提示词、写入证据行，便于人工复核） */
-  anchorConceptKey?: string;
-  /** 锚题期望信念：mastered→答错即 false_mastery；struggling→答对即 false_struggle */
-  anchorExpectedBelief?: 'mastered' | 'struggling';
-  /**
-   * 锚题种类（Q8 测量深化）：`independent`（Q13 独立证伪，缺省） / `delayed`（延迟保持率复测）。
-   * 随 `inheritTeachingState` 跨回合继承，供结果留痕区分两类探针。
-   */
-  anchorKind?: 'independent' | 'delayed';
-  /** 延迟锚题的自然日间隔（UTC 日界，仅 `anchorKind='delayed'`）；用于"间隔 vs 保持率" */
-  anchorIntervalDays?: number;
-}
-
-export interface CheckpointSubmitPayload {
-  selectedOptionIds?: string[];
-  answerText?: string;
-  /** 跳过检查点：清除待处理检查点并记录历史，不触发教学回合 */
-  skip?: boolean;
-}
-
-export interface CheckpointSubmitResult {
-  passed: boolean;
-  feedback: string;
-  hint?: string;
-  nextAction: 'continue' | 'review' | 'retry';
-  revision: number;
 }
 
 export interface TeachingSessionStartInput {
@@ -259,9 +265,6 @@ interface ProcessStudentMessageOptions {
 export const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 /** 检查点最小间隔（条消息）：与 `processStudentMessage` 事后门保持一致 */
-export const CHECKPOINT_MIN_TURNS = 4;
-/** 触发检查点所需"上一轮确有进展"的理解度门槛 */
-export const CHECKPOINT_TRIGGER_MIN_UNDERSTANDING = 0.6;
 
 /**
  * 检查点**触发**（2026-09-17）：由**代码**决定"何时探测"，模型只负责"探测什么"（出题 + 答案键）。
@@ -278,19 +281,6 @@ export const CHECKPOINT_TRIGGER_MIN_UNDERSTANDING = 0.6;
  * "收尾当轮"是否真的落库另有护栏（协调器建检查点时的 `!completionReady`），
  * 因此这里放开**不会**留下"没人答的检查点"。
  */
-export function shouldEmitCheckpoint(
-  session: { messages: Array<{ role: string; analysis?: any }> },
-  teachingState: Record<string, any> | null | undefined,
-): boolean {
-  if (getPendingCheckpoint(teachingState)) return false;
-  const lastTurn = Number(teachingState?.lastCheckpointTurn);
-  if (Number.isFinite(lastTurn) && session.messages.length - lastTurn < CHECKPOINT_MIN_TURNS) return false;
-  const stage = String(teachingState?.classroomContext?.stage?.current ?? '');
-  if (stage === 'wrapup') return false;
-  const lastAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
-  const understanding = Number(lastAnalysis?.understanding);
-  return Number.isFinite(understanding) && understanding >= CHECKPOINT_TRIGGER_MIN_UNDERSTANDING;
-}
 
 function buildSessionId(userId: string) {
   return `teaching_${userId}_${randomUUID()}`;
@@ -335,9 +325,6 @@ function normalizeKnowledgePoints(points: TeachingKnowledgePointState[]): Knowle
   }));
 }
 
-function parseSessionArtifacts(teachingState: Record<string, any> | null | undefined) {
-  return teachingState?.sessionArtifacts || {};
-}
 
 /**
  * 归因证据（有界、带稳定 id 供模型引用）：本课复盘要点 + 状态信号 + 不稳定概念名单。
@@ -387,249 +374,6 @@ export function buildReplanAttributionEvidence(input: {
 }
 
 /** 课内温故：模型用「原名字」报告回捞结果，比对走归一化（模型可能换写法） */
-function warmupKeyOf(name: string): string {
-  return normalizeConceptKey(name);
-}
-
-/**
- * 能代表「当场回捞出了结果」的看板状态。
- * 提示词要求回捞成功才把温故点推进为 learning / mastered；模型有时会把它标成 'review'
- * （= 已提问、待作答）或 'pending'（= 尚未处理）——这两种只说明"问过了"，不是作答表现，
- * 因此**不收录为结果**（否则收束时会按"没答出"落成 again，污染记忆状态与间隔）。
- */
-const WARMUP_RESULT_STATUSES = new Set(['mastered', 'learning']);
-
-/**
- * 结构化召回等级 → 看板状态/进度（2026-09-17）。
- * 与 `mapReviewStatusToRating` 的口径对齐：unaided→easy(0.9)、with-hint→hard(0.5)、failed→again(0.5)。
- * "给了多少帮助才想起来"是 desirable difficulty 的直接观测量，比"是否答出"二分更有信息量。
- */
-const WARMUP_RECALL_TO_STATUS: Record<'unaided' | 'with-hint' | 'failed', { status: string; progress: number }> = {
-  unaided: { status: 'mastered', progress: 100 },
-  'with-hint': { status: 'learning', progress: 50 },
-  failed: { status: 'not-recalled', progress: 0 },
-};
-
-/** 保守包含匹配的长度门槛（归一化后字符数）：短名包含关系太容易误伤，宁可不匹配 */
-export const WARMUP_FUZZY_MIN_LENGTH = 8;
-
-/** 字符重合率下限（以较短名为分母）：低于它就不再视为同一概念 */
-export const WARMUP_FUZZY_OVERLAP_MIN = 0.8;
-
-/**
- * 把「模型回写的点位名」对到计划项上（保守匹配）。
- *
- * 为什么需要退一步：实测两次全流程验证，一次摘到、一次没摘到——模型用**近义/截断**说法
- * 回写点位（提示词要求"用计划里的原名字"，但不总是遵守），结果**随机丢样本**，
- * 而样本正是动态预算与保持曲线的输入。
- *
- * 为什么必须保守：温故点会被**从本节看板摘除**（回归 2e3ca16），一旦误判，
- * 本节知识点会被当成温故点摘掉。因此：
- * 1) 先精确（归一化后相等）；计划内自身歧义 → 放弃；
- * 2) 再退一步做包含匹配，但要求**双方长度 ≥ 门槛**且**唯一命中**；否则放弃（宁缺勿错）。
- */
-export function matchWarmupItem(
-  plan: ReviewPlan | null | undefined,
-  name: string,
-): ReviewPlanItem | null {
-  const items = (plan?.items || []).filter((item) => item && (item.label || item.conceptKey));
-  if (items.length === 0) return null;
-  const target = warmupKeyOf(String(name || ''));
-  if (!target) return null;
-
-  const exact = items.filter((item) => warmupKeyOf(item.label || item.conceptKey) === target);
-  if (exact.length === 1) return exact[0];
-  if (exact.length > 1) return null;
-
-  const contained = items.filter((item) => {
-    const key = warmupKeyOf(item.label || item.conceptKey);
-    if (key.length < WARMUP_FUZZY_MIN_LENGTH || target.length < WARMUP_FUZZY_MIN_LENGTH) return false;
-    return key.includes(target) || target.includes(key);
-  });
-  if (contained.length === 1) return contained[0];
-  if (contained.length > 1) return null;
-
-  // 3) 同字异序：模型常把中文概念名调序（实测 "整合输出8月龄食物质地安全判据" → 写回 "
-  //    食物质地安全判据整合"）。字符多重集完全相同的两个名字几乎不可能指不同概念 → 唯一命中就认。
-  const sameChars = items.filter((item) => {
-    const key = warmupKeyOf(item.label || item.conceptKey);
-    if (key.length !== target.length || key.length < WARMUP_FUZZY_MIN_LENGTH) return false;
-    return [...key].sort().join('') === [...target].sort().join('');
-  });
-  if (sameChars.length === 1) return sameChars[0];
-  if (sameChars.length > 1) return null;
-
-  // 4) 最后退一步：**调序 + 截断**同时出现（实测那次就是丢了"输出/8月龄"）。按字符重合率（不看顺序），
-  //    以较短名为分母要求 ≥ 0.8，双方均 ≥ 8 字，且唯一命中。
-  //    再松就会开始误伤本节知识点（误判会把知识点从看板摘掉）——宁可漏摘。
-  const similar = items.filter((item) => {
-    const key = warmupKeyOf(item.label || item.conceptKey);
-    if (key.length < WARMUP_FUZZY_MIN_LENGTH || target.length < WARMUP_FUZZY_MIN_LENGTH) return false;
-    const shortName = key.length <= target.length ? key : target;
-    const pool = [...(key.length <= target.length ? target : key)];
-    let hit = 0;
-    for (const char of shortName) {
-      const index = pool.indexOf(char);
-      if (index >= 0) {
-        pool.splice(index, 1);
-        hit += 1;
-      }
-    }
-    return hit / shortName.length >= WARMUP_FUZZY_OVERLAP_MIN;
-  });
-  return similar.length === 1 ? similar[0] : null;
-}
-
-/**
- * 交给模型的本节温故视图：**只保留尚未回捞的点**。
- * - 已在本节报告过结果的点不再重复问（也避免后续回合覆盖已记录的结果）；
- * - 全部完成 → 返回 null，提示词走"本节不温故"分支；
- * - 注意：`stripWarmupPoints` / `extractWarmupOutcomes` 仍须用**完整计划**（它们负责"温故点永不进
- *   本节看板"），否则模型若在后续回合才报出结果，就会漏摘并串进看板（回归 2e3ca16）。
- */
-export function pendingWarmupForModel(plan: ReviewPlan | null | undefined): ReviewPlan | null {
-  if (!plan || !Array.isArray(plan.items)) return null;
-  const pending = plan.items.filter((item) => !item?.outcome?.status);
-  if (pending.length === 0) return null;
-  return {
-    ...plan,
-    items: pending,
-    // 与 items 保持一致的视图：只算还没回捞的负担
-    usedLoad: pending.reduce((sum, item) => sum + (Number(item.load) || 0), 0),
-  };
-}
-
-/**
- * 每回合重建 context 后回填温故计划。
- * 断点回归（2026-09-16 调查）：计划只在 `startSession` 里赋给 context，而回合侧每回合重建 context，
- * 于是 `scenario.memoryWarmup` 恒为 null——提示词的温故规则成了死代码，结果也永远摘不到。
- * 计划持久化在 `sessionArtifacts.memoryWarmup`（开课建立、随回合合并结果），这里必须回填。
- */
-export function resolveTurnMemoryWarmup(
-  sessionArtifacts: Record<string, any> | null | undefined,
-): ReviewPlan | null {
-  const persisted = sessionArtifacts?.memoryWarmup;
-  return persisted && Array.isArray(persisted.items) && persisted.items.length > 0 ? persisted : null;
-}
-
-/**
- * 从教学回合的输出里摘出「课内温故」的结果。
- *
- * **两条通道，结构化优先（2026-09-17，审计 §3.6 问题④的另一半）**：
- * ① `control.warmupOutcomes`（首选）：模型直接报"给了多少帮助才想起来"（unaided / with-hint / failed），
- *    代码据此落结果——**不做名字匹配**，因此不再依赖"模型必须把温故点按原名回写进 knowledge.points"。
- *    实测背景：靠回写 + 名字匹配时，两次全流程验证一次摘到一次没摘到（本轮从零回归里温故点在消息中
- *    出现 5 次、却没进 knowledge.points ⇒ 摘取饿死、outcome 恒 null）。
- * ② `knowledge.points` 名字匹配（兼容）：老行为，结构化缺失时兜底。
- *
- * 到期旧知必须与本节点看板**物理分离**——历史事故 2e3ca16：日常课把跨 path 到期点注入
- * seededKnowledgeState，结果串进「本节知识点」且被前端 isCurrent 误显示为「进行中 · x%」，
- * 于是整个课内复习机制被下线。这里仍走独立通道（只取结果，不进看板）。
- */
-export function extractWarmupOutcomes(
-  plan: ReviewPlan | null | undefined,
-  points: Array<{ name: string; status: string; progress: number }> | null | undefined,
-  structured?: Array<{ conceptKey?: string; itemIndex?: number; recall: 'unaided' | 'with-hint' | 'failed'; evidence?: string }> | null,
-): Array<{ conceptKey: string; status: string; progress: number }> {
-  if (!plan) return [];
-  const outcomes: Array<{ conceptKey: string; status: string; progress: number }> = [];
-  const pushOnce = (item: ReviewPlanItem, status: string, progress: number) => {
-    const key = warmupKeyOf(item.conceptKey);
-    if (outcomes.some((existing) => warmupKeyOf(existing.conceptKey) === key)) return;
-    // 用**计划项的规范键**（而非模型当时的写法）：记忆引擎按它定位 memory_traces
-    outcomes.push({ conceptKey: item.conceptKey, status, progress });
-  };
-
-  // ① 结构化通道：itemIndex 相对的是**模型看到的待回捞视图**（pendingWarmupForModel），不是完整计划
-  const pendingView = pendingWarmupForModel(plan)?.items ?? [];
-  for (const entry of structured || []) {
-    if (!entry) continue;
-    const index = Number.isInteger(entry.itemIndex) ? Number(entry.itemIndex) : -1;
-    const byIndex = index >= 0 && index < pendingView.length ? pendingView[index] : null;
-    const item = byIndex ?? matchWarmupItem(plan, String(entry.conceptKey || ''));
-    if (!item) continue;
-    const mapped = WARMUP_RECALL_TO_STATUS[entry.recall];
-    if (!mapped) continue;
-    pushOnce(item, mapped.status, mapped.progress);
-  }
-
-  // ② 兼容通道：模型把温故点按原名写回 knowledge.points（仅在结构化没给这个点时生效）
-  if (Array.isArray(points)) {
-    for (const point of points) {
-      const name = String(point?.name || '').trim();
-      if (!name) continue;
-      const matched = matchWarmupItem(plan, name);
-      if (!matched) continue;
-      const status = String(point.status || '') || 'learning';
-      // 只有「当场回捞出了结果」的状态才算结果：模型把温故点写回来只为提问（'review'）时，
-      // 它不代表任何作答表现——若当成结果收录，收束时会按"没答出"落成 again，污染记忆状态。
-      if (!WARMUP_RESULT_STATUSES.has(status)) continue;
-      pushOnce(matched, status, Number(point.progress) || 0);
-    }
-  }
-  return outcomes;
-}
-
-/** 从本节看板点里剔除温故点（保证到期旧知不污染本节知识点清单） */
-export function stripWarmupPoints<T extends { name: string }>(
-  plan: ReviewPlan | null | undefined,
-  points: T[],
-): T[] {
-  if (!plan || !Array.isArray(points)) return points;
-  return points.filter((point) => !matchWarmupItem(plan, String(point?.name || '')));
-}
-
-/**
- * 标记「模型真的把这个温故点问出来了」（首次）。
- *
- * 与 `mergeWarmupOutcomes`（记录**结果**）分开：模型常把温故点以 `review`/`pending` 写回
- * （= 我已经问了/正要问），这不是作答表现，但它证明**确实发生了这次回捞**。
- * 结算时凭它把"问过、但始终没推进"判定为**没答出**——否则失败永不入库：
- * 成功率与保持曲线只剩上界，leech（连续答不出）与队列自净也永远不会触发。
- */
-export function markWarmupAsked(
-  plan: ReviewPlan | null | undefined,
-  points: Array<{ name: string }> | null | undefined,
-  askedAt: string,
-): ReviewPlan | null {
-  if (!plan || !Array.isArray(plan.items) || !Array.isArray(points)) return plan ?? null;
-  const matched = new Set<string>();
-  for (const point of points) {
-    const item = matchWarmupItem(plan, String(point?.name || ''));
-    if (item) matched.add(item.conceptKey);
-  }
-  if (matched.size === 0) return plan;
-  return {
-    ...plan,
-    items: plan.items.map((item) =>
-      matched.has(item.conceptKey) && !item.askedAt ? { ...item, askedAt } : item,
-    ),
-  };
-}
-
-/** 把温故结果并进持久化计划项（按归一化键匹配） */
-export function mergeWarmupOutcomes(
-  plan: ReviewPlan | null | undefined,
-  updates: Array<{ conceptKey: string; status: string; progress: number }>,
-  reviewedAt: string,
-): ReviewPlan | null {
-  if (!plan || updates.length === 0) return plan ?? null;
-  const byKey = new Map(updates.map((item) => [warmupKeyOf(item.conceptKey), item]));
-  return {
-    ...plan,
-    items: plan.items.map((item) => {
-      const update = byKey.get(warmupKeyOf(item.label || item.conceptKey));
-      if (!update) return item;
-      return { ...item, outcome: { status: update.status, progress: update.progress, reviewedAt } };
-    }),
-  };
-}
-
-function getPendingCheckpoint(teachingState: Record<string, any> | null | undefined): TeachingCheckpoint | null {
-  return teachingState?.pendingCheckpoint
-    || parseSessionArtifacts(teachingState).pendingCheckpoint
-    || null;
-}
 
 /**
  * 教学阶段。
@@ -1432,395 +1176,6 @@ export function computeSessionEvidence(session: TeachingSessionRecord) {  // 排
  * 只给模型"最近发生了什么、哪些没通过"，用于**换表征再确认**——不铺原始 20 条（噪声）。
  * 返回 null = 本节课还没有检查点记录（模型据此不改变默认行为）。
  */
-export function summarizeCheckpointHistory(raw: unknown): {
-  total: number;
-  passed: number;
-  failed: number;
-  skipped: number;
-  recent: Array<{ title: string; passed: boolean; skipped?: boolean; understanding?: number }>;
-} | null {
-  const rows = Array.isArray(raw) ? raw : [];
-  if (rows.length === 0) return null;
-  const passed = rows.filter((row) => row?.passed === true).length;
-  const skipped = rows.filter((row) => row?.skipped === true).length;
-  return {
-    total: rows.length,
-    passed,
-    failed: rows.length - passed - skipped,
-    skipped,
-    recent: rows.slice(-5).map((row) => ({
-      title: String(row?.title ?? row?.checkpointId ?? ''),
-      passed: row?.passed === true,
-      ...(row?.skipped === true ? { skipped: true } : {}),
-      ...(typeof row?.understanding === 'number' ? { understanding: row.understanding } : {}),
-    })),
-  };
-}
-
-export interface CheckpointCodeJudgement {
-  /** code = 代码按答案键裁决（独立传感器）；model-reference = 无答案键，退回模型/完成度派生（同步标记，不冒充独立） */
-  judgedBy: 'code' | 'model-reference';
-  passed: boolean;
-  detail: string;
-}
-
-/** 归一化选项 id 集合（大小写/空白容错） */
-function normalizeIdSet(ids: unknown): Set<string> {
-  if (!Array.isArray(ids)) return new Set();
-  return new Set(ids
-    .filter((id): id is string => typeof id === 'string')
-    .map((id) => id.trim().toLowerCase())
-    .filter(Boolean));
-}
-
-/** 归一化待比对文本：小写、去空白与常见标点（简答要点的保守包含判定） */
-function normalizeForMatch(text: unknown): string {
-  return String(text ?? '')
-    .toLowerCase()
-    .replace(/[\s，。、；：！？,.;:!?（）()【】[\]"'“”‘’—-]/g, '');
-}
-
-/**
- * **代码裁决**检查点作答（2026-09-17，审计 §7 P1-1「独立传感器」）。
- *
- * 原理：此前 `passed` 由 `completionReady || 当前点已被判 mastered` 反推——**答案是模型自己的判断**，
- * 于是"检查点通过率"与"模型认为学习者懂不懂"是同一条序列（自证回路，§5.3）。
- * 有了答案键（`control.checkpoint.correctOptionIds` / `expectedKeywords`），对错可以由代码判定，
- * 这才是可用于闭环控制的、独立于 LLM 自评的观测量。
- *
- * 边界（诚实标注，不假装独立）：
- * - 没有答案键 → 返回 `null`，调用方退回旧的模型派生判定，并在证据里标 `judgedBy='model-reference'`；
- * - 简答按"要点是否出现"保守判定：宁可**漏判通过**，不误判通过（避免鼓励背关键词）；
- * - 这仍是**弱独立**：题目与答案键都由 LLM 产出，独立的是"评判学习者"这一步。
- */
-export function judgeCheckpointAnswer(
-  checkpoint: Pick<TeachingCheckpoint, 'type' | 'correctOptionIds' | 'expectedKeywords'>,
-  submission: { selectedOptionIds?: string[]; answerText?: string },
-): CheckpointCodeJudgement | null {
-  if (checkpoint.type === 'single_choice' || checkpoint.type === 'multi_choice') {
-    const key = normalizeIdSet(checkpoint.correctOptionIds);
-    if (key.size === 0) return null;
-    const chosen = normalizeIdSet(submission?.selectedOptionIds);
-    const passed = chosen.size === key.size && Array.from(chosen).every((id) => key.has(id));
-    // detail 用**原始写法**（便于事后人工复核），比对用归一化集合
-    const original = (ids: unknown) => Array.from(new Set((Array.isArray(ids) ? ids : [])
-      .filter((id): id is string => typeof id === 'string')
-      .map((id) => id.trim())
-      .filter(Boolean)));
-    const keyText = original(checkpoint.correctOptionIds).join('/');
-    const chosenText = original(submission?.selectedOptionIds).join('/') || '空';
-    return {
-      judgedBy: 'code',
-      passed,
-      detail: passed
-        ? `选项集合与答案键一致（${keyText}）`
-        : `选项集合不一致（正确 ${keyText}，作答 ${chosenText}）`,
-    };
-  }
-
-  const keywords = (checkpoint.expectedKeywords || []).map(normalizeForMatch).filter(Boolean);
-  if (keywords.length === 0) return null;
-  const text = normalizeForMatch(submission?.answerText);
-  const missing = keywords.filter((keyword) => !text.includes(keyword));
-  return {
-    judgedBy: 'code',
-    passed: missing.length === 0,
-    detail: missing.length === 0 ? '作答包含全部要点' : `缺少要点：${missing.join('/')}`,
-  };
-}
-
-/**
- * 检查点结果留痕（`learner_evidence` type=`checkpoint:result`）。
- *
- * 为什么单独留痕：这是**独立于 LLM 自评**的第一手观测（`judgedBy='code'` 时）——
- * 第 3 步的"目标成功率带"（§7 P1-1）与效度检验（§8 E5）都以它为输入。
- * 无答案键时也照记，但标 `judgedBy='model-reference'`，**不得**混进独立信号。
- * 置信度按来源给：code=0.95（可复算）、model-reference=0.6（模型派生，含自证风险）。
- */
-async function recordCheckpointResultEvidence(
-  session: TeachingSessionRecord,
-  checkpoint: TeachingCheckpoint,
-  result: {
-    passed: boolean;
-    judgedBy: 'code' | 'model-reference';
-    detail: string | null;
-    submission: { selectedOptionIds?: string[] };
-  },
-): Promise<void> {
-  try {
-    const at = new Date();
-    await prisma.learner_evidence.create({
-      data: {
-        id: `lev_cp_${checkpoint.id}_${at.getTime()}`,
-        eventId: `checkpoint:${checkpoint.id}:${at.getTime()}`,
-        evidenceKey: `checkpoint:result:${checkpoint.id}`,
-        userId: session.userId,
-        pathId: session.learningPathId ?? null,
-        taskId: session.taskId ?? null,
-        sessionId: session.id,
-        evidenceType: 'checkpoint:result',
-        payload: JSON.stringify({
-          checkpointId: checkpoint.id,
-          type: checkpoint.type,
-          passed: result.passed,
-          judgedBy: result.judgedBy,
-          detail: result.detail,
-          ...(result.submission.selectedOptionIds?.length
-            ? { selectedOptionIds: result.submission.selectedOptionIds }
-            : {}),
-        }),
-        confidence: result.judgedBy === 'code' ? 0.95 : 0.6,
-        occurredAt: at,
-      },
-    });
-    logger.info('[AITeaching] 检查点结果留痕', {
-      sessionId: session.id,
-      checkpointId: checkpoint.id,
-      passed: result.passed,
-      judgedBy: result.judgedBy,
-    });
-  } catch (error) {
-    logger.warn('[AITeaching] 检查点结果留痕失败（不影响判定与课堂）', {
-      sessionId: session.id,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
-/**
- * 锚题探针 · 回合内目标解析（本接线里唯一的 I/O 点）。
- *
- * 仅在**本轮满足出检查点条件**（`emitCheckpoint=true`，即 `shouldEmitCheckpoint` 为真）时才接线——
- * 探针复用检查点这一个测量槽位（`anchor-probe` 纪律 3：不与检查点抢采样）。随后按优先级解析：
- * 1. **延迟锚题（Q8）**：已掌握/已完成点距上次接触达到 N 个自然日（UTC 日界，env
- *    `TEACHING_DELAYED_ANCHOR_DAYS`，默认 7）→ 做一次保持率复测，产出"间隔 vs 保持率"样本；
- *    以 `lastProbeAt` 做同间隔冷却，避免同一窗口内重复投放。
- * 2. **独立证伪探针（Q13/B4）**：用 `shouldRunAnchorProbe` 过闸（间隔 72h、轮次、退避、无 pending 检查点），
- *    从 `mastered/struggling` 候选 `limit:1` 选一个目标。
- *
- * 任何一步不满足 / 读取失败 → 返回 null，链路**与不接线时逐字节一致**（不注入、不落标记、不写证据）。
- * 数据来源：`learnerProjection.relevantKnowledge.mastered/struggling`（由 memory_traces + 会话看板派生）；
- * `fragile` 被有意排除，`turnsSinceLastProbe` 用 `消息数 − lastCheckpointTurn` 近似，详见 anchor-probe-emit.ts。
- */
-async function resolveAnchorProbeTarget(params: {
-  userId: string;
-  teachingState: Record<string, any> | null | undefined;
-  emitCheckpoint: boolean;
-  learnerProjection: TeachingScenarioContext['learnerProjection'] | null | undefined;
-  /** 全量已掌握概念 lastSeenAt（不受 recentConceptLedger 12 条截断；见 TeachingContextBuilder） */
-  masteredLastSeenAt?: Record<string, string> | null;
-  messageCount: number;
-  now: Date;
-}): Promise<AnchorProbePlan | null> {
-  if (!params.emitCheckpoint) return null;
-  try {
-    const rows = await prisma.learner_evidence.findMany({
-      where: { userId: params.userId, evidenceType: 'anchor:result' },
-      orderBy: { occurredAt: 'desc' },
-      take: ANCHOR_RESULT_LOOKBACK,
-      select: { occurredAt: true, payload: true },
-    });
-    const { lastProbeAt, probesSinceLastFlag } = summarizeAnchorEvidence(rows);
-    const signalSource = buildAnchorSignalSource(params.learnerProjection, params.masteredLastSeenAt);
-
-    // 优先：延迟锚题（Q8 测量深化）——已完成点经过 N 个自然日后复测保持率。
-    const delayed = partitionDelayedAnchorCandidates(
-      buildDelayedAnchorCandidatesFromLearnerSignals(signalSource),
-      {
-        now: params.now,
-        minIntervalDays: resolveDelayedAnchorDays(process.env.TEACHING_DELAYED_ANCHOR_DAYS),
-        lastProbeAt,
-        limit: 1,
-      },
-    );
-    // 跨时钟域/非法时间戳：显式跳过并留痕（绝不静默钳制）。正常"未到间隔"不在此列，避免噪声。
-    const crossDomain = delayed.skipped.filter((item) => item.reason === 'future-timestamp');
-    const invalidTime = delayed.skipped.filter((item) => item.reason === 'invalid-time');
-    if (crossDomain.length > 0 || invalidTime.length > 0) {
-      logger.warn('[anchor-probe] 延迟锚题候选时间戳异常，已跳过并留痕（跨时钟域/非法时间）', {
-        userId: params.userId,
-        now: params.now.toISOString(),
-        crossDomain: crossDomain.map((item) => ({ conceptKey: item.conceptKey, completedAt: item.completedAt })),
-        invalidTime: invalidTime.map((item) => ({ conceptKey: item.conceptKey, completedAt: item.completedAt })),
-      });
-    }
-    if (crossDomain.length > 0) {
-      recordDegradation({
-        source: 'ai-teaching/anchor-probe',
-        faultCategory: 'SCHEMA_VIOLATION',
-        severity: 'P3_NOTICE',
-        impactedDimensions: ['anchorProbe.delayed.completedAt'],
-        mitigationApplied: 'skip-cross-domain-candidate',
-        rootCauseMessage: `delayed anchor candidate timestamp after now (clock-domain mismatch): ${crossDomain
-          .map((item) => item.conceptKey)
-          .join(',')
-          .slice(0, 200)}`,
-      });
-    }
-    if (delayed.plans[0]) return delayed.plans[0];
-
-    // 其次：独立证伪探针（Q13/B4）
-    const decision = shouldRunAnchorProbe({
-      now: params.now,
-      lastProbeAt,
-      hasPendingCheckpoint: getPendingCheckpoint(params.teachingState) !== null,
-      turnsSinceLastProbe: deriveTurnsSinceLastProbe(
-        params.messageCount,
-        params.teachingState?.lastCheckpointTurn,
-      ),
-      probesSinceLastFlag,
-    });
-    if (!decision.shouldRun) return null;
-
-    const candidates = buildAnchorCandidatesFromLearnerSignals(signalSource);
-    const plans = selectAnchorCandidates(candidates, { limit: 1 });
-    return plans[0] ?? null;
-  } catch (error) {
-    // 允许降级，不允许未打标的降级：读取失败 → 本轮不投放，结构化遥测留痕，链路照常。
-    logger.warn('[anchor-probe] 目标解析失败（本轮不投放，链路照常）', {
-      userId: params.userId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    recordDegradation({
-      source: 'ai-teaching/anchor-probe',
-      faultCategory: 'DB_READ_FAILED',
-      severity: 'P3_NOTICE',
-      impactedDimensions: ['anchorProbeTarget'],
-      mitigationApplied: 'return-null-skip-turn',
-      rootCauseMessage: degradationCause(error),
-    });
-    return null;
-  }
-}
-
-/**
- * 独立锚题结果留痕（`learner_evidence` type=`anchor:result`）。
- *
- * 触发条件（全部满足）：该检查点带 `purpose='anchor'`、由**代码裁决**（`judgedBy='code'`，纪律 1）、
- * 且 `anchorExpectedBelief` 合法。`evaluateAnchorProbeOutcome` 只产出"证伪/一致"标记，
- * **绝不改写** knowledge/mastery/difficulty/BKT（纪律 2）；证伪时打 `warn` 提示人工复核。
- *
- * 幂等：`(eventId, evidenceKey)` 由 checkpointId 派生并命中唯一约束，同一检查点重复提交只保留一行
- * （答错重答时按最新一次结果 upsert），不会重复计数。
- */
-async function recordAnchorProbeResult(
-  session: TeachingSessionRecord,
-  checkpoint: TeachingCheckpoint,
-  passed: boolean,
-): Promise<void> {
-  const expected = checkpoint.anchorExpectedBelief;
-  if (expected !== 'mastered' && expected !== 'struggling') return;
-  try {
-    const outcome = evaluateAnchorProbeOutcome({ expected, passed });
-    const anchorKind = checkpoint.anchorKind ?? 'independent';
-    const row = buildAnchorResultEvidence({
-      checkpointId: checkpoint.id,
-      conceptKey: checkpoint.anchorConceptKey ?? null,
-      expected,
-      passed,
-      signal: outcome.signal,
-      falsified: outcome.falsified,
-      anchorKind,
-      intervalDays: checkpoint.anchorIntervalDays ?? null,
-      userId: session.userId,
-      pathId: session.learningPathId ?? null,
-      taskId: session.taskId ?? null,
-      sessionId: session.id,
-      occurredAt: simulatedNowOr(),
-    });
-    const { eventId, evidenceKey } = anchorResultEvidenceKey(checkpoint.id);
-    await prisma.learner_evidence.upsert({
-      where: { eventId_evidenceKey: { eventId, evidenceKey } },
-      create: row,
-      update: {
-        payload: row.payload,
-        confidence: row.confidence,
-        occurredAt: row.occurredAt,
-      },
-    });
-    if (outcome.falsified) {
-      logger.warn('[anchor-probe] 独立锚题证伪既有信念（仅标记待复核，不改写掌握/难度/BKT）', {
-        sessionId: session.id,
-        checkpointId: checkpoint.id,
-        conceptKey: checkpoint.anchorConceptKey ?? null,
-        expected,
-        anchorKind,
-        intervalDays: checkpoint.anchorIntervalDays ?? null,
-        passed,
-        signal: outcome.signal,
-      });
-    } else {
-      logger.info('[anchor-probe] 独立锚题结果留痕', {
-        sessionId: session.id,
-        checkpointId: checkpoint.id,
-        conceptKey: checkpoint.anchorConceptKey ?? null,
-        expected,
-        anchorKind,
-        intervalDays: checkpoint.anchorIntervalDays ?? null,
-        passed,
-        signal: outcome.signal,
-      });
-    }
-  } catch (error) {
-    logger.warn('[anchor-probe] 探针结果留痕失败（不影响判定与课堂）', {
-      sessionId: session.id,
-      checkpointId: checkpoint.id,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
-/**
- * 剥离检查点答案键（客户端投影前调用）：答案键只用于服务端代码裁决，**绝不下发**。
- * 覆盖两处暴露面：`pendingCheckpoint` 本身，以及原样返回的 `teachingState`（其中也存了一份）。
- */
-/**
- * 消息响应里下发的 `checkpoint`：**必须先剥离答案键**。
- *
- * 为什么单独抽出来（18 号报告 N1）：`/messages`（含 SSE final）此前直接下发
- * `getPendingCheckpoint(teachingState)`，而 `pendingCheckpoint` 里带着 `correctOptionIds` /
- * `expectedKeywords`——答案键一旦下发，"代码裁决独立传感器"的反作弊前提就失效了。
- * `/detail` 早已剥离，这里补齐唯一遗漏的出口。
- */
-export function checkpointForMessageResult(
-  teachingState: Record<string, any> | null | undefined
-): TeachingCheckpoint | null {
-  const stripped = stripCheckpointAnswerKeys({ pendingCheckpoint: getPendingCheckpoint(teachingState) });
-  return stripped.pendingCheckpoint ?? null;
-}
-
-/**
- * 组装本回合 `teachingState`：**先继承上一回合顶层状态，再覆盖本回合字段**。
- *
- * 为什么必须继承（18 号报告 N2）：本函数此前用 `{ ...currentState(运行时指标), ... }` 重建，
- * 而运行时指标里**没有** `pendingCheckpoint` / `lastCheckpointTurn` / `checkpointHistory`——
- * 它们只存在于上一回合的顶层。于是每次重建都把它们丢掉：
- * 答错后 `getPendingCheckpoint` 返回 null → `submitCheckpoint` 报"理解检查不存在或已处理"，
- * `checkpointHistory` 永远为空（DB 实测 220 会话仅 2 条）。
- */
-export function inheritTeachingState<T extends Record<string, any>>(
-  previousTeachingState: Record<string, any> | null | undefined,
-  turnState: T
-): T & Record<string, any> {
-  return { ...(previousTeachingState || {}), ...turnState };
-}
-
-export function stripCheckpointAnswerKeys<T extends Record<string, any> | null | undefined>(teachingState: T): T {
-  if (!teachingState || typeof teachingState !== 'object') return teachingState;
-  const clone: Record<string, any> = { ...(teachingState as Record<string, any>) };
-  const stripOne = (checkpoint: any) => {
-    if (!checkpoint || typeof checkpoint !== 'object') return checkpoint;
-    const { correctOptionIds, expectedKeywords, ...rest } = checkpoint;
-    void correctOptionIds;
-    void expectedKeywords;
-    return rest;
-  };
-  if (clone.pendingCheckpoint) clone.pendingCheckpoint = stripOne(clone.pendingCheckpoint);
-  if (clone.sessionArtifacts && typeof clone.sessionArtifacts === 'object' && clone.sessionArtifacts.pendingCheckpoint) {
-    clone.sessionArtifacts = { ...clone.sessionArtifacts, pendingCheckpoint: stripOne(clone.sessionArtifacts.pendingCheckpoint) };
-  }
-  return clone as T;
-}
 
 async function buildTeachingTurnInput(
   session: TeachingSessionRecord,
