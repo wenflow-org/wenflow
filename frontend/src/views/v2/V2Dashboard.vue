@@ -1272,8 +1272,7 @@ onMounted(loadAll);
 .nav {
   display: flex; align-items: center; gap: 28px;
   padding: 0 28px; height: 60px;
-  background: rgba(255, 255, 255, 0.86);
-  backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.92);
   border-bottom: 1px solid var(--line);
 }
 .nav__brand { display: flex; align-items: center; gap: 9px; }
@@ -1789,7 +1788,7 @@ a.btn-primary { text-decoration: none; }
   height: 100%;
   background: var(--canvas);
   border-left: 1px solid var(--line);
-  box-shadow: -24px 0 60px rgba(23, 32, 51, 0.18);
+  box-shadow: -16px 0 40px rgba(23, 32, 51, 0.16);
   display: flex; flex-direction: column;
 }
 .sheet__head {

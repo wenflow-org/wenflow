@@ -35,9 +35,7 @@ body.admin-session-concealed > #admin-session-validation-shell {
   min-height: 100vh;
   min-height: 100dvh;
   padding: 24px;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(44, 99, 208, 0.09), transparent 38%),
-    var(--mk-overlay-bg);
+  background: var(--mk-overlay-bg);
   color: var(--mk-overlay-fg);
 }
 
@@ -162,9 +160,7 @@ body.admin-session-concealed[data-theme='dark'] {
 
 html.admin-session-concealed[data-theme='dark'] body > #admin-session-validation-shell,
 body.admin-session-concealed[data-theme='dark'] > #admin-session-validation-shell {
-  background:
-    radial-gradient(circle at 50% 0%, rgba(91, 141, 239, 0.12), transparent 38%),
-    var(--mk-bg);
+  background: var(--mk-bg);
   color: var(--mk-ink, #e6edf7);
 }
 

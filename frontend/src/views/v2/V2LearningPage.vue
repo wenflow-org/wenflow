@@ -1809,10 +1809,9 @@ onBeforeUnmount(() => {
 .learn__head {
   display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px;
   padding: 12px 24px;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
   border-bottom: 1px solid var(--line);
-  /* backdrop-filter 创建堆叠上下文：若不设 z-index 会按文档顺序排，位于其后的 .tutor 将盖住「⋯」弹层。显式提升，让头部与菜单弹层始终在对话框之上。 */
+  /* position+z-index 建立堆叠上下文：若不设会按文档顺序排，位于其后的 .tutor 将盖住「⋯」弹层。显式提升，让头部与菜单弹层始终在对话框之上。 */
   position: relative;
   z-index: 50;
 }
@@ -2183,7 +2182,7 @@ onBeforeUnmount(() => {
   background: var(--surface);
   border: 1px solid rgba(244, 149, 66, 0.28);
   border-radius: 18px;
-  box-shadow: 0 24px 60px rgba(190, 92, 26, 0.16);
+  box-shadow: 0 16px 40px rgba(190, 92, 26, 0.14);
   overflow: hidden;
 }
 .peer-pop-enter-active { transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -2571,7 +2570,7 @@ onBeforeUnmount(() => {
   background: var(--surface);
   border: 1px solid rgba(49, 177, 111, 0.3);
   border-radius: 20px;
-  box-shadow: 0 28px 70px rgba(23, 32, 51, 0.16);
+  box-shadow: 0 16px 40px rgba(23, 32, 51, 0.14);
   padding: 28px;
   display: grid; gap: 14px; justify-items: center; text-align: center;
 }

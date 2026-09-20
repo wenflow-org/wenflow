@@ -409,7 +409,7 @@ table.uc-table {
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e3e9f4);
   border-radius: 20px;
-  box-shadow: 0 28px 70px rgba(23, 32, 51, 0.16);
+  box-shadow: 0 16px 40px rgba(23, 32, 51, 0.14);
   max-height: 85vh;
   display: flex;
   flex-direction: column;

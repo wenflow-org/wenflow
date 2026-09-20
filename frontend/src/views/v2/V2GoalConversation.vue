@@ -912,8 +912,7 @@ function shuffleScenes() {
 .nav {
   display: flex; align-items: center; gap: 28px;
   padding: 0 28px; height: 60px;
-  background: rgba(255, 255, 255, 0.86);
-  backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.92);
   border-bottom: 1px solid var(--line);
 }
 .nav__brand { display: flex; align-items: center; gap: 9px; }
@@ -1518,7 +1517,7 @@ function shuffleScenes() {
   background: var(--surface);
   border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
   border-radius: 20px;
-  box-shadow: 0 28px 70px rgba(23, 32, 51, 0.16);
+  box-shadow: 0 16px 40px rgba(23, 32, 51, 0.14);
   padding: 26px 28px;
   display: grid; gap: 16px;
 }
@@ -1809,7 +1808,7 @@ function shuffleScenes() {
 }
 :global([data-theme='dark']) .proposal {
   border-color: rgba(77, 139, 248, 0.2);
-  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);
 }
 :global([data-theme='dark']) .scene-card:hover:not(:disabled) {
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25);
@@ -1817,7 +1816,7 @@ function shuffleScenes() {
 :global([data-theme='dark']) .peerdock {
   background: var(--surface);
   border-color: rgba(167, 139, 255, 0.18);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);
 }
 :global([data-theme='dark']) .peerdock__bubble {
   background: rgba(167, 139, 255, 0.1);

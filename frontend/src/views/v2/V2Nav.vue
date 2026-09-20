@@ -158,8 +158,7 @@ onUnmounted(() => {
 
 <style scoped>
 .v2nav {
-  background: var(--v2nav-bg, rgba(255, 255, 255, 0.86));
-  backdrop-filter: blur(16px);
+  background: var(--v2nav-bg, rgba(255, 255, 255, 0.94));
   border-bottom: 1px solid var(--line, #e3e9f4);
   position: sticky; top: 0; z-index: 30;
 }
@@ -343,8 +342,7 @@ onUnmounted(() => {
     position: fixed;
     left: 0; right: 0; bottom: 0;
     z-index: 40;
-    background: color-mix(in srgb, var(--surface, #ffffff) 92%, transparent);
-    backdrop-filter: blur(16px);
+    background: color-mix(in srgb, var(--surface, #ffffff) 96%, transparent);
     border-top: 1px solid var(--line, #e3e9f4);
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
   }
