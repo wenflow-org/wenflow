@@ -255,26 +255,35 @@ function schedulePolling() {
 
 async function pollOnce() {
   const generating = cards.value.filter((c) => c.kind === 'generating');
-  let failCount = 0;
-  for (const c of generating) {
-    try {
-      const lc = await learningAPI.getPathGenerationStatus(c.id);
-      if (lc.phase === 'ready') {
-        toast.success(`「${c.title}」已生成，可以开始了`);
-        await load();
-        return;
-      }
-      if (lc.status === 'failed' || lc.status === 'stale') {
-        toast.error(`「${c.title}」生成失败，可重试`);
-        await load();
-        return;
-      }
-      c.phaseText = lc.phase === 'core' ? '主结构生成中…' : `阶段任务准备中（${lc.completedStages ?? 0}/${lc.totalStages ?? '?'}）…`;
-    } catch {
-      // 单条失败静默累计；连续失败过多说明状态接口异常，停止空转轮询
-      failCount += 1;
+  if (!generating.length) return;
+  type PollStatus = {
+    card: (typeof generating)[number];
+    lc: Awaited<ReturnType<typeof learningAPI.getPathGenerationStatus>>;
+  };
+  // 多卡并行查状态:原先串行 for 循环,N 张卡 = 每轮 N 个串行 RTT
+  const results = await Promise.allSettled(
+    generating.map(async (c): Promise<PollStatus> => ({ card: c, lc: await learningAPI.getPathGenerationStatus(c.id) }))
+  );
+  const settled = results.filter(
+    (r): r is Extract<(typeof results)[number], { status: 'fulfilled' }> => r.status === 'fulfilled'
+  );
+  const finished = settled.filter(
+    (r) => r.value.lc.phase === 'ready' || r.value.lc.status === 'failed' || r.value.lc.status === 'stale'
+  );
+  if (finished.length) {
+    for (const r of finished) {
+      if (r.value.lc.phase === 'ready') toast.success(`「${r.value.card.title}」已生成，可以开始了`);
+      else toast.error(`「${r.value.card.title}」生成失败，可重试`);
     }
+    await load();
+    return;
   }
+  for (const r of settled) {
+    const { card, lc } = r.value;
+    card.phaseText = lc.phase === 'core' ? '主结构生成中…' : `阶段任务准备中（${lc.completedStages ?? 0}/${lc.totalStages ?? '?'}）…`;
+  }
+  const failCount = results.length - settled.length;
+  // 单条失败静默累计;连续失败过多说明状态接口异常,停止空转轮询
   if (failCount > 0 && failCount >= generating.length && pollFailCount.value >= 6) {
     toast.warning('生成状态查询失败，请手动刷新');
     return;

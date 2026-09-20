@@ -753,16 +753,23 @@ async function boot() {
   confirmCheck.value = null;
   openingQuestion.value = '';
   try {
-    try {
-      const task = unwrap<Record<string, any>>(await request.get(`/learning/tasks/${taskId}`));
-      taskTitle.value = task?.title || task?.displayLabel || '';
-      pathName.value = task?.pathTitle || task?.learningPathTitle || task?.learningPath?.title || '';
-      pathId.value = task?.learningPathId || task?.pathId || task?.learningPath?.id || '';
-    } catch { /* 任务信息拿不到也能上课 */ }
+    // 任务详情与开课无数据依赖(仅回填标题/路径名),与 LLM 开场生成并行,
+    // 省掉开课路径上一个串行 RTT;拿不到任务信息也能上课(原语义)
+    const taskPromise = request
+      .get(`/learning/tasks/${taskId}`)
+      .then((t) => unwrap<Record<string, any>>(t))
+      .catch(() => null);
 
     const s = (isReviewMode.value
       ? await aiTeachingAPI.startReviewSession(taskId)
       : await aiTeachingAPI.startSession(taskId)) as unknown as Record<string, any>;
+
+    const task = await taskPromise;
+    if (task) {
+      taskTitle.value = task?.title || task?.displayLabel || '';
+      pathName.value = task?.pathTitle || task?.learningPathTitle || task?.learningPath?.title || '';
+      pathId.value = task?.learningPathId || task?.pathId || task?.learningPath?.id || '';
+    }
     if (s.mode === 'completed') {
       // P3：服务端已把上次「完成并结算」补结算完成（该任务已完成），直接进入学习反馈，不再新建课堂
       router.replace({ name: 'LearningEvaluationPage', params: { taskId, sessionId: s.sessionId } });

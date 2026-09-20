@@ -1955,6 +1955,9 @@ const { start: startPolling, stop: stopPolling, isActive: pollingActive } = useS
     maxBackoff: 30000,
     circuitBreakerThreshold: 8,
     skipWhenHidden: true,
+    // 首拍不立即执行:三个 startPolling 调用点(watch/resumeLearning/restartLearning)
+    // 前后都已有 refresh() 立即拉数据,轮询立即再拍 = 首帧秒内双打 ~9 请求
+    immediate: false,
   }
 )
 
