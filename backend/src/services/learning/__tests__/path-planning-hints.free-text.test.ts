@@ -2,18 +2,18 @@ import { inferMaxWeeksFromTimeHorizon, derivePlanningHints, derivePlannedOutline
 import { paceSignalRangeConfig } from '../../../config/pedagogy.config';
 
 /**
- * 走查 P7：预览承诺的阶段数必须与真实生成一致。
- * 目标对话可能给出 self-contradictory 的 key_stages × scope_size，
- * 生成时按 scope 夹；预览必须用同一计算。
+ * 走查 P7：预览承诺的阶段数必须与真实生成一致（两边都走 derivePlanningHints，同源）。
+ * 体量口径（A′，2026-09-20）：scope_size 只作**下界参考**，计数以 key_stages 为准；
+ * 上界取 scope 与 pace 中较松者再压硬上限 8 —— 保留防膨胀，同时不让"~95% small"的退化信号压小。
  */
 describe('derivePlannedOutline（预览口径与生成同源）', () => {
-  it('4 段大纲 + scope_size=small(2~3) → 生成口径 3 段，且列表截到 3', () => {
+  it('4 段大纲 + scope_size=small → 生成口径 4 段（不再被 scopeCap=3 砍掉）', () => {
     const result = derivePlannedOutline({
       key_stages: ['环境搭建与基础认知', 'Python 操作 Excel 核心技能', '周报自动化脚本开发与调试', '流程优化与异常处理'],
       scope_size: 'small',
     });
-    expect(result.plannedMilestones).toBe(3);
-    expect(result.stages).toHaveLength(4); // 清洗只剔操作性阶段；截断由预览按 plannedMilestones 做
+    expect(result.plannedMilestones).toBe(4);
+    expect(result.stages).toHaveLength(4); // 清洗只剔操作性阶段
   });
 
   it('scope 与大纲自洽时不缩水（medium + 4 段 → 4）', () => {
@@ -46,6 +46,33 @@ describe('derivePlannedOutline（预览口径与生成同源）', () => {
 
   it('非对象输入安全返回', () => {
     expect(derivePlannedOutline(null)).toEqual({ plannedMilestones: null, stages: [] });
+  });
+});
+
+describe('体量与节奏分轴（A′）：scope 降为下界、计数以 keyStages 为准', () => {
+  it('small + 5 段（pace=standard 上界 5）→ 5', () => {
+    expect(derivePlannedOutline({ key_stages: ['一', '二', '三', '四', '五'], scope_size: 'small' }).plannedMilestones).toBe(5);
+  });
+
+  it('紧节奏（compact）仍保留防膨胀：small + 4 段 → 3', () => {
+    const hints = derivePlanningHints('1天', null, null, null, ['一', '二', '三', '四'], null, 'small');
+    expect(hints.paceSignal).toBe('compact');
+    expect(hints.targetMilestones).toBe(3); // cap = min(8, max(scope 3, pace 3)) = 3
+  });
+
+  it('宽松节奏（extended）允许铺开：small + 6 段 → 6', () => {
+    const hints = derivePlanningHints('三个月', null, null, null, ['一', '二', '三', '四', '五', '六'], null, 'small');
+    expect(hints.paceSignal).toBe('extended');
+    expect(hints.targetMilestones).toBe(6); // cap = min(8, max(scope 3, pace 8)) = 8
+  });
+
+  it('micro：floor 来自 scope（1），不会被无条件抬到 2', () => {
+    expect(derivePlanningHints(null, null, null, null, ['一'], null, 'micro').targetMilestones).toBe(1);
+  });
+
+  it('无 scope 时行为不变', () => {
+    expect(derivePlanningHints(null, null, null, null, ['一', '二', '三'], null, null).targetMilestones).toBe(3);
+    expect(derivePlanningHints(null, null, null, null, [], null, null).targetMilestones).toBeNull();
   });
 });
 
@@ -134,9 +161,9 @@ describe('scope_size（问题规模钳制里程碑数）', () => {
     expect(hints.milestoneRange).toEqual([2, 2]);
     expect(hints.scopeSize).toBe('micro');
   });
-  it('small 钳制 milestone 顶多 3：keyStages 给 5 个压到 3', () => {
+  it('small 允许被 pace 放宽（extended）：keyStages 5 → 5（不再被 scopeCap=3 砍到 3）', () => {
     const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3', 'S4', 'S5'], null, 'small');
-    expect(hints.targetMilestones).toBe(3);
+    expect(hints.targetMilestones).toBe(5); // cap = min(8, max(scope 3, pace extended 8)) = 8
   });
   it('medium 允许到 5：keyStages 给 5 个保留 5', () => {
     const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3', 'S4', 'S5'], null, 'medium');
@@ -222,15 +249,15 @@ describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数�
     expect(low.targetSubtasksPerStage).toBe(2);
   });
 
-  it('scope_size 钳制 perStageFromHours：small + 大 estimatedHours 仍不超 3', () => {
+  it('perStageFromHours 上界被 pace 夹住（small + extended）：16h/3≈5 → 5', () => {
     const hints = derivePlanningHints(
       '三个月', null, null, null, ['S1', 'S2', 'S3'],
       { totalWeeks: 2, estimatedHours: 16, sessionsPerWeek: 6, sessionsLengthMin: 60 },
       'small'
     );
-    // small subtasksPerStageRange=[2,3]，16h/3≈5 被钳到 3
-    expect(hints.targetSubtasksPerStage).toBe(3);
-    expect(hints.subtasksPerStageRange).toEqual([3, 3]);
+    // A″：上界取 max(scope small 3, pace extended 6) = 6，故 16h/3≈5 不再被 scope 的 3 砍到 3；仍受 6 夹住
+    expect(hints.targetSubtasksPerStage).toBe(5);
+    expect(hints.subtasksPerStageRange).toEqual([5, 5]);
   });
 
   it('keyStages 缺失时 targetSubtasksPerStage 为 null，沿用 pace 区间', () => {
@@ -308,7 +335,7 @@ describe('可选负荷画像 learnerLoadProfile（加性参数，不传零差异
     expect(nonTight).toEqual(without);
     // 非紧画像也不改变 defect-1 修复后的兜底结果
     expect(without.targetSubtasksPerStage).toBe(3);
-    expect(without.subtasksPerStageRange).toEqual([3, 5]);
+    expect(without.subtasksPerStageRange).toEqual([3, 6]); // A″：上界取 max(scope medium 5, pace extended 6)
   });
 });
 

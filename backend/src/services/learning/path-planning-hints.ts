@@ -196,27 +196,47 @@ export function derivePlanningHints(
   const keyStageCount = keyStages.length;
   const paceConfig = paceSignalRangeConfig[paceSignal];
 
-  // 问题规模优先于 pace 档位：scope_size 是 goal 层对"这个问题多大"的直接判断，
-  // 比"时间紧迫/从容"更接近路径体量的真实决定因素
+  // 体量与节奏分轴（A′，2026-09-20 修正）：
+  //   历史：9-05「里程碑数精确匹配 keyStages」+ 9-14「scope_size 钳制体量」两次都是为了防**膨胀**
+  //   （原话："小问题不再被撑成大路径"）；但 scope 判定长期退化成 ~95% small，反过来**压小**——
+  //   goal 自己排出 4-6 个阶段却被 min(scopeCap, …) 静默砍成 2~3 个。
+  //   现在：scope_size 降级为「下界参考」，计数以 keyStages（用户在确认卡上真正确认过的阶段计划）为准；
+  //   上界取「scope 与 pace 中较松者」再压全局硬上限，**保留防膨胀**，同时不让单一退化信号独裁。
   const scope = normalizeScopeSize(scopeSize);
   const scopeConfig = scope ? SCOPE_SIZE_RANGES[scope] : null;
 
   let milestoneRange: [number, number] = scopeConfig ? [...scopeConfig.milestoneRange] : [...paceConfig.milestoneRange];
   let conceptRange: [number, number] = [...paceConfig.conceptRange];
-  let subtasksPerStageRange: [number, number] = scopeConfig ? [...scopeConfig.subtasksPerStageRange] : [...paceConfig.subtasksPerStageRange];
   const defaultMinutesRange: [number, number] = [...paceConfig.defaultMinutesRange];
-  // 强制里程碑数量：优先尊重 scope_size 的体量上限，再叠 keyStages 数。
-  // 之前直接 clamp(keyStages, 2, 8) 会让 goal 随机产出的 3-5 个 keyStages 无脑放大成 3-5 个 milestone；
-  // 现在 milestone 数被 scope_size 钳制：micro 顶多 2、small 顶多 3、medium 顶多 5、large 顶多 8。
-  const scopeMilestoneCap = scopeConfig ? scopeConfig.milestoneRange[1] : 8;
+
+  const HARD_MILESTONE_CAP = 8;
   const scopeMilestoneFloor = scopeConfig ? scopeConfig.milestoneRange[0] : 2;
-  let targetMilestones: number | null = scope
-    ? (keyStageCount > 0
-        ? Math.min(scopeMilestoneCap, Math.max(scopeMilestoneFloor, keyStageCount))
-        : scopeMilestoneFloor)
-    : (keyStageCount > 0
-        ? Math.min(8, Math.max(2, keyStageCount))
-        : null);
+  // micro 是**定义类**（"一个动作/一次判断"，1-2 段）——上下界是定义，不参与放宽；
+  // small/medium/large 是**估计类**——允许被 pace 放宽（仍受 pace 上界与硬上限夹），
+  // 避免"估小了就被静默砍掉"（实测 4/10 例 scope=small 却排出 4-5 个阶段）。
+  const milestoneCap = scope === 'micro'
+    ? scopeConfig!.milestoneRange[1]
+    : Math.min(
+        HARD_MILESTONE_CAP,
+        Math.max(
+          scopeConfig ? scopeConfig.milestoneRange[1] : HARD_MILESTONE_CAP,
+          paceConfig.milestoneRange[1],
+        ),
+      );
+  let targetMilestones: number | null = keyStageCount > 0
+    ? Math.min(milestoneCap, Math.max(scopeMilestoneFloor, keyStageCount))
+    : (scope ? scopeMilestoneFloor : null);
+
+  // 每阶段任务数同理（含 micro 的特殊处理）：否则"每阶段 2 个任务"的塌缩不变。
+  let subtasksPerStageRange: [number, number] = scope === 'micro'
+    ? [...scopeConfig!.subtasksPerStageRange]
+    : [
+        scopeConfig ? scopeConfig.subtasksPerStageRange[0] : paceConfig.subtasksPerStageRange[0],
+        Math.max(
+          scopeConfig ? scopeConfig.subtasksPerStageRange[1] : paceConfig.subtasksPerStageRange[1],
+          paceConfig.subtasksPerStageRange[1],
+        ),
+      ];
   // maxWeeks：优先用 goal 层 LLM 推断的 totalWeeks（×1.2 缓冲）；
   // 其次用自由文本 time_horizon 的确定性周数兜底（LLM 未产出 totalWeeks 时仍能钳制紧迫场景）；
   // 最后回退 pace 档位固定值，硬上限 52
