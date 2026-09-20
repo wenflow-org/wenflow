@@ -4,8 +4,6 @@
 
     <main id="top">
       <div class="hn-bg" aria-hidden="true">
-        <div class="hn-orb hn-orb--a" />
-        <div class="hn-orb hn-orb--b" />
         <div class="hn-grid" />
       </div>
 
@@ -158,7 +156,6 @@
 
       <!-- 全宽收尾 -->
       <section class="hn-end">
-        <div class="hn-end__glow" />
         <div class="hn-end__in" v-reveal>
           <h2>用 2 分钟，理出一条能执行的路径。</h2>
           <div class="hn-end__acts">
@@ -368,44 +365,6 @@ onUnmounted(() => {
   overflow: hidden;
   z-index: 0;
 }
-.hn-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(90px);
-  opacity: 0.24;
-  will-change: transform;
-}
-.hn-orb--a {
-  width: 520px;
-  height: 520px;
-  top: 80px;
-  right: -140px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--blue) 36%, transparent), transparent 70%);
-}
-.hn-orb--b {
-  width: 420px;
-  height: 420px;
-  top: 480px;
-  left: -140px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .hn-orb--a {
-    animation: hn-drift-a 24s ease-in-out infinite;
-  }
-  .hn-orb--b {
-    animation: hn-drift-b 28s ease-in-out infinite;
-  }
-}
-@keyframes hn-drift-a {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(-36px, 28px); }
-}
-@keyframes hn-drift-b {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(30px, -24px); }
-}
 .hn-grid {
   position: absolute;
   inset: 0;
@@ -561,10 +520,9 @@ main {
 .hn-panel {
   background: var(--surface-soft);
   border: 1px solid var(--line);
-  border-radius: 28px;
+  border-radius: 20px;
   padding: 20px;
-  box-shadow: 0 28px 80px rgba(58, 101, 197, 0.14);
-  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 32px rgba(58, 101, 197, 0.1);
 }
 .hn-stage__chat {
   transform: rotate(-1deg);
@@ -1087,11 +1045,11 @@ main {
 }
 .hn-panel:hover {
   transform: translateY(-4px);
-  box-shadow: 0 34px 88px rgba(58, 101, 197, 0.18);
+  box-shadow: 0 16px 40px rgba(58, 101, 197, 0.12);
 }
 [data-theme='dark'] .hn-panel:hover,
 [data-theme='dark'] .hn-stage__chat:hover {
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
 }
 .hn-state__metrics {
   display: grid;
@@ -1133,25 +1091,11 @@ main {
   position: relative;
   margin-top: 20px;
   padding: 88px 24px 100px;
-  background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
+  background: var(--surface);
   border-top: 1px solid var(--line);
   color: var(--ink);
   overflow: hidden;
   text-align: center;
-}
-.hn-end__glow {
-  position: absolute;
-  inset: auto 50% -180px auto;
-  width: 560px;
-  height: 300px;
-  transform: translateX(50%);
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--blue) 18%, transparent), transparent 68%);
-  filter: blur(40px);
-  pointer-events: none;
-}
-[data-theme='dark'] .hn-end__glow {
-  background: radial-gradient(circle, rgba(77, 139, 248, 0.22), transparent 68%);
 }
 .hn-end__in {
   position: relative;
@@ -1327,7 +1271,7 @@ main {
   .hn-stage__desk,
   .hn-panel {
     padding: 26px;
-    border-radius: 32px;
+    border-radius: 24px;
   }
   .hn-stage__bar {
     font-size: 15px;

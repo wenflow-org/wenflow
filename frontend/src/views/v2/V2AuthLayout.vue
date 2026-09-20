@@ -1,7 +1,5 @@
 <template>
   <div class="auth v2-page">
-    <div class="auth__bg" aria-hidden="true"></div>
-
     <main class="auth__main">
       <router-link to="/" class="auth__logo">
         <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" />
@@ -80,44 +78,6 @@ const isDark = useIsDark();
 
 <style scoped>
 .auth { min-height: 100vh; position: relative; }
-.auth__bg {
-  position: absolute; inset: 0; pointer-events: none;
-  background:
-    radial-gradient(560px 300px at 12% -4%, color-mix(in srgb, var(--blue) 7%, transparent), transparent 60%),
-    radial-gradient(480px 260px at 88% 104%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 60%);
-  overflow: hidden;
-}
-.auth__bg::before,
-.auth__bg::after {
-  content: '';
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.22;
-  will-change: transform;
-}
-.auth__bg::before {
-  width: 420px; height: 420px;
-  top: -90px; right: -120px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--blue) 32%, transparent), transparent 70%);
-}
-.auth__bg::after {
-  width: 340px; height: 340px;
-  bottom: -70px; left: -110px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 24%, transparent), transparent 70%);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .auth__bg::before { animation: auth-orb-a 24s ease-in-out infinite; }
-  .auth__bg::after { animation: auth-orb-b 28s ease-in-out infinite; }
-}
-@keyframes auth-orb-a {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(-30px, 24px); }
-}
-@keyframes auth-orb-b {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(26px, -20px); }
-}
 
 .auth__main {
   position: relative;
@@ -140,7 +100,7 @@ const isDark = useIsDark();
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 20px;
-  box-shadow: 0 2px 4px rgba(23, 32, 51, 0.04), 0 24px 60px rgba(23, 32, 51, 0.08);
+  box-shadow: 0 2px 4px rgba(23, 32, 51, 0.04), 0 12px 32px rgba(23, 32, 51, 0.07);
   overflow: hidden;
 }
 
@@ -157,9 +117,7 @@ const isDark = useIsDark();
 
 /* 右：演示（柔和蓝调分区） */
 .auth__demo-side {
-  background:
-    radial-gradient(320px 220px at 90% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 65%),
-    linear-gradient(160deg, color-mix(in srgb, var(--blue) 7%, transparent), color-mix(in srgb, var(--cyan) 4%, transparent));
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
   border-left: 1px solid var(--line);
   padding: 26px 26px 28px;
   display: grid;
@@ -295,8 +253,7 @@ const isDark = useIsDark();
 @media (prefers-reduced-motion: reduce) {
   .anim-msg, .anim-field, .anim-field .mark--done { animation: none; opacity: 1; transform: none; }
   .auth__card, .demo__panel-bar i,
-  .demo__field--asking .mark--asking,
-  .auth__bg::before, .auth__bg::after { animation: none; }
+  .demo__field--asking .mark--asking { animation: none; }
   .demo__panel-bar i { width: 25%; }
 }
 
@@ -342,8 +299,6 @@ const isDark = useIsDark();
 [data-theme='dark'] .demo__panel-bar { background: rgba(230, 237, 247, 0.12); }
 [data-theme='dark'] .mark { border-color: var(--line); }
 [data-theme='dark'] .auth__demo-side {
-  background:
-    radial-gradient(320px 220px at 90% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 65%),
-    linear-gradient(160deg, color-mix(in srgb, var(--blue) 8%, transparent), color-mix(in srgb, var(--cyan) 5%, transparent));
+  background: color-mix(in srgb, var(--blue) 9%, var(--surface));
 }
 </style>

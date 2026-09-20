@@ -4,8 +4,6 @@
 
     <main>
       <div class="vn-bg" aria-hidden="true">
-        <div class="vn-orb vn-orb--a" />
-        <div class="vn-orb vn-orb--b" />
         <div class="vn-grid" />
       </div>
 
@@ -96,7 +94,6 @@
       </section>
 
       <section class="vn-end">
-        <div class="vn-end__glow" />
         <div class="vn-end__in" v-reveal>
           <h2>带着一个真实问题开始。</h2>
           <p>不需要先写完整计划。说出最近真正想解决的事。</p>
@@ -260,43 +257,6 @@ onUnmounted(() => {
   overflow: hidden;
   z-index: 0;
 }
-.vn-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(90px);
-  opacity: 0.22;
-}
-.vn-orb--a {
-  width: 480px;
-  height: 480px;
-  top: 60px;
-  right: -140px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--blue) 34%, transparent), transparent 70%);
-}
-.vn-orb--b {
-  width: 360px;
-  height: 360px;
-  top: 380px;
-  left: -120px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 20%, transparent), transparent 70%);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .vn-orb--a {
-    animation: vn-drift-a 24s ease-in-out infinite;
-  }
-  .vn-orb--b {
-    animation: vn-drift-b 28s ease-in-out infinite;
-  }
-}
-@keyframes vn-drift-a {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(-32px, 26px); }
-}
-@keyframes vn-drift-b {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(28px, -22px); }
-}
 .vn-grid {
   position: absolute;
   inset: 0;
@@ -354,16 +314,15 @@ main {
   display: grid;
   gap: 12px;
   padding: 32px;
-  border-radius: 28px;
+  border-radius: 20px;
   background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
   border: 1px solid color-mix(in srgb, var(--blue) 16%, transparent);
-  box-shadow: 0 28px 80px rgba(58, 101, 197, 0.12);
-  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 32px rgba(58, 101, 197, 0.1);
   overflow: hidden;
 }
 [data-theme='dark'] .vn-hero__aside {
   border-color: rgba(111, 163, 255, 0.25);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
 }
 .vn-hero__quote {
   position: absolute;
@@ -451,7 +410,7 @@ main {
 }
 .vn-stand__grid article {
   padding: 28px;
-  border-radius: 24px;
+  border-radius: 20px;
   background: var(--surface-soft);
   border: 1px solid var(--line);
   transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
@@ -611,24 +570,10 @@ main {
 .vn-end {
   position: relative;
   padding: 88px 24px 100px;
-  background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
+  background: var(--surface);
   border-top: 1px solid var(--line);
   text-align: center;
   overflow: hidden;
-}
-.vn-end__glow {
-  position: absolute;
-  inset: auto 50% -180px auto;
-  width: 560px;
-  height: 300px;
-  transform: translateX(50%);
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--blue) 18%, transparent), transparent 68%);
-  filter: blur(40px);
-  pointer-events: none;
-}
-[data-theme='dark'] .vn-end__glow {
-  background: radial-gradient(circle, rgba(77, 139, 248, 0.22), transparent 68%);
 }
 .vn-end__in {
   position: relative;

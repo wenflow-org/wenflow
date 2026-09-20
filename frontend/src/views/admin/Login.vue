@@ -1,7 +1,5 @@
 <template>
   <div class="auth v2-page">
-    <div class="auth__bg" aria-hidden="true"></div>
-
     <main class="auth__main">
       <router-link to="/" class="auth__logo">
         <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" />
@@ -256,15 +254,6 @@ onMounted(() => {
   position: relative;
 }
 
-.auth__bg {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(560px 300px at 12% -4%, rgba(52, 120, 246, 0.07), transparent 60%),
-    radial-gradient(480px 260px at 88% 104%, rgba(141, 107, 255, 0.06), transparent 60%);
-}
-
 .auth__main {
   position: relative;
   min-height: calc(100vh - 56px);
@@ -292,7 +281,7 @@ onMounted(() => {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 20px;
-  box-shadow: 0 2px 4px rgba(23, 32, 51, 0.04), 0 24px 60px rgba(23, 32, 51, 0.08);
+  box-shadow: 0 2px 4px rgba(23, 32, 51, 0.04), 0 12px 32px rgba(23, 32, 51, 0.07);
   overflow: hidden;
 }
 
@@ -485,9 +474,7 @@ onMounted(() => {
 }
 
 .auth__demo-side {
-  background:
-    radial-gradient(320px 220px at 90% 0%, rgba(141, 107, 255, 0.1), transparent 65%),
-    linear-gradient(160deg, rgba(52, 120, 246, 0.07), rgba(67, 176, 216, 0.04));
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
   border-left: 1px solid var(--line);
   padding: 26px 26px 28px;
   display: grid;
@@ -646,19 +633,12 @@ onMounted(() => {
   opacity: 0.5;
 }
 
-/* ===== 深色模式（data-theme=dark）：压制硬编码浅色光晕与渐变，统计卡/页脚随变量反转 ===== */
+/* ===== 深色模式（data-theme=dark）：统计卡/页脚随变量反转 ===== */
 [data-theme='dark'] .auth__demo-side {
-  background:
-    radial-gradient(320px 220px at 90% 0%, rgba(141, 107, 255, 0.14), transparent 65%),
-    linear-gradient(160deg, rgba(77, 139, 248, 0.1), rgba(24, 34, 48, 0.2));
-}
-[data-theme='dark'] .auth__bg {
-  background:
-    radial-gradient(560px 300px at 12% -4%, rgba(77, 139, 248, 0.08), transparent 60%),
-    radial-gradient(480px 260px at 88% 104%, rgba(167, 139, 255, 0.07), transparent 60%);
+  background: color-mix(in srgb, var(--blue) 9%, var(--surface));
 }
 [data-theme='dark'] .auth__card {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 24px 60px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.38);
 }
 
 @media (max-width: 760px) {

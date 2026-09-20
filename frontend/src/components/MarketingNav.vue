@@ -140,7 +140,6 @@ onUnmounted(() => {
   background: var(--nav-bg);
   border-color: var(--line);
   box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(18px);
 }
 [data-theme='dark'] .mknav--on {
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.38);

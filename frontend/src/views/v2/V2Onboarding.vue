@@ -1,7 +1,5 @@
 <template>
   <div class="ob v2-page">
-    <div class="ob__bg" aria-hidden="true"></div>
-
     <main class="ob__main">
       <router-link to="/" class="ob__logo">
         <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" />
@@ -210,40 +208,6 @@ function goDashboard() {
   position: relative;
 }
 
-.ob__bg {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(560px 300px at 12% -4%, color-mix(in srgb, var(--blue) 7%, transparent), transparent 60%),
-    radial-gradient(480px 260px at 88% 104%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 60%);
-  overflow: hidden;
-}
-.ob__bg::before,
-.ob__bg::after {
-  content: '';
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.22;
-}
-.ob__bg::before {
-  width: 420px; height: 420px;
-  top: -90px; right: -120px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--blue) 32%, transparent), transparent 70%);
-}
-.ob__bg::after {
-  width: 340px; height: 340px;
-  bottom: -70px; left: -110px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 24%, transparent), transparent 70%);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .ob__bg::before { animation: ob-orb-a 24s ease-in-out infinite; }
-  .ob__bg::after  { animation: ob-orb-b 28s ease-in-out infinite; }
-}
-@keyframes ob-orb-a { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-30px,24px)} }
-@keyframes ob-orb-b { 0%,100%{transform:translate(0,0)} 50%{transform:translate(26px,-20px)} }
-
 .ob__main {
   position: relative;
   min-height: 100vh;
@@ -265,7 +229,7 @@ function goDashboard() {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 20px;
-  box-shadow: 0 2px 4px rgba(23,32,51,0.04), 0 24px 60px rgba(23,32,51,0.08);
+  box-shadow: 0 2px 4px rgba(23,32,51,0.04), 0 12px 32px rgba(23,32,51,0.07);
   padding: 26px 30px 24px;
   text-align: center;
   animation: ob-card-in 0.65s cubic-bezier(0.16,1,0.3,1) both;
@@ -641,7 +605,7 @@ function goDashboard() {
 }
 
 [data-theme='dark'] .ob__card {
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 24px 60px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 12px 32px rgba(0,0,0,0.28);
 }
 [data-theme='dark'] .ob__cta {
   box-shadow: 0 8px 20px rgba(77,139,248,0.2);
