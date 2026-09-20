@@ -5,8 +5,6 @@
    ======================================== */
 
 /* ---- @import 集中置于文件顶部（CSS 规范要求先于其他规则） ---- */
-/* 现代化增强包 */
-@import './modern-enhancements.css';
 
 /* 核心设计系统 */
 @import './design-system.css';
