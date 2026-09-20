@@ -198,11 +198,15 @@ describe('targetMilestones 降级为建议值 + milestoneRange 为权威区间�
     expect(hints.milestoneRange).toEqual([2, 8]);
   });
 
-  it('keyStages 数量超出夹取范围时限制在 2-8 之间', () => {
+  it('方案丙：无 scope 时上界由节奏给（standard→5、extended→8），下界仍 2', () => {
     const low = derivePlanningHints(null, null, null, null, ['S1']);
     expect(low.targetMilestones).toBe(2);
-    const high = derivePlanningHints(null, null, null, null, Array.from({ length: 12 }, (_, i) => `S${i}`));
-    expect(high.targetMilestones).toBe(8);
+    // 无时间信号 → pace=standard → cap = min(8, 5) = 5
+    const mid = derivePlanningHints(null, null, null, null, Array.from({ length: 12 }, (_, i) => `S${i}`));
+    expect(mid.targetMilestones).toBe(5);
+    // 长周期 → pace=extended → cap = min(8, 8) = 8
+    const wide = derivePlanningHints('三个月', null, null, null, Array.from({ length: 12 }, (_, i) => `S${i}`));
+    expect(wide.targetMilestones).toBe(8);
   });
 });
 

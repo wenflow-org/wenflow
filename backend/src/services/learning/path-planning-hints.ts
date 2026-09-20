@@ -190,12 +190,11 @@ export function derivePlanningHints(
   const keyStageCount = keyStages.length;
   const paceConfig = paceSignalRangeConfig[paceSignal];
 
-  // 体量口径（方案乙，2026-09-20）：**区间是权威边界，具体数字交给 LLM**。
-  //   历史：9-05「里程碑数精确匹配」+ 9-14「scope_size 钳制体量」都是为了防**膨胀**
-  //   （原话："小问题不再被撑成大路径"）；但 scope 判定长期退化（~95% small），
-  //   叠加 `[target,target]` 把区间捏成点 ⇒ 代码替 LLM 拍死一个数，这正是"过于死板"的来源。
-  //   现在：scope 只给**下界**；上界 = min(硬上限 8, max(scopeCap, paceCap)) 保留防膨胀；
-  //   targetMilestones 降级为「建议值」；validator 只校验 count ∈ [lo, hi]。
+  // 体量口径（方案丙，2026-09-20）：**goal 只给自由描述，代码只给边界，数字由 LLM 定**。
+  //   演进：甲（枚举+精确匹配+正则清洗）→ 乙（枚举降为下界、区间授权、去正则）→ 丙（连枚举也不要）。
+  //   丙的做法：goal 的 scope_size 是"规模判断 + 依据"的一句话；代码只用
+  //   ①节奏（时间→pace）给**上界**（防膨胀）②软下界 2 给**下界**，区间交给 path LLM 自定。
+  //   若历史数据仍传来合法枚举值，则沿用乙口径（向后兼容，不因数据形态切换而行为突变）。
   const scope = normalizeScopeSize(scopeSize);
   const scopeConfig = scope ? SCOPE_SIZE_RANGES[scope] : null;
 
@@ -204,15 +203,13 @@ export function derivePlanningHints(
 
   const HARD_MILESTONE_CAP = 8;
   const scopeMilestoneFloor = scopeConfig ? scopeConfig.milestoneRange[0] : 2;
-  const milestoneCap = scope === 'micro'
-    ? scopeConfig!.milestoneRange[1]
-    : Math.min(
-        HARD_MILESTONE_CAP,
-        Math.max(
-          scopeConfig ? scopeConfig.milestoneRange[1] : HARD_MILESTONE_CAP,
-          paceConfig.milestoneRange[1],
-        ),
-      );
+  // 方案丙：goal 的 scope_size 改为**自由描述**（不再选档），代码不再按枚举映射 ⇒ 正常情况下 scope=null。
+  // 那时上界只由**节奏（时间）**给：min(硬上限 8, paceCap)。历史数据/重规划若仍传来合法枚举，沿用乙口径（兼容）。
+  const milestoneCap = scope
+    ? (scope === 'micro'
+        ? scopeConfig!.milestoneRange[1]
+        : Math.min(HARD_MILESTONE_CAP, Math.max(scopeConfig!.milestoneRange[1], paceConfig.milestoneRange[1])))
+    : Math.min(HARD_MILESTONE_CAP, paceConfig.milestoneRange[1]);
   // 方案乙：**区间是权威边界，数字由 LLM 定**。
   //   lo = scope 下界（问题规模参考）；hi = 防膨胀上界（scope/pace 较松者 ∧ 硬上限 8）。
   //   targetMilestones 退化为「建议值」：供提示词参考，validator 只校验 count ∈ [lo, hi]。
