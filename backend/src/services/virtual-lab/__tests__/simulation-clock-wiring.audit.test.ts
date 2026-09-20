@@ -28,8 +28,8 @@ describe('模拟时钟接线审计（防退化）', () => {
     expect(text).toMatch(/simulatedNowOr\(/);
   });
 
-  it('learning.service：台账/streak 接受 asOf（模拟日）', () => {
-    const text = read('services/learning/learning.service.ts');
+  it('任务结算（task-completion.service）：台账/streak 接受 asOf（模拟日）', () => {
+    const text = read('services/learning/tasks/task-completion.service.ts');
     expect(text).toMatch(/data\.asOf \?\? new Date\(\)/); // 台账与 streak 的基准时间
   });
 
@@ -65,7 +65,7 @@ describe('模拟时钟接线审计（防退化）', () => {
   it('任务结算的业务时间戳走模拟时钟（不再落真墙钟）', () => {
     // learning.service：任务完成时间戳——驱动 subtasks.completedAt / 完成类 evidence /
     // 里程碑状态 / task:completed 事件（→ 学习指标 recordedAt/calculatedAt）
-    expect(read('services/learning/learning.service.ts'))
+    expect(read('services/learning/tasks/task-completion.service.ts'))
       .toMatch(/const completedAt = data\.asOf \?\? new Date\(\)/);
 
     // 课堂结束时间：不得再出现真墙钟 endTime（含 finalize / timeout / fail / discard）
