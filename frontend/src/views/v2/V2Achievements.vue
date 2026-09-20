@@ -318,7 +318,7 @@ onMounted(load);
 
 /* ── Unlock stagger animation ── */
 .ach-card--unlocked {
-  animation: ach-unlock 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: ach-unlock 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 .ach-card--unlocked:nth-child(1) { animation-delay: 0ms; }
 .ach-card--unlocked:nth-child(2) { animation-delay: 60ms; }
@@ -456,7 +456,7 @@ onMounted(load);
   z-index: 9999;
   pointer-events: none;
 }
-.toast-enter-active { transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.toast-enter-active { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
 .toast-leave-active { transition: all 0.2s ease-in; }
 .toast-enter-from { opacity: 0; transform: translateX(-50%) translateY(12px) scale(0.95); }
 .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(4px) scale(0.97); }

@@ -5,9 +5,7 @@
       <button type="button" class="mk-status__action" @click="refresh(true)">重试</button>
     </div>
 
-    <div v-else-if="!data" class="mk-empty mk-empty--compact">
-      <MkLoading inline text="加载中…" />
-    </div>
+    <MkLoading v-else-if="!data" inline text="加载中…" />
 
     <template v-else>
       <!-- ① 默认路由：配置值 → 解析结果（回答"改成别名后到底用哪个模型"） -->
@@ -133,7 +131,7 @@
             </tbody>
           </table>
         </div>
-        <div v-else class="mk-empty mk-empty--compact"><span>当前没有冷却中的部署（部署全部健康）。</span></div>
+        <MkEmptyState v-else compact title="当前没有冷却中的部署（部署全部健康）。" />
       </section>
 
       <!-- ⑤ 配置漂移告警 -->
@@ -147,7 +145,7 @@
             <span class="mk-alert__msg">{{ warning }}</span>
           </div>
         </div>
-        <div v-else class="mk-empty mk-empty--compact"><span>没有发现配置漂移。</span></div>
+        <MkEmptyState v-else compact title="没有发现配置漂移。" />
       </section>
     </template>
   </div>
@@ -157,6 +155,7 @@
 import { onMounted, ref } from 'vue'
 import { adminApiConfigApi } from '@/api/adminApi'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { errMsg } from './live'
 
 interface ModelRegistryOverviewData {

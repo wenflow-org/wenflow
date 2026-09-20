@@ -3,7 +3,6 @@
     <div class="evaluation-shell" ref="reportRef">
       <header class="evaluation-head">
         <div>
-          <p class="evaluation-kicker">学习反馈</p>
           <h1>当前任务学习反馈</h1>
           <AiContentNote class="evaluation-head__ai-note" />
         </div>
@@ -612,14 +611,6 @@ onUnmounted(() => {
   font-size: 13px;
   height: 36px;
   padding: 0 16px;
-}
-
-.evaluation-kicker {
-  margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  color: var(--blue-deep, #1f57cc);
 }
 
 .evaluation-head__ai-note {

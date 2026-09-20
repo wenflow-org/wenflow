@@ -21,7 +21,6 @@
 
     <!-- 标题区 -->
     <section class="docs-hero">
-      <span class="kicker">WENFLOW DEVELOPER DOCS</span>
       <h1>开发者文档</h1>
       <p>本地运行、架构与 Skill 体系、Prompt 工程、控制台与 API。</p>
       <div class="docs-hero__chips">
