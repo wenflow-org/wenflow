@@ -1,5 +1,5 @@
 import { analyzeCoreHashParity, extractRowCoreHash } from '../check-core-hash-parity';
-import { computeCoreHash, type CoreFile } from '../../services/prompt-lab/core-file-loader';
+import { computeCoreHash, type CoreFile } from '../../prompt-lab/core-file-loader';
 
 function makeCore(overrides: Partial<CoreFile> = {}): CoreFile {
   return {

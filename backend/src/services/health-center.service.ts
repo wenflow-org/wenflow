@@ -36,12 +36,12 @@ import {
   analyzeCoreHashParity,
   type CoreHashParityActiveRow,
   type CoreHashParityReport,
-} from '../scripts/check-core-hash-parity';
+} from './prompt-manifest/check-core-hash-parity';
 import { analyzeSkillReadiness, type SkillsReadinessReport } from './skills-readiness.service';
 import {
   analyzeCoreFieldsSync,
   type CoreFieldsSyncSkillReport,
-} from '../scripts/check-core-fields-sync';
+} from './prompt-manifest/check-core-fields-sync';
 import {
   detectFieldRoutingDrift,
   syncStageFieldRoutingsFromFile,
@@ -53,18 +53,18 @@ import {
   collectDeclaredPromptRuntimeContractAgentIdCandidates,
   queryActivePromptRuntimeContractMetadataRows,
   type PromptRuntimeContractMetadataParityReport,
-} from '../scripts/check-prompt-runtime-contract-metadata-parity';
+} from './prompt-manifest/check-prompt-runtime-contract-metadata-parity';
 import {
   runYamlVocabularyCheck,
   type YamlVocabularyCheckReport,
-} from '../scripts/check-yaml-vocabulary';
+} from './prompt-manifest/check-yaml-vocabulary';
 import {
   AGENT_SNAPSHOTS_TARGET,
   checkAgentSnapshotsDrift,
   generateAgentSnapshotsContent,
-} from '../scripts/generate-agent-snapshots';
-import { compileAllCorePromptFiles } from '../scripts/compile-core-files';
-import { ensureCoreAgentPrompts } from '../scripts/seed-core-agent-prompts';
+} from './prompt-manifest/generate-agent-snapshots';
+import { compileAllCorePromptFiles } from './prompt-manifest/compile-core-files';
+import { ensureCoreAgentPrompts } from './prompt-manifest/seed-core-agent-prompts';
 import systemPrisma from '../config/system-database';
 import prisma from '../config/database';
 import {
@@ -72,7 +72,7 @@ import {
   type OrchestrationStage,
 } from './field-routing/orchestration-file';
 import { SKILL_RUNTIME_DEFINITIONS } from '../coordinators/definitions-registry';
-import type { CoreAgentPromptEnsureResult } from '../scripts/seed-core-agent-prompts';
+import type { CoreAgentPromptEnsureResult } from './prompt-manifest/seed-core-agent-prompts';
 
 // ============================================================
 // 类型（基准元数据 schema，DRIFT_BASELINE_SURVEY §4.1）

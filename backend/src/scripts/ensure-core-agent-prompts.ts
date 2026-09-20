@@ -5,7 +5,7 @@ import {
   ensureCoreAgentPrompts,
   findMissingCorePromptSeeds,
   type CoreAgentPromptEnsureMode,
-} from './seed-core-agent-prompts';
+} from '../services/prompt-manifest/seed-core-agent-prompts';
 
 dotenv.config();
 

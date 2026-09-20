@@ -1,11 +1,11 @@
-import type { PromptFile, PromptFileScanResult } from '../../composers/prompt-files/loader'
+import type { PromptFile, PromptFileScanResult } from '../../../composers/prompt-files/loader'
 import {
   analyzePromptRuntimeContractMetadataParity,
   checkPromptRuntimeContractMetadataParity,
   type ActivePromptRuntimeContractMetadataRow,
 } from '../check-prompt-runtime-contract-metadata-parity'
-import { buildV4CorePromptMetadata } from '../../services/prompt-lab/core-prompt-metadata'
-import { computeCoreHash, loadCoreFile } from '../../services/prompt-lab/core-file-loader'
+import { buildV4CorePromptMetadata } from '../../prompt-lab/core-prompt-metadata'
+import { computeCoreHash, loadCoreFile } from '../../prompt-lab/core-file-loader'
 
 function validRuntimeContract() {
   return {

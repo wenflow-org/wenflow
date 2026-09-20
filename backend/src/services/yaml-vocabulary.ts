@@ -5,7 +5,7 @@
  * - prompt-lab/core-file-loader（CORE_FIELD_TYPES / FAILURE_POLICY_CORE，经 re-export 保兼容）
  * - skill-output-validator（CORE_FIELD_TYPES，替换原重复白名单）
  * - field-routing/orchestration-file（PROMPT_ROLES / RENDER_VALUES / CORE_VALUE_TYPES / VISIBILITY_PRESETS）
- * - scripts/check-yaml-vocabulary（failurePolicy 映射一致性门禁）
+ * - services/prompt-manifest/check-yaml-vocabulary（failurePolicy 映射一致性门禁）
  *
  * 词表统一口径（YAML_UNIFICATION_AUDIT §2）：
  * - 字段类型：core 侧 `T[]` 拼写（string[]/object[]，enum 为 core-only），编排侧 `array<T>`（array<string>/array<object>），

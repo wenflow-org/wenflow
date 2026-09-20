@@ -8,7 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const TARGET = path.resolve(__dirname, '../../../../prompts/agent-snapshots.md');
+const TARGET = path.resolve(__dirname, '../../../../../prompts/agent-snapshots.md');
 
 describe('generate-agent-snapshots import 副作用', () => {
   it('import 模块不写盘（require.main 守卫；文件 mtime 不变）', () => {

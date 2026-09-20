@@ -3,8 +3,8 @@ import {
   mapPromptFileToCoreAgentPromptSeed,
   matchesSeedConfig,
 } from '../seed-core-agent-prompts';
-import type { PromptFile } from '../../composers/prompt-files/loader';
-import { computeCoreHash, loadCoreFile } from '../../services/prompt-lab/core-file-loader';
+import type { PromptFile } from '../../../composers/prompt-files/loader';
+import { computeCoreHash, loadCoreFile } from '../../prompt-lab/core-file-loader';
 
 function makePromptFile(runtimeContract?: unknown): PromptFile {
   return {

@@ -39,7 +39,7 @@ import {
   type CoreHashParityActiveRow,
   type CoreHashParityQueryAdapter,
   type CoreHashParityReport,
-} from '../scripts/check-core-hash-parity';
+} from './prompt-manifest/check-core-hash-parity';
 
 /** 僵尸技能：保留注册但零生产调用（skills.yaml notes）。
  * 2026-09-15：course-design / basic-evaluator / goal-alignment-checker 已正式退役（四同步），

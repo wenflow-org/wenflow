@@ -1,6 +1,6 @@
 import { analyzeCoreFieldsSync, EXEMPT_PLATFORM_ROOTS, CORE_ALIAS_TO_EXEMPT_ROOT } from '../check-core-fields-sync';
-import type { OrchestrationStage } from '../../services/field-routing/orchestration-file';
-import type { CoreFile } from '../../services/prompt-lab/core-file-loader';
+import type { OrchestrationStage } from '../../field-routing/orchestration-file';
+import type { CoreFile } from '../../prompt-lab/core-file-loader';
 
 function makeCore(fields: Array<{ name: string; type: string }>): CoreFile {
   return {

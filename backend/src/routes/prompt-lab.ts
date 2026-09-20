@@ -72,7 +72,7 @@ import {
 } from '../services/field-routing/admin-field-routings.repo';
 import { clearRoutingCache } from '../services/field-dispatcher';
 import { clearSupplementRenderCache } from '../services/prompt-composer';
-import { analyzeCoreFieldsSync, type CoreFieldsSyncSkillReport } from '../scripts/check-core-fields-sync';
+import { analyzeCoreFieldsSync, type CoreFieldsSyncSkillReport } from '../services/prompt-manifest/check-core-fields-sync';
 import {
   CORE_FIELD_TYPES,
   PROMPT_ROLES,

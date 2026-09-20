@@ -36,7 +36,7 @@ import {
   loadOrchestrationFiles,
   type OrchestrationStage,
 } from '../services/field-routing/orchestration-file';
-import { EXEMPT_ROOT_NAMES } from './check-core-fields-sync';
+import { EXEMPT_ROOT_NAMES } from '../services/prompt-manifest/check-core-fields-sync';
 import {
   aggregateFieldHitRates,
   skillIdFromAgentId,

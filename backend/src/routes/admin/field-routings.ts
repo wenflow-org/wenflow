@@ -33,7 +33,7 @@ import { PROMPT_ROLE_META } from '../../services/yaml-vocabulary';
 import { getCanonicalAgentId, getAgentManifest } from '../../services/agent-manifest.service';
 import { writeNodeConfigChangeToSystemDb, summarizeTextDigest } from '../../services/node-config-change-audit';
 import { loadSkillsBookRaw } from '../../services/skill-registry/skills-file';
-import { analyzeCoreFieldsSync, type CoreFieldsSyncSkillReport } from '../../scripts/check-core-fields-sync';
+import { analyzeCoreFieldsSync, type CoreFieldsSyncSkillReport } from '../../services/prompt-manifest/check-core-fields-sync';
 import { loadCoreFile } from '../../services/prompt-lab/core-file-loader';
 
 const router = Router();

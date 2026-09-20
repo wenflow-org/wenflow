@@ -14,7 +14,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import yaml from 'js-yaml';
-import { deriveContract } from '../../scripts/seed-contract-helper';
+import { deriveContract } from '../prompt-manifest/seed-contract-helper';
 import {
   CORE_VALUE_TYPES,
   PROMPT_ROLES,

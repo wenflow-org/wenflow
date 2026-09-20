@@ -7,7 +7,7 @@ import {
   ZOMBIE_SKILL_IDS,
 } from '../skills-readiness.service';
 import type { SkillsBook } from '../skill-registry/skills-file';
-import type { CoreHashParityReport } from '../../scripts/check-core-hash-parity';
+import type { CoreHashParityReport } from '../../services/prompt-manifest/check-core-hash-parity';
 
 function makeEntry(overrides: Partial<Record<string, unknown>>): SkillsBook['skills'][number] {
   return {

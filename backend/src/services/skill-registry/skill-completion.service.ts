@@ -35,7 +35,7 @@ import {
 } from './skills-file';
 import { loadCoreFile, type CoreFile } from '../prompt-lab/core-file-loader';
 import { loadOrchestrationFiles, type OrchestrationStage } from '../field-routing/orchestration-file';
-import { analyzeCoreFieldsSync } from '../../scripts/check-core-fields-sync';
+import { analyzeCoreFieldsSync } from '../prompt-manifest/check-core-fields-sync';
 import { listRawManifestEntries } from '../agent-manifest.service';
 
 export const COMPLETION_STATES = ['draft', 'handler-ready', 'core-ready', 'fields-synced', 'live'] as const;

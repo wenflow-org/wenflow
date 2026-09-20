@@ -35,7 +35,7 @@ import {
 import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
 import { scanCoreFiles } from '../../services/prompt-lab/core-file-loader';
 import { loadOrchestrationFiles } from '../../services/field-routing/orchestration-file';
-import { EXEMPT_ROOT_NAMES } from '../../scripts/check-core-fields-sync';
+import { EXEMPT_ROOT_NAMES } from '../../services/prompt-manifest/check-core-fields-sync';
 import { checkIsAdmin } from '../../services/admin-access.service';
 import {
   timeoutErrorSignals,

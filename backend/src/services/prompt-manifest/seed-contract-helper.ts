@@ -1,4 +1,4 @@
-import { getAgentManifest } from '../services/agent-manifest.service';
+import { getAgentManifest } from '../../services/agent-manifest.service';
 
 /**
  * 契约元数据单源化（统一化 1d）：

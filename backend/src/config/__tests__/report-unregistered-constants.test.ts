@@ -10,7 +10,7 @@ import {
   findNumericModuleConstants,
   isRegisteredConstantName,
   buildUnregisteredReport,
-} from '../../scripts/report-unregistered-constants';
+} from '../../services/prompt-manifest/report-unregistered-constants';
 
 describe('findNumericModuleConstants', () => {
   it('抓顶格 const 与 export const（含 as const）', () => {

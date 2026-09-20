@@ -8,7 +8,7 @@
 import prisma from '../config/database';
 import systemPrisma from '../config/system-database';
 import { logger } from '../utils/logger';
-import { ensureCoreAgentPrompts } from '../scripts/seed-core-agent-prompts';
+import { ensureCoreAgentPrompts } from '../services/prompt-manifest/seed-core-agent-prompts';
 import { initializeAdmin } from '../services/auth/init-admin.service';
 import { ensureBuiltinVirtualLearners } from '../virtual-lab/builtin-learners';
 import { bootstrapFieldRoutings } from '../services/field-routing-bootstrap.service';

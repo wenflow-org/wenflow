@@ -8,19 +8,19 @@
  * - 不再从代码常量读取，改为扫描 prompts/ 目录
  */
 
-import type { PrismaClient } from '../generated/system-client';
-import { runWithTransaction } from '../utils/with-transaction';
-import { loadAllPromptFiles, type PromptFile } from '../composers/prompt-files/loader';
-import { computeCoreHash, loadCoreFile } from '../services/prompt-lab/core-file-loader';
+import type { PrismaClient } from '../../generated/system-client';
+import { runWithTransaction } from '../../utils/with-transaction';
+import { loadAllPromptFiles, type PromptFile } from '../../composers/prompt-files/loader';
+import { computeCoreHash, loadCoreFile } from '../../services/prompt-lab/core-file-loader';
 import {
   normalizeRuntimeContract,
   type RuntimeContract,
-} from '../services/prompt-lab/runtime-contract';
+} from '../../services/prompt-lab/runtime-contract';
 import {
   lintDeclaredSkillPromptContract,
   type SkillPromptContract,
-} from '../services/skill-prompt-contract';
-import { buildV4CorePromptMetadata } from '../services/prompt-lab/core-prompt-metadata';
+} from '../../services/skill-prompt-contract';
+import { buildV4CorePromptMetadata } from '../../services/prompt-lab/core-prompt-metadata';
 
 export interface CoreAgentPromptSeed {
   agentId: string;

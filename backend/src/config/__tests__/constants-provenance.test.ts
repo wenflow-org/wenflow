@@ -4,7 +4,7 @@
  * - 检查器本身要能抓到：漂移、无出处的"文献"、重复 key、同口径分叉。
  */
 import { SCIENTIFIC_CONSTANTS, summarizeConstantSources, type ScientificConstant } from '../constants-provenance';
-import { checkConstants } from '../../scripts/check-constants-provenance';
+import { checkConstants } from '../../services/prompt-manifest/check-constants-provenance';
 
 const base = (over: Partial<ScientificConstant>): ScientificConstant => ({
   key: 'k',
