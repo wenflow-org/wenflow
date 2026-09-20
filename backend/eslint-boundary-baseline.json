@@ -7,7 +7,6 @@
     "src/routes/admin/export.ts",
     "src/routes/admin/field-routings.ts",
     "src/routes/admin/goal-conversations.ts",
-    "src/routes/admin/memory-review.ts",
     "src/routes/admin/notifications.ts",
     "src/routes/admin/prompt-ops.ts",
     "src/routes/admin/session-console.ts",
@@ -15,9 +14,7 @@
     "src/routes/learning.ts",
     "src/routes/notifications.ts",
     "src/routes/prompt-lab.ts",
-    "src/routes/user-agents.ts",
-    "src/routes/user-api-config.ts",
-    "src/routes/user-mcp.ts"
+    "src/routes/user-api-config.ts"
   ],
   "occurrences": {
     "src/routes/admin-auth.ts": 5,
@@ -25,8 +22,7 @@
     "src/routes/admin/announcements.ts": 8,
     "src/routes/admin/export.ts": 7,
     "src/routes/admin/field-routings.ts": 7,
-    "src/routes/admin/goal-conversations.ts": 13,
-    "src/routes/admin/memory-review.ts": 12,
+    "src/routes/admin/goal-conversations.ts": 0,
     "src/routes/admin/notifications.ts": 9,
     "src/routes/admin/prompt-ops.ts": 6,
     "src/routes/admin/session-console.ts": 10,
@@ -34,8 +30,6 @@
     "src/routes/learning.ts": 6,
     "src/routes/notifications.ts": 6,
     "src/routes/prompt-lab.ts": 9,
-    "src/routes/user-agents.ts": 12,
-    "src/routes/user-api-config.ts": 8,
-    "src/routes/user-mcp.ts": 12
+    "src/routes/user-api-config.ts": 8
   }
 }

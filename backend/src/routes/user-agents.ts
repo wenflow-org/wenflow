@@ -1,6 +1,12 @@
 // 用户 Agent 托管配置路由
 import express from 'express';
-import prisma from '../config/database';
+import {
+  listUserAgentConfigs,
+  findUserAgentConfig,
+  updateUserAgentConfig,
+  createUserAgentConfig,
+  listUserAgentCallLogs,
+} from '../services/users/user-agent-config.repo';
 import { randomUUID as uuidv4 } from 'crypto';
 import {
   OFFICIAL_AGENT_DEFINITIONS,
@@ -64,10 +70,7 @@ router.get('/', async (req, res, next) => {
     const filter = req.query.filter as string; // all, system, custom
 
     // 获取用户的 Agent 配置
-    const userAgents = await prisma.user_agent_configs.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' }
-    });
+    const userAgents = await listUserAgentConfigs(userId);
     
     // 合并数据
     let agents: any[] = [];
@@ -156,12 +159,7 @@ router.get('/:name', async (req, res, next) => {
       });
     }
 
-    const agent = await prisma.user_agent_configs.findFirst({
-      where: {
-        userId,
-        agentName: name
-      }
-    });
+    const agent = await findUserAgentConfig(userId, name);
 
     if (!agent) {
       return res.status(404).json({
@@ -230,18 +228,13 @@ router.post('/', async (req, res, next) => {
       });
     }
 
-    const existing = await prisma.user_agent_configs.findFirst({
-      where: {
-        userId,
-        agentName
-      }
-    });
+    const existing = await findUserAgentConfig(userId, agentName);
 
     let agent;
     
     if (existing) {
       // 更新现有配置
-      agent = await prisma.user_agent_configs.update({
+      agent = await updateUserAgentConfig({
         where: { id: existing.id },
         data: {
           sourceType: 'PLATFORM',
@@ -275,7 +268,7 @@ router.post('/', async (req, res, next) => {
           connect: { id: userId }
         }
       };
-      agent = await prisma.user_agent_configs.create({ data });
+      agent = await createUserAgentConfig({ data });
     }
 
     res.json({
@@ -326,12 +319,7 @@ router.put('/:name', async (req, res, next) => {
       });
     }
 
-    const agent = await prisma.user_agent_configs.findFirst({
-      where: {
-        userId,
-        agentName: name
-      }
-    });
+    const agent = await findUserAgentConfig(userId, name);
 
     if (!agent) {
       return res.status(404).json({
@@ -340,7 +328,7 @@ router.put('/:name', async (req, res, next) => {
       });
     }
 
-    const updated = await prisma.user_agent_configs.update({
+    const updated = await updateUserAgentConfig({
       where: { id: agent.id },
       data: {
         ...(model !== undefined && { model }),
@@ -389,12 +377,7 @@ router.post('/:name/enable', async (req, res, next) => {
       });
     }
 
-    const agent = await prisma.user_agent_configs.findFirst({
-      where: {
-        userId,
-        agentName: name
-      }
-    });
+    const agent = await findUserAgentConfig(userId, name);
 
     if (!agent) {
       return res.status(404).json({
@@ -403,7 +386,7 @@ router.post('/:name/enable', async (req, res, next) => {
       });
     }
 
-    await prisma.user_agent_configs.update({
+    await updateUserAgentConfig({
       where: { id: agent.id },
       data: { enabled: true, updatedAt: new Date() }
     });
@@ -430,12 +413,7 @@ router.post('/:name/disable', async (req, res, next) => {
       });
     }
 
-    const agent = await prisma.user_agent_configs.findFirst({
-      where: {
-        userId,
-        agentName: name
-      }
-    });
+    const agent = await findUserAgentConfig(userId, name);
 
     if (!agent) {
       return res.status(404).json({
@@ -444,7 +422,7 @@ router.post('/:name/disable', async (req, res, next) => {
       });
     }
 
-    await prisma.user_agent_configs.update({
+    await updateUserAgentConfig({
       where: { id: agent.id },
       data: { enabled: false, updatedAt: new Date() }
     });
@@ -485,22 +463,7 @@ router.get('/:name/logs', async (req, res, next) => {
       });
     }
 
-    const logs = await prisma.agent_call_logs.findMany({
-      where: {
-        userId,
-        agentId: name
-      },
-      orderBy: { calledAt: 'desc' },
-      take: limit,
-      select: {
-        id: true,
-        success: true,
-        durationMs: true,
-        tokensUsed: true,
-        error: true,
-        calledAt: true
-      }
-    });
+    const logs = await listUserAgentCallLogs(userId, name, limit);
 
     res.json({
       success: true,

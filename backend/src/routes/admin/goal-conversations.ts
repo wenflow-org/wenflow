@@ -1,7 +1,17 @@
 // 目标对话管理路由（后台管理）
 import express from 'express';
-import prisma from '../../config/database';
-import { Prisma } from '@prisma/client';
+import {
+  findGoalConversationsForAdmin,
+  countGoalConversationsWhere,
+  findGoalConversationDetail,
+  updateGoalConversation,
+  deleteGoalConversation,
+  findGoalConversationWithUser,
+  countAiGeneratedPathsByUser,
+  getGoalConversationStatusCounts,
+  findRecentGoalConversationsForTrend,
+} from '../../services/admin/goal-conversation-admin.repo';
+import type { Prisma } from '@prisma/client';
 import { generateLearningPathFromConversation } from '../../services/learning/goal-conversation.service';
 import { REAL_USER_WHERE, isTestAccountUser } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
@@ -47,25 +57,8 @@ router.get('/', async (req: any, res) => {
     }
 
     const [conversations, total] = await Promise.all([
-      prisma.goal_conversations.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          users: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              isVirtualLearner: true
-            }
-          }
-        },
-        orderBy: {
-          createdAt: 'desc'
-        }
-      }),
-      prisma.goal_conversations.count({ where })
+      findGoalConversationsForAdmin(where, skip, limit),
+      countGoalConversationsWhere(where)
     ]);
 
     res.json({
@@ -102,18 +95,7 @@ router.get('/:id', async (req: any, res) => {
   try {
     const { id } = req.params;
 
-    const conversation = await prisma.goal_conversations.findUnique({
-      where: { id },
-      include: {
-        users: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        }
-      }
-    });
+    const conversation = await findGoalConversationDetail(id);
 
     if (!conversation) {
       return res.status(404).json({
@@ -160,10 +142,7 @@ router.patch('/:id', async (req: any, res) => {
       updateData.collectedData = collectedData;
     }
 
-    const conversation = await prisma.goal_conversations.update({
-      where: { id },
-      data: updateData
-    });
+    const conversation = await updateGoalConversation(id, updateData);
 
     res.json({
       success: true,
@@ -186,9 +165,7 @@ router.delete('/:id', async (req: any, res) => {
   try {
     const { id } = req.params;
 
-  await prisma.goal_conversations.delete({
-      where: { id }
-    });
+  await deleteGoalConversation(id);
 
     res.json({
       success: true,
@@ -212,10 +189,7 @@ router.post('/:id/regenerate-path', async (req: any, res) => {
     const { id } = req.params;
     
     // 验证对话是否存在
-    const conversation = await prisma.goal_conversations.findUnique({
-      where: { id },
-      include: { users: true }
-    });
+    const conversation = await findGoalConversationWithUser(id);
 
     if (!conversation) {
       return res.status(404).json({
@@ -225,12 +199,7 @@ router.post('/:id/regenerate-path', async (req: any, res) => {
     }
 
     // 获取已生成的路径数量（通过查询该用户的 AI 生成路径）
-    const existingPathsCount = await prisma.learning_paths.count({
-      where: { 
-        userId: conversation.userId,
-        aiGenerated: true
-      }
-    });
+    const existingPathsCount = await countAiGeneratedPathsByUser(conversation.userId);
 
     // 调用服务生成新的学习路径
     const pathData = await generateLearningPathFromConversation(id);
@@ -260,32 +229,13 @@ router.post('/:id/regenerate-path', async (req: any, res) => {
  */
 router.get('/stats/overview', async (req: any, res) => {
   try {
-    const [total, active, completed, cancelled] = await Promise.all([
-      prisma.goal_conversations.count({ where: { users: STATS_USER_WHERE } }),
-      prisma.goal_conversations.count({ where: { users: STATS_USER_WHERE, status: 'active' } }),
-      prisma.goal_conversations.count({ where: { users: STATS_USER_WHERE, status: 'completed' } }),
-      prisma.goal_conversations.count({ where: { users: STATS_USER_WHERE, status: 'cancelled' } })
-    ]);
+    const [total, active, completed, cancelled] = await getGoalConversationStatusCounts(STATS_USER_WHERE);
 
     // 获取最近 7 天的对话趋势（含 7 天内完成但更早创建的对话，保证「当日完成」完整）
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const recentConversations = await prisma.goal_conversations.findMany({
-      where: {
-        users: STATS_USER_WHERE,
-        OR: [
-          { createdAt: { gte: sevenDaysAgo } },
-          { completedAt: { gte: sevenDaysAgo } },
-        ],
-      },
-      select: {
-        createdAt: true,
-        status: true,
-        completedAt: true,
-        updatedAt: true
-      }
-    });
+    const recentConversations = await findRecentGoalConversationsForTrend(STATS_USER_WHERE, sevenDaysAgo);
 
     // 按日期分组统计（口径修复：新增按创建日归集；「完成」按完成时间（completedAt）
     // 归集 = 当日实际完成数，而非「当日创建、查询时点已完成」；

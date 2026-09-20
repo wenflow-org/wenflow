@@ -10,7 +10,18 @@
  * 只读 + 一个显式的「重新观察」（force observe，不动数据）。
  */
 import express from 'express';
-import prisma from '../../config/database';
+import { checkIsAdmin } from '../../services/admin-access.service';
+import {
+  listVirtualLearnerIds,
+  groupTraceCountsByUser,
+  groupDueCountsByUser,
+  findConsolidationAuditProjections,
+  findMergeRecordEvidence,
+  findUsersByIdsWithFlags,
+  findUserMemoryProfile,
+  listUserMemoryTraces,
+  findUserIdOnly,
+} from '../../services/admin/memory-review.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { logger } from '../../utils/logger';
 import { normalizeConceptKey } from '../../services/memory/memory-trace.service';
@@ -29,12 +40,7 @@ const router = express.Router();
 router.use(authMiddleware);
 
 async function ensureAdmin(userId?: string) {
-  if (!userId) return false;
-  const operator = await prisma.users.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true },
-  });
-  return !!operator?.isAdmin;
+  return checkIsAdmin(userId);
 }
 
 function parseAudit(payload: string | null): ConceptConsolidationAudit | null {
@@ -85,33 +91,15 @@ router.get('/', async (req, res) => {
 
     const virtualIds = includeVirtual
       ? []
-      : (await prisma.users.findMany({
-          where: { isVirtualLearner: true },
-          select: { id: true },
-        })).map((row) => row.id);
+      : (await listVirtualLearnerIds()).map((row) => row.id);
 
     const baseWhere = virtualIds.length > 0 ? { userId: { notIn: virtualIds } } : {};
     const [traceCounts, dueCounts, audits, mergeRecords] = await Promise.all([
-      prisma.memory_traces.groupBy({ by: ['userId'], where: baseWhere, _count: { _all: true } }),
-      prisma.memory_traces.groupBy({
-        by: ['userId'],
-        where: {
-          ...baseWhere,
-          dueAt: { lte: now },
-          // 从未真正提取过的点不进复习队列（口径与 review-plan 一致）
-          extractionCount: { gt: 0 },
-        },
-        _count: { _all: true },
-      }),
-      prisma.learner_projections.findMany({
-        where: { scope: CONSOLIDATION_AUDIT_PROJECTION_SCOPE },
-        select: { userId: true, payload: true, generatedAt: true },
-      }),
+      groupTraceCountsByUser(baseWhere),
+      groupDueCountsByUser(baseWhere, now),
+      findConsolidationAuditProjections(),
       // 按次留档的归并凭据（权威、长期有效）：概览必须基于它，否则"审计窗口滚出去的旧归并"在界面上消失
-      prisma.learner_evidence.findMany({
-        where: { evidenceType: MERGE_RECORD_EVIDENCE_TYPE },
-        select: { userId: true, payload: true },
-      }),
+      findMergeRecordEvidence(),
     ]);
 
     const dueByUser = new Map(dueCounts.map((row) => [row.userId, row._count._all]));
@@ -155,10 +143,7 @@ router.get('/', async (req, res) => {
 
     const userIds = rows.map((row) => row.userId);
     const users = userIds.length > 0
-      ? await prisma.users.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, name: true, email: true, isVirtualLearner: true },
-        })
+      ? await findUsersByIdsWithFlags(userIds)
       : [];
     const userById = new Map(users.map((row) => [row.id, row]));
 
@@ -215,34 +200,14 @@ router.get('/:userId', async (req, res) => {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
     const { userId } = req.params;
-    const user = await prisma.users.findUnique({
-      where: { id: userId },
-      select: { id: true, name: true, email: true, isVirtualLearner: true },
-    });
+    const user = await findUserMemoryProfile(userId);
     if (!user) {
       return res.status(404).json({ success: false, error: { message: '用户不存在' } });
     }
 
     const [plan, traces, audit] = await Promise.all([
       reviewPlanService.buildReviewPlan(userId).catch(() => null),
-      prisma.memory_traces.findMany({
-        where: { userId },
-        orderBy: [{ lastSeenAt: 'desc' }],
-        take: 1000,
-        select: {
-          conceptKey: true,
-          label: true,
-          source: true,
-          masteryScore: true,
-          extractionCount: true,
-          lastSeenAt: true,
-          dueAt: true,
-          fsrsStability: true,
-          fsrsDifficulty: true,
-          fsrsLapses: true,
-          fsrsReps: true,
-        },
-      }),
+      listUserMemoryTraces(userId),
       conceptConsolidatorService.getAudit(userId).catch(() => null),
     ]);
     // 归并凭据视图（按次留档，权威）：界面据此判断"还能不能回滚"，
@@ -350,7 +315,7 @@ router.post('/:userId/apply', async (req, res) => {
     if (canonicals.length === 0) {
       return res.status(400).json({ success: false, error: { message: '缺少要执行的归并项（canonicals）' } });
     }
-    const user = await prisma.users.findUnique({ where: { id: userId }, select: { id: true } });
+    const user = await findUserIdOnly(userId);
     if (!user) {
       return res.status(404).json({ success: false, error: { message: '用户不存在' } });
     }
@@ -381,7 +346,7 @@ router.post('/:userId/rollback', async (req, res) => {
     if (canonicals.length === 0) {
       return res.status(400).json({ success: false, error: { message: '缺少要回滚的归并项（canonicals）' } });
     }
-    const user = await prisma.users.findUnique({ where: { id: userId }, select: { id: true } });
+    const user = await findUserIdOnly(userId);
     if (!user) {
       return res.status(404).json({ success: false, error: { message: '用户不存在' } });
     }
@@ -404,7 +369,7 @@ router.post('/:userId/recompute', async (req, res) => {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
     const { userId } = req.params;
-    const user = await prisma.users.findUnique({ where: { id: userId }, select: { id: true } });
+    const user = await findUserIdOnly(userId);
     if (!user) {
       return res.status(404).json({ success: false, error: { message: '用户不存在' } });
     }

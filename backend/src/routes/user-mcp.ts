@@ -1,6 +1,10 @@
 // 用户 MCP 配置路由
 import express from 'express';
-import prisma from '../config/database';
+import {
+  findUserMcpConfig,
+  updateUserMcpConfig,
+  createUserMcpConfig,
+} from '../services/mcp/user-mcp-config.repo';
 import { randomUUID as uuidv4 } from 'crypto';
 import { safeHttpRequest } from '../utils/safe-http';
 import { preserveNestedSecrets, preserveNestedSecretsById, toSecretSafeResponse } from '../utils/secret-redaction';
@@ -70,9 +74,7 @@ router.get('/', async (req, res, next) => {
   try {
     const userId = req.user.userId;
 
-    const config = await prisma.user_mcp_configs.findUnique({
-      where: { userId }
-    });
+    const config = await findUserMcpConfig(userId);
 
     if (!config) {
       res.json({
@@ -115,9 +117,7 @@ router.put('/', async (req, res, next) => {
     const userId = req.user.userId;
     const { providers, tools, routingStrategy, fallbackEnabled, healthCheck } = parseUserMcpConfigUpdate(req.body);
 
-    let config = await prisma.user_mcp_configs.findUnique({
-      where: { userId }
-    });
+    let config = await findUserMcpConfig(userId);
 
     const existingProviders = normalizeStoredUserMcpProviders(
       parseSecretJson(config?.providers || null, PROVIDERS_CONTEXT, [])
@@ -149,7 +149,7 @@ router.put('/', async (req, res, next) => {
       if (routingStrategy !== undefined) data.routingStrategy = nextRoutingStrategy;
       if (fallbackEnabled !== undefined) data.fallbackEnabled = nextFallbackEnabled;
       if (healthCheck !== undefined) data.healthCheck = serializeSecretJson(mergedHealthCheck, HEALTH_CONTEXT);
-      config = await prisma.user_mcp_configs.update({
+      config = await updateUserMcpConfig({
         where: { userId },
         data
       });
@@ -166,7 +166,7 @@ router.put('/', async (req, res, next) => {
           connect: { id: userId }
         }
       };
-      config = await prisma.user_mcp_configs.create({ data });
+      config = await createUserMcpConfig({ data });
     }
 
     res.json({
@@ -190,9 +190,7 @@ router.get('/providers', async (req, res, next) => {
   try {
     const userId = req.user.userId;
 
-    const config = await prisma.user_mcp_configs.findUnique({
-      where: { userId }
-    });
+    const config = await findUserMcpConfig(userId);
 
     if (!config || !config.providers) {
       res.json({
@@ -218,9 +216,7 @@ router.post('/providers', async (req, res, next) => {
     const userId = req.user.userId;
     let provider = parseUserMcpProviders([req.body])[0];
 
-    let config = await prisma.user_mcp_configs.findUnique({
-      where: { userId }
-    });
+    let config = await findUserMcpConfig(userId);
 
     let providers = [];
     if (config && config.providers) {
@@ -240,12 +236,10 @@ router.post('/providers', async (req, res, next) => {
     }
     providers = parseUserMcpProviders(providers);
 
-    config = await prisma.user_mcp_configs.findUnique({
-      where: { userId }
-    });
+    config = await findUserMcpConfig(userId);
 
     if (config) {
-      config = await prisma.user_mcp_configs.update({
+      config = await updateUserMcpConfig({
         where: { userId },
         data: {
           providers: serializeSecretJson(providers, PROVIDERS_CONTEXT),
@@ -265,7 +259,7 @@ router.post('/providers', async (req, res, next) => {
           connect: { id: userId }
         }
       };
-      config = await prisma.user_mcp_configs.create({ data });
+      config = await createUserMcpConfig({ data });
     }
 
     res.json({
@@ -284,9 +278,7 @@ router.delete('/providers/:id', async (req, res, next) => {
     const userId = req.user.userId;
     const { id } = req.params;
 
-    const config = await prisma.user_mcp_configs.findUnique({
-      where: { userId }
-    });
+    const config = await findUserMcpConfig(userId);
 
     if (!config || !config.providers) {
       return res.status(404).json({
@@ -299,7 +291,7 @@ router.delete('/providers/:id', async (req, res, next) => {
     const normalizedId = id.trim().toLowerCase();
     providers = providers.filter((s: any) => String(s.id || '').trim().toLowerCase() !== normalizedId);
 
-    await prisma.user_mcp_configs.update({
+    await updateUserMcpConfig({
       where: { userId },
       data: {
         providers: serializeSecretJson(providers, PROVIDERS_CONTEXT),
@@ -427,9 +419,7 @@ router.get('/status', async (req, res, next) => {
   try {
     const userId = req.user.userId;
 
-    const config = await prisma.user_mcp_configs.findUnique({
-      where: { userId }
-    });
+    const config = await findUserMcpConfig(userId);
 
     if (!config || !config.providers) {
       res.json({
