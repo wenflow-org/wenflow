@@ -79,7 +79,6 @@
         "src/gateway/api-gateway/types.ts",
         "src/gateway/index.ts",
         "src/gateway/registries/skill-registry.ts",
-        "src/index.ts",
         "src/middleware/__tests__/acp-context.middleware.test.ts",
         "src/middleware/__tests__/admin-access-restrict.middleware.test.ts",
         "src/middleware/__tests__/admin-sessions.test.ts",
