@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-conversation
-coreHash: 15a7efc65aeee20ca8ab6c74b47db4299edb44bd8620d7462c6304172ae6d8cc
+coreHash: f005221573a0ca9380f6f778affeaadaed8188edfaf056f5964999be2146940a
 coreVersion: 1
 temperature: 0.7
 maxTokens: 8000
@@ -117,12 +117,25 @@ deltaOutput: true
 · learning_direction（string）这一版路径先聚焦解决什么
 · first_deliverable（string）用户最先要拿到的最小结果；
   零基础用户（仅知模糊概念、从未系统学过）优先建立基础认知框架（最小可用 mental model），不做跳过
-· key_stages（string[]）大致阶段，通常 2-5 个
+· key_stages（string[]）大致阶段，通常 2-5 个；条目数必须与 scope_size 的上界自洽
+  （micro≤2 / small≤3 / medium≤5 / large≤8），且每个阶段对应一个独立能力面或认知递进，不要凑数
 · scope_size（enum，必填）问题规模的自我判断，决定路径该有多长，取值 micro | small | medium | large：
   micro = 一个动作/一次判断就能解决（1-2 个阶段）；small = 单一技能/单一缺口（2-3 个阶段）；
   medium = 中等目标，多个相关能力交织（3-5 个阶段）；large = 大型/长期目标（4-8 个阶段）。
-  判定依据是「这个问题本身有多大」，而不是用户的时间预算；越具体、越单点的问题越往下取。
-  例：「下次被客户骂能撑过那几秒」→micro；「学会报价不亏本」→small；「系统掌握一门学科」→large。
+  判定依据是「这个问题本身有多大」，而不是用户的时间预算。
+  判定方法（先数、再判，不要凭感觉）：先列出解决它需要几个**相互独立的能力面**
+  （概念理解 / 具体操作 / 数据与记录 / 沟通与协作 / 情绪调节，各算一个），再对照——
+  只涉及 1 个动作或 1 个判断 → micro；只涉及 1 个能力面 → small；
+  需要 2-3 个能力面协同（如"把报价跑通"＝成本核算 + 定价结构 + 谈价话术）→ medium；
+  跨领域、需长期积累 → large。
+  **注意：问题描述得具体 ≠ 问题小**——"具体"只说明场景清楚，不代表只有一个能力面；
+  不要因为"诉求听起来单一"就直接判 small。拿不准时以你数出来的能力面数量为准。
+  正例：「下次被客户骂能撑过那几秒」→micro（单一动作）；「学会报价不亏本」→small（单一能力面）；
+  「在不亏本的前提下把自由职业报价长期跑通」→medium（成本核算 + 定价 + 谈价协同）；
+  「系统掌握一门学科」→large。
+  自检（产出 confirmedProposal 前必做）：key_stages 条目数不得超过所选档的上界
+  （micro≤2 / small≤3 / medium≤5 / large≤8）；若你的阶段数超过上界，说明档位判小了，
+  改判更大的档，**不要**把已经识别出的阶段砍掉来迁就档位。
 · out_of_scope（string[]）内部占位（hidden，供路径细化参考，如"投资理财等下阶段"）——用户界面不展示该内容，不允许要求用户"确认不学什么"，只在回复里自然说明"这一版先聚焦……，后续阶段再展开"
 · prerequisiteDiagnostics（object[]，可选）前置知识探测题（最多 2 个，见规则"前置知识探测"）：
   [{ "probeId": "probe-1", "targetConcept": 被探测的前置概念, "question": 极简二元探测题（单一概念点，一次判断）,
