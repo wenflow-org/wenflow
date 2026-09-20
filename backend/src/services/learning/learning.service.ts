@@ -48,6 +48,7 @@ import {
 // Path 任务画像 Skills
 import { executeSkill } from '../../skills';
 import { buildFramedNormalizedInput } from './path-planning-hints';
+import { normalizePathDifficulty } from './path-difficulty';
 import { assembleStageDesignerChannels } from '../field-dispatcher';
 import { stageDesignerDefinition } from '../../skills/stage-designer';
 import { pathAgentDefinition } from '../../skills/path-planning';
@@ -491,7 +492,6 @@ class LearningService {
           cognitiveDomain: sceneFraming.cognitiveDomain || null,
           planningFocus: normalizeStringArray(sceneFraming.planningFocus),
           excludedScope: normalizeStringArray(sceneFraming.excludedScope),
-          riskFlags: normalizeStringArray(sceneFraming.riskFlags),
           resourceProfile: {
             timeBudget: sceneFraming.resourceProfile?.timeBudget || null,
             timeHorizon: sceneFraming.resourceProfile?.timeHorizon || null,
@@ -1882,7 +1882,7 @@ class LearningService {
       return {
         pathName: path.name,
         subject: path.subject || '综合',
-        difficulty: data.userProfile?.skillLevel || 'beginner',
+        difficulty: normalizePathDifficulty(data.userProfile?.skillLevel),
         estimatedTotalHours: path.estimatedHours || 0,
         // AI 生成的路径简短摘要（path-planning 输出），随 aiPromptTemplate 持久化，
         // 供列表接口 parsePathSummary 读取、前端卡片展示
@@ -2916,7 +2916,7 @@ class LearningService {
           description: data.description,
           subject: data.subject || '综合',
           status: 'generating',
-          difficulty: data.userProfile?.skillLevel || 'beginner',
+          difficulty: normalizePathDifficulty(data.userProfile?.skillLevel),
           estimatedHours: 0,
           aiGenerated: true,
           deadline: data.deadline || null,

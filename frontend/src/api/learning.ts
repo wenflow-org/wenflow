@@ -100,7 +100,6 @@ export interface LearningPath {
     /** 用户确认的阶段提示（与页面阶段列表重复，前端不再展示） */
     planningFocus?: string[];
     excludedScope?: string[];
-    riskFlags?: string[];
     timeBudget?: string | null;
     timeHorizon?: string | null;
     milestoneCount?: number;

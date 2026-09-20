@@ -191,7 +191,6 @@ export interface PathSceneFraming {
     timeHorizon?: string;
     pace?: string;
   };
-  riskFlags?: string[];
   sourceGoal?: {
     surfaceGoal?: string;
     realProblem?: string;

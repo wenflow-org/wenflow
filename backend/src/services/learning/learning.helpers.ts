@@ -592,7 +592,6 @@ export function buildSceneSummaryFromFraming(
     targetState: normalizedInput?.successCriteria?.observableResult || sceneFraming.targetState || null,
     planningFocus: focusSource,
     excludedScope: outOfScope.length > 0 ? outOfScope : legacyExcludedScope,
-    riskFlags: normalizeStringArray(sceneFraming.riskFlags),
     timeBudget: normalizedInput?.resources?.timeBudget || normalizedInput?.resources?.timePerWeek || sceneFraming.resourceProfile?.timeBudget || null,
     timeHorizon: normalizedInput?.resources?.timeHorizon || sceneFraming.resourceProfile?.timeHorizon || null,
     milestoneCount: typeof milestoneCount === 'number' ? milestoneCount : undefined,

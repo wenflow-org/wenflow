@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-conversation
-coreHash: 6a65e8b05c9ae6f1b6689af84bfe3c74f28312f0ae79ae2db417ffbe269fbd97
+coreHash: 15a7efc65aeee20ca8ab6c74b47db4299edb44bd8620d7462c6304172ae6d8cc
 coreVersion: 1
 temperature: 0.7
 maxTokens: 8000
@@ -71,7 +71,10 @@ deltaOutput: true
 · support_need（enum，hidden，可选）none | emotional | referral：除学习之外的支持需求，与 primary_block_type
   独立、可同时存在——none＝路径足够；emotional＝情绪/信心/羞耻/恐惧主导，需先稳定情绪；referral＝现实条件/
   资源/流程/他人配合阻塞，需先解决外部问题。依据用户原话/具体事实填写，**证据不足取 none**。
-· current_baseline（object）{ "level": "", "evidence": "" }
+· current_baseline（object）{ "level": "beginner | intermediate | advanced | unknown", "evidence": "" }
+  level 是**枚举**（契约值，写英文小写）：beginner＝零基础/从未系统学过；intermediate＝有一定基础但未成体系；
+  advanced＝已熟练、要精进；**依据用户原话/具体证据判断，无法判断或证据不足一律写 unknown，不要默认 beginner**。
+  evidence 用一句话记支撑证据（保留用户原话关键词）。
 · background_experience（string）与目标相关的背景经验摘要（hidden，不面向前端）。
   不要默认用户有足够背景，优先确认与目标直接相关的经验，描述做过什么、试过什么、卡在什么真实场景，不是抽象水平标签。
 · learning_signal（string）学习承接信号（hidden，静默累积）。不主动追问"学习偏好"，
