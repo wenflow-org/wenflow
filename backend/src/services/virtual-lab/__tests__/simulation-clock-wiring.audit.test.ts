@@ -17,7 +17,9 @@ const WIRED_MODULES = [
   'services/metrics/LearningMetricService.ts',
   'virtual-lab/learner-memory.ts',
   'services/ai-teaching/TeachingSessionRepository.ts',
-  'services/ai-teaching/AITeachingCoordinator.ts',
+  'services/ai-teaching/teaching-turn-engine.ts',
+  'services/ai-teaching/teaching-session-lifecycle.ts',
+  'services/ai-teaching/teaching-session-ops.ts',
   'coordinators/simulation.coordinator.ts',
 ];
 
@@ -71,7 +73,9 @@ describe('模拟时钟接线审计（防退化）', () => {
     // 课堂结束时间：不得再出现真墙钟 endTime（含 finalize / timeout / fail / discard）
     for (const rel of [
       'services/ai-teaching/TeachingSessionRepository.ts',
-      'services/ai-teaching/AITeachingCoordinator.ts',
+      'services/ai-teaching/teaching-turn-engine.ts',
+  'services/ai-teaching/teaching-session-lifecycle.ts',
+  'services/ai-teaching/teaching-session-ops.ts',
     ]) {
       expect(read(rel)).not.toMatch(/endTime: new Date\(\)/);
     }

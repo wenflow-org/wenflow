@@ -240,6 +240,7 @@
         "src/services/ai-teaching/teaching-checkpoint.ts",
         "src/services/ai-teaching/teaching-classroom-flow.ts",
         "src/services/ai-teaching/teaching-session-lifecycle.ts",
+        "src/services/ai-teaching/teaching-session-ops.ts",
         "src/services/ai-teaching/teaching-session-views.ts",
         "src/services/ai-teaching/teaching-turn-engine.ts",
         "src/services/ai-teaching/teaching-turn-shared.ts",
