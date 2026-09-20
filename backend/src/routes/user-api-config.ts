@@ -1,6 +1,10 @@
 // 用户 API 配置路由
 import express from 'express';
-import prisma from '../config/database';
+import {
+  findUserApiConfig,
+  updateUserApiConfig,
+  createUserApiConfig,
+} from '../services/users/user-api-config.repo';
 import { randomUUID as uuidv4 } from 'crypto';
 import { getAPIGateway } from '../gateway/api-gateway';
 import apiConfigService from '../services/apiConfig.service';
@@ -31,7 +35,7 @@ router.get('/platform-default', async (req, res) => {
 router.get('/', async (req, res, next) => {
   try {
     const userId = req.user.userId;
-    const config = await prisma.user_api_configs.findUnique({ where: { userId } });
+    const config = await findUserApiConfig(userId);
     
     if (!config) {
       return res.json({
@@ -71,7 +75,7 @@ router.put('/', async (req, res, next) => {
     const body = req.body || {};
     const { endpoint, apiKey, chatModel, reasoningModel, enabled } = body;
     
-    const existing = await prisma.user_api_configs.findUnique({ where: { userId } });
+    const existing = await findUserApiConfig(userId);
     const endpointProvided = Object.prototype.hasOwnProperty.call(body, 'endpoint');
     if (endpointProvided && endpoint !== null && typeof endpoint !== 'string') {
       return res.status(400).json({
@@ -110,7 +114,7 @@ router.put('/', async (req, res, next) => {
     }
     
     if (existing) {
-      await prisma.user_api_configs.update({
+      await updateUserApiConfig({
         where: { userId },
         data: {
           endpoint: finalEndpoint,
@@ -122,7 +126,7 @@ router.put('/', async (req, res, next) => {
         }
       });
     } else {
-      await prisma.user_api_configs.create({
+      await createUserApiConfig({
         data: {
           id: uuidv4(),
           userId,
@@ -158,10 +162,10 @@ router.delete('/', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     
-    const existing = await prisma.user_api_configs.findUnique({ where: { userId } });
+    const existing = await findUserApiConfig(userId);
     
     if (existing) {
-      await prisma.user_api_configs.update({
+      await updateUserApiConfig({
         where: { userId },
         data: { enabled: false, updatedAt: new Date() }
       });
@@ -180,7 +184,7 @@ router.post('/models', async (req, res, next) => {
   try {
     const { endpoint, apiKey } = req.body;
     const userId = req.user.userId;
-    const existing = await prisma.user_api_configs.findUnique({ where: { userId } });
+    const existing = await findUserApiConfig(userId);
     const requestedEndpoint = typeof endpoint === 'string' ? endpoint.trim() : '';
     const resolvedApiKey = typeof apiKey === 'string' && apiKey.trim()
       ? apiKey.trim()
@@ -244,7 +248,7 @@ router.post('/test', async (req, res, next) => {
   try {
     const { endpoint, apiKey, model } = req.body;
     const userId = req.user.userId;
-    const existing = await prisma.user_api_configs.findUnique({ where: { userId } });
+    const existing = await findUserApiConfig(userId);
     const requestedEndpoint = typeof endpoint === 'string' ? endpoint.trim() : '';
     const resolvedApiKey = typeof apiKey === 'string' && apiKey.trim()
       ? apiKey.trim()

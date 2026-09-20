@@ -11,7 +11,6 @@ import {
   getGoalConversationStatusCounts,
   findRecentGoalConversationsForTrend,
 } from '../../services/admin/goal-conversation-admin.repo';
-import type { Prisma } from '@prisma/client';
 import { generateLearningPathFromConversation } from '../../services/learning/goal-conversation.service';
 import { REAL_USER_WHERE, isTestAccountUser } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
@@ -21,7 +20,7 @@ const router = express.Router();
 /**
  * 统计口径与漏斗/KPI 一致：排除虚拟/测试账号（单点 utils/test-account.ts）+ 软删。
  */
-const STATS_USER_WHERE: Prisma.usersWhereInput = {
+const STATS_USER_WHERE = {
   ...REAL_USER_WHERE,
   deletedAt: null,
 };

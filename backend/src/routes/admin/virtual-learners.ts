@@ -5,7 +5,7 @@
  */
 
 import express, { type Request } from 'express';
-import type { goal_conversations, Prisma } from '@prisma/client';
+import type { goal_conversations, Prisma } from '../../services/prisma-client-types';
 import { randomUUID as uuidv4 } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';

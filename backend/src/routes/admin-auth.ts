@@ -1,7 +1,13 @@
 import express, { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
-import prisma from '../config/database';
+import {
+  findAdminByLogin,
+  updateAdminLastLoginAt,
+  createAdminSession,
+  revokeAdminSessionByJti,
+  findCurrentAdminProfile,
+} from '../services/auth/admin-auth-session.repo';
 import { z } from 'zod';
 import { logger } from '../utils/logger';
 import { adminAuthMiddleware } from '../middleware/auth.middleware';
@@ -33,16 +39,7 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
     const clientIP = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
 
     // 查找管理员用户（支持用户名或邮箱登录）；软删管理员视为不存在
-    const admin = await prisma.users.findFirst({
-      where: {
-        OR: [
-          { name: name },
-          { email: name }
-        ],
-        isAdmin: true,
-        deletedAt: null,
-      },
-    });
+    const admin = await findAdminByLogin(name);
 
     // 未命中时也执行同等成本的密码校验，避免通过响应时序探测管理员账号。
     const isValidPassword = await bcrypt.compare(
@@ -81,10 +78,7 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
 
     // 更新最后登录时间（修复：admin 登录成功后 users.lastLoginAt 未更新，导致用户页显示"从未"）
     try {
-      await prisma.users.update({
-        where: { id: admin.id },
-        data: { lastLoginAt: new Date() },
-      });
+      await updateAdminLastLoginAt(admin.id);
     } catch (updateError) {
       logger.warn('管理员最后登录时间更新失败（不阻塞登录）:', updateError);
     }
@@ -92,7 +86,7 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
     // 写入会话表（fail-open：写库失败不阻塞登录，仅告警；登出/吊销能力随之下线）
     try {
       const issuedAt = new Date();
-      await prisma.admin_sessions.create({
+      await createAdminSession({
         data: {
           id: randomUUID(),
           adminId: admin.id,
@@ -154,10 +148,7 @@ router.post('/logout', async (req: Request, res: Response) => {
       try {
         const payload = verifySessionToken(token, 'admin');
         if (payload.jti) {
-          await prisma.admin_sessions.update({
-            where: { jti: payload.jti },
-            data: { revokedAt: new Date() },
-          });
+          await revokeAdminSessionByJti(payload.jti);
         }
       } catch (tokenError) {
         logger.warn('登出时解析会话 Token 失败（仅清理 Cookie）:', tokenError);
@@ -178,19 +169,7 @@ router.post('/logout', async (req: Request, res: Response) => {
 router.get('/me', adminAuthMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
     // 软删管理员视为不存在（与不存在同样返回 404，不泄露删除状态）
-    const admin = await prisma.users.findFirst({
-      where: { id: req.user!.userId, deletedAt: null },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isAdmin: true,
-        xp: true,
-        currentLevel: true,
-        createdAt: true,
-      },
-    });
+    const admin = await findCurrentAdminProfile(req.user!.userId);
 
     if (!admin?.isAdmin) {
       return res.status(404).json({

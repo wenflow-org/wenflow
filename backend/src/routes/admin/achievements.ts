@@ -1,7 +1,16 @@
 // 成就管理路由（admin 后台：成就定义 / 解锁记录 / 手动发放与撤回）
 // 挂载: /api/admin/achievements
 import express, { Request, Response } from 'express';
-import prisma from '../../config/database';
+import { checkIsAdmin } from '../../services/admin-access.service';
+import { findUserIdOnly } from '../../services/users/user.repo';
+import {
+  groupAchievementUnlockCounts,
+  listAchievementRecordsForAdmin,
+  countAchievementRecords,
+  findUserGrantTarget,
+  findUserAchievementOfType,
+  findAchievementRecord,
+} from '../../services/achievements/admin-achievements.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { logger } from '../../utils/logger';
@@ -14,14 +23,7 @@ const router = express.Router();
 
 router.use(authMiddleware);
 
-const ensureAdmin = async (userId?: string) => {
-  if (!userId) return false;
-  const operator = await prisma.users.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true },
-  });
-  return !!operator?.isAdmin;
-};
+const ensureAdmin = checkIsAdmin;
 
 /** 成就定义列表（成就系统的静态定义 + 每个定义已被解锁的用户数） */
 router.get('/definitions', async (req: Request, res: Response) => {
@@ -29,10 +31,7 @@ router.get('/definitions', async (req: Request, res: Response) => {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
 
-    const unlockCounts = await prisma.achievements.groupBy({
-      by: ['type', 'title'],
-      _count: { _all: true },
-    });
+    const unlockCounts = await groupAchievementUnlockCounts();
     const countMap = new Map<string, number>();
     for (const g of unlockCounts) {
       countMap.set(`${g.type}-${g.title}`, g._count._all);
@@ -90,18 +89,8 @@ router.get('/records', async (req: Request, res: Response) => {
       : [{ earnedAt: order }, { id: 'desc' as const }];
 
     const [records, total] = await Promise.all([
-      prisma.achievements.findMany({
-        where,
-        orderBy,
-        skip,
-        take: limit,
-        include: {
-          users: {
-            select: { id: true, name: true, email: true, isVirtualLearner: true },
-          },
-        },
-      }),
-      prisma.achievements.count({ where }),
+      listAchievementRecordsForAdmin(where, orderBy, skip, limit),
+      countAchievementRecords(where),
     ]);
 
     res.json({
@@ -146,12 +135,10 @@ router.post('/grant', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: { message: `成就定义不存在: ${achievementId}` } });
     }
 
-    const user = await prisma.users.findUnique({ where: { id: userId }, select: { id: true, isVirtualLearner: true } });
+    const user = await findUserGrantTarget(userId);
     if (!user) return res.status(404).json({ success: false, error: { message: '用户不存在' } });
 
-    const existing = await prisma.achievements.findFirst({
-      where: { userId, type: def.type, title: def.name },
-    });
+    const existing = await findUserAchievementOfType(userId, def.type, def.name);
     if (existing) {
       return res.status(409).json({ success: false, error: { message: `该用户已解锁「${def.name}」` } });
     }
@@ -199,7 +186,7 @@ router.post('/revoke', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: { message: 'recordId 必填' } });
     }
 
-    const record = await prisma.achievements.findUnique({ where: { id: recordId } });
+    const record = await findAchievementRecord(recordId);
     if (!record) return res.status(404).json({ success: false, error: { message: '解锁记录不存在' } });
 
     await withTransaction(async (tx) => {
@@ -232,7 +219,7 @@ router.post('/recheck', async (req: Request, res: Response) => {
     if (!userId || typeof userId !== 'string') {
       return res.status(400).json({ success: false, error: { message: 'userId 必填' } });
     }
-    const user = await prisma.users.findUnique({ where: { id: userId }, select: { id: true } });
+    const user = await findUserIdOnly(userId);
     if (!user) return res.status(404).json({ success: false, error: { message: '用户不存在' } });
 
     const unlocked = await achievementService.checkAndUnlockAchievements(userId);

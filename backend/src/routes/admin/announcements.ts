@@ -1,5 +1,11 @@
 import express, { Request, Response } from 'express';
-import prisma from '../../config/database';
+import {
+  listAnnouncements,
+  createAnnouncement,
+  updateAnnouncement,
+  findAnnouncementById,
+  deleteAnnouncement,
+} from '../../services/admin/announcement.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { logger } from '../../utils/logger';
@@ -44,10 +50,7 @@ function shape(a: Record<string, unknown>) {
 /** GET / — 全部公告（新→旧） */
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const items = await prisma.announcements.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 100
-    });
+    const items = await listAnnouncements();
     res.json({ success: true, data: { items: items.map((a) => shape(a as unknown as Record<string, unknown>)) } });
   } catch (error) {
     logger.error('[admin-announcements] list failed:', error);
@@ -75,7 +78,7 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: error.message });
     }
     const admin = (req as Request & { user?: { userId?: string; name?: string } }).user;
-    const created = await prisma.announcements.create({
+    const created = await createAnnouncement({
       data: {
         title: String(title).trim(),
         body: String(body).trim(),
@@ -97,11 +100,11 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id/publish', async (req: Request, res: Response) => {
   try {
     // 操作审计：发布前快照旧实体
-    const existing = await prisma.announcements.findUnique({ where: { id: req.params.id } });
+    const existing = await findAnnouncementById(req.params.id);
     setAuditAction(res, 'announcement-publish', { targetType: 'announcement', targetId: req.params.id });
     setAuditBefore(res, existing);
 
-    const updated = await prisma.announcements.update({
+    const updated = await updateAnnouncement({
       where: { id: req.params.id },
       data: { status: 'published', publishedAt: new Date() }
     });
@@ -117,11 +120,11 @@ router.put('/:id/publish', async (req: Request, res: Response) => {
 router.put('/:id/archive', async (req: Request, res: Response) => {
   try {
     // 操作审计：下线前快照旧实体
-    const existing = await prisma.announcements.findUnique({ where: { id: req.params.id } });
+    const existing = await findAnnouncementById(req.params.id);
     setAuditAction(res, 'announcement-archive', { targetType: 'announcement', targetId: req.params.id });
     setAuditBefore(res, existing);
 
-    const updated = await prisma.announcements.update({
+    const updated = await updateAnnouncement({
       where: { id: req.params.id },
       data: { status: 'archived' }
     });
@@ -152,7 +155,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     } catch (error: any) {
       return res.status(400).json({ success: false, error: error.message });
     }
-    const updated = await prisma.announcements.update({
+    const updated = await updateAnnouncement({
       where: { id: req.params.id },
       data: {
         title: String(title).trim(),
@@ -171,7 +174,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 /** DELETE /:id — 删除 */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    await prisma.announcements.delete({ where: { id: req.params.id } });
+    await deleteAnnouncement(req.params.id);
     res.json({ success: true });
   } catch (error) {
     logger.error('[admin-announcements] delete failed:', error);

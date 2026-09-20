@@ -2,7 +2,14 @@
 import express from 'express';
 import { z } from 'zod';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import prisma from '../config/database';
+import {
+  findGoalConversationForPathSummary,
+  findOwnedLearningPathById,
+  findLearningPathById,
+  findLearningPathWithMilestones,
+  findLearningPathOwner,
+  listMilestonesWithTaskIds,
+} from '../services/learning/learning-routes.repo';
 import learningService from '../services/learning/learning.service';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { learningPathsPollingLimiter } from '../middleware/api-rate-limit.middleware';
@@ -181,18 +188,7 @@ const buildGoalPathRequestFromConversation = async (path: {
   aiPromptTemplate?: string | null;
 }) => {
   const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
-  const conversation = await prisma.goal_conversations.findFirst({
-    where: sourceConversationId
-      ? { id: sourceConversationId, userId: path.userId }
-      : { learningPathId: path.id, userId: path.userId },
-    select: {
-      id: true,
-      userId: true,
-      description: true,
-      stage: true,
-      collectedData: true
-    }
-  });
+  const conversation = await findGoalConversationForPathSummary(sourceConversationId, path.id, path.userId);
 
   if (!conversation) {
     return null;
@@ -375,9 +371,7 @@ router.patch('/goals/:goalId', async (req, res, next) => {
 
     // G2：pathId 必须归属当前用户，防止跨用户引用学习路径
     if (body.pathId !== undefined && body.pathId !== null) {
-      const path = await prisma.learning_paths.findFirst({
-        where: { id: String(body.pathId), userId }
-      });
+      const path = await findOwnedLearningPathById(String(body.pathId), userId);
       if (!path) {
         return res.status(400).json({
           success: false,
@@ -626,9 +620,7 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
     const { pathId } = req.params;
 
     // 获取原路径信息
-    const path = await prisma.learning_paths.findUnique({
-      where: { id: pathId }
-    });
+    const path = await findLearningPathById(pathId);
 
     if (!path) {
       return res.status(404).json({
@@ -724,16 +716,7 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
       ? req.body.adjustments.trim()
       : null;
 
-    const path = await prisma.learning_paths.findUnique({
-      where: { id: pathId },
-      include: {
-        milestones: {
-          include: {
-            subtasks: { select: { id: true, status: true } }
-          }
-        }
-      }
-    });
+    const path = await findLearningPathWithMilestones(pathId);
 
     if (!path) {
       return res.status(404).json({
@@ -970,10 +953,7 @@ router.post('/paths/:pathId/abandon-open-sessions', async (req, res, next) => {
       ? req.body.sessionIds.filter((x: unknown) => typeof x === 'string')
       : undefined;
 
-    const path = await prisma.learning_paths.findUnique({
-      where: { id: pathId },
-      select: { userId: true }
-    });
+    const path = await findLearningPathOwner(pathId);
     if (!path) {
       return res.status(404).json({ success: false, error: { message: '学习路径不存在' } });
     }
@@ -982,11 +962,7 @@ router.post('/paths/:pathId/abandon-open-sessions', async (req, res, next) => {
     }
 
     // 解析调整范围对应的任务集（与 replan 的 fromStage/stage 语义对齐）
-    const milestones = await prisma.milestones.findMany({
-      where: { learningPathId: pathId },
-      include: { subtasks: { select: { id: true } } },
-      orderBy: { stageNumber: 'asc' }
-    });
+    const milestones = await listMilestonesWithTaskIds(pathId);
     const firstOpen = milestones.find((m: any) => m.status !== 'completed');
     let scopeTaskIds: string[] = [];
     let scopeMilestoneIds: string[] = [];

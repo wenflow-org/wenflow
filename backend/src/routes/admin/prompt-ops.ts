@@ -17,8 +17,26 @@
 import { Router, Request, Response } from 'express';
 import { rejectPromptOpsRuntimeMutation } from '../../middleware/prompt-file-truth.middleware';
 import { randomUUID } from 'crypto';
-import systemPrisma from '../../config/system-database';
-import prisma from '../../config/database';
+import {
+  listActiveAgentPromptsFull,
+  groupDraftCountsByAgent,
+  listActiveAgentPromptsBrief,
+  findAgentPromptById,
+  findAgentPromptByVersion,
+  findActiveAgentPrompt,
+  listAllActiveAgentPrompts,
+  listEvalCases,
+  findEvalCaseByAgentAndCaseId,
+  createEvalCase,
+  updateEvalCase,
+  deleteEvalCase,
+  findEnabledEvalCasesByIds,
+  listEnabledEvalCasesByAgent,
+  createEvalRun,
+  listEvalRuns,
+  findEvalRunById,
+} from '../../services/admin/prompt-ops.repo';
+import { findProfileById } from '../../services/virtual-lab/virtual-learner-profile.repo';
 import { logger } from '../../utils/logger';
 import { loadAllPromptFiles } from '../../composers/prompt-files/loader';
 import {
@@ -114,27 +132,8 @@ function trimForPreview(text: string, max = 240): string {
 router.get('/agent-overview', async (_req: Request, res: Response) => {
   try {
     const files = loadAllPromptFiles();
-    const dbActives = await systemPrisma.agent_prompts.findMany({
-      where: { status: 'ACTIVE' },
-      select: {
-        id: true,
-        agentId: true,
-        version: true,
-        name: true,
-        systemPrompt: true,
-        temperature: true,
-        maxTokens: true,
-        model: true,
-        publishedAt: true,
-        useCount: true,
-      },
-      orderBy: { agentId: 'asc' },
-    });
-    const dbDraftCounts = await systemPrisma.agent_prompts.groupBy({
-      by: ['agentId'],
-      where: { status: 'DRAFT' },
-      _count: { _all: true },
-    });
+    const dbActives = await listActiveAgentPromptsFull();
+    const dbDraftCounts = await groupDraftCountsByAgent();
 
     const fileByAgent = new Map<string, ReturnType<typeof loadAllPromptFiles>[number]>();
     for (const f of files) {
@@ -297,10 +296,7 @@ router.get('/agent-overview', async (_req: Request, res: Response) => {
 router.get('/skill-rules-overview', async (_req: Request, res: Response) => {
   try {
     const allFiles = loadAllPromptFiles();
-    const dbActives = await systemPrisma.agent_prompts.findMany({
-      where: { status: 'ACTIVE' },
-      select: { agentId: true, systemPrompt: true, version: true },
-    });
+    const dbActives = await listActiveAgentPromptsBrief();
     const dbByAgent = new Map<string, (typeof dbActives)[number]>();
     for (const r of dbActives) dbByAgent.set(r.agentId, r);
 
@@ -553,10 +549,7 @@ router.get('/eval-cases', async (req: Request, res: Response) => {
   try {
     const agentId = String(req.query.agentId || '').trim();
     const where = agentId ? { agentId } : {};
-    const cases = await systemPrisma.prompt_eval_cases.findMany({
-      where,
-      orderBy: [{ agentId: 'asc' }, { createdAt: 'asc' }],
-    });
+    const cases = await listEvalCases(where);
     return res.json({
       success: true,
       data: cases.map((c) => ({
@@ -610,9 +603,7 @@ router.post('/eval-cases', async (req: Request, res: Response) => {
       String(body.caseId || '').trim() || `case-${Date.now().toString(36)}`;
 
     // 唯一性
-    const dup = await systemPrisma.prompt_eval_cases.findUnique({
-      where: { agentId_caseId: { agentId, caseId } },
-    });
+    const dup = await findEvalCaseByAgentAndCaseId(agentId, caseId);
     if (dup) {
       return res.status(409).json({
         success: false,
@@ -620,7 +611,7 @@ router.post('/eval-cases', async (req: Request, res: Response) => {
       });
     }
 
-    const created = await systemPrisma.prompt_eval_cases.create({
+    const created = await createEvalCase({
       data: {
         id: randomUUID(),
         agentId,
@@ -674,7 +665,7 @@ router.put('/eval-cases/:id', async (req: Request, res: Response) => {
     }
     if (typeof body.enabled === 'boolean') data.enabled = body.enabled;
 
-    await systemPrisma.prompt_eval_cases.update({ where: { id }, data });
+    await updateEvalCase(id, data);
     return res.json({ success: true });
   } catch (error: any) {
     logger.error('[admin-prompt-ops] update eval-case failed:', error);
@@ -690,7 +681,7 @@ router.put('/eval-cases/:id', async (req: Request, res: Response) => {
 // ============================================================
 router.delete('/eval-cases/:id', async (req: Request, res: Response) => {
   try {
-    await systemPrisma.prompt_eval_cases.delete({ where: { id: req.params.id } });
+    await deleteEvalCase(req.params.id);
     return res.json({ success: true });
   } catch (error: any) {
     logger.error('[admin-prompt-ops] delete eval-case failed:', error);
@@ -759,18 +750,10 @@ router.post('/run-eval', async (req: Request, res: Response) => {
     const hasExplicitCaseFilter = Array.isArray(body.caseIds) && body.caseIds.length > 0;
     const hasAdhocOnly = !hasExplicitCaseFilter && Array.isArray(body.adhocCases) && body.adhocCases.length > 0;
     const dbCases = hasExplicitCaseFilter
-      ? await systemPrisma.prompt_eval_cases.findMany({
-          where: {
-            agentId: canonicalAgentId,
-            caseId: { in: body.caseIds.map((s: any) => String(s)) },
-            enabled: true,
-          },
-        })
+      ? await findEnabledEvalCasesByIds(canonicalAgentId, body.caseIds.map((s: any) => String(s)))
       : hasAdhocOnly
         ? []
-        : await systemPrisma.prompt_eval_cases.findMany({
-            where: { agentId: canonicalAgentId, enabled: true },
-          });
+        : await listEnabledEvalCasesByAgent(canonicalAgentId);
 
     const adhocCases = Array.isArray(body.adhocCases) ? body.adhocCases : [];
 
@@ -1013,7 +996,7 @@ router.post('/run-eval', async (req: Request, res: Response) => {
     const totalDuration = Date.now() - startedAt;
 
     // 写历史
-    const runRecord = await systemPrisma.prompt_eval_runs.create({
+    const runRecord = await createEvalRun({
       data: {
         id: randomUUID(),
         agentId: canonicalAgentId,
@@ -1055,11 +1038,7 @@ router.get('/eval-runs', async (req: Request, res: Response) => {
     const agentId = String(req.query.agentId || '').trim();
     const limit = Math.min(50, Number(req.query.limit) || 20);
     const where = agentId ? { agentId } : {};
-    const runs = await systemPrisma.prompt_eval_runs.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
+    const runs = await listEvalRuns(where, limit);
     return res.json({
       success: true,
       data: runs.map((r) => ({
@@ -1092,9 +1071,7 @@ router.get('/eval-runs', async (req: Request, res: Response) => {
 // ============================================================
 router.get('/eval-runs/:id', async (req: Request, res: Response) => {
   try {
-    const r = await systemPrisma.prompt_eval_runs.findUnique({
-      where: { id: req.params.id },
-    });
+    const r = await findEvalRunById(req.params.id);
     if (!r) {
       return res
         .status(404)
@@ -1194,9 +1171,7 @@ async function resolveSimulatedEvalInput(sim: {
   let story: any = null;
 
   if (sim.personaId) {
-    const profile = await prisma.virtual_learner_profiles.findUnique({
-      where: { id: sim.personaId },
-    });
+    const profile = await findProfileById(sim.personaId);
     if (!profile) throw new Error(`模拟学习者 ${sim.personaId} 不存在`);
     const profileData = safeParse<any>(profile.profile, {});
     personaSeed =
@@ -1665,9 +1640,7 @@ async function resolvePrompt(
   }
 
   if (typeof payload.promptVersionId === 'string' && payload.promptVersionId) {
-    const row = await systemPrisma.agent_prompts.findUnique({
-      where: { id: payload.promptVersionId },
-    });
+    const row = await findAgentPromptById(payload.promptVersionId);
     if (!row) throw new Error(`promptVersionId ${payload.promptVersionId} 不存在`);
     return {
       systemPrompt: row.systemPrompt,
@@ -1678,9 +1651,7 @@ async function resolvePrompt(
   }
 
   if (typeof payload.promptVersion === 'number') {
-    const row = await systemPrisma.agent_prompts.findFirst({
-      where: { agentId: canonicalAgentId, version: payload.promptVersion },
-    });
+    const row = await findAgentPromptByVersion(canonicalAgentId, payload.promptVersion);
     if (!row) throw new Error(`promptVersion ${payload.promptVersion} 不存在`);
     return {
       systemPrompt: row.systemPrompt,
@@ -1690,10 +1661,7 @@ async function resolvePrompt(
     };
   }
 
-  const active = await systemPrisma.agent_prompts.findFirst({
-    where: { agentId: canonicalAgentId, status: 'ACTIVE' },
-    orderBy: { version: 'desc' },
-  });
+  const active = await findActiveAgentPrompt(canonicalAgentId);
   if (!active) throw new Error(`agent ${canonicalAgentId} 当前没有 ACTIVE prompt`);
   return {
     systemPrompt: active.systemPrompt,
@@ -1726,10 +1694,7 @@ router.get('/:agentId/compile-info', async (req: Request, res: Response) => {
     // 找 DB ACTIVE prompt
     let activePrompt: any = null;
     for (const id of ids) {
-      activePrompt = await systemPrisma.agent_prompts.findFirst({
-        where: { agentId: id, status: 'ACTIVE' },
-        orderBy: { version: 'desc' },
-      });
+      activePrompt = await findActiveAgentPrompt(id);
       if (activePrompt) break;
     }
 
@@ -1810,17 +1775,7 @@ router.get('/skill-catalog', async (_req: Request, res: Response) => {
     const topAgents = listTopLevelAgents();
 
     // 拉所有 ACTIVE prompts 一次性 (避免 N+1)
-    const allActivePrompts = await systemPrisma.agent_prompts.findMany({
-      where: { status: 'ACTIVE' },
-      select: {
-        agentId: true,
-        systemPrompt: true,
-        compiledSystemPrompt: true,
-        compileStatus: true,
-        name: true,
-        version: true,
-      },
-    });
+    const allActivePrompts = await listAllActiveAgentPrompts();
     const promptMap = new Map<string, typeof allActivePrompts[0]>();
     for (const p of allActivePrompts) {
       promptMap.set(p.agentId, p);

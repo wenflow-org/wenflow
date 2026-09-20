@@ -1,7 +1,14 @@
 // 站内通知用户端路由（登录用户拉取/已读）
 // 挂载: /api/notifications
 import express, { Request, Response } from 'express';
-import prisma from '../config/database';
+import {
+  listUserNotifications,
+  countUserNotifications,
+  countUserUnreadNotifications,
+  findUserNotification,
+  markNotificationRead,
+  markAllUserNotificationsRead,
+} from '../services/notifications/notification.repo';
 import { authMiddleware } from '../middleware/auth.middleware';
 
 const router = express.Router();
@@ -17,14 +24,9 @@ router.get('/', async (req: Request, res: Response) => {
     const skip = (page - 1) * limit;
 
     const [items, total, unread] = await Promise.all([
-      prisma.notifications.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.notifications.count({ where: { userId } }),
-      prisma.notifications.count({ where: { userId, isRead: false } }),
+      listUserNotifications(userId, skip, limit),
+      countUserNotifications(userId),
+      countUserUnreadNotifications(userId),
     ]);
 
     res.json({
@@ -52,13 +54,10 @@ router.get('/', async (req: Request, res: Response) => {
 router.post('/:id/read', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const item = await prisma.notifications.findFirst({ where: { id: req.params.id, userId } });
+    const item = await findUserNotification(req.params.id, userId);
     if (!item) return res.status(404).json({ success: false, error: { message: '通知不存在' } });
 
-    await prisma.notifications.update({
-      where: { id: item.id },
-      data: { isRead: true, readAt: new Date() },
-    });
+    await markNotificationRead(item.id);
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { message: error.message || '标记失败', status: 500 } });
@@ -69,10 +68,7 @@ router.post('/:id/read', async (req: Request, res: Response) => {
 router.post('/read-all', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    await prisma.notifications.updateMany({
-      where: { userId, isRead: false },
-      data: { isRead: true, readAt: new Date() },
-    });
+    await markAllUserNotificationsRead(userId);
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { message: error.message || '标记失败', status: 500 } });

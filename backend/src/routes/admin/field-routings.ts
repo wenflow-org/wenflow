@@ -2,11 +2,24 @@ import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import systemPrisma from '../../config/system-database';
 import { logger } from '../../utils/logger';
 import { clearRoutingCache } from '../../services/field-dispatcher';
 import { clearSupplementRenderCache } from '../../services/prompt-composer';
-import { detectFieldRoutingDrift, ensureStageFieldRoutings, syncStageFieldRoutingsFromFile, pruneStageFieldRoutings } from '../../services/field-routing-bootstrap.service';
+import {
+  listFieldDefinitionsByStage,
+  listAgentContractsByStage,
+  listAgentIdsByStage,
+  listFieldIdsByStage,
+  listRoutingsByAgentsAndFields,
+  findRoutingRow,
+  findFieldDefLocks,
+  updateRoutingRow,
+  listNodeConfigChanges,
+  ensureStageRoutingsForStage,
+  syncStageRoutingsForStage,
+  pruneStageRoutingsForStage,
+  detectFieldRoutingDriftNow,
+} from '../../services/field-routing/admin-field-routings.repo';
 import {
   loadOrchestrationFiles,
   ORCHESTRATION_DIR,
@@ -18,7 +31,7 @@ import {
 } from '../../services/field-routing/orchestration-file';
 import { PROMPT_ROLE_META } from '../../services/yaml-vocabulary';
 import { getCanonicalAgentId, getAgentManifest } from '../../services/agent-manifest.service';
-import { writeNodeConfigChange, summarizeTextDigest } from '../../services/node-config-change-audit';
+import { writeNodeConfigChangeToSystemDb, summarizeTextDigest } from '../../services/node-config-change-audit';
 import { loadSkillsBookRaw } from '../../services/skill-registry/skills-file';
 import { analyzeCoreFieldsSync, type CoreFieldsSyncSkillReport } from '../../scripts/check-core-fields-sync';
 import { loadCoreFile } from '../../services/prompt-lab/core-file-loader';
@@ -177,26 +190,15 @@ router.get('/stages/:stage', async (req: Request, res: Response) => {
   }
 
   const [fields, contracts] = await Promise.all([
-    systemPrisma.field_definitions.findMany({
-      where: { stage },
-      orderBy: [{ promptRole: 'asc' }, { fieldId: 'asc' }],
-    }),
-    systemPrisma.agent_contracts.findMany({
-      where: { stage },
-      orderBy: { displayName: 'asc' },
-    }),
+    listFieldDefinitionsByStage(stage),
+    listAgentContractsByStage(stage),
   ]);
 
   const agentIds = contracts.map((c) => c.agentId);
   const fieldIds = fields.map((f) => f.fieldId);
 
   const routings = agentIds.length && fieldIds.length
-    ? await systemPrisma.agent_field_routings.findMany({
-        where: {
-          agentId: { in: agentIds },
-          fieldId: { in: fieldIds },
-        },
-      })
+    ? await listRoutingsByAgentsAndFields(agentIds, fieldIds)
     : [];
 
   const fieldsOut = fields.map(serializeField);
@@ -411,9 +413,7 @@ router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) 
   }
 
   // 读当前 DB 行（锁判定 + 审计 before）
-  const dbRow = await systemPrisma.agent_field_routings.findUnique({
-    where: { agentId_fieldId: { agentId, fieldId } },
-  });
+  const dbRow = await findRoutingRow(agentId, fieldId);
   if (!dbRow) {
     return res.status(404).json({ success: false, error: { message: `DB 路由行不存在：${agentId}/${fieldId}（请先同步编排文件）` } });
   }
@@ -424,10 +424,7 @@ router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) 
     });
   }
   // 字段定义级锁：字段 systemLocked → 该字段的所有路由行均锁定
-  const fieldDef = await systemPrisma.field_definitions.findFirst({
-    where: { stage, fieldId },
-    select: { systemLocked: true, structureLocked: true },
-  });
+  const fieldDef = await findFieldDefLocks(stage, fieldId);
   if (fieldDef && (fieldDef.systemLocked || fieldDef.structureLocked)) {
     return res.status(423).json({
       success: false,
@@ -525,17 +522,14 @@ router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) 
     if (!refreshed) return;
     const fileRouting = refreshed.routings.find((r) => r.agentId === agentId && r.fieldId === fieldId);
     if (!fileRouting) return;
-    await systemPrisma.agent_field_routings.update({
-      where: { agentId_fieldId: { agentId, fieldId } },
-      data: {
-        render: fileRouting.render,
-        handoff: fileRouting.handoff.length ? JSON.stringify(fileRouting.handoff) : null,
-        internalFlag: fileRouting.internal,
-        accumulate: fileRouting.accumulate,
-        visibilityPreset: fileRouting.visibilityPreset ?? null,
-        notes: fileRouting.notes ?? null,
-        updatedAt: new Date(),
-      },
+    await updateRoutingRow(agentId, fieldId, {
+      render: fileRouting.render,
+      handoff: fileRouting.handoff.length ? JSON.stringify(fileRouting.handoff) : null,
+      internalFlag: fileRouting.internal,
+      accumulate: fileRouting.accumulate,
+      visibilityPreset: fileRouting.visibilityPreset ?? null,
+      notes: fileRouting.notes ?? null,
+      updatedAt: new Date(),
     });
   };
   await fileSync();
@@ -544,7 +538,7 @@ router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) 
   try {
     const actorId = (req as Request & { user?: { userId?: string } }).user?.userId || 'admin';
     const afterHandoff = edits.handoff !== undefined ? edits.handoff : (parseJson<string[]>(dbRow.handoff) || []);
-    await writeNodeConfigChange(systemPrisma, {
+    await writeNodeConfigChangeToSystemDb({
       changeType: 'routing-patch',
       targetTable: 'agent_field_routings',
       targetId: `${agentId}/${fieldId}`,
@@ -576,9 +570,7 @@ router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) 
   clearRoutingCache();
   clearSupplementRenderCache();
 
-  const afterRow = await systemPrisma.agent_field_routings.findUnique({
-    where: { agentId_fieldId: { agentId, fieldId } },
-  });
+  const afterRow = await findRoutingRow(agentId, fieldId);
   res.json({
     success: true,
     data: {
@@ -703,7 +695,7 @@ router.put('/orchestration/:stage', async (req: Request, res: Response) => {
   // before/after = 保存前/后文件摘要：行数 + 字符数 + sha1 短哈希）——失败不阻断保存
   try {
     const actorId = (req as Request & { user?: { userId?: string } }).user?.userId || 'admin';
-    await writeNodeConfigChange(systemPrisma, {
+    await writeNodeConfigChangeToSystemDb({
       changeType: 'orchestration-save',
       targetTable: 'orchestration',
       targetId: stage,
@@ -720,7 +712,7 @@ router.put('/orchestration/:stage', async (req: Request, res: Response) => {
   let synced = true;
   let syncHint = '';
   try {
-    await ensureStageFieldRoutings(systemPrisma, validated);
+    await ensureStageRoutingsForStage(validated);
   } catch (error) {
     synced = false;
     syncHint = `DB 同步失败：${error instanceof Error ? error.message : String(error)}（新建行未入库，请复查漂移明细）`;
@@ -759,7 +751,7 @@ router.post('/orchestration/:stage/sync', async (req: Request, res: Response) =>
     return res.status(404).json({ success: false, error: { message: `编排文件不存在：${stage}` } });
   }
 
-  const report = await syncStageFieldRoutingsFromFile(systemPrisma, found);
+  const report = await syncStageRoutingsForStage(found);
 
   clearRoutingCache();
   clearSupplementRenderCache();
@@ -795,7 +787,7 @@ router.post('/orchestration/:stage/prune', async (req: Request, res: Response) =
   const actorId = (req as Request & { user?: { userId?: string } }).user?.userId || 'admin';
 
   try {
-    const report = await pruneStageFieldRoutings(systemPrisma, found, { dryRun, actorId });
+    const report = await pruneStageRoutingsForStage(found, { dryRun, actorId });
 
     clearRoutingCache();
     clearSupplementRenderCache();
@@ -827,7 +819,7 @@ router.get('/drift', async (req: Request, res: Response) => {
   const kind = typeof req.query.kind === 'string' && req.query.kind.trim() ? req.query.kind.trim() : undefined;
   const stage = typeof req.query.stage === 'string' && req.query.stage.trim() ? req.query.stage.trim() : undefined;
 
-  const report = await detectFieldRoutingDrift(systemPrisma);
+  const report = await detectFieldRoutingDriftNow();
 
   let items = report.items;
   if (kind) {
@@ -840,8 +832,8 @@ router.get('/drift', async (req: Request, res: Response) => {
   // 再按 agentId 或 fieldId 命中过滤（原来的 key.includes(':stage:') 永远匹配不到）。
   if (stage) {
     const [contracts, fields] = await Promise.all([
-      systemPrisma.agent_contracts.findMany({ where: { stage }, select: { agentId: true } }),
-      systemPrisma.field_definitions.findMany({ where: { stage }, select: { fieldId: true } }),
+      listAgentIdsByStage(stage),
+      listFieldIdsByStage(stage),
     ]);
     const agentIds = new Set(contracts.map((c) => c.agentId));
     const fieldIds = new Set(fields.map((f) => f.fieldId));
@@ -880,8 +872,8 @@ router.get('/changes', async (req: Request, res: Response) => {
   let stageWhere: any = {};
   if (stage) {
     const [contracts, fields] = await Promise.all([
-      systemPrisma.agent_contracts.findMany({ where: { stage }, select: { agentId: true } }),
-      systemPrisma.field_definitions.findMany({ where: { stage }, select: { fieldId: true } }),
+      listAgentIdsByStage(stage),
+      listFieldIdsByStage(stage),
     ]);
     const agentIds = contracts.map((c) => c.agentId);
     const fieldIds = fields.map((f) => f.fieldId);
@@ -899,15 +891,11 @@ router.get('/changes', async (req: Request, res: Response) => {
     };
   }
 
-  const rows = await systemPrisma.node_config_changes.findMany({
-    where: {
-      ...stageWhere,
-      ...(fieldId ? { fieldId } : {}),
-      ...(agentId ? { agentId } : {}),
-    },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-  });
+  const rows = await listNodeConfigChanges({
+    ...stageWhere,
+    ...(fieldId ? { fieldId } : {}),
+    ...(agentId ? { agentId } : {}),
+  }, limit);
 
   res.json({
     success: true,

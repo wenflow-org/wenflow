@@ -209,7 +209,11 @@ if (process.argv.includes('--update')) {
   )
 
   const eslint = readEslint()
-  eslint.overrides[findExemptOverride(eslint)].files = current
+  // 清零后不能写空数组（ESLint schema 要求 files 至少一项）：用不匹配任何文件的占位 glob 保住 override
+  // 结构，后续若有新豁免（--allow-grow）仍能就地同步。
+  eslint.overrides[findExemptOverride(eslint)].files = current.length
+    ? current
+    : ['src/routes/__boundary_cleared__/*.never.ts']
   writeFileSync(ESLINT_PATH, JSON.stringify(eslint, null, 2) + '\n')
 
   const removed = existing ? existingSet.size - current.filter((f) => existingSet.has(f)).length : 0
@@ -235,7 +239,11 @@ const baselineSet = new Set(baseline.violations || [])
 const baselineCounts = baseline.occurrences || null
 
 const eslint = readEslint()
-const eslintSet = new Set(eslint.overrides[findExemptOverride(eslint)].files || [])
+// 清零占位 glob（见 --update 分支）：不参与漂移比对
+const PLACEHOLDER_EXEMPT = 'src/routes/__boundary_cleared__/*.never.ts'
+const eslintSet = new Set(
+  (eslint.overrides[findExemptOverride(eslint)].files || []).filter((f) => f !== PLACEHOLDER_EXEMPT)
+)
 
 const newViolations = current.filter((f) => !baselineSet.has(f))
 const staleViolations = [...baselineSet].filter((f) => !current.includes(f))

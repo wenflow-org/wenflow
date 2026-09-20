@@ -9,7 +9,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import yaml from 'js-yaml';
 import { randomUUID as uuidv4 } from 'crypto';
-import systemPrisma from '../config/system-database';
 import { logger } from '../utils/logger';
 import { withSystemTransaction } from '../utils/with-transaction';
 import { getAPIGateway } from '../gateway/api-gateway';
@@ -67,10 +66,10 @@ import {
   type OrchestrationRouting,
 } from '../services/field-routing/orchestration-file';
 import {
-  ensureStageFieldRoutings,
-  syncStageFieldRoutingsFromFile,
-  deleteStageFieldRows,
-} from '../services/field-routing-bootstrap.service';
+  ensureStageRoutingsForStage,
+  syncStageRoutingsForStage,
+  deleteStageFieldRowsNow,
+} from '../services/field-routing/admin-field-routings.repo';
 import { clearRoutingCache } from '../services/field-dispatcher';
 import { clearSupplementRenderCache } from '../services/prompt-composer';
 import { analyzeCoreFieldsSync, type CoreFieldsSyncSkillReport } from '../scripts/check-core-fields-sync';
@@ -84,7 +83,17 @@ import {
   type PromptRole,
   type RenderValue,
 } from '../services/yaml-vocabulary';import { getAgentManifest, getCanonicalAgentId } from '../services/agent-manifest.service';
-import { writeNodeConfigChange } from '../services/node-config-change-audit';
+import { writeNodeConfigChangeToSystemDb } from '../services/node-config-change-audit';
+import {
+  findPlatformReasoningDefaultModelRow,
+  findLatestCoreVersionRow,
+  findActivePromptMetadata,
+  listCoreVersionHistory,
+  findPromptVersionRow,
+  findActivePromptBrief,
+  archiveOtherActivePrompts,
+  activateAgentPrompt,
+} from '../services/prompt-lab/prompt-lab-versions.repo';
 import type { CoreFile } from '../services/prompt-lab/core-file-loader';
 
 const router = Router();
@@ -364,9 +373,7 @@ async function writeManifest(skillId: string, manifestInput: any, sourceContent 
 
 async function getPlatformReasoningDefaultModel() {
   try {
-    const row = await systemPrisma.platform_api_configs.findFirst({
-      select: { defaultReasoningModel: true }
-    });
+    const row = await findPlatformReasoningDefaultModelRow();
     return sanitizeString(row?.defaultReasoningModel, '') || null;
   } catch {
     return null;
@@ -463,11 +470,7 @@ router.get('/compile-spec', async (req, res) => {
 
 /** v4：查询某 agentId 的下一个 coreVersion（无历史则从 1 起） */
 async function nextCoreVersion(agentId: string): Promise<number> {
-  const latest = await systemPrisma.agent_prompts.findFirst({
-    where: { agentId, coreVersion: { not: null } },
-    orderBy: { coreVersion: 'desc' },
-    select: { coreVersion: true }
-  });
+  const latest = await findLatestCoreVersionRow(agentId);
   return (latest?.coreVersion ?? 0) + 1;
 }
 
@@ -599,11 +602,7 @@ router.post('/publish-core', async (req, res) => {
 
       // 字段结构变更以 ACTIVE 版本的 coreSnapshot 为基准，而不是磁盘当前 core。
       // 这样 staging 后的重复保存也不能把 blocked/restricted 变成安全修改。
-      const activeForClassification = await systemPrisma.agent_prompts.findFirst({
-        where: { agentId, status: 'ACTIVE' },
-        orderBy: { version: 'desc' },
-        select: { metadata: true },
-      });
+      const activeForClassification = await findActivePromptMetadata(agentId);
       let classification: ReturnType<typeof classifyCoreEdit> = {
         level: 'safe',
         messages: ['首次发布核心文件'],
@@ -875,11 +874,7 @@ router.put('/core/:skillId', async (req, res) => {
     }
 
     const agentId = `skill:${skillId}`;
-    const active = await systemPrisma.agent_prompts.findFirst({
-      where: { agentId, status: 'ACTIVE' },
-      orderBy: { version: 'desc' },
-      select: { metadata: true },
-    });
+    const active = await findActivePromptMetadata(agentId);
     let classification: ReturnType<typeof classifyCoreEdit> = {
       level: 'safe',
       messages: ['首次创建核心文件'],
@@ -1276,7 +1271,7 @@ export async function addSkillFieldToCoreAndOrchestration(
   let synced = true;
   let syncHint = '新字段 core+编排双写完成；新建字段/路由已入库生效';
   try {
-    await ensureStageFieldRoutings(systemPrisma, newStage);
+    await ensureStageRoutingsForStage(newStage);
   } catch (error) {
     synced = false;
     syncHint = `DB 同步失败：${(error as Error).message}（新建行未入库，可走「强制同步 DB」补录）`;
@@ -1285,7 +1280,7 @@ export async function addSkillFieldToCoreAndOrchestration(
   // ---- 10. 审计（node_config_changes；失败不阻断） ----
   let auditId = '';
   try {
-    auditId = await writeNodeConfigChange(systemPrisma, {
+    auditId = await writeNodeConfigChangeToSystemDb({
       changeType: 'skill-field-add',
       targetTable: 'core.yaml+orchestration',
       targetId: skillId,
@@ -1876,7 +1871,7 @@ export async function updateSkillFieldInCoreAndOrchestration(
     fieldsUpdated: 0, routingsUpdated: 0, contractsUpdated: 0, createdCount: 0, skippedAdminRows: [],
   };
   try {
-    const report = await syncStageFieldRoutingsFromFile(systemPrisma, newStage);
+    const report = await syncStageRoutingsForStage(newStage);
     dbSync = {
       fieldsUpdated: report.fieldsUpdated,
       routingsUpdated: report.routingsUpdated,
@@ -1895,7 +1890,7 @@ export async function updateSkillFieldInCoreAndOrchestration(
   // 审计（changeType='skill-field-update'；before=原摘要，after=新摘要）
   let auditId = '';
   try {
-    auditId = await writeNodeConfigChange(systemPrisma, {
+    auditId = await writeNodeConfigChangeToSystemDb({
       changeType: 'skill-field-update',
       targetTable: 'core.yaml+orchestration',
       targetId: skillId,
@@ -2159,7 +2154,7 @@ export async function deleteSkillFieldFromCoreAndOrchestration(
   const dbDeleted: Array<{ table: string; key: string }> = [];
   const protectedRows: Array<{ table: string; key: string }> = [];
   try {
-    const report = await deleteStageFieldRows(systemPrisma, { stage: stageName, fieldId: name, agentId });
+    const report = await deleteStageFieldRowsNow({ stage: stageName, fieldId: name, agentId });
     for (const row of report.deletedRows) dbDeleted.push({ table: row.table, key: row.key });
     for (const row of report.protectedRows) protectedRows.push(row);
   } catch (error) {
@@ -2173,7 +2168,7 @@ export async function deleteSkillFieldFromCoreAndOrchestration(
   // ---- 审计（changeType='skill-field-delete'；before=被删字段全量摘要） ----
   let auditId = '';
   try {
-    auditId = await writeNodeConfigChange(systemPrisma, {
+    auditId = await writeNodeConfigChangeToSystemDb({
       changeType: 'skill-field-delete',
       targetTable: 'core.yaml+orchestration',
       targetId: skillId,
@@ -2246,22 +2241,7 @@ router.delete('/core/:skillId/field/:name', async (req, res) => {
 router.get('/core/:skillId/versions', async (req, res) => {
   try {
     const skillId = assertValidSkillId(req.params.skillId);
-    const rows = await systemPrisma.agent_prompts.findMany({
-      where: { agentId: `skill:${skillId}` },
-      orderBy: { version: 'desc' },
-      select: {
-        version: true,
-        status: true,
-        coreHash: true,
-        coreVersion: true,
-        createdBy: true,
-        publishedAt: true,
-        temperature: true,
-        maxTokens: true,
-        metadata: true,
-      },
-      take: 30,
-    });
+    const rows = await listCoreVersionHistory(`skill:${skillId}`);
     const versions = rows.map((row) => ({
       ...row,
       // 旧版本没有 coreSnapshot 时只可审计，不能安全回滚到 core SSOT。
@@ -2286,13 +2266,7 @@ router.post('/core/:skillId/rollback', async (req, res) => {
       return res.status(400).json({ error: '缺少有效 version' });
     }
     const agentId = `skill:${skillId}`;
-    const target = await systemPrisma.agent_prompts.findFirst({
-      where: { agentId, version },
-      select: {
-        id: true, version: true, systemPrompt: true, temperature: true, maxTokens: true,
-        coreHash: true, coreVersion: true, metadata: true,
-      },
-    });
+    const target = await findPromptVersionRow(agentId, version);
     if (!target) {
       return res.status(404).json({ error: `版本不存在: ${agentId} v${version}` });
     }
@@ -2319,11 +2293,7 @@ router.post('/core/:skillId/rollback', async (req, res) => {
     }
 
     // 操作审计：回滚前快照当前 ACTIVE 版本（旧版本），回滚后快照目标版本（新版本）
-    const activeBefore = await systemPrisma.agent_prompts.findFirst({
-      where: { agentId, status: 'ACTIVE' },
-      orderBy: { version: 'desc' },
-      select: { id: true, version: true, status: true, coreHash: true, coreVersion: true },
-    });
+    const activeBefore = await findActivePromptBrief(agentId);
     setAuditAction(res, 'prompt-lab-rollback', { targetType: 'skill', targetId: skillId });
     setAuditBefore(res, activeBefore ?? null);
 
@@ -2341,14 +2311,8 @@ router.post('/core/:skillId/rollback', async (req, res) => {
     await fs.writeFile(prodPath, compiled.prompt, 'utf-8');
 
     // 2) ACTIVE 翻转（其余置 ARCHIVED）
-    await systemPrisma.agent_prompts.updateMany({
-      where: { agentId, status: 'ACTIVE', id: { not: target.id } },
-      data: { status: 'ARCHIVED', updatedAt: new Date() },
-    });
-    await systemPrisma.agent_prompts.update({
-      where: { id: target.id },
-      data: { status: 'ACTIVE', updatedAt: new Date() },
-    });
+    await archiveOtherActivePrompts(agentId, target.id);
+    await activateAgentPrompt(target.id);
 
     // 3) 缓存清理
     try {

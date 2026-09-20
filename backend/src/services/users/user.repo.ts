@@ -1,5 +1,6 @@
 import prisma from '../../config/database';
 import type { Prisma } from '@prisma/client';
+import { REAL_USER_WHERE } from '../../utils/test-account';
 
 /**
  * 用户表仓储（routes/users.ts 自助域 + routes/admin/users.ts 管理域的取数层）。
@@ -274,4 +275,16 @@ export function findUserRestoreTarget(userId: string) {
     where: { id: userId },
     select: { id: true, deletedAt: true }
   });
+}
+
+// ---------- 跨域共用 ----------
+
+/** 存在性校验（发放/发送/执行前的前置检查） */
+export function findUserIdOnly(userId: string) {
+  return prisma.users.findUnique({ where: { id: userId }, select: { id: true } });
+}
+
+/** 全部真实用户 id（全员通知等批量目标；排除虚拟学习者与测试/审计账号） */
+export function listRealUserIds() {
+  return prisma.users.findMany({ where: REAL_USER_WHERE, select: { id: true } });
 }

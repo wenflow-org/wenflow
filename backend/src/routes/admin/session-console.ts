@@ -4,7 +4,17 @@
 // - 响应对齐虚拟会话 stageResults/runtime/stageStatus/bindings 契约，前端双模式共用渲染
 // - 无 stageResults 字段（blackbox/simulationConfig/评审）给 null → 前端优雅降级隐藏
 import { Router } from 'express';
-import prisma from '../../config/database';
+import {
+  findLearningPathById,
+  findMilestonesByPathId,
+  findLatestGoalConversationByPathId,
+  findSessionEvidence,
+  findSubtaskById,
+  findTeachingSessionsByPathId,
+  findPathEvidence,
+  findTeachingSessionWithUser,
+  findGoalConversationWithUser,
+} from '../../services/admin/session-console.repo';
 import { logger } from '../../utils/logger';
 
 const router = Router();
@@ -123,11 +133,7 @@ function buildMilestonesView(milestones: any[]): Array<Record<string, unknown>> 
 
 async function resolvePathView(path: any) {
   if (!path) return null;
-  const milestones = await prisma.milestones.findMany({
-    where: { learningPathId: path.id },
-    orderBy: { stageNumber: 'asc' },
-    include: { subtasks: { orderBy: { order: 'asc' } } },
-  });
+  const milestones = await findMilestonesByPathId(path.id);
   const totalTasks = milestones.reduce((sum, m) => sum + m.subtasks.length, 0);
   const completedTasks = milestones.reduce(
     (sum, m) => sum + m.subtasks.filter((t) => t.status === 'completed').length,
@@ -285,25 +291,14 @@ function buildTimeline(params: {
 async function buildTeachingConsole(session: any) {
   const [goalConversation, path, evidence, task] = await Promise.all([
     session.learningPathId
-      ? prisma.goal_conversations.findFirst({
-          where: { learningPathId: session.learningPathId },
-          orderBy: { createdAt: 'desc' },
-        })
+      ? findLatestGoalConversationByPathId(session.learningPathId)
       : Promise.resolve(null),
     session.learningPathId
-      ? prisma.learning_paths.findUnique({ where: { id: session.learningPathId } })
+      ? findLearningPathById(session.learningPathId)
       : Promise.resolve(null),
-    prisma.learner_evidence.findMany({
-      where: {
-        OR: [
-          ...(session.id ? [{ sessionId: session.id }] : []),
-          ...(session.taskId ? [{ taskId: session.taskId }] : []),
-        ],
-      },
-      orderBy: { occurredAt: 'asc' },
-    }),
+    findSessionEvidence(session.id, session.taskId),
     session.taskId
-      ? prisma.subtasks.findUnique({ where: { id: session.taskId } })
+      ? findSubtaskById(session.taskId)
       : Promise.resolve(null),
   ]);
 
@@ -418,19 +413,12 @@ async function buildTeachingConsole(session: any) {
 async function buildGoalConsole(conversation: any) {
   const [path, teachingSessions, evidence] = await Promise.all([
     conversation.learningPathId
-      ? prisma.learning_paths.findUnique({ where: { id: conversation.learningPathId } })
+      ? findLearningPathById(conversation.learningPathId)
       : Promise.resolve(null),
     conversation.learningPathId
-      ? prisma.teaching_sessions.findMany({
-          where: { learningPathId: conversation.learningPathId, status: { not: 'superseded' } },
-          orderBy: { startTime: 'desc' },
-          take: 20,
-        })
+      ? findTeachingSessionsByPathId(conversation.learningPathId)
       : Promise.resolve([]),
-    prisma.learner_evidence.findMany({
-      where: { pathId: conversation.learningPathId || undefined },
-      orderBy: { occurredAt: 'asc' },
-    }),
+    findPathEvidence(conversation.learningPathId),
   ]);
 
   const pathView = path ? await resolvePathView(path) : null;
@@ -556,14 +544,8 @@ router.get('/:sessionId', async (req: any, res) => {
     const { sessionId } = req.params;
 
     const [teachingSession, goalConversation] = await Promise.all([
-      prisma.teaching_sessions.findUnique({
-        where: { id: sessionId },
-        include: { users: { select: { id: true, name: true, email: true } } },
-      }),
-      prisma.goal_conversations.findUnique({
-        where: { id: sessionId },
-        include: { users: { select: { id: true, name: true, email: true } } },
-      }),
+      findTeachingSessionWithUser(sessionId),
+      findGoalConversationWithUser(sessionId),
     ]);
 
     let data: Record<string, unknown>;

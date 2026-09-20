@@ -472,20 +472,7 @@
     },
     {
       "files": [
-        "src/routes/admin-auth.ts",
-        "src/routes/admin/achievements.ts",
-        "src/routes/admin/announcements.ts",
-        "src/routes/admin/export.ts",
-        "src/routes/admin/field-routings.ts",
-        "src/routes/admin/goal-conversations.ts",
-        "src/routes/admin/notifications.ts",
-        "src/routes/admin/prompt-ops.ts",
-        "src/routes/admin/session-console.ts",
-        "src/routes/admin/virtual-learners.ts",
-        "src/routes/learning.ts",
-        "src/routes/notifications.ts",
-        "src/routes/prompt-lab.ts",
-        "src/routes/user-api-config.ts"
+        "src/routes/__boundary_cleared__/*.never.ts"
       ],
       "rules": {
         "no-restricted-imports": "off",

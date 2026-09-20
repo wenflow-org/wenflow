@@ -1,7 +1,16 @@
 // 站内通知管理路由（admin 后台：全员/定向推送）
 // 挂载: /api/admin/notifications
 import express, { Request, Response } from 'express';
-import prisma from '../../config/database';
+import { checkIsAdmin } from '../../services/admin-access.service';
+import { findUserIdOnly, listRealUserIds } from '../../services/users/user.repo';
+import {
+  listNotificationsForAdmin,
+  countNotificationsWhere,
+  countUnreadNotificationsWhere,
+  findNotificationById,
+  deleteNotification,
+  createNotifications,
+} from '../../services/notifications/notification.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { randomUUID as uuidv4 } from 'crypto';
@@ -12,14 +21,7 @@ const router = express.Router();
 
 router.use(authMiddleware);
 
-const ensureAdmin = async (userId?: string) => {
-  if (!userId) return false;
-  const operator = await prisma.users.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true },
-  });
-  return !!operator?.isAdmin;
-};
+const ensureAdmin = checkIsAdmin;
 
 /** 通知列表（分页；userId 筛选；includeTest=1 含虚拟/测试） */
 router.get('/', async (req: Request, res: Response) => {
@@ -56,15 +58,9 @@ router.get('/', async (req: Request, res: Response) => {
       : [{ createdAt: order }, { id: 'desc' as const }];
 
     const [items, total, unreadTotal] = await Promise.all([
-      prisma.notifications.findMany({
-        where,
-        orderBy,
-        skip,
-        take: limit,
-        include: { users: { select: { id: true, name: true, email: true } } },
-      }),
-      prisma.notifications.count({ where }),
-      prisma.notifications.count({ where: { ...where, isRead: false } }),
+      listNotificationsForAdmin(where, orderBy, skip, limit),
+      countNotificationsWhere(where),
+      countUnreadNotificationsWhere(where),
     ]);
 
     res.json({
@@ -111,17 +107,17 @@ router.post('/', async (req: Request, res: Response) => {
 
     const targetIds: string[] = [];
     if (scope === 'user') {
-      const user = await prisma.users.findUnique({ where: { id: userId }, select: { id: true } });
+      const user = await findUserIdOnly(userId);
       if (!user) return res.status(404).json({ success: false, error: { message: '用户不存在' } });
       targetIds.push(user.id);
     } else {
       // 全员 = 所有真实用户（排除虚拟学习者与测试账号）
-      const users = await prisma.users.findMany({ where: REAL_USER_WHERE, select: { id: true } });
+      const users = await listRealUserIds();
       targetIds.push(...users.map((u) => u.id));
     }
 
     const createdAt = new Date();
-    await prisma.notifications.createMany({
+    await createNotifications({
       data: targetIds.map((id) => ({
         id: uuidv4(),
         userId: id,
@@ -152,14 +148,14 @@ router.delete('/:id', async (req: Request, res: Response) => {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
 
-    const item = await prisma.notifications.findUnique({ where: { id: req.params.id } });
+    const item = await findNotificationById(req.params.id);
     if (!item) return res.status(404).json({ success: false, error: { message: '通知不存在' } });
 
     setAuditAction(res, 'notification.delete', { targetType: 'notification', targetId: item.id });
     setAuditBefore(res, { title: item.title, userId: item.userId });
     setAuditAfter(res, null);
 
-    await prisma.notifications.delete({ where: { id: req.params.id } });
+    await deleteNotification(req.params.id);
     res.json({ success: true });
   } catch (error: any) {
     logger.error('[admin-notifications] 删除通知失败', { error });
