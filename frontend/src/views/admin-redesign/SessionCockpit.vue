@@ -789,6 +789,8 @@ import {
   buildLearnLessons, buildLessonTree, lessonMark, lessonStateLabel, lessonNumberOf,
   type LearnLesson
 } from './cockpitLessons'
+import { useCockpitStages, stageFlow, type StageKey } from './cockpitStages'
+import { useCockpitAutopilot } from './cockpitAutopilot'
 
 const sessionId = computed(() => subPage.value?.id || '')
 const shortId = computed(() => (sessionId.value.length > 20 ? `…${sessionId.value.slice(-16)}` : sessionId.value))
@@ -903,45 +905,6 @@ const isPaused = computed(() =>
   || stageStatus.value.learning?.paused === true
 )
 
-/* ===== 全自动模式：以最终目标（Path 全部完成）为终点的无人值守运行 ===== */
-const autopilot = computed(() => asRecord(stageResults.value.autopilot) as {
-  status?: string
-  mode?: string
-  steps?: number
-  lastStage?: string | null
-  lastError?: string | null
-  startedAt?: string
-  completedAt?: string
-  stopRequested?: boolean
-  queuePosition?: number | null
-})
-// stopRequested=true 表示已请求停止（可能主循环已死未消费）：视为未运行，
-// 否则会出现「已停止却仍显示停止自动驾驶按钮」的悬挂态（按钮点了没反应）
-const autopilotRunning = computed(() => autopilot.value.status === 'running' && autopilot.value.stopRequested !== true)
-const autopilotStopping = computed(() => autopilot.value.status === 'running' && autopilot.value.stopRequested === true)
-const autopilotQueued = computed(() => autopilot.value.status === 'queued')
-const autopilotStartDisabled = computed(() => {
-  if (!session.value) return true
-  if (busy.value) return true
-  if (isTerminal.value) return true
-  return autopilotRunning.value || autopilotQueued.value
-})
-const autopilotStartTitle = computed(() => {
-  if (!session.value) return '会话仍在加载'
-  if (isTerminal.value) return '会话已终态，无需启动全自动'
-  if (autopilotRunning.value) return '全自动正在进行中'
-  return '自动驾驶：后台持续推进，直达 Path 全部任务完成（每课回合数受「每课回合上限」约束；可随时「停止自动驾驶」暂停，进度保留）'
-})
-const autopilotResultText = computed(() => {
-  const st = autopilot.value.status
-  if (st === 'completed') return '✅ 全部完成：Path 所有任务已跑完'
-  if (st === 'failed') return `❌ 运行失败：${firstText(autopilot.value.lastError) || '未知原因'}`
-  if (st === 'incomplete') return `⚠️ 未完成（疑似教学卡死）：${firstText(autopilot.value.lastError) || '无进展'}`
-  if (st === 'stopped') return '⏸ 已停止自动驾驶'
-  if (st === 'queued') return `⏳ 已排队等待并发槽位（第 ${autopilot.value.queuePosition || 1} 位），有空位自动启动`
-  if (st === 'running' && autopilot.value.stopRequested === true) return '⏸ 已请求停止自动驾驶（等待确认）'
-  return ''
-})
 const statusTitle = computed(() =>
   !session.value
     ? '加载中…'
@@ -992,20 +955,10 @@ const headerHealth = computed(() => runHealthTone(session.value ? runLifecycleSt
  * 失败 / 未完成（疑似卡死）/ 收尾失败 必须落到 bad —— 与同一张卡里
  * .cp-run__autopilot-result--bad 的判定保持一致，不再显示灰点。
  */
-const autopilotHealthState = computed<string | null>(() => {
-  if (autopilotRunning.value) return 'running'
-  if (isPaused.value) return 'paused'
-  const st = String(autopilot.value.status || '').toLowerCase()
-  if (st === 'stopped') return 'paused'
-  if (st === 'incomplete' || st === 'failed' || st === 'finalization_failed') return 'failed'
-  if (st) return st
-  return session.value ? runLifecycleState.value : null
-})
-const autopilotHealth = computed(() => runHealthTone(autopilotHealthState.value))
-
-/* 阶段流：后端 currentStage 枚举是 goal/path/teaching，前端归一为 learning */
-const stageFlow = ['goal', 'path', 'learning', 'wrapup'] as const
-type StageKey = (typeof stageFlow)[number]
+const {
+  autopilot, autopilotRunning, autopilotStopping, autopilotQueued,
+  autopilotStartDisabled, autopilotStartTitle, autopilotResultText, autopilotHealth
+} = useCockpitAutopilot(stageResults, session, busy, isTerminal, isPaused, runLifecycleState)
 
 /* 阶段分页：阶段条即 tab，默认跟随 currentStage；控制面板与日志常驻 */
 const activeTab = ref<StageKey>('goal')
@@ -1459,116 +1412,24 @@ const pathReadinessText = computed(() => {
   return learningBlockedReason.value || 'Path 已生成，正在确认 Learn 启动条件。'
 })
 
-/** 进度条索引：优先 currentStage，并用 bindings 兜底（避免 key 不一致时全「未开始」） */
-const effectiveStageIndex = computed(() => {
-  const raw = currentStage.value
-  let idx = stageFlow.indexOf(raw as StageKey)
-  if (idx >= 0) return idx
-
-  // 后端偶发非标准 stage 时，用绑定证据推断
-  if (bindings.value.teachingSessionId || bindings.value.currentTaskId) return 2
-  if (bindings.value.learningPathId || stageStatus.value.path?.generated) return 1
-  if (bindings.value.goalConversationId) return 0
-  return 0
-})
-
 const {
   hasWrapup, wrapupSections, wrapupFieldCards,
   wrapupSourceBadge, wrapupStatusBadge, wrapupEmptyHint
 } = useCockpitWrapup(stageResults, stageStatus, isRealMode)
 
+const {
+  effectiveStageIndex, stageDone, stageActive, stageCls, stageMark,
+  stageProgress, stageMiniStatus, learnProgressText
+} = useCockpitStages({
+  currentStage, bindings, stageStatus, stageResults,
+  isTerminal, isFailedTerminal, hasWrapup,
+  goalConversationMessages, pathStatusPath, pathMilestonesView, learnLessons
+})
+
 /** 从总结页点击课时 → 跳转到 Learn 标签并打开该课时的总结 */
 function viewLessonSummary(lesson: LearnLesson) {
   activeTab.value = 'learning'
   nextTick(() => openLesson(lesson))
-}
-
-function stageDone(st: StageKey) {
-  const idx = stageFlow.indexOf(st)
-  const cur = effectiveStageIndex.value
-
-  // Wrapup 不是会话终态的同义词：只有确实写出总结时才算完成。
-  if (st === 'wrapup') return hasWrapup.value
-  // 失败终态只确认失败点以前的阶段；当前失败阶段不能伪装成完成。
-  if (isFailedTerminal.value && idx === cur) return false
-  if (isTerminal.value && idx <= cur) return true
-  if (idx < cur) return true
-  // 同阶段但已有下游证据时，也标完成（如 learning 时 Goal/Path 已完成）
-  if (st === 'goal' && (bindings.value.learningPathId || bindings.value.teachingSessionId || cur >= 1)) return true
-  if (st === 'path' && (bindings.value.teachingSessionId || cur >= 2)) return true
-  if (st === 'learning' && (isTerminal.value || stageStatus.value.learning?.wrapup)) return true
-  return false
-}
-
-function stageActive(st: StageKey) {
-  if (isTerminal.value) {
-    return st === 'wrapup'
-      ? hasWrapup.value
-      : stageFlow.indexOf(st) === effectiveStageIndex.value
-  }
-  if (stageDone(st) && stageFlow.indexOf(st) !== effectiveStageIndex.value) return false
-  return stageFlow.indexOf(st) === effectiveStageIndex.value
-}
-
-function stageCls(st: string) {
-  const key = st as StageKey
-  return {
-    'cp-stage--done': stageDone(key),
-    'cp-stage--active': stageActive(key) && !isTerminal.value
-  }
-}
-
-/* 阶段条进度副标（遗留项 2 C2）：当前阶段显示 x/y 或百分比；数据源不足给空串 */
-const goalRoundText = computed(() => {
-  const n = goalConversationMessages.value.length
-  if (n) return `对话 ${n} 轮`
-  const confidence = numberValue(stageStatus.value.goal?.confidence)
-  if (confidence !== null) return `置信度 ${Math.round(confidence * 100)}%`
-  return ''
-})
-const pathProgressText = computed(() => {
-  const srPath = asRecord(stageResults.value.path)
-  const completed = numberValue(srPath.completedMilestones)
-    ?? numberValue(pathStatusPath.value.completedMilestones)
-    ?? numberValue(stageStatus.value.path?.completedMilestones)
-  const total = numberValue(srPath.totalMilestones)
-    ?? numberValue(pathStatusPath.value.totalMilestones)
-    ?? numberValue(stageStatus.value.path?.totalMilestones)
-  if (completed !== null && total) return `${completed}/${total} 里程碑`
-  const milestones = pathMilestonesView.value
-  if (milestones.length) {
-    const done = milestones.filter((m) => m.tasks.length && m.tasks.every((t) => t.completed)).length
-    return `${done}/${milestones.length} 里程碑`
-  }
-  return ''
-})
-const learnProgressText = computed(() => {
-  const done = learnLessons.value.filter((l) => l.state === 'done').length
-  const total = learnLessons.value.length
-  return `课程进度 ${done}/${total}`
-})
-function stageProgress(st: string) {
-  const key = st as StageKey
-  switch (key) {
-    case 'goal':
-      return goalRoundText.value
-    case 'path':
-      return pathProgressText.value
-    case 'learning':
-      return learnLessons.value.length ? `课程 ${learnLessons.value.filter((l) => l.state === 'done').length}/${learnLessons.value.length}` : ''
-    case 'wrapup':
-      return hasWrapup.value ? '总结已生成' : ''
-    default:
-      return ''
-  }
-}
-
-/* 阶段胶囊状态标记：已完成 ✓ / 当前 · / 其他空 */
-function stageMark(st: string) {
-  const key = st as StageKey
-  if (stageDone(key)) return '✓'
-  if (stageActive(key)) return '·'
-  return ''
 }
 
 /** 会话状态简短标签 */
@@ -1578,26 +1439,6 @@ const sessionStatusLabel = computed(() => {
   // 状态词一律走全局字典（单源）：running → 进行中，不再在页内另写一套同义词
   return statusText(String(session.value?.status ?? ''))
 })
-/** 阶段迷你状态文本 */
-function stageMiniStatus(st: StageKey) {
-  if (st === 'goal') {
-    const n = goalConversationMessages.value.length
-    return n ? `${n} 轮` : (stageDone(st) ? '已收敛' : '')
-  }
-  if (st === 'path') {
-    return pathMilestonesView.value.length ? `${pathMilestonesView.value.length} 个里程碑` : ''
-  }
-  if (st === 'learning') {
-    const done = learnLessons.value.filter(l => l.state === 'done').length
-    const total = learnLessons.value.length
-    return total ? `${done}/${total}` : ''
-  }
-  if (st === 'wrapup') {
-    return hasWrapup.value ? '已生成' : ''
-  }
-  return ''
-}
-
 /* 数据加载 */
 /** 日期模拟时钟（只读）：虚拟会话顶部显示"第 N 天"推进进度 */
 const simClock = ref<{
