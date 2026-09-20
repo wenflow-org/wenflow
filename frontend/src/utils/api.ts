@@ -1,18 +1,13 @@
-﻿// Axios API 客户端
-import axios from 'axios';
+﻿// Axios API 客户端（user 画像：成功解包 response.data + 401 静默刷新重试）
+import axios, { type AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 import { getProjectionToken } from './projection';
 import { setAuthFlashMessage } from './authFlash';
 import { clearUserLocalState } from './sessionCleanup';
+import { createApiClient, resolveApiBaseUrl } from './http';
 
-const isDev = import.meta.env.DEV;
-// 统一使用 VITE_API_BASE_URL（VITE_API_URL 为历史遗留别名，保留兼容）。
-// 解析收敛为单点函数：adminApi 等其它 axios 实例也经此取 baseURL，避免两套公式在
-// dev 下对 VITE_API_BASE_URL 的处理分叉（dev 固定 '/api' 走代理，prod 读环境变量）。
-export function resolveApiBaseUrl(): string {
-  return isDev
-    ? '/api'
-    : (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '/api');
-}
+// baseURL 解析与拦截器实现单点在 utils/http.ts（admin 侧 adminApi.ts 走同一工厂）；
+// 此处 re-export 保持既有导入路径（API_BASE_URL / resolveApiBaseUrl）稳定
+export { resolveApiBaseUrl };
 export const API_BASE_URL = resolveApiBaseUrl();
 
 /**
@@ -67,89 +62,42 @@ const redirectToLoginOnce = () => {
 // 认证类端点自身返回 401 表示"凭证错误"，不应被误判为会话失效
 const AUTH_ENDPOINT_PATTERN = /^\/auth\/(login|register|verify)(\?|$)/;
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 60000,
-  withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json; charset=utf-8'
+function injectAuthHeaders(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
+  const token = localStorage.getItem('token');
+  const projectionToken = getProjectionToken();
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
+
+  if (projectionToken) {
+    config.headers['X-Projection-Token'] = projectionToken;
+  }
+
+  return config;
+}
+
+/** 401 静默刷新 + 原请求重试；无会话标记或刷新失败 → 跳登录并落到统一归一化拒绝 */
+async function handleUnauthorized(error: AxiosError): Promise<AxiosResponse | void> {
+  if (!(hasUserSession() || getProjectionToken())) return;
+  // 保存原始请求配置用于重试
+  const originalConfig = { ...(error.config ?? {}) };
+  (originalConfig as { _retry?: boolean })._retry = true;
+  const refreshed = await tryRefresh();
+  if (refreshed) {
+    // 刷新成功，重试原始请求
+    return api.request(originalConfig);
+  }
+  // 刷新失败，跳转登录
+  redirectToLoginOnce();
+}
+
+const api = createApiClient({
+  timeout: 60000,
+  unwrapResponse: true,
+  injectHeaders: injectAuthHeaders,
+  isAuthEndpoint: (url) => AUTH_ENDPOINT_PATTERN.test(url),
+  handleUnauthorized,
 });
 
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    const projectionToken = getProjectionToken();
-    
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-
-    if (projectionToken) {
-      config.headers['X-Projection-Token'] = projectionToken;
-    }
-
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// 响应拦截器 - 统一错误处理和清理
-api.interceptors.response.use(
-  (response) => {
-    return response.data;
-  },
-  async (error) => {
-    // 如果是取消错误，直接返回
-    if (axios.isCancel(error) || error.name === 'CanceledError' || error.name === 'AbortError') {
-      return Promise.reject({ message: '请求已取消', cancelled: true });
-    }
-
-    if (error.response) {
-      const { status, data } = error.response;
-      const url = typeof error.config?.url === 'string' ? error.config.url : '';
-
-      // 401 未授权 - 先尝试静默刷新 access token，失败再跳登录
-      if (status === 401
-        && !error.config?._retry
-        && !AUTH_ENDPOINT_PATTERN.test(url)
-        && (hasUserSession() || getProjectionToken())) {
-        // 保存原始请求配置用于重试
-        const originalConfig = { ...error.config };
-        originalConfig._retry = true;
-        const refreshed = await tryRefresh();
-        if (refreshed) {
-          // 刷新成功，重试原始请求
-          return api.request(originalConfig);
-        }
-        // 刷新失败，跳转登录
-        redirectToLoginOnce();
-      }
-
-      // 返回错误信息，保留完整 response 以便上层读取 422 恢复信封等结构化数据。
-      // 兼容后端两种错误形态：{ error: { message } } 与 { error: "字符串" }（约 209 处历史端点）
-      const errBody = data?.error;
-      const errMessage = typeof errBody === 'string'
-        ? errBody
-        : errBody?.message || data?.message || '请求失败';
-      return Promise.reject({
-        message: errMessage,
-        status,
-        details: typeof errBody === 'object' ? errBody?.details : undefined,
-        response: error.response
-      });
-    }
-
-    // 网络错误
-    if (error.code === 'ECONNABORTED') {
-      return Promise.reject({ message: '请求超时，请稍后重试' });
-    }
-
-    return Promise.reject({ message: '网络错误，请检查连接' });
-  }
-);
-
 export default api;
-
