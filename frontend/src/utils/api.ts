@@ -5,10 +5,15 @@ import { setAuthFlashMessage } from './authFlash';
 import { clearUserLocalState } from './sessionCleanup';
 
 const isDev = import.meta.env.DEV;
-// 统一使用 VITE_API_BASE_URL（VITE_API_URL 为历史遗留别名，保留兼容）
-export const API_BASE_URL = isDev
-  ? '/api'
-  : (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '/api');
+// 统一使用 VITE_API_BASE_URL（VITE_API_URL 为历史遗留别名，保留兼容）。
+// 解析收敛为单点函数：adminApi 等其它 axios 实例也经此取 baseURL，避免两套公式在
+// dev 下对 VITE_API_BASE_URL 的处理分叉（dev 固定 '/api' 走代理，prod 读环境变量）。
+export function resolveApiBaseUrl(): string {
+  return isDev
+    ? '/api'
+    : (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '/api');
+}
+export const API_BASE_URL = resolveApiBaseUrl();
 
 /**
  * 超时分级：普通请求 60s；AI/LLM 类请求（对话、生成、重规划、连接测试）300s

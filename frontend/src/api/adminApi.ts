@@ -2,8 +2,10 @@
 import axios from 'axios';
 import { setAuthFlashMessage } from '@/utils/authFlash';
 import { clearUserLocalState } from '@/utils/sessionCleanup';
-import { AI_REQUEST_TIMEOUT } from '@/utils/api';
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+import { AI_REQUEST_TIMEOUT, resolveApiBaseUrl } from '@/utils/api';
+// baseURL 与用户端 utils/api.ts 单点同源（dev 固定 '/api' 走代理；prod 读 VITE_API_BASE_URL）。
+// 双实例本身保留：admin 与用户会话的 401 语义、响应解包形态不同（见审计 #6，拦截器合并为后续独立批次）。
+const API_BASE = resolveApiBaseUrl();
 const ADMIN_SESSION_REQUEST_TIMEOUT_MS = 10000;
 
 /**
