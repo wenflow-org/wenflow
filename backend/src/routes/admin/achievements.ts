@@ -202,13 +202,13 @@ router.post('/revoke', async (req: Request, res: Response) => {
     const record = await prisma.achievements.findUnique({ where: { id: recordId } });
     if (!record) return res.status(404).json({ success: false, error: { message: '解锁记录不存在' } });
 
-    await prisma.$transaction([
-      prisma.achievements.delete({ where: { id: recordId } }),
-      prisma.users.update({
+    await withTransaction(async (tx) => {
+      await tx.achievements.delete({ where: { id: recordId } });
+      await tx.users.update({
         where: { id: record.userId },
         data: { xp: { decrement: Math.max(0, record.xpReward || 0) } },
-      }),
-    ]);
+      });
+    }, { label: 'admin-achievements.revoke' });
 
     setAuditAction(res, 'achievement.revoke', { targetType: 'user', targetId: record.userId });
     setAuditBefore(res, { userId: record.userId, title: record.title, xpReward: record.xpReward });

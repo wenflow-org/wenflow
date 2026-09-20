@@ -13,6 +13,7 @@ import {
 } from '../../utils/session-token';
 import { getPasswordResetMailProvider } from './password-reset-mailer';
 import { isTestAccountUser } from '../../utils/test-account';
+import { withTransaction } from '../../utils/with-transaction';
 
 interface RegisterData {
   name: string;
@@ -330,20 +331,20 @@ class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await prisma.$transaction([
-      prisma.users.update({
+    await withTransaction(async (tx) => {
+      await tx.users.update({
         where: { id: record.userId },
         data: {
           password: hashedPassword,
           tokenVersion: { increment: 1 },
           updatedAt: new Date()
         }
-      }),
-      prisma.password_reset_tokens.update({
+      });
+      await tx.password_reset_tokens.update({
         where: { id: record.id },
         data: { usedAt: new Date() }
-      })
-    ]);
+      });
+    }, { label: 'auth.resetPassword' });
 
     logger.info(`用户通过重置链接修改密码：${record.userId}`);
   }
