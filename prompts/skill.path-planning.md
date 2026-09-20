@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-planning
-coreHash: ea20be269f9a5781af71d57f649671b68928172ca155cb30495acbfc5285f4eb
+coreHash: 2af36d31bc03d1cdb28b33fbd24c9c63552c2244bafa25660cd3fb2905472852
 coreVersion: 1
 temperature: 0.5
 maxTokens: 12000
@@ -69,7 +69,8 @@ failurePolicy: retry
 37. 路径名称必须是简洁的主题名：核心主题/技能 + 水平词（如"Python 自动化 Excel 报表入门"），控制在 8-20 个字；名称只表达"学什么"，不要冒号加副标题、括号补充说明、"从…到…"完整过程句，也不要把用户目标原文整段搬入名称；具体场景、交付物与细节放进 summary 和 milestones
 38. 名称硬性自检：拟定的名称若包含逗号、分号、破折号（——/-/—）、"知道要""但…""导致…"等因果从句形态，或超过 20 个字，判定为不合格，必须改写为"主题/技能 + 水平词"的短名；禁止把 real_problem 的诊断原文（如"知道要签字，但触发时机与当前状态冲突"）作为路径名称
 39. summary 必须用 1-2 句"人话"概括"这条路径适合谁（场景）+ 解决什么（能力）"，从学习者视角表述；禁止复制或改写 real_problem 的诊断全文、禁止把理解字段原文照搬进 summary
-40. 路径名称的水平词必须与 normalizedInput.learnerProfile.currentBaseline.level 一致：beginner → 必须用"入门""基础""从零开始"等词，不得出现"中级""进阶""高级"；intermediate → 用"进阶""系统""提高"等词；advanced → 用"实战""精通""高阶"等词；**unknown（含缺失）→ 名称不写水平词，只用中性主题名（如"复盘结论提炼""手机摄影对焦与光线"），禁止默认写成"入门/基础"**。level 与 evidence/backgroundExperience 冲突时以 evidence 为准，并在里程碑难度上体现（unknown 按保守假设补前置，但不在标题上替用户认定水平）
+40. 里程碑数量**不是固定值**：`normalizedInput.planningHints.milestoneRange` 给出**允许区间**（下界来自问题规模、上界用于防膨胀），同层的 `targetMilestones` 只是**建议值**。请按这条路径的实际认知复杂度在区间内决定里程碑数（落在区间内即为合法，不会因数量被拒），不要为了对齐建议值而把本来清晰的阶段合并或拆散，也不要为凑满上界而拆分
+41. 路径名称的水平词必须与 normalizedInput.learnerProfile.currentBaseline.level 一致：beginner → 必须用"入门""基础""从零开始"等词，不得出现"中级""进阶""高级"；intermediate → 用"进阶""系统""提高"等词；advanced → 用"实战""精通""高阶"等词；**unknown（含缺失）→ 名称不写水平词，只用中性主题名（如"复盘结论提炼""手机摄影对焦与光线"），禁止默认写成"入门/基础"**。level 与 evidence/backgroundExperience 冲突时以 evidence 为准，并在里程碑难度上体现（unknown 按保守假设补前置，但不在标题上替用户认定水平）
 
 ## 输出字段
 

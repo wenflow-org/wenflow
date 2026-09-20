@@ -29,15 +29,15 @@ describe('derivePlannedOutline（预览口径与生成同源）', () => {
     expect(derivePlannedOutline({ key_stages: [] }).plannedMilestones).toBeNull();
   });
 
-  it('剔除操作性阶段（与生成时的清洗一致）', () => {
+  it('不再正则剔除「操作性阶段」：原样保留（方案乙——交给 LLM 判断）', () => {
     const result = derivePlannedOutline({
       key_stages: ['环境搭建', '4. 梳理本周任务清单', '脚本开发'],
       scope_size: 'medium',
     });
-    expect(result.stages).toEqual(['环境搭建', '脚本开发']);
-    // 承诺数量以生成口径为准：medium 的下限是 3 ⇒ 生成 3 段
-    // （列表只是「大致阶段」种子，故可能少于承诺数量）
-    expect(result.plannedMilestones).toBe(3);
+    // 旧行为按动词前缀黑名单删掉"梳理…"，还会误删"学习/设计/分析…"开头的真阶段（实测删过"设计…固定动作"）
+    expect(result.stages).toEqual(['环境搭建', '4. 梳理本周任务清单', '脚本开发']);
+    expect(result.plannedMilestones).toBe(3); // 建议值
+    expect(result.milestoneRange).toEqual([3, 5]); // 权威区间
   });
 
   it('兼容 camelCase 键（handoff 形态）', () => {
@@ -45,7 +45,7 @@ describe('derivePlannedOutline（预览口径与生成同源）', () => {
   });
 
   it('非对象输入安全返回', () => {
-    expect(derivePlannedOutline(null)).toEqual({ plannedMilestones: null, stages: [] });
+    expect(derivePlannedOutline(null)).toEqual({ plannedMilestones: null, milestoneRange: null, stages: [] });
   });
 });
 
@@ -155,10 +155,10 @@ describe('inferPaceSignal（节奏档兜底：未命中映射表时按周数分�
 });
 
 describe('scope_size（问题规模钳制里程碑数）', () => {
-  it('micro 钳制 milestone 顶多 2：即便 keyStages 给 5 个也压到 2', () => {
+  it('micro 是定义类（1-2 段）：建议值夹到 2，区间 [1,2]', () => {
     const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3', 'S4', 'S5'], null, 'micro');
     expect(hints.targetMilestones).toBe(2);
-    expect(hints.milestoneRange).toEqual([2, 2]);
+    expect(hints.milestoneRange).toEqual([1, 2]);
     expect(hints.scopeSize).toBe('micro');
   });
   it('small 允许被 pace 放宽（extended）：keyStages 5 → 5（不再被 scopeCap=3 砍到 3）', () => {
@@ -185,17 +185,17 @@ describe('scope_size（问题规模钳制里程碑数）', () => {
   });
 });
 
-describe('targetMilestones（强制里程碑数量，keyStages 直接透传）', () => {
-  it('keyStages 数量直接作为 targetMilestones，milestoneRange 收紧为精确值', () => {
+describe('targetMilestones 降级为建议值 + milestoneRange 为权威区间（方案乙）', () => {
+  it('keyStages 数作为建议值；区间给边界', () => {
     const hints = derivePlanningHints('三个月', null, null, null, ['S1', 'S2', 'S3']);
     expect(hints.targetMilestones).toBe(3);
-    expect(hints.milestoneRange).toEqual([3, 3]);
+    expect(hints.milestoneRange).toEqual([2, 8]); // 无 scope：下界 2、上界硬上限 8
   });
 
-  it('keyStages 缺失时 targetMilestones 为 null，沿用 pace 区间', () => {
+  it('keyStages 缺失时建议值为 null，区间仍给边界（不再沿用 pace 区间）', () => {
     const hints = derivePlanningHints('三个月', null, null, null, [], null);
     expect(hints.targetMilestones).toBeNull();
-    expect(hints.milestoneRange).toEqual(paceSignalRangeConfig.extended.milestoneRange);
+    expect(hints.milestoneRange).toEqual([2, 8]);
   });
 
   it('keyStages 数量超出夹取范围时限制在 2-8 之间', () => {
@@ -285,14 +285,14 @@ describe('缺陷修复：学时未知时每阶段任务数不再落到 1', () =>
     expect(hints.subtasksPerStageRange).toEqual([3, 5]);
   });
 
-  it('estimatedHours 存在时行为不变（区间仍精确化为 [target,target]）', () => {
+  it('estimatedHours 存在时每阶段任务数仍精确化；里程碑区间按方案乙给边界', () => {
     const hints = derivePlanningHints(
       '三个月', null, null, null, ['S1', 'S2', 'S3'],
       { totalWeeks: 12, estimatedHours: 12, sessionsPerWeek: null, sessionsLengthMin: null }
     );
     expect(hints.targetSubtasksPerStage).toBe(4);
     expect(hints.subtasksPerStageRange).toEqual([4, 4]);
-    expect(hints.milestoneRange).toEqual([3, 3]);
+    expect(hints.milestoneRange).toEqual([2, 8]);
     expect(hints.maxWeeks).toBe(15);
   });
 });
@@ -364,16 +364,16 @@ describe('buildFramedNormalizedInput：currentBaseline.level 归一为契约枚�
   });
 });
 
-describe('derivePlanningHints：紧预算必须同时收紧 targetMilestones（修 3）', () => {
-  it('medium + 紧预算（per_day 20 分钟）→ 里程碑目标被区间上界收紧', () => {
+describe('derivePlanningHints：紧预算同时收紧建议值与区间上界（修 3 + 方案乙）', () => {
+  it('medium + 紧预算（per_day 20 分钟）→ 上界被收紧', () => {
     const tight = derivePlanningHints(null, null, '每天20分钟', 'per_day', ['一', '二', '三', '四', '五'], null, 'medium');
-    expect(tight.targetMilestones).toBe(4); // medium[3,5] → 紧预算后 [2,4]，target=min(5,4)=4
-    expect(tight.milestoneRange).toEqual([4, 4]);
+    expect(tight.targetMilestones).toBe(4);
+    expect(tight.milestoneRange).toEqual([2, 4]);
   });
 
   it('非紧预算不受影响（medium 5 段 → 5）', () => {
     const normal = derivePlanningHints(null, null, '每天60分钟', 'per_day', ['一', '二', '三', '四', '五'], null, 'medium');
     expect(normal.targetMilestones).toBe(5);
-    expect(normal.milestoneRange).toEqual([5, 5]);
+    expect(normal.milestoneRange).toEqual([3, 5]);
   });
 });

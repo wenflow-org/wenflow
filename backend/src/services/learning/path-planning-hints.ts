@@ -6,7 +6,7 @@
  * 由 coordinator / learning.service 直接调用。
  */
 
-import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig, operationalStagePatterns } from '../../config/pedagogy.config';
+import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig } from '../../config/pedagogy.config';
 import { normalizePathDifficulty } from './path-difficulty';
 
 export type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
@@ -33,15 +33,9 @@ function normalizeCadence(value: any): TimeBudgetCadence | null {
     : null;
 }
 
-function isOperationalStageLike(value: string | null): boolean {
-  if (!value) return false;
-  const prefixPattern = `^(${operationalStagePatterns.verbPrefixes.join('|')})`;
-  const matchPattern = `(${operationalStagePatterns.patternMatches.join('|')}|先.+再.+)`;
-  return new RegExp(prefixPattern).test(value)
-    || new RegExp(matchPattern).test(value);
-}
-
-/** 学习者负荷画像（可选）：可用时间与认知负荷耐受。仅在显式传入时影响推导。 */
+/**
+ * 学习者负荷画像（可选）：可用时间与认知负荷耐受。仅在显式传入时影响推导。
+ */
 export interface LearnerLoadProfile {
   /** 可用时间枚举或自由文本，如 'minimal' | 'moderate' | 'abundant' */
   availableTime?: string | null;
@@ -196,24 +190,20 @@ export function derivePlanningHints(
   const keyStageCount = keyStages.length;
   const paceConfig = paceSignalRangeConfig[paceSignal];
 
-  // 体量与节奏分轴（A′，2026-09-20 修正）：
-  //   历史：9-05「里程碑数精确匹配 keyStages」+ 9-14「scope_size 钳制体量」两次都是为了防**膨胀**
-  //   （原话："小问题不再被撑成大路径"）；但 scope 判定长期退化成 ~95% small，反过来**压小**——
-  //   goal 自己排出 4-6 个阶段却被 min(scopeCap, …) 静默砍成 2~3 个。
-  //   现在：scope_size 降级为「下界参考」，计数以 keyStages（用户在确认卡上真正确认过的阶段计划）为准；
-  //   上界取「scope 与 pace 中较松者」再压全局硬上限，**保留防膨胀**，同时不让单一退化信号独裁。
+  // 体量口径（方案乙，2026-09-20）：**区间是权威边界，具体数字交给 LLM**。
+  //   历史：9-05「里程碑数精确匹配」+ 9-14「scope_size 钳制体量」都是为了防**膨胀**
+  //   （原话："小问题不再被撑成大路径"）；但 scope 判定长期退化（~95% small），
+  //   叠加 `[target,target]` 把区间捏成点 ⇒ 代码替 LLM 拍死一个数，这正是"过于死板"的来源。
+  //   现在：scope 只给**下界**；上界 = min(硬上限 8, max(scopeCap, paceCap)) 保留防膨胀；
+  //   targetMilestones 降级为「建议值」；validator 只校验 count ∈ [lo, hi]。
   const scope = normalizeScopeSize(scopeSize);
   const scopeConfig = scope ? SCOPE_SIZE_RANGES[scope] : null;
 
-  let milestoneRange: [number, number] = scopeConfig ? [...scopeConfig.milestoneRange] : [...paceConfig.milestoneRange];
   let conceptRange: [number, number] = [...paceConfig.conceptRange];
   const defaultMinutesRange: [number, number] = [...paceConfig.defaultMinutesRange];
 
   const HARD_MILESTONE_CAP = 8;
   const scopeMilestoneFloor = scopeConfig ? scopeConfig.milestoneRange[0] : 2;
-  // micro 是**定义类**（"一个动作/一次判断"，1-2 段）——上下界是定义，不参与放宽；
-  // small/medium/large 是**估计类**——允许被 pace 放宽（仍受 pace 上界与硬上限夹），
-  // 避免"估小了就被静默砍掉"（实测 4/10 例 scope=small 却排出 4-5 个阶段）。
   const milestoneCap = scope === 'micro'
     ? scopeConfig!.milestoneRange[1]
     : Math.min(
@@ -223,6 +213,12 @@ export function derivePlanningHints(
           paceConfig.milestoneRange[1],
         ),
       );
+  // 方案乙：**区间是权威边界，数字由 LLM 定**。
+  //   lo = scope 下界（问题规模参考）；hi = 防膨胀上界（scope/pace 较松者 ∧ 硬上限 8）。
+  //   targetMilestones 退化为「建议值」：供提示词参考，validator 只校验 count ∈ [lo, hi]。
+  //   为什么不再塌成 [t,t]：体量是"这条路径该分几步"的语义判断，属于 LLM 的活；
+  //   代码只该给边界（防压小/防撑大），不该替它拍一个精确数——枚举拍死正是"过于死板"的来源。
+  let milestoneRange: [number, number] = [scopeMilestoneFloor, milestoneCap];
   let targetMilestones: number | null = keyStageCount > 0
     ? Math.min(milestoneCap, Math.max(scopeMilestoneFloor, keyStageCount))
     : (scope ? scopeMilestoneFloor : null);
@@ -307,10 +303,11 @@ export function derivePlanningHints(
     }
   }
 
-  // 强制里程碑数量存在时，milestoneRange 同步为精确目标（消除 LLM 区间懒选），保留 pace 默认作为无 target 时的兜底
-  const effectiveMilestoneRange: [number, number] = targetMilestones !== null
-    ? [targetMilestones, targetMilestones]
-    : milestoneRange;
+  // 方案乙：区间即权威（不再塌成点）。确保「建议值」落在区间内，供提示词引用时不自相矛盾。
+  const effectiveMilestoneRange: [number, number] = [
+    Math.min(milestoneRange[0], targetMilestones ?? milestoneRange[0]),
+    Math.max(milestoneRange[1], targetMilestones ?? milestoneRange[1]),
+  ];
 
   // 强制每阶段子任务数量：总学时 ÷ 里程碑数 ÷ 每任务约 1 小时 → 每阶段任务目标。
   // 总学时 fallback 链（goal 数值推断产出率极低，必须有多级信号兜底，保证总能算出确定值）：
@@ -367,28 +364,31 @@ export function derivePlanningHints(
 /**
  * 预览用：按**路径生成同一口径**归一「用户确认的大纲」。
  *
- * 返回 plannedMilestones（与 path-planning 的 planningHints.targetMilestones 同源）
- * 与 stages（已剔除「操作性阶段」，与生成时的清洗一致）。
+ * 返回 plannedMilestones（**建议值**，与 path-planning 的 planningHints.targetMilestones 同源）、
+ * milestoneRange（**权威区间**，生成时 LLM 在区间内决定里程碑数）与 stages（原始阶段，不再正则删减）。
  *
- * 背景（走查 P7）：目标对话让 LLM 同时给 key_stages（如 4 段）与 scope_size
- * （如 small = 2~3 段），两者可自相矛盾；生成时会被 scope 夹回 3 段，
- * 而预览直接照抄 4 段 ⇒ 承诺 4 段、实际 3 段。这里让预览改用同一计算。
+ * 背景（走查 P7）：预览与生成必须同源。方案乙把口径从"精确相等"放宽为"区间内"，
+ * 因此确认卡应展示区间（而非承诺一个精确数）。
  */
 export function derivePlannedOutline(confirmedProposal: any): {
   plannedMilestones: number | null;
+  milestoneRange: [number, number] | null;
   stages: string[];
 } {
-  const rawKeyStages = normalizeStringArray(
+  const stages = normalizeStringArray(
     confirmedProposal?.key_stages ?? confirmedProposal?.keyStages
   );
-  const stages = rawKeyStages.filter((item) => !isOperationalStageLike(item));
   const scopeSize = normalizeScopeSize(
     confirmedProposal?.scope_size ?? confirmedProposal?.scopeSize
   );
   // targetMilestones 只由「阶段数 + scope_size」决定，其余入参不影响计数
   const hints = derivePlanningHints(null, null, null, null, stages, null, scopeSize);
   const planned = typeof hints?.targetMilestones === 'number' ? hints.targetMilestones : null;
-  return { plannedMilestones: planned, stages };
+  const hasSignal = stages.length > 0 || scopeSize !== null;
+  const range = hasSignal && Array.isArray(hints?.milestoneRange) && hints.milestoneRange.length === 2
+    ? ([hints.milestoneRange[0], hints.milestoneRange[1]] as [number, number])
+    : null;
+  return { plannedMilestones: planned, milestoneRange: range, stages };
 }
 
 /**
@@ -414,8 +414,10 @@ export function buildFramedNormalizedInput(input: any): any {
 
   const surfaceGoal = normalizeString(learnerProfile.surfaceGoal);
   const explicitProblem = normalizeString(problemSpace.realProblem);
-  const rawKeyStages = normalizeStringArray(confirmedProposal?.keyStages);
-  const keyStages = rawKeyStages.filter((item) => !isOperationalStageLike(item));
+  // 方案乙：不再用动词前缀黑名单静默删阶段（"学习/设计/分析/梳理…"开头的阶段会被误删，
+  // 实测把"设计…固定动作"这类真阶段删掉）。"哪些算认知阶段"是语义判断，交给 LLM：
+  // goal 提示词给约束，path-planning 可自行合并/拆分里程碑。
+  const keyStages = normalizeStringArray(confirmedProposal?.keyStages);
   const scopeSize = normalizeScopeSize(confirmedProposal?.scopeSize ?? confirmedProposal?.scope_size);
   const timeBudget = normalizeString(resources.timeBudget) || normalizeString(resources.timePerWeek);
   const timeBudgetCadence = normalizeCadence(resources.timeBudgetCadence);

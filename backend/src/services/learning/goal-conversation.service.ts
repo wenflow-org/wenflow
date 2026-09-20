@@ -272,8 +272,8 @@ class GoalConversationService {
    */
   private withPlannedOutline(confirmedProposal: any): any {
     if (!confirmedProposal || typeof confirmedProposal !== 'object') return confirmedProposal;
-    const { plannedMilestones, stages } = derivePlannedOutline(confirmedProposal);
-    return { ...confirmedProposal, plannedMilestones, previewStages: stages };
+    const { plannedMilestones, milestoneRange, stages } = derivePlannedOutline(confirmedProposal);
+    return { ...confirmedProposal, plannedMilestones, milestoneRange, previewStages: stages };
   }
 
   private getStructuredOutputValid(aiResponse: any): boolean {

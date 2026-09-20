@@ -214,7 +214,11 @@ interface PathOutput {
   milestones: MilestoneOutput[];
 }
 
-export function validatePathPlanningOutput(parsed: any, expectedMilestones?: number | null) {
+export function validatePathPlanningOutput(
+  parsed: any,
+  expectedMilestones?: number | null,
+  expectedMilestoneRange?: [number, number] | null
+) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { valid: false as const, failureReason: 'PATH_PLANNING_OUTPUT_NOT_OBJECT' };
   }
@@ -303,13 +307,22 @@ export function validatePathPlanningOutput(parsed: any, expectedMilestones?: num
     }
   }
 
-  // 强制里程碑数量：targetMilestones 由上游 keyStages 直接得出，path 必须精确匹配（阻断级）
-  if (typeof expectedMilestones === 'number' && Number.isInteger(expectedMilestones) && expectedMilestones >= 1) {
-    const count = parsed.milestones.length;
-    if (count !== expectedMilestones) {
+  // 里程碑数量：方案乙——**区间校验**（数量由 LLM 在区间内决定），仅越界才阻断；
+  // 未提供区间时保留旧的精确校验（向后兼容，如 replan 只给单点）。
+  const milestoneCount = parsed.milestones.length;
+  if (Array.isArray(expectedMilestoneRange) && expectedMilestoneRange.length === 2) {
+    const [lo, hi] = expectedMilestoneRange;
+    if (Number.isInteger(lo) && Number.isInteger(hi) && (milestoneCount < lo || milestoneCount > hi)) {
       return {
         valid: false as const,
-        failureReason: `PATH_PLANNING_MILESTONE_COUNT_MISMATCH(expected=${expectedMilestones}, got=${count})`,
+        failureReason: `PATH_PLANNING_MILESTONE_COUNT_OUT_OF_RANGE(expected=${lo}..${hi}, got=${milestoneCount})`,
+      };
+    }
+  } else if (typeof expectedMilestones === 'number' && Number.isInteger(expectedMilestones) && expectedMilestones >= 1) {
+    if (milestoneCount !== expectedMilestones) {
+      return {
+        valid: false as const,
+        failureReason: `PATH_PLANNING_MILESTONE_COUNT_MISMATCH(expected=${expectedMilestones}, got=${milestoneCount})`,
       };
     }
   }
@@ -631,6 +644,17 @@ async function generatePath(
   const acceptanceCheck = framingNormalizedInput?.successCriteria?.acceptanceCheck || null;
   // 强制里程碑数量：优先取 framing planningHints.targetMilestones（由 keyStages 直接得出），
   // 其次用已确认 keyStages 数量推导；均缺失时为 null（validator 跳过数量校验）
+  // 里程碑数量：方案乙——优先用规划的**权威区间**（LLM 在区间内自定数量）；
+  // 无区间时回退到「确认阶段数」组成的单点区间（replan 等路径）。
+  const framingMilestoneRange = (framingNormalizedInput?.planningHints as any)?.milestoneRange;
+  const expectedMilestoneRange: [number, number] | null =
+    Array.isArray(framingMilestoneRange)
+    && framingMilestoneRange.length === 2
+    && framingMilestoneRange.every((n: any) => Number.isInteger(n))
+      ? [framingMilestoneRange[0], framingMilestoneRange[1]]
+      : (confirmedStages.length > 0
+          ? [Math.min(8, Math.max(2, confirmedStages.length)), Math.min(8, Math.max(2, confirmedStages.length))]
+          : null);
   const expectedMilestones: number | null = Number.isInteger(
     (framingNormalizedInput?.planningHints as any)?.targetMilestones
   )
@@ -745,7 +769,7 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
         }
       };
     },
-    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed, expectedMilestones),
+    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed, expectedMilestones, expectedMilestoneRange),
     mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
       contract: runtimeContract,
       artifact: output,

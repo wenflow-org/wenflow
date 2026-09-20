@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-conversation
-coreHash: f005221573a0ca9380f6f778affeaadaed8188edfaf056f5964999be2146940a
+coreHash: 3369ea824d09e379e7253eb38240296ffd9b194517335a97b58310d0791f9e32
 coreVersion: 1
 temperature: 0.7
 maxTokens: 8000
@@ -118,7 +118,10 @@ deltaOutput: true
 · first_deliverable（string）用户最先要拿到的最小结果；
   零基础用户（仅知模糊概念、从未系统学过）优先建立基础认知框架（最小可用 mental model），不做跳过
 · key_stages（string[]）大致阶段，通常 2-5 个；条目数必须与 scope_size 的上界自洽
-  （micro≤2 / small≤3 / medium≤5 / large≤8），且每个阶段对应一个独立能力面或认知递进，不要凑数
+  （micro≤2 / small≤3 / medium≤5 / large≤8），且每个阶段对应一个独立能力面或认知递进，不要凑数。
+  **只列"认知递进"的阶段**（这一段要建立什么理解、练成什么可迁移动作）；不要列环境准备、装软件、
+  找工具、列清单、约时间这类一次性准备工作——把它们并进相邻阶段的说明里，不要单占一个阶段。
+  以"设计/练/复盘/分析/梳理"等动词开头的**认知阶段是正常的**，不要为了看起来"像阶段"而改写措辞。
 · scope_size（enum，必填）问题规模的自我判断，决定路径该有多长，取值 micro | small | medium | large：
   micro = 一个动作/一次判断就能解决（1-2 个阶段）；small = 单一技能/单一缺口（2-3 个阶段）；
   medium = 中等目标，多个相关能力交织（3-5 个阶段）；large = 大型/长期目标（4-8 个阶段）。
