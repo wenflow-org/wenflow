@@ -281,6 +281,8 @@
         "src/services/learning/__tests__/path-hours-normalize.test.ts",
         "src/services/learning/__tests__/path-mutation-safety.test.ts",
         "src/services/learning/generation/run-lifecycle.ts",
+        "src/services/learning/generation/path-generation.core.ts",
+        "src/services/learning/generation/stage-enrichment.ts",
         "src/services/learning/goal-conversation.service.ts",
         "src/services/learning/goal-path-visible-summary.ts",
         "src/services/learning/queries/path-views.queries.ts",
