@@ -35,7 +35,7 @@
     "src/routes/admin/prompt-ops.ts": 6,
     "src/routes/admin/session-console.ts": 10,
     "src/routes/admin/users.ts": 22,
-    "src/routes/admin/virtual-learners.ts": 60,
+    "src/routes/admin/virtual-learners.ts": 0,
     "src/routes/learning.ts": 6,
     "src/routes/notifications.ts": 6,
     "src/routes/prompt-lab.ts": 9,

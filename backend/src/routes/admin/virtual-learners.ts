@@ -9,7 +9,44 @@ import type { goal_conversations, Prisma } from '@prisma/client';
 import { randomUUID as uuidv4 } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
-import prisma from '../../config/database';
+import {
+  findRecentProfilesForHints,
+  findProfileById,
+  findProfileWithRecentSessions,
+  findProfileDetail,
+  findProfileForProjectionToken,
+  findProfileJsonById,
+  findMemoryTracesByUser,
+  updateProfileJsonField,
+  updateProfileFields,
+  updateUserName,
+  createVirtualLearnerUser,
+  createVirtualLearnerProfile,
+  listProfilesWithSessionSamples,
+  countProfiles,
+} from '../../services/virtual-lab/virtual-learner-profile.repo';
+import {
+  findSessionById,
+  findSessionWithProfileAndUser,
+  findGoalConversationById,
+  findSessionStageFields,
+  findSessionStatus,
+  updateSessionStageResults,
+  overwriteSessionStageResults,
+  findSessionsForTerminate,
+  deleteSessionLeases,
+  markSessionAbandoned,
+  createAdminAuditLog,
+  getSessionStatusAggregates,
+  getPerProfileStatusAggregates,
+  findStaleSessionsByProfiles,
+  findStaleSessionCandidates,
+  findStaleSessionsForStats,
+  findRunningSessionsByProfiles,
+  findTerminalSessions,
+  countTodayVirtualAgentCalls,
+  findSessionsByIdPair,
+} from '../../services/virtual-lab/virtual-session.repo';
 import { logger } from '../../utils/logger';
 import { withTransaction } from '../../utils/with-transaction';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
@@ -670,15 +707,7 @@ function buildSessionSummary(session: VirtualSessionRow) {
 }
 
 async function buildRecentScenarioHints() {
-  const recentProfiles = await prisma.virtual_learner_profiles.findMany({
-    take: 12,
-    orderBy: { createdAt: 'desc' },
-    select: {
-      profile: true,
-      learningGoal: true,
-      notes: true,
-    },
-  });
+  const recentProfiles = await findRecentProfilesForHints();
 
   const occupations = recentProfiles
     .map((item) => parseJson<{ occupation?: unknown }>(item.profile, {}).occupation)
@@ -758,7 +787,7 @@ async function buildLearnerMemoryStoryHints(profile: {
 router.get('/:id/memory', async (req: Request, res) => {
   try {
     const { id } = req.params;
-    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id } });
+    const profile = await findProfileById(id);
     if (!profile) {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
@@ -770,10 +799,7 @@ router.get('/:id/memory', async (req: Request, res) => {
     const asOf = simulatedNowOr();
     const dueNames = new Set(memory.dueReview.map((item) => item.name));
     const masteredNames = new Set(memory.mastered.map((item) => item.name));
-    const traces = await prisma.memory_traces.findMany({
-      where: { userId: profile.userId },
-      orderBy: { lastSeenAt: 'desc' },
-    });
+    const traces = await findMemoryTracesByUser(profile.userId);
     const concepts = buildRetentionSeriesForConcepts(
       traces.map((trace): RetentionConceptInput => ({
         conceptKey: trace.conceptKey,
@@ -825,18 +851,7 @@ router.get('/:id/memory', async (req: Request, res) => {
 router.get('/:id/stories', async (req: Request, res) => {
   try {
     const { id } = req.params;
-    const profile = await prisma.virtual_learner_profiles.findUnique({
-      where: { id },
-      include: {
-        users: {
-          select: { id: true, email: true, name: true }
-        },
-        sessions: {
-          orderBy: { updatedAt: 'desc' },
-          take: 200,
-        },
-      },
-    });
+    const profile = await findProfileWithRecentSessions(id);
 
     if (!profile) {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
@@ -934,9 +949,7 @@ router.get('/sessions/:sessionId/teaching-detail', async (req: Request, res) => 
   try {
     const { sessionId } = req.params;
 
-    const session = await prisma.virtual_sessions.findUnique({
-      where: { id: sessionId }
-    });
+    const session = await findSessionById(sessionId);
 
     if (!session) {
       return res.status(404).json({ success: false, error: '模拟会话不存在' });
@@ -1033,7 +1046,7 @@ router.post('/:id/draft-profile', async (req: Request, res) => {
   try {
     const { id } = req.params;
 
-    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id } });
+    const profile = await findProfileById(id);
     if (!profile) {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
@@ -1070,7 +1083,7 @@ router.post('/:id/draft-stories', async (req: Request, res) => {
   try {
     const { id } = req.params;
 
-    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id } });
+    const profile = await findProfileById(id);
     if (!profile) {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
@@ -1137,10 +1150,7 @@ router.post('/:id/draft-stories', async (req: Request, res) => {
       const updatedStoryPool = normalizedUpdated.storyPool;
       const updatedProfile = normalizedUpdated.profileData;
 
-      await prisma.virtual_learner_profiles.update({
-        where: { id },
-        data: { profile: JSON.stringify(updatedProfile) },
-      });
+      await updateProfileJsonField(id, JSON.stringify(updatedProfile));
 
       logger.info('[admin-generate-stories] 故事已自动持久化', {
         virtualProfileId: id,
@@ -1169,7 +1179,7 @@ router.put('/:id/stories/:storyIndex', async (req: Request, res) => {
     const { id, storyIndex } = req.params;
     const { title, storyOutline, storyTriggerEvent, visibleOpening, pressurePoints, problemKnowledge, budget } = req.body || {};
 
-    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id } });
+    const profile = await findProfileById(id);
     if (!profile) {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
@@ -1246,10 +1256,7 @@ router.put('/:id/stories/:storyIndex', async (req: Request, res) => {
     });
     const updatedProfile = normalizedUpdated.profileData;
 
-    await prisma.virtual_learner_profiles.update({
-      where: { id },
-      data: { profile: JSON.stringify(updatedProfile) },
-    });
+    await updateProfileJsonField(id, JSON.stringify(updatedProfile));
 
     res.json({
       success: true,
@@ -1267,7 +1274,7 @@ router.delete('/:id/stories/:storyIndex', async (req: Request, res) => {
   try {
     const { id, storyIndex } = req.params;
 
-    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id } });
+    const profile = await findProfileById(id);
     if (!profile) {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
@@ -1288,10 +1295,7 @@ router.delete('/:id/stories/:storyIndex', async (req: Request, res) => {
     });
     const updatedProfile = normalizedUpdated.profileData;
 
-    await prisma.virtual_learner_profiles.update({
-      where: { id },
-      data: { profile: JSON.stringify(updatedProfile) },
-    });
+    await updateProfileJsonField(id, JSON.stringify(updatedProfile));
 
     res.json({
       success: true,
@@ -1342,7 +1346,7 @@ router.post('/', async (req: Request, res) => {
     // 虚拟学习者仅供系统编排使用，不提供可共享的登录凭据。
     const hashedPassword = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
     
-    const user = await prisma.users.create({
+    const user = await createVirtualLearnerUser({
       data: {
         id: uuidv4(),
         email,
@@ -1359,7 +1363,7 @@ router.post('/', async (req: Request, res) => {
     
     // student_baselines 已退役（2026-08 M1 认知负荷改造），虚拟学习者不再初始化 EMA 基线
     
-    const virtualProfile = await prisma.virtual_learner_profiles.create({
+    const virtualProfile = await createVirtualLearnerProfile({
       data: {
         id: uuidv4(),
         userId: user.id,
@@ -1416,79 +1420,24 @@ router.get('/', async (req: Request, res) => {
     const skip = (page - 1) * limit;
     
     const [profiles, total] = await Promise.all([
-      prisma.virtual_learner_profiles.findMany({
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          users: {
-            select: {
-              id: true,
-              email: true,
-              name: true,
-              currentLevel: true,
-              createdAt: true
-            }
-          },
-          sessions: {
-            select: {
-              id: true,
-              status: true,
-              currentStage: true,
-              createdAt: true,
-              updatedAt: true,
-              stageResults: true,
-              goalConversationId: true,
-              learningPathId: true,
-              currentTaskId: true,
-              completedTasks: true,
-              totalTasks: true
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 50
-          },
-          _count: {
-            select: { sessions: true }
-          }
-        }
-      }),
-      prisma.virtual_learner_profiles.count()
+      listProfilesWithSessionSamples(skip, limit),
+      countProfiles()
     ]);
 
     // 全量口径聚合（P1-1/D3）：运行中/失败/卡死分区与状态条不再基于 50 条会话样本
     const profileIds = profiles.map(p => p.id);
     const [statusAgg, perProfileAgg, staleSessions, staleCandidates, runningSessionsAll] = await Promise.all([
-      prisma.virtual_sessions.groupBy({
-        by: ['status'],
-        _count: { _all: true }
-      }),
+      getSessionStatusAggregates(),
       profileIds.length
-        ? prisma.virtual_sessions.groupBy({
-            by: ['virtualProfileId', 'status'],
-            where: { virtualProfileId: { in: profileIds } },
-            _count: { _all: true }
-          })
+        ? getPerProfileStatusAggregates(profileIds)
         : Promise.resolve([]),
       profileIds.length
-        ? prisma.virtual_sessions.findMany({
-            where: {
-              virtualProfileId: { in: profileIds },
-              status: 'running',
-              updatedAt: { lt: staleThresholdAt() }
-            },
-            select: { id: true, virtualProfileId: true, stageResults: true }
-          })
+        ? findStaleSessionsByProfiles(profileIds, staleThresholdAt())
         : Promise.resolve([]),
-      prisma.virtual_sessions.findMany({
-        where: { status: { in: ['running', 'created'] }, updatedAt: { lt: staleThresholdAt() } },
-        select: { id: true, stageResults: true }
-      }),
+      findStaleSessionCandidates(staleThresholdAt()),
       // 运行中口径细分：会话 status=running 但 autopilot=stopped（用户暂停自动驾驶）不算「正在运行」
       profileIds.length
-        ? prisma.virtual_sessions.findMany({
-            where: { virtualProfileId: { in: profileIds }, status: 'running' },
-            select: { id: true, virtualProfileId: true, stageResults: true }
-          })
+        ? findRunningSessionsByProfiles(profileIds)
         : Promise.resolve([]),
     ]);
     const countByStatus = (status: string) => statusAgg.find(s => s.status === status)?._count?._all ?? 0;
@@ -1645,44 +1594,12 @@ router.get('/', async (req: Request, res) => {
 router.get('/stats', async (req: Request, res) => {
   try {
     const [statusAgg, profileCount, staleSessions, terminalSessions, todayVirtualCalls] = await Promise.all([
-      prisma.virtual_sessions.groupBy({
-        by: ['status'],
-        _count: { _all: true }
-      }),
-      prisma.virtual_learner_profiles.count(),
-      prisma.virtual_sessions.findMany({
-        where: { status: { in: ['running', 'created'] }, updatedAt: { lt: staleThresholdAt() } },
-        select: { id: true, stageResults: true, updatedAt: true }
-      }),
-      prisma.virtual_sessions.findMany({
-        where: { status: { in: ['completed', 'failed', 'abandoned'] } },
-        select: { createdAt: true, updatedAt: true }
-      }),
+      getSessionStatusAggregates(),
+      countProfiles(),
+      findStaleSessionsForStats(staleThresholdAt()),
+      findTerminalSessions(),
       // 今日虚拟/测试账号调用数（agent_call_logs）；仿真看板核心指标，与总览页真实口径互斥
-      (async () => {
-        const virtualIds = (
-          await prisma.users.findMany({
-            where: {
-              OR: [
-                { isVirtualLearner: true },
-                { email: { startsWith: 'virtual_' } },
-                { email: { endsWith: '@test.local' } }
-              ]
-            },
-            select: { id: true }
-          })
-        ).map(u => u.id);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        return prisma.agent_call_logs.count({
-          where: {
-            calledAt: { gte: today, lt: tomorrow },
-            userId: { in: virtualIds }
-          }
-        });
-      })()
+      countTodayVirtualAgentCalls()
     ]);
 
     const countByStatus = (status: string) => statusAgg.find(s => s.status === status)?._count?._all ?? 0;
@@ -1779,23 +1696,7 @@ router.get('/:id', async (req: Request, res) => {
   try {
     const { id } = req.params;
     
-    const profile = await prisma.virtual_learner_profiles.findUnique({
-      where: { id },
-      include: {
-        users: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            currentLevel: true
-          }
-        },
-        sessions: {
-          orderBy: { updatedAt: 'desc' },
-          take: 200
-        }
-      }
-    });
+    const profile = await findProfileDetail(id);
     
     if (!profile) {
       return res.status(404).json({
@@ -1837,9 +1738,7 @@ router.put('/:id', async (req: Request, res) => {
   try {
     const { id } = req.params;
     
-    const profile = await prisma.virtual_learner_profiles.findUnique({
-      where: { id }
-    });
+    const profile = await findProfileById(id);
     
     if (!profile) {
       return res.status(404).json({
@@ -1855,7 +1754,7 @@ router.put('/:id', async (req: Request, res) => {
       updateData.profile = JSON.stringify({ ...existingProfile, ...req.body.profile });
     }
     if (typeof req.body.name === 'string' && req.body.name.trim()) {
-      await prisma.users.update({ where: { id: profile.userId }, data: { name: req.body.name.trim() } });
+      await updateUserName(profile.userId, req.body.name.trim());
     }
     // learningGoal 的产品语义已降为可选长期倾向；请求显式携带空串时也要允许清空。
     if (typeof req.body.learningGoal === 'string') updateData.learningGoal = req.body.learningGoal.trim();
@@ -1899,10 +1798,7 @@ router.put('/:id', async (req: Request, res) => {
     }
     if (nextProfileJson !== profile.profile) updateData.profile = nextProfileJson;
     
-    const updated = await prisma.virtual_learner_profiles.update({
-      where: { id },
-      data: updateData
-    });
+    const updated = await updateProfileFields(id, updateData);
     
     res.json({
       success: true,
@@ -2011,22 +1907,7 @@ router.get('/sessions/:sessionId', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
     
-    const session = await prisma.virtual_sessions.findUnique({
-      where: { id: sessionId },
-      include: {
-        virtual_learner_profiles: {
-          include: {
-            users: {
-              select: {
-                id: true,
-                email: true,
-                name: true
-              }
-            }
-          }
-        }
-      }
-    });
+    const session = await findSessionWithProfileAndUser(sessionId);
     
     if (!session) {
       return res.status(404).json({
@@ -2051,9 +1932,7 @@ router.get('/sessions/:sessionId', async (req: Request, res) => {
 
     let goalConversation: goal_conversations | null = null;
     if (session.goalConversationId) {
-      goalConversation = await prisma.goal_conversations.findFirst({
-        where: { id: session.goalConversationId }
-      });
+      goalConversation = await findGoalConversationById(session.goalConversationId);
     }
 
     let teachingSession: Awaited<ReturnType<typeof teachingSessionRepository.getById>> | null = null;
@@ -2152,14 +2031,7 @@ router.post('/:id/projection-token', async (req: Request, res) => {
     const { id } = req.params;
     const operatorId = req.user?.userId;
 
-    const profile = await prisma.virtual_learner_profiles.findUnique({
-      where: { id },
-      include: {
-        users: {
-          select: { id: true, email: true, name: true }
-        }
-      }
-    });
+    const profile = await findProfileForProjectionToken(id);
 
     if (!profile) {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
@@ -2312,7 +2184,7 @@ router.post('/:id/start-blackbox-session', async (req: Request, res) => {
 
 router.post('/sessions/:sessionId/blackbox-rerun', async (req: Request, res) => {
   try {
-    const source = await prisma.virtual_sessions.findUnique({ where: { id: req.params.sessionId } });
+    const source = await findSessionById(req.params.sessionId);
     if (!source) return res.status(404).json({ success: false, error: '模拟会话不存在' });
     if (!['completed', 'failed', 'abandoned'].includes(source.status)) {
       return res.status(409).json({ success: false, error: '只有终态黑盒实验可以按原输入重跑' });
@@ -2392,7 +2264,7 @@ function parseBlackboxAction(body: Record<string, unknown>): LearnerAction {
 }
 
 async function requireAssistedSession(sessionId: string) {
-  const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
+  const session = await findSessionById(sessionId);
   if (!session) throw new Error('模拟会话不存在');
   assertAssistedSessionMode(parseJson<StageResults>(session.stageResults, {}));
   return session;
@@ -2525,7 +2397,7 @@ router.post('/sessions/:sessionId/blackbox-evaluations', async (req: Request, re
 router.post('/sessions/:sessionId/autopilot/start', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
+    const session = await findSessionById(sessionId);
     if (!session) return res.status(404).json({ success: false, error: '模拟会话不存在' });
     const target = String(req.body?.target || 'final') === 'stage' ? 'stage' : 'final';
     // 每课回合上限透传（驾驶舱「回合上限」），未传则沿用状态内上次值/默认 50
@@ -2551,7 +2423,7 @@ router.post('/sessions/:sessionId/autopilot/stop', async (req: Request, res) => 
 
 router.get('/sessions/:sessionId/autopilot', async (req: Request, res) => {
   try {
-    const session = await prisma.virtual_sessions.findUnique({ where: { id: req.params.sessionId } });
+    const session = await findSessionById(req.params.sessionId);
     if (!session) return res.status(404).json({ success: false, error: '模拟会话不存在' });
     res.json({ success: true, data: AutopilotService.readState(session) });
   } catch (error) {
@@ -2595,26 +2467,7 @@ router.post('/sessions/terminate', async (req: Request, res) => {
       return res.status(400).json({ success: false, error: 'sessionIds 与 profileIds 至少提供一个' });
     }
     const ids: string[] = [...new Set(sessionIds)];
-    const sessions = await prisma.virtual_sessions.findMany({
-      where: {
-        OR: [
-          ...(ids.length ? [{ id: { in: ids } }] : []),
-          ...(profileIds.length ? [{ virtualProfileId: { in: profileIds } }] : [])
-        ]
-      },
-      select: {
-        id: true,
-        virtualProfileId: true,
-        status: true,
-        currentStage: true,
-        stageResults: true,
-        logs: true,
-        updatedAt: true,
-        virtual_learner_profiles: { select: { userId: true } }
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 50
-    });
+    const sessions = await findSessionsForTerminate(ids, profileIds);
 
     const result = {
       dryRun,
@@ -2673,18 +2526,9 @@ async function terminateSession(session: Pick<VirtualSessionRow, 'id' | 'status'
   const before = { status: session.status, currentStage: session.currentStage, updatedAt: session.updatedAt?.toISOString?.() ?? null };
   // 先撤销活跃租约：正在执行的 Blackbox/Assisted runner 若持租约，会在下次续租/写库前
   // 抛 LeaseLost 中止（runLeasedExclusive 的 assertLeaseOwned），避免「终止后 session 被复活成 running」
-  await prisma.virtual_experiment_leases?.deleteMany({ where: { sessionId: session.id } }).catch(() => {});
-  await prisma.virtual_sessions.update({
-    where: { id: session.id },
-    data: {
-      status: 'abandoned',
-      completedAt: terminatedAt,
-      stageResults: JSON.stringify(stageResults),
-      logs: JSON.stringify(logs),
-      updatedAt: terminatedAt
-    }
-  });
-  await prisma.admin_audit_logs.create({
+  await deleteSessionLeases(session.id).catch(() => {});
+  await markSessionAbandoned(session.id, terminatedAt, JSON.stringify(stageResults), JSON.stringify(logs));
+  await createAdminAuditLog({
     data: {
       adminId: operator?.userId ?? null,
       adminName: operator?.name ?? (operator?.userId ? 'admin' : 'system'),
@@ -2762,9 +2606,7 @@ router.get('/sessions/:sessionId/path-status', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
     
-    const session = await prisma.virtual_sessions.findUnique({
-      where: { id: sessionId }
-    });
+    const session = await findSessionById(sessionId);
     
     if (!session) {
       return res.status(404).json({
@@ -3122,13 +2964,7 @@ router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) =
       };
 
       await assertLeaseOwned();
-      await prisma.virtual_sessions.update({
-        where: { id: sessionId },
-        data: {
-          stageResults: JSON.stringify(nextStageResults),
-          updatedAt: new Date()
-        }
-      });
+      await updateSessionStageResults(sessionId, JSON.stringify(nextStageResults));
 
       await assertLeaseOwned();
       return nextStageResults;
@@ -3173,10 +3009,7 @@ router.post('/sessions/:sessionId/simulation-clock/reset', async (req: Request, 
       const nextStageResults = { ...stageResults, simulationClock: nextClock };
 
       await assertLeaseOwned();
-      await prisma.virtual_sessions.update({
-        where: { id: sessionId },
-        data: { stageResults: JSON.stringify(nextStageResults), updatedAt: new Date() },
-      });
+      await updateSessionStageResults(sessionId, JSON.stringify(nextStageResults));
       await assertLeaseOwned();
       return nextClock;
     });
@@ -3220,10 +3053,7 @@ async function runDayLearning(
   input: { lessonsPerDay: number; stageResults: Record<string, unknown>; profileData: Record<string, unknown> },
 ): Promise<{ started: boolean; chunks: number; error?: string }> {
   try {
-    const current = await prisma.virtual_sessions.findUnique({
-      where: { id: sessionId },
-      select: { currentStage: true, status: true },
-    });
+    const current = await findSessionStageFields(sessionId);
     if (!current) return { started: false, chunks: 0, error: '会话不存在' };
     if (!['teaching', 'learn'].includes(String(current.currentStage))) {
       const review = await simulationCoordinator.resolvePathReview(sessionId, { startLearning: true });
@@ -3249,7 +3079,7 @@ async function runDayLearning(
       const r = await simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones: 1, maxTurns });
       attempts.push({ success: r?.success === true, error: r?.error });
       if (!r?.success) break;
-      const after = await prisma.virtual_sessions.findUnique({ where: { id: sessionId }, select: { status: true } });
+      const after = await findSessionStatus(sessionId);
       if (after?.status === 'completed') break;
     }
     // 零节成功（如会话已 failed/停止、上游抖动）→ started:false，路由回滚时钟，不白烧一天。
@@ -3286,8 +3116,7 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
       const settings = await getVirtualLabSettings().catch(() => ({ ...DEFAULT_VIRTUAL_LAB_SETTINGS }));
       const stageResults = parseJson<StageResults>(session.stageResults, {});
       const rawClock = (stageResults as any).simulationClock || {};
-      const profile = await prisma.virtual_learner_profiles
-        .findUnique({ where: { id: session.virtualProfileId }, select: { profile: true } })
+      const profile = await findProfileJsonById(session.virtualProfileId)
         .catch(() => null);
       const profileData = parseJson<Record<string, unknown>>(profile?.profile, {});
       const clock = resolveSimulationClock({
@@ -3407,7 +3236,7 @@ router.post('/sessions/:sessionId/stop-learning', async (req: Request, res) => {
 router.post('/sessions/:sessionId/pause', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
+    const session = await findSessionById(sessionId);
     if (!session) {
       return res.status(404).json({ success: false, error: { message: '会话不存在' } });
     }
@@ -3428,10 +3257,7 @@ router.post('/sessions/:sessionId/pause', async (req: Request, res) => {
       stageResults.teaching = { ...(stageResults.teaching || {}), paused: true };
     }
 
-    await prisma.virtual_sessions.update({
-      where: { id: sessionId },
-      data: { stageResults: JSON.stringify(stageResults), updatedAt: new Date() }
-    });
+    await updateSessionStageResults(sessionId, JSON.stringify(stageResults));
 
     logger.info('[admin] 会话已暂停', { sessionId });
     res.json({ success: true, data: { sessionId, status: 'running', paused: true } });
@@ -3449,7 +3275,7 @@ router.post('/sessions/:sessionId/pause', async (req: Request, res) => {
 router.post('/sessions/:sessionId/resume', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
+    const session = await findSessionById(sessionId);
     if (!session) {
       return res.status(404).json({ success: false, error: { message: '会话不存在' } });
     }
@@ -3465,10 +3291,7 @@ router.post('/sessions/:sessionId/resume', async (req: Request, res) => {
       stageResults.teaching.paused = false;
     }
 
-    await prisma.virtual_sessions.update({
-      where: { id: sessionId },
-      data: { stageResults: JSON.stringify(stageResults), updatedAt: new Date() }
-    });
+    await updateSessionStageResults(sessionId, JSON.stringify(stageResults));
 
     logger.info('[admin] 会话已恢复', { sessionId });
     res.json({ success: true, data: { sessionId, status: 'running', paused: false } });
@@ -3486,9 +3309,7 @@ router.get('/sessions/:sessionId/logs', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
     
-    const session = await prisma.virtual_sessions.findUnique({
-      where: { id: sessionId }
-    });
+    const session = await findSessionById(sessionId);
     
     if (!session) {
       return res.status(404).json({
@@ -3528,9 +3349,7 @@ router.delete('/sessions/:sessionId', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
 
-    const existingSession = await prisma.virtual_sessions.findUnique({
-      where: { id: sessionId }
-    });
+    const existingSession = await findSessionById(sessionId);
 
     if (!existingSession) {
       return res.status(404).json({
@@ -3540,9 +3359,7 @@ router.delete('/sessions/:sessionId', async (req: Request, res) => {
     }
 
     const session = await simulationCoordinator.runLeasedExclusive(sessionId, async assertLeaseOwned => {
-      const leasedSession = await prisma.virtual_sessions.findUnique({
-        where: { id: sessionId }
-      });
+      const leasedSession = await findSessionById(sessionId);
       if (!leasedSession) throw new Error('模拟会话不存在');
 
       let deletedTeachingCount = 0;
@@ -3631,7 +3448,7 @@ router.delete('/sessions/:sessionId', async (req: Request, res) => {
 
     if (session.deletedTeachingCount > 0) {
       try {
-        await prisma.admin_audit_logs.create({
+        await createAdminAuditLog({
           data: {
             adminId: req.user?.userId ?? null,
             adminName: req.user?.email ?? null,
@@ -3694,9 +3511,7 @@ router.post('/:profileId/regression-run', async (req: Request, res) => {
     const { storyId, storyIndex, maxGoalRounds: requestedMaxGoalRounds, systemPromptOverrides } = req.body || {};
     const maxGoalRounds = parseSimulationLimit(requestedMaxGoalRounds, 20, 50, 'maxGoalRounds');
 
-    const profile = await prisma.virtual_learner_profiles.findUnique({
-      where: { id: profileId }
-    });
+    const profile = await findProfileById(profileId);
     if (!profile) {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
@@ -3715,15 +3530,10 @@ router.post('/:profileId/regression-run', async (req: Request, res) => {
         const pathAgent = typeof systemPromptOverrides.pathAgent === 'string' ? systemPromptOverrides.pathAgent.trim() : '';
         if (goalAgent || pathAgent) {
           await assertLeaseOwned();
-          await prisma.virtual_sessions.update({
-            where: { id: sessionId },
-            data: {
-              stageResults: JSON.stringify({
-                ...parseJson(leasedSession.stageResults, {}),
-                systemPromptOverrides: { goalAgent: goalAgent || undefined, pathAgent: pathAgent || undefined }
-              })
-            }
-          });
+          await overwriteSessionStageResults(sessionId, JSON.stringify({
+            ...parseJson(leasedSession.stageResults, {}),
+            systemPromptOverrides: { goalAgent: goalAgent || undefined, pathAgent: pathAgent || undefined }
+          }));
           await assertLeaseOwned();
         }
       }
@@ -3768,10 +3578,7 @@ router.get('/regression/compare-sessions', async (req: Request, res) => {
       return res.status(400).json({ success: false, error: '需要提供 sessionA 与 sessionB' });
     }
 
-    const [a, b] = await Promise.all([
-      prisma.virtual_sessions.findUnique({ where: { id: sessionA } }),
-      prisma.virtual_sessions.findUnique({ where: { id: sessionB } })
-    ]);
+    const [a, b] = await findSessionsByIdPair(sessionA, sessionB);
 
     if (!a || !b) {
       return res.status(404).json({
