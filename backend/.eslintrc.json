@@ -65,6 +65,7 @@
         "src/coordinators/__tests__/simulation.coordinator.task-completion-recovery.test.ts",
         "src/coordinators/path.coordinator.ts",
         "src/coordinators/simulation.coordinator.ts",
+        "src/coordinators/simulation.path-phase.ts",
         "src/coordinators/simulation.types.ts",
         "src/core/mcp/McpGateway.ts",
         "src/events/__tests__/learner-event-consumer.test.ts",

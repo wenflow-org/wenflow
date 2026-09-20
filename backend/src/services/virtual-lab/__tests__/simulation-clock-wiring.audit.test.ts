@@ -58,7 +58,7 @@ describe('模拟时钟接线审计（防退化）', () => {
   });
 
   it('评审为独立旁路：评审失败按 accept 处理，不阻断 Learn', () => {
-    const text = read('coordinators/simulation.coordinator.ts');
+    const text = read('coordinators/simulation.path-phase.ts');
     expect(text).toMatch(/review-failed-non-blocking/);
   });
 
