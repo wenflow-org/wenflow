@@ -2,7 +2,6 @@
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { withTransaction } from '../../utils/with-transaction';
-import stateTrackingService from './learning-state.service';
 import achievementService from '../achievements/achievement.service';
 import type { AgentInput } from '../../agents/protocol';
 import { normalizeAgentOutput } from '../../agents/output-normalizer';
@@ -19,15 +18,12 @@ import {
   PATH_GENERATION_LEASE_MS,
   assertGenerationRunFence,
   assertStageTasksPresent,
-  buildGenerationRunStatus,
   calculateStageProgress,
   claimExpiredGenerationRun,
-  getSafeGenerationErrorMessage,
   isGenerationRunStale,
   isStageDesignStale,
   resolveGenerationRetry,
   type PathGenerationRollbackSnapshotV1,
-  type PersistedPathGenerationRun,
 } from './path-generation-status';
 import {
   assertPathMutationSafe,
@@ -58,7 +54,6 @@ import {
   type PathAdjustmentEvidence,
   type NormalizedPathTask,
   type NormalizedPathMilestone,
-  type PathStageTraceItem,
   type CompleteTaskData,
 } from './learning.types';
 import {
@@ -67,38 +62,24 @@ import {
   TERMINAL_STAGE_DESIGN_RETRY_CODES,
 } from './learning.constants';
 import {
-  normalizePathHoursFromTasks,
-  parsePathSummary,
+  getSceneFramingNormalizedInput,
+  normalizeStringArray,
+  resolvePersistedNormalizedInput,
   cleanPathTitle,
   resolvePathSubject,
-  normalizeSessionDurationMinutes,
-  normalizeStringArray,
-  normalizeConceptText,
   resolveTaskConcept,
   resolveMilestoneConcept,
   inferMilestoneConceptFromTasks,
-  getSceneFramingNormalizedInput,
-  resolvePersistedNormalizedInput,
-  resolveNormalizedInputSnapshot,
   getSceneFramingFallbackDomain,
   parsePathCognitiveDesign,
-  parsePathMilestoneConceptBindings,
-  parsePathAdjustmentPolicy,
-  parsePathAdjustmentEvidence,
   buildSceneSummaryFromFraming,
   slugifyConceptId,
   parsePathGenerationStatus,
   parsePathPromptTemplate,
   generateDisplayLabel,
-  parseJsonSafe,
-  isSuspiciousCognitiveDomain,
-  isSuspiciousCoreConceptName,
-  parseTaskLearningObjectives,
   normalizePathTaskType,
   buildNormalizedPathInputSnapshot,
   buildGoalToPathHandoffSnapshot,
-  normalizeStageTraceStatus,
-  normalizeStageTracePhase,
 } from './learning.helpers';
 import {
   createGenerationId,
@@ -119,6 +100,22 @@ import {
   isAppendBlockedByInFlightGeneration,
 } from './generation/retry-policy';
 import { requestPathReplan } from './replan/path-replan.service';
+import {
+  getPathLearningAccessState,
+  getLearningPath,
+  getPathGenerationLifecycle,
+  getUserLearningPaths,
+  getTaskDetail,
+  getTaskById,
+  getLearningStats,
+} from './queries/path-views.queries';
+import {
+  createLearningGoal,
+  getLearningGoals,
+  updateLearningGoal,
+  getTodaySchedule,
+  planTodaySchedule,
+} from './goals/goal-schedule.service';
 
 export { normalizePathHoursFromTasks } from './learning.helpers';
 
@@ -175,238 +172,6 @@ class LearningService {
     if (isAppendBlockedByInFlightGeneration(generationStatus, activeRun, pathUpdatedAt)) return [];
     return this.listEmptyMilestoneIds(pathId);
   }
-
-  private buildPathProcessDetail(path: any) {
-    const parsedTemplate = parsePathPromptTemplate(path.aiPromptTemplate || null);
-    const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate || null);
-    const sceneFraming = parsedTemplate?.sceneFraming && typeof parsedTemplate.sceneFraming === 'object'
-      ? parsedTemplate.sceneFraming
-      : null;
-    const sceneFramingRaw = typeof parsedTemplate?.sceneFramingRaw === 'string'
-      ? parsedTemplate.sceneFramingRaw
-      : null;
-    const sceneFramingInput = parsedTemplate?.sceneFramingInput && typeof parsedTemplate.sceneFramingInput === 'object'
-      ? parsedTemplate.sceneFramingInput
-      : null;
-    const pathAgentInput = parsedTemplate?.pathAgentInput && typeof parsedTemplate.pathAgentInput === 'object'
-      ? parsedTemplate.pathAgentInput
-      : null;
-    const pathAgentRaw = typeof parsedTemplate?.pathAgentRaw === 'string'
-      ? parsedTemplate.pathAgentRaw
-      : null;
-    const stageDesigns = parsedTemplate?.stageDesigns && typeof parsedTemplate.stageDesigns === 'object'
-      ? parsedTemplate.stageDesigns
-      : null;
-    const normalizedInput = resolveNormalizedInputSnapshot(parsedTemplate);
-    const goalFinalPayload = parsedTemplate?.goalFinalPayload && typeof parsedTemplate.goalFinalPayload === 'object'
-      ? parsedTemplate.goalFinalPayload
-      : null;
-    const sceneFramingNormalizedInput = getSceneFramingNormalizedInput(sceneFraming) || resolvePersistedNormalizedInput(parsedTemplate);
-    const cognitiveDesign = parsePathCognitiveDesign(path.aiPromptTemplate || null);
-    const milestoneConceptBindings = parsePathMilestoneConceptBindings(path.aiPromptTemplate || null);
-    const milestoneConceptBindingMap = new Map<number, { coreConcept: string | null; title?: string | null }>();
-    milestoneConceptBindings.forEach((item) => {
-      milestoneConceptBindingMap.set(item.stageNumber, {
-        coreConcept: item.coreConcept,
-        title: item.title,
-      });
-    });
-    const milestoneConcepts = (path.milestones || []).map((milestone: any, index: number) => {
-      const stageNumber = Number.isFinite(Number(milestone?.stageNumber)) ? Number(milestone.stageNumber) : index + 1;
-      const binding = milestoneConceptBindingMap.get(stageNumber);
-      const resolvedMilestoneConcept = resolveMilestoneConcept(
-        milestone?.coreConceptId || binding?.coreConcept || null,
-        cognitiveDesign,
-        milestone?.coreConceptName || binding?.coreConcept || null,
-      );
-      return {
-        milestoneId: milestone.id,
-        stageNumber,
-        title: milestone.title || milestone.goal || binding?.title || null,
-        ...resolvedMilestoneConcept,
-      };
-    });
-    const taskProfiles = (path.milestones || []).flatMap((milestone: any) =>
-      (milestone.subtasks || []).map((task: any) => ({
-        ...resolveTaskConcept(task.linkedConceptId || task.coreConcept, cognitiveDesign, task.linkedConceptName || task.coreConcept),
-        taskId: task.id,
-        milestoneId: milestone.id,
-        milestoneTitle: milestone.title || milestone.goal || null,
-        title: task.title,
-        status: task.status,
-        knowledgeType: task.knowledgeType || null,
-        cognitiveLevel: task.cognitiveLevel || null,
-        displayLabel: task.displayLabel || null,
-        learningObjectives: parseTaskLearningObjectives(task.learningObjectives),
-        coreConcept: normalizeConceptText(task.linkedConceptName || task.coreConcept),
-        transferable: task.transferable ?? false,
-        annotationConfidence: task.annotationConfidence ?? null,
-      }))
-    );
-    const cognitiveDiagnostics = {
-      suspiciousDomain: isSuspiciousCognitiveDomain(cognitiveDesign?.cognitiveDomain),
-      suspiciousConcepts: Array.isArray(cognitiveDesign?.coreConcepts)
-        ? cognitiveDesign.coreConcepts
-            .filter((concept: any) => isSuspiciousCoreConceptName(concept?.name))
-            .map((concept: any) => ({ id: concept.id, name: concept.name }))
-        : [],
-    };
-
-    return {
-      source: typeof normalizedInput?.source === 'string'
-        ? normalizedInput.source
-        : (typeof parsedTemplate?.source === 'string' ? parsedTemplate.source : null),
-      mode: typeof normalizedInput?.mode === 'string'
-        ? normalizedInput.mode
-        : (typeof parsedTemplate?.mode === 'string' ? parsedTemplate.mode : null),
-      sourceConversationId: goalFinalPayload?.sourceConversationId || normalizedInput?.sourceConversationId || generationStatus?.sourceConversationId || null,
-      goalFinalPayload: {
-        provenance: {
-          source: goalFinalPayload ? 'persisted-goal-final-payload' : 'missing',
-          isBackfilled: false,
-          summary: goalFinalPayload
-            ? '这份数据是 Goal 阶段最终产出并正式保存的 Path 入口 payload。'
-            : '当前路径没有保存 Goal Final Payload。'
-        },
-        display: {
-          description: goalFinalPayload?.rawGoal || null,
-          subject: normalizedInput?.subject || null,
-          deadlineText: normalizedInput?.deadlineText || null,
-          sourceGoal: null,
-          skillLevel: normalizedInput?.skillLevel || null,
-          timePerDay: normalizedInput?.timePerDay || null,
-        },
-        rawGoal: goalFinalPayload?.rawGoal || null,
-        finalUserVisible: goalFinalPayload?.finalUserVisible || null,
-        visibleSummary: goalFinalPayload?.visibleSummary || null,
-        conversationHistory: Array.isArray(goalFinalPayload?.conversationHistory)
-          ? goalFinalPayload.conversationHistory
-          : [],
-      },
-      normalizedInput: {
-        provenance: {
-          source: normalizedInput
-            ? 'persisted-normalized-input'
-            : 'missing',
-          isBackfilled: false,
-          summary: normalizedInput
-            ? '这份数据是 orchestrator 归一化后正式保存的 Path 内部输入。'
-            : '当前路径没有保存可用的 normalized input。'
-        },
-        description: normalizedInput?.description || null,
-        subject: normalizedInput?.subject || null,
-        deadlineText: normalizedInput?.deadlineText || null,
-        sourceConversationId: normalizedInput?.sourceConversationId || null,
-        existingPathId: normalizedInput?.existingPathId || null,
-        skillLevel: normalizedInput?.skillLevel || null,
-        timePerDay: normalizedInput?.timePerDay || null,
-        confirmedProposal: normalizedInput?.confirmedProposal || null,
-        conversationHistory: Array.isArray(normalizedInput?.conversationHistory)
-          ? normalizedInput.conversationHistory
-          : [],
-        normalizedInput: normalizedInput?.normalizedInput || sceneFramingNormalizedInput || null,
-      },
-      framing: sceneFraming ? {
-        normalizedInput: sceneFramingNormalizedInput || null,
-        legacyFrame: {
-          version: sceneFraming.version || null,
-          intent: sceneFraming.intent || null,
-          targetState: sceneFraming.targetState || null,
-          firstDeliverable: sceneFraming.firstDeliverable || null,
-          cognitiveDomain: sceneFraming.cognitiveDomain || null,
-          planningFocus: normalizeStringArray(sceneFraming.planningFocus),
-          excludedScope: normalizeStringArray(sceneFraming.excludedScope),
-          riskFlags: normalizeStringArray(sceneFraming.riskFlags),
-          resourceProfile: {
-            timeBudget: sceneFraming.resourceProfile?.timeBudget || null,
-            timeHorizon: sceneFraming.resourceProfile?.timeHorizon || null,
-            pace: sceneFraming.resourceProfile?.pace || null,
-          },
-          sourceGoal: sceneFraming.sourceGoal && typeof sceneFraming.sourceGoal === 'object'
-            ? sceneFraming.sourceGoal
-            : null,
-        }
-      } : null,
-      cognitiveDesign,
-      cognitiveDiagnostics,
-      adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate || null),
-      adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate || null),
-      generationTimeline: generationStatus ? {
-        core: generationStatus.core || null,
-        coreStep: generationStatus.coreStep || null,
-        stageDesign: generationStatus.stageDesign || null,
-        lastError: generationStatus.lastError || null,
-        triggerSource: generationStatus.triggerSource || null,
-        updatedAt: generationStatus.updatedAt || null,
-        stageDesignRetryCount: generationStatus.stageDesignRetryCount || 0,
-        lastStageDesignRetryAt: generationStatus.lastStageDesignRetryAt || null,
-      } : null,
-      milestoneConcepts,
-      taskProfiles,
-      stageDesigns,
-        raw: {
-          goalFinalPayload,
-          normalizedInput,
-          normalizedInputStructured: sceneFramingNormalizedInput || null,
-          sceneFramingInput,
-          sceneFramingRaw,
-          pathAgentInput,
-          pathAgentRaw,
-          sceneFraming,
-          stageDesigns,
-          promptTemplate: parsedTemplate,
-          generationStatus,
-        },
-    };
-  }
-
-  private async getPathStageTraces(pathId: string, sourceConversationId?: string | null): Promise<PathStageTraceItem[]> {
-    const logs = await prisma.agent_call_logs.findMany({
-      where: {
-        agentId: 'path-agent',
-        sourceEntry: 'platform',
-        OR: [
-          { metadata: { contains: pathId } },
-          ...(sourceConversationId ? [{ metadata: { contains: sourceConversationId } }] : []),
-        ],
-      },
-      orderBy: { calledAt: 'asc' },
-      take: 20,
-    });
-
-    return logs
-      .map((log) => {
-        const metadata = parseJsonSafe(log.metadata);
-        const input = parseJsonSafe(log.input);
-        const output = parseJsonSafe(log.output);
-        const phase = normalizeStageTracePhase(metadata?.phase || input?.phase);
-        const status = normalizeStageTraceStatus(metadata?.status || input?.status);
-        const tracePathId = metadata?.pathId || input?.pathId || null;
-        const traceSourceConversationId = metadata?.sourceConversationId || input?.sourceConversationId || null;
-
-        if (tracePathId !== pathId && (!sourceConversationId || traceSourceConversationId !== sourceConversationId)) {
-          return null;
-        }
-
-        return {
-          id: log.id,
-          phase,
-          status,
-          success: !!log.success,
-          pathId: tracePathId,
-          sourceConversationId: traceSourceConversationId,
-          triggerSource: metadata?.triggerSource || input?.triggerSource || null,
-          durationMs: log.durationMs || 0,
-          error: log.error || null,
-          errorCode: log.errorCode || null,
-          input,
-          output,
-          calledAt: log.calledAt.toISOString(),
-        } as PathStageTraceItem;
-      })
-      .filter(Boolean) as PathStageTraceItem[];
-  }
-
   private normalizeCognitiveDesign(
     candidate: PathCognitiveDesign | null | undefined,
     fallbackDomain: string,
@@ -523,78 +288,6 @@ class LearningService {
       };
     });
   }
-
-  private getPathLearningAccessState(
-    pathStatus: string | null | undefined,
-    aiPromptTemplate: string | null,
-    activeRun?: PersistedPathGenerationRun | null,
-    aiGenerated = false,
-    taskCount = 0
-  ) {
-    const legacyGenerationStatus = parsePathGenerationStatus(aiPromptTemplate);
-    const persistedRunStatus = buildGenerationRunStatus(activeRun);
-    const generationStatus = legacyGenerationStatus || persistedRunStatus
-      ? {
-          ...(legacyGenerationStatus || {}),
-          ...(persistedRunStatus || {})
-        }
-      : null;
-    const enrichmentStatus = generationStatus?.stageDesign;
-
-    if (pathStatus !== 'active') {
-      if (pathStatus === 'generating') {
-        return {
-          generationStatus,
-          canStartLearning: false,
-          learningBlockedReason: '学习路径仍在生成中，请稍候再开始学习。'
-        };
-      }
-
-      if (pathStatus === 'failed') {
-        return {
-          generationStatus,
-          canStartLearning: false,
-          learningBlockedReason: '学习路径生成失败，请先重新生成路径。'
-        };
-      }
-    }
-
-    if (!generationStatus || !enrichmentStatus) {
-      const missingGeneratedState = pathStatus === 'active' && aiGenerated && taskCount === 0;
-      return {
-        generationStatus,
-        canStartLearning: pathStatus === 'active' && !missingGeneratedState,
-        learningBlockedReason: pathStatus === 'active' && !missingGeneratedState
-          ? null
-          : missingGeneratedState
-            ? '学习路径生成状态缺失，暂不能开始学习，请重试生成。'
-          : '学习路径当前不可开始，请稍后再试。'
-      };
-    }
-
-    if (enrichmentStatus === 'succeeded') {
-      return {
-        generationStatus,
-        canStartLearning: true,
-        learningBlockedReason: null
-      };
-    }
-
-    if (enrichmentStatus === 'failed') {
-      return {
-        generationStatus,
-        canStartLearning: false,
-        learningBlockedReason: '阶段任务生成遇到问题，系统会继续尝试，请稍后再开始学习。'
-      };
-    }
-
-    return {
-      generationStatus,
-      canStartLearning: false,
-      learningBlockedReason: '阶段任务还在生成中，请稍候再开始学习。'
-    };
-  }
-
   private async queuePathEnrichmentRetry(
     path: {
       id: string;
@@ -800,25 +493,6 @@ class LearningService {
 
     return evidence;
   }
-
-  private getPathSceneSummary(raw: string | null, fallbackMilestones?: any[]): Record<string, any> | null {
-    const generationScene = parsePathGenerationStatus(raw)?.scene;
-    if (generationScene && typeof generationScene === 'object') {
-      return generationScene;
-    }
-
-    const parsed = parsePathPromptTemplate(raw);
-    const sceneFraming = parsed?.sceneFraming && typeof parsed.sceneFraming === 'object'
-      ? parsed.sceneFraming as PathSceneFraming
-      : null;
-    const milestoneCount = Array.isArray(fallbackMilestones) ? fallbackMilestones.length : undefined;
-    const taskCount = Array.isArray(fallbackMilestones)
-      ? fallbackMilestones.reduce((sum: number, milestone: any) => sum + ((milestone?.subtasks || []).length), 0)
-      : undefined;
-
-    return buildSceneSummaryFromFraming(sceneFraming, milestoneCount, taskCount);
-  }
-
   async recoverStaleGeneratingPaths(): Promise<number> {
     const now = new Date();
     const staleRuns = await prisma.path_generation_runs.findMany({
@@ -1091,93 +765,6 @@ class LearningService {
 
     return retriedCount;
   }
-
-  private async attachActualMinutesToPath(path: any): Promise<any> {
-    const milestones = path?.milestones || [];
-    const cognitiveDesign = parsePathCognitiveDesign(path?.aiPromptTemplate || null);
-    const milestoneConceptBindings = parsePathMilestoneConceptBindings(path?.aiPromptTemplate || null);
-    const milestoneConceptBindingMap = new Map<number, { coreConcept: string | null; title?: string | null }>();
-    milestoneConceptBindings.forEach((item) => {
-      milestoneConceptBindingMap.set(item.stageNumber, {
-        coreConcept: item.coreConcept,
-        title: item.title,
-      });
-    });
-    const allSubtasks = milestones.flatMap((milestone: any) => milestone.subtasks || []);
-    const taskIds = allSubtasks.map((task: any) => task.id).filter(Boolean);
-
-    if (taskIds.length === 0) {
-      return path;
-    }
-
-    const sessions = await prisma.teaching_sessions.findMany({
-      where: {
-        userId: path.userId,
-        taskId: { in: taskIds },
-        status: 'completed',
-        wrapup: { not: null },
-      },
-      select: {
-        taskId: true,
-        duration: true,
-        startTime: true,
-        endTime: true,
-        wrapup: true,
-      },
-    });
-
-    const actualMinutesMap = new Map<string, number>();
-    const latestSessionAtMap = new Map<string, string>();
-    const latestWrapupStatusMap = new Map<string, string | null>();
-    sessions.forEach((session) => {
-      if (!session.taskId) return;
-
-      const minutes = normalizeSessionDurationMinutes(session);
-      if (minutes <= 0) return;
-
-      actualMinutesMap.set(session.taskId, (actualMinutesMap.get(session.taskId) || 0) + minutes);
-
-      const sessionAt = (session.endTime || session.startTime)?.toISOString?.() || null;
-      const previousAt = latestSessionAtMap.get(session.taskId);
-      if (sessionAt && (!previousAt || new Date(sessionAt).getTime() > new Date(previousAt).getTime())) {
-        latestSessionAtMap.set(session.taskId, sessionAt);
-        try {
-          const wrapup = session.wrapup ? JSON.parse(session.wrapup) : null;
-          latestWrapupStatusMap.set(session.taskId, wrapup?.status || null);
-        } catch {
-          latestWrapupStatusMap.set(session.taskId, null);
-        }
-      }
-    });
-
-    return {
-      ...path,
-      milestones: milestones.map((milestone: any, index: number) => {
-        const stageNumber = Number.isFinite(Number(milestone?.stageNumber)) ? Number(milestone.stageNumber) : index + 1;
-        const milestoneConcept = resolveMilestoneConcept(
-          milestone?.coreConceptId || milestoneConceptBindingMap.get(stageNumber)?.coreConcept || null,
-          cognitiveDesign,
-          milestone?.coreConceptName || milestoneConceptBindingMap.get(stageNumber)?.coreConcept || null,
-        );
-
-        return {
-          ...milestone,
-          coreConceptId: milestoneConcept.coreConceptId,
-          coreConceptName: milestoneConcept.coreConceptName,
-          coreConceptDescription: milestoneConcept.coreConceptDescription,
-          coreConceptSource: milestoneConcept.conceptSource,
-          subtasks: (milestone.subtasks || []).map((task: any) => ({
-            ...task,
-            actualMinutes: actualMinutesMap.get(task.id) ?? null,
-            hasTeachingWrapup: latestSessionAtMap.has(task.id),
-            latestTeachingSessionAt: latestSessionAtMap.get(task.id) ?? null,
-            latestWrapupStatus: latestWrapupStatusMap.get(task.id) ?? null,
-          })),
-        };
-      }),
-    };
-  }
-
   async markTaskInProgress(taskId: string, userId: string) {
     const subtask = await prisma.subtasks.findUnique({
       where: { id: taskId },
@@ -1214,28 +801,6 @@ class LearningService {
     }
   }
 
-  // 创建学习目标
-  async createLearningGoal(data: CreateGoalData) {
-    try {
-      const goal = await prisma.learning_goals.create({
-        data: {
-          id: `lg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          userId: data.userId,
-          title: data.description,
-          description: data.description,
-          updatedAt: new Date()
-        }
-      });
-
-      logger.info(`学习目标创建：${goal.id}`);
-
-      return goal;
-    } catch (error) {
-      logger.error('创建学习目标失败:', error);
-      throw error;
-    }
-  }
-
   // 创建简单的学习路径
   async createLearningPath(data: {
     userId: string;
@@ -1262,169 +827,6 @@ class LearningService {
       logger.error('创建学习路径失败:', error);
       throw error;
     }
-  }
-
-  // 获取用户的学习目标
-  async getLearningGoals(userId: string, status?: string) {
-    try {
-      const goals = await prisma.learning_goals.findMany({
-        where: { userId, ...(status ? { status } : {}) },
-        orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }]
-      });
-
-      return goals;
-    } catch (error) {
-      logger.error('获取学习目标失败:', error);
-      throw error;
-    }
-  }
-
-  // 更新学习目标（多目标预算台账元数据：status/pathId/priority/plannedMinutesPerDay/cognitiveBandwidth）
-  async updateLearningGoal(
-    userId: string,
-    goalId: string,
-    data: {
-      status?: 'active' | 'paused' | 'completed' | 'archived';
-      pathId?: string | null;
-      priority?: number;
-      plannedMinutesPerDay?: number | null;
-      cognitiveBandwidth?: string | null;
-    }
-  ) {
-    const goal = await prisma.learning_goals.findFirst({ where: { id: goalId, userId } });
-    if (!goal) throw new Error('学习目标不存在');
-    return prisma.learning_goals.update({
-      where: { id: goalId },
-      data: {
-        ...(data.status ? { status: data.status } : {}),
-        ...(data.pathId !== undefined ? { pathId: data.pathId } : {}),
-        ...(data.priority !== undefined ? { priority: data.priority } : {}),
-        ...(data.plannedMinutesPerDay !== undefined ? { plannedMinutesPerDay: data.plannedMinutesPerDay } : {}),
-        ...(data.cognitiveBandwidth !== undefined ? { cognitiveBandwidth: data.cognitiveBandwidth } : {}),
-        updatedAt: new Date(),
-      },
-    });
-  }
-
-  /**
-   * 今日预算视图（多目标调度 · learn agent 台账）：
-   * active goals（含预算）+ 今日 ledger + 活跃教学会话，产出每个目标的预算/已耗/建议
-   *
-   * 口径（拍板 2026-08-21）：
-   * - 日界按服务器本地时区（此前 UTC 导致 UTC+8 用户清晨的学习记进「昨天」）
-   * - todayMinutes = 今日开课的教学会话时长（终态取 duration，进行中取已流逝分钟）
-   * - consumedMinutes：ledger 有值用 ledger；否则从今日会话经 task→milestone→path 反查到目标推导
-   */
-  async getTodaySchedule(userId: string) {
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    const [goals, ledgers, activeSessions, todaySessions] = await Promise.all([
-      prisma.learning_goals.findMany({
-        where: { userId, status: 'active' },
-        orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
-      }),
-      prisma.goal_scheduling_ledger.findMany({
-        where: { userId, date: today },
-      }),
-      prisma.teaching_sessions.findMany({
-        where: { userId, status: 'active' },
-        select: { id: true, taskId: true, startTime: true },
-      }),
-      prisma.teaching_sessions.findMany({
-        where: { userId, startTime: { gte: dayStart } },
-        select: { taskId: true, duration: true, status: true, startTime: true },
-      }),
-    ]);
-
-    const ledgerByGoal = new Map(ledgers.map((l) => [l.goalId, l]));
-
-    // 今日真实学习分钟：终态会话取落库 duration；进行中的取「开课至今」流逝分钟
-    const settledMinutes = todaySessions.reduce((sum, s) => sum + (s.duration ?? 0), 0);
-    const activeElapsedMinutes = activeSessions.reduce((sum, s) => {
-      const started = new Date(s.startTime).getTime();
-      return Number.isFinite(started) ? sum + Math.max(0, Math.round((Date.now() - started) / 60000)) : sum;
-    }, 0);
-    const todayMinutes = settledMinutes + activeElapsedMinutes;
-
-    // task → milestone → path 反查，把今日会话时长归账到对应目标（ledger 缺失时的诚实推导）
-    const taskIds = [...new Set(todaySessions.map((s) => s.taskId).filter((id): id is string => !!id))];
-    const minutesByPath = new Map<string, number>();
-    if (taskIds.length) {
-      const subtaskRows = await prisma.subtasks.findMany({
-        where: { id: { in: taskIds } },
-        select: { id: true, milestoneId: true },
-      });
-      const milestoneIds = [...new Set(subtaskRows.map((s) => s.milestoneId).filter((id): id is string => !!id))];
-      const milestoneRows = milestoneIds.length
-        ? await prisma.milestones.findMany({ where: { id: { in: milestoneIds } }, select: { id: true, learningPathId: true } })
-        : [];
-      const milestoneToPath = new Map(milestoneRows.map((m) => [m.id, m.learningPathId]));
-      const durationByTask = new Map<string, number>();
-      for (const s of todaySessions) {
-        if (!s.taskId) continue;
-        durationByTask.set(s.taskId, (durationByTask.get(s.taskId) ?? 0) + (s.duration ?? 0));
-      }
-      for (const st of subtaskRows) {
-        const pathId = milestoneToPath.get(st.milestoneId);
-        if (!pathId) continue;
-        minutesByPath.set(pathId, (minutesByPath.get(pathId) ?? 0) + (durationByTask.get(st.id) ?? 0));
-      }
-    }
-
-    return {
-      date: today,
-      totalPlanned: goals.reduce((sum, g) => sum + (g.plannedMinutesPerDay ?? 0), 0),
-      activeGoals: goals.map((goal) => {
-        const ledger = ledgerByGoal.get(goal.id);
-        // ledger 无记录时用今日会话推导，消除「恒 0 假进度条」
-        const derivedMinutes = goal.pathId ? minutesByPath.get(goal.pathId) ?? 0 : 0;
-        const consumedMinutes = ledger?.consumedMinutes ?? derivedMinutes;
-        return {
-          goalId: goal.id,
-          title: goal.title,
-          pathId: goal.pathId,
-          priority: goal.priority,
-          cognitiveBandwidth: goal.cognitiveBandwidth,
-          plannedMinutes: goal.plannedMinutesPerDay ?? 30,
-          consumedMinutes,
-          loadAvg: ledger?.loadAvg ?? null,
-          remainingMinutes: Math.max((goal.plannedMinutesPerDay ?? 30) - consumedMinutes, 0),
-        };
-      }),
-      activeSessions: activeSessions.length,
-      todayMinutes,
-    };
-  }
-
-  /** 今日台账写入（幂等 upsert：userId×goalId×date） */
-  async planTodaySchedule(userId: string, plan: Array<{ goalId: string; budgetMinutes: number; plannedTasks?: string[] }>) {
-    const today = new Date().toISOString().slice(0, 10);
-    const results = [];
-    for (const item of plan) {
-      const goal = await prisma.learning_goals.findFirst({ where: { id: item.goalId, userId } });
-      if (!goal) continue;
-      const ledger = await prisma.goal_scheduling_ledger.upsert({
-        where: { userId_goalId_date: { userId, goalId: item.goalId, date: today } },
-        update: {
-          budgetMinutes: item.budgetMinutes,
-          plannedTasks: item.plannedTasks?.length ? JSON.stringify(item.plannedTasks) : null,
-          updatedAt: new Date(),
-        },
-        create: {
-          id: `gsl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-          userId,
-          goalId: item.goalId,
-          date: today,
-          budgetMinutes: item.budgetMinutes,
-          plannedTasks: item.plannedTasks?.length ? JSON.stringify(item.plannedTasks) : null,
-        },
-      });
-      results.push(ledger);
-    }
-    return results;
   }
 
   private buildPathAgentInput(data: GeneratePathData): AgentInput {
@@ -1800,7 +1202,7 @@ class LearningService {
       return path;
     });
 
-    return this.getLearningPath(learningPath.id);
+    return getLearningPath(learningPath.id);
   }
 
   private async enrichLearningPathWithAnderson(
@@ -2613,353 +2015,6 @@ class LearningService {
     return fullPath;
   }
 
-  async getLearningPath(pathId: string) {
-    try {
-      const path = await prisma.learning_paths.findUnique({
-        where: { id: pathId },
-        include: {
-          milestones: {
-            orderBy: { stageNumber: 'asc' },
-            include: {
-              subtasks: {
-                orderBy: { order: 'asc' }
-              }
-            }
-          }
-        }
-      });
-
-      if (!path) {
-        throw new Error('学习路径不存在');
-      }
-
-      const pathWithActualMinutes = await this.attachActualMinutesToPath(path);
-      const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
-      const taskCount = pathWithActualMinutes.milestones.reduce(
-        (sum: number, milestone: any) => sum + ((milestone.subtasks || []).length),
-        0
-      );
-      const accessState = this.getPathLearningAccessState(
-        path.status,
-        path.aiPromptTemplate,
-        activeRun,
-        path.aiGenerated,
-        taskCount
-      );
-      const processDetail = this.buildPathProcessDetail(pathWithActualMinutes);
-      const stageTraces = await this.getPathStageTraces(path.id, processDetail.sourceConversationId || null);
-
-      // 「预计投入」以任务分钟汇总为准（LLM 骨架期粗估仅作内部参考，见 normalizePathHoursFromTasks 说明）
-      const normalized = normalizePathHoursFromTasks(pathWithActualMinutes);
-
-      return {
-        ...pathWithActualMinutes,
-        estimatedHours: normalized.estimatedHours,
-        estimatedHoursRaw: normalized.estimatedHoursRaw,
-        summary: parsePathSummary(path.aiPromptTemplate),
-        generationStatus: accessState.generationStatus,
-        generationRun: buildGenerationRunStatus(activeRun),
-        sceneSummary: this.getPathSceneSummary(path.aiPromptTemplate, normalized.milestones),
-        cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate),
-        adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate),
-        adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate),
-        processDetail: {
-          ...processDetail,
-          stageTraces,
-        },
-        canStartLearning: accessState.canStartLearning,
-        learningBlockedReason: accessState.learningBlockedReason,
-        replanLineage: {
-          sourcePathId: path.sourcePathId || null,
-          replanMode: path.replanMode || null,
-          triggerSource: path.replanTriggerSource || null,
-          reason: path.replanReason || null,
-        },
-        milestones: normalized.milestones,
-        stages: normalized.milestones,
-        totalStages: path.totalMilestones
-      };
-    } catch (error) {
-      logger.error('获取学习路径详情失败:', error);
-      throw error;
-    }
-  }
-
-  async getPathGenerationLifecycle(pathId: string, userId: string) {
-    const path = await prisma.learning_paths.findUnique({
-      where: { id: pathId },
-      select: {
-        id: true,
-        userId: true,
-        status: true,
-        aiGenerated: true,
-        aiPromptTemplate: true,
-        activeGenerationRunId: true,
-        totalMilestones: true,
-        updatedAt: true,
-        activeGenerationRun: true,
-        milestones: {
-          select: {
-            stageNumber: true,
-            subtasks: { select: { id: true } }
-          },
-          orderBy: { stageNumber: 'asc' }
-        }
-      }
-    });
-
-    if (!path) throw new Error('学习路径不存在');
-    if (path.userId !== userId) throw new Error('无权访问此学习路径');
-
-    const run = path.activeGenerationRun;
-    const legacy = parsePathGenerationStatus(path.aiPromptTemplate);
-    // 活动 stageDesign run 的工作量以 run.totalItems 为准（整路径生成 = 全部阶段；
-    // 后续阶段重排 = 被重排的子集，仅展示该部分进度）；
-    // 无活动 run（core 完成等待/历史状态）时退回路径阶段数。
-    const runTotal = (run?.phase === 'stageDesign' || !run) ? (run?.totalItems || 0) : 0;
-    const totalStages = runTotal > 0
-      ? runTotal
-      : Math.max(path.totalMilestones || 0, path.milestones.length, 0);
-    const taskCount = path.milestones.reduce((sum, milestone) => sum + milestone.subtasks.length, 0);
-    const accessState = this.getPathLearningAccessState(
-      path.status,
-      path.aiPromptTemplate,
-      run,
-      path.aiGenerated,
-      taskCount
-    );
-    const stale = isGenerationRunStale(run);
-    const retry = resolveGenerationRetry(path.status, legacy, run, path.updatedAt);
-
-    let phase: 'core' | 'stage_design' | 'ready' = 'ready';
-    let status: 'queued' | 'processing' | 'stale' | 'failed' | 'ready' = 'ready';
-
-    if (run && run.status !== 'cancelled') {
-      if (run.status === 'succeeded' && run.phase === 'stageDesign') {
-        phase = 'ready';
-        status = 'ready';
-      } else {
-        phase = run.phase === 'stageDesign' ? 'stage_design' : 'core';
-      }
-      if (stale) status = 'stale';
-      else if (run.status === 'failed') status = 'failed';
-      else if (run.status === 'queued') status = 'queued';
-      else if (run.status === 'processing') status = 'processing';
-      else if (run.status === 'succeeded' && run.phase === 'core') {
-        phase = 'stage_design';
-        status = 'queued';
-      }
-    } else if (path.status === 'generating' || path.status === 'failed' || legacy?.core === 'failed') {
-      phase = 'core';
-      status = path.status === 'failed' || legacy?.core === 'failed' ? 'failed' : 'processing';
-    } else if (legacy?.stageDesign === 'failed') {
-      phase = 'stage_design';
-      status = 'failed';
-    } else if (legacy?.stageDesign === 'pending' || legacy?.stageDesign === 'processing') {
-      phase = 'stage_design';
-      status = 'processing';
-    } else if (!accessState.canStartLearning) {
-      phase = 'stage_design';
-      status = 'stale';
-    }
-
-    const lifecycle = phase === 'ready'
-      ? 'ready'
-      : `${phase}_${status}`;
-    const completedStages = phase === 'ready'
-      ? totalStages
-      : phase === 'stage_design'
-        ? Math.min(run?.completedItems || 0, totalStages)
-        : 0;
-    const currentStageNumber = phase === 'stage_design' && status !== 'ready' && completedStages < totalStages
-      ? path.milestones[completedStages]?.stageNumber || completedStages + 1
-      : null;
-
-    return {
-      lifecycle,
-      phase,
-      status,
-      runId: run?.id || null,
-      heartbeatAt: run?.heartbeatAt?.toISOString?.() || legacy?.updatedAt || null,
-      retryAllowed: retry.allowed,
-      retryType: retry.retryType === 'stageDesign' ? 'stage_design' : retry.retryType,
-      completedStages,
-      totalStages,
-      currentStageNumber,
-      errorMessage: getSafeGenerationErrorMessage(
-        run?.phase || (phase === 'stage_design' ? 'stageDesign' : phase),
-        status,
-        run?.errorCode
-      ),
-      canStartLearning: phase === 'ready' && accessState.canStartLearning
-    };
-  }
-
-// 获取用户的学习路径列表
-  async getUserLearningPaths(userId: string) {
-    try {
-      const paths = await prisma.learning_paths.findMany({
-        where: { userId },
-        include: {
-          activeGenerationRun: true,
-          milestones: {
-            orderBy: { stageNumber: 'asc' },
-            include: {
-              subtasks: {
-                orderBy: { order: 'asc' }
-              }
-            }
-          }
-        },
-        orderBy: { createdAt: 'desc' }
-      });
-
-      return paths.map(path => {
-        const allTasks = path.milestones.flatMap((m: any) => m.subtasks || []);
-        const totalTaskCount = allTasks.length;
-        const completedTaskCount = allTasks.filter((t: any) => t.status === 'completed').length;
-        const accessState = this.getPathLearningAccessState(
-          path.status,
-          path.aiPromptTemplate,
-          path.activeGenerationRun,
-          path.aiGenerated,
-          totalTaskCount
-        );
-
-        // 「预计投入」以任务分钟汇总为准（与详情页口径一致）
-        const normalized = normalizePathHoursFromTasks(path);
-
-        return {
-          ...path,
-          name: path.title,
-          estimatedHours: normalized.estimatedHours,
-          estimatedHoursRaw: normalized.estimatedHoursRaw,
-          summary: parsePathSummary(path.aiPromptTemplate),
-          generationStatus: accessState.generationStatus,
-          generationRun: buildGenerationRunStatus(path.activeGenerationRun),
-          sceneSummary: this.getPathSceneSummary(path.aiPromptTemplate, normalized.milestones),
-          cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate),
-          adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate),
-          adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate),
-          canStartLearning: accessState.canStartLearning,
-          learningBlockedReason: accessState.learningBlockedReason,
-          replanLineage: {
-            sourcePathId: path.sourcePathId || null,
-            replanMode: path.replanMode || null,
-            triggerSource: path.replanTriggerSource || null,
-            reason: path.replanReason || null,
-          },
-          totalStages: path.totalMilestones,
-          taskSummary: {
-            total: totalTaskCount,
-            completed: completedTaskCount,
-            progress: totalTaskCount > 0 ? Math.round((completedTaskCount / totalTaskCount) * 100) : 0
-          }
-        };
-      });
-    } catch (error) {
-      logger.error('获取用户学习路径失败:', error);
-      throw error;
-    }
-  }
-
-// 获取任务详情
-  async getTaskDetail(taskId: string, userId?: string) {
-    try {
-      const subtask = await prisma.subtasks.findUnique({
-        where: { id: taskId },
-        include: {
-          milestones: {
-            include: {
-              learning_paths: true,
-              subtasks: {
-                select: {
-                  id: true,
-                  title: true,
-                  status: true,
-                  order: true,
-                },
-                orderBy: { order: 'asc' }
-              }
-            }
-          }
-        }
-      });
-
-      if (!subtask) {
-        throw new Error('任务不存在');
-      }
-
-      const learningPath = subtask.milestones?.learning_paths || null;
-
-      if (userId && learningPath?.userId !== userId) {
-        throw new Error('无权访问此任务');
-      }
-
-      const accessState = learningPath
-        ? this.getPathLearningAccessState(
-            learningPath.status,
-            learningPath.aiPromptTemplate,
-            null,
-            learningPath.aiGenerated,
-            1
-          )
-        : {
-            generationStatus: null,
-            canStartLearning: true,
-            learningBlockedReason: null
-          };
-
-      const latestTeachingSession = await prisma.teaching_sessions.findFirst({
-        where: {
-          taskId,
-          ...(userId ? { userId } : {}),
-          status: 'completed',
-          wrapup: { not: null },
-        },
-        orderBy: { startTime: 'desc' },
-        select: {
-          startTime: true,
-          wrapup: true,
-        }
-      });
-
-      let latestWrapupStatus: string | null = null;
-      if (latestTeachingSession?.wrapup) {
-        try {
-          latestWrapupStatus = JSON.parse(latestTeachingSession.wrapup)?.status || null;
-        } catch {
-          latestWrapupStatus = null;
-        }
-      }
-
-      return {
-        ...subtask,
-        hasTeachingWrapup: !!latestTeachingSession,
-        latestTeachingSessionAt: latestTeachingSession?.startTime?.toISOString?.() || null,
-        latestWrapupStatus,
-        week: subtask.milestones,
-        milestone: subtask.milestones,
-        learningPath: learningPath
-          ? {
-              ...learningPath,
-              generationStatus: accessState.generationStatus,
-              canStartLearning: accessState.canStartLearning,
-              learningBlockedReason: accessState.learningBlockedReason
-            }
-          : learningPath,
-      };
-    } catch (error) {
-      logger.error('获取任务详情失败:', error);
-      throw error;
-    }
-  }
-
-  // 获取任务详情（别名，用于路由）
-  async getTaskById(taskId: string, userId?: string) {
-    return this.getTaskDetail(taskId, userId);
-  }
-
   async retryPathEnrichment(pathId: string, userId: string) {
     const path = await prisma.learning_paths.findUnique({
       where: { id: pathId }
@@ -3131,7 +2186,7 @@ class LearningService {
     }
 
     const activeRun = await getActiveGenerationRun(learningPath.id, learningPath.activeGenerationRunId);
-    const accessState = this.getPathLearningAccessState(
+    const accessState = getPathLearningAccessState(
       learningPath.status,
       learningPath.aiPromptTemplate,
       activeRun,
@@ -3542,103 +2597,58 @@ class LearningService {
     }
   }
 
-  // 获取学习进度统计
+  async getLearningPath(pathId: string) {
+    return getLearningPath(pathId);
+  }
+
+  async getPathGenerationLifecycle(pathId: string, userId: string) {
+    return getPathGenerationLifecycle(pathId, userId);
+  }
+
+  async getUserLearningPaths(userId: string) {
+    return getUserLearningPaths(userId);
+  }
+
+  async getTaskDetail(taskId: string, userId?: string) {
+    return getTaskDetail(taskId, userId);
+  }
+
+  async getTaskById(taskId: string, userId?: string) {
+    return getTaskById(taskId, userId);
+  }
+
   async getLearningStats(userId: string) {
-    try {
-      const user = await prisma.users.findUnique({
-        where: { id: userId }
-      });
+    return getLearningStats(userId);
+  }
 
-      if (!user) {
-        throw new Error('用户不存在');
-      }
+  async createLearningGoal(data: CreateGoalData) {
+    return createLearningGoal(data);
+  }
 
-      const subtasks = await prisma.subtasks.findMany({
-        where: { userId }
-      });
+  async getLearningGoals(userId: string, status?: string) {
+    return getLearningGoals(userId, status);
+  }
 
-      const totalPaths = await prisma.learning_paths.count({
-        where: {
-          userId,
-          status: {
-            not: 'failed'
-          }
-        }
-      });
-
-      const completedSubtasks = subtasks.filter(t => t.status === 'completed');
-      const inProgressSubtasks = subtasks.filter(t => t.status === 'in_progress');
-      const todoSubtasks = subtasks.filter(t => t.status === 'todo');
-
-      const totalEstimatedMinutes = subtasks.reduce((sum, t) => sum + (t.estimatedMinutes || 0), 0);
-      // 与 /users/me/sessions、学习状态页统一口径：只排除被回收重开的 superseded（无真实进展），
-      // discarded（用户「重新开始」的旧会话）计入真实学习时长
-      const sessions = await prisma.teaching_sessions.findMany({
-        where: { userId, status: { notIn: ['superseded'] } },
-        select: {
-          duration: true,
-          startTime: true,
-          endTime: true,
-          // 未结束会话（active/paused）的时长需按活跃时长估算，见
-          // normalizeSessionDurationMinutes（走查 P9）
-          status: true,
-          messages: true,
-          teachingState: true,
-          updatedAt: true,
-        },
-      });
-      const totalMinutes = sessions.reduce((sum, session) => sum + normalizeSessionDurationMinutes(session), 0);
-      const activeLearningDays = new Set(
-        sessions.map((session) => session.startTime.toISOString().split('T')[0])
-      ).size;
-      const avgDailyMinutes = activeLearningDays > 0
-        ? Number((totalMinutes / activeLearningDays).toFixed(1))
-        : 0;
-
-      // 获取学习状态指标
-      const currentState = await stateTrackingService.getCurrentStateDisplay(userId);
-      const suggestion = currentState ? stateTrackingService.generateDisplaySuggestion(currentState) : null;
-      const displayState = currentState || null;
-
-      return {
-        user: {
-          id: user.id,
-          name: user.name,
-          xp: user.xp,
-          level: Math.floor(Math.sqrt(user.xp / 100)) + 1
-        },
-        subtasks: {
-          total: subtasks.length,
-          completed: completedSubtasks.length,
-          inProgress: inProgressSubtasks.length,
-          todo: todoSubtasks.length
-        },
-        tasks: {
-          total: subtasks.length,
-          completed: completedSubtasks.length,
-          inProgress: inProgressSubtasks.length,
-          todo: todoSubtasks.length,
-          completionRate: subtasks.length > 0 ? Number((completedSubtasks.length / subtasks.length * 100).toFixed(1)) : 0
-        },
-        paths: {
-          total: totalPaths
-        },
-        time: {
-          totalMinutes,
-          totalCompleted: totalMinutes,
-          totalEstimated: totalEstimatedMinutes,
-          activeLearningDays,
-          avgDailyMinutes,
-          progress: subtasks.length > 0 ? Number((completedSubtasks.length / subtasks.length * 100).toFixed(1)) : 0,
-          completionRate: subtasks.length > 0 ? (completedSubtasks.length / subtasks.length * 100).toFixed(1) : '0'
-        },
-        state: displayState,
-        suggestion
-      };
-    } catch (error) {
-      logger.error('获取学习统计失败:', error);
-      throw error;
+  async updateLearningGoal(
+    userId: string,
+    goalId: string,
+    data: {
+      status?: 'active' | 'paused' | 'completed' | 'archived';
+      pathId?: string | null;
+      priority?: number;
+      plannedMinutesPerDay?: number | null;
+      cognitiveBandwidth?: string | null;
     }
+  ) {
+    return updateLearningGoal(userId, goalId, data);
+  }
+
+  async getTodaySchedule(userId: string) {
+    return getTodaySchedule(userId);
+  }
+
+  async planTodaySchedule(userId: string, plan: Array<{ goalId: string; budgetMinutes: number; plannedTasks?: string[] }>) {
+    return planTodaySchedule(userId, plan);
   }
 }
 
