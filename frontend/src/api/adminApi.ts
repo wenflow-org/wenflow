@@ -1,11 +1,8 @@
 // Admin 管理 API
-import axios from 'axios';
 import { setAuthFlashMessage } from '@/utils/authFlash';
 import { clearUserLocalState } from '@/utils/sessionCleanup';
-import { AI_REQUEST_TIMEOUT, resolveApiBaseUrl } from '@/utils/api';
-// baseURL 与用户端 utils/api.ts 单点同源（dev 固定 '/api' 走代理；prod 读 VITE_API_BASE_URL）。
-// 双实例本身保留：admin 与用户会话的 401 语义、响应解包形态不同（见审计 #6，拦截器合并为后续独立批次）。
-const API_BASE = resolveApiBaseUrl();
+import { AI_REQUEST_TIMEOUT } from '@/utils/api';
+import { createApiClient } from '@/utils/http';
 const ADMIN_SESSION_REQUEST_TIMEOUT_MS = 10000;
 
 /**
@@ -113,20 +110,6 @@ function blackboxActionCommandKey(action: Record<string, unknown>): string {
   return `action:${JSON.stringify(action)}`;
 }
 
-/**
- * 创建 axios 实例
- */
-const adminAxios = axios.create({
-  baseURL: API_BASE,
-  timeout: 30000, // 30秒超时
-  withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// 会话认证依赖 HttpOnly Cookie（withCredentials），无需在请求头注入 Token
-
 let unauthorizedRedirect: Promise<void> | null = null;
 
 function isAdminLogoutRequest(url?: string): boolean {
@@ -152,19 +135,19 @@ export function handleAdminAuthenticationFailure(): void {
   });
 }
 
-adminAxios.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (
-      error.response?.status === 401
-      && adminProtectedLocationResolver()
-      && !isAdminLogoutRequest(error.config?.url)
-    ) {
+// 会话认证依赖 HttpOnly Cookie（withCredentials），无需在请求头注入 Token。
+// 实例经 utils/http.ts 工厂创建（拦截器单实现；admin 画像：原样返回 response、
+// 401 受保护路径守卫重定向、错误/取消统一归一化—— errMsg 等消费形态兼容）。
+const adminAxios = createApiClient({
+  timeout: 30000, // 30秒超时
+  isAuthEndpoint: isAdminLogoutRequest,
+  handleUnauthorized: async () => {
+    // 登录页自身/登出请求的 401 不触发；受保护管理路径上的 401 清除会话并跳登录
+    if (adminProtectedLocationResolver()) {
       handleAdminAuthenticationFailure();
     }
-    return Promise.reject(error);
-  }
-);
+  },
+});
 
 // 导出 axios 实例供其他模块使用
 export { adminAxios };
