@@ -768,10 +768,27 @@ import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { runHealthTone, statusText } from './statusText'
-import { parseLogEntry, type LogEntryView } from './sessionLog'
+import { parseLogEntry } from './sessionLog'
 import { scoreBadgeCls, scoreFillPct, scoreToPct, scoreTone } from './evalScore'
-import { traceSummaryRows, traceRawJson, type TraceKeyValue } from './traceSummary'
 import { useSafePolling } from '@/composables/useSafePolling'
+import {
+  asRecord, normalized, firstText, boolValue, numberValue,
+  conversationMessages, formatTime, stageLabel, wrapupCardIcon
+} from './cockpitFormat'
+import {
+  useCockpitTraces, timelineKindLabel, verdictLabel, scoreItems, findingEvidence
+} from './cockpitTraces'
+import { useCockpitLogs, LOG_WINDOW } from './useCockpitLogs'
+import { buildLessonWrapup, useCockpitWrapup } from './cockpitWrapup'
+import {
+  collectPathMilestones, buildPathMilestonesView,
+  buildPathDetailTitle, buildPathDetailSummary, buildPathDetailMeta,
+  pathReviewDecisionLabelOf, pathReviewStatusLabelOf
+} from './cockpitPathViews'
+import {
+  buildLearnLessons, buildLessonTree, lessonMark, lessonStateLabel, lessonNumberOf,
+  type LearnLesson
+} from './cockpitLessons'
 
 const sessionId = computed(() => subPage.value?.id || '')
 const shortId = computed(() => (sessionId.value.length > 20 ? `…${sessionId.value.slice(-16)}` : sessionId.value))
@@ -808,183 +825,31 @@ const timelineEntries = ref<Array<{ time: string; kind: string; title: string; d
 const rawLogs = ref<Record<string, unknown>[]>([])
 
 const session = ref<Record<string, unknown> | null>(null)
-const logs = ref<{ id: string; time: string; text: string; view: LogEntryView }[]>([])
-const logsFailed = ref(false)
-const logBox = ref<HTMLElement | null>(null)
-const LOG_WINDOW = 60
-/* 日志滚动：接近底部才跟随，用户上翻时不打扰 */
-const logFollowsBottom = ref(true)
-const logPhaseFilter = ref('')
-/* 所有出现过的日志阶段，用于筛选 chips */
-const logPhases = computed(() => {
-  const seen = new Set<string>()
-  for (const l of logs.value) {
-    if (l.view.phase) seen.add(l.view.phase)
-  }
-  return [...seen]
-})
-const filteredLogs = computed(() => {
-  if (!logPhaseFilter.value) return logs.value
-  return logs.value.filter(l => l.view.phase === logPhaseFilter.value)
-})
-function onLogScroll() {
-  const box = logBox.value
-  if (!box) return
-  logFollowsBottom.value = box.scrollHeight - box.scrollTop - box.clientHeight < 80
-}
-function scrollLogsIfFollowing() {
-  void nextTick(() => {
-    const box = logBox.value
-    if (!box || !logFollowsBottom.value) return
-    box.scrollTop = box.scrollHeight
-  })
-}
-function scrollToBottom() {
-  const box = logBox.value
-  if (!box) return
-  box.scrollTop = box.scrollHeight
-  logFollowsBottom.value = true
-}
-/* 按消息 id 去重追加，保留窗口上限 */
-function appendLogs(entries: Array<{ id: string; time: string; text: string; view: LogEntryView }>) {
-  if (!entries.length) return
-  const seen = new Set(logs.value.map((l) => l.id || `${l.time}|${l.view.phase}|${l.text}`))
-  const added: Array<{ id: string; time: string; text: string; view: LogEntryView }> = []
-  for (const entry of entries) {
-    const key = entry.id || `${entry.time}|${entry.view.phase}|${entry.text}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    added.push(entry)
-  }
-  if (!added.length) return
-  logs.value = [...logs.value, ...added].slice(-LOG_WINDOW)
-  scrollLogsIfFollowing()
-}
+const {
+  logsFailed, logBox, logFollowsBottom, logPhaseFilter,
+  logPhases, filteredLogs, onLogScroll, scrollToBottom, appendLogs, resetLogs
+} = useCockpitLogs()
+
 const pathStatus = ref<Record<string, unknown> | null>(null)
 const pathStatusFailed = ref(false)
 const teachingDetail = ref<Record<string, unknown> | null>(null)
 const teachingDetailFailed = ref(false)
 const teachingDetailLoading = ref(false)
 /** 当前查看课时的 wrapup 总结数据 */
-const lessonWrapup = computed(() => {
-  const wrapup = teachingDetail.value?.wrapup
-  if (!wrapup || typeof wrapup !== 'object') return null
-  const w = wrapup as Record<string, unknown>
-  const summary = (w.summary || {}) as Record<string, unknown>
-  const evaluation = (w.evaluation || {}) as Record<string, unknown>
-  const evidence = (w.evidence || {}) as Record<string, unknown>
-  const progress = (w.progress || {}) as Record<string, unknown>
-  const learner = (w.learner || {}) as Record<string, unknown>
-  const knowledgeItems = Array.isArray(summary.knowledgeItems) ? summary.knowledgeItems as Array<{ name: string; status: string; progress: number; evidence: string }> : []
-  const confusionPoints = Array.isArray(evidence.topConfusionPoints) ? evidence.topConfusionPoints as string[] : []
-  const highlights = (summary.evaluationHighlights || {}) as Record<string, unknown>
-  const emotions = (evidence.emotionalSignals || {}) as Record<string, unknown>
-  const sources = (w.sources || {}) as Record<string, unknown>
-  const status = String(w.status || '')
-  const rawPracticeAdvice = String(summary.practiceAdvice || '')
-  // 降级总结：超时/收束失败兜底（summary-only）的 practiceAdvice 是面向学习者的
-  // 「重新开始本节…」占位，后台原样展示像在要求管理员重新学习 → 标记降级并隐藏该占位。
-  const degraded = status === 'summary-only'
-    || String(sources.summary || '').includes('fallback')
-    || /重新开始本节|重新完成一次完整的学习/.test(rawPracticeAdvice)
-  return {
-    status,
-    degraded,
-    duration: numberValue(w.duration),
-    topicSummary: String(summary.topicSummary || ''),
-    knowledgeSummary: String(summary.knowledgeSummary || ''),
-    practiceAdvice: degraded ? '' : rawPracticeAdvice,
-    learningEvaluation: String(summary.learningEvaluation || ''),
-    keyTakeaways: Array.isArray(summary.keyTakeaways) ? summary.keyTakeaways as string[] : [],
-    actionPlan: Array.isArray(summary.actionPlan) ? summary.actionPlan as string[] : [],
-    knowledgeItems,
-    confusionPoints,
-    strengths: Array.isArray(highlights.strengths) ? highlights.strengths as string[] : [],
-    improvements: Array.isArray(highlights.improvements) ? highlights.improvements as string[] : [],
-    lss: numberValue(evaluation.sessionLss),
-    ktl: numberValue(evaluation.sessionKtl),
-    lf: numberValue(evaluation.sessionLf),
-    turnCount: numberValue(evidence.turnCount),
-    avgUnderstanding: numberValue(evidence.avgUnderstanding),
-    avgEngagement: numberValue(evidence.avgEngagement),
-    dominantCognitiveLevel: String(evidence.dominantCognitiveLevel || ''),
-    lastCognitiveLevel: String(evidence.lastCognitiveLevel || ''),
-    positiveEmotions: numberValue(emotions.positive) || 0,
-    neutralEmotions: numberValue(emotions.neutral) || 0,
-    frustratedEmotions: numberValue(emotions.frustrated) || 0,
-    confusedEmotions: numberValue(emotions.confused) || 0,
-    fatigueRisk: String(learner.fatigueRisk || ''),
-    recommendedPacing: String(learner.recommendedPacing || ''),
-    newlyMastered: Array.isArray(progress.newlyMastered) ? progress.newlyMastered as string[] : [],
-  }
-})
+const lessonWrapup = computed(() => buildLessonWrapup(teachingDetail.value))
 const hasLessonWrapup = computed(() => !!lessonWrapup.value && (!!lessonWrapup.value.topicSummary || !!lessonWrapup.value.knowledgeSummary))
 const selectedTeachingSessionId = ref('')
 
-interface EvaluationReport {
-  id?: string
-  evaluatedAt?: string
-  report?: {
-    verdict?: string
-    scores?: Record<string, number | null>
-    findings?: Array<{
-      code: string
-      severity: string
-      title: string
-      detail: string
-      evidenceIds?: Array<string | number>
-    }>
-    recommendations?: Array<{
-      priority?: string
-      action?: string
-      rationale?: string
-      findingCodes?: Array<string | number>
-    }>
-    evidence?: Array<{
-      id?: string | number
-      source?: string
-      index?: number | null
-      path?: string
-      excerpt?: string
-      interpretation?: string
-    }>
-  }
-}
-
-interface RefereeTraceItem {
-  timestamp: string
-  traceId: string | null
-  diagnostic: Record<string, unknown> | null
-}
-
-interface PrivateStateTraceItem {
-  sequence?: number
-  stage: 'goal' | 'learning'
-  taskId?: string | null
-  transition?: string | null
-  emotion?: string | null
-  phaseFocus?: string | null
-  degraded?: boolean
-  visibleSignal?: string | null
-  stateChangeReason?: string | null
-  metrics?: Record<string, number>
-  flags?: Record<string, boolean>
-  blockers?: string[]
-  generatedAt?: string | null
-}
-
-const refereeReports = ref<EvaluationReport[]>([])
-const actorAuditReports = ref<EvaluationReport[]>([])
-const refereeTrace = ref<RefereeTraceItem[]>([])
-const refereeTraceCount = ref(0)
-const privateStateTrace = ref<PrivateStateTraceItem[]>([])
-const privateStateTraceCount = ref(0)
 const busy = ref(false)
-
 
 const stageResults = computed(() => (session.value?.stageResults || {}) as Record<string, unknown>)
 const runtime = computed(() => (session.value?.runtime || {}) as Record<string, unknown>)
 const stageStatus = computed(() => (runtime.value.stageStatus || {}) as Record<string, Record<string, unknown>>)
+const {
+  refereeReports, actorAuditReports, refereeTrace, refereeTraceCount,
+  privateStateTrace, privateStateTraceCount, parseBlackbox, refereeTraceViews,
+  hasTraceFlows, unifiedTimeline, resetTraces
+} = useCockpitTraces(stageResults, isRealMode, rawLogs)
 
 /* ---- 预算消耗（三级页顶栏预警条）：runtimeStats.aiCalls / 后端解析的成本上限 ---- */
 const budgetUsage = computed(() => {
@@ -1013,42 +878,6 @@ const budgetTone = computed(() => {
   if (pct >= 70) return 'warn'
   return 'ok'
 })
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
-}
-
-function normalized(value: unknown): string {
-  return String(value || '').trim().toLowerCase()
-}
-
-function firstText(...values: unknown[]): string {
-  for (const value of values) {
-    if (typeof value === 'string' && value.trim()) return value.trim()
-  }
-  return ''
-}
-
-function boolValue(value: unknown): boolean | undefined {
-  if (value === true || value === 'true') return true
-  if (value === false || value === 'false') return false
-  return undefined
-}
-
-function numberValue(value: unknown): number | null {
-  const number = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(number) ? number : null
-}
-
-function conversationMessages(value: unknown) {
-  if (!Array.isArray(value)) return [] as Array<{ role: string; content: string }>
-  return value.map(asRecord).map((message) => ({
-    role: normalized(message.role) === 'assistant' || normalized(message.role) === 'teacher' ? 'assistant' : 'user',
-    content: firstText(message.content, message.text, message.message)
-  })).filter((message) => message.content)
-}
 
 const isBlackbox = computed(() => !!(stageResults.value.blackbox || stageResults.value.experiment))
 const blackboxTraceCount = computed(() => {
@@ -1243,74 +1072,16 @@ const displayedTeachingSessionId = computed(() => firstText(
 ))
 /* Path : Learn = 1 : N。课程列表以 Path 任务树为数据源，
    每节课的课堂 id 从 teachingSessionHistory / 当前绑定推导，点击切换 transcript。 */
-type LessonState = 'done' | 'active' | 'failed' | 'pending'
-interface LearnLesson {
-  taskId: string
-  title: string
-  milestone: string
-  state: LessonState
-  teachingSessionId: string
-}
-const learnLessons = computed<LearnLesson[]>(() => {
-  const currentTaskId = firstText(bindings.value.currentTaskId, learningResult.value.currentTaskId)
-  const currentTeachingId = firstText(bindings.value.teachingSessionId)
-  const runtimeStatus = normalized(learningTaskRuntime.value.status)
-  const historyByTask = new Map<string, string>()
-  for (const item of teachingSessionHistory.value) {
-    if (item.taskId) historyByTask.set(item.taskId, item.id)
-  }
-  const lessons: LearnLesson[] = []
-  for (const m of pathMilestonesView.value) {
-    for (const t of m.tasks) {
-      if (!t.id) continue
-      let state: LessonState = 'pending'
-      let teachingSessionId = ''
-      if (t.completed) {
-        state = 'done'
-        teachingSessionId = historyByTask.get(t.id) || ''
-      }
-      if (t.id === currentTaskId) {
-        state = ['error', 'next_task_start_failed'].includes(runtimeStatus) ? 'failed' : 'active'
-        teachingSessionId = currentTeachingId
-      }
-      lessons.push({ taskId: t.id, title: t.title, milestone: m.title, state, teachingSessionId })
-    }
-  }
-  return lessons
-})
-
-/** Path → Milestones → Lessons 的层级分组，用于 Learn 树形视图 */
-const lessonTree = computed(() => {
-  const tree: { milestone: string; lessons: LearnLesson[]; doneCount: number }[] = []
-  const map = new Map<string, LearnLesson[]>()
-  for (const l of learnLessons.value) {
-    const key = l.milestone
-    if (!map.has(key)) map.set(key, [])
-    map.get(key)!.push(l)
-  }
-  for (const m of pathMilestonesView.value) {
-    const lessons = map.get(m.title) || []
-    if (lessons.length) {
-      tree.push({ milestone: m.title, lessons, doneCount: lessons.filter(l => l.state === 'done').length })
-    }
-  }
-  return tree
-})
-
-function lessonMark(state: LessonState) {
-  return { done: '✓', active: '▸', failed: '✕', pending: '·' }[state]
-}
-function lessonStateLabel(state: LessonState) {
-  return { done: '已完成', active: '进行中', failed: '失败，可重启恢复', pending: '未开始' }[state]
-}
-/** 全局课程编号（跨里程碑递增） */
+const learnLessons = computed<LearnLesson[]>(() => buildLearnLessons(pathMilestonesView.value, teachingSessionHistory.value, {
+  currentTaskId: firstText(bindings.value.currentTaskId, learningResult.value.currentTaskId),
+  currentTeachingId: firstText(bindings.value.teachingSessionId),
+  runtimeStatus: normalized(learningTaskRuntime.value.status)
+}))
+const lessonTree = computed(() => buildLessonTree(pathMilestonesView.value, learnLessons.value))
 function lessonNumber(taskId: string) {
-  const idx = learnLessons.value.findIndex(l => l.taskId === taskId)
-  return idx >= 0 ? idx + 1 : 0
+  return lessonNumberOf(learnLessons.value, taskId)
 }
 
-/* Learn 页 = 单课视图：正在查看的课节（默认当前进行中的课），
-   全量任务列表在 Path 页；这里只保留上一课/下一课/可回放课的紧凑导航。 */
 const activeLesson = computed(() =>
   learnLessons.value.find((l) => l.state === 'active' || l.state === 'failed') || null
 )
@@ -1419,75 +1190,18 @@ const learningBlockedReason = computed(() => firstText(
   pathStatusPath.value.learningBlockedReason,
   pathStatus.value?.learningBlockedReason
 ))
-const pathMilestones = computed(() => {
-  const milestones = pathStatusPath.value.milestones
-    || pathStatusPath.value.stages
-    || pathStatus.value?.milestones
-    || pathStatus.value?.stages
-    || (stageResults.value.path as Record<string, unknown>)?.milestones
-  return Array.isArray(milestones) ? milestones.map(asRecord) : []
-})
+const pathMilestones = computed(() => collectPathMilestones(pathStatusPath.value, pathStatus.value, stageResults.value.path))
 
 /* Path 内容展示：标题/摘要/里程碑/任务（读 path-status 的完整结构；真实模式读 stageResults.path） */
-const pathDetailTitle = computed(() =>
-  firstText(pathStatusPath.value.title, pathStatusPath.value.name)
-  || firstText(asRecord(stageResults.value.path).title, asRecord(stageResults.value.path).name)
-  || '学习路径'
-)
-const pathDetailSummary = computed(() =>
-  firstText(pathStatusPath.value.summary, pathStatusPath.value.description)
-  || firstText(asRecord(stageResults.value.path).summary, asRecord(stageResults.value.path).description)
-)
-const pathDetailMeta = computed(() => {
-  if (!hasPath.value) return ''
-  const parts: string[] = []
-  const srPath = asRecord(stageResults.value.path)
-  const difficulty = firstText(pathStatusPath.value.difficulty, srPath.difficulty)
-  const hours = numberValue(pathStatusPath.value.estimatedHours) ?? numberValue(srPath.estimatedHours)
-  const total = numberValue(pathStatusPath.value.totalMilestones)
-    ?? numberValue(srPath.totalMilestones)
-    ?? pathMilestones.value.length
-  if (difficulty) parts.push(`难度 ${difficulty}`)
-  if (hours !== null) parts.push(`约 ${hours} 小时`)
-  if (total) parts.push(`${total} 个里程碑`)
-  return parts.join(' · ')
-})
-const pathMilestonesView = computed(() => pathMilestones.value.map((m, index) => {
-  const rawTasks = m.subtasks || m.tasks
-  const tasks = (Array.isArray(rawTasks) ? rawTasks : []).map(asRecord).map((t) => {
-    const id = firstText(t.id)
-    return {
-      id,
-      title: firstText(t.title, t.name) || '未命名任务',
-      completed: normalized(t.status) === 'completed',
-      current: !!id && id === bindings.value.currentTaskId
-    }
-  })
-  return {
-    stageNumber: numberValue(m.stageNumber) ?? index + 1,
-    title: firstText(m.title, m.name) || `里程碑 ${index + 1}`,
-    description: firstText(m.description),
-    estimatedHours: numberValue(m.estimatedHours),
-    tasks
-  }
-}))
-
+const pathDetailTitle = computed(() => buildPathDetailTitle(pathStatusPath.value, stageResults.value.path))
+const pathDetailSummary = computed(() => buildPathDetailSummary(pathStatusPath.value, stageResults.value.path))
+const pathDetailMeta = computed(() => buildPathDetailMeta(hasPath.value, pathStatusPath.value, stageResults.value.path, pathMilestones.value.length))
+const pathMilestonesView = computed(() => buildPathMilestonesView(pathMilestones.value, firstText(bindings.value.currentTaskId)))
 /* Path 评审展示：stageResults.path_review */
 const pathReviewStatus = computed(() => normalized(pathReview.value.status))
 const pathReviewDecision = computed(() => normalized(pathReview.value.decision) || 'pending')
-const pathReviewDecisionLabel = computed(() => ({
-  accept: '接受',
-  modify: '需要修改',
-  reject: '拒绝',
-  pending: '待评审'
-}[pathReviewDecision.value] || pathReviewDecision.value))
-const pathReviewStatusLabel = computed(() => ({
-  pending: '评审完成，待人工处理',
-  accepted: '已接受',
-  replanning: '重规划中',
-  replanned: '已生成新版 Path，待再次评审',
-  failed: '评审失败'
-}[pathReviewStatus.value] || pathReviewStatus.value))
+const pathReviewDecisionLabel = computed(() => pathReviewDecisionLabelOf(pathReviewDecision.value))
+const pathReviewStatusLabel = computed(() => pathReviewStatusLabelOf(pathReviewStatus.value))
 const pathReviewReaction = computed(() => firstText(pathReview.value.reaction))
 const pathReviewConcern = computed(() => firstText(pathReview.value.biggestConcern))
 const pathReviewChanges = computed(() => {
@@ -1758,94 +1472,15 @@ const effectiveStageIndex = computed(() => {
   return 0
 })
 
-const hasWrapup = computed(() => {
-  const teaching = (stageResults.value.teaching || {}) as Record<string, unknown>
-  return !!(stageStatus.value.learning?.wrapup || teaching.wrapup)
-})
+const {
+  hasWrapup, wrapupSections, wrapupFieldCards,
+  wrapupSourceBadge, wrapupStatusBadge, wrapupEmptyHint
+} = useCockpitWrapup(stageResults, stageStatus, isRealMode)
 
-/* Wrapup 分页内容：summary/evaluation 结构化对象 → 字段卡（C4/遗留项 2），字符串保持原样 */
-const wrapupObject = computed(() => {
-  const learning = asRecord(stageResults.value.teaching)
-  return asRecord(learning.wrapup || stageStatus.value.learning?.wrapup)
-})
-const wrapupSections = computed(() => {
-  const wrapup = wrapupObject.value
-  if (!Object.keys(wrapup).length) return [] as Array<{ label: string; text: string; isJson: boolean }>
-  const render = (value: unknown) => typeof value === 'string'
-    ? { text: value, isJson: false }
-    : { text: JSON.stringify(value, null, 2), isJson: true }
-  const sections: Array<{ label: string; text: string; isJson: boolean }> = []
-  // 结构化对象由字段卡承载，字符串走分节卡
-  if (typeof wrapup.summary === 'string') sections.push({ label: '学习总结', ...render(wrapup.summary) })
-  if (typeof wrapup.evaluation === 'string') sections.push({ label: '评估', ...render(wrapup.evaluation) })
-  const generatedAt = firstText(wrapup.generatedAt)
-  if (generatedAt) sections.push({ label: '生成时间', text: formatTime(generatedAt), isJson: false })
-  return sections
-})
-
-/* 终局评估区 wrapup 评价字段卡：评价/评估摘要/来源徽章 */
-const wrapupFieldCards = computed(() => {
-  const wrapup = wrapupObject.value
-  const cards: Array<{ label: string; value: string }> = []
-  const summary = wrapup.summary
-  if (summary && typeof summary === 'object' && !Array.isArray(summary)) {
-    const s = summary as Record<string, unknown>
-    const labels: Record<string, string> = {
-      topicSummary: '主题摘要',
-      knowledgeSummary: '知识总结',
-      practiceAdvice: '练习建议',
-      learningEvaluation: '学习评估'
-    }
-    for (const [key, label] of Object.entries(labels)) {
-      const v = s[key]
-      if (typeof v === 'string' && v.trim()) cards.push({ label, value: v.trim() })
-    }
-  }
-  const evaluation = wrapup.evaluation
-  if (evaluation && typeof evaluation === 'object' && !Array.isArray(evaluation)) {
-    const e = evaluation as Record<string, unknown>
-    for (const [key, value] of Object.entries(e)) {
-      if (key === 'summary') continue
-      if (typeof value === 'string' && value.trim()) cards.push({ label: `评估 · ${key}`, value: value.trim() })
-    }
-    const evaluationSummary = firstText(e.summary, e.verdict, e.conclusion)
-    if (evaluationSummary) cards.push({ label: '评估摘要', value: evaluationSummary })
-  }
-  return cards
-})
-const wrapupSourceBadge = computed(() => {
-  const sources = asRecord(wrapupObject.value.sources)
-  return sources.summary === 'model' ? '模型生成' : sources.summary === 'rule' || sources.summary ? '规则回退' : ''
-})
-const wrapupStatusBadge = computed(() => String(wrapupObject.value.status || ''))
-const wrapupEmptyHint = computed(() =>
-  isRealMode.value
-    ? '该真实会话未生成总结（无 wrapup 记录）。'
-    : '尚无学习总结。Learn 产生进度后点击「生成总结」。'
-)
-/** Wrapup 卡片图标映射 */
-function wrapupCardIcon(label: string) {
-  const map: Record<string, string> = {
-    '主题摘要': '📖',
-    '知识总结': '🧠',
-    '练习建议': '💡',
-    '学习评估': '📊',
-  }
-  return map[label] || '📋'
-}
 /** 从总结页点击课时 → 跳转到 Learn 标签并打开该课时的总结 */
 function viewLessonSummary(lesson: LearnLesson) {
   activeTab.value = 'learning'
   nextTick(() => openLesson(lesson))
-}
-
-function stageLabel(st: string) {
-  return {
-    goal: 'Goal',
-    path: 'Path',
-    learning: 'Learn',
-    wrapup: '总结'
-  }[st] || st
 }
 
 function stageDone(st: StageKey) {
@@ -2139,129 +1774,6 @@ function showCurrentTeaching() {
 function showArchivedTeaching(teachingSessionId: string) {
   selectedTeachingSessionId.value = teachingSessionId
   void loadTeachingDetail(teachingSessionId)
-}
-
-function parseBlackbox() {
-  const bb = (stageResults.value.blackbox || {}) as Record<string, unknown>
-  // 平台质量裁判与角色保真审计（结构化报告）
-  refereeReports.value = Array.isArray(bb.refereeReports) ? bb.refereeReports as EvaluationReport[] : []
-  actorAuditReports.value = Array.isArray(bb.actorAuditReports) ? bb.actorAuditReports as EvaluationReport[] : []
-  // 裁判旁路诊断轨迹
-  const rawRefereeTrace = Array.isArray(bb.refereeTrace) ? bb.refereeTrace : []
-  refereeTrace.value = rawRefereeTrace as RefereeTraceItem[]
-  refereeTraceCount.value = rawRefereeTrace.length
-  // 角色私有状态轨迹
-  const rawPrivateTrace = Array.isArray(bb.learnerPrivateStateTrace) ? bb.learnerPrivateStateTrace : []
-  privateStateTrace.value = rawPrivateTrace as PrivateStateTraceItem[]
-  privateStateTraceCount.value = rawPrivateTrace.length
-}
-
-/* 裁判轨迹视图：键值摘要行 + 原文 JSON（C3，展开不丢原始数据） */
-interface RefereeTraceView {
-  item: RefereeTraceItem
-  rows: TraceKeyValue[]
-  rawJson: string
-}
-const refereeTraceViews = computed<RefereeTraceView[]>(() =>
-  refereeTrace.value.map((item) => ({
-    item,
-    rows: traceSummaryRows(item.diagnostic),
-    rawJson: traceRawJson(item.diagnostic)
-  }))
-)
-
-/* 统一时间线（遗留项 2）：三流合并（裁判诊断 / 私有状态 / 会话日志），按时间升序单轴 */
-interface TimelineEntry {
-  time: string
-  kind: string
-  kindLabel: string
-  stage: string
-  title: string
-  detail: string
-}
-function timelineKindLabel(kind: string): string {
-  const map: Record<string, string> = {
-    referee: '裁判',
-    private: '私有状态',
-    log: '日志',
-    goal: '目标对话',
-    path: '路径',
-    teaching: '课堂',
-    evidence: '证据'
-  }
-  return map[kind] || kind
-}
-/* 裁判/私有轨迹流任一存在才展示统一时间线（仅日志时与会话日志卡重复） */
-const hasTraceFlows = computed(() => refereeTrace.value.length > 0 || privateStateTrace.value.length > 0)
-const unifiedTimeline = computed<TimelineEntry[]>(() => {
-  // 真实模式：后端合成时间线已由日志卡承载（同屏对照简化版），此面板仅服务虚拟三流合并
-  if (isRealMode.value) return []
-  const entries: TimelineEntry[] = []
-  for (const item of refereeTrace.value) {
-    entries.push({
-      time: item.timestamp || '',
-      kind: 'referee',
-      kindLabel: timelineKindLabel('referee'),
-      stage: 'learning',
-      title: `裁判诊断${item.traceId ? ` · ${item.traceId.slice(0, 8)}` : ''}`,
-      detail: traceSummaryRows(item.diagnostic).map((r) => `${r.label}: ${r.value}`).join(' · ')
-    })
-  }
-  for (const item of privateStateTrace.value) {
-    entries.push({
-      time: item.generatedAt || '',
-      kind: 'private',
-      kindLabel: timelineKindLabel('private'),
-      stage: item.stage || '',
-      title: `${item.transition || '状态'}${item.emotion ? ` · ${item.emotion}` : ''}`,
-      detail: [item.phaseFocus, item.visibleSignal, item.stateChangeReason]
-        .filter((v): v is string => !!v && typeof v === 'string')
-        .join(' · ')
-    })
-  }
-  for (const raw of rawLogs.value) {
-    const ts = String(raw.timestamp || raw.createdAt || '')
-    const view = parseLogEntry(raw)
-    entries.push({
-      time: ts,
-      kind: 'log',
-      kindLabel: timelineKindLabel('log'),
-      stage: view.phase,
-      title: view.text || view.phase || '会话日志',
-      detail: ''
-    })
-  }
-  return entries
-    .filter((e) => !!e.time)
-    .sort((a, b) => String(a.time).localeCompare(String(b.time)))
-    .slice(-200)
-})
-
-/* 评估报告展示助手 */
-function verdictLabel(verdict?: string) {
-  if (!verdict) return '未生成'
-  const map: Record<string, string> = {
-    pass: '通过', pass_with_concerns: '有条件通过',
-    fail: '失败', inconclusive: '证据不足',
-    credible: '可信', credible_with_concerns: '基本可信',
-    invalid: '无效'
-  }
-  return map[verdict] || verdict
-}
-function formatTime(value?: string | null) {
-  if (!value) return ''
-  const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString('zh-CN', { hour12: false })
-}
-function scoreItems(scores: Record<string, number | null>, kind: 'referee' | 'actor') {
-  const labels = kind === 'referee'
-    ? [['goalExperience', 'Goal 体验'], ['pathExperience', 'Path 体验'], ['teachingExperience', 'Teaching 体验'], ['controlConsistency', '控制一致'], ['boundaryIntegrity', '边界完整'], ['evidenceSufficiency', '证据充分']]
-    : [['personaConsistency', '画像一致'], ['storyConsistency', '故事一致'], ['disclosureDiscipline', '披露节奏'], ['frictionCalibration', '摩擦校准'], ['stateContinuity', '状态连续'], ['behaviorPlausibility', '行为可信'], ['evidenceSufficiency', '证据充分']]
-  return labels.map(([key, label]) => ({ label, value: scores[key] ?? null }))
-}
-function findingEvidence(report: EvaluationReport, finding: { evidenceIds?: Array<string | number> }) {
-  const ids = new Set(Array.isArray(finding.evidenceIds) ? finding.evidenceIds : [])
-  return (Array.isArray(report.report?.evidence) ? report.report.evidence : []).filter((e) => ids.has(e.id as never))
 }
 
 const frictionBudget = ref<'none' | 'low' | 'normal' | 'high' | 'stress_test'>('normal')
@@ -2611,20 +2123,13 @@ watch(
     if (!id) return
     stopPolling()
     session.value = null
-    logs.value = []
-    logsFailed.value = false
-    logFollowsBottom.value = true
+    resetLogs()
     pathStatus.value = null
     pathStatusFailed.value = false
     teachingDetail.value = null
     teachingDetailFailed.value = false
     selectedTeachingSessionId.value = ''
-    refereeReports.value = []
-    actorAuditReports.value = []
-    refereeTrace.value = []
-    refereeTraceCount.value = 0
-    privateStateTrace.value = []
-    privateStateTraceCount.value = 0
+    resetTraces()
     frictionBudget.value = 'normal'
     timelineEntries.value = []
     rawLogs.value = []
@@ -2651,7 +2156,8 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   z-index: 10;
   margin: -8px -8px 0;
   padding: 8px 8px 0;
-}.cp-topbar__autopilot {
+}
+.cp-topbar__autopilot {
   font-size: var(--mk-fs-12);
   font-weight: 700;
   color: var(--mk-amber);
@@ -2747,7 +2253,8 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   min-width: 0;
 }
 
-/* ===== 右列阶段卡（goal→预生成 Path / path→评审 / learning→运行 / wrapup→统计） ===== */.cp-aside-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-faint); flex-shrink: 0; }
+/* ===== 右列阶段卡（goal→预生成 Path / path→评审 / learning→运行 / wrapup→统计） ===== */
+.cp-aside-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-faint); flex-shrink: 0; }
 .cp-aside-dot.is-ok { background: var(--mk-green); }
 .cp-aside-dot.is-warn { background: var(--mk-amber); }
 .cp-aside-dot.is-bad { background: var(--mk-red); }
@@ -3586,7 +3093,8 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-sidebar { position: static; max-height: none; }
 }
 @media (min-width: 2000px) {
-  .cp-body { grid-template-columns: minmax(0, 1fr) 380px; }
+  .cp-body { grid-template-columns: minmax(0, 1fr) 380px; }
+
   .cp-stage { font-size: 15px; }
   .cp-stage__label { font-size: 15px; }
   .cp-stage__progress { font-size: 12px; }
@@ -3661,7 +3169,8 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-trace-list__body { font-size: 11.5px; }
 }
 @media (min-width: 2800px) {
-  .cp-body { grid-template-columns: minmax(0, 1fr) 440px; }
+  .cp-body { grid-template-columns: minmax(0, 1fr) 440px; }
+
   .cp-stage { font-size: 17.5px; }
   .cp-stage__label { font-size: 17.5px; }
   .cp-stage__progress { font-size: 14px; }
@@ -3737,9 +3246,11 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 }
 
 /* ================= 暗色模式（D1 补完）：会话座舱 ================= */
-html[data-theme='dark'] {  .cp-stage:hover:not(:disabled) { background: #1f2b40; }
+html[data-theme='dark'] {
+  .cp-stage:hover:not(:disabled) { background: #1f2b40; }
   .cp-stage--active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
-  .cp-run__autopilot-result { background: #141c2b; }  .cp-transcript__message { background: #141c2b; border-left-color: #2a3850; }
+  .cp-run__autopilot-result { background: #141c2b; }
+  .cp-transcript__message { background: #141c2b; border-left-color: #2a3850; }
   .cp-transcript__message.is-teacher { background: rgba(91, 141, 239, 0.12); border-left-color: var(--mk-blue); }
   .cp-transcript__message.is-learner { background: rgba(45, 212, 191, 0.1); border-left-color: var(--mk-teal); }
   .cp-review { background: #141c2b; }
@@ -3798,5 +3309,6 @@ html[data-theme='dark'] {  .cp-stage:hover:not(:disabled) { background: #1f2b40
   .cp-trace-list__metrics > span,
   .cp-trace-list__kv > span { background: #1d2739; }
   .cp-trace-list__flags > span { background: #253049; }
-  .cp-trace-list__flags > span.active { background: rgba(91, 141, 239, 0.16); color: #9db8f5; border-color: rgba(91, 141, 239, 0.45); }}
+  .cp-trace-list__flags > span.active { background: rgba(91, 141, 239, 0.16); color: #9db8f5; border-color: rgba(91, 141, 239, 0.45); }
+}
 </style>
