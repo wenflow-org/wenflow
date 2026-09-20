@@ -68,6 +68,7 @@ module.exports = {
     "src/views/v2/learningKp.ts",
     "src/views/v2/learningScene.ts",
     "src/views/v2/useGoalLive.ts",
+    "src/views/v2/useCheckpointFlow.ts",
     "src/views/v2/usePeerAssistant.ts"
   ],
       rules: {
