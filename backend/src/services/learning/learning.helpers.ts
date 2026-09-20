@@ -13,7 +13,7 @@ import type {
   PathSceneFraming,
   PathSceneFramingNormalizedInput,
 } from './learning.types';
-import { NEW_PATH_TASK_TYPES } from './learning.constants';
+import { DISPLAY_LABEL_MAP, NEW_PATH_TASK_TYPES } from './learning.constants';
 import type { PathGenerationPhase } from './path-generation-status';
 
 /**
@@ -799,5 +799,26 @@ export function normalizeStageTraceStatus(value: any): 'started' | 'succeeded' |
 export function normalizeStageTracePhase(value: any): PathGenerationPhase | null {
   if (value === 'core' || value === 'stageDesign') return value;
   if (value === 'enrichment') return 'stageDesign';
+  return null;
+}
+
+/** 解析 path.aiPromptTemplate 中持久化的 JSON 模板（坏数据/空值返回空对象，绝不抛错） */
+export function parsePathPromptTemplate(raw: string | null): Record<string, any> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/** 由 knowledgeType × cognitiveLevel 查展示标签（DISPLAY_LABEL_MAP），无映射返回 null */
+export function generateDisplayLabel(knowledgeType?: string | null, cognitiveLevel?: string | null): string | null {
+  if (!knowledgeType || !cognitiveLevel) return null;
+  const typeMap = DISPLAY_LABEL_MAP[knowledgeType];
+  if (typeMap && typeMap[cognitiveLevel]) {
+    return typeMap[cognitiveLevel];
+  }
   return null;
 }

@@ -17,32 +17,22 @@ import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
 import {
   PATH_GENERATION_LEASE_MS,
-  PATH_GENERATION_LEASE_OWNER,
   assertGenerationRunFence,
   assertStageTasksPresent,
   buildGenerationRunStatus,
   calculateStageProgress,
   claimExpiredGenerationRun,
-  createAndClaimPathGenerationRun,
   getSafeGenerationErrorMessage,
   isGenerationRunStale,
   isStageDesignStale,
   resolveGenerationRetry,
   type PathGenerationRollbackSnapshotV1,
-  type PathGenerationPhase,
-  type PathGenerationRetryType,
   type PersistedPathGenerationRun,
 } from './path-generation-status';
 import {
   assertPathMutationSafe,
-  buildPathReplanSnapshot,
-  claimPathReplanSnapshot,
-  createPathVersioningUnsupportedError,
   isPathMutationConflictError,
   PathMutationConflictError,
-  type PathMutationKind,
-  type PathMutationScope,
-  type PathReplanSnapshot,
 } from './path-mutation-safety';
 
 // Path 任务画像 Skills
@@ -54,27 +44,20 @@ import { pathAgentDefinition } from '../../skills/path-planning';
 import { pathReviewerDefinition } from '../../skills/path-reviewer';
 import { buildPathReviewerGoalContext } from './path-reviewer-context';
 import { kcMapperDefinition } from '../../skills/kc-mapper';
-import { sessionFinalizationService } from '../ai-teaching/SessionFinalizationService';
 
 // 模块级类型 / 常量 / 纯工具函数已抽离到同目录下的 learning.types / learning.constants / learning.helpers
 import {
   type CreateGoalData,
   type GeneratePathData,
   type PathReplanRequest,
-  type PathGenerationLogPayload,
-  type PathGenerationStatusPatch,
   type ParsedPathGenerationStatus,
-  type PathSceneFramingNormalizedInput,
   type PathSceneFraming,
-  type GoalToPathHandoffSnapshot,
   type PathCognitiveConcept,
   type PathCognitiveDesign,
-  type NewPathTaskType,
   type PathAdjustmentPolicy,
   type PathAdjustmentEvidence,
   type NormalizedPathTask,
   type NormalizedPathMilestone,
-  type PathNormalizedInputSnapshot,
   type PathStageTraceItem,
   type CompleteTaskData,
 } from './learning.types';
@@ -82,7 +65,6 @@ import {
   STALE_GENERATING_PATH_MINUTES,
   ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES,
   TERMINAL_STAGE_DESIGN_RETRY_CODES,
-  DISPLAY_LABEL_MAP,
 } from './learning.constants';
 import {
   normalizePathHoursFromTasks,
@@ -106,6 +88,8 @@ import {
   buildSceneSummaryFromFraming,
   slugifyConceptId,
   parsePathGenerationStatus,
+  parsePathPromptTemplate,
+  generateDisplayLabel,
   parseJsonSafe,
   isSuspiciousCognitiveDomain,
   isSuspiciousCoreConceptName,
@@ -116,35 +100,56 @@ import {
   normalizeStageTraceStatus,
   normalizeStageTracePhase,
 } from './learning.helpers';
+import {
+  createGenerationId,
+  createAndClaimGenerationRun as createAndClaimGenerationRunImpl,
+  restorePathAfterMutationConflict as restorePathAfterMutationConflictImpl,
+  claimQueuedGenerationRun,
+  heartbeatGenerationRun,
+  startGenerationHeartbeat,
+  failGenerationRun,
+  getActiveGenerationRun,
+  updatePathGenerationStatus as updatePathGenerationStatusImpl,
+  recordPathGenerationStageLog,
+} from './generation/run-lifecycle';
+import {
+  getNextEnrichmentRetryDelayMinutes,
+  getEnrichmentRetryReferenceTime as getEnrichmentRetryReferenceTimeImpl,
+  listEmptyMilestoneIds as listEmptyMilestoneIdsImpl,
+  isAppendBlockedByInFlightGeneration,
+} from './generation/retry-policy';
+import { requestPathReplan } from './replan/path-replan.service';
 
 export { normalizePathHoursFromTasks } from './learning.helpers';
 
 class LearningService {
-  private createGenerationId(prefix: 'pgr' | 'pgsi'): string {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+  private createAndClaimGenerationRun(
+    pathId: string,
+    phase: 'core' | 'stageDesign',
+    retryType: 'core' | 'stageDesign' | null = null,
+    totalItems = 0,
+    mutationKind?: any,
+    expectedActiveGenerationRunId?: string | null,
+    mutationScope: any = {}
+  ): Promise<any> {
+    return createAndClaimGenerationRunImpl(pathId, phase, retryType, totalItems, mutationKind, expectedActiveGenerationRunId, mutationScope);
   }
 
-  private async createAndClaimGenerationRun(
+  private async updatePathGenerationStatus(
     pathId: string,
-    phase: PathGenerationPhase,
-    retryType: PathGenerationRetryType | null = null,
-    totalItems = 0,
-    mutationKind?: PathMutationKind,
-    expectedActiveGenerationRunId?: string | null,
-    mutationScope: PathMutationScope = {}
-  ): Promise<any> {
-    const runId = this.createGenerationId('pgr');
-    return createAndClaimPathGenerationRun(prisma, {
-      runId,
-      pathId,
-      phase,
-      retryType,
-      totalItems,
-      ...(expectedActiveGenerationRunId === undefined ? {} : { expectedActiveGenerationRunId }),
-      guard: mutationKind
-        ? (tx) => assertPathMutationSafe(tx, pathId, mutationKind, mutationScope)
-        : undefined
-    });
+    patch: any,
+    runId?: string,
+    expectedRunStatus: 'processing' | 'failed' = 'processing'
+  ): Promise<void> {
+    return updatePathGenerationStatusImpl(pathId, patch, runId, expectedRunStatus);
+  }
+
+  private getEnrichmentRetryReferenceTime(path: { updatedAt: Date }, generationStatus: any): number {
+    return getEnrichmentRetryReferenceTimeImpl(path, generationStatus);
+  }
+
+  private async listEmptyMilestoneIds(pathId: string): Promise<string[]> {
+    return listEmptyMilestoneIdsImpl(pathId);
   }
 
   private async restorePathAfterMutationConflict(
@@ -157,202 +162,22 @@ class LearningService {
       errorCode?: string;
     } = {}
   ): Promise<void> {
-    const now = new Date();
-    const errorCode = options.errorCode || (isPathMutationConflictError(error)
-      ? error.code
-      : 'PATH_MUTATION_CONFLICT');
-    const runStatus = options.runStatus || 'cancelled';
-
-    await withTransaction(async (tx) => {
-      const path = await tx.learning_paths.findUnique({
-        where: { id: pathId },
-        select: {
-          activeGenerationRunId: true,
-          aiPromptTemplate: true,
-          status: true
-        }
-      });
-      if (!path || path.activeGenerationRunId !== runId) return;
-
-      const run = await tx.path_generation_runs.findUnique({
-        where: { id: runId },
-        select: { rollbackSnapshot: true }
-      });
-      let rollbackSnapshot: PathGenerationRollbackSnapshotV1 | null = null;
-      try {
-        const parsed = run?.rollbackSnapshot ? JSON.parse(run.rollbackSnapshot) : null;
-        rollbackSnapshot = parsed?.version === 1 ? parsed as PathGenerationRollbackSnapshotV1 : null;
-      } catch {
-        rollbackSnapshot = null;
-      }
-
-      await tx.path_generation_runs.updateMany({
-        where: {
-          id: runId,
-          learningPathId: pathId,
-          status: { in: ['queued', 'processing'] }
-        },
-        data: {
-          status: runStatus,
-          retryAllowed: options.retryAllowed === true,
-          heartbeatAt: now,
-          leaseExpiresAt: now,
-          finishedAt: now,
-          errorCode,
-          errorMessage: error instanceof Error ? error.message : String(error)
-        }
-      });
-
-      const restoringCorePath = rollbackSnapshot?.path.restoreStatus === true;
-      if (restoringCorePath && path.status !== 'generating') return;
-
-      const restored = await tx.learning_paths.updateMany({
-        where: {
-          id: pathId,
-          activeGenerationRunId: runId,
-          ...(restoringCorePath ? { status: 'generating' } : {})
-        },
-        data: {
-          activeGenerationRunId: runStatus === 'failed'
-            ? runId
-            : rollbackSnapshot?.supersededRun
-              ? null
-              : rollbackSnapshot?.path.activeGenerationRunId || null,
-          aiPromptTemplate: rollbackSnapshot ? rollbackSnapshot.path.aiPromptTemplate : path.aiPromptTemplate,
-          ...(rollbackSnapshot?.path.restoreStatus && path.status === 'generating'
-            ? { status: rollbackSnapshot.path.status }
-            : {}),
-          updatedAt: now
-        }
-      });
-      if (restored.count !== 1) return;
-
-      if (!rollbackSnapshot) {
-        logger.warn('路径生成任务缺少回滚快照，仅释放当前生成指针', { pathId, runId });
-      }
-    });
+    return restorePathAfterMutationConflictImpl(pathId, runId, error, options);
   }
 
-  private async claimQueuedGenerationRun(pathId: string, runId: string): Promise<any | null> {
-    const now = new Date();
-    const claimed = await prisma.path_generation_runs.updateMany({
-      where: {
-        id: runId,
-        learningPathId: pathId,
-        phase: 'stageDesign',
-        status: 'queued',
-        learningPath: { activeGenerationRunId: runId }
-      },
-      data: {
-        status: 'processing',
-        leaseOwner: PATH_GENERATION_LEASE_OWNER,
-        claimedAt: now,
-        startedAt: now,
-        heartbeatAt: now,
-        leaseExpiresAt: new Date(now.getTime() + PATH_GENERATION_LEASE_MS)
-      }
-    });
-    if (claimed.count !== 1) return null;
-    return this.getActiveGenerationRun(pathId, runId);
-  }
-
-  private async heartbeatGenerationRun(
+  /** 追加式补齐的目标阶段（无则空数组）：生成在途时返回空（避免与在途生成重复）。 */
+  private async resolveAppendMilestoneIds(
     pathId: string,
-    runId: string,
-    progressPatch: { completedItems?: number; totalItems?: number; progress?: number } = {}
-  ): Promise<void> {
-    const now = new Date();
-    const result = await prisma.path_generation_runs.updateMany({
-      where: {
-        id: runId,
-        learningPathId: pathId,
-        status: 'processing',
-        learningPath: { activeGenerationRunId: runId }
-      },
-      data: {
-        ...progressPatch,
-        leaseOwner: PATH_GENERATION_LEASE_OWNER,
-        heartbeatAt: now,
-        leaseExpiresAt: new Date(now.getTime() + PATH_GENERATION_LEASE_MS)
-      }
-    });
-    if (result.count !== 1) throw new Error('GENERATION_RUN_FENCED');
-  }
-
-  private startGenerationHeartbeat(pathId: string, runId: string): () => void {
-    let inFlight = false;
-    const timer = setInterval(() => {
-      if (inFlight) return;
-      inFlight = true;
-      void this.heartbeatGenerationRun(pathId, runId)
-        .catch((error) => {
-          if (!(error instanceof Error) || error.message !== 'GENERATION_RUN_FENCED') {
-            logger.warn('刷新路径生成任务心跳失败', {
-              pathId,
-              runId,
-              error: error instanceof Error ? error.message : String(error)
-            });
-          }
-        })
-        .finally(() => {
-          inFlight = false;
-        });
-    }, Math.max(30_000, Math.floor(PATH_GENERATION_LEASE_MS / 3)));
-    timer.unref?.();
-    return () => clearInterval(timer);
-  }
-
-  private async failGenerationRun(
-    pathId: string,
-    runId: string,
-    error: unknown,
-    errorCode: string,
-    retryType: PathGenerationRetryType,
-    pathStatus?: 'failed' | 'active'
-  ): Promise<boolean> {
-    const now = new Date();
-    const errorMessage = error instanceof Error ? error.message : String(error);
-
-    return withTransaction(async (tx) => {
-      const failed = await tx.path_generation_runs.updateMany({
-        where: {
-          id: runId,
-          learningPathId: pathId,
-          status: { in: ['queued', 'processing'] }
-        },
-        data: {
-          status: 'failed',
-          retryType,
-          retryAllowed: true,
-          heartbeatAt: now,
-          leaseExpiresAt: now,
-          finishedAt: now,
-          errorCode,
-          errorMessage
-        }
-      });
-      if (failed.count !== 1) return false;
-
-      const updatedPath = await tx.learning_paths.updateMany({
-        where: { id: pathId, activeGenerationRunId: runId },
-        data: {
-          ...(pathStatus ? { status: pathStatus } : {}),
-          updatedAt: now
-        }
-      });
-      return updatedPath.count === 1;
-    });
-  }
-
-  private async getActiveGenerationRun(pathId: string, activeGenerationRunId?: string | null): Promise<any | null> {
-    if (!activeGenerationRunId) return null;
-    return prisma.path_generation_runs.findFirst({
-      where: { id: activeGenerationRunId, learningPathId: pathId }
-    });
+    generationStatus: any,
+    activeRun: any,
+    pathUpdatedAt: Date
+  ): Promise<string[]> {
+    if (isAppendBlockedByInFlightGeneration(generationStatus, activeRun, pathUpdatedAt)) return [];
+    return this.listEmptyMilestoneIds(pathId);
   }
 
   private buildPathProcessDetail(path: any) {
-    const parsedTemplate = this.parsePathPromptTemplate(path.aiPromptTemplate || null);
+    const parsedTemplate = parsePathPromptTemplate(path.aiPromptTemplate || null);
     const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate || null);
     const sceneFraming = parsedTemplate?.sceneFraming && typeof parsedTemplate.sceneFraming === 'object'
       ? parsedTemplate.sceneFraming
@@ -770,25 +595,6 @@ class LearningService {
     };
   }
 
-  private getNextEnrichmentRetryDelayMinutes(retryCount: number): number {
-    return ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES[
-      Math.min(retryCount, ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length - 1)
-    ];
-  }
-
-  private getEnrichmentRetryReferenceTime(
-    path: { updatedAt: Date },
-    generationStatus: ParsedPathGenerationStatus | null
-  ): number {
-    const rawTime = generationStatus?.updatedAt
-      || generationStatus?.lastStageDesignRetryAt
-      || path.updatedAt?.toISOString?.()
-      || path.updatedAt;
-
-    const timestamp = new Date(rawTime).getTime();
-    return Number.isFinite(timestamp) ? timestamp : Date.now();
-  }
-
   private async queuePathEnrichmentRetry(
     path: {
       id: string;
@@ -824,7 +630,7 @@ class LearningService {
     }, run.id);
 
     const analysis = {
-      ...this.parsePathPromptTemplate(path.aiPromptTemplate || null),
+      ...parsePathPromptTemplate(path.aiPromptTemplate || null),
       subject: path.subject || '综合'
     };
 
@@ -840,39 +646,6 @@ class LearningService {
     }, analysis), { pathId: path.id, runId: run.id, userId: path.userId });
 
     return { retryCount, runId: run.id };
-  }
-
-  /** 列出"零子任务且未完成"的阶段 id（追加式补齐的合法目标）。 */
-  private async listEmptyMilestoneIds(pathId: string): Promise<string[]> {
-    const milestones = await prisma.milestones.findMany({
-      where: {
-        learningPathId: pathId,
-        status: { not: 'completed' },
-        subtasks: { none: {} }
-      },
-      select: { id: true },
-      orderBy: { stageNumber: 'asc' }
-    });
-    return milestones.map((milestone) => milestone.id);
-  }
-
-  /**
-   * 追加式补齐的目标阶段（无则空数组）：生成在途时返回空（避免与在途生成重复）。
-   * 供后台自愈环在 replace 通道不可用/预算耗尽时选路。
-   */
-  private async resolveAppendMilestoneIds(
-    pathId: string,
-    generationStatus: ParsedPathGenerationStatus | null,
-    activeRun: PersistedPathGenerationRun | null,
-    pathUpdatedAt: Date
-  ): Promise<string[]> {
-    const generationInFlight = (activeRun != null
-        && (activeRun.status === 'queued' || activeRun.status === 'processing')
-        && !isGenerationRunStale(activeRun))
-      || (generationStatus?.stageDesign === 'processing'
-        && !isStageDesignStale(generationStatus, pathUpdatedAt));
-    if (generationInFlight) return [];
-    return this.listEmptyMilestoneIds(pathId);
   }
 
   /**
@@ -913,7 +686,7 @@ class LearningService {
     }, run.id);
 
     const analysis = {
-      ...this.parsePathPromptTemplate(path.aiPromptTemplate || null),
+      ...parsePathPromptTemplate(path.aiPromptTemplate || null),
       subject: path.subject || '综合'
     };
 
@@ -929,25 +702,6 @@ class LearningService {
     }, analysis, { appendOnly: true }), { pathId: path.id, runId: run.id, userId: path.userId });
 
     return { retryCount: appendCount, runId: run.id };
-  }
-
-  private generateDisplayLabel(knowledgeType?: string | null, cognitiveLevel?: string | null): string | null {
-    if (!knowledgeType || !cognitiveLevel) return null;
-    const typeMap = DISPLAY_LABEL_MAP[knowledgeType];
-    if (typeMap && typeMap[cognitiveLevel]) {
-      return typeMap[cognitiveLevel];
-    }
-    return null;
-  }
-
-  private parsePathPromptTemplate(raw: string | null): Record<string, any> {
-    if (!raw) return {};
-    try {
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch {
-      return {};
-    }
   }
 
   private buildPathCognitiveDesign(data: GeneratePathData, analysis: any): PathCognitiveDesign {
@@ -1053,7 +807,7 @@ class LearningService {
       return generationScene;
     }
 
-    const parsed = this.parsePathPromptTemplate(raw);
+    const parsed = parsePathPromptTemplate(raw);
     const sceneFraming = parsed?.sceneFraming && typeof parsed.sceneFraming === 'object'
       ? parsed.sceneFraming as PathSceneFraming
       : null;
@@ -1063,94 +817,6 @@ class LearningService {
       : undefined;
 
     return buildSceneSummaryFromFraming(sceneFraming, milestoneCount, taskCount);
-  }
-
-  private async updatePathGenerationStatus(
-    pathId: string,
-    patch: PathGenerationStatusPatch,
-    runId?: string,
-    expectedRunStatus: 'processing' | 'failed' = 'processing'
-  ): Promise<void> {
-    try {
-      await withTransaction(async (tx) => {
-        if (runId) await assertGenerationRunFence(tx, pathId, runId, expectedRunStatus);
-        const existing = await tx.learning_paths.findUnique({
-          where: { id: pathId },
-          select: { aiPromptTemplate: true }
-        });
-        if (!existing) return;
-
-        const currentTemplate = this.parsePathPromptTemplate(existing.aiPromptTemplate);
-        const currentGeneration = currentTemplate._generation && typeof currentTemplate._generation === 'object'
-          ? currentTemplate._generation
-          : {};
-
-        await tx.learning_paths.update({
-          where: { id: pathId },
-          data: {
-            aiPromptTemplate: JSON.stringify({
-              ...currentTemplate,
-              _generation: {
-                ...currentGeneration,
-                ...patch,
-                updatedAt: patch.updatedAt || new Date().toISOString()
-              }
-            }),
-            updatedAt: new Date()
-          }
-        });
-      });
-    } catch (error) {
-      if (error instanceof Error && error.message === 'GENERATION_RUN_FENCED') throw error;
-      logger.warn('更新路径生成状态失败', {
-        pathId,
-        patch,
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
-  }
-
-  private async recordPathGenerationStageLog(payload: PathGenerationLogPayload): Promise<void> {
-    try {
-      await prisma.agent_call_logs.create({
-        data: {
-          id: `acl_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          agentId: 'path-agent',
-          userId: payload.userId,
-          sourceEntry: 'platform',
-          input: JSON.stringify({
-            phase: payload.phase,
-            status: payload.status,
-            pathId: payload.pathId || null,
-            sourceConversationId: payload.sourceConversationId || null,
-            triggerSource: payload.triggerSource || null,
-            ...(payload.input || {})
-          }),
-          output: payload.output ? JSON.stringify(payload.output) : null,
-          success: payload.status !== 'failed',
-          durationMs: payload.durationMs || 0,
-          error: payload.error || null,
-          errorCode: payload.errorCode || null,
-          calledAt: new Date(),
-          metadata: JSON.stringify({
-            eventType: 'path-generation-stage',
-            executionLayer: 'flow-event',
-            phase: payload.phase,
-            status: payload.status,
-            pathId: payload.pathId || null,
-            sourceConversationId: payload.sourceConversationId || null,
-            triggerSource: payload.triggerSource || null
-          })
-        }
-      });
-    } catch (error) {
-      logger.warn('记录路径阶段日志失败', {
-        phase: payload.phase,
-        status: payload.status,
-        pathId: payload.pathId,
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
   }
 
   async recoverStaleGeneratingPaths(): Promise<number> {
@@ -1351,7 +1017,7 @@ class LearningService {
 
     for (const path of candidatePaths) {
       const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
-      const activeRun = await this.getActiveGenerationRun(path.id, path.activeGenerationRunId);
+      const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
       const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
       const canReplace = retry.allowed && retry.retryType === 'stageDesign';
       const replaceBudgetLeft = (generationStatus?.stageDesignRetryCount || 0) < ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length;
@@ -1376,7 +1042,7 @@ class LearningService {
       }
 
       const retryReferenceTime = this.getEnrichmentRetryReferenceTime(path, generationStatus);
-      const requiredDelayMs = this.getNextEnrichmentRetryDelayMinutes(retryCount) * 60 * 1000;
+      const requiredDelayMs = getNextEnrichmentRetryDelayMinutes(retryCount) * 60 * 1000;
       if (Date.now() - retryReferenceTime < requiredDelayMs) {
         continue;
       }
@@ -2081,7 +1747,7 @@ class LearningService {
           }
         });
 
-        const stageRunId = this.createGenerationId('pgr');
+        const stageRunId = createGenerationId('pgr');
         const stageRollbackSnapshot: PathGenerationRollbackSnapshotV1 = {
           version: 1,
           path: {
@@ -2150,10 +1816,10 @@ class LearningService {
     let inFlightStageItemIds: Set<string> | null = null;
 
     try {
-      const persistedRun = await this.getActiveGenerationRun(pathId, runId);
+      const persistedRun = await getActiveGenerationRun(pathId, runId);
       const run = persistedRun?.phase === 'stageDesign'
         ? persistedRun.status === 'queued'
-          ? await this.claimQueuedGenerationRun(pathId, runId)
+          ? await claimQueuedGenerationRun(pathId, runId)
           : persistedRun
         : null;
       if (!run || run.status !== 'processing') throw new Error('GENERATION_RUN_FENCED');
@@ -2168,9 +1834,9 @@ class LearningService {
         appendOnly ? 'append-tasks' : 'replace-tasks',
         appendOnly ? { milestoneIds: appendMilestoneIds } : {}
       );
-      stopHeartbeat = this.startGenerationHeartbeat(pathId, runId);
+      stopHeartbeat = startGenerationHeartbeat(pathId, runId);
 
-      await this.recordPathGenerationStageLog({
+      await recordPathGenerationStageLog({
         userId: data.userId,
         pathId,
         sourceConversationId: data.sourceConversationId,
@@ -2215,14 +1881,14 @@ class LearningService {
       if (learningPath.milestones.length === 0) {
         throw new Error('PATH_STAGE_DESIGN_HAS_NO_STAGES');
       }
-      await this.heartbeatGenerationRun(pathId, runId, {
+      await heartbeatGenerationRun(pathId, runId, {
         totalItems: learningPath.milestones.length,
         completedItems: 0,
         progress: 0
       });
 
       const pathCognitiveDesign = parsePathCognitiveDesign(learningPath.aiPromptTemplate || null);
-      const parsedTemplate = this.parsePathPromptTemplate(learningPath.aiPromptTemplate || null);
+      const parsedTemplate = parsePathPromptTemplate(learningPath.aiPromptTemplate || null);
       const sceneFraming = parsedTemplate?.sceneFraming && typeof parsedTemplate.sceneFraming === 'object'
         ? parsedTemplate.sceneFraming
         : null;
@@ -2250,7 +1916,7 @@ class LearningService {
       const processStageDesign = async (stageIndex: number): Promise<void> => {
         const milestone = learningPath.milestones[stageIndex];
         const stageStartedAt = new Date();
-        const stageItemId = this.createGenerationId('pgsi');
+        const stageItemId = createGenerationId('pgsi');
         inFlightStageItemIds.add(stageItemId);
         await prisma.path_generation_stage_items.create({
           data: {
@@ -2330,7 +1996,7 @@ class LearningService {
         });
         inFlightStageItemIds.delete(stageItemId);
         completedStageCount += 1;
-        await this.heartbeatGenerationRun(
+        await heartbeatGenerationRun(
           pathId,
           runId,
           calculateStageProgress(completedStageCount, learningPath.milestones.length)
@@ -2347,7 +2013,7 @@ class LearningService {
       // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图
       let kcAnnotation: any = null;
       try {
-        const parsedTemplate = this.parsePathPromptTemplate(learningPath.aiPromptTemplate || null);
+        const parsedTemplate = parsePathPromptTemplate(learningPath.aiPromptTemplate || null);
         const kcResult = await executeSkill(kcMapperDefinition, {
           cognitiveCore: (parsedTemplate as any)?.cognitiveCore || (parsedTemplate as any)?.cognitiveDesign || null,
           milestones: learningPath.milestones.map((m) => ({
@@ -2389,7 +2055,7 @@ class LearningService {
             where: { id: pathId },
             select: { aiPromptTemplate: true },
           });
-          const currentTemplate = this.parsePathPromptTemplate(currentPath?.aiPromptTemplate || null);
+          const currentTemplate = parsePathPromptTemplate(currentPath?.aiPromptTemplate || null);
           await prisma.learning_paths.update({
             where: { id: pathId },
             data: {
@@ -2443,7 +2109,7 @@ class LearningService {
               pathCognitiveDesign,
               typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
             );
-            const displayLabel = this.generateDisplayLabel(taskData.knowledgeType || null, taskData.cognitiveLevel || null)
+            const displayLabel = generateDisplayLabel(taskData.knowledgeType || null, taskData.cognitiveLevel || null)
               || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
 
             await tx.subtasks.create({
@@ -2552,7 +2218,7 @@ class LearningService {
         milestoneCount: learningPath.milestones.length,
       });
 
-      await this.recordPathGenerationStageLog({
+      await recordPathGenerationStageLog({
         userId: data.userId,
         pathId,
         sourceConversationId: data.sourceConversationId,
@@ -2600,7 +2266,7 @@ class LearningService {
           }
         });
       }
-      await this.recordPathGenerationStageLog({
+      await recordPathGenerationStageLog({
         userId: data.userId,
         pathId,
         sourceConversationId: data.sourceConversationId,
@@ -2619,7 +2285,7 @@ class LearningService {
           triggerSource,
           updatedAt: new Date().toISOString()
         }, runId);
-        await this.failGenerationRun(
+        await failGenerationRun(
           pathId,
           runId,
           andersonError,
@@ -2647,7 +2313,7 @@ class LearningService {
 
     const coreRun = data.existingPathId
       ? data.generationRunId
-        ? await this.getActiveGenerationRun(data.existingPathId, data.generationRunId)
+        ? await getActiveGenerationRun(data.existingPathId, data.generationRunId)
         : null
       : null;
     if (data.existingPathId && (!coreRun || coreRun.status !== 'processing')) {
@@ -2672,10 +2338,10 @@ class LearningService {
       });
     }
     const stopHeartbeat = data.existingPathId && coreRunId
-      ? this.startGenerationHeartbeat(data.existingPathId, coreRunId)
+      ? startGenerationHeartbeat(data.existingPathId, coreRunId)
       : null;
 
-    await this.recordPathGenerationStageLog({
+    await recordPathGenerationStageLog({
       userId: data.userId,
       pathId: data.existingPathId,
       sourceConversationId: data.sourceConversationId,
@@ -2769,7 +2435,7 @@ class LearningService {
         });
       }
       if (data.existingPathId && coreRunId) {
-        await this.heartbeatGenerationRun(data.existingPathId, coreRunId, { progress: 50 });
+        await heartbeatGenerationRun(data.existingPathId, coreRunId, { progress: 50 });
       }
 
       if (!analysis) {
@@ -2801,7 +2467,7 @@ class LearningService {
           durationMs: duration
         });
 
-      await this.recordPathGenerationStageLog({
+      await recordPathGenerationStageLog({
         userId: data.userId,
         pathId: fullPath.id,
         sourceConversationId: data.sourceConversationId,
@@ -2817,7 +2483,7 @@ class LearningService {
       });
 
       if (sceneSummary) {
-        const persistedTemplate = this.parsePathPromptTemplate(fullPath.aiPromptTemplate || null);
+        const persistedTemplate = parsePathPromptTemplate(fullPath.aiPromptTemplate || null);
         await prisma.learning_paths.updateMany({
           where: {
             id: fullPath.id,
@@ -2860,7 +2526,7 @@ class LearningService {
         durationMs: duration
       });
 
-      await this.recordPathGenerationStageLog({
+      await recordPathGenerationStageLog({
         userId: data.userId,
         pathId: data.existingPathId,
         sourceConversationId: data.sourceConversationId,
@@ -2882,7 +2548,7 @@ class LearningService {
             updatedAt: new Date().toISOString()
           }, coreRunId);
           if (coreRunId) {
-            await this.failGenerationRun(
+            await failGenerationRun(
               data.existingPathId,
               coreRunId,
               error,
@@ -2968,7 +2634,7 @@ class LearningService {
       }
 
       const pathWithActualMinutes = await this.attachActualMinutesToPath(path);
-      const activeRun = await this.getActiveGenerationRun(path.id, path.activeGenerationRunId);
+      const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
       const taskCount = pathWithActualMinutes.milestones.reduce(
         (sum: number, milestone: any) => sum + ((milestone.subtasks || []).length),
         0
@@ -3312,7 +2978,7 @@ class LearningService {
     }
 
     const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
-    const activeRun = await this.getActiveGenerationRun(path.id, path.activeGenerationRunId);
+    const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
     const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
     if (retry.allowed && retry.retryType === 'stageDesign') {
       const queued = await this.queuePathEnrichmentRetry(path, generationStatus);
@@ -3359,7 +3025,7 @@ class LearningService {
     if (path.userId !== userId) throw new Error('无权访问此学习路径');
 
     const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
-    const activeRun = await this.getActiveGenerationRun(path.id, path.activeGenerationRunId);
+    const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
     return {
       ...resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt),
       expectedActiveGenerationRunId: path.activeGenerationRunId
@@ -3390,14 +3056,14 @@ class LearningService {
     });
     const activeRunId = runId || path?.activeGenerationRunId;
     if (!activeRunId || path?.activeGenerationRunId !== activeRunId) return;
-    const run = await this.getActiveGenerationRun(pathId, activeRunId);
+    const run = await getActiveGenerationRun(pathId, activeRunId);
     if (!run || run.status === 'failed' || run.status === 'succeeded' || run.status === 'cancelled') return;
 
     try {
       await this.updatePathGenerationStatus(pathId, run.phase === 'stageDesign'
         ? { stageDesign: 'failed', lastError: error instanceof Error ? error.message : String(error) }
         : { core: 'failed', lastError: error instanceof Error ? error.message : String(error) }, activeRunId);
-      await this.failGenerationRun(
+      await failGenerationRun(
         pathId,
         activeRunId,
         error,
@@ -3464,7 +3130,7 @@ class LearningService {
       throw new Error('此阶段尚未解锁，请先完成前置阶段');
     }
 
-    const activeRun = await this.getActiveGenerationRun(learningPath.id, learningPath.activeGenerationRunId);
+    const activeRun = await getActiveGenerationRun(learningPath.id, learningPath.activeGenerationRunId);
     const accessState = this.getPathLearningAccessState(
       learningPath.status,
       learningPath.aiPromptTemplate,
@@ -3516,698 +3182,9 @@ class LearningService {
   }
 
   // 预留：基于已学内容重调学习路径（默认 new_version）
-  private resolveStageReplanTarget(path: any, requestedStageNumber?: number | null) {
-    if (requestedStageNumber) {
-      const requested = path.milestones.find((milestone: any) => milestone.stageNumber === requestedStageNumber) || null;
-      return requested?.status === 'completed' ? null : requested;
-    }
-
-    const activeMilestone = path.milestones.find((milestone: any) => {
-      if (milestone.status === 'completed') return false;
-      const tasks = milestone.subtasks || [];
-      return tasks.length === 0 || tasks.some((task: any) => task.status !== 'completed');
-    });
-
-    return activeMilestone || null;
-  }
-
-  private async redesignMilestoneTasks(
-    path: any,
-    milestone: any,
-    data: PathReplanRequest,
-    learnerReplanProjection: any,
-    runId: string,
-    snapshot: PathReplanSnapshot,
-    options: {
-      skipFinalizeRun?: boolean;
-      eventRunTotal?: number;
-    } = {}
-  ) {
-    const { skipFinalizeRun = false, eventRunTotal = 1 } = options;    const parsedTemplate = this.parsePathPromptTemplate(path.aiPromptTemplate || null);
-    const pathCognitiveDesign = parsePathCognitiveDesign(path.aiPromptTemplate || null);
-    const normalizedInput = getSceneFramingNormalizedInput(parsedTemplate?.sceneFraming)
-      || resolvePersistedNormalizedInput(parsedTemplate)
-      || null;
-    const sceneFraming = parsedTemplate?.sceneFraming && typeof parsedTemplate.sceneFraming === 'object'
-      ? parsedTemplate.sceneFraming
-      : null;
-    const completedTasks = (milestone.subtasks || []).filter((task: any) => task.status === 'completed');
-    const sortedMilestones = [...(path.milestones || [])].sort((a: any, b: any) => a.stageNumber - b.stageNumber);
-    const milestoneIndex = sortedMilestones.findIndex((m: any) => m.id === milestone.id);
-    const previousMilestone = milestoneIndex > 0 ? sortedMilestones[milestoneIndex - 1] : null;
-
-    const stageDesignerInput = {
-      milestone: {
-        stageNumber: milestone.stageNumber,
-        title: milestone.title,
-        coreConcept: milestone.coreConceptId || null,
-        description: milestone.description || null,
-        goal: milestone.goal || null,
-        estimatedHours: milestone.estimatedHours || null,
-      },
-      ...(previousMilestone ? {
-        previousMilestone: {
-          stageNumber: previousMilestone.stageNumber,
-          title: previousMilestone.title,
-          coreConcept: previousMilestone.coreConceptId || null,
-        },
-      } : {}),
-      cognitiveCore: pathCognitiveDesign,
-      normalizedInput,
-      repairHints: {
-        reason: data.reason || null,
-        triggerSource: data.triggerSource || null,
-        evidence: data.evidence || null,
-        learnerReplanProjection,
-        preserveCompletedTasks: completedTasks.map((task: any) => ({ id: task.id, title: task.title })),
-      },
-    };
-    const stageResult = await executeSkill(stageDesignerDefinition, stageDesignerInput);
-
-    const newTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
-    assertStageTasksPresent(milestone.stageNumber, newTasks);
-
-    await withTransaction(async (tx) => {
-      await assertGenerationRunFence(tx, path.id, runId);
-      await claimPathReplanSnapshot(tx, snapshot);
-      await assertPathMutationSafe(tx, path.id, 'replan-stage', {
-        milestoneId: milestone.id,
-        ...(Array.isArray((data.evidence as any)?.clearedSessionIds) && (data.evidence as any).clearedSessionIds.length
-          ? { ignoreCompletedSessionIds: (data.evidence as any).clearedSessionIds as string[] }
-          : {})
-      });
-      await tx.subtasks.deleteMany({
-        where: {
-          milestoneId: milestone.id,
-          status: { not: 'completed' },
-        }
-      });
-
-      for (let index = 0; index < newTasks.length; index += 1) {
-        const taskData = newTasks[index];
-        const resolvedConcept = resolveTaskConcept(
-          typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
-          pathCognitiveDesign,
-          typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
-        );
-        const displayLabel = this.generateDisplayLabel(taskData.knowledgeType || null, taskData.cognitiveLevel || null)
-          || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
-
-        await tx.subtasks.create({
-          data: {
-            id: `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${index}`,
-            milestoneId: milestone.id,
-            userId: data.userId,
-            title: taskData.title || `任务${index + 1}`,
-            description: taskData.description || '',
-            taskType: normalizePathTaskType(taskData.type),
-            estimatedMinutes: taskData.estimatedMinutes || 30,
-            acceptanceCriteria: taskData.acceptanceHint || '',
-            coreConcept: resolvedConcept.linkedConceptName || null,
-            linkedConceptId: resolvedConcept.linkedConceptId || null,
-            linkedConceptName: resolvedConcept.linkedConceptName || null,
-            knowledgeType: taskData.knowledgeType || null,
-            cognitiveLevel: taskData.cognitiveLevel || null,
-            icapLevel: taskData.icapLevel || null,
-            displayLabel,
-            learningObjectives: null,
-            transferable: taskData.transferable ?? false,
-            annotationConfidence: null,
-            order: Math.max(-1, ...completedTasks.map((task: any) => Number(task.order) || 0)) + 1 + index,
-            status: 'todo',
-            updatedAt: new Date(),
-          }
-        });
-      }
-
-      // 阶段/路径估时回写：本阶段任务分钟汇总（ceil 整小时）；路径=Σ各阶段（含未重设计阶段既有任务）
-      const redesignTotalMinutes = (newTasks as Array<{ estimatedMinutes?: number }>)
-        .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
-      // 保留的已完成任务也计入本阶段时长
-      const completedMinutes = completedTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
-      const stageNewHours = newTasks.length > 0 ? Math.max(1, Math.ceil((redesignTotalMinutes + completedMinutes) / 60)) : null;
-      if (stageNewHours !== null) {
-        await tx.milestones.update({
-          where: { id: milestone.id },
-          data: { estimatedHours: stageNewHours, updatedAt: new Date() }
-        });
-      }
-      // 路径汇总：以全部阶段任务分钟真实汇总（含重设计阶段新任务 + 其它阶段既有任务）
-      const allPathTasks = await tx.subtasks.findMany({
-        where: { milestones: { learningPathId: path.id } },
-        select: { estimatedMinutes: true },
-      });
-      const pathTotalMinutes = allPathTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
-      const pathHours = allPathTasks.length > 0 ? Math.max(1, Math.ceil(pathTotalMinutes / 60)) : 0;
-
-      await tx.learning_paths.update({
-        where: { id: path.id },
-        data: {
-          // 断链修复 P0-4：真实 replan 流补写 replan 元数据（此前 LearningDecisionFeedService
-          // 依赖 replanReason 非空，而真实 replan 从不写 → 决策卡不出现）
-          ...(pathHours > 0 ? { estimatedHours: pathHours } : {}),
-          replanMode: data.mode || 'overwrite',
-          replanTriggerSource: data.triggerSource || 'api',
-          replanReason: data.reason || null,
-          aiPromptTemplate: JSON.stringify({
-            ...parsedTemplate,
-            stageDesigns: {
-              ...(parsedTemplate?.stageDesigns && typeof parsedTemplate.stageDesigns === 'object' ? parsedTemplate.stageDesigns : {}),
-              [`stage-${milestone.stageNumber}`]: {
-                inputPayload: stageDesignerInput,
-                rawModelOutput: stageResult?._debug?.rawModelOutput || null,
-                extractedJson: stageResult?._debug?.extractedJson || null,
-                normalizedOutput: {
-                  subtasks: newTasks,
-                },
-                redesignedAt: new Date().toISOString(),
-                redesignReason: data.reason || null,
-                ...(eventRunTotal > 1 ? { rangeDesign: true } : {}),
-              }
-            },
-            _generation: {
-              ...(parsedTemplate?._generation && typeof parsedTemplate._generation === 'object' ? parsedTemplate._generation : {}),
-              stageDesign: 'succeeded',
-              lastError: null,
-              triggerSource: data.triggerSource || 'api',
-              updatedAt: new Date().toISOString(),
-            }
-          }),
-          updatedAt: new Date(),
-        }
-      });
-      if (!skipFinalizeRun) {
-        await tx.path_generation_runs.update({
-          where: { id: runId },
-          data: {
-            status: 'succeeded',
-            retryAllowed: false,
-            totalItems: eventRunTotal,
-            completedItems: eventRunTotal,
-            progress: 100,
-            heartbeatAt: new Date(),
-            leaseExpiresAt: new Date(),
-            finishedAt: new Date(),
-            errorCode: null,
-            errorMessage: null
-          }
-        });
-      }
-      await enqueueDomainEvent(tx, createDomainEvent({
-        type: 'path:adjusted',
-        aggregateType: 'path',
-        aggregateId: path.id,
-        userId: data.userId,
-        source: 'learning-service',
-        data: {
-          pathId: path.id,
-          milestoneId: milestone.id,
-          stageNumber: milestone.stageNumber,
-          redesignedTaskCount: newTasks.length,
-          preservedCompletedTaskCount: completedTasks.length,
-          reason: data.reason || null,
-          triggerSource: data.triggerSource || 'api'
-        }
-      }));
-    });
-
-    return {
-      pathId: path.id,
-      redesignedStageNumber: milestone.stageNumber,
-      redesignedTaskCount: newTasks.length,
-      preservedCompletedTaskCount: completedTasks.length,
-    };
-  }
-
-  /** 多阶段重排：解析目标阶段（含起始阶段的已学冻结与进行中拦截） */
-  private resolveDownstreamReplanTargets(
-    path: any,
-    requestedFromStage?: number | null
-  ): any[] {
-    const sorted = [...(path.milestones || [])]
-      .sort((a: any, b: any) => a.stageNumber - b.stageNumber);
-    const active = sorted.find((m: any) => m.status !== 'completed');
-    if (!active) return [];
-    if (requestedFromStage !== undefined && requestedFromStage !== null) {
-      const from = sorted.find((m: any) => m.stageNumber === requestedFromStage);
-      if (!from) throw new Error('指定调整的起始阶段不存在');
-      if (from.status === 'completed') throw new Error('指定调整的起始阶段已学完，请选择未开始学习的阶段');
-      return sorted.filter((m: any) => m.stageNumber >= from.stageNumber && m.status !== 'completed');
-    }
-    // 缺省 = 当前活动阶段（含）
-    return sorted.filter((m: any) => m.stageNumber >= active.stageNumber && m.status !== 'completed');
-  }
-
-  /** 多阶段重排驱动：串行逐阶段重设计任务，进度回写 heartbeat（前台轮询可见） */
-  private async redesignMilestoneRange(
-    path: any,
-    milestones: any[],
-    data: PathReplanRequest,
-    learnerReplanProjection: any,
-    runId: string
-  ) {
-    let redesignedStages = 0;
-    let redesignedTaskCount = 0;
-    let preservedCompletedTaskCount = 0;
-
-    for (let index = 0; index < milestones.length; index += 1) {
-      const milestone = milestones[index];
-      // 每个阶段执行前重读该阶段最新状态（前一阶段的写入会更新其 updatedAt；自身仅受外部写影响）
-      const freshMilestone = await prisma.milestones.findUnique({
-        where: { id: milestone.id },
-        include: { subtasks: { orderBy: { order: 'asc' } } }
-      });
-      if (!freshMilestone) throw new Error('调整目标阶段不存在');
-      const result = await this.redesignMilestoneTasks(
-        path,
-        freshMilestone,
-        { ...data, evidence: {
-            ...(data.evidence || {}),
-            downstreamRange: {
-              fromStageNumber: milestones[0].stageNumber,
-              total: milestones.length,
-              index: index + 1,
-            },
-          } },
-        learnerReplanProjection,
-        runId,
-        buildPathReplanSnapshot(freshMilestone),
-        {
-          skipFinalizeRun: true,
-          eventRunTotal: milestones.length,
-        }
-      );
-      redesignedStages += 1;
-      redesignedTaskCount += result.redesignedTaskCount;
-      preservedCompletedTaskCount += result.preservedCompletedTaskCount;
-      await this.heartbeatGenerationRun(
-        path.id,
-        runId,
-        {
-          totalItems: milestones.length,
-          completedItems: redesignedStages,
-          progress: Math.round((redesignedStages / milestones.length) * 100),
-        }
-      );
-    }
-    return { redesignedStages, redesignedTaskCount, preservedCompletedTaskCount };
-  }
-
-  /** 多阶段重排后台执行体：预检 → 逐阶段重设计 → 收尾 run（heartbeat 由 interval 维持） */
-  private async executeDownstreamReplan(context: {
-    pathId: string;
-    userId: string;
-    fromStageNumber: number;
-    stageCount: number;
-    data: PathReplanRequest;
-    learnerReplanProjection: any;
-    runId: string;
-  }): Promise<void> {
-    const { pathId, userId, fromStageNumber, stageCount, data, learnerReplanProjection, runId } = context;
-    const stopHeartbeat = this.startGenerationHeartbeat(pathId, runId);
-    try {
-      // 执行期重读路径（请求期快照可能已被其它后台写触碰；以执行期一致状态为准）
-      const freshPath = await prisma.learning_paths.findUnique({
-        where: { id: pathId },
-        include: { milestones: { include: { subtasks: true } } }
-      });
-      if (!freshPath) throw new Error('学习路径不存在');
-      const milestones = this.resolveDownstreamReplanTargets(freshPath, fromStageNumber);
-      if (milestones.length !== stageCount) {
-        throw new PathMutationConflictError(
-          '调整范围内阶段状态已变化，请刷新后重新调整',
-          'PATH_REPLAN_RANGE_CHANGED'
-        );
-      }
-
-      // 预检：无进行中任务/未结束课堂（提交期逐阶段各自乐观锁 claim + 安全检查）
-      // 只读校验事务（无写入）：保留裸 $transaction 以维持只读快照语义，本轮不接入写入封装
-      await prisma.$transaction(async (tx) => {
-        await assertGenerationRunFence(tx, pathId, runId);
-        await assertPathMutationSafe(tx, pathId, 'replan-stage', {
-          milestoneIds: milestones.map((m: any) => m.id),
-          ...(Array.isArray((data.evidence as any)?.clearedSessionIds) && (data.evidence as any).clearedSessionIds.length
-            ? { ignoreCompletedSessionIds: (data.evidence as any).clearedSessionIds as string[] }
-            : {})
-        });
-      });
-
-      await this.redesignMilestoneRange(
-        freshPath,
-        milestones,
-        data,
-        learnerReplanProjection,
-        runId
-      );
-
-      // 收尾：run 成功落库（阶段任务已逐阶段写入）
-      await withTransaction(async (tx) => {
-        await assertGenerationRunFence(tx, pathId, runId);
-        await tx.path_generation_runs.update({
-          where: { id: runId },
-          data: {
-            status: 'succeeded',
-            retryAllowed: false,
-            totalItems: milestones.length,
-            completedItems: milestones.length,
-            progress: 100,
-            heartbeatAt: new Date(),
-            leaseExpiresAt: new Date(),
-            finishedAt: new Date(),
-            errorCode: null,
-            errorMessage: null
-          }
-        });
-      });
-    } catch (error) {
-      if (isPathMutationConflictError(error)) {
-        await this.restorePathAfterMutationConflict(pathId, runId, error);
-        throw error;
-      }
-      try {
-        await this.updatePathGenerationStatus(pathId, {
-          stageDesign: 'failed',
-          lastError: error instanceof Error ? error.message : String(error),
-          triggerSource: data.triggerSource || 'api',
-          updatedAt: new Date().toISOString()
-        }, runId);
-        await this.failGenerationRun(
-          pathId,
-          runId,
-          error,
-          error instanceof Error && error.message.includes('EMPTY_TASKS')
-            ? 'PATH_STAGE_DESIGN_ZERO_TASKS'
-            : 'PATH_ENRICHMENT_FAILED',
-          'stageDesign'
-        );
-      } catch (fenceError) {
-        if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;
-      }
-      throw error;
-    } finally {
-      stopHeartbeat();
-    }
-  }
 
   async requestPathReplan(data: PathReplanRequest) {
-    const requestedMode = data.mode || 'overwrite';
-    const mode = requestedMode;
-    const triggerSource = data.triggerSource || 'api';
-
-    const path = await prisma.learning_paths.findUnique({
-      where: { id: data.pathId },
-      include: {
-        milestones: {
-          include: {
-            subtasks: true
-          }
-        }
-      }
-    });
-
-    if (!path) {
-      throw new Error('学习路径不存在');
-    }
-
-    if (path.userId !== data.userId) {
-      throw new Error('无权访问此学习路径');
-    }
-
-    if (requestedMode === 'new_version') {
-      throw createPathVersioningUnsupportedError();
-    }
-
-    const completedTaskIds = path.milestones
-      .flatMap((milestone: any) => milestone.subtasks || [])
-      .filter((task: any) => task.status === 'completed')
-      .map((task: any) => task.id);
-
-    const learnerSnapshot = await learnerSnapshotRefreshService.refresh({
-      userId: data.userId,
-      pathId: data.pathId,
-      scope: 'path',
-    });
-    const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
-    const replanSignal = learnerSnapshot.replanSignal;
-
-    // 后续阶段重排（多阶段）：显式指定 fromStageNumber 时触发
-    const downstreamTargets = data.fromStageNumber !== undefined && data.fromStageNumber !== null
-      ? this.resolveDownstreamReplanTargets(path, data.fromStageNumber)
-      : null;
-
-    const targetMilestone = downstreamTargets && downstreamTargets.length > 0
-      ? downstreamTargets[0]
-      : this.resolveStageReplanTarget(path, data.stageNumber || null);
-    const replanSnapshot = targetMilestone ? buildPathReplanSnapshot(targetMilestone) : null;
-
-    if (!targetMilestone || !replanSnapshot) {
-      if (data.previewOnly) {
-        return {
-          enabled: false,
-          status: 'no-signal',
-          signal: { shouldSuggest: false, recommendation: 'keep', rationale: '当前路径没有可重设计的阶段。' },
-          request: {
-            pathId: data.pathId,
-            userId: data.userId,
-            triggerSource,
-            mode,
-            requestedMode,
-            stageNumber: null,
-            fromStageNumber: data.fromStageNumber ?? null,
-            reason: data.reason || '',
-          },
-        };
-      }
-      throw new Error('当前路径没有可重设计的阶段');
-    }
-
-    if (data.previewOnly || (replanSignal?.shouldSuggest && data.requireConfirmation !== false)) {
-      // 预览模式：无论是否建议调整都返回诊断（keep 也展示「无需调整」），不执行
-      // 常规模式：有建议且需确认时先返回 awaiting-confirmation
-      return {
-        enabled: false,
-        status: replanSignal?.shouldSuggest || data.previewOnly
-          ? 'awaiting-confirmation'
-          : 'no-signal',
-        signal: replanSignal,
-        request: {
-          pathId: data.pathId,
-          userId: data.userId,
-          triggerSource,
-          mode,
-          requestedMode,
-          stageNumber: targetMilestone?.stageNumber || null,
-          fromStageNumber: data.fromStageNumber ?? null,
-          reason: data.reason || replanSignal?.rationale || '',
-          evidence: {
-            ...(data.evidence || {}),
-            learnerReplanProjection,
-            replanSignal,
-          }
-        }
-      };
-    }
-
-    const currentMilestoneTitle = learnerReplanProjection?.path.currentPosition.milestoneTitle || '';
-    const stableConcepts = learnerReplanProjection?.mastery.stableConcepts || [];
-    const fragileConcepts = learnerReplanProjection?.mastery.fragileConcepts || [];
-    const strugglingConcepts = learnerReplanProjection?.mastery.strugglingConcepts || [];
-    const prerequisiteGaps = learnerReplanProjection?.risk.prerequisiteGaps?.map((item) => item.label) || [];
-
-    // ---- 多阶段重排（后续阶段，保留已学）：后台执行，前台轮询 lifecycle ----
-    if (downstreamTargets && downstreamTargets.length > 0) {
-      const rangeMilestones = downstreamTargets;
-      const rangeRun = await this.createAndClaimGenerationRun(
-        data.pathId,
-        'stageDesign',
-        'stageDesign',
-        rangeMilestones.length,
-        'replan-stage',
-        path.activeGenerationRunId,
-        {
-          milestoneIds: rangeMilestones.map((m: any) => m.id),
-          ...(Array.isArray((data.evidence as any)?.clearedSessionIds) && (data.evidence as any).clearedSessionIds.length
-            ? { ignoreCompletedSessionIds: (data.evidence as any).clearedSessionIds as string[] }
-            : {})
-        }
-      );
-
-      await this.updatePathGenerationStatus(data.pathId, {
-        stageDesign: 'processing',
-        lastError: null,
-        triggerSource,
-        updatedAt: new Date().toISOString()
-      }, rangeRun.id);
-
-      const rangeContext = {
-        pathId: data.pathId,
-        userId: data.userId,
-        fromStageNumber: rangeMilestones[0].stageNumber,
-        stageCount: rangeMilestones.length,
-        data,
-        learnerReplanProjection: {
-          ...learnerReplanProjection,
-          summary: {
-            currentMilestoneTitle,
-            stableConcepts,
-            fragileConcepts,
-            strugglingConcepts,
-            prerequisiteGaps,
-            freezeCompletedTaskIds: completedTaskIds,
-            downstreamRange: true,
-          },
-        },
-        runId: rangeRun.id,
-      };
-      runBackgroundTask(
-        'learning.path.downstream-replan',
-        () => this.executeDownstreamReplan(rangeContext as any),
-        { pathId: data.pathId, runId: rangeRun.id, userId: data.userId }
-      );
-
-      dashboardGuidanceSnapshotService.refreshInBackground(data.userId, 'path-replanned');
-
-      return {
-        enabled: true,
-        status: 'accepted',
-        policy: {
-          immutableLearned: true,
-          freezeCompletedTaskIds: completedTaskIds,
-          defaultMode: 'overwrite',
-          downstream: {
-            fromStageNumber: rangeMilestones[0].stageNumber,
-            stageCount: rangeMilestones.length,
-          }
-        },
-        request: {
-          pathId: data.pathId,
-          userId: data.userId,
-          triggerSource,
-          mode,
-          requestedMode,
-          stageNumber: rangeMilestones[0].stageNumber,
-          fromStageNumber: rangeMilestones[0].stageNumber,
-          reason: data.reason || '',
-          evidence: {
-            ...(data.evidence || {}),
-            learnerReplanProjection,
-            replanSignal,
-            downstreamRange: {
-              fromStageNumber: rangeMilestones[0].stageNumber,
-              stageCount: rangeMilestones.length,
-            },
-          }
-        },
-        result: {
-          pathId: data.pathId,
-          runId: rangeRun.id,
-          fromStageNumber: rangeMilestones[0].stageNumber,
-          stageCount: rangeMilestones.length,
-          mode,
-          requestedMode,
-        }
-      };
-    }
-
-    // ---- 单阶段重排（当前活动阶段，原行为）----
-    const run = await this.createAndClaimGenerationRun(
-      data.pathId,
-      'stageDesign',
-      'stageDesign',
-      1,
-      'replan-stage',
-      path.activeGenerationRunId,
-      {
-        milestoneId: targetMilestone.id,
-        ...(Array.isArray((data.evidence as any)?.clearedSessionIds) && (data.evidence as any).clearedSessionIds.length
-          ? { ignoreCompletedSessionIds: (data.evidence as any).clearedSessionIds as string[] }
-          : {})
-      }
-    );
-    const stopHeartbeat = this.startGenerationHeartbeat(data.pathId, run.id);
-    let redesignResult;
-    try {
-      await this.updatePathGenerationStatus(data.pathId, {
-        stageDesign: 'processing',
-        lastError: null,
-        triggerSource,
-        updatedAt: new Date().toISOString()
-      }, run.id);
-      redesignResult = await this.redesignMilestoneTasks(path, targetMilestone, data, {
-        ...learnerReplanProjection,
-        summary: {
-          currentMilestoneTitle,
-          stableConcepts,
-          fragileConcepts,
-          strugglingConcepts,
-          prerequisiteGaps,
-          freezeCompletedTaskIds: completedTaskIds,
-        }
-      }, run.id, replanSnapshot);
-    } catch (error) {
-      if (isPathMutationConflictError(error)) {
-        await this.restorePathAfterMutationConflict(data.pathId, run.id, error);
-        throw error;
-      }
-
-      try {
-        await this.updatePathGenerationStatus(data.pathId, {
-          stageDesign: 'failed',
-          lastError: error instanceof Error ? error.message : String(error),
-          triggerSource,
-          updatedAt: new Date().toISOString()
-        }, run.id);
-        await this.failGenerationRun(
-          data.pathId,
-          run.id,
-          error,
-          error instanceof Error && error.message.includes('EMPTY_TASKS')
-            ? 'PATH_STAGE_DESIGN_ZERO_TASKS'
-            : 'PATH_ENRICHMENT_FAILED',
-          'stageDesign'
-        );
-      } catch (fenceError) {
-        if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;
-      }
-      throw error;
-    } finally {
-      stopHeartbeat();
-    }
-
-    dashboardGuidanceSnapshotService.refreshInBackground(data.userId, 'path-replanned');
-
-    return {
-      enabled: true,
-      status: 'redesigned-stage',
-      policy: {
-        immutableLearned: true,
-        freezeCompletedTaskIds: completedTaskIds,
-        defaultMode: 'overwrite'
-      },
-      request: {
-        pathId: data.pathId,
-        userId: data.userId,
-        triggerSource,
-        mode,
-        requestedMode,
-        stageNumber: targetMilestone.stageNumber,
-        reason: data.reason || '',
-        evidence: {
-          ...(data.evidence || {}),
-          learnerReplanProjection,
-          replanSignal,
-        }
-      },
-      result: {
-        pathId: data.pathId,
-        runId: run.id,
-        redesignedStageNumber: redesignResult.redesignedStageNumber,
-        redesignedTaskCount: redesignResult.redesignedTaskCount,
-        preservedCompletedTaskCount: redesignResult.preservedCompletedTaskCount,
-        mode,
-        requestedMode,
-      }
-    };
+    return requestPathReplan(data);
   }
 
   // 完成任务

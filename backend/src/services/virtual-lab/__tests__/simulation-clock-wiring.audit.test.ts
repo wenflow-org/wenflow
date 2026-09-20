@@ -47,10 +47,14 @@ describe('模拟时钟接线审计（防退化）', () => {
     expect(text).not.toMatch(/startSimulatedDayScheduler/);
   });
 
-  it('index.ts 从 scheduler 模块注册自动推进', () => {
-    const text = read('index.ts');
-    expect(text).toMatch(/startSimulatedDayScheduler/);
-    expect(text).toMatch(/simulated-day-scheduler/);
+  it('启动装配从 scheduler 模块注册自动推进（index.ts → bootstrap/schedulers.ts）', () => {
+    // index.ts 拆分后调度启动收敛到 bootstrap/schedulers.ts，入口经 startMaintenanceSchedulers 传递注册
+    const entry = read('index.ts');
+    expect(entry).toMatch(/startMaintenanceSchedulers/);
+
+    const schedulers = read('bootstrap/schedulers.ts');
+    expect(schedulers).toMatch(/startSimulatedDayScheduler/);
+    expect(schedulers).toMatch(/simulated-day-scheduler/);
   });
 
   it('评审为独立旁路：评审失败按 accept 处理，不阻断 Learn', () => {
