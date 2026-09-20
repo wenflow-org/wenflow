@@ -463,7 +463,6 @@ const isDark = useIsDark();
 import { useRoute, useRouter } from 'vue-router';
 import request, { API_BASE_URL } from '@/utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
-import { feedbackApi } from '@/api/feedback';
 import AiContentNote from '@/components/AiContentNote.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import { toast } from '@/utils/toast';
@@ -473,6 +472,11 @@ import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { unwrap } from './unwrap';
+import { nowTime, type ChatMsg } from './learningChat';
+import { isMastered, kpCls, kpStatusText, useKnowledgePanel } from './learningKp';
+import { useOpeningSceneViews } from './learningScene';
+import { usePeerAssistant } from './usePeerAssistant';
+import { useMessageActions } from './useMessageActions';
 
 const route = useRoute();
 const router = useRouter();
@@ -548,7 +552,6 @@ const friendlyError = computed(() => {
   return raw || '开课失败，请重试。';
 });
 
-interface ChatMsg { role: 'ai' | 'user'; text: string; time: string; failed?: boolean; confusion?: string[]; id?: string }
 const msgs = ref<ChatMsg[]>([]);
 let msgSeq = 0;
 function pushMsg(m: ChatMsg): ChatMsg {
@@ -610,49 +613,10 @@ const completed = ref(false);
 const resumedNotice = ref(false);
 
 /* ---------- 开场景卡片（resumed / continuation / relearn / review） ---------- */
-const SCENE_META: Record<string, { tag: string; primary: string }> = {
-  resume: { tag: '继续上课', primary: '从这继续' },
-  continuation: { tag: '接着学', primary: '开始本节' },
-  relearn: { tag: '重新学', primary: '重新开始本节' },
-  review: { tag: '今日复习', primary: '开始复习' },
-  first: { tag: '开始上课', primary: '开始' },
-};
-const sceneTag = computed(() => SCENE_META[openingScene.value?.kind]?.tag || '开始上课');
-const scenePrimaryText = computed(() => SCENE_META[openingScene.value?.kind]?.primary || '开始');
-const sceneDefaultTitle = computed(() => {
-  const k = openingScene.value?.kind;
-  if (k === 'resume') return '继续这节课，从上次离开的地方接着学';
-  if (k === 'continuation') return '接着上一课往下学';
-  if (k === 'relearn') return '重新学这一课，把上次没掌握的补上';
-  if (k === 'review') return '今日复习：回捞快忘的知识点';
-  return '开始这节课';
-});
-/** 副文案：依据 kind 给一句人话引导 */
-const sceneLead = computed(() => {
-  const sc = openingScene.value;
-  if (!sc) return '';
-  const k = sc.kind;
-  if (k === 'resume') return '你的进度还在，接着上次的内容继续，不用从头开始。';
-  if (k === 'continuation') {
-    const rel = sc.recap?.relation;
-    if (rel === 'prev-milestone') return `上节课在「${sc.recap?.sourceTitle || '上一阶段'}」结束，这节课是它的下一步。`;
-    return '上一课刚结束，这节课接着往下推进。';
-  }
-  if (k === 'relearn') return sc.attempt && sc.attempt > 1 ? `这是你第 ${sc.attempt} 次学这节课，重点补上次没掌握的。` : '从头再学一遍这节课。';
-  if (k === 'review') return '把快到遗忘点的知识先捞回来，再继续新内容。';
-  return '';
-});
-const sceneUnresolved = computed<string[]>(() => {
-  const r = openingScene.value?.recap;
-  return Array.isArray(r?.unresolved) ? (r.unresolved as string[]).slice(0, 3) : [];
-});
-/** 前序掌握较弱的阶段提醒（at-risk / partial） */
-const sceneMasteryWarn = computed(() => {
-  const list: Array<{ stage: number; title: string; state: string }> = openingScene.value?.mastery || [];
-  const weak = list.filter((m) => m.state === 'at-risk' || m.state === 'partial').slice(0, 2);
-  if (!weak.length) return '';
-  return weak.map((m) => `第 ${m.stage} 阶段「${m.title}」还不太稳`).join('；');
-});
+const {
+  sceneTag, scenePrimaryText, sceneDefaultTitle, sceneLead,
+  sceneUnresolved, sceneMasteryWarn, quickReplyKicker
+} = useOpeningSceneViews(openingScene)
 
 /** 卡片主按钮：resume（断线续课）= 走无输入续讲回合（不发伪消息）；其余场景 = 把用户"从这继续/开始"作为消息发给导师 */
 function startFromScene() {
@@ -752,163 +716,11 @@ const input = ref('');
 const scrollEl = ref<HTMLElement | null>(null);
 
 /* ---------- 伴学浮窗（角色「小启」，dock 式不占主对话区） ---------- */
-interface PeerChatItem {
-  role: 'peer' | 'me';
-  text: string;
-  time: string;
-  /** 伴学策略（英文枚举），展示为学法标签；主动消息/失败兜底为 null */
-  strategy?: string | null;
-  /** 小启消息自带的后续追问快选（skill followUpQuestions） */
-  followUps?: string[];
-}
-const peerOpen = ref(false);
-const peerUnread = ref(false);
-/** 伴学窗打开来源：'trigger'（AI 侦测卡点自动推）| 'user'（用户点 FAB 主动开聊）
-    驱动头部状态行文案（不再固定死「看到你卡了一下」） */
-const peerEntry = ref<'trigger' | 'user'>('user');
-/** 触发频控：相邻触发的冷却窗口（ms），防止每轮对话都强制弹窗打扰 */
-const PEER_TRIGGER_COOLDOWN = 60_000;
-/** 距上次自动展开的时间戳：冷却期内仅累计未读红点，不强制展开 */
-let lastPeerAutoOpen = 0;
-/** 用户手动收起过：本轮会话内不再自动展开（尊重用户意图，仅红点提示） */
-let peerManuallyMinimized = false;
-const peerItems = ref<PeerChatItem[]>([]);
-const peerInput = ref('');
-const peerSending = ref(false);
-const peerScrollEl = ref<HTMLElement | null>(null);
-
-/** 伴学策略 → 学法标签（与 peer-reinforcement skill 枚举对齐） */
-const PEER_STRATEGY_LABEL: Record<string, string> = {
-  feynman: '费曼讲解',
-  debate: '观点辩论',
-  counterexample: '反例挑战',
-  analogy: '类比迁移',
-  'error-analysis': '错因复盘',
-};
-/** 最近一条小启消息的策略：头部状态行展示「正在用 XX 陪你练」 */
-const peerLastStrategy = ref<string | null>(null);
-
-/** 头部状态行文案：随打开来源 + 最近策略动态变化 */
-const peerHeadline = computed(() => {
-  const base = peerEntry.value === 'trigger'
-    ? '看到你在这里卡了一下，来搭把手'
-    : '随时找我聊卡点，陪你理一理';
-  const s = peerLastStrategy.value ? PEER_STRATEGY_LABEL[peerLastStrategy.value] : null;
-  return s ? `${base} · ${s}` : base;
-});
-
-function strategyLabelOf(p: PeerChatItem) {
-  return p.strategy ? PEER_STRATEGY_LABEL[p.strategy] || null : null;
-}
-
-async function scrollPeerDown() {
-  await nextTick();
-  if (peerScrollEl.value) peerScrollEl.value.scrollTop = peerScrollEl.value.scrollHeight;
-}
-
-function openPeer() {
-  peerOpen.value = true;
-  peerUnread.value = false;
-  scrollPeerDown();
-}
-
-/** 用户主动点 FAB 开聊：来源标记为 user，清掉旧的「自动触发」状态文案 */
-function openPeerByUser() {
-  peerEntry.value = 'user';
-  openPeer();
-}
-
-/** AI 侦测卡点自动推消息并展开（受频控与「手动收起过」约束） */
-function openPeerByTrigger() {
-  peerEntry.value = 'trigger';
-  peerUnread.value = true;
-  const now = Date.now();
-  const inCooldown = now - lastPeerAutoOpen < PEER_TRIGGER_COOLDOWN;
-  if (!inCooldown && !peerManuallyMinimized) {
-    peerOpen.value = true;
-    lastPeerAutoOpen = now;
-    scrollPeerDown();
-  }
-}
-
-/** 用户手动收起：本轮会话内不再自动展开（仅红点），避免「收起又被弹开」的打扰循环；
-    收起视为已读（红点清除，用户已看到内容） */
-function minimizePeer() {
-  peerOpen.value = false;
-  peerUnread.value = false;
-  peerManuallyMinimized = true;
-}
-
-/** 记录伴学消息并更新「最近策略」（驱动头部状态行）；新回合消息则清除入口标记 */
-function pushPeerItem(item: PeerChatItem) {
-  peerItems.value.push(item);
-  if (item.role === 'peer') {
-    if (item.strategy) peerLastStrategy.value = item.strategy;
-  } else {
-    // 用户发言后，下一条小启回复前保持「正在陪你聊」
-    peerLastStrategy.value = null;
-    peerEntry.value = 'user';
-  }
-}
-
-async function sendPeerCore(text: string) {
-  if (peerSending.value || !session.value) return;
-  peerInput.value = '';
-  pushPeerItem({ role: 'me', text, time: nowTime() });
-  scrollPeerDown();
-  peerSending.value = true;
-  // peer skill 为 JSON 输出（无 delta）：等待期间仅显示 typing 指示器，final 后一次性上屏
-  try {
-    let r: Record<string, any>;
-    try {
-      peerStreamAbort = new AbortController();
-      r = await aiTeachingAPI.streamSendPeerMessage(session.value.sessionId, text, { signal: peerStreamAbort.signal }) as unknown as Record<string, any>;
-    } catch (peerError) {
-      // 传输层失败且未收到任何内容：回退非流式重发；业务失败交给外层报错；
-      // 用户离页触发的 abort 不重发
-      const pe = peerError as { cancelled?: boolean; transport?: boolean };
-      if (pe.cancelled) throw peerError;
-      if (!pe.transport) throw peerError;
-      r = await aiTeachingAPI.sendPeerMessage(session.value.sessionId, text) as unknown as Record<string, any>;
-    } finally {
-      peerStreamAbort = null;
-    }
-    if (r?.peerResponse) {
-      pushPeerItem({
-        role: 'peer',
-        text: String(r.peerResponse),
-        time: nowTime(),
-        strategy: r.peerStrategy || null,
-        followUps: Array.isArray(r.peerFollowUpQuestions)
-          ? r.peerFollowUpQuestions.filter((q: unknown) => typeof q === 'string' && q.trim()).slice(0, 3)
-          : [],
-      });
-    }
-  } catch (e) {
-    // 离页中止：静默丢弃
-    if ((e as { cancelled?: boolean })?.cancelled) return;
-    pushPeerItem({ role: 'peer', text: '这次没接上，等下再跟我说一句试试。', time: nowTime() });
-  } finally {
-    peerSending.value = false;
-    scrollPeerDown();
-  }
-}
-
-async function sendPeer(e?: unknown) {
-  // IME 组合期守卫：拼音选词回车不发送
-  const ke = e as KeyboardEvent | undefined;
-  if (ke && (ke.isComposing || ke.keyCode === 229)) return;
-  const t = peerInput.value.trim();
-  if (!t) return;
-  await sendPeerCore(t);
-}
-
-/** 点击小启给的追问快选：直接发送该追问 */
-async function sendPeerDirect(text: string) {
-  const t = String(text || '').trim();
-  if (!t || peerSending.value || !session.value) return;
-  await sendPeerCore(t);
-}
+const {
+  peerOpen, peerUnread, peerItems, peerInput, peerSending, peerScrollEl,
+  peerHeadline, strategyLabelOf, openPeerByUser, openPeerByTrigger, minimizePeer,
+  pushPeerItem, sendPeer, sendPeerDirect, resetPeer, restorePeerHistory, abortPeer
+} = usePeerAssistant(session)
 
 const formatMessage = (text: string) => plainMessageHtml(text);
 
@@ -916,11 +728,6 @@ const formatMessage = (text: string) => plainMessageHtml(text);
    markdown/DOMPurify（50 条消息 × 每秒数十 delta 开销显著）。
    共享工具按消息对象缓存渲染结果，仅文本变化时惰性重算 */
 const htmlFor = (m: { text: string }) => cachedMessageHtml(m);
-
-function nowTime() {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
 
 /* 贴底跟随：用户上翻看旧内容时暂停自动滚动（避免被持续拽回底部），
    并在滚动到底部时清除「回到底部」浮标 */
@@ -1032,18 +839,7 @@ async function boot() {
                 });
               }
             }
-            if (peerRestored.length) {
-              peerItems.value = peerRestored.map((m) => ({
-                ...m,
-                time: nowTime(),
-                followUps: [],
-              }));
-              // 恢复入口标记为 trigger（历史里可能含自动伴学）
-              peerEntry.value = 'trigger';
-              // 回填最近策略（驱动头部「正在用 XX 陪你练」）
-              const lastPeerStrategy = [...peerRestored].reverse().find((m) => m.role === 'peer' && m.strategy)?.strategy;
-              peerLastStrategy.value = lastPeerStrategy || null;
-            }
+            restorePeerHistory(peerRestored);
           }
           // 有可续历史才显示恢复横幅（附「重新开始」出口）；全新无历史则不必打扰。
           // 有开场景卡片时横幅让位给卡片（卡片已含恢复信息与重新开始出口），避免重复提示
@@ -1079,8 +875,6 @@ async function boot() {
 let lastUserText = '';
 /** 流式发送中的 AbortController：离页/卸载时中止，触发后端 res close 止损上游生成 */
 let streamAbort: AbortController | null = null;
-/** 伴学窗流式发送的独立 AbortController（与主对话互不干扰） */
-let peerStreamAbort: AbortController | null = null;
 /** 检查点通过后的自动关闭 timer（提交/卸载时清理，防竞态） */
 let checkpointCloseTimer = 0;
 /**
@@ -1090,84 +884,10 @@ let checkpointCloseTimer = 0;
  */
 const streamingBubbleIndex = ref(-1);
 
-/* ---------- 消息操作 ---------- */
-const hoveredMsgId = ref<string | null>(null);
-
-function onBubbleEnter(id: string) { hoveredMsgId.value = id; }
-function onBubbleLeave() { hoveredMsgId.value = null; }
-
-async function copyMessage(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    toast.success('已复制到剪贴板');
-  } catch { toast.error('复制失败'); }
-}
-
-/** 消息级点赞/点踩上报：内容去重（后端按内容哈希 key），失败静默不打扰 */
-async function sendMessageFeedback(m: ChatMsg, thumbsUp: boolean) {
-  if (!session.value || !m.text) return;
-  try {
-    await feedbackApi.submitMessage({
-      sessionId: session.value.sessionId,
-      messageText: m.text,
-      thumbsUp
-    });
-  } catch {
-    /* 反馈失败不影响对话，静默 */
-  }
-}
-
-/* ---------- 用户消息内联编辑（ChatGPT/Claude 标准能力） ----------
-   仅允许编辑「最后一条用户消息」：编辑后替换文本 + 裁掉其后所有消息 + 重新发送。
-   后端 teaching 会话为顺序追加，重发即新回合，无需后端改动。 */
-const editingMsgId = ref<string | null>(null);
-const editingText = ref('');
-
-/** 可编辑条件：最后一条用户消息（且不在流式/结算中） */
-function canEditMessage(m: ChatMsg): boolean {
-  if (typing.value || completed.value || editingMsgId.value) return false;
-  const lastUserIdx = msgs.value.map((x) => x.role).lastIndexOf('user');
-  return lastUserIdx >= 0 && msgs.value[lastUserIdx] === m;
-}
-
-function startEdit(m: ChatMsg) {
-  editingMsgId.value = m.id ?? null;
-  editingText.value = m.text;
-}
-
-function cancelEdit() {
-  editingMsgId.value = null;
-  editingText.value = '';
-}
-
-/** 保存编辑：替换文本 → 裁掉其后所有消息 → 重新发送 */
-async function saveEdit(m: ChatMsg) {
-  const t = editingText.value.trim();
-  if (!t || !session.value) { cancelEdit(); return; }
-  if (t === m.text) { cancelEdit(); return; }
-  const idx = msgs.value.indexOf(m);
-  if (idx < 0) { cancelEdit(); return; }
-  // 替换本条 + 裁掉其后（含 AI 回复）
-  msgs.value.splice(idx, msgs.value.length - idx, { ...m, text: t });
-  editingMsgId.value = null;
-  editingText.value = '';
-  // 重新发送（不重复 push 用户消息，消息已替换）
-  await doSend(t, true, true);
-}
-
-async function regenerateMessage(m: ChatMsg) {
-  if (typing.value || !session.value) return;
-  // Find the user message preceding this AI message
-  const idx = msgs.value.indexOf(m);
-  let lastUser = '';
-  for (let i = idx - 1; i >= 0; i--) {
-    if (msgs.value[i].role === 'user') { lastUser = msgs.value[i].text; break; }
-  }
-  if (!lastUser) { toast.info('找不到对应的问题'); return; }
-  // Remove the current AI message and re-send（不重复 push 用户消息）
-  msgs.value.splice(idx, 1);
-  await doSend(lastUser, true, true);
-}
+const {
+  hoveredMsgId, onBubbleEnter, onBubbleLeave, copyMessage, sendMessageFeedback,
+  editingMsgId, editingText, canEditMessage, startEdit, cancelEdit, saveEdit, regenerateMessage
+} = useMessageActions({ msgs, typing, completed, session, doSend })
 
 function stopGeneration() {
   streamAbort?.abort();
@@ -1191,16 +911,6 @@ async function sendDirect(text: string) {
   assessTarget.value = null; // 点击快选确认/开场建议即表态，清除待确认
   await doSend(text);
 }
-
-/** 开场行动台标题：跟随进入方式，避免每次都是冷冰冰的「开场建议」 */
-const quickReplyKicker = computed(() => {
-  const k = openingScene.value?.kind;
-  if (k === 'review') return '复习方式';
-  if (k === 'relearn') return '这次怎么学';
-  if (k === 'continuation') return '接着怎么学';
-  if (k === 'resume') return '从哪继续';
-  return '怎么开始';
-});
 
 async function doSend(text: string, allowStaleRetry = true, skipUserPush = false) {
   if (!session.value) return;
@@ -1642,11 +1352,7 @@ async function restart() {
     checkpointPending.value = false;
     completed.value = false;
     // 伴学窗同步重置（B7：上一会话内容不残留到新开课）
-    peerItems.value = [];
-    peerUnread.value = false;
-    peerOpen.value = false;
-    peerManuallyMinimized = false;
-    lastPeerAutoOpen = 0;
+    resetPeer();
     await boot();
   } catch (e: any) {
     toast.error(e?.message || e?.response?.data?.error?.message || '重新开始失败，请稍后重试');
@@ -1656,39 +1362,9 @@ async function restart() {
 }
 
 /* ---------- 知识点 ---------- */
-function isMastered(kp: Record<string, any>) {
-  return ['mastered', 'completed', 'done'].includes(String(kp.status || '').toLowerCase());
-}
-function isCurrent(kp: Record<string, any>) {
-  return ['learning', 'in_progress', 'current', 'teaching'].includes(String(kp.status || '').toLowerCase());
-}
-/** 单点完成度 0-100：已掌握算满；否则取 progress（夹取到 0-100） */
-function kpProgressPct(kp: Record<string, any>) {
-  if (isMastered(kp)) return 100;
-  const raw = Number(kp.progress);
-  if (Number.isFinite(raw)) return Math.max(0, Math.min(100, Math.round(raw)));
-  return 0;
-}
-function kpCls(kp: Record<string, any>) {
-  return { 'kp__item--done': isMastered(kp), 'kp__item--current': isCurrent(kp) };
-}
-function kpStatusText(kp: Record<string, any>) {
-  if (isMastered(kp)) return '已掌握';
-  const pct = kpProgressPct(kp);
-  if (isCurrent(kp)) return pct > 0 ? `学习中 · ${pct}%` : '学习中';
-  return pct > 0 ? `进行中 · ${pct}%` : '待学习';
-}
-const masteredCount = computed(() => knowledgePoints.value.filter(isMastered).length);
-/** 进行中（未掌握且已有进度）的点数 */
-const inProgressCount = computed(
-  () => knowledgePoints.value.filter((kp) => !isMastered(kp) && kpProgressPct(kp) > 0).length
-);
-/** 加权完成度：按各点 progress 求均值（不再只数 mastered，避免 80-90% 显示成 0%） */
-const weightedProgressPct = computed(() => {
-  const list = knowledgePoints.value;
-  if (!list.length) return 0;
-  return Math.round(list.reduce((sum, kp) => sum + kpProgressPct(kp), 0) / list.length);
-});
+const {
+  masteredCount, inProgressCount, weightedProgressPct
+} = useKnowledgePanel(knowledgePoints)
 
 /* ---------- 导航 ---------- */
 function goBack() {
@@ -1703,7 +1379,7 @@ function goEvaluation() {
    用 pagehide + sendBeacon 兜底记暂停，避免时长统计把闲置时间算进去。 */
 function onPageHide() {
   streamAbort?.abort();
-  peerStreamAbort?.abort();
+  abortPeer();
   if (!session.value || completed.value) return;
   const payload = JSON.stringify({ reason: 'pagehide', revision: session.value.revision });
   const blob = new Blob([payload], { type: 'application/json' });
@@ -1792,7 +1468,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   narrowMq?.removeEventListener('change', onNarrowChange);
   streamAbort?.abort();
-  peerStreamAbort?.abort();
+  abortPeer();
   window.clearTimeout(checkpointCloseTimer);
   window.removeEventListener('pagehide', onPageHide);
   document.removeEventListener('visibilitychange', onVisibilityChange);

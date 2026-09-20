@@ -65,7 +65,10 @@ module.exports = {
     "src/views/v2/V2LearningPaths.vue",
     "src/views/v2/V2LearningState.vue",
     "src/views/v2/V2NotifCenter.vue",
-    "src/views/v2/useGoalLive.ts"
+    "src/views/v2/learningKp.ts",
+    "src/views/v2/learningScene.ts",
+    "src/views/v2/useGoalLive.ts",
+    "src/views/v2/usePeerAssistant.ts"
   ],
       rules: {
         '@typescript-eslint/no-explicit-any': 'off'
