@@ -7,6 +7,7 @@
  */
 
 import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig, operationalStagePatterns } from '../../config/pedagogy.config';
+import { normalizePathDifficulty } from './path-difficulty';
 
 export type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
 export type TimeBudgetCadence = 'per_day' | 'per_week' | 'per_session' | 'flexible' | 'unclear';
@@ -248,6 +249,12 @@ export function derivePlanningHints(
       milestoneRange = [Math.max(floors.milestoneRange[0], milestoneRange[0] - 1), Math.max(floors.milestoneRange[1], milestoneRange[1] - 1)];
       conceptRange = [Math.max(floors.conceptRange[0], conceptRange[0] - 1), Math.max(floors.conceptRange[1], conceptRange[1] - 1)];
       subtasksPerStageRange = [Math.max(floors.subtasksPerStageRange[0], subtasksPerStageRange[0] - 1), Math.max(floors.subtasksPerStageRange[1], subtasksPerStageRange[1] - 1)];
+      // 紧预算必须同时收紧「精确目标」：scope 已知时 effectiveMilestoneRange 恒为 [target,target]，
+      // 只改 milestoneRange 的话下调永远到不了输出（255 例扫测发现的空转）；
+      // 且下游 path-planning 对里程碑数是**阻断级精确匹配**，这里不收 target 就等于紧预算对体量零影响。
+      if (targetMilestones !== null) {
+        targetMilestones = Math.min(targetMilestones, milestoneRange[1]);
+      }
     }
   }
 
@@ -411,7 +418,7 @@ export function buildFramedNormalizedInput(input: any): any {
       ...learnerProfile,
       surfaceGoal,
       currentBaseline: {
-        level: normalizeString(learnerProfile.currentBaseline?.level),
+        level: normalizePathDifficulty(learnerProfile.currentBaseline?.level),
         evidence: normalizeString(learnerProfile.currentBaseline?.evidence),
       },
       motivation: normalizeString(learnerProfile.motivation),

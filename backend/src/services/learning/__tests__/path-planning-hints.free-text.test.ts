@@ -1,4 +1,4 @@
-import { inferMaxWeeksFromTimeHorizon, derivePlanningHints, derivePlannedOutline } from '../path-planning-hints';
+import { inferMaxWeeksFromTimeHorizon, derivePlanningHints, derivePlannedOutline, buildFramedNormalizedInput } from '../path-planning-hints';
 import { paceSignalRangeConfig } from '../../../config/pedagogy.config';
 
 /**
@@ -309,5 +309,44 @@ describe('可选负荷画像 learnerLoadProfile（加性参数，不传零差异
     // 非紧画像也不改变 defect-1 修复后的兜底结果
     expect(without.targetSubtasksPerStage).toBe(3);
     expect(without.subtasksPerStageRange).toEqual([3, 5]);
+  });
+});
+
+describe('buildFramedNormalizedInput：currentBaseline.level 归一为契约枚举（修 2）', () => {
+  const levelOf = (input: Parameters<typeof buildFramedNormalizedInput>[0]) =>
+    buildFramedNormalizedInput(input).learnerProfile.currentBaseline.level;
+
+  it('明确水平词 → 对应枚举', () => {
+    expect(levelOf({ learnerProfile: { currentBaseline: { level: '零基础' } } })).toBe('beginner');
+    expect(levelOf({ learnerProfile: { currentBaseline: { level: '新手' } } })).toBe('beginner');
+    expect(levelOf({ learnerProfile: { currentBaseline: { level: '中级' } } })).toBe('intermediate');
+    expect(levelOf({ learnerProfile: { currentBaseline: { level: '熟练' } } })).toBe('advanced');
+    expect(levelOf({ learnerProfile: { currentBaseline: { level: 'BEGINNER' } } })).toBe('beginner');
+  });
+
+  it('缺失 / 长句自述 → unknown（不再把「缺失」等同 beginner）', () => {
+    expect(levelOf({ learnerProfile: {} })).toBe('unknown');
+    expect(levelOf({ learnerProfile: { currentBaseline: {} } })).toBe('unknown');
+    expect(
+      levelOf({
+        learnerProfile: {
+          currentBaseline: { level: '非零基础：护理本科、ICU 临床十几年，具备医药卫生专业背景' },
+        },
+      })
+    ).toBe('unknown');
+  });
+});
+
+describe('derivePlanningHints：紧预算必须同时收紧 targetMilestones（修 3）', () => {
+  it('medium + 紧预算（per_day 20 分钟）→ 里程碑目标被区间上界收紧', () => {
+    const tight = derivePlanningHints(null, null, '每天20分钟', 'per_day', ['一', '二', '三', '四', '五'], null, 'medium');
+    expect(tight.targetMilestones).toBe(4); // medium[3,5] → 紧预算后 [2,4]，target=min(5,4)=4
+    expect(tight.milestoneRange).toEqual([4, 4]);
+  });
+
+  it('非紧预算不受影响（medium 5 段 → 5）', () => {
+    const normal = derivePlanningHints(null, null, '每天60分钟', 'per_day', ['一', '二', '三', '四', '五'], null, 'medium');
+    expect(normal.targetMilestones).toBe(5);
+    expect(normal.milestoneRange).toEqual([5, 5]);
   });
 });

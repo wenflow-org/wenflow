@@ -183,7 +183,6 @@ export function buildPathProcessDetail(path: any) {
         cognitiveDomain: sceneFraming.cognitiveDomain || null,
         planningFocus: normalizeStringArray(sceneFraming.planningFocus),
         excludedScope: normalizeStringArray(sceneFraming.excludedScope),
-        riskFlags: normalizeStringArray(sceneFraming.riskFlags),
         resourceProfile: {
           timeBudget: sceneFraming.resourceProfile?.timeBudget || null,
           timeHorizon: sceneFraming.resourceProfile?.timeHorizon || null,
