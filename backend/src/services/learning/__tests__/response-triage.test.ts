@@ -77,6 +77,25 @@ describe('triageGoalResponse 规则表', () => {
     expect(result.mode).toBe('combination');
   });
 
+  it('permission_process 命中命名实体（"职业技能鉴定"）不抬成 combination（高精度模式）', () => {
+    const result = triageGoalResponse({
+      primaryBlockType: 'permission_process',
+      blockTypeEvidence: '没上过人社局官网，不知道该搜"健康管理师"还是搜"职业技能鉴定"',
+      realProblem: '报考资格口径冲突，没核过官方流程与审批说明，判断不了自己是否符合条件',
+      painPoints: ['从未上过官网，不知道入口怎么搜', '报考属于职业技能鉴定，怕点进去还是找不到原文'],
+    });
+    expect(result.mode).toBe('referral');
+  });
+
+  it('environment_tooling 只命中该阻塞的定义词（配置/使用/工具）→ 仍 referral', () => {
+    const result = triageGoalResponse({
+      primaryBlockType: 'environment_tooling',
+      blockTypeEvidence: '电脑配置太旧、工具装不上，根本没法使用这套软件',
+      realProblem: '设备环境限制，需要先修好系统配置',
+    });
+    expect(result.mode).toBe('referral');
+  });
+
   it('oneoff_operation → combination', () => {
     const result = triageGoalResponse({ primaryBlockType: 'oneoff_operation' });
     expect(result.mode).toBe('combination');

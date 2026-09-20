@@ -18,7 +18,9 @@
  *  3. emotion_relationship → 默认 emotional_support；
  *     若 blockTypeEvidence 非空且命中"具体技能"词 → combination（情绪 × 技能缺口）。
  *  4. environment_tooling / permission_process → 默认 referral（现实条件/资源/流程）；
- *     evidence / real_problem / pain_points 命中"具体技能/可学习成分" → combination。
+ *     evidence / real_problem / pain_points 命中**高精度**「可学习成分」词（方法/思路/框架/模板/…）→ combination。
+ *     注意：这里**不用**宽模式，因为 `技能|流程|配置|使用|操作|工具` 既是这两类阻塞自身的定义词，
+ *     又常出现在命名实体里（如"职业技能鉴定"），会把权限类案例误抬成 combination（宁可漏判不误报）。
  *  5. oneoff_operation → combination（一次性操作含少量可学习成分）。
  *  6. urgency 极高且 constraints_and_boundaries 非空 → confidence 降一档，并写入 reasons。
  *  7. 第二轴 support_need（none | emotional | referral，"除学习外是否还需要别的支持"）叠加：
@@ -94,7 +96,20 @@ const CONFIDENCE_ORDER: ResponseTriageConfidence[] = ['low', 'medium', 'high'];
 
 /** 「提到具体技能」的判定词：只认可学习的技能/方法/概念，不认泛化的"不会/不知道"。 */
 const SPECIFIC_SKILL_PATTERN =
-  /(技能|方法|操作|使用|配置|概念|原理|写法|模板|公式|技巧|练习|掌握|学会|步骤|工具|流程|步骤|框架)/;
+  /(技能|方法|操作|使用|配置|概念|原理|写法|模板|公式|技巧|练习|掌握|学会|步骤|工具|流程|框架)/;
+
+/**
+ * `environment_tooling` / `permission_process` 判断「是否另有可学习成分」用的**高精度**模式。
+ *
+ * 为什么另起一套：宽模式里的 `技能 | 流程 | 配置 | 使用 | 操作 | 工具` 既是这两类阻塞自身的定义词
+ * （权限/审批/流程/交接、设备/软件/网络/配置），又极易出现在命名实体里——
+ * 实测：周敏（nurse-career-transition）的 evidence 是「是搜"健康管理师"还是搜"职业技能鉴定"？」，
+ * `技能` 命中命名实体 ⇒ 权限类案例被误抬成 combination。
+ * 这里只保留「学习动作 / 认知对象」类词，宁可漏判也不误报（真要有主导性学习缺口，
+ * 模型应把 primary_block_type 判成 capability，而不是靠这里兜）。
+ */
+const LEARNABLE_COMPONENT_PATTERN =
+  /(方法|思路|框架|模板|公式|技巧|练习|掌握|学会|理解|概念|原理|基础|认知|步骤)/;
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -123,6 +138,10 @@ function pickStringArray(source: Record<string, unknown>, keys: string[]): strin
 
 function hasSpecificSkillSignal(text: string | null): boolean {
   return !!text && SPECIFIC_SKILL_PATTERN.test(text);
+}
+
+function hasLearnableComponent(text: string | null): boolean {
+  return !!text && LEARNABLE_COMPONENT_PATTERN.test(text);
 }
 
 function isUnknownBlockType(value: string | null): boolean {
@@ -284,9 +303,9 @@ function triageByBlockType(blockType: PrimaryBlockType, ctx: BlockTypeContext): 
     case 'environment_tooling':
     case 'permission_process': {
       const learnable =
-        hasSpecificSkillSignal(evidence) ||
-        hasSpecificSkillSignal(realProblem) ||
-        painPoints.some((point) => hasSpecificSkillSignal(point));
+        hasLearnableComponent(evidence) ||
+        hasLearnableComponent(realProblem) ||
+        painPoints.some((point) => hasLearnableComponent(point));
       if (learnable) {
         return finalize(
           {
