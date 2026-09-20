@@ -77,7 +77,7 @@ describe('模拟时钟接线审计（防退化）', () => {
     }
 
     // 课堂内事件时间线（classroomEventHistory）走模拟时钟
-    expect(read('services/ai-teaching/AITeachingCoordinator.ts'))
+    expect(read('services/ai-teaching/teaching-classroom-flow.ts'))
       .toMatch(/occurredAt: simulatedNowOr\(\)\.toISOString\(\)/);
   });
 });
