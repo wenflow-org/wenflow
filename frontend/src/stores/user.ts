@@ -97,6 +97,37 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  /* 守卫专用档案读取（审计 #10：路由守卫不再每次导航都请求 profile）。
+     缓存命中条件是 onboardingCompleted 已知——markLoggedIn 只写 id/name 部分档案，
+     未水合完整档案前不算有效缓存；并发导航共享同一次在途请求。 */
+  let ensureProfileInFlight: Promise<UserProfile | null> | null = null;
+  async function ensureProfile(): Promise<UserProfile | null> {
+    if (!hasSession.value) return null;
+    if (user.value && user.value.onboardingCompleted !== undefined) return user.value;
+    if (ensureProfileInFlight) return ensureProfileInFlight;
+    ensureProfileInFlight = (async () => {
+      try {
+        const profile = await userAPI.getProfile();
+        user.value = profile;
+        localStorage.setItem('user', JSON.stringify(profile));
+        return profile;
+      } catch {
+        // 与守卫原语义一致：获取失败不阻塞导航（401 由 api 实例拦截器统一处理）
+        return null;
+      } finally {
+        ensureProfileInFlight = null;
+      }
+    })();
+    return ensureProfileInFlight;
+  }
+
+  /** onboarding 完成回写缓存（页面直连 /users/me/onboarding 后必须调用，否则守卫缓存会把用户拉回引导页） */
+  function markOnboardingCompleted() {
+    if (!user.value) return;
+    user.value = { ...user.value, onboardingCompleted: true };
+    localStorage.setItem('user', JSON.stringify(user.value));
+  }
+
   async function updateProfile(data: UpdateProfileData) {
     loading.value = true;
     error.value = null;
@@ -158,6 +189,8 @@ export const useUserStore = defineStore('user', () => {
     login,
     register,
     fetchProfile,
+    ensureProfile,
+    markOnboardingCompleted,
     updateProfile,
     logout,
     initFromStorage

@@ -1,5 +1,6 @@
 ﻿import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { hasUserSession } from '../utils/api';
+import { useUserStore } from '../stores/user';
 import { hasAdminSession } from '../api/adminApi';
 import { getProjectionToken } from '../utils/projection';
 import { applyDocumentTheme, readTheme } from '../utils/theme';
@@ -409,9 +410,10 @@ router.beforeEach(async (to, _from, next) => {
   // 新用户引导：已登录但未完成 onboarding → 强制跳转到引导页（自身除外）
   if (to.meta.requiresAuth && hasSession && to.path !== '/onboarding') {
     try {
-      const { userAPI } = await import('@/api/user');
-      const profile = await userAPI.getProfile();
-      if (profile.onboardingCompleted === false) {
+      // 审计 #10：档案经 user store 缓存（onboardingCompleted 已知即命中），
+      // 完成回写/登录拉取/登出清空沿 store 生命周期失效，高频导航不再重复请求
+      const profile = await useUserStore().ensureProfile();
+      if (profile?.onboardingCompleted === false) {
         next({ path: '/onboarding', query: { redirect: to.fullPath } });
         return;
       }

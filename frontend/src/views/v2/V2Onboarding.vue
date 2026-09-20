@@ -190,9 +190,13 @@ function prev() {
   if (step.value > 1) step.value--
 }
 
-/* 标记引导完成（完成或跳过时调用） */
+/* 标记引导完成（完成或跳过时调用）；成功后回写 store 档案缓存，
+   否则路由守卫按缓存的 onboardingCompleted=false 会把用户再拉回引导页 */
 async function markDone() {
-  try { await api.post('/users/me/onboarding') } catch { /* 不阻塞 */ }
+  try {
+    await api.post('/users/me/onboarding')
+    userStore.markOnboardingCompleted()
+  } catch { /* 不阻塞 */ }
 }
 
 /* 引导只教「怎么用」，目标规划交给 /goal-conversation 自己完成 */
