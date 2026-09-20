@@ -478,20 +478,17 @@
         "src/routes/admin/export.ts",
         "src/routes/admin/field-routings.ts",
         "src/routes/admin/goal-conversations.ts",
-        "src/routes/admin/learning-content.ts",
         "src/routes/admin/memory-review.ts",
         "src/routes/admin/notifications.ts",
         "src/routes/admin/prompt-ops.ts",
         "src/routes/admin/session-console.ts",
-        "src/routes/admin/users.ts",
         "src/routes/admin/virtual-learners.ts",
         "src/routes/learning.ts",
         "src/routes/notifications.ts",
         "src/routes/prompt-lab.ts",
         "src/routes/user-agents.ts",
         "src/routes/user-api-config.ts",
-        "src/routes/user-mcp.ts",
-        "src/routes/users.ts"
+        "src/routes/user-mcp.ts"
       ],
       "rules": {
         "no-restricted-imports": "off",

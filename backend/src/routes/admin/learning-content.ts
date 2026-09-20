@@ -3,7 +3,18 @@
 // 功能：全局学习路径列表（含统计）/ 路径详情 / 下线与恢复（内容治理）/
 //       低质量路径标记 / 路径删除（级联子表由外键处理）
 import express, { Request, Response } from 'express';
-import prisma from '../../config/database';
+import { checkIsAdmin } from '../../services/admin-access.service';
+import {
+  findLearningPathsForAdmin,
+  countLearningPathsWhere,
+  findLearningPathDetail,
+  findLearningPathById,
+  archiveLearningPath,
+  restoreLearningPath,
+  findLearningPathWithMilestoneCount,
+  deleteLearningPath,
+  getLearningContentStats,
+} from '../../services/admin/learning-content.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { logger } from '../../utils/logger';
@@ -13,14 +24,7 @@ const router = express.Router();
 
 router.use(authMiddleware);
 
-const ensureAdmin = async (userId?: string) => {
-  if (!userId) return false;
-  const operator = await prisma.users.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true },
-  });
-  return !!operator?.isAdmin;
-};
+const ensureAdmin = checkIsAdmin;
 
 /** 路径列表（全局内容治理视图：跨用户内容目录，非单用户视角） */
 router.get('/paths', async (req: Request, res: Response) => {
@@ -51,32 +55,8 @@ router.get('/paths', async (req: Request, res: Response) => {
     if (!includeTest) where.users = REAL_USER_WHERE;
 
     const [paths, total] = await Promise.all([
-      prisma.learning_paths.findMany({
-        where,
-        orderBy: { updatedAt: 'desc' },
-        skip,
-        take: limit,
-        select: {
-          id: true,
-          title: true,
-          subject: true,
-          status: true,
-          difficulty: true,
-          estimatedHours: true,
-          totalMilestones: true,
-          completedMilestones: true,
-          aiGenerated: true,
-          createdAt: true,
-          updatedAt: true,
-          deadline: true,
-          users: { select: { id: true, name: true, email: true, isVirtualLearner: true } },
-          milestones: {
-            select: { id: true, status: true, title: true },
-          },
-          _count: { select: { milestones: true } },
-        },
-      }),
-      prisma.learning_paths.count({ where }),
+      findLearningPathsForAdmin(where, skip, limit),
+      countLearningPathsWhere(where),
     ]);
 
     res.json({
@@ -116,18 +96,7 @@ router.get('/paths/:id', async (req: Request, res: Response) => {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
 
-    const path = await prisma.learning_paths.findUnique({
-      where: { id: req.params.id },
-      include: {
-        users: { select: { id: true, name: true, email: true, isVirtualLearner: true } },
-        milestones: {
-          orderBy: { order: 'asc' },
-          include: {
-            subtasks: { orderBy: { order: 'asc' }, select: { id: true, title: true, status: true, taskType: true, estimatedMinutes: true, completedAt: true, cognitiveLoad: true } },
-          },
-        },
-      },
-    });
+    const path = await findLearningPathDetail(req.params.id);
     if (!path) return res.status(404).json({ success: false, error: { message: '路径不存在' } });
 
     res.json({ success: true, data: path });
@@ -143,14 +112,11 @@ router.post('/paths/:id/archive', async (req: Request, res: Response) => {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
 
-    const path = await prisma.learning_paths.findUnique({ where: { id: req.params.id } });
+    const path = await findLearningPathById(req.params.id);
     if (!path) return res.status(404).json({ success: false, error: { message: '路径不存在' } });
 
     const before = { status: path.status };
-    await prisma.learning_paths.update({
-      where: { id: req.params.id },
-      data: { status: 'archived', updatedAt: new Date() },
-    });
+    await archiveLearningPath(req.params.id);
 
     setAuditAction(res, 'learning-content.archive', { targetType: 'learning-path', targetId: path.id });
     setAuditBefore(res, before);
@@ -169,14 +135,11 @@ router.post('/paths/:id/restore', async (req: Request, res: Response) => {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
 
-    const path = await prisma.learning_paths.findUnique({ where: { id: req.params.id } });
+    const path = await findLearningPathById(req.params.id);
     if (!path) return res.status(404).json({ success: false, error: { message: '路径不存在' } });
 
     const before = { status: path.status };
-    await prisma.learning_paths.update({
-      where: { id: req.params.id },
-      data: { status: 'active', updatedAt: new Date() },
-    });
+    await restoreLearningPath(req.params.id);
 
     setAuditAction(res, 'learning-content.restore', { targetType: 'learning-path', targetId: path.id });
     setAuditBefore(res, before);
@@ -195,17 +158,14 @@ router.delete('/paths/:id', async (req: Request, res: Response) => {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
 
-    const path = await prisma.learning_paths.findUnique({
-      where: { id: req.params.id },
-      include: { _count: { select: { milestones: true } } },
-    });
+    const path = await findLearningPathWithMilestoneCount(req.params.id);
     if (!path) return res.status(404).json({ success: false, error: { message: '路径不存在' } });
 
     setAuditAction(res, 'learning-content.delete', { targetType: 'learning-path', targetId: path.id });
     setAuditBefore(res, { pathId: path.id, title: path.title, milestoneCount: path._count.milestones });
     setAuditAfter(res, null);
 
-    await prisma.learning_paths.delete({ where: { id: req.params.id } });
+    await deleteLearningPath(req.params.id);
     logger.info('[admin-learning-content] 删除学习路径', { adminId: req.user?.userId, pathId: path.id });
 
     res.json({ success: true });
@@ -221,15 +181,7 @@ router.get('/stats', async (req: Request, res: Response) => {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
 
-    const [total, byStatus, bySubject, totalMilestones, totalTasks] = await Promise.all([
-      prisma.learning_paths.count({ where: { users: REAL_USER_WHERE } }),
-      prisma.learning_paths.groupBy({ by: ['status'], _count: { _all: true }, where: { users: REAL_USER_WHERE } }),
-      prisma.learning_paths.groupBy({ by: ['subject'], _count: { _all: true }, where: { users: REAL_USER_WHERE } }),
-      prisma.milestones.count({ where: { learning_paths: { users: REAL_USER_WHERE } } }),
-      // 口径修复：subtasks.users 关系建在 usersId（生产路径从不写入，恒为 null），
-      // 改走 milestones → learning_paths → users（learning_paths.users 建在 userId 上，可靠）。
-      prisma.subtasks.count({ where: { milestones: { learning_paths: { users: REAL_USER_WHERE } } } }),
-    ]);
+    const [total, byStatus, bySubject, totalMilestones, totalTasks] = await getLearningContentStats();
 
     res.json({
       success: true,

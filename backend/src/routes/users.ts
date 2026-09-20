@@ -1,7 +1,21 @@
 // 用户路由
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import prisma from '../config/database';
+import {
+  findCurrentUserProfile,
+  findActivePathIdByUpdatedAt,
+  updateUser,
+  findUserForDeactivation,
+  listUserAchievements,
+  listUserTeachingSessions,
+  countUserTeachingSessions,
+  findSubtasksByIds,
+  listUserAgentLogs,
+  countUserAgentLogs,
+  listUserAgentLogsForExport,
+  findUserAgentLogById,
+  markOnboardingCompleted,
+} from '../services/users/user.repo';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 import { getLevelFromXp } from '../services/learner/level.util';
@@ -81,23 +95,7 @@ router.get('/me', async (req, res, next) => {
   try {
     const userId = req.user.userId;
 
-    const user = await prisma.users.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        xp: true,
-        role: true,
-        currentLevel: true,
-        createdAt: true,
-        lastLoginAt: true,
-        streakDays: true,
-        longestStreak: true,
-        onboardingCompleted: true,
-        deletedAt: true
-      }
-    });
+    const user = await findCurrentUserProfile(userId);
 
     if (user?.deletedAt) {
       return res.status(401).json({
@@ -141,14 +139,7 @@ router.get('/me/learner-center', async (req, res, next) => {
 
     // 用户侧全局快照默认补一条活跃路径，避免账户页等入口误判为“暂无进行中路径”。
     if (!pathId && scope === 'global') {
-      const activePath = await prisma.learning_paths.findFirst({
-        where: {
-          userId,
-          status: 'active'
-        },
-        orderBy: { updatedAt: 'desc' },
-        select: { id: true }
-      });
+      const activePath = await findActivePathIdByUpdatedAt(userId);
 
       pathId = activePath?.id;
     }
@@ -194,7 +185,7 @@ router.put('/me', directUserSessionOnly, async (req, res, next) => {
       normalizedName = trimmed;
     }
 
-    const user = await prisma.users.update({
+    const user = await updateUser({
       where: { id: userId },
       data: {
         ...(normalizedName ? { name: normalizedName } : {})
@@ -232,10 +223,7 @@ router.post('/me/deactivate', async (req, res, next) => {
       });
     }
 
-    const user = await prisma.users.findUnique({
-      where: { id: userId },
-      select: { id: true, password: true, deletedAt: true }
-    });
+    const user = await findUserForDeactivation(userId);
     if (!user || user.deletedAt) {
       return res.status(404).json({
         success: false,
@@ -251,7 +239,7 @@ router.post('/me/deactivate', async (req, res, next) => {
       });
     }
 
-    await prisma.users.update({
+    await updateUser({
       where: { id: userId },
       data: {
         deletedAt: new Date(),
@@ -276,10 +264,7 @@ router.get('/me/achievements', async (req, res, next) => {
   try {
     const userId = req.user.userId;
 
-    const achievements = await prisma.achievements.findMany({
-      where: { userId },
-      orderBy: { unlockedAt: 'desc' }
-    });
+    const achievements = await listUserAchievements(userId);
 
     res.json({
       success: true,
@@ -324,28 +309,19 @@ router.get('/me/sessions', async (req, res, next) => {
       }
     }
 
-    const sessions = await prisma.teaching_sessions.findMany({
+    const sessions = await listUserTeachingSessions(
       where,
-      orderBy: { startTime: 'desc' },
       // page 分页：此前前端传 page 但后端忽略（无 skip），导致「加载更多」永远拿回同一页
-      skip: (Math.max(parseInt(req.query.page as string) || 1, 1) - 1) * limit,
-      take: limit
-    });
+      (Math.max(parseInt(req.query.page as string) || 1, 1) - 1) * limit,
+      limit
+    );
 
     // 全量总数（含日期过滤，与列表同 where）：供前端统计卡使用，避免分页后统计失真
-    const total = await prisma.teaching_sessions.count({ where });
+    const total = await countUserTeachingSessions(where);
 
     const taskIds = Array.from(new Set(sessions.map((session) => session.taskId).filter(Boolean))) as string[];
     const tasks = taskIds.length > 0
-      ? await prisma.subtasks.findMany({
-          where: { id: { in: taskIds } },
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            estimatedMinutes: true
-          }
-        })
+      ? await findSubtasksByIds(taskIds)
       : [];
 
     const taskMap = new Map(tasks.map((task) => [task.id, task]));
@@ -397,27 +373,8 @@ router.get('/me/agent-logs', async (req, res, next) => {
     const where = buildAgentLogWhere(userId, req.query);
 
     const [logs, total] = await Promise.all([
-      prisma.agent_call_logs.findMany({
-        where,
-        orderBy: { calledAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit * 3,
-        select: {
-          id: true,
-          agentId: true,
-          sourceEntry: true,
-          traceId: true,
-          callerAgent: true,
-          success: true,
-          durationMs: true,
-          tokensUsed: true,
-          error: true,
-          errorCode: true,
-          calledAt: true,
-          metadata: true
-        }
-      }),
-      prisma.agent_call_logs.count({ where })
+      listUserAgentLogs(where, (page - 1) * limit, limit * 3),
+      countUserAgentLogs(where)
     ]);
 
     const parseMetadata = (metadata: string | null) => {
@@ -589,11 +546,7 @@ router.get('/me/agent-logs/export', async (req, res, next) => {
     const format = (req.query.format as string) || 'json';
     const where = buildAgentLogWhere(userId, req.query);
 
-    const logs = await prisma.agent_call_logs.findMany({
-      where,
-      orderBy: { calledAt: 'desc' },
-      take: 1000
-    });
+    const logs = await listUserAgentLogsForExport(where);
 
     if (format === 'csv') {
       const headers = ['id', 'agentId', 'success', 'durationMs', 'tokensUsed', 'error', 'calledAt'];
@@ -630,12 +583,7 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
     const userId = req.user.userId;
     const { logId } = req.params;
 
-    const log = await prisma.agent_call_logs.findFirst({
-      where: {
-        id: logId,
-        userId
-      }
-    });
+    const log = await findUserAgentLogById(logId, userId);
 
     if (!log) {
       return res.status(404).json({
@@ -656,10 +604,7 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
 // 标记引导完成
 router.post('/me/onboarding', async (req, res, next) => {
   try {
-    await prisma.users.update({
-      where: { id: req.user.userId },
-      data: { onboardingCompleted: true }
-    });
+    await markOnboardingCompleted(req.user.userId);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, error: { message: '标记引导完成失败' } });

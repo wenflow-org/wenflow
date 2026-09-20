@@ -1,7 +1,24 @@
 // 用户管理路由
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import prisma from '../../config/database';
+import { checkIsAdmin } from '../../services/admin-access.service';
+import {
+  findUsersForAdminList,
+  countUsersWhere,
+  findUserDetailForAdmin,
+  findUserByEmail,
+  createUser,
+  updateUser,
+  findUserEditableFields,
+  countActiveAdmins,
+  findVirtualLearnerUserIds,
+  findActiveAdminIdsInBatch,
+  findBatchDeleteTargets,
+  softDeleteUsersBatch,
+  findUserForRoleAudit,
+  findUserDeleteTarget,
+  findUserRestoreTarget,
+} from '../../services/users/user.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { randomUUID as uuidv4 } from 'crypto';
@@ -22,14 +39,7 @@ function validatePasswordRule(password: string): string | null {
   return null;
 }
 
-const ensureAdmin = async (userId: string) => {
-  const operator = await prisma.users.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true }
-  });
-
-  return !!operator?.isAdmin;
-};
+const ensureAdmin = checkIsAdmin;
 
 const requireAdmin = async (operatorId?: string) => {
   if (!operatorId || !(await ensureAdmin(operatorId))) {
@@ -79,31 +89,8 @@ router.get('/', async (req, res, next) => {
     }
 
     const [users, total] = await Promise.all([
-      prisma.users.findMany({
-        where,
-        skip,
-        take: Number(limit),
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          isAdmin: true,
-          isVirtualLearner: true,
-          xp: true,
-          currentLevel: true,
-          lastLoginAt: true,
-          createdAt: true,
-          deletedAt: true,
-          _count: {
-            select: {
-              learning_paths: true,
-              teaching_sessions: true
-            }
-          }
-        },
-        orderBy: { createdAt: 'desc' }
-      }),
-      prisma.users.count({ where })
+      findUsersForAdminList(where, skip, Number(limit)),
+      countUsersWhere(where)
     ]);
 
     res.json({
@@ -135,26 +122,7 @@ router.get('/:id', async (req, res, next) => {
     // 默认隐藏已软删用户（详情 404 语义）；includeDeleted=1 时放行（已删列表的详情/恢复入口）
     const includeDeleted = (req.query as { includeDeleted?: string } | undefined)?.includeDeleted === '1';
 
-    const user = await prisma.users.findFirst({
-      where: includeDeleted ? { id: userId } : { id: userId, deletedAt: null },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        currentLevel: true,
-        xp: true,
-        isAdmin: true,
-        role: true,
-        createdAt: true,
-        deletedAt: true,
-        _count: {
-          select: {
-            learning_paths: true,
-            goal_conversations: true
-          }
-        }
-      }
-    });
+    const user = await findUserDetailForAdmin(userId, includeDeleted);
 
     if (!user) {
       return res.status(404).json({
@@ -222,7 +190,7 @@ router.post('/', async (req, res, next) => {
     // 非管理员时不允许 role 为 'admin'（忽略并降级为 'user'）
     const finalRole = adminFlag ? 'admin' : (role === 'admin' ? 'user' : role);
 
-    const existing = await prisma.users.findUnique({ where: { email } });
+    const existing = await findUserByEmail(email);
     if (existing) {
       return res.status(409).json({
         success: false,
@@ -232,7 +200,7 @@ router.post('/', async (req, res, next) => {
 
     const hashedPassword = await bcrypt.hash(String(password), SALT_ROUNDS);
 
-    const user = await prisma.users.create({
+    const user = await createUser({
       data: {
         id: uuidv4(),
         email: String(email),
@@ -277,10 +245,7 @@ router.patch('/:id', async (req, res, next) => {
     const userId = req.params.id;
     const { name, email, isAdmin, currentLevel, xp, password } = req.body;
 
-    const existing = await prisma.users.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true, isAdmin: true }
-    });
+    const existing = await findUserEditableFields(userId);
 
     if (!existing) {
       return res.status(404).json({
@@ -298,7 +263,7 @@ router.patch('/:id', async (req, res, next) => {
 
     // 最后管理员保护：把管理员降为普通用户前，确认剩余管理员 ≥ 2
     if (typeof isAdmin === 'boolean' && isAdmin === false && existing.isAdmin) {
-      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true, deletedAt: null } }) - 1;
+      const remainingAdmins = await countActiveAdmins() - 1;
       if (remainingAdmins <= 1) {
         return res.status(409).json({
           success: false,
@@ -311,7 +276,7 @@ router.patch('/:id', async (req, res, next) => {
     }
 
     if (email && email !== existing.email) {
-      const duplicated = await prisma.users.findUnique({ where: { email: String(email) } });
+      const duplicated = await findUserByEmail(String(email));
       if (duplicated) {
         return res.status(409).json({
           success: false,
@@ -342,7 +307,7 @@ router.patch('/:id', async (req, res, next) => {
       data.tokenVersion = { increment: 1 };
     }
 
-    const updated = await prisma.users.update({
+    const updated = await updateUser({
       where: { id: userId },
       data,
       select: {
@@ -392,10 +357,7 @@ router.post('/batch-delete', async (req, res, next) => {
     }
 
     // 虚拟学习者保护：虚拟用户由虚拟学习者管理模块维护，不允许在此直接删除
-    const virtualProfiles = await prisma.virtual_learner_profiles.findMany({
-      where: { userId: { in: ids } },
-      select: { userId: true }
-    });
+    const virtualProfiles = await findVirtualLearnerUserIds(ids);
     if (virtualProfiles.length > 0) {
       return res.status(409).json({
         success: false,
@@ -407,12 +369,9 @@ router.post('/batch-delete', async (req, res, next) => {
     }
 
     // 最后管理员保护：删除管理员前统计删除后的剩余管理员数量（软删管理员不计入）
-    const adminsInBatch = await prisma.users.findMany({
-      where: { id: { in: ids }, isAdmin: true, deletedAt: null },
-      select: { id: true }
-    });
+    const adminsInBatch = await findActiveAdminIdsInBatch(ids);
     if (adminsInBatch.length > 0) {
-      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true, deletedAt: null } }) - adminsInBatch.length;
+      const remainingAdmins = await countActiveAdmins() - adminsInBatch.length;
       if (remainingAdmins <= 1) {
         return res.status(409).json({
           success: false,
@@ -425,26 +384,13 @@ router.post('/batch-delete', async (req, res, next) => {
     }
 
     // 操作审计：批量删除前快照目标账号
-    const targets = await prisma.users.findMany({
-      where: { id: { in: ids } },
-      select: { id: true, email: true, name: true, isAdmin: true, deletedAt: true }
-    });
+    const targets = await findBatchDeleteTargets(ids);
     setAuditAction(res, 'user-batch-delete', { targetType: 'user' });
     setAuditBefore(res, targets);
 
     // 软删除：仅标记未删除的账号（deletedAt: null 兜底幂等），历史数据保留
     const deletedAt = new Date();
-    const result = await prisma.users.updateMany({
-      where: {
-        id: { in: ids },
-        deletedAt: null
-      },
-      data: {
-        deletedAt,
-        deletedBy: operatorId,
-        updatedAt: deletedAt
-      }
-    });
+    const result = await softDeleteUsersBatch(ids, deletedAt, operatorId);
 
     logger.info('用户已批量软删除', { count: result.count, deletedBy: operatorId });
 
@@ -486,14 +432,11 @@ router.patch('/:id/role', async (req, res, next) => {
     }
 
     // 操作审计：角色变更前快照旧实体
-    const existing = await prisma.users.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true, name: true, role: true, isAdmin: true, deletedAt: true }
-    });
+    const existing = await findUserForRoleAudit(userId);
     setAuditAction(res, 'user-role-change', { targetType: 'user', targetId: userId });
     setAuditBefore(res, existing);
 
-    const updated = await prisma.users.update({
+    const updated = await updateUser({
       where: { id: userId },
       data: {
         role,
@@ -538,10 +481,7 @@ router.delete('/:id', async (req, res, next) => {
       });
     }
 
-    const target = await prisma.users.findUnique({
-      where: { id: userId },
-      select: { id: true, isAdmin: true, deletedAt: true }
-    });
+    const target = await findUserDeleteTarget(userId);
 
     if (!target) {
       return res.status(404).json({
@@ -563,7 +503,7 @@ router.delete('/:id', async (req, res, next) => {
 
     // 最后管理员保护：删除管理员前统计剩余管理员数量（软删管理员不计入）
     if (target.isAdmin) {
-      const remainingAdmins = await prisma.users.count({ where: { isAdmin: true, deletedAt: null } }) - 1;
+      const remainingAdmins = await countActiveAdmins() - 1;
       if (remainingAdmins <= 1) {
         return res.status(409).json({
           success: false,
@@ -581,7 +521,7 @@ router.delete('/:id', async (req, res, next) => {
 
     // 软删除：仅标记，历史数据（学习路径/会话/成就等）全部保留
     const deletedAt = new Date();
-    await prisma.users.update({
+    await updateUser({
       where: { id: userId },
       data: { deletedAt, deletedBy: operatorId, updatedAt: deletedAt }
     });
@@ -608,10 +548,7 @@ router.post('/:id/restore', async (req, res, next) => {
 
     const userId = req.params.id;
 
-    const target = await prisma.users.findUnique({
-      where: { id: userId },
-      select: { id: true, deletedAt: true }
-    });
+    const target = await findUserRestoreTarget(userId);
 
     if (!target) {
       return res.status(404).json({
@@ -632,7 +569,7 @@ router.post('/:id/restore', async (req, res, next) => {
     }
 
     // 身份保留策略（Phase 1 决策）：软删不释放 email/name，恢复无需查重
-    const restored = await prisma.users.update({
+    const restored = await updateUser({
       where: { id: userId },
       data: { deletedAt: null, deletedBy: null, updatedAt: new Date() },
       select: {
