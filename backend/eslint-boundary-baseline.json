@@ -1,5 +1,5 @@
 {
-  "note": "ESLint 数据库边界基线（棘轮：只降不升）。src/routes/**（不含测试）禁止直接 import config/database、config/system-database、generated/system-client、@prisma/client；此清单为存量豁免，只能用 `npm --prefix backend run boundaries:update` 收缩，禁止新增。",
+  "note": "ESLint 数据库边界基线（棘轮：只降不升）。src/routes/**（不含测试）禁止直接 import config/database、config/system-database、generated/system-client、@prisma/client；violations 为存量豁免文件，occurrences 为每文件数据库直连调用处数——两者都只能收缩，只能用 `npm --prefix backend run boundaries:update` 下调，禁止新增。",
   "violations": [
     "src/routes/admin-auth.ts",
     "src/routes/admin/achievements.ts",
@@ -22,5 +22,28 @@
     "src/routes/user-api-config.ts",
     "src/routes/user-mcp.ts",
     "src/routes/users.ts"
-  ]
+  ],
+  "occurrences": {
+    "src/routes/admin-auth.ts": 5,
+    "src/routes/admin/achievements.ts": 8,
+    "src/routes/admin/announcements.ts": 8,
+    "src/routes/admin/export.ts": 7,
+    "src/routes/admin/field-routings.ts": 7,
+    "src/routes/admin/goal-conversations.ts": 13,
+    "src/routes/admin/learning-content.ts": 15,
+    "src/routes/admin/memory-review.ts": 12,
+    "src/routes/admin/notifications.ts": 9,
+    "src/routes/admin/platform.ts": 61,
+    "src/routes/admin/prompt-ops.ts": 6,
+    "src/routes/admin/session-console.ts": 10,
+    "src/routes/admin/users.ts": 22,
+    "src/routes/admin/virtual-learners.ts": 60,
+    "src/routes/learning.ts": 6,
+    "src/routes/notifications.ts": 6,
+    "src/routes/prompt-lab.ts": 9,
+    "src/routes/user-agents.ts": 12,
+    "src/routes/user-api-config.ts": 8,
+    "src/routes/user-mcp.ts": 12,
+    "src/routes/users.ts": 14
+  }
 }
