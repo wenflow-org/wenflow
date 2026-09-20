@@ -29,7 +29,7 @@ import {
   type TraceSpan,
   type SkillStat
 } from './store'
-import { EXTRA_COMPONENT_VISIBLE_SKILLS } from '@/views/admin/capabilityCatalog'
+import { EXTRA_COMPONENT_VISIBLE_SKILLS } from './capabilityCatalog'
 import { humanizeHttpError } from './terms'
 
 /** 与生产 Skill 目录同口径：外挂能力 Skill 不在主目录展示（归外挂组件页） */

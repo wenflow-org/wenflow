@@ -233,7 +233,7 @@ import {
 } from '@/api/adminApi'
 import { TERMS } from './terms'
 import { COMPLETION_META, SEMANTICS_META } from './glossaryMeta'
-import { EXTRA_CAPABILITY_SKILLS } from '@/views/admin/capabilityCatalog'
+import { EXTRA_CAPABILITY_SKILLS } from './capabilityCatalog'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'

@@ -1,7 +1,7 @@
 <template>
   <!--
     归属说明（2026-08 admin 管理面审计 A6.4）：
-    本组件位于旧版 admin 目录（views/admin/components/virtual/），但为「仍在使用的活组件」，
+    本组件原位于旧版 admin 目录，2026-09 三代目录清理已迁入 admin-redesign（审计 #6 整改）；
     被 admin-redesign 的 VirtualProfile.vue（画像页「账号自动学习」）唯一复用，非废弃残留。
     依赖：后端 virtual-quick-learn.ts 6 端点 + quick-learn.service.ts。
     2026-09 已从 Element Plus 组件重写为 mk-* 原语：admin-theme.css 的 `body.admin-route .el-*`
@@ -250,13 +250,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { toast } from '@/utils/toast'
-import { askConfirm } from '@/views/admin-redesign/useConfirm'
+import { askConfirm } from './useConfirm'
 import { adminApi } from '@/api/adminApi'
 import { setProjectionToken } from '@/utils/projection'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MkLoading from '@/components/mk/MkLoading.vue'
-import { statusText } from '@/views/admin-redesign/statusText'
-import { useEscape } from '@/views/admin-redesign/useEscape'
+import { statusText } from './statusText'
+import { useEscape } from './useEscape'
 
 const props = defineProps<{
   visible: boolean
