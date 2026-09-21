@@ -100,12 +100,12 @@ describe('虚拟学习者定位（D1）', () => {
     wrapper.unmount();
   });
 
-  it('manifest 导航中虚拟学习者归入「虚拟实验」组（阶段 2：实验室独立成组）', () => {
+  it('manifest 导航中虚拟学习者归入「虚拟学习者」组（阶段 2：实验室独立成组）', () => {
     const scene = MOCK_SCENES.find((s) => s.id === 'virtual-learners');
     expect(scene).toBeDefined();
-    expect(scene!.group).toBe('虚拟实验');
+    expect(scene!.group).toBe('虚拟学习者');
     const batch = MOCK_SCENES.find((s) => s.id === 'batch-experiments');
     expect(batch).toBeDefined();
-    expect(batch!.group).toBe('虚拟实验');
+    expect(batch!.group).toBe('虚拟学习者');
   });
 });
