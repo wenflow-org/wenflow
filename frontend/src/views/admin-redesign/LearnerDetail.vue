@@ -1375,12 +1375,12 @@ function barToneBadge(tone: ConceptBarTone): string {
   font-size: var(--mk-fs-11);
   font-weight: 700;
   color: var(--mk-muted);
-  background: #eef2fa;
+  background: var(--mk-surface-2);
   border-radius: 6px;
   padding: 1px 6px;
   cursor: help;
 }
-.ld-bar__ev--zero { background: #f4f6fa; color: var(--mk-faint); }
+.ld-bar__ev--zero { background: var(--mk-surface-2); color: var(--mk-faint); }
 /* 分布条统一走 .mk-minibar + data-tone（原为 4 套渐变，属 §4 点名的违规）；
    muted 档原语没有，保留本页一个色调类 */
 .ld-bar__fill--muted { background: var(--mk-faint); }
@@ -1398,7 +1398,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   background: linear-gradient(180deg, #6aa0ff, #3d7cff);
   min-height: 6px;
 }
-.ld-trend__bar--down { background: linear-gradient(180deg, #fca5a5, #dc2626); }
+.ld-trend__bar--down { background: linear-gradient(180deg, #fca5a5, var(--mk-red)); }
 
 .ld-sessions { display: grid; }
 .ld-session {
@@ -1406,7 +1406,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   align-items: center;
   gap: 12px;
   padding: 11px 16px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--mk-surface-2);
 }
 .ld-session:last-child { border-bottom: none; }
 .ld-session__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -1447,7 +1447,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   margin-right: 8px;
   padding: 1px 7px;
   border-radius: 6px;
-  background: #eff6ff;
+  background: var(--mk-blue-bg);
   color: var(--mk-blue);
   font-size: var(--mk-fs-11);
   font-weight: 700;
@@ -1461,7 +1461,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   font-size: var(--mk-fs-11);
   font-weight: 600;
   color: var(--mk-faint);
-  background: #f4f6fa;
+  background: var(--mk-surface-2);
   border-radius: 5px;
   padding: 0 6px;
 }
@@ -1477,7 +1477,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   grid-template-columns: 140px 1fr;
   gap: 12px;
   padding: 10px 16px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--mk-surface-2);
   font-size: var(--mk-fs-12_5);
 }
 .ld-kv__row:last-child { border-bottom: none; }
@@ -1509,7 +1509,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   align-items: flex-start;
   gap: 12px;
   padding: 12px 16px 12px 22px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--mk-surface-2);
 }
 .ld-ev:last-child { border-bottom: none; }
 /* 竖线时间轴：贯穿每行左侧，末端渐隐；单条时不显示（避免断裂） */
@@ -1554,7 +1554,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-ev__signal.is-ok { background: var(--mk-green-bg); color: var(--mk-green); }
 .ld-ev__signal.is-warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .ld-ev__signal.is-bad { background: var(--mk-red-bg); color: var(--mk-red); }
-.ld-ev__signal.is-muted { background: #f0f2f5; color: var(--mk-muted); }
+.ld-ev__signal.is-muted { background: var(--mk-surface-2); color: var(--mk-muted); }
 /* 证据不足徽章 */
 .ld-ev__lack {
   flex-shrink: 0;
@@ -1577,7 +1577,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   display: block;
   height: 5px;
   border-radius: 99px;
-  background: #eef2fa;
+  background: var(--mk-surface-2);
   overflow: hidden;
   position: relative;
 }
@@ -1654,7 +1654,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-cal__outcome { font-size: var(--mk-fs-11); font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
 .ld-cal__outcome.is-smooth { color: var(--mk-green); background: var(--mk-green-bg); }
 .ld-cal__outcome.is-hard { color: var(--mk-red); background: var(--mk-red-bg); }
-.ld-cal__outcome.is-pending { color: var(--mk-faint); background: #f0f2f5; }
+.ld-cal__outcome.is-pending { color: var(--mk-faint); background: var(--mk-surface-2); }
 
 @media (max-width: 1100px) {
   .ld-grid { grid-template-columns: 1fr; }
@@ -1800,16 +1800,16 @@ html[data-theme='dark'] {
   .ld-session,
   .ld-ev,
   .ld-cal__row,
-  .ld-bar__ev { border-bottom-color: #232f45; }
+  .ld-bar__ev { border-bottom-color: #2f3239; }
   /* 语义渐变（warn/bad 用暗色系，避免浅红/浅琥珀过亮） */
-  .ld-trend__bar--down { background: linear-gradient(90deg, #b91c1c, #7f1d1d); }
-  .ld-bar__ev { background: #232f45; }
+  .ld-trend__bar--down { background: linear-gradient(90deg, var(--mk-red-strong), #7f1d1d); }
+  .ld-bar__ev { background: #2f3239; }
   .ld-kv__row,
   /* 滚动条 */
-  .ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #33415c; }
+  .ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #41464e; }
   /* 补漏：操作提示标签/概念 chip/置信条/加载分段 */
   .ld-actions__k { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
-  .ld-chip { background: #253049; color: #9fb0c8; }
-  .ld-ev__confbar { background: #232f45; }
+  .ld-chip { background: #32353c; color: #adb2ba; }
+  .ld-ev__confbar { background: #2f3239; }
 }
 </style>

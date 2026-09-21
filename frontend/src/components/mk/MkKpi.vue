@@ -29,8 +29,8 @@ withDefaults(
   gap: 3px;
   padding: 12px 14px;
   border-radius: 12px;
-  border: 1px solid #e8edf6;
-  background: #fafbfe;
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface-2);
 }
 .mk-kpi__label { font-size: var(--mk-fs-12); font-weight: 700; letter-spacing: 0.04em; color: var(--mk-faint); }
 .mk-kpi__num {
@@ -70,7 +70,7 @@ withDefaults(
 .mk-kpi--row .mk-kpi__hint { grid-column: 1; grid-row: 2; font-size: var(--mk-fs-11); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 暗色模式（D1） */
-html[data-theme='dark'] .mk-kpi { background: #141c2b; border-color: #232f45; }
+html[data-theme='dark'] .mk-kpi { background: var(--mk-surface-2); border-color: var(--mk-line); }
 
 /* 1440px 中间档 */
 @media (min-width: 1440px) {

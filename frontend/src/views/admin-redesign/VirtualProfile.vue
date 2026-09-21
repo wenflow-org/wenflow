@@ -2026,7 +2026,7 @@ async function quietReload(id: string) {
   padding: 12px 14px;
   border: 1px solid #e8ecf2;
   border-radius: 12px;
-  background: #fafbfd;
+  background: var(--mk-surface-2);
 }
 .vp-pk > .mk-field__label { font-size: var(--mk-fs-12); color: var(--mk-faint); font-weight: 700; }
 .vp-pk .mk-field { margin-bottom: 0; }
@@ -2067,7 +2067,7 @@ async function quietReload(id: string) {
 .vp-life--bad .vp-life__dot { background: var(--mk-red); }
 .vp-life--muted .vp-life__dot { background: var(--mk-faint); }
 .mk-entity__actions .mk-status__action--danger { color: var(--mk-red); border-color: rgba(220, 38, 38, 0.35); }
-.mk-entity__actions .mk-status__action--danger:hover { border-color: var(--mk-red); background: #fef2f2; }
+.mk-entity__actions .mk-status__action--danger:hover { border-color: var(--mk-red); background: var(--mk-red-bg); }
 
 /* 故事池空态（与全站空数据态同一语言） */
 /* 概览统计：KPI 四卡（全站 MkKpi 语言；点击跳转对应页签） */
@@ -2085,7 +2085,7 @@ async function quietReload(id: string) {
   font-size: var(--mk-fs-12);
   font-weight: 600;
   color: var(--mk-muted);
-  background: #f8fafc;
+  background: var(--mk-surface-2);
   border: 1px solid var(--mk-line);
   border-radius: 999px;
   padding: 2px 10px;
@@ -2127,7 +2127,7 @@ async function quietReload(id: string) {
 .vp-trait {
   padding: 4px 11px;
   border-radius: 999px;
-  background: #eef2fa;
+  background: var(--mk-surface-2);
   color: var(--mk-muted);
   font-size: var(--mk-fs-12);
   font-weight: 700;
@@ -2137,7 +2137,7 @@ async function quietReload(id: string) {
   gap: 4px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: #eef5ff;
+  background: var(--mk-blue-bg);
 }
 .vp-goal span { font-size: var(--mk-fs-12); color: var(--mk-faint); font-weight: 700; }
 .vp-goal strong { color: var(--mk-blue); font-size: var(--mk-fs-14); line-height: 1.45; }
@@ -2148,7 +2148,7 @@ async function quietReload(id: string) {
   grid-template-columns: 108px minmax(0, 1fr);
   gap: 14px;
   padding: 12px 18px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--mk-surface-2);
   font-size: var(--mk-fs-13);
   align-items: start;
 }
@@ -2206,8 +2206,8 @@ async function quietReload(id: string) {
   min-width: 0;
   transition: background 0.12s ease;
 }
-.vp-story__row:hover { background: #f6f9ff; }
-.vp-story.is-selected .vp-story__row { background: #f0f7ff; }
+.vp-story__row:hover { background: var(--mk-blue-bg); }
+.vp-story.is-selected .vp-story__row { background: var(--mk-blue-bg); }
 .vp-story__radio {
   width: 15px;
   height: 15px;
@@ -2234,7 +2234,7 @@ async function quietReload(id: string) {
 .vp-story__checkbox input {
   width: 15px;
   height: 15px;
-  accent-color: var(--mk-blue, #2c63d0);
+  accent-color: var(--mk-blue, var(--mk-blue-fill));
   cursor: pointer;
 }
 .vp-story-select-all {
@@ -2246,7 +2246,7 @@ async function quietReload(id: string) {
   cursor: pointer;
   white-space: nowrap;
 }
-.vp-story-select-all input { width: 14px; height: 14px; accent-color: var(--mk-blue, #2c63d0); cursor: pointer; }
+.vp-story-select-all input { width: 14px; height: 14px; accent-color: var(--mk-blue, var(--mk-blue-fill)); cursor: pointer; }
 /* 主区：标题行 + 简述 + 统计行 */
 .vp-story__main {
   display: grid;
@@ -2322,7 +2322,7 @@ async function quietReload(id: string) {
   margin-left: auto;
 }
 .vp-story__latest.is-ok { color: var(--mk-green, #16a34a); }
-.vp-story__latest.is-bad { color: var(--mk-red, #dc2626); }
+.vp-story__latest.is-bad { color: var(--mk-red, var(--mk-red)); }
 .vp-story__latest.is-warn { color: var(--mk-amber, #b7791f); }
 .vp-story__latest.is-running { color: var(--mk-amber, #b7791f); }
 .vp-story__latest.is-running::before {
@@ -2367,10 +2367,10 @@ async function quietReload(id: string) {
   white-space: nowrap;
 }
 .vp-quality__time { font-weight: 600; opacity: 0.75; }
-.vp-quality--ok { color: #1a7f4b; background: #e8f7ee; }
-.vp-quality--warn { color: var(--mk-amber, #b7791f); background: #fff5e6; }
-.vp-quality--bad { color: #dc2626; background: #fdecec; }
-.vp-quality--none { color: var(--mk-faint); background: #f0f2f5; }
+.vp-quality--ok { color: #1a7f4b; background: var(--mk-green-bg); }
+.vp-quality--warn { color: var(--mk-amber, #b7791f); background: var(--mk-amber-bg); }
+.vp-quality--bad { color: var(--mk-red); background: var(--mk-red-bg); }
+.vp-quality--none { color: var(--mk-faint); background: var(--mk-surface-2); }
 
 /* 运行 tab：按故事分组 */
 .vp-run-groups { display: grid; gap: 10px; padding: 12px; }
@@ -2386,7 +2386,7 @@ async function quietReload(id: string) {
   justify-content: space-between;
   gap: 10px;
   padding: 8px 12px;
-  background: #f8fafc;
+  background: var(--mk-surface-2);
   border-bottom: 1px solid #eef1f6;
 }
 .vp-run-group__head strong {
@@ -2434,7 +2434,7 @@ async function quietReload(id: string) {
 }
 .vp-run__result.is-ok { color: var(--mk-green, #16a34a); }
 .vp-run__result.is-warn { color: var(--mk-amber, #b7791f); }
-.vp-run__result.is-bad { color: var(--mk-red, #dc2626); }
+.vp-run__result.is-bad { color: var(--mk-red, var(--mk-red)); }
 .vp-run__sub {
   display: flex;
   align-items: center;
@@ -2576,7 +2576,7 @@ async function quietReload(id: string) {
   border: 1px solid var(--mk-line);
   border-radius: 10px;
   padding: 10px 12px;
-  background: #fafbfd;
+  background: var(--mk-surface-2);
   display: grid;
   gap: 2px;
 }
@@ -2688,7 +2688,7 @@ async function quietReload(id: string) {
   padding: 10px 12px;
   border: 1px solid #e8ecf2;
   border-radius: 10px;
-  background: #fafbfd;
+  background: var(--mk-surface-2);
 }
 .vp-memory__completed-dot {
   width: 18px;
@@ -2722,37 +2722,37 @@ async function quietReload(id: string) {
 
 /* ================= 暗色模式（D1 补完）：虚拟画像页 ================= */
 html[data-theme='dark'] {
-  .vp-top { background: #141c2b; border-color: #232f45; }
-  .vp-tab { background: #1b2537; }
+  .vp-top { background: #1c1e23; border-color: #2f3239; }
+  .vp-tab { background: #25282d; }
   .vp-tab.is-active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
-  .vp-story__row:hover { background: #1b2740; }
+  .vp-story__row:hover { background: #282c33; }
   .vp-story.is-selected .vp-story__row { background: rgba(91, 141, 239, 0.12); }
   .vp-quality--ok { color: #6ee7a0; background: rgba(74, 222, 128, 0.12); }
   .vp-quality--warn { color: #fcd34d; background: rgba(251, 191, 36, 0.12); }
   .vp-quality--bad { color: #fca5a5; background: rgba(248, 113, 113, 0.12); }
-  .vp-quality--none { background: #253049; }
-  .vp-top__goal { background: #1b2537; }
+  .vp-quality--none { background: #32353c; }
+  .vp-top__goal { background: #25282d; }
   .vp-life--ok { background: rgba(74, 222, 128, 0.12); }
   .vp-life--warn { background: rgba(251, 191, 36, 0.12); }
   .vp-life--bad { background: rgba(248, 113, 113, 0.12); }
-  .vp-life--muted { background: #253049; border-color: #33415c; }
-  .vp-story { background: #141c2b; border-color: #232f45; }
-  .vp-story__radio { background: #1b2537; }
+  .vp-life--muted { background: #32353c; border-color: #41464e; }
+  .vp-story { background: #1c1e23; border-color: #2f3239; }
+  .vp-story__radio { background: #25282d; }
   .vp-story.is-selected { background: rgba(91, 141, 239, 0.1); border-color: rgba(91, 141, 239, 0.35); }
   /* 补漏：特征标签/目标/预算徽章/运行卡/工具/记忆统计/警告标签 */
-  .vp-trait { background: #253049; color: #9fb0c8; }
-  .vp-goal { background: #141c2b; border-color: #232f45; }
-  .vp-story__budget-badge { background: #1d2739; color: #9fb0c8; }
-  .vp-run-group { background: #141c2b; border-color: #232f45; }
-  .vp-run-group__head { background: #1b2537; }
-  .vp-run { background: #141c2b; border-color: #232f45; }
-  .vp-run:hover { background: #1b2740; }
-  .vp-memory__stat { background: #141c2b; border-color: #232f45; }
+  .vp-trait { background: #32353c; color: #adb2ba; }
+  .vp-goal { background: #1c1e23; border-color: #2f3239; }
+  .vp-story__budget-badge { background: #272a2f; color: #adb2ba; }
+  .vp-run-group { background: #1c1e23; border-color: #2f3239; }
+  .vp-run-group__head { background: #25282d; }
+  .vp-run { background: #1c1e23; border-color: #2f3239; }
+  .vp-run:hover { background: #282c33; }
+  .vp-memory__stat { background: #1c1e23; border-color: #2f3239; }
   .vp-tag--warn { background: rgba(251, 191, 36, 0.12); color: #fcd34d; }
-  .vp-pk { background: #141c2b; border-color: #232f45; }
+  .vp-pk { background: #1c1e23; border-color: #2f3239; }
 
   .vp-tag--ok { background: rgba(62, 201, 132, 0.14); color: #3ec984; }
-  .vp-memory__completed-item { background: #141c2b; }
+  .vp-memory__completed-item { background: #1c1e23; }
   .vp-memory__completed-dot { background: rgba(62, 201, 132, 0.25); }
 }
 </style>
