@@ -121,6 +121,39 @@ function buildPinnedLookup(validated: { address: string; family: 4 | 6 }) {
   }
 }
 
+/**
+ * 按「已校验地址」复用的 keep-alive 连接池。
+ *
+ * 键为 family+address 而非域名:Agent 的 lookup 始终钉住该地址,每次调用仍先过
+ * validateExternalUrl 重校验,DNS pinning / 防重绑定语义与逐次新建 Agent 完全一致;
+ * 收益是同源重复调用(重试、fallback、重定向跳、高频对话)复用 TCP+TLS 连接,
+ * 省去每次 1-2 个握手 RTT(TTFT 直接受益)。
+ */
+const pinnedAgentPool = new Map<string, { httpAgent: http.Agent; httpsAgent: https.Agent }>()
+const PINNED_AGENT_POOL_MAX = 128
+
+function getPinnedAgentPair(address: string, family: 4 | 6): { httpAgent: http.Agent; httpsAgent: https.Agent } {
+  const key = `${family}:${address}`
+  let pair = pinnedAgentPool.get(key)
+  if (!pair) {
+    // 防御上限(仅多上游网关场景可能触达):整体重建,keep-alive 短暂降级但语义不变
+    if (pinnedAgentPool.size >= PINNED_AGENT_POOL_MAX) {
+      for (const stale of pinnedAgentPool.values()) {
+        stale.httpAgent.destroy()
+        stale.httpsAgent.destroy()
+      }
+      pinnedAgentPool.clear()
+    }
+    const lookup = buildPinnedLookup({ address, family })
+    pair = {
+      httpAgent: new http.Agent({ lookup, keepAlive: true, keepAliveMsecs: 15_000, maxSockets: 64, maxFreeSockets: 8 }),
+      httpsAgent: new https.Agent({ lookup, keepAlive: true, keepAliveMsecs: 15_000, maxSockets: 64, maxFreeSockets: 8 })
+    }
+    pinnedAgentPool.set(key, pair)
+  }
+  return pair
+}
+
 function parseIpv4(address: string): number[] | null {
   if (isIP(address) !== 4) return null
   const parts = address.split('.').map(Number)
@@ -482,7 +515,6 @@ export async function safeHttpRequest<T = unknown>(
       })
       const remainingMs = deadline - Date.now()
       if (remainingMs <= 0) throw new SafeHttpTimeoutError()
-      const lookupPinned = buildPinnedLookup(validated)
       const config: AxiosRequestConfig = {
         method: options.method || 'GET',
         url: validated.url.toString(),
@@ -496,8 +528,7 @@ export async function safeHttpRequest<T = unknown>(
         maxRedirects: 0,
         validateStatus: () => true,
         proxy: false,
-        httpAgent: new http.Agent({ lookup: lookupPinned }),
-        httpsAgent: new https.Agent({ lookup: lookupPinned })
+        ...getPinnedAgentPair(validated.address, validated.family)
       }
 
       const response = await waitForAbortable(
@@ -591,7 +622,6 @@ export async function safeHttpStreamRequest(
       privateNetworkPolicy: options.privateNetworkPolicy,
       signal: abortController.signal
     })
-    const lookupPinned = buildPinnedLookup(validated)
     const config: AxiosRequestConfig = {
       method: options.method || 'POST',
       url: validated.url.toString(),
@@ -602,8 +632,7 @@ export async function safeHttpStreamRequest(
       maxRedirects: 0,
       validateStatus: () => true,
       proxy: false,
-      httpAgent: new http.Agent({ lookup: lookupPinned }),
-      httpsAgent: new https.Agent({ lookup: lookupPinned })
+      ...getPinnedAgentPair(validated.address, validated.family)
     }
 
     const response = await waitForAbortable(
