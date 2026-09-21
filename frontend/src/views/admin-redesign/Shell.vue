@@ -482,7 +482,7 @@ function groupBadgeTitle(title: string): string {
   margin-bottom: 2px;
 }
 /* 置顶入口比组内子项略收高度：驾驶舱入口不再显高（用户反馈 2026-09-05） */
-.mshell__pinned .mshell__item { font-weight: 800; padding-top: 6px; padding-bottom: 6px; }
+.mshell__pinned .mshell__item { font-weight: 600; padding-top: 6px; padding-bottom: 6px; color: #42506a; }
 .mshell__group { display: grid; gap: 1px; }
 /* 组头（可点击折叠）：组图标 + 组名 + 聚合徽章 + 箭头 */
 .mshell__group-head {
@@ -490,14 +490,15 @@ function groupBadgeTitle(title: string): string {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 10px 5px;
+  padding: 12px 10px 4px;
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: var(--mk-fs-14);
-  font-weight: 800;
-  letter-spacing: 0;
-  color: #2b3a55;
+  /* 分组标题是「标签」不是内容：比组内可点页面小一号、弱一档（原 14/800 深色比子项还重，层级倒置） */
+  font-size: var(--mk-fs-12);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #8593a8;
   cursor: pointer;
   border-radius: 8px;
   transition: color 0.12s ease, background 0.12s ease;
@@ -552,7 +553,7 @@ function groupBadgeTitle(title: string): string {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #5b6577;
+  color: #42506a;
   font: inherit;
   font-size: var(--mk-fs-13);
   font-weight: 600;
@@ -893,7 +894,7 @@ html[data-theme='dark'] {
   .mshell { background: #16181d; color: #eceef1; }
   .mshell__side { background: #1b1d22; border-right-color: #2f3239; }
   .mshell__pinned { border-bottom-color: #2f3239; }
-  .mshell__group-head { color: #d4d8dd; }
+  .mshell__group-head { color: #79828f; }
   .mshell__group-head:hover { color: #7aa2ff; background: rgba(120, 140, 170, 0.08); }
   .mshell__group-head--active { color: #7aa2ff; }
   .mshell__group-icon { color: #6b7c96; }
@@ -902,7 +903,7 @@ html[data-theme='dark'] {
   .mshell__group-badge { background: #272a2f; color: var(--mk-muted, #adb2ba); }
   .mshell__group-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
   .mshell__item-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
-  .mshell__item { color: #adb2ba; }
+  .mshell__item { color: #b8bec8; }
   .mshell__item:hover { background: #282c33; color: #eceef1; }
   .mshell__item--active { background: rgba(91, 141, 239, 0.1); color: #7aa2ff; box-shadow: inset 3px 0 0 var(--mk-blue); }
   .mshell__item-glyph { background: #272a2f; color: #adb2ba; }
