@@ -4,6 +4,9 @@ export class GatewayCache {
   private routeCache = new Map<string, RouteCacheEntry>();
   private readonly ttl = 60000;
   private readonly keySeparator = '::';
+  // 过期条目原本只在被再次访问时删除（键含 userId，不活跃用户条目永驻 = 慢泄漏）。
+  // 容量触达阈值时做一次全表惰性清扫，均摊成本低。
+  private readonly sweepThreshold = 512;
 
   private generateKey(caller: CallerInfo, userId?: string): string {
     return [
@@ -40,6 +43,12 @@ export class GatewayCache {
       route,
       expiresAt: Date.now() + this.ttl
     });
+    if (this.routeCache.size >= this.sweepThreshold) {
+      const now = Date.now();
+      for (const [cachedKey, entry] of this.routeCache) {
+        if (now > entry.expiresAt) this.routeCache.delete(cachedKey);
+      }
+    }
   }
 
   invalidate(userId?: string, agentId?: string, skillId?: string): void {
