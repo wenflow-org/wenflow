@@ -7,10 +7,10 @@
   background: var(--mk-bg);
   color: var(--mk-ink);
   font-size: var(--mk-fs-14);
-  line-height: 1.6;
-  padding: var(--mk-space-3) var(--mk-space-4) var(--mk-space-5);
+  line-height: 1.65;
+  padding: var(--mk-space-4) var(--mk-space-4) var(--mk-space-5);
   display: grid;
-  gap: var(--mk-space-3);
+  gap: var(--mk-space-4);
   align-content: start;
   min-height: 100%;
   /* 窄屏防横向溢出：grid 子项默认 min-width:auto 会被 nowrap 内容撑破，
@@ -62,16 +62,16 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 12px;
-  /* 高度统一：至少容纳 30px 的 .mk-status__action 按钮（30 + 7×2 内边距 + 1×2 边框 = 46）。
+  padding: 9px 14px;
+  /* 高度统一：至少容纳 30px 的 .mk-status__action 按钮。
      此前 min-height:44 只能压住「纯文字」状态条，带按钮的条自然高 46/48，
      导致同一条状态条「有操作按钮」与「无按钮」跨页高度不一（虚拟学习者 48 / 外挂能力 44）。 */
-  min-height: 46px;
+  min-height: 48px;
   /* 绝不压缩：fill 布局下列表页空间不足时，flex 子项默认会收缩到 min-height，
      使同一条状态条在不同页高度不同（用户与学习者页曾收缩到 44.6）。 */
   flex: none;
   box-sizing: border-box;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-sm);
@@ -314,7 +314,7 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 9px 14px;
+  padding: 11px 16px;
   border-bottom: 1px solid var(--mk-line);
   flex-wrap: wrap;
 }
