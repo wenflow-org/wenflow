@@ -840,9 +840,15 @@ html[data-theme='dark'] .mshell__crumb { background: #1c1e23; border-color: #2f3
 .mshell[data-collapsed='true'] .mshell__logo-full { display: none; }
 .mshell[data-collapsed='true'] .mshell__logo-mark { display: block; }
 .mshell[data-collapsed='true'] .mshell__brand { justify-content: center; padding: 2px 0 0; }
-.mshell[data-collapsed='true'] .mshell__collapse { position: absolute; right: -14px; top: 18px; }
+.mshell[data-collapsed='true'] .mshell__collapse { position: static; margin: 4px auto 0; display: block; }
 .mshell[data-collapsed='true'] .mshell__pinned { justify-content: center; padding-bottom: 8px; border-bottom: 0; }
 .mshell[data-collapsed='true'] .mshell__group { margin-top: 10px; }
+/* 折叠态组间分隔线:单字按钮平铺无分组上下文,用细线+留白恢复结构 */
+.mshell[data-collapsed='true'] .mshell__group + .mshell__group {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--mk-line, #2f3239);
+}
 
 /* 折叠按钮（展开态右上角，悬停显示 tooltip 由 title 提供） */
 .mshell__collapse {
