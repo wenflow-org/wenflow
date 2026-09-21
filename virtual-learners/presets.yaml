@@ -8,6 +8,15 @@
 # 修改规则：改内容请同步递增该条 presetVersion，否则已存在实例不会被刷新；删除条目不会自动删除已建实例。
 #
 # 设计稿见 doc/VIRTUAL_LEARNER_PRESET_DRAFT.md
+#
+# 变更记录（corpus 版本）
+# - v1（≤ 2026-09-20）：原始 14 条。availableTime = 7 minimal / 4 moderate / 3 abundant。
+#   问题：负荷收紧分支覆盖过半 ⇒ 体量/资源被"时间紧"主导（实测 275 例里 46% 被硬钳成恰好 2 段）。
+# - v2（2026-09-21）：均衡负荷轴 —— 林慧敏 / 陈默 / 周敏 / 刘芳 由 minimal 改 moderate
+#   （该 4 条 presetVersion 2 → 3），保留王婷 / 苏芮 / 孙浩 三条真正「时间极少」的样本。
+#   现行分布：3 minimal / 8 moderate / 3 abundant。
+#   **注意**：这 4 条在 v1 下跑出的历史数据与 v2 不可直接比较（人设字段变了）。
+#   生效方式：预设随服务启动同步（ensureBuiltinVirtualLearners）；改动需重启才落到 DB。
 
 version: 1
 
@@ -26,7 +35,7 @@ defaultBudget:
 presets:
 
   - presetKey: shop-owner-inventory
-    presetVersion: 2
+    presetVersion: 3
     sourceType: work
     goalType: problem_driven
     scope: in_scope
@@ -41,7 +50,7 @@ presets:
       struggleConcepts: [出入库流程, 库存台账, 先进先出, 盘点差异归因]
       learningStyle: doing
       motivationType: necessity
-      availableTime: minimal
+      availableTime: moderate
       techComfort: medium
       priorAttempts: 买过一本《小店记账》翻了十几页就丢了，试过用手机备忘录记进货，坚持了两周。
       corePersonality: 直、急、要面子，遇事先抱怨再讲细节；被质疑时先自证不是自己的错。
@@ -118,7 +127,7 @@ presets:
       - 隐藏细节把 misdiagnosis（偷窃）与真实缺口（流程）分开，供 Goal 阶段诊断
 
   - presetKey: student-geo-essay
-    presetVersion: 2
+    presetVersion: 3
     sourceType: study
     goalType: exam_prep
     scope: in_scope
@@ -133,7 +142,7 @@ presets:
       struggleConcepts: [综合题答题结构, 材料信息提取, 区位分析]
       learningStyle: reading
       motivationType: necessity
-      availableTime: minimal
+      availableTime: moderate
       techComfort: high
       priorAttempts: 背过很多答题模板，考试时想不起来用。
       corePersonality: 内向、要强、表面平静内里焦虑；不轻易说不会，怕被看成笨。
@@ -302,7 +311,7 @@ presets:
       - hiddenGaps 把「孩子吐」从「手艺差」重新归因到「性状没过渡」
 
   - presetKey: nurse-career-transition
-    presetVersion: 2
+    presetVersion: 3
     sourceType: work
     goalType: foundation_building
     scope: in_scope
@@ -317,7 +326,7 @@ presets:
       struggleConcepts: [健康管理师考证范围, 营养学基础, 健康风险评估]
       learningStyle: reading
       motivationType: career
-      availableTime: minimal
+      availableTime: moderate
       techComfort: medium
       priorAttempts: 下载过考试大纲，看了一眼就放下了。
       corePersonality: 务实、要强，习惯照顾别人不习惯求助；一旦决定就认真。
@@ -757,7 +766,7 @@ presets:
       - hiddenGaps 把「背不下来」重新归因到「没理解原理」
 
   - presetKey: parent-homework-anger
-    presetVersion: 2
+    presetVersion: 3
     sourceType: self_management
     goalType: problem_driven
     scope: in_scope
@@ -772,7 +781,7 @@ presets:
       struggleConcepts: [情绪控制, 亲子沟通, 作业习惯培养]
       learningStyle: listening
       motivationType: social
-      availableTime: minimal
+      availableTime: moderate
       techComfort: medium
       priorAttempts: 看过育儿视频，也跟孩子约定过不发火，两天就破功。
       corePersonality: 要强、心软、内疚重；累的时候一点就着。
