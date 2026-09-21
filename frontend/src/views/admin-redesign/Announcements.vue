@@ -118,7 +118,7 @@
       <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="新建公告">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ editingId ? '编辑公告' : '新建公告' }}</h3>
-          <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeCreate">✕</button>
         </div>
         <div class="mk-modal__body">
           <label class="mk-field" :class="{ 'mk-field--error': errors.title }">
@@ -349,11 +349,16 @@ async function remove(r: Row) {
 
 /* 新建 */
 const createOpen = ref(false)
-useEscape(() => createOpen.value, () => { createOpen.value = false })
+const creating = ref(false)
+/** 弹窗统一关闭路径：提交中（保存中…）禁止 Esc/遮罩/✕ 误关（请求继续但用户失去上下文） */
+function closeCreate() {
+  if (!creating.value) createOpen.value = false
+}
+useEscape(() => createOpen.value, closeCreate)
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => createOpen.value), panelRef)
-useMaskClose(maskRef, () => { createOpen.value = false })
+useMaskClose(maskRef, closeCreate)
 
 /* intent 快捷动作：直达并打开新建弹窗 */
 watch(
@@ -361,12 +366,10 @@ watch(
   (a) => {
     if (a === 'create-announcement') {
       intent.quickAction = ''
-      createOpen.value = true
     }
   },
   { immediate: true }
 )
-const creating = ref(false)
 const editingId = ref('')
 const form = ref({ title: '', body: '', severity: 'info' as 'info' | 'warning' | 'critical', expiresAt: '', publishNow: true })
 const errors = ref<{ title?: string; body?: string }>({})

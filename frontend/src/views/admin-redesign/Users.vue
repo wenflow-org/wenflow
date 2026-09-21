@@ -205,7 +205,7 @@
       <div ref="panelRef" class="mk-modal__panel" role="dialog" :aria-label="editTarget ? '编辑用户' : '新建用户'">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ editTarget ? `编辑用户 · ${editTarget.name}` : '新建用户' }}</h3>
-          <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeCreate">✕</button>
         </div>
         <div class="mk-modal__body">
           <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
@@ -237,7 +237,7 @@
           </label>
         </div>
         <div class="mk-modal__foot">
-          <button type="button" class="mk-btn" @click="createOpen = false">取消</button>
+          <button type="button" class="mk-btn" @click="closeCreate">取消</button>
           <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="saveUser">
             {{ creating ? '保存中…' : editTarget ? '保存修改' : '创建' }}
           </button>
@@ -441,7 +441,12 @@ watch(pill, (p) => {
 
 /* 新建 / 编辑用户 */
 const createOpen = ref(false)
-useEscape(() => createOpen.value, () => { createOpen.value = false })
+const creating = ref(false)
+/** 弹窗统一关闭路径：提交中（保存中…）禁止 Esc/遮罩/✕ 误关（请求继续但用户失去上下文） */
+function closeCreate() {
+  if (!creating.value) createOpen.value = false
+}
+useEscape(() => createOpen.value, closeCreate)
 const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
 
 /** 行内 ⋯ 菜单项：先关菜单再执行 */
@@ -464,7 +469,7 @@ function menuRestore(u: UserRow) {
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => createOpen.value), panelRef)
-useMaskClose(maskRef, () => { createOpen.value = false })
+useMaskClose(maskRef, closeCreate)
 
 /* intent 快捷动作：直达并打开新建弹窗 */
 watch(
@@ -477,7 +482,6 @@ watch(
   },
   { immediate: true }
 )
-const creating = ref(false)
 const editTarget = ref<UserRow | null>(null)
 const form = ref({ name: '', email: '', password: '', confirmPassword: '', admin: false })
 const errors = ref<{ name?: string; email?: string; password?: string; confirmPassword?: string }>({})

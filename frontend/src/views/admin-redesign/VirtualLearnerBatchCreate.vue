@@ -1,11 +1,12 @@
 <template>
   <!-- 批量新建虚拟学习者 -->
   <Teleport v-if="render" to="body">
-  <div v-if="batchOpen" ref="batchMaskRef" class="mk-modal" @click.self="batchOpen = false">
+  <!-- 遮罩关闭统一走 useMaskClose（带 busy 守卫）：不再挂 @click.self 双路径 -->
+  <div v-if="batchOpen" ref="batchMaskRef" class="mk-modal">
     <div ref="batchPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="批量新建虚拟学习者">
       <div class="mk-modal__head">
         <h3 class="mk-modal__title">批量新建虚拟学习者</h3>
-        <button type="button" class="mk-modal__close" aria-label="关闭" @click="batchOpen = false">✕</button>
+        <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeBatch">✕</button>
       </div>
       <div class="mk-modal__body">
         <p class="mk-alert mk-alert--info vl-steps">设置人数与故事数，点击创建后立即返回——AI 会在后台为每人生成身份与故事，页面顶部状态条可查看进度。</p>
@@ -46,6 +47,7 @@ import { computed, reactive, ref } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { loadLiveData, errMsg } from './live'
 import { useOverlay, useMaskClose } from './useOverlay'
+import { useEscape } from './useEscape'
 import { useSafePolling } from '@/composables/useSafePolling'
 import { toast } from '@/utils/toast'
 import type { BatchTask } from './virtualLearnersTypes'
@@ -66,8 +68,13 @@ const batchNote = ref('')
 const batchError = ref('')
 const batchPanelRef = ref<HTMLElement | null>(null)
 const batchMaskRef = ref<HTMLElement | null>(null)
+/** 弹窗统一关闭路径：创建中禁止 Esc/遮罩/✕ 误关（进度视图在此弹窗里；任务本身服务端执行不受影响） */
+function closeBatch() {
+  if (!batchCreating.value) batchOpen.value = false
+}
 useOverlay(computed(() => batchOpen.value), batchPanelRef)
-useMaskClose(batchMaskRef, () => { if (!batchCreating.value) batchOpen.value = false })
+useMaskClose(batchMaskRef, closeBatch)
+useEscape(() => batchOpen.value, closeBatch)
 
 /* ===== 批量创建后台任务：创建人秒回，AI 身份 + 故事后台轮询推进（不占用窗口） ===== */
 /* 用 reactive（而非 ref）承载任务：父页面/RunningBar 直接读取同一对象，避免 exposed ref 类型歧义 */

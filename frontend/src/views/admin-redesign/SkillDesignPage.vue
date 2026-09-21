@@ -145,8 +145,13 @@ const agentIdParam = computed(() => {
 })
 const skillId = computed(() => agentIdParam.value.replace(/^skill:/, ''))
 
-async function goConsole() {
-  void router.push('/admin/console')
+/** 返回控制台：优先回 SPA 来源页（设计页通常从 Skill 列表/抽屉进入，旧实现固定回
+    /admin/console → 经重定向永远落在总览，丢失来源上下文）；直接深链进来（无站内
+    上一页）时回 Skill 列表兜底。onBeforeRouteLeave 的未保存确认对 back 同样生效 */
+function goConsole() {
+  const back = (window.history.state as { back?: string } | null)?.back
+  if (back && back.startsWith('/admin/')) router.back()
+  else void router.push('/admin/skills')
 }
 
 /** Dry Run → 试跑页签 */
