@@ -56,28 +56,31 @@ defineEmits<{ select: [key: string | undefined] }>()
   align-items: stretch;
   min-width: 0;
 }
+/* KPI 层级(2026-09-22 重设计):数值是主角(18px/700),标签是注脚(11px/faint);
+   旧版数值 13px 与标签几乎同大,主次颠倒且拥挤 */
 .mk-stat {
   display: grid;
-  gap: 1px;
+  gap: 4px;
   align-content: center;
   min-width: 0;
-  padding: 1px 12px;
+  padding: 4px 16px;
   border-left: 1px solid var(--mk-line);
 }
 .mk-stat:first-child { border-left: 0; padding-left: 0; }
 .mk-stat__label {
   font-size: var(--mk-fs-11);
   font-weight: 600;
+  letter-spacing: 0.03em;
   color: var(--mk-faint);
   line-height: 1.3;
   white-space: nowrap;
 }
 .mk-stat__value {
-  font-size: var(--mk-fs-13);
+  font-size: 18px;
   font-weight: 700;
   color: var(--mk-ink);
   font-variant-numeric: tabular-nums;
-  line-height: 1.25;
+  line-height: 1.2;
   white-space: nowrap;
 }
 .mk-stat--ok .mk-stat__value { color: var(--mk-green); }
@@ -106,14 +109,14 @@ defineEmits<{ select: [key: string | undefined] }>()
 /* 4K 档对齐全站字号阶梯 */
 @media (min-width: 2000px) {
   .mk-stat__label { font-size: 12px; }
-  .mk-stat__value { font-size: 14px; }
+  .mk-stat__value { font-size: 20px; }
 }
 @media (min-width: 2800px) {
-  .mk-stat__label { font-size: 14px; }
-  .mk-stat__value { font-size: 16px; }
+  .mk-stat__label { font-size: 13px; }
+  .mk-stat__value { font-size: 22px; }
 }
 @media (min-width: 3600px) {
-  .mk-stat__label { font-size: 16px; }
-  .mk-stat__value { font-size: 18px; }
+  .mk-stat__label { font-size: 14px; }
+  .mk-stat__value { font-size: 24px; }
 }
 </style>
