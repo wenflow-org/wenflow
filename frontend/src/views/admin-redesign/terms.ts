@@ -87,6 +87,24 @@ export const ERROR_CODE_LABELS: Record<string, string> = {
   GENERATION_FAILED: '内容生成失败',
 }
 
+// 路由来源(routeSource)人话映射:执行日志 attempt 时间线直出黑话治理
+export const ROUTE_SOURCE_LABELS: Record<string, string> = {
+  platform: '平台默认',
+  'agent-config': 'Agent 配置',
+  'user-agent-override': '用户覆盖',
+  'user-agent': '用户覆盖',
+  'user-provider': '用户自带接入',
+  'skill-config': 'Skill 配置',
+  'env-fallback': '环境变量兜底',
+  env: '环境变量',
+} as const
+
+/** routeSource → 中文;未知值返回 undefined(调用方回退原样展示) */
+export function routeSourceLabel(source?: string): string | undefined {
+  if (!source) return undefined
+  return ROUTE_SOURCE_LABELS[source]
+}
+
 /** errorCode → 中文；未知码返回 undefined（调用方回退原样展示） */
 export function errorCodeLabel(code?: string): string | undefined {
   if (!code) return undefined

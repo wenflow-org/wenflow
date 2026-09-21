@@ -383,27 +383,27 @@
               <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">上游最大尝试</span>
-                  <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" max="10" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">传输重试</span>
-                  <input v-model.number="reliability.maxTransportRetries" type="number" min="0" max="5" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.maxTransportRetries" type="number" min="0" :max="limMax('maxTransportRetries', 5)" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">逻辑重试</span>
-                  <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" max="5" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" :max="limMax('maxLogicalRetries', 5)" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">退避基数（毫秒）</span>
-                  <input v-model.number="reliability.retryBaseDelayMs" type="number" min="100" step="100" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">Retry-After 上限（毫秒）</span>
-                  <input v-model.number="reliability.maxRetryAfterMs" type="number" min="1000" step="1000" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.maxRetryAfterMs" type="number" min="0" :max="limMax('maxRetryAfterMs', 30000)" step="1000" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">单次超时（毫秒）</span>
-                  <input v-model.number="reliability.defaultRequestTimeoutMs" type="number" min="1000" step="1000" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.defaultRequestTimeoutMs" type="number" :min="limMin('minRequestTimeoutMs', 1000)" :max="limMax('maxRequestTimeoutMs', 600000)" step="1000" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field mk-field--switch">
                   <input type="checkbox" v-model="reliability.jitterEnabled" @change="markDirty('reliability')" />
@@ -676,6 +676,8 @@ const connectionStatus = ref('unknown')
 const fetchError = ref('')
 /** 曾成功拉取过模型列表（含从已保存配置载入）：此后提交才携带 availableModels，避免空数组清空后端列表 */
 const modelsFetchedOnce = ref(false)
+/** 模型清单的拉取来源端点:与表单地址一致才允许随连接保存 */
+const fetchedModelsEndpoint = ref('')
 /** 已保存的服务地址：endpoint 被改动且 Key 留空时提示重新输入密钥 */
 const savedApiUrl = ref('')
 
@@ -763,6 +765,17 @@ async function saveProbeInterval(e?: Event) {
   await persistProbe({ intervalMs: probe.intervalSec * 1000 })
 }
 
+/** 可靠性设置硬上限(后端 platform settings GET 返回,前端不再自带一套) */
+const reliabilityLimits = ref<Record<string, number> | null>(null)
+/** 最近一次加载的设置快照:数字输入被清空时保存前回退到该值(后端要求全整数字段) */
+const reliabilityBase = ref<Record<string, number | boolean> | null>(null)
+function limMax(field: string, fallback: number): number {
+  return Number(reliabilityLimits.value?.[field] ?? fallback)
+}
+function limMin(field: string, fallback: number): number {
+  return Number(reliabilityLimits.value?.[field] ?? fallback)
+}
+
 async function loadReliability() {
   try {
     const res = await adminPlatformSettingsApi.getReliabilitySettings()
@@ -777,6 +790,9 @@ async function loadReliability() {
       jitterEnabled: s.jitterEnabled !== false,
       platformRpmLimit: Number(s.platformRpmLimit ?? 0)
     }
+    // 后端 hardLimits 是校验唯一真源:表单 min/max 与保存前的空值回退都以它为准
+    reliabilityLimits.value = (res.data?.data?.hardLimits ?? null) as Record<string, number> | null
+    reliabilityBase.value = { ...reliability.value }
     configLoadFailed.value = false
   } catch {
     reliability.value = null
@@ -830,6 +846,7 @@ function applyLiveConfig() {
   form.defaultThinkingMode = cfg.value.defaultThinkingMode || 'default'
   form.defaultReasoningEffort = cfg.value.defaultReasoningEffort || 'default'
   fetchedModels.value = [...cfg.value.availableModels]
+  fetchedModelsEndpoint.value = cfg.value.apiUrl
   keySet.value = cfg.value.apiKeyConfigured
   connectionStatus.value = cfg.value.connectionStatus
   savedApiUrl.value = cfg.value.apiUrl
@@ -925,6 +942,7 @@ async function fetchModels() {
   try {
     const list = await liveFetchModels(form.apiUrl, form.apiKey)
     fetchedModels.value = list
+    fetchedModelsEndpoint.value = form.apiUrl.trim()
     modelsFetchedOnce.value = true
     connectionStatus.value = 'connected'
     fetchError.value = ''
@@ -981,34 +999,51 @@ async function saveGroups(groups: string[]) {
   }
   saving.value = true
   try {
-    if (set.has('conn') || set.has('route')) {
-      const payload: {
-        apiUrl: string
-        apiKey: string
-        defaultModel: string
-        defaultReasoningModel: string
-        defaultEvaluationModel: string
-        defaultThinkingMode?: string
-        defaultReasoningEffort?: string
-        availableModels?: string[]
-      } = {
+    // 分域保存:连接与路由各自独立提交(后端 PUT 为 partial 合并语义),
+    // 修复「保存路由顺带落盘改了一半的连接」的范围错位
+    if (set.has('conn')) {
+      const payload: { apiUrl: string; apiKey: string; availableModels?: string[] } = {
         apiUrl: form.apiUrl,
-        apiKey: form.apiKey,
+        apiKey: form.apiKey
+      }
+      // 仅当模型清单来自「当前服务地址」的拉取时才携带,
+      // 防止换地址后把上一个服务商的列表挂到新地址(applyLiveConfig 的回显同理按 savedApiUrl 归属)
+      if (fetchedModelsEndpoint.value === form.apiUrl.trim()) payload.availableModels = fetchedModels.value
+      await liveSaveApiConfig(payload as Parameters<typeof liveSaveApiConfig>[0])
+    }
+    if (set.has('route')) {
+      await liveSaveApiConfig({
         defaultModel: form.defaultModel,
         defaultReasoningModel: form.defaultReasoningModel,
         defaultEvaluationModel: form.defaultEvaluationModel,
         defaultThinkingMode: form.defaultThinkingMode,
         defaultReasoningEffort: form.defaultReasoningEffort
-      }
-      // G5：从未成功拉取过模型时不提交 availableModels，避免空数组清空后端模型列表
-      if (modelsFetchedOnce.value) payload.availableModels = fetchedModels.value
-      await liveSaveApiConfig(payload as Parameters<typeof liveSaveApiConfig>[0])
+      } as Parameters<typeof liveSaveApiConfig>[0])
     }
     if (set.has('policy')) {
       await liveSaveNetworkPolicy({ ...policy })
     }
     if (set.has('reliability') && reliability.value) {
-      await adminPlatformSettingsApi.updateReliabilitySettings({ ...reliability.value })
+      // 空值容错:v-model.number 清空后是字符串,后端要求全整数字段(400 且不定位)。
+      // 保存前回退到最近一次加载值,并写回输入框,所见即所存
+      const intOr = (v: unknown, fb: unknown): number => {
+        if (typeof v === 'number' && Number.isInteger(v)) return v
+        const f = Number(fb)
+        return Number.isInteger(f) ? f : 0
+      }
+      const base = reliabilityBase.value ?? {}
+      const sanitized = {
+        maxUpstreamAttempts: intOr(reliability.value.maxUpstreamAttempts, base.maxUpstreamAttempts),
+        maxTransportRetries: intOr(reliability.value.maxTransportRetries, base.maxTransportRetries),
+        maxLogicalRetries: intOr(reliability.value.maxLogicalRetries, base.maxLogicalRetries),
+        defaultRequestTimeoutMs: intOr(reliability.value.defaultRequestTimeoutMs, base.defaultRequestTimeoutMs),
+        retryBaseDelayMs: intOr(reliability.value.retryBaseDelayMs, base.retryBaseDelayMs),
+        maxRetryAfterMs: intOr(reliability.value.maxRetryAfterMs, base.maxRetryAfterMs),
+        platformRpmLimit: intOr(reliability.value.platformRpmLimit, base.platformRpmLimit),
+        jitterEnabled: reliability.value.jitterEnabled !== false
+      }
+      Object.assign(reliability.value, sanitized)
+      await adminPlatformSettingsApi.updateReliabilitySettings(sanitized)
     }
     // 只清除本次已保存的域，保留其他未保存改动（探针为热生效开关，不走统一保存条）
     dirty.value = new Set([...dirty.value].filter((g) => !set.has(g)))

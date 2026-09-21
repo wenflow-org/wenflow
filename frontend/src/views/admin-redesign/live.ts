@@ -628,6 +628,8 @@ export interface LogDetail {
   input?: string
   output?: string
   error?: string
+  /** 主模型重试耗尽后实际降级到的来源模型(元数据回读;无降级为 null) */
+  fallbackFrom?: string | null
   attempts: LogAttempt[]
   attemptCount: number
   maxAttempts: number
@@ -675,6 +677,7 @@ export async function fetchLogDetail(id: string): Promise<LogDetail> {
     input: cap(d.input),
     output: cap(d.output),
     error: cap(d.errorMessage || d.error || undefined),
+    fallbackFrom: typeof d.fallbackFrom === 'string' ? d.fallbackFrom : null,
     attempts: rawAttempts.map((a) => mapAttempt(a as Record<string, unknown>)),
     attemptCount: Number(d.attemptCount || rawAttempts.length || 1),
     maxAttempts: Number(d.maxAttempts || rawAttempts[0]?.maxAttempts || 1)

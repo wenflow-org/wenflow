@@ -46,11 +46,13 @@ vi.mock('../live', async () => {
 });
 
 vi.mock('../store', async () => {
-  const { ref } = await import('vue');
+  const { ref, reactive } = await import('vue');
   return {
     spans: ref([]),
     dataSource: ref('live'),
     isLive: ref(true),
+    // 成本页共享筛选(金额条依赖;plain reactive 对象即可)
+    tokenCostFilters: reactive({ days: 7, includeTest: false }),
     intent: { agentFilter: '', statusFilter: '' },
     openTrace: vi.fn(),
     openSession: vi.fn(),

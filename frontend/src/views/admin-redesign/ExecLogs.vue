@@ -42,7 +42,7 @@
       <!-- 成本金额条：读取 token-cost 端点新增的金额字段；单价未配置时显式提示「单价未配置」（绝不用 0 冒充） -->
       <div class="mk-card cost-strip" :class="{ 'cost-strip--unknown': !costPricingKnown }">
         <div class="cost-strip__main">
-          <span class="cost-strip__label">调用成本（近 7 天）</span>
+          <span class="cost-strip__label">调用成本（近 {{ tokenCostFilters.days }} 天{{ tokenCostFilters.includeTest ? ' · 含测试流量' : '' }}）</span>
           <strong v-if="costLoading" class="cost-strip__value">统计中…</strong>
           <strong v-else-if="costUsd !== null" class="cost-strip__value mono">≈ ${{ fmtCostUsd(costUsd) }}</strong>
           <strong v-else-if="costPricedCalls === 0 && costMissingCalls === 0" class="cost-strip__value cost-strip__value--unknown">无调用</strong>
@@ -51,7 +51,7 @@
             <template v-if="costUsd !== null">
               已定价 {{ costPricedCalls }} 次<template v-if="costMissingCalls > 0"> · {{ costMissingCalls }} 次未定价（未计入）</template>
             </template>
-            <template v-else-if="costPricedCalls === 0 && costMissingCalls === 0">近 7 天没有带 token 的 LLM 调用</template>
+            <template v-else-if="costPricedCalls === 0 && costMissingCalls === 0">近 {{ tokenCostFilters.days }} 天没有带 token 的 LLM 调用</template>
             <template v-else>models.config.ts 的 pricing 尚未填权威单价，暂不展示金额</template>
           </span>
         </div>
@@ -202,6 +202,7 @@
                     <!-- 摘要行：表格弱化列的完整值（类型/模型/输入输出），展开即看全不丢信息 -->
                     <div class="exec-detail__meta mono">
                       <span class="mk-badge" :class="`mk-badge--${kindTone(log)}`">{{ kindText(log) }}</span>
+                      <span v-if="detailCache[log.id]?.fallbackFrom" class="tline__recovered" :title="'主模型重试耗尽后自动降级换模型重跑'">已从 {{ detailCache[log.id]?.fallbackFrom }} 降级</span>
                       <span v-if="log.model" :title="log.model">{{ log.model }}</span>
                       <span v-if="log.promptTokens != null || log.completionTokens != null || promptOf(log)?.tokens" :title="tokensTitle(log)">{{ tokensText(log) }}</span>
                       <span v-if="log.errorCode" class="tline__errcode">{{ errorCodeLabel(log.errorCode) ?? log.errorCode }}</span>
@@ -227,7 +228,7 @@
                                 <span v-if="a.promptTokens != null">P {{ a.promptTokens }} / C {{ a.completionTokens ?? 0 }}</span>
                                 <span v-if="a.ttftMs != null" :title="'TTFT（首字节）'">TTFT {{ a.ttftMs }}ms</span>
                                 <span v-if="a.promptCacheHitTokens" class="tline-attempt__cache" :title="'DeepSeek 自动前缀缓存命中'">缓存 {{ a.promptCacheHitTokens }} token</span>
-                                <span v-if="a.routeSource">路由 {{ a.routeSource }}</span>
+                                <span v-if="a.routeSource" :title="a.routeSource">路由 {{ routeSourceLabel(a.routeSource) ?? a.routeSource }}</span>
                                 <span v-if="a.endpointHost">{{ a.endpointHost }}</span>
                               </div>
                               <p v-if="a.errorMessage" class="tline-attempt__err">{{ a.errorCode ? `${errorCodeLabel(a.errorCode) ?? a.errorCode} · ` : '' }}{{ a.errorMessage }}</p>
@@ -267,7 +268,10 @@
                         <p v-if="detailFailed[log.id]" class="tline__none tline__none--err">详情拉取失败，请稍后重试</p>
                         <p v-else-if="!detailCache[log.id].attempts.length && !detailCache[log.id].error && !detailCache[log.id].input && !detailCache[log.id].output" class="tline__none">无请求内容记录</p>
                       </template>
-                      <p v-else class="tline__none">详情不可用</p>
+                      <div v-else class="tline__section">
+                        <span class="tline__label tline__label--err">{{ detailFailed[log.id] ? '详情拉取失败' : '详情不可用' }}</span>
+                        <button v-if="detailFailed[log.id]" type="button" class="mk-btn mk-btn--ghost mk-btn--sm" @click.stop="retryDetail(log.id)">重试拉取</button>
+                      </div>
                   </div>
                 </td>
               </tr>
@@ -291,7 +295,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { intent, openSkillDrawer, clearInvestigation, dataSource } from './store'
+import { intent, openSkillDrawer, clearInvestigation, dataSource, tokenCostFilters } from './store'
 import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, totalPagesOf, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -303,7 +307,7 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
 import TokenCost from './TokenCost.vue'
 import { adminTokenCostApi } from '@/api/adminApi'
-import { TERMS, errorCodeLabel } from './terms'
+import { TERMS, errorCodeLabel, routeSourceLabel } from './terms'
 import { useTableSort } from './useTableSort'
 
 /* 日志 / Trace 链路 / 成本分析 tab（Trace 为执行日志下钻视图；成本分析为观测同域并入） */
@@ -328,7 +332,8 @@ function switchElTab(t: ElTab) {
   if (route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
 }
 
-/* 成本金额条（成本 tab）：读取 token-cost 端点新增的金额字段（近 7 天口径，与嵌入组件同源）。
+/* 成本金额条（成本 tab）：读取 token-cost 端点金额字段，口径跟随共享筛选
+   （store.tokenCostFilters，与嵌入的 TokenCost 组件同一份状态，切换时间窗同步刷新）。
    单价未配置时后端返回 usd=null，这里显示「单价未配置」而非 0 / 空白；
    pricingStatus.missingPricingModels 给出运维补价清单。 */
 const costLoading = ref(false)
@@ -348,7 +353,7 @@ async function loadCostSummary() {
   if (costLoading.value) return
   costLoading.value = true
   try {
-    const res = await adminTokenCostApi.getSummary({ days: 7, includeTest: false })
+    const res = await adminTokenCostApi.getSummary({ days: tokenCostFilters.days, includeTest: tokenCostFilters.includeTest })
     const totals = res.data?.data?.totals ?? null
     costUsd.value = totals?.usd ?? null
     costPricingKnown.value = totals?.pricingKnown ?? false
@@ -367,6 +372,12 @@ async function loadCostSummary() {
 /* 进入成本 tab 时懒加载一次（深链 ?tab=cost 由 route watch 改写 elTab 后触发） */
 watch(elTab, (t) => {
   if (t === 'cost' && !costLoaded.value) void loadCostSummary()
+
+// 筛选变化（与 TokenCost 同源）→ 金额条失效；在成本 tab 上立即刷新，否则下次进入刷新
+watch(tokenCostFilters, () => {
+  costLoaded.value = false
+  if (elTab.value === 'cost') void loadCostSummary()
+})
 }, { immediate: true })
 /** 切到 Trace tab 并让瀑布聚焦指定链路/会话（openTrace/openSession 深链接入） */
 function showTrace(traceId?: string, sessionId?: string) {
@@ -602,8 +613,8 @@ function setDetail(id: string, d: LogDetail) {
   detailCache.value = next
 }
 
-watch(openId, async (id) => {
-  if (!id || detailCache.value[id]) return
+async function loadDetail(id: string) {
+  if (detailCache.value[id]) return
   detailLoading.value = id
   try {
     const d = await fetchLogDetail(id)
@@ -612,11 +623,18 @@ watch(openId, async (id) => {
     delete f[id]
     detailFailed.value = f
   } catch {
-    setDetail(id, { attempts: [], attemptCount: 0, maxAttempts: 1 })
+    // 不写占位缓存:此前失败详情被空缓存占位后无法重试(仅 LRU 淘汰才能重拉)
     detailFailed.value = { ...detailFailed.value, [id]: true }
   } finally {
     if (detailLoading.value === id) detailLoading.value = ''
   }
+}
+function retryDetail(id: string) {
+  detailFailed.value = { ...detailFailed.value, [id]: false }
+  void loadDetail(id)
+}
+watch(openId, (id) => {
+  if (id) void loadDetail(id)
 })
 
 // 从排查意图进入时应用过滤（含失败归因跳转的错误类别与时间范围）

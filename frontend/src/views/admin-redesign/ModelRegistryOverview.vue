@@ -105,7 +105,17 @@
                 <td class="mono">{{ model.limits.defaultMaxTokens ?? '—' }}</td>
                 <td class="mono">{{ model.limits.reasoningReserveTokens || '—' }}</td>
                 <td class="mono">{{ model.limits.maxParallelRequests ?? '不限' }}</td>
-                <td class="mono">{{ model.fallbacks.length ? model.fallbacks.join(' → ') : '—' }}</td>
+                <td class="mono">
+                  <template v-if="model.fallbacks.length">
+                    {{ effectiveFallbacks(model.fallbacks).join(' → ') }}
+                    <span
+                      v-if="model.fallbacks.length > effectiveFallbacks(model.fallbacks).length"
+                      class="ac-mr-label"
+                      title="运行时最多主模型+1跳 fallback(MAX_MODEL_CANDIDATES),声明链更长也只生效前段"
+                    >(声明 {{ model.fallbacks.length }} 层,运行时生效 {{ effectiveFallbacks(model.fallbacks).length }} 层)</span>
+                  </template>
+                  <template v-else>—</template>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -193,7 +203,13 @@ interface ModelRegistryOverviewData {
     defaultReasoningModelResolved: string | null
     defaultReasoningModelSource: 'alias' | 'concrete' | 'unset'
   }
-  fallbackChains: Array<{ model: string; fallbacks: string[] }>
+  fallbackChains: Array<{
+    model: string
+    fallbacks: string[]
+    effectiveFallbacks: string[]
+    truncated: boolean
+  }>
+  runtime?: { maxModelCandidates: number }
   cooldowns: Array<{ key: string; providerId: string; endpoint: string; model: string; remainingMs: number }>
   warnings: string[]
   deprecatedPromptModelCount: number
@@ -204,6 +220,14 @@ const emit = defineEmits<{ count: [payload: { models: number; warnings: number }
 const data = ref<ModelRegistryOverviewData | null>(null)
 const failed = ref(false)
 const errorText = ref('')
+
+/** 运行时模型候选上限(含主模型);后端 registry runtime 缺失时按现状 2 兜底 */
+function runtimeMaxCandidates(): number {
+  return data.value?.runtime?.maxModelCandidates ?? 2
+}
+function effectiveFallbacks(fallbacks: string[]): string[] {
+  return fallbacks.slice(0, Math.max(0, runtimeMaxCandidates() - 1))
+}
 
 function sourceLabel(source: 'alias' | 'concrete' | 'unset'): string {
   if (source === 'alias') return '别名'

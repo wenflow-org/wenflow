@@ -174,7 +174,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { isLive, intent } from './store'
+import { isLive, intent, tokenCostCacheKey, tokenCostFilters } from './store'
 import { errMsg, isPageCacheFresh, markPageFetched } from './live'
 import { adminTokenCostApi } from '@/api/adminApi'
 import DataScopeToggle from './DataScopeToggle.vue'
@@ -194,8 +194,15 @@ interface Summary {
   trend: Array<{ date: string; tokens: number; calls: number; failed: number }>
 }
 
-const days = ref(7)
-const includeTest = ref(false)
+// 筛选状态存于 store（与金额条同源）；此处以可写计算属性保持既有模板绑定
+const days = computed({
+  get: () => tokenCostFilters.days,
+  set: (v: number) => { tokenCostFilters.days = v }
+})
+const includeTest = computed({
+  get: () => tokenCostFilters.includeTest,
+  set: (v: boolean) => { tokenCostFilters.includeTest = v }
+})
 const loading = ref(false)
 const loadFailed = ref(false)
 
@@ -250,7 +257,7 @@ watch([days, includeTest], () => {
 
 async function load(force = false) {
   if (loading.value) return
-  if (!force && isPageCacheFresh('token-cost') && summary.value) return
+  if (!force && isPageCacheFresh(tokenCostCacheKey()) && summary.value) return
   loading.value = true
   loadFailed.value = false
   try {
@@ -265,7 +272,7 @@ async function load(force = false) {
     bySkill.value = (skillRes.data?.data?.items ?? []) as RankRow[]
     byUser.value = (userRes.data?.data?.items ?? []) as RankRow[]
     byModel.value = (modelRes.data?.data?.items ?? []) as RankRow[]
-    markPageFetched('token-cost')
+    markPageFetched(tokenCostCacheKey())
   } catch (e) {
     loadFailed.value = true
     toast.error(`加载失败：${errMsg(e)}`)
