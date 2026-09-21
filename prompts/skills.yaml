@@ -663,6 +663,18 @@ skills:
       sandbox: []
     notes: 预留能力（Prompt-AI 单轮验收）——入口 /api/admin/skill-author 于 2026-09-11 因未挂载死路由下线（QA ISSUE-008），compileSkill 待重新接线（失败路径漏 return 已修）；走 service 直调（platform-direct），不进业务编排链；历史输入=用户提交 systemPrompt/requiredFieldIds，无 DB 直读
   # ============ 平台守门（aux 变体，registrationPoint=platform-direct 豁免注册检查） ============
+  - skillId: triage-judge
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/triage-judge.yaml
+    displayName: 需求分流判官
+    description: 判断真实诉求是否存在可迁移的因果心智、以及会不会反复发生（决定"要不要排路径"）
+    dataSource:
+      db: []
+      sandbox: []
+    notes: 调用方 = Goal 层（诊断完成后一次调用）；输入 = 用户诉求原文 + 情境（callsite 组装）；
+      artifact 建议位由 LLM 出，正式取值由代码按 transferable × recurrence 推导（LLM 出观测、档位由代码裁决）；
+      消费方 = derivePlanningHints 的分流钳制（note：缺失时不生效，行为与今天一致）
   - skillId: semantic-freeze-judge
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts

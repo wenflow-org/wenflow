@@ -1,0 +1,34 @@
+version: prompt-lab-manifest/v1
+skillId: triage-judge
+agentId: skill:triage-judge
+name: default-skill-triage-judge
+archetype: distiller
+description: 需求分流判官
+acceptableAgentIds: [skill:triage-judge]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar }
+  failurePolicy: retry
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: triage-judge, phases: [judged], defaultPhase: judged, terminalPhases: [judged], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, goal, triage, v4]
+notes: |
+  判断真实诉求是否存在「可跨情境迁移的因果心智」(transferable) 与「会不会反复发生」(recurrence)，
+  供 Goal 层产出 normalizedInput.triage → derivePlanningHints 的分流钳制（出口不变量 B）消费。
+  判据依据（2026-09-21，60 例混合数据自带标注）：blockType 与 recurrence 几乎正交
+  （capability×recurring 14/14、oneoff×once 10/10、environment_tooling×recurring 10/11），
+  按"类型"熔断会误杀反复发生型；**复现性才是钥匙**。
+  ⚠️ 尚未接入生产调用方（无 caller）；判据 v1 经 60 例评测**未达标**（弃权率 32%、once 召回≈0），
+  评测脚本 = backend/src/scripts/eval-triage-judge.ts（离线，不落库）。
+  纪律：LLM 只出两个观测（transferable/recurrence），档位 artifact 由代码推导。

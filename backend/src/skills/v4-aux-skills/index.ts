@@ -28,7 +28,8 @@ export type AuxSkillId =
   | 'learner-state-review'
   | 'concept-consolidator'
   | 'concept-load-estimator'
-  | 'replan-attribution';
+  | 'replan-attribution'
+  | 'triage-judge';
 
 // File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
 const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
@@ -40,6 +41,7 @@ const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
   'concept-consolidator': loadPromptFile('skill:concept-consolidator')?.systemPrompt || '',
   'concept-load-estimator': loadPromptFile('skill:concept-load-estimator')?.systemPrompt || '',
   'replan-attribution': loadPromptFile('skill:replan-attribution')?.systemPrompt || '',
+  'triage-judge': loadPromptFile('skill:triage-judge')?.systemPrompt || '',
 };
 
 interface AuxPlumbing extends PromptCallContext {
@@ -221,6 +223,7 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
   'concept-consolidator': { skillId: 'concept-consolidator', displayName: '概念身份归并器', description: '判断多个知识点名字里哪些是同一个概念的不同说法，输出可执行、可审计的归并建议', category: 'analysis' },
   'concept-load-estimator': { skillId: 'concept-load-estimator', displayName: '概念负担判定器', description: '逐概念判定粒度/知识类型/检索难度档位，供温故配额按认知负担裁剪', category: 'analysis' },
   'replan-attribution': { skillId: 'replan-attribution', displayName: '路径重排归因器', description: '在阈值召回的重排建议上给出主因、方向与一条可证伪断言', category: 'analysis' },
+  'triage-judge': { skillId: 'triage-judge', displayName: '需求分流判官', description: '判断真实诉求是否存在可迁移的因果心智、以及会不会反复发生（决定"要不要排路径"）', category: 'analysis' },
 };
 
 // ============================================================
@@ -553,6 +556,49 @@ async function replanAttributionHandler(input: any) {
   });
 }
 
+/**
+ * 需求分流判官：LLM 只判两个观测（transferable / recurrence），
+ * **档位 artifact 由代码推导**（LLM 出观测、档位由代码裁决——与 replan-attribution 同一纪律）。
+ * 依据：60 例混合数据实测，blockType 与 recurrence 几乎正交，按类型分流会误杀 13 例。
+ */
+async function triageJudgeHandler(input: any) {
+  return runAux({
+    meta: META['triage-judge'],
+    input,
+    buildUserPayload: (d) => ({
+      request: asTrimmedString(d.request),
+      context: asTrimmedString(d.context),
+      background: asTrimmedString(d.background),
+    }),
+    normalize: (parsed) => {
+      const rawTransferable = parsed?.transferable;
+      const transferable = rawTransferable === true ? true : rawTransferable === false ? false : null;
+      const recurrenceRaw = asTrimmedString(parsed?.recurrence).toLowerCase();
+      const recurrence = recurrenceRaw === 'once' || recurrenceRaw === 'recurring' ? recurrenceRaw : 'unknown';
+      // 档位由代码裁决（不采信模型自造的取值）。缺省收敛到**最小产物**：
+      // 未知/一次性 → 步骤卡；不确定（transferable=null）→ 一节；只有可迁移才给路径。
+      // 理由：两个方向的错误代价不对称——给多了是"通胀"（7.4h 传照片课），给少了用户能自己升上来。
+      const artifact = transferable === true
+        ? 'path'
+        : transferable === false
+          ? (recurrence === 'recurring' ? 'short_course' : 'one_off')
+          : 'short_course';
+      const confidenceRaw = asTrimmedString(parsed?.confidence).toLowerCase();
+      return {
+        transferable,
+        recurrence,
+        artifact,
+        evidence: asTrimmedString(parsed?.evidence).slice(0, 80),
+        misdiagnosis: asTrimmedString(parsed?.misdiagnosis).slice(0, 60) || null,
+        confidence: ['high', 'medium', 'low'].includes(confidenceRaw) ? confidenceRaw : 'low',
+      };
+    },
+    validate: (parsed) => parsed && typeof parsed === 'object'
+      ? { valid: true }
+      : { valid: false, failureReason: 'TRIAGE_JUDGE_OUTPUT_NOT_OBJECT' },
+  });
+}
+
 // ============================================================
 // 注册表
 // ============================================================
@@ -571,4 +617,5 @@ export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillE
   'concept-consolidator': conceptConsolidatorHandler,
   'concept-load-estimator': conceptLoadEstimatorHandler,
   'replan-attribution': replanAttributionHandler,
+  'triage-judge': triageJudgeHandler,
 };
