@@ -34,11 +34,32 @@ describe('resolvePathSubject（路径 subject 兜底）', () => {
 describe('cleanPathTitle', () => {
   it('去掉结尾的「学习路径」等后缀', () => {
     expect(cleanPathTitle('Python 自动化 Excel 学习路径')).toBe('Python 自动化 Excel');
-    expect(cleanPathTitle('摄影入门学习计划')).toBe('摄影入门');
   });
 
-  it('无后缀时原样返回', () => {
-    expect(cleanPathTitle('二战在家备考偏离重启入门')).toBe('二战在家备考偏离重启入门');
+  it('剔除交付口径水平词（后缀清洗在前，否则水平词不在末尾）', () => {
+    expect(cleanPathTitle('摄影入门学习计划')).toBe('摄影');
+    expect(cleanPathTitle('几何证明条件推方向入门')).toBe('几何证明条件推方向');
+    expect(cleanPathTitle('奥数行程题读题建模入门')).toBe('奥数行程题读题建模');
+    expect(cleanPathTitle('数据分析实战')).toBe('数据分析');
+    expect(cleanPathTitle('从零开始学 Excel 合并')).toBe('学 Excel 合并');
+  });
+
+  it('保护主题词：中部的「基础/系统」不是水平标签，不动', () => {
+    expect(cleanPathTitle('基础理财规划')).toBe('基础理财规划');
+    expect(cleanPathTitle('知识管理系统搭建入门')).toBe('知识管理系统搭建');
+  });
+
+  it('整名就是水平词时保持原样（空标题更糟）', () => {
+    expect(cleanPathTitle('入门')).toBe('入门');
+  });
+
+  it('无水平词时原样返回', () => {
+    expect(cleanPathTitle('二战在家备考偏离重启')).toBe('二战在家备考偏离重启');
+  });
+
+  it('幂等：清洗两次结果一致', () => {
+    const once = cleanPathTitle('限时卡题断手翻页训练入门');
+    expect(cleanPathTitle(once)).toBe(once);
   });
 });
 

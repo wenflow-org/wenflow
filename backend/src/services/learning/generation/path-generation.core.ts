@@ -29,6 +29,7 @@ import {
   buildNormalizedPathInputSnapshot,
   buildSceneSummaryFromFraming,
   cleanPathTitle,
+  cleanPathTitleDetailed,
   getSceneFramingFallbackDomain,
   getSceneFramingNormalizedInput,
   inferMilestoneConceptFromTasks,
@@ -287,7 +288,7 @@ function buildPathAdjustmentEvidence(data: GeneratePathData): PathAdjustmentEvid
   return evidence;
 }
 
-function buildPathAgentInput(data: GeneratePathData): AgentInput {
+export function buildPathAgentInput(data: GeneratePathData): AgentInput {
   const skillLevel = data.userProfile?.skillLevel || data.userProfile?.currentSkillLevel;
   const currentLevel = (skillLevel === 'beginner' || skillLevel === 'intermediate' || skillLevel === 'advanced')
     ? skillLevel as 'beginner' | 'intermediate' | 'advanced'
@@ -476,7 +477,19 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
 
   // subject 兜底：path-planning 的 analysis.subject 可能是目标原文（其 analyzeInput 用 input.goal），
   // 过长会污染教学 prompt / 管理端列表 / Dashboard 副标题，超阈值时用清洗后的路径名兜底。
-  const pathTitle = cleanPathTitle(analysis.pathName || `${analysis.subject || '个性化'}学习路径`);
+  // 名称清洗走 cleanPathTitleDetailed：**交付口径水平词会被剔除**（见 path-naming.ts），
+  // 并在命中时打结构化告警——这是"提示词是否被遵守"的可观测信号（改写后应趋近 0）。
+  const pathTitleCleanup = cleanPathTitleDetailed(analysis.pathName || `${analysis.subject || '个性化'}学习路径`);
+  const pathTitle = pathTitleCleanup.title;
+  if (pathTitleCleanup.strippedLevelWords.length > 0) {
+    logger.warn('[path-naming] 路径名含交付口径水平词，已剔除', {
+      userId: data.userId,
+      pathId: data.existingPathId || null,
+      raw: analysis.pathName,
+      cleaned: pathTitle,
+      stripped: pathTitleCleanup.strippedLevelWords,
+    });
+  }
   const pathSubject = resolvePathSubject(analysis.subject, pathTitle);
 
   const learningPath = await withTransaction(async (tx) => {
@@ -502,7 +515,7 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
             : (normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
           subject: pathSubject,
           status: 'active',
-          difficulty: analysis.difficulty || 'beginner',
+          difficulty: normalizePathDifficulty(analysis.difficulty),
           totalMilestones: normalizedMilestonesData.length || 1,
           estimatedHours: analysis.estimatedTotalHours || 0,
           deadline: data.deadline || null,
@@ -542,7 +555,7 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
             ? data.description
             : (normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
           subject: pathSubject,
-          difficulty: analysis.difficulty || 'beginner',
+          difficulty: normalizePathDifficulty(analysis.difficulty),
           totalMilestones: normalizedMilestonesData.length || 1,
           estimatedHours: analysis.estimatedTotalHours || 0,
           deadline: data.deadline || null,

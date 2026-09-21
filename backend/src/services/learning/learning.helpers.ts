@@ -14,6 +14,7 @@ import type {
   PathSceneFramingNormalizedInput,
 } from './learning.types';
 import { DISPLAY_LABEL_MAP, NEW_PATH_TASK_TYPES } from './learning.constants';
+import { stripDeliveryLevelWords } from './path-naming';
 import type { PathGenerationPhase } from './path-generation-status';
 
 /**
@@ -80,10 +81,32 @@ export function parsePathSummary(raw: string | null): string | null {
   }
 }
 
-export function cleanPathTitle(title: string): string {
-  const t = title.trim();
+export interface PathTitleCleanup {
+  /** 清洗后的名称（用户可见） */
+  title: string;
+  /** 被剔除的交付口径水平词（空数组=未命中）；调用方据此打标，不静默 */
+  strippedLevelWords: string[];
+}
+
+/**
+ * 路径名称清洗（**用户可见名称的唯一入口**）。
+ *
+ * 两步（顺序不可交换）：
+ *   1. 去掉模板尾巴"学习路径/学习计划/路径计划"——否则"…入门学习路径"的水平词不在末尾，下一步剔不到；
+ *   2. 剔除**交付口径水平词**（见 `path-naming.ts`）：水平词描述"起点"，
+ *      用户读到的却是"终点"⇒ 不进入用户可见名称；难度信息仍在 `difficulty` 列。
+ * 全被剔空时保持上一步结果（空标题更糟，由调用方兜底）。
+ */
+export function cleanPathTitleDetailed(title: string): PathTitleCleanup {
+  const t = typeof title === 'string' ? title.trim() : '';
   const cleaned = t.replace(/(?:[，,、\s]*)(?:学习路径|学习计划|路径计划)$/, '').trim();
-  return cleaned || t;
+  const base = cleaned || t;
+  const { title: withoutLevelWords, stripped } = stripDeliveryLevelWords(base);
+  return { title: withoutLevelWords || base, strippedLevelWords: stripped };
+}
+
+export function cleanPathTitle(title: string): string {
+  return cleanPathTitleDetailed(title).title;
 }
 
 /** subject 长度上限：超过即视为把目标原文误当学科，改用路径名兜底 */
