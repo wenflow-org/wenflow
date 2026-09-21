@@ -27,7 +27,9 @@
         <span class="mk-card__meta">{{ cores.length }} 个</span>
       </div>
       <div class="mk-table-scroll">
-      <table v-if="cores.length" class="mk-table mk-table--click mk-table--fixed">
+      <!-- 首载骨架屏（对齐全站「骨架替代空白」约定；此前整表无占位） -->
+      <MockSkeletonTable v-if="loading && !cores.length" :cols="6" :rows="8" />
+      <table v-else-if="cores.length" class="mk-table mk-table--click mk-table--fixed">
         <colgroup>
           <col style="width:var(--mk-col-text)">
           <col style="width:var(--mk-col-badge)">
@@ -185,7 +187,9 @@ import { useLoadMore } from './useLoadMore';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
 import { intent } from './store'
+import { errMsg } from './live'
 import { toast } from '@/utils/toast'
+import MockSkeletonTable from './SkeletonTable.vue';
 
 interface CoreListItem {
   skillId: string;
@@ -238,10 +242,12 @@ async function loadList() {
   try {
     const res = await adminPromptWorkbenchApi.getCoreList();
     cores.value = res.data?.items || [];
-  } catch (e: any) {
+  } catch (e) {
+    /* 错误人话化走全站单源 errMsg（此前直抛 e.message，管理员会看到
+       "Request failed with status code 500" 之类的原始英文） */
     cores.value = [];
-    loadError.value = `清单加载失败：${e?.message || e}`;
-    toast.error(`清单加载失败：${e?.message || e}`);
+    loadError.value = `清单加载失败：${errMsg(e)}`;
+    toast.error(loadError.value);
   } finally {
     loading.value = false;
   }
@@ -306,8 +312,9 @@ async function openScaffold() {
   }
 }
 
+/** 弹窗统一关闭路径：scaffold 提交中禁止 Esc/遮罩/✕ 误关（与其他弹窗同一守卫纪律） */
 function closeScaffold() {
-  scaffoldOpen.value = false;
+  if (!scaffolding.value) scaffoldOpen.value = false;
 }
 
 function validateForm(): string {

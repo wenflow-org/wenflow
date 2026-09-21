@@ -133,7 +133,7 @@
             <tr v-for="s in paged" :key="s.id" class="sk-row" @click="openSkillDrawer(s.id)">
               <td>
                 <div class="sk-cell">
-                  <span class="sk-dot" :class="`sk-dot--${s.health}`" :title="s.health === 'ok' ? '健康' : s.health === 'error' ? '异常' : '空闲'"></span>
+                  <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
                   <div class="mk-cell-main">
                     <strong class="sk-id-main mk-ellipsis" :title="s.id">{{ s.id }}</strong>
                     <span class="sk-name-desc mk-ellipsis" :title="s.name">{{ s.name }}</span>
@@ -174,7 +174,7 @@
           <span class="sk-card__head">
             <span class="sk-card__dot"></span>
             <span class="sk-card__cat">{{ categoryText(s.category) }}</span>
-            <span v-if="s.health !== 'ok'" class="sk-card__flag">{{ s.health === 'error' ? '异常' : '空闲' }}</span>
+            <span v-if="s.health !== 'ok'" class="sk-card__flag">{{ healthLabel(s.health) }}</span>
           </span>
           <strong class="sk-card__name" :title="s.name">{{ s.id }}</strong>
           <span class="sk-card__id">{{ s.name }}</span>
@@ -388,6 +388,14 @@ const cards = computed<SkillRow[]>(() => {
     return { ...p, ...stat, health }
   })
 })
+
+/** 健康状态文案（状态点 tooltip + aria-label 共用）：状态点是无内容的 span，
+    仅靠 title 时触屏/读屏拿不到状态（且 title 会成为行可访问名的首词） */
+function healthLabel(health: Health): string {
+  if (health === 'error') return '异常'
+  if (health === 'idle') return '空闲'
+  return '健康'
+}
 
 /* 表格排序：默认失败数优先（问题浮顶，保持既有行为），表头可点切换。
    数据为 live 注册表全量（有界）→ 客户端排序是诚实的；截断/服务端分页列表不适用本机制。 */
