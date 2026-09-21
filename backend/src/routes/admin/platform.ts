@@ -271,6 +271,10 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
 const OVERVIEW_CACHE_TTL_MS = 45 * 1000;
 const overviewStatsCache = new Map<string, { payload: unknown; cachedAt: number }>();
 
+/** 拓扑接口缓存（按 range 分 key；45s TTL 与概览一致） */
+const TOPOLOGY_CACHE_TTL_MS = 45 * 1000;
+const topologyCache = new Map<string, { payload: unknown; cachedAt: number }>();
+
 /** 测试辅助：清空概览/动态缓存（45s TTL 会跨用例复用，污染路由级断言） */
 export function clearOverviewStatsCache(): void {
   overviewStatsCache.clear();
@@ -379,6 +383,15 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
       ? range
       : 'all';
 
+    /* 拓扑聚合是后台最重的接口之一（range=all 全历史 groupBy + 字段命中率计算，
+       实测 9s+；编排页还可能短时间重复进入）——按 range 缓存 45s，口径与
+       overview/stats 的缓存模式一致。 */
+    const topoCacheKey = `topology:${statsRange}`;
+    const topoCached = topologyCache.get(topoCacheKey);
+    if (topoCached && Date.now() - topoCached.cachedAt < TOPOLOGY_CACHE_TTL_MS) {
+      return res.json({ success: true, data: topoCached.payload });
+    }
+
     const { listTopLevelAgents, listAgentManifest, getCanonicalAgentId } = await import('../../services/agent-manifest.service');
     const {
       getUnifiedSkillStats,
@@ -432,6 +445,18 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
     const nodes: any[] = [];
     const edges: any[] = [];
     const effectiveConfigCache = new Map<string, any>();
+
+    /* 生效运行配置并行预解析（原在成员循环内串行 await，几十个 Skill 串成秒级；
+       失败的条目留空 → 循环内回落 manifest 默认，与原行为一致） */
+    await Promise.all(
+      [...new Set(skillIds)].map(async (shortId) => {
+        try {
+          effectiveConfigCache.set(shortId, await resolveEffectiveSkillRuntimeConfig(shortId));
+        } catch {
+          // keep manifest default as last resort
+        }
+      })
+    );
 
     for (const agent of topAgents) {
       const agentStats = getAgentStats(agent.id);
@@ -534,6 +559,7 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
       success: true,
       data: { nodes, edges: edgesWithStats, summary, fieldStats }
     });
+    topologyCache.set(topoCacheKey, { payload: { nodes, edges: edgesWithStats, summary, fieldStats }, cachedAt: Date.now() });
   } catch (error: any) {
     logger.error('[admin-topology] 加载拓扑失败', { error });
     res.status(500).json({

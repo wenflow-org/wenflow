@@ -68,7 +68,11 @@
       </details>
     </template>
     <div v-else class="orch-tabpane">
-      <MkLoading v-if="pageLoading" text="编排数据加载中…" />
+      <!-- 首屏骨架：此前是居中小 spinner，4K 下整页空白只挂一行字 -->
+      <template v-if="pageLoading">
+        <MockSkeletonTable :cols="6" :rows="8" />
+        <MkLoading text="编排数据加载中…" />
+      </template>
       <MkEmptyState v-else title="暂无编排阶段数据" />
     </div>
   </div>
@@ -87,6 +91,7 @@ import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MockSkeletonTable from './SkeletonTable.vue'
 
 const viewMode = ref<'stage' | 'sandbox'>('stage')
 /** 编辑页内治理折叠区（漂移/审计）：?tab=drift 深链时自动展开 */

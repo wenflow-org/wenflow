@@ -1765,13 +1765,35 @@ async function fetchLiveSkillCatalog(): Promise<void> {
 
 export const liveTopoNodes = ref<LiveTopoNode[]>([])
 
-/** 拓扑统计时间范围（页面可切换，触发服务端重查） */
-export const liveTopoRange = ref<'24h' | '7d' | '30d' | 'all'>('all')
+/** 拓扑统计时间范围（页面可切换，触发服务端重查）。
+    默认 7d：all 是全历史聚合（实测 9s+，是编排页加载慢的主因），不宜作为默认口径 */
+export const liveTopoRange = ref<'24h' | '7d' | '30d' | 'all'>('7d')
 
-async function fetchLiveTopology(): Promise<void> {
-  const res = await adminAgentTopologyApi.getTopology(liveTopoRange.value)
-  const body = res.data?.data ?? res.data ?? {}
-  const nodes = body.nodes || []
+/** 原始拓扑响应的单飞行共享（boot 的 topology 域与 DataFlowGraph 等消费方此前各拉一次，
+    同一重接口重复请求；现共享同一 in-flight 请求 + 缓存最近一次响应，切 range/显式 force 时失效） */
+let liveTopoRawBody: Record<string, unknown> | null = null
+let liveTopoInflight: Promise<Record<string, unknown>> | null = null
+
+export async function ensureLiveTopologyRaw(force = false): Promise<Record<string, unknown>> {
+  if (!force && liveTopoRawBody) return liveTopoRawBody
+  if (!liveTopoInflight) {
+    liveTopoInflight = adminAgentTopologyApi
+      .getTopology(liveTopoRange.value)
+      .then((res) => {
+        const body = (res.data?.data ?? res.data ?? {}) as Record<string, unknown>
+        liveTopoRawBody = body
+        return body
+      })
+      .finally(() => {
+        liveTopoInflight = null
+      })
+  }
+  return liveTopoInflight
+}
+
+async function fetchLiveTopology(force = false): Promise<void> {
+  const body = await ensureLiveTopologyRaw(force)
+  const nodes = (body.nodes as Array<Record<string, unknown>>) || []
   liveTopoNodes.value = nodes.map((n: Record<string, unknown>) => {
     const stats = (n.stats as Record<string, unknown>) || {}
     return {
@@ -1791,10 +1813,10 @@ async function fetchLiveTopology(): Promise<void> {
   })
 }
 
-/** 切换拓扑时间范围并重查 */
+/** 切换拓扑时间范围并重查（range 变化必须绕过共享缓存） */
 export async function reloadLiveTopology(range: '24h' | '7d' | '30d' | 'all'): Promise<void> {
   liveTopoRange.value = range
-  await fetchLiveTopology()
+  await fetchLiveTopology(true)
 }
 
 /* ================= 平台注册开关 ================= */
@@ -2002,7 +2024,7 @@ export async function loadLiveData(force = false) {
     learners: fetchLiveLearners,
     virtuals: fetchLiveVirtuals,
     apiConfig: fetchLiveApiConfig,
-    topology: fetchLiveTopology,
+    topology: () => fetchLiveTopology(force),
     catalog: fetchLiveSkillCatalog,
     registration: fetchRegistrationSetting,
     announcements: fetchLiveAnnouncements

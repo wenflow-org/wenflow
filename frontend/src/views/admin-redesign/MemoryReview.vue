@@ -11,20 +11,22 @@
         </button>
       </span>
     </header>
-    <p class="mr__lead">
-      记忆层（用户级、跨 path）：到期积压、课内温故配额、概念归并审计。
-      归并默认<strong>观察模式</strong>——只记录建议，不动 memory_traces。
-    </p>
-    <!-- R1：筛选控件不得进状态条，独立成筛选行 -->
-    <div class="mr__filter">
-      <label class="mr__toggle">
-        <input v-model="includeVirtual" type="checkbox" @change="loadOverview" />
-        包含虚拟学习者
-      </label>
+    <!-- 概览卡：口径说明 + 筛选 + KPI 指标条收进同一张卡
+         （原 lead / 筛选行 / 指标条三段裸露在页面背景上，与全站卡片风格不符） -->
+    <div class="mk-card">
+      <div class="mk-card__head">
+        <strong>观测概览</strong>
+        <span class="mk-card__meta">
+          记忆层（用户级、跨 path）：到期积压 · 课内温故配额 · 概念归并审计；归并默认<strong>观察模式</strong>，只记录建议，不动 memory_traces
+        </span>
+        <label class="mr__toggle" title="切换后整页重新统计">
+          <input v-model="includeVirtual" type="checkbox" @change="loadOverview" />
+          包含虚拟学习者
+        </label>
+      </div>
+      <!-- KPI 走 MkStatStrip 单源（原 MkKpi 方块 + 私写网格与全站风格不一致，且 7 个会折行） -->
+      <MkStatStrip :items="kpiItems" />
     </div>
-
-    <!-- KPI 走 MkStatStrip 单源（原 MkKpi 方块 + 私写网格与全站风格不一致，且 7 个会折行） -->
-    <MkStatStrip :items="kpiItems" />
 
     <div class="mk-card">
       <div class="mk-card__head">
@@ -558,9 +560,7 @@ onMounted(async () => {
 
 <style scoped>
 .mr { display: grid; gap: 14px; }
-.mr__lead { margin: 4px 0 0; font-size: 12px; color: var(--mk-muted, #5b6577); max-width: 720px; line-height: 1.6; }
-.mr__filter { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
-.mr__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mk-muted, #5b6577); }
+.mr__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mk-muted, #5b6577); margin-left: auto; white-space: nowrap; }
 .mr__h4 { margin: 14px 0 6px; font-size: 13px; font-weight: 700; color: var(--mk-ink); }
 .mr__num { text-align: right; font-variant-numeric: tabular-nums; }
 .mr__num--warn { color: var(--mk-amber); font-weight: 700; }

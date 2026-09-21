@@ -532,10 +532,10 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { adminAgentTopologyApi, adminFieldRoutingsApi, adminRuntimeDefinitionsApi } from '@/api/adminApi'
+import { adminFieldRoutingsApi, adminRuntimeDefinitionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
-import { liveTopoNodes, liveTopoRange } from './live'
+import { liveTopoNodes, ensureLiveTopologyRaw } from './live'
 import {
   buildStageFlow, fmtCalls, familyHue, type FlowChip, type FlowStep, type StageFlow, type DefStepLike, type TopoEdgeLike,
   type FieldStat, type FieldStatsBlock,
@@ -580,13 +580,15 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [stagesRes, defRes, topoRes] = await Promise.all([
+    /* 拓扑走 live 层共享获取（ensureLiveTopologyRaw）：与 boot 的 topology 域共用同一
+       请求/缓存——此前本组件每次 load（切阶段/flowKey 重挂载都会触发）都独立拉一遍
+       同一接口，重口径下成倍放大编排页加载时间 */
+    const [stagesRes, defRes, topoBody] = await Promise.all([
       adminFieldRoutingsApi.getStages().catch(() => null),
       adminRuntimeDefinitionsApi.getOrchestratorDefinitions().catch(() => null),
-      adminAgentTopologyApi.getTopology(liveTopoRange.value).catch(() => null),
+      ensureLiveTopologyRaw().catch(() => ({} as Record<string, unknown>)),
     ])
     // 隶属边用量与节点统计同源（同 range）；拉取失败时置空 → 图退回无边缘统计
-    const topoBody = topoRes?.data?.data ?? topoRes?.data ?? {}
     topoEdges.value = Array.isArray(topoBody.edges) ? (topoBody.edges as TopoEdgeLike[]) : []
     // 字段命中率与拓扑同源同响应；缺失 / 旧后端 → null（图退回无字段状态）
     fieldStatsRaw.value = (topoBody.fieldStats as FieldStatsBlock | null) ?? null
