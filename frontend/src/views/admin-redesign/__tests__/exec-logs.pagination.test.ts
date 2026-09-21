@@ -15,6 +15,7 @@ import {
   liveLogsPageSize,
   liveLogsTotal,
   liveLogsFiltered,
+  liveLogStats,
 } from '../live';
 
 const h = vi.hoisted(() => ({
@@ -243,5 +244,74 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     await flushPromises();
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ sort: 'durationMs', order: 'asc' });
     expect(th.attributes('aria-sort')).toBe('ascending');
+  });
+});
+
+/* ---------- P0 回归：测试日志筛选上移服务端 + 筛选↔URL 双向同步 ---------- */
+describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同步', () => {
+  beforeEach(() => {
+    h.reload.mockClear();
+    liveLogsPage.value = 1;
+    liveLogsPageSize.value = 30;
+    liveLogsTotal.value = 0;
+    liveLogsFiltered.value = [];
+    liveLogStats.value = null;
+    window.scrollTo = vi.fn();
+    localStorage.clear();
+  });
+
+  async function mountExecAt(url: string) {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+    });
+    await router.push(url);
+    await router.isReady();
+    const w = mount(ExecLogs, { global: { plugins: [router] } });
+    await flushPromises();
+    return { w, router };
+  }
+
+  it('深链 ?agent=&status=err&test=only → 服务端查询带 agentId/status/sourceEntry（页码与筛选口径一致）', async () => {
+    liveLogsTotal.value = 5;
+    const { w, router } = await mountExecAt('/admin/execution-logs?agent=api-gateway&status=err&test=only');
+    await nextTick();
+    expect(w.text()).toContain('仅看测试');
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({
+      agentId: 'api-gateway',
+      status: 'error',
+      sourceEntry: 'system-canary'
+    });
+    // 深链参数不被筛选→URL 回写抹掉
+    expect(router.currentRoute.value.query).toMatchObject({ agent: 'api-gateway', status: 'err', test: 'only' });
+  });
+
+  it('stats.canary > 0 → 「测试 N」入口出现；点击仅看测试（sourceEntry 上服务端），再点恢复默认', async () => {
+    liveLogStats.value = { total: 200, success: 190, timeout: 4, error: 6, canary: 5 };
+    // only 态下入口计数 = 该查询 total（liveLogsTotal），需 > 0 按钮才保持可见（可再次点击退出）
+    liveLogsTotal.value = 5;
+    const { w, router } = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    const btn = findBtn(w, '测试');
+    expect(btn.text()).toContain('5');
+    await btn.trigger('click');
+    await flushPromises();
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ sourceEntry: 'system-canary' });
+    expect(router.currentRoute.value.query.test).toBe('only');
+    await findBtn(w, '测试').trigger('click');
+    await flushPromises();
+    expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).sourceEntry).toBeUndefined();
+    expect(router.currentRoute.value.query.test).toBeUndefined();
+  });
+
+  it('状态筛选进 URL：点「失败」pill → ?status=err（刷新/分享可还原的故障视图）', async () => {
+    liveLogsTotal.value = 378;
+    liveLogsFiltered.value = [fakeSpan(1)];
+    const { w, router } = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    await w.findAll('.mk-pill').find((x) => x.text() === '失败')!.trigger('click');
+    await flushPromises();
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ status: 'error' });
+    expect(router.currentRoute.value.query.status).toBe('err');
   });
 });

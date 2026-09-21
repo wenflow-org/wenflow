@@ -428,6 +428,8 @@ export interface LiveLogStats {
   timeout: number
   error: number
   bySource?: Record<string, number>
+  /** 测试（金丝雀）日志数：默认视图已排除 canary，后端按同筛选口径单独计数（驱动「测试 N」入口显隐） */
+  canary?: number
   /** 延迟分位（毫秒）：后端 stats 提供时优先（P50/P99 对标 Langfuse 观测台核心指标） */
   latencyPercentiles?: { p50?: number; p99?: number }
 }
@@ -512,6 +514,8 @@ export interface SpanQuery {
   sessionId?: string
   /** 错误类别筛选（失败归因/异常流跳转；后端按列值 + 空类别启发式归并） */
   errorCategory?: string
+  /** 来源入口筛选：'system-canary' = 仅看测试/探活日志（后端默认视图已排除 canary） */
+  sourceEntry?: string
   /** 服务端排序：白名单列（agent_call_logs 自身列）；默认 calledAt desc */
   sort?: 'calledAt' | 'durationMs'
   order?: 'asc' | 'desc'

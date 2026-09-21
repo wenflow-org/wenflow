@@ -127,7 +127,7 @@ import Shell from './Shell.vue';
 import SkillDrawer from './SkillDrawer.vue';
 import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
-import { intent, subPage, closeSkillDrawer, type SubPageView } from './store';
+import { intent, intentQueryParams, subPage, closeSkillDrawer, type SubPageView } from './store';
 import { loadLiveData } from './live';
 import '@/styles/mk-primitives.css';
 
@@ -233,7 +233,14 @@ watch(
 let bootstrapped = false;
 watch(scene, (s) => {
   const cur = typeof route.params.page === 'string' ? route.params.page : ''
-  if (bootstrapped && cur !== s) void router.push(`/admin/${s}`)
+  if (bootstrapped && cur !== s) {
+    /* 排查动线（P0）：intent 筛选随跳转进 URL——执行日志「已过滤故障视图」
+       可刷新/分享/前进后退还原（ExecLogs 侧做 URL↔筛选双向同步）。
+       只带 intent 参数、不透传当前页 query（避免把 ?view=&id= 等二级页状态漏进目标页） */
+    const q = intentQueryParams(s)
+    if (Object.keys(q).length) void router.push({ path: `/admin/${s}`, query: q })
+    else void router.push(`/admin/${s}`)
+  }
   subPage.value = null;
   // 切换页面时自动关闭 Skill 抽屉，避免遮挡侧栏导航
   closeSkillDrawer();

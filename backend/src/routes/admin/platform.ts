@@ -747,6 +747,19 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       delete where.AND;
     }
 
+    /* 测试（金丝雀）日志计数：默认视图已排除 canary 行，前端「测试 N」入口从结果里
+       数不到——用「同筛选、仅 system-canary」的 where 顺带 count（放在全部过滤条件
+       组装完之后，保证入口计数与「仅看测试」视图条数对得上）。浅拷贝保留 where 里 Date 引用。 */
+    let canaryWhere: any = null;
+    if (!sourceEntry && Array.isArray(where.AND)) {
+      canaryWhere = {
+        ...where,
+        AND: (where.AND as any[]).map((clause) =>
+          clause?.sourceEntry?.not === 'system-canary' ? { sourceEntry: 'system-canary' } : clause
+        ),
+      };
+    }
+
     const buildStatusLabel = (log: { success: boolean; errorCode: string | null; error: string | null }) => {
       if (log.success) return 'success';
 
@@ -877,11 +890,12 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       };
     };
 
-    const [logs, total, successCount, timeoutCount, errorCount, bySourceRows] = await fetchAgentLogPage({
+    const [logs, total, successCount, timeoutCount, errorCount, bySourceRows, canaryCount] = await fetchAgentLogPage({
       where,
       skip,
       limitNum,
       logOrderBy,
+      canaryWhere,
     });
 
     const bySource = bySourceRows.reduce((acc, row) => {
@@ -945,7 +959,9 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
           success: successCount,
           timeout: timeoutCount,
           error: errorCount,
-          bySource
+          bySource,
+          // 测试（金丝雀）日志计数（默认视图排除 canary，行内数不到；驱动前端「测试 N」入口）
+          canary: canaryCount,
         },
         pagination: {
           total,

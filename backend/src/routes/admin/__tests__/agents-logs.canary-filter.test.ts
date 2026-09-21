@@ -100,4 +100,30 @@ describe('执行日志默认排除金丝雀探针（回归）', () => {
     expect(where.sourceEntry).toBe('system-canary')
     expect(hasCanaryExclusion(where.AND)).toBe(false)
   })
+
+  it('默认查询时以「同筛选、仅 system-canary」的 where 顺带统计 canary 计数', async () => {
+    const res = await run(getRouteHandler(platformRouter, '/agents/logs', 'get'), {
+      query: { timeRange: 'week', status: 'error' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    // Promise.all 按序取数：count 第 5 次调用 = canary 计数（total/success/timeout/error 之后）
+    const canaryCountCall = count.mock.calls[4]
+    expect(canaryCountCall).toBeDefined()
+    const canaryWhere = canaryCountCall[0].where
+    // 排除条件换成仅 canary，其余过滤（时间范围/状态）保持同口径
+    expect(canaryWhere.AND).toEqual(expect.arrayContaining([{ sourceEntry: 'system-canary' }]))
+    expect(hasCanaryExclusion(canaryWhere.AND)).toBe(false)
+    expect(res.body.data.stats.canary).toBe(0)
+  })
+
+  it('显式 sourceEntry 筛选时不追加 canary 计数（stats.canary = 0）', async () => {
+    const res = await run(getRouteHandler(platformRouter, '/agents/logs', 'get'), {
+      query: { sourceEntry: 'system-canary' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(count).toHaveBeenCalledTimes(4)
+    expect(res.body.data.stats.canary).toBe(0)
+  })
 })

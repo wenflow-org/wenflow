@@ -181,6 +181,21 @@ export function clearInvestigation() {
   intent.timeRange = ''
 }
 
+/**
+ * 排查动线的 URL 筛选参数（P0 动线修复）：AdminConsole 按 intent.scene 跳转时合并进
+ * query，执行日志的「已过滤故障视图」从此可刷新/分享/前进后退还原。
+ * ExecLogs 侧做 URL↔筛选双向同步（全量快照语义：query 缺省参数 = 该项默认值）。
+ */
+export function intentQueryParams(scene: string): Record<string, string> {
+  if (scene !== 'execution-logs') return {}
+  const q: Record<string, string> = {}
+  if (intent.agentFilter) q.agent = intent.agentFilter
+  if (intent.statusFilter) q.status = intent.statusFilter
+  if (intent.errorCategory) q.cat = intent.errorCategory
+  if (intent.timeRange) q.range = intent.timeRange
+  return q
+}
+
 /* ---------- 二级页面（drill-in） ---------- */
 export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real'
 

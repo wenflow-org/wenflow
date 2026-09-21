@@ -13,8 +13,8 @@
         type="button"
         class="mk-status__meta-link"
         :class="{ 'mk-status__meta-link--on': testFilter !== '' }"
-        :title="testFilter === 'only' ? '仅看测试 → 点击恢复全部' : testFilter === 'hide' ? '已排除测试 → 点击仅看测试' : '连通性/探活测试日志（模型接入页产生），点击排除 → 再点仅看 → 三态切换'"
-        @click="cycleTestFilter"
+        :title="testFilter === 'only' ? '仅看测试 → 点击恢复默认视图' : '连通性/探活测试日志（模型接入页产生，默认视图已排除），点击仅看测试'"
+        @click="toggleTestFilter"
       >
         测试 {{ testCount }}
       </button>
@@ -372,13 +372,13 @@ async function loadCostSummary() {
 /* 进入成本 tab 时懒加载一次（深链 ?tab=cost 由 route watch 改写 elTab 后触发） */
 watch(elTab, (t) => {
   if (t === 'cost' && !costLoaded.value) void loadCostSummary()
-
+}, { immediate: true })
 // 筛选变化（与 TokenCost 同源）→ 金额条失效；在成本 tab 上立即刷新，否则下次进入刷新
+// （此前括号错位把本 watch 嵌进了 elTab 回调：每切一次 tab 泄漏注册一个 watcher）
 watch(tokenCostFilters, () => {
   costLoaded.value = false
   if (elTab.value === 'cost') void loadCostSummary()
 })
-}, { immediate: true })
 /** 切到 Trace tab 并让瀑布聚焦指定链路/会话（openTrace/openSession 深链接入） */
 function showTrace(traceId?: string, sessionId?: string) {
   elTab.value = 'trace'
@@ -406,6 +406,8 @@ const keyword = ref('')
 const traceId = ref('')
 const sessionId = ref('')
 const errorCategory = ref('')
+/** 测试日志筛选（服务端参数）：'' = 默认（后端已排除测试）/ only = 仅看测试 */
+const testFilter = ref<'only' | ''>('')
 const autoRefresh = ref(false)
 const advOpen = ref(false)
 
@@ -512,6 +514,9 @@ function currentQuery(): SpanQuery {
     traceId: traceId.value.trim() || undefined,
     sessionId: sessionId.value.trim() || undefined,
     errorCategory: errorCategory.value || undefined,
+    /* 测试日志筛选上移服务端（P0 分页正确性）：仅看测试 = sourceEntry=system-canary；
+       默认/排除态不传该参数（后端默认视图已排除 canary），页码 total 与行数保持一致 */
+    sourceEntry: testFilter.value === 'only' ? 'system-canary' : undefined,
     sort: (logSortKey.value || undefined) as SpanQuery['sort'],
     order: logSortDir.value
   }
@@ -550,10 +555,10 @@ async function goPage(p: number) {
   window.scrollTo(0, 0)
 }
 
-/* P0 分页正确性：状态/节点过滤上移服务端（status/agentId 参数，API 已支持），
+/* P0 分页正确性：状态/节点/测试过滤上移服务端（status/agentId/sourceEntry 参数，API 已支持），
    消除「本地过滤 × 服务端分页」组合缺陷（旧实现下第 2 页整页被滤掉时，
    「加载更多」空转无感知变化） */
-watch([statusFilter, agentFilter], () => {
+watch([statusFilter, agentFilter, testFilter], () => {
   void applyServerQuery()
 })
 
@@ -650,18 +655,66 @@ watch(
   { immediate: true }
 )
 
+/* —— 筛选 ↔ URL query 双向同步（P0 动线修复：总览「去排查」的故障视图刷新/分享不再丢失）——
+   全量快照语义：agent/status/cat/range/q/trace/session/test，缺省参数 = 该项默认值。
+   URL → 筛选（深链/刷新/前进后退）；筛选 → URL（replace，不压历史栈）。
+   注册在 intent watch 之后：深链直达时 URL 权威（覆盖 intent 空值回写）；
+   站内跳转时 AdminConsole 已把 intent 带进 query，两源一致不抖动。 */
+const FILTER_QUERY_KEYS = ['agent', 'status', 'cat', 'range', 'q', 'trace', 'session', 'test'] as const
+const EL_TIME_RANGES = ['today', 'yesterday', 'week', 'month', 'all'] as const
+const queryVal = (v: unknown): string => (typeof v === 'string' ? v : '')
+watch(
+  () => FILTER_QUERY_KEYS.map((k) => route.query[k]),
+  (vals) => {
+    const [agent, status, cat, range, q, trace, session, test] = vals.map(queryVal)
+    agentFilter.value = agent
+    statusFilter.value = ['err', 'warn', 'ok'].includes(status) ? status : ''
+    errorCategory.value = cat
+    keyword.value = q
+    traceId.value = trace
+    sessionId.value = session
+    timeRange.value = (EL_TIME_RANGES as readonly string[]).includes(range)
+      ? (range as typeof timeRange.value)
+      : 'week'
+    testFilter.value = test === 'only' ? 'only' : ''
+  },
+  { immediate: true }
+)
+watch(
+  [statusFilter, agentFilter, timeRange, keyword, traceId, sessionId, errorCategory, testFilter],
+  () => {
+    const desired: Record<string, string> = {}
+    if (agentFilter.value) desired.agent = agentFilter.value
+    if (statusFilter.value) desired.status = statusFilter.value
+    if (errorCategory.value) desired.cat = errorCategory.value
+    if (timeRange.value !== 'week') desired.range = timeRange.value
+    if (keyword.value.trim()) desired.q = keyword.value.trim()
+    if (traceId.value.trim()) desired.trace = traceId.value.trim()
+    if (sessionId.value.trim()) desired.session = sessionId.value.trim()
+    if (testFilter.value) desired.test = testFilter.value
+    const cur = route.query
+    if (FILTER_QUERY_KEYS.every((k) => queryVal(cur[k]) === (desired[k] || ''))) return
+    const next = { ...cur }
+    for (const k of FILTER_QUERY_KEYS) delete next[k]
+    Object.assign(next, desired)
+    void router.replace({ query: next })
+  },
+  { immediate: true }
+)
+
 const logs = computed(() => liveLogsFiltered.value)
 const agentOptions = computed(() => [...new Set(logs.value.map((s) => s.agent))].sort())
 
 /** 连通性/探活测试日志识别：sourceEntry = system-canary（模型接入页探活 + 测试连接产生） */
 const isTestLog = (l: { sourceEntry?: string }) => l.sourceEntry === 'system-canary'
-/** 测试日志筛选：'' = 全部 / hide = 排除测试 / only = 仅看测试 */
-const testFilter = ref<'hide' | '' | 'only'>('')
+/* testFilter 声明在上方筛选 ref 区（需早于 requery watch 引用）。
+   旧三态的「排除测试」与默认视图语义重合（后端默认排除 canary），已并入默认态 */
 
+/* P0 分页正确性：测试日志筛选随查询上移服务端（sourceEntry 参数），
+   与 status/agentId 同批修复「本地过滤 × 服务端分页」组合缺陷——
+   旧实现在当前页行上过滤，第 2 页可能整页被滤空而页码器仍显示可达 */
 const filtered = computed(() =>
   logs.value.filter((l) => {
-    if (testFilter.value === 'hide' && isTestLog(l)) return false
-    if (testFilter.value === 'only' && !isTestLog(l)) return false
     if (agentFilter.value && l.agent !== agentFilter.value) return false
     if (statusFilter.value && l.status !== statusFilter.value) return false
     return true
@@ -712,11 +765,15 @@ function percentileOf(durations: number[], q: number): string {
   return fmtMs(arr[idx])
 }
 const statusTone = computed(() => (!logs.value.length ? 'muted' : errCount.value ? 'bad' : 'ok'))
-/** 测试日志计数（当前服务端窗口内的 system-canary 行） */
-const testCount = computed(() => logs.value.filter((l) => isTestLog(l)).length)
-/** 测试筛选三态循环：全部 → 排除测试 → 仅看测试 → 全部 */
-function cycleTestFilter() {
-  testFilter.value = testFilter.value === '' ? 'hide' : testFilter.value === 'hide' ? 'only' : ''
+/** 测试日志计数：默认态读后端 stats.canary（默认视图已排除 canary，行内数不到）；
+    仅看测试态 = 该查询的 total（口径即测试行数） */
+const testCount = computed(() => {
+  if (testFilter.value === 'only') return liveLogsTotal.value
+  return liveStats.value?.canary ?? 0
+})
+/** 测试筛选两态切换：默认（已排除测试）→ 仅看测试 → 默认 */
+function toggleTestFilter() {
+  testFilter.value = testFilter.value === '' ? 'only' : ''
   void applyServerQuery()
 }
 /* 排查徽章：读本地筛选（修复此前读 intent 导致的空值）；live 下补充关键词/时间范围/trace/会话 */
@@ -724,7 +781,7 @@ const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天
 const filterLabel = computed(() =>
   [
     timeRange.value !== 'week' ? timeRangeLabels[timeRange.value] : '',
-    testFilter.value === 'hide' ? '排除测试' : testFilter.value === 'only' ? '仅看测试' : '',
+    testFilter.value === 'only' ? '仅看测试' : '',
     agentFilter.value || '',
     statusFilter.value === 'err' ? '仅失败' : statusFilter.value === 'warn' ? '仅超时' : statusFilter.value === 'ok' ? '仅成功' : '',
     errorCategory.value ? `类别「${errorCategory.value}」` : '',
