@@ -393,7 +393,7 @@ onMounted(() => {
 
 .field__error {
   font-size: 13px;
-  color: #c0454a;
+  color: var(--mk-red-strong);
   font-weight: 500;
 }
 
@@ -627,10 +627,6 @@ onMounted(() => {
   width: 14px;
   border-radius: 4px;
   opacity: 0.8;
-}
-
-.auth__footer-sep {
-  opacity: 0.5;
 }
 
 /* ===== 深色模式（data-theme=dark）：统计卡/页脚随变量反转 ===== */

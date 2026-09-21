@@ -5,12 +5,6 @@ import sqlite3 from 'sqlite3';
 import { closeDatabase, executeSql, openDatabase } from '../sqlite-database';
 import { DatabaseSpaceReport, vacuumDatabase, vacuumDatabases } from '../database-vacuum';
 
-function runSql(database: sqlite3.Database, sql: string, params: any[] = []): Promise<void> {
-  return new Promise((resolve, reject) => {
-    database.run(sql, params, error => error ? reject(error) : resolve());
-  });
-}
-
 /** 造一个带碎片的库：批量写入后全量删除，页留在 freelist 而不归还 OS */
 async function createBloatyDatabase(filePath: string): Promise<void> {
   const database = await openDatabase(filePath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE);

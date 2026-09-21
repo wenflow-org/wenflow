@@ -1,7 +1,6 @@
 {
   "hex": {
     "src/views/admin-redesign/AchIcon.vue": 5,
-    "src/views/admin-redesign/Addons.vue": 1,
     "src/views/admin-redesign/AdminConsole.vue": 4,
     "src/views/admin-redesign/AdminGlossaryDrawer.vue": 10,
     "src/views/admin-redesign/ApiConfig.vue": 22,
@@ -14,8 +13,6 @@
     "src/views/admin-redesign/GoalConversations.vue": 14,
     "src/views/admin-redesign/LearnerCenter.vue": 1,
     "src/views/admin-redesign/LearnerDetail.vue": 30,
-    "src/components/mk/MkCols.vue": 4,
-    "src/components/mk/MkKpi.vue": 4,
     "src/views/admin-redesign/Notifications.vue": 3,
     "src/views/admin-redesign/OpsHub.vue": 12,
     "src/views/admin-redesign/Orchestrator.vue": 8,
@@ -26,7 +23,7 @@
     "src/views/admin-redesign/RunStageBar.vue": 28,
     "src/views/admin-redesign/RunStateBadge.vue": 22,
     "src/views/admin-redesign/SandboxView.vue": 10,
-    "src/views/admin-redesign/SessionCockpit.vue": 147,
+    "src/views/admin-redesign/SessionCockpit.vue": 133,
     "src/views/admin-redesign/SessionSecurity.vue": 16,
     "src/views/admin-redesign/Shell.vue": 63,
     "src/views/admin-redesign/SkeletonTable.vue": 1,
@@ -36,12 +33,12 @@
     "src/views/admin-redesign/skill-design/runtime-tab.vue": 6,
     "src/views/admin-redesign/skill-design/trial-tab.vue": 25,
     "src/views/admin-redesign/skill-design/versions-tab.vue": 12,
-    "src/views/admin-redesign/SkillDrawer.vue": 39,
+    "src/views/admin-redesign/SkillDrawer.vue": 33,
     "src/views/admin-redesign/SkillFieldRouting.vue": 2,
     "src/views/admin-redesign/SkillReconciliation.vue": 15,
     "src/views/admin-redesign/Skills.vue": 13,
     "src/views/admin-redesign/TcRankTable.vue": 11,
-    "src/views/admin-redesign/TeachingSessions.vue": 5,
+    "src/views/admin-redesign/TeachingSessions.vue": 3,
     "src/views/admin-redesign/TokenCost.vue": 6,
     "src/views/admin-redesign/Users.vue": 5,
     "src/views/admin-redesign/VirtualLearnerBatchCreate.vue": 1,
@@ -50,8 +47,18 @@
     "src/views/admin-redesign/VirtualLearnerReclaim.vue": 5,
     "src/views/admin-redesign/VirtualLearnerRunningBar.vue": 27,
     "src/views/admin-redesign/VirtualLearners.vue": 11,
-    "src/views/admin-redesign/VirtualProfile.vue": 81
+    "src/views/admin-redesign/VirtualProfile.vue": 81,
+    "src/components/mk/MkCols.vue": 4,
+    "src/components/mk/MkKpi.vue": 4
   },
-  "deadClasses": {},
+  "deadClasses": {
+    "src/views/admin-redesign/QuickLearnPanel.vue": [
+      "el-button"
+    ],
+    "src/views/admin-redesign/SessionCockpit.vue": [
+      "cp-stage--active",
+      "cp-stage--done"
+    ]
+  },
   "note": "硬编码 hex 色值 + 死 CSS 类基线（棘轮：只降不升）。收敛后请用 --update 下调。"
 }

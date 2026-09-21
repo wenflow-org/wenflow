@@ -628,10 +628,6 @@ useEscape(() => props.visible, close)
 </script>
 
 <style scoped>
-.quick-learn__notice {
-  margin-bottom: 12px;
-}
-
 .ql-account-brief {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
