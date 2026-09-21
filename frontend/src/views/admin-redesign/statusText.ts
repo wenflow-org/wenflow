@@ -15,7 +15,9 @@ const STATUS_TEXT: Record<string, string> = {
   running: '进行中',
   processing: '处理中',
   timeout: '超时',
-  error: '错误',
+  stalled: '卡死',
+  /* 失败族统一「失败」：error/err/failed/fail 曾各译（错误/失败），同色调徽章文案却不同 */
+  error: '失败',
   err: '失败',
   failed: '失败',
   fail: '失败',

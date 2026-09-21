@@ -42,6 +42,8 @@ vi.mock('../opsShared', async () => {
   return {
     announcementCounts: ref({ rows: 0, published: 0, draft: 0, archived: 0 }),
     segmentPct: () => [],
+    // OpsHub 路径四态标签已改走 opsShared 单源映射（原页内私写文案）
+    PATH_STATUS_TEXT: { active: '学习中', completed: '已完成', failed: '生成失败', archived: '已下线' },
   }
 })
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn(async () => true) }))

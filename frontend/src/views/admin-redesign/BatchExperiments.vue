@@ -403,7 +403,9 @@ async function openDetail(e: ExpRow) {
   }
 }
 
-const runStatusText = (s: string) => ({ active: '进行中', stalled: '卡死', done: '完成', failed: '失败' }[s] || s)
+/* 运行态文案统一走全局字典单源：stalled（卡死）已收录、done 统一「已完成」
+   （原私写映射漏收 stalled——若有人误改走通用表会英文直出；done 曾写「完成」） */
+const runStatusText = (s: string) => statusText(s)
 const runStatusBadge = (s: string) =>
   s === 'done' ? 'mk-badge--ok' : s === 'failed' ? 'mk-badge--bad' : s === 'stalled' ? 'mk-badge--warn' : 'mk-badge--info'
 

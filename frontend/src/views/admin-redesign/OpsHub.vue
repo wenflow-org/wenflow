@@ -150,7 +150,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { timeAgo, liveAnnouncements, errMsg } from './live'
 import { intent } from './store'
 import { adminFeedbackApi, adminLearningContentApi, adminDevtoolsApi, type LearningContentStats } from '@/api/adminApi'
-import { announcementCounts, segmentPct } from './opsShared'
+import { announcementCounts, segmentPct, PATH_STATUS_TEXT } from './opsShared'
 import Feedback from './Feedback.vue'
 import OpsAchievements from './OpsAchievements.vue'
 import Announcements from './Announcements.vue'
@@ -313,10 +313,10 @@ const ann = announcementCounts
 /* 状态面板：路径四态 + 公告三态（比例条 + 行式计数） */
 const pathSegments = computed(() =>
   segmentPct([
-    { key: 'active', label: '学习中', count: stats.value?.byStatus?.active || 0, tone: 'ok' },
-    { key: 'completed', label: '已完成', count: stats.value?.byStatus?.completed || 0, tone: 'info' },
-    { key: 'failed', label: '生成失败', count: stats.value?.byStatus?.failed || 0, tone: 'bad' },
-    { key: 'archived', label: '已下线', count: stats.value?.byStatus?.archived || 0, tone: 'muted' },
+    { key: 'active', label: PATH_STATUS_TEXT.active, count: stats.value?.byStatus?.active || 0, tone: 'ok' },
+    { key: 'completed', label: PATH_STATUS_TEXT.completed, count: stats.value?.byStatus?.completed || 0, tone: 'info' },
+    { key: 'failed', label: PATH_STATUS_TEXT.failed, count: stats.value?.byStatus?.failed || 0, tone: 'bad' },
+    { key: 'archived', label: PATH_STATUS_TEXT.archived, count: stats.value?.byStatus?.archived || 0, tone: 'muted' },
   ])
 )
 /* 路径状态行（原 MkKpi 色板口径：非零计数的警示态才着色） */
@@ -324,10 +324,10 @@ const pathCards = computed(() => {
   const s = stats.value?.byStatus || {}
   const failedN = s.failed || 0
   return [
-    { label: '学习中', value: String(s.active || 0), tone: (s.active || 0) > 0 ? ('ok' as const) : '' },
-    { label: '已完成', value: String(s.completed || 0), tone: '' },
-    { label: '生成失败', value: String(failedN), tone: failedN > 0 ? ('bad' as const) : '' },
-    { label: '已下线', value: String(s.archived || 0), tone: '' },
+    { label: PATH_STATUS_TEXT.active, value: String(s.active || 0), tone: (s.active || 0) > 0 ? ('ok' as const) : '' },
+    { label: PATH_STATUS_TEXT.completed, value: String(s.completed || 0), tone: '' },
+    { label: PATH_STATUS_TEXT.failed, value: String(failedN), tone: failedN > 0 ? ('bad' as const) : '' },
+    { label: PATH_STATUS_TEXT.archived, value: String(s.archived || 0), tone: '' },
   ]
 })
 const annSegments = computed(() =>

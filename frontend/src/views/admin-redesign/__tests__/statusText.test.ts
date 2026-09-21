@@ -27,7 +27,7 @@ describe('statusText', () => {
   it('核心状态映射', () => {
     expect(statusText('completed')).toBe('已完成');
     expect(statusText('success')).toBe('成功');
-    expect(statusText('error')).toBe('错误');
+    expect(statusText('error')).toBe('失败'); // 失败族统一（error/err/failed/fail 同词）
     expect(statusText('timeout')).toBe('超时');
     expect(statusText('failed')).toBe('失败');
     expect(statusText('active')).toBe('进行中');
@@ -322,7 +322,7 @@ describe('结果态方言收敛（统一走字典单源）', () => {
     expect(statusText('created')).toBe('已创建'); // 页内曾写「创建中」
     expect(statusText('incomplete')).toBe('未收束');
     expect(statusText('failed')).toBe('失败'); // 页内曾写「已失败」/「未完成」
-    expect(statusText('error')).toBe('错误');
+    expect(statusText('error')).toBe('失败'); // 失败族统一（error/err/failed/fail 同词）
     expect(statusText('abandoned')).toBe('已放弃'); // 页内曾写「已终止」
     expect(statusText('aborted')).toBe('已中止');
     expect(statusText('interrupted')).toBe('已中断');
