@@ -230,7 +230,9 @@ export function parseProfileData(profileRecord: VirtualLearnerProfileRow): Virtu
  * 兼容老数据：2026-09-21 之前 `cognitiveLoadTolerance` 里写的是散文（且由 overloadReaction 兜底复制），
  * 那种数据仍然当行为描述用；枚举值不算行为描述。
  */
-export function resolveOverloadBehaviorText(profile: Record<string, any> | null | undefined): string {
+export function resolveOverloadBehaviorText(
+  profile: { overloadReaction?: unknown; cognitiveLoadTolerance?: unknown } | null | undefined
+): string {
   const p = profile && typeof profile === 'object' ? profile : {};
   const reaction = typeof p.overloadReaction === 'string' ? p.overloadReaction.trim() : '';
   if (reaction) return reaction;
