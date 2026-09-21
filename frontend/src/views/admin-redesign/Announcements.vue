@@ -537,6 +537,6 @@ function expiresLabel(iso: string): string {
   /* 4K（zoom 1.3 档）：字号继续放大 */
   .an-body { max-width: 720px; }
   .an-severity { gap: 12px; }
-  .an-sev { padding: 11px 22px; font-size: 18px; }
+  .an-sev { padding: 11px 22px; font-size: var(--mk-fs-18); }
 }
 </style>

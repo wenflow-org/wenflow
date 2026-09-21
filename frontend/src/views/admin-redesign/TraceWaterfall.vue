@@ -1088,32 +1088,32 @@ const verdictText = computed(() => {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .wf-tracepick__count { font-size: 13px; }
-  .wf-tracepick__search { font-size: 12.5px; padding: 8px 12px; width: 150px; }
-  .wf-tracepick__select { font-size: 13px; padding: 8px 12px; max-width: 380px; }
+  .wf-tracepick__count { font-size: var(--mk-fs-13); }
+  .wf-tracepick__search { font-size: var(--mk-fs-12_5); padding: 8px 12px; width: 150px; }
+  .wf-tracepick__select { font-size: var(--mk-fs-13); padding: 8px 12px; max-width: 380px; }
   .wf-ruler { grid-template-columns: 340px 1fr; padding: 9px 14px; }
-  .wf-ruler__label { font-size: 12.5px; }
+  .wf-ruler__label { font-size: var(--mk-fs-12_5); }
   .wf-row__main { grid-template-columns: 340px 1fr auto; }
   .wf-row__stage-name { font-size: 13.5px; }
   .wf-row__stage-id { font-size: 11.5px; }
-  .wf-row__dur { font-size: 13px; }
-  .wf-detail-label { font-size: 12.5px; }
-  .wf-payload { font-size: 13px; }
-  .wf-verdict strong { font-size: 14px; }
+  .wf-row__dur { font-size: var(--mk-fs-13); }
+  .wf-detail-label { font-size: var(--mk-fs-12_5); }
+  .wf-payload { font-size: var(--mk-fs-13); }
+  .wf-verdict strong { font-size: var(--mk-fs-14); }
   .wf-verdict p { font-size: 14.5px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号沿用 2000px 档 */
   .wf-tracepick__count { font-size: 15.5px; }
-  .wf-tracepick__search { font-size: 15px; padding: 10px 14px; width: 180px; }
+  .wf-tracepick__search { font-size: var(--mk-fs-15); padding: 10px 14px; width: 180px; }
   .wf-tracepick__select { font-size: 15.5px; padding: 10px 14px; max-width: 460px; }
   .wf-ruler { grid-template-columns: 400px 1fr; padding: 9px 14px; }
-  .wf-ruler__label { font-size: 15px; }
+  .wf-ruler__label { font-size: var(--mk-fs-15); }
   .wf-row__main { grid-template-columns: 400px 1fr auto; }
-  .wf-row__stage-name { font-size: 16px; }
+  .wf-row__stage-name { font-size: var(--mk-fs-16); }
   .wf-row__stage-id { font-size: 13.5px; }
   .wf-row__dur { font-size: 15.5px; }
-  .wf-detail-label { font-size: 15px; }
+  .wf-detail-label { font-size: var(--mk-fs-15); }
   .wf-payload { font-size: 15.5px; }
   .wf-verdict strong { font-size: 16.5px; }
   .wf-verdict p { font-size: 17px; }
@@ -1124,12 +1124,12 @@ const verdictText = computed(() => {
   .wf-ruler__label { font-size: 17.5px; }
   .wf-row__main { grid-template-columns: 460px 1fr auto; }
   .wf-row__stage-name { font-size: 18.5px; }
-  .wf-row__stage-id { font-size: 16px; }
-  .wf-row__dur { font-size: 18px; }
+  .wf-row__stage-id { font-size: var(--mk-fs-16); }
+  .wf-row__dur { font-size: var(--mk-fs-18); }
   .wf-tracepick__search { font-size: 17.5px; padding: 12px 16px; width: 210px; }
-  .wf-tracepick__select { font-size: 18px; padding: 12px 16px; max-width: 540px; }
+  .wf-tracepick__select { font-size: var(--mk-fs-18); padding: 12px 16px; max-width: 540px; }
   .wf-detail-label { font-size: 17.5px; }
-  .wf-payload { font-size: 18px; }
+  .wf-payload { font-size: var(--mk-fs-18); }
   .wf-verdict strong { font-size: 19px; }
   .wf-verdict p { font-size: 19.5px; }
 }

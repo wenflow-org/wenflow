@@ -2478,19 +2478,19 @@ async function quietReload(id: string) {
 @media (min-width: 2000px) {
   .vp-top__level { font-size: 13.5px; }
   .vp-hero__story { font-size: 16.5px; }
-  .vp-trait { font-size: 14px; }
+  .vp-trait { font-size: var(--mk-fs-14); }
   .vp-goal span { font-size: 13.5px; }
   .vp-goal strong { font-size: 16.5px; }
-  .vp-profile__row { font-size: 15px; }
-  .vp-story__title { font-size: 15px; }
+  .vp-profile__row { font-size: var(--mk-fs-15); }
+  .vp-story__title { font-size: var(--mk-fs-15); }
   .vp-story__outline { font-size: 13.5px; }
-  .vp-story__stats-item { font-size: 13px; }
-  .vp-story__latest { font-size: 13px; }
-  .vp-run__head strong { font-size: 15px; }
-  .vp-run__result, .vp-run__sub { font-size: 13px; }
-  .vp-run-group__head strong { font-size: 14px; }
-  .vp-none { font-size: 15px; }
-  .vp-tab__count { font-size: 13px; margin-left: 4px; }
+  .vp-story__stats-item { font-size: var(--mk-fs-13); }
+  .vp-story__latest { font-size: var(--mk-fs-13); }
+  .vp-run__head strong { font-size: var(--mk-fs-15); }
+  .vp-run__result, .vp-run__sub { font-size: var(--mk-fs-13); }
+  .vp-run-group__head strong { font-size: var(--mk-fs-14); }
+  .vp-none { font-size: var(--mk-fs-15); }
+  .vp-tab__count { font-size: var(--mk-fs-13); margin-left: 4px; }
   .vp-fallback { font-size: 14.5px; padding: 12px 16px; }
   .vp-overview { gap: 12px; }
   .vp-trait { padding: 5px 13px; }
@@ -2506,14 +2506,14 @@ async function quietReload(id: string) {
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
-  .vp-top__level { font-size: 16px; }
+  .vp-top__level { font-size: var(--mk-fs-16); }
   .vp-hero__story { font-size: 19.5px; }
   .vp-trait { font-size: 16.5px; }
-  .vp-goal span { font-size: 16px; }
+  .vp-goal span { font-size: var(--mk-fs-16); }
   .vp-goal strong { font-size: 19.5px; }
   .vp-profile__row { font-size: 17.5px; }
   .vp-story__title { font-size: 17.5px; }
-  .vp-story__outline { font-size: 16px; }
+  .vp-story__outline { font-size: var(--mk-fs-16); }
   .vp-story__stats-item { font-size: 15.5px; }
   .vp-story__latest { font-size: 15.5px; }
   .vp-run__head strong { font-size: 17.5px; }
@@ -2545,13 +2545,13 @@ async function quietReload(id: string) {
   .vp-story__title { font-size: 20.5px; }
   .vp-story__outline { font-size: 19px; }
   .vp-story__stats-item { font-size: 18.5px; }
-  .vp-story__latest { font-size: 18px; }
+  .vp-story__latest { font-size: var(--mk-fs-18); }
   .vp-run__head strong { font-size: 20.5px; }
-  .vp-run__result, .vp-run__sub { font-size: 18px; }
+  .vp-run__result, .vp-run__sub { font-size: var(--mk-fs-18); }
   .vp-run-group__head strong { font-size: 19.5px; }
   .vp-none { font-size: 20.5px; }
-  .vp-tab__count { font-size: 18px; margin-left: 6px; }
-  .vp-fallback { font-size: 20px; padding: 16px 22px; }
+  .vp-tab__count { font-size: var(--mk-fs-18); margin-left: 6px; }
+  .vp-fallback { font-size: var(--mk-fs-20); padding: 16px 22px; }
   .vp-overview { gap: 16px; }
   .vp-trait { padding: 7px 18px; }
   .vp-goal { padding: 19px 22px; }

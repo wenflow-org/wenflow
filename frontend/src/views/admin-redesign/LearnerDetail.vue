@@ -1670,23 +1670,23 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-none { font-size: 14.5px; }
   .ld-progress strong { font-size: 17.5px; }
   .ld-progress__stage, .ld-progress__task { font-size: 14.5px; }
-  .ld-concept-label { font-size: 13px; }
-  .ld-concept { font-size: 14px; }
+  .ld-concept-label { font-size: var(--mk-fs-13); }
+  .ld-concept { font-size: var(--mk-fs-14); }
   .ld-bar__head strong { font-size: 14.5px; }
-  .ld-bar__risk, .ld-bar__ev { font-size: 12px; }
+  .ld-bar__risk, .ld-bar__ev { font-size: var(--mk-fs-12); }
   .ld-actions p { font-size: 14.5px; }
-  .ld-actions__k { font-size: 12px; }
-  .ld-chip { font-size: 12px; }
-  .ld-session__main strong { font-size: 15px; }
+  .ld-actions__k { font-size: var(--mk-fs-12); }
+  .ld-chip { font-size: var(--mk-fs-12); }
+  .ld-session__main strong { font-size: var(--mk-fs-15); }
   .ld-session__main span, .ld-session__time { font-size: 13.5px; }
   .ld-kv__row { font-size: 14.5px; }
   .ld-insights p { font-size: 14.5px; }
   .ld-ev__main strong { font-size: 14.5px; }
   .ld-ev__main span { font-size: 13.5px; }
-  .ld-ev__time { font-size: 13px; }
-  .ld-ev__signal { font-size: 12px; }
-  .ld-ev__conf em { font-size: 12px; }
-  .ld-ev__src { font-size: 12px; }
+  .ld-ev__time { font-size: var(--mk-fs-13); }
+  .ld-ev__signal { font-size: var(--mk-fs-12); }
+  .ld-ev__conf em { font-size: var(--mk-fs-12); }
+  .ld-ev__src { font-size: var(--mk-fs-12); }
   .ld-none { padding: 21px 19px; }
   .ld-none__hint { font-size: 13.5px; }
   .ld-progress { padding: 18px; gap: 9px; }
@@ -1710,25 +1710,25 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-none { font-size: 17px; }
   .ld-progress strong { font-size: 20.5px; }
   .ld-progress__stage, .ld-progress__task { font-size: 17px; }
-  .ld-concept-label { font-size: 15px; }
+  .ld-concept-label { font-size: var(--mk-fs-15); }
   .ld-concept { font-size: 16.5px; }
   .ld-bar__head strong { font-size: 17px; }
-  .ld-bar__risk, .ld-bar__ev { font-size: 14px; }
+  .ld-bar__risk, .ld-bar__ev { font-size: var(--mk-fs-14); }
   .ld-actions p { font-size: 17px; }
-  .ld-actions__k { font-size: 14px; }
-  .ld-chip { font-size: 14px; }
+  .ld-actions__k { font-size: var(--mk-fs-14); }
+  .ld-chip { font-size: var(--mk-fs-14); }
   .ld-session__main strong { font-size: 17.5px; }
-  .ld-session__main span, .ld-session__time { font-size: 16px; }
+  .ld-session__main span, .ld-session__time { font-size: var(--mk-fs-16); }
   .ld-kv__row { font-size: 17px; }
   .ld-insights p { font-size: 17px; }
   .ld-ev__main strong { font-size: 17px; }
-  .ld-ev__main span { font-size: 16px; }
-  .ld-ev__time { font-size: 15px; }
-  .ld-ev__signal { font-size: 14px; }
-  .ld-ev__conf em { font-size: 14px; }
-  .ld-ev__src { font-size: 14px; }
+  .ld-ev__main span { font-size: var(--mk-fs-16); }
+  .ld-ev__time { font-size: var(--mk-fs-15); }
+  .ld-ev__signal { font-size: var(--mk-fs-14); }
+  .ld-ev__conf em { font-size: var(--mk-fs-14); }
+  .ld-ev__src { font-size: var(--mk-fs-14); }
   .ld-none { padding: 25px 22px; }
-  .ld-none__hint { font-size: 16px; }
+  .ld-none__hint { font-size: var(--mk-fs-16); }
   .ld-progress { padding: 21px; gap: 10px; }
   .ld-concept { padding: 4px 14px; }
   .ld-bars { padding: 19px 21px 21px; }
@@ -1747,21 +1747,21 @@ function barToneBadge(tone: ConceptBarTone): string {
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
-  .ld-none { font-size: 20px; }
+  .ld-none { font-size: var(--mk-fs-20); }
   .ld-progress strong { font-size: 24px; }
-  .ld-progress__stage, .ld-progress__task { font-size: 20px; }
+  .ld-progress__stage, .ld-progress__task { font-size: var(--mk-fs-20); }
   .ld-concept-label { font-size: 17.5px; }
   .ld-concept { font-size: 19px; }
-  .ld-bar__head strong { font-size: 20px; }
+  .ld-bar__head strong { font-size: var(--mk-fs-20); }
   .ld-bar__risk, .ld-bar__ev { font-size: 16.5px; }
-  .ld-actions p { font-size: 20px; }
+  .ld-actions p { font-size: var(--mk-fs-20); }
   .ld-actions__k { font-size: 16.5px; }
   .ld-chip { font-size: 16.5px; }
   .ld-session__main strong { font-size: 20.5px; }
   .ld-session__main span, .ld-session__time { font-size: 18.5px; }
-  .ld-kv__row { font-size: 20px; }
-  .ld-insights p { font-size: 20px; }
-  .ld-ev__main strong { font-size: 20px; }
+  .ld-kv__row { font-size: var(--mk-fs-20); }
+  .ld-insights p { font-size: var(--mk-fs-20); }
+  .ld-ev__main strong { font-size: var(--mk-fs-20); }
   .ld-ev__main span { font-size: 18.5px; }
   .ld-ev__time { font-size: 17.5px; }
   .ld-ev__signal { font-size: 16.5px; }

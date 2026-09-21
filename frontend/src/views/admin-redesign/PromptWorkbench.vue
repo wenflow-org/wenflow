@@ -439,10 +439,10 @@ onMounted(async () => {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-    .pw-hash { font-size: 12.5px; }
+    .pw-hash { font-size: var(--mk-fs-12_5); }
 }
 @media (min-width: 2800px) {
-    .pw-hash { font-size: 14px; }
+    .pw-hash { font-size: var(--mk-fs-14); }
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：字号继续放大，与表格正文对齐 */

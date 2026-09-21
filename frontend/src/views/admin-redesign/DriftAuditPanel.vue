@@ -210,15 +210,15 @@ watch(() => props.stage, () => {
 
 @media (min-width: 2000px) {
   .fdp__guide { padding: 14px 17px; }
-  .fdp__guide-text { font-size: 14px; }
-  .fdp__guide-file { font-size: 14px; padding: 9px 14px; }
+  .fdp__guide-text { font-size: var(--mk-fs-14); }
+  .fdp__guide-file { font-size: var(--mk-fs-14); padding: 9px 14px; }
   .fdp__guide-file .mono { font-size: 13.5px; }
-  .fdp__guide-text code { font-size: 13px; }
+  .fdp__guide-text code { font-size: var(--mk-fs-13); }
   .fdp__drift-item { font-size: 13.5px; padding: 8px 12px; }
-  .fdp__drift-kind { font-size: 12px; padding: 1px 10px; }
-  .fdp__drift-val { font-size: 13px; }
+  .fdp__drift-kind { font-size: var(--mk-fs-12); padding: 1px 10px; }
+  .fdp__drift-val { font-size: var(--mk-fs-13); }
   .fdp__change { font-size: 13.5px; padding: 8px 12px; }
-  .fdp__change-kind { font-size: 12px; padding: 1px 10px; }
+  .fdp__change-kind { font-size: var(--mk-fs-12); padding: 1px 10px; }
   .fdp__empty { padding: 24px; }
 }
 
@@ -226,13 +226,13 @@ watch(() => props.stage, () => {
   .fdp__guide { padding: 17px 21px; }
   .fdp__guide-text { font-size: 16.5px; }
   .fdp__guide-file { font-size: 16.5px; padding: 11px 17px; }
-  .fdp__guide-file .mono { font-size: 16px; }
+  .fdp__guide-file .mono { font-size: var(--mk-fs-16); }
   .fdp__guide-text code { font-size: 15.5px; }
-  .fdp__drift-item { font-size: 16px; padding: 10px 15px; }
-  .fdp__drift-kind { font-size: 14px; padding: 2px 12px; }
+  .fdp__drift-item { font-size: var(--mk-fs-16); padding: 10px 15px; }
+  .fdp__drift-kind { font-size: var(--mk-fs-14); padding: 2px 12px; }
   .fdp__drift-val { font-size: 15.5px; }
-  .fdp__change { font-size: 16px; padding: 10px 15px; }
-  .fdp__change-kind { font-size: 14px; padding: 2px 12px; }
+  .fdp__change { font-size: var(--mk-fs-16); padding: 10px 15px; }
+  .fdp__change-kind { font-size: var(--mk-fs-14); padding: 2px 12px; }
   .fdp__empty { padding: 28px; }
 }
 

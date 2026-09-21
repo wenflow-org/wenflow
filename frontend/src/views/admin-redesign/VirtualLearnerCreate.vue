@@ -236,27 +236,27 @@ defineExpose({ open })
 .vl-advanced .mk-field { margin-bottom: 0; }
 
 @media (min-width: 2000px) {
-  .vl-steps { font-size: 13px; padding: 9px 12px; }
-  .vl-req { font-size: 12px; }
+  .vl-steps { font-size: var(--mk-fs-13); padding: 9px 12px; }
+  .vl-req { font-size: var(--mk-fs-12); }
   .vl-ai-row { gap: 12px; }
-  .vl-ai-hint { font-size: 12.5px; }
-  .vl-persona-ok { font-size: 14px; padding: 7px 12px; }
+  .vl-ai-hint { font-size: var(--mk-fs-12_5); }
+  .vl-persona-ok { font-size: var(--mk-fs-14); padding: 7px 12px; }
   .vl-advanced { padding: 10px 14px; }
-  .vl-advanced summary { font-size: 14px; }
+  .vl-advanced summary { font-size: var(--mk-fs-14); }
   .vl-advanced[open] summary { margin-bottom: 9px; }
 }
 @media (min-width: 2800px) {
   .vl-steps { font-size: 15.5px; padding: 11px 14px; }
-  .vl-req { font-size: 14px; }
+  .vl-req { font-size: var(--mk-fs-14); }
   .vl-ai-row { gap: 14px; }
-  .vl-ai-hint { font-size: 15px; }
+  .vl-ai-hint { font-size: var(--mk-fs-15); }
   .vl-persona-ok { font-size: 16.5px; padding: 8px 14px; }
   .vl-advanced { padding: 12px 17px; }
   .vl-advanced summary { font-size: 16.5px; }
   .vl-advanced[open] summary { margin-bottom: 11px; }
 }
 @media (min-width: 3600px) {
-  .vl-steps { font-size: 18px; padding: 13px 16px; }
+  .vl-steps { font-size: var(--mk-fs-18); padding: 13px 16px; }
   .vl-req { font-size: 16.5px; }
   .vl-ai-row { gap: 16px; }
   .vl-ai-hint { font-size: 17.5px; }

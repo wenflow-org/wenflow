@@ -103,6 +103,7 @@ import { ref, watch } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { errMsg } from './live'
+import { askConfirm } from './useConfirm'
 
 interface SimulationClock {
   enabled: boolean
@@ -183,7 +184,13 @@ async function toggleAuto(next: boolean) {
 
 async function resetClock() {
   if (!props.sessionId) return
-  if (typeof window !== 'undefined' && !window.confirm('确定重置该会话的日期模拟推进进度？（dayIndex 归零、清空 history；不回改已写时间戳）')) return
+  /* 全站统一确认框（原原生 window.confirm 是最后一处离类：无 busy/焦点管理、样式断裂） */
+  const ok = await askConfirm({
+    title: '重置日期模拟进度',
+    message: '确定重置该会话的日期模拟推进进度？dayIndex 归零、清空 history；不回改已写时间戳。',
+    confirmText: '重置',
+  })
+  if (!ok) return
   resetting.value = true
   try {
     await adminVirtualLearnersApi.resetVirtualSessionClock(props.sessionId)
@@ -237,31 +244,31 @@ watch(() => props.sessionId, load, { immediate: true })
 
 <style scoped>
 .cp-day-timeline { display: flex; flex-direction: column; gap: 12px; }
-.dt-state { padding: 16px; color: var(--mk-faint); font-size: 13px; }
+.dt-state { padding: 16px; color: var(--mk-faint); font-size: var(--mk-fs-13); }
 .dt-state--error { color: var(--mk-red); display: flex; gap: 8px; align-items: center; }
-.dt-clock { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; }
+.dt-clock { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: var(--mk-fs-12); }
 .dt-clock__badge { padding: 2px 8px; border-radius: 999px; font-weight: 600; }
 .dt-clock__badge.is-on { background: var(--mk-green-bg); color: var(--mk-green); }
 .dt-clock__badge.is-off { background: var(--mk-surface-3); color: var(--mk-faint); }
 .dt-clock__meta { color: var(--mk-faint); }
-.dt-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; }
-.dt-auto { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; }
-.dt-hint { margin: 0; font-size: 12px; color: var(--mk-faint); }
+.dt-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: var(--mk-fs-12); }
+.dt-auto { display: flex; align-items: center; gap: 4px; font-size: var(--mk-fs-12); cursor: pointer; }
+.dt-hint { margin: 0; font-size: var(--mk-fs-12); color: var(--mk-faint); }
 .dt-day { border: 1px solid var(--mk-line); border-radius: 8px; padding: 10px 12px; }
 .dt-day__head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .dt-day__label { font-weight: 600; }
-.dt-day__date { color: var(--mk-faint); font-size: 12px; }
+.dt-day__date { color: var(--mk-faint); font-size: var(--mk-fs-12); }
 .dt-chip { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: rgba(140, 140, 140, 0.12); }
 .dt-chip--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .dt-chip--pace-slow { background: var(--mk-amber-bg); color: var(--mk-amber-fill); }
 .dt-chip--pace-fast { background: var(--mk-blue-bg); color: var(--mk-blue); }
-.dt-metrics { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; font-size: 12px; color: var(--mk-faint); }
+.dt-metrics { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; font-size: var(--mk-fs-12); color: var(--mk-faint); }
 .dt-metric b { color: var(--mk-ink); }
 .dt-tasks { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
-.dt-task { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.dt-task { display: flex; justify-content: space-between; gap: 12px; font-size: var(--mk-fs-12); }
 .dt-task__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dt-task__meta { color: var(--mk-faint); flex: 0 0 auto; }
-.dt-adjust { margin-top: 8px; font-size: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.dt-adjust { margin-top: 8px; font-size: var(--mk-fs-12); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .dt-adjust__label { color: var(--mk-faint); }
 .dt-adjust__item { background: rgba(140, 140, 140, 0.1); padding: 1px 6px; border-radius: 4px; }
 .dt-adjust__item em { font-style: normal; margin-left: 4px; color: var(--mk-faint); }

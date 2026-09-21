@@ -584,27 +584,27 @@ html[data-theme='dark'] .ow-ann:hover { background: #1a2436; }
 /* 4K：待办/状态行跟随全站节奏 */
 @media (min-width: 2000px) {
   .ow-todo__label { font-size: 14.5px; }
-  .ow-todo__hint { font-size: 12px; }
-  .ow-todo__count { font-size: 20px; }
+  .ow-todo__hint { font-size: var(--mk-fs-12); }
+  .ow-todo__count { font-size: var(--mk-fs-20); }
   .ow-state__row { font-size: 13.5px; }
   .ow-state__row b { font-size: 15.5px; }
-  .ow-ann__title { font-size: 14px; }
-  .ow-ann__meta, .ow-ann__go { font-size: 12px; }
+  .ow-ann__title { font-size: var(--mk-fs-14); }
+  .ow-ann__meta, .ow-ann__go { font-size: var(--mk-fs-12); }
 }
 @media (min-width: 2800px) {
   .ow-todo__label { font-size: 17px; }
-  .ow-todo__hint { font-size: 14px; }
+  .ow-todo__hint { font-size: var(--mk-fs-14); }
   .ow-todo__count { font-size: 23px; }
   .ow-state__row { font-size: 15.5px; }
-  .ow-state__row b { font-size: 18px; }
+  .ow-state__row b { font-size: var(--mk-fs-18); }
   .ow-ann__title { font-size: 16.5px; }
-  .ow-ann__meta, .ow-ann__go { font-size: 14px; }
+  .ow-ann__meta, .ow-ann__go { font-size: var(--mk-fs-14); }
 }
 @media (min-width: 3600px) {
-  .ow-todo__label { font-size: 20px; }
+  .ow-todo__label { font-size: var(--mk-fs-20); }
   .ow-todo__hint { font-size: 16.5px; }
   .ow-todo__count { font-size: 27px; }
-  .ow-state__row { font-size: 18px; }
+  .ow-state__row { font-size: var(--mk-fs-18); }
   .ow-state__row b { font-size: 21px; }
   .ow-ann__title { font-size: 19.5px; }
   .ow-ann__meta, .ow-ann__go { font-size: 16.5px; }

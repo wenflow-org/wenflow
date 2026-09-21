@@ -357,35 +357,35 @@ void stageTitle.value
 @media (min-width: 2000px) {
   .orch-stage-tab { padding: 11px 16px; }
   .orch-stage-tab__name { font-size: 14.5px; }
-  .orch-stage-tab__meta { font-size: 12px; }
-  .orch-fold__meta { font-size: 12.5px; }
+  .orch-stage-tab__meta { font-size: var(--mk-fs-12); }
+  .orch-fold__meta { font-size: var(--mk-fs-12_5); }
   .orch-fold__body { padding: 0 16px 16px; }
   .orch-pane-head { padding: 12px 16px; }
   .orch-pane-title { font-size: 14.5px; }
-  .orch-pane-hint { font-size: 13px; }
-  .orch-pane-back { font-size: 13px; padding: 6px 14px; }
+  .orch-pane-hint { font-size: var(--mk-fs-13); }
+  .orch-pane-back { font-size: var(--mk-fs-13); padding: 6px 14px; }
 }
 @media (min-width: 2800px) {
   .orch-stage-tab { padding: 13px 19px; }
   .orch-stage-tab__name { font-size: 17px; }
-  .orch-stage-tab__meta { font-size: 14px; }
+  .orch-stage-tab__meta { font-size: var(--mk-fs-14); }
   .orch-fold__meta { font-size: 14.5px; }
   .orch-fold__body { padding: 0 19px 19px; }
   .orch-pane-head { padding: 14px 19px; }
   .orch-pane-title { font-size: 17px; }
-  .orch-pane-hint { font-size: 15px; }
+  .orch-pane-hint { font-size: var(--mk-fs-15); }
   .orch-pane-back { font-size: 15.5px; padding: 7px 17px; }
 }
 @media (min-width: 3600px) {
   .orch-stage-tab { padding: 15px 22px; }
-  .orch-stage-tab__name { font-size: 20px; }
+  .orch-stage-tab__name { font-size: var(--mk-fs-20); }
   .orch-stage-tab__meta { font-size: 16.5px; }
   .orch-fold__meta { font-size: 17px; }
   .orch-fold__body { padding: 0 22px 22px; }
   .orch-pane-head { padding: 16px 22px; }
-  .orch-pane-title { font-size: 20px; }
+  .orch-pane-title { font-size: var(--mk-fs-20); }
   .orch-pane-hint { font-size: 17.5px; }
-  .orch-pane-back { font-size: 18px; padding: 8px 20px; }
+  .orch-pane-back { font-size: var(--mk-fs-18); padding: 8px 20px; }
 }
 
 /* ================= 暗色模式（D1 补完）：编排结构 ================= */

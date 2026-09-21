@@ -309,12 +309,12 @@ html[data-theme='dark'] .pt-field { background: rgba(129, 140, 248, 0.14); color
   line-height: 1.5;
 }
 @media (min-width: 2000px) {
-  .vl-steps { font-size: 13px; padding: 9px 12px; }
+  .vl-steps { font-size: var(--mk-fs-13); padding: 9px 12px; }
 }
 @media (min-width: 2800px) {
   .vl-steps { font-size: 15.5px; padding: 11px 14px; }
 }
 @media (min-width: 3600px) {
-  .vl-steps { font-size: 18px; padding: 13px 16px; }
+  .vl-steps { font-size: var(--mk-fs-18); padding: 13px 16px; }
 }
 </style>

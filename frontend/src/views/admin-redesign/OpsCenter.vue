@@ -487,17 +487,17 @@ void loadDead()
 
 @media (min-width: 2000px) {
   .dt-grid { grid-template-columns: 1.6fr 0.7fr 1.4fr auto; }
-  .dt-compare__col pre { font-size: 12.5px; }
+  .dt-compare__col pre { font-size: var(--mk-fs-12_5); }
 }
 @media (min-width: 2800px) {
-  .dt-compare__col pre { font-size: 15px; }
+  .dt-compare__col pre { font-size: var(--mk-fs-15); }
   .ex-row__text strong { font-size: 16.5px; }
   .ex-row__text span { font-size: 15.5px; }
 }
 @media (min-width: 3600px) {
   .dt-compare__col pre { font-size: 17.5px; }
   .ex-row__text strong { font-size: 19.5px; }
-  .ex-row__text span { font-size: 18px; }
+  .ex-row__text span { font-size: var(--mk-fs-18); }
 }
 @media (max-width: 1100px) {
   .dt-grid { grid-template-columns: 1fr 1fr; }

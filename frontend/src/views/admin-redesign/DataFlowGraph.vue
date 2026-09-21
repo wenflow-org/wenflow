@@ -1397,7 +1397,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-gate__head { display: flex; align-items: center; gap: 9px; }
 .dfg-gate__icon {
   width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 7px; color: var(--mk-graph-on-accent); font-size: 12px; font-weight: 800; flex-shrink: 0;
+  border-radius: 7px; color: var(--mk-graph-on-accent); font-size: var(--mk-fs-12); font-weight: 800; flex-shrink: 0;
   background: var(--hz);
 }
 .dfg-gate__title { display: grid; gap: 1px; min-width: 0; flex: 1; }

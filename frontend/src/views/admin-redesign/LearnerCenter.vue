@@ -506,7 +506,7 @@ async function recomputeAll() {
 .conf--low { color: var(--mk-amber); }
 
 @media (min-width: 2000px) {
-  .risk-text { font-size: 14px; }
+  .risk-text { font-size: var(--mk-fs-14); }
 }
 @media (min-width: 2800px) {
   .risk-text { font-size: 16.5px; }

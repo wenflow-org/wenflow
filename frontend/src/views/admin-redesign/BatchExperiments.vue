@@ -496,18 +496,18 @@ load()
   .be-run { padding: 14px 16px; }
   .be-run__head strong { font-size: 14.5px; }
   .be-run__body { font-size: 13.5px; }
-  .be-progress__num { font-size: 13px; }
+  .be-progress__num { font-size: var(--mk-fs-13); }
 }
 @media (min-width: 2800px) {
   .be-run { padding: 16px 19px; }
   .be-run__head strong { font-size: 17px; }
-  .be-run__body { font-size: 16px; }
+  .be-run__body { font-size: var(--mk-fs-16); }
   .be-progress__num { font-size: 15.5px; }
 }
 @media (min-width: 3600px) {
   .be-run { padding: 19px 22px; }
-  .be-run__head strong { font-size: 20px; }
+  .be-run__head strong { font-size: var(--mk-fs-20); }
   .be-run__body { font-size: 18.5px; }
-  .be-progress__num { font-size: 18px; }
+  .be-progress__num { font-size: var(--mk-fs-18); }
 }
 </style>

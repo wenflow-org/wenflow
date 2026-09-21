@@ -202,10 +202,10 @@ watch(
 
 /* 大屏/4K 适配（全站 mk 体系档位） */
 @media (min-width: 2000px) {
-  .mk-pagination { font-size: 13px; gap: 12px; padding: 11px 18px 13px; }
-  .mk-pagination__total { font-size: 13px; }
-  .mk-pagination__size { font-size: 13px; padding: 5px 10px; border-radius: 7px; }
-  .mk-pagination__btn, .mk-pagination__num { font-size: 13px; min-width: 32px; height: 32px; padding: 0 10px; }
+  .mk-pagination { font-size: var(--mk-fs-13); gap: 12px; padding: 11px 18px 13px; }
+  .mk-pagination__total { font-size: var(--mk-fs-13); }
+  .mk-pagination__size { font-size: var(--mk-fs-13); padding: 5px 10px; border-radius: 7px; }
+  .mk-pagination__btn, .mk-pagination__num { font-size: var(--mk-fs-13); min-width: 32px; height: 32px; padding: 0 10px; }
 }
 @media (min-width: 3600px) {
   .mk-pagination { font-size: 15.5px; }

@@ -457,12 +457,12 @@ function trendH(tokens: number): string {
 /* 4K：趋势图跟随全站节奏 */
 @media (min-width: 2000px) {
   .tc-trend { height: 230px; }
-  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: 12px; }
+  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: var(--mk-fs-12); }
   .tc-trend__bar { width: 58%; }
 }
 @media (min-width: 2800px) {
   .tc-trend { height: 270px; }
-  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: 14px; }
+  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: var(--mk-fs-14); }
   .tc-trend__bar { width: 54%; }
 }
 @media (min-width: 3600px) {

@@ -148,9 +148,9 @@ defineExpose({ open, state })
 }
 
 @media (min-width: 2000px) {
-  .vl-steps { font-size: 13px; padding: 9px 12px; }
+  .vl-steps { font-size: var(--mk-fs-13); padding: 9px 12px; }
   .vl-reclaim-item { font-size: 13.5px; padding: 8px 12px; }
-  .vl-reclaim-id { font-size: 12.5px; }
+  .vl-reclaim-id { font-size: var(--mk-fs-12_5); }
 }
 @media (min-width: 2800px) {
   .vl-steps { font-size: 15.5px; padding: 11px 14px; }
@@ -158,8 +158,8 @@ defineExpose({ open, state })
   .vl-reclaim-id { font-size: 14.5px; }
 }
 @media (min-width: 3600px) {
-  .vl-steps { font-size: 18px; padding: 13px 16px; }
-  .vl-reclaim-item { font-size: 18px; padding: 11px 16px; }
+  .vl-steps { font-size: var(--mk-fs-18); padding: 13px 16px; }
+  .vl-reclaim-item { font-size: var(--mk-fs-18); padding: 11px 16px; }
   .vl-reclaim-id { font-size: 17px; }
 }
 

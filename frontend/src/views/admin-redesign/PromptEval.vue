@@ -1178,18 +1178,18 @@ void reloadRuns()
 }
 
 @media (min-width: 2000px) {
-  .pe-result-row__head strong { font-size: 14px; }
+  .pe-result-row__head strong { font-size: var(--mk-fs-14); }
   .pe-result-row__out { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
   .pe-result-row__head strong { font-size: 16.5px; }
-  .pe-result-row__out { font-size: 16px; }
+  .pe-result-row__out { font-size: var(--mk-fs-16); }
   .pe-expect { font-size: 13.5px; max-width: 300px; }
 }
 @media (min-width: 3600px) {
   .pe-result-row__head strong { font-size: 19.5px; }
   .pe-result-row__out { font-size: 18.5px; }
-  .pe-expect { font-size: 16px; max-width: 350px; }
+  .pe-expect { font-size: var(--mk-fs-16); max-width: 350px; }
 }
 
 /* 暗色模式（D1 补完）：Prompt 评估（此前完全缺失） */

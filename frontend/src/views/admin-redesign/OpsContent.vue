@@ -551,20 +551,20 @@ defineExpose({ reload })
 
 /* 4K：抽屉内容跟随全站节奏 */
 @media (min-width: 2000px) {
-  .oc-progress__num { font-size: 13px; }
+  .oc-progress__num { font-size: var(--mk-fs-13); }
   .oc-milestone__head strong { font-size: 14.5px; }
-  .oc-milestone__meta { font-size: 12.5px; }
+  .oc-milestone__meta { font-size: var(--mk-fs-12_5); }
   .oc-subtask { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
   .oc-progress__num { font-size: 15.5px; }
   .oc-milestone__head strong { font-size: 17px; }
   .oc-milestone__meta { font-size: 14.5px; }
-  .oc-subtask { font-size: 16px; }
+  .oc-subtask { font-size: var(--mk-fs-16); }
 }
 @media (min-width: 3600px) {
-  .oc-progress__num { font-size: 18px; }
-  .oc-milestone__head strong { font-size: 20px; }
+  .oc-progress__num { font-size: var(--mk-fs-18); }
+  .oc-milestone__head strong { font-size: var(--mk-fs-20); }
   .oc-milestone__meta { font-size: 17px; }
   .oc-subtask { font-size: 18.5px; }
 }

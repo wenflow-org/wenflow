@@ -457,10 +457,10 @@ void reload()
 
 /* 4K：弹窗内候选列表/提示条跟随全站节奏 */
 @media (min-width: 2000px) {
-  .nt-boundary { font-size: 12.5px; padding: 3px 10px; }
-  .nt-candidate strong { font-size: 14px; }
+  .nt-boundary { font-size: var(--mk-fs-12_5); padding: 3px 10px; }
+  .nt-candidate strong { font-size: var(--mk-fs-14); }
   .nt-candidate { padding: 10px 12px; }
-  .nt-none { font-size: 14px; }
+  .nt-none { font-size: var(--mk-fs-14); }
 }
 @media (min-width: 2800px) {
   .nt-boundary { font-size: 14.5px; padding: 4px 12px; }

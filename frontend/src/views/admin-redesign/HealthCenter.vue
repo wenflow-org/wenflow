@@ -608,11 +608,11 @@ defineExpose({ refresh })
 
 /* 4K：检查行/完成度条跟随全站节奏（概要 KPI 由 MkKpi 自带档位） */
 @media (min-width: 2000px) {
-  .hc-check__main strong { font-size: 14px; }
-  .hc-check__main span, .hc-check__sem { font-size: 12.5px; }
+  .hc-check__main strong { font-size: var(--mk-fs-14); }
+  .hc-check__main span, .hc-check__sem { font-size: var(--mk-fs-12_5); }
   .hc-check__num { font-size: 14.5px; }
-  .hc-drift__item strong { font-size: 14px; }
-  .hc-completion__label { font-size: 12.5px; }
+  .hc-drift__item strong { font-size: var(--mk-fs-14); }
+  .hc-completion__label { font-size: var(--mk-fs-12_5); }
   .hc-completion__num { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
@@ -621,12 +621,12 @@ defineExpose({ refresh })
   .hc-check__num { font-size: 17px; }
   .hc-drift__item strong { font-size: 16.5px; }
   .hc-completion__label { font-size: 14.5px; }
-  .hc-completion__num { font-size: 16px; }
+  .hc-completion__num { font-size: var(--mk-fs-16); }
 }
 @media (min-width: 3600px) {
   .hc-check__main strong { font-size: 19.5px; }
   .hc-check__main span, .hc-check__sem { font-size: 17px; }
-  .hc-check__num { font-size: 20px; }
+  .hc-check__num { font-size: var(--mk-fs-20); }
   .hc-drift__item strong { font-size: 19.5px; }
   .hc-completion__label { font-size: 17px; }
   .hc-completion__num { font-size: 18.5px; }

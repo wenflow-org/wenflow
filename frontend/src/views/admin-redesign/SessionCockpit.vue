@@ -2939,77 +2939,77 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 @media (min-width: 2000px) {
   .cp-body { grid-template-columns: minmax(0, 1fr) 380px; }
 
-  .cp-stage { font-size: 15px; }
-  .cp-stage__label { font-size: 15px; }
-  .cp-stage__progress { font-size: 12px; }
-  .cp-btn { font-size: 14px; padding: 9px 16px; }
-  .cp-btn--sm { font-size: 12.5px; padding: 6px 12px; }
-  .cp-none { font-size: 14px; }
-  .cp-sidebar__toggle { font-size: 14px; }
+  .cp-stage { font-size: var(--mk-fs-15); }
+  .cp-stage__label { font-size: var(--mk-fs-15); }
+  .cp-stage__progress { font-size: var(--mk-fs-12); }
+  .cp-btn { font-size: var(--mk-fs-14); padding: 9px 16px; }
+  .cp-btn--sm { font-size: var(--mk-fs-12_5); padding: 6px 12px; }
+  .cp-none { font-size: var(--mk-fs-14); }
+  .cp-sidebar__toggle { font-size: var(--mk-fs-14); }
 
 
-  .cp-timeline__kind { font-size: 12px; }
-  .cp-timeline__stage { font-size: 12px; }
+  .cp-timeline__kind { font-size: var(--mk-fs-12); }
+  .cp-timeline__stage { font-size: var(--mk-fs-12); }
   .cp-timeline__title { font-size: 13.5px; }
-  .cp-timeline__detail { font-size: 12.5px; }
-  .cp-log { font-size: 13px; }
+  .cp-timeline__detail { font-size: var(--mk-fs-12_5); }
+  .cp-log { font-size: var(--mk-fs-13); }
   .cp-log__time { font-size: 11.5px; }
   .cp-log__phase { font-size: 11.5px; }
   .cp-log__dur { font-size: 11.5px; }
   .cp-transcript summary { font-size: 13.5px; }
-  .cp-transcript__message span { font-size: 12px; }
+  .cp-transcript__message span { font-size: var(--mk-fs-12); }
   .cp-transcript__message p { font-size: 13.5px; }
   .cp-path-detail__head strong { font-size: 15.5px; }
-  .cp-path-detail__meta { font-size: 12.5px; }
+  .cp-path-detail__meta { font-size: var(--mk-fs-12_5); }
   .cp-path-detail__summary { font-size: 13.5px; }
-  .cp-milestone__head strong { font-size: 14px; }
-  .cp-milestone__order { font-size: 12px; }
-  .cp-milestone__meta { font-size: 12px; }
-  .cp-milestone__desc { font-size: 13px; }
-  .cp-task-list li { font-size: 13px; }
-  .cp-review__badge { font-size: 12.5px; }
-  .cp-review__meta { font-size: 12px; }
+  .cp-milestone__head strong { font-size: var(--mk-fs-14); }
+  .cp-milestone__order { font-size: var(--mk-fs-12); }
+  .cp-milestone__meta { font-size: var(--mk-fs-12); }
+  .cp-milestone__desc { font-size: var(--mk-fs-13); }
+  .cp-task-list li { font-size: var(--mk-fs-13); }
+  .cp-review__badge { font-size: var(--mk-fs-12_5); }
+  .cp-review__meta { font-size: var(--mk-fs-12); }
   .cp-review__reaction { font-size: 13.5px; }
-  .cp-review__concern { font-size: 13px; }
-  .cp-review__changes { font-size: 13px; }
-  .cp-review__replan { font-size: 12.5px; }
-  .cp-wrapup-card__label { font-size: 12.5px; }
-  .cp-wrapup-card__text { font-size: 14px; }
-  .cp-wrapup-section__label { font-size: 12.5px; }
-  .cp-wrapup-section__text { font-size: 14px; }
-  .cp-wrapup__json { font-size: 12.5px; }
+  .cp-review__concern { font-size: var(--mk-fs-13); }
+  .cp-review__changes { font-size: var(--mk-fs-13); }
+  .cp-review__replan { font-size: var(--mk-fs-12_5); }
+  .cp-wrapup-card__label { font-size: var(--mk-fs-12_5); }
+  .cp-wrapup-card__text { font-size: var(--mk-fs-14); }
+  .cp-wrapup-section__label { font-size: var(--mk-fs-12_5); }
+  .cp-wrapup-section__text { font-size: var(--mk-fs-14); }
+  .cp-wrapup__json { font-size: var(--mk-fs-12_5); }
   .cp-raw { font-size: 13.5px; }
-  .cp-raw pre { font-size: 12px; }
+  .cp-raw pre { font-size: var(--mk-fs-12); }
   .cp-eval-group__title { font-size: 13.5px; }
-  .cp-eval__head strong { font-size: 15px; }
-  .cp-eval__time { font-size: 12.5px; }
-  .cp-eval__score { font-size: 12.5px; }
-  .cp-eval__score code { font-size: 12.5px; }
+  .cp-eval__head strong { font-size: var(--mk-fs-15); }
+  .cp-eval__time { font-size: var(--mk-fs-12_5); }
+  .cp-eval__score { font-size: var(--mk-fs-12_5); }
+  .cp-eval__score code { font-size: var(--mk-fs-12_5); }
   .cp-eval__score strong { font-size: 13.5px; }
-  .cp-eval__section h5 { font-size: 13px; }
-  .cp-finding strong { font-size: 14px; }
+  .cp-eval__section h5 { font-size: var(--mk-fs-13); }
+  .cp-finding strong { font-size: var(--mk-fs-14); }
   .cp-finding p { font-size: 13.5px; }
-  .cp-finding__sev { font-size: 12px; }
-  .cp-evidence { font-size: 13px; }
-  .cp-evidence code { font-size: 12px; }
-  .cp-evidence p { font-size: 13px; }
+  .cp-finding__sev { font-size: var(--mk-fs-12); }
+  .cp-evidence { font-size: var(--mk-fs-13); }
+  .cp-evidence code { font-size: var(--mk-fs-12); }
+  .cp-evidence p { font-size: var(--mk-fs-13); }
   .cp-rec strong { font-size: 13.5px; }
   .cp-rec__codes code { font-size: 11.5px; }
-  .cp-rec p { font-size: 14px; }
-  .cp-rec__rationale { font-size: 13px; }
-  .cp-trace-panel > summary { font-size: 13px; }
-  .cp-trace-panel > summary code { font-size: 12px; }
-  .cp-trace-list__head { font-size: 12.5px; }
+  .cp-rec p { font-size: var(--mk-fs-14); }
+  .cp-rec__rationale { font-size: var(--mk-fs-13); }
+  .cp-trace-panel > summary { font-size: var(--mk-fs-13); }
+  .cp-trace-panel > summary code { font-size: var(--mk-fs-12); }
+  .cp-trace-list__head { font-size: var(--mk-fs-12_5); }
   .cp-trace-list__id { font-size: 11.5px; }
   .cp-trace-list__stage { font-size: 11.5px; }
   .cp-trace-list__emotion, .cp-trace-list__transition { font-size: 11.5px; }
   .cp-trace-list__degraded { font-size: 11.5px; }
-  .cp-trace-list__focus, .cp-trace-list__reason { font-size: 12.5px; }
-  .cp-trace-list__signal { font-size: 12.5px; }
+  .cp-trace-list__focus, .cp-trace-list__reason { font-size: var(--mk-fs-12_5); }
+  .cp-trace-list__signal { font-size: var(--mk-fs-12_5); }
   .cp-trace-list__metrics > span { font-size: 11.5px; }
   .cp-trace-list__metrics code { font-size: 11.5px; }
   .cp-trace-list__flags > span { font-size: 11.5px; }
-  .cp-trace-list__blockers { font-size: 12.5px; }
+  .cp-trace-list__blockers { font-size: var(--mk-fs-12_5); }
   .cp-trace-list__body { font-size: 11.5px; }
 }
 @media (min-width: 2800px) {
@@ -3017,35 +3017,35 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 
   .cp-stage { font-size: 17.5px; }
   .cp-stage__label { font-size: 17.5px; }
-  .cp-stage__progress { font-size: 14px; }
+  .cp-stage__progress { font-size: var(--mk-fs-14); }
   .cp-btn { font-size: 16.5px; padding: 11px 20px; }
   .cp-btn--sm { font-size: 14.5px; padding: 7px 14px; }
   .cp-none { font-size: 16.5px; }
   .cp-sidebar__toggle { font-size: 16.5px; }
 
 
-  .cp-timeline__kind { font-size: 14px; }
-  .cp-timeline__stage { font-size: 14px; }
-  .cp-timeline__title { font-size: 16px; }
+  .cp-timeline__kind { font-size: var(--mk-fs-14); }
+  .cp-timeline__stage { font-size: var(--mk-fs-14); }
+  .cp-timeline__title { font-size: var(--mk-fs-16); }
   .cp-timeline__detail { font-size: 14.5px; }
   .cp-log { font-size: 15.5px; }
   .cp-log__time { font-size: 13.5px; }
   .cp-log__phase { font-size: 13.5px; }
   .cp-log__dur { font-size: 13.5px; }
-  .cp-transcript summary { font-size: 16px; }
-  .cp-transcript__message span { font-size: 14px; }
-  .cp-transcript__message p { font-size: 16px; }
-  .cp-path-detail__head strong { font-size: 18px; }
+  .cp-transcript summary { font-size: var(--mk-fs-16); }
+  .cp-transcript__message span { font-size: var(--mk-fs-14); }
+  .cp-transcript__message p { font-size: var(--mk-fs-16); }
+  .cp-path-detail__head strong { font-size: var(--mk-fs-18); }
   .cp-path-detail__meta { font-size: 14.5px; }
-  .cp-path-detail__summary { font-size: 16px; }
+  .cp-path-detail__summary { font-size: var(--mk-fs-16); }
   .cp-milestone__head strong { font-size: 16.5px; }
-  .cp-milestone__order { font-size: 14px; }
-  .cp-milestone__meta { font-size: 14px; }
+  .cp-milestone__order { font-size: var(--mk-fs-14); }
+  .cp-milestone__meta { font-size: var(--mk-fs-14); }
   .cp-milestone__desc { font-size: 15.5px; }
   .cp-task-list li { font-size: 15.5px; }
   .cp-review__badge { font-size: 14.5px; }
-  .cp-review__meta { font-size: 14px; }
-  .cp-review__reaction { font-size: 16px; }
+  .cp-review__meta { font-size: var(--mk-fs-14); }
+  .cp-review__reaction { font-size: var(--mk-fs-16); }
   .cp-review__concern { font-size: 15.5px; }
   .cp-review__changes { font-size: 15.5px; }
   .cp-review__replan { font-size: 14.5px; }
@@ -3054,27 +3054,27 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-wrapup-section__label { font-size: 14.5px; }
   .cp-wrapup-section__text { font-size: 16.5px; }
   .cp-wrapup__json { font-size: 14.5px; }
-  .cp-raw { font-size: 16px; }
-  .cp-raw pre { font-size: 14px; }
-  .cp-eval-group__title { font-size: 16px; }
+  .cp-raw { font-size: var(--mk-fs-16); }
+  .cp-raw pre { font-size: var(--mk-fs-14); }
+  .cp-eval-group__title { font-size: var(--mk-fs-16); }
   .cp-eval__head strong { font-size: 17.5px; }
   .cp-eval__time { font-size: 14.5px; }
   .cp-eval__score { font-size: 14.5px; }
   .cp-eval__score code { font-size: 14.5px; }
-  .cp-eval__score strong { font-size: 16px; }
+  .cp-eval__score strong { font-size: var(--mk-fs-16); }
   .cp-eval__section h5 { font-size: 15.5px; }
   .cp-finding strong { font-size: 16.5px; }
-  .cp-finding p { font-size: 16px; }
-  .cp-finding__sev { font-size: 14px; }
+  .cp-finding p { font-size: var(--mk-fs-16); }
+  .cp-finding__sev { font-size: var(--mk-fs-14); }
   .cp-evidence { font-size: 15.5px; }
-  .cp-evidence code { font-size: 14px; }
+  .cp-evidence code { font-size: var(--mk-fs-14); }
   .cp-evidence p { font-size: 15.5px; }
-  .cp-rec strong { font-size: 16px; }
+  .cp-rec strong { font-size: var(--mk-fs-16); }
   .cp-rec__codes code { font-size: 13.5px; }
   .cp-rec p { font-size: 16.5px; }
   .cp-rec__rationale { font-size: 15.5px; }
   .cp-trace-panel > summary { font-size: 15.5px; }
-  .cp-trace-panel > summary code { font-size: 14px; }
+  .cp-trace-panel > summary code { font-size: var(--mk-fs-14); }
   .cp-trace-list__head { font-size: 14.5px; }
   .cp-trace-list__id { font-size: 13.5px; }
   .cp-trace-list__stage { font-size: 13.5px; }

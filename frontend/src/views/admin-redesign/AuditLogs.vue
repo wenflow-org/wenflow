@@ -773,28 +773,28 @@ function goSessions(username: string) {
   .log-time,
   .log-target,
   .log-ip { font-size: 13.5px; }
-  .log-admin { font-size: 14px; }
-  .log-method { font-size: 12.5px; padding: 2px 9px; }
+  .log-admin { font-size: var(--mk-fs-14); }
+  .log-method { font-size: var(--mk-fs-12_5); padding: 2px 9px; }
   .log-path { font-size: 13.5px; max-width: 520px; }
-  .log-action { font-size: 13px; max-width: 520px; }
+  .log-action { font-size: var(--mk-fs-13); max-width: 520px; }
   .log-admin { max-width: 300px; }
   .log-tt,
   .log-reason,
-  .log-none { font-size: 13px; }
+  .log-none { font-size: var(--mk-fs-13); }
   .log-payload-meta,
-  .log-ua { font-size: 13px; }
-  .log-label { font-size: 13px; }
-  .log-payload pre { font-size: 13px; }
+  .log-ua { font-size: var(--mk-fs-13); }
+  .log-label { font-size: var(--mk-fs-13); }
+  .log-payload pre { font-size: var(--mk-fs-13); }
   .log-payload-row td { padding-left: 84px !important; }
-  .log-arrow { font-size: 14px; }
+  .log-arrow { font-size: var(--mk-fs-14); }
 }
 @media (min-width: 2800px) {
   .log-time,
   .log-target,
-  .log-ip { font-size: 16px; }
+  .log-ip { font-size: var(--mk-fs-16); }
   .log-admin { font-size: 16.5px; }
-  .log-method { font-size: 14px; }
-  .log-path { font-size: 16px; max-width: 640px; }
+  .log-method { font-size: var(--mk-fs-14); }
+  .log-path { font-size: var(--mk-fs-16); max-width: 640px; }
   .log-action { font-size: 15.5px; max-width: 640px; }
   .log-admin { max-width: 360px; }
   .log-tt,
@@ -809,10 +809,10 @@ function goSessions(username: string) {
 @media (min-width: 3600px) {
   .log-time,
   .log-target,
-  .log-ip { font-size: 18px; }
+  .log-ip { font-size: var(--mk-fs-18); }
   .log-admin { font-size: 18.5px; }
-  .log-method { font-size: 16px; padding: 3px 11px; }
-  .log-path { font-size: 18px; max-width: 760px; }
+  .log-method { font-size: var(--mk-fs-16); padding: 3px 11px; }
+  .log-path { font-size: var(--mk-fs-18); max-width: 760px; }
   .log-action { font-size: 17.5px; max-width: 760px; }
   .log-admin { max-width: 420px; }
   .log-tt,
@@ -823,7 +823,7 @@ function goSessions(username: string) {
   .log-label { font-size: 17.5px; }
   .log-payload pre { font-size: 17.5px; }
   .log-payload-row td { padding-left: 100px !important; }
-  .log-arrow { font-size: 18px; }
+  .log-arrow { font-size: var(--mk-fs-18); }
 }
 
 /* ================= 暗色模式（D1 补完）：审计日志 ================= */

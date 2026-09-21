@@ -914,12 +914,12 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {
-  .ts-facts span { font-size: 13px; }
+  .ts-facts span { font-size: var(--mk-fs-13); }
   .ts-facts strong { font-size: 14.5px; }
-  .ts-section h4 { font-size: 13px; }
+  .ts-section h4 { font-size: var(--mk-fs-13); }
   .ts-card p { font-size: 14.5px; }
-  .ts-card span { font-size: 13px; }
-  .ts-json { font-size: 12.5px; }
+  .ts-card span { font-size: var(--mk-fs-13); }
+  .ts-json { font-size: var(--mk-fs-12_5); }
   .ts-more { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
@@ -928,16 +928,16 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
   .ts-section h4 { font-size: 15.5px; }
   .ts-card p { font-size: 17px; }
   .ts-card span { font-size: 15.5px; }
-  .ts-json { font-size: 15px; }
-  .ts-more { font-size: 16px; }
+  .ts-json { font-size: var(--mk-fs-15); }
+  .ts-more { font-size: var(--mk-fs-16); }
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-  .ts-facts span { font-size: 18px; }
-  .ts-facts strong { font-size: 20px; }
-  .ts-section h4 { font-size: 18px; }
-  .ts-card p { font-size: 20px; }
-  .ts-card span { font-size: 18px; }
+  .ts-facts span { font-size: var(--mk-fs-18); }
+  .ts-facts strong { font-size: var(--mk-fs-20); }
+  .ts-section h4 { font-size: var(--mk-fs-18); }
+  .ts-card p { font-size: var(--mk-fs-20); }
+  .ts-card span { font-size: var(--mk-fs-18); }
   .ts-json { font-size: 17.5px; }
   .ts-more { font-size: 18.5px; }
 }

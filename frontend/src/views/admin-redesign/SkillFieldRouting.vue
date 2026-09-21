@@ -641,7 +641,7 @@ onMounted(() => void load())
 .sfr__legend-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
 .sfr__legend-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sfr__legend-en { flex-shrink: 0; font-size: 11px; color: var(--mk-faint, var(--mk-faint-soft)); }
-.sfr__legend-hint { font-size: 12px; color: var(--mk-muted, #5b6577); min-width: 0; }
+.sfr__legend-hint { font-size: var(--mk-fs-12); color: var(--mk-muted, #5b6577); min-width: 0; }
 
 .sfr__filter { margin-bottom: 12px; }
 .sfr__filter-count { font-size: 11.5px; color: var(--mk-faint, var(--mk-faint-soft)); font-weight: 600; }
@@ -668,8 +668,8 @@ onMounted(() => void load())
 
 /* 4K：字段路由表内容跟随全站节奏 */
 @media (min-width: 2000px) {
-  .sfr__emptyrow { font-size: 14px; }
-  .sfr__persist { font-size: 12.5px; }
+  .sfr__emptyrow { font-size: var(--mk-fs-14); }
+  .sfr__persist { font-size: var(--mk-fs-12_5); }
 }
 @media (min-width: 2800px) {
   .sfr__emptyrow { font-size: 16.5px; }

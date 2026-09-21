@@ -547,19 +547,19 @@ async function submit() {
 
 /* 4K：向导弹窗内容跟随全站节奏（Teleport 覆盖层） */
 @media (min-width: 2000px) {
-  .faw__preview-code { font-size: 13px; }
-  .faw__result-list { font-size: 14px; }
-  .faw__result-title { font-size: 15px; }
+  .faw__preview-code { font-size: var(--mk-fs-13); }
+  .faw__result-list { font-size: var(--mk-fs-14); }
+  .faw__result-title { font-size: var(--mk-fs-15); }
   .faw__result-note { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
   .faw__preview-code { font-size: 15.5px; }
   .faw__result-list { font-size: 16.5px; }
   .faw__result-title { font-size: 17.5px; }
-  .faw__result-note { font-size: 16px; }
+  .faw__result-note { font-size: var(--mk-fs-16); }
 }
 @media (min-width: 3600px) {
-  .faw__preview-code { font-size: 18px; }
+  .faw__preview-code { font-size: var(--mk-fs-18); }
   .faw__result-list { font-size: 19.5px; }
   .faw__result-title { font-size: 20.5px; }
   .faw__result-note { font-size: 18.5px; }

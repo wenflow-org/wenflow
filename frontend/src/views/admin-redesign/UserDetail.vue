@@ -451,39 +451,39 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .ud-path__main strong { font-size: 15px; }
+  .ud-path__main strong { font-size: var(--mk-fs-15); }
   .ud-path__main span { font-size: 13.5px; }
-  .ud-path__pct { font-size: 14px; }
+  .ud-path__pct { font-size: var(--mk-fs-14); }
   .ud-none { font-size: 14.5px; }
   .ud-act { font-size: 14.5px; }
   .ud-act__time { font-size: 13.5px; }
   .ud-grant__copy { font-size: 14.5px; }
-  .ud-grant__notice { font-size: 14px; }
-  .ud-grant__grid div { font-size: 14px; }
-  .ud-grant__grid span { font-size: 13px; }
+  .ud-grant__notice { font-size: var(--mk-fs-14); }
+  .ud-grant__grid div { font-size: var(--mk-fs-14); }
+  .ud-grant__grid span { font-size: var(--mk-fs-13); }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
   .ud-path__main strong { font-size: 17.5px; }
-  .ud-path__main span { font-size: 16px; }
+  .ud-path__main span { font-size: var(--mk-fs-16); }
   .ud-path__pct { font-size: 16.5px; }
   .ud-none { font-size: 17px; }
   .ud-act { font-size: 17px; }
-  .ud-act__time { font-size: 16px; }
+  .ud-act__time { font-size: var(--mk-fs-16); }
   .ud-grant__copy { font-size: 17px; }
   .ud-grant__notice { font-size: 16.5px; }
   .ud-grant__grid div { font-size: 16.5px; }
-  .ud-grant__grid span { font-size: 15px; }
+  .ud-grant__grid span { font-size: var(--mk-fs-15); }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
   .ud-path__main strong { font-size: 20.5px; }
   .ud-path__main span { font-size: 18.5px; }
   .ud-path__pct { font-size: 19px; }
-  .ud-none { font-size: 20px; }
-  .ud-act { font-size: 20px; }
+  .ud-none { font-size: var(--mk-fs-20); }
+  .ud-act { font-size: var(--mk-fs-20); }
   .ud-act__time { font-size: 18.5px; }
-  .ud-grant__copy { font-size: 20px; }
+  .ud-grant__copy { font-size: var(--mk-fs-20); }
   .ud-grant__notice { font-size: 19px; }
   .ud-grant__grid div { font-size: 19px; }
   .ud-grant__grid span { font-size: 17.5px; }

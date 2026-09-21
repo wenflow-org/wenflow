@@ -308,27 +308,27 @@ html[data-theme='dark'] .tc-share__bar { background: linear-gradient(90deg, #6fa
 /* 4K 档：跟随全站节奏 */
 @media (min-width: 2000px) {
   .tc-table { padding: 2px 16px 0; }
-  .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: 14px; }
-  .tc-c__sub { font-size: 12px; }
-  .tc-rank__no { width: 22px; height: 22px; font-size: 12px; }
+  .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: var(--mk-fs-14); }
+  .tc-c__sub { font-size: var(--mk-fs-12); }
+  .tc-rank__no { width: 22px; height: 22px; font-size: var(--mk-fs-12); }
   .tc-share__track { height: 7px; }
-  .tc-share__num { font-size: 12px; }
-  .tc-avatar { width: 24px; height: 24px; font-size: 12px; }
+  .tc-share__num { font-size: var(--mk-fs-12); }
+  .tc-avatar { width: 24px; height: 24px; font-size: var(--mk-fs-12); }
 }
 @media (min-width: 2800px) {
-  .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: 16px; }
-  .tc-c__sub { font-size: 14px; }
-  .tc-rank__no { width: 26px; height: 26px; font-size: 14px; border-radius: 7px; }
+  .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: var(--mk-fs-16); }
+  .tc-c__sub { font-size: var(--mk-fs-14); }
+  .tc-rank__no { width: 26px; height: 26px; font-size: var(--mk-fs-14); border-radius: 7px; }
   .tc-share__track { height: 8px; }
-  .tc-share__num { font-size: 14px; }
-  .tc-avatar { width: 28px; height: 28px; font-size: 14px; }
+  .tc-share__num { font-size: var(--mk-fs-14); }
+  .tc-avatar { width: 28px; height: 28px; font-size: var(--mk-fs-14); }
 }
 @media (min-width: 3600px) {
   .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: 19px; }
   .tc-c__sub { font-size: 16.5px; }
-  .tc-rank__no { width: 30px; height: 30px; font-size: 16px; }
+  .tc-rank__no { width: 30px; height: 30px; font-size: var(--mk-fs-16); }
   .tc-share__track { height: 10px; }
   .tc-share__num { font-size: 16.5px; }
-  .tc-avatar { width: 32px; height: 32px; font-size: 16px; }
+  .tc-avatar { width: 32px; height: 32px; font-size: var(--mk-fs-16); }
 }
 </style>

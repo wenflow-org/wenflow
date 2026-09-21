@@ -759,9 +759,9 @@ html[data-theme='dark'] .mshell__crumb { background: #1c1e23; border-color: #2f3
 /* 大屏（2000+）：侧栏加宽、字号放大；2800+（4K）再升一档（zoom 之上叠加） */
 @media (min-width: 1920px) {
   .mshell { grid-template-columns: 260px minmax(0, 1fr); }
-  .mshell__item { font-size: 14px; padding: 10px 12px; }
-  .mshell__group-name { font-size: 12px; }
-  .mshell__item-badge { font-size: 12px; }
+  .mshell__item { font-size: var(--mk-fs-14); padding: 10px 12px; }
+  .mshell__group-name { font-size: var(--mk-fs-12); }
+  .mshell__item-badge { font-size: var(--mk-fs-12); }
   .mshell__logo-full { height: 64px; }
 }
 @media (min-width: 2000px) {
@@ -770,10 +770,10 @@ html[data-theme='dark'] .mshell__crumb { background: #1c1e23; border-color: #2f3
   }
   .mshell__side { padding: 18px 14px 14px; gap: 18px; }
   .mshell__logo-full { height: 72px; }
-  .mshell__group-name { font-size: 12.5px; padding: 0 12px 7px; }
+  .mshell__group-name { font-size: var(--mk-fs-12_5); padding: 0 12px 7px; }
   .mshell__item { font-size: 14.5px; padding: 11px 12px; gap: 8px; }
-  .mshell__item-badge { font-size: 12.5px; padding: 2px 9px; }
-  .mshell__foot { font-size: 13px; padding: 10px 12px; }
+  .mshell__item-badge { font-size: var(--mk-fs-12_5); padding: 2px 9px; }
+  .mshell__foot { font-size: var(--mk-fs-13); padding: 10px 12px; }
   .mshell__tool { width: 30px; height: 30px; }
   .mshell__user-avatar { width: 28px; height: 28px; }
 }
@@ -783,16 +783,16 @@ html[data-theme='dark'] .mshell__crumb { background: #1c1e23; border-color: #2f3
   }
   .mshell__side { padding: 22px 18px 16px; gap: 22px; }
   .mshell__logo-full { height: 72px; }
-  .mshell__group-name { font-size: 15px; padding: 0 14px 8px; }
+  .mshell__group-name { font-size: var(--mk-fs-15); padding: 0 14px 8px; }
   .mshell__item { font-size: 17px; padding: 14px 14px; gap: 10px; border-radius: 10px; }
-  .mshell__item-badge { font-size: 14px; padding: 3px 10px; }
-  .mshell__foot { font-size: 15px; padding: 12px 14px; }
+  .mshell__item-badge { font-size: var(--mk-fs-14); padding: 3px 10px; }
+  .mshell__foot { font-size: var(--mk-fs-15); padding: 12px 14px; }
   .mshell__tool { width: 36px; height: 36px; }
-  .mshell__tool-icon { font-size: 16px; }
+  .mshell__tool-icon { font-size: var(--mk-fs-16); }
   .mshell__tool-icon svg,
   .mshell__refresh-icon svg { width: 18px; height: 18px; }
   .mshell__user-avatar { width: 32px; height: 32px; }
-  .mshell__user-name { font-size: 14px; }
+  .mshell__user-name { font-size: var(--mk-fs-14); }
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：侧栏再加宽、字号继续放大 */
@@ -802,7 +802,7 @@ html[data-theme='dark'] .mshell__crumb { background: #1c1e23; border-color: #2f3
   .mshell__side { padding: 26px 22px 18px; gap: 26px; }
   .mshell__logo-full { height: 88px; }
   .mshell__group-name { font-size: 17.5px; padding: 0 16px 9px; }
-  .mshell__item { font-size: 20px; padding: 16px 16px; gap: 12px; }
+  .mshell__item { font-size: var(--mk-fs-20); padding: 16px 16px; gap: 12px; }
   .mshell__item-badge { font-size: 16.5px; padding: 4px 12px; }
   .mshell__foot { font-size: 17.5px; padding: 14px 16px; }
   .mshell__tool { width: 42px; height: 42px; }

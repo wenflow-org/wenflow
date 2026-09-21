@@ -415,12 +415,12 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   /* 4K：设计页独立渲染（无全局 zoom），字号大幅放大以对齐管理台基线 */
   .sdp { max-width: 3000px; }
   .mk-back { font-size: 19px; }
-  .sdp-parent { font-size: 18px; }
-  .sdp-drift { font-size: 18px; padding: 14px 18px; }
+  .sdp-parent { font-size: var(--mk-fs-18); }
+  .sdp-drift { font-size: var(--mk-fs-18); padding: 14px 18px; }
   .sdp-drift code { font-size: 17px; }
   .sdp .mk-pills { padding: 6px; }
   .sdp .mk-pill { font-size: 19px; padding: 10px 24px; }
   .sdp .mk-pills { border-radius: 10px; }
-  .sdp .mk-pill { font-size: 18px; padding: 7px 18px; }
+  .sdp .mk-pill { font-size: var(--mk-fs-18); padding: 7px 18px; }
 }
 </style>

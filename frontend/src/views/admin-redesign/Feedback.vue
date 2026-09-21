@@ -553,34 +553,34 @@ onMounted(() => {
 /* 4K：内容区字号跟随壳层放大（面板宽度/头/体由 mk-drawer 全局档接管） */
 @media (min-width: 2000px) {
   .fb-panel__title h3 { font-size: 17px; }
-  .fb-panel__id { font-size: 12.5px; }
-  .fb-facts span { font-size: 13px; }
+  .fb-panel__id { font-size: var(--mk-fs-12_5); }
+  .fb-facts span { font-size: var(--mk-fs-13); }
   .fb-facts strong { font-size: 14.5px; }
-  .fb-section h4 { font-size: 13px; }
+  .fb-section h4 { font-size: var(--mk-fs-13); }
   .fb-text { font-size: 14.5px; }
-  .fb-note { font-size: 14px; }
-  .fb-code { font-size: 12.5px; }
-  .fb-meta { font-size: 12px; }
+  .fb-note { font-size: var(--mk-fs-14); }
+  .fb-code { font-size: var(--mk-fs-12_5); }
+  .fb-meta { font-size: var(--mk-fs-12); }
 }
 @media (min-width: 2800px) {
-  .fb-panel__title h3 { font-size: 20px; }
-  .fb-panel__id { font-size: 15px; }
+  .fb-panel__title h3 { font-size: var(--mk-fs-20); }
+  .fb-panel__id { font-size: var(--mk-fs-15); }
   .fb-facts span { font-size: 15.5px; }
   .fb-facts strong { font-size: 17px; }
   .fb-section h4 { font-size: 15.5px; }
   .fb-text { font-size: 17px; }
   .fb-note { font-size: 16.5px; }
-  .fb-code { font-size: 15px; }
-  .fb-meta { font-size: 14px; }
+  .fb-code { font-size: var(--mk-fs-15); }
+  .fb-meta { font-size: var(--mk-fs-14); }
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
   .fb-panel__title h3 { font-size: 23px; }
   .fb-panel__id { font-size: 17.5px; }
-  .fb-facts span { font-size: 18px; }
-  .fb-facts strong { font-size: 20px; }
-  .fb-section h4 { font-size: 18px; }
-  .fb-text { font-size: 20px; }
+  .fb-facts span { font-size: var(--mk-fs-18); }
+  .fb-facts strong { font-size: var(--mk-fs-20); }
+  .fb-section h4 { font-size: var(--mk-fs-18); }
+  .fb-text { font-size: var(--mk-fs-20); }
   .fb-note { font-size: 19.5px; }
   .fb-code { font-size: 17.5px; }
   .fb-meta { font-size: 16.5px; }

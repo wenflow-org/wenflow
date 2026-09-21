@@ -685,20 +685,20 @@ function recGateDetail(completion: SkillCompletion): string {
 /* 大屏档位（mk 体系：2000 ≈×1.15，2800 ≈×1.17，3600 ≈×1.3） */
 @media (min-width: 2000px) {
   .sk-card__cat,
-  .sk-card__flag { font-size: 12px; }
+  .sk-card__flag { font-size: var(--mk-fs-12); }
   .sk-dot { width: 10px; height: 10px; }
-  .sk-agent-tag { font-size: 12.5px; padding: 3px 11px; }
+  .sk-agent-tag { font-size: var(--mk-fs-12_5); padding: 3px 11px; }
 
   .sk-id-main { font-size: 13.5px; }
-  .sk-name-desc { font-size: 13px; }
+  .sk-name-desc { font-size: var(--mk-fs-13); }
 }
 @media (min-width: 2800px) {
   .sk-card__cat,
-  .sk-card__flag { font-size: 14px; }
+  .sk-card__flag { font-size: var(--mk-fs-14); }
   .sk-dot { width: 12px; height: 12px; }
   .sk-agent-tag { font-size: 14.5px; padding: 4px 13px; }
 
-  .sk-id-main { font-size: 16px; }
+  .sk-id-main { font-size: var(--mk-fs-16); }
   .sk-name-desc { font-size: 15.5px; }
 }
 @media (min-width: 3600px) {
@@ -708,7 +708,7 @@ function recGateDetail(completion: SkillCompletion): string {
   .sk-agent-tag { font-size: 17px; padding: 5px 15px; }
 
   .sk-id-main { font-size: 18.5px; }
-  .sk-name-desc { font-size: 18px; }
+  .sk-name-desc { font-size: var(--mk-fs-18); }
 }
 
 /* ================= 暗色模式（D1 补完）：Skill 运行 ================= */

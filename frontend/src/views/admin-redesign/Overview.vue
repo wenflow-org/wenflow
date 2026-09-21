@@ -1360,46 +1360,46 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .brief-score { width: 64px; height: 64px; }
   .brief-score strong { font-size: 17px; }
   .brief-score__cap { font-size: 10.5px; }
-  .brief-head__verdict h3 { font-size: 20px; }
-  .brief-head__verdict p { font-size: 15px; }
-  .brief-actions li { font-size: 15px; }
-  .brief-actions__btn { font-size: 14px; }
-  .brief-actions__clear { font-size: 15px; }
+  .brief-head__verdict h3 { font-size: var(--mk-fs-20); }
+  .brief-head__verdict p { font-size: var(--mk-fs-15); }
+  .brief-actions li { font-size: var(--mk-fs-15); }
+  .brief-actions__btn { font-size: var(--mk-fs-14); }
+  .brief-actions__clear { font-size: var(--mk-fs-15); }
   .brief-card__note { font-size: 14.5px; }
   .feed-filter { font-size: 13.5px; }
-  .feed__empty { font-size: 15px; }
-  .feed li strong { font-size: 15px; }
+  .feed__empty { font-size: var(--mk-fs-15); }
+  .feed li strong { font-size: var(--mk-fs-15); }
   .feed li span { font-size: 13.5px; }
   .feed--full li strong { font-size: 14.5px; }
-  .wq__label { font-size: 14px; }
+  .wq__label { font-size: var(--mk-fs-14); }
   .wq__nums { font-size: 13.5px; }
-  .wq__note { font-size: 14px; }
+  .wq__note { font-size: var(--mk-fs-14); }
 
 
 
-  .usage__label { font-size: 13px; }
-  .usage__row { font-size: 14px; }
-  .usage__fails li { font-size: 14px; }
-  .trend__legend { font-size: 13px; }
-  .trend__num { font-size: 13px; }
-  .trend__day { font-size: 12.5px; }
-  .trend__sum { font-size: 14px; }
+  .usage__label { font-size: var(--mk-fs-13); }
+  .usage__row { font-size: var(--mk-fs-14); }
+  .usage__fails li { font-size: var(--mk-fs-14); }
+  .trend__legend { font-size: var(--mk-fs-13); }
+  .trend__num { font-size: var(--mk-fs-13); }
+  .trend__day { font-size: var(--mk-fs-12_5); }
+  .trend__sum { font-size: var(--mk-fs-14); }
   .funnel__node span { font-size: 13.5px; }
   .funnel__node strong { font-size: 22px; }
-  .funnel__rate { font-size: 12.5px; }
+  .funnel__rate { font-size: var(--mk-fs-12_5); }
   .pulse__meta { font-size: 14.5px; }
 }
 @media (min-width: 2800px) {
   .funnel__node span { font-size: 15.5px; }
   .brief-card { padding: 24px 30px; }
-  .brief-card h4 { font-size: 16px; }
+  .brief-card h4 { font-size: var(--mk-fs-16); }
   .brief-score { width: 76px; height: 76px; }
-  .brief-score strong { font-size: 20px; }
-  .brief-score__cap { font-size: 12.5px; }
+  .brief-score strong { font-size: var(--mk-fs-20); }
+  .brief-score__cap { font-size: var(--mk-fs-12_5); }
   .brief-head__verdict h3 { font-size: 24px; }
   .brief-head__verdict p { font-size: 17px; }
   .brief-actions li { font-size: 17px; }
-  .brief-actions__btn { font-size: 16px; }
+  .brief-actions__btn { font-size: var(--mk-fs-16); }
   .brief-actions__clear { font-size: 17px; }
   .brief-card__note { font-size: 16.5px; }
   .feed-filter { font-size: 15.5px; }
@@ -1407,19 +1407,19 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .feed li strong { font-size: 17px; }
   .feed li span { font-size: 15.5px; }
   .feed--full li strong { font-size: 16.5px; }
-  .wq__label { font-size: 16px; }
+  .wq__label { font-size: var(--mk-fs-16); }
   .wq__nums { font-size: 15.5px; }
-  .wq__note { font-size: 16px; }
+  .wq__note { font-size: var(--mk-fs-16); }
 
 
 
-  .usage__label { font-size: 15px; }
-  .usage__row { font-size: 16px; }
-  .usage__fails li { font-size: 16px; }
-  .trend__legend { font-size: 15px; }
-  .trend__num { font-size: 15px; }
+  .usage__label { font-size: var(--mk-fs-15); }
+  .usage__row { font-size: var(--mk-fs-16); }
+  .usage__fails li { font-size: var(--mk-fs-16); }
+  .trend__legend { font-size: var(--mk-fs-15); }
+  .trend__num { font-size: var(--mk-fs-15); }
   .trend__day { font-size: 14.5px; }
-  .trend__sum { font-size: 16px; }
+  .trend__sum { font-size: var(--mk-fs-16); }
   .funnel__node span { font-size: 15.5px; }
   .funnel__node strong { font-size: 26px; }
   .funnel__rate { font-size: 14.5px; }
@@ -1433,30 +1433,30 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .brief-score { width: 90px; height: 90px; }
   .brief-score strong { font-size: 23.5px; }
   .brief-score__cap { font-size: 14.5px; }
-  .brief-actions li { font-size: 15px; }
-  .brief-actions__btn { font-size: 14px; }
-  .brief-actions__clear { font-size: 15px; }
+  .brief-actions li { font-size: var(--mk-fs-15); }
+  .brief-actions__btn { font-size: var(--mk-fs-14); }
+  .brief-actions__clear { font-size: var(--mk-fs-15); }
   .feed-filter { font-size: 13.5px; }
-  .feed__empty { font-size: 15px; }
+  .feed__empty { font-size: var(--mk-fs-15); }
   .feed li strong { font-size: 15.5px; }
   .feed li span { font-size: 13.5px; }
-  .feed--full li strong { font-size: 15px; }
-  .wq__label { font-size: 14px; }
+  .feed--full li strong { font-size: var(--mk-fs-15); }
+  .wq__label { font-size: var(--mk-fs-14); }
   .wq__nums { font-size: 13.5px; }
-  .wq__note { font-size: 14px; }
+  .wq__note { font-size: var(--mk-fs-14); }
 
 
 
-  .usage__label { font-size: 13px; }
-  .usage__row { font-size: 14px; }
-  .usage__fails li { font-size: 14px; }
-  .trend__legend { font-size: 13px; }
-  .trend__num { font-size: 13px; }
-  .trend__day { font-size: 12.5px; }
-  .trend__sum { font-size: 14px; }
+  .usage__label { font-size: var(--mk-fs-13); }
+  .usage__row { font-size: var(--mk-fs-14); }
+  .usage__fails li { font-size: var(--mk-fs-14); }
+  .trend__legend { font-size: var(--mk-fs-13); }
+  .trend__num { font-size: var(--mk-fs-13); }
+  .trend__day { font-size: var(--mk-fs-12_5); }
+  .trend__sum { font-size: var(--mk-fs-14); }
   .funnel__node span { font-size: 13.5px; }
   .funnel__node strong { font-size: 22px; }
-  .funnel__rate { font-size: 12.5px; }
+  .funnel__rate { font-size: var(--mk-fs-12_5); }
   .pulse__meta { font-size: 14.5px; }
 }
 

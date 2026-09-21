@@ -953,7 +953,7 @@ watch(
 .mt-cell span { font-size: 10px; color: var(--mk-faint); font-weight: 600; }
 .mt-cell strong {
   font-family: var(--mk-mono);
-  font-size: 12px;
+  font-size: var(--mk-fs-12);
   font-weight: 600;
   color: #1a2a44;
   font-variant-numeric: tabular-nums;
@@ -978,34 +978,34 @@ watch(
 
 /* 4K：面板宽/头/体/关闭按钮由 .mk-drawer 全局档接管；此处只放大页面私有内容字号 */
 @media (min-width: 2000px) {
-  .msk__id { font-size: 12.5px; }
-  .msk__tab-badge { font-size: 12px; }
-  .msk__stat span { font-size: 12px; }
-  .msk__stat strong { font-size: 18px; }
-  .msk__row { font-size: 14px; }
-  .msk__row-id { font-size: 12.5px; }
-  .msk__row-num { font-size: 12.5px; }
-  .msk__note { font-size: 12.5px; }
-  .mk-section__head h4 { font-size: 13px; }
-  .msk__sec-meta { font-size: 12.5px; }
-  .msk__kv span { font-size: 13px; }
-  .msk__code { font-size: 12.5px; }
+  .msk__id { font-size: var(--mk-fs-12_5); }
+  .msk__tab-badge { font-size: var(--mk-fs-12); }
+  .msk__stat span { font-size: var(--mk-fs-12); }
+  .msk__stat strong { font-size: var(--mk-fs-18); }
+  .msk__row { font-size: var(--mk-fs-14); }
+  .msk__row-id { font-size: var(--mk-fs-12_5); }
+  .msk__row-num { font-size: var(--mk-fs-12_5); }
+  .msk__note { font-size: var(--mk-fs-12_5); }
+  .mk-section__head h4 { font-size: var(--mk-fs-13); }
+  .msk__sec-meta { font-size: var(--mk-fs-12_5); }
+  .msk__kv span { font-size: var(--mk-fs-13); }
+  .msk__code { font-size: var(--mk-fs-12_5); }
   .msk__prompt { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
-  .msk__id { font-size: 15px; }
-  .msk__tab-badge { font-size: 14px; }
-  .msk__stat span { font-size: 14px; }
+  .msk__id { font-size: var(--mk-fs-15); }
+  .msk__tab-badge { font-size: var(--mk-fs-14); }
+  .msk__stat span { font-size: var(--mk-fs-14); }
   .msk__stat strong { font-size: 22px; }
   .msk__row { font-size: 16.5px; }
-  .msk__row-id { font-size: 15px; }
-  .msk__row-num { font-size: 15px; }
-  .msk__note { font-size: 15px; }
+  .msk__row-id { font-size: var(--mk-fs-15); }
+  .msk__row-num { font-size: var(--mk-fs-15); }
+  .msk__note { font-size: var(--mk-fs-15); }
   .mk-section__head h4 { font-size: 15.5px; }
-  .msk__sec-meta { font-size: 15px; }
+  .msk__sec-meta { font-size: var(--mk-fs-15); }
   .msk__kv span { font-size: 15.5px; }
-  .msk__code { font-size: 15px; }
-  .msk__prompt { font-size: 16px; }
+  .msk__code { font-size: var(--mk-fs-15); }
+  .msk__prompt { font-size: var(--mk-fs-16); }
 }
 @media (min-width: 3600px) {
   /* 4K（抽屉 Teleport 到 body，无 zoom）：字号继续放大（面板宽/头/体由 mk-drawer 全局档接管） */
@@ -1017,9 +1017,9 @@ watch(
   .msk__row-id { font-size: 17.5px; }
   .msk__row-num { font-size: 17.5px; }
   .msk__note { font-size: 17.5px; }
-  .mk-section__head h4 { font-size: 18px; }
+  .mk-section__head h4 { font-size: var(--mk-fs-18); }
   .msk__sec-meta { font-size: 17.5px; }
-  .msk__kv span { font-size: 18px; }
+  .msk__kv span { font-size: var(--mk-fs-18); }
   .msk__code { font-size: 17.5px; }
   .msk__prompt { font-size: 18.5px; }
 }

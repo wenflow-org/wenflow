@@ -686,35 +686,35 @@ onMounted(async () => {
 @media (min-width: 2000px) {
   .ss-group__head { padding: 12px 18px; }
   .ss-group__who strong { font-size: 14.5px; }
-  .ss-group__email { font-size: 12.5px; }
-  .ss-group__count { font-size: 13px; }
-  .ss-group__revokeall { font-size: 13px; }
-  .ss-current { font-size: 12px; }
+  .ss-group__email { font-size: var(--mk-fs-12_5); }
+  .ss-group__count { font-size: var(--mk-fs-13); }
+  .ss-group__revokeall { font-size: var(--mk-fs-13); }
+  .ss-current { font-size: var(--mk-fs-12); }
   .ss-na { font-size: 13.5px; }
-  .ss-time--soon { font-size: 13px; }
+  .ss-time--soon { font-size: var(--mk-fs-13); }
   .ss-ip { font-size: 13.5px; }
 }
 @media (min-width: 2800px) {
   .ss-group__who strong { font-size: 16.5px; }
-  .ss-group__email { font-size: 14px; }
-  .ss-group__count { font-size: 15px; }
-  .ss-group__revokeall { font-size: 15px; }
+  .ss-group__email { font-size: var(--mk-fs-14); }
+  .ss-group__count { font-size: var(--mk-fs-15); }
+  .ss-group__revokeall { font-size: var(--mk-fs-15); }
   .ss-current { font-size: 13.5px; }
   .ss-na { font-size: 15.5px; }
   .ss-time,
-  .ss-time--soon { font-size: 15px; }
+  .ss-time--soon { font-size: var(--mk-fs-15); }
   .ss-ip { font-size: 15.5px; }
 }
 @media (min-width: 3600px) {
   .ss-group__head { padding: 14px 22px; }
   .ss-group__who strong { font-size: 18.5px; }
-  .ss-group__email { font-size: 16px; }
+  .ss-group__email { font-size: var(--mk-fs-16); }
   .ss-group__count { font-size: 17px; }
   .ss-group__revokeall { font-size: 17px; }
   .ss-current { font-size: 15.5px; }
-  .ss-na { font-size: 18px; }
+  .ss-na { font-size: var(--mk-fs-18); }
   .ss-time--soon { font-size: 15.5px; }
-  .ss-ip { font-size: 18px; }
+  .ss-ip { font-size: var(--mk-fs-18); }
 }
 
 /* ================= 暗色模式（D1 补完）：会话安全 ================= */

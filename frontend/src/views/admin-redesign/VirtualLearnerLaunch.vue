@@ -175,10 +175,10 @@ defineExpose({ open })
   margin-left: 4px;
 }
 @media (min-width: 2000px) {
-  .vl-req { font-size: 12px; }
+  .vl-req { font-size: var(--mk-fs-12); }
 }
 @media (min-width: 2800px) {
-  .vl-req { font-size: 14px; }
+  .vl-req { font-size: var(--mk-fs-14); }
 }
 @media (min-width: 3600px) {
   .vl-req { font-size: 16.5px; }

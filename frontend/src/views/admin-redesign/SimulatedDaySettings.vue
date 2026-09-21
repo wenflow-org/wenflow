@@ -154,11 +154,11 @@ onMounted(load)
 .sd-settings__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
 .sd-settings__arrow { color: var(--mk-faint, #6b7c96); font-size: 10px; transition: transform 0.15s ease; }
 .sd-settings__arrow[data-open='true'] { transform: rotate(90deg); }
-.sd-settings__title { font-weight: 600; font-size: 13px; }
-.sd-switch { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+.sd-settings__title { font-weight: 600; font-size: var(--mk-fs-13); }
+.sd-switch { display: flex; align-items: center; gap: 6px; font-size: var(--mk-fs-12); cursor: pointer; }
 .sd-settings__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 12px; margin-top: 8px; }
 .sd-settings__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
-.sd-settings__hint { font-size: 12px; color: var(--mk-faint); }
-.sd-weekdays { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; font-size: 12px; }
+.sd-settings__hint { font-size: var(--mk-fs-12); color: var(--mk-faint); }
+.sd-weekdays { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; font-size: var(--mk-fs-12); }
 .sd-weekday { display: flex; align-items: center; gap: 4px; cursor: pointer; }
 </style>

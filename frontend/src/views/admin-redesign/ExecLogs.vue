@@ -1163,32 +1163,32 @@ html[data-theme='dark'] .tline-attempt--fail { background: rgba(220, 38, 38, 0.0
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3，高度换算回逻辑坐标） ========== */
 @media (min-width: 2000px) {
-  .log-auto { font-size: 13px; }
-  .mk-status__filter { font-size: 13px; }
+  .log-auto { font-size: var(--mk-fs-13); }
+  .mk-status__filter { font-size: var(--mk-fs-13); }
   .mk-status__clear { font-size: 14.5px; }
   /* 列宽：时间列由 shared.css 4K token 覆盖（--mk-col-time-full），固定列 4K 档字号放大 */
   .exec-time,
   .exec-dur,
   .exec-trace,
   .exec-stage,
-  .exec-model__name { font-size: 13px; }
-  .exec-title { font-size: 15px; }
+  .exec-model__name { font-size: var(--mk-fs-13); }
+  .exec-title { font-size: var(--mk-fs-15); }
   .exec-tokens,
-  .exec-status { font-size: 13px; }
+  .exec-status { font-size: var(--mk-fs-13); }
   .tline__errcode,
   .tline__http,
   .tline__recovered,
-  .tline__drift { font-size: 12px; }
+  .tline__drift { font-size: var(--mk-fs-12); }
   .tline__session,
   .tline__prompt-meta,
-  .tline__payload-meta { font-size: 13px; }
+  .tline__payload-meta { font-size: var(--mk-fs-13); }
   .tline__none,
-  .tline__label { font-size: 13px; }
+  .tline__label { font-size: var(--mk-fs-13); }
   .tline-attempt__retry,
-  .tline-attempt__dur { font-size: 12px; }
-  .tline-attempt__err { font-size: 13px; }
-  .exec-detail__box pre { font-size: 13px; }
-  .tline-attempt__no { font-size: 12px; }
+  .tline-attempt__dur { font-size: var(--mk-fs-12); }
+  .tline-attempt__err { font-size: var(--mk-fs-13); }
+  .exec-detail__box pre { font-size: var(--mk-fs-13); }
+  .tline-attempt__no { font-size: var(--mk-fs-12); }
   .tline-attempt__meta { font-size: 11.5px; }
 }
 @media (min-width: 2800px) {
@@ -1207,21 +1207,21 @@ html[data-theme='dark'] .tline-attempt--fail { background: rgba(220, 38, 38, 0.0
   .exec-model__name { font-size: 15.5px; }
   .exec-title { font-size: 17.5px; }
   .exec-tokens,
-  .exec-status { font-size: 14px; }
+  .exec-status { font-size: var(--mk-fs-14); }
   .tline__errcode,
   .tline__http,
   .tline__recovered,
-  .tline__drift { font-size: 14px; }
+  .tline__drift { font-size: var(--mk-fs-14); }
   .tline__session,
   .tline__prompt-meta,
   .tline__payload-meta { font-size: 15.5px; }
   .tline__none,
   .tline__label { font-size: 15.5px; }
   .tline-attempt__retry,
-  .tline-attempt__dur { font-size: 14px; }
+  .tline-attempt__dur { font-size: var(--mk-fs-14); }
   .tline-attempt__err { font-size: 15.5px; }
   .exec-detail__box pre { font-size: 15.5px; }
-  .tline-attempt__no { font-size: 14px; }
+  .tline-attempt__no { font-size: var(--mk-fs-14); }
   .tline-attempt__meta { font-size: 13.5px; }
 }
 
@@ -1259,7 +1259,7 @@ html[data-theme='dark'] {
 }
 .cost-strip__main { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .cost-strip__label { color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-12, 12px); font-weight: 600; }
-.cost-strip__value { font-size: 18px; font-weight: 750; color: var(--mk-green, #16a34a); font-variant-numeric: tabular-nums; }
+.cost-strip__value { font-size: var(--mk-fs-18); font-weight: 750; color: var(--mk-green, #16a34a); font-variant-numeric: tabular-nums; }
 .cost-strip__value--unknown { color: var(--mk-amber, #d97706); }
 .cost-strip__hint { color: var(--mk-faint, #5f6f8c); font-size: var(--mk-fs-12, 12px); }
 .cost-strip__missing {

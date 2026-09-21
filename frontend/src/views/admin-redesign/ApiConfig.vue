@@ -1283,7 +1283,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   border-radius: 50%;
   background: var(--mk-blue-bg);
   color: var(--mk-blue);
-  font-size: 13px;
+  font-size: var(--mk-fs-13);
   font-weight: 800;
   flex-shrink: 0;
 }
@@ -1552,51 +1552,51 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
 @media (min-width: 2000px) {
   .ac-body { gap: 16px; padding: 6px 18px 18px; }
   .mk-field__label { font-size: 13.5px; }
-  .ac-model { font-size: 13px; padding: 5px 12px; }
+  .ac-model { font-size: var(--mk-fs-13); padding: 5px 12px; }
 
   .ac-policy { gap: 16px 0; padding: 6px 18px 18px; }
   .ac-policy__label { font-size: 13.5px; }
-  .ac-policy__desc { font-size: 13px; }
-  .ac-policy__warn { font-size: 13px; }
+  .ac-policy__desc { font-size: var(--mk-fs-13); }
+  .ac-policy__warn { font-size: var(--mk-fs-13); }
   .mk-seg { border-radius: 12px; }
   .mk-seg__item { font-size: 13.5px; padding: 8px 14px; }
   .ac-textarea { font-size: 13.5px; }
-  .ac-sec__title { font-size: 13px; }
-  .ac-sec__hint { font-size: 12px; }
+  .ac-sec__title { font-size: var(--mk-fs-13); }
+  .ac-sec__hint { font-size: var(--mk-fs-12); }
   .ac-cols__main { padding: 0; }
   .ac-cols__side { padding: 0; }
-  .ac-sec__sub { font-size: 12.5px; }
-  .ac-group__title { font-size: 12.5px; }
+  .ac-sec__sub { font-size: var(--mk-fs-12_5); }
+  .ac-group__title { font-size: var(--mk-fs-12_5); }
   .ac-groups { gap: 20px; padding: 4px 0 8px; }
-  .ac-rel__note { font-size: 13px; }
+  .ac-rel__note { font-size: var(--mk-fs-13); }
   .ac-health__row { grid-template-columns: 12px 210px 1fr auto auto; gap: 12px; padding: 9px 0; font-size: 13.5px; }
-  .ac-health__head { grid-template-columns: 12px 210px 1fr auto auto; gap: 12px; padding: 5px 0 3px; font-size: 12.5px; }
+  .ac-health__head { grid-template-columns: 12px 210px 1fr auto auto; gap: 12px; padding: 5px 0 3px; font-size: var(--mk-fs-12_5); }
   .ac-health__id,
   .ac-health__lat,
-  .ac-health__time { font-size: 12.5px; }
-  .ac-health__stale { font-size: 12.5px; }
+  .ac-health__time { font-size: var(--mk-fs-12_5); }
+  .ac-health__stale { font-size: var(--mk-fs-12_5); }
   .ac-save { padding: 11px 14px 11px 18px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号继续放大 */
   .ac-body { gap: 18px; padding: 8px 22px 22px; }
   .mk-field__label { font-size: 15.5px; }
-  .ac-model { font-size: 15px; padding: 6px 14px; border-radius: 9px; }
+  .ac-model { font-size: var(--mk-fs-15); padding: 6px 14px; border-radius: 9px; }
 
   .ac-policy { gap: 18px 0; padding: 8px 22px 22px; }
   .ac-policy__label { font-size: 15.5px; }
-  .ac-policy__desc { font-size: 15px; }
-  .ac-policy__warn { font-size: 15px; }
+  .ac-policy__desc { font-size: var(--mk-fs-15); }
+  .ac-policy__warn { font-size: var(--mk-fs-15); }
   .mk-seg__item { font-size: 15.5px; padding: 9px 16px; }
   .ac-textarea { font-size: 15.5px; }
-  .ac-sec__title { font-size: 15px; }
-  .ac-sec__hint { font-size: 14px; }
+  .ac-sec__title { font-size: var(--mk-fs-15); }
+  .ac-sec__hint { font-size: var(--mk-fs-14); }
   .ac-cols__main { padding: 0; }
   .ac-cols__side { padding: 0; }
   .ac-sec__sub { font-size: 14.5px; }
   .ac-group__title { font-size: 14.5px; }
   .ac-groups { gap: 22px; padding: 6px 0 8px; }
-  .ac-rel__note { font-size: 15px; }
+  .ac-rel__note { font-size: var(--mk-fs-15); }
   .ac-health__row { grid-template-columns: 14px 260px 1fr auto auto; gap: 14px; padding: 11px 0; font-size: 15.5px; }
   .ac-health__head { grid-template-columns: 14px 260px 1fr auto auto; gap: 14px; padding: 6px 0 3px; font-size: 14.5px; }
   .ac-health__id,
@@ -1608,24 +1608,24 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：字号继续放大，与页面基线对齐 */
   .ac-body { gap: 20px; padding: 10px 26px 26px; }
-  .mk-field__label { font-size: 18px; }
+  .mk-field__label { font-size: var(--mk-fs-18); }
   .ac-model { font-size: 17.5px; padding: 7px 16px; }
 
   .ac-policy { gap: 20px 0; padding: 10px 26px 26px; }
-  .ac-policy__label { font-size: 18px; }
+  .ac-policy__label { font-size: var(--mk-fs-18); }
   .ac-policy__desc { font-size: 17.5px; }
   .ac-policy__warn { font-size: 17.5px; }
-  .mk-seg__item { font-size: 18px; padding: 11px 19px; }
-  .ac-textarea { font-size: 18px; }
+  .mk-seg__item { font-size: var(--mk-fs-18); padding: 11px 19px; }
+  .ac-textarea { font-size: var(--mk-fs-18); }
   .ac-sec__title { font-size: 17.5px; }
-  .ac-sec__hint { font-size: 16px; }
+  .ac-sec__hint { font-size: var(--mk-fs-16); }
   .ac-cols__main { padding: 0; }
   .ac-cols__side { padding: 0; }
   .ac-sec__sub { font-size: 17px; }
   .ac-group__title { font-size: 17px; }
   .ac-groups { gap: 26px; padding: 8px 0 10px; }
   .ac-rel__note { font-size: 17.5px; }
-  .ac-health__row { grid-template-columns: 16px 310px 1fr auto auto; gap: 16px; padding: 13px 0; font-size: 18px; }
+  .ac-health__row { grid-template-columns: 16px 310px 1fr auto auto; gap: 16px; padding: 13px 0; font-size: var(--mk-fs-18); }
   .ac-health__head { grid-template-columns: 16px 310px 1fr auto auto; gap: 16px; padding: 7px 0 4px; font-size: 17px; }
   .ac-health__id,
   .ac-health__lat,

@@ -646,22 +646,22 @@ function goConfig() {
 @media (min-width: 2000px) {
   .mono { font-size: 13.5px; }
   .ac-mcp__row { padding: 12px 18px; }
-  .ac-mcp__main strong { font-size: 14px; }
-  .ac-mcp__id { font-size: 12px; }
-  .ac-mcp__type, .ac-mcp__endpoint { font-size: 12.5px; }
+  .ac-mcp__main strong { font-size: var(--mk-fs-14); }
+  .ac-mcp__id { font-size: var(--mk-fs-12); }
+  .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-12_5); }
 }
 @media (min-width: 2800px) {
   .mono { font-size: 15.5px; }
   .ac-mcp__row { padding: 14px 22px; }
-  .ac-mcp__main strong { font-size: 16px; }
-  .ac-mcp__id { font-size: 14px; }
+  .ac-mcp__main strong { font-size: var(--mk-fs-16); }
+  .ac-mcp__id { font-size: var(--mk-fs-14); }
   .ac-mcp__type, .ac-mcp__endpoint { font-size: 14.5px; }
 }
 @media (min-width: 3600px) {
-  .mono { font-size: 18px; }
+  .mono { font-size: var(--mk-fs-18); }
   .ac-mcp__row { padding: 16px 26px; }
   .ac-mcp__main strong { font-size: 18.5px; }
-  .ac-mcp__id { font-size: 16px; }
+  .ac-mcp__id { font-size: var(--mk-fs-16); }
   .ac-mcp__type, .ac-mcp__endpoint { font-size: 17px; }
 }
 

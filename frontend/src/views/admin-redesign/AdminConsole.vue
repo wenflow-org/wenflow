@@ -410,12 +410,12 @@ onMounted(() => {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15） ========== */
 @media (min-width: 2000px) {
-  .ac-boot { font-size: 16px; gap: 12px; }
+  .ac-boot { font-size: var(--mk-fs-16); gap: 12px; }
   .ac-boot .mk-spinner { width: 19px; height: 19px; border-width: 2.5px; }
   .ac-error__card { gap: 12px; padding: 38px 48px; border-radius: 19px; }
   .ac-error__card strong { font-size: 18.5px; }
-  .ac-error__card span { font-size: 15px; }
-  .ac-error__retry { margin-top: 7px; padding: 9px 24px; border-radius: 10px; font-size: 15px; }
+  .ac-error__card span { font-size: var(--mk-fs-15); }
+  .ac-error__retry { margin-top: 7px; padding: 9px 24px; border-radius: 10px; font-size: var(--mk-fs-15); }
 }
 @media (min-width: 2800px) {
   .ac-boot { font-size: 19px; gap: 14px; }

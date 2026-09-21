@@ -1055,14 +1055,14 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大 */
 @media (min-width: 2000px) {
-  .gc-facts span { font-size: 13px; }
+  .gc-facts span { font-size: var(--mk-fs-13); }
   .gc-facts strong { font-size: 14.5px; }
-  .gc-section h4 { font-size: 13px; }
+  .gc-section h4 { font-size: var(--mk-fs-13); }
   .gc-desc { font-size: 14.5px; }
-  .gc-msg { font-size: 14px; }
-  .gc-msg__role { font-size: 12.5px; }
-  .gc-json { font-size: 12.5px; }
-  .mk-btn--sm { font-size: 14px; }
+  .gc-msg { font-size: var(--mk-fs-14); }
+  .gc-msg__role { font-size: var(--mk-fs-12_5); }
+  .gc-json { font-size: var(--mk-fs-12_5); }
+  .mk-btn--sm { font-size: var(--mk-fs-14); }
 }
 @media (min-width: 2800px) {
   .gc-facts span { font-size: 15.5px; }
@@ -1070,16 +1070,16 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
   .gc-section h4 { font-size: 15.5px; }
   .gc-desc { font-size: 17px; }
   .gc-msg { font-size: 16.5px; }
-  .gc-msg__role { font-size: 15px; }
-  .gc-json { font-size: 15px; }
+  .gc-msg__role { font-size: var(--mk-fs-15); }
+  .gc-json { font-size: var(--mk-fs-15); }
   .mk-btn--sm { font-size: 16.5px; }
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-  .gc-facts span { font-size: 18px; }
-  .gc-facts strong { font-size: 20px; }
-  .gc-section h4 { font-size: 18px; }
-  .gc-desc { font-size: 20px; }
+  .gc-facts span { font-size: var(--mk-fs-18); }
+  .gc-facts strong { font-size: var(--mk-fs-20); }
+  .gc-section h4 { font-size: var(--mk-fs-18); }
+  .gc-desc { font-size: var(--mk-fs-20); }
   .gc-msg { font-size: 19.5px; }
   .gc-msg__role { font-size: 17.5px; }
   .gc-json { font-size: 17.5px; }

@@ -510,9 +510,9 @@ onMounted(() => {
 
 /* 4K：弹窗内容跟随全站节奏 */
 @media (min-width: 2000px) {
-  .ac-candidate strong { font-size: 14px; }
+  .ac-candidate strong { font-size: var(--mk-fs-14); }
   .ac-candidate { padding: 10px 12px; }
-  .ac-none { font-size: 14px; }
+  .ac-none { font-size: var(--mk-fs-14); }
 }
 @media (min-width: 2800px) {
   .ac-candidate strong { font-size: 16.5px; }

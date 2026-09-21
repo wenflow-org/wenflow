@@ -103,20 +103,20 @@ function confirm() {
 @media (min-width: 2000px) {
   .mk-confirm { width: min(500px, 100%); padding: 22px 24px 20px; }
   .mk-confirm__title { font-size: 17px; }
-  .mk-confirm__msg { font-size: 15px; }
-  .mk-confirm__input span { font-size: 14px; }
+  .mk-confirm__msg { font-size: var(--mk-fs-15); }
+  .mk-confirm__input span { font-size: var(--mk-fs-14); }
 }
 @media (min-width: 2800px) {
   .mk-confirm { width: min(600px, 100%); }
   .mk-confirm__title { font-size: 19.5px; }
   .mk-confirm__msg { font-size: 17.5px; }
-  .mk-confirm__input span { font-size: 16px; }
+  .mk-confirm__input span { font-size: var(--mk-fs-16); }
 }
 @media (min-width: 3600px) {
   /* 4K（确认框 Teleport 到 body，无 zoom）：加宽 + 字号继续放大 */
   .mk-confirm { width: min(700px, 100%); }
   .mk-confirm__title { font-size: 23px; }
-  .mk-confirm__msg { font-size: 20px; }
+  .mk-confirm__msg { font-size: var(--mk-fs-20); }
   .mk-confirm__input span { font-size: 18.5px; }
 }
 </style>

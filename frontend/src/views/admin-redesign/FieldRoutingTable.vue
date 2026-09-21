@@ -964,45 +964,45 @@ watch(() => props.stage, () => void loadStage());
 .frt__emptyrow { color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; padding: 14px; }
 
 @media (min-width: 2000px) {
-  .frt__toolbar-btn { font-size: 14px; padding: 10px 20px; }
+  .frt__toolbar-btn { font-size: var(--mk-fs-14); padding: 10px 20px; }
   .frt__toolbar-hint { font-size: 13.5px; }
   .frt__notice { font-size: 13.5px; padding: 9px 14px; }
-  .frt__legend-title { font-size: 12px; }
-  .frt__legend-loading { font-size: 13px; }
-  .frt__legend-en { font-size: 12px; }
+  .frt__legend-title { font-size: var(--mk-fs-12); }
+  .frt__legend-loading { font-size: var(--mk-fs-13); }
+  .frt__legend-en { font-size: var(--mk-fs-12); }
   .frt__legend-hint { font-size: 13.5px; }
-  .frt__legend-foot { font-size: 12px; }
-  .frt__legend-foot .mono { font-size: 12px; }
-  .frt__filter-count { font-size: 13px; }
+  .frt__legend-foot { font-size: var(--mk-fs-12); }
+  .frt__legend-foot .mono { font-size: var(--mk-fs-12); }
+  .frt__filter-count { font-size: var(--mk-fs-13); }
   .frt__orch-summary { font-size: 13.5px; }
   .frt__orch-textarea { font-size: 13.5px; padding: 14px; }
   .frt__orch-msg { font-size: 13.5px; }
-  .frt__orch-quick { font-size: 13px; }
+  .frt__orch-quick { font-size: var(--mk-fs-13); }
   .frt__agentdesc { font-size: 13.5px; }
-  .frt__agentcount { font-size: 12px; padding: 2px 11px; }
-  .frt__fieldpath { font-size: 12px; }
-  .frt__persist { font-size: 12px; }
+  .frt__agentcount { font-size: var(--mk-fs-12); padding: 2px 11px; }
+  .frt__fieldpath { font-size: var(--mk-fs-12); }
+  .frt__persist { font-size: var(--mk-fs-12); }
   }
 
 @media (min-width: 2800px) {
   .frt__toolbar-btn { font-size: 16.5px; padding: 12px 24px; }
-  .frt__toolbar-hint { font-size: 16px; }
-  .frt__notice { font-size: 16px; padding: 11px 17px; }
-  .frt__legend-title { font-size: 14px; }
+  .frt__toolbar-hint { font-size: var(--mk-fs-16); }
+  .frt__notice { font-size: var(--mk-fs-16); padding: 11px 17px; }
+  .frt__legend-title { font-size: var(--mk-fs-14); }
   .frt__legend-loading { font-size: 15.5px; }
-  .frt__legend-en { font-size: 14px; }
-  .frt__legend-hint { font-size: 16px; }
-  .frt__legend-foot { font-size: 14px; }
-  .frt__legend-foot .mono { font-size: 14px; }
+  .frt__legend-en { font-size: var(--mk-fs-14); }
+  .frt__legend-hint { font-size: var(--mk-fs-16); }
+  .frt__legend-foot { font-size: var(--mk-fs-14); }
+  .frt__legend-foot .mono { font-size: var(--mk-fs-14); }
   .frt__filter-count { font-size: 15.5px; }
-  .frt__orch-summary { font-size: 16px; }
-  .frt__orch-textarea { font-size: 16px; padding: 17px; }
-  .frt__orch-msg { font-size: 16px; }
+  .frt__orch-summary { font-size: var(--mk-fs-16); }
+  .frt__orch-textarea { font-size: var(--mk-fs-16); padding: 17px; }
+  .frt__orch-msg { font-size: var(--mk-fs-16); }
   .frt__orch-quick { font-size: 15.5px; }
-  .frt__agentdesc { font-size: 16px; }
-  .frt__agentcount { font-size: 14px; padding: 3px 13px; }
-  .frt__fieldpath { font-size: 14px; }
-  .frt__persist { font-size: 14px; }
+  .frt__agentdesc { font-size: var(--mk-fs-16); }
+  .frt__agentcount { font-size: var(--mk-fs-14); padding: 3px 13px; }
+  .frt__fieldpath { font-size: var(--mk-fs-14); }
+  .frt__persist { font-size: var(--mk-fs-14); }
 }
 
 /* ================= 暗色模式（D1 补完）：字段路由表 ================= */

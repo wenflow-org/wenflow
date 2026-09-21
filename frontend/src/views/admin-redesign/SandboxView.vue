@@ -201,23 +201,23 @@ onMounted(() => void loadSandboxView());
 
 @media (min-width: 2000px) {
   .sbx__agentdesc { font-size: 13.5px; }
-  .sbx__agentcount { font-size: 12px; padding: 2px 11px; }
-  .sbx__label { font-size: 12px; }
+  .sbx__agentcount { font-size: var(--mk-fs-12); padding: 2px 11px; }
+  .sbx__label { font-size: var(--mk-fs-12); }
   .sbx__list { padding: 9px 14px; }
   .sbx__li { font-size: 13.5px; }
-  .sbx__src { font-size: 12px; padding: 1px 10px; }
-  .sbx__handoff { font-size: 12px; padding: 1px 10px; }
+  .sbx__src { font-size: var(--mk-fs-12); padding: 1px 10px; }
+  .sbx__handoff { font-size: var(--mk-fs-12); padding: 1px 10px; }
   .sbx__empty { padding: 24px; }
 }
 
 @media (min-width: 2800px) {
-  .sbx__agentdesc { font-size: 16px; }
-  .sbx__agentcount { font-size: 14px; padding: 3px 13px; }
-  .sbx__label { font-size: 14px; }
+  .sbx__agentdesc { font-size: var(--mk-fs-16); }
+  .sbx__agentcount { font-size: var(--mk-fs-14); padding: 3px 13px; }
+  .sbx__label { font-size: var(--mk-fs-14); }
   .sbx__list { padding: 11px 17px; }
-  .sbx__li { font-size: 16px; }
-  .sbx__src { font-size: 14px; padding: 2px 12px; }
-  .sbx__handoff { font-size: 14px; padding: 2px 12px; }
+  .sbx__li { font-size: var(--mk-fs-16); }
+  .sbx__src { font-size: var(--mk-fs-14); padding: 2px 12px; }
+  .sbx__handoff { font-size: var(--mk-fs-14); padding: 2px 12px; }
   .sbx__empty { padding: 28px; }
 }
 
