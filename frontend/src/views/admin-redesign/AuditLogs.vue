@@ -82,36 +82,36 @@
       <div class="mk-table-scroll">
         <table class="mk-table mk-table--click mk-table--fixed">
           <colgroup>
-            <col v-if="!hiddenCols.has('time')" style="width:var(--mk-col-datetime)">
-            <col v-if="!hiddenCols.has('admin')" style="width:var(--mk-col-model-wide)">
-            <col v-if="!hiddenCols.has('action')" style="width:var(--mk-col-text)">
-            <col v-if="!noTargetTypes && !hiddenCols.has('tt')" style="width:var(--mk-col-model)">
-            <col v-if="!hiddenCols.has('target')" style="width:var(--mk-col-model-wide)">
-            <col v-if="!hiddenCols.has('result')" style="width:var(--mk-col-badge)">
-            <col v-if="!hiddenCols.has('ip')" style="width:var(--mk-col-model)">
+            <col v-if="colVisible('time')" style="width:var(--mk-col-datetime)">
+            <col v-if="colVisible('admin')" class="al-col-admin" style="width:var(--mk-col-model-wide)">
+            <col v-if="colVisible('action')" class="al-col-action" style="width:var(--mk-col-text)">
+            <col v-if="!noTargetTypes && colVisible('tt')" style="width:var(--mk-col-model)">
+            <col v-if="colVisible('target')" style="width:var(--mk-col-model-wide)">
+            <col v-if="colVisible('result')" style="width:var(--mk-col-badge)">
+            <col v-if="colVisible('ip')" style="width:var(--mk-col-model)">
             <col style="width:36px">
           </colgroup>
           <thead>
             <tr>
               <th
-                v-if="!hiddenCols.has('time')"
+                v-if="colVisible('time')"
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="alSortState('createdAt')"
                 @click="toggleAlSort('createdAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('createdAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!hiddenCols.has('admin')">操作者</th>
-              <th v-if="!hiddenCols.has('action')">动作</th>
-              <th v-if="!noTargetTypes && !hiddenCols.has('tt')" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</th>
-              <th v-if="!hiddenCols.has('target')">目标</th>
+              <th v-if="colVisible('admin')">操作者</th>
+              <th v-if="colVisible('action')">动作</th>
+              <th v-if="!noTargetTypes && colVisible('tt')" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</th>
+              <th v-if="colVisible('target')">目标</th>
               <th
-                v-if="!hiddenCols.has('result')"
+                v-if="colVisible('result')"
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="alSortState('success')"
                 @click="toggleAlSort('success')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('success')">结果<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!hiddenCols.has('ip')">IP</th>
+              <th v-if="colVisible('ip')">IP</th>
               <th class="mk-th--right" aria-hidden="true"></th>
             </tr>
           </thead>
@@ -124,11 +124,11 @@
                 :aria-controls="`audit-payload-${log.id}`"
                 @click="openId = openId === log.id ? '' : log.id"
               >
-                <td v-if="!hiddenCols.has('time')" class="log-time mono" :title="fmtFull(log.createdAt)">{{ fmtTime(log.createdAt) }}</td>
-                <td v-if="!hiddenCols.has('admin')" class="log-admin" :title="log.adminName || log.adminId || ''">
+                <td v-if="colVisible('time')" class="log-time mono" :title="fmtFull(log.createdAt)">{{ fmtTime(log.createdAt) }}</td>
+                <td v-if="colVisible('admin')" class="log-admin" :title="log.adminName || log.adminId || ''">
                   {{ log.adminName || (log.adminId ? shortId(log.adminId) : '—') }}
                 </td>
-                <td v-if="!hiddenCols.has('action')" :title="log.action">
+                <td v-if="colVisible('action')" :title="log.action">
                   <template v-if="methodOf(log)">
                     <span class="log-path mono" :title="`${methodOf(log)} ${log.path || ''}`">{{ actionLabelOf(log) }}</span>
                     <span class="log-action-sep" aria-hidden="true">·</span>
@@ -136,10 +136,10 @@
                   </template>
                   <span v-else class="log-action">{{ actionText(log.action) }}</span>
                 </td>
-                <td v-if="!noTargetTypes && !hiddenCols.has('tt')" class="log-tt" :title="log.targetType || '当前记录未写入目标类型'">{{ targetTypeText(log.targetType) }}</td>
-                <td v-if="!hiddenCols.has('target')" class="log-target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</td>
-                <td v-if="!hiddenCols.has('result')"><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
-                <td v-if="!hiddenCols.has('ip')" class="log-ip mono" :title="log.ip || ''">{{ ipText(log.ip) }}</td>
+                <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt" :title="log.targetType || '当前记录未写入目标类型'">{{ targetTypeText(log.targetType) }}</td>
+                <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</td>
+                <td v-if="colVisible('result')"><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
+                <td v-if="colVisible('ip')" class="log-ip mono" :title="log.ip || ''">{{ ipText(log.ip) }}</td>
                 <td class="mk-th--right log-arrow" aria-hidden="true">▸</td>
               </tr>
               <tr v-if="openId === log.id" class="log-payload-row">
@@ -271,6 +271,7 @@ import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
+import { useIsNarrow } from './useIsNarrow'
 import MkCols from '@/components/mk/MkCols.vue'
 import { actionText, targetTypeText, ipText, pathActionText } from './statusText'
 import { useTableSort } from './useTableSort'
@@ -381,8 +382,13 @@ const alColDefs = [
   { key: 'ip', label: 'IP', title: '来源 IP' },
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())
+/* 窄屏（≤720）：目标类型/目标/IP 次要列随 useIsNarrow 隐藏（colgroup/th/td 统一走 colVisible），
+   时间/操作者/动作/结果可完整放下，免 8 列横向滚动；行详情信息不丢 */
+const isNarrow = useIsNarrow()
+const MOBILE_HIDDEN_AL = new Set(['tt', 'target', 'ip'])
+const colVisible = (key: string) => !hiddenCols.value.has(key) && !(isNarrow.value && MOBILE_HIDDEN_AL.has(key))
 const visibleAlCols = computed(() => {
-  let n = alColDefs.filter((c) => !hiddenCols.value.has(c.key)).length
+  let n = alColDefs.filter((c) => colVisible(c.key)).length
   if (noTargetTypes.value) n -= 1 // 目标类型列自动隐藏
   return n + 1 // + 箭头列
 })
@@ -652,6 +658,13 @@ function goSessions(username: string) {
 /* 非 API 动作（中文标签）：中性蓝 chip */
 /* UI 复查 #11：操作列是末列，贴表格右缘过紧，补右留白 */
 .al-act { padding-right: 16px; }
+/* 窄屏（≤720，次要列已随 useIsNarrow 隐藏）：操作者/动作列收为弹性宽 + 单行截断
+   （全文在 title），固定列宽合计不再超出视口 → 免横向滚动 */
+@media (max-width: 720px) {
+  .al-col-admin, .al-col-action { width: auto !important; }
+  td.log-admin { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td .log-path { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+}
 
 .log-action {
   display: inline-block;

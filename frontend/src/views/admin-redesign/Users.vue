@@ -398,10 +398,17 @@ const ulColDefs = [
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())
 
-/* 移动端仅保留「名称 / 状态 / 操作」：隐藏勾选列与时间/等级等次要列，避免多列挤进横向滚动 */
+/* 移动端仅保留「名称 / 状态 / 操作」：隐藏勾选列与时间/等级等次要列，避免多列挤进横向滚动。
+   中屏（≤1320，覆盖最常见的 1280 笔记本减侧栏后的内容区）再收起「等级 / 注册时间」——
+   9 列全开时操作列会被截出可视区（1280 实测），优先保行内操作可达 */
 const isNarrow = useIsNarrow()
+const isMedium = useIsNarrow(1320)
 const MOBILE_HIDDEN_COLS = new Set(['check', 'role', 'level', 'created', 'lastlogin'])
-const showCol = (key: string) => !hiddenCols.value.has(key) && !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
+const MEDIUM_HIDDEN_COLS = new Set(['level', 'created'])
+const showCol = (key: string) =>
+  !hiddenCols.value.has(key) &&
+  !(isMedium.value && MEDIUM_HIDDEN_COLS.has(key)) &&
+  !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
 
 /** 真实用户数（排除测试/虚拟账号；口径标注用，与总览「总用户」对齐——列表已全量加载，仅超上限时截断） */
 const realUsers = computed(() => users.value.filter((u) => !u.deleted && !isTestAccountUser(u)).length)

@@ -72,22 +72,22 @@
       <div v-else-if="filtered.length" class="mk-table-scroll vl-table-scroll">
       <table class="mk-table mk-table--click mk-table--fixed">
         <colgroup>
-          <col v-if="isLive" style="width:32px">
+          <col v-if="isLive && !isNarrow" style="width:32px">
           <!-- 文本列（虚拟学习者 / 长期倾向）：auto 吸收列，共享剩余宽度；
                固定 token 只用于徽章/数字/时间/操作列。 -->
           <col style="width:var(--mk-col-text)">
-          <col style="width:var(--mk-col-text)">
-          <col style="width:var(--mk-col-badge)">
-          <col style="width:var(--mk-col-num)">
+          <col v-if="!isNarrow" style="width:var(--mk-col-text)">
+          <col v-if="!isNarrow" style="width:var(--mk-col-badge)">
+          <col v-if="!isNarrow" style="width:var(--mk-col-num)">
           <col style="width:var(--mk-col-flex-min)">
-          <col style="width:var(--mk-col-num)">
-          <col style="width:var(--mk-col-num)">
-          <col style="width:var(--mk-col-time-full)">
+          <col v-if="!isNarrow" style="width:var(--mk-col-num)">
+          <col v-if="!isNarrow" style="width:var(--mk-col-num)">
+          <col v-if="!isNarrow" style="width:var(--mk-col-time-full)">
           <col style="width:var(--mk-col-actions-wide)">
         </colgroup>
         <thead>
           <tr>
-            <th v-if="isLive" scope="col">
+            <th v-if="isLive && !isNarrow" scope="col">
               <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
             </th>
             <th
@@ -96,14 +96,16 @@
               :aria-sort="vlSortState('name')"
               @click="toggleVlSort('name')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('name')">虚拟学习者<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th>长期倾向</th>
+            <th v-if="!isNarrow">长期倾向</th>
             <th
+              v-if="!isNarrow"
               scope="col"
               class="mk-th--sortable"
               :aria-sort="vlSortState('story')"
               @click="toggleVlSort('story')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('story')">故事池<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
+              v-if="!isNarrow"
               scope="col"
               class="mk-th--right mk-th--sortable"
               title="累计会话数（全部会话，含终态）"
@@ -118,6 +120,7 @@
               @click="toggleVlSort('running')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('running')">进行中<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
+              v-if="!isNarrow"
               scope="col"
               class="mk-th--right mk-th--sortable"
               title="已失败/已终止会话数（全量聚合）"
@@ -125,6 +128,7 @@
               @click="toggleVlSort('failed')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('failed')">失败<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
+              v-if="!isNarrow"
               scope="col"
               class="mk-th--right mk-th--sortable"
               title="超过回收阈值无写入且无活跃租约的会话数（可在状态条一键回收）"
@@ -132,6 +136,7 @@
               @click="toggleVlSort('stalled')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('stalled')">卡死<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
+              v-if="!isNarrow"
               scope="col"
               class="mk-th--sortable"
               :aria-sort="vlSortState('created')"
@@ -142,7 +147,7 @@
         </thead>
         <tbody>
           <tr v-for="s in paged" :key="s.id" class="vl-row">
-            <td v-if="isLive"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
+            <td v-if="isLive && !isNarrow"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
             <td>
               <div class="mk-cell-main vl-cell vl-cell--click" role="button" tabindex="0" :title="`查看 ${s.name} 的画像：故事池 / 运行记录 / 会话控制`" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)">
                 <strong class="vl-name">
@@ -152,15 +157,15 @@
                 <span class="mk-cell-sub">{{ shortId(s.id) }}</span>
               </div>
             </td>
-            <td>
+            <td v-if="!isNarrow">
               <span class="vl-goal" :class="{ 'vl-goal--empty': !s.goal || s.goal === '—' }" :title="s.goal || undefined">{{ s.goal || '未设置' }}</span>
             </td>
-            <td>
+            <td v-if="!isNarrow">
               <span class="mk-badge" :class="s.storyCount > 0 ? 'mk-badge--ok' : 'mk-badge--muted'">
                 {{ s.storyCount > 0 ? `${s.storyCount} 条` : '未生成' }}
               </span>
             </td>
-            <td class="mk-num">{{ s.sessions }}</td>
+            <td v-if="!isNarrow" class="mk-num">{{ s.sessions }}</td>
             <td>
               <div class="vl-state-cell">
                 <template v-if="s.runningCount > 0 || (s.pausedCount ?? 0) > 0">
@@ -184,7 +189,7 @@
                 >模拟 第 {{ s.simulation.dayIndex }} 天</span>
               </div>
             </td>
-            <td class="mk-num">
+            <td v-if="!isNarrow" class="mk-num">
               <button
                 type="button"
                 class="vl-faillink mk-num"
@@ -193,11 +198,11 @@
                 @click.stop="openSubPage('virtual', s.id)"
               >{{ s.failedCount }}</button>
             </td>
-            <td class="mk-num">
+            <td v-if="!isNarrow" class="mk-num">
               <span v-if="s.stalledCount > 0" class="mk-badge mk-badge--sm mk-badge--bad" :title="`${s.stalledCount} 个进行中会话已卡死（超过回收阈值无写入），可在状态条一键回收`">卡死 {{ s.stalledCount }}</span>
               <span v-else class="mk-na" title="无卡死会话">—</span>
             </td>
-            <td class="mk-na">{{ s.created }}</td>
+            <td v-if="!isNarrow" class="mk-na">{{ s.created }}</td>
             <td>
               <div class="mk-actions mk-actions--left">
                 <!-- live：整行点击即进入画像详情，此处只留真正的行内操作（运行 / 测试 / 更多） -->
@@ -277,6 +282,7 @@ import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useRowMenu } from './useRowMenu'
+import { useIsNarrow } from './useIsNarrow'
 import { useSafePolling } from '@/composables/useSafePolling'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -443,6 +449,11 @@ function menuRemove(s: Sample) {
   closeMenu()
   void removeSample(s)
 }
+
+/* 窄屏（≤720）：10 列只保留「名称 / 进行中 / 操作」，次要列（勾选/倾向/故事池/会话/
+   失败/卡死/创建）随 useIsNarrow 隐藏——此前整表 860px 最小宽只能横向拖（vlab 大表
+   窄屏零降级问题）；行详情（画像页）信息不丢 */
+const isNarrow = useIsNarrow()
 
 /* ===== intent 快捷动作：直达并打开新建弹窗（子组件挂载后触发，保持深链行为） ===== */
 watch(
@@ -621,6 +632,10 @@ function openRunningSession(s: Sample) {
 .mk-actions .mk-icon-btn--text svg { width: 13px; height: 13px; }
 /* 窄屏表格：8 列在 704px 内容区会被压扁操作列，设 min-width 触发 .mk-table-scroll 横向滚动（对齐 AuditLogs 模式） */
 .mk-table-scroll .mk-table { min-width: 860px; }
+/* 窄屏（≤720）次要列已随 useIsNarrow 隐藏，仅剩 3 列可完整放下，不再强制最小宽 */
+@media (max-width: 720px) {
+  .mk-table-scroll .mk-table { min-width: 0; }
+}
 .vl-row { cursor: pointer; }
 /* 长期倾向列：单行截断 + title（原可换行撑高行，ADMIN_COLUMN_WIDTH_AUDIT ⑤）；空值统一「未设置」降噪 */
 .vl-goal {
