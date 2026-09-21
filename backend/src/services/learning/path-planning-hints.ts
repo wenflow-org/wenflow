@@ -388,6 +388,30 @@ export function derivePlanningHints(
     if (targetMilestones !== null) targetMilestones = Math.min(targetMilestones, cap.milestoneRange[1]);
   }
 
+  // ---- 用户承受力锚（2026-09-21 **数据定位**）：体量上界锚在"用户一次能承受多少" ----
+  // 实测（本地重放复现生产）：学时 = 段数 × 每段任务数(4–6) × 单任务分钟(37–45)，
+  // 与"这件事需要多久"无关 —— 一个 availableTime=minimal 的学习者被排了 **7.4 小时**。
+  // 因此：**时间极少 或 完全没有时长信号** ⇒ 一律收到"一节课"（最坏 60 分钟）。
+  // 其余情况不动（能力型 + 时间充裕者应保持长路径；这是判断，不是数据，留待后续验证）。
+  const hasAnyTimeSignal = Boolean(
+    normalizeString(timeHorizon)
+    || normalizeString(timeBudget)
+    || normalizeString(timePerSession)
+    || normalizeString(learnerLoadProfile?.availableTime)
+    || (timeDimensions && (timeDimensions.totalWeeks || timeDimensions.estimatedHours || timeDimensions.sessionsPerWeek)),
+  );
+  const availabilityText = normalizeString(learnerLoadProfile?.availableTime);
+  const isTightAvailabilitySignal = availabilityText ? isMinimalAvailabilitySignal(availabilityText) : false;
+  if (isTightAvailabilitySignal || !hasAnyTimeSignal) {
+    const cap = ONE_SITTING_BOUNDS;
+    milestoneRange = [...cap.milestoneRange];
+    conceptRange = [...cap.conceptRange];
+    subtasksPerStageRange = [...cap.subtasksPerStageRange];
+    subtaskMinutesRange = [...cap.subtaskMinutesRange];
+    maxWeeks = Math.min(maxWeeks, cap.maxWeeks);
+    if (targetMilestones !== null) targetMilestones = Math.min(targetMilestones, cap.milestoneRange[1]);
+  }
+
   // 方案乙：区间即权威（不再塌成点）。确保「建议值」落在区间内，供提示词引用时不自相矛盾。
   // 出口不变量（2026-09-21）：**里程碑区间永不为单点**——两端一旦相等，validator 会退化成
   //   「精确校验」，数量就被代码拍死（这才是体量塌缩的真正机制，而不是"收得小"）。
