@@ -4,11 +4,13 @@
  * 数据源: subtasks(任务) × teaching_sessions(status=completed,全量 messages/wrapup/knowledgeState)
  */
 import {
-  qa, q, log, arg, accounts, writeLessonReport, pathSnapshot, runState, now,
+  qa, q, log, arg, accounts, pathSnapshot, runState, now, writeLessonReport,
 } from './lib.mjs';
 
 const RUN = arg('run', 'A1');
-const acct = accounts().A;
+const which = arg('user', 'A');
+const acct = accounts()[which];
+if (!acct) { log('accounts.json 无该用户: ' + which); process.exit(1); }
 const sinceIso = runState(RUN).startedAt;
 
 const snap = pathSnapshot(acct.userId, sinceIso);
