@@ -10,6 +10,7 @@
 import systemPrisma from '../config/system-database';
 import { AVAILABLE_MODELS, MODEL_ALIASES, MODEL_MAP, getModelAliasMembers } from '../config/models.config';
 import { selectModelForAlias } from '../gateway/api-gateway/model-alias';
+import { MAX_MODEL_CANDIDATES } from '../gateway/api-gateway/executor';
 import { listCoolingDowns, type CooldownSnapshot } from '../gateway/api-gateway/deployment-health';
 
 export interface ModelRegistryOverview {
@@ -51,7 +52,13 @@ export interface ModelRegistryOverview {
     defaultReasoningModelResolved: string | null;
     defaultReasoningModelSource: 'alias' | 'concrete' | 'unset';
   };
-  fallbackChains: Array<{ model: string; fallbacks: string[] }>;
+  fallbackChains: Array<{
+    model: string;
+    fallbacks: string[];
+    effectiveFallbacks: string[];
+    truncated: boolean;
+  }>;
+  runtime: { maxModelCandidates: number };
   cooldowns: CooldownSnapshot[];
   /** 配置漂移 / 待清理项 */
   warnings: string[];
@@ -133,9 +140,18 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     description: model.description
   }));
 
+  // 运行时有效链:executor 只允许主模型 + 1 跳 fallback(MAX_MODEL_CANDIDATES),
+  // 声明链更长也只生效前 N 个候选——展示层必须与运行时一致,避免「看着 3 层保险实际 1 层」
+  const runtimeMaxCandidates = MAX_MODEL_CANDIDATES;
   const fallbackChains = models
     .filter((model) => model.fallbacks.length > 0)
-    .map((model) => ({ model: model.id, fallbacks: model.fallbacks }));
+    .map((model) => ({
+      model: model.id,
+      fallbacks: model.fallbacks,
+      effectiveFallbacks: model.fallbacks.slice(0, Math.max(0, runtimeMaxCandidates - 1)),
+      truncated: model.fallbacks.length > runtimeMaxCandidates - 1
+    }));
+  const runtime = { maxModelCandidates: runtimeMaxCandidates };
 
   // 未被任何别名引用的模型（提示：可能已下线或漏配别名）
   const referenced = new Set(aliases.flatMap((item) => item.members));
@@ -172,6 +188,7 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
       defaultReasoningModelSource: reasoningModel ? (reasoningSelection ? 'alias' : 'concrete') : 'unset'
     },
     fallbackChains,
+    runtime,
     cooldowns: listCoolingDowns(),
     warnings,
     deprecatedPromptModelCount

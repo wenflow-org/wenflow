@@ -178,8 +178,13 @@ export class APIRouter {
         ? 'platform'
         : inheritedRoute.source;
 
+      // 平台别名覆盖是全局的模型身份重映射:skill 显式模型同样生效(此前仅平台默认路由生效)
+      const platformRecord = await this.getPlatformConfigRecord();
+      const overrides = platformRecord ? this.platformAliasOverrides(platformRecord) : null;
       const model = config.model
-        ? (isReasoning ? this.resolveReasoningModel(config.model) : this.resolveModel(config.model))
+        ? (isReasoning
+          ? this.resolveReasoningModel(config.model, overrides)
+          : this.resolveModel(config.model, overrides))
         : inheritedRoute.model;
 
       return {
@@ -240,7 +245,10 @@ export class APIRouter {
         apiKey: customEndpoint
           ? customApiKey
           : this.resolvePlatformApiKey(platformConfig, platformConfig?.apiUrl || this.resolveBaseEndpoint()),
-        model: this.resolveModel(config.model || platformConfig?.defaultModel),
+        model: this.resolveModel(
+          config.model || platformConfig?.defaultModel,
+          platformConfig ? this.platformAliasOverrides(platformConfig) : null
+        ),
         thinkingMode: 'default',
         reasoningEffort: 'default',
         temperature: config.temperature ?? platformConfig?.defaultTemperature ?? 0.7,
@@ -279,6 +287,7 @@ export class APIRouter {
         providerId: `user-provider:${userId}`,
         endpoint: config.endpoint,
         apiKey: decryptSecret(config.apiKey, USER_KEY_CONTEXT) || '',
+        // 用户自有 provider:模型身份是用户自己的供应商空间,不套平台别名覆盖(有意豁免)
         model: this.resolveModel(config.chatModel),
         reasoningModel: config.reasoningModel ? this.resolveModel(config.reasoningModel) : undefined,
         thinkingMode: 'default',
@@ -333,6 +342,9 @@ export class APIRouter {
         defaultMaxTokens: true,
         reasoningEndpoint: true,
         lightEndpoint: true,
+        chatModels: true,
+        reasoningModels: true,
+        lightModels: true,
       }
     });
   }
@@ -381,9 +393,10 @@ export class APIRouter {
           : '')
       : this.resolvePlatformApiKey(platformConfig, inheritedEndpoint);
 
+    const overrides = platformConfig ? this.platformAliasOverrides(platformConfig) : null;
     const model = isReasoning
-      ? this.resolveReasoningModel(config.model || platformConfig?.defaultReasoningModel)
-      : this.resolveModel(config.model || platformConfig?.defaultModel);
+      ? this.resolveReasoningModel(config.model || platformConfig?.defaultReasoningModel, overrides)
+      : this.resolveModel(config.model || platformConfig?.defaultModel, overrides);
 
     return {
       providerId: `agent:${agentId}`,

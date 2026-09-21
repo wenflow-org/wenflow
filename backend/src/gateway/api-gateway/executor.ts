@@ -32,7 +32,8 @@ const STREAM_IDLE_TIMEOUT_MS = 60_000;
 /** 流式响应累计字节上限 */
 const STREAM_MAX_RESPONSE_BYTES = 20 * 1024 * 1024;
 /** 降级链最多候选数（主模型 + N 个 fallback），用于限制质量漂移与成本（见 §4.5） */
-const MAX_MODEL_CANDIDATES = 2;
+/** 运行时模型候选上限（含主模型）：fallback 链超过部分静默截断，registry 据此展示有效链 */
+export const MAX_MODEL_CANDIDATES = 2;
 
 interface RequestResult {
   response: ChatResponse;

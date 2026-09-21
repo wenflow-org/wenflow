@@ -1139,6 +1139,8 @@ router.get('/agents/logs/:id', async (req: Request, res: Response) => {
       data: {
         log: {
           ...log,
+          // 降级来源透出(fallbackFrom 此前只写不读):主模型重试耗尽后实际切换到的来源模型
+          fallbackFrom: typeof logMetadata.fallbackFrom === 'string' ? logMetadata.fallbackFrom : null,
           input: inputInfo.value,
           output: outputInfo.value,
           inputTruncated: inputInfo.truncated,

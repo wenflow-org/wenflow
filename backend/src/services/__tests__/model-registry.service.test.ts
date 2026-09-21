@@ -93,10 +93,12 @@ describe('model-registry.service（只读总览）', () => {
     expect(flash.limits.maxOutputTokens).toBe(131072)
     expect(flash.limits.defaultMaxTokens).toBe(32768)
     expect(flash.fallbacks).toEqual(['agnes-3.0-flash'])
+    // 运行时有效链:MAX_MODEL_CANDIDATES=2(主模型+1 跳),展示与执行语义一致
     expect(overview.fallbackChains).toEqual([
-      { model: 'deepseek-v4-flash', fallbacks: ['agnes-3.0-flash'] },
-      { model: 'deepseek-v4-pro', fallbacks: ['deepseek-v4-flash'] }
+      { model: 'deepseek-v4-flash', fallbacks: ['agnes-3.0-flash'], effectiveFallbacks: ['agnes-3.0-flash'], truncated: false },
+      { model: 'deepseek-v4-pro', fallbacks: ['deepseek-v4-flash'], effectiveFallbacks: ['deepseek-v4-flash'], truncated: false }
     ])
+    expect(overview.runtime).toEqual({ maxModelCandidates: 2 })
   })
 
   it('暴露当前冷却中的部署', async () => {
