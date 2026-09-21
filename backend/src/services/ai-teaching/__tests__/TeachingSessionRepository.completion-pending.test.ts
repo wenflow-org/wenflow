@@ -2,7 +2,11 @@ const mockFindMany = jest.fn();
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
-  default: { teaching_sessions: { findMany: mockFindMany } }
+  default: {
+    teaching_sessions: { findMany: mockFindMany },
+    // 消息子表（水合）：测试用例列内容为空数组、侧表无行 → 懒水合不命中
+    teaching_session_messages: { findMany: jest.fn(async () => []) }
+  }
 }));
 
 jest.mock('../../../utils/logger', () => ({

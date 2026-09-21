@@ -501,6 +501,7 @@ model teaching_sessions {
   updatedAt               DateTime  @default(now())
   users                   users     @relation(fields: [userId], references: [id], onDelete: Cascade)
   finalizationOperations  session_finalization_operations[]
+  messageRows             teaching_session_messages[]
 
   @@index([userId, taskId, status])
   @@index([status, updatedAt])
@@ -511,6 +512,21 @@ model teaching_sessions {
   @@index([userId, createdAt])
   @@index([startTime])
   @@index([learningPathId])
+}
+
+/// 教学会话消息子表（大 JSON 增量化 #2，见 doc/SESSION_JSON_INCREMENTAL_DESIGN.md）：
+/// 每回合 INSERT 新增行（O(新增)）替代 messages 列整包写回（O(全量)）。
+/// 双读过渡：侧表有行即权威；旧会话回退解析 messages 列，首次写惰性播种后列置 null。
+/// 并发：claim 返回侧表行数作快照基线，commit 校验基线后仅落新增（替代整包覆写的
+/// last-write-wins 语义）。
+model teaching_session_messages {
+  id        Int      @id @default(autoincrement())
+  sessionId String
+  payload   String
+  createdAt DateTime @default(now())
+  teaching_sessions teaching_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, id])
 }
 
 model session_finalization_operations {

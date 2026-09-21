@@ -759,6 +759,7 @@ export async function processStudentMessage(
 
     await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
       messages: persistedMessages,
+      messagesBaseCount: operationClaim.messagesBaseCount,
       knowledgeState: mergedKnowledge,
       teachingState,
       taskId: session.taskId,

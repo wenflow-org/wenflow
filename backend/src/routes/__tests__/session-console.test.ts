@@ -8,6 +8,8 @@
 
 const mockPrisma = {
   teaching_sessions: { findUnique: jest.fn(), findMany: jest.fn() },
+  // 消息子表（水合）：侧表无行 → 旧会话回退读列，测试用列数据不受影响
+  teaching_session_messages: { findMany: jest.fn().mockResolvedValue([]) },
   goal_conversations: { findUnique: jest.fn(), findFirst: jest.fn() },
   learning_paths: { findUnique: jest.fn() },
   milestones: { findMany: jest.fn() },

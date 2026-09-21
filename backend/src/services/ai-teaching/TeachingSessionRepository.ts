@@ -2,6 +2,13 @@ import { randomUUID } from 'crypto';
 import prisma from '../../config/database';
 import { withTransaction } from '../../utils/with-transaction';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
+import {
+  commitTeachingMessages,
+  hydrateTeachingSessionMessages,
+  appendTeachingMessages,
+  TeachingMessageBaseStaleError,
+  type TeachingMessageStoreClient
+} from './teaching-session-message-store';
 import type { DurableDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
 import {
@@ -116,6 +123,8 @@ export interface TeachingSessionRecord {
 export interface TeachingSessionOperationClaim {
   operationId: string;
   session: TeachingSessionRecord;
+  /** 消息快照基线（水合后的权威消息条数）：commit 校验后仅落 slice(baseCount) 新增 */
+  messagesBaseCount: number;
 }
 
 export interface TeachingLearningStateCommit {
@@ -186,6 +195,23 @@ function mapRecord(record: any): TeachingSessionRecord {
 
 function buildOpenKey(userId: string, taskId: string): string {
   return `${userId}:${taskId}`;
+}
+
+/**
+ * 行 → 记录 + 消息子表水合（大 JSON 增量化 #2）。
+ * - 单会话读点（getById/claim）：始终水合——claim 的快照基线必须取自权威侧表；
+ * - 列表读点（listByUser 等）：懒规则（列解析为空才查侧表），省 N×1 查询。
+ * 旧会话（列有内容、侧表无行）解析结果即权威，行为与子表化前一致。
+ */
+async function mapRecordHydrated(
+  record: any,
+  options: { lazy?: boolean } = {}
+): Promise<TeachingSessionRecord> {
+  const session = mapRecord(record);
+  if (!options.lazy || session.messages.length === 0) {
+    await hydrateTeachingSessionMessages(session);
+  }
+  return session;
 }
 
 function isUniqueConstraintError(error: unknown): boolean {
@@ -261,7 +287,7 @@ export class TeachingSessionRepository {
             && (recoveryExpired || initializingLeaseExpired || finalizationFailedRecoverable || failedRecoverable);
 
           if (!canSupersede) {
-            return { session: mapRecord(existing), created: false, operationId: null };
+            return { session: await mapRecordHydrated(existing, { lazy: true }), created: false, operationId: null };
           }
 
           const superseded = await tx.teaching_sessions.updateMany({
@@ -311,13 +337,13 @@ export class TeachingSessionRepository {
           }
         });
 
-        return { session: mapRecord(record), created: true, operationId };
+        return { session: await mapRecordHydrated(record, { lazy: true }), created: true, operationId };
       });
     } catch (error) {
       if (!isUniqueConstraintError(error)) throw error;
       const existing = await prisma.teaching_sessions.findUnique({ where: { openKey } });
       if (!existing) throw error;
-      return { session: mapRecord(existing), created: false, operationId: null };
+      return { session: await mapRecordHydrated(existing, { lazy: true }), created: false, operationId: null };
     }
   }
 
@@ -379,7 +405,8 @@ export class TeachingSessionRepository {
       where: { id: sessionId }
     });
 
-    return record ? mapRecord(record) : null;
+    // 始终水合：claim 的消息快照基线必须取自权威侧表
+    return record ? mapRecordHydrated(record) : null;
   }
 
   async assertOwnership(sessionId: string, userId: string): Promise<TeachingSessionRecord> {
@@ -403,7 +430,7 @@ export class TeachingSessionRepository {
       orderBy: { startTime: 'desc' }
     });
 
-    return record ? mapRecord(record) : null;
+    return record ? mapRecordHydrated(record, { lazy: true }) : null;
   }
 
   async getRecoverableByTask(
@@ -423,7 +450,7 @@ export class TeachingSessionRepository {
       orderBy: { updatedAt: 'desc' },
     });
 
-    return record ? mapRecord(record) : null;
+    return record ? mapRecordHydrated(record, { lazy: true }) : null;
   }
 
   async claimOperation(
@@ -466,7 +493,7 @@ export class TeachingSessionRepository {
 
     const session = await this.getById(sessionId);
     if (!session) throw new Error('会话不存在或已结束');
-    return { operationId, session };
+    return { operationId, session, messagesBaseCount: session.messages.length };
   }
 
   async releaseOperation(sessionId: string, operationId: string): Promise<void> {
@@ -522,7 +549,7 @@ export class TeachingSessionRepository {
       take: 5
     });
     for (const record of records) {
-      const session = mapRecord(record);
+      const session = await mapRecordHydrated(record, { lazy: true });
       const artifacts = (session.teachingState as Record<string, any> | null)?.sessionArtifacts;
       const finalization = getSessionFinalizationState(session.teachingState);
       if (artifacts?.endReason === 'task-completed' && finalization?.taskCompletion !== 'completed') {
@@ -542,7 +569,7 @@ export class TeachingSessionRepository {
       where: { userId, taskId, ...(status ? { status } : {}) },
       orderBy: { updatedAt: 'desc' }
     });
-    return record ? mapRecord(record) : null;
+    return record ? mapRecordHydrated(record, { lazy: true }) : null;
   }
 
   async listByUser(userId: string, limit: number = 50): Promise<TeachingSessionRecord[]> {
@@ -554,7 +581,7 @@ export class TeachingSessionRepository {
       take: limit,
     });
 
-    return records.map(mapRecord);
+    return Promise.all(records.map((record) => mapRecordHydrated(record, { lazy: true })));
   }
 
   async commitTurnState(
@@ -562,6 +589,8 @@ export class TeachingSessionRepository {
     operationId: string,
     payload: {
       messages: TeachingSessionMessage[];
+      /** 消息快照基线（claim 时侧表行数）：校验一致后仅落 slice(baseCount) 的新增 */
+      messagesBaseCount: number;
       knowledgeState: TeachingKnowledgePointState[];
       teachingState?: Record<string, any> | null;
       taskId?: string;
@@ -581,7 +610,6 @@ export class TeachingSessionRepository {
           status: 'active',
           endTime: null,
           duration: null,
-          messages: JSON.stringify(payload.messages),
           knowledgeState: JSON.stringify(payload.knowledgeState),
           teachingState: payload.teachingState === undefined
             ? undefined
@@ -595,6 +623,22 @@ export class TeachingSessionRepository {
       });
       if (updated.count !== 1) {
         throw new TeachingSessionConflictError('课堂状态已变化，本次结果未覆盖新状态', 'TEACHING_SESSION_STATE_CHANGED');
+      }
+
+      // 消息增量落子表（大 JSON 增量化 #2）：基线一致才 INSERT slice(baseCount)，
+      // 替代旧「整包覆写」的 last-write-wins；基线漂移按可重试冲突拒绝
+      try {
+        await commitTeachingMessages(
+          sessionId,
+          payload.messagesBaseCount,
+          payload.messages,
+          tx as unknown as TeachingMessageStoreClient
+        );
+      } catch (error) {
+        if (error instanceof TeachingMessageBaseStaleError) {
+          throw new TeachingSessionConflictError('课堂消息已变化，请刷新后重试', 'TEACHING_MESSAGE_BASE_STALE');
+        }
+        throw error;
       }
 
       if (payload.markTaskInProgress && payload.taskId && payload.userId) {
@@ -616,11 +660,12 @@ export class TeachingSessionRepository {
   /**
    * 追加伴学对话消息（revision 乐观锁）：不参与教学回合的 knowledgeState/teachingState 变更，
    * 仅在 active/timeout 会话上生效，避免与 commitTurnState 并发覆盖。
+   * 消息进子表（首写惰性播种旧列），行更新不再整包重写 messages 列。
    */
   async appendPeerMessages(sessionId: string, messages: TeachingSessionMessage[]): Promise<void> {
     const session = await prisma.teaching_sessions.findUnique({
       where: { id: sessionId },
-      select: { messages: true, revision: true, status: true, operationId: true }
+      select: { revision: true, status: true, operationId: true }
     });
     if (!session) {
       throw new Error('会话不存在或已结束');
@@ -628,22 +673,23 @@ export class TeachingSessionRepository {
     if (session.status !== 'active' && session.status !== 'timeout') {
       throw new TeachingSessionConflictError('课堂已结束，无法继续伴学对话', 'TEACHING_SESSION_STATE_CHANGED');
     }
-    // 教学回合在途（operationId 非空）：commitTurnState 会用回合开始时快照整包覆写 messages，
-    // 此时写入会被静默覆盖丢失——拒绝并让客户端重试（回合提交后 revision 变更，重试自然通过）。
+    // 教学回合在途（operationId 非空）：commitTurnState 会带回合快照基线落增量，
+    // 此时插入新行会破坏基线对账——拒绝并让客户端重试（回合提交后 revision 变更，重试自然通过）。
     if (session.operationId) {
       throw new TeachingSessionConflictError('教学回合进行中，伴学消息稍后重试', 'TEACHING_TURN_IN_PROGRESS');
     }
-    const current: TeachingSessionMessage[] = JSON.parse(session.messages || '[]');
-    const updated = await prisma.teaching_sessions.updateMany({
-      where: { id: sessionId, revision: session.revision, status: { in: ['active', 'timeout'] } },
-      data: {
-        messages: JSON.stringify([...current, ...messages]),
-        updatedAt: new Date()
+    await withTransaction(async (tx) => {
+      await appendTeachingMessages(sessionId, messages, tx as unknown as TeachingMessageStoreClient);
+      const updated = await tx.teaching_sessions.updateMany({
+        where: { id: sessionId, revision: session.revision, status: { in: ['active', 'timeout'] } },
+        data: {
+          updatedAt: new Date()
+        }
+      });
+      if (updated.count !== 1) {
+        throw new TeachingSessionConflictError('课堂状态已变化，伴学消息未保存', 'TEACHING_SESSION_STATE_CHANGED');
       }
     });
-    if (updated.count !== 1) {
-      throw new TeachingSessionConflictError('课堂状态已变化，伴学消息未保存', 'TEACHING_SESSION_STATE_CHANGED');
-    }
   }
 
   async commitLifecycleState(
@@ -694,7 +740,7 @@ export class TeachingSessionRepository {
     return withTransaction(async (tx) => {
       const currentRecord = await tx.teaching_sessions.findUnique({ where: { id: sessionId } });
       if (!currentRecord) throw new Error('会话不存在或已结束');
-      const current = mapRecord(currentRecord);
+      const current = await mapRecordHydrated(currentRecord, { lazy: true });
       const existingOperation = await tx.session_finalization_operations.findUnique({
         where: { sessionId_idempotencyKey: { sessionId, idempotencyKey } }
       });
@@ -887,7 +933,7 @@ export class TeachingSessionRepository {
         status: 'claimed' as const,
         operationId: idempotencyKey,
         leaseOwner,
-        session: mapRecord(claimedRecord)
+        session: await mapRecordHydrated(claimedRecord, { lazy: true })
       };
     });
   }
@@ -943,7 +989,7 @@ export class TeachingSessionRepository {
     await withTransaction(async (tx) => {
       const currentRecord = await tx.teaching_sessions.findUnique({ where: { id: sessionId } });
       if (!currentRecord || currentRecord.operationId !== leaseOwner) return;
-      const current = mapRecord(currentRecord);
+      const current = await mapRecordHydrated(currentRecord, { lazy: true });
       const step = action === 'complete_task'
         ? 'taskCompletion'
         : action === 'complete_review' ? 'reviewCompletion' : 'sessionClosure';
@@ -1030,7 +1076,7 @@ export class TeachingSessionRepository {
       ) {
         throw new FinalizationOperationError('课堂完成执行租约已失效', 'FINALIZATION_LEASE_LOST', 409, true, 'lease');
       }
-      const current = mapRecord(currentRecord);
+      const current = await mapRecordHydrated(currentRecord, { lazy: true });
       const step = action === 'complete_task' ? 'taskCompletion' : 'reviewCompletion';
       const teachingState = updateSessionFinalizationState(
         current.teachingState,
@@ -1082,7 +1128,7 @@ export class TeachingSessionRepository {
       }
       const updatedSession = await tx.teaching_sessions.findUnique({ where: { id: sessionId } });
       if (!updatedSession) throw new Error('会话不存在');
-      return mapRecord(updatedSession);
+      return mapRecordHydrated(updatedSession, { lazy: true });
     });
   }
 
@@ -1236,7 +1282,7 @@ export class TeachingSessionRepository {
         if (claimed.count !== 1) return false;
         const sessionRecord = await tx.teaching_sessions.findUnique({ where: { id: operation.sessionId } });
         if (!sessionRecord || sessionRecord.operationId !== operation.leaseOwner) return true;
-        const session = mapRecord(sessionRecord);
+        const session = await mapRecordHydrated(sessionRecord, { lazy: true });
         const step = operation.action === 'complete_task'
           ? 'taskCompletion'
           : operation.action === 'complete_review' ? 'reviewCompletion' : 'sessionClosure';

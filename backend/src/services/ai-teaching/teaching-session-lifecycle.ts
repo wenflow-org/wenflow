@@ -397,6 +397,7 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
 
       await teachingSessionRepository.commitTurnState(previousSession.id, claim.operationId, {
         messages: previousSession.messages,
+        messagesBaseCount: claim.messagesBaseCount,
         knowledgeState: resumedKnowledgeState,
         teachingState: resumedTeachingState,
         allowedStatuses: ['active', 'paused', 'timeout']

@@ -16,6 +16,7 @@ import {
   findGoalConversationWithUser,
 } from '../../services/admin/session-console.repo';
 import { logger } from '../../utils/logger';
+import { hydrateTeachingSessionMessages } from '../../services/ai-teaching/teaching-session-message-store';
 
 const router = Router();
 
@@ -289,6 +290,8 @@ function buildTimeline(params: {
 
 /** teaching_sessions → 控制台同构载荷 */
 async function buildTeachingConsole(session: any) {
+  // 消息子表水合：侧表权威的会话覆写内存 messages 字段（旧会话原样读列）
+  await hydrateTeachingSessionMessages(session);
   const [goalConversation, path, evidence, task] = await Promise.all([
     session.learningPathId
       ? findLatestGoalConversationByPathId(session.learningPathId)
@@ -423,6 +426,7 @@ async function buildGoalConsole(conversation: any) {
 
   const pathView = path ? await resolvePathView(path) : null;
   const latestTeaching = teachingSessions[0] || null;
+  if (latestTeaching) await hydrateTeachingSessionMessages(latestTeaching);
   const messages = latestTeaching ? teachingMessages(latestTeaching.messages) : [];
   const wrapup = latestTeaching ? wrapupView(latestTeaching.wrapup) : null;
   const stage = conversation.stage || null;

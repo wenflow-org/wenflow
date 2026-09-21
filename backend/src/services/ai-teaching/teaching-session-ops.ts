@@ -143,6 +143,7 @@ export async function submitCheckpoint(
       teachingState.checkpointHistory = history.slice(-20);
       await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
         messages: session.messages,
+        messagesBaseCount: operationClaim.messagesBaseCount,
         knowledgeState: session.knowledgeState,
         teachingState,
         taskId: session.taskId,
