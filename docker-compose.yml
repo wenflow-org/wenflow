@@ -51,6 +51,12 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    # production 下 winston 同时写 stdout,不配上限 json-file 驱动会无限增长
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/readyz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 10s
@@ -73,6 +79,11 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
     networks:
       proxy:

@@ -69,8 +69,10 @@ export function createHttpApp({ lifecycle, readinessService }: HttpAppDeps): exp
   };
   app.use(cors(corsOptions));
 
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  // 请求体上限:默认 100kb 会把长文本导入/批量接口/大 prompt 编辑等正常 JSON 拒之门外(413);
+  // 与 nginx 层 client_max_body_size 2m 对齐
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '2mb' }));
   app.use(cookieParser());
 
   // HTTP 请求日志（dev 调试用，debug 级别；不记录 body，仅 method/path/status/耗时）
