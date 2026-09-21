@@ -938,8 +938,12 @@ async function runBatch() {
     })
     const data = res.data?.data ?? res.data
     const summary = data?.summary || {}
+    const skipped = Array.isArray(data?.skipped) ? data.skipped : []
     toast.close(busy)
     toast.success(`批量完成：${summary.passedCount ?? 0}/${summary.totalRuns ?? 0} 通过（${summary.passRate ?? 0}%）`)
+    if (skipped.length) {
+      toast.info(`跳过 ${skipped.length} 个用例：${skipped.map((s: any) => s.reason).join('；')}`, 0)
+    }
     void reloadRuns()
   } catch (e) {
     toast.close(busy)

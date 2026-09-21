@@ -786,27 +786,13 @@ router.post('/run-eval', async (req: Request, res: Response) => {
       });
     }
 
-    // ---- 虚拟学习者模拟输入展开（expectations.mode === 'simulated'）----
-    const simConfigs: Array<SimEvalConfig | null> = evalCases.map((c) => extractSimConfig(c.expectations));
-    const simInputs: Array<{ learner: any; story: any } | null> = [];
-    for (let ci = 0; ci < evalCases.length; ci += 1) {
-      const sim = simConfigs[ci];
-      if (!sim) {
-        simInputs.push(null);
-        continue;
-      }
-      const input = await resolveSimulatedEvalInput({
-        personaId: sim.personaId,
-        scenario: sim.scenario,
-      });
-      // 用模拟出的学生诉求替换首条 user 消息
-      const firstUser = evalCases[ci].messages.find((m: any) => m.role === 'user');
-      if (firstUser) firstUser.content = input.demandText;
-      else evalCases[ci].messages.unshift({ role: 'user', content: input.demandText });
-      evalCases[ci].expectations = { ...(evalCases[ci].expectations || {}), ...sim };
-      simInputs.push({ learner: input.learner, story: input.story });
-    }
-
+    // ---- 虚拟学习者模拟输入展开 ----
+    // 单用例输入解析失败（如引用的模拟学习者已被删除）→ 跳过该用例并在
+    // skipped 中报告，不让整批失败（2026-09-22 交互走查发现的功能故障）
+    const { keptCases, keptSimConfigs: simConfigs, keptSimInputs: simInputs, skipped: skippedCases } =
+      await partitionSimulatedEvalCases(evalCases, resolveSimulatedEvalInput);
+    evalCases.length = 0;
+    evalCases.push(...keptCases);
     const repeatCount = Math.max(1, Math.min(5, Number(body.repeatCount || 1)));
     const startedAt = Date.now();
     const results: any[] = [];
@@ -1019,6 +1005,7 @@ router.post('/run-eval', async (req: Request, res: Response) => {
         runId: runRecord.id,
         summary,
         results,
+        skipped: skippedCases,
       },
     });
   } catch (error: any) {
@@ -1222,6 +1209,64 @@ async function resolveSimulatedEvalInput(sim: {
     demandText: demand.text,
     source: demand.source || 'scenario',
   };
+}
+
+export interface SimulatedEvalPartition<TCase> {
+  keptCases: TCase[];
+  /** 与 keptCases 下标一一对应 */
+  keptSimConfigs: Array<SimEvalConfig | null>;
+  keptSimInputs: Array<{ learner: any; story: any } | null>;
+  skipped: Array<{ caseId: string; caseName: string; reason: string }>;
+}
+
+/**
+ * 批量评估的模拟输入展开：逐用例解析模拟输入，单用例失败（典型：引用的
+ * 模拟学习者已被删除）→ 跳过该用例并记入 skipped，不让整批失败。
+ * keptSimConfigs / keptSimInputs 与 keptCases 下标一一对应。
+ */
+export async function partitionSimulatedEvalCases<TCase extends {
+  id: string;
+  name: string;
+  messages: any[];
+  expectations: any;
+}>(
+  cases: TCase[],
+  resolveInput: (sim: { personaId?: string; scenario?: string }) => Promise<{
+    learner: any;
+    story: any;
+    demandText: string;
+    source: string;
+  }>,
+): Promise<SimulatedEvalPartition<TCase>> {
+  const keptCases: TCase[] = [];
+  const keptSimConfigs: Array<SimEvalConfig | null> = [];
+  const keptSimInputs: Array<{ learner: any; story: any } | null> = [];
+  const skipped: Array<{ caseId: string; caseName: string; reason: string }> = [];
+
+  for (let ci = 0; ci < cases.length; ci += 1) {
+    const item = cases[ci];
+    const sim = extractSimConfig(item.expectations);
+    if (!sim) {
+      keptCases.push(item);
+      keptSimConfigs.push(null);
+      keptSimInputs.push(null);
+      continue;
+    }
+    try {
+      const input = await resolveInput({ personaId: sim.personaId, scenario: sim.scenario });
+      // 用模拟出的学生诉求替换首条 user 消息
+      const firstUser = item.messages.find((m: any) => m.role === 'user');
+      if (firstUser) firstUser.content = input.demandText;
+      else item.messages.unshift({ role: 'user', content: input.demandText });
+      item.expectations = { ...(item.expectations || {}), ...sim };
+      keptCases.push(item);
+      keptSimConfigs.push(sim);
+      keptSimInputs.push({ learner: input.learner, story: input.story });
+    } catch (e: any) {
+      skipped.push({ caseId: item.id, caseName: item.name, reason: e?.message || '模拟输入解析失败' });
+    }
+  }
+  return { keptCases, keptSimConfigs, keptSimInputs, skipped };
 }
 
 /** goal-conversation 的字段检查（既有逻辑提取，供单轮/多轮共用） */
