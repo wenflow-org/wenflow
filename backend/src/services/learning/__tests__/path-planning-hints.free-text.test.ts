@@ -302,18 +302,33 @@ describe('缺陷修复：学时未知时每阶段任务数不再落到 1', () =>
 });
 
 describe('可选负荷画像 learnerLoadProfile（加性参数，不传零差异）', () => {
-  it('紧预算 + 极低耐受 → 收紧里程碑数 / 单任务分钟 / 周期 / 每阶段任务数', () => {
+  it('紧预算 + 极低耐受 → 只收紧**资源**（单任务分钟/周期/任务密度）；里程碑数不受认知负荷影响', () => {
     const tightened = derivePlanningHints(
       '三个月', null, null, null, ['S1', 'S2', 'S3'], null, 'medium',
       { availableTime: 'minimal', loadTolerance: '信息一多就容易乱，三步以上就放弃' }
     );
-    expect(tightened.targetMilestones).toBe(2);
-    expect(tightened.milestoneRange).toEqual([2, 2]);
+    // 2026-09-21：认知负荷退出里程碑数（结构归 LLM 与学习证据）——边界只由 scope/pace 给。
+    expect(tightened.targetMilestones).toBe(3);
+    expect(tightened.milestoneRange).toEqual([3, 8]); // scope=medium 下界 3；pace=extended 上界 8
+    expect(tightened.milestoneRange[0]).not.toBe(tightened.milestoneRange[1]);
     expect(tightened.subtaskMinutesRange).toEqual([30, 45]);
     expect(tightened.maxWeeks).toBe(2);
-    // medium 下界本就是 3；低耐受把上界从 5 收到 3
+    // medium 下界本就是 3；低耐受把上界从 5 收到 3（任务密度属"强度"，仍由负荷管）
     expect(tightened.subtasksPerStageRange).toEqual([3, 3]);
     expect(tightened.targetSubtasksPerStage).toBe(3);
+  });
+
+  it('回归：认知负荷**不参与**里程碑数——minimal 与「不传画像」的区间/建议值完全一致，且区间不为单点', () => {
+    const stages = ['S1', 'S2', 'S3', 'S4', 'S5'];
+    const base = derivePlanningHints('三个月', null, null, null, stages, null, null, null);
+    const minimal = derivePlanningHints('三个月', null, null, null, stages, null, null, { availableTime: 'minimal' });
+    expect(minimal.milestoneRange).toEqual(base.milestoneRange);
+    expect(minimal.targetMilestones).toBe(base.targetMilestones);
+    expect(minimal.milestoneRange).toEqual([2, 8]);
+    expect(minimal.milestoneRange[0]).not.toBe(minimal.milestoneRange[1]); // 单点 ⇒ 数量被代码拍死
+    // 资源仍被收紧（这才是认知负荷该管的东西）
+    expect(minimal.maxWeeks).toBeLessThan(base.maxWeeks);
+    expect(minimal.subtaskMinutesRange[1]).toBeLessThanOrEqual(45);
   });
 
   it('碎片化节奏（per_day）在传入负荷画像时也触发收紧', () => {

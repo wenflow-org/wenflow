@@ -60,8 +60,10 @@ describe('normalizeLearnerLoadProfile / resolveLearnerLoadProfileFromCollectedDa
     expect(profile).not.toBeNull();
 
     const tightened = computeHints(profile);
-    expect(tightened.targetMilestones).toBeLessThanOrEqual(2);
-    expect(tightened.milestoneRange[1]).toBeLessThanOrEqual(2);
+    // 2026-09-21：认知负荷**不参与里程碑数**（结构归 LLM 与学习证据）；资源仍被收紧。
+    const baseline = computeHints(null);
+    expect(tightened.milestoneRange).toEqual(baseline.milestoneRange);
+    expect(tightened.milestoneRange[0]).not.toBe(tightened.milestoneRange[1]); // 单点 ⇒ validator 退化为精确校验
     expect(tightened.maxWeeks).toBeLessThanOrEqual(2);
     expect(tightened.subtaskMinutesRange[1]).toBeLessThanOrEqual(45);
 

@@ -51,11 +51,19 @@ function isMinimalAvailabilitySignal(value: string): boolean {
   return /(minimal|very\s*low|几乎没有|极少|很少|碎片|零碎|不固定|不稳定|抽不出|时间紧|紧张|有限)/.test(text);
 }
 
-/** 认知负荷耐受是否极低：能识别"关页面/合电脑/三步以上就放弃/信息一多"这类信号。 */
+/**
+ * 认知负荷耐受是否低（决定资源收紧）。
+ * **等级枚举优先**（2026-09-21 起生成器产出 low|normal|high）；老数据（散文）退化到关键词表兜底
+ * ——该表实测漏判 47%，只作兼容，不再承载新数据。
+ */
 function isLowLoadToleranceSignal(value: string): boolean {
   const text = value.trim();
   if (!text) return false;
-  if (/^(low|very\s*low|低|极低)$/i.test(text)) return true;
+  const level = /^(low|低|极低)/i.test(text) ? 'low'
+    : /^(high|高)/i.test(text) ? 'high'
+    : /^(normal|中)/i.test(text) ? 'normal'
+    : null;
+  if (level) return level === 'low';
   return /(关(掉|闭)?\s*页面|合(上)?\s*电脑|三步以上|超过三步|信息一多|一多就|太长|看不下去|坐不住|坚持不了|容易放弃|轻言放弃|分心|浮躁|耐受(很|较|非常)?低|承载(很|较|非常)?低)/.test(text);
 }
 
@@ -284,9 +292,11 @@ export function derivePlanningHints(
     const isLowTolerance = loadToleranceText ? isLowLoadToleranceSignal(loadToleranceText) : false;
 
     if (isTightAvailability || isFragmentedCadence || isLowTolerance) {
-      // 里程碑上界 ≤2
-      milestoneRange = [Math.min(milestoneRange[0], 2), Math.min(milestoneRange[1], 2)];
-      if (targetMilestones !== null) targetMilestones = Math.min(targetMilestones, 2);
+      // 里程碑数：**认知负荷不参与**（2026-09-21 定）。
+      //   「这人该分几步」是**结构判断**，归 LLM（问题语义）+ 学习证据；认知负荷管的是
+      //   「一次能学多久、多密」——只收紧下面的**资源**。历史教训：这里曾把区间压成 [2,2]，
+      //   区间两端相等 ⇒ validator 退化成精确校验 ⇒ 数量被代码拍死（275 例实测 46% 命中，
+      //   且被拍的全部恰好 2 段）。边界仍由 scope/pace 给（见上），防膨胀不靠这一层。
       // 单任务分钟上界 ≤45
       subtaskMinutesRange = [Math.min(subtaskMinutesRange[0], 45), Math.min(subtaskMinutesRange[1], 45)];
       // 周期上界 ≤2 周
@@ -301,10 +311,13 @@ export function derivePlanningHints(
   }
 
   // 方案乙：区间即权威（不再塌成点）。确保「建议值」落在区间内，供提示词引用时不自相矛盾。
-  const effectiveMilestoneRange: [number, number] = [
-    Math.min(milestoneRange[0], targetMilestones ?? milestoneRange[0]),
-    Math.max(milestoneRange[1], targetMilestones ?? milestoneRange[1]),
-  ];
+  // 出口不变量（2026-09-21）：**里程碑区间永不为单点**——两端一旦相等，validator 会退化成
+  //   「精确校验」，数量就被代码拍死（这才是体量塌缩的真正机制，而不是"收得小"）。
+  //   任何分支的意外塌缩（含今后新增的收紧）都在这里兜住，不必逐个分支打补丁。
+  const hintedMilestoneTarget = targetMilestones ?? milestoneRange[0];
+  const milestoneLo = Math.min(milestoneRange[0], hintedMilestoneTarget);
+  const milestoneHi = Math.max(milestoneRange[1], hintedMilestoneTarget);
+  const effectiveMilestoneRange: [number, number] = [milestoneLo, Math.max(milestoneLo + 1, milestoneHi)];
 
   // 强制每阶段子任务数量：总学时 ÷ 里程碑数 ÷ 每任务约 1 小时 → 每阶段任务目标。
   // 总学时 fallback 链（goal 数值推断产出率极低，必须有多级信号兜底，保证总能算出确定值）：
