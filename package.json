@@ -26,6 +26,8 @@
     "permissions:repair": "npm --prefix backend run permissions:repair",
     "database:backup:create": "npm run build:backend && npm --prefix backend run database:backup:create --",
     "database:backup:verify": "npm run build:backend && npm --prefix backend run database:backup:verify --",
+    "database:vacuum:status": "npm run build:backend && npm --prefix backend run database:vacuum:status",
+    "database:vacuum": "npm run build:backend && npm --prefix backend run database:vacuum --",
     "test": "npm --prefix backend run test:ci",
     "test:coverage": "npm --prefix backend run test:coverage",
     "typecheck:backend": "npm --prefix backend run typecheck",

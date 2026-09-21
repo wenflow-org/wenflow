@@ -24,6 +24,8 @@
     "permissions:repair": "ts-node src/scripts/audit-sensitive-storage.ts --apply",
     "database:backup:create": "node dist/operations/database-backup.cli.js create",
     "database:backup:verify": "node dist/operations/database-backup.cli.js verify",
+    "database:vacuum:status": "node dist/operations/database-vacuum.cli.js status",
+    "database:vacuum": "node dist/operations/database-vacuum.cli.js vacuum --confirm-quiesced",
     "prompts:sync": "npm run runtime:validate && ts-node src/scripts/ensure-core-agent-prompts.ts --sync",
     "prompts:bootstrap": "npm run runtime:validate && ts-node src/scripts/ensure-core-agent-prompts.ts --bootstrap",
     "prompts:backfill-core": "npm run runtime:validate && ts-node src/scripts/ensure-core-agent-prompts.ts --backfill",
