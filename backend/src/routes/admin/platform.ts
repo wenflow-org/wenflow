@@ -20,7 +20,7 @@ import {
   getPlatformReliabilitySettings,
   getReliabilityHardLimits,
   updatePlatformReliabilitySettings
-} from '../../services/reliability-settings.service';
+, isFallbackEffectivelyDisabled } from '../../services/reliability-settings.service';
 import { applyRpmLimitsFromSettings } from '../../services/rpm-limit-config.service';
 import {
   getPlatformCapabilityProbeEnabled,
@@ -973,7 +973,21 @@ router.get('/settings/reliability', async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
     const settings = await getPlatformReliabilitySettings();
-    res.json({ success: true, data: { settings, hardLimits: getReliabilityHardLimits() } });
+    // 降级有效性派生值:当前重试配置下 fallback 是否永不触发(executor 降级守卫语义)
+    const fallbackDisabled = isFallbackEffectivelyDisabled(settings.maxUpstreamAttempts, settings.maxTransportRetries);
+    res.json({
+      success: true,
+      data: {
+        settings,
+        hardLimits: getReliabilityHardLimits(),
+        derived: {
+          fallbackDisabled,
+          ...(fallbackDisabled
+            ? { reason: '降级要求「1 + 传输重试 < 上游最大尝试」,当前配置下模型降级永远不会触发' }
+            : {})
+        }
+      }
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { message: error.message || '获取 AI 可靠性设置失败' } });
   }
@@ -1023,7 +1037,15 @@ router.put('/settings/reliability', async (req: Request, res: Response) => {
     }
     const settings = await updatePlatformReliabilitySettings(input);
     await applyRpmLimitsFromSettings().catch(() => undefined);
-    res.json({ success: true, data: { settings, hardLimits: getReliabilityHardLimits() } });
+    // 配置可保存,但若会使降级永不触发,必须显式告警而非静默(前端 reliability PUT 响应展示)
+    const fallbackDisabled = isFallbackEffectivelyDisabled(settings.maxUpstreamAttempts, settings.maxTransportRetries);
+    const warnings = fallbackDisabled
+      ? ['当前「上游最大尝试 / 传输重试」组合下,模型降级永远不会触发(要求 1 + 传输重试 < 上游最大尝试)。如需保留降级能力请调整后重新保存。']
+      : [];
+    if (fallbackDisabled) {
+      logger.warn('[admin-platform] 可靠性配置使模型降级失效', { ...settings });
+    }
+    res.json({ success: true, data: { settings, hardLimits: getReliabilityHardLimits(), warnings } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { message: error.message || '更新 AI 可靠性设置失败' } });
   }

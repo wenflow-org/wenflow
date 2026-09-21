@@ -174,3 +174,13 @@ export async function getEffectiveLogicalRetryLimit(
 export function getReliabilityHardLimits() {
   return RETRY_BUDGET_HARD_LIMITS;
 }
+
+/**
+ * 模型降级有效性(executor 降级守卫的配置面显式化):
+ * fallback 仅在「主候选重试耗尽后仍有剩余上游预算」时触发,即
+ * 1 + maxTransportRetries < maxUpstreamAttempts(首次尝试不计传输重试)。
+ * 不满足时降级被静默跳过——管理端必须把这一点讲清楚而不是让链路默默失效。
+ */
+export function isFallbackEffectivelyDisabled(maxUpstreamAttempts: number, maxTransportRetries: number): boolean {
+  return maxUpstreamAttempts <= 1 || 1 + maxTransportRetries >= maxUpstreamAttempts;
+}

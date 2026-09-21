@@ -58,7 +58,7 @@ export interface ModelRegistryOverview {
     effectiveFallbacks: string[];
     truncated: boolean;
   }>;
-  runtime: { maxModelCandidates: number };
+  runtime: { maxModelCandidates: number; fallbackSwapsModelOnly: boolean };
   cooldowns: CooldownSnapshot[];
   /** 配置漂移 / 待清理项 */
   warnings: string[];
@@ -151,7 +151,18 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
       effectiveFallbacks: model.fallbacks.slice(0, Math.max(0, runtimeMaxCandidates - 1)),
       truncated: model.fallbacks.length > runtimeMaxCandidates - 1
     }));
-  const runtime = { maxModelCandidates: runtimeMaxCandidates };
+  // 降级语义:仅切换模型名,网关与密钥沿用主调用(单网关拓扑下正确;多网关需候选自带部署)
+  const runtime = { maxModelCandidates: runtimeMaxCandidates, fallbackSwapsModelOnly: true as const };
+
+  // 跨 provider 降级链提示:降级不换网关/密钥,跨 provider 链只在单网关拓扑下可用
+  for (const model of AVAILABLE_MODELS) {
+    for (const target of model.fallbacks ?? []) {
+      const targetModel = AVAILABLE_MODELS.find((item) => item.id === target);
+      if (targetModel && targetModel.provider !== model.provider) {
+        warnings.push(`模型「${model.id}」的降级目标「${target}」属于不同 provider（${model.provider} → ${targetModel.provider}）。降级仅切换模型名、网关与密钥沿用主调用：单网关拓扑下可用，多网关部署时该链不可用。`);
+      }
+    }
+  }
 
   // 未被任何别名引用的模型（提示：可能已下线或漏配别名）
   const referenced = new Set(aliases.flatMap((item) => item.members));
@@ -160,6 +171,14 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
       warnings.push(`模型「${model.id}」未被任何别名引用（只能通过具体 id 使用）。`);
     }
   }
+
+  // 隐藏真源可见性:agent 级覆盖优先于平台默认路由,遗留行会让平台级模型切换对部分 agent 失效
+  try {
+    const agentOverrideCount = await systemPrisma.agent_model_configs.count({ where: { enabled: true } });
+    if (agentOverrideCount > 0) {
+      warnings.push(`${agentOverrideCount} 个 agent 存在模型级覆盖（agent_model_configs，优先级高于平台默认路由）。若平台默认模型切换未生效，请先检查这些覆盖。`);
+    }
+  } catch { /* 总览是诊断页:统计失败不阻塞其余信息 */ }
 
   let deprecatedPromptModelCount = 0;
   try {

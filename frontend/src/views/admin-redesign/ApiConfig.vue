@@ -380,6 +380,7 @@
           <div class="ac-groups">
             <div v-if="reliability" class="ac-group">
               <div class="ac-group__title">重试与超时</div>
+              <div v-if="fallbackDisabled" class="ac-keyhint">⚠ 当前配置下「模型降级」永远不会触发:降级要求「1 + 传输重试 &lt; 上游最大尝试」。如需保留降级能力,请增大上游最大尝试或减小传输重试。</div>
               <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">上游最大尝试</span>
@@ -488,8 +489,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { dataSource, isLive } from './store'
 import Addons from './Addons.vue'
 import ModelRegistryOverview from './ModelRegistryOverview.vue'
@@ -776,6 +777,16 @@ function limMin(field: string, fallback: number): number {
   return Number(reliabilityLimits.value?.[field] ?? fallback)
 }
 
+/** 当前重试配置下模型降级是否永不触发(executor 守卫语义:1 + 传输重试 < 上游最大尝试) */
+const fallbackDisabled = computed(() => {
+  const r = reliability.value
+  if (!r) return false
+  const upstream = Number(r.maxUpstreamAttempts)
+  const transport = Number(r.maxTransportRetries)
+  if (!Number.isInteger(upstream) || !Number.isInteger(transport)) return false
+  return upstream <= 1 || 1 + transport >= upstream
+})
+
 async function loadReliability() {
   try {
     const res = await adminPlatformSettingsApi.getReliabilitySettings()
@@ -857,14 +868,44 @@ function applyLiveConfig() {
 
 watch(
   () => [dataSource.value, cfg.value] as const,
-  () => {
-    applyLiveConfig()
+  async () => {
+    // 全局刷新/数据源切换会用新配置覆盖表单:有未保存修改时先确认,拒绝则保留表单仅刷新后台状态
+    if (dirty.value.size > 0) {
+      const ok = await askConfirm({
+        title: '丢弃未保存的配置修改?',
+        message: `配置数据已刷新,继续将覆盖以下未保存的修改:${[...dirty.value].join(' / ')}。`,
+        confirmText: '覆盖'
+      })
+      if (ok) applyLiveConfig()
+    } else {
+      applyLiveConfig()
+    }
     if (!reliability.value) void loadReliability()
     if (!probe.loaded) void loadProbe()
     void loadHealth()
   },
   { immediate: true, deep: true }
 )
+
+// 路由离开守卫:与其他管理页(SkillDesignPage)同款,未保存修改不静默丢失
+onBeforeRouteLeave(async () => {
+  if (dirty.value.size === 0) return true
+  const ok = await askConfirm({
+    title: '有未保存的配置修改',
+    message: `尚未保存的域:${[...dirty.value].join(' / ')}。离开将丢弃这些修改,确认离开?`,
+    confirmText: '丢弃并离开'
+  })
+  return ok === true
+})
+
+function onBeforeUnloadHandler(e: BeforeUnloadEvent) {
+  if (dirty.value.size > 0) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+window.addEventListener('beforeunload', onBeforeUnloadHandler)
+onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnloadHandler))
 
 const models = computed(() => fetchedModels.value)
 

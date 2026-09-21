@@ -7,7 +7,8 @@ import { isExtraCapabilitySkill } from './skill-component-catalog';
 import { decryptSecret, encryptSecret } from '../utils/secret-crypto';
 
 const SECRET_CONTEXT = 'system.skill_model_configs.apiKey';
-const MAX_SKILL_REQUEST_TIMEOUT_MS = 300_000;
+// 与路由读取上限对齐(router 解析 requestTimeoutMs 上限 600s;此前写 300 读 600,skill 永远配不出平台默认的 10 分钟)
+const MAX_SKILL_REQUEST_TIMEOUT_MS = 600_000;
 
 function normalizeRequestTimeoutMs(value: number | null | undefined): number | null | undefined {
   if (value == null) return value;
@@ -123,6 +124,9 @@ class SkillModelConfigService {
           lastCalledAt: skill.lastCalledAt || null,
           thinkingMode: persisted.thinkingMode || 'default',
           reasoningEffort: persisted.reasoningEffort || 'default',
+          // temperature/maxTokens 为僵尸列(写路径已剥离、运行时不读),不再回显以免误导
+          temperature: undefined,
+          maxTokens: undefined,
         };
       }));
 

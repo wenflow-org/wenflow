@@ -78,7 +78,7 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">模型能力与限额</h3>
-          <span class="mk-card__meta">唯一写源 = 后端代码注册表（models.config.ts）；此表只读</span>
+          <span class="mk-card__meta">唯一写源 = 后端代码注册表（models.config.ts）；此表只读。降级仅切换模型名，网关与密钥沿用主调用</span>
         </div>
         <div class="mk-table-scroll">
           <table class="mk-table mk-table--dense">
@@ -209,7 +209,7 @@ interface ModelRegistryOverviewData {
     effectiveFallbacks: string[]
     truncated: boolean
   }>
-  runtime?: { maxModelCandidates: number }
+  runtime?: { maxModelCandidates: number; fallbackSwapsModelOnly: boolean }
   cooldowns: Array<{ key: string; providerId: string; endpoint: string; model: string; remainingMs: number }>
   warnings: string[]
   deprecatedPromptModelCount: number

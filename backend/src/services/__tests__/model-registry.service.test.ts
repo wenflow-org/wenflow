@@ -98,7 +98,7 @@ describe('model-registry.service（只读总览）', () => {
       { model: 'deepseek-v4-flash', fallbacks: ['agnes-3.0-flash'], effectiveFallbacks: ['agnes-3.0-flash'], truncated: false },
       { model: 'deepseek-v4-pro', fallbacks: ['deepseek-v4-flash'], effectiveFallbacks: ['deepseek-v4-flash'], truncated: false }
     ])
-    expect(overview.runtime).toEqual({ maxModelCandidates: 2 })
+    expect(overview.runtime).toEqual({ maxModelCandidates: 2, fallbackSwapsModelOnly: true })
   })
 
   it('暴露当前冷却中的部署', async () => {
