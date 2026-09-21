@@ -18,13 +18,10 @@
       </span>
     </div>
 
-    <p v-if="!embedded" class="pw-lead">编辑与发布在 Skill 设计页的「协议」页签；「新建 Skill」生成骨架（core.yaml + 技能登记册条目 + 编排契约 + handler 占位）。</p>
-
-
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">核心文件</h3>
-        <span class="mk-card__meta">{{ cores.length }} 个</span>
+        <span class="mk-card__meta">编辑与发布在 Skill 设计页「协议」页签；「新建 Skill」生成骨架（core.yaml + 技能登记册条目 + 编排契约 + handler 占位）</span>
       </div>
       <div class="mk-table-scroll">
       <!-- 首载骨架屏（对齐全站「骨架替代空白」约定；此前整表无占位） -->
@@ -368,12 +365,6 @@ onMounted(async () => {
 <style scoped>
 .pw-ok { color: var(--mk-green, #15803d); }
 .pw-warn { color: var(--mk-amber, #b45309); }
-.pw-lead {
-  margin: 0;
-  font-size: var(--mk-fs-12_5);
-  color: var(--mk-faint, #8492ab);
-  line-height: 1.7;
-}
 .pw-hash { font-size: var(--mk-fs-11); }
 .mk-table--click tbody tr { cursor: pointer; }
 .sc-result__section { margin-top: 14px; }.sc-result__title { display: block; font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-muted, #5b6577); margin-bottom: 6px; }
@@ -448,17 +439,14 @@ onMounted(async () => {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .pw-lead { font-size: 14px; }
-  .pw-hash { font-size: 12.5px; }
+    .pw-hash { font-size: 12.5px; }
 }
 @media (min-width: 2800px) {
-  .pw-lead { font-size: 15.5px; }
-  .pw-hash { font-size: 14px; }
+    .pw-hash { font-size: 14px; }
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：字号继续放大，与表格正文对齐 */
-  .pw-lead { font-size: 18px; }
-  .pw-hash { font-size: 16.5px; }
+    .pw-hash { font-size: 16.5px; }
 }
 
 /* ================= 暗色模式（D1 补完）：Skill 工作台 ================= */

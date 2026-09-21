@@ -284,7 +284,7 @@
             <h3 class="mk-card__title">记忆痕迹与保持率（FSRS）</h3>
             <button type="button" class="mk-link" @click="goMemoryReview">记忆与复习 →</button>
           </div>
-          <table class="ld-mt">
+          <table class="mk-table">
             <thead>
               <tr><th>概念</th><th>掌握度</th><th>稳定性（天）</th><th>难度</th><th>保持率</th><th>到期</th></tr>
             </thead>
@@ -1484,11 +1484,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-kv__row span { color: var(--mk-faint); }
 .ld-kv__row strong { font-weight: 600; white-space: pre-wrap; }
 
-.ld-mt { width: 100%; border-collapse: collapse; font-size: var(--mk-fs-12); }
-.ld-mt th, .ld-mt td { padding: 8px 16px; text-align: left; border-bottom: 1px solid #f0f2f5; }
-.ld-mt th { color: var(--mk-faint); font-weight: 600; }
-.ld-mt td { font-variant-numeric: tabular-nums; }
-.ld-mt tr:last-child td { border-bottom: none; }
+
 .ld-mt--low { color: #d64545; font-weight: 700; }
 .ld-mt--mid { color: #b98900; font-weight: 600; }
 .ld-mt--high { color: #2f9e44; font-weight: 600; }
@@ -1809,8 +1805,6 @@ html[data-theme='dark'] {
   .ld-trend__bar--down { background: linear-gradient(90deg, #b91c1c, #7f1d1d); }
   .ld-bar__ev { background: #232f45; }
   .ld-kv__row,
-  .ld-mt th,
-  .ld-mt td { border-bottom-color: #232f45; }
   /* 滚动条 */
   .ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #33415c; }
   /* 补漏：操作提示标签/概念 chip/置信条/加载分段 */

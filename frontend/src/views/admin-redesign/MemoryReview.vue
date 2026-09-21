@@ -15,7 +15,7 @@
          （原 lead / 筛选行 / 指标条三段裸露在页面背景上，与全站卡片风格不符） -->
     <div class="mk-card">
       <div class="mk-card__head">
-        <strong>观测概览</strong>
+        <h3 class="mk-card__title">观测概览</h3>
         <span class="mk-card__meta">
           记忆层（用户级、跨 path）：到期积压 · 课内温故配额 · 概念归并审计；归并默认<strong>观察模式</strong>，只记录建议，不动 memory_traces
         </span>
@@ -30,11 +30,12 @@
 
     <div class="mk-card">
       <div class="mk-card__head">
-        <strong>用户列表</strong>
+        <h3 class="mk-card__title">用户列表</h3>
         <span class="mk-card__meta">按痕迹数倒序 · 前 {{ rows.length }} 个用户</span>
       </div>
       <p v-if="error" class="mr__error">{{ error }}</p>
-      <MkEmptyState v-if="!loading && !rows.length" title="暂无记忆痕迹数据" />
+      <MockSkeletonTable v-if="loading && !rows.length" :cols="6" :rows="8" />
+      <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" />
       <div v-else class="mk-table-scroll">
       <table class="mk-table">
         <thead>
@@ -82,7 +83,7 @@
     <div v-if="detail" class="mr__detail">
       <div class="mk-card">
         <div class="mk-card__head">
-          <strong>明细 · {{ detail.user.name || '未命名' }}</strong>
+          <h3 class="mk-card__title">明细 · {{ detail.user.name || '未命名' }}</h3>
           <span class="mk-card__meta">
             痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} ·
             同族重复 {{ detail.summary.duplicatedFamilies }} 组 / {{ detail.summary.duplicatedTraces }} 条 ·
@@ -160,7 +161,7 @@
 
       <div class="mk-card">
         <div class="mk-card__head">
-          <strong>概念归并审计</strong>
+          <h3 class="mk-card__title">概念归并审计</h3>
           <span class="mk-card__meta">
             <template v-if="detail.audit">
               {{ detail.audit.mode }} 模式 · {{ timeAgo(detail.audit.generatedAt) }} ·
@@ -277,6 +278,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { adminMemoryReviewApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkStatStrip from '@/components/mk/MkStatStrip.vue'
+import MockSkeletonTable from './SkeletonTable.vue'
 import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
