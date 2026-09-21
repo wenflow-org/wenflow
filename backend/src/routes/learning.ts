@@ -706,7 +706,7 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
 //   - 有已完成任务（completed，无 in_progress）→ 收敛为重设计当前活动阶段（replan-stage），
 //     补充说明作为 reason 传给 stage-designer，已完成任务保留冻结
 //   - 有 in_progress 任务或未结束课堂 → 409 拦截，提示先结束课堂
-router.post('/paths/:pathId/regenerate', async (req, res, next) => {
+router.post('/paths/:pathId/regenerate', llmGenerateUserLimiter, async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { pathId } = req.params;
@@ -878,7 +878,7 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
 });
 
 // 预留：基于已学内容重调路径（当前仅返回占位结果）
-router.post('/paths/:pathId/replan', async (req, res, next) => {
+router.post('/paths/:pathId/replan', llmGenerateUserLimiter, async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { pathId } = req.params;
@@ -1073,7 +1073,7 @@ router.get('/tasks/:taskId', async (req, res, next) => {
   }
 });
 
-router.post('/paths/:pathId/retry-stage-design', async (req, res, next) => {
+router.post('/paths/:pathId/retry-stage-design', llmGenerateUserLimiter, async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { pathId } = req.params;
