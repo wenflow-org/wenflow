@@ -641,10 +641,43 @@ const sourceFailed = ref<Record<string, boolean>>({
   review: false,
   week: false
 });
+/**
+ * SWR 快照（模块级，跨导航存活）：进入学习台先立即渲染上一次数据（无骨架屏），
+ * 随后静默刷新；月历仅在快照与当前月份一致时才复用，避免闪现错月数据。
+ */
+function buildDashboardSnapshot() {
+  return {
+    stats: stats.value,
+    paths: paths.value,
+    sessions: sessions.value,
+    achievements: achievements.value,
+    reviewDue: reviewDue.value,
+    reviewPlan: reviewPlan.value,
+    todaySchedule: todaySchedule.value,
+    monthCursor: { ...monthCursor.value }
+  };
+}
+let dashboardSnapshot: ReturnType<typeof buildDashboardSnapshot> | null = null;
+
 async function loadAll() {
-  loading.value = true;
-  loadError.value = false;
-  sourceFailed.value = { budget: false, review: false, week: false };
+  const snap = dashboardSnapshot;
+  const sameMonth = !!snap
+    && snap.monthCursor.year === monthCursor.value.year
+    && snap.monthCursor.month === monthCursor.value.month;
+  if (snap) {
+    // 先渲快照（loading 不置 true → 不出骨架屏），随后静默刷新
+    stats.value = snap.stats;
+    paths.value = snap.paths;
+    achievements.value = snap.achievements;
+    reviewDue.value = snap.reviewDue;
+    reviewPlan.value = snap.reviewPlan;
+    if (sameMonth) sessions.value = snap.sessions;
+    if (sameMonth && snap.todaySchedule) todaySchedule.value = snap.todaySchedule;
+  } else {
+    loading.value = true;
+    loadError.value = false;
+    sourceFailed.value = { budget: false, review: false, week: false };
+  }
   const fastGroup = await Promise.allSettled([
     learningAPI.getStats(),
     learningAPI.getPaths(),
@@ -654,10 +687,13 @@ async function loadAll() {
     request.get('/ai-teaching/review/plan'),
     request.get('/learning/schedule/today')
   ]);
-  // 所有数据源全部失败 → 整页加载失败态（避免误渲染成新手空态）
+  // 所有数据源全部失败 → 整页加载失败态（避免误渲染成新手空态）；
+  // 有快照时保留旧内容静默失败（不闪错误态，下一次进入再重试）
   if (fastGroup.every((r) => r.status === 'rejected')) {
-    loading.value = false;
-    loadError.value = true;
+    if (!snap) {
+      loading.value = false;
+      loadError.value = true;
+    }
     return;
   }
   const [statsR, pathsR, sessionsR, achR, dueR, planR, scheduleR] = fastGroup;
@@ -683,6 +719,7 @@ async function loadAll() {
     sourceFailed.value.budget = true;
   }
   loading.value = false;
+  dashboardSnapshot = buildDashboardSnapshot();
   // AI 引导文案独立异步：慢（模型生成可达数秒）也不阻塞首屏，失败静默降级
   learningAPI.getAdaptiveGuidance()
     .then((body) => { guidance.value = body as Record<string, any> | null; })
