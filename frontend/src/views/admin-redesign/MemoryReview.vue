@@ -1,5 +1,5 @@
 <template>
-  <div class="mr">
+  <div class="mr mk-page mk-page--fill">
     <header class="mk-status" :class="`mk-status--${headTone}`">
       <span class="mk-status__dot" aria-hidden="true"></span>
       <strong class="mk-status__title">记忆与复习观测</strong>
@@ -28,16 +28,16 @@
       <MkStatStrip :items="kpiItems" />
     </div>
 
-    <div class="mk-card">
+    <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <h3 class="mk-card__title">用户列表</h3>
-        <span class="mk-card__meta">按痕迹数倒序 · 前 {{ rows.length }} 个用户</span>
+        <span class="mk-card__meta">共 {{ rows.length }} 位有痕迹用户 · 按痕迹数倒序</span>
       </div>
       <p v-if="error" class="mr__error">{{ error }}</p>
       <MockSkeletonTable v-if="loading && !rows.length" :cols="6" :rows="8" />
       <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" />
       <div v-else class="mk-table-scroll">
-      <table class="mk-table">
+      <table class="mk-table mk-table--click mk-table--fixed">
         <thead>
           <tr>
             <th>用户</th>
@@ -56,7 +56,9 @@
           <tr
             v-for="row in rows"
             :key="row.userId"
+            class="mk-table--rowclick"
             :class="{ 'mr__row--active': row.userId === selectedId }"
+            @click="openDetail(row.userId)"
           >
             <td>
               <strong>{{ row.name || '未命名' }}</strong>
@@ -72,8 +74,8 @@
             <td class="mk-num">{{ rollbackableCount(row) }}</td>
             <td>{{ row.audit ? `${row.audit.mode} · ${timeAgo(row.audit.generatedAt)}` : '未观察' }}</td>
             <td class="mr__actions">
-              <button type="button" class="mk-btn mk-btn--sm" @click="openDetail(row.userId)">明细</button>
-              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" @click="recompute(row.userId)">重新观察</button>
+              <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(row.userId)">明细</button>
+              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" @click.stop="recompute(row.userId)">重新观察</button>
             </td>
           </tr>
         </tbody>
@@ -561,7 +563,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.mr { display: grid; gap: 14px; }
+.mr { display: flex; flex-direction: column; }
 .mr__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-12); color: var(--mk-muted, #5b6577); margin-left: auto; white-space: nowrap; }
 .mr__h4 { margin: 14px 0 6px; font-size: var(--mk-fs-13); font-weight: 700; color: var(--mk-ink); }
 .mr__num { text-align: right; font-variant-numeric: tabular-nums; }

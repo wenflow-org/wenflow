@@ -8,7 +8,8 @@
  * - 系统工具（ops-center）成为 tab 宿主：运维工具 · 数据导出 · 会话安全；session-security 场景下线。
  * - 记忆与复习（memory-review）由「观测」移入「教学」；Skill 组本阶段保持不变。
  *
- * 阶段 2（2026-09-19）：虚拟学习者独立成「虚拟实验」组（个体实验 / 规模实验），
+ * 阶段 2（2026-09-19）：虚拟学习者独立成组（个体实验 / 规模实验）；
+ * 2026-09-22：组名「虚拟实验」→「虚拟学习者」（组名跟随主页面，消除命名错位），
  * 「批量实验」由 virtual-learners 的 tab 提升为独立场景；侧栏 15 项/7 组。
  *
  * 阶段 3（2026-09-19）：健康中心折入「Skill 运行」（skills）宿主 tab：
@@ -34,9 +35,9 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'people', label: '用户与学习者', group: '教学', glyph: '人' },
   { id: 'sessions', label: '学习会话', group: '教学', glyph: '会' },
   { id: 'memory-review', label: '记忆与复习', group: '教学', glyph: '忆' },
-  // 虚拟实验组：虚拟学习者实验室独立成组（个体实验 / 规模实验）
-  { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟实验', glyph: '拟' },
-  { id: 'batch-experiments', label: '批量实验', group: '虚拟实验', glyph: '批' },
+  // 虚拟学习者组：个体实验 / 规模实验
+  { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟学习者', glyph: '拟' },
+  { id: 'batch-experiments', label: '批量实验', group: '虚拟学习者', glyph: '批' },
   // Skill 组：阶段 3 收敛——健康中心折入「Skill 运行」宿主 tab（?tab=health/drift/recon），
   // 场景下线，Skill 组由 4 项收敛为 3 项（orchestrator · skills · prompt-eval）
   { id: 'orchestrator', label: '编排结构', group: 'Skill', glyph: '流' },

@@ -352,6 +352,7 @@ const groupedScenes = computed(() => {
    当前页所在组自动展开；状态 localStorage 持久化 ===== */
 /** 组标题 SVG 图标（lucide 风格线性图标，内联 path） */
 const GROUP_ICONS: Record<string, string> = {
+  虚拟学习者: '<path d="M9 3h6v3a3 3 0 0 1-6 0V3Z"/><path d="M12 9v4"/><path d="M8 21h8v-2a4 4 0 0 0-8 0v2Z"/>',
   教学: '<path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/>',
   Skill: '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
   观测: '<path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/>',
