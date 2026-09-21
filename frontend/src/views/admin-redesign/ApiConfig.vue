@@ -42,15 +42,15 @@
     <!-- 主布局：左列(接入与模型+安全与访问 纵向) / 右列(AI 调用与健康) -->
     <div class="ac-layout">
       <div class="ac-layout__main">
-        <!-- 接入与模型（全宽：连接 → 模型/路由 → 连通性验证） -->
+        <!-- 接入与模型(重设计):长卡拆两张语义卡——连接与验证 / 模型路由与思考 -->
         <section class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">接入与模型</h3>
+        <h3 class="mk-card__title">连接与验证</h3>
         <span class="mk-badge" :class="connBadge.cls">{{ connBadge.text }}</span>
+        <button v-if="dirty.has('conn')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['conn'])">{{ saving ? '保存中…' : '保存连接' }}</button>
       </div>
       <div class="ac-body">
         <!-- 连接凭证：地址与密钥并排，密钥附显示切换 -->
-        <div class="ac-sec__title">连接<button v-if="dirty.has('conn')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['conn'])">{{ saving ? '保存中…' : '保存连接' }}</button></div>
         <div class="ac-row ac-row--2-1">
           <label class="mk-field mk-field--row">
             <span class="mk-field__label">服务地址</span>
@@ -93,7 +93,36 @@
             </div>
           </div>
         </label>
-        <div class="ac-sec__title">路由默认<span class="ac-sec__hint">可填具体模型 id，也可填逻辑别名（chat / reasoning / light）；清单未拉取时也能直接输入</span><button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button></div>
+        <!-- 连通性验证（连接卡的收尾动作：测通即连接可信） -->
+        <div class="ac-sec__title">连通性验证</div>
+        <div class="ac-test">
+          <label class="mk-field ac-test__model">
+            <span class="mk-field__label">测试模型</span>
+            <select class="mk-filter__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
+              <option v-if="!models.length" value="">无可用模型（等待拉取）</option>
+              <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+            </select>
+          </label>
+          <button type="button" class="mk-btn mk-btn--primary ac-test__btn" :disabled="!models.length || testing" @click="runTest">
+            <MkLoading v-if="testing" inline text="测试中…" />
+            <span v-else>运行测试</span>
+          </button>
+          <span v-if="testResult" class="ac-test__result">
+            <span class="mk-badge" :class="testResult.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.ok ? '测试通过' : '测试失败' }}</span>
+            <span class="ac-test__meta mono">{{ testResult.latency || '—' }}{{ testResult.usage ? ` · ${testResult.usage}` : '' }}</span>
+            <span class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }">「{{ testResult.text }}」</span>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">模型路由与思考</h3>
+        <span class="ac-sec__hint">可填具体模型 id，也可填逻辑别名（chat / reasoning / light）</span>
+        <button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button>
+      </div>
+      <div class="ac-body">
         <div class="ac-row ac-row--3">
           <label class="mk-field">
             <span class="mk-field__label">对话默认</span>
@@ -174,26 +203,6 @@
           </label>
         </div>
 
-        <!-- 连通性验证（并入卡体末段） -->
-        <div class="ac-sec__title">连通性验证</div>
-        <div class="ac-test">
-          <label class="mk-field ac-test__model">
-            <span class="mk-field__label">测试模型</span>
-            <select class="mk-filter__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
-              <option v-if="!models.length" value="">无可用模型（等待拉取）</option>
-              <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-            </select>
-          </label>
-          <button type="button" class="mk-btn mk-btn--primary ac-test__btn" :disabled="!models.length || testing" @click="runTest">
-            <MkLoading v-if="testing" inline text="测试中…" />
-            <span v-else>运行测试</span>
-          </button>
-          <span v-if="testResult" class="ac-test__result">
-            <span class="mk-badge" :class="testResult.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.ok ? '测试通过' : '测试失败' }}</span>
-            <span class="ac-test__meta mono">{{ testResult.latency || '—' }}{{ testResult.usage ? ` · ${testResult.usage}` : '' }}</span>
-            <span class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }">「{{ testResult.text }}」</span>
-          </span>
-        </div>
       </div>
     </section>
 
