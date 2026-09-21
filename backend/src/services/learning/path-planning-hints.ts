@@ -184,6 +184,23 @@ export interface PlanningHints {
   targetSubtasksPerStage: number | null;
 }
 
+/**
+ * Goal 层分流判定（`normalizedInput.triage`，可选）。
+ * 语义：这件事是否有「可跨情境迁移的因果心智」、以及**会不会反复发生**。
+ * 依据（2026-09-21，60 例混合数据集自带标注）：`blockType` 与 `recurrence` 几乎正交——
+ *   capability × recurring 14/14、oneoff_operation × once 10/10、environment_tooling × recurring 10/11
+ *   ⇒ 按"类型"分流会误杀 13 例（10 个 recurring 环境排障 + 3 个 recurring 权限流程）；
+ *   **复现性才是钥匙**。缺失时行为与今天完全一致。
+ */
+export interface TriageHint {
+  /** 是否存在可跨情境迁移的因果心智（false = 一次性操作/事务） */
+  transferable?: boolean | null;
+  /** 会不会反复发生 */
+  recurrence?: 'once' | 'recurring' | null;
+  /** 判定依据（可观测，落库/审计用） */
+  evidence?: string | null;
+}
+
 export function derivePlanningHints(
   timeHorizon: string | null,
   timePerSession: string | null,
@@ -192,7 +209,8 @@ export function derivePlanningHints(
   keyStages: string[],
   timeDimensions?: { totalWeeks?: number | null; estimatedHours?: number | null; sessionsPerWeek?: number | null; sessionsLengthMin?: number | null } | null,
   scopeSize?: ScopeSize | null,
-  learnerLoadProfile?: LearnerLoadProfile | null
+  learnerLoadProfile?: LearnerLoadProfile | null,
+  triage?: TriageHint | null
 ): PlanningHints {
   const paceSignal = inferPaceSignal(timeHorizon);
   const keyStageCount = keyStages.length;
@@ -308,6 +326,22 @@ export function derivePlanningHints(
         Math.min(subtasksPerStageRange[1], loadSubtasksCap),
       ];
     }
+  }
+
+  // ---- 分流钳制（出口不变量 B，2026-09-21）：Goal 层判为「低可迁移 × 低复现」⇒ 压到"一节"量级 ----
+  // 依据（60 例混合数据实测）：一次性操作类产出 2.3–7.4h，构成为
+  //   「阶段数 × 每段任务数(2–3) × 单任务分钟」；单任务中位 37 分钟恰是 standard 档
+  //   defaultMinutesRange=[30,90] 的下沿 ⇒ 学时是模板产物，不是"这件事要多久"的估计。
+  // 只收紧上界，不拍死数字（数字仍由 LLM 在区间内定）；且**不用单点区间**，
+  // 与不变量 A（区间永不为单点，见下方出口收束）兼容：最坏 2 段 × 2 任务 × 15 分钟 = 60 分钟。
+  // 缺失 triage 时，本分支不生效，行为与今天完全一致。
+  if (triage && triage.transferable === false && triage.recurrence === 'once') {
+    milestoneRange = [1, 2];
+    conceptRange = [1, 2];
+    subtasksPerStageRange = [1, 2];
+    subtaskMinutesRange = [10, 15];
+    maxWeeks = Math.min(maxWeeks, 1);
+    if (targetMilestones !== null) targetMilestones = Math.min(targetMilestones, 2);
   }
 
   // 方案乙：区间即权威（不再塌成点）。确保「建议值」落在区间内，供提示词引用时不自相矛盾。
@@ -441,7 +475,11 @@ export function buildFramedNormalizedInput(input: any): any {
   const learnerLoadProfile = input.learnerLoadProfile && typeof input.learnerLoadProfile === 'object'
     ? input.learnerLoadProfile
     : null;
-  const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize, learnerLoadProfile);
+  // 可选分流判定（Goal 层产出）：仅当显式提供时收紧体量上界，缺失时行为与今天完全一致。
+  const triage = input.triage && typeof input.triage === 'object'
+    ? (input.triage as TriageHint)
+    : null;
+  const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize, learnerLoadProfile, triage);
 
   return {
     ...input,

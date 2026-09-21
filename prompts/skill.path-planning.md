@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-planning
-coreHash: bf4226a7a72e6f544ea419be073df0911f2cafe3ef53dc4ee34fc6ce9c3b9d58
+coreHash: 62eae3b125c7f9e68304333ff0a0cdaa7991e05bdb62f1610e79c278a2c75f20
 coreVersion: 1
 temperature: 0.5
 maxTokens: 12000
@@ -69,8 +69,9 @@ failurePolicy: retry
 37. 路径名称必须是简洁的**结果/场景**名：**核心主题/技能 + 学完能做什么（结果或场景）**，控制在 8-20 个字；名称只表达"学什么 + 到哪算成"，不要冒号加副标题、括号补充说明、"从…到…"完整过程句，也不要把用户目标原文整段搬入名称；具体场景、交付物与细节放进 summary 和 milestones。好的例子："合并多张 Excel 表并核对差异""小店进货留痕与月底对账""客服接电话前的缓冲动作""限时卡题的止损与跳题"；不好的例子："Python 报表入门""基础理财规划"（"入门/基础"是**起点标签**，不是交付承诺）
 38. 名称硬性自检（三条，任一不合格必须改写）：① 不含逗号、分号、破折号（——/-/—）、"知道要""但…""导致…"等因果从句形态；② 不超过 20 个字；③ **不含交付口径水平词**——名称的**末尾或开头**不得出现"入门、起步、初学、新手、零基础、零起点、进阶、中级、高级、高阶、精通、实战、基础"，也不得写"从零开始"。理由：水平词描述的是**起点**（系统该假设你从哪开始），用户读到的却是**终点**（"我最后能到哪"），会把交付读小、拉低接受度。禁止把 real_problem 的诊断原文（如"知道要签字，但触发时机与当前状态冲突"）作为路径名称
 39. summary 必须用 1-2 句"人话"概括"这条路径适合谁（场景）+ 解决什么（能力）"，从学习者视角表述；禁止复制或改写 real_problem 的诊断全文、禁止把理解字段原文照搬进 summary
-40. 里程碑数量**不是固定值**：`normalizedInput.planningHints.milestoneRange` 给出**允许区间**（下界来自问题规模、上界用于防膨胀），同层的 `targetMilestones` 只是**建议值**。请按这条路径的实际认知复杂度在区间内决定里程碑数（落在区间内即为合法，不会因数量被拒），不要为了对齐建议值而把本来清晰的阶段合并或拆散，也不要为凑满上界而拆分
-41. normalizedInput.learnerProfile.currentBaseline.level **不写入名称**（名称一律中性、结果导向，见上条硬性自检）。level 只用于两处：① 里程碑的难度与前置假设（beginner/unknown 按保守假设补前置；unknown 不替用户认定水平，也不在名称里给任何水平暗示）；② summary 里"适合谁"的一句（例如"适合没写过脚本、但每天要手工合并报表的人"）。level 与 evidence/backgroundExperience 冲突时以 evidence 为准
+40. 如果 normalizedInput.triage 标记为「低可迁移 × 一次性」（transferable=false 且 recurrence=once）：这条路径**不是课程**——只输出 **1–2 个阶段**，直呼操作本身（如"把首行钉住""把照片复制到电脑"），**禁止**引入"原理/机制/习惯/迁移/复盘/判断链"这类认知阶段，也禁止把用户的情绪顾虑（怕点错、怕弄丢）当作里程碑的认知目标；情绪只在 summary 里用一句安抚承接。这条路径只有一个目标：用户照着做完，这件事就结束了
+41. 里程碑数量**不是固定值**：`normalizedInput.planningHints.milestoneRange` 给出**允许区间**（下界来自问题规模、上界用于防膨胀），同层的 `targetMilestones` 只是**建议值**。请按这条路径的实际认知复杂度在区间内决定里程碑数（落在区间内即为合法，不会因数量被拒），不要为了对齐建议值而把本来清晰的阶段合并或拆散，也不要为凑满上界而拆分
+42. normalizedInput.learnerProfile.currentBaseline.level **不写入名称**（名称一律中性、结果导向，见上条硬性自检）。level 只用于两处：① 里程碑的难度与前置假设（beginner/unknown 按保守假设补前置；unknown 不替用户认定水平，也不在名称里给任何水平暗示）；② summary 里"适合谁"的一句（例如"适合没写过脚本、但每天要手工合并报表的人"）。level 与 evidence/backgroundExperience 冲突时以 evidence 为准
 
 ## 输出字段
 
