@@ -5,6 +5,7 @@
  * - requiresAdminAuth 守卫：无会话 → /admin/login 重定向，有会话 → 放行
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
 import router from '../index';
 import { ADMIN_SESSION_KEY } from '@/api/adminApi';
 
@@ -19,6 +20,10 @@ function setAdminSession(on: boolean) {
 }
 
 beforeEach(() => {
+  /* 路由守卫 router.beforeEach 内会调用 useUserStore().restoreFromCookie()(ISSUE-12
+     会话自举),测试裸驱动 router 时需先挂 active pinia(restoreFromCookie 自带
+     try/catch,接口失败优雅返回 false,不产生网络副作用) */
+  setActivePinia(createPinia());
   setAdminSession(true);
 });
 

@@ -80,7 +80,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { dataSource } from './store'
 import { liveTopoNodes, liveSkillCatalog, liveLoading, errMsg } from './live'
 import { TERMS } from './terms'
@@ -108,6 +108,7 @@ function onStageChange(s: string) {
 }
 
 const route = useRoute()
+const router = useRouter()
 
 /** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排结构页跳转闭环；旧 /admin/topology 重定向落位阶段视图） */
 function applyStageQuery() {
@@ -205,6 +206,11 @@ interface Stage {
 }
 
 const active = ref('goal')
+/* 阶段切换回写 ?stage=(对齐全站"切换可寻址"约定;此前只读深链,刷新丢失所在阶段) */
+watch(active, (s) => {
+  const cur = typeof route.query.stage === 'string' ? route.query.stage : ''
+  if (s && s !== cur) void router.replace({ query: { ...route.query, stage: s } })
+})
 applyStageQuery()
 watch(() => route.query, applyStageQuery)
 const defById = computed(() => new Map(orchDefs.value.map((d) => [d.id, d])))// 阶段清单统一后端源：GET /admin/field-routings/stages（派生自编排文件），

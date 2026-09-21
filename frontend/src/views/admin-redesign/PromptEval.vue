@@ -402,7 +402,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { timeAgo, errMsg, shortId } from './live'
 import { adminPromptOpsApi, adminVirtualLearnersApi, type CreateEvalCasePayload } from '@/api/adminApi'
 import { useEscape } from './useEscape'
@@ -484,6 +485,18 @@ const agentMustContainExample = computed(() => AGENT_META[form.value.agentId]?.m
 const agentMustContainPlaceholder = computed(() => `例如：${AGENT_META[form.value.agentId]?.mustContainExample || ''}`)
 
 const tab = ref<'cases' | 'runs'>('cases')
+const route = useRoute()
+const router = useRouter()
+/* URL ↔ tab 双向同步(对齐合并宿主页 ?tab= 约定;此前刷新/深链落回默认 tab) */
+watch(
+  () => route.query.tab,
+  (t) => {
+    const v = t === 'runs' ? 'runs' : 'cases'
+    if (v !== tab.value) tab.value = v
+    if (v === 'runs' && !runs.value.length && !runsLoading.value) void reloadRuns()
+  },
+  { immediate: true }
+)
 const agentFilter = ref('')
 const cases = ref<EvalCase[]>([])
 const runs = ref<EvalRun[]>([])
@@ -608,6 +621,7 @@ async function reloadRuns() {
 
 function switchTab(t: 'cases' | 'runs') {
   tab.value = t
+  if (route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
   if (t === 'cases' && !cases.value.length && !casesLoading.value) void reloadCases()
   if (t === 'runs' && !runs.value.length && !runsLoading.value) void reloadRuns()
 }
