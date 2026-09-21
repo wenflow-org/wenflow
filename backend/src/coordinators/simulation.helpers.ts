@@ -220,6 +220,26 @@ export function parseProfileData(profileRecord: VirtualLearnerProfileRow): Virtu
   };
 }
 
+/**
+ * 负荷「行为描述」（散文）的唯一解析入口（2026-09-21）。
+ *
+ * 字段分工：
+ * - `overloadReaction`（散文）= 信息一多/步骤太密时的**可观察表现** → 模拟器表现层（本文件的注入与注意力惩罚）
+ * - `cognitiveLoadTolerance`（枚举 low|normal|high）= **等级** → 机器判定（path-planning-hints 的资源收紧）
+ *
+ * 兼容老数据：2026-09-21 之前 `cognitiveLoadTolerance` 里写的是散文（且由 overloadReaction 兜底复制），
+ * 那种数据仍然当行为描述用；枚举值不算行为描述。
+ */
+export function resolveOverloadBehaviorText(profile: Record<string, any> | null | undefined): string {
+  const p = profile && typeof profile === 'object' ? profile : {};
+  const reaction = typeof p.overloadReaction === 'string' ? p.overloadReaction.trim() : '';
+  if (reaction) return reaction;
+  const legacy = typeof p.cognitiveLoadTolerance === 'string' ? p.cognitiveLoadTolerance.trim() : '';
+  if (!legacy) return '';
+  // 新数据的 cognitiveLoadTolerance 是枚举，不算行为描述
+  return /^(low|normal|high|低|中|高|极低)$/i.test(legacy) ? '' : legacy;
+}
+
 export function buildStoryBehaviorBias(storyContext?: SimulationContext['storyContext']): Partial<LearnerLatentState> {
   if (!storyContext) return {};
 
@@ -259,7 +279,8 @@ export function buildDefaultLearnerState(
 
   const patienceBase = traits.patience === 'low' ? 0.35 : traits.patience === 'high' ? 0.78 : 0.58;
   const enthusiasmBase = traits.enthusiasm === 'low' ? 0.4 : traits.enthusiasm === 'high' ? 0.76 : 0.58;
-  const attentionPenalty = typeof p.cognitiveLoadTolerance === 'string' && p.cognitiveLoadTolerance.includes('信息一多') ? 0.12 : 0;
+  // 行为描述优先读 overloadReaction（老数据回退 cognitiveLoadTolerance 里的散文）
+  const attentionPenalty = resolveOverloadBehaviorText(p).includes('信息一多') ? 0.12 : 0;
   const frustrationBoost = p.emotionalBaseline || (Array.isArray(p.emotionalTriggers) && p.emotionalTriggers.length) ? 0.08 : 0;
   const helpSeeking = typeof p.helpSeekingPattern === 'string' ? p.helpSeekingPattern : '';
   const wantsClarificationByTrait = traits.questionStyle === 'clarifying'
@@ -356,8 +377,9 @@ export function buildGoalConcernPool(profile: VirtualLearnerProfile, goalState: 
     secondary.add(`如果建议不贴近现实，我可能会先保留或质疑：${profile.profile.adversarialPattern}`);
   }
 
-  if (profile.profile?.cognitiveLoadTolerance) {
-    secondary.add(`我的信息承载方式有边界：${profile.profile.cognitiveLoadTolerance}`);
+  const overloadText = resolveOverloadBehaviorText(profile.profile);
+  if (overloadText) {
+    secondary.add(`我的信息承载方式有边界：${overloadText}`);
   }
 
   if (profile.profile?.metacognitiveProfile) {

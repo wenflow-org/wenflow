@@ -157,6 +157,20 @@ function validatePersonaOutput(parsed: any): { valid: boolean; failureReason?: s
   return { valid: true };
 }
 
+/**
+ * 认知负荷「等级」枚举化（2026-09-21）。
+ * 吃 low|normal|high（含中文别名与"低——…"这类老散文的前缀）；散文/空 → null（未知，不收紧）。
+ * 与「行为描述」（overloadReaction 散文）分工：这里只表达等级，供机器判定。
+ */
+export function normalizeToleranceLevel(value: any): 'low' | 'normal' | 'high' | null {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) return null;
+  if (/^(low|低|极低)/i.test(text)) return 'low';
+  if (/^(high|高)/i.test(text)) return 'high';
+  if (/^(normal|中)/i.test(text)) return 'normal';
+  return null;
+}
+
 function normalizePersonaOutput(raw: any) {
   const personaSeed = raw?.personaSeed && typeof raw.personaSeed === 'object' ? raw.personaSeed : raw || {};
   const selfAwarenessPattern = normalizeString(personaSeed.selfAwarenessPattern);
@@ -239,7 +253,10 @@ function normalizePersonaOutput(raw: any) {
       // Backfill legacy field names so existing profile pages and session logic can keep working.
       metacognitiveProfile: normalizeString(personaSeed.metacognitiveProfile) || selfAwareness,
       selfRegulationStyle: normalizeString(personaSeed.selfRegulationStyle) || planningFollowThrough,
-      cognitiveLoadTolerance: normalizeString(personaSeed.cognitiveLoadTolerance) || overloadReaction,
+      // 机器判定字段：只吃**等级枚举**（2026-09-21）。旧实现是 `… || overloadReaction`，
+      //   会把「行为散文」灌进这个机器字段 ⇒ 下游只能用正则猜（实测漏判 47%）。
+      //   行为描述留在 overloadReaction（simulation.helpers 的 resolveOverloadBehaviorText 读它）。
+      cognitiveLoadTolerance: normalizeToleranceLevel(personaSeed.cognitiveLoadTolerance),
       // 补齐 scenario-designer 完整 schema 的字段 (兼容 simulator 的 friction 引用)
       motivationType,
       personalityDrivers: normalizeStringArray(personaSeed.personalityDrivers, ['完成当前学习目标']),

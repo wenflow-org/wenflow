@@ -18,7 +18,10 @@ export interface VirtualLearnerProfileData {
   emotionalTriggers?: string[];
   resiliencePattern?: string;
   metacognitiveProfile?: string;
+  /** 负荷**等级**枚举（low|normal|high）：机器判定（资源收紧）用。行为描述见 overloadReaction。 */
   cognitiveLoadTolerance?: string;
+  /** 负荷**行为描述**（散文）：信息一多/步骤太密时的可观察表现，供模拟器表现层消费。 */
+  overloadReaction?: string;
   selfRegulationStyle?: string;
   digitalLiteracy?: string;
   helpSeekingPattern?: string;

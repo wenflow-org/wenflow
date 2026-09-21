@@ -350,7 +350,9 @@ describe('buildGoalConcernPool / flattenGoalConcernPool', () => {
         emotionalTriggers: ['a', 'b', 'c'],
         helpSeekingPattern: '习惯',
         adversarialPattern: '质疑',
+        // 2026-09-21 字段分工：等级枚举给机器、行为散文给模拟器表现层（这里两者都测）
         cognitiveLoadTolerance: '低',
+        overloadReaction: '信息一多就容易乱，需要把任务拆小',
         metacognitiveProfile: '弱',
         memoryRepairPattern: '遗忘'
       },
@@ -363,10 +365,28 @@ describe('buildGoalConcernPool / flattenGoalConcernPool', () => {
     expect(pool.hidden).toHaveLength(7)
     expect(pool.primary).toContain('我对某些关键点长期卡住，比如：A、B')
     expect(pool.secondary).toContain('我的时间可能不稳定，担心学不完或者坚持不下去')
+    // 行为描述来自 overloadReaction（散文），不是 cognitiveLoadTolerance（枚举）
+    expect(pool.secondary).toContain('我的信息承载方式有边界：信息一多就容易乱，需要把任务拆小')
     expect(pool.hidden).toContain('这件事会牵动我的情绪底色：焦虑')
     expect(pool.hidden).toContain('有些情境会明显放大我的压力，比如：a、b')
     expect(pool.hidden).toContain('即使我忘了或没真懂，也可能先按自己的习惯处理：遗忘')
     expect(flattenGoalConcernPool(pool)).toHaveLength(15)
+  })
+
+  it('认知负荷等级枚举不进入行为描述（只吃 overloadReaction 散文）', () => {
+    const profile = baseProfile({
+      profile: { cognitiveLoadTolerance: 'low' },
+      struggleConcepts: [],
+      personalityTraits: { questionStyle: 'none', patience: 'low' }
+    })
+    const pool = buildGoalConcernPool(profile, undefined)
+    expect(pool.secondary.some((line) => line.includes('我的信息承载方式有边界'))).toBe(false)
+    // 老数据兼容：散文写在 cognitiveLoadTolerance 里时仍然当行为描述用
+    const legacy = buildGoalConcernPool(
+      baseProfile({ profile: { cognitiveLoadTolerance: '信息一多就乱，需要把任务拆小' }, struggleConcepts: [], personalityTraits: { questionStyle: 'none', patience: 'low' } }),
+      undefined
+    )
+    expect(legacy.secondary.some((line) => line.includes('我的信息承载方式有边界'))).toBe(true)
   })
 })
 
