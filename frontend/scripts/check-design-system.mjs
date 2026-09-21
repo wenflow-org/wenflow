@@ -323,6 +323,40 @@ for (const abs of vueFiles) {
   }
 }
 
+/* ---------- 规则 9：媒体查询档位内的硬编码间距（棘轮，只降不升） ----------
+   五档(1440/1920/2000/2800/3600)曾以硬编码 px 覆盖 .mk-page/.mk-status 等的
+   gap/padding/min-height/radius，各档互不单调且覆盖基线 token——"布局乱糟糟"
+   的系统性根源（验收 F1）。档内这类声明现在只降不升；字号放大不在本规则内。 */
+const MEDIA_SPACING_RE = /(^|[;{]\s*)(gap|padding|margin)(-(top|right|bottom|left|inline|block))?\s*:\s*[^;]*\dpx/
+function countMediaSpacing(css) {
+  let n = 0
+  const re = /@media[^{]*\{/g
+  let m
+  while ((m = re.exec(css)) !== null) {
+    let depth = 1
+    let k = re.lastIndex
+    while (k < css.length && depth > 0) {
+      if (css[k] === '{') depth += 1
+      else if (css[k] === '}') depth -= 1
+      k += 1
+    }
+    const block = css.slice(re.lastIndex, k - 1)
+    for (const line of block.split('\n')) {
+      const t = line.trim()
+      if (MEDIA_SPACING_RE.test(t)) n += 1
+    }
+  }
+  return n
+}
+
+const mediaSpacingCounts = {}
+for (const relPath of HEX_CSS_TARGETS) {
+  const abs = join(ROOT, relPath)
+  if (!existsSync(abs)) continue
+  const n = countMediaSpacing(readFileSync(abs, 'utf8'))
+  if (n) mediaSpacingCounts[relPath] = n
+}
+
 /* ---------- 规则 3（续）：admin 原语层 CSS 的硬编码色值 ---------- */
 for (const relPath of HEX_CSS_TARGETS) {
   const abs = join(ROOT, relPath)
@@ -334,7 +368,7 @@ for (const relPath of HEX_CSS_TARGETS) {
 }
 
 /* ---------- 规则 3：基线棘轮 ---------- */
-const baseline = existsSync(BASELINE_PATH) ? JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) : { hex: {} }
+const baseline = existsSync(BASELINE_PATH) ? JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) : { hex: {}, mediaSpacing: {} }
 
 if (process.argv.includes('--update')) {
   const deadByFile = {}
@@ -344,6 +378,7 @@ if (process.argv.includes('--update')) {
     JSON.stringify(
       {
         hex: hexCounts,
+        mediaSpacing: mediaSpacingCounts,
         deadClasses: deadByFile,
         note: '硬编码 hex 色值 + 死 CSS 类基线（棘轮：只降不升）。收敛后请用 --update 下调。',
       },
@@ -366,6 +401,18 @@ for (const [file, n] of Object.entries(hexCounts)) {
 
 /* ---------- 输出 ---------- */
 let failed = false
+
+const mediaSpacingRegressions = []
+for (const [file, n] of Object.entries(mediaSpacingCounts)) {
+  const base = baseline.mediaSpacing?.[file] ?? 0
+  if (n > base) mediaSpacingRegressions.push({ file, now: n, base })
+}
+if (mediaSpacingRegressions.length) {
+  failed = true
+  console.log(`
+✖ 规则 9：媒体查询档位内的硬编码间距不得超过基线（只降不升）`)
+  for (const v of mediaSpacingRegressions) console.log(`    ${v.file}: ${v.base} → ${v.now}`)
+}
 
 if (badDefinitions.length) {
   failed = true

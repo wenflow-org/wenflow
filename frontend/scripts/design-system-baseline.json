@@ -12,7 +12,7 @@
     "src/views/admin-redesign/FieldRoutingTable.vue": 25,
     "src/views/admin-redesign/GoalConversations.vue": 14,
     "src/views/admin-redesign/LearnerCenter.vue": 1,
-    "src/views/admin-redesign/LearnerDetail.vue": 30,
+    "src/views/admin-redesign/LearnerDetail.vue": 16,
     "src/views/admin-redesign/Notifications.vue": 3,
     "src/views/admin-redesign/OpsHub.vue": 12,
     "src/views/admin-redesign/Orchestrator.vue": 8,
@@ -23,7 +23,7 @@
     "src/views/admin-redesign/RunStageBar.vue": 28,
     "src/views/admin-redesign/RunStateBadge.vue": 22,
     "src/views/admin-redesign/SandboxView.vue": 10,
-    "src/views/admin-redesign/SessionCockpit.vue": 133,
+    "src/views/admin-redesign/SessionCockpit.vue": 78,
     "src/views/admin-redesign/SessionSecurity.vue": 16,
     "src/views/admin-redesign/Shell.vue": 63,
     "src/views/admin-redesign/SkeletonTable.vue": 1,
@@ -47,9 +47,12 @@
     "src/views/admin-redesign/VirtualLearnerReclaim.vue": 5,
     "src/views/admin-redesign/VirtualLearnerRunningBar.vue": 27,
     "src/views/admin-redesign/VirtualLearners.vue": 11,
-    "src/views/admin-redesign/VirtualProfile.vue": 81,
-    "src/components/mk/MkCols.vue": 4,
-    "src/components/mk/MkKpi.vue": 4
+    "src/views/admin-redesign/VirtualProfile.vue": 65,
+    "src/components/mk/MkCols.vue": 4
+  },
+  "mediaSpacing": {
+    "src/styles/mk-primitives.css": 40,
+    "src/styles/admin-theme.css": 1
   },
   "deadClasses": {
     "src/views/admin-redesign/QuickLearnPanel.vue": [

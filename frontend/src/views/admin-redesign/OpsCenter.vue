@@ -24,7 +24,7 @@
     <template v-if="tab === 'tools'">
     <div class="oc-tab-body">
     <!-- 时间推进模拟 -->
-    <section class="mk-card">
+    <section class="mk-card mk-card--narrow">
       <div class="mk-card__head">
         <h4 class="mk-card__title">时间推进模拟</h4>
         <span class="mk-card__meta">不写库：按衰减模型预览「N 天后」学习者画像变化</span>
