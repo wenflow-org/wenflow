@@ -12,7 +12,7 @@ import { logger } from '../../../utils/logger';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
-import { clampHintsToOneSitting, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
+import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
 import { kcMapperDefinition } from '../../../skills/kc-mapper';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import {
@@ -229,7 +229,13 @@ export async function enrichLearningPathWithAnderson(
       };
       const stageResult = await executeSkill(stageDesignerDefinition, stageDesignerInput);
 
-      const stageTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
+      const rawStageTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
+      // hints 硬执行：模型把 subtasksPerStageRange 当软参考（实测 hints=[2,2] 仍给 5 任务/段），
+      // 这里按上界兜底裁剪，否则体量锚在上端失效（输出不随锚变化 ⇒ 连校准都测不了）。
+      const stageTasks = clampStageTasksToHints(rawStageTasks, (normalizedInput as any)?.planningHints);
+      if (stageTasks.length !== rawStageTasks.length) {
+        logger.warn(`[stage-hints-clamp] 任务数按 hints 兜底裁剪：stage${milestone.stageNumber} ${rawStageTasks.length} → ${stageTasks.length}`);
+      }
       assertStageTasksPresent(milestone.stageNumber, stageTasks);
       stageDesignRawOutputs[`stage-${milestone.stageNumber}`] = {
         inputPayload: stageDesignerInput,

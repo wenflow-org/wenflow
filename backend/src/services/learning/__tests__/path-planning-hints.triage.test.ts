@@ -1,4 +1,4 @@
-import { clampHintsToOneSitting, derivePlanningHints, type TriageHint } from '../path-planning-hints';
+import { clampHintsToOneSitting, derivePlanningHints, type TriageHint, clampStageTasksToHints } from '../path-planning-hints';
 
 /**
  * 体量边界（2026-09-21）：
@@ -156,5 +156,26 @@ describe('一次时长默认值（课次锚的必要配件）', () => {
   it('无课次时不受默认值影响（保持现状）', () => {
     const h = derivePlanningHints(null, null, RICH_TIME_BUDGET, 'per_week', [], { ...RICH_TIME_DIMENSIONS }, null, null, null);
     expect(h.milestoneRange[1]).toBeGreaterThan(2);
+  });
+});
+
+
+describe('hints 硬执行（stage 产出按上界裁剪）', () => {
+  it('任务数超上界 ⇒ 裁到上界（实测 hints=[2,2] 时模型给 5 任务/段）', () => {
+    const tasks = [1, 2, 3, 4, 5].map((i) => ({ title: `t${i}`, estimatedMinutes: 45 }));
+    const out = clampStageTasksToHints(tasks, { subtasksPerStageRange: [2, 2], subtaskMinutesRange: [30, 90] });
+    expect(out.length).toBe(2);
+  });
+  it('单任务分钟超上界 ⇒ 钳到上界', () => {
+    const out = clampStageTasksToHints([{ estimatedMinutes: 300 }], { subtaskMinutesRange: [1, 15] });
+    expect(out[0].estimatedMinutes).toBe(15);
+  });
+  it('未超界不动（不抬升下限——给少是可逆的）', () => {
+    const tasks = [{ estimatedMinutes: 10 }];
+    expect(clampStageTasksToHints(tasks, { subtasksPerStageRange: [2, 5], subtaskMinutesRange: [30, 90] })).toBe(tasks);
+  });
+  it('无 hints 时不动', () => {
+    const tasks = [{ estimatedMinutes: 999 }];
+    expect(clampStageTasksToHints(tasks, null)).toBe(tasks);
   });
 });

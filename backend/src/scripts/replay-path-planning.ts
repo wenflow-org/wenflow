@@ -43,6 +43,9 @@ const DB_PATH = path.resolve(__dirname, '..', '..', 'prisma', 'dev.db');
  *  注入构造输入的 timeDimensions——这是课次锚的输入，缺它就只能走兜底 */
 const ESTIMATE_LESSONS = process.argv.includes('--estimate-lessons');
 
+/** `--judge-only`：只调判官（估课次），不跑 path/stage —— 用于统计判官契约稳定性 */
+const JUDGE_ONLY = process.argv.includes('--judge-only');
+
 /** `--with-stage`：path 之后继续跑 stage-designer，汇总任务数与真实学时（定位注水点） */
 const WITH_STAGE = process.argv.includes('--with-stage');
 
@@ -224,6 +227,7 @@ async function main(): Promise<void> {
         console.log(`  ⇢ 估课次失败：${String((error as Error)?.message || error).slice(0, 80)}`);
       }
     }
+    if (JUDGE_ONLY) continue;
     const agentInput = buildPathAgentInput(data);
     const framedRaw = data.userProfile?.normalizedInput || null;
     const framed = buildFramedNormalizedInput(framedRaw);

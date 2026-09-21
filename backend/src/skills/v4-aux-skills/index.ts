@@ -109,6 +109,8 @@ interface RunAuxOptions<TOutput> {
   validate?: (parsed: any) => { valid: true } | { valid: false; failureReason: string };
   /** 契约校验前的容错归一（模型输出的等价变体 → core 声明形态）；不影响 normalize */
   coerceParse?: (parsed: any) => any;
+  /** LLM 侧整轮重试（如返回非 JSON）；不传则沿用 callPrompt 默认（不重试） */
+  retryStrategy?: { maxAttempts: number };
   /** 内置确定性降级输出；优先级低于调用方 __fallback */
   builtinFallback?: (domain: any) => TOutput;
   prepareSystemPrompt?: (systemPrompt: string, domain: any) => string;
@@ -151,6 +153,7 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
       ...(opts.coerceParse
         ? { coerceParsedForContract: (parsed: any) => opts.coerceParse!(parsed) }
         : {}),
+      ...(opts.retryStrategy ? { retryStrategy: opts.retryStrategy } : {}),
       validateParsedOutput: opts.validate || ((parsed) => parsed !== undefined && parsed !== null
         ? { valid: true }
         : { valid: false, failureReason: `${opts.meta.skillId.toUpperCase().replace(/-/g, '_')}_OUTPUT_EMPTY` }),
@@ -600,6 +603,35 @@ async function triageJudgeHandler(input: any) {
         confidence: ['high', 'medium', 'low'].includes(confidenceRaw) ? confidenceRaw : 'low',
       };
     },
+    // 契约容错（2026-09-21）：实测 4/10 例**整轮失败**（枚举取值不合法 / 数字给成字符串 / 返回非 JSON），
+    // 失败即静默回退到"只有 availableTime 枚举"的老路 ⇒ 对 moderate/abundant 的人完全没有保护。
+    // 这里在契约校验前把等价变体收敛到 core 声明形态；判据本身仍交给 normalize。
+    coerceParse: (parsed: any) => {
+      if (!parsed || typeof parsed !== 'object') return parsed;
+      const recurrenceRaw = asTrimmedString(parsed.recurrence).toLowerCase();
+      const confidenceRaw = asTrimmedString(parsed.confidence).toLowerCase();
+      const num = (v: any): number | null => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      };
+      return {
+        ...parsed,
+        transferable: parsed.transferable === true || parsed.transferable === 'true'
+          ? true
+          : parsed.transferable === false || parsed.transferable === 'false'
+            ? false
+            : null,
+        recurrence: ['once', 'recurring', 'unknown'].includes(recurrenceRaw)
+          ? recurrenceRaw
+          : (['daily', 'weekly', 'monthly', 'often', 'repeat', 'repeated', 'recur'].includes(recurrenceRaw)
+            ? 'recurring'
+            : 'unknown'),
+        confidence: ['high', 'medium', 'low'].includes(confidenceRaw) ? confidenceRaw : 'low',
+        totalSessions: num(parsed.totalSessions),
+        sessionsLengthMin: num(parsed.sessionsLengthMin),
+      };
+    },
+    retryStrategy: { maxAttempts: 2 },
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
       : { valid: false, failureReason: 'TRIAGE_JUDGE_OUTPUT_NOT_OBJECT' },

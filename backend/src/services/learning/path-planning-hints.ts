@@ -230,6 +230,37 @@ export const ONE_SITTING_MAX_HOURS = 1;
 export const DEFAULT_SESSION_MINUTES = 40;
 
 /**
+ * hints 硬执行（2026-09-21）：把 stage-designer 的**产出**按 hints 兜底裁剪。
+ *
+ * 为什么需要：`subtasksPerStageRange` 对模型只是"软参考"——实测 hints=[2,2] 时仍产出
+ * 5 任务/段（15.8h），导致"体量 = 课次 × 一次时长"的锚在上端**完全不生效**（输出不随锚变化，
+ * 连"校准"都测不出来）。
+ *
+ * 只治**注水方向**（超上界才裁），不抬升下限：给少是可逆的（用户能升），给多是荒谬的
+ * （7.4h 的传照片课）。分钟同理只钳上界。
+ */
+export function clampStageTasksToHints<T extends { estimatedMinutes?: number }>(
+  tasks: T[],
+  hints?: { subtasksPerStageRange?: [number, number]; subtaskMinutesRange?: [number, number] } | null,
+): T[] {
+  if (!Array.isArray(tasks) || tasks.length === 0 || !hints) return tasks;
+  const capCount = Number(hints.subtasksPerStageRange?.[1]);
+  const capMinutes = Number(hints.subtaskMinutesRange?.[1]);
+  let out = tasks;
+  if (Number.isFinite(capCount) && capCount >= 1 && out.length > capCount) {
+    out = out.slice(0, Math.floor(capCount));
+  }
+  const overMinutes = (task: T): boolean => {
+    const minutes = Number(task?.estimatedMinutes);
+    return Number.isFinite(minutes) && minutes > capMinutes;
+  };
+  if (Number.isFinite(capMinutes) && capMinutes >= 1 && out.some(overMinutes)) {
+    out = out.map((task) => (overMinutes(task) ? { ...task, estimatedMinutes: capMinutes } : task));
+  }
+  return out;
+}
+
+/**
  * 把任意已算好的 hints 收到「一节课」量级（只收上界，不拍死数字；区间不塌成单点）。
  * 两个调用方：① Goal 层 triage 判定（derivePlanningHints 内）；② Path 层自检后，
  * 给 stage-designer 用的 hints（path 产出 ≤1 小时 ⇒ 任务数/分钟一并收紧，否则学时仍会被
