@@ -165,8 +165,9 @@ export function setRunState(run, patch) {
 
 // ---------- 路径结构快照 ----------
 export function pathSnapshot(userId, sinceIso) {
-  const lp = sinceIso
-    ? q('SELECT * FROM learning_paths WHERE userId=? AND createdAt>=? ORDER BY createdAt DESC LIMIT 1', [userId, sinceIso])
+  const sinceMs = sinceIso ? new Date(sinceIso).getTime() : null;
+  const lp = sinceMs
+    ? q('SELECT * FROM learning_paths WHERE userId=? AND createdAt>=? ORDER BY createdAt DESC LIMIT 1', [userId, sinceMs])
     : q('SELECT * FROM learning_paths WHERE userId=? ORDER BY createdAt DESC LIMIT 1', [userId]);
   if (!lp) return null;
   const milestones = qa('SELECT id, stageNumber, title, description, estimatedHours, status FROM milestones WHERE learningPathId=? ORDER BY stageNumber', [lp.id]);

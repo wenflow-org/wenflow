@@ -455,6 +455,43 @@ export function planClockAdvance(
 }
 
 /**
+ * 诊断 planClockAdvance 返回 null 的具体原因,给路由层产出精确报错。
+ * 三种失败:empty_schedule(课表排不出上课日)/ day_limit(超上限)/ future_day(下一上课日未到,
+ * P0 护栏禁止越过真实现在)。之前三者混成一句"已达上限或课表为空",误导排障。
+ */
+export function explainPlanFailure(
+  clock: SimulationClockView,
+  days: number,
+  now: Date = new Date(),
+): { reason: 'empty_schedule' | 'day_limit' | 'future_day' | 'none'; message: string; nextCourseDay?: string } {
+  const want = Math.max(1, Math.trunc(days) || 1);
+  const candidates = collectCourseDayIndexes(clock.baseDate, clock.dayIndex, clock.courseWeekdays, want);
+  if (!candidates.length) {
+    return {
+      reason: 'empty_schedule',
+      message: `课表为空:courseWeekdays=[${(clock.courseWeekdays || []).join(',')}] 在下一个自然周内排不出任何上课日`,
+    };
+  }
+  const withinCap = candidates.filter((index) => index <= clock.maxSimulatedDays);
+  if (!withinCap.length) {
+    return {
+      reason: 'day_limit',
+      message: `已达模拟天数上限(${clock.maxSimulatedDays}),下一个上课日是第 ${candidates[0]} 天`,
+    };
+  }
+  const next = resolveDayWindow(clock.baseDate, withinCap[0]);
+  if (next.dayStart.getTime() <= now.getTime()) {
+    // 候选日已开始但 plan 仍为 null:状态自相矛盾,多半是调用方传参不一致;不猜原因
+    return { reason: 'none', nextCourseDay: next.simulatedDay, message: `未发现可解释的失败:下一个上课日(${next.simulatedDay})按当前口径应可推进` };
+  }
+  return {
+    reason: 'future_day',
+    nextCourseDay: next.simulatedDay,
+    message: `下一上课日(${next.simulatedDay})尚未开始:模拟日不可越过真实当前时间(P0 护栏),等该日期到来后再推进,或将 baseDate 调整为已开始的日期`,
+  };
+}
+
+/**
  * 评审结论是否**真正进入了 Learn**（teaching/learn 阶段）。
  *
  * `resolvePathReview({startLearning:true})` 在 `decision=modify` 且重规划成功时返回

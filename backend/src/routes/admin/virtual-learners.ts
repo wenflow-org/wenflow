@@ -69,7 +69,7 @@ import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
 import { buildRetentionSeriesForConcepts, type RetentionConceptInput } from '../../services/memory/retention-series';
-import { simulatedDayService, resolveSimulationClock, planClockAdvance, resolveDayWindow, resolutionEnteredLearn, summarizeDayLearning, shouldAdvanceSimulationClock } from '../../services/virtual-lab/simulated-day.service';
+import { simulatedDayService, resolveSimulationClock, planClockAdvance, explainPlanFailure, resolveDayWindow, resolutionEnteredLearn, summarizeDayLearning, shouldAdvanceSimulationClock } from '../../services/virtual-lab/simulated-day.service';
 import { runWithSimulatedClock, simulatedNowOr } from '../../services/virtual-lab/simulation-clock-context';
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
 import { getVirtualLabSettings, updateVirtualLabSettings, DEFAULT_VIRTUAL_LAB_SETTINGS } from '../../services/virtual-lab-settings.service';
@@ -3146,8 +3146,10 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
       }
       const plan = planClockAdvance(clock, rawClock, days);
       if (!plan) {
-        const err: any = new Error(`已达模拟天数上限（${clock.maxSimulatedDays}）或课表为空`);
+        const why = explainPlanFailure(clock, days);
+        const err: any = new Error(why.message);
         err.statusCode = 409;
+        err.code = `SIM_DAY_${why.reason.toUpperCase()}`;
         throw err;
       }
       const lastIndex = plan.indexes[plan.indexes.length - 1];

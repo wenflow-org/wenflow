@@ -8,6 +8,7 @@ import {
   collectCourseDayIndexes,
   previousCourseDayGap,
   planClockAdvance,
+  explainPlanFailure,
   resolutionEnteredLearn,
   summarizeDayLearning,
   shouldAdvanceSimulationClock,
@@ -305,5 +306,50 @@ describe('课表与推进（isCourseDay / collectCourseDayIndexes / planClockAdv
     expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-14T12:00:00Z'))).toBeNull();
     // now = 09-15：第 1 天可推进
     expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-15T12:00:00Z'))?.indexes).toEqual([1]);
+  });
+});
+
+describe('explainPlanFailure: advance-day null 计划三分类', () => {
+  const WEEK = [1, 2, 3, 4, 5]; // 周一..周五
+
+  const clockOf = (over: { stageResultsClock?: any; settings?: any } = {}) =>
+    resolveSimulationClock({
+      stageResultsClock: { baseDate: '2026-09-14', dayIndex: 0, ...over.stageResultsClock },
+      profileClock: { enabled: true },
+      settings: { ...SETTINGS, courseWeekdays: WEEK, ...over.settings },
+      sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
+    });
+
+  it('future_day: 下一上课日尚未开始(2026-09-21 现场事故的还原)', () => {
+    const clock = clockOf();
+    const why = explainPlanFailure(clock, 1, new Date('2026-09-14T12:00:00Z'));
+    expect(why.reason).toBe('future_day');
+    expect(why.nextCourseDay).toBe('2026-09-15');
+    expect(why.message).toContain('尚未开始');
+  });
+
+  it('day_limit: dayIndex 已到上限,候选日全部越界(与 planClockAdvance 的 atLimit 同口径)', () => {
+    const clock = clockOf({ stageResultsClock: { dayIndex: 3 }, settings: { maxSimulatedDays: 3 } });
+    const why = explainPlanFailure(clock, 1, new Date('2026-09-20T12:00:00Z'));
+    expect(why.reason).toBe('day_limit');
+    expect(why.message).toContain('上限(3)');
+    expect(why.message).toContain('第 4 天');
+  });
+
+  it('empty 课表兜底:courseWeekdays=[] 时 isCourseDay 回落周一~五,不产生 empty_schedule(契约记录)', () => {
+    const clock = clockOf({ settings: { courseWeekdays: [] } });
+    const why = explainPlanFailure(clock, 1, new Date('2026-09-20T12:00:00Z'));
+    expect(why.reason).not.toBe('empty_schedule');
+    // 09-15(周二)在 09-20 前已开始 → 无失败
+    expect(why.reason).toBe('none');
+  });
+
+  it('none: 候选日已开始时应判「无失败」,且与 planClockAdvance 成功对齐', () => {
+    const clock = clockOf();
+    const now = new Date('2026-09-15T12:00:00Z');
+    const why = explainPlanFailure(clock, 1, now);
+    const plan = planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, now);
+    expect(why.reason).toBe('none');
+    expect(plan?.indexes).toEqual([1]);
   });
 });

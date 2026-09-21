@@ -62,7 +62,8 @@ async function goal() {
     const status = s?.status;
     log(`step#${i}: stage=${stageNow} status=${status} err=${r?.data?.error || r?.error || '-'}`);
     if (stageNow && stageNow !== 'goal') { log('已离开 goal 阶段 → ' + stageNow); setRunState(RUN, { phase: 'path-generating', goalRounds: i }); return; }
-    if (status && status !== 'active') { log('会话状态异常: ' + status); setRunState(RUN, { phase: 'goal-stalled', sessionStatus: status }); return; }
+    const NORMAL = ['running', 'active', 'in_progress'];
+    if (status && !NORMAL.includes(status)) { log('会话状态异常: ' + status); setRunState(RUN, { phase: 'goal-stalled', sessionStatus: status }); return; }
   }
   log(`已达 ${cap} 轮上限,goal 未收敛 — 登记问题后人工研判`);
   setRunState(RUN, { phase: 'goal-stalled', goalRounds: cap });
@@ -74,7 +75,8 @@ async function pathWatch() {
   while (Date.now() < deadline) {
     const r = await call('admin', 'GET', `${VL}/sessions/${sessionId}/path-status`, undefined, { run: RUN, action: 'path-status', pace: false });
     const st = r?.data?.status;
-    if (st === 'ready' || st === 'completed' || st === 'failed') { log('path-status: ' + st); break; }
+    if (st === 'active' || st === 'ready' || st === 'completed') { log('path-status: ' + st + ' (就绪)'); break; }
+    if (st === 'failed') { log('path-status: failed — 登记问题'); break; }
     await sleep(8000);
   }
   const snap = pathSnapshot(acct.userId, runState(RUN).startedAt);
@@ -142,7 +144,8 @@ async function learn() {
   }
   const advanceDay = !arg('no-day', false);
   const cap = Number(arg('steps', 90));
-  let steps = 0, stuck = 0, lastTaskId = null, lastCompleted = st.lessonsDone || 0;
+  let steps = 0, stuck = 0, lastMsgCount = -1;
+  const digests = [];
 
   while (steps < cap) {
     steps++;
@@ -155,13 +158,24 @@ async function learn() {
     const d = r.data || {};
     const s = await getSession(sessionId);
     const taskId = s?.currentTaskId;
-    if (taskId === lastTaskId && (d.completedTasks ?? s?.completedTasks) === lastCompleted) stuck++; else stuck = 0;
-    lastTaskId = taskId; lastCompleted = d.completedTasks ?? s?.completedTasks ?? lastCompleted;
-    log(`teach-step#${steps}: task=${(taskId || '').slice(-6)} completed=${lastCompleted}/${s?.totalTasks} taskCompleted=${!!d.taskCompleted} pathCompleted=${!!d.isPathCompleted} stuck=${stuck} err=${d.error || '-'}`);
+    // 净进展信号 = 当前任务课堂消息数增长(任务完成数只在课界变化,不能当步进信号)
+    const msgCount = taskId
+      ? (q(`SELECT COUNT(*) c FROM teaching_session_messages WHERE sessionId=(SELECT id FROM teaching_sessions WHERE taskId=? ORDER BY createdAt DESC LIMIT 1)`, [taskId])?.c ?? 0)
+      : 0;
+    if (d.userMessage || d.aiResponse) {
+      digests.push({
+        n: steps,
+        user: String(d.userMessage || '').replace(/\s+/g, ' ').slice(0, 120),
+        ai: String(d.aiResponse || '').replace(/[*#]+/g, '').replace(/\s+/g, ' ').slice(0, 200),
+      });
+    }
+    if (msgCount === lastMsgCount && !d.taskCompleted && !d.isPathCompleted) stuck++; else stuck = 0;
+    lastMsgCount = msgCount;
+    log(`teach-step#${steps}: task=${(taskId || '').slice(-6)} msgs=${msgCount} done=${s?.completedTasks ?? '?'}/${s?.totalTasks ?? '?'} taskCompleted=${!!d.taskCompleted} pathCompleted=${!!d.isPathCompleted} stuck=${stuck} err=${d.error || '-'}`);
 
     if (d.taskCompleted) {
       const idx = (runState(RUN).lessonsDone || 0) + 1;
-      await lessonBoundary(sessionId, taskId, idx, steps);
+      await lessonBoundary(sessionId, taskId, idx, digests.splice(0));
       setRunState(RUN, { lessonsDone: idx });
       if (advanceDay) {
         const day = await call('admin', 'POST', `${VL}/sessions/${sessionId}/advance-day`, {}, { run: RUN, action: `advance-day(L${idx})`, timeoutMs: 600000 });
@@ -170,28 +184,31 @@ async function learn() {
     }
     if (d.isPathCompleted) { log('全路径任务完成!'); setRunState(RUN, { phase: 'learn-done' }); return; }
     if (d.currentTaskStopped) { log('当前任务被中止(见日志)'); }
-    if (stuck >= 10) { log(`连续 ${stuck} 步无净进展,暂停防卡死 — 研判后可续跑`); setRunState(RUN, { phase: 'learn-stuck', steps }); return; }
+    if (stuck >= 6) { log(`连续 ${stuck} 步课堂消息无增长,暂停防卡死 — 研判后可续跑`); setRunState(RUN, { phase: 'learn-stuck', steps }); return; }
   }
   log('步数上限,未完成 — 可用 --steps 加大续跑');
 }
 
-async function lessonBoundary(sessionId, taskId, idx, stepsUsed) {
+async function lessonBoundary(sessionId, taskId, idx, digests = []) {
   const task = taskId ? q('SELECT id,title,estimatedMinutes,taskType,acceptanceCriteria,status,cognitiveLevel FROM subtasks WHERE id=?', [taskId]) : null;
   const tsRow = taskId ? q('SELECT * FROM teaching_sessions WHERE taskId=? ORDER BY createdAt DESC LIMIT 1', [taskId]) : null;
   const dg = tsRow ? taskDigest(tsRow.messages) : { turns: 0, lines: [] };
   let wrapup = '';
   try { wrapup = tsRow?.wrapup ? JSON.stringify(JSON.parse(tsRow.wrapup)).slice(0, 600) : (tsRow?.wrapup || ''); } catch { wrapup = String(tsRow?.wrapup || '').slice(0, 600); }
+  const timeline = digests.length
+    ? digests.map(g => `- [步${g.n}] 周: ${g.user} / AI: ${g.ai}`)
+    : dg.lines;
   const md = [
     `# ${RUN} · 第 ${idx} 课报告(${now()})`,
     '',
     `- 任务: ${task?.title || taskId} | 类型 ${task?.taskType || '?'} | 计划 ${task?.estimatedMinutes ?? '?'} 分钟`,
     `- 验收标准: ${task?.acceptanceCriteria || '-'}`,
-    `- 课堂回合数: ${dg.turns} | 本课实耗步进: ${stepsUsed}`,
+    `- 课堂回合数: ${dg.turns} | 驾驶步数: ${digests.length ? digests[digests.length - 1].n : '-'}`,
     `- 结算状态: ${task?.status} | 认知层级: ${task?.cognitiveLevel ?? '-'}`,
     `- wrapup 摘要: ${wrapup || '(无)'}`,
     '',
-    '## 课堂时间线(截选)',
-    ...dg.lines,
+    '## 课堂时间线(步级摘要)',
+    ...timeline,
     '',
     '## 系统反应待填(人工研判后补)',
     '- checkpoint 出题与判卷:',
@@ -223,6 +240,14 @@ async function status() {
   }
 }
 
-const stages = { start, goal, 'path-watch': pathWatch, review, accept, learn, wrap, status };
+async function replan() {
+  const { sessionId } = runState(RUN);
+  const r = await call('admin', 'POST', `${VL}/sessions/${sessionId}/replan-path`, {}, { run: RUN, action: '按评审重规划', timeoutMs: 600000 });
+  if (r?._failed) { log('重规划失败: ' + r.error); return; }
+  setRunState(RUN, { phase: 'path-generating', replannedAt: now(), replanCount: (runState(RUN).replanCount || 0) + 1 });
+  log('重规划已触发,跑 path-watch 等新结构');
+}
+
+const stages = { start, goal, 'path-watch': pathWatch, review, replan, accept, learn, wrap, status };
 if (!stages[stage]) { console.error('未知 stage:', stage, '| 可用:', Object.keys(stages).join(' ')); process.exit(1); }
 stages[stage]().catch(e => { console.error('FATAL', e); process.exit(1); });
