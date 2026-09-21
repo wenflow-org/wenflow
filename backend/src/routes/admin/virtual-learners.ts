@@ -47,6 +47,10 @@ import {
   countTodayVirtualAgentCalls,
   findSessionsByIdPair,
 } from '../../services/virtual-lab/virtual-session.repo';
+import {
+  appendSessionLogs as appendVirtualSessionLogs,
+  hydrateSessionLogsField as hydrateVirtualSessionLogsField
+} from '../../services/virtual-lab/virtual-session-log-store';
 import { logger } from '../../utils/logger';
 import { withTransaction } from '../../utils/with-transaction';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
@@ -1706,7 +1710,14 @@ router.get('/:id', async (req: Request, res) => {
     }
 
     const { profileData } = await ensureProfileStoryPool(profile);
-    
+
+    // 日志子表水合（列表摘要 roundCount/会话数依赖 logs 字段）
+    await Promise.all(
+      (Array.isArray(profile.sessions) ? (profile.sessions as VirtualSessionRow[]) : []).map(
+        (session) => hydrateVirtualSessionLogsField(session)
+      )
+    );
+
     res.json({
       success: true,
       data: {
@@ -1908,14 +1919,17 @@ router.get('/sessions/:sessionId', async (req: Request, res) => {
     const { sessionId } = req.params;
     
     const session = await findSessionWithProfileAndUser(sessionId);
-    
+
     if (!session) {
       return res.status(404).json({
         success: false,
         error: '模拟会话不存在'
       });
     }
-    
+
+    // 日志子表水合：侧表权威的会话把 logs 字段覆写为侧表内容（旧会话原样读列）
+    await hydrateVirtualSessionLogsField(session);
+
     let logs: SimulationLogEntry[] = [];
     try {
       logs = JSON.parse(session.logs || '[]');
@@ -2500,7 +2514,7 @@ router.post('/sessions/terminate', async (req: Request, res) => {
 });
 
 /** 单个会话终态化（operator 批量终止）：与 reclaim 同模式——只标记 abandoned，不删除任何数据 */
-async function terminateSession(session: Pick<VirtualSessionRow, 'id' | 'status' | 'currentStage' | 'stageResults' | 'logs' | 'updatedAt'>, operator: { userId?: string | null; name?: string | null }) {
+async function terminateSession(session: Pick<VirtualSessionRow, 'id' | 'status' | 'currentStage' | 'stageResults' | 'updatedAt'>, operator: { userId?: string | null; name?: string | null }) {
   const terminatedAt = new Date();
   const reason = 'operator_batch_terminate';
   const stageResults = parseJson<StageResults>(session.stageResults, {});
@@ -2517,17 +2531,17 @@ async function terminateSession(session: Pick<VirtualSessionRow, 'id' | 'status'
     (stageResults.autopilot as Record<string, unknown>).completedAt = terminatedAt.toISOString();
     (stageResults.autopilot as Record<string, unknown>).lastError = '管理员批量终止';
   }
-  const logs = parseJson<SimulationLogEntry[]>(session.logs, []);
-  logs.push({
-    timestamp: terminatedAt.toISOString(),
-    phase: 'error',
-    details: { error: `管理员批量终止会话（${session.status} → abandoned）`, output: { action: 'batch-terminate', previousStatus: session.status } }
-  });
   const before = { status: session.status, currentStage: session.currentStage, updatedAt: session.updatedAt?.toISOString?.() ?? null };
   // 先撤销活跃租约：正在执行的 Blackbox/Assisted runner 若持租约，会在下次续租/写库前
   // 抛 LeaseLost 中止（runLeasedExclusive 的 assertLeaseOwned），避免「终止后 session 被复活成 running」
   await deleteSessionLeases(session.id).catch(() => {});
-  await markSessionAbandoned(session.id, terminatedAt, JSON.stringify(stageResults), JSON.stringify(logs));
+  await markSessionAbandoned(session.id, terminatedAt, JSON.stringify(stageResults));
+  // 终止轨迹进日志子表（首写惰性播种旧列，O(新增) 代替整包写回）
+  await appendVirtualSessionLogs(session.id, [{
+    timestamp: terminatedAt.toISOString(),
+    phase: 'error',
+    details: { error: `管理员批量终止会话（${session.status} → abandoned）`, output: { action: 'batch-terminate', previousStatus: session.status } }
+  }]);
   await createAdminAuditLog({
     data: {
       adminId: operator?.userId ?? null,
@@ -3310,14 +3324,17 @@ router.get('/sessions/:sessionId/logs', async (req: Request, res) => {
     const { sessionId } = req.params;
     
     const session = await findSessionById(sessionId);
-    
+
     if (!session) {
       return res.status(404).json({
         success: false,
         error: '模拟会话不存在'
       });
     }
-    
+
+    // 日志子表水合（侧表权威则覆写内存 logs 字段）
+    await hydrateVirtualSessionLogsField(session);
+
     let logs: SimulationLogEntry[] = [];
     try {
       logs = JSON.parse(session.logs || '[]');

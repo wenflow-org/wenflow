@@ -11,7 +11,14 @@ jest.mock('../../config/database', () => ({
   default: {
     virtual_sessions: { findMany: mockVirtualSessionsFindMany, update: mockVirtualSessionsUpdate },
     admin_audit_logs: { create: mockAuditCreate },
-    virtual_experiment_leases: { deleteMany: mockLeaseDeleteMany }
+    virtual_experiment_leases: { deleteMany: mockLeaseDeleteMany },
+    // 日志子表（appendSessionLogs）：侧表已有行 → 跳过播种；裁剪扫描返回空
+    virtual_session_logs: {
+      findMany: jest.fn(async (args: { select?: { bytes?: boolean } }) =>
+        args.select && 'bytes' in args.select ? [] : [{ id: 1 }]),
+      createMany: jest.fn(async () => ({})),
+      deleteMany: jest.fn(async () => ({}))
+    }
   }
 }))
 jest.mock('../../utils/logger', () => ({

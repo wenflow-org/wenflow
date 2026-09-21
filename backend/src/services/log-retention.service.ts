@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 import { runBackgroundTask } from './background-task-tracker.service';
 import { boundSimulationLog } from './virtual-lab/simulation-log-buffer';
+import { trimSessionLogRows, type VirtualSessionLogStoreClient } from './virtual-lab/virtual-session-log-store';
 import type { ApplicationLifecycle } from './application-lifecycle.service';
 
 export const DEFAULT_LOG_RETENTION_DAYS = 90;
@@ -313,6 +314,29 @@ export class LogRetentionService {
       if (rows.length === 0) break;
       for (const row of rows) {
         scanned += 1;
+        // 日志子表权威的会话：裁最旧行（旧列已冻结置 null，无需处理）
+        const sideDelegate = (this.database as unknown as {
+          virtual_session_logs?: {
+            findMany(args: Record<string, unknown>): Promise<Array<{ id: number }>>;
+            deleteMany(args: Record<string, unknown>): Promise<unknown>;
+          }
+        }).virtual_session_logs;
+        if (sideDelegate?.findMany && sideDelegate?.deleteMany) {
+          const existing = await sideDelegate.findMany({
+            where: { sessionId: row.id },
+            take: 1,
+            select: { id: true }
+          });
+          if (existing.length > 0) {
+            if (!this.dryRun) {
+              const deleted = await trimSessionLogRows(row.id, budget, this.database as unknown as VirtualSessionLogStoreClient);
+              if (deleted > 0) trimmed += 1;
+            } else {
+              trimmed += 1;
+            }
+            continue;
+          }
+        }
         const raw = typeof row.logs === 'string' ? row.logs : '';
         if (raw.length <= budget) continue;
         let parsed: unknown;

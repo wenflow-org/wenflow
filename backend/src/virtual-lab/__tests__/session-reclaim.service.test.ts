@@ -16,11 +16,20 @@ const mockFindMany = jest.fn()
 const mockFindFirst = jest.fn()
 const mockUpdate = jest.fn()
 const mockAuditCreate = jest.fn()
+const mockLogRowsFindMany = jest.fn()
+const mockLogCreateMany = jest.fn()
+const mockLogDeleteMany = jest.fn()
 
 const mockDatabase: any = {
   virtual_sessions: { findMany: mockFindMany, update: mockUpdate },
   virtual_experiment_leases: { findFirst: mockFindFirst },
-  admin_audit_logs: { create: mockAuditCreate }
+  admin_audit_logs: { create: mockAuditCreate },
+  // 日志子表：默认侧表已有行（跳过播种），裁剪扫描返回空
+  virtual_session_logs: {
+    findMany: mockLogRowsFindMany,
+    createMany: mockLogCreateMany,
+    deleteMany: mockLogDeleteMany
+  }
 }
 
 function staleSession(overrides: Record<string, unknown> = {}) {
@@ -40,6 +49,8 @@ const NOW = new Date('2026-08-15T10:00:00.000Z')
 describe('VirtualSessionReclaimService', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockLogRowsFindMany.mockImplementation(async (args: { select?: { bytes?: boolean } }) =>
+      args?.select && 'bytes' in args.select ? [] : [{ id: 1 }])
   })
 
   it('running 超 24h 且无活跃租约的会话标记 failed 并写审计（不删除数据）', async () => {
@@ -67,7 +78,12 @@ describe('VirtualSessionReclaimService', () => {
       previousStatus: 'running',
       staleMs: expect.any(Number)
     }))
-    expect(JSON.parse(updateCall[0].data.logs)).toHaveLength(1)
+    // 回收轨迹改走日志子表（appendSessionLogs），会话行不再写 logs 列
+    expect(updateCall[0].data.logs).toBeUndefined()
+    expect(mockLogCreateMany).toHaveBeenCalledTimes(1)
+    const logRows = mockLogCreateMany.mock.calls[0][0].data
+    expect(logRows[0].sessionId).toBe('vs-stale')
+    expect(JSON.parse(logRows[0].payload).phase).toBe('error')
     expect(mockAuditCreate).toHaveBeenCalledTimes(1)
     const auditCall = mockAuditCreate.mock.calls[0][0].data
     expect(auditCall).toEqual(expect.objectContaining({

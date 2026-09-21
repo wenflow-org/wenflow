@@ -21,7 +21,12 @@ import {
 import { safeJsonParse } from '../utils/safe-json';
 import { asErrorLike } from '../virtual-lab/vlab-types';
 import { resolveSessionBudget } from '../virtual-lab/session-budget';
-import { appendSimulationLog, boundSimulationLog } from '../services/virtual-lab/simulation-log-buffer';
+import { boundSimulationLog } from '../services/virtual-lab/simulation-log-buffer';
+import {
+  appendSessionLogs,
+  loadSessionLogs,
+  replaceSessionLogs
+} from '../services/virtual-lab/virtual-session-log-store';
 import { simulatedNowOr } from '../services/virtual-lab/simulation-clock-context';
 import type { LeaseClientLike } from '../virtual-lab/vlab-types';
 import type {
@@ -818,78 +823,44 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
   }
 
   async addSessionLog(sessionId: string, log: SimulationLogEntry) {
-    // 只取 logs 列：整行读会连带拖回 stageResults 大字段（每条日志一次，放大明显）
+    // 只取 id：确认会话存在即可（日志追加进子表，不再读/写 logs 大列）
     const session = await prisma.virtual_sessions.findUnique({
       where: { id: sessionId },
-      select: { logs: true }
+      select: { id: true }
     });
 
     if (!session) return;
 
-    let logs: SimulationLogEntry[] = [];
-    try {
-      logs = JSON.parse(session.logs || '[]');
-    } catch { /* 解析失败时保留默认值 */ }
-
-    // 按**字节预算**封顶（实测出现过单行 31.9 MB：765 条 teaching-response，单条最大 123 KB）
-    logs = appendSimulationLog(logs, log);
-
     await this.assertCurrentSessionLeaseOwned(sessionId);
-    await prisma.virtual_sessions.update({
-      where: { id: sessionId },
-      data: {
-        logs: JSON.stringify(logs),
-        updatedAt: new Date()
-      }
-    });
+    // 子表追加（O(新增)）：首写惰性播种旧列，字节预算裁最旧行
+    await appendSessionLogs(sessionId, [log]);
   }
 
   /**
-   * 统计会话日志里某个 phase 的条数（只读 logs 列，避开 stageResults 大字段）。
+   * 统计会话日志里某个 phase 的条数。
    * 用于收敛护栏：`path-replan`（重规划次数）。
    */
   async countSessionLogsByPhase(sessionId: string, phase: string): Promise<number> {
-    const session = await prisma.virtual_sessions.findUnique({
-      where: { id: sessionId },
-      select: { logs: true }
-    });
-    if (!session) return 0;
-    let logs: SimulationLogEntry[] = [];
-    try {
-      logs = JSON.parse(session.logs || '[]');
-    } catch { /* 解析失败按 0 计 */ }
+    const logs = await loadSessionLogs(sessionId);
     return logs.filter((entry) => entry?.phase === phase).length;
   }
 
   /**
-   * 批量追加日志：一次读-改-写落多条。
-   * 背景：调用方曾普遍 `for (const log of logs) await addSessionLog(...)`，
-   * 每条日志都全量 parse/stringify 整个 logs 数组，形成 O(n²) 写放大
-   * （单会话累计冗余写可达 MB 级）。批量入口把 n 次读写收敛为 1 次。
+   * 批量追加日志：一次落多条。
+   * 背景：调用方曾普遍 `for (const log of logs) await addSessionLog(...)`，叠加旧列
+   * 整包重写形成 O(n²) 写放大（单会话累计冗余写可达 MB 级）。
+   * 子表化后每批 = 一次 INSERT，天然 O(新增)。
    */
   async addSessionLogs(sessionId: string, entries: SimulationLogEntry[]) {
     if (!entries.length) return;
     const session = await prisma.virtual_sessions.findUnique({
       where: { id: sessionId },
-      select: { logs: true }
+      select: { id: true }
     });
     if (!session) return;
 
-    let logs: SimulationLogEntry[] = [];
-    try {
-      logs = JSON.parse(session.logs || '[]');
-    } catch { /* 解析失败时保留默认值 */ }
-
-    logs.push(...entries);
-
     await this.assertCurrentSessionLeaseOwned(sessionId);
-    await prisma.virtual_sessions.update({
-      where: { id: sessionId },
-      data: {
-        logs: JSON.stringify(logs),
-        updatedAt: new Date()
-      }
-    });
+    await appendSessionLogs(sessionId, entries);
   }
   
   async updateSessionStatus(
@@ -1105,7 +1076,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       delete stageResults[key]
     }
 
-    const logs: SimulationLogEntry[] = safeJsonParse<SimulationLogEntry[]>(session.logs, [])
+    const logs = await loadSessionLogs(sessionId)
 
     const logPhasesToRemove = new Set(options.logPhasesToRemove || [])
     const nextLogs = logPhasesToRemove.size
@@ -1113,6 +1084,8 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       : logs
 
     await this.assertCurrentSessionLeaseOwned(sessionId)
+    // 日志重建进子表（过滤 phase 后落行，旧列置 null 冻结）
+    await replaceSessionLogs(sessionId, boundSimulationLog(nextLogs))
     await prisma.virtual_sessions.update({
       where: { id: sessionId },
       data: {
@@ -1124,7 +1097,6 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         completedTasks: options.resetTaskProgress ? 0 : session.completedTasks,
         totalTasks: options.resetTaskProgress ? 0 : session.totalTasks,
         stageResults: JSON.stringify(stageResults),
-        logs: JSON.stringify(boundSimulationLog(nextLogs)),
         completedAt: options.clearCompletedAt ? null : session.completedAt,
         updatedAt: new Date()
       }

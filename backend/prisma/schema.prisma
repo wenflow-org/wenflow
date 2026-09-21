@@ -918,10 +918,26 @@ model virtual_sessions {
   virtual_learner_profiles virtual_learner_profiles @relation(fields: [virtualProfileId], references: [id], onDelete: Cascade)
   experimentLease          virtual_experiment_leases?
   experimentCommands       virtual_experiment_commands[]
+  logsRows                 virtual_session_logs[]
 
   @@index([virtualProfileId])
   @@index([userId])
   @@index([status])
+}
+
+/// 虚拟会话日志子表（大 JSON 增量化，见 doc/SESSION_JSON_INCREMENTAL_DESIGN.md）：
+/// 追加 = INSERT 行（O(新增)），替代 logs 列「读全量→parse→整包 stringify 写回」。
+/// 双读过渡：侧表有行即权威；旧会话回退解析 logs 列，首次写时惰性播种后列置 null。
+model virtual_session_logs {
+  id         Int      @id @default(autoincrement())
+  sessionId  String
+  phase      String?
+  payload    String
+  bytes      Int      @default(0)
+  createdAt  DateTime @default(now())
+  virtual_sessions virtual_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, id])
 }
 
 model virtual_experiment_leases {

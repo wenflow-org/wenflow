@@ -23,6 +23,13 @@ jest.mock('../../config/database', () => ({
       findUnique: mockVirtualSessionFindUnique,
       update: mockVirtualSessionUpdate
     },
+    // 日志子表（appendSessionLogs）：侧表已有行 → 跳过播种；裁剪扫描返回空
+    virtual_session_logs: {
+      findMany: jest.fn(async (args: { select?: { bytes?: boolean } }) =>
+        args.select && 'bytes' in args.select ? [] : [{ id: 1 }]),
+      createMany: jest.fn(async () => ({})),
+      deleteMany: jest.fn(async () => ({}))
+    },
     goal_conversations: {
       findFirst: mockGoalConversationFindFirst
     }

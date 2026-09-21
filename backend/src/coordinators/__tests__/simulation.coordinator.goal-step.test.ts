@@ -28,6 +28,13 @@ const mockContinueConversation = jest.fn()
 jest.mock('../../config/database', () => ({
   __esModule: true,
   default: {
+    // 日志子表（appendSessionLogs）：侧表已有行 → 跳过播种；裁剪扫描返回空
+    virtual_session_logs: {
+      findMany: jest.fn(async (args: { select?: { bytes?: boolean } }) =>
+        args.select && 'bytes' in args.select ? [] : [{ id: 1 }]),
+      createMany: jest.fn(async () => ({})),
+      deleteMany: jest.fn(async () => ({}))
+    },
     $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback({
       virtual_sessions: {
         findUnique: mockTxFindUnique,

@@ -12,6 +12,7 @@ import prisma from '../config/database';
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 import type { ApplicationLifecycle } from '../services/application-lifecycle.service';
+import { appendSessionLogs, type VirtualSessionLogStoreClient } from '../services/virtual-lab/virtual-session-log-store';
 
 export const DEFAULT_STALE_SESSION_HOURS = 24;
 /**
@@ -300,20 +301,15 @@ export class VirtualSessionReclaimService {
       stageResults.autopilot.lastError = '僵尸会话自动回收';
     }
 
-    let logs: any[] = [];
-    try {
-      logs = JSON.parse(session.logs || '[]');
-    } catch {
-      logs = [];
-    }
-    logs.push({
+    // 回收轨迹进日志子表（首写惰性播种旧列；不再读改写 logs 大列）
+    await appendSessionLogs(session.id, [{
       timestamp: reclaimedAt,
       phase: 'error',
       details: {
         error: `僵尸会话自动回收：${session.status} 超过 ${formatThreshold(thresholdMs)}无写入`,
         output: { action: 'stale-session-reclaim', reason, thresholdMs, previousStatus: session.status, staleMs }
       }
-    });
+    }], { db: this.database as unknown as VirtualSessionLogStoreClient });
 
     const before = { status: session.status, currentStage: session.currentStage, updatedAt: session.updatedAt.toISOString(), staleMs };
     // 终态记 abandoned（拍板 2026-08-21）：僵尸回收是运维清理而非系统失败，
@@ -325,7 +321,6 @@ export class VirtualSessionReclaimService {
         currentStage: session.currentStage || 'goal',
         completedAt: now,
         stageResults: JSON.stringify(stageResults),
-        logs: JSON.stringify(logs),
         updatedAt: now
       }
     });

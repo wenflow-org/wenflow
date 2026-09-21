@@ -96,15 +96,15 @@ export function deleteSessionLeases(sessionId: string) {
   return prisma.virtual_experiment_leases?.deleteMany({ where: { sessionId } });
 }
 
-/** 单会话终态化（operator 批量终止）：abandoned + 终态时间戳 */
-export function markSessionAbandoned(sessionId: string, terminatedAt: Date, stageResultsJson: string, logsJson: string) {
+/** 单会话终态化（operator 批量终止）：abandoned + 终态时间戳。
+ *  日志轨迹改走 virtual_session_logs 子表（appendSessionLogs），不再经列写回。 */
+export function markSessionAbandoned(sessionId: string, terminatedAt: Date, stageResultsJson: string) {
   return prisma.virtual_sessions.update({
     where: { id: sessionId },
     data: {
       status: 'abandoned',
       completedAt: terminatedAt,
       stageResults: stageResultsJson,
-      logs: logsJson,
       updatedAt: terminatedAt
     }
   });
