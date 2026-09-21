@@ -204,6 +204,9 @@ function buildTimeDimensions(raw: unknown): NonNullable<GoalPathVisibleSummary['
     estimatedHours: num(r.estimatedHours),
     sessionsPerWeek: num(r.sessionsPerWeek),
     sessionsLengthMin: num(r.sessionsLengthMin),
+    // 课次锚（2026-09-21）：体量 = totalSessions × sessionsLengthMin。
+    // 让 LLM 估"总学时"产出率只有 10%，估"几节课"才估得动。
+    totalSessions: num(r.totalSessions),
   };
   return Object.values(result).some((v) => v !== null) ? result : null;
 }

@@ -223,6 +223,13 @@ export const ONE_SITTING_BOUNDS = {
 export const ONE_SITTING_MAX_HOURS = 1;
 
 /**
+ * 「一节课」的默认时长（分钟）：当 Goal 层没能从用户原话里取到"一次多久"时用它兜底。
+ * 为什么需要默认值：`sessionsLengthMin` 实测常为 null（用户没说"一次学多久"），
+ * 而"课次 × 一次时长"必须两项都有才能算出体量 —— 缺一项就退化成模具（= 通胀）。
+ */
+export const DEFAULT_SESSION_MINUTES = 40;
+
+/**
  * 把任意已算好的 hints 收到「一节课」量级（只收上界，不拍死数字；区间不塌成单点）。
  * 两个调用方：① Goal 层 triage 判定（derivePlanningHints 内）；② Path 层自检后，
  * 给 stage-designer 用的 hints（path 产出 ≤1 小时 ⇒ 任务数/分钟一并收紧，否则学时仍会被
@@ -250,7 +257,7 @@ export function derivePlanningHints(
   timeBudget: string | null,
   timeBudgetCadence: TimeBudgetCadence | null,
   keyStages: string[],
-  timeDimensions?: { totalWeeks?: number | null; estimatedHours?: number | null; sessionsPerWeek?: number | null; sessionsLengthMin?: number | null } | null,
+  timeDimensions?: { totalWeeks?: number | null; estimatedHours?: number | null; sessionsPerWeek?: number | null; sessionsLengthMin?: number | null; totalSessions?: number | null } | null,
   scopeSize?: ScopeSize | null,
   learnerLoadProfile?: LearnerLoadProfile | null,
   triage?: TriageHint | null
@@ -302,6 +309,20 @@ export function derivePlanningHints(
   // maxWeeks：优先用 goal 层 LLM 推断的 totalWeeks（×1.2 缓冲）；
   // 其次用自由文本 time_horizon 的确定性周数兜底（LLM 未产出 totalWeeks 时仍能钳制紧迫场景）；
   // 最后回退 pace 档位固定值，硬上限 52
+  // ---- 课次锚（2026-09-21）：体量 = **课次 × 一次时长** ----
+  // 实测（本地 60 条 run）：让 LLM 估"总学时"产出率仅 10%（estimatedHours 只有 6/60 有值）⇒
+  // hints 掉进兜底模具（[3,5] 任务 × 30–90 分钟）⇒ 中位 7.2h、与需求无关。
+  // 改口径：让 LLM 估"这件事大概要几节课"（人能估），一次时长取用户原话（sessionsLengthMin）。
+  const totalSessions = Number.isFinite(timeDimensions?.totalSessions) && (timeDimensions!.totalSessions as number) > 0
+    ? (timeDimensions!.totalSessions as number)
+    : null;
+  // 一次时长：优先用户原话，缺失用默认（40 分钟）——否则"课次 × 一次时长"算不出体量，锚失效
+  const oneSessionMinutes = totalSessions !== null
+    ? (Number.isFinite(timeDimensions?.sessionsLengthMin) && (timeDimensions!.sessionsLengthMin as number) > 0
+        ? (timeDimensions!.sessionsLengthMin as number)
+        : DEFAULT_SESSION_MINUTES)
+    : null;
+
   const inferredWeeks = Number.isFinite(timeDimensions?.totalWeeks) && (timeDimensions!.totalWeeks as number) > 0
     ? (timeDimensions!.totalWeeks as number)
     : inferMaxWeeksFromTimeHorizon(timeHorizon);
@@ -398,11 +419,13 @@ export function derivePlanningHints(
     || normalizeString(timeBudget)
     || normalizeString(timePerSession)
     || normalizeString(learnerLoadProfile?.availableTime)
-    || (timeDimensions && (timeDimensions.totalWeeks || timeDimensions.estimatedHours || timeDimensions.sessionsPerWeek)),
+    || (timeDimensions && (timeDimensions.totalWeeks || timeDimensions.estimatedHours || timeDimensions.sessionsPerWeek || timeDimensions.totalSessions)),
   );
   const availabilityText = normalizeString(learnerLoadProfile?.availableTime);
   const isTightAvailabilitySignal = availabilityText ? isMinimalAvailabilitySignal(availabilityText) : false;
-  if (isTightAvailabilitySignal || !hasAnyTimeSignal) {
+  // 课次 < 1 ⇒ 这是一次操作（不是一门课）——最干净、且**代码可判**的判据，不需要类型分类
+  const lessThanOneLesson = totalSessions !== null && totalSessions < 1;
+  if (lessThanOneLesson || isTightAvailabilitySignal || !hasAnyTimeSignal) {
     const cap = ONE_SITTING_BOUNDS;
     milestoneRange = [...cap.milestoneRange];
     conceptRange = [...cap.conceptRange];
@@ -427,7 +450,9 @@ export function derivePlanningHints(
   //   ② totalWeeks × sessionsPerWeek × sessionsLengthMin/60（频率×时长×周期推算总小时）
   //   ③ pace 档位中位数（compact→3, standard→4, extended→5）
   const estimatedHoursTotal =
-    Number.isFinite(timeDimensions?.estimatedHours) && (timeDimensions!.estimatedHours as number) > 0
+    totalSessions !== null && oneSessionMinutes !== null
+      ? totalSessions * oneSessionMinutes / 60
+      : Number.isFinite(timeDimensions?.estimatedHours) && (timeDimensions!.estimatedHours as number) > 0
       ? (timeDimensions!.estimatedHours as number)
       : Number.isFinite(timeDimensions?.totalWeeks)
           && (timeDimensions!.totalWeeks as number) > 0

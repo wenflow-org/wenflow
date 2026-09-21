@@ -584,10 +584,17 @@ async function triageJudgeHandler(input: any) {
           ? (recurrence === 'recurring' ? 'short_course' : 'one_off')
           : 'short_course';
       const confidenceRaw = asTrimmedString(parsed?.confidence).toLowerCase();
+      const positiveNumber = (v: any): number | null => {
+        const n = Number(v);
+        return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+      };
       return {
         transferable,
         recurrence,
         artifact,
+        // 体量估算（课次锚）：totalSessions × sessionsLengthMin 就是体量
+        totalSessions: positiveNumber(parsed?.totalSessions),
+        sessionsLengthMin: positiveNumber(parsed?.sessionsLengthMin),
         evidence: asTrimmedString(parsed?.evidence).slice(0, 80),
         misdiagnosis: asTrimmedString(parsed?.misdiagnosis).slice(0, 60) || null,
         confidence: ['high', 'medium', 'low'].includes(confidenceRaw) ? confidenceRaw : 'low',

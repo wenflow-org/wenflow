@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-conversation
-coreHash: 03cf1f394658ea8f7a5da3c3b9586cc4015c34fb2bcdc9edecb7af76e3dc8470
+coreHash: 47a3c501aaf70d2699144c3e08ef05eca7fa598f4cc40d573758d2233fe451b8
 coreVersion: 1
 temperature: 0.7
 maxTokens: 8000
@@ -100,8 +100,10 @@ deltaOutput: true
 · available_resources（object）{ "time_horizon": "", "time_budget": "", "time_per_session": "" }；
   time_horizon 为用户时间表述的自由文本（如"三个月""下周汇报前""半年"），保留原意、不限定枚举、不改写；
   无法确定时记"未明确"。后续规划必须阶段制，不生成按周/月展开的任务表。
-· time_dimensions（object，可选，hidden）时间维度数值推断（供 path 层规划参考，LLM 自由推断，无法确定给 null）：
-  { "totalWeeks": 总学习周期周数, "estimatedHours": 预计总投入小时, "sessionsPerWeek": 每周学习次数, "sessionsLengthMin": 每次学习分钟数 }
+· time_dimensions（object，可选，hidden）时间维度数值推断（供 path 层规划参考，LLM 自由推断，无法确定给 null）。
+  **优先答"这件事大概要几节课"**（可估），不要硬凑"总投入小时"（估不准，给不出就给 null）：
+  { "totalSessions": 总课次（单位 = 用户自己一次能学的时长；如"每天睡前半小时"→ 一次 30 分钟，这件事大概需要几节就写几节，可以是小数如 0.2）, "sessionsLengthMin": 每次学习分钟数（取自用户原话；用户没说给 null）, "totalWeeks": 总学习周期周数, "sessionsPerWeek": 每周学习次数, "estimatedHours": 预计总投入小时（**仅当总课次与一次时长都能定出时才填，否则 null**） }
+  口径：`totalSessions × sessionsLengthMin` 就是体量；**课次小于 1 ⇒ 这只是一次操作，不该排课**（下游据此只给"一节课"或一张操作卡）。
   由 time_horizon/time_budget/time_per_session 自然推断（月→周换算、频率×时长×周期乘除推导均可），无依据的字段给 null，禁止编造。
 · success_criteria（object）{ "observable_result": "", "acceptance_check": "" }
 · constraints_and_boundaries（string[]）硬约束、禁区

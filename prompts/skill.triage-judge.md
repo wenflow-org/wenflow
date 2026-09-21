@@ -1,6 +1,6 @@
 ---
 agentId: skill:triage-judge
-coreHash: edd2c7076403f53560297cb9e2f8b614371de7a3a990bcf5b67f1cb53e6ed651
+coreHash: 44a1f963599071de7b21bf53a96d21453ee9cdad3e2ac2311e8a252339fa9b65
 coreVersion: 1
 temperature: 0.1
 maxTokens: 2600
@@ -28,13 +28,16 @@ failurePolicy: retry
 4. 情绪材料**不是**可迁移性的证据：怕点错、怕弄丢、被笑话、不敢动手、怕被追问——这些是**执行前的障碍**， 既不能作为 transferable=true 的理由，也不影响 recurrence。若用户只有情绪、没有可迁移的判断 → transferable=false
 5. 用户把一次性操作误诊为"得系统学一门"（如"是不是得报个电脑班学 Office"）时：**以诉求本身为准判 false**， 并在 misdiagnosis 字段写明他误诊成了什么（供后续安抚使用）
 6. 证据不足（只有一句口号、没有具体情境）→ transferable 给 null、recurrence 给 unknown、confidence 给 low，**不要猜**
-7. evidence 字段必须引用用户自己的说法（可核查），不得写成你的推理结论
-8. 只输出一个 JSON 对象：不要任何解释、前言、结语、Markdown 代码块或字段之外的键；拿不准的字段按规则给 null/unknown
+7. 体量估算是**本判官的主产物**：回答"这件事大概要**几节课**"，而不是"总共多少小时"（后者估不准）。 单位 = **用户自己一次能学的时长**（从用户原话里取：'每天睡前半小时' → 一次 30 分钟；没说就给 null）。 课次可以是小数：'把照片传到电脑' → 0.2；'把表头钉住' → 0.1；'从零会独立做数据报表' → 20。 **课次小于 1 ⇒ 这只是一次操作**（下游据此不排课），不要为了显得专业而把课次抬高
+8. evidence 字段必须引用用户自己的说法（可核查），不得写成你的推理结论
+9. 只输出一个 JSON 对象：不要任何解释、前言、结语、Markdown 代码块或字段之外的键；拿不准的字段按规则给 null/unknown
 
 ## 输出字段
 
 - transferable · boolean? — 是否存在可跨情境迁移的因果心智；证据不足给 null
 - recurrence · enum — once（只此一次）| recurring（还会再遇到）| unknown（用户未给出证据）
+- totalSessions · number? — 总课次（单位 = 一次学习时长；可有小数，如 0.2）；证据不足给 null
+- sessionsLengthMin · number? — 一次学习分钟数（取自用户原话，如"睡前半小时"→30）；用户没说给 null
 - evidence · string — 一句话依据，必须引用用户原话，不超过 60 字
 - misdiagnosis · string? — 用户把这件事误诊成了什么（无则 null），不超过 40 字
 - confidence · enum — high | medium | low

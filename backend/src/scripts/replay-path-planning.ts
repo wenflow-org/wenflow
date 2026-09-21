@@ -23,8 +23,9 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
 import sqlite3 from 'sqlite3';
-import { executeSkill } from '../skills';
+import { auxSkillDefinitionMap, executeSkill, executeSkillWithResult } from '../skills';
 import { pathAgentDefinition } from '../skills/path-planning';
+import { stageDesignerDefinition } from '../skills/stage-designer';
 import { normalizeAgentOutput } from '../agents/output-normalizer';
 import { buildFramedNormalizedInput } from '../services/learning/path-planning-hints';
 import { buildPathAgentInput } from '../services/learning/generation/path-generation.core';
@@ -38,6 +39,13 @@ const DB_PATH = path.resolve(__dirname, '..', '..', 'prisma', 'dev.db');
  * 足以构造一份**同源输入**做改动前后的**配对 A/B**（同输入、单变量）。
  * ⚠️ 这是构造输入（非生产快照）：只用于**同一输入下的前后对比**，不能当作生产分布的样本。
  */
+/** `--estimate-lessons`：先调判官模拟 Goal 层"估课次"（totalSessions × sessionsLengthMin），
+ *  注入构造输入的 timeDimensions——这是课次锚的输入，缺它就只能走兜底 */
+const ESTIMATE_LESSONS = process.argv.includes('--estimate-lessons');
+
+/** `--with-stage`：path 之后继续跑 stage-designer，汇总任务数与真实学时（定位注水点） */
+const WITH_STAGE = process.argv.includes('--with-stage');
+
 /** `--rich`：构造输入时额外灌入情绪/压力/抗拒材料（见 problemSpace 注释） */
 const RICH = process.argv.includes('--rich');
 /**
@@ -186,6 +194,36 @@ async function main(): Promise<void> {
 
   for (const item of items) {
     const data = item.data;
+    if (ESTIMATE_LESSONS) {
+      // 模拟 Goal 层：用"用户原话 + 情境"估课次与一次时长（判官的主产物）
+      const ni = data.userProfile?.normalizedInput || {};
+      const request = String(ni?.learnerProfile?.surfaceGoal || data.description || '');
+      const context = [
+        ni?.problemSpace?.realProblem,
+        ni?.problemSpace?.scenario,
+        ni?.learnerLoadProfile?.availableTime ? `（自报可用时间档位：${ni.learnerLoadProfile.availableTime}）` : '',
+      ].filter(Boolean).join(' / ');
+      try {
+        const est: any = await executeSkillWithResult(auxSkillDefinitionMap['triage-judge'], {
+          request, context, background: ni?.learnerProfile?.backgroundExperience || '',
+          __prompt: { requestPath: 'replay-estimate-lessons' },
+        } as any);
+        const out = est?.output || {};
+        if (out.totalSessions > 0) {
+          ni.timeDimensions = {
+            totalSessions: out.totalSessions,
+            sessionsLengthMin: out.sessionsLengthMin ?? null,
+          };
+          data.userProfile.normalizedInput = ni;
+          const totalMin = out.sessionsLengthMin ? Math.round(out.totalSessions * out.sessionsLengthMin) : null;
+          console.log(`  ⇢ 判官估课次: totalSessions=${out.totalSessions} · 一次=${out.sessionsLengthMin ?? '-'}分钟 · 合计≈${totalMin ?? '?'}分钟 | artifact=${out.artifact} | 依据：${String(out.evidence || '').slice(0, 50)}`);
+        } else {
+          console.log(`  ⇢ 判官未给出课次（${JSON.stringify(out).slice(0, 90)}）`);
+        }
+      } catch (error) {
+        console.log(`  ⇢ 估课次失败：${String((error as Error)?.message || error).slice(0, 80)}`);
+      }
+    }
     const agentInput = buildPathAgentInput(data);
     const framedRaw = data.userProfile?.normalizedInput || null;
     const framed = buildFramedNormalizedInput(framedRaw);
@@ -217,6 +255,38 @@ async function main(): Promise<void> {
     for (const m of ms2) {
       const concept = m.coreConcept || m.coreConceptName || '';
       console.log(`    【${m.stageNumber ?? ''}】${m.title}   (概念:${String(concept).slice(0, 26)})`);
+    }
+    if (WITH_STAGE && ms2.length > 0) {
+      // 定位注水点：path 只给段数与粗估学时；**真实学时 = 任务分钟之和**（stage-designer 产出）
+      let totalTasks = 0;
+      let totalMinutes = 0;
+      const perStage: string[] = [];
+      for (const [i, m] of ms2.entries()) {
+        const prev = i > 0 ? ms2[i - 1] : null;
+        const stageInput = {
+          milestone: {
+            stageNumber: m.stageNumber,
+            title: m.title,
+            coreConcept: m.coreConceptId || m.coreConcept || null,
+            description: m.description || null,
+            goal: m.goal || null,
+            estimatedHours: m.estimatedHours || null,
+          },
+          ...(prev ? { previousMilestone: { stageNumber: prev.stageNumber, title: prev.title, coreConcept: prev.coreConceptId || prev.coreConcept || null } } : {}),
+          cognitiveCore: (payload as any).cognitiveCore || (payload as any).cognitiveDesign || null,
+          normalizedInput: framed,
+          repairHints: null,
+        };
+        // 生产里（stage-enrichment）就是**裸输入**直接传，不是 { input, context }
+        const stageResult: any = await executeSkill(stageDesignerDefinition, stageInput as any);
+        const subs = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
+        const minutes = subs.reduce((sum: number, x: any) => sum + (Number(x?.estimatedMinutes) || 0), 0);
+        totalTasks += subs.length;
+        totalMinutes += minutes;
+        perStage.push(`段${m.stageNumber}: ${subs.length}任务/${minutes}分钟`);
+      }
+      console.log(`  ▶ stage-design 后（真实产出）: **${totalTasks} 任务 / ${totalMinutes} 分钟 = ${(totalMinutes / 60).toFixed(1)}h**`);
+      console.log(`     ${perStage.join('  |  ')}`);
     }
     if (expectKeyword) {
       const hit = String(payload.name).includes(expectKeyword);

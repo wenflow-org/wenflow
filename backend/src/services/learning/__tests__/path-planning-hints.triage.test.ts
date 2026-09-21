@@ -120,3 +120,41 @@ describe('clampHintsToOneSitting（Path 层自检 → stage-designer 的 hints�
     expect(width(h.subtasksPerStageRange)).toBeGreaterThanOrEqual(1);
   });
 });
+
+/**
+ * 课次锚（2026-09-21）：体量 = 课次 × 一次时长。
+ * 为什么换锚：让 LLM 估"总学时"产出率仅 10%（本地 60 条 run 里 estimatedHours 只有 6 条有值），
+ * 于是 hints 掉进兜底模具（[3,5] 任务 × 30–90 分钟）⇒ 中位 7.2h、与需求无关。
+ */
+describe('课次锚（体量 = 课次 × 一次时长）', () => {
+  it('课次 < 1 ⇒ 一节课（这是一次操作，不该排课）', () => {
+    const h = derivePlanningHints(null, null, '每天睡前半小时', 'per_day', [], { totalSessions: 0.2, sessionsLengthMin: 30 }, null, null, null);
+    expect(h.milestoneRange[1]).toBeLessThanOrEqual(2);
+    expect(h.subtaskMinutesRange[1]).toBeLessThanOrEqual(15);
+    expect(h.milestoneRange[1] * h.subtasksPerStageRange[1] * h.subtaskMinutesRange[1]).toBeLessThanOrEqual(60);
+  });
+
+  it('课次 × 一次时长 驱动任务数（不再用模具兜底）', () => {
+    const small = derivePlanningHints(null, null, null, null, ['a', 'b', 'c'], { totalSessions: 1, sessionsLengthMin: 30 }, null, null, null);
+    const big = derivePlanningHints(null, null, null, null, ['a', 'b', 'c'], { totalSessions: 20, sessionsLengthMin: 60 }, null, null, null);
+    expect(big.targetSubtasksPerStage ?? 0).toBeGreaterThan(small.targetSubtasksPerStage ?? 0);
+  });
+
+  it('课次 ≥ 1 且时长充裕 ⇒ 不被一节课锚钳制（capability 保持长路径）', () => {
+    const h = derivePlanningHints(null, null, null, null, [], { totalSessions: 20, sessionsLengthMin: 60 }, null, null, null);
+    expect(h.milestoneRange[1]).toBeGreaterThan(2);
+  });
+});
+
+describe('一次时长默认值（课次锚的必要配件）', () => {
+  it('课次存在但一次时长缺失 ⇒ 用默认 40 分钟，锚仍生效（不退化成模具）', () => {
+    const withDefault = derivePlanningHints(null, null, null, null, ['a', 'b', 'c', 'd'], { totalSessions: 6 }, null, null, null);
+    const explicit = derivePlanningHints(null, null, null, null, ['a', 'b', 'c', 'd'], { totalSessions: 6, sessionsLengthMin: 40 }, null, null, null);
+    expect(withDefault.targetSubtasksPerStage).toEqual(explicit.targetSubtasksPerStage);
+    expect(withDefault.targetSubtasksPerStage ?? 0).toBeGreaterThan(0);
+  });
+  it('无课次时不受默认值影响（保持现状）', () => {
+    const h = derivePlanningHints(null, null, RICH_TIME_BUDGET, 'per_week', [], { ...RICH_TIME_DIMENSIONS }, null, null, null);
+    expect(h.milestoneRange[1]).toBeGreaterThan(2);
+  });
+});
