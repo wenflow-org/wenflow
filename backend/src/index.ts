@@ -15,6 +15,7 @@ import { ApplicationLifecycle, resolveShutdownDeadlineMs } from './services/appl
 import { aiTeachingOrchestrator } from './services/ai-teaching/AITeachingCoordinator';
 import { aiCapabilityHealthService } from './services/ai-capability-health.service';
 import { backgroundTaskTracker } from './services/background-task-tracker.service';
+import { telemetryWriter } from './services/telemetry-writer.service';
 import { logRetentionService } from './services/log-retention.service';
 import { auditCleanupService } from './services/audit-cleanup.service';
 import { autopilotService } from './virtual-lab/autopilot.service';
@@ -124,6 +125,9 @@ export async function startServer() {
 // 优雅关闭
 export async function shutdown(signal: string) {
   logger.info(`${signal} received. Draining server...`, { shutdownDeadlineMs });
+  // 遥测写已后台化（不再阻塞请求路径），关闭时统一等待在途写入落盘，
+  // 避免与下方 prisma $disconnect 竞争产生无谓的写入失败告警
+  await telemetryWriter.flush().catch(() => {});
   const report = await lifecycle.shutdown(signal, {
     httpServer,
     stopSchedulers: async () => {
