@@ -21,7 +21,7 @@
         :key="s.id"
         type="button"
         class="orch-stage-tab"
-        :class="{ 'is-active': viewMode === 'stage' && active === s.id }"
+        :class="{ 'is-active': pane !== 'sandbox' && active === s.id }"
         @click="selectStage(s.id)"
       >
         <span class="orch-stage-tab__name">{{ s.name.replace(/阶段$/, '') }}</span>
@@ -29,43 +29,46 @@
       </button>
     </div>
 
-    <!-- 沙盘：深链 ?tab=sandbox / 次要入口（契约对照，独立工作流） -->
-    <div v-if="viewMode === 'sandbox'" class="orch-tabpane">
-      <div class="orch-pane-head">
-        <strong class="orch-pane-title">沙盘契约</strong>
-        <span class="orch-pane-hint">Agent 输入通道 / 输出字段对照（仿真调试参考）</span>
-        <span class="orch-pane-spacer"></span>
-        <button type="button" class="orch-pane-back" @click="viewMode = 'stage'">返回阶段</button>
+    <!-- 阶段工作区:阶段(看哪个阶段) × 子面板(看什么) 双层导航。
+         原「流水线常开 + 字段路由/治理 details 折叠」纵堆层级不清,收敛为 pills 子面板;
+         沙盘从"次要深链入口"提升为第 4 个子面板,可发现性补齐 -->
+    <div v-if="pane === 'sandbox'" class="orch-tabpane">
+      <div class="mk-pills orch-pane-tabs" role="tablist">
+        <button v-for="pt in ORCH_PANES" :key="pt.id" type="button" role="tab"
+          class="mk-pill" :class="{ 'mk-pill--active': pane === pt.id }"
+          :aria-selected="pane === pt.id" @click="pane = pt.id">{{ pt.label }}</button>
       </div>
       <SandboxView />
     </div>
 
-    <!-- 阶段工作区：数据旅程流水线（浏览）+ 字段路由（编辑，默认收起）+ 治理（查证） -->
     <template v-else-if="current">
+      <div class="mk-pills orch-pane-tabs" role="tablist">
+        <button v-for="pt in ORCH_PANES.filter((x) => x.id !== 'sandbox')" :key="pt.id" type="button" role="tab"
+          class="mk-pill" :class="{ 'mk-pill--active': pane === pt.id }"
+          :aria-selected="pane === pt.id" @click="pane = pt.id">{{ pt.label }}</button>
+      </div>
+
       <DataFlowGraph
+        v-if="pane === 'journey'"
         :key="`${active}-${flowKey}`"
         :stage="active"
         @changed="onRoutingChanged"
         @stage="onStageChange"
       />
-      <details class="orch-fold">
-        <summary class="mk-section__summary mk-section__summary--muted">
-          字段路由与编排文件
-          <span class="orch-fold__meta">{{ current.skills.length }} Skill · 点开批量查阅 / 编辑编排 YAML</span>
-        </summary>
-        <div class="orch-fold__body">
-          <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
+      <section v-else-if="pane === 'routing'" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">字段路由与编排文件</h3>
+          <span class="mk-card__meta">{{ current.skills.length }} Skill · 批量查阅 / 编辑编排 YAML</span>
         </div>
-      </details>
-      <details class="orch-fold" :open="governOpen">
-        <summary class="mk-section__summary mk-section__summary--muted">
-          治理：{{ TERMS.driftContract }}报告 + 变更审计
-          <span class="orch-fold__meta">编辑后核对文件与库一致</span>
-        </summary>
-        <div class="orch-fold__body">
-          <DriftAuditPanel :stage="active" />
+        <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
+      </section>
+      <section v-else-if="pane === 'governance'" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">治理：{{ TERMS.driftContract }}报告 + 变更审计</h3>
+          <span class="mk-card__meta">编辑后核对文件与库一致</span>
         </div>
-      </details>
+        <DriftAuditPanel :stage="active" />
+      </section>
     </template>
     <div v-else class="orch-tabpane">
       <!-- 首屏骨架：此前是居中小 spinner，4K 下整页空白只挂一行字 -->
@@ -93,9 +96,15 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
-const viewMode = ref<'stage' | 'sandbox'>('stage')
-/** 编辑页内治理折叠区（漂移/审计）：?tab=drift 深链时自动展开 */
-const governOpen = ref(false)
+/** 阶段工作区子面板:字段旅程(默认)/字段路由/治理;沙盘为顶层独立面板(深链 ?tab=sandbox 兼容) */
+type OrchPane = 'journey' | 'routing' | 'governance' | 'sandbox'
+const ORCH_PANES: Array<{ id: OrchPane; label: string }> = [
+  { id: 'journey', label: '字段旅程' },
+  { id: 'routing', label: '字段路由' },
+  { id: 'governance', label: '治理' },
+  { id: 'sandbox', label: '沙盘契约' },
+]
+const pane = ref<OrchPane>('journey')
 
 /** 字段流转图数据版本：行级编辑/字段路由变更后 +1 触发重挂载刷新 */
 const flowKey = ref(0)
@@ -115,15 +124,17 @@ function applyStageQuery() {
   const qStage = typeof route.query.stage === 'string' && route.query.stage.trim() ? route.query.stage.trim() : ''
   const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
   if (qStage) active.value = qStage
-  // 阶段工作区模式：浏览/编辑/治理都在阶段内；仅沙盘保留独立 pane
-  if (qTab === 'sandbox') viewMode.value = 'sandbox'
-  else if (qTab === 'drift') governOpen.value = true
-  // topology / field-routings / routing / workbench 深链 → 落阶段视图（阶段内含图+表+治理）
+  // ?tab= 语义:journey(缺省)/routing/governance/sandbox;legacy:drift→治理,topology→旅程
+  if (qTab === 'sandbox') pane.value = 'sandbox'
+  else if (qTab === 'routing') pane.value = 'routing'
+  else if (qTab === 'governance' || qTab === 'drift') pane.value = 'governance'
+  else if (qTab === 'journey' || qTab === 'topology') pane.value = 'journey'
+
 }
 
 function selectStage(id: string) {
   active.value = id
-  viewMode.value = 'stage'
+  if (pane.value === 'sandbox') pane.value = 'journey'
   flowKey.value++
 }
 
@@ -206,10 +217,16 @@ interface Stage {
 }
 
 const active = ref('goal')
-/* 阶段切换回写 ?stage=(对齐全站"切换可寻址"约定;此前只读深链,刷新丢失所在阶段) */
-watch(active, (s) => {
-  const cur = typeof route.query.stage === 'string' ? route.query.stage : ''
-  if (s && s !== cur) void router.replace({ query: { ...route.query, stage: s } })
+/* 阶段/子面板变化回写 ?stage=&tab=(对齐全站"切换可寻址"约定;此前只读深链,
+   刷新丢失所在阶段与子面板)。journey 为缺省档,不占 URL。 */
+watch([active, pane], ([s, p]) => {
+  const curStage = typeof route.query.stage === 'string' ? route.query.stage : ''
+  const curTab = typeof route.query.tab === 'string' ? route.query.tab : ''
+  const wantTab = p !== 'journey' ? p : ''
+  if (s === curStage && curTab === wantTab) return
+  const q: Record<string, string> = { ...(route.query as Record<string, string>), stage: s }
+  if (wantTab) q.tab = wantTab
+  void router.replace({ query: q })
 })
 applyStageQuery()
 watch(() => route.query, applyStageQuery)
@@ -309,6 +326,7 @@ const stageTitle = computed(() => {
 void stageTitle.value
 </script><style scoped>
 /* 阶段导航：五个 tab = 五个阶段（大分段卡，每卡含阶段名 + Skill/调用概要） */
+.orch-pane-tabs { margin-bottom: 2px; }
 .orch-stage-tabs {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -334,64 +352,25 @@ void stageTitle.value
 .orch-stage-tab__meta { font-size: var(--mk-fs-11); font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 
 /* 折叠层（字段路由 / 治理）：阶段工作区的查阅层，默认收起 */
-.orch-fold {
-  margin-top: 12px;
-  border: 1px solid var(--mk-line); border-radius: 10px;
-  background: var(--mk-surface);
-}
 /* 折叠头走 .mk-section__summary（shared.css） */
-.orch-fold__meta { font-size: var(--mk-fs-11); font-weight: 600; color: var(--mk-faint); }
-.orch-fold__body { padding: 0 14px 14px; }
 
 /* 沙盘（深链次要入口）顶部条 */
-.orch-pane-head {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px; margin-bottom: 10px;
-  background: var(--mk-surface); border: 1px solid var(--mk-line); border-radius: 10px;
-}
-.orch-pane-title { font-size: var(--mk-fs-13); font-weight: 800; color: var(--mk-ink); }
-.orch-pane-hint { font-size: var(--mk-fs-12); color: var(--mk-faint); }
-.orch-pane-spacer { flex: 1; }
-.orch-pane-back {
-  padding: 5px 12px; border: 1px solid var(--mk-line); border-radius: 8px;
-  background: var(--mk-surface); font: inherit; font-size: var(--mk-fs-12); font-weight: 700;
-  color: var(--mk-muted); cursor: pointer;
-}
-.orch-pane-back:hover { color: var(--mk-blue); border-color: var(--mk-blue); }
 
 /* 4K：阶段导航与折叠层跟随全站节奏 */
 @media (min-width: 2000px) {
   .orch-stage-tab { padding: 11px 16px; }
   .orch-stage-tab__name { font-size: 14.5px; }
   .orch-stage-tab__meta { font-size: var(--mk-fs-12); }
-  .orch-fold__meta { font-size: var(--mk-fs-12_5); }
-  .orch-fold__body { padding: 0 16px 16px; }
-  .orch-pane-head { padding: 12px 16px; }
-  .orch-pane-title { font-size: 14.5px; }
-  .orch-pane-hint { font-size: var(--mk-fs-13); }
-  .orch-pane-back { font-size: var(--mk-fs-13); padding: 6px 14px; }
 }
 @media (min-width: 2800px) {
   .orch-stage-tab { padding: 13px 19px; }
   .orch-stage-tab__name { font-size: 17px; }
   .orch-stage-tab__meta { font-size: var(--mk-fs-14); }
-  .orch-fold__meta { font-size: 14.5px; }
-  .orch-fold__body { padding: 0 19px 19px; }
-  .orch-pane-head { padding: 14px 19px; }
-  .orch-pane-title { font-size: 17px; }
-  .orch-pane-hint { font-size: var(--mk-fs-15); }
-  .orch-pane-back { font-size: 15.5px; padding: 7px 17px; }
 }
 @media (min-width: 3600px) {
   .orch-stage-tab { padding: 15px 22px; }
   .orch-stage-tab__name { font-size: var(--mk-fs-20); }
   .orch-stage-tab__meta { font-size: 16.5px; }
-  .orch-fold__meta { font-size: 17px; }
-  .orch-fold__body { padding: 0 22px 22px; }
-  .orch-pane-head { padding: 16px 22px; }
-  .orch-pane-title { font-size: var(--mk-fs-20); }
-  .orch-pane-hint { font-size: 17.5px; }
-  .orch-pane-back { font-size: var(--mk-fs-18); padding: 8px 20px; }
 }
 
 /* ================= 暗色模式（D1 补完）：编排结构 ================= */
@@ -407,11 +386,8 @@ html[data-theme='dark'] {
   }
 
   /* 折叠层（字段路由 / 治理） */
-  .orch-fold { background: #141c2b; border-color: #232f45; }
   /* 折叠头基调由 .mk-section__summary--muted / :hover 提供（原 #9fb0c8 即 --mk-muted 暗色值） */
 
   /* 沙盘顶部条返回按钮 */
-  .orch-pane-back { background: #17202f; border-color: #232f45; color: #9fb0c8; }
-  .orch-pane-back:hover { color: var(--mk-blue); border-color: var(--mk-blue); }
 }
 </style>
