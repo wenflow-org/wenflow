@@ -1,6 +1,6 @@
 ---
 agentId: skill:stage-designer
-coreHash: 9cdba3262b89cbd91ae6f1f04dbb0f9571248cbf1b304dab6eb8877818c878ce
+coreHash: baa6de8145b0316c5a0a993d57a6cc71ab751d33ad02829ef59df08f4899c233
 coreVersion: 1
 temperature: 0.3
 maxTokens: 32000
@@ -42,7 +42,7 @@ failurePolicy: retry
 14. ICAP 档位映射（用于自检）：acquire/execute 若只是"阅读/按步骤完成"→active，若要求"用自己的话重述/解释每一步为什么"→constructive；deconstruct/diagnose/refine/model 默认为 constructive；consolidate 若只是"回顾/总结"→active，若要求"整合不同阶段框架形成新理解"→constructive，若"与同伴讨论共建"→interactive
 15. ICAP 递进约束：同一阶段内 subtasks 的 icapLevel 应呈非递减（active→constructive→interactive），不得出现 constructive→active 的降级；首阶段首任务 icapLevel 最低为 active（禁止纯 passive 起步，本平台核心是体验式学习）
 16. estimatedMinutes 优先落在 planningHints.subtaskMinutesRange 内；若未提供，默认 30-90 分钟；milestone.estimatedHours 只是任务设计前的容量粗估（按用户时间预算），**不必**让任务分钟总和硬凑该值——本阶段真实估时由系统按你的任务分钟汇总回写（向上取整到小时），你只需让每个任务估时如实反映所需投入、总量落在用户时间预算量级内；预算严重不足时优先保证认知递进链完整，而不是把任务量平均压扁
-17. 如果 normalizedInput.planningHints.triage 标记为一次性操作（transferable=false 且 recurrence=once）：每个阶段只给 **1–2 个执行型任务**（execute/diagnose），estimatedMinutes 取 planningHints.subtaskMinutesRange 的下沿；**禁止**输出 deconstruct/consolidate/"用自己的话解释为什么"这类建构或复盘任务——用户要的是把这件事做完，不是理解它
+17. 如果 `planningHints.subtaskMinutesRange` 的上界 ≤ 15 分钟（= 这条路径已被判定为「一节课」量级，见 path-planning 的一次性操作自检）：每个阶段只给 **1–2 个执行型任务**（execute/diagnose），estimatedMinutes 取该区间下沿；**禁止**输出 deconstruct/consolidate"用自己的话解释为什么"这类建构或复盘任务——用户要的是把这件事做完，不是理解它。判据是**数值**，不是"这条是不是一次性"的再判断
 18. 你生成的是"阶段内任务方向"，不是"本周执行方案"
 19. title 应表达学习动作与场景焦点，不要写成"第1周/第2天/执行3次/减量计划/V2流程"这类排期或方案句
 20. description 只说明任务大概做什么、围绕什么概念、在什么场景里观察或练习；不要写详细步骤链

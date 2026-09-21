@@ -201,6 +201,49 @@ export interface TriageHint {
   evidence?: string | null;
 }
 
+/**
+ * 「一节课」量级边界（出口不变量 B 的**唯一口径**）。
+ * 依据：60 例混合数据实测，一次性操作类产出 2.3–7.4h，构成为
+ * 「阶段数 × 每段任务数(2–3) × 单任务分钟」，而单任务中位 37 分钟恰是 standard 档
+ * `defaultMinutesRange=[30,90]` 的下沿 ⇒ 学时是模板产物。
+ * 最坏量级 = 2 段 × 2 任务 × 15 分钟 = 60 分钟。
+ */
+export const ONE_SITTING_BOUNDS = {
+  milestoneRange: [1, 2] as [number, number],
+  conceptRange: [1, 2] as [number, number],
+  subtasksPerStageRange: [1, 2] as [number, number],
+  subtaskMinutesRange: [10, 15] as [number, number],
+  maxWeeks: 1,
+};
+
+/**
+ * "这是一节课（不是一门课）"的小时上限：Path 层产出的 `estimatedHours` 落在此值以内，
+ * 即视为一次性操作的收敛结果，下游 stage-enrichment 据此把任务数与分钟一并收紧。
+ */
+export const ONE_SITTING_MAX_HOURS = 1;
+
+/**
+ * 把任意已算好的 hints 收到「一节课」量级（只收上界，不拍死数字；区间不塌成单点）。
+ * 两个调用方：① Goal 层 triage 判定（derivePlanningHints 内）；② Path 层自检后，
+ * 给 stage-designer 用的 hints（path 产出 ≤1 小时 ⇒ 任务数/分钟一并收紧，否则学时仍会被
+ * stage-designer 的 30–90 分钟默认值撑回 7 小时）。
+ */
+export function clampHintsToOneSitting(hints: PlanningHints): PlanningHints {
+  const cap = ONE_SITTING_BOUNDS;
+  const capTarget = (value: number | null, ceiling: number): number | null =>
+    value === null || value === undefined ? value : Math.min(value, ceiling);
+  return {
+    ...hints,
+    milestoneRange: [...cap.milestoneRange],
+    conceptRange: [...cap.conceptRange],
+    subtasksPerStageRange: [...cap.subtasksPerStageRange],
+    subtaskMinutesRange: [...cap.subtaskMinutesRange],
+    maxWeeks: Math.min(hints.maxWeeks, cap.maxWeeks),
+    targetMilestones: capTarget(hints.targetMilestones ?? null, cap.milestoneRange[1]),
+    targetSubtasksPerStage: capTarget(hints.targetSubtasksPerStage ?? null, cap.subtasksPerStageRange[1]),
+  };
+}
+
 export function derivePlanningHints(
   timeHorizon: string | null,
   timePerSession: string | null,
@@ -336,12 +379,13 @@ export function derivePlanningHints(
   // 与不变量 A（区间永不为单点，见下方出口收束）兼容：最坏 2 段 × 2 任务 × 15 分钟 = 60 分钟。
   // 缺失 triage 时，本分支不生效，行为与今天完全一致。
   if (triage && triage.transferable === false && triage.recurrence === 'once') {
-    milestoneRange = [1, 2];
-    conceptRange = [1, 2];
-    subtasksPerStageRange = [1, 2];
-    subtaskMinutesRange = [10, 15];
-    maxWeeks = Math.min(maxWeeks, 1);
-    if (targetMilestones !== null) targetMilestones = Math.min(targetMilestones, 2);
+    const cap = ONE_SITTING_BOUNDS;
+    milestoneRange = [...cap.milestoneRange];
+    conceptRange = [...cap.conceptRange];
+    subtasksPerStageRange = [...cap.subtasksPerStageRange];
+    subtaskMinutesRange = [...cap.subtaskMinutesRange];
+    maxWeeks = Math.min(maxWeeks, cap.maxWeeks);
+    if (targetMilestones !== null) targetMilestones = Math.min(targetMilestones, cap.milestoneRange[1]);
   }
 
   // 方案乙：区间即权威（不再塌成点）。确保「建议值」落在区间内，供提示词引用时不自相矛盾。

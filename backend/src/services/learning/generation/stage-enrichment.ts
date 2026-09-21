@@ -12,6 +12,7 @@ import { logger } from '../../../utils/logger';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
+import { clampHintsToOneSitting, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
 import { kcMapperDefinition } from '../../../skills/kc-mapper';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import {
@@ -138,6 +139,24 @@ export async function enrichLearningPathWithAnderson(
     const normalizedInput = getSceneFramingNormalizedInput(sceneFraming)
       || resolvePersistedNormalizedInput(parsedTemplate)
       || null;
+    // 出口不变量 B 的**下游一半**（2026-09-21）：Path 层已自检为"一次性操作"时，
+    // 它产出的路径总量 ≤ 1 小时（见 path-planning 的"一次性操作"规则）。若不在这里
+    // 把 hints 一起收紧，stage-designer 会按 standard 档默认 30–90 分钟/任务把学时撑回 7 小时
+    // ——「学时 = 阶段数 × 每段任务数 × 单任务分钟」这条链必须两端都收。
+    const oneSittingPath = Number.isFinite(Number(learningPath.estimatedHours))
+      && Number(learningPath.estimatedHours) > 0
+      && Number(learningPath.estimatedHours) <= ONE_SITTING_MAX_HOURS;
+    if (oneSittingPath && normalizedInput && (normalizedInput as any).planningHints) {
+      const before = (normalizedInput as any).planningHints;
+      (normalizedInput as any).planningHints = clampHintsToOneSitting(before);
+      logger.info('[stage-enrichment] 一次性操作：hints 收紧到一节课量级', {
+        pathId: learningPath.id,
+        estimatedHours: learningPath.estimatedHours,
+        milestoneRange: (normalizedInput as any).planningHints.milestoneRange,
+        subtasksPerStageRange: (normalizedInput as any).planningHints.subtasksPerStageRange,
+        subtaskMinutesRange: (normalizedInput as any).planningHints.subtaskMinutesRange,
+      });
+    }
     const stageDesignerBaseInput = {
       cognitiveCore: pathCognitiveDesign,
       normalizedInput,

@@ -1,4 +1,4 @@
-import { derivePlanningHints, type TriageHint } from '../path-planning-hints';
+import { clampHintsToOneSitting, derivePlanningHints, type TriageHint } from '../path-planning-hints';
 
 /**
  * 出口不变量 B（2026-09-21）：Goal 层判为「低可迁移 × 低复现」的一次性操作/事务，
@@ -59,5 +59,34 @@ describe('分流钳制（出口不变量 B）', () => {
     const width = (r: [number, number]) => r[1] - r[0];
     expect(width(h.milestoneRange)).toBeGreaterThanOrEqual(1);
     expect(width(h.subtasksPerStageRange)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+/**
+ * 下游一半：Path 层自检为"一次性"后，stage-designer 用的 hints 必须被收到同一量级
+ * （否则学时会被 standard 档默认 30–90 分钟/任务撑回 7 小时）。
+ */
+describe('clampHintsToOneSitting（Path 层自检 → stage-designer 的 hints）', () => {
+  it('把任意 hints 收到一节课量级（只收上界，区间不塌成单点）', () => {
+    const base = derivePlanningHints(null, null, null, null, [], null, null, null, null);
+    const clamped = clampHintsToOneSitting(base);
+    expect(clamped.milestoneRange[1]).toBeLessThanOrEqual(2);
+    expect(clamped.milestoneRange[0]).toBeLessThan(clamped.milestoneRange[1]);
+    expect(clamped.subtasksPerStageRange[1]).toBeLessThanOrEqual(2);
+    expect(clamped.subtaskMinutesRange[1]).toBeLessThanOrEqual(15);
+    expect(clamped.maxWeeks).toBeLessThanOrEqual(1);
+    expect(clamped.milestoneRange[1] * clamped.subtasksPerStageRange[1] * clamped.subtaskMinutesRange[1])
+      .toBeLessThanOrEqual(60);
+    // 建议值同步收住，避免提示词自相矛盾
+    expect(clamped.targetMilestones ?? 0).toBeLessThanOrEqual(2);
+    expect(clamped.targetSubtasksPerStage ?? 0).toBeLessThanOrEqual(2);
+  });
+
+  it('与"Goal 层 triage"走同一份边界常量（单一口径）', () => {
+    const byTriage = derivePlanningHints(null, null, null, null, [], null, null, null, { transferable: false, recurrence: 'once' });
+    const bySelfCheck = clampHintsToOneSitting(derivePlanningHints(null, null, null, null, [], null, null, null, null));
+    expect(bySelfCheck.milestoneRange).toEqual(byTriage.milestoneRange);
+    expect(bySelfCheck.subtaskMinutesRange).toEqual(byTriage.subtaskMinutesRange);
+    expect(bySelfCheck.subtasksPerStageRange).toEqual(byTriage.subtasksPerStageRange);
   });
 });
