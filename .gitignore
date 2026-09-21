@@ -254,6 +254,9 @@ page-*.md
 # UI 审计截图临时目录
 .ui-audit/
 
+# 本地实验数据（语料、跑批产物与归档；不入库 —— 见 doc/VIRTUAL_LEARNER_DESIGN.md）
+data/
+
 # 实验残留（一次性调试/探测脚本与产物，不入库）
 work/
 _pi-ai-test/
