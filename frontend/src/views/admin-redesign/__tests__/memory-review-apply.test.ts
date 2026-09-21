@@ -107,7 +107,7 @@ describe('MemoryReview 归并执行交互', () => {
     await w.findAll('button').find((b) => b.text() === '明细')!.trigger('click');
     await flushPromises();
 
-    const boxes = w.findAll('.mr__table input[type="checkbox"]');
+    const boxes = w.findAll('.mk-table input[type="checkbox"]');
     expect(boxes).toHaveLength(2);
     expect((boxes[0].element as HTMLInputElement).checked).toBe(true);
     expect((boxes[1].element as HTMLInputElement).checked).toBe(false);
@@ -126,7 +126,7 @@ describe('MemoryReview 归并执行交互', () => {
 
     // 勾上「需人工确认」那条 → 传给服务端 includeNeedsReview=true
     apply.mockClear();
-    await w.findAll('.mr__table input[type="checkbox"]')[1].trigger('change');
+    await w.findAll('.mk-table input[type="checkbox"]')[1].trigger('change');
     await flushPromises();
     expect(w.text()).toContain('1 条属于「需人工确认」');
     await w.findAll('button').find((b) => b.text().startsWith('执行选中'))!.trigger('click');

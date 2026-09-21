@@ -743,7 +743,7 @@ function groupBadgeTitle(title: string): string {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-html[data-theme='dark'] .mshell__crumb { background: #141c2b; border-color: #232f45; }
+html[data-theme='dark'] .mshell__crumb { background: #1c1e23; border-color: #2f3239; }
 
 /* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半） */
 @media (min-width: 1440px) {
@@ -839,7 +839,7 @@ html[data-theme='dark'] .mshell__crumb { background: #141c2b; border-color: #232
 .mshell[data-collapsed='true'] .mshell__logo-mark { display: block; }
 .mshell[data-collapsed='true'] .mshell__brand { justify-content: center; padding: 2px 0 0; }
 .mshell[data-collapsed='true'] .mshell__collapse { position: absolute; right: -14px; top: 18px; }
-.mshell[data-collapsed='true'] .mshell__pinned { justify-content: center; padding-bottom: 8px; border-bottom-color: #232f45; }
+.mshell[data-collapsed='true'] .mshell__pinned { justify-content: center; padding-bottom: 8px; border-bottom-color: #2f3239; }
 .mshell[data-collapsed='true'] .mshell__group { margin-top: 10px; }
 
 /* 折叠按钮（展开态右上角，悬停显示 tooltip 由 title 提供） */
@@ -889,36 +889,36 @@ html[data-theme='dark'] .mshell__crumb { background: #141c2b; border-color: #232
 
 /* ================= 暗色模式（D1）：壳层硬编码色覆写 ================= */
 html[data-theme='dark'] {
-  .mshell { background: #0f1624; color: #e6edf7; }
-  .mshell__side { background: #131b2a; border-right-color: #232f45; }
-  .mshell__pinned { border-bottom-color: #232f45; }
-  .mshell__group-head { color: #c9d6e8; }
+  .mshell { background: #16181d; color: #eceef1; }
+  .mshell__side { background: #1b1d22; border-right-color: #2f3239; }
+  .mshell__pinned { border-bottom-color: #2f3239; }
+  .mshell__group-head { color: #d4d8dd; }
   .mshell__group-head:hover { color: #7aa2ff; background: rgba(120, 140, 170, 0.08); }
   .mshell__group-head--active { color: #7aa2ff; }
   .mshell__group-icon { color: #6b7c96; }
   .mshell__group-head:hover .mshell__group-icon,
   .mshell__group-head--active .mshell__group-icon { color: #7aa2ff; }
-  .mshell__group-badge { background: #1d2739; color: var(--mk-muted, #9fb0c8); }
+  .mshell__group-badge { background: #272a2f; color: var(--mk-muted, #adb2ba); }
   .mshell__group-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
   .mshell__item-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
-  .mshell__item { color: #9fb0c8; }
-  .mshell__item:hover { background: #1b2740; color: #e6edf7; }
+  .mshell__item { color: #adb2ba; }
+  .mshell__item:hover { background: #282c33; color: #eceef1; }
   .mshell__item--active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; box-shadow: inset 3px 0 0 var(--mk-blue); }
-  .mshell__item-glyph { background: #1d2739; color: #9fb0c8; }
+  .mshell__item-glyph { background: #272a2f; color: #adb2ba; }
   .mshell__item--active .mshell__item-glyph { background: rgba(91, 141, 239, 0.22); color: #7aa2ff; }
-  .mshell__item-badge { background: #1d2739; color: #6b7c96; }
+  .mshell__item-badge { background: #272a2f; color: #6b7c96; }
   .mshell__item--active .mshell__item-badge { background: rgba(91, 141, 239, 0.22); color: #7aa2ff; }
-  .mshell__foot { border-top-color: #1f2a3d; }
-  .mshell__foot-name { color: #93a3bd; }
+  .mshell__foot { border-top-color: #2a2d32; }
+  .mshell__foot-name { color: #a2a6ae; }
   .mshell__foot-ver { color: #7c8aa3; }
-  .mshell__collapse { background: #131b2a; border-color: #232f45; color: #9fb0c8; }
+  .mshell__collapse { background: #1b1d22; border-color: #2f3239; color: #adb2ba; }
   .mshell__collapse:hover { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
-  .mshell__tool { color: var(--mk-muted, #9fb0c8); }
-  .mshell__tool:hover { background: #1b2740; color: #7aa2ff; }
-  .mshell__user { border-top-color: #1f2a3d; }
-  .mshell__user-avatar { background: #1d2739; color: #7aa2ff; }
-  .mshell__user-name { color: #e6edf7; }
-  .mshell__logout { color: var(--mk-muted, #9fb0c8); }
+  .mshell__tool { color: var(--mk-muted, #adb2ba); }
+  .mshell__tool:hover { background: #282c33; color: #7aa2ff; }
+  .mshell__user { border-top-color: #2a2d32; }
+  .mshell__user-avatar { background: #272a2f; color: #7aa2ff; }
+  .mshell__user-name { color: #eceef1; }
+  .mshell__logout { color: var(--mk-muted, #adb2ba); }
   .mshell__logout:hover { background: rgba(220, 38, 38, 0.14); color: #f87171; }
 }
 </style>
