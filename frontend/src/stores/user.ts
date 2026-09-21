@@ -128,6 +128,28 @@ export const useUserStore = defineStore('user', () => {
     localStorage.setItem('user', JSON.stringify(user.value));
   }
 
+  /* ISSUE-12:HttpOnly 会话有效但本地标记/档案丢失(清站点数据、隐私清理)时,
+     守卫在首次导航前的自举恢复——探一次档案,成功则恢复会话标记与用户档案。
+     单例在途;失败按未登录走原分支(刷新页面可重试)。 */
+  let restoreInFlight: Promise<boolean> | null = null;
+  async function restoreFromCookie(): Promise<boolean> {
+    if (hasSession.value) return true;
+    if (!restoreInFlight) {
+      restoreInFlight = (async () => {
+        try {
+          const profile = await userAPI.getProfile();
+          markLoggedIn(profile);
+          return true;
+        } catch {
+          return false;
+        } finally {
+          restoreInFlight = null;
+        }
+      })();
+    }
+    return restoreInFlight;
+  }
+
   async function updateProfile(data: UpdateProfileData) {
     loading.value = true;
     error.value = null;
@@ -190,6 +212,7 @@ export const useUserStore = defineStore('user', () => {
     register,
     fetchProfile,
     ensureProfile,
+    restoreFromCookie,
     markOnboardingCompleted,
     updateProfile,
     logout,

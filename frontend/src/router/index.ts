@@ -1,5 +1,4 @@
 ﻿import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
-import { hasUserSession } from '../utils/api';
 import { useUserStore } from '../stores/user';
 import { hasAdminSession } from '../api/adminApi';
 import { getProjectionToken } from '../utils/projection';
@@ -387,7 +386,8 @@ router.beforeEach(async (to, _from, next) => {
   const usesAdminSurface = to.path.startsWith('/admin/') && to.path !== '/admin/login';
   document.body.classList.toggle('admin-route', usesAdminSurface);
 
-  const hasSession = hasUserSession();
+  // ISSUE-12:标记缺失时用 HttpOnly cookie 自举恢复会话(标记+档案),有效会话不再误弹登录页
+  const hasSession = await useUserStore().restoreFromCookie();
   const projectionToken = getProjectionToken();
   const adminSession = hasAdminSession();
 

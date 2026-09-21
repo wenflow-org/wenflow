@@ -26,7 +26,12 @@ async function tryRefresh(): Promise<boolean> {
   refreshPromise = (async () => {
     try {
       const resp = await axios.post('/api/auth/refresh', null, { withCredentials: true });
-      return resp.data?.success === true;
+      if (resp.data?.success === true) {
+        // 刷新成功说明 HttpOnly 会话仍有效,补回本地标记,避免存储被清后守卫误判未登录
+        localStorage.setItem(USER_SESSION_KEY, '1');
+        return true;
+      }
+      return false;
     } catch {
       return false;
     } finally {
