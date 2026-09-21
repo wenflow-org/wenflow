@@ -94,7 +94,6 @@
         title="还没有批量实验"
         description="一次创建多个虚拟学习者，系统级队列实验：目标 → 路径 → 学习 → 跨日衰减。"
         action-text="新建实验"
-        min
         @action="openCreate"
       />
     </div>
@@ -468,7 +467,6 @@ load()
 </script>
 
 <style scoped>
-.be-list { min-height: var(--mk-empty-min-h, calc(100dvh - 230px)); }
 .be-progress { display: flex; align-items: center; gap: 8px; min-width: 140px; }
 /* 学习者列：失败数红色强调（失败有值时突出，无失败保持副行灰） */
 .be-fail-num { color: var(--mk-red); font-weight: 700; }

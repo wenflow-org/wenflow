@@ -1,13 +1,22 @@
 <template>
   <div class="sd-settings">
-    <div class="sd-settings__head">
+    <div
+      class="sd-settings__head"
+      role="button"
+      tabindex="0"
+      :aria-expanded="expanded ? 'true' : 'false'"
+      title="展开/收起日期模拟设置"
+      @click="expanded = !expanded"
+      @keydown.enter.prevent="expanded = !expanded"
+    >
       <span class="sd-settings__title">日期模拟</span>
-      <label class="sd-switch" :title="form.enabled ? '已开启：允许按自然日推进虚拟学习' : '默认关闭，现网零变化'">
-        <input v-model="form.enabled" type="checkbox" @change="dirty = true" />
+      <span class="sd-settings__arrow" :data-open="expanded ? 'true' : 'false'" aria-hidden="true">▸</span>
+      <label class="sd-switch" :title="form.enabled ? '已开启：允许按自然日推进虚拟学习' : '默认关闭，现网零变化'" @click.stop @keydown.stop>
+        <input v-model="form.enabled" type="checkbox" @change="onToggleEnabled" />
         <span>{{ form.enabled ? '已开启' : '已关闭' }}</span>
       </label>
     </div>
-    <div class="sd-settings__grid">
+    <div v-show="expanded" class="sd-settings__grid">
       <label class="mk-field">
         <span class="mk-field__label">每日时长上限（分钟）</span>
         <input v-model.number="form.defaultDailyMinutesCap" type="number" min="5" max="480" class="mk-field__input" @input="dirty = true" />
@@ -81,9 +90,17 @@ const WEEKDAYS = [
 const form = reactive({ ...DEFAULT })
 const dirty = ref(false)
 const saving = ref(false)
+/** 设置体默认收起（虚拟学习者页首屏让位给列表；用户反馈：常开占 400px 高）。
+    开启「日期模拟」开关或已有开启配置时自动展开，避免开关与表单分离找不到 */
+const expanded = ref(false)
+function onToggleEnabled() {
+  dirty.value = true
+  if (form.enabled) expanded.value = true
+}
 
 function apply(raw: Partial<typeof DEFAULT> | null | undefined) {
   form.enabled = raw?.enabled === true
+  if (form.enabled) expanded.value = true
   form.defaultDailyMinutesCap = Number(raw?.defaultDailyMinutesCap ?? DEFAULT.defaultDailyMinutesCap)
   form.defaultDaysPerWeek = Number(raw?.defaultDaysPerWeek ?? DEFAULT.defaultDaysPerWeek)
   form.defaultPaceDaysPerAdvance = Number(raw?.defaultPaceDaysPerAdvance ?? DEFAULT.defaultPaceDaysPerAdvance)
@@ -134,7 +151,9 @@ onMounted(load)
 
 <style scoped>
 .sd-settings { border: 1px solid var(--mk-line); border-radius: 8px; padding: 10px 12px; margin-top: 8px; }
-.sd-settings__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sd-settings__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+.sd-settings__arrow { color: var(--mk-faint, #6b7c96); font-size: 10px; transition: transform 0.15s ease; }
+.sd-settings__arrow[data-open='true'] { transform: rotate(90deg); }
 .sd-settings__title { font-weight: 600; font-size: 13px; }
 .sd-switch { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
 .sd-settings__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 12px; margin-top: 8px; }

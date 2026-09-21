@@ -50,7 +50,7 @@
           >
             <svg class="mshell__group-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" v-html="groupIcon(group.title)"></svg>
             <span class="mshell__group-name">{{ group.title }}</span>
-            <span class="mshell__group-badge" :class="{ 'mshell__group-badge--alarm': groupBadgeCount(group.title) && groupHasAlarm(group.title), 'mshell__group-badge--empty': !groupBadgeCount(group.title) }" :title="groupBadgeTitle(group.title)">{{ groupBadgeCount(group.title) || '—' }}</span>
+            <span v-if="groupBadgeCount(group.title)" class="mshell__group-badge" :class="{ 'mshell__group-badge--alarm': groupHasAlarm(group.title) }" :title="groupBadgeTitle(group.title)">{{ groupBadgeCount(group.title) }}</span>
             <span class="mshell__group-arrow" aria-hidden="true">▸</span>
           </button>
           <div v-show="isGroupOpen(group.title)" class="mshell__group-body">
@@ -529,8 +529,6 @@ function groupBadgeTitle(title: string): string {
   color: #b91c1c;
   animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
 }
-/* 无数据量的分组占位「—」：保持各分组右侧对齐，同时不冒充计数 */
-.mshell__group-badge--empty { background: transparent; color: var(--mk-faint); opacity: 0.7; }
 .mshell__group-arrow {
   font-size: 9px;
   opacity: 0.65;
@@ -563,6 +561,9 @@ function groupBadgeTitle(title: string): string {
   transition: 0.12s ease;
 }
 .mshell__item:hover { background: #f6f9ff; color: #1a2a44; }
+/* 点击导航后不残留聚焦描边环（选中态由 --active 底色+左条表达）；键盘 Tab 仍有可见环 */
+.mshell__item:focus { outline: none; }
+.mshell__item:focus-visible { outline: 2px solid var(--mk-blue, #2c63d0); outline-offset: -2px; }
 .mshell__item--active {
   background: #eef5ff;
   color: var(--mk-accent-deep, #1f57cc);
@@ -839,7 +840,7 @@ html[data-theme='dark'] .mshell__crumb { background: #1c1e23; border-color: #2f3
 .mshell[data-collapsed='true'] .mshell__logo-mark { display: block; }
 .mshell[data-collapsed='true'] .mshell__brand { justify-content: center; padding: 2px 0 0; }
 .mshell[data-collapsed='true'] .mshell__collapse { position: absolute; right: -14px; top: 18px; }
-.mshell[data-collapsed='true'] .mshell__pinned { justify-content: center; padding-bottom: 8px; border-bottom-color: #2f3239; }
+.mshell[data-collapsed='true'] .mshell__pinned { justify-content: center; padding-bottom: 8px; border-bottom: 0; }
 .mshell[data-collapsed='true'] .mshell__group { margin-top: 10px; }
 
 /* 折叠按钮（展开态右上角，悬停显示 tooltip 由 title 提供） */
@@ -903,7 +904,7 @@ html[data-theme='dark'] {
   .mshell__item-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
   .mshell__item { color: #adb2ba; }
   .mshell__item:hover { background: #282c33; color: #eceef1; }
-  .mshell__item--active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; box-shadow: inset 3px 0 0 var(--mk-blue); }
+  .mshell__item--active { background: rgba(91, 141, 239, 0.1); color: #7aa2ff; box-shadow: inset 3px 0 0 var(--mk-blue); }
   .mshell__item-glyph { background: #272a2f; color: #adb2ba; }
   .mshell__item--active .mshell__item-glyph { background: rgba(91, 141, 239, 0.22); color: #7aa2ff; }
   .mshell__item-badge { background: #272a2f; color: #6b7c96; }
