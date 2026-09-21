@@ -192,6 +192,9 @@ export function writeText(rel, content) {
 
 // ---------- CLI 参数 ----------
 export function arg(name, fallback = undefined) {
+  const prefix = '--' + name + '=';
+  const eq = process.argv.find(a => a.startsWith(prefix));
+  if (eq) return eq.slice(prefix.length);
   const i = process.argv.indexOf('--' + name);
   if (i === -1) return fallback;
   const v = process.argv[i + 1];

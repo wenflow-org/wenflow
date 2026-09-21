@@ -178,7 +178,8 @@ async function learn() {
       await lessonBoundary(sessionId, taskId, idx, digests.splice(0));
       setRunState(RUN, { lessonsDone: idx });
       if (advanceDay) {
-        const day = await call('admin', 'POST', `${VL}/sessions/${sessionId}/advance-day`, {}, { run: RUN, action: `advance-day(L${idx})`, timeoutMs: 600000 });
+        // retries=1:课界推进在 UTC 日窗内是预期内 409(未来日护栏),不值得退避重试
+        const day = await call('admin', 'POST', `${VL}/sessions/${sessionId}/advance-day`, {}, { run: RUN, action: `advance-day(L${idx})`, retries: 1, timeoutMs: 600000 });
         log(`advance-day: ${day?._failed ? 'FAIL ' + day.error : 'ok'}`);
       }
     }

@@ -21,7 +21,7 @@ log(`已完成 ${done.length}/${snap.taskCount}`);
 for (let i = 0; i < done.length; i++) {
   const t = done[i];
   const ts = q('SELECT id, status, messages, wrapup, knowledgeState, startTime, endTime FROM teaching_sessions WHERE taskId=? ORDER BY createdAt DESC LIMIT 1', [t.id]);
-  let turns = [], cps = [];
+  let turns = [], cps = [], source = 'messages-json';
   if (ts?.messages) {
     try {
       const arr = JSON.parse(ts.messages);
@@ -30,6 +30,12 @@ for (let i = 0; i < done.length; i++) {
         cps = arr.filter(m => String(m.analysis?.checkpointId || m.checkpointId || m.analysis?.type || '').length > 0 && JSON.stringify(m).includes('checkpoint'));
       }
     } catch { /* 全量消息解析失败则退化为空 */ }
+  }
+  // 兜底(ISSUE-9):任务 completed 但会话未终态化时,全量 JSON 为空,从增量表恢复
+  if (!turns.length && ts?.id) {
+    const inc = qa('SELECT payload FROM teaching_session_messages WHERE sessionId=? ORDER BY createdAt', [ts.id]);
+    turns = inc.map(r => { try { return JSON.parse(r.payload); } catch { return { role: '?', content: String(r.payload).slice(0, 200) }; } });
+    if (turns.length) source = 'incremental-rows(会话未终态化,数据来自增量表)';
   }
   const userTurns = turns.filter(m => m.role === 'user');
   const aiTurns = turns.filter(m => m.role === 'assistant');
@@ -54,7 +60,7 @@ for (let i = 0; i < done.length; i++) {
     '',
     `- 任务: ${t.title} | 类型 ${t.taskType} | 计划 ${t.estimatedMinutes} 分钟 | 认知 ${t.cognitiveLevel}`,
     `- 验收标准: ${t.acceptanceCriteria || '-'}`,
-    `- 实况: 课堂回合 ${turns.length}(周敏 ${userTurns.length} / AI ${aiTurns.length}) | 课堂计时 ${durMin ?? '-'} 分钟 | 计划 ${t.estimatedMinutes} 分钟`,
+    `- 实况: 课堂回合 ${turns.length}(周敏 ${userTurns.length} / AI ${aiTurns.length}) | 课堂计时 ${durMin ?? '-'} 分钟 | 计划 ${t.estimatedMinutes} 分钟 | 数据源: ${source}`,
     `- 结算: ${t.status} | 完成时间 ${t.completedAt || '-'}`,
     '',
     '## 知识点掌握(会话末快照)',
