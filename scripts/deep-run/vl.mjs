@@ -111,10 +111,11 @@ async function review() {
 
 async function accept() {
   const { sessionId } = runState(RUN);
-  const r = await call('admin', 'POST', `${VL}/sessions/${sessionId}/accept-path`, {}, { run: RUN, action: '接受路径' });
+  const force = arg('force', false) === true || arg('force', false) === 'true';
+  const r = await call('admin', 'POST', `${VL}/sessions/${sessionId}/accept-path`, { force }, { run: RUN, action: force ? '强制接受路径' : '接受路径' });
   if (r?._failed) { log('接受失败: ' + r.error); return; }
-  setRunState(RUN, { phase: 'accepted' });
-  log('路径已接受');
+  setRunState(RUN, { phase: 'accepted', forceAccepted: force || undefined });
+  log(force ? '路径已强制接受(评审旁路)' : '路径已接受');
 }
 
 function taskDigest(messages) {
