@@ -20,6 +20,7 @@ import {
   findUserRestoreTarget,
 } from '../../services/users/user.repo';
 import { revokeAdminSessions } from '../../services/admin-session.service';
+import { revokeAllUserSessions } from '../../services/auth/user-session.service';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { randomUUID as uuidv4 } from 'crypto';
@@ -332,6 +333,8 @@ router.patch('/:id', async (req, res, next) => {
       // 吊销失败不阻塞改密结果，但必须留痕（旧 admin 会话将继续有效直至过期）
       logger.error('[admin-users] 改密后吊销管理员会话失败:', revokeError);
     }
+    // 同步吊销该用户的用户侧会话（安全审计 M2；tokenVersion 仍是主吊销手段）
+    await revokeAllUserSessions(userId);
 
     res.json({
       success: true,

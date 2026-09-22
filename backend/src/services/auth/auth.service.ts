@@ -14,6 +14,7 @@ import {
 import { getPasswordResetMailProvider } from './password-reset-mailer';
 import { isTestAccountUser } from '../../utils/test-account';
 import { withTransaction } from '../../utils/with-transaction';
+import { registerUserSession, revokeAllUserSessions, pruneUserSessions } from './user-session.service';
 
 interface RegisterData {
   name: string;
@@ -122,6 +123,9 @@ class AuthService {
         user.name,
         user.tokenVersion || 0
       );
+      await registerUserSession(user.id, refreshToken, user.tokenVersion || 0);
+      // 登录时机顺带惰性清理过期会话（不等待、失败内部自吞）
+      void pruneUserSessions();
 
       logger.info(`新用户注册：${user.name}`);
 
@@ -179,6 +183,9 @@ class AuthService {
         user.name,
         user.tokenVersion || 0
       );
+      await registerUserSession(user.id, refreshToken, user.tokenVersion || 0);
+      // 登录时机顺带惰性清理过期会话（不等待、失败内部自吞）
+      void pruneUserSessions();
 
       logger.info(`用户登录：${user.name}`);
 
@@ -223,6 +230,8 @@ class AuthService {
         updatedAt: new Date()
       }
     });
+    // 同步吊销该用户全部会话（安全审计 M2：tokenVersion 之外对无版本存量令牌的兜底）
+    await revokeAllUserSessions(user.id);
 
     logger.info(`用户修改密码：${user.name}`);
   }
@@ -345,6 +354,8 @@ class AuthService {
         data: { usedAt: new Date() }
       });
     }, { label: 'auth.resetPassword' });
+    // 同步吊销该用户全部会话（安全审计 M2，与 changePassword 同策略）
+    await revokeAllUserSessions(record.userId);
 
     logger.info(`用户通过重置链接修改密码：${record.userId}`);
   }

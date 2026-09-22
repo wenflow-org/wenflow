@@ -18,6 +18,7 @@ import {
   setAuthCookie,
   setRefreshCookie,
 } from '../utils/auth-cookie';
+import { rotateUserSession } from '../services/auth/user-session.service';
 
 interface JwtPayload {
   userId: string;
@@ -81,18 +82,25 @@ const validateUserRecord = async (
 };
 
 /**
- * Issue a new token pair and set cookies for a user during silent refresh.
+ * Silent refresh：签发新 token 对并做会话轮换（安全审计 M2）。
+ * 轮换失败（重用/未登记）返回 false，调用方必须 401 拒绝，不得放行请求。
  */
-const issueAndSetTokens = (
+const issueAndSetTokens = async (
   res: Response,
+  oldRefreshToken: string,
   userId: string,
   name: string,
   tokenVersion: number
-): void => {
+): Promise<boolean> => {
   const accessToken = signAccessToken(userId, name, tokenVersion);
   const refreshToken = signRefreshToken(userId, tokenVersion);
+  const rotation = await rotateUserSession(oldRefreshToken, refreshToken, { userId, tokenVersion });
+  if (rotation !== 'rotated') {
+    return false;
+  }
   setAuthCookie(res, accessToken, 'user');
   setRefreshCookie(res, refreshToken);
+  return true;
 };
 
 const authenticate = async (
@@ -253,13 +261,20 @@ const authenticate = async (
         });
       }
 
-      // Silent refresh: issue new access + refresh token pair, set cookies
-      issueAndSetTokens(
+      // Silent refresh: issue new access + refresh token pair with session rotation
+      const rotated = await issueAndSetTokens(
         res,
+        refreshTokenCookie,
         refreshPayload.userId,
         refreshPayload.name || '',
         refreshPayload.tokenVersion ?? 0
       );
+      if (!rotated) {
+        return res.status(401).json({
+          success: false,
+          error: { message: '会话已失效，请重新登录' }
+        });
+      }
 
       // Attach user to request
       req.user = {

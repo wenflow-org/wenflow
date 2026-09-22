@@ -1130,6 +1130,28 @@ model login_attempts {
   @@index([success, createdAt])
 }
 
+// 用户会话（安全审计 M2）：refresh token 服务端登记 + 原地轮换 + 重用检测。
+// 每活跃设备一行：轮换时 tokenHash 换新、旧哈希挪入 previousTokenHash（乐观锁防并发双刷新互杀）；
+// 命中 previousTokenHash 即旧代令牌被重放 → 吊销该会话；查不到即未登记令牌 → 刷新一律拒绝。
+// 只存 sha256 摘要，拖库不可直接冒用。过期行由 pruneUserSessions 惰性清理。
+model user_sessions {
+  id                String    @id @default(uuid())
+  userId            String
+  tokenHash         String    @unique
+  previousTokenHash String?
+  familyId          String    @default(uuid())
+  tokenVersion      Int       @default(0)
+  createdAt         DateTime  @default(now())
+  lastUsedAt        DateTime?
+  rotatedAt         DateTime?
+  expiresAt         DateTime
+  revokedAt         DateTime?
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([previousTokenHash])
+}
+
 // 批量实验（admin 虚拟学习者页 · 系统级队列实验）
 // 由 batch-experiment.service 驱动：创建学习者 → goal → path → 学完任务 → 跨日衰减模拟，
 // 每任务快照 memory_traces/learner_evidence 供画像系统验证。

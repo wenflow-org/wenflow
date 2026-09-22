@@ -14,6 +14,7 @@ import {
   THIRTY_DAYS_MS,
 } from '../utils/auth-cookie';
 import { verifyRefreshToken } from '../utils/session-token';
+import { rotateUserSession, revokeUserSessionByToken } from '../services/auth/user-session.service';
 import { aiCapabilityHealthService } from '../services/ai-capability-health.service';
 import { logger } from '../utils/logger';
 import {
@@ -322,8 +323,13 @@ router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
   }
 });
 
-// 登出：清除 HttpOnly 认证 Cookie + Refresh Token Cookie
-router.post('/logout', (req, res) => {
+// 登出：服务端吊销会话（安全审计 M2）+ 清除 HttpOnly 认证 Cookie + Refresh Token Cookie
+router.post('/logout', async (req, res) => {
+  // 吊销当前设备的会话登记：被盗 refresh token 在登出后即刻失效（此前仅清 Cookie，token 最长 30 天仍可用）
+  const refreshTokenCookie = resolveRefreshToken(req);
+  if (refreshTokenCookie) {
+    await revokeUserSessionByToken(refreshTokenCookie);
+  }
   clearAuthCookie(res, 'user');
   clearRefreshCookie(res);
   res.status(200).json({
@@ -370,6 +376,25 @@ router.post('/refresh', async (req, res, next) => {
       userRecord.name,
       userRecord.tokenVersion ?? 0
     );
+
+    // 会话轮换（安全审计 M2）：旧令牌登记换新 + 重用检测。非 rotated 一律拒绝并清 Cookie，
+    // 不给「已轮换/未登记的旧令牌」继续换新的机会
+    const rotation = await rotateUserSession(refreshTokenCookie, newRefreshToken, {
+      userId: userRecord.id,
+      tokenVersion: userRecord.tokenVersion ?? 0
+    });
+    if (rotation !== 'rotated') {
+      clearAuthCookie(res, 'user');
+      clearRefreshCookie(res);
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: rotation === 'reuse-detected'
+            ? '检测到会话异常，请重新登录'
+            : '会话已失效，请重新登录'
+        }
+      });
+    }
 
     // 设置新 cookies
     setAuthCookie(res, accessToken, 'user');
