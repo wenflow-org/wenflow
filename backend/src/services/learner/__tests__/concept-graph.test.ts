@@ -71,7 +71,7 @@ describe('materializePathGraph（图物化）', () => {
     expect(r.prerequisite).toBe(1);
     // 上游查询：以"按公共键对齐拼接"为起点，应取到"识别列名差异"
     const upstream = await svc.upstreamClosure('u1', idOf('按公共键对齐拼接'), { maxDepth: 1, pathId: 'p1' });
-    expect(upstream).toEqual([{ conceptId: idOf('识别列名差异'), depth: 1 }]);
+    expect(upstream).toEqual([{ conceptId: idOf('识别列名差异'), depth: 1, label: '识别列名差异' }]);
   });
 
   it('由 conceptKcs 嵌套推导 part_of（KC → coreConcept），不新增 LLM', async () => {
@@ -187,6 +187,6 @@ describe('upstreamClosure（上游闭包）', () => {
     };
     await svc.materializePathGraph({ userId: 'u1', pathId: 'p1', kcAnnotation: ann, cognitiveCore: null });
     const closure = await svc.upstreamClosure('u1', idOf('C'), { maxDepth: 1, pathId: 'p1' });
-    expect(closure).toEqual([{ conceptId: idOf('B'), depth: 1 }]);
+    expect(closure).toEqual([{ conceptId: idOf('B'), depth: 1, label: 'B' }]);
   });
 });

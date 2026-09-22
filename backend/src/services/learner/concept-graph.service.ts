@@ -222,12 +222,13 @@ export class ConceptGraphService {
 
   /**
    * 沿 `prerequisite` 向上游闭包（"要学 X，先得掌握什么"）。BFS，按 depth 去重取最小深度。
+   * 返回值带 `label`（canonical 标签），便于调用方直接展示缺口名。
    */
   async upstreamClosure(
     userId: string,
     conceptId: string,
     options: { maxDepth?: number; pathId?: string | null } = {},
-  ): Promise<Array<{ conceptId: string; depth: number }>> {
+  ): Promise<Array<{ conceptId: string; depth: number; label: string | null }>> {
     const maxDepth = options.maxDepth ?? 2;
     if (maxDepth <= 0) return [];
     const edges = await this.deps.listEdges({
@@ -251,7 +252,11 @@ export class ConceptGraphService {
       }
       frontier = next;
     }
-    return [...depthOf.entries()].map(([id, depth]) => ({ conceptId: id, depth }));
+    const ids = [...depthOf.keys()];
+    if (ids.length === 0) return [];
+    const concepts = await this.deps.findConcepts(ids);
+    const labelById = new Map(concepts.map((c) => [c.id, c.canonicalLabel]));
+    return ids.map((id) => ({ conceptId: id, depth: depthOf.get(id)!, label: labelById.get(id) ?? null }));
   }
 
   /** 单条路径的边（供只读校验/前端） */

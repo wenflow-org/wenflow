@@ -1,6 +1,7 @@
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { conceptRegistryService } from './concept-registry.service';
+import { conceptGraphService } from './concept-graph.service';
 // 注册表口径的归一化（比本文件的本地 normalizeConceptKey 更强：还去引号/冒号从句/尾部标点）。
 // 查别名表必须用它，否则会 miss——本文件那个本地版只做 trim+空白压缩。
 import { normalizeConceptKey as normalizeConceptKeyCanonical } from '../memory/concept-key';
@@ -53,6 +54,71 @@ function normalizeConceptKey(value: string | null | undefined): string | null {
   if (!value) return null;
   const normalized = value.trim().replace(/\s+/g, ' ');
   return normalized ? normalized : null;
+}
+
+/**
+ * 前置缺口（L3 · S4b）：当前任务的**上游前置**里未掌握的那些。
+ *
+ * 链路：当前任务 canonical（优先用 subtask.conceptId，回落按名字只读解析）
+ * → `upstreamClosure`（prerequisite 上游，maxDepth 2）→ 用 `conceptStates`（已带 conceptId）判掌握
+ * → 未掌握者按深度定 severity（一跳 = 直接阻塞 → high；两跳 = medium）。
+ *
+ * 返回空数组 = 无图/无上游/全部已掌握，调用方回落旧口径（保证未回填路径零行为变化）。
+ * 读侧纪律：只读解析（`createIfMissing:false`），不写库。
+ */
+async function buildUpstreamPrerequisiteGaps(params: {
+  userId: string;
+  pathId: string;
+  currentTask: { conceptId?: string | null; linkedConceptName?: string | null; coreConcept?: string | null } | null;
+  conceptStates: LearnerConceptState[];
+}): Promise<Array<{ conceptKey: string; label: string; reason: string; severity: 'high' | 'medium' }>> {
+  const { userId, pathId, currentTask, conceptStates } = params;
+  if (!userId || !currentTask) return [];
+  try {
+    let conceptId = currentTask.conceptId ?? null;
+    if (!conceptId) {
+      const name = currentTask.linkedConceptName || currentTask.coreConcept;
+      if (!name) return [];
+      const resolved = await conceptRegistryService.resolveConcept(userId, name, { createIfMissing: false });
+      conceptId = resolved?.conceptId ?? null;
+    }
+    if (!conceptId) return [];
+
+    const upstream = await conceptGraphService.upstreamClosure(userId, conceptId, { maxDepth: 2, pathId });
+    if (upstream.length === 0) return [];
+
+    const stateByConceptId = new Map<string, LearnerConceptState>();
+    for (const state of conceptStates) {
+      if (state.conceptId && !stateByConceptId.has(state.conceptId)) stateByConceptId.set(state.conceptId, state);
+    }
+    return upstream
+      .map((item) => {
+        const state = stateByConceptId.get(item.conceptId);
+        const weak = !state
+          || state.stability === 'fragile'
+          || state.status === 'review'
+          || state.masteryScore < 0.45;
+        if (!weak) return null;
+        return {
+          conceptKey: state?.conceptKey || item.conceptId,
+          label: state?.label || item.label || item.conceptId,
+          reason: item.depth === 1
+            ? '当前任务直接依赖该前置知识点，但历史证据显示尚未掌握。'
+            : '该知识点是当前任务的间接前置（上游两跳），掌握不稳定会影响后续推进。',
+          severity: (item.depth === 1 ? 'high' : 'medium') as 'high' | 'medium',
+        };
+      })
+      .filter((gap): gap is { conceptKey: string; label: string; reason: string; severity: 'high' | 'medium' } => !!gap)
+      .sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'high' ? -1 : 1))
+      .slice(0, 4);
+  } catch (error) {
+    logger.warn('[learner-knowledge] 上游前置缺口计算失败（best-effort，回落旧口径）', {
+      userId,
+      pathId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
 }
 
 function parseLearningObjectives(raw: string | null | undefined): string[] {
@@ -595,16 +661,28 @@ export class LearnerKnowledgeMemoryService {
         ])
       : [];
 
-    const prerequisiteGaps = currentTaskConcepts
-      .map((conceptKey) => conceptStates.find((concept) => concept.conceptKey === conceptKey || concept.label === conceptKey))
-      .filter((concept) => !concept || concept.stability === 'fragile' || concept.status === 'review' || concept.masteryScore < 0.45)
-      .slice(0, 4)
-      .map((concept) => ({
-        conceptKey: concept?.conceptKey || 'unknown',
-        label: concept?.label || '未识别知识点',
-        reason: '当前任务依赖该知识点，但历史证据显示掌握仍不稳定或掌握度偏低。',
-        severity: concept?.stability === 'fragile' ? 'high' as const : 'medium' as const,
-      }));
+    // 前置缺口（L3 接入，语义修正）：
+    // 旧口径算的是"**当前概念自己**没掌握"，那不是缺口——缺口是"**当前任务依赖的上游前置**没掌握"。
+    // 新口径：当前任务的 canonical → 沿 prerequisite 边向上游闭包 → 取其中未掌握者。
+    // **图缺失/无上游时回落旧口径**，保证未回填路径行为与改造前逐字一致。
+    const graphGaps = await buildUpstreamPrerequisiteGaps({
+      userId: input.userId,
+      pathId: path.id,
+      currentTask: currentTask ?? null,
+      conceptStates,
+    });
+    const prerequisiteGaps = graphGaps.length > 0
+      ? graphGaps
+      : currentTaskConcepts
+        .map((conceptKey) => conceptStates.find((concept) => concept.conceptKey === conceptKey || concept.label === conceptKey))
+        .filter((concept) => !concept || concept.stability === 'fragile' || concept.status === 'review' || concept.masteryScore < 0.45)
+        .slice(0, 4)
+        .map((concept) => ({
+          conceptKey: concept?.conceptKey || 'unknown',
+          label: concept?.label || '未识别知识点',
+          reason: '当前任务依赖该知识点，但历史证据显示掌握仍不稳定或掌握度偏低。',
+          severity: concept?.stability === 'fragile' ? 'high' as const : 'medium' as const,
+        }));
 
     const currentPath: LearnerPathKnowledgeMemory = {
       learningPathId: path.id,
