@@ -44,6 +44,10 @@ function makeDeps() {
     async findConcepts(ids) {
       return ids.map((id) => concepts.get(id)).filter((c): c is { id: string; canonicalLabel: string; level: string } => !!c);
     },
+    async listConcepts() {
+      return [...concepts.values()].map((c) => ({ id: c.id, canonicalLabel: c.canonicalLabel, level: c.level, taxonomy: null }));
+    },
+    async listTraceMastery() { return []; },
   };
   return { deps, concepts, edges, calls, idOf: (label: string) => aliasToId.get(`u1\u0000${label}`)! };
 }

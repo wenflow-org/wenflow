@@ -59,6 +59,12 @@ export interface ConceptGraphDeps {
   }): Promise<void>;
   listEdges(where: { userId: string; relations: string[]; scope?: string; pathId?: string | null }): Promise<EdgeRow[]>;
   findConcepts(ids: string[]): Promise<Array<{ id: string; canonicalLabel: string; level: string }>>;
+  /** 图视图：该用户的全部概念（含分类） */
+  listConcepts(userId: string): Promise<Array<{ id: string; canonicalLabel: string; level: string; taxonomy: string | null }>>;
+  /** 图视图：按 canonical 聚合的掌握度（来自 memory_traces） */
+  listTraceMastery(userId: string): Promise<Array<{
+    conceptId: string; masteryScore: number; stability: string; extractionCount: number; lastSeenAt: string | null;
+  }>>;
 }
 
 const defaultDeps: ConceptGraphDeps = {
@@ -93,6 +99,33 @@ const defaultDeps: ConceptGraphDeps = {
     where: { id: { in: ids } },
     select: { id: true, canonicalLabel: true, level: true },
   }),
+  listConcepts: async (userId) => prisma.concepts.findMany({
+    where: { userId },
+    select: { id: true, canonicalLabel: true, level: true, taxonomy: true },
+    take: 2000,
+  }),
+  listTraceMastery: async (userId) => {
+    const rows = await prisma.memory_traces.findMany({
+      where: { userId, conceptId: { not: null } },
+      select: { conceptId: true, masteryScore: true, stability: true, extractionCount: true, lastSeenAt: true },
+    });
+    // 同一 canonical 可能有多行（不同自由文本键）→ 取掌握度最高者（与"这个概念我会不会"语义一致）
+    const byConcept = new Map<string, { conceptId: string; masteryScore: number; stability: string; extractionCount: number; lastSeenAt: string | null }>();
+    for (const row of rows) {
+      const conceptId = row.conceptId!;
+      const current = byConcept.get(conceptId);
+      if (!current || row.masteryScore > current.masteryScore) {
+        byConcept.set(conceptId, {
+          conceptId,
+          masteryScore: row.masteryScore,
+          stability: row.stability,
+          extractionCount: row.extractionCount,
+          lastSeenAt: row.lastSeenAt ? row.lastSeenAt.toISOString() : null,
+        });
+      }
+    }
+    return [...byConcept.values()];
+  },
 };
 
 const newId = (): string => `ced_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -263,6 +296,92 @@ export class ConceptGraphService {
   async listPathEdges(userId: string, pathId: string): Promise<EdgeRow[]> {
     return this.deps.listEdges({ userId, relations: [RELATION_PREREQUISITE, RELATION_PART_OF], pathId });
   }
+
+  /**
+   * 图视图（前端画布用）：节点 = 该用户的概念（带掌握度/稳定性），边 = 概念关系。
+   * 只读聚合，不新增实体；`pathId` 可选（只看某条路径的边）。
+   */
+  async buildGraphView(
+    userId: string,
+    options: { pathId?: string | null; maxNodes?: number } = {},
+  ): Promise<ConceptGraphView> {
+    const maxNodes = options.maxNodes ?? 200;
+    const [concepts, edges, masteryRows] = await Promise.all([
+      this.deps.listConcepts(userId),
+      this.deps.listEdges({
+        userId,
+        relations: [RELATION_PREREQUISITE, RELATION_PART_OF],
+        ...(options.pathId ? { pathId: options.pathId } : {}),
+      }),
+      this.deps.listTraceMastery(userId),
+    ]);
+
+    const masteryByConcept = new Map(masteryRows.map((row) => [row.conceptId, row]));
+    const usedIds = new Set<string>();
+    for (const edge of edges) {
+      usedIds.add(edge.fromConceptId);
+      usedIds.add(edge.toConceptId);
+    }
+    // 有边的概念优先，其次按掌握度（未掌握优先，便于诊断），截断到 maxNodes
+    const ranked = concepts
+      .slice()
+      .sort((a, b) => {
+        const aHas = usedIds.has(a.id) ? 0 : 1;
+        const bHas = usedIds.has(b.id) ? 0 : 1;
+        if (aHas !== bHas) return aHas - bHas;
+        const am = masteryByConcept.get(a.id)?.masteryScore ?? 0;
+        const bm = masteryByConcept.get(b.id)?.masteryScore ?? 0;
+        return am - bm;
+      })
+      .slice(0, maxNodes);
+    const nodeIds = new Set(ranked.map((c) => c.id));
+
+    return {
+      nodes: ranked.map((concept) => {
+        const mastery = masteryByConcept.get(concept.id);
+        return {
+          id: concept.id,
+          label: concept.canonicalLabel,
+          level: concept.level,
+          taxonomy: concept.taxonomy ?? null,
+          masteryScore: mastery?.masteryScore ?? null,
+          stability: mastery?.stability ?? null,
+          extractionCount: mastery?.extractionCount ?? 0,
+          lastSeenAt: mastery?.lastSeenAt ?? null,
+        };
+      }),
+      // 只保留两端都在节点集里的边（截断后不产生悬空边）
+      edges: edges.filter((edge) => nodeIds.has(edge.fromConceptId) && nodeIds.has(edge.toConceptId)),
+      meta: {
+        nodeCount: ranked.length,
+        edgeCount: edges.filter((edge) => nodeIds.has(edge.fromConceptId) && nodeIds.has(edge.toConceptId)).length,
+        totalConcepts: concepts.length,
+        totalEdges: edges.length,
+        truncated: concepts.length > ranked.length,
+      },
+    };
+  }
+}
+
+export interface ConceptGraphView {
+  nodes: Array<{
+    id: string;
+    label: string;
+    level: string;
+    taxonomy: string | null;
+    masteryScore: number | null;
+    stability: string | null;
+    extractionCount: number;
+    lastSeenAt: string | null;
+  }>;
+  edges: Array<{ fromConceptId: string; toConceptId: string; relation: string }>;
+  meta: {
+    nodeCount: number;
+    edgeCount: number;
+    totalConcepts: number;
+    totalEdges: number;
+    truncated: boolean;
+  };
 }
 
 export const conceptGraphService = new ConceptGraphService();

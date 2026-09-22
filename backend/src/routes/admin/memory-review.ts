@@ -35,6 +35,7 @@ import {
   type AppliedConceptMerge,
   type ConceptConsolidationAudit,
 } from '../../services/learner/ConceptConsolidatorService';
+import { conceptGraphService } from '../../services/learner/concept-graph.service';
 import { fsrsRetrievability, fsrsStateFromLegacy, type FsrsMemoryState } from '../../services/memory/fsrs';
 
 const router = express.Router();
@@ -187,6 +188,26 @@ router.get('/', async (req, res) => {
   } catch (error: any) {
     logger.error('[admin/memory-review] 总览查询失败:', error);
     return res.status(500).json({ success: false, error: { message: '获取记忆与复习总览失败' } });
+  }
+});
+
+/**
+ * GET /api/admin/memory-review/:userId/concept-graph
+ * 概念图视图（前端画布用）：节点 = 该用户的概念（带掌握度/稳定性），边 = prerequisite / part_of。
+ * 只读聚合，数据来自已落地的 concepts / concept_edges / memory_traces（不新增实体）。
+ */
+router.get('/:userId/concept-graph', async (req, res) => {
+  try {
+    if (!(await ensureAdmin(req.user?.userId))) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const { userId } = req.params;
+    const pathId = typeof req.query.pathId === 'string' && req.query.pathId.trim() ? req.query.pathId.trim() : null;
+    const view = await conceptGraphService.buildGraphView(userId, { pathId });
+    res.json({ success: true, data: view });
+  } catch (error) {
+    logger.error('读取概念图失败:', error);
+    res.status(500).json({ success: false, error: { message: error instanceof Error ? error.message : '读取概念图失败' } });
   }
 });
 

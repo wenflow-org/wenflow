@@ -72,7 +72,7 @@ export function misconceptionRiskZh(v?: string): string {
 }
 
 /** LearnerDetail tab 归一化：6 tab → 3 tab 后旧 tab 名深链重定向（内容去向见 ADMIN_DEEP_LEARNER_AUDIT §4.2） */
-export type LearnerTab = 'overview' | 'profile' | 'evidence'
+export type LearnerTab = 'overview' | 'profile' | 'evidence' | 'graph'
 
 const TAB_REDIRECT: Record<string, LearnerTab> = {
   overview: 'overview',
@@ -81,7 +81,8 @@ const TAB_REDIRECT: Record<string, LearnerTab> = {
   dynamic: 'evidence', // 动态状态 → 证据（指标卡常驻）
   memory: 'profile', // 知识记忆 → 画像
   teaching: 'profile', // 教学建议 → 画像
-  evidence: 'evidence'
+  evidence: 'evidence',
+  graph: 'graph' // 知识图谱（概念图画布）
 }
 
 export function normalizeLearnerTab(tab: unknown): LearnerTab {

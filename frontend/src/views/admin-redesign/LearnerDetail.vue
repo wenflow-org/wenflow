@@ -528,6 +528,40 @@
         </div>
       </div>
     </div>
+
+    <!-- ============ 知识图谱：概念图画布（节点=概念，边=前置/属于） ============ -->
+    <div v-else-if="tab === 'graph'" class="ld-tabpage">
+      <section class="ld-card">
+        <header class="ld-card__head">
+          <h3 class="ld-card__title">知识图谱</h3>
+          <span v-if="graphMeta" class="ld-card__hint">
+            {{ graphMeta.nodeCount }} 个概念 · {{ graphMeta.edgeCount }} 条关系
+            <template v-if="graphMeta.truncated">（已截断，共 {{ graphMeta.totalConcepts }} 个）</template>
+          </span>
+        </header>
+        <p v-if="graphError" class="ld-graph__err">{{ graphError }}</p>
+        <MkLoading v-else-if="graphLoading" inline min />
+        <p v-else-if="!graphNodes.length" class="ld-graph__empty">
+          这位学习者还没有概念图数据——路径生成后 kc-mapper 会产出前置依赖，随概念身份注册表物化进图。
+        </p>
+        <MkGraph
+          v-else
+          :nodes="graphNodes"
+          :edges="graphEdges"
+          :theme="graphTheme"
+          height="520px"
+          @select="onGraphSelect"
+        />
+        <div v-if="graphSelected" class="ld-graph__detail">
+          <strong>{{ graphSelected.label }}</strong>
+          <span>{{ graphSelected.level === 'concept' ? '核心概念' : '知识组件' }}</span>
+          <span>掌握度 {{ graphSelected.masteryScore === null || graphSelected.masteryScore === undefined ? '未评估' : Math.round(graphSelected.masteryScore * 100) + '%' }}</span>
+          <span v-if="graphSelected.stability">稳定性 {{ graphSelected.stability }}</span>
+          <span>提取 {{ graphSelected.extractionCount ?? 0 }} 次</span>
+          <button type="button" class="mk-btn mk-btn--sm" @click="graphSelected = null">清除选中</button>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -538,11 +572,14 @@ import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, memoryReviewUrl, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
+import { adminMemoryReviewApi } from '@/api/adminApi'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import type { EChartsCoreOption } from 'echarts/core'
 import MkChart from '@/components/mk/MkChart.vue'
+import MkGraph from '@/components/mk/MkGraph.vue'
+import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -592,8 +629,45 @@ const tab = ref<LearnerTab>('overview')
 const tabs = [
   { id: 'overview' as const, label: '总览' },
   { id: 'profile' as const, label: '画像' },
-  { id: 'evidence' as const, label: '证据' }
+  { id: 'evidence' as const, label: '证据' },
+  { id: 'graph' as const, label: '知识图谱' }
 ]
+
+/* ── 知识图谱（概念图画布）：进入 tab 才加载，避免给总览页拖一个额外请求 ── */
+const graphNodes = ref<MkGraphNode[]>([])
+const graphEdges = ref<MkGraphEdge[]>([])
+const graphMeta = ref<{ nodeCount: number; edgeCount: number; totalConcepts: number; truncated: boolean } | null>(null)
+const graphLoading = ref(false)
+const graphError = ref('')
+const graphSelected = ref<MkGraphNode | null>(null)
+/** 跟随 admin 主题（暗色用同族配色，见 MkGraph 的 colorOf） */
+const graphTheme = computed<'light' | 'dark'>(() =>
+  typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
+)
+function onGraphSelect(node: MkGraphNode | null) { graphSelected.value = node }
+async function loadConceptGraph(userId: string) {
+  if (!userId) return
+  graphLoading.value = true
+  graphError.value = ''
+  try {
+    const res = await adminMemoryReviewApi.conceptGraph(userId)
+    const data = res?.data?.data ?? res?.data ?? {}
+    graphNodes.value = Array.isArray(data.nodes) ? data.nodes : []
+    graphEdges.value = Array.isArray(data.edges) ? data.edges : []
+    graphMeta.value = data.meta ?? null
+  } catch (error) {
+    graphError.value = `概念图加载失败：${errMsg(error)}`
+    graphNodes.value = []
+    graphEdges.value = []
+    graphMeta.value = null
+  } finally {
+    graphLoading.value = false
+  }
+}
+// 进入图 tab 时按需加载（同一学习者只加载一次；切走不清空，回来即见）
+watch([tab, () => subPage.value?.id], ([t, id]) => {
+  if (t === 'graph' && id && !graphNodes.value.length && !graphLoading.value) void loadConceptGraph(String(id))
+})
 
 /* P0-2 tab 路由化：?tab= 深链/刷新保持（与 subPage 的 view/id 同级，不侵入 AdminConsole 机制） */
 const tabRoute = useRoute()

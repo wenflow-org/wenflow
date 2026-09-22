@@ -423,6 +423,10 @@ export const adminMemoryReviewApi = {
   /** 回滚指定归并（胜出者还原 + 被删行重建） */
   rollback: async (userId: string, canonicals: string[]) => {
     return adminAxios.post(`/admin/memory-review/${userId}/rollback`, { canonicals });
+  },
+  /** 概念图视图（画布用）：节点 = 概念（带掌握度/稳定性），边 = prerequisite / part_of */
+  conceptGraph: async (userId: string, params?: { pathId?: string }) => {
+    return adminAxios.get(`/admin/memory-review/${userId}/concept-graph`, { params });
   }
 };
 

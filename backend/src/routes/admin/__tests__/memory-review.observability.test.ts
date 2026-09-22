@@ -62,7 +62,12 @@ jest.mock('../../../services/learner/ConceptConsolidatorService', () => ({
   },
 }))
 
+jest.mock('../../../services/learner/concept-graph.service', () => ({
+  conceptGraphService: { buildGraphView: jest.fn() },
+}))
+
 import memoryReviewRouter from '../memory-review'
+import { conceptGraphService } from '../../../services/learner/concept-graph.service'
 
 const mergeRecord = (over: Record<string, unknown> = {}) => ({
   mergeId: 'mrg_1', canonical: '离开前翻页立好', aliases: ['离开前翻页立好：动作先于评价'],
@@ -117,6 +122,11 @@ beforeEach(() => {
   projectionsFindMany.mockResolvedValue([])
   listAppliedMerges.mockResolvedValue([])
   listAppliedAliasMerges.mockResolvedValue([])
+  ;(conceptGraphService.buildGraphView as jest.Mock).mockResolvedValue({
+    nodes: [{ id: 'cpt_1', label: '分组键唯一性', level: 'concept', taxonomy: null, masteryScore: 0.4, stability: 'fragile', extractionCount: 3, lastSeenAt: null }],
+    edges: [],
+    meta: { nodeCount: 1, edgeCount: 0, totalConcepts: 1, totalEdges: 0, truncated: false },
+  })
 })
 
 describe('权限', () => {
@@ -313,5 +323,17 @@ describe('重新观察', () => {
 
     expect(consolidate).toHaveBeenCalledWith('u1', { mode: 'observe', force: true })
     expect(res.body.data.audit).toMatchObject({ mode: 'observe' })
+  })
+})
+
+describe('概念图视图（S5 前端画布的数据源）', () => {
+  it('GET /:userId/concept-graph 返回节点/边/元信息，且支持 pathId 过滤', async () => {
+    const res = await run(getRouteHandler(memoryReviewRouter, '/:userId/concept-graph', 'get'), {
+      ...adminReq, params: { userId: 'u1' }, query: { pathId: 'p1' },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.data.nodes[0]).toMatchObject({ id: 'cpt_1', label: '分组键唯一性', stability: 'fragile' })
+    expect(res.body.data.meta.nodeCount).toBe(1)
+    expect(conceptGraphService.buildGraphView).toHaveBeenCalledWith('u1', { pathId: 'p1' })
   })
 })
