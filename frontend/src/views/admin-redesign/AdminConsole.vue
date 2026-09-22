@@ -156,7 +156,9 @@ const crumbTitle = computed(() => {
   const sp = subPage.value
   if (!sp) return ''
   const parent = sp.from ? (sp.from.label || sp.from.id) : ''
-  return parent ? `${parent} / ${sp.id}` : sp.id
+  // label 回填后tooltip也应显示中文名（除名，避免裸 UUID）；深链瞬间 label 未到，回退 id
+  const current = sp.label ? `${sp.label}` : sp.id
+  return parent ? `${parent} / ${current}` : current
 })
 
 /* —— 真路由化：scene ↔ URL /admin/:page 双向同步 —— */

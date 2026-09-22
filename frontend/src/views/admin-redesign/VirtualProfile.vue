@@ -30,35 +30,7 @@
             :title="qualityTitle"
           >{{ qualityReferee ? `质量 ${qualityReferee}` : '质量 —' }}<template v-if="qualityFidelity"> · 保真 {{ qualityFidelity }}</template><span class="vp-quality__time">{{ qualityTime }}</span></span>
         </div>
-        <div v-if="isLive" class="mk-entity__actions">
-          <!-- 低频/管理操作收进 ⋯ 菜单（统一模型 vlab-controls：操作/文案/确认来自单一来源，三层同语义） -->
-          <div class="mk-menu">
-            <button
-              type="button"
-              class="mk-menu__btn"
-              aria-label="更多操作"
-              aria-haspopup="menu"
-              :aria-expanded="openMenu === 'header'"
-              title="更多操作：座舱 / 生命周期 / 账号自动学习 / 编辑画像"
-              @click.stop="toggleMenu('header')"
-            >⋯</button>
-            <div v-if="openMenu === 'header'" class="mk-menu__pop" :style="popStyle" @click.stop>
-              <button
-                v-for="c in lifeControls"
-                :key="c.key"
-                type="button"
-                class="mk-menu__item"
-                :class="{ 'mk-menu__item--danger': c.tone === 'danger' }"
-                :disabled="sessionBusy"
-                :title="c.hint"
-                @click="runLifeAction(c); closeMenu()"
-              >{{ c.label }}</button>
-              <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
-              <button type="button" class="mk-menu__item" title="账号自动学习：批量自动运行该虚拟人的全部故事/课程（独立于单个故事运行）" @click="closeMenu(); quickLearnOpen = true">账号自动学习</button>
-              <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
-            </div>
-          </div>
-        </div>
+        <!-- 头部只留身份信息（状态 + 属性 pill）；全部操作收进下方统一操作台，见 vp-toolbar -->
       </div>
     </header>
 
@@ -82,6 +54,94 @@
         {{ t.label }}
         <span v-if="t.count !== undefined" class="vp-tab__count">{{ t.count }}</span>
       </button>
+    </div>
+
+    <!-- 统一操作台：按钮不再散落（头部/卡头/卡片三处），按三类固定槽位集中
+         左「主动作」每个 tab 一个高频动作 | 中「视图筛选」当前 tab 的过滤器 | 右「⋯ 管理」账号级低频 -->
+    <div v-if="isLive" class="vp-toolbar">
+      <template v-if="activeTab === 'stories'">
+        <button
+          type="button"
+          class="mk-status__action"
+          :class="{ 'mk-status__action--primary': !displayStories.length }"
+          :disabled="storyBusy"
+          :title="storySampleType === 'student'
+            ? '生成传统学生故事（考试节点/课纲压力/作业情境/家长同伴环境）'
+            : '用 AI 生成新的故事脚本（基于该虚拟人画像与指定领域），生成后可运行'"
+          @click="generateStory"
+        >
+          {{ storyBusy ? '生成中…' : '生成故事' }}
+        </button>
+        <div class="vp-sample-pills" role="radiogroup" aria-label="故事样本类型">
+          <button
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': storySampleType === 'general' }"
+            @click="storySampleType = 'general'"
+          >通用</button>
+          <button
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': storySampleType === 'student' }"
+            title="生成传统学生故事：考试节点/课纲压力/作业情境/家长与同伴环境"
+            @click="storySampleType = 'student'"
+          >传统学生</button>
+        </div>
+      </template>
+      <button
+        v-else-if="activeTab === 'memory'"
+        type="button"
+        class="mk-status__action"
+        :disabled="memoryLoading"
+        title="重新读取记忆池数据"
+        @click="loadMemory(true)"
+      >
+        <MkLoading v-if="memoryLoading" inline /><template v-else>刷新</template>
+      </button>
+
+      <span class="vp-toolbar__spacer" aria-hidden="true"></span>
+
+      <!-- 视图筛选：故事池生命周期过滤（轴 A；与一级页 chips 同语义） -->
+      <div v-if="activeTab === 'stories' && displayStories.length" class="vp-filters">
+        <button
+          v-for="opt in storyFilterOptions"
+          :key="opt.key"
+          type="button"
+          class="mk-pill"
+          :class="{ 'mk-pill--active': storyFilter === opt.key }"
+          @click="storyFilter = opt.key"
+        >
+          {{ opt.label }} <span class="vp-filter-count">{{ opt.count }}</span>
+        </button>
+      </div>
+
+      <!-- 账号级低频操作集中入口 -->
+      <div class="mk-menu">
+        <button
+          type="button"
+          class="mk-menu__btn"
+          aria-label="更多操作"
+          aria-haspopup="menu"
+          :aria-expanded="openMenu === 'ops'"
+          title="更多操作：座舱 / 生命周期 / 账号自动学习 / 编辑画像"
+          @click.stop="toggleMenu('ops')"
+        >⋯</button>
+        <div v-if="openMenu === 'ops'" class="mk-menu__pop" :style="popStyle" @click.stop>
+          <button
+            v-for="c in lifeControls"
+            :key="c.key"
+            type="button"
+            class="mk-menu__item"
+            :class="{ 'mk-menu__item--danger': c.tone === 'danger' }"
+            :disabled="sessionBusy"
+            :title="c.hint"
+            @click="runLifeAction(c); closeMenu()"
+          >{{ c.label }}</button>
+          <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
+          <button type="button" class="mk-menu__item" title="账号自动学习：批量自动运行该虚拟人的全部故事/课程（独立于单个故事运行）" @click="closeMenu(); quickLearnOpen = true">账号自动学习</button>
+          <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
+        </div>
+      </div>
     </div>
 
     <div class="vp-body">
@@ -159,15 +219,7 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">记忆池 · {{ memoryCount }}</h3>
             <span class="mk-card__meta">课后沉淀 · 学过的会被记住，快忘了的会显示为复习点</span>
-            <button
-              v-if="isLive"
-              type="button"
-              class="mk-status__action"
-              :disabled="memoryLoading"
-              @click="loadMemory(true)"
-            >
-              <MkLoading v-if="memoryLoading" inline /><template v-else>刷新</template>
-            </button>
+            <!-- 刷新已上移至统一操作台「主动作」槽 -->
           </div>
 
           <MkLoading v-if="isLive && memoryLoading && !memoryData" text="正在读取记忆…" />
@@ -299,19 +351,7 @@
         <section v-if="activeTab === 'stories'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">故事池 · {{ displayStories.length }}</h3>
-            <!-- 状态过滤并入卡头一行（此前独立成行，顶部 chrome 层层堆叠） -->
-            <div v-if="isLive && displayStories.length" class="vp-filters">
-              <button
-                v-for="opt in storyFilterOptions"
-                :key="opt.key"
-                type="button"
-                class="mk-pill"
-                :class="{ 'mk-pill--active': storyFilter === opt.key }"
-                @click="storyFilter = opt.key"
-              >
-                {{ opt.label }} <span class="vp-filter-count">{{ opt.count }}</span>
-              </button>
-            </div>
+            <!-- 筛选/生成/样本类型已上移至统一操作台；卡头只留对象级条件操作（勾选后批量） -->
             <div class="vp-stories-head">
               <!-- 批量操作（对齐一级页：勾选后批量运行/删除） -->
               <template v-if="isLive && displayStories.length">
@@ -324,34 +364,6 @@
                 <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm" :disabled="storyBusy" title="停止勾选故事最新会话的自动驾驶（学习进度保留）" @click="batchAutopilotStories('stop')">批量停止</button>
                 <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="storyBusy" title="删除勾选的故事（不可恢复）" @click="batchRemoveStories">批量删除</button>
               </template>
-              <div v-if="isLive" class="vp-sample-pills" role="radiogroup" aria-label="故事样本类型">
-                <button
-                  type="button"
-                  class="mk-pill"
-                  :class="{ 'mk-pill--active': storySampleType === 'general' }"
-                  @click="storySampleType = 'general'"
-                >通用</button>
-                <button
-                  type="button"
-                  class="mk-pill"
-                  :class="{ 'mk-pill--active': storySampleType === 'student' }"
-                  title="生成传统学生故事：考试节点/课纲压力/作业情境/家长与同伴环境"
-                  @click="storySampleType = 'student'"
-                >传统学生</button>
-              </div>
-              <button
-                v-if="isLive"
-                type="button"
-                class="mk-status__action"
-                :class="{ 'mk-status__action--primary': !displayStories.length }"
-                :disabled="storyBusy"
-                :title="storySampleType === 'student'
-                  ? '生成传统学生故事（考试节点/课纲压力/作业情境/家长同伴环境）'
-                  : '用 AI 生成新的故事脚本（基于该虚拟人画像与指定领域），生成后可运行'"
-                @click="generateStory"
-              >
-                {{ storyBusy ? '生成中…' : '生成故事' }}
-              </button>
             </div>
           </div>
           <!-- 空态三态：底层无故事 / 筛选无匹配（故事存在但过滤后为空） -->
@@ -2181,6 +2193,18 @@ async function quietReload(id: string) {
 }
 /* .mk-card__foot 基础规则与暗色已提升为全局（见 shared.css）；此处仅保留本页的宽屏内边距档位 */
 
+/* ===== 统一操作台（tabs 下一行；主动作 | 视图筛选 | ⋯ 管理 三段固定槽位） ===== */
+.vp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+}
+.vp-toolbar__spacer { flex: 1 1 auto; min-width: 0; }
 .vp-stories-head {
   margin-left: auto;
   display: flex;
@@ -2194,8 +2218,8 @@ async function quietReload(id: string) {
 }
 /* ===== 故事池：列表（选中 → 运行目标；展开 → 详情区） ===== */
 .vp-stories { display: grid; gap: 8px; padding: 12px; }
-/* 故事池状态过滤 chips（对齐一级页 vl-filters） */
-.vp-filters { display: flex; align-items: center; gap: 6px; padding: 8px 16px 0; flex-wrap: wrap; }
+/* 故事池状态过滤 chips（操作台「视图筛选」槽；对齐一级页 vl-filters） */
+.vp-filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .vp-filter-count { font-weight: 800; margin-left: 2px; opacity: 0.75; }
 
 .vp-story {
