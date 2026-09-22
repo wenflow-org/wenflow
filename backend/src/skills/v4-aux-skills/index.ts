@@ -457,6 +457,9 @@ async function conceptConsolidatorHandler(input: any) {
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
       : { valid: false, failureReason: 'CONCEPT_CONSOLIDATOR_OUTPUT_NOT_OBJECT' },
+    // 2026-09-22 实测：此前未声明重试（callPrompt 默认不重试），一次跑偏即整轮失败。
+    // 与 kc-mapper 对齐，先给整轮重试（失败反馈能力 aux 框架暂无，另行评估）。
+    retryStrategy: { maxAttempts: 2 },
   });
 }
 

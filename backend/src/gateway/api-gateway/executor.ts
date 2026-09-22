@@ -688,6 +688,16 @@ export class APIExecutor {
       temperature: hoisted.temperature ?? route.temperature,
       max_tokens: hoisted.max_tokens ?? route.maxTokens
     };
+    // 上游兼容：当前平台的 zijian 网关（101.43.146.102:30001）实测会**静默丢弃 role:'system'**
+    // （2026-09-22 直连实测：带 1467 字 system 与不带 system 的 prompt_tokens 完全相同 = 98，
+    //  且模型对 system 里的"只输出 JSON"约束毫无反应；同一约束写进 user 消息则被完美遵从）。
+    // 后果：所有 skill 的系统提示词从未到达模型，表现为"模型把结构化输入当文档做总结"——
+    // kc-mapper/concept-consolidator 等纯标注类 skill 集体失败的真因。
+    // 这里把 system 内容折叠进首条 user 消息，保证提示词一定被模型看到。
+    // 关闭方式：LLM_SYSTEM_PROMPT_FOLD=0（上游改为支持 system 后可关）。
+    if (process.env.LLM_SYSTEM_PROMPT_FOLD !== '0') {
+      requestBody.messages = foldSystemMessagesIntoUser(requestBody.messages);
+    }
     // 调用方**显式**声明 thinking 时以调用方为准（定向重试：截断空输出 → 关闭思考重试），
     // 否则按路由档位 + 模型能力推导。
     const explicitThinking = requestBody.thinking;
@@ -1140,4 +1150,35 @@ export class APIExecutor {
   private generateTraceId(): string {
     return `gw-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
   }
+}
+
+/**
+ * 把 `role:'system'` 消息内容折叠进首条 user 消息（上游不支持 system 角色时的兼容层）。
+ *
+ * 背景（2026-09-22 实测）：平台当前的 zijian 网关会静默丢弃 system 消息，导致 skill 的
+ * 系统提示词从未到达模型；折叠进 user 消息后同一约束被模型完美遵从。
+ *
+ * 语义：
+ * - 无 system 消息 → 原样返回（引用不变，避免无谓拷贝）；
+ * - 多条 system → 按顺序以空行拼接；
+ * - 有 user 消息 → system 文本前置到**首条** user 消息，用分隔线隔开，保留原 user 内容与其余消息顺序；
+ * - 无 user 消息（只有 system/assistant）→ 生成一条 user 消息承载 system 文本。
+ */
+export function foldSystemMessagesIntoUser(messages: ChatRequest['messages']): ChatRequest['messages'] {
+  if (!Array.isArray(messages) || messages.length === 0) return messages;
+  const systems = messages.filter((m) => m?.role === 'system' && String(m?.content || '').trim());
+  if (systems.length === 0) return messages;
+
+  const systemText = systems.map((m) => String(m.content)).join('\n\n');
+  const rest = messages.filter((m) => m?.role !== 'system');
+  const firstUserIndex = rest.findIndex((m) => m?.role === 'user');
+  if (firstUserIndex === -1) {
+    return [{ role: 'user', content: systemText }, ...rest];
+  }
+  const merged = [...rest];
+  merged[firstUserIndex] = {
+    ...merged[firstUserIndex],
+    content: `${systemText}\n\n---\n${String(merged[firstUserIndex].content || '')}`,
+  };
+  return merged;
 }
