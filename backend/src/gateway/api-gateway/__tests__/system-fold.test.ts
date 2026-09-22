@@ -52,6 +52,6 @@ describe('foldSystemMessagesIntoUser（上游不支持 system 角色的兼容层
 
   it('空数组 / 非数组安全返回', () => {
     expect(foldSystemMessagesIntoUser([])).toEqual([]);
-    expect(foldSystemMessagesIntoUser(undefined as any)).toBeUndefined();
+    expect(foldSystemMessagesIntoUser(undefined as unknown as Parameters<typeof foldSystemMessagesIntoUser>[0])).toBeUndefined();
   });
 });
