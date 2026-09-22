@@ -713,12 +713,12 @@ function recGateDetail(completion: SkillCompletion): string {
 
 /* ================= 暗色模式（D1 补完）：Skill 运行 ================= */
 html[data-theme='dark'] {
-  .sk-card__rate { background: #232f45; }
-  .sk-card { background: #141c2b; border-color: #232f45; }
-  .sk-card__head { border-bottom-color: #232f45; }
-  .sk-card--error { background: linear-gradient(180deg, #241a1a, #141c2b); }
-  .sk-dot--idle, .sk-card--idle .sk-card__dot { background: #4a5874; }
-  .sk-agent-tag { background: #232f45; color: #9fb0c8; }
+  .sk-card__rate { background: #2a2b2d; }
+  .sk-card { background: #19191a; border-color: #2a2b2d; }
+  .sk-card__head { border-bottom-color: #2a2b2d; }
+  .sk-card--error { background: linear-gradient(180deg, #241a1a, #19191a); }
+  .sk-dot--idle, .sk-card--idle .sk-card__dot { background: #4d4e51; }
+  .sk-agent-tag { background: #2a2b2d; color: #afb1b6; }
 }
 
 /* ================= D3 表格增强：Skill 列设置菜单 ================= */

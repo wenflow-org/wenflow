@@ -161,23 +161,23 @@ body.admin-session-concealed[data-theme='dark'] {
 html.admin-session-concealed[data-theme='dark'] body > #admin-session-validation-shell,
 body.admin-session-concealed[data-theme='dark'] > #admin-session-validation-shell {
   background: var(--mk-bg);
-  color: var(--mk-ink, #eceef1);
+  color: var(--mk-ink, #efeff0);
 }
 
 html[data-theme='dark'] .admin-session-validation-card {
-  background: var(--mk-surface, #1f2227);
-  border-color: var(--mk-line, #373b43);
+  background: var(--mk-surface, #1b1c1d);
+  border-color: var(--mk-line, #313235);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
 }
 
-html[data-theme='dark'] .admin-session-validation-card h1 { color: var(--mk-ink, #eceef1); }
+html[data-theme='dark'] .admin-session-validation-card h1 { color: var(--mk-ink, #efeff0); }
 
-html[data-theme='dark'] .admin-session-validation-detail { color: var(--mk-muted, #adb2ba); }
+html[data-theme='dark'] .admin-session-validation-detail { color: var(--mk-muted, #afb1b6); }
 
 html[data-theme='dark'] .admin-session-validation-button {
   background: var(--mk-overlay-btn-bg);
   border-color: var(--mk-line);
-  color: var(--mk-ink, #eceef1);
+  color: var(--mk-ink, #efeff0);
 }
 
 html[data-theme='dark'] .admin-session-validation-button:hover:not(:disabled) {

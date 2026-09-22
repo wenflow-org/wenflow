@@ -566,7 +566,7 @@ async function submit() {
 }
 
 /* 暗色模式：硬编码浅色块替换为深色等阶（Teleport 覆盖层不继承页面暗色） */
-html[data-theme='dark'] .faw__preview-head { background: #141c2b; }
+html[data-theme='dark'] .faw__preview-head { background: #19191a; }
 html[data-theme='dark'] .faw__msg {
   background: rgba(91, 141, 239, 0.16);
   border-color: rgba(91, 141, 239, 0.4);

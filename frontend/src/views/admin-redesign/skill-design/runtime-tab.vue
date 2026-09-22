@@ -365,6 +365,6 @@ watch(
 }
 
 /* 暗色模式 */
-[data-theme='dark'] .sdp-chiprow { background: #17202f; }
+[data-theme='dark'] .sdp-chiprow { background: #1b1c1d; }
 
 </style>

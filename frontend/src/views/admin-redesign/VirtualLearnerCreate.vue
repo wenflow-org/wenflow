@@ -268,7 +268,7 @@ defineExpose({ open })
 
 /* 暗色模式：高级区/人设成功提示（硬编码浅底） */
 html[data-theme='dark'] {
-  .vl-advanced { background: #141c2b; border-color: #232f45; }
+  .vl-advanced { background: #19191a; border-color: #2a2b2d; }
   .vl-persona-ok { background: rgba(74, 222, 128, 0.12); color: #6ee7a0; }
 }
 </style>

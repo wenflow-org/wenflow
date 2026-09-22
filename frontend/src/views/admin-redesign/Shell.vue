@@ -746,7 +746,7 @@ function groupBadgeTitle(title: string): string {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-html[data-theme='dark'] .mshell__crumb { background: #1c1e23; border-color: #2f3239; }
+html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2b2d; }
 
 /* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半） */
 @media (min-width: 1440px) {
@@ -898,36 +898,36 @@ html[data-theme='dark'] .mshell__crumb { background: #1c1e23; border-color: #2f3
 
 /* ================= 暗色模式（D1）：壳层硬编码色覆写 ================= */
 html[data-theme='dark'] {
-  .mshell { background: #16181d; color: #eceef1; }
-  .mshell__side { background: #1b1d22; border-right-color: #2f3239; }
-  .mshell__pinned { border-bottom-color: #2f3239; }
-  .mshell__group-head { color: #79828f; }
+  .mshell { background: #141415; color: #efeff0; }
+  .mshell__side { background: #19191a; border-right-color: #2a2b2d; }
+  .mshell__pinned { border-bottom-color: #2a2b2d; }
+  .mshell__group-head { color: #808389; }
   .mshell__group-head:hover { color: #7aa2ff; background: rgba(120, 140, 170, 0.08); }
   .mshell__group-head--active { color: #7aa2ff; }
-  .mshell__group-icon { color: #6b7c96; }
+  .mshell__group-icon { color: #7a7e85; }
   .mshell__group-head:hover .mshell__group-icon,
   .mshell__group-head--active .mshell__group-icon { color: #7aa2ff; }
-  .mshell__group-badge { background: #272a2f; color: var(--mk-muted, #adb2ba); }
+  .mshell__group-badge { background: #232325; color: var(--mk-muted, #afb1b6); }
   .mshell__group-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
   .mshell__item-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
-  .mshell__item { color: #b8bec8; }
-  .mshell__item:hover { background: #282c33; color: #eceef1; }
+  .mshell__item { color: #bdbec2; }
+  .mshell__item:hover { background: #252627; color: #efeff0; }
   .mshell__item--active { background: rgba(91, 141, 239, 0.1); color: #7aa2ff; box-shadow: inset 3px 0 0 var(--mk-blue); }
-  .mshell__item-glyph { background: #272a2f; color: #adb2ba; }
+  .mshell__item-glyph { background: #232325; color: #afb1b6; }
   .mshell__item--active .mshell__item-glyph { background: rgba(91, 141, 239, 0.22); color: #7aa2ff; }
-  .mshell__item-badge { background: #272a2f; color: #6b7c96; }
+  .mshell__item-badge { background: #232325; color: #7a7e85; }
   .mshell__item--active .mshell__item-badge { background: rgba(91, 141, 239, 0.22); color: #7aa2ff; }
-  .mshell__foot { border-top-color: #2a2d32; }
-  .mshell__foot-name { color: #a2a6ae; }
-  .mshell__foot-ver { color: #7c8aa3; }
-  .mshell__collapse { background: #1b1d22; border-color: #2f3239; color: #adb2ba; }
+  .mshell__foot { border-top-color: #252627; }
+  .mshell__foot-name { color: #a5a7ac; }
+  .mshell__foot-ver { color: #8a8d93; }
+  .mshell__collapse { background: #19191a; border-color: #2a2b2d; color: #afb1b6; }
   .mshell__collapse:hover { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
-  .mshell__tool { color: var(--mk-muted, #adb2ba); }
-  .mshell__tool:hover { background: #282c33; color: #7aa2ff; }
-  .mshell__user { border-top-color: #2a2d32; }
-  .mshell__user-avatar { background: #272a2f; color: #7aa2ff; }
-  .mshell__user-name { color: #eceef1; }
-  .mshell__logout { color: var(--mk-muted, #adb2ba); }
+  .mshell__tool { color: var(--mk-muted, #afb1b6); }
+  .mshell__tool:hover { background: #252627; color: #7aa2ff; }
+  .mshell__user { border-top-color: #252627; }
+  .mshell__user-avatar { background: #232325; color: #7aa2ff; }
+  .mshell__user-name { color: #efeff0; }
+  .mshell__logout { color: var(--mk-muted, #afb1b6); }
   .mshell__logout:hover { background: rgba(220, 38, 38, 0.14); color: #f87171; }
 }
 </style>

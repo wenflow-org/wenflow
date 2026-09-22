@@ -451,12 +451,12 @@ onMounted(async () => {
 
 /* ================= 暗色模式（D1 补完）：Skill 工作台 ================= */
 html[data-theme='dark'] {
-  .sc-msg { background: #141c2b; border-color: #232f45; }
+  .sc-msg { background: #19191a; border-color: #2a2b2d; }
   .sc-msg--error { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.35); }
-  .sc-badge-kind { background: #253049; }
+  .sc-badge-kind { background: #2d2d2f; }
 
   /* 补漏：输入框/代码块浅底 */
-  .sc-field__input { background: #141c2b; }
-  .sc-result__pre { background: #0f1624; color: var(--mk-pre-fg); }
+  .sc-field__input { background: #19191a; }
+  .sc-result__pre { background: #141415; color: var(--mk-pre-fg); }
 }
 </style>

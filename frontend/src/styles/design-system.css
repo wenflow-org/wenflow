@@ -367,16 +367,16 @@
   --color-danger-dark: #ef7578;
   
   /* 中性色系反转 */
-  --neutral-50: #1A252F;
-  --neutral-100: #1E2D3A;
-  --neutral-200: #2A3D4D;
-  --neutral-300: #3A4F61;
-  --neutral-400: #4A6173;
-  --neutral-500: #6B8294;
-  --neutral-600: #8BA3B5;
-  --neutral-700: #AFC5D3;
-  --neutral-800: #D4E0E8;
-  --neutral-900: #EDF2F6;
+  --neutral-50: #1e1e20;
+  --neutral-100: #232325;
+  --neutral-200: #2f3032;
+  --neutral-300: #3e3f42;
+  --neutral-400: #4a4c4f;
+  --neutral-500: #7a7e85;
+  --neutral-600: #9d9fa4;
+  --neutral-700: #bfc1c4;
+  --neutral-800: #dddddf;
+  --neutral-900: #f2f2f3;
   --neutral-950: #FFFFFF;
   
   /* 暗色模式背景 */
@@ -394,14 +394,14 @@
   --text-muted: var(--mk-muted);
   --text-disabled: var(--neutral-500);
   --text-inverse: var(--neutral-950);
-  --text-on-primary: #0F1820;
-  --text-on-success: #0F1820;
-  --text-on-warning: #0F1820;
-  --text-on-danger: #0F1820;
-  --text-on-success-light: #EDF2F6;
-  --text-on-warning-light: #EDF2F6;
-  --text-on-info-light: #EDF2F6;
-  --text-on-danger-light: #EDF2F6;
+  --text-on-primary: #141415;
+  --text-on-success: #141415;
+  --text-on-warning: #141415;
+  --text-on-danger: #141415;
+  --text-on-success-light: #f2f2f3;
+  --text-on-warning-light: #f2f2f3;
+  --text-on-info-light: #f2f2f3;
+  --text-on-danger-light: #f2f2f3;
   
   /* 暗色模式边框 */
   --border-default: var(--mk-line);

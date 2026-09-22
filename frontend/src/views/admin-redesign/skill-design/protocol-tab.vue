@@ -1055,11 +1055,11 @@ watch(
 }
 
 /* 暗色模式 */
-[data-theme='dark'] .sdp-pw__viewswitch { background: #1b2638; }
-[data-theme='dark'] .sdp-block { background: #17202f; }
-[data-theme='dark'] .sdp-pwform__card { background: #17202f; }
-[data-theme='dark'] .sdp-pw__textarea { background: #141c2b; color: #e6edf7; }
-[data-theme='dark'] .sdp-pw__textarea:disabled { background: #1b2638; }
-[data-theme='dark'] .sdp-pw__viewbtn--active { background: #1d2a42; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+[data-theme='dark'] .sdp-pw__viewswitch { background: #202122; }
+[data-theme='dark'] .sdp-block { background: #1b1c1d; }
+[data-theme='dark'] .sdp-pwform__card { background: #1b1c1d; }
+[data-theme='dark'] .sdp-pw__textarea { background: #19191a; color: #e6edf7; }
+[data-theme='dark'] .sdp-pw__textarea:disabled { background: #202122; }
+[data-theme='dark'] .sdp-pw__viewbtn--active { background: #252627; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
 
 </style>

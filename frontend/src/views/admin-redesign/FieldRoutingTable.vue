@@ -1012,22 +1012,22 @@ html[data-theme='dark'] {
     border-bottom-color: rgba(42, 56, 80, 0.9);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   }
-  .frt__toolbar { background: #141c2b; border-color: #232f45; }
-  .frt__toolbar-btn:hover { background: #1f2b40; }
-  .frt__notice { background: #1b2a45; border-color: rgba(91, 141, 239, 0.45); color: #7aa2ff; }
-  .frt-syncbar { background: #1b2a45; border-color: rgba(91, 141, 239, 0.4); }
-  .frt-syncbar--muted { background: #141c2b; }
-  .frt-syncbar__badge--muted { background: #253049; }
+  .frt__toolbar { background: #19191a; border-color: #2a2b2d; }
+  .frt__toolbar-btn:hover { background: #252627; }
+  .frt__notice { background: #252627; border-color: rgba(91, 141, 239, 0.45); color: #7aa2ff; }
+  .frt-syncbar { background: #252627; border-color: rgba(91, 141, 239, 0.4); }
+  .frt-syncbar--muted { background: #19191a; }
+  .frt-syncbar__badge--muted { background: #2d2d2f; }
 
-  .frt__agenthead { background: #131b2a; }
+  .frt__agenthead { background: #19191a; }
   /* agent 卡片标题：暗色下从近白降为柔和浅灰蓝（与编排图一致） */
-  .frt__agentname { color: #c7d3e8; }
-  .frt__agentcount { background: #253049; }
+  .frt__agentname { color: #d8d8da; }
+  .frt__agentcount { background: #2d2d2f; }
   .frt__persist--alias { background: rgba(251, 191, 36, 0.12); }
 
 
-  .frt__orch-summary { background: #101826; }
-  .frt__orch-textarea { background: #0f1624; }
+  .frt__orch-summary { background: #161718; }
+  .frt__orch-textarea { background: #141415; }
   .frt__orch-quick { background: rgba(91, 141, 239, 0.12); }
 }
 </style>

@@ -164,7 +164,7 @@ function confirm() {
 .mk-btn--danger:hover { background: var(--mk-red-fill-strong, #b91c1c); border-color: var(--mk-red-fill-strong, #b91c1c); }
 /* 暗色覆写：与 shared.css 同源同值（Confirm 独立承载，不依赖 admin shared.css 加载） */
 html[data-theme='dark'] .mk-modal { background: rgba(3, 7, 14, 0.62); }
-html[data-theme='dark'] .mk-btn:hover { background: #1b2740; }
+html[data-theme='dark'] .mk-btn:hover { background: #252627; }
 html[data-theme='dark'] .mk-btn--primary:hover { background: #6a9cf3; }
 html[data-theme='dark'] .mk-btn--danger:hover { background: var(--mk-red-fill-strong, #b91c1c); border-color: var(--mk-red-fill-strong, #b91c1c); }
 </style>

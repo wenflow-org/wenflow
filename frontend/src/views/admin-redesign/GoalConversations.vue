@@ -968,7 +968,7 @@ onMounted(() => {
   transition: border-color 0.12s ease, background 0.12s ease;
 }
 .gc-msg-jump:hover { border-color: rgba(44, 99, 208, 0.5); background: #f0f5ff; }
-html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { display: flex; }
+html[data-theme='dark'] .gc-msg-jump:hover { background: #252627; }.gc-msg { display: flex; }
 .gc-msg--user { justify-content: flex-end; }
 .gc-msg--assistant { justify-content: flex-start; }
 .gc-msg--unknown { justify-content: flex-start; }
@@ -1088,13 +1088,13 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #1f2b40; }.gc-msg { dis
 
 /* ================= 暗色模式（D1 补完）：目标对话 ================= */
 html[data-theme='dark'] {
-  .gc-json { background: #0f1624; color: var(--mk-pre-fg); }
+  .gc-json { background: #141415; color: var(--mk-pre-fg); }
   /* 消息气泡：容器级旧覆写修正为气泡级（assistant 灰蓝 / user 深蓝） */
   .gc-msg--assistant .gc-msg__bubble,
-  .gc-msg--unknown .gc-msg__bubble { background: #1b2433; border-color: #2a3850; }
-  .gc-msg--user .gc-msg__bubble { background: #16233a; border-color: #27405f; }
-  .gc-insight__row { border-bottom-color: #1e2839; }
-  .gc-stage-cell__dot { background: #2a3850; }
+  .gc-msg--unknown .gc-msg__bubble { background: #202122; border-color: #313235; }
+  .gc-msg--user .gc-msg__bubble { background: #202122; border-color: #36383a; }
+  .gc-insight__row { border-bottom-color: #232325; }
+  .gc-stage-cell__dot { background: #313235; }
   .gc-error { border-color: rgba(248, 113, 113, 0.35); }
 }
 </style>

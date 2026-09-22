@@ -105,6 +105,6 @@ watch(
 .sdp-none { margin: 0; font-size: 12px; color: var(--mk-faint); }
 
 /* 暗色模式 */
-[data-theme='dark'] .sdp-routing__lineage { background: #17202f; }
+[data-theme='dark'] .sdp-routing__lineage { background: #1b1c1d; }
 
 </style>

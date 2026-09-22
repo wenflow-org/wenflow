@@ -2722,37 +2722,37 @@ async function quietReload(id: string) {
 
 /* ================= 暗色模式（D1 补完）：虚拟画像页 ================= */
 html[data-theme='dark'] {
-  .vp-top { background: #1c1e23; border-color: #2f3239; }
-  .vp-tab { background: #25282d; }
+  .vp-top { background: #19191a; border-color: #2a2b2d; }
+  .vp-tab { background: #202122; }
   .vp-tab.is-active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
-  .vp-story__row:hover { background: #282c33; }
+  .vp-story__row:hover { background: #252627; }
   .vp-story.is-selected .vp-story__row { background: rgba(91, 141, 239, 0.12); }
   .vp-quality--ok { color: #6ee7a0; background: rgba(74, 222, 128, 0.12); }
   .vp-quality--warn { color: #fcd34d; background: rgba(251, 191, 36, 0.12); }
   .vp-quality--bad { color: #fca5a5; background: rgba(248, 113, 113, 0.12); }
-  .vp-quality--none { background: #32353c; }
-  .vp-top__goal { background: #25282d; }
+  .vp-quality--none { background: #2d2d2f; }
+  .vp-top__goal { background: #202122; }
   .vp-life--ok { background: rgba(74, 222, 128, 0.12); }
   .vp-life--warn { background: rgba(251, 191, 36, 0.12); }
   .vp-life--bad { background: rgba(248, 113, 113, 0.12); }
-  .vp-life--muted { background: #32353c; border-color: #41464e; }
-  .vp-story { background: #1c1e23; border-color: #2f3239; }
-  .vp-story__radio { background: #25282d; }
+  .vp-life--muted { background: #2d2d2f; border-color: #393a3c; }
+  .vp-story { background: #19191a; border-color: #2a2b2d; }
+  .vp-story__radio { background: #202122; }
   .vp-story.is-selected { background: rgba(91, 141, 239, 0.1); border-color: rgba(91, 141, 239, 0.35); }
   /* 补漏：特征标签/目标/预算徽章/运行卡/工具/记忆统计/警告标签 */
-  .vp-trait { background: #32353c; color: #adb2ba; }
-  .vp-goal { background: #1c1e23; border-color: #2f3239; }
-  .vp-story__budget-badge { background: #272a2f; color: #adb2ba; }
-  .vp-run-group { background: #1c1e23; border-color: #2f3239; }
-  .vp-run-group__head { background: #25282d; }
-  .vp-run { background: #1c1e23; border-color: #2f3239; }
-  .vp-run:hover { background: #282c33; }
-  .vp-memory__stat { background: #1c1e23; border-color: #2f3239; }
+  .vp-trait { background: #2d2d2f; color: #afb1b6; }
+  .vp-goal { background: #19191a; border-color: #2a2b2d; }
+  .vp-story__budget-badge { background: #232325; color: #afb1b6; }
+  .vp-run-group { background: #19191a; border-color: #2a2b2d; }
+  .vp-run-group__head { background: #202122; }
+  .vp-run { background: #19191a; border-color: #2a2b2d; }
+  .vp-run:hover { background: #252627; }
+  .vp-memory__stat { background: #19191a; border-color: #2a2b2d; }
   .vp-tag--warn { background: rgba(251, 191, 36, 0.12); color: #fcd34d; }
-  .vp-pk { background: #1c1e23; border-color: #2f3239; }
+  .vp-pk { background: #19191a; border-color: #2a2b2d; }
 
   .vp-tag--ok { background: rgba(62, 201, 132, 0.14); color: #3ec984; }
-  .vp-memory__completed-item { background: #1c1e23; }
+  .vp-memory__completed-item { background: #19191a; }
   .vp-memory__completed-dot { background: rgba(62, 201, 132, 0.25); }
 }
 </style>

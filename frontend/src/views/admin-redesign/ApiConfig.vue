@@ -1306,7 +1306,7 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-policy__item { display: grid; gap: 10px; align-content: start; min-width: 0; padding-left: 18px; border-left: 1px dashed #e6eaf0; }
 .ac-policy__item:nth-child(odd) { padding-left: 0; border-left: none; }
 .ac-policy__item:nth-child(n + 3) { padding-top: 14px; border-top: 1px dashed #e6eaf0; }
-html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
+html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 .ac-policy__label { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-muted); }
 .ac-policy__desc { font-size: var(--mk-fs-12_5); color: var(--mk-muted); line-height: 1.6; }
 .ac-policy__hint { font-size: var(--mk-fs-12_5); color: var(--mk-faint); line-height: 1.55; display: block; }
@@ -1554,7 +1554,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
   .ac-policy { grid-template-columns: 1fr; }
   .ac-policy__item { padding-left: 0; border-left: none; padding-top: 12px; border-top: 1px dashed #e6eaf0; }
   .ac-policy__item:first-child { padding-top: 0; border-top: none; }
-  html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
+  html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
@@ -1646,16 +1646,16 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2a3446; }
 /* ================= 暗色模式（D1 补完）：模型与接入 ================= */
 html[data-theme='dark'] {
   .ac-key-toggle:hover { background: rgba(91, 141, 239, 0.14); }
-  .mk-seg { background: #1d2739; }
+  .mk-seg { background: #232325; }
   .mk-seg__item--active { background: rgba(91, 141, 239, 0.22); color: #9db8f5; box-shadow: none; }
-  .ac-save { background: #141c2b; border-color: #232f45; }
+  .ac-save { background: #19191a; border-color: #2a2b2d; }
   /* 补漏：密钥切换钮/模型胶囊浅底 */
   .ac-key-toggle,
-  .ac-model { background: #1d2739; color: #9fb0c8; }
+  .ac-model { background: #232325; color: #afb1b6; }
   /* 硬编码浅色分隔线（卡内分区/健康表行）暗色适配 */
   .ac-health__head,
   .ac-health__row,
-  .ac-health__foot { border-color: #232f45; }
-  .ac-models__empty { background: #141c2b; border-color: #2a3850; }
+  .ac-health__foot { border-color: #2a2b2d; }
+  .ac-models__empty { background: #19191a; border-color: #313235; }
 }
 </style>

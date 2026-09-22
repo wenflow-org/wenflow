@@ -313,10 +313,10 @@ function openPanel() { recOpen.value = true; }
 
 /* ================= 暗色模式（D1 补完）：Skill 对账 ================= */
 html[data-theme='dark'] {
-  .sk-rec__refresh { background: #17202f; }
-  .sk-rec-tag { background: #253049; color: #9fb0c8; }
+  .sk-rec__refresh { background: #1b1c1d; }
+  .sk-rec-tag { background: #2d2d2f; color: #afb1b6; }
   .sk-rec-tag--bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
-  .sk-rec-group td { background: #131b2a; }
+  .sk-rec-group td { background: #19191a; }
   /* 补漏：pill 语义底 */
   .sk-pill--bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
   .sk-pill--warn { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }

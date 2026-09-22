@@ -199,12 +199,12 @@ function stageLabel(stage: string | null | undefined): string {
 
 /* 暗色模式：正在运行条 */
 html[data-theme='dark'] {
-  .vl-running__chip { background: #141c2b; border-color: #232f45; color: #4ade80; }
-  .vl-running__chip--paused { color: #8fa3bd; }
+  .vl-running__chip { background: #19191a; border-color: #2a2b2d; color: #4ade80; }
+  .vl-running__chip--paused { color: #a2a5a9; }
   .vl-running__chip--batch { color: #7aa2ff; }
   .vl-running__chip--batch.is-done { color: #4ade80; }
   .vl-running__chip--batch.is-error { color: #f87171; }
   .vl-running__label { color: #4ade80; }
-  .vl-running__more { background: #141c2b; border-color: #2a3850; color: #8fa3bd; }
+  .vl-running__more { background: #19191a; border-color: #313235; color: #a2a5a9; }
 }
 </style>

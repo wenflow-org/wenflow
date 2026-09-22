@@ -1212,7 +1212,7 @@ void reloadRuns()
 
 /* 暗色模式（D1 补完）：Prompt 评估（此前完全缺失） */
 html[data-theme='dark'] {
-  .pe-result-row { background: #141c2b; border-color: #232f45; }
+  .pe-result-row { background: #19191a; border-color: #2a2b2d; }
   .pe-result-row--fail { background: rgba(248, 113, 113, 0.08); border-color: rgba(248, 113, 113, 0.35); }
   .pe-check--ok { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
   .pe-check--fail { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }

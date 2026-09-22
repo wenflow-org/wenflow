@@ -238,9 +238,9 @@ watch(() => props.stage, () => {
 
 /* ================= 暗色模式（D1 补完）：治理漂移审计 ================= */
 html[data-theme='dark'] {
-  .fdp__guide-text code { background: #253049; }
-  .fdp__drift-item { background: #161f2f; }
-  .fdp__change { background: #161f2f; }
-  .fdp__change-kind { background: #253049; color: #9fb0c8; }
+  .fdp__guide-text code { background: #2d2d2f; }
+  .fdp__drift-item { background: #1b1c1d; }
+  .fdp__change { background: #1b1c1d; }
+  .fdp__change-kind { background: #2d2d2f; color: #afb1b6; }
 }
 </style>

@@ -1800,16 +1800,16 @@ html[data-theme='dark'] {
   .ld-session,
   .ld-ev,
   .ld-cal__row,
-  .ld-bar__ev { border-bottom-color: #2f3239; }
+  .ld-bar__ev { border-bottom-color: #2a2b2d; }
   /* 语义渐变（warn/bad 用暗色系，避免浅红/浅琥珀过亮） */
   .ld-trend__bar--down { background: linear-gradient(90deg, var(--mk-red-strong), #7f1d1d); }
-  .ld-bar__ev { background: #2f3239; }
+  .ld-bar__ev { background: #2a2b2d; }
   .ld-kv__row,
   /* 滚动条 */
-  .ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #41464e; }
+  .ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #393a3c; }
   /* 补漏：操作提示标签/概念 chip/置信条/加载分段 */
   .ld-actions__k { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
-  .ld-chip { background: #32353c; color: #adb2ba; }
-  .ld-ev__confbar { background: #2f3239; }
+  .ld-chip { background: #2d2d2f; color: #afb1b6; }
+  .ld-ev__confbar { background: #2a2b2d; }
 }
 </style>

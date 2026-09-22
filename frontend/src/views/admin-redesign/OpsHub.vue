@@ -437,8 +437,8 @@ onMounted(() => {
 }
 .ow-todo:last-child { border-bottom: none; }
 .ow-todo:hover { background: #f6f9ff; }
-html[data-theme='dark'] .ow-todo { border-bottom-color: #1f2a3d; }
-html[data-theme='dark'] .ow-todo:hover { background: #1a2436; }
+html[data-theme='dark'] .ow-todo { border-bottom-color: #252627; }
+html[data-theme='dark'] .ow-todo:hover { background: #202122; }
 .ow-todo__dot {
   width: 9px;
   height: 9px;
@@ -514,7 +514,7 @@ html[data-theme='dark'] .ow-todo:hover { background: #1a2436; }
 .ow-seg--warn { background: var(--mk-amber); }
 .ow-seg--bad { background: var(--mk-red); }
 .ow-seg--muted { background: #c3cbda; }
-html[data-theme='dark'] .ow-seg--muted { background: #3b4a66; }
+html[data-theme='dark'] .ow-seg--muted { background: #404244; }
 .ow-state__rows { display: grid; gap: 5px; }
 .ow-state__row {
   display: flex;
@@ -543,7 +543,7 @@ html[data-theme='dark'] .ow-seg--muted { background: #3b4a66; }
 .ow-state__dot--warn { background: var(--mk-amber); }
 .ow-state__dot--bad { background: var(--mk-red); }
 .ow-state__dot--muted { background: #c3cbda; }
-html[data-theme='dark'] .ow-state__dot--muted { background: #3b4a66; }
+html[data-theme='dark'] .ow-state__dot--muted { background: #404244; }
 
 /* 生效中公告列表 */
 .ow-ann-list { padding: 2px 14px 6px; }
@@ -563,8 +563,8 @@ html[data-theme='dark'] .ow-state__dot--muted { background: #3b4a66; }
 }
 .ow-ann:last-child { border-bottom: none; }
 .ow-ann:hover { background: #f6f9ff; }
-html[data-theme='dark'] .ow-ann { border-bottom-color: #1f2a3d; }
-html[data-theme='dark'] .ow-ann:hover { background: #1a2436; }
+html[data-theme='dark'] .ow-ann { border-bottom-color: #252627; }
+html[data-theme='dark'] .ow-ann:hover { background: #202122; }
 .ow-ann__title {
   flex: 1;
   min-width: 0;

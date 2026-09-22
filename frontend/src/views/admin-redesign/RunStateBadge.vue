@@ -81,10 +81,10 @@ html[data-theme='dark'] .rs-badge--ok { background: rgba(74, 222, 128, 0.14); co
 html[data-theme='dark'] .rs-badge--bad { background: rgba(248, 113, 113, 0.14); color: #f87171; border-color: rgba(248, 113, 113, 0.35); }
 html[data-theme='dark'] .rs-badge--warn { background: rgba(251, 191, 36, 0.14); color: #fbbf24; border-color: rgba(251, 191, 36, 0.45); }
 html[data-theme='dark'] .rs-badge--info { background: rgba(91, 141, 239, 0.16); color: #9db8f5; border-color: rgba(91, 141, 239, 0.4); }
-html[data-theme='dark'] .rs-badge--muted { background: #253049; color: #9fb0c8; border-color: #33415c; }
+html[data-theme='dark'] .rs-badge--muted { background: #2d2d2f; color: #afb1b6; border-color: #393a3c; }
 html[data-theme='dark'] .rs-badge--running { background: rgba(91, 141, 239, 0.18); color: #7aa2ff; border-color: rgba(91, 141, 239, 0.45); }
 html[data-theme='dark'] .rs-badge--queued { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; border-color: rgba(167, 139, 250, 0.45); }
-html[data-theme='dark'] .rs-badge--paused { background: #253049; color: #9fb0c8; border-color: #33415c; }
+html[data-theme='dark'] .rs-badge--paused { background: #2d2d2f; color: #afb1b6; border-color: #393a3c; }
 @keyframes rs-pulse-dark {
   0%, 100% { box-shadow: 0 0 0 0 rgba(91, 141, 239, 0.4); }
   50% { box-shadow: 0 0 0 4px rgba(91, 141, 239, 0); }

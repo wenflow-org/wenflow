@@ -945,7 +945,7 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 /* ================= 暗色模式（D1 补完）：教学会话 ================= */
 html[data-theme='dark'] {
   .ts-card--advisory { background: #2a2410; border-color: rgba(251, 191, 36, 0.3); }
-  .ts-json { background: #0f1624; color: var(--mk-pre-fg); }
+  .ts-json { background: #141415; color: var(--mk-pre-fg); }
 }
 
 </style>

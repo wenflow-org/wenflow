@@ -362,8 +362,8 @@ watch(
 }
 
 /* 暗色模式 */
-[data-theme='dark'] .sdp-table-wrap { background: #17202f; }
-[data-theme='dark'] .sdp-diff { background: #17202f; }
-[data-theme='dark'] .sdp-diff__head { background: #1b2638; }
+[data-theme='dark'] .sdp-table-wrap { background: #1b1c1d; }
+[data-theme='dark'] .sdp-diff { background: #1b1c1d; }
+[data-theme='dark'] .sdp-diff__head { background: #202122; }
 
 </style>

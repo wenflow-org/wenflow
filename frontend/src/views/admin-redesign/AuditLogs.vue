@@ -898,15 +898,15 @@ function goSessions(username: string) {
 
 /* ================= 暗色模式（D1 补完）：审计日志 ================= */
 html[data-theme='dark'] {
-  .log-tr--open td { background: #1b2740; }
+  .log-tr--open td { background: #252627; }
   .log-payload-row td,
-  .log-payload-row:hover td { background: #1b2740; }
+  .log-payload-row:hover td { background: #252627; }
   .log-method--get { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
   .log-method--post { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
   .log-method--put { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
   .log-method--patch { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
   .log-method--delete { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
-  .log-method--head { background: #253049; color: #9fb0c8; }
+  .log-method--head { background: #2d2d2f; color: #afb1b6; }
 }
 
 /* ================= D3 表格增强：审计列设置菜单 ================= */
@@ -919,8 +919,8 @@ html[data-theme='dark'] {
 
 
 
-html[data-theme='dark'] .log-tr--open td { background: #131c2c; }
+html[data-theme='dark'] .log-tr--open td { background: #19191a; }
 html[data-theme='dark'] .log-payload-row td,
-html[data-theme='dark'] .log-payload-row:hover td { background: #101826; }
-html[data-theme='dark'] .log-payload-row td { border-bottom-color: #1e2839; }
+html[data-theme='dark'] .log-payload-row:hover td { background: #161718; }
+html[data-theme='dark'] .log-payload-row td { border-bottom-color: #232325; }
 </style>

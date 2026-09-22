@@ -988,7 +988,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   font-weight: 600;
   padding: 1px 7px;
 }
-html[data-theme='dark'] .exec-kind-group .mk-badge { background: #253049; color: #8fa3bd; }
+html[data-theme='dark'] .exec-kind-group .mk-badge { background: #2d2d2f; color: #a2a5a9; }
 /* 测试标签：灰底小徽章（与类型徽章并排，业务日志不出现） */
 .exec-test-tag {
   font-size: 11px;
@@ -1000,7 +1000,7 @@ html[data-theme='dark'] .exec-kind-group .mk-badge { background: #253049; color:
   color: var(--mk-muted, #5b6577);
   white-space: nowrap;
 }
-html[data-theme='dark'] .exec-test-tag { background: #2a3850; color: #8fa3bd; }
+html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
 .exec-cell { min-width: 0; }
 .exec-cell__line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .exec-cell__line + .exec-cell__line { margin-top: 1px; }
@@ -1110,7 +1110,7 @@ html[data-theme='dark'] .exec-test-tag { background: #2a3850; color: #8fa3bd; }
 
 /* 展开详情行（colspan=5）：浅底 + 内容盒内聚，干扰最小化 */
 .exec-detail td { padding: 6px 14px 14px; background: #fbfcfe; vertical-align: top; }
-html[data-theme='dark'] .exec-detail td { background: #101826; }
+html[data-theme='dark'] .exec-detail td { background: #161718; }
 .exec-detail__box {
   display: grid;
   gap: 8px;
@@ -1137,7 +1137,7 @@ html[data-theme='dark'] .exec-detail td { background: #101826; }
   font-weight: 600;
   padding: 1px 7px;
 }
-html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #253049; color: #8fa3bd; }
+html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; color: #a2a5a9; }
 .exec-detail__meta > span { white-space: nowrap; }
 
 /* 窄屏自适应：min-width 只保证默认 5 列(时间/节点/调用/耗时/状态)在窄容器内不塌陷 ≈620px;
@@ -1297,12 +1297,12 @@ html[data-theme='dark'] .tline-attempt--fail { background: rgba(220, 38, 38, 0.0
 /* ================= 暗色模式（D1 补完）：执行日志终端页 ================= */
 html[data-theme='dark'] {
 
-  .exec-row--open { background: #1b2740; }
-  .exec-detail td { background: #131b2a; }
-  .exec-detail__box { background: #0f1624; border-color: #232f45; }
+  .exec-row--open { background: #252627; }
+  .exec-detail td { background: #19191a; }
+  .exec-detail__box { background: #141415; border-color: #2a2b2d; }
   .exec-detail__box pre { color: var(--mk-pre-fg); }
-  .tline { background: #131b2a; border-color: #232f45; }
-  .tline-attempt { background: #17202f; border-color: #232f45; }
+  .tline { background: #19191a; border-color: #2a2b2d; }
+  .tline-attempt { background: #1b1c1d; border-color: #2a2b2d; }
   .tline-attempt--fail { background: #241a1a; border-left-color: var(--mk-red); }
 
 

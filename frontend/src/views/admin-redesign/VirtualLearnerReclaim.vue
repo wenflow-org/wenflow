@@ -165,6 +165,6 @@ defineExpose({ open, state })
 
 /* 暗色模式：回收清单（硬编码浅底） */
 html[data-theme='dark'] {
-  .vl-reclaim-item { background: #141c2b; border-color: #232f45; }
+  .vl-reclaim-item { background: #19191a; border-color: #2a2b2d; }
 }
 </style>

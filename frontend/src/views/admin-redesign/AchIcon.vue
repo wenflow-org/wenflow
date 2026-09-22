@@ -58,5 +58,5 @@ const meta = computed(
   font-size: var(--mk-fs-13);
   vertical-align: middle;
 }
-html[data-theme='dark'] .ach-icon--muted { background: #4a5874; }
+html[data-theme='dark'] .ach-icon--muted { background: #4d4e51; }
 </style>

@@ -108,8 +108,8 @@ const DONE_TEXT: Record<RunStageName, string> = { goal: '目标', path: '路径'
 
 /* ================= 暗色模式（D1 补完）：阶段进度条 ================= */
 html[data-theme='dark'] {
-  .rs-bar__connector { background: #2a3850; }
-  .rs-bar__node--todo .rs-bar__dot { background: #1d2739; color: #64748b; border-color: #33415c; }
-  .rs-bar__node--skip .rs-bar__dot { background: #1d2739; color: #3d4c66; border-color: #2a3850; }
+  .rs-bar__connector { background: #313235; }
+  .rs-bar__node--todo .rs-bar__dot { background: #232325; color: #73767d; border-color: #393a3c; }
+  .rs-bar__node--skip .rs-bar__dot { background: #232325; color: #404244; border-color: #313235; }
 }
 </style>

@@ -721,11 +721,11 @@ onMounted(async () => {
 html[data-theme='dark'] {
   .ss-tr--current td { background: rgba(91, 141, 239, 0.1); }
   .ss-tr--current:hover td { background: rgba(91, 141, 239, 0.16); }
-  .ss-hist__summary:hover { background: #1b2740; }
+  .ss-hist__summary:hover { background: #252627; }
   .ss-dot--linux { background: #f59e0b; }
-  .ss-hist { background: #141c2b; border-color: #232f45; }
+  .ss-hist { background: #19191a; border-color: #2a2b2d; }
   /* 补漏：当前会话徽章/折叠组头浅底 */
   .ss-current { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
-  .ss-hist__summary { background: #1b2537; }
+  .ss-hist__summary { background: #202122; }
 }
 </style>

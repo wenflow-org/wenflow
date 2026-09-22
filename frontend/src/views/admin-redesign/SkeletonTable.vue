@@ -37,5 +37,5 @@ function barWidth(i: number, j: number) {
 .skl__bar { height: 12px; }
 
 /* 暗色模式 */
-html[data-theme='dark'] .skl { border-bottom-color: #232f45; }
+html[data-theme='dark'] .skl { border-bottom-color: #2a2b2d; }
 </style>

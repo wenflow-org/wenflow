@@ -194,8 +194,8 @@ function rowTitle(r: RankRow): string {
 }
 .tc-table__row:last-child { border-bottom: none; }
 .tc-table__row:hover { background: #f6f9ff; }
-html[data-theme='dark'] .tc-table__row { border-bottom-color: #1f2a3d; }
-html[data-theme='dark'] .tc-table__row:hover { background: #1a2436; }
+html[data-theme='dark'] .tc-table__row { border-bottom-color: #252627; }
+html[data-theme='dark'] .tc-table__row:hover { background: #202122; }
 
 .tc-c { min-width: 0; }
 .tc-c--num { text-align: right; }
@@ -223,7 +223,7 @@ html[data-theme='dark'] .tc-table__row:hover { background: #1a2436; }
   font-variant-numeric: tabular-nums;
 }
 .tc-rank__no--top { background: var(--mk-blue-bg); color: var(--mk-blue); }
-html[data-theme='dark'] .tc-rank__no { background: #253049; color: var(--mk-muted); }
+html[data-theme='dark'] .tc-rank__no { background: #2d2d2f; color: var(--mk-muted); }
 html[data-theme='dark'] .tc-rank__no--top { background: rgba(91, 141, 239, 0.2); color: #9db8f5; }
 
 /* 名称列 */
@@ -294,7 +294,7 @@ html[data-theme='dark'] .tc-rank__no--top { background: rgba(91, 141, 239, 0.2);
   border-radius: 999px;
   background: linear-gradient(90deg, #6fa1f5, var(--mk-accent-deep));
 }
-html[data-theme='dark'] .tc-share__track { background: #232f45; }
+html[data-theme='dark'] .tc-share__track { background: #2a2b2d; }
 html[data-theme='dark'] .tc-share__bar { background: linear-gradient(90deg, #6fa1f5, #2f6fed); }
 .tc-share__num {
   text-align: right;

@@ -3091,14 +3091,14 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 
 /* ================= 暗色模式（D1 补完）：会话座舱 ================= */
 html[data-theme='dark'] {
-  .cp-stage:hover:not(:disabled) { background: #2b2e34; }
+  .cp-stage:hover:not(:disabled) { background: #252627; }
   .cp-stage--active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
-  .cp-run__autopilot-result { background: #1c1e23; }
-  .cp-transcript__message { background: #1c1e23; border-left-color: #373b43; }
+  .cp-run__autopilot-result { background: #19191a; }
+  .cp-transcript__message { background: #19191a; border-left-color: #313235; }
   .cp-transcript__message.is-teacher { background: rgba(91, 141, 239, 0.12); border-left-color: var(--mk-blue); }
   .cp-transcript__message.is-learner { background: rgba(45, 212, 191, 0.1); border-left-color: var(--mk-teal); }
-  .cp-review { background: #1c1e23; }
-  .cp-review__badge, .cp-lesson-head__state { background: #32353c; }
+  .cp-review { background: #19191a; }
+  .cp-review__badge, .cp-lesson-head__state { background: #2d2d2f; }
   .cp-lesson-head__state[data-state='active'] { background: rgba(91, 141, 239, 0.18); color: #7aa2ff; }
   .cp-learn-tree__lesson.is-active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; border-left-color: var(--mk-blue); }
   .cp-learn-tree__lesson.is-pending:hover { background: rgba(251, 191, 36, 0.12); color: #fcd34d; }
@@ -3110,13 +3110,13 @@ html[data-theme='dark'] {
 
   .cp-log__phase { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
   /* 补漏：wrapup 分数/卡片/小节/trace 面板/时间线标签 */
-  .cp-lesson-wrapup__score { background: #272a2f; color: #adb2ba; }
+  .cp-lesson-wrapup__score { background: #232325; color: #afb1b6; }
   .cp-lesson-wrapup__score--primary { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
   .cp-wrapup-card,
   .cp-wrapup-section,
-  .cp-trace-panel { background: #1c1e23; border-color: #2f3239; }
-  .cp-trace-list__body { background: #25282d; }
-  .cp-run__stages { background: #1c1e23; }
+  .cp-trace-panel { background: #19191a; border-color: #2a2b2d; }
+  .cp-trace-list__body { background: #202122; }
+  .cp-run__stages { background: #19191a; }
   .cp-wrapup-lesson.is-active { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
   .cp-wrapup-lesson.is-done:hover { background: rgba(74, 222, 128, 0.1); }
   .cp-timeline__kind[data-kind='referee'] { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
@@ -3129,30 +3129,30 @@ html[data-theme='dark'] {
   .cp-timeline__stage[data-stage='goal'] { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
   .cp-timeline__stage[data-stage='path'] { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
 
-  .cp-learn-tree__ms { background: #1c1e23; }
-  .cp-lesson-head { background: #1c1e23; }
-  .cp-wrapup-ms__head { background: #1c1e23; }
-  .cp-wrapup-card__icon { background: #282b33; }
+  .cp-learn-tree__ms { background: #19191a; }
+  .cp-lesson-head { background: #19191a; }
+  .cp-wrapup-ms__head { background: #19191a; }
+  .cp-wrapup-card__icon { background: #252627; }
   /* 补漏 2：课时总结渐变底/stats/骨架屏/eval/trace 徽章/预算条文字 */
-  .cp-lesson-wrapup { background: linear-gradient(135deg, rgba(74, 222, 128, 0.1), #1c1e23); }
-  .cp-wrapup-stats { background: linear-gradient(135deg, rgba(91, 141, 239, 0.1), #1c1e23); }
-  .cp-trace-list > li { background: #1c1e23; }
-  .cp-eval__score { background: #272a2f; }
-  .cp-finding__sev { background: #32353c; }
+  .cp-lesson-wrapup { background: linear-gradient(135deg, rgba(74, 222, 128, 0.1), #19191a); }
+  .cp-wrapup-stats { background: linear-gradient(135deg, rgba(91, 141, 239, 0.1), #19191a); }
+  .cp-trace-list > li { background: #19191a; }
+  .cp-eval__score { background: #232325; }
+  .cp-finding__sev { background: #2d2d2f; }
   .cp-finding__sev[data-sev='minor'] { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
   .cp-finding__sev[data-sev='info'] { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
-  .cp-rec__codes code { background: #32353c; }
-  .cp-timeline__kind { background: #32353c; }
+  .cp-rec__codes code { background: #2d2d2f; }
+  .cp-timeline__kind { background: #2d2d2f; }
   .cp-timeline__stage { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
   .cp-timeline__stage[data-stage='learning'],
   .cp-timeline__stage[data-stage='teaching'] { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
   .cp-trace-list__stage { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
   .cp-trace-list__stage[data-stage='learning'] { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
   .cp-trace-list__emotion,
-  .cp-trace-list__transition { background: #32353c; color: #9db8f5; }
+  .cp-trace-list__transition { background: #2d2d2f; color: #9db8f5; }
   .cp-trace-list__metrics > span,
-  .cp-trace-list__kv > span { background: #272a2f; }
-  .cp-trace-list__flags > span { background: #32353c; }
+  .cp-trace-list__kv > span { background: #232325; }
+  .cp-trace-list__flags > span { background: #2d2d2f; }
   .cp-trace-list__flags > span.active { background: rgba(91, 141, 239, 0.16); color: #9db8f5; border-color: rgba(91, 141, 239, 0.45); }
 }
 </style>

@@ -274,13 +274,13 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
 }
 
 /* 暗色模式：sdp 面板/表格浅色硬编码收敛 */
-[data-theme='dark'] .sdp-kv { background: #17202f; }
-[data-theme='dark'] .sdp-kv th { background: #1b2638; color: #9fb0c8; }
+[data-theme='dark'] .sdp-kv { background: #1b1c1d; }
+[data-theme='dark'] .sdp-kv th { background: #202122; color: #afb1b6; }
 [data-theme='dark'] .sdp-kv td { color: #e6edf7; }
-[data-theme='dark'] .sdp-kv th, [data-theme='dark'] .sdp-kv td { border-color: #2a3850; }
-[data-theme='dark'] .sdp-protocol { background: #17202f; border-color: #2a3850; }
+[data-theme='dark'] .sdp-kv th, [data-theme='dark'] .sdp-kv td { border-color: #313235; }
+[data-theme='dark'] .sdp-protocol { background: #1b1c1d; border-color: #313235; }
 [data-theme='dark'] .sdp-protocol strong { color: #e6edf7; }
 [data-theme='dark'] .sdp-rule { background: rgba(141, 107, 255, 0.08); }
-[data-theme='dark'] .sdp-rule__text { color: #cbd7ea; }
+[data-theme='dark'] .sdp-rule__text { color: #dbdbdd; }
 
 </style>

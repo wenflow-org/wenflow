@@ -661,11 +661,11 @@ watch(
 [data-theme='dark'] .sdp-prompt,
 [data-theme='dark'] .sdp-log,
 [data-theme='dark'] .sdp-log__detail,
-[data-theme='dark'] .sdp-log__io pre { background: #17202f; border-color: #2a3850; color: #e6edf7; }
+[data-theme='dark'] .sdp-log__io pre { background: #1b1c1d; border-color: #313235; color: #e6edf7; }
 [data-theme='dark'] .sdp-prompt__code,
 [data-theme='dark'] .sdp-json,
-[data-theme='dark'] .sdp-codehl--json .sdp-codehl__pre { background: #141c2b; }
-[data-theme='dark'] .sdp-log__main:hover { background: #1b2638; }
+[data-theme='dark'] .sdp-codehl--json .sdp-codehl__pre { background: #19191a; }
+[data-theme='dark'] .sdp-log__main:hover { background: #202122; }
 [data-theme='dark'] .sdp-log__io--err pre { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.3); }
 
 </style>

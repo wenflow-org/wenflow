@@ -98,7 +98,7 @@ function toggle(key: string) {
   user-select: none;
 }
 .mk-cols__item:hover { background: #f0f5ff; }
-html[data-theme='dark'] .mk-cols__item:hover { background: #1f2b40; }
+html[data-theme='dark'] .mk-cols__item:hover { background: #252627; }
 .mk-cols__item input { accent-color: var(--mk-blue, #2c63d0); }
 .mk-cols__reset {
   margin-top: 4px;
@@ -115,5 +115,5 @@ html[data-theme='dark'] .mk-cols__item:hover { background: #1f2b40; }
   text-align: left;
 }
 .mk-cols__reset:hover { background: #eff6ff; }
-html[data-theme='dark'] .mk-cols__reset:hover { background: #1f2b40; }
+html[data-theme='dark'] .mk-cols__reset:hover { background: #252627; }
 </style>

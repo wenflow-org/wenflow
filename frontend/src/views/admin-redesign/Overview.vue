@@ -1462,30 +1462,30 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
 
 /* ================= 暗色模式（D1）：总览页硬编码浅色覆写 ================= */
 html[data-theme='dark'] {
-  .brief-head { background: #141c2b; }
-  .brief-head--warn { background: linear-gradient(180deg, #2a2410, #141c2b); }
-  .brief-head--bad { background: linear-gradient(180deg, #2a1414, #141c2b); }
-  .brief-head--muted { background: #131b2a; }
-  .brief-score__track { stroke: #232f45; }
-  .brief-card { background: #141c2b; }
+  .brief-head { background: #19191a; }
+  .brief-head--warn { background: linear-gradient(180deg, #2a2410, #19191a); }
+  .brief-head--bad { background: linear-gradient(180deg, #2a1414, #19191a); }
+  .brief-head--muted { background: #19191a; }
+  .brief-score__track { stroke: #2a2b2d; }
+  .brief-card { background: #19191a; }
   .brief-actions__btn { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.35); }
   .brief-actions__btn:hover { background: rgba(91, 141, 239, 0.26); }
-  .wq__bars, .ov-skill__track, .usage__bar-track { background: #232f45; }
-  .ov-skill:hover, .usage__fail:hover, .feed__item:hover { background: #1b2740; }
+  .wq__bars, .ov-skill__track, .usage__bar-track { background: #2a2b2d; }
+  .ov-skill:hover, .usage__fail:hover, .feed__item:hover { background: #252627; }
   .feed__item--bad:hover { background: #2a1414; }
   .feed__item--warn:hover { background: #2a2410; }
   .trend__col--today { background: rgba(91, 141, 239, 0.12); box-shadow: inset 0 0 0 1px rgba(91, 141, 239, 0.3); }
-  .funnel__node { background: #1b2740; border-color: #232f45; }
-  .funnel__node--idle { background: #131b2a; border-color: #232f45; }
-  .usage__hero { background: linear-gradient(180deg, #141c2b, #131b2a); border-color: #232f45; }
-  .usage__hero-sep { background: #232f45; }
+  .funnel__node { background: #252627; border-color: #2a2b2d; }
+  .funnel__node--idle { background: #19191a; border-color: #2a2b2d; }
+  .usage__hero { background: linear-gradient(180deg, #19191a, #19191a); border-color: #2a2b2d; }
+  .usage__hero-sep { background: #2a2b2d; }
   .brief-card__go:hover { background: rgba(91, 141, 239, 0.14); }
-  .ov-health { background: #141c2b; }
+  .ov-health { background: #19191a; }
   .ov-growth__bar--new, .trend__bar, .usage__bar { background: linear-gradient(180deg, #6aa0ff, #3d7cff); }
 
-  .ov-skill__rank { background: #1d2739; }
-  .feed__dot { background: #4a5874; box-shadow: 0 0 0 3px #141c2b; }
+  .ov-skill__rank { background: #232325; }
+  .feed__dot { background: #4d4e51; box-shadow: 0 0 0 3px #19191a; }
   .ov-skill:nth-child(1) .ov-skill__rank { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
-  .feed__toggle:hover { background: #1b2740; }
+  .feed__toggle:hover { background: #252627; }
 }
 </style>

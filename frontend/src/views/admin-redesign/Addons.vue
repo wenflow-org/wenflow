@@ -668,7 +668,7 @@ function goConfig() {
 /* ================= 暗色模式（D1 补完）：外挂能力 ================= */
 html[data-theme='dark'] {
   .ac-error { background: rgba(248, 113, 113, 0.1); }
-  /* .ac-mcp__dot.is-off 不再重写：基础规则已走 var(--mk-faint)，暗色下自动取 #6b7c96 */
-  .ac-mcp__hint code { background: var(--mk-surface-3); color: var(--mk-muted, #9fb0c8); }
+  /* .ac-mcp__dot.is-off 不再重写：基础规则已走 var(--mk-faint)，暗色下自动取 #7a7e85 */
+  .ac-mcp__hint code { background: var(--mk-surface-3); color: var(--mk-muted, #afb1b6); }
 }
 </style>

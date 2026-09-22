@@ -317,14 +317,14 @@ html.dark { color-scheme: dark; }
    ======================================== */
 html[data-theme='dark'] {
   color-scheme: dark;
-  --mk-ink: #eceef1;            /* 主文字：深底浅字 */
-  --mk-muted: #adb2ba;          /* 次级文字 */
-  --mk-faint: #6b7c96;          /* 弱化文字 */
-  --mk-faint-soft: #9fa5ad;     /* 弱化文字亮档（暗色下可读性补足） */
-  --mk-line: #373b43;           /* 边框/分隔线 */
-  --mk-bg: #16181d;             /* 页面背景 */
-  --mk-surface: #1f2227;        /* 卡片/面板表面 */
-  --mk-surface-2: #272a2f;      /* 次级表面（亮色 #eef2fa 的暗色等价物） */
+  --mk-ink: #efeff0;            /* 主文字：深底浅字 */
+  --mk-muted: #afb1b6;          /* 次级文字 */
+  --mk-faint: #7a7e85;          /* 弱化文字 */
+  --mk-faint-soft: #a2a5a9;     /* 弱化文字亮档（暗色下可读性补足） */
+  --mk-line: #313235;           /* 边框/分隔线 */
+  --mk-bg: #141415;             /* 页面背景 */
+  --mk-surface: #1b1c1d;        /* 卡片/面板表面 */
+  --mk-surface-2: #232325;      /* 次级表面（亮色 #eef2fa 的暗色等价物） */
   --mk-blue: #5b8def;           /* 品牌蓝提亮（深底可读性） */
   --mk-accent-deep: #7aa2ff;
   --mk-green: #4ade80;
@@ -336,25 +336,25 @@ html[data-theme='dark'] {
   --mk-blue-bg: rgba(91, 141, 239, 0.16);
   --mk-blue-bg-strong: rgba(91, 141, 239, 0.26);
   /* 组件级表面/悬停对的暗色档（与 :root 同名；取代原 shared.css 暗色补丁段） */
-  --mk-surface-3: #32353c;
-  --mk-table-head-bg: #1c1e23;
-  --mk-table-head-hover-bg: #25282e;
-  --mk-table-row-line: #2a2d32;
-  --mk-table-row-hover-bg: #24272c;
-  --mk-menu-btn-hover-bg: #2e3138;
-  --mk-menu-item-hover-bg: #2b2e34;
-  --mk-pills-bg: #272a2f;
-  --mk-minibar-bg: #2f3239;
-  --mk-hover-surface: #282c33;
-  --mk-btn-hover-bg: #282c33;
+  --mk-surface-3: #2d2d2f;
+  --mk-table-head-bg: #19191a;
+  --mk-table-head-hover-bg: #202122;
+  --mk-table-row-line: #252627;
+  --mk-table-row-hover-bg: #202122;
+  --mk-menu-btn-hover-bg: #28282a;
+  --mk-menu-item-hover-bg: #252627;
+  --mk-pills-bg: #232325;
+  --mk-minibar-bg: #2a2b2d;
+  --mk-hover-surface: #252627;
+  --mk-btn-hover-bg: #252627;
   --mk-blue-hover: #6a9cf3;
   /* 徽章族 / 按钮族 / 其余组件对的暗色档（与 :root 同名） */
   --mk-badge-info-bg: rgba(91, 141, 239, 0.18);
-  --mk-badge-virtual-bg: #25282e;
-  --mk-badge-virtual-fg: #9fa5ad;
-  --mk-badge-virtual-line: #41464e;
-  --mk-badge-deleted-bg: #2d3035;
-  --mk-badge-deleted-fg: #a1a5ab;
+  --mk-badge-virtual-bg: #202122;
+  --mk-badge-virtual-fg: #a2a5a9;
+  --mk-badge-virtual-line: #393a3c;
+  --mk-badge-deleted-bg: #28282a;
+  --mk-badge-deleted-fg: #a2a5a9;
   --mk-badge-hidden-bg: rgba(167, 139, 250, 0.16);
   --mk-badge-hidden-fg: #c4b5fd;
   --mk-badge-proposal-bg: rgba(45, 212, 191, 0.14);
@@ -375,54 +375,54 @@ html[data-theme='dark'] {
   --mk-pill-active-fg: #9db8f5;
   --mk-pill-count-active-fg: #9db8f5;
   --mk-meta-link-on-fg: #9db8f5;
-  --mk-search-clear-bg: #373b43;
-  --mk-search-clear-fg: #adb2ba;
+  --mk-search-clear-bg: #313235;
+  --mk-search-clear-fg: #afb1b6;
   --mk-meta-link-on-bg: rgba(91, 141, 239, 0.22);
   --mk-pill-count-active-bg: rgba(91, 141, 239, 0.24);
-  --mk-input-disabled-bg: #1b1d21;
-  --mk-modal-close-bg: #2f3239;
-  --mk-modal-close-hover-bg: #3a3f47;
-  --mk-drawer-close-bg: #2f3239;
-  --mk-drawer-close-hover-bg: #3a3f47;
-  --mk-card-foot-bg: #1c1e23;
-  --mk-card-foot-line: #2f3239;
-  --mk-batchbar-bg: #1f2227;
-  --mk-batchbar-line: #373b43;
+  --mk-input-disabled-bg: #19191a;
+  --mk-modal-close-bg: #2a2b2d;
+  --mk-modal-close-hover-bg: #343537;
+  --mk-drawer-close-bg: #2a2b2d;
+  --mk-drawer-close-hover-bg: #343537;
+  --mk-card-foot-bg: #19191a;
+  --mk-card-foot-line: #2a2b2d;
+  --mk-batchbar-bg: #1b1c1d;
+  --mk-batchbar-line: #313235;
   --mk-batchbar-danger-fg: #f87171;
   --mk-batchbar-danger-hover-bg: rgba(248, 113, 113, 0.26);
   --mk-alert-ok-bg: rgba(74, 222, 128, 0.12);
   --mk-alert-ok-fg: #6ee7a0;
-  --mk-alert-info-bg: #1c1e23;
-  --mk-alert-info-fg: #a1a5ab;
-  --mk-skeleton-from: #272a2f;
-  --mk-skeleton-to: #393e46;
+  --mk-alert-info-bg: #19191a;
+  --mk-alert-info-fg: #a2a5a9;
+  --mk-skeleton-from: #232325;
+  --mk-skeleton-to: #313235;
   /* 会话校验遮罩 + EP 覆写调色板的暗色档（与 :root 同名） */
   --mk-table-sort-hover-bg: rgba(91, 141, 239, 0.12);
-  --mk-search-clear-hover-bg: #41464e;
+  --mk-search-clear-hover-bg: #393a3c;
   --mk-link-active-hover-bg: rgba(91, 141, 239, 0.26);
-  --mk-overlay-bg: #16181d;
-  --mk-overlay-card-line: #373b43;
-  --mk-overlay-fg: #eceef1;
-  --mk-overlay-sub: #adb2ba;
-  --mk-overlay-btn-bg: #25282d;
-  --mk-overlay-btn-line: #373b43;
-  --mk-overlay-btn-fg: #eceef1;
-  --mk-overlay-btn-hover-bg: #30343c;
-  --mk-overlay-btn-hover-line: #4c525c;
-  --mk-graph-pipe-bg: linear-gradient(180deg, var(--mk-graph-canvas), #17191e);
+  --mk-overlay-bg: #141415;
+  --mk-overlay-card-line: #313235;
+  --mk-overlay-fg: #efeff0;
+  --mk-overlay-sub: #afb1b6;
+  --mk-overlay-btn-bg: #202122;
+  --mk-overlay-btn-line: #313235;
+  --mk-overlay-btn-fg: #efeff0;
+  --mk-overlay-btn-hover-bg: #2a2b2d;
+  --mk-overlay-btn-hover-line: #434447;
+  --mk-graph-pipe-bg: linear-gradient(180deg, var(--mk-graph-canvas), #161718);
   --mk-purple: #a78bfa;
   --mk-teal: #2dd4bf;
   --mk-red-strong: #ef4444;
-  --mk-code-bg: #111216;
-  --mk-code-fg: #b2b9c3;
-  --mk-code-border: #333740;
-  --mk-pre-fg: #d3d7dd;         /* 暗色代码井前景：维持原值 */
-  --mk-close-bg: #33363d;
+  --mk-code-bg: #0f0f10;
+  --mk-code-fg: #b7b9bd;
+  --mk-code-border: #2d2d2f;
+  --mk-pre-fg: #d7d8da;         /* 暗色代码井前景：中性灰白 */
+  --mk-close-bg: #2d2d2f;
   --mk-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.5);
   --mk-shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55);
   --mk-shadow-drawer: -16px 0 48px rgba(0, 0, 0, 0.6);
   --mk-shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.7);
-  --mk-rec-draft: #4b5563;
+  --mk-rec-draft: #45474a;
   --mk-rec-handler: #b45309;
   --mk-rec-core: #5b8def;
   --mk-rec-synced: #0f766e;
@@ -430,24 +430,24 @@ html[data-theme='dark'] {
 
   /* 图形页 token 暗色覆写（值 = 两页原暗色块字面量，逐一对应）。
      on-accent / err-ink / notice-ink / down / bar-* / attempt-bg 暗色不变，故不在此覆写。 */
-  --mk-graph-canvas: #1c1e23;
-  --mk-graph-canvas-2: #1b1d22;
-  --mk-graph-inset: #1b1d22;
-  --mk-graph-field: #1b1d22;
-  --mk-graph-node-bg: #1f2227;
-  --mk-graph-node-top: #1f2226;
-  --mk-graph-gate: #1a1c21;
-  --mk-graph-summary-bg: #1b1d22;
-  --mk-graph-line: #2f3239;
-  --mk-graph-line-soft: #2f3239;
-  --mk-graph-row-line: #2f3239;
-  --mk-graph-toolbar-a: #24272c;
-  --mk-graph-toolbar-b: #1e2025;
-  --mk-graph-journey-a: #1c1e23;
-  --mk-graph-journey-b: #1a1c21;
+  --mk-graph-canvas: #19191a;
+  --mk-graph-canvas-2: #19191a;
+  --mk-graph-inset: #19191a;
+  --mk-graph-field: #19191a;
+  --mk-graph-node-bg: #1b1c1d;
+  --mk-graph-node-top: #1b1c1d;
+  --mk-graph-gate: #161718;
+  --mk-graph-summary-bg: #19191a;
+  --mk-graph-line: #2a2b2d;
+  --mk-graph-line-soft: #2a2b2d;
+  --mk-graph-row-line: #2a2b2d;
+  --mk-graph-toolbar-a: #202122;
+  --mk-graph-toolbar-b: #1b1c1d;
+  --mk-graph-journey-a: #19191a;
+  --mk-graph-journey-b: #161718;
   --mk-graph-start-b: #14261c;
-  --mk-graph-end-b: #1c1830;
-  --mk-graph-node-ink: #d3d6dc;
+  --mk-graph-end-b: #1e1e20;
+  --mk-graph-node-ink: #d7d8da;
   --mk-graph-blue-ink: #9db8f5;
   --mk-graph-blue-ink-hover: #c7d8ff;
   --mk-graph-flow-soft-ink: #9db8f5;
@@ -456,28 +456,28 @@ html[data-theme='dark'] {
   --mk-graph-flag-purple-ink: #d8b4fe;
   --mk-graph-warn-ink: #fcd34d;
   --mk-graph-err-strong-ink: #fca5a5;
-  --mk-graph-flow-out: #3a3f47;
+  --mk-graph-flow-out: #343537;
   --mk-graph-port-ink: #8fb3ff;
-  --mk-graph-badge-bg: #32353c;
-  --mk-graph-tag-bg: #32353c;
-  --mk-graph-fact-bg: #25282d;
-  --mk-graph-track-bg: #25282d;
-  --mk-graph-chip-blue-bg: #2a2e36;
-  --mk-graph-hover-bg: #282c33;
-  --mk-graph-row-open-bg: #282c33;
-  --mk-graph-row-hover-bg: #282c33;
-  --mk-graph-flow-bg: #2a2e36;
-  --mk-graph-flow-soft-bg: #2a2e36;
+  --mk-graph-badge-bg: #2d2d2f;
+  --mk-graph-tag-bg: #2d2d2f;
+  --mk-graph-fact-bg: #202122;
+  --mk-graph-track-bg: #202122;
+  --mk-graph-chip-blue-bg: #252627;
+  --mk-graph-hover-bg: #252627;
+  --mk-graph-row-open-bg: #252627;
+  --mk-graph-row-hover-bg: #252627;
+  --mk-graph-flow-bg: #252627;
+  --mk-graph-flow-soft-bg: #252627;
   --mk-graph-stage-hover-bg: rgba(91, 141, 239, 0.26);
-  --mk-graph-pills-bg: #24272c;
-  --mk-graph-pill-on-bg: #3f4550;
-  --mk-graph-clear-bg: #373b43;
-  --mk-graph-clear-bg-hover: #4c525c;
+  --mk-graph-pills-bg: #202122;
+  --mk-graph-pill-on-bg: #393a3c;
+  --mk-graph-clear-bg: #313235;
+  --mk-graph-clear-bg-hover: #434447;
   --mk-graph-flag-purple-bg: rgba(192, 132, 252, 0.16);
   --mk-graph-badge-cross-bg: rgba(167, 139, 250, 0.16);
-  --mk-graph-port-bg: #2a2e36;
-  --mk-graph-port-bg-hover: #363b46;
-  --mk-graph-port-line: #3f4550;
+  --mk-graph-port-bg: #252627;
+  --mk-graph-port-bg-hover: #313235;
+  --mk-graph-port-line: #393a3c;
   --mk-graph-attempt-fail-bg: #241a1a;
   --mk-graph-notice-bg: rgba(251, 191, 36, 0.1);
   --mk-graph-notice-line: rgba(251, 191, 36, 0.3);

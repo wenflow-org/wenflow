@@ -294,8 +294,8 @@ defineExpose({ open })
 }
 html[data-theme='dark'] .pt-check--ok { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
 html[data-theme='dark'] .pt-check--bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
-html[data-theme='dark'] .pt-content { color: var(--mk-ink, #e2e8f0); }
-html[data-theme='dark'] .pt-io { border-color: #1f2a3d; }
+html[data-theme='dark'] .pt-content { color: var(--mk-ink, #e7e8e9); }
+html[data-theme='dark'] .pt-io { border-color: #252627; }
 html[data-theme='dark'] .pt-field { background: rgba(129, 140, 248, 0.14); color: #a5b4fc; border-color: rgba(129, 140, 248, 0.3); }
 
 /* 弹窗内步骤/结果提示：mk-alert 形态，此处只留边距（本组件独立复制一份） */

@@ -478,6 +478,6 @@ void reload()
 /* ================= 暗色模式（D1 补完）：站内通知 ================= */
 html[data-theme='dark'] {
   .nt-row--unread { background: rgba(91, 141, 239, 0.08); }
-  .nt-boundary { background: #1b2537; border-color: #2a3850; color: #8fa3bd; }
+  .nt-boundary { background: #202122; border-color: #313235; color: #a2a5a9; }
 }
 </style>

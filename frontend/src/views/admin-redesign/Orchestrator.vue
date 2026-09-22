@@ -377,8 +377,8 @@ void stageTitle.value
 html[data-theme='dark'] {
 
   /* 阶段 tab 大分段卡 */
-  .orch-stage-tab { background: #141c2b; border-color: #232f45; }
-  .orch-stage-tab:hover { border-color: color-mix(in srgb, var(--mk-blue) 45%, #2a3850); }
+  .orch-stage-tab { background: #19191a; border-color: #2a2b2d; }
+  .orch-stage-tab:hover { border-color: color-mix(in srgb, var(--mk-blue) 45%, #313235); }
   .orch-stage-tab.is-active {
     background: rgba(91, 141, 239, 0.16);
     border-color: var(--mk-blue);
@@ -386,7 +386,7 @@ html[data-theme='dark'] {
   }
 
   /* 折叠层（字段路由 / 治理） */
-  /* 折叠头基调由 .mk-section__summary--muted / :hover 提供（原 #9fb0c8 即 --mk-muted 暗色值） */
+  /* 折叠头基调由 .mk-section__summary--muted / :hover 提供（原 #afb1b6 即 --mk-muted 暗色值） */
 
   /* 沙盘顶部条返回按钮 */
 }

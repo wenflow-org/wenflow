@@ -1028,16 +1028,16 @@ watch(
 html[data-theme='dark'] {
   /* 头部身份台渐变仅亮色生效；暗色回到面板表面色（面板底色由 .mk-drawer__panel 原语接管） */
   .msk__head { background: var(--mk-surface); }
-  .msk__tab-badge { background: #253049; }
+  .msk__tab-badge { background: #2d2d2f; }
   .mk-pill--active .msk__tab-badge { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
-  .msk__row { background: #17202f; border-color: #232f45; }
-  .msk__row:hover { background: #1b2740; }
+  .msk__row { background: #1b1c1d; border-color: #2a2b2d; }
+  .msk__row:hover { background: #252627; }
   .msk__primary-link:hover { background: rgba(91, 141, 239, 0.14); }
-  .msk__section { background: #141c2b; }
-  .mt-result { background: #17202f; border-color: #232f45; }
+  .msk__section { background: #19191a; }
+  .mt-result { background: #1b1c1d; border-color: #2a2b2d; }
   .mt-cell strong { color: var(--mk-ink, #e6edf7); }
   .mt-resolved { background: rgba(91, 141, 239, 0.1); border-color: rgba(91, 141, 239, 0.3); color: var(--mk-ink, #e6edf7); }
-  .mt-row { background: #141c2b; border-color: #232f45; color: var(--mk-ink, #e6edf7); }
+  .mt-row { background: #19191a; border-color: #2a2b2d; color: var(--mk-ink, #e6edf7); }
   .mt-row--check em { color: var(--mk-faint); }
   .mt-rt-msg { color: var(--mk-green); }
   /* 文字色补漏 */
@@ -1046,6 +1046,6 @@ html[data-theme='dark'] {
   .msk__row-title { color: var(--mk-ink, #e6edf7); }
   .msk__desc,
   .msk__prompt,
-  .msk__row-num { color: var(--mk-muted, #9fb0c8); }
+  .msk__row-num { color: var(--mk-muted, #afb1b6); }
 }
 </style>

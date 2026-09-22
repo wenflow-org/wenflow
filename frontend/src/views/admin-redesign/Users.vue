@@ -774,7 +774,7 @@ html[data-theme='dark'] {
     appearance: none;
     width: 14px;
     height: 14px;
-    border: 1.5px solid #4a5874;
+    border: 1.5px solid #4d4e51;
     border-radius: 4px;
     background: transparent;
     cursor: pointer;

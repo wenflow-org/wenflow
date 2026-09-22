@@ -365,11 +365,11 @@ function close() { emit('close') }
 
 /* ================= 暗色模式（D1 补完）：术语表抽屉 ================= */
 html[data-theme='dark'] {
-  .agd__panel { background: #17202f; }
-  .agd__nav-item { background: #1d2739; }
+  .agd__panel { background: #1b1c1d; }
+  .agd__nav-item { background: #232325; }
   .agd__nav-item.is-active { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
-  .agd__term { background: #141c2b; }
+  .agd__term { background: #19191a; }
   /* 吸顶分类标题：白底穿帮修复 */
-  .agd__section-title { background: #17202f; }
+  .agd__section-title { background: #1b1c1d; }
 }
 </style>
