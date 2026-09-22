@@ -21,10 +21,14 @@ router.use(authMiddleware);
 
 const ensureAdmin = checkIsAdmin;
 
-/** CSV 转义：双引号包裹含逗号/引号/换行的字段 */
+/** CSV 转义：双引号包裹含逗号/引号/换行的字段；并中和公式注入（=,+,-,@/Tab 开头的单元格在 Excel 中会被当公式执行） */
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const s = String(value);
+  let s = String(value);
+  const looksNumeric = /^[+-]?\d+(\.\d+)?%?$/.test(s);
+  if (!looksNumeric && /^[=+\-@\t\r]/.test(s)) {
+    s = `'${s}`;
+  }
   if (/[",\n\r]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`;
   }

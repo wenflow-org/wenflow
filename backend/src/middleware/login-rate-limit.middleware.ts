@@ -112,7 +112,7 @@ const createLoginRateLimitMiddleware = (scope: LoginRateLimitScope) => (
 ) => {
   // G3：用户名会作为内存 Map 的 key，截断超长输入防止内存滥用（schema 层另有 max(64) 校验）
   const name = (typeof req.body?.name === 'string' ? req.body.name : '').slice(0, 64);
-  const clientIP = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
+  const clientIP = (req.ip || 'unknown').toString();
   const key = buildLoginAttemptKey(scope, name, clientIP);
   const ipKey = `${scope}:ip:${clientIP}`;
   const accountKey = `${scope}:account:${name}`;

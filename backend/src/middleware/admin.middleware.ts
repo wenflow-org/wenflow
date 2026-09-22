@@ -99,7 +99,8 @@ export const adminMiddleware = async (
     };
 
     // P2 会话校验：带 jti 的新格式 Token 需命中 admin_sessions 且未吊销未过期。
-    // legacy Token（无 jti）放行保持兼容；查表失败（DB 错误）fail-open 放行，避免误伤全部管理员。
+    // legacy Token（无 jti）放行保持兼容；查表失败（DB 错误）fail-closed 拒绝，
+    // 否则 DB 异常窗口内已吊销/过期会话会被放行，与"吊销立即生效"语义冲突。
     const sessionJti = extractSessionJti(req);
     if (sessionJti) {
       try {
@@ -112,7 +113,11 @@ export const adminMiddleware = async (
         }
         touchLastSeen(sessionJti);
       } catch (sessionError) {
-        logger.warn('管理员会话校验查询失败（fail-open 放行）:', sessionError);
+        logger.error('管理员会话校验查询失败（fail-closed 拒绝）:', sessionError);
+        return res.status(503).json({
+          success: false,
+          error: { message: '会话校验暂时不可用，请稍后重试' }
+        });
       }
     }
 

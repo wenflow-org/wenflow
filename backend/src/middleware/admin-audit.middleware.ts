@@ -208,7 +208,7 @@ export const adminAuditMiddleware = (req: Request, res: Response, next: NextFunc
         path: redactQueryString(req.originalUrl),
         statusCode: res.statusCode,
         success,
-        ip: (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString().slice(0, IP_MAX_CHARS),
+        ip: (req.ip || 'unknown').toString().slice(0, IP_MAX_CHARS),
         userAgent: typeof req.headers['user-agent'] === 'string'
           ? req.headers['user-agent'].slice(0, USER_AGENT_MAX_CHARS)
           : null,

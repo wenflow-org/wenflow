@@ -29,7 +29,12 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DB = path.join(ROOT, 'backend', 'prisma', 'dev.db');
-const BASE = process.env.EVAL_API_BASE || 'http://101.43.146.102:30001/v1';
+// 安全：不内置任何端点 fallback（曾硬编码公网 IP，等于把生产 LLM 入口写进公开仓库）——必须显式提供
+const BASE = process.env.EVAL_API_BASE;
+if (!BASE) {
+  console.error('缺少 EVAL_API_BASE 环境变量（例如 http://127.0.0.1:30001/v1），拒绝执行。');
+  process.exit(1);
+}
 
 const arg = (n, d = null) => { const h = process.argv.find((a) => a.startsWith(`--${n}=`)); return h ? h.slice(n.length + 3) : (process.argv.includes(`--${n}`) ? true : d); };
 const TAG = String(arg('tag') || 'vl50');

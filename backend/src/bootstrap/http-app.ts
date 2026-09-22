@@ -58,6 +58,11 @@ export function createHttpApp({ lifecycle, readinessService }: HttpAppDeps): exp
   });
 
   // CORS 安全配置
+  if (!process.env.CORS_ORIGIN && process.env.NODE_ENV === 'production') {
+    // 生产漏配 CORS_ORIGIN 时静默回退 localhost 开发白名单：浏览器端跨源请求会被全部拒绝，
+    // 属配置漂移信号——显式告警提醒补配，而不是默默用开发值
+    logger.warn('[http-app] 生产环境未配置 CORS_ORIGIN，CORS/CSRF 白名单回退到 localhost 开发值，请尽快补配');
+  }
   const corsOptions = {
     origin: process.env.CORS_ORIGIN
       ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())

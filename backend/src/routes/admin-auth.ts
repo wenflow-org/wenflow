@@ -36,7 +36,7 @@ const loginSchema = z.object({
 router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: Response) => {
   try {
     const { name, password, remember } = loginSchema.parse(req.body);
-    const clientIP = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
+    const clientIP = (req.ip || 'unknown').toString();
 
     // 查找管理员用户（支持用户名或邮箱登录）；软删管理员视为不存在
     const admin = await findAdminByLogin(name);

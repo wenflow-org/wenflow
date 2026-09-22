@@ -65,6 +65,9 @@ if (process.env.NODE_ENV === 'production') {
   logger.add(
     new winston.transports.Console({
       format: winston.format.combine(
+        // 开发控制台同样走脱敏：此前 printf 自定义 format 绕过 secretRedactionFormat，
+        // 含 apiKey/token 的日志会明文上屏（与文件日志/生产行为不一致）
+        secretRedactionFormat(),
         winston.format.colorize(),
         winston.format.printf(({ timestamp, level, message, ...metadata }) => {
           let msg = `${timestamp} [${level}]: ${message}`;

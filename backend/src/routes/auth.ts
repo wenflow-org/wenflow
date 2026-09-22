@@ -33,8 +33,22 @@ const REGISTER_WINDOW_MS = 60 * 60 * 1000;
 const REGISTER_MAX_ATTEMPTS = 10;
 const registerAttemptsByIp: Map<string, Date[]> = new Map();
 
+// 惰性清理：过期条目读取时过滤，另加周期性整体清扫，防止 Map 只增不减导致缓慢内存膨胀
+const sweepTimestampMap = (map: Map<string, Date[]>, windowMs: number, now: number) => {
+  for (const [key, timestamps] of map) {
+    const active = timestamps.filter((timestamp) => now - timestamp.getTime() < windowMs);
+    if (active.length === 0) map.delete(key);
+    else if (active.length !== timestamps.length) map.set(key, active);
+  }
+};
+let registerSweepAt = 0;
+
 const isRegisterRateLimited = (ip: string): number => {
   const now = Date.now();
+  if (now - registerSweepAt > 5 * 60 * 1000) {
+    registerSweepAt = now;
+    sweepTimestampMap(registerAttemptsByIp, REGISTER_WINDOW_MS, now);
+  }
   const attempts = (registerAttemptsByIp.get(ip) || []).filter(
     (timestamp) => now - timestamp.getTime() < REGISTER_WINDOW_MS
   );
@@ -62,10 +76,16 @@ const recordRegisterAttempt = (ip: string, success: boolean) => {
 // ---- 通用端点限速（按 IP）：change-password / verify 等敏感端点防暴力与滥用 ----
 function createIpLimiter(maxAttempts: number, windowMs: number) {
   const attemptsByIp = new Map<string, Date[]>();
+  let lastSweepAt = 0;
 
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const ip = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
+    // 仅信任 req.ip（trust proxy 已按部署配置），不回退可被伪造的 x-forwarded-for
+    const ip = (req.ip || 'unknown').toString();
     const now = Date.now();
+    if (now - lastSweepAt > 5 * 60 * 1000) {
+      lastSweepAt = now;
+      sweepTimestampMap(attemptsByIp, windowMs, now);
+    }
     const attempts = (attemptsByIp.get(ip) || []).filter(
       (timestamp) => now - timestamp.getTime() < windowMs
     );
@@ -165,7 +185,7 @@ router.post('/register', async (req, res, next) => {
     }
 
     // 注册限速：防止用户名枚举与批量注册（G1）
-    clientIP = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
+    clientIP = (req.ip || 'unknown').toString();
     const remainingSeconds = isRegisterRateLimited(clientIP);
     if (remainingSeconds > 0) {
       return res.status(429).json({
@@ -257,7 +277,7 @@ router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
     // 验证请求数据
     const data = loginSchema.parse(req.body) as { name: string; password: string; remember?: boolean };
     loginName = data.name;
-    const clientIP = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const clientIP = req.ip || 'unknown';
 
     // 调用服务
     const result = await authService.login(data);
@@ -286,7 +306,7 @@ router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
     }
 
     if (error instanceof InvalidCredentialsError && loginName) {
-      const clientIP = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+      const clientIP = req.ip || 'unknown';
       recordLoginAttempt(loginName, clientIP.toString(), false, 'user', 'invalid_credentials');
       return res.status(401).json({
         success: false,

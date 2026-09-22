@@ -1,4 +1,4 @@
-// P2 管理员会话校验测试：admin_sessions 查表 + 403 吊销语义 + fail-open + legacy 放行 + lastSeen 节流
+// P2 管理员会话校验测试：admin_sessions 查表 + 403 吊销语义 + fail-closed + legacy 放行 + lastSeen 节流
 import { adminMiddleware } from '../admin.middleware';
 
 jest.mock('../../config/database', () => ({
@@ -155,7 +155,7 @@ describe('adminMiddleware 会话校验（P2）', () => {
     expect(sessionsFindUnique).not.toHaveBeenCalled();
   });
 
-  it('查表失败（DB 错误）→ fail-open 放行并告警', async () => {
+  it('查表失败（DB 错误）→ fail-closed 拒绝（503）并告警', async () => {
     sessionsFindUnique.mockRejectedValue(new Error('db down'));
     const req: any = adminReq('jti-1');
     const res = createResponse();
@@ -163,9 +163,10 @@ describe('adminMiddleware 会话校验（P2）', () => {
 
     await adminMiddleware(req, res, next);
 
-    expect(next).toHaveBeenCalledTimes(1);
-    expect(loggerWarn).toHaveBeenCalledWith(
-      expect.stringContaining('fail-open'),
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(503);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('fail-closed'),
       expect.any(Error)
     );
   });
