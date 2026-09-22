@@ -1,5 +1,10 @@
 <template>
-  <div ref="el" class="mk-graph" :style="{ height }"></div>
+  <div class="mk-graph-wrap">
+    <div ref="el" class="mk-graph" :style="{ height }"></div>
+    <p v-if="isolatedCount > 0" class="mk-graph__note">
+      另有 {{ isolatedCount }} 个概念暂无前置/归属关系，未在图中显示
+    </p>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -12,7 +17,7 @@
  * 主题：亮/暗两套配色都走语义 token 的同族色值（与 admin 视觉层一致），
  * 节点按掌握度着色（未掌握=暖色警示、已掌握=冷色安定、未评估=中性灰）。
  */
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts/core'
 import { GraphChart } from 'echarts/charts'
 import { TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components'
@@ -44,8 +49,10 @@ const props = withDefaults(
     edges: MkGraphEdge[]
     height?: string
     theme?: 'light' | 'dark'
+    /** 是否隐藏"无任何关系"的孤立节点（默认隐藏：实测它们只是散在四周造成噪声） */
+    hideIsolated?: boolean
   }>(),
-  { height: '520px', theme: 'light' }
+  { height: '520px', theme: 'light', hideIsolated: true }
 )
 
 const emit = defineEmits<{ (e: 'select', node: MkGraphNode | null): void }>()
@@ -59,6 +66,19 @@ interface GraphCallbackParams {
 const el = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
 let ro: ResizeObserver | null = null
+
+/** 只保留有边相连的节点（若全无连接则原样保留，避免空图） */
+const visibleNodes = computed<MkGraphNode[]>(() => {
+  if (!props.hideIsolated) return props.nodes
+  const connected = new Set<string>()
+  for (const e of props.edges) {
+    connected.add(e.fromConceptId)
+    connected.add(e.toConceptId)
+  }
+  const kept = props.nodes.filter((n) => connected.has(n.id))
+  return kept.length > 0 ? kept : props.nodes
+})
+const isolatedCount = computed(() => props.nodes.length - visibleNodes.value.length)
 
 /** 掌握度 → 语义色（亮/暗各一套；未评估走中性灰） */
 function colorOf(node: MkGraphNode, dark: boolean): string {
@@ -75,7 +95,8 @@ const RELATION_STYLE: Record<string, { color: string; width: number; type: 'soli
 
 function buildOption(): EChartsCoreOption {
   const dark = props.theme === 'dark'
-  const nodeIds = new Set(props.nodes.map((n) => n.id))
+  const nodes = visibleNodes.value
+  const nodeIds = new Set(nodes.map((n) => n.id))
   const edges = props.edges.filter((e) => nodeIds.has(e.fromConceptId) && nodeIds.has(e.toConceptId))
   const degree = new Map<string, number>()
   for (const edge of edges) {
@@ -85,6 +106,23 @@ function buildOption(): EChartsCoreOption {
   const textColor = dark ? '#c9ccd1' : '#3b3f46'
   const relationKeys = Array.from(new Set(edges.map((e) => e.relation)))
   const RELATION_LABEL: Record<string, string> = { prerequisite: '前置依赖', part_of: '属于' }
+  // 可读性（视觉验证实测）：节点一多，常显全部标签会让中心区糊成一团（41 节点时完全不可读）；
+  // 但全都不显示又只剩点。故密集图只给"值得标注"的节点显示标签：
+  // ① 连接度最高的若干（结构枢纽）② 薄弱/脆弱节点（诊断最关心）。其余靠悬停。
+  const denseGraph = nodes.length > 18
+  const labelWorthy = new Set<string>()
+  if (!denseGraph) {
+    for (const node of nodes) labelWorthy.add(node.id)
+  } else {
+    const byDegree = [...nodes]
+      .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0))
+      .slice(0, 10)
+    for (const node of byDegree) labelWorthy.add(node.id)
+    for (const node of nodes) {
+      const weak = node.stability === 'fragile' || (node.masteryScore !== null && node.masteryScore !== undefined && node.masteryScore < 0.45)
+      if (weak) labelWorthy.add(node.id)
+    }
+  }
 
   return {
     backgroundColor: 'transparent',
@@ -113,18 +151,36 @@ function buildOption(): EChartsCoreOption {
         layout: 'force',
         roam: true,
         draggable: true,
-        label: { show: true, color: textColor, fontSize: 11, formatter: '{b}' },
-        force: { repulsion: 220, edgeLength: [70, 150], gravity: 0.08 },
-        emphasis: { focus: 'adjacency', label: { fontWeight: 'bold' } },
+        // 缩放/平移范围：给密集图留出"拉开来读"的余地
+        scaleLimit: { min: 0.3, max: 4 },
+        label: {
+          show: false,
+          color: textColor,
+          fontSize: 11,
+          formatter: '{b}',
+          overflow: 'truncate',
+          width: 120
+        },
+        labelLayout: { hideOverlap: true },
+        emphasis: { focus: 'adjacency', label: { show: true, fontWeight: 'bold' } },
+        select: { label: { show: true }, itemStyle: { borderWidth: 2 } },
         lineStyle: { curveness: 0.08 },
         categories: relationKeys.map((k) => ({ name: RELATION_LABEL[k] ?? k })),
-        data: props.nodes.map((node) => ({
+        force: {
+          // 斥力随节点数缓增，别把图推出画布（实测 420 会让节点大量溢出）
+          repulsion: denseGraph ? 300 : 220,
+          edgeLength: denseGraph ? [80, 170] : [70, 150],
+          gravity: 0.08,
+          layoutAnimation: true
+        },
+        data: nodes.map((node) => ({
           id: node.id,
           name: node.label,
           symbolSize: Math.min(46, 16 + (degree.get(node.id) ?? 0) * 4),
           itemStyle: { color: colorOf(node, dark), borderColor: dark ? '#2a2c30' : '#ffffff', borderWidth: 1 },
           // 层级：coreConcept 用圆、KC 用圆角方块，一眼区分粒度
           symbol: node.level === 'concept' ? 'circle' : 'roundRect',
+          label: { show: labelWorthy.has(node.id) },
           raw: node
         })),
         links: edges.map((edge) => ({
@@ -158,7 +214,7 @@ onMounted(() => {
   if (el.value) ro.observe(el.value)
 })
 
-watch(() => [props.nodes, props.edges, props.theme], () => render(), { deep: true })
+watch(() => [props.nodes, props.edges, props.theme, props.hideIsolated], () => render(), { deep: true })
 
 onBeforeUnmount(() => {
   ro?.disconnect()
@@ -169,7 +225,16 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.mk-graph-wrap {
+  width: 100%;
+}
 .mk-graph {
   width: 100%;
+}
+.mk-graph__note {
+  margin: 6px 0 0;
+  font-size: var(--mk-fs-11);
+  line-height: 1.5;
+  opacity: 0.65;
 }
 </style>

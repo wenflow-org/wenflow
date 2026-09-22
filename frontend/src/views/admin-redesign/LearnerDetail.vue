@@ -740,7 +740,11 @@ async function loadDetail(id: string | undefined) {
   rawDetail.value = null
   liveEvidence.value = []
   detailError.value = false
-  tab.value = 'overview'
+  // 深链保持：URL 明确带 ?tab= 时尊重它，否则回落总览。
+  // （此前无条件置 'overview'，会把 ?tab=profile/evidence/graph 的深链与刷新全部冲掉——
+  //  与上方「P0-2 tab 路由化：?tab= 深链/刷新保持」的约定相矛盾，实测发现。）
+  const urlTab = typeof tabRoute.query.tab === 'string' ? tabRoute.query.tab.trim() : ''
+  tab.value = urlTab ? normalizeLearnerTab(urlTab) : 'overview'
   const base = liveLearners.value.find((l) => l.userId === id)
   const pathId = base?.pathId
   // 从用户详情显式进入学习者画像时携带 includeTest（虚拟/测试账号可查，默认视图仍排除）
