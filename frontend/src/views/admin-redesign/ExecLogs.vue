@@ -81,6 +81,17 @@
           <MkFilterSearch v-model="keyword" placeholder="关键词搜索" @keydown.enter="applyServerQuery" />
           <MkFilterSearch v-model="traceId" placeholder="Trace ID（链路 ID）" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
+          <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
+          <SavedViewsBar
+            :views="savedViews"
+            :active-name="activeSavedViewName"
+            :can-save="isFiltered"
+            :suggest-name="filterLabel"
+            :title-of="savedViewTitle"
+            @apply="applySavedView"
+            @remove="removeView"
+            @save="onSaveView"
+          />
         </div>
         <!-- 右侧：错误类别 / 自动刷新 / 高级 / 列设置（对齐 Users：切换控件 + 统计） -->
         <div class="mk-card__head-right">
@@ -309,6 +320,8 @@ import TokenCost from './TokenCost.vue'
 import { adminTokenCostApi } from '@/api/adminApi'
 import { TERMS, errorCodeLabel, routeSourceLabel } from './terms'
 import { useTableSort } from './useTableSort'
+import SavedViewsBar from './SavedViewsBar.vue'
+import { useSavedViews, sameViewQuery, type SavedView } from './useSavedViews'
 
 /* 日志 / Trace 链路 / 成本分析 tab（Trace 为执行日志下钻视图；成本分析为观测同域并入） */
 const EL_TABS = ['logs', 'trace', 'cost'] as const
@@ -680,18 +693,24 @@ watch(
   },
   { immediate: true }
 )
+/** 当前筛选快照（仅含非默认值；键与 URL query 同名——保存视图与深链共用同一形状） */
+function filterSnapshot(): Record<string, string> {
+  const desired: Record<string, string> = {}
+  if (agentFilter.value) desired.agent = agentFilter.value
+  if (statusFilter.value) desired.status = statusFilter.value
+  if (errorCategory.value) desired.cat = errorCategory.value
+  if (timeRange.value !== 'week') desired.range = timeRange.value
+  if (keyword.value.trim()) desired.q = keyword.value.trim()
+  if (traceId.value.trim()) desired.trace = traceId.value.trim()
+  if (sessionId.value.trim()) desired.session = sessionId.value.trim()
+  if (testFilter.value) desired.test = testFilter.value
+  return desired
+}
+
 watch(
   [statusFilter, agentFilter, timeRange, keyword, traceId, sessionId, errorCategory, testFilter],
   () => {
-    const desired: Record<string, string> = {}
-    if (agentFilter.value) desired.agent = agentFilter.value
-    if (statusFilter.value) desired.status = statusFilter.value
-    if (errorCategory.value) desired.cat = errorCategory.value
-    if (timeRange.value !== 'week') desired.range = timeRange.value
-    if (keyword.value.trim()) desired.q = keyword.value.trim()
-    if (traceId.value.trim()) desired.trace = traceId.value.trim()
-    if (sessionId.value.trim()) desired.session = sessionId.value.trim()
-    if (testFilter.value) desired.test = testFilter.value
+    const desired = filterSnapshot()
     const cur = route.query
     if (FILTER_QUERY_KEYS.every((k) => queryVal(cur[k]) === (desired[k] || ''))) return
     const next = { ...cur }
@@ -701,6 +720,56 @@ watch(
   },
   { immediate: true }
 )
+
+/* —— 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 —— */
+const { views: savedViews, save: saveViewToStore, remove: removeView } = useSavedViews('wf_exec_saved_views')
+
+/** 快照可读摘要（pill 悬停说明），与 filterLabel 同一套措辞 */
+function describeQuery(q: Record<string, string>): string {
+  const parts: string[] = []
+  if (q.range) parts.push(timeRangeLabels[q.range as keyof typeof timeRangeLabels] || q.range)
+  if (q.test === 'only') parts.push('仅看测试')
+  if (q.agent) parts.push(q.agent)
+  if (q.status === 'err') parts.push('仅失败')
+  else if (q.status === 'warn') parts.push('仅超时')
+  else if (q.status === 'ok') parts.push('仅成功')
+  if (q.cat) parts.push(`类别「${q.cat}」`)
+  if (q.q) parts.push(`关键词「${q.q}」`)
+  if (q.trace) parts.push(`trace「${q.trace}」`)
+  if (q.session) parts.push(`会话「${q.session}」`)
+  return parts.join(' · ') || '默认筛选'
+}
+function savedViewTitle(v: SavedView): string {
+  return `${describeQuery(v.query)}（点击应用 · × 删除）`
+}
+
+/** 应用保存视图：整体重写筛选 refs 后服务端重查（URL 同步 watch 会随之回写 ?query） */
+function applySavedView(v: SavedView) {
+  const q = v.query || {}
+  agentFilter.value = q.agent || ''
+  statusFilter.value = ['err', 'warn', 'ok'].includes(q.status) ? q.status : ''
+  errorCategory.value = q.cat || ''
+  keyword.value = q.q || ''
+  traceId.value = q.trace || ''
+  sessionId.value = q.session || ''
+  timeRange.value = (EL_TIME_RANGES as readonly string[]).includes(q.range)
+    ? (q.range as typeof timeRange.value)
+    : 'week'
+  testFilter.value = q.test === 'only' ? 'only' : ''
+  /* keyword/trace/session 等输入项不在 watch 内（输入即查询防抖动），需显式重查 */
+  void applyServerQuery()
+}
+
+/** 当前筛选恰好命中的保存视图名（高亮该 pill；默认视图不高亮） */
+const activeSavedViewName = computed(() => {
+  const snap = filterSnapshot()
+  if (!Object.keys(snap).length) return ''
+  return savedViews.value.find((v) => sameViewQuery(v.query, snap))?.name || ''
+})
+
+function onSaveView(name: string) {
+  saveViewToStore(name, filterSnapshot())
+}
 
 const logs = computed(() => liveLogsFiltered.value)
 const agentOptions = computed(() => [...new Set(logs.value.map((s) => s.agent))].sort())
