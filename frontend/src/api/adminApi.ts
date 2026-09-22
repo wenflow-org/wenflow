@@ -597,7 +597,7 @@ export const adminFieldRoutingsApi = {
     adminAxios.post(`/admin/field-routings/orchestration/${encodeURIComponent(stage)}/prune`, { dryRun }),
 
   /**
-   * 行级编辑路由行（2026-08 编排结构页重构恢复）：仅允许编辑路由行属性
+   * 行级编辑路由行（2026-08 编排图页重构恢复）：仅允许编辑路由行属性
    * （render/handoff/internal/accumulate/visibilityPreset/notes），
    * 后端会同步回写编排文件（File-as-Truth 单源化保持）并写审计。
    */
@@ -703,7 +703,7 @@ export const adminSystemApi = {
 };
 
 // ============================================================
-// 健康中心（漂移/健康提醒聚合，编排结构页顶部健康区数据源）
+// 健康中心（漂移/健康提醒聚合，编排图页顶部健康区数据源）
 // 契约：GET /api/admin/health-center（60s 缓存，refresh=1 强制）、
 //       POST /api/admin/health-center/fix（body: { id }，仅 fixable 类）
 // ============================================================

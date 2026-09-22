@@ -22,7 +22,7 @@
         <span v-else class="mk-badge mk-badge--muted">无 core 声明（core 缺失）</span>
         <span class="sfr__status-actions">
           <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!canAdd" @click="openWizard">＋ 加字段</button>
-          <button type="button" class="mk-btn mk-btn--sm" @click="goOrchestration">→ 编排结构页（{{ data.stage }}）</button>
+          <button type="button" class="mk-btn mk-btn--sm" @click="goOrchestration">→ 编排图页（{{ data.stage }}）</button>
         </span>
       </div>
 
@@ -45,7 +45,7 @@
         </span>
       </div>
 
-      <!-- 图例：角色 / render / 流转 / 落库键 / 锁定（与编排结构页同源人话表） -->
+      <!-- 图例：角色 / render / 流转 / 落库键 / 锁定（与编排图页同源人话表） -->
       <details class="sfr__legend" @toggle="legendOpen = ($event.target as HTMLDetailsElement).open">
         <summary class="sfr__legend-summary">图例：字段角色 / render / 锁定 / 流转 —— 不懂就看这里</summary>
         <div class="sfr__legend-body">
@@ -614,7 +614,7 @@ onMounted(() => void load())
 .sfr__orphan-item { display: inline-flex; gap: 4px; align-items: center; color: var(--mk-muted, #5b6577); }
 .sfr__orphan-item code { color: var(--mk-amber, #b45309); font-weight: 700; }
 
-/* ========== 图例（可折叠，与编排结构页同款语义） ========== */
+/* ========== 图例（可折叠，与编排图页同款语义） ========== */
 .sfr__legend {
   margin: 0 0 12px;
   border: 1px solid var(--mk-line, #e6ebf4);
@@ -659,7 +659,7 @@ onMounted(() => void load())
 .sfr__ops { display: flex; gap: 6px; white-space: nowrap; }
 .sfr__ops .mk-btn { padding: 3px 10px; font-size: 11.5px; }
 
-/* 角色徽章（与编排结构页同款 7 类着色） */
+/* 角色徽章（与编排图页同款 7 类着色） */
 .sfr__persist { display: inline-block; max-width: var(--mk-col-id); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); font-size: 11px; }
 .sfr__persist--alias { color: var(--mk-amber, #b45309); background: #fffbeb; border-radius: 5px; padding: 0 5px; }
 

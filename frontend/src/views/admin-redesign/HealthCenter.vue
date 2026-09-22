@@ -478,7 +478,7 @@ function goDrift(kind: keyof HealthDriftSummary) {
   else void router.push('/admin/execution-logs')
 }
 
-/** manual 项跳对应面板：字段路由/契约维度 → 编排结构漂移 tab；参数/契约/对账类 → Skills；yaml → Skill 工作台 */
+/** manual 项跳对应面板：字段路由/契约维度 → 编排图漂移 tab；参数/契约/对账类 → Skills；yaml → Skill 工作台 */
 function jump(id: HealthCenterItemId) {
   if (id === 'field-routing' || id === 'field-routing-contract' || id === 'fields-sync') void router.push('/admin/orchestrator?tab=drift')
   else if (id === 'yaml-crosscheck' || id === 'params-consistency') void router.push('/admin/skill-workbench')

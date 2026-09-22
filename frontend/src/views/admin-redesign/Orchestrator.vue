@@ -1,9 +1,9 @@
 ﻿<template>
-  <div class="mk-page">
-    <!-- 状态条：标题 + 全局关键指标（紧凑单行） -->
+  <div class="mk-page mk-page--fill">
+    <!-- 状态条：标题 + 全局关键指标（紧凑单行）——chrome 固定 -->
     <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">编排结构</strong>
+      <strong class="mk-status__title">编排图</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ pageLoading ? '—' : stages.length }} 阶段 · {{ pageLoading ? '—' : totalSkills }} 个 Skill</span>
       <span class="mk-status__meta">总调用 {{ pageLoading ? '—' : totalCalls }}</span>
@@ -14,7 +14,7 @@
       </span>
     </div>
 
-    <!-- 阶段导航：五个 tab = 五个阶段（浏览 + 编辑 + 治理都在阶段工作区内） -->
+    <!-- 阶段导航：五个 tab = 五个阶段（浏览 + 编辑 + 治理都在阶段工作区内）——chrome 固定 -->
     <div class="orch-stage-tabs" role="tablist">
       <button
         v-for="s in stages"
@@ -29,48 +29,41 @@
       </button>
     </div>
 
-    <!-- 阶段工作区:阶段(看哪个阶段) × 子面板(看什么) 双层导航。
-         原「流水线常开 + 字段路由/治理 details 折叠」纵堆层级不清,收敛为 pills 子面板;
-         沙盘从"次要深链入口"提升为第 4 个子面板,可发现性补齐 -->
-    <div v-if="pane === 'sandbox'" class="orch-tabpane">
-      <div class="mk-pills orch-pane-tabs" role="tablist">
-        <button v-for="pt in ORCH_PANES" :key="pt.id" type="button" role="tab"
-          class="mk-pill" :class="{ 'mk-pill--active': pane === pt.id }"
-          :aria-selected="pane === pt.id" @click="pane = pt.id">{{ pt.label }}</button>
-      </div>
-      <SandboxView />
+    <!-- 子面板 pills：四个面板统一可达（此前非沙盘视图不显示沙盘 pill，只能深链进入）——chrome 固定 -->
+    <div class="mk-pills orch-pane-tabs" role="tablist">
+      <button v-for="pt in ORCH_PANES" :key="pt.id" type="button" role="tab"
+        class="mk-pill" :class="{ 'mk-pill--active': pane === pt.id }"
+        :aria-selected="pane === pt.id" @click="pane = pt.id">{{ pt.label }}</button>
     </div>
 
-    <template v-else-if="current">
-      <div class="mk-pills orch-pane-tabs" role="tablist">
-        <button v-for="pt in ORCH_PANES.filter((x) => x.id !== 'sandbox')" :key="pt.id" type="button" role="tab"
-          class="mk-pill" :class="{ 'mk-pill--active': pane === pt.id }"
-          :aria-selected="pane === pt.id" @click="pane = pt.id">{{ pt.label }}</button>
+    <!-- 阶段工作区：占满剩余视高（fill 布局，底部不再有空白）。
+         旅程图 = 卡内画布滚动（工具条/旅程条吸顶）；路由/治理/沙盘 = 面板内滚；页面本身不滚 -->
+    <DataFlowGraph
+      v-if="current && pane === 'journey'"
+      class="orch-pane orch-pane--journey"
+      :key="`${active}-${flowKey}`"
+      :stage="active"
+      @changed="onRoutingChanged"
+      @stage="onStageChange"
+    />
+    <section v-else-if="current && pane === 'routing'" class="mk-card mk-card--fill orch-pane orch-routing">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">字段路由与编排文件</h3>
+        <span class="mk-card__meta">{{ current.skills.length }} Skill · 批量查阅 / 编辑编排 YAML</span>
       </div>
-
-      <DataFlowGraph
-        v-if="pane === 'journey'"
-        :key="`${active}-${flowKey}`"
-        :stage="active"
-        @changed="onRoutingChanged"
-        @stage="onStageChange"
-      />
-      <section v-else-if="pane === 'routing'" class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">字段路由与编排文件</h3>
-          <span class="mk-card__meta">{{ current.skills.length }} Skill · 批量查阅 / 编辑编排 YAML</span>
-        </div>
-        <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
-      </section>
-      <section v-else-if="pane === 'governance'" class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">治理：{{ TERMS.driftContract }}报告 + 变更审计</h3>
-          <span class="mk-card__meta">编辑后核对文件与库一致</span>
-        </div>
-        <DriftAuditPanel :stage="active" />
-      </section>
-    </template>
-    <div v-else class="orch-tabpane">
+      <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
+    </section>
+    <section v-else-if="current && pane === 'governance'" class="mk-card mk-card--fill orch-pane orch-pane--scroll">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">治理：{{ TERMS.driftContract }}报告 + 变更审计</h3>
+        <span class="mk-card__meta">编辑后核对文件与库一致</span>
+      </div>
+      <DriftAuditPanel :stage="active" />
+    </section>
+    <div v-else-if="pane === 'sandbox'" class="orch-pane orch-pane--scroll">
+      <SandboxView />
+    </div>
+    <div v-else class="orch-pane orch-pane--center">
       <!-- 首屏骨架：此前是居中小 spinner，4K 下整页空白只挂一行字 -->
       <template v-if="pageLoading">
         <MockSkeletonTable :cols="6" :rows="8" />
@@ -119,7 +112,7 @@ function onStageChange(s: string) {
 const route = useRoute()
 const router = useRouter()
 
-/** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排结构页跳转闭环；旧 /admin/topology 重定向落位阶段视图） */
+/** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排图页跳转闭环；旧 /admin/topology 重定向落位阶段视图） */
 function applyStageQuery() {
   const qStage = typeof route.query.stage === 'string' && route.query.stage.trim() ? route.query.stage.trim() : ''
   const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
@@ -327,6 +320,16 @@ void stageTitle.value
 </script><style scoped>
 /* 阶段导航：五个 tab = 五个阶段（大分段卡，每卡含阶段名 + Skill/调用概要） */
 .orch-pane-tabs { margin-bottom: 2px; }
+/* ===== 阶段工作区（fill 布局：占满剩余视高，底部不再留空白；面板各自内滚，页面不滚） ===== */
+.orch-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.orch-pane--scroll { overflow-y: auto; }
+.orch-pane--center { justify-content: center; }
+/* 字段路由：卡头 + 工具条吸顶，仅表格区内滚（.frt__scroll 自带 .mk-table-scroll 横向滚动） */
+.orch-routing .frt { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.orch-routing .frt__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* fill 布局下阶段导航的外边距由页面 gap（12px）接管 */
+.mk-page--fill .orch-stage-tabs { margin: 0; }
+
 .orch-stage-tabs {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -373,7 +376,7 @@ void stageTitle.value
   .orch-stage-tab__meta { font-size: 16.5px; }
 }
 
-/* ================= 暗色模式（D1 补完）：编排结构 ================= */
+/* ================= 暗色模式（D1 补完）：编排图 ================= */
 html[data-theme='dark'] {
 
   /* 阶段 tab 大分段卡 */

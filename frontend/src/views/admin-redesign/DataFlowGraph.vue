@@ -889,25 +889,29 @@ function measure() {
   const rr = root.getBoundingClientRect()
   pipeW.value = root.scrollWidth
   pipeH.value = root.scrollHeight
+  // pipe 是内部滚动容器：卡片/芯片 rect 是视口坐标，加回滚动量才是画布内容坐标，
+  // 否则滚动后重测（resize/聚焦）连线会整体漂移
+  const offX = root.scrollLeft
+  const offY = root.scrollTop
   const map = new Map<string, DOMRect>()
   const slotMap = new Map<string, string>()
   const cardMap = new Map<string, DOMRect>()
   for (const el of root.querySelectorAll<HTMLElement>('[data-card-key]')) {
     const key = el.getAttribute('data-card-key') || ''
     const r = el.getBoundingClientRect()
-    cardMap.set(key, new DOMRect(r.left - rr.left, r.top - rr.top, r.width, r.height))
+    cardMap.set(key, new DOMRect(r.left - rr.left + offX, r.top - rr.top + offY, r.width, r.height))
   }
   for (const el of root.querySelectorAll<HTMLElement>('[data-chip-id][data-chip-role]')) {
     const id = `${el.getAttribute('data-chip-id')}|${el.getAttribute('data-chip-role')}`
     const r = el.getBoundingClientRect()
-    map.set(id, new DOMRect(r.left - rr.left, r.top - rr.top, r.width, r.height))
+    map.set(id, new DOMRect(r.left - rr.left + offX, r.top - rr.top + offY, r.width, r.height))
     const card = el.closest<HTMLElement>('[data-card-key]')
     if (card) slotMap.set(id, card.getAttribute('data-card-key') || '')
   }
   for (const el of root.querySelectorAll<HTMLElement>('[data-gate-anchor]')) {
     const id = `gate|${el.getAttribute('data-gate-anchor')}`
     const r = el.getBoundingClientRect()
-    map.set(id, new DOMRect(r.left - rr.left, r.top - rr.top, r.width, r.height))
+    map.set(id, new DOMRect(r.left - rr.left + offX, r.top - rr.top + offY, r.width, r.height))
     const card = el.closest<HTMLElement>('[data-card-key]')
     if (card) slotMap.set(id, card.getAttribute('data-card-key') || '')
   }
@@ -1042,12 +1046,25 @@ function focusCard(key: string) {
 }
 
 let measureRaf = 0
+let measureTimer = 0
+/** 一次待执行的重测（rAF 与兜底定时器竞争触发，先到者执行、另一个作废） */
+let measurePending = false
 function scheduleMeasure() {
+  if (measurePending) return
+  measurePending = true
   cancelAnimationFrame(measureRaf)
-  measureRaf = requestAnimationFrame(async () => {
+  window.clearTimeout(measureTimer)
+  const run = async () => {
+    if (!measurePending) return
+    measurePending = false
+    window.clearTimeout(measureTimer)
     await nextTick()
     measure()
-  })
+  }
+  measureRaf = requestAnimationFrame(run)
+  // rAF 在后台标签页 / 嵌入式浏览器视口会被饿死（连线几何停更不恢复），
+  // 兜底定时器保证重测终会执行；两者竞争，先到先跑
+  measureTimer = window.setTimeout(run, 120)
 }
 
 let resizeObserver: ResizeObserver | null = null
@@ -1059,6 +1076,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   cancelAnimationFrame(measureRaf)
+  window.clearTimeout(measureTimer)
   resizeObserver?.disconnect()
   window.removeEventListener('resize', scheduleMeasure)
 })
@@ -1233,14 +1251,29 @@ function stepHue(step: FlowStep): string {
 </script>
 
 <style scoped>
-/* 工作区卡 */
+/* 工作区卡：fill 布局下根与 frame 占满编排页工作区高度，画布内部滚动 */
+.dfg {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
 .dfg-frame {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: var(--mk-graph-canvas);
   overflow: hidden;
   box-shadow: var(--mk-shadow-sm);
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
+/* frame 内吸顶元素：工具条 / 图性质说明 / 旅程概览条，不参与高度压缩 */
+.dfg-toolbar,
+.dfg-caption,
+.dfg-journey { flex: none; }
 .dfg-toolbar {
   display: flex;
   align-items: center;
@@ -1344,7 +1377,7 @@ function stepHue(step: FlowStep): string {
   border: 1px solid color-mix(in srgb, var(--fam-core) 18%, transparent);
 }
 
-/* 流水线画布 */
+/* 流水线画布：占满 frame 剩余高度并内部滚动（工具条/旅程条吸顶，页面本身不滚） */
 .dfg-pipe {
   position: relative;
   padding: 16px 20px 28px;
@@ -1357,6 +1390,10 @@ function stepHue(step: FlowStep): string {
   gap: 14px;
   align-content: start;
   transition: opacity 0.15s ease;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .dfg-pipe.is-dimmed { opacity: 1; }
 .dfg-edges { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3; }

@@ -221,7 +221,7 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/sessions'
   },
   {
-    // 兼容：Agent 拓扑视图已并入编排结构页（拓扑数据并入运行时统计），旧 URL 落在默认阶段视图（?tab=topology 仅作兼容 query，编排页按阶段泳道渲染）
+    // 兼容：Agent 拓扑视图已并入编排图页（拓扑数据并入运行时统计），旧 URL 落在默认阶段视图（?tab=topology 仅作兼容 query，编排页按阶段泳道渲染）
     path: '/admin/agent-registry/:agentId?',
     redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
   },
@@ -230,7 +230,7 @@ const routes: RouteRecordRaw[] = [
     redirect: (to) => ({ path: `/admin/skills/${to.params.agentId as string}` })
   },
   {
-    // 兼容：旧拓扑独立页 → 编排结构页（拓扑统计已并入阶段泳道；query 仅保 URL 兼容，无独立 tab）
+    // 兼容：旧拓扑独立页 → 编排图页（拓扑统计已并入阶段泳道；query 仅保 URL 兼容，无独立 tab）
     path: '/admin/topology',
     redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
   },
