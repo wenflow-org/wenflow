@@ -187,10 +187,12 @@ const prefersReducedMotion = typeof window !== 'undefined'
 function useCountUpMap(source: () => Record<string, number>, durationMs = 800): { display: Record<string, string> } {
   const display = reactive<Record<string, string>>({});
   let raf = 0;
+  // 指标统一展示一位小数(动画分支与 reduced-motion 分支同口径,不再漏原始浮点/整数)
+  const fmt = (v: number) => Number(v).toFixed(1);
   const render = () => {
     const targets = source();
     if (prefersReducedMotion) {
-      Object.assign(display, Object.fromEntries(Object.entries(targets).map(([k, v]) => [k, String(v)])));
+      Object.assign(display, Object.fromEntries(Object.entries(targets).map(([k, v]) => [k, fmt(v)])));
       return;
     }
     const start = performance.now();
@@ -201,7 +203,7 @@ function useCountUpMap(source: () => Record<string, number>, durationMs = 800): 
       const next: Record<string, string> = {};
       for (const [k, v] of Object.entries(targets)) {
         const from = Number(fromMap[k]) || 0;
-        next[k] = String(Math.round(from + (v - from) * eased));
+        next[k] = fmt(from + (v - from) * eased);
       }
       Object.assign(display, next);
       if (t < 1) raf = requestAnimationFrame(step);
