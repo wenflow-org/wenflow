@@ -50,6 +50,9 @@
         </button>
       </div>
 
+      <!-- 上传资料区（只支持文本型；放在输入区上方，提示随上传区一起给出） -->
+      <MaterialUploadArea class="goal__materials" />
+
       <div class="composer composer--entry">
         <label class="visually-hidden" for="goal-entry-input">你想解决什么</label>
         <div class="composer__box" :class="{ 'composer__box--active': input.trim() }">
@@ -253,6 +256,9 @@
         </div>
 
         <!-- 输入区 -->
+        <!-- 上传资料区（只支持文本型；与初始态同一组件） -->
+        <MaterialUploadArea class="goal__materials" />
+
         <div class="composer">
           <label class="visually-hidden" for="goal-chat-input">回答上面的问题，或补充你的基础、时间和限制</label>
           <div class="composer__box" :class="{ 'composer__box--active': input.trim() }">
@@ -424,6 +430,7 @@ import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
+import MaterialUploadArea from '@/components/learning/MaterialUploadArea.vue';
 import { hasUserSession } from '@/utils/api';
 import { plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
@@ -950,16 +957,19 @@ function shuffleScenes() {
 .entry {
   flex: 1; width: 100%;
   max-width: 1080px; margin: 0 auto;
-  /* 顶部留白与学习路径/学习状态页统一（24px） */
-  padding: 24px 28px 12px;
-  display: flex; flex-direction: column; gap: 16px;
-  /* 内容紧凑靠上，输入框紧跟场景卡 */
-  justify-content: flex-start;
+  /* 初始态是完整叙事块：垂直居中落在视口中部，消除底部大片空白 */
+  padding: 40px 28px;
+  display: flex; flex-direction: column; gap: 18px;
+  justify-content: center;
 }
+/* 统一内容列：hero 文字 / 场景卡 / 资料投放区 / 输入框共用 640 一条列，
+   不再 hero 通栏左对齐、卡片居中的混搭（比例失调的根源） */
+.entry__hero { max-width: 640px; width: 100%; margin: 0 auto; }
+.entry .goal__materials { max-width: 640px; width: 100%; margin: 0 auto; }
 .entry .composer--entry {
   max-width: 640px; width: 100%; margin: 0 auto;
-  /* 与卡片组保持约一张卡片的高度（gap 16px + margin 46px ≈ 62px） */
-  margin-top: 46px;
+  /* 原 46 补白为卡片间距服务；现在资料区在两者之间，由 gap 接管 */
+  margin-top: 2px;
 }
 
 .goal__foot { margin-top: auto; }

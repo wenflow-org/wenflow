@@ -576,12 +576,15 @@ html, body {
   .v2-page.detail .detail__main,
   .v2-page.state .state__main,
   .v2-page.ach .ach__main,
+  .v2-page.history .history__main,
   .v2-page.goal .work,
   .v2-page.goal .entry,
   .v2-page.evaluation-page .evaluation-shell {
     max-width: 1360px;
   }
   .v2-page.learn .learn__body { max-width: 1600px; }
+  /* 无知识点面板时壳随内容收紧：900 的控制台不该漂在 1600 壳里（两侧各空 ~350px） */
+  .v2-page.learn .learn__body--no-kp { max-width: 960px; }
   .v2-page .v2footer__inner { max-width: 1360px; }
 }
 
