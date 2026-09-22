@@ -16,6 +16,8 @@ import { getActiveForConcepts } from '../learner/misconception-ledger.service';
 import type { ReviewPlan } from '../memory/review-plan.service';
 import { buildMasteredLastSeenAtMap } from './anchor-probe-emit';
 import { logger } from '../../utils/logger';
+import { conceptRegistryService } from '../learner/concept-registry.service';
+import { conceptGraphService, RELATION_PREREQUISITE, RELATION_PART_OF } from '../learner/concept-graph.service';
 
 export interface TeachingScenarioContext {
   userId: string;
@@ -389,21 +391,59 @@ function resolveTaskConceptFromPath(task: any, path: any): { id: string | null; 
   };
 }
 
-function buildCognitiveFrame(params: {
-  task: any;
-  milestone: any;
-  path: any;
-  resolvedConcept: { id: string | null; name: string | null; description: string | null };
-  primaryConcepts: string[];
-  prerequisiteConcepts: string[];
-  taskProfile: TeachingScenarioContext['taskProfile'];
-}) {
-  const { task, milestone, path, resolvedConcept, primaryConcepts, prerequisiteConcepts, taskProfile } = params;
-  const cognitiveCore = parsePathPromptTemplateCore(path);
-  const coreConcepts = Array.isArray(cognitiveCore?.coreConcepts) ? cognitiveCore.coreConcepts : [];
-  const currentConceptId = normalizeConcept(resolvedConcept.id);
-  const currentConceptName = normalizeConcept(resolvedConcept.name);
-  const neighboringConcepts = dedupeConcepts(
+/**
+ * 取当前概念的 1-hop 图邻居名（L3 接入，best-effort）。
+ *
+ * 链路：概念名 → 注册表只读解析 canonical → `concept_edges` 1-hop（`direction:'in'` 前置优先）
+ * → canonical 标签。任一步不可用（未回填/无图/无邻居）就返回空数组，由调用方回落旧行为。
+ * **不创建概念、不写库**（读侧纪律）；失败只 warn，绝不影响开课。
+ */
+async function fetchGraphNeighbors(params: {
+  userId: string;
+  pathId: string;
+  conceptName: string | null;
+  limit?: number;
+}): Promise<string[]> {
+  const { userId, pathId, conceptName, limit = 3 } = params;
+  if (!userId || !conceptName) return [];
+  try {
+    const resolved = await conceptRegistryService.resolveConcept(userId, conceptName, { createIfMissing: false });
+    if (!resolved) return [];
+    const neighbors = await conceptGraphService.neighbors(userId, resolved.conceptId, {
+      relations: [RELATION_PREREQUISITE, RELATION_PART_OF],
+      direction: 'in',
+      limit,
+      pathId,
+    });
+    return neighbors.map((item) => item.label).filter((label): label is string => !!label);
+  } catch (error) {
+    logger.warn('[TeachingContextBuilder] 概念图邻居查询失败（best-effort，回落旧行为）', {
+      userId,
+      pathId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
+
+/**
+ * 邻域来源优先级（纯函数，导出以便单测）：
+ * ① 概念图 1-hop（有语义依据）→ ② 旧行为（取前 3 个其它 coreConcept，任意切片，图缺失时的兜底）。
+ */
+export function pickNeighboringConcepts(params: {
+  graphNeighbors?: string[];
+  coreConcepts: any[];
+  currentConceptId: string | null;
+  currentConceptName: string | null;
+}): string[] {
+  const { graphNeighbors, coreConcepts, currentConceptId, currentConceptName } = params;
+  const graphNeighborList = dedupeConcepts(
+    (graphNeighbors ?? [])
+      .map((name) => normalizeConcept(name))
+      .filter((name): name is string => !!name && name !== currentConceptName)
+  );
+  if (graphNeighborList.length > 0) return graphNeighborList.slice(0, 3);
+  return dedupeConcepts(
     coreConcepts
       .filter((concept: any) => {
         const conceptId = normalizeConcept(concept?.id);
@@ -414,6 +454,31 @@ function buildCognitiveFrame(params: {
       .slice(0, 3)
       .map((concept: any) => normalizeConcept(concept?.name))
   );
+}
+
+function buildCognitiveFrame(params: {
+  task: any;
+  milestone: any;
+  path: any;
+  resolvedConcept: { id: string | null; name: string | null; description: string | null };
+  primaryConcepts: string[];
+  prerequisiteConcepts: string[];
+  taskProfile: TeachingScenarioContext['taskProfile'];
+  /** 1-hop 图邻居名（前置优先）；空数组 = 无图/无邻居，回落旧的"取前 3 个其它 coreConcept" */
+  graphNeighbors?: string[];
+}) {
+  const { task, milestone, path, resolvedConcept, primaryConcepts, prerequisiteConcepts, taskProfile, graphNeighbors } = params;
+  const cognitiveCore = parsePathPromptTemplateCore(path);
+  const coreConcepts = Array.isArray(cognitiveCore?.coreConcepts) ? cognitiveCore.coreConcepts : [];
+  const currentConceptId = normalizeConcept(resolvedConcept.id);
+  const currentConceptName = normalizeConcept(resolvedConcept.name);
+  // 邻域来源优先级：① 概念图 1-hop（有语义依据）→ ② 旧行为（取前 3 个其它 coreConcept，任意切片）
+  const neighboringConcepts = pickNeighboringConcepts({
+    graphNeighbors,
+    coreConcepts,
+    currentConceptId,
+    currentConceptName,
+  });
 
   const milestoneIntent = normalizeConcept(
     milestone?.goal
@@ -999,6 +1064,13 @@ export async function buildTeachingScenarioContext(
     linkedConceptId: resolvedConcept.id,
     linkedConceptName: resolvedConcept.name,
   } as TeachingScenarioContext['taskProfile'];
+  // 概念图 1-hop 邻域（L3 接入）：优先用物化后的 concept_edges 拿"有语义依据的邻居"
+  // （前置优先——教学需要先唤醒基础），图缺失/无邻居时回落旧行为（见 buildCognitiveFrame 内的兜底）。
+  const graphNeighbors = await fetchGraphNeighbors({
+    userId,
+    pathId: path.id,
+    conceptName: resolvedConcept.name,
+  });
   const cognitiveFrame = buildCognitiveFrame({
     task,
     milestone,
@@ -1007,6 +1079,7 @@ export async function buildTeachingScenarioContext(
     primaryConcepts,
     prerequisiteConcepts,
     taskProfile,
+    graphNeighbors,
   });
   const supportingConcepts = dedupeConcepts([
     ...cognitiveFrame.neighboringConcepts,
