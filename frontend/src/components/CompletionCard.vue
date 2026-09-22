@@ -187,12 +187,13 @@ const prefersReducedMotion = typeof window !== 'undefined'
 function useCountUpMap(source: () => Record<string, number>, durationMs = 800): { display: Record<string, string> } {
   const display = reactive<Record<string, string>>({});
   let raf = 0;
-  // 指标统一展示一位小数(动画分支与 reduced-motion 分支同口径,不再漏原始浮点/整数)
-  const fmt = (v: number) => Number(v).toFixed(1);
+  // 展示格式:整数计数(知识点 x/x、消息条数)保持整数,指标值统一一位小数;
+  // 两条输出路径(reduced-motion 直出/动画帧)同口径,不再漏原始浮点
+  const fmt = (v: number, asInt: boolean) => (asInt ? String(Math.round(v)) : Number(v).toFixed(1));
   const render = () => {
     const targets = source();
     if (prefersReducedMotion) {
-      Object.assign(display, Object.fromEntries(Object.entries(targets).map(([k, v]) => [k, fmt(v)])));
+      Object.assign(display, Object.fromEntries(Object.entries(targets).map(([k, v]) => [k, fmt(v, Number.isInteger(v))])));
       return;
     }
     const start = performance.now();
@@ -203,7 +204,7 @@ function useCountUpMap(source: () => Record<string, number>, durationMs = 800): 
       const next: Record<string, string> = {};
       for (const [k, v] of Object.entries(targets)) {
         const from = Number(fromMap[k]) || 0;
-        next[k] = fmt(from + (v - from) * eased);
+        next[k] = fmt(from + (v - from) * eased, Number.isInteger(v));
       }
       Object.assign(display, next);
       if (t < 1) raf = requestAnimationFrame(step);
