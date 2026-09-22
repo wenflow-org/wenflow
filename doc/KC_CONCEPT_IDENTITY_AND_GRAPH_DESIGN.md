@@ -1,6 +1,6 @@
 # KC 概念身份与图关系改造设计
 
-> 状态：**设计（待评审）**｜日期：2026-09-22｜分支：`deep-experience/2026-09-21`
+> 状态：**L1/L2/L3 + 前端画布已落地**（见文末「交付状态」）｜日期：2026-09-22（2026-09-23 更新）
 > 关联：`doc/LEARNER_STATE_REVIEW_DESIGN.md`（调控分工纪律）、`doc/local/VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md`（跨日模拟契约）、`doc/LEARNER_MODEL_ARCHITECTURE.md`
 > 验证手段：现有虚拟学习者存量回填 + `src/scripts/simulate-learner-e2e.ts` 跨日对照
 
@@ -454,3 +454,34 @@ subtasks / milestones ─resolve───► conceptId ───┤
                           ├─ prerequisiteGaps                  ← 上游闭包 × 掌握度
                           └─ ReplanAdvisory severity           ← 缺口深度 + 是否阻塞
 ```
+
+---
+
+## 交付状态（2026-09-23）
+
+| 期 | 内容 | 提交 | 实测 |
+|---|---|---|---|
+| P0 | 建表 + 注册表服务 + 写入点双写（只写不读） | `735d4979` | concept-registry 12/12 |
+| P1 | 存量回填 + 只读度量脚本 | `735d4979` | 子任务 canonical 覆盖 0→99.9%；误解↔痕迹贯通 27.9%→87.8% |
+| P1 续 | 双写扩到误解台账 + 子任务；键对齐 + 局部序号护栏 | `89cb0a7e` `7bf2e0e4` | 真实生成 4/4 子任务带 id |
+| S2 | 读侧携带 conceptId（+ 修痕迹循环被误圈在会话循环内的门控 bug） | `032cc70e` | 675/675 |
+| S3 | consolidator 升格 alias 策略（非破坏：登记别名 + 改指，不删行） | `f2650c59` | consolidator 35/35 |
+| S1 | **L2 边表物化**：`kcGraph.edges` → `concept_edges`（+ part_of 代码推导） | `ee028e0b` | 断言 9 转绿：`kcGraph.edges=111 == concept_edges=111` |
+| S4a | `neighboringConcepts` → 1-hop 图遍历（图缺失回落旧行为） | `bcc78948` | 5/5 |
+| S4b | `prerequisiteGaps` → 上游闭包（**修正语义错误**：缺口 = 上游未掌握） | `a3d739a9` | 4/4 |
+| S4c | 缺口 severity → 重规划风险 契约 | `6a2ac4ac` | 3/3 |
+| S5 | 图视图 API + `MkGraph.vue` 画布 + 学习者详情「知识图谱」tab | `4a2316d0` | 后端 10/10+11/11；前端 555/555、design:check 通过 |
+
+**边方向语义（实测标定）**：`edges[{from,to}]` 表示 **`from` 是 `to` 的前置**（用 5 条真实路径的
+66 条边与 `conceptKcs[].kcs[].prerequisiteKCs` 交叉验证：66 一致、0 反向）。
+
+**已知限制（诚实边界）**
+1. `prerequisite` 边**极稀疏**：157 条含 kcAnnotation 的路径里只有 5 条产出边（kc-mapper 产出侧局限）；
+   `part_of`（代码从 `conceptKcs` 嵌套推导）才是主要结构。
+2. `memory_traces` 内部比值无改善（`@@unique(userId,conceptKey)` 写入时已去重）。
+3. **计划↔痕迹贯通率仍仅 ~7.8%**——子任务的"关系描述式"命名与痕迹的 KC 级命名是两套词汇，
+   机械归一化桥不过去；**S3 的 alias 升格（LLM 建议）才是收敛杠杆**，需实际跑一轮归并才会见效。
+4. 物化钩子**需要一次干净的后端重启**才在服务进程内生效：实测 ts-node-dev `--respawn`
+   偶发漏重载深层模块，导致 2 条新路径未物化（重启后实测触发：`prerequisite:16, partOf:15`）。
+5. S4b/S4c 是**用户可见**改动（`hasPrerequisiteGaps` / 重规划触发率），按计划需跨日对照卡住——
+   因并行会话持续改动 day-boundary 相关文件，跨日对照待仓库安静后补。
