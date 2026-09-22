@@ -423,12 +423,15 @@ model milestones {
   updatedAt       DateTime
   coreConceptId   String?
   coreConceptName String?
+  /// 概念身份（canonical，concepts.id）；`coreConceptId` 是 path 内局部序号（concept-N），本列可跨表 join。
+  conceptId       String?
   learning_paths  learning_paths @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
   subtasks        subtasks[]
 
   @@unique([learningPathId, stageNumber])
   @@index([learningPathId])
   @@index([status])
+  @@index([conceptId])
 }
 
 
@@ -460,6 +463,9 @@ model subtasks {
   transferable         Boolean?           @default(false)
   linkedConceptId      String?
   linkedConceptName    String?
+  /// 概念身份（canonical，concepts.id）。`linkedConceptId` 是 path 内局部序号（concept-N，同键不同义），
+  /// 本列才是可跨表 join 的 canonical id；null = 尚未回填。
+  conceptId            String?
   users                users?             @relation(fields: [usersId], references: [id])
   milestones           milestones         @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
 
@@ -470,6 +476,7 @@ model subtasks {
   @@index([cognitiveLevel])
   @@index([icapLevel])
   @@index([status, completedAt])
+  @@index([conceptId])
 }
 
 
@@ -621,6 +628,8 @@ model misconception_ledger {
   id              String   @id
   userId          String
   conceptKey      String
+  /// 概念身份（canonical，concepts.id）；null = 尚未回填。读侧「conceptId 优先，空则回落 conceptKey」。
+  conceptId       String?
   hypothesisHash  String   // hypothesis 文本短哈希（跨会话去重/upsert 锚点）
   hypothesis      String
   canonicalLabel  String?
@@ -638,6 +647,7 @@ model misconception_ledger {
   @@unique([userId, conceptKey, hypothesisHash])
   @@index([userId, status])
   @@index([userId, lastSeenAt])
+  @@index([userId, conceptId])
 }
 
 model learner_projections {
@@ -694,6 +704,9 @@ model memory_traces {
   id              String    @id
   userId          String
   conceptKey      String
+  /// 概念身份（canonical，concepts.id）。由 concept-registry 解析写入；为 null = 尚未回填/解析。
+  /// 读侧一律「conceptId 优先，空则回落 conceptKey」，故该列上线不改任何既有行为。
+  conceptId       String?
   label           String?
   masteryScore    Float     @default(0.5)
   stability       String    @default("developing") // unknown | fragile | developing | stable
@@ -718,6 +731,64 @@ model memory_traces {
   @@index([userId, stability])
   @@index([userId, dueAt])
   @@index([userId, pathId])
+  @@index([userId, conceptId])
+}
+
+/// 概念身份注册表（canonical）。身份是**用户级**的：同一个名字对新手是技能簇、对熟手只是一个词
+/// （复用 concept-load 的既有判读），且遗忘不分路径 → 不做 path 隔离。
+/// 粒度 = 可调度单元（memory_traces 的粒度，多为 KC 级）；coreConcept 亦注册为节点（level='concept'），
+/// 两者用 concept_edges(relation='part_of') 相连。
+/// 设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.1
+model concepts {
+  id             String   @id
+  userId         String
+  canonicalLabel String
+  level          String   @default("kc") // concept | kc
+  taxonomy       String? // factual | conceptual | procedural | metacognitive
+  granularity    String? // atomic | cluster
+  originPathId   String? // 首次出现路径（仅溯源，不做隔离键）
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  aliases        concept_aliases[]
+
+  @@unique([userId, canonicalLabel])
+  @@index([userId, level])
+}
+
+/// 别名表：唯一索引 (userId, aliasNorm) **就是解析器的全部机制**——一次索引命中完成身份解析。
+/// 非破坏性：归并 = 插一行 alias，不重写任何 traces（回滚 = 删该行）。
+model concept_aliases {
+  id         String   @id
+  conceptId  String
+  userId     String
+  aliasNorm  String // normalizeConceptKey 后的键（与 memory_traces 口径一致）
+  aliasRaw   String // 原文（展示/审计）
+  source     String // write_time | consolidator | human | backfill
+  confidence Float    @default(1)
+  createdAt  DateTime @default(now())
+  concept    concepts @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, aliasNorm])
+  @@index([conceptId])
+}
+
+/// 概念边。scope 区分「路径内局部依赖」与「用户级全局关系」——语义不同，不可混算。
+/// 设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §4.1
+model concept_edges {
+  id            String   @id
+  userId        String
+  fromConceptId String
+  toConceptId   String
+  relation      String // prerequisite | part_of | related | contrasts_with | transfer_to
+  scope         String   @default("path") // path | user
+  pathId        String? // scope='path' 时必填
+  source        String // kc-mapper | path-planning | consolidator | human
+  confidence    Float    @default(1)
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, fromConceptId, toConceptId, relation, scope, pathId])
+  @@index([userId, fromConceptId, relation])
+  @@index([userId, toConceptId, relation])
 }
 
 model user_agent_configs {

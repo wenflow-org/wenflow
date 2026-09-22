@@ -8,7 +8,9 @@
  * - getRetentionSnapshot：读取时计算保留率快照
  */
 import prisma from '../../config/database';
+import { logger } from '../../utils/logger';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
+import { conceptRegistryService } from '../learner/concept-registry.service';
 import {
   reviewIntervalDays,
   clamp01,
@@ -22,6 +24,27 @@ import {
   type FsrsGradeCode,
   type FsrsMemoryState,
 } from './fsrs';
+
+/**
+ * 解析概念身份（canonical conceptId），best-effort：注册表故障不得阻断痕迹写入。
+ * 设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.4（写入点双写，只写不读）。
+ */
+async function resolveConceptIdSafe(userId: string, conceptKey: string, pathId?: string | null): Promise<string | null> {
+  try {
+    const resolved = await conceptRegistryService.resolveConcept(userId, conceptKey, {
+      source: 'write_time',
+      originPathId: pathId ?? null,
+    });
+    return resolved?.conceptId ?? null;
+  } catch (error) {
+    logger.warn('[memory-trace] 概念身份解析失败（best-effort，conceptId 留空）', {
+      userId,
+      conceptKey: conceptKey.slice(0, 40),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
 
 /** FSRS 统一保留率（#8 legacy 退役）：trace 有 FSRS 状态用 FSRS，否则 fsrsStateFromLegacy 推导 */
 function fsrsRetentionOfTrace(
@@ -64,21 +87,12 @@ function fsrsIntervalDaysOfTrace(
  * 知识点键归一化（幂等）：conceptKey 直接取模型生成的知识点名字，模型换一种说法就多一条，
  * 导致同一概念被记成多条痕迹（实测「离开前翻页立好」被记成 5 条），复习清单因此爆炸。
  * 写入与查询都过这里，保证同一概念只占一条 trace。
- * 规则：压缩空白 → 去引号 → 去冒号后的解释性从句 → 去尾部标点。
+ *
+ * 实现已抽到 `./concept-key`（供 ConceptRegistryService 共用同口径，避免循环依赖）；
+ * 此处 re-export 保持既有 import 路径不变。
  */
-export function normalizeConceptKey(raw: unknown): string {
-  const original = String(raw ?? '').trim();
-  if (!original) return '';
-  let s = original.replace(/\s+/g, ' ');
-  // 引号只是强调：去掉才能合并「靠「动作先发生」取胜」与「靠动作先发生取胜」
-  s = s.replace(/[「」『』"'“”‘’]/g, '');
-  // 冒号后多为模型的解释性从句（主体至少 4 字才截），只保留冒号前的主体
-  const colon = s.search(/[：:]/);
-  if (colon >= 4) s = s.slice(0, colon);
-  // 去尾部标点/破折号
-  s = s.replace(/[。．.，,、；;！!？?~～\-—…\s]+$/g, '');
-  return s.trim() || original;
-}
+import { normalizeConceptKey } from './concept-key';
+export { normalizeConceptKey };
 
 export type MemoryStability = 'unknown' | 'fragile' | 'developing' | 'stable';
 
@@ -232,6 +246,10 @@ class MemoryTraceService {
       && existing !== null && existing !== undefined
       && existing.fsrsStability !== null && existing.fsrsStability !== undefined;
 
+    // 概念身份（canonical）：best-effort 解析，失败留空不阻断；update 分支也写，
+    // 让被触碰的历史行顺带补齐 conceptId（回填之外的增量补全通道）。
+    const conceptId = await resolveConceptIdSafe(input.userId, conceptKey, input.pathId ?? null);
+
     await prisma.memory_traces.upsert({
       where: {
         userId_conceptKey: { userId: input.userId, conceptKey },
@@ -240,6 +258,7 @@ class MemoryTraceService {
         id: `mt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
         userId: input.userId,
         conceptKey,
+        conceptId,
         label: input.label ?? null,
         masteryScore,
         stability,
@@ -261,6 +280,8 @@ class MemoryTraceService {
         lastSeenAt: now,
         extractionCount: { increment: 1 },
         source: input.source ?? undefined,
+        // 补齐身份：已解析出 conceptId 才覆盖（解析失败时保留原值，不回退为 null）
+        ...(conceptId !== null ? { conceptId } : {}),
         // 无显式评级时**不覆盖**已有 FSRS 排程的 dueAt（18 号报告 N5）：
         // 普通课（recordSessionOutcome 不传 fsrsGrade）只更新掌握度/内化强度，
         // 不应把 FSRS 的长间隔压回 ~1 天（旧实现每节课都写 dueAt=now+1d）。
@@ -435,13 +456,14 @@ class MemoryTraceService {
       if (!key) continue;
       const mastery = Number.isFinite(item.mastery) ? Math.max(0, Math.min(1, item.mastery)) : null;
       if (mastery === null) continue;
+      const conceptId = await resolveConceptIdSafe(userId, key, pathId);
       const existing = await this.getTrace(userId, key);
       if (existing) {
         const prev = existing.ktMasteryEma ?? existing.masteryScore;
         const ema = Number.isFinite(prev) ? ALPHA * mastery + (1 - ALPHA) * (prev as number) : mastery;
         await prisma.memory_traces.updateMany({
           where: { userId, conceptKey: key },
-          data: { ktMasteryEma: ema },
+          data: { ktMasteryEma: ema, ...(conceptId !== null ? { conceptId } : {}) },
         });
       } else {
         // 无痕迹也记录 EMA（独立于 ACT-R/FSRS 调度的知识状态通道）
@@ -450,6 +472,7 @@ class MemoryTraceService {
             id: `mt_${now.getTime()}_${Math.random().toString(36).slice(2, 10)}`,
             userId,
             conceptKey: key,
+            conceptId,
             masteryScore: 0.3,
             stability: 'unknown',
             ktMasteryEma: mastery,
