@@ -17,8 +17,8 @@
           <h1 class="mk-entity__name mk-entity__name--lg">{{ d.name }}</h1>
           <span v-if="d.archetype" class="mk-badge mk-badge--info">{{ d.archetype }}</span>
           <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
-          <span v-if="d.goal" class="vp-top__goal" :title="'长期倾向：影响模拟行为与学习需求'">长期倾向：{{ d.goal }}</span>
-          <span v-else class="vp-top__goal vp-top__goal--none" title="长期倾向未设置：学习需求由故事产生">长期倾向未设置</span>
+          <span v-if="goalText" class="vp-top__goal" :title="'长期倾向：影响模拟行为与学习需求'">{{ goalText }}</span>
+          <span v-else class="vp-top__goal vp-top__goal--none" title="长期倾向未设置：学习需求由故事产生">未设置目标</span>
           <!-- 仿真质量常驻徽章：最近一次黑盒终局评估（裁判 / 保真），未评估显示灰标 -->
           <span v-if="isLive" class="vp-quality" :class="qualityTone" :title="qualityTitle">
             <template v-if="qualityReferee || qualityFidelity">
@@ -406,8 +406,8 @@
                   </div>
                   <p class="vp-story__outline" :title="s.outline">{{ s.outline || '暂无故事概述' }}</p>
                   <div class="vp-story__stats">
-                    <span class="vp-story__stats-item" title="共运行的会话次数">运行 {{ s.runCount || 0 }} 次</span>
-                    <span class="vp-story__stats-item" title="会话进度：目标对话 / 路径规划 / 教学回合 的累计会话数">目标 {{ s.goalCount || 0 }} · 路径 {{ s.pathCount || 0 }} · 教学 {{ s.learnCount || 0 }}</span>
+                    <span v-if="(s.runCount || 0) > 0" class="vp-story__stats-item" title="共运行的会话次数">运行 {{ s.runCount }} 次</span>
+                    <span v-if="stageCountsText(s)" class="vp-story__stats-item" title="会话进度：目标对话 / 路径规划 / 教学回合 的累计会话数（0 段省略）">{{ stageCountsText(s) }}</span>
                     <!-- 双轴状态：生命周期徽章（轴 A）+ 阶段条（轴 B）；与一级页同源组件 -->
                     <template v-if="s.latestRun?.sessionId">
                       <RunStateBadge :status="storyRunState(s)" :hint="`${formatRunResult(s.latestRun?.status || '')} · ${timeAgo(String(s.latestRun?.updatedAt || s.latestRun?.createdAt || ''))}`" :pulse="false" />
@@ -1844,6 +1844,13 @@ const levelLabel = computed(() => ({
   advanced: '进阶'
 }[d.value?.level || ''] || d.value?.level || ''))
 
+/* 长期倾向归一化：库里曾以字面量「未设置目标 / 未设置」落盘（无值占位），
+   展示层一律按「未设置」处理，避免出现「长期倾向：未设置目标」这种同义反复 */
+const goalText = computed(() => {
+  const g = String(d.value?.goal || '').trim()
+  return !g || g === '未设置目标' || g === '未设置' ? '' : g
+})
+
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* 全部运行 feed（人物级全量运行流） */
@@ -1883,6 +1890,15 @@ function storyStatusLabel(s: StoryItem): string {
   if (s.status === 'ready') return '就绪'
   if (s.status === 'draft' || !s.status) return '草稿'
   return s.status
+}
+
+/** 阶段会话数摘要：只显示有数的段（「路径 0 · 教学 0」是零值噪声，无会话阶段不占位） */
+function stageCountsText(s: StoryItem): string {
+  const parts: string[] = []
+  if ((s.goalCount || 0) > 0) parts.push(`目标 ${s.goalCount}`)
+  if ((s.pathCount || 0) > 0) parts.push(`路径 ${s.pathCount}`)
+  if ((s.learnCount || 0) > 0) parts.push(`教学 ${s.learnCount}`)
+  return parts.join(' · ')
 }
 
 /** 故事级预算覆盖徽标文案（无覆盖返回空串） */
