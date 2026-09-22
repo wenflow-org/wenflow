@@ -38,11 +38,11 @@
               class="mk-menu__btn"
               aria-label="更多操作"
               aria-haspopup="menu"
-              :aria-expanded="menuOpen"
+              :aria-expanded="openMenu === 'header'"
               title="更多操作：座舱 / 生命周期 / 账号自动学习 / 编辑画像"
               @click.stop="toggleMenu('header')"
             >⋯</button>
-            <div v-if="menuOpen" class="mk-menu__pop" :style="popStyle" @click.stop>
+            <div v-if="openMenu === 'header'" class="mk-menu__pop" :style="popStyle" @click.stop>
               <button
                 v-for="c in lifeControls"
                 :key="c.key"
@@ -422,8 +422,22 @@
                   <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" :title="'用这个故事启动一次新的实验会话（进入座舱）'" @click="runStory(s, i)">
                     {{ running ? '进行中…' : '▶ 运行' }}
                   </button>
-                  <button type="button" class="mk-link" :disabled="storyBusy" title="编辑故事：标题、概述、故事级预算（留空继承角色级）" @click="openEditStory(i)">编辑</button>
-                  <button type="button" class="mk-link mk-link--danger" :disabled="storyBusy" title="删除该故事（不可恢复）" @click="removeStory(i)">删除</button>
+                  <!-- 低频操作收进 ⋯ 菜单：卡片只留主操作「运行」 -->
+                  <div class="mk-menu">
+                    <button
+                      type="button"
+                      class="mk-menu__btn"
+                      aria-label="更多故事操作"
+                      aria-haspopup="menu"
+                      :aria-expanded="openMenu === `story-${storyKey(s, i)}`"
+                      title="编辑 / 删除故事"
+                      @click.stop="toggleMenu(`story-${storyKey(s, i)}`)"
+                    >⋯</button>
+                    <div v-if="openMenu === `story-${storyKey(s, i)}`" class="mk-menu__pop" :style="popStyle" @click.stop>
+                      <button type="button" class="mk-menu__item" :disabled="storyBusy" title="编辑故事：标题、概述、故事级预算（留空继承角色级）" @click="openEditStory(i); closeMenu()">编辑</button>
+                      <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="storyBusy" title="删除该故事（不可恢复）" @click="removeStory(i); closeMenu()">删除</button>
+                    </div>
+                  </div>
                 </div>
                 <span class="vp-story__chevron" aria-hidden="true">▸</span>
               </div>
@@ -1996,7 +2010,7 @@ function avatarClassOf(name: string): string {
 }
 
 /* ---- 头部「更多操作」⋯ 菜单（复用行内菜单模型：点击外部/Esc/方向键关闭，fixed 定位防裁切） ---- */
-const { toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
+const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 
 /* ---- 进行中会话的静默轮询刷新（setTimeout 链 + 并发守卫 + 指数退避） ---- */
 const VLAB_POLL_MS = 30_000
