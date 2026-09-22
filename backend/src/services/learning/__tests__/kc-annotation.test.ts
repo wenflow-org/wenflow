@@ -123,3 +123,66 @@ describe('mapAndPersistKcAnnotation（契约事故回归）', () => {
     expect(input.prerequisiteTree).toBeNull();
   });
 });
+
+/**
+ * 等价变体归一回归（2026-09-22 生产事故）：
+ * 模型稳定产出合法 JSON 却因字段名/形态偏离契约被判死或下游读空。
+ * coerceKcMapperParsed 把实测变体收敛到契约形态，normalizeOutput 亦复用同一函数。
+ */
+import { coerceKcMapperParsed } from '../../../skills/kc-mapper';
+
+describe('coerceKcMapperParsed（契约等价变体归一）', () => {
+  it('空 gapCoverage（[]/{}）移除，非空归为 {covered,uncovered}', () => {
+    expect(coerceKcMapperParsed({ conceptKcs: [], gapCoverage: [] }).gapCoverage).toBeUndefined();
+    expect(coerceKcMapperParsed({ conceptKcs: [], gapCoverage: {} }).gapCoverage).toBeUndefined();
+    const r = coerceKcMapperParsed({
+      conceptKcs: [],
+      gapCoverage: [{ conceptId: 'c1', coveredKCs: ['kc-1'], gaps: [] }, { conceptId: 'c2', gaps: ['没覆盖'] }],
+    });
+    expect(r.gapCoverage).toEqual({ covered: ['c1'], uncovered: [{ concept: 'c2', reason: '没覆盖' }] });
+  });
+
+  it('单条明细对象也归为契约形态', () => {
+    const r = coerceKcMapperParsed({ conceptKcs: [], gapCoverage: { conceptId: 'c1', gaps: [] } });
+    expect(r.gapCoverage).toEqual({ covered: ['c1'], uncovered: [] });
+  });
+
+  it('taskKcLinks 的 kcIds 别名补出 linkedKCs（保留原字段）', () => {
+    const r = coerceKcMapperParsed({ conceptKcs: [], taskKcLinks: [{ taskTitle: 't', kcIds: ['kc-1'] }] });
+    expect(r.taskKcLinks[0].linkedKCs).toEqual(['kc-1']);
+  });
+
+  it('edges 缺 relation 补 prerequisite，type 别名转正', () => {
+    const r = coerceKcMapperParsed({
+      conceptKcs: [],
+      kcGraph: { nodes: [], edges: [{ from: 'a', to: 'b' }, { from: 'b', to: 'c', type: 'prerequisite' }] },
+    });
+    expect(r.kcGraph.edges).toEqual([
+      { from: 'a', to: 'b', relation: 'prerequisite' },
+      { from: 'b', to: 'c', type: 'prerequisite', relation: 'prerequisite' },
+    ]);
+  });
+
+  it('节点为纯字符串或缺少 name/taxonomy 时从 conceptKcs 回填', () => {
+    const r = coerceKcMapperParsed({
+      conceptKcs: [{ conceptId: 'c1', kcs: [{ kcId: 'kc-1', name: '识别半联动点', taxonomy: 'procedural' }] }],
+      kcGraph: { nodes: ['kc-1', { kcId: 'kc-1' }], edges: [] },
+    });
+    expect(r.kcGraph.nodes).toEqual([
+      { kcId: 'kc-1', name: '识别半联动点', taxonomy: 'procedural' },
+      { kcId: 'kc-1', name: '识别半联动点', taxonomy: 'procedural' },
+    ]);
+  });
+
+  it('已合规输入保持不变（幂等）', () => {
+    const input = {
+      conceptKcs: [{ conceptId: 'c1', kcs: [{ kcId: 'kc-1', name: 'n', taxonomy: 'factual' }] }],
+      taskKcLinks: [{ taskTitle: 't', linkedKCs: ['kc-1'] }],
+      kcGraph: { nodes: [{ kcId: 'kc-1', name: 'n', taxonomy: 'factual' }], edges: [{ from: 'a', to: 'b', relation: 'prerequisite' }] },
+      gapCoverage: { covered: ['c1'], uncovered: [] },
+    };
+    const once = coerceKcMapperParsed(input);
+    expect(once).toEqual(input);
+    expect(coerceKcMapperParsed(once)).toEqual(input);
+  });
+});

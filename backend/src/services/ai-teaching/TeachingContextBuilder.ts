@@ -1,5 +1,7 @@
 import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
+import { getSceneFramingNormalizedInput, resolveNormalizedInputSnapshot, resolvePersistedNormalizedInput } from '../learning/learning.helpers';
+import { extractPromptMaterials, TEACHING_MATERIAL_LIMITS, type PromptMaterial } from '../materials/material-prompt-projection';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { teachingStrategyConfig } from '../../config/pedagogy.config';
 import type { TeachingKnowledgePointState, TeachingSessionRecord } from './TeachingSessionRepository';
@@ -95,6 +97,11 @@ export interface TeachingScenarioContext {
     pathSummary?: string | null;
     subject?: string | null;
   };
+  /**
+   * 该路径关联的资料（用户附件在前、联网采集在后）——**投影后的最小集合**。
+   * 课堂上用于"引用资料原文/章节"（不得编造资料里没有的内容）；无资料时为 null。
+   */
+  materials: PromptMaterial[] | null;
   previousSession?: {
     sessionId: string;
     messages: TeachingSessionRecord['messages'];
@@ -335,9 +342,18 @@ function resolveTaskKcsFromPath(task: any, path: any): Array<{ kcId: string; nam
     if (!kcAnnotation || typeof kcAnnotation !== 'object') return [];
     const taskKcLinks = Array.isArray(kcAnnotation.taskKcLinks) ? kcAnnotation.taskKcLinks : [];
     const matched = taskKcLinks.find((link: any) => normalizeConcept(link?.taskTitle) === normalizeConcept(task?.title));
-    if (!matched || !Array.isArray(matched.linkedKCs)) return [];
+    // 字段兼容：契约是 linkedKCs，但实测弱模型/漂移模型会写成 kcIds / linkedKcIds / kcs（2026-09-22）。
+    // 读取侧归一，避免"落了库但下游解析为空"的静默断链。
+    const linkedKcIds = matched
+      ? (Array.isArray(matched.linkedKCs) ? matched.linkedKCs
+        : Array.isArray(matched.kcIds) ? matched.kcIds
+        : Array.isArray(matched.linkedKcIds) ? matched.linkedKcIds
+        : Array.isArray(matched.kcs) ? matched.kcs
+        : [])
+      : [];
+    if (!matched || linkedKcIds.length === 0) return [];
     const kcGraphNodes = Array.isArray(kcAnnotation.kcGraph?.nodes) ? kcAnnotation.kcGraph.nodes : [];
-    return matched.linkedKCs.map((kcId: any) => {
+    return linkedKcIds.map((kcId: any) => {
       const node = kcGraphNodes.find((n: any) => normalizeConcept(n?.kcId) === normalizeConcept(kcId));
       return {
         kcId: normalizeConcept(kcId) || String(kcId || ''),
@@ -852,6 +868,31 @@ function buildTeachingStrategyGuidance(taskProfile: TeachingScenarioContext['tas
   };
 }
 
+/**
+ * 从路径模板（`learning_paths.aiPromptTemplate`）里取回该路径关联的资料，并投影成课堂用的最小集合。
+ *
+ * 数据位置：`sceneFraming.normalizedInput.resources.materials`（优先），回退持久化快照。
+ * 无资料 → null（提示词里不出现该键，课堂行为与原先完全一致）。
+ */
+export function resolvePathMaterialsForTeaching(aiPromptTemplate: string | null | undefined): PromptMaterial[] | null {
+  const parsed = parsePathPromptTemplate(aiPromptTemplate || null);
+  if (!parsed) return null;
+  // 持久化形态有三种（历史演进）：sceneFraming.normalizedInput / 顶层 normalizedInput /
+  // normalizedInputSnapshot.normalizedInput。逐个尝试，命中即返回（都拿不到 → null）。
+  const snapshot = resolveNormalizedInputSnapshot(parsed);
+  const candidates: unknown[] = [
+    getSceneFramingNormalizedInput(parsed.sceneFraming),
+    resolvePersistedNormalizedInput(parsed),
+    snapshot,
+    (snapshot as any)?.normalizedInput,
+  ];
+  for (const candidate of candidates) {
+    const materials = extractPromptMaterials({ normalizedInput: candidate }, TEACHING_MATERIAL_LIMITS);
+    if (materials) return materials;
+  }
+  return null;
+}
+
 export async function buildTeachingScenarioContext(
   userId: string,
   taskId: string,
@@ -1111,6 +1152,8 @@ export async function buildTeachingScenarioContext(
       pathSummary: parsePathSummary(path.aiPromptTemplate),
       subject: path.subject,
     },
+    // 资料 → 课堂：从路径模板里取回资料包并投影（见 resolvePathMaterialsForTeaching）
+    materials: resolvePathMaterialsForTeaching(path.aiPromptTemplate),
     previousSession: previousSession ? {
       sessionId: previousSession.id,
       messages: previousSession.messages,
