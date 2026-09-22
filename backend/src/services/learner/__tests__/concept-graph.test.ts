@@ -45,7 +45,7 @@ function makeDeps() {
       return ids.map((id) => concepts.get(id)).filter((c): c is { id: string; canonicalLabel: string; level: string } => !!c);
     },
     async listConcepts() {
-      return [...concepts.values()].map((c) => ({ id: c.id, canonicalLabel: c.canonicalLabel, level: c.level, taxonomy: null }));
+      return [...concepts.values()].map((c) => ({ id: c.id, canonicalLabel: c.canonicalLabel, level: c.level, taxonomy: null, originPathId: null }));
     },
     async listTraceMastery() { return []; },
   };

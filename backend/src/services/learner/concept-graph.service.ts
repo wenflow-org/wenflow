@@ -59,8 +59,10 @@ export interface ConceptGraphDeps {
   }): Promise<void>;
   listEdges(where: { userId: string; relations: string[]; scope?: string; pathId?: string | null }): Promise<EdgeRow[]>;
   findConcepts(ids: string[]): Promise<Array<{ id: string; canonicalLabel: string; level: string }>>;
-  /** 图视图：该用户的全部概念（含分类） */
-  listConcepts(userId: string): Promise<Array<{ id: string; canonicalLabel: string; level: string; taxonomy: string | null }>>;
+  /** 图视图：该用户的全部概念（含分类与首次出现路径，后者供按路径收敛节点） */
+  listConcepts(userId: string): Promise<Array<{
+    id: string; canonicalLabel: string; level: string; taxonomy: string | null; originPathId: string | null;
+  }>>;
   /** 图视图：按 canonical 聚合的掌握度（来自 memory_traces） */
   listTraceMastery(userId: string): Promise<Array<{
     conceptId: string; masteryScore: number; stability: string; extractionCount: number; lastSeenAt: string | null;
@@ -101,7 +103,7 @@ const defaultDeps: ConceptGraphDeps = {
   }),
   listConcepts: async (userId) => prisma.concepts.findMany({
     where: { userId },
-    select: { id: true, canonicalLabel: true, level: true, taxonomy: true },
+    select: { id: true, canonicalLabel: true, level: true, taxonomy: true, originPathId: true },
     take: 2000,
   }),
   listTraceMastery: async (userId) => {
@@ -298,15 +300,19 @@ export class ConceptGraphService {
   }
 
   /**
-   * 图视图（前端画布用）：节点 = 该用户的概念（带掌握度/稳定性），边 = 概念关系。
-   * 只读聚合，不新增实体；`pathId` 可选（只看某条路径的边）。
+   * 图视图（前端画布用）：节点 = 概念（带掌握度/稳定性），边 = 概念关系。
+   * 只读聚合，不新增实体。
+   *
+   * `pathId` 传值时**节点与边都收敛到该路径**（用户侧只看自己当前路径）：
+   * 节点 = 该路径边的两端 ∪ 首次出现于该路径的概念（`concepts.originPathId`）；
+   * 不传 = 该用户的全局图（admin 诊断用）。
    */
   async buildGraphView(
     userId: string,
     options: { pathId?: string | null; maxNodes?: number } = {},
   ): Promise<ConceptGraphView> {
     const maxNodes = options.maxNodes ?? 200;
-    const [concepts, edges, masteryRows] = await Promise.all([
+    const [allConcepts, edges, masteryRows] = await Promise.all([
       this.deps.listConcepts(userId),
       this.deps.listEdges({
         userId,
@@ -315,6 +321,17 @@ export class ConceptGraphService {
       }),
       this.deps.listTraceMastery(userId),
     ]);
+
+    // 路径收敛：有 pathId 时只保留"这条路径的概念"（边两端 + 首次出现于该路径）
+    let concepts = allConcepts;
+    if (options.pathId) {
+      const inPath = new Set<string>();
+      for (const edge of edges) {
+        inPath.add(edge.fromConceptId);
+        inPath.add(edge.toConceptId);
+      }
+      concepts = allConcepts.filter((c) => inPath.has(c.id) || c.originPathId === options.pathId);
+    }
 
     const masteryByConcept = new Map(masteryRows.map((row) => [row.conceptId, row]));
     const usedIds = new Set<string>();
@@ -335,6 +352,7 @@ export class ConceptGraphService {
       })
       .slice(0, maxNodes);
     const nodeIds = new Set(ranked.map((c) => c.id));
+    const keptEdges = edges.filter((edge) => nodeIds.has(edge.fromConceptId) && nodeIds.has(edge.toConceptId));
 
     return {
       nodes: ranked.map((concept) => {
@@ -351,10 +369,10 @@ export class ConceptGraphService {
         };
       }),
       // 只保留两端都在节点集里的边（截断后不产生悬空边）
-      edges: edges.filter((edge) => nodeIds.has(edge.fromConceptId) && nodeIds.has(edge.toConceptId)),
+      edges: keptEdges,
       meta: {
         nodeCount: ranked.length,
-        edgeCount: edges.filter((edge) => nodeIds.has(edge.fromConceptId) && nodeIds.has(edge.toConceptId)).length,
+        edgeCount: keptEdges.length,
         totalConcepts: concepts.length,
         totalEdges: edges.length,
         truncated: concepts.length > ranked.length,

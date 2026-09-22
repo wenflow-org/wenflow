@@ -74,7 +74,42 @@
         </button>
         <div class="kp__body">
           <div class="kp__bar"><i :style="{ width: weightedProgressPct + '%' }"></i></div>
-          <ol class="kp__list">
+          <!-- 视图切换：列表（默认）/ 图谱。图谱按需加载——只在切过去时才发请求 -->
+          <div class="kp__views" role="tablist" aria-label="知识点视图">
+            <button
+              type="button" role="tab" class="kp__view"
+              :class="{ 'kp__view--on': kpView === 'list' }"
+              :aria-selected="kpView === 'list'"
+              @click="kpView = 'list'"
+            >列表</button>
+            <button
+              type="button" role="tab" class="kp__view"
+              :class="{ 'kp__view--on': kpView === 'graph' }"
+              :aria-selected="kpView === 'graph'"
+              @click="switchKpToGraph"
+            >图谱</button>
+          </div>
+          <template v-if="kpView === 'graph'">
+            <p v-if="graphError" class="kp__hint kp__hint--err">{{ graphError }}</p>
+            <MkLoading v-else-if="graphLoading" inline />
+            <p v-else-if="!graphNodes.length" class="kp__hint">这条路径还没有概念图数据——路径生成完成后会出现在这里。</p>
+            <MkGraph
+              v-else
+              :nodes="graphNodes"
+              :edges="graphEdges"
+              :theme="kpGraphTheme"
+              height="320px"
+              @select="kpSelected = $event"
+            />
+            <p v-if="graphMeta" class="kp__hint">
+              {{ graphMeta.nodeCount }} 个概念 · {{ graphMeta.edgeCount }} 条关系
+            </p>
+            <p v-if="kpSelected" class="kp__hint">
+              选中：{{ kpSelected.label }} ·
+              {{ kpSelected.masteryScore === null || kpSelected.masteryScore === undefined ? '未评估' : Math.round(kpSelected.masteryScore * 100) + '%' }}
+            </p>
+          </template>
+          <ol v-else class="kp__list">
             <li v-for="(kp, i) in knowledgePoints" :key="kp.id || i" class="kp__item" :class="kpCls(kp)">
               <span class="kp__mark">
                 <svg v-if="isMastered(kp)" viewBox="0 0 24 24" width="10" height="10"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
@@ -472,6 +507,10 @@ import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { unwrap } from './unwrap';
 import { nowTime, type ChatMsg } from './learningChat';
+import MkGraph from '@/components/mk/MkGraph.vue'
+import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
+import { learningAPI } from '@/api/learning'
 import { isMastered, kpCls, kpStatusText, useKnowledgePanel } from './learningKp';
 import { useOpeningSceneViews } from './learningScene';
 import { usePeerAssistant } from './usePeerAssistant';
@@ -1214,6 +1253,37 @@ const {
   masteredCount, inProgressCount, weightedProgressPct
 } = useKnowledgePanel(knowledgePoints)
 
+/* ---------- 知识点图谱（列表/图谱切换；图谱按需加载，只取当前路径） ---------- */
+const kpView = ref<'list' | 'graph'>('list')
+const graphNodes = ref<MkGraphNode[]>([])
+const graphEdges = ref<MkGraphEdge[]>([])
+const graphMeta = ref<{ nodeCount: number; edgeCount: number; totalConcepts: number; truncated: boolean } | null>(null)
+const graphLoading = ref(false)
+const graphError = ref('')
+const kpSelected = ref<MkGraphNode | null>(null)
+/** 跟随站点主题（v2 与 admin 共用 documentElement.dataset.theme） */
+const kpGraphTheme = computed<'light' | 'dark'>(() =>
+  typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
+)
+async function switchKpToGraph() {
+  kpView.value = 'graph'
+  if (graphNodes.value.length || graphLoading.value) return
+  graphLoading.value = true
+  graphError.value = ''
+  try {
+    const data = (await learningAPI.getConceptGraph(pathId.value ? { pathId: pathId.value } : undefined)) as {
+      nodes?: MkGraphNode[]; edges?: MkGraphEdge[]; meta?: typeof graphMeta.value
+    } | null
+    graphNodes.value = Array.isArray(data?.nodes) ? data!.nodes! : []
+    graphEdges.value = Array.isArray(data?.edges) ? data!.edges! : []
+    graphMeta.value = data?.meta ?? null
+  } catch (e) {
+    graphError.value = `图谱加载失败：${e instanceof Error ? e.message : String(e)}`
+  } finally {
+    graphLoading.value = false
+  }
+}
+
 /* ---------- 导航 ---------- */
 function goBack() {
   if (pathId.value) router.push(`/learning-path/${pathId.value}`);
@@ -1400,6 +1470,12 @@ onBeforeUnmount(() => {
 .kp__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .kp__bar { height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
 .kp__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
+/* 视图切换（列表/图谱）：轻量分段控件，走既有 token */
+.kp__views { display: inline-flex; gap: 2px; padding: 2px; border-radius: 99px; background: rgba(230, 237, 247, 0.6); align-self: flex-start; }
+.kp__view { border: 0; background: transparent; cursor: pointer; padding: 3px 10px; border-radius: 99px; font-size: 11.5px; font-weight: 700; color: var(--faint); }
+.kp__view--on { background: var(--surface-2, #fff); color: var(--blue-deep); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08); }
+.kp__hint { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--faint); }
+.kp__hint--err { color: var(--danger, #c0392b); }
 .kp__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .kp__item {
   display: grid; grid-template-columns: 20px 1fr; gap: 9px;

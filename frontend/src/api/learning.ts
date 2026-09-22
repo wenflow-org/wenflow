@@ -44,6 +44,16 @@ export interface LearningGoal {
   updatedAt: string;
 }
 
+export interface LearningPathMaterial {
+  title?: string | null;
+  sourceUrl?: string | null;
+  publisher?: string | null;
+  sourceTier?: string | null;
+  tldr?: string | null;
+  sections?: Array<{ id?: string | null; title?: string | null }>;
+  keyPoints?: Array<{ text?: string | null; cite?: string | null }>;
+}
+
 export interface LearningPath {
   id: string;
   userId: string;
@@ -61,6 +71,11 @@ export interface LearningPath {
   weeks: Week[];
   stages?: Stage[];
   milestones?: Stage[];
+  /**
+   * 该路径关联的资料（后端投影后的最小集合：用户附件在前、联网采集在后）。
+   * 用于让学习者看到"这条路径长在我上传的资料上"；无资料时为 null。
+   */
+  materials?: LearningPathMaterial[] | null;
   createdAt: string;
   updatedAt: string;
   generationStatus?: {
@@ -650,5 +665,11 @@ export const learningAPI = {
   async getAdaptiveGuidance(): Promise<AdaptiveGuidancePayload | null> {
     const response = await api.get('/adaptive-guidance/copy');
     return response.data || null;
+  },
+
+  /** 学习者自己的知识点图（画布用）：节点 = 自己的概念（带掌握度），边 = 前置/属于 */
+  async getConceptGraph(params?: { pathId?: string }) {
+    const response = await api.get('/learning/concept-graph', { params });
+    return (response as { data?: unknown } | null)?.data ?? null;
   }
 };

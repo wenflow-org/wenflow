@@ -18,6 +18,7 @@ import pathOrchestrator from '../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
 import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
 import { openSessionClearanceService } from '../services/learning/open-session-clearance.service';
+import { conceptGraphService } from '../services/learner/concept-graph.service';
 import { setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
 
 const router = express.Router();
@@ -531,6 +532,30 @@ const result = await pathOrchestrator.generate({
       });
     }
 
+    next(error);
+  }
+});
+
+/**
+ * GET /api/learning/concept-graph?pathId=
+ * 学习者自己的知识点图（画布用）：节点 = 自己的概念（带掌握度），边 = 前置/属于。
+ * **self-scoped**：只读 `req.user.userId` 的数据，不接 userId 参数（防越权）；
+ * 传 `pathId` 时节点与边都收敛到该路径（并校验路径归属）。
+ */
+router.get('/concept-graph', async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const pathId = typeof req.query.pathId === 'string' && req.query.pathId.trim() ? req.query.pathId.trim() : null;
+    if (pathId) {
+      const path = await findLearningPathById(pathId);
+      if (!path) return res.status(404).json({ success: false, error: { message: '路径不存在' } });
+      if (path.userId !== userId) {
+        return res.status(403).json({ success: false, error: { message: '无权访问此路径' } });
+      }
+    }
+    const view = await conceptGraphService.buildGraphView(userId, { pathId });
+    res.json({ success: true, data: view });
+  } catch (error) {
     next(error);
   }
 });
