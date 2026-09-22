@@ -41,7 +41,9 @@ export function createHttpApp({ lifecycle, readinessService }: HttpAppDeps): exp
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", process.env.AI_API_URL || ''],
+      // 安全审计批次6：AI_API_URL 是后端服务端调用的上游地址，浏览器从不直连——
+      // 写进 connect-src 既无作用又向浏览器侧泄漏上游端点，移除
+      connectSrc: ["'self'"],
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
       frameSrc: ["'none'"],

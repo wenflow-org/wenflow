@@ -43,12 +43,13 @@ async function tryRefresh(): Promise<boolean> {
 
 /**
  * 用户会话标记：token 已通过 HttpOnly Cookie 下发，JS 侧只记录"已登录"标记（非敏感）
- * 旧的 localStorage token 为历史遗留，读取处均做兼容
+ * （安全审计批次6：legacy localStorage token 读取已移除——全仓已无写入点，残留读取
+ *  会让迁移前的旧 token 继续以 Bearer 头发出，造成"已登录"误判）
  */
 export const USER_SESSION_KEY = 'wenflow_session';
 
 export const hasUserSession = (): boolean =>
-  localStorage.getItem(USER_SESSION_KEY) === '1' || !!localStorage.getItem('token');
+  localStorage.getItem(USER_SESSION_KEY) === '1';
 
 const redirectToLoginOnce = () => {
   if (!unauthorizedRedirect) {
@@ -68,12 +69,7 @@ const redirectToLoginOnce = () => {
 const AUTH_ENDPOINT_PATTERN = /^\/auth\/(login|register|verify)(\?|$)/;
 
 function injectAuthHeaders(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
-  const token = localStorage.getItem('token');
   const projectionToken = getProjectionToken();
-
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
 
   if (projectionToken) {
     config.headers['X-Projection-Token'] = projectionToken;

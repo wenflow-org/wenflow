@@ -22,14 +22,12 @@ export async function streamSsePost(
   payload: Record<string, unknown>,
   handlers: StreamSseHandlers
 ): Promise<void> {
-  const token = localStorage.getItem('token');
   const projectionToken = getProjectionToken();
   const idleTimeoutMs = handlers.idleTimeoutMs ?? 60_000;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json; charset=utf-8',
     Accept: 'text/event-stream'
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
   if (projectionToken) headers['X-Projection-Token'] = projectionToken;
 
   let response: Response;
