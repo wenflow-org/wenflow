@@ -40,6 +40,7 @@ async function api(method, urlPath, body, opts = {}) {
   const t0 = Date.now();
   const headers = { Cookie: await getCookie('user'), Origin: 'http://localhost:5173' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (opts.idem) headers['Idempotency-Key'] = opts.idem;
   const res = await fetch(BASE + urlPath, {
     method, headers, body: body !== undefined ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(opts.timeoutMs || 300000),
@@ -83,16 +84,17 @@ async function goal(text) {
     return;
   }
   if (!st.conversationId) {
-    const r = await api('POST', `${GC}/start`, { goal: text }, { action: 'goal-start', timeoutMs: 420000 });
+    const r = await api('POST', `${GC}/start`, { input: { text } }, { action: 'goal-start', timeoutMs: 420000 });
     if (r._failed) return;
-    const id = r?.data?.conversationId || r?.data?.id || r?.data?.conversation?.id;
+    const id = r?.data?.conversationId || r?.data?.id || r?.data?.conversation?.id || r?.data?.internal?.core?.conversationId;
     if (!id) { log('未取到 conversationId: ' + JSON.stringify(r.data).slice(0, 300)); return; }
     setRunState(RUN, { conversationId: id, startedAt: now(), phase: 'goal' });
     log('对话已开启: ' + id);
     console.log(JSON.stringify(r.data, null, 2).slice(0, 2500));
     return;
   }
-  const body = confirm ? { confirmProposal: true } : { message: text };
+  // API 要求确认时必须附带非空学习者发言(空文本 400:回复内容不能为空)
+  const body = confirm ? { input: { text: text || '好的,按这个方案来,开始吧。' }, confirmProposal: true } : { input: { text } };
   const r = await api('POST', `${GC}/${st.conversationId}/reply`, body, { action: confirm ? 'goal-confirm' : 'goal-reply', timeoutMs: 420000 });
   if (r._failed) return;
   console.log(JSON.stringify(r.data ?? r, null, 2).slice(0, 3000));
@@ -181,7 +183,10 @@ async function say(text) {
   const { classSessionId } = runState(RUN);
   if (!classSessionId) { log('课堂未开'); return; }
   if (!text) { log('用法: say "<发言>"'); return; }
-  const r = await api('POST', `${AT}/sessions/${classSessionId}/messages`, { content: text }, { action: 'say', timeoutMs: 420000 });
+  // 契约:{message, revision}(旧 {content} 报 400 缺少消息内容);revision 取自 detail 乐观锁
+  const d0 = await api('GET', `${AT}/sessions/${classSessionId}/detail`, undefined, { action: 'say-rev', pace: false });
+  if (d0._failed) return;
+  const r = await api('POST', `${AT}/sessions/${classSessionId}/messages`, { message: text, revision: d0.data?.revision }, { action: 'say', timeoutMs: 420000 });
   if (r._failed) return;
   console.log(JSON.stringify(r.data ?? r, null, 2).slice(0, 3000));
 }
@@ -200,9 +205,14 @@ async function end() {
   const { classSessionId } = runState(RUN);
   if (!classSessionId) { log('课堂未开'); return; }
   const action = arg('action', 'complete_task');
-  let r = await api('POST', `${AT}/sessions/${classSessionId}/end`, {}, { action: 'class-end', timeoutMs: 420000 });
+  // ISSUE-10 配方:end(带 revision)→ 重取 revision → finalize(rev' + Idempotency-Key)
+  const d0 = await api('GET', `${AT}/sessions/${classSessionId}/detail`, undefined, { action: 'end-rev', pace: false });
+  let r = await api('POST', `${AT}/sessions/${classSessionId}/end`, { revision: d0.data?.revision }, { action: 'class-end', timeoutMs: 420000 });
   if (r._failed) log('end 失败,仍尝试 finalize(幂等)');
-  r = await api('POST', `${AT}/sessions/${classSessionId}/finalize`, { action }, { action: 'finalize', timeoutMs: 420000 });
+  const d1 = await api('GET', `${AT}/sessions/${classSessionId}/detail`, undefined, { action: 'finalize-rev', pace: false });
+  r = await api('POST', `${AT}/sessions/${classSessionId}/finalize`,
+    { action, revision: d1.data?.revision },
+    { action: 'finalize', idem: `user-${classSessionId.slice(-8)}-${Date.now()}`, timeoutMs: 420000 });
   if (!r._failed) {
     setRunState(RUN, { classSessionId: null, phase: 'between-tasks', lessonsDone: (runState(RUN).lessonsDone || 0) + 1 });
     log(`已结算(action=${action})`);
@@ -224,5 +234,5 @@ const cmd = process.argv[2];
 const map = { goal, 'path-watch': pathWatch, tasks: tasksCmd, open, state, say, checkpoint, end, status };
 if (!map[cmd]) { console.error('未知命令:', cmd, '| 可用:', Object.keys(map).join(' ')); process.exit(1); }
 const posArg = process.argv[3] && !process.argv[3].startsWith('--') ? process.argv[3] : undefined;
-const arg0 = cmd === 'say' ? (posArg ?? arg('text')) : posArg;
+const arg0 = (cmd === 'say' || cmd === 'goal') ? (posArg ?? arg('text')) : posArg;
 map[cmd](arg0).catch(e => { console.error('FATAL', e); process.exit(1); });
