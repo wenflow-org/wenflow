@@ -15,6 +15,10 @@
         <span class="mk-entity__avatar mk-entity__avatar--round" :class="avatarClassOf(d.name)" aria-hidden="true">{{ d.name.slice(0, 1) }}</span>
         <div class="mk-entity__name-row">
           <h1 class="mk-entity__name mk-entity__name--lg">{{ d.name }}</h1>
+          <!-- 生命周期状态（无活动会话/运行中…）：身份信息，与名字同行；操作行只留可点按钮 -->
+          <span v-if="isLive" class="vp-life" :class="`vp-life--${lifeTone}`" :title="lifeHint">
+            <span class="vp-life__dot" aria-hidden="true"></span>{{ lifeLabel }}
+          </span>
           <span v-if="d.archetype" class="mk-badge mk-badge--info">{{ d.archetype }}</span>
           <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
           <span v-if="goalText" class="vp-top__goal" :title="'长期倾向：影响模拟行为与学习需求'">{{ goalText }}</span>
@@ -29,11 +33,7 @@
           </span>
         </div>
         <div v-if="isLive" class="mk-entity__actions">
-          <!-- 生命周期控制条（统一模型 vlab-controls：状态徽章 + 该状态合法操作；
-               操作/文案/确认全部来自单一来源，三层同语义） -->
-          <span class="vp-life" :class="`vp-life--${lifeTone}`" :title="lifeHint">
-            <span class="vp-life__dot" aria-hidden="true"></span>{{ lifeLabel }}
-          </span>
+          <!-- 生命周期合法操作（统一模型 vlab-controls：操作/文案/确认全部来自单一来源，三层同语义） -->
           <button
             v-for="c in lifeControls"
             :key="c.key"
@@ -727,7 +727,7 @@ export function buildMemoryRetentionChartOption(
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { statusText } from './statusText'
-import { subPage, closeSubPage, openSubPage, isLive } from './store'
+import { subPage, closeSubPage, openSubPage, setSubPageLabel, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import QuickLearnPanel from './QuickLearnPanel.vue'
@@ -1373,7 +1373,7 @@ async function loadDetail(id?: string, quiet = false) {
       name: String(p.name || raw.userName || id),
       archetype: String(p.occupation || p.archetype || '自定义样本'),
       story: String(p.background || raw.notes || '（未填写故事）'),
-      goal: String(raw.learningGoal || '未设置目标'),
+      goal: String(raw.learningGoal || ''),
       level: String(raw.knowledgeLevel || 'beginner'),
       notes: String(raw.notes || ''),
       traits: Object.entries(traitsRaw).slice(0, 5).map(([k, v]) => `${k}: ${String(v)}`),
@@ -1425,6 +1425,8 @@ async function loadDetail(id?: string, quiet = false) {
         }
       })()
     }
+    // 深链/刷新进入时 subPage 只有 id（label 缺失 → 面包屑退化成裸 ID），加载出名字后回填
+    setSubPageLabel(liveDetail.value.name)
   } catch {
     if (seq !== loadSeq) return
     const base = liveVirtuals.value.find((v) => v.id === id)
@@ -1441,6 +1443,7 @@ async function loadDetail(id?: string, quiet = false) {
         quality: { referee: null, fidelity: null },
         aiProfile: [{ label: '知识水平', value: base.level || '—' }]
       }
+      setSubPageLabel(base.name)
     } else {
       detailError.value = true
     }
