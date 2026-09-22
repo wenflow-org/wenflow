@@ -1,4 +1,9 @@
 import prisma from '../../config/database';
+import { logger } from '../../utils/logger';
+import { conceptRegistryService } from './concept-registry.service';
+// 注册表口径的归一化（比本文件的本地 normalizeConceptKey 更强：还去引号/冒号从句/尾部标点）。
+// 查别名表必须用它，否则会 miss——本文件那个本地版只做 trim+空白压缩。
+import { normalizeConceptKey as normalizeConceptKeyCanonical } from '../memory/concept-key';
 import type {
   LearnerBackgroundConceptLedgerItem,
   LearnerGlobalBackgroundKnowledge,
@@ -27,6 +32,8 @@ type ConceptSignal = {
   milestoneId?: string;
   seenAt?: string;
   label: string;
+  /** 概念身份（canonical）。痕迹来源直接带；其它来源在聚合后统一解析（只读，不创建）。 */
+  conceptId?: string;
 };
 
 function parseJsonSafe<T>(raw: string | null | undefined, fallback: T): T {
@@ -78,6 +85,31 @@ function signalFromProgress(progress: number, status: 'pending' | 'learning' | '
         : 'unknown';
 
   return { score, stability } as const;
+}
+
+
+/**
+ * 会话评估 → 记忆信号（2026-09-22 档位化修正）。
+ *
+ * LLM 现在只输出档位（low/mid/high），0-10 数值是**档位区间中点**（mid=6）。
+ * 继续用 `>= 6` 会把整个 mid 档（锚点定义："有明显吃力/疲劳但引导下仍能推进"）
+ * 误判成 fatigue/mastery/struggle —— 等于把"正常摩擦"升级成"异常信号"。
+ * 因此改为**按档位判定**（只有 high = 8-10 才进这些桶）；legacy 数值（无档位）仍走 >= 6。
+ * 判据来源：session-wrapup 的评分参考（三个阈值参数的唯一定义在 session-evaluation-scale）。
+ */
+function resolveEvaluationSignal(evaluation: {
+  sessionLf?: number | null;
+  sessionKtl?: number | null;
+  sessionLss?: number | null;
+  metricTiers?: { sessionLf?: string; sessionKtl?: string; sessionLss?: string } | null;
+}): 'fatigue' | 'mastery' | 'struggle' | 'incomplete' {
+  const tiers = evaluation?.metricTiers || null;
+  const isHigh = (tier: string | undefined, value: number | null | undefined): boolean =>
+    tier ? tier === 'high' : (typeof value === 'number' && Number.isFinite(value) && value >= 6);
+  if (isHigh(tiers?.sessionLf, evaluation?.sessionLf)) return 'fatigue';
+  if (isHigh(tiers?.sessionKtl, evaluation?.sessionKtl)) return 'mastery';
+  if (isHigh(tiers?.sessionLss, evaluation?.sessionLss)) return 'struggle';
+  return 'incomplete';
 }
 
 export class LearnerKnowledgeMemoryService {
@@ -300,32 +332,6 @@ export class LearnerKnowledgeMemoryService {
       });
     }
 
-    // 记忆引擎 M2 读侧并轨：memory_traces 痕迹注入概念信号（sourceType: memory-trace）
-    // 脆弱（stability=fragile）或低掌握（masteryScore<0.5）或高间隔因子（即将到期）→ review/fragile 信号
-    for (const trace of memoryTraces) {
-      const conceptKey = normalizeConceptKey(trace.conceptKey);
-      if (!conceptKey) continue;
-      const fragile = trace.stability === 'fragile'
-        || (trace.masteryScore ?? 0.5) < 0.5
-        || (trace.intervalFactor ?? 1) > 4;
-      const mastered = !fragile && (trace.stability === 'stable' || (trace.masteryScore ?? 0) >= 0.8);
-      const current = conceptSignals.get(conceptKey) || [];
-      current.push({
-        score: trace.masteryScore ?? 0.5,
-        status: mastered ? 'mastered' : fragile ? 'review' : 'learning',
-        stability: mastered ? 'stable' : fragile ? 'fragile' : 'developing',
-        sourceType: 'memory-trace',
-        taskId: undefined,
-        milestoneId: undefined,
-        // 时钟域：只用记忆引擎写入的业务 lastSeenAt（simulatedNowOr 落模拟日）。
-        // KT-only 痕迹（applyKtEstimate 创建）lastSeenAt=null 表示"从未提取/从未真正见过"，
-        // 不回退 updatedAt（真墙钟），否则会给已掌握概念注入未来时间戳。无 lastSeenAt = 不记时间。
-        seenAt: trace.lastSeenAt ? trace.lastSeenAt.toISOString() : undefined,
-        label: trace.label || trace.conceptKey,
-      });
-      conceptSignals.set(conceptKey, current);
-    }
-
       if (Array.isArray(summaryPayload?.knowledgeItems)) {
         for (const item of summaryPayload.knowledgeItems) {
           const conceptKey = normalizeConceptKey(item?.name);
@@ -365,11 +371,46 @@ export class LearnerKnowledgeMemoryService {
           taskId: session.taskId,
           sessionId: session.id,
           conceptKeys: knowledgeState.map((item) => item.name).filter(Boolean),
-          signal: evaluationPayload.sessionLf >= 6 ? 'fatigue' : evaluationPayload.sessionKtl >= 6 ? 'mastery' : evaluationPayload.sessionLss >= 6 ? 'struggle' : 'incomplete',
+          signal: resolveEvaluationSignal(evaluationPayload),
           score: typeof evaluationPayload.sessionKtl === 'number' ? clamp(evaluationPayload.sessionKtl / 10, 0, 1) : undefined,
           happenedAt,
         });
       }
+    }
+
+    // 记忆引擎 M2 读侧并轨：memory_traces 痕迹注入概念信号（sourceType: memory-trace）
+    // 脆弱（stability=fragile）或低掌握（masteryScore<0.5）或高间隔因子（即将到期）→ review/fragile 信号
+    //
+    // ⚠️ 位置修正（2026-09-23）：本循环此前被写在上面 `for (const session of sessions)` 的**循环体内**
+    // （brace 深度实测 337→409 均在会话循环里），导致两个后果：
+    //   ① **门控错误**：该路径没有教学会话时，用户级痕迹信号**完全不参与**概念状态
+    //      （痕迹是用户级、天然跨 path，不该被"这条路径有没有会话"门控）；
+    //   ② **重复注入**：N 个会话就把同一条痕迹推 N 次。
+    // 痕迹派生自 `memoryTraces`（与 session 无关），故移出到会话循环之后、与 tasks/sessions 平级。
+    for (const trace of memoryTraces) {
+      const conceptKey = normalizeConceptKey(trace.conceptKey);
+      if (!conceptKey) continue;
+      const fragile = trace.stability === 'fragile'
+        || (trace.masteryScore ?? 0.5) < 0.5
+        || (trace.intervalFactor ?? 1) > 4;
+      const mastered = !fragile && (trace.stability === 'stable' || (trace.masteryScore ?? 0) >= 0.8);
+      const current = conceptSignals.get(conceptKey) || [];
+      current.push({
+        score: trace.masteryScore ?? 0.5,
+        status: mastered ? 'mastered' : fragile ? 'review' : 'learning',
+        stability: mastered ? 'stable' : fragile ? 'fragile' : 'developing',
+        sourceType: 'memory-trace',
+        taskId: undefined,
+        milestoneId: undefined,
+        // 时钟域：只用记忆引擎写入的业务 lastSeenAt（simulatedNowOr 落模拟日）。
+        // KT-only 痕迹（applyKtEstimate 创建）lastSeenAt=null 表示"从未提取/从未真正见过"，
+        // 不回退 updatedAt（真墙钟），否则会给已掌握概念注入未来时间戳。无 lastSeenAt = 不记时间。
+        seenAt: trace.lastSeenAt ? trace.lastSeenAt.toISOString() : undefined,
+        label: trace.label || trace.conceptKey,
+        // 概念身份（canonical）：memory_traces 写入侧已双写，直接带过来
+        conceptId: trace.conceptId ?? undefined,
+      });
+      conceptSignals.set(conceptKey, current);
     }
 
     const conceptStates: LearnerConceptState[] = Array.from(conceptSignals.entries()).map(([conceptKey, signals]) => {
@@ -410,6 +451,8 @@ export class LearnerKnowledgeMemoryService {
       return {
         conceptKey,
         label: labels[0] || conceptKey,
+        // 概念身份（canonical）：优先取信号自带的（痕迹来源），缺失时由聚合后的统一解析补齐
+        conceptId: signals.map((signal) => signal.conceptId).find(Boolean),
         sourceType,
         masteryScore,
         stability,
@@ -419,6 +462,27 @@ export class LearnerKnowledgeMemoryService {
         lastSeenAt,
       };
     });
+
+    // 概念身份补齐（只读）：来源不含痕迹的信号（会话知识/摘要/任务标签）没有 conceptId，
+    // 用注册表按归一化键解析一次（`createIfMissing:false` —— **读侧绝不创建概念**）。
+    // 解析失败/未命中一律留 undefined，读侧各处「conceptId 优先，空则回落 conceptKey」。
+    const missingIdentity = conceptStates.filter((state) => !state.conceptId).map((state) => state.label || state.conceptKey);
+    if (missingIdentity.length > 0) {
+      try {
+        const resolved = await conceptRegistryService.resolveMany(input.userId, missingIdentity, { createIfMissing: false });
+        if (resolved.size > 0) {
+          for (const state of conceptStates) {
+            if (state.conceptId) continue;
+            state.conceptId = resolved.get(normalizeConceptKeyCanonical(state.label || state.conceptKey)) ?? undefined;
+          }
+        }
+      } catch (error) {
+        logger.warn('[learner-knowledge] 概念身份补齐失败（只读，best-effort）', {
+          userId: input.userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     const taskMastery: LearnerTaskMastery[] = allTasks.map(({ milestone, task }) => {
       const objectiveConcepts = parseLearningObjectives(task.learningObjectives);

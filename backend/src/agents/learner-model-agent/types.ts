@@ -84,6 +84,22 @@ export interface LearnerCurriculumControls {
   progressionStrategyNote: string;
 }
 
+/**
+ * goal 阶段目标对话产出的叙述性理解（原文留存）。
+ * `learningSignal` 是学习者在目标对话中流露的交付形式偏好，教学侧（TeachingContextBuilder）
+ * 与开场技能据此兑现可见承诺，因此必须随 profile 持久化——只进 narrativeInsights 会丢原文。
+ */
+export interface LearnerGoalNarratives {
+  realProblem?: string;
+  surfaceGoal?: string;
+  motivation?: string;
+  backgroundExperience?: string;
+  painPoints?: string[];
+  learningSignal?: unknown;
+  currentLevel?: string;
+  availableTime?: string;
+}
+
 export interface LearnerModelProfile {
   userId: string;
   lastUpdated: string;
@@ -96,6 +112,8 @@ export interface LearnerModelProfile {
   history: InteractionHistory;
   narrativeInsights: LearnerNarrativeInsights;
   curriculumControls: LearnerCurriculumControls;
+  /** 有目标对话数据时存在；无则为 undefined（读取侧需可选链） */
+  narratives?: LearnerGoalNarratives;
   
   derivedInsights: {
     learningVelocity: number;
@@ -153,6 +171,11 @@ export interface LearnerRecentEvidence {
 export interface LearnerConceptState {
   conceptKey: string;
   label: string;
+  /**
+   * 概念身份（canonical，concepts.id）。读侧一律「conceptId 优先，空则回落 conceptKey/label」。
+   * 痕迹来源直接带；其它来源经注册表只读解析补齐；解析不到为 undefined（不编造）。
+   */
+  conceptId?: string;
   sourceType: 'task-label' | 'session-knowledge' | 'derived' | 'memory-trace';
   masteryScore: number;
   stability: 'unknown' | 'fragile' | 'developing' | 'stable';
