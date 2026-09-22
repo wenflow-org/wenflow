@@ -101,7 +101,7 @@
 
       <span class="vp-toolbar__spacer" aria-hidden="true"></span>
 
-      <!-- 视图筛选：故事池生命周期过滤（轴 A；与一级页 chips 同语义） -->
+      <!-- 视图筛选：当前 tab 的过滤器（故事池生命周期 / 运行流水状态） -->
       <div v-if="activeTab === 'stories' && displayStories.length" class="vp-filters">
         <button
           v-for="opt in storyFilterOptions"
@@ -110,6 +110,18 @@
           class="mk-pill"
           :class="{ 'mk-pill--active': storyFilter === opt.key }"
           @click="storyFilter = opt.key"
+        >
+          {{ opt.label }} <span class="vp-filter-count">{{ opt.count }}</span>
+        </button>
+      </div>
+      <div v-else-if="activeTab === 'runs'" class="vp-filters">
+        <button
+          v-for="opt in runFilterOptions"
+          :key="opt.key"
+          type="button"
+          class="mk-pill"
+          :class="{ 'mk-pill--active': runsFilter === opt.key }"
+          @click="runsFilter = opt.key"
         >
           {{ opt.label }} <span class="vp-filter-count">{{ opt.count }}</span>
         </button>
@@ -481,45 +493,35 @@
 
         <section v-if="activeTab === 'runs'" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">全部运行</h3>
-            <span class="mk-badge mk-badge--muted">{{ allRuns.length }} 条</span>
+            <h3 class="mk-card__title">会话流水 · {{ allRuns.length }}</h3>
+            <span class="mk-card__meta">按时间倒序 · 与故事池互补：那里按故事看，这里按会话发生时间看</span>
           </div>
-          <div v-if="runsGrouped.length" class="vp-run-groups">
-            <div v-for="g in runsGrouped" :key="g.key" class="vp-run-group">
-              <div class="vp-run-group__head">
-                <strong>{{ g.title }}</strong>
-                <span class="vp-run-group__count">{{ g.runs.length }} 条</span>
-              </div>
-              <div class="vp-run-group__body">
-                <div v-for="(r, i) in g.runs" :key="r.sessionId || i" class="vp-run">
-                  <div class="vp-run__head">
-                    <strong>{{ formatRunStage(r.stage) }}</strong>
-                    <RunStateBadge :status="r.result" :hint="formatRunResult(r.result)" :pulse="false" />
-                    <RunStageBar
-                      :stage="r.stage"
-                      :status="r.result"
-                      :task-progress="null"
-                      :show-task-text="false"
-                    />
-                    <span class="vp-run__result" :class="`is-${r.tone}`">{{ formatRunResult(r.result) }}<template v-if="r.pathId"> · Path</template></span>
-                  </div>
-                  <div class="vp-run__sub">
-                    <span>{{ r.time }}</span>
-                    <template v-if="r.storyTitle && g.key !== '__orphan__' && g.title !== r.storyTitle"> · {{ r.storyTitle }}</template>
-                  </div>
-                  <div v-if="isLive && r.sessionId" class="vp-run__ops">
-                    <button type="button" class="mk-link" title="进入该会话的座舱：查看对话、推进/自动/暂停/终止等细粒度控制" @click="openSessionCockpit(r.sessionId)">打开座舱</button>
-                    <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" title="删除该会话（仅终态可删，不可恢复）" @click="removeSession(r.sessionId)">删除</button>
-                  </div>
+          <p v-if="!allRuns.length" class="vp-none">还没有运行记录</p>
+          <div v-else-if="!runRows.length" class="vp-none">
+            当前筛选无运行
+            <button type="button" class="mk-link" @click="runsFilter = ''">查看全部</button>
+          </div>
+          <div v-else class="vp-run-flow">
+            <div v-for="g in runDayGroups" :key="g.key" class="vp-run-day">
+              <div class="vp-run-day__label">{{ g.title }}</div>
+              <div v-for="(r, i) in g.runs" :key="r.sessionId || `${r.stage}-${r.time}-${i}`" class="vp-run-row">
+                <span class="vp-run-row__time mono">{{ runHm(r.createdAt) }}</span>
+                <span class="vp-run-row__story" :title="r.storyTitle || '未关联故事'">{{ r.storyTitle || '未关联故事' }}</span>
+                <RunStateBadge :status="r.result" :hint="`${formatRunResult(r.result)}${r.pathId ? ' · 关联学习路径' : ''}`" :pulse="false" />
+                <RunStageBar
+                  :stage="r.stage"
+                  :status="r.result"
+                  :task-progress="null"
+                  :show-task-text="false"
+                />
+                <div v-if="isLive && r.sessionId" class="vp-run-row__ops">
+                  <button type="button" class="mk-link" title="进入该会话的座舱：查看对话、推进/自动/暂停/终止等细粒度控制" @click="openSessionCockpit(r.sessionId)">打开座舱</button>
+                  <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" title="删除该会话（仅终态可删，不可恢复）" @click="removeSession(r.sessionId)">删除</button>
                 </div>
               </div>
             </div>
           </div>
-          <p v-else class="vp-none">还没有运行记录</p>
         </section>
-
-        
-
     </div>
 
     <QuickLearnPanel
@@ -782,6 +784,8 @@ import {
 
 interface RunItem {
   time: string
+  /** 原始创建时间 ISO（会话流水按日期分组用；time 是相对时间文案） */
+  createdAt?: string
   stage: string
   result: string
   tone: 'ok' | 'warn' | 'bad'
@@ -1406,6 +1410,7 @@ async function loadDetail(id?: string, quiet = false) {
         const pathId = sessionBindings.learningPathId ? String(sessionBindings.learningPathId) : s.learningPathId ? String(s.learningPathId) : null
         return {
           time: timeAgo(String(s.createdAt || s.startedAt || '')),
+          createdAt: String(s.createdAt || s.startedAt || ''),
           stage: String(s.currentStage || s.stage || s.phase || 'goal'),
           result: String(s.status || s.result || 'created'),
           tone: (s.status === 'error' || s.status === 'failed' || s.status === 'timeout'
@@ -1895,15 +1900,6 @@ watch(
   { immediate: true },
 )
 
-/* 单个故事的运行历史（运行 tab 分组用） */
-function runsForStory(story: StoryItem): RunItem[] {
-  const runs = d.value?.runs || []
-  const sid = story.id
-  if (!sid) return []
-  const matched = runs.filter((r) => r.storyId && r.storyId === sid)
-  return matched.length ? matched : runs.filter((r) => r.storyTitle === story.title)
-}
-
 function storyStatusLabel(s: StoryItem): string {
   if (selectedStoryId.value === (s.id || String(s.index ?? 0))) return '已选'
   if (s.status === 'ready') return '就绪'
@@ -1934,21 +1930,6 @@ function storyBudgetOf(s: StoryItem): Record<string, unknown> | null {
   return b && typeof b === 'object' ? b as Record<string, unknown> : null
 }
 
-function formatRunStage(stage: string) {
-  const s = String(stage || '').toLowerCase()
-  if (s === 'running' || s === 'created' || s === 'completed' || s === 'failed' || s === 'error' || s === 'timeout') {
-    // 容错：旧数据若 stage/result 仍反了，按状态词不当作阶段
-    return '会话'
-  }
-  // 与一级/三级页同口径：Goal / Path / Learn / Wrapup（VLAB_STAGE_LABELS）
-  if (s.includes('goal')) return 'Goal'
-  if (s.includes('path')) return 'Path'
-  if (s.includes('learn') || s.includes('teach')) return 'Learn'
-  if (s.includes('wrap')) return 'Wrapup'
-  if (s.includes('scenario') || s.includes('story')) return '故事'
-  return stage || '会话'
-}
-
 function formatRunResult(result: string) {
   const r = String(result || '').toLowerCase()
   // 非 running/created/… 的 goal* 值（如 goal_reached）单独给「Goal」
@@ -1971,22 +1952,72 @@ function storyRunState(s: StoryItem): string {
   return st || 'created'
 }
 
-/** 运行 tab：按故事分组的时间线（含「未关联故事」兜底组） */
-interface StoryRunGroup { key: string; title: string; runs: RunItem[] }
-const runsGrouped = computed<StoryRunGroup[]>(() => {
-  const all = d.value?.runs || []
-  const groups: StoryRunGroup[] = []
-  const knownStoryIds = new Set<string>()
-  for (const s of displayStories.value) {
-    if (s.id) knownStoryIds.add(s.id)
-    const runs = runsForStory(s)
-    if (runs.length) groups.push({ key: s.id || s.title, title: s.title, runs })
+/** 会话流水的日期分组（组内保持时间倒序） */
+interface RunDayGroup { key: string; title: string; runs: RunItem[] }
+/* —— 会话流水（运行 tab）：与故事池互补的两个轴
+   故事池 = 按故事看（教材库存视角，卡片自带各故事的最近会话）；
+   这里   = 按时间看（会话流水视角：全部会话按时间倒序、按日期分组），
+   两个 tab 因此不再是同一数据的重复展示。 */
+const RUN_FILTERS = [
+  { key: '', label: '全部' },
+  { key: 'active', label: '进行中' },
+  { key: 'done', label: '已完成' },
+  { key: 'failed', label: '失败' },
+] as const
+const runsFilter = ref('')
+function isRunActive(r: RunItem): boolean {
+  return r.result === 'running' || r.result === 'created'
+}
+const runFilterOptions = computed(() =>
+  RUN_FILTERS.map((f) => ({
+    key: f.key,
+    label: f.label,
+    count: f.key === ''
+      ? allRuns.value.length
+      : f.key === 'active'
+        ? allRuns.value.filter(isRunActive).length
+        : f.key === 'done'
+          ? allRuns.value.filter((r) => r.tone === 'ok' || r.result === 'completed').length
+          : allRuns.value.filter((r) => r.tone === 'bad').length,
+  }))
+)
+/** 时间倒序 + 筛选（与 runFilterOptions 同口径） */
+const runRows = computed<RunItem[]>(() => {
+  const rows = allRuns.value.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+  if (runsFilter.value === 'active') return rows.filter(isRunActive)
+  if (runsFilter.value === 'done') return rows.filter((r) => r.tone === 'ok' || r.result === 'completed')
+  if (runsFilter.value === 'failed') return rows.filter((r) => r.tone === 'bad')
+  return rows
+})
+/** 会话流水行内时刻 HH:mm（完整日期见日期分组头） */
+function runHm(iso?: string): string {
+  const d = iso ? new Date(iso) : null
+  if (!d || Number.isNaN(d.getTime())) return '--:--'
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())}`
+}
+function dayLabelOf(iso?: string): { key: string; label: string } {
+  const d = iso ? new Date(iso) : null
+  if (!d || Number.isNaN(d.getTime())) return { key: 'unknown', label: '时间未知' }
+  const p = (n: number) => String(n).padStart(2, '0')
+  const md = `${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  const now = new Date()
+  const today = `${p(now.getMonth() + 1)}-${p(now.getDate())}`
+  if (md === today) return { key: md, label: '今天' }
+  const yest = new Date(now)
+  yest.setDate(now.getDate() - 1)
+  if (md === `${p(yest.getMonth() + 1)}-${p(yest.getDate())}`) return { key: md, label: '昨天' }
+  return { key: md, label: `${d.getFullYear() === now.getFullYear() ? '' : `${d.getFullYear()}-`}${md}` }
+}
+/** 按日期分组（今天/昨天/日期；组内保持时间倒序） */
+const runDayGroups = computed<RunDayGroup[]>(() => {
+  const groups: RunDayGroup[] = []
+  for (const r of runRows.value) {
+    const { key, label } = dayLabelOf(r.createdAt)
+    const last = groups[groups.length - 1]
+    if (last && last.key === key) last.runs.push(r)
+    else groups.push({ key, title: label, runs: [r] })
   }
-  const orphanRuns = all.filter((r) =>
-    !(r.storyId && knownStoryIds.has(r.storyId))
-    && !(r.storyTitle && displayStories.value.some((s) => s.title === r.storyTitle))
-  )
-  if (orphanRuns.length) groups.push({ key: '__orphan__', title: '未关联故事', runs: orphanRuns })
   return groups
 })
 
@@ -2409,85 +2440,40 @@ async function quietReload(id: string) {
 .vp-quality--bad { color: var(--mk-red); background: var(--mk-red-bg); }
 .vp-quality--none { color: var(--mk-faint); background: var(--mk-surface-2); }
 
-/* 运行 tab：按故事分组 */
-.vp-run-groups { display: grid; gap: 10px; padding: 12px; }
-.vp-run-group {
-  border: 1px solid #eef1f6;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #fff;
+/* 运行 tab：会话流水（按时间倒序 + 日期分组；轴与故事池互补） */
+.vp-run-flow { display: grid; gap: 14px; padding: 12px; }
+.vp-run-day { display: grid; gap: 6px; }
+.vp-run-day__label {
+  font-size: var(--mk-fs-11);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--mk-faint);
+  padding: 2px 2px 0;
 }
-.vp-run-group__head {
-  display: flex;
+.vp-run-row {
+  display: grid;
+  grid-template-columns: 52px minmax(96px, 0.9fr) auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
-  padding: 8px 12px;
-  background: var(--mk-surface-2);
-  border-bottom: 1px solid #eef1f6;
+  padding: 8px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  background: var(--mk-surface);
+  transition: border-color 0.12s ease;
 }
-.vp-run-group__head strong {
+.vp-run-row:hover { border-color: rgba(44, 99, 208, 0.35); }
+.vp-run-row__time { font-size: var(--mk-fs-12); color: var(--mk-faint); white-space: nowrap; }
+.vp-run-row__story {
   font-size: var(--mk-fs-12_5);
-  font-weight: 700;
+  font-weight: 600;
+  color: var(--mk-ink);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.vp-run-group__count {
-  font-size: var(--mk-fs-11);
-  font-weight: 700;
-  color: var(--mk-faint);
-  flex-shrink: 0;
-}
-.vp-run-group__body { display: grid; }
-
-
-/* 运行记录：三行卡片（阶段+结果 / 时间 / 操作） */
-.vp-run {
-  display: grid;
-  gap: 3px;
-  padding: 9px 12px;
-  border: 1px solid #e8edf4;
-  border-radius: 10px;
-  background: #fff;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
-.vp-run:hover { border-color: rgba(44, 99, 208, 0.35); background: #fbfdff; }
-.vp-run__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-}
-.vp-run__head strong { font-size: var(--mk-fs-13); font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vp-run__result {
-  font-size: var(--mk-fs-12);
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.vp-run__result.is-ok { color: var(--mk-green, #16a34a); }
-.vp-run__result.is-warn { color: var(--mk-amber, #b7791f); }
-.vp-run__result.is-bad { color: var(--mk-red, var(--mk-red)); }
-.vp-run__sub {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--mk-fs-12);
-  color: var(--mk-faint);
-  min-width: 0;
-}
-.vp-run__sub span { white-space: nowrap; }
-.vp-run__ops {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 2px;
-}
-.vp-run__ops .mk-link { font-size: var(--mk-fs-12); }
+.vp-run-row__ops { display: flex; align-items: center; gap: 12px; }
+.vp-run-row__ops .mk-link { font-size: var(--mk-fs-12); }
 
 
 .vp-fallback {
@@ -2523,9 +2509,6 @@ async function quietReload(id: string) {
   .vp-story__outline { font-size: 13.5px; }
   .vp-story__stats-item { font-size: var(--mk-fs-13); }
   .vp-story__latest { font-size: var(--mk-fs-13); }
-  .vp-run__head strong { font-size: var(--mk-fs-15); }
-  .vp-run__result, .vp-run__sub { font-size: var(--mk-fs-13); }
-  .vp-run-group__head strong { font-size: var(--mk-fs-14); }
   .vp-none { font-size: var(--mk-fs-15); }
   .vp-tab__count { font-size: var(--mk-fs-13); margin-left: 4px; }
   .vp-fallback { font-size: 14.5px; padding: 12px 16px; }
@@ -2536,8 +2519,8 @@ async function quietReload(id: string) {
   .mk-card__foot { padding: 12px 21px; }
   .vp-stories { gap: 8px; padding: 14px; }
   .vp-story__row { padding: 10px 16px; }
-  .vp-run { padding: 11px 14px; }
-  .vp-run-groups { padding: 14px; }
+  .vp-run-row { padding: 11px 14px; }
+  .vp-run-flow { padding: 14px; }
   .vp-none { padding: 21px; }
 }
 @media (min-width: 2800px) {
@@ -2552,9 +2535,6 @@ async function quietReload(id: string) {
   .vp-story__outline { font-size: var(--mk-fs-16); }
   .vp-story__stats-item { font-size: 15.5px; }
   .vp-story__latest { font-size: 15.5px; }
-  .vp-run__head strong { font-size: 17.5px; }
-  .vp-run__result, .vp-run__sub { font-size: 15.5px; }
-  .vp-run-group__head strong { font-size: 16.5px; }
   .vp-none { font-size: 17.5px; }
   .vp-tab__count { font-size: 15.5px; margin-left: 5px; }
   .vp-fallback { font-size: 17px; padding: 14px 19px; }
@@ -2565,8 +2545,7 @@ async function quietReload(id: string) {
   .mk-card__foot { padding: 14px 24px; }
   .vp-stories { gap: 10px; padding: 16px; }
   .vp-story__row { padding: 12px 20px; }
-  .vp-run { padding: 13px 16px; }
-  .vp-run-groups { padding: 16px; }
+  .vp-run-row { padding: 13px 16px; }
   .vp-none { padding: 24px; }
 }
 @media (min-width: 3600px) {
@@ -2581,9 +2560,6 @@ async function quietReload(id: string) {
   .vp-story__outline { font-size: 19px; }
   .vp-story__stats-item { font-size: 18.5px; }
   .vp-story__latest { font-size: var(--mk-fs-18); }
-  .vp-run__head strong { font-size: 20.5px; }
-  .vp-run__result, .vp-run__sub { font-size: var(--mk-fs-18); }
-  .vp-run-group__head strong { font-size: 19.5px; }
   .vp-none { font-size: 20.5px; }
   .vp-tab__count { font-size: var(--mk-fs-18); margin-left: 6px; }
   .vp-fallback { font-size: var(--mk-fs-20); padding: 16px 22px; }
@@ -2594,8 +2570,7 @@ async function quietReload(id: string) {
   .mk-card__foot { padding: 16px 28px; }
   .vp-stories { gap: 12px; padding: 19px; }
   .vp-story__row { padding: 15px 24px; }
-  .vp-run { padding: 15px 19px; }
-  .vp-run-groups { padding: 19px; }
+  .vp-run-row { padding: 15px 19px; }
   .vp-none { padding: 28px; }
 }
 
@@ -2777,10 +2752,6 @@ html[data-theme='dark'] {
   .vp-trait { background: #2d2d2f; color: #afb1b6; }
   .vp-goal { background: #19191a; border-color: #2a2b2d; }
   .vp-story__budget-badge { background: #232325; color: #afb1b6; }
-  .vp-run-group { background: #19191a; border-color: #2a2b2d; }
-  .vp-run-group__head { background: #202122; }
-  .vp-run { background: #19191a; border-color: #2a2b2d; }
-  .vp-run:hover { background: #252627; }
   .vp-memory__stat { background: #19191a; border-color: #2a2b2d; }
   .vp-tag--warn { background: rgba(251, 191, 36, 0.12); color: #fcd34d; }
   .vp-pk { background: #19191a; border-color: #2a2b2d; }
