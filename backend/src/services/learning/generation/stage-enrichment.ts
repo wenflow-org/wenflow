@@ -13,7 +13,7 @@ import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
-import { kcMapperDefinition } from '../../../skills/kc-mapper';
+import { mapAndPersistKcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import {
   assertGenerationRunFence,
@@ -278,71 +278,28 @@ export async function enrichLearningPathWithAnderson(
       await Promise.all(batchIndexes.map(processStageDesign));
     }
 
-    // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图
-    let kcAnnotation: any = null;
-    try {
-      const parsedTemplate = parsePathPromptTemplate(learningPath.aiPromptTemplate || null);
-      const kcResult = await executeSkill(kcMapperDefinition, {
-        cognitiveCore: (parsedTemplate as any)?.cognitiveCore || (parsedTemplate as any)?.cognitiveDesign || null,
-        milestones: learningPath.milestones.map((m) => ({
-          stageNumber: m.stageNumber,
-          title: m.title,
-          coreConcept: m.coreConceptName || m.coreConceptId,
-          description: m.description,
-          goal: m.goal,
-        })),
-        subtasks: stageDesignOutputs.flatMap((s) => s.subtasks.map((t: any) => ({
-          title: t.title,
-          type: t.type,
-          linkedConcept: t.linkedConcept,
-          knowledgeType: t.knowledgeType,
-          cognitiveLevel: t.cognitiveLevel,
-        }))),
-        prerequisiteTree: ((parsedTemplate as any)?.cognitiveCore || (parsedTemplate as any)?.cognitiveDesign)?.prerequisiteTree || null,
-      });
-      if (kcResult?.success && kcResult?.output) {
-        kcAnnotation = kcResult.output;
-        logger.info('[kc-mapper] KC 映射完成', {
-          userId: data.userId,
-          pathId,
-          kcCount: kcAnnotation?.conceptKcs?.length || 0,
-        });
-      }
-    } catch (kcError) {
-      logger.warn('[kc-mapper] 映射失败（best-effort，不阻断路径生成）', {
-        userId: data.userId,
-        pathId,
-        error: kcError instanceof Error ? kcError.message : String(kcError),
-      });
-    }
-
-    // KC 映射持久化（kc-mapper 下游激活 3a）：写回 aiPromptTemplate，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费
-    if (kcAnnotation) {
-      try {
-        const currentPath = await prisma.learning_paths.findUnique({
-          where: { id: pathId },
-          select: { aiPromptTemplate: true },
-        });
-        const currentTemplate = parsePathPromptTemplate(currentPath?.aiPromptTemplate || null);
-        await prisma.learning_paths.update({
-          where: { id: pathId },
-          data: {
-            aiPromptTemplate: JSON.stringify({ ...currentTemplate, kcAnnotation }),
-            updatedAt: new Date(),
-          },
-        });
-        logger.info('[kc-mapper] KC 映射已持久化到 aiPromptTemplate', {
-          pathId,
-          kcCount: kcAnnotation?.conceptKcs?.length || 0,
-          taskKcLinkCount: kcAnnotation?.taskKcLinks?.length || 0,
-        });
-      } catch (persistError) {
-        logger.warn('[kc-mapper] KC 映射持久化失败（best-effort，不阻断路径生成）', {
-          pathId,
-          error: persistError instanceof Error ? persistError.message : String(persistError),
-        });
-      }
-    }
+    // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
+    // 写回 aiPromptTemplate.kcAnnotation，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费。
+    // 契约收口在 kc-annotation 模块（executeSkillWithResult；2026-09-22 判空错配事故修复见该文件头注）。
+    const kcAnnotation = await mapAndPersistKcAnnotation({
+      pathId,
+      userId: data.userId,
+      template: parsePathPromptTemplate(learningPath.aiPromptTemplate || null),
+      milestones: learningPath.milestones.map((m) => ({
+        stageNumber: m.stageNumber,
+        title: m.title,
+        coreConcept: m.coreConceptName || m.coreConceptId,
+        description: m.description,
+        goal: m.goal,
+      })),
+      subtasks: stageDesignOutputs.flatMap((s) => s.subtasks.map((t: any) => ({
+        title: t.title,
+        type: t.type,
+        linkedConcept: t.linkedConcept,
+        knowledgeType: t.knowledgeType,
+        cognitiveLevel: t.cognitiveLevel,
+      }))),
+    });
 
     await withTransaction(async (tx) => {
       // 事务可能因瞬时冲突整体重试：计数必须随每次尝试重置，避免重复累加
