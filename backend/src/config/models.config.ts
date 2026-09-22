@@ -77,6 +77,12 @@ export interface ModelDefinition {
  *
  * DB 覆盖来源：`platform_api_configs.chatModels / reasoningModels / lightModels`
  * （此前是只回显的死字段，现作为别名映射的动态来源）。见 doc/MODEL_GATEWAY_DESIGN.md §4.2。
+ *
+ * ⚠️ 网关实况（2026-09-22 实测）：网关对 `deepseek-v4-flash` 的请求实际由 **deepseek-v4.1**
+ * 部署服务（响应体 model 字段为 deepseek-v4.1-flash）；而字面 id `deepseek-v4.1-flash`
+ * 在当前订阅下**无配额**（"subscription quota insufficient"），不可直接配置。因此这里
+ * 继续用 `deepseek-v4-flash` 指代线上部署，不要在拿到 v4.1 字面配额前改配置——
+ * v4.1 部署自身的输出质量波动（长 prompt 不合 JSON 契约）只能等网关侧或提示词侧解决。
  */
 export const MODEL_ALIASES: Record<string, string[]> = {
   chat: ['deepseek-v4-flash', 'agnes-3.0-flash'],
