@@ -771,7 +771,9 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
   }
   .mshell__side { padding: 18px 14px 14px; gap: 18px; }
   .mshell__logo-full { height: 72px; }
-  .mshell__group-name { font-size: var(--mk-fs-12_5); padding: 0 12px 7px; }
+  /* 组名只放字号，不加 padding：组头是 flex 行，padding-bottom 会撑高名字盒子，
+     居中后文字墨迹与组图标错行（宽屏下「图标和文字不在一行上」的根因） */
+  .mshell__group-name { font-size: var(--mk-fs-12_5); }
   .mshell__item { font-size: 14.5px; padding: 11px 12px; gap: 8px; }
   .mshell__item-badge { font-size: var(--mk-fs-12_5); padding: 2px 9px; }
   .mshell__foot { font-size: var(--mk-fs-13); padding: 10px 12px; }
@@ -784,7 +786,7 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
   }
   .mshell__side { padding: 22px 18px 16px; gap: 22px; }
   .mshell__logo-full { height: 72px; }
-  .mshell__group-name { font-size: var(--mk-fs-15); padding: 0 14px 8px; }
+  .mshell__group-name { font-size: var(--mk-fs-15); }
   .mshell__item { font-size: 17px; padding: 14px 14px; gap: 10px; border-radius: 10px; }
   .mshell__item-badge { font-size: var(--mk-fs-14); padding: 3px 10px; }
   .mshell__foot { font-size: var(--mk-fs-15); padding: 12px 14px; }
@@ -802,7 +804,7 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
   }
   .mshell__side { padding: 26px 22px 18px; gap: 26px; }
   .mshell__logo-full { height: 88px; }
-  .mshell__group-name { font-size: 17.5px; padding: 0 16px 9px; }
+  .mshell__group-name { font-size: 17.5px; }
   .mshell__item { font-size: var(--mk-fs-20); padding: 16px 16px; gap: 12px; }
   .mshell__item-badge { font-size: 16.5px; padding: 4px 12px; }
   .mshell__foot { font-size: 17.5px; padding: 14px 16px; }
