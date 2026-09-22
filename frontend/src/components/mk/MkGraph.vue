@@ -67,6 +67,13 @@ const el = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
 let ro: ResizeObserver | null = null
 
+/**
+ * 容器宽度（视觉验证实测）：学习页知识点面板只有 ~320px 宽，默认参数会让标签溢出面板、
+ * 图例压在图区上。故按宽度自适应（窄栏收紧字号/标签截断/斥力，并隐藏图例）。
+ */
+const width = ref(0)
+const isNarrow = computed(() => width.value > 0 && width.value < 420)
+
 /** 只保留有边相连的节点（若全无连接则原样保留，避免空图） */
 const visibleNodes = computed<MkGraphNode[]>(() => {
   if (!props.hideIsolated) return props.nodes
@@ -110,6 +117,7 @@ function buildOption(): EChartsCoreOption {
   // 但全都不显示又只剩点。故密集图只给"值得标注"的节点显示标签：
   // ① 连接度最高的若干（结构枢纽）② 薄弱/脆弱节点（诊断最关心）。其余靠悬停。
   const denseGraph = nodes.length > 18
+  const narrow = isNarrow.value
   const labelWorthy = new Set<string>()
   if (!denseGraph) {
     for (const node of nodes) labelWorthy.add(node.id)
@@ -142,7 +150,7 @@ function buildOption(): EChartsCoreOption {
         ].join('<br/>')
       }
     },
-    legend: relationKeys.length
+    legend: relationKeys.length && !narrow
       ? [{ data: relationKeys.map((k) => RELATION_LABEL[k] ?? k), bottom: 0, textStyle: { color: textColor } }]
       : undefined,
     series: [
@@ -151,15 +159,20 @@ function buildOption(): EChartsCoreOption {
         layout: 'force',
         roam: true,
         draggable: true,
+        // 布局盒留边：窄栏不留图例位（图例已隐藏），宽栏底部留 24px 给图例
+        top: 8,
+        bottom: narrow ? 8 : 26,
+        left: 8,
+        right: 8,
         // 缩放/平移范围：给密集图留出"拉开来读"的余地
         scaleLimit: { min: 0.3, max: 4 },
         label: {
           show: false,
           color: textColor,
-          fontSize: 11,
+          fontSize: narrow ? 10 : 11,
           formatter: '{b}',
           overflow: 'truncate',
-          width: 120
+          width: narrow ? 64 : 120
         },
         labelLayout: { hideOverlap: true },
         emphasis: { focus: 'adjacency', label: { show: true, fontWeight: 'bold' } },
@@ -167,16 +180,17 @@ function buildOption(): EChartsCoreOption {
         lineStyle: { curveness: 0.08 },
         categories: relationKeys.map((k) => ({ name: RELATION_LABEL[k] ?? k })),
         force: {
-          // 斥力随节点数缓增，别把图推出画布（实测 420 会让节点大量溢出）
-          repulsion: denseGraph ? 300 : 220,
-          edgeLength: denseGraph ? [80, 170] : [70, 150],
-          gravity: 0.08,
+          // 斥力随节点数缓增，别把图推出画布（实测 420 会让节点大量溢出）；
+          // 窄栏再收紧一档，否则节点会散到面板外。
+          repulsion: narrow ? 150 : (denseGraph ? 300 : 220),
+          edgeLength: narrow ? [45, 100] : (denseGraph ? [80, 170] : [70, 150]),
+          gravity: narrow ? 0.12 : 0.08,
           layoutAnimation: true
         },
         data: nodes.map((node) => ({
           id: node.id,
           name: node.label,
-          symbolSize: Math.min(46, 16 + (degree.get(node.id) ?? 0) * 4),
+          symbolSize: Math.min(narrow ? 34 : 46, (narrow ? 12 : 16) + (degree.get(node.id) ?? 0) * 4),
           itemStyle: { color: colorOf(node, dark), borderColor: dark ? '#2a2c30' : '#ffffff', borderWidth: 1 },
           // 层级：coreConcept 用圆、KC 用圆角方块，一眼区分粒度
           symbol: node.level === 'concept' ? 'circle' : 'roundRect',
@@ -209,12 +223,17 @@ function render() {
 }
 
 onMounted(() => {
+  width.value = el.value?.clientWidth ?? 0
   render()
-  ro = new ResizeObserver(() => chart?.resize())
+  ro = new ResizeObserver(() => {
+    width.value = el.value?.clientWidth ?? 0
+    chart?.resize()
+    render()
+  })
   if (el.value) ro.observe(el.value)
 })
 
-watch(() => [props.nodes, props.edges, props.theme, props.hideIsolated], () => render(), { deep: true })
+watch(() => [props.nodes, props.edges, props.theme, props.hideIsolated, isNarrow.value], () => render(), { deep: true })
 
 onBeforeUnmount(() => {
   ro?.disconnect()
