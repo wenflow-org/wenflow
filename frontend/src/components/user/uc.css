@@ -478,7 +478,7 @@ table.uc-table {
   border-radius: var(--mk-radius-sm);
 }
 [data-theme='dark'] .uc-skeleton {
-  background: linear-gradient(90deg, #1d2739 25%, #253049 50%, #1d2739 75%);
+  background: linear-gradient(90deg, #232325 25%, #2d2d2f 50%, #232325 75%);
 }
 
 @keyframes uc-shimmer {

@@ -2049,8 +2049,8 @@ onBeforeUnmount(() => {
 }
 [data-theme='dark'] .clear-sessions__head p { color: var(--mk-muted); }
 [data-theme='dark'] .clear-sessions__item {
-  background: #141c2b;
-  border-color: #27344d;
+  background: #19191a;
+  border-color: #2f3032;
 }
 [data-theme='dark'] .clear-sessions__item-main strong { color: var(--mk-ink); }
 
@@ -2107,14 +2107,14 @@ onBeforeUnmount(() => {
 }
 [data-theme='dark'] .adjust-scope__label { color: var(--mk-muted); }
 [data-theme='dark'] .adjust-scope__opt {
-  background: #141c2b;
-  border-color: #27344d;
+  background: #19191a;
+  border-color: #2f3032;
 }
 [data-theme='dark'] .adjust-scope__opt strong { color: var(--mk-ink); }
-[data-theme='dark'] .adjust-scope__opt small { color: #7c8aa3; }
+[data-theme='dark'] .adjust-scope__opt small { color: #8a8d93; }
 [data-theme='dark'] .adjust-scope__select {
-  background: #141c2b;
-  border-color: #33405c;
+  background: #19191a;
+  border-color: #393a3c;
   color: var(--mk-ink);
 }
 /* AI 诊断建议卡（auto 场景） */
@@ -2220,7 +2220,7 @@ onBeforeUnmount(() => {
   background: var(--mk-surface);
   border-color: var(--mk-line);
 }
-[data-theme='dark'] .adjust-mode:hover { border-color: #4d8bf8; background: #1d2a3d; }
+[data-theme='dark'] .adjust-mode:hover { border-color: #4d8bf8; background: #232325; }
 [data-theme='dark'] .adjust-mode__body strong { color: var(--mk-ink); }
 [data-theme='dark'] .adjust-mode__body small { color: var(--mk-muted); }
 [data-theme='dark'] .adjust-dialog__desc { color: var(--mk-muted); }

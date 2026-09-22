@@ -158,13 +158,13 @@ html, body {
   background: rgba(255, 255, 255, 0.06);
 }
 [data-theme='dark'] .v2nav__menu {
-  background: var(--surface, #182230);
-  border-color: var(--line, #2a3648);
+  background: var(--surface, #1e1e20);
+  border-color: var(--line, #2d2d2f);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
 }
 [data-theme='dark'] .v2nav__menu a,
 [data-theme='dark'] .v2nav__menu button {
-  color: var(--ink, #e6edf7);
+  color: var(--ink, #efeff0);
 }
 [data-theme='dark'] .v2nav__menu a:hover,
 [data-theme='dark'] .v2nav__menu button:hover {
@@ -172,13 +172,13 @@ html, body {
 }
 [data-theme='dark'] .v2nav__menu-danger {
   color: #f28588 !important;
-  border-top-color: var(--line, #2a3648) !important;
+  border-top-color: var(--line, #2d2d2f) !important;
 }
 
 /* 底部移动导航暗色适配 */
 [data-theme='dark'] .v2nav__tabs {
   background: rgba(15, 22, 32, 0.92);
-  border-top-color: var(--line, #2a3648);
+  border-top-color: var(--line, #2d2d2f);
 }
 
 /* ================= 暗色模式：V2GoalConversation 覆写 ================= */
@@ -276,8 +276,8 @@ html, body {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);
 }
 [data-theme='dark'] .msg__code {
-  background: #0d1520;
-  color: #c8daf0;
+  background: #111212;
+  color: #dadbdd;
 }
 [data-theme='dark'] .stage-card {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 16px 40px rgba(0, 0, 0, 0.3);

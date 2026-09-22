@@ -719,22 +719,22 @@ onBeforeUnmount(() => {
 .nc__retry:hover { background: color-mix(in srgb, var(--blue) 14%, transparent); }
 
 /* ================= 暗色模式 ================= */
-[data-theme='dark'] .nc__bell { color: var(--muted, #9aa8bf); }
+[data-theme='dark'] .nc__bell { color: var(--muted, #aaacb1); }
 [data-theme='dark'] .nc__bell:hover { background: rgba(77, 139, 248, 0.12); color: var(--blue-deep, #4d8bf8); }
 [data-theme='dark'] .nc__bell--open { background: rgba(77, 139, 248, 0.16); color: var(--blue-deep, #4d8bf8); }
 [data-theme='dark'] .nc__bell--busy { color: var(--blue, #4d8bf8); }
 [data-theme='dark'] .nc__panel {
-  background: var(--surface, #182230);
-  border-color: var(--line, #2a3648);
+  background: var(--surface, #1e1e20);
+  border-color: var(--line, #2d2d2f);
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2);
 }
-[data-theme='dark'] .nc__item:hover { background: color-mix(in srgb, var(--ink, #e6edf7) 5%, transparent); }
+[data-theme='dark'] .nc__item:hover { background: color-mix(in srgb, var(--ink, #efeff0) 5%, transparent); }
 [data-theme='dark'] .nc__item--unread { background: color-mix(in srgb, var(--blue, #4d8bf8) 8%, transparent); }
 [data-theme='dark'] .nc__task--running { background: color-mix(in srgb, var(--blue, #4d8bf8) 10%, transparent); }
-[data-theme='dark'] .nc__task:hover { background: color-mix(in srgb, var(--ink, #e6edf7) 6%, transparent); }
+[data-theme='dark'] .nc__task:hover { background: color-mix(in srgb, var(--ink, #efeff0) 6%, transparent); }
 [data-theme='dark'] .nc__more:hover, [data-theme='dark'] .nc__readall:hover { background: rgba(77, 139, 248, 0.14); }
 [data-theme='dark'] .nc__retry { color: var(--blue-deep, #4d8bf8); background: rgba(77, 139, 248, 0.12); border-color: rgba(77, 139, 248, 0.4); }
-[data-theme='dark'] .nc__tab { color: var(--muted, #9aa8bf); }
+[data-theme='dark'] .nc__tab { color: var(--muted, #aaacb1); }
 [data-theme='dark'] .nc__tab:hover, [data-theme='dark'] .nc__tab--on { color: var(--blue-deep, #4d8bf8); }
-[data-theme='dark'] .nc__dot { box-shadow: 0 0 0 2px var(--surface, #182230); }
+[data-theme='dark'] .nc__dot { box-shadow: 0 0 0 2px var(--surface, #1e1e20); }
 </style>

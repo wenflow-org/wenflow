@@ -2047,7 +2047,7 @@ a.btn-primary { text-decoration: none; }
 
 /* ---------- 暗色模式覆写 ---------- */
 [data-theme='dark'] .day__cell--h0,
-[data-theme='dark'] .mday--h0 { background: rgba(230, 237, 247, 0.1); color: var(--ink, #e6edf7); }
+[data-theme='dark'] .mday--h0 { background: rgba(230, 237, 247, 0.1); color: var(--ink, #efeff0); }
 [data-theme='dark'] .day__cell--h1,
 [data-theme='dark'] .mday--h1 { background: rgba(77, 139, 248, 0.22); color: var(--blue-deep, #6fa3ff); }
 [data-theme='dark'] .day__cell--h2,

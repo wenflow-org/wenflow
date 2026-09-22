@@ -327,10 +327,10 @@ onUnmounted(() => {
     --surface: var(--mk-surface);
     --surface-soft: rgba(24, 34, 48, 0.72);
     --surface-tint: rgba(26, 37, 53, 0.85);
-    --surface-strong: #1a2535;
-    --wash: #1d2a3c;
-    --wash-deep: #16202e;
-    --track: #232f40;
+    --surface-strong: #202122;
+    --wash: #232325;
+    --wash-deep: #1b1c1d;
+    --track: #28282a;
     --float: rgba(10, 15, 23, 0.45);
     --shade: rgba(0, 0, 0, 0.38);
     --card-blend: rgba(24, 34, 48, 0.85);

@@ -89,17 +89,17 @@
 /* 暗色模式：容器/文字/幽灵按钮随主题翻转（--canvas 亮色在 .v2-page 或 v2.css :root 定义；
    html[data-theme='dark'] 时由 v2.css 覆写为 #0f1620，此处仅兜底无 v2 上下文时的直设） */
 [data-theme='dark'] .not-found-page {
-  background: #0f1620;
+  background: #141415;
 }
 [data-theme='dark'] .not-found-title {
-  color: #e6edf7;
+  color: #efeff0;
 }
 [data-theme='dark'] .not-found-desc {
-  color: #9aa8bf;
+  color: #aaacb1;
 }
 [data-theme='dark'] .nf-btn--ghost {
   border-color: rgba(230, 237, 247, 0.16);
-  color: #c9d6ea;
+  color: #d7d8da;
   background: rgba(24, 34, 48, 0.7);
 }
 </style>
