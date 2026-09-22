@@ -20,6 +20,7 @@ import { executeSkillWithResult } from '../../../skills';
 import type { SkillDefinition } from '../../../skills/protocol';
 import { kcMapperDefinition } from '../../../skills/kc-mapper';
 import { parsePathPromptTemplate } from '../learning.helpers';
+import { conceptGraphService, type MaterializeResult } from '../../learner/concept-graph.service';
 
 export interface KcAnnotationMilestone {
   stageNumber: number;
@@ -77,6 +78,10 @@ export interface KcAnnotationParams {
   callSkill?: (definition: unknown, input: unknown) => Promise<KcSkillResult>;
   /** 测试注入：落库回调（默认读-合并-写回 aiPromptTemplate） */
   persist?: (pathId: string, kcAnnotation: KcAnnotation) => Promise<void>;
+  /** 测试注入：概念图物化（默认 conceptGraphService.materializePathGraph） */
+  materialize?: (params: {
+    userId: string; pathId: string; kcAnnotation: KcAnnotation; cognitiveCore: KcCognitiveCoreLike | null;
+  }) => Promise<MaterializeResult>;
 }
 
 /** 默认落库：读当前模板为基底、只覆盖 kcAnnotation，避免并发写互相覆盖 */
@@ -99,7 +104,7 @@ async function persistKcAnnotationToPath(pathId: string, kcAnnotation: KcAnnotat
  * 执行 KC 映射并持久化。返回落库的标注（失败/无输出返回 null，调用方无需判空分支）。
  */
 export async function mapAndPersistKcAnnotation(params: KcAnnotationParams): Promise<KcAnnotation | null> {
-  const { pathId, userId, template, milestones, subtasks, callSkill, persist } = params;
+  const { pathId, userId, template, milestones, subtasks, callSkill, persist, materialize } = params;
   const cognitiveCore: KcCognitiveCoreLike | null = template?.cognitiveCore || template?.cognitiveDesign || null;
 
   let kcAnnotation: KcAnnotation | null = null;
@@ -155,6 +160,23 @@ export async function mapAndPersistKcAnnotation(params: KcAnnotationParams): Pro
       kcCount: kcAnnotation?.conceptKcs?.length || 0,
       taskKcLinkCount: kcAnnotation?.taskKcLinks?.length || 0,
     });
+
+    // 概念图物化（L2）：把 kcGraph.edges（前置）与 conceptKcs 嵌套（part_of）搬进 concept_edges。
+    // 独立 try：图物化失败不得影响已成功的 JSON 落库（best-effort，与整体语义一致）。
+    if (userId) {
+      try {
+        const runMaterialize = materialize ?? ((p) => conceptGraphService.materializePathGraph(p));
+        const graph = await runMaterialize({ userId, pathId, kcAnnotation, cognitiveCore });
+        logger.info('[kc-mapper] 概念图已物化到 concept_edges', { pathId, ...graph });
+      } catch (graphError) {
+        logger.warn('[kc-mapper] 概念图物化失败（best-effort，不阻断路径生成）', {
+          pathId,
+          error: graphError instanceof Error ? graphError.message : String(graphError),
+        });
+      }
+    } else {
+      logger.warn('[kc-mapper] 缺 userId，跳过概念图物化', { pathId });
+    }
   } catch (persistError) {
     logger.warn('[kc-mapper] KC 映射持久化失败（best-effort，不阻断路径生成）', {
       userId,

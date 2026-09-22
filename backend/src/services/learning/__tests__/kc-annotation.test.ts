@@ -66,6 +66,29 @@ describe('mapAndPersistKcAnnotation（契约事故回归）', () => {
     expect(ann).toBe(goodOutput);
   });
 
+  it('有 userId 时落库后调用概念图物化（L2 接线），并把标注与 cognitiveCore 透传', async () => {
+    withResultMock().mockResolvedValue({ success: true, output: goodOutput, quality: 'model' });
+    const persist = jest.fn();
+    const materialize = jest.fn().mockResolvedValue({ prerequisite: 1, partOf: 1, skipped: 0 });
+
+    await mapAndPersistKcAnnotation({ pathId: 'lp_1', userId: 'u_1', template, milestones, subtasks, persist, materialize });
+
+    expect(materialize).toHaveBeenCalledTimes(1);
+    expect(materialize.mock.calls[0][0]).toMatchObject({ userId: 'u_1', pathId: 'lp_1', kcAnnotation: goodOutput });
+    expect(materialize.mock.calls[0][0].cognitiveCore).toBe(template.cognitiveCore);
+  });
+
+  it('物化抛错不影响已成功的 JSON 落库（best-effort）', async () => {
+    withResultMock().mockResolvedValue({ success: true, output: goodOutput, quality: 'model' });
+    const persist = jest.fn();
+    const materialize = jest.fn().mockRejectedValue(new Error('edge upsert failed'));
+
+    const ann = await mapAndPersistKcAnnotation({ pathId: 'lp_1', userId: 'u_1', template, milestones, subtasks, persist, materialize });
+
+    expect(persist).toHaveBeenCalledWith('lp_1', goodOutput);
+    expect(ann).toBe(goodOutput);
+  });
+
   it('success:false 不落库、返回 null、不抛错', async () => {
     withResultMock().mockResolvedValue({ success: false, quality: 'failed' });
     const persist = jest.fn();
