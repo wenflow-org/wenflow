@@ -30,7 +30,7 @@
             :title="qualityTitle"
           >{{ qualityReferee ? `质量 ${qualityReferee}` : '质量 —' }}<template v-if="qualityFidelity"> · 保真 {{ qualityFidelity }}</template><span class="vp-quality__time">{{ qualityTime }}</span></span>
         </div>
-        <!-- 头部只留身份信息（状态 + 属性 pill）；全部操作收进下方统一操作台，见 vp-toolbar -->
+        <!-- 头部只留身份信息（状态 + 属性 pill）；tab 级操作在下方操作台，账号级操作在 tabs 行右端 ⋯ -->
       </div>
     </header>
 
@@ -41,24 +41,54 @@
     </div>
 
 
-    <!-- 分页：故事池是主工作区，画像/运行/验收各归其页（数量即 tab 角标，不再单设 KPI 行） -->
-    <div class="mk-pills vp-tabs">
-      <button
-        v-for="t in tabs"
-        :key="t.key"
-        type="button"
-        class="mk-pill"
-        :class="{ 'mk-pill--active': activeTab === t.key }"
-        @click="activeTab = t.key"
-      >
-        {{ t.label }}
-        <span v-if="t.count !== undefined" class="vp-tab__count">{{ t.count }}</span>
-      </button>
+    <!-- 分页：故事池是主工作区，画像/运行/验收各归其页（数量即 tab 角标，不再单设 KPI 行）；
+         ⋯ 账号级低频操作常驻 tabs 行右端——每个 tab 都能到达，不依赖操作台是否存在 -->
+    <div class="vp-tabsrow">
+      <div class="mk-pills vp-tabs">
+        <button
+          v-for="t in tabs"
+          :key="t.key"
+          type="button"
+          class="mk-pill"
+          :class="{ 'mk-pill--active': activeTab === t.key }"
+          @click="activeTab = t.key"
+        >
+          {{ t.label }}
+          <span v-if="t.count !== undefined" class="vp-tab__count">{{ t.count }}</span>
+        </button>
+      </div>
+      <div v-if="isLive" class="mk-menu vp-tabsrow__ops">
+        <button
+          type="button"
+          class="mk-menu__btn"
+          aria-label="更多操作"
+          aria-haspopup="menu"
+          :aria-expanded="openMenu === 'ops'"
+          title="更多操作：座舱 / 生命周期 / 账号自动学习 / 编辑画像"
+          @click.stop="toggleMenu('ops')"
+        >⋯</button>
+        <div v-if="openMenu === 'ops'" class="mk-menu__pop" :style="popStyle" @click.stop>
+          <button
+            v-for="c in lifeControls"
+            :key="c.key"
+            type="button"
+            class="mk-menu__item"
+            :class="{ 'mk-menu__item--danger': c.tone === 'danger' }"
+            :disabled="sessionBusy"
+            :title="c.hint"
+            @click="runLifeAction(c); closeMenu()"
+          >{{ c.label }}</button>
+          <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
+          <button type="button" class="mk-menu__item" title="账号自动学习：批量自动运行该虚拟人的全部故事/课程（独立于单个故事运行）" @click="closeMenu(); quickLearnOpen = true">账号自动学习</button>
+          <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
+        </div>
+      </div>
     </div>
 
-    <!-- 统一操作台：按钮不再散落（头部/卡头/卡片三处），按三类固定槽位集中
-         左「主动作」每个 tab 一个高频动作 | 中「视图筛选」当前 tab 的过滤器 | 右「⋯ 管理」账号级低频 -->
-    <div v-if="isLive" class="vp-toolbar">
+    <!-- 统一操作台：按钮不再散落（头部/卡头/卡片三处），按两类固定槽位集中
+         左「主动作」每个 tab 一个高频动作 | 右「视图筛选」当前 tab 的过滤器；
+         账号级低频操作在 tabs 行右端 ⋯。整行仅在有内容时渲染，无内容的 tab 不占位 -->
+    <div v-if="isLive && hasToolbar" class="vp-toolbar">
       <template v-if="activeTab === 'stories'">
         <button
           type="button"
@@ -125,34 +155,6 @@
         >
           {{ opt.label }} <span class="vp-filter-count">{{ opt.count }}</span>
         </button>
-      </div>
-
-      <!-- 账号级低频操作集中入口 -->
-      <div class="mk-menu">
-        <button
-          type="button"
-          class="mk-menu__btn"
-          aria-label="更多操作"
-          aria-haspopup="menu"
-          :aria-expanded="openMenu === 'ops'"
-          title="更多操作：座舱 / 生命周期 / 账号自动学习 / 编辑画像"
-          @click.stop="toggleMenu('ops')"
-        >⋯</button>
-        <div v-if="openMenu === 'ops'" class="mk-menu__pop" :style="popStyle" @click.stop>
-          <button
-            v-for="c in lifeControls"
-            :key="c.key"
-            type="button"
-            class="mk-menu__item"
-            :class="{ 'mk-menu__item--danger': c.tone === 'danger' }"
-            :disabled="sessionBusy"
-            :title="c.hint"
-            @click="runLifeAction(c); closeMenu()"
-          >{{ c.label }}</button>
-          <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
-          <button type="button" class="mk-menu__item" title="账号自动学习：批量自动运行该虚拟人的全部故事/课程（独立于单个故事运行）" @click="closeMenu(); quickLearnOpen = true">账号自动学习</button>
-          <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
-        </div>
       </div>
     </div>
 
@@ -1861,6 +1863,13 @@ const tabs = computed(() => {
   ]
   return list
 })
+/** 操作台是否有内容：主动作（stories 生成故事 / memory 刷新）或视图筛选（stories 状态 / runs 流水）
+    存在的 tab 才渲染整行；日程/画像等无操作 tab 不出现空行（账号级 ⋯ 在 tabs 行右端常驻） */
+const hasToolbar = computed(() =>
+  activeTab.value === 'stories'
+  || activeTab.value === 'memory'
+  || (activeTab.value === 'runs' && allRuns.value.length > 0)
+)
 const levelLabel = computed(() => ({
   beginner: '零基础',
   elementary: '入门',
@@ -2153,8 +2162,10 @@ async function quietReload(id: string) {
 }
 /* 工作流指引 */
 
-/* 分页：统一 mk-pills 分段控件 */
+/* 分页：统一 mk-pills 分段控件。tabs 行右端常驻账号级 ⋯ 操作（见 .vp-tabsrow__ops） */
 .vp-tabs { width: fit-content; }
+.vp-tabsrow { display: flex; align-items: center; gap: 12px; }
+.vp-tabsrow__ops { margin-left: auto; }
 /* 空态文案基类：原先只有 ≥2000px 的字号/内边距覆写、缺基础规则，导致故事池与
    运行记录的空文案没有颜色与内边距（审计 附 A #6）。与 .ld-none / .ud-none 同规格。 */
 .vp-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-12_5); }
@@ -2224,7 +2235,7 @@ async function quietReload(id: string) {
 }
 /* .mk-card__foot 基础规则与暗色已提升为全局（见 shared.css）；此处仅保留本页的宽屏内边距档位 */
 
-/* ===== 统一操作台（tabs 下一行；主动作 | 视图筛选 | ⋯ 管理 三段固定槽位） ===== */
+/* ===== 统一操作台（tabs 下一行；主动作 | 视图筛选 两段固定槽位；账号级 ⋯ 在 tabs 行右端） ===== */
 .vp-toolbar {
   display: flex;
   align-items: center;
