@@ -91,6 +91,7 @@ class LruCache {
       if (oldest !== undefined) this.map.delete(oldest);
     }
   }
+  delete(key: string): void { this.map.delete(key); }
   clear(): void { this.map.clear(); }
   get size(): number { return this.map.size; }
 }
@@ -189,6 +190,19 @@ export class ConceptRegistryService {
       where: { id: conceptId },
       include: { aliases: { select: { aliasNorm: true, aliasRaw: true, source: true } } },
     });
+  }
+
+  /**
+   * 撤销若干别名（归并回滚用）：删 alias 行并清缓存。
+   * 只删别名，**不动任何业务表行**——调用方负责把被改指的 conceptId 还原。
+   * 概念行本身保留（可能仍有其它别名指向它）。
+   */
+  async removeAliases(userId: string, aliasRaws: readonly string[]): Promise<{ removed: number }> {
+    const norms = aliasRaws.map((raw) => normalizeConceptKey(raw)).filter(Boolean);
+    if (!userId || norms.length === 0) return { removed: 0 };
+    const result = await prisma.concept_aliases.deleteMany({ where: { userId, aliasNorm: { in: norms } } });
+    for (const norm of norms) this.cache.delete(`${userId}\u0000${norm}`);
+    return { removed: result.count };
   }
 
   // ── 内部 ──────────────────────────────────────────────────────────────

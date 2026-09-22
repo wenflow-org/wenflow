@@ -44,6 +44,7 @@ const consolidate = jest.fn()
 const applyProposals = jest.fn()
 const rollbackMerge = jest.fn()
 const listAppliedMerges = jest.fn()
+const listAppliedAliasMerges = jest.fn()
 jest.mock('../../../services/learner/ConceptConsolidatorService', () => ({
   CONSOLIDATION_AUDIT_PROJECTION_SCOPE: 'concept-consolidation',
   MERGE_RECORD_EVIDENCE_TYPE: 'concept:merge:applied',
@@ -57,6 +58,7 @@ jest.mock('../../../services/learner/ConceptConsolidatorService', () => ({
     applyProposals: (...args: any[]) => applyProposals(...args),
     rollbackMerge: (...args: any[]) => rollbackMerge(...args),
     listAppliedMerges: (...args: any[]) => listAppliedMerges(...args),
+    listAppliedAliasMerges: (...args: any[]) => listAppliedAliasMerges(...args),
   },
 }))
 
@@ -114,6 +116,7 @@ beforeEach(() => {
   evidenceFindMany.mockResolvedValue([])
   projectionsFindMany.mockResolvedValue([])
   listAppliedMerges.mockResolvedValue([])
+  listAppliedAliasMerges.mockResolvedValue([])
 })
 
 describe('权限', () => {
@@ -220,6 +223,10 @@ describe('单用户明细', () => {
       mergeRecord({ mergeId: 'mrg_live', canonical: '已滚出窗口但仍可回滚' }),
       mergeRecord({ mergeId: 'mrg_done', canonical: '已经回滚过的', rolledBackAt: '2026-09-16T00:00:00Z' }),
     ])
+    // alias 式归并（S3 非破坏）：凭据独立留档，视图与破坏性归并分开暴露
+    listAppliedAliasMerges.mockResolvedValue([
+      { aliasMergeId: 'alg_1', canonical: '走之前把书翻开', aliases: ['离开前翻页立好'], appliedAt: '2026-09-17T00:00:00Z', touchedRows: [{ table: 'memory_traces', id: 'r1', previousConceptId: null }] },
+    ])
 
     const res = await run(getRouteHandler(memoryReviewRouter, '/:userId', 'get'), { ...adminReq, params: { userId: 'u1' } })
     const view = res.body.data.appliedMerges
@@ -229,6 +236,13 @@ describe('单用户明细', () => {
     expect(view.rollbackable[0].deletedRows).toBe(1)
     expect(view.rolledBack.map((m: any) => m.canonical)).toEqual(['已经回滚过的'])
     expect(view.legacyWindowOnly.map((m: any) => m.canonical)).toEqual(['窗口内的旧归并'])
+
+    // alias 式归并（S3 非破坏）：凭据独立留档、独立视图暴露（UI 才能回滚），不混进破坏性归并视图
+    const aliasView = res.body.data.appliedAliasMerges
+    expect(listAppliedAliasMerges).toHaveBeenCalledWith('u1', { includeRolledBack: true })
+    expect(aliasView.rollbackable.map((m: any) => m.canonical)).toEqual(['走之前把书翻开'])
+    expect(aliasView.rollbackable[0].repointedRows).toBe(1)
+    expect(view.rollbackable.map((m: any) => m.canonical)).not.toContain('走之前把书翻开')
   })
 
   it('用户不存在 → 404', async () => {

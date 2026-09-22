@@ -31,6 +31,7 @@ import {
   CONSOLIDATION_AUDIT_PROJECTION_SCOPE,
   MERGE_RECORD_EVIDENCE_TYPE,
   parseMergeRecord,
+  type AppliedConceptAliasMerge,
   type AppliedConceptMerge,
   type ConceptConsolidationAudit,
 } from '../../services/learner/ConceptConsolidatorService';
@@ -233,6 +234,27 @@ router.get('/:userId', async (req, res) => {
         .map(toMergeView),
     };
 
+    // alias 式归并（S3 非破坏策略）：凭据独立留档，回滚语义不同（还原 conceptId + 删别名，不重建行）
+    const aliasCredentials = await conceptConsolidatorService
+      .listAppliedAliasMerges(userId, { includeRolledBack: true })
+      .catch(() => [] as AppliedConceptAliasMerge[]);
+    const toAliasView = (merge: AppliedConceptAliasMerge) => ({
+      aliasMergeId: merge.aliasMergeId ?? null,
+      canonical: merge.canonical,
+      aliases: merge.aliases,
+      appliedAt: merge.appliedAt,
+      rolledBackAt: merge.rolledBackAt ?? null,
+      repointedRows: merge.touchedRows.length,
+    });
+    const aliasCredentialIds = new Set(aliasCredentials.map((item) => item.aliasMergeId));
+    const appliedAliasMerges = {
+      rollbackable: aliasCredentials.filter((item) => !item.rolledBackAt).map(toAliasView),
+      rolledBack: aliasCredentials.filter((item) => item.rolledBackAt).map(toAliasView),
+      legacyWindowOnly: (audit?.appliedAliasMerges ?? [])
+        .filter((item) => !item.aliasMergeId || !aliasCredentialIds.has(item.aliasMergeId))
+        .map(toAliasView),
+    };
+
     const now = new Date();
     const dueTraces = traces
       .filter((trace) => trace.dueAt && trace.dueAt <= now && trace.extractionCount > 0)
@@ -289,6 +311,7 @@ router.get('/:userId', async (req, res) => {
         duplicatedFamilies,
         audit,
         appliedMerges,
+        appliedAliasMerges,
       },
     });
   } catch (error: any) {

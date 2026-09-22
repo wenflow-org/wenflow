@@ -233,6 +233,11 @@ describe('ConceptConsolidatorService', () => {
       createTraces: jest.fn().mockResolvedValue({}),
       writeAudit: jest.fn().mockResolvedValue({}),
       recordMerge: jest.fn().mockResolvedValue({}),
+      // alias 策略（S3）用到的写入点
+      registerAlias: jest.fn().mockResolvedValue({ conceptId: 'cpt_canonical', registered: true }),
+      updateTraceMany: jest.fn().mockResolvedValue({ count: 0 }),
+      updateMisconceptionMany: jest.fn().mockResolvedValue({ count: 0 }),
+      recordAliasMerge: jest.fn().mockResolvedValue({}),
     };
     const deps: ConceptConsolidatorDeps = {
       findTraces: jest.fn().mockResolvedValue(projectionRows),
@@ -245,6 +250,14 @@ describe('ConceptConsolidatorService', () => {
       writeAudit: writes.writeAudit,
       recordMerge: writes.recordMerge,
       findMerges: jest.fn().mockResolvedValue([]),
+      // alias 策略（S3）依赖
+      resolveConcept: jest.fn().mockResolvedValue({ conceptId: 'cpt_canonical' }),
+      registerAlias: writes.registerAlias,
+      updateTraceMany: writes.updateTraceMany,
+      findMisconceptionRows: jest.fn().mockResolvedValue([]),
+      updateMisconceptionMany: writes.updateMisconceptionMany,
+      recordAliasMerge: writes.recordAliasMerge,
+      findAliasMerges: jest.fn().mockResolvedValue([]),
       callSkill: jest.fn().mockResolvedValue({
         success: true,
         output: {
@@ -265,6 +278,110 @@ describe('ConceptConsolidatorService', () => {
     (built.deps.readAudit as jest.Mock).mockResolvedValue({ payload: JSON.stringify(audit) });
     return { ...built, audit: audit! };
   }
+
+  describe('alias 策略（S3 升格：非破坏归并）', () => {
+    // 夹具要点：两个候选在**机械归一化后仍是不同键**（真近义），否则 alias 模式无可归并——
+    // 冒号从句变体（'X：解释'）会被 normalizeConceptKey 剥成 'X'，与 canonical 同键，属"已同身份"。
+    const ALIAS_CANONICAL = '离开前翻页立好';
+    const ALIAS_NEAR = '走之前把书翻开并停在该页';
+    const aliasProjection = [
+      { id: 'r1', conceptKey: ALIAS_CANONICAL, label: ALIAS_CANONICAL, source: 'derived', extractionCount: 7, masteryScore: 0.6, lastSeenAt: new Date('2026-09-10'), dueAt: new Date('2026-09-16'), ktMasteryEma: 0.5, fsrsStability: 3, fsrsDifficulty: 5 },
+      { id: 'r2', conceptKey: ALIAS_NEAR, label: null, source: 'derived', extractionCount: 2, masteryScore: 0.5, lastSeenAt: new Date('2026-09-12'), dueAt: new Date('2026-09-14'), ktMasteryEma: 0.7, fsrsStability: null, fsrsDifficulty: null },
+    ];
+
+    function buildAliasCase(over: Partial<ConceptConsolidatorDeps> = {}) {
+      return build({
+        findTraces: jest.fn().mockImplementation((args: any) => {
+          // 带 conceptKey in 过滤 = "待回填行"查询；否则是投影查询
+          if (args?.where?.conceptKey) return Promise.resolve([{ id: 'r-alias', conceptId: 'cpt_alias_own' }]);
+          return Promise.resolve(aliasProjection);
+        }),
+        callSkill: jest.fn().mockResolvedValue({
+          success: true,
+          output: {
+            merges: [{ canonical: ALIAS_CANONICAL, aliases: [ALIAS_NEAR], confidence: 0.92, rationale: '同一动作的两种说法' }],
+            ambiguous: [],
+            dropCandidates: [],
+          },
+        }),
+        ...over,
+      });
+    }
+
+    async function applyAlias(service: ConceptConsolidatorService) {
+      await service.consolidate('u1', { force: true, now: new Date('2026-09-15T00:00:00Z') });
+      return service.consolidate('u1', {
+        mode: 'apply', force: true, includeNeedsReview: true, now: new Date('2026-09-15T02:00:00Z'),
+      });
+    }
+
+    it('apply 默认走 alias：登记别名 + 改指 conceptId，且**不删任何行**', async () => {
+      const { service, writes } = buildAliasCase();
+      const audit = await applyAlias(service);
+
+      expect(audit?.appliedAliasMerges?.length).toBe(1);
+      const applied = audit!.appliedAliasMerges![0];
+      expect(applied.canonical).toBe(ALIAS_CANONICAL);
+      expect(applied.aliases).toEqual([ALIAS_NEAR]);
+      expect(applied.touchedRows).toEqual([
+        { table: 'memory_traces', id: 'r-alias', previousConceptId: 'cpt_alias_own' },
+      ]);
+      expect(writes.registerAlias).toHaveBeenCalledWith(expect.objectContaining({ aliasRaw: ALIAS_NEAR }));
+      expect(writes.updateTraceMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', id: { in: ['r-alias'] } },
+        data: { conceptId: 'cpt_canonical' },
+      });
+      // 非破坏：不删行、不改 conceptKey
+      expect(writes.deleteTraces).not.toHaveBeenCalled();
+      expect(writes.updateTrace).not.toHaveBeenCalled();
+    });
+
+    it('凭据落档失败 → 当场撤销（还原 conceptId + 删别名），不留"改了却没凭据"的状态', async () => {
+      const { service, writes } = buildAliasCase({
+        recordAliasMerge: jest.fn().mockRejectedValue(new Error('evidence write failed')),
+      });
+      const audit = await applyAlias(service);
+
+      expect(audit?.appliedAliasMerges?.length ?? 0).toBe(0);
+      expect(writes.updateTraceMany).toHaveBeenCalledWith({
+        where: { id: { in: ['r-alias'] } },
+        data: { conceptId: 'cpt_alias_own' },
+      });
+    });
+
+    it('回滚：还原 conceptId + 删别名，且凭据标记 rolledBackAt（幂等）', async () => {
+      const { service, deps, writes } = buildAliasCase();
+      const applied = await applyAlias(service);
+      const merge = applied!.appliedAliasMerges![0];
+      (deps.findAliasMerges as jest.Mock).mockResolvedValue([{ payload: JSON.stringify(merge) }]);
+      (deps.readAudit as jest.Mock).mockResolvedValue({ payload: JSON.stringify(applied) });
+
+      const rolled = await service.rollbackMerge('u1', [ALIAS_CANONICAL]);
+      expect(rolled.rolledBack).toBe(1);
+      expect(writes.updateTraceMany).toHaveBeenCalledWith({
+        where: { id: { in: ['r-alias'] } },
+        data: { conceptId: 'cpt_alias_own' },
+      });
+      expect(writes.recordAliasMerge).toHaveBeenCalledWith(expect.objectContaining({
+        update: expect.objectContaining({ payload: expect.stringContaining('rolledBackAt') }),
+      }));
+    });
+
+    it('影响行数超上限 → 整条不执行（保住"凡执行必可完全回滚"）', async () => {
+      const manyRows = Array.from({ length: 501 }, (_, i) => ({ id: `r${i}`, conceptId: null }));
+      const { service, writes } = buildAliasCase({
+        findTraces: jest.fn().mockImplementation((args: any) => {
+          if (args?.where?.conceptKey) return Promise.resolve(manyRows);
+          return Promise.resolve(aliasProjection);
+        }),
+      });
+      const audit = await applyAlias(service);
+
+      expect(audit?.appliedAliasMerges?.length ?? 0).toBe(0);
+      expect(writes.registerAlias).not.toHaveBeenCalled();
+      expect(writes.updateTraceMany).not.toHaveBeenCalled();
+    });
+  });
 
   it('默认 observe：记录审计但不改 memory_traces', async () => {
     const { service, writes } = build();
@@ -295,7 +412,7 @@ describe('ConceptConsolidatorService', () => {
 
   it('apply 模式：并字段 + 留整行快照（可回滚）', async () => {
     const { service, writes } = build();
-    const audit = await service.consolidate('u1', { mode: 'apply', now: new Date('2026-09-15T00:00:00Z') });
+    const audit = await service.consolidate('u1', { mode: 'apply', strategy: 'merge', now: new Date('2026-09-15T00:00:00Z') });
     expect(audit?.stats).toMatchObject({ applied: 1, deleted: 1 });
     expect(writes.deleteTraces).toHaveBeenCalledWith({ where: { id: { in: ['r2'] } } });
     // 并字段：被删那条更早的 dueAt 与更高的 ktMasteryEma 都要并进胜出者
@@ -312,7 +429,7 @@ describe('ConceptConsolidatorService', () => {
 
   it('applyProposals：只执行勾选的，未勾选/不存在的不动', async () => {
     const { service, writes } = await buildWithAudit();
-    const result = await service.applyProposals('u1', ['离开前翻页立好', '不存在的键']);
+    const result = await service.applyProposals('u1', ['离开前翻页立好', '不存在的键'], { strategy: 'merge' });
     expect(result.applied).toBe(1);
     expect(result.skipped).toContain('不存在的键');
     expect(writes.deleteTraces).toHaveBeenCalledTimes(1);
@@ -341,18 +458,18 @@ describe('ConceptConsolidatorService', () => {
         },
       }),
     });
-    const denied = await service.applyProposals('u1', ['回来后的第一眼第一手交给已翻开的书']);
+    const denied = await service.applyProposals('u1', ['回来后的第一眼第一手交给已翻开的书'], { strategy: 'merge' });
     expect(denied.applied).toBe(0);
     expect(denied.skipped).toContain('回来后的第一眼第一手交给已翻开的书');
     expect(writes.deleteTraces).not.toHaveBeenCalled();
 
-    const forced = await service.applyProposals('u1', ['回来后的第一眼第一手交给已翻开的书'], { includeNeedsReview: true });
+    const forced = await service.applyProposals('u1', ['回来后的第一眼第一手交给已翻开的书'], { includeNeedsReview: true, strategy: 'merge' });
     expect(forced.applied).toBe(1);
   });
 
   it('rollbackMerge：胜出者还原 + 被删行按整行快照重建', async () => {
     const { service, writes } = await buildWithAudit();
-    const applied = await service.applyProposals('u1', ['离开前翻页立好']);
+    const applied = await service.applyProposals('u1', ['离开前翻页立好'], { strategy: 'merge' });
     expect(applied.applied).toBe(1);
     (writes.updateTrace as jest.Mock).mockClear();
     (writes.createTraces as jest.Mock).mockClear();
@@ -485,7 +602,7 @@ describe('ConceptConsolidatorService', () => {
       const { service, writes } = await buildWithAudit({
         recordMerge: jest.fn().mockRejectedValue(new Error('db down')),
       });
-      const result = await service.applyProposals('u1', ['离开前翻页立好']);
+      const result = await service.applyProposals('u1', ['离开前翻页立好'], { strategy: 'merge' });
 
       expect(result.applied).toBe(0);            // 没留下"改了却没凭据"的状态
       expect(writes.createTraces).toHaveBeenCalledWith({

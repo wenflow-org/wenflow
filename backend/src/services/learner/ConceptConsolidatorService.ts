@@ -22,6 +22,7 @@ import { logger } from '../../utils/logger';
 import { runBackgroundTask } from '../background-task-tracker.service';
 import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
 import { normalizeConceptKey } from '../memory/memory-trace.service';
+import { conceptRegistryService } from './concept-registry.service';
 
 /** 参与归并的活跃概念上限（控 LLM 成本与投影规模） */
 export const MAX_CANDIDATES = 60;
@@ -74,12 +75,17 @@ export interface ConceptConsolidationAudit {
    * 否则跑到第 101 次归并，更早的凭据就会被窗口挤掉（回滚过期）。
    */
   appliedMerges: AppliedConceptMerge[];
+  /** alias 式归并的执行记录（非破坏；与 appliedMerges 并列，回滚语义不同） */
+  appliedAliasMerges: AppliedConceptAliasMerge[];
   stats: {
     candidates: number;
     proposed: number;
     autoApplicable: number;
     applied: number;
     deleted: number;
+    /** alias 策略：登记别名数 / 回填行数 */
+    aliasesRegistered?: number;
+    rowsRepointed?: number;
   };
 }
 
@@ -103,6 +109,35 @@ export interface AppliedConceptMerge {
 
 export const MERGE_RECORD_EVIDENCE_TYPE = 'concept:merge:applied';
 export const MERGE_RECORD_EVIDENCE_KEY = 'concept-merge';
+/** alias 策略的按次凭据（与破坏性归并分开留档，回滚语义不同） */
+export const ALIAS_RECORD_EVIDENCE_TYPE = 'concept:alias:registered';
+export const ALIAS_RECORD_EVIDENCE_KEY = 'concept-alias';
+
+/** alias 策略单次可回填的行数上限：超限则**不自动执行**（转人工），以保住"完全可回滚"的不变式 */
+export const MAX_ALIAS_ROLLBACK_ROWS = 500;
+
+/**
+ * 一次 **alias 式归并**的按次凭据（非破坏：只登记别名 + 把既有行改指 canonical，**不删任何行**）。
+ *
+ * 与 `AppliedConceptMerge` 的区别：后者重写/删除 `memory_traces` 行（靠整行快照回滚）；
+ * 本类型只改 `conceptId` 指向并登记别名，回滚 = 删别名 + 还原 `conceptId`。
+ */
+export interface AppliedConceptAliasMerge {
+  aliasMergeId: string;
+  canonical: string;
+  canonicalConceptId: string;
+  aliases: string[];
+  /** 回填前的 conceptId（回滚凭据）；表名区分痕迹与误解台账 */
+  touchedRows: Array<{ table: 'memory_traces' | 'misconception_ledger'; id: string; previousConceptId: string | null }>;
+  appliedAt: string;
+  /** 已回滚时间；有值 = 凭据仍在但不再作为可回滚目标（幂等） */
+  rolledBackAt?: string | null;
+}
+
+/** 稳定 aliasMergeId：同一 (canonical, appliedAt) 恒等 → 重复写不产生重复凭据 */
+export function buildAliasMergeId(canonical: string, appliedAt: string): string {
+  return `alg_${createHash('sha1').update(`${canonical}|${appliedAt}`).digest('hex').slice(0, 16)}`;
+}
 
 /** 稳定 mergeId：同一 (canonical, winnerId, appliedAt) 恒等 → 重复写不会产生重复凭据 */
 export function buildMergeId(canonical: string, winnerId: string, appliedAt: string): string {
@@ -145,6 +180,17 @@ export interface ConceptConsolidatorDeps {
   recordMerge: (args: Record<string, unknown>) => Promise<unknown>;
   /** 按次留档：读归并凭据（回滚的权威来源） */
   findMerges: (args: Record<string, unknown>) => Promise<Array<Record<string, any>>>;
+  /** alias 策略：解析/创建 canonical 概念身份 */
+  resolveConcept: (userId: string, text: string, opts?: { createIfMissing?: boolean }) => Promise<{ conceptId: string } | null>;
+  /** alias 策略：登记别名（非破坏） */
+  registerAlias: (args: { userId: string; conceptId: string; aliasRaw: string; source: string }) => Promise<{ conceptId: string; registered: boolean }>;
+  /** alias 策略：批量改指 conceptId（回填/回滚） */
+  updateTraceMany: (args: Record<string, unknown>) => Promise<unknown>;
+  findMisconceptionRows: (args: Record<string, unknown>) => Promise<Array<Record<string, any>>>;
+  updateMisconceptionMany: (args: Record<string, unknown>) => Promise<unknown>;
+  /** alias 策略：按次留档（写/读 alias 凭据） */
+  recordAliasMerge: (args: Record<string, unknown>) => Promise<unknown>;
+  findAliasMerges: (args: Record<string, unknown>) => Promise<Array<Record<string, any>>>;
 }
 
 const defaultDeps: ConceptConsolidatorDeps = {
@@ -162,6 +208,19 @@ const defaultDeps: ConceptConsolidatorDeps = {
   callSkill: (input) => executeSkillWithResult(auxSkillDefinitionMap['concept-consolidator'], input as any) as any,
   recordMerge: (args) => prisma.learner_evidence.upsert(args as any) as any,
   findMerges: (args) => prisma.learner_evidence.findMany(args as any) as any,
+  resolveConcept: (userId, text, opts) =>
+    conceptRegistryService.resolveConcept(userId, text, {
+      createIfMissing: opts?.createIfMissing !== false,
+      source: 'consolidator',
+    }),
+  registerAlias: (args) => conceptRegistryService.registerAlias({
+    userId: args.userId, conceptId: args.conceptId, aliasRaw: args.aliasRaw, source: 'consolidator',
+  }),
+  updateTraceMany: (args) => prisma.memory_traces.updateMany(args as any) as any,
+  findMisconceptionRows: (args) => prisma.misconception_ledger.findMany(args as any) as any,
+  updateMisconceptionMany: (args) => prisma.misconception_ledger.updateMany(args as any) as any,
+  recordAliasMerge: (args) => prisma.learner_evidence.upsert(args as any) as any,
+  findAliasMerges: (args) => prisma.learner_evidence.findMany(args as any) as any,
 };
 
 export function consolidationAuditKey(userId: string): string {
@@ -461,7 +520,11 @@ class ConceptConsolidatorService {
    */
   async consolidate(
     userId: string,
-    options: { mode?: 'observe' | 'apply'; force?: boolean; includeNeedsReview?: boolean; now?: Date } = {},
+    options: {
+      mode?: 'observe' | 'apply'; force?: boolean; includeNeedsReview?: boolean; now?: Date;
+      /** 执行策略：alias（默认，非破坏）/ merge（历史破坏性归并，仅用于回滚旧凭据） */
+      strategy?: 'alias' | 'merge';
+    } = {},
   ): Promise<ConceptConsolidationAudit | null> {
     const mode = options.mode ?? 'observe';
     const now = options.now ?? new Date();
@@ -500,11 +563,19 @@ class ConceptConsolidatorService {
     }
 
     const validated = validateConsolidation({ candidates, parsed });
-    const applied = mode === 'apply'
+    // 执行策略：alias（默认，非破坏：登记别名 + 改指 conceptId）/ merge（历史破坏性归并，仅用于回滚旧凭据）
+    const strategy = options.strategy ?? 'alias';
+    const appliedAlias = mode === 'apply' && strategy === 'alias'
+      ? await this.executeAliasMerges(userId, validated.proposals, { includeNeedsReview: options.includeNeedsReview === true })
+      : [];
+    const applied = mode === 'apply' && strategy === 'merge'
       ? await this.executeMerges(userId, validated.proposals, { includeNeedsReview: options.includeNeedsReview === true })
       : [];
 
-    const appliedKeys = new Set(applied.map((item) => item.canonical));
+    const appliedKeys = new Set([
+      ...applied.map((item) => item.canonical),
+      ...appliedAlias.map((item) => item.canonical),
+    ]);
     const audit: ConceptConsolidationAudit = {
       schemaVersion: 'concept-merge-audits-v1',
       generatedAt: now.toISOString(),
@@ -515,12 +586,15 @@ class ConceptConsolidatorService {
       ambiguous: [...validated.ambiguous, ...(previous?.ambiguous ?? [])].slice(0, 400),
       dropCandidates: [...validated.dropCandidates, ...(previous?.dropCandidates ?? [])].slice(0, 100),
       appliedMerges: [...applied, ...(previous?.appliedMerges ?? [])].slice(0, 100),
+      appliedAliasMerges: [...appliedAlias, ...(previous?.appliedAliasMerges ?? [])].slice(0, 100),
       stats: {
         candidates: candidates.length,
         proposed: validated.proposals.length,
         autoApplicable: validated.proposals.filter((item) => item.autoApplicable).length,
-        applied: applied.length,
+        applied: applied.length + appliedAlias.length,
         deleted: applied.reduce((sum, item) => sum + item.deletedRows.length, 0),
+        aliasesRegistered: appliedAlias.reduce((sum, item) => sum + item.aliases.length, 0),
+        rowsRepointed: appliedAlias.reduce((sum, item) => sum + item.touchedRows.length, 0),
       },
     };
 
@@ -553,7 +627,7 @@ class ConceptConsolidatorService {
   async applyProposals(
     userId: string,
     canonicals: string[],
-    options: { includeNeedsReview?: boolean } = {},
+    options: { includeNeedsReview?: boolean; strategy?: 'alias' | 'merge' } = {},
   ): Promise<{ audit: ConceptConsolidationAudit | null; applied: number; skipped: string[] }> {
     const audit = await this.getAudit(userId);
     if (!audit) return { audit: null, applied: 0, skipped: [] };
@@ -572,25 +646,34 @@ class ConceptConsolidatorService {
     }
     if (executable.length === 0) return { audit, applied: 0, skipped };
 
-    const applied = await this.executeMerges(userId, executable, {
-      includeNeedsReview: options.includeNeedsReview === true,
-    });
+    // 默认 alias（非破坏）；merge 仅用于回滚历史破坏性凭据的场景
+    const strategy = options.strategy ?? 'alias';
+    const appliedAlias = strategy === 'alias'
+      ? await this.executeAliasMerges(userId, executable, { includeNeedsReview: options.includeNeedsReview === true })
+      : [];
+    const applied = strategy === 'merge'
+      ? await this.executeMerges(userId, executable, { includeNeedsReview: options.includeNeedsReview === true })
+      : [];
     const next: ConceptConsolidationAudit = {
       ...audit,
       mode: 'apply',
       generatedAt: new Date().toISOString(),
       appliedMerges: [...applied, ...audit.appliedMerges].slice(0, 100),
+      appliedAliasMerges: [...appliedAlias, ...(audit.appliedAliasMerges ?? [])].slice(0, 100),
       proposals: audit.proposals.filter((proposal) => !executable.some((item) => item.canonical === proposal.canonical)),
       stats: {
         ...audit.stats,
-        applied: audit.stats.applied + applied.length,
+        applied: audit.stats.applied + applied.length + appliedAlias.length,
         deleted: audit.stats.deleted + applied.reduce((sum, item) => sum + item.deletedRows.length, 0),
+        aliasesRegistered: (audit.stats.aliasesRegistered ?? 0) + appliedAlias.reduce((sum, item) => sum + item.aliases.length, 0),
+        rowsRepointed: (audit.stats.rowsRepointed ?? 0) + appliedAlias.reduce((sum, item) => sum + item.touchedRows.length, 0),
       },
     };
     await this.writeAudit(userId, next);
     logger.info('[concept-consolidator] 归并已执行', {
       userId,
-      applied: applied.length,
+      strategy,
+      applied: applied.length + appliedAlias.length,
       skipped: skipped.length,
     });
     return { audit: next, applied: applied.length, skipped };
@@ -623,11 +706,45 @@ class ConceptConsolidatorService {
       wanted.has(merge.canonical) && (!merge.mergeId || !coveredIds.has(merge.mergeId))
     );
     const targets = [...durableTargets, ...blobTargets];
-    const skipped = Array.from(wanted).filter((canonical) => !targets.some((merge) => merge.canonical === canonical));
-    if (targets.length === 0) return { audit, rolledBack: 0, skipped };
+
+    // alias 凭据（非破坏策略）：同样按 canonical 匹配，回滚语义不同（还原 conceptId + 删别名）
+    const durableAliases = await this.listAliasMerges(userId).catch((error) => {
+      logger.warn('[concept-consolidator] 读取 alias 凭据失败', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [] as AppliedConceptAliasMerge[];
+    });
+    const aliasCovered = new Set(durableAliases.map((item) => item.aliasMergeId));
+    const aliasTargets = [
+      ...durableAliases.filter((item) => wanted.has(item.canonical) && !item.rolledBackAt),
+      ...(audit?.appliedAliasMerges ?? []).filter((item) =>
+        wanted.has(item.canonical) && !item.rolledBackAt && !aliasCovered.has(item.aliasMergeId)
+      ),
+    ];
+
+    const skipped = Array.from(wanted).filter((canonical) =>
+      !targets.some((merge) => merge.canonical === canonical)
+      && !aliasTargets.some((item) => item.canonical === canonical)
+    );
+    if (targets.length === 0 && aliasTargets.length === 0) return { audit, rolledBack: 0, skipped };
 
     let rolledBack = 0;
     const rolledBackIds: string[] = [];
+    const rolledBackAliasIds: string[] = [];
+    for (const aliasTarget of aliasTargets) {
+      try {
+        await this.revertAliasMerge(userId, aliasTarget);
+        rolledBack += 1;
+        rolledBackAliasIds.push(aliasTarget.aliasMergeId);
+      } catch (error) {
+        logger.warn('[concept-consolidator] 单条 alias 回滚失败（跳过）', {
+          userId,
+          canonical: aliasTarget.canonical,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     for (const target of targets) {
       try {
         await this.revertMerge(target);
@@ -648,6 +765,10 @@ class ConceptConsolidatorService {
       if (!target.mergeId || !rolledBackIds.includes(target.mergeId)) continue;
       await this.recordMerge(userId, { ...target, rolledBackAt }).catch(() => undefined);
     }
+    for (const aliasTarget of aliasTargets) {
+      if (!rolledBackAliasIds.includes(aliasTarget.aliasMergeId)) continue;
+      await this.recordAliasMerge(userId, { ...aliasTarget, rolledBackAt }).catch(() => undefined);
+    }
 
     if (!audit) {
       logger.info('[concept-consolidator] 归并已回滚（无审计视图，按留档凭据）', { userId, rolledBack });
@@ -655,14 +776,20 @@ class ConceptConsolidatorService {
     }
 
     const rolledBackCanonicals = new Set(targets.map((merge) => merge.canonical));
+    const rolledBackAliasCanonicals = new Set(aliasTargets.map((item) => item.canonical));
     const next: ConceptConsolidationAudit = {
       ...audit,
       generatedAt: new Date().toISOString(),
       appliedMerges: audit.appliedMerges.filter((merge) => !rolledBackCanonicals.has(merge.canonical)),
+      appliedAliasMerges: (audit.appliedAliasMerges ?? []).filter((item) => !rolledBackAliasCanonicals.has(item.canonical)),
       stats: {
         ...audit.stats,
         applied: Math.max(0, audit.stats.applied - rolledBack),
         deleted: Math.max(0, audit.stats.deleted - targets.reduce((sum, item) => sum + (item.deletedRows?.length || 0), 0)),
+        aliasesRegistered: Math.max(0, (audit.stats.aliasesRegistered ?? 0)
+          - aliasTargets.reduce((sum, item) => sum + item.aliases.length, 0)),
+        rowsRepointed: Math.max(0, (audit.stats.rowsRepointed ?? 0)
+          - aliasTargets.reduce((sum, item) => sum + item.touchedRows.length, 0)),
       },
     };
     await this.writeAudit(userId, next);
@@ -746,7 +873,189 @@ class ConceptConsolidatorService {
     });
   }
 
-  /** 执行归并（只处理 autoApplicable，除非显式 includeNeedsReview） */
+  /**
+   * alias 式归并（**非破坏**）：为 canonical 建立/取回身份 → 把每个 alias 登记进注册表
+   * → 把既有行的 `conceptId` 改指 canonical（**只改指向，不删行**）。
+   *
+   * 与 `executeMerges` 的关键差别：本策略不改 `conceptKey`/不删行，故"同一概念的多个自由文本键"
+   * 会各自保留自己的行，但都指向同一个 canonical —— 这正是让"计划↔痕迹"能 join 起来的手段
+   * （实测该贯通率仅 ~6%，靠 alias 桥接提升）。
+   *
+   * 可回滚性：先算出将受影响的行（回滚凭据），**超过 `MAX_ALIAS_ROLLBACK_ROWS` 就整条不执行**
+   * （转人工），以保住"凡执行必完全可回滚"的不变式，而不是静默降级成部分可回滚。
+   */
+  private async executeAliasMerges(
+    userId: string,
+    proposals: ConceptMergeProposal[],
+    options: { includeNeedsReview?: boolean } = {},
+  ): Promise<AppliedConceptAliasMerge[]> {
+    const applied: AppliedConceptAliasMerge[] = [];
+    const executable = proposals.filter((item) => options.includeNeedsReview || item.autoApplicable);
+    if (executable.length === 0) return applied;
+
+    for (const proposal of executable) {
+      try {
+        const canonicalResolved = await this.deps.resolveConcept(userId, proposal.canonical, { createIfMissing: true });
+        if (!canonicalResolved) continue;
+        const canonicalConceptId = canonicalResolved.conceptId;
+        const aliases = Array.from(new Set(proposal.aliases.map((a) => String(a || '').trim()).filter(Boolean)))
+          .filter((alias) => normalizeConceptKey(alias) !== normalizeConceptKey(proposal.canonical));
+        if (aliases.length === 0) continue;
+
+        // ① 先收集将受影响的行（回滚凭据）——超限则整条跳过，不执行
+        const touchedRows: AppliedConceptAliasMerge['touchedRows'] = [];
+        const aliasNorms = aliases.map((alias) => normalizeConceptKey(alias)).filter(Boolean);
+        const traceRows = await this.deps.findTraces({
+          where: { userId, conceptKey: { in: aliasNorms }, NOT: { conceptId: canonicalConceptId } },
+          select: { id: true, conceptId: true },
+        });
+        for (const row of traceRows) {
+          touchedRows.push({ table: 'memory_traces', id: String(row.id), previousConceptId: (row.conceptId as string | null) ?? null });
+        }
+        const misconceptionRows = await this.deps.findMisconceptionRows({
+          where: { userId, conceptKey: { in: aliasNorms }, NOT: { conceptId: canonicalConceptId } },
+          select: { id: true, conceptId: true },
+        });
+        for (const row of misconceptionRows) {
+          touchedRows.push({ table: 'misconception_ledger', id: String(row.id), previousConceptId: (row.conceptId as string | null) ?? null });
+        }
+        if (touchedRows.length > MAX_ALIAS_ROLLBACK_ROWS) {
+          logger.warn('[concept-consolidator] alias 归并影响行数超限，转人工（未执行）', {
+            userId, canonical: proposal.canonical, rows: touchedRows.length, limit: MAX_ALIAS_ROLLBACK_ROWS,
+          });
+          continue;
+        }
+
+        // ② 登记别名（非破坏；幂等）
+        for (const alias of aliases) {
+          await this.deps.registerAlias({ userId, conceptId: canonicalConceptId, aliasRaw: alias, source: 'consolidator' });
+        }
+
+        // ③ 回填既有行的 conceptId（只改指向）
+        const traceIds = touchedRows.filter((row) => row.table === 'memory_traces').map((row) => row.id);
+        if (traceIds.length > 0) {
+          await this.deps.updateTraceMany({ where: { userId, id: { in: traceIds } }, data: { conceptId: canonicalConceptId } });
+        }
+        const misconceptionIds = touchedRows.filter((row) => row.table === 'misconception_ledger').map((row) => row.id);
+        if (misconceptionIds.length > 0) {
+          await this.deps.updateMisconceptionMany({ where: { userId, id: { in: misconceptionIds } }, data: { conceptId: canonicalConceptId } });
+        }
+
+        const appliedAt = new Date().toISOString();
+        const merge: AppliedConceptAliasMerge = {
+          aliasMergeId: buildAliasMergeId(proposal.canonical, appliedAt),
+          canonical: proposal.canonical,
+          canonicalConceptId,
+          aliases,
+          touchedRows,
+          appliedAt,
+          rolledBackAt: null,
+        };
+        // 凭据与改动同生共死：落不进凭据就当场撤销，绝不留下"改了却没有回滚凭据"的状态
+        try {
+          await this.recordAliasMerge(userId, merge);
+        } catch (recordError) {
+          await this.revertAliasMerge(userId, merge).catch(() => undefined);
+          throw recordError;
+        }
+        applied.push(merge);
+      } catch (error) {
+        logger.warn('[concept-consolidator] 单条 alias 归并失败（跳过，不影响其余）', {
+          userId,
+          canonical: proposal.canonical,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return applied;
+  }
+
+  /** alias 凭据落档（learner_evidence，按次留档、长期可回滚） */
+  private async recordAliasMerge(userId: string, merge: AppliedConceptAliasMerge): Promise<void> {
+    await this.deps.recordAliasMerge({
+      where: { eventId_evidenceKey: { eventId: merge.aliasMergeId, evidenceKey: ALIAS_RECORD_EVIDENCE_KEY } },
+      create: {
+        id: `lev_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+        eventId: merge.aliasMergeId,
+        evidenceKey: ALIAS_RECORD_EVIDENCE_KEY,
+        userId,
+        evidenceType: ALIAS_RECORD_EVIDENCE_TYPE,
+        payload: JSON.stringify(merge),
+        confidence: 1,
+        occurredAt: new Date(merge.appliedAt),
+      },
+      update: { payload: JSON.stringify(merge), occurredAt: new Date(merge.appliedAt) },
+    });
+  }
+
+  /** 读 alias 凭据（回滚的权威来源） */
+  private async listAliasMerges(userId: string): Promise<AppliedConceptAliasMerge[]> {
+    const rows = await this.deps.findAliasMerges({
+      where: { userId, evidenceType: ALIAS_RECORD_EVIDENCE_TYPE },
+      orderBy: { occurredAt: 'desc' },
+      take: 500,
+    });
+    return rows
+      .map((row) => {
+        try { return JSON.parse(String(row.payload)) as AppliedConceptAliasMerge; } catch { return null; }
+      })
+      .filter((item): item is AppliedConceptAliasMerge => Boolean(item));
+  }
+
+  /** alias 凭据的公开视图（管理端用；与 `listAppliedMerges` 对称） */
+  async listAppliedAliasMerges(
+    userId: string,
+    options: { includeRolledBack?: boolean } = {},
+  ): Promise<AppliedConceptAliasMerge[]> {
+    const rows = await this.deps.findAliasMerges({
+      where: { userId, evidenceType: ALIAS_RECORD_EVIDENCE_TYPE },
+      orderBy: { occurredAt: 'asc' },
+      select: { payload: true },
+    });
+    const merges = rows.flatMap((row) => {
+      try {
+        const parsed = JSON.parse(String(row.payload)) as AppliedConceptAliasMerge;
+        return parsed?.aliasMergeId ? [parsed] : [];
+      } catch { return []; }
+    });
+    return options.includeRolledBack ? merges : merges.filter((item) => !item.rolledBackAt);
+  }
+
+  /** 撤销一次 alias 归并：还原被改指的行 + 删掉本次登记的别名行 */
+  private async revertAliasMerge(userId: string, merge: AppliedConceptAliasMerge): Promise<void> {
+    const byTraceConcept = new Map<string, string[]>();
+    for (const row of merge.touchedRows) {
+      if (row.table !== 'memory_traces') continue;
+      const key = row.previousConceptId ?? '\u0000null';
+      if (!byTraceConcept.has(key)) byTraceConcept.set(key, []);
+      byTraceConcept.get(key)!.push(row.id);
+    }
+    for (const [key, ids] of byTraceConcept) {
+      await this.deps.updateTraceMany({
+        where: { id: { in: ids } },
+        data: { conceptId: key === '\u0000null' ? null : key },
+      });
+    }
+    const byMisconceptionConcept = new Map<string, string[]>();
+    for (const row of merge.touchedRows) {
+      if (row.table !== 'misconception_ledger') continue;
+      const key = row.previousConceptId ?? '\u0000null';
+      if (!byMisconceptionConcept.has(key)) byMisconceptionConcept.set(key, []);
+      byMisconceptionConcept.get(key)!.push(row.id);
+    }
+    for (const [key, ids] of byMisconceptionConcept) {
+      await this.deps.updateMisconceptionMany({
+        where: { id: { in: ids } },
+        data: { conceptId: key === '\u0000null' ? null : key },
+      });
+    }
+    await conceptRegistryService.removeAliases(userId, merge.aliases);
+  }
+
+  /**
+   * 执行归并（只处理 autoApplicable，除非显式 includeNeedsReview）
+   * @deprecated 历史破坏性策略；新执行走 `executeAliasMerges`，本方法仅保留用于回滚旧凭据。
+   */
   private async executeMerges(
     userId: string,
     proposals: ConceptMergeProposal[],
