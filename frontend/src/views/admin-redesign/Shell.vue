@@ -515,7 +515,7 @@ function groupBadgeTitle(title: string): string {
 }
 .mshell__group-head:hover .mshell__group-icon,
 .mshell__group-head--active .mshell__group-icon { color: var(--mk-accent-deep, #1f57cc); }
-.mshell__group-name { flex: 1; text-align: left; }
+.mshell__group-name { text-align: left; }
 .mshell__group-badge {
   padding: 0 6px;
   border-radius: 999px;
@@ -538,8 +538,9 @@ function groupBadgeTitle(title: string): string {
 }
 .mshell__group[data-open='true'] .mshell__group-arrow { transform: rotate(90deg); }
 .mshell__group-body { display: grid; gap: 1px; }
-/* 子项层级：组内子项相对组标题缩进，强化从属关系（对齐 AntD inline menu 缩进层级） */
-.mshell__group-body .mshell__item { padding-left: 22px; }
+/* 子项层级：组内子项文字与组名文字左沿对齐（组名 = 侧栏内边距 + 组头内边距10 + 图标16 + 间距8 = 34），
+   子项不显単字图标（仅折叠态有），靠缩进表达从属关系（对齐 AntD inline menu 缩进层级） */
+.mshell__group-body .mshell__item { padding-left: 34px; }
 .mshell__group-body .mshell__item .mshell__item-glyph {
   width: 20px;
   height: 20px;
@@ -549,7 +550,7 @@ function groupBadgeTitle(title: string): string {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  /* 宽度交给 grid 拉伸（保持整行可点）；不用 width:100%，否则与下方 margin 叠加会溢出 */
   padding: 8px 10px;
   border: 0;
   border-radius: 10px;
@@ -561,6 +562,8 @@ function groupBadgeTitle(title: string): string {
   text-align: left;
   cursor: pointer;
   transition: 0.12s ease;
+  /* 选中/悬底内缩 8px：不贴侧栏左右缘，选中态从「通铺大蓝条」变成贴内容的胶囊 */
+  margin: 0 8px;
 }
 .mshell__item:hover { background: #f6f9ff; color: #1a2a44; }
 /* 点击导航后不残留聚焦描边环（选中态由 --active 底色+左条表达）；键盘 Tab 仍有可见环 */
@@ -571,7 +574,7 @@ function groupBadgeTitle(title: string): string {
   color: var(--mk-accent-deep, #1f57cc);
   box-shadow: inset 3px 0 0 var(--mk-blue, #2c63d0);
 }
-.mshell__item-label { flex: 1; }
+/* 展开态不显単字图标（仅折叠态显示，见 data-collapsed 规则） */
 .mshell__item-glyph {
   display: none;
   width: 28px;
@@ -587,6 +590,7 @@ function groupBadgeTitle(title: string): string {
   transition: background 0.12s ease, color 0.12s ease;
 }
 .mshell__item--active .mshell__item-glyph { background: #dbe9ff; color: var(--mk-accent-deep, #1f57cc); }
+/* 子项角标紧跟标签（不右推）：短标签 + 右对齐计数会在行中间拉出一条空洞 */
 .mshell__item-badge {
   padding: 1px 7px;
   border-radius: 999px;
@@ -750,16 +754,17 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
 
 /* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半） */
 @media (min-width: 1440px) {
-  .mshell { grid-template-columns: 240px minmax(0, 1fr); }
+  .mshell { grid-template-columns: 224px minmax(0, 1fr); }
   .mshell__item { font-size: 13.5px; padding: 9px 11px; }
   .mshell__group-name { font-size: 11.5px; }
   .mshell__item-badge { font-size: 11.5px; }
   .mshell__logo-full { height: 58px; }
 }
 
-/* 大屏（2000+）：侧栏加宽、字号放大；2800+（4K）再升一档（zoom 之上叠加） */
+/* 大屏（2000+）：侧栏加宽、字号放大；2800+（4K）再升一档（zoom 之上叠加）。
+   宽度只随内容（字号）增长、不随屏宽膨胀——短标签配宽侧栏会在行右拉出大片空洞 */
 @media (min-width: 1920px) {
-  .mshell { grid-template-columns: 260px minmax(0, 1fr); }
+  .mshell { grid-template-columns: 240px minmax(0, 1fr); }
   .mshell__item { font-size: var(--mk-fs-14); padding: 10px 12px; }
   .mshell__group-name { font-size: var(--mk-fs-12); }
   .mshell__item-badge { font-size: var(--mk-fs-12); }
@@ -767,7 +772,7 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
 }
 @media (min-width: 2000px) {
   .mshell {
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: 248px minmax(0, 1fr);
   }
   .mshell__side { padding: 18px 14px 14px; gap: 18px; }
   .mshell__logo-full { height: 72px; }
@@ -782,7 +787,7 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
 }
 @media (min-width: 2800px) {
   .mshell {
-    grid-template-columns: 360px minmax(0, 1fr);
+    grid-template-columns: 288px minmax(0, 1fr);
   }
   .mshell__side { padding: 22px 18px 16px; gap: 22px; }
   .mshell__logo-full { height: 72px; }
@@ -800,7 +805,7 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：侧栏再加宽、字号继续放大 */
   .mshell {
-    grid-template-columns: 440px minmax(0, 1fr);
+    grid-template-columns: 336px minmax(0, 1fr);
   }
   .mshell__side { padding: 26px 22px 18px; gap: 26px; }
   .mshell__logo-full { height: 88px; }
