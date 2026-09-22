@@ -52,6 +52,26 @@ router.get('/', async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * endpoint 写入校验（安全审计批次3）：必须为合法 http(s) URL，生产强制 HTTPS。
+ * 运行时调用仍会经 safe-http 逐请求复核（私网/元数据地址由调用侧策略拦截），
+ * 这里挡掉明显非法的写入，避免垃圾配置进入 mcp-config。
+ */
+function validateMcpEndpoint(raw: unknown): string | null {
+  const text = String(raw).trim();
+  try {
+    const url = new URL(text);
+    const isProduction = process.env.NODE_ENV === 'production';
+    const allowedProtocols = isProduction ? ['https:'] : ['http:', 'https:'];
+    if (!allowedProtocols.includes(url.protocol)) {
+      return isProduction ? 'endpoint 必须是 HTTPS URL（生产环境）' : 'endpoint 必须是 http(s) URL';
+    }
+    return null;
+  } catch {
+    return 'endpoint 必须是合法的 http(s) URL';
+  }
+}
+
 /** POST /tools — 新增平台 MCP 工具 */
 router.post('/tools', async (req: Request, res: Response) => {
   try {
@@ -64,6 +84,10 @@ router.post('/tools', async (req: Request, res: Response) => {
     }
     if (!endpoint || !String(endpoint).trim()) {
       return res.status(400).json({ success: false, error: 'endpoint 必填' });
+    }
+    const endpointError = validateMcpEndpoint(endpoint);
+    if (endpointError) {
+      return res.status(400).json({ success: false, error: endpointError });
     }
     const cfg = mcpGateway.getConfig();
     if (cfg.tools.some((t) => t.id === id)) {
@@ -107,6 +131,12 @@ router.put('/tools/:id', async (req: Request, res: Response) => {
     const { name, type, transport, endpoint, description, enabled, userAccessible, apiKey, config } = req.body || {};
     if (transport !== undefined && transport !== 'http' && transport !== 'mcp') {
       return res.status(400).json({ success: false, error: 'transport 只能是 http 或 mcp' });
+    }
+    if (endpoint !== undefined) {
+      const endpointError = validateMcpEndpoint(endpoint);
+      if (endpointError) {
+        return res.status(400).json({ success: false, error: endpointError });
+      }
     }
     const next: IMcpToolConfig = {
       ...cur,

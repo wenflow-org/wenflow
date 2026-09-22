@@ -483,6 +483,10 @@ router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) 
       value = Array.isArray(value) && (value as string[]).length ? `[${(value as string[]).map((v) => `'${v}'`).join(', ')}]` : '[]';
     } else if (key === 'internal' || key === 'accumulate') {
       value = value ? 'true' : 'false';
+    } else if (key === 'notes' || key === 'visibilityPreset') {
+      // 安全审计批次3：自由文本字段以 JSON 双引号标量写回——JSON 字符串是合法 YAML 标量，
+      // 换行/引号/控制字符天然转义；原样拼接会让值中换行注入任意 YAML 结构。
+      value = (value == null || value === '') ? 'null' : JSON.stringify(String(value));
     } else if (value == null || value === '') {
       value = 'null';
     }
