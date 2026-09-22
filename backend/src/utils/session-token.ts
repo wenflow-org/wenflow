@@ -81,6 +81,14 @@ const validateTokenDomain = (
   return payload;
 };
 
+// legacy 兼容路径命中提示（每进程一次）：legacy Token 属迁移残留，提请重新登录换发新格式
+let legacyTokenWarned = false;
+const warnLegacyTokenUse = (): void => {
+  if (legacyTokenWarned) return;
+  legacyTokenWarned = true;
+  console.warn('[session-token] 命中 legacy Token 兼容路径（无 iss/aud/type 的旧格式令牌）；请重新登录换发新格式 Token，legacy 支持后续将移除');
+};
+
 export const verifySessionToken = (
   token: string,
   expectedType: SessionTokenType
@@ -101,6 +109,13 @@ export const verifySessionToken = (
     if (payload.type !== undefined || payload.iss !== undefined || payload.aud !== undefined) {
       throw strictError;
     }
+
+    // 兼容路径收紧（安全审计 M4）：legacy Token 必须自带 exp。无过期声明的令牌会
+    // "永不过期 + 无 jti 绕过 admin_sessions 吊销"地长期存活，一律拒绝。
+    if (!payload.exp) {
+      throw new jwt.TokenExpiredError('legacy Token 缺少 exp 声明，已拒绝', new Date(0));
+    }
+    warnLegacyTokenUse();
 
     return validateTokenDomain(payload, expectedType, true);
   }

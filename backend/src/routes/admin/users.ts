@@ -19,6 +19,7 @@ import {
   findUserDeleteTarget,
   findUserRestoreTarget,
 } from '../../services/users/user.repo';
+import { revokeAdminSessions } from '../../services/admin-session.service';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { randomUUID as uuidv4 } from 'crypto';
@@ -322,6 +323,15 @@ router.patch('/:id', async (req, res, next) => {
         updatedAt: true
       }
     });
+
+    // 安全审计 M5：改密后联动吊销该用户的管理员会话。tokenVersion 只拦截用户侧 JWT，
+    // admin 认证链不消费该字段——不吊销的话被改密管理员的旧 token（记住登录 7 天）仍然有效。
+    try {
+      await revokeAdminSessions({ adminId: userId, revokedAt: null });
+    } catch (revokeError) {
+      // 吊销失败不阻塞改密结果，但必须留痕（旧 admin 会话将继续有效直至过期）
+      logger.error('[admin-users] 改密后吊销管理员会话失败:', revokeError);
+    }
 
     res.json({
       success: true,

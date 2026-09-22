@@ -43,8 +43,8 @@ describe('session token domain isolation', () => {
 
   it('兼容可明确识别域的旧 Token，但不允许旧 Token 跨域', () => {
     const secret = process.env.JWT_SECRET as string
-    const legacyUserToken = jwt.sign({ userId: 'user-1', name: 'alice' }, secret, { algorithm: 'HS256' })
-    const legacyAdminToken = jwt.sign({ userId: 'admin-1', isAdmin: true }, secret, { algorithm: 'HS256' })
+    const legacyUserToken = jwt.sign({ userId: 'user-1', name: 'alice' }, secret, { algorithm: 'HS256', expiresIn: '1h' })
+    const legacyAdminToken = jwt.sign({ userId: 'admin-1', isAdmin: true }, secret, { algorithm: 'HS256', expiresIn: '1h' })
 
     expect(verifySessionToken(legacyUserToken, 'user').userId).toBe('user-1')
     expect(verifySessionToken(legacyAdminToken, 'admin').userId).toBe('admin-1')
@@ -80,7 +80,7 @@ describe('session token domain isolation', () => {
   })
 
   it('旧格式兼容路径保留：无 jti 的 legacy Admin Token 仍可验证', () => {
-    const legacy = jwt.sign({ userId: 'admin-1', isAdmin: true }, process.env.JWT_SECRET as string, { algorithm: 'HS256' })
+    const legacy = jwt.sign({ userId: 'admin-1', isAdmin: true }, process.env.JWT_SECRET as string, { algorithm: 'HS256', expiresIn: '1h' })
     expect(verifySessionToken(legacy, 'admin').userId).toBe('admin-1')
     expect(verifySessionToken(legacy, 'admin').jti).toBeUndefined()
   })
@@ -89,9 +89,17 @@ describe('session token domain isolation', () => {
     const legacyWithJti = jwt.sign(
       { userId: 'admin-1', isAdmin: true, jti: 'session-uuid-2' },
       process.env.JWT_SECRET as string,
-      { algorithm: 'HS256' }
+      { algorithm: 'HS256', expiresIn: '1h' }
     )
 
     expect(verifySessionToken(legacyWithJti, 'admin').jti).toBe('session-uuid-2')
+  })
+
+  it('收紧（安全审计 M4）：缺少 exp 的 legacy Token 一律拒绝，杜绝永不过期令牌', () => {
+    const immortalLegacy = jwt.sign({ userId: 'admin-1', isAdmin: true }, process.env.JWT_SECRET as string, { algorithm: 'HS256' })
+    expect(() => verifySessionToken(immortalLegacy, 'admin')).toThrow('exp')
+
+    const immortalLegacyUser = jwt.sign({ userId: 'user-1' }, process.env.JWT_SECRET as string, { algorithm: 'HS256' })
+    expect(() => verifySessionToken(immortalLegacyUser, 'user')).toThrow('exp')
   })
 })

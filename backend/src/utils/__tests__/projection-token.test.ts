@@ -30,14 +30,16 @@ describe('synthetic projection token', () => {
 
   it('拒绝未知 capability', () => {
     const token = jwt.sign({ ...base, capabilities: ['admin:write'] }, process.env.JWT_SECRET as string, {
-      algorithm: 'HS256'
+      algorithm: 'HS256',
+      expiresIn: '30m'
     });
     expect(() => verifyProjectionToken(token)).toThrow('capability');
   });
 
   it('拒绝缺少实验绑定的 synthetic token', () => {
     const token = jwt.sign({ ...base, experimentId: undefined }, process.env.JWT_SECRET as string, {
-      algorithm: 'HS256'
+      algorithm: 'HS256',
+      expiresIn: '30m'
     });
     expect(() => verifyProjectionToken(token)).toThrow('合成用户 token');
   });

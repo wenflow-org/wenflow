@@ -17,6 +17,7 @@ import {
 } from '../../services/skill-runtime-contract.service';
 import { STAGE_DESIGNER_PROMPT } from '../../skills/stage-designer';
 import { buildThinkingPolicy, type ReasoningEffort, type ThinkingMode } from '../../gateway/api-gateway/thinking-policy';
+import { validateExternalUrl } from '../../utils/safe-http';
 import { GLOBAL_DEFAULT_MAX_TOKENS } from '../../services/resolve-llm-call-params';
 import { ADAPTIVE_GUIDANCE_COPY_PROMPT } from '../../skills/adaptive-guidance-copy';
 import { VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT } from '../../skills/virtual-learner-persona-designer';
@@ -384,6 +385,22 @@ router.post('/:name/model-probe', async (req: Request, res: Response) => {
       ? `${endpointBase}/chat/completions`
       : `${endpointBase}/v1/chat/completions`;
 
+    // 4.5) SSRF 防护（安全审计 M3，与运行时执行器同源）：探测目标必须通过 safe-http 地址校验
+    // （拒绝私网/本机/链路本地/元数据地址，生产强制 HTTPS）。此前这里是全站唯一绕过 safe-http
+    // 的裸 fetch 点，且解密后的 apiKey 会随请求外发，endpoint 可被配置指到任意地址。
+    const probePrivateNetworkPolicy = route.privateNetworkPolicy
+      || (route.source === 'user-provider' || route.source === 'user-agent-override'
+        ? 'public-only'
+        : 'runtime');
+    try {
+      await validateExternalUrl(endpoint, { privateNetworkPolicy: probePrivateNetworkPolicy });
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: `探测目标地址被拒绝：${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+
     const userMsg = body.testInput?.trim() || '请用一句简短的中文说明你接到的指令并输出一个最小 JSON 示例。';
     const timeoutMs = Math.min(180_000, Math.max(10_000, Number(body.timeoutMs) || 180_000));
 
@@ -422,6 +439,8 @@ router.post('/:name/model-probe', async (req: Request, res: Response) => {
         },
         body: JSON.stringify(requestBody),
         signal: ctrl.signal,
+        // 禁止重定向：原生 fetch 跟随重定向时不会重新做 safe-http 校验，可能被 302 绕过
+        redirect: 'error',
       });
     } catch (error: any) {
       clearTimeout(timer);

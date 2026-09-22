@@ -63,6 +63,8 @@ export const verifyProjectionToken = (token: string): ProjectionTokenPayload => 
     decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as ProjectionTokenPayload
     const claims = decoded as ProjectionTokenPayload & jwt.JwtPayload
     if (claims.iss !== undefined || claims.aud !== undefined) throw strictError
+    // 兼容路径收紧（安全审计 M4）：legacy 投影 token 必须自带 exp，拒绝永不过期的存量令牌
+    if (!claims.exp) throw new jwt.TokenExpiredError('legacy 投影 token 缺少 exp 声明，已拒绝', new Date(0))
   }
   if (decoded.type !== 'projection' || !decoded.targetUserId || !decoded.issuedByAdminId) {
     throw new Error('无效的投影 token')

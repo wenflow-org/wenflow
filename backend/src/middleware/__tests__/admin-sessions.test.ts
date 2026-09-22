@@ -30,7 +30,7 @@ import jwt from 'jsonwebtoken';
 function signAdminToken(jti?: string): string {
   const payload: Record<string, unknown> = { userId: 'admin-1', email: 'admin@example.com', isAdmin: true };
   if (jti) payload.jti = jti;
-  return jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
+  return jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256', expiresIn: '1h' });
 }
 
 function createResponse() {
