@@ -22,33 +22,42 @@
           <span v-if="d.archetype" class="mk-badge mk-badge--info">{{ d.archetype }}</span>
           <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
           <span v-if="goalText" class="vp-top__goal" :title="'长期倾向：影响模拟行为与学习需求'">{{ goalText }}</span>
-          <span v-else class="vp-top__goal vp-top__goal--none" title="长期倾向未设置：学习需求由故事产生">未设置目标</span>
-          <!-- 仿真质量常驻徽章：最近一次黑盒终局评估（裁判 / 保真），未评估显示灰标 -->
-          <span v-if="isLive" class="vp-quality" :class="qualityTone" :title="qualityTitle">
-            <template v-if="qualityReferee || qualityFidelity">
-              {{ qualityReferee ? `质量 ${qualityReferee}` : '质量 —' }}<template v-if="qualityFidelity"> · 保真 {{ qualityFidelity }}</template>
-              <span class="vp-quality__time">{{ qualityTime }}</span>
-            </template>
-            <template v-else>未评估</template>
-          </span>
+          <!-- 仿真质量徽章：只在已评估时显示（「未评估」灰标是空态噪声，详见画像 tab） -->
+          <span
+            v-if="isLive && (qualityReferee || qualityFidelity)"
+            class="vp-quality"
+            :class="qualityTone"
+            :title="qualityTitle"
+          >{{ qualityReferee ? `质量 ${qualityReferee}` : '质量 —' }}<template v-if="qualityFidelity"> · 保真 {{ qualityFidelity }}</template><span class="vp-quality__time">{{ qualityTime }}</span></span>
         </div>
         <div v-if="isLive" class="mk-entity__actions">
-          <!-- 生命周期合法操作（统一模型 vlab-controls：操作/文案/确认全部来自单一来源，三层同语义） -->
-          <button
-            v-for="c in lifeControls"
-            :key="c.key"
-            type="button"
-            class="mk-status__action"
-            :class="{
-              'mk-status__action--primary': c.tone === 'primary',
-              'mk-status__action--danger': c.tone === 'danger'
-            }"
-            :disabled="sessionBusy"
-            :title="c.hint"
-            @click="runLifeAction(c)"
-          >{{ c.label }}</button>
-          <button type="button" class="mk-status__action" title="账号自动学习：批量自动运行该虚拟人的全部故事/课程（独立于单个故事运行）" @click="quickLearnOpen = true">账号自动学习</button>
-          <button type="button" class="mk-status__action" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="editOpen = true">画像与偏好</button>
+          <!-- 低频/管理操作收进 ⋯ 菜单（统一模型 vlab-controls：操作/文案/确认来自单一来源，三层同语义） -->
+          <div class="mk-menu">
+            <button
+              type="button"
+              class="mk-menu__btn"
+              aria-label="更多操作"
+              aria-haspopup="menu"
+              :aria-expanded="menuOpen"
+              title="更多操作：座舱 / 生命周期 / 账号自动学习 / 编辑画像"
+              @click.stop="toggleMenu('header')"
+            >⋯</button>
+            <div v-if="menuOpen" class="mk-menu__pop" :style="popStyle" @click.stop>
+              <button
+                v-for="c in lifeControls"
+                :key="c.key"
+                type="button"
+                class="mk-menu__item"
+                :class="{ 'mk-menu__item--danger': c.tone === 'danger' }"
+                :disabled="sessionBusy"
+                :title="c.hint"
+                @click="runLifeAction(c); closeMenu()"
+              >{{ c.label }}</button>
+              <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
+              <button type="button" class="mk-menu__item" title="账号自动学习：批量自动运行该虚拟人的全部故事/课程（独立于单个故事运行）" @click="closeMenu(); quickLearnOpen = true">账号自动学习</button>
+              <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
+            </div>
+          </div>
         </div>
       </div>
     </header>
@@ -60,18 +69,7 @@
     </div>
 
 
-    <!-- 概览统计：KPI 四卡（全站 MkKpi 语言；点击跳转对应页签；成功/失败数字着色） -->
-    <div class="vp-overview">
-      <MkKpi label="故事" :value="displayStories.length" hint="故事池" :title="'故事池数量（含草稿/已就绪）；点击查看故事池'" clickable @click="activeTab = 'stories'" />
-      <MkKpi label="会话" :value="allRuns.length" hint="累计实验会话" :title="'全部运行记录（含终态）；点击查看运行列表'" clickable @click="activeTab = 'runs'" />
-      <MkKpi label="进行中" :value="runningCount" :tone="runningCount > 0 ? 'ok' : ''" hint="进行中 + 创建中" :title="'当前进行中/创建中的会话数'" clickable @click="activeTab = 'runs'" />
-      <MkKpi label="已失败" :value="failedCount" :tone="failedCount > 0 ? 'bad' : ''" hint="失败或已终止" :title="'失败与终止会话数（可重试续传，不丢进度）'" clickable @click="activeTab = 'runs'" />
-    </div>
-
-    
-
-
-    <!-- 分页：故事池是主工作区，画像/运行/验收各归其页 -->
+    <!-- 分页：故事池是主工作区，画像/运行/验收各归其页（数量即 tab 角标，不再单设 KPI 行） -->
     <div class="mk-pills vp-tabs">
       <button
         v-for="t in tabs"
@@ -301,8 +299,20 @@
         <section v-if="activeTab === 'stories'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">故事池 · {{ displayStories.length }}</h3>
+            <!-- 状态过滤并入卡头一行（此前独立成行，顶部 chrome 层层堆叠） -->
+            <div v-if="isLive && displayStories.length" class="vp-filters">
+              <button
+                v-for="opt in storyFilterOptions"
+                :key="opt.key"
+                type="button"
+                class="mk-pill"
+                :class="{ 'mk-pill--active': storyFilter === opt.key }"
+                @click="storyFilter = opt.key"
+              >
+                {{ opt.label }} <span class="vp-filter-count">{{ opt.count }}</span>
+              </button>
+            </div>
             <div class="vp-stories-head">
-              <span class="mk-card__meta">故事池</span>
               <!-- 批量操作（对齐一级页：勾选后批量运行/删除） -->
               <template v-if="isLive && displayStories.length">
                 <label class="vp-story-select-all" :title="allStoriesSelected ? '取消全选' : '全选所有故事'">
@@ -343,19 +353,6 @@
                 {{ storyBusy ? '生成中…' : '生成故事' }}
               </button>
             </div>
-          </div>
-          <!-- 故事池状态过滤（轴 A 生命周期；与一级页 chips 同语义） -->
-          <div v-if="isLive && displayStories.length" class="vp-filters">
-            <button
-              v-for="opt in storyFilterOptions"
-              :key="opt.key"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': storyFilter === opt.key }"
-              @click="storyFilter = opt.key"
-            >
-              {{ opt.label }} <span class="vp-filter-count">{{ opt.count }}</span>
-            </button>
           </div>
           <!-- 空态三态：底层无故事 / 筛选无匹配（故事存在但过滤后为空） -->
           <MkEmptyState
@@ -742,7 +739,6 @@ import {
   type VsControlKey,
   type VsLifecycleState
 } from './vlab-controls'
-import MkKpi from '@/components/mk/MkKpi.vue'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -750,6 +746,7 @@ import MkLoading from '@/components/mk/MkLoading.vue'
 import MkChart from '@/components/mk/MkChart.vue'
 import DayTimeline from './DayTimeline.vue'
 import { useSafePolling } from '@/composables/useSafePolling'
+import { useRowMenu } from './useRowMenu'
 import { useIsDark } from '@/composables/useIsDark'
 import {
   extractQuality,
@@ -1731,13 +1728,6 @@ async function removeSession(sessionId: string) {
   }
 }
 
-const runningCount = computed(() =>
-  displayStories.value.reduce((n, s) => n + (s.runningCount || 0), 0)
-)
-const failedCount = computed(() =>
-  allRuns.value.filter((r) => r.tone === 'bad').length
-)
-
 /* ===== 会话状态管理 ===== */
 /** 当前活跃会话 ID（进行中或最近失败的） */
 const activeSessionId = computed(() => {
@@ -2005,6 +1995,9 @@ function avatarClassOf(name: string): string {
   return `vp-avatar--${h % 8}`
 }
 
+/* ---- 头部「更多操作」⋯ 菜单（复用行内菜单模型：点击外部/Esc/方向键关闭，fixed 定位防裁切） ---- */
+const { toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
+
 /* ---- 进行中会话的静默轮询刷新（setTimeout 链 + 并发守卫 + 指数退避） ---- */
 const VLAB_POLL_MS = 30_000
 const { start: startPolling, stop: stopPolling } = useSafePolling(
@@ -2085,20 +2078,8 @@ async function quietReload(id: string) {
 .vp-life--warn .vp-life__dot { background: var(--mk-amber); }
 .vp-life--bad .vp-life__dot { background: var(--mk-red); }
 .vp-life--muted .vp-life__dot { background: var(--mk-faint); }
-.mk-entity__actions .mk-status__action--danger { color: var(--mk-red); border-color: rgba(220, 38, 38, 0.35); }
-.mk-entity__actions .mk-status__action--danger:hover { border-color: var(--mk-red); background: var(--mk-red-bg); }
 
 /* 故事池空态（与全站空数据态同一语言） */
-/* 概览统计：KPI 四卡（全站 MkKpi 语言；点击跳转对应页签） */
-.vp-overview {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-@media (max-width: 1000px) {
-  .vp-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 /* 身份区：长期倾向（随名字走，不再挤统计条） */
 .vp-top__goal {
   font-size: var(--mk-fs-12);
@@ -2113,7 +2094,6 @@ async function quietReload(id: string) {
   text-overflow: ellipsis;
   max-width: 420px;
 }
-.vp-top__goal--none { color: var(--mk-faint); font-weight: 500; }
 /* 工作流指引 */
 
 /* 分页：统一 mk-pills 分段控件 */
@@ -2511,7 +2491,6 @@ async function quietReload(id: string) {
   .vp-none { font-size: var(--mk-fs-15); }
   .vp-tab__count { font-size: var(--mk-fs-13); margin-left: 4px; }
   .vp-fallback { font-size: 14.5px; padding: 12px 16px; }
-  .vp-overview { gap: 12px; }
   .vp-trait { padding: 5px 13px; }
   .vp-goal { padding: 14px 16px; }
   .vp-profile__row { grid-template-columns: 126px minmax(0, 1fr); padding: 14px 21px; }
@@ -2541,7 +2520,6 @@ async function quietReload(id: string) {
   .vp-none { font-size: 17.5px; }
   .vp-tab__count { font-size: 15.5px; margin-left: 5px; }
   .vp-fallback { font-size: 17px; padding: 14px 19px; }
-  .vp-overview { gap: 14px; }
   .vp-trait { padding: 6px 15px; }
   .vp-goal { padding: 16px 19px; }
   .vp-profile__row { grid-template-columns: 148px minmax(0, 1fr); padding: 16px 24px; }
@@ -2571,7 +2549,6 @@ async function quietReload(id: string) {
   .vp-none { font-size: 20.5px; }
   .vp-tab__count { font-size: var(--mk-fs-18); margin-left: 6px; }
   .vp-fallback { font-size: var(--mk-fs-20); padding: 16px 22px; }
-  .vp-overview { gap: 16px; }
   .vp-trait { padding: 7px 18px; }
   .vp-goal { padding: 19px 22px; }
   .vp-profile__row { grid-template-columns: 174px minmax(0, 1fr); padding: 19px 28px; }
