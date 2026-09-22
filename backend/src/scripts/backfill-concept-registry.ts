@@ -39,6 +39,23 @@ function parseArgs(): Args {
   return out;
 }
 
+/**
+ * 路径内局部序号（`concept-1` / `kc-1a`）**不得**注册为 canonical 概念。
+ * 实测（2026-09-22）：`resolveTaskConcept` 回退为原始文本时，`linkedConceptName` 可能就是
+ * `concept-N`；把它当概念注册会重造"同键不同义"污染（别名表出现 aliasRaw="concept-1"）。
+ * 模型还会返回**列表形态**（实测 `"concept-1, concept-2"`），故按分隔符逐段判定：
+ * 全部段都是局部序号才拒收（混有真实概念名的保留）。
+ * 只收真正的语义概念名，其余留 null（读侧回落原键）。
+ */
+const LOCAL_ID_TOKEN_RE = /^(concept|kc|ms|st)[-_]\d+[a-z]?$/i;
+export function isRegistrableConceptText(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const tokens = trimmed.split(/[\s,，、;；/]+/).filter(Boolean);
+  if (tokens.length === 0) return false;
+  return !tokens.every((token) => LOCAL_ID_TOKEN_RE.test(token));
+}
+
 const CHUNK = 500;
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -123,7 +140,7 @@ async function backfillSubtasks(userIds: string[] | null, args: Args, stats: Sta
   const byUser = new Map<string, Array<{ id: string; text: string }>>();
   for (const r of rows) {
     const text = (r.linkedConceptName || r.coreConcept || '').trim();
-    if (!text) { stats.skipped += 1; continue; }
+    if (!isRegistrableConceptText(text)) { stats.skipped += 1; continue; }
     if (!byUser.has(r.userId)) byUser.set(r.userId, []);
     byUser.get(r.userId)!.push({ id: r.id, text });
   }
@@ -154,7 +171,7 @@ async function backfillMilestones(userIds: string[] | null, args: Args, stats: S
   for (const r of rows) {
     const text = (r.coreConceptName || '').trim();
     const userId = r.learning_paths?.userId;
-    if (!text || !userId) { stats.skipped += 1; continue; }
+    if (!isRegistrableConceptText(text) || !userId) { stats.skipped += 1; continue; }
     if (!byUser.has(userId)) byUser.set(userId, []);
     byUser.get(userId)!.push({ id: r.id, text });
   }
@@ -187,10 +204,11 @@ async function reportPlan(userIds: string[] | null, args: Args): Promise<void> {
     prisma.milestones.findMany({ where: { conceptId: null, ...(userIds ? { learning_paths: { userId: { in: userIds } } } : {}) }, select: { coreConceptName: true, learning_paths: { select: { userId: true } } }, ...(args.limit ? { take: args.limit } : {}) }),
   ]);
   const distinct = (pairs: Array<[string, string]>): number => new Set(pairs.map(([u, k]) => `${u}\u0000${k}`)).size;
-  const traceKeys = distinct(traces.map((r) => [r.userId, normalizeConceptKey(r.conceptKey)]).filter(([, k]) => !!k));
-  const misKeys = distinct(misconceptions.map((r) => [r.userId, normalizeConceptKey(r.conceptKey)]).filter(([, k]) => !!k));
-  const stKeys = distinct(subtasks.map((r) => [r.userId, normalizeConceptKey(r.linkedConceptName || r.coreConcept || '')]).filter(([, k]) => !!k));
-  const msKeys = distinct(milestones.map((r) => [r.learning_paths?.userId || '', normalizeConceptKey(r.coreConceptName || '')]).filter(([, k]) => !!k));
+  const pair = (u: string, k: string): [string, string] => [u, k];
+  const traceKeys = distinct(traces.map((r) => pair(r.userId, normalizeConceptKey(r.conceptKey))).filter(([, k]) => !!k));
+  const misKeys = distinct(misconceptions.map((r) => pair(r.userId, normalizeConceptKey(r.conceptKey))).filter(([, k]) => !!k));
+  const stKeys = distinct(subtasks.map((r) => pair(r.userId, normalizeConceptKey(r.linkedConceptName || r.coreConcept || ''))).filter(([, k]) => !!k));
+  const msKeys = distinct(milestones.map((r) => pair(r.learning_paths?.userId || '', normalizeConceptKey(r.coreConceptName || ''))).filter(([, k]) => !!k));
   const allKeys = new Set([traceKeys, misKeys, stKeys, msKeys].flatMap((n) => [n])); // 仅用于提示规模
   void allKeys;
   const existing = await prisma.concepts.count();
@@ -229,4 +247,7 @@ async function main() {
     ` ｜库内 concepts=${concepts} aliases=${aliases}${args.dryRun ? ' （dry-run：未写库）' : ''}`);
 }
 
-main().then(() => process.exit(0)).catch((e) => { logger.error('[backfill] 失败', e); console.error(e); process.exit(1); });
+// 仅在直接执行时跑 CLI：被 import（如单测）时不得产生副作用。
+if (require.main === module) {
+  main().then(() => process.exit(0)).catch((e) => { logger.error('[backfill] 失败', e); console.error(e); process.exit(1); });
+}

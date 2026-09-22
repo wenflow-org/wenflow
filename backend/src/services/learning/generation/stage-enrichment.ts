@@ -314,14 +314,25 @@ export async function enrichLearningPathWithAnderson(
 
     // 概念身份预解析（canonical，best-effort）：**必须在事务外**——SQLite 下事务持有写锁，
     // 事务内再写 concepts/aliases 会撞锁。设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.4
+    //
+    // 键必须与写入侧一致：写入用的是 `resolveTaskConcept(...).linkedConceptName`（命中认知设计时
+    // 取**设计里的概念名**，非原始 linkedConcept 文本），故这里复用同一个解析函数取同一个值。
+    // （首版误用原始文本做键 → 实测子任务 6/0 全部落空。）
+    //
+    // 只收 `conceptSource === 'linked-concept'`：回退文本（'fallback-text'）可能是 path 内局部序号
+    // `concept-N`，把它当 canonical 注册会重造"同键不同义"污染（实测别名表出现 aliasRaw="concept-1"）。
     const subtaskConceptIds = new Map<string, string>();
     try {
-      const texts = stageDesignOutputs
+      const names = stageDesignOutputs
         .flatMap((s) => s.subtasks)
-        .map((t: any) => (typeof t?.linkedConcept === 'string' ? t.linkedConcept.trim() : ''))
-        .filter((text: string) => !!text);
-      if (texts.length > 0) {
-        const resolved = await conceptRegistryService.resolveMany(data.userId, texts, {
+        .map((t: any) => {
+          const linked = typeof t?.linkedConcept === 'string' ? t.linkedConcept : null;
+          const resolved = resolveTaskConcept(linked, pathCognitiveDesign, linked);
+          return resolved.conceptSource === 'linked-concept' ? resolved.linkedConceptName : null;
+        })
+        .filter((name): name is string => !!name && !!name.trim());
+      if (names.length > 0) {
+        const resolved = await conceptRegistryService.resolveMany(data.userId, names, {
           source: 'write_time', level: 'concept', originPathId: pathId,
         });
         for (const [key, conceptId] of resolved) subtaskConceptIds.set(key, conceptId);
