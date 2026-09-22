@@ -105,41 +105,102 @@ const checkBlock = (attempts: LoginAttempt[], maxAttempts: number): BlockCheck =
   return { blocked: true, remainingTime };
 };
 
-const createLoginRateLimitMiddleware = (scope: LoginRateLimitScope) => (
+/**
+ * 落库复核（安全审计 M6）：内存限流态重启即清零、多实例各自为政——
+ * 内存无拦截时以 login_attempts 表近窗口失败记录再核一次（该表在每次失败/锁定拒绝时均已落库）。
+ * 命中后把锁定态写回内存（后续请求走内存快路径，每个锁定窗口每 key 至多一次 DB 查询）；
+ * 查询失败 fail-open 退回纯内存判定，绝不因审计库抖动阻断登录。
+ */
+const checkDbLockout = async (
+  scope: LoginRateLimitScope,
+  name: string,
+  clientIP: string
+): Promise<number | null> => {
+  const prisma = loadPrisma();
+  const since = new Date(Date.now() - LOCK_DURATION_MS);
+  const baseWhere = { scope, success: false, createdAt: { gte: since } };
+  const [nameIpCount, ipCount, accountCount] = await Promise.all([
+    prisma.login_attempts.count({ where: { ...baseWhere, username: name, ip: clientIP } }),
+    prisma.login_attempts.count({ where: { ...baseWhere, ip: clientIP } }),
+    prisma.login_attempts.count({ where: { ...baseWhere, username: name } }),
+  ]);
+  const dimensions: Array<[number, number]> = [
+    [nameIpCount, MAX_ATTEMPTS],
+    [ipCount, IP_MAX_ATTEMPTS],
+    [accountCount, ACCOUNT_MAX_ATTEMPTS],
+  ];
+  return dimensions.some(([count, max]) => count >= max) ? LOCK_DURATION_SECONDS : null;
+};
+
+/** DB 命中锁定后把满额失败记录写回内存三张 Map，让后续请求直接走内存快路径 */
+const seedMemoryLockout = (mKey: string, mIpKey: string, mAccountKey: string) => {
+  const now = new Date();
+  loginAttempts.set(mKey, Array.from({ length: MAX_ATTEMPTS }, () => ({ timestamp: now })));
+  ipLoginAttempts.set(mIpKey, Array.from({ length: IP_MAX_ATTEMPTS }, () => ({ timestamp: now })));
+  accountLoginAttempts.set(mAccountKey, Array.from({ length: ACCOUNT_MAX_ATTEMPTS }, () => ({ timestamp: now })));
+};
+
+const createLoginRateLimitMiddleware = (scope: LoginRateLimitScope) => async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  // G3：用户名会作为内存 Map 的 key，截断超长输入防止内存滥用（schema 层另有 max(64) 校验）
-  const name = (typeof req.body?.name === 'string' ? req.body.name : '').slice(0, 64);
-  const clientIP = (req.ip || 'unknown').toString();
-  const key = buildLoginAttemptKey(scope, name, clientIP);
-  const ipKey = `${scope}:ip:${clientIP}`;
-  const accountKey = `${scope}:account:${name}`;
+  try {
+    // G3：用户名会作为内存 Map 的 key，截断超长输入防止内存滥用（schema 层另有 max(64) 校验）
+    const name = (typeof req.body?.name === 'string' ? req.body.name : '').slice(0, 64);
+    const clientIP = (req.ip || 'unknown').toString();
+    const key = buildLoginAttemptKey(scope, name, clientIP);
+    const ipKey = `${scope}:ip:${clientIP}`;
+    const accountKey = `${scope}:account:${name}`;
 
-  const blocking = [
-    checkBlock(loginAttempts.get(key) || [], MAX_ATTEMPTS),
-    checkBlock(ipLoginAttempts.get(ipKey) || [], IP_MAX_ATTEMPTS),
-    checkBlock(accountLoginAttempts.get(accountKey) || [], ACCOUNT_MAX_ATTEMPTS),
-  ].filter(check => check.blocked);
+    const blocking = [
+      checkBlock(loginAttempts.get(key) || [], MAX_ATTEMPTS),
+      checkBlock(ipLoginAttempts.get(ipKey) || [], IP_MAX_ATTEMPTS),
+      checkBlock(accountLoginAttempts.get(accountKey) || [], ACCOUNT_MAX_ATTEMPTS),
+    ].filter(check => check.blocked);
 
-  if (blocking.length > 0) {
-    const remainingTime = Math.max(...blocking.map(check => check.remainingTime));
-
-    // 登录审计：锁定拒绝同样落库（success=false, reason=ACCOUNT_LOCKED）
-    persistLoginAttempt(name, clientIP, false, scope, 'ACCOUNT_LOCKED');
-
-    return res.status(429).json({
-      success: false,
-      error: {
-        message: `登录失败次数过多，请 ${remainingTime} 秒后重试`,
-        code: 'ACCOUNT_LOCKED',
-        remainingTime
+    if (blocking.length === 0) {
+      try {
+        const dbRemainingTime = await checkDbLockout(scope, name, clientIP);
+        if (dbRemainingTime !== null) {
+          seedMemoryLockout(key, ipKey, accountKey);
+          persistLoginAttempt(name, clientIP, false, scope, 'ACCOUNT_LOCKED');
+          return res.status(429).json({
+            success: false,
+            error: {
+              message: `登录失败次数过多，请 ${dbRemainingTime} 秒后重试`,
+              code: 'ACCOUNT_LOCKED',
+              remainingTime: dbRemainingTime
+            }
+          });
+        }
+      } catch (dbError) {
+        loadLogger().warn('[login-rate-limit] 落库复核查询失败（fail-open 退回内存判定）', {
+          error: dbError instanceof Error ? dbError.message : String(dbError)
+        });
       }
-    });
-  }
+    }
 
-  next();
+    if (blocking.length > 0) {
+      const remainingTime = Math.max(...blocking.map(check => check.remainingTime));
+
+      // 登录审计：锁定拒绝同样落库（success=false, reason=ACCOUNT_LOCKED）
+      persistLoginAttempt(name, clientIP, false, scope, 'ACCOUNT_LOCKED');
+
+      return res.status(429).json({
+        success: false,
+        error: {
+          message: `登录失败次数过多，请 ${remainingTime} 秒后重试`,
+          code: 'ACCOUNT_LOCKED',
+          remainingTime
+        }
+      });
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const loginRateLimitMiddleware = createLoginRateLimitMiddleware('user');

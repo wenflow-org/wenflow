@@ -1,3 +1,15 @@
+// M6 落库复核：mock 掉 prisma（count 恒 0 = DB 无锁定），本套件聚焦内存判定语义，
+// 避免中间件的 DB 复核在测试环境触碰真实数据库
+jest.mock('../../config/database', () => ({
+  __esModule: true,
+  default: {
+    login_attempts: {
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn().mockResolvedValue({})
+    }
+  }
+}));
+
 describe('loginRateLimitMiddleware', () => {
   const originalEnv = process.env.LOGIN_LOCK_DURATION_SECONDS
   const originalLegacyEnv = process.env.LOGIN_LOCK_DURATION
@@ -23,7 +35,7 @@ describe('loginRateLimitMiddleware', () => {
     }
   })
 
-  it('按秒配置锁定窗口，而不是把 900 当成毫秒', () => {
+  it('按秒配置锁定窗口，而不是把 900 当成毫秒', async () => {
     process.env.LOGIN_LOCK_DURATION_SECONDS = '900'
     jest.resetModules()
     const {
@@ -55,18 +67,18 @@ describe('loginRateLimitMiddleware', () => {
     }
     const next = jest.fn()
 
-    loginRateLimitMiddleware(req, res, next)
+    await loginRateLimitMiddleware(req, res, next)
     expect(res.statusCode).toBe(429)
     expect(res.body.error.remainingTime).toBe(900)
 
     jest.advanceTimersByTime(899_000)
     const nextBeforeExpiry = jest.fn()
-    loginRateLimitMiddleware(req, res, nextBeforeExpiry)
+    await loginRateLimitMiddleware(req, res, nextBeforeExpiry)
     expect(nextBeforeExpiry).not.toHaveBeenCalled()
 
     jest.advanceTimersByTime(1_000)
     const nextAfterExpiry = jest.fn()
-    loginRateLimitMiddleware(req, res, nextAfterExpiry)
+    await loginRateLimitMiddleware(req, res, nextAfterExpiry)
     expect(nextAfterExpiry).toHaveBeenCalledTimes(1)
   })
 
@@ -140,7 +152,7 @@ describe('loginRateLimitMiddleware', () => {
     expect(res.body.error.remainingTime).toBe(900)
   })
 
-  it('成功登录后清除同一账号和来源的失败记录', () => {
+  it('成功登录后清除同一账号和来源的失败记录', async () => {
     const {
       loginRateLimitMiddleware,
       recordLoginAttempt,
@@ -166,12 +178,12 @@ describe('loginRateLimitMiddleware', () => {
     }
     const next = jest.fn()
 
-    loginRateLimitMiddleware(req, res, next)
+    await loginRateLimitMiddleware(req, res, next)
 
     expect(next).toHaveBeenCalledTimes(1)
   })
 
-  it('普通用户与 Admin 登录使用独立失败计数桶', () => {
+  it('普通用户与 Admin 登录使用独立失败计数桶', async () => {
     const {
       adminLoginRateLimitMiddleware,
       loginRateLimitMiddleware,
@@ -190,8 +202,8 @@ describe('loginRateLimitMiddleware', () => {
     const userNext = jest.fn()
     const adminNext = jest.fn()
 
-    loginRateLimitMiddleware(req, userRes, userNext)
-    adminLoginRateLimitMiddleware(req, adminRes, adminNext)
+    await loginRateLimitMiddleware(req, userRes, userNext)
+    await adminLoginRateLimitMiddleware(req, adminRes, adminNext)
 
     expect(userRes.statusCode).toBe(429)
     expect(userNext).not.toHaveBeenCalled()
