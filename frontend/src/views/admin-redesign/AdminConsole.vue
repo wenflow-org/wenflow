@@ -17,7 +17,7 @@
     </div>
 
     <Shell :current="scene" :crumb="crumbLabel" :crumb-title="crumbTitle" release @navigate="navigate" @glossary="glossaryOpen = true">
-      <MkLoading v-if="booting" class="ac-boot" text="加载中…" />
+      <MockSkeletonTable v-if="booting" :rows="7" :cols="6" />
       <component v-else :is="detailComponent || currentComponent" />
     </Shell>
 
@@ -40,8 +40,8 @@
 function asyncPage(loader: () => Promise<any>) {
   return defineAsyncComponent({
     loader,
-    // 统一加载态：与页面级 MkLoading 同源（原先自搓 .admin-page-loading + 非 mk 的 .spinner）
-    loadingComponent: h(MkLoading, { min: true, text: '加载中…' }),
+    // 统一加载态：表格骨架屏（与页面自身骨架同源同观感；原 spinner 与骨架体系割裂且切换观感差）
+    loadingComponent: h(MockSkeletonTable, { rows: 7, cols: 6 }),
     delay: 200,
     errorComponent: {
       setup() {
@@ -126,7 +126,7 @@ import { useRoute, useRouter } from 'vue-router';
 import Shell from './Shell.vue';
 import SkillDrawer from './SkillDrawer.vue';
 import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
-import MkLoading from '@/components/mk/MkLoading.vue';
+import MockSkeletonTable from './SkeletonTable.vue';
 import { intent, intentQueryParams, subPage, closeSkillDrawer, type SubPageView } from './store';
 import { loadLiveData } from './live';
 import '@/styles/mk-primitives.css';
@@ -345,18 +345,6 @@ onMounted(() => {
   min-height: 100vh;
 }
 
-.ac-boot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 50vh;
-  color: #5b6577;
-  font-size: var(--mk-fs-14);
-}
-/* 启动屏 spinner 略大：需 :deep() 才能命中子组件内部节点（scoped 属性不作用于组件内部） */
-.ac-boot :deep(.mk-spinner) { width: 16px; height: 16px; border-width: 2px; }
-
 .ac-error {
   position: fixed;
   inset: 0;
@@ -410,33 +398,19 @@ onMounted(() => {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15） ========== */
 @media (min-width: 2000px) {
-  .ac-boot { font-size: var(--mk-fs-16); gap: 12px; }
-  .ac-boot .mk-spinner { width: 19px; height: 19px; border-width: 2.5px; }
   .ac-error__card { gap: 12px; padding: 38px 48px; border-radius: 19px; }
   .ac-error__card strong { font-size: 18.5px; }
   .ac-error__card span { font-size: var(--mk-fs-15); }
   .ac-error__retry { margin-top: 7px; padding: 9px 24px; border-radius: 10px; font-size: var(--mk-fs-15); }
 }
 @media (min-width: 2800px) {
-  .ac-boot { font-size: 19px; gap: 14px; }
-  .ac-boot .mk-spinner { width: 22px; height: 22px; border-width: 3px; }
   .ac-error__card { gap: 14px; padding: 46px 58px; border-radius: 22px; }
   .ac-error__card strong { font-size: 21.5px; }
   .ac-error__card span { font-size: 17.5px; }
   .ac-error__retry { margin-top: 8px; padding: 11px 28px; border-radius: 12px; font-size: 17.5px; }
 }
 
-/* 异步 tab 过渡态：loading 骨架 + 加载失败错误卡 */
-.admin-page-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 60px 20px;
-  color: var(--mk-muted, #8896b0);
-  font-size: var(--mk-fs-14);
-}
+/* 异步 tab 过渡态：错误卡（加载骨架已统一走 SkeletonTable） */
 .admin-page-error {
   margin: 24px;
 }
