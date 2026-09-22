@@ -15,12 +15,15 @@ import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
 import { mapAndPersistKcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
+import { extractPromptMaterials, STAGE_MATERIAL_LIMITS } from '../../materials/material-prompt-projection';
 import {
   assertGenerationRunFence,
   assertStageTasksPresent,
   calculateStageProgress,
 } from '../path-generation-status';
 import { assertPathMutationSafe, isPathMutationConflictError } from '../path-mutation-safety';
+import { conceptRegistryService } from '../../learner/concept-registry.service';
+import { normalizeConceptKey } from '../../memory/concept-key';
 import {
   generateDisplayLabel,
   getSceneFramingNormalizedInput,
@@ -160,6 +163,11 @@ export async function enrichLearningPathWithAnderson(
     const stageDesignerBaseInput = {
       cognitiveCore: pathCognitiveDesign,
       normalizedInput,
+      // 资料 → 任务（下游 learn 的第一段）：把附件/联网资料**投影后**交给 stage-designer，
+      // 让任务长在资料的具体章节/条目上，而不是只长在里程碑标题上。
+      ...(extractPromptMaterials(normalizedInput, STAGE_MATERIAL_LIMITS)
+        ? { materials: extractPromptMaterials(normalizedInput, STAGE_MATERIAL_LIMITS) }
+        : {}),
     };
     const stageDesignRawOutputs: Record<string, any> = {};
     const stageDesignOutputs: Array<{
@@ -301,6 +309,30 @@ export async function enrichLearningPathWithAnderson(
       }))),
     });
 
+    // 任务级资料引用收集（key = subtaskId；写进模板 JSON，不新增表列）
+    const materialRefsByTask: Record<string, any[]> = {};
+
+    // 概念身份预解析（canonical，best-effort）：**必须在事务外**——SQLite 下事务持有写锁，
+    // 事务内再写 concepts/aliases 会撞锁。设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.4
+    const subtaskConceptIds = new Map<string, string>();
+    try {
+      const texts = stageDesignOutputs
+        .flatMap((s) => s.subtasks)
+        .map((t: any) => (typeof t?.linkedConcept === 'string' ? t.linkedConcept.trim() : ''))
+        .filter((text: string) => !!text);
+      if (texts.length > 0) {
+        const resolved = await conceptRegistryService.resolveMany(data.userId, texts, {
+          source: 'write_time', level: 'concept', originPathId: pathId,
+        });
+        for (const [key, conceptId] of resolved) subtaskConceptIds.set(key, conceptId);
+      }
+    } catch (error) {
+      logger.warn('[stage-enrichment] 子任务概念身份预解析失败（best-effort，conceptId 留空）', {
+        pathId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     await withTransaction(async (tx) => {
       // 事务可能因瞬时冲突整体重试：计数必须随每次尝试重置，避免重复累加
       designedTaskCount = 0;
@@ -337,9 +369,14 @@ export async function enrichLearningPathWithAnderson(
           const displayLabel = generateDisplayLabel(taskData.knowledgeType || null, taskData.cognitiveLevel || null)
             || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
 
+          const subtaskId = `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${j}`;
+          // 任务 → 资料条目（skill 侧已逐字核对）：按 subtaskId 落进 aiPromptTemplate.materialRefs.byTask
+          if (Array.isArray((taskData as any).materialRefs) && (taskData as any).materialRefs.length) {
+            materialRefsByTask[subtaskId] = (taskData as any).materialRefs;
+          }
           await tx.subtasks.create({
             data: {
-              id: `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${j}`,
+              id: subtaskId,
               milestoneId: milestone.id,
               userId: data.userId,
               title: taskData.title || `任务${j + 1}`,
@@ -350,6 +387,8 @@ export async function enrichLearningPathWithAnderson(
               coreConcept: resolvedConcept.linkedConceptName || null,
               linkedConceptId: resolvedConcept.linkedConceptId || null,
               linkedConceptName: resolvedConcept.linkedConceptName || null,
+              // canonical 身份（事务外预解析；未命中留 null，回填脚本可补）
+              conceptId: subtaskConceptIds.get(normalizeConceptKey(resolvedConcept.linkedConceptName)) ?? null,
               knowledgeType: taskData.knowledgeType || null,
               cognitiveLevel: taskData.cognitiveLevel || null,
               icapLevel: taskData.icapLevel || null,
@@ -392,6 +431,14 @@ export async function enrichLearningPathWithAnderson(
             ...parsedTemplate,
             stageDesigns: stageDesignRawOutputs,
             kcAnnotation,
+            ...(Object.keys(materialRefsByTask).length
+              ? {
+                  materialRefs: {
+                    ...(parsedTemplate?.materialRefs && typeof parsedTemplate.materialRefs === 'object' ? parsedTemplate.materialRefs : {}),
+                    byTask: materialRefsByTask,
+                  },
+                }
+              : {}),
             _generation: {
               ...(parsedTemplate?._generation && typeof parsedTemplate._generation === 'object' ? parsedTemplate._generation : {}),
               stageDesign: 'succeeded',

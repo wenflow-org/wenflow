@@ -11,6 +11,25 @@ import prisma from '../../config/database';
 import { createHash } from 'crypto';
 import { logger } from '../../utils/logger';
 import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
+import { conceptRegistryService } from './concept-registry.service';
+
+/**
+ * 解析概念身份（canonical conceptId），best-effort：注册表故障不得阻断误解记录。
+ * 设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.4（写入点双写）
+ */
+async function resolveConceptIdSafe(userId: string, conceptKey: string): Promise<string | null> {
+  try {
+    const resolved = await conceptRegistryService.resolveConcept(userId, conceptKey, { source: 'write_time' });
+    return resolved?.conceptId ?? null;
+  } catch (error) {
+    logger.warn('[misconception-ledger] 概念身份解析失败（best-effort，conceptId 留空）', {
+      userId,
+      conceptKey: conceptKey.slice(0, 40),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
 
 /**
  * 读取选项（B1/Q3）：
@@ -61,6 +80,7 @@ export async function recordMisconceptions(
     const now = new Date();
     for (const item of items) {
       const hash = hashHypothesis(item.hypothesis);
+      const conceptId = await resolveConceptIdSafe(userId, item.conceptKey);
       const existing = await prisma.misconception_ledger.findUnique({
         where: {
           userId_conceptKey_hypothesisHash: { userId, conceptKey: item.conceptKey, hypothesisHash: hash },
@@ -80,6 +100,7 @@ export async function recordMisconceptions(
             occurrenceCount: { increment: 1 },
             lastSeenAt: now,
             lastSessionId: sessionId,
+            ...(conceptId !== null ? { conceptId } : {}),
           },
         });
       } else {
@@ -88,6 +109,7 @@ export async function recordMisconceptions(
             id: `ml_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
             userId,
             conceptKey: item.conceptKey,
+            conceptId,
             hypothesisHash: hash,
             hypothesis: item.hypothesis.trim().slice(0, 300),
             canonicalLabel: item.canonicalLabel?.trim().slice(0, 200) ?? null,
