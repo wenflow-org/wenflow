@@ -233,3 +233,25 @@
 - **长链路**（`verify-from-zero --turns=1 --days=1`，真模型）：造人/路径/首课/记忆/学习状态 **PASS**；跨日温故与检查点 **FAIL**——相关实现文件（`review-plan.service` / `simulated-day.service` / `simulation-clock-context` / `learning-state.service` / `services/time/`）**全部是他人 WIP，本会话未触碰**，且与既有的两处跨日失真记录一致。
 - **遗留登记**：① consolidator 的 `CALLER_ABORTED`（44 次/7 天，调用方取消，非提示词缺陷，需单独排查调用点）；② opening 条件规则机制（§6-2 已判"不推广"）；③ `lesson-knowledge-enricher` 的 `transferGoal` 未登记为 inputs（值今天由调用方 payload 直达；补齐需先决定它属于哪个已注册 sandbox 通道）；④ `stage-designer.yaml` 的 `inputSchema`/`variableBindings`/orchestration 字段漂移（落在他人 WIP 上，本轮不触碰）。
 - **环境**：本轮真模型探针的临时产物（路径/会话/学习者）均已清理；`prompts:sync` 只更新了本会话改动的 skill（实测 updated 列表逐次仅一项）。
+
+## 10. 真实前端走查（2026-09-24，前端 5173 + 后端 3001）
+
+一次性测试账号（走查后已按应用口径软删除：`deletedAt` 置位、`deletedBy=uicheck-walkthrough-cleanup`，历史行保留；临时凭据文件已删除）在真实浏览器里按用户操作路径走了一遍，逐项取界面证据：
+
+| 修复项 | 界面/落库证据 |
+|---|---|
+| A4（advisory 不进用户可见） | 真实对话回复正文无「系统判断…」字样；DB `responseTriage.mode=combination` 仍落库 |
+| A2（规则#25 字段声明） | 真实一轮对话后 `collectedData.motivationSignal={change_talk_score:1.5}` + 4 条 `miFrames` 落库，整轮不再失败 |
+| B2（adjustments 可达） | 路径页「调整剩余部分」填补充说明 → 载荷 `normalizedInput.understanding.adjustments` 逐字命中；重生成路径采纳（4.7h→3.1h，任务 40/45min→30min，阶段 1 改为「拆出一条结论」），路径页渲染即新版本 |
+| D4（opening 规则去重） | 课堂「重新开始」现场生成开场：`openingMode=self-assess` + 3 个快捷回复 chip 在界面渲染（`.replies__row`，文案与落库一致） |
+| D1（peer followUpQuestions 契约） | 发含「搞不懂/不明白」的消息触发伴学：小启伴学窗自动弹出，消息带策略标签「类比迁移」，并渲染出 1 个 `peerdock__follow` chip；DB `followUpQuestions` 为正常数组 |
+| D2（peer 负荷/情绪转发） | 同一次调用的 `userPayload` 含【本轮认知负荷】【本轮情绪】两段；对照修复前的旧记录无这两段 |
+| D3（peer 重试收敛） | 该次 `attempts=1 / llmCalls=1 / success=1`（4159ms，`deepseek-v4-flash`），未走重试即成功 |
+| D5（guidance 声明对齐） | 学习状态页「AI 建议」渲染出模型生成文案（`AI 生成` 标记 + headline/subtitle/warningCopy + 行动选项），与 `skill:adaptive-guidance-copy` 输出一致 |
+
+另走通一条完整真实回合（点快捷回复 chip → 用户消息 → 真模型回复）。
+
+### 10.1 走查中发现的两处非本轮引入的问题（登记）
+
+1. **课堂页可能永久卡在「正在准备本节内容…」**：`V2LearningPage` 的 `<Transition name="stage-switch" mode="out-in">` 依赖 `requestAnimationFrame` 推进离开动画；当 rAF 不触发（本次自动化浏览器实测：rAF 回调 1.5s 超时未执行，页面可见、非后台标签）时，离开动画永不收尾，`mode="out-in"` 使 `.learn__body` 永不挂载。此时三个接口全 200、组件 `initing=false`，DOM 停在 `stage-switch-leave-from stage-switch-leave-active`。前端未在本会话改动，属既有实现；现实风险场景是 rAF 被节流的嵌入 webview / 长时间后台标签。建议前端加兜底超时（或关键挂载不用 `out-in`）使其免疫。
+2. **引导文案接口耗时超过前端超时**：`/api/adaptive-guidance/copy?view=learning-state` 本次模型调用耗时 **113.9s**（网关侧慢，与 `deepseek-v4-flash` 波动一致），前端 60s 超时 → 界面回落静态文案「完成第一次学习后…」，而服务端其实已成功并写入缓存（刷新页面即显示模型文案）。根因是网关延迟，但"成功却看不到"由前后端超时口径不匹配放大。
