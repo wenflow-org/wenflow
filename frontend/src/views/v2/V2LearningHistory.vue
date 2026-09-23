@@ -171,6 +171,15 @@ function feedbackLink(s: SessionRecord): string {
   return `/learn/${s.taskId}/evaluation/${s.id}`;
 }
 
+/** 摘要兜底用消息原文时去掉行内 markdown 标记（主题小结本身是纯文本） */
+function plainSnippet(text: string): string {
+  return text
+    .replace(/[*`~#>]/g, '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function sessionSummary(s: SessionRecord): string {
   try {
     const state = s.teachingState ? JSON.parse(s.teachingState) : null;
@@ -179,8 +188,8 @@ function sessionSummary(s: SessionRecord): string {
     const msg = s.messages ? JSON.parse(s.messages) : null;
     if (Array.isArray(msg) && msg.length) {
       const last = msg[msg.length - 1];
-      const text = String(last?.content || last?.text || '');
-      if (text.trim()) return text.trim().slice(0, 60);
+      const text = plainSnippet(String(last?.content || last?.text || ''));
+      if (text) return text.slice(0, 60);
     }
   } catch {
     /* 忽略解析失败 */

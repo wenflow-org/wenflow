@@ -443,7 +443,19 @@ const ktlLineD = computed(() => linePath('ktl'));
 const lfLineD = computed(() => linePath('lf'));
 const lsbLineD = computed(() => linePath('lsb'));
 
-const latestDay = computed<TrendPoint | null>(() => points.value[points.value.length - 1] ?? null);
+/** 今天本地日期键（与 series 同格式）。图表右侧 2 天是刻意的留白（非真实数据日），
+    「当前状态」必须落在今天而非留白日，否则会展示一个未来日期的空数据。 */
+const todayKey = computed(() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+});
+
+const latestDay = computed<TrendPoint | null>(() => {
+  const hit = points.value.find((p) => p.date === todayKey.value);
+  if (hit) return hit;
+  const past = points.value.filter((p) => p.date <= todayKey.value);
+  return (past.length ? past[past.length - 1] : points.value[points.value.length - 1]) ?? null;
+});
 const hoverDay = ref<TrendPoint | null>(null);
 const displayDay = computed<TrendPoint | null>(() => hoverDay.value ?? latestDay.value);
 
