@@ -344,7 +344,10 @@ onUnmounted(() => {
 @media (max-width: 1100px) {
   .v2nav__tabs {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    /* 7 个入口（学习台/目标规划/学习路径/知识图谱/学习状态/学习历史/成就）：
+       列数必须与 items 数量一致，否则第 7 个 tab 换行把导航撑成两行（+49px）。
+       新增底部入口时同步改这里。 */
+    grid-template-columns: repeat(7, 1fr);
     position: fixed;
     left: 0; right: 0; bottom: 0;
     z-index: 40;
@@ -362,11 +365,17 @@ onUnmounted(() => {
     text-decoration: none;
   }
   .v2nav__tab-icon { display: grid; place-items: center; opacity: 0.75; }
-  .v2nav__tab-label { font-size: 10.5px; font-weight: 700; }
+  .v2nav__tab-label { font-size: 10.5px; font-weight: 700; white-space: nowrap; }
   .v2nav__tab--active {
     color: var(--blue-deep, #1f57cc);
   }
   .v2nav__tab--active .v2nav__tab-icon { opacity: 1; }
   .v2nav__tab:active { background: color-mix(in srgb, var(--blue) 8%, transparent); }
+  /* ≤360px 窄屏：7 列每列仅 ~44px，4 字标签 10.5px 会溢出——收字号、去左右内边距 */
+  @media (max-width: 360px) {
+    .v2nav__tabs { padding-left: 0; padding-right: 0; }
+    .v2nav__tab { padding-left: 0; padding-right: 0; }
+    .v2nav__tab-label { font-size: 9.5px; }
+  }
 }
 </style>
