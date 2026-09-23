@@ -66,7 +66,8 @@ const dismissToast = (item: ToastItem) => {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 340px;
+  /* 宿主 fixed 右上 right:20px：100vw-40px 保证 ≤360px 窄屏不被裁切（原固定 340 会溢出） */
+  width: min(340px, calc(100vw - 40px));
   padding: 12px 14px;
   border-radius: 6px;
   background: var(--surface, #ffffff);
