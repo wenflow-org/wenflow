@@ -76,7 +76,7 @@
             v-model="input"
             class="composer__textarea"
             rows="1"
-            maxlength="500"
+            :maxlength="INPUT_MAX"
             :placeholder="entryPlaceholder"
             @input="live.meta.onInput(input.length)"
             @keydown.enter.exact.prevent="doSend"
@@ -173,7 +173,7 @@
                   v-model="editingText"
                   class="msg__edit-input"
                   rows="2"
-                  maxlength="500"
+                  :maxlength="INPUT_MAX"
                   @keydown.enter.exact.prevent="saveEdit(km.msg)"
                   @keydown.esc="cancelEdit"
                 ></textarea>
@@ -297,7 +297,7 @@
               v-model="input"
               class="composer__textarea"
               rows="1"
-              maxlength="500"
+              :maxlength="INPUT_MAX"
               :placeholder="chatPlaceholder"
               @keydown.enter.exact.prevent="doSend"
             ></textarea>
@@ -327,7 +327,7 @@
           <div class="composer__hint">
             <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
             <span class="composer__hint-right">
-              <span class="composer__count">{{ input.length }} / 500</span>
+              <span class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
               <AiContentNote />
             </span>
           </div>
@@ -478,6 +478,8 @@ const narrowMq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 
 const isNarrow = ref(narrowMq?.matches ?? false);
 const panelOpen = ref(false);
 const panelExpanded = computed(() => !isNarrow.value || panelOpen.value);
+/** 输入上限：后端 GOAL_INPUT_MAX_CHARS 是 4096，前端 500 太紧——用户常要一次性贴一段背景 */
+const INPUT_MAX = 1000;
 /* 移动端输入框 placeholder 缩短（长文案换行后被裁，占两行以上无法完整显示） */
 const entryPlaceholder = computed(() => isNarrow.value ? '先说说你想解决什么…' : '先说说你最近想解决什么，或现在卡在哪里…');
 const chatPlaceholder = computed(() => isNarrow.value ? '回答问题，或补充基础、时间…' : '回答上面的问题，或补充你的基础、时间和限制…');
@@ -1886,17 +1888,33 @@ function shuffleScenes() {
   .chat__scroll { min-height: 0; overscroll-behavior: contain; }
   .msg { max-width: 96%; }
   .replies { margin-left: 0; }
-  /* 移动端 hint 行：触屏无键盘快捷键提示，隐藏之；0/500 计数与 AI 标注一行右对齐 */
+  /* 移动端 hint 行整体脱离文档流（0 高，原占 17px + gap 7px），内容挂到输入框与底部导航
+     之间那道缝里：左边「0 / 1000」计数、右边 AI 生成声明。触屏没有键盘快捷键提示，隐藏之。 */
+  .composer { position: relative; }
+  .composer__hint {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 0;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    padding: 0;
+  }
   .composer__hint-shortcut { display: none; }
-  .composer__hint { justify-content: flex-end; flex-wrap: nowrap; }
+  /* 计数与 AI 声明分列缝的两端（两者原本裹在 .composer__hint-right 里，会挤成一堆） */
+  .composer__hint-right { display: contents; }
   /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——
-     移动端输入统一提到 16px，并整体收紧盒内间距：外内边距 16/8→12/6、gap 10→8、
-     textarea 上下 10→8、发送键 40→36，盒高 62→54，图标/文字/按钮贴得更近。
-     回形针与首行文字中线对齐：上内边距 8 + 半行高 12 = 20，按钮 32 高 → margin-top 4。 */
-  .composer__box { padding: 6px 6px 6px 12px; gap: 8px; }
+     textarea 必须留 16px；想让空态看着轻一点只能压 placeholder（占位符字号不影响聚焦判定）。
+     盒内继续收紧：外内边距左 12→8、gap 10→8、textarea 上下 10→8、发送键 40→36，盒高 62→54。
+     回形针与首行文字中线对齐：上内边距 8 + 半行高 12 = 20，按钮 32 高 → margin-top 4。
+     左右内边距都收到 6：回形针/发送键的图标视觉内缩 ≈14.5 / 16.5px，两侧基本对称且贴边。 */
+  .composer__box { padding: 6px; gap: 8px; }
   .composer__textarea { font-size: 16px; padding: 8px 0; }
+  .composer__textarea::placeholder { font-size: 15px; }
   .composer__attach { margin-top: 4px; }
+  .composer__attach svg { width: 14px; height: 14px; }
   .composer__send { width: 36px; height: 36px; }
+  .composer__send:not(.composer__send--stop) svg { width: 15px; height: 15px; }
   .proposal__stages ol { grid-template-columns: repeat(2, 1fr); }
   .entry__hero { align-items: stretch; flex-direction: column; }
   .entry__hero h1 { font-size: 22px; }
