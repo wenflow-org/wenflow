@@ -87,13 +87,15 @@ const icons = {
   layers: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="m12 2 10 5-10 5L2 7l10-5zm0 7.6L18.9 7 12 4.4 5.1 7 12 9.6zM2 12l10 5 10-5v2l-10 5L2 14v-2zm0 5 10 5 10-5v2l-10 5L2 19v-2z" opacity=".9"/></svg>',
   pulse: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 13h4l2-7 4 12 2-7h6v2h-4.6l-2.4 8.4L9.6 7.6 7.6 15H3v-2z"/></svg>',
   history: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm-.75 3v5.6l4.3 2.55.9-1.5-3.7-2.2V7h-1.5z"/></svg>',
-  medal: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></svg>'
+  medal: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></svg>',
+  graph: '<svg viewBox="0 0 24 24" width="20" height="20"><g fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8.7 6.8 15.3 9.3M8.1 9.1l-1 7"/></g><g fill="currentColor"><circle cx="6.5" cy="5.5" r="3"/><circle cx="17.5" cy="10.5" r="3"/><circle cx="7" cy="19" r="3"/></g></svg>'
 };
 
 const items = [
   { to: '/dashboard', label: '学习台', match: ['/dashboard'], icon: icons.home },
   { to: '/goal-conversation', label: '目标规划', match: ['/goal-conversation'], icon: icons.goal },
   { to: '/learning-paths', label: '学习路径', match: ['/learning-paths', '/learning-path'], icon: icons.layers },
+  { to: '/knowledge-map', label: '知识图谱', match: ['/knowledge-map'], icon: icons.graph },
   { to: '/learning-state', label: '学习状态', match: ['/learning-state'], icon: icons.pulse },
   { to: '/learning-history', label: '学习历史', match: ['/learning-history'], icon: icons.history },
   { to: '/achievements', label: '成就', match: ['/achievements'], icon: icons.medal }
@@ -321,6 +323,10 @@ onUnmounted(() => {
   .v2nav__right { gap: 8px; }
   .v2nav__avatar { padding: 4px 8px 4px 4px; font-size: 12.5px; }
   .v2nav__avatar i { width: 28px; height: 28px; font-size: 13px; }
+  /* 手机段隐藏「规划新目标」CTA：底部六 tab 的「目标规划」就是同一入口，重复且抢眼——
+     84×32 的蓝色大按钮与 34px logo 并排比例失衡。隐藏后头部只剩
+     logo + 铃铛 + 头像三件套；901–1100 平板段保留（该段无顶部链接，CTA 仍是主动作）。 */
+  .v2nav__cta { display: none; }
 }
 
 /* 大屏（1680+）：导航内容与页面容器同宽（1360）居中，避免 4K 下内容贴左 */
