@@ -178,3 +178,58 @@
 | **evidence 逐字校验** | 误解台账 `evidence` 必须是学生本轮原话的逐字片段，否则**整条丢弃**（照 `material-refs.ts#isQuoteVerbatim` 先例） |
 
 **共同教训**：能落到代码的约束就不要只写在提示词里（模型会绕过）；逐字段白名单是静默丢字段的高发区；提示词改动必须走"单点编译 + sync"，否则运行时不变。
+
+---
+
+## 9. 修复记录（2026-09-23 本会话 · `04b546fd..38611c27` · 20 个提交）
+
+**结论**：P0 五项全部修复；P1 除「需拍板」一项按**拍板口径**落地外全部修复；P2 修了测试缺口与可安全改的声明漂移，其余登记。每一步都跑了真模型端到端（探针脚本留在 `backend/src/scripts/probe-*.ts`）。
+
+### 9.1 P0（全部已修）
+
+| 项 | 提交 | 真模型证据（要点） |
+|---|---|---|
+| §1.1 `prerequisiteCheckResults` 断链 | `352efcf6` | `probe-prerequisite-e2e`：请求/装配/normalizedInput 均带探测结果，path-planning 载荷命中；path-reviewer 据此产出 `prerequisiteTree.unknownConcepts` |
+| §1.2 规则 #25 字段未声明 | `409c368b` | `probe-motivation-fields-e2e`：一轮即落库 `motivationSignal={change_talk_score:2.5}` + 四帧齐全的 `miFrames` |
+| §1.3 评审反馈/旧路径不进载荷 | `29646096` | `probe-replan-payload-e2e`：载荷含【路径评审反馈】【被调整的原路径】+ 第 6 条要求；模型据反馈改名、里程碑 3→5 |
+| §1.4 `sandbox:path.materials` 未注册 | `f74977f4` | 门禁 `prompts:check-handoff:strict` **FAIL→PASS**；`prompts:check:all` 全绿 |
+| §1.5 peer `followUpQuestions` 必填 vs 可选 | `4f50a9b6` | `probe-peer-contract-e2e`：2 次全成功；契约集成用例证明"只给 message"不再整轮失败 |
+
+### 9.2 P1（已修，除注明外）
+
+| 项 | 提交 | 说明/证据 |
+|---|---|---|
+| §2.1a advisory 冲突 | `35803cde` | **按拍板口径**：只落库/遥测，不进 `userVisible`（gated 闸门保留）。`probe-triage-advisory-e2e`：mode=emotional_support 落库、userVisible 无「系统判断」 |
+| §2.1b 探测题判分无回退 | `dcab066d` | 回退 `previousState.confirmedProposal`；`probe-probe-scoring-e2e` 判分与 correctOption 一致（并实测到"作答轮不重复输出 proposal"的真实样本） |
+| §2.2a/§2.2c adjustments 不可达 | `84d6c177` | coordinator 补 `normalizedInput.understanding.adjustments` + 投影窄口径透传 + 渲染 `replan.reason`；`probe-adjustments-e2e` 载荷命中原文 |
+| §2.3a `loadTarget` 死链 | `3e405c91` | 保留 `loadProfile`/`prerequisiteTree`；`probe-stage-e2e` 真实载荷 `milestone.loadTarget=low/medium`，且修复前同技能载荷全部缺失（自然对照） |
+| §2.3b 无资料不核对 materialRefs | `5f40dace` | 统一走核对；无资料那次产出 5 任务、残留 materialRefs=0 |
+| §2.3c 资料重复投递 | `5f40dace` | 投递点剥离嵌套那份；真实载荷 `resources.materials=UNDEFINED`、顶层 materials=数组(1) |
+| §2.4a peer 负荷/情绪丢字段 | `8a1ed07c` | 高负荷+frustrated 那次：载荷两分区在，模型**先共情且不追问**（`followUpQuestions=[]`）；对照两次则照常挑战式追问 |
+| §2.4b opening 规则重复 | `0be2343a` | 删一份（yaml/md 各剩 1 处，产物少 8 行）；三个 mode 行为不变 |
+| §2.4d adaptive 声明漂移 | `0e5fff86` | 声明名对齐载荷键 + 规则 6 路径写全 + 规则 8 改消费真实字段；真模型：有偏好则兑现承诺、无偏好不编造 |
+| §2.4e peer JSON 合规 35 次 | `7765c95e` | 补纠偏重试；`retry-non-json.test`（真 composer + 打桩网关）证明散文→重试→成功，两次散文仍抛错 |
+| §2.4 末条 consolidator 失败率 | `76aafcf4` | 同类修复：`coerceParse` + 纠偏话术；真跑 2 次成功 |
+
+### 9.3 P2（部分修 + 登记）
+
+- 已修：`coercePathPlanningParsed`/`buildPathValidationRepairNotice` 单测（`e61e74c3`）；`parsePathCognitiveDesign` 单测（`3e405c91`）；stage 无资料删 refs 与 loadTarget 整链集成测试（`5f40dace`/`1b904263`）；`PAYLOAD_STABILITY` 的 stage-designer 补 `materials`（`1b904263`）；退役 code-only skill 死代码清理（`c50ad05d`）。
+- 登记不改：见 §9.5。
+
+### 9.4 核查修正（审计原文有偏差处，已按核实后的口径修）
+
+1. **§1.1**：「understanding 已是合并结果（两路都覆盖）」不准确——实为 OR 回落，且 `getGoalExt` 对缺失 understanding 返回 `{}`（truthy）⇒ 回落分支**不可达**；当轮 understanding 优先（已用单测锁定该语义）。
+2. **§1.2**：「不输出表外字段」不在 yaml，是**编译器注入**（`core-compiler.ts:33`）；运行时拦截在 `structured-validator` 的 `allowedTopLevelKeys`（该文件也不在他人 WIP 里）。
+3. **§1.3**：载荷**确实**渲染了 `freezeCompletedTaskIds`（审计若指它则错）；缺的是 `reviewerFeedback` 与旧路径。
+4. **§2.4c**：规则 **11** 不以「输入提供」开头（只有 10/12/13 符合），机制判断本身正确。
+5. **§2.4d**：实为**三套**键集（yaml inputs 4 / inputSchema 6 / payload 6），非两套。
+6. **新增发现（比审计更严重）**：§2.4d 的规则 8 引用的 `learningSignal` **在真实载荷里根本不存在**（全载荷搜索无命中）⇒ 该规则是死的，不只是"路径没写全"。
+7. **新增发现**：peer 与 consolidator 的"重试"此前**没有纠偏话术**（`onValidationFail` 缺位），重试等于把同样的 prompt 再发一遍——与"无重试"同源，故一并修。
+
+### 9.5 验证与遗留
+
+- **全量回归**：`3508 passed / 5 failed`。3 个失败套件**均为既有**：`learner-load-profile`（他人 WIP 的 `milestoneRange`）、`path-planning-hints.free-text`（他人 WIP）、`health-center.service`（断言的 `visual` 孤儿在基线就存在）。`check-llm-call-boundary` 首轮偶发、复跑通过。
+- **门禁**：`prompts:check:all` 全绿；`tsc` 0；`boundaries:check` 通过；**本会话改过的文件 eslint 0 error**（全仓另有 148 个 error，全在"工作树 == HEAD"的既有文件里，非本会话引入）。
+- **长链路**（`verify-from-zero --turns=1 --days=1`，真模型）：造人/路径/首课/记忆/学习状态 **PASS**；跨日温故与检查点 **FAIL**——相关实现文件（`review-plan.service` / `simulated-day.service` / `simulation-clock-context` / `learning-state.service` / `services/time/`）**全部是他人 WIP，本会话未触碰**，且与既有的两处跨日失真记录一致。
+- **遗留登记**：① consolidator 的 `CALLER_ABORTED`（44 次/7 天，调用方取消，非提示词缺陷，需单独排查调用点）；② opening 条件规则机制（§6-2 已判"不推广"）；③ `lesson-knowledge-enricher` 的 `transferGoal` 未登记为 inputs（值今天由调用方 payload 直达；补齐需先决定它属于哪个已注册 sandbox 通道）；④ `stage-designer.yaml` 的 `inputSchema`/`variableBindings`/orchestration 字段漂移（落在他人 WIP 上，本轮不触碰）。
+- **环境**：本轮真模型探针的临时产物（路径/会话/学习者）均已清理；`prompts:sync` 只更新了本会话改动的 skill（实测 updated 列表逐次仅一项）。
