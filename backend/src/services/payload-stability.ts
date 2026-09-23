@@ -22,8 +22,8 @@ export const PAYLOAD_STABILITY: Readonly<Record<string, PayloadStabilitySpec>> =
     note: 'scenario(洁)/promptDirectives/learner 跨回合稳定；controls/knowledge/对话等逐回合变化后置',
   },
   'stage-designer': {
-    stable: ['cognitiveCore', 'normalizedInput'],
-    note: '跨里程碑不变；milestone/previousMilestone/repairHints 后置',
+    stable: ['cognitiveCore', 'normalizedInput', 'materials'],
+    note: '跨里程碑不变；milestone/previousMilestone/repairHints 后置（materials 是整条路径的投影，同样逐里程碑不变）',
   },
   'path-reviewer': {
     stable: ['prerequisiteTree', 'goalContext'],
