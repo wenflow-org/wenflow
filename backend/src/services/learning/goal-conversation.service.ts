@@ -11,6 +11,7 @@ import { derivePlannedOutline, type LearnerLoadProfile } from './path-planning-h
 import {
   normalizeLearnerLoadProfile,
   resolveLearnerLoadProfileFromCollectedData,
+  resolvePrerequisiteCheckResultsFromUnderstanding,
 } from './learner-load-profile';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
@@ -1182,6 +1183,9 @@ async continueConversation(
       // 虚拟学习者负荷画像（会话创建时写入 collectedData）；真实用户缺失 → null，
       // path.coordinator 的体量推导与今天完全一致。
       learnerLoadProfile: resolveLearnerLoadProfileFromCollectedData(data),
+      // 前置探测题作答结果（goal skill 产出）：path-planning 的规则与代码都消费它
+      // （防自评虚高），此前从未进过载荷 ⇒ 只有旁路路由生效，主流程拿不到。
+      prerequisiteCheckResults: resolvePrerequisiteCheckResultsFromUnderstanding(understanding),
       // 响应分诊结论（advisory 默认；path 侧仅类型透传，不改变生成逻辑）
       responseTriage,
       systemPromptOverrides: systemPromptOverrides?.pathAgent

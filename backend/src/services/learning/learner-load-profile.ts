@@ -43,3 +43,29 @@ export function resolveLearnerLoadProfileFromCollectedData(
     (collectedData as Record<string, unknown>)[CONVERSATION_LOAD_PROFILE_KEY]
   );
 }
+
+/** 前置探测题作答结果（goal skill 产出 → path 消费）的最小结构。 */
+export interface PrerequisiteCheckResultShape {
+  probeId?: string;
+  targetConcept?: string;
+  userAnswer?: string;
+  isCorrect?: boolean;
+}
+
+/**
+ * 从 goal 层 `understanding` 读取前置探测题作答结果并透传给 Path。
+ *
+ * 该字段由 goal skill 落进 `collectedData.understanding.prerequisiteCheckResults`，
+ * path-planning 的规则与代码都消费它（用于「防自评虚高」）；但确认生成路径的主流程
+ * 此前**从未把它放进 `GoalPathRequest`** ⇒ 探测结果在正常流程里不生效，只有旁路
+ * 路由能捞回。这里做与负荷画像相同的接线：形状非法一律 `null`，下游按「无探测」处理。
+ */
+export function resolvePrerequisiteCheckResultsFromUnderstanding(
+  understanding: unknown
+): PrerequisiteCheckResultShape[] | null {
+  if (!understanding || typeof understanding !== 'object') return null;
+  const results = (understanding as Record<string, unknown>).prerequisiteCheckResults;
+  return Array.isArray(results) && results.length > 0
+    ? (results as PrerequisiteCheckResultShape[])
+    : null;
+}

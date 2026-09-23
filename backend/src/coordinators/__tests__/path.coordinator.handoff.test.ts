@@ -161,6 +161,33 @@ describe('path.coordinator normalizedInputV1 配置式装配', () => {
     expect(ni.learnerProfile.surfaceGoal).toBe('想学会向上汇报')
   })
 
+  // 回归（审计 P0 §1.1）：goal 层 prerequisiteCheckResults 曾从不进 GoalPathRequest，
+  // 前置探测（"防自评虚高"）在主流程里完全不生效。锁定消费端接线，防再次断开。
+  it('prerequisiteCheckResults 透传进 normalizedInput；未提供时不注入', async () => {
+    const probes = [
+      { probeId: 'probe-1', targetConcept: '问题结构识别', userAnswer: 'B', isCorrect: false },
+    ]
+
+    const withProbes = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+      prerequisiteCheckResults: probes,
+    } as any)
+
+    const withoutProbes = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+    } as any)
+
+    expect(withProbes.userProfile.normalizedInput.prerequisiteCheckResults).toEqual(probes)
+    // 真实用户无探测结果 → 不注入（行为与今天一致）
+    expect(withoutProbes.userProfile.normalizedInput.prerequisiteCheckResults ?? null).toBeNull()
+    // 落库快照保留探测结果，供异步生成/重试复用
+    expect(withProbes.userProfile.goalFinalPayload?.prerequisiteCheckResults).toEqual(probes)
+  })
+
   // 回归：GoalFinalPayload 重建时曾漏拷 goalHandoffFields，导致 handoff 恒被丢弃、永远回退 visibleSummary。
   // 本用例取 handoff 与 visibleSummary 不同的值，只有真交接才会得到 HANDOFF 值。
   it('goalHandoffFields 真实生效：与 visibleSummary 取值不同时以 handoff 为准', async () => {
