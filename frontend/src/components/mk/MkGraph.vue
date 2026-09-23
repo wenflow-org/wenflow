@@ -137,6 +137,8 @@ function buildOption(): EChartsCoreOption {
   // 可读性（视觉验证实测）：节点一多，常显全部标签会让中心区糊成一团；但全都不显示又只剩点。
   // 故密集图只给"值得标注"的节点显示标签：① 连接度最高的若干（结构枢纽）② 薄弱/脆弱节点。其余靠悬停。
   const denseGraph = nodes.length > 18
+  // 力导向总跨度 ≈ 边长·√n；斥力/边长的原值按 ~40 节点校准，故以 40 为基准反比收缩
+  const shrink = Math.sqrt(40 / Math.max(1, nodes.length))
   const narrow = isNarrow.value
   const perLine = narrow ? 7 : 9
   const labelWorthy = new Set<string>()
@@ -201,10 +203,15 @@ function buildOption(): EChartsCoreOption {
           // `initLayout: circular` 给一个铺开的初值，否则力导向从随机点起步、
           // 实测容易收敛到画布一侧或缩成一小团。
           initLayout: 'circular',
-          // 斥力/边长随节点数上调，gravity 压低：密集图要"铺开"才读得出来
-          // （实测 300/0.08 时 40 个节点会缩在画布中间一小团里）。
-          repulsion: narrow ? 150 : (denseGraph ? 480 : 240),
-          edgeLength: narrow ? [45, 100] : (denseGraph ? [110, 220] : [80, 160]),
+          // 斥力/边长随节点数收缩。原值（480 / 110-220）是按 ~40 节点校准的
+          // （实测 300/0.08 时 40 个节点会缩在画布中间一小团里，故上调到 480），
+          // 但力导向的总跨度 ≈ 边长·√n，节点再多就撑出画布——实测某学习者 5 条路径的
+          // 并集（76 个有边节点）在 802×560 画布上只看得见边缘碎片。
+          // 故按 √n 反比收缩，使总跨度近似不随 n 增长；n≤40 时 shrink=1，校准点行为不变。
+          repulsion: narrow ? 150 : (denseGraph ? Math.round(480 * shrink * shrink) : 240),
+          edgeLength: narrow
+            ? [45, 100]
+            : (denseGraph ? [Math.round(110 * shrink), Math.round(220 * shrink)] : [80, 160]),
           gravity: narrow ? 0.12 : (denseGraph ? 0.04 : 0.08),
           friction: 0.82,
           layoutAnimation: true
