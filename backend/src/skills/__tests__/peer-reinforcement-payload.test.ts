@@ -74,4 +74,30 @@ describe('peer-reinforcement payload snapshot parity', () => {
     expect(payload).toContain('【策略】counterexample')
     expect(payload).toContain('反例')
   })
+
+  /**
+   * 审计 P1 §2.4a：规则「高负荷/受挫 → 不连续追问、先共情」需要 loadIndex/emotionalState；
+   * inputSchema 与两个 caller 都已传，但 payload 此前完全不转发 ⇒ 该分支不可达。
+   */
+  it('loadIndex / emotionalState 进入载荷（高负荷共情分支可达）', async () => {
+    const input = { ...MINIMAL_INPUT, loadIndex: 0.82, emotionalState: 'frustrated' }
+    await executePeerDiscussion(input as any)
+
+    const [spec] = mockCallPrompt.mock.calls[0]
+    const payload = spec.buildUserPayload(input, {})
+
+    expect(payload).toContain('【本轮认知负荷】0.82')
+    expect(payload).toContain('【本轮情绪】frustrated')
+  })
+
+  it('loadIndex / emotionalState 缺失或为 null 时不出现对应分区', async () => {
+    const input = { ...MINIMAL_INPUT, loadIndex: null, emotionalState: null }
+    await executePeerDiscussion(input as any)
+
+    const [spec] = mockCallPrompt.mock.calls[0]
+    const payload = spec.buildUserPayload(input, {})
+
+    expect(payload).not.toContain('【本轮认知负荷】')
+    expect(payload).not.toContain('【本轮情绪】')
+  })
 })

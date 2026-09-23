@@ -31,6 +31,17 @@ const CASES: PeerDiscussionInput[] = [
     understanding: 0.55,
   },
   {
+    // 高负荷 + 受挫：规则要求"不连续追问、先共情"，前提是这两个字段真的进了载荷（§2.4a）
+    topic: '英语时态',
+    strategy: 'feynman',
+    tutorContext: [{ role: 'assistant', content: '刚才讲了现在完成时与一般过去时的区别。' }],
+    studentMessage: '算了，我是不是根本学不会，越听越乱。',
+    cognitiveLevel: 'understand',
+    understanding: 0.22,
+    loadIndex: 0.85,
+    emotionalState: 'frustrated',
+  },
+  {
     topic: '一元二次方程的判别式',
     strategy: 'counterexample',
     tutorContext: [{ role: 'assistant', content: '判别式 Δ>0 时有两个不等实根。' }],
@@ -75,11 +86,15 @@ async function main() {
     await new Promise((r) => setTimeout(r, 1500));
     const rows = await prisma.prompt_call_logs.findMany({
       where: { agentId: 'skill:peer-reinforcement', createdAt: { gte: startedAt } },
-      select: { success: true, errorMessage: true, normalizedOutput: true, extractedJson: true },
+      select: { success: true, errorMessage: true, normalizedOutput: true, extractedJson: true, userPayload: true },
     });
     for (const row of rows) {
       const emitted = /followUpQuestions/.test(row.extractedJson || row.normalizedOutput || '');
-      console.log(`[probe]   本次日志：success=${row.success} | 模型输出含 followUpQuestions=${emitted}${row.errorMessage ? ` | err=${row.errorMessage}` : ''}`);
+      const payload = row.userPayload || '';
+      const hasLoad = payload.includes('【本轮认知负荷】');
+      const hasEmotion = payload.includes('【本轮情绪】');
+      console.log(`[probe]   本次日志：success=${row.success} | 模型输出含 followUpQuestions=${emitted}`
+        + ` | 载荷含负荷分区=${hasLoad} 情绪分区=${hasEmotion}${row.errorMessage ? ` | err=${row.errorMessage}` : ''}`);
     }
   }
 

@@ -102,6 +102,14 @@ export interface PeerDiscussionInput {
   tutorContext: Array<{ role: string; content: string }>;
   cognitiveLevel?: string;
   understanding?: number;
+  /**
+   * 本轮认知负荷 (0-1)，未知为 null。
+   * 规则「高负荷/受挫 → 不连续追问、先共情」需要它才可达——inputSchema 与两个 caller 都已传，
+   * 此前类型与载荷都不转发（审计 P1 §2.4a）。
+   */
+  loadIndex?: number | null;
+  /** 本轮情绪（positive/neutral/frustrated/confused/bored），未知为 null */
+  emotionalState?: string | null;
   /** 此前伴学对话历史（peer 标记消息） */
   peerHistory?: Array<{ role: string; content: string }>;
 }
@@ -181,11 +189,20 @@ function buildPeerUserPayload(input: PeerDiscussionInput) {
     ? `\n【理解度】${input.understanding}`
     : '';
 
+  // 规则「当【理解度】< 0.3 或输入表明学生处于高认知负荷/情绪受挫时：不连续追问、先共情」——
+  // 这两个字段此前完全不转发，该分支只能靠【理解度】单腿触发（审计 P1 §2.4a）。
+  const loadSection = typeof input.loadIndex === 'number'
+    ? `\n【本轮认知负荷】${input.loadIndex}`
+    : '';
+  const emotionSection = typeof input.emotionalState === 'string' && input.emotionalState
+    ? `\n【本轮情绪】${input.emotionalState}`
+    : '';
+
   return `请生成一段同伴讨论消息：
 【主题】${input.topic}
 【策略】${input.strategy}
 【策略要求】${getStrategyInstruction(input.strategy)}
-【学生认知层级】${input.cognitiveLevel || 'understand'}${understandingSection}${contextSection}${peerHistorySection}${studentMessageSection}`;
+【学生认知层级】${input.cognitiveLevel || 'understand'}${understandingSection}${loadSection}${emotionSection}${contextSection}${peerHistorySection}${studentMessageSection}`;
 }
 
 export function validatePeerParsedOutput(parsed: unknown) {
