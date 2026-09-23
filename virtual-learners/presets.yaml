@@ -16,6 +16,14 @@
 #   （该 4 条 presetVersion 2 → 3），保留王婷 / 苏芮 / 孙浩 三条真正「时间极少」的样本。
 #   现行分布：3 minimal / 8 moderate / 3 abundant。
 #   **注意**：这 4 条在 v1 下跑出的历史数据与 v2 不可直接比较（人设字段变了）。
+# - v3（2026-09-22）：项目级修整（不含个案判断）——
+#   ① 时间轴自洽：coverageAxes 统一 low_time/mid_time/abundant_time，与 availableTime 对齐
+#      （林慧敏 low_time→mid_time；王婷/苏芮/孙浩补 low_time；徐国栋/赵鹏/吴倩补 abundant_time）；
+#   ② 去命名水平词：retiree-phone-photography 的 domain「手机摄影入门」→「手机拍照与照片整理」
+#      （路径命名硬规则禁水平词，domain 会进 subject/名称链路）；
+#   ③ 新增可选字段 fixtureMaterials：预制学习者自带附件夹具，VL 跑批先注入再起 Goal，
+#      用于覆盖「附件 → 路径 → 任务 → 课堂(materialRefs)」（周敏/陈默 各挂 1 件）。
+#   **注意**：①②③ 改动的人设/覆盖轴与历史数据不可直接比较（故相关条目 presetVersion +1）。
 #   生效方式：预设随服务启动同步（ensureBuiltinVirtualLearners）；改动需重启才落到 DB。
 
 version: 1
@@ -35,11 +43,11 @@ defaultBudget:
 presets:
 
   - presetKey: shop-owner-inventory
-    presetVersion: 3
+    presetVersion: 4
     sourceType: work
     goalType: problem_driven
     scope: in_scope
-    coverageAxes: [work, problem_driven, necessity, doing, low_time]
+    coverageAxes: [work, problem_driven, necessity, doing, mid_time]
     personaSeed:
       nameHint: 林慧敏
       age: 38
@@ -127,11 +135,14 @@ presets:
       - 隐藏细节把 misdiagnosis（偷窃）与真实缺口（流程）分开，供 Goal 阶段诊断
 
   - presetKey: student-geo-essay
-    presetVersion: 3
+    presetVersion: 5
+    fixtureMaterials:
+      - file: text/课件-MIT6.006-01-真实幻灯片.pptx
+        note: 有真实标题结构的课件（27 个小标题）——验证 materialRefs 的章节级引用
     sourceType: study
     goalType: exam_prep
     scope: in_scope
-    coverageAxes: [study, exam_prep, necessity, reading, terse]
+    coverageAxes: [study, exam_prep, necessity, reading, terse, mid_time]
     personaSeed:
       nameHint: 陈默
       age: 17
@@ -219,11 +230,11 @@ presets:
       - 爸爸的期望对应 personalityDrivers 与 emotionalTriggers
 
   - presetKey: newmom-complementary-food
-    presetVersion: 2
+    presetVersion: 3
     sourceType: life
     goalType: problem_driven
     scope: in_scope
-    coverageAxes: [life, problem_driven, social, watching, expressive]
+    coverageAxes: [life, problem_driven, social, watching, expressive, low_time]
     personaSeed:
       nameHint: 王婷
       age: 31
@@ -311,11 +322,15 @@ presets:
       - hiddenGaps 把「孩子吐」从「手艺差」重新归因到「性状没过渡」
 
   - presetKey: nurse-career-transition
-    presetVersion: 3
+    presetVersion: 5
+    # 附件夹具：VL 跑批时先注入为「已上传资料」，覆盖「附件 → 路径 → 任务 → 课堂(materialRefs)」这条链
+    fixtureMaterials:
+      - file: text/指南-抽取.txt
+        note: 官方指南类资料（长文本、无标题结构）——验证章节回退与逐字引文核对
     sourceType: work
     goalType: foundation_building
     scope: in_scope
-    coverageAxes: [work, foundation_building, career, reading, high_patience]
+    coverageAxes: [work, foundation_building, career, reading, high_patience, mid_time]
     personaSeed:
       nameHint: 周敏
       age: 40
@@ -401,11 +416,11 @@ presets:
       - 医生的叮嘱对应 emotionalTriggers 与 urgencyHint
 
   - presetKey: freelance-photographer-pricing
-    presetVersion: 2
+    presetVersion: 3
     sourceType: work
     goalType: problem_driven
     scope: in_scope
-    coverageAxes: [work, problem_driven, career, doing, avoid_conflict]
+    coverageAxes: [work, problem_driven, career, doing, avoid_conflict, mid_time]
     personaSeed:
       nameHint: 阿哲
       age: 29
@@ -492,11 +507,11 @@ presets:
       - hiddenGaps 把「亏本」从「不适合做生意」重新归因到「缺报价结构」
 
   - presetKey: retiree-phone-photography
-    presetVersion: 2
+    presetVersion: 3
     sourceType: life
     goalType: interest_exploration
     scope: in_scope
-    coverageAxes: [life, interest_exploration, interest, doing, low_tech]
+    coverageAxes: [life, interest_exploration, interest, doing, low_tech, abundant_time]
     personaSeed:
       nameHint: 徐国栋
       age: 61
@@ -564,7 +579,7 @@ presets:
         selfAssessment: 自认「会用微信，别的不会」。
         hiddenGaps: [不知道拍照有对焦、曝光这两个基本点]
       goalSeed:
-        domain: 手机摄影入门
+        domain: 手机拍照与照片整理
         goalType: interest_exploration
         surfaceGoal: 学会用手机拍清楚照片
         realProblem: 缺最基础的拍摄操作认知（对焦、光线），且因怕出丑不敢练
@@ -583,11 +598,11 @@ presets:
       - hiddenGaps 把「老了学不会」重新归因到「缺对焦/曝光认知」
 
   - presetKey: cs-lead-emotion
-    presetVersion: 2
+    presetVersion: 3
     sourceType: work
     goalType: problem_driven
     scope: in_scope
-    coverageAxes: [work, problem_driven, career, doing, high_emotion]
+    coverageAxes: [work, problem_driven, career, doing, high_emotion, mid_time]
     personaSeed:
       nameHint: 谭小雨
       age: 27
@@ -675,11 +690,11 @@ presets:
       - hiddenGaps 把「管不住」重新归因到「缺情境技能」
 
   - presetKey: vocational-electrician-exam
-    presetVersion: 2
+    presetVersion: 3
     sourceType: study
     goalType: exam_prep
     scope: in_scope
-    coverageAxes: [study, exam_prep, necessity, doing, terse]
+    coverageAxes: [study, exam_prep, necessity, doing, terse, abundant_time]
     personaSeed:
       nameHint: 赵鹏
       age: 18
@@ -766,11 +781,11 @@ presets:
       - hiddenGaps 把「背不下来」重新归因到「没理解原理」
 
   - presetKey: parent-homework-anger
-    presetVersion: 3
+    presetVersion: 4
     sourceType: self_management
     goalType: problem_driven
     scope: in_scope
-    coverageAxes: [self_management, problem_driven, social, listening, expressive]
+    coverageAxes: [self_management, problem_driven, social, listening, expressive, mid_time]
     personaSeed:
       nameHint: 刘芳
       age: 42
@@ -858,11 +873,11 @@ presets:
       - hiddenGaps 把「孩子磨蹭」重新归因到「缺情绪触发点觉察」
 
   - presetKey: community-phone-class
-    presetVersion: 2
+    presetVersion: 3
     sourceType: work
     goalType: project_based
     scope: in_scope
-    coverageAxes: [work, project_based, career, doing, deadline]
+    coverageAxes: [work, project_based, career, doing, deadline, mid_time]
     personaSeed:
       nameHint: 何芸
       age: 33
@@ -949,11 +964,11 @@ presets:
       - hiddenGaps 把「没做过培训」重新归因到「缺目标与需求拆解」
 
   - presetKey: primary-xsc-cram
-    presetVersion: 2
+    presetVersion: 3
     sourceType: study
     goalType: exam_prep
     scope: in_scope
-    coverageAxes: [study, exam_prep, social, watching, primary_school]
+    coverageAxes: [study, exam_prep, social, watching, primary_school, low_time]
     personaSeed:
       nameHint: 苏芮
       age: 11
@@ -1041,11 +1056,11 @@ presets:
       - hiddenGaps 把「笨」重新归因到「缺解题步骤」，但不得由平台直接下结论
 
   - presetKey: zhongkao-streaming
-    presetVersion: 2
+    presetVersion: 3
     sourceType: study
     goalType: exam_prep
     scope: in_scope
-    coverageAxes: [study, exam_prep, necessity, doing, junior_high]
+    coverageAxes: [study, exam_prep, necessity, doing, junior_high, mid_time]
     personaSeed:
       nameHint: 李昊
       age: 15
@@ -1133,11 +1148,11 @@ presets:
       - 分流焦虑（emotionalTriggers）是首句动力来源
 
   - presetKey: gaokao-science
-    presetVersion: 2
+    presetVersion: 3
     sourceType: study
     goalType: exam_prep
     scope: in_scope
-    coverageAxes: [study, exam_prep, necessity, reading, senior_high]
+    coverageAxes: [study, exam_prep, necessity, reading, senior_high, low_time]
     personaSeed:
       nameHint: 孙浩
       age: 18
@@ -1225,11 +1240,11 @@ presets:
       - 睡眠不足细节支撑 emotionalBaseline 的紧绷
 
   - presetKey: kaoyan-retake
-    presetVersion: 2
+    presetVersion: 3
     sourceType: study
     goalType: exam_prep
     scope: in_scope
-    coverageAxes: [study, exam_prep, career, reading, postgraduate]
+    coverageAxes: [study, exam_prep, career, reading, postgraduate, abundant_time]
     personaSeed:
       nameHint: 吴倩
       age: 24

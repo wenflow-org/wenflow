@@ -48,6 +48,7 @@ import { getAPIGateway } from '../gateway/api-gateway'
 import { agentConfigService } from '../services/agentConfig.service'
 import { learningStateService } from '../services/learning/learning-state.service'
 import { logger } from '../utils/logger'
+import { ensureFixtureMaterialsForVirtualSession } from './fixture-materials'
 import {
   buildLearnerMemorySnapshot,
   extractSelfStateFromTrace,
@@ -805,6 +806,12 @@ export class BlackboxVirtualLearnerRunner {
         if (action.type !== 'chat') {
           throw new BlackboxRunStateError('Blackbox Goal 首轮必须使用 chat 动作', 'BLACKBOX_FIRST_ACTION_INVALID')
         }
+        // 起 Goal 之前注入预设声明的附件夹具（幂等 + fail-open）：
+        // 让「附件 → 路径 → 任务 → 课堂(materialRefs)」这条链在跑批里也能被覆盖
+        await ensureFixtureMaterialsForVirtualSession({
+          userId: session.userId,
+          virtualProfileId: session.virtualProfileId,
+        })
         result = await adapter.startGoal(action.text)
       } else if (!control.learningPathId && (action.type === 'chat' || action.type === 'confirm_proposal')) {
         result = await adapter.replyGoal(control.conversationId, action)

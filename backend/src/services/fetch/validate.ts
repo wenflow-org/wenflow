@@ -59,6 +59,15 @@ const fetchRequestSchema = z
       .max(120_000, 'perUrlTimeoutMs 不能超过 120000')
       .optional(),
     purpose: z.string({ invalid_type_error: 'purpose 必须是字符串' }).trim().max(2000, 'purpose 不能超过 2000 个字符').optional(),
+    // 查询定向抽取（2026-09-22）：provider 支持则只返回与查询相关的片段；不支持时忽略该字段
+    query: z.string({ invalid_type_error: 'query 必须是字符串' }).trim().min(1, 'query 不能为空').max(500, 'query 不能超过 500 个字符').optional(),
+    chunksPerSource: z
+      .number({ invalid_type_error: 'chunksPerSource 必须是数字' })
+      .int('chunksPerSource 必须是整数')
+      .min(1, 'chunksPerSource 不能小于 1')
+      .max(5, 'chunksPerSource 不能超过 5')
+      .optional(),
+    extractDepth: z.enum(['basic', 'advanced'], { invalid_type_error: 'extractDepth 只能是 basic/advanced' }).optional(),
     links: z.boolean({ invalid_type_error: 'links 必须是布尔值' }).optional(),
     imageLinks: z.boolean({ invalid_type_error: 'imageLinks 必须是布尔值' }).optional(),
     ifNoneMatch: z.string({ invalid_type_error: 'ifNoneMatch 必须是字符串' }).trim().min(1, 'ifNoneMatch 不能为空').max(512, 'ifNoneMatch 不能超过 512 个字符').optional(),

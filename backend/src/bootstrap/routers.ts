@@ -14,6 +14,7 @@ import stateTrackingRoutes from '../routes/state-tracking.routes';
 import achievementsRoutes from '../routes/achievements';
 import metricsRoutes from '../routes/metrics';
 import goalConversationRoutes from '../routes/goal-conversation';
+import materialsRoutes from '../routes/materials.routes';
 import agentsRoutes from '../routes/agents';
 import adaptiveGuidanceRoutes from '../routes/adaptive-guidance.routes';
 import adminAuthRoutes from '../routes/admin-auth';
@@ -143,6 +144,9 @@ export function registerRoutes(app: express.Express): void {
 
   // goal-conversation 路由（用户侧调用）
   app.use('/api/goal-conversation', authMiddleware, acpContextMiddleware('user'), goalConversationRoutes);
+
+  // 上传资料路由（用户侧调用；只支持文本型文档，扫描件/老格式在接口层拒收并告知）
+  app.use('/api/materials', authMiddleware, acpContextMiddleware('user'), materialsRoutes);
 
   // 其他路由（保持原有认证）
   // 注意：具体路由必须在通用路由之前注册！

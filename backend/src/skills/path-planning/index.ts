@@ -22,6 +22,9 @@ import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 
 import { logger } from '../../utils/logger';
+import { buildPromptFriendlyMaterials } from '../../services/materials/material-prompt-projection';
+import { normalizeMaterialRefs } from '../../services/materials/material-refs';
+import type { PromptMaterial } from '../../services/materials/material-prompt-projection';
 
 const AGENT_ID = 'skill:path-planning';
 const PATH_AGENT_MAX_TOKENS = 32000;
@@ -79,6 +82,82 @@ function buildLearningContextForPrompt(raw: any): Record<string, unknown> | null
   };
 }
 
+/**
+ * 契约容错归一：只修**可派生的不变量**与**字段名等价变体**，不做任何语义猜测。
+ *   - `totalMilestones` 是 milestones.length 的派生量：模型漏填时补齐（不改语义）；
+ *   - 概念描述字段名归一（模型偶发写成 understanding/desc）。
+ * 实测（2026-09-22）：`fields contract violation: totalMilestones(missing-required)` 是生产失败之一。
+ */
+export function coercePathPlanningParsed(parsed: any, materials?: PromptMaterial[] | null) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed;
+  const out: any = { ...parsed };
+  if (!Number.isFinite(Number(out.totalMilestones)) && Array.isArray(out.milestones)) {
+    out.totalMilestones = out.milestones.length;
+  }
+  // materialRefs：逐字核对（编造的引用在这里就被丢掉，不进下游）
+  if (Array.isArray(out.milestones) && Array.isArray(materials) && materials.length) {
+    out.milestones = out.milestones.map((milestone: any) => {
+      if (!milestone || typeof milestone !== 'object') return milestone;
+      const refs = normalizeMaterialRefs(milestone.materialRefs, materials);
+      const next = { ...milestone };
+      if (refs.length) next.materialRefs = refs;
+      else delete next.materialRefs;
+      return next;
+    });
+  }
+  const core = out.cognitiveCore;
+  if (core && typeof core === 'object' && !Array.isArray(core) && Array.isArray(core.coreConcepts)) {
+    core.coreConcepts = core.coreConcepts.map((concept: any) => {
+      if (!concept || typeof concept !== 'object') return concept;
+      const description = typeof concept.description === 'string' && concept.description
+        ? concept.description
+        : (concept.understanding || concept.desc || '');
+      return { ...concept, description };
+    });
+  }
+  return out;
+}
+
+/**
+ * 校验失败 → **针对性**修复提示（只用于重试那一轮）。
+ *
+ * 为什么需要它：通用提示（"请输出合法 JSON"）对"缺 hub""带了 subtasks"这类结构性违规
+ * 没有指导性，模型第二次照样犯。实测（2026-09-22，`prompt_call_logs`）：path-planning 674 次调用里
+ * `PATH_PLANNING_HUB_CONCEPT_MISSING` 19 次，是**头号失败门**；模型常把概念写成
+ * `{name, understanding}` 并漏掉 `role`。因此这里给**字面骨架**，而不是再描述一遍规则。
+ */
+const PATH_OUTPUT_SKELETON = '{"name":"…","summary":"…","totalMilestones":N,"estimatedHours":N,"estimatedWeeks":N,'
+  + '"milestones":[{"stageNumber":1,"title":"…","description":"…","goal":"…","coreConcept":"concept-1"}],'
+  + '"cognitiveCore":{"coreConcepts":[{"id":"concept-1","name":"…","role":"hub","description":"…"},'
+  + '{"id":"concept-2","name":"…","role":"supporting","description":"…"}]}}';
+
+const PATH_VALIDATION_REPAIR_HINTS: Record<string, string> = {
+  PATH_PLANNING_HUB_CONCEPT_MISSING:
+    `上一次的 coreConcepts 里没有任何 role="hub"。概念对象的字段名**只能是** id/name/role/description（不要用 understanding 之类自造字段名）。`
+    + `请严格按这个骨架重出（恰好一个 role="hub"，其余 role="supporting"）：${PATH_OUTPUT_SKELETON}`,
+  PATH_PLANNING_HUB_CONCEPT_MULTIPLE:
+    `上一次出现了多个 role="hub"。请严格按这个骨架重出（恰好一个 role="hub"，其余改为 "supporting"）：${PATH_OUTPUT_SKELETON}`,
+  PATH_PLANNING_LEGACY_TASK_FIELDS:
+    `上一次的里程碑里出现了 subtasks / tasks / acceptanceCriteria 等任务级字段。请严格按这个骨架重出（里程碑只保留 stageNumber/title/description/goal/coreConcept）：${PATH_OUTPUT_SKELETON}`,
+  PATH_PLANNING_MILESTONE_CONCEPT_UNBOUND:
+    `上一次的 milestone.coreConcept 引用了未声明的概念。请严格按这个骨架重出（coreConcept 只能填 coreConcepts 里已声明的 id，如 "concept-1"）：${PATH_OUTPUT_SKELETON}`,
+  PATH_PLANNING_MILESTONES_MISSING:
+    `上一次没有 milestones 数组。请严格按这个骨架重出：${PATH_OUTPUT_SKELETON}`,
+  PATH_PLANNING_COGNITIVE_CORE_MISSING:
+    `上一次缺少 cognitiveCore。请严格按这个骨架重出：${PATH_OUTPUT_SKELETON}`,
+};
+
+/** 按失败原因（含「fields contract violation: xxx」这类前缀包裹）取修复提示。 */
+export function buildPathValidationRepairNotice(failureReason: string): string {
+  const reason = String(failureReason || '');
+  if (reason.includes('totalMilestones')) {
+    return `上一次缺少 totalMilestones（它必须等于 milestones 数组长度）。请严格按这个骨架重出：${PATH_OUTPUT_SKELETON}`;
+  }
+  const key = Object.keys(PATH_VALIDATION_REPAIR_HINTS).find((candidate) => reason.includes(candidate));
+  if (key) return PATH_VALIDATION_REPAIR_HINTS[key];
+  return `请只输出一个学习路径 JSON 对象，严格按这个骨架（字段名逐字一致）：${PATH_OUTPUT_SKELETON}`;
+}
+
 /** 导出以便回归测试（§3.19 P0①：learnerLearningContext 必须真正进入提示词） */
 export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
   if (!normalizedInput || typeof normalizedInput !== 'object') return null;
@@ -130,6 +209,12 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         timePerSession: normalizePromptString(resources.timePerSession),
         timeHorizon: normalizePromptString(resources.timeHorizon),
         deadlineText: normalizePromptString(resources.deadlineText),
+        // 资料包（用户附件在前、联网采集在后）：**必须进提示词**，否则规则"路径必须长在资料上"
+        // 永远拿不到资料（2026-09-22 实测：装配层送达了、投影层却把它裁掉 ⇒ 模型看不见）。
+        // 无资料时不出现该键，冷启动行为不变。
+        ...(buildPromptFriendlyMaterials(resources.materials)
+          ? { materials: buildPromptFriendlyMaterials(resources.materials) }
+          : {}),
       },
       successCriteria: {
         observableResult: normalizePromptString(successCriteria.observableResult),
@@ -735,6 +820,10 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
 
   const userId = context?.userId || input?.metadata?.userId;
   const systemPromptOverride = (context as any)?.metadata?.pathAgentSystemPromptOverride as string | undefined;
+  // 资料（投影后）：既用于提示词，也用于 materialRefs 的**逐字核对**与覆盖度观测
+  const promptMaterials = buildPromptFriendlyMaterials(
+    (input as any)?.metadata?.normalizedInput?.resources?.materials,
+  );
   const result = await callPrompt<any, PathOutput>({
     agentId: 'skill:path-planning',
     defaultSystemPrompt: PATH_PLANNING_PROMPT,
@@ -755,6 +844,18 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
       };
       const estimatedHours = clampHours(pathData.estimatedHours);
       const estimatedWeeks = clampWeeks(pathData.estimatedWeeks);
+      // materialRefs 覆盖度观测（有资料却没引用 → 可观测，不阻断生成）
+      if (promptMaterials?.length) {
+        const milestones = Array.isArray(pathData.milestones) ? pathData.milestones : [];
+        const withRefs = milestones.filter((m: any) => Array.isArray(m?.materialRefs) && m.materialRefs.length > 0).length;
+        if (withRefs === 0) {
+          logger.warn('[path-planning] 有资料但没有任何里程碑给出可核对的 materialRefs（规则未被执行）', {
+            userId,
+            materials: promptMaterials.length,
+            milestones: milestones.length,
+          });
+        }
+      }
       return {
         id: `path_${Date.now()}`,
         name: pathData.name,
@@ -765,13 +866,23 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
         estimatedWeeks,
         cognitiveCore: pathData.cognitiveCore || pathData.cognitiveDesign,
         cognitiveDesign: pathData.cognitiveDesign || pathData.cognitiveCore,
-        milestones: pathData.milestones,
+        // materialRefs 在**这里**做逐字核对（normalizeOutput 拿得到 input 侧的投影资料）：
+        // coerce 只影响契约校验，真正落库的是本函数的产物。
+        milestones: (Array.isArray(pathData.milestones) ? pathData.milestones : []).map((milestone: any) => {
+          if (!milestone || typeof milestone !== 'object') return milestone;
+          const refs = normalizeMaterialRefs(milestone.materialRefs, promptMaterials);
+          const next = { ...milestone };
+          if (refs.length) next.materialRefs = refs;
+          else delete next.materialRefs;
+          return next;
+        }),
         _debug: {
           rawModelOutput: '',
           extractedJson: '',
         }
       };
     },
+    coerceParsedForContract: (parsed: any) => coercePathPlanningParsed(parsed, promptMaterials),
     validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed, expectedMilestones, expectedMilestoneRange),
     mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
       contract: runtimeContract,
@@ -784,7 +895,8 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
     }),
     retryStrategy: {
       maxAttempts: 2,
-      onValidationFail: ({ failureReason }) => `请只输出一个学习路径 JSON 对象，必须包含非空 name、非空 milestones 数组和 cognitiveCore 对象。上次失败原因：${failureReason}`,
+      onValidationFail: ({ failureReason }) => `${buildPathValidationRepairNotice(failureReason)}`
+        + `上次失败原因：${failureReason}`,
     },
   }, input, { userId, ...(systemPromptOverride ? { systemPromptOverride } : {}) });
 

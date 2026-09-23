@@ -6,14 +6,51 @@ import {
 } from '../services/background-task-tracker.service';
 import learningService from '../services/learning/learning.service';
 import { buildFramedNormalizedInput, type LearnerLoadProfile } from '../services/learning/path-planning-hints';
+import { buildUploadedMaterialPacks } from '../services/materials/material-pack.builder';
 import type { ResponseTriage } from '../services/learning/response-triage';
 import {
   getPathAgentInputConfig,
   type PathAgentInputConfig
 } from '../services/agentConfig.service';
 import type { GoalPathTimeBudgetCadence, GoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
+import type { MaterialNeed, MaterialPackResult } from '../skills/material-collector/types';
 
 const COORDINATOR_ID = 'path-agent';
+
+/**
+ * 资料采集开关：默认开启（goal 声明了 needsMaterial 才触发，缺省零调用）。
+ * 复用仓库既有的 `*_DISABLED === '1'` env 模式（同 SKILLS_FILE_DISABLED）；
+ * 设 `MATERIAL_COLLECTION_DISABLED=1` 可整体关闭，path 生成行为回到接线前。
+ */
+function isMaterialCollectionEnabled(): boolean {
+  return process.env.MATERIAL_COLLECTION_DISABLED !== '1';
+}
+
+/** 总超时上限（毫秒）：到点即 fail-open 跳过，避免 path 生成被检索拖死。env 可覆盖，封顶 120s。 */
+function resolveMaterialCollectionTimeoutMs(): number {
+  const raw = Number(process.env.MATERIAL_COLLECTION_TIMEOUT_MS);
+  if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 120_000);
+  return 20_000;
+}
+
+/** 单次生成最多采集几条 need（防批量/恶意大量声明拖慢 path 生成）。 */
+const MATERIAL_COLLECTION_MAX_NEEDS = 3;
+
+/** 带超时的 promise：到点 reject（可选触发 onTimeout，如 abort 下游 signal），成功/失败都清定时器。 */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout?: () => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      try { onTimeout?.(); } catch { /* abort 失败不影响 fail-open */ }
+      reject(new Error(`MATERIAL_COLLECTION_TIMEOUT:${timeoutMs}ms`));
+    }, timeoutMs);
+    if (typeof (timer as any).unref === 'function') (timer as any).unref();
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); }
+    );
+  });
+}
+
 
 export interface PathGenerationInput {
   source?: 'goal' | 'learn' | 'replan' | 'api';
@@ -84,6 +121,12 @@ interface NormalizedPathInputV1 {
     timePerSession: string | null;
     timeHorizon: string | null;
     deadlineText: string | null;
+    /**
+     * 外部资料采集结果（material-collector Material Pack）。goal 未声明 needsMaterial
+     * 或采集失败/未开启时为缺失/not_found 条目，**不阻塞**路径生成。path-planning 读
+     * pack.sections[].id/title 与 keyPoints 设计路径；learn 层按 sourceUrl+cite 引用选段。
+     */
+    materials?: MaterialPackResult[] | null;
   };
   successCriteria: {
     observableResult: string | null;
@@ -275,7 +318,77 @@ class PathCoordinator {
         : null,
     };
   }
-  private buildNormalizedGoalInput(input: GoalPathRequest, config: PathAgentInputConfig): PathGenerationInput {
+  /**
+   * 附件注入（附件是主线）：读该用户上传的资料 → 资料包。
+   * 纯本地读盘（无网络/LLM），同步且**绝不抛错**；一份都没有时返回空数组（零影响）。
+   * 开关：`MATERIAL_UPLOAD_INJECTION_DISABLED=1` 关闭。
+   */
+  private resolveUploadedMaterialPacks(userId: unknown): MaterialPackResult[] {
+    const id = typeof userId === 'string' ? userId.trim() : '';
+    if (!id) return [];
+    try {
+      return buildUploadedMaterialPacks(id);
+    } catch (error) {
+      logger.warn('[path-coordinator] 读取上传附件失败，已跳过（fail-open，不阻塞路径生成）', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  }
+
+  /**
+   * 资料采集（goal→path 接线缝，最小侵入 + fail-open）：
+   *   - 开关：`MATERIAL_COLLECTION_DISABLED=1` 关闭；未声明 needsMaterial 时**零调用**（连模块都不 import）；
+   *   - 依赖：动态 import material-collector，避免把 search/fetch/prompt 依赖注入 path.coordinator 的静态图；
+   *   - 超时：withTimeout 总上限（默认 20s），到点 abort + 跳过，绝不阻塞路径生成；
+   *   - 失败：任何抛错只记一条 warn 日志，并以 status=not_found + note 落入 materials（路径生成继续）。
+   */
+  private async resolveMaterialPacks(needsMaterial: unknown): Promise<MaterialPackResult[] | null> {
+    if (!needsMaterial) return null;
+    if (!isMaterialCollectionEnabled()) return null;
+
+    let collector: typeof import('../skills/material-collector');
+    try {
+      collector = await import('../skills/material-collector');
+    } catch (error) {
+      logger.warn('[path-coordinator] material-collector 加载失败，跳过资料采集（fail-open）', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+
+    if (!collector.hasMaterialNeed({ needsMaterial })) return null;
+
+    const needs = (Array.isArray(needsMaterial) ? needsMaterial : [needsMaterial])
+      .slice(0, MATERIAL_COLLECTION_MAX_NEEDS) as MaterialNeed[];
+    const timeoutMs = resolveMaterialCollectionTimeoutMs();
+    const controller = new AbortController();
+    const startedAt = Date.now();
+    try {
+      const results = await withTimeout(
+        collector.collectMaterialForGoal(needs, { signal: controller.signal }),
+        timeoutMs,
+        () => controller.abort()
+      );
+      return Array.isArray(results) ? results : null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn('[path-coordinator] 资料采集失败，已跳过（fail-open，不阻塞路径生成）', {
+        needs: needs.map((need) => need?.title).filter(Boolean),
+        durationMs: Date.now() - startedAt,
+        error: message,
+      });
+      return [{
+        status: 'not_found',
+        pack: null,
+        provenance: [],
+        coverage: { covered: [], missing: [] },
+        notes: [`资料采集失败，已跳过（fail-open）：${message}`],
+      }];
+    }
+  }
+
+  private async buildNormalizedGoalInput(input: GoalPathRequest, config: PathAgentInputConfig): Promise<PathGenerationInput> {
     const goalFinalPayload: GoalFinalPayload = {
       sourceConversationId: input.sourceConversationId,
       existingPathId: input.existingPathId,
@@ -339,6 +452,26 @@ class PathCoordinator {
     );
     if (goalFinalPayload.prerequisiteCheckResults?.length) {
       normalizedInputV1.prerequisiteCheckResults = goalFinalPayload.prerequisiteCheckResults;
+    }
+
+    // goal→path 资料采集：goal 声明了 needsMaterial 才触发（缺省零调用）；采集失败 fail-open。
+    // 来源优先配置式 handoff（若后续登记路由），否则 visibleSummary 白名单透传（understanding.needsMaterial）。
+    const needsMaterial = (goalFinalPayload.goalHandoffFields as any)?.['understanding.needsMaterial']
+      ?? (goalFinalPayload.goalHandoffFields as any)?.needsMaterial
+      ?? (visibleSummary as any)?.needsMaterial
+      ?? null;
+    const materialPacks = [
+      // 附件是主线：用户上传的资料优先进入路径（本地读盘，无网络、无 LLM）
+      ...this.resolveUploadedMaterialPacks(input.userId),
+      // 联网采集只用于补信息（goal 声明 needsMaterial 才触发）
+      ...(await this.resolveMaterialPacks(needsMaterial) || []),
+    ];
+
+    // 单一挂载点：定帧层（buildFramedNormalizedInput）负责归一化与字段透传，
+    // materials 由本处统一合入（附件在前、联网在后），下游 path-planning 按序消费。
+    const framedNormalizedInput = buildFramedNormalizedInput(normalizedInputV1) || normalizedInputV1;
+    if (materialPacks.length > 0 && framedNormalizedInput && typeof framedNormalizedInput === 'object') {
+      framedNormalizedInput.resources = { ...(framedNormalizedInput.resources || {}), materials: materialPacks };
     }
 
     // L2 声明化装配（只读对账）：状态池形状由 sandbox-resolver 的 path provider 声明，
@@ -414,7 +547,7 @@ class PathCoordinator {
         confirmedProposal: config.normalizedInput.includeConfirmedProposal ? input.visibleSummary?.confirmedProposal || null : null,
         confidenceScores: null,
         conversationHistory: config.normalizedInput.includeConversationHistory ? input.conversationHistory || [] : [],
-        normalizedInput: buildFramedNormalizedInput(normalizedInputV1) || normalizedInputV1,
+        normalizedInput: framedNormalizedInput,
         goalFinalPayload: {
           source: 'goal',
           mode: 'generate',

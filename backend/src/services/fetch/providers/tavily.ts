@@ -71,8 +71,16 @@ export function buildTavilyFetchBody(request: FetchRequest): Record<string, unkn
 
   const body: Record<string, unknown> = {
     urls: request.urls,
-    extract_depth: 'basic',
+    // advanced：更高成功率、返回更多内容（含表格/嵌入内容）——资料采集这类"要正文"的场景默认用它
+    extract_depth: request.extractDepth ?? 'basic',
   };
+  // 查询定向片段：Tavily 仅在给出 query 时才支持 chunks_per_source（1~5）
+  if (request.query) {
+    body.query = request.query;
+    if (typeof request.chunksPerSource === 'number' && Number.isFinite(request.chunksPerSource)) {
+      body.chunks_per_source = Math.min(5, Math.max(1, Math.round(request.chunksPerSource)));
+    }
+  }
   if (request.imageLinks) body.include_images = true;
 
   return body;

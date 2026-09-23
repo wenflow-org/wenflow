@@ -23,6 +23,12 @@ export interface BuiltinLearnerPreset {
   goalType: string;
   scope: string;
   coverageAxes: string[];
+  /**
+   * 该预制学习者自带的**附件夹具**（可选）：VL 跑批时在起 Goal 之前注入为「已上传资料」，
+   * 用于覆盖「附件 → 路径 → 任务 → 课堂（materialRefs）」这条链。
+   * 形状：`[{ file: 'text/xxx.pptx', note?: '...' }]`（file 为仓库内相对路径）。
+   */
+  fixtureMaterials: Array<{ file: string; note: string | null }>;
   personaSeed: Record<string, any>;
   story: Record<string, any>;
   consistencyNotes: string[];
@@ -58,7 +64,7 @@ function stableStringify(value: unknown): string {
 
 /** 定义哈希：覆盖 persona/story/一致性说明/预算与元数据，不含 presetVersion（版本号本身不改变内容） */
 export function computePresetContentHash(
-  preset: Pick<BuiltinLearnerPreset, 'sourceType' | 'goalType' | 'scope' | 'coverageAxes' | 'personaSeed' | 'story' | 'consistencyNotes' | 'budget'>
+  preset: Pick<BuiltinLearnerPreset, 'sourceType' | 'goalType' | 'scope' | 'coverageAxes' | 'fixtureMaterials' | 'personaSeed' | 'story' | 'consistencyNotes' | 'budget'>
 ): string {
   return createHash('sha256')
     .update(stableStringify({
@@ -66,6 +72,7 @@ export function computePresetContentHash(
       goalType: preset.goalType,
       scope: preset.scope,
       coverageAxes: preset.coverageAxes,
+      fixtureMaterials: preset.fixtureMaterials,
       personaSeed: preset.personaSeed,
       story: preset.story,
       consistencyNotes: preset.consistencyNotes,
@@ -117,6 +124,15 @@ function normalizePreset(
     return { diagnostics };
   }
 
+  const fixtureMaterials = (Array.isArray(raw.fixtureMaterials) ? raw.fixtureMaterials : [])
+    .map((item: unknown) => {
+      if (!isRecord(item)) return null;
+      const file = asNonBlankString(item.file);
+      if (!file) return null;
+      return { file, note: asNonBlankString(item.note) || null };
+    })
+    .filter((item): item is { file: string; note: string | null } => !!item);
+
   const preset: BuiltinLearnerPreset = {
     presetKey,
     presetVersion: Math.round(presetVersion),
@@ -124,6 +140,7 @@ function normalizePreset(
     goalType: asNonBlankString(raw.goalType) || 'problem_driven',
     scope: asNonBlankString(raw.scope) || 'in_scope',
     coverageAxes: Array.isArray(raw.coverageAxes) ? raw.coverageAxes.map((v: unknown) => String(v)) : [],
+    fixtureMaterials,
     personaSeed: raw.personaSeed,
     story: raw.story,
     consistencyNotes: Array.isArray(raw.consistencyNotes) ? raw.consistencyNotes.map((v: unknown) => String(v)) : [],

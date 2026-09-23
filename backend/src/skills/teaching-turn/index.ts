@@ -74,6 +74,13 @@ export interface TeachingTurnInput {
       prerequisiteConcepts: string[];
       supportingConcepts?: string[];
     };
+    /** 该路径关联的资料（投影后的最小集合）：讲解/示例要能引用其章节或条目原文 */
+    materials?: Array<{
+      title?: string | null;
+      sourceUrl?: string | null;
+      sections?: Array<{ id?: string | null; title?: string | null }>;
+      keyPoints?: Array<{ text?: string | null; cite?: string | null }>;
+    }> | null;
     pathTitle?: string;
     pathSummary?: string | null;
     currentMilestoneTitle?: string;
@@ -997,7 +1004,14 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
   },
     retryStrategy: {
     maxAttempts: 2,
-    onValidationFail: ({ failureReason }) => `上一次输出未通过校验，原因是：${failureReason}。请重新输出一个严格 JSON，特别注意：1) knowledge.points 要围绕当前任务、验收标准和最近课堂对话动态生成，不要偏题；2) pedagogy.strategies 只能使用允许的枚举；3) 保持当前任务的 core concept 与 target relation 不偏移。`,
+    onValidationFail: ({ failureReason }) => `上一次输出未通过校验，原因是：${failureReason}。请重新输出一个严格 JSON，特别注意：`
+      // reply 是**用户可见文本**：实测（2026-09-22）模型有时只给了 knowledge/pedagogy 而漏掉 reply，
+      // 导致整轮以 TEACHING_TURN_REPLY_MISSING 失败（用户看到"这节课没回应"）。这里点名要求。
+      + `0) **必须包含全部顶层块**：reply（非空字符串，老师这一轮真正说给学生听的话，Markdown 文本）、analysis（对象）、`
+      + `knowledge（对象，含 points 数组）、pedagogy（对象，含 strategies）、control（对象）；缺任一块整轮都会失败，不能只给其中一部分；`
+      + `1) knowledge.points 要围绕当前任务、验收标准和最近课堂对话动态生成，不要偏题；`
+      + `2) pedagogy.strategies 只能使用允许的枚举；`
+      + `3) 保持当前任务的 core concept 与 target relation 不偏移。`,
   },
 };
 

@@ -1,5 +1,7 @@
 export type GoalPathTimeBudgetCadence = 'per_day' | 'per_week' | 'per_session' | 'flexible' | 'unclear';
 
+import type { MaterialNeed } from '../../skills/material-collector/types';
+
 export interface GoalPathVisibleSummary {
   surfaceGoal: string | null;
   realProblem: string | null;
@@ -31,6 +33,12 @@ export interface GoalPathVisibleSummary {
     sessionsPerWeek?: number | null;
     sessionsLengthMin?: number | null;
   } | null;
+  /**
+   * 外部权威资料需求（hidden，goal→path 资料采集缝）。
+   * 由 goal-conversation 产出、随 collectedData.understanding.needsMaterial 落库；
+   * 白名单透传后供 path.coordinator 调 material-collector 采集（未声明则为 null）。
+   */
+  needsMaterial?: MaterialNeed | MaterialNeed[] | null;
   successCriteria: {
     observableResult: string | null;
     acceptanceCheck: string | null;
@@ -80,6 +88,17 @@ export function inferTimeBudgetCadence(value: any): GoalPathTimeBudgetCadence | 
   }
 
   return 'unclear';
+}
+
+function normalizeNeedsMaterial(value: any): MaterialNeed | MaterialNeed[] | null {
+  if (!value) return null;
+  if (Array.isArray(value)) {
+    const items = value.filter(
+      (item): item is MaterialNeed => !!item && typeof item === 'object' && !!normalizeString(item.title)
+    );
+    return items.length > 0 ? items : null;
+  }
+  return typeof value === 'object' && normalizeString(value.title) ? (value as MaterialNeed) : null;
 }
 
 function buildCurrentBaseline(understanding: any) {
@@ -141,6 +160,7 @@ export function buildGoalPathVisibleSummary(params: {
   const timeDimensions = buildTimeDimensions(understanding?.time_dimensions);
   const scenario = buildScenario(understanding, backgroundExperience, realProblem);
   const currentBaseline = buildCurrentBaseline(understanding);
+  const needsMaterial = normalizeNeedsMaterial(understanding?.needsMaterial);
 
   const hasResources = !!(timeBudget || timePerSession || timeHorizon || deadlineText);
   const observableResult = normalizeString(understanding?.success_criteria?.observable_result);
@@ -190,6 +210,7 @@ export function buildGoalPathVisibleSummary(params: {
         }
       : null,
     timeDimensions,
+    needsMaterial,
   };
 }
 

@@ -157,6 +157,18 @@
                   <ul v-if="objectivesOf(stage).length" class="objectives">
                     <li v-for="(o, oi) in objectivesOf(stage)" :key="oi">{{ o }}</li>
                   </ul>
+                  <p v-if="materialRefLabels(stage).length" class="stage__material">
+                    本阶段依据资料：
+                    <button
+                      v-for="(ref, ri) in stage.materialRefs"
+                      :key="ri"
+                      type="button"
+                      class="material-ref"
+                      :disabled="!ref.materialId"
+                      :title="ref.materialId ? '点开看原文' : ref.quote"
+                      @click="openMaterialRef(ref)"
+                    >{{ refLabel(ref) }}</button>
+                  </p>
                   <div
                     v-for="task in stageTasks(stage)"
                     :key="task.id"
@@ -171,6 +183,18 @@
                   <div class="task__body">
                     <strong>{{ task.title || task.displayLabel }}</strong>
                     <small>{{ taskKindText(task) }} · 约 {{ task.estimatedMinutes || '—' }} 分钟</small>
+                    <small v-if="materialRefLabels(task).length" class="task__material">
+                      资料：
+                      <button
+                        v-for="(ref, ri) in task.materialRefs"
+                        :key="ri"
+                        type="button"
+                        class="material-ref"
+                        :disabled="!ref.materialId"
+                        :title="ref.materialId ? '点开看原文' : ref.quote"
+                        @click="openMaterialRef(ref)"
+                      >{{ refLabel(ref) }}</button>
+                    </small>
                   </div>
                   <button type="button" v-if="task.id === currentTask?.id && canLearn" class="task__cta" @click="goLearn(task.id)">
                     {{ task.status === 'in_progress' ? '继续学习' : '开始学习' }}
@@ -310,6 +334,38 @@
                   <small>{{ t.estimatedMinutes || '—' }} 分钟</small>
                 </li>
               </ol>
+            </section>
+
+            <section v-if="pathMaterials.length" class="card sidecard">
+              <span class="kicker">本路径的资料</span>
+              <ul class="materials-list">
+                <li v-for="(material, mi) in pathMaterials" :key="mi">
+                  <strong>{{ material.title || '未命名资料' }}</strong>
+                  <small v-if="material.sections?.length">{{ material.sections.length }} 个章节</small>
+                  <ul v-if="openMaterial === mi" class="materials-sections">
+                    <li v-for="(section, si) in material.sections || []" :key="si">{{ section.title }}</li>
+                  </ul>
+                  <button
+                    v-if="material.sections?.length"
+                    type="button"
+                    class="materials-toggle"
+                    @click="openMaterial = openMaterial === mi ? null : mi"
+                  >{{ openMaterial === mi ? '收起章节' : '查看章节' }}</button>
+                </li>
+              </ul>
+              <p class="materials-note">这条路径按你上传的资料生成；学习时会围绕这些章节展开。</p>
+            </section>
+
+            <section v-if="materialPreview.open" class="card sidecard">
+              <span class="kicker">资料原文</span>
+              <strong>{{ materialPreview.title }}</strong>
+              <p v-if="materialPreview.loading" class="materials-note">正在读取…</p>
+              <template v-else>
+                <p v-if="materialPreview.sectionTitle" class="materials-note">对应章节：{{ materialPreview.sectionTitle }}</p>
+                <p v-if="materialPreview.quote" class="materials-note">引文：{{ materialPreview.quote }}</p>
+                <pre class="material-text">{{ materialPreview.text }}</pre>
+              </template>
+              <button type="button" class="materials-toggle" @click="materialPreview.open = false">收起</button>
             </section>
 
             <section v-if="sceneSummary" class="card sidecard">
@@ -572,6 +628,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
+import { readMaterial } from '@/api/materials';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import {
   getReplanActionText,
@@ -646,6 +703,51 @@ function isClampedOverflow(el: HTMLElement | null): boolean {
 }
 
 /* Hero 描述：优先 AI 摘要，老数据无 summary 时兜底原文 */
+const pathMaterials = computed<any[]>(() => {
+  const list = path.value?.materials;
+  return Array.isArray(list) ? list : [];
+});
+const refLabel = (ref: any): string => {
+  const label = String(ref?.sectionTitle || ref?.quote || '').trim();
+  return label.length > 18 ? `${label.slice(0, 18)}…` : (label || '资料');
+};
+
+/**
+ * 「点开看原文」：按引用里的 materialId 取回附件正文（GET /api/materials/:id）。
+ * 只对**本地附件**可用（联网资料的 materialId 为 null，按钮禁用）。
+ */
+const materialPreview = ref<{ open: boolean; loading: boolean; title: string; sectionTitle: string; quote: string; text: string }>({
+  open: false, loading: false, title: '', sectionTitle: '', quote: '', text: '',
+});
+
+const openMaterialRef = async (ref: any) => {
+  if (!ref?.materialId) return;
+  materialPreview.value = {
+    open: true,
+    loading: true,
+    title: String(ref.sectionTitle || '资料原文'),
+    sectionTitle: String(ref.sectionTitle || ''),
+    quote: String(ref.quote || ''),
+    text: '',
+  };
+  try {
+    const material = await readMaterial(String(ref.materialId));
+    materialPreview.value.text = String(material?.markdown || '').slice(0, 4000) || '（正文为空）';
+  } catch (error) {
+    materialPreview.value.text = `读取失败：${String((error as { message?: string })?.message || error)}`;
+  } finally {
+    materialPreview.value.loading = false;
+  }
+};
+
+const materialRefLabels = (node: any): string[] => {
+  const refs = Array.isArray(node?.materialRefs) ? node.materialRefs : [];
+  return refs
+    .map((ref: any) => String(ref?.sectionTitle || ref?.quote || '').trim())
+    .filter((label: string) => !!label)
+    .map((label: string) => (label.length > 20 ? `${label.slice(0, 20)}…` : label));
+};
+const openMaterial = ref<number | null>(null);
 const heroDescription = computed(() => String(path.value?.summary || path.value?.description || '').trim());
 const descExpanded = ref(false);
 const heroDescOverflow = ref(false);
@@ -1483,6 +1585,19 @@ onBeforeUnmount(() => {
 .sidecard strong { font-size: 14.5px; line-height: 1.5; }
 .sidecard p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.65; }
 .sidecard__meta { display: flex; gap: 8px; flex-wrap: wrap; }
+.materials-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.materials-list > li { display: flex; flex-direction: column; gap: 4px; }
+.materials-list strong { font-size: 13.5px; color: var(--ink); }
+.materials-list small { font-size: 12px; color: var(--muted); }
+.materials-sections { list-style: none; margin: 4px 0 0; padding: 0 0 0 10px; display: flex; flex-direction: column; gap: 2px; border-left: 1px solid var(--line); }
+.materials-sections li { font-size: 12px; color: var(--muted); }
+.materials-toggle { align-self: flex-start; background: none; border: none; padding: 0; font-size: 12px; color: var(--blue); cursor: pointer; }
+.materials-note { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.task__material { display: block; margin-top: 2px; font-size: 11.5px; color: var(--blue); }
+.stage__material { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.material-ref { background: none; border: none; padding: 0 4px 0 0; font-size: 11.5px; color: var(--blue); cursor: pointer; text-decoration: underline; }
+.material-ref:disabled { color: var(--muted); text-decoration: none; cursor: default; }
+.material-text { margin: 8px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.6; color: var(--ink); }
 .sidecard--current { border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
 .tag {
   padding: 4px 10px; border-radius: var(--mk-radius-pill);

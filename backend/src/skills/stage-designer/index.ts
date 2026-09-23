@@ -7,6 +7,8 @@ import { AgentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
+import { normalizeMaterialRefs } from '../../services/materials/material-refs';
+import type { PromptMaterial } from '../../services/materials/material-prompt-projection';
 
 const STAGE_DESIGNER_MAX_TOKENS = 32000;
 const STAGE_DESIGNER_TEMPERATURE = 0.3;
@@ -84,6 +86,9 @@ function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
         ? item.icapLevel
         : null,
       transferable: !!item?.transferable,
+      // 白名单归一**必须带上** materialRefs，否则任务级资料引用在此被丢掉
+      // （随后由 withMaterialRefs 逐字核对；核对不过会在那里被删除）
+      materialRefs: Array.isArray(item?.materialRefs) ? item.materialRefs : undefined,
     }))
     .filter((item) => !!item.title);
 }
@@ -117,6 +122,24 @@ export function withLoadTargetForMilestone(milestone: any, cognitiveCore: any): 
   return loadTarget ? { ...milestone, loadTarget } : milestone;
 }
 
+/**
+ * materialRefs：任务 → 资料条目（**逐字核对**，编造的引用丢弃）。
+ * 输入里带了投影后的 materials（由 stage-enrichment 注入），核对不通过就不落该键。
+ */
+function withMaterialRefs(subtasks: any[], materials: unknown): any[] {
+  const list = Array.isArray(subtasks) ? subtasks : [];
+  const normalizedMaterials = Array.isArray(materials) ? (materials as PromptMaterial[]) : null;
+  if (!normalizedMaterials?.length) return list;
+  return list.map((task) => {
+    if (!task || typeof task !== 'object') return task;
+    const refs = normalizeMaterialRefs(task.materialRefs, normalizedMaterials);
+    const next = { ...task };
+    if (refs.length) next.materialRefs = refs;
+    else delete next.materialRefs;
+    return next;
+  });
+}
+
 export async function stageDesigner(input: any): Promise<SkillExecutionResult<any>> {
   try {
     const milestone = input?.milestone && typeof input.milestone === 'object' ? input.milestone : null;
@@ -135,6 +158,7 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
         ? {
             cognitiveCore: payload.cognitiveCore,
             normalizedInput: payload.normalizedInput || null,
+            materials: payload.materials || null,
             milestone: withLoadTargetForMilestone(payload.milestone, payload.cognitiveCore),
             previousMilestone: payload.previousMilestone || null,
             repairHints: payload.repairHints || null,
@@ -144,10 +168,14 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
             previousMilestone: payload.previousMilestone || null,
             cognitiveCore: payload.cognitiveCore,
             normalizedInput: payload.normalizedInput || null,
+            materials: payload.materials || null,
             repairHints: payload.repairHints || null,
           }),
       normalizeOutput: (parsed, payload) => ({
-        subtasks: normalizeSubtasks(parsed?.subtasks, normalizeString(payload?.milestone?.coreConcept)),
+        subtasks: withMaterialRefs(
+          normalizeSubtasks(parsed?.subtasks, normalizeString(payload?.milestone?.coreConcept)),
+          payload?.materials,
+        ),
       }),
       validateParsedOutput: (parsed) => validateStageDesignerOutput(parsed),
       mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({

@@ -56,6 +56,7 @@ export function buildCreateProfileData(preset: BuiltinLearnerPreset): Record<str
   return {
     ...preset.personaSeed,
     ...(preset.budget ? { simulationBudget: { ...preset.budget } } : {}),
+    ...(preset.fixtureMaterials?.length ? { fixtureMaterials: preset.fixtureMaterials.map((item) => ({ ...item })) } : {}),
     storyPool: [presetStory(preset)],
   };
 }
@@ -75,6 +76,8 @@ export function buildMergedProfileData(
     struggleConcepts: unionStrings(preset.personaSeed.struggleConcepts, existing.struggleConcepts),
     recentCompleted: Array.isArray(existing.recentCompleted) ? existing.recentCompleted : [],
     ...(existing.runtimePrefs ? { runtimePrefs: existing.runtimePrefs } : {}),
+    // 附件夹具属定义字段：随版本刷新；未声明则清掉（避免旧夹具残留误导跑批）
+    fixtureMaterials: preset.fixtureMaterials?.length ? preset.fixtureMaterials.map((item) => ({ ...item })) : undefined,
     ...(existing.selfAssessmentAccuracy ? { selfAssessmentAccuracy: existing.selfAssessmentAccuracy } : {}),
     ...(preset.budget
       ? { simulationBudget: { ...(existing.simulationBudget && typeof existing.simulationBudget === 'object' ? existing.simulationBudget : {}), ...preset.budget } }

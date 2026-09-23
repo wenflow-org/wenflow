@@ -81,6 +81,7 @@ export async function buildTeachingTurnInput(
     currentTaskContext: context.currentTaskContext,
     cognitiveFrame: context.cognitiveFrame,
     teachingStrategyGuidance: context.teachingStrategyGuidance,
+    materials: context.materials ?? null,
     pathTitle: context.pathProgress.pathTitle,
     pathSummary: context.pathProgress.pathSummary,
     currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,

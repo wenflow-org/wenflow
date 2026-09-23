@@ -41,6 +41,7 @@ import {
   resolvePersistedNormalizedInput,
   resolveTaskConcept,
 } from '../learning.helpers';
+import { extractPromptMaterials, PATH_MATERIAL_LIMITS } from '../../materials/material-prompt-projection';
 import type { PathSceneFraming, PathStageTraceItem } from '../learning.types';
 
 export function buildPathProcessDetail(path: any) {
@@ -471,6 +472,23 @@ export async function getLearningPath(pathId: string) {
     }
 
     const pathWithActualMinutes = await attachActualMinutesToPath(path);
+    // 资料：从路径模板取回（sceneFraming 优先，回退持久化快照）——供学习者侧展示
+    const pathTemplate = parsePathPromptTemplate(path.aiPromptTemplate || null);
+    const pathMaterialsNormalizedInput = getSceneFramingNormalizedInput(pathTemplate?.sceneFraming)
+      || resolvePersistedNormalizedInput(pathTemplate);
+    // 资料引用（materialRefs）：byStage 键=阶段号、byTask 键=subtaskId（生成期已逐字核对）
+    const materialRefsRaw = pathTemplate?.materialRefs && typeof pathTemplate.materialRefs === 'object'
+      ? pathTemplate.materialRefs as Record<string, any>
+      : null;
+    const materialRefsByStage: Record<string, any[]> = materialRefsRaw?.byStage || {};
+    const materialRefsByTask: Record<string, any[]> = materialRefsRaw?.byTask || {};
+    const attachMaterialRefs = (milestones: any[]) => (Array.isArray(milestones) ? milestones : []).map((milestone: any) => ({
+      ...milestone,
+      materialRefs: materialRefsByStage[String(milestone?.stageNumber ?? milestone?.stage ?? '')] || undefined,
+      subtasks: Array.isArray(milestone?.subtasks)
+        ? milestone.subtasks.map((task: any) => ({ ...task, materialRefs: materialRefsByTask[String(task?.id)] || undefined }))
+        : milestone?.subtasks,
+    }));
     const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
     const taskCount = pathWithActualMinutes.milestones.reduce(
       (sum: number, milestone: any) => sum + ((milestone.subtasks || []).length),
@@ -512,8 +530,11 @@ export async function getLearningPath(pathId: string) {
         triggerSource: path.replanTriggerSource || null,
         reason: path.replanReason || null,
       },
-      milestones: normalized.milestones,
-      stages: normalized.milestones,
+      // 学习者可见的资料（顶层字段，绕开 stripPathGenerationInternals 对 processDetail/aiPromptTemplate 的剥离）：
+      // 前端据此渲染"这条路径长在你上传的资料上"，也让学习者能回看自己上传了什么。
+      materials: extractPromptMaterials(pathMaterialsNormalizedInput, PATH_MATERIAL_LIMITS),
+      milestones: attachMaterialRefs(normalized.milestones),
+      stages: attachMaterialRefs(normalized.milestones),
       totalStages: path.totalMilestones
     };
   } catch (error) {

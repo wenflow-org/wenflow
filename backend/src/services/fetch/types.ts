@@ -31,6 +31,19 @@ export interface FetchRequest {
   perUrlTimeoutMs?: number;
   /** 抓取意图说明（为什么抓），用于提升抽取质量 */
   purpose?: string;
+  /**
+   * 查询定向抽取（2026-09-22 起支持）：传入目标查询后，provider 只返回**与该查询相关的片段**
+   * 而不是整页——这是业界共识（Perplexity 专门建 span-labeling 流水线；Tavily /extract 的
+   * query + chunks_per_source）。用于"我要的是某份资料的正文"这类场景，避免整页导航噪声。
+   */
+  query?: string;
+  /** 每源最多返回几个相关片段（1~5；providers 仅在同时给了 query 时才生效） */
+  chunksPerSource?: number;
+  /**
+   * 抽取深度：basic（默认，1 credit）| advanced（更高成功率、更多内容，含表格/嵌入内容，2 credits）
+   * provider 不支持时静默忽略。
+   */
+  extractDepth?: 'basic' | 'advanced';
   /** 是否额外抽取页面内链接（provider 不支持则静默省略该字段） */
   links?: boolean;
   /** 是否额外抽取图片链接（provider 不支持则静默省略该字段） */

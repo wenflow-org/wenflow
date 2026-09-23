@@ -331,7 +331,12 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
     // path 输入定帧：skill:path-scene-framing 已移除（LLM 环节信息零增量、输出被 seed 覆盖），
     // normalizedInput 由确定性 buildFramedNormalizedInput 清洗并附加 planningHints。
     // API/裸输入模式（无结构化 normalizedInput）用最小兜底结构，保证 planningHints 不缺失。
-    const framedNormalizedInput = buildFramedNormalizedInput(data.userProfile?.normalizedInput || null)
+    // 定帧会白名单重建 resources（裁掉 material-collector 的 materials），故先取出、定帧后回挂。
+    const incomingNormalizedInput = data.userProfile?.normalizedInput || null;
+    const incomingMaterials = incomingNormalizedInput?.resources?.materials
+      ?? incomingNormalizedInput?.materials
+      ?? null;
+    const framedNormalizedInput = buildFramedNormalizedInput(incomingNormalizedInput)
       || buildFramedNormalizedInput({
         version: '1.0',
         learnerProfile: { surfaceGoal: data.description },
@@ -339,6 +344,12 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
         resources: { timeBudget: data.userProfile?.timePerDay || null },
       });
     if (framedNormalizedInput) {
+      if (Array.isArray(incomingMaterials) && incomingMaterials.length > 0) {
+        framedNormalizedInput.resources = {
+          ...(framedNormalizedInput.resources || {}),
+          materials: incomingMaterials,
+        };
+      }
       // 学习者学习证据回注（仅新建路径）：同一个学习者第二次建路径时，之前踩过的坑要影响首版难度，
       // 否则首版是"盲排"。无学习历史 → 不注入（冷启动行为不变）。best-effort，失败不影响生成。
       try {
@@ -427,6 +438,8 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
         description: m.description,
         goal: m.goal,
         estimatedHours: m.estimatedHours,
+        // 资料引用（已在 skill 侧逐字核对）：白名单重建时**必须带上**，否则在此边界被丢掉
+        ...(Array.isArray(m.materialRefs) && m.materialRefs.length ? { materialRefs: m.materialRefs } : {}),
         tasks: []
       })),
       cognitiveCore: path.cognitiveCore || path.cognitiveDesign,
@@ -446,6 +459,16 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
 async function persistGeneratedPath(data: GeneratePathData, analysis: any, milestonesData: any[], runId?: string) {
   const cognitiveDesign = buildPathCognitiveDesign(data, analysis);
   const normalizedMilestonesData = normalizeMilestonesWithConcepts(milestonesData, cognitiveDesign);
+
+  // 资料引用（materialRefs）：里程碑 → 资料条目，**已在 skill 侧逐字核对**过。
+  // 落进 aiPromptTemplate（不新增表列），读侧由 path-views 合并进 milestones/subtasks 返回给学习者。
+  const materialRefsByStage: Record<string, any[]> = {};
+  for (const milestone of normalizedMilestonesData as any[]) {
+    const refs = Array.isArray(milestone?.materialRefs) ? milestone.materialRefs : [];
+    if (refs.length) {
+      materialRefsByStage[String(milestone.stageNumber ?? milestone.stage ?? '')] = refs;
+    }
+  }
   const adjustmentPolicy = buildPathAdjustmentPolicy();
   const adjustmentEvidence = buildPathAdjustmentEvidence(data);
   const generationUpdatedAt = new Date().toISOString();
@@ -462,6 +485,7 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
       pathAgentRaw: analysis.pathAgentRaw || null,
       suggestedMilestones: normalizedMilestonesData,
       cognitiveCore: cognitiveDesign,
+      ...(Object.keys(materialRefsByStage).length ? { materialRefs: { byStage: materialRefsByStage } } : {}),
       adjustmentPolicy,
       adjustmentEvidence,
       _generation: {
