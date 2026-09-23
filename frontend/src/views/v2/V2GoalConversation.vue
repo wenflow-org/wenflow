@@ -50,12 +50,27 @@
         </button>
       </div>
 
-      <!-- 上传资料区（只支持文本型；放在输入区上方，提示随上传区一起给出） -->
-      <MaterialUploadArea class="goal__materials" />
-
-      <div class="composer composer--entry">
+      <!-- 资料附件层：回形针内置输入框，已传资料以 chips 浮在输入框上方；输入框本身是拖放目标 -->
+      <div
+        class="composer composer--entry"
+        @dragenter.prevent="onBoxDragEnter"
+        @dragover.prevent="onBoxDragOver"
+        @dragleave.prevent="onBoxDragLeave"
+        @drop.prevent="onBoxDrop"
+      >
+        <MaterialUploadArea ref="uploadRef" @change="materialCount = $event" />
         <label class="visually-hidden" for="goal-entry-input">你想解决什么</label>
-        <div class="composer__box" :class="{ 'composer__box--active': input.trim() }">
+        <div class="composer__box" :class="{ 'composer__box--active': input.trim(), 'composer__box--dropping': boxDropping }">
+          <button
+            type="button"
+            class="composer__attach"
+            aria-label="添加资料"
+            title="添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框"
+            @click="uploadRef?.openPicker()"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16.5 6v11.5a4 4 0 0 1-8 0V6a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v10.5a2.5 2.5 0 0 0 5 0V6a4 4 0 0 0-8 0v11.5a5.5 5.5 0 0 0 11 0V6z"/></svg>
+            <span v-if="materialCount" class="composer__attach-count">{{ materialCount }}</span>
+          </button>
           <textarea
             id="goal-entry-input"
             v-model="input"
@@ -66,6 +81,7 @@
             @input="live.meta.onInput(input.length)"
             @keydown.enter.exact.prevent="doSend"
           ></textarea>
+          <span v-if="boxDropping" class="composer__drop-hint">松开上传到资料</span>
           <button
             v-if="!live.sending"
             type="button"
@@ -255,13 +271,27 @@
           </div>
         </div>
 
-        <!-- 输入区 -->
-        <!-- 上传资料区（只支持文本型；与初始态同一组件） -->
-        <MaterialUploadArea class="goal__materials" />
-
-        <div class="composer">
+        <!-- 输入区：回形针资料入口内置输入框，已传资料 chips 浮在输入框上方；输入框本身是拖放目标 -->
+        <div
+          class="composer"
+          @dragenter.prevent="onBoxDragEnter"
+          @dragover.prevent="onBoxDragOver"
+          @dragleave.prevent="onBoxDragLeave"
+          @drop.prevent="onBoxDrop"
+        >
+          <MaterialUploadArea ref="uploadRef" @change="materialCount = $event" />
           <label class="visually-hidden" for="goal-chat-input">回答上面的问题，或补充你的基础、时间和限制</label>
-          <div class="composer__box" :class="{ 'composer__box--active': input.trim() }">
+          <div class="composer__box" :class="{ 'composer__box--active': input.trim(), 'composer__box--dropping': boxDropping }">
+            <button
+              type="button"
+              class="composer__attach"
+              aria-label="添加资料"
+              title="添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框"
+              @click="uploadRef?.openPicker()"
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16.5 6v11.5a4 4 0 0 1-8 0V6a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v10.5a2.5 2.5 0 0 0 5 0V6a4 4 0 0 0-8 0v11.5a5.5 5.5 0 0 0 11 0V6z"/></svg>
+              <span v-if="materialCount" class="composer__attach-count">{{ materialCount }}</span>
+            </button>
             <textarea
               id="goal-chat-input"
               v-model="input"
@@ -271,6 +301,7 @@
               :placeholder="chatPlaceholder"
               @keydown.enter.exact.prevent="doSend"
             ></textarea>
+            <span v-if="boxDropping" class="composer__drop-hint">松开上传到资料</span>
             <!-- 发送/停止 同位置切换：生成中变停止（主流聊天交互，位置固定不占额外空间） -->
             <button
               v-if="!live.sending"
@@ -556,6 +587,24 @@ function goPaths() {
 const input = ref('');
 /** 当前展示轮的快捷补充入口（快选为勾选语义：全部常驻，点选打勾，再点取消） */
 const currentQuickReplies = ref<Array<{ text: string; icon?: string }>>([]);
+
+/* ---------- 资料附件层（回形针内置输入框 + 输入框即拖放目标） ---------- */
+const uploadRef = ref<{ openPicker: () => void; addFiles: (files: File[]) => void } | null>(null);
+const materialCount = ref(0);
+const boxDropping = ref(false);
+let boxDragDepth = 0;
+function onBoxDragEnter() { boxDragDepth++; boxDropping.value = true; }
+function onBoxDragOver(e: DragEvent) { e.preventDefault(); }
+function onBoxDragLeave() {
+  boxDragDepth = Math.max(0, boxDragDepth - 1);
+  if (!boxDragDepth) boxDropping.value = false;
+}
+function onBoxDrop(e: DragEvent) {
+  boxDragDepth = 0;
+  boxDropping.value = false;
+  const files = Array.from(e.dataTransfer?.files || []);
+  if (files.length) uploadRef.value?.addFiles(files);
+}
 /** 从 input 中把某行追加/取消；为保持展示层薄，纯组件内实现 */
 function toggleReply(text: string) {
   const t = text.trim();
@@ -962,10 +1011,9 @@ function shuffleScenes() {
   display: flex; flex-direction: column; gap: 18px;
   justify-content: center;
 }
-/* 统一内容列：hero 文字 / 场景卡 / 资料投放区 / 输入框共用 640 一条列，
+/* 统一内容列：hero 文字 / 场景卡 / 输入框（含资料 chips 层）共用 640 一条列，
    不再 hero 通栏左对齐、卡片居中的混搭（比例失调的根源） */
 .entry__hero { max-width: 640px; width: 100%; margin: 0 auto; }
-.entry .goal__materials { max-width: 640px; width: 100%; margin: 0 auto; }
 .entry .composer--entry {
   max-width: 640px; width: 100%; margin: 0 auto;
   /* 原 46 补白为卡片间距服务；现在资料区在两者之间，由 gap 接管 */
@@ -1080,6 +1128,7 @@ function shuffleScenes() {
 /* ---------- 输入区 ---------- */
 .composer { display: grid; gap: 7px; }
 .composer__box {
+  position: relative;
   display: flex; align-items: flex-end; gap: 10px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1092,6 +1141,39 @@ function shuffleScenes() {
 .composer__box--active {
   border-color: color-mix(in srgb, var(--blue) 55%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent), 0 6px 20px rgba(23, 32, 51, 0.06);
+}
+/* 资料附件：输入框左下回形针入口（主流附件模式），角标显示已传份数 */
+.composer__attach {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  border: 0; border-radius: 9px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.composer__attach:hover { background: rgba(23, 32, 51, 0.06); color: var(--ink); }
+.composer__attach-count {
+  position: absolute; top: -1px; right: -3px;
+  min-width: 14px; height: 14px; padding: 0 3px;
+  border-radius: 999px;
+  background: var(--blue); color: #fff;
+  font-size: 9px; font-weight: 800; line-height: 14px;
+  pointer-events: none;
+}
+/* 拖文件到输入框：整盒高亮 + 居中提示 */
+.composer__box--dropping {
+  border-color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 6%, var(--surface));
+}
+.composer__drop-hint {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  font-size: 12px; font-weight: 700; color: var(--blue-deep);
+  pointer-events: none;
+  z-index: 2;
 }
 .composer__textarea {
   flex: 1;

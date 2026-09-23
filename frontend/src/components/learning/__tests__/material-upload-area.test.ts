@@ -1,8 +1,8 @@
 /**
  * MaterialUploadArea：上传资料区的关键约束回归。
  *
- * 约束来源（2026-09-22 定稿）：
- *   1. 上传区必须**显式告知只支持文本型**（灰色提示），且 accept 只放开文本型扩展名；
+ * 约束来源（2026-09-22 定稿，2026-09-23 附件层移入输入框后更新）：
+ *   1. 入口与格式说明在父级回形针按钮的 title 里，accept 只放开文本型扩展名；
  *   2. 上传失败（扫描件 / legacy .doc 等被后端拒收）时展示后端的中文原因，且**不进列表**；
  *   3. 同一文件可重复选择（input.value 必须清空，否则第二次选同名文件不触发 change）。
  */
@@ -45,14 +45,23 @@ beforeEach(() => {
 });
 
 describe('MaterialUploadArea', () => {
-  it('提示行列出支持的文本型格式，并说明可拖拽上传', async () => {
+  it('无资料时整体退场（display:none，不占输入框上方的行）', async () => {
     const w = mount(MaterialUploadArea);
     await flushPromises();
-    const hint = w.find('.mat-upload__hint');
-    expect(hint.exists()).toBe(true);
-    expect(hint.text()).toContain('PDF');
-    expect(hint.text()).toContain('Markdown');
-    expect(hint.text()).toContain('拖拽');
+    expect(w.classes()).toContain('mat-upload--empty');
+    expect(w.classes()).toContain('mat-upload--empty');
+  });
+
+  it('chips 超过 4 份折叠为 +N，点击展开', async () => {
+    mockList.mockResolvedValue([1, 2, 3, 4, 5, 6].map((i) => baseMaterial({ id: `m${i}`, name: `资料${i}.txt` })));
+    const w = mount(MaterialUploadArea);
+    await flushPromises();
+    const chips = () => w.findAll('.mat-upload__chip:not(.mat-upload__chip--more)');
+    expect(chips().length).toBe(4); // 默认只显 4 份
+    const more = w.find('.mat-upload__chip--more');
+    expect(more.text()).toBe('+2');
+    await more.trigger('click');
+    expect(chips().length).toBe(6);
   });
 
   it('accept 只放开文本型扩展名，不含图片与 legacy .doc', async () => {
@@ -72,14 +81,16 @@ describe('MaterialUploadArea', () => {
     const w = mount(MaterialUploadArea);
     await flushPromises();
 
-    await (w.vm as unknown as { uploadFiles: (files: File[]) => Promise<void> })
-      .uploadFiles([new File(['x'], '指南.txt', { type: 'text/plain' })]);
+    await (w.vm as unknown as { addFiles: (files: File[]) => Promise<void> })
+      .addFiles([new File(['x'], '指南.txt', { type: 'text/plain' })]);
     await flushPromises();
 
     expect(mockUpload).toHaveBeenCalledTimes(1);
-    expect(w.text()).toContain('指南.txt');
-    expect(w.text()).toContain('1200 字');
-    expect(w.text()).toContain('3 个小标题');
+    const chip = w.find('.mat-upload__chip');
+    expect(chip.text()).toContain('指南.txt');
+    // 完整元信息在 title 里（chip 本体只放名字，避免输入框上方过吵）
+    expect(chip.attributes('title')).toContain('1200 字');
+    expect(chip.attributes('title')).toContain('3 个小标题');
   });
 
   it('被拒收（扫描件）→ 展示后端中文原因，且不进列表', async () => {
@@ -87,12 +98,12 @@ describe('MaterialUploadArea', () => {
     const w = mount(MaterialUploadArea);
     await flushPromises();
 
-    await (w.vm as unknown as { uploadFiles: (files: File[]) => Promise<void> })
-      .uploadFiles([new File(['x'], '扫描件.pdf')]);
+    await (w.vm as unknown as { addFiles: (files: File[]) => Promise<void> })
+      .addFiles([new File(['x'], '扫描件.pdf')]);
     await flushPromises();
 
     expect(w.find('.mat-upload__error').text()).toContain('没有可提取的文本');
-    expect(w.find('.mat-upload__list').exists()).toBe(false);
+    expect(w.find('.mat-upload__chips').exists()).toBe(false);
   });
 
   it('多选时逐份处理：一份失败不影响其余', async () => {
@@ -102,8 +113,8 @@ describe('MaterialUploadArea', () => {
     const w = mount(MaterialUploadArea);
     await flushPromises();
 
-    await (w.vm as unknown as { uploadFiles: (files: File[]) => Promise<void> })
-      .uploadFiles([new File(['x'], '旧.doc'), new File(['y'], '笔记.md')]);
+    await (w.vm as unknown as { addFiles: (files: File[]) => Promise<void> })
+      .addFiles([new File(['x'], '旧.doc'), new File(['y'], '笔记.md')]);
     await flushPromises();
 
     expect(mockUpload).toHaveBeenCalledTimes(2);
@@ -135,7 +146,7 @@ describe('MaterialUploadArea', () => {
     await flushPromises();
     expect(w.text()).toContain('指南.txt');
 
-    await w.find('.mat-upload__remove').trigger('click');
+    await w.find('.mat-upload__chip-x').trigger('click');
     await flushPromises();
 
     expect(mockRemove).toHaveBeenCalledWith('m1');
