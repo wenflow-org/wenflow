@@ -645,6 +645,12 @@ function parseGoalConversationResponse(
     } else {
       understanding = mergeUnderstanding(previousUnderstanding, normalizedPayload);
     }
+    // needsMaterial（hidden，goal→path 资料采集缝）：统一收进 understanding 随既有
+    // collectedData.understanding 持久化，避免新增存储列。跨轮累积：本轮缺席=沿用上一轮，
+    // null=清空。放在 merge 之后统一处理，同时覆盖 delta / 非 delta 两种模式。
+    if (normalizedPayload.needsMaterial !== undefined) {
+      understanding = { ...understanding, needsMaterial: normalizedPayload.needsMaterial };
+    }
     const validStages = ['understanding', 'proposing', 'ready', 'completed'];
     const stageFromPayload = parsedJson.stage || parsedJson.state?.stage;
     if (validStages.includes(stageFromPayload)) {

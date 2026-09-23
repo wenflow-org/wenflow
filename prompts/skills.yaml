@@ -536,6 +536,17 @@ skills:
       sandbox: []
     notes: handler-only 外挂能力——handler 委托 backend/src/services/fetch（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制）；provider 与密钥由 FETCH_PROVIDER / FETCH_API_KEY（缺省复用 SEARCH_API_KEY）等环境变量承担，无 DB 直读，dataSource.db 保持空
 
+  - skillId: material-collector
+    kind: handler-only
+    handlerRef: backend/src/skills/material-collector/index.ts
+    noPromptFile: true
+    displayName: 资料采集编排器 Skill
+    description: 在 goal→path 之间采集外部权威资料：确定性编排 search→选源→fetch，LLM 仅抽取带引文的要点，产出 Material Pack
+    dataSource:
+      db: []
+      sandbox: []
+    notes: handler-only 外挂能力（编排器）——handler 委托 backend/src/services/search + backend/src/services/fetch（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制），无 DB 直读，dataSource.db 保持空。**混合形态说明**：主接口是确定性 handler（故登记为 handler-only，照 web-fetch 成例，不进 agentMembers、不进字段路由），但内含一个 LLM 抽取环节，其 prompt 以 v4 核心文件 prompts/core/material-collector.yaml 编译产物承载（故同时具备 coreFile 产物与 prompts/manifests/material-collector.yaml）；户口簿按 F7 只登记 handler-only 形态，core/manifest 为抽取环节的 prompt 资产。三条硬规则：not_found 显式返回 / 无引文要点进不了 pack / 网页文本当数据不当指令。
+
   - skillId: text-to-image
     kind: handler-only
     handlerRef: backend/src/skills/text-to-image/index.ts

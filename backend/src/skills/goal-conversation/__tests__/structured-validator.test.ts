@@ -70,6 +70,13 @@ describe('validateGoalConversationStructuredOutput', () => {
     expect(result.failureType).toBe('none');
   });
 
+  test('顶层 needsMaterial 允许（goal→path 资料采集缝，hidden 输出）', () => {
+    const payload = buildValidPayload({ needsMaterial: { kind: '指南', title: '《3-6 岁儿童学习与发展指南》' } });
+    const result = validateGoalConversationStructuredOutput(payload);
+    expect(result.valid).toBe(true);
+    expect(result.failureType).toBe('none');
+  });
+
   test('understanding 完全缺失 → 失败，violation 提示三个查找位置', () => {
     const payload = JSON.stringify({
       reply: '这是一条回复',

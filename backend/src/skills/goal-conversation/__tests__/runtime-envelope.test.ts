@@ -116,6 +116,42 @@ describe('goal-conversation runtime envelope contract', () => {
     }))
   })
 
+  it('顶层 needsMaterial 通过校验并落到 understanding（goal→path 资料采集缝）', async () => {
+    const contentWithNeed = JSON.stringify({
+      reply: '这条路依赖《3-6 岁儿童学习与发展指南》。',
+      state: { stage: 'proposing', confidence: 0.9, done: false },
+      understanding: { real_problem: '按指南设计活动' },
+      nextQuestions: ['要不要先读指南？'],
+      confirmedProposal: {
+        learning_direction: '指南落地',
+        first_deliverable: '一份活动方案',
+        key_stages: ['读懂领域', '设计活动'],
+        out_of_scope: [],
+        scope_size: 'small',
+      },
+      needsMaterial: {
+        kind: '指南',
+        title: '《3-6 岁儿童学习与发展指南》',
+        why: '活动设计要有官方依据',
+        queries: ['3-6岁儿童学习与发展指南'],
+      },
+    })
+    executeMock.mockResolvedValue({
+      choices: [{ message: { content: contentWithNeed }, finish_reason: 'stop' }],
+      _gatewayMetadata: { attemptCount: 1 },
+    })
+
+    const result = await goalConversationAgentHandler(
+      { goal: '按指南设计活动', metadata: {} },
+      { userId: 'user-1', conversationHistory: [] } as any
+    )
+
+    expect(result.success).toBe(true)
+    expect((result.internal as any).ext.goalConversation.understanding.needsMaterial).toEqual(
+      expect.objectContaining({ title: '《3-6 岁儿童学习与发展指南》' })
+    )
+  })
+
   it('uses ACTIVE metadata contract on validation failure', async () => {
     executeMock.mockResolvedValue({
       choices: [{ message: { content: '没有结构化输出' }, finish_reason: 'stop' }],

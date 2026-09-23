@@ -54,7 +54,9 @@ export function validateGoalConversationStructuredOutput(
   const allowedTopLevelKeys = new Set([
     'reply', 'state', 'goalConversation', 'hints',
     'understanding', 'nextQuestions', 'quickReplies', 'confirmedProposal', 'confidenceScores', 'structuredData',
-    'proposalQuality'
+    'proposalQuality',
+    // goal→path 资料采集缝：hidden 顶层输出（不向用户展示，由 material-collector 消费）
+    'needsMaterial'
   ]);
   const { parsedJson, dialogueText, parseMode, parseError } = extractStructuredPayload(content);
 

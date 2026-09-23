@@ -50,6 +50,10 @@ import { executeWebFetch as executeWebFetchFn } from './web-fetch';
 export { textToImageDefinition } from './text-to-image';
 import { executeTextToImage as executeTextToImageFn } from './text-to-image';
 
+// 资料采集编排器（非 LLM 外挂能力；确定性编排 search→选源→fetch，LLM 仅抽取带引文要点）
+export { materialCollectorDefinition, executeMaterialCollector, collectMaterialPack, collectMaterialForGoal, hasMaterialNeed } from './material-collector';
+import { executeMaterialCollector as executeMaterialCollectorFn } from './material-collector';
+
 // v4 辅助 LLM Skills（由原遗留插件/旁路迁入）
 import { auxSkillDefinitions, auxSkillHandlers } from './v4-aux-skills';
 export { auxSkillDefinitions, auxSkillDefinitionMap } from './v4-aux-skills';
@@ -128,6 +132,7 @@ import { mcpToolDefinition } from './mcp-tool';
 import { webSearchDefinition } from './web-search';
 import { webFetchDefinition } from './web-fetch';
 import { textToImageDefinition } from './text-to-image';
+import { materialCollectorDefinition } from './material-collector';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   stageDesignerDefinition,
@@ -149,6 +154,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   webSearchDefinition,
   webFetchDefinition,
   textToImageDefinition,
+  materialCollectorDefinition,
   ...auxSkillDefinitions,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
   {
@@ -234,6 +240,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'web-search': executeWebSearchFn,
   'web-fetch': executeWebFetchFn,
   'text-to-image': executeTextToImageFn,
+  'material-collector': executeMaterialCollectorFn,
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
   'goal-conversation': (input: any) => runGoalConversationAgent(input),
