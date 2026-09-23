@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-opening-generator
-coreHash: 1b6384808fc477d63c7d9760d2686fa14d8a32ae1fd097414a223ce5d5a85ca3
+coreHash: 938bd51ef4642fd30a55276e642208085cc05e297eadd239b00354494a3e52a6
 coreVersion: 3
 temperature: 0.4
 maxTokens: 3000
@@ -32,13 +32,12 @@ failurePolicy: propagate
 5. quickReplies 输出 0 到 3 个动作选项，每项只保留 text，动词开头、不超过 12 字；没有可执行的下一步动作时不要硬凑，输出空数组或省略均可——此时 message 负责完成开场定位
 6. question 若用于摸底/自评，则 quickReplies 必须与摸底无关——quickReplies 永远指向"从哪开始动手"
 7. quickReplies 必须与 mode 匹配： · example-first：如"带我看一个例子""我先试一小步""先讲要点，再拿例子练" · predict：如"让我先判断一下""给个提示再判断""我先猜一个，你验证" · self-assess：把自评转化为动作，如"我自己写一句试试""先听你讲一遍""跳过自评，直接练"
-8. quickReplies 必须与 mode 匹配： · example-first：如"带我看一个例子""我先试一小步""先讲要点，再拿例子练" · predict：如"让我先判断一下""给个提示再判断""我先猜一个，你验证" · self-assess：把自评转化为动作，如"我自己写一句试试""先听你讲一遍""跳过自评，直接练"
-9. mode 决定开场风格；example-first 从小例子切入，predict 让学生先判断，self-assess 让学生快速自评
-10. 输入提供 lastLessonRecap（上一课摘要）时，message 必须先承接一句上节的卡住点、检索题或未答问题（如"上次你卡在 X，今天我们把它解决掉"），再进入本节开场；不要让每节课像第一次见面
-11. lastLessonRecap.relation 表示上一课与本课的位置关系：same-milestone-prev-task（同阶段前一任务）/ prev-milestone（上一阶段）/ same-task（同一任务重学）/ last-any（更早的课）。same-task 时应承认"这节课之前学过"，结合 sameTaskHistory.lastUnresolvedPoints 承接上次没掌握的，不要装作第一次
-12. 输入提供 priorLearningContext（结构化前序）时：priorLearningContext.adjacent 是紧邻前序（优先承接），priorLearningContext.sameTask 是当前任务重学历史，priorLearningContext.priorMilestoneMastery 是已学阶段掌握汇总——开场可自然带一句"前面 X 已经稳了，我们继续推进"，不要罗列数据
-13. 输入提供 learningSignal（学习者在目标阶段流露的交付形式偏好）时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 message，不机械复述原话
-14. 不要包含内部状态名、任务 ID、路径 ID、指标公式或调试信息
+8. mode 决定开场风格；example-first 从小例子切入，predict 让学生先判断，self-assess 让学生快速自评
+9. 输入提供 lastLessonRecap（上一课摘要）时，message 必须先承接一句上节的卡住点、检索题或未答问题（如"上次你卡在 X，今天我们把它解决掉"），再进入本节开场；不要让每节课像第一次见面
+10. lastLessonRecap.relation 表示上一课与本课的位置关系：same-milestone-prev-task（同阶段前一任务）/ prev-milestone（上一阶段）/ same-task（同一任务重学）/ last-any（更早的课）。same-task 时应承认"这节课之前学过"，结合 sameTaskHistory.lastUnresolvedPoints 承接上次没掌握的，不要装作第一次
+11. 输入提供 priorLearningContext（结构化前序）时：priorLearningContext.adjacent 是紧邻前序（优先承接），priorLearningContext.sameTask 是当前任务重学历史，priorLearningContext.priorMilestoneMastery 是已学阶段掌握汇总——开场可自然带一句"前面 X 已经稳了，我们继续推进"，不要罗列数据
+12. 输入提供 learningSignal（学习者在目标阶段流露的交付形式偏好）时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 message，不机械复述原话
+13. 不要包含内部状态名、任务 ID、路径 ID、指标公式或调试信息
 
 ## 输出字段
 

@@ -35,10 +35,6 @@ rules:
     · example-first：如"带我看一个例子""我先试一小步""先讲要点，再拿例子练"
     · predict：如"让我先判断一下""给个提示再判断""我先猜一个，你验证"
     · self-assess：把自评转化为动作，如"我自己写一句试试""先听你讲一遍""跳过自评，直接练"
-  - quickReplies 必须与 mode 匹配：
-    · example-first：如"带我看一个例子""我先试一小步""先讲要点，再拿例子练"
-    · predict：如"让我先判断一下""给个提示再判断""我先猜一个，你验证"
-    · self-assess：把自评转化为动作，如"我自己写一句试试""先听你讲一遍""跳过自评，直接练"
   - mode 决定开场风格；example-first 从小例子切入，predict 让学生先判断，self-assess 让学生快速自评
   - 输入提供 lastLessonRecap（上一课摘要）时，message 必须先承接一句上节的卡住点、检索题或未答问题（如"上次你卡在 X，今天我们把它解决掉"），再进入本节开场；不要让每节课像第一次见面
   - lastLessonRecap.relation 表示上一课与本课的位置关系：same-milestone-prev-task（同阶段前一任务）/ prev-milestone（上一阶段）/ same-task（同一任务重学）/ last-any（更早的课）。same-task 时应承认"这节课之前学过"，结合 sameTaskHistory.lastUnresolvedPoints 承接上次没掌握的，不要装作第一次
