@@ -10,6 +10,9 @@
  *   而不是把多张悄悄压成一张。
  * - size 被接受但只决定宽高比档位（实测 512x512→1024x1024，1024x1792→736x1312），
  *   原样透传、不做精确像素保证（语义已在 types.ts 的 size 注释写明）。
+ * - ratio 为官方宽高比档位（配合档位式 size）；网关若不支持会静默忽略（回落 1:1）。
+ * - response_format **不放顶层**（官方文档明确禁止）：url 是服务端默认形态故不发。
+ *   注意：实测本网关会忽略 `extra_body.response_format` 与 `return_base64`，故 b64 仍走顶层。
  * - purpose 为纯提示字段，无对应参数，静默忽略。
  * - 响应同时带 url 与 b64_json（未请求的一侧为空串），按非空侧归一化。
  */
@@ -66,7 +69,14 @@ export function buildAgnesImageBody(request: ImageRequest, model: string): Recor
     n: 1,
   };
   if (request.size) body.size = request.size;
-  if (request.responseFormat) body.response_format = request.responseFormat;
+  if (request.ratio) body.ratio = request.ratio;
+  // 官方文档：response_format **不放顶层**（文生图 Base64 的正解是 return_base64）。
+  // 但**实测本网关（IMAGE_API_URL）会忽略 `extra_body.response_format` 与 `return_base64`**，
+  // 只有顶层 response_format 可能生效——为不改变既有 text-to-image 的 b64 行为，这里保持顶层。
+  // url（= 服务端默认形态）则**不发送任何字段**：既合规、又不改变行为。
+  if (request.responseFormat === 'b64_json') {
+    body.response_format = request.responseFormat;
+  }
 
   return body;
 }

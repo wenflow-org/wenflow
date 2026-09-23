@@ -84,15 +84,32 @@ export interface TeachingSessionMessage {
   checkpoint?: boolean;
   /** 伴学对话消息标记：不属于正式教学回合 */
   peer?: boolean;
+  /**
+   * 教学配图（owner 口径 2026-09-23：图片是一种特殊的文字）——**内联在消息流里**，
+   * 由老师给的一段文字描述生成（`prompt` 即原文，可回溯）。文本脱离图仍成立。
+   */
+  images?: TeachingImage[];
+}
+
+/**
+ * 教学配图（owner 口径 2026-09-23：图片是一种特殊的文字）。
+ * 由老师给的一段**文字描述**生成——`prompt` 即那段文字的最终形态，可回溯"图 = 哪段文字"。
+ */
+export interface TeachingImage {
+  url: string;
+  caption: string | null;
+  prompt: string;
+  provider: string;
+  model: string;
+  kind: string | null;
+  createdAt: string;
 }
 
 export interface TeachingKnowledgePointState {
   name: string;
   status: 'pending' | 'learning' | 'mastered' | 'review';
   progress: number;
-}
-
-export interface TeachingSessionRecord {
+}export interface TeachingSessionRecord {
   id: string;
   userId: string;
   taskId: string;

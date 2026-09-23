@@ -57,6 +57,8 @@ export interface CheckpointSubmitResult {
 
 export interface MessageResult {
   aiResponse: string;
+  /** 教学配图（owner 口径：图片是一种特殊的文字）——本轮老师临场附的一张图，内联在回复里 */
+  images?: Array<{ url: string; caption?: string | null; prompt?: string; kind?: string | null }>;
   analysis: {
     cognitiveLevel: string;
     levelScore: number;
@@ -156,7 +158,7 @@ export interface SessionDetail {
   endTime: string | null;
   duration: number | null;
   status: string;
-  messages: Array<{ role: string; content: string; timestamp: string; analysis?: Record<string, unknown>; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: Record<string, unknown> | null; peerTriggered?: boolean; peerMessage?: string | null; peerStrategy?: string | null; peerFollowUpQuestions?: string[]; peerDebug?: Record<string, unknown> | null; peer?: boolean }>;
+  messages: Array<{ role: string; content: string; timestamp: string; analysis?: Record<string, unknown>; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: Record<string, unknown> | null; peerTriggered?: boolean; peerMessage?: string | null; peerStrategy?: string | null; peerFollowUpQuestions?: string[]; peerDebug?: Record<string, unknown> | null; peer?: boolean; images?: Array<{ url: string; caption?: string | null; prompt?: string; kind?: string | null }> }>;
   state: Record<string, unknown> | null;
   knowledgePoints?: KnowledgePointStatus[];
   wrapup?: WrapupArtifact | null;

@@ -35,6 +35,21 @@ describe('generateImages 编排', () => {
     ).rejects.toMatchObject({ code: 'IMAGE_REQUEST_INVALID' });
   });
 
+  it('档位式 size + ratio 通过校验（官方推荐写法）', async () => {
+    const provider = fakeProvider('agnes', async () => ({ images: [image('agnes')], model: 'm' }));
+    const result = await generateImages(
+      { prompt: '一条位置线', size: '1K', ratio: '16:9' },
+      { providers: { agnes: provider } }
+    );
+    expect(result.images).toHaveLength(1);
+  });
+
+  it('非法 ratio 被拒（IMAGE_REQUEST_INVALID）', async () => {
+    await expect(
+      generateImages({ prompt: 'x', ratio: '5:4' } as unknown as ImageRequest)
+    ).rejects.toMatchObject({ code: 'IMAGE_REQUEST_INVALID' });
+  });
+
   it('IMAGE_PROVIDER 配置未知 id 时抛 IMAGE_PROVIDER_UNKNOWN', () => {
     expect(() => resolveImageProviderOrder('agnes,no-such')).toThrow(/未知的文生图 provider/);
   });

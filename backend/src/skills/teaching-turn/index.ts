@@ -242,6 +242,19 @@ export interface TeachingTurnInput {
   classroomEventContext?: Record<string, any>;
   /** 双引擎试点（内部透传）：第一段 analysis-only 的产出，注入第二段作为约束 */
   _analysisStage?: Record<string, any> | null;
+  /**
+   * 教学配图时机信号（**代码裁决**后显式送进来的，见 `teaching-visual.service.ts#buildVisualOpportunity`）。
+   *
+   * 为什么要有这个字段：实测埋在 2 万字 system prompt 里的"配图规则"会被模型忽略（三档加码都无效），
+   * 而**把要求显式放进该轮输入**一次就生效。所以"何时该配图"由代码判定后走这里送进来，
+   * 模型只负责"画什么"（输出 `visual`）。
+   */
+  visualOpportunity?: {
+    suggested: boolean;
+    reason: string;
+    /** 给模型的显式、正向要求（原样进入载荷） */
+    instruction: string;
+  } | null;
 }
 
 export interface TeachingTurnOutput {
@@ -348,6 +361,27 @@ export interface TeachingTurnOutput {
       evidence?: string;
     }>;
   };
+  /**
+   * 教学配图请求（可选）——owner 口径 2026-09-23：**「图片是一种特殊的文字，放在教学中」**。
+   *
+   * 语义：老师**临场**觉得"这里给学生看一张图会更好"时，输出本块；由**代码**决定要不要真的画
+   * （开关 + 每会话上限 + fail-open，见 `services/ai-teaching/teaching-visual.service.ts`）。
+   *
+   * 硬边界（与既有"课堂仅文本"规则一致，只是允许附图）：
+   * - `prompt` 是**画面描述**，取自当前教学内容的文字——图 = 这段文字的渲染，文本仍是唯一真相源；
+   * - **文本必须脱离图也成立**：`reply` 不能依赖这张图（不写"看图就明白""照着图上做"），
+   *   学生不看图也能继续；图只是辅助；
+   * - 不是每轮都配：**同一个任务最多配一次**，且只在本轮内容确实"天然偏视觉"（几何/结构/流程/对比）时才用；
+   * - 纯文字能说清、或图会分散注意时，**不要**输出本块。
+   */
+  visual?: {
+    /** 画面描述（必填）：要画什么，用中文写清主体与关系 */
+    prompt: string;
+    /** 图的说明文字（学生可见；可空，一句话） */
+    caption?: string | null;
+    /** 图类型（如 示意图 / 对比图 / 流程图）；仅作润色与留痕 */
+    kind?: string | null;
+  } | null;
 }
 
 /**
@@ -406,7 +440,9 @@ export const teachingTurnAgentDefinition: AgentDefinition = {
       analysis: { type: 'object' },
       knowledge: { type: 'object' },
       pedagogy: { type: 'object' },
-      control: { type: 'object' }
+      control: { type: 'object' },
+      // 可选：老师临场请求的一张教学配图（图 = 一段文字的渲染；见 TeachingTurnOutput.visual）
+      visual: { type: 'object' }
     },
     required: ['reply', 'analysis', 'knowledge', 'pedagogy', 'control']
   },
@@ -563,7 +599,10 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
       levelScore: Number.isFinite(analysis.levelScore) ? Number(analysis.levelScore) : 2,
       understanding: Number.isFinite(analysis.understanding) ? Number(analysis.understanding) : 0.5,
       confusionPoints: resolveConfusionPoints(analysis.confusionPoints, analysis.misconceptions),
-      ...(normalizeMisconceptions(analysis.misconceptions)),
+      ...(normalizeMisconceptions(
+        analysis.misconceptions,
+        [...(input.messages || [])].reverse().find((message) => message?.role === 'user')?.content || '',
+      )),
       ...(normalizeKtEstimate(analysis.ktEstimate)),
       ...(normalizeRsmAttempts(analysis.rsmAttempts)),
       ...(normalizeSelfAssessmentSignal(analysis.selfAssessmentSignal)),
@@ -609,7 +648,26 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
         : {}),
       ...(normalizeWarmupOutcomes(control.warmupOutcomes) ?? {}),
     },
+    ...(normalizeVisual(parsed.visual) ?? {}),
   };
+}
+
+/**
+ * 归一化老师请求的教学配图（契约见 `TeachingTurnOutput.visual`）。
+ *
+ * 规则（与其它可选输出同风格：宁缺毋滥）：
+ * - `prompt` 非空才保留（空/非字符串 → 整块丢弃，不编造）；
+ * - `caption` / `kind` 裁长；空串归一成 null；
+ * - 单张（本字段天然只有一张），真正的"要不要画"由代码闸门裁决（服务侧）。
+ */
+function normalizeVisual(raw: unknown): { visual: NonNullable<TeachingTurnOutput['visual']> } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+  const prompt = typeof record.prompt === 'string' ? record.prompt.trim().slice(0, 800) : '';
+  if (!prompt) return null;
+  const caption = typeof record.caption === 'string' ? record.caption.trim().slice(0, 200) : '';
+  const kind = typeof record.kind === 'string' ? record.kind.trim().slice(0, 40) : '';
+  return { visual: { prompt, caption: caption || null, kind: kind || null } };
 }
 
 /**
@@ -689,9 +747,31 @@ function normalizeCheckpoint(value: Record<string, any>): NonNullable<TeachingTu
   };
 }
 
-/** 归一化结构化误解台账（G-R-R Phase 1）：过滤缺证据项，置信度收敛到 0|25|50|75|100 五档 */
-function normalizeMisconceptions(value: any): { misconceptions?: NonNullable<TeachingTurnOutput['analysis']['misconceptions']> } {  if (!Array.isArray(value) || value.length === 0) return {};
-  const items = value
+/** 引文逐字核对用的空白归一（与 `material-refs.ts#isQuoteVerbatim` 同口径）。 */
+function normalizeForQuote(text: unknown): string {
+  return String(text ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * evidence 必须是**学生本轮原话的逐字片段**（2026-09-23 采纳外部评审建议）。
+ *
+ * 为什么从"提示词建议"升级为"代码硬约束"：此前只在规则里要求"evidence 必须引用学生本轮原话
+ * （不可定位则不输出该项）"，但归一化只做了 `trim().slice(0,300)`——**模型修饰过的"引文"照样落库**，
+ * 误解台账的证据链就虚了。这里照本仓既有做法（`material-refs.ts#isQuoteVerbatim`）逐字核对，
+ * **核对不过就丢弃该条**（宁缺勿编：没有可定位的证据，就不该断言学生有这个误解）。
+ */
+export function isVerbatimEvidence(evidence: unknown, learnerMessage: unknown): boolean {
+  const quote = normalizeForQuote(evidence);
+  if (quote.length < 2) return false;
+  const haystack = normalizeForQuote(learnerMessage);
+  if (!haystack) return false;
+  return haystack.includes(quote);
+}
+
+/** 归一化结构化误解台账（G-R-R Phase 1）：过滤缺证据项 + **evidence 逐字核对**，置信度收敛到 0|25|50|75|100 五档 */
+function normalizeMisconceptions(value: any, learnerMessage = ''): { misconceptions?: NonNullable<TeachingTurnOutput['analysis']['misconceptions']> } {
+  if (!Array.isArray(value) || value.length === 0) return {};
+  const mapped = value
     .filter((item: any) => item && typeof item?.hypothesis === 'string' && item.hypothesis.trim())
     .slice(0, 8)
     .map((item: any) => ({
@@ -704,6 +784,15 @@ function normalizeMisconceptions(value: any): { misconceptions?: NonNullable<Tea
       evidence: typeof item.evidence === 'string' ? item.evidence.trim().slice(0, 300) : '',
       status: item.status === 'confirmed' || item.status === 'addressed' ? String(item.status) : 'suspected',
     }));
+  // 逐字核对：evidence 定位不到学生原话 → 丢弃该条（不是清空 evidence，而是整条不要）
+  const items = mapped.filter((item: any) => isVerbatimEvidence(item.evidence, learnerMessage));
+  if (items.length < mapped.length) {
+    logger.warn('[TeachingTurnAgent] 误解台账 evidence 逐字核对未通过，已丢弃', {
+      reported: mapped.length,
+      kept: items.length,
+      dropped: mapped.length - items.length,
+    });
+  }
   return items.length > 0 ? { misconceptions: items } : {};
 }
 
@@ -817,6 +906,111 @@ export function toWireMessages(
   }));
 }
 
+/**
+ * 条件规则（A 项，2026-09-23）：编译产物里以「若输入提供 X / 如果输入提供 X / 若 classroomEventContext…」
+ * 开头的规则，只在对应输入**真的存在**时才需要发送（实测 13 条 / 3,078 字 = 执行规则段的 21.7%）。
+ *
+ * 为什么不"逐请求删 system"：规则原本在 system **前缀**里，逐请求改动会让前缀缓存整块失效
+ * （连后面 ~15.8k 的 payload 一起重算），净亏。改为：system 只留常驻规则（稳定 → 可缓存），
+ * 条件规则按需注入**本来就逐回合变化**的载荷尾部（`conditionalRules`）。
+ */
+export interface ConditionalRule {
+  /** 规则引用的输入字段路径（用于判存在） */
+  key: string;
+  /** 规则正文（去掉编号） */
+  text: string;
+}
+
+const CONDITIONAL_RULE_LEAD = /^(?:若输入提供|如果输入提供|若 classroomEventContext)/;
+
+/** 值条件（字段常在、但值通常不满足）：不能只判"字段存在" */
+const CONDITIONAL_RULE_OVERRIDES: Record<string, (input: TeachingTurnInput) => boolean> = {
+  'controls.temporalGap': (input) => (input?.controls as any)?.temporalGap?.isLongGap === true,
+};
+
+/** 从规则正文里抽出它引用的输入字段路径（如 `scenario.materials`）。 */
+function extractRuleField(ruleText: string): string {
+  const backticked = ruleText.match(/`([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+)`/);
+  if (backticked) return backticked[1];
+  const plain = ruleText.match(/(?:输入提供|输入里|输入包含)\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)/);
+  if (plain) return plain[1];
+  const anyPath = ruleText.match(/([a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_.]*)/);
+  return anyPath ? anyPath[1] : '';
+}
+
+/** 路径取值（非空即存在）：数组看长度、字符串看 trim、boolean 只认 true。 */
+function hasPathValue(root: unknown, path: string): boolean {
+  if (!path) return false;
+  let current: any = root;
+  for (const segment of path.split('.')) {
+    if (current == null) return false;
+    current = current[segment];
+  }
+  if (current == null || current === false) return false;
+  if (Array.isArray(current)) return current.length > 0;
+  if (typeof current === 'string') return current.trim().length > 0;
+  return true;
+}
+
+/**
+ * 把编译产物切成「常驻提示词」与「条件规则」：条件规则从 system 里摘出（常驻部分重编号，
+ * 规则之间无编号互引 → 安全），由 buildPromptInput 在对应输入存在时注入载荷尾部。
+ */
+export function splitConditionalRules(systemPrompt: string): { stable: string; rules: ConditionalRule[] } {
+  const lines = String(systemPrompt || '').split('\n');
+  const start = lines.findIndex((line) => line.trim() === '## 执行规则');
+  if (start < 0) return { stable: systemPrompt, rules: [] };
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^##\s/.test(lines[index])) {
+      end = index;
+      break;
+    }
+  }
+
+  const stableRules: string[] = [];
+  const rules: ConditionalRule[] = [];
+  let buffer: string[] | null = null;
+  let bufferIsConditional = false;
+  const flush = () => {
+    if (!buffer) return;
+    const body = buffer.join('\n');
+    if (bufferIsConditional) rules.push({ key: extractRuleField(body), text: body });
+    else stableRules.push(body);
+    buffer = null;
+  };
+  for (const line of lines.slice(start + 1, end)) {
+    const match = line.match(/^\d+\.\s*(.*)$/);
+    if (match) {
+      flush();
+      bufferIsConditional = CONDITIONAL_RULE_LEAD.test(match[1]);
+      buffer = [match[1]];
+    } else if (buffer && line.trim()) {
+      buffer.push(line); // 续行（当前产物无，保留以防规则改写为多行）
+    }
+  }
+  flush();
+
+  if (rules.length === 0) return { stable: systemPrompt, rules: [] };
+  const rebuilt = stableRules.map((rule, index) => `${index + 1}. ${rule}`).join('\n');
+  const stable = [...lines.slice(0, start + 1), '', rebuilt, '', ...lines.slice(end)].join('\n');
+  return { stable, rules };
+}
+
+/** 本轮适用的条件规则正文（按输入存在性判定）。 */
+export function selectApplicableRules(rules: ConditionalRule[], input: TeachingTurnInput): string[] {
+  return rules
+    .filter((rule) => {
+      const override = CONDITIONAL_RULE_OVERRIDES[rule.key];
+      if (override) return override(input);
+      return hasPathValue(input, rule.key);
+    })
+    .map((rule) => rule.text);
+}
+
+/** 编译产物里的条件规则（取自默认产物；DB ACTIVE 与 .md 同源编译，判据一致）。 */
+const CONDITIONAL_RULES = splitConditionalRules(TEACHING_TURN_PROMPT).rules;
+
 function buildPromptInput(input: TeachingTurnInput) {
   const strategyGuidancePrompt = buildStrategyGuidancePrompt(input);
   const taskExecutionPrompt = buildTaskExecutionPrompt(input);
@@ -830,6 +1024,21 @@ function buildPromptInput(input: TeachingTurnInput) {
     taskExecution: taskExecutionPrompt,
   };
   const latestLearnerMessage = [...input.messages].reverse().find((message) => message.role === 'user')?.content || '';
+
+  // 条件规则按需注入（逐回合变化 → 必须放**载荷尾部**）：输入提供了对应字段才带
+  const applicableRules = selectApplicableRules(CONDITIONAL_RULES, input);
+  logger.debug('[teaching-turn] 条件规则按需注入', {
+    injected: applicableRules.length,
+    total: CONDITIONAL_RULES.length,
+    injectedChars: applicableRules.reduce((sum, rule) => sum + rule.length, 0),
+  });
+  const conditionalRulesPayload = applicableRules.length > 0
+    ? {
+        conditionalRules:
+          '【本轮适用规则】输入提供了以下字段，故以下规则生效：\n'
+          + applicableRules.map((rule) => `- ${rule}`).join('\n'),
+      }
+    : {};
 
   // 试飞改造（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：
   // 真实遥测显示 scenario 每回合必变（因子键 interactionProfile/contextCompression 逐回合变化），
@@ -852,6 +1061,9 @@ function buildPromptInput(input: TeachingTurnInput) {
       messages: toWireMessages(input.messages),
       latestLearnerMessage,
       ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
+      // 教学配图时机（逐回合变化 → 必须放**载荷尾部**，避免打断 KV 前缀缓存；见 buildPromptInput 注释）
+      ...(input.visualOpportunity?.suggested ? { visualOpportunity: input.visualOpportunity } : {}),
+      ...conditionalRulesPayload,
     };
   }
 
@@ -872,6 +1084,7 @@ function buildPromptInput(input: TeachingTurnInput) {
     latestLearnerMessage,
     // 双引擎试点：第一段（推理模型）产出的 analysis 作为第二段的既定认知判定
     ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
+    ...conditionalRulesPayload,
   };
 }
 
@@ -975,6 +1188,7 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
     skillId: 'teaching-turn',
   },
   buildUserPayload: (input) => buildPromptInput(input),
+  prepareSystemPrompt: (systemPrompt) => splitConditionalRules(systemPrompt).stable,
   normalizeOutput: (parsed, input) => normalizeOutput(parsed, input),
   // Q9 契约漂移容错：core fields 契约校验前把平铺的 knowledge 子字段收敛回 knowledge 对象，
   // 不改变最终业务形态（最终形态仍由 normalizeOutput 决定）。
@@ -1028,6 +1242,7 @@ const teachingAnalysisPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurn
     skillId: 'teaching-turn',
   },
   buildUserPayload: (input) => buildAnalysisOnlyPayload(input),
+  prepareSystemPrompt: (systemPrompt) => splitConditionalRules(systemPrompt).stable,
   normalizeOutput: (parsed) => ({ ...parsed }),
   validateParsedOutput: (parsed) => {
     if (!parsed || typeof parsed !== 'object' || !parsed.analysis || typeof parsed.analysis !== 'object') {

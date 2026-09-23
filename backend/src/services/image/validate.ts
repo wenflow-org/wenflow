@@ -4,7 +4,8 @@
  * 约束按 OpenAI 兼容 /v1/images/generations 的公开契约收敛，保证调用方在
  * provider 之间切换时行为一致：
  * - prompt 必填，1~4000 字符
- * - size 形如 1024x1024（2~5 位边长，只做格式校验，不做精确像素保证）
+ * - size 为档位式 1K/2K/3K/4K（推荐）或形如 1024x1024（只做格式校验，不做精确像素保证）
+ * - ratio 为官方宽高比档位，与档位式 size 配合（不传 = provider 默认 1:1）
  * - n 为 1~4 整数（是否真支持多张由 adapter 判定，不支持会让 provider 降级）
  * - responseFormat 仅 url / b64_json
  *
@@ -13,7 +14,7 @@
  */
 
 import { z } from 'zod';
-import { ImageError } from './types';
+import { ImageError, IMAGE_RATIOS } from './types';
 import type { ImageRequest } from './types';
 
 const MAX_PROMPT_CHARS = 4000;
@@ -35,7 +36,12 @@ const imageRequestSchema = z
     size: z
       .string({ invalid_type_error: 'size 必须是字符串' })
       .trim()
-      .regex(/^\d{2,5}x\d{2,5}$/, 'size 必须形如 1024x1024')
+      .regex(/^([1-4]K|\d{2,5}x\d{2,5})$/i, 'size 必须是档位 1K/2K/3K/4K 或形如 1024x1024')
+      .optional(),
+    ratio: z
+      .enum(IMAGE_RATIOS, {
+        errorMap: () => ({ message: 'ratio 仅支持 1:1/3:4/4:3/16:9/9:16/2:3/3:2/21:9' }),
+      })
       .optional(),
     n: z
       .number({ invalid_type_error: 'n 必须是数字' })

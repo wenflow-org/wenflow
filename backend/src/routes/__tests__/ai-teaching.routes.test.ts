@@ -177,6 +177,8 @@ describe('ai-teaching routes', () => {
         peerStrategy: 'feynman',
         peerFollowUpQuestions: ['你能用自己的话讲一遍吗？'],
         checkpoint: { id: 'checkpoint-1', question: '何时使用 infer？' },
+        // 教学配图（owner 口径：图片是一种特殊的文字）——字段恒在，本轮无图则为空数组
+        images: [],
         // 提示词调试信封默认不下发（见 promptDebugEnabled）
         promptDebug: null,
         peerDebug: null,

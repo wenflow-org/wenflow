@@ -18,11 +18,11 @@ function arg(name: string): string | null {
 }
 
 const TURNS = Math.max(1, Math.min(3, Number(arg('turns') || 1) || 1));
-/** 学生发言按轮次给（第 1 轮就说"我读了但不会用"，引导老师引资料） */
+/** 学生发言按轮次给（第 1 轮就说"我读了但不会用"，引导老师引资料）；`--msg=` 可整段覆盖（验收用） */
 const STUDENT_MESSAGES = [
-  '我看了资料，但不太清楚该怎么用它来判断',
-  '那我具体该看哪一部分？能给我指一下吗',
-  '我试着做一次，你帮我看看对不对',
+  arg('msg') || '我看了资料，但不太清楚该怎么用它来判断',
+  arg('msg') || '那我具体该看哪一部分？能给我指一下吗',
+  arg('msg') || '我试着做一次，你帮我看看对不对',
 ];
 
 /**
@@ -157,6 +157,15 @@ async function main(): Promise<void> {
     console.log(`[课堂] 老师(${turn + 1})：${reply.slice(0, 320)}`);
     const hit = matchMaterialReferences(reply, sections, cites);
     console.log(`   ⇢ 引用资料：章节命中 ${hit.sectionHits.length}｜原文片段命中 ${hit.citeHits.length}｜资料词汇命中 ${hit.vocabHits.length}${hit.vocabHits.length ? `（${hit.vocabHits.slice(0, 8).join('、')}）` : ''}`);
+    // 教学配图（owner 口径 2026-09-23：图片是一种特殊的文字）：老师临场请求 → 代码闸门 → 内联一张图
+    const images = Array.isArray(result?.images) ? result.images : [];
+    if (images.length) {
+      console.log(`   ⇢ 教学配图：${images.length} 张｜kind=${images.map((i: any) => String(i.kind || '-')).join('、')}｜caption=${String(images[0]?.caption || '-')}`);
+      console.log(`     生图 prompt（图 = 这段文字的渲染）：${String(images[0]?.prompt || '').slice(0, 160)}`);
+      console.log(`     url：${String(images[0]?.url || '').slice(0, 120)}`);
+    } else {
+      console.log('   ⇢ 教学配图：0 张（本轮老师没请求，或未过闸门）');
+    }
   }
 
   // 真实 payload 是否带 scenario.materials

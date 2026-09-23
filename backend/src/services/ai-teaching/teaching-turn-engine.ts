@@ -12,7 +12,7 @@ import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, peerAgentD
 import { teachingTurnAgentDefinition } from '../../skills/teaching-turn';
 import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
-import { teachingSessionRepository, type TeachingSessionRecord } from './TeachingSessionRepository';
+import { teachingSessionRepository, type TeachingSessionRecord, type TeachingImage } from './TeachingSessionRepository';
 import { knowledgeStateService, COMPLETION_TARGET_PROGRESS_FLOOR } from './KnowledgeStateService';
 import { peerTriggerService } from './PeerTriggerService';
 import { buildTeachingScenarioContext, type TeachingScenarioContext } from './TeachingContextBuilder';
@@ -62,6 +62,7 @@ import {
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
 import { buildDeterministicOpening, pickPeerStrategy, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
+import { generateTeachingVisual, buildVisualOpportunity } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
@@ -149,6 +150,8 @@ export async function processStudentMessage(
 ): Promise<{
   analysis: TeachingTurnOutput['analysis'];
   aiResponse: string;
+  /** 教学配图（owner 口径：图片是一种特殊的文字）——本轮老师临场要给学生看的一张图，内联在回复里 */
+  images?: TeachingImage[];
   strategies: string[];
   knowledgePoint: string | null;
   knowledgePoints: KnowledgePointStatus[];
@@ -266,6 +269,12 @@ export async function processStudentMessage(
     messages: fenceLearnerMessagesForModel(updatedMessages),
     knowledgeState: frozenKnowledgeState,
   }, context, { anchorTarget });
+  // 教学配图时机（S1，代码裁决 → **显式**送进本轮输入）：老师上一轮用字符画了结构 → 本轮要求出图。
+  // 为什么必须显式送：实测埋在 2 万字 system prompt 里的规则会被忽略，写进本轮输入才生效。
+  const visualOpportunity = buildVisualOpportunity(updatedMessages);
+  if (visualOpportunity) {
+    (turnInput as { visualOpportunity?: typeof visualOpportunity }).visualOpportunity = visualOpportunity;
+  }
   // 教学回合 wall-clock 超时兜底：LLM 挂起时避免操作租约（30min）被占导致会话内所有操作 409 BUSY；
   // 超时走 releaseOperation + 客户端重试路径（revision 未递增，重试安全）。
   // 阈值对齐 platform_settings.aiReliability.defaultRequestTimeoutMs（300s）：
@@ -564,6 +573,16 @@ export async function processStudentMessage(
     peerDebug,
   };
 
+  // 教学配图（owner 口径 2026-09-23「图片是一种特殊的文字」）：老师临场请求 → 代码闸门 → 画一张，
+  // 内联在本轮消息里（`images`）。文本脱离图仍成立；生成失败/超上限一律 fail-open，不阻断课堂。
+  if (teachingOutput.visual) {
+    const image = await generateTeachingVisual({
+      request: teachingOutput.visual,
+      messages: updatedMessages,
+    });
+    if (image) assistantMessage.images = [image];
+  }
+
   if (!completionReady && hasPrematureNextStepLanguage(assistantMessage.content)) {
     logger.warn('[AITeaching] 教学回复越界，尚未满足结束条件却提到下一环节', {
       sessionId,
@@ -795,6 +814,7 @@ export async function processStudentMessage(
     const baseResult = {
     analysis: teachingOutput.analysis,
     aiResponse: teachingOutput.reply,
+    ...(assistantMessage.images?.length ? { images: assistantMessage.images } : {}),
     strategies: effectiveTeachingOutput.pedagogy.strategies,
     knowledgePoint: effectiveTeachingOutput.knowledge.currentPoint,
     ...(effectiveTeachingOutput.knowledge.confirmCheck

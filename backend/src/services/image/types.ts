@@ -15,8 +15,11 @@
 
 export type ImageProviderId = 'agnes';
 
-/** 返回形态：直链（默认）或 base64（内联，便于落盘/入库） */
 export type ImageResponseFormat = 'url' | 'b64_json';
+
+/** 宽高比档位（官方支持集合；与档位式 size 配合，不传 = provider 默认 1:1） */
+export const IMAGE_RATIOS = ['1:1', '3:4', '4:3', '16:9', '9:16', '2:3', '3:2', '21:9'] as const;
+export type ImageRatio = (typeof IMAGE_RATIOS)[number];
 
 export interface ImageRequest {
   /** 画面描述（必填） */
@@ -24,11 +27,18 @@ export interface ImageRequest {
   /** 模型 id；不传 = provider 默认（IMAGE_MODEL） */
   model?: string;
   /**
-   * 目标尺寸，形如 1024x1024 / 1024x1792。
+   * 目标尺寸。两种写法：
+   * - 档位式 `1K|2K|3K|4K`（**推荐**，配合 ratio 得到可预期宽高比）
+   * - 精确式 `1024x1024` / `1024x1792`（历史写法，兼容但可能被上游标准化）
    * 注意：部分 provider 只把它当**宽高比提示**，实际像素会吸附到固定档位
    * （实测 agnes：512x512→1024x1024，1024x1792→736x1312），不做精确保证。
    */
   size?: string;
+  /**
+   * 宽高比档位（与档位式 size 配合；不传 = provider 默认 1:1）。
+   * 横向内容（流程/位置线/时间轴）应传 `16:9`，否则会被压成方图。
+   */
+  ratio?: ImageRatio;
   /** 生成张数；不传 = 1。不支持多张的 provider 传 >1 时抛 IMAGE_PROVIDER_UNSUPPORTED */
   n?: number;
   /** 返回形态；不传 = url */

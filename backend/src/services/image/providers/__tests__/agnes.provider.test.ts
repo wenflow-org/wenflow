@@ -60,7 +60,24 @@ describe('AgnesImageProvider', () => {
       prompt: '一只红苹果',
       n: 1,
       size: '1024x1024',
+      // 实测本网关忽略 extra_body.response_format 与 return_base64，b64 仍走顶层
       response_format: 'b64_json',
+    });
+  });
+
+  it('档位式 size + ratio 透传；response_format=url（默认）不落任何字段', async () => {
+    requestMock.mockResolvedValue(okResponse({ data: [{ url: 'http://cdn.example/a.png' }] }));
+    const provider = new AgnesImageProvider(CONFIG);
+
+    await provider.generate({ prompt: '一条位置线：甲在前、乙在后', size: '1K', ratio: '16:9', responseFormat: 'url' });
+
+    const [, options] = requestMock.mock.calls[0] as [string, Record<string, unknown>];
+    expect(options.body).toEqual({
+      model: 'agnes-image-2.5-flash',
+      prompt: '一条位置线：甲在前、乙在后',
+      n: 1,
+      size: '1K',
+      ratio: '16:9',
     });
   });
 
