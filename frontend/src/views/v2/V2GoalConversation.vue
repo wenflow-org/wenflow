@@ -1814,12 +1814,18 @@ function shuffleScenes() {
   .panel--collapsed .panel__body { display: none; }
   /* chat 撑满第二行：内部滚动、composer 吸底 */
   .chat { min-height: 0; height: 100%; }
-  .chat__scroll { min-height: 0; }
+  /* overscroll-behavior:contain 隔断滚动链——列表滚到边缘时不再触发整页橡皮筋
+     （本页 height:100dvh 不随文档滚动，iOS 上链式滚动会把底部导航一起拽动） */
+  .chat__scroll { min-height: 0; overscroll-behavior: contain; }
   .msg { max-width: 96%; }
   .replies { margin-left: 0; }
   /* 移动端 hint 行：触屏无键盘快捷键提示，隐藏之；0/500 计数与 AI 标注一行右对齐 */
   .composer__hint-shortcut { display: none; }
   .composer__hint { justify-content: flex-end; flex-wrap: nowrap; }
+  /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——
+     移动端输入统一提到 16px。随之首行文字中心 20.5→22，回形针对齐 margin-top 同步 +1.5px */
+  .composer__textarea { font-size: 16px; }
+  .composer__attach { margin-top: 6px; }
   .proposal__stages ol { grid-template-columns: repeat(2, 1fr); }
   .entry__hero { align-items: stretch; flex-direction: column; }
   .entry__hero h1 { font-size: 22px; }

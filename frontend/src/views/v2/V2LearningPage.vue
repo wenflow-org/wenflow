@@ -2205,7 +2205,11 @@ onBeforeUnmount(() => {
   /* 移动端 tutor 撑满可用高度：聊天区内部滚动、composer 吸底，消除滚动到底的底部空白 */
   .tutor { max-height: none; height: 100%; min-height: 0; }
   .learn__body--no-kp .tutor { max-height: none !important; height: 100% !important; }
-  .tutor__scroll { flex: 1; min-height: 0; overflow-y: auto; }
+  /* overscroll-behavior:contain 隔断滚动链——消息列表滚到边缘时不再触发整页橡皮筋
+     （本页 height:100dvh 不随文档滚动，iOS 上链式滚动会带动整页回弹） */
+  .tutor__scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——移动端提到 16px */
+  .composer__textarea { font-size: 16px; }
   /* 移动端头部：单行紧凑 —— 返回隐藏、标题占主列可截断，右侧「学习中」+「⋯」同行，不再换行占第二行 */
   .learn__head {
     grid-template-columns: minmax(0, 1fr) auto;
