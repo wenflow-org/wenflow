@@ -1437,7 +1437,10 @@ onMounted(loadAll);
   color: var(--amber-ink);
 }
 .review__lead { margin: 6px 0 10px; font-size: 12px; color: var(--faint); }
-.review__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+/* minmax(0,1fr)：auto 轨道会被行的 max-content（名称 260 + 标签 58 + 强度条 132 + 间距）
+   顶到 486px，即使容器只有 316px——320/390 窄屏下整卡被撑破、整页出横向滚动条。
+   轨道下限钉 0 后由 .review__name 的 min-width:0 + ellipsis 正常收尾。 */
+.review__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; grid-template-columns: minmax(0, 1fr); }
 .review__item { border-radius: var(--mk-radius-md); }
 .review__link {
   display: flex; align-items: center; gap: 10px; padding: 5px 8px;
@@ -1719,11 +1722,18 @@ onMounted(loadAll);
 /* ---------- 响应式 ---------- */
 @media (max-width: 900px) {
   .nav__links { display: none; }
-  .dash__grid-main, .dash__grid-week { grid-template-columns: 1fr; }
+  /* 单列轨道用 minmax(0,1fr) 而非 1fr：1fr = minmax(auto,1fr)，下限仍是内容 min-content，
+     折叠区里的 nowrap 内容会顺着这条链把整页顶宽（展开态 390→538px、居中按钮被迫右移）。 */
+  .dash__grid-main, .dash__grid-week { grid-template-columns: minmax(0, 1fr); }
   .month__body { grid-template-columns: 1fr; }
   .mweek { grid-template-columns: 1fr; gap: 6px; }
   .mweek__side { display: flex; gap: 8px; align-items: baseline; }
   .quick { grid-template-columns: 1fr; }
+  /* 复习行移动端换行：单行布局里标签 58 + 强度条 132 是固定的，名称只能分到 ~90px，
+     长知识点名退化成「按维度定位…」。改两行：名称独占一行（可折行）+ 标签/强度条/百分比一行。 */
+  .review__link { flex-wrap: wrap; row-gap: 4px; }
+  .review__name { flex: 1 1 100%; white-space: normal; overflow: visible; }
+  .review__meter { flex: 1 1 auto; width: auto; min-width: 0; }
   .action__title { font-size: 21px; }
   .dash__main { padding: 16px 14px 32px; }
   .greet { flex-direction: column; align-items: flex-start; gap: 8px; }
@@ -2012,6 +2022,10 @@ a.btn-primary { text-decoration: none; }
 .folded-sections {
   display: grid;
   gap: 16px;
+  /* 隐式 auto 轨道会被子项的 max-content 撑开（auto 轨道的下限是 min-content，而 flex 行
+     的下限能被 Chrome 算成 max-content）：折叠区里任何 nowrap 行都能把整页顶出横向滚动条。
+     minmax(0,1fr) 把轨道下限钉到 0，宽度只由容器决定。 */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .more-toggle {
