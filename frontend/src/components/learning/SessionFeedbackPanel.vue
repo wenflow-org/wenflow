@@ -298,6 +298,10 @@ onMounted(load)
 .reason-option {
   min-height: 40px;
   padding: 8px 14px;
+  /* v2 的按钮 reset（.v2-page button:where(...) { font: inherit }，0-1-1）会把这几个
+     选项的字号交回继承值，于是「难度感受」跟着正文 16px 走，而「总体评分」的数字/标签
+     是 15/12px，同一组选项两个字号。显式声明后两组都落在 13px（与 legend 13px 同级） */
+  font-size: 13px;
   border: 1px solid var(--border-default, #dce4ef);
   border-radius: 999px;
   background: transparent;
@@ -316,12 +320,12 @@ onMounted(load)
 
 .rating-option span:first-child {
   color: var(--text-primary, #172033);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
 }
 
 .rating-option span:last-child {
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .rating-option:hover,

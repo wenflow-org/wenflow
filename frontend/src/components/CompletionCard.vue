@@ -393,8 +393,11 @@ const tagClass = (type: string) => ({
 .evaluation-line { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink, #37474f); }
 .completion-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 
-/* 状态标签：以 .status-tag 原语为基，尺寸对齐旧 el-tag small（色 token 不变） */
-.completion-card .status-tag { justify-content: center; gap: 0; height: 20px; padding: 0 7px; line-height: 1; letter-spacing: normal; text-transform: none; }
+/* 状态标签：以 .status-tag 原语为基，尺寸对齐旧 el-tag small（色 token 不变）。
+   flex/nowrap 是必需的：标签挂在 .knowledge-head（space-between）里，默认可收缩，
+   窄屏下会被挤到 51px < 内容 62px，中文随即折成两行、溢出 20px 高的胶囊。 */
+.completion-card .status-tag { flex: 0 0 auto; white-space: nowrap; justify-content: center; gap: 0; height: 20px; padding: 0 7px; line-height: 1; letter-spacing: normal; text-transform: none; }
+.completion-card .knowledge-name { min-width: 0; }
 .status-tag--efficient { background: var(--color-efficient-bg); color: var(--color-efficient-dark); border: 1px solid var(--color-efficient-border); }
 
 /* 第一方按钮：视觉对齐原 el-button 及其全局 EP 覆写（tremor-theme / design-system） */

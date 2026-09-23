@@ -1023,16 +1023,52 @@ onUnmounted(() => {
     align-items: flex-start;
   }
 
+  /* 移动端头部瘦身：390 下原本 213px（标题 59 + 动作 96 + 内边距 40），压到约 150px。
+     动作按钮已换成一方 .btn-ghost/.btn-primary，此处旧 :deep(.el-button) 覆写早已失效
+     （不匹配任何元素），所以按钮一直是 41px 高、字号 14px 的自适应换行版。 */
+  .evaluation-page {
+    padding: 14px 0 40px;
+  }
+
+  .evaluation-head {
+    padding: 12px 16px;
+    gap: 10px;
+    border-radius: 14px;
+  }
+
+  .evaluation-head h1 {
+    font-size: 19px;
+    line-height: 1.25;
+  }
+
+  .evaluation-head__ai-note {
+    margin-top: 3px;
+  }
+
   .evaluation-head__actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
   }
 
-  .evaluation-head__actions :deep(.el-button) {
-    flex: 1 1 calc(50% - 10px);
-    margin-left: 0;
+  /* 两枚次级按钮同行并分（窄到放不下才整体换行），主按钮整行；nowrap 让放不下的按钮
+     整体换行，而不是把「打印或另存为 PDF」压进 32px 高度里折行溢出。
+     flex-basis 用 auto 而非 50%：百分比基值在 320 下取整后正好卡满一行，反而把它们挤成两行 */
+  .evaluation-head__actions :deep(.btn-ghost),
+  .evaluation-head__actions :deep(.btn-primary) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+    height: 32px;
+    padding: 0 12px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+
+  .evaluation-head__actions :deep(.btn-primary) {
+    flex-basis: 100%;
   }
 
   .evaluation-shell :deep(.completion-summary) {
@@ -1045,11 +1081,6 @@ onUnmounted(() => {
 }
 
 @media (max-width: 640px) {
-  .evaluation-head__actions :deep(.el-button) {
-    flex-basis: 100%;
-    width: 100%;
-  }
-
   .evaluation-transcript-item {
     max-width: 100%;
     padding: 14px 14px;
