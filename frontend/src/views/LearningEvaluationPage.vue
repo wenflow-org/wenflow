@@ -1,6 +1,6 @@
 <template>
   <div class="evaluation-page v2-page">
-    <div class="evaluation-shell" ref="reportRef">
+    <div class="evaluation-shell" ref="reportRef" :class="{ 'is-exporting': exportingImage }">
       <header class="evaluation-head">
         <div>
           <h1>当前任务学习反馈</h1>
@@ -86,8 +86,22 @@
           <p class="evaluation-transcript-card__hint">回看本次学习中的对话内容。</p>
 
           <div v-if="mainDialogueMessages.length" class="evaluation-transcript-list">
+            <button
+              v-if="hiddenTranscriptCount > 0"
+              type="button"
+              class="evaluation-transcript-toggle"
+              :aria-expanded="transcriptExpanded"
+              @click="transcriptExpanded = !transcriptExpanded"
+            >
+              <span>{{ transcriptToggleLabel }}</span>
+              <span
+                class="evaluation-transcript-toggle__caret"
+                :class="{ 'is-open': transcriptExpanded }"
+                aria-hidden="true"
+              ></span>
+            </button>
             <article
-              v-for="(message, index) in mainDialogueMessages"
+              v-for="(message, index) in visibleTranscriptMessages"
               :key="`${message.timestamp || 'message'}-${index}`"
               class="evaluation-transcript-item"
               :class="`evaluation-transcript-item--${message.role}`"
@@ -113,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 // html2canvas 体积大，仅导出图片时动态加载
@@ -202,6 +216,27 @@ const evaluationDegraded = computed(() => {
 const isTimeoutFallback = computed(() => sessionDetail.value?.wrapup?.sources?.summary === 'timeout-fallback');
 const canSubmitSessionFeedback = computed(() => !isProjectionMode());
 const mainDialogueMessages = computed(() => (sessionDetail.value?.messages || []).filter((message) => message.role === 'user' || message.role === 'assistant'));
+
+/* 当堂对话默认只回看最近两条：长会话（5 条消息里两三条是几百字讲解）在手机上能占好几屏，
+   而这一块是"回看"而非必读。导出图片/打印前会临时全展开，避免导出的报告缺内容。 */
+const TRANSCRIPT_PREVIEW_COUNT = 2;
+const transcriptExpanded = ref(false);
+const hiddenTranscriptCount = computed(() => Math.max(mainDialogueMessages.value.length - TRANSCRIPT_PREVIEW_COUNT, 0));
+const visibleTranscriptMessages = computed(() => (
+  transcriptExpanded.value
+    ? mainDialogueMessages.value
+    : mainDialogueMessages.value.slice(-TRANSCRIPT_PREVIEW_COUNT)
+));
+const transcriptToggleLabel = computed(() => (
+  transcriptExpanded.value ? '收起对话' : `展开更早的 ${hiddenTranscriptCount.value} 条消息`
+));
+/** 导出前展开全部对话（返回是否临时展开，便于导出后恢复用户原本的折叠状态） */
+const expandTranscriptForExport = async () => {
+  if (!hiddenTranscriptCount.value || transcriptExpanded.value) return false;
+  transcriptExpanded.value = true;
+  await nextTick();
+  return true;
+};
 
 /* 会话活跃时长（分钟）：wrapup 缺省时用消息时间戳估算，间隔 > 30 分钟视为暂停 */
 const activeDurationMinutes = computed(() => {
@@ -492,6 +527,7 @@ const getExportFilename = () => {
 const exportImage = async () => {
   if (!reportRef.value || exportingImage.value) return;
   exportingImage.value = true;
+  const collapsedForExport = await expandTranscriptForExport();
   try {
     const { default: html2canvas } = await import('html2canvas-pro');
     const canvas = await html2canvas(reportRef.value, {
@@ -510,11 +546,14 @@ const exportImage = async () => {
     toast.error(err?.message || '导出图片失败');
   } finally {
     exportingImage.value = false;
+    if (collapsedForExport) transcriptExpanded.value = false;
   }
 };
 
-const exportPdf = () => {
+const exportPdf = async () => {
+  const collapsedForExport = await expandTranscriptForExport();
   window.print();
+  if (collapsedForExport) transcriptExpanded.value = false;
 };
 
 onMounted(() => {
@@ -944,6 +983,47 @@ onUnmounted(() => {
   gap: 14px;
 }
 
+/* 折叠开关：默认只回看最近两条消息（长讲解在手机上占好几屏）。选择器带上卡片类是因为
+   v2 的按钮 reset（.v2-page button:where(...)，权重 0-1-1）比单类选择器更高 */
+.evaluation-transcript-card .evaluation-transcript-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
+  color: var(--blue-deep, #1f57cc);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.evaluation-transcript-card .evaluation-transcript-toggle:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+}
+
+.evaluation-transcript-toggle__caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  transition: transform 180ms ease;
+}
+
+.evaluation-transcript-toggle__caret.is-open {
+  transform: rotate(180deg);
+}
+
+/* 导出图片时隐藏开关：报告成品里不该出现交互控件（打印同理，见 @media print） */
+.evaluation-shell.is-exporting .evaluation-transcript-toggle {
+  display: none;
+}
+
 .evaluation-transcript-item {
   max-width: min(100%, 860px);
   padding: 16px 18px;
@@ -1120,6 +1200,10 @@ onUnmounted(() => {
 
   .evaluation-loading,
   .evaluation-error {
+    display: none;
+  }
+
+  .evaluation-transcript-card .evaluation-transcript-toggle {
     display: none;
   }
 }
@@ -1348,6 +1432,33 @@ onUnmounted(() => {
   .evaluation-transcript-item__body {
     font-size: 13.5px;
     line-height: 1.65;
+  }
+
+  /* 正文实际字号由 MarkdownRenderer 自带样式决定（16px/1.8，外层 13.5px 被它盖住），
+     长讲解按 12.5px/1.6 排：一屏多读 4–5 行，且不触碰 12.5px 的下限 */
+  .evaluation-transcript-card .evaluation-transcript-item__body :deep(.markdown-renderer) {
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+
+  .evaluation-transcript-item__meta strong {
+    font-size: 12px;
+  }
+
+  .evaluation-transcript-item__meta span {
+    font-size: 11.5px;
+  }
+
+  .evaluation-transcript-card .evaluation-transcript-toggle {
+    min-height: 32px;
+    font-size: 12px;
+  }
+
+  /* 卡片头改回一行（标题左、条数右）：≤900 的竖排白占 26px，390/320 都放得下 */
+  .evaluation-transcript-card__head {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
   }
 }
 </style>
