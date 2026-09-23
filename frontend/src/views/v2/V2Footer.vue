@@ -89,12 +89,11 @@ const version = appVersion;
   font-variant-numeric: tabular-nums;
 }
 .v2footer__divider { opacity: 0.5; }
-@media (max-width: 720px) {
-  .v2footer__inner { flex-direction: row; justify-content: center; gap: 0; padding: 8px 16px 10px; }
-  .v2footer__brand { display: none; }
-  .v2footer__links { display: none; }
-  .v2footer__tag { display: none; }
-  /* 移动端页脚：无图，保留版权 + 版本号 */
-  .v2footer__meta { font-size: 10.5px; }
+/* 移动端不放页脚：品牌块/链接/版权在 ≤900px 整体收起，导航职能交给底部六 tab，
+   省下的 ~30px 还给内容（滚动页底部少一层 chrome）。断点取 900 而非 720 的原因：
+   底部导航 ≤1100px 就出现，但 901–1100 平板段顶部链接已折叠，愿景/开发者文档的
+   唯一入口就是本页脚，该段保留。AI 生成声明是合规项、不在页脚内，不受影响。 */
+@media (max-width: 900px) {
+  .v2footer { display: none; }
 }
 </style>
