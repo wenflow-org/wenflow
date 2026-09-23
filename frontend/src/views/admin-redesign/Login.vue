@@ -269,7 +269,7 @@ onMounted(() => {
 }
 
 .auth__logo img {
-  height: 52px;
+  height: 64px;
   width: auto;
   display: block;
 }
@@ -287,7 +287,7 @@ onMounted(() => {
 
 /* 大屏（2000-2799）：卡片与内容放大；2800+ 交由 v2.css zoom 机制 */
 @media (min-width: 2000px) and (max-width: 2799px) {
-  .auth__logo img { height: 64px; }
+  .auth__logo img { height: 76px; }
   .auth__card {
     width: min(1080px, 100%);
     border-radius: 26px;

@@ -52,13 +52,14 @@ const version = appVersion;
 .v2footer__brand {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   min-width: 0;
   text-decoration: none;
 }
 .v2footer__logo {
-  width: 24px; height: 24px; object-fit: contain;
-  border-radius: 7px; flex-shrink: 0;
+  /* 与右侧两行品牌文字齐高：name 13×1.2 + tag 11×1.3 ≈ 30px */
+  width: 30px; height: 30px; object-fit: contain;
+  border-radius: 9px; flex-shrink: 0;
 }
 .v2footer__brand-text { display: grid; gap: 0; min-width: 0; }
 .v2footer__name { font-size: 13px; font-weight: 700; color: var(--ink, #172033); line-height: 1.2; }

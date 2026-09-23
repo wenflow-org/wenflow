@@ -1142,9 +1142,13 @@ function shuffleScenes() {
   border-color: color-mix(in srgb, var(--blue) 55%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent), 0 6px 20px rgba(23, 32, 51, 0.06);
 }
-/* 资料附件：输入框左下回形针入口（主流附件模式），角标显示已传份数 */
+/* 资料附件：输入框左下回形针入口（主流附件模式），角标显示已传份数。
+   与右侧首行文字中线对齐：首行中心 = textarea 上内边距 10 + 行高一半 10.5 = 20.5，
+   按钮 32 高、中线偏 16，故 margin-top: 4.5px 顶到行首。textarea 单行不 autogrow，首行位置恒定。 */
 .composer__attach {
   position: relative;
+  align-self: flex-start;
+  margin-top: 4.5px;
   flex: 0 0 auto;
   display: inline-flex; align-items: center; justify-content: center;
   width: 32px; height: 32px;

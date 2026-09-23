@@ -90,7 +90,7 @@ const isDark = useIsDark();
 }
 
 .auth__logo { display: inline-flex; }
-.auth__logo img { height: 52px; width: auto; display: block; }
+.auth__logo img { height: 64px; width: auto; display: block; }
 
 /* ---------- 一体式双栏卡 ---------- */
 .auth__card {
@@ -274,7 +274,7 @@ const isDark = useIsDark();
 
 /* ---------- 超大屏（2K）：卡片与演示放大；2800+ 交由 v2.css zoom 机制，避免叠加 ---------- */
 @media (min-width: 2000px) and (max-width: 2799px) {
-  .auth__logo img { height: 64px; }
+  .auth__logo img { height: 76px; }
   .auth__main { gap: 36px; }
   .auth__card {
     width: min(1080px, 100%);
