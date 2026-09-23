@@ -456,6 +456,31 @@ export function pickNeighboringConcepts(params: {
   );
 }
 
+/**
+ * 前置概念筛选（纯函数，导出以便单测）。
+ *
+ * `prerequisiteGaps` 由 `LearnerKnowledgeMemoryService` 按**本任务**的上游闭包算出，故：
+ * ① `source==='graph'`（真上游前置）直接采用——不再做名字子串匹配，
+ *    因为上游概念按定义就与本课概念**不同名**，子串过滤恰好会把它们全滤掉（2026-09-23 实测）；
+ * ② `source==='fallback'`（图缺失时的回落，实为"本任务自身薄弱概念"）不是前置 →
+ *    仅保留能与锚点（本课概念）对上的，保持旧行为。
+ *
+ * 兼容：旧数据可能没有 `source` 字段 → 走 ② 的旧口径。
+ */
+export function pickPrerequisiteConcepts(
+  gaps: Array<{ label?: string; source?: 'graph' | 'fallback' }>,
+  anchor: string[],
+): string[] {
+  return dedupeConcepts(
+    gaps
+      .filter((gap) => !!gap.label && (
+        gap.source === 'graph'
+        || anchor.some((concept) => gap.label!.includes(concept) || concept.includes(gap.label!))
+      ))
+      .map((gap) => gap.label),
+  ).slice(0, 2);
+}
+
 function buildCognitiveFrame(params: {
   task: any;
   milestone: any;
@@ -527,11 +552,28 @@ function parseLearningObjectives(raw: string | null | undefined): string[] {
 
 
 
-function buildTaskKnowledgeSeeds(_params: {
+/**
+ * 本课的"知识组件种子"：kc-mapper 已经把任务↔KC 的映射落在 `kcAnnotation.taskKcLinks` 里，
+ * 复用 `resolveTaskKcsFromPath`（含契约漂移归一）取出来即可，**不新增 LLM 调用**。
+ *
+ * 修复（2026-09-23）：本函数原为恒返回 `[]` 的空桩，而 `subtasks.learningObjectives` 全库为空
+ * （实测 2037/2037），两者叠加使 `primaryConcepts` 恒为 `[]` —— 教学上下文里"本课知识范围"
+ * 这一格一直是空的，并连带把 `prerequisiteConcepts` 也卡死（它按 `primaryConcepts` 过滤）。
+ * 取不到 KC 时回落任务自身的 canonical 概念（`coreConcept`/`linkedConceptName`，覆盖率 100%）。
+ */
+export function buildTaskKnowledgeSeeds(params: {
   task: any;
+  path: any;
   resolvedConcept: { id: string | null; name: string | null; description: string | null };
 }): TeachingKnowledgePointState[] {
-  return [];
+  const kcNames = resolveTaskKcsFromPath(params.task, params.path)
+    .map((kc) => normalizeConcept(kc.name))
+    .filter((name): name is string => !!name);
+  const names = kcNames.length > 0
+    ? kcNames
+    : [normalizeConcept(params.resolvedConcept.name)].filter((name): name is string => !!name);
+  // 去重保序；`primaryConcepts` 只取前 2，这里多留一些供后续筛选
+  return dedupeConcepts(names).slice(0, 4).map((name) => ({ name, status: 'pending' as const, progress: 0 }));
 }
 
 /** 有效失败（PF）触发条件：概念性任务 + 无既定学习目标（新概念）+ 有迁移目标 + 练习/项目型 */
@@ -1036,14 +1078,20 @@ export async function buildTeachingScenarioContext(
   );
   const resolvedConcept = resolveTaskConceptFromPath(task, path);
   const persistedLearningObjectives = parseLearningObjectives((task as any).learningObjectives);
-  const taskKnowledgeSeeds = buildTaskKnowledgeSeeds({ task, resolvedConcept });
+  const taskKnowledgeSeeds = buildTaskKnowledgeSeeds({ task, path, resolvedConcept });
   const primaryConcepts = persistedLearningObjectives.length > 0
     ? persistedLearningObjectives
     : taskKnowledgeSeeds.map((point) => point.name).slice(0, 2);
-  const prerequisiteConcepts = (learnerSnapshot.knowledgeMemory.currentPath?.prerequisiteGaps || [])
-    .map((item) => item.label)
-    .filter((label) => primaryConcepts.some((concept) => label.includes(concept) || concept.includes(label)))
-    .slice(0, 2);
+  // 前置概念：`prerequisiteGaps` 本来就是按**本任务**的上游闭包算出来的，`source==='graph'` 可直接采用。
+  // 回落口径（`source==='fallback'`）给的是"本任务自身薄弱概念"，不是前置 → 只保留能对上本课概念的（旧行为）。
+  // 锚点不再只依赖 `primaryConcepts`：它曾恒为空，使这一格结构性永远为空（2026-09-23 修）。
+  const prerequisiteAnchor = primaryConcepts.length > 0
+    ? primaryConcepts
+    : [normalizeConcept(resolvedConcept.name)].filter((name): name is string => !!name);
+  const prerequisiteConcepts = pickPrerequisiteConcepts(
+    learnerSnapshot.knowledgeMemory.currentPath?.prerequisiteGaps || [],
+    prerequisiteAnchor,
+  );
 
   const canStartLearning = previousSession?.status === 'active'
     ? true
@@ -1081,16 +1129,25 @@ export async function buildTeachingScenarioContext(
     taskProfile,
     graphNeighbors,
   });
+  // 本课知识组件（kc-mapper 拆出的最小单元）：既是注入字段，也参与误解台账检索——
+  // 台账的 conceptKey 往往就是 KC 名（教学回合按 KC 粒度报误解），只按上面三个概念槽位去查
+  // 会一条都拉不到；模型看不到既往标签就只能每轮重编一个 hypothesis（实测 22 行里 6 行标签为 null）。
+  const taskKcs = resolveTaskKcsFromPath(task, path);
   const supportingConcepts = dedupeConcepts([
     ...cognitiveFrame.neighboringConcepts,
     ...prerequisiteConcepts,
-  ]).filter((concept) => !primaryConcepts.includes(concept)).slice(0, 3);
+  ])
+    // 三个槽位各占其位：本课概念（primary）与前置（prerequisite）已有自己的格子，
+    // 不再重复出现在"支撑概念"里（前置恒空时看不出，前置修好后会重复）。
+    .filter((concept) => !primaryConcepts.includes(concept) && !prerequisiteConcepts.includes(concept))
+    .slice(0, 3);
   // 误解台账（G-R-R Phase 2）：拉取当前任务相关概念的活跃误解，注入教学上下文
-  const priorMisconceptions = await getActiveForConcepts(userId, [
+  const priorMisconceptions = await getActiveForConcepts(userId, dedupeConcepts([
     ...primaryConcepts,
     ...prerequisiteConcepts,
     ...supportingConcepts,
-  ], 5).then((rows) => rows.length > 0 ? rows.map((r) => ({
+    ...taskKcs.map((kc) => kc.name).filter((name) => !!name),
+  ]), 5).then((rows) => rows.length > 0 ? rows.map((r) => ({
     conceptKey: r.conceptKey,
     hypothesis: r.hypothesis,
     canonicalLabel: r.canonicalLabel,
@@ -1193,7 +1250,7 @@ export async function buildTeachingScenarioContext(
       prerequisiteConcepts,
       supportingConcepts,
     },
-    taskKcs: resolveTaskKcsFromPath(task, path),
+    taskKcs,
     taskKnowledgeSeeds,
     taskProfile,
     currentTaskContext: {

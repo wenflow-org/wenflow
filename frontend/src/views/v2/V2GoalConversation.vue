@@ -115,7 +115,7 @@
       <aside class="panel" :class="{ 'panel--collapsed': !panelExpanded }">
         <button type="button" class="panel__head" :aria-expanded="panelExpanded" @click="togglePanel">
           <strong>目标信息</strong>
-          <span class="panel__count">已收集 {{ live.filledCount }} / {{ live.totalFields }}</span>
+          <span class="panel__count"><span class="panel__count-k">已收集</span> {{ live.filledCount }} / {{ live.totalFields }}</span>
           <span class="panel__caret" aria-hidden="true">{{ panelExpanded ? '▾' : '▸' }}</span>
         </button>
         <div class="panel__body">
@@ -1790,32 +1790,70 @@ function shuffleScenes() {
   .goal { height: 100dvh; min-height: 0; flex: 0 0 auto; }
   .work {
     grid-template-columns: 1fr;
-    /* 第一行 = 信息清单（折叠时仅头部横条），第二行 = chat 撑满剩余 */
-    grid-template-rows: auto minmax(0, 1fr);
+    /* 信息面板在移动端改绝对定位（零占位锚点），chat 独占整行撑满 */
+    grid-template-rows: minmax(0, 1fr);
     padding: 8px 10px;
     gap: 8px;
     overflow: hidden;
     min-height: 0;
   }
-  /* 信息面板：头部横条留在流内（~43px），展开的内容做成悬浮层盖在 chat 上。
-     原先展开态是「流内限高 45dvh」，380px 的面板把 chat 压到 311px、消息区只剩 160px。 */
+  /* 目标信息：不再占一整行（原 43px 横条 + 8px gap），触发按钮挪到 chat 头部行的右上角
+     （该行移动端只剩阶段导航，右侧是空的）。aside 绝对定位成「零占位锚点」：
+     盒子与 .chat__head 同一水平带（47px 高、等高即可对齐），悬浮层从它的下沿展开。
+     空白区 pointer-events:none，否则会盖住下面阶段导航的点击。
+     展开态原先是流内限高 45dvh，380px 面板把 chat 压到 311px、消息区只剩 160px。 */
   .panel {
-    position: relative;
-    z-index: 25;
+    position: absolute;
+    /* 与 chat 卡片同框：top/left/right 就是 .work 的内边距（8/10/10），
+       height 47 对齐 .chat__head 那一条头部带（两者差 1px 不可见）。 */
+    top: 8px; left: 10px; right: 10px;
+    height: 47px;
+    display: flex; flex-direction: row; align-items: center; justify-content: flex-end;
+    padding: 0;
+    border: 0;
+    background: none;
     max-height: none;
     overflow: visible;
-    padding: 10px 12px;
-    gap: 8px;
+    z-index: 25;
+    pointer-events: none;
   }
+  /* 小按钮：触发入口就是这一颗药丸，空带不挡事件（下方阶段导航要能点） */
+  .panel__head {
+    position: relative;
+    pointer-events: auto;
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-right: 16px;
+    padding: 5px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--mk-radius-pill);
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 11.5px;
+    box-shadow: 0 2px 8px rgba(23, 32, 51, 0.06);
+  }
+  .panel__head strong { font-size: 11.5px; }
+  .panel__caret { display: inline; font-size: 9px; }
+  /* 计数改角标：绝对定位不吃宽度（右上角那一条带要和阶段导航挤在同一行），
+     「已收集」三字省掉只留「3 / 7」 */
+  .panel__count-k { display: none; }
+  .panel__count {
+    position: absolute; top: -5px; right: -6px;
+    min-width: 15px; padding: 0 4px;
+    border-radius: 999px;
+    background: var(--blue);
+    color: #fff;
+    font-size: 9.5px; font-weight: 800; line-height: 15px;
+    text-align: center;
+  }
+  .panel--collapsed .panel__body { display: none; }
   .panel:not(.panel--collapsed) .panel__body {
     position: absolute;
     top: calc(100% + 6px);
-    left: 0; right: 0;
+    left: 16px; right: 16px;
     z-index: 26;
     /* 高度上限取「不超过 60% 视口」与「给 composer 留位」的较小值：
-       悬浮层顶边 ≈113px 起，下方要留 composer(103) + 底部导航(62) + 24px 间隙 ≈ 320px，
-       短屏（320×568）下 60dvh 会盖住输入框，靠这一项兜住。
-       内容仍超高时面板内部滚动。 */
+       悬浮层顶边在头部带下方 ≈118px，下方要留 composer(103) + 底部导航(62) ≈ 300px，
+       短屏（320×568）下 60dvh 会盖住输入框，靠这一项兜住。内容仍超高时面板内部滚动。 */
     max-height: min(60dvh, calc(100dvh - 320px));
     overflow: auto;
     padding: 12px;
@@ -1871,7 +1909,16 @@ function shuffleScenes() {
      改为整页均布：hero / 方向卡 / composer 等间距铺满视口，底部收敛为
      composer → 声明 → 底部导航 的稳定叠层；登录门只有单子元素，均布对其仍是居中。 */
   .entry { padding: 28px 16px; justify-content: space-evenly; }
-  .stage-nav__item { padding: 4px 7px; }
+  /* 阶段导航在窄屏收紧，给右上角的目标信息按钮腾位置（390 下两者刚好共处一行，
+     合计 ~325px ≤ 头部带内容宽 336px） */
+  .stage-nav { gap: 3px; }
+  .stage-nav__item { padding: 4px 5px; font-size: 11.5px; gap: 4px; }
+  .stage-nav__item i { width: 14px; height: 14px; font-size: 10px; }
+  /* ≤360：非当前阶段只留序号（那三个字的宽度换 4 字标签+计数角标的位置） */
+  @media (max-width: 360px) {
+    .stage-nav__item:not(.stage-nav__item--current) { font-size: 0; gap: 0; padding: 4px 3px; }
+    .stage-nav__item i { font-size: 10px; }
+  }
   .chat__clear { display: none; }
 }
 </style>
