@@ -109,8 +109,20 @@ interface RunAuxOptions<TOutput> {
   validate?: (parsed: any) => { valid: true } | { valid: false; failureReason: string };
   /** 契约校验前的容错归一（模型输出的等价变体 → core 声明形态）；不影响 normalize */
   coerceParse?: (parsed: any) => any;
-  /** LLM 侧整轮重试（如返回非 JSON）；不传则沿用 callPrompt 默认（不重试） */
-  retryStrategy?: { maxAttempts: number };
+  /** LLM 侧整轮重试（如返回非 JSON）；不传则沿用 callPrompt 默认（不重试）。
+   *  onValidationFail 把失败原因回灌进重试提示——无它时重试只是把同样的 prompt 再发一遍，
+   *  模型往往重复同样的散文（concept-consolidator 实测 42/197 次非 JSON 失败）。 */
+  retryStrategy?: {
+    maxAttempts: number;
+    onValidationFail?: (params: {
+      input: any;
+      attempt: number;
+      rawOutput: string;
+      extractedJson: string | null;
+      failureReason: string;
+      violations?: string[];
+    }) => string | null;
+  };
   /** 内置确定性降级输出；优先级低于调用方 __fallback */
   builtinFallback?: (domain: any) => TOutput;
   prepareSystemPrompt?: (systemPrompt: string, domain: any) => string;
@@ -457,9 +469,25 @@ async function conceptConsolidatorHandler(input: any) {
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
       : { valid: false, failureReason: 'CONCEPT_CONSOLIDATOR_OUTPUT_NOT_OBJECT' },
+    // 契约容错：merges/ambiguous 是 object[] 必填，模型省略时整轮 missing-required 失败
+    // （实测 10 次）。语义上"没给出建议"等价于空数组——与 normalize 的口径一致。
+    coerceParse: (parsed: any) => {
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed;
+      const out: any = { ...parsed };
+      for (const key of ['merges', 'ambiguous', 'dropCandidates']) {
+        if (!Array.isArray(out[key])) out[key] = [];
+      }
+      return out;
+    },
     // 2026-09-22 实测：此前未声明重试（callPrompt 默认不重试），一次跑偏即整轮失败。
-    // 与 kc-mapper 对齐，先给整轮重试（失败反馈能力 aux 框架暂无，另行评估）。
-    retryStrategy: { maxAttempts: 2 },
+    // 与 kc-mapper 对齐，先给整轮重试；2026-09-23 补 onValidationFail——只有 maxAttempts 时
+    // 重试等于把同样的 prompt 再发一遍，实测仍有 42/197 次非 JSON 失败。
+    retryStrategy: {
+      maxAttempts: 2,
+      onValidationFail: ({ failureReason }) =>
+        `请只输出一个 JSON 对象（顶层字段：merges、ambiguous、dropCandidates，前两个必须是数组），`
+        + `不要输出解释文字或 markdown 代码块之外的内容。上次失败原因：${failureReason}`,
+    },
   });
 }
 
