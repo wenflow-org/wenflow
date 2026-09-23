@@ -25,8 +25,12 @@ describe('parsePathCognitiveDesign', () => {
     const design = parsePathCognitiveDesign(raw);
     expect(design?.cognitiveDomain).toBe('汇报表达');
     expect(design?.coreConcepts).toHaveLength(1);
-    expect((design as any)?.loadProfile?.stageLoadDistribution).toHaveLength(2);
-    expect((design as any)?.prerequisiteTree?.unknownConcepts?.[0]?.concept).toBe('问题结构');
+    const withProfile = design as unknown as {
+      loadProfile?: { stageLoadDistribution?: unknown[] };
+      prerequisiteTree?: { unknownConcepts?: Array<{ concept?: string }> };
+    };
+    expect(withProfile.loadProfile?.stageLoadDistribution).toHaveLength(2);
+    expect(withProfile.prerequisiteTree?.unknownConcepts?.[0]?.concept).toBe('问题结构');
   });
 
   it('缺 loadProfile 时不凭空造键（下游按"未提供"处理）', () => {

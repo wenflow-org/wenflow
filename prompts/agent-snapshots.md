@@ -228,7 +228,7 @@ sandbox:path-agent.subtasks.title
 | `classroomContext` | object | skill:teaching-turn |
 | `visibleDialogueContext` | array<object> | skill:teaching-turn |
 | `message` | string | teaching-agent |
-| `followUpQuestions` | string[] | teaching-agent |
+| `followUpQuestions` | string[]? | teaching-agent |
 | `summary.topicSummary` | string | teaching-agent |
 | `summary.knowledgeSummary` | string | teaching-agent |
 | `summary.knowledgeItems` | array<object> | teaching-agent |
