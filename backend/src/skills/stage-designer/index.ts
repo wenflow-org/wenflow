@@ -124,12 +124,15 @@ export function withLoadTargetForMilestone(milestone: any, cognitiveCore: any): 
 
 /**
  * materialRefs：任务 → 资料条目（**逐字核对**，编造的引用丢弃）。
- * 输入里带了投影后的 materials（由 stage-enrichment 注入），核对不通过就不落该键。
+ * 输入里带了投影后的 materials（由 stage-enrichment 注入）。
+ *
+ * 无资料时**也要走核对**：`normalizeMaterialRefs` 对空资料一律返回 []，于是模型编造的引用被删除。
+ * 此前直接 `return list`，等于放行编造引用落库给学习者看（违反"宁缺勿编"），
+ * 也与 path-planning 的口径不一致（审计 P1 §2.3b）。
  */
-function withMaterialRefs(subtasks: any[], materials: unknown): any[] {
+export function withMaterialRefs(subtasks: any[], materials: unknown): any[] {
   const list = Array.isArray(subtasks) ? subtasks : [];
   const normalizedMaterials = Array.isArray(materials) ? (materials as PromptMaterial[]) : null;
-  if (!normalizedMaterials?.length) return list;
   return list.map((task) => {
     if (!task || typeof task !== 'object') return task;
     const refs = normalizeMaterialRefs(task.materialRefs, normalizedMaterials);
@@ -138,6 +141,19 @@ function withMaterialRefs(subtasks: any[], materials: unknown): any[] {
     else delete next.materialRefs;
     return next;
   });
+}
+
+/**
+ * 资料只从顶层 `materials`（投影后）投递。`normalizedInput.resources.materials` 是**全量原文**，
+ * 与顶层投影同进载荷既浪费 token，又制造"模型看到投影外内容、却被逐字核对丢弃"的口径不一致
+ * （审计 P1 §2.3c）。这里在投递前剥掉嵌套的那份，保持单一投递点。
+ */
+export function stripNestedMaterials(normalizedInput: any): any {
+  if (!normalizedInput || typeof normalizedInput !== 'object') return normalizedInput ?? null;
+  const resources = normalizedInput.resources;
+  if (!resources || typeof resources !== 'object' || resources.materials === undefined) return normalizedInput;
+  const { materials: _dropped, ...restResources } = resources;
+  return { ...normalizedInput, resources: restResources };
 }
 
 export async function stageDesigner(input: any): Promise<SkillExecutionResult<any>> {
@@ -157,7 +173,7 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       buildUserPayload: (payload) => (process.env.PAYLOAD_STABLE_PREFIX !== '0'
         ? {
             cognitiveCore: payload.cognitiveCore,
-            normalizedInput: payload.normalizedInput || null,
+            normalizedInput: stripNestedMaterials(payload.normalizedInput),
             materials: payload.materials || null,
             milestone: withLoadTargetForMilestone(payload.milestone, payload.cognitiveCore),
             previousMilestone: payload.previousMilestone || null,
@@ -167,7 +183,7 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
             milestone: withLoadTargetForMilestone(payload.milestone, payload.cognitiveCore),
             previousMilestone: payload.previousMilestone || null,
             cognitiveCore: payload.cognitiveCore,
-            normalizedInput: payload.normalizedInput || null,
+            normalizedInput: stripNestedMaterials(payload.normalizedInput),
             materials: payload.materials || null,
             repairHints: payload.repairHints || null,
           }),
