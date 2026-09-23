@@ -306,25 +306,32 @@ onUnmounted(() => {
   .v2nav__name { display: none; }
 }
 
-/* 移动端压缩顶部导航：高度 72→56，logo 48→34，CTA 36→32，间距收窄 */
+/* 移动端顶部导航：高度 72→56，CTA 36→32，间距收窄。
+   比例：logo 由 34 提到 44（132px 宽），右侧三件套整体收小（铃铛 40→34、图标 20→18、
+   头像 28→24、chip 内边距 8/4→6/4、caret 10→9），362px 内容宽里
+   「132 品牌标 ↔ 87 操作簇」形成清晰主次；改前是 102 ↔ 104，右重左轻。 */
 @media (max-width: 900px) {
   .v2nav__in {
     height: 56px;
     gap: 12px;
     width: calc(100% - 28px);
   }
-  .v2nav__logo { height: 34px; }
+  .v2nav__logo { height: 44px; }
   .v2nav__cta {
     min-height: 32px;
     padding: 0 12px;
     font-size: 12px;
     box-shadow: 0 4px 10px color-mix(in srgb, var(--blue) 22%, transparent);
   }
-  .v2nav__right { gap: 8px; }
-  .v2nav__avatar { padding: 4px 8px 4px 4px; font-size: 12.5px; }
-  .v2nav__avatar i { width: 28px; height: 28px; font-size: 13px; }
-  /* 手机段隐藏「规划新目标」CTA：底部六 tab 的「目标规划」就是同一入口，重复且抢眼——
-     84×32 的蓝色大按钮与 34px logo 并排比例失衡。隐藏后头部只剩
+  .v2nav__right { gap: 4px; }
+  /* 铃铛在 V2NotifCenter 里是 40×40 按钮 + 20px 图标，需 :deep 才能收小 */
+  .v2nav__right :deep(.nc__bell) { width: 34px; height: 34px; }
+  .v2nav__right :deep(.nc__bell svg) { width: 18px; height: 18px; }
+  .v2nav__avatar { padding: 4px 6px 4px 4px; font-size: 12.5px; }
+  .v2nav__avatar i { width: 24px; height: 24px; font-size: 12px; }
+  .v2nav__caret { font-size: 9px; }
+  /* 手机段隐藏「规划新目标」CTA：底部 tab 的「目标规划」就是同一入口，重复且抢眼——
+     84×32 的蓝色大按钮与品牌标并排会抢走主次。隐藏后头部只剩
      logo + 铃铛 + 头像三件套；901–1100 平板段保留（该段无顶部链接，CTA 仍是主动作）。 */
   .v2nav__cta { display: none; }
 }

@@ -1823,13 +1823,20 @@ function shuffleScenes() {
   .composer__hint-shortcut { display: none; }
   .composer__hint { justify-content: flex-end; flex-wrap: nowrap; }
   /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——
-     移动端输入统一提到 16px。随之首行文字中心 20.5→22，回形针对齐 margin-top 同步 +1.5px */
-  .composer__textarea { font-size: 16px; }
-  .composer__attach { margin-top: 6px; }
+     移动端输入统一提到 16px，并整体收紧盒内间距：外内边距 16/8→12/6、gap 10→8、
+     textarea 上下 10→8、发送键 40→36，盒高 62→54，图标/文字/按钮贴得更近。
+     回形针与首行文字中线对齐：上内边距 8 + 半行高 12 = 20，按钮 32 高 → margin-top 4。 */
+  .composer__box { padding: 6px 6px 6px 12px; gap: 8px; }
+  .composer__textarea { font-size: 16px; padding: 8px 0; }
+  .composer__attach { margin-top: 4px; }
+  .composer__send { width: 36px; height: 36px; }
   .proposal__stages ol { grid-template-columns: repeat(2, 1fr); }
   .entry__hero { align-items: stretch; flex-direction: column; }
   .entry__hero h1 { font-size: 22px; }
   .resume { width: 100%; justify-content: flex-start; }
+  /* 整行铺满后「继续 ›」原本紧跟两行正文、悬在正文中线高度上，读起来像个孤立标签；
+     推到行尾后成为标准的「列表行 + 行尾动作」。 */
+  .resume__go { margin-left: auto; }
   .entry__cards { grid-template-columns: 1fr; }
   /* 初始态移动端：基线 justify-content:center 会留下上下两块对称死白（composer 与 AI 声明之间 135px）。
      改为整页均布：hero / 方向卡 / composer 等间距铺满视口，底部收敛为
