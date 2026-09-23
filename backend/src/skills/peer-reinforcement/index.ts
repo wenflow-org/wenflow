@@ -228,6 +228,21 @@ export function normalizePeerParsedOutput(parsed: unknown): PeerModelArtifact {
   };
 }
 
+/**
+ * 契约校验前的容错归一（审计 P0 §1.5）。
+ *
+ * core fields 曾把 followUpQuestions 声明为必填（"string[]"），而提示词写的是「可选的后续追问」、
+ * handler 也按可选处理 ⇒ 模型省略该字段时整轮 missing-required 失败（peer 无 retryStrategy，
+ * maxAttempts=1 不重试），**伴学消息整条丢失**（现网实测 2 次）。
+ * 缺失/非数组一律收敛为 []：语义上等价于「本轮不追问」，normalizeOutput 本就按此处理。
+ */
+export function coercePeerParsedForContract(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed;
+  const record = parsed as Record<string, unknown>;
+  if (Array.isArray(record.followUpQuestions)) return parsed;
+  return { ...record, followUpQuestions: [] };
+}
+
 const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, PeerModelArtifact> = {
   agentId: AGENT_ID,
   defaultSystemPrompt: PEER_REINFORCEMENT_PROMPT,
@@ -237,6 +252,7 @@ const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, PeerModelArtifact> = {
     skillId: 'peer-reinforcement',
   },
   buildUserPayload: (input) => buildPeerUserPayload(input),
+  coerceParsedForContract: (parsed) => coercePeerParsedForContract(parsed),
   validateParsedOutput: (parsed) => validatePeerParsedOutput(parsed),
   normalizeOutput: (parsed) => normalizePeerParsedOutput(parsed),
   mapEnvelope: (output, input, runtimeContract) => adaptToRuntimeEnvelope({

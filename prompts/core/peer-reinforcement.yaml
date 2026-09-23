@@ -45,9 +45,9 @@ fields:
     turn: true
     desc: 一段自然、口语化、像同学讨论的伴学消息；必须非空，长度控制在 1-4 句
   - name: followUpQuestions
-    type: "string[]"
+    type: "string[]?"
     turn: true
-    desc: 可选的后续追问
+    desc: 可选的后续追问（可省略；缺失等价于"本轮不追问"，平台会收敛为 []）
 constraints:
   - 不做路径调整、课程结束或成绩判定等强决策
   - 不直接给正确答案，只引导

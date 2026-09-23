@@ -1,6 +1,6 @@
 ---
 agentId: skill:peer-reinforcement
-coreHash: c7fac75f5da6990f056748271e11828a290e528d1f55b869f25eaab8e17515ae
+coreHash: 32702171f35d57e43b6b5e312e7af83cd69f88cf54111fc2a21070a96891840b
 coreVersion: 1
 temperature: 0.7
 maxTokens: 8000
@@ -40,7 +40,7 @@ failurePolicy: propagate
 ## 输出字段
 
 - message · string — 一段自然、口语化、像同学讨论的伴学消息；必须非空，长度控制在 1-4 句（当轮）
-- followUpQuestions · string[] — 可选的后续追问（当轮）
+- followUpQuestions · string[]? — 可选的后续追问（可省略；缺失等价于"本轮不追问"，平台会收敛为 []）（当轮）
 
 ## 边界约束
 

@@ -7,10 +7,12 @@ import {
   executePeerDiscussion,
   peerAgentHandler,
   toPeerSkillOutcome,
+  coercePeerParsedForContract,
   type PeerDiscussionInput,
   type PeerModelArtifact,
   validatePeerParsedOutput,
 } from '../index'
+import { validateSkillOutputFields } from '../../../services/skill-output-validator'
 import { buildDefaultRuntimeContract, type RuntimeContract } from '../../../services/prompt-lab/runtime-contract'
 
 const input: PeerDiscussionInput = {
@@ -183,5 +185,32 @@ describe('peer-reinforcement model artifact', () => {
       transition: { kind: 'none', durable: false },
     })
     expect(output.internal.ext.peer).not.toHaveProperty('artifact')
+  })
+})
+
+/**
+ * 审计 P0 §1.5：core fields 曾把 followUpQuestions 声明为必填（"string[]"），而提示词写"可选"、
+ * handler 也按可选处理 ⇒ 模型省略该字段时整轮 missing-required 失败（peer 无 retryStrategy，
+ * maxAttempts=1 不重试），伴学消息整条丢失（现网实测 2 次）。
+ * 两层一起修：真源类型改 "string[]?" + 契约校验前 coerce 收敛为 []。
+ */
+describe('peer 字段契约（审计 P0 §1.5）', () => {
+  it('coerce：缺失 / 非数组 followUpQuestions 一律收敛为 []', () => {
+    expect(coercePeerParsedForContract({ message: 'x' })).toEqual({ message: 'x', followUpQuestions: [] })
+    expect(coercePeerParsedForContract({ message: 'x', followUpQuestions: 'nope' })).toEqual({ message: 'x', followUpQuestions: [] })
+    expect(coercePeerParsedForContract({ message: 'x', followUpQuestions: ['a'] })).toEqual({ message: 'x', followUpQuestions: ['a'] })
+    // 非对象原样返回（不构造）
+    expect(coercePeerParsedForContract(null)).toBeNull()
+    expect(coercePeerParsedForContract('x')).toBe('x')
+  })
+
+  it('集成：只给 message 的模型输出通过 core 字段契约（不再整轮失败）', async () => {
+    const parsed = { message: '你会怎么向同学解释它？' }
+
+    const raw = await validateSkillOutputFields('skill:peer-reinforcement', parsed)
+    expect(raw?.valid).toBe(true)
+
+    const coerced = await validateSkillOutputFields('skill:peer-reinforcement', coercePeerParsedForContract(parsed))
+    expect(coerced?.valid).toBe(true)
   })
 })
