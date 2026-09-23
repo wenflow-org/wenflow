@@ -14,6 +14,8 @@
         <router-link to="/learning-state" class="km__link">查看学习状态</router-link>
       </div>
 
+      <p v-if="narrowedNote" class="km__note">{{ narrowedNote }}</p>
+
       <section class="km__card">
         <MkGraphExplorer
           :nodes="nodes"
@@ -57,6 +59,24 @@ const pathId = ref<string | null>(null)
 const loading = ref(false)
 const error = ref('')
 
+/**
+ * 「全部路径」的图超过这个规模就自动收窄到单条路径。
+ *
+ * 为什么是 40：`MkGraph` 的力导向斥力/边长是按 ~40 节点校准的（该文件注释记录了这次校准），
+ * 超过之后云团会撑出画布——实测某学习者 5 条路径并集有 76 个有边节点，802×560 的画布上
+ * 只能看见边缘碎片。这里按"有边相连的节点数"判断，与画布实际渲染的规模一致
+ * （孤立节点默认不显示）。
+ */
+const AUTO_NARROW_CONNECTED_NODES = 40
+const narrowedNote = ref('')
+
+/** 有边相连的节点数（= 画布实际会渲染的规模） */
+function connectedCount(ns: MkGraphNode[], es: MkGraphEdge[]): number {
+  const used = new Set<string>()
+  for (const e of es) { used.add(e.fromConceptId); used.add(e.toConceptId) }
+  return ns.filter((n) => used.has(n.id)).length
+}
+
 async function load(nextPathId: string | null = pathId.value) {
   loading.value = true
   error.value = ''
@@ -79,12 +99,28 @@ async function load(nextPathId: string | null = pathId.value) {
   }
 }
 
-function onPathChange(value: string | null) {
+/** 程序化换路径（保留说明文案） */
+async function applyPath(value: string | null) {
   pathId.value = value
-  void load(value)
+  await load(value)
 }
 
-onMounted(() => { void load(null) })
+/** 用户主动换路径：说明文案随之作废 */
+function onPathChange(value: string | null) {
+  narrowedNote.value = ''
+  void applyPath(value)
+}
+
+onMounted(async () => {
+  await load(null)
+  // 首次进来若「全部路径」过大，先落到最近一条路径并说明原因（用户可切回全部）
+  const first = paths.value[0]
+  if (pathId.value !== null || paths.value.length < 2 || !first) return
+  const connected = connectedCount(nodes.value, edges.value)
+  if (connected <= AUTO_NARROW_CONNECTED_NODES) return
+  narrowedNote.value = `你有 ${paths.value.length} 条学习路径，合起来有 ${connected} 个概念节点，一张图放不下，先只展示「${first.title ?? '最近一条路径'}」。想看全貌可以切回「全部路径」。`
+  await applyPath(first.id)
+})
 </script>
 
 <style scoped>
@@ -124,6 +160,17 @@ onMounted(() => { void load(null) })
 /* 触屏：「查看学习状态」这类文字链接只有 20px 高，加纵向内边距抬到 34px（配色不变） */
 @media (max-width: 900px) {
   .km__link { padding: 7px 0; }
+}
+.km__note {
+  margin: 0 0 var(--mk-space-4);
+  padding: var(--mk-space-3) var(--mk-space-4);
+  border: 1px solid var(--mk-line);
+  border-left: 3px solid var(--mk-blue);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+  font-size: var(--mk-fs-12_5);
+  line-height: 1.6;
+  color: var(--mk-muted);
 }
 .km__card {
   padding: var(--mk-space-5);
