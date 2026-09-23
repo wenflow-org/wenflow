@@ -261,6 +261,12 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
       ...(buildLearningContextForPrompt(normalizedInput.learnerLearningContext)
         ? { learnerLearningContext: buildLearningContextForPrompt(normalizedInput.learnerLearningContext) }
         : {}),
+      // 用户侧补充说明（「补充说明重新生成」）：core 规则明确要求消费
+      // normalizedInput.understanding.adjustments，但本投影是逐字段白名单重建 ⇒ understanding 被静默丢。
+      // 只透传这一个键（不平铺整个 understanding），保持白名单纪律。
+      ...(normalizePromptString(normalizedInput.understanding?.adjustments)
+        ? { understanding: { adjustments: normalizePromptString(normalizedInput.understanding?.adjustments) } }
+        : {}),
     },
       };
 }
@@ -315,6 +321,11 @@ export function renderReplanSection(replan: any): string {
   const reviewerFeedback = typeof replan.reviewerFeedback === 'string' && replan.reviewerFeedback.trim()
     ? replan.reviewerFeedback.trim().slice(0, REPLAN_FEEDBACK_MAX)
     : null;
+  // 用户侧补充说明（「补充说明重新生成」route 写进 replan.reason）：core 规则要求与评审反馈同级消费，
+  // 但此前从不渲染 ⇒ 用户可见功能实际无效（审计 P1 §2.2a）。
+  const reason = typeof replan.reason === 'string' && replan.reason.trim()
+    ? replan.reason.trim().slice(0, REPLAN_FEEDBACK_MAX)
+    : null;
   const previousPlan = renderPreviousPlanForPrompt(replan.previousPlan);
   const freeze = Array.isArray(replan.freezeCompletedTaskIds) && replan.freezeCompletedTaskIds.length > 0
     ? replan.freezeCompletedTaskIds.join('、')
@@ -326,7 +337,10 @@ export function renderReplanSection(replan: any): string {
 - 触发来源：${replan.triggerSource || 'unknown'}
 - 源路径 ID：${replan.sourcePathId || 'unknown'}
 - 冻结已完成任务：${freeze}
-${reviewerFeedback ? `
+${reason ? `
+【用户补充说明】（用户明确提出的调整要求，必须落实；与评审反馈冲突时以评审反馈为准）
+${reason}
+` : ''}${reviewerFeedback ? `
 【路径评审反馈】（上一版被评审否决的具体结构缺陷，必须逐条修正）
 ${reviewerFeedback}
 ` : ''}${previousPlan ? `

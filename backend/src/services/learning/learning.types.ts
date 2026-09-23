@@ -59,6 +59,8 @@ export interface GeneratePathData {
       freezeCompletedTaskIds?: string[];
       /** 显式整条重建（用户主动选择「重新来一遍」）：放行 replace-path 的已完成任务保护 */
       forceReplace?: boolean;
+      /** 用户侧补充说明（「补充说明重新生成」route 写入；core 规则要求与评审反馈同级消费） */
+      reason?: string;
       /** path-reviewer 评审失败后的重规划指令（自动重规划闭环注入，非用户侧） */
       reviewerFeedback?: string;
       /**

@@ -188,6 +188,27 @@ describe('path.coordinator normalizedInputV1 配置式装配', () => {
     expect(withProbes.userProfile.goalFinalPayload?.prerequisiteCheckResults).toEqual(probes)
   })
 
+  // 回归（审计 P1 §2.2a/§2.2c）：用户「补充说明重新生成」写进 GoalPathRequest.adjustments，
+  // 但 buildNormalizedInputV1 不产出 understanding ⇒ core 规则要消费的
+  // normalizedInput.understanding.adjustments 永无输入，用户可见功能实际无效。
+  it('adjustments 进入 normalizedInput.understanding（用户补充说明可达）；未提供时不注入', async () => {
+    const withAdjustments = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+      adjustments: '第二阶段太难了，想先补基础',
+    } as any)
+
+    const without = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+    } as any)
+
+    expect(withAdjustments.userProfile.normalizedInput.understanding?.adjustments).toBe('第二阶段太难了，想先补基础')
+    expect(without.userProfile.normalizedInput.understanding ?? null).toBeNull()
+  })
+
   // 回归：GoalFinalPayload 重建时曾漏拷 goalHandoffFields，导致 handoff 恒被丢弃、永远回退 visibleSummary。
   // 本用例取 handoff 与 visibleSummary 不同的值，只有真交接才会得到 HANDOFF 值。
   it('goalHandoffFields 真实生效：与 visibleSummary 取值不同时以 handoff 为准', async () => {

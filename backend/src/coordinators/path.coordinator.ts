@@ -149,6 +149,13 @@ interface NormalizedPathInputV1 {
   /** 前置知识探测结果（goal 层透传，path-planning 读入 prerequisiteTree.knownConcepts） */
   prerequisiteCheckResults?: PrerequisiteCheckResult[];
   /**
+   * 用户侧补充说明（「补充说明重新生成」）。只带 path-planning core 规则明确消费的
+   * `understanding.adjustments` 一个键——不把整个 goal understanding 塞进 normalizedInput。
+   */
+  understanding?: {
+    adjustments?: string | null;
+  } | null;
+  /**
    * 学习者负荷画像（可用时间 / 负荷耐受文本）。仅**虚拟学习者**链路会带（来自
    * `virtual_learner_profiles.profile`）；真实用户缺省 `null` ⇒ 体量推导行为不变。
    * 由 `derivePlanningHints` 消费以收紧紧预算/低耐受者的里程碑数、单任务分钟与周期。
@@ -452,6 +459,15 @@ class PathCoordinator {
     );
     if (goalFinalPayload.prerequisiteCheckResults?.length) {
       normalizedInputV1.prerequisiteCheckResults = goalFinalPayload.prerequisiteCheckResults;
+    }
+    // 用户侧补充说明：core 规则要求消费 normalizedInput.understanding.adjustments，
+    // 但 buildNormalizedInputV1 不产出 understanding ⇒ 该规则永无输入（审计 P1 §2.2a/§2.2c）。
+    // 只补这一个键，不把整个 understanding 塞进 normalizedInput。
+    if (goalFinalPayload.adjustments) {
+      normalizedInputV1.understanding = {
+        ...(normalizedInputV1.understanding || {}),
+        adjustments: goalFinalPayload.adjustments,
+      };
     }
 
     // goal→path 资料采集：goal 声明了 needsMaterial 才触发（缺省零调用）；采集失败 fail-open。

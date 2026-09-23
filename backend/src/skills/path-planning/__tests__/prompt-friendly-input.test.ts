@@ -72,4 +72,26 @@ describe('path-planning 输入构造：学习证据必须真正进入提示词',
     );
     expect(Object.prototype.hasOwnProperty.call(built2.normalizedInput, 'learnerLearningContext')).toBe(false);
   });
+
+  /**
+   * 审计 P1 §2.2c：本投影是逐字段白名单重建，`understanding` 被静默丢弃；
+   * 而 core 规则要求消费 `normalizedInput.understanding.adjustments`（用户补充说明）⇒ 功能不可达。
+   */
+  it('understanding.adjustments 透传（只这一个键）；缺失/空值不出现该键', () => {
+    const withAdjustments = asPromptFriendly(
+      buildPromptFriendlyNormalizedInput({
+        ...base,
+        understanding: { adjustments: '第二阶段太难了，想先补基础', realProblem: '不应透传的其他键' },
+      }),
+    );
+    expect(withAdjustments.normalizedInput.understanding).toEqual({ adjustments: '第二阶段太难了，想先补基础' });
+
+    const without = asPromptFriendly(buildPromptFriendlyNormalizedInput({ ...base }));
+    expect(Object.prototype.hasOwnProperty.call(without.normalizedInput, 'understanding')).toBe(false);
+
+    const blank = asPromptFriendly(
+      buildPromptFriendlyNormalizedInput({ ...base, understanding: { adjustments: '   ' } }),
+    );
+    expect(Object.prototype.hasOwnProperty.call(blank.normalizedInput, 'understanding')).toBe(false);
+  });
 });

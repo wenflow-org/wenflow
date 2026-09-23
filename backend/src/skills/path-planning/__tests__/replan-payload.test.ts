@@ -49,6 +49,16 @@ describe('renderReplanSection', () => {
     expect(section).toContain('不是从零忽略已有学习历史重新规划');
   });
 
+  // 审计 P1 §2.2a：用户「补充说明重新生成」写进 replan.reason，但此前从不渲染 ⇒ 功能实际无效
+  it('用户补充说明（replan.reason）被渲染；缺失时不出现该分区', () => {
+    const withReason = renderReplanSection({ mode: 'regenerate-user', reason: '第二阶段太难了，想先补基础' });
+    expect(withReason).toContain('【用户补充说明】');
+    expect(withReason).toContain('第二阶段太难了，想先补基础');
+
+    const withoutReason = renderReplanSection({ mode: 'regenerate-user' });
+    expect(withoutReason).not.toContain('【用户补充说明】');
+  });
+
   it('非对象 / 空值 → 空串（无重调时零输出）', () => {
     expect(renderReplanSection(null)).toBe('');
     expect(renderReplanSection(undefined)).toBe('');
