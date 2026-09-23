@@ -70,7 +70,7 @@ fields:
       引导用户确认或调整，proposal 是可调整的初版方向，不是终稿。ready 阶段：只确认，不展开完整路径。
   - name: state
     type: object
-    desc: '回合状态 { "stage": "understanding | proposing | ready", "confidence": 0-0.99, "done": false }；ready 只在用户通过界面按钮显式确认后输出，模型不得自行宣布 ready'
+    desc: '回合状态 { "stage": "understanding | proposing | ready", "confidence": 0-0.99, "done": false, "motivation_signal": { "change_talk_score": -3..+3 }, "mi_frames": { "GoalFrame": {}, "ProblemFrame": {}, "ExperienceFrame": {}, "PlanFrame": {} } }；motivation_signal / mi_frames 是上面规则要求的 hidden 静默累积字段（不外露给用户，无证据就留空），与 stage/confidence/done 同处 state 下；ready 只在用户通过界面按钮显式确认后输出，模型不得自行宣布 ready'
   - name: understanding
     type: object
     desc: |

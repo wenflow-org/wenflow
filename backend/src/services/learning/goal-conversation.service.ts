@@ -312,9 +312,13 @@ class GoalConversationService {
         structuredData: next.structuredData !== undefined ? next.structuredData : (data?.structuredData ?? null),
         confirmedProposal: next.confirmedProposal !== undefined ? next.confirmedProposal : (data?.confirmedProposal ?? null),
         confidenceScores: next.confidenceScores !== undefined ? next.confidenceScores : (data?.confidenceScores ?? null),
-        // 动机信号/动机帧跨轮累积：从 collectedData 回填（首轮为空）
+        // 动机信号/动机帧跨轮累积：从 collectedData 回填（首轮为空）。
+        // 两种键名都输出：规则要求模型维护 state.motivation_signal（snake），而历史回填读的是
+        // camelCase；只给一种会让模型看到与规则不一致的 shape，容易改写丢轮。
         motivationSignal: data?.motivationSignal ?? data?.motivation_signal ?? null,
         miFrames: data?.miFrames ?? data?.mi_frames ?? null,
+        motivation_signal: data?.motivation_signal ?? data?.motivationSignal ?? null,
+        mi_frames: data?.mi_frames ?? data?.miFrames ?? null,
       };
     }
 
@@ -328,6 +332,8 @@ class GoalConversationService {
       confidenceScores: data?.confidenceScores ?? null,
       motivationSignal: data?.motivationSignal ?? data?.motivation_signal ?? null,
       miFrames: data?.miFrames ?? data?.mi_frames ?? null,
+      motivation_signal: data?.motivation_signal ?? data?.motivationSignal ?? null,
+      mi_frames: data?.mi_frames ?? data?.miFrames ?? null,
     };
   }
 

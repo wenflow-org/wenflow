@@ -56,7 +56,11 @@ export function validateGoalConversationStructuredOutput(
     'understanding', 'nextQuestions', 'quickReplies', 'confirmedProposal', 'confidenceScores', 'structuredData',
     'proposalQuality',
     // goal→path 资料采集缝：hidden 顶层输出（不向用户展示，由 material-collector 消费）
-    'needsMaterial'
+    'needsMaterial',
+    // 动机信号/动机帧（规则：hidden，静默累积）：规范位置在 state 下，但模型可能直接写在顶层
+    // （输入 shape 回写的既有兼容口径，见 normalizeGoalConversationModelPayload 的 `...state` 展开）。
+    // 不在这里放行会整轮 invalid_top_level_keys 失败——内容由 skill 侧缺省留空，不会误采。
+    'motivation_signal', 'mi_frames', 'motivationSignal', 'miFrames'
   ]);
   const { parsedJson, dialogueText, parseMode, parseError } = extractStructuredPayload(content);
 

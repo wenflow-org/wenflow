@@ -168,4 +168,51 @@ describe('validateGoalConversationStructuredOutput', () => {
     expect(result.valid).toBe(false);
     expect(result.failureType).toBe('invalid_stage');
   });
+
+  // 审计 P0 §1.2：规则要求维护 state.motivation_signal / state.mi_frames，但字段表未声明，
+  // 模型若照输入 shape 写在顶层会被整轮判 invalid_top_level_keys，伴生 hidden 字段直接丢。
+  test('顶层 motivation_signal / mi_frames 允许（hidden 动机字段，不再整轮失败）', () => {
+    const payload = buildValidPayload({
+      motivation_signal: { change_talk_score: 1.5 },
+      mi_frames: { GoalFrame: { desire: '想自己带团队' } },
+    });
+    const result = validateGoalConversationStructuredOutput(payload);
+    expect(result.valid).toBe(true);
+    expect(result.failureType).toBe('none');
+  });
+
+  test('state 下嵌套 motivation_signal / mi_frames 允许（规则里的规范位置）', () => {
+    const payload = buildValidPayload({
+      state: {
+        stage: 'understanding',
+        confidence: 0.4,
+        done: false,
+        motivation_signal: { change_talk_score: -1 },
+        mi_frames: { PlanFrame: { commitment: '试试看' } },
+      },
+    });
+    const result = validateGoalConversationStructuredOutput(payload);
+    expect(result.valid).toBe(true);
+  });
+
+  test('normalize 把 state 下的动机字段展开到顶层（读取路径可达）', () => {
+    const normalized = normalizeGoalConversationModelPayload({
+      state: {
+        stage: 'understanding',
+        motivation_signal: { change_talk_score: 2 },
+        mi_frames: { GoalFrame: { desire: '独立完成汇报' } },
+      },
+    });
+
+    expect(normalized.motivation_signal).toEqual({ change_talk_score: 2 });
+    expect(normalized.mi_frames).toEqual({ GoalFrame: { desire: '独立完成汇报' } });
+  });
+
+  test('放行动机字段后，未声明的顶层字段仍然失败（没有放宽闸门）', () => {
+    const payload = buildValidPayload({ totallyUnknownField: 1 });
+    const result = validateGoalConversationStructuredOutput(payload);
+    expect(result.valid).toBe(false);
+    expect(result.failureType).toBe('invalid_top_level_keys');
+    expect(result.violations[0]).toContain('totallyUnknownField');
+  });
 });
