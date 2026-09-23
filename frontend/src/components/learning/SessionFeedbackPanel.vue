@@ -486,14 +486,43 @@ onMounted(load)
 }
 
 @media (max-width: 640px) {
+  /* 密度：卡片内边距 20/18→14/12、字段间距 22→14，选项 40→36px（仍高于 32px 触达下限） */
   .session-feedback {
-    padding: 20px 18px;
+    padding: 14px 12px;
+  }
+
+  .session-feedback__kicker {
+    margin-bottom: 4px;
+  }
+
+  .session-feedback h2 {
+    font-size: 16px;
+  }
+
+  .session-feedback__field {
+    margin-top: 14px;
+  }
+
+  .session-feedback__field legend,
+  .session-feedback__comment > span {
+    margin-bottom: 8px;
+  }
+
+  .rating-option,
+  .fit-option,
+  .reason-option {
+    min-height: 36px;
+    padding: 6px 12px;
   }
 
   .session-feedback__head,
   .session-feedback__actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .session-feedback__actions {
+    margin-top: 14px;
   }
 
   .rating-options {

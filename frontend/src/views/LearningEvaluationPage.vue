@@ -1131,3 +1131,223 @@ onUnmounted(() => {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.25);
 }
 </style>
+
+<style scoped>
+/* 移动端信息密度：390 下整页 7293px（≈8.6 屏）。报告页在手机上主要是"扫"而不是"读"，
+   所以压的是留白、行高和"一行一个字段"的排布，正文不再低于 12.5px、可点区域不再低于 32px。
+
+   放在文件末尾是必需的：≤900 / ≤640 两个媒体块在文件中间，同权重下后出现者胜，
+   密度规则写在那两个块里会被它们自己的 padding/字号覆写吃掉（学习页/详情页已踩过两次）。 */
+@media (max-width: 900px) {
+  .evaluation-shell {
+    gap: 14px;
+  }
+
+  /* ---- 报告卡 ---- */
+  .evaluation-shell :deep(.completion-card) {
+    padding: 14px 12px;
+  }
+
+  .evaluation-shell :deep(.completion-header) {
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+  }
+
+  .evaluation-shell :deep(.completion-title) {
+    font-size: 17px;
+  }
+
+  .evaluation-shell :deep(.completion-header .completion-icon--header) {
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+  }
+
+  /* 概要：桌面是 4 列卡片，窄屏堆成 4 行时每行只有"标签一行 + 值一行"（266px）。
+     改成标签/值同行的清单，标签定宽 58px 对齐成两栏 → 4 行 ≈128px */
+  .evaluation-shell :deep(.completion-summary) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+    padding: 11px 12px;
+    margin-bottom: 12px;
+  }
+
+  .evaluation-shell :deep(.summary-item) {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .evaluation-shell :deep(.summary-label) {
+    flex: 0 0 58px;
+    margin-bottom: 0;
+  }
+
+  .evaluation-shell :deep(.summary-value) {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 14px;
+  }
+
+  .evaluation-shell :deep(.completion-section) {
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+
+  .evaluation-shell :deep(.section-title) {
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+
+  .evaluation-shell :deep(.section-content) {
+    font-size: 13px;
+    line-height: 1.65;
+  }
+
+  .evaluation-shell :deep(.section-hint),
+  .evaluation-shell :deep(.section-attribution) {
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+
+  /* 指标卡：堆成 1 列后每张 ~150px（标签、值、说明各占一行）。改成"标签+值同行、
+     说明独占一行"的紧凑行（~62px），数值靠右对齐，扫的时候一眼落在数字上 */
+  .evaluation-shell :deep(.metrics-grid),
+  .evaluation-shell :deep(.metrics-grid--three) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .evaluation-shell :deep(.metric-card) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 2px;
+    padding: 8px 12px;
+  }
+
+  .evaluation-shell :deep(.metric-head) {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .evaluation-shell :deep(.metric-value) {
+    flex: 0 0 auto;
+    margin-top: 0;
+    font-size: 20px;
+    line-height: 1.15;
+  }
+
+  .evaluation-shell :deep(.metric-desc) {
+    flex: 1 1 100%;
+    margin: 0;
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+
+  .evaluation-shell :deep(.metric-badge) {
+    padding: 2px 8px;
+  }
+
+  .evaluation-shell :deep(.knowledge-list) {
+    gap: 8px;
+  }
+
+  .evaluation-shell :deep(.knowledge-item) {
+    padding: 8px 10px;
+  }
+
+  .evaluation-shell :deep(.knowledge-evidence) {
+    margin-top: 4px;
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+
+  .evaluation-shell :deep(.ordered-list),
+  .evaluation-shell :deep(.evaluation-line) {
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+
+  .evaluation-shell :deep(.ordered-list li) {
+    margin-bottom: 4px;
+  }
+
+  /* 建议确认：三个决策按钮由"竖排三行"改两列网格 + 主按钮整行（省一行 ≈42px），
+     高度仍是 34px 的触达尺寸 */
+  .evaluation-shell :deep(.advisory-options) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .evaluation-shell :deep(.advisory-options .completion-btn) {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .evaluation-shell :deep(.advisory-options .completion-btn--primary) {
+    grid-column: 1 / -1;
+  }
+
+  .evaluation-shell :deep(.completion-actions) {
+    gap: 8px;
+  }
+
+  /* ---- 当堂对话：长文正文 14px/1.8 是这一块的主要开销，行高压到 1.65 ---- */
+  .evaluation-transcript-card {
+    padding: 14px 12px;
+    gap: 12px;
+  }
+
+  .evaluation-transcript-card__kicker {
+    margin-bottom: 2px;
+  }
+
+  .evaluation-transcript-card__head h2 {
+    font-size: 18px;
+  }
+
+  .evaluation-transcript-card__meta {
+    min-height: 26px;
+    padding: 0 10px;
+  }
+
+  .evaluation-transcript-card__hint {
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  .evaluation-transcript-list {
+    gap: 10px;
+  }
+
+  .evaluation-transcript-item {
+    max-width: 100%;
+    padding: 10px 12px;
+    gap: 6px;
+    border-radius: 12px;
+  }
+
+  /* 说话人 + 时间在 390/320 下都放得下一行（≤640 的竖排是白占一行 × 每条消息） */
+  .evaluation-transcript-item__meta {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .evaluation-transcript-item__meta strong {
+    font-size: 12.5px;
+  }
+
+  .evaluation-transcript-item__body {
+    font-size: 13.5px;
+    line-height: 1.65;
+  }
+}
+</style>
