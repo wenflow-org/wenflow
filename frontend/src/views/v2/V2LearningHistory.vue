@@ -495,12 +495,86 @@ onMounted(() => {
 }
 
 @media (max-width: 640px) {
+  /* 移动端密度：390 下整页 2306px，其中三张统计卡竖排就占 309px（每张 95px，
+     只装「学习次数 / 24 次」两行）。桌面本来就是三列，窄屏竖排是因为 26px 的数值
+     在 100px 宽的列里放不下——把数值压到 19px、单位 11px、卡片内边距收到 10px 后
+     三列重新放得下（320 下每列内容宽 72px，「271 分钟」实测 57px） */
   .history__stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .history__stat {
+    padding: 10px;
+    gap: 2px;
+  }
+
+  .history__stat span {
+    font-size: 11.5px;
+  }
+
+  .history__stat strong {
+    font-size: 19px;
+  }
+
+  .history__stat strong i {
+    font-size: 11px;
+  }
+
+  .history__main {
+    padding: 14px 14px 32px;
+    gap: 12px;
+  }
+
+  .history__hero h1 {
+    margin-bottom: 4px;
+    font-size: 22px;
+  }
+
+  .history__hero p {
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  .history__list {
+    gap: 10px;
+  }
+
+  .history__day {
+    padding: 12px;
+  }
+
+  .history__day-head strong {
+    font-size: 14px;
+  }
+
+  /* 行内边距 11→9、间距 12→8：一行省 16px，24 条就是 380px；顺带把标题的可用宽度
+     从 104px 提到 ~160px（比例问题：标题才是这一行里最该看清的东西） */
+  .history__item {
+    padding: 9px 2px;
+    gap: 8px;
+  }
+
+  .history__item-main strong {
+    font-size: 13px;
+  }
+
+  .history__item-sub {
+    font-size: 11.5px;
   }
 
   .history__item-time {
     display: none;
+  }
+
+  .history__feedback,
+  .history__resume {
+    padding: 5px 10px;
+  }
+
+  .history__end {
+    padding: 2px 0;
+    font-size: 11.5px;
   }
 }
 </style>

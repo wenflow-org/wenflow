@@ -203,16 +203,50 @@ function isActive(t: { match: string[] }) {
 @media (max-width: 900px) {
   .uc.v2-page > main.uc__main {
     width: min(100% - 28px, 1180px);
-    padding-bottom: 88px;
+    padding: 14px 0 84px;
+    gap: 12px;
   }
 
   .uc__head {
     flex-direction: column;
+    gap: 12px;
+    padding: 0 2px;
   }
 
   .uc__head-actions {
     width: 100%;
     justify-content: stretch;
+    gap: 8px;
+  }
+
+  /* 页头动作（调用日志的「导出 JSON / 导出 CSV / 复制排查信息」）：390 下原本
+     折成三行占 124px，收紧字号与内边距后 390/320 都能排成一行（38px）。
+     用 flex: 0 0 auto 让它放不下时整体换行，而不是把按钮压扁 */
+  .uc__head-actions .uc-btn {
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  /* 移动端页头密度：390 下页头 74px + 分段导航 40px，压到 ~56 + ~34 */
+  .uc__kicker {
+    margin-bottom: 4px;
+  }
+
+  .uc__head h1 {
+    margin-bottom: 4px;
+    font-size: 22px;
+  }
+
+  .uc__head p {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .uc__tab {
+    padding: 7px 12px;
+    font-size: 12.5px;
   }
 }
 </style>

@@ -666,3 +666,103 @@ async function handleDeactivate() {
   color: var(--ink, #172033);
 }
 </style>
+
+<style scoped>
+/* 移动端重新排版（用户："个人中心也是很大，要针对移动端重新设计大小"）。
+   390 下资料卡 354px：≤900 的 `.profile-identity` 改成了竖排（头像 96 独占一行），
+   加两栏统计卡全宽，一张"我是谁"的卡就吃掉半屏。这里改回横向：
+   头像 56 + 姓名/邮箱/注册信息同一行，两张统计卡换成下一行的紧凑横条。
+
+   放文件末尾：.profile-avatar / .profile-hero / .stat-card 的基础规则在前面的块里，
+   而 ≤900 / ≤560 / ≤640 三个媒体块也在中间，同权重下后出现者胜。 */
+@media (max-width: 900px) {
+  .profile-hero {
+    padding: 14px;
+  }
+
+  .profile-identity {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .profile-avatar {
+    width: 56px;
+    height: 56px;
+    font-size: 22px;
+    box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12), 0 6px 16px rgba(52, 120, 246, 0.2);
+  }
+
+  .profile-name-row {
+    gap: 6px;
+  }
+
+  .profile-name-row h2 {
+    font-size: 18px;
+  }
+
+  .profile-email {
+    margin-top: 3px;
+    font-size: 12.5px;
+  }
+
+  .profile-meta {
+    margin-top: 2px;
+    font-size: 11.5px;
+  }
+
+  /* 统计卡换行到下一行，两张并排 */
+  .profile-stats {
+    flex: 1 1 100%;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .stat-card {
+    min-width: 0;
+    padding: 8px 10px;
+    gap: 2px;
+  }
+
+  .stat-card span {
+    font-size: 11px;
+  }
+
+  .stat-card strong {
+    font-size: 17px;
+  }
+
+  .profile-cols {
+    gap: 12px;
+  }
+
+  .pwd-grid {
+    gap: 10px;
+  }
+
+  .uc-card__foot {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+
+  .grant-form-grid {
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .grant-scope-fixed {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .danger-form {
+    gap: 8px;
+  }
+
+  .confirm-desc {
+    font-size: 13px;
+    line-height: 1.6;
+  }
+}
+</style>

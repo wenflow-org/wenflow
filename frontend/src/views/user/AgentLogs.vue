@@ -1023,11 +1023,16 @@ const copyText = async (text: string, successMessage: string) => {
 
   .actions {
     width: 100%;
-    justify-content: stretch;
+    justify-content: flex-start;
   }
 
+  /* 页头三个导出/复制按钮原本各占一整行（页头 193px），字号与内边距收紧后
+     390/320 都能排成一行（~262px）；放不下时整体换行而不是把按钮压扁 */
   .actions > * {
-    flex: 1 1 100%;
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    font-size: 12px;
+    white-space: nowrap;
   }
 
   /* 窄屏：筛选项整行铺开，日期区间可换行，避免两个 130px 日期输入撑破页面 */

@@ -527,4 +527,34 @@ table.uc-table {
 @media (max-width: 900px) {
   .uc-btn--link { padding: 9px 10px; }
   .uc-btn--sm { padding: 8px 12px; }
+
+  /* 移动端卡片密度：内边距 20/22 → 14px、标题块下间距 14 → 10px。
+     个人中心一页三张卡，仅这一项就是 ~120px。 */
+  .uc-card {
+    padding: 14px;
+  }
+
+  .uc-card__head {
+    margin-bottom: 10px;
+  }
+
+  .uc-card__head h3 {
+    font-size: 15px;
+  }
+
+  .uc-card__head p {
+    margin-top: 3px;
+    font-size: 12.5px;
+  }
+
+  /* 输入框：内边距 10/14 → 8/12 把高度从 ~42 收到 ~40，同时字号 14 → 16px。
+     16px 是 iOS Safari 的聚焦缩放阈值（<16px 聚焦会放大整个视口），桌面维持 14px 不变。 */
+  .uc-field {
+    gap: 5px;
+  }
+
+  .uc-field__input {
+    padding: 8px 12px;
+    font-size: 16px;
+  }
 }
