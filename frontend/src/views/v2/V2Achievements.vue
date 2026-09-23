@@ -24,7 +24,7 @@
         <div class="overview">
           <section class="card ov"><small>已解锁</small><b>{{ unlockedCount }}</b><span>个成就</span></section>
           <section class="card ov"><small>待解锁</small><b>{{ items.length - unlockedCount }}</b><span>个成就</span></section>
-          <section class="card ov"><small>已获得经验值</small><b>{{ totalXp }}</b><span>XP</span></section>
+          <section class="card ov"><small>已获得经验值</small><b>{{ totalXpAll }}</b><span>XP{{ achXpHint }}</span></section>
           <section class="card ov"><small>解锁进度</small><b>{{ items.length ? Math.round((unlockedCount / items.length) * 100) : 0 }}%</b><span>{{ unlockedCount }} / {{ items.length }}</span></section>
         </div>
 
@@ -125,6 +125,7 @@ import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import { unwrapArray } from './unwrap';
+import { useUserStore } from '@/stores/user';
 
 interface Achievement {
   id: string;
@@ -171,6 +172,13 @@ const typeFilters = computed(() => {
 
 const unlockedCount = computed(() => items.value.filter((a) => a.unlocked).length);
 const totalXp = computed(() => items.value.filter((a) => a.unlocked).reduce((s, a) => s + (a.xpReward ?? 0), 0));
+
+/* XP 口径：user.xp 是账号权威经验值（成就奖励 + 任务完成奖励，addXp 唯一写入口），
+   账号页与等级都用它。本页 KPI 与账号页同源显示总数，成就贡献作子注——
+   此前本页只累加成就奖励（如 10），与账号页的 60 对不上，像两个体系。 */
+const userStore = useUserStore();
+const totalXpAll = computed(() => userStore.user?.xp || 0);
+const achXpHint = computed(() => (totalXpAll.value !== totalXp.value ? ` · 其中成就 ${totalXp.value}` : ''));
 
 function progressOf(a: Achievement) {
   return a.progress ?? { current: 0, total: 1, percentage: 0 };
@@ -249,7 +257,12 @@ async function load() {
   }
 }
 
-onMounted(load);
+/* XP 为账号权威值：SPA 内完成会话（+50）后 store 可能是登录时旧值，
+   与账号页保持一致，挂载时刷新档案 */
+onMounted(() => {
+  load();
+  userStore.fetchProfile().catch(() => {});
+});
 </script>
 
 <style scoped>
