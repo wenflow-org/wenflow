@@ -272,6 +272,14 @@ const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, PeerModelArtifact> = {
   coerceParsedForContract: (parsed) => coercePeerParsedForContract(parsed),
   validateParsedOutput: (parsed) => validatePeerParsedOutput(parsed),
   normalizeOutput: (parsed) => normalizePeerParsedOutput(parsed),
+  // 现网实测：peer 的头号失败源是 `response does not contain valid JSON object`（35 次），
+  // 其次才是契约缺字段（2 次）。此前没有 retryStrategy ⇒ maxAttempts=1，一次不合规就整条丢。
+  // 给一次纠偏重试（与 stage-designer 同模式），把"偶发输出散文"从失败转成成功。
+  retryStrategy: {
+    maxAttempts: 2,
+    onValidationFail: ({ failureReason }) =>
+      `请只输出一个 JSON 对象（字段：message、strategy、followUpQuestions），不要输出解释文字或 markdown 代码块之外的内容。上次失败原因：${failureReason}`,
+  },
   mapEnvelope: (output, input, runtimeContract) => adaptToRuntimeEnvelope({
     contract: runtimeContract,
     artifact: {

@@ -15,6 +15,13 @@ import {
 import { validateSkillOutputFields } from '../../../services/skill-output-validator'
 import { buildDefaultRuntimeContract, type RuntimeContract } from '../../../services/prompt-lab/runtime-contract'
 
+const SUCCESS_RESULT_LIKE = {
+  success: true,
+  output: { message: '那你能给我讲讲它为什么这样？', followUpQuestions: [] },
+  runtimeEnvelope: {},
+  debug: {},
+}
+
 const input: PeerDiscussionInput = {
   topic: '牛顿第一定律',
   strategy: 'feynman',
@@ -22,6 +29,8 @@ const input: PeerDiscussionInput = {
 }
 
 interface PeerPromptSpec {
+  retryStrategy?: { maxAttempts: number; onValidationFail?: (params: { failureReason: string }) => string | null }
+  coerceParsedForContract?: (parsed: unknown) => unknown
   validateParsedOutput: (parsed: unknown, input: PeerDiscussionInput) => {
     valid: boolean
     failureReason?: string
@@ -212,5 +221,22 @@ describe('peer 字段契约（审计 P0 §1.5）', () => {
 
     const coerced = await validateSkillOutputFields('skill:peer-reinforcement', coercePeerParsedForContract(parsed))
     expect(coerced?.valid).toBe(true)
+  })
+})
+
+/**
+ * 审计 P1 §2.4e：现网 35 次 `response does not contain valid JSON object` 是 peer 的头号失败源，
+ * 而 peer 此前没有 retryStrategy（maxAttempts=1，一次不合规即整条丢）。
+ */
+describe('peer 重试策略（审计 P1 §2.4e）', () => {
+  it('spec 声明了一次纠偏重试，且纠偏话术要求只输出 JSON 对象', async () => {
+    mockCallPrompt.mockResolvedValue(SUCCESS_RESULT_LIKE)
+    await executePeerDiscussion(input)
+
+    const [spec] = mockCallPrompt.mock.calls[0] as [PeerPromptSpec]
+    expect(spec.retryStrategy?.maxAttempts).toBe(2)
+    const nudge = spec.retryStrategy?.onValidationFail?.({ failureReason: 'response does not contain valid JSON object' })
+    expect(nudge).toContain('只输出一个 JSON 对象')
+    expect(nudge).toContain('response does not contain valid JSON object')
   })
 })
