@@ -262,7 +262,87 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         ? { learnerLearningContext: buildLearningContextForPrompt(normalizedInput.learnerLearningContext) }
         : {}),
     },
-  };
+      };
+}
+
+/** 重调分区限长（token 预算）：反馈与原路径都是长文本，且会与学习者投影叠加。 */
+const REPLAN_FEEDBACK_MAX = 1200;
+const REPLAN_PREVIOUS_PLAN_MAX = 2400;
+
+/**
+ * 【被调整的原路径】渲染：只保留模型真正需要的结构信息（名称/摘要/核心概念/里程碑标题与目标），
+ * 逐段限长。把旧路径 JSON 全量塞进载荷会挤掉本次生成的有效输入。
+ */
+export function renderPreviousPlanForPrompt(plan: any): string {
+  if (!plan || typeof plan !== 'object') return '';
+  const lines: string[] = [];
+
+  const name = typeof plan.name === 'string' && plan.name.trim() ? plan.name.trim() : null;
+  if (name) lines.push(`- 原路径名：${name}`);
+  const summary = typeof plan.summary === 'string' && plan.summary.trim() ? plan.summary.trim() : null;
+  if (summary) lines.push(`- 原路径摘要：${summary.slice(0, 300)}`);
+
+  const core = plan.cognitiveCore || plan.cognitiveDesign;
+  const coreConcepts = Array.isArray(core?.coreConcepts)
+    ? core.coreConcepts.map((c: any) => (typeof c?.name === 'string' ? c.name : '')).filter(Boolean)
+    : [];
+  if (coreConcepts.length > 0) lines.push(`- 原核心概念：${coreConcepts.slice(0, 10).join('、')}`);
+
+  const milestones = Array.isArray(plan.milestones) ? plan.milestones : [];
+  if (milestones.length > 0) {
+    const rendered = milestones.slice(0, 12).map((m: any, index: number) => {
+      const title = typeof m?.title === 'string' && m.title.trim()
+        ? m.title.trim()
+        : (typeof m?.name === 'string' && m.name.trim() ? m.name.trim() : '(未命名阶段)');
+      const goal = typeof m?.goal === 'string' && m.goal.trim() ? ` — ${m.goal.trim().slice(0, 120)}` : '';
+      return `  ${index + 1}. ${title}${goal}`;
+    });
+    lines.push(`- 原里程碑（共 ${milestones.length} 个）：\n${rendered.join('\n')}`);
+  }
+
+  return lines.length > 0 ? lines.join('\n').slice(0, REPLAN_PREVIOUS_PLAN_MAX) : '';
+}
+
+/**
+ * 重调分区渲染：模式/来源/冻结任务 + 【路径评审反馈】 + 【被调整的原路径】 + 学习者重调投影 + 重调要求。
+ *
+ * 评审反馈此前只被写进 replan 对象、**从不渲染**，也没有旧路径可对照 ⇒ 规则 #4「逐条修正评审反馈」
+ * 完全失效，自动重规划退化成「同样输入的再次采样」（审计 P0 §1.3）。
+ */
+export function renderReplanSection(replan: any): string {
+  if (!replan || typeof replan !== 'object') return '';
+
+  const reviewerFeedback = typeof replan.reviewerFeedback === 'string' && replan.reviewerFeedback.trim()
+    ? replan.reviewerFeedback.trim().slice(0, REPLAN_FEEDBACK_MAX)
+    : null;
+  const previousPlan = renderPreviousPlanForPrompt(replan.previousPlan);
+  const freeze = Array.isArray(replan.freezeCompletedTaskIds) && replan.freezeCompletedTaskIds.length > 0
+    ? replan.freezeCompletedTaskIds.join('、')
+    : '无';
+
+  return `
+【路径重调模式】
+- 重调模式：${replan.mode || 'overwrite'}
+- 触发来源：${replan.triggerSource || 'unknown'}
+- 源路径 ID：${replan.sourcePathId || 'unknown'}
+- 冻结已完成任务：${freeze}
+${reviewerFeedback ? `
+【路径评审反馈】（上一版被评审否决的具体结构缺陷，必须逐条修正）
+${reviewerFeedback}
+` : ''}${previousPlan ? `
+【被调整的原路径】（这是被调整的上一版，不要从零重新采样）
+${previousPlan}
+` : ''}
+【学习者重调投影】
+${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
+
+【重调要求】
+1. 这是对现有学习路径的调整重调，不是从零忽略已有学习历史重新规划。
+2. 必须显式参考学习者已稳定掌握、掌握不稳、持续吃力和前置缺口信息。
+3. 不要围绕已稳定掌握内容重复铺设大量基础阶段。
+4. 对掌握不稳和前置缺口内容，应通过补桥接阶段、补充任务、降低阶段跳跃度来处理。
+5. 如果已完成任务被冻结，请把它们视为既有学习历史，不要简单复制同名任务来伪装重调。${reviewerFeedback ? `
+6. 已提供【路径评审反馈】：必须逐条修正反馈中指出的结构缺陷，并在生成前自检中确认每条都已处理；不得无视反馈与原路径、按同样输入重新采样一遍。` : ''}`;
 }
 
 
@@ -780,22 +860,7 @@ ${conversationHistory.map((m: any) => `${m.role}: ${m.content}`).join('\n')}
 
 【重要】如果对某些信息不确定（如学习者身份），请查看对话历史验证。` : ''}
 
-${replan ? `
-【路径重调模式】
-- 重调模式：${replan.mode || 'overwrite'}
-- 触发来源：${replan.triggerSource || 'unknown'}
-- 源路径 ID：${replan.sourcePathId || 'unknown'}
-- 冻结已完成任务：${Array.isArray(replan.freezeCompletedTaskIds) && replan.freezeCompletedTaskIds.length > 0 ? replan.freezeCompletedTaskIds.join('、') : '无'}
-
-【学习者重调投影】
-${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
-
-【重调要求】
-1. 这是对现有学习路径的调整重调，不是从零忽略已有学习历史重新规划。
-2. 必须显式参考学习者已稳定掌握、掌握不稳、持续吃力和前置缺口信息。
-3. 不要围绕已稳定掌握内容重复铺设大量基础阶段。
-4. 对掌握不稳和前置缺口内容，应通过补桥接阶段、补充任务、降低阶段跳跃度来处理。
-5. 如果已完成任务被冻结，请把它们视为既有学习历史，不要简单复制同名任务来伪装重调。` : ''}
+${replan ? renderReplanSection(replan) : ''}
 
 【强制要求】以下所有生成内容必须紧密围绕"${analysis.context || input.goal}"展开：
 - 路径名称必须包含"${analysis.context || input.goal}"的核心主题关键词（提取 2-6 字即可），不得使用通用模板名称

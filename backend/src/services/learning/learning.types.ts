@@ -61,6 +61,16 @@ export interface GeneratePathData {
       forceReplace?: boolean;
       /** path-reviewer 评审失败后的重规划指令（自动重规划闭环注入，非用户侧） */
       reviewerFeedback?: string;
+      /**
+       * 被调整的原路径（评审失败自动重规划注入）。只带渲染需要的字段：
+       * 没有它，模型只能按同样输入重新采样，无法「逐条修正评审反馈」。
+       */
+      previousPlan?: {
+        name?: string | null;
+        summary?: string | null;
+        cognitiveCore?: any;
+        milestones?: Array<{ title?: string | null; goal?: string | null }>;
+      };
     };
   };
   systemPromptOverrides?: {

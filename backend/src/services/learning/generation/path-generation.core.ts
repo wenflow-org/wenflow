@@ -810,6 +810,17 @@ async function generateLearningPathCore(data: GeneratePathData) {
                   ...(data.userProfile?.replan || {}),
                   triggerSource: 'path-reviewer',
                   reviewerFeedback: pathReview.replanInstructions,
+                  // 被调整的原路径：此前只传反馈、不传旧路径，模型无从对照 ⇒ 规则「逐条修正评审反馈」
+                  // 失效、退化成同样输入的再次采样（审计 P0 §1.3）。只带渲染需要的字段，避免载荷膨胀。
+                  previousPlan: {
+                    name: analysis.pathName,
+                    summary: analysis.summary,
+                    cognitiveCore: analysis.cognitiveCore || analysis.cognitiveDesign,
+                    milestones: (Array.isArray(analysis.suggestedMilestones) ? analysis.suggestedMilestones : []).map((m: any) => ({
+                      title: m?.title ?? m?.name ?? null,
+                      goal: m?.goal ?? null,
+                    })),
+                  },
                 },
               },
             };
