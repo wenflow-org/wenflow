@@ -223,6 +223,14 @@
                 @mouseleave="onBubbleLeave"
               >
                 <div class="msg__bubble msg__bubble--html msg__bubble--relative" v-html="htmlFor(m)"></div>
+                <!-- 教学配图（owner 口径：图片是一种特殊的文字）——由老师给的一段文字生成，内联在回复里；
+                     文本仍自洽：不看图也能继续。 -->
+                <div v-if="m.images && m.images.length" class="msg__visuals">
+                  <figure v-for="(img, ii) in m.images" :key="ii" class="msg__visual">
+                    <img :src="img.url" :alt="img.caption || '教学配图'" loading="lazy" referrerpolicy="no-referrer" />
+                    <figcaption v-if="img.caption">{{ img.caption }}</figcaption>
+                  </figure>
+                </div>
                 <MessageActions
                   :show="hoveredMsgId === m.id"
                   :streaming="typing && streamingBubbleIndex === msgs.indexOf(m)"
@@ -859,6 +867,7 @@ async function boot() {
                 role: m.role === 'user' ? 'user' : 'ai',
                 text: String(m.content || ''),
                 time: nowTime(),
+                ...(Array.isArray(m.images) && m.images.length ? { images: m.images } : {}),
               }));
             restoredCount = restored.length;
             if (restored.length) scrollDown();
@@ -1040,8 +1049,9 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
   if (aiMsg?.role === 'ai') {
     aiMsg.text = r.aiResponse || aiMsg.text;
     aiMsg.confusion = confusion;
+    if (Array.isArray(r.images) && r.images.length) (aiMsg as ChatMsg).images = r.images;
   } else if (r.aiResponse) {
-    pushMsg({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion });
+    pushMsg({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion, ...(Array.isArray(r.images) && r.images.length ? { images: r.images } : {}) });
   }
   // 兜底：AI 全程未返回任何内容（空响应）时给占位气泡，避免本轮「无声消失」
   if (!r.aiResponse && (!aiMsg || !aiMsg.text.trim())) {
@@ -1704,6 +1714,16 @@ onBeforeUnmount(() => {
 .msg__bubble p:last-child { margin-bottom: 0; }
 .msg--ai { flex-direction: row; align-items: flex-start; gap: 10px; max-width: 94%; }
 .msg--ai .msg__content { display: grid; gap: 5px; min-width: 0; }
+/* 教学配图（owner 口径 2026-09-23：图片是一种特殊的文字）——内联在老师回复里的图；
+   图只是辅助：文本仍自洽，不看图也能继续。 */
+.msg__visuals { display: grid; gap: 8px; }
+.msg__visual { margin: 0; display: grid; gap: 4px; }
+.msg__visual img {
+  display: block; max-width: 100%; max-height: 320px;
+  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md);
+  background: var(--surface);
+}
+.msg__visual figcaption { font-size: 11px; color: var(--faint); line-height: 1.5; }
 .msg__avatar {
   width: 30px; height: 30px; border-radius: var(--mk-radius-lg);
   background: linear-gradient(135deg, var(--blue), var(--accent));
@@ -2212,8 +2232,16 @@ onBeforeUnmount(() => {
   /* overscroll-behavior:contain 隔断滚动链——消息列表滚到边缘时不再触发整页橡皮筋
      （本页 height:100dvh 不随文档滚动，iOS 上链式滚动会带动整页回弹） */
   .tutor__scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-  /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——移动端提到 16px */
-  .composer__textarea { font-size: 16px; }
+  /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——移动端提到 16px。
+     盒内与目标对话页同款收紧：外内边距左 14→6、gap 10→8、textarea 上下 10→8、发送键 40→36。 */
+  .composer__box { padding: 6px; gap: 8px; }
+  .composer__textarea { font-size: 16px; padding: 8px 0; }
+  .composer__attach { margin-top: 4px; }
+  .composer__send { width: 36px; height: 36px; }
+  /* 触屏没有键盘快捷键提示：这行是「Enter 发送 · Shift+Enter 换行」+ AI 声明，不隐藏的话两者
+     在 340px 里折成两行（hint 行 17→33px）。隐藏后只剩声明，居中与入口页 .goal__ai-note 一致。 */
+  .composer__hint > span:first-child { display: none; }
+  .composer__hint { flex-wrap: nowrap; justify-content: center; }
   /* 移动端头部：单行紧凑 —— 返回隐藏、标题占主列可截断，右侧「学习中」+「⋯」同行，不再换行占第二行 */
   .learn__head {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -2228,7 +2256,16 @@ onBeforeUnmount(() => {
   .learn__live, .learn__state-link { white-space: nowrap; flex-shrink: 0; }
   .learn__live { padding: 3px 9px; font-size: 10.5px; }
   .learn__menu-wrap { position: relative; display: inline-flex; }
-  .learn__menu { padding: 0 4px; font-size: 20px; line-height: 1; display: inline-flex; align-items: center; height: 28px; }
+  /* ⋯ 视觉不变，热区 28→38（触屏） */
+  .learn__menu { padding: 0 4px; font-size: 20px; line-height: 1; display: inline-flex; align-items: center; height: 38px; }
+  /* 头部三行（「当前任务」标签 / 任务名 / 路径名）在手机上白占 22px——标签本身只是分类提示，
+     去掉后头部 79→57px，全部还给消息区 */
+  .learn__task-pill { display: none; }
+  .learn__title { gap: 1px; }
+  /* 消息区贴底（与目标对话页一致）：否则对话刚开始时消息顶在上方、与下方快捷块之间空一大截 */
+  .tutor__scroll > :first-child { margin-top: auto; }
+  /* 快捷块瘦身见文件末尾的媒体块：.replies/.reply 的基础规则在本文件靠后的 style 块里，
+     同权重下写在这里会被覆盖 */
   /* 弹窗锚定在 ⋯ 按钮正下方、右对齐按钮 */
   .learn__menu-pop {
     top: calc(100% + 6px);
@@ -2237,7 +2274,7 @@ onBeforeUnmount(() => {
     width: min(250px, calc(100vw - 28px));
   }
   /* 移动端知识点面板默认折叠：头部横条可点，收起时隐藏进度条/清单 */
-  .kp__head { cursor: pointer; }
+  .kp__head { cursor: pointer; padding: 5px 0; }   /* 24 → 34，触屏整条可点 */
   .kp__caret { display: inline; }
   .kp--collapsed .kp__body { display: none; }
 }
@@ -2501,4 +2538,18 @@ onBeforeUnmount(() => {
 :global([data-theme='dark']) .composer__send--off { background: rgba(230, 237, 247, 0.08); }
 :global([data-theme='dark']) .learn__menu-item--primary:hover { background: rgba(77, 139, 248, 0.18); }
 :global([data-theme='dark']) .finish { background: rgba(15, 22, 32, 0.78); }
+</style>
+
+<style scoped>
+/* 移动端收尾（必须放在文件最后：.replies / .reply 的基础规则在本文件靠后的 style 块里，
+   同权重下先出现的会被覆盖）。快捷块固定在 composer 之上，原高 256px——消息区只剩 153px
+   （头部 79 + 知识点条 58 已占掉 137）。这里只做瘦身而不给它内部滚动：第三个选项被藏进
+   看不见的滚动区更糟。目标：块 ≤210px、消息区 ≥200px。 */
+@media (max-width: 900px) {
+  .replies { margin: 4px 12px 0; padding: 10px 12px 12px; }
+  .replies__head { padding-bottom: 6px; }
+  .replies__question { margin-bottom: 6px; padding: 6px 9px; font-size: 11.5px; }
+  .replies__row { gap: 5px; }
+  .reply { padding: 7px 10px; font-size: 12.5px; }
+}
 </style>
