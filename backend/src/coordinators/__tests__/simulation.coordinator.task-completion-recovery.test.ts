@@ -393,9 +393,10 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockStartSession).toHaveBeenCalledWith({ userId: 'user-1', taskId: 'task-2' })
   })
 
-  it('教学上游重试耗尽后将 Learn 标为失败并保留当前 task 供重启', async () => {
-    // 用"可重试但非中止"的错误（超时）来测"重试耗尽 → 终局 failed"；
-    // 中止类（caller_abort / canceled）走"非终局、可续跑"，见下一个用例（跑数观察 #3）。
+  it('教学上游重试耗尽（突发不可用）不终局化：Learn 保持可续跑、task 保留（I-1）', async () => {
+    // 2026-09-23（四学段测试 I-1）：上游突发（超时/5xx/限流）把**单次调用**的重试预算耗尽，
+    // 说明"这次上游没给到"，不是"这节课坏了"——不应打成终态 failed（否则要人工 restart-learning）。
+    // 与"模型抖动暂停"同款：保持 running + 落 retryable 标记，下一次 advance 重新推进同一回合。
     mockProcessStudentMessage.mockRejectedValue(new Error('connection timeout'))
     // 重试退避是真实 sleep（8 次尝试共 2+4+6+8+10+12+14=56s），用假时钟快进避免测试超时
     jest.useFakeTimers()
@@ -410,16 +411,38 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
         error: 'connection timeout'
       }))
       expect(mockProcessStudentMessage).toHaveBeenCalledTimes(8)
-      expect(sessionRecord.status).toBe('failed')
-      expect(sessionRecord.currentStage).toBe('teaching')
-      expect(learning.taskRuntime).toEqual(expect.objectContaining({
-        status: 'error',
-        taskId: 'task-1',
-        error: 'connection timeout'
+      // 关键回归（I-1）：上游突发 ≠ 终局失败
+      expect(sessionRecord.status).not.toBe('failed')
+      // 同一 task 保留（暂停路径刻意不改写教学状态，保留课堂 revision 供续跑）
+      expect(learning.currentTaskId).toBe('task-1')
+      expect(String(result.aiResponse)).toContain('暂停')
+      // 暂停标记要能分诊（上游突发 vs 模型抖动），retryable=true 让 harness 重试同一天
+      expect(JSON.parse(sessionRecord.stageResults).runtimeStats.lastError).toEqual(expect.objectContaining({
+        code: 'LEARN_UPSTREAM_TRANSIENT_PAUSED',
+        retryable: true
       }))
     } finally {
       jest.useRealTimers()
     }
+  })
+
+  it('真正的硬失败（非可重试业务错误）仍终局化：Learn 标 failed 供人工检查', async () => {
+    // 与 I-1 的边界：不是所有失败都能靠"再跑一次"救——业务/契约类硬失败仍应终局，
+    // 否则会变成无限重试、把真问题藏起来。
+    mockProcessStudentMessage.mockRejectedValue(new Error('业务校验失败：缺少必填字段'))
+    const result = await coordinator.executeLearningStep('simulation-1')
+    const learning = getLearningState()
+
+    expect(result).toEqual(expect.objectContaining({
+      success: false,
+      error: '业务校验失败：缺少必填字段'
+    }))
+    expect(mockProcessStudentMessage).toHaveBeenCalledTimes(1)
+    expect(sessionRecord.status).toBe('failed')
+    expect(learning.taskRuntime).toEqual(expect.objectContaining({
+      status: 'error',
+      taskId: 'task-1'
+    }))
   })
 
   it('上游被中止（caller_abort / canceled）不终局化：Learn 保持可续跑、task 保留', async () => {

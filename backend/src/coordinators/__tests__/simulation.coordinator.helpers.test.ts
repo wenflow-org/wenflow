@@ -24,6 +24,7 @@ import {
   isRetryableLearnUpstreamError,
   boundTaskCompletionError,
   isAbortLikeLearnError,
+  isTransientUpstreamLearnError,
   isPathReviewAlreadyAcceptedForCurrentPath,
   parseProfileData
 } from '../simulation.helpers'
@@ -481,6 +482,21 @@ describe('misc pure helpers', () => {
     expect(isAbortLikeLearnError(new Error('Learn 上游调用重试耗尽：timeout'))).toBe(false)
     expect(isAbortLikeLearnError(new Error('structured_output_invalid'))).toBe(false)
     expect(isAbortLikeLearnError(null)).toBe(false)
+  })
+
+  it('isTransientUpstreamLearnError：上游突发（会话级）非终局；硬失败仍终局（I-1）', () => {
+    // 网关预算耗尽会继承最后一次真实失败的 category
+    expect(isTransientUpstreamLearnError(Object.assign(new Error('Provider request retry budget exhausted'), { code: 'RETRY_BUDGET_EXHAUSTED', category: 'provider_timeout' }))).toBe(true)
+    expect(isTransientUpstreamLearnError(Object.assign(new Error('Provider request retry budget exhausted'), { code: 'RETRY_BUDGET_EXHAUSTED', category: 'provider_http', statusCode: 502 }))).toBe(true)
+    // category=internal（平台自身问题）不当成上游突发
+    expect(isTransientUpstreamLearnError(Object.assign(new Error('Provider request retry budget exhausted'), { code: 'RETRY_BUDGET_EXHAUSTED', category: 'internal' }))).toBe(false)
+    // 包装丢了 category：靠 statusCode / 文案兜底
+    expect(isTransientUpstreamLearnError(Object.assign(new Error('boom'), { statusCode: 503 }))).toBe(true)
+    expect(isTransientUpstreamLearnError(new Error('Provider request retry budget exhausted'))).toBe(true)
+    expect(isTransientUpstreamLearnError(new Error('connection timeout'))).toBe(true)
+    // 硬失败：业务/契约类不该被当成"再跑一次就好"
+    expect(isTransientUpstreamLearnError(new Error('业务校验失败：缺少必填字段'))).toBe(false)
+    expect(isTransientUpstreamLearnError(new Error('当前 Learn 没有绑定教学会话'))).toBe(false)
   })
 
   it('isPathReviewAlreadyAcceptedForCurrentPath：已接受的当前 Path 才短路（换版需重评）', () => {

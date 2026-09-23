@@ -240,11 +240,18 @@ export function rankSources(
 
   return candidates.sort((a, b) => {
     if (a.whitelisted !== b.whitelisted) return a.whitelisted ? -1 : 1;
-    // 文档型优先（全文 PDF/附件 > 通知/导航页）：见 documentSourceScore 注释
-    const docDiff = documentSourceScore(b.url, b.title) - documentSourceScore(a.url, a.title);
-    if (docDiff !== 0) return docDiff;
+    // ① 硬文档（真实文件扩展名，如 .pdf）优先——"官方域名的通知页"压过"非官方域的全文 PDF"
+    //    是实测要修的（见 documentSourceScore 注释）。
+    const aHard = documentSourceScore(a.url, a.title) === 2;
+    const bHard = documentSourceScore(b.url, b.title) === 2;
+    if (aHard !== bHard) return aHard ? -1 : 1;
+    // ② tier 必须压过**软文档线索**：标题里出现「下载/全文」只是线索，不足以让二手汇编越过权威源。
+    //    2026-09-23 I-5 实测：unknown 层的「复习题汇编(文末下载)」因标题含「下载」排到了权威课标之前。
     const tierDiff = SOURCE_TIER_RANK[b.sourceTier] - SOURCE_TIER_RANK[a.sourceTier];
     if (tierDiff !== 0) return tierDiff;
+    // ③ 同 tier 内再用文档线索做 tie-break（全文/附件 > 通知/导航页）
+    const docDiff = documentSourceScore(b.url, b.title) - documentSourceScore(a.url, a.title);
+    if (docDiff !== 0) return docDiff;
     return (a.position ?? 0) - (b.position ?? 0);
   });
 }

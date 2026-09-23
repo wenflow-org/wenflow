@@ -19,6 +19,16 @@ describe('P0-b 文档型来源优先', () => {
     expect(documentSourceScore('https://a.com/page', '《指南》全文下载')).toBe(1);
     expect(documentSourceScore('https://a.com/page', '关于印发指南的通知')).toBe(0);
   });
+
+  it('软文档线索不越过 tier：unknown 层的「(文末下载)」不压权威课标（I-5）', () => {
+    // 2026-09-23 四学段实测：`sjds.net` 的「复习题汇编(文末下载)」因标题含「下载」拿到软线索 1 分，
+    // 而排序把文档分排在 tier 之前 → 二手汇编压过了权威课标。软线索只应做同 tier 的 tie-break。
+    const ranked = rankSources([
+      { url: 'https://www.sjds.net/a/513054.html', title: '2022版数学课程标准教师过关考试复习题汇编(文末下载)' },
+      { url: 'https://www.moe.gov.cn/srcsite/A26/s8001/202204/t20220420_620508.html', title: '义务教育数学课程标准（2022年版）' },
+    ] as never);
+    expect(ranked[0].url).toContain('moe.gov.cn');
+  });
 });
 
 describe('P0-a 查询定向抽取参数透传', () => {

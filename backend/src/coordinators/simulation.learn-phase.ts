@@ -31,6 +31,7 @@ import {
   getRunnableTasks,
   resolveLearnTurnBudget,
   isAbortLikeLearnError,
+  isTransientUpstreamLearnError,
   isProviderRetryable,
   resolveSimLearnerState,
   getSessionFrictionBudget,
@@ -768,6 +769,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     // 教学回合「模型抖动」暂停（新发现问题 #3）：**非终局**，保留 task 可续跑，
     // 不把会话打成 failed，只落 runtimeStats.lastError 标记。
     let learningStepPaused: string | null = null;
+    // 暂停原因码（分诊用：模型抖动 vs 上游突发不可用）
+    let learningStepPauseCode: string | null = null;
     let closureDecision: LearningClosureDecision | null = null;
     let shouldStopCurrentTask = false;
 
@@ -976,6 +979,29 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
               }
             }
           });
+        } else if (isTransientUpstreamLearnError(err)) {
+          // I-1（2026-09-23 四学段测试）：上游突发（5xx/超时/限流）把**单次调用**的重试预算耗尽——
+          // 那是"这次上游没给到"，不是"这节课坏了"。与模型抖动同款处理：非终局暂停、保留同一 task
+          // 与课堂 revision，下一次 advance-day 重新推进；避免一次突发就把会话打成终态 failed。
+          learningStepPaused = failureMessage;
+          learningStepPauseCode = 'LEARN_UPSTREAM_TRANSIENT_PAUSED';
+          logger.warn('[simulation-coordinator] Learn 上游突发不可用，暂停本回合（非终局，可续跑）', {
+            sessionId,
+            error: failureMessage
+          });
+          logs.push({
+            timestamp: new Date().toISOString(),
+            phase: 'teaching-interrupted',
+            details: {
+              error: failureMessage,
+              output: {
+                currentTask: currentTask.title,
+                currentMilestone: currentMilestone.title,
+                action: 'teaching-step-upstream-paused',
+                retryable: true
+              }
+            }
+          });
         } else {
           logger.warn('[simulation-coordinator] AI教学响应失败，已停止当前学习步骤', {
             sessionId,
@@ -1018,7 +1044,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     // buildNextLearningState / 终局写库：既不追加任何 assistant 消息（杜绝伪教师回复），
     // 也不把会话打成 failed；只落可重试标记并保留同一 task 供下一次 advance-day 重试。
     if (learningStepPaused) {
-      await ctx.persistTeachingPauseMarker(sessionId, learningStepPaused);
+      await ctx.persistTeachingPauseMarker(sessionId, learningStepPaused, { code: learningStepPauseCode || undefined });
       await ctx.addSessionLogs(sessionId, logs);
       return {
         success: false,

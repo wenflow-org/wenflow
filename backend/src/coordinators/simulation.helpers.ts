@@ -135,6 +135,31 @@ export function isAbortLikeLearnError(error: unknown): boolean {
   return /request_aborted|api request canceled|aborted|abort_err|econnreset|socket hang up|请求已取消/.test(message);
 }
 
+/** 上游突发不可用的网关 category（预算耗尽会继承最后一次真实失败的 category）。 */
+const TRANSIENT_UPSTREAM_CATEGORIES = new Set(['network', 'provider_timeout', 'provider_http', 'rate_limit', 'quota']);
+const TRANSIENT_UPSTREAM_MESSAGE_RE = /retry budget exhausted|upstream_5\d\d|\b50[234]\b|\b529\b|\b429\b|provider_timeout|timed out|timeout|fetch failed|socket hang up|econnreset|rate.?limit|insufficient quota|network error/i;
+
+/**
+ * 「上游突发不可用」类错误（**会话级**判定，2026-09-23 四学段测试 I-1）。
+ *
+ * 单次调用的重试预算被 5xx/超时/限流耗尽，说明的是"**这次上游没给到**"，而不是"这节课坏了"；
+ * 不应据此把整个会话打成终态 `failed`（用户看到"这节课没回应"，只能人工 `restart-learning`）。
+ *
+ * 与 `isRetryableLearnUpstreamError` 的区别（层次不同，别混）：
+ *   - 那个决定**单次调用内**要不要重试；预算耗尽是网关的终止信号，当成可重试会让预算形同虚设；
+ *   - 这个决定**会话**要不要终态。
+ *
+ * 判据优先级：网关 category → statusCode → 文案（包装丢字段时仍能识别预算耗尽）。
+ */
+export function isTransientUpstreamLearnError(error: unknown): boolean {
+  const record = (error ?? {}) as { category?: unknown; statusCode?: unknown };
+  const category = typeof record.category === 'string' ? record.category : '';
+  if (category) return TRANSIENT_UPSTREAM_CATEGORIES.has(category);
+  const statusCode = Number(record.statusCode);
+  if (Number.isFinite(statusCode) && (statusCode >= 500 || statusCode === 429)) return true;
+  return TRANSIENT_UPSTREAM_MESSAGE_RE.test(String(asErrorLike(error).message || error || ''));
+}
+
 export function boundTaskCompletionError(error: unknown): string {
   const message = asErrorLike(error).message || String(error || '任务完成失败');
   return message.length > 1000 ? `${message.slice(0, 997)}...` : message;

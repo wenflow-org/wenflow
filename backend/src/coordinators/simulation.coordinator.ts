@@ -981,7 +981,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
    *
    * 边界：**不写入任何教师 reply**，本方法只记录错误标记。
    */
-  async persistTeachingPauseMarker(sessionId: string, error: unknown): Promise<void> {
+  async persistTeachingPauseMarker(sessionId: string, error: unknown, options: { code?: string } = {}): Promise<void> {
     const message = boundTaskCompletionError(error);
     const at = new Date().toISOString();
     try {
@@ -996,7 +996,8 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
         stageResults.runtimeStats = {
           ...stats,
           lastError: {
-            code: 'TEACHING_TURN_STEP_PAUSED',
+            // 默认是"教学回合模型抖动"；上游突发暂停用调用方传入的 code（I-1），便于分诊
+            code: options.code || 'TEACHING_TURN_STEP_PAUSED',
             message,
             stage: 'teaching',
             retryable: true,
