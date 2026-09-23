@@ -478,6 +478,12 @@ export function parsePathCognitiveDesign(raw: string | null): PathCognitiveDesig
     return {
       cognitiveDomain,
       coreConcepts,
+      // 这两个键此前被丢掉：`cognitiveCore` 会被整份交给 stage-designer，而 stage 侧
+      // withLoadTargetForMilestone 依赖 `cognitiveCore.loadProfile.stageLoadDistribution`
+      // 才能挂出 `milestone.loadTarget`（CLT 负荷调整与规则 #13 的唯一输入）。
+      // 丢掉 ⇒ 生产与重规划两处 loadTarget 永不生效（审计 P1 §2.3a）。
+      ...(candidate.loadProfile !== undefined ? { loadProfile: candidate.loadProfile } : {}),
+      ...(candidate.prerequisiteTree !== undefined ? { prerequisiteTree: candidate.prerequisiteTree } : {}),
     };
   } catch {
     return null;
