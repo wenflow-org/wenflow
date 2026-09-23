@@ -1825,7 +1825,10 @@ function shuffleScenes() {
   .entry__hero h1 { font-size: 22px; }
   .resume { width: 100%; justify-content: flex-start; }
   .entry__cards { grid-template-columns: 1fr; }
-  .entry { padding: 28px 16px; }
+  /* 初始态移动端：基线 justify-content:center 会留下上下两块对称死白（composer 与 AI 声明之间 135px）。
+     改为整页均布：hero / 方向卡 / composer 等间距铺满视口，底部收敛为
+     composer → 声明 → 底部导航 的稳定叠层；登录门只有单子元素，均布对其仍是居中。 */
+  .entry { padding: 28px 16px; justify-content: space-evenly; }
   .stage-nav__item { padding: 4px 7px; }
   .chat__clear { display: none; }
 }

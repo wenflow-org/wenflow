@@ -641,6 +641,9 @@ main {
     min-height: auto;
     padding-top: 110px;
   }
+  /* 单列窄容器（≤900px）下 38px 标题按字符断行会甩出孤词行（「…提问与 / 判断。」）：
+     balance 均分行宽，保证末行不成孤儿 */
+  .vn-hero h1 { text-wrap: balance; }
 }
 
 @media (max-width: 640px) {
