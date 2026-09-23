@@ -1797,17 +1797,46 @@ function shuffleScenes() {
     overflow: hidden;
     min-height: 0;
   }
+  /* 信息面板：头部横条留在流内（~43px），展开的内容做成悬浮层盖在 chat 上。
+     原先展开态是「流内限高 45dvh」，380px 的面板把 chat 压到 311px、消息区只剩 160px。 */
   .panel {
+    position: relative;
+    z-index: 25;
     max-height: none;
     overflow: visible;
-    padding: 12px 14px;
-    gap: 10px;
+    padding: 10px 12px;
+    gap: 8px;
   }
-  /* 展开态：面板限高内部滚动，避免挤压 chat（composer 最小高度约 132px） */
-  .panel:not(.panel--collapsed) {
-    max-height: 45dvh;
+  .panel:not(.panel--collapsed) .panel__body {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0; right: 0;
+    z-index: 26;
+    /* 高度上限取「不超过 60% 视口」与「给 composer 留位」的较小值：
+       悬浮层顶边 ≈113px 起，下方要留 composer(103) + 底部导航(62) + 24px 间隙 ≈ 320px，
+       短屏（320×568）下 60dvh 会盖住输入框，靠这一项兜住。
+       内容仍超高时面板内部滚动。 */
+    max-height: min(60dvh, calc(100dvh - 320px));
     overflow: auto;
+    padding: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--mk-radius-modal);
+    box-shadow: 0 20px 44px rgba(23, 32, 51, 0.22);
   }
+  /* 面板紧凑化：字段行内边距 8→6、清单间距 4→2、标记 18→16、值 13→12.5；
+     「待补充」行只有一行内容，标签与值并排（原先占两行纯属浪费，5 行白吃 ~110px）。 */
+  .checklist { gap: 2px; }
+  .field { padding: 6px; grid-template-columns: 18px 1fr; gap: 8px; }
+  .field__mark { width: 16px; height: 16px; margin-top: 1px; }
+  .field__label { font-size: 11.5px; }
+  .field__value { margin-top: 2px; font-size: 12.5px; }
+  .field__value--todo { font-size: 11.5px; }
+  .field--todo .field__body { display: flex; align-items: baseline; gap: 6px; }
+  .field--todo .field__value { margin-top: 0; min-width: 0; }
+  .field__fresh { top: 6px; right: 6px; }
+  .panel__bar { height: 5px; }
+  .panel__tip { font-size: 10.5px; padding-top: 8px; }
   /* 移动端信息清单默认折叠：头部横条可点，收起时隐藏进度条/清单/提示 */
   .panel__head { cursor: pointer; }
   .panel__caret { display: inline; }
@@ -1917,6 +1946,12 @@ function shuffleScenes() {
 }
 :global([data-theme='dark']) .overlay {
   background: rgba(15, 22, 32, 0.65);
+}
+/* 移动端悬浮信息面板：暗色下要更实的投影才立得起来（浅色档是 rgba(23,32,51,.22)） */
+@media (max-width: 900px) {
+  :global([data-theme='dark']) .panel:not(.panel--collapsed) .panel__body {
+    box-shadow: 0 20px 44px rgba(0, 0, 0, 0.55);
+  }
 }
 :global([data-theme='dark']) .proposal {
   border-color: rgba(77, 139, 248, 0.2);
