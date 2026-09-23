@@ -157,6 +157,7 @@ sandbox:goal-agent.understanding.urgency
 
 ```
 sandbox:path-agent.cognitiveCore
+sandbox:path-agent.materials
 sandbox:path-agent.milestones
 sandbox:path-agent.milestones.goal
 sandbox:path-agent.milestones.title

@@ -67,6 +67,9 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'normalizedInput.confirmedProposal',
     'normalizedInput.prerequisiteTree',
     'normalizedInput.understanding.adjustments',
+    // stage-designer 声明 ref: sandbox:path.materials（路径关联资料包，附件在前、联网在后）。
+    // 此前未登记 ⇒ prompts:check-handoff:strict 判失败（sandbox-path-unregistered）。
+    'materials',
     'previousMilestone',
     'milestones',
     'subtasks',
