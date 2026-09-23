@@ -121,6 +121,10 @@ onMounted(() => { void load(null) })
 .km__link:hover {
   color: var(--mk-blue);
 }
+/* 触屏：「查看学习状态」这类文字链接只有 20px 高，加纵向内边距抬到 34px（配色不变） */
+@media (max-width: 900px) {
+  .km__link { padding: 7px 0; }
+}
 .km__card {
   padding: var(--mk-space-5);
   border: 1px solid var(--mk-line);

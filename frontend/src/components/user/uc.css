@@ -520,3 +520,11 @@ table.uc-table {
 @keyframes uc-spin {
   to { transform: rotate(360deg); }
 }
+
+/* 触屏：.uc-btn--link（「编辑」这类文字按钮）在桌面上是 4px 内边距的一行小字（27px 高），
+   手机上同样是主要入口，抬到 34px；.uc-btn--sm 顺带补到 36px。
+   只加纵向内边距，配色与视觉不变。 */
+@media (max-width: 900px) {
+  .uc-btn--link { padding: 9px 10px; }
+  .uc-btn--sm { padding: 8px 12px; }
+}

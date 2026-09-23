@@ -832,6 +832,8 @@ onMounted(() => {
   .metrics { grid-template-columns: repeat(2, 1fr); }
   .state__grid { grid-template-columns: 1fr; }
   .side { position: static; }
+  /* 42/90 天分段控件是触屏主入口之一，28px 高对拇指偏小 → 34px */
+  .seg__item { padding: 8px 12px; }
 }
 </style>
 

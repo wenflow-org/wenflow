@@ -420,5 +420,7 @@ function onIsolatedChange(event: Event) {
   .mk-ge__body {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* 视图分段控件（全部/核心概念/知识组件）只有 27px 高，触屏上它是最常用的过滤器 */
+  .mk-ge__seg-btn { padding: 8px var(--mk-space-3); }
 }
 </style>

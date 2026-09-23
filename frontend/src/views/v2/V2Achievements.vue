@@ -418,12 +418,18 @@ onMounted(() => {
 }
 .ach-card:hover .ach-share { opacity: 1; }
 .ach-share:hover { background: rgba(0,0,0,0.08); color: var(--ink); }
+/* 触屏没有 hover：不常显这个分享入口就永远点不到（此前只有 .ach-card:hover 一条路径） */
+@media (hover: none) {
+  .ach-share { opacity: 1; }
+}
 
 @media (max-width: 900px) {
   .ach__main { padding: 16px 14px 32px; }
   .ach__hero h1 { font-size: 22px; }
   .overview { grid-template-columns: repeat(2, 1fr); }
   .grid { grid-template-columns: 1fr 1fr; }
+  /* 28×28 对拇指偏小，抬到 34×34 并同步贴角 */
+  .ach-share { width: 34px; height: 34px; top: 6px; right: 6px; }
 }
 @media (max-width: 560px) {
   .grid { grid-template-columns: 1fr; }
