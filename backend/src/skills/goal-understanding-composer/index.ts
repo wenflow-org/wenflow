@@ -5,7 +5,7 @@
  * 处理多轮理解数据的合并、去重、净化，以及 proposal 完整性检查。
  */
 
-import { SkillDefinition, SkillExecutionResult } from '../protocol'
+import { SkillDefinition } from '../protocol'
 
 export const GOAL_UNDERSTANDING_COMPOSER_PROMPT = ''
 
@@ -21,7 +21,7 @@ export const goalUnderstandingComposerDefinition: SkillDefinition = {
     properties: {
       previousUnderstanding: { type: 'object', description: '上一轮累积的理解数据' },
       parsedJson: { type: 'object', description: '本轮 AI 返回的解析结果' },
-      action: { type: 'string', description: '操作类型: merge / sanitize / buildCollected / checkThin' }
+      action: { type: 'string', description: '操作类型: merge / sanitize / buildCollected' }
     }
   },
   outputSchema: {
@@ -31,16 +31,6 @@ export const goalUnderstandingComposerDefinition: SkillDefinition = {
     }
   },
   stats: { callCount: 0, successRate: 1, avgLatency: 0 }
-}
-
-export interface GoalUnderstandingComposerInput {
-  previousUnderstanding?: any
-  parsedJson?: any
-  action: 'merge' | 'sanitize' | 'buildCollected' | 'checkThin'
-}
-
-export interface GoalUnderstandingComposerOutput {
-  result: any
 }
 
 export function isPlaceholderValue(value: any): boolean {
@@ -132,31 +122,5 @@ export function buildCollected(understanding: any, parsedJson: any): any {
     timePerDay: understanding.available_resources?.time_budget || understanding.background?.available_time || understanding.background?.expected_time || null,
     expected_time: understanding.available_resources?.time_horizon || understanding.background?.expected_time || null,
     questions_to_ask: parsedJson?.nextQuestions || parsedJson?.next_questions || []
-  }
-}
-
-export async function goalUnderstandingComposer(
-  input: GoalUnderstandingComposerInput
-): Promise<SkillExecutionResult<GoalUnderstandingComposerOutput>> {
-  const startedAt = Date.now()
-  try {
-    let result: any = {}
-    switch (input.action) {
-      case 'merge':
-        result = mergeUnderstanding(input.previousUnderstanding, input.parsedJson)
-        break
-      case 'sanitize':
-        result = sanitizeUnderstanding(input.previousUnderstanding || {})
-        break
-      case 'buildCollected':
-        result = buildCollected(input.previousUnderstanding || {}, input.parsedJson || {})
-        break
-      case 'checkThin':
-        result = {} // thin check 由 skill:goal-conversation 内的 hasThinProposalPayload 处理（涉及 routing 表）
-        break
-    }
-    return { success: true, output: { result }, duration: Date.now() - startedAt }
-  } catch (error: any) {
-    return { success: false, error: { code: 'COMPOSER_FAILED', message: error?.message || '编排失败' }, duration: Date.now() - startedAt }
   }
 }

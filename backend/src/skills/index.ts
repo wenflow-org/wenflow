@@ -23,16 +23,15 @@ export { learningPredictorDefinition } from './learning-predictor';
 import { learningPredictor as learningPredictorFn } from './learning-predictor';
 
 // 目标理解编排器（新增：understanding 管理）
+// 已退役（code-only，见 retired-skills.ts）：纯函数 sanitize/merge/buildCollected 仍被 goal-conversation 直接引用，
+// 但 handler 调度器无任何调用点，故不再在此 import（曾长期挂着未使用的 import）。
 export { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
-import { goalUnderstandingComposer as goalUnderstandingComposerFn } from './goal-understanding-composer';
 
 // 任务完成度评估器（新增：acceptance criteria 匹配）
 export { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-evaluator';
-import { acceptanceEvidenceEvaluator as acceptanceEvidenceEvaluatorFn } from './acceptance-evidence-evaluator';
 
 // 教学策略选择器（新增：策略别名映射 + 引导 prompt 构建）
 export { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
-import { teachingStrategySelector as teachingStrategySelectorFn } from './teaching-strategy-selector';
 
 // MCP 非 LLM 工具能力
 export { mcpToolDefinition } from './mcp-tool';
