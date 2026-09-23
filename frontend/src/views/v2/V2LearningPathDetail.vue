@@ -2350,4 +2350,16 @@ onBeforeUnmount(() => {
 [data-theme='dark'] .task--locked .task__icon { background: rgba(230, 237, 247, 0.1); }
 [data-theme='dark'] .task--todo .task__icon { border-color: var(--line); }
 [data-theme='dark'] .tl__task-dot--todo { border-color: var(--line); }
+
+/* 触屏热区（放在文件末尾：这几个控件的基础规则散在后面的 style 块里，同权重下先出现会被覆盖）：
+   它们在桌面是「一行小字 + 光标」，触屏上却是主要入口，实测高度只有 17–24px——
+   「问题背景」17、「展开全文 / 更多意图」19、视图切换 24、面包屑返回 30。加纵向 padding
+   抬到 32–40，文字与配色不变；这几处背景都透明，加 padding 不产生视觉变化。 */
+@media (max-width: 900px) {
+  .crumbs__back { padding: 9px 0; }             /* 30 → 38 */
+  .view-toggle__btn { padding: 7px 10px; }      /* 24 → 33 */
+  .hero__desc-toggle,
+  .sidecard__intent-toggle { padding: 7px 0; }  /* 19 → 33 */
+  .sidecard__bg-head { padding: 8px 0; }        /* 17 → 33 */
+}
 </style>

@@ -594,6 +594,10 @@ onBeforeUnmount(() => {
   .paths__main { padding: 16px 14px 32px; }
   .paths__hero h1 { font-size: 22px; }
   .cards { grid-template-columns: 1fr; }
+  /* ⋯ 触发器视觉不变（18px 字形 + 6px 内边距 = 30×27），伪元素把热区扩到 44×43：
+     触屏上 27px 高太难点，它又贴在卡片右上角、周边没有别的手势目标，扩热区无副作用 */
+  .pcard__more { position: relative; }
+  .pcard__more::before { content: ''; position: absolute; inset: -8px -7px; }
 }
 </style>
 
