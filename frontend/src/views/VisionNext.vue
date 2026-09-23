@@ -644,6 +644,14 @@ main {
   /* 单列窄容器（≤900px）下 38px 标题按字符断行会甩出孤词行（「…提问与 / 判断。」）：
      balance 均分行宽，保证末行不成孤儿 */
   .vn-hero h1 { text-wrap: balance; }
+  /* 触屏热区：状态区链接 21px、页脚链接 16px、返回首页 20px——宣传页上这些是唯一的外部/返回
+     入口，加纵向内边距抬到 ≥34px（配色不变；块内边距同步收一点，页面不至于变高） */
+  .vn-status__links { gap: 12px; margin-top: 10px; }
+  .vn-status__links a { padding: 8px 0; }
+  .vn-end__back { padding: 9px 0; }
+  .vn-foot__in { padding: 14px 0; }
+  .vn-foot__in > div { display: flex; gap: 16px; flex-wrap: wrap; }
+  .vn-foot__in a { padding: 8px 0; }
 }
 
 @media (max-width: 640px) {

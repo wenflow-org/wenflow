@@ -428,5 +428,9 @@ const tagClass = (type: string) => ({
     width: 100%;
     margin-left: 0;
   }
+
+  /* --small 只有 24px 高，而这里正是「保持原计划 / 查看调整建议 / 确认调整后续阶段」
+     这类主决策按钮；窄屏已铺满整宽，触屏高度抬到 34px */
+  .completion-btn--small { height: 34px; padding: 8px 12px; }
 }
 </style>
