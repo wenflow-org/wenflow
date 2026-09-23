@@ -1782,8 +1782,8 @@ function shuffleScenes() {
 /* ---------- 响应式 ---------- */
 @media (max-width: 900px) {
   .nav__links { display: none; }
-  /* 移动端隐藏顶部导航（沉浸式对话页，底部导航已有入口；header 隐藏、底部 tabs 保留） */
-  .goal :deep(.v2nav) { display: none; }
+  /* 移动端保留顶部导航：与其余页面一致的 logo+铃铛+头像（CTA 已在 V2Nav ≤900 隐藏），
+     底部 tabs 同时保留。本页 .goal 锁 100dvh，头部 56px 入流后由 main flex:1 自动让位。 */
   /* 锁定视口高度：会话态整页不滚动，chat 内部滚动、composer 吸底在底部导航之上。
      flex-grow:0 显式置零（.v2-page 全局 flex:1 会把 height:100dvh 拉伸到内容高度）。
      v2.css 全局 .v2-page { padding-bottom:72px } 为底部导航让位，此处保留。 */
