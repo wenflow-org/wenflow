@@ -95,6 +95,32 @@ import {
 } from '../../virtual-lab/session-factory';
 import { batchJobService } from '../../virtual-lab/batch-job.service';
 
+/**
+ * 负荷画像字段层级归一（I-13，2026-09-23）：
+ * 下游（simulation.path-phase / 负荷收紧）只读 profile **顶层**的 availableTime / cognitiveLoadTolerance。
+ * 创建 VL 时人设常塞进 personaSeed（presets.yaml 书写形状） ⇒ 后者静默失效。
+ * 本函数：两处都查，顶层优先；顶层缺失时从 personaSeed 提升，避免"配了低耐受但从未收紧"。
+ * 调用方对 `POST /` 创建时的 profile 调用即可，不影响已存储的数据（读侧见 resolveLearnerLoadProfile）。
+ */
+function normalizeVirtualLearnerProfileShape(profile: unknown): Record<string, unknown> {
+  const data = profile && typeof profile === 'object' ? { ...(profile as Record<string, unknown>) } : {};
+  const nested = (data.personaSeed && typeof data.personaSeed === 'object'
+    ? data.personaSeed
+    : {}) as Record<string, unknown>;
+
+  const TOLERANCE_KEYS = ['availableTime', 'cognitiveLoadTolerance'] as const;
+  for (const key of TOLERANCE_KEYS) {
+    if (typeof data[key] !== 'string' || !data[key]) {
+      const fallback = typeof nested[key] === 'string' ? nested[key] : null;
+      if (fallback) {
+        data[key] = fallback;
+        logger.info('[vl-create] I-13 归一：将 personaSeed 中的负荷字段提升到 profile 顶层', { field: key });
+      }
+    }
+  }
+  return data;
+}
+
 const router = express.Router();
 
 /** 模拟会话操作统一注入 sessionId：执行日志/瀑布可按模拟会话归组追溯 */
@@ -1345,7 +1371,13 @@ router.post('/', async (req: Request, res) => {
     const normalizedKnowledgeLevel = typeof knowledgeLevel === 'string' && knowledgeLevel.trim()
       ? knowledgeLevel.trim()
       : 'beginner';
-    
+
+    // 负荷画像字段层级归一（2026-09-23，I-13）：下游（simulation.path-phase / 负荷收紧）读 profile **顶层**
+    // 的 availableTime / cognitiveLoadTolerance，但调用方常把整套人设塞进 personaSeed（presets.yaml 书写形状）
+    // ⇒ 收紧静默失效。此处把 personaSeed 里的这两个字段抬到顶层（顶层已有则不覆盖），
+    // 使两种写法都生效，避免"看起来配了低耐受、实际从未收紧"。
+    const normalizedProfile = normalizeVirtualLearnerProfileShape(profile);
+
     const email = `virtual_${uuidv4().substring(0, 8)}@test.local`;
     // 虚拟学习者仅供系统编排使用，不提供可共享的登录凭据。
     const hashedPassword = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
@@ -1371,7 +1403,7 @@ router.post('/', async (req: Request, res) => {
       data: {
         id: uuidv4(),
         userId: user.id,
-        profile: JSON.stringify(profile || {}),
+        profile: JSON.stringify(normalizedProfile),
         learningGoal: normalizedLearningGoal,
         knowledgeLevel: normalizedKnowledgeLevel,
         knownConcepts: knownConcepts ? JSON.stringify(knownConcepts) : null,
@@ -3153,7 +3185,7 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
         throw err;
       }
       const lastIndex = plan.indexes[plan.indexes.length - 1];
-      const dayWindow = resolveDayWindow(clock.baseDate, lastIndex);
+      const dayWindow = resolveDayWindow(clock.baseDate, lastIndex, clock.timezone);
       const nextClock = { ...(rawClock || {}), enabled: true, ...plan.nextClock };
       const nextStageResults = { ...stageResults, simulationClock: nextClock };
 

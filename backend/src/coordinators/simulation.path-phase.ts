@@ -29,6 +29,7 @@ import {
   parseProfileData,
   parseStageResultsPayload,
   parseStoryContextFromStageResults,
+  resolveLearnerLoadProfile,
 } from './simulation.helpers';
 import { buildAssistedLearnerMemory } from './simulation.memory';
 import type { SimulationOrchestrator } from './simulation.coordinator';
@@ -127,11 +128,12 @@ export function buildGoalPathRequest(
   // 负荷画像：虚拟学习者的人设里有 availableTime / cognitiveLoadTolerance（自由文本），
   // 透传给 derivePlanningHints 收紧"紧预算/低耐受"者的体量（里程碑数/单任务分钟/周期）。
   // 真实用户链路不构造该字段 ⇒ 体量推导行为不变。
+  //
+  // 字段层级：内置 preset 把这些字段放在 profile **顶层**；但创建 VL 的调用方也常把整套
+  // 人设塞进 `personaSeed`（presets.yaml 的书写形状）。历史上只读顶层 ⇒ 后者静默失效
+  // （learnerLoadProfile=null ⇒ 收紧分支从不执行）。此处两处都读，顶层优先。
   const personaData = safeJsonParse<Record<string, unknown>>(session.virtual_learner_profiles.profile, {});
-  const learnerLoadProfile = {
-    availableTime: typeof personaData.availableTime === 'string' ? personaData.availableTime : null,
-    loadTolerance: typeof personaData.cognitiveLoadTolerance === 'string' ? personaData.cognitiveLoadTolerance : null,
-  };
+  const learnerLoadProfile = resolveLearnerLoadProfile(personaData);
   const request: GoalPathRequest = {
     userId: session.userId,
     sourceConversationId: session.goalConversationId as string,

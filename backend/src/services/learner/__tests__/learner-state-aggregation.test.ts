@@ -193,6 +193,65 @@ describe('derivePacing（全局节奏只看总负担，不再由单课 LSS 决�
   });
 });
 
+describe('deriveReplanSignal · 完成度归一（I-11：已完成路径不再报"建议重排后续"）', () => {
+  const km = (over: Record<string, unknown> = {}) => ({
+    globalSignals: { fragileConcepts: ['c1'], strugglingConcepts: ['c2'], masteredConcepts: [] },
+    globalBackground: { blockedFoundations: ['b1'] },
+    currentPath: { prerequisiteGaps: [{ severity: 'high' }], progress: { totalTasks: 18, completedTasks: 18 } },
+    ...over,
+  }) as any;
+  const dyn = (over: Record<string, unknown> = {}) => ({
+    metrics: { lss: 4, ktl: 6, lf: 5, lsb: 1 },
+    recentTrend: 'stable', fatigueRisk: 'medium',
+    ...over,
+  }) as any;
+
+  it('路径全部完成（18/18）+ 存在脆弱/阻塞信号 → 不再报 high/resequence', () => {
+    const signal = deriveReplanSignal({
+      dynamicState: dyn(), learningControlState: { paceMode: 'steady', reviewPriority: 'high' } as any,
+      knowledgeMemory: km(),
+    });
+    expect(signal.shouldSuggest).toBe(false);
+    expect(signal.priority).toBe('none');
+    expect(signal.reasonCodes).toContain('path_completed'); // 保留观测
+  });
+
+  it('路径未完成（10/18）+ 结构性风险（前置缺口）→ 仍报 high/resequence（正当重排）', () => {
+    const signal = deriveReplanSignal({
+      dynamicState: dyn(),
+      learningControlState: { paceMode: 'steady', reviewPriority: 'high' } as any,
+      knowledgeMemory: km({ currentPath: { prerequisiteGaps: [{ severity: 'high' }], progress: { totalTasks: 18, completedTasks: 10 } } }),
+    });
+    expect(signal.shouldSuggest).toBe(true);
+    expect(signal.priority).toBe('high');
+    expect(signal.recommendation).toBe('resequence');
+  });
+
+  it('接近完成（17/18）且无结构性风险 → 不再报 high（不打断收尾）', () => {
+    const signal = deriveReplanSignal({
+      dynamicState: dyn(),
+      learningControlState: { paceMode: 'steady', reviewPriority: 'medium' } as any,
+      knowledgeMemory: km({
+        globalBackground: { blockedFoundations: [] },
+        globalSignals: { fragileConcepts: ['c1'], strugglingConcepts: [], masteredConcepts: [] },
+        currentPath: { prerequisiteGaps: [], progress: { totalTasks: 18, completedTasks: 17 } },
+      }),
+    });
+    expect(signal.priority).toBe('none');
+    expect(signal.shouldSuggest).toBe(false);
+  });
+
+  it('无 currentPath（无进度信息）时保持原行为：结构性风险仍报 high（不误杀）', () => {
+    const signal = deriveReplanSignal({
+      dynamicState: dyn(),
+      learningControlState: { paceMode: 'steady', reviewPriority: 'high' } as any,
+      knowledgeMemory: km({ currentPath: undefined }),
+    });
+    expect(signal.shouldSuggest).toBe(true);
+    expect(signal.priority).toBe('high');
+  });
+});
+
 describe('deriveLearningControlState（单课压力起作用的地方 = 课内）', () => {
   const dynamicState = (overrides: Partial<any> = {}) => ({
     metrics: { lss: 2, ktl: 3, lf: 1, lsb: 2 },

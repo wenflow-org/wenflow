@@ -26,7 +26,8 @@ import {
   isAbortLikeLearnError,
   isTransientUpstreamLearnError,
   isPathReviewAlreadyAcceptedForCurrentPath,
-  parseProfileData
+  parseProfileData,
+  resolveLearnerLoadProfile
 } from '../simulation.helpers'
 import type { VirtualLearnerProfile } from '../simulation.types'
 import type { VirtualLearnerProfileRow } from '../../virtual-lab/vlab-types'
@@ -563,5 +564,32 @@ describe('misc pure helpers', () => {
       personalityTraits: {},
       knowledgeLevel: 'beginner'
     })
+  })
+})
+
+describe('resolveLearnerLoadProfile（I-13：负荷画像字段层级容错）', () => {
+  it('字段在 profile 顶层（内置 preset 形状）→ 直接取到', () => {
+    expect(resolveLearnerLoadProfile({ availableTime: 'minimal', cognitiveLoadTolerance: 'low' }))
+      .toEqual({ availableTime: 'minimal', loadTolerance: 'low' })
+  })
+
+  it('字段在 personaSeed 内（创建 VL 常见形状）→ 提升到顶层，不再静默失效', () => {
+    expect(resolveLearnerLoadProfile({
+      personaSeed: { availableTime: 'minimal', cognitiveLoadTolerance: '低——一次只能接收一小步' }
+    })).toEqual({ availableTime: 'minimal', loadTolerance: '低——一次只能接收一小步' })
+  })
+
+  it('两处都有 → 顶层优先', () => {
+    expect(resolveLearnerLoadProfile({
+      availableTime: 'abundant', cognitiveLoadTolerance: 'high',
+      personaSeed: { availableTime: 'minimal', cognitiveLoadTolerance: 'low' }
+    })).toEqual({ availableTime: 'abundant', loadTolerance: 'high' })
+  })
+
+  it('两处都没有 / 入参非法 → 返回空画像（保持原行为）', () => {
+    expect(resolveLearnerLoadProfile({})).toEqual({ availableTime: null, loadTolerance: null })
+    expect(resolveLearnerLoadProfile(null)).toEqual({ availableTime: null, loadTolerance: null })
+    expect(resolveLearnerLoadProfile({ personaSeed: 'not-an-object' } as unknown as Record<string, unknown>))
+      .toEqual({ availableTime: null, loadTolerance: null })
   })
 })

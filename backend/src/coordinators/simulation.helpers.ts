@@ -255,6 +255,31 @@ export function parseProfileData(profileRecord: VirtualLearnerProfileRow): Virtu
  * 兼容老数据：2026-09-21 之前 `cognitiveLoadTolerance` 里写的是散文（且由 overloadReaction 兜底复制），
  * 那种数据仍然当行为描述用；枚举值不算行为描述。
  */
+/**
+ * 负荷画像（结构化字段）的层级容错解析（2026-09-23，I-13）。
+ *
+ * 内置 preset 把 `availableTime` / `cognitiveLoadTolerance` 放在 profile **顶层**；
+ * 但创建 VL 的调用方常把整套人设塞进 `personaSeed`（与 presets.yaml 书写形状一致）。
+ * 历史的顶层-only 读取让后者静默失效（learnerLoadProfile=null → 负荷收紧从不执行）。
+ * 本函数顶层优先，`personaSeed` 兜底，两处都没有才返回空画像。
+ */
+export interface LearnerLoadProfileShape {
+  availableTime?: string | null;
+  loadTolerance?: string | null;
+}
+
+export function resolveLearnerLoadProfile(profileData: Record<string, unknown> | null | undefined): LearnerLoadProfileShape {
+  const top = profileData && typeof profileData === 'object' ? profileData : {};
+  const nested = (top.personaSeed && typeof top.personaSeed === 'object' ? top.personaSeed : {}) as Record<string, unknown>;
+  const availableTime = typeof top.availableTime === 'string'
+    ? top.availableTime
+    : typeof nested.availableTime === 'string' ? nested.availableTime : null;
+  const loadTolerance = typeof top.cognitiveLoadTolerance === 'string'
+    ? top.cognitiveLoadTolerance
+    : typeof nested.cognitiveLoadTolerance === 'string' ? nested.cognitiveLoadTolerance : null;
+  return { availableTime, loadTolerance };
+}
+
 export function resolveOverloadBehaviorText(
   profile: { overloadReaction?: unknown; cognitiveLoadTolerance?: unknown } | null | undefined
 ): string {

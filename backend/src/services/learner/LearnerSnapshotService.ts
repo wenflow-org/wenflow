@@ -131,6 +131,20 @@ export function deriveReplanSignal(input: {
   const prerequisiteGapCount = knowledgeMemory.currentPath?.prerequisiteGaps.length || 0;
   const reasonCodes: string[] = [];
 
+  // 路径完成度：重规划建议的意义是「后续安排怎么走」；若当前路径已走完（下游无可调整阶段），
+  // 再报「建议重排后续路径」既无动作对象、也与学习者已完成的事实矛盾。
+  // 历史实测：全库 159 条 teaching 投影里 158 条恒 shouldSuggest=true，其中含 18/18 全完成、
+  // 每课 5/5 的路径仍报 priority=high + resequence —— 判据只看「计数>0」，无完成度/量级归一。
+  const progress = knowledgeMemory.currentPath?.progress;
+  const totalTasks = progress?.totalTasks ?? 0;
+  const completedTasks = progress?.completedTasks ?? 0;
+  const pathFullyComplete = totalTasks > 0 && completedTasks >= totalTasks;
+  const completionRatio = totalTasks > 0 ? completedTasks / totalTasks : 0;
+  // 结构性风险（阻塞基础/前置缺口）才是「重排后续」的正当理由；单纯脆弱的点属于课内补强，不构成重排。
+  const structuralRisk = prerequisiteGapCount > 0 || blockedCount > 0;
+  // 接近完成（≥90%）且无结构性风险时，也不值得为「重排后续」打断收尾。
+  const nearCompleteNoStructural = !pathFullyComplete && completionRatio >= 0.9 && !structuralRisk;
+
   if (dynamicState.metrics.lf >= 6) reasonCodes.push('fatigue_high');
   if (dynamicState.metrics.lsb < 0) reasonCodes.push('lsb_negative');
   if (dynamicState.recentTrend === 'declining') reasonCodes.push('recent_trend_declining');
@@ -138,9 +152,17 @@ export function deriveReplanSignal(input: {
   if (strugglingCount > 0) reasonCodes.push('struggling_concepts');
   if (blockedCount > 0) reasonCodes.push('blocked_foundations');
   if (prerequisiteGapCount > 0) reasonCodes.push('prerequisite_gaps');
+  if (pathFullyComplete) reasonCodes.push('path_completed');
 
-  const highRisk = dynamicState.metrics.lf >= 6 || dynamicState.metrics.lsb < 0 || prerequisiteGapCount > 0 || blockedCount > 0;
-  const mediumRisk = learningControlState.reviewPriority === 'high' || fragileCount > 0 || strugglingCount > 0 || dynamicState.recentTrend === 'declining';
+  // highRisk：疲劳/失衡/结构性风险。**路径已完成或接近完成且无结构性风险时，不进入 high**——
+  // 此时没有「后续路径」可重排，报 high 只会误导用户去做一次空转的重规划。
+  const highRisk = (dynamicState.metrics.lf >= 6 || dynamicState.metrics.lsb < 0 || structuralRisk)
+    && !pathFullyComplete
+    && !nearCompleteNoStructural;
+  // mediumRisk：非结构性但存在需补强的信号（脆弱/挣扎点、复习优先级高、趋势下滑）。
+  // 接近完成且无结构性风险时也不进 medium——收尾阶段不再追加「补强建议」。
+  const mediumRisk = !nearCompleteNoStructural
+    && (learningControlState.reviewPriority === 'high' || fragileCount > 0 || strugglingCount > 0 || dynamicState.recentTrend === 'declining');
   // 加速资格：学习者级（总负荷 ktl/lf）+ 路径级（paceMode 不是 recover）+ 知识证据。
   // 不再看全局 `lss`：它 = 各路径里"最近一课最难"的那节课，用它给整个学习者判"能否加速"
   // 正是"单课量决定全局判断"的老毛病；路径是否吃力由 learningControlState.paceMode 表达。
@@ -149,6 +171,19 @@ export function deriveReplanSignal(input: {
     && learningControlState.paceMode !== 'recover'
     && fragileCount === 0
     && strugglingCount === 0;
+
+  // 路径已完成：下游没有可「重排/减速」的阶段，任何重规划建议都是空转。
+  // 明确回 keep（保留 reasonCodes 供观测），不再进 accelerate/high/medium 分支。
+  if (pathFullyComplete) {
+    return {
+      shouldSuggest: false,
+      priority: 'none',
+      recommendation: 'keep',
+      scope: 'none',
+      rationale: '当前路径已完成，无可调整的后续阶段。',
+      reasonCodes,
+    };
+  }
 
   if (accelerateReady) {
     return {
