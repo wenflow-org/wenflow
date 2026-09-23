@@ -609,7 +609,10 @@ function extractDeltaOutputMode(metadata: unknown): boolean {
   }
 }
 
-function parseGoalConversationResponse(
+/**
+ * 模型响应 → 会话状态（纯函数；导出以便对确定性判分/跨轮回退做单测）。
+ */
+export function parseGoalConversationResponse(
   content: string,
   previousUnderstanding?: any,
   stageControlOptions?: StageControlOptions,
@@ -743,8 +746,13 @@ function parseGoalConversationResponse(
   }
 
   understanding = sanitizeUnderstanding(understanding);
-  // 探测题判分确定性比对：correctOption 覆盖 LLM 判分，防"自己出题自己判"的自洽偏差
-  understanding = applyPrerequisiteProbeAnswerKey(understanding, confirmedProposal);
+  // 探测题判分确定性比对：correctOption 覆盖 LLM 判分，防"自己出题自己判"的自洽偏差。
+  // 本轮未重复输出 confirmedProposal（delta 缺席=不变，或模型只是没再复述）时回退上一轮：
+  // 否则判分键丢失，LLM 的 isCorrect 无人覆盖，确定性判分静默失效、探测题等于白做。
+  understanding = applyPrerequisiteProbeAnswerKey(
+    understanding,
+    confirmedProposal ?? stageControlOptions?.previousState?.confirmedProposal ?? null,
+  );
 
   dialogueText = normalizeDialogueText(dialogueText);
   if (parsedJson?.reply) {
