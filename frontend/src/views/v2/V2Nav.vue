@@ -14,11 +14,6 @@
       </nav>
       <div class="v2nav__right">
         <V2NotifCenter />
-        <router-link
-          to="/goal-conversation"
-          class="v2nav__cta"
-          @click="onNewGoalClick"
-        >规划新目标</router-link>
         <div class="v2nav__user" ref="userMenuRef">
           <button
             type="button"
@@ -105,17 +100,6 @@ function isActive(item: { match: string[] }) {
   return item.match.some((m) => route.path.startsWith(m));
 }
 
-/**
- * 已在目标规划页内点击「规划新目标」：router-link 同路由不触发导航，
- * 派发事件由 V2GoalConversation 监听并重置视图（清内存、保留本地恢复入口）。
- */
-function onNewGoalClick() {
-  // 按路由 name 判断：深链 /goal-conversation/gc_xxx 与无参路由同样命中
-  if (route.name === 'V2GoalConversation') {
-    window.dispatchEvent(new CustomEvent('v2:new-goal'));
-  }
-}
-
 const userName = computed(() => userStore.user?.name || '学习者');
 const avatarLetter = computed(() => (userStore.user?.name || '学').charAt(0));
 
@@ -186,26 +170,6 @@ onUnmounted(() => {
 .v2nav__links a:hover { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.08); }
 .v2nav__links a.active { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.1); }
 .v2nav__right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
-/* 规划新目标 CTA：36px 高（次级动作，弱于主导航链接）。
-   flex-shrink: 0 + nowrap：防止窄屏 flex 行把按钮压缩到文字宽度以下，
-   导致文字竖排换行、按钮纵向膨胀超出导航栏并裁出视口顶部（ISSUE-001）。 */
-.v2nav__cta {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-height: 36px; padding: 0 14px; border-radius: var(--mk-radius-pill);
-  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
-  color: #fff; font-size: 13px; font-weight: 800;
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--blue) 26%, transparent);
-  cursor: pointer; text-decoration: none;
-  white-space: nowrap; flex-shrink: 0;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
-}
-.v2nav__cta:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 9px 18px color-mix(in srgb, var(--blue) 32%, transparent);
-}
-.v2nav__cta:active {
-  transform: translateY(0) scale(0.98);
-}
 .v2nav__user { position: relative; }
 .v2nav__avatar {
   display: flex; align-items: center; gap: 8px;
@@ -306,7 +270,7 @@ onUnmounted(() => {
   .v2nav__name { display: none; }
 }
 
-/* 移动端压缩顶部导航：高度 72→56，logo 48→34，CTA 36→32，间距收窄 */
+/* 移动端压缩顶部导航：高度 72→56，logo 48→34，间距收窄 */
 @media (max-width: 900px) {
   .v2nav__in {
     height: 56px;
@@ -314,19 +278,9 @@ onUnmounted(() => {
     width: calc(100% - 28px);
   }
   .v2nav__logo { height: 34px; }
-  .v2nav__cta {
-    min-height: 32px;
-    padding: 0 12px;
-    font-size: 12px;
-    box-shadow: 0 4px 10px color-mix(in srgb, var(--blue) 22%, transparent);
-  }
   .v2nav__right { gap: 8px; }
   .v2nav__avatar { padding: 4px 8px 4px 4px; font-size: 12.5px; }
   .v2nav__avatar i { width: 28px; height: 28px; font-size: 13px; }
-  /* 手机段隐藏「规划新目标」CTA：底部六 tab 的「目标规划」就是同一入口，重复且抢眼——
-     84×32 的蓝色大按钮与 34px logo 并排比例失衡。隐藏后头部只剩
-     logo + 铃铛 + 头像三件套；901–1100 平板段保留（该段无顶部链接，CTA 仍是主动作）。 */
-  .v2nav__cta { display: none; }
 }
 
 /* 大屏（1680+）：导航内容与页面容器同宽（1360）居中，避免 4K 下内容贴左 */

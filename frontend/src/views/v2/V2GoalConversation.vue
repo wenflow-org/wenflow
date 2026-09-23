@@ -506,7 +506,6 @@ const lastAiKey = computed(() => {
 });
 
 onMounted(() => {
-  window.addEventListener('v2:new-goal', onNewGoalEvent);
   window.addEventListener('keydown', onProposalKey);
   narrowMq?.addEventListener('change', onNarrowChange);
   // 每次进入页面随机展示一批场景
@@ -531,7 +530,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('v2:new-goal', onNewGoalEvent);
   window.removeEventListener('keydown', onProposalKey);
   narrowMq?.removeEventListener('change', onNarrowChange);
 });
@@ -543,15 +541,6 @@ function resetToEntry() {
   supplementMode.value = false;
   supplementText.value = '';
   input.value = '';
-}
-
-/** 页面内点击导航「规划新目标」：重置为全新初始态（保留本地恢复入口） */
-function onNewGoalEvent() {
-  resetToEntry();
-  // 清掉 URL 中残留的旧会话参数，避免刷新后按旧 conversationId 恢复
-  if (typeof route.params.conversationId === 'string') {
-    router.replace({ name: 'V2GoalConversation' });
-  }
 }
 
 // 会话 ID 变化时同步视图状态（分享链接 / 恢复旧会话）
