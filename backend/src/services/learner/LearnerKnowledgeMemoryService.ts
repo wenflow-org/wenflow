@@ -71,7 +71,7 @@ async function buildUpstreamPrerequisiteGaps(params: {
   pathId: string;
   currentTask: { conceptId?: string | null; linkedConceptName?: string | null; coreConcept?: string | null } | null;
   conceptStates: LearnerConceptState[];
-}): Promise<Array<{ conceptKey: string; label: string; reason: string; severity: 'high' | 'medium' }>> {
+}): Promise<Array<{ conceptKey: string; label: string; reason: string; severity: 'high' | 'medium'; source: 'graph' }>> {
   const { userId, pathId, currentTask, conceptStates } = params;
   if (!userId || !currentTask) return [];
   try {
@@ -106,9 +106,10 @@ async function buildUpstreamPrerequisiteGaps(params: {
             ? '当前任务直接依赖该前置知识点，但历史证据显示尚未掌握。'
             : '该知识点是当前任务的间接前置（上游两跳），掌握不稳定会影响后续推进。',
           severity: (item.depth === 1 ? 'high' : 'medium') as 'high' | 'medium',
+          source: 'graph' as const,
         };
       })
-      .filter((gap): gap is { conceptKey: string; label: string; reason: string; severity: 'high' | 'medium' } => !!gap)
+      .filter((gap): gap is { conceptKey: string; label: string; reason: string; severity: 'high' | 'medium'; source: 'graph' } => !!gap)
       .sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'high' ? -1 : 1))
       .slice(0, 4);
   } catch (error) {
@@ -682,6 +683,7 @@ export class LearnerKnowledgeMemoryService {
           label: concept?.label || '未识别知识点',
           reason: '当前任务依赖该知识点，但历史证据显示掌握仍不稳定或掌握度偏低。',
           severity: concept?.stability === 'fragile' ? 'high' as const : 'medium' as const,
+          source: 'fallback' as const,
         }));
 
     const currentPath: LearnerPathKnowledgeMemory = {

@@ -210,6 +210,13 @@ export interface LearnerPrerequisiteGap {
   label: string;
   reason: string;
   severity: 'low' | 'medium' | 'high';
+  /**
+   * 缺口来源：
+   * - `graph` = 沿概念图 prerequisite 边向上游闭包得到的**真上游前置**未掌握；
+   * - `fallback` = 图缺失时的回落口径，实为"**本任务自身**薄弱概念"，**不是**前置。
+   * 消费方（教学上下文的 `prerequisiteConcepts`）据此区分，避免把本课概念当"前置"喂给模型。
+   */
+  source?: 'graph' | 'fallback';
 }
 
 export interface LearnerBackgroundConceptLedgerItem {

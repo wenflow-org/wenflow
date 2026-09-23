@@ -16,15 +16,24 @@
  *
  * 主题：亮/暗两套配色都走语义 token 的同族色值（与 admin 视觉层一致），
  * 节点按掌握度着色（未掌握=暖色警示、已掌握=冷色安定、未评估=中性灰）。
+ *
+ * 2026-09-23 重设计（视觉走查实测的三个问题）：
+ *  ① **布局被反复重置**：ResizeObserver 每 tick 都 `setOption(..., true)`（notMerge）会把
+ *    力导向布局一次次打回起点，图永远不收敛、还偏到画布一侧 → 现在 resize 只 `chart.resize()`，
+ *     只有数据/主题变化才重建 option。
+ *  ② **标签被截断成"…"**：`overflow:'truncate'` + `width:120` 把中文长标签全切了 →
+ *     改为显式两行折行（`\n`）并放在节点下方，不再截断。
+ *  ③ **图例是假的**：`categories` 列的是"关系"，而节点没有 `category` 字段，
+ *     点图例会把整张图隐藏 → 去掉画布内图例，图例改由外层容器用 DOM 呈现。
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts/core'
 import { GraphChart } from 'echarts/charts'
-import { TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components'
+import { TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsCoreOption } from 'echarts/core'
 
-echarts.use([GraphChart, TooltipComponent, LegendComponent, TitleComponent, CanvasRenderer])
+echarts.use([GraphChart, TooltipComponent, CanvasRenderer])
 
 export interface MkGraphNode {
   id: string
@@ -68,8 +77,8 @@ let chart: echarts.ECharts | null = null
 let ro: ResizeObserver | null = null
 
 /**
- * 容器宽度（视觉验证实测）：学习页知识点面板只有 ~320px 宽，默认参数会让标签溢出面板、
- * 图例压在图区上。故按宽度自适应（窄栏收紧字号/标签截断/斥力，并隐藏图例）。
+ * 容器宽度（视觉验证实测）：学习页知识点面板只有 ~320px 宽，默认参数会让标签溢出面板。
+ * 故按宽度自适应（窄栏收紧字号/折行宽度/斥力）。
  */
 const width = ref(0)
 const isNarrow = computed(() => width.value > 0 && width.value < 420)
@@ -100,6 +109,19 @@ const RELATION_STYLE: Record<string, { color: string; width: number; type: 'soli
   part_of: { color: '#b9bec7', width: 1, type: 'dashed' }
 }
 
+/**
+ * 折行（最多 2 行，超出加省略号）。中文概念名普遍 10-20 字，
+ * 单行会横跨整张图并互相压；两行折行后长度可控、也不再被截成"…"。
+ */
+function wrapLabel(text: string, perLine: number): string {
+  const value = String(text ?? '')
+  if (value.length <= perLine) return value
+  const first = value.slice(0, perLine)
+  const rest = value.slice(perLine)
+  if (rest.length <= perLine) return `${first}\n${rest}`
+  return `${first}\n${rest.slice(0, perLine - 1)}…`
+}
+
 function buildOption(): EChartsCoreOption {
   const dark = props.theme === 'dark'
   const nodes = visibleNodes.value
@@ -111,13 +133,12 @@ function buildOption(): EChartsCoreOption {
     degree.set(edge.toConceptId, (degree.get(edge.toConceptId) ?? 0) + 1)
   }
   const textColor = dark ? '#c9ccd1' : '#3b3f46'
-  const relationKeys = Array.from(new Set(edges.map((e) => e.relation)))
   const RELATION_LABEL: Record<string, string> = { prerequisite: '前置依赖', part_of: '属于' }
-  // 可读性（视觉验证实测）：节点一多，常显全部标签会让中心区糊成一团（41 节点时完全不可读）；
-  // 但全都不显示又只剩点。故密集图只给"值得标注"的节点显示标签：
-  // ① 连接度最高的若干（结构枢纽）② 薄弱/脆弱节点（诊断最关心）。其余靠悬停。
+  // 可读性（视觉验证实测）：节点一多，常显全部标签会让中心区糊成一团；但全都不显示又只剩点。
+  // 故密集图只给"值得标注"的节点显示标签：① 连接度最高的若干（结构枢纽）② 薄弱/脆弱节点。其余靠悬停。
   const denseGraph = nodes.length > 18
   const narrow = isNarrow.value
+  const perLine = narrow ? 7 : 9
   const labelWorthy = new Set<string>()
   if (!denseGraph) {
     for (const node of nodes) labelWorthy.add(node.id)
@@ -145,64 +166,68 @@ function buildOption(): EChartsCoreOption {
           : `${Math.round(node.masteryScore * 100)}%`
         return [
           `<b>${node.label}</b>`,
+          `${node.level === 'concept' ? '核心概念' : '知识组件'}`,
           `掌握度：${mastery}${node.stability ? ` · ${node.stability}` : ''}`,
           `提取次数：${node.extractionCount ?? 0}`
         ].join('<br/>')
       }
     },
-    legend: relationKeys.length && !narrow
-      ? [{ data: relationKeys.map((k) => RELATION_LABEL[k] ?? k), bottom: 0, textStyle: { color: textColor } }]
-      : undefined,
     series: [
       {
         type: 'graph',
         layout: 'force',
         roam: true,
         draggable: true,
-        // 布局盒留边：窄栏不留图例位（图例已隐藏），宽栏底部留 24px 给图例
-        top: 8,
-        bottom: narrow ? 8 : 26,
-        left: 8,
-        right: 8,
-        // 缩放/平移范围：给密集图留出"拉开来读"的余地
+        // 布局盒留边（画布内图例已移除，四边等距）
+        top: 16,
+        bottom: 16,
+        left: 16,
+        right: 16,
         scaleLimit: { min: 0.3, max: 4 },
         label: {
           show: false,
+          position: 'bottom',
+          distance: 5,
           color: textColor,
           fontSize: narrow ? 10 : 11,
-          formatter: '{b}',
-          overflow: 'truncate',
-          width: narrow ? 64 : 120
+          lineHeight: narrow ? 12 : 13,
+          formatter: (params: { name?: string }) => wrapLabel(params?.name ?? '', perLine)
         },
         labelLayout: { hideOverlap: true },
         emphasis: { focus: 'adjacency', label: { show: true, fontWeight: 'bold' } },
         select: { label: { show: true }, itemStyle: { borderWidth: 2 } },
         lineStyle: { curveness: 0.08 },
-        categories: relationKeys.map((k) => ({ name: RELATION_LABEL[k] ?? k })),
         force: {
-          // 斥力随节点数缓增，别把图推出画布（实测 420 会让节点大量溢出）；
-          // 窄栏再收紧一档，否则节点会散到面板外。
-          repulsion: narrow ? 150 : (denseGraph ? 300 : 220),
-          edgeLength: narrow ? [45, 100] : (denseGraph ? [80, 170] : [70, 150]),
-          gravity: narrow ? 0.12 : 0.08,
+          // `initLayout: circular` 给一个铺开的初值，否则力导向从随机点起步、
+          // 实测容易收敛到画布一侧或缩成一小团。
+          initLayout: 'circular',
+          // 斥力/边长随节点数上调，gravity 压低：密集图要"铺开"才读得出来
+          // （实测 300/0.08 时 40 个节点会缩在画布中间一小团里）。
+          repulsion: narrow ? 150 : (denseGraph ? 480 : 240),
+          edgeLength: narrow ? [45, 100] : (denseGraph ? [110, 220] : [80, 160]),
+          gravity: narrow ? 0.12 : (denseGraph ? 0.04 : 0.08),
+          friction: 0.82,
           layoutAnimation: true
         },
         data: nodes.map((node) => ({
           id: node.id,
           name: node.label,
-          symbolSize: Math.min(narrow ? 34 : 46, (narrow ? 12 : 16) + (degree.get(node.id) ?? 0) * 4),
-          itemStyle: { color: colorOf(node, dark), borderColor: dark ? '#2a2c30' : '#ffffff', borderWidth: 1 },
+          symbolSize: Math.min(narrow ? 34 : 44, (narrow ? 12 : 15) + (degree.get(node.id) ?? 0) * 4),
+          itemStyle: { color: colorOf(node, dark), borderColor: dark ? '#2a2c30' : '#ffffff', borderWidth: 1.5 },
           // 层级：coreConcept 用圆、KC 用圆角方块，一眼区分粒度
           symbol: node.level === 'concept' ? 'circle' : 'roundRect',
           label: { show: labelWorthy.has(node.id) },
           raw: node
         })),
-        links: edges.map((edge) => ({
-          source: edge.fromConceptId,
-          target: edge.toConceptId,
-          relation: edge.relation,
-          lineStyle: RELATION_STYLE[edge.relation] ?? { color: '#b9bec7', width: 1, type: 'solid' }
-        }))
+        // 前置边后画（覆盖在"属于"虚线之上），让主结构更清楚
+        links: [...edges]
+          .sort((a, b) => (a.relation === 'prerequisite' ? 1 : 0) - (b.relation === 'prerequisite' ? 1 : 0))
+          .map((edge) => ({
+            source: edge.fromConceptId,
+            target: edge.toConceptId,
+            relation: edge.relation,
+            lineStyle: RELATION_STYLE[edge.relation] ?? { color: '#b9bec7', width: 1, type: 'solid' }
+          }))
       }
     ]
   }
@@ -222,18 +247,29 @@ function render() {
   chart.setOption(buildOption(), true)
 }
 
+let lastNarrow = false
+
 onMounted(() => {
   width.value = el.value?.clientWidth ?? 0
+  lastNarrow = isNarrow.value
   render()
   ro = new ResizeObserver(() => {
-    width.value = el.value?.clientWidth ?? 0
+    const next = el.value?.clientWidth ?? 0
+    if (next === width.value) return
+    width.value = next
     chart?.resize()
-    render()
+    // 只有"窄/宽档位"翻转才重建 option（字号/折行宽度/斥力不同）。
+    // 单纯变宽变窄**不重建**：setOption(notMerge) 会把力导向布局打回起点，
+    // 图永远不收敛——这正是改造前"图偏在画布一侧"的根因。
+    if (isNarrow.value !== lastNarrow) {
+      lastNarrow = isNarrow.value
+      render()
+    }
   })
   if (el.value) ro.observe(el.value)
 })
 
-watch(() => [props.nodes, props.edges, props.theme, props.hideIsolated, isNarrow.value], () => render(), { deep: true })
+watch(() => [props.nodes, props.edges, props.theme, props.hideIsolated], () => render(), { deep: true })
 
 onBeforeUnmount(() => {
   ro?.disconnect()

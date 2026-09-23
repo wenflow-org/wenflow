@@ -79,6 +79,13 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '学习状态', requiresAuth: true }
   },
   {
+    // 用户侧知识图谱**聚合页**（全部路径；学习页里的图谱只看当前路径）
+    path: '/knowledge-map',
+    name: 'V2KnowledgeMap',
+    component: () => import('@/views/v2/V2KnowledgeMap.vue'),
+    meta: { title: '知识图谱', requiresAuth: true }
+  },
+  {
     path: '/achievements',
     name: 'V2Achievements',
     component: () => import('@/views/v2/V2Achievements.vue'),

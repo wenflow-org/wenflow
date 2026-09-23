@@ -535,31 +535,22 @@
         <header class="ld-card__head">
           <h3 class="ld-card__title">知识图谱</h3>
           <span v-if="graphMeta" class="ld-card__hint">
-            {{ graphMeta.nodeCount }} 个概念 · {{ graphMeta.edgeCount }} 条关系
-            <template v-if="graphMeta.truncated">（已截断，共 {{ graphMeta.totalConcepts }} 个）</template>
+            <template v-if="graphMeta.truncated">已截断，共 {{ graphMeta.totalConcepts }} 个概念 · </template>
+            默认展示全部路径的聚合图
           </span>
         </header>
-        <p v-if="graphError" class="ld-graph__err">{{ graphError }}</p>
-        <MkLoading v-else-if="graphLoading" inline min />
-        <p v-else-if="!graphNodes.length" class="ld-graph__empty">
-          这位学习者还没有概念图数据——路径生成后 kc-mapper 会产出前置依赖，随概念身份注册表物化进图。
-        </p>
-        <MkGraph
-          v-else
+        <MkGraphExplorer
           :nodes="graphNodes"
           :edges="graphEdges"
+          :paths="graphMeta?.paths ?? []"
+          :path-id="graphPathId"
           :theme="graphTheme"
-          height="520px"
-          @select="onGraphSelect"
+          :loading="graphLoading"
+          :error="graphError"
+          height="560px"
+          empty-hint="这位学习者还没有概念图数据——路径生成后 kc-mapper 会产出前置依赖，随概念身份注册表物化进图。"
+          @update:path-id="onGraphPathChange"
         />
-        <div v-if="graphSelected" class="ld-graph__detail">
-          <strong>{{ graphSelected.label }}</strong>
-          <span>{{ graphSelected.level === 'concept' ? '核心概念' : '知识组件' }}</span>
-          <span>掌握度 {{ graphSelected.masteryScore === null || graphSelected.masteryScore === undefined ? '未评估' : Math.round(graphSelected.masteryScore * 100) + '%' }}</span>
-          <span v-if="graphSelected.stability">稳定性 {{ graphSelected.stability }}</span>
-          <span>提取 {{ graphSelected.extractionCount ?? 0 }} 次</span>
-          <button type="button" class="mk-btn mk-btn--sm" @click="graphSelected = null">清除选中</button>
-        </div>
       </section>
     </div>
   </div>
@@ -578,7 +569,7 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import type { EChartsCoreOption } from 'echarts/core'
 import MkChart from '@/components/mk/MkChart.vue'
-import MkGraph from '@/components/mk/MkGraph.vue'
+import MkGraphExplorer from '@/components/mk/MkGraphExplorer.vue'
 import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -636,21 +627,21 @@ const tabs = [
 /* ── 知识图谱（概念图画布）：进入 tab 才加载，避免给总览页拖一个额外请求 ── */
 const graphNodes = ref<MkGraphNode[]>([])
 const graphEdges = ref<MkGraphEdge[]>([])
-const graphMeta = ref<{ nodeCount: number; edgeCount: number; totalConcepts: number; truncated: boolean } | null>(null)
+const graphMeta = ref<{ nodeCount: number; edgeCount: number; totalConcepts: number; truncated: boolean; paths: Array<{ id: string; title: string | null }> } | null>(null)
 const graphLoading = ref(false)
 const graphError = ref('')
-const graphSelected = ref<MkGraphNode | null>(null)
+/** 路径筛选：空 = 全部路径（用户级聚合图）。切换要重新请求——后端按 pathId 收敛节点与边 */
+const graphPathId = ref<string | null>(null)
 /** 跟随 admin 主题（暗色用同族配色，见 MkGraph 的 colorOf） */
 const graphTheme = computed<'light' | 'dark'>(() =>
   typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
 )
-function onGraphSelect(node: MkGraphNode | null) { graphSelected.value = node }
-async function loadConceptGraph(userId: string) {
+async function loadConceptGraph(userId: string, pathId: string | null = graphPathId.value) {
   if (!userId) return
   graphLoading.value = true
   graphError.value = ''
   try {
-    const res = await adminMemoryReviewApi.conceptGraph(userId)
+    const res = await adminMemoryReviewApi.conceptGraph(userId, pathId ? { pathId } : undefined)
     const data = res?.data?.data ?? res?.data ?? {}
     graphNodes.value = Array.isArray(data.nodes) ? data.nodes : []
     graphEdges.value = Array.isArray(data.edges) ? data.edges : []
@@ -664,8 +655,16 @@ async function loadConceptGraph(userId: string) {
     graphLoading.value = false
   }
 }
+/** 路径下拉：切路径即重新拉取（不清空旧图，避免闪白） */
+function onGraphPathChange(pathId: string | null) {
+  graphPathId.value = pathId
+  const id = subPage.value?.id
+  if (id) void loadConceptGraph(String(id), pathId)
+}
 // 进入图 tab 时按需加载（同一学习者只加载一次；切走不清空，回来即见）
-watch([tab, () => subPage.value?.id], ([t, id]) => {
+watch([tab, () => subPage.value?.id], ([t, id], [, prevId]) => {
+  // 换学习者：路径筛选与选中态都要复位，否则会带着上一个人的 pathId 去查
+  if (prevId && prevId !== id) graphPathId.value = null
   if (t === 'graph' && id && !graphNodes.value.length && !graphLoading.value) void loadConceptGraph(String(id))
 })
 

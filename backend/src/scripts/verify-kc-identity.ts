@@ -34,7 +34,18 @@ interface Report {
   a3: { subtaskRows: number; withCanonicalConceptId: number | null; withLocalRef: number; canonicalCoverage: number | null };
   a4: { subtaskConcepts: number | null; traceConcepts: number | null; shared: number | null; bridgeRate: number | null };
   a5: { misconceptionConcepts: number | null; shared: number | null; bridgeRate: number | null };
-  a9: { kcGraphEdgesTotal: number; conceptEdgesPrerequisitePath: number | null; consistent: boolean | null };
+  a9: {
+    kcGraphEdgesTotal: number;
+    conceptEdgesPrerequisitePath: number | null;
+    /** true = 没有一条路径"物化行数 < stored kcGraph.edges"（物化未漏） */
+    consistent: boolean | null;
+    /** 概念级前置投影边（kc-mapper 原始边的派生，单独统计） */
+    conceptPrerequisiteProjection: number | null;
+    /** 物化行数少于 stored 的路径数（应为 0） */
+    missingSides: number | null;
+    /** 多出的行数（来自被覆盖的 kc-mapper 版本，正常） */
+    surplusEdges: number | null;
+  };
   extra: { virtualLearners: number; memoryTracesVirtual: number; memoryTracesReal: number };
 }
 
@@ -141,20 +152,46 @@ async function main() {
         `select count(*) c from (select distinct conceptId from misconception_ledger where conceptId is not null${userFilter(scope)}
            intersect select distinct conceptId from memory_traces where conceptId is not null${userFilter(scope)})`)).c) : null;
 
-  // ── 断言 9：边物化一致 ───────────────────────────────────────────────
+  // ── 断言 9：边物化一致（逐路径） ─────────────────────────────────────
+  // 不变式：**每条路径的 kc-mapper 物化行数 ≥ 该路径 stored kcGraph.edges 数**（物化不能漏）。
+  // 不用等号：kc-mapper 重跑会把上一版输出的边留在表里（2026-09-23 实测 path1 stored=11 / 物化=22，
+  // 多出的 11 条端点不在 stored nodes 中 → 来自被覆盖的那一版），此时行数 > stored 是正常的。
   const paths = await prisma.learning_paths.findMany({
     where: scope === 'virtual' ? { users: { isVirtualLearner: true } } : {},
-    select: { aiPromptTemplate: true },
+    select: { id: true, aiPromptTemplate: true },
   });
   let kcGraphEdgesTotal = 0;
+  const storedByPath = new Map<string, number>();
   for (const p of paths) {
     const ann = parsePathPromptTemplate(p.aiPromptTemplate)?.kcAnnotation as
       { kcGraph?: { edges?: unknown[] } } | undefined;
-    kcGraphEdgesTotal += Array.isArray(ann?.kcGraph?.edges) ? ann!.kcGraph!.edges!.length : 0;
+    const n = Array.isArray(ann?.kcGraph?.edges) ? ann!.kcGraph!.edges!.length : 0;
+    kcGraphEdgesTotal += n;
+    if (n > 0) storedByPath.set(p.id, n);
+  }
+  let materializedByPath = new Map<string, number>();
+  if (edgesTable) {
+    const rows = await prisma.$queryRawUnsafe<Array<{ pathId: string; c: number | bigint }>>(
+      `select pathId, count(*) c from concept_edges
+        where relation='prerequisite' and scope='path' and source='kc-mapper' and pathId is not null${userFilter(scope)}
+        group by pathId`);
+    materializedByPath = new Map(rows.map((r) => [r.pathId, num(r.c)]));
+  }
+  // 只对"有 stored 前置边"的路径判漏；多出的行数与漏掉的路径分别报出
+  let missingSides = 0;
+  let surplusEdges = 0;
+  for (const [pathId, storedCount] of storedByPath) {
+    const got = materializedByPath.get(pathId) ?? 0;
+    if (got < storedCount) missingSides += 1;
+    else surplusEdges += got - storedCount;
   }
   const conceptEdges = edgesTable
     ? num((await one<{ c: number }>(
-        `select count(*) c from concept_edges where relation='prerequisite' and scope='path'${userFilter(scope)}`)).c)
+        `select count(*) c from concept_edges where relation='prerequisite' and scope='path' and source='kc-mapper'${userFilter(scope)}`)).c)
+    : null;
+  const conceptProjectionEdges = edgesTable
+    ? num((await one<{ c: number }>(
+        `select count(*) c from concept_edges where relation='prerequisite' and scope='path' and source='prerequisite-projection'${userFilter(scope)}`)).c)
     : null;
 
   // ── 附：规模 ─────────────────────────────────────────────────────────
@@ -191,7 +228,10 @@ async function main() {
     },
     a9: {
       kcGraphEdgesTotal, conceptEdgesPrerequisitePath: conceptEdges,
-      consistent: conceptEdges === null ? null : conceptEdges === kcGraphEdgesTotal,
+      consistent: edgesTable ? missingSides === 0 : null,
+      conceptPrerequisiteProjection: conceptProjectionEdges,
+      missingSides: edgesTable ? missingSides : null,
+      surplusEdges: edgesTable ? surplusEdges : null,
     },
     extra: { virtualLearners: vl, memoryTracesVirtual: mtVirtual, memoryTracesReal: mtReal },
   };
@@ -204,7 +244,9 @@ async function main() {
   console.log(`[A3 子任务可解析] 子任务=${num(st.total)} 有canonicalId=${stCanonical ?? 'n/a'} 有局部ref=${num(st.local)} 覆盖率=${report.a3.canonicalCoverage ?? 'n/a'}`);
   console.log(`[A4 计划↔痕迹贯通] subtask概念=${stConcepts ?? 'n/a'} trace概念=${trConcepts ?? 'n/a'} 共享=${stShared ?? 'n/a'} 贯通率=${report.a4.bridgeRate ?? 'n/a'}`);
   console.log(`[A5 误解↔痕迹贯通] 误解概念=${misIds ?? 'n/a'} 共享=${misShared ?? 'n/a'} 贯通率=${report.a5.bridgeRate ?? 'n/a'}`);
-  console.log(`[A9 边物化一致] kcGraph.edges=${kcGraphEdgesTotal} concept_edges=${conceptEdges ?? 'n/a'} 一致=${report.a9.consistent ?? 'n/a'}`);
+  console.log(`[A9 边物化一致] stored kcGraph.edges=${kcGraphEdgesTotal} 物化(kc-mapper)=${conceptEdges ?? 'n/a'}` +
+    ` 未漏=${report.a9.consistent ?? 'n/a'}（漏的路径=${report.a9.missingSides ?? 'n/a'} 多出=${report.a9.surplusEdges ?? 'n/a'}）` +
+    ` ｜概念级前置投影=${conceptProjectionEdges ?? 'n/a'}`);
   console.log(`[规模] 虚拟学习者=${vl} 痕迹(虚拟)=${mtVirtual} 痕迹(真实)=${mtReal}`);
 
   if (args.json) {

@@ -25,6 +25,15 @@ export const RELATION_PART_OF = 'part_of';
 export const SCOPE_PATH = 'path';
 export const SOURCE_KC_MAPPER = 'kc-mapper';
 export const SOURCE_DERIVED = 'path-planning-derived';
+/**
+ * 概念级前置投影边（KC 级 prerequisite → 其所属 coreConcept 之间的 prerequisite）。
+ *
+ * 为什么需要：`kcGraph.edges` 的两端是 **KC 级**节点，而任务当前概念经 `resolveTaskConcept`
+ * 解析出来是 **concept 级**节点——同一路径内两套粒度。结果概念级节点上没有 prerequisite 边，
+ * `upstreamClosure` 恒为空（2026-09-23 实测 25/25 任务命中 0）。本投影把 KC 级前置折叠到概念级，
+ * 让"要学 X 先掌握什么"在**概念级**也能走通。来源单列，便于与 kc-mapper 原始边区分统计。
+ */
+export const SOURCE_PREREQUISITE_PROJECTION = 'prerequisite-projection';
 
 export type ConceptLevel = 'concept' | 'kc';
 export type EdgeDirection = 'in' | 'out' | 'both';
@@ -48,6 +57,8 @@ export interface EdgeRow {
   fromConceptId: string;
   toConceptId: string;
   relation: string;
+  /** 该边所属路径（scope='path' 时有值）——图视图据此给出"按路径筛选"的候选 */
+  pathId?: string | null;
 }
 
 /** 可注入依赖（测试用；默认实现走 prisma + conceptRegistry） */
@@ -67,6 +78,8 @@ export interface ConceptGraphDeps {
   listTraceMastery(userId: string): Promise<Array<{
     conceptId: string; masteryScore: number; stability: string; extractionCount: number; lastSeenAt: string | null;
   }>>;
+  /** 图视图：路径标题（供"按路径筛选"下拉） */
+  listPathTitles(pathIds: string[]): Promise<Array<{ id: string; title: string | null }>>;
 }
 
 const defaultDeps: ConceptGraphDeps = {
@@ -95,7 +108,7 @@ const defaultDeps: ConceptGraphDeps = {
       ...(where.scope ? { scope: where.scope } : {}),
       ...(where.pathId !== undefined ? { pathId: where.pathId } : {}),
     },
-    select: { fromConceptId: true, toConceptId: true, relation: true },
+    select: { fromConceptId: true, toConceptId: true, relation: true, pathId: true },
   }),
   findConcepts: async (ids) => prisma.concepts.findMany({
     where: { id: { in: ids } },
@@ -128,6 +141,10 @@ const defaultDeps: ConceptGraphDeps = {
     }
     return [...byConcept.values()];
   },
+  listPathTitles: async (pathIds) => pathIds.length === 0 ? [] : prisma.learning_paths.findMany({
+    where: { id: { in: pathIds } },
+    select: { id: true, title: true },
+  }),
 };
 
 const newId = (): string => `ced_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -136,6 +153,8 @@ const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 export interface MaterializeResult {
   prerequisite: number;
   partOf: number;
+  /** 概念级前置投影边（KC 级 prerequisite 折叠到所属 coreConcept 后新增的边） */
+  prerequisiteConcept: number;
   /** 因两端无法解析出 canonical 身份而跳过的边数 */
   skipped: number;
 }
@@ -145,8 +164,10 @@ export class ConceptGraphService {
 
   /**
    * 把一条路径的 `kcAnnotation` 物化进 `concept_edges`（幂等，best-effort）。
-   * - `prerequisite`：来自 `kcGraph.edges`，两端经 kcId→name→canonical 解析
+   * - `prerequisite`：来自 `kcGraph.edges`，两端经 kcId→name→canonical 解析（**KC 级**）
    * - `part_of`：来自 `conceptKcs` 嵌套（父 = coreConcept，子 = 各 KC），代码推导
+   * - `prerequisite`（概念级投影）：把上一条的两端各自折叠到所属 coreConcept，跳过自环；
+   *   原因见 `SOURCE_PREREQUISITE_PROJECTION` 注释
    */
   async materializePathGraph(params: {
     userId: string;
@@ -155,8 +176,10 @@ export class ConceptGraphService {
     cognitiveCore?: CognitiveCoreLike | null;
   }): Promise<MaterializeResult> {
     const { userId, pathId, kcAnnotation, cognitiveCore } = params;
-    const result: MaterializeResult = { prerequisite: 0, partOf: 0, skipped: 0 };
+    const result: MaterializeResult = { prerequisite: 0, partOf: 0, prerequisiteConcept: 0, skipped: 0 };
     if (!userId || !pathId || !kcAnnotation) return result;
+
+    const conceptKcs = Array.isArray(kcAnnotation.conceptKcs) ? kcAnnotation.conceptKcs! : [];
 
     const nodes = Array.isArray(kcAnnotation.kcGraph?.nodes) ? kcAnnotation.kcGraph!.nodes! : [];
     const nameByKcId = new Map<string, string>();
@@ -166,7 +189,7 @@ export class ConceptGraphService {
       if (kcId && name) nameByKcId.set(kcId, name);
     }
     // 兜底：nodes 缺失时从 conceptKcs 的 KC 明细建同样的映射
-    for (const item of Array.isArray(kcAnnotation.conceptKcs) ? kcAnnotation.conceptKcs! : []) {
+    for (const item of conceptKcs) {
       for (const kc of Array.isArray(item?.kcs) ? item.kcs! : []) {
         const kcId = str(kc?.kcId);
         const name = str(kc?.name);
@@ -174,26 +197,7 @@ export class ConceptGraphService {
       }
     }
 
-    // ── prerequisite 边（from = 前置，to = 后继）──
-    const edges = Array.isArray(kcAnnotation.kcGraph?.edges) ? kcAnnotation.kcGraph!.edges! : [];
-    for (const edge of edges) {
-      const fromName = nameByKcId.get(str(edge?.from));
-      const toName = nameByKcId.get(str(edge?.to));
-      if (!fromName || !toName || fromName === toName) { result.skipped += 1; continue; }
-      const [from, to] = await Promise.all([
-        this.deps.resolveConcept(userId, fromName, { level: 'kc', originPathId: pathId }),
-        this.deps.resolveConcept(userId, toName, { level: 'kc', originPathId: pathId }),
-      ]);
-      if (!from || !to) { result.skipped += 1; continue; }
-      await this.deps.upsertEdge({
-        id: newId(), userId,
-        fromConceptId: from.conceptId, toConceptId: to.conceptId,
-        relation: RELATION_PREREQUISITE, scope: SCOPE_PATH, pathId, source: SOURCE_KC_MAPPER,
-      });
-      result.prerequisite += 1;
-    }
-
-    // ── part_of 边（KC → 其所属 coreConcept），由嵌套结构代码推导 ──
+    // ── coreConcept：id → 名称，以及 kcId → 所属 coreConcept 名（供概念级投影）──
     const coreConcepts = Array.isArray(cognitiveCore?.coreConcepts) ? cognitiveCore!.coreConcepts! : [];
     const coreNameById = new Map<string, string>();
     for (const concept of coreConcepts) {
@@ -201,19 +205,91 @@ export class ConceptGraphService {
       const name = str(concept?.name);
       if (id && name) coreNameById.set(id, name);
     }
-    for (const item of Array.isArray(kcAnnotation.conceptKcs) ? kcAnnotation.conceptKcs! : []) {
+    const parentNameByKcId = new Map<string, string>();
+    for (const item of conceptKcs) {
       const parentName = coreNameById.get(str(item?.conceptId));
       if (!parentName) continue;
-      const parent = await this.deps.resolveConcept(userId, parentName, { level: 'concept', originPathId: pathId });
+      for (const kc of Array.isArray(item?.kcs) ? item.kcs! : []) {
+        const kcId = str(kc?.kcId);
+        if (kcId && !parentNameByKcId.has(kcId)) parentNameByKcId.set(kcId, parentName);
+      }
+    }
+
+    /** 同名同 level 只解析一次（兜底映射会让多个 kcId 指向同一 name） */
+    const idCache = new Map<string, string | null>();
+    const resolveCached = async (name: string, level: ConceptLevel): Promise<string | null> => {
+      const key = `${level}:${name}`;
+      if (!idCache.has(key)) {
+        const resolved = await this.deps.resolveConcept(userId, name, { level, originPathId: pathId });
+        idCache.set(key, resolved?.conceptId ?? null);
+      }
+      return idCache.get(key) ?? null;
+    };
+
+    // ── prerequisite 边（KC 级；from = 前置，to = 后继）+ 收集概念级投影对 ──
+    const edges = Array.isArray(kcAnnotation.kcGraph?.edges) ? kcAnnotation.kcGraph!.edges! : [];
+    const projectionPairs: Array<[string, string]> = [];
+    for (const edge of edges) {
+      const fromKcId = str(edge?.from);
+      const toKcId = str(edge?.to);
+      const fromName = nameByKcId.get(fromKcId);
+      const toName = nameByKcId.get(toKcId);
+      if (!fromName || !toName || fromName === toName) { result.skipped += 1; continue; }
+      const [from, to] = await Promise.all([
+        resolveCached(fromName, 'kc'),
+        resolveCached(toName, 'kc'),
+      ]);
+      if (!from || !to) { result.skipped += 1; continue; }
+      await this.deps.upsertEdge({
+        id: newId(), userId,
+        fromConceptId: from, toConceptId: to,
+        relation: RELATION_PREREQUISITE, scope: SCOPE_PATH, pathId, source: SOURCE_KC_MAPPER,
+      });
+      result.prerequisite += 1;
+
+      // 折叠到概念级：KC 级前置 → 其所属 coreConcept 之间的前置
+      const parentFromName = parentNameByKcId.get(fromKcId);
+      const parentToName = parentNameByKcId.get(toKcId);
+      if (!parentFromName || !parentToName || parentFromName === parentToName) continue;
+      const [parentFrom, parentTo] = await Promise.all([
+        resolveCached(parentFromName, 'concept'),
+        resolveCached(parentToName, 'concept'),
+      ]);
+      if (parentFrom && parentTo && parentFrom !== parentTo) projectionPairs.push([parentFrom, parentTo]);
+    }
+
+    // ── 概念级 prerequisite 投影边 ──
+    // 互为反向的一对只保留字典序较小的一条：概念级若同时出现 A→B 与 B→A，
+    // 上游闭包会把 A 既算成 B 的前置、又算成 B 的后继，是无意义的结构。
+    const pairSet = new Set(projectionPairs.map(([a, b]) => `${a}|${b}`));
+    const writtenPairs = new Set<string>();
+    for (const [a, b] of projectionPairs) {
+      const key = `${a}|${b}`;
+      if (writtenPairs.has(key)) continue;
+      if (pairSet.has(`${b}|${a}`) && key > `${b}|${a}`) continue;
+      writtenPairs.add(key);
+      await this.deps.upsertEdge({
+        id: newId(), userId,
+        fromConceptId: a, toConceptId: b,
+        relation: RELATION_PREREQUISITE, scope: SCOPE_PATH, pathId, source: SOURCE_PREREQUISITE_PROJECTION,
+      });
+      result.prerequisiteConcept += 1;
+    }
+
+    // ── part_of 边（KC → 其所属 coreConcept），由嵌套结构代码推导 ──
+    for (const item of conceptKcs) {
+      const parentName = coreNameById.get(str(item?.conceptId));
+      if (!parentName) continue;
+      const parent = await resolveCached(parentName, 'concept');
       if (!parent) { result.skipped += 1; continue; }
       for (const kc of Array.isArray(item?.kcs) ? item.kcs! : []) {
         const childName = str(kc?.name);
         if (!childName) continue;
-        const child = await this.deps.resolveConcept(userId, childName, { level: 'kc', originPathId: pathId });
+        const child = await resolveCached(childName, 'kc');
         if (!child) { result.skipped += 1; continue; }
         await this.deps.upsertEdge({
           id: newId(), userId,
-          fromConceptId: child.conceptId, toConceptId: parent.conceptId,
+          fromConceptId: child, toConceptId: parent,
           relation: RELATION_PART_OF, scope: SCOPE_PATH, pathId, source: SOURCE_DERIVED,
         });
         result.partOf += 1;
@@ -249,6 +325,10 @@ export class ConceptGraphService {
       seen.add(item.conceptId);
       return true;
     });
+    // 前置优先：`limit` 截断必须落在**确定**的顺序上，否则同样的图会因 DB 行序不同
+    // 返回不同邻居（改造前就是这个问题——返回的其实全是 part_of 子节点）。
+    const relationPriority: Record<string, number> = { [RELATION_PREREQUISITE]: 0, [RELATION_PART_OF]: 1 };
+    unique.sort((a, b) => (relationPriority[a.relation] ?? 9) - (relationPriority[b.relation] ?? 9));
     const limited = options.limit && options.limit > 0 ? unique.slice(0, options.limit) : unique;
     const concepts = await this.deps.findConcepts(limited.map((item) => item.conceptId));
     const labelById = new Map(concepts.map((c) => [c.id, c.canonicalLabel]));
@@ -312,15 +392,14 @@ export class ConceptGraphService {
     options: { pathId?: string | null; maxNodes?: number } = {},
   ): Promise<ConceptGraphView> {
     const maxNodes = options.maxNodes ?? 200;
-    const [allConcepts, edges, masteryRows] = await Promise.all([
+    // 边一次性取**全量**（不带 pathId）：既用于路径筛选（在代码里过滤，语义等价），
+    // 也用于给出"按路径筛选"的完整候选——若按 pathId 过滤再取候选，下拉会只剩当前那一条。
+    const [allConcepts, allEdges, masteryRows] = await Promise.all([
       this.deps.listConcepts(userId),
-      this.deps.listEdges({
-        userId,
-        relations: [RELATION_PREREQUISITE, RELATION_PART_OF],
-        ...(options.pathId ? { pathId: options.pathId } : {}),
-      }),
+      this.deps.listEdges({ userId, relations: [RELATION_PREREQUISITE, RELATION_PART_OF] }),
       this.deps.listTraceMastery(userId),
     ]);
+    const edges = options.pathId ? allEdges.filter((edge) => edge.pathId === options.pathId) : allEdges;
 
     // 路径收敛：有 pathId 时只保留"这条路径的概念"（边两端 + 首次出现于该路径）
     let concepts = allConcepts;
@@ -354,6 +433,16 @@ export class ConceptGraphService {
     const nodeIds = new Set(ranked.map((c) => c.id));
     const keptEdges = edges.filter((edge) => nodeIds.has(edge.fromConceptId) && nodeIds.has(edge.toConceptId));
 
+    // 路径候选：边归属 ∪ 概念首次出现路径（用**全量**边，不受 pathId 筛选影响）
+    const pathIds = new Set<string>();
+    for (const edge of allEdges) if (edge.pathId) pathIds.add(edge.pathId);
+    for (const concept of allConcepts) if (concept.originPathId) pathIds.add(concept.originPathId);
+    const pathTitles = await this.deps.listPathTitles([...pathIds]);
+    const titleById = new Map(pathTitles.map((item) => [item.id, item.title]));
+    const paths = [...pathIds]
+      .map((id) => ({ id, title: titleById.get(id) ?? null }))
+      .sort((a, b) => String(a.title ?? a.id).localeCompare(String(b.title ?? b.id)));
+
     return {
       nodes: ranked.map((concept) => {
         const mastery = masteryByConcept.get(concept.id);
@@ -376,6 +465,7 @@ export class ConceptGraphService {
         totalConcepts: concepts.length,
         totalEdges: edges.length,
         truncated: concepts.length > ranked.length,
+        paths,
       },
     };
   }
@@ -399,6 +489,8 @@ export interface ConceptGraphView {
     totalConcepts: number;
     totalEdges: number;
     truncated: boolean;
+    /** 该学习者图里涉及到的路径（供前端"按路径筛选"下拉） */
+    paths: Array<{ id: string; title: string | null }>;
   };
 }
 

@@ -483,5 +483,19 @@ subtasks / milestones ─resolve───► conceptId ───┤
    机械归一化桥不过去；**S3 的 alias 升格（LLM 建议）才是收敛杠杆**，需实际跑一轮归并才会见效。
 4. 物化钩子**需要一次干净的后端重启**才在服务进程内生效：实测 ts-node-dev `--respawn`
    偶发漏重载深层模块，导致 2 条新路径未物化（重启后实测触发：`prerequisite:16, partOf:15`）。
-5. S4b/S4c 是**用户可见**改动（`hasPrerequisiteGaps` / 重规划触发率），按计划需跨日对照卡住——
-   因并行会话持续改动 day-boundary 相关文件，跨日对照待仓库安静后补。
+5. S4b/S4c 是**用户可见**改动（`hasPrerequisiteGaps` / 重规划触发率）。**2026-09-23 已跑跨日对照**
+   （单用户 3 路径 × 2 模拟日，见 `doc/KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md`），结论修正如下：
+6. **S4b 曾因层级错配而实际未生效（2026-09-23 已修）**：任务概念是 `concept` 级（当时实测 25/25），
+   而 `prerequisite` 边是 `kc→kc`（22/22），故 `upstreamClosure` 在所有任务上返回 0，
+   `prerequisiteGaps` 静默回落旧算法。修法 = 物化时增加**概念级前置投影**
+   （`source='prerequisite-projection'`，自环与反向对跳过），修后上游闭包命中 6/9、5/8、1/8。
+7. **S4a 曾返回 `part_of` 子节点而非前置（2026-09-23 已修）**：`neighbors` 的 `limit` 截断原本依 DB 行序
+   `slice`，顺序不确定；已改为前置优先的确定排序。
+8. **kc-mapper 重跑会累积被覆盖版本的边**：实测某路径 stored `kcGraph.edges`=11 而物化行=22，
+   多出的 11 条端点不在 stored `kcGraph.nodes` 中。故断言 9 已从"等号"改为逐路径**超集不变式**
+   （"物化行数 ≥ stored 数"，即未漏），并把多出行数单独报出。是否清理作废边属产品裁决。
+9. **教学上下文的"本课知识范围"曾恒空（2026-09-23 已修）**：`buildTaskKnowledgeSeeds` 是空桩，
+   `subtasks.learningObjectives` 全库为空（2037/2037）⇒ `primaryConcepts` 恒空 ⇒ 按它过滤的
+   `prerequisiteConcepts` **结构性永远为空**（上游闭包修好了却在此被丢掉）。
+   修后 `primary` 16/16、`prereq` 有真缺口时非空；`LearnerPrerequisiteGap` 增 `source` 字段区分
+   真上游与回落口径。详见 `doc/KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md` §1.2d。

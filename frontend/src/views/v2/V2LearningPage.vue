@@ -103,6 +103,7 @@
             />
             <p v-if="graphMeta" class="kp__hint">
               {{ graphMeta.nodeCount }} 个概念 · {{ graphMeta.edgeCount }} 条关系
+              <router-link to="/knowledge-map" class="kp__more">全部路径 →</router-link>
             </p>
             <p v-if="kpSelected" class="kp__hint">
               选中：{{ kpSelected.label }} ·
@@ -1476,6 +1477,9 @@ onBeforeUnmount(() => {
 .kp__view--on { background: var(--surface-2, #fff); color: var(--blue-deep); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08); }
 .kp__hint { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--faint); }
 .kp__hint--err { color: var(--danger, #c0392b); }
+/* 通向「知识图谱」聚合页的桥：学习页这里只画当前路径，想看全部路径要去聚合页 */
+.kp__more { margin-left: 6px; color: var(--mk-blue); text-decoration: none; white-space: nowrap; }
+.kp__more:hover { text-decoration: underline; }
 .kp__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .kp__item {
   display: grid; grid-template-columns: 20px 1fr; gap: 9px;
