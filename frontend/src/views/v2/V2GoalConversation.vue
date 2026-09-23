@@ -164,7 +164,7 @@
           连接失败，没能开始对话。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
         </div>
 
-        <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal }" aria-live="polite">
+        <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal }" aria-live="polite" @scroll.passive="onScrollPin">
           <template v-for="km in keyedMessages" :key="km.key">
             <div v-if="km.msg.role === 'user'" class="msg msg--user" :class="{ 'msg--editing': editingMsgId === km.key }">
               <!-- 编辑态：textarea 替换气泡 -->
@@ -510,6 +510,10 @@ const lastAiKey = computed(() => {
 onMounted(() => {
   window.addEventListener('v2:new-goal', onNewGoalEvent);
   window.addEventListener('keydown', onProposalKey);
+  window.addEventListener('resize', onViewportResize);
+  // iOS 键盘不改布局视口高度、只改 visualViewport，需单独监听（Android 的
+  // viewport meta 带 interactive-widget=resizes-content，走上面的 resize）
+  window.visualViewport?.addEventListener('resize', onViewportResize);
   narrowMq?.addEventListener('change', onNarrowChange);
   // 每次进入页面随机展示一批场景
   shuffleScenes();
@@ -535,6 +539,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('v2:new-goal', onNewGoalEvent);
   window.removeEventListener('keydown', onProposalKey);
+  window.removeEventListener('resize', onViewportResize);
+  window.visualViewport?.removeEventListener('resize', onViewportResize);
   narrowMq?.removeEventListener('change', onNarrowChange);
 });
 
@@ -764,6 +770,21 @@ async function scrollToBottom() {
 
 watch(() => live.messages.length, scrollToBottom);
 watch(() => live.sending, scrollToBottom);
+// 是否跟随贴底：由滚动位置持续记账。手机键盘弹起时视口瞬间收缩，收缩后再量「离底多远」
+// 永远为真（键盘高度本身就超过阈值），所以必须用收缩前的状态判断，否则上翻阅读会被强行拽到底。
+let pinToBottom = true;
+function onScrollPin() {
+  const el = scrollEl.value;
+  if (!el) return;
+  pinToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+}
+/** 视口尺寸变化（键盘弹起/收起、横竖屏切换）后重新贴底，避免最新消息被挤到可视区外 */
+function onViewportResize() {
+  if (!pinToBottom) return;
+  // resize 到达时新尺寸可能尚未重排，补一次延时兜底（重复设 scrollTop 无副作用）
+  requestAnimationFrame(() => { void scrollToBottom(); });
+  window.setTimeout(() => { void scrollToBottom(); }, 150);
+}
 // 流式渐进渲染：delta 累积时持续贴底（仅近底时跟随，避免打断上翻阅读）
 watch(() => live.streamingText, () => {
   if (!live.sending || !scrollEl.value) return;
@@ -1825,7 +1846,7 @@ function shuffleScenes() {
     pointer-events: auto;
     display: inline-flex; align-items: center; gap: 5px;
     margin-right: 16px;
-    padding: 5px 8px;
+    padding: 7px 8px;
     border: 1px solid var(--line);
     border-radius: var(--mk-radius-pill);
     background: var(--surface);
@@ -1886,8 +1907,21 @@ function shuffleScenes() {
   /* overscroll-behavior:contain 隔断滚动链——列表滚到边缘时不再触发整页橡皮筋
      （本页 height:100dvh 不随文档滚动，iOS 上链式滚动会把底部导航一起拽动） */
   .chat__scroll { min-height: 0; overscroll-behavior: contain; }
+  /* 消息少时贴底：首个子项吃满剩余空间（等价 justify-content:flex-end，但溢出时不会把顶部
+     推出可达范围——auto 外边距在无剩余空间时按 0 处理）。短会话下最新一条与快捷补充紧贴输入框，
+     视线与拇指都不用上下跑。 */
+  .chat__scroll > :first-child { margin-top: auto; }
   .msg { max-width: 96%; }
   .replies { margin-left: 0; }
+  /* 快捷补充面板占满整宽：基础样式的 margin-left 40（对齐气泡正文）在手机上白丢 40px 宽度，
+     而这是整屏最常点的区域 */
+  .replies-panel { margin-left: 0; }
+  /* 编辑按钮视觉仍 24px，但热区扩到 36px（触屏常显，24 对拇指太小） */
+  .msg--user .msg__edit-btn::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+  }
   /* 移动端 hint 行整体脱离文档流（0 高，原占 17px + gap 7px），内容挂到输入框与底部导航
      之间那道缝里：左边「0 / 1000」计数、右边 AI 生成声明。触屏没有键盘快捷键提示，隐藏之。 */
   .composer { position: relative; }
