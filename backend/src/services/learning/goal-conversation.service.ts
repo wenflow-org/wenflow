@@ -198,25 +198,6 @@ class GoalConversationService {
     }
   }
 
-  /**
-   * advisory 负向出口：当本轮已产出提议且分诊 mode !== learning_path 时，
-   * 在面向用户/模拟者的提议文本末尾追加一行可读结论。
-   * 直接原地修改 `aiResponse.userVisible`，使落库消息与返回值一致；默认无命中时零改动。
-   */
-  private applyResponseTriageAdvisoryLine(
-    aiResponse: any,
-    mode: ResponseTriageEnforcementMode
-  ): ResponseTriage {
-    const triage = triageGoalResponse(this.getGoalExt(aiResponse?.internal).understanding);
-    if (mode === 'advisory'
-      && this.getGoalExt(aiResponse?.internal).confirmedProposal
-      && typeof aiResponse?.userVisible === 'string') {
-      const line = buildTriageAdvisoryLine(triage);
-      if (line) aiResponse.userVisible = `${aiResponse.userVisible}${line}`;
-    }
-    return triage;
-  }
-
   private hasContinueDiscussIntent(text: string) {
     return /(不过|但是|但我|但还是|我担心|还是担心|还有个问题|还有一个问题|我还想问|我还想补充|能先说一下|能不能先说一下|具体怎么|要是|如果到时候|万一)/.test(text || '');
   }
@@ -527,8 +508,6 @@ class GoalConversationService {
 
       // 让AI生成第一个回复
       const aiResponse = await this.callAI(conversation.id, initialGoal, true, userId, options);
-      // 分诊负向出口（advisory）：在 withConversationId 快照前原地追加提议结论
-      this.applyResponseTriageAdvisoryLine(aiResponse, await this.resolveResponseTriageEnforcementMode());
       const responseWithConversationId = this.withConversationId(aiResponse, conversation.id);
 
       if (!this.getStructuredOutputValid(aiResponse)) {
@@ -773,8 +752,6 @@ async continueConversation(
 
       // 调用AI生成回复。先不写当前用户消息，避免本轮输入重复进入上下文。
       const aiResponse = await this.callAI(conversation.id, userReply, false, userId, options);
-      // 分诊负向出口（advisory）：在 withConversationId 快照前原地追加提议结论
-      this.applyResponseTriageAdvisoryLine(aiResponse, await this.resolveResponseTriageEnforcementMode());
       const responseWithConversationId = this.withConversationId(aiResponse, conversationId);
 
       if (!this.getStructuredOutputValid(aiResponse)) {
@@ -1042,6 +1019,9 @@ async continueConversation(
 
     // 响应分诊（纯函数，advisory 默认）：整包读改写只新增顶层键，不破坏既有键。
     // 落 collectedData.responseTriage 供后续确认提议读取/遥测统计「分诊命中率」。
+    // 注意：分诊结论**只落库/遥测**，不写进面向用户的 reply——提示词明令 hidden 信号不得向用户
+    // 宣布（primary_block_type / support_need 等），平台侧替它宣布会与之反向冲突。
+    // 需要用户显式知情时走 gated 模式（那是产品化的确认闸门，不是静默附加）。
     const responseTriage = triageGoalResponse(data.understanding);
     data[RESPONSE_TRIAGE_KEY] = responseTriage;
 

@@ -1,7 +1,7 @@
 /**
  * goal→path 链路上的响应分诊接线（增量、默认不改行为）：
  *  - collectedData.responseTriage 落库 + 透传进 GoalPathRequest；
- *  - advisory 默认：mode !== learning_path 时提议文本追加负向出口一行；
+ *  - advisory 默认：分诊结论**只落库/遥测**，不写进面向用户的 reply（提示词明令 hidden 信号不宣布）；
  *  - advisory 默认：仍照常推进路径生成（零行为变化）；
  *  - gated：非学习路径结论作为待确认项，不自动推进。
  */
@@ -162,7 +162,7 @@ beforeEach(() => {
 });
 
 describe('responseTriage 落库与透传', () => {
-  it('advisory 默认：非学习路径时提议文本含负向出口一行，并把 responseTriage 落库', async () => {
+  it('advisory 默认：非学习路径结论只落库/遥测，不写进用户可见文本', async () => {
     mockExecuteSkill.mockResolvedValue(buildAiResponse({
       userVisible: '这一版方向先聚焦复盘结论提炼。',
       understanding: {
@@ -179,11 +179,11 @@ describe('responseTriage 落库与透传', () => {
       'user-1'
     );
 
-    // 负向出口可被断言
-    expect(result.userVisible).toContain('系统判断');
-    expect(result.userVisible).toContain('情绪');
+    // hidden 信号不向用户宣布：reply 原样返回，平台不再替它附加「系统判断」行
+    expect(result.userVisible).not.toContain('系统判断');
+    expect(result.userVisible).toBe('这一版方向先聚焦复盘结论提炼。');
 
-    // collectedData.responseTriage 落库
+    // 但分诊结论照常落库（遥测/后续确认提议读取）
     const persisted = JSON.parse(conversationRecord.collectedData);
     expect(persisted.responseTriage).toEqual(expect.objectContaining({ mode: 'emotional_support' }));
     // 不破坏既有键
@@ -224,7 +224,7 @@ describe('responseTriage 落库与透传', () => {
 
     const result = await goalConversationService.continueConversation('conv-1', '我试试', 'user-1');
 
-    expect(result.userVisible).toContain('系统判断');
+    expect(result.userVisible).not.toContain('系统判断');
     const persisted = JSON.parse(conversationRecord.collectedData);
     expect(persisted.responseTriage).toEqual(expect.objectContaining({ mode: 'emotional_support' }));
     expect(persisted.understanding.primary_block_type).toBe('emotion_relationship');
@@ -245,7 +245,7 @@ describe('responseTriage 落库与透传', () => {
 
     const result = await goalConversationService.continueConversation('conv-1', '我试试', 'user-1');
 
-    expect(result.userVisible).toContain('系统判断');
+    expect(result.userVisible).not.toContain('系统判断');
     const persisted = JSON.parse(conversationRecord.collectedData);
     expect(persisted.responseTriage).toEqual(expect.objectContaining({ mode: 'combination' }));
     // 真实可学缺口不被丢弃：仍照常推进路径生成
