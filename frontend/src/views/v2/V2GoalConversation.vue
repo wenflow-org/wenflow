@@ -1950,6 +1950,20 @@ function shuffleScenes() {
   .composer__send { width: 36px; height: 36px; }
   .composer__send:not(.composer__send--stop) svg { width: 15px; height: 15px; }
   .proposal__stages ol { grid-template-columns: repeat(2, 1fr); }
+  /* 方案确认卡：窄屏收掉浮层/卡片的大内边距（24/28 在 320 下只剩 250px 内容宽），
+     并把主操作行钉在卡片底部——长方案在卡片内部滚动时，「确认，生成我的路径」不会沉到
+     看不见的地方（320 下原本在可视区下方 865px，多数人不会发现卡片内还能滚）。 */
+  .overlay { padding: 12px; }
+  .proposal { padding: 18px 16px 0; }
+  .proposal .proposal__actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    padding: 10px 0 14px;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+  }
+  .proposal__note { padding-bottom: 14px; }
   .entry__hero { align-items: stretch; flex-direction: column; }
   .entry__hero h1 { font-size: 22px; }
   .resume { width: 100%; justify-content: flex-start; }
