@@ -409,7 +409,46 @@ function tierFontMap(text, px) {
   return map
 }
 
+/* 角色 token：文本只有三级（SPEC §1）。档位块只覆写这三个 token，页面引用它们，
+   于是"每档位几个字号档"这件事收敛成一个数得出来的量。 */
+const ROLE_TOKENS = ['--mk-fs-micro', '--mk-fs-body', '--mk-fs-emphasis']
+const BASE_ROLE_SCALE = { '--mk-fs-micro': 12, '--mk-fs-body': 14, '--mk-fs-emphasis': 15 }
+
+/** 取某个档位块里声明的角色 token 值 */
+function tierRoleTokens(text, px) {
+  const out = {}
+  const re = new RegExp(`@media\\s*\\(min-width:\\s*${px}px\\)\\s*\\{`, 'g')
+  while (re.exec(text) !== null) {
+    let depth = 1
+    let k = re.lastIndex
+    while (k < text.length && depth > 0) {
+      if (text[k] === '{') depth += 1
+      else if (text[k] === '}') depth -= 1
+      k += 1
+    }
+    const block = text.slice(re.lastIndex, k - 1)
+    for (const tok of ROLE_TOKENS) {
+      const m = block.match(new RegExp(`${tok}\\s*:\\s*([\\d.]+)px`))
+      if (m) out[tok] = parseFloat(m[1])
+    }
+  }
+  return out
+}
+
+/** 每个文件的每档位角色尺度（未声明的档位继承更低档位；最低回落到基线） */
+function roleScaleByTier(text) {
+  const declared = TIER_PX.map((px) => tierRoleTokens(text, px))
+  const out = {}
+  let carry = { ...BASE_ROLE_SCALE }
+  for (let i = 0; i < TIER_PX.length; i++) {
+    carry = { ...carry, ...declared[i] }
+    out[TIER_PX[i]] = { ...carry }
+  }
+  return out
+}
+
 const tierRegressions = []
+const offScaleTierFonts = []
 for (const abs of [...vueFiles.filter((p) => isGoverned(rel(p))), ...HEX_CSS_TARGETS.map((r) => join(ROOT, r))]) {
   if (!existsSync(abs)) continue
   const text = readFileSync(abs, 'utf8')
@@ -431,6 +470,51 @@ for (const abs of [...vueFiles.filter((p) => isGoverned(rel(p))), ...HEX_CSS_TAR
         })
       }
     }
+  }
+
+  /* 规则 11（续）：角色 token 的档位单调性——文本档现在由三个 token 承载，
+     逐个选择器的扫描已覆盖不到它们，所以 token 本身也要比：有效字号（值 × zoom）非递减。 */
+  {
+    const scaleByTier11 = roleScaleByTier(text)
+    for (const tok of ROLE_TOKENS) {
+      let prev = null
+      let prevTier = null
+      for (const px of TIER_PX) {
+        const v = scaleByTier11[px][tok]
+        if (prev !== null) {
+          const effPrev = prev * TIER_ZOOM[prevTier]
+          const effNow = v * TIER_ZOOM[px]
+          if (effNow < effPrev * TIER_TOLERANCE) {
+            tierRegressions.push({
+              file: rel(abs), sel: tok, prevTier, prev, tier: px, now: v,
+              effPrev: Math.round(effPrev * 10) / 10, effNow: Math.round(effNow * 10) / 10,
+            })
+          }
+        }
+        prev = v
+        prevTier = px
+      }
+    }
+  }
+
+  /* ---------- 规则 13：档位内不得再写「文本带内」的字号字面量 ----------
+     SPEC §5 要求视觉层改动只发生在 token/原语层。档位块里逐个选择器写 13.5/15.5/17.5 这类
+     半像素值，正是"同一页在 1440 有 6 档、3840 变 16 档"的来源（2026-09-24 收敛前实测
+     588 条档位内字号声明）。现在文本只有三个角色 token，档位块只覆写 token；
+     字面量只允许**展示型**（> emphasis × 1.15：KPI 数字、实体名、大标题）。 */
+  const scaleByTier = roleScaleByTier(text)
+  for (const px of TIER_PX) {
+    const scale = scaleByTier[px]
+    const emphasis = scale['--mk-fs-emphasis']
+    const textBandMax = emphasis * 1.15
+    const roleValues = ROLE_TOKENS.map((t) => scale[t])
+    const bad = []
+    for (const [sel, v] of maps[TIER_PX.indexOf(px)]) {
+      if (v > textBandMax) continue // 展示型，合法
+      if (roleValues.some((rv) => Math.abs(rv - v) < 0.01)) continue // 与某角色值等值，等价写法
+      bad.push({ sel, v })
+    }
+    if (bad.length) offScaleTierFonts.push({ file: rel(abs), tier: px, emphasis, bad })
   }
 }
 
@@ -537,6 +621,19 @@ if (tierRegressions.length) {
       console.log(`        ${v.sel}  ${v.prevTier}→${v.prev}px(有效 ${v.effPrev}) 但 ${v.tier}→${v.now}px(有效 ${v.effNow})`)
     }
     if (vs.length > 6) console.log(`        … 另 ${vs.length - 6} 处`)
+  }
+}
+
+if (offScaleTierFonts.length) {
+  failed = true
+  console.log(`
+✖ 规则 13：档位内出现文本带内的字号字面量（${offScaleTierFonts.length} 个文件×档位）`)
+  console.log('  文本只有三个角色 token（micro/body/emphasis，SPEC §1）；档位块只覆写 token，')
+  console.log('  字面量只允许展示型（> emphasis × 1.15，如 KPI 数字/实体名）。')
+  for (const v of offScaleTierFonts) {
+    console.log(`    ${v.file} @${v.tier}（emphasis ${v.emphasis}）`)
+    for (const b of v.bad.slice(0, 5)) console.log(`        ${b.sel}  ${b.v}px`)
+    if (v.bad.length > 5) console.log(`        … 另 ${v.bad.length - 5} 处`)
   }
 }
 
