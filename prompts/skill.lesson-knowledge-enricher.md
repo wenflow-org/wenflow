@@ -1,6 +1,6 @@
 ---
 agentId: skill:lesson-knowledge-enricher
-coreHash: ea5038fa3eaa265ddd287c5182b86f6af813e55407d052c0100e7863a8581052
+coreHash: 6c62d24ca740c587754bafaf58e29657dd14aeba476f4db9de210e7ea2d02fcd
 coreVersion: 1
 temperature: 0.4
 maxTokens: 4000
@@ -21,6 +21,9 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
 - task：当前任务 / 场景 / 控制指令
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「transferGoal（string?）」`user:lessonCompleted.transferGoal`（用户/平台） — 本任务的可迁移目标（task.transferable 派生，由 lesson:completed 事件携带）；缺失时不做迁移意图锚定
 
 ## 执行规则
 

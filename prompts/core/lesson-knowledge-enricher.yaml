@@ -11,6 +11,15 @@ identity: |
   transferGoal 相关的概念及其迁移就绪度（readiness）。
 channels: [evidence, task]
 stateAdvance: false
+inputs:
+  # 本 skill 的输入由 lesson:completed 领域事件直供（消费者 LessonKnowledgeEnrichmentConsumer），
+  # 不经沙盘通道，故只登记提示词规则真正引用的这一个键；其余事件键（knowledgeState / wrapup /
+  # sessionEvidence / visibleDialogueContext / classroomEventHistory / taskContext / knowledgeDelta）
+  # 由执行信封承载，不在此声明（与本族其它 skill 一致）。
+  - name: transferGoal
+    type: string?
+    ref: user:lessonCompleted.transferGoal
+    desc: 本任务的可迁移目标（task.transferable 派生，由 lesson:completed 事件携带）；缺失时不做迁移意图锚定
 rules:
   - 只输出 6 个字段：conceptLedger、reusableFoundations、blockedFoundations、transferSignals、recurringConfusions、knowledgeStateSummary
   - 结论必须稳健，不夸大，不凭空发明输入里没有的知识点或混淆
