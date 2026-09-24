@@ -230,6 +230,35 @@ const MEASURE = `(() => {
   });
   out.narrowCols = narrow;
 
+  // 9) 文本档合规（SPEC §1「同一视口内 ≤3 个字号档」）：角色 token 在运行时就是当前档位的值，
+  //    直接读 --mk-fs-micro/body/emphasis。落在 (0, emphasis] 内、又不是三个角色值的字号 = 档外文本字号；
+  //    大于 emphasis 的是展示型（KPI 数字、实体名、大标题），按设计不占文本档位，单独计数。
+  const rootCs = getComputedStyle(document.documentElement);
+  const num = (v) => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const rolePx = {
+    micro: num(rootCs.getPropertyValue('--mk-fs-micro')),
+    body: num(rootCs.getPropertyValue('--mk-fs-body')),
+    emphasis: num(rootCs.getPropertyValue('--mk-fs-emphasis')),
+  };
+  const roleVals = Object.values(rolePx).filter((v) => v !== null);
+  const offScale = {};
+  const displaySizes = {};
+  if (roleVals.length === 3) {
+    for (const [size, count] of Object.entries(fs)) {
+      const v = parseFloat(size);
+      if (v > rolePx.emphasis + 0.01) { displaySizes[size] = count; continue; }
+      if (roleVals.some((rv) => Math.abs(rv - v) < 0.01)) continue;
+      offScale[size] = count;
+    }
+  }
+  out.rolePx = rolePx;
+  out.offScaleTextSizes = offScale;
+  out.offScaleTextKinds = Object.keys(offScale).length;
+  out.displaySizes = displaySizes;
+
   // 7) 跨档字号序列（外部按宽度聚合后判单调）
   const tiers = {};
   for (const sel of ${JSON.stringify(TIER_SELECTORS)}) {
@@ -456,6 +485,10 @@ async function run() {
       radiusKinds: r.measure ? r.measure.radiusKinds : null,
       tableRows: r.measure ? r.measure.tableRows : null,
       narrowCols: r.measure ? r.measure.narrowCols : null,
+      rolePx: r.measure ? r.measure.rolePx : null,
+      offScaleTextSizes: r.measure ? r.measure.offScaleTextSizes : null,
+      offScaleTextKinds: r.measure ? r.measure.offScaleTextKinds : null,
+      displaySizes: r.measure ? r.measure.displaySizes : null,
       tiers: r.measure ? r.measure.tiers : null,
     })),
     tierViolations,
@@ -482,6 +515,10 @@ async function run() {
   console.log(`字号档 >3 的页：${tiers3.length} 个（最多 ${Math.max(0, ...tiers3.map((p) => p.fontTierCount))} 档）`);
   const rows = report.pages.filter((p) => p.tableRows && p.tableRows.under40 > 0);
   console.log(`表格行 <40px：${rows.length ? rows.map((p) => `${p.name}(${p.tableRows.min}px×${p.tableRows.under40})`).join(', ') : '无'}`);
+  const off = report.pages.filter((p) => p.offScaleTextKinds > 0);
+  console.log(`文本档合规：${off.length} 个页面×档位组合出现档外文本字号${off.length ? '（' + off.slice(0, 8).map((p) => `${p.name}@${p.width}(${p.offScaleTextKinds})`).join(', ') + '）' : ''}`);
+  const maxOff = report.pages.reduce((a, p) => Math.max(a, p.offScaleTextKinds || 0), 0);
+  console.log(`档外文本字号最多 ${maxOff} 种/页；展示型字号（> emphasis）不计入`);
   console.log(`控制台错误 ${report.consoleErrors.length} 条 / 失败请求 ${report.failedRequests.length} 条`);
   if (details.length) console.log(`二级详情已采集：${details.map((d) => d.name).join(', ')}`);
 }
