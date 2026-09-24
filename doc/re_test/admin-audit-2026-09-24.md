@@ -237,6 +237,7 @@ node scripts/admin-audit.mjs --only overview,audit-logs --no-shots   # 单页快
 | `15afa171` | MkChart 跟随 `<html data-theme>`，暗色重建实例 | §3.6 |
 | `a7f8bebb` | 清 8 处 EP 死规则 + 删孤儿页 Messages + 守卫规则 12 | §3.7 / §3.8 |
 | `9a729ebd` | 评估用例列表标记「人设失效」（后端批量核验 + 前端徽章 + 2 条回归测试） | §3.5 |
+| `867d02a3` | 本报告更新 + 巡检脚本记 `input.type`（§1.3 的例外从此可机器判定） | §1.3 / 全文 |
 
 **仍未做**（见 §2.1 / §2.3 / §3.2 / §3.3 / §3.5 后半）：共享层字号级差收敛（≤3 档）、
 档位蔓延收敛、i18n、skill-workbench 侧栏入口、PromptEval 悬空引用的 DB 清理策略。
