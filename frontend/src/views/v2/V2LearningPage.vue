@@ -2568,6 +2568,11 @@ onBeforeUnmount(() => {
    放在文件末尾：同权重下后出现者胜。 */
 @media (max-width: 900px) {
   .stage-card { padding: 24px 18px; border-radius: var(--mk-radius-modal); }
+  /* 状态卡标题收档：占位卡/完成卡是页级标题 → 18px 档；续读卡是卡内标题 → 14px 档
+     （2026-09-24 课堂移动端走查；.stage-card__warn 的「!」是装饰字形不动） */
+  .stage-card h2 { font-size: 18px; }
+  .finish__card h2 { font-size: 18px; }
+  .oscene__title { font-size: 14px; }
   .learn__stage { padding: 28px 16px; }
   .finish { padding: 16px; }
   .finish__card { padding: 20px; border-radius: var(--mk-radius-modal); }
@@ -2575,5 +2580,33 @@ onBeforeUnmount(() => {
   .tutor__scroll { padding: 14px; }
   .oscene { padding: 12px 14px; }
   .learn__live { font-size: 12px; }
+}
+</style>
+
+<style scoped>
+/* ===== 课堂布局重排（2026-09-24 用户：「刚进入课堂时候，对话区只有一小块，而且有内容了，
+   上面也没顶满…参考 goal 对话的情况设计，把对话区做大。下方输入框也偏大」）=====
+   实测 390 根因：.learn__body 移动块写的 grid-template-rows: minmax(0,1fr) 只有 1 条显式行，
+   第二个孩子 .tutor 掉进隐式行——会话内容短（刚进课堂/续读卡在场）时 1fr 行吃掉全部富余
+   （实测行高 280px），tutor 卡片悬到 y=346、与知识点条之间空 215px；消息多了才碰巧占满。
+   另两处偏大：知识点折叠条 65px（桌面 16px 内边距原样留在手机上）、composer 103px
+   （goal 页同款输入区净高只有 54px——hint 行 position:absolute; height:0 拿出文档流浮在底边）。
+   修法与 goal 页对齐：kp 行 auto、tutor 行吃满剩余；折叠条外层内边距清零；
+   hint 浮出文档流，composer 103 → 84px。对话区（消息+输入）合计 602 → 725px。 */
+@media (max-width: 900px) {
+  .learn__body { grid-template-rows: auto minmax(0, 1fr); }
+  /* 无知识点变体只有 tutor 一个孩子：单行 1fr，别让它落进 auto 行 */
+  .learn__body--no-kp { grid-template-rows: minmax(0, 1fr); }
+  .kp { padding: 0; }
+  .kp:not(.kp--collapsed) { padding: 10px 12px; }
+  .kp--collapsed .kp__head { padding: 11px 12px; }   /* 折叠条 65 → 45px，触屏整条可点 */
+  .composer { position: relative; gap: 0; padding: 8px 10px 22px; }
+  /* AI 声明浮在底部 22px 留白条里，不再独立占一行（goal 页同款做法） */
+  .composer__hint {
+    position: absolute;
+    left: 0; right: 0; bottom: 3px;
+    align-items: flex-start;
+    justify-content: center;
+  }
 }
 </style>
