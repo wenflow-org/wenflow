@@ -628,7 +628,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
-import { readMaterial } from '@/api/materials';
+import { readMaterial, readMaterialSection } from '@/api/materials';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import {
   getReplanActionText,
@@ -720,6 +720,11 @@ const materialPreview = ref<{ open: boolean; loading: boolean; title: string; se
   open: false, loading: false, title: '', sectionTitle: '', quote: '', text: '',
 });
 
+/**
+ * 「点开看原文」：优先按章节取回窗口（GET /materials/:id/section，引文锚定优先、
+ * 标题回退）——点「一、健康」直接看到那一章，而不是全文前 4000 字；
+ * 端点失败时回退整篇读取（老行为）。只对**本地附件**可用（联网资料 materialId 为 null）。
+ */
 const openMaterialRef = async (ref: any) => {
   if (!ref?.materialId) return;
   materialPreview.value = {
@@ -731,10 +736,18 @@ const openMaterialRef = async (ref: any) => {
     text: '',
   };
   try {
-    const material = await readMaterial(String(ref.materialId));
-    materialPreview.value.text = String(material?.markdown || '').slice(0, 4000) || '（正文为空）';
-  } catch (error) {
-    materialPreview.value.text = `读取失败：${String((error as { message?: string })?.message || error)}`;
+    const section = await readMaterialSection(String(ref.materialId), {
+      title: ref.sectionTitle || null,
+      quote: ref.quote || null,
+    });
+    materialPreview.value.text = String(section?.excerpt || '') || '（正文为空）';
+  } catch {
+    try {
+      const material = await readMaterial(String(ref.materialId));
+      materialPreview.value.text = String(material?.markdown || '').slice(0, 4000) || '（正文为空）';
+    } catch (error) {
+      materialPreview.value.text = `读取失败：${String((error as { message?: string })?.message || error)}`;
+    }
   } finally {
     materialPreview.value.loading = false;
   }

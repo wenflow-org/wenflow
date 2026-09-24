@@ -2,6 +2,8 @@ import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
 import { getSceneFramingNormalizedInput, resolveNormalizedInputSnapshot, resolvePersistedNormalizedInput } from '../learning/learning.helpers';
 import { extractPromptMaterials, TEACHING_MATERIAL_LIMITS, type PromptMaterial } from '../materials/material-prompt-projection';
+import { extractSectionWindow, type ActiveTaskMaterialExcerpt } from '../materials/material-sections';
+import { readMaterial } from '../materials/material-store';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { teachingStrategyConfig } from '../../config/pedagogy.config';
 import type { TeachingKnowledgePointState, TeachingSessionRecord } from './TeachingSessionRepository';
@@ -104,6 +106,11 @@ export interface TeachingScenarioContext {
    * 课堂上用于"引用资料原文/章节"（不得编造资料里没有的内容）；无资料时为 null。
    */
   materials: PromptMaterial[] | null;
+  /**
+   * 当前任务 materialRefs 的**章节原文窗口**（material-sections 取回，≤2 份 × ≤4K 字，2026-09-24）。
+   * 「讲到哪章就能看到那章原文」；无引用/取回失败时为 null（不出现该键，行为不变）。
+   */
+  activeTaskMaterialExcerpts?: ActiveTaskMaterialExcerpt[] | null;
   previousSession?: {
     sessionId: string;
     messages: TeachingSessionRecord['messages'];
@@ -1000,6 +1007,65 @@ export function resolvePathMaterialsForTeaching(aiPromptTemplate: string | null 
   return null;
 }
 
+/**
+ * 当前任务 materialRefs 的章节原文窗口（按章节取回，2026-09-24）。
+ *
+ * 讲到某条引用时，课堂上下文应能看到**该章节的原文**，而不是只有打包投影里的
+ * ≤4 条引文——这是 parent-child 检索的「取大」半边（无向量、标题/引文锚定）。
+ * 任一环失败 fail-open：返回 null，课堂行为与原先完全一致。
+ */
+export async function resolveActiveTaskMaterialExcerpts(params: {
+  aiPromptTemplate: string | null | undefined;
+  taskId: string;
+  userId: string;
+  maxExcerpts?: number;
+  maxCharsPerExcerpt?: number;
+}): Promise<ActiveTaskMaterialExcerpt[] | null> {
+  const maxExcerpts = params.maxExcerpts ?? 2;
+  const maxCharsPerExcerpt = params.maxCharsPerExcerpt ?? 4000;
+  try {
+    const parsed = parsePathPromptTemplate(params.aiPromptTemplate || null);
+    const byTask = parsed?.materialRefs && typeof parsed.materialRefs === 'object'
+      ? (parsed.materialRefs as Record<string, any>).byTask
+      : null;
+    const refs: any[] = byTask && typeof byTask === 'object' ? (byTask[params.taskId] || []) : [];
+    if (!Array.isArray(refs) || refs.length === 0) return null;
+
+    const excerpts: ActiveTaskMaterialExcerpt[] = [];
+    const seenMaterials = new Set<string>();
+    for (const ref of refs) {
+      if (excerpts.length >= maxExcerpts) break;
+      const materialId = typeof ref?.materialId === 'string' ? ref.materialId : '';
+      // 联网资料（materialId=null）原文不落盘，无法取回，跳过
+      if (!materialId || seenMaterials.has(materialId)) continue;
+      seenMaterials.add(materialId);
+      const found = readMaterial(params.userId, materialId);
+      if (!found) continue;
+      const window = extractSectionWindow(
+        found.markdown,
+        { sectionTitle: ref.sectionTitle || null, quote: ref.quote || null },
+        maxCharsPerExcerpt
+      );
+      if (!window.excerpt) continue;
+      excerpts.push({
+        materialId,
+        materialName: found.record.name,
+        sectionTitle: typeof ref.sectionTitle === 'string' ? ref.sectionTitle : null,
+        quote: typeof ref.quote === 'string' ? ref.quote : null,
+        anchor: window.anchor,
+        excerpt: window.excerpt,
+      });
+    }
+    return excerpts.length ? excerpts : null;
+  } catch (error) {
+    logger.warn('[teaching-context] 章节原文取回失败（fail-open）', {
+      taskId: params.taskId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 export async function buildTeachingScenarioContext(
   userId: string,
   taskId: string,
@@ -1290,6 +1356,12 @@ export async function buildTeachingScenarioContext(
     },
     // 资料 → 课堂：从路径模板里取回资料包并投影（见 resolvePathMaterialsForTeaching）
     materials: resolvePathMaterialsForTeaching(path.aiPromptTemplate),
+    // 章节 → 课堂：当前任务引用的章节原文窗口（按章节取回；无引用时为 null）
+    activeTaskMaterialExcerpts: await resolveActiveTaskMaterialExcerpts({
+      aiPromptTemplate: path.aiPromptTemplate,
+      taskId: task.id,
+      userId,
+    }),
     previousSession: previousSession ? {
       sessionId: previousSession.id,
       messages: previousSession.messages,

@@ -82,6 +82,8 @@ export async function buildTeachingTurnInput(
     cognitiveFrame: context.cognitiveFrame,
     teachingStrategyGuidance: context.teachingStrategyGuidance,
     materials: context.materials ?? null,
+    // 章节 → 课堂：当前任务引用的章节原文窗口（material-sections 取回；无引用时为 null）
+    activeTaskMaterialExcerpts: context.activeTaskMaterialExcerpts ?? null,
     pathTitle: context.pathProgress.pathTitle,
     pathSummary: context.pathProgress.pathSummary,
     currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,

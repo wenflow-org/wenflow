@@ -63,6 +63,24 @@ export async function readMaterial(id: string): Promise<UploadedMaterial & { mar
   return response.data;
 }
 
+/**
+ * 按章节取回资料原文窗口（引用定位；引文锚定优先、章节标题回退）。
+ * anchored：quote=引文锚定 / title=标题定位 / none=回退全文开头。
+ */
+export async function readMaterialSection(
+  id: string,
+  params: { title?: string | null; quote?: string | null }
+): Promise<{ excerpt: string; anchored: 'quote' | 'title' | 'none' }> {
+  const search = new URLSearchParams();
+  if (params.title) search.set('title', params.title);
+  if (params.quote) search.set('quote', params.quote);
+  const response = (await api.get(`/materials/${encodeURIComponent(id)}/section?${search.toString()}`)) as unknown as {
+    success: boolean;
+    data: { excerpt: string; anchored: 'quote' | 'title' | 'none' };
+  };
+  return response.data;
+}
+
 /** 删除单份资料。 */
 export async function removeMaterial(id: string): Promise<void> {
   await api.delete(`/materials/${encodeURIComponent(id)}`);

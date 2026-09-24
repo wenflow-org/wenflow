@@ -15,6 +15,7 @@ import {
   readMaterial,
   saveUploadedMaterial,
 } from '../services/materials/material-upload.service';
+import { extractSectionWindow } from '../services/materials/material-sections';
 
 const router = express.Router();
 
@@ -95,6 +96,34 @@ router.get('/', (req: Request, res: Response) => {
   } catch (error) {
     logger.error('列出资料失败:', error);
     return res.status(500).json({ success: false, error: '获取资料列表失败，请稍后重试' });
+  }
+});
+
+/** 按章节取回资料原文窗口（前端引用定位；与课堂取回共用 extractSectionWindow 语义）。 */
+router.get('/:id/section', (req: Request, res: Response) => {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const title = String((req.query.title as string) || '').trim();
+  const quote = String((req.query.quote as string) || '').trim();
+  if (!title && !quote) {
+    return res.status(400).json({ success: false, error: '缺少章节标题或引文定位参数' });
+  }
+  try {
+    const found = readMaterial(userId, String(req.params.id || ''));
+    if (!found) return res.status(404).json({ success: false, error: '资料不存在' });
+    const window = extractSectionWindow(found.markdown, { sectionTitle: title, quote });
+    return res.json({
+      success: true,
+      data: {
+        sectionTitle: title || null,
+        quote: quote || null,
+        anchored: window.anchor,
+        excerpt: window.excerpt,
+      },
+    });
+  } catch (error) {
+    logger.error('按章节读取资料失败:', error);
+    return res.status(500).json({ success: false, error: '读取资料失败，请稍后重试' });
   }
 });
 

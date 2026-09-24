@@ -81,6 +81,18 @@ export interface TeachingTurnInput {
       sections?: Array<{ id?: string | null; title?: string | null }>;
       keyPoints?: Array<{ text?: string | null; cite?: string | null }>;
     }> | null;
+    /**
+     * 当前任务 materialRefs 的**章节原文窗口**（material-sections 取回，≤2×4K 字，2026-09-24）。
+     * 讲到哪章就能看到那章原文；无引用/取回失败时为 null。
+     */
+    activeTaskMaterialExcerpts?: Array<{
+      materialId?: string | null;
+      materialName?: string | null;
+      sectionTitle?: string | null;
+      quote?: string | null;
+      anchor?: 'quote' | 'title' | 'none';
+      excerpt?: string | null;
+    }> | null;
     pathTitle?: string;
     pathSummary?: string | null;
     currentMilestoneTitle?: string;
