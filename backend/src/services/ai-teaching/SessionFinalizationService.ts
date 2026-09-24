@@ -154,6 +154,8 @@ export class SessionFinalizationService {
       && session.operationKind?.startsWith('finalize:')
       && session.operationLeaseExpiresAt
       && session.operationLeaseExpiresAt > new Date();
+    // claim 的乐观锁基准：auto-end 会前进 revision，走完 auto-end 后以 endResult 为准（见下）
+    let claimRevision = input.revision;
     if ((session.status !== 'completed' || !session.wrapup) && !activeFinalization) {
       // complete_task 前置要求会话已结束（completed + wrapup），但前端 finish('complete_task')
       // 不会先调 end——这里与 end_only/complete_review 一致，自动先结束课堂生成 wrapup，
@@ -185,6 +187,10 @@ export class SessionFinalizationService {
         (error as any).status = 409;
         throw error;
       }
+      // auto-end 已把 session.revision 前进（end 消耗一次乐观锁）：后续 claim 若仍拿客户端
+      // 旧 revision 校验，必然 TEACHING_SESSION_STALE（实测：单步 complete_task 必 409）。
+      // 因此 claim 改用 auto-end 返回的最新 revision。
+      claimRevision = endResult.revision ?? ended.revision ?? input.revision;
     }
 
     const claim = await teachingSessionRepository.claimFinalization(
@@ -193,7 +199,7 @@ export class SessionFinalizationService {
       operationId,
       requestIdentity.requestHash,
       requestIdentity.requestJson,
-      input.revision
+      claimRevision
     );
     if (claim.status === 'processing') {
       return {
