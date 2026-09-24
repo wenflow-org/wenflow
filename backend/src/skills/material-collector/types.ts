@@ -12,6 +12,8 @@
  *   ③ 外部网页文本当数据不当指令（抽取 prompt 侧声明）。
  */
 
+import type { MaterialBrief } from '../material-brief/types';
+
 /** 资料采集状态：ok（齐全）/ partial（部分）/ not_found（无可用正文或资料对不上） */
 export type MaterialStatus = 'ok' | 'partial' | 'not_found';
 
@@ -85,6 +87,12 @@ export interface MaterialPackResult {
   status: MaterialStatus;
   /** status=not_found 时为 null（显式，不得用记忆冒充） */
   pack: MaterialPack | null;
+  /**
+   * 资料理解摘要（material-brief，Document Summary Index 摘要节点；2026-09-24）。
+   * 仅用户上传附件这一路携带（material-collector 联网包的 pack 本身即 LLM 摘要，不重复生成）；
+   * path-planning 据此获得分段意图（naturalDivisions）与全文目录感知。
+   */
+  brief?: MaterialBrief | null;
   provenance: MaterialProvenance[];
   coverage: MaterialCoverage;
   /** 退化说明与丢弃台账（抓取失败 / suspicious / 缺引文丢弃 / 疑似注入文本…） */
