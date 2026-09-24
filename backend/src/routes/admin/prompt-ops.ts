@@ -36,7 +36,7 @@ import {
   listEvalRuns,
   findEvalRunById,
 } from '../../services/admin/prompt-ops.repo';
-import { findProfileById } from '../../services/virtual-lab/virtual-learner-profile.repo';
+import { findProfileById, filterExistingProfileIds } from '../../services/virtual-lab/virtual-learner-profile.repo';
 import { logger } from '../../utils/logger';
 import { loadAllPromptFiles } from '../../composers/prompt-files/loader';
 import {
@@ -550,21 +550,33 @@ router.get('/eval-cases', async (req: Request, res: Response) => {
     const agentId = String(req.query.agentId || '').trim();
     const where = agentId ? { agentId } : {};
     const cases = await listEvalCases(where);
+    /* 模拟用例引用的虚拟学习者可能已被删除：列表就标出来，否则要等跑批时
+       才从 partitionSimulatedEvalCases 的 skipped 里发现用例被跳过。 */
+    const personaIds = Array.from(new Set(
+      cases
+        .map((c) => extractSimConfig(safeParse(c.expectationsJson, null))?.personaId)
+        .filter((v): v is string => !!v),
+    ));
+    const existingPersonaIds = await filterExistingProfileIds(personaIds);
     return res.json({
       success: true,
-      data: cases.map((c) => ({
-        id: c.id,
-        agentId: c.agentId,
-        caseId: c.caseId,
-        name: c.name,
-        description: c.description,
-        messages: safeParse(c.messagesJson, []),
-        previousState: safeParse(c.previousStateJson, null),
-        expectations: safeParse(c.expectationsJson, null),
-        enabled: c.enabled,
-        createdAt: c.createdAt,
-        updatedAt: c.updatedAt,
-      })),
+      data: cases.map((c) => {
+        const personaId = extractSimConfig(safeParse(c.expectationsJson, null))?.personaId;
+        return {
+          id: c.id,
+          agentId: c.agentId,
+          caseId: c.caseId,
+          name: c.name,
+          description: c.description,
+          messages: safeParse(c.messagesJson, []),
+          previousState: safeParse(c.previousStateJson, null),
+          expectations: safeParse(c.expectationsJson, null),
+          personaMissing: !!personaId && !existingPersonaIds.has(personaId),
+          enabled: c.enabled,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+        };
+      }),
     });
   } catch (error: any) {
     logger.error('[admin-prompt-ops] list eval-cases failed:', error);

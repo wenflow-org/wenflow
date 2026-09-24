@@ -24,6 +24,16 @@ export function findProfileById(id: string) {
   return prisma.virtual_learner_profiles.findUnique({ where: { id } });
 }
 
+/** 批量存在性检查（评估用例列表标记「人设引用失效」用；避免逐条 findUnique） */
+export async function filterExistingProfileIds(ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set<string>();
+  const rows = await prisma.virtual_learner_profiles.findMany({
+    where: { id: { in: ids } },
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
+}
+
 /** 记忆池遗忘曲线数据源（memory_traces 全量，按最近触达倒序） */
 export function findMemoryTracesByUser(userId: string) {
   return prisma.memory_traces.findMany({

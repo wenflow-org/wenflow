@@ -71,6 +71,11 @@
               </td>
               <td>
                 <span class="mk-badge" :class="c.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ c.enabled ? '启用' : '停用' }}</span>
+                <span
+                  v-if="c.personaMissing"
+                  class="mk-badge mk-badge--warn pe-persona-missing"
+                  title="引用的虚拟学习者已被删除：批量评估会跳过该用例，请重选学生人设或改用场景描述"
+                >人设失效</span>
               </td>
               <td :title="fmtDate(c.updatedAt)">{{ timeAgo(c.updatedAt) }}</td>
               <td>
@@ -438,6 +443,8 @@ interface EvalCase {
   } | null
   previousState?: Record<string, unknown> | null
   inputPayload?: Record<string, unknown> | null
+  /** 服务端核验：模拟用例引用的虚拟学习者已不存在（跑批会跳过该用例） */
+  personaMissing?: boolean
   enabled: boolean
   createdAt: string
   updatedAt: string
@@ -581,6 +588,7 @@ async function reloadCases() {
       expectations: (c.expectations as EvalCase['expectations']) || null,
       previousState: (c.previousState as Record<string, unknown>) || null,
       inputPayload: (c.inputPayload as Record<string, unknown>) || null,
+      personaMissing: c.personaMissing === true,
       enabled: c.enabled !== false,
       createdAt: String(c.createdAt || ''),
       updatedAt: String(c.updatedAt || ''),
@@ -1027,6 +1035,7 @@ void reloadRuns()
 /* 列表高度：空态占位交给 mk-empty--min，有数据时表格自然高度（不再硬撑满屏） */
 .pe-list { min-height: 0; }
 .pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-12); color: var(--mk-muted); }
+.pe-persona-missing { margin-left: 6px; }
 .pe-result { display: flex; align-items: baseline; gap: 6px; }
 .pe-result strong { font-size: var(--mk-fs-13); font-family: var(--mk-mono); }
 .pe-result span { font-size: var(--mk-fs-11); color: var(--mk-faint); }
