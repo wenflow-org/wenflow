@@ -220,6 +220,10 @@ nul
 
 # Local architecture docs (track only current spec/result docs; archive, history, design drafts, survey snapshots & changelogs stay untracked locally)
 doc/*
+# 例外：管理端巡检报告（代码注释与守卫规则引用该路径，需随代码可查）
+!doc/re_test/
+doc/re_test/*
+!doc/re_test/admin-audit-2026-09-24.md
 !doc/SKILL_PROTOCOL_V4.md
 !doc/README.md
 !doc/README.en.md
