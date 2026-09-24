@@ -880,10 +880,5 @@ useEscape(() => props.visible, close)
     align-items: stretch;
     flex-direction: column;
   }
-
-  .ql-entries__actions > .el-button {
-    flex: 1 1 46%;
-    margin-left: 0;
-  }
 }
 </style>

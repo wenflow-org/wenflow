@@ -2,7 +2,7 @@
  * 合并宿主页冒烟（2026-09-04 导航收敛）：
  * - People（用户与学习者：账号/学习状态 tab + ?tab= 深链 + intent quickAction 新建用户直达）
  * - Sessions（学习会话：教学会话/目标对话/学习路径 tab + ?tab= 深链）
- * - Messages（通知与公告：公告/站内通知 tab + ?tab= 深链）
+ * - OpsHub（通知与公告：公告/站内通知 tab + ?tab= 深链；2026-09-19 由已下线的 Messages 宿主承接）
  * - ExecLogs（执行日志：成本分析 tab 嵌入 TokenCost）
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -11,7 +11,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import People from '../People.vue';
 import GoalConversations from '../GoalConversations.vue';
-import Messages from '../Messages.vue';
+import OpsHub from '../OpsHub.vue';
 import ExecLogs from '../ExecLogs.vue';
 import Users from '../Users.vue';
 import LearnerCenter from '../LearnerCenter.vue';
@@ -52,6 +52,9 @@ vi.mock('@/api/adminApi', () => ({
     getByModel: vi.fn(async () => ({ data: { data: [] } }))
   },
   adminLearningContentApi: apiObject(),
+  // OpsHub 宿主页的待办聚合会打这两个（此前只测 Messages 宿主时不需要）
+  adminFeedbackApi: apiObject(),
+  adminDevtoolsApi: apiObject(),
   clearAdminSession: vi.fn(),
   markAdminSession: vi.fn(),
   hasAdminSession: vi.fn(() => true),
@@ -170,10 +173,10 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     w2.unmount();
   });
 
-  it('Messages：默认公告 tab（Announcements）；切「站内通知」→ Notifications + ?tab=inapp', async () => {
-    const { router, ready } = mockRouter('/admin/messages');
+  it('OpsHub：深链 ?tab=announce 渲染 Announcements；切「站内通知」→ Notifications + ?tab=inapp', async () => {
+    const { router, ready } = mockRouter('/admin/ops-hub?tab=announce');
     await ready;
-    const w = mount(Messages, { global: { plugins: [router] } });
+    const w = mount(OpsHub, { global: { plugins: [router] } });
     await settle();
     expect(w.findComponent(Announcements).exists()).toBe(true);
     expect(w.findComponent(Notifications).exists()).toBe(false);

@@ -644,14 +644,6 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.evaluation-head__actions :deep(.el-button) {
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 13px;
-  height: 36px;
-  padding: 0 16px;
-}
-
 .evaluation-head__ai-note {
   margin-top: 6px;
 }
@@ -755,11 +747,6 @@ onUnmounted(() => {
   color: var(--ink, #172033);
 }
 
-.evaluation-shell :deep(.completion-header .el-icon) {
-  font-size: 28px;
-  color: var(--green, #31b16f);
-}
-
 .evaluation-shell :deep(.completion-summary) {
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
@@ -797,10 +784,6 @@ onUnmounted(() => {
   font-weight: 700;
   color: var(--ink, #172033);
   margin-bottom: 12px;
-}
-
-.evaluation-shell :deep(.section-title .el-icon) {
-  color: var(--accent, #3478f6);
 }
 
 .evaluation-shell :deep(.section-content) {
@@ -915,14 +898,6 @@ onUnmounted(() => {
   border-top: 1px solid var(--line);
   margin-top: 8px;
   gap: 10px;
-}
-
-.evaluation-shell :deep(.completion-actions .el-button) {
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 13px;
-  height: 38px;
-  padding: 0 18px;
 }
 
 .evaluation-transcript-card {
@@ -1104,8 +1079,8 @@ onUnmounted(() => {
   }
 
   /* 移动端头部瘦身：390 下原本 213px（标题 59 + 动作 96 + 内边距 40），压到约 150px。
-     动作按钮已换成一方 .btn-ghost/.btn-primary，此处旧 :deep(.el-button) 覆写早已失效
-     （不匹配任何元素），所以按钮一直是 41px 高、字号 14px 的自适应换行版。 */
+     动作按钮是一方 .btn-ghost/.btn-primary（旧 :deep(.el-button) 覆写已随 EP 移除一并删掉，
+     它本来就不匹配任何元素——按钮此前一直是 41px 高、字号 14px 的自适应换行版）。 */
   .evaluation-page {
     padding: 14px 0 40px;
   }

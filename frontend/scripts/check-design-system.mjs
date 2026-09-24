@@ -434,6 +434,27 @@ for (const abs of [...vueFiles.filter((p) => isGoverned(rel(p))), ...HEX_CSS_TAR
   }
 }
 
+/* ---------- 规则 12：Element Plus 选择器残留（硬失败，无基线） ----------
+   EP 已从依赖里移除（frontend/package.json 无 element-plus），`.el-button` 这类选择器不再命中
+   任何元素：看着像样式、实际是死规则，还会让人以为 EP 仍在用。2026-09-24 管理端巡检清掉 8 处。
+   豁免：src/styles/v2.css 的按钮 reset 用 `:not(.el-button)` 排除历史类名——那是功能性子句
+   （删掉反而会误伤），不是样式规则。 */
+const EL_SELECTOR_RE = /\.el-[a-z0-9-]+/g
+const EL_ALLOWED_FILES = new Set([posix.join('src', 'styles', 'v2.css')])
+const elResidues = []
+for (const abs of walk(SRC).filter((p) => p.endsWith('.vue') || p.endsWith('.css'))) {
+  const relPath = rel(abs)
+  if (EL_ALLOWED_FILES.has(relPath)) continue
+  const text = readFileSync(abs, 'utf8')
+  // 只看样式块（模板注释里提到 `.el-*` 属说明文字），并剔除 CSS 注释（注释里的选择器不渲染）
+  const css = abs.endsWith('.vue')
+    ? styleBlocks(text).map((b) => b.css).join('\n')
+    : text
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '')
+  const hits = [...new Set([...stripped.matchAll(EL_SELECTOR_RE)].map((m) => m[0]))]
+  if (hits.length) elResidues.push({ file: relPath, sels: hits })
+}
+
 /* ---------- 规则 3（续）：admin 原语层 CSS 的硬编码色值 ---------- */for (const relPath of HEX_CSS_TARGETS) {
   const abs = join(ROOT, relPath)
   if (!existsSync(abs)) continue
@@ -517,6 +538,13 @@ if (tierRegressions.length) {
     }
     if (vs.length > 6) console.log(`        … 另 ${vs.length - 6} 处`)
   }
+}
+
+if (elResidues.length) {
+  failed = true
+  console.log(`\n✖ 规则 12：Element Plus 选择器残留（${elResidues.length} 个文件）`)
+  console.log('  EP 已从依赖移除，这些选择器不命中任何元素（死规则）。删掉，或改写成一方的类名。')
+  for (const v of elResidues) console.log(`    ${v.file}  ${v.sels.join(' ')}`)
 }
 
 if (badDefinitions.length) {
