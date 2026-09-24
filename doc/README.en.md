@@ -51,6 +51,11 @@
 - [`VIRTUAL_LEARNER_CHAIN.md`](./VIRTUAL_LEARNER_CHAIN.md)
   - Virtual learner chain source of truth: persona / stories / session simulation / referee
 
+## Developer Tooling
+
+- [`DEV_SCRIPTS.md`](./DEV_SCRIPTS.md)
+  - Developer scripts handbook: layout & naming conventions across the three script folders, the virtual-learner batch chain, a reusable tool index (gates / audits / probes / backfills / ops / evals), and how to spot and archive one-off scripts
+
 ---
 
 ## Process materials (removed, not in repo)

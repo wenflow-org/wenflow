@@ -1,7 +1,7 @@
 # 开发脚本手册（DEV_SCRIPTS）
 
-> 面向**二次开发**：本地 240+ 个脚本怎么找、怎么用、哪些别当工具用。
-> 快照日期 **2026-09-24**；脚本会漂移，动手前先用 `git log -- <脚本>` 确认它还在维护。
+> 面向**二次开发**：本地几百个脚本怎么找、怎么用、哪些别当工具用。
+> 本文只写**稳定的定位与约定**；具体清单以目录为准（脚本会漂移，动手前先 `git log -- <脚本>` 确认它还在维护）。
 
 ---
 
@@ -9,7 +9,7 @@
 
 | 你想干的事 | 去哪 |
 |---|---|
-| 找**正式工具**（门禁 / 审计 / 探针 / 回填） | `backend/src/scripts/` —— 104 个，**几乎都有自述 + 用法 + 参数** |
+| 找**正式工具**（门禁 / 审计 / 探针 / 回填） | `backend/src/scripts/` —— 自述最全，几乎都有「用途 + 用法 + 参数」 |
 | 跑**虚拟学习者**（造人 / 跑批 / 看结果 / 救场） | `scripts/` —— 见 §2 |
 | 看到 `q-*` / `inspect-*` / `check-uicheck-*` / `*.log` | **一次性产物**，绑定具体账号/会话，别当工具用 —— 见 §4 |
 | 想知道 CI 为什么红 | `npm run ci:status`（= `scripts/ci-status.mjs`） |
@@ -20,12 +20,12 @@
 
 ### 1.1 目录定位
 
-| 目录 | 数量 | 定位 | 自述质量 | 入库 |
-|---|---|---|---|---|
-| `backend/src/scripts/` | 104 | **正式工具**：门禁 / 只读审计 / E2E 探针 / 回填 / 评测 / 运维 | **好**（用途 + 用法 + 参数） | 104/104 ✅ |
-| `scripts/`（仓库根） | 60 | **虚拟学习者 / 跑批 / 巡检 / 演示** | 中（多数一句话） | 58/60 |
-| `backend/scripts/` | 73 | **历史遗留 + 一次性排查**（`q-*` / `inspect-*` / `check-uicheck-*` / 8 个 `.log`） | 差（近半无自述） | 62/73 |
-| `frontend/scripts/` | 2 | 设计系统守卫 | 好 | ✅ |
+| 目录 | 定位 | 自述质量 |
+|---|---|---|
+| `backend/src/scripts/` | **正式工具**：门禁 / 只读审计 / E2E 探针 / 回填 / 评测 / 运维 | **好**（用途 + 用法 + 参数） |
+| `scripts/`（仓库根） | **虚拟学习者 / 跑批 / 巡检 / 演示** | 中（多数一句话） |
+| `backend/scripts/` | **历史遗留 + 一次性排查**（`q-*` / `inspect-*` / `check-uicheck-*` / 跑批日志） | 差（近半无自述） |
+| `frontend/scripts/` | 设计系统守卫 | 好 |
 
 ### 1.2 两种调用方式
 
@@ -60,7 +60,7 @@ node scripts/<名字>.mjs [参数]
 
 ---
 
-## 2. 虚拟学习者跑批（重点）
+## 2. 虚拟学习者跑批
 
 ### 2.1 链路总图
 
@@ -70,24 +70,24 @@ node scripts/<名字>.mjs [参数]
    ↓
 [造数据/生成路径]
         vl-batch-path.mjs --tag=vl50     批量造 N 个互不相同的 VL → 推进到 path 生成完成（不进学习）
-        vl-preset-run.mjs                用内置 14 个 preset 跑 Goal→Path（并发 1 + 指数退避，对网关友好）
+        vl-preset-run.mjs                用内置 preset 跑 Goal→Path（并发 1 + 指数退避，对网关友好）
         simulate-learner-e2e.ts          ★ 可丢弃学习者 + 等就绪 + 断点续跑 + 自动清理（推荐）
    ↓
 [推进学习]（已有 sessionId）
         run-vl-learn.mjs <sessionId>     path → learn → 完成
         run-vl-full.mjs  <sessionId>     当前阶段 → 全路径完成
-        run-vl-one.js    <key>           单轮（默认 key=shop-owner-inventory）
+        run-vl-one.js    <key>           单轮
         kc-multipath-run.ts              同一学习者 N 条路径 × 跨日（看概念图被消费 / 动态调整轨迹）
         kc-resume-case.ts --session=<id> 失败后续跑（保留 goal 与路径，只补课）
    ↓
 [观察]
-        vl-path-report.mjs --tag=vl50    人设 + 故事池 + 路径 全景 HTML（输出 backend/vlab-runs/*.html）
-        vl-dataset-report.mjs --tag=vl50 数据集汇总（规模分布 / scope_size / targetMilestones 落点）
-        vl-blocktype-report.mjs          源头问题类型标注覆盖率与分布（L1 提示词改动的主指标）
-        vl-ai-audit.mjs                  AI 独立盲评（两段式；分诊判定不给模型看系统产出的路径，防辩护）
+        vl-path-report.mjs --tag=<tag>   人设 + 故事池 + 路径 全景 HTML（输出 backend/vlab-runs/*.html）
+        vl-dataset-report.mjs --tag=<tag> 数据集汇总（规模分布 / scope_size / targetMilestones 落点）
+        vl-blocktype-report.mjs          源头问题类型标注覆盖率与分布（提示词改动是否生效的主指标）
+        vl-ai-audit.mjs                  AI 独立盲评（分诊判定不给模型看系统产出的路径，防辩护）
         vlab-sessions-list.mjs           列出该用户全部教学会话
         vlab-lesson-{locate,result,review}.mjs   单节课定位 / 结果汇总 / 完整复盘
-        vlab-cohort.mjs [--resume]       三人队列实验（幂等断点续跑；报告 doc/COHORT_EXPERIMENT_REPORT.md）
+        vlab-cohort.mjs [--resume]       队列实验（幂等断点续跑）
         cohort-{status,progress,teaching-check}.mjs   队列状态 / setup 进度 / 教学消息增长
    ↓
 [救场]
@@ -100,7 +100,7 @@ node scripts/<名字>.mjs [参数]
 | 项 | 说明 |
 |---|---|
 | **管理员凭据** | 跑批脚本从 `backend/.env` 的 `INIT_ADMIN_NAME` / `INIT_ADMIN_PASSWORD` 读；也可用 `E2E_ADMIN_NAME` / `E2E_ADMIN_PASSWORD` 覆盖 |
-| **基准 preset 在哪** | `virtual-learners/presets.yaml`（14 个手写 preset；`builtin_*@preset.local`，`prune` 会**保留**它们） |
+| **基准 preset 在哪** | `virtual-learners/presets.yaml`（手写 preset；`builtin_*@preset.local`，`prune` 会**保留**它们） |
 | **网关限流** | `vl-preset-run.mjs` 默认并发 1 + 学习者之间留间隔 + 失败指数退避——实测网关会返 429，别硬加并发 |
 | **"未就绪"不是失败** | 路径生成窗口内 `advance-day runTasks` 会拒跑（不烧模拟日）——`simulate-learner-e2e.ts` 会等就绪，手工跑容易误判 |
 | **后端重启会掐断在途请求** | `ts-node-dev --respawn` 下长链路会被并行编辑打断 → 用带 `--state=` 的脚本断点续跑 |
@@ -119,7 +119,7 @@ node scripts/<名字>.mjs [参数]
 | `check-input-handoffs.ts` | inputs 声明 ↔ 字段路由 handoff 双向对账 | `prompts:check-handoff` / `:strict` |
 | `check-core-fields-sync.ts` | 产出字段 ↔ core fields 一致性 | `prompts:fields-sync:check` |
 | `check-payload-prefix-stability.ts` | 稳定键前置护栏（KV 前缀缓存） | `prompts:payload-prefix:check[:strict]` |
-| `check-skills-file.ts` | 技能户口簿 `prompts/skills.yaml` 全量门禁（F1~F12） | `prompts:skills:check` |
+| `check-skills-file.ts` | 技能户口簿 `prompts/skills.yaml` 全量门禁 | `prompts:skills:check` |
 | `check-yaml-vocabulary.ts` | YAML 词表一致性 | `prompts:yaml:check` |
 | `check-data-source.ts` | `dataSource` 声明校验 | `prompts:data-source:check` |
 | `check-retired-skill-lists.ts` | 退役名单不变量（防双名单漂移） | `retired:check` |
@@ -130,7 +130,7 @@ node scripts/<名字>.mjs [参数]
 | `check-prompt-runtime-contract-metadata-parity.ts` | 运行时契约元数据 parity | `prompts:runtime-contract:check` |
 | `check-route-db-boundary.mjs`（在 `backend/scripts/`） | 路由层不得直连 DB | `boundaries:check`（`--update` **只允许收缩**） |
 
-> ⚠️ `check-constants-provenance` / `check-core-fields-sync` / `check-core-hash-parity` / `check-yaml-vocabulary` / `check-prompt-runtime-contract-metadata-parity` / `generate-agent-snapshots` / `compile-core-files` 的**实现已迁到 `services/prompt-manifest/`**，脚本只是运维 CLI 入口（审计 #8）。
+> ⚠️ 上表中若干门禁（constants / core-fields-sync / core-hash-parity / yaml-vocabulary / runtime-contract / agent-snapshots / compile-core-files）的**实现已迁到 `services/prompt-manifest/`**，脚本只是运维 CLI 入口（审计 #8）。
 
 ### 3.2 只读审计（`audit-*`，安全，可对生产库跑）
 
@@ -159,7 +159,7 @@ node scripts/<名字>.mjs [参数]
 
 ### 3.5 离线评测（`eval-*`，不落库）
 
-`eval-path-review`（真实路径跑 path-reviewer，`--replan` 可 dry 跑重规划）· `eval-concept-load`（LLM 档位 vs 旧正则）· `eval-triage-judge`（60 例分流判据准确率）· `eval-systemone-{cognition,triage}`（外部模型离线对照）
+`eval-path-review`（真实路径跑 path-reviewer，`--replan` 可 dry 跑重规划）· `eval-concept-load`（LLM 档位 vs 旧正则）· `eval-triage-judge`（分流判据准确率）· `eval-systemone-{cognition,triage}`（外部模型离线对照）
 
 ### 3.6 运维 / 数据库
 
@@ -185,7 +185,7 @@ node scripts/<名字>.mjs [参数]
 | `field-routing-orchestration-sync.ts` | 编排文件 → 三表全量对账 upsert |
 | `generate-agent-snapshots.ts --check` / `generate-agents-self-intro.ts` | 生成 `prompts/agent-snapshots.md` / `AGENTS_SELF_INTRO.md` |
 | `check-material-collector.ts` | material-collector **真跑**冒烟（真 search / fetch / LLM） |
-| `export-material-demo.ts` | 附件→路径→任务→课堂 导成自包含 HTML |
+| `export-material-demo.ts` | 附件→路径→任务→课堂 导成自包含 HTML（输出到 `doc/local/`） |
 | `verify-kv-prefix-cache.ts` | 连调 goal 3 次看 TTFT / 缓存命中 |
 
 ### 3.8 外挂能力冒烟
@@ -210,28 +210,27 @@ node scripts/<名字>.mjs [参数]
 
 ---
 
-## 4. 一次性脚本存档（**别当工具用**）
+## 4. 一次性脚本：识别与归档
 
-### 4.1 `backend/scripts/` 的一次性族
+### 4.1 怎么认出它们
 
-| 族 | 例子 | 为什么别用 |
+| 特征 | 例子 | 为什么别用 |
 |---|---|---|
 | `q-*` | `q-kc-shape` / `q-graph-summary` / `q-miscon-*` / `q-trace-join` | 绑定**某个具体路径/学习者名**（默认值写死在源码里），是当时排查的探针 |
-| `inspect-*` | `inspect-stage-payload` / `inspect-uicheck-*` | 打印某一次载荷/某账号的数据 |
+| `inspect-*` | `inspect-stage-payload` / `inspect-uicheck-*` | 打印某一次载荷 / 某账号的数据 |
 | `check-uicheck-*` / `where-uicheck-*` | `check-uicheck-lesson` / `where-uicheck-adjustments` | 绑定 uicheck 测试账号 |
-| `.log` | `vlearner-goal-e2e*.log`（8 个） | 跑批日志残留，**不是脚本** |
-| 其它 | `tmp-turn-split.py` | 临时片段 |
+| `*.log` | `vlearner-goal-e2e*.log` | 跑批日志残留，**不是脚本** |
+| 其它 | `tmp-*.py` 等 | 临时片段 |
 
-> 这些多数**未入库**或入库但无自述——建议按 §5 归档。
+### 4.2 归档约定
 
-### 4.2 未入库（CI 看不到，换机器就丢）
+`scripts/archive/` 已是既有归档位（含 `README.md`）——**新的一次性脚本跑完就往里挪或直接删**，别留在主目录。判断标准：**换个人、换个账号还能跑吗？** 不能就是一次性的。
 
-- `scripts/`：`admin-audit-results/`（JSON 产物）、`material-strategy-probe.py`
-- `backend/scripts/`：`q-consolidator-abort.ts`、`tmp-turn-split.py`、8 个 `vlearner-goal-e2e*.log`
+### 4.3 入库与否
 
-### 4.3 已有归档先例
-
-`scripts/archive/`（`failure-*.mjs` 12 个、`run-vl-retry*.mjs` 3 个、`vlab-test-result*.mjs`、`qoder-search2.mjs`，含 `README.md`）——**归档已经有约定，照它做**。
+- 一次性/排查类**不必入库**（本机留档即可）。
+- 要入库的正式工具，按 §5 的约定放对目录、写清头部。
+- 查某个脚本是否入库：`git ls-files --error-unmatch <路径>`。
 
 ---
 
@@ -255,7 +254,7 @@ node scripts/<名字>.mjs [参数]
 | `npm run ci:status [-- --branch=develop --runs=5 --logs]` | CI 状态回看 |
 | `npm run security:scan:current` / `:history` | 密钥扫描 |
 | `npm run check:quality` / `check:test` / `check:build` / `check` | 与 CI 三个 job 一一对应 |
-| `npm run prompts:check` | = `prompts:check:all`（11 道提示词门禁串） |
+| `npm run prompts:check` | = `prompts:check:all`（提示词门禁串） |
 | `npm run prompts:core:check` / `prompts:runtime-contract:check` | core hash / 运行时契约 |
 | `npm run prompts:sync` / `prompts:bootstrap` / `prompts:backfill-core` | 提示词入库 |
 | `npm run prompts:compile-all` | ⚠️ 全量编译（并行开发期间会盖别人 WIP） |
@@ -264,10 +263,3 @@ node scripts/<名字>.mjs [参数]
 | `npm run design:check` | 前端设计系统守卫 |
 | `npm run verify:kv-prefix-cache` | KV 前缀缓存验证 |
 | `npm run search:check` / `fetch:check` / `image:check` / `mcp:check` | 外挂能力冒烟 |
-
----
-
-## 附：本文档的取材方式
-
-脚本清单由只读脚本生成（三个目录全量 + 头部注释 + 用法行），再人工核对关键链路（虚拟学习者 / 门禁 / 探针）。
-未展开的目录：`scripts/deep-run/`、`scripts/agent-audit/`、`scripts/admin-audit-results/`（产物）、`backend/scripts` 中未列出的 `check-*`/`inspect-*` 变体。

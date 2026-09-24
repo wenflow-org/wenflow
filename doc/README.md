@@ -61,6 +61,11 @@
 - [`VIRTUAL_LEARNER_CHAIN.md`](./VIRTUAL_LEARNER_CHAIN.md)
   - 虚拟学习者链路 Source of Truth：persona / 故事 / 会话模拟 / 裁判
 
+## 开发工具
+
+- [`DEV_SCRIPTS.md`](./DEV_SCRIPTS.md)
+  - 开发脚本手册：三个脚本目录的定位与命名约定、虚拟学习者跑批链路、可复用工具索引（门禁 / 审计 / 探针 / 回填 / 运维 / 评测）、一次性脚本的识别与归档约定
+
 ---
 
 ## 过程材料（不在仓库）
