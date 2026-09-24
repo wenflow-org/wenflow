@@ -57,6 +57,7 @@ import {
 import { generateOpening } from './teaching-turn-engine';
 import { AI_TEACHING_AGENT_ID, requireTeachingRevision } from './teaching-turn-shared';
 import { conceptConsolidatorService } from '../learner/ConceptConsolidatorService';
+import { lessonPrepService } from './lesson-prep.service';
 import { conceptLoadService } from '../memory/concept-load.service';
 import { fsrsRetrievability, type FsrsMemoryState } from '../memory/fsrs';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
@@ -924,6 +925,13 @@ export async function endSession(
         error: error instanceof Error ? error.message : String(error),
       });
     });
+    // n+1 备课·资料腿（活的 path 批次 C）：下一任务引用的联网来源定向补采入库。
+    // 认知腿（概念负荷预热/快照刷新/insights）已由上方 refreshInBackground 链承担，不重复触发。
+    runWithTeachingSession(session.id, () => lessonPrepService.prepareNextLesson({
+      userId: session.userId,
+      pathId: session.learningPathId ?? undefined,
+      completedTaskId: session.taskId ?? undefined,
+    }));
     return {
       status: 'completed',
       operationId,

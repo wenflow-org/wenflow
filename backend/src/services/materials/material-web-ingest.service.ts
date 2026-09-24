@@ -56,6 +56,16 @@ function normalizeTitleForMatch(title: string): string {
     .replace(/[《》〔〕\s（）()【】[\]—–\-·、，,。.：:；;"'「」]/g, '');
 }
 
+/** 按 sourceUrl 精确查找库中联网记录（教学引用取回 / 备课补采去重用）。 */
+export function findWebRecordBySourceUrl(userId: string, url: string): MaterialRecord | null {
+  const userIdTrimmed = String(userId || '').trim();
+  const normalized = normalizeSourceUrl(url);
+  if (!userIdTrimmed || !normalized) return null;
+  return listMaterials(userIdTrimmed).find(
+    (record) => record.origin === 'web' && normalizeSourceUrl(String(record.sourceUrl || '')) === normalized
+  ) || null;
+}
+
 /**
  * 库优先查找（path 重建零重采）：按 need 标题在用户库里找已入库的联网资料。
  * 归一后互相包含即视为同一资料；命中返回记录（调用方据此跳过采集、直接用库打包）。

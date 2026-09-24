@@ -3,6 +3,7 @@ import learningStateService from '../learning/learning-state.service';
 import { getSceneFramingNormalizedInput, resolveNormalizedInputSnapshot, resolvePersistedNormalizedInput } from '../learning/learning.helpers';
 import { extractPromptMaterials, TEACHING_MATERIAL_LIMITS, type PromptMaterial } from '../materials/material-prompt-projection';
 import { extractSectionWindow, type ActiveTaskMaterialExcerpt } from '../materials/material-sections';
+import { findWebRecordBySourceUrl } from '../materials/material-web-ingest.service';
 import { readMaterial } from '../materials/material-store';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { teachingStrategyConfig } from '../../config/pedagogy.config';
@@ -1035,8 +1036,13 @@ export async function resolveActiveTaskMaterialExcerpts(params: {
     const seenMaterials = new Set<string>();
     for (const ref of refs) {
       if (excerpts.length >= maxExcerpts) break;
-      const materialId = typeof ref?.materialId === 'string' ? ref.materialId : '';
-      // 联网资料（materialId=null）原文不落盘，无法取回，跳过
+      let materialId = typeof ref?.materialId === 'string' ? ref.materialId : '';
+      // 批次 C：联网引用（materialId=null）按 sourceUrl 反查用户库——批次 A 入库/备课补采的
+      // 联网资料全文已落库，可像附件一样取章节窗口（存量纯联网路径的引用从此可取回）
+      if (!materialId && typeof ref?.sourceUrl === 'string' && ref.sourceUrl.trim()) {
+        const webRecord = findWebRecordBySourceUrl(params.userId, ref.sourceUrl);
+        if (webRecord) materialId = webRecord.id;
+      }
       if (!materialId || seenMaterials.has(materialId)) continue;
       seenMaterials.add(materialId);
       const found = readMaterial(params.userId, materialId);
