@@ -4,7 +4,11 @@
     <AnnouncementBanner />
     <div id="app-main" tabindex="-1">
       <RouterView v-slot="{ Component }">
-        <transition name="route-fade" mode="out-in">
+        <!-- 显式 duration：Vue 改用定时器收尾，不依赖 transitionend 事件。
+             页面失焦/后台化时浏览器停帧会导致 transitionend 永不触发，
+             out-in 过渡随即永久冻结（URL 已变内容不换、后续导航全死，
+             与课堂页 b25ff5d6 修过的 rAF 陷阱同族）。200ms 略大于 CSS 的 140ms。 -->
+        <transition name="route-fade" mode="out-in" :duration="200">
           <component :is="Component" />
         </transition>
       </RouterView>
