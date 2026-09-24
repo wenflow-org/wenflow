@@ -53,6 +53,23 @@ export function userDirectory(userId: string): string {
   return path.join(resolveMaterialsRoot(), safe || 'anonymous');
 }
 
+/**
+ * 历史无前缀目录（读路径兼容，2026-09-24 发现）：加 `user_` 前缀的目录约定上线之前，
+ * 旧上传直接落在 `<root>/<sanitized-userId>/`。这些资料对当前管线（清单/brief/附件打包）
+ * 全部不可见——读路径对旧目录做回退兼容，写路径仍只写新前缀目录。
+ */
+function legacyUserDirectory(userId: string): string {
+  const safe = String(userId || '').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);
+  return path.join(resolveMaterialsRoot(), safe || 'anonymous');
+}
+
+/** 该用户的所有候选目录：新前缀目录优先，旧无前缀目录兜底（去重）。 */
+function userDirectories(userId: string): string[] {
+  const current = userDirectory(userId);
+  const legacy = legacyUserDirectory(userId);
+  return current === legacy ? [current] : [current, legacy];
+}
+
 export function recordPath(userId: string, id: string): string {
   return path.join(userDirectory(userId), `${id}.json`);
 }
@@ -61,15 +78,34 @@ export function markdownPath(userId: string, id: string): string {
   return path.join(userDirectory(userId), `${id}.md`);
 }
 
+function recordPathIn(dir: string, id: string): string {
+  return path.join(dir, `${id}.json`);
+}
+
+function markdownPathIn(dir: string, id: string): string {
+  return path.join(dir, `${id}.md`);
+}
+
+/** 按新→旧目录顺序找记录所在目录；都找不到返回 null。 */
+function findRecordDir(userId: string, id: string): string | null {
+  if (!ID_PATTERN.test(String(id || ''))) return null;
+  for (const dir of userDirectories(userId)) {
+    if (fs.existsSync(recordPathIn(dir, id))) return dir;
+  }
+  return null;
+}
+
 export function readRecord(userId: string, id: string): MaterialRecord | null {
   if (!ID_PATTERN.test(String(id || ''))) return null;
-  try {
-    const raw = fs.readFileSync(recordPath(userId, id), 'utf-8');
-    const parsed = JSON.parse(raw) as MaterialRecord;
-    return parsed && parsed.id === id ? parsed : null;
-  } catch {
-    return null;
+  for (const dir of userDirectories(userId)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(recordPathIn(dir, id), 'utf-8')) as MaterialRecord;
+      if (parsed && parsed.id === id) return parsed;
+    } catch {
+      // 该目录无此记录或损坏，尝试下一候选目录
+    }
   }
+  return null;
 }
 
 /** 写入一份资料（正文 + 记录）。 */
@@ -84,51 +120,60 @@ export function writeMaterial(record: MaterialRecord, markdown: string): void {
 export function updateRecord(userId: string, id: string, patch: Partial<MaterialRecord>): MaterialRecord | null {
   const record = readRecord(userId, id);
   if (!record) return null;
+  // 写回记录所在目录（兼容旧无前缀目录中的历史资料，不搬家）
+  const dir = findRecordDir(userId, id) ?? userDirectory(userId);
   const updated: MaterialRecord = { ...record, ...patch };
-  fs.writeFileSync(recordPath(userId, id), JSON.stringify(updated, null, 2), 'utf-8');
+  fs.writeFileSync(recordPathIn(dir, id), JSON.stringify(updated, null, 2), 'utf-8');
   return updated;
 }
 
-/** 列出该用户的资料（新→旧）。损坏的单条记录跳过，不影响整体列表。 */
+/** 列出该用户的资料（新→旧；合并新前缀目录与历史无前缀目录，按 id 去重）。损坏的单条记录跳过。 */
 export function listMaterials(userId: string): MaterialRecord[] {
-  let entries: string[] = [];
-  try {
-    entries = fs.readdirSync(userDirectory(userId));
-  } catch {
-    return [];
+  const byId = new Map<string, MaterialRecord>();
+  // 新目录优先：后读旧目录，重复 id 不覆盖
+  const dirs = [...userDirectories(userId)].reverse();
+  for (const dir of dirs) {
+    let entries: string[] = [];
+    try {
+      entries = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.endsWith('.json')) continue;
+      const record = readRecord(userId, entry.slice(0, -'.json'.length));
+      if (record) byId.set(record.id, record);
+    }
   }
-  const records: MaterialRecord[] = [];
-  for (const entry of entries) {
-    if (!entry.endsWith('.json')) continue;
-    const record = readRecord(userId, entry.slice(0, -'.json'.length));
-    if (record) records.push(record);
-  }
-  return records.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  return Array.from(byId.values()).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 }
 
 /** 读取单份资料的正文（供前端预览与「资料→路径」消费）。 */
 export function readMaterial(userId: string, id: string): { record: MaterialRecord; markdown: string } | null {
   const record = readRecord(userId, id);
   if (!record) return null;
+  const dir = findRecordDir(userId, id) ?? userDirectory(userId);
   let markdown = '';
   try {
-    markdown = fs.readFileSync(markdownPath(userId, id), 'utf-8');
+    markdown = fs.readFileSync(markdownPathIn(dir, id), 'utf-8');
   } catch {
     markdown = '';
   }
   return { record, markdown };
 }
 
-/** 删除单份资料（只删自己的；返回是否删掉了东西）。 */
+/** 删除单份资料（只删自己的；返回是否删掉了东西；兼容旧目录）。 */
 export function deleteMaterial(userId: string, id: string): boolean {
   if (!readRecord(userId, id)) return false;
   let removed = false;
-  for (const target of [recordPath(userId, id), markdownPath(userId, id)]) {
-    try {
-      fs.unlinkSync(target);
-      removed = true;
-    } catch {
-      // 文件可能已被清理，忽略
+  for (const dir of userDirectories(userId)) {
+    for (const target of [recordPathIn(dir, id), markdownPathIn(dir, id)]) {
+      try {
+        fs.unlinkSync(target);
+        removed = true;
+      } catch {
+        // 文件可能已被清理，忽略
+      }
     }
   }
   return removed;
