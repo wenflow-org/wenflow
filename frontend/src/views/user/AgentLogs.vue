@@ -1022,9 +1022,9 @@ const copyText = async (text: string, successMessage: string) => {
   }
 
   /* 2026-09-24 反馈「个人中心五个选项里的内容都偏大」：统计卡 14/16 → 10/12、
-     数字 22 → 19px；表格单元格 uc.css 移动端块已收一轮，这里再压一档行内间距。 */
+     数字 22 → 16px；表格单元格 uc.css 移动端块已收一轮，这里再压一档行内间距。 */
   .stat-card { padding: 10px 12px; }
-  .stat-card strong { font-size: 19px; }
+  .stat-card strong { font-size: 16px; }
   .logs-table td, .logs-table th { padding: 7px 8px; }
 
   .actions {

@@ -998,12 +998,12 @@ function loadGuidance() {
 
 <style scoped>
 /* ===== 移动端密度（2026-09-24）=====
-   判据：KPI 数字 20–22px、卡片内边距 12–16px、空态/加载留白 ≤32px。
-   实测 390 下整页 3359px（最长的一页），其中 .metric__value 30px×4 是全站最大的数字刻度：
+   判据：KPI 数字 16px（2026-09-24 用户指着统计卡数字说「数字也很大」后全站统一）、卡片内边距 12–16px、空态/加载留白 ≤32px。
+   实测 390 下整页 3359px（最长的一页），其中 .metric__value 原 30px×4 是全站最大的数字刻度：
    两列卡各约 171px 宽，30px 数字占掉近 1/5 屏宽，与「扫一眼看数」的用法不匹配。
    放在文件末尾：同权重下后出现者胜。 */
 @media (max-width: 1100px) {
-  .metric__value { font-size: 20px; }
+  .metric__value { font-size: 16px; }
   .metric { padding: 12px 14px; gap: 6px; }
   .chart,
   .suggest,

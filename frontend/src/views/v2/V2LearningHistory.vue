@@ -504,7 +504,8 @@ onMounted(() => {
   }
 
   .history__stat strong {
-    font-size: 19px;
+    /* 统计数字全站统一 16px（对齐账户页，2026-09-24 收数字轮） */
+    font-size: 16px;
   }
 
   .history__stat strong i {

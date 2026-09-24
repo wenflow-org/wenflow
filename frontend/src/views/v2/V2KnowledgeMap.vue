@@ -190,5 +190,9 @@ onMounted(async () => {
   .km__card {
     padding: var(--mk-space-4);
   }
+  /* 页面 h1 移动端全站 18px，只有这页漏了（桌面 20px 一直漏到手机上） */
+  .km__hero h1 {
+    font-size: var(--mk-fs-18);
+  }
 }
 </style>

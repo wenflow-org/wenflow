@@ -433,7 +433,7 @@ onMounted(() => {
   /* 28×28 对拇指偏小，抬到 34×34 并同步贴角 */
   .ach-share { width: 34px; height: 34px; top: 6px; right: 6px; }
   .ov { padding: 12px 14px; }
-  .ov b { font-size: 20px; }
+  .ov b { font-size: 16px; } /* 统计数字全站统一 16px */
   .ov small { font-size: 12px; }
   .ach-card { padding: 12px 14px; }
   .ach-card__name { font-size: 14px; }

@@ -2408,9 +2408,9 @@ onBeforeUnmount(() => {
    放在文件末尾：同权重下后出现者胜（本文件有 4 个 style 块，基础规则在后面几块里）。 */
 @media (max-width: 1100px) {
   .hero { padding: 16px 18px; gap: 12px; }
-  /* 120px 环 + 环内 22px 数字在 390 下太占地方；收到 96px、数字 19px（与学习历史统计卡同档） */
+  /* 120px 环 + 环内 22px 数字在 390 下太占地方；收到 96px、数字 16px（统计数字统一档） */
   .hero__ring { width: 96px; height: 96px; }
-  .hero__ring-text b { font-size: 19px; }
+  .hero__ring-text b { font-size: 16px; }
   .stages__empty { padding: 20px 16px; }
   .sidecard { padding: 12px 14px; }
   .sidecard strong { font-size: 14px; }

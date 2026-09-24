@@ -1736,9 +1736,8 @@ onMounted(loadAll);
   .review__link { flex-wrap: wrap; row-gap: 4px; }
   .review__name { flex: 1 1 100%; white-space: normal; overflow: visible; }
   .review__meter { flex: 1 1 auto; width: auto; min-width: 0; }
-  /* 21px 是「页面标题」档，但它是卡内标题，而且比同页的问候语（16px）还大——
-     按基线（卡/区块标题 15–17px）收到 17px。 */
-  .action__title { font-size: 16px; }
+  /* 卡内标题按基线收到 14px——16px 比路径页卡标题（用户点过名的 15.5px 档）还大一档 */
+  .action__title { font-size: 14px; }
   .dash__main { padding: 16px 14px 32px; }
   .greet { flex-direction: column; align-items: flex-start; gap: 8px; }
 }
