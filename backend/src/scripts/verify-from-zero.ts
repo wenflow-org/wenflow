@@ -195,12 +195,19 @@ async function main(): Promise<void> {
     : 0;
   // 阶段任务由**后台任务**生成（runBackgroundTask('learning.path.stage-enrichment')），
   // generate() 返回时还没有任务 → 必须等（生产线里由前端轮询 run 状态）。
+  // 窗口可用 --wait=<秒> 调整：网关慢时（实测单次 150s+）三个里程碑的阶段设计要跑好几分钟，
+  // 固定 150s 会把"还在生成"误判成"没生成"。
+  const waitSeconds = Math.max(60, Number(arg('wait')) || 600);
+  const waitDeadline = Date.now() + waitSeconds * 1000;
+  let waited = 0;
   let task = await pickTask(provisioned.userId);
-  for (let attempt = 0; attempt < 50 && !task; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+  while (!task && Date.now() < waitDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    waited += 5;
     task = await pickTask(provisioned.userId);
   }
-  ok('1 路径', Boolean(path && milestones > 0 && task), `path=${path?.id.slice(0, 10)} milestones=${milestones} 首任务=${task?.title ?? '(无)'}`);
+  if (waited) console.log(`[zero] 等待阶段任务生成 ${waited}s`);
+  ok('1 路径', Boolean(path && milestones > 0 && task), `path=${path?.id.slice(0, 10)} milestones=${milestones} 首任务=${task?.title ?? '(无)'}（等待 ${waited}s / 上限 ${waitSeconds}s）`);
   if (!path || !task) throw new Error('路径/任务未生成，无法继续');
 
   const tracesBefore = await prisma.memory_traces.count({ where: { userId: provisioned.userId } });
