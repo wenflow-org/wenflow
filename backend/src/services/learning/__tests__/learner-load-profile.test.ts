@@ -59,15 +59,19 @@ describe('normalizeLearnerLoadProfile / resolveLearnerLoadProfileFromCollectedDa
     const profile = resolveLearnerLoadProfileFromCollectedData(collectedData);
     expect(profile).not.toBeNull();
 
+    const base = computeHints(null);
     const tightened = computeHints(profile);
-    // 2026-09-21：认知负荷**不参与里程碑数**（结构归 LLM 与学习证据）；资源仍被收紧。
-    const baseline = computeHints(null);
-    expect(tightened.milestoneRange).toEqual(baseline.milestoneRange);
+    // 2026-09-21：认知负荷不参与里程碑数；2026-09-21 数据定位 / 09-22 修正后，明确
+    // minimal（承受力锚）⇒ 结构收到一节课量级 [1,2]（ONE_SITTING_BOUNDS，区间非单点）。
+    expect(tightened.milestoneRange).toEqual([1, 2]);
     expect(tightened.milestoneRange[0]).not.toBe(tightened.milestoneRange[1]); // 单点 ⇒ validator 退化为精确校验
     expect(tightened.maxWeeks).toBeLessThanOrEqual(2);
     expect(tightened.subtaskMinutesRange[1]).toBeLessThanOrEqual(45);
 
-    const base = computeHints(null);
+    // 认知负荷（低耐受）单独不碰里程碑数——结构归 LLM 与学习证据，只收紧资源
+    const toleranceOnly = computeHints({ availableTime: null, loadTolerance: '信息一多就容易乱，三步以上就放弃' });
+    expect(toleranceOnly.milestoneRange).toEqual(base.milestoneRange);
+
     // 收紧严格优于（或等于）未注入画像的基线
     expect(tightened.targetMilestones).toBeLessThanOrEqual(base.targetMilestones as number);
     expect(tightened.maxWeeks).toBeLessThanOrEqual(base.maxWeeks);

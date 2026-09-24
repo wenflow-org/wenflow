@@ -302,10 +302,10 @@ describe('缺陷修复：学时未知时每阶段任务数不再落到 1', () =>
 });
 
 describe('可选负荷画像 learnerLoadProfile（加性参数，不传零差异）', () => {
-  it('紧预算 + 极低耐受 → 只收紧**资源**（单任务分钟/周期/任务密度）；里程碑数不受认知负荷影响', () => {
+  it('极低耐受 → 只收紧**资源**（单任务分钟/周期/任务密度）；里程碑数不受认知负荷影响', () => {
     const tightened = derivePlanningHints(
       '三个月', null, null, null, ['S1', 'S2', 'S3'], null, 'medium',
-      { availableTime: 'minimal', loadTolerance: '信息一多就容易乱，三步以上就放弃' }
+      { availableTime: null, loadTolerance: '信息一多就容易乱，三步以上就放弃' }
     );
     // 2026-09-21：认知负荷退出里程碑数（结构归 LLM 与学习证据）——边界只由 scope/pace 给。
     expect(tightened.targetMilestones).toBe(3);
@@ -318,17 +318,21 @@ describe('可选负荷画像 learnerLoadProfile（加性参数，不传零差异
     expect(tightened.targetSubtasksPerStage).toBe(3);
   });
 
-  it('回归：认知负荷**不参与**里程碑数——minimal 与「不传画像」的区间/建议值完全一致，且区间不为单点', () => {
+  it('承受力锚（2026-09-21 数据定位 / 09-22 修正）：minimal ⇒ 结构收到一节课量级 [1,2]；仅低耐受不碰里程碑数', () => {
     const stages = ['S1', 'S2', 'S3', 'S4', 'S5'];
     const base = derivePlanningHints('三个月', null, null, null, stages, null, null, null);
     const minimal = derivePlanningHints('三个月', null, null, null, stages, null, null, { availableTime: 'minimal' });
-    expect(minimal.milestoneRange).toEqual(base.milestoneRange);
-    expect(minimal.targetMilestones).toBe(base.targetMilestones);
-    expect(minimal.milestoneRange).toEqual([2, 8]);
+    // ONE_SITTING_BOUNDS：明确 minimal 的时间信号把结构收到一节课（区间非单点）
+    expect(minimal.milestoneRange).toEqual([1, 2]);
     expect(minimal.milestoneRange[0]).not.toBe(minimal.milestoneRange[1]); // 单点 ⇒ 数量被代码拍死
-    // 资源仍被收紧（这才是认知负荷该管的东西）
-    expect(minimal.maxWeeks).toBeLessThan(base.maxWeeks);
-    expect(minimal.subtaskMinutesRange[1]).toBeLessThanOrEqual(45);
+    expect(minimal.targetMilestones).toBeLessThanOrEqual(2);
+    // 资源同收（锚口径：≤15 分钟 / ≤1 周）
+    expect(minimal.subtaskMinutesRange[1]).toBeLessThanOrEqual(15);
+    expect(minimal.maxWeeks).toBeLessThanOrEqual(1);
+    // 认知负荷（低耐受）单独：里程碑数保持中性，结构归 LLM 与学习证据
+    const toleranceOnly = derivePlanningHints('三个月', null, null, null, stages, null, null, { availableTime: null, loadTolerance: '信息一多就容易乱' });
+    expect(toleranceOnly.milestoneRange).toEqual(base.milestoneRange);
+    expect(toleranceOnly.targetMilestones).toBe(base.targetMilestones);
   });
 
   it('碎片化节奏（per_day）在传入负荷画像时也触发收紧', () => {
