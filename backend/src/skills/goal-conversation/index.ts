@@ -165,7 +165,36 @@ interface GoalPromptInput {
   confirmProposal?: boolean;
   /** 字段路由 supplement 纯文本（user 前缀注入，system 纯静态） */
   supplementText?: string | null;
+  /** 用户已上传资料清单（仅元信息；无上传时不传 → payload 不出现该键，行为不变） */
+  uploadedMaterials?: GoalUploadedMaterialSummary[] | null;
 }
+
+/**
+ * 用户已上传资料的**元信息清单**（不含正文）。
+ *
+ * 设计口径（2026-09-22「附件是主线」）：上传资料的正文的消费点在路径生成
+ * （path.coordinator 附件打包 → path-planning）；goal 对话阶段只让模型知道
+ * 「用户已提供了哪些资料」，避免答出「没有收到文件」这类与事实不符的话，
+ * 同时保持既有纪律「禁止假装读过资料」。
+ */
+export interface GoalUploadedMaterialSummary {
+  /** 用户原始文件名。 */
+  name: string;
+  ext: string;
+  format: string;
+  /** 抽取后正文字符数。 */
+  charCount: number;
+  /** 结构化小标题数。 */
+  headingCount: number;
+  /** 前几个小标题（给模型主题感；取不到为空数组）。 */
+  headings: string[];
+}
+
+/** 资料清单纪律注记：随清单一起注入 user payload（system prompt 纯静态，不进 prompt 治理管线）。 */
+const UPLOADED_MATERIALS_NOTE =
+  'uploadedMaterials 字段是用户已上传的资料清单：已收到，将在路径生成时作为主线依据。'
+  + '你可以确认收到并围绕其主题交流，但正文你尚未读取——禁止假装读过或凭记忆引用其内容；'
+  + '这些资料无需在 needsMaterial 中重复声明（下游会自动使用已上传文件）。';
 
 export function buildGoalConversationUserPayload(input: {
   userInput: string;
@@ -175,6 +204,8 @@ export function buildGoalConversationUserPayload(input: {
   previousStage?: string;
   /** 字段路由 supplement 纯文本（KV 前缀缓存友好化：注入 user 前缀，system 保持纯静态；30s 粒度） */
   supplementText?: string | null;
+  /** 已上传资料清单（仅元信息；缺省/空数组 → payload 不出现该键，冷启动行为不变） */
+  uploadedMaterials?: GoalUploadedMaterialSummary[] | null;
 }): string {
   const statePayload = input.previousState
     ? input.previousState
@@ -197,6 +228,21 @@ export function buildGoalConversationUserPayload(input: {
 
   // 键序按"稳定→动态"（KV 前缀缓存）：task 常量前置（跨轮/跨用户稳定），
   // 动态块（state 全量快照 / 当轮输入 / 增长历史）后置，最大化 user 内前缀命中。
+  // uploadedMaterials 会话内基本稳定，紧跟 task 之后；无上传时键不出现（JSON.stringify 忽略空展开）。
+  const materialsBlock = input.uploadedMaterials?.length
+    ? {
+        uploadedMaterialsNote: UPLOADED_MATERIALS_NOTE,
+        uploadedMaterials: input.uploadedMaterials.map((material) => ({
+          name: material.name,
+          format: material.format,
+          ext: material.ext,
+          charCount: material.charCount,
+          headingCount: material.headingCount,
+          headings: material.headings,
+        })),
+      }
+    : {};
+
   const payloadJson = JSON.stringify({
     task: {
       mode: 'goal-conversation-turn-update',
@@ -208,6 +254,7 @@ export function buildGoalConversationUserPayload(input: {
         'return exactly one raw JSON object with no extra text'
       ]
     },
+    ...materialsBlock,
     state: statePayload,
     userInput: input.userInput,
     conversationContext
@@ -889,6 +936,7 @@ function buildGoalPromptSpec(
       previousUnderstanding: payload.previousUnderstanding,
       previousStage: payload.previousStage,
       supplementText: payload.supplementText,
+      uploadedMaterials: payload.uploadedMaterials,
     }),
     parseRawOutput: (rawOutput) => {
       // Delta 模式（§5.4）：state/understanding 缺席合法（缺席=不变）
@@ -979,6 +1027,8 @@ export async function goalConversationAgentHandler(
       supplementText: isPromptSupplementEnabled()
         ? (await getSupplementTextForAgent('skill:goal-conversation')).text
         : null,
+      // 已上传资料清单（仅元信息）：service 层 fail-open 提供，缺省=无上传
+      uploadedMaterials: input.metadata?.uploadedMaterials as GoalUploadedMaterialSummary[] | undefined,
     };
 
     // 旧语义：maxFormatRetries=2 → 最多 3 次尝试（含首次）
@@ -1245,6 +1295,8 @@ export async function runGoalConversationAgent(params: {
   allowInvalidStructuredOutput?: boolean;
   systemPromptOverride?: string;
   confirmProposal?: boolean;
+  /** 已上传资料清单（仅元信息，见 GoalUploadedMaterialSummary）；缺省=无上传 */
+  uploadedMaterials?: GoalUploadedMaterialSummary[] | null;
 }): Promise<GoalConversationAgentResult> {
   const result = await goalConversationAgentHandler(
     {
@@ -1255,7 +1307,8 @@ export async function runGoalConversationAgent(params: {
           previousUnderstanding: params.previousUnderstanding,
           previousStage: params.previousStage,
           previousState: params.previousState,
-          confirmProposal: params.confirmProposal === true
+          confirmProposal: params.confirmProposal === true,
+          uploadedMaterials: params.uploadedMaterials
         }
     },
     {
