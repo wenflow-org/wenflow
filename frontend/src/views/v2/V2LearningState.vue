@@ -97,9 +97,12 @@
             </div>
 
             <!-- skill 生成块 -->
-            <!-- P1 修复：guidance 加载失败可见提示 -->
+            <!-- P1 修复：guidance 加载失败可见提示（可原地重试，不再冒充"没有数据"） -->
             <div v-if="guidanceLoadFailed" class="chart__empty" role="alert">
-              AI 建议加载失败，请刷新页面重试。
+              AI 建议暂时取不到（生成较慢或失败）。
+              <button type="button" class="guide-retry" :disabled="guidanceLoading" @click="loadGuidance">
+                {{ guidanceLoading ? '重试中…' : '重试' }}
+              </button>
             </div>
             <template v-if="skillCopy">
               <div class="guide">
@@ -147,7 +150,9 @@
             <!-- 静态规则兜底块 -->
             <template v-else>
               <div v-if="!suggestionCards.length" class="chart__empty">
-                {{ hasAnyLoad ? '当前没有特别建议，保持节奏就好。' : '完成第一次学习后，这里会出现 AI 建议。' }}
+                {{ guidanceLoadFailed
+                  ? 'AI 建议暂时取不到，可点上方重试。'
+                  : (hasAnyLoad ? '当前没有特别建议，保持节奏就好。' : '完成第一次学习后，这里会出现 AI 建议。') }}
               </div>
               <div v-else class="suggest__list">
                 <article v-for="(s, i) in suggestionCards" :key="i" class="sug" :class="`sug--${s.level}`">
@@ -698,6 +703,7 @@ const currentLoadFailed = ref(false);
 const warningsLoadFailed = ref(false);
 const learnerCenterLoadFailed = ref(false);
 const guidanceLoadFailed = ref(false);
+const guidanceLoading = ref(false);
 
 onMounted(() => {
   // 各数据源独立并发，互不阻塞（skill 引导最慢，不应拖住其他区块）
@@ -718,10 +724,23 @@ onMounted(() => {
     .then((r) => { learnerCenter.value = unwrap(r) as Record<string, any>; })
     .catch(() => { learnerCenterLoadFailed.value = true; });
 
-  request.get('/adaptive-guidance/copy', { params: { view: 'learning-state' } })
-    .then((r) => { guidance.value = unwrap(r) as Record<string, any> | null; })
-    .catch(() => { guidanceLoadFailed.value = true; });
+  void loadGuidance();
 });
+
+/**
+ * 拉取 skill 引导文案（最慢的一个数据源，独立于其他区块）。
+ * 走查（2026-09-24）：网关慢调用可超过前端超时（实测一次 113.9s）→ 请求失败后
+ * 页面此前会回落成「完成第一次学习后…」，对已有学习记录的学员是错误信息。
+ * 现在失败只提示失败并可原地重试，不再冒充"没有数据"。
+ */
+function loadGuidance() {
+  guidanceLoading.value = true;
+  guidanceLoadFailed.value = false;
+  return request.get('/adaptive-guidance/copy', { params: { view: 'learning-state' } })
+    .then((r) => { guidance.value = unwrap(r) as Record<string, any> | null; })
+    .catch(() => { guidanceLoadFailed.value = true; })
+    .finally(() => { guidanceLoading.value = false; });
+}
 </script>
 
 <style scoped>
@@ -918,6 +937,13 @@ onMounted(() => {
 <style scoped>
 .chart__empty strong { font-size: 14px; color: var(--muted); display: block; margin-bottom: 6px; }
 .chart__empty p { margin: 0; font-size: 12.5px; color: var(--faint); }
+/* 引导文案加载失败时的原地重试按钮 */
+.guide-retry {
+  margin-left: 8px; padding: 4px 12px; border-radius: var(--mk-radius-xl, 999px);
+  border: 1px solid var(--line); background: var(--surface, #fff);
+  font-size: 12.5px; font-weight: 700; color: var(--blue-deep, #1e5fa8); cursor: pointer;
+}
+.guide-retry:disabled { opacity: .6; cursor: default; }
 </style>
 
 <style scoped>

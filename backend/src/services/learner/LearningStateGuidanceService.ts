@@ -48,10 +48,19 @@ class LearningStateGuidanceService {
   private cache = new Map<string, CacheEntry>();
   private inflight = new Map<string, Promise<LearningStateGuidancePayload | null>>();
 
-  /** 读缓存；过期/缺失则同步刷新。 */
+  /**
+   * 读缓存；过期/缺失则刷新。
+   * - 命中且未过期：直接返回
+   * - 命中但已过期：**先返回旧值**，后台刷新（stale-while-revalidate）。
+   *   动机（2026-09-24 走查）：网关侧慢调用实测到过 114s，而前端 60s 就超时——同步刷新会把
+   *   已经存在的建议整段吞掉，页面回落成"完成第一次学习后…"（对已有学习记录的学员是错误信息）。
+   * - 冷缓存/强制刷新：同步刷新（首次没有旧值可给）
+   */
   async get(userId: string, options: { forceRefresh?: boolean } = {}): Promise<LearningStateGuidancePayload | null> {
     const hit = this.cache.get(userId);
-    if (!options.forceRefresh && hit && Date.now() - hit.at < CACHE_TTL_MS) {
+    if (!options.forceRefresh && hit) {
+      if (Date.now() - hit.at < CACHE_TTL_MS) return hit.payload;
+      void this.refresh(userId).catch(() => undefined);
       return hit.payload;
     }
     return this.refresh(userId);
