@@ -9,6 +9,7 @@ import {
   findAuditLogs,
   type AuditLogScope,
 } from '../../services/audit-log.service';
+import { startOfDay } from '../../services/time/day-boundary';
 
 const router = Router();
 
@@ -58,26 +59,22 @@ function parsePositiveInt(value: unknown, defaultValue: number, name: string): n
   return parsed;
 }
 
-/** 快捷 timeRange（本地时区当日 00:00 起点，与 platform.ts 同款） */
+/** 快捷 timeRange（**应用时区本地日** 00:00 起点，day-boundary 单一真理源） */
 function timeRangeBounds(range: TimeRange): { gte?: Date; lt?: Date } {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = startOfDay(new Date());
   switch (range) {
     case 'today':
       return { gte: today };
     case 'yesterday': {
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterday = new Date(today.getTime() - 86400000);
       return { gte: yesterday, lt: today };
     }
     case 'week': {
-      const weekAgo = new Date(today);
-      weekAgo.setDate(weekAgo.getDate() - 7);
+      const weekAgo = new Date(today.getTime() - 7 * 86400000);
       return { gte: weekAgo };
     }
     case 'month': {
-      const monthAgo = new Date(today);
-      monthAgo.setDate(monthAgo.getDate() - 30);
+      const monthAgo = new Date(today.getTime() - 30 * 86400000);
       return { gte: monthAgo };
     }
     case 'all':

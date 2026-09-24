@@ -26,9 +26,11 @@ export function getSimulatedAsOf(): Date | null {
   return storage.getStore()?.asOf ?? null;
 }
 
-/** 写入点统一入口：优先模拟时刻，否则真墙钟（默认行为不变）。 */
+/** 写入/读取统一入口：优先模拟时刻，否则真墙钟（默认行为不变）。
+ *  返回**拷贝**：调用方原地修改（setHours/setDate 等）不会污染共享的模拟时刻。 */
 export function simulatedNowOr(fallback: Date = new Date()): Date {
-  return storage.getStore()?.asOf ?? fallback;
+  const asOf = storage.getStore()?.asOf;
+  return asOf ? new Date(asOf.getTime()) : fallback;
 }
 
 export function isSimulatedClockActive(): boolean {

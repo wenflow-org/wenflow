@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import systemPrisma from '../config/system-database';
+import { getAppTimeZone, setAppTimeZone, normalizeTimeZone } from './time/day-boundary';
 
 export interface PlatformSettings {
   registrationEnabled: boolean;
@@ -8,13 +9,16 @@ export interface PlatformSettings {
   registerIpQuotaEnabled?: boolean;
   /** 开启后的每日限额（1-100），默认 5 */
   registerIpDailyQuota?: number;
+  /** 应用时区（IANA 名，如 Asia/Shanghai）：所有"按天归组/比较"的日界口径，见 services/time/day-boundary */
+  timezone?: string;
 }
 
 /** 平台 key 统一存这里（避免散落字符串笔误） */
 export const PLATFORM_SETTING_KEYS = {
   registrationEnabled: 'registrationEnabled',
   registerIpQuotaEnabled: 'registerIpQuotaEnabled',
-  registerIpDailyQuota: 'registerIpDailyQuota'
+  registerIpDailyQuota: 'registerIpDailyQuota',
+  timezone: 'timezone'
 } as const;
 
 export const DEFAULT_REGISTER_IP_DAILY_QUOTA = 5;
@@ -112,7 +116,11 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     ? DEFAULT_REGISTER_IP_DAILY_QUOTA
     : parsePositiveInt(quotaStored, DEFAULT_REGISTER_IP_DAILY_QUOTA, MAX_REGISTER_IP_DAILY_QUOTA);
 
-  return { registrationEnabled, registerIpQuotaEnabled, registerIpDailyQuota };
+  // timezone：应用日界口径；无记录/非法 → 用当前生效值（默认 Asia/Shanghai）
+  const timezoneStored = await readSetting(PLATFORM_SETTING_KEYS.timezone);
+  const timezone = normalizeTimeZone(timezoneStored) || getAppTimeZone();
+
+  return { registrationEnabled, registerIpQuotaEnabled, registerIpDailyQuota, timezone };
 }
 
 export async function updatePlatformSettings(input: Partial<PlatformSettings>): Promise<PlatformSettings> {
@@ -125,6 +133,14 @@ export async function updatePlatformSettings(input: Partial<PlatformSettings>): 
   if (input.registerIpDailyQuota !== undefined) {
     const quota = parsePositiveInt(input.registerIpDailyQuota, DEFAULT_REGISTER_IP_DAILY_QUOTA, MAX_REGISTER_IP_DAILY_QUOTA);
     await persistPlatformSetting(PLATFORM_SETTING_KEYS.registerIpDailyQuota, String(quota));
+  }
+  if (typeof input.timezone === 'string' && input.timezone.trim()) {
+    if (!normalizeTimeZone(input.timezone)) {
+      throw new PlatformSettingsUnavailableError('时区名非法（需 IANA 名，如 Asia/Shanghai）');
+    }
+    await persistPlatformSetting(PLATFORM_SETTING_KEYS.timezone, input.timezone.trim());
+    // 立即生效：日界是全局口径，改完必须同步缓存（否则要等下次启动）
+    setAppTimeZone(input.timezone.trim());
   }
   return getPlatformSettings();
 }

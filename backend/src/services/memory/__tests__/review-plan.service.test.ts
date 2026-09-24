@@ -564,11 +564,11 @@ describe('buildReviewPlan（课内温故计划）', () => {
     });
     const plan = await buildReviewPlan('u1', { deps, now: new Date('2026-09-15T10:00:00Z') });
     expect(plan.tomorrowCount).toBe(7);
-    // 窗口：今天结束之后 ~ 明天结束之前
+    // 窗口：今天结束之后 ~ 明天结束之前（**应用时区本地日**：UTC+8 下本地日末 = 15:59:59.999Z）
     const [userId, from, to] = (deps.countDueBetween as jest.Mock).mock.calls[0];
     expect(userId).toBe('u1');
-    expect(from.toISOString()).toBe('2026-09-15T23:59:59.999Z');
-    expect(to.toISOString()).toBe('2026-09-16T23:59:59.999Z');
+    expect(from.toISOString()).toBe('2026-09-15T15:59:59.999Z');
+    expect(to.toISOString()).toBe('2026-09-16T15:59:59.999Z');
   });
 
   it('额度读取失败 → 退回按会话预算走（不能让一次读失败把温故关掉）', async () => {

@@ -18,6 +18,7 @@ import { backgroundTaskTracker } from './services/background-task-tracker.servic
 import { telemetryWriter } from './services/telemetry-writer.service';
 import { logRetentionService } from './services/log-retention.service';
 import { auditCleanupService } from './services/audit-cleanup.service';
+import { refreshAppTimeZoneFromSettings } from './services/time/day-boundary';
 import { autopilotService } from './virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from './virtual-lab/session-reclaim.service';
 import { bootstrapEnvironment } from './bootstrap/env';
@@ -76,6 +77,9 @@ export async function startServer() {
     startMaintenanceSchedulers(lifecycle);
     await runVirtualLabStartupRecovery();
     assertStartupActive();
+    // 应用日界口径（所有"按天归组/比较"）：从平台设置加载时区，失败保持默认 Asia/Shanghai
+    const appTz = await refreshAppTimeZoneFromSettings();
+    logger.info(`[startup] 应用日界时区 = ${appTz}`);
 
     await auditSensitiveStoragePermissions(assertStartupActive);
     assertStartupActive();

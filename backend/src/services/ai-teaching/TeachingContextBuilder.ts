@@ -1029,8 +1029,14 @@ export async function buildTeachingScenarioContext(
     throw new Error('无权访问此任务');
   }
 
-  const runtimeLearningState = previousSession?.status === 'active'
+  // 续课（active 会话）同样走自然衰减：跨日恢复一节没结完的课时，不能把上次课内最后一回合的
+  // runtime 值原样当先验（此前直读 teachingState，跨日恢复会带着"昨天的疲劳"上课）。
+  // restoreMetrics 按日粒度折算：同日续课 dayDiff=0 无影响，仅跨日恢复生效。
+  const resumedLearningState = previousSession?.status === 'active'
     ? learningStateService.coerceMetrics(previousSession.teachingState)
+    : null;
+  const runtimeLearningState = resumedLearningState
+    ? learningStateService.restoreMetrics(resumedLearningState)
     : null;
   const learningState = runtimeLearningState || await learningStateService.getCurrentState(userId);
   const learnerSnapshot = await learnerSnapshotRefreshService.getLatest({

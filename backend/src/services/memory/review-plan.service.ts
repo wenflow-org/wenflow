@@ -23,6 +23,7 @@ import { getDailyState as defaultGetDailyState, type ReviewDailyState } from './
 import { mapReviewStatusToRating, type ReviewRating } from '../learner/ReviewCompletedConsumer';
 import { conceptBeliefService } from '../learner/concept-belief.service';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
+import { endOfDay, dayKeyOf } from '../time/day-boundary';
 
 /** 基准负担预算（负担单位）：约等于**两个原子点**（1.0+1.0），或一个复合/流程点（1.5） */
 export const BASE_LOAD_BUDGET = 2.0;
@@ -498,7 +499,7 @@ export async function buildReviewPlan(
     .catch(() => ({
       ok: false as const,
       state: {
-        date: now.toISOString().slice(0, 10),
+        date: dayKeyOf(now),
         limitLoad: budget,
         usedLoad: 0,
         usedCount: 0,
@@ -557,11 +558,10 @@ export async function buildReviewPlan(
     usedLoad = Math.round((usedLoad + estimate.load) * 100) / 100;
   }
 
-  // 明日预告：明天（UTC 日）预计到期的点数，用于首页「明天预计 N 个」
-  const endOfToday = new Date(now);
-  endOfToday.setUTCHours(23, 59, 59, 999);
+  // 明日预告：明天（**应用时区本地日**）预计到期的点数，用于首页「明天预计 N 个」
+  const endOfToday = endOfDay(now);
   const startOfTomorrow = new Date(endOfToday.getTime() + 1);
-  const endOfTomorrow = new Date(startOfTomorrow.getTime() + 86400_000 - 1);
+  const endOfTomorrow = new Date(endOfDay(startOfTomorrow).getTime());
   const tomorrowCount = await deps
     .countDueBetween(userId, endOfToday, endOfTomorrow)
     .catch(() => 0);

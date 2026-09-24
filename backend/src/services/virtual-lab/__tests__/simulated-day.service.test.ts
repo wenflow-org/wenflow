@@ -22,21 +22,27 @@ import { resetDegradationCounters, snapshotDegradationCounters } from '../../../
 const SETTINGS = { ...DEFAULT_VIRTUAL_LAB_SETTINGS.dateSimulation };
 
 describe('simulated-day 纯函数', () => {
-  it('parseDateOnly / toDateOnly：按 UTC 日历日归一', () => {
+  it('parseDateOnly / toDateOnly：按**应用时区本地日**归一（默认 Asia/Shanghai）', () => {
     expect(toDateOnly(parseDateOnly('2026-09-16'))).toBe('2026-09-16');
-    expect(parseDateOnly('2026-09-16T23:30:00+08:00').toISOString()).toBe('2026-09-16T00:00:00.000Z');
-    expect(parseDateOnly(new Date('2026-09-16T10:00:00Z')).toISOString()).toBe('2026-09-16T00:00:00.000Z');
+    // 本地 2026-09-16 00:00 = 2026-09-15T16:00Z（UTC+8）
+    expect(parseDateOnly('2026-09-16T23:30:00+08:00').toISOString()).toBe('2026-09-15T16:00:00.000Z');
+    expect(parseDateOnly(new Date('2026-09-16T10:00:00Z')).toISOString()).toBe('2026-09-15T16:00:00.000Z');
+    // 时区可显式注入（如 UTC 口径）
+    expect(parseDateOnly(new Date('2026-09-16T10:00:00Z'), 'UTC').toISOString()).toBe('2026-09-16T00:00:00.000Z');
   });
 
-  it('resolveDayWindow：第 N 天 = baseDate + N（UTC 日界，asOf 覆盖整日）', () => {
+  it('resolveDayWindow：第 N 天 = baseDate + N（应用时区日界，asOf 覆盖整日）', () => {
     const w0 = resolveDayWindow('2026-09-16', 0);
     expect(w0.simulatedDay).toBe('2026-09-16');
-    expect(w0.dayStart.toISOString()).toBe('2026-09-16T00:00:00.000Z');
-    expect(w0.asOf.toISOString()).toBe('2026-09-16T23:59:59.999Z');
+    expect(w0.dayStart.toISOString()).toBe('2026-09-15T16:00:00.000Z'); // 本地 09-16 00:00
+    expect(w0.asOf.toISOString()).toBe('2026-09-16T15:59:59.999Z');     // 本地 09-16 23:59:59.999
 
     const w3 = resolveDayWindow('2026-09-16', 3);
     expect(w3.simulatedDay).toBe('2026-09-19');
-    expect(w3.dayStart.toISOString()).toBe('2026-09-19T00:00:00.000Z');
+    expect(w3.dayStart.toISOString()).toBe('2026-09-18T16:00:00.000Z');
+
+    // 显式时区参数：UTC 口径仍可得（日界口径是显式的，不依赖机器）
+    expect(resolveDayWindow('2026-09-16', 0, 'UTC').dayStart.toISOString()).toBe('2026-09-16T00:00:00.000Z');
   });
 
   it('resolveSimulationClock：默认关 → disabled，baseDate 取会话创建日', () => {
@@ -62,7 +68,7 @@ describe('simulated-day 纯函数', () => {
     expect(clock.status).toBe('in_progress');
     expect(clock.baseDate).toBe('2026-09-01');
     expect(clock.dayIndex).toBe(4);
-    expect(clock.simulatedNow).toBe('2026-09-05T23:59:59.999Z');
+    expect(clock.simulatedNow).toBe('2026-09-05T15:59:59.999Z'); // 本地 09-05 日末（UTC+8）
   });
 
   it('resolveSimulationClock：baseDate 优先级 session > profile（18 号报告观察项）', () => {
@@ -284,7 +290,7 @@ describe('课表与推进（isCourseDay / collectCourseDayIndexes / planClockAdv
     expect(plan?.nextClock.dayIndex).toBe(2);
     expect(plan?.nextClock.advancedTimes).toBe(2);
     expect(plan?.nextClock.history).toHaveLength(2);
-    expect(plan?.nextClock.simulatedNow).toBe('2026-09-16T23:59:59.999Z');
+    expect(plan?.nextClock.simulatedNow).toBe('2026-09-16T15:59:59.999Z'); // 本地 09-16 日末（UTC+8）
 
     const atLimit = resolveSimulationClock({
       stageResultsClock: { baseDate: '2026-09-14', dayIndex: 3 },
@@ -307,6 +313,19 @@ describe('课表与推进（isCourseDay / collectCourseDayIndexes / planClockAdv
     // now = 09-15：第 1 天可推进
     expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-15T12:00:00Z'))?.indexes).toEqual([1]);
   });
+
+  it('P0 护栏按**应用时区日界**：本地 00:30 就能推进当日（旧 UTC 口径要等本地 08:00）', () => {
+    const clock = resolveSimulationClock({
+      stageResultsClock: { baseDate: '2026-09-14', dayIndex: 0, timezone: 'Asia/Shanghai' },
+      profileClock: { enabled: true },
+      settings: { ...SETTINGS, courseWeekdays: WEEK, timezone: 'Asia/Shanghai' },
+      sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
+    });
+    // 本地 09-15 00:30 = 2026-09-14T16:30Z：新口径下 09-15 的本地日已开始 → 可推进
+    expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-14T16:30:00Z'))?.indexes).toEqual([1]);
+    // 本地 09-14 23:30 = 2026-09-14T15:30Z：09-15 还没开始 → 仍拒绝
+    expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-14T15:30:00Z'))).toBeNull();
+  });
 });
 
 describe('explainPlanFailure: advance-day null 计划三分类', () => {
@@ -326,6 +345,24 @@ describe('explainPlanFailure: advance-day null 计划三分类', () => {
     expect(why.reason).toBe('future_day');
     expect(why.nextCourseDay).toBe('2026-09-15');
     expect(why.message).toContain('尚未开始');
+  });
+
+  it('future_day 文案带应用时区日界：到点时刻按配置时区展示（Asia/Shanghai 本地 00:00）', () => {
+    const clock = clockOf({ settings: { timezone: 'Asia/Shanghai' } });
+    const why = explainPlanFailure(clock, 1, new Date('2026-09-14T12:00:00Z'));
+    expect(why.reason).toBe('future_day');
+    expect(why.message).toContain('按 Asia/Shanghai 日界生效');
+    expect(why.message).toContain('2026/09/15 00:00'); // 该本地日起点
+  });
+
+  it('future_day 文案容错：时区缺失/非法时不阻断报错', () => {
+    const noTz = explainPlanFailure(clockOf({ settings: { timezone: undefined } }), 1, new Date('2026-09-14T12:00:00Z'));
+    expect(noTz.reason).toBe('future_day');
+    expect(noTz.message).toContain('尚未开始');
+
+    const badTz = explainPlanFailure(clockOf({ settings: { timezone: 'Not/AZone' } }), 1, new Date('2026-09-14T12:00:00Z'));
+    expect(badTz.reason).toBe('future_day');
+    expect(badTz.message).toContain('尚未开始'); // 非法时区回落应用时区，不抛错
   });
 
   it('day_limit: dayIndex 已到上限,候选日全部越界(与 planClockAdvance 的 atLimit 同口径)', () => {

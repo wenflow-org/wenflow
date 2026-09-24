@@ -37,6 +37,7 @@ import {
   listUsersBasicInfo,
 } from '../../services/cost/token-cost.service';
 import { logger } from '../../utils/logger';
+import { dayKeyOf, addDaysToDayKey } from '../../services/time/day-boundary';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -206,17 +207,15 @@ async function loadTokenData(days: number, includeTest: boolean) {
   const callCount = callRows.length;
   let callFailed = 0;
   const daily = new Map<string, { date: string; tokens: number; calls: number; failed: number }>();
-  const today = new Date();
+  // 日标签按**应用时区本地日**（day-boundary），与学习侧日界/前端 localDateKey 同口径
+  const todayKey = dayKeyOf(new Date());
   for (let i = days - 1; i >= 0; i -= 1) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const label = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const label = addDaysToDayKey(todayKey, -i);
     daily.set(label, { date: label, tokens: 0, calls: 0, failed: 0 });
   }
   for (const r of callRows) {
     if (r.success === false) callFailed += 1;
-    const d = new Date(r.calledAt);
-    const label = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const label = dayKeyOf(new Date(r.calledAt));
     const b = daily.get(label);
     if (b) {
       b.calls += 1;
@@ -225,8 +224,7 @@ async function loadTokenData(days: number, includeTest: boolean) {
   }
   // token 按天叠加
   for (const r of tokenRows) {
-    const d = new Date(r.calledAt);
-    const label = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const label = dayKeyOf(new Date(r.calledAt));
     const b = daily.get(label);
     if (b) {
       b.tokens += r.tokensUsed || 0;

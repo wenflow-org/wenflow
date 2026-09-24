@@ -19,8 +19,8 @@ import {
   updatePlatformSettings
 } from '../platform-settings.service'
 
-/** registerIpQuota* 默认值（未配置时开关关、额度 5） */
-const QUOTA_DEFAULTS = { registerIpQuotaEnabled: false, registerIpDailyQuota: 5 }
+/** registerIpQuota* 默认值（未配置时开关关、额度 5）+ 应用时区（日界口径，默认 Asia/Shanghai） */
+const QUOTA_DEFAULTS = { registerIpQuotaEnabled: false, registerIpDailyQuota: 5, timezone: expect.any(String) }
 
 describe('platform settings service', () => {
   beforeEach(() => {

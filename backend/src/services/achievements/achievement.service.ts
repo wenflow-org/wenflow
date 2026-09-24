@@ -3,6 +3,7 @@
 
 import prisma from '../../config/database';
 import { withTransaction } from '../../utils/with-transaction';
+import { dayKeyOf, addDaysToDayKey } from '../time/day-boundary';
 import type { Prisma } from '@prisma/client';
 import { logger } from '../../utils/logger';
 import AchievementSystem, { ACHIEVEMENTS, type AchievementDefinition } from './achievement-system';
@@ -25,21 +26,21 @@ function achievementRecordId(userId: string, achievementId: string): string {
 }
 
 export function calculateCurrentStreak(endTimes: Date[], now = new Date()): number {
-  const dateKeys = new Set(endTimes.map((date) => date.toISOString().slice(0, 10)));
-  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const todayKey = new Date(todayUtc).toISOString().slice(0, 10);
-  const yesterdayKey = new Date(todayUtc - DAY_MS).toISOString().slice(0, 10);
+  // 连击按**应用时区本地日**（与 task-completion 的 streakDays 同口径；此前 UTC 切日会错一天）
+  const dateKeys = new Set(endTimes.map((date) => dayKeyOf(date)));
+  const todayKey = dayKeyOf(now);
+  const yesterdayKey = addDaysToDayKey(todayKey, -1);
 
-  let cursor = dateKeys.has(todayKey)
-    ? todayUtc
+  let cursor: string | null = dateKeys.has(todayKey)
+    ? todayKey
     : dateKeys.has(yesterdayKey)
-      ? todayUtc - DAY_MS
+      ? yesterdayKey
       : null;
   let streak = 0;
 
-  while (cursor !== null && dateKeys.has(new Date(cursor).toISOString().slice(0, 10))) {
+  while (cursor !== null && dateKeys.has(cursor)) {
     streak += 1;
-    cursor -= DAY_MS;
+    cursor = addDaysToDayKey(cursor, -1);
   }
 
   return streak;

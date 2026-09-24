@@ -12,6 +12,11 @@
 import prisma from '../../config/database';
 import { withTransaction } from '../../utils/with-transaction';
 import { logger } from '../../utils/logger';
+// 时钟域：状态写入侧早已用模拟时刻（simulatedNowOr），读取侧的自然衰减必须同口径——
+// 否则跨日模拟里"隔了一个模拟日"的疲劳恢复会按真实墙钟差（≈0 或夸张天数）计算。
+import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
+// 日界单一真理源（应用时区本地日）——所有"按天归组/比较"必须走这里
+import { dayKeyOf, startOfDay, dayDiffInDays, DAY_BOUNDARY_DAY_MS } from '../time/day-boundary';
 
 // EWMA 配置（半衰期按日更新折算：h = ln(0.5)/ln(λ)）
 export const EWMA_CONFIG = {
@@ -346,9 +351,8 @@ export class LearningStateService {
    * 现在四个口径一致；顺带一个好处：UTC 没有夏令时，日差恒为整数（本地日界在 DST 切换日会错半天）。
    */
   private getNaturalDayDiff(from: Date, to: Date): number {
-    const start = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
-    const end = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
-    return Math.max(0, Math.floor((end - start) / 86400000));
+    // 日界统一走 day-boundary（应用时区本地日）：与当日课量 / 温故配额 / 日期模拟 / 趋势分桶同口径
+    return dayDiffInDays(from, to);
   }
 
   /** 单一归一入口的别名（历史上这里有一份重复实现，导致"两套刻度"并存） */
@@ -434,7 +438,7 @@ export class LearningStateService {
     return fallback;
   }
 
-  coerceMetrics(input: any, fallbackTimestamp: Date = new Date()): LearningStateMetrics | null {
+  coerceMetrics(input: any, fallbackTimestamp: Date = simulatedNowOr()): LearningStateMetrics | null {
     if (!input || typeof input !== 'object') return null;
 
     const rawLss = typeof input.lss === 'number' ? input.lss : null;
@@ -467,7 +471,7 @@ export class LearningStateService {
       ktlInput?: number;
       lfInput?: number;
     },
-    timestamp: Date = new Date()
+    timestamp: Date = simulatedNowOr()
   ): LearningStateMetrics {
     const effectiveKtlInput = this.normalizeTenScale(input.ktlInput ?? input.lss);
     const effectiveLfInput = this.normalizeTenScale(input.lfInput ?? input.lss);
@@ -668,7 +672,7 @@ export class LearningStateService {
     lf: number | null | undefined;
     lsb: number | null | undefined;
     timestamp: Date;
-  }, asOf: Date = new Date()): LearningStateMetrics {
+  }, asOf: Date = simulatedNowOr()): LearningStateMetrics {
     const normalized: LearningStateMetrics = {
       lss: this.normalizeTenScale(input.lss),
       ktl: this.normalizeTenScale(input.ktl),
@@ -812,7 +816,7 @@ export class LearningStateService {
 
     if (!latestSnapshot) return null;
 
-    return this.restoreMetrics(latestSnapshot.metrics, options.asOf ?? new Date());
+    return this.restoreMetrics(latestSnapshot.metrics, options.asOf ?? simulatedNowOr());
   }
 
   async getCommittedMetricBySourceKey(
@@ -860,7 +864,7 @@ export class LearningStateService {
     return {
       revision: user.learningStateRevision,
       metrics: latestSnapshot
-        ? this.restoreMetrics(latestSnapshot.metrics, options.asOf || new Date())
+        ? this.restoreMetrics(latestSnapshot.metrics, options.asOf || simulatedNowOr())
         : null
     };
   }
@@ -1000,7 +1004,7 @@ export class LearningStateService {
       ktl: this.displayTenScaleToInternal(input.ktl),
       lf: this.displayTenScaleToInternal(input.lf),
       lsb: this.displayBalanceScaleToInternal(input.lsb),
-      timestamp: input.timestamp || new Date(),
+      timestamp: input.timestamp || simulatedNowOr(),
     };
     const inputs: LSSInputs = {
       difficulty: Math.max(1, Math.min(10, metrics.lss)),
@@ -1112,7 +1116,7 @@ export class LearningStateService {
 
     // 添加新记录
     lssHistory.push({
-      date: new Date().toISOString(),
+      date: simulatedNowOr().toISOString(),
       score: Math.round(metrics.lss * 10), // 转换为 0-100
     });
 
@@ -1203,7 +1207,7 @@ export class LearningStateService {
     userId: string,
     options: { asOf?: Date } = {}
   ): Promise<AggregatedLearningState | null> {
-    const asOf = options.asOf ?? new Date();
+    const asOf = options.asOf ?? simulatedNowOr();
     const snapshots = await this.listCommittedSnapshots(userId, undefined, undefined, asOf);
     if (snapshots.length === 0) return null;
 
@@ -1258,7 +1262,7 @@ export class LearningStateService {
    * 用 UTC 日与每日温故配额（ReviewQuotaService）保持一致口径，避免跨时区口径漂移。
    */
   private async resolveDayLoad(userId: string, asOf: Date): Promise<{ lessons: number; minutes: number }> {
-    const dayStart = new Date(Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate()));
+    const dayStart = startOfDay(asOf);
     const [lessons, sessions] = await Promise.all([
       prisma.subtasks.count({
         where: { userId, status: 'completed', completedAt: { gte: dayStart, lte: asOf } },
@@ -1380,8 +1384,7 @@ export class LearningStateService {
   }
 
   async getTrends(userId: string, days: number = 7): Promise<LearningStateMetrics[]> {
-    const since = new Date();
-    since.setDate(since.getDate() - days);
+    const since = new Date(startOfDay(simulatedNowOr()).getTime() - days * DAY_BOUNDARY_DAY_MS);
 
     return this.getTrendsSince(userId, since);
   }
@@ -1652,34 +1655,25 @@ export class LearningStateService {
         select: { createdAt: true },
       });
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // 日界走 day-boundary（应用时区本地日，与自然衰减 / 当日课量 / 温故配额 / 日期模拟同口径）。
+      const today = startOfDay(simulatedNowOr());
 
-      const registeredAt = user?.createdAt ? new Date(user.createdAt) : new Date(today);
-      registeredAt.setHours(0, 0, 0, 0);
+      const registeredAt = user?.createdAt ? startOfDay(user.createdAt) : new Date(today);
 
-      const requestedStartDate = new Date(today);
-      requestedStartDate.setDate(today.getDate() - (requestedDays - 1));
+      const requestedStartDate = new Date(today.getTime() - (requestedDays - 1) * DAY_BOUNDARY_DAY_MS);
 
       const startDate = mode === 'all'
         ? new Date(registeredAt)
         : new Date(Math.max(requestedStartDate.getTime(), registeredAt.getTime()));
 
-      const actualDays = Math.max(1, Math.floor((today.getTime() - startDate.getTime()) / 86400000) + 1);
+      const actualDays = Math.max(1, Math.floor((today.getTime() - startDate.getTime()) / DAY_BOUNDARY_DAY_MS) + 1);
       const metrics = await this.getTrendsSince(userId, startDate);
       const currentState = await this.getCurrentState(userId);
       const latestMetricBeforeWindow = await this.getLatestCommittedMetricBefore(userId, startDate);
 
-      const toDateKey = (date: Date): string => {
-        const y = date.getFullYear();
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-      };
-
       const metricsByDay = new Map<string, typeof metrics>();
       for (const metric of metrics) {
-        const key = toDateKey(metric.timestamp);
+        const key = dayKeyOf(metric.timestamp);
         const list = metricsByDay.get(key) || [];
         list.push(metric);
         metricsByDay.set(key, list);
@@ -1687,13 +1681,12 @@ export class LearningStateService {
 
       const trends: LearningStateTrendPoint[] = [];
       let lastKnownMetric = latestMetricBeforeWindow;
-      const todayKey = toDateKey(new Date());
+      const todayKey = dayKeyOf(simulatedNowOr());
 
       for (let i = 0; i < actualDays; i += 1) {
-        const currentDate = new Date(startDate);
-        currentDate.setDate(startDate.getDate() + i);
-        currentDate.setHours(12, 0, 0, 0);
-        const key = toDateKey(currentDate);
+        // 每个本地日的展示锚点：本地正午
+        const currentDate = new Date(startOfDay(new Date(startDate.getTime() + i * DAY_BOUNDARY_DAY_MS)).getTime() + 12 * 3600 * 1000);
+        const key = dayKeyOf(currentDate);
         const dayMetrics = metricsByDay.get(key) || [];
 
         if (dayMetrics.length === 0) {

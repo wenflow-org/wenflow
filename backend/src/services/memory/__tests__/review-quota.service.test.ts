@@ -22,20 +22,21 @@ function build(over: Partial<ReviewQuotaDeps> = {}) {
 const stored = (payload: any) => ({ payload: JSON.stringify(payload) });
 
 describe('额度口径', () => {
-  it('日期按 UTC 日（与 goal_scheduling_ledger 同口径）', () => {
-    expect(quotaDateKey(new Date('2026-09-16T00:00:00Z'))).toBe('2026-09-16');
-    expect(quotaDateKey(new Date('2026-09-16T23:59:59Z'))).toBe('2026-09-16');
+  it('日期按**应用时区本地日**（day-boundary 单一真理源；UTC+8 下 16:00Z 已属次日）', () => {
+    expect(quotaDateKey(new Date('2026-09-16T00:00:00Z'))).toBe('2026-09-16');   // 本地 08:00
+    expect(quotaDateKey(new Date('2026-09-16T15:59:59Z'))).toBe('2026-09-16');   // 本地 23:59:59
+    expect(quotaDateKey(new Date('2026-09-16T16:00:00Z'))).toBe('2026-09-17');   // 本地次日 00:00
     expect(reviewDailyQuotaKey('u1', '2026-09-16')).toBe('review-daily-quota-v1:u1:2026-09-16');
   });
 
   it('模拟时钟上下文内：日期键走模拟日（读侧与写侧同口径，回归"日期模拟下到期算错"）', () => {
-    const asOf = new Date('2026-10-01T10:00:00Z');
+    const asOf = new Date('2026-10-01T10:00:00Z'); // 本地 18:00
     runWithSimulatedClock(asOf, () => {
       expect(quotaDateKey()).toBe('2026-10-01');
     });
     // 上下文外仍等价墙钟（现网行为零变化）
     expect(getSimulatedAsOf()).toBeNull();
-    expect(quotaDateKey(new Date('2026-09-16T23:59:59Z'))).toBe('2026-09-16');
+    expect(quotaDateKey(new Date('2026-09-16T15:59:59Z'))).toBe('2026-09-16');
   });
 
   it('上限默认 6.0（≈3 节课 × 会话基准预算 2.0），env 可覆盖、非法值回落', () => {

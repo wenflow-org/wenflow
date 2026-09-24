@@ -10,6 +10,7 @@
 import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
 import { withTransaction } from '../../../utils/with-transaction';
+import { dayKeyOf, parseDayKeyStart, dayDiffInDays } from '../../time/day-boundary';
 import achievementService from '../../achievements/achievement.service';
 import { dashboardGuidanceSnapshotService } from '../../learner/DashboardGuidanceSnapshotService';
 import { learnerStateReviewService } from '../../learner/LearnerStateReviewService';
@@ -415,11 +416,8 @@ export async function completeTask(data: CompleteTaskData) {
         });
         if (linkedGoal) {
           const nowDate = data.asOf ?? new Date();
-          const pad = (n: number) => String(n).padStart(2, '0');
-          // 模拟时钟（asOf）下用 UTC 日（与日期模拟/当日课量同口径）；缺省保持本地日（现网不变）
-          const todayKey = data.asOf
-            ? nowDate.toISOString().slice(0, 10)
-            : `${nowDate.getFullYear()}-${pad(nowDate.getMonth() + 1)}-${pad(nowDate.getDate())}`;
+          // 台账 date 键按应用时区本地日（此前：模拟下 UTC、缺省机器本地日 —— 两套口径，已统一）
+          const todayKey = dayKeyOf(nowDate);
           await prisma.goal_scheduling_ledger.upsert({
             where: { userId_goalId_date: { userId: data.userId, goalId: linkedGoal.id, date: todayKey } },
             update: { consumedMinutes: { increment: actualMinutes }, updatedAt: nowDate },
@@ -440,7 +438,9 @@ export async function completeTask(data: CompleteTaskData) {
     // 更新连续学习天数（best-effort，不影响任务完成）
     try {
       const today = data.asOf ?? new Date();
-      const todayStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
+      // 连击按**应用时区本地日**（与课量/配额/衰减同口径）：此前 toISOString 是 UTC 切日，
+      // UTC+8 用户 00:00–08:00 的学习会被算进"昨天"，连击判定错一天。
+      const todayStr = dayKeyOf(today);
 
       const user = await prisma.users.findUnique({
         where: { id: data.userId },
@@ -449,14 +449,13 @@ export async function completeTask(data: CompleteTaskData) {
 
       if (user) {
         let newStreak = user.streakDays;
-        const lastDate = user.streakLastDate?.toISOString().slice(0, 10);
+        const lastDate = user.streakLastDate ? dayKeyOf(user.streakLastDate) : undefined;
 
         if (lastDate !== todayStr) {
           if (!lastDate) {
             newStreak = 1;
           } else {
-            const last = new Date(lastDate + 'T00:00:00Z');
-            const diffDays = Math.floor((today.getTime() - last.getTime()) / (24 * 60 * 60 * 1000));
+            const diffDays = dayDiffInDays(parseDayKeyStart(lastDate), parseDayKeyStart(todayStr));
             if (diffDays === 1) {
               newStreak = user.streakDays + 1;
             } else {

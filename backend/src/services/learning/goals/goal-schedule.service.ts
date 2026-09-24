@@ -7,6 +7,8 @@
 import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
 import type { CreateGoalData } from '../learning.types';
+import { dayKeyOf, startOfDay } from '../../time/day-boundary';
+import { simulatedNowOr } from '../../virtual-lab/simulation-clock-context';
 
 // 创建学习目标
 export async function createLearningGoal(data: CreateGoalData) {
@@ -82,10 +84,10 @@ export async function updateLearningGoal(
  * - consumedMinutes：ledger 有值用 ledger；否则从今日会话经 task→milestone→path 反查到目标推导
  */
 export async function getTodaySchedule(userId: string) {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const now = simulatedNowOr();
+  // 「今天」按应用时区本地日（day-boundary 单一真理源），与课量/配额/衰减/日期模拟同口径
+  const today = dayKeyOf(now);
+  const dayStart = startOfDay(now);
 
   const [goals, ledgers, activeSessions, todaySessions] = await Promise.all([
     prisma.learning_goals.findMany({
@@ -167,7 +169,8 @@ export async function getTodaySchedule(userId: string) {
 
 /** 今日台账写入（幂等 upsert：userId×goalId×date） */
 export async function planTodaySchedule(userId: string, plan: Array<{ goalId: string; budgetMinutes: number; plannedTasks?: string[] }>) {
-  const today = new Date().toISOString().slice(0, 10);
+  // 台账 date 键按应用时区本地日（与 getTodaySchedule 的「今天」同口径）
+  const today = dayKeyOf(simulatedNowOr());
   const results = [];
   for (const item of plan) {
     const goal = await prisma.learning_goals.findFirst({ where: { id: item.goalId, userId } });

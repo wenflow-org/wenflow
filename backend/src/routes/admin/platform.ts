@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { getPlatformSettings, updatePlatformSettings } from '../../services/platform-settings.service';
+import { startOfDay } from '../../services/time/day-boundary';
 import {
   getAgentManifest,
   getCanonicalAgentId,
@@ -729,28 +730,24 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
           },
         });
       }
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
+      const today = startOfDay(new Date());
+
       switch (rangeValue) {
         case 'today':
           where.calledAt = { gte: today };
           break;
         case 'yesterday': {
-          const yesterday = new Date(today);
-          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterday = new Date(today.getTime() - 86400000);
           where.calledAt = { gte: yesterday, lt: today };
           break;
         }
         case 'week': {
-          const weekAgo = new Date(today);
-          weekAgo.setDate(weekAgo.getDate() - 7);
+          const weekAgo = new Date(today.getTime() - 7 * 86400000);
           where.calledAt = { gte: weekAgo };
           break;
         }
         case 'month': {
-          const monthAgo = new Date(today);
-          monthAgo.setDate(monthAgo.getDate() - 30);
+          const monthAgo = new Date(today.getTime() - 30 * 86400000);
           where.calledAt = { gte: monthAgo };
           break;
         }

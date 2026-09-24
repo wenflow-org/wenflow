@@ -3,6 +3,7 @@ import { authMiddleware } from '../../middleware/auth.middleware';
 import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
 import { predictionCalibrationService } from '../../services/learner/PredictionCalibrationService';
 import learningStateService from '../../services/learning/learning-state.service';
+import { dayKeyOf } from '../../services/time/day-boundary';
 import { checkIsAdmin } from '../../services/admin-access.service';
 
 const router = express.Router();
@@ -180,7 +181,7 @@ router.get('/:userId/evidence', async (req, res) => {
     try {
       const trendWindow = await learningStateService.getStateTrendWindow(req.params.userId, { days: 90, mode: 'recent' });
       loadCurve = trendWindow.trends.map((t) => ({
-        date: t.date.toISOString().slice(0, 10),
+        date: dayKeyOf(t.date),
         lss: t.lss,
         ktl: t.ktl,
         lf: t.lf,

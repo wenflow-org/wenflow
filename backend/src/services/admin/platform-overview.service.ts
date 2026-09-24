@@ -1,4 +1,5 @@
 import prisma from '../../config/database';
+import { hourKeyOf, startOfHour, dayKeyOf, addDaysToDayKey, startOfDay } from '../time/day-boundary';
 import { REAL_USER_WHERE } from './real-user-where';
 import { classifyFailureCategory, isTimeoutLog } from './failure-classification';
 
@@ -34,10 +35,9 @@ export function buildHourlyTrend(
   const hourlyTrendMap: Record<string, { total: number; error: number; timeout: number }> = {};
 
   for (let i = 23; i >= 0; i -= 1) {
-    const d = new Date(now);
-    d.setMinutes(0, 0, 0);
-    d.setHours(d.getHours() - i);
-    const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${d.getHours()}`;
+    // 小时桶按**应用时区**（day-boundary），不再用机器本地时区
+    const d = new Date(startOfHour(now).getTime() - i * 3600000);
+    const key = hourKeyOf(d);
     hourKeys.push(key);
     hourlyTrendMap[key] = { total: 0, error: 0, timeout: 0 };
   }
@@ -46,7 +46,7 @@ export function buildHourlyTrend(
     const d = new Date(log.calledAt);
     if (d.getTime() < windowStart.getTime() || d.getTime() > now.getTime()) continue;
 
-    const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${d.getHours()}`;
+    const key = hourKeyOf(d);
     if (!hourlyTrendMap[key]) continue;
 
     hourlyTrendMap[key].total += 1;
@@ -74,23 +74,18 @@ export function buildHourlyTrend(
 }
 
 export async function computeOverviewStats(): Promise<unknown> {
-    // 获取今日统计
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // 获取今日统计（**应用时区本地日**，与学习侧日界同口径）
+    const today = startOfDay(new Date());
+
+    const tomorrow = new Date(startOfDay(new Date()).getTime() + 86400000);
 
     // 获取昨日统计
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterday = new Date(startOfDay(new Date()).getTime() - 86400000);
     const last24HoursStart = new Date(Date.now() - 24 * 3600000);
 
     // 脉搏窗口与桶窗口同源：当前整点 - 23h（[start, now] 恰好 24 个整点桶），
     // 保证「24h 总数 = 各小时之和」恒成立；活跃 Agent 统计仍用严格 24h 滚动窗口。
-    const trendWindowStart = new Date();
-    trendWindowStart.setMinutes(0, 0, 0);
-    trendWindowStart.setHours(trendWindowStart.getHours() - 23);
+    const trendWindowStart = new Date(startOfHour(new Date()).getTime() - 23 * 3600000);
 
     const businessExecutionWhere = {
       OR: [
@@ -484,18 +479,11 @@ export async function computeOverviewStats(): Promise<unknown> {
     const activeUsersCount = activeUsersToday.length;
 
     /* ===== G1-G4：总览新增模块（近 7 天趋势 / 用户增长 / Top Skill） ===== */
-    const dayKey = (d: Date | string) => {
-      const dt = new Date(d);
-      const y = dt.getFullYear();
-      const m = String(dt.getMonth() + 1).padStart(2, '0');
-      const dd = String(dt.getDate()).padStart(2, '0');
-      return `${y}-${m}-${dd}`;
-    };
+    const dayKey = (d: Date | string) => dayKeyOf(new Date(d));
     const trendMap = new Map<string, { calls: number; failed: number }>();
+    const todayKey = dayKeyOf(new Date());
     for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      trendMap.set(dayKey(d), { calls: 0, failed: 0 });
+      trendMap.set(addDaysToDayKey(todayKey, -i), { calls: 0, failed: 0 });
     }
     for (const row of agentLogs7dRows) {
       const bucket = trendMap.get(dayKey(row.calledAt));

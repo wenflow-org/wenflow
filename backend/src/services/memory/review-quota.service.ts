@@ -17,6 +17,7 @@
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
+import { dayKeyOf } from '../time/day-boundary';
 
 /** 每日温故负担上限（负担单位）：≈ 3 节课 × 会话基准预算 2.0 */
 export const DEFAULT_DAILY_LOAD_LIMIT = 6.0;
@@ -71,13 +72,31 @@ export function resolveDailyLoadLimit(): number {
   return Math.min(raw, 100);
 }
 
-/** UTC 日期口径（与 goal_scheduling_ledger 一致）；走模拟时钟，与写侧同一口径 */
+/** 应用时区（本地日）日期口径；走模拟时钟，与写侧同一口径。日界单一真理源见 services/time/day-boundary。 */
 export function quotaDateKey(now: Date = simulatedNowOr()): string {
-  return now.toISOString().slice(0, 10);
+  return dayKeyOf(now);
 }
 
 export function reviewDailyQuotaKey(userId: string, date: string): string {
   return `${REVIEW_DAILY_QUOTA_KEY_PREFIX}:${userId}:${date}`;
+}
+
+/**
+ * 读当日额度行，带**过渡兼容**：日界从 UTC 切到应用时区本地日（2026-09-22）后，
+ * 切换当天新键可能还没有行、而旧 UTC 键存着当天已用额度——此时回退读旧键，
+ * 避免"换口径当天额度被重置"。
+ */
+async function readQuotaRowWithLegacyFallback(
+  userId: string,
+  date: string,
+  now: Date,
+  deps: ReviewQuotaDeps,
+): Promise<{ payload?: string } | null | undefined> {
+  const row = await deps.read(reviewDailyQuotaKey(userId, date));
+  if (row?.payload) return row;
+  const legacyDate = now.toISOString().slice(0, 10);
+  if (legacyDate === date) return row;
+  return deps.read(reviewDailyQuotaKey(userId, legacyDate));
 }
 
 function emptyState(date: string, limitLoad: number): ReviewDailyState {
@@ -94,7 +113,7 @@ export async function getDailyState(
   const date = quotaDateKey(now);
   const limitLoad = options.limitLoad ?? resolveDailyLoadLimit();
   try {
-    const row = await deps.read(reviewDailyQuotaKey(userId, date));
+    const row = await readQuotaRowWithLegacyFallback(userId, date, now, deps);
     if (!row?.payload) return emptyState(date, limitLoad);
     const parsed = JSON.parse(row.payload) as ReviewDailyQuotaPayload;
     const usedLoad = Number(parsed?.usedLoad) || 0;
@@ -127,7 +146,7 @@ export async function reserveDailyQuota(
   if (!input.keys.length || !(input.load > 0)) return getDailyState(userId, { now, deps, limitLoad });
 
   try {
-    const row = await deps.read(reviewDailyQuotaKey(userId, date));
+    const row = await readQuotaRowWithLegacyFallback(userId, date, now, deps);
     const existing: ReviewDailyQuotaPayload = row?.payload
       ? JSON.parse(row.payload) as ReviewDailyQuotaPayload
       : {

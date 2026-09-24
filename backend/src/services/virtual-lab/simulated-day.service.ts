@@ -2,14 +2,24 @@
  * SimulatedDayService —— 虚拟学习者"日期模拟"只读聚合（P1）
  *
  * 设计：doc/local/VIRTUAL_LEARNER_SIMULATED_DAY_DRAFT.md §C2/§C4/§8.8。
- * 机制：**不 mock 时钟**，把"第 dayIndex 天"映射为日历 `baseDate + dayIndex`（UTC 日界，与
- * `getAggregatedState.dayLoad` / `ReviewQuotaService` 同口径），再以该日 **asOf** 读回——
+ * 机制：**不 mock 时钟**，把"第 dayIndex 天"映射为日历 `baseDate + dayIndex`（**应用时区日界**，
+ * 与自然衰减 / `getAggregatedState.dayLoad` / `ReviewQuotaService` 同口径），再以该日 **asOf** 读回——
  * 聚合、配额、记忆保留率、难度调整留痕全部来自已落地读写缝，**不新增实体、不自造口径**。
  *
  * 只读：本模块不写任何业务表；推进（写）属 P2，由系统层负责。
  */
 import prisma from '../../config/database';
 import { safeJsonParse } from '../../utils/safe-json';
+import {
+  getAppTimeZone,
+  dayKeyOf,
+  parseDayKeyStart,
+  startOfDay,
+  endOfDay,
+  addDaysToDayKey,
+  normalizeTimeZone,
+  formatLocal,
+} from '../time/day-boundary';
 import learningStateService, { type AggregatedLearningState } from '../learning/learning-state.service';
 import { derivePacing } from '../learner/LearnerSnapshotService';
 import {
@@ -114,34 +124,40 @@ const defaultDeps: SimulatedDayDeps = {
 
 /* ============ 纯函数（可单测） ============ */
 
-/** 解析 'YYYY-MM-DD' 或 ISO → 该日历日的 UTC 零点 */
-export function parseDateOnly(value: string | Date): Date {
+/** 解析 'YYYY-MM-DD' 或 Date → 该**应用时区**日历日的 00:00（绝对时刻）。 */
+export function parseDateOnly(value: string | Date, tz: string = getAppTimeZone()): Date {
   if (value instanceof Date) {
-    return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+    return startOfDay(value, tz);
   }
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || '').trim());
-  if (!match) return new Date(Date.UTC(1970, 0, 1));
-  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  if (!match) return parseDayKeyStart('1970-01-01', tz);
+  return parseDayKeyStart(`${match[1]}-${match[2]}-${match[3]}`, tz);
 }
 
-export function toDateOnly(value: Date): string {
-  return value.toISOString().slice(0, 10);
+/** 绝对时刻 → 该应用时区下的日期键 'YYYY-MM-DD'。 */
+export function toDateOnly(value: Date, tz: string = getAppTimeZone()): string {
+  return dayKeyOf(value, tz);
 }
+
+/** 日期键加 N 个日历日（日历运算，不受 DST/时区影响）。 */
+const pad2 = (n: number) => String(n).padStart(2, '0');
 
 /**
- * 第 dayIndex 天的窗口（UTC 日界，与 getAggregatedState.dayLoad / ReviewQuotaService 同口径）。
- * asOf 取当天 23:59:59.999，使 `[dayStart, asOf]` 覆盖整日。
+ * 第 dayIndex 天的窗口（**应用时区日界**，与自然衰减 / getAggregatedState.dayLoad /
+ * ReviewQuotaService 同口径）。asOf 取当天 23:59:59.999，使 `[dayStart, asOf]` 覆盖整日。
  */
-export function resolveDayWindow(baseDate: string | Date, dayIndex: number): {
+export function resolveDayWindow(baseDate: string | Date, dayIndex: number, tz: string = getAppTimeZone()): {
   dayStart: Date;
   dayEnd: Date;
   asOf: Date;
   simulatedDay: string;
 } {
-  const base = parseDateOnly(baseDate);
-  const dayStart = new Date(base.getTime() + Math.max(0, Math.trunc(dayIndex)) * DAY_MS);
-  const dayEnd = new Date(dayStart.getTime() + DAY_MS - 1);
-  return { dayStart, dayEnd, asOf: dayEnd, simulatedDay: toDateOnly(dayStart) };
+  const baseKey = dayKeyOf(parseDateOnly(baseDate, tz), tz);
+  const dayKey = addDaysToDayKey(baseKey, Math.max(0, Math.trunc(dayIndex)));
+  const dayStart = parseDayKeyStart(dayKey, tz);
+  // endOfDay 用"次日本地零点 - 1ms"（DST 安全），与 day-boundary 同口径
+  const dayEnd = endOfDay(dayStart, tz);
+  return { dayStart, dayEnd, asOf: dayEnd, simulatedDay: dayKey };
 }
 
 export interface SimulationClockInput {
@@ -163,16 +179,19 @@ export interface SimulationClockInput {
 /** 解析会话的模拟时钟（session > profile > global 优先级；默认关）。 */
 export function resolveSimulationClock(input: SimulationClockInput): SimulationClockView {
   const enabled = input.stageResultsClock?.enabled ?? input.profileClock?.enabled ?? input.settings.enabled;
+  // 时区先定：会话级 > 日期模拟设置 > 应用时区（日窗口与 baseDate 都按它切日）
+  const timezone = normalizeTimeZone(input.stageResultsClock?.timezone)
+    || normalizeTimeZone(input.settings.timezone)
+    || getAppTimeZone();
   // baseDate 与 enabled 同口径：session > profile > 会话创建日。
   // （18 号报告观察项：此前写成 profile 优先，与注释相反 → 画像一旦配了 startDate，
   //   管理端在会话上设的 baseDate 会被静默忽略。）
   const baseDateRaw = input.stageResultsClock?.baseDate
     || input.profileClock?.startDate
-    || toDateOnly(input.sessionCreatedAt);
-  const baseDate = toDateOnly(parseDateOnly(baseDateRaw));
+    || toDateOnly(input.sessionCreatedAt, timezone);
+  const baseDate = dayKeyOf(parseDateOnly(baseDateRaw, timezone), timezone);
   const dayIndex = Math.max(0, Math.trunc(Number(input.stageResultsClock?.dayIndex) || 0));
-  const window = resolveDayWindow(baseDate, dayIndex);
-  const timezone = input.stageResultsClock?.timezone || input.settings.timezone;
+  const window = resolveDayWindow(baseDate, dayIndex, timezone);
   const simulatedNow = input.stageResultsClock?.simulatedNow || window.asOf.toISOString();
 
   return {
@@ -189,11 +208,14 @@ export function resolveSimulationClock(input: SimulationClockInput): SimulationC
   };
 }
 
-/** 是否为课表内的上课日（0=周日 … 6=周六，UTC 日界） */
-export function isCourseDay(baseDate: string | Date, dayIndex: number, courseWeekdays: number[]): boolean {
+/** 是否为课表内的上课日（0=周日 … 6=周六）。星期由**日历日**决定，与时区无关。 */
+export function isCourseDay(baseDate: string | Date, dayIndex: number, courseWeekdays: number[], tz: string = getAppTimeZone()): boolean {
   const weekdays = courseWeekdays.length ? courseWeekdays : [1, 2, 3, 4, 5];
-  const day = new Date(parseDateOnly(baseDate).getTime() + Math.max(0, Math.trunc(dayIndex)) * DAY_MS);
-  return weekdays.includes(day.getUTCDay());
+  const baseKey = dayKeyOf(parseDateOnly(baseDate, tz), tz);
+  const dayKey = addDaysToDayKey(baseKey, Math.max(0, Math.trunc(dayIndex)));
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dayKey);
+  if (!m) return false;
+  return weekdays.includes(new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).getUTCDay());
 }
 
 /**
@@ -203,11 +225,11 @@ export function isCourseDay(baseDate: string | Date, dayIndex: number, courseWee
  *   上课日 → null。
  * 说明：虚拟会话逐日推进，实际学习发生在课表内的上课日；跨周末会自然得到 2~3 天。
  */
-export function previousCourseDayGap(baseDate: string, dayIndex: number, courseWeekdays: number[]): number | null {
+export function previousCourseDayGap(baseDate: string, dayIndex: number, courseWeekdays: number[], tz: string = getAppTimeZone()): number | null {
   const day = Math.max(0, Math.trunc(dayIndex));
   if (day <= 0) return null;
   for (let cursor = day - 1; cursor >= 0; cursor -= 1) {
-    if (isCourseDay(baseDate, cursor, courseWeekdays)) return day - cursor;
+    if (isCourseDay(baseDate, cursor, courseWeekdays, tz)) return day - cursor;
   }
   return null;
 }
@@ -221,6 +243,7 @@ export function collectCourseDayIndexes(
   fromDayIndex: number,
   courseWeekdays: number[],
   count: number,
+  tz: string = getAppTimeZone(),
 ): number[] {
   const total = Math.max(0, Math.trunc(count));
   const result: number[] = [];
@@ -229,7 +252,7 @@ export function collectCourseDayIndexes(
   const hardLimit = cursor + total * 7 + 7;
   while (result.length < total && cursor < hardLimit) {
     cursor += 1;
-    if (isCourseDay(baseDate, cursor, courseWeekdays)) result.push(cursor);
+    if (isCourseDay(baseDate, cursor, courseWeekdays, tz)) result.push(cursor);
   }
   return result;
 }
@@ -246,8 +269,8 @@ export interface TemporalContext {
 /** 仅为"已开启日期模拟"的会话产出 temporalContext；否则返回 null（输入里省略该键 = 现网不变）。 */
 export function temporalContextFromClock(clock: SimulationClockView | null | undefined): TemporalContext | null {
   if (!clock || !clock.enabled) return null;
-  const window = resolveDayWindow(clock.baseDate, clock.dayIndex);
-  const sinceLastSessionDays = previousCourseDayGap(clock.baseDate, clock.dayIndex, clock.courseWeekdays);
+  const window = resolveDayWindow(clock.baseDate, clock.dayIndex, clock.timezone);
+  const sinceLastSessionDays = previousCourseDayGap(clock.baseDate, clock.dayIndex, clock.courseWeekdays, clock.timezone);
   return {
     simulatedNow: clock.simulatedNow,
     simulatedDay: window.simulatedDay,
@@ -265,8 +288,9 @@ export async function buildDayEntry(
   dayIndex: number,
   deps: SimulatedDayDeps = defaultDeps,
   now: Date = new Date(),
+  tz: string = getAppTimeZone(),
 ): Promise<SimulatedDayEntry> {
-  const win = resolveDayWindow(baseDate, dayIndex);
+  const win = resolveDayWindow(baseDate, dayIndex, tz);
   // P0 护栏：模拟读不得越过真实"现在"（防把真实历史卷进聚合）；未来日直接返回空（不读）
   const asOf = new Date(Math.min(win.asOf.getTime(), now.getTime()));
   const isFuture = win.dayStart.getTime() > now.getTime();
@@ -403,15 +427,16 @@ export async function buildDayTimeline(
   input: { userId: string; baseDate: string; fromDay?: number; toDay: number; maxDays?: number },
   deps: SimulatedDayDeps = defaultDeps,
   now: Date = new Date(),
+  tz: string = getAppTimeZone(),
 ): Promise<DayTimeline> {
   const maxDays = Math.max(0, Math.trunc(input.maxDays ?? 365));
   const fromDay = Math.max(0, Math.trunc(input.fromDay ?? 0));
   const toDay = Math.min(maxDays, Math.max(fromDay, Math.trunc(input.toDay)));
   const days: SimulatedDayEntry[] = [];
   for (let dayIndex = fromDay; dayIndex <= toDay; dayIndex += 1) {
-    days.push(await buildDayEntry(input.userId, input.baseDate, dayIndex, deps, now));
+    days.push(await buildDayEntry(input.userId, input.baseDate, dayIndex, deps, now, tz));
   }
-  return { baseDate: toDateOnly(parseDateOnly(input.baseDate)), fromDay, toDay, days };
+  return { baseDate: dayKeyOf(parseDateOnly(input.baseDate, tz), tz), fromDay, toDay, days };
 }
 
 /* ============ DB 绑定入口 ============ */
@@ -424,15 +449,15 @@ export function planClockAdvance(
   now: Date = new Date(),
 ): { indexes: number[]; nextClock: Record<string, any> } | null {
   const want = Math.max(1, Math.trunc(days) || 1);
-  const indexes = collectCourseDayIndexes(clock.baseDate, clock.dayIndex, clock.courseWeekdays, want)
+  const indexes = collectCourseDayIndexes(clock.baseDate, clock.dayIndex, clock.courseWeekdays, want, clock.timezone)
     .filter((index) => index <= clock.maxSimulatedDays)
     // P0 护栏：不推进到"未来日"（避免 asOf 越过真实现在、把真实历史卷进聚合）
-    .filter((index) => resolveDayWindow(clock.baseDate, index).dayStart.getTime() <= now.getTime());
+    .filter((index) => resolveDayWindow(clock.baseDate, index, clock.timezone).dayStart.getTime() <= now.getTime());
   if (!indexes.length) return null;
 
   const history = Array.isArray(rawClock?.history) ? [...rawClock!.history] : [];
   for (const index of indexes) {
-    const win = resolveDayWindow(clock.baseDate, index);
+    const win = resolveDayWindow(clock.baseDate, index, clock.timezone);
     history.push({
       dayIndex: index,
       simulatedDay: win.simulatedDay,
@@ -441,7 +466,7 @@ export function planClockAdvance(
     });
   }
   const lastIndex = indexes[indexes.length - 1];
-  const lastWindow = resolveDayWindow(clock.baseDate, lastIndex);
+  const lastWindow = resolveDayWindow(clock.baseDate, lastIndex, clock.timezone);
   return {
     indexes,
     nextClock: {
@@ -465,7 +490,7 @@ export function explainPlanFailure(
   now: Date = new Date(),
 ): { reason: 'empty_schedule' | 'day_limit' | 'future_day' | 'none'; message: string; nextCourseDay?: string } {
   const want = Math.max(1, Math.trunc(days) || 1);
-  const candidates = collectCourseDayIndexes(clock.baseDate, clock.dayIndex, clock.courseWeekdays, want);
+  const candidates = collectCourseDayIndexes(clock.baseDate, clock.dayIndex, clock.courseWeekdays, want, clock.timezone);
   if (!candidates.length) {
     return {
       reason: 'empty_schedule',
@@ -479,7 +504,7 @@ export function explainPlanFailure(
       message: `已达模拟天数上限(${clock.maxSimulatedDays}),下一个上课日是第 ${candidates[0]} 天`,
     };
   }
-  const next = resolveDayWindow(clock.baseDate, withinCap[0]);
+  const next = resolveDayWindow(clock.baseDate, withinCap[0], clock.timezone);
   if (next.dayStart.getTime() <= now.getTime()) {
     // 候选日已开始但 plan 仍为 null:状态自相矛盾,多半是调用方传参不一致;不猜原因
     return { reason: 'none', nextCourseDay: next.simulatedDay, message: `未发现可解释的失败:下一个上课日(${next.simulatedDay})按当前口径应可推进` };
@@ -487,7 +512,9 @@ export function explainPlanFailure(
   return {
     reason: 'future_day',
     nextCourseDay: next.simulatedDay,
-    message: `下一上课日(${next.simulatedDay})尚未开始:模拟日不可越过真实当前时间(P0 护栏),等该日期到来后再推进,或将 baseDate 调整为已开始的日期`,
+    message: `下一上课日(${next.simulatedDay})尚未开始:模拟日不可越过真实当前时间(P0 护栏)。`
+      + `该日按 ${clock.timezone} 日界生效（${formatLocal(next.dayStart, clock.timezone)}）`
+      + `,到点后再推进,或将 baseDate 调整为已开始的日期`,
   };
 }
 
@@ -603,11 +630,11 @@ class SimulatedDayService {
     });
     if (!session) return null;
     const clock = await this.getSimulationClock(input.sessionId);
-    const baseDate = input.baseDate || clock?.baseDate || toDateOnly(session.createdAt);
+    const baseDate = input.baseDate || clock?.baseDate || toDateOnly(session.createdAt, clock?.timezone);
     const maxDays = clock?.maxSimulatedDays ?? DEFAULT_VIRTUAL_LAB_SETTINGS.dateSimulation.maxSimulatedDays;
     const fromDay = input.fromDay ?? 0;
     const toDay = input.toDay ?? Math.min(maxDays, Math.max(fromDay, clock?.dayIndex ?? 0));
-    return buildDayTimeline({ userId: session.userId, baseDate, fromDay, toDay, maxDays });
+    return buildDayTimeline({ userId: session.userId, baseDate, fromDay, toDay, maxDays }, undefined, undefined, clock?.timezone);
   }
 }
 
