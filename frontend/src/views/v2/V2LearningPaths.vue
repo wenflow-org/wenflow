@@ -31,8 +31,8 @@
       </div>
 
       <template v-else>
-        <!-- 筛选 -->
-        <div class="filters">
+        <!-- 筛选（无任何路径时整行隐藏：空态下五个「0」芯片是噪音，2026-09-24 全新账号走查发现） -->
+        <div v-if="cards.length" class="filters">
           <button
             v-for="f in filterList"
             :key="f.key"
