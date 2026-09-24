@@ -5,7 +5,7 @@ import { clampHintsToOneSitting, derivePlanningHints, type TriageHint, clampStag
  *   A. 出口不变量 A：里程碑区间**永不为单点**（防塌缩）
  *   B. 出口不变量 B：**一节课**量级边界（防通胀）——两个触发源
  *      · Goal 层 triage（transferable=false × recurrence=once）
- *      · 用户承受力锚（availableTime=minimal **或完全没有时长信号**）
+ *      · 用户承受力锚（availableTime=minimal；2026-09-22 起删去"无信号"这一支）
  *
  * 依据（本地重放复现生产）：学时 = 段数 × 每段任务数(4–6) × 单任务分钟(37–45)，
  * 与"这件事需要多久"无关 —— availableTime=minimal 的学习者被排了 7.4 小时。
@@ -76,10 +76,10 @@ describe('分流钳制（出口不变量 B）· 用户承受力锚触发', () =>
     expect(h.subtaskMinutesRange).toEqual(hintsWith({ transferable: false, recurrence: 'once' }).subtaskMinutesRange);
   });
 
-  it('完全没有时长信号（未知）→ 按最小兜底，而不是按最大', () => {
+  it('完全没有时长信号（未知）→ **不再**塌成一节课（未知≠最小；收紧只能由证据驱动）', () => {
     const h = hintsNoTimeSignal(null);
-    expect(h.milestoneRange[1]).toBeLessThanOrEqual(2);
-    expect(worstMinutes(h)).toBeLessThanOrEqual(60);
+    expect(h.milestoneRange[1]).toBeGreaterThan(2);
+    expect(h.subtaskMinutesRange[1]).toBeGreaterThan(15);
   });
 
   it('availableTime=moderate / abundant 且时长信号充裕 → **不钳制**（局限要说清）', () => {

@@ -443,20 +443,20 @@ export function derivePlanningHints(
   // ---- 用户承受力锚（2026-09-21 **数据定位**）：体量上界锚在"用户一次能承受多少" ----
   // 实测（本地重放复现生产）：学时 = 段数 × 每段任务数(4–6) × 单任务分钟(37–45)，
   // 与"这件事需要多久"无关 —— 一个 availableTime=minimal 的学习者被排了 **7.4 小时**。
-  // 因此：**时间极少 或 完全没有时长信号** ⇒ 一律收到"一节课"（最坏 60 分钟）。
-  // 其余情况不动（能力型 + 时间充裕者应保持长路径；这是判断，不是数据，留待后续验证）。
-  const hasAnyTimeSignal = Boolean(
-    normalizeString(timeHorizon)
-    || normalizeString(timeBudget)
-    || normalizeString(timePerSession)
-    || normalizeString(learnerLoadProfile?.availableTime)
-    || (timeDimensions && (timeDimensions.totalWeeks || timeDimensions.estimatedHours || timeDimensions.sessionsPerWeek || timeDimensions.totalSessions)),
-  );
+  // 因此：**时间极少（明确的 minimal 信号）** ⇒ 收到"一节课"（最坏 60 分钟）。
+  //
+  // 2026-09-22 修正：**删掉"完全没有时长信号 ⇒ 一节课"这一支**。三条理由：
+  // ① 真实用户大多不主动说时长 ⇒"未知"占多数，会把"没说时长但确实要学"的人全塌成
+  //    一次性操作卡 —— 正是"砍过头"，与消除教育通胀的目标相反；
+  // ② 与既有设计正面冲突（"认知负荷退出里程碑数 + 里程碑区间永不为单点"，d216bde0），
+  //    实测造成 11 个既有单测变红；
+  // ③ 体量的主锚已是"课次"（见下方 lessThanOneLesson）。**未知 ≠ 最小**：缺信号时结构
+  //    保持中性，收紧只能由证据（明确 minimal / 课次 < 1）驱动。
   const availabilityText = normalizeString(learnerLoadProfile?.availableTime);
   const isTightAvailabilitySignal = availabilityText ? isMinimalAvailabilitySignal(availabilityText) : false;
   // 课次 < 1 ⇒ 这是一次操作（不是一门课）——最干净、且**代码可判**的判据，不需要类型分类
   const lessThanOneLesson = totalSessions !== null && totalSessions < 1;
-  if (lessThanOneLesson || isTightAvailabilitySignal || !hasAnyTimeSignal) {
+  if (lessThanOneLesson || isTightAvailabilitySignal) {
     const cap = ONE_SITTING_BOUNDS;
     milestoneRange = [...cap.milestoneRange];
     conceptRange = [...cap.conceptRange];
@@ -564,6 +564,27 @@ export function derivePlannedOutline(confirmedProposal: any): {
  * 原 skill 的 LLM 环节被证明信息零增量（seed 覆盖模型输出），此处即其确定性替代。
  * 输入缺字段保持缺失，不猜测、不扩写。
  */
+/**
+ * 透传 + 归一化（2026-09-22）。
+ *
+ * 背景：本函数原先对 resources / successCriteria 做**白名单重建**（不展开原对象），
+ * 导致任何未声明的字段被静默裁掉 —— `resources.materials` 就是这样丢掉资料的
+ * （下游 path.coordinator 只好"定帧后再挂一次"打补丁），排查花了 3 轮实验。
+ * 现在语义改为：**先原样透传，再用归一化值覆盖已知字段**；未声明的键保留并打一条留痕日志
+ * （静默裁剪必须可观测——与 stage-hints-clamp 同一个教训）。
+ */
+function passThroughFramedFields(
+  raw: Record<string, any> | null | undefined,
+  normalized: Record<string, any>
+): Record<string, any> {
+  const base = raw && typeof raw === 'object' ? raw : {};
+  const passthroughKeys = Object.keys(base).filter((key) => !(key in normalized));
+  if (passthroughKeys.length > 0) {
+    console.warn(`[path-framing] 未声明字段原样透传（不再裁剪）：${passthroughKeys.join(', ')}`);
+  }
+  return { ...base, ...normalized };
+}
+
 export function buildFramedNormalizedInput(input: any): any {
   if (!input || typeof input !== 'object') return null;
 
@@ -629,18 +650,18 @@ export function buildFramedNormalizedInput(input: any): any {
       scenario: normalizeString(problemSpace.scenario),
       currentPainPoint: normalizeString(problemSpace.currentPainPoint),
     },
-    resources: {
+    resources: passThroughFramedFields(resources, {
       timeBudget,
       timeBudgetCadence,
       timePerWeek: normalizeString(resources.timePerWeek) || timeBudget,
       timePerSession,
       timeHorizon,
       deadlineText: normalizeString(resources.deadlineText),
-    },
-    successCriteria: {
+    }),
+    successCriteria: passThroughFramedFields(input.successCriteria, {
       observableResult: normalizeString(input.successCriteria?.observableResult),
       acceptanceCheck: normalizeString(input.successCriteria?.acceptanceCheck),
-    },
+    }),
     confirmedProposal: confirmedProposal
       ? {
           learningDirection: normalizeString(confirmedProposal.learningDirection),

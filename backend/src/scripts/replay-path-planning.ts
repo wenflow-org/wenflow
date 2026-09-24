@@ -51,6 +51,24 @@ const WITH_STAGE = process.argv.includes('--with-stage');
 
 /** `--rich`：构造输入时额外灌入情绪/压力/抗拒材料（见 problemSpace 注释） */
 const RICH = process.argv.includes('--rich');
+
+/** `--goal=<text>`：覆盖构造输入的诉求（用于"同一诉求、不同资料条件"的对照实验） */
+const GOAL_ARG = (() => {
+  const hit = process.argv.find((a) => a.startsWith('--goal='));
+  return hit ? hit.slice('--goal='.length) : null;
+})();
+
+/** `--material-file=<path>`：把本地文档作为"资料包"注入（模拟**有文档**） */
+const MATERIAL_FILE = (() => {
+  const hit = process.argv.find((a) => a.startsWith('--material-file='));
+  return hit ? hit.slice('--material-file='.length) : null;
+})();
+
+/** `--material-search`：用 material-collector 联网采集（模拟**有网络搜索**） */
+const MATERIAL_SEARCH = process.argv.includes('--material-search');
+
+/** `--full`：打印完整路径结构（名称/摘要/每段的说明与概念），用于人眼审阅 */
+const FULL_PATH = process.argv.includes('--full');
 /**
  * `--triage=once|recurring`：向构造输入注入 Goal 层的分流判定（`normalizedInput.triage`），
  * 用于验证「分流钳制 + 提示词规则」的效果。缺省不注入 ⇒ 与生产现状一致。
@@ -110,13 +128,27 @@ function buildInputFromCaseFile(casePath: string, rich: boolean): { data: any; l
     learnerLoadProfile: { availableTime: spec.availableTime || null, loadTolerance: null },
     ...(TRIAGE_ARG ? { triage: TRIAGE_ARG } : {}),
   };
+  if (GOAL_ARG) {
+    // 首轮实验教训：只改 surfaceGoal 不够——案例故事字段（scenario/痛点/背景）与 availableTime(minimal)
+    // 会盖过它（三条结果一模一样）。做"资料条件"对照时必须把故事痕迹与承受力档位一起清空。
+    normalizedInput.learnerProfile.surfaceGoal = GOAL_ARG;
+    normalizedInput.learnerProfile.backgroundExperience = null;
+    normalizedInput.learnerProfile.learningSignal = null;
+    normalizedInput.learnerProfile.painPoints = [];
+    normalizedInput.learnerProfile.currentBaseline = { level: null, evidence: null };
+    normalizedInput.problemSpace.realProblem = GOAL_ARG;
+    normalizedInput.problemSpace.scenario = GOAL_ARG;
+    normalizedInput.problemSpace.currentPainPoint = null;
+    normalizedInput.learnerLoadProfile = { availableTime: null, loadTolerance: null };
+    normalizedInput.successCriteria = { observableResult: null, acceptanceCheck: null, firstDeliverable: null };
+  }
   return {
     label: `${name}（构造输入${rich ? ' · rich' : ''} · ${story.primaryBlockType || '?'} · recurrence=${story.recurrence || '?'}）`,
     data: {
       source: 'replay-case',
       mode: 'create',
       userId: 'replay-case-user',
-      description: story.visibleOpening || spec.goalHint || spec.domain || name,
+      description: GOAL_ARG || story.visibleOpening || spec.goalHint || spec.domain || name,
       userProfile: {
         skillLevel: spec.knowledgeLevel,
         timePerDay: null,
@@ -228,10 +260,54 @@ async function main(): Promise<void> {
       }
     }
     if (JUDGE_ONLY) continue;
+
+    // ---- 资料条件（对照实验变量）----
+    if (MATERIAL_FILE || MATERIAL_SEARCH) {
+      const ni: any = data.userProfile?.normalizedInput || {};
+      const packs: any[] = [];
+      if (MATERIAL_SEARCH) {
+        const { collectMaterialPack } = await import('../skills/material-collector');
+        const pack: any = await collectMaterialPack(
+          { kind: 'standard', title: (GOAL_ARG || '资料').slice(0, 60), why: 'replay：联网补信息' } as never,
+          { maxSources: 5 }
+        );
+        packs.push(pack);
+        console.log(`  ⇢ 联网采集: status=${pack.status} 要点=${pack?.pack?.keyPoints?.length ?? 0} 来源=${pack?.pack?.sourceUrl ?? '-'}`);
+      }
+      if (MATERIAL_FILE) {
+        const text = fs.readFileSync(MATERIAL_FILE as string, 'utf-8');
+        const lines = text.split(String.fromCharCode(10)).map((l) => l.trim()).filter((l) => l.length > 12);
+        packs.push({
+          status: 'ok',
+          pack: {
+            title: path.basename(MATERIAL_FILE as string),
+            publisher: null,
+            sourceTier: 'official',
+            sourceUrl: `attachment://${encodeURIComponent(path.basename(MATERIAL_FILE as string))}`,
+            version: null,
+            fetchedAt: new Date().toISOString(),
+            license: null,
+            tldr: text.slice(0, 4000),
+            sections: lines.slice(0, 8).map((l, i) => ({ id: `s-${i + 1}`, title: l.slice(0, 40), summary: '' })),
+            keyPoints: lines.slice(0, 16).map((l) => ({ text: l.slice(0, 120), cite: l.slice(0, 120), sourceUrl: 'attachment://local' })),
+          },
+          provenance: [],
+          coverage: { covered: [], missing: [] },
+          notes: ['来自本地附件（replay 注入）'],
+        });
+        console.log(`  ⇢ 注入附件资料: ${path.basename(MATERIAL_FILE as string)} · ${text.length} 字`);
+      }
+      ni.resources = { ...(ni.resources || {}), materials: packs };
+      data.userProfile.normalizedInput = ni;
+    }
+
     const agentInput = buildPathAgentInput(data);
     const framedRaw = data.userProfile?.normalizedInput || null;
     const framed = buildFramedNormalizedInput(framedRaw);
     agentInput.metadata = { ...(agentInput.metadata || {}), normalizedInput: framed };
+    // 资料是否真的送达 path（framing 白名单可能把 materials 裁掉——上轮子代理就踩过）
+    const sentMaterials = (framed as any)?.resources?.materials;
+    console.log(`  ⇢ framed.resources.materials = ${Array.isArray(sentMaterials) ? sentMaterials.length + ' 包' : 'MISSING（被 framing 裁掉）'}`);
 
     const goalText = String(agentInput.goal || '').replace(/\s+/g, ' ').slice(0, 56);
     const startedAt = Date.now();
@@ -256,6 +332,10 @@ async function main(): Promise<void> {
     console.log(`  原始 name : ${payload.name}`);
     console.log(`  落库后 name: ${strip.title}   ${flag}`);
     console.log(`  段数 ${ms2.length} | 学时 ${payload.estimatedHours ?? '-'} | 周 ${payload.estimatedWeeks ?? '-'}`);
+    if (FULL_PATH) {
+      console.log('  ──── 完整路径 ────');
+      console.log(JSON.stringify({ name: payload.name ?? null, summary: payload.summary ?? null, subject: payload.subject ?? null, estimatedHours: payload.estimatedHours ?? null, estimatedWeeks: payload.estimatedWeeks ?? null, milestones: ms2 }, null, 2));
+    }
     for (const m of ms2) {
       const concept = m.coreConcept || m.coreConceptName || '';
       console.log(`    【${m.stageNumber ?? ''}】${m.title}   (概念:${String(concept).slice(0, 26)})`);

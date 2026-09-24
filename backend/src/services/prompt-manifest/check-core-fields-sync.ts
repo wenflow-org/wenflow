@@ -154,6 +154,11 @@ export const ORPHAN_EXEMPT_FIELDS: ReadonlyArray<{ skillId: string; field: strin
     field: 'checkpointAnswer',
     evidence: '2026-09-18 P1-3：平台出题时的作答草案，由 virtual-lab/blackbox-runner 直接读取用于提交检查点，不进编排数据面路由',
   },
+  {
+    skillId: 'goal-conversation',
+    field: 'needsMaterial',
+    evidence: 'prompts/core/goal-conversation.yaml：goal→path 接线缝的 hidden 输出，只声明「要不要外部权威资料」、不进数据面路由；消费方 = backend/src/skills/material-collector（采集编排器）',
+  },
 ];
 
 /** skillId → 已豁免字段名集合（孤儿判定过滤用） */

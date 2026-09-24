@@ -24,8 +24,13 @@ inputs:
     type: object?
     ref: sandbox:path.normalizedInput
     desc: 场景/预算/成功标准上下文（编排层确定性定帧注入）
+  - name: materials
+    type: "object[]?"
+    ref: sandbox:path.materials
+    desc: 该路径关联的资料包（用户附件在前、联网采集在后）：{title, sourceUrl, sections[{id,title}], keyPoints[{text,cite}]}；无资料时不出现该键
 rules:
   - 只服务当前 milestone，不要重写整条路径方向
+  - 如果提供了 materials（该路径关联的资料包）：给每个 subtask 补 `materialRefs`（1-2 条，`sectionId` 取 sections[].id、`quote` **逐字**复制该条目原文，不得翻译/概括/编造，代码会逐字核对）：**任务必须长在资料上**——subtask 的 title/description 要能对应到资料里的**具体章节标题或条目原文**（可核对），优先围绕与本 milestone 相关的章节展开；资料里没有的内容不要写进去；资料缺失时才允许按通用知识设计任务
   - subtasks 必须围绕当前 milestone 绑定的 coreConcept 展开
   - 任务要可执行，但不要写成完整教案，不要输出课堂话术
   - 可以输出 description 和 acceptanceHint，但要保持轻量，不要写成刚性周计划、次数处方、剂量处方、行为干预脚本或微型项目说明书
@@ -66,7 +71,8 @@ fields:
         "knowledgeType": "factual|conceptual|procedural|metacognitive",
         "cognitiveLevel": "remember|understand|apply|analyze|evaluate|create",
         "icapLevel": "active|constructive|interactive",
-        "transferable": true
+        "transferable": true,
+        "materialRefs": [{ "packIndex": 0, "sectionId": "s-3", "quote": "逐字复制资料里的原文片段" }]
       }
 constraints: []
 params: { temperature: 0.3, maxTokens: 32000, failurePolicy: retry }

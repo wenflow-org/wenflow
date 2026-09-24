@@ -45,6 +45,8 @@ rules:
   - normalizedInput.confirmedProposal（或标签分区的"用户确认的方案轮廓"）是用户已确认方向，必须优先遵守，尤其是 learningDirection、firstDeliverable、keyStages、outOfScope
   - normalizedInput.successCriteria 如果存在 observableResult 或 acceptanceCheck，必须用于约束里程碑目标与任务完成标准
   - normalizedInput.planningHints 如果存在，仅作节奏参考范围（概念数、milestone 数建议值），时间与周期以 normalizedInput.resources 的自由文本和 timeDimensions 数值为准自行推断；若缺失再使用默认范围
+  - 有资料时，每个 milestone 都要给 `materialRefs`（1-2 条）指向它依据的资料条目：`sectionId` 取资料 sections[].id，`quote` **逐字**复制该条目的原文片段（cite/章节标题），不要翻译、不要概括、不要编造——代码会逐字核对，编的会被丢弃
+  - 资料必须**服务于当前诉求**：只采用与 normalizedInput 的诉求/问题相关的资料；**与诉求明显无关的附件要忽略**（不要为了"长在资料上"而把路径主题换成资料的主题，也不要把无关资料的章节名塞进里程碑）；多份资料时以诉求为主线取舍，宁可用得少，也不要用错
   - 目标取向（normalizedInput.learnerProfile.goalOrientation 为自由描述）：偏掌握型（想搞懂原理、知其所以然）→ 路径可给更高挑战与失败容忍空间，milestone 的 zpdDistance 可设更远、可含开放探索；偏表现型（想做出成果、证明自己、怕落后）→ 首阶段必须给快速成功小任务建立信心，first_deliverable 更小更早可见、首阶段 loadTarget 保持 low、避免开局高挑战；未提供时不改变默认设计
   - normalizedInput 中包含的场景、痛点和背景信息必须优先用于锚定路径场景、命名和范围边界
   - 前提知识递归发现（RPKT）：先识别目标的核心概念，再对照 normalizedInput.learnerProfile（backgroundExperience/currentBaseline）与 conversationHistory 判断哪些前置知识已知、哪些未知；对未知前置递归追问"要理解 X 必须先懂什么"，最大深度 3 层，直至触及学习者已确认的知识边界。将发现的前置缺口纳入 cognitiveCore.prerequisiteTree，且 milestone 顺序必须匹配缺口链的深度顺序（从基础到高级，禁止跳过基础直接进入高级应用）。若用户明显为零基础（背景缺失），不得假设其已掌握前置，须显式补基础认知框架
@@ -102,7 +104,8 @@ fields:
       正式认知结构，结构：
       {
         "cognitiveDomain": 这条路径主要训练的一体化底层能力,
-        "coreConcepts": [{ "id": "concept-1", "name": 关系描述式概念名, "role": "hub|supporting", "description": "..." }],
+        "coreConcepts": [{ "id": "concept-1", "name": 关系描述式概念名, "role": "hub", "description": "..." }, { "id": "concept-2", "name": 支撑概念名, "role": "supporting", "description": "..." }],
+        ⚠️ role 只允许字面量 "hub" 或 "supporting"（不是 "hub|supporting" 这一整串）：**恰好一个**概念 role 为 "hub"，其余全部为 "supporting"；
         "prerequisiteTree": 可选。前提知识缺口链（RPKT 递归发现），结构：
         { "rootConcept": 目标核心概念, "knownConcepts": [已确认掌握的前置],
           "unknownConcepts": [{ "concept": 未知前置, "depth": 1-3, "note": 需补什么 }],
@@ -117,7 +120,9 @@ fields:
     type: object[]
     desc: |-
       正式阶段骨架（只写阶段级，不含 subtask/acceptanceCriteria/周计划），每项结构：
-      { "stageNumber": 1, "title": "...", "coreConcept": "concept-1", "description": "...", "goal": "...", "estimatedHours": 4 }
+      { "stageNumber": 1, "title": "...", "coreConcept": "concept-1", "description": "...", "goal": "...", "estimatedHours": 4,
+        "materialRefs": [{ "packIndex": 0, "sectionId": "s-3", "quote": "逐字复制资料里的原文片段" }] }
+      materialRefs 仅当输入提供了 materials 时给（1-2 条）：sectionId 必须取自该资料包的 sections[].id，quote 必须**逐字**复制该包 keyPoints[].cite 或章节标题里的片段（不得改写、不得翻译、不得编造）；代码会逐字核对，核对不过的引用会被丢弃
 constraints:
   - 最终自检：cognitiveDomain 是否像一条长期可迁移的能力主线，不像则继续抽象；coreConcept 是否都像"机制/关系/框架/原则/模型"并能作为 milestone 的稳定骨架；每个 milestone 是否都绑定了明确的 coreConcept；如果某个 coreConcept 以"梳理/整理/记录/分析"等动作开头，改写成底层关系描述；如果 Learn 层拿到概念后仍不知道要帮助学习者建立什么理解，继续重写
   - 最终自检：milestone 是否按功能模块、页面对象或知识目录分组，如果是则重组为认知递进阶段；milestone 标题或 goal 是否写成了周计划、步骤清单或执行处方，如果是则收回到阶段骨架层
