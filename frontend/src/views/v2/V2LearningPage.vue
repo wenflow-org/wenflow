@@ -39,9 +39,13 @@
       </div>
     </header>
 
-    <!-- 初始化中 -->
-    <Transition name="stage-switch" mode="out-in">
-      <div v-if="initing" key="init" class="learn__stage">
+    <!-- 初始化中 / 初始化失败 / 正文：三态直接切换，**刻意不套 Vue Transition**。
+         原因：Transition 的进入/离开动画靠 requestAnimationFrame 推进，rAF 被节流或不触发时
+         （嵌入 webview、长时间后台标签、无合成器的渲染环境）离开动画永不收尾，而 mode="out-in"
+         要求旧分支走完才挂新分支 —— 结果是正文永不挂载，页面永久停在「正在准备本节内容…」。
+         改用 CSS 关键帧做淡入（见 .learn__stage/.learn__body 的 animation）：CSS 动画即使不执行，
+         元素也停在默认的可见状态，不会把关键内容藏起来。 -->
+    <div v-if="initing" class="learn__stage">
       <div class="stage-card">
         <span class="spinner"></span>
         <h2>正在准备本节内容…</h2>
@@ -51,7 +55,7 @@
     </div>
 
     <!-- 初始化失败 -->
-    <div v-else-if="initError" key="err" class="learn__stage">
+    <div v-else-if="initError" class="learn__stage">
       <div class="stage-card">
         <span class="stage-card__warn">!</span>
         <h2>本节暂时开不了课</h2>
@@ -64,7 +68,7 @@
       </div>
     </div>
 
-    <div v-else key="body" class="learn__body" :class="{ 'learn__body--no-kp': !knowledgePoints.length }">
+    <div v-else class="learn__body" :class="{ 'learn__body--no-kp': !knowledgePoints.length }">
       <!-- 左：知识点面板（移动端默认折叠为头部横条，点击展开；桌面恒展开） -->
       <aside v-if="knowledgePoints.length" class="kp" :class="{ 'kp--collapsed': !kpExpanded }">
         <button type="button" class="kp__head" :aria-expanded="kpExpanded" @click="toggleKp">
@@ -426,7 +430,6 @@
         </Transition>
       </section>
     </div>
-    </Transition>
 
     <!-- 伴学浮窗：小启（独立角色，暖橙系）；不占主对话区，可回复、可收起成悬浮球 -->
     <Transition name="peer-pop">
@@ -1742,9 +1745,11 @@ onBeforeUnmount(() => {
   .pop-enter-from { opacity: 0; transform: scale(.96) translateY(4px); }
   .pop-leave-to { opacity: 0; transform: scale(.97) translateY(-2px); }
 
-  /* 初始化/错误/课堂 三态切换：淡入淡出 */
-  .stage-switch-enter-active, .stage-switch-leave-active { transition: opacity .2s ease; }
-  .stage-switch-enter-from, .stage-switch-leave-to { opacity: 0; }
+  /* 初始化/错误/课堂 三态切换：淡入。
+     用 CSS 关键帧而非 Vue Transition —— 关键帧即使不执行，元素也停在默认的可见状态；
+     而 Transition 的类是在 rAF 里加的，rAF 不触发会把正文永久留在 opacity:0 / 不挂载。 */
+  .learn__stage, .learn__body { animation: stage-fade-in .2s ease; }
+  @keyframes stage-fade-in { from { opacity: 0; } }
 
   /* 检查点：上浮淡入 / 收缩淡出 */
   .cp-enter-active { transition: opacity .25s ease, transform .25s cubic-bezier(0.16, 1, 0.3, 1); }
