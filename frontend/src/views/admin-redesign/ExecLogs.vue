@@ -1021,13 +1021,14 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
 .exec-title--err:hover { text-decoration: underline; }
 .exec-title--preview { color: var(--mk-muted, #5b6577); font-weight: 550; }
 .exec-title--ok { color: var(--mk-faint, #5f6f8c); font-weight: 500; }
-/* 链路入口图标按钮：主行右侧,常显弱化/hover 高亮,点击直达 Trace(替代隐藏的 Trace 列) */
+/* 链路入口图标按钮：主行右侧,常显弱化/hover 高亮,点击直达 Trace(替代隐藏的 Trace 列)
+   2026-09-24 桌面端验收：22px 低于鼠标可点下限，抬到 24px */
 .exec-trace-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   border: 0;
   border-radius: 6px;

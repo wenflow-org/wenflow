@@ -319,7 +319,11 @@
               class="feed__item"
               :class="`feed__item--${f.tone}`"
               :title="`查看 ${f.errorCategory || '失败'} 类别日志（近 7 天）`"
+              role="button"
+              tabindex="0"
               @click="feedJump(f)"
+              @keydown.enter.prevent="feedJump(f)"
+              @keydown.space.prevent="feedJump(f)"
             >
               <span class="feed__dot" :class="`feed__dot--${f.tone}`"></span>
               <div class="feed__body">
@@ -1314,16 +1318,20 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
 .feed__empty { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-13); }
 /* 新鲜度标注（R6：显示最近一次自动刷新的时间） */
 .feed-fresh { margin-left: 6px; font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 600; letter-spacing: 0.02em; }
-/* 异常事件条目（bad/warn 置顶可点） */
+/* 异常事件条目（bad/warn 置顶可点）——键盘可达：role=button + tabindex + Enter/Space 见模板。
+   「排查 →」原来是 hover 才出现的（opacity 0），鼠标用户之外看不到这个行可点；
+   改成常态半透明（0.5）、hover/focus 时点亮，键盘聚焦也画 focus ring。 */
 .feed__item { cursor: pointer; border-radius: 8px; padding: 6px 8px; margin: -6px -8px; transition: background 0.12s ease; }
+.feed__item:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .feed__item:hover { background: #f5f8ff; }
 .feed__item--bad:hover { background: #fff2f2; }
 .feed__item--warn:hover { background: #fffaed; }
 .feed__item .feed__body { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .feed__item--bad strong { color: var(--mk-red, #b91c1c); }
 .feed__item--warn strong { color: var(--mk-amber, #b45309); }
-.feed__go { font-style: normal; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-blue); flex-shrink: 0; align-self: center; opacity: 0; transition: opacity 0.12s ease; }
-.feed__item:hover .feed__go { opacity: 1; }
+.feed__go { font-style: normal; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-blue); flex-shrink: 0; align-self: center; opacity: 0.5; transition: opacity 0.12s ease; }
+.feed__item:hover .feed__go,
+.feed__item:focus-visible .feed__go { opacity: 1; }
 /* 普通事件折叠开关 */
 .feed__toggle {
   align-self: flex-start;
@@ -1425,7 +1433,11 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .funnel__rate { font-size: 14.5px; }
   .pulse__meta { font-size: 16.5px; }
 }
-/* 3600+（zoom 1.3 档）：卡片延续 2800 放大节奏（约 1.17×），补齐 2000/2800 未覆盖的卡片内文字（feed/pulse/trend/wq/usage/funnel） */
+/* 3600+（zoom 1.3 档）：卡片延续 2800 放大节奏（约 1.17×），补齐 2000/2800 未覆盖的卡片内文字（feed/pulse/trend/wq/usage/funnel）
+   注：本档 px 是"除过 zoom 1.3"的补偿值（2800 档生效时壳层 zoom 1.15）。
+   2026-09-24 桌面端验收：5 处补偿不足，有效字号反而小于 2800 档（如 .funnel__node strong
+   26×1.15=29.9 → 22×1.3=28.6），已上调到 ≥ 2800 的有效值；守卫见
+   scripts/check-design-system.mjs 规则 11（档位字号单调性，按 zoom 折算比较）。 */
 @media (min-width: 3600px) {
   .brief-card { padding: 28px 36px; }
   .brief-card h4 { font-size: 19px; }
@@ -1436,13 +1448,13 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .brief-actions li { font-size: var(--mk-fs-15); }
   .brief-actions__btn { font-size: var(--mk-fs-14); }
   .brief-actions__clear { font-size: var(--mk-fs-15); }
-  .feed-filter { font-size: 13.5px; }
+  .feed-filter { font-size: 14px; }
   .feed__empty { font-size: var(--mk-fs-15); }
   .feed li strong { font-size: 15.5px; }
-  .feed li span { font-size: 13.5px; }
+  .feed li span { font-size: 14px; }
   .feed--full li strong { font-size: var(--mk-fs-15); }
   .wq__label { font-size: var(--mk-fs-14); }
-  .wq__nums { font-size: 13.5px; }
+  .wq__nums { font-size: 14px; }
   .wq__note { font-size: var(--mk-fs-14); }
 
 
@@ -1454,8 +1466,8 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .trend__num { font-size: var(--mk-fs-13); }
   .trend__day { font-size: var(--mk-fs-12_5); }
   .trend__sum { font-size: var(--mk-fs-14); }
-  .funnel__node span { font-size: 13.5px; }
-  .funnel__node strong { font-size: 22px; }
+  .funnel__node span { font-size: 14px; }
+  .funnel__node strong { font-size: 23.5px; }
   .funnel__rate { font-size: var(--mk-fs-12_5); }
   .pulse__meta { font-size: 14.5px; }
 }

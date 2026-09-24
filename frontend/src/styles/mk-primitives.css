@@ -85,7 +85,10 @@
 .mk-status--warn .mk-status__dot { background: var(--mk-amber); }
 .mk-status--bad .mk-status__dot { background: var(--mk-red); }
 .mk-status--muted .mk-status__dot { background: var(--mk-faint); }
-/* 状态点颜色图例：悬停显示该色含义（纯 CSS，覆盖全站 29 处状态条，无需逐页改标记） */
+/* 状态点颜色图例：悬停显示该色含义（纯 CSS，覆盖全站 29 处状态条，无需逐页改标记）
+   2026-09-24 桌面端验收：原来只有 `.mk-status__dot:hover` 一个触发点——点是 8px 的装饰元素，
+   键盘用户永远看不到图例。触发面扩到整条状态条，并补 :focus-within（键盘 Tab 进条内
+   动作按钮时同样显示）。图例语义本由 __meta 文本承载，这里只补可达性。 */
 .mk-status__dot::after {
   content: '';
   position: absolute;
@@ -105,7 +108,9 @@
   transition: opacity 0.12s ease, transform 0.12s ease;
   z-index: 70;
 }
-.mk-status__dot:hover::after { opacity: 1; transform: translateX(-50%); }
+.mk-status__dot:hover::after,
+.mk-status:hover .mk-status__dot::after,
+.mk-status:focus-within .mk-status__dot::after { opacity: 1; transform: translateX(-50%); }
 .mk-status--ok .mk-status__dot::after { content: '正常'; }
 .mk-status--warn .mk-status__dot::after { content: '需关注'; }
 .mk-status--bad .mk-status__dot::after { content: '异常'; }
@@ -137,14 +142,17 @@
 /* 状态条可点击计数锚点（P0-3 页头统一：需关注/失败节点等计数可点击筛选；
    LearnerCenter.lc-count-link / Skills 共用，全局化避免每页复制） */
 .mk-status__meta-link {
-  border: 0; background: transparent; padding: 0;
+  border: 0; background: transparent;
+  /* 热区：原来 padding:0，盒子就是文字行高（17px 上下）——低于 24px 鼠标可点下限。
+     改成与其 hover 态同一套 padding/margin 负补偿，视觉位置不变、热区到 ~25px */
+  padding: 4px 6px; margin: -4px -6px;
   font: inherit; font-size: 12.5px; font-weight: 700;
   color: var(--mk-muted); cursor: pointer;
   border-radius: 6px;
   transition: color 0.12s ease, background 0.12s ease;
 }
-.mk-status__meta-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); padding: 2px 6px; margin: -2px -6px; }
-.mk-status__meta-link--on { color: var(--mk-meta-link-on-fg); background: var(--mk-meta-link-on-bg); padding: 2px 6px; margin: -2px -6px; }
+.mk-status__meta-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); }
+.mk-status__meta-link--on { color: var(--mk-meta-link-on-fg); background: var(--mk-meta-link-on-bg); }
 /* 暗色等价色：原为 LearnerCenter 页面私有补丁，收敛为全局。
    其余 5 处计数锚点此前无暗色覆盖 → rgba(44,99,208,.08) 落在深底上几乎不可见。 */
 html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 239, 0.14); }
@@ -371,7 +379,10 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 0;
+  /* 排序按钮的盒高原来等于表头文字行高（21px），低于 24px 的鼠标可点下限；
+     补纵向内边距到 24px，表头单元格自身的 padding 负责视觉位置，观感不变 */
+  min-height: 24px;
+  padding: 2px 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -1350,6 +1361,12 @@ html[data-theme='dark'] {
 }
 
 @media (min-width: 2000px) {
+  /* 档位收敛(2026-09-24 桌面端验收):本档只负责**间距/尺寸/列宽/覆盖层宽度**,不再声明字号。
+     原因:本档写于 1920 档之前,字号沿用的是"1440→2000"的旧节奏,而 1920 档(D4 补丁)是
+     后补的中间档——同优先级后者覆盖,于是 1920→2000 反而**字号回退**
+     (.mk-page 15→14.5、.mk-table td 15→13.5、.mk-card__title 15→14.5 等 12 个类,
+     越大屏字越小),另有 8 个类与本档重复。字号交给 1920 档,本档承接间距与列宽。
+     回归守卫:scripts/check-design-system.mjs 规则 11(档位字号单调性)。 */
   /* 实体头（原 UserDetail/LearnerDetail 各自的 4K 档，收敛到原语一处） */
   .mk-entity__avatar { width: 54px; height: 54px; font-size: 21px; }
   .mk-entity__name { font-size: 21px; }
@@ -1374,28 +1391,14 @@ html[data-theme='dark'] {
     --mk-col-flex-max: 840px;
     --mk-cell-main-max: 300px;
   }
-  .mk-page { font-size: 14.5px; }
-  .mk-status__title { font-size: 16px; }
-  .mk-status__meta { font-size: 13.5px; }
-  .mk-status__action { font-size: 13.5px; }
-  .mk-table th { font-size: 12.5px; }
-  .mk-table td { font-size: 13.5px; }
-  /* dense 档 4K 镜像（原 frt__table 档位） */
+  /* dense 档 4K 镜像（原 frt__table 档位）——dense 是显式的独立档，1920 档未覆盖，故保留 */
   .mk-table--dense th { font-size: 12.5px; }
   .mk-table--dense td { font-size: 14px; }
-  .mk-cell-sub { font-size: 12.5px; }
-  .mk-badge { font-size: 13px; }
-  .mk-menu__item { font-size: 14px; }
   .mk-menu__btn { width: 30px; height: 30px; font-size: 15px; }
   .mk-filter__input,
-  .mk-filter__select { font-size: 14px; padding: 9px 13px; height: 42px; }
-  .mk-pill { font-size: 13.5px; padding: 6px 14px; }
-  .mk-empty strong { font-size: 15px; }
-  .mk-empty span { font-size: 14px; }
+  .mk-filter__select { padding: 9px 13px; height: 42px; }
+  .mk-pill { padding: 6px 14px; }
   .mk-empty__action { font-size: 14px; padding: 8px 18px; }
-  .mk-card__title { font-size: 14.5px; }
-  .mk-card__meta { font-size: 13.5px; }
-  .mk-num { font-size: 13.5px; }
   .mk-modal__panel { width: min(var(--mk-modal-w-lg, 620px), 100%); }
   .mk-modal__panel--wide { width: min(var(--mk-modal-w-wide-lg, 860px), 100%); }
   .mk-modal__title { font-size: 17px; }
@@ -1404,11 +1407,9 @@ html[data-theme='dark'] {
   .mk-field__hint { font-size: 12.5px; }
   .mk-field__err { font-size: 12.5px; }
   .mk-field__input, .mk-field__select, .mk-field__textarea, .mk-input { font-size: 14px; padding: 10px 13px; }
-  .mk-btn { font-size: 14px; padding: 10px 18px; }
-  .mk-btn--sm { font-size: 12.5px; padding: 6px 13px; }
-  .mk-toast { font-size: 13.5px; }
+  .mk-btn { padding: 10px 18px; }
+  .mk-btn--sm { padding: 6px 13px; }
   .mk-list-more { font-size: 13.5px; padding: 11px 16px 13px; }
-  .mk-link { font-size: 14px; }
   .mk-actions { min-width: 84px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-lg, 700px); }
   .mk-drawer__panel--wide { width: var(--mk-drawer-w-xl, 880px); }
@@ -1509,6 +1510,16 @@ html[data-theme='dark'] {
   .mk-drawer__title { font-size: 23px; }
   .mk-drawer__close { width: 46px; height: 46px; font-size: 20px; }
   .mk-drawer__body { padding: 26px 36px 36px; }
+}
+
+/* ---------- 复选框 ----------
+   原生 checkbox 的盒子就是控件本身（Chrome 13px）→ 抬到 16px（表格行选择等场景的通行尺寸）。
+   注：24px 的鼠标可点下限对复选框不适用——平台惯例就是 13–16px，且四周留白充足；
+   这里按例外处理并在 doc/re_test/admin-audit-2026-09-24.md 里登记。 */
+input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex: none;
 }
 
 /* ----- 回到顶部浮动按钮（滚动规范 #9：页面 >2 屏时出现；Shell 挂载，全局可用） ----- */

@@ -151,7 +151,8 @@ onMounted(load)
 
 <style scoped>
 .sd-settings { border: 1px solid var(--mk-line); border-radius: 8px; padding: 10px 12px; margin-top: 8px; }
-.sd-settings__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+/* 折叠头是 role=button 的整行开关，高度原来等于 13px 文字行高（~19px），低于 24px 可点下限 */
+.sd-settings__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; cursor: pointer; }
 .sd-settings__arrow { color: var(--mk-faint, #6b7c96); font-size: 10px; transition: transform 0.15s ease; }
 .sd-settings__arrow[data-open='true'] { transform: rotate(90deg); }
 .sd-settings__title { font-weight: 600; font-size: var(--mk-fs-13); }

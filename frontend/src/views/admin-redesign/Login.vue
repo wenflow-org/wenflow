@@ -322,6 +322,9 @@ onMounted(() => {
 }
 
 .auth__back {
+  /* 热区：原来只有文字行高 19px，低于 24px 鼠标可点下限；纵向补内边距到 ~27px */
+  display: inline-block;
+  padding: 4px 2px;
   font-size: var(--mk-fs-12_5);
   font-weight: 600;
   color: var(--faint);
