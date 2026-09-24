@@ -254,6 +254,9 @@ page-*.md
 # UI 审计截图临时目录
 .ui-audit/
 
+# 管理端巡检原始数据（可复跑：node scripts/admin-audit.mjs；结论进 doc/re_test/）
+scripts/admin-audit-results/
+
 # 本地实验数据（语料、跑批产物与归档；不入库 —— 见 doc/VIRTUAL_LEARNER_DESIGN.md）
 data/
 
