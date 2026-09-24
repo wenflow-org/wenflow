@@ -581,4 +581,15 @@ table.uc-table {
   .uc-dialog__head h3 { font-size: 15.5px; }
   .uc-dialog__body { padding: 12px 16px; gap: 10px; }
   .uc-dialog__foot { padding: 12px 16px 14px; gap: 8px; }
+
+  /* 主按钮的"浮板感"：尺寸上一轮已和学习侧 .btn-primary 对齐（38px 高 / 13.5px 字），
+     但这里留着桌面的 10px·22px·22% 蓝晕——39 高的小按钮配这个投影，在 390 宽下
+     就是一块浮起来的板（2026-09-24 用户指「授权 24 小时还挺大的」）。
+     学习侧同款按钮的移动端投影是 5px·12px·20%，这里收到同一档。 */
+  .uc-btn--primary {
+    box-shadow: 0 5px 12px color-mix(in srgb, var(--blue, #3478f6) 20%, transparent);
+  }
+  .uc-btn--primary:hover:not(:disabled) {
+    box-shadow: 0 8px 18px color-mix(in srgb, var(--blue, #3478f6) 26%, transparent);
+  }
 }
