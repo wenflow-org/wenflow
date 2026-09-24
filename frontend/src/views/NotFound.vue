@@ -109,3 +109,15 @@ const adminSession = hasAdminSession();
   background: rgba(24, 34, 48, 0.7);
 }
 </style>
+
+<style scoped>
+/* ===== 移动端密度（2026-09-24）=====
+   本页此前一个媒体查询都没有：实测 390 下 404 数字 72px（占屏宽近 1/5）、
+   容器留白 24px、按钮左右内边距 22px（学习侧同款按钮的移动端是 17px）。 */
+@media (max-width: 640px) {
+  .not-found-page { padding: 16px; }
+  .not-found-code { font-size: 56px; }
+  .not-found-desc { margin-bottom: 20px; }
+  .nf-btn { padding: 9px 17px; font-size: 13.5px; }
+}
+</style>
