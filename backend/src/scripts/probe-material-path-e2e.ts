@@ -179,6 +179,18 @@ async function main(): Promise<void> {
       console.log('[probe] 未找到可用生产快照，退回自造输入');
     }
   }
+  // --needs[=《资料名》]：goal 声明 needsMaterial（visibleSummary 白名单透传）→ 触发联网采集。
+  // 纯联网对照实验用：配一个无上传附件的 user，即得「不走文档、只联网」的路径。
+  if (hasFlag('needs')) {
+    const needTitle = arg('needs') || '《3-6岁儿童学习与发展指南》';
+    request.visibleSummary.needsMaterial = [{
+      kind: '指南',
+      title: needTitle,
+      why: '目标指定的对照文本，路径内容依赖它',
+      queries: [needTitle.replace(/[《》]/g, ''), `${needTitle.replace(/[《》]/g, '')} 全文`].slice(0, 2),
+    }];
+    console.log(`[probe] 声明 needsMaterial（触发联网采集）：${needTitle}`);
+  }
   const normalized = await pathOrchestrator.previewNormalizedGoalInput(request);
   console.log(`[probe] 诉求（rawGoal）：${String(request.rawGoal || '').slice(0, 70)}`);
 
