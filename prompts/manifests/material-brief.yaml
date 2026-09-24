@@ -13,7 +13,7 @@ publish:
 promptContract:
   version: skill-prompt-contract/v2
   executionMode: llm
-  artifactKind: summary
+  artifactKind: distillation
   interactionMode: snapshot
   input: { transport: json, schemaSource: skill-definition }
   output: { media: json, schemaSource: runtime-validator, envelope: adapter }
