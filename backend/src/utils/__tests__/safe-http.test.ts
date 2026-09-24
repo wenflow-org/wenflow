@@ -14,12 +14,14 @@ import { lookup } from 'dns/promises'
 import {
   isAlwaysBlockedAddress,
   isLocalOrPrivateAddress,
+  SAFE_HTTP_MAX_TIMEOUT_MS,
   SafeHttpAbortError,
   SafeHttpTimeoutError,
   safeHttpRequest,
   validateExternalUrl,
   validateSafeHttpConfig
 } from '../safe-http'
+import { RETRY_BUDGET_HARD_LIMITS } from '../../gateway/api-gateway/retry-budget'
 
 const lookupMock = lookup as jest.Mock
 const requestMock = axios.request as jest.Mock
@@ -156,7 +158,12 @@ describe('safe-http SSRF policy', () => {
     expect(config.proxy).toBe(false)
   })
 
-  it('将调用方超时封顶为 300 秒', async () => {
+  it('将调用方超时封顶为 600 秒，且与网关单 attempt 硬上限对齐（防漂移）', async () => {
+    // utils 层不反向 import gateway，口径一致性由此用例锁定：
+    // SAFE_HTTP_MAX_TIMEOUT_MS 若小于 RETRY_BUDGET_HARD_LIMITS.maxRequestTimeoutMs，
+    // 传输层会静默截断执行器/路由层放行的慢上游调用（2026-09-24 对账修复的回归锚点）。
+    expect(SAFE_HTTP_MAX_TIMEOUT_MS).toBe(RETRY_BUDGET_HARD_LIMITS.maxRequestTimeoutMs)
+
     lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
     requestMock.mockResolvedValue({
       status: 200,
@@ -167,7 +174,7 @@ describe('safe-http SSRF policy', () => {
 
     await safeHttpRequest('https://example.com', { timeoutMs: 2_000_000_000 })
 
-    expect(requestMock.mock.calls[0][0].timeout).toBeLessThanOrEqual(300_000)
+    expect(requestMock.mock.calls[0][0].timeout).toBeLessThanOrEqual(SAFE_HTTP_MAX_TIMEOUT_MS)
   })
 
   it('总请求时限覆盖 DNS 解析阶段', async () => {

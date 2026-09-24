@@ -6,7 +6,15 @@ import { isIP } from 'net'
 import { canAccessPrivateNetwork } from '../services/runtime-network-policy.service'
 
 const DEFAULT_TIMEOUT_MS = 15_000
-export const SAFE_HTTP_MAX_TIMEOUT_MS = 300_000
+/**
+ * 单请求超时硬上限。必须与网关执行器的单 attempt 上限保持一致：
+ * `gateway/api-gateway/retry-budget.ts` 的 `RETRY_BUDGET_HARD_LIMITS.maxRequestTimeoutMs`（600s）。
+ * 此处若小于该值，会把执行器/路由层显式放行的慢上游调用（skill/path-planning 覆盖到 600s）
+ * 在传输层静默截断，且遥测 `effectiveTimeoutMs` 仍按未截断值记录（2026-09-24 对账修复）。
+ * 不直接 import 的原因：utils 层不反向依赖 gateway 层；防漂移由 parity 测试锁定
+ * （`utils/__tests__/safe-http.test.ts` 超时钳制对齐用例）。
+ */
+export const SAFE_HTTP_MAX_TIMEOUT_MS = 600_000
 const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 const DEFAULT_MAX_REDIRECTS = 3
 const SENSITIVE_REDIRECT_HEADERS = new Set(['authorization', 'cookie', 'proxy-authorization', 'x-api-key'])
