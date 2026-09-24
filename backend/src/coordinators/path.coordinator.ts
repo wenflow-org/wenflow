@@ -6,8 +6,9 @@ import {
 } from '../services/background-task-tracker.service';
 import learningService from '../services/learning/learning.service';
 import { buildFramedNormalizedInput, type LearnerLoadProfile } from '../services/learning/path-planning-hints';
-import { buildUploadedMaterialPacks } from '../services/materials/material-pack.builder';
-import { listMaterials } from '../services/materials/material-store';
+import { buildUploadedMaterialPacks, buildPackFromMaterial } from '../services/materials/material-pack.builder';
+import { listMaterials, readMaterial } from '../services/materials/material-store';
+import { findWebRecordByTitle } from '../services/materials/material-web-ingest.service';
 import { collectBriefsWithDeadline } from '../services/materials/material-brief.service';
 import type { ResponseTriage } from '../services/learning/response-triage';
 import {
@@ -345,16 +346,35 @@ class PathCoordinator {
     }
   }
 
+  /** 库中联网资料 → pack（读盘 + 确定性打包；fail-open，任何失败返回 null 回退采集）。 */
+  private buildWebRecordPackQuietly(record: { id: string; userId: string }): MaterialPackResult | null {
+    try {
+      const material = readMaterial(record.userId, record.id);
+      if (!material) return null;
+      return buildPackFromMaterial(material.record, material.markdown);
+    } catch (error) {
+      logger.warn('[path-coordinator] 库中联网资料打包失败，回退采集（fail-open）', {
+        recordId: record.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
   /**
    * 资料采集（goal→path 接线缝，最小侵入 + fail-open）：
    *   - 开关：`MATERIAL_COLLECTION_DISABLED=1` 关闭；未声明 needsMaterial 时**零调用**（连模块都不 import）；
+   *   - 库优先（活的 path 批次 A）：need 对应的联网资料已在用户库（标题归一匹配）→ 直接用库打包，
+   *     **跳过本次采集**——path 重建零联网消费；未命中的 need 才走采集；
    *   - 依赖：动态 import material-collector，避免把 search/fetch/prompt 依赖注入 path.coordinator 的静态图；
    *   - 超时：withTimeout 总上限（默认 20s），到点 abort + 跳过，绝不阻塞路径生成；
    *   - 失败：任何抛错只记一条 warn 日志，并以 status=not_found + note 落入 materials（路径生成继续）。
    */
-  private async resolveMaterialPacks(needsMaterial: unknown): Promise<MaterialPackResult[] | null> {
+  private async resolveMaterialPacks(userId: unknown, needsMaterial: unknown): Promise<MaterialPackResult[] | null> {
     if (!needsMaterial) return null;
     if (!isMaterialCollectionEnabled()) return null;
+
+    const collectorUserId = typeof userId === 'string' ? userId.trim() : '';
 
     let collector: typeof import('../skills/material-collector');
     try {
@@ -370,30 +390,57 @@ class PathCoordinator {
 
     const needs = (Array.isArray(needsMaterial) ? needsMaterial : [needsMaterial])
       .slice(0, MATERIAL_COLLECTION_MAX_NEEDS) as MaterialNeed[];
+
+    // 库优先：已入库的联网资料直接复用（零网络、零 LLM），只对未命中的 need 采集
+    const results: MaterialPackResult[] = [];
+    const pendingNeeds: MaterialNeed[] = [];
+    for (const need of needs) {
+      const libraryRecord = collectorUserId ? findWebRecordByTitle(collectorUserId, String(need?.title || '')) : null;
+      if (libraryRecord) {
+        const cached = this.buildWebRecordPackQuietly(libraryRecord);
+        if (cached) {
+          results.push({
+            ...cached,
+            notes: [...(cached.notes || []), '复用库中联网资料（按标题匹配），跳过本次采集（path 重建零重采）'],
+          });
+          continue;
+        }
+      }
+      pendingNeeds.push(need);
+    }
+
+    if (pendingNeeds.length === 0) {
+      return results.length > 0 ? results : null;
+    }
+
     const timeoutMs = resolveMaterialCollectionTimeoutMs();
     const controller = new AbortController();
     const startedAt = Date.now();
     try {
-      const results = await withTimeout(
-        collector.collectMaterialForGoal(needs, { signal: controller.signal }),
+      const collected = await withTimeout(
+        collector.collectMaterialForGoal(pendingNeeds, { signal: controller.signal, userId: collectorUserId || undefined }),
         timeoutMs,
         () => controller.abort()
       );
-      return Array.isArray(results) ? results : null;
+      const merged = [...results, ...(Array.isArray(collected) ? collected : [])];
+      return merged.length > 0 ? merged : null;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn('[path-coordinator] 资料采集失败，已跳过（fail-open，不阻塞路径生成）', {
-        needs: needs.map((need) => need?.title).filter(Boolean),
+        needs: pendingNeeds.map((need) => need?.title).filter(Boolean),
         durationMs: Date.now() - startedAt,
         error: message,
       });
-      return [{
-        status: 'not_found',
-        pack: null,
-        provenance: [],
-        coverage: { covered: [], missing: [] },
-        notes: [`资料采集失败，已跳过（fail-open）：${message}`],
-      }];
+      return [
+        ...results,
+        {
+          status: 'not_found' as const,
+          pack: null,
+          provenance: [],
+          coverage: { covered: [], missing: [] },
+          notes: [`资料采集失败，已跳过（fail-open）：${message}`],
+        },
+      ];
     }
   }
 
@@ -493,12 +540,18 @@ class PathCoordinator {
       });
     }
 
-    const materialPacks = [
-      // 附件是主线：用户上传的资料优先进入路径（本地读盘，无网络、无 LLM）
-      ...this.resolveUploadedMaterialPacks(input.userId),
-      // 联网采集只用于补信息（goal 声明 needsMaterial 才触发）
-      ...(await this.resolveMaterialPacks(needsMaterial) || []),
-    ];
+    // 附件是主线：用户上传的资料优先进入路径（本地读盘，无网络、无 LLM）
+    const uploadedPacks = this.resolveUploadedMaterialPacks(input.userId);
+    const uploadedMaterialIds = new Set(
+      uploadedPacks.map((pack) => pack.pack?.materialId).filter((id): id is string => !!id)
+    );
+    // 联网采集只用于补信息（goal 声明 needsMaterial 才触发）。
+    // 批次 A 起联网正文会入库：若采集到的记录已在库里（URL 去重命中既有记录），
+    // 附件列表里那份（带 brief、全文可取回）优先，丢弃本次采集的重复 pack。
+    const collectedPacks = (await this.resolveMaterialPacks(input.userId, needsMaterial) || []).filter(
+      (pack) => !(pack.pack?.materialId && uploadedMaterialIds.has(pack.pack.materialId))
+    );
+    const materialPacks = [...uploadedPacks, ...collectedPacks];
 
     // 单一挂载点：定帧层（buildFramedNormalizedInput）负责归一化与字段透传，
     // materials 由本处统一合入（附件在前、联网在后），下游 path-planning 按序消费。

@@ -36,6 +36,15 @@ export interface MaterialRecord {
   brief?: MaterialBrief | null;
   /** brief 生成时间（ISO）；缺省=未生成。 */
   briefGeneratedAt?: string | null;
+  /**
+   * 来源（2026-09-24 活的 path 批次 A）：'upload'=用户上传附件；'web'=联网采集入库。
+   * 缺省=历史记录（一律按 upload 对待——旧记录全是上传）。
+   */
+  origin?: 'upload' | 'web';
+  /** 联网资料的原始 URL（origin='web' 时有值）；上传附件为空。去重与溯源用。 */
+  sourceUrl?: string | null;
+  /** 联网抓取时间（ISO）；上传附件为空。 */
+  fetchedAt?: string | null;
 }
 
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

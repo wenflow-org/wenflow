@@ -22,6 +22,8 @@
 
 import { searchWeb } from '../../services/search';
 import { fetchWeb } from '../../services/fetch';
+import { ingestWebMaterial as ingestWebMaterialService } from '../../services/materials/material-web-ingest.service';
+import type { MaterialRecord } from '../../services/materials/material-store';
 import type { SearchCallOptions, SearchQuery, SearchResponse, SearchResultItem } from '../../services/search/types';
 import type { FetchCallOptions, FetchContentItem, FetchRequest, FetchResponse } from '../../services/fetch/types';
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
@@ -42,11 +44,18 @@ import type {
 
 export * from './types';
 
-/** 可 mock 的 provider 边界（默认实现 = services/search + services/fetch + prompt 抽取器） */
+/** 可 mock 的 provider 边界（默认实现 = services/search + services/fetch + prompt 抽取器 + 联网入库） */
 export interface MaterialCollectorProviderDeps {
   searchWeb: (query: SearchQuery, options?: SearchCallOptions) => Promise<SearchResponse>;
   fetchWeb: (request: FetchRequest, options?: FetchCallOptions) => Promise<FetchResponse>;
   extract: MaterialExtractor;
+  /**
+   * 联网正文入库（活的 path 批次 A）：抓到的全文落成用户资料库正式记录，
+   * 返回记录 id 回填 pack.materialId——此后引用走「库资料」通道（章节取回/brief/重建复用）。
+   * deduped=true 表示命中 URL 去重复用了既有记录。返回 null = 入库失败（fail-open，不影响本次 pack）。
+   */
+  ingestWebMaterial: (input: { userId: string; url: string; title: string; text: string })
+    => Promise<{ record: Pick<MaterialRecord, 'id' | 'name' | 'charCount'>; deduped: boolean } | null>;
 }
 
 /** 依赖注入别名（对外可读名） */
@@ -81,6 +90,8 @@ export interface MaterialCollectorOptions {
   signal?: AbortSignal;
   /** 可注入时钟（测试固定 fetchedAt） */
   now?: () => Date;
+  /** 资料归属用户（联网正文入库用；缺省不入库，行为与批次 A 之前一致） */
+  userId?: string;
 }
 
 const DEFAULT_TTL_SECONDS = 24 * 60 * 60;
@@ -302,6 +313,7 @@ function resolveDeps(partial?: Partial<MaterialCollectorProviderDeps>): Material
     searchWeb: partial?.searchWeb ?? searchWeb,
     fetchWeb: partial?.fetchWeb ?? fetchWeb,
     extract: partial?.extract ?? createPromptExtractor(),
+    ingestWebMaterial: partial?.ingestWebMaterial ?? ingestWebMaterialService,
   };
 }
 
@@ -536,6 +548,32 @@ export async function collectMaterialPack(
 
   const { pack, provenance, missing } = assembled;
   const coverage: MaterialCoverage = { covered: pack.sections.map((section) => section.title), missing };
+
+  // --- 5) 入库（活的 path 批次 A）：抓到的**全文**（非 6000 字抽取截断版）落成用户库正式资料。
+  // 成功后回填 pack.materialId——同代 materialRefs 即为「库资料」引用（章节取回/brief/重建复用全打通）。
+  // URL 去重 + 闸门拒收 + 任何异常都 fail-open：只记 note，不影响本次 pack 交付。
+  const ingestUserId = normalizeText(options.userId);
+  if (ingestUserId) {
+    try {
+      const ingested = await deps.ingestWebMaterial({
+        userId: ingestUserId,
+        url: sourceUrl,
+        title: pack.title,
+        text: String(chosen.text),
+      });
+      if (ingested?.record?.id) {
+        pack.materialId = ingested.record.id;
+        notes.push(ingested.deduped
+          ? `联网资料已在库（按 URL 去重，复用既有记录）：${ingested.record.name}`
+          : `联网资料已入库：${ingested.record.name}（${ingested.record.charCount ?? 0} 字），后续重建直接复用`);
+      } else {
+        notes.push('联网资料入库被闸门拒收（正文过短或解析失败），本次仅交付资料包');
+      }
+    } catch (error) {
+      notes.push(`联网资料入库失败（fail-open）：${errorMessage(error)}`);
+    }
+  }
+
   const degraded =
     (fetchResponse.errors?.length ?? 0) > 0 ||
     usable.length < selected.length ||
@@ -611,10 +649,20 @@ export async function collectMaterialForGoal(
 
 /** goal 输出是否声明了外部资料需求（供调用点做 0 成本早退判断） */
 export function hasMaterialNeed(goalOutput: unknown): boolean {
-  const record = goalOutput && typeof goalOutput === 'object' ? (goalOutput as Record<string, any>) : {};
-  const need = record.needsMaterial ?? record.visibleSummary?.needsMaterial ?? record.understanding?.needsMaterial;
-  if (Array.isArray(need)) return need.some((item) => Boolean(item && normalizeText(item.title)));
-  return Boolean(need && normalizeText((need as Record<string, any>).title));
+  const record: Record<string, unknown> = goalOutput && typeof goalOutput === 'object'
+    ? (goalOutput as Record<string, unknown>)
+    : {};
+  const visible = record.visibleSummary as Record<string, unknown> | undefined;
+  const understanding = record.understanding as Record<string, unknown> | undefined;
+  const need = record.needsMaterial ?? visible?.needsMaterial ?? understanding?.needsMaterial;
+  if (Array.isArray(need)) {
+    return need.some((item) => {
+      const needRecord = item as Record<string, unknown> | null;
+      return Boolean(item && normalizeText(needRecord?.title));
+    });
+  }
+  const needRecord = need as Record<string, unknown> | null;
+  return Boolean(need && normalizeText(needRecord?.title));
 }
 
 export const materialCollectorDefinition: SkillDefinition = {

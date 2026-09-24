@@ -59,8 +59,9 @@ export interface MaterialPack {
   sourceUrl: string;
   version: string | null;
   /**
-   * 本地附件的资料 id（仅"用户上传附件"这一路有；联网采集为 null）。
-   * 用途：学习者侧「点开看原文」按 id 取回附件正文（`GET /api/materials/:id`）。
+   * 用户资料库记录 id：上传附件必有；联网采集在入库成功后回填（活的 path 批次 A）——
+   * 回填后该 pack 即「库资料」：学习者侧可按 id 取回正文/章节窗口，重建时不再重采。
+   * 仅当未传 userId 或入库失败时为 null（此时保持旧的 sourceUrl 引用形态）。
    */
   materialId?: string | null;
   /** 抓取/组装时间（ISO 8601） */
