@@ -1912,7 +1912,7 @@ export class LearningStateService {
         warnings.push({
           type: 'fatigue',
           level: 'critical',
-          title: '⚠️ 学习疲劳预警',
+          title: '学习疲劳预警',
           message: `你的疲劳度（LF）已连续 ${recentLF.length} 天超过 70。这表明你可能过度学习。`,
           suggestion: '建议暂停学习1-2天，做一些轻松的事情恢复精力，后续降低学习强度。'
         });
@@ -1924,7 +1924,7 @@ export class LearningStateService {
         warnings.push({
           type: 'lsb_negative',
           level: 'warning',
-          title: '📉 学习状态预警',
+          title: '学习状态预警',
           message: `你的学习状态值（LSB）已连续 ${recentLSB.length} 次为负，说明疲劳已超过知识积累能力。`,
           suggestion: '建议调整学习计划，减少每日学习量或选择更简单的任务。'
         });
@@ -1941,7 +1941,7 @@ export class LearningStateService {
           warnings.push({
             type: 'efficiency_drop',
             level: 'warning',
-            title: '📊 学习效率预警',
+            title: '学习效率预警',
             message: `你最近的学习压力评分明显上升（从 ${avgLSSBefore.toFixed(1)} 到 ${avgLSSRecent.toFixed(1)}）。`,
             suggestion: '可能是任务难度过高或疲劳累积，建议回顾学习方法或适当休息。'
           });
@@ -1954,7 +1954,7 @@ export class LearningStateService {
         warnings.push({
           type: 'overstudy',
           level: 'info',
-          title: '💡 学习平衡提醒',
+          title: '学习平衡提醒',
           message: `你已掌握较多知识（KTL = ${current.ktl.toFixed(1)}），但当前状态不佳（LSB = ${current.lsb.toFixed(1)}）。`,
           suggestion: '知识积累很好，但疲劳度较高。建议今天做轻松的复习，不要学习新内容。'
         });

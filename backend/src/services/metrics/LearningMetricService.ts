@@ -287,25 +287,25 @@ export function generateLearningStateAdvice(metrics: LearningStateMetrics): stri
 
   // LSB建议
   if (metrics.lsb < -30) {
-    advice.push('⚠️ 学习状态不佳。建议休息1-2天，恢复精力和注意力。');
+    advice.push('学习状态不佳。建议休息1-2天，恢复精力和注意力。');
   } else if (metrics.lsb < 0) {
-    advice.push('📉 学习状态偏低。建议减少学习强度，或增加休息时间。');
+    advice.push('学习状态偏低。建议减少学习强度，或增加休息时间。');
   } else if (metrics.lsb > 50) {
-    advice.push('🚀 学习状态极佳！正是攻克难点的好时机。');
+    advice.push('学习状态极佳，正是攻克难点的好时机。');
   } else {
-    advice.push('✅ 学习状态良好。继续保持当前节奏。');
+    advice.push('学习状态良好。继续保持当前节奏。');
   }
 
   // LSS建议
   if (metrics.lss > 75) {
-    advice.push('💔 学习压力过大。建议拆分任务，或寻求AI辅导。');
+    advice.push('学习压力过大。建议拆分任务，或寻求 AI 辅导。');
   } else if (metrics.lss > 50) {
     advice.push('⚡ 学习压力适中。注意劳逸结合。');
   }
 
   // LF建议
   if (metrics.lf > 60) {
-    advice.push('😴 疲劳度较高。确保充足睡眠，适当运动。');
+    advice.push('疲劳度较高。确保充足睡眠，适当运动。');
   }
 
   return advice;
