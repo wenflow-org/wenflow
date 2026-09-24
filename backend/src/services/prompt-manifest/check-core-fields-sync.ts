@@ -159,6 +159,11 @@ export const ORPHAN_EXEMPT_FIELDS: ReadonlyArray<{ skillId: string; field: strin
     field: 'needsMaterial',
     evidence: 'prompts/core/goal-conversation.yaml：goal→path 接线缝的 hidden 输出，只声明「要不要外部权威资料」、不进数据面路由；消费方 = backend/src/skills/material-collector（采集编排器）',
   },
+  {
+    skillId: 'teaching-turn',
+    field: 'visual',
+    evidence: 'prompts/core/teaching-turn.yaml:179 教学配图（2026-09-23 全链路）：handler 侧 normalizeVisual 直通前端渲染（skills/teaching-turn/index.ts:663，渲染开关与配额在 teaching-visual.service），不进编排数据面路由',
+  },
 ];
 
 /** skillId → 已豁免字段名集合（孤儿判定过滤用） */
