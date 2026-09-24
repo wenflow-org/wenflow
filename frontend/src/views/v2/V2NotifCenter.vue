@@ -505,7 +505,7 @@ onBeforeUnmount(() => {
 .nc__body { max-height: min(420px, 60vh); overflow-y: auto; }
 
 /* 移动端：面板改为全宽 fixed（铃铛不在屏幕右缘，absolute 右对齐铃铛会向左溢出屏幕） */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .nc__panel {
     position: fixed;
     top: 64px;
@@ -742,8 +742,8 @@ onBeforeUnmount(() => {
 <style scoped>
 /* ===== 移动端密度（2026-09-24）=====
    判据：空态留白 ≤32px。实测 390 下通知面板空态上下 34px、图标 22px。
-   放在文件末尾：同权重下后出现者胜（.nc__empty 的基础规则在中间那个 ≤900 块之后）。 */
-@media (max-width: 900px) {
+   放在文件末尾：同权重下后出现者胜（.nc__empty 的基础规则在中间那个移动块之后）。 */
+@media (max-width: 1100px) {
   .nc__empty { padding: 24px 14px; }
   .nc__empty-icon { font-size: 18px; }
 }

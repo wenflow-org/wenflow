@@ -590,9 +590,11 @@ onBeforeUnmount(() => {
 .toast-enter-active, .toast-leave-active { transition: .25s ease; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-8px); }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .paths__main { padding: 16px 14px 32px; }
-  .paths__hero h1 { font-size: 22px; }
+  /* 移动端页标题 22→20：390 下「继续你的学习计划」占掉 270/362px 宽，
+     比页内正文（13.5px）重得多。全站移动端页标题同步收一档（2026-09-24 反馈）。 */
+  .paths__hero h1 { font-size: 20px; }
   .cards { grid-template-columns: 1fr; }
   /* ⋯ 触发器视觉不变（18px 字形 + 6px 内边距 = 30×27），伪元素把热区扩到 44×43：
      触屏上 27px 高太难点，它又贴在卡片右上角、周边没有别的手势目标，扩热区无副作用 */
@@ -666,7 +668,12 @@ onBeforeUnmount(() => {
    判据：卡片内边距 12–16px、空态/加载留白 ≤32px。
    实测 390 下 .pcard 18×20、.empty 56px + min-height 52vh、加载态 64px。
    放在文件末尾：同权重下后出现者胜。 */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
+  /* 筛选药丸：390 下 5 个占两行 83px（13px 字 + 8×15 内边距 + 38px 高），
+     收到 6×12（34px，仍在 34–38 的控件档）＋ 间距 8→6；页内节奏 18→14。 */
+  .filters { gap: 6px; }
+  .filter { padding: 6px 12px; }
+  .paths__main { gap: 14px; }
   .pcard { padding: 14px 16px; gap: 10px; }
   .empty { min-height: 40vh; padding: 32px 0; }
   .paths__loading { padding: 32px 0; }

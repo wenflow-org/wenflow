@@ -483,7 +483,7 @@ const live = useGoalLive();
 const loggedIn = hasUserSession();
 
 /* 移动端信息清单折叠：桌面（>900px）恒展开，窄屏默认折叠，点击顶栏展开/收起 */
-const narrowMq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 900px)') : null;
+const narrowMq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 1100px)') : null;
 const isNarrow = ref(narrowMq?.matches ?? false);
 const panelOpen = ref(false);
 const panelExpanded = computed(() => !isNarrow.value || panelOpen.value);
@@ -1829,7 +1829,7 @@ function shuffleScenes() {
 }
 
 /* ---------- 响应式 ---------- */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .nav__links { display: none; }
   /* 移动端保留顶部导航：与其余页面一致的 logo+铃铛+头像（CTA 已在 V2Nav ≤900 隐藏），
      底部 tabs 同时保留。本页 .goal 锁 100dvh，头部 56px 入流后由 main flex:1 自动让位。 */
@@ -1991,7 +1991,7 @@ function shuffleScenes() {
   }
   .proposal__note { padding-bottom: 14px; }
   .entry__hero { align-items: stretch; flex-direction: column; }
-  .entry__hero h1 { font-size: 22px; }
+  .entry__hero h1 { font-size: 20px; }
   .resume { width: 100%; justify-content: flex-start; }
   /* 整行铺满后「继续 ›」原本紧跟两行正文、悬在正文中线高度上，读起来像个孤立标签；
      推到行尾后成为标准的「列表行 + 行尾动作」。 */
@@ -2024,7 +2024,7 @@ function shuffleScenes() {
      是死规则；本轮不动它，留待一次专门的死 CSS 清理。 */
   .chat__scroll { padding: 14px; }
   .login-gate { padding: 28px 20px; border-radius: var(--mk-radius-modal); }
-  .login-gate h1 { font-size: 22px; }
+  .login-gate h1 { font-size: 20px; }
   .proposal__title { font-size: 19px; }
 }
 </style>
@@ -2098,7 +2098,7 @@ function shuffleScenes() {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 /* 移动端悬浮信息面板：暗色下要更实的投影才立得起来（浅色档是 rgba(23,32,51,.22)） */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   :global([data-theme='dark']) .panel:not(.panel--collapsed) .panel__body {
     box-shadow: 0 20px 44px rgba(0, 0, 0, 0.55);
   }

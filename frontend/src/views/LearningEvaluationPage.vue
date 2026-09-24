@@ -1059,7 +1059,7 @@ onUnmounted(() => {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .evaluation-shell {
     width: calc(100% - 28px);
   }
@@ -1197,7 +1197,7 @@ onUnmounted(() => {
 
    放在文件末尾是必需的：≤900 / ≤640 两个媒体块在文件中间，同权重下后出现者胜，
    密度规则写在那两个块里会被它们自己的 padding/字号覆写吃掉（学习页/详情页已踩过两次）。 */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .evaluation-shell {
     gap: 14px;
   }

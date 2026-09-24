@@ -1722,7 +1722,7 @@ onMounted(loadAll);
 .quick__item:hover .quick__go { color: var(--blue-deep); }
 
 /* ---------- 响应式 ---------- */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .nav__links { display: none; }
   /* 单列轨道用 minmax(0,1fr) 而非 1fr：1fr = minmax(auto,1fr)，下限仍是内容 min-content，
      折叠区里的 nowrap 内容会顺着这条链把整页顶宽（展开态 390→538px、居中按钮被迫右移）。 */
@@ -1736,7 +1736,9 @@ onMounted(loadAll);
   .review__link { flex-wrap: wrap; row-gap: 4px; }
   .review__name { flex: 1 1 100%; white-space: normal; overflow: visible; }
   .review__meter { flex: 1 1 auto; width: auto; min-width: 0; }
-  .action__title { font-size: 21px; }
+  /* 21px 是「页面标题」档，但它是卡内标题，而且比同页的问候语（16px）还大——
+     按基线（卡/区块标题 15–17px）收到 17px。 */
+  .action__title { font-size: 17px; }
   .dash__main { padding: 16px 14px 32px; }
   .greet { flex-direction: column; align-items: flex-start; gap: 8px; }
 }
@@ -1984,7 +1986,7 @@ a.btn-primary { text-decoration: none; }
 /* 移动端防横向溢出 */
 .action__eyebrow { flex-wrap: wrap; row-gap: 4px; }
 .action__from { min-width: 0; overflow-wrap: anywhere; }
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .greet__left { flex-wrap: wrap; row-gap: 4px; }
   .greet__sub { white-space: normal; flex-basis: 100%; }
   .action__title { overflow-wrap: anywhere; }
@@ -1993,7 +1995,7 @@ a.btn-primary { text-decoration: none; }
 
 <style scoped>
 /* 移动端：本周条 7 列收缩适配窄屏 */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .week { padding: 16px 14px; }
   .week__grid { gap: 5px; }
   .day { padding: 6px 2px 8px; }
@@ -2085,14 +2087,17 @@ a.btn-primary { text-decoration: none; }
 <style scoped>
 /* ===== 移动端密度（2026-09-24）=====
    判据：卡片内边距 12–16px、大留白（空态/加载）≤32px、移动端规则不写 <12px。
-   实测 390 下：.action 22×26（首屏最大一块）、.path 20×22、加载态 64px。
-   必须放在文件末尾：同权重下后出现者胜，写进前面那个 ≤900 块会被它后面的基础规则吃掉。
+   实测 390 下：.action 22×26（首屏最大一块，403px 高）、.path 20×22（542px）、加载态 64px。
+   必须放在文件末尾：同权重下后出现者胜，写进前面那个移动块会被它后面的基础规则吃掉。
+   断点取 1100，与底部 tab 条一致（见 v2.css 里 901~1100 段的说明）。
    不动的：.badge/.quick__body small 这类桌面本来就是 11–11.5px 的微标签——单方面放大后
    手机上同一个元素比桌面还大，而且卡片会变高，与密度目标相反。 */
-@media (max-width: 900px) {
-  .action { padding: 16px 18px; }
+@media (max-width: 1100px) {
+  /* 卡内节奏同步收：内边距已到位，余下的开销是 gap（10/14）与页脚按钮行的 12 */
+  .action { padding: 16px 18px; gap: 8px; }
   .action--empty { padding: 14px 16px; }
-  .path { padding: 14px 16px; }
+  .action__footer { gap: 8px; }
+  .path { padding: 14px 16px; gap: 12px; }
   .path__empty-body { padding: 18px 0; }
   .week__empty { padding: 18px 0; }
   .dash__loading { padding: 32px 0; }

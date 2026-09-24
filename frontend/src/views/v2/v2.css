@@ -614,9 +614,6 @@ html, body {
    （实测 1000×700 滚到底：页脚 638~700、tab 条 638~700，页脚整行几乎不可见）。 */
 @media (max-width: 1100px) {
   .v2-page { padding-bottom: 72px; }
-}
-
-@media (max-width: 900px) {
   .v2-page .v2footer { margin-bottom: 0; }
   /* 移动端按钮收一档（2026-09-24 反馈「移动端好像这种按钮都比较大」）：
      43px 高 / 14px 字 / 22px 横向内边距，配上 10px·22px·30% 的蓝色投影，
@@ -646,6 +643,19 @@ html, body {
      这些副本是历史遗留的复制粘贴（7 个页面、3 种尺寸），删掉它们才是正解，见提交说明。
      全宽变体（.btn-ghost--block）与主按钮的全宽提交键同属一类，不跟着收。 */
   .v2-page .btn-ghost:not(.btn-ghost--block) { padding: 8px 14px; font-size: 13.5px; }
+}
+
+/* 901~1100 这一段是学习者的「移动端模式」——底部 tab 条已经出现（V2Nav ≤1100），
+   但主列还是桌面的 1080px 宽，密度也还是桌面刻度（实测 1000px：学习台 h1 26px、
+   行动卡 22×26；学习路径 h1 28px、路径卡 18×20；学习历史日分组卡 16×18）。
+   各页的移动块已统一到 ≤1100（本轮），这里再补列宽：14px 正文铺满 1000px 是每行
+   140 字符，收成 720px 居中列（约 72 字符），与 ≤900 的手机刻度接得上。
+   用 main[class] 而不是 main：各页 .dash__main / .paths__main / .state__main …
+   自带 scoped 的 max-width: 1080px（权重 (0,2,0)），单写 main（(0,1,1)）压不住它。 */
+@media (min-width: 901px) and (max-width: 1100px) {
+  .v2-page > main[class] {
+    max-width: 720px;
+  }
 }
 
 /* ====== 暗色模式：非 .card 抬升面投影 ======

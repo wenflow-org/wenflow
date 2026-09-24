@@ -187,7 +187,7 @@ function isActive(t: { match: string[] }) {
   border-radius: 12px !important;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .uc.v2-page > main.uc__main {
     width: min(100% - 28px, 1180px);
     padding: 14px 0 84px;
@@ -221,9 +221,10 @@ function isActive(t: { match: string[] }) {
     margin-bottom: 4px;
   }
 
+  /* 移动端页标题 22→20（2026-09-24 反馈「还是有大的」）：与各页 hero 标题同步收一档 */
   .uc__head h1 {
     margin-bottom: 4px;
-    font-size: 22px;
+    font-size: 20px;
   }
 
   .uc__head p {

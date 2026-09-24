@@ -547,7 +547,7 @@ async function handleDeactivate() {
   align-content: start;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .profile-cols {
     grid-template-columns: 1fr;
   }
@@ -675,7 +675,7 @@ async function handleDeactivate() {
 
    放文件末尾：.profile-avatar / .profile-hero / .stat-card 的基础规则在前面的块里，
    而 ≤900 / ≤560 / ≤640 三个媒体块也在中间，同权重下后出现者胜。 */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .profile-hero {
     padding: 14px;
   }

@@ -1016,7 +1016,7 @@ const copyText = async (text: string, successMessage: string) => {
   margin: 0;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1100px) {
   .stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

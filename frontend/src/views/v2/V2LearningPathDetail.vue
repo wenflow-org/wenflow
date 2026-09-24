@@ -1668,11 +1668,11 @@ onBeforeUnmount(() => {
 .sidecard__bg-chev--open { transform: rotate(180deg); }
 .sidecard__bg-text { margin: 6px 0 0; font-size: 12px; line-height: 1.65; color: var(--muted); white-space: pre-wrap; }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .detail__main { padding: 14px 14px 32px; }
   .hero { grid-template-columns: 1fr; }
   .hero__ring { justify-self: center; }
-  .hero h1 { font-size: 22px; }
+  .hero h1 { font-size: 20px; }
   .detail__grid { grid-template-columns: 1fr; }
   .side { position: static; }
 }
@@ -2021,7 +2021,7 @@ onBeforeUnmount(() => {
 }
 
 /* ===== 移动端适配 ===== */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .view-toggle { width: auto; }
   .view-toggle__btn { flex: none; font-size: 12px; }
   .crumbs { flex-wrap: wrap; row-gap: 6px; }
@@ -2391,7 +2391,7 @@ onBeforeUnmount(() => {
    它们在桌面是「一行小字 + 光标」，触屏上却是主要入口，实测高度只有 17–24px——
    「问题背景」17、「展开全文 / 更多意图」19、视图切换 24、面包屑返回 30。加纵向 padding
    抬到 32–40，文字与配色不变；这几处背景都透明，加 padding 不产生视觉变化。 */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .crumbs__back { padding: 9px 0; }             /* 30 → 38 */
   .view-toggle__btn { padding: 7px 10px; }      /* 24 → 33 */
   .hero__desc-toggle,
@@ -2406,8 +2406,8 @@ onBeforeUnmount(() => {
    实测 390 下整页 2726px（第二长），其中 .hero 26×28 是全站最厚的 hero 卡、
    进度环 120px 占 390 宽近 1/3、.sidecard 16×18、加载态 64px。
    放在文件末尾：同权重下后出现者胜（本文件有 4 个 style 块，基础规则在后面几块里）。 */
-@media (max-width: 900px) {
-  .hero { padding: 16px 18px; gap: 16px; }
+@media (max-width: 1100px) {
+  .hero { padding: 16px 18px; gap: 12px; }
   /* 120px 环 + 环内 22px 数字在 390 下太占地方；收到 96px、数字 19px（与学习历史统计卡同档） */
   .hero__ring { width: 96px; height: 96px; }
   .hero__ring-text b { font-size: 19px; }

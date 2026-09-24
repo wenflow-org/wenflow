@@ -665,7 +665,7 @@ const testMcpTool = async (tool: UserMcpToolConfig) => {
   align-items: start;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .settings-cols {
     grid-template-columns: 1fr;
   }
@@ -719,7 +719,7 @@ const testMcpTool = async (tool: UserMcpToolConfig) => {
 
 /* 移动端表单密度：字段间距 16 → 12（同一张卡内 8~12px 是规范区间）。
    输入框/按钮的**尺寸不动**——见 uc.css 里 16px 字号与 ≥40px 高度的注释，那是 iOS/规范下限。 */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .api-form { gap: 12px; }
   .api-form__grid { gap: 10px; }
   .action-buttons { gap: 8px; margin-top: 4px; }

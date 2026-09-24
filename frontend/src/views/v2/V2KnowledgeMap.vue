@@ -158,7 +158,7 @@ onMounted(async () => {
   color: var(--mk-blue);
 }
 /* 触屏：「查看学习状态」这类文字链接只有 20px 高，加纵向内边距抬到 34px（配色不变） */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .km__link { padding: 7px 0; }
 }
 .km__note {
@@ -182,8 +182,8 @@ onMounted(async () => {
 /* ===== 移动端密度（2026-09-24）=====
    判据：卡片内边距 12–16px、整页上下留白 ≤40px。本页通篇用 --mk-space-* token，这里继续用 token。
    实测 390 下：.km__main 24/20/48（叠加 v2.css 给底部导航留的 72px 后，页尾合计 120px）、
-   .km__card 20px。放在文件末尾：同权重下后出现者胜（中间那个 ≤900 块在 .km__card 之前）。 */
-@media (max-width: 900px) {
+   .km__card 20px。放在文件末尾：同权重下后出现者胜（中间那个移动块在 .km__card 之前）。 */
+@media (max-width: 1100px) {
   .km__main {
     padding: var(--mk-space-4) var(--mk-space-3) var(--mk-space-6);
   }

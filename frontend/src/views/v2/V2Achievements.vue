@@ -407,7 +407,7 @@ onMounted(() => {
   .ach-share { opacity: 1; }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   /* 收进个人中心后的移动端压缩（2026-09-24 反馈「内容都偏大」）：
      390 下 2 列统计卡的 KPI 数字原为 28px（卡宽仅 ~165px）、成就卡内边距 16px、卡片高 176px——
      一张"我是谁"式的概览要吃掉整屏。按学习侧 KPI 刻度压到 21px/12px 边距。 */
@@ -477,10 +477,10 @@ onMounted(() => {
    判据：卡片内边距 12–16px、空态/加载留白 ≤32px。
    实测 390 下：成就卡图标块 48×48（卡片两列、每列仅 ~165px 宽，emoji 已压到 20px、
    块本身还是桌面尺寸）、加载态 64px、空态 48px。
-   放在文件末尾：同权重下后出现者胜（中间那个 ≤900 块在 .ach__loading/.empty 之前）。
+   放在文件末尾：同权重下后出现者胜（中间那个移动块在 .ach__loading/.empty 之前）。
    不动的：.ach-rarity(10px)/.ach-card__badge(10.5px)/.ach-card__date(11.5px) 这些
    桌面就是 10–11.5px 的微标签——移动端单方面放大会让卡片变高，与密度目标相反。 */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .ach-card__icon-wrap { width: 40px; height: 40px; }
   .ach__loading { padding: 32px 0; }
   .empty { padding: 32px 0; }
