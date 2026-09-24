@@ -7,12 +7,18 @@
       <div class="not-found-actions">
         <router-link to="/" class="nf-btn nf-btn--primary">返回首页</router-link>
         <router-link to="/dashboard" class="nf-btn nf-btn--ghost">前往学习台</router-link>
+        <!-- 管理员打错路径时不再只有学习者侧出口（/admin/<未知> 由 AdminConsole 吞掉并提示，
+             走不到这里，所以本出口只兜「/admn/xxx」这类彻底写错的路径） -->
+        <router-link v-if="adminSession" to="/admin/overview" class="nf-btn nf-btn--ghost">前往管理控制台</router-link>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { hasAdminSession } from '@/api/adminApi';
+
+const adminSession = hasAdminSession();
 </script>
 
 <style scoped>

@@ -129,6 +129,7 @@ import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
 import MockSkeletonTable from './SkeletonTable.vue';
 import { intent, intentQueryParams, subPage, closeSkillDrawer, type SubPageView } from './store';
 import { loadLiveData } from './live';
+import { toast } from '@/utils/toast';
 import '@/styles/mk-primitives.css';
 
 const scene = ref('overview');
@@ -225,6 +226,8 @@ watch(
     if (id && components[id]) {
       if (id !== scene.value) scene.value = id
     } else if (id) {
+      // 静默 replace 会让打错的深链看起来"点了没反应"：先告知，再回总览
+      toast.warning(`未知管理页「${id}」，已回到总览`)
       void router.replace('/admin/overview')
     }
   },
