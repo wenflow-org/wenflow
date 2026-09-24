@@ -77,6 +77,7 @@ const ANON_ROUTES = ['/login', '/register', '/reset-password', '/', '/vision', '
 
 const VIEWPORTS = [
   { w: 390, h: 844, label: '390x844', mobile: true },
+  { w: 360, h: 800, label: '360x800', mobile: true },
   { w: 1440, h: 900, label: '1440x900', mobile: false },
 ];
 
