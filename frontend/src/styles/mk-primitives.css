@@ -6,7 +6,7 @@
 .mk-page {
   background: var(--mk-bg);
   color: var(--mk-ink);
-  font-size: var(--mk-fs-14);
+  font-size: var(--mk-fs-body);
   line-height: 1.65;
   padding: var(--mk-space-4) var(--mk-space-4) var(--mk-space-5);
   display: grid;
@@ -102,7 +102,7 @@
   border-radius: 6px;
   background: var(--mk-ink, #1a2a44);
   color: var(--mk-on-fill);
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
@@ -118,9 +118,9 @@
 .mk-status--warn .mk-status__dot::after { content: '需关注'; }
 .mk-status--bad .mk-status__dot::after { content: '异常'; }
 .mk-status--muted .mk-status__dot::after { content: '暂无数据'; }
-.mk-status__title { font-weight: 700; font-size: var(--mk-fs-15); color: var(--mk-ink); }
+.mk-status__title { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
 .mk-status__sep { width: 1px; height: 13px; background: var(--mk-line); }
-.mk-status__meta { color: var(--mk-muted); font-size: var(--mk-fs-12_5); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mk-status__meta { color: var(--mk-muted); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mk-status__action {
   margin-left: auto;
   height: 30px;
@@ -130,7 +130,7 @@
   background: var(--mk-surface);
   color: var(--mk-blue);
   font: inherit;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
@@ -149,7 +149,7 @@
   /* 热区：原来 padding:0，盒子就是文字行高（17px 上下）——低于 24px 鼠标可点下限。
      改成与其 hover 态同一套 padding/margin 负补偿，视觉位置不变、热区到 ~25px */
   padding: 4px 6px; margin: -4px -6px;
-  font: inherit; font-size: 12.5px; font-weight: 700;
+  font: inherit; font-size: var(--mk-fs-micro); font-weight: 700;
   color: var(--mk-muted); cursor: pointer;
   border-radius: 6px;
   transition: color 0.12s ease, background 0.12s ease;
@@ -172,7 +172,7 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
   border-radius: 999px;
   background: var(--mk-red-bg);
   color: var(--mk-red);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
 }
 .mk-status__clear {
@@ -180,7 +180,7 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
   background: transparent;
   color: inherit;
   cursor: pointer;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   padding: 0 2px;
 }
 
@@ -249,7 +249,7 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
 .mk-entity__name { margin: 0; font-size: var(--mk-fs-18); line-height: 1.4; }
 .mk-entity__name--lg { font-size: var(--mk-fs-20); letter-spacing: -0.02em; line-height: 1.25; }
 .mk-entity__badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mk-entity__sub { color: var(--mk-faint); font-size: var(--mk-fs-12); }
+.mk-entity__sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .mk-entity__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; flex-shrink: 0; }
 
 /* ----- 区块（mk-section：标题 + 结论 + 明细）-----
@@ -282,7 +282,7 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
 .mk-section__head h4,
 .mk-section__title {
   margin: 0;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -307,7 +307,7 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
 /* 独立使用（不与 mk-card__head 同用）时的缺省排版 */
 .mk-section__summary:not(.mk-card__head) {
   padding: 10px 14px;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-ink);
   transition: color 0.14s ease;
@@ -319,7 +319,7 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
 .mk-section__conclusion {
   margin: 0;
   padding: 2px 14px 10px;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 700;
   color: var(--mk-ink);
 }
@@ -332,11 +332,11 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   border-bottom: 1px solid var(--mk-line);
   flex-wrap: wrap;
 }
-.mk-card__title { margin: 0; font-size: var(--mk-fs-14); font-weight: 700; }
-.mk-card__meta { color: var(--mk-faint); font-size: var(--mk-fs-12_5); }
+.mk-card__title { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; }
+.mk-card__meta { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 /* 卡内小字注解（图表/排行无数据时的说明行）。
    此前 TokenCost.vue 4 处使用但全局零定义，渲染成无样式裸 <p>（视觉审计 附 A #7）。 */
-.mk-card__note { margin: 0; padding: 8px 2px; color: var(--mk-faint); font-size: var(--mk-fs-12_5); }
+.mk-card__note { margin: 0; padding: 8px 2px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .mk-card__head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 /* 卡头右组的主操作按钮与筛选控件（输入框/下拉/pills）同高：
    原来按钮 34.8px、输入框 41px，同一条工具栏高矮不齐；stretch 到行高即与最高控件齐平。 */
@@ -358,7 +358,7 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
 .mk-table th {
   text-align: left;
   padding: 8px 13px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -428,7 +428,7 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
 /* dense 档：字段配置类密集表（12/10 列）——原 sfr__table / frt__table 独立类并入（表统一批次，行高 ≈28px） */
 .mk-table--dense th,
 .mk-table--dense td { padding: 8px 12px; }
-.mk-table--dense td { font-size: 12.5px; }
+.mk-table--dense td { font-size: var(--mk-fs-micro); }
 
 /* 全局紧凑档（D3 表格增强）：html[data-density='compact'] 一键收紧全站表格。
    纯 CSS 实现（无需逐页改），与 .mk-table--dense 语义等价但全局生效；
@@ -470,7 +470,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   border-radius: 7px;
   color: var(--mk-faint);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--mk-fs-body);
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
@@ -501,7 +501,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   background: transparent;
   color: var(--mk-muted);
   font: inherit;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 600;
   text-align: left;
   cursor: pointer;
@@ -518,9 +518,9 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 
 .mk-cell-main { display: grid; gap: 1px; min-width: 0; }
 .mk-cell-main strong { display: block; max-width: var(--mk-cell-main-max); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mk-cell-sub { color: var(--mk-faint); font-size: var(--mk-fs-12); font-family: var(--mk-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-cell-sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 数字列：不换行、右对齐、不被挤压（固定列宽规范） */
-.mk-num { font-family: var(--mk-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; min-width: 48px; }
+.mk-num { font-family: var(--mk-mono); font-size: var(--mk-fs-body); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; min-width: 48px; }
 .mk-na { color: var(--mk-faint); }
 /* 操作列：不换行、不被挤压 */
 .mk-actions { display: flex; gap: 4px; justify-content: flex-end; white-space: nowrap; min-width: 72px; }
@@ -558,7 +558,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid transparent;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
@@ -575,7 +575,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-badge--muted { background: var(--mk-surface-3); color: var(--mk-muted); }
 .mk-badge--info { background: var(--mk-badge-info-bg); color: var(--mk-blue); }
 /* 紧凑变体：行内小标签（10.5px / 1px 8px），替代各页面散落的 gc-tag/ts-tag/ul-tag */
-.mk-badge--sm { font-size: 11px; padding: 1px 8px; letter-spacing: 0.03em; }
+.mk-badge--sm { font-size: var(--mk-fs-micro); padding: 1px 8px; letter-spacing: 0.03em; }
 /* 虚拟学习者标记：slate 灰 + 虚线边框（与测试 amber 区分） */
 .mk-badge--virtual { background: var(--mk-badge-virtual-bg); color: var(--mk-badge-virtual-fg); border: 1px dashed var(--mk-badge-virtual-line); }
 /* 管理员自身标记：蓝色实心 */
@@ -648,7 +648,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   background: var(--mk-surface);
   color: var(--mk-ink);
   font: inherit;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   outline: none;
   height: 34px;
   box-sizing: border-box;
@@ -678,7 +678,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   padding: 5px 12px;
   border-radius: 7px;
   font: inherit;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-muted);
   cursor: pointer;
@@ -701,7 +701,7 @@ html[data-theme='dark'] .mk-pill--active {
   border-radius: 999px;
   background: rgba(100, 116, 139, 0.14);
   color: var(--mk-muted);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -729,7 +729,7 @@ html[data-theme='dark'] .mk-pill__count { background: rgba(148, 163, 184, 0.18);
   border-radius: 50%;
   background: var(--mk-search-clear-bg);
   color: var(--mk-search-clear-fg);
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   line-height: 1;
   cursor: pointer;
 }
@@ -745,7 +745,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   background: transparent;
   color: var(--mk-back-color, var(--mk-blue));
   font: inherit;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 700;
   cursor: pointer;
   padding: 4px 8px;
@@ -763,7 +763,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   color: var(--mk-blue);
   font: inherit;
   font-weight: 700;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 6px;
@@ -811,8 +811,8 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   gap: 6px;
   justify-items: center;
 }
-.mk-empty strong { color: var(--mk-muted); font-size: var(--mk-fs-14); }
-.mk-empty span { font-size: var(--mk-fs-13); }
+.mk-empty strong { color: var(--mk-muted); font-size: var(--mk-fs-emphasis); }
+.mk-empty span { font-size: var(--mk-fs-body); }
 .mk-empty__icon {
   width: 46px;
   height: 46px;
@@ -833,7 +833,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   background: var(--mk-blue-bg);
   color: var(--mk-blue);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-body);
   font-weight: 700;
   cursor: pointer;
 }
@@ -868,7 +868,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   gap: 8px;
   padding: 18px 16px;
   color: var(--mk-faint);
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
 }
 .mk-loading--inline {
   display: inline-flex;
@@ -947,7 +947,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   padding: 6px 12px;
   border-radius: 7px;
   font: inherit;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-muted);
   cursor: pointer;
@@ -986,7 +986,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   border-bottom: 1px solid var(--mk-line, #e1e8f2);
   flex-shrink: 0;
 }
-.mk-modal__title { margin: 0; font-size: var(--mk-fs-16); font-weight: 700; }
+.mk-modal__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 700; }
 .mk-modal__close {
   border: 0;
   background: var(--mk-modal-close-bg);
@@ -999,6 +999,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   place-items: center;
   line-height: 1;
   flex-shrink: 0;
+  font-size: var(--mk-fs-emphasis);
 }
 .mk-modal__close:hover { background: var(--mk-modal-close-hover-bg); }
 .mk-modal__body { padding: 16px 18px; display: grid; gap: 14px; overflow-y: auto; min-height: 0; }
@@ -1025,12 +1026,12 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .vp-budget-row .mk-field--row { flex: 0 0 auto; }
 /* 开关布局：label + 控件在同一行，左对齐 */
 .mk-field--switch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.mk-field__label { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-muted, #5b6577); }
+.mk-field__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted, #5b6577); }
 /* 字段标签内的次级提示（「（可选）」「（进阶）」等）：原 PromptEval 页内私有，收敛为全局 */
-.mk-field__opt { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 500; }
+.mk-field__opt { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 500; }
 .mk-field__req { color: var(--mk-red, #dc2626); font-style: normal; font-weight: 700; margin-left: 2px; }
-.mk-field__hint { font-size: var(--mk-fs-12); color: var(--mk-faint, #8492ab); margin-top: 2px; }
-.mk-field__hint { font-size: var(--mk-fs-12); color: var(--mk-faint, #8492ab); }
+.mk-field__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint, #8492ab); margin-top: 2px; }
+.mk-field__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint, #8492ab); }
 .mk-field__input,
 .mk-field__select,
 .mk-field__textarea {
@@ -1041,7 +1042,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   background: var(--mk-surface, #fff);
   color: var(--mk-ink, #1a2a44);
   font: inherit;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   outline: none;
 }
 .mk-field__input:focus,
@@ -1050,7 +1051,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-field__textarea { min-height: 96px; resize: vertical; line-height: 1.6; }
 .mk-field--error .mk-field__input,
 .mk-field--error .mk-field__textarea { border-color: var(--mk-red, #dc2626); }
-.mk-field__err { font-size: 11px; color: var(--mk-red, #dc2626); font-weight: 600; }
+.mk-field__err { font-size: var(--mk-fs-micro); color: var(--mk-red, #dc2626); font-weight: 600; }
 
 /* 通用输入框（input/select/textarea 三合一）：FieldAddWizard 等 Teleport/子组件场景必须用全局类，
    页面级 scoped 输入类不作用于子组件内部元素（原 sdp-input 缺陷的替代方案） */
@@ -1062,7 +1063,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   background: var(--mk-surface, #fff);
   color: var(--mk-ink, #1a2a44);
   font: inherit;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   outline: none;
   box-sizing: border-box;
 }
@@ -1080,7 +1081,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   background: var(--mk-surface, #fff);
   color: var(--mk-ink, #1a2a44);
   font: inherit;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 700;
   cursor: pointer;
 }
@@ -1129,7 +1130,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   color: var(--mk-btn-ok-fg);
 }
 .mk-btn--ok:hover { background: var(--mk-btn-ok-bg-hover); border-color: var(--mk-btn-ok-line-hover); }
-.mk-btn--sm { padding: 5px 11px; font-size: var(--mk-fs-12); }
+.mk-btn--sm { padding: 5px 11px; font-size: var(--mk-fs-micro); }
 /* 通栏按钮：弹窗底部主操作占满一行。
    此前 VirtualLearners.vue:498 使用但全局零定义 → 按钮未按预期占满（视觉审计 附 A #8）。 */
 .mk-btn--block { display: block; width: 100%; }
@@ -1164,7 +1165,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   gap: 8px;
   padding: 7px 12px;
   border-radius: 9px;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-body);
   font-weight: 600;
 }
 .mk-toast--ok { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
@@ -1182,7 +1183,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   gap: 8px;
   padding: 9px 14px 11px;
   border-top: 1px dashed var(--mk-line);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
 
@@ -1250,8 +1251,8 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   padding: 16px 18px 12px;
   border-bottom: 1px solid var(--mk-line, #e6ebf4);
 }
-.mk-drawer__title { margin: 0; font-size: var(--mk-fs-16); font-weight: 700; color: var(--mk-ink, #1a2a44); }
-.mk-drawer__sub { font-size: var(--mk-fs-12_5); color: var(--mk-faint, #5f6f8c); }
+.mk-drawer__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 700; color: var(--mk-ink, #1a2a44); }
+.mk-drawer__sub { font-size: var(--mk-fs-micro); color: var(--mk-faint, #5f6f8c); }
 .mk-drawer__close {
   border: 0;
   background: var(--mk-drawer-close-bg);
@@ -1260,7 +1261,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   height: 28px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--mk-fs-emphasis);
   flex-shrink: 0;
   display: grid;
   place-items: center;
@@ -1313,54 +1314,30 @@ html[data-theme='dark'] {
    幅度约为 2000 档的一半：仅字号/内边距微调，不动布局结构。 */
 /* 档位收敛(2026-09-22 验收):本档只放大字号;间距/圆角/布局一律走基线 token,
    不再逐组件覆盖(旧档以硬编码 padding/gap 覆盖基线,是各宽度节奏不一致的根源) */
+/* 文本档收敛(2026-09-24 第二轮):每档只允许 **3 个文本档** —— micro / body / emphasis
+   (SPEC §1「同一视口内 ≤3 个字号档」)。旧档是 6 档(12.5/13/13.5/14/14.5/15),
+   层级靠半像素差表达;现在层级靠字重与颜色,字号只留三级。
+   本档必须**覆盖全部文本型选择器**:没被覆盖的会落回基线值,在 1440 上又变成第 4 档
+   (此前 .mk-section__head h4 / .mk-card__note / .mk-field__opt 等就是这样漏的)。
+   展示型字号(实体名/图标字符/KPI 数字)不占文本档位,单独按 display 档放大,见各档 display 段。 */
 @media (min-width: 1440px) {
-  .mk-page { font-size: 14.5px; }
-  .mk-status__title { font-size: 15px; }
-  .mk-status__meta { font-size: 13px; }
-  .mk-status__action { font-size: 13px; }
-  .mk-table th { font-size: 12.5px; }
-  .mk-table td { font-size: 14.5px; }
-  .mk-cell-sub { font-size: 12.5px; }
-  .mk-badge { font-size: 12.5px; }
-  .mk-menu__item { font-size: 14px; }
-  .mk-filter__input,
-  .mk-filter__select { font-size: 13.5px; }
-  .mk-pill { font-size: 13.5px; }
-  .mk-card__title { font-size: 14.5px; }
-  .mk-card__meta { font-size: 13px; }
-  .mk-btn { font-size: 13.5px; }
-  .mk-btn--sm { font-size: 12.5px; }
-  .mk-empty strong { font-size: 14.5px; }
-  .mk-empty span { font-size: 13.5px; }
-  .mk-num { font-size: 13.5px; }
-  .mk-link { font-size: 13.5px; }
-  .mk-toast { font-size: 13.5px; }
+  /* 文本档只有三级角色，本档只覆写这三个 token；页面引用 var(--mk-fs-*) 即自动跟随档位。 */
+  :root {
+    --mk-fs-micro: 12.5px;
+    --mk-fs-body: 14.5px;
+    --mk-fs-emphasis: 15.5px;
+  }
 }
 
 /* 1920px 档（D4 补丁：最低标准 1920×1080 全屏时落在 1440 档，字号/间距偏小。
-   取 1440 档与 2000 档之间的中间值，1080p 全屏观感更舒展）。 */
+   取 1440 档与 2000 档之间的中间值，1080p 全屏观感更舒展）。
+   文本档同 1440：micro 13 / body 15 / emphasis 16。 */
 @media (min-width: 1920px) {
-  .mk-page { font-size: 15px; }
-  .mk-status__title { font-size: 16px; }
-  .mk-status__meta { font-size: 14px; }
-  .mk-status__action { font-size: 14px; }
-  .mk-table th { font-size: 13px; }
-  .mk-table td { font-size: 15px; }
-  .mk-cell-sub { font-size: 13px; }
-  .mk-badge { font-size: 13px; }
-  .mk-menu__item { font-size: 14.5px; }
-  .mk-filter__input,
-  .mk-filter__select { font-size: 14px; }
-  .mk-pill { font-size: 14px; }
-  .mk-card__title { font-size: 15px; }
-  .mk-card__meta { font-size: 13.5px; }
-  .mk-btn { font-size: 14px; }
-  .mk-btn--sm { font-size: 13px; }
-  .mk-empty strong { font-size: 15px; }
-  .mk-empty span { font-size: 14px; }
-  .mk-num { font-size: 14px; }
-  .mk-link { font-size: 14px; }
-  .mk-toast { font-size: 14px; }
+  :root {
+    --mk-fs-micro: 13px;
+    --mk-fs-body: 15px;
+    --mk-fs-emphasis: 16px;
+  }
 }
 
 @media (min-width: 2000px) {
@@ -1369,13 +1346,15 @@ html[data-theme='dark'] {
      后补的中间档——同优先级后者覆盖,于是 1920→2000 反而**字号回退**
      (.mk-page 15→14.5、.mk-table td 15→13.5、.mk-card__title 15→14.5 等 12 个类,
      越大屏字越小),另有 8 个类与本档重复。字号交给 1920 档,本档承接间距与列宽。
-     回归守卫:scripts/check-design-system.mjs 规则 11(档位字号单调性)。 */
-  /* 实体头（原 UserDetail/LearnerDetail 各自的 4K 档，收敛到原语一处） */
+     回归守卫:scripts/check-design-system.mjs 规则 11(档位字号单调性)。
+     文本档收敛(2026-09-24 第二轮):本档遗留的文本型字号(section summary / dense 表格 /
+     字段标签·提示·输入 / list-more / 模态·抽屉标题)一并删除——1920 档已全覆盖这些选择器,
+     本档再声明一遍只会在 2000 上多出第 4、第 5 档。只保留**展示型**字号(实体头、图标字符)。 */
+  /* 实体头（display 档，不占文本档位；原 UserDetail/LearnerDetail 各自的 4K 档，收敛到原语一处） */
   .mk-entity__avatar { width: 54px; height: 54px; font-size: 21px; }
   .mk-entity__name { font-size: 21px; }
   .mk-entity__name--lg { font-size: 23.5px; }
-  .mk-entity__sub { font-size: 14px; }
-  .mk-section__summary:not(.mk-card__head) { padding: 12px 17px; font-size: 14px; }
+  .mk-section__summary:not(.mk-card__head) { padding: 12px 17px; }
   /* 列宽 token 4K 档（×≈1.16，比例对齐 ExecLogs 原 72→84→100 档位；ADMIN_COLUMN_WIDTH_SPEC §2.8） */
   :root {
     --mk-col-id: 148px;
@@ -1394,92 +1373,74 @@ html[data-theme='dark'] {
     --mk-col-flex-max: 840px;
     --mk-cell-main-max: 300px;
   }
-  /* dense 档 4K 镜像（原 frt__table 档位）——dense 是显式的独立档，1920 档未覆盖，故保留 */
-  .mk-table--dense th { font-size: 12.5px; }
-  .mk-table--dense td { font-size: 14px; }
-  .mk-menu__btn { width: 30px; height: 30px; font-size: 15px; }
+  .mk-menu__btn { width: 30px; height: 30px; }
   .mk-filter__input,
   .mk-filter__select { padding: 9px 13px; height: 42px; }
   .mk-pill { padding: 6px 14px; }
-  .mk-empty__action { font-size: 14px; padding: 8px 18px; }
+  .mk-empty__action { padding: 8px 18px; }
   .mk-modal__panel { width: min(var(--mk-modal-w-lg, 620px), 100%); }
   .mk-modal__panel--wide { width: min(var(--mk-modal-w-wide-lg, 860px), 100%); }
-  .mk-modal__title { font-size: 17px; }
-  .mk-modal__close { width: 34px; height: 34px; font-size: 16px; }
-  .mk-field__label { font-size: 13.5px; }
-  .mk-field__hint { font-size: 12.5px; }
-  .mk-field__err { font-size: 12.5px; }
-  .mk-field__input, .mk-field__select, .mk-field__textarea, .mk-input { font-size: 14px; padding: 10px 13px; }
+  .mk-modal__close { width: 34px; height: 34px; }
+  .mk-field__input, .mk-field__select, .mk-field__textarea, .mk-input { padding: 10px 13px; }
   .mk-btn { padding: 10px 18px; }
   .mk-btn--sm { padding: 6px 13px; }
-  .mk-list-more { font-size: 13.5px; padding: 11px 16px 13px; }
+  .mk-list-more { padding: 11px 16px 13px; }
   .mk-actions { min-width: 84px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-lg, 700px); }
   .mk-drawer__panel--wide { width: var(--mk-drawer-w-xl, 880px); }
   .mk-drawer__head { padding: 20px 24px 14px; }
-  .mk-drawer__title { font-size: 17px; }
-  .mk-drawer__close { width: 32px; height: 32px; font-size: 14px; }
+  .mk-drawer__close { width: 32px; height: 32px; }
   .mk-drawer__body { padding: 18px 24px 26px; }
 }
 
 @media (min-width: 2800px) {
+  :root {
+    --mk-fs-micro: 15.5px;
+    --mk-fs-body: 17px;
+    --mk-fs-emphasis: 19.5px;
+  }
+  /* —— display：实体头 / 图标字符（不占文本档位） —— */
   .mk-entity__avatar { width: 62px; height: 62px; font-size: 24px; }
   .mk-entity__name { font-size: 24.5px; }
   .mk-entity__name--lg { font-size: 27.5px; }
-  .mk-entity__sub { font-size: 16.5px; }
-  .mk-section__summary:not(.mk-card__head) { padding: 14px 21px; font-size: 16.5px; }
-  .mk-page { font-size: 17px; padding: 22px 28px 32px; gap: 16px; }
+  .mk-menu__btn { width: 36px; height: 36px; }
+  .mk-modal__close { width: 40px; height: 40px; }
+  /* —— 间距 / 尺寸（本档的另一半职责） —— */
+  .mk-page { padding: 22px 28px 32px; gap: 16px; }
   .mk-status { padding: 10px 18px; min-height: 52px; border-radius: 14px; }
-  .mk-status__title { font-size: 19px; }
-  .mk-status__meta { font-size: 16px; }
-  .mk-status__action { font-size: 16px; padding: 6px 14px; }
-  .mk-table th { font-size: 15px; padding: 13px 20px; }
-  .mk-table td { font-size: 16px; padding: 14px 20px; }
-  /* dense 档 4K 镜像（原 frt__table 档位） */
-  .mk-table--dense th { font-size: 15px; padding: 12px 19px; }
-  .mk-table--dense td { font-size: 16.5px; padding: 12px 19px; }
-  .mk-cell-sub { font-size: 15px; }
-  .mk-badge { font-size: 15.5px; padding: 4px 12px; }
+  .mk-status__action { padding: 6px 14px; }
+  .mk-table th { padding: 13px 20px; }
+  .mk-table td { padding: 14px 20px; }
+  .mk-table--dense th,
+  .mk-table--dense td { padding: 12px 19px; }
+  .mk-badge { padding: 4px 12px; }
   .mk-badge--warn { padding: 3px 11px; }
-  .mk-menu__item { font-size: 16.5px; }
-  .mk-menu__btn { width: 36px; height: 36px; font-size: 18px; }
   .mk-filter__input,
-  .mk-filter__select { font-size: 16.5px; padding: 11px 16px; height: 50px; }
-  .mk-pill { font-size: 16px; padding: 7px 17px; }
-  .mk-empty strong { font-size: 18px; }
-  .mk-empty span { font-size: 16.5px; }
-  .mk-empty__action { font-size: 16.5px; padding: 10px 22px; }
-  .mk-card__title { font-size: 17px; }
-  .mk-card__meta { font-size: 16px; }
-  .mk-num { font-size: 16px; }
+  .mk-filter__select { padding: 11px 16px; height: 50px; }
+  .mk-pill { padding: 7px 17px; }
+  .mk-empty__action { padding: 10px 22px; }
   .mk-modal__panel { width: min(var(--mk-modal-w-xl, 760px), 100%); }
   .mk-modal__panel--wide { width: min(var(--mk-modal-w-wide-xl, 1000px), 100%); }
-  .mk-modal__title { font-size: 20px; }
-  .mk-modal__close { width: 40px; height: 40px; font-size: 19px; }
-  .mk-field__label { font-size: 16px; }
-  .mk-field__hint { font-size: 15px; }
-  .mk-field__err { font-size: 15px; }
-  .mk-field__input, .mk-field__select, .mk-field__textarea, .mk-input { font-size: 16.5px; padding: 12px 16px; }
-  .mk-btn { font-size: 16.5px; padding: 12px 22px; }
-  .mk-btn--sm { font-size: 14.5px; padding: 8px 16px; }
-  .mk-toast { font-size: 16px; }
-  .mk-link { font-size: 16.5px; }
+  .mk-field__input, .mk-field__select, .mk-field__textarea, .mk-input { padding: 12px 16px; }
+  .mk-btn { padding: 12px 22px; }
+  .mk-btn--sm { padding: 8px 16px; }
   .mk-actions { min-width: 100px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-xl, 880px); }
   .mk-drawer__panel--wide { width: var(--mk-drawer-w-xxl, 1040px); }
   .mk-drawer__head { padding: 24px 28px 16px; }
-  .mk-drawer__title { font-size: 20px; }
-  .mk-drawer__close { width: 38px; height: 38px; font-size: 16px; }
+  .mk-drawer__close { width: 38px; height: 38px; }
   .mk-drawer__body { padding: 22px 28px 30px; }
 }
 
-/* 3600 镜像档：Teleport 到 body 的覆盖层不受壳层 zoom 影响，需独立放大（与各文件 4K 镜像一致） */
+/* 3600 镜像档：Teleport 到 body 的覆盖层不受壳层 zoom 影响，需独立放大（与各文件 4K 镜像一致）。
+   文本档收敛(2026-09-24 第二轮):本档**只声明覆盖层专属**的字号(模态/抽屉标题)与展示型字号
+   (实体头、图标字符);页面上也出现的 .mk-badge/.mk-pill/.mk-btn/.mk-link/.mk-field__input 等
+   一律不在此声明——它们的 2800 档值已经生效(页面侧再叠 1.3 zoom),本档再给一个更大的值
+   会在 3840 的页面渲染里变成第 4、第 5 个字号档。 */
 @media (min-width: 3600px) {
   .mk-entity__avatar { width: 72px; height: 72px; font-size: 28px; }
   .mk-entity__name { font-size: 28.5px; }
   .mk-entity__name--lg { font-size: 32px; }
-  .mk-entity__sub { font-size: 19px; }
-  .mk-section__summary:not(.mk-card__head) { padding: 16px 22px; font-size: 18.5px; }
   /* 列宽 token 3600 镜像档（×≈1.4；壳层 zoom 1.3 下实际渲染再等比放大） */
   :root {
     --mk-col-id: 180px;
@@ -1498,20 +1459,15 @@ html[data-theme='dark'] {
     --mk-col-flex-max: 1000px;
     --mk-cell-main-max: 360px;
   }
-  .mk-badge { font-size: 19px; padding: 5px 15px; }
-  .mk-pill { font-size: 19px; padding: 8px 20px; }
-  .mk-field__input, .mk-field__select, .mk-field__textarea, .mk-input { font-size: 19px; padding: 14px 19px; }
+  /* 覆盖层专属（页面上不出现，故不占页面文本档位） */
   .mk-modal__panel { width: min(var(--mk-modal-w-xxl, 900px), 100%); }
   .mk-modal__panel--wide { width: min(var(--mk-modal-w-wide-xxl, 1160px), 100%); }
   .mk-modal__title { font-size: 23px; }
-  .mk-modal__close { width: 46px; height: 46px; font-size: 22px; }
-  .mk-btn { font-size: 19px; padding: 14px 26px; }
-  .mk-link { font-size: 19px; }
-  .mk-list-more { font-size: 15.5px; }
+  .mk-modal__close { width: 46px; height: 46px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-xxl, 1040px); }
   .mk-drawer__head { padding: 28px 36px 18px; }
   .mk-drawer__title { font-size: 23px; }
-  .mk-drawer__close { width: 46px; height: 46px; font-size: 20px; }
+  .mk-drawer__close { width: 46px; height: 46px; }
   .mk-drawer__body { padding: 26px 36px 36px; }
 }
 
@@ -1524,6 +1480,11 @@ input[type='checkbox'] {
   height: 16px;
   flex: none;
 }
+
+/* 管理端 code/pre 继承所在文本档：design-system.css 给 `code` 设了用户侧的 --text-sm（14px），
+   在管理端会盖住表格/卡片的文本档——3840 上就是一枚档外字号（实测 skill-workbench 15 处）。
+   用 body.admin-route 提权重（路由守卫给管理端路由加该类），覆盖层（Teleport 到 body）同样命中。 */
+body.admin-route code { font-size: inherit; }
 
 /* ----- 回到顶部浮动按钮（滚动规范 #9：页面 >2 屏时出现；Shell 挂载，全局可用） ----- */
 .mk-backtop {
@@ -1542,7 +1503,7 @@ input[type='checkbox'] {
   background: var(--mk-surface, #fff);
   color: var(--mk-muted, #5b6577);
   font: inherit;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   box-shadow: var(--mk-shadow-pop, 0 12px 32px rgba(15, 23, 42, 0.16));
   cursor: pointer;
@@ -1553,10 +1514,14 @@ input[type='checkbox'] {
 }
 .mk-backtop--show { opacity: 1; pointer-events: auto; transform: none; }
 .mk-backtop:hover { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
-.mk-backtop__icon { font-size: 13px; line-height: 1; }
+.mk-backtop__icon { font-size: var(--mk-fs-micro); line-height: 1; }
 @media (min-width: 2000px) {
-  .mk-backtop { font-size: 13.5px; padding: 10px 16px; right: 28px; bottom: 32px; }
-  .mk-backtop__icon { font-size: 14.5px; }
+  .mk-backtop { padding: 10px 16px; right: 28px; bottom: 32px; }
+  .mk-backtop__icon { font-size: var(--mk-fs-micro); }
+}
+@media (min-width: 2800px) {
+  .mk-backtop { padding: 12px 19px; right: 34px; bottom: 38px; }
+
 }
 
 /* 减少动态偏好：全局关闭动画/过渡（无障碍底线，抽屉/弹窗等覆盖层同样生效） */
@@ -1583,7 +1548,7 @@ input[type='checkbox'] {
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-pop);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-body);
 }
 .mk-batchbar__btn {
   padding: 6px 14px;
@@ -1592,7 +1557,7 @@ input[type='checkbox'] {
   background: transparent;
   color: var(--mk-red, #dc2626);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-body);
   font-weight: 700;
   cursor: pointer;
   transition: background 0.12s ease;
@@ -1606,7 +1571,7 @@ input[type='checkbox'] {
   background: var(--mk-red-fill, #dc2626);
   color: var(--mk-batchbar-danger-fg);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--mk-fs-body);
   font-weight: 700;
   cursor: pointer;
   transition: background 0.12s ease;
@@ -1614,12 +1579,12 @@ input[type='checkbox'] {
 .mk-batchbar__danger:hover:not(:disabled) { background: var(--mk-batchbar-danger-hover-bg); }
 .mk-batchbar__danger:disabled { opacity: 0.45; cursor: not-allowed; }
 @media (min-width: 2000px) {
-  .mk-batchbar { gap: 11px; padding: 10px 14px 10px 18px; font-size: 14px; }
-  .mk-batchbar__btn, .mk-batchbar__danger { font-size: 14px; padding: 7px 16px; }
+  .mk-batchbar { gap: 11px; padding: 10px 14px 10px 18px; }
+  .mk-batchbar__btn, .mk-batchbar__danger { padding: 7px 16px; }
 }
 @media (min-width: 2800px) {
-  .mk-batchbar { gap: 13px; padding: 12px 17px 12px 21px; font-size: 16.5px; }
-  .mk-batchbar__btn, .mk-batchbar__danger { font-size: 16.5px; padding: 8px 19px; }
+  .mk-batchbar { gap: 13px; padding: 12px 17px 12px 21px; }
+  .mk-batchbar__btn, .mk-batchbar__danger { padding: 8px 19px; }
 }
 
 /* ----- 提示/错误条（表单错误、批量任务提示等统一形态；替代页面级 errorbar/vl-steps） ----- */
@@ -1629,7 +1594,7 @@ input[type='checkbox'] {
   border-radius: 8px;
   background: var(--mk-red-bg, #fef2f2);
   color: var(--mk-red, #dc2626);
-  font-size: 12.5px;
+  font-size: var(--mk-fs-body);
   font-weight: 600;
 }
 .mk-alert--ok {
