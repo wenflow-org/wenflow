@@ -278,3 +278,14 @@ qa-reports/
 
 # 批量/审计运行产物（脚本生成的数据快照，非源码）
 backend/vlab-runs/
+
+# AI 编码工具的本机资产（技能包 / 锁文件 / 工具目录；随本机环境走，不入库）
+.agents/
+.claude/
+.zcode/
+.zcodeignore
+agent/
+skills-lock.json
+
+# 版权语料（含版权书；仅供本地跑批/演示，不入库）
+text/
