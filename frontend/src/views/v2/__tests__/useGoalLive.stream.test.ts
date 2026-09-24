@@ -44,6 +44,7 @@ vi.mock('@/composables/useInteractionMeta', () => ({
 }));
 
 import { useGoalLive } from '../useGoalLive';
+import { isProbeAnswer, probeAnswerParts } from '../probeAnswer';
 import type { GoalConversationEnvelope } from '@/api/goalConversation';
 
 function makeEnvelope(overrides: Partial<GoalConversationEnvelope> = {}): GoalConversationEnvelope {
@@ -195,5 +196,49 @@ describe('useGoalLive 流式渐进渲染', () => {
     await live.send('开始');
 
     expect(live.proposal?.stages).toEqual(['甲', '乙']);
+  });
+
+  /**
+   * 快速自测作答（2026-09-24 反馈）：作答要经对话消息回传（goal-conversation 据此静默
+   * 回填 prerequisiteCheckResults），文案必须"先答案、后原题"，且带前缀供渲染识别成
+   * 紧凑记录卡——此前整道题在句首，用户在对话里看到一条像自己发问的消息。
+   */
+  it('前置自测作答：消息先给答案、题目跟后，并带渲染识别前缀', async () => {
+    driveStream([], makeEnvelope());
+    apiMock.streamReplyGoalConversation.mockResolvedValueOnce(makeEnvelope());
+    const live = useGoalLive() as ReturnType<typeof useGoalLive> & {
+      answerProbe: (
+        p: { probeId: string; targetConcept: string; question: string; options: Array<{ id: string; text: string }> },
+        optionId: string,
+        optionText: string,
+      ) => Promise<void>;
+      probeAnswers: Record<string, string>;
+      messages: Array<{ role: string; content: string }>;
+      reset: () => void;
+      send: (t: string) => Promise<void>;
+    };
+    live.reset();
+    await live.send('开始'); // 建立会话（envelope 带 conversationId）
+
+    const question = '孩子经常把别人玩具抢过来（3-4岁），按指南最可能涉及哪个领域？';
+    await live.answerProbe(
+      { probeId: 'probe-1', targetConcept: '社会领域', question, options: [{ id: 'A', text: '健康领域' }, { id: 'B', text: '社会领域' }] },
+      'B',
+      '社会领域（人际交往与规则意识）',
+    );
+
+    const last = live.messages.filter((m) => m.role === 'user').at(-1);
+    expect(last?.content).toBe(`【快速自测作答】我选 B（社会领域（人际交往与规则意识））· 原题：${question}`);
+    expect(isProbeAnswer(last?.content ?? '')).toBe(true);
+    expect(probeAnswerParts(last?.content ?? '').question).toBe(question);
+    // 已作答记录（面板据此禁用选项）
+    expect(live.probeAnswers['probe-1']).toBe('B');
+    // 已作答后再点同一题不重复发送
+    await live.answerProbe(
+      { probeId: 'probe-1', targetConcept: '社会领域', question, options: [{ id: 'A', text: '健康领域' }, { id: 'B', text: '社会领域' }] },
+      'A',
+      '健康领域（动作发展）',
+    );
+    expect(live.messages.filter((m) => m.role === 'user').at(-1)?.content).toBe(last?.content);
   });
 });

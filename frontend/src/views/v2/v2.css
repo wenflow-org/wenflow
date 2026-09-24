@@ -182,11 +182,11 @@ html, body {
 }
 
 /* ================= 暗色模式：V2GoalConversation 覆写 ================= */
-/* 以下仅保留非 scoped 元素（overlay/proposal/chat__show-proposal/scene-card）；
+/* 以下仅保留非 scoped 元素（proposal/chat__show-proposal/scene-card）；
+   .overlay 的遮罩改为基线规则里 color-mix(var(--canvas)) 跟主题——原先这里的
+   `[data-theme='dark'] .overlay` 与组件 scoped 基线规则同权重、且组件样式后加载，
+   实际从未生效（深色下仍是浅色白纱，2026-09-24 反馈）。
    scoped 元素（msg__bubble/pstep/btn-ghost 等）已移入组件 scoped 样式 */
-[data-theme='dark'] .overlay {
-  background: rgba(15, 22, 32, 0.65);
-}
 [data-theme='dark'] .proposal {
   border-color: rgba(77, 139, 248, 0.2);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);

@@ -22,6 +22,7 @@ import {
   type GoalUnderstanding
 } from '@/api/goalConversation';
 import { useInteractionMeta, type InteractionMeta } from '@/composables/useInteractionMeta';
+import { buildProbeAnswerText } from './probeAnswer';
 
 export interface LiveMessage {
   role: 'user' | 'ai';
@@ -430,12 +431,13 @@ async function confirm() {
   await run('confirm', label);
 }
 
-/** 前置探测题作答：把选项以明确格式作为用户消息发送，goal-conversation 回填 prerequisiteCheckResults */
+/** 前置探测题作答：把选项以明确格式作为用户消息发送，goal-conversation 回填
+    prerequisiteCheckResults。消息格式与渲染识别共用 ./probeAnswer（先给答案、题目跟后）。 */
 async function answerProbe(probe: { probeId: string; targetConcept: string; question: string; options: Array<{ id: string; text: string }> }, optionId: string, optionText: string) {
   if (sending.value) return;
   if (probeAnswers.value[probe.probeId]) return; // 已作答，防重复
   probeAnswers.value = { ...probeAnswers.value, [probe.probeId]: optionId };
-  const text = `【前置自测】${probe.question} 我选 ${optionId}（${optionText}）`;
+  const text = buildProbeAnswerText(probe.question, optionId, optionText);
   await send(text, false);
 }
 

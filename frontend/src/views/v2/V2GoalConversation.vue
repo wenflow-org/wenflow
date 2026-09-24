@@ -183,9 +183,16 @@
                 </div>
               </div>
               <template v-else>
-                <div class="msg__bubble">{{ km.msg.content }}</div>
+                <!-- 快速自测作答：不是普通对话气泡（它是确认面板里的选项回传），
+                     渲染成一条紧凑记录，免得把「题目 + 选项」读成自己发的问题 -->
+                <div v-if="isProbeAnswer(km.msg.content)" class="msg__probe">
+                  <span class="msg__probe-tag">快速自测</span>
+                  <span class="msg__probe-answer">{{ probeAnswerParts(km.msg.content).answer }}</span>
+                  <span v-if="probeAnswerParts(km.msg.content).question" class="msg__probe-q" :title="probeAnswerParts(km.msg.content).question">{{ probeAnswerParts(km.msg.content).question }}</span>
+                </div>
+                <div v-else class="msg__bubble">{{ km.msg.content }}</div>
                 <button
-                  v-if="canEditMessage(km.msg)"
+                  v-if="!isProbeAnswer(km.msg.content) && canEditMessage(km.msg)"
                   type="button"
                   class="msg__edit-btn"
                   title="编辑这条消息"
@@ -457,6 +464,7 @@ import { useIsDark } from '@/composables/useIsDark';
 const isDark = useIsDark();
 import { useRoute, useRouter } from 'vue-router';
 import { useGoalLive, type LiveMessage } from './useGoalLive';
+import { isProbeAnswer, probeAnswerParts } from './probeAnswer';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
@@ -1401,6 +1409,22 @@ function shuffleScenes() {
   to { opacity: 1; transform: translateY(0); }
 }
 .msg--user { align-self: flex-end; align-items: flex-end; position: relative; }
+/* 快速自测作答：紧凑记录卡（左侧蓝色标签 + 答案 + 题目弱化两行） */
+.msg--user .msg__probe {
+  display: grid; gap: 3px;
+  padding: 9px 13px;
+  max-width: 100%;
+  border-radius: 14px 14px 4px 14px;
+  background: color-mix(in srgb, var(--surface) 88%, var(--blue) 12%);
+  border: 1px solid color-mix(in srgb, var(--blue) 26%, transparent);
+  color: var(--ink);
+}
+.msg__probe-tag { font-size: 11px; font-weight: 800; letter-spacing: .04em; color: var(--blue-deep); }
+.msg__probe-answer { font-size: 13px; font-weight: 600; line-height: 1.5; }
+.msg__probe-q {
+  font-size: 11.5px; line-height: 1.5; color: var(--muted);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 .msg--user .msg__bubble {
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff;
@@ -1625,7 +1649,8 @@ function shuffleScenes() {
   position: absolute; inset: 0;
   display: grid; place-items: center;
   padding: 24px;
-  background: rgba(244, 247, 252, 0.55);
+  /* 遮罩跟随主题：原先写死浅色 rgba(244,247,252,.55)，深色下是一层白纱（2026-09-24 反馈） */
+  background: color-mix(in srgb, var(--canvas) 62%, transparent);
   backdrop-filter: blur(1px);
   z-index: 5;
 }
@@ -2056,9 +2081,6 @@ function shuffleScenes() {
   background: var(--surface) !important;
   border-color: var(--line);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
-:global([data-theme='dark']) .overlay {
-  background: rgba(15, 22, 32, 0.65);
 }
 /* 移动端悬浮信息面板：暗色下要更实的投影才立得起来（浅色档是 rgba(23,32,51,.22)） */
 @media (max-width: 900px) {
