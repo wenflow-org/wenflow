@@ -1403,7 +1403,9 @@ onMounted(loadAll);
 .link-muted:hover { color: var(--blue-deep); }
 
 /* ---------- 今日预算（多目标调度台账） ---------- */
-.dash__budget { margin-bottom: 16px; }
+/* 折叠区内的卡片间距由 .folded-sections 的 grid gap 统一给（16px）。
+   这里原有一层 margin-bottom: 16px 是折叠区抽出组件之前留下的：与 gap 叠加成 32px，
+   展开后同页出现两套节奏（2026-09-24 反馈「展开后影响页面一致性」）。 */
 .budget { padding: 16px 18px; }
 .budget__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
 .budget__title { font-size: 14px; font-weight: 700; }
@@ -1420,7 +1422,7 @@ onMounted(loadAll);
 .budget__bw { padding: 1px 6px; border-radius: var(--mk-radius-xs); background: color-mix(in srgb, var(--green, #1e9e58) 8%, var(--surface)); color: var(--green, #047857); font-size: 11px; }
 
 /* ---------- 今日复习（复习闭环） ---------- */
-.dash__review { margin-bottom: 16px; }
+/* 同上：间距交给 .folded-sections 的 gap，不再叠一层 margin-bottom */
 .review { padding: 16px 18px; }
 .review__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .review__headline { display: grid; gap: 2px; min-width: 0; }
@@ -2031,26 +2033,28 @@ a.btn-primary { text-decoration: none; }
 .more-toggle {
   display: flex;
   justify-content: center;
-  padding: 8px 0;
+  padding: 2px 0;
 }
+/* 折叠控件改用页面既有的「次级展开」语言（同 .link-muted、卡头里的「展开整月 ›」）：
+   原来是描边胶囊——全页唯一一个胶囊按钮，展开后夹在快捷入口与折叠区之间像一块外来元素，
+   而同一页另外三处展开/收起都是文字链（2026-09-24 反馈「展开后影响页面一致性」）。
+   去掉描边后纵向内边距留 8px，触控高度仍有 ~36px。 */
 .more-toggle__btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--faint);
   background: none;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-pill);
-  padding: 7px 18px;
+  border: 0;
+  border-radius: var(--mk-radius-md);
+  padding: 8px 12px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition: color 0.15s;
 }
 .more-toggle__btn:hover {
   color: var(--blue-deep);
-  border-color: color-mix(in srgb, var(--blue) 30%, transparent);
-  background: color-mix(in srgb, var(--blue) 4%, transparent);
 }
 .more-toggle__arrow--open {
   transform: rotate(180deg);

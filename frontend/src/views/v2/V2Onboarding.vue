@@ -614,4 +614,29 @@ function goDashboard() {
 [data-theme='dark'] .ob__cta {
   box-shadow: 0 8px 20px rgba(77,139,248,0.2);
 }
+
+/* ===== 移动端收敛（2026-09-24 反馈） ===== */
+@media (max-width: 720px) {
+  /* logo 放大一档（44 → 56）：引导页里 logo 是唯一的品牌元素，
+     44px 放在手机上比下方卡片还弱（2026-09-24 反馈「logo 可以再大一点」） */
+  .ob__logo img { height: 56px; }
+}
+@media (max-width: 480px) {
+  /* 主 CTA 收一档：原 14.5px / 11×26 内边距在 390 宽下是 132×44 的实心蓝块，
+     与卡内其余元素（12~13.5px）不成比例；降到 14px / 9×18（≈114×39）。
+     纵向内边距保留 9px，触控高度仍在可用区间。 */
+  .ob__cta {
+    padding: 9px 18px;
+    font-size: 14px;
+    border-radius: 11px;
+    box-shadow: 0 5px 14px color-mix(in srgb, var(--blue) 22%, transparent);
+  }
+  [data-theme='dark'] .ob__cta { box-shadow: 0 5px 14px rgba(77, 139, 248, 0.18); }
+  /* 第 1 步只有 CTA 一个动作，原来的「空 span + space-between」把它顶到右下角，
+     左侧留白比按钮还宽；卡片自身是居中排版，移动端让 CTA 居中、上一步贴左。
+     空 span 是第 1 步的占位，居中时它仍占一个 10px gap，会让按钮偏右 5px，故隐藏。 */
+  .ob__nav { position: relative; justify-content: center; }
+  .ob__nav > span:empty { display: none; }
+  .ob__back { position: absolute; left: 0; top: 50%; transform: translateY(-50%); }
+}
 </style>
