@@ -52,6 +52,75 @@ export interface KcAnnotation {
   [key: string]: unknown;
 }
 
+/** 按 key 去重合并数组（后者覆盖同 key 项）。 */
+function unionByKey<T extends Record<string, unknown>>(previous: T[], incoming: T[], keyOf: (item: T) => string): T[] {
+  const map = new Map<string, T>();
+  for (const item of [...(Array.isArray(previous) ? previous : []), ...(Array.isArray(incoming) ? incoming : [])]) {
+    const key = keyOf(item);
+    if (!key) continue;
+    map.set(key, item);
+  }
+  return Array.from(map.values());
+}
+
+function stableKeyOf(item: unknown): string {
+  if (!item || typeof item !== 'object') return '';
+  const record = item as Record<string, unknown>;
+  return String(record.kcId ?? record.taskTitle ?? record.conceptId ?? record.name ?? '');
+}
+
+/**
+ * 渐进式设计的 KC 增量合并（活的 path 批次 D3）：把**单阶段**的 kc-mapper 输出合并进
+ * 既有标注。顶层字段（conceptKcs/taskKcLinks/kcGraph）保持与 v1 相同形状的**并集**——
+ * 读侧（TeachingContextBuilder.resolveTaskKcsFromPath 按 taskTitle 匹配）零改动兼容；
+ * `byStage` 额外保留每阶段快照（渐进审计与未来按阶段读取）；v1 旧标注（无 version）
+ * 首次合并时整体快照进 `byStage.legacy`，避免阶段归属不明的内容被静默丢弃。
+ * 合并是纯函数：幂等（同输入重复合并结果不变）、不丢其他阶段的条目。
+ */
+export function mergeKcStageAnnotation(
+  current: KcAnnotation | null | undefined,
+  stageNumber: number,
+  stageOutput: KcAnnotation
+): KcAnnotation {
+  const previous: KcAnnotation = current && typeof current === 'object' ? current : {};
+  const previousByStage = previous.byStage && typeof previous.byStage === 'object'
+    ? (previous.byStage as Record<string, KcAnnotation>)
+    : {};
+  const byStage: Record<string, KcAnnotation> = { ...previousByStage };
+  if (previous.version !== 2 && (previous.conceptKcs?.length || previous.taskKcLinks?.length)) {
+    // v1 → v2 升级：旧整包无阶段归属，快照为 legacy 供追溯（读侧并集仍含其条目）
+    byStage.legacy = previous;
+  }
+  byStage[String(stageNumber)] = stageOutput;
+
+  const previousGraph = previous.kcGraph && typeof previous.kcGraph === 'object'
+    ? (previous.kcGraph as Record<string, unknown>)
+    : {};
+  const incomingGraph = stageOutput.kcGraph && typeof stageOutput.kcGraph === 'object'
+    ? (stageOutput.kcGraph as Record<string, unknown>)
+    : {};
+  const previousNodes = Array.isArray(previousGraph.nodes) ? previousGraph.nodes as Array<Record<string, unknown>> : [];
+  const incomingNodes = Array.isArray(incomingGraph.nodes) ? incomingGraph.nodes as Array<Record<string, unknown>> : [];
+  const previousEdges = Array.isArray(previousGraph.edges) ? previousGraph.edges as Array<Record<string, unknown>> : [];
+  const incomingEdges = Array.isArray(incomingGraph.edges) ? incomingGraph.edges as Array<Record<string, unknown>> : [];
+
+  return {
+    ...previous,
+    version: 2,
+    byStage,
+    conceptKcs: unionByKey(previous.conceptKcs || [], stageOutput.conceptKcs || [], stableKeyOf),
+    taskKcLinks: unionByKey(previous.taskKcLinks || [], stageOutput.taskKcLinks || [], (item) =>
+      `${stableKeyOf(item)}::${Array.isArray(item?.linkedKCs) ? (item.linkedKCs as unknown[]).map(String).sort().join(',') : ''}`),
+    kcGraph: {
+      ...previousGraph,
+      nodes: unionByKey(previousNodes, incomingNodes, (node) => String(node?.kcId ?? '')),
+      edges: unionByKey(previousEdges, incomingEdges, (edge) =>
+        `${edge.from ?? ''}->${edge.to ?? ''}:${edge.type ?? ''}`),
+    },
+    ...(stageOutput.gapCoverage ? { gapCoverage: stageOutput.gapCoverage } : {}),
+  };
+}
+
 /** 已解析 aiPromptTemplate 的最小视图 */
 export interface KcAnnotationTemplate {
   cognitiveCore?: KcCognitiveCoreLike | null;

@@ -61,6 +61,16 @@
             </div>
           </template>
         </section>
+        <!-- 渐进式路径（批次 D）：后续阶段随学习进度生成，横幅只在有未就绪阶段时轻提示 -->
+        <section
+          v-else-if="lifecycle?.progressive && lifecycle.designedStages < lifecycle.totalPathStages"
+          class="genbar card genbar--working"
+        >
+          <div class="genbar__text">
+            <strong>第 {{ lifecycle.designedStages }}/{{ lifecycle.totalPathStages }} 阶段已就绪，后续阶段随学习进度生成</strong>
+            <p>完成当前阶段后，下一阶段会自动准备好。</p>
+          </div>
+        </section>
 
         <!-- 头部 Hero -->
         <section class="hero card">

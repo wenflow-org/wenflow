@@ -291,6 +291,26 @@ export function getPathLearningAccessState(
       }
     : null;
   const enrichmentStatus = generationStatus?.stageDesign;
+  // 渐进式（批次 D）：_generation.progressive 标记的路径按「已设计部分可学」判定——
+  // 后续 stage 的追加设计（processing）不 block 已就绪 stage；首 stage 仍在设计时照常阻塞。
+  const progressive = (() => {
+    try {
+      const template = aiPromptTemplate ? JSON.parse(aiPromptTemplate) : null;
+      const generation = template?._generation;
+      return generation?.progressive === true;
+    } catch {
+      return false;
+    }
+  })();
+  const hasDesignedStage = progressive && (() => {
+    try {
+      const template = aiPromptTemplate ? JSON.parse(aiPromptTemplate) : null;
+      const designs = template?.stageDesigns;
+      return !!designs && typeof designs === 'object' && Object.keys(designs).length > 0;
+    } catch {
+      return false;
+    }
+  })();
 
   if (pathStatus !== 'active') {
     if (pathStatus === 'generating') {
@@ -324,6 +344,15 @@ export function getPathLearningAccessState(
   }
 
   if (enrichmentStatus === 'succeeded') {
+    return {
+      generationStatus,
+      canStartLearning: true,
+      learningBlockedReason: null
+    };
+  }
+
+  // 渐进式：已有任一阶段设计完成 → 已就绪部分可学（后续 stage 的追加设计不阻塞全局）
+  if (progressive && hasDesignedStage && (enrichmentStatus === 'processing' || enrichmentStatus === 'pending')) {
     return {
       generationStatus,
       canStartLearning: true,
@@ -571,6 +600,17 @@ export async function getPathGenerationLifecycle(pathId: string, userId: string)
 
   const run = path.activeGenerationRun;
   const legacy = parsePathGenerationStatus(path.aiPromptTemplate);
+  // 渐进式（批次 D）探针：_generation.progressive 标记 + 已设计阶段数（供 run 分支与返回值共用）
+  const progressive = (() => {
+    try {
+      const template = path.aiPromptTemplate ? JSON.parse(path.aiPromptTemplate) : null;
+      return template?._generation?.progressive === true;
+    } catch {
+      return false;
+    }
+  })();
+  const designedStages = path.milestones.filter((milestone) => milestone.subtasks.length > 0).length;
+  const totalPathStages = Math.max(path.totalMilestones || 0, path.milestones.length, 0);
   // 活动 stageDesign run 的工作量以 run.totalItems 为准（整路径生成 = 全部阶段；
   // 后续阶段重排 = 被重排的子集，仅展示该部分进度）；
   // 无活动 run（core 完成等待/历史状态）时退回路径阶段数。
@@ -593,7 +633,15 @@ export async function getPathGenerationLifecycle(pathId: string, userId: string)
   let status: 'queued' | 'processing' | 'stale' | 'failed' | 'ready' = 'ready';
 
   if (run && run.status !== 'cancelled') {
+    // 渐进式（批次 D）：stage N+1 的追加设计 run 活跃时**不回到生成态**——
+    // 已就绪阶段的可学性不受影响（accessState 渐进判定已放行）；进度见 designedStages。
+    const progressiveAppendDesign = progressive
+      && run.phase === 'stageDesign'
+      && (run.status === 'queued' || run.status === 'processing');
     if (run.status === 'succeeded' && run.phase === 'stageDesign') {
+      phase = 'ready';
+      status = 'ready';
+    } else if (progressiveAppendDesign && accessState.canStartLearning) {
       phase = 'ready';
       status = 'ready';
     } else {
@@ -633,6 +681,10 @@ export async function getPathGenerationLifecycle(pathId: string, userId: string)
     ? path.milestones[completedStages]?.stageNumber || completedStages + 1
     : null;
 
+  // 渐进式（批次 D）：进度口径=「已设计阶段 / 总阶段」——设计按学习节奏逐段发生，
+  // 与 eager 的「本 run 全量进度」不同；前端据此显示「第 N/M 阶段已就绪，后续随学习生成」。
+  // （progressive/designedStages/totalPathStages 已在函数前部解析）
+
   return {
     lifecycle,
     phase,
@@ -644,6 +696,7 @@ export async function getPathGenerationLifecycle(pathId: string, userId: string)
     completedStages,
     totalStages,
     currentStageNumber,
+    ...(progressive ? { progressive: true, designedStages, totalPathStages } : {}),
     errorMessage: getSafeGenerationErrorMessage(
       run?.phase || (phase === 'stage_design' ? 'stageDesign' : phase),
       status,

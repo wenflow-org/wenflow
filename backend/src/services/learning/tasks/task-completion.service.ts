@@ -24,6 +24,7 @@ import { assertPathMutationSafe, PathMutationConflictError } from '../path-mutat
 import type { CompleteTaskData } from '../learning.types';
 import { getActiveGenerationRun } from '../generation/run-lifecycle';
 import { getPathLearningAccessState } from '../queries/path-views.queries';
+import { isProgressiveStageDesignEnabled, triggerNextStageDesign } from '../generation/progressive-design';
 
 export async function markTaskInProgress(taskId: string, userId: string) {
   const subtask = await prisma.subtasks.findUnique({
@@ -208,6 +209,9 @@ export async function completeTask(data: CompleteTaskData) {
     // 必须在模拟时钟下落到模拟日；无模拟上下文时 asOf 缺省 → new Date()，现网行为不变。
     const completedAt = data.asOf ?? new Date();
     const completionResult = await withTransaction(async (tx) => {
+      // 渐进式（批次 D）：本阶段完成 → 下一阶段解锁时带出（事务外触发 stage N+1 设计）
+      let nextUnlockedMilestoneId: string | null = null;
+      let nextUnlockedStageNumber: number | undefined = undefined;
       const lockedPath = await tx.learning_paths.updateMany({
         where: { id: pathId, userId: data.userId },
         data: { updatedAt: completedAt }
@@ -329,6 +333,9 @@ export async function completeTask(data: CompleteTaskData) {
               where: { id: nextMilestone.id },
               data: { status: 'active', unlockedAt: nextMilestone.unlockedAt || completedAt, updatedAt: completedAt }
             });
+            // 渐进式（批次 D）：记录交接信息（见事务 return）
+            nextUnlockedMilestoneId = nextMilestone.id;
+            nextUnlockedStageNumber = nextMilestone.stageNumber;
           }
           const completedMilestones = await tx.milestones.count({
             where: { learningPathId: pathId, status: 'completed' }
@@ -383,7 +390,12 @@ export async function completeTask(data: CompleteTaskData) {
           'PATH_TASK_REPLACED'
         );
       }
-      return { task: updatedTask, alreadyCompleted: false };
+      // 渐进式（批次 D）：把「本阶段完成 → 下一阶段解锁」的交接信息带出事务，
+      // 事务外据此触发 stage N+1 的后台设计（不拖长完成事务）。
+      const nextUnlockedMilestone = typeof nextUnlockedStageNumber === 'number'
+        ? { id: nextUnlockedMilestoneId!, stageNumber: nextUnlockedStageNumber }
+        : null;
+      return { task: updatedTask, alreadyCompleted: false, nextUnlockedMilestone };
     });
 
     const subtask = completionResult.task;
@@ -395,6 +407,19 @@ export async function completeTask(data: CompleteTaskData) {
         learningReport: undefined,
         alreadyCompleted: true
       };
+    }
+
+    // 渐进式（批次 D）：stage N 完成 → 后台设计 stage N+1（append-only + 学习者信号注入）。
+    // fail-open：设计失败不影响任务完成结果；冷启动兜底见 progressive-design 模块注释。
+    if (completionResult.nextUnlockedMilestone && isProgressiveStageDesignEnabled()) {
+      const next = completionResult.nextUnlockedMilestone;
+      triggerNextStageDesign(
+        pathId,
+        data.userId,
+        next.id,
+        next.stageNumber,
+        completionResult.task.milestones?.stageNumber ?? next.stageNumber - 1
+      );
     }
 
     // 检查成就达成

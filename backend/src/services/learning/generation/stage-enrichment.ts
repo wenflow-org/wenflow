@@ -13,9 +13,10 @@ import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
-import { mapAndPersistKcAnnotation } from './kc-annotation';
+import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS } from '../../materials/material-prompt-projection';
+import type { PreviousStageOutcome } from './progressive-design';
 import {
   assertGenerationRunFence,
   assertStageTasksPresent,
@@ -23,6 +24,7 @@ import {
 } from '../path-generation-status';
 import { assertPathMutationSafe, isPathMutationConflictError } from '../path-mutation-safety';
 import { conceptRegistryService } from '../../learner/concept-registry.service';
+import { conceptGraphService } from '../../learner/concept-graph.service';
 import { normalizeConceptKey } from '../../memory/concept-key';
 import {
   generateDisplayLabel,
@@ -55,10 +57,20 @@ export async function enrichLearningPathWithAnderson(
   runId: string,
   data: GeneratePathData,
   analysis: any,
-  options: { appendOnly?: boolean } = {}
+  options: {
+    appendOnly?: boolean;
+    /**
+     * 渐进式（批次 D）：restrict 到指定阶段（stage N 完成后只设计 N+1）；
+     * true 时 designer 输入带学习者信号、kc 走增量合并、template 记 _generation.progressive。
+     */
+    progressive?: boolean;
+    restrictMilestoneIds?: string[];
+    previousStageOutcome?: PreviousStageOutcome | null;
+  } = {}
 ): Promise<void> {
   const startTime = Date.now();
   const triggerSource = data.sourceConversationId ? 'goal-conversation' : 'api';
+  const progressive = options.progressive === true;
   let stopHeartbeat = () => undefined;
   let inFlightStageItemIds: Set<string> | null = null;
 
@@ -72,7 +84,14 @@ export async function enrichLearningPathWithAnderson(
     if (!run || run.status !== 'processing') throw new Error('GENERATION_RUN_FENCED');
     // 追加模式：只对"空白阶段"生成任务（不删除、不覆盖）→ 走 append-tasks 契约。
     const appendOnly = options.appendOnly === true;
-    const appendMilestoneIds = appendOnly ? await listEmptyMilestoneIds(pathId) : [];
+    // 渐进 restrict（批次 D）：显式指定目标阶段（跳过 listEmptyMilestoneIds 的全量空白枚举——
+    // 渐进语义是「到哪设计哪」，不是「一次补齐所有空白」）。仍过滤掉非空阶段防御重复设计。
+    const restrictMilestoneIds = Array.isArray(options.restrictMilestoneIds) ? options.restrictMilestoneIds : null;
+    let appendMilestoneIds = appendOnly ? await listEmptyMilestoneIds(pathId) : [];
+    if (restrictMilestoneIds) {
+      const emptySet = new Set(appendOnly ? appendMilestoneIds : await listEmptyMilestoneIds(pathId));
+      appendMilestoneIds = restrictMilestoneIds.filter((id) => emptySet.has(id));
+    }
     if (appendOnly && appendMilestoneIds.length === 0) throw new Error('PATH_APPEND_NO_EMPTY_STAGE');
     await assertGenerationRunFence(prisma, pathId, runId);
     await assertPathMutationSafe(
@@ -120,9 +139,11 @@ export async function enrichLearningPathWithAnderson(
     if (!learningPath) {
       throw new Error('PATH_ENRICHMENT_TARGET_NOT_FOUND');
     }
-    if (appendOnly) {
-      // 追加模式只处理"空白阶段"：其余阶段一概不碰（不删除、不覆盖任何既有任务）。
-      learningPath.milestones = learningPath.milestones.filter((milestone) => appendMilestoneIds.includes(milestone.id));
+    if (appendOnly || restrictMilestoneIds) {
+      // 追加/渐进 restrict：只处理目标阶段，其余阶段一概不碰（不删除、不覆盖任何既有任务）。
+      learningPath.milestones = learningPath.milestones.filter(
+        (milestone) => appendMilestoneIds.includes(milestone.id)
+      );
       if (learningPath.milestones.length === 0) throw new Error('PATH_APPEND_NO_EMPTY_STAGE');
     }
     if (learningPath.milestones.length === 0) {
@@ -233,6 +254,11 @@ export async function enrichLearningPathWithAnderson(
           } : null),
         } : {}),
         ...stageDesignerBaseInput,
+        // 渐进式（批次 D）：上一阶段的学习者账本信号——脆弱/挣扎概念、先修缺口、
+        // wrapup 里仍未掌握的点。stage-designer 据此调整下一阶段的坡度与回补任务。
+        ...(progressive && options.previousStageOutcome
+          ? { previousStageOutcome: options.previousStageOutcome }
+          : {}),
         repairHints: null,
       };
       const stageResult = await executeSkill(stageDesignerDefinition, stageDesignerInput);
@@ -289,7 +315,79 @@ export async function enrichLearningPathWithAnderson(
     // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
     // 写回 aiPromptTemplate.kcAnnotation，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费。
     // 契约收口在 kc-annotation 模块（executeSkillWithResult；2026-09-22 判空错配事故修复见该文件头注）。
-    const kcAnnotation = await mapAndPersistKcAnnotation({
+    // 渐进式（批次 D）：单阶段输出走 **增量合并**（mergeKcStageAnnotation，v2 顶层与 v1 同形、
+    // byStage 存阶段快照）——整包调用会把单阶段输出当全量覆写、抹掉其他阶段的 KC。
+    // persist 注入 no-op：合并结果经本函数返回值交给下方 final 事务统一写 template（避免双写竞争）。
+    let kcAnnotation: KcAnnotation | null;
+    if (progressive) {
+      const { executeSkillWithResult } = await import('../../../skills');
+      const { kcMapperDefinition } = await import('../../../skills/kc-mapper');
+      const kcParams = {
+        pathId,
+        userId: data.userId,
+        template: parsedTemplate,
+        milestones: learningPath.milestones.map((m) => ({
+          stageNumber: m.stageNumber,
+          title: m.title,
+          coreConcept: m.coreConceptName || m.coreConceptId,
+          description: m.description,
+          goal: m.goal,
+        })),
+        subtasks: stageDesignOutputs.flatMap((s) => s.subtasks.map((t: any) => ({
+          title: t.title,
+          type: t.type,
+          linkedConcept: t.linkedConcept,
+          knowledgeType: t.knowledgeType,
+          cognitiveLevel: t.cognitiveLevel,
+        }))),
+      };
+      let stageKc: KcAnnotation | null = null;
+      try {
+        const kcResult = await executeSkillWithResult(kcMapperDefinition, {
+          cognitiveCore: parsedTemplate?.cognitiveCore || parsedTemplate?.cognitiveDesign || null,
+          milestones: kcParams.milestones,
+          subtasks: kcParams.subtasks,
+          prerequisiteTree: parsedTemplate?.cognitiveCore?.prerequisiteTree
+            || parsedTemplate?.cognitiveDesign?.prerequisiteTree
+            || null,
+        });
+        stageKc = kcResult?.success && kcResult?.output ? kcResult.output : null;
+      } catch (kcError) {
+        logger.warn('[stage-enrichment] 渐进 KC 映射失败（best-effort）', {
+          pathId,
+          error: kcError instanceof Error ? kcError.message : String(kcError),
+        });
+      }
+      if (stageKc) {
+        const currentTemplate = parsePathPromptTemplate(
+          (await prisma.learning_paths.findUnique({
+            where: { id: pathId },
+            select: { aiPromptTemplate: true },
+          }))?.aiPromptTemplate || null
+        );
+        kcAnnotation = mergeKcStageAnnotation(
+          currentTemplate?.kcAnnotation as KcAnnotation | null,
+          learningPath.milestones[0]?.stageNumber ?? 1,
+          stageKc
+        );
+        try {
+          await conceptGraphService.materializePathGraph({
+            userId: data.userId,
+            pathId,
+            kcAnnotation,
+            cognitiveCore: parsedTemplate?.cognitiveCore || parsedTemplate?.cognitiveDesign || null,
+          });
+        } catch (graphError) {
+          logger.warn('[stage-enrichment] 渐进概念图物化失败（best-effort）', {
+            pathId,
+            error: graphError instanceof Error ? graphError.message : String(graphError),
+          });
+        }
+      } else {
+        kcAnnotation = null;
+      }
+    } else {
+    kcAnnotation = await mapAndPersistKcAnnotation({
       pathId,
       userId: data.userId,
       template: parsePathPromptTemplate(learningPath.aiPromptTemplate || null),
@@ -308,6 +406,7 @@ export async function enrichLearningPathWithAnderson(
         cognitiveLevel: t.cognitiveLevel,
       }))),
     });
+    }
 
     // 任务级资料引用收集（key = subtaskId；写进模板 JSON，不新增表列）
     const materialRefsByTask: Record<string, any[]> = {};
@@ -448,7 +547,17 @@ export async function enrichLearningPathWithAnderson(
               ? {
                   materialRefs: {
                     ...(parsedTemplate?.materialRefs && typeof parsedTemplate.materialRefs === 'object' ? parsedTemplate.materialRefs : {}),
-                    byTask: materialRefsByTask,
+                    // 追加/渐进设计**合并**既有 byTask（否则 stage N+1 的设计会抹掉 stage N 的
+                    // 引用——append 不删既有任务，refs 也不能丢）；eager replace 保持整体替换
+                    // （旧 subtaskId 已随 replace 失效，合并只会留垃圾键）。
+                    byTask: (appendOnly || progressive)
+                      ? {
+                          ...((parsedTemplate?.materialRefs as any)?.byTask && typeof (parsedTemplate as any).materialRefs.byTask === 'object'
+                            ? (parsedTemplate as any).materialRefs.byTask
+                            : {}),
+                          ...materialRefsByTask,
+                        }
+                      : materialRefsByTask,
                   },
                 }
               : {}),
@@ -459,6 +568,7 @@ export async function enrichLearningPathWithAnderson(
               lastError: null,
               sourceConversationId: data.sourceConversationId || null,
               triggerSource,
+              ...(progressive ? { progressive: true } : {}),
               updatedAt: new Date().toISOString()
             }
           }),

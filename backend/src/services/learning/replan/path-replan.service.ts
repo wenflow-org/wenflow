@@ -181,13 +181,25 @@ async function redesignMilestoneTasks(
         data: { estimatedHours: stageNewHours, updatedAt: new Date() }
       });
     }
-    // 路径汇总：以全部阶段任务分钟真实汇总（含重设计阶段新任务 + 其它阶段既有任务）
+    // 路径汇总：以全部阶段任务分钟真实汇总（含重设计阶段新任务 + 其它阶段既有任务）。
+    // 渐进式路径（批次 D）存在**未设计阶段**（无任务、保留骨架 LLM 估值）——
+    // 这些阶段的估时用 milestone.estimatedHours 现值累加，否则路径总时被算小。
     const allPathTasks = await tx.subtasks.findMany({
       where: { milestones: { learningPathId: path.id } },
-      select: { estimatedMinutes: true },
+      select: { estimatedMinutes: true, milestoneId: true },
     });
+    const designedMilestoneIds = new Set(allPathTasks.map((t: any) => t.milestoneId));
+    const undesignedMilestones = await tx.milestones.findMany({
+      where: { learningPathId: path.id, id: { notIn: [...designedMilestoneIds] } },
+      select: { estimatedHours: true },
+    });
+    const undesignedHours = undesignedMilestones.reduce(
+      (sum: number, m: any) => sum + (Number(m?.estimatedHours) || 0),
+      0
+    );
     const pathTotalMinutes = allPathTasks.reduce((sum, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
-    const pathHours = allPathTasks.length > 0 ? Math.max(1, Math.ceil(pathTotalMinutes / 60)) : 0;
+    const pathHoursFromTasks = allPathTasks.length > 0 ? Math.max(1, Math.ceil(pathTotalMinutes / 60)) : 0;
+    const pathHours = pathHoursFromTasks + Math.ceil(undesignedHours);
 
     await tx.learning_paths.update({
       where: { id: path.id },

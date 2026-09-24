@@ -69,6 +69,7 @@ import {
   updatePathGenerationStatus,
 } from './run-lifecycle';
 import { enrichLearningPathWithAnderson } from './stage-enrichment';
+import { isProgressiveStageDesignEnabled } from './progressive-design';
 
 function normalizeCognitiveDesign(
   candidate: PathCognitiveDesign | null | undefined,
@@ -667,7 +668,7 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
           attempt: await tx.path_generation_runs.count({
             where: { learningPathId: path.id, phase: 'stageDesign' }
           }) + 1,
-          totalItems: normalizedMilestonesData.length,
+          totalItems: isProgressiveStageDesignEnabled() ? 1 : normalizedMilestonesData.length,
           completedItems: 0,
           progress: 0,
           rollbackSnapshot: JSON.stringify(stageRollbackSnapshot),
@@ -867,6 +868,17 @@ async function generateLearningPathCore(data: GeneratePathData) {
       cognitiveDesign,
       pathReview,
     }, normalizedMilestonesData, coreRunId);
+    // 渐进式（批次 D）：首跑只设计 stage 1——把首个里程碑 id 传给 enrichment restrict
+    const progressive = isProgressiveStageDesignEnabled();
+    let firstMilestoneId: string | null = null;
+    if (progressive) {
+      const firstMilestone = await prisma.milestones.findFirst({
+        where: { learningPathId: fullPath.id },
+        orderBy: { stageNumber: 'asc' },
+        select: { id: true },
+      });
+      firstMilestoneId = firstMilestone?.id ?? null;
+    }
     const duration = Date.now() - startTime;
     const sceneSummary = buildSceneSummaryFromFraming(
       analysis.sceneFraming || data.userProfile?.pathSceneFraming || null,
@@ -914,7 +926,7 @@ async function generateLearningPathCore(data: GeneratePathData) {
       });
     }
 
-    return { fullPath, analysis };
+    return { fullPath, analysis, firstMilestoneId };
   } catch (error: any) {
     if (data.existingPathId && coreRunId) {
       if (isPathMutationConflictError(error)) {
@@ -1012,13 +1024,21 @@ export async function generateLearningPath(data: GeneratePathData) {
     };
   }
 
-  const { fullPath, analysis } = await generateLearningPathCore(generationData);
+  const { fullPath, analysis, firstMilestoneId } = await generateLearningPathCore(generationData);
 
   const stageRunId = fullPath.activeGenerationRunId;
   if (!stageRunId) throw new Error('GENERATION_RUN_REQUIRED');
+  const progressive = isProgressiveStageDesignEnabled();
   runBackgroundTask(
     'learning.path.stage-enrichment',
-    () => enrichLearningPathWithAnderson(fullPath.id, stageRunId, generationData, analysis),
+    () => enrichLearningPathWithAnderson(fullPath.id, stageRunId, generationData, analysis, {
+      ...(progressive
+        ? {
+            progressive: true,
+            restrictMilestoneIds: firstMilestoneId ? [firstMilestoneId] : undefined,
+          }
+        : {}),
+    }),
     { pathId: fullPath.id, runId: stageRunId, userId: generationData.userId }
   );
   dashboardGuidanceSnapshotService.refreshInBackground(generationData.userId, 'path-created');
