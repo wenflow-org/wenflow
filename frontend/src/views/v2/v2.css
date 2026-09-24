@@ -614,6 +614,11 @@ html, body {
    （实测 1000×700 滚到底：页脚 638~700、tab 条 638~700，页脚整行几乎不可见）。 */
 @media (max-width: 1100px) {
   .v2-page { padding-bottom: 72px; }
+  /* 移动端基准字号 16 → 14。桌面 body 是 16px，任何「没写自己字号」的元素都会继承它，
+     在 390 下比周围内容（12.5–13.5px）整整大一档——用户指的筛选条容器实测就是 16px
+     （里面的药丸是 12.5px），学习历史的日期行容器同样 16px（内容 14px）。
+     基准降到 14 后，继承者与显式值同档；有自己字号的元素不受影响。 */
+  .v2-page { font-size: 14px; }
   .v2-page .v2footer { margin-bottom: 0; }
   /* 移动端按钮收一档（2026-09-24 反馈「移动端好像这种按钮都比较大」）：
      43px 高 / 14px 字 / 22px 横向内边距，配上 10px·22px·30% 的蓝色投影，
@@ -624,7 +629,7 @@ html, body {
      不排除的话「生成中/重试中」的禁用按钮会在移动端被重新点亮投影。 */
   .v2-page .btn-primary:not(.btn-primary--block) {
     padding: 9px 17px;
-    font-size: 13.5px;
+    font-size: 13px;
   }
   .v2-page .btn-primary:not(.btn-primary--block):not(.btn-primary--off) {
     box-shadow: 0 5px 12px color-mix(in srgb, var(--blue) 20%, transparent);
@@ -642,7 +647,7 @@ html, body {
      （.btn-ghost[data-v-x] 与 .v2-page .btn-ghost 同特异性，靠加载顺序赢）——
      这些副本是历史遗留的复制粘贴（7 个页面、3 种尺寸），删掉它们才是正解，见提交说明。
      全宽变体（.btn-ghost--block）与主按钮的全宽提交键同属一类，不跟着收。 */
-  .v2-page .btn-ghost:not(.btn-ghost--block) { padding: 8px 14px; font-size: 13.5px; }
+  .v2-page .btn-ghost:not(.btn-ghost--block) { padding: 8px 14px; font-size: 13px; }
 }
 
 /* 901~1100 这一段是学习者的「移动端模式」——底部 tab 条已经出现（V2Nav ≤1100），

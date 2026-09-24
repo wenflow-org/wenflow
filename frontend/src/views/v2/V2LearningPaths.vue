@@ -594,7 +594,7 @@ onBeforeUnmount(() => {
   .paths__main { padding: 16px 14px 32px; }
   /* 移动端页标题 22→20：390 下「继续你的学习计划」占掉 270/362px 宽，
      比页内正文（13.5px）重得多。全站移动端页标题同步收一档（2026-09-24 反馈）。 */
-  .paths__hero h1 { font-size: 20px; }
+  .paths__hero h1 { font-size: 18px; }
   .cards { grid-template-columns: 1fr; }
   /* ⋯ 触发器视觉不变（18px 字形 + 6px 内边距 = 30×27），伪元素把热区扩到 44×43：
      触屏上 27px 高太难点，它又贴在卡片右上角、周边没有别的手势目标，扩热区无副作用 */
@@ -674,6 +674,10 @@ onBeforeUnmount(() => {
   .filters { gap: 6px; }
   .filter { padding: 6px 12px; }
   .paths__main { gap: 14px; }
+  /* 卡标题 15.5 → 14：用户指着 15.5px 的路径卡标题说「这些就是大了」 */
+  .pcard__title { font-size: 14px; }
+  /* 筛选药丸 13 → 12.5（同一条反馈里的元素） */
+  .filter { font-size: 12.5px; padding: 6px 11px; }
   .pcard { padding: 14px 16px; gap: 10px; }
   .empty { min-height: 40vh; padding: 32px 0; }
   .paths__loading { padding: 32px 0; }

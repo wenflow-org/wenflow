@@ -1672,7 +1672,7 @@ onBeforeUnmount(() => {
   .detail__main { padding: 14px 14px 32px; }
   .hero { grid-template-columns: 1fr; }
   .hero__ring { justify-self: center; }
-  .hero h1 { font-size: 20px; }
+  .hero h1 { font-size: 18px; }
   .detail__grid { grid-template-columns: 1fr; }
   .side { position: static; }
 }
@@ -2413,6 +2413,8 @@ onBeforeUnmount(() => {
   .hero__ring-text b { font-size: 19px; }
   .stages__empty { padding: 20px 16px; }
   .sidecard { padding: 12px 14px; }
+  .sidecard strong { font-size: 14px; }
+  .stage__title strong { font-size: 14px; }
   .detail__loading { padding: 32px 0; }
   .genbar { padding: 12px 14px; }
   .adjust-dialog-mask { padding: 14px; }

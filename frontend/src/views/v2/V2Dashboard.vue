@@ -1738,7 +1738,7 @@ onMounted(loadAll);
   .review__meter { flex: 1 1 auto; width: auto; min-width: 0; }
   /* 21px 是「页面标题」档，但它是卡内标题，而且比同页的问候语（16px）还大——
      按基线（卡/区块标题 15–17px）收到 17px。 */
-  .action__title { font-size: 17px; }
+  .action__title { font-size: 16px; }
   .dash__main { padding: 16px 14px 32px; }
   .greet { flex-direction: column; align-items: flex-start; gap: 8px; }
 }
@@ -2098,6 +2098,7 @@ a.btn-primary { text-decoration: none; }
   .action--empty { padding: 14px 16px; }
   .action__footer { gap: 8px; }
   .path { padding: 14px 16px; gap: 12px; }
+  .path__title strong { font-size: 14px; }
   .path__empty-body { padding: 18px 0; }
   .week__empty { padding: 18px 0; }
   .dash__loading { padding: 32px 0; }

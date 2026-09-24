@@ -221,10 +221,10 @@ function isActive(t: { match: string[] }) {
     margin-bottom: 4px;
   }
 
-  /* 移动端页标题 22→20（2026-09-24 反馈「还是有大的」）：与各页 hero 标题同步收一档 */
+  /* 移动端页标题：22 → 20 → 18（2026-09-24 两轮反馈，与各页 hero 标题同步收） */
   .uc__head h1 {
     margin-bottom: 4px;
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .uc__head p {

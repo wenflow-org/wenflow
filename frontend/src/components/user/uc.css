@@ -564,10 +564,10 @@ table.uc-table {
      弹窗 22px 边距——都是桌面密度。学习侧对照密度是 38px 控件 + 13.5px 正文。
      输入框字号保持 16px（iOS Safari 聚焦缩放阈值，见上一段注释）。
      统计：壳内五页（账户/成就/学习历史/API 接入/调用日志）全部走 uc.css，改一处五页生效。 */
-  .uc-btn { padding: 9px 14px; }
+  .uc-btn { padding: 9px 14px; font-size: 13px; }
   .uc-btn--sm { padding: 7px 11px; font-size: 12px; }
   .uc-card__head { margin-bottom: 8px; }
-  .uc-card__head h3 { font-size: 14.5px; }
+  .uc-card__head h3 { font-size: 14px; }
   .uc-card__head p { font-size: 12px; }
   /* 12px 是移动端最小可读字号（业界共识：低于 12px 显著影响辨识），上一轮压到 11px 压过头了 */
   .uc-badge { font-size: 12px; padding: 2px 9px; }

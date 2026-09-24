@@ -1991,7 +1991,7 @@ function shuffleScenes() {
   }
   .proposal__note { padding-bottom: 14px; }
   .entry__hero { align-items: stretch; flex-direction: column; }
-  .entry__hero h1 { font-size: 20px; }
+  .entry__hero h1 { font-size: 18px; }
   .resume { width: 100%; justify-content: flex-start; }
   /* 整行铺满后「继续 ›」原本紧跟两行正文、悬在正文中线高度上，读起来像个孤立标签；
      推到行尾后成为标准的「列表行 + 行尾动作」。 */
@@ -2024,7 +2024,7 @@ function shuffleScenes() {
      是死规则；本轮不动它，留待一次专门的死 CSS 清理。 */
   .chat__scroll { padding: 14px; }
   .login-gate { padding: 28px 20px; border-radius: var(--mk-radius-modal); }
-  .login-gate h1 { font-size: 20px; }
+  .login-gate h1 { font-size: 18px; }
   .proposal__title { font-size: 19px; }
 }
 </style>

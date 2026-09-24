@@ -847,7 +847,7 @@ function loadGuidance() {
 
 @media (max-width: 1100px) {
   .state__main { padding: 16px 14px 32px; }
-  .state__hero h1 { font-size: 20px; }
+  .state__hero h1 { font-size: 18px; }
   .metrics { grid-template-columns: repeat(2, 1fr); }
   .state__grid { grid-template-columns: 1fr; }
   .side { position: static; }
@@ -1003,7 +1003,7 @@ function loadGuidance() {
    两列卡各约 171px 宽，30px 数字占掉近 1/5 屏宽，与「扫一眼看数」的用法不匹配。
    放在文件末尾：同权重下后出现者胜。 */
 @media (max-width: 1100px) {
-  .metric__value { font-size: 22px; }
+  .metric__value { font-size: 20px; }
   .metric { padding: 12px 14px; gap: 6px; }
   .chart,
   .suggest,
