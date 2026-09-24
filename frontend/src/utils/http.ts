@@ -41,7 +41,22 @@ export function createApiClient(profile: ApiClientProfile): AxiosInstance {
   });
 
   client.interceptors.request.use(
-    (config) => (profile.injectHeaders ? profile.injectHeaders(config) : config),
+    (config) => {
+      // FormData 上传（如 /materials 资料上传）：实例默认的 application/json 头会让 axios 在
+      // transformRequest 里把 FormData 转成 JSON 体（formDataToJSON），后端 multer 收不到任何
+      // 文件字段（症状：「没有收到文件」）。此处在进入 transformRequest 前移除该请求的
+      // Content-Type，让浏览器自动补 multipart boundary；普通 JSON 请求不受影响
+      // （axios 对对象体本就自动补 application/json，无需默认头）。
+      if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+        const headers = config.headers as {
+          setContentType?: (value: unknown) => unknown;
+          'Content-Type'?: unknown;
+        } | undefined;
+        if (typeof headers?.setContentType === 'function') headers.setContentType(false);
+        else if (headers) delete headers['Content-Type'];
+      }
+      return profile.injectHeaders ? profile.injectHeaders(config) : config;
+    },
     (error) => Promise.reject(error),
   );
 

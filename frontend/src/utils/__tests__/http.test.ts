@@ -120,4 +120,24 @@ describe('createApiClient 工厂', () => {
     await client.get('/x');
     expect((calls[0].headers as Record<string, unknown>).Authorization).toBe('Bearer t1');
   });
+
+  it('FormData 上传：默认 application/json 头被移除且 data 保持 FormData（不被 formDataToJSON 转成 JSON 体）', async () => {
+    // 回归锚点（2026-09-24）：实例默认 Content-Type: application/json 会让 axios transformRequest
+    // 把 FormData 序列化成 JSON 字符串，后端 multer 收不到文件字段（goal 页资料上传报「没有收到文件」）。
+    const { client, calls } = clientWith({ timeout: 1000 }, [{ status: 200, data: { success: true } }]);
+    const form = new FormData();
+    form.append('file', new Blob(['doc-content'], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), '指南.docx');
+
+    await client.post('/materials', form);
+
+    const sent = calls[0];
+    expect(sent.data).toBeInstanceOf(FormData);
+    const headers = sent.headers as unknown as { getContentType?: () => unknown };
+    const rawType = typeof headers?.getContentType === 'function'
+      ? headers.getContentType()
+      : (sent.headers as Record<string, unknown>)['Content-Type'];
+    // 清除后 AxiosHeaders 侧可能返回 false/null/undefined，统一按「非 JSON」判定
+    const contentType = rawType == null || typeof rawType !== 'string' ? '' : rawType.toLowerCase();
+    expect(contentType).not.toContain('application/json');
+  });
 });
