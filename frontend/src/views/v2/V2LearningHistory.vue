@@ -475,8 +475,10 @@ onMounted(() => {
   padding: 4px 0;
 }
 
-@media (max-width: 640px) {
-  /* 移动端密度：390 下整页 2306px，其中三张统计卡竖排就占 309px（每张 95px，
+@media (max-width: 900px) {
+  /* 断点从 640 提到 900：个人中心壳（CapabilityShell / uc.css）自己的移动端压缩就是
+     ≤900，641–900 段此前是本页桌面刻度 + 壳的移动刻度混着显示。
+     实测 390 下整页 2306px，其中三张统计卡竖排就占 309px（每张 95px，
      只装「学习次数 / 24 次」两行）。桌面本来就是三列，窄屏竖排是因为 26px 的数值
      在 100px 宽的列里放不下——把数值压到 19px、单位 11px、卡片内边距收到 10px 后
      三列重新放得下（320 下每列内容宽 72px，「271 分钟」实测 57px） */
@@ -486,8 +488,13 @@ onMounted(() => {
   }
 
   .history__stat {
-    padding: 10px;
+    padding: 10px 12px;
     gap: 2px;
+  }
+
+  /* 加载态桌面 40px 上下留白，移动端收到 28（基线：加载/空态 ≤32） */
+  .history__loading {
+    padding: 28px 0;
   }
 
   .history__stat span {
@@ -506,16 +513,15 @@ onMounted(() => {
     gap: 12px;
   }
 
-  /* 统计卡与日分组再收一档（2026-09-24 反馈「内容都偏大」） */
-  .history__stat { padding: 10px 12px; }
-  .history__day { padding: 10px 12px; }
+  /* 统计卡与日分组再收一档（2026-09-24 反馈「内容都偏大」）。
+     原来 .history__stat / .history__day 在这个块里各写了两遍（10px 与 10px 12px / 12px），
+     同权重下后一条胜出、前一条是死规则——合并成一条。 */
+  .history__day {
+    padding: 12px;
+  }
 
   .history__list {
     gap: 10px;
-  }
-
-  .history__day {
-    padding: 12px;
   }
 
   .history__day-head strong {

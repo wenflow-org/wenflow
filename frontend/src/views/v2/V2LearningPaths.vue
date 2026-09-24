@@ -661,3 +661,15 @@ onBeforeUnmount(() => {
 }
 </style>
 
+<style scoped>
+/* ===== 移动端密度（2026-09-24）=====
+   判据：卡片内边距 12–16px、空态/加载留白 ≤32px。
+   实测 390 下 .pcard 18×20、.empty 56px + min-height 52vh、加载态 64px。
+   放在文件末尾：同权重下后出现者胜。 */
+@media (max-width: 900px) {
+  .pcard { padding: 14px 16px; gap: 10px; }
+  .empty { min-height: 40vh; padding: 32px 0; }
+  .paths__loading { padding: 32px 0; }
+}
+</style>
+

@@ -2081,3 +2081,26 @@ a.btn-primary { text-decoration: none; }
 [data-theme='dark'] .sheet__zone--none { background: rgba(230, 237, 247, 0.1); }
 [data-theme='dark'] .chip { background: rgba(230, 237, 247, 0.1); }
 </style>
+
+<style scoped>
+/* ===== 移动端密度（2026-09-24）=====
+   判据：卡片内边距 12–16px、大留白（空态/加载）≤32px、移动端规则不写 <12px。
+   实测 390 下：.action 22×26（首屏最大一块）、.path 20×22、加载态 64px。
+   必须放在文件末尾：同权重下后出现者胜，写进前面那个 ≤900 块会被它后面的基础规则吃掉。
+   不动的：.badge/.quick__body small 这类桌面本来就是 11–11.5px 的微标签——单方面放大后
+   手机上同一个元素比桌面还大，而且卡片会变高，与密度目标相反。 */
+@media (max-width: 900px) {
+  .action { padding: 16px 18px; }
+  .action--empty { padding: 14px 16px; }
+  .path { padding: 14px 16px; }
+  .path__empty-body { padding: 18px 0; }
+  .week__empty { padding: 18px 0; }
+  .dash__loading { padding: 32px 0; }
+  .sheet__head { padding: 14px 16px 12px; }
+  .sheet__scroll { padding: 12px 14px 20px; }
+  /* 30px 对拇指偏小（贴弹层右上角、周边无别的手势目标），抬到 36px */
+  .sheet__close { width: 36px; height: 36px; }
+  /* 桌面 12px、移动块里被压到 11px —— 移动端规则自己写到了下限以下，抬回 12px */
+  .day__cell { font-size: 12px; }
+}
+</style>

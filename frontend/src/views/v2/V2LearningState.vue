@@ -995,3 +995,21 @@ function loadGuidance() {
   font-size: 11.5px; color: var(--faint);
 }
 </style>
+
+<style scoped>
+/* ===== 移动端密度（2026-09-24）=====
+   判据：KPI 数字 20–22px、卡片内边距 12–16px、空态/加载留白 ≤32px。
+   实测 390 下整页 3359px（最长的一页），其中 .metric__value 30px×4 是全站最大的数字刻度：
+   两列卡各约 171px 宽，30px 数字占掉近 1/5 屏宽，与「扫一眼看数」的用法不匹配。
+   放在文件末尾：同权重下后出现者胜。 */
+@media (max-width: 900px) {
+  .metric__value { font-size: 22px; }
+  .metric { padding: 12px 14px; gap: 6px; }
+  .chart,
+  .suggest,
+  .decisions { padding: 14px 16px; }
+  .sidecard { padding: 12px 14px; }
+  .chart__loading { padding: 28px 0; }
+  .chart__empty { padding: 24px 0; }
+}
+</style>
