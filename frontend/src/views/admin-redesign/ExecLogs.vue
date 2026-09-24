@@ -1343,4 +1343,11 @@ html[data-theme='dark'] {
 }
 .cost-strip--unknown { border-left: 3px solid var(--mk-amber, #d97706); }
 
+
+/* 成本金额条的值是**展示型数字**（KPI 语义）：随档位放大，且每个档都要大于该档的
+   emphasis × 1.15，否则在 3840 会落进文本带、变成第 4 个文本档
+   （巡检实测 execution-cost@3840 就是它冒出来的 18px）。 */
+@media (min-width: 1440px) { .cost-strip__value { font-size: 20px; } }
+@media (min-width: 1920px) { .cost-strip__value { font-size: 22px; } }
+@media (min-width: 2800px) { .cost-strip__value { font-size: 26px; } }
 </style>
