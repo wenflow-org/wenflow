@@ -393,8 +393,11 @@ router.beforeEach(async (to, _from, next) => {
   const usesAdminSurface = to.path.startsWith('/admin/') && to.path !== '/admin/login';
   document.body.classList.toggle('admin-route', usesAdminSurface);
 
-  // ISSUE-12:标记缺失时用 HttpOnly cookie 自举恢复会话(标记+档案),有效会话不再误弹登录页
-  const hasSession = await useUserStore().restoreFromCookie();
+  /* ISSUE-12:标记缺失时用 HttpOnly cookie 自举恢复会话(标记+档案),有效会话不再误弹登录页。
+     管理端不用学习者会话(判据是 hasAdminSession),这里若照常自举,每个管理页导航都会
+     打一条注定 401 的 /api/users/me——巡检实测 60 条失败请求全是它。 */
+  const isAdminRoute = to.path.startsWith('/admin');
+  const hasSession = isAdminRoute ? false : await useUserStore().restoreFromCookie();
   const projectionToken = getProjectionToken();
   const adminSession = hasAdminSession();
 
