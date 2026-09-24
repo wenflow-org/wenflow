@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /* eslint-disable no-console -- 一次性评测 CLI：面向人读的输出，不需要 logger */
 /**
  * 评测 `skill:triage-judge`：在 **60 例混合数据集**上算"分流判据"的准确率（离线、不落库）。

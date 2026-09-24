@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /* eslint-disable no-console -- 一次性验收 CLI */
 /**
  * 下游 learn 接线验收：给定 pathId，检查资料是否同时到达

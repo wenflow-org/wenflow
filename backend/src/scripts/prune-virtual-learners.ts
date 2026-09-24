@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /* eslint-disable no-console -- 运维 CLI：面向人读的输出 */
 /**
  * 清理虚拟学习者（**默认 dry-run**）。

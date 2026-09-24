@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /**
  * teaching-turn `visual` 块归一化（owner 口径 2026-09-23：「图片是一种特殊的文字」）。
  *

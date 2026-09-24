@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /**
  * 会话评估影子探针（**真实数据**，不调 LLM、不写库）。
  *
@@ -14,6 +15,7 @@ import 'dotenv/config';
 import path from 'node:path';
 // node:sqlite 属 Node 22 实验 API，本仓库 @types/node 尚未声明；运行时可 require 到。
 // 这里用最小局部类型替代 import，避免为一个只读探针脚本放宽全仓 tsc。
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- 实验 API 无类型声明，import type 无法表达运行时存在性
 const { DatabaseSync } = require('node:sqlite') as {
   DatabaseSync: new (dbPath: string, options?: { readOnly?: boolean }) => {
     prepare(sql: string): { all(...params: unknown[]): unknown[] };

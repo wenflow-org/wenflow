@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /**
  * 误解台账 `evidence` 的**逐字核对**（2026-09-23 采纳外部评审建议）。
  *

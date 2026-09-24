@@ -15,7 +15,10 @@ import type { MaterialExtractionDraft, MaterialExtractionRequest, MaterialExtrac
 // File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
 export const MATERIAL_COLLECTOR_PROMPT = loadPromptFile('skill:material-collector')?.systemPrompt || '';
 
+// 载荷形状经 normalizeOutput 收敛为 MaterialExtractionDraft，此处 any 为类型桥（改 unknown 会破坏下游推断）
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function asRecord(value: unknown): Record<string, any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : {};
 }
 

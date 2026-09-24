@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /* eslint-disable no-console -- 一次性验收 CLI：面向人读的输出 */
 /**
  * 「资料 → 真实课堂」验收探针：在**带资料的已生成路径**上真起一节课，看
@@ -42,8 +43,8 @@ function matchMaterialReferences(reply: string, sections: string[], cites: strin
   const stop = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'are', 'not', 'you', 'can', 'use', 'one', 'two', 'set', 'all', 'its', 'from', 'have']);
   const vocabulary = new Set<string>();
   for (const source of [...sections, ...cites]) {
-    for (const token of String(source).split(/[^A-Za-z0-9.\-]+/)) {
-      const clean = token.replace(/^[.\-]+|[.\-]+$/g, '');
+    for (const token of String(source).split(/[^A-Za-z0-9.-]+/)) {
+      const clean = token.replace(/^[.-]+|[.-]+$/g, '');
       if (clean.length >= 3 && /[A-Za-z]/.test(clean) && !stop.has(clean.toLowerCase())) {
         vocabulary.add(clean);
       }

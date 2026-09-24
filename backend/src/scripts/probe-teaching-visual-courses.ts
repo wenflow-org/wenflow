@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /* eslint-disable no-console -- 一次性验收 CLI：面向人读的输出 */
 /**
  * 「教学配图时机」课程跑批：按**任务**逐节走一遍课堂，看老师会不会为「用文字讲不直观」的内容**主动**配图。

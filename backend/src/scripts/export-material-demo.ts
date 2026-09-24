@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /* eslint-disable no-console -- 一次性导出 CLI：面向人读 */
 /**
  * 把「附件 → 路径 → 任务 → 课堂」整条链导成一个**自包含 HTML**，供人直接翻看。

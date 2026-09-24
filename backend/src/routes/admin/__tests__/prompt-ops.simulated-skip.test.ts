@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /**
  * 回归：批量评估的单用例模拟输入解析失败（典型：引用的模拟学习者已被删除）
  * → 跳过该用例并在 skipped 中报告，不再让整批评估失败。

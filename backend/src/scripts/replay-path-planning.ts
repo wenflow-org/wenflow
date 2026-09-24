@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /* eslint-disable no-console -- 一次性诊断 CLI：面向人读的输出，不需要 logger */
 /**
  * **只重放 path 一步**（复用历史 Goal 产出，跳过 Goal 对话）——只读、**不落库**。

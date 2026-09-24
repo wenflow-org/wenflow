@@ -188,7 +188,7 @@ export function isProseTextLine(line: string): boolean {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/https?:\/\/\S+/gi, ' ')
-    .replace(/[`*_>#|~=+[\]()\-]/g, ' ')
+    .replace(/[`*_>#|~=+[\]()-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   return outsideLinks.length >= MIN_PROSE_CHARS;

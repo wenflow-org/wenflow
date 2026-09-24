@@ -372,6 +372,17 @@ export interface TeachingTurnOutput {
       /** 可选：学生原话片段（供事后核对，不进看板） */
       evidence?: string;
     }>;
+    /**
+     * 教师补充请求（活的 path 批次 E，可选）：主线资料没覆盖、学生明确需要外部信息时，
+     * 请求编排层采集一份公开网络资料，**下一轮**注入课堂（带出处，标注"非主线补充"）。
+     * 每个 session 至多请求一次；能靠主线讲清时**不要**用。
+     */
+    supplement?: {
+      /** 缺什么（一句话主题，如"2024 年最新转速标准"） */
+      topic: string;
+      /** 可选：检索词（缺省用 topic） */
+      query?: string | null;
+    };
   };
   /**
    * 教学配图请求（可选）——owner 口径 2026-09-23：**「图片是一种特殊的文字，放在教学中」**。
@@ -659,9 +670,26 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
         ? { checkpoint: normalizeCheckpoint(control.checkpoint) }
         : {}),
       ...(normalizeWarmupOutcomes(control.warmupOutcomes) ?? {}),
+      ...(normalizeSupplement(control.supplement) ?? {}),
     },
     ...(normalizeVisual(parsed.visual) ?? {}),
   };
+}
+
+/**
+ * 归一化教师补充请求（活的 path 批次 E）。
+ * 宁缺毋滥：topic 非空才保留；query 裁长；编排层做真正裁决（每 session 至多一次、
+ * 主线未覆盖才准用），模型只负责把"缺什么"说清楚。
+ */
+function normalizeSupplement(value: unknown): { supplement: { topic: string; query: string | null } } | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const topic = typeof record.topic === 'string' ? record.topic.trim().slice(0, 80) : '';
+  if (!topic) return null;
+  const query = typeof record.query === 'string' && record.query.trim()
+    ? record.query.trim().slice(0, 120)
+    : null;
+  return { supplement: { topic, query } };
 }
 
 /**
@@ -946,7 +974,7 @@ function extractRuleField(ruleText: string): string {
   if (backticked) return backticked[1];
   const plain = ruleText.match(/(?:输入提供|输入里|输入包含)\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)/);
   if (plain) return plain[1];
-  const anyPath = ruleText.match(/([a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_.]*)/);
+  const anyPath = ruleText.match(/([a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_.]*)/);
   return anyPath ? anyPath[1] : '';
 }
 

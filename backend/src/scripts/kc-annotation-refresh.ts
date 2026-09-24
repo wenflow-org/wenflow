@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /* eslint-disable no-console -- 一次性回填 CLI：KC 重标注 */
 /**
  * KC 重标注（用**当前已发布**的 kc-mapper 契约重跑既有路径）。
