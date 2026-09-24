@@ -7,6 +7,12 @@ import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
 import { buildSkillOutcome, type SkillOutcome } from '../outcome';
+import {
+  isSessionEvaluationTier,
+  sessionEvaluationTierToValue,
+  SESSION_EVALUATION_ZERO_EVIDENCE,
+  type SessionEvaluationTier,
+} from '../../services/learning/session-evaluation-scale';
 
 export interface SessionWrapupInput {
   messages: Array<{
@@ -100,6 +106,21 @@ export interface SessionWrapupEvaluation {
   sessionLf: number;
   confidence: number;
   reasoning: string;
+  /**
+   * LLM 判定的档位（2026-09-22 起 LLM 输出档位而非 0-10 数值）。
+   * legacy 数值输出时为 undefined。档位→数值的唯一映射见 session-evaluation-scale。
+   */
+  metricTiers?: {
+    sessionKtl?: SessionEvaluationTier;
+    sessionLss?: SessionEvaluationTier;
+    sessionLf?: SessionEvaluationTier;
+  };
+  /** 每项档位判定引用的证据句（若有） */
+  metricEvidence?: {
+    sessionKtl?: string;
+    sessionLss?: string;
+    sessionLf?: string;
+  };
 }
 
 export interface SessionWrapupResult {
@@ -267,33 +288,92 @@ function isSummary(value: unknown): value is SessionWrapupSummary {
   );
 }
 
+/**
+ * 解析单个评估指标。为兼容历史数据与新旧输出，支持三种形态：
+ * - 档位对象：{ "tier": "low|mid|high", "evidence": "…" }（2026-09-22 起的主形态）
+ * - 档位字符串："low" | "mid" | "high"
+ * - legacy 数值：0-10
+ * 未能识别返回 undefined。档位→数值映射统一走 session-evaluation-scale（唯一来源）。
+ */
+function readEvaluationMetric(
+  value: unknown,
+): { value: number; tier?: SessionEvaluationTier; evidence?: string } | undefined {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    if (isSessionEvaluationTier(record.tier)) {
+      return {
+        value: sessionEvaluationTierToValue(record.tier),
+        tier: record.tier,
+        evidence: typeof record.evidence === 'string' && record.evidence.trim()
+          ? record.evidence.trim()
+          : undefined,
+      };
+    }
+    const numeric = requireNumber(record.tier, 0, 10);
+    if (numeric !== null) return { value: numeric };
+    return undefined;
+  }
+  if (isSessionEvaluationTier(value)) {
+    return { value: sessionEvaluationTierToValue(value), tier: value };
+  }
+  const numeric = requireNumber(value, 0, 10);
+  return numeric !== null ? { value: numeric } : undefined;
+}
+
 function extractEvaluation(value: unknown): SessionWrapupEvaluation | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
 
-  const sessionLss = requireNumber(record.sessionLss, 0, 10);
-  const sessionKtl = requireNumber(record.sessionKtl, 0, 10);
-  const sessionLf = requireNumber(record.sessionLf, 0, 10);
+  const sessionLss = readEvaluationMetric(record.sessionLss);
+  const sessionKtl = readEvaluationMetric(record.sessionKtl);
+  const sessionLf = readEvaluationMetric(record.sessionLf);
   const confidence = requireNumber(record.confidence, 0, 1);
   const reasoning = requireReasoning(record.reasoning);
 
   if (
-    sessionLss === null ||
-    sessionKtl === null ||
-    sessionLf === null ||
+    !sessionLss ||
+    !sessionKtl ||
+    !sessionLf ||
     confidence === null ||
     reasoning === null
   ) {
     return null;
   }
 
+  const metricTiers = {
+    ...(sessionKtl.tier ? { sessionKtl: sessionKtl.tier } : {}),
+    ...(sessionLss.tier ? { sessionLss: sessionLss.tier } : {}),
+    ...(sessionLf.tier ? { sessionLf: sessionLf.tier } : {}),
+  };
+  const metricEvidence = {
+    ...(sessionKtl.evidence ? { sessionKtl: sessionKtl.evidence } : {}),
+    ...(sessionLss.evidence ? { sessionLss: sessionLss.evidence } : {}),
+    ...(sessionLf.evidence ? { sessionLf: sessionLf.evidence } : {}),
+  };
+
   return {
-    sessionLss,
-    sessionKtl,
-    sessionLf,
+    sessionLss: sessionLss.value,
+    sessionKtl: sessionKtl.value,
+    sessionLf: sessionLf.value,
     confidence,
     reasoning,
+    ...(Object.keys(metricTiers).length > 0 ? { metricTiers } : {}),
+    ...(Object.keys(metricEvidence).length > 0 ? { metricEvidence } : {}),
   };
+}
+
+/**
+ * 零证据分支（确定式）：输入缺少会话消息（<2 条）、知识看板为空或回合数 < 1
+ * 时视为"会话未产生可评估内容"。与 prompts/core/session-wrapup.yaml 规则一致，
+ * 三项固定取 3、confidence 0.1 —— 由代码保证，不依赖 LLM 是否遵守提示词。
+ */
+export function isZeroEvidenceSessionInput(input: SessionWrapupInput): boolean {
+  const messageCount = Array.isArray(input.messages) ? input.messages.length : 0;
+  if (messageCount < 2) return true;
+  const knowledgeCount = Array.isArray(input.knowledgePoints) ? input.knowledgePoints.length : 0;
+  if (knowledgeCount === 0) return true;
+  const turnCount = input.sessionEvidence?.turnCount ?? 0;
+  return turnCount < 1;
 }
 
 /**
@@ -385,12 +465,14 @@ function buildWrapupUserPrompt(input: SessionWrapupInput, mode: 'primary' | 'eva
 
 只输出 evaluation 对象，严格 JSON，不要输出 summary，不要输出解释性前后文。示例：
 {
-  "sessionLss": 5.8,
-  "sessionKtl": 6.2,
-  "sessionLf": 4.9,
+  "sessionKtl": { "tier": "mid", "evidence": "引导下完成了核心任务，但对概念的表述仍不稳定" },
+  "sessionLss": { "tier": "low", "evidence": "全场无明显阻塞，节奏顺畅" },
+  "sessionLf": { "tier": "high", "evidence": "后段出现重复、投入下降" },
   "confidence": 0.78,
   "reasoning": "一句简短的证据化说明"
-}`;
+}
+tier 只能取 low | mid | high（档位定义见 system prompt 的评分参考），不要输出 0-10 数字。`;
+
   }
 
   return `【学科】${input.sessionInfo.subject}
@@ -544,7 +626,20 @@ export class SessionWrapupAgent {
         : buildFallbackSummary(input);
       // 纯重试+明确失败：主 prompt 重试后仍缺 evaluation → 不补全、不保守评分，
       // 直接 evaluation=null + evaluationSource='unavailable'（下游全链 null 容忍，与 M1 兜底同形态）。
-      const evaluation = extractEvaluation(parsedEvaluation);
+      const parsedEvaluationResult = extractEvaluation(parsedEvaluation);
+      // 零证据兜底保持确定式：LLM 有回应时，无论其自由发挥成什么值，都覆盖为固定保守值
+      // （三项 3 / confidence 0.1），与 prompt 规则同源但由代码保证，不靠模型依从。
+      const evaluation: SessionWrapupEvaluation | null = parsedEvaluationResult
+        ? (isZeroEvidenceSessionInput(input)
+            ? {
+                sessionLss: SESSION_EVALUATION_ZERO_EVIDENCE.lss,
+                sessionKtl: SESSION_EVALUATION_ZERO_EVIDENCE.ktl,
+                sessionLf: SESSION_EVALUATION_ZERO_EVIDENCE.lf,
+                confidence: SESSION_EVALUATION_ZERO_EVIDENCE.confidence,
+                reasoning: SESSION_EVALUATION_ZERO_EVIDENCE.reasoning,
+              }
+            : parsedEvaluationResult)
+        : null;
       const evaluationSource: SessionWrapupResult['evaluationSource'] = evaluation ? 'model' : 'unavailable';
 
       result = {

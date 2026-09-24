@@ -138,9 +138,14 @@ export class ReplanAdvisoryService {
 
     const repeatedConfusion = wrapup.evidence.topConfusionPoints.length >= 2;
     const learnerSignal = learnerReplanProjection.signal;
+    // 2026-09-22：档位化后 mid 的中点=6，会让整个 mid 档（"有明显吃力但能推进"）压到 >=6 被算作高风险。
+    // 改为按档位判定（只有 high 才算高风险）；legacy 数值（无档位）仍走数值阈值。
+    const evaluationTiers = (wrapup.evaluation as { metricTiers?: { sessionLss?: string; sessionLf?: string } } | undefined)?.metricTiers;
+    const isHighSignal = (tier: string | undefined, value: number | null): boolean =>
+      tier ? tier === 'high' : (typeof value === 'number' && Number.isFinite(value) && value >= 6);
     const highRisk = (
-      (lss !== null && lss >= 6) ||
-      (lf !== null && lf >= 6) ||
+      isHighSignal(evaluationTiers?.sessionLss, lss) ||
+      isHighSignal(evaluationTiers?.sessionLf, lf) ||
       prerequisiteGaps.some((item) => item.severity === 'high') ||
       wrapup.progress.movedToReview.length > 0
     );

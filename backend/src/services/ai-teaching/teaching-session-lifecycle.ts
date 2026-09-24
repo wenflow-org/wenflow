@@ -20,6 +20,10 @@ import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 import { classifyFinalizationError } from './FinalizationErrors';
 import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
+import {
+  aggregateSessionEvaluationFromMessages,
+  buildSessionEvaluationShadow,
+} from '../learning/session-evaluation-aggregate';
 import { isCalibratableDirection, replanAttributionService, type ReplanAttributionEvidence } from './ReplanAttributionService';
 import { replanAdvisoryService, toAttributionRecall, type ReplanAdvisory } from './ReplanAdvisoryService';
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
@@ -698,6 +702,31 @@ export async function endSession(
       }
     : null;
 
+  // 影子双写（2026-09-22）：确定性聚合与 LLM 档位判定并存记录，供后续比对分布。
+  // **不改变任何现有消费方**：learning-state.service / ReplanAdvisoryService /
+  // LearnerKnowledgeMemoryService 仍读 LLM 值（evaluationResult）。这里只额外留痕。
+  // 落点 = teaching_sessions.wrapup.shadowDeterministic（JSON 列，无需迁移）+ 一条 info 日志。
+  const deterministicEvaluation = aggregateSessionEvaluationFromMessages(session.messages);
+  const shadowDeterministic = buildSessionEvaluationShadow({
+    llm: evaluationResult?.evaluation ?? null,
+    deterministic: deterministicEvaluation,
+    recordedAt: new Date().toISOString(),
+  });
+  logger.info('[AITeaching] 会话评估影子双写（确定性聚合 vs LLM）', {
+    sessionId,
+    formulaVersion: shadowDeterministic.formulaVersion,
+    basis: shadowDeterministic.deterministic.basis,
+    turnCount: shadowDeterministic.deterministic.turnCount,
+    deterministic: {
+      lss: shadowDeterministic.deterministic.lss,
+      ktl: shadowDeterministic.deterministic.ktl,
+      lf: shadowDeterministic.deterministic.lf,
+      confidence: shadowDeterministic.deterministic.confidence,
+    },
+    llm: shadowDeterministic.llm,
+    delta: shadowDeterministic.delta,
+  });
+
   const lastAnalyzedMessage = [...session.messages].reverse().find((message) => !!message.analysis);
   const scoreInput = evaluationResult ? {
     sessionLss: evaluationResult.evaluation.sessionLss,
@@ -734,6 +763,8 @@ export async function endSession(
       summarySource: wrapupResult.summarySource,
       evaluationSource: wrapupResult.evaluationSource,
       runtimeEnvelope: wrapupRuntimeEnvelope,
+      // 影子双写：确定性聚合 vs LLM，仅供比对，不被任何消费方读取
+      shadowDeterministic,
     };
     const snapshotInput = {
       userId: session.userId,
