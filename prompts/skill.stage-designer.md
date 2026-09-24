@@ -1,6 +1,6 @@
 ---
 agentId: skill:stage-designer
-coreHash: 25e4f77724bdacdc8506ef93726178f8501a1e736d79c56f070e4ae8e80411ac
+coreHash: e6f6c704226a3480d99d5601f32b52ec384456a335bb8b9527366dd3f85a30ca
 coreVersion: 1
 temperature: 0.3
 maxTokens: 32000
@@ -24,6 +24,7 @@ failurePolicy: retry
 - 「cognitiveCore（object）」`skill:path-planning.cognitiveCore` — 认知结构，约束子任务的概念归属
 - 「normalizedInput（object?）」`sandbox:path.normalizedInput`（编排注入） — 场景/预算/成功标准上下文（编排层确定性定帧注入）
 - 「materials（object[]?）」`sandbox:path.materials`（编排注入） — 该路径关联的资料包（用户附件在前、联网采集在后）：{title, sourceUrl, sections[{id,title}], keyPoints[{text,cite}]}；无资料时不出现该键
+- 「repairHints（object?）」`sandbox:path.repairHints`（编排注入） — 上一次生成的修复提示（质检不合格重试时的输入）；主链路首轮恒为空，不出现该键
 
 ## 执行规则
 

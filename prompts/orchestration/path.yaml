@@ -147,11 +147,15 @@ fields:
   - fieldId: subtasks.type
     promptRole: soft-info
     valueType: string
-    description: 子任务类型（learn / practice / verify）
+    description: 子任务类型（acquire / deconstruct / model / execute / diagnose / refine / consolidate）
   - fieldId: subtasks.estimatedMinutes
     promptRole: soft-info
     valueType: number
     description: 子任务估时（分钟）
+  - fieldId: subtasks.description
+    promptRole: soft-info
+    valueType: string
+    description: 任务大概内容（围绕什么概念、在什么场景观察或练习）
   - fieldId: subtasks.acceptanceCriteria
     promptRole: soft-info
     valueType: string
@@ -169,10 +173,18 @@ fields:
     promptRole: soft-info
     valueType: string
     description: 认知层次（Bloom 等级）
+  - fieldId: subtasks.icapLevel
+    promptRole: soft-info
+    valueType: string
+    description: ICAP 参与层级（passive / active / constructive / interactive），落 subtasks.icapLevel
   - fieldId: subtasks.transferable
     promptRole: soft-info
     valueType: boolean
     description: 是否可迁移
+  - fieldId: subtasks.materialRefs
+    promptRole: soft-info
+    valueType: array<object>
+    description: 任务→资料条目引用（逐字核对后保留的才落库；无资料时不出该键）
 
 routings:
   # path-agent（确定性定帧）→ path-planning + stage-designer

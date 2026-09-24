@@ -28,6 +28,10 @@ inputs:
     type: "object[]?"
     ref: sandbox:path.materials
     desc: 该路径关联的资料包（用户附件在前、联网采集在后）：{title, sourceUrl, sections[{id,title}], keyPoints[{text,cite}]}；无资料时不出现该键
+  - name: repairHints
+    type: object?
+    ref: sandbox:path.repairHints
+    desc: 上一次生成的修复提示（质检不合格重试时的输入）；主链路首轮恒为空，不出现该键
 rules:
   - 只服务当前 milestone，不要重写整条路径方向
   - 如果提供了 materials（该路径关联的资料包）：给每个 subtask 补 `materialRefs`（1-2 条，`sectionId` 取 sections[].id、`quote` **逐字**复制该条目原文，不得翻译/概括/编造，代码会逐字核对）：**任务必须长在资料上**——subtask 的 title/description 要能对应到资料里的**具体章节标题或条目原文**（可核对），优先围绕与本 milestone 相关的章节展开；资料里没有的内容不要写进去；资料缺失时才允许按通用知识设计任务

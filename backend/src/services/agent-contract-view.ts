@@ -71,6 +71,9 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     // 此前未登记 ⇒ prompts:check-handoff:strict 判失败（sandbox-path-unregistered）。
     'materials',
     'previousMilestone',
+    // stage-designer 的质检重试输入（上一次生成被判不合格时的修复提示）；
+    // 主链路当前恒传 null，但 inputSchema 已声明、提示词规则 38 也引用它 —— 登记后声明三方一致。
+    'repairHints',
     'milestones',
     'subtasks',
     'cognitiveCore',

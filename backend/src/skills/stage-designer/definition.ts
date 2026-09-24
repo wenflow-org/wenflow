@@ -9,6 +9,9 @@ export const stageDesignerRuntimeDefinition: RuntimeDefinitionRecord = {
     type: 'object',
     properties: {
       milestone: { type: 'object' },
+      // 前一里程碑（consolidate 回捞的输入真相源）：yaml inputs 与 buildUserPayload 都有它，
+      // 此前 inputSchema 漏声明 ⇒ 契约视图与真实载荷不一致（审计 P2 声明漂移）。
+      previousMilestone: { type: 'object' },
       cognitiveCore: { type: 'object' },
       normalizedInput: { type: 'object' },
       materials: { type: 'array' },
@@ -27,6 +30,9 @@ export const stageDesignerRuntimeDefinition: RuntimeDefinitionRecord = {
       'milestone.title',
       'milestone.coreConcept',
       'milestone.goal',
+      // 规则 41（每阶段至少一个 consolidate 回捞前一阶段）依赖这两个键
+      'previousMilestone.title',
+      'previousMilestone.coreConcept',
       'cognitiveCore.coreConcepts',
       'materials[].title',
       'materials[].sections[].id',
@@ -35,14 +41,20 @@ export const stageDesignerRuntimeDefinition: RuntimeDefinitionRecord = {
       'normalizedInput.confirmedProposal.firstDeliverable',
       'normalizedInput.planningHints.subtasksPerStageRange',
       'normalizedInput.planningHints.subtaskMinutesRange',
+      'repairHints',
     ],
     produces: [
       'subtasks[].title',
       'subtasks[].type',
       'subtasks[].estimatedMinutes',
+      'subtasks[].description',
       'subtasks[].linkedConcept',
       'subtasks[].knowledgeType',
       'subtasks[].cognitiveLevel',
+      'subtasks[].icapLevel',
+      'subtasks[].transferable',
+      // 资料引用（逐字核对后保留的才落库；无资料时不出该键）
+      'subtasks[].materialRefs',
     ],
   },
   capabilities: ['stage-task-design', 'task-light-tagging'],

@@ -186,6 +186,7 @@ sandbox:path-agent.path.name
 sandbox:path-agent.path.summary
 sandbox:path-agent.planningHints
 sandbox:path-agent.previousMilestone
+sandbox:path-agent.repairHints
 sandbox:path-agent.replan
 sandbox:path-agent.subtasks
 sandbox:path-agent.subtasks.acceptanceCriteria
