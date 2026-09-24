@@ -60,6 +60,12 @@
 
 - [`VIRTUAL_LEARNER_CHAIN.md`](./VIRTUAL_LEARNER_CHAIN.md)
   - 虚拟学习者链路 Source of Truth：persona / 故事 / 会话模拟 / 裁判
+- [`VIRTUAL_LEARNER_PRESET_DESIGN.md`](./VIRTUAL_LEARNER_PRESET_DESIGN.md)
+  - 预制虚拟学习者设计稿 v0（14 条样本集；落地见 `virtual-learners/presets.yaml`）
+- [`VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md`](./VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md)
+  - 日期模拟与学习负担评估设计：跨日语义、系统层契约、页面落点、待做清单
+- [`VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md`](./VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md)
+  - 日期模拟接口冻结清单：系统层 ↔ 页面层的分工边界与数据契约
 
 ## 开发工具
 

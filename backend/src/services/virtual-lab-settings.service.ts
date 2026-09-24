@@ -12,7 +12,7 @@ const RUNTIME_CACHE_TTL_MS = 30_000;
 
 /**
  * 日期模拟（虚拟侧）：控制"学习分散在各自然天"的仿真推进。
- * 设计见 doc/local/VIRTUAL_LEARNER_SIMULATED_DAY_DRAFT.md §八（默认关闭，现网零变化）。
+ * 设计见 doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md §八（默认关闭，现网零变化）。
  */
 export interface VirtualLabDateSimulationSettings {
   /** 默认 false：未开启时任何推进/时间线都不生效（现网零变化） */

@@ -6,7 +6,7 @@
  * **没有上下文时等价于 `new Date()`**（现网行为零变化）。
  *
  * 只在 `POST /sessions/:id/advance-day` 的 `runTasks` 分支内启用（`runWithSimulatedClock`）。
- * 设计：doc/local/VIRTUAL_LEARNER_SIMULATED_DAY_DRAFT.md §四（asOf 注入）。
+ * 设计：doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md §四（asOf 注入）。
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 

@@ -2025,7 +2025,7 @@ router.get('/sessions/:sessionId', async (req: Request, res) => {
 /**
  * GET /api/admin/virtual-learners/sessions/:sessionId/simulation-clock
  * 会话的模拟时钟（只读）：默认关（enabled=false，status='disabled'）。
- * 设计：doc/local/VIRTUAL_LEARNER_SIMULATED_DAY_DRAFT.md §8.2/C2①。
+ * 设计：doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md §8.2/C2①。
  */
 router.get('/sessions/:sessionId/simulation-clock', async (req: Request, res) => {
   try {

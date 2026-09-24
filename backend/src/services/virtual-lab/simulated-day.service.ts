@@ -1,7 +1,7 @@
 /**
  * SimulatedDayService —— 虚拟学习者"日期模拟"只读聚合（P1）
  *
- * 设计：doc/local/VIRTUAL_LEARNER_SIMULATED_DAY_DRAFT.md §C2/§C4/§8.8。
+ * 设计：doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md §C2/§C4/§8.8。
  * 机制：**不 mock 时钟**，把"第 dayIndex 天"映射为日历 `baseDate + dayIndex`（**应用时区日界**，
  * 与自然衰减 / `getAggregatedState.dayLoad` / `ReviewQuotaService` 同口径），再以该日 **asOf** 读回——
  * 聚合、配额、记忆保留率、难度调整留痕全部来自已落地读写缝，**不新增实体、不自造口径**。

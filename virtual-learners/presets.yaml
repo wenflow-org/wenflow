@@ -7,7 +7,7 @@
 # 消费方：backend/src/virtual-lab/builtin-learners（启动时 ensureBuiltinVirtualLearners 按 presetKey 幂等同步进 DB）。
 # 修改规则：改内容请同步递增该条 presetVersion，否则已存在实例不会被刷新；删除条目不会自动删除已建实例。
 #
-# 设计稿见 doc/VIRTUAL_LEARNER_PRESET_DRAFT.md
+# 设计稿见 doc/VIRTUAL_LEARNER_PRESET_DESIGN.md
 #
 # 变更记录（corpus 版本）
 # - v1（≤ 2026-09-20）：原始 14 条。availableTime = 7 minimal / 4 moderate / 3 abundant。

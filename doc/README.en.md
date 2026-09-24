@@ -50,6 +50,12 @@
 
 - [`VIRTUAL_LEARNER_CHAIN.md`](./VIRTUAL_LEARNER_CHAIN.md)
   - Virtual learner chain source of truth: persona / stories / session simulation / referee
+- [`VIRTUAL_LEARNER_PRESET_DESIGN.md`](./VIRTUAL_LEARNER_PRESET_DESIGN.md)
+  - Built-in preset virtual learners, design v0 (14-sample set; implemented in `virtual-learners/presets.yaml`)
+- [`VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md`](./VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md)
+  - Simulated-day / study-load design: multi-day semantics, system-layer contract, page touchpoints, TODO list
+- [`VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md`](./VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md)
+  - Simulated-day interface freeze list: system-layer ↔ page-layer split and data contract
 
 ## Developer Tooling
 
