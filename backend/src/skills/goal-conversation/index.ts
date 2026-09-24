@@ -170,12 +170,12 @@ interface GoalPromptInput {
 }
 
 /**
- * 用户已上传资料的**元信息清单**（不含正文）。
+ * 用户已上传资料的**元信息 + 理解摘要**（不含正文全文）。
  *
- * 设计口径（2026-09-22「附件是主线」）：上传资料的正文的消费点在路径生成
- * （path.coordinator 附件打包 → path-planning）；goal 对话阶段只让模型知道
- * 「用户已提供了哪些资料」，避免答出「没有收到文件」这类与事实不符的话，
- * 同时保持既有纪律「禁止假装读过资料」。
+ * 设计口径（2026-09-22「附件是主线」+ 2026-09-24「Document Summary Index 摘要层」）：
+ * 正文消费点在路径生成（附件打包）与教学按章节取回；goal 对话消费 brief
+ * （material-brief 惰性生成一次、持久化复用）——知道「这份资料是什么/讲什么/怎么切分」
+ * 才能聊得好（澄清全面学 vs 重点学）；brief 未就绪时降级为 headings 元信息。
  */
 export interface GoalUploadedMaterialSummary {
   /** 用户原始文件名。 */
@@ -184,17 +184,30 @@ export interface GoalUploadedMaterialSummary {
   format: string;
   /** 抽取后正文字符数。 */
   charCount: number;
-  /** 结构化小标题数。 */
+  /** 结构化小标题数（唯一标题总数，感知文档规模）。 */
   headingCount: number;
-  /** 前几个小标题（给模型主题感；取不到为空数组）。 */
+  /** 降级目录（brief 未就绪时使用，≤6 个标题）。 */
   headings: string[];
+  /** 资料理解摘要（material-brief；未生成/生成失败为 null → 降级 headings）。 */
+  brief: {
+    docType: string | null;
+    subject: string | null;
+    audience: string | null;
+    /** 全文浓缩概括（≤200 字）。 */
+    overview: string | null;
+    /** 天然学习切分维度（≤4 条）。 */
+    naturalDivisions: string[];
+    /** 目录（≤12 条，title 照抄原文）。 */
+    toc: Array<{ title: string; gist: string }>;
+  } | null;
 }
 
 /** 资料清单纪律注记：随清单一起注入 user payload（system prompt 纯静态，不进 prompt 治理管线）。 */
 const UPLOADED_MATERIALS_NOTE =
-  'uploadedMaterials 字段是用户已上传的资料清单：已收到，将在路径生成时作为主线依据。'
-  + '你可以确认收到并围绕其主题交流，但正文你尚未读取——禁止假装读过或凭记忆引用其内容；'
-  + '这些资料无需在 needsMaterial 中重复声明（下游会自动使用已上传文件）。';
+  'uploadedMaterials 字段是用户已上传的资料清单及其理解摘要（brief）：已收到，将在路径生成时作为主线依据。'
+  + '你可基于 brief 的 subject/overview/toc 与用户澄清学习范围（「全面学习整份资料」还是「重点学某些章节」），'
+  + '并可参考 naturalDivisions 建议切分维度；除摘要所载信息外，正文细节你尚未读取——'
+  + '禁止假装读过或凭记忆引用正文细节；这些资料无需在 needsMaterial 中重复声明（下游会自动使用已上传文件）。';
 
 export function buildGoalConversationUserPayload(input: {
   userInput: string;
@@ -238,7 +251,17 @@ export function buildGoalConversationUserPayload(input: {
           ext: material.ext,
           charCount: material.charCount,
           headingCount: material.headingCount,
-          headings: material.headings,
+          // brief 就绪：带理解摘要（目录截 12 条）；未就绪：降级 headings 元信息
+          ...(material.brief
+            ? {
+                docType: material.brief.docType,
+                subject: material.brief.subject,
+                audience: material.brief.audience,
+                overview: material.brief.overview,
+                naturalDivisions: material.brief.naturalDivisions,
+                toc: material.brief.toc.slice(0, 12),
+              }
+            : { headings: material.headings }),
         })),
       }
     : {};

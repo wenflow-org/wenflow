@@ -51,7 +51,10 @@ import { executeTextToImage as executeTextToImageFn } from './text-to-image';
 
 // 资料采集编排器（非 LLM 外挂能力；确定性编排 search→选源→fetch，LLM 仅抽取带引文要点）
 export { materialCollectorDefinition, executeMaterialCollector, collectMaterialPack, collectMaterialForGoal, hasMaterialNeed } from './material-collector';
+export { materialBriefDefinition, generateMaterialBriefDraft, normalizeMaterialBrief, MATERIAL_BRIEF_PROMPT } from './material-brief';
+import { materialBriefDefinition } from './material-brief';
 import { executeMaterialCollector as executeMaterialCollectorFn } from './material-collector';
+import { generateMaterialBriefDraft as generateMaterialBriefFn } from './material-brief';
 
 // v4 辅助 LLM Skills（由原遗留插件/旁路迁入）
 import { auxSkillDefinitions, auxSkillHandlers } from './v4-aux-skills';
@@ -154,6 +157,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   webFetchDefinition,
   textToImageDefinition,
   materialCollectorDefinition,
+  materialBriefDefinition,
   ...auxSkillDefinitions,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
   {
@@ -240,6 +244,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'web-fetch': executeWebFetchFn,
   'text-to-image': executeTextToImageFn,
   'material-collector': executeMaterialCollectorFn,
+  'material-brief': (input: any) => generateMaterialBriefFn(input),
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
   'goal-conversation': (input: any) => runGoalConversationAgent(input),

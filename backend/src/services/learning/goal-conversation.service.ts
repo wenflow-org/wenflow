@@ -6,6 +6,13 @@ import { withTransaction } from '../../utils/with-transaction';
 import { executeSkill } from '../../skills';
 import { goalConversationAgentDefinition, type GoalUploadedMaterialSummary } from '../../skills/goal-conversation';
 import { listMaterials } from '../materials/material-store';
+import { collectBriefsWithDeadline } from '../materials/material-brief.service';
+
+/**
+ * goal 回合等待资料 brief 就绪的总预算（毫秒）。
+ * 到点未就绪的资料降级为 headings 元信息；brief 生成在后台继续落盘，下次对话拾取。
+ */
+const GOAL_BRIEF_DEADLINE_MS = 20_000;
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
 import { derivePlannedOutline, type LearnerLoadProfile } from './path-planning-hints';
@@ -837,27 +844,41 @@ async continueConversation(
   }
 
   /**
-   * goal 阶段的「已上传资料清单」（仅元信息，不含正文）。
-   * 口径（2026-09-22「附件是主线」）：正文消费点在路径生成（path.coordinator 附件打包），
-   * goal 对话只让模型知道用户提供了什么——见 skills/goal-conversation 的 GoalUploadedMaterialSummary。
+   * goal 阶段的「已上传资料清单」（元信息 + 理解摘要）。
+   * brief（material-brief，Document Summary Index 摘要节点）：惰性生成一次、持久化复用；
+   * 本方法受总等待预算约束——到点未就绪的降级为 headings 元信息（生成在后台继续落盘，下次对话拾取）。
    * 纯本地读盘 + fail-open：任何异常返回空清单，绝不阻塞对话。
    */
-  private collectUploadedMaterialSummaries(userId?: string): GoalUploadedMaterialSummary[] {
+  private async collectUploadedMaterialSummaries(userId?: string): Promise<GoalUploadedMaterialSummary[]> {
     const id = typeof userId === 'string' ? userId.trim() : '';
     if (!id) return [];
     try {
-      // listMaterials 新→旧；清单上限 5 份（超出部分对 goal 阶段无信息增量，正文仍全量进路径）
-      return listMaterials(id).slice(0, 5).map((record) => ({
-        name: record.name,
-        ext: record.ext,
-        format: record.format,
-        charCount: record.charCount,
-        headingCount: record.structure?.headingCount ?? 0,
-        headings: (record.anchors || [])
-          .map((anchor) => String(anchor?.heading || '').trim())
-          .filter((heading) => heading && heading !== '（无标题）')
-          .slice(0, 3),
-      }));
+      const records = listMaterials(id).slice(0, 5);
+      const briefs = await collectBriefsWithDeadline(records, GOAL_BRIEF_DEADLINE_MS);
+      return records.map((record, index) => {
+        const brief = briefs[index];
+        return {
+          name: record.name,
+          ext: record.ext,
+          format: record.format,
+          charCount: record.charCount,
+          headingCount: record.structure?.headingCount ?? 0,
+          headings: (record.anchors || [])
+            .map((anchor) => String(anchor?.heading || '').trim())
+            .filter((heading) => heading && heading !== '（无标题）')
+            .slice(0, 6),
+          brief: brief
+            ? {
+                docType: brief.docType,
+                subject: brief.subject,
+                audience: brief.audience,
+                overview: brief.overview,
+                naturalDivisions: brief.naturalDivisions,
+                toc: brief.toc,
+              }
+            : null,
+        };
+      });
     } catch (error) {
       logger.warn('[goal-conversation] 读取上传资料清单失败，已跳过（fail-open）', {
         userId: id,
@@ -927,9 +948,9 @@ async continueConversation(
         maxFormatRetries: this.MAX_FORMAT_RETRIES,
         confirmProposal: options?.confirmProposal === true,
         systemPromptOverride: options?.systemPromptOverrides?.goalAgent,
-        // 已上传资料清单（仅元信息，正文由路径生成时附件打包消费）：让 goal-agent 知道用户已提供
-        // 哪些资料，避免答出「没有收到文件」这类与事实不符的话；无上传=空数组=payload 无该键
-        uploadedMaterials: this.collectUploadedMaterialSummaries(userId)
+        // 已上传资料清单（元信息 + 理解摘要）：让 goal-agent 知道用户提供了什么、资料讲什么，
+        // 避免答出「没有收到文件」这类与事实不符的话；无上传=空数组=payload 无该键
+        uploadedMaterials: await this.collectUploadedMaterialSummaries(userId)
       });
 
         logger.debug('AI响应', {

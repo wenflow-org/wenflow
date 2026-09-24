@@ -12,6 +12,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { DocumentAnchor, DocumentStructure } from './document-parser.types';
+import type { MaterialBrief } from '../../skills/material-brief/types';
 
 export interface MaterialRecord {
   id: string;
@@ -28,6 +29,13 @@ export interface MaterialRecord {
   anchors: DocumentAnchor[];
   warnings: string[];
   createdAt: string;
+  /**
+   * 资料理解摘要（Document Summary Index 摘要节点，2026-09-24）。
+   * 惰性生成一次后持久化，goal 对话与 path 生成复用；缺省=尚未生成（fail-open 降级元信息）。
+   */
+  brief?: MaterialBrief | null;
+  /** brief 生成时间（ISO）；缺省=未生成。 */
+  briefGeneratedAt?: string | null;
 }
 
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -70,6 +78,15 @@ export function writeMaterial(record: MaterialRecord, markdown: string): void {
   fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(markdownPath(record.userId, record.id), markdown, 'utf-8');
   fs.writeFileSync(recordPath(record.userId, record.id), JSON.stringify(record, null, 2), 'utf-8');
+}
+
+/** 局部更新资料记录（读-改-写；如 brief 惰性生成后的持久化）。记录不存在返回 null。 */
+export function updateRecord(userId: string, id: string, patch: Partial<MaterialRecord>): MaterialRecord | null {
+  const record = readRecord(userId, id);
+  if (!record) return null;
+  const updated: MaterialRecord = { ...record, ...patch };
+  fs.writeFileSync(recordPath(userId, id), JSON.stringify(updated, null, 2), 'utf-8');
+  return updated;
 }
 
 /** 列出该用户的资料（新→旧）。损坏的单条记录跳过，不影响整体列表。 */

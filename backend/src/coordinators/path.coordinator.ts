@@ -7,6 +7,8 @@ import {
 import learningService from '../services/learning/learning.service';
 import { buildFramedNormalizedInput, type LearnerLoadProfile } from '../services/learning/path-planning-hints';
 import { buildUploadedMaterialPacks } from '../services/materials/material-pack.builder';
+import { listMaterials } from '../services/materials/material-store';
+import { collectBriefsWithDeadline } from '../services/materials/material-brief.service';
 import type { ResponseTriage } from '../services/learning/response-triage';
 import {
   getPathAgentInputConfig,
@@ -476,6 +478,21 @@ class PathCoordinator {
       ?? (goalFinalPayload.goalHandoffFields as any)?.needsMaterial
       ?? (visibleSummary as any)?.needsMaterial
       ?? null;
+    // 附件理解摘要（material-brief）惰性就绪：path 是长流程，值得等 brief（有预算上限）——
+    // path-planning 拿到 brief 的 naturalDivisions/目录后才知道「这一堆怎么切分学习」。
+    // fail-open：生成失败/超时的附件照常以 pack 进路径（brief=null），下次生成再补。
+    try {
+      const uploadUserId = typeof input.userId === 'string' ? input.userId.trim() : '';
+      if (uploadUserId) {
+        const uploadedRecords = listMaterials(uploadUserId).slice(0, 3);
+        await collectBriefsWithDeadline(uploadedRecords, 90_000);
+      }
+    } catch (error) {
+      logger.warn('[path-coordinator] 附件 brief 就绪失败（fail-open）', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     const materialPacks = [
       // 附件是主线：用户上传的资料优先进入路径（本地读盘，无网络、无 LLM）
       ...this.resolveUploadedMaterialPacks(input.userId),

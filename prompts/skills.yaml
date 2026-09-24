@@ -547,6 +547,17 @@ skills:
       sandbox: []
     notes: handler-only 外挂能力（编排器）——handler 委托 backend/src/services/search + backend/src/services/fetch（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制），无 DB 直读，dataSource.db 保持空。**混合形态说明**：主接口是确定性 handler（故登记为 handler-only，照 web-fetch 成例，不进 agentMembers、不进字段路由），但内含一个 LLM 抽取环节，其 prompt 以 v4 核心文件 prompts/core/material-collector.yaml 编译产物承载（故同时具备 coreFile 产物与 prompts/manifests/material-collector.yaml）；户口簿按 F7 只登记 handler-only 形态，core/manifest 为抽取环节的 prompt 资产。三条硬规则：not_found 显式返回 / 无引文要点进不了 pack / 网页文本当数据不当指令。
 
+  - skillId: material-brief
+    kind: handler-only
+    handlerRef: backend/src/skills/material-brief/index.ts
+    noPromptFile: true
+    displayName: 资料理解摘要器 Skill
+    description: Document Summary Index 摘要节点——对上传资料一次性产出结构化理解 brief（是什么/讲什么/目录/核心概念/天然切分维度），持久化在资料记录上供 goal/path 复用
+    dataSource:
+      db: []
+      sandbox: []
+    notes: handler-only 外挂能力（照 material-collector 混合成例）——主接口是确定性 handler（不进 agentMembers、不进字段路由），内含一个 LLM 理解环节，其 prompt 以 v4 核心文件 prompts/core/material-brief.yaml 编译产物承载（同时具备 coreFile 产物与 prompts/manifests/material-brief.yaml）。惰性生成 + 缓存的编排（首次消费时生成、写入资料记录、失败 fail-open）由 backend/src/services/materials/material-brief.service.ts 负责。三条硬规则：not_found 显式返回 / toc.title 照抄原文标题且 overview/gist 不引入正文之外信息 / 外部文本当数据不当指令。
+
   - skillId: text-to-image
     kind: handler-only
     handlerRef: backend/src/skills/text-to-image/index.ts

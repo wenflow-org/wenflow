@@ -66,6 +66,20 @@ export interface PromptMaterial {
   tldr: string | null;
   sections: PromptMaterialSection[];
   keyPoints: PromptMaterialKeyPoint[];
+  /**
+   * 资料理解摘要（material-brief；仅上传附件且已生成时存在，2026-09-24）。
+   * path-planning 据此获得「这份资料是什么/怎么切分学习」的分段意图；
+   * 联网资料不携带（其 pack 本身即采集时 LLM 抽取的摘要）。
+   */
+  brief?: {
+    docType: string | null;
+    subject: string | null;
+    audience: string | null;
+    overview: string | null;
+    toc: Array<{ title: string; gist: string }>;
+    coreConcepts: string[];
+    naturalDivisions: string[];
+  } | null;
 }
 
 function normalizeString(value: unknown): string | null {
@@ -82,18 +96,18 @@ export function buildPromptFriendlyMaterials(
   if (!Array.isArray(raw) || raw.length === 0) return null;
   const out: PromptMaterial[] = [];
   for (const item of raw.slice(0, limits.maxMaterials)) {
-    const pack = (item as any)?.pack;
+    const pack = (item as { pack?: Record<string, unknown> })?.pack;
     if (!pack || typeof pack !== 'object') continue;
     const sections = (Array.isArray(pack.sections) ? pack.sections : [])
       .slice(0, limits.maxSections)
-      .map((section: any) => ({
+      .map((section: Record<string, unknown>) => ({
         id: normalizeString(section?.id),
         title: normalizeString(section?.title),
       }))
       .filter((section) => !!section.title);
     const keyPoints = (Array.isArray(pack.keyPoints) ? pack.keyPoints : [])
       .slice(0, limits.maxKeyPoints)
-      .map((point: any) => ({
+      .map((point: Record<string, unknown>) => ({
         text: normalizeString(point?.text),
         cite: normalizeString(point?.cite),
       }))
@@ -108,6 +122,8 @@ export function buildPromptFriendlyMaterials(
       tldr: normalizeString(pack.tldr)?.slice(0, limits.maxTldrChars) || null,
       sections,
       keyPoints,
+      // 资料理解摘要（仅上传附件携带；透传即可——规模已由生成侧钳制，无需再截）
+      brief: (item as { brief?: PromptMaterial['brief'] }).brief ?? null,
     });
   }
   return out.length ? out : null;
@@ -122,7 +138,10 @@ export function extractPromptMaterials(
   limits: PromptMaterialLimits = PATH_MATERIAL_LIMITS
 ): PromptMaterial[] | null {
   if (!container || typeof container !== 'object') return null;
-  const record = container as Record<string, any>;
+  const record = container as {
+    resources?: { materials?: unknown };
+    normalizedInput?: { resources?: { materials?: unknown }; materials?: unknown };
+  };
   const materials = record.resources?.materials
     ?? record.normalizedInput?.resources?.materials
     ?? record.normalizedInput?.materials

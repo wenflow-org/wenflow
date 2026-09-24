@@ -505,6 +505,17 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Tool',
     noPromptFile: true
+  },
+  {
+    id: 'skill:material-brief',
+    name: '资料理解摘要器 Skill',
+    description: 'Document Summary Index 摘要节点：对上传资料一次性产出结构化理解 brief（是什么/讲什么/目录/核心概念/天然切分维度），持久化在资料记录上供 goal/path 复用',
+    category: 'tool',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Tool',
+    noPromptFile: true
   }
 ];
 

@@ -156,6 +156,8 @@ export function buildPackFromMaterial(record: MaterialRecord, markdown: string):
   return {
     status: 'ok',
     pack,
+    // 资料理解摘要（惰性生成，未生成时为 null；path-planning 据此获得分段意图与全文目录感知）
+    brief: record.brief ?? null,
     provenance: keyPoints.map((point, index) => ({
       pointId: `p-${index + 1}`,
       sourceUrl: point.sourceUrl,
