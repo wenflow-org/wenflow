@@ -764,5 +764,13 @@ async function handleDeactivate() {
     font-size: 13px;
     line-height: 1.6;
   }
+
+  /* 资料卡再收一档（2026-09-24 反馈「个人中心五个选项里的内容都偏大」）：
+     390 下 hero 卡 182px 高，统计卡 8px 上下边距 + 17px 数字是主要开销 */
+  .profile-hero { padding: 12px; }
+  .stat-card { padding: 6px 10px; }
+  .stat-card strong { font-size: 16px; }
+  .stat-card span { font-size: 10.5px; }
+  .uc-card__foot { margin-top: 10px; padding-top: 10px; }
 }
 </style>

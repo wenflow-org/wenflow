@@ -493,6 +493,10 @@ onMounted(() => {
     gap: 12px;
   }
 
+  /* 统计卡与日分组再收一档（2026-09-24 反馈「内容都偏大」） */
+  .history__stat { padding: 10px 12px; }
+  .history__day { padding: 10px 12px; }
+
   .history__list {
     gap: 10px;
   }

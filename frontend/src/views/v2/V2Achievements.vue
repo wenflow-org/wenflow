@@ -408,10 +408,21 @@ onMounted(() => {
 }
 
 @media (max-width: 900px) {
+  /* 收进个人中心后的移动端压缩（2026-09-24 反馈「内容都偏大」）：
+     390 下 2 列统计卡的 KPI 数字原为 28px（卡宽仅 ~165px）、成就卡内边距 16px、卡片高 176px——
+     一张"我是谁"式的概览要吃掉整屏。按学习侧 KPI 刻度压到 21px/12px 边距。 */
   .overview { grid-template-columns: repeat(2, 1fr); }
   .grid { grid-template-columns: 1fr 1fr; }
   /* 28×28 对拇指偏小，抬到 34×34 并同步贴角 */
   .ach-share { width: 34px; height: 34px; top: 6px; right: 6px; }
+  .ov { padding: 12px 14px; }
+  .ov b { font-size: 21px; }
+  .ov small { font-size: 11px; }
+  .ach-card { padding: 12px 14px; }
+  .ach-card__name { font-size: 14px; }
+  .ach-card__icon-emoji { font-size: 20px; }
+  .filters { gap: 6px; }
+  .filter { padding: 6px 12px; }
 }
 @media (max-width: 560px) {
   .grid { grid-template-columns: 1fr; }
