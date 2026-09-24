@@ -22,11 +22,11 @@ export interface PromptMaterialLimits {
   maxTldrChars: number;
 }
 
-/** 路径层（骨架）：资料是主线，给得最全。 */
+/** 路径层（骨架）：资料是主线，给得最全（2026-09-24 对齐包上限——「全面学习」场景 path 必须看到完整目录）。 */
 export const PATH_MATERIAL_LIMITS: PromptMaterialLimits = {
   maxMaterials: 3,
-  maxSections: 12,
-  maxKeyPoints: 8,
+  maxSections: 24,
+  maxKeyPoints: 12,
   maxTldrChars: 600,
 };
 

@@ -23,9 +23,9 @@ import type {
 
 /** 单次最多带上几份附件（再多会挤占路径提示词预算）。 */
 export const MAX_UPLOAD_MATERIAL_PACKS = 3;
-/** 单个包最多几个章节 / 几条要点。 */
+/** 单个包最多几个章节 / 几条要点。要点上限 ≈ 每章一条（contextual retrieval 语境前缀的载体，2026-09-24）。 */
 export const MAX_PACK_SECTIONS = 24;
-export const MAX_PACK_KEY_POINTS = 12;
+export const MAX_PACK_KEY_POINTS = 24;
 /** 单条要点正文上限（引文本身不截断语义，仅防超长行）。 */
 export const MAX_POINT_CHARS = 160;
 /** tldr 上限。 */
@@ -87,21 +87,23 @@ function paragraphLines(markdown: string): string[] {
   return out;
 }
 
-/** 由章节锚点建要点：**引文取自原文**（cite = 原文片段），text 前置章节名便于路径引用。 */
+/** 由章节锚点建要点：**引文取自原文**（cite = 原文片段），text 前置「文档名·章节名」语境
+ *  （contextual retrieval 对齐：脱离原文的引文片段必须自带出处语境，2026-09-24）。 */
 function buildKeyPoints(record: MaterialRecord, anchors: MaterialRecord['anchors'], markdown: string): MaterialKeyPoint[] {
   const sourceUrl = attachmentSourceUrl(record.name);
+  const docTitle = String(record.name || '').replace(/\.[^.]+$/, '') || record.name;
   const points: MaterialKeyPoint[] = [];
   const seen = new Set<string>();
   for (const anchor of anchors) {
     const quote = String(anchor?.preview || '').trim();
     if (!quote) continue;
     const heading = String(anchor?.heading || '').trim();
-    const prefix = heading && heading !== '（无标题）' ? `${heading}｜` : '';
+    const contextPrefix = heading && heading !== '（无标题）' ? `${docTitle}·${heading}｜` : `${docTitle}｜`;
     const cite = clamp(quote, MAX_POINT_CHARS);
     if (seen.has(cite)) continue;
     seen.add(cite);
     points.push({
-      text: clamp(`${prefix}${quote}`, MAX_POINT_CHARS),
+      text: clamp(`${contextPrefix}${quote}`, MAX_POINT_CHARS),
       cite,
       sourceUrl,
     });

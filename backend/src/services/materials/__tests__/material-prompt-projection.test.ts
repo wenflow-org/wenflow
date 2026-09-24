@@ -27,8 +27,9 @@ function pack(overrides: Record<string, unknown> = {}) {
       fetchedAt: '2026-09-22T00:00:00.000Z',
       license: null,
       tldr: 'T'.repeat(2000),
-      sections: Array.from({ length: 20 }, (_, index) => ({ id: `s-${index + 1}`, title: `章节${index + 1}`, summary: '' })),
-      keyPoints: Array.from({ length: 20 }, (_, index) => ({ text: `要点${index + 1}`, cite: `原文${index + 1}`, sourceUrl: 'attachment://guide.txt' })),
+      // 夹具规模须 ≥ PATH_MATERIAL_LIMITS（当前 24/12），否则"按上限截断"断言失去意义
+      sections: Array.from({ length: 30 }, (_, index) => ({ id: `s-${index + 1}`, title: `章节${index + 1}`, summary: '' })),
+      keyPoints: Array.from({ length: 30 }, (_, index) => ({ text: `要点${index + 1}`, cite: `原文${index + 1}`, sourceUrl: 'attachment://guide.txt' })),
       ...overrides,
     },
     provenance: [],
