@@ -572,7 +572,7 @@ function recGateDetail(completion: SkillCompletion): string {
   text-overflow: ellipsis;
 }
 .sk-name-desc {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   line-height: 1.5;
   font-family: inherit;
@@ -622,21 +622,21 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-card--idle .sk-card__dot { background: #c3cede; }
 .sk-card--error .sk-card__dot { background: var(--mk-red); animation: sk-blink 1.2s ease infinite; }
 @keyframes sk-blink { 50% { opacity: 0.3; } }
-.sk-card__cat { font-size: var(--mk-fs-11); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mk-faint); }
-.sk-card__flag { margin-left: auto; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-red); }
+.sk-card__cat { font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mk-faint); }
+.sk-card__flag { margin-left: auto; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-red); }
 .sk-card--idle .sk-card__flag { color: var(--mk-faint); }
 
 /* 英文原名（id）主行 + 中文解释副行 */
 .sk-card__name {
   font-family: var(--mk-mono);
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .sk-card__id {
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   line-height: 1.5;
   overflow: hidden;
@@ -647,7 +647,7 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-card__stats {
   display: flex;
   justify-content: space-between;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   font-variant-numeric: tabular-nums;
   border-top: 1px dashed var(--mk-line);
@@ -668,7 +668,7 @@ function recGateDetail(completion: SkillCompletion): string {
   border-radius: 999px;
   background: var(--mk-line);
   color: var(--mk-muted);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -685,30 +685,30 @@ function recGateDetail(completion: SkillCompletion): string {
 /* 大屏档位（mk 体系：2000 ≈×1.15，2800 ≈×1.17，3600 ≈×1.3） */
 @media (min-width: 2000px) {
   .sk-card__cat,
-  .sk-card__flag { font-size: var(--mk-fs-12); }
+  .sk-card__flag { font-size: var(--mk-fs-micro); }
   .sk-dot { width: 10px; height: 10px; }
-  .sk-agent-tag { font-size: var(--mk-fs-12_5); padding: 3px 11px; }
+  .sk-agent-tag { font-size: var(--mk-fs-micro); padding: 3px 11px; }
 
-  .sk-id-main { font-size: 13.5px; }
-  .sk-name-desc { font-size: var(--mk-fs-13); }
+  .sk-id-main { font-size: var(--mk-fs-micro); }
+  .sk-name-desc { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .sk-card__cat,
-  .sk-card__flag { font-size: var(--mk-fs-14); }
+  .sk-card__flag { font-size: var(--mk-fs-micro); }
   .sk-dot { width: 12px; height: 12px; }
-  .sk-agent-tag { font-size: 14.5px; padding: 4px 13px; }
+  .sk-agent-tag { font-size: var(--mk-fs-micro); padding: 4px 13px; }
 
-  .sk-id-main { font-size: var(--mk-fs-16); }
-  .sk-name-desc { font-size: 15.5px; }
+  .sk-id-main { font-size: var(--mk-fs-micro); }
+  .sk-name-desc { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .sk-card__cat,
-  .sk-card__flag { font-size: 16.5px; }
+  .sk-card__flag { font-size: var(--mk-fs-body); }
   .sk-dot { width: 14px; height: 14px; }
-  .sk-agent-tag { font-size: 17px; padding: 5px 15px; }
+  .sk-agent-tag { font-size: var(--mk-fs-body); padding: 5px 15px; }
 
-  .sk-id-main { font-size: 18.5px; }
-  .sk-name-desc { font-size: var(--mk-fs-18); }
+  .sk-id-main { font-size: var(--mk-fs-emphasis); }
+  .sk-name-desc { font-size: var(--mk-fs-body); }
 }
 
 /* ================= 暗色模式（D1 补完）：Skill 运行 ================= */

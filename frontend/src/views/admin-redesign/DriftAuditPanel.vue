@@ -140,7 +140,7 @@ watch(() => props.stage, () => {
 /* 折叠头走 .mk-section__summary（shared.css）；展开态的底分隔线是本页特性，保留 */
 .fdp__box[open] > .mk-section__summary { border-bottom: 1px solid var(--mk-line, #e6ebf4); }
 .fdp__guide { display: grid; gap: 8px; padding: 12px 14px; }
-.fdp__guide-text { margin: 0; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-12_5); line-height: 1.6; }
+.fdp__guide-text { margin: 0; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); line-height: 1.6; }
 .fdp__guide-file {
   margin: 0;
   padding: 8px 12px;
@@ -148,11 +148,11 @@ watch(() => props.stage, () => {
   border-radius: 9px;
   background: var(--mk-blue-bg, #eff6ff);
   color: var(--mk-blue, #2c63d0);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
 }
-.fdp__guide-file .mono { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-blue, #2c63d0); }
-.fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: var(--mk-fs-12); background: #f0f2f5; padding: 1px 6px; border-radius: 5px; }
+.fdp__guide-file .mono { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue, #2c63d0); }
+.fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: var(--mk-fs-micro); background: #f0f2f5; padding: 1px 6px; border-radius: 5px; }
 .fdp__drift-list { margin: 0; padding: 6px 14px 12px; list-style: none; }
 .fdp__drift-item {
   display: flex;
@@ -163,7 +163,7 @@ watch(() => props.stage, () => {
   border: 1px solid var(--mk-line, #e6ebf4);
   border-radius: 9px;
   background: #fafbfd;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   flex-wrap: wrap;
 }
 .fdp__drift-kind {
@@ -172,14 +172,14 @@ watch(() => props.stage, () => {
   border-radius: 999px;
   background: var(--mk-amber-bg, #fffbeb);
   color: var(--mk-amber, #b45309);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .fdp__drift-key { font-weight: 700; color: var(--mk-ink, #1a2a44); }
 .fdp__drift-field { color: var(--mk-faint, var(--mk-faint-soft)); }
-.fdp__drift-val { font-size: var(--mk-fs-12); }
+.fdp__drift-val { font-size: var(--mk-fs-micro); }
 .fdp__drift-val--seed { color: var(--mk-muted, #5b6577); }
 .fdp__drift-val--db { color: var(--mk-blue, #2c63d0); font-weight: 600; }
 .fdp__changes-list { margin: 0; padding: 8px 14px 12px; list-style: none; }
@@ -192,7 +192,7 @@ watch(() => props.stage, () => {
   border: 1px solid var(--mk-line, #e6ebf4);
   border-radius: 9px;
   background: #fafbfd;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   flex-wrap: wrap;
 }
 .fdp__change-kind {
@@ -201,7 +201,7 @@ watch(() => props.stage, () => {
   border-radius: 999px;
   background: #eef2fa;
   color: var(--mk-muted, #5b6577);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -210,29 +210,29 @@ watch(() => props.stage, () => {
 
 @media (min-width: 2000px) {
   .fdp__guide { padding: 14px 17px; }
-  .fdp__guide-text { font-size: var(--mk-fs-14); }
-  .fdp__guide-file { font-size: var(--mk-fs-14); padding: 9px 14px; }
-  .fdp__guide-file .mono { font-size: 13.5px; }
-  .fdp__guide-text code { font-size: var(--mk-fs-13); }
-  .fdp__drift-item { font-size: 13.5px; padding: 8px 12px; }
-  .fdp__drift-kind { font-size: var(--mk-fs-12); padding: 1px 10px; }
-  .fdp__drift-val { font-size: var(--mk-fs-13); }
-  .fdp__change { font-size: 13.5px; padding: 8px 12px; }
-  .fdp__change-kind { font-size: var(--mk-fs-12); padding: 1px 10px; }
+  .fdp__guide-text { font-size: var(--mk-fs-body); }
+  .fdp__guide-file { font-size: var(--mk-fs-body); padding: 9px 14px; }
+  .fdp__guide-file .mono { font-size: var(--mk-fs-micro); }
+  .fdp__guide-text code { font-size: var(--mk-fs-micro); }
+  .fdp__drift-item { font-size: var(--mk-fs-micro); padding: 8px 12px; }
+  .fdp__drift-kind { font-size: var(--mk-fs-micro); padding: 1px 10px; }
+  .fdp__drift-val { font-size: var(--mk-fs-micro); }
+  .fdp__change { font-size: var(--mk-fs-micro); padding: 8px 12px; }
+  .fdp__change-kind { font-size: var(--mk-fs-micro); padding: 1px 10px; }
   .fdp__empty { padding: 24px; }
 }
 
 @media (min-width: 2800px) {
   .fdp__guide { padding: 17px 21px; }
-  .fdp__guide-text { font-size: 16.5px; }
-  .fdp__guide-file { font-size: 16.5px; padding: 11px 17px; }
-  .fdp__guide-file .mono { font-size: var(--mk-fs-16); }
-  .fdp__guide-text code { font-size: 15.5px; }
-  .fdp__drift-item { font-size: var(--mk-fs-16); padding: 10px 15px; }
-  .fdp__drift-kind { font-size: var(--mk-fs-14); padding: 2px 12px; }
-  .fdp__drift-val { font-size: 15.5px; }
-  .fdp__change { font-size: var(--mk-fs-16); padding: 10px 15px; }
-  .fdp__change-kind { font-size: var(--mk-fs-14); padding: 2px 12px; }
+  .fdp__guide-text { font-size: var(--mk-fs-body); }
+  .fdp__guide-file { font-size: var(--mk-fs-body); padding: 11px 17px; }
+  .fdp__guide-file .mono { font-size: var(--mk-fs-micro); }
+  .fdp__guide-text code { font-size: var(--mk-fs-micro); }
+  .fdp__drift-item { font-size: var(--mk-fs-micro); padding: 10px 15px; }
+  .fdp__drift-kind { font-size: var(--mk-fs-micro); padding: 2px 12px; }
+  .fdp__drift-val { font-size: var(--mk-fs-micro); }
+  .fdp__change { font-size: var(--mk-fs-micro); padding: 10px 15px; }
+  .fdp__change-kind { font-size: var(--mk-fs-micro); padding: 2px 12px; }
   .fdp__empty { padding: 28px; }
 }
 

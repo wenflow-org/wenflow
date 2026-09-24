@@ -131,9 +131,9 @@ defineExpose({ open, state })
   border-radius: 10px;
   background: #fafbfd;
   border: 1px solid #e8ecf2;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
-.vl-reclaim-id { font-size: var(--mk-fs-11); color: var(--mk-muted, #5b6577); }
+.vl-reclaim-id { font-size: var(--mk-fs-micro); color: var(--mk-muted, #5b6577); }
 .vl-reclaim-stale { margin-left: auto; color: var(--mk-red, #dc2626); font-weight: 700; white-space: nowrap; }
 
 /* 弹窗内步骤/结果提示：mk-alert 形态，此处只留边距（本组件独立复制一份） */
@@ -143,24 +143,24 @@ defineExpose({ open, state })
   border-radius: 10px;
   background: #f4f7fc;
   color: var(--mk-muted, #5b6577);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   line-height: 1.5;
 }
 
 @media (min-width: 2000px) {
-  .vl-steps { font-size: var(--mk-fs-13); padding: 9px 12px; }
-  .vl-reclaim-item { font-size: 13.5px; padding: 8px 12px; }
-  .vl-reclaim-id { font-size: var(--mk-fs-12_5); }
+  .vl-steps { font-size: var(--mk-fs-micro); padding: 9px 12px; }
+  .vl-reclaim-item { font-size: var(--mk-fs-micro); padding: 8px 12px; }
+  .vl-reclaim-id { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .vl-steps { font-size: 15.5px; padding: 11px 14px; }
-  .vl-reclaim-item { font-size: 15.5px; padding: 9px 14px; }
-  .vl-reclaim-id { font-size: 14.5px; }
+  .vl-steps { font-size: var(--mk-fs-micro); padding: 11px 14px; }
+  .vl-reclaim-item { font-size: var(--mk-fs-micro); padding: 9px 14px; }
+  .vl-reclaim-id { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
-  .vl-steps { font-size: var(--mk-fs-18); padding: 13px 16px; }
-  .vl-reclaim-item { font-size: var(--mk-fs-18); padding: 11px 16px; }
-  .vl-reclaim-id { font-size: 17px; }
+  .vl-steps { font-size: var(--mk-fs-body); padding: 13px 16px; }
+  .vl-reclaim-item { font-size: var(--mk-fs-body); padding: 11px 16px; }
+  .vl-reclaim-id { font-size: var(--mk-fs-body); }
 }
 
 /* 暗色模式：回收清单（硬编码浅底） */

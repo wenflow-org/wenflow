@@ -2106,7 +2106,7 @@ async function quietReload(id: string) {
   border-radius: 12px;
   background: var(--mk-surface-2);
 }
-.vp-pk > .mk-field__label { font-size: var(--mk-fs-12); color: var(--mk-faint); font-weight: 700; }
+.vp-pk > .mk-field__label { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
 .vp-pk .mk-field { margin-bottom: 0; }
 
 .vp {
@@ -2123,7 +2123,7 @@ async function quietReload(id: string) {
 .vp-avatar--5 { background: #06b6d4; }
 .vp-avatar--6 { background: #ec4899; }
 .vp-avatar--7 { background: #64748b; }
-.vp-top__level { font-size: var(--mk-fs-12); color: var(--mk-faint); font-weight: 700; }
+.vp-top__level { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
 /* 页头主操作走 .mk-entity__actions（shared.css） */
 /* 生命周期状态徽章（vlab-controls 唯一语义：进行中/已暂停/已失败/已终止/已完成…） */
 .vp-life {
@@ -2134,7 +2134,7 @@ async function quietReload(id: string) {
   border-radius: 999px;
   border: 1px solid var(--mk-line);
   background: #fff;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   color: var(--mk-ink);
   white-space: nowrap;
@@ -2148,7 +2148,7 @@ async function quietReload(id: string) {
 /* 故事池空态（与全站空数据态同一语言） */
 /* 身份区：长期倾向（随名字走，不再挤统计条） */
 .vp-top__goal {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-muted);
   background: var(--mk-surface-2);
@@ -2168,10 +2168,10 @@ async function quietReload(id: string) {
 .vp-tabsrow__ops { margin-left: auto; }
 /* 空态文案基类：原先只有 ≥2000px 的字号/内边距覆写、缺基础规则，导致故事池与
    运行记录的空文案没有颜色与内边距（审计 附 A #6）。与 .ld-none / .ud-none 同规格。 */
-.vp-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-12_5); }
+.vp-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .vp-tab__count {
   font-family: var(--mk-mono, ui-monospace, monospace);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   margin-left: 3px;
 }
@@ -2187,7 +2187,7 @@ async function quietReload(id: string) {
 .vp-hero__story {
   margin: 0;
   color: var(--mk-muted);
-  font-size: var(--mk-fs-14);
+  font-size: var(--mk-fs-body);
   line-height: 1.8;
 }
 .vp-traits { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -2196,7 +2196,7 @@ async function quietReload(id: string) {
   border-radius: 999px;
   background: var(--mk-surface-2);
   color: var(--mk-muted);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
 }
 .vp-goal {
@@ -2206,8 +2206,8 @@ async function quietReload(id: string) {
   border-radius: 12px;
   background: var(--mk-blue-bg);
 }
-.vp-goal span { font-size: var(--mk-fs-12); color: var(--mk-faint); font-weight: 700; }
-.vp-goal strong { color: var(--mk-blue); font-size: var(--mk-fs-14); line-height: 1.45; }
+.vp-goal span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
+.vp-goal strong { color: var(--mk-blue); font-size: var(--mk-fs-body); line-height: 1.45; }
 
 .vp-profile { display: grid; }
 .vp-profile__row {
@@ -2216,7 +2216,7 @@ async function quietReload(id: string) {
   gap: 14px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--mk-surface-2);
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   align-items: start;
 }
 .vp-profile__row:last-child { border-bottom: none; }
@@ -2320,7 +2320,7 @@ async function quietReload(id: string) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   cursor: pointer;
   white-space: nowrap;
@@ -2340,7 +2340,7 @@ async function quietReload(id: string) {
   min-width: 0;
 }
 .vp-story__title {
-  font-size: var(--mk-fs-14);
+  font-size: var(--mk-fs-body);
   font-weight: 800;
   line-height: 1.4;
   min-width: 0;
@@ -2349,7 +2349,7 @@ async function quietReload(id: string) {
   white-space: nowrap;
 }
 .vp-story__budget-badge {
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-amber, #b7791f);
   background: #fff7e8;
@@ -2362,7 +2362,7 @@ async function quietReload(id: string) {
 /* 简述：单行截断，次要文字色 */
 .vp-story__outline {
   margin: 0;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   line-height: 1.5;
   min-width: 0;
@@ -2379,22 +2379,22 @@ async function quietReload(id: string) {
   min-width: 0;
 }
 .vp-story__stats-item {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   font-weight: 600;
   white-space: nowrap;
 }
 .vp-story__stats-item:first-child::before {
   content: '🕐 ';
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
 }
 .vp-story__stats-item:nth-child(2)::before {
   content: '📈 ';
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
 }
 /* 最近结果：色调徽标 */
 .vp-story__latest {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   white-space: nowrap;
   flex-shrink: 0;
@@ -2422,10 +2422,10 @@ async function quietReload(id: string) {
   gap: 10px;
   flex-shrink: 0;
 }
-.vp-story__ops .mk-link { font-size: var(--mk-fs-12); }
+.vp-story__ops .mk-link { font-size: var(--mk-fs-micro); }
 .vp-story__chevron {
   color: #c4ccd9;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   flex-shrink: 0;
 }
 
@@ -2441,7 +2441,7 @@ async function quietReload(id: string) {
   gap: 4px;
   padding: 3px 10px;
   border-radius: 999px;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -2455,7 +2455,7 @@ async function quietReload(id: string) {
 .vp-run-flow { display: grid; gap: 14px; padding: 12px; }
 .vp-run-day { display: grid; gap: 6px; }
 .vp-run-day__label {
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   letter-spacing: 0.06em;
   color: var(--mk-faint);
@@ -2473,9 +2473,9 @@ async function quietReload(id: string) {
   transition: border-color 0.12s ease;
 }
 .vp-run-row:hover { border-color: rgba(44, 99, 208, 0.35); }
-.vp-run-row__time { font-size: var(--mk-fs-12); color: var(--mk-faint); white-space: nowrap; }
+.vp-run-row__time { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 .vp-run-row__story {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-ink);
   min-width: 0;
@@ -2484,7 +2484,7 @@ async function quietReload(id: string) {
   white-space: nowrap;
 }
 .vp-run-row__ops { display: flex; align-items: center; gap: 12px; }
-.vp-run-row__ops .mk-link { font-size: var(--mk-fs-12); }
+.vp-run-row__ops .mk-link { font-size: var(--mk-fs-micro); }
 
 
 .vp-fallback {
@@ -2497,7 +2497,7 @@ async function quietReload(id: string) {
   background: var(--mk-amber-bg);
   border: 1px solid rgba(180, 83, 9, 0.25);
   color: var(--mk-amber);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
 
@@ -2510,19 +2510,19 @@ async function quietReload(id: string) {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .vp-top__level { font-size: 13.5px; }
-  .vp-hero__story { font-size: 16.5px; }
-  .vp-trait { font-size: var(--mk-fs-14); }
-  .vp-goal span { font-size: 13.5px; }
-  .vp-goal strong { font-size: 16.5px; }
-  .vp-profile__row { font-size: var(--mk-fs-15); }
-  .vp-story__title { font-size: var(--mk-fs-15); }
-  .vp-story__outline { font-size: 13.5px; }
-  .vp-story__stats-item { font-size: var(--mk-fs-13); }
-  .vp-story__latest { font-size: var(--mk-fs-13); }
-  .vp-none { font-size: var(--mk-fs-15); }
-  .vp-tab__count { font-size: var(--mk-fs-13); margin-left: 4px; }
-  .vp-fallback { font-size: 14.5px; padding: 12px 16px; }
+  .vp-top__level { font-size: var(--mk-fs-micro); }
+  .vp-hero__story { font-size: var(--mk-fs-emphasis); }
+  .vp-trait { font-size: var(--mk-fs-body); }
+  .vp-goal span { font-size: var(--mk-fs-micro); }
+  .vp-goal strong { font-size: var(--mk-fs-emphasis); }
+  .vp-profile__row { font-size: var(--mk-fs-body); }
+  .vp-story__title { font-size: var(--mk-fs-body); }
+  .vp-story__outline { font-size: var(--mk-fs-micro); }
+  .vp-story__stats-item { font-size: var(--mk-fs-micro); }
+  .vp-story__latest { font-size: var(--mk-fs-micro); }
+  .vp-none { font-size: var(--mk-fs-body); }
+  .vp-tab__count { font-size: var(--mk-fs-micro); margin-left: 4px; }
+  .vp-fallback { font-size: var(--mk-fs-body); padding: 12px 16px; }
   .vp-trait { padding: 5px 13px; }
   .vp-goal { padding: 14px 16px; }
   .vp-profile__row { grid-template-columns: 126px minmax(0, 1fr); padding: 14px 21px; }
@@ -2536,19 +2536,19 @@ async function quietReload(id: string) {
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
-  .vp-top__level { font-size: var(--mk-fs-16); }
-  .vp-hero__story { font-size: 19.5px; }
-  .vp-trait { font-size: 16.5px; }
-  .vp-goal span { font-size: var(--mk-fs-16); }
-  .vp-goal strong { font-size: 19.5px; }
-  .vp-profile__row { font-size: 17.5px; }
-  .vp-story__title { font-size: 17.5px; }
-  .vp-story__outline { font-size: var(--mk-fs-16); }
-  .vp-story__stats-item { font-size: 15.5px; }
-  .vp-story__latest { font-size: 15.5px; }
-  .vp-none { font-size: 17.5px; }
-  .vp-tab__count { font-size: 15.5px; margin-left: 5px; }
-  .vp-fallback { font-size: 17px; padding: 14px 19px; }
+  .vp-top__level { font-size: var(--mk-fs-micro); }
+  .vp-hero__story { font-size: var(--mk-fs-emphasis); }
+  .vp-trait { font-size: var(--mk-fs-body); }
+  .vp-goal span { font-size: var(--mk-fs-micro); }
+  .vp-goal strong { font-size: var(--mk-fs-emphasis); }
+  .vp-profile__row { font-size: var(--mk-fs-body); }
+  .vp-story__title { font-size: var(--mk-fs-body); }
+  .vp-story__outline { font-size: var(--mk-fs-micro); }
+  .vp-story__stats-item { font-size: var(--mk-fs-micro); }
+  .vp-story__latest { font-size: var(--mk-fs-micro); }
+  .vp-none { font-size: var(--mk-fs-body); }
+  .vp-tab__count { font-size: var(--mk-fs-micro); margin-left: 5px; }
+  .vp-fallback { font-size: var(--mk-fs-body); padding: 14px 19px; }
   .vp-trait { padding: 6px 15px; }
   .vp-goal { padding: 16px 19px; }
   .vp-profile__row { grid-template-columns: 148px minmax(0, 1fr); padding: 16px 24px; }
@@ -2561,19 +2561,19 @@ async function quietReload(id: string) {
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
-  .vp-top__level { font-size: 18.5px; }
+  .vp-top__level { font-size: var(--mk-fs-emphasis); }
   .vp-hero__story { font-size: 22.5px; }
-  .vp-trait { font-size: 19px; }
-  .vp-goal span { font-size: 18.5px; }
+  .vp-trait { font-size: var(--mk-fs-emphasis); }
+  .vp-goal span { font-size: var(--mk-fs-emphasis); }
   .vp-goal strong { font-size: 22.5px; }
-  .vp-profile__row { font-size: 20.5px; }
-  .vp-story__title { font-size: 20.5px; }
-  .vp-story__outline { font-size: 19px; }
-  .vp-story__stats-item { font-size: 18.5px; }
-  .vp-story__latest { font-size: var(--mk-fs-18); }
-  .vp-none { font-size: 20.5px; }
-  .vp-tab__count { font-size: var(--mk-fs-18); margin-left: 6px; }
-  .vp-fallback { font-size: var(--mk-fs-20); padding: 16px 22px; }
+  .vp-profile__row { font-size: var(--mk-fs-emphasis); }
+  .vp-story__title { font-size: var(--mk-fs-emphasis); }
+  .vp-story__outline { font-size: var(--mk-fs-emphasis); }
+  .vp-story__stats-item { font-size: var(--mk-fs-emphasis); }
+  .vp-story__latest { font-size: var(--mk-fs-body); }
+  .vp-none { font-size: var(--mk-fs-emphasis); }
+  .vp-tab__count { font-size: var(--mk-fs-body); margin-left: 6px; }
+  .vp-fallback { font-size: var(--mk-fs-emphasis); padding: 16px 22px; }
   .vp-trait { padding: 7px 18px; }
   .vp-goal { padding: 19px 22px; }
   .vp-profile__row { grid-template-columns: 174px minmax(0, 1fr); padding: 19px 28px; }
@@ -2601,7 +2601,7 @@ async function quietReload(id: string) {
   gap: 2px;
 }
 .vp-memory__stat strong { font-size: var(--mk-fs-20); line-height: 1.2; color: var(--mk-green); }
-.vp-memory__stat span { font-size: var(--mk-fs-12); color: var(--mk-faint, #8a94a6); }
+.vp-memory__stat span { font-size: var(--mk-fs-micro); color: var(--mk-faint, #8a94a6); }
 .vp-memory__stat--warn strong { color: var(--mk-amber); }
 .vp-memory__group {
   padding: 4px 18px 18px;
@@ -2614,7 +2614,7 @@ async function quietReload(id: string) {
 }
 .vp-memory__group-title {
   margin: 0;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 700;
   color: var(--mk-ink);
 }
@@ -2628,7 +2628,7 @@ async function quietReload(id: string) {
   align-items: center;
   padding: 5px 12px;
   border-radius: 999px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   line-height: 1.4;
   border: 1px solid transparent;
@@ -2654,13 +2654,13 @@ async function quietReload(id: string) {
   gap: 6px;
 }
 .vp-memory__retention {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint, #8a94a6);
 }
 /* 记忆保持曲线（Q2/Q8）：说明 + 概念图例（与曲线同序取色）+ ECharts */
 .vp-memory__curve-hint {
   margin: 0 0 10px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   line-height: 1.6;
 }
@@ -2674,7 +2674,7 @@ async function quietReload(id: string) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   min-width: 0;
 }
 .vp-memory__curve-dot {
@@ -2719,7 +2719,7 @@ async function quietReload(id: string) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   flex-shrink: 0;
   margin-top: 2px;
@@ -2729,13 +2729,13 @@ async function quietReload(id: string) {
   gap: 3px;
   min-width: 0;
 }
-.vp-memory__completed-body strong { font-size: var(--mk-fs-13); color: var(--mk-ink); }
+.vp-memory__completed-body strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
 .vp-memory__deliverable {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
 .vp-memory__delta {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint, #8a94a6);
   font-style: italic;
 }

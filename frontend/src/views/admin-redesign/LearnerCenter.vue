@@ -481,7 +481,7 @@ async function recomputeAll() {
 /* 趋势列（P0-1 信号可视化）：箭头 + 迷你条 + 文字（无历史序列时的三态可视化；
    lssHistory 暴露后可升级真 sparkline） */
 .trend { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.lc-trend { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: var(--mk-fs-12); color: var(--mk-muted); white-space: nowrap; cursor: help; }
+.lc-trend { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; cursor: help; }
 .lc-trend--up { color: var(--mk-green); }
 .lc-trend--down { color: var(--mk-red); }
 .lc-trend--flat { color: var(--mk-muted); }
@@ -498,18 +498,18 @@ async function recomputeAll() {
 .lc-trend--down .lc-trend__bar--2 { height: 8px; }
 .lc-trend--down .lc-trend__bar--3 { height: 11px; opacity: 0.85; }
 .progress-title { font-weight: 600; }
-.risk-text { color: var(--mk-amber); font-size: var(--mk-fs-12_5); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.risk-text { color: var(--mk-amber); font-size: var(--mk-fs-micro); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 更新列：相对时间不换行（"4 分钟前"拆行问题） */
-.lc-updated { white-space: nowrap; color: var(--mk-faint); font-size: var(--mk-fs-12); }
+.lc-updated { white-space: nowrap; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .conf { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-muted); cursor: help; }
-.conf__lack { font-style: normal; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+.conf__lack { font-style: normal; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
 .conf--low { color: var(--mk-amber); }
 
 @media (min-width: 2000px) {
-  .risk-text { font-size: var(--mk-fs-14); }
+  .risk-text { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
-  .risk-text { font-size: 16.5px; }
+  .risk-text { font-size: var(--mk-fs-body); }
 }
 
 /* ================= C2 干预动线 ================= */
@@ -527,8 +527,8 @@ html[data-theme='dark'] .lc-intervene--hot { color: #fbbf24; }
   color: var(--mk-amber);
 }
 .lc-iv__risk--hot { background: var(--mk-red-bg); border-color: rgba(220, 38, 38, 0.25); color: var(--mk-red); }
-.lc-iv__risk strong { font-size: var(--mk-fs-12); font-weight: 800; letter-spacing: 0.04em; }
-.lc-iv__risk span { font-size: var(--mk-fs-12_5); line-height: 1.6; }
+.lc-iv__risk strong { font-size: var(--mk-fs-micro); font-weight: 800; letter-spacing: 0.04em; }
+.lc-iv__risk span { font-size: var(--mk-fs-micro); line-height: 1.6; }
 .lc-iv__actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.lc-iv__hint { margin: 0; font-size: var(--mk-fs-12); color: var(--mk-faint); line-height: 1.6; }
+.lc-iv__hint { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.6; }
 </style>

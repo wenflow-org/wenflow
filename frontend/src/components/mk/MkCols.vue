@@ -91,7 +91,7 @@ function toggle(key: string) {
   gap: 8px;
   padding: 6px 8px;
   border-radius: 7px;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   cursor: pointer;
   white-space: nowrap;
@@ -108,7 +108,7 @@ html[data-theme='dark'] .mk-cols__item:hover { background: #252627; }
   border-radius: 7px;
   border-top: 1px dashed var(--mk-line);
   font: inherit;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-blue);
   cursor: pointer;

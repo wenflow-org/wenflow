@@ -283,20 +283,20 @@ function close() { emit('close') }
 }
 @keyframes agd-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .agd__title { display: grid; gap: 2px; }
-.agd__title strong { font-size: var(--mk-fs-15); color: var(--mk-ink, #1a2a44); }
-.agd__subtitle { font-size: var(--mk-fs-12); color: var(--mk-faint, var(--mk-faint-soft)); }
+.agd__title strong { font-size: var(--mk-fs-emphasis); color: var(--mk-ink, #1a2a44); }
+.agd__subtitle { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); }
 .agd__search { display: grid; gap: 8px; padding: 6px 18px 12px; border-bottom: 1px solid var(--mk-line, #e6ebf4); }
 /* 滚动修复 #10：分类锚点导航条（横向滚动小胶囊） */
 .agd__nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
 .agd__nav-item {
   flex-shrink: 0;
   padding: 2px 10px; border: 1px solid transparent; border-radius: 999px;
-  background: #f1f5fb; color: var(--mk-muted, #5b6577); font: inherit; font-size: var(--mk-fs-11); font-weight: 700; cursor: pointer;
+  background: #f1f5fb; color: var(--mk-muted, #5b6577); font: inherit; font-size: var(--mk-fs-micro); font-weight: 700; cursor: pointer;
 }
 .agd__nav-item:hover { color: var(--mk-blue, #2c63d0); }
 .agd__nav-item.is-active { background: #dbe9ff; color: var(--mk-accent-deep, #1f57cc); border-color: rgba(44, 99, 208, 0.35); }
 .agd__body { overflow-y: auto; padding: 6px 18px 20px; }
-.agd__loading { padding: 30px 0; text-align: center; color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-12_5); }
+.agd__loading { padding: 30px 0; text-align: center; color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-micro); }
 .agd__section { margin-top: 14px; }
 /* 滚动修复 #10：分类标题吸顶（抽屉内部滚动时分区标题常驻顶部） */
 .agd__section-title {
@@ -306,7 +306,7 @@ function close() { emit('close') }
   margin: 0 0 6px;
   padding: 4px 0 6px;
   background: #fff;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -314,53 +314,53 @@ function close() { emit('close') }
 }
 .agd__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
 .agd__term { display: grid; gap: 1px; padding: 7px 10px; border-radius: 9px; background: #f8fafd; }
-.agd__term-name { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-ink, #1a2a44); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-.agd__term-en { font-size: var(--mk-fs-11); color: var(--mk-faint, var(--mk-faint-soft)); font-weight: 600; }
-.agd__term-def { font-size: var(--mk-fs-12); color: var(--mk-muted, #5b6577); line-height: 1.5; }
+.agd__term-name { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink, #1a2a44); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.agd__term-en { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); font-weight: 600; }
+.agd__term-def { font-size: var(--mk-fs-micro); color: var(--mk-muted, #5b6577); line-height: 1.5; }
 .agd__term-where { font-style: normal; color: var(--mk-blue, #2c63d0); }
-.agd__empty { padding: 8px 0; color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-12); }
+.agd__empty { padding: 8px 0; color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-micro); }
 
 @media (min-width: 2000px) {
   .agd__panel { width: var(--mk-drawer-w-lg, 700px); }
-  .agd__title strong { font-size: 17px; }
-  .agd__subtitle { font-size: 13.5px; }
+  .agd__title strong { font-size: var(--mk-fs-emphasis); }
+  .agd__subtitle { font-size: var(--mk-fs-micro); }
   .agd__search { padding: 8px 24px 14px; }
-  .agd__nav-item { font-size: var(--mk-fs-12_5); }
+  .agd__nav-item { font-size: var(--mk-fs-micro); }
   .agd__body { padding: 8px 24px 24px; }
-  .agd__loading { font-size: 14.5px; }
-  .agd__section-title { font-size: var(--mk-fs-13); }
-  .agd__term-name { font-size: var(--mk-fs-15); }
-  .agd__term-en { font-size: var(--mk-fs-12_5); }
-  .agd__term-def { font-size: 13.5px; }
-  .agd__empty { font-size: var(--mk-fs-14); }
+  .agd__loading { font-size: var(--mk-fs-body); }
+  .agd__section-title { font-size: var(--mk-fs-micro); }
+  .agd__term-name { font-size: var(--mk-fs-body); }
+  .agd__term-en { font-size: var(--mk-fs-micro); }
+  .agd__term-def { font-size: var(--mk-fs-micro); }
+  .agd__empty { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
   .agd__panel { width: var(--mk-drawer-w-xl, 880px); }
-  .agd__title strong { font-size: 19px; }
-  .agd__subtitle { font-size: var(--mk-fs-16); }
+  .agd__title strong { font-size: var(--mk-fs-emphasis); }
+  .agd__subtitle { font-size: var(--mk-fs-micro); }
   .agd__search { padding: 10px 30px 16px; }
-  .agd__nav-item { font-size: 14.5px; }
+  .agd__nav-item { font-size: var(--mk-fs-micro); }
   .agd__body { padding: 10px 30px 30px; }
-  .agd__loading { font-size: 17px; }
-  .agd__section-title { font-size: 15.5px; }
-  .agd__term-name { font-size: var(--mk-fs-18); }
-  .agd__term-en { font-size: var(--mk-fs-15); }
-  .agd__term-def { font-size: var(--mk-fs-16); }
-  .agd__empty { font-size: 16.5px; }
+  .agd__loading { font-size: var(--mk-fs-body); }
+  .agd__section-title { font-size: var(--mk-fs-micro); }
+  .agd__term-name { font-size: var(--mk-fs-body); }
+  .agd__term-en { font-size: var(--mk-fs-micro); }
+  .agd__term-def { font-size: var(--mk-fs-micro); }
+  .agd__empty { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 3600px) {
   .agd__panel { width: var(--mk-drawer-w-xxl, 1040px); }
-  .agd__title strong { font-size: 22px; }
-  .agd__subtitle { font-size: 19px; }
+  .agd__title strong { font-size: var(--mk-fs-emphasis); }
+  .agd__subtitle { font-size: var(--mk-fs-emphasis); }
   .agd__search { padding: 12px 36px 18px; }
-  .agd__nav-item { font-size: 17px; }
+  .agd__nav-item { font-size: var(--mk-fs-body); }
   .agd__body { padding: 12px 36px 36px; }
-  .agd__loading { font-size: var(--mk-fs-20); }
-  .agd__section-title { font-size: 18.5px; }
-  .agd__term-name { font-size: 21.5px; }
-  .agd__term-en { font-size: 17.5px; }
-  .agd__term-def { font-size: 19px; }
-  .agd__empty { font-size: 19.5px; }
+  .agd__loading { font-size: var(--mk-fs-emphasis); }
+  .agd__section-title { font-size: var(--mk-fs-emphasis); }
+  .agd__term-name { font-size: var(--mk-fs-emphasis); }
+  .agd__term-en { font-size: var(--mk-fs-body); }
+  .agd__term-def { font-size: var(--mk-fs-emphasis); }
+  .agd__empty { font-size: var(--mk-fs-emphasis); }
 }
 
 /* ================= 暗色模式（D1 补完）：术语表抽屉 ================= */

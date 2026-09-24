@@ -281,7 +281,7 @@ function openPanel() { recOpen.value = true; }
 .sk-rec[open] > .sk-rec__summary::before { transform: rotate(90deg); }
 .sk-rec-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px 4px; }
 .sk-rec__title { display: flex; flex-direction: column; gap: 2px; }
-.sk-rec__title strong { font-size: var(--mk-fs-14); }
+.sk-rec__title strong { font-size: var(--mk-fs-body); }
 .sk-rec__clear { width: fit-content; }
 .sk-rec-flash { animation: sk-rec-flash 1.4s ease 2; }
 @keyframes sk-rec-flash { 0%,100% { background: transparent; } 50% { background: #fdf3e3; } }
@@ -289,27 +289,27 @@ function openPanel() { recOpen.value = true; }
 .sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
 .sk-pill--bad { color: var(--mk-red-strong); background: #fdecec; }
 .sk-pill--warn { color: var(--mk-amber); background: #fdf3e3; }
-.sk-rec__refresh { border: 1px solid var(--mk-line); background: #fff; border-radius: 8px; padding: 3px 10px; font: inherit; font-size: var(--mk-fs-12); color: var(--mk-muted); cursor: pointer; white-space: nowrap; }
+.sk-rec__refresh { border: 1px solid var(--mk-line); background: #fff; border-radius: 8px; padding: 3px 10px; font: inherit; font-size: var(--mk-fs-micro); color: var(--mk-muted); cursor: pointer; white-space: nowrap; }
 .sk-rec__refresh:hover { border-color: rgba(44,99,208,0.4); color: var(--mk-blue); }
 .sk-rec__refresh:disabled { opacity: 0.5; cursor: default; }
 .sk-rec__skeleton { padding: 12px; }
 .sk-rec-table th, .sk-rec-table td { text-align: left; }
-.sk-rec-yn { font-weight: 700; font-size: var(--mk-fs-13); }
+.sk-rec-yn { font-weight: 700; font-size: var(--mk-fs-body); }
 .sk-rec-yn--ok { color: var(--mk-green); }
 .sk-rec-yn--no { color: var(--mk-red); }
-.sk-rec-tag { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 999px; background: #eef2fa; color: #41516e; font-size: var(--mk-fs-11); font-weight: 600; vertical-align: 1px; }
+.sk-rec-tag { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 999px; background: #eef2fa; color: #41516e; font-size: var(--mk-fs-micro); font-weight: 600; vertical-align: 1px; }
 .sk-rec-tag--bad { background: #fdecec; color: var(--mk-red-strong); }
-.sk-rec-diff { font-size: var(--mk-fs-11); font-weight: 700; }
+.sk-rec-diff { font-size: var(--mk-fs-micro); font-weight: 700; }
 .sk-rec-diff--bad { color: var(--mk-red); }
 .sk-rec-diff--warn { color: var(--mk-amber); }
-.sk-rec-orphans { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px dashed var(--mk-line); font-size: var(--mk-fs-12); color: var(--mk-muted); }
+.sk-rec-orphans { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px dashed var(--mk-line); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .sk-rec-orphans .sk-rec-tag { margin-left: 0; }
 /* 分组行不覆写内边距：单行小字单元格曾因 6px 纵向内边距落到 37px，低于 SPEC §3 的 40px 行高下限。
    跟随 .mk-table td 的档位节奏（9px 起，≥2800 档 14px）后为 43px 且随档位增长。 */
 .sk-rec-group td { background: #f4f7fc; border-bottom: 1px solid var(--mk-line); }
-.sk-rec-group__name { font-family: var(--mk-mono); font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-blue); }
-.sk-rec-group__meta { font-size: var(--mk-fs-11); color: var(--mk-faint); margin-left: 10px; }
-.sk-rec-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--mk-line); font-size: var(--mk-fs-11); }
+.sk-rec-group__name { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue); }
+.sk-rec-group__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); margin-left: 10px; }
+.sk-rec-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--mk-line); font-size: var(--mk-fs-micro); }
 .sk-rec-legend__item { display: inline-flex; align-items: center; gap: 4px; }
 .sk-rec-legend .mk-card__meta { margin-left: auto; }
 

@@ -512,7 +512,7 @@ function expiresLabel(iso: string): string {
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   font: inherit;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-muted);
   cursor: pointer;
@@ -526,17 +526,17 @@ function expiresLabel(iso: string): string {
 @media (min-width: 2000px) {
   .an-body { max-width: 480px; }
   .an-severity { gap: 8px; }
-  .an-sev { padding: 8px 16px; font-size: 13.5px; }
+  .an-sev { padding: 8px 16px; font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .an-body { max-width: 600px; }
   .an-severity { gap: 10px; }
-  .an-sev { padding: 9px 18px; font-size: 15.5px; }
+  .an-sev { padding: 9px 18px; font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：字号继续放大 */
   .an-body { max-width: 720px; }
   .an-severity { gap: 12px; }
-  .an-sev { padding: 11px 22px; font-size: var(--mk-fs-18); }
+  .an-sev { padding: 11px 22px; font-size: var(--mk-fs-body); }
 }
 </style>

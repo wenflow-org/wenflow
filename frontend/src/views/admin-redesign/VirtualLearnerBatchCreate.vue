@@ -203,7 +203,7 @@ defineExpose({ open, task: batchTask, retry, dismiss, toggleDetail })
 .vl-batch-config__count { width: 100px; }
 .vl-batch-config__stories { width: 120px; }
 .vl-batch-config__prefix { flex: 1; min-width: 200px; }
-.vl-req-less { font-style: normal; font-weight: 400; color: var(--mk-faint, #94a3b8); font-size: var(--mk-fs-11); }
+.vl-req-less { font-style: normal; font-weight: 400; color: var(--mk-faint, #94a3b8); font-size: var(--mk-fs-micro); }
 
 /* 弹窗内步骤/结果提示：mk-alert 形态，此处只留边距（本组件独立复制一份） */
 .vl-steps {
@@ -212,16 +212,16 @@ defineExpose({ open, task: batchTask, retry, dismiss, toggleDetail })
   border-radius: 10px;
   background: #f4f7fc;
   color: var(--mk-muted, #5b6577);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   line-height: 1.5;
 }
 @media (min-width: 2000px) {
-  .vl-steps { font-size: var(--mk-fs-13); padding: 9px 12px; }
+  .vl-steps { font-size: var(--mk-fs-micro); padding: 9px 12px; }
 }
 @media (min-width: 2800px) {
-  .vl-steps { font-size: 15.5px; padding: 11px 14px; }
+  .vl-steps { font-size: var(--mk-fs-micro); padding: 11px 14px; }
 }
 @media (min-width: 3600px) {
-  .vl-steps { font-size: var(--mk-fs-18); padding: 13px 16px; }
+  .vl-steps { font-size: var(--mk-fs-body); padding: 13px 16px; }
 }
 </style>

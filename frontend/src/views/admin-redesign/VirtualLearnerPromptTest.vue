@@ -260,35 +260,35 @@ defineExpose({ open })
 .pt-config .mk-field { margin-bottom: 0; }
 .pt-result { display: grid; gap: 10px; }
 .pt-verdict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.pt-meta { font-size: var(--mk-fs-12); color: var(--mk-muted); }
+.pt-meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 输入/输出区 */
 .pt-io { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border: 1px solid var(--mk-line, #e1e8f2); border-radius: 10px; padding: 10px 12px; background: var(--mk-surface); }
 .pt-io__col { display: grid; gap: 6px; align-content: start; }
-.pt-io__title { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-muted); }
-.pt-io__row { font-size: var(--mk-fs-12); color: var(--mk-ink); line-height: 1.5; word-break: break-word; }
-.pt-io__k { display: inline-block; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-faint, #94a3b8); margin-right: 6px; }
+.pt-io__title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
+.pt-io__row { font-size: var(--mk-fs-micro); color: var(--mk-ink); line-height: 1.5; word-break: break-word; }
+.pt-io__k { display: inline-block; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint, #94a3b8); margin-right: 6px; }
 /* 字段明细 chips */
 .pt-fields { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 4px; }
 .pt-field {
-  font-size: var(--mk-fs-11); padding: 1px 7px; border-radius: 6px; font-family: var(--mk-mono, monospace);
+  font-size: var(--mk-fs-micro); padding: 1px 7px; border-radius: 6px; font-family: var(--mk-mono, monospace);
   background: rgba(99, 102, 241, 0.08); color: var(--mk-purple); border: 1px solid rgba(99, 102, 241, 0.2);
   word-break: break-all;
 }
 .pt-field b { font-weight: 700; }
 .pt-checks { display: flex; gap: 6px; flex-wrap: wrap; }
-.pt-check { font-size: var(--mk-fs-11); padding: 1px 8px; border-radius: 99px; font-weight: 600; }
+.pt-check { font-size: var(--mk-fs-micro); padding: 1px 8px; border-radius: 99px; font-weight: 600; }
 .pt-check--ok { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #16a34a); }
 .pt-check--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .pt-transcript { display: grid; gap: 8px; border-top: 1px dashed var(--mk-line, #e1e8f2); padding-top: 10px; }
 .pt-row { display: grid; grid-template-columns: 92px 1fr; gap: 8px; align-items: start; }
-.pt-role { font-size: var(--mk-fs-11_5); font-weight: 700; padding-top: 3px; }
+.pt-role { font-size: var(--mk-fs-micro); font-weight: 700; padding-top: 3px; }
 .pt-role--agent { color: var(--mk-purple); }
 .pt-role--learner { color: var(--mk-green, #16a34a); }
 .pt-bubble { display: grid; gap: 4px; }
-.pt-content { font-size: var(--mk-fs-12_5); color: var(--mk-ink); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
-.pt-state { font-size: var(--mk-fs-11); color: var(--mk-faint, #94a3b8); }
+.pt-content { font-size: var(--mk-fs-micro); color: var(--mk-ink); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.pt-state { font-size: var(--mk-fs-micro); color: var(--mk-faint, #94a3b8); }
 .pt-out {
-  margin: 0; font-size: var(--mk-fs-12); color: var(--mk-muted);
+  margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted);
   max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
   border-top: 1px dashed var(--mk-line, #e1e8f2); padding-top: 8px;
 }
@@ -305,16 +305,16 @@ html[data-theme='dark'] .pt-field { background: rgba(129, 140, 248, 0.14); color
   border-radius: 10px;
   background: #f4f7fc;
   color: var(--mk-muted, #5b6577);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   line-height: 1.5;
 }
 @media (min-width: 2000px) {
-  .vl-steps { font-size: var(--mk-fs-13); padding: 9px 12px; }
+  .vl-steps { font-size: var(--mk-fs-micro); padding: 9px 12px; }
 }
 @media (min-width: 2800px) {
-  .vl-steps { font-size: 15.5px; padding: 11px 14px; }
+  .vl-steps { font-size: var(--mk-fs-micro); padding: 11px 14px; }
 }
 @media (min-width: 3600px) {
-  .vl-steps { font-size: var(--mk-fs-18); padding: 13px 16px; }
+  .vl-steps { font-size: var(--mk-fs-body); padding: 13px 16px; }
 }
 </style>

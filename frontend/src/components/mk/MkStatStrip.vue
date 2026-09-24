@@ -68,7 +68,7 @@ defineEmits<{ select: [key: string | undefined] }>()
 }
 .mk-stat:first-child { border-left: 0; padding-left: 0; }
 .mk-stat__label {
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   letter-spacing: 0.03em;
   color: var(--mk-faint);
@@ -108,15 +108,15 @@ defineEmits<{ select: [key: string | undefined] }>()
 
 /* 4K 档对齐全站字号阶梯 */
 @media (min-width: 2000px) {
-  .mk-stat__label { font-size: 12px; }
+  .mk-stat__label { font-size: var(--mk-fs-micro); }
   .mk-stat__value { font-size: 20px; }
 }
 @media (min-width: 2800px) {
-  .mk-stat__label { font-size: 13px; }
-  .mk-stat__value { font-size: 22px; }
+  .mk-stat__label { font-size: var(--mk-fs-micro); }
+  .mk-stat__value { font-size: var(--mk-fs-emphasis); }
 }
 @media (min-width: 3600px) {
-  .mk-stat__label { font-size: 14px; }
+  .mk-stat__label { font-size: var(--mk-fs-micro); }
   .mk-stat__value { font-size: 24px; }
 }
 </style>

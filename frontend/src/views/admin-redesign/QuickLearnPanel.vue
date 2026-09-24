@@ -645,12 +645,12 @@ useEscape(() => props.visible, close)
 }
 
 .ql-account-brief__item span {
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
 }
 
 .ql-account-brief__item strong {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-ink);
 }
 
@@ -667,7 +667,7 @@ useEscape(() => props.visible, close)
 
 .ql-section__title {
   font-weight: 600;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   color: var(--mk-ink);
   margin-bottom: 8px;
 }
@@ -675,7 +675,7 @@ useEscape(() => props.visible, close)
 .ql-section__hint,
 .ql-entries__hint {
   margin: -2px 0 10px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   line-height: 1.6;
   color: var(--mk-faint);
 }
@@ -697,7 +697,7 @@ useEscape(() => props.visible, close)
 }
 
 .ql-label {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   min-width: 56px;
 }
@@ -722,7 +722,7 @@ useEscape(() => props.visible, close)
   padding: 6px 8px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
 }
 
 .ql-history-item:hover {
@@ -731,13 +731,13 @@ useEscape(() => props.visible, close)
 
 .ql-history-item__meta {
   color: var(--mk-faint);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   flex: 1;
 }
 
 .ql-history-item__open {
   color: var(--mk-blue);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
 
 .ql-status {
@@ -774,20 +774,20 @@ useEscape(() => props.visible, close)
 
 .ql-status__title {
   font-weight: 600;
-  font-size: var(--mk-fs-14);
+  font-size: var(--mk-fs-body);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .ql-status__desc {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   margin-top: 4px;
 }
 
 .ql-status__error {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-red);
   margin-top: 6px;
 }
@@ -800,7 +800,7 @@ useEscape(() => props.visible, close)
 }
 
 .ql-tech {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
 
 .ql-tech--ok {
@@ -839,14 +839,14 @@ useEscape(() => props.visible, close)
   flex-wrap: wrap;
   gap: 6px;
   padding: 4px 0;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
 }
 
 .ql-chip {
   background: var(--mk-surface-3);
   border-radius: 4px;
   padding: 2px 8px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
 
 .ql-chip--warn {
@@ -859,7 +859,7 @@ useEscape(() => props.visible, close)
 
 .ql-warnings {
   margin-top: 8px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-amber);
 }
 

@@ -749,7 +749,7 @@ function clearFilters() {
 .ul-level__badge {
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   letter-spacing: 0.03em;
   line-height: 1.5;
@@ -757,7 +757,7 @@ function clearFilters() {
   color: #0369a1;
   cursor: help;
 }
-.ul-level__xp { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-12); color: var(--mk-muted); font-weight: 600; }
+.ul-level__xp { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
 
 @media (min-width: 2000px) {
   .ul-tags { gap: 6px; margin-top: 3px; }

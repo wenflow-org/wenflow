@@ -537,7 +537,7 @@ function goConfig() {
 <style scoped>
 /* 嵌入模式（模型与接入宿主 flex 列内）：占满剩余高度并内滚（对齐 oc-embedded 先例） */
 .add-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-.mono { font-family: var(--mk-mono); font-size: var(--mk-fs-12); }
+.mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
 
 /* 能力列：主名 + ID 双行，最小宽度兜底（原 51px 截断至 1-2 字符；并栏/窄卡下不被其余列挤压，
    超宽时由 .mk-table-scroll 横向滚动承接） */
@@ -576,10 +576,10 @@ function goConfig() {
 .ac-mcp__dot.is-on { background: var(--mk-green); box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12); }
 .ac-mcp__dot.is-off { background: var(--mk-faint); }
 .ac-mcp__main { display: grid; gap: 1px; min-width: 0; }
-.ac-mcp__main strong { font-size: var(--mk-fs-12_5); font-weight: 600; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ac-mcp__id { font-size: var(--mk-fs-11); color: var(--mk-faint); }
-.ac-mcp__type { font-size: var(--mk-fs-11); color: var(--mk-muted); }
-.ac-mcp__test { font-size: var(--mk-fs-11); font-weight: 700; white-space: nowrap; }
+.ac-mcp__main strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-mcp__id { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.ac-mcp__type { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-mcp__test { font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }
 .ac-mcp__test.is-ok { color: var(--mk-green); }
 .ac-mcp__test.is-bad { color: var(--mk-red); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 /* 模型列：长模型名单行截断（上限 --mk-col-model-wide 140px + title 全值；原 57px 无截断越界源） */
@@ -590,7 +590,7 @@ function goConfig() {
   text-overflow: ellipsis;
 }
 .ac-mcp__endpoint {
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   min-width: 0;
   white-space: nowrap;
@@ -602,13 +602,13 @@ function goConfig() {
 /* MCP 服务提示：说明工具是运行时发现的，避免误以为要逐个登记 */
 .ac-mcp__hint {
   margin: -6px 0 0;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   line-height: 1.65;
   color: var(--mk-faint);
 }
 .ac-mcp__hint code {
   font-family: var(--mk-mono);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   background: var(--mk-surface-2);
   color: var(--mk-muted);
   padding: 1px 4px;
@@ -644,25 +644,25 @@ function goConfig() {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .mono { font-size: 13.5px; }
+  .mono { font-size: var(--mk-fs-micro); }
   .ac-mcp__row { padding: 12px 18px; }
-  .ac-mcp__main strong { font-size: var(--mk-fs-14); }
-  .ac-mcp__id { font-size: var(--mk-fs-12); }
-  .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-12_5); }
+  .ac-mcp__main strong { font-size: var(--mk-fs-body); }
+  .ac-mcp__id { font-size: var(--mk-fs-micro); }
+  .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .mono { font-size: 15.5px; }
+  .mono { font-size: var(--mk-fs-micro); }
   .ac-mcp__row { padding: 14px 22px; }
-  .ac-mcp__main strong { font-size: var(--mk-fs-16); }
-  .ac-mcp__id { font-size: var(--mk-fs-14); }
-  .ac-mcp__type, .ac-mcp__endpoint { font-size: 14.5px; }
+  .ac-mcp__main strong { font-size: var(--mk-fs-micro); }
+  .ac-mcp__id { font-size: var(--mk-fs-micro); }
+  .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
-  .mono { font-size: var(--mk-fs-18); }
+  .mono { font-size: var(--mk-fs-body); }
   .ac-mcp__row { padding: 16px 26px; }
-  .ac-mcp__main strong { font-size: 18.5px; }
-  .ac-mcp__id { font-size: var(--mk-fs-16); }
-  .ac-mcp__type, .ac-mcp__endpoint { font-size: 17px; }
+  .ac-mcp__main strong { font-size: var(--mk-fs-emphasis); }
+  .ac-mcp__id { font-size: var(--mk-fs-micro); }
+  .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-body); }
 }
 
 /* ================= 暗色模式（D1 补完）：外挂能力 ================= */

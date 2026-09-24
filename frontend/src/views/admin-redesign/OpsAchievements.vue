@@ -488,7 +488,7 @@ onMounted(() => {
   background: var(--mk-surface);
 }
 .ac-grant-target > div { flex: 1; display: grid; gap: 1px; min-width: 0; }
-.ac-grant-target strong { font-size: var(--mk-fs-13); }
+.ac-grant-target strong { font-size: var(--mk-fs-body); }
 
 .ac-candidates { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; }
 .ac-candidate {
@@ -505,23 +505,23 @@ onMounted(() => {
 }
 .ac-candidate:hover { border-color: rgba(44, 99, 208, 0.4); }
 .ac-candidate--on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.12); }
-.ac-candidate strong { font-size: var(--mk-fs-12_5); }
-.ac-none { color: var(--mk-faint); font-size: var(--mk-fs-12_5); text-align: center; padding: 10px 0; }
+.ac-candidate strong { font-size: var(--mk-fs-micro); }
+.ac-none { color: var(--mk-faint); font-size: var(--mk-fs-micro); text-align: center; padding: 10px 0; }
 
 /* 4K：弹窗内容跟随全站节奏 */
 @media (min-width: 2000px) {
-  .ac-candidate strong { font-size: var(--mk-fs-14); }
+  .ac-candidate strong { font-size: var(--mk-fs-body); }
   .ac-candidate { padding: 10px 12px; }
-  .ac-none { font-size: var(--mk-fs-14); }
+  .ac-none { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
-  .ac-candidate strong { font-size: 16.5px; }
+  .ac-candidate strong { font-size: var(--mk-fs-body); }
   .ac-candidate { padding: 12px 14px; }
-  .ac-none { font-size: 16.5px; }
+  .ac-none { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 3600px) {
-  .ac-candidate strong { font-size: 19.5px; }
+  .ac-candidate strong { font-size: var(--mk-fs-emphasis); }
   .ac-candidate { padding: 14px 16px; }
-  .ac-none { font-size: 19.5px; }
+  .ac-none { font-size: var(--mk-fs-emphasis); }
 }
 </style>

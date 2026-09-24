@@ -378,7 +378,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   align-items: start;
   padding: 4px 0 2px;
 }
-.sdp-parent { font-size: var(--mk-fs-12); font-weight: 600; white-space: nowrap; }
+.sdp-parent { font-size: var(--mk-fs-micro); font-weight: 600; white-space: nowrap; }
 .sdp-ellipsis {
   max-width: 320px;
   overflow: hidden;
@@ -398,9 +398,9 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   background: var(--mk-amber-bg);
   border: 1px solid rgba(180, 83, 9, 0.3);
   color: var(--mk-amber);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
-.sdp-drift code { font-size: var(--mk-fs-11); }
+.sdp-drift code { font-size: var(--mk-fs-micro); }
 
 /* ---------- Tabs（收敛为全局 mk-pills / mk-pill） ---------- */
 
@@ -414,13 +414,13 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
 @media (min-width: 3600px) {
   /* 4K：设计页独立渲染（无全局 zoom），字号大幅放大以对齐管理台基线 */
   .sdp { max-width: 3000px; }
-  .mk-back { font-size: 19px; }
-  .sdp-parent { font-size: var(--mk-fs-18); }
-  .sdp-drift { font-size: var(--mk-fs-18); padding: 14px 18px; }
-  .sdp-drift code { font-size: 17px; }
+  .mk-back { font-size: var(--mk-fs-emphasis); }
+  .sdp-parent { font-size: var(--mk-fs-body); }
+  .sdp-drift { font-size: var(--mk-fs-body); padding: 14px 18px; }
+  .sdp-drift code { font-size: var(--mk-fs-body); }
   .sdp .mk-pills { padding: 6px; }
-  .sdp .mk-pill { font-size: 19px; padding: 10px 24px; }
+  .sdp .mk-pill { font-size: var(--mk-fs-emphasis); padding: 10px 24px; }
   .sdp .mk-pills { border-radius: 10px; }
-  .sdp .mk-pill { font-size: var(--mk-fs-18); padding: 7px 18px; }
+  .sdp .mk-pill { font-size: var(--mk-fs-body); padding: 7px 18px; }
 }
 </style>

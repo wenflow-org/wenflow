@@ -40,7 +40,7 @@ const meta = computed(
   border-radius: 6px;
   flex: none;
   color: #fff;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   line-height: 1;
   vertical-align: -4px;
@@ -55,7 +55,7 @@ const meta = computed(
   width: 26px;
   height: 26px;
   border-radius: 8px;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   vertical-align: middle;
 }
 html[data-theme='dark'] .ach-icon--muted { background: #4d4e51; }

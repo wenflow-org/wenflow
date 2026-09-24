@@ -295,7 +295,7 @@ onBeforeUnmount(() => {
 }
 .mk-graph__note {
   margin: 6px 0 0;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   line-height: 1.5;
   opacity: 0.65;
 }

@@ -1223,7 +1223,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   border-radius: 8px;
   width: 32px;
   height: 32px;
-  font-size: var(--mk-fs-14);
+  font-size: var(--mk-fs-body);
   line-height: 1;
   cursor: pointer;
   display: inline-flex;
@@ -1233,7 +1233,7 @@ async function saveQuota(enabled: boolean, quota: number) {
 }
 .ac-key-toggle:hover { background: #eef5ff; border-color: var(--mk-blue, #2c63d0); }
 .ac-keyhint {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-amber);
   font-weight: 600;
   font-style: normal;
@@ -1249,9 +1249,9 @@ async function saveQuota(enabled: boolean, quota: number) {
 }
 .ac-test__model { min-width: 240px; max-width: 320px; margin: 0; }
 .ac-test__result { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-bottom: 6px; min-width: 0; }
-.ac-test__meta { font-size: var(--mk-fs-12); color: var(--mk-faint); white-space: nowrap; }
+.ac-test__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 .ac-test__text {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1268,7 +1268,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   background: #eef2fa;
   color: var(--mk-muted);
   font-family: var(--mk-mono);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
 /* 可用模型空态：引导操作而非一行弱文字（原「尚未拉取模型」独占一行显空） */
@@ -1281,7 +1281,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   border-radius: 8px;
   background: #fafbfc;
   color: var(--mk-muted);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
 }
 .ac-models__empty-icon {
   display: inline-flex;
@@ -1292,7 +1292,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   border-radius: 50%;
   background: var(--mk-blue-bg);
   color: var(--mk-blue);
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 800;
   flex-shrink: 0;
 }
@@ -1307,18 +1307,18 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-policy__item:nth-child(odd) { padding-left: 0; border-left: none; }
 .ac-policy__item:nth-child(n + 3) { padding-top: 14px; border-top: 1px dashed #e6eaf0; }
 html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
-.ac-policy__label { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-muted); }
-.ac-policy__desc { font-size: var(--mk-fs-12_5); color: var(--mk-muted); line-height: 1.6; }
-.ac-policy__hint { font-size: var(--mk-fs-12_5); color: var(--mk-faint); line-height: 1.55; display: block; }
+.ac-policy__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
+.ac-policy__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
+.ac-policy__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; display: block; }
 .ac-policy__toggle { width: fit-content; }
-.ac-policy__warn { font-size: var(--mk-fs-12_5); color: var(--mk-red); font-weight: 600; }
+.ac-policy__warn { font-size: var(--mk-fs-micro); color: var(--mk-red); font-weight: 600; }
 .ac-quota-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ac-quota-seg { width: fit-content; }
 .ac-quota-field {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
 .ac-quota-field .mk-filter__input { width: 76px; text-align: center; }
@@ -1351,12 +1351,12 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-muted);
 }
-.ac-sec__hint { font-size: var(--mk-fs-12_5); font-weight: 500; color: var(--mk-faint); }
-.ac-sec__sub { margin-left: auto; font-size: var(--mk-fs-12_5); font-weight: 500; color: var(--mk-faint); }
+.ac-sec__hint { font-size: var(--mk-fs-micro); font-weight: 500; color: var(--mk-faint); }
+.ac-sec__sub { margin-left: auto; font-size: var(--mk-fs-micro); font-weight: 500; color: var(--mk-faint); }
 /* 分段保存（方向 A）：该段有未保存改动时才出现；与底部统一保存条并存 */
 .ac-sec__save {
   margin-left: auto;
@@ -1366,7 +1366,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   background: rgba(44, 99, 208, 0.08);
   color: var(--mk-blue);
   font: inherit;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   cursor: pointer;
 }
@@ -1374,7 +1374,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 .ac-sec__save:disabled { opacity: 0.6; cursor: not-allowed; }
 /* 分段控件走 .mk-seg（shared.css） */
 
-.ac-textarea { resize: vertical; font-size: var(--mk-fs-12); }
+.ac-textarea { resize: vertical; font-size: var(--mk-fs-micro); }
 
 /* 能力健康 */
 .ac-health { display: grid; padding: 2px 0 8px; }
@@ -1386,7 +1386,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   align-items: center;
   padding: 4px 0 2px;
   border-bottom: 1px solid #f0f2f5;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1400,7 +1400,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   align-items: center;
   padding: 7px 0;
   border-bottom: 1px solid #f0f2f5;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
 .ac-health__row:last-child { border-bottom: none; }
 .ac-health__dot { width: 8px; height: 8px; border-radius: 50%; }
@@ -1408,10 +1408,10 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 .ac-health__dot.is-degraded { background: var(--mk-amber); }
 .ac-health__dot.is-unavailable { background: var(--mk-red); }
 .ac-health__dot.is-unknown { background: var(--mk-faint); }
-.ac-health__id { font-size: var(--mk-fs-11); color: var(--mk-ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-health__id { font-size: var(--mk-fs-micro); color: var(--mk-ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-health__msg { color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ac-health__lat { font-size: var(--mk-fs-11); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
-.ac-health__time { font-size: var(--mk-fs-11); color: var(--mk-faint); white-space: nowrap; }
+.ac-health__lat { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+.ac-health__time { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 .ac-health__foot {
   display: flex;
   align-items: center;
@@ -1444,7 +1444,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 .ac-probe__switch { flex: none; margin: 0; }
 .ac-probe__desc {
   font-style: normal;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   line-height: 1.5;
 }
@@ -1456,9 +1456,9 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   margin: 0;
 }
 .ac-probe__interval .mk-filter__input { width: 72px; text-align: center; }
-.ac-probe__unit { font-style: normal; color: var(--mk-faint); font-size: var(--mk-fs-11); }
+.ac-probe__unit { font-style: normal; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
-.ac-health__stale { font-size: var(--mk-fs-11); color: var(--mk-faint); }
+.ac-health__stale { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 调用参数 + 能力健康：右卡内纵向分区（ac-body 统一间距，无内嵌双栏/竖线） */
 .ac-cols { display: grid; gap: 14px; align-items: start; }
@@ -1475,7 +1475,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 
 /* 分组副标题：与 ac-sec__title 同族更轻（重试/超时） */
 .ac-group__title {
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--mk-faint);
@@ -1488,7 +1488,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 .ac-rel__note {
   margin: 0;
   padding: 0 0 14px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
 }
 /* 降级提示：健康快照不可用 / 配置读取失败 */
@@ -1499,7 +1499,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   color: var(--mk-red);
   font-weight: 600;
 }
-.ac-rel__error .mk-link { font-size: var(--mk-fs-12); }
+.ac-rel__error .mk-link { font-size: var(--mk-fs-micro); }
 /* 配置读取失败条：外形走 .mk-alert--row，本类只保留位置 */
 .ac-config-error { margin: 0 16px 4px; }
 
@@ -1560,86 +1560,86 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
   .ac-body { gap: 16px; padding: 6px 18px 18px; }
-  .mk-field__label { font-size: 13.5px; }
-  .ac-model { font-size: var(--mk-fs-13); padding: 5px 12px; }
+  .mk-field__label { font-size: var(--mk-fs-micro); }
+  .ac-model { font-size: var(--mk-fs-micro); padding: 5px 12px; }
 
   .ac-policy { gap: 16px 0; padding: 6px 18px 18px; }
-  .ac-policy__label { font-size: 13.5px; }
-  .ac-policy__desc { font-size: var(--mk-fs-13); }
-  .ac-policy__warn { font-size: var(--mk-fs-13); }
+  .ac-policy__label { font-size: var(--mk-fs-micro); }
+  .ac-policy__desc { font-size: var(--mk-fs-micro); }
+  .ac-policy__warn { font-size: var(--mk-fs-micro); }
   .mk-seg { border-radius: 12px; }
-  .mk-seg__item { font-size: 13.5px; padding: 8px 14px; }
-  .ac-textarea { font-size: 13.5px; }
-  .ac-sec__title { font-size: var(--mk-fs-13); }
-  .ac-sec__hint { font-size: var(--mk-fs-12); }
+  .mk-seg__item { font-size: var(--mk-fs-micro); padding: 8px 14px; }
+  .ac-textarea { font-size: var(--mk-fs-micro); }
+  .ac-sec__title { font-size: var(--mk-fs-micro); }
+  .ac-sec__hint { font-size: var(--mk-fs-micro); }
   .ac-cols__main { padding: 0; }
   .ac-cols__side { padding: 0; }
-  .ac-sec__sub { font-size: var(--mk-fs-12_5); }
-  .ac-group__title { font-size: var(--mk-fs-12_5); }
+  .ac-sec__sub { font-size: var(--mk-fs-micro); }
+  .ac-group__title { font-size: var(--mk-fs-micro); }
   .ac-groups { gap: 20px; padding: 4px 0 8px; }
-  .ac-rel__note { font-size: var(--mk-fs-13); }
-  .ac-health__row { grid-template-columns: 12px 210px 1fr auto auto; gap: 12px; padding: 9px 0; font-size: 13.5px; }
-  .ac-health__head { grid-template-columns: 12px 210px 1fr auto auto; gap: 12px; padding: 5px 0 3px; font-size: var(--mk-fs-12_5); }
+  .ac-rel__note { font-size: var(--mk-fs-micro); }
+  .ac-health__row { grid-template-columns: 12px 210px 1fr auto auto; gap: 12px; padding: 9px 0; font-size: var(--mk-fs-micro); }
+  .ac-health__head { grid-template-columns: 12px 210px 1fr auto auto; gap: 12px; padding: 5px 0 3px; font-size: var(--mk-fs-micro); }
   .ac-health__id,
   .ac-health__lat,
-  .ac-health__time { font-size: var(--mk-fs-12_5); }
-  .ac-health__stale { font-size: var(--mk-fs-12_5); }
+  .ac-health__time { font-size: var(--mk-fs-micro); }
+  .ac-health__stale { font-size: var(--mk-fs-micro); }
   .ac-save { padding: 11px 14px 11px 18px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号继续放大 */
   .ac-body { gap: 18px; padding: 8px 22px 22px; }
-  .mk-field__label { font-size: 15.5px; }
-  .ac-model { font-size: var(--mk-fs-15); padding: 6px 14px; border-radius: 9px; }
+  .mk-field__label { font-size: var(--mk-fs-micro); }
+  .ac-model { font-size: var(--mk-fs-micro); padding: 6px 14px; border-radius: 9px; }
 
   .ac-policy { gap: 18px 0; padding: 8px 22px 22px; }
-  .ac-policy__label { font-size: 15.5px; }
-  .ac-policy__desc { font-size: var(--mk-fs-15); }
-  .ac-policy__warn { font-size: var(--mk-fs-15); }
-  .mk-seg__item { font-size: 15.5px; padding: 9px 16px; }
-  .ac-textarea { font-size: 15.5px; }
-  .ac-sec__title { font-size: var(--mk-fs-15); }
-  .ac-sec__hint { font-size: var(--mk-fs-14); }
+  .ac-policy__label { font-size: var(--mk-fs-micro); }
+  .ac-policy__desc { font-size: var(--mk-fs-micro); }
+  .ac-policy__warn { font-size: var(--mk-fs-micro); }
+  .mk-seg__item { font-size: var(--mk-fs-micro); padding: 9px 16px; }
+  .ac-textarea { font-size: var(--mk-fs-micro); }
+  .ac-sec__title { font-size: var(--mk-fs-micro); }
+  .ac-sec__hint { font-size: var(--mk-fs-micro); }
   .ac-cols__main { padding: 0; }
   .ac-cols__side { padding: 0; }
-  .ac-sec__sub { font-size: 14.5px; }
-  .ac-group__title { font-size: 14.5px; }
+  .ac-sec__sub { font-size: var(--mk-fs-micro); }
+  .ac-group__title { font-size: var(--mk-fs-micro); }
   .ac-groups { gap: 22px; padding: 6px 0 8px; }
-  .ac-rel__note { font-size: var(--mk-fs-15); }
-  .ac-health__row { grid-template-columns: 14px 260px 1fr auto auto; gap: 14px; padding: 11px 0; font-size: 15.5px; }
-  .ac-health__head { grid-template-columns: 14px 260px 1fr auto auto; gap: 14px; padding: 6px 0 3px; font-size: 14.5px; }
+  .ac-rel__note { font-size: var(--mk-fs-micro); }
+  .ac-health__row { grid-template-columns: 14px 260px 1fr auto auto; gap: 14px; padding: 11px 0; font-size: var(--mk-fs-micro); }
+  .ac-health__head { grid-template-columns: 14px 260px 1fr auto auto; gap: 14px; padding: 6px 0 3px; font-size: var(--mk-fs-micro); }
   .ac-health__id,
   .ac-health__lat,
-  .ac-health__time { font-size: 14.5px; }
-  .ac-health__stale { font-size: 14.5px; }
+  .ac-health__time { font-size: var(--mk-fs-micro); }
+  .ac-health__stale { font-size: var(--mk-fs-micro); }
   .ac-save { padding: 13px 16px 13px 20px; }
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：字号继续放大，与页面基线对齐 */
   .ac-body { gap: 20px; padding: 10px 26px 26px; }
-  .mk-field__label { font-size: var(--mk-fs-18); }
-  .ac-model { font-size: 17.5px; padding: 7px 16px; }
+  .mk-field__label { font-size: var(--mk-fs-body); }
+  .ac-model { font-size: var(--mk-fs-body); padding: 7px 16px; }
 
   .ac-policy { gap: 20px 0; padding: 10px 26px 26px; }
-  .ac-policy__label { font-size: var(--mk-fs-18); }
-  .ac-policy__desc { font-size: 17.5px; }
-  .ac-policy__warn { font-size: 17.5px; }
-  .mk-seg__item { font-size: var(--mk-fs-18); padding: 11px 19px; }
-  .ac-textarea { font-size: var(--mk-fs-18); }
-  .ac-sec__title { font-size: 17.5px; }
-  .ac-sec__hint { font-size: var(--mk-fs-16); }
+  .ac-policy__label { font-size: var(--mk-fs-body); }
+  .ac-policy__desc { font-size: var(--mk-fs-body); }
+  .ac-policy__warn { font-size: var(--mk-fs-body); }
+  .mk-seg__item { font-size: var(--mk-fs-body); padding: 11px 19px; }
+  .ac-textarea { font-size: var(--mk-fs-body); }
+  .ac-sec__title { font-size: var(--mk-fs-body); }
+  .ac-sec__hint { font-size: var(--mk-fs-micro); }
   .ac-cols__main { padding: 0; }
   .ac-cols__side { padding: 0; }
-  .ac-sec__sub { font-size: 17px; }
-  .ac-group__title { font-size: 17px; }
+  .ac-sec__sub { font-size: var(--mk-fs-body); }
+  .ac-group__title { font-size: var(--mk-fs-body); }
   .ac-groups { gap: 26px; padding: 8px 0 10px; }
-  .ac-rel__note { font-size: 17.5px; }
-  .ac-health__row { grid-template-columns: 16px 310px 1fr auto auto; gap: 16px; padding: 13px 0; font-size: var(--mk-fs-18); }
-  .ac-health__head { grid-template-columns: 16px 310px 1fr auto auto; gap: 16px; padding: 7px 0 4px; font-size: 17px; }
+  .ac-rel__note { font-size: var(--mk-fs-body); }
+  .ac-health__row { grid-template-columns: 16px 310px 1fr auto auto; gap: 16px; padding: 13px 0; font-size: var(--mk-fs-body); }
+  .ac-health__head { grid-template-columns: 16px 310px 1fr auto auto; gap: 16px; padding: 7px 0 4px; font-size: var(--mk-fs-body); }
   .ac-health__id,
   .ac-health__lat,
-  .ac-health__time { font-size: 17px; }
-  .ac-health__stale { font-size: 17px; }
+  .ac-health__time { font-size: var(--mk-fs-body); }
+  .ac-health__stale { font-size: var(--mk-fs-body); }
   .ac-save { padding: 15px 18px 15px 24px; }
 }
 

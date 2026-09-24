@@ -57,7 +57,7 @@ const DONE_TEXT: Record<RunStageName, string> = { goal: '目标', path: '路径'
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   white-space: nowrap;
 }
 .rs-bar__node {
@@ -75,7 +75,7 @@ const DONE_TEXT: Record<RunStageName, string> = { goal: '目标', path: '路径'
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   line-height: 1;
 }
@@ -94,7 +94,7 @@ const DONE_TEXT: Record<RunStageName, string> = { goal: '目标', path: '路径'
 .rs-bar__node--skip .rs-bar__label { color: #cbd5e1; text-decoration: line-through; }
 
 .rs-bar__connector--done { background: #2ac769; }
-.rs-bar__task { margin-left: 4px; color: #64748b; font-weight: 600; font-size: var(--mk-fs-11); }
+.rs-bar__task { margin-left: 4px; color: #64748b; font-weight: 600; font-size: var(--mk-fs-micro); }
 .rs-bar__done { margin-left: 4px; color: #0e8a4d; font-weight: 700; }
 
 @keyframes rsbar-pulse {
@@ -104,7 +104,7 @@ const DONE_TEXT: Record<RunStageName, string> = { goal: '目标', path: '路径'
 
 /* 紧凑模式 */
 .rs-bar--compact .rs-bar__node { padding: 0 2px; }
-.rs-bar--compact .rs-bar__dot { width: 12px; height: 12px; font-size: 8px; }
+.rs-bar--compact .rs-bar__dot { width: 12px; height: 12px; font-size: var(--mk-fs-micro); }
 
 /* ================= 暗色模式（D1 补完）：阶段进度条 ================= */
 html[data-theme='dark'] {

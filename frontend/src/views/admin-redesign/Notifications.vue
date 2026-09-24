@@ -424,7 +424,7 @@ void reload()
 .nt-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .nt-boundary {
   margin-left: auto;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   background: var(--mk-line);
   border: 1px dashed var(--mk-line);
@@ -452,27 +452,27 @@ void reload()
 }
 .nt-candidate:hover { border-color: rgba(44, 99, 208, 0.4); }
 .nt-candidate--on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.12); }
-.nt-candidate strong { font-size: var(--mk-fs-12_5); }
-.nt-none { color: var(--mk-faint); font-size: var(--mk-fs-12_5); text-align: center; padding: 10px 0; }
+.nt-candidate strong { font-size: var(--mk-fs-micro); }
+.nt-none { color: var(--mk-faint); font-size: var(--mk-fs-micro); text-align: center; padding: 10px 0; }
 
 /* 4K：弹窗内候选列表/提示条跟随全站节奏 */
 @media (min-width: 2000px) {
-  .nt-boundary { font-size: var(--mk-fs-12_5); padding: 3px 10px; }
-  .nt-candidate strong { font-size: var(--mk-fs-14); }
+  .nt-boundary { font-size: var(--mk-fs-micro); padding: 3px 10px; }
+  .nt-candidate strong { font-size: var(--mk-fs-body); }
   .nt-candidate { padding: 10px 12px; }
-  .nt-none { font-size: var(--mk-fs-14); }
+  .nt-none { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
-  .nt-boundary { font-size: 14.5px; padding: 4px 12px; }
-  .nt-candidate strong { font-size: 16.5px; }
+  .nt-boundary { font-size: var(--mk-fs-micro); padding: 4px 12px; }
+  .nt-candidate strong { font-size: var(--mk-fs-body); }
   .nt-candidate { padding: 12px 14px; }
-  .nt-none { font-size: 16.5px; }
+  .nt-none { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 3600px) {
-  .nt-boundary { font-size: 17px; padding: 5px 14px; }
-  .nt-candidate strong { font-size: 19.5px; }
+  .nt-boundary { font-size: var(--mk-fs-body); padding: 5px 14px; }
+  .nt-candidate strong { font-size: var(--mk-fs-emphasis); }
   .nt-candidate { padding: 14px 16px; }
-  .nt-none { font-size: 19.5px; }
+  .nt-none { font-size: var(--mk-fs-emphasis); }
 }
 
 /* ================= 暗色模式（D1 补完）：站内通知 ================= */

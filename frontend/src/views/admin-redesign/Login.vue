@@ -295,8 +295,8 @@ onMounted(() => {
   .auth__form-side { padding: 36px 40px 28px; gap: 22px; }
   .auth__demo-side { padding: 36px 36px 38px; }
   .auth__main { gap: 36px; }
-  .demo__tagline { font-size: 17px; }
-  .demo__msg { font-size: var(--mk-fs-15); }
+  .demo__tagline { font-size: var(--mk-fs-emphasis); }
+  .demo__msg { font-size: var(--mk-fs-body); }
 }
 
 .auth__form-side {
@@ -313,7 +313,7 @@ onMounted(() => {
 }
 
 .auth__pill {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   color: var(--blue-deep);
   background: rgba(52, 120, 246, 0.09);
@@ -325,7 +325,7 @@ onMounted(() => {
   /* 热区：原来只有文字行高 19px，低于 24px 鼠标可点下限；纵向补内边距到 ~27px */
   display: inline-block;
   padding: 4px 2px;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--faint);
   text-decoration: none;
@@ -347,7 +347,7 @@ onMounted(() => {
 
 .head p {
   margin: 0;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   color: var(--muted);
 }
 
@@ -362,7 +362,7 @@ onMounted(() => {
 }
 
 .field__label {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--muted);
 }
@@ -373,7 +373,7 @@ onMounted(() => {
   border-radius: 12px;
   padding: 11px 14px;
   font: inherit;
-  font-size: var(--mk-fs-14);
+  font-size: var(--mk-fs-body);
   color: var(--ink);
   background: var(--surface);
   outline: none;
@@ -395,7 +395,7 @@ onMounted(() => {
 }
 
 .field__error {
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   color: var(--mk-red-strong);
   font-weight: 500;
 }
@@ -434,7 +434,7 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--muted);
   cursor: pointer;
@@ -451,7 +451,7 @@ onMounted(() => {
   justify-content: center;
   width: 100%;
   padding: 12px;
-  font-size: 14.5px;
+  font-size: var(--mk-fs-emphasis);
 }
 
 .btn-primary--block:disabled {
@@ -466,7 +466,7 @@ onMounted(() => {
   justify-content: center;
   gap: 8px;
   flex-wrap: wrap;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   color: var(--muted);
   text-align: center;
 }
@@ -491,7 +491,7 @@ onMounted(() => {
 
 .demo__tagline {
   margin: 0;
-  font-size: 14.5px;
+  font-size: var(--mk-fs-emphasis);
   font-weight: 600;
   line-height: 1.7;
   color: var(--ink);
@@ -504,7 +504,7 @@ onMounted(() => {
 
 .demo__intro p {
   margin: 0;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--muted);
   line-height: 1.6;
 }
@@ -528,7 +528,7 @@ onMounted(() => {
 }
 
 .demo__status strong {
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
 }
 
 .demo__score {
@@ -552,11 +552,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
 
 .demo__panel-head span {
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   color: var(--blue-deep);
 }
@@ -578,13 +578,13 @@ onMounted(() => {
 }
 
 .demo__funnel-item small {
-  font-size: 10.5px;
+  font-size: var(--mk-fs-micro);
   color: var(--faint);
   font-weight: 700;
 }
 
 .demo__funnel-item strong {
-  font-size: var(--mk-fs-14);
+  font-size: var(--mk-fs-body);
   font-variant-numeric: tabular-nums;
 }
 
@@ -602,13 +602,13 @@ onMounted(() => {
 }
 
 .demo__feed strong {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   line-height: 1.45;
 }
 
 .demo__feed span {
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   color: var(--faint);
 }
 
@@ -621,7 +621,7 @@ onMounted(() => {
   padding: 14px 20px 18px;
   border-top: 1px solid var(--line);
   color: var(--faint);
-  font-size: 11.5px;
+  font-size: var(--mk-fs-micro);
   background: var(--v2nav-bg);
 }
 
@@ -652,7 +652,7 @@ onMounted(() => {
   }
 
   .demo__tagline {
-    font-size: var(--mk-fs-13);
+    font-size: var(--mk-fs-body);
   }
 
   .auth__form-side {

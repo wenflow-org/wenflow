@@ -744,7 +744,7 @@ defineExpose({ refreshNow })
   display: block;
   max-width: 320px;
   margin-top: 3px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -757,7 +757,7 @@ defineExpose({ refreshNow })
 .ts-row--att-high { box-shadow: inset 3px 0 0 var(--mk-red); }
 .ts-row--att-medium { box-shadow: inset 3px 0 0 var(--mk-amber); }
 /* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
-.ts-att { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }
+.ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }
 .ts-att--high { color: var(--mk-red); }
 .ts-att--medium { color: var(--mk-amber); }
 .ts-att--low { color: var(--mk-faint); }
@@ -766,7 +766,7 @@ defineExpose({ refreshNow })
 .ts-tag {
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.03em;
 }
@@ -774,14 +774,14 @@ defineExpose({ refreshNow })
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }
 /* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
 .ts-prog { display: grid; gap: 4px; max-width: 96px; }
-.ts-prog__num { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-12); font-weight: 700; white-space: nowrap; }
+.ts-prog__num { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }
 .ts-prog__bar { width: 88px; height: 5px; }
 /* 终态完成列（P1 语义修复）：只显「已完成」文字，不再与进度条并存；title 保留历史进度 */
 .ts-prog--done {
   display: inline-flex;
   align-items: center;
   color: var(--mk-green);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -800,7 +800,7 @@ defineExpose({ refreshNow })
   border-radius: 8px;
   background: var(--mk-red-bg);
   color: var(--mk-red);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
 
@@ -813,12 +813,12 @@ defineExpose({ refreshNow })
 html[data-theme='dark'] .ts-tabs { background: var(--mk-surface); }
 .ts-tabs__item {
   border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 7px 12px;
-  margin-bottom: -1px; border-radius: 0; font: inherit; font-size: var(--mk-fs-12_5); font-weight: 600;
+  margin-bottom: -1px; border-radius: 0; font: inherit; font-size: var(--mk-fs-micro); font-weight: 600;
   color: var(--mk-muted); cursor: pointer; transition: color 0.12s ease, border-color 0.12s ease;
 }
 .ts-tabs__item:hover { color: var(--mk-ink); }
 .ts-tabs__item--on { border-bottom-color: var(--mk-blue); color: var(--mk-blue); font-weight: 700; }
-.ts-empty { margin: 0; font-size: var(--mk-fs-12_5); color: var(--mk-faint); padding: 12px 0; }
+.ts-empty { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); padding: 12px 0; }
 /* P2-2 事件时间线（左对齐垂直线，对齐 Intercom） */
 .ts-timeline { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; }
 .ts-timeline__item { display: flex; gap: 10px; padding: 7px 0; position: relative; }
@@ -830,8 +830,8 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 .ts-timeline__item--warn .ts-timeline__dot { background: var(--mk-amber); }
 .ts-timeline__item--bad .ts-timeline__dot { background: var(--mk-red); }
 .ts-timeline__body { display: grid; gap: 1px; min-width: 0; }
-.ts-timeline__body strong { font-size: var(--mk-fs-12_5); color: var(--mk-ink); }
-.ts-timeline__body span { font-size: var(--mk-fs-11); color: var(--mk-faint); }
+.ts-timeline__body strong { font-size: var(--mk-fs-micro); color: var(--mk-ink); }
+.ts-timeline__body span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 .ts-facts {
   display: grid;
@@ -839,8 +839,8 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
   gap: 10px;
 }
 .ts-facts > div { display: grid; gap: 2px; }
-.ts-facts span { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 600; }
-.ts-facts strong { font-size: var(--mk-fs-12_5); }
+.ts-facts span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
+.ts-facts strong { font-size: var(--mk-fs-micro); }
 
 @media (max-width: 560px) {
   .ts-facts { grid-template-columns: repeat(2, 1fr); }
@@ -849,7 +849,7 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 .ts-section { display: grid; gap: 8px; }
 .ts-section h4 {
   margin: 0;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -858,7 +858,7 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
   align-items: center;
   gap: 8px;
 }
-.ts-src { font-size: var(--mk-fs-11); font-weight: 600; text-transform: none; letter-spacing: 0; }
+.ts-src { font-size: var(--mk-fs-micro); font-weight: 600; text-transform: none; letter-spacing: 0; }
 .ts-degraded { margin-left: 6px; }
 .ts-card {
   border: 1px solid var(--mk-line);
@@ -867,8 +867,8 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
   display: grid;
   gap: 4px;
 }
-.ts-card span { font-size: var(--mk-fs-11); color: var(--mk-faint); font-weight: 700; }
-.ts-card p { margin: 0; font-size: var(--mk-fs-12_5); line-height: 1.7; white-space: pre-wrap; }
+.ts-card span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
+.ts-card p { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.7; white-space: pre-wrap; }
 .ts-card--advisory { border-color: rgba(180, 83, 9, 0.3); background: #fffdf5; }
 
 /* 长文本截断 */
@@ -885,14 +885,14 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
   background: transparent;
   color: var(--mk-blue, #2c63d0);
   font: inherit;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   cursor: pointer;
   padding: 0;
 }
 .ts-raw summary {
   cursor: pointer;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -914,32 +914,32 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {
-  .ts-facts span { font-size: var(--mk-fs-13); }
-  .ts-facts strong { font-size: 14.5px; }
-  .ts-section h4 { font-size: var(--mk-fs-13); }
-  .ts-card p { font-size: 14.5px; }
-  .ts-card span { font-size: var(--mk-fs-13); }
-  .ts-json { font-size: var(--mk-fs-12_5); }
-  .ts-more { font-size: 13.5px; }
+  .ts-facts span { font-size: var(--mk-fs-micro); }
+  .ts-facts strong { font-size: var(--mk-fs-body); }
+  .ts-section h4 { font-size: var(--mk-fs-micro); }
+  .ts-card p { font-size: var(--mk-fs-body); }
+  .ts-card span { font-size: var(--mk-fs-micro); }
+  .ts-json { font-size: var(--mk-fs-micro); }
+  .ts-more { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .ts-facts span { font-size: 15.5px; }
-  .ts-facts strong { font-size: 17px; }
-  .ts-section h4 { font-size: 15.5px; }
-  .ts-card p { font-size: 17px; }
-  .ts-card span { font-size: 15.5px; }
-  .ts-json { font-size: var(--mk-fs-15); }
-  .ts-more { font-size: var(--mk-fs-16); }
+  .ts-facts span { font-size: var(--mk-fs-micro); }
+  .ts-facts strong { font-size: var(--mk-fs-body); }
+  .ts-section h4 { font-size: var(--mk-fs-micro); }
+  .ts-card p { font-size: var(--mk-fs-body); }
+  .ts-card span { font-size: var(--mk-fs-micro); }
+  .ts-json { font-size: var(--mk-fs-micro); }
+  .ts-more { font-size: var(--mk-fs-micro); }
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-  .ts-facts span { font-size: var(--mk-fs-18); }
-  .ts-facts strong { font-size: var(--mk-fs-20); }
-  .ts-section h4 { font-size: var(--mk-fs-18); }
-  .ts-card p { font-size: var(--mk-fs-20); }
-  .ts-card span { font-size: var(--mk-fs-18); }
-  .ts-json { font-size: 17.5px; }
-  .ts-more { font-size: 18.5px; }
+  .ts-facts span { font-size: var(--mk-fs-body); }
+  .ts-facts strong { font-size: var(--mk-fs-emphasis); }
+  .ts-section h4 { font-size: var(--mk-fs-body); }
+  .ts-card p { font-size: var(--mk-fs-emphasis); }
+  .ts-card span { font-size: var(--mk-fs-body); }
+  .ts-json { font-size: var(--mk-fs-body); }
+  .ts-more { font-size: var(--mk-fs-emphasis); }
 }
 
 /* ================= 暗色模式（D1 补完）：教学会话 ================= */

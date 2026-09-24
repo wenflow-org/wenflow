@@ -625,10 +625,10 @@ function openRunningSession(s: Sample) {
   width: auto;
   padding: 0 5px;
   gap: 3px;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
 }
-.mk-actions .mk-icon-btn--text span { font-size: var(--mk-fs-11); }
+.mk-actions .mk-icon-btn--text span { font-size: var(--mk-fs-micro); }
 .mk-actions .mk-icon-btn--text svg { width: 13px; height: 13px; }
 /* 窄屏表格：8 列在 704px 内容区会被压扁操作列，设 min-width 触发 .mk-table-scroll 横向滚动（对齐 AuditLogs 模式） */
 .mk-table-scroll .mk-table { min-width: 860px; }
@@ -646,14 +646,14 @@ function openRunningSession(s: Sample) {
   text-overflow: ellipsis;
   vertical-align: middle;
 }
-.vl-goal--empty { color: var(--mk-faint); font-size: var(--mk-fs-12); }
+.vl-goal--empty { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 /* 状态列：进行中胶囊 / 失败数 / 卡死徽章 分列展示（一列一语义） */
 .vl-state-cell { display: flex; align-items: center; min-height: 26px; }
 .vl-run {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-faint);
   white-space: nowrap;
@@ -690,7 +690,7 @@ function openRunningSession(s: Sample) {
   border-left: 1px solid var(--mk-line);
 }
 .vl-rpm__label {
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-faint);
   white-space: nowrap;
@@ -712,7 +712,7 @@ function openRunningSession(s: Sample) {
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   flex-shrink: 0;
 }

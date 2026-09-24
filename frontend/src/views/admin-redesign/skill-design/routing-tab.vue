@@ -83,7 +83,7 @@ watch(
 }
 .sdp-routing__lineage summary {
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-muted);
   user-select: none;
@@ -92,7 +92,7 @@ watch(
 .sdp-routing__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--mk-fs-micro);
   margin-top: 8px;
 }
 .sdp-routing__table th, .sdp-routing__table td {
@@ -100,9 +100,9 @@ watch(
   padding: 6px 8px;
   border-bottom: 1px solid #f0f2f5;
 }
-.sdp-routing__table th { font-size: 11px; color: var(--mk-faint); font-weight: 700; }
-.sdp-routing__consumer { font-size: 11px; color: var(--mk-muted); padding: 1px 0; }
-.sdp-none { margin: 0; font-size: 12px; color: var(--mk-faint); }
+.sdp-routing__table th { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
+.sdp-routing__consumer { font-size: var(--mk-fs-micro); color: var(--mk-muted); padding: 1px 0; }
+.sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 暗色模式 */
 [data-theme='dark'] .sdp-routing__lineage { background: #1b1c1d; }

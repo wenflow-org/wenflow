@@ -236,7 +236,7 @@ function onIsolatedChange(event: Event) {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--mk-space-3);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
 .mk-ge__stat b {
@@ -265,7 +265,7 @@ function onIsolatedChange(event: Event) {
   display: inline-flex;
   align-items: center;
   gap: var(--mk-space-2);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
 .mk-ge__select {
@@ -275,7 +275,7 @@ function onIsolatedChange(event: Event) {
   border-radius: var(--mk-radius-sm);
   background: var(--mk-surface);
   color: inherit;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
 }
 .mk-ge__seg {
   display: inline-flex;
@@ -288,7 +288,7 @@ function onIsolatedChange(event: Event) {
   border: 0;
   background: transparent;
   color: var(--mk-muted);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   cursor: pointer;
 }
 .mk-ge__seg-btn--on {
@@ -300,7 +300,7 @@ function onIsolatedChange(event: Event) {
   display: inline-flex;
   align-items: center;
   gap: var(--mk-space-1);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   cursor: pointer;
 }
@@ -318,7 +318,7 @@ function onIsolatedChange(event: Event) {
   padding: var(--mk-space-5);
   border: 1px dashed var(--mk-line);
   border-radius: var(--mk-radius-md);
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   color: var(--mk-muted);
   text-align: center;
 }
@@ -331,7 +331,7 @@ function onIsolatedChange(event: Event) {
   flex-wrap: wrap;
   gap: var(--mk-space-4);
   margin-top: var(--mk-space-2);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
 .mk-ge__legend-group {
@@ -368,12 +368,12 @@ function onIsolatedChange(event: Event) {
 }
 .mk-ge__side-title {
   margin: 0 0 var(--mk-space-2);
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   line-height: 1.5;
 }
 .mk-ge__side-hint {
   margin: 0;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   line-height: 1.6;
   color: var(--mk-muted);
 }
@@ -382,7 +382,7 @@ function onIsolatedChange(event: Event) {
   grid-template-columns: auto 1fr;
   gap: var(--mk-space-1) var(--mk-space-3);
   margin: 0;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
 }
 .mk-ge__kv dt {
   color: var(--mk-muted);
@@ -395,7 +395,7 @@ function onIsolatedChange(event: Event) {
 }
 .mk-ge__rel-label {
   margin: 0 0 var(--mk-space-1);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
 .mk-ge__rel-list {
@@ -408,7 +408,7 @@ function onIsolatedChange(event: Event) {
   border: 0;
   background: transparent;
   color: inherit;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   line-height: 1.5;
   text-align: left;
   cursor: pointer;

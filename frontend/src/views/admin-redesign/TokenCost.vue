@@ -354,7 +354,7 @@ function trendH(tokens: number): string {
   justify-content: space-between;
   align-items: flex-end;
   padding-bottom: 24px; /* 留出底部日期行高，使 0 刻度线不与日期重叠 */
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -411,7 +411,7 @@ function trendH(tokens: number): string {
   top: -18px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -419,7 +419,7 @@ function trendH(tokens: number): string {
   pointer-events: none;
 }
 .tc-trend__day {
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   font-weight: 600;
   white-space: nowrap;
@@ -445,7 +445,7 @@ function trendH(tokens: number): string {
   background: transparent;
   padding: 2px 8px;
   font: inherit;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-blue);
   border-radius: 6px;
@@ -457,17 +457,17 @@ function trendH(tokens: number): string {
 /* 4K：趋势图跟随全站节奏 */
 @media (min-width: 2000px) {
   .tc-trend { height: 230px; }
-  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: var(--mk-fs-12); }
+  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: var(--mk-fs-micro); }
   .tc-trend__bar { width: 58%; }
 }
 @media (min-width: 2800px) {
   .tc-trend { height: 270px; }
-  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: var(--mk-fs-14); }
+  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: var(--mk-fs-micro); }
   .tc-trend__bar { width: 54%; }
 }
 @media (min-width: 3600px) {
   .tc-trend { height: 310px; }
-  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: 16.5px; }
+  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: var(--mk-fs-body); }
   .tc-trend__bar { width: 50%; }
 }
 

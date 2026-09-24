@@ -439,7 +439,7 @@ function groupBadgeTitle(title: string): string {
   overflow: hidden;
   background: var(--mk-bg, #f7f8fa);
   color: #1a2a44;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
 }
 
 /* 侧边栏 */
@@ -496,7 +496,7 @@ function groupBadgeTitle(title: string): string {
   background: transparent;
   font: inherit;
   /* 分组标题是「标签」不是内容：比组内可点页面小一号、弱一档（原 14/800 深色比子项还重，层级倒置） */
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.03em;
   color: #8593a8;
@@ -521,7 +521,7 @@ function groupBadgeTitle(title: string): string {
   border-radius: 999px;
   background: #eef2fa;
   color: var(--mk-faint);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 16px;
@@ -532,7 +532,7 @@ function groupBadgeTitle(title: string): string {
   animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
 }
 .mshell__group-arrow {
-  font-size: 9px;
+  font-size: var(--mk-fs-micro);
   opacity: 0.65;
   transition: transform 0.15s ease;
 }
@@ -544,7 +544,7 @@ function groupBadgeTitle(title: string): string {
 .mshell__group-body .mshell__item .mshell__item-glyph {
   width: 20px;
   height: 20px;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
 }
 .mshell__item {
   display: flex;
@@ -557,7 +557,7 @@ function groupBadgeTitle(title: string): string {
   background: transparent;
   color: #42506a;
   font: inherit;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 600;
   text-align: left;
   cursor: pointer;
@@ -584,7 +584,7 @@ function groupBadgeTitle(title: string): string {
   border-radius: 8px;
   background: #eef2fa;
   color: #5b6577;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 800;
   flex-shrink: 0;
   transition: background 0.12s ease, color 0.12s ease;
@@ -596,7 +596,7 @@ function groupBadgeTitle(title: string): string {
   border-radius: 999px;
   background: #eef2fa;
   color: var(--mk-faint);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -641,7 +641,7 @@ function groupBadgeTitle(title: string): string {
 }
 .mshell__tool:hover { background: #eef2fa; color: var(--mk-blue, #2c63d0); }
 .mshell__tool:disabled { opacity: 0.45; cursor: default; }
-.mshell__tool-icon { font-size: var(--mk-fs-13); line-height: 1; display: inline-flex; }
+.mshell__tool-icon { font-size: var(--mk-fs-body); line-height: 1; display: inline-flex; }
 .mshell__tool-icon svg { width: 15px; height: 15px; display: block; }
 .mshell__refresh-icon { display: inline-flex; }
 .mshell__refresh-icon svg { width: 15px; height: 15px; display: block; }
@@ -665,14 +665,14 @@ function groupBadgeTitle(title: string): string {
   border-radius: 50%;
   background: #dbe9ff;
   color: var(--mk-accent-deep, #1f57cc);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   flex-shrink: 0;
 }
 .mshell__user-name {
   flex: 1;
   min-width: 0;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-ink);
   overflow: hidden;
@@ -684,7 +684,7 @@ function groupBadgeTitle(title: string): string {
   background: transparent;
   color: var(--mk-faint);
   font: inherit;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   cursor: pointer;
   padding: 4px 8px;
@@ -701,11 +701,11 @@ function groupBadgeTitle(title: string): string {
   gap: 6px;
   padding: 0 2px;
   color: var(--mk-faint);
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
 }
 .mshell__foot-name { font-weight: 700; color: var(--mk-faint, #5f6f8c); letter-spacing: 0.02em; }
 .mshell__foot-ver {
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint, #5f6f8c);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -740,7 +740,7 @@ function groupBadgeTitle(title: string): string {
   padding: 7px 16px;
   border-bottom: 1px solid var(--mk-line, #e6ebf4);
   background: var(--mk-surface, #fff);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint, #8a97ab);
 }
 .mshell__crumb-label {
@@ -755,9 +755,9 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
 /* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半） */
 @media (min-width: 1440px) {
   .mshell { grid-template-columns: 224px minmax(0, 1fr); }
-  .mshell__item { font-size: 13.5px; padding: 9px 11px; }
-  .mshell__group-name { font-size: 11.5px; }
-  .mshell__item-badge { font-size: 11.5px; }
+  .mshell__item { font-size: var(--mk-fs-body); padding: 9px 11px; }
+  .mshell__group-name { font-size: var(--mk-fs-micro); }
+  .mshell__item-badge { font-size: var(--mk-fs-micro); }
   .mshell__logo-full { height: 58px; }
 }
 
@@ -765,9 +765,9 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
    宽度只随内容（字号）增长、不随屏宽膨胀——短标签配宽侧栏会在行右拉出大片空洞 */
 @media (min-width: 1920px) {
   .mshell { grid-template-columns: 240px minmax(0, 1fr); }
-  .mshell__item { font-size: var(--mk-fs-14); padding: 10px 12px; }
-  .mshell__group-name { font-size: var(--mk-fs-12); }
-  .mshell__item-badge { font-size: var(--mk-fs-12); }
+  .mshell__item { font-size: var(--mk-fs-body); padding: 10px 12px; }
+  .mshell__group-name { font-size: var(--mk-fs-micro); }
+  .mshell__item-badge { font-size: var(--mk-fs-micro); }
   .mshell__logo-full { height: 64px; }
 }
 @media (min-width: 2000px) {
@@ -778,10 +778,10 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
   .mshell__logo-full { height: 72px; }
   /* 组名只放字号，不加 padding：组头是 flex 行，padding-bottom 会撑高名字盒子，
      居中后文字墨迹与组图标错行（宽屏下「图标和文字不在一行上」的根因） */
-  .mshell__group-name { font-size: var(--mk-fs-12_5); }
-  .mshell__item { font-size: 14.5px; padding: 11px 12px; gap: 8px; }
-  .mshell__item-badge { font-size: var(--mk-fs-12_5); padding: 2px 9px; }
-  .mshell__foot { font-size: var(--mk-fs-13); padding: 10px 12px; }
+  .mshell__group-name { font-size: var(--mk-fs-micro); }
+  .mshell__item { font-size: var(--mk-fs-body); padding: 11px 12px; gap: 8px; }
+  .mshell__item-badge { font-size: var(--mk-fs-micro); padding: 2px 9px; }
+  .mshell__foot { font-size: var(--mk-fs-micro); padding: 10px 12px; }
   .mshell__tool { width: 30px; height: 30px; }
   .mshell__user-avatar { width: 28px; height: 28px; }
 }
@@ -791,16 +791,16 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
   }
   .mshell__side { padding: 22px 18px 16px; gap: 22px; }
   .mshell__logo-full { height: 72px; }
-  .mshell__group-name { font-size: var(--mk-fs-15); }
-  .mshell__item { font-size: 17px; padding: 14px 14px; gap: 10px; border-radius: 10px; }
-  .mshell__item-badge { font-size: var(--mk-fs-14); padding: 3px 10px; }
-  .mshell__foot { font-size: var(--mk-fs-15); padding: 12px 14px; }
+  .mshell__group-name { font-size: var(--mk-fs-micro); }
+  .mshell__item { font-size: var(--mk-fs-body); padding: 14px 14px; gap: 10px; border-radius: 10px; }
+  .mshell__item-badge { font-size: var(--mk-fs-micro); padding: 3px 10px; }
+  .mshell__foot { font-size: var(--mk-fs-micro); padding: 12px 14px; }
   .mshell__tool { width: 36px; height: 36px; }
-  .mshell__tool-icon { font-size: var(--mk-fs-16); }
+  .mshell__tool-icon { font-size: var(--mk-fs-micro); }
   .mshell__tool-icon svg,
   .mshell__refresh-icon svg { width: 18px; height: 18px; }
   .mshell__user-avatar { width: 32px; height: 32px; }
-  .mshell__user-name { font-size: var(--mk-fs-14); }
+  .mshell__user-name { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：侧栏再加宽、字号继续放大 */
@@ -809,16 +809,16 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
   }
   .mshell__side { padding: 26px 22px 18px; gap: 26px; }
   .mshell__logo-full { height: 88px; }
-  .mshell__group-name { font-size: 17.5px; }
-  .mshell__item { font-size: var(--mk-fs-20); padding: 16px 16px; gap: 12px; }
-  .mshell__item-badge { font-size: 16.5px; padding: 4px 12px; }
-  .mshell__foot { font-size: 17.5px; padding: 14px 16px; }
+  .mshell__group-name { font-size: var(--mk-fs-body); }
+  .mshell__item { font-size: var(--mk-fs-emphasis); padding: 16px 16px; gap: 12px; }
+  .mshell__item-badge { font-size: var(--mk-fs-body); padding: 4px 12px; }
+  .mshell__foot { font-size: var(--mk-fs-body); padding: 14px 16px; }
   .mshell__tool { width: 42px; height: 42px; }
-  .mshell__tool-icon { font-size: 19px; }
+  .mshell__tool-icon { font-size: var(--mk-fs-emphasis); }
   .mshell__tool-icon svg,
   .mshell__refresh-icon svg { width: 21px; height: 21px; }
   .mshell__user-avatar { width: 38px; height: 38px; }
-  .mshell__user-name { font-size: 17px; }
+  .mshell__user-name { font-size: var(--mk-fs-body); }
 }
 
 /* 侧栏折叠（D5）：用户切换 data-collapsed 驱动 icon-only 模式；
@@ -865,7 +865,7 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
   color: var(--mk-muted, #5b6577);
   width: 24px; height: 24px;
   border-radius: 7px;
-  font-size: var(--mk-fs-12); line-height: 1;
+  font-size: var(--mk-fs-micro); line-height: 1;
   cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0;

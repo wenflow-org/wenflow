@@ -82,16 +82,16 @@ function confirm() {
   display: grid;
   gap: 12px;
 }
-.mk-confirm__title { margin: 0; font-size: var(--mk-fs-15); font-weight: 700; }
+.mk-confirm__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 700; }
 .mk-confirm__msg {
   margin: 0;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   line-height: 1.7;
   color: var(--mk-muted);
   white-space: pre-wrap;
 }
 .mk-confirm__input { display: grid; gap: 6px; }
-.mk-confirm__input span { font-size: var(--mk-fs-12); font-weight: 700; color: var(--mk-muted); }
+.mk-confirm__input span { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
 .mk-confirm__actions {
   display: flex;
   justify-content: flex-end;
@@ -102,22 +102,22 @@ function confirm() {
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
   .mk-confirm { width: min(500px, 100%); padding: 22px 24px 20px; }
-  .mk-confirm__title { font-size: 17px; }
-  .mk-confirm__msg { font-size: var(--mk-fs-15); }
-  .mk-confirm__input span { font-size: var(--mk-fs-14); }
+  .mk-confirm__title { font-size: var(--mk-fs-emphasis); }
+  .mk-confirm__msg { font-size: var(--mk-fs-body); }
+  .mk-confirm__input span { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
   .mk-confirm { width: min(600px, 100%); }
-  .mk-confirm__title { font-size: 19.5px; }
-  .mk-confirm__msg { font-size: 17.5px; }
-  .mk-confirm__input span { font-size: var(--mk-fs-16); }
+  .mk-confirm__title { font-size: var(--mk-fs-emphasis); }
+  .mk-confirm__msg { font-size: var(--mk-fs-body); }
+  .mk-confirm__input span { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   /* 4K（确认框 Teleport 到 body，无 zoom）：加宽 + 字号继续放大 */
   .mk-confirm { width: min(700px, 100%); }
   .mk-confirm__title { font-size: 23px; }
-  .mk-confirm__msg { font-size: var(--mk-fs-20); }
-  .mk-confirm__input span { font-size: 18.5px; }
+  .mk-confirm__msg { font-size: var(--mk-fs-emphasis); }
+  .mk-confirm__input span { font-size: var(--mk-fs-emphasis); }
 }
 </style>
 
@@ -141,7 +141,7 @@ function confirm() {
   background: var(--mk-surface, #fff);
   color: var(--mk-ink, #1a2a44);
   font: inherit;
-  font-size: var(--mk-fs-13, 13px);
+  font-size: var(--mk-fs-body);
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease;

@@ -120,12 +120,12 @@ watch(
   gap: 10px;
   padding: 9px 14px 11px;
   border-top: 1px solid var(--mk-line);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
 .mk-pagination__total {
   color: var(--mk-faint);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -145,7 +145,7 @@ watch(
   border-radius: 6px;
   background: var(--mk-surface);
   color: var(--mk-muted);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   cursor: pointer;
   transition: border-color 0.12s;
 }
@@ -165,7 +165,7 @@ watch(
   background: var(--mk-surface);
   color: var(--mk-ink);
   font: inherit;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -202,15 +202,15 @@ watch(
 
 /* 大屏/4K 适配（全站 mk 体系档位） */
 @media (min-width: 2000px) {
-  .mk-pagination { font-size: var(--mk-fs-13); gap: 12px; padding: 11px 18px 13px; }
-  .mk-pagination__total { font-size: var(--mk-fs-13); }
-  .mk-pagination__size { font-size: var(--mk-fs-13); padding: 5px 10px; border-radius: 7px; }
-  .mk-pagination__btn, .mk-pagination__num { font-size: var(--mk-fs-13); min-width: 32px; height: 32px; padding: 0 10px; }
+  .mk-pagination { font-size: var(--mk-fs-micro); gap: 12px; padding: 11px 18px 13px; }
+  .mk-pagination__total { font-size: var(--mk-fs-micro); }
+  .mk-pagination__size { font-size: var(--mk-fs-micro); padding: 5px 10px; border-radius: 7px; }
+  .mk-pagination__btn, .mk-pagination__num { font-size: var(--mk-fs-micro); min-width: 32px; height: 32px; padding: 0 10px; }
 }
 @media (min-width: 3600px) {
-  .mk-pagination { font-size: 15.5px; }
-  .mk-pagination__total { font-size: 15.5px; }
-  .mk-pagination__size { font-size: 15.5px; }
-  .mk-pagination__btn { font-size: 15.5px; }
+  .mk-pagination { font-size: var(--mk-fs-micro); }
+  .mk-pagination__total { font-size: var(--mk-fs-micro); }
+  .mk-pagination__size { font-size: var(--mk-fs-micro); }
+  .mk-pagination__btn { font-size: var(--mk-fs-micro); }
 }
 </style>

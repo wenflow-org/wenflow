@@ -350,9 +350,9 @@ void stageTitle.value
   background: rgba(44, 99, 208, 0.08);
   box-shadow: 0 2px 8px rgba(44, 99, 208, 0.12);
 }
-.orch-stage-tab__name { font-size: var(--mk-fs-13); font-weight: 800; color: var(--mk-ink); }
+.orch-stage-tab__name { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
 .orch-stage-tab.is-active .orch-stage-tab__name { color: var(--mk-blue); }
-.orch-stage-tab__meta { font-size: var(--mk-fs-11); font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+.orch-stage-tab__meta { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 
 /* 折叠层（字段路由 / 治理）：阶段工作区的查阅层，默认收起 */
 /* 折叠头走 .mk-section__summary（shared.css） */
@@ -362,18 +362,18 @@ void stageTitle.value
 /* 4K：阶段导航与折叠层跟随全站节奏 */
 @media (min-width: 2000px) {
   .orch-stage-tab { padding: 11px 16px; }
-  .orch-stage-tab__name { font-size: 14.5px; }
-  .orch-stage-tab__meta { font-size: var(--mk-fs-12); }
+  .orch-stage-tab__name { font-size: var(--mk-fs-body); }
+  .orch-stage-tab__meta { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .orch-stage-tab { padding: 13px 19px; }
-  .orch-stage-tab__name { font-size: 17px; }
-  .orch-stage-tab__meta { font-size: var(--mk-fs-14); }
+  .orch-stage-tab__name { font-size: var(--mk-fs-body); }
+  .orch-stage-tab__meta { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .orch-stage-tab { padding: 15px 22px; }
-  .orch-stage-tab__name { font-size: var(--mk-fs-20); }
-  .orch-stage-tab__meta { font-size: 16.5px; }
+  .orch-stage-tab__name { font-size: var(--mk-fs-emphasis); }
+  .orch-stage-tab__meta { font-size: var(--mk-fs-body); }
 }
 
 /* ================= 暗色模式（D1 补完）：编排图 ================= */

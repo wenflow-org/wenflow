@@ -454,19 +454,19 @@ void loadDead()
   padding: 10px 12px;
   border-bottom: 1px solid var(--mk-line);
   background: var(--mk-surface);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
 }
-.dt-result__head strong { font-size: var(--mk-fs-13); }
+.dt-result__head strong { font-size: var(--mk-fs-body); }
 .dt-result__head .mono { color: var(--mk-muted); }
 .dt-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
 .dt-compare__col { padding: 12px; min-width: 0; }
 .dt-compare__col + .dt-compare__col { border-left: 1px dashed var(--mk-line); }
-.dt-compare__col h5 { margin: 0 0 8px; font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.05em; }
+.dt-compare__col h5 { margin: 0 0 8px; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.05em; }
 .dt-compare__col pre {
   margin: 0;
   max-height: 300px;
   overflow: auto;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   line-height: 1.6;
   color: var(--mk-muted);
   white-space: pre-wrap;
@@ -482,22 +482,22 @@ void loadDead()
   white-space: nowrap;
   vertical-align: bottom;
   color: var(--mk-red);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
 
 @media (min-width: 2000px) {
   .dt-grid { grid-template-columns: 1.6fr 0.7fr 1.4fr auto; }
-  .dt-compare__col pre { font-size: var(--mk-fs-12_5); }
+  .dt-compare__col pre { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .dt-compare__col pre { font-size: var(--mk-fs-15); }
-  .ex-row__text strong { font-size: 16.5px; }
-  .ex-row__text span { font-size: 15.5px; }
+  .dt-compare__col pre { font-size: var(--mk-fs-micro); }
+  .ex-row__text strong { font-size: var(--mk-fs-body); }
+  .ex-row__text span { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
-  .dt-compare__col pre { font-size: 17.5px; }
-  .ex-row__text strong { font-size: 19.5px; }
-  .ex-row__text span { font-size: var(--mk-fs-18); }
+  .dt-compare__col pre { font-size: var(--mk-fs-body); }
+  .ex-row__text strong { font-size: var(--mk-fs-emphasis); }
+  .ex-row__text span { font-size: var(--mk-fs-body); }
 }
 @media (max-width: 1100px) {
   .dt-grid { grid-template-columns: 1fr 1fr; }
@@ -518,14 +518,14 @@ void loadDead()
 }
 .ex-row:last-child { border-bottom: none; }
 .ex-row__text { display: grid; gap: 2px; min-width: 0; }
-.ex-row__text strong { font-size: var(--mk-fs-13); }
-.ex-row__text span { font-size: var(--mk-fs-12); color: var(--mk-muted); max-width: 640px; }
+.ex-row__text strong { font-size: var(--mk-fs-body); }
+.ex-row__text span { font-size: var(--mk-fs-micro); color: var(--mk-muted); max-width: 640px; }
 .ex-row__actions { display: flex; align-items: center; gap: 8px; }
 .ex-row__actions .mk-filter__select { min-width: 110px; height: 30px; padding: 3px 8px; }
-.ex-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: var(--mk-fs-12_5); color: var(--mk-muted); }
+.ex-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 @media (min-width: 2000px) {
-  .ex-row__text strong { font-size: 14.5px; }
-  .ex-row__text span { font-size: 13.5px; }
+  .ex-row__text strong { font-size: var(--mk-fs-body); }
+  .ex-row__text span { font-size: var(--mk-fs-micro); }
 }
 
 /* ================= 暗色模式（D1 补完）：系统工具 ================= */

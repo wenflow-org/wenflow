@@ -471,11 +471,11 @@ load()
 /* 学习者列：失败数红色强调（失败有值时突出，无失败保持副行灰） */
 .be-fail-num { color: var(--mk-red); font-weight: 700; }
 .be-cell--fail { color: var(--mk-red); }.be-progress .mk-minibar { flex: 1; }
-.be-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-12); color: var(--mk-muted); white-space: nowrap; }
+.be-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
 
 .be-rows { display: grid; gap: 6px; }
 .be-row { display: grid; grid-template-columns: 1.2fr 1.6fr 0.9fr 28px; gap: 8px; align-items: center; }
-.be-row--head { font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; }
+.be-row--head { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; }
 .be-row--head span:last-child { visibility: hidden; }
 .be-budget { height: 34px; }
 
@@ -483,9 +483,9 @@ load()
 /* 详情 run 卡：mk-card 形态（边框/圆角/背景由全局类提供，此处只留内部布局） */
 .be-run { padding: 12px 14px; display: grid; gap: 8px; margin-bottom: 10px; }
 .be-run__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.be-run__head strong { font-size: var(--mk-fs-13); }
-.be-run__phase { margin-left: auto; font-size: var(--mk-fs-12); color: var(--mk-muted); }
-.be-run__body { display: flex; gap: 12px; flex-wrap: wrap; font-size: var(--mk-fs-12); color: var(--mk-muted); }
+.be-run__head strong { font-size: var(--mk-fs-body); }
+.be-run__phase { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.be-run__body { display: flex; gap: 12px; flex-wrap: wrap; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .be-run__task { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .be-run__stall { color: var(--mk-amber); }
 .be-run__error { color: var(--mk-red); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -494,20 +494,20 @@ load()
 
 @media (min-width: 2000px) {
   .be-run { padding: 14px 16px; }
-  .be-run__head strong { font-size: 14.5px; }
-  .be-run__body { font-size: 13.5px; }
-  .be-progress__num { font-size: var(--mk-fs-13); }
+  .be-run__head strong { font-size: var(--mk-fs-body); }
+  .be-run__body { font-size: var(--mk-fs-micro); }
+  .be-progress__num { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .be-run { padding: 16px 19px; }
-  .be-run__head strong { font-size: 17px; }
-  .be-run__body { font-size: var(--mk-fs-16); }
-  .be-progress__num { font-size: 15.5px; }
+  .be-run__head strong { font-size: var(--mk-fs-body); }
+  .be-run__body { font-size: var(--mk-fs-micro); }
+  .be-progress__num { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .be-run { padding: 19px 22px; }
-  .be-run__head strong { font-size: var(--mk-fs-20); }
-  .be-run__body { font-size: 18.5px; }
-  .be-progress__num { font-size: var(--mk-fs-18); }
+  .be-run__head strong { font-size: var(--mk-fs-emphasis); }
+  .be-run__body { font-size: var(--mk-fs-emphasis); }
+  .be-progress__num { font-size: var(--mk-fs-body); }
 }
 </style>

@@ -946,7 +946,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   cursor: pointer;
   white-space: nowrap;
@@ -984,14 +984,14 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .exec-kind-group .mk-badge {
   background: #f0f2f5;
   color: var(--mk-muted, #5b6577);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   padding: 1px 7px;
 }
 html[data-theme='dark'] .exec-kind-group .mk-badge { background: #2d2d2f; color: #a2a5a9; }
 /* 测试标签：灰底小徽章（与类型徽章并排，业务日志不出现） */
 .exec-test-tag {
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.03em;
   padding: 1px 6px;
@@ -1008,7 +1008,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
    用字重/颜色表达语义差异（红=错误摘要，灰蓝=内容预览，弱化=成功），
    不再用更大字号抢视觉——整表更清爽、可扫性更强 */
 .exec-title {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   min-width: 0;
   flex: 1 1 auto;
@@ -1046,7 +1046,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
    长节点名会溢出节点列侵入消息列（实测 46 字符节点名溢出 132px 与标题重叠） */
 .exec-stage {
   display: inline-block;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-blue);
   cursor: pointer;
   white-space: nowrap;
@@ -1058,7 +1058,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
 /* 模型 / Tokens 独立列：单行截断（同为 inline span，需 inline-block 让截断生效） */
 .exec-model__name {
   display: inline-block;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -1067,7 +1067,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
 }
 .exec-tokens {
   display: inline-block;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -1079,7 +1079,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   border-radius: 999px;
   padding: 1px 8px;
@@ -1090,19 +1090,19 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
 .exec-status--err { background: var(--mk-red-bg); color: var(--mk-red); }
 /* 时间/耗时/Trace 等宽数字列 */
 .exec-time {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .exec-dur {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .exec-trace {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   white-space: nowrap;
   cursor: pointer;
@@ -1129,12 +1129,12 @@ html[data-theme='dark'] .exec-detail td { background: #161718; }
   gap: 10px;
   padding: 8px 0 2px;
   color: var(--mk-muted);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
 .exec-detail__meta .mk-badge {
   background: #f0f2f5;
   color: var(--mk-muted, #5b6577);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   padding: 1px 7px;
 }
@@ -1150,37 +1150,37 @@ html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; colo
    错误码红底 chip 改为轻红文字——错误语义由红标题与状态 pill 承担，副行只作元数据） ---------- */
 .tline__errcode {
   flex-shrink: 0;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-red, #dc2626);
   white-space: nowrap;
 }
 .tline__http {
   flex-shrink: 0;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-red, #dc2626);
   white-space: nowrap;
 }
 .tline__recovered {
   flex-shrink: 0;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-amber);
   white-space: nowrap;
 }
 .tline__drift {
   flex-shrink: 0;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-amber);
   white-space: nowrap;
 }
-.tline__session { font-size: var(--mk-fs-12); color: var(--mk-blue, #2c63d0); cursor: pointer; }
+.tline__session { font-size: var(--mk-fs-micro); color: var(--mk-blue, #2c63d0); cursor: pointer; }
 .tline__session:hover { text-decoration: underline; }
 /* Prompt 契约展开区 */
 .tline__prompt { border-left: 3px solid rgba(217, 119, 6, 0.4); padding-left: 10px; }
-.tline__prompt-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: var(--mk-fs-11); color: var(--mk-faint); }
+.tline__prompt-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .tline__prompt-drift { color: var(--mk-amber); font-weight: 700; }
 
 .exec-detail__box pre {
@@ -1199,14 +1199,14 @@ html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; colo
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   font-family: var(--mk-mono);
 }
-.tline__none { margin: 0; font-size: var(--mk-fs-12); color: var(--mk-faint); }
+.tline__none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .tline__none--err { color: var(--mk-red); font-weight: 600; }
 .tline__section { display: grid; gap: 4px; }
-.tline__label { font-size: var(--mk-fs-11); font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
+.tline__label { font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
 .tline__label--err { color: var(--mk-red); }
 
 /* 重试时间线 */
@@ -1224,75 +1224,75 @@ html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; colo
 html[data-theme='dark'] .tline-attempt--fail { background: rgba(220, 38, 38, 0.08); }
 .tline-attempt--retry { border-left-color: var(--mk-amber); }
 .tline-attempt__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.tline-attempt__no { font-family: var(--mk-mono); font-size: var(--mk-fs-11); font-weight: 800; color: var(--mk-muted); }
-.tline-attempt__retry { font-size: var(--mk-fs-11); font-weight: 700; color: var(--mk-amber); }
+.tline-attempt__no { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-muted); }
+.tline-attempt__retry { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber); }
 .tline-attempt__cache { font-weight: 700; color: var(--mk-green, #15803d); }
-.tline-attempt__dur { margin-left: auto; font-size: var(--mk-fs-11); color: var(--mk-faint); }
-.tline-attempt__meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: var(--mk-fs-11); color: var(--mk-faint); }
-.tline-attempt__err { margin: 0; font-size: var(--mk-fs-11); color: var(--mk-red); word-break: break-all; }
+.tline-attempt__dur { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.tline-attempt__meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.tline-attempt__err { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-red); word-break: break-all; }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3，高度换算回逻辑坐标） ========== */
 @media (min-width: 2000px) {
-  .log-auto { font-size: var(--mk-fs-13); }
-  .mk-status__filter { font-size: var(--mk-fs-13); }
-  .mk-status__clear { font-size: 14.5px; }
+  .log-auto { font-size: var(--mk-fs-micro); }
+  .mk-status__filter { font-size: var(--mk-fs-micro); }
+  .mk-status__clear { font-size: var(--mk-fs-body); }
   /* 列宽：时间列由 shared.css 4K token 覆盖（--mk-col-time-full），固定列 4K 档字号放大 */
   .exec-time,
   .exec-dur,
   .exec-trace,
   .exec-stage,
-  .exec-model__name { font-size: var(--mk-fs-13); }
-  .exec-title { font-size: var(--mk-fs-15); }
+  .exec-model__name { font-size: var(--mk-fs-micro); }
+  .exec-title { font-size: var(--mk-fs-body); }
   .exec-tokens,
-  .exec-status { font-size: var(--mk-fs-13); }
+  .exec-status { font-size: var(--mk-fs-micro); }
   .tline__errcode,
   .tline__http,
   .tline__recovered,
-  .tline__drift { font-size: var(--mk-fs-12); }
+  .tline__drift { font-size: var(--mk-fs-micro); }
   .tline__session,
   .tline__prompt-meta,
-  .tline__payload-meta { font-size: var(--mk-fs-13); }
+  .tline__payload-meta { font-size: var(--mk-fs-micro); }
   .tline__none,
-  .tline__label { font-size: var(--mk-fs-13); }
+  .tline__label { font-size: var(--mk-fs-micro); }
   .tline-attempt__retry,
-  .tline-attempt__dur { font-size: var(--mk-fs-12); }
-  .tline-attempt__err { font-size: var(--mk-fs-13); }
-  .exec-detail__box pre { font-size: var(--mk-fs-13); }
-  .tline-attempt__no { font-size: var(--mk-fs-12); }
-  .tline-attempt__meta { font-size: 11.5px; }
+  .tline-attempt__dur { font-size: var(--mk-fs-micro); }
+  .tline-attempt__err { font-size: var(--mk-fs-micro); }
+  .exec-detail__box pre { font-size: var(--mk-fs-micro); }
+  .tline-attempt__no { font-size: var(--mk-fs-micro); }
+  .tline-attempt__meta { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号沿用 2000px 档 */
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：字号继续放大 */
-  .log-auto { font-size: 15.5px; }
-  .mk-status__filter { font-size: 15.5px; }
-  .mk-status__clear { font-size: 17px; }
+  .log-auto { font-size: var(--mk-fs-micro); }
+  .mk-status__filter { font-size: var(--mk-fs-micro); }
+  .mk-status__clear { font-size: var(--mk-fs-body); }
   .exec-table { }
   .exec-time,
   .exec-dur,
   .exec-trace,
   .exec-stage,
-  .exec-model__name { font-size: 15.5px; }
-  .exec-title { font-size: 17.5px; }
+  .exec-model__name { font-size: var(--mk-fs-micro); }
+  .exec-title { font-size: var(--mk-fs-body); }
   .exec-tokens,
-  .exec-status { font-size: var(--mk-fs-14); }
+  .exec-status { font-size: var(--mk-fs-micro); }
   .tline__errcode,
   .tline__http,
   .tline__recovered,
-  .tline__drift { font-size: var(--mk-fs-14); }
+  .tline__drift { font-size: var(--mk-fs-micro); }
   .tline__session,
   .tline__prompt-meta,
-  .tline__payload-meta { font-size: 15.5px; }
+  .tline__payload-meta { font-size: var(--mk-fs-micro); }
   .tline__none,
-  .tline__label { font-size: 15.5px; }
+  .tline__label { font-size: var(--mk-fs-micro); }
   .tline-attempt__retry,
-  .tline-attempt__dur { font-size: var(--mk-fs-14); }
-  .tline-attempt__err { font-size: 15.5px; }
-  .exec-detail__box pre { font-size: 15.5px; }
-  .tline-attempt__no { font-size: var(--mk-fs-14); }
-  .tline-attempt__meta { font-size: 13.5px; }
+  .tline-attempt__dur { font-size: var(--mk-fs-micro); }
+  .tline-attempt__err { font-size: var(--mk-fs-micro); }
+  .exec-detail__box pre { font-size: var(--mk-fs-micro); }
+  .tline-attempt__no { font-size: var(--mk-fs-micro); }
+  .tline-attempt__meta { font-size: var(--mk-fs-micro); }
 }
 
 /* ================= 暗色模式（D1 补完）：执行日志终端页 ================= */
@@ -1328,10 +1328,10 @@ html[data-theme='dark'] {
   padding: 10px 14px;
 }
 .cost-strip__main { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.cost-strip__label { color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-12, 12px); font-weight: 600; }
+.cost-strip__label { color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); font-weight: 600; }
 .cost-strip__value { font-size: var(--mk-fs-18); font-weight: 750; color: var(--mk-green, #16a34a); font-variant-numeric: tabular-nums; }
 .cost-strip__value--unknown { color: var(--mk-amber, #d97706); }
-.cost-strip__hint { color: var(--mk-faint, #5f6f8c); font-size: var(--mk-fs-12, 12px); }
+.cost-strip__hint { color: var(--mk-faint, #5f6f8c); font-size: var(--mk-fs-micro); }
 .cost-strip__missing {
   margin-left: auto;
   max-width: 52%;
@@ -1339,7 +1339,7 @@ html[data-theme='dark'] {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--mk-amber, #d97706);
-  font-size: var(--mk-fs-12, 12px);
+  font-size: var(--mk-fs-micro);
 }
 .cost-strip--unknown { border-left: 3px solid var(--mk-amber, #d97706); }
 

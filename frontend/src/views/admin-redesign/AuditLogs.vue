@@ -670,13 +670,13 @@ function goSessions(username: string) {
 
 /* 单元格 */
 .log-time {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .log-admin {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-ink);
   font-weight: 600;
   white-space: nowrap;
@@ -688,7 +688,7 @@ function goSessions(username: string) {
 .log-method {
   display: inline-block;
   font-family: var(--mk-mono);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   border-radius: 5px;
   padding: 1px 7px;
@@ -717,7 +717,7 @@ function goSessions(username: string) {
 .log-path {
   /* inline-block（非 inline）：max-width/text-overflow 只对块级盒生效 */
   display: inline-block;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-ink);
   white-space: nowrap;
   overflow: hidden;
@@ -738,7 +738,7 @@ function goSessions(username: string) {
 
 .log-action {
   display: inline-block;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   border-radius: 5px;
   padding: 1px 8px;
@@ -751,38 +751,38 @@ function goSessions(username: string) {
 }
 /* P2-16：失败 TOP 聚合 chip（点击下钻到该动作的失败记录） */
 .al-fails { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 48%; }
-.al-fails__label { font-size: var(--mk-fs-11); font-weight: 800; color: var(--mk-faint); }
+.al-fails__label { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); }
 .al-fails__chip {
   border: 1px solid var(--mk-line);
   border-radius: 999px;
   background: transparent;
   color: var(--mk-muted);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   padding: 2px 8px;
 }
 .al-fails__chip b { color: #b91c1c; font-variant-numeric: tabular-nums; }
 .log-tt {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   white-space: nowrap;
 }
 .log-target {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .log-ip {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .log-reason {
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -801,7 +801,7 @@ function goSessions(username: string) {
   margin-left: auto;
   text-align: center;
   overflow: hidden;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   transition: transform 0.15s ease;
 }
@@ -812,7 +812,7 @@ function goSessions(username: string) {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   font-family: var(--mk-mono);
 }
@@ -834,66 +834,66 @@ function goSessions(username: string) {
   white-space: pre-wrap;
   word-break: break-all;
 }
-.log-none { margin: 0; font-size: var(--mk-fs-12); color: var(--mk-faint); }
+.log-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .log-section { display: grid; gap: 4px; }
-.log-label { font-size: var(--mk-fs-11); font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
+.log-label { font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
 
 /* 大屏/4K 适配（全站 mk 体系档位；表格与状态条由 shared.css 档位覆盖） */
 @media (min-width: 2000px) {
   .log-time,
   .log-target,
-  .log-ip { font-size: 13.5px; }
-  .log-admin { font-size: var(--mk-fs-14); }
-  .log-method { font-size: var(--mk-fs-12_5); padding: 2px 9px; }
-  .log-path { font-size: 13.5px; max-width: 520px; }
-  .log-action { font-size: var(--mk-fs-13); max-width: 520px; }
+  .log-ip { font-size: var(--mk-fs-micro); }
+  .log-admin { font-size: var(--mk-fs-body); }
+  .log-method { font-size: var(--mk-fs-micro); padding: 2px 9px; }
+  .log-path { font-size: var(--mk-fs-micro); max-width: 520px; }
+  .log-action { font-size: var(--mk-fs-micro); max-width: 520px; }
   .log-admin { max-width: 300px; }
   .log-tt,
   .log-reason,
-  .log-none { font-size: var(--mk-fs-13); }
+  .log-none { font-size: var(--mk-fs-micro); }
   .log-payload-meta,
-  .log-ua { font-size: var(--mk-fs-13); }
-  .log-label { font-size: var(--mk-fs-13); }
-  .log-payload pre { font-size: var(--mk-fs-13); }
+  .log-ua { font-size: var(--mk-fs-micro); }
+  .log-label { font-size: var(--mk-fs-micro); }
+  .log-payload pre { font-size: var(--mk-fs-micro); }
   .log-payload-row td { padding-left: 84px !important; }
-  .log-arrow { font-size: var(--mk-fs-14); }
+  .log-arrow { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
   .log-time,
   .log-target,
-  .log-ip { font-size: var(--mk-fs-16); }
-  .log-admin { font-size: 16.5px; }
-  .log-method { font-size: var(--mk-fs-14); }
-  .log-path { font-size: var(--mk-fs-16); max-width: 640px; }
-  .log-action { font-size: 15.5px; max-width: 640px; }
+  .log-ip { font-size: var(--mk-fs-micro); }
+  .log-admin { font-size: var(--mk-fs-body); }
+  .log-method { font-size: var(--mk-fs-micro); }
+  .log-path { font-size: var(--mk-fs-micro); max-width: 640px; }
+  .log-action { font-size: var(--mk-fs-micro); max-width: 640px; }
   .log-admin { max-width: 360px; }
   .log-tt,
   .log-reason,
-  .log-none { font-size: 15.5px; }
+  .log-none { font-size: var(--mk-fs-micro); }
   .log-payload-meta,
-  .log-ua { font-size: 15.5px; }
-  .log-label { font-size: 15.5px; }
-  .log-payload pre { font-size: 15.5px; }
-  .log-arrow { font-size: 16.5px; }
+  .log-ua { font-size: var(--mk-fs-micro); }
+  .log-label { font-size: var(--mk-fs-micro); }
+  .log-payload pre { font-size: var(--mk-fs-micro); }
+  .log-arrow { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 3600px) {
   .log-time,
   .log-target,
-  .log-ip { font-size: var(--mk-fs-18); }
-  .log-admin { font-size: 18.5px; }
-  .log-method { font-size: var(--mk-fs-16); padding: 3px 11px; }
-  .log-path { font-size: var(--mk-fs-18); max-width: 760px; }
-  .log-action { font-size: 17.5px; max-width: 760px; }
+  .log-ip { font-size: var(--mk-fs-body); }
+  .log-admin { font-size: var(--mk-fs-emphasis); }
+  .log-method { font-size: var(--mk-fs-micro); padding: 3px 11px; }
+  .log-path { font-size: var(--mk-fs-body); max-width: 760px; }
+  .log-action { font-size: var(--mk-fs-body); max-width: 760px; }
   .log-admin { max-width: 420px; }
   .log-tt,
   .log-reason,
-  .log-none { font-size: 17.5px; }
+  .log-none { font-size: var(--mk-fs-body); }
   .log-payload-meta,
-  .log-ua { font-size: 17.5px; }
-  .log-label { font-size: 17.5px; }
-  .log-payload pre { font-size: 17.5px; }
+  .log-ua { font-size: var(--mk-fs-body); }
+  .log-label { font-size: var(--mk-fs-body); }
+  .log-payload pre { font-size: var(--mk-fs-body); }
   .log-payload-row td { padding-left: 100px !important; }
-  .log-arrow { font-size: var(--mk-fs-18); }
+  .log-arrow { font-size: var(--mk-fs-body); }
 }
 
 /* ================= 暗色模式（D1 补完）：审计日志 ================= */

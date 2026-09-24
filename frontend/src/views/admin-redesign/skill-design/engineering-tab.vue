@@ -188,14 +188,14 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
 .sdp-ok { color: var(--mk-green); }
 .sdp-warn { color: var(--mk-amber); }
 .sdp-bad-text { color: var(--mk-red); font-weight: 700; }
-.sdp-none { margin: 0; font-size: 12px; color: var(--mk-faint); }
+.sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .sdp-eng { display: grid; gap: 8px; }
 /* 区块头走 .mk-section__head（shared.css） */
-.sdp-sec-meta { font-size: 11px; color: var(--mk-faint); display: inline-flex; gap: 10px; align-items: center; }
+.sdp-sec-meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); display: inline-flex; gap: 10px; align-items: center; }
 .sdp-kv {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--mk-fs-micro);
   background: #fff;
   border: 1px solid var(--mk-line);
   border-radius: 12px;
@@ -204,7 +204,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
 .sdp-kv th {
   text-align: left;
   font-weight: 600;
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   padding: 7px 12px;
   width: 180px;
@@ -219,7 +219,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   word-break: break-all;
 }
 .sdp-kv tr:last-child th, .sdp-kv tr:last-child td { border-bottom: none; }
-.sdp-kv code { font-size: 11px; }
+.sdp-kv code { font-size: var(--mk-fs-micro); }
 .sdp-protocols { display: grid; gap: 8px; }
 .sdp-protocol {
   border: 1px solid #e6ecf6;
@@ -230,9 +230,9 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   background: #fff;
 }
 .sdp-protocol header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.sdp-protocol strong { font-size: 12.5px; font-weight: 600; color: #223252; }
-.sdp-protocol p { margin: 0; font-size: 11.5px; color: var(--mk-muted); line-height: 1.6; }
-.sdp-protocol__sites { font-size: 10px; color: var(--mk-faint); word-break: break-all; }
+.sdp-protocol strong { font-size: var(--mk-fs-micro); font-weight: 600; color: #223252; }
+.sdp-protocol p { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
+.sdp-protocol__sites { font-size: var(--mk-fs-micro); color: var(--mk-faint); word-break: break-all; }
 .sdp-conflict {
   display: grid;
   gap: 4px;
@@ -241,7 +241,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   background: var(--mk-amber-bg);
   border: 1px solid rgba(180, 83, 9, 0.3);
   color: var(--mk-amber);
-  font-size: 11.5px;
+  font-size: var(--mk-fs-micro);
 }
 .sdp-rules { display: grid; gap: 6px; }
 .sdp-rule {
@@ -251,26 +251,26 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   border-left: 2px solid rgba(141, 107, 255, 0.45);
   background: #faf9ff;
   border-radius: 0 8px 8px 0;
-  font-size: 12px;
+  font-size: var(--mk-fs-micro);
 }
-.sdp-rule__id { color: #8d6bff; font-size: 10.5px; font-weight: 700; }
+.sdp-rule__id { color: #8d6bff; font-size: var(--mk-fs-micro); font-weight: 700; }
 .sdp-rule__text { color: #263950; line-height: 1.55; }
 
 /* 4K：字号跟随壳层放大 */
 @media (min-width: 3600px) {
-  .mk-section__head h4 { font-size: 17.5px; }
-  .sdp-sec-meta { font-size: 17.5px; }
-  .sdp-kv { font-size: 18px; }
-  .sdp-kv th { font-size: 17px; padding: 10px 16px; }
+  .mk-section__head h4 { font-size: var(--mk-fs-body); }
+  .sdp-sec-meta { font-size: var(--mk-fs-body); }
+  .sdp-kv { font-size: var(--mk-fs-body); }
+  .sdp-kv th { font-size: var(--mk-fs-body); padding: 10px 16px; }
   .sdp-kv td { padding: 10px 16px; }
-  .sdp-kv code { font-size: 17px; }
+  .sdp-kv code { font-size: var(--mk-fs-body); }
   .sdp-protocol { padding: 14px 16px; }
-  .sdp-protocol strong { font-size: 19px; }
-  .sdp-protocol p { font-size: 18px; }
-  .sdp-protocol__sites { font-size: 16.5px; }
-  .sdp-conflict { font-size: 18px; padding: 13px 16px; }
-  .sdp-rule { font-size: 18px; padding: 10px 12px 10px 16px; }
-  .sdp-rule__id { font-size: 16.5px; }
+  .sdp-protocol strong { font-size: var(--mk-fs-emphasis); }
+  .sdp-protocol p { font-size: var(--mk-fs-body); }
+  .sdp-protocol__sites { font-size: var(--mk-fs-body); }
+  .sdp-conflict { font-size: var(--mk-fs-body); padding: 13px 16px; }
+  .sdp-rule { font-size: var(--mk-fs-body); padding: 10px 12px 10px 16px; }
+  .sdp-rule__id { font-size: var(--mk-fs-body); }
 }
 
 /* 暗色模式：sdp 面板/表格浅色硬编码收敛 */

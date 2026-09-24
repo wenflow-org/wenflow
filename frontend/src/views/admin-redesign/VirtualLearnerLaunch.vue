@@ -169,18 +169,18 @@ defineExpose({ open })
 <style scoped>
 .vl-req {
   font-style: normal;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-blue, #2c63d0);
   margin-left: 4px;
 }
 @media (min-width: 2000px) {
-  .vl-req { font-size: var(--mk-fs-12); }
+  .vl-req { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .vl-req { font-size: var(--mk-fs-14); }
+  .vl-req { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
-  .vl-req { font-size: 16.5px; }
+  .vl-req { font-size: var(--mk-fs-body); }
 }
 </style>

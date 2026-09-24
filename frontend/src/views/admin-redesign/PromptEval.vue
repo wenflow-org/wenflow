@@ -1031,14 +1031,14 @@ void reloadRuns()
 
 <style scoped>
 .pe-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; }
-.pe-filter__hint { color: var(--mk-faint); font-size: var(--mk-fs-12); margin-left: auto; }
+.pe-filter__hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); margin-left: auto; }
 /* 列表高度：空态占位交给 mk-empty--min，有数据时表格自然高度（不再硬撑满屏） */
 .pe-list { min-height: 0; }
-.pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-12); color: var(--mk-muted); }
+.pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .pe-persona-missing { margin-left: 6px; }
 .pe-result { display: flex; align-items: baseline; gap: 6px; }
-.pe-result strong { font-size: var(--mk-fs-13); font-family: var(--mk-mono); }
-.pe-result span { font-size: var(--mk-fs-11); color: var(--mk-faint); }
+.pe-result strong { font-size: var(--mk-fs-body); font-family: var(--mk-mono); }
+.pe-result span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .pe-result--ok strong { color: var(--mk-green); }
 .pe-result--warn strong { color: var(--mk-amber); }
 .pe-result--bad strong { color: var(--mk-red); }
@@ -1073,8 +1073,8 @@ void reloadRuns()
   padding: 8px 12px;
   margin-bottom: 4px;
 }
-.pe-guide__title { font-size: var(--mk-fs-12_5); font-weight: 700; color: var(--mk-purple); }
-.pe-guide__steps { font-size: var(--mk-fs-12); color: var(--mk-muted); line-height: 1.5; }
+.pe-guide__title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-purple); }
+.pe-guide__steps { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
 /* .mk-field__opt（字段标签内的「（可选）」次级提示）已提升为全局，见 shared.css */
 
 /* ===== 学生输入：标准 tab ===== */
@@ -1087,7 +1087,7 @@ void reloadRuns()
   background: transparent;
   padding: 8px 14px;
   cursor: pointer;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 600;
   color: var(--mk-muted);
   border-bottom: 2px solid transparent;
@@ -1109,7 +1109,7 @@ void reloadRuns()
 /* 模拟参数：一行内联 */
 .pe-params { display: grid; grid-template-columns: 84px 150px 1fr; gap: 10px; align-items: end; }
 .pe-param { display: grid; gap: 4px; }
-.pe-param__label { font-size: var(--mk-fs-11_5); font-weight: 600; color: var(--mk-muted); }
+.pe-param__label { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); }
 
 /* ===== select 与 input 高度统一 =====
    Chrome 原生 select 有 appearance 导致的盒模型差异（与 input 差 1-2px）。
@@ -1137,15 +1137,15 @@ void reloadRuns()
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 700;
   color: var(--mk-ink);
   user-select: none;
 }
 .pe-expect summary::-webkit-details-marker { display: none; }
-.pe-expect summary::before { content: '▸'; font-size: var(--mk-fs-11); color: var(--mk-faint); transition: transform .15s ease; }
+.pe-expect summary::before { content: '▸'; font-size: var(--mk-fs-micro); color: var(--mk-faint); transition: transform .15s ease; }
 .pe-expect[open] summary::before { transform: rotate(90deg); }
-.pe-expect__hint { font-size: var(--mk-fs-11); font-weight: 400; color: var(--mk-faint); }
+.pe-expect__hint { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-faint); }
 .pe-expect > * + * { margin-top: 10px; }
 /* 折叠语义恢复：内容元素的显式 display（grid 等）会覆盖 UA 的 display:none */
 .pe-expect:not([open]) > *:not(summary),
@@ -1161,23 +1161,23 @@ void reloadRuns()
 .pe-adv > * + * { margin-top: 10px; }
 .pe-adv summary {
   cursor: pointer;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-muted);
   padding: 4px 0;
   user-select: none;
 }
 .pe-adv summary:hover { color: var(--mk-purple); }
-.pe-adv__hint { font-size: var(--mk-fs-11); font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
+.pe-adv__hint { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
 
 /* 模拟对话轨迹 */
 .pe-transcript { display: grid; gap: 6px; margin-top: 6px; }
-.pe-transcript__row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; font-size: var(--mk-fs-12); }
+.pe-transcript__row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; font-size: var(--mk-fs-micro); }
 .pe-transcript__role { font-weight: 700; padding-top: 2px; }
 .pe-transcript__role--goal { color: var(--mk-purple); }
 .pe-transcript__role--learner { color: var(--mk-green); }
 .pe-transcript__content { color: var(--mk-muted); line-height: 1.6; word-break: break-all; }
-.pe-transcript__meta { grid-column: 2; font-size: var(--mk-fs-11); color: var(--mk-faint); }
+.pe-transcript__meta { grid-column: 2; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 
 /* 运行概要：MkKpi 网格容器（统计卡本体由 MkKpi 提供） */
@@ -1186,15 +1186,15 @@ void reloadRuns()
 .pe-result-row { border: 1px solid var(--mk-line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; background: var(--mk-surface); }
 .pe-result-row--fail { border-color: rgba(220, 38, 38, 0.35); background: var(--mk-red-bg, #fef2f2); }
 .pe-result-row__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pe-result-row__head strong { font-size: var(--mk-fs-12_5); }
-.pe-result-row__meta { margin-left: auto; font-size: var(--mk-fs-11); color: var(--mk-faint); }
+.pe-result-row__head strong { font-size: var(--mk-fs-micro); }
+.pe-result-row__meta { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .pe-result-row__checks { display: flex; gap: 6px; flex-wrap: wrap; }
-.pe-check { font-size: var(--mk-fs-11); padding: 1px 8px; border-radius: 99px; font-weight: 600; }
+.pe-check { font-size: var(--mk-fs-micro); padding: 1px 8px; border-radius: 99px; font-weight: 600; }
 .pe-check--ok { background: var(--mk-green-bg); color: var(--mk-green); }
 .pe-check--fail { background: var(--mk-red-bg); color: var(--mk-red); }
 .pe-result-row__out {
   margin: 0;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   max-height: 96px;
   overflow-y: auto;
@@ -1205,18 +1205,18 @@ void reloadRuns()
 }
 
 @media (min-width: 2000px) {
-  .pe-result-row__head strong { font-size: var(--mk-fs-14); }
-  .pe-result-row__out { font-size: 13.5px; }
+  .pe-result-row__head strong { font-size: var(--mk-fs-body); }
+  .pe-result-row__out { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .pe-result-row__head strong { font-size: 16.5px; }
-  .pe-result-row__out { font-size: var(--mk-fs-16); }
-  .pe-expect { font-size: 13.5px; max-width: 300px; }
+  .pe-result-row__head strong { font-size: var(--mk-fs-body); }
+  .pe-result-row__out { font-size: var(--mk-fs-micro); }
+  .pe-expect { font-size: var(--mk-fs-micro); max-width: 300px; }
 }
 @media (min-width: 3600px) {
-  .pe-result-row__head strong { font-size: 19.5px; }
-  .pe-result-row__out { font-size: 18.5px; }
-  .pe-expect { font-size: var(--mk-fs-16); max-width: 350px; }
+  .pe-result-row__head strong { font-size: var(--mk-fs-emphasis); }
+  .pe-result-row__out { font-size: var(--mk-fs-emphasis); }
+  .pe-expect { font-size: var(--mk-fs-micro); max-width: 350px; }
 }
 
 /* 暗色模式（D1 补完）：Prompt 评估（此前完全缺失） */

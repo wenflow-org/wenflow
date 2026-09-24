@@ -368,8 +368,8 @@ onMounted(() => {
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-modal);
 }
-.ac-error__card strong { font-size: var(--mk-fs-16); color: var(--mk-ink); }
-.ac-error__card span { font-size: var(--mk-fs-13); color: #5b6577; }
+.ac-error__card strong { font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
+.ac-error__card span { font-size: var(--mk-fs-body); color: #5b6577; }
 .ac-error__retry {
   margin-top: 6px;
   padding: 8px 20px;
@@ -378,7 +378,7 @@ onMounted(() => {
   background: var(--mk-blue, #2c63d0);
   color: #fff;
   font: inherit;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 700;
   cursor: pointer;
 }
@@ -389,7 +389,7 @@ onMounted(() => {
   color: var(--mk-blue, #2c63d0);
   border: 1px solid var(--mk-line);
 }
-.ac-error__diag { max-width: 460px; font-size: var(--mk-fs-12); color: var(--mk-faint); }
+.ac-error__diag { max-width: 460px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .ac-error__diag summary { cursor: pointer; }
 .ac-error__diag code {
   display: block;
@@ -405,14 +405,14 @@ onMounted(() => {
 @media (min-width: 2000px) {
   .ac-error__card { gap: 12px; padding: 38px 48px; border-radius: 19px; }
   .ac-error__card strong { font-size: 18.5px; }
-  .ac-error__card span { font-size: var(--mk-fs-15); }
-  .ac-error__retry { margin-top: 7px; padding: 9px 24px; border-radius: 10px; font-size: var(--mk-fs-15); }
+  .ac-error__card span { font-size: var(--mk-fs-body); }
+  .ac-error__retry { margin-top: 7px; padding: 9px 24px; border-radius: 10px; font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
   .ac-error__card { gap: 14px; padding: 46px 58px; border-radius: 22px; }
-  .ac-error__card strong { font-size: 21.5px; }
-  .ac-error__card span { font-size: 17.5px; }
-  .ac-error__retry { margin-top: 8px; padding: 11px 28px; border-radius: 12px; font-size: 17.5px; }
+  .ac-error__card strong { font-size: var(--mk-fs-emphasis); }
+  .ac-error__card span { font-size: var(--mk-fs-body); }
+  .ac-error__retry { margin-top: 8px; padding: 11px 28px; border-radius: 12px; font-size: var(--mk-fs-body); }
 }
 
 /* 异步 tab 过渡态：错误卡（加载骨架已统一走 SkeletonTable） */

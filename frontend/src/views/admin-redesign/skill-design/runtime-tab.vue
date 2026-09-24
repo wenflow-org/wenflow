@@ -273,11 +273,11 @@ watch(
   background: #eff6ff;
   border: 1px solid #dbe7f6;
   color: #41516e;
-  font-size: 12px;
+  font-size: var(--mk-fs-micro);
   line-height: 1.6;
 }
 .sdp-notice strong { margin-right: 6px; }
-.sdp-notice code { font-size: 11px; }
+.sdp-notice code { font-size: var(--mk-fs-micro); }
 .sdp-chiprows { display: grid; gap: 8px; }
 .sdp-chiprow {
   display: flex;
@@ -289,7 +289,7 @@ watch(
   border-radius: 10px;
   background: #fff;
 }
-.sdp-chiprow__label { font-size: 12px; font-weight: 600; color: var(--mk-muted); margin-right: 4px; }
+.sdp-chiprow__label { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); margin-right: 4px; }
 .sdp-chip {
   display: inline-flex;
   align-items: center;
@@ -298,7 +298,7 @@ watch(
   border-radius: 999px;
   background: #eef2fa;
   color: var(--mk-muted);
-  font-size: 10.5px;
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
 .sdp-chip b { color: var(--mk-ink); font-weight: 600; }
@@ -314,7 +314,7 @@ watch(
   .sdp-form__grid { grid-template-columns: 1fr; }
 }
 .sdp-field { display: grid; gap: 5px; }
-.sdp-field > span { font-size: 11.5px; color: var(--mk-muted); font-weight: 600; }
+.sdp-field > span { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
 .sdp-field > span em { font-style: normal; font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
 .sdp-field--check {
   display: flex;
@@ -328,15 +328,15 @@ watch(
   padding-top: 12px;
   border-top: 1px solid var(--mk-line);
 }
-.sdp-divider strong { font-size: 12.5px; }
-.sdp-divider span { color: var(--mk-faint); font-size: 11.5px; }
+.sdp-divider strong { font-size: var(--mk-fs-micro); }
+.sdp-divider span { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .sdp-form__footer {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
 }
-.sdp-form__msg { margin: 0 auto 0 0; font-size: 11.5px; color: var(--mk-green); font-weight: 600; }
+.sdp-form__msg { margin: 0 auto 0 0; font-size: var(--mk-fs-micro); color: var(--mk-green); font-weight: 600; }
 .sdp-form__msg.is-err { color: var(--mk-red); }
 .sdp-btn--danger { color: var(--mk-red); border-color: rgba(220, 38, 38, 0.35); background: transparent; }
 .sdp-btn--danger:hover { background: var(--mk-red-bg); }
@@ -346,22 +346,22 @@ watch(
   background: var(--mk-red-bg);
   border: 1px solid rgba(220, 38, 38, 0.3);
   color: var(--mk-red);
-  font-size: 12px;
+  font-size: var(--mk-fs-micro);
 }
 
 /* 4K：字号跟随壳层放大 */
 @media (min-width: 3600px) {
-  .sdp-chip { font-size: 16.5px; padding: 4px 12px; }
-  .sdp-notice { font-size: 18px; padding: 14px 18px; }
-  .sdp-notice code { font-size: 17px; }
+  .sdp-chip { font-size: var(--mk-fs-body); padding: 4px 12px; }
+  .sdp-notice { font-size: var(--mk-fs-body); padding: 14px 18px; }
+  .sdp-notice code { font-size: var(--mk-fs-body); }
   .sdp-chiprow { padding: 14px 16px; }
-  .sdp-chiprow__label { font-size: 18px; }
+  .sdp-chiprow__label { font-size: var(--mk-fs-body); }
   .sdp-form { padding: 18px 20px; gap: 14px; }
-  .sdp-field > span { font-size: 18px; }
-  .sdp .mk-input { font-size: 19px; padding: 12px 15px; }
-  .sdp-divider strong { font-size: 19px; }
-  .sdp-divider span { font-size: 18px; }
-  .sdp-form__msg { font-size: 18px; }
+  .sdp-field > span { font-size: var(--mk-fs-body); }
+  .sdp .mk-input { font-size: var(--mk-fs-emphasis); padding: 12px 15px; }
+  .sdp-divider strong { font-size: var(--mk-fs-emphasis); }
+  .sdp-divider span { font-size: var(--mk-fs-body); }
+  .sdp-form__msg { font-size: var(--mk-fs-body); }
 }
 
 /* 暗色模式 */

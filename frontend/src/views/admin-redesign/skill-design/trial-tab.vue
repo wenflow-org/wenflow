@@ -431,14 +431,14 @@ watch(
 }
 .sdp-block__head h4 {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--mk-faint);
 }
-.sdp-block__meta { display: inline-flex; align-items: center; gap: 10px; font-size: 11px; color: var(--mk-faint); }
-.sdp-none { margin: 0; font-size: 12px; color: var(--mk-faint); }
+.sdp-block__meta { display: inline-flex; align-items: center; gap: 10px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .sdp-bad-text { color: var(--mk-red); font-weight: 700; }
 
 /* Prompt 面板（视图切换已收敛为全局 mk-pills） */
@@ -446,11 +446,11 @@ watch(
   display: flex;
   gap: 14px;
   flex-wrap: wrap;
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
 }
 .sdp-prompt__facts b { color: var(--mk-ink); }
-.sdp-prompt__facts code { font-size: 10.5px; }
+.sdp-prompt__facts code { font-size: var(--mk-fs-micro); }
 .sdp-prompt__used { color: var(--mk-muted); }
 .sdp-prompt__code {
   margin: 0;
@@ -465,8 +465,8 @@ watch(
   font: 11.5px/1.65 var(--mk-mono);
   color: #263950;
 }
-.sdp-prompt__hint { margin: 0; font-size: 11px; color: var(--mk-faint); line-height: 1.6; }
-.sdp-prompt__hint code { font-size: 10.5px; }
+.sdp-prompt__hint { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.6; }
+.sdp-prompt__hint code { font-size: var(--mk-fs-micro); }
 
 /* 试跑 */
 .sdp-chip {
@@ -477,7 +477,7 @@ watch(
   border-radius: 999px;
   background: #eef2fa;
   color: var(--mk-muted);
-  font-size: 10.5px;
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
 .sdp-chip b { color: var(--mk-ink); font-weight: 600; }
@@ -486,7 +486,7 @@ watch(
   padding: 10px 12px;
   border: 1px solid #dbe3ef;
   border-radius: 9px;
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   line-height: 1.6;
   resize: vertical;
   background: #fbfcfe;
@@ -499,7 +499,7 @@ watch(
 .sdp-codehl--json .sdp-codehl__ta { min-height: 0; }
 .sdp-codehl--json { height: 180px; margin-bottom: 12px; position: relative; display: flex; flex-direction: column; border-radius: 9px; overflow: hidden; }
 .sdp-codehl--json .sdp-codehl__pre,
-.sdp-codehl--json .sdp-codehl__ta { height: 100%; padding: 10px 12px; font-size: 11px; }
+.sdp-codehl--json .sdp-codehl__ta { height: 100%; padding: 10px 12px; font-size: var(--mk-fs-micro); }
 .sdp-codehl--json .sdp-codehl__pre {
   position: absolute;
   inset: 0;
@@ -530,7 +530,7 @@ watch(
   background: var(--mk-code-bg, #101826);
   border: 1px solid var(--mk-code-border, #1c2a40);
   color: var(--mk-code-fg, #9db8dc);
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
@@ -543,7 +543,7 @@ watch(
   background: var(--mk-red-bg);
   border: 1px solid rgba(220, 38, 38, 0.3);
   color: var(--mk-red);
-  font-size: 12px;
+  font-size: var(--mk-fs-micro);
 }
 
 /* 最近调用 */
@@ -566,7 +566,7 @@ watch(
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-micro);
   text-align: left;
   cursor: pointer;
 }
@@ -574,8 +574,8 @@ watch(
 .sdp-log__dot { width: 7px; height: 7px; border-radius: 50%; }
 .sdp-log__dot.is-ok { background: var(--mk-green); }
 .sdp-log__dot.is-err, .sdp-log__dot.is-timeout { background: var(--mk-red); }
-.sdp-log__time { color: var(--mk-faint); font-size: 10px; }
-.sdp-log__dur { color: var(--mk-muted); font-size: 10.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.sdp-log__time { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.sdp-log__dur { color: var(--mk-muted); font-size: var(--mk-fs-micro); text-align: right; font-variant-numeric: tabular-nums; }
 .sdp-log__summary {
   color: var(--mk-muted);
   white-space: nowrap;
@@ -588,7 +588,7 @@ watch(
   background: transparent;
   color: var(--mk-blue);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   padding: 0 10px;
   cursor: pointer;
@@ -604,14 +604,14 @@ watch(
   background: #fbfcfe;
 }
 .sdp-log__io { display: grid; gap: 3px; }
-.sdp-log__io span { font-size: 10px; font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; }
+.sdp-log__io span { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; }
 .sdp-log__io pre {
   margin: 0;
   padding: 8px 10px;
   border-radius: 7px;
   background: #fff;
   border: 1px solid #eef2f8;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-micro);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -625,35 +625,35 @@ watch(
 @media (min-width: 2000px) {
   .sdp-json,
   .sdp-output,
-  .sdp-prompt__code { font-size: 13.5px; }
+  .sdp-prompt__code { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .sdp-json,
   .sdp-output,
-  .sdp-prompt__code { font-size: 16px; }
+  .sdp-prompt__code { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .sdp-block, .sdp-prompt { padding: 16px 18px; gap: 12px; }
-  .sdp-block__head h4 { font-size: 17.5px; }
-  .sdp-block__meta { font-size: 17.5px; }
-  .sdp-chip { font-size: 16.5px; padding: 4px 12px; }
-  .sdp-prompt__facts { font-size: 17.5px; gap: 18px; }
-  .sdp-prompt__facts code { font-size: 16.5px; }
-  .sdp-prompt__code { font-size: 19px; padding: 18px; }
-  .sdp-prompt__hint { font-size: 17.5px; }
-  .sdp-prompt__hint code { font-size: 16.5px; }
-  .sdp-json { font-size: 19px; padding: 14px 16px; }
+  .sdp-block__head h4 { font-size: var(--mk-fs-body); }
+  .sdp-block__meta { font-size: var(--mk-fs-body); }
+  .sdp-chip { font-size: var(--mk-fs-body); padding: 4px 12px; }
+  .sdp-prompt__facts { font-size: var(--mk-fs-body); gap: 18px; }
+  .sdp-prompt__facts code { font-size: var(--mk-fs-body); }
+  .sdp-prompt__code { font-size: var(--mk-fs-emphasis); padding: 18px; }
+  .sdp-prompt__hint { font-size: var(--mk-fs-body); }
+  .sdp-prompt__hint code { font-size: var(--mk-fs-body); }
+  .sdp-json { font-size: var(--mk-fs-emphasis); padding: 14px 16px; }
   .sdp-codehl--json { height: 240px; }
   .sdp-codehl--json .sdp-codehl__pre,
-  .sdp-codehl--json .sdp-codehl__ta { padding: 14px 16px; font-size: 19px; }
-  .sdp-output { font-size: 19px; padding: 16px; max-height: 420px; }
-  .sdp-error { font-size: 18px; padding: 14px 16px; }
-  .sdp-log__main { font-size: 18px; padding: 12px 14px; }
-  .sdp-log__time { font-size: 16px; }
-  .sdp-log__dur { font-size: 16.5px; }
-  .sdp-log__rerun { font-size: 17.5px; padding: 0 14px; }
-  .sdp-log__io span { font-size: 16px; }
-  .sdp-log__io pre { font-size: 16.5px; padding: 12px 14px; }
+  .sdp-codehl--json .sdp-codehl__ta { padding: 14px 16px; font-size: var(--mk-fs-emphasis); }
+  .sdp-output { font-size: var(--mk-fs-emphasis); padding: 16px; max-height: 420px; }
+  .sdp-error { font-size: var(--mk-fs-body); padding: 14px 16px; }
+  .sdp-log__main { font-size: var(--mk-fs-body); padding: 12px 14px; }
+  .sdp-log__time { font-size: var(--mk-fs-micro); }
+  .sdp-log__dur { font-size: var(--mk-fs-body); }
+  .sdp-log__rerun { font-size: var(--mk-fs-body); padding: 0 14px; }
+  .sdp-log__io span { font-size: var(--mk-fs-micro); }
+  .sdp-log__io pre { font-size: var(--mk-fs-body); padding: 12px 14px; }
 }
 
 /* 暗色模式 */

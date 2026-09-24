@@ -263,7 +263,7 @@ watch(
 <style scoped>
 /* ---------- 版本 ---------- */
 .sdp-versions { display: grid; gap: 16px; }
-.sdp-versions-msg { margin: 0; font-size: 11.5px; color: var(--mk-green); font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.sdp-versions-msg { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-green); font-weight: 600; display: flex; gap: 8px; align-items: center; }
 .sdp-versions-msg.is-err { color: var(--mk-red); }
 .sdp-table-wrap {
   border: 1px solid var(--mk-line);
@@ -277,7 +277,7 @@ watch(
   border-radius: 5px;
   background: #eef2fa;
   color: #41516e;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-micro);
 }
 /* Prompt 版本名称列：上限 420px（原 656px 占半屏无上限）+ ellipsis + title 全值 */
 .sdp-vname {
@@ -302,7 +302,7 @@ watch(
   padding: 8px 12px;
   background: #f8fafd;
   border-bottom: 1px solid #eef2f8;
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
 .sdp-diff__count { font-weight: 700; color: var(--mk-amber); }
@@ -312,7 +312,7 @@ watch(
   max-height: 380px;
   overflow-y: auto;
   padding: 6px 0;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-micro);
   line-height: 1.6;
 }
 .sdp-diff__line {
@@ -330,35 +330,35 @@ watch(
 .sdp-diff__no { color: var(--mk-faint); text-align: right; user-select: none; }
 .sdp-diff__text { white-space: pre-wrap; word-break: break-word; color: #41516e; }
 .sdp-diff__gap { padding: 2px 12px; color: #c3cede; user-select: none; }
-.sdp-diff__same { margin: 8px 12px; font-size: 11px; color: var(--mk-faint); }
+.sdp-diff__same { margin: 8px 12px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 核心文件版本表（沿用协议 tab 原 sdp-pw__table 视觉） */
-.sdp-pw__table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sdp-pw__table { width: 100%; border-collapse: collapse; font-size: var(--mk-fs-micro); }
 .sdp-pw__table th, .sdp-pw__table td {
   text-align: left;
   padding: 6px 8px;
   border-bottom: 1px solid #f0f2f5;
 }
 .sdp-pw__table-active { background: var(--mk-green-bg); }
-.sdp-pw__audit { font-size: 11px; color: var(--mk-faint); }
+.sdp-pw__audit { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 分区头 */
 .sdp-eng { display: grid; gap: 8px; }
 /* 区块头走 .mk-section__head（shared.css） */
-.sdp-sec-meta { font-size: 11px; color: var(--mk-faint); display: inline-flex; gap: 10px; align-items: center; }
-.sdp-none { margin: 0; font-size: 12px; color: var(--mk-faint); }
+.sdp-sec-meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); display: inline-flex; gap: 10px; align-items: center; }
+.sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 4K：字号跟随壳层放大 */
 @media (min-width: 3600px) {
-  .mk-section__head h4 { font-size: 17.5px; }
-  .sdp-sec-meta { font-size: 17.5px; }
-  .sdp-versions-msg { font-size: 18px; }
-  .sdp-vtag { font-size: 16.5px; padding: 2px 9px; }
-  .sdp-diff__head { font-size: 17.5px; padding: 12px 16px; }
-  .sdp-diff__body { font-size: 16.5px; max-height: 460px; }
-  .sdp-diff__same { font-size: 17.5px; }
-  .sdp-pw__table { font-size: 18px; }
-  .sdp-pw__audit { font-size: 17.5px; }
+  .mk-section__head h4 { font-size: var(--mk-fs-body); }
+  .sdp-sec-meta { font-size: var(--mk-fs-body); }
+  .sdp-versions-msg { font-size: var(--mk-fs-body); }
+  .sdp-vtag { font-size: var(--mk-fs-body); padding: 2px 9px; }
+  .sdp-diff__head { font-size: var(--mk-fs-body); padding: 12px 16px; }
+  .sdp-diff__body { font-size: var(--mk-fs-body); max-height: 460px; }
+  .sdp-diff__same { font-size: var(--mk-fs-body); }
+  .sdp-pw__table { font-size: var(--mk-fs-body); }
+  .sdp-pw__audit { font-size: var(--mk-fs-body); }
 }
 
 /* 暗色模式 */

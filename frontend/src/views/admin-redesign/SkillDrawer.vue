@@ -658,7 +658,7 @@ watch(
   border-radius: 999px;
   display: inline-grid;
   place-items: center;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   background: #eef2fa;
   color: var(--mk-faint);
@@ -708,7 +708,7 @@ watch(
   margin: 0;
   padding-left: 49px;
   color: #5b6577;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   line-height: 1.6;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -738,10 +738,10 @@ watch(
   padding: 10px 12px 11px;
 }
 .msk__stat + .msk__stat { border-left: 1px solid #eef2f8; }
-.msk__stat span { font-size: var(--mk-fs-12); color: var(--mk-faint); font-weight: 600; }
+.msk__stat span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
 .msk__stat strong {
   font-family: var(--mk-mono);
-  font-size: var(--mk-fs-16);
+  font-size: var(--mk-fs-emphasis);
   font-weight: 600;
   color: #1a2a44;
   font-variant-numeric: tabular-nums;
@@ -750,7 +750,7 @@ watch(
 .msk__stat strong.is-ok { color: var(--mk-green); }
 .msk__stat strong.is-warn { color: var(--mk-amber); }
 .msk__stat strong.is-na { color: var(--mk-faint); }
-.msk__note { margin: -8px 0 0; font-size: var(--mk-fs-12_5); color: var(--mk-faint); }
+.msk__note { margin: -8px 0 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 生效模型 kv 行 */
 .msk__kv {
@@ -761,11 +761,11 @@ watch(
   border: 1px dashed var(--mk-line);
   border-radius: 10px;
 }
-.msk__kv span { font-size: var(--mk-fs-12); color: var(--mk-faint); font-weight: 600; }
-.msk__kv strong { font-size: var(--mk-fs-12); color: #1a2a44; font-weight: 600; }
+.msk__kv span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
+.msk__kv strong { font-size: var(--mk-fs-micro); color: #1a2a44; font-weight: 600; }
 .msk__src {
   margin-left: auto;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   font-style: normal;
   font-weight: 600;
   color: var(--mk-faint);
@@ -778,7 +778,7 @@ watch(
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   font-weight: 600;
 }
@@ -795,7 +795,7 @@ watch(
   border-radius: 9px;
   background: #fff;
   font: inherit;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   text-align: left;
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease;
@@ -813,16 +813,16 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.msk__row-num { color: #5b6577; font-size: var(--mk-fs-12_5); font-variant-numeric: tabular-nums; }
+.msk__row-num { color: #5b6577; font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; }
 .msk__row-id {
   color: var(--mk-faint);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.msk__none { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-12); }
+.msk__none { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .msk__notfound {
   width: var(--mk-drawer-w, 560px);
   max-width: 100vw;
@@ -835,8 +835,8 @@ watch(
   text-align: center;
   padding: 24px;
 }
-.msk__notfound strong { font-size: var(--mk-fs-14); color: var(--mk-ink); }
-.msk__notfound span { font-size: var(--mk-fs-12_5); color: var(--mk-faint); }
+.msk__notfound strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
+.msk__notfound span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 代码井（Prompt 预览） */
 .msk__code {
@@ -863,7 +863,7 @@ watch(
   padding: 9px 12px;
   border: 1px dashed var(--mk-line);
   border-radius: 9px;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: #5b6577;
 }
 .mk-link {
@@ -872,7 +872,7 @@ watch(
   color: var(--mk-blue, #2c63d0);
   font: inherit;
   font-weight: 700;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -886,12 +886,12 @@ watch(
   border: 1px solid #e6ecf6;
   border-radius: 9px;
   background: #fbfcfe;
-  font-size: 11.5px;
+  font-size: var(--mk-fs-micro);
   color: #41516e;
 }
 .mt-row--check input { width: 15px; height: 15px; accent-color: var(--mk-blue); }
 .mt-row--check em { font-style: normal; font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
-.mt-rt-msg { margin: 0; font-size: 11.5px; color: var(--mk-green); font-weight: 600; }
+.mt-rt-msg { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-green); font-weight: 600; }
 .mt-rt-msg.is-err { color: var(--mk-red); }
 .mt-btn--danger { color: var(--mk-red); border-color: rgba(220, 38, 38, 0.35); background: transparent; }
 .mt-btn--danger:hover { background: var(--mk-red-bg); }
@@ -905,7 +905,7 @@ watch(
   color: var(--mk-blue, #2c63d0);
   font: inherit;
   font-weight: 700;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   padding: 10px 12px;
   border-radius: 10px;
   cursor: pointer;
@@ -921,19 +921,19 @@ watch(
   gap: 10px;
 }
 .mt-field { display: grid; gap: 4px; }
-.mt-field > span { font-size: 11px; color: var(--mk-faint); font-weight: 600; }
-.mt-hint { font-style: normal; font-weight: 400; color: var(--mk-faint); font-size: 10.5px; margin-left: 5px; }
+.mt-field > span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
+.mt-hint { font-style: normal; font-weight: 400; color: var(--mk-faint); font-size: var(--mk-fs-micro); margin-left: 5px; }
 .mt-resolved {
   margin: 0;
   padding: 6px 10px;
   border-radius: 8px;
   background: #f2f6fd;
   border: 1px dashed #d3e0f5;
-  font-size: 10.5px;
+  font-size: var(--mk-fs-micro);
   color: #41516e;
 }
 .mt-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.mt-err { font-size: 11.5px; color: var(--mk-red); font-weight: 600; }
+.mt-err { font-size: var(--mk-fs-micro); color: var(--mk-red); font-weight: 600; }
 .mt-result {
   display: grid;
   gap: 10px;
@@ -950,10 +950,10 @@ watch(
   gap: 8px;
 }
 .mt-cell { display: grid; gap: 2px; }
-.mt-cell span { font-size: 10px; color: var(--mk-faint); font-weight: 600; }
+.mt-cell span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
 .mt-cell strong {
   font-family: var(--mk-mono);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: #1a2a44;
   font-variant-numeric: tabular-nums;
@@ -967,7 +967,7 @@ watch(
   background: var(--mk-code-bg, #101826);
   border: 1px solid var(--mk-code-border, #1c2a40);
   color: var(--mk-code-fg, #9db8dc);
-  font-size: 10.5px;
+  font-size: var(--mk-fs-micro);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -978,50 +978,50 @@ watch(
 
 /* 4K：面板宽/头/体/关闭按钮由 .mk-drawer 全局档接管；此处只放大页面私有内容字号 */
 @media (min-width: 2000px) {
-  .msk__id { font-size: var(--mk-fs-12_5); }
-  .msk__tab-badge { font-size: var(--mk-fs-12); }
-  .msk__stat span { font-size: var(--mk-fs-12); }
-  .msk__stat strong { font-size: var(--mk-fs-18); }
-  .msk__row { font-size: var(--mk-fs-14); }
-  .msk__row-id { font-size: var(--mk-fs-12_5); }
-  .msk__row-num { font-size: var(--mk-fs-12_5); }
-  .msk__note { font-size: var(--mk-fs-12_5); }
-  .mk-section__head h4 { font-size: var(--mk-fs-13); }
-  .msk__sec-meta { font-size: var(--mk-fs-12_5); }
-  .msk__kv span { font-size: var(--mk-fs-13); }
-  .msk__code { font-size: var(--mk-fs-12_5); }
-  .msk__prompt { font-size: 13.5px; }
+  .msk__id { font-size: var(--mk-fs-micro); }
+  .msk__tab-badge { font-size: var(--mk-fs-micro); }
+  .msk__stat span { font-size: var(--mk-fs-micro); }
+  .msk__stat strong { font-size: var(--mk-fs-emphasis); }
+  .msk__row { font-size: var(--mk-fs-body); }
+  .msk__row-id { font-size: var(--mk-fs-micro); }
+  .msk__row-num { font-size: var(--mk-fs-micro); }
+  .msk__note { font-size: var(--mk-fs-micro); }
+  .mk-section__head h4 { font-size: var(--mk-fs-micro); }
+  .msk__sec-meta { font-size: var(--mk-fs-micro); }
+  .msk__kv span { font-size: var(--mk-fs-micro); }
+  .msk__code { font-size: var(--mk-fs-micro); }
+  .msk__prompt { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .msk__id { font-size: var(--mk-fs-15); }
-  .msk__tab-badge { font-size: var(--mk-fs-14); }
-  .msk__stat span { font-size: var(--mk-fs-14); }
-  .msk__stat strong { font-size: 22px; }
-  .msk__row { font-size: 16.5px; }
-  .msk__row-id { font-size: var(--mk-fs-15); }
-  .msk__row-num { font-size: var(--mk-fs-15); }
-  .msk__note { font-size: var(--mk-fs-15); }
-  .mk-section__head h4 { font-size: 15.5px; }
-  .msk__sec-meta { font-size: var(--mk-fs-15); }
-  .msk__kv span { font-size: 15.5px; }
-  .msk__code { font-size: var(--mk-fs-15); }
-  .msk__prompt { font-size: var(--mk-fs-16); }
+  .msk__id { font-size: var(--mk-fs-micro); }
+  .msk__tab-badge { font-size: var(--mk-fs-micro); }
+  .msk__stat span { font-size: var(--mk-fs-micro); }
+  .msk__stat strong { font-size: var(--mk-fs-emphasis); }
+  .msk__row { font-size: var(--mk-fs-body); }
+  .msk__row-id { font-size: var(--mk-fs-micro); }
+  .msk__row-num { font-size: var(--mk-fs-micro); }
+  .msk__note { font-size: var(--mk-fs-micro); }
+  .mk-section__head h4 { font-size: var(--mk-fs-micro); }
+  .msk__sec-meta { font-size: var(--mk-fs-micro); }
+  .msk__kv span { font-size: var(--mk-fs-micro); }
+  .msk__code { font-size: var(--mk-fs-micro); }
+  .msk__prompt { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   /* 4K（抽屉 Teleport 到 body，无 zoom）：字号继续放大（面板宽/头/体由 mk-drawer 全局档接管） */
-  .msk__id { font-size: 17.5px; }
-  .msk__tab-badge { font-size: 16.5px; }
-  .msk__stat span { font-size: 16.5px; }
+  .msk__id { font-size: var(--mk-fs-body); }
+  .msk__tab-badge { font-size: var(--mk-fs-body); }
+  .msk__stat span { font-size: var(--mk-fs-body); }
   .msk__stat strong { font-size: 26px; }
-  .msk__row { font-size: 19.5px; }
-  .msk__row-id { font-size: 17.5px; }
-  .msk__row-num { font-size: 17.5px; }
-  .msk__note { font-size: 17.5px; }
-  .mk-section__head h4 { font-size: var(--mk-fs-18); }
-  .msk__sec-meta { font-size: 17.5px; }
-  .msk__kv span { font-size: var(--mk-fs-18); }
-  .msk__code { font-size: 17.5px; }
-  .msk__prompt { font-size: 18.5px; }
+  .msk__row { font-size: var(--mk-fs-emphasis); }
+  .msk__row-id { font-size: var(--mk-fs-body); }
+  .msk__row-num { font-size: var(--mk-fs-body); }
+  .msk__note { font-size: var(--mk-fs-body); }
+  .mk-section__head h4 { font-size: var(--mk-fs-body); }
+  .msk__sec-meta { font-size: var(--mk-fs-body); }
+  .msk__kv span { font-size: var(--mk-fs-body); }
+  .msk__code { font-size: var(--mk-fs-body); }
+  .msk__prompt { font-size: var(--mk-fs-emphasis); }
 }
 
 /* ================= 暗色模式（D1 补完）：Skill 抽屉 ================= */

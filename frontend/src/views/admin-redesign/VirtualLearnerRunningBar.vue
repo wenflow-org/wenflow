@@ -101,7 +101,7 @@ function stageLabel(stage: string | null | undefined): string {
   border: 1px dashed #cbd5e1;
   background: #fff;
   color: #64748b;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 999px;
@@ -147,7 +147,7 @@ function stageLabel(stage: string | null | undefined): string {
 .vl-running::-webkit-scrollbar { height: 4px; }
 .vl-running::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.3); border-radius: 2px; }
 .vl-running__label {
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   color: #047857;
   white-space: nowrap;
@@ -174,7 +174,7 @@ function stageLabel(stage: string | null | undefined): string {
   border: 1px solid rgba(16, 185, 129, 0.35);
   background: #fff;
   color: #065f46;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   cursor: pointer;
   transition: background 0.12s ease;

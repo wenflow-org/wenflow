@@ -179,12 +179,12 @@ defineExpose({ open })
   border-radius: 10px;
   background: #f4f7fc;
   color: var(--mk-muted, #5b6577);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   line-height: 1.5;
 }
 .vl-req {
   font-style: normal;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-blue, #2c63d0);
   margin-left: 4px;
@@ -204,7 +204,7 @@ defineExpose({ open })
 .vl-ai { flex: 0 0 auto; }
 .vl-ai-hint {
   margin: 0;
-  font-size: var(--mk-fs-11);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint, #8492ab);
   line-height: 1.45;
 }
@@ -214,7 +214,7 @@ defineExpose({ open })
   border-radius: 8px;
   background: #e8f7ee;
   color: #1a7f4b;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
 .vl-advanced {
@@ -226,7 +226,7 @@ defineExpose({ open })
 }
 .vl-advanced summary {
   cursor: pointer;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-muted, #5b6577);
   list-style: none;
@@ -236,33 +236,33 @@ defineExpose({ open })
 .vl-advanced .mk-field { margin-bottom: 0; }
 
 @media (min-width: 2000px) {
-  .vl-steps { font-size: var(--mk-fs-13); padding: 9px 12px; }
-  .vl-req { font-size: var(--mk-fs-12); }
+  .vl-steps { font-size: var(--mk-fs-micro); padding: 9px 12px; }
+  .vl-req { font-size: var(--mk-fs-micro); }
   .vl-ai-row { gap: 12px; }
-  .vl-ai-hint { font-size: var(--mk-fs-12_5); }
-  .vl-persona-ok { font-size: var(--mk-fs-14); padding: 7px 12px; }
+  .vl-ai-hint { font-size: var(--mk-fs-micro); }
+  .vl-persona-ok { font-size: var(--mk-fs-body); padding: 7px 12px; }
   .vl-advanced { padding: 10px 14px; }
-  .vl-advanced summary { font-size: var(--mk-fs-14); }
+  .vl-advanced summary { font-size: var(--mk-fs-body); }
   .vl-advanced[open] summary { margin-bottom: 9px; }
 }
 @media (min-width: 2800px) {
-  .vl-steps { font-size: 15.5px; padding: 11px 14px; }
-  .vl-req { font-size: var(--mk-fs-14); }
+  .vl-steps { font-size: var(--mk-fs-micro); padding: 11px 14px; }
+  .vl-req { font-size: var(--mk-fs-micro); }
   .vl-ai-row { gap: 14px; }
-  .vl-ai-hint { font-size: var(--mk-fs-15); }
-  .vl-persona-ok { font-size: 16.5px; padding: 8px 14px; }
+  .vl-ai-hint { font-size: var(--mk-fs-micro); }
+  .vl-persona-ok { font-size: var(--mk-fs-body); padding: 8px 14px; }
   .vl-advanced { padding: 12px 17px; }
-  .vl-advanced summary { font-size: 16.5px; }
+  .vl-advanced summary { font-size: var(--mk-fs-body); }
   .vl-advanced[open] summary { margin-bottom: 11px; }
 }
 @media (min-width: 3600px) {
-  .vl-steps { font-size: var(--mk-fs-18); padding: 13px 16px; }
-  .vl-req { font-size: 16.5px; }
+  .vl-steps { font-size: var(--mk-fs-body); padding: 13px 16px; }
+  .vl-req { font-size: var(--mk-fs-body); }
   .vl-ai-row { gap: 16px; }
-  .vl-ai-hint { font-size: 17.5px; }
-  .vl-persona-ok { font-size: 19px; padding: 9px 16px; }
+  .vl-ai-hint { font-size: var(--mk-fs-body); }
+  .vl-persona-ok { font-size: var(--mk-fs-emphasis); padding: 9px 16px; }
   .vl-advanced { padding: 14px 20px; }
-  .vl-advanced summary { font-size: 19px; }
+  .vl-advanced summary { font-size: var(--mk-fs-emphasis); }
   .vl-advanced[open] summary { margin-bottom: 13px; }
 }
 

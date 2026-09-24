@@ -508,13 +508,13 @@ defineExpose({ reload })
   background: var(--mk-red-bg, #fef2f2);
   border: 1px solid rgba(220, 38, 38, 0.3);
   color: var(--mk-red, #dc2626);
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-body);
   font-weight: 600;
   margin: 10px 14px;
 }
 .oc-progress { display: flex; align-items: center; gap: 8px; min-width: 120px; }
 .oc-progress .mk-minibar { flex: 1; }
-.oc-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-12); color: var(--mk-muted); }
+.oc-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 虚拟/测试行内标记（对齐同页 conversations/teaching 行样式） */
 .oc-tags { display: flex; gap: 4px; margin-top: 2px; }
 /* 主题列：subject 字段或为学科或为生成路径时写入的目标文本（可能很长），单行省略 + hover 全文 */
@@ -525,11 +525,11 @@ defineExpose({ reload })
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: bottom;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
 
-.oc-desc { color: var(--mk-muted); font-size: var(--mk-fs-12_5); margin: 0 0 12px; }
+.oc-desc { color: var(--mk-muted); font-size: var(--mk-fs-micro); margin: 0 0 12px; }
 .oc-milestone {
   border: 1px solid var(--mk-line);
   border-radius: 10px;
@@ -537,36 +537,36 @@ defineExpose({ reload })
   margin-bottom: 10px;
 }
 .oc-milestone__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.oc-milestone__head strong { font-size: var(--mk-fs-13); }
-.oc-milestone__meta { margin-left: auto; color: var(--mk-faint); font-size: var(--mk-fs-11); }
-.oc-milestone__empty { font-size: var(--mk-fs-12); margin: 8px 0 0; }
+.oc-milestone__head strong { font-size: var(--mk-fs-body); }
+.oc-milestone__meta { margin-left: auto; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.oc-milestone__empty { font-size: var(--mk-fs-micro); margin: 8px 0 0; }
 .oc-subtasks { display: grid; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--mk-line); }
-.oc-subtask { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-12); }
+.oc-subtask { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }
 .oc-subtask__dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .oc-subtask__dot--completed { background: var(--mk-green); }
 .oc-subtask__dot--in_progress { background: var(--mk-blue); }
 .oc-subtask__dot--todo { background: var(--mk-faint); }
 .oc-subtask__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oc-subtask__meta { color: var(--mk-faint); font-size: var(--mk-fs-11); }
+.oc-subtask__meta { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 /* 4K：抽屉内容跟随全站节奏 */
 @media (min-width: 2000px) {
-  .oc-progress__num { font-size: var(--mk-fs-13); }
-  .oc-milestone__head strong { font-size: 14.5px; }
-  .oc-milestone__meta { font-size: var(--mk-fs-12_5); }
-  .oc-subtask { font-size: 13.5px; }
+  .oc-progress__num { font-size: var(--mk-fs-micro); }
+  .oc-milestone__head strong { font-size: var(--mk-fs-body); }
+  .oc-milestone__meta { font-size: var(--mk-fs-micro); }
+  .oc-subtask { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .oc-progress__num { font-size: 15.5px; }
-  .oc-milestone__head strong { font-size: 17px; }
-  .oc-milestone__meta { font-size: 14.5px; }
-  .oc-subtask { font-size: var(--mk-fs-16); }
+  .oc-progress__num { font-size: var(--mk-fs-micro); }
+  .oc-milestone__head strong { font-size: var(--mk-fs-body); }
+  .oc-milestone__meta { font-size: var(--mk-fs-micro); }
+  .oc-subtask { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
-  .oc-progress__num { font-size: var(--mk-fs-18); }
-  .oc-milestone__head strong { font-size: var(--mk-fs-20); }
-  .oc-milestone__meta { font-size: 17px; }
-  .oc-subtask { font-size: 18.5px; }
+  .oc-progress__num { font-size: var(--mk-fs-body); }
+  .oc-milestone__head strong { font-size: var(--mk-fs-emphasis); }
+  .oc-milestone__meta { font-size: var(--mk-fs-body); }
+  .oc-subtask { font-size: var(--mk-fs-emphasis); }
 }
 
 /* 暗色模式：补齐暗色覆写（原缺失，与全站 Token 红覆盖对齐） */

@@ -270,12 +270,12 @@ defineExpose({ refresh })
 .ac-mr-label {
   margin-left: 6px;
   color: var(--mk-muted);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
 .ac-mr-note {
   margin: 8px 0 0;
   color: var(--mk-muted);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
 .ac-mr-note__item {
   margin-left: 8px;

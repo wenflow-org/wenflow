@@ -378,12 +378,12 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 }
 .ud-path:last-child { border-bottom: none; }
 .ud-path__main { display: grid; min-width: 0; }
-.ud-path__main strong { font-size: var(--mk-fs-13); }
-.ud-path__main span { font-size: var(--mk-fs-12); color: var(--mk-faint); }
+.ud-path__main strong { font-size: var(--mk-fs-body); }
+.ud-path__main span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 进度条统一走 .mk-minibar（shared.css），填充色走 data-tone
    （原为渐变：linear-gradient(#6aa0ff→蓝) / (#fcd34d→#f59e0b)，属 §4 点名的违规） */
-.ud-path__pct { font-size: var(--mk-fs-12); color: var(--mk-muted); text-align: right; font-variant-numeric: tabular-nums; }
-.ud-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-12_5); }
+.ud-path__pct { font-size: var(--mk-fs-micro); color: var(--mk-muted); text-align: right; font-variant-numeric: tabular-nums; }
+.ud-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 .ud-activity { display: grid; }
 .ud-act {
@@ -392,16 +392,16 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
   gap: 12px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--mk-line, #e6ebf4);
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
 }
 .ud-act:last-child { border-bottom: none; }
-.ud-act__time { color: var(--mk-faint); font-size: var(--mk-fs-12); white-space: nowrap; }
+.ud-act__time { color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
 
 .ud-grant { margin-top: 0; }
 .ud-grant__copy {
   margin: 0;
   padding: 0 16px 10px;
-  font-size: var(--mk-fs-12_5);
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   line-height: 1.6;
 }
@@ -412,7 +412,7 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
   /* 走 token：浅色 #eff6ff、暗色 rgba(91,141,239,.16)，避免暗色下仍是白底（原硬编码 #eef5ff） */
   background: var(--mk-blue-bg, #eff6ff);
   color: var(--mk-blue);
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
 .ud-grant__notice--error {
   background: var(--mk-red-bg, #fef2f2);
@@ -432,9 +432,9 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
   padding: 8px 12px;
   border: 1px solid var(--mk-line);
   border-radius: 9px;
-  font-size: var(--mk-fs-12);
+  font-size: var(--mk-fs-micro);
 }
-.ud-grant__grid span { color: var(--mk-faint); font-weight: 700; font-size: var(--mk-fs-11); white-space: nowrap; }
+.ud-grant__grid span { color: var(--mk-faint); font-weight: 700; font-size: var(--mk-fs-micro); white-space: nowrap; }
 .ud-grant__grid strong { text-align: right; min-width: 0; }
 .ud-grant__actions {
   display: flex;
@@ -451,41 +451,41 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .ud-path__main strong { font-size: var(--mk-fs-15); }
-  .ud-path__main span { font-size: 13.5px; }
-  .ud-path__pct { font-size: var(--mk-fs-14); }
-  .ud-none { font-size: 14.5px; }
-  .ud-act { font-size: 14.5px; }
-  .ud-act__time { font-size: 13.5px; }
-  .ud-grant__copy { font-size: 14.5px; }
-  .ud-grant__notice { font-size: var(--mk-fs-14); }
-  .ud-grant__grid div { font-size: var(--mk-fs-14); }
-  .ud-grant__grid span { font-size: var(--mk-fs-13); }
+  .ud-path__main strong { font-size: var(--mk-fs-body); }
+  .ud-path__main span { font-size: var(--mk-fs-micro); }
+  .ud-path__pct { font-size: var(--mk-fs-body); }
+  .ud-none { font-size: var(--mk-fs-body); }
+  .ud-act { font-size: var(--mk-fs-body); }
+  .ud-act__time { font-size: var(--mk-fs-micro); }
+  .ud-grant__copy { font-size: var(--mk-fs-body); }
+  .ud-grant__notice { font-size: var(--mk-fs-body); }
+  .ud-grant__grid div { font-size: var(--mk-fs-body); }
+  .ud-grant__grid span { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
-  .ud-path__main strong { font-size: 17.5px; }
-  .ud-path__main span { font-size: var(--mk-fs-16); }
-  .ud-path__pct { font-size: 16.5px; }
-  .ud-none { font-size: 17px; }
-  .ud-act { font-size: 17px; }
-  .ud-act__time { font-size: var(--mk-fs-16); }
-  .ud-grant__copy { font-size: 17px; }
-  .ud-grant__notice { font-size: 16.5px; }
-  .ud-grant__grid div { font-size: 16.5px; }
-  .ud-grant__grid span { font-size: var(--mk-fs-15); }
+  .ud-path__main strong { font-size: var(--mk-fs-body); }
+  .ud-path__main span { font-size: var(--mk-fs-micro); }
+  .ud-path__pct { font-size: var(--mk-fs-body); }
+  .ud-none { font-size: var(--mk-fs-body); }
+  .ud-act { font-size: var(--mk-fs-body); }
+  .ud-act__time { font-size: var(--mk-fs-micro); }
+  .ud-grant__copy { font-size: var(--mk-fs-body); }
+  .ud-grant__notice { font-size: var(--mk-fs-body); }
+  .ud-grant__grid div { font-size: var(--mk-fs-body); }
+  .ud-grant__grid span { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
-  .ud-path__main strong { font-size: 20.5px; }
-  .ud-path__main span { font-size: 18.5px; }
-  .ud-path__pct { font-size: 19px; }
-  .ud-none { font-size: var(--mk-fs-20); }
-  .ud-act { font-size: var(--mk-fs-20); }
-  .ud-act__time { font-size: 18.5px; }
-  .ud-grant__copy { font-size: var(--mk-fs-20); }
-  .ud-grant__notice { font-size: 19px; }
-  .ud-grant__grid div { font-size: 19px; }
-  .ud-grant__grid span { font-size: 17.5px; }
+  .ud-path__main strong { font-size: var(--mk-fs-emphasis); }
+  .ud-path__main span { font-size: var(--mk-fs-emphasis); }
+  .ud-path__pct { font-size: var(--mk-fs-emphasis); }
+  .ud-none { font-size: var(--mk-fs-emphasis); }
+  .ud-act { font-size: var(--mk-fs-emphasis); }
+  .ud-act__time { font-size: var(--mk-fs-emphasis); }
+  .ud-grant__copy { font-size: var(--mk-fs-emphasis); }
+  .ud-grant__notice { font-size: var(--mk-fs-emphasis); }
+  .ud-grant__grid div { font-size: var(--mk-fs-emphasis); }
+  .ud-grant__grid span { font-size: var(--mk-fs-body); }
 }
 </style>

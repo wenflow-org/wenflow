@@ -564,18 +564,18 @@ onMounted(async () => {
 
 <style scoped>
 .mr { display: flex; flex-direction: column; }
-.mr__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-12); color: var(--mk-muted, #5b6577); margin-left: auto; white-space: nowrap; }
-.mr__h4 { margin: 14px 0 6px; font-size: var(--mk-fs-13); font-weight: 700; color: var(--mk-ink); }
+.mr__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted, #5b6577); margin-left: auto; white-space: nowrap; }
+.mr__h4 { margin: 14px 0 6px; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 .mr__num { text-align: right; font-variant-numeric: tabular-nums; }
 .mr__num--warn { color: var(--mk-amber); font-weight: 700; }
-.mr__sub { display: block; color: var(--mk-muted, #5b6577); font-size: 11px; }
+.mr__sub { display: block; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
 .mr__row--active { background: var(--mk-blue-bg); }
 .mr__actions { display: flex; gap: 6px; }
-.mr__error { margin: 6px 0; color: var(--mk-red-strong); font-size: var(--mk-fs-12); }
-.mr__warn { margin-top: 8px; padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(217, 119, 6, 0.3); background: rgba(217, 119, 6, 0.06); font-size: var(--mk-fs-12); }
+.mr__error { margin: 6px 0; color: var(--mk-red-strong); font-size: var(--mk-fs-micro); }
+.mr__warn { margin-top: 8px; padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(217, 119, 6, 0.3); background: rgba(217, 119, 6, 0.06); font-size: var(--mk-fs-micro); }
 .mr__chip { display: inline-block; margin-left: 8px; }
 .mr__detail { display: grid; gap: 14px; }
-.mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: 11px; }
+.mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
 .mr__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 10px; }
-.mr__warn-inline { color: var(--mk-amber); font-size: 11px; }
+.mr__warn-inline { color: var(--mk-amber); font-size: var(--mk-fs-micro); }
 </style>
