@@ -74,11 +74,10 @@ function findByQuote(markdown: string, quote: string, maxChars: number): string 
   return null;
 }
 
-/** 剥掉 docx 转 md 的装饰（锚点 <a id>、下划线 <u>、加粗 **），得到行文本——标题判定用它。 */
+/** 剥掉 docx 转 md 的装饰（任意 HTML 标签 <a id>/<u>/<div>…、加粗 **），得到行文本——标题判定用它。 */
 function lineText(line: string): string {
   return line
-    .replace(/<a\s+id="[^"]*"><\/a>/g, '')
-    .replace(/<\/?[uo]>/g, '')
+    .replace(/<[^>]+>/g, '')
     .replace(/\*\*/g, '')
     .trim();
 }
@@ -99,12 +98,21 @@ function headingLevel(line: string): number {
  * 截断，只有几十字），正文标题的窗口才有整章内容；取最长自然跳过目录/交叉引用。
  */
 function findByTitle(markdown: string, sectionTitle: string, maxChars: number): string | null {
-  const needle = sectionTitle.replace(/\s+/g, '').toLowerCase();
-  if (!needle) return null;
+  // needle 与行文本同源剥装饰（引用落库的 sectionTitle 是原始装饰行，如 <u>一、健康</u>3）
+  const base = lineText(String(sectionTitle)).replace(/\s+/g, '').toLowerCase();
+  if (!base) return null;
+  // docx 目录标题常带页码尾巴（「一、健康3」），正文标题没有 → 补一个去页码变体
+  const needles = [base];
+  const withoutPageNo = base.replace(/\d+$/, '');
+  if (withoutPageNo && withoutPageNo !== base) needles.push(withoutPageNo);
   const lines = markdown.split('\n');
+  const needleCap = Math.max(...needles.map((n) => n.length)) + 12;
   const candidates: number[] = [];
   for (let i = 0; i < lines.length; i += 1) {
-    if (lineText(lines[i]).replace(/\s+/g, '').toLowerCase().includes(needle)) candidates.push(i);
+    const line = lineText(lines[i]).replace(/\s+/g, '').toLowerCase();
+    // 标题行必然与标题等长（短行）；正文句里顺带提到标题词的长行不算候选——
+    // 否则「最长窗口」会被远处的顺带提及劫持（实测：短标题「说明」落在社会领域的长句上）
+    if (line.length <= needleCap && needles.some((n) => line.includes(n))) candidates.push(i);
   }
   if (candidates.length === 0) return null;
   let best: string | null = null;
@@ -114,7 +122,13 @@ function findByTitle(markdown: string, sectionTitle: string, maxChars: number): 
     const out: string[] = [];
     let length = 0;
     for (let i = startLine; i < lines.length && length < maxChars; i += 1) {
-      if (i > startLine && headingLevel(lines[i]) <= matchedLevel) break;
+      // 「一、」形态既是章节标题也是列举段落的段首——真标题是短行（CJK 40 字内），
+      // 长行（一、为深入贯彻……）是段落，不能截断窗口（实测：说明节正文全以一、二、三、开头）
+      if (
+        i > startLine &&
+        headingLevel(lines[i]) <= matchedLevel &&
+        lineText(lines[i]).length <= 40
+      ) break;
       out.push(lines[i]);
       length += lines[i].length + 1;
     }

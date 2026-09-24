@@ -86,4 +86,40 @@ describe('extractSectionWindow 章节取回', () => {
     // 不是目录那一小段
     expect(result.excerpt.length).toBeGreaterThan(60);
   });
+
+  it('落库装饰标题（带页码尾巴）也能定位正文：needle 与行文本同源剥装饰', () => {
+    const tocDoc = [
+      '<u>一、健康</u>3',
+      '',
+      '<u>二、语言</u>14',
+      '',
+      '<a id="toc1"></a><a id="ref1"></a>**一、健康**',
+      '（一）身心状况',
+      '目标1 具有健康的体态。',
+      '<a id="toc9"></a>**（二）动作发展**',
+      '目标2 具有一定的力量和耐力。',
+    ].join('\n');
+    // 真实引用落库形状：原始装饰行做 sectionTitle
+    const result = extractSectionWindow(tocDoc, { sectionTitle: '<u>（一）身心状况</u>3' });
+    expect(result.anchor).toBe('title');
+    expect(result.excerpt).toContain('具有健康的体态');
+    expect(result.excerpt).not.toContain('力量和耐力');
+  });
+
+  it('短标题（说明）：正文句顺带提及的长行不参选，列举段落不截断窗口', () => {
+    const genericDoc = [
+      '<u>说 明</u>1',
+      '<a id="t"></a>**说 明**',
+      '一、为深入贯彻《国家中长期教育改革和发展规划纲要（2010—2020年）》，指导幼儿园实施科学的保育和教育，促进幼儿身心全面协调发展。', // 列举段落（长行，不以它截断）
+      '本指南旨在帮助幼儿园教师和家长。', // 真实说明节内容
+      '<a id="h"></a>**一、健康**',
+      '目标1 具有健康的体态。',
+      '教师在活动中应当说明并示范加入同伴游戏的方法。' + '后续内容'.repeat(200), // 远处长句顺带提「说明」
+    ].join('\n');
+    const result = extractSectionWindow(genericDoc, { sectionTitle: '<u>说  明</u>1' });
+    expect(result.anchor).toBe('title');
+    expect(result.excerpt).toContain('本指南旨在');
+    expect(result.excerpt).toContain('为深入贯彻');
+    expect(result.excerpt).not.toContain('后续内容');
+  });
 });
