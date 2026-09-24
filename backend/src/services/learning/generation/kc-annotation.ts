@@ -84,8 +84,14 @@ export interface KcAnnotationParams {
   }) => Promise<MaterializeResult>;
 }
 
-/** 默认落库：读当前模板为基底、只覆盖 kcAnnotation，避免并发写互相覆盖 */
-async function persistKcAnnotationToPath(pathId: string, kcAnnotation: KcAnnotation): Promise<void> {
+/**
+ * 默认落库：读当前模板为基底、只覆盖 kcAnnotation，避免并发写互相覆盖。
+ *
+ * 导出供**身份迁移**复用（`src/scripts/kc-identity-migrate.ts`）：迁移必须先拿到模型输出、
+ * 据此登记别名，再把**同一份**标注落库——kc-mapper 是 temperature 0.3，重跑一次名字就会变，
+ * 别名与落库标注必须同源，否则登记的别名指向一批不存在的名字。
+ */
+export async function persistKcAnnotationToPath(pathId: string, kcAnnotation: KcAnnotation): Promise<void> {
   const currentPath = await prisma.learning_paths.findUnique({
     where: { id: pathId },
     select: { aiPromptTemplate: true },
