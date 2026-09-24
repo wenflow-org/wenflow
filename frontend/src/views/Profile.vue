@@ -537,6 +537,8 @@ async function handleDeactivate() {
   min-width: 0;
 }
 
+/* 卡脚上留白：桌面 16px；移动端收到 12px（见本文件移动块里的覆盖——这里不能直接改，
+   否则 1440 也吃到了）。 */
 .profile-cols .uc-card__foot {
   margin-top: auto;
   padding-top: 16px;
@@ -687,10 +689,11 @@ async function handleDeactivate() {
     gap: 12px;
   }
 
+  /* 头像 56 → 48：56px 在 390 下比昵称行还高一头，hero 卡的主要开销 */
   .profile-avatar {
-    width: 56px;
-    height: 56px;
-    font-size: 22px;
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
     box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12), 0 6px 16px rgba(52, 120, 246, 0.2);
   }
 
@@ -698,8 +701,9 @@ async function handleDeactivate() {
     gap: 6px;
   }
 
+  /* 昵称 18 → 16：页标题 h1 已收到 18，昵称再同档分不出主次 */
   .profile-name-row h2 {
-    font-size: 18px;
+    font-size: 16px;
   }
 
   .profile-email {
@@ -744,6 +748,12 @@ async function handleDeactivate() {
 
   .uc-card__foot {
     margin-top: 12px;
+    padding-top: 12px;
+  }
+
+  /* 卡脚上留白 16 → 12（按钮与上方字段之间，390 下偏松）。
+     只覆盖 .profile-cols 内的：这条权重 (0,2,0) 才压得住基础规则里的同权重版本。 */
+  .profile-cols .uc-card__foot {
     padding-top: 12px;
   }
 

@@ -281,12 +281,16 @@ const isDark = useIsDark();
    `[data-v-壳] .field__input`，权重 (0,2,0)，和页面里的 `.field__input[data-v-页]` 打平，
    而页面样式后注入 → 平局下壳会输（实测就是这样：算出来仍是 14px）。
    写成 `.auth__form-side :deep(...)` → `.auth__form-side[data-v-壳] .field__input`，
-   权重 (0,3,0)，稳赢。 */
+   权重 (0,3,0)，稳赢。
+   2026-09-24 二次修正：字号从 16 收回 14。理由是和个人中心一致的——输入文字比它
+   自己的标签（.field__label 12.5px）还大 28%，390 下输入框是全页最重的块。
+   低于 16px 在 iOS Safari 聚焦时会有一次整页 zoom，这里接受这个取舍
+   （理由与「不要表单里字大大小小」的权衡见 uc.css 的 .uc-field__input 注释）。 */
 @media (max-width: 760px) {
   .auth__main { gap: 20px; padding: 28px 16px 24px; }
   .auth__logo img { height: 48px; }
   .auth__card { border-radius: var(--mk-radius-modal); }
-  .auth__form-side :deep(.field__input) { font-size: 16px; }
+  .auth__form-side :deep(.field__input) { font-size: 14px; }
 }
 
 /* ---------- 超大屏（2K）：卡片与演示放大；2800+ 交由 v2.css zoom 机制，避免叠加 ---------- */
