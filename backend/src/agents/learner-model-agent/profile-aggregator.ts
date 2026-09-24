@@ -17,6 +17,7 @@ import {
   InteractionHistory,
   LearnerNarrativeInsights,
   LearnerCurriculumControls,
+  LearnerGoalNarratives,
   ProfileUpdateSource,
   ProfileAggregationResult,
   MetacognitionLevel,
@@ -168,6 +169,9 @@ export class ProfileAggregator {
       history,
       narrativeInsights,
       curriculumControls,
+      // 目标对话原文留存：learningSignal 等字段的教学侧读取依赖 profile.narratives（此前只进
+      // narrativeInsights 摘要，原文被丢弃，导致 TeachingContextBuilder 的 learningSignal 恒为 null）
+      ...(goalConversation?.narratives ? { narratives: goalConversation.narratives } : {}),
       derivedInsights
     };
     
@@ -184,16 +188,7 @@ export class ProfileAggregator {
       currentLevel?: string;
       availableTime?: string;
     };
-    narratives?: {
-      realProblem?: string;
-      surfaceGoal?: string;
-      motivation?: string;
-      backgroundExperience?: string;
-      painPoints?: string[];
-      learningSignal?: any;
-      currentLevel?: string;
-      availableTime?: string;
-    };
+    narratives?: LearnerGoalNarratives;
     learnerBackground?: any;
   } | null> {
     try {

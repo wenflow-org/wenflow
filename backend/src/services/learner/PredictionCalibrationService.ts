@@ -64,7 +64,7 @@ export class PredictionCalibrationService {
 
   /**
    * task:completed 时自动回写实际结果（从最近会话推导挣扎信号）：
-   * - knowledgeState 含 review / wrapup.evaluation.sessionLss >= 6 → struggled
+   * - knowledgeState 含 review / wrapup.evaluation 判为 high 档（legacy：sessionLss >= 6）→ struggled
    * - 否则 → smooth
    * 找不到未回写的预测记录时静默放弃（预测可能未及写入——fire-and-forget 竞态窗口可忽略）。
    */
@@ -82,7 +82,11 @@ export class PredictionCalibrationService {
         const wrapup = safeParseObj(session.wrapup);
         const evaluation = wrapup?.evaluation as Record<string, unknown> | undefined;
         const sessionLss = Number(evaluation?.sessionLss);
-        const lssHigh = Number.isFinite(sessionLss) && sessionLss >= 6;
+        // 2026-09-22：档位化后按档位判定（mid 的中点 6 不再被当成"挣扎"）；legacy 数值仍走 >= 6
+        const sessionLssTier = (evaluation as { metricTiers?: { sessionLss?: string } } | undefined)?.metricTiers?.sessionLss;
+        const lssHigh = sessionLssTier
+          ? sessionLssTier === 'high'
+          : (Number.isFinite(sessionLss) && sessionLss >= 6);
         if (reviewHit || lssHigh) outcome = 'struggled';
       }
       return await this.resolveOutcome(userId, taskId, outcome);
