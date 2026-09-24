@@ -50,7 +50,7 @@ export function normalizeSourceUrl(url: string): string {
 }
 
 /** 标题归一（库优先查找用）：去书名号/括号/空白/连字符变体、小写——「《指南》」与「指南全文」可对上。 */
-function normalizeTitleForMatch(title: string): string {
+export function normalizeTitleForMatch(title: string): string {
   return String(title || '')
     .toLowerCase()
     .replace(/[《》〔〕\s（）()【】[\]—–\-·、，,。.：:；;"'「」]/g, '');

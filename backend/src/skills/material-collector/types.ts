@@ -15,7 +15,12 @@
 import type { MaterialBrief } from '../material-brief/types';
 
 /** 资料采集状态：ok（齐全）/ partial（部分）/ not_found（无可用正文或资料对不上） */
-export type MaterialStatus = 'ok' | 'partial' | 'not_found';
+/**
+ * ok=全部要点核验通过；partial=部分成功（有降级）；
+ * not_found=显式未取到（不编造）；
+ * pending=活的 path 批次 B：后台异步采集中（path 先行生成，资料就绪后回填 template）。
+ */
+export type MaterialStatus = 'ok' | 'partial' | 'not_found' | 'pending';
 
 /**
  * 来源分级（官方/标准 > 教材 > 权威机构 > 社区）。

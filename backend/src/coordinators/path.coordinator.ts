@@ -8,7 +8,8 @@ import learningService from '../services/learning/learning.service';
 import { buildFramedNormalizedInput, type LearnerLoadProfile } from '../services/learning/path-planning-hints';
 import { buildUploadedMaterialPacks, buildPackFromMaterial } from '../services/materials/material-pack.builder';
 import { listMaterials, readMaterial } from '../services/materials/material-store';
-import { findWebRecordByTitle } from '../services/materials/material-web-ingest.service';
+import { findWebRecordByTitle, normalizeTitleForMatch } from '../services/materials/material-web-ingest.service';
+import { patchPathsWithAsyncMaterials } from '../services/materials/material-async-collect.service';
 import { collectBriefsWithDeadline } from '../services/materials/material-brief.service';
 import type { ResponseTriage } from '../services/learning/response-triage';
 import {
@@ -38,6 +39,11 @@ function resolveMaterialCollectionTimeoutMs(): number {
 
 /** 单次生成最多采集几条 need（防批量/恶意大量声明拖慢 path 生成）。 */
 const MATERIAL_COLLECTION_MAX_NEEDS = 3;
+
+/** 后台采集预算（活的 path 批次 B）：脱离 20s 关键路径后放宽——实测书籍类场景 20s 不够。 */
+const MATERIAL_COLLECT_ASYNC_BUDGET_MS = 90_000;
+/** 占位 marker（与 material-async-collect.service 的 prefix 必须一致；回填按 marker 原位替换）。 */
+const ASYNC_COLLECT_MARKER = '__async_collect__';
 
 /** 带超时的 promise：到点 reject（可选触发 onTimeout，如 abort 下游 signal），成功/失败都清定时器。 */
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout?: () => void): Promise<T> {
@@ -366,11 +372,17 @@ class PathCoordinator {
    *   - 开关：`MATERIAL_COLLECTION_DISABLED=1` 关闭；未声明 needsMaterial 时**零调用**（连模块都不 import）；
    *   - 库优先（活的 path 批次 A）：need 对应的联网资料已在用户库（标题归一匹配）→ 直接用库打包，
    *     **跳过本次采集**——path 重建零联网消费；未命中的 need 才走采集；
+   *   - 模式（活的 path 批次 B）：sync=等待采集完成（preview 诊断口径）；async=生产链路
+   *     **path 不等联网**——立即返回 pending 占位，真实采集进后台（预算放宽 90s），
+   *     完成后等活跃 generation run 清空，再按 marker 回填 template（幂等）；
    *   - 依赖：动态 import material-collector，避免把 search/fetch/prompt 依赖注入 path.coordinator 的静态图；
-   *   - 超时：withTimeout 总上限（默认 20s），到点 abort + 跳过，绝不阻塞路径生成；
-   *   - 失败：任何抛错只记一条 warn 日志，并以 status=not_found + note 落入 materials（路径生成继续）。
+   *   - 超时/失败：fail-open，绝不阻塞路径生成。
    */
-  private async resolveMaterialPacks(userId: unknown, needsMaterial: unknown): Promise<MaterialPackResult[] | null> {
+  private async resolveMaterialPacks(
+    userId: unknown,
+    needsMaterial: unknown,
+    mode: 'sync' | 'async' = 'sync'
+  ): Promise<MaterialPackResult[] | null> {
     if (!needsMaterial) return null;
     if (!isMaterialCollectionEnabled()) return null;
 
@@ -413,6 +425,23 @@ class PathCoordinator {
       return results.length > 0 ? results : null;
     }
 
+    // 批次 B：生产链路不等联网——占位 + 后台采集回填
+    if (mode === 'async') {
+      if (!collectorUserId) return null;
+      const placeholders: MaterialPackResult[] = pendingNeeds.map((need) => ({
+        status: 'pending' as const,
+        pack: null,
+        provenance: [],
+        coverage: { covered: [], missing: [] },
+        notes: [
+          '联网资料后台采集中，就绪后自动补充到本路径',
+          `${ASYNC_COLLECT_MARKER}:${normalizeTitleForMatch(String(need?.title || ''))}`,
+        ],
+      }));
+      this.dispatchAsyncMaterialCollection(collector, collectorUserId, pendingNeeds, placeholders);
+      return results.length > 0 ? [...results, ...placeholders] : placeholders;
+    }
+
     const timeoutMs = resolveMaterialCollectionTimeoutMs();
     const controller = new AbortController();
     const startedAt = Date.now();
@@ -444,7 +473,65 @@ class PathCoordinator {
     }
   }
 
-  private async buildNormalizedGoalInput(input: GoalPathRequest, config: PathAgentInputConfig): Promise<PathGenerationInput> {
+  /**
+   * 后台采集（批次 B）：预算放宽 90s（脱离 20s 关键路径）；采集（含入库，批次 A）完成后，
+   * 等活跃 generation run 清空（不与生成事务竞争 template 写），再按 marker 把近期路径里的
+   * pending 占位**原位替换**为真实 pack。重启丢任务=可接受（下次生成库优先命中，资料不丢）。
+   */
+  private dispatchAsyncMaterialCollection(
+    collector: typeof import('../skills/material-collector'),
+    userId: string,
+    needs: MaterialNeed[],
+    placeholders: MaterialPackResult[]
+  ): void {
+    runBackgroundTask('material.web-collect', async () => {
+      const startedAt = Date.now();
+      let collected: MaterialPackResult[];
+      try {
+        collected = await withTimeout(
+          collector.collectMaterialForGoal(needs, { userId }),
+          MATERIAL_COLLECT_ASYNC_BUDGET_MS,
+          () => undefined
+        );
+      } catch (error) {
+        logger.warn('[path-coordinator] 后台联网采集失败（fail-open，资料下次生成经库优先补齐）', {
+          userId,
+          needs: needs.map((need) => need?.title).filter(Boolean),
+          durationMs: Date.now() - startedAt,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+      if (!Array.isArray(collected)) return;
+      const readyPacks = collected.filter((pack) => pack.pack);
+      if (readyPacks.length === 0) {
+        logger.info('[path-coordinator] 后台联网采集未获可用资料（fail-open）', {
+          userId,
+          durationMs: Date.now() - startedAt,
+        });
+        return;
+      }
+      await this.patchPathsWithAsyncMaterials(userId, readyPacks);
+    });
+  }
+
+  /** 回填走 materials 域 service（coordinator 无 DB 直连边界）；失败已在其内部 fail-open。 */
+  private async patchPathsWithAsyncMaterials(userId: string, readyPacks: MaterialPackResult[]): Promise<void> {
+    try {
+      await patchPathsWithAsyncMaterials(userId, readyPacks);
+    } catch (error) {
+      logger.warn('[path-coordinator] 后台资料回填失败（fail-open）', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async buildNormalizedGoalInput(
+    input: GoalPathRequest,
+    config: PathAgentInputConfig,
+    collectionMode: 'sync' | 'async' = 'sync'
+  ): Promise<PathGenerationInput> {
     const goalFinalPayload: GoalFinalPayload = {
       sourceConversationId: input.sourceConversationId,
       existingPathId: input.existingPathId,
@@ -548,7 +635,7 @@ class PathCoordinator {
     // 联网采集只用于补信息（goal 声明 needsMaterial 才触发）。
     // 批次 A 起联网正文会入库：若采集到的记录已在库里（URL 去重命中既有记录），
     // 附件列表里那份（带 brief、全文可取回）优先，丢弃本次采集的重复 pack。
-    const collectedPacks = (await this.resolveMaterialPacks(input.userId, needsMaterial) || []).filter(
+    const collectedPacks = (await this.resolveMaterialPacks(input.userId, needsMaterial, collectionMode) || []).filter(
       (pack) => !(pack.pack?.materialId && uploadedMaterialIds.has(pack.pack.materialId))
     );
     const materialPacks = [...uploadedPacks, ...collectedPacks];
@@ -658,7 +745,8 @@ class PathCoordinator {
 
   private async normalizeGoalRequest(input: GoalPathRequest): Promise<PathGenerationInput> {
     const config = await getPathAgentInputConfig();
-    return this.buildNormalizedGoalInput(input, config);
+    // 生产入口走 async：path 不等联网（批次 B），preview 保持 sync（探针诊断口径不变）
+    return this.buildNormalizedGoalInput(input, config, 'async');
   }
 
   async generate(input: PathGenerationInput) {
