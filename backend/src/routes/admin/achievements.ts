@@ -44,7 +44,7 @@ router.get('/definitions', async (req: Request, res: Response) => {
         type: a.type,
         name: a.name,
         description: a.description,
-        icon: a.icon || '🏆',
+        icon: a.icon,
         xpReward: a.xpReward,
         requirement: a.requirement,
         unlockCount: countMap.get(`${a.type}-${a.name}`) || 0,

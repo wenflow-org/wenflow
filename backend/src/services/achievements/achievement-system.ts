@@ -23,7 +23,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'milestone',
     name: '初学者',
     description: '完成第一个任务',
-    icon: '🎯',
     xpReward: 10,
     requirement: {
       type: 'task_count',
@@ -35,7 +34,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'milestone',
     name: '渐入佳境',
     description: '完成10个任务',
-    icon: '📈',
     xpReward: 50,
     requirement: {
       type: 'task_count',
@@ -47,7 +45,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'milestone',
     name: '学习达人',
     description: '完成50个任务',
-    icon: '🏆',
     xpReward: 200,
     requirement: {
       type: 'task_count',
@@ -59,7 +56,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'milestone',
     name: '学习专家',
     description: '完成100个任务',
-    icon: '👑',
     xpReward: 500,
     requirement: {
       type: 'task_count',
@@ -73,7 +69,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'streak',
     name: '持之以恒',
     description: '连续3天学习',
-    icon: '🔥',
     xpReward: 30,
     requirement: {
       type: 'streak_days',
@@ -85,7 +80,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'streak',
     name: '七日坚持',
     description: '连续7天学习',
-    icon: '⚡',
     xpReward: 100,
     requirement: {
       type: 'streak_days',
@@ -97,7 +91,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'streak',
     name: '月度冠军',
     description: '连续30天学习',
-    icon: '💎',
     xpReward: 500,
     requirement: {
       type: 'streak_days',
@@ -111,7 +104,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'completion',
     name: '初登路径',
     description: '完成第一条学习路径',
-    icon: '🚀',
     xpReward: 100,
     requirement: {
       type: 'path_completion',
@@ -123,7 +115,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'completion',
     name: '全能学习者',
     description: '完成所有任务的学习路径',
-    icon: '🌟',
     xpReward: 1000,
     requirement: {
       type: 'custom',
@@ -138,7 +129,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'mastery',
     name: '知识小成',
     description: 'KTL达到5.0',
-    icon: '📚',
     xpReward: 100,
     requirement: {
       type: 'ktl_level',
@@ -150,7 +140,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'mastery',
     name: '知识大成',
     description: 'KTL达到7.0',
-    icon: '🎓',
     xpReward: 300,
     requirement: {
       type: 'ktl_level',
@@ -162,7 +151,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'mastery',
     name: '知识宗师',
     description: 'KTL达到9.0',
-    icon: '👨‍🏫',
     xpReward: 1000,
     requirement: {
       type: 'ktl_level',
@@ -176,7 +164,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'milestone',
     name: '完美一周',
     description: '一周内完成所有计划任务',
-    icon: '💯',
     xpReward: 200,
     requirement: {
       type: 'custom',
@@ -189,7 +176,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     type: 'mastery',
     name: '速成高手',
     description: '比预计时间提前50%完成任务',
-    icon: '⏱️',
     xpReward: 150,
     requirement: {
       type: 'custom',

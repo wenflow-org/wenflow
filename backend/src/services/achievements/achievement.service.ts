@@ -201,7 +201,7 @@ class AchievementService {
           id: achievement.id,
           name: achievement.name,
           description: achievement.description,
-          icon: achievement.icon ?? '🏆',
+          icon: achievement.icon,
           xpReward: achievement.xpReward,
           type: achievement.type,
           unlocked,

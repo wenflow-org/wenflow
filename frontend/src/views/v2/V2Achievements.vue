@@ -60,7 +60,7 @@
 
             <div class="ach-card__head">
               <span class="ach-card__icon-wrap" :class="`ach-card__icon--${a.unlocked ? 'on' : 'off'}`">
-                <span class="ach-card__icon-emoji">{{ a.icon }}</span>
+                <span class="ach-card__icon-mark">{{ achMark(a) }}</span>
               </span>
               <div class="ach-card__head-right">
                 <span v-if="a.unlocked" class="ach-rarity" :class="rarityOf(a.xpReward).cls">
@@ -120,7 +120,9 @@ interface Achievement {
   id: string;
   name: string;
   description: string;
-  icon: string;
+  /** 后端历史字段（曾放 emoji）。**界面不再渲染它**——emoji 各系统渲染不一致，
+      改按 type 给「色块 + 字标」，与管理端 AchIcon.vue 同一套做法。 */
+  icon?: string;
   xpReward: number;
   type: string;
   unlocked: boolean;
@@ -131,6 +133,20 @@ interface Achievement {
 const items = ref<Achievement[]>([]);
 const loading = ref(true);
 const loadError = ref(false);
+
+/** 成就图标：按类型给「色块 + 字标」（里/连/完/掌/社），与管理端 AchIcon.vue 同一套映射，
+    色块本身由 .ach-card__icon-wrap::before 按解锁状态给色。
+    替代原来的 emoji——各系统渲染不一致，且与全站的线性图标 + 色块徽标语言不搭。 */
+const ACH_TYPE_MARK: Record<string, string> = {
+  milestone: '里',
+  streak: '连',
+  completion: '完',
+  mastery: '掌',
+  social: '社',
+};
+function achMark(a: Achievement): string {
+  return ACH_TYPE_MARK[a.type] || '成';
+}
 const statusFilter = ref<'all' | 'unlocked' | 'locked'>('all');
 const typeFilter = ref('');
 const toastMsg = ref('');
@@ -356,11 +372,12 @@ onMounted(() => {
 .ach-card__icon--off .ach-card__icon-wrap::before {
   background: var(--line);
 }
-.ach-card__icon-emoji {
-  font-size: 24px;
+.ach-card__icon-mark {
   position: relative;
   z-index: 1;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
 /* ── Rarity tag ── */
@@ -420,7 +437,7 @@ onMounted(() => {
   .ov small { font-size: 12px; }
   .ach-card { padding: 12px 14px; }
   .ach-card__name { font-size: 14px; }
-  .ach-card__icon-emoji { font-size: 20px; }
+  .ach-card__icon-mark { font-size: 15px; }
   .filters { gap: 6px; }
   .filter { padding: 6px 11px; font-size: 12.5px; }
 }

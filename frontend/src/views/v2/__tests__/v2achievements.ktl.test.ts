@@ -25,7 +25,6 @@ function achievement(description: string) {
     id: 'a1',
     name: '成就一',
     description,
-    icon: '🏅',
     xpReward: 100,
     type: 'mastery',
     unlocked: false,
