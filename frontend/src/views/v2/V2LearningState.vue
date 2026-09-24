@@ -217,7 +217,7 @@
           </section>
           <section class="card sidecard">
             <span class="kicker">学习记录</span>
-            <router-link to="/learning-history" class="btn-ghost btn-ghost--block">查看学习历史</router-link>
+            <router-link to="/user/learning-history" class="btn-ghost btn-ghost--block">查看学习历史</router-link>
           </section>
           <section class="card sidecard">
             <span class="kicker">指标说明</span>
@@ -607,7 +607,7 @@ const guideActions = computed(() => {
       case 'learning-state':
         return '/learning-state';
       case 'achievements':
-        return '/achievements';
+        return '/user/achievements';
       case 'create-goal':
         return '/goal-conversation';
       default:

@@ -208,7 +208,7 @@
             <span class="quick__body"><strong>全部路径</strong><small>{{ pathsCountText }}</small></span>
             <span class="quick__go">›</span>
           </router-link>
-          <router-link to="/achievements" class="quick__item">
+          <router-link to="/user/achievements" class="quick__item">
             <span class="quick__icon quick__icon--medal">
               <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2z"/></svg>
             </span>
@@ -285,7 +285,7 @@
               class="review__item"
               :class="{ 'review__item--urgent': item.reason === 'below-threshold' }"
             >
-              <router-link to="/achievements" class="review__link" :title="'查看「' + item.label + '」的复习进度'">
+              <router-link to="/user/achievements" class="review__link" :title="'查看「' + item.label + '」的复习进度'">
                 <span class="review__name">{{ item.label }}</span>
                 <span
                   class="review__tag"
@@ -423,7 +423,7 @@
               <p v-else class="day-detail__empty">{{ selectedInfo.note }}</p>
               <div class="day-detail__actions">
                 <button type="button" class="day-detail__more" @click="daySheetOpen = true">查看当天明细 ›</button>
-                <router-link to="/learning-history" class="day-detail__more">全部历史 ›</router-link>
+                <router-link to="/user/learning-history" class="day-detail__more">全部历史 ›</router-link>
               </div>
             </aside>
           </div>
@@ -841,7 +841,7 @@ const skillActions = computed<SkillAction[]>(() => {
       case 'learning-state':
         return '/learning-state';
       case 'achievements':
-        return '/achievements';
+        return '/user/achievements';
       case 'create-goal':
         return '/goal-conversation';
       case 'path-detail':

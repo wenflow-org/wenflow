@@ -1,14 +1,7 @@
 ﻿<template>
-  <div class="ach v2-page">
-    <V2Nav />
-
-    <main class="ach__main">
-      <!-- 页头 -->
-      <div class="ach__hero">
-        <h1>查看你的学习里程碑</h1>
-        <p>每一次小进步都算数。</p>
-      </div>
-
+  <CapabilityShell title="成就" description="查看你的学习里程碑，每一次小进步都算数。">
+    <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题 + 说明） -->
+    <div class="ach__body">
       <!-- 加载中 -->
       <div v-if="loading" class="ach__loading">
         <SkeletonLoader variant="cards" :count="6" />
@@ -100,28 +93,24 @@
           <button type="button" class="btn-ghost" @click="statusFilter = 'all'; typeFilter = ''">查看全部</button>
         </div>
       </template>
-    </main>
-
-    <!-- AI 生成提示 + 页脚：一起沉底 -->
-    <div class="ach__foot">
-      <div class="ach__ai-note">
-        <AiContentNote />
-      </div>
-      <V2Footer />
     </div>
 
-    <!-- Toast -->
-    <Transition name="toast">
-      <div v-if="toastMsg" class="ach-toast">{{ toastMsg }}</div>
-    </Transition>
-  </div>
+    <!-- AI 生成提示（页脚由 CapabilityShell 提供） -->
+    <div class="ach__ai-note">
+      <AiContentNote />
+    </div>
+  </CapabilityShell>
+
+  <!-- Toast -->
+  <Transition name="toast">
+    <div v-if="toastMsg" class="ach-toast">{{ toastMsg }}</div>
+  </Transition>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import request from '@/utils/api';
-import V2Nav from './V2Nav.vue';
-import V2Footer from './V2Footer.vue';
+import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import { unwrapArray } from './unwrap';
@@ -266,22 +255,17 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* wrapper 沉底：AI 提示与页脚一起贴近底部 */
-.ach__foot { margin-top: auto; }
+/* AI 提示：页脚由 CapabilityShell 提供，这里只留一行居中说明 */
 .ach__ai-note {
   display: flex; justify-content: center;
-  padding: 10px 28px 4px;
+  padding: 4px 0 0;
 }
 .ach__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
 
-.ach__main {
-  max-width: 1080px; margin: 0 auto;
-  padding: 24px 28px 48px;
+/* 内容容器：宽度/内边距交给 CapabilityShell 的 .uc__main，这里只管卡间距 */
+.ach__body {
   display: grid; gap: 18px;
 }
-.kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
-.ach__hero h1 { margin: 6px 0 4px; font-size: 28px; letter-spacing: -0.01em; }
-.ach__hero p { margin: 0; font-size: 13.5px; color: var(--muted); }
 
 .card {
   background: var(--surface);
@@ -424,8 +408,6 @@ onMounted(() => {
 }
 
 @media (max-width: 900px) {
-  .ach__main { padding: 16px 14px 32px; }
-  .ach__hero h1 { font-size: 22px; }
   .overview { grid-template-columns: repeat(2, 1fr); }
   .grid { grid-template-columns: 1fr 1fr; }
   /* 28×28 对拇指偏小，抬到 34×34 并同步贴角 */
@@ -462,8 +444,6 @@ onMounted(() => {
   cursor: pointer;
 }
 .empty { display: grid; justify-items: center; gap: 12px; padding: 48px 0; color: var(--faint); font-size: 13px; }
-.ach { min-height: calc(100vh - 41px); display: flex; flex-direction: column; background: var(--canvas); }
-.ach__main { width: 100%; }
 
 /* ── Toast ── */
 .ach-toast {

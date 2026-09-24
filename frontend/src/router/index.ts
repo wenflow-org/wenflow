@@ -67,12 +67,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '学习路径', requiresAuth: true }
   },
   {
-    path: '/learning-history',
-    name: 'V2LearningHistory',
-    component: () => import('@/views/v2/V2LearningHistory.vue'),
-    meta: { title: '学习历史', requiresAuth: true }
-  },
-  {
     path: '/learning-state',
     name: 'V2LearningState',
     component: () => import('@/views/v2/V2LearningState.vue'),
@@ -84,12 +78,6 @@ const routes: RouteRecordRaw[] = [
     name: 'V2KnowledgeMap',
     component: () => import('@/views/v2/V2KnowledgeMap.vue'),
     meta: { title: '知识图谱', requiresAuth: true }
-  },
-  {
-    path: '/achievements',
-    name: 'V2Achievements',
-    component: () => import('@/views/v2/V2Achievements.vue'),
-    meta: { title: '成就', requiresAuth: true }
   },
   {
     path: '/learning-path/:id',
@@ -132,10 +120,26 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/user/Settings.vue'),
     meta: { title: 'API 接入', requiresAuth: true }
   },
+  {
+    // 成就 / 学习历史：2026-09-24 从顶层导航收进个人中心（走 CapabilityShell 分段导航）
+    path: '/user/achievements',
+    name: 'UserAchievements',
+    component: () => import('@/views/v2/V2Achievements.vue'),
+    meta: { title: '成就', requiresAuth: true }
+  },
+  {
+    path: '/user/learning-history',
+    name: 'UserLearningHistory',
+    component: () => import('@/views/v2/V2LearningHistory.vue'),
+    meta: { title: '学习历史', requiresAuth: true }
+  },
   // 旧个人中心路径 → 正式 /user/* 路径（书签/外链兼容）
   { path: '/profile', redirect: '/user/account' },
   { path: '/settings', redirect: '/user/settings' },
   { path: '/agent-logs', redirect: '/user/agent-logs' },
+  // 旧顶层路径 → 个人中心（书签/外链兼容）
+  { path: '/achievements', redirect: '/user/achievements' },
+  { path: '/learning-history', redirect: '/user/learning-history' },
   {
     path: '/goal-conversation/:conversationId?',
     name: 'V2GoalConversation',
@@ -179,7 +183,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/v2/achievements',
-    redirect: '/achievements'
+    redirect: '/user/achievements'
   },
   {
     path: '/admin/login',

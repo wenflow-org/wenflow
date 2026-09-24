@@ -40,6 +40,8 @@ const route = useRoute()
 
 const tabs = [
   { to: '/user/account', label: '账户', match: ['/user/account'] },
+  { to: '/user/achievements', label: '成就', match: ['/user/achievements'] },
+  { to: '/user/learning-history', label: '学习历史', match: ['/user/learning-history'] },
   { to: '/user/settings', label: 'API 接入', match: ['/user/settings'] },
   { to: '/user/agent-logs', label: '调用日志', match: ['/user/agent-logs'] }
 ]
@@ -230,7 +232,9 @@ function isActive(t: { match: string[] }) {
   }
 
   .uc__tab {
-    padding: 7px 12px;
+    /* 5 个分段（账户/成就/学习历史/API 接入/调用日志）在 390 下必须排成一行：
+       padding 12→10 省 20px 后总宽 ~337 < 可用 358，实测不再折行 */
+    padding: 7px 10px;
     font-size: 12.5px;
   }
 }

@@ -86,8 +86,6 @@ const icons = {
   goal: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM7 9h10v2H7V9zm6 5H7v-2h6v2zm4-6H7V6h10v2z"/></svg>',
   layers: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="m12 2 10 5-10 5L2 7l10-5zm0 7.6L18.9 7 12 4.4 5.1 7 12 9.6zM2 12l10 5 10-5v2l-10 5L2 14v-2zm0 5 10 5 10-5v2l-10 5L2 19v-2z" opacity=".9"/></svg>',
   pulse: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 13h4l2-7 4 12 2-7h6v2h-4.6l-2.4 8.4L9.6 7.6 7.6 15H3v-2z"/></svg>',
-  history: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm-.75 3v5.6l4.3 2.55.9-1.5-3.7-2.2V7h-1.5z"/></svg>',
-  medal: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></svg>',
   graph: '<svg viewBox="0 0 24 24" width="20" height="20"><g fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8.7 6.8 15.3 9.3M8.1 9.1l-1 7"/></g><g fill="currentColor"><circle cx="6.5" cy="5.5" r="3"/><circle cx="17.5" cy="10.5" r="3"/><circle cx="7" cy="19" r="3"/></g></svg>'
 };
 
@@ -96,10 +94,11 @@ const items = [
   { to: '/goal-conversation', label: '目标规划', match: ['/goal-conversation'], icon: icons.goal },
   { to: '/learning-paths', label: '学习路径', match: ['/learning-paths', '/learning-path'], icon: icons.layers },
   { to: '/knowledge-map', label: '知识图谱', match: ['/knowledge-map'], icon: icons.graph },
-  { to: '/learning-state', label: '学习状态', match: ['/learning-state'], icon: icons.pulse },
-  { to: '/learning-history', label: '学习历史', match: ['/learning-history'], icon: icons.history },
-  { to: '/achievements', label: '成就', match: ['/achievements'], icon: icons.medal }
+  { to: '/learning-state', label: '学习状态', match: ['/learning-state'], icon: icons.pulse }
 ];
+/* 「成就」「学习历史」不再是顶层入口（2026-09-24 用户拍板：成就意义不大、历史也太细），
+   移到个人中心 /user/achievements、/user/learning-history，走 CapabilityShell 的分段导航；
+   旧路径保留重定向，站内入口（首页快捷卡、复习行、状态页、路径详情）已改指新路径。 */
 
 function isActive(item: { match: string[] }) {
   return item.match.some((m) => route.path.startsWith(m));
@@ -312,17 +311,6 @@ onUnmounted(() => {
   .v2nav__name { display: none; }
 }
 
-/* 1152~1679：导航行比容器宽约 28px（内容 1080），7 个主链接全部折成两行、用户名也断行——
-   实测 1152/1280/1440/1600 链接高 65.5、右侧操作簇高 58，1680 起容器放宽到 1360 才恢复 43.8/44。
-   只收链接内边距（16→12）与组间距（28→20）把这一档救回来，不动容器宽度
-   （1080 与页面内容同宽是刻意的对齐，见上）。改后同一批宽度实测链接 542.5×43.8、右簇 44、无横向溢出。
-   1101~1151 是断点前 50px 的缝：那一段容器只有 1045，收紧后仍差 ~20px，需要改断点才能根治。 */
-@media (min-width: 1152px) and (max-width: 1679px) {
-  .v2nav__in { gap: 20px; }
-  .v2nav__links { margin-left: 20px; }
-  .v2nav__links a { padding: 11px 12px; }
-}
-
 /* 移动端顶部导航：高度 72→56，CTA 36→32，间距收窄。
    比例：logo 由 34 提到 44（132px 宽），右侧三件套整体收小（铃铛 40→34、图标 20→18、
    头像 28→24、chip 内边距 8/4→6/4、caret 10→9），362px 内容宽里
@@ -368,10 +356,10 @@ onUnmounted(() => {
 @media (max-width: 1100px) {
   .v2nav__tabs {
     display: grid;
-    /* 7 个入口（学习台/目标规划/学习路径/知识图谱/学习状态/学习历史/成就）：
-       列数必须与 items 数量一致，否则第 7 个 tab 换行把导航撑成两行（+49px）。
+    /* 5 个入口（学习台/目标规划/学习路径/知识图谱/学习状态）：
+       列数必须与 items 数量一致，否则多出的 tab 换行把导航撑成两行（+49px）。
        新增底部入口时同步改这里。 */
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     position: fixed;
     left: 0; right: 0; bottom: 0;
     z-index: 40;
@@ -395,11 +383,10 @@ onUnmounted(() => {
   }
   .v2nav__tab--active .v2nav__tab-icon { opacity: 1; }
   .v2nav__tab:active { background: color-mix(in srgb, var(--blue) 8%, transparent); }
-  /* ≤360px 窄屏：7 列每列仅 ~44px，4 字标签 10.5px 会溢出——收字号、去左右内边距 */
+  /* ≤360px 窄屏：5 列每列仍有 ~72px，4 字标签 10.5px 放得下，只去左右内边距 */
   @media (max-width: 360px) {
     .v2nav__tabs { padding-left: 0; padding-right: 0; }
     .v2nav__tab { padding-left: 0; padding-right: 0; }
-    .v2nav__tab-label { font-size: 9.5px; }
   }
 }
 </style>

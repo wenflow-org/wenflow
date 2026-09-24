@@ -11,8 +11,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 const getMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/utils/api', () => ({ default: { get: getMock } }));
-vi.mock('../V2Nav.vue', () => ({ default: { template: '<nav class="stub-nav" />' } }));
-vi.mock('../V2Footer.vue', () => ({ default: { template: '<footer class="stub-footer" />' } }));
+// 页面已收进个人中心壳：壳负责导航/页头/页脚，测试只关心页面内容，用透传 slot 的桩替掉
+vi.mock('@/components/user/CapabilityShell.vue', () => ({ default: { template: '<div><slot /></div>' } }));
 
 import V2LearningHistory from '../V2LearningHistory.vue';
 

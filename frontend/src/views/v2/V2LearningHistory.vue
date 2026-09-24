@@ -1,17 +1,7 @@
 <template>
-  <div class="history v2-page">
-    <V2Nav />
-
-    <main class="history__main">
-      <!-- 页头 -->
-      <div class="history__hero">
-        <div>
-          <span class="kicker">学习历史</span>
-          <h1>每一次学习，都有迹可循</h1>
-          <p>按时间回看你的学习会话：学了什么、学多久、完成情况。</p>
-        </div>
-      </div>
-
+  <CapabilityShell title="学习历史" description="按时间回看你的学习会话：学了什么、学多久、完成情况。">
+    <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题 + 说明） -->
+    <div class="history__body">
       <!-- 统计（与首页/状态页同口径：后端已默认过滤 discarded/superseded 内部会话） -->
       <div class="history__stats">
         <div class="card history__stat">
@@ -85,23 +75,19 @@
         </div>
         <p v-else-if="sessions.length" class="history__end">— 已加载全部记录 —</p>
       </div>
-    </main>
-
-    <!-- AI 生成提示 + 页脚：一起沉底 -->
-    <div class="history__foot">
-      <div class="history__ai-note">
-        <AiContentNote />
-      </div>
-      <V2Footer />
     </div>
-  </div>
+
+    <!-- AI 生成提示（页脚由 CapabilityShell 提供） -->
+    <div class="history__ai-note">
+      <AiContentNote />
+    </div>
+  </CapabilityShell>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import request from '@/utils/api';
-import V2Nav from './V2Nav.vue';
-import V2Footer from './V2Footer.vue';
+import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import { localDateKeyFromIso } from '@/utils/date';
 import { unwrap } from './unwrap';
@@ -304,36 +290,18 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* wrapper 沉底：AI 提示与页脚一起贴近底部 */
-.history__foot { margin-top: auto; }
+/* AI 提示：页脚由 CapabilityShell 提供，这里只留一行居中说明 */
 .history__ai-note {
   display: flex; justify-content: center;
-  padding: 10px 28px 4px;
+  padding: 4px 0 0;
 }
 .history__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
 
-.history__main {
-  flex: 1;
-  width: 100%;
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 24px 28px 48px;
+/* 内容容器：宽度/内边距交给 CapabilityShell 的 .uc__main，这里只管卡间距 */
+.history__body {
   display: grid;
   gap: 16px;
   align-content: start;
-}
-
-.history__hero h1 {
-  margin: 0 0 6px;
-  font-size: 28px;
-  letter-spacing: -0.01em;
-}
-
-.history__hero p {
-  margin: 0;
-  font-size: 13.5px;
-  color: var(--muted, #5b6577);
-  line-height: 1.7;
 }
 
 .history__stats {
@@ -521,19 +489,8 @@ onMounted(() => {
     font-size: 11px;
   }
 
-  .history__main {
-    padding: 14px 14px 32px;
+  .history__body {
     gap: 12px;
-  }
-
-  .history__hero h1 {
-    margin-bottom: 4px;
-    font-size: 22px;
-  }
-
-  .history__hero p {
-    font-size: 12.5px;
-    line-height: 1.5;
   }
 
   .history__list {

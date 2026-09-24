@@ -1389,7 +1389,7 @@ async function viewFeedback(task: Record<string, any>) {
     confirmText: '回看学习历史',
     danger: false,
   });
-  if (go) router.push('/learning-history');
+  if (go) router.push('/user/learning-history');
 }
 
 onMounted(() => {
