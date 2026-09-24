@@ -38,7 +38,7 @@
 
     <!-- ===== Tab1: 接入与模型（原 ApiConfig 全量内容） ===== -->
     <template v-if="tab === 'model'">
-    <div class="ac-tab-body">
+    <div class="ac-tab-body mk-narrow">
     <!-- 主布局：左列(接入与模型+安全与访问 纵向) / 右列(AI 调用与健康) -->
     <div class="ac-layout">
       <div class="ac-layout__main">

@@ -215,6 +215,21 @@ const MEASURE = `(() => {
   });
   out.tableRows = { count: rowH.length, min: rowH.length ? Math.min(...rowH) : null, under40: rowH.filter((h) => h < 40).length };
 
+  // 8) 内容宽度策略（SPEC §7）：表单/设置内容应收敛为居中窄列，表格/工作台保持通栏。
+  //    记下窄列容器的实际宽度与是否居中，便于跨档核对是否出现「越大屏越窄」。
+  const narrow = [];
+  document.querySelectorAll('.mk-narrow, .mk-card--narrow').forEach((el) => {
+    const r = rect(el);
+    if (r.width === 0) return;
+    const parent = el.parentElement ? rect(el.parentElement) : null;
+    narrow.push({
+      cls: cls(el).slice(0, 40),
+      w: Math.round(r.width),
+      centered: parent ? Math.abs((r.left - parent.left) - (parent.right - r.right)) <= 2 : null,
+    });
+  });
+  out.narrowCols = narrow;
+
   // 7) 跨档字号序列（外部按宽度聚合后判单调）
   const tiers = {};
   for (const sel of ${JSON.stringify(TIER_SELECTORS)}) {
@@ -262,24 +277,24 @@ async function gotoReady(page, url, w) {
 }
 
 /* ── 二级详情：从列表页进入 ?view=&id= 深链（纯导航，不点任何写操作）──
-   三种入口依次尝试：可点行 → 「详情」图标按钮 → 行内链接。 */
+   入口依次尝试：可点行 → 单元格内的 role=button（虚拟学习者用 .vl-cell--click）
+   → 只读图标按钮（详情 / 控制台）→ 行内链接。 */
 async function discoverDetail(page, listUrl, name) {
+  const clickIfFound = async (locator) => {
+    if ((await locator.count()) === 0) return false;
+    await locator.click({ timeout: 5000 }).catch(() => {});
+    await sleep(1800);
+    return page.url().includes('view=');
+  };
   try {
     await gotoReady(page, listUrl, 1440);
     const row = page.locator('table.mk-table tbody tr').first();
     if ((await row.count()) > 0) {
       const rowText = (await row.innerText()).slice(0, 60);
-      if (!MUTATING.test(rowText)) {
-        await row.click({ timeout: 5000 }).catch(() => {});
-        await sleep(1800);
-        if (page.url().includes('view=')) return { name, url: page.url().replace(BASE, '') };
-      }
+      if (!MUTATING.test(rowText) && (await clickIfFound(row))) return { name, url: page.url().replace(BASE, '') };
     }
-    const icon = page.locator('.mk-icon-btn[title="详情"]').first();
-    if ((await icon.count()) > 0) {
-      await icon.click({ timeout: 5000 }).catch(() => {});
-      await sleep(1800);
-      if (page.url().includes('view=')) return { name, url: page.url().replace(BASE, '') };
+    for (const sel of ['.vl-cell--click', '.mk-icon-btn[title="详情"]', '.mk-icon-btn[title="控制台"]']) {
+      if (await clickIfFound(page.locator(sel).first())) return { name, url: page.url().replace(BASE, '') };
     }
     const link = page.locator('tbody tr a[href*="view="]').first();
     if ((await link.count()) > 0) {
@@ -440,6 +455,7 @@ async function run() {
       cardPaddings: r.measure ? r.measure.cardPaddings : null,
       radiusKinds: r.measure ? r.measure.radiusKinds : null,
       tableRows: r.measure ? r.measure.tableRows : null,
+      narrowCols: r.measure ? r.measure.narrowCols : null,
       tiers: r.measure ? r.measure.tiers : null,
     })),
     tierViolations,

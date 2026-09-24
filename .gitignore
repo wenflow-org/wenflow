@@ -224,6 +224,8 @@ doc/*
 !doc/re_test/
 doc/re_test/*
 !doc/re_test/admin-audit-2026-09-24.md
+# 例外：管理端视觉层规范（守卫规则 10/11/12 与巡检脚本按路径引用它作为判据）
+!doc/ADMIN_VISUAL_LAYER_SPEC.md
 !doc/SKILL_PROTOCOL_V4.md
 !doc/README.md
 !doc/README.en.md

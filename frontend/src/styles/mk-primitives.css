@@ -47,8 +47,11 @@
   flex-direction: column;
 }
 /* 表单/设置为主的卡片限宽居中（对标 GitHub 设置页）：单列表单拉满通栏可读性差。
-   表格列表页保持通栏。 */
-.mk-card--narrow { max-width: 1200px; margin-inline: auto; width: 100%; }
+   表格列表页保持通栏。
+   .mk-narrow 是同一策略的非卡片写法：限宽对象是 tab body 等布局容器（一个 tab 下多张卡
+   时，逐卡加 --narrow 会各自居中、列宽还对不齐，改由容器统一收敛）。 */
+.mk-card--narrow,
+.mk-narrow { max-width: 1200px; margin-inline: auto; width: 100%; }
 .mk-card--fill > .mk-table-scroll,
 .mk-card--fill > .log-body,
 .mk-card--fill > .ss-body,
