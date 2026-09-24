@@ -135,7 +135,7 @@ const MEASURE = `(() => {
     const label = el.tagName === 'INPUT' ? el.closest('label') : null;
     const r = rect(label || el);
     if (r.width === 0 || r.height === 0) return;
-    clickables.push({ tag: el.tagName, cls: cls(el), text: txt(el), w: Math.round(r.width), h: Math.round(r.height), via: label ? 'label' : 'self' });
+    clickables.push({ tag: el.tagName, type: el.tagName === 'INPUT' ? el.type : null, cls: cls(el), text: txt(el), w: Math.round(r.width), h: Math.round(r.height), via: label ? 'label' : 'self' });
   });
   out.clickTotal = clickables.length;
   out.under24 = clickables.filter((c) => c.h < 24 || c.w < 24).slice(0, 30);
