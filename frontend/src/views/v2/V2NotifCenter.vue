@@ -738,3 +738,13 @@ onBeforeUnmount(() => {
 [data-theme='dark'] .nc__tab:hover, [data-theme='dark'] .nc__tab--on { color: var(--blue-deep, #4d8bf8); }
 [data-theme='dark'] .nc__dot { box-shadow: 0 0 0 2px var(--surface, #1e1e20); }
 </style>
+
+<style scoped>
+/* ===== 移动端密度（2026-09-24）=====
+   判据：空态留白 ≤32px。实测 390 下通知面板空态上下 34px、图标 22px。
+   放在文件末尾：同权重下后出现者胜（.nc__empty 的基础规则在中间那个 ≤900 块之后）。 */
+@media (max-width: 900px) {
+  .nc__empty { padding: 24px 14px; }
+  .nc__empty-icon { font-size: 18px; }
+}
+</style>

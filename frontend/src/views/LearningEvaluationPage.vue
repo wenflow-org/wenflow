@@ -1303,7 +1303,7 @@ onUnmounted(() => {
   .evaluation-shell :deep(.metric-desc) {
     flex: 1 1 100%;
     margin: 0;
-    font-size: 11.5px;
+    font-size: 12px;
     line-height: 1.45;
   }
 
@@ -1321,7 +1321,7 @@ onUnmounted(() => {
 
   .evaluation-shell :deep(.knowledge-evidence) {
     margin-top: 4px;
-    font-size: 11.5px;
+    font-size: 12px;
     line-height: 1.45;
   }
 
@@ -1421,7 +1421,7 @@ onUnmounted(() => {
   }
 
   .evaluation-transcript-item__meta span {
-    font-size: 11.5px;
+    font-size: 12px;
   }
 
   .evaluation-transcript-card .evaluation-transcript-toggle {
@@ -1435,5 +1435,14 @@ onUnmounted(() => {
     align-items: center;
     justify-content: space-between;
   }
+
+  /* 加载/错误/空态：桌面 60px 上下留白（本层此前没覆盖到），移动端收到 32（基线 ≤32）；
+     .spin 36→28 与 .evaluation-transcript-empty 20→14 同理。 */
+  .evaluation-loading,
+  .evaluation-error {
+    padding: 32px 16px;
+  }
+  .spin { font-size: 28px; }
+  .evaluation-transcript-empty { padding: 14px; }
 }
 </style>

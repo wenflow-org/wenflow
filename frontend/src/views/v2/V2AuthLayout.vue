@@ -272,6 +272,23 @@ const isDark = useIsDark();
   .auth__demo-side { display: none; }
 }
 
+/* ===== 移动端密度（2026-09-24）=====
+   实测 390 下：.auth__main 上下 48/40px + gap 30px、品牌 logo 64px、认证卡圆角 20px。
+   另外三个认证页（登录/注册/重置）的输入框是 14px——低于 iOS Safari 聚焦缩放阈值，
+   点输入框整页会被放大；uc.css、学习页、目标页都按 16px 处理了，这三页此前漏了。
+   .field__input 定义在三个页面组件里（不在本文件），从壳上用 :deep 统一收口。
+   注意必须带上 .auth__form-side 这个祖先类：单独写 `:deep(.field__input)` 编译出来是
+   `[data-v-壳] .field__input`，权重 (0,2,0)，和页面里的 `.field__input[data-v-页]` 打平，
+   而页面样式后注入 → 平局下壳会输（实测就是这样：算出来仍是 14px）。
+   写成 `.auth__form-side :deep(...)` → `.auth__form-side[data-v-壳] .field__input`，
+   权重 (0,3,0)，稳赢。 */
+@media (max-width: 760px) {
+  .auth__main { gap: 20px; padding: 28px 16px 24px; }
+  .auth__logo img { height: 48px; }
+  .auth__card { border-radius: var(--mk-radius-modal); }
+  .auth__form-side :deep(.field__input) { font-size: 16px; }
+}
+
 /* ---------- 超大屏（2K）：卡片与演示放大；2800+ 交由 v2.css zoom 机制，避免叠加 ---------- */
 @media (min-width: 2000px) and (max-width: 2799px) {
   .auth__logo img { height: 76px; }

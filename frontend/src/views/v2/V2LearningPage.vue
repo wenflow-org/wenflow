@@ -2553,8 +2553,27 @@ onBeforeUnmount(() => {
 @media (max-width: 900px) {
   .replies { margin: 4px 12px 0; padding: 10px 12px 12px; }
   .replies__head { padding-bottom: 6px; }
-  .replies__question { margin-bottom: 6px; padding: 6px 9px; font-size: 11.5px; }
+  .replies__question { margin-bottom: 6px; padding: 6px 9px; font-size: 12px; }
   .replies__row { gap: 5px; }
   .reply { padding: 7px 10px; font-size: 12.5px; }
+}
+</style>
+
+<style scoped>
+/* ===== 移动端密度（2026-09-24）=====
+   判据：卡片内边距 12–16px、弹层 16–20px、整页留白 ≤40px、移动端规则不写 <12px。
+   实测 390 下：.oscene 16×18（开场卡）、.learn__live 10.5px（桌面 11px，移动块自己压低了）。
+   其余几块只在对应状态下出现（开课准备 .stage-card 36×32、完成浮层 .finish__card 28、
+   初始化 .learn__init 80×20），登录态巡检量不到，按基线推导。
+   放在文件末尾：同权重下后出现者胜。 */
+@media (max-width: 900px) {
+  .stage-card { padding: 24px 18px; border-radius: var(--mk-radius-modal); }
+  .learn__stage { padding: 28px 16px; }
+  .finish { padding: 16px; }
+  .finish__card { padding: 20px; border-radius: var(--mk-radius-modal); }
+  .learn__init { padding: 48px 16px; }
+  .tutor__scroll { padding: 14px; }
+  .oscene { padding: 12px 14px; }
+  .learn__live { font-size: 12px; }
 }
 </style>

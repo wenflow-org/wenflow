@@ -577,7 +577,7 @@ table.uc-table {
   .uc-loading { padding: 20px 0; font-size: 12.5px; }
   .uc-table th { padding: 8px 10px; font-size: 12px; }
   .uc-table td { padding: 9px 10px; font-size: 12.5px; }
-  .uc-table .uc-table__sub { font-size: 11px; }
+  .uc-table .uc-table__sub { font-size: 12px; }
   .uc-dialog__head { padding: 14px 16px 0; }
   .uc-dialog__head h3 { font-size: 15.5px; }
   .uc-dialog__body { padding: 12px 16px; gap: 10px; }
@@ -593,4 +593,13 @@ table.uc-table {
   .uc-btn--primary:hover:not(:disabled) {
     box-shadow: 0 8px 18px color-mix(in srgb, var(--blue, #3478f6) 26%, transparent);
   }
+
+  /* 弹窗与表单控件（2026-09-24 密度轮）：圆角 20px 不在 token 刻度上（…10/12/16/pill），
+     收到 --mk-radius-modal；遮罩 20→14（390 下 20px 遮罩边距让弹窗内容过窄）；
+     关闭键 28→36（触屏热区，它是弹窗里唯一的退出路径）；
+     文本域 72→64（默认高度按两行正文够用，需要时可拖拽放大）。 */
+  .uc-dialog { border-radius: var(--mk-radius-modal); }
+  .uc-dialog-mask { padding: 14px; }
+  .uc-dialog__close { width: 36px; height: 36px; }
+  .uc-field textarea.uc-field__input { min-height: 64px; }
 }
