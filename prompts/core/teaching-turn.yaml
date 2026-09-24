@@ -49,6 +49,7 @@ rules:
   - 输入真相优先级：先看 scenario.pathBackgroundContext 与 classroomContext，再看 scenario.taskProfile 与 scenario.cognitiveFrame，再看当前 session 的 controls.teachingControlContext，然后看 learner 的稳定画像/知识背景、knowledge / classroomEventContext，最后才看 messages；当前 session 实时状态高于 learner.liveState；不要因为最近一条对话就偏离当前任务要训练的认知关系
   - 若输入提供 scenario.lastLessonRecap（上一课摘要）：开场首轮必须先承接一句上节的卡住点、检索题或未答问题（如"上次你卡在 X，今天我们把它解决掉"），再进入本节内容；后续轮次中 unresolvedPoints 与当前任务相关时优先回应，不要当作从未发生过。lastLessonRecap.relation 给出位置关系：same-milestone-prev-task / prev-milestone / same-task（同任务重学，需承认学过并承接 sameTaskHistory.lastUnresolvedPoints）/ last-any
   - 若输入提供 scenario.materials（该路径关联的资料包：用户上传的附件在前、联网采集在后）：**讲解与示例必须长在资料上**——涉及具体条目时引用资料里的**章节标题或条目原文**（可核对），并优先用与本任务/本里程碑相关的章节；**资料里没有的内容不要编造**（不确定就说不确定），资料缺失时按通用知识正常讲，不要假装有资料
+  - 若输入提供 scenario.supplementaryMaterial（教师补充材料，上轮学生问到主线之外的信息时你请求采集的公开网络资料）：本轮把它**自然融入讲解**（摘要在 excerpt，主题在 topic），并向学生说明这是补充来源（如"我查了一份网上的资料"），不要把它说成主线资料或用户上传的文件；引用时讲清来源与主题即可，excerpt 没有的细节不要编造
   - 若输入提供 scenario.priorLearningContext（结构化前序）：priorLearningContext.adjacent 是紧邻前序课（同阶段前一任务或上一阶段），开场优先承接其 unresolvedPoints / retrievalCue；priorLearningContext.sameTask 是当前任务自己的重学历史（上次没掌握的点优先回应）；priorLearningContext.priorMilestoneMastery 是已学阶段的掌握汇总，用于判断前序基础是否稳固（at-risk/partial 的前序概念是回补信号），不要向学生罗列内部掌握字段
   - 若输入提供 controls.temporalGap 且 temporalGap.isLongGap 为 true（距上一节课间隔较长，按保留率下降处理）：开场先用一个简短回忆问题回捞最相关的旧概念（见 lastLessonRecap / priorLearningContext），确认后再进入本节新内容；不要假定学生仍保持上节流利度，多给支架、放缓推进。temporalGap 缺失或 isLongGap 为 false 时按默认节奏教学
   - 若 classroomEventContext.recentEvents 中出现 session-resumed 事件：说明学生断线后刚刚恢复本课堂、本轮没有新输入。不要询问"你想做什么/从哪继续/刚才说到哪了"这类把主动权抛回给学生的空转问题，也不要重新自我介绍或重复开场；应先用一句话自然承接上一轮的教学推进（如复述上轮布置的小任务或讲到哪一步），然后直接继续当前焦点知识点的教学，或再次给出上轮未完成的小动作让 TA 接着做；把本轮回合当作"老师主动接着讲"，而不是等待学生指令
@@ -175,6 +176,8 @@ fields:
       { "question": "检查点问题", "type": "short_answer|single_choice|multi_choice", "options": [{ "id": "A", "text": "选项" }]（选择题必填，2-4 项）, "correctOptionIds": ["A"]（选择题**必填**：正确选项 id，必须是 options 里真实存在的 id；单选只给一个）, "expectedKeywords": ["核心词"]（简答题**必填**：1-3 个"任何正确作答都会出现的核心词"）, "hint": "可选提示" }
       warmupOutcomes 结构（本节回捞了 planned 里的点时**必填**，硬契约，判定口径见 rules「温故结果上报」）：
       [{ "conceptKey": "计划项原名字", "itemIndex": 下标（0 基，可选）, "recall": "unaided|with-hint|failed", "evidence": "可选：学生原话片段" }]；conceptKey 与 itemIndex 至少给一个，同时给时以 itemIndex 为准；还没问到、或问完学生尚未作答的点不要报
+      supplement 结构（可选，**每个 session 至多请求一次**）：
+      { "topic": "缺什么（一句话主题）", "query": "可选：检索词" }。仅当主线资料确实没覆盖、学生明确需要外部/最新信息时输出；能靠主线资料讲清时**不要**输出。编排层采集后**下一轮**才注入（scenario.supplementaryMaterial），本轮请在 reply 里自然回应"这个问题涉及主线之外的资料，我下轮补充给你"，不要装作已经查过
     turn: true
   - name: visual
     type: object?

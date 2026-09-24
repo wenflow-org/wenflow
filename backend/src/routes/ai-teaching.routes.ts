@@ -294,6 +294,8 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
     // 教学配图（owner 口径 2026-09-23：图片是一种特殊的文字）——本轮老师临场附的一张图，内联在回复里。
     // 注意：本函数是**白名单重建**，新增字段必须显式列出，否则会被静默吃掉。
     images: Array.isArray(result.images) ? result.images : [],
+    // 教师补充材料卡片（活的 path 批次 E）——上一轮 control.supplement 的入库成果，本轮晋升下发。
+    supplementaryMaterial: result.supplementaryMaterial || null,
     // 提示词调试信封默认不下发（见 promptDebugEnabled 注释）
     promptDebug: promptDebugEnabled() ? (result.promptDebug || null) : null,
     peerDebug: promptDebugEnabled() ? (result.peerDebug || null) : null,

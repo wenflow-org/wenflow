@@ -235,6 +235,17 @@
                     <figcaption v-if="img.caption">{{ img.caption }}</figcaption>
                   </figure>
                 </div>
+                <!-- 教师补充材料卡片（批次 E）：主线之外的公开网络资料，点开看原文窗口 -->
+                <button
+                  v-if="m.supplement?.materialId"
+                  type="button"
+                  class="msg__supplement"
+                  @click="openSupplement(m.supplement)"
+                >
+                  <span class="msg__supplement-tag">补充资料</span>
+                  <span class="msg__supplement-title">{{ m.supplement.title }}</span>
+                  <span class="msg__supplement-topic">关于「{{ m.supplement.topic }}」· 点开看原文</span>
+                </button>
                 <MessageActions
                   :show="hoveredMsgId === m.id"
                   :streaming="typing && streamingBubbleIndex === msgs.indexOf(m)"
@@ -499,6 +510,19 @@
       <span class="peerfab__q" aria-hidden="true">Q</span>
       <i v-if="peerUnread" class="peerfab__dot"></i>
     </button>
+    <!-- 教师补充材料弹层（批次 E） -->
+    <div v-if="supplementPreview.open" class="supmodal" @click.self="closeSupplement">
+      <div class="supmodal__card" role="dialog" aria-label="补充资料原文">
+        <div class="supmodal__head">
+          <strong>{{ supplementPreview.title }}</strong>
+          <button type="button" class="supmodal__close" aria-label="关闭" @click="closeSupplement">✕</button>
+        </div>
+        <div class="supmodal__body">
+          <p v-if="supplementPreview.loading" class="supmodal__loading">正在读取原文…</p>
+          <p v-else class="supmodal__text">{{ supplementPreview.text }}</p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -510,6 +534,7 @@ const isDark = useIsDark();
 import { useRoute, useRouter } from 'vue-router';
 import request, { API_BASE_URL } from '@/utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
+import { readMaterialSection } from '@/api/materials';
 import AiContentNote from '@/components/AiContentNote.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import { toast } from '@/utils/toast';
@@ -518,7 +543,7 @@ import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { unwrap } from './unwrap';
-import { nowTime, type ChatMsg } from './learningChat';
+import { nowTime, type ChatMsg, type ChatSupplement } from './learningChat';
 import MkGraph from '@/components/mk/MkGraph.vue'
 import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -609,6 +634,25 @@ function pushMsg(m: ChatMsg): ChatMsg {
   const withId: ChatMsg = { ...m, id: m.id ?? `lm_${Date.now().toString(36)}_${++msgSeq}` };
   msgs.value.push(withId);
   return withId;
+}
+
+/** 教师补充材料弹层（批次 E）：点卡片看原文窗口（章节取回，失败回退摘要）。 */
+const supplementPreview = ref<{ open: boolean; loading: boolean; title: string; text: string }>({
+  open: false, loading: false, title: '', text: '',
+});
+async function openSupplement(supplement: ChatSupplement): Promise<void> {
+  supplementPreview.value = { open: true, loading: true, title: supplement.title, text: '' };
+  try {
+    const section = await readMaterialSection(supplement.materialId, {});
+    supplementPreview.value.text = String(section?.excerpt || supplement.excerpt || '') || '（正文为空）';
+  } catch {
+    supplementPreview.value.text = String(supplement.excerpt || '') || '读取失败，请稍后重试。';
+  } finally {
+    supplementPreview.value.loading = false;
+  }
+}
+function closeSupplement(): void {
+  supplementPreview.value.open = false;
 }
 /**
  * 卡点条只在「与上一条消息的卡点不同」时展示。
@@ -1053,8 +1097,10 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
     aiMsg.text = r.aiResponse || aiMsg.text;
     aiMsg.confusion = confusion;
     if (Array.isArray(r.images) && r.images.length) (aiMsg as ChatMsg).images = r.images;
+    // 教师补充材料卡片（批次 E）：承诺的"下轮补充"在本轮送达
+    if (r.supplementaryMaterial?.materialId) (aiMsg as ChatMsg).supplement = r.supplementaryMaterial;
   } else if (r.aiResponse) {
-    pushMsg({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion, ...(Array.isArray(r.images) && r.images.length ? { images: r.images } : {}) });
+    pushMsg({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion, ...(Array.isArray(r.images) && r.images.length ? { images: r.images } : {}), ...(r.supplementaryMaterial ? { supplement: r.supplementaryMaterial } : {}) });
   }
   // 兜底：AI 全程未返回任何内容（空响应）时给占位气泡，避免本轮「无声消失」
   if (!r.aiResponse && (!aiMsg || !aiMsg.text.trim())) {
@@ -1720,6 +1766,28 @@ onBeforeUnmount(() => {
 /* 教学配图（owner 口径 2026-09-23：图片是一种特殊的文字）——内联在老师回复里的图；
    图只是辅助：文本仍自洽，不看图也能继续。 */
 .msg__visuals { display: grid; gap: 8px; }
+/* 教师补充材料卡片（批次 E）：轻量、可点、不抢正文视觉 */
+.msg__supplement {
+  display: grid; gap: 2px; width: 100%; margin-top: 8px; padding: 8px 10px;
+  text-align: left; cursor: pointer;
+  border: 1px solid var(--line, rgba(0,0,0,.08)); border-radius: 10px;
+  background: var(--surface, rgba(0,0,0,.02)); color: inherit;
+}
+.msg__supplement:hover { border-color: var(--blue, #3b82f6); }
+.msg__supplement-tag {
+  justify-self: start; padding: 1px 6px; border-radius: 999px;
+  background: var(--blue, #3b82f6); color: #fff; font-size: 12px; font-weight: 700;
+}
+.msg__supplement-title { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg__supplement-topic { font-size: 12px; color: var(--muted, #6b7280); }
+/* 补充材料弹层 */
+.supmodal { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(15, 23, 42, .45); }
+.supmodal__card { width: min(640px, 100%); max-height: 80vh; display: flex; flex-direction: column; background: #fff; border-radius: 14px; box-shadow: 0 12px 40px rgba(15, 23, 42, .2); }
+.supmodal__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid rgba(0,0,0,.06); }
+.supmodal__head strong { font-size: 14px; }
+.supmodal__close { border: 0; background: transparent; font-size: 14px; cursor: pointer; color: #6b7280; }
+.supmodal__body { padding: 12px 16px 16px; overflow-y: auto; }
+.supmodal__text, .supmodal__loading { margin: 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; color: #1f2937; }
 .msg__visual { margin: 0; display: grid; gap: 4px; }
 .msg__visual img {
   display: block; max-width: 100%; max-height: 320px;

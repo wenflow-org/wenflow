@@ -82,6 +82,17 @@ export interface TeachingTurnInput {
       keyPoints?: Array<{ text?: string | null; cite?: string | null }>;
     }> | null;
     /**
+     * 教师补充材料（活的 path 批次 E）：上一轮 control.supplement 请求采集入库的公开网络资料。
+     * 引用时要向学生说明这是补充来源（非主线资料），并自然带出主题。
+     */
+    supplementaryMaterial?: {
+      materialId: string;
+      title: string;
+      topic: string;
+      sourceUrl?: string | null;
+      excerpt: string;
+    } | null;
+    /**
      * 当前任务 materialRefs 的**章节原文窗口**（material-sections 取回，≤2×4K 字，2026-09-24）。
      * 讲到哪章就能看到那章原文；无引用/取回失败时为 null。
      */
@@ -1103,6 +1114,8 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
       // 教学配图时机（逐回合变化 → 必须放**载荷尾部**，避免打断 KV 前缀缓存；见 buildPromptInput 注释）
       ...(input.visualOpportunity?.suggested ? { visualOpportunity: input.visualOpportunity } : {}),
+      // 教师补充材料（逐回合变化 → 同样放载荷尾部）：上一轮 control.supplement 的入库成果
+      ...(input.scenario?.supplementaryMaterial ? { supplementaryMaterial: input.scenario.supplementaryMaterial } : {}),
       ...conditionalRulesPayload,
     };
   }

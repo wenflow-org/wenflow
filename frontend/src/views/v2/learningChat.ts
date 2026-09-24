@@ -10,6 +10,15 @@ export interface ChatImage {
   kind?: string | null;
 }
 
+/** 教师补充材料（活的 path 批次 E）：上一轮学生问到主线之外的信息，老师请求采集的公开网络资料。 */
+export interface ChatSupplement {
+  materialId: string;
+  title: string;
+  topic: string;
+  sourceUrl?: string | null;
+  excerpt: string;
+}
+
 export interface ChatMsg {
   role: 'ai' | 'user';
   text: string;
@@ -18,6 +27,8 @@ export interface ChatMsg {
   confusion?: string[];
   /** 本轮老师临场附的教学配图（可选，内联在气泡里） */
   images?: ChatImage[];
+  /** 本轮送达的教师补充材料卡片（可选，气泡下方） */
+  supplement?: ChatSupplement;
   id?: string;
 }
 

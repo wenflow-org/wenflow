@@ -8,6 +8,7 @@
  * facade 保留同名委托，行为与拆分前逐一等价。
  */
 import { logger } from '../../utils/logger';
+import { runBackgroundTask } from '../background-task-tracker.service';
 import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, peerAgentDefinition } from '../../skills';
 import { teachingTurnAgentDefinition } from '../../skills/teaching-turn';
 import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
@@ -21,6 +22,11 @@ import { memoryTraceService } from '../memory/memory-trace.service';
 import { recordMisconceptions } from '../learner/misconception-ledger.service';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { parseSessionArtifacts } from './checkpoint-shared';
+import {
+  promoteSupplementSlot,
+  fetchSupplementMaterial,
+  type SupplementSlot,
+} from './teaching-supplement.service';
 import {
   TeachingCheckpoint,
   checkpointForMessageResult,
@@ -238,6 +244,13 @@ export async function processStudentMessage(
   if (turnMemoryWarmup) {
     context.memoryWarmup = turnMemoryWarmup;
   }
+  // 教师补充槽晋升（活的 path 批次 E）：上一轮 control.supplement 请求 → 后台已入库 →
+  // 本轮查库晋升为补充材料（进 scenario 给模型 + 进消息结果给前端卡片）；超轮次置过期。
+  const supplementPromotion = promoteSupplementSlot(
+    sessionArtifacts.supplement as SupplementSlot | undefined,
+    session.userId,
+    updatedMessages.length
+  );
   const effectiveInitialKnowledgeState = cloneKnowledgePoints(
     Array.isArray(sessionArtifacts.initialKnowledgeState) && sessionArtifacts.initialKnowledgeState.length > 0
       ? sessionArtifacts.initialKnowledgeState
@@ -269,6 +282,10 @@ export async function processStudentMessage(
     messages: fenceLearnerMessagesForModel(updatedMessages),
     knowledgeState: frozenKnowledgeState,
   }, context, { anchorTarget });
+  // 教师补充材料（批次 E）：上一轮请求已入库 → 本轮把就绪载荷送进 scenario（模型可引用出处讲）。
+  if (supplementPromotion.payload) {
+    (turnInput.scenario as Record<string, unknown>).supplementaryMaterial = supplementPromotion.payload;
+  }
   // 教学配图时机（S1，代码裁决 → **显式**送进本轮输入）：老师上一轮用字符画了结构 → 本轮要求出图。
   // 为什么必须显式送：实测埋在 2 万字 system prompt 里的规则会被忽略，写进本轮输入才生效。
   const visualOpportunity = buildVisualOpportunity(updatedMessages);
@@ -671,6 +688,43 @@ export async function processStudentMessage(
       })(),
       // 冻结的收束目标集：只增一次，后续回合沿用（防止目标集随模型新增/改名膨胀）
       completionTargets,
+      // 教师补充槽（批次 E）：① 晋升结果落槽（delivered/expired）；② 本轮新请求（闸门：
+      // 已有槽位则忽略——每 session 至多一次）写 requested + fire 后台采集入库。
+      // 采集产物进资料库（持久）；槽位流转全部随回合同事务写，无中途并发写。
+      ...(() => {
+        const existing = sessionArtifacts.supplement as SupplementSlot | undefined;
+        if (supplementPromotion.slot && supplementPromotion.slot !== existing) {
+          return { supplement: supplementPromotion.slot };
+        }
+        const request = effectiveTeachingOutput?.control?.supplement
+          || rawTeachingOutput?.control?.supplement;
+        if (request?.topic && !existing) {
+          const slot: SupplementSlot = {
+            status: 'requested',
+            topic: request.topic,
+            query: request.query || request.topic,
+            requestedAt: new Date().toISOString(),
+            requestedTurn: updatedMessages.length,
+          };
+          runBackgroundTask('teaching.material-supplement', async () => {
+            const outcome = await fetchSupplementMaterial(session.userId, slot.topic, slot.query);
+            if (!outcome.ok) {
+              logger.warn('[AITeaching] 教师补充资料采集失败（fail-open，槽位靠轮次超时过期）', {
+                sessionId,
+                topic: slot.topic,
+                error: outcome.error,
+              });
+            }
+          });
+          logger.info('[AITeaching] 教师补充请求已受理', {
+            sessionId,
+            topic: slot.topic,
+            turn: slot.requestedTurn,
+          });
+          return { supplement: slot };
+        }
+        return {};
+      })(),
       pathBackgroundContext: sessionArtifacts.pathBackgroundContext || buildPathBackgroundContext(context),
       endReason: endIntent.isEndIntent
         ? 'learner-requested-end'
@@ -815,6 +869,8 @@ export async function processStudentMessage(
     analysis: teachingOutput.analysis,
     aiResponse: teachingOutput.reply,
     ...(assistantMessage.images?.length ? { images: assistantMessage.images } : {}),
+    // 教师补充材料卡片（批次 E）：本轮晋升成功时随消息下发（前端渲染卡片，点开看章节）
+    ...(supplementPromotion.payload ? { supplementaryMaterial: supplementPromotion.payload } : {}),
     strategies: effectiveTeachingOutput.pedagogy.strategies,
     knowledgePoint: effectiveTeachingOutput.knowledge.currentPoint,
     ...(effectiveTeachingOutput.knowledge.confirmCheck
