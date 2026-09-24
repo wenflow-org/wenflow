@@ -569,12 +569,13 @@ table.uc-table {
   .uc-card__head { margin-bottom: 8px; }
   .uc-card__head h3 { font-size: 14.5px; }
   .uc-card__head p { font-size: 12px; }
-  .uc-badge { font-size: 11px; padding: 2px 9px; }
+  /* 12px 是移动端最小可读字号（业界共识：低于 12px 显著影响辨识），上一轮压到 11px 压过头了 */
+  .uc-badge { font-size: 12px; padding: 2px 9px; }
   .uc-errorbar { padding: 10px 12px; font-size: 12.5px; }
   .uc-empty { padding: 22px 14px; font-size: 12.5px; }
   .uc-empty strong { font-size: 13.5px; }
   .uc-loading { padding: 20px 0; font-size: 12.5px; }
-  .uc-table th { padding: 8px 10px; font-size: 10.5px; }
+  .uc-table th { padding: 8px 10px; font-size: 12px; }
   .uc-table td { padding: 9px 10px; font-size: 12.5px; }
   .uc-table .uc-table__sub { font-size: 11px; }
   .uc-dialog__head { padding: 14px 16px 0; }

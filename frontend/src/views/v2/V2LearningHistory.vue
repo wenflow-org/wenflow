@@ -368,6 +368,19 @@ onMounted(() => {
   color: var(--ink, #172033);
 }
 
+/* 日分组右侧的计数/时长是次级信息：12px + faint。
+   原来这里只有 V2LearningState 有 `.muted`，本页照抄了同一份 markup 却没带样式，
+   于是继承壳的 16px 基座——和左边的日期标题一样大，一眼看不出主次（2026-09-24 指出）。 */
+.muted { font-size: 12px; color: var(--faint, #67758f); font-weight: 600; }
+
+/* 状态徽章贴着行右缘，和左边标题同尺寸（16px）会显得这一行很满；
+   收到 12px + 2×8 内边距（业界移动端最小可读字号），并沿用 uc.css .uc-badge 的配色。 */
+.history__item .uc-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  line-height: 1.4;
+}
+
 .history__items {
   margin: 0;
   padding: 0;
@@ -478,7 +491,7 @@ onMounted(() => {
   }
 
   .history__stat span {
-    font-size: 11.5px;
+    font-size: 12px;
   }
 
   .history__stat strong {
@@ -486,7 +499,7 @@ onMounted(() => {
   }
 
   .history__stat strong i {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .history__body {
@@ -521,7 +534,7 @@ onMounted(() => {
   }
 
   .history__item-sub {
-    font-size: 11.5px;
+    font-size: 12px;
   }
 
   .history__item-time {
@@ -535,7 +548,7 @@ onMounted(() => {
 
   .history__end {
     padding: 2px 0;
-    font-size: 11.5px;
+    font-size: 12px;
   }
 }
 </style>

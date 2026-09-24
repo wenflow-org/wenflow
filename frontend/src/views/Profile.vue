@@ -709,7 +709,7 @@ async function handleDeactivate() {
 
   .profile-meta {
     margin-top: 2px;
-    font-size: 11.5px;
+    font-size: 12px;
   }
 
   /* 统计卡换行到下一行，两张并排 */
@@ -725,8 +725,9 @@ async function handleDeactivate() {
     gap: 2px;
   }
 
+  /* 12px 是移动端最小可读字号（业界共识），11px 原来是压过头的 */
   .stat-card span {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .stat-card strong {
@@ -766,11 +767,11 @@ async function handleDeactivate() {
   }
 
   /* 资料卡再收一档（2026-09-24 反馈「个人中心五个选项里的内容都偏大」）：
-     390 下 hero 卡 182px 高，统计卡 8px 上下边距 + 17px 数字是主要开销 */
+     390 下 hero 卡 182px 高，统计卡 8px 上下边距 + 17px 数字是主要开销。
+     只收内边距与数字，标签字号抬回 12px（见上面 stat-card span）——卡片可以紧，字不能更小。 */
   .profile-hero { padding: 12px; }
   .stat-card { padding: 6px 10px; }
   .stat-card strong { font-size: 16px; }
-  .stat-card span { font-size: 10.5px; }
   .uc-card__foot { margin-top: 10px; padding-top: 10px; }
 }
 </style>

@@ -417,7 +417,7 @@ onMounted(() => {
   .ach-share { width: 34px; height: 34px; top: 6px; right: 6px; }
   .ov { padding: 12px 14px; }
   .ov b { font-size: 21px; }
-  .ov small { font-size: 11px; }
+  .ov small { font-size: 12px; }
   .ach-card { padding: 12px 14px; }
   .ach-card__name { font-size: 14px; }
   .ach-card__icon-emoji { font-size: 20px; }
