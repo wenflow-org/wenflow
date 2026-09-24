@@ -1365,3 +1365,25 @@ main {
   }
 }
 </style>
+<style scoped>
+/* ===== 移动端密度（2026-09-24）=====
+   判据与用户侧一致：卡片内边距 12–18px、按钮 44–46px 档、微标签 ≥12px。
+   实测 390 下：舞台卡 20×20、band 卡 28×28、流程卡 22×16（×5，各 134px 高）、
+   idea 卡 22×24（×4）、面板 26×26；hero CTA 是 .hn-btn--lg（60px 高 / 32px 横向内边距 /
+   17px 字），在 390 里是两块很大的实心按钮；另有 6 处 11px 的微标签。
+   展示型字号（hero 的 clamp）与 20/28px 圆角是这一页的视觉语言，不动。 */
+@media (max-width: 980px) {
+  .hn-stage__chat,
+  .hn-stage__desk,
+  .hn-panel { padding: 14px; }
+  .hn-band__side { padding: 18px; }
+  .hn-flow__grid li { padding: 16px 14px; }
+  .hn-idea__list article { padding: 16px 18px; }
+  .hn-btn--lg { min-height: 46px; padding: 0 22px; font-size: 15px; }
+  .hn-chip,
+  .hn-tag,
+  .hn-flow__grid em,
+  .hn-state__metrics span,
+  .hn-stage__result small { font-size: 12px; }
+}
+</style>

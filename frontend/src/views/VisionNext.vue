@@ -742,3 +742,17 @@ main {
   }
 }
 </style>
+<style scoped>
+/* ===== 移动端密度（2026-09-24）=====
+   判据同上。实测 390 下：hero 侧栏 32×32、标准卡 28×28（×2）、能力清单 20×12（×5，
+   各 95px 高）、桥接盒 36×40（255px 高）；.vn-btn--lg 50px 高；1 处 11px 微标签。
+   展示型字号与 20/28px 圆角不动（同首页）。 */
+@media (max-width: 900px) {
+  .vn-hero__aside { padding: 20px; }
+  .vn-stand__grid article { padding: 18px; }
+  .vn-cap__list li { padding: 14px 12px; }
+  .vn-bridge__box { padding: 22px 18px; }
+  .vn-btn--lg { min-height: 44px; padding: 0 20px; }
+  .vn-hero__seal em { font-size: 12px; }
+}
+</style>
