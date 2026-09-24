@@ -1876,21 +1876,21 @@ function shuffleScenes() {
     border-radius: var(--mk-radius-pill);
     background: var(--surface);
     color: var(--muted);
-    font-size: 11.5px;
+    font-size: 12px;
     box-shadow: 0 2px 8px rgba(23, 32, 51, 0.06);
   }
-  .panel__head strong { font-size: 11.5px; }
+  .panel__head strong { font-size: 12px; }
   .panel__caret { display: inline; font-size: 9px; }
   /* 计数改角标：绝对定位不吃宽度（右上角那一条带要和阶段导航挤在同一行），
      「已收集」三字省掉只留「3 / 7」 */
   .panel__count-k { display: none; }
   .panel__count {
     position: absolute; top: -5px; right: -6px;
-    min-width: 15px; padding: 0 4px;
+    min-width: 18px; padding: 0 4px;
     border-radius: 999px;
     background: var(--blue);
     color: #fff;
-    font-size: 9.5px; font-weight: 800; line-height: 15px;
+    font-size: 12px; font-weight: 800; line-height: 16px;
     text-align: center;
   }
   .panel--collapsed .panel__body { display: none; }
@@ -1915,14 +1915,14 @@ function shuffleScenes() {
   .checklist { gap: 2px; }
   .field { padding: 6px; grid-template-columns: 18px 1fr; gap: 8px; }
   .field__mark { width: 16px; height: 16px; margin-top: 1px; }
-  .field__label { font-size: 11.5px; }
+  .field__label { font-size: 12px; }
   .field__value { margin-top: 2px; font-size: 12.5px; }
-  .field__value--todo { font-size: 11.5px; }
+  .field__value--todo { font-size: 12px; }
   .field--todo .field__body { display: flex; align-items: baseline; gap: 6px; }
   .field--todo .field__value { margin-top: 0; min-width: 0; }
   .field__fresh { top: 6px; right: 6px; }
   .panel__bar { height: 5px; }
-  .panel__tip { font-size: 10.5px; padding-top: 8px; }
+  .panel__tip { font-size: 12px; padding-top: 8px; }
   /* 移动端信息清单默认折叠：头部横条可点，收起时隐藏进度条/清单/提示 */
   .panel__head { cursor: pointer; }
   .panel__caret { display: inline; }
@@ -2011,6 +2011,20 @@ function shuffleScenes() {
     .stage-nav__item i { font-size: 10px; }
   }
   .chat__clear { display: none; }
+
+  /* ===== 移动端密度（2026-09-24）=====
+     判据：页面主容器左右 14px、卡片内边距 12–16、hero/h1 22px、区块标题 15–17px。
+     实测 390 下：.chat__scroll 左右各 20px（同页 .work 已收到 8/10px）、登录门 48×32 +
+     h1 26px、方案标题 21px。这几块只在对应状态下出现（登录门＝未登录、会话面板＝会话中），
+     登录态巡检量不到，按基线推导。
+     刻意不动的：.stage-nav__item(11.5px) 与 .panel__caret(9px)——前者与右上角目标信息
+     按钮共享一行、注释里记着 390 下只有 11px 余量，后者是纯装饰字形。
+     另注：本文件的 .nav/.nav__* 只在 CSS 里存在、模板没有用到（顶栏早换成了 V2Nav），
+     是死规则；本轮不动它，留待一次专门的死 CSS 清理。 */
+  .chat__scroll { padding: 14px; }
+  .login-gate { padding: 28px 20px; border-radius: var(--mk-radius-modal); }
+  .login-gate h1 { font-size: 22px; }
+  .proposal__title { font-size: 19px; }
 }
 </style>
 

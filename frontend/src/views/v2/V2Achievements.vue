@@ -471,3 +471,18 @@ onMounted(() => {
 .toast-enter-from { opacity: 0; transform: translateX(-50%) translateY(12px) scale(0.95); }
 .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(4px) scale(0.97); }
 </style>
+
+<style scoped>
+/* ===== 移动端密度（2026-09-24）=====
+   判据：卡片内边距 12–16px、空态/加载留白 ≤32px。
+   实测 390 下：成就卡图标块 48×48（卡片两列、每列仅 ~165px 宽，emoji 已压到 20px、
+   块本身还是桌面尺寸）、加载态 64px、空态 48px。
+   放在文件末尾：同权重下后出现者胜（中间那个 ≤900 块在 .ach__loading/.empty 之前）。
+   不动的：.ach-rarity(10px)/.ach-card__badge(10.5px)/.ach-card__date(11.5px) 这些
+   桌面就是 10–11.5px 的微标签——移动端单方面放大会让卡片变高，与密度目标相反。 */
+@media (max-width: 900px) {
+  .ach-card__icon-wrap { width: 40px; height: 40px; }
+  .ach__loading { padding: 32px 0; }
+  .empty { padding: 32px 0; }
+}
+</style>

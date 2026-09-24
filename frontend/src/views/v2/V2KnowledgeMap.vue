@@ -178,4 +178,17 @@ onMounted(async () => {
   border-radius: var(--mk-radius-lg);
   background: var(--mk-surface);
 }
+
+/* ===== 移动端密度（2026-09-24）=====
+   判据：卡片内边距 12–16px、整页上下留白 ≤40px。本页通篇用 --mk-space-* token，这里继续用 token。
+   实测 390 下：.km__main 24/20/48（叠加 v2.css 给底部导航留的 72px 后，页尾合计 120px）、
+   .km__card 20px。放在文件末尾：同权重下后出现者胜（中间那个 ≤900 块在 .km__card 之前）。 */
+@media (max-width: 900px) {
+  .km__main {
+    padding: var(--mk-space-4) var(--mk-space-3) var(--mk-space-6);
+  }
+  .km__card {
+    padding: var(--mk-space-4);
+  }
+}
 </style>
