@@ -1,0 +1,96 @@
+{
+  "sessionId": "1b0af1a0-972a-44e8-843e-a80e50445b92",
+  "learningSignalInPrompt": null,
+  "trace": [
+    {
+      "day": 1,
+      "before": {
+        "prompt": {
+          "at": "11:39:22",
+          "learningSignal": null,
+          "lf": 3.1,
+          "lsb": 2.021,
+          "pacing": "moderate",
+          "approach": "采用平衡的学习方式",
+          "diffReasons": [
+            "fragile_concepts",
+            "prerequisite_gaps"
+          ]
+        },
+        "metric": {
+          "calc": "2026-09-21T21:27",
+          "lf": "3.09",
+          "lsb": "3.95",
+          "src": "task-completion:st_17900"
+        },
+        "teachingState": null
+      },
+      "after": {
+        "prompt": {
+          "at": "11:39:22",
+          "learningSignal": null,
+          "lf": 3.1,
+          "lsb": 2.021,
+          "pacing": "moderate",
+          "approach": "采用平衡的学习方式",
+          "diffReasons": [
+            "fragile_concepts",
+            "prerequisite_gaps"
+          ]
+        },
+        "metric": {
+          "calc": "2026-09-21T21:27",
+          "lf": "3.09",
+          "lsb": "3.95",
+          "src": "task-completion:st_17900"
+        },
+        "teachingState": null
+      }
+    },
+    {
+      "day": 2,
+      "before": {
+        "prompt": {
+          "at": "11:39:22",
+          "learningSignal": null,
+          "lf": 3.1,
+          "lsb": 2.021,
+          "pacing": "moderate",
+          "approach": "采用平衡的学习方式",
+          "diffReasons": [
+            "fragile_concepts",
+            "prerequisite_gaps"
+          ]
+        },
+        "metric": {
+          "calc": "2026-09-21T21:27",
+          "lf": "3.09",
+          "lsb": "3.95",
+          "src": "task-completion:st_17900"
+        },
+        "teachingState": null
+      },
+      "after": {
+        "prompt": {
+          "at": "11:39:22",
+          "learningSignal": null,
+          "lf": 3.1,
+          "lsb": 2.021,
+          "pacing": "moderate",
+          "approach": "采用平衡的学习方式",
+          "diffReasons": [
+            "fragile_concepts",
+            "prerequisite_gaps"
+          ]
+        },
+        "metric": {
+          "calc": "2026-09-21T21:27",
+          "lf": "3.09",
+          "lsb": "3.95",
+          "src": "task-completion:st_17900"
+        },
+        "teachingState": null
+      }
+    }
+  ]
+}

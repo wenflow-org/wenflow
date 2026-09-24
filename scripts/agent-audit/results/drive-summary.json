@@ -1,0 +1,20 @@
+{
+  "results": [
+    {
+      "key": "shop-owner-inventory",
+      "ok": false,
+      "error": "POST /api/admin/virtual-learners/1e7924fd-b3e5-43d3-a731-0604427ac957/start-session -> 400: 一人多故事时必须指定 storyId：每个故事对应一套学习路径（Path）"
+    },
+    {
+      "key": "vocational-electrician-exam",
+      "ok": false,
+      "error": "POST /api/admin/virtual-learners/dd6e10de-52c0-452c-913b-ab8f3605fa95/start-session -> 400: 一人多故事时必须指定 storyId：每个故事对应一套学习路径（Path）"
+    },
+    {
+      "key": "student-geo-essay",
+      "ok": false,
+      "error": "POST /api/admin/virtual-learners/e454328c-cd8f-4276-89ac-bc56e5b0fc08/start-session -> 400: 一人多故事时必须指定 storyId：每个故事对应一套学习路径（Path）"
+    }
+  ],
+  "minutes": 0
+}

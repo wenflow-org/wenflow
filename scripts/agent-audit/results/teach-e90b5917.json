@@ -1,0 +1,248 @@
+{
+  "id": "e90b5917-eed0-42bb-a3fb-cd43eee98a73",
+  "steps": 20,
+  "taskDone": 1,
+  "errs": 0,
+  "timeline": [
+    {
+      "t": "2026-09-21T21:24:09.726Z",
+      "phase": "step",
+      "detail": {
+        "i": 1,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 17
+      }
+    },
+    {
+      "t": "2026-09-21T21:24:25.375Z",
+      "phase": "step",
+      "detail": {
+        "i": 2,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 19
+      }
+    },
+    {
+      "t": "2026-09-21T21:24:37.794Z",
+      "phase": "step",
+      "detail": {
+        "i": 3,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 21
+      }
+    },
+    {
+      "t": "2026-09-21T21:24:49.865Z",
+      "phase": "step",
+      "detail": {
+        "i": 4,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 23
+      }
+    },
+    {
+      "t": "2026-09-21T21:25:02.987Z",
+      "phase": "step",
+      "detail": {
+        "i": 5,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 25
+      }
+    },
+    {
+      "t": "2026-09-21T21:25:14.915Z",
+      "phase": "step",
+      "detail": {
+        "i": 6,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 27
+      }
+    },
+    {
+      "t": "2026-09-21T21:25:27.147Z",
+      "phase": "step",
+      "detail": {
+        "i": 7,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 29
+      }
+    },
+    {
+      "t": "2026-09-21T21:25:39.451Z",
+      "phase": "step",
+      "detail": {
+        "i": 8,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 31
+      }
+    },
+    {
+      "t": "2026-09-21T21:25:54.680Z",
+      "phase": "step",
+      "detail": {
+        "i": 9,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 33
+      }
+    },
+    {
+      "t": "2026-09-21T21:26:17.126Z",
+      "phase": "step",
+      "detail": {
+        "i": 10,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 35
+      }
+    },
+    {
+      "t": "2026-09-21T21:26:30.183Z",
+      "phase": "step",
+      "detail": {
+        "i": 11,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 37
+      }
+    },
+    {
+      "t": "2026-09-21T21:26:43.117Z",
+      "phase": "step",
+      "detail": {
+        "i": 12,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 39
+      }
+    },
+    {
+      "t": "2026-09-21T21:26:54.811Z",
+      "phase": "step",
+      "detail": {
+        "i": 13,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 41
+      }
+    },
+    {
+      "t": "2026-09-21T21:27:08.773Z",
+      "phase": "step",
+      "detail": {
+        "i": 14,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "0/20",
+        "aiCalls": 43
+      }
+    },
+    {
+      "t": "2026-09-21T21:28:15.895Z",
+      "phase": "step",
+      "detail": {
+        "i": 15,
+        "done": null,
+        "taskCompleted": true,
+        "stage": "teaching",
+        "tasks": "1/20",
+        "aiCalls": 46
+      }
+    },
+    {
+      "t": "2026-09-21T21:28:27.954Z",
+      "phase": "step",
+      "detail": {
+        "i": 16,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "1/20",
+        "aiCalls": 48
+      }
+    },
+    {
+      "t": "2026-09-21T21:28:40.430Z",
+      "phase": "step",
+      "detail": {
+        "i": 17,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "1/20",
+        "aiCalls": 50
+      }
+    },
+    {
+      "t": "2026-09-21T21:28:58.100Z",
+      "phase": "step",
+      "detail": {
+        "i": 18,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "1/20",
+        "aiCalls": 52
+      }
+    },
+    {
+      "t": "2026-09-21T21:29:12.639Z",
+      "phase": "step",
+      "detail": {
+        "i": 19,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "1/20",
+        "aiCalls": 54
+      }
+    },
+    {
+      "t": "2026-09-21T21:29:25.177Z",
+      "phase": "step",
+      "detail": {
+        "i": 20,
+        "done": null,
+        "taskCompleted": false,
+        "stage": "teaching",
+        "tasks": "1/20",
+        "aiCalls": 56
+      }
+    }
+  ]
+}

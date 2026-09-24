@@ -1,0 +1,26 @@
+import fs from 'node:fs'; import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { fileURLToPath } from 'node:url';
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..','..');
+const db = new DatabaseSync(path.join(ROOT,'backend','prisma','dev.db'),{timeout:40000});
+const q=(s)=>db.prepare(s).all();
+const st=JSON.parse(fs.readFileSync(path.join(ROOT,'data','newfeatures-test-2026-09-22','L1-state.json'),'utf8'));
+const s=q(`select status,currentStage,completedTasks,totalTasks,stageResults from virtual_sessions where id='${st.sessionId}'`)[0];
+console.log('session:',s.status,'|',s.currentStage,'|',s.completedTasks+'/'+s.totalTasks);
+let sr={};try{sr=JSON.parse(s.stageResults||'{}')}catch{}
+console.log('simulationClock:',JSON.stringify(sr.simulationClock));
+console.log('simulationClockHistory 天数:',(sr.simulationClock?.history||[]).length);
+const tot=q(`select count(*) c from subtasks s join milestones m on s.milestoneId=m.id where m.learningPathId='${st.pathId}'`)[0].c;
+const done=q(`select count(*) c from subtasks s join milestones m on s.milestoneId=m.id where m.learningPathId='${st.pathId}' and s.status='completed'`)[0].c;
+console.log('课次:',done+'/'+tot);
+console.log();
+console.log('=== 逐课负担指标（跨日模拟下）===');
+const proj=q(`select payload,createdAt from learner_projections where scope='teaching' and payload like '%${st.pathId}%' order by createdAt`);
+proj.forEach((r,i)=>{const p=JSON.parse(r.payload);const m=p.dynamicState?.metrics||{};const lc=p.learningControlState||{};
+  console.log(String(i+1).padStart(2),'|',new Date(r.createdAt).toISOString().slice(5,16),'| ktl',String(m.ktl).slice(0,4),'lf',String(m.lf).slice(0,4),'lsb',String(m.lsb).slice(0,4),'| pace',lc.paceMode,'cap',lc.challengeLevelCap,'| fatigue',p.dynamicState?.fatigueRisk);});
+console.log();
+console.log('=== 降载档是否出现 ===');
+const lcs=new Set(proj.map(r=>{const p=JSON.parse(r.payload);return p.learningControlState?.paceMode;}));
+console.log('paceMode 取值:',[...lcs].join(','));
+const rs=new Set(proj.map(r=>{const p=JSON.parse(r.payload);return p.replanSignal?.shouldSuggest;}));
+console.log('replanSignal.shouldSuggest 取值:',[...rs].join(','));

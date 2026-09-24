@@ -1,0 +1,82 @@
+{
+  "preset": "vocational-electrician-exam",
+  "sessionId": "1b0af1a0-972a-44e8-843e-a80e50445b92",
+  "userLearningSignal": "倾向找记忆/背诵方法，问是否只能死记硬背；曾用逐题抠错题方式但坚持不下来；对\\",
+  "learningSignalInPrompt": null,
+  "trace": [
+    {
+      "day": 1,
+      "before": {
+        "at": "11:39:22",
+        "learningSignal": null,
+        "lf": 3.1,
+        "lsb": 2.021,
+        "pacing": "moderate",
+        "approach": "采用平衡的学习方式",
+        "diffReasons": [
+          "fragile_concepts",
+          "prerequisite_gaps"
+        ]
+      },
+      "after": {
+        "at": "11:39:22",
+        "learningSignal": null,
+        "lf": 3.1,
+        "lsb": 2.021,
+        "pacing": "moderate",
+        "approach": "采用平衡的学习方式",
+        "diffReasons": [
+          "fragile_concepts",
+          "prerequisite_gaps"
+        ]
+      },
+      "metricBefore": {
+        "calc": "2026-09-21T21:27",
+        "lf": "3.09",
+        "src": "task-completion:st_1790025"
+      },
+      "metricAfter": {
+        "calc": "2026-09-21T21:27",
+        "lf": "3.09",
+        "src": "task-completion:st_1790025"
+      }
+    },
+    {
+      "day": 2,
+      "before": {
+        "at": "11:39:22",
+        "learningSignal": null,
+        "lf": 3.1,
+        "lsb": 2.021,
+        "pacing": "moderate",
+        "approach": "采用平衡的学习方式",
+        "diffReasons": [
+          "fragile_concepts",
+          "prerequisite_gaps"
+        ]
+      },
+      "after": {
+        "at": "11:39:22",
+        "learningSignal": null,
+        "lf": 3.1,
+        "lsb": 2.021,
+        "pacing": "moderate",
+        "approach": "采用平衡的学习方式",
+        "diffReasons": [
+          "fragile_concepts",
+          "prerequisite_gaps"
+        ]
+      },
+      "metricBefore": {
+        "calc": "2026-09-21T21:27",
+        "lf": "3.09",
+        "src": "task-completion:st_1790025"
+      },
+      "metricAfter": {
+        "calc": "2026-09-21T21:27",
+        "lf": "3.09",
+        "src": "task-completion:st_1790025"
+      }
+    }
+  ]
+}

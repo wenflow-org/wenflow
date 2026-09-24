@@ -4450,6 +4450,10 @@ export namespace Prisma {
       coreVersion: number | null
       temperature: number | null
       maxTokens: number | null
+      /**
+       * @deprecated 提示词工件**不承载模型绑定**：模型只来自路由层（skill_model_configs → agent → platform）。
+       * 历史 seed 写入的副本已废弃，运行时仅作最后兜底；见 doc/MODEL_GATEWAY_DESIGN.md §4.9。
+       */
       model: string | null
       status: string
       createdBy: string
@@ -8564,6 +8568,10 @@ export namespace Prisma {
     scalars: $Extensions.GetPayloadResult<{
       id: string
       skillId: string
+      /**
+       * 【skill 运行时绑定 profile】模型绑定的**唯一写源**（含 tier/model/thinking/effort/endpoint/key/timeout/retries）。
+       * 与 `agent_prompts`（提示词工件：正文 + temperature/maxTokens 意图）职责分离，见 doc/MODEL_GATEWAY_DESIGN.md §4.9。
+       */
       tier: string
       model: string | null
       thinkingMode: string | null
