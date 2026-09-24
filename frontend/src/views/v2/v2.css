@@ -613,6 +613,35 @@ html, body {
 @media (max-width: 900px) {
   .v2-page { padding-bottom: 72px; }
   .v2-page .v2footer { margin-bottom: 0; }
+
+  /* 移动端按钮收一档（2026-09-24 反馈「移动端好像这种按钮都比较大」）：
+     43px 高 / 14px 字 / 22px 横向内边距，配上 10px·22px·30% 的蓝色投影，
+     在 390 宽里比卡内正文（13~14px）重得多，像一块浮起来的板。
+     收到 38px 高，与引导页 CTA（39）、导航 CTA（36）同一档；投影收一半。
+     表单全宽提交键（.btn-primary--block，46px）是另一类角色，不跟着收。
+     :not(.btn-primary--off) 是必需的：--off 的 box-shadow:none 特异性更低，
+     不排除的话「生成中/重试中」的禁用按钮会在移动端被重新点亮投影。 */
+  .v2-page .btn-primary:not(.btn-primary--block) {
+    padding: 9px 17px;
+    font-size: 13.5px;
+  }
+  .v2-page .btn-primary:not(.btn-primary--block):not(.btn-primary--off) {
+    box-shadow: 0 5px 12px color-mix(in srgb, var(--blue) 20%, transparent);
+  }
+  .v2-page .btn-primary:not(.btn-primary--block):not(.btn-primary--off):not(:disabled):hover {
+    box-shadow: 0 8px 18px color-mix(in srgb, var(--blue) 26%, transparent);
+  }
+  [data-theme='dark'] .v2-page .btn-primary:not(.btn-primary--block):not(.btn-primary--off) {
+    box-shadow: 0 5px 12px rgba(77, 139, 248, 0.16);
+  }
+  [data-theme='dark'] .v2-page .btn-primary:not(.btn-primary--block):not(.btn-primary--off):not(:disabled):hover {
+    box-shadow: 0 8px 18px rgba(77, 139, 248, 0.2);
+  }
+  /* 次级按钮同样收一档。选择器必须带 :not() 才能压过各页自己那份 .btn-ghost 副本
+     （.btn-ghost[data-v-x] 与 .v2-page .btn-ghost 同特异性，靠加载顺序赢）——
+     这些副本是历史遗留的复制粘贴（7 个页面、3 种尺寸），删掉它们才是正解，见提交说明。
+     全宽变体（.btn-ghost--block）与主按钮的全宽提交键同属一类，不跟着收。 */
+  .v2-page .btn-ghost:not(.btn-ghost--block) { padding: 8px 14px; font-size: 13.5px; }
 }
 
 /* ====== 暗色模式：非 .card 抬升面投影 ======

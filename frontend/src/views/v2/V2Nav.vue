@@ -222,11 +222,17 @@ onUnmounted(() => {
 .v2nav__avatar:hover { background: color-mix(in srgb, var(--surface) 92%, var(--ink)); }
 .v2nav__avatar i {
   width: 34px; height: 34px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--blue, #3478f6), var(--accent, #8d6bff));
-  color: #fff;
-  font-style: normal; font-size: 15px;
+  /* 1152~1600 区间导航行刚好占满容器，头像作为最后一个可压缩的 flex 项被压成 28.6×34
+     （圆被拉成椭圆）。定死不参与收缩后实测该区间恢复正圆，其余元素尺寸与横向溢出均无变化。 */
+  flex: 0 0 auto;
+  /* 去炫彩：原来是 blue→accent(#8d6bff) 跨色相渐变 + 蓝色光晕，全站唯一一处，
+     深色主题下就是一颗发光紫蓝球（2026-09-24 反馈「头像区太炫彩了，感觉不和主题」）。
+     改成扁平强调色底 + 同色系首字母，与导航菜单里的主题图标（blue 10% 底 + blue-deep）
+     以及聊天头像（.msg__avatar 早已去掉同一套渐变改 surface+描边）同一语言。 */
+  background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
+  color: var(--blue-deep, #1f57cc);
+  font-style: normal; font-size: 15px; font-weight: 800;
   display: grid; place-items: center;
-  box-shadow: 0 4px 10px color-mix(in srgb, var(--blue) 25%, transparent);
 }
 .v2nav__caret {
   font-size: 10px;
