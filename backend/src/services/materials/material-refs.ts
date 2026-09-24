@@ -24,6 +24,13 @@ export interface MaterialRef {
   sectionTitle: string | null;
   /** 逐字引文（已核对存在于资料正文/章节/要点中）。 */
   quote: string;
+  /**
+   * 联网资料出处（仅 materialId=null 的联网引用携带；2026-09-24）。
+   * 学习者侧据此展示「网络资料：域名」并可跳原文，而不是哑禁用按钮。
+   * 旧路径落库的引用没有这两个字段（undefined），前端按空处理。
+   */
+  sourceUrl?: string | null;
+  sourceTitle?: string | null;
 }
 
 /** 单个里程碑/任务最多保留几条资料引用（防提示词与前端被刷屏）。 */
@@ -106,6 +113,9 @@ export function normalizeMaterialRefs(raw: unknown, materials: PromptMaterial[] 
       sectionId: section?.id || null,
       sectionTitle: section?.title || null,
       quote,
+      // 出处钉在写入侧（联网引用在路径详情可溯源）；本地附件的出处就是附件本身
+      sourceUrl: hit.materialId ? null : hit.sourceUrl,
+      sourceTitle: hit.materialId ? null : hit.title,
     });
     if (out.length >= MAX_MATERIAL_REFS) break;
   }

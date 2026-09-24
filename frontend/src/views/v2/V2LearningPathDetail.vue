@@ -164,8 +164,8 @@
                       :key="ri"
                       type="button"
                       class="material-ref"
-                      :disabled="!ref.materialId"
-                      :title="ref.materialId ? '点开看原文' : ref.quote"
+                      :disabled="!refClickable(ref)"
+                      :title="refTitle(ref)"
                       @click="openMaterialRef(ref)"
                     >{{ refLabel(ref) }}</button>
                   </p>
@@ -190,8 +190,8 @@
                         :key="ri"
                         type="button"
                         class="material-ref"
-                        :disabled="!ref.materialId"
-                        :title="ref.materialId ? '点开看原文' : ref.quote"
+                        :disabled="!refClickable(ref)"
+                        :title="refTitle(ref)"
                         @click="openMaterialRef(ref)"
                       >{{ refLabel(ref) }}</button>
                     </small>
@@ -708,14 +708,33 @@ const pathMaterials = computed<any[]>(() => {
   return Array.isArray(list) ? list : [];
 });
 const refLabel = (ref: any): string => {
+  // 联网引用（materialId=null）：亮出处域名，而不是哑禁用
+  if (!ref?.materialId) {
+    const domain = webRefDomain(String(ref?.sourceUrl || ''));
+    return domain ? `网络资料：${domain}` : '网络资料';
+  }
   const label = String(ref?.sectionTitle || ref?.quote || '').trim();
   return label.length > 18 ? `${label.slice(0, 18)}…` : (label || '资料');
 };
 
-/**
- * 「点开看原文」：按引用里的 materialId 取回附件正文（GET /api/materials/:id）。
- * 只对**本地附件**可用（联网资料的 materialId 为 null，按钮禁用）。
- */
+/** 联网引用按钮是否可点：本地附件点开看章节原文；联网资料跳原文链接；都没有才禁用。 */
+const refClickable = (ref: any): boolean => !!(ref?.materialId || ref?.sourceUrl);
+
+const refTitle = (ref: any): string => {
+  if (ref?.materialId) return '点开看原文';
+  if (ref?.sourceUrl) return String(ref.sourceUrl);
+  return String(ref?.quote || '网络资料');
+};
+
+function webRefDomain(url: string): string {
+  if (!url) return '';
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
 const materialPreview = ref<{ open: boolean; loading: boolean; title: string; sectionTitle: string; quote: string; text: string }>({
   open: false, loading: false, title: '', sectionTitle: '', quote: '', text: '',
 });
@@ -723,10 +742,14 @@ const materialPreview = ref<{ open: boolean; loading: boolean; title: string; se
 /**
  * 「点开看原文」：优先按章节取回窗口（GET /materials/:id/section，引文锚定优先、
  * 标题回退）——点「一、健康」直接看到那一章，而不是全文前 4000 字；
- * 端点失败时回退整篇读取（老行为）。只对**本地附件**可用（联网资料 materialId 为 null）。
+ * 端点失败时回退整篇读取（老行为）。联网资料（materialId=null）改为跳转原文链接。
  */
 const openMaterialRef = async (ref: any) => {
-  if (!ref?.materialId) return;
+  if (!ref?.materialId) {
+    const url = String(ref?.sourceUrl || '');
+    if (url) window.open(url, '_blank', 'noopener');
+    return;
+  }
   materialPreview.value = {
     open: true,
     loading: true,

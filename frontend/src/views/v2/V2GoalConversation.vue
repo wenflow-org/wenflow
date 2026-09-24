@@ -408,6 +408,7 @@
               </div>
             </div>
             <div class="proposal__note">
+              <span v-if="materialCount">已上传的 {{ materialCount }} 份资料将作为学习主线，公开网络资料作补充；引用内容可点开看原文。</span>
               <span>确认后在本页生成，一般需要 1-2 分钟。失败可原地重试，信息不会丢。</span>
               <AiContentNote />
             </div>
