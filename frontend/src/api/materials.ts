@@ -64,7 +64,7 @@ export async function readMaterial(id: string): Promise<UploadedMaterial & { mar
 }
 
 /**
- * 按章节取回资料原文窗口（引用定位；引文锚定优先、章节标题回退）。
+ * 按章节取回资料原文窗口（引用定位；章节标题优先、引文锚定回退）。
  * anchored：quote=引文锚定 / title=标题定位 / none=回退全文开头。
  */
 export async function readMaterialSection(

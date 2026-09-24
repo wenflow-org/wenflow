@@ -1,6 +1,6 @@
 /**
  * 资料章节取回（结构化检索，无向量）：从已落盘的资料正文里，
- * 按「引用锚定优先、章节标题回退」取回一个**原文窗口**。
+ * 按「章节标题优先、引文锚定回退」取回一个**原文窗口**。
  *
  * 设计（2026-09-24，parent-child 检索的「取大」半边）：
  * - 打包投影只带 ≤24 条要点/目录；教学回合讲到某条引用时需要**该章节的原文**，
@@ -8,6 +8,7 @@
  * - quote 在落库时做过空白归一（material-refs.normalizeWhitespace），且空白在中文
  *   文本里无语义 → 匹配前对正文与引文**剥除全部空白**（带原位映射），CJK 场景最稳。
  * - 窗口有硬上限（默认 4000 字），防止把整份文档塞进课堂上下文。
+ * - 优先级：标题定位（最长窗口，跳过目录行）> 引文锚定（精确定位）> 全文开头。
  */
 
 export interface SectionWindowOptions {
@@ -21,7 +22,7 @@ export interface SectionWindowOptions {
 
 export interface MaterialSectionWindow {
   excerpt: string;
-  /** 命中方式：quote=引文锚定（最可靠）；title=章节标题定位；none=回退全文开头。 */
+  /** 命中方式：title=章节标题定位（最长窗口）；quote=引文锚定；none=回退全文开头。 */
   anchor: 'quote' | 'title' | 'none';
 }
 
@@ -73,9 +74,18 @@ function findByQuote(markdown: string, quote: string, maxChars: number): string 
   return null;
 }
 
+/** 剥掉 docx 转 md 的装饰（锚点 <a id>、下划线 <u>、加粗 **），得到行文本——标题判定用它。 */
+function lineText(line: string): string {
+  return line
+    .replace(/<a\s+id="[^"]*"><\/a>/g, '')
+    .replace(/<\/?[uo]>/g, '')
+    .replace(/\*\*/g, '')
+    .trim();
+}
+
 /** 标题行层级（数值越小越粗）：ATX 按井号数；「第X部分/章」=1；「一、」=2；「（一）/1、」=3；非标题=4。 */
 function headingLevel(line: string): number {
-  const trimmed = line.trim();
+  const trimmed = lineText(line);
   const atx = trimmed.match(/^(#{1,6})\s/);
   if (atx) return atx[1].length;
   if (/^第[一二三四五六七八九十百\d]+(部分|章|讲|单元)/.test(trimmed)) return 1;
@@ -84,33 +94,42 @@ function headingLevel(line: string): number {
   return 4;
 }
 
-/** 标题定位：找包含标题的行，从该行起到下一个**同级或更粗**的标题行（子标题算本节内容）或 maxChars 上限。 */
+/**
+ * 标题定位：所有命中行里取**最长窗口**——标题常先出现在目录（窗口被下一条目录行
+ * 截断，只有几十字），正文标题的窗口才有整章内容；取最长自然跳过目录/交叉引用。
+ */
 function findByTitle(markdown: string, sectionTitle: string, maxChars: number): string | null {
   const needle = sectionTitle.replace(/\s+/g, '').toLowerCase();
   if (!needle) return null;
   const lines = markdown.split('\n');
-  let startLine = -1;
+  const candidates: number[] = [];
   for (let i = 0; i < lines.length; i += 1) {
-    if (lines[i].replace(/\s+/g, '').toLowerCase().includes(needle)) {
-      startLine = i;
-      break;
+    if (lineText(lines[i]).replace(/\s+/g, '').toLowerCase().includes(needle)) candidates.push(i);
+  }
+  if (candidates.length === 0) return null;
+  let best: string | null = null;
+  for (const startLine of candidates.slice(0, 20)) {
+    // 起始行不是标题形态（标题匹配到正文句）时按细粒度处理：任何标题行都可截断
+    const matchedLevel = Math.min(headingLevel(lines[startLine]), 3);
+    const out: string[] = [];
+    let length = 0;
+    for (let i = startLine; i < lines.length && length < maxChars; i += 1) {
+      if (i > startLine && headingLevel(lines[i]) <= matchedLevel) break;
+      out.push(lines[i]);
+      length += lines[i].length + 1;
     }
+    const excerpt = out.join('\n');
+    if (!best || excerpt.length > best.length) best = excerpt;
+    if (best.length >= maxChars) break; // 已到上限，不会有更长的候选
   }
-  if (startLine === -1) return null;
-  // 起始行不是标题形态（标题匹配到正文句）时按细粒度处理：任何标题行都可截断
-  const matchedLevel = Math.min(headingLevel(lines[startLine]), 3);
-  const out: string[] = [];
-  let length = 0;
-  for (let i = startLine; i < lines.length && length < maxChars; i += 1) {
-    if (i > startLine && headingLevel(lines[i]) <= matchedLevel) break;
-    out.push(lines[i]);
-    length += lines[i].length + 1;
-  }
-  return out.join('\n');
+  return best;
 }
 
 /**
- * 取章节原文窗口。优先级：引文锚定 > 章节标题 > 回退全文开头。
+ * 取章节原文窗口。优先级：章节标题 > 引文锚定 > 回退全文开头
+ * （计划定案：消费者（课堂注入/前端点引用）要的都是「那一章」；
+ *   引文兜底负责无标题引用的精确定位。另外标题定位走最长窗口，
+ *   天然跳过目录行，而引文锚定对 docx 目录装饰行会命中目录区）。
  * 永不抛错、excerpt 一定非空（有正文时）。
  */
 export function extractSectionWindow(
@@ -123,16 +142,16 @@ export function extractSectionWindow(
     return { excerpt: '', anchor: 'none' };
   }
 
-  const byQuote = options.quote ? findByQuote(text, String(options.quote), maxChars) : null;
-  if (byQuote) {
-    return { excerpt: byQuote, anchor: 'quote' };
-  }
-
   if (options.sectionTitle) {
     const byTitle = findByTitle(text, String(options.sectionTitle), maxChars);
     if (byTitle) {
       return { excerpt: byTitle, anchor: 'title' };
     }
+  }
+
+  const byQuote = options.quote ? findByQuote(text, String(options.quote), maxChars) : null;
+  if (byQuote) {
+    return { excerpt: byQuote, anchor: 'quote' };
   }
 
   return { excerpt: text.slice(0, maxChars), anchor: 'none' };

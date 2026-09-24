@@ -740,8 +740,7 @@ const materialPreview = ref<{ open: boolean; loading: boolean; title: string; se
 });
 
 /**
- * 「点开看原文」：优先按章节取回窗口（GET /materials/:id/section，引文锚定优先、
- * 标题回退）——点「一、健康」直接看到那一章，而不是全文前 4000 字；
+ * 「点开看原文」：优先按章节取回窗口（GET /materials/:id/section，标题优先、引文回退）——点「一、健康」直接看到那一章，而不是全文前 4000 字；
  * 端点失败时回退整篇读取（老行为）。联网资料（materialId=null）改为跳转原文链接。
  */
 const openMaterialRef = async (ref: any) => {
@@ -2029,9 +2028,10 @@ onBeforeUnmount(() => {
   .tl__row { padding: 8px 10px; gap: 10px; }
   .tl__step-no { display: none; }
   .tl__title { font-size: 13.5px; }
-  .tl__badge { font-size: 10px; padding: 2px 6px; }
+  /* 桌面 11px、这里被压到 10px —— 移动端规则自己写到了 12px 下限以下，抬回 12 */
+  .tl__badge { font-size: 12px; padding: 2px 6px; }
   .tl__tasks-inner { padding-left: 24px; }
-  .tl__task-status { font-size: 10px; }
+  .tl__task-status { font-size: 12px; }
 }
 
 /* ===== 补充说明调整弹窗 ===== */
@@ -2397,5 +2397,27 @@ onBeforeUnmount(() => {
   .hero__desc-toggle,
   .sidecard__intent-toggle { padding: 7px 0; }  /* 19 → 33 */
   .sidecard__bg-head { padding: 8px 0; }        /* 17 → 33 */
+}
+</style>
+
+<style scoped>
+/* ===== 移动端密度（2026-09-24）=====
+   判据：卡片内边距 12–16px、hero 标题 22px、KPI 数字 20–22px、弹层 16–18px、加载留白 ≤32px。
+   实测 390 下整页 2726px（第二长），其中 .hero 26×28 是全站最厚的 hero 卡、
+   进度环 120px 占 390 宽近 1/3、.sidecard 16×18、加载态 64px。
+   放在文件末尾：同权重下后出现者胜（本文件有 4 个 style 块，基础规则在后面几块里）。 */
+@media (max-width: 900px) {
+  .hero { padding: 16px 18px; gap: 16px; }
+  /* 120px 环 + 环内 22px 数字在 390 下太占地方；收到 96px、数字 19px（与学习历史统计卡同档） */
+  .hero__ring { width: 96px; height: 96px; }
+  .hero__ring-text b { font-size: 19px; }
+  .stages__empty { padding: 20px 16px; }
+  .sidecard { padding: 12px 14px; }
+  .detail__loading { padding: 32px 0; }
+  .genbar { padding: 12px 14px; }
+  .adjust-dialog-mask { padding: 14px; }
+  .adjust-dialog { padding: 16px 18px; }
+  /* 26×26 对拇指偏小（弹窗右上角唯一退出路径），抬到 36 */
+  .adjust-dialog__close { width: 36px; height: 36px; }
 }
 </style>
