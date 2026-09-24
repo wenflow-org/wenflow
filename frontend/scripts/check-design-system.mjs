@@ -246,7 +246,10 @@ for (const abs of vueFiles) {
     lines.forEach((line, i) => {
       const m = line.match(/^\s*\.(mk-[a-zA-Z0-9_-]+)/)
       if (!m) return
-      if (defined.has(m[1])) { scoped && overrides.push({ file: relPath, line: i + 1, cls: m[1] }); return }
+      if (defined.has(m[1])) {
+        if (scoped) overrides.push({ file: relPath, line: i + 1, cls: m[1] })
+        return
+      }
       if (!scoped) { nonScopedDefs.push({ file: relPath, line: i + 1, cls: m[1] }); return }
       if (primitiveLayer) return
       badDefinitions.push({ file: relPath, line: i + 1, cls: m[1] })
@@ -323,16 +326,19 @@ for (const abs of vueFiles) {
   }
 }
 
-/* ---------- 规则 9：媒体查询档位内的硬编码间距（棘轮，只降不升） ----------
+/* ---------- 规则 9/10：媒体查询档位内的硬编码间距 / 字号（棘轮，只降不升） ----------
    五档(1440/1920/2000/2800/3600)曾以硬编码 px 覆盖 .mk-page/.mk-status 等的
    gap/padding/min-height/radius，各档互不单调且覆盖基线 token——"布局乱糟糟"
-   的系统性根源（验收 F1）。档内这类声明现在只降不升；字号放大不在本规则内。 */
+   的系统性根源（验收 F1）。档内这类声明现在只降不升。
+   规则 10 是它的对称项：字号此前不在任何规则覆盖内，而档位里的字号声明有上千条，
+   正是"字号体系被档位打散"（同一页 1440 有 10 个字号档、3840 变 17 个）的来源。 */
 const MEDIA_SPACING_RE = /(^|[;{]\s*)(gap|padding|margin)(-(top|right|bottom|left|inline|block))?\s*:\s*[^;]*\dpx/
-function countMediaSpacing(css) {
-  let n = 0
+const MEDIA_FONT_RE = /(^|[;{]\s*)font-size\s*:\s*[^;]*\dpx/
+
+/** 遍历所有 @media 块（含嵌套），把块内文本交给回调 */
+function forEachMediaBlock(css, fn) {
   const re = /@media[^{]*\{/g
-  let m
-  while ((m = re.exec(css)) !== null) {
+  while (re.exec(css) !== null) {
     let depth = 1
     let k = re.lastIndex
     while (k < css.length && depth > 0) {
@@ -340,25 +346,95 @@ function countMediaSpacing(css) {
       else if (css[k] === '}') depth -= 1
       k += 1
     }
-    const block = css.slice(re.lastIndex, k - 1)
-    for (const line of block.split('\n')) {
-      const t = line.trim()
-      if (MEDIA_SPACING_RE.test(t)) n += 1
-    }
+    fn(css.slice(re.lastIndex, k - 1))
   }
-  return n
 }
 
+function countInMediaBlocks(css, re) {
+  let n = 0
+  forEachMediaBlock(css, (block) => {
+    for (const line of block.split('\n')) {
+      if (re.test(line.trim())) n += 1
+    }
+  })
+  return n
+}
+const countMediaSpacing = (css) => countInMediaBlocks(css, MEDIA_SPACING_RE)
+const countMediaFontSize = (css) => countInMediaBlocks(css, MEDIA_FONT_RE)
+
 const mediaSpacingCounts = {}
+const mediaFontSizeCounts = {}
 for (const relPath of HEX_CSS_TARGETS) {
   const abs = join(ROOT, relPath)
   if (!existsSync(abs)) continue
-  const n = countMediaSpacing(readFileSync(abs, 'utf8'))
+  const css = readFileSync(abs, 'utf8')
+  const n = countMediaSpacing(css)
   if (n) mediaSpacingCounts[relPath] = n
+  const f = countMediaFontSize(css)
+  if (f) mediaFontSizeCounts[relPath] = f
 }
 
-/* ---------- 规则 3（续）：admin 原语层 CSS 的硬编码色值 ---------- */
-for (const relPath of HEX_CSS_TARGETS) {
+/* ---------- 规则 11：档位字号单调性（硬失败，无基线） ----------
+   响应式档位的语义是"屏幕越大越舒展"。曾出现 1920 档字号大于相邻 2000 档
+   （.mk-page 15→14.5、.mk-table td 15→13.5 等 12 个类）——越大屏字越小，
+   而 1440/1920/2000/2800 各档分属不同补丁、谁也没做跨档校验。
+   这里对每个文件逐档解析 `选择器 { font-size: Npx }`，与「更低的最近已声明档」比较。
+
+   两个必要的修正，否则会误报：
+   1) ≥2800/≥3600 壳层叠了全局 zoom（admin-theme.css：1.15 / 1.3），页面级 3600 档
+      的 px 值是**除过 zoom 的补偿值**（17×1.15 ≈ 15.5×1.3），必须换算成有效字号再比。
+   2) 补偿算术会有零点几 px 的取整偏差，给 1.5% 容差，避免把"持平"报成"回退"。 */
+const TIER_PX = [1440, 1920, 2000, 2800, 3600]
+const TIER_ZOOM = { 1440: 1, 1920: 1, 2000: 1, 2800: 1.15, 3600: 1.3 }
+const TIER_TOLERANCE = 0.985
+
+function tierFontMap(text, px) {
+  const map = new Map()
+  const re = new RegExp(`@media\\s*\\(min-width:\\s*${px}px\\)\\s*\\{`, 'g')
+  while (re.exec(text) !== null) {
+    let depth = 1
+    let k = re.lastIndex
+    while (k < text.length && depth > 0) {
+      if (text[k] === '{') depth += 1
+      else if (text[k] === '}') depth -= 1
+      k += 1
+    }
+    const block = text.slice(re.lastIndex, k - 1)
+    for (const r of block.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const sel = r[1].trim().replace(/\s+/g, ' ')
+      const f = r[2].match(/font-size\s*:\s*([\d.]+)px/)
+      if (f) map.set(sel, parseFloat(f[1]))
+    }
+  }
+  return map
+}
+
+const tierRegressions = []
+for (const abs of [...vueFiles.filter((p) => isGoverned(rel(p))), ...HEX_CSS_TARGETS.map((r) => join(ROOT, r))]) {
+  if (!existsSync(abs)) continue
+  const text = readFileSync(abs, 'utf8')
+  const maps = TIER_PX.map((px) => tierFontMap(text, px))
+  for (let i = 1; i < TIER_PX.length; i++) {
+    for (const [sel, v] of maps[i]) {
+      let prev = null
+      let prevTier = null
+      for (let k = i - 1; k >= 0; k--) {
+        if (maps[k].has(sel)) { prev = maps[k].get(sel); prevTier = TIER_PX[k]; break }
+      }
+      if (prev === null) continue
+      const effPrev = prev * TIER_ZOOM[prevTier]
+      const effNow = v * TIER_ZOOM[TIER_PX[i]]
+      if (effNow < effPrev * TIER_TOLERANCE) {
+        tierRegressions.push({
+          file: rel(abs), sel, prevTier, prev, tier: TIER_PX[i], now: v,
+          effPrev: Math.round(effPrev * 10) / 10, effNow: Math.round(effNow * 10) / 10,
+        })
+      }
+    }
+  }
+}
+
+/* ---------- 规则 3（续）：admin 原语层 CSS 的硬编码色值 ---------- */for (const relPath of HEX_CSS_TARGETS) {
   const abs = join(ROOT, relPath)
   if (!existsSync(abs)) continue
   const n = countHardcodedHex(readFileSync(abs, 'utf8'), {
@@ -379,6 +455,7 @@ if (process.argv.includes('--update')) {
       {
         hex: hexCounts,
         mediaSpacing: mediaSpacingCounts,
+        mediaFontSize: mediaFontSizeCounts,
         deadClasses: deadByFile,
         note: '硬编码 hex 色值 + 死 CSS 类基线（棘轮：只降不升）。收敛后请用 --update 下调。',
       },
@@ -412,6 +489,34 @@ if (mediaSpacingRegressions.length) {
   console.log(`
 ✖ 规则 9：媒体查询档位内的硬编码间距不得超过基线（只降不升）`)
   for (const v of mediaSpacingRegressions) console.log(`    ${v.file}: ${v.base} → ${v.now}`)
+}
+
+const mediaFontRegressions = []
+for (const [file, n] of Object.entries(mediaFontSizeCounts)) {
+  const base = baseline.mediaFontSize?.[file] ?? 0
+  if (n > base) mediaFontRegressions.push({ file, now: n, base })
+}
+if (mediaFontRegressions.length) {
+  failed = true
+  console.log(`
+✖ 规则 10：媒体查询档位内的硬编码字号不得超过基线（只降不升）`)
+  console.log('  档位里的字号应改为继承共享层的档位值，或在 token 层统一放大；逐页写死会让字号体系被档位打散。')
+  for (const v of mediaFontRegressions) console.log(`    ${v.file}: ${v.base} → ${v.now}`)
+}
+
+if (tierRegressions.length) {
+  failed = true
+  console.log(`\n✖ 规则 11：档位字号必须随断点非递减（${tierRegressions.length} 处回退，已按 zoom 折算）`)
+  console.log('  「屏幕越大字越小」：高档位的有效字号小于更低档位的同一选择器。')
+  const byFile = {}
+  for (const v of tierRegressions) (byFile[v.file] ||= []).push(v)
+  for (const [f, vs] of Object.entries(byFile).sort((a, b) => b[1].length - a[1].length)) {
+    console.log(`    ${f}  ×${vs.length}`)
+    for (const v of vs.slice(0, 6)) {
+      console.log(`        ${v.sel}  ${v.prevTier}→${v.prev}px(有效 ${v.effPrev}) 但 ${v.tier}→${v.now}px(有效 ${v.effNow})`)
+    }
+    if (vs.length > 6) console.log(`        … 另 ${vs.length - 6} 处`)
+  }
 }
 
 if (badDefinitions.length) {

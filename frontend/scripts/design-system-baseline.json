@@ -54,6 +54,9 @@
     "src/styles/mk-primitives.css": 40,
     "src/styles/admin-theme.css": 1
   },
+  "mediaFontSize": {
+    "src/styles/mk-primitives.css": 116
+  },
   "deadClasses": {
     "src/views/admin-redesign/QuickLearnPanel.vue": [
       "el-button"
