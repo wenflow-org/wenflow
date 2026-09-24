@@ -70,74 +70,81 @@ interface CallSite {
 
 const CALL_SITE_MANIFEST: Record<string, CallSite[]> = {
   'goal-conversation': [
-    { file: 'backend/src/services/learning/goal-conversation.service.ts', line: 636 },
+    { file: 'backend/src/services/learning/goal-conversation.service.ts', line: 885 },
   ],
   'path-planning': [
-    { file: 'backend/src/services/learning/learning.service.ts', line: 2509 },
+    { file: 'backend/src/services/learning/generation/path-generation.core.ts', line: 386 },
   ],
   'stage-designer': [
-    { file: 'backend/src/services/learning/learning.service.ts', line: 2933 },
-    { file: 'backend/src/services/learning/learning.service.ts', line: 4093 },
+    { file: 'backend/src/services/learning/generation/stage-enrichment.ts', line: 238 },
+    { file: 'backend/src/services/learning/replan/path-replan.service.ts', line: 114 },
   ],
   'teaching-turn': [
-    { file: 'backend/src/services/ai-teaching/AITeachingCoordinator.ts', line: 1399 },
+    { file: 'backend/src/services/ai-teaching/teaching-turn-engine.ts', line: 283 },
   ],
   'peer-reinforcement': [
-    { file: 'backend/src/services/ai-teaching/AITeachingCoordinator.ts', line: 1470 },
-    { file: 'backend/src/services/ai-teaching/AITeachingCoordinator.ts', line: 2588 },
+    { file: 'backend/src/services/ai-teaching/teaching-session-ops.ts', line: 620 },
+    { file: 'backend/src/services/ai-teaching/teaching-turn-engine.ts', line: 408 },
   ],
   'session-wrapup': [
-    { file: 'backend/src/services/ai-teaching/AITeachingCoordinator.ts', line: 1842 },
+    { file: 'backend/src/services/ai-teaching/teaching-session-lifecycle.ts', line: 628 },
   ],
   'adaptive-guidance-copy': [
-    { file: 'backend/src/services/learner/DashboardGuidanceSnapshotService.ts', line: 149 },
-    { file: 'backend/src/services/learner/LearningStateGuidanceService.ts', line: 89 },
+    { file: 'backend/src/services/learner/DashboardGuidanceSnapshotService.ts', line: 158 },
+    { file: 'backend/src/services/learner/LearningStateGuidanceService.ts', line: 106 },
   ],
   'lesson-knowledge-enricher': [
-    { file: 'backend/src/services/learner/LessonKnowledgeEnrichmentConsumer.ts', line: 27 },
+    { file: 'backend/src/services/learner/LessonKnowledgeEnrichmentConsumer.ts', line: 44 },
   ],
   'learning-predictor': [
-    { file: 'backend/src/services/ai-teaching/TeachingContextBuilder.ts', line: 550 },
+    { file: 'backend/src/services/ai-teaching/TeachingContextBuilder.ts', line: 1362 },
   ],
   'virtual-learner-persona-designer': [
-    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 837 },
-    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 868 },
+    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 1054 },
+    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 1086 },
+    { file: 'backend/src/virtual-lab/learner-provisioning.ts', line: 150 },
   ],
   'virtual-learner-scenario-designer': [
-    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 915 },
+    { file: 'backend/src/routes/admin/virtual-learners.ts', line: 1155 },
+    { file: 'backend/src/virtual-lab/learner-provisioning.ts', line: 206 },
   ],
   'virtual-learner-goal-dialogue-simulator': [
-    { file: 'backend/src/coordinators/simulation.coordinator.ts', line: 811 },
+    { file: 'backend/src/coordinators/simulation.coordinator.ts', line: 788 },
   ],
   'virtual-learner-path-evaluator': [
-    { file: 'backend/src/coordinators/simulation.coordinator.ts', line: 2126 },
+    { file: 'backend/src/coordinators/simulation.path-phase.ts', line: 376 },
   ],
   'virtual-learner-learn-turn-simulator': [
-    { file: 'backend/src/coordinators/simulation.coordinator.ts', line: 2783 },
-    { file: 'backend/src/virtual-lab/quick-learn/quick-learn.service.ts', line: 560 },
+    { file: 'backend/src/coordinators/simulation.learn-phase.ts', line: 692 },
+    { file: 'backend/src/virtual-lab/quick-learn/quick-learn.service.ts', line: 650 },
   ],
   'virtual-learner-referee': [
-    { file: 'backend/src/virtual-lab/blackbox-runner.ts', line: 540 },
+    { file: 'backend/src/virtual-lab/blackbox-runner.ts', line: 653 },
   ],
   'virtual-learner-actor-auditor': [
-    { file: 'backend/src/virtual-lab/blackbox-runner.ts', line: 605 },
+    { file: 'backend/src/virtual-lab/blackbox-runner.ts', line: 718 },
   ],
   'teaching-opening-generator': [
-    { file: 'backend/src/services/ai-teaching/AITeachingCoordinator.ts', line: 1261 },
+    // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
   ],
   'learner-progress-report': [
-    { file: 'backend/src/services/learner/LearnerProgressService.ts', line: 251 },
+    // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
   ],
   'skill-author': [
-    { file: 'backend/src/services/skill-author/index.ts', line: 47 },
+    // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
   ],
   'skill-compiler': [
-    { file: 'backend/src/services/skill-author/index.ts', line: 145 },
+    // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
   ],
-  // 例外账：无 executeSkill 调用点（learner-model=handler 直读 / 平台直调）
-  'learner-model': [],
-  'mcp-tool': [],
-  'semantic-freeze-judge': [],
+  'learner-model': [
+    // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
+  ],
+  'mcp-tool': [
+    // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
+  ],
+  'semantic-freeze-judge': [
+    // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -326,13 +333,45 @@ function scanFunctionBody(filePath: string, body: { start: number; end: number }
   return found;
 }
 
+/**
+ * 锚点解析（自愈 + 漂移可见）。
+ *
+ * manifest 里的 line 是"证据索引"时期的快照，代码重构后会漂移（实测 25 条锚点里 19 条已偏出
+ * ±20 行）。漂移的后果不是报错而是**静默失明**：extractEnclosingFunction 取到错误函数或 null，
+ * 于是该 skill 的声明表全被判成"疑似已改数据源"，整个 W5 对账形同虚设。
+ *
+ * 口径：line 只当提示——该行不是 executeSkill 调用时，就近（±ANCHOR_SEARCH_WINDOW 行）找最近的
+ * 调用行；仍找不到则**不猜**（不退化到"全文件调用行"，那会把同文件其它 skill 的表误算进来），
+ * 而是登记一条锚点漂移告警，提示人工刷新。
+ */
+const ANCHOR_SEARCH_WINDOW = 80;
+
+function isExecuteSkillLine(lines: string[], index: number): boolean {
+  return index >= 0 && index < lines.length && /executeSkill/.test(lines[index]);
+}
+
+function resolveCallLine(lines: string[], hintLine: number): number | null {
+  const idx = hintLine - 1;
+  if (isExecuteSkillLine(lines, idx)) return idx;
+  for (let d = 1; d <= ANCHOR_SEARCH_WINDOW; d += 1) {
+    if (isExecuteSkillLine(lines, idx - d)) return idx - d;
+    if (isExecuteSkillLine(lines, idx + d)) return idx + d;
+  }
+  return null;
+}
+
 function scanSkillTables(skillId: string): Map<string, string> {
   const found = new Map<string, string>();
   for (const site of CALL_SITE_MANIFEST[skillId] || []) {
     const filePath = path.resolve(REPO_ROOT, site.file);
     if (!fs.existsSync(filePath)) continue;
     const lines = fs.readFileSync(filePath, 'utf-8').split(/\r?\n/);
-    const body = extractEnclosingFunction(lines, site.line - 1);
+    const callIdx = resolveCallLine(lines, site.line);
+    if (callIdx === null) {
+      anchorDriftFindings.push(`${site.file}:${site.line}`);
+      continue;
+    }
+    const body = extractEnclosingFunction(lines, callIdx);
     if (!body) continue;
     for (const [table, evidence] of scanFunctionBody(filePath, body)) {
       if (!found.has(table)) found.set(table, evidence);
@@ -340,6 +379,9 @@ function scanSkillTables(skillId: string): Map<string, string> {
   }
   return found;
 }
+
+/** 锚点漂移登记（文件:行）；由 run 汇总成 warn 级发现 */
+const anchorDriftFindings: string[] = [];
 
 // ---------------------------------------------------------------------------
 // ⑥ sandbox 通道：core.yaml inputs 实际 sandbox refs
@@ -516,6 +558,15 @@ function main() {
         });
       }
     }
+  }
+
+  // ---- 锚点漂移：manifest 的 file:line 已偏到搜不到调用点 ⇒ 该 skill 的对账不可信，需人工刷新 ----
+  for (const anchor of [...new Set(anchorDriftFindings)].sort()) {
+    findings.push({
+      level: 'warn',
+      channel: 'W5-锚点漂移',
+      message: `调用点锚点 ${anchor} 附近 ${ANCHOR_SEARCH_WINDOW} 行内找不到 executeSkill 调用，请刷新 CALL_SITE_MANIFEST 行号（该 skill 的表对账结果不可信）`,
+    });
   }
 
   // ---- 输出 ----

@@ -72,7 +72,10 @@ function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
     .map((item: any) => ({
       title: normalizeString(item?.title) || '阶段学习任务',
       type: normalizeTaskType(item?.type),
-      estimatedMinutes: Number.isFinite(Number(item?.estimatedMinutes)) ? Math.max(15, Number(item.estimatedMinutes)) : 30,
+      // 下沿取 10：path-planning-hints 对"一节课量级"的路径给的是 subtaskMinutesRange=[10,15]，
+      // 而规则 49 要求此时 estimatedMinutes 取该区间下沿——此前硬抬到 15，等于静默覆盖规则
+      // （审计 P2「下沿不一致」）。地板仍保留，用来挡模型给出的荒谬小值。
+      estimatedMinutes: Number.isFinite(Number(item?.estimatedMinutes)) ? Math.max(10, Number(item.estimatedMinutes)) : 30,
       description: normalizeString(item?.description) || '',
       acceptanceHint: normalizeString(item?.acceptanceHint) || '',
       linkedConcept: normalizeString(item?.linkedConcept) || fallbackConcept,

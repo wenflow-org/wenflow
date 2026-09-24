@@ -48,6 +48,10 @@ import { pathAgentDefinition } from '../../skills/path-planning';
 import { validatePathPlanningOutput } from '../../skills/path-planning';
 import { stageDesignerDefinition } from '../../skills/stage-designer';
 import { validateStageDesignerOutput } from '../../skills/stage-designer';
+// 试跑载荷要与真实链路同形：loadTarget 在真实链路里由 skill 的 withLoadTargetForMilestone 从
+// cognitiveCore.loadProfile.stageLoadDistribution 注入——这里复用同一个函数，否则试跑永远
+// 走不到规则 39（loadTarget 分支），也就验不出该规则是否被改坏（审计 P2「试跑载荷缺 materials/loadTarget」）
+import { withLoadTargetForMilestone } from '../../skills/stage-designer';
 import { executeSkill } from '../../skills';
 import { virtualLearnerGoalDialogueSimulatorDefinition, type GoalLearnerSimulationOutput } from '../../skills/virtual-learner-goal-dialogue-simulator';
 import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-learner-persona-designer';
@@ -1558,6 +1562,13 @@ ${JSON.stringify({
       cognitiveCore: { cognitiveDomain: '示例', coreConcepts: [] },
       normalizedInput: null,
       repairHints: null,
+      // 默认带一份最小资料包：否则试跑永远走不到 materialRefs 分支（有资料才要求逐字引用）
+      materials: [{
+        title: '示例资料',
+        sourceUrl: 'https://example.com/doc',
+        sections: [{ id: 's-1', title: '第一章 概述' }],
+        keyPoints: [{ text: '示例要点', cite: '第一章 概述' }],
+      }],
     };
     // 若调用方指定期望子任务数（等同 coordinator 的 targetSubtasksPerStage 注入），
     // 写进 normalizedInput.planningHints 供 prompt 强制读取
@@ -1585,10 +1596,11 @@ ${JSON.stringify({
       requireActivePrompt: false,
       caller: { skillId: 'stage-designer' },
       buildUserPayload: () => ({
-        milestone: promptInput.milestone,
+        milestone: withLoadTargetForMilestone(promptInput.milestone, promptInput.cognitiveCore),
         previousMilestone: promptInput.previousMilestone || null,
         cognitiveCore: promptInput.cognitiveCore,
         normalizedInput: enrichedNormalizedInput,
+        materials: promptInput.materials || null,
         repairHints: promptInput.repairHints || null,
         __promptOverridden: true,
       }),

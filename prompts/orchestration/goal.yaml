@@ -450,13 +450,6 @@ routings:
     accumulate: false
     visibilityPreset: agent-internal
   - agentId: goal-agent
-    fieldId: understanding.cognitive_bandwidth
-    render: hidden
-    handoff: [path]
-    internal: false
-    accumulate: false
-    visibilityPreset: agent-internal
-  - agentId: goal-agent
     fieldId: understanding.constraints_and_boundaries
     render: visible
     handoff: [path]

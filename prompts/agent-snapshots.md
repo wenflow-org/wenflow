@@ -71,7 +71,6 @@ sandbox:goal-agent.understanding.available_resources.time_budget
 sandbox:goal-agent.understanding.available_resources.time_horizon
 sandbox:goal-agent.understanding.available_resources.time_per_session
 sandbox:goal-agent.understanding.background_experience
-sandbox:goal-agent.understanding.cognitive_bandwidth
 sandbox:goal-agent.understanding.constraints_and_boundaries
 sandbox:goal-agent.understanding.current_baseline.evidence
 sandbox:goal-agent.understanding.current_baseline.level

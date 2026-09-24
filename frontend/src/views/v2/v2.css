@@ -609,11 +609,15 @@ html, body {
   .v2-page .auth__card .hint { font-size: 13px; }
 }
 
-/* 移动端为底部导航留出空间 */
-@media (max-width: 900px) {
+/* 移动端为底部导航留出空间：底部 tab 条在 ≤1100 就出现（V2Nav 的 .v2nav__tabs），
+   而留白此前只写到 900，901~1100 这一段页脚被固定 tab 条压住 62px
+   （实测 1000×700 滚到底：页脚 638~700、tab 条 638~700，页脚整行几乎不可见）。 */
+@media (max-width: 1100px) {
   .v2-page { padding-bottom: 72px; }
-  .v2-page .v2footer { margin-bottom: 0; }
+}
 
+@media (max-width: 900px) {
+  .v2-page .v2footer { margin-bottom: 0; }
   /* 移动端按钮收一档（2026-09-24 反馈「移动端好像这种按钮都比较大」）：
      43px 高 / 14px 字 / 22px 横向内边距，配上 10px·22px·30% 的蓝色投影，
      在 390 宽里比卡内正文（13~14px）重得多，像一块浮起来的板。

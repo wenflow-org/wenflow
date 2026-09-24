@@ -347,6 +347,8 @@ export async function enrichLearningPathWithAnderson(
     await withTransaction(async (tx) => {
       // 事务可能因瞬时冲突整体重试：计数必须随每次尝试重置，避免重复累加
       designedTaskCount = 0;
+      // 同理：资料引用收集器声明在事务外，重试不清空会把上一次尝试的条目累加进模板
+      for (const key of Object.keys(materialRefsByTask)) delete materialRefsByTask[key];
       await assertGenerationRunFence(tx, pathId, runId);
       const lockedPath = await tx.learning_paths.updateMany({
         where: { id: pathId, activeGenerationRunId: runId },
