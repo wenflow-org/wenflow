@@ -1475,10 +1475,10 @@ onBeforeUnmount(() => {
 .learn__back:hover { color: var(--blue-deep); }
 .learn__title { display: grid; gap: 3px; min-width: 0; }
 .learn__title strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.learn__title small { font-size: 11.5px; color: var(--faint); }
+.learn__title small { font-size: 12px.5px; color: var(--faint); }
 .learn__head-right { display: flex; align-items: center; gap: 10px; }
 .learn__state-link {
-  font-size: 11.5px; font-weight: 700;
+  font-size: 12px.5px; font-weight: 700;
   color: var(--muted);
   text-decoration: none;
   padding: 4px 11px; border-radius: var(--mk-radius-pill);
@@ -1488,7 +1488,7 @@ onBeforeUnmount(() => {
 }
 .learn__state-link:hover { color: var(--blue-deep); border-color: rgba(52, 120, 246, 0.4); background: rgba(52, 120, 246, 0.06); }
 .learn__live {
-  font-size: 11px; font-weight: 800; color: var(--green);
+  font-size: 12px; font-weight: 800; color: var(--green);
   background: rgba(49, 177, 111, 0.1);
   border: 1px solid rgba(49, 177, 111, 0.3);
   padding: 4px 10px; border-radius: var(--mk-radius-pill);
@@ -1523,16 +1523,16 @@ onBeforeUnmount(() => {
   border: 0; background: transparent; padding: 0; margin: 0;
   font: inherit; color: inherit; text-align: left; cursor: default;
 }
-.kp__head span { font-size: 11.5px; font-weight: 800; color: var(--blue-deep); }
+.kp__head span { font-size: 12px.5px; font-weight: 800; color: var(--blue-deep); }
 .kp__caret { display: none; font-size: 11px; color: var(--faint); flex-shrink: 0; }
 .kp__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .kp__bar { height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
 .kp__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 /* 视图切换（列表/图谱）：轻量分段控件，走既有 token（mk token 深浅主题自动跟随，2026-09-25 深色修复） */
 .kp__views { display: inline-flex; gap: 2px; padding: 2px; border-radius: 99px; background: var(--mk-surface-2); align-self: flex-start; }
-.kp__view { border: 0; background: transparent; cursor: pointer; padding: 3px 10px; border-radius: 99px; font-size: 11.5px; font-weight: 700; color: var(--faint); }
+.kp__view { border: 0; background: transparent; cursor: pointer; padding: 3px 10px; border-radius: 99px; font-size: 12px.5px; font-weight: 700; color: var(--faint); }
 .kp__view--on { background: var(--surface); color: var(--blue-deep); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08); }
-.kp__hint { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--faint); }
+.kp__hint { margin: 0; font-size: 12px.5px; line-height: 1.5; color: var(--faint); }
 .kp__hint--err { color: var(--danger, #c0392b); }
 /* 通向「知识图谱」聚合页的桥：学习页这里只画当前路径，想看全部路径要去聚合页 */
 .kp__more { margin-left: 6px; color: var(--mk-blue); text-decoration: none; white-space: nowrap; }
@@ -1554,9 +1554,9 @@ onBeforeUnmount(() => {
 .kp__item--done .kp__mark { background: var(--green); border: 0; color: #fff; }
 .kp__item--current .kp__mark { border: 2px solid var(--blue); border-style: solid; }
 .kp__name strong { display: block; font-size: 13px; line-height: 1.45; }
-.kp__name small { display: block; margin-top: 2px; font-size: 11px; color: var(--faint); }
+.kp__name small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 .kp__item--current .kp__name small { color: var(--blue-deep); font-weight: 700; }
-.kp__time { font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px; }
+.kp__time { font-size: 12px.5px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px; }
 
 /* ---------- 导师对话 ---------- */
 .tutor {
@@ -1619,7 +1619,7 @@ onBeforeUnmount(() => {
 .oscene--review { border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
 .oscene__tag {
   justify-self: start;
-  font-size: 10.5px; font-weight: 800;
+  font-size: 12px.5px; font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--blue-deep, #1f57cc);
   background: color-mix(in srgb, var(--blue, #3478f6) 10%, transparent);
@@ -1637,15 +1637,15 @@ onBeforeUnmount(() => {
   border-radius: var(--mk-radius-lg); padding: 8px 11px;
 }
 .oscene__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.oscene__chip-label { font-size: 11px; font-weight: 700; color: var(--faint); }
+.oscene__chip-label { font-size: 12px; font-weight: 700; color: var(--faint); }
 .oscene__chip {
-  font-size: 11px; font-weight: 700;
+  font-size: 12px; font-weight: 700;
   color: var(--amber, #b45309);
   background: color-mix(in srgb, var(--amber, #f4aa46) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 32%, transparent);
   padding: 2px 9px; border-radius: var(--mk-radius-pill);
 }
-.oscene__warn { font-size: 11.5px; line-height: 1.6; color: var(--amber, #b45309); }
+.oscene__warn { font-size: 12px.5px; line-height: 1.6; color: var(--amber, #b45309); }
 .oscene__warn span { font-weight: 700; }
 .oscene__actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 .oscene__actions .btn-ghost { font-size: 12.5px; }
@@ -1761,18 +1761,18 @@ onBeforeUnmount(() => {
 .supmodal__body { padding: 12px 16px 16px; overflow-y: auto; }
 .supmodal__text, .supmodal__loading { margin: 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; color: #1f2937; }
 /* 暗色：补充资料弹窗跟随主题（原为硬编码 #fff/#1f2937，暗色下在聊天区中央弹出一整块白） */
-:global([data-theme='dark']) .supmodal__card { background: var(--surface); box-shadow: 0 12px 40px rgba(0, 0, 0, .5); }
-:global([data-theme='dark']) .supmodal__head { border-bottom-color: var(--line); }
-:global([data-theme='dark']) .supmodal__close { color: var(--muted); }
-:global([data-theme='dark']) .supmodal__close:hover { background: rgba(230, 237, 247, 0.08); }
-:global([data-theme='dark']) .supmodal__text, :global([data-theme='dark']) .supmodal__loading { color: var(--ink); }
+[data-theme='dark'] .supmodal__card { background: var(--surface); box-shadow: 0 12px 40px rgba(0, 0, 0, .5); }
+[data-theme='dark'] .supmodal__head { border-bottom-color: var(--line); }
+[data-theme='dark'] .supmodal__close { color: var(--muted); }
+[data-theme='dark'] .supmodal__close:hover { background: rgba(230, 237, 247, 0.08); }
+[data-theme='dark'] .supmodal__text, [data-theme='dark'] .supmodal__loading { color: var(--ink); }
 .msg__visual { margin: 0; display: grid; gap: 4px; }
 .msg__visual img {
   display: block; max-width: 100%; max-height: 320px;
   border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md);
   background: var(--surface);
 }
-.msg__visual figcaption { font-size: 11px; color: var(--faint); line-height: 1.5; }
+.msg__visual figcaption { font-size: 12px; color: var(--faint); line-height: 1.5; }
 .msg__avatar {
   width: 30px; height: 30px; border-radius: var(--mk-radius-lg);
   background: linear-gradient(135deg, var(--blue), var(--accent));
@@ -1780,7 +1780,7 @@ onBeforeUnmount(() => {
   display: grid; place-items: center;
   flex: 0 0 auto; margin-top: 2px;
 }
-.msg__meta { font-size: 11px; color: var(--faint); }
+.msg__meta { font-size: 12px; color: var(--faint); }
 
 /* 消息入场：新气泡浮出（typing 圆点除外） */
 @media (prefers-reduced-motion: no-preference) {
@@ -1842,7 +1842,7 @@ onBeforeUnmount(() => {
 .msg__chip {
   display: inline-flex; align-items: center; gap: 5px;
   width: fit-content; padding: 4px 10px; border-radius: var(--mk-radius-pill);
-  font-size: 11px; font-weight: 700; line-height: 1.5;
+  font-size: 12px; font-weight: 700; line-height: 1.5;
 }
 .msg__chip--confuse { color: var(--amber-ink); background: rgba(244, 170, 70, 0.12); border: 1px solid rgba(244, 170, 70, 0.2); margin-top: 6px; }
 
@@ -1888,7 +1888,7 @@ onBeforeUnmount(() => {
 .peerdock__name strong { font-size: 13.5px; color: var(--ink); }
 .peerdock__tag {
   flex: 0 0 auto;
-  font-size: 10px; font-weight: 700; color: #c05e14;
+  font-size: 12px; font-weight: 700; color: #c05e14;
   background: color-mix(in srgb, var(--amber) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
   padding: 1px 7px; border-radius: var(--mk-radius-pill);
@@ -1896,7 +1896,7 @@ onBeforeUnmount(() => {
 }
 .peerdock__status {
   display: flex; align-items: center; gap: 5px; min-width: 0;
-  font-size: 11px; color: var(--muted);
+  font-size: 12px; color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .peerdock__status-dot {
@@ -1944,9 +1944,9 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; gap: 8px; min-width: 0;
   padding: 0 2px;
 }
-.peerdock__meta small { font-size: 10.5px; color: var(--faint); }
+.peerdock__meta small { font-size: 12px.5px; color: var(--faint); }
 .peerdock__strategy {
-  font-size: 10px; font-weight: 700; color: #c05e14;
+  font-size: 12px; font-weight: 700; color: #c05e14;
   background: color-mix(in srgb, var(--amber) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 25%, transparent);
   padding: 1px 7px; border-radius: var(--mk-radius-pill);
@@ -1977,7 +1977,7 @@ onBeforeUnmount(() => {
   display: flex; justify-content: center;
   padding: 2px 0 0;
 }
-.peerdock__ai-note :deep(.ai-note) { font-size: 10px; color: var(--faint); opacity: 0.75; }
+.peerdock__ai-note :deep(.ai-note) { font-size: 12px; color: var(--faint); opacity: 0.75; }
 .peerdock__input {
   display: flex; gap: 8px; padding: 10px 12px;
   border-top: 1px solid var(--line, rgba(23, 32, 51, 0.08));
@@ -2057,7 +2057,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--surface) 96%, transparent);
   display: grid; gap: 9px;
 }
-.kp-actions__label { font-size: 11.5px; font-weight: 700; color: var(--faint); }
+.kp-actions__label { font-size: 12px.5px; font-weight: 700; color: var(--faint); }
 .kp-actions__row { display: flex; gap: 10px; flex-wrap: wrap; }
 /* 自我评估二选一：掌握 ✓ 绿实心 / 未理解 ✗ 琥珀描边——语义色一眼可辨 */
 .kp-btn {
@@ -2146,7 +2146,7 @@ onBeforeUnmount(() => {
 .checkpoint__head code { background: rgba(52, 120, 246, 0.1); color: var(--blue-deep); padding: 1px 6px; border-radius: var(--mk-radius-sm); font-size: 12.5px; }
 .checkpoint__badge {
   width: fit-content;
-  font-size: 11px; font-weight: 800; color: var(--amber-ink);
+  font-size: 12px; font-weight: 800; color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
   padding: 3px 9px; border-radius: var(--mk-radius-pill);
@@ -2209,10 +2209,10 @@ onBeforeUnmount(() => {
 .composer__hint {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap;
-  font-size: 11px; line-height: 1.5; color: var(--faint); padding-left: 4px;
+  font-size: 12px; line-height: 1.5; color: var(--faint); padding-left: 4px;
 }
 .composer__hint :deep(.ai-note) {
-  font-size: 11px; line-height: 1.5;
+  font-size: 12px; line-height: 1.5;
 }
 
 .btn-primary {
@@ -2310,7 +2310,7 @@ onBeforeUnmount(() => {
   .learn__title small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .learn__head-right { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .learn__live, .learn__state-link { white-space: nowrap; flex-shrink: 0; }
-  .learn__live { padding: 3px 9px; font-size: 10.5px; }
+  .learn__live { padding: 3px 9px; font-size: 12px.5px; }
   .learn__menu-wrap { position: relative; display: inline-flex; }
   /* ⋯ 视觉不变，热区 28→38（触屏） */
   .learn__menu { padding: 0 4px; font-size: 20px; line-height: 1; display: inline-flex; align-items: center; height: 38px; }
@@ -2365,7 +2365,7 @@ onBeforeUnmount(() => {
 .learn__menu-group { display: grid; gap: 1px; }
 .learn__menu-label {
   padding: 6px 12px 3px;
-  font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em;
+  font-size: 11px.5px; font-weight: 800; letter-spacing: 0.06em;
   color: var(--faint);
 }
 .learn__menu-sep { height: 1px; background: var(--line); margin: 4px 6px; }
@@ -2378,7 +2378,7 @@ onBeforeUnmount(() => {
 }
 .learn__menu-item-main { display: grid; gap: 2px; }
 .learn__menu-item-main strong { font-size: 13px; font-weight: 700; color: inherit; }
-.learn__menu-item-main small { font-size: 11px; font-weight: 500; color: var(--faint); white-space: normal; }
+.learn__menu-item-main small { font-size: 12px; font-weight: 500; color: var(--faint); white-space: normal; }
 .learn__menu-item:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); color: var(--ink); }
 .learn__menu-item--primary { color: var(--blue, #2c63d0); }
 .learn__menu-item--primary:hover { background: #e8effc; color: var(--blue, #2c63d0); }
@@ -2438,7 +2438,7 @@ onBeforeUnmount(() => {
   letter-spacing: 0.04em;
   color: var(--blue-deep, #1f57cc);
 }
-.replies__hint { font-size: 11px; color: var(--faint); }
+.replies__hint { font-size: 12px; color: var(--faint); }
 /* 开场引导（opening.question 收进面板）：一行可选的小字，想回答就打字，不答可直接选动作 */
 .replies__question {
   margin: 0 2px 9px;
@@ -2470,7 +2470,7 @@ onBeforeUnmount(() => {
   display: grid; place-items: center;
   width: 20px; height: 20px;
   border-radius: 7px;
-  font-size: 11px; font-weight: 800;
+  font-size: 12px; font-weight: 800;
   color: var(--blue-deep, #1f57cc);
   background: color-mix(in srgb, var(--blue, #3478f6) 10%, transparent);
 }
@@ -2548,51 +2548,51 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* 暗色模式适配 */
-:global([data-theme='dark']) .msg__bubble {
+[data-theme='dark'] .msg__bubble {
   background: color-mix(in srgb, var(--surface) 72%, var(--blue) 4%);
   color: var(--ink);
 }
-:global([data-theme='dark']) .msg--ai .msg__bubble b,
-:global([data-theme='dark']) .msg--ai .msg__bubble strong {
+[data-theme='dark'] .msg--ai .msg__bubble b,
+[data-theme='dark'] .msg--ai .msg__bubble strong {
   color: var(--blue-deep);
 }
-:global([data-theme='dark']) .msg__bubble--html :deep(code) {
+[data-theme='dark'] .msg__bubble--html :deep(code) {
   background: rgba(77, 139, 248, 0.15);
   color: var(--blue-deep);
 }
-:global([data-theme='dark']) .msg__bubble--html :deep(pre) {
+[data-theme='dark'] .msg__bubble--html :deep(pre) {
   background: #111212;
   color: #dadbdd;
 }
-:global([data-theme='dark']) .msg__avatar {
+[data-theme='dark'] .msg__avatar {
   background: var(--surface) !important;
   border-color: var(--line);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
-:global([data-theme='dark']) .tutor__jump-bottom {
+[data-theme='dark'] .tutor__jump-bottom {
   background: var(--surface);
   border-color: var(--line);
   color: var(--muted);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
-:global([data-theme='dark']) .learn__menu {
+[data-theme='dark'] .learn__menu {
   background: var(--surface);
   border-color: var(--line);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
 }
-:global([data-theme='dark']) .learn__menu-item:hover {
+[data-theme='dark'] .learn__menu-item:hover {
   background: rgba(255, 255, 255, 0.04);
   color: var(--ink);
 }
-:global([data-theme='dark']) .kp-bar {
+[data-theme='dark'] .kp-bar {
   background: var(--surface);
   border-color: var(--line);
 }
-:global([data-theme='dark']) .kp__bar { background: rgba(230, 237, 247, 0.12); }
-:global([data-theme='dark']) .kp__mark { border-color: var(--line); }
-:global([data-theme='dark']) .composer__send--off { background: rgba(230, 237, 247, 0.08); }
-:global([data-theme='dark']) .learn__menu-item--primary:hover { background: rgba(77, 139, 248, 0.18); }
-:global([data-theme='dark']) .finish { background: rgba(15, 22, 32, 0.78); }
+[data-theme='dark'] .kp__bar { background: rgba(230, 237, 247, 0.12); }
+[data-theme='dark'] .kp__mark { border-color: var(--line); }
+[data-theme='dark'] .composer__send--off { background: rgba(230, 237, 247, 0.08); }
+[data-theme='dark'] .learn__menu-item--primary:hover { background: rgba(77, 139, 248, 0.18); }
+[data-theme='dark'] .finish { background: rgba(15, 22, 32, 0.78); }
 </style>
 
 <style scoped>
