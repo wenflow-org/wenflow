@@ -532,6 +532,7 @@ import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
+import { useCurrentTask } from '@/composables/useCurrentTask';
 import { unwrapArray } from './unwrap';
 
 const router = useRouter();
@@ -794,22 +795,20 @@ const pageState = computed<'active' | 'attention' | 'generating' | 'empty'>(() =
 });
 
 /* ================= 今日任务 ================= */
-/* 标题用任务本名：guidance 的 taskTitle 是同一节课的另一种说法，
-   覆盖后与课堂页标题不一致（决策链要求「今日行动 → 课堂」同一个任务），
-   且 actionDesc 的与标题去重比较也随之失真（2026-09-25） */
-const todayTask = computed(() => {
-  if (pageState.value === 'active' && primaryPath.value) {
-    const weeks = rawWeeksOf(primaryPath.value.id);
-    for (const w of weeks) {
-      const tasks = w.subtasks || w.tasks || [];
-      const t = tasks.find((x: Record<string, any>) => x.status === 'in_progress') ?? tasks.find((x: Record<string, any>) => x.status !== 'completed');
-      if (t) {
-        return { id: t.id, title: t.title || t.displayLabel, desc: t.description || '', minutes: t.estimatedMinutes, kind: t.displayLabel || t.taskType || '任务', status: t.status || 'todo' };
-      }
-    }
+/* 用共享 pickCurrentTask/useCurrentTask（与路径详情页 currentTask 同一算法）：
+   原实现按周遍历、首个有未完成任务的周就返回——周1 有 todo、周2 有 in_progress 时
+   会选成周1 的旧任务，与详情页「开始学习」指向不同课（2026-09-25 收口）。
+   标题用任务本名：guidance 的 taskTitle 是同一节课的另一种说法，覆盖后会与课堂页
+   标题不一致（决策链要求「今日行动 → 课堂」同一个任务）。 */
+const allPathTasks = computed<Array<Record<string, any>>>(() => {
+  if (pageState.value !== 'active' || !primaryPath.value) return [];
+  const out: Array<Record<string, any>> = [];
+  for (const w of rawWeeksOf(primaryPath.value.id)) {
+    for (const t of w.subtasks || w.tasks || []) out.push(t);
   }
-  return null;
+  return out;
 });
+const todayTask = useCurrentTask(allPathTasks);
 
 function rawWeeksOf(pathId: string) {
   const p = paths.value.find((x) => x.id === pathId);

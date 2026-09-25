@@ -651,6 +651,7 @@ import { aiTeachingAPI } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
 import { readMaterial, readMaterialSection } from '@/api/materials';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
+import { pickCurrentTask } from '@/composables/useCurrentTask';
 import {
   getReplanActionText,
   getReplanPriorityText,
@@ -1327,11 +1328,9 @@ const doneTasks = computed(() => allTasks.value.filter((t) => t.status === 'comp
 const percent = computed(() => (totalTasks.value ? Math.round((doneTasks.value / totalTasks.value) * 100) : 0));
 const allDone = computed(() => totalTasks.value > 0 && doneTasks.value === totalTasks.value);
 
-const currentTask = computed(() => {
-  const inProgress = allTasks.value.find((t) => t.status === 'in_progress');
-  if (inProgress) return inProgress;
-  return allTasks.value.find((t) => t.status === 'todo' || !t.status) ?? null;
-});
+/* 当前任务 = 全局第一个 in_progress，否则第一个 todo；与学习台「今日行动」共用
+   pickCurrentTask（决策链同源：两页必须指向同一节课，2026-09-25 收口） */
+const currentTask = computed(() => pickCurrentTask(allTasks.value));
 
 const currentStageNo = computed(() => {
   if (!currentTask.value) return stages.value.length;
