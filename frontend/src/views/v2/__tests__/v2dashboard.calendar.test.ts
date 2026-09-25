@@ -77,8 +77,9 @@ describe('V2Dashboard 日历口径（本地日期）', () => {
     const w = await mountDash(todaySessions());
     await w.find('.day--today').trigger('click');
     await flushPromises();
+    // 月历下的当日入口只呈现摘要（完整明细在抽屉）：分钟与次数按本地日期归组
     const detail = w.find('.day-detail');
-    expect(detail.text()).toContain('学习次数');
+    expect(detail.text()).toContain('当天学了 25 分钟');
     expect(detail.text()).toContain('1 次');
   });
 
