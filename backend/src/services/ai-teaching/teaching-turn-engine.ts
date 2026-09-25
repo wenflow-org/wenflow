@@ -411,6 +411,9 @@ export async function processStudentMessage(
       // 此前硬编码 'feynman'，使「understand→类比 / apply→反例 / analyze+→辩论」永不触发（§3.19 P0②）。
       strategy: pickPeerStrategy(teachingOutput.analysis.cognitiveLevel),
       studentMessage: message,
+      // 老师本轮回复原文（2026-09-25 对齐调整）：让伴学看见老师刚说了什么——
+      // 老师刚提问等学生答 → 不代答不提前给提示；老师搁置某话题 → 不再追。此前只埋在 6 条窗口里，压不过【学生消息】的锚定。
+      tutorLatestReply: teachingOutput.reply,
       tutorContext: updatedMessages.slice(-6).map((item) => ({
         role: item.role,
         content: item.content,

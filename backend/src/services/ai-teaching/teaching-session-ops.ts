@@ -617,11 +617,15 @@ export async function processPeerMessage(
     .map((item: any) => ({ role: item.role, content: item.content }));
 
   const peerState = (session.teachingState as any)?.analysis ?? {};
+  const lastAssistantReply = [...session.messages].reverse().find((item: any) => item.role === 'assistant')?.content || '';
   const peerResult = await executeSkill(peerAgentDefinition, {
     input: {
       topic: session.topic,
       strategy: pickPeerStrategy(peerState.cognitiveLevel),
       studentMessage: message,
+      // 老师最近一条回复原文（2026-09-25 对齐调整，与 engine 主动触发路径一致）：
+      // 老师刚提问等学生答 → 不代答；老师搁置某话题 → 不再追
+      tutorLatestReply: lastAssistantReply,
       tutorContext: session.messages.slice(-6).map((item) => ({
         role: item.role,
         content: item.content,

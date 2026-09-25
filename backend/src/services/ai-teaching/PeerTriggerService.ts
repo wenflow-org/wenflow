@@ -34,6 +34,12 @@ export class PeerTriggerService {
       return 'model-control';
     }
 
+    // 会话内冷却：紧邻几轮老师消息刚带过伴学插话 → 本轮不再自动触发（给学生的作答和老师的推进留空档，
+    // 2026-09-25 真课实测"怎么/为什么"逢问必弹、两轮两弹）。model-control 不受冷却限制——那是教学模型本轮的显式要求。
+    if (this.isInCooldown(session)) {
+      return null;
+    }
+
     if (peerTriggerConfig.helpKeywords.some((keyword) => studentMessage.includes(keyword))) {
       return 'help-keyword';
     }
@@ -52,6 +58,15 @@ export class PeerTriggerService {
     }
 
     return null;
+  }
+
+  /** 最近 cooldownAssistantTurns 条助手消息里是否已有伴学插话（peerMessage 内嵌于老师消息）。 */
+  private isInCooldown(session: TeachingSessionRecord): boolean {
+    const window = Math.max(1, peerTriggerConfig.cooldownAssistantTurns ?? 2);
+    const recentAssistant = session.messages
+      .filter((message) => message.role === 'assistant')
+      .slice(-window);
+    return recentAssistant.some((message) => Boolean((message as any).peerMessage));
   }
 }
 

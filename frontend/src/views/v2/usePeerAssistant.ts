@@ -31,12 +31,6 @@ export function usePeerAssistant(session: Ref<{ sessionId: string; revision: num
   /** 伴学窗打开来源：'trigger'（AI 侦测卡点自动推）| 'user'（用户点 FAB 主动开聊）
       驱动头部状态行文案（不再固定死「看到你卡了一下」） */
   const peerEntry = ref<'trigger' | 'user'>('user');
-  /** 触发频控：相邻触发的冷却窗口（ms），防止每轮对话都强制弹窗打扰 */
-  const PEER_TRIGGER_COOLDOWN = 60_000;
-  /** 距上次自动展开的时间戳：冷却期内仅累计未读红点，不强制展开 */
-  let lastPeerAutoOpen = 0;
-  /** 用户手动收起过：本轮会话内不再自动展开（尊重用户意图，仅红点提示） */
-  let peerManuallyMinimized = false;
   const peerItems = ref<PeerChatItem[]>([]);
   const peerInput = ref('');
   const peerSending = ref(false);
@@ -77,25 +71,18 @@ export function usePeerAssistant(session: Ref<{ sessionId: string; revision: num
     openPeer();
   }
 
-  /** AI 侦测卡点自动推消息并展开（受频控与「手动收起过」约束） */
+  /** AI 侦测卡点推来消息：**只亮红点不自动展开**（2026-09-25 设计调整）。
+      原自动展开会盖住老师刚发的消息/配图（真课实测：老师提问等学生作答时被小启窗压住）——
+      学生应先看老师，红点 + FAB 文案邀请学生自己点开，主动权在学生。 */
   function openPeerByTrigger() {
     peerEntry.value = 'trigger';
     peerUnread.value = true;
-    const now = Date.now();
-    const inCooldown = now - lastPeerAutoOpen < PEER_TRIGGER_COOLDOWN;
-    if (!inCooldown && !peerManuallyMinimized) {
-      peerOpen.value = true;
-      lastPeerAutoOpen = now;
-      scrollPeerDown();
-    }
   }
 
-  /** 用户手动收起：本轮会话内不再自动展开（仅红点），避免「收起又被弹开」的打扰循环；
-      收起视为已读（红点清除，用户已看到内容） */
+  /** 用户手动收起：收起视为已读（红点清除）；想再聊点 FAB 即可 */
   function minimizePeer() {
     peerOpen.value = false;
     peerUnread.value = false;
-    peerManuallyMinimized = true;
   }
 
   /** 记录伴学消息并更新「最近策略」（驱动头部状态行）；新回合消息则清除入口标记 */
@@ -174,8 +161,6 @@ export function usePeerAssistant(session: Ref<{ sessionId: string; revision: num
     peerItems.value = [];
     peerUnread.value = false;
     peerOpen.value = false;
-    peerManuallyMinimized = false;
-    lastPeerAutoOpen = 0;
   }
 
   /** 恢复会话时回填伴学历史：peer 标记消息 + assistant 内嵌 peerMessage（boot 专用） */

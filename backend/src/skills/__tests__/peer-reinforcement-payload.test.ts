@@ -100,4 +100,23 @@ describe('peer-reinforcement payload snapshot parity', () => {
     expect(payload).not.toContain('【本轮认知负荷】')
     expect(payload).not.toContain('【本轮情绪】')
   })
+
+  /**
+   * 2026-09-25 对齐调整：伴学与老师节奏相抵（老师刚提问等学生答 → 伴学提前给提示；
+   * 老师搁置话题 → 伴学还追）。payload 单独放行【老师本轮回复】，规则才可达。
+   */
+  it('tutorLatestReply 进入载荷；缺失时不出现分区', async () => {
+    const input = {
+      ...MINIMAL_INPUT,
+      tutorLatestReply: '先不急着看代码——你先用自己的话说说，闭包到底把什么"关"住了？',
+    }
+    await executePeerDiscussion(input as any)
+
+    const [spec] = mockCallPrompt.mock.calls[0]
+    const payload = spec.buildUserPayload(input, {})
+    expect(payload).toContain('【老师本轮回复】先不急着看代码')
+
+    const withoutReply = spec.buildUserPayload(MINIMAL_INPUT, {})
+    expect(withoutReply).not.toContain('【老师本轮回复】')
+  })
 })

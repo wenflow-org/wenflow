@@ -55,7 +55,8 @@ export const peerAgentDefinition: AgentDefinition = {
         description: '伴学策略'
       },
       studentMessage: { type: 'string', description: '学生最新消息' },
-      tutorContext: { 
+      tutorLatestReply: { type: 'string', description: '老师最近一条回复原文（可选；用于对齐老师当前教学动作）' },
+      tutorContext: {
         type: 'array', 
         items: { 
           type: 'object', 
@@ -99,6 +100,12 @@ export interface PeerDiscussionInput {
   topic: string;
   strategy: 'feynman' | 'debate' | 'counterexample' | 'analogy' | 'error-analysis';
   studentMessage?: string;
+  /**
+   * 老师最近一条回复原文（2026-09-25 对齐调整，可选）。
+   * 让伴学看见老师刚说了什么：老师刚提问等学生答 → 不代答不提前给提示；老师搁置某话题 → 不再追。
+   * 此前只埋在 tutorContext 的 100 字/条窗口里，压不过【学生消息】的锚定（真课实测两轮插话均与老师节奏相抵）。
+   */
+  tutorLatestReply?: string;
   tutorContext: Array<{ role: string; content: string }>;
   cognitiveLevel?: string;
   understanding?: number;
@@ -185,6 +192,11 @@ function buildPeerUserPayload(input: PeerDiscussionInput) {
     ? `\n【学生消息】${input.studentMessage}`
     : '';
 
+  // 对齐老师当前教学动作（2026-09-25）：500 字/条窗口外单独放行，让伴学看见老师刚说了什么
+  const tutorReplySection = input.tutorLatestReply
+    ? `\n【老师本轮回复】${input.tutorLatestReply.substring(0, 500)}`
+    : '';
+
   const understandingSection = typeof input.understanding === 'number'
     ? `\n【理解度】${input.understanding}`
     : '';
@@ -202,7 +214,7 @@ function buildPeerUserPayload(input: PeerDiscussionInput) {
 【主题】${input.topic}
 【策略】${input.strategy}
 【策略要求】${getStrategyInstruction(input.strategy)}
-【学生认知层级】${input.cognitiveLevel || 'understand'}${understandingSection}${loadSection}${emotionSection}${contextSection}${peerHistorySection}${studentMessageSection}`;
+【学生认知层级】${input.cognitiveLevel || 'understand'}${understandingSection}${loadSection}${emotionSection}${contextSection}${tutorReplySection}${peerHistorySection}${studentMessageSection}`;
 }
 
 export function validatePeerParsedOutput(parsed: unknown) {
