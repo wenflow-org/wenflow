@@ -1,10 +1,13 @@
 # 管理后台页面模板规范（v1 草案）
 
 > 依据：`doc/ADMIN_UI_CONSISTENCY_AUDIT`（2026-09-15 全量审计，18 个导航页 / 约 4.26 万行 Vue / 5 组并行审查 + 逐条实测验证）。
+> **⚠ 该依据文件已不在仓库**（09-25 对账发现）；可追溯的实测记录见 `doc/re_test/admin-audit-2026-09-24.md` 与 `doc/ADMIN_PAGE_AUDIT.md`。
 > 本文档只定义**骨架与规则**，不含视觉换皮。目标是让"设计系统无法被绕过"。
 >
 > **校正记录（2026-09-19）**：本文档 §2 R1/R4/R5/R6、§3 T1 等处的"现存违规 / 现存量"清单写于收口之前，**部分条目已被后续阶段修复**，直接据此派活会出错。本次以磁盘代码为准做**只读核对 + 就地批注**（不删历史）：R4 自搓抽屉已全部收敛到 `.mk-drawer`；R6 三个幽灵类已补定义、页内新增 `mk-` 定义已清零；R1 双导航四页已修至 0（`VirtualLearners` 为登记例外）；R5 清单多数已合规或已修；T1 适用清单因导航收敛而过时。批注统一以 `> 状态（2026-09-19 校正）：…` 标注。
 > 另两处全局改名：`shared.css` → `src/styles/mk-primitives.css`；`FieldFlowGraph.vue` / `Topology.vue` 已删。下文旧行号若与现码不符，以批注中的现行 `file:line` 为准。
+>
+> **读法（2026-09-25 对账后补充）**：① 正文 §0-§8 与 §附 是**现行规范**；"阶段 1 续 / 第 N 批"各章是**历史执行日志**，其中的像素值是当日口径、不随后续归档更新——现行视觉口径唯一以 `doc/ADMIN_VISUAL_LAYER_SPEC.md`（v2）为准。② 批注里的 `file:line` 在 aa963345/bae7ee34 之后已普遍漂移 5-35 行，**引用时以类名/token 名为锚，不要抄行号**。③ 圆角/阴影/控件高的旧值（r14、shadow-sm、46px 等）凡与 v2 硬规则冲突处，一律以 v2 为准；文内未逐一回改。
 
 ---
 
@@ -13,8 +16,9 @@
 后台不缺设计系统，缺的是**设计系统被采用**。
 
 - **低层（token）**：`frontend/src/styles/main.css` 的 `--mk-*` —— 完整、可用。
-- **低层（原语）**：`shared.css`（1366 行）的 `mk-*` —— 完整、可用。
+- **低层（原语）**：`shared.css`（1366 行）的 `mk-*` —— 完整、可用。（09-25 注：已改名 mk-primitives.css，现约 1650 行。）
 - **中层（复合原语）**：分段控件 / 底部操作条 / 错误条 / 区块 / 实体头 —— **缺失**。
+  > 状态（2026-09-25 校正）：五件**均已落地**——`.mk-seg` / `.mk-batchbar` / `.mk-alert--row` / `.mk-section` / `.mk-entity`（见 mk-primitives.css）。本节是起草时的诊断，不再反映现状。
 - **高层（页面）**：每页自建私有体系（`.cp-*` 373 类 / `.ld-*` 190 类 / `.vp-*` 169 类 / `.ac-*` 75 类）。
 
 中层缺失 → 每页重造 → 同一动作多种形态 → 用户跨页重建预期。这就是"说不上来的不对劲"。
@@ -303,14 +307,14 @@
 |---|---|---|
 | `.mk-entity`（实体头） | `.ld-head`/`.ud-head`/`.vp-top`（3 份） | 高 |
 | `.mk-section`（区块：标题+结论+明细+折叠） | `.ld-*`/`.vp-*`/`.hc-*` 各自的区块 | 高 |
-| `.mk-state`（三态容器：loading/empty/error+retry） | 5 种加载 + 6 种错误 + 10+ 种空态 | 高 |
-| `.gr-toolbar` + `.gr-journey`（图形页工具条/概览条） | `.dfg-*`/`.ffg-*`/`.topo-*`/`.wf-*` | 中 |
+| `.mk-state`（三态容器：loading/empty/error+retry） | 5 种加载 + 6 种错误 + 10+ 种空态 | 高 |（09-25 注：**已裁定不补**——三态由 MkLoading/MkEmptyState/`.mk-alert` 分件承担，不做合一容器） |
+| `.gr-toolbar` + `.gr-journey`（图形页工具条/概览条） | `.dfg-*`/`.ffg-*`/`.topo-*`/`.wf-*` | 中 |（09-25 注：**已裁定不补**——图形页保留私有工具条，FieldFlowGraph/Topology 已删） |
 | `.mk-seg`（分段控件） | `.ac-seg` ≈ `.mk-pills` | 中 |
 | token 补档：**次级表面 / 细分割线 / 胶囊底** | 13 个硬编码 hex（`#eef2fa`/`#fafbfd`/`#edf0f6`/`#f8fafd`）的根因 | 高 |
 
 **并修复既有原语的两个缺陷**：
 - `.mk-status` 需拆清「结论条」与「筛选条」两种职责（R1）；
-- 「推挤式抽屉」规则从 `html.wf-drawer-open .msk` 迁到 `.mk-drawer`（R4）。
+- 「推挤式抽屉」规则从 `html.wf-drawer-open .msk` 迁到 `.mk-drawer`（R4）。（09-25 注：推挤模式已整体删除，无迁移对象，此条作废。）
 
 ---
 
@@ -365,6 +369,7 @@
 ### 已验证结论
 
 **A. 页头高度已统一。** 20 个页面的 `.mk-status` 实测高度**全部为 46px** → `shared.css:69` 的 `min-height:46` 修复生效。"页头高矮不齐"不是当前问题。
+> 状态（2026-09-25 校正）：现为 `min-height: 48px`（mk-primitives.css `.mk-status`；09-24 提到 48 以容纳操作钮）。
 
 **B. 三档宽度下均无内容被裁剪。** 19 页 × 1280/1440/1920：文档无横向溢出、无越界元素。
 唯一例外 `audit-logs` 在 1440 下 `.mk-card__head-right` 容器右缘超出视口 **30px**，但**放大 3 倍确认无任何可见内容被切**（尾部为空白）→ 潜在隐患，非缺陷。
@@ -498,7 +503,7 @@ ESLint 无法解析 `<style>` 块内的 CSS 声明，因此门禁实现为独立
 | `eslint` | ✓（1 个既有 warning：`live.ts:2014`，与本次无关） |
 | `vitest run` | ✓ **62 文件 / 421 测试全通过** |
 | `design:check` | ✓ |
-| 真机视觉复核（6 个改动页） | ✓ 零 console/page error；旧私有类残留 `0`；静止态 `padding:0`+muted、激活态 `2px 6px`+蓝底，与全局规范一致 |
+| 真机视觉复核（6 个改动页） | ✓ 零 console/page error；旧私有类残留 `0`；静止态 `padding:4px 6px`+负 margin、激活态蓝底 + `inset 0 0 0 1px` 描边（09-25 v2 口径） |
 
 ### 阶段 1 续 · R2 状态语义 + 断链修复 + 回归测试（同日第二批）
 
@@ -876,7 +881,7 @@ shared.css 76 → 4      main.css token 定义行不计入
   --flat                      无卡片（本身已有页面留白的详情页用）
   .mk-back                    返回行（复用既有原语，不由 entity 提供）
   .mk-entity__main            flex / align-center / gap 14
-    .mk-entity__avatar        46×46 r14 形状层（不含颜色）
+    .mk-entity__avatar        46×46 r12（`--mk-radius-xl`；09-25 圆角归档，原 r14 档已废）形状层（不含颜色）
       --user                  绿蓝渐变（原 .ud-avatar 值，已提升为 token）
       --learner               蓝紫渐变（原 .ld-avatar）
       --round                 圆形 + 内描边；**具体颜色由页面按名称哈希给**
@@ -898,7 +903,7 @@ shared.css 76 → 4      main.css token 定义行不计入
 
 | 页 | 实测 |
 |---|---|
-| 用户详情 | border 1px `--mk-line`（亮 rgb(230,235,244) / 暗 rgb(42,56,80)）、radius 12、bg `--mk-surface`（亮白/暗 rgb(23,32,47)）、头像 46×46 r14、名字 18px、副行 12px `--mk-faint`、操作右贴边（gap 19 = padding 18 + border 1） |
+| 用户详情 | border 1px `--mk-line`（亮 rgb(230,235,244) / 暗 rgb(42,56,80)）、radius 12、bg `--mk-surface`（亮白/暗 rgb(23,32,47)）、头像 46×46 r12（09-25 归档）、名字 18px、副行 12px `--mk-faint`、操作右贴边（gap 19 = padding 18 + border 1） |
 | 学习者画像 | 同上一组；**2560px 下 4K 档生效**：头像 54×54、名字 21px、副行 14px；3 个徽章在名字行内 |
 | 虚拟学习者 | `--flat` ✓（bg 透明 / border 0）、头像 46×46 **r50%**、**色板仍生效**（哈希取到 rgb(6,182,212)）、名字 20px、3 个操作右对齐 |
 
@@ -1048,13 +1053,13 @@ hex 随之 1114 → 1032（死规则里带的硬编码一并清掉）。真机�
 ### 阶段 1 续 ⑲ · 收尾四件（同日第二十批）
 
 #### ① EP 覆写的死活 —— **是活的**（查了再动，没删）
-`admin-theme.css` 里 ~50 条 `body.admin-route .el-*` 一度像是死重（redesign 里零 EP 组件）。查证：`body.admin-route` 由路由对**所有 `/admin/*`** 打上（`router/index.ts:357`），而 `admin-redesign/VirtualProfile.vue` 嵌了旧版 EP 面板 **`QuickLearnPanel`** → 覆写**确实生效**。
+`admin-theme.css` 里 ~50 条 `body.admin-route .el-*` 一度像是死重（redesign 里零 EP 组件）。查证：`body.admin-route` 由路由对**所有 `/admin/*`** 打上（router/index.ts 的 `usesAdminSurface` 判定，行号随编辑漂移），而 `admin-redesign/VirtualProfile.vue` 嵌了旧版 EP 面板 **`QuickLearnPanel`** → 覆写**确实生效**。
 **副产品**：那是 redesign 里**唯一**的 EP 孤岛（一处旧设计语言嵌在新页面里），记进「仍未动的」。
 
 #### ② `.mk-seg` 推广（第 2 处）
 `LearnerDetail` 的「42 天 / 90 天」分段控件原本是 `.ld-load__seg*`（还带着一份**重复定义**）→ 改走 `.mk-seg`。
 **真机核验**：2 项、激活态正确、明暗两态（激活底 `#fff` / `rgba(91,141,239,0.22)`，字号 12px）。
-已记的像素差异：容器圆角 9→10、gap 2→4、项内边距 4/10→6/12、字重 700→600、激活字色 blue→ink（属"统一密度 + seg 语义"）。
+已记的像素差异：容器圆角 9→10、gap 2→4、项内边距 4/10→6/12、字重 700→600、激活字色 blue→ink（属"统一密度 + seg 语义"）。（09-25 注：容器现为 `--mk-radius-xl`=12。）
 
 #### ③ 错误横幅统一：3 份私有 → `.mk-alert--row`
 原状：`Addons/.ac-error`、`ApiConfig/.ac-config-error`、`ExecLogs/.exec-error` 三份 flex 行（消息 + 重试），差异只在 padding/radius/按钮样式。原语 `.mk-alert` 只有 `display:block` 的条，**缺 flex 行与重试位**。补：
@@ -1067,7 +1072,7 @@ hex 随之 1114 → 1032（死规则里带的硬编码一并清掉）。真机�
 ```
 
 三处迁移；页面只保留**位置**（`ac-error` / `ac-config-error` 退化成 margin 一行）。
-**真机探针核验（明/暗）**：`flex` / `space-between` / gap 10 / 底 `#fef2f2`↔`rgba(248,113,113,0.14)` / 字 `#dc2626`↔`#f87171` / fs 12.5 / r8 / 按钮 `underline` + `inherit` 色 ✓。
+**真机探针核验（明/暗）**：`flex` / `space-between` / gap 10 / 底 `#fef2f2`↔`rgba(248,113,113,0.14)` / 字 `#dc2626`↔`#f87171` / fs 12.5 / r8 / 按钮 `underline` + `inherit` 色 ✓。（09-25 注：现行 `.mk-alert` 为 fs-body(14) / `--mk-radius-sm`(6)。）
 **已记的像素差异**：`ExecLogs` 那条原来是更"重"的样式（padding 12/16、r12、带红描边、暗色字 `#fca5a5`）→ 统一为标准条（暗色字改走 token 的 `#f87171`）。
 **未迁移**：`AdminConsole` 的三处错误面（整页错误卡 + 诊断折叠 + errorbar）形状不同，仍留页面私有。
 
@@ -1264,16 +1269,16 @@ hex 随之 1114 → 1032（死规则里带的硬编码一并清掉）。真机�
 
 ### 阶段 1 续 ㉗ · SessionCockpit 第 4 片（收尾）：旁栏卡片 → `.mk-card`（同日第二十八批）
 
-`.cp-aside-card` 与 `.mk-card` 是**逐字重复**的同一张卡（border/radius 12/background/shadow-sm），唯一差别是 `overflow: hidden` vs 原语的 `clip` —— 而原语注释已写明 `clip` 是刻意的（不产生滚动容器，卡内 sticky 表头才能吸顶）。
+`.cp-aside-card` 与 `.mk-card` 是**逐字重复**的同一张卡（border/radius 12/background/shadow-sm；09-25 注：`.mk-card` 现已 **0 阴影**，v2 "面=平"），唯一差别是 `overflow: hidden` vs 原语的 `clip` —— 而原语注释已写明 `clip` 是刻意的（不产生滚动容器，卡内 sticky 表头才能吸顶）。
 
 **卡头本来就是重复**：本页**别处早已在用** `.mk-card__head` + `.mk-card__title`（147 / 189 行「Path 内容」「Goal 对话」），只有旁栏另起了一套 `.cp-aside-card__head`。收敛后页内卡头语言一致。
 
 改动：模板 4 容器 + 4 卡头 + 4 标题；删 3 条私有规则（`.cp-aside-card` / `__head` / `__head h4`）。
 **顺带修孤儿块名**：块类没了就不该留 `cp-aside-card__body` / `__dot` → 改名 `cp-aside-body` / `cp-aside-dot`（BEM 子类不该指向已不存在的块）。
 
-**枚举增量**：① 卡头标题 12.5px/800 → 原语 `--mk-fs-14`(14.5px)/700（统一卡头节奏）；② 容器 `overflow` hidden → clip（旁栏卡内无 sticky，**无可见差异**）。
+**枚举增量**：① 卡头标题 12.5px/800 → 原语 `--mk-fs-body`(14px)/700（统一卡头节奏；09-25 注：`--mk-fs-14` 实为 14px，卡头标题走 fs-body）；② 容器 `overflow` hidden → clip（旁栏卡内无 sticky，**无可见差异**）。
 
-**真机核验**：`.cp-aside-card` 剩余 **0** 处；旁栏卡实测取到原语值（radius 12px、border `--mk-line`、surface 底、`overflow: clip`）；标题 14.5px/700；状态点仍为琥珀 `--mk-amber` ✓ 无页面错误 ✓；门禁 ✓（hex 931 未变）、`vue-tsc` 0、458 测试 ✓
+**真机核验**：`.cp-aside-card` 剩余 **0** 处；旁栏卡实测取到原语值（radius 12px、border `--mk-line`、surface 底、`overflow: clip`）；标题 14px/700（09-25 注：原记 14.5px 系旧档）；状态点仍为琥珀 `--mk-amber` ✓ 无页面错误 ✓；门禁 ✓（hex 931 未变）、`vue-tsc` 0、458 测试 ✓
 
 **有意不收敛**：`cp-trace-panel` / `cp-trace-list` / `cp-timeline` / `cp-transcript` / `cp-wrapup-*` 等**功能视图**保持页面私有 —— 这不是漏收敛，是这批类的正确定位（`.cp-trace-panel` 的折叠头虽然形式上像 `.mk-section__summary`，但其内容是采样视图，合并只会把页面私有细节塞进原语）。
 
@@ -1374,7 +1379,7 @@ hex 随之 1114 → 1032（死规则里带的硬编码一并清掉）。真机�
 
 ### 阶段 1 续 ㉜ · 收尾四件（同日第三十三批）
 
-1. **侧栏盖住遮罩 → 判定为刻意，不改**（㉚ 的"修法待定"到此有结论）：`--mk-z-sidebar: 220` > `--mk-z-drawer: 200` 是 token 里的**显式排序** —— 侧栏是常驻 chrome，推挤式抽屉模式下它本就要保持可交互。所以"点抽屉左边缘不关"不是缺陷而是设计；从待办移除。
+1. **侧栏盖住遮罩 → 判定为刻意，不改**（㉚ 的"修法待定"到此有结论）：`--mk-z-sidebar: 220` > `--mk-z-drawer: 200` 是 token 里的**显式排序** —— 侧栏是常驻 chrome，推挤式抽屉模式下它本就要保持可交互。所以"点抽屉左边缘不关"不是缺陷而是设计；从待办移除。（09-25 注：**本条前提已被㉝推翻**——推挤模式整体删除、`--mk-z-drawer` 提到 240 > 220；保留原文仅为留痕。）
 2. **`el-*` 残留 → 找到并修**：不是 EP popper，而是 **ExecLogs 里残留的幽灵类** `class="mk-pills el-tabs"`（EP 迁移留下的类名，正是 R6 要禁的）。已删；真机核到该页 `el-*` 元素 **0**。
    **更正**：之前说"token-cost / trace-waterfall 各 1 个"，实为**路由兜底**（那两个 slug 不存在 → 落到默认页 = ExecLogs）→ 本就是同一处。
 3. **`.mk-section` 结论推广**：给 `LearnerDetail`「预测校准」卡头加了结论常驻 —— 就地派生「卡壳 X% · 基调 Y% · n=Z」，原说明「非自报置信度」降级到 `title`，无样本时仍显示说明（座舱「预生成 Path」上一批已做）。
@@ -1456,7 +1461,7 @@ hex 随之 1114 → 1032（死规则里带的硬编码一并清掉）。真机�
 | canvas | `--mk-bg #f7f8fa`(55) vs v2 `#f3f6fb`(9) vs `--bg-body #F8F9FA` | 页面底色；暗色还差 `#0f1624`↔`#0f1620` |
 | surface | 亮色都是 `#fff`，**暗色不同**：`#17202f` vs `#182230` | 暗色模式 |
 | green / red / amber | `#15803d`/`#1e9e58`/`#31b16f`；`#dc2626`/`#ef7578`；`#b45309`/`#f4aa46` | admin vs 学习者，语义色三套 |
-| 半径 | mk `8/10/12/16` vs design-system `8/12/16` vs v2/uc 硬编码 `12/16/20` | 全站控件 |
+| 半径 | mk `8/10/12/16` vs design-system `8/12/16` vs v2/uc 硬编码 `12/16/20` | 全站控件 |（09-25 注：admin 侧已归档 4 档 xs4/sm6/xl12/modal16，见 VISUAL_LAYER_SPEC v2 §0.5；此表为全站对账快照，学习端未动） |
 | 阴影 | mk（sm/pop/drawer/modal） vs v2/uc 卡片 vs design-system（xs…2xl） vs 营销 | 4 套 elevation |
 
 - **门禁扩面的风险（逐条判定）**：规则 **1/2 可直接扩**（低风险）；规则 **3/7 需按面加棘轮基线**；规则 **4/5/6 不能扩** ✗（会误伤 —— v2/uc 合法地使用 `.chart__empty`/`.spinner`/自身 shimmer，且不 import `MkEmptyState`）；规则 8 只认 `--mk-*`，扩面需按面泛化命名空间。

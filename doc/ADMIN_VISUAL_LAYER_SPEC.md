@@ -2,9 +2,10 @@
 
 > 配套文档：`doc/ADMIN_PAGE_TEMPLATES.md`（骨架与规则，"不含视觉换皮"——本文补上它留白的那个层）。
 > 状态：v2 把 v1 的"数值"升格为"硬规则"——2026-09-25 复审结论：admin 丑的根源不是某个值不对，
-> 而是**没有一套被强制的语言**（活代码里圆角 15 档、控件高度 12 档、阴影各写各的、
-> token 只在纸面上存在——mk-primitives.css 里 32 处圆角硬编码、radius token 仅 3 处被引用）。
-> v2 已把原语层全部改写为引用 token（详见 git aa963345 之后的提交）。
+> 而是**没有一套被强制的语言**（v2 前的活代码：圆角 15 档、控件高度 12 档、阴影各写各的、
+> mk-primitives.css 里 32 处圆角硬编码而 radius token 仅 3 处被引用）。
+> v2 已把原语层全部改写为引用 token（bae7ee34）；09-25 二次复核清掉了原语层残存的
+> 档外值（`.mk-status` 阴影、26/30px 控件、skeleton radius-lg）。
 
 ## 0. 一句话语言
 
@@ -26,6 +27,8 @@
 | 特例 | 4K tier | ×1.15/×1.4 | 仅 `@media` 档位块内允许出现 14px 这类缩放值 |
 
 禁止 5/7/8/9/10/13/22/26px 等中间档（v1 存量里它们各被用了 12-66 处，已全部归档）。
+注意：`--mk-radius-md(8)/lg(10)` 是历史别名 token，为不波及学习端（design-system.css 的
+`--radius-*` 别名指向它们）仅保留定义，**admin 侧禁止引用**（`.mk-skeleton--block` 曾误用，已改 xl）。
 
 ### 阴影：只有三档，面永远是平的
 
@@ -106,6 +109,8 @@ CSS 变量，属于登记过的残留，改图表时顺手带 palette 统一）�
 | `.mk-status` 圆角 | 10 | **12** | 与卡片（12）同族 |
 
 规则：块间距只用 space-4 / space-5 两档；卡内元素间距用 space-2 / space-3。
+已登记例外：`.mk-page--fill`（表格页填满轨道布局）gap 12px——fill 轨道里卡与卡的
+呼吸感交给表格自身行高，16px 会挤压可视行数（mk-primitives.css `.mk-page--fill`）。
 
 ## 3. 透气（Density）
 
@@ -129,17 +134,19 @@ CSS 变量，属于登记过的残留，改图表时顺手带 palette 统一）�
 - 视觉层改动只允许发生在 token / 原语层；页面级 scoped style 只允许布局（grid/flex/定位）。
 - 数值迭代：改共享层 → 真机对比 → 全站生效；永不逐页追。
 
-## 6. 洼地收口状态（2026-09-21 更新）
+## 6. 洼地收口状态（2026-09-25 复核；数字为当日 grep 实测）
 
 | 批次 | 对象 | 状态 |
 |---|---|---|
-| 1 | SessionCockpit | ✅ 暗色海军块去蓝 + 亮色语义 token 化（133→70 hex，剩余为暗色强调/徽章语义色/JS 图表色） |
-| 2 | VirtualProfile / LearnerDetail | ✅ 同规则 token 化（99→79、36→24）；LearnerDetail 私写表格 ld-mt → mk-table |
+| 1 | SessionCockpit | ✅ 暗色海军块去蓝 + 亮色语义 token 化（133→78 hex，剩余为暗色强调/徽章语义色/JS 图表色） |
+| 2 | VirtualProfile / LearnerDetail | ✅ 同规则 token 化（99→70、36→24）；LearnerDetail 私写表格 ld-mt → mk-table |
 | 3 | 两代 KPI 组件 | ✅ 裁定：MkKpi（详情页瓦片）与 MkStatStrip（页头指标条）为两种布局用途，不做机械合并；MkKpi 硬编码边框/底已接 token |
-| 4 | Login | ✅ 核查：已用 37 处 var(--mk-*)，rgba 为品牌水彩，无需迁移；作为独立视觉页保留 |
-| 5 | Overview | 保留手作体系（视觉尚可，作为质感标尺）；684 行/99 处暂不动 |
+| 4 | Login | ✅ 核查（09-25 复核：24 处 var(--mk-*)）：rgba 为品牌水彩，无需迁移；作为独立视觉页保留 |
+| 5 | Overview | 保留手作体系（视觉尚可，作为质感标尺）；约 690 行 scoped / 99 处 hex 暂不动——**下一个收敛对象** |
 
 残留 hex 均为：暗色强调色（#7aa2ff 系）、徽章语义水彩、JS 图表配置色（ECharts 不解析 CSS 变量）。
+v2 起新增洼地面：**页面私写 shadow-sm 的非吸顶面板**（SessionCockpit / SkillDrawer / TraceWaterfall /
+DataFlowGraph 各 1 处）——按 §0.5"面=平"应随各自批次摘除；原语层已清零（`.mk-status` 曾带阴影，09-25 摘除）。
 
 ## 7. 内容宽度（Content width，2026-09-24 补）
 
@@ -151,6 +158,9 @@ CSS 变量，属于登记过的残留，改图表时顺手带 palette 统一）�
 | 表单 / 设置（含 tab 宿主下的多张设置卡） | 限宽 1200px 居中 | `.mk-card--narrow`（单卡）或 `.mk-narrow`（tab body 等容器） |
 | 弹窗 / 抽屉 | 按档位放大（`--mk-modal-w-*` / `--mk-drawer-w-*`） | 原语自带，页面不管 |
 
-实测依据：`.mk-page` 在 1440 下可用宽度 1216px，已低于 1200 限宽——**加限宽对 1440 无影响**，
-只在 ≥2560 起收敛（3840 叠加 zoom 1.3 后为 1560px，仍大于 1440 的 1184px，不出现"越大屏越窄"）。
-判据来自 `doc/re_test/admin-audit-2026-09-24.md` §2.4。
+实测依据（2026-09-25 复核口径）：1440 视口 − admin 侧栏 224px（Shell.vue ≥1440 档；注意
+design-system.css 的 `--sidebar-width: 240px` 是学习端壳的 token，**不是** admin 的侧栏宽）
+− `.mk-page` 左右 padding 16×2 = **卡宽 1184px**，已低于 1200 限宽——**加限宽对 1440 无影响**，
+只在 ≥2560 起收敛（3840 叠加 zoom 1.3 后内容区约 1560px，仍大于 1184px，不出现"越大屏越窄"）。
+判据来自 `doc/re_test/admin-audit-2026-09-24.md` §2.4（该文 1216/1184 两个数字分别指
+"未扣 padding 的内容区"与"实际卡宽"，本文统一用 1184 卡宽口径）。
