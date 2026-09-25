@@ -118,9 +118,16 @@
     </div>
 
     <div class="completion-actions">
-      <button type="button" class="completion-btn completion-btn--action completion-btn--default" :disabled="busy" @click="emit('action', 'continue-task')">继续练习</button>
-      <button type="button" class="completion-btn completion-btn--action completion-btn--default" :disabled="busy" @click="emit('action', 'end')"><span class="completion-icon" aria-hidden="true"><VideoPause /></span>返回学习路径</button>
-      <button type="button" class="completion-btn completion-btn--action completion-btn--primary" :disabled="busy" @click="emit('action', 'complete-task')"><span v-if="busy" class="spinner--sm completion-spinner" aria-hidden="true"></span>完成任务</button>
+      <!-- 三个动作的后果写清楚：用户反馈「又是继续、又是返回、又是完成，不知道什么意思」 -->
+      <p class="completion-actions__hint">完成任务计入路径进度；继续练习再开一轮课、不推进任务；返回则暂不决定。</p>
+      <div class="completion-actions__row">
+        <button type="button" class="completion-btn completion-btn--action completion-btn--default" :disabled="busy" @click="emit('action', 'continue-task')"><span class="completion-icon" aria-hidden="true"><VideoPlay /></span>继续练习</button>
+        <button type="button" class="completion-btn completion-btn--action completion-btn--link" :disabled="busy" @click="emit('action', 'end')"><span class="completion-icon" aria-hidden="true"><ArrowLeft /></span>返回学习路径</button>
+        <button type="button" class="completion-btn completion-btn--action completion-btn--primary" :disabled="busy" @click="emit('action', 'complete-task')">
+          <span v-if="busy" class="spinner--sm completion-spinner" aria-hidden="true"></span>
+          <span v-else class="completion-icon" aria-hidden="true"><CircleCheckFilled /></span>完成任务
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -131,7 +138,8 @@ import { computed, h, onMounted, onUnmounted, reactive, watch } from 'vue';
    数据来自本地常量（静态可信标记，不经用户输入）。 */
 const ICONS: Record<string, string> = {
   CircleCheckFilled: `<circle cx="10" cy="10" r="8.2" fill="currentColor"/><path d="M6.1 10.4l2.6 2.6 5.2-5.4" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>`,
-  VideoPause: `<rect x="4.8" y="3.8" width="3.6" height="12.4" rx="1.3"/><rect x="11.6" y="3.8" width="3.6" height="12.4" rx="1.3"/>`,
+  VideoPlay: `<path d="M7.4 4.4l7.6 5.6-7.6 5.6z" fill="currentColor"/>`,
+  ArrowLeft: `<path d="M11.4 3.6L4.6 10l6.8 6.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.6 10h11.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>`,
   Compass: `<circle cx="10" cy="10" r="7.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M13.3 6.7l-1.9 4.7-4.7 1.9 1.9-4.7z" fill="currentColor"/>`,
   Document: `<path d="M6.1 2.6h5L15.3 6.8v10.6H6.1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M11 2.8v4.2h4.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>`,
   Collection: `<rect x="3" y="4.4" width="3.2" height="11.2" rx="1"/><rect x="8.4" y="4.4" width="3.2" height="11.2" rx="1"/><rect x="13.8" y="4.4" width="3.2" height="11.2" rx="1"/>`,
@@ -150,7 +158,8 @@ const DataAnalysis = icon('DataAnalysis');
 const TrendCharts = icon('TrendCharts');
 const Collection = icon('Collection');
 const Compass = icon('Compass');
-const VideoPause = icon('VideoPause');
+const VideoPlay = icon('VideoPlay');
+const ArrowLeft = icon('ArrowLeft');
 import MarkdownRenderer from './MarkdownRenderer.vue';
 import type { ReplanAdvisory, WrapupArtifact } from '@/api/aiTeaching';
 
@@ -391,7 +400,9 @@ const tagClass = (type: string) => ({
 .ordered-list li:last-child { margin-bottom: 0; }
 .evaluation-block { display: grid; gap: 8px; }
 .evaluation-line { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink, #37474f); }
-.completion-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.completion-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.completion-actions__hint { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted, #7a8599); text-align: right; }
+.completion-actions__row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 
 /* 状态标签：以 .status-tag 原语为基，尺寸对齐旧 el-tag small（色 token 不变）。
    flex/nowrap 是必需的：标签挂在 .knowledge-head（space-between）里，默认可收缩，
@@ -408,6 +419,10 @@ const tagClass = (type: string) => ({
 /* 底部动作按钮此前走 el-button 默认型（灰色文字），非 --default 型；对齐其视觉 */
 .completion-btn--action.completion-btn--default { color: var(--muted, #5b6577); }
 .completion-btn--default:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--color-primary); color: var(--color-primary); }
+/* 第三级动作（返回）：与「完成任务」同域但不同权重，做成无描边文字钮，
+   避免三个按钮一样重、用户分不清主次（2026-09-25 反馈「又是继续又是返回又是完成」） */
+.completion-btn--link { background: none; border-color: transparent; color: var(--muted, #5b6577); }
+.completion-btn--link:hover:not(:disabled) { background: var(--bg-hover); border-color: transparent; color: var(--color-primary); }
 .completion-btn--primary { background: var(--color-primary); border-color: var(--color-primary); color: var(--text-on-primary); font-weight: var(--font-medium); box-shadow: 0 14px 28px color-mix(in srgb, var(--color-primary) 24%, transparent); }
 .completion-btn--primary:hover:not(:disabled) { background: var(--color-primary-dark); border-color: var(--color-primary-dark); color: var(--text-on-primary); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 .completion-btn--primary:active:not(:disabled) { transform: translateY(0); }
@@ -424,6 +439,21 @@ const tagClass = (type: string) => ({
   .completion-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .completion-actions__hint {
+    text-align: left;
+  }
+
+  /* 动作区窄屏：两个次级动作并排半宽，主动作（完成任务）通栏沉底、落在拇指热区 */
+  .completion-actions__row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .completion-actions__row .completion-btn--primary {
+    grid-column: 1 / -1;
   }
 
   .completion-actions .completion-btn,

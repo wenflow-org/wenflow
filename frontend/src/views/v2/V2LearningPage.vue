@@ -845,11 +845,18 @@ async function boot() {
     if (task) {
       taskTitle.value = task?.title || task?.displayLabel || '';
       pathName.value = task?.pathTitle || task?.learningPathTitle || task?.learningPath?.title || '';
-      pathId.value = task?.learningPathId || task?.pathId || task?.learningPath?.id || '';
     }
+    /* pathId 取任务负载，query 兜底：任务负载偶发不带 learningPathId（旧路径/直进场），
+       此时入口若带 ?pathId= （学习台 CTA）就靠它把「评估页 → 返回学习路径」接回详情页 */
+    pathId.value = (route.query.pathId as string) || task?.learningPathId || task?.pathId || task?.learningPath?.id || '';
     if (s.mode === 'completed') {
       // P3：服务端已把上次「完成并结算」补结算完成（该任务已完成），直接进入学习反馈，不再新建课堂
-      router.replace({ name: 'LearningEvaluationPage', params: { taskId, sessionId: s.sessionId } });
+      // pathId 透传不断：少了它，评估页的「返回学习路径」只能退回列表页（2026-09-25）
+      router.replace({
+        name: 'LearningEvaluationPage',
+        params: { taskId, sessionId: s.sessionId },
+        query: pathId.value ? { pathId: pathId.value } : {},
+      });
       return;
     }
     session.value = { sessionId: s.sessionId, revision: s.revision ?? 0 };

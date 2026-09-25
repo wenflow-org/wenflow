@@ -838,7 +838,11 @@ const skillActions = computed<SkillAction[]>(() => {
   const resolve = (to?: string): string => {
     switch (to) {
       case 'continue-learning':
-        return todayTask.value?.id ? `/learn/${todayTask.value.id}` : (primaryPath.value ? `/learning-path/${primaryPath.value.id}` : '/learning-paths');
+        // 与 goLearn 同口径带 pathId：评估页「返回学习路径」据此回详情页（2026-09-25）
+        if (todayTask.value?.id) {
+          return primaryPath.value ? `/learn/${todayTask.value.id}?pathId=${primaryPath.value.id}` : `/learn/${todayTask.value.id}`;
+        }
+        return primaryPath.value ? `/learning-path/${primaryPath.value.id}` : '/learning-paths';
       case 'learning-state':
         return '/learning-state';
       case 'achievements':
@@ -883,8 +887,12 @@ const actionDesc = computed(() => {
   return desc;
 });
 
+/* 带上 pathId 进课堂：评估页的「返回学习路径」靠它回详情页（缺省只能回列表），
+   上课页也会把它透传到评估 URL（2026-09-25 断链修复） */
 function goLearn() {
-  if (todayTask.value?.id) router.push(`/learn/${todayTask.value.id}`);
+  if (!todayTask.value?.id) return;
+  const pathId = primaryPath.value?.id;
+  router.push(pathId ? { path: `/learn/${todayTask.value.id}`, query: { pathId } } : `/learn/${todayTask.value.id}`);
 }
 
 /* ================= 提示条（skill: adaptive-guidance-copy 回填 + 分级） ================= */

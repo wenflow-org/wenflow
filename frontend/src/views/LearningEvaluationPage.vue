@@ -6,11 +6,28 @@
           <h1>当前任务学习反馈</h1>
           <AiContentNote class="evaluation-head__ai-note" />
         </div>
+        <!-- 窄屏收进 ⋮ 子菜单：三个并排按钮在 390px 下把头部撑到 154px 且换行凌乱（2026-09-25） -->
         <div class="evaluation-head__actions">
           <button type="button" class="btn-ghost" :disabled="exportingImage" @click="exportImage">{{ exportingImage ? '导出中…' : '导出图片' }}</button>
           <button type="button" class="btn-ghost" @click="exportPdf">打印或另存为 PDF</button>
           <button type="button" class="btn-primary" @click="() => goBackToPath()">返回学习路径</button>
         </div>
+        <span class="evaluation-head__more-wrap">
+          <button
+            type="button"
+            class="evaluation-head__more"
+            title="更多操作"
+            :aria-expanded="headMenuOpen"
+            @click="headMenuOpen = !headMenuOpen"
+          >⋯</button>
+          <Transition name="pop">
+            <div v-if="headMenuOpen" class="evaluation-head__pop">
+              <button type="button" class="evaluation-head__pop-item" :disabled="exportingImage" @click="pickHeadMenu('image')">{{ exportingImage ? '导出中…' : '导出图片' }}</button>
+              <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('pdf')">打印或另存为 PDF</button>
+              <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('back')">返回学习路径</button>
+            </div>
+          </Transition>
+        </span>
       </header>
 
       <section v-if="loading" class="evaluation-loading">
@@ -556,14 +573,30 @@ const exportPdf = async () => {
   if (collapsedForExport) transcriptExpanded.value = false;
 };
 
+/* ── 头部 ⋮ 子菜单（窄屏专用；桌面仍并排按钮） ── */
+const headMenuOpen = ref(false);
+function pickHeadMenu(kind: 'image' | 'pdf' | 'back') {
+  headMenuOpen.value = false;
+  if (kind === 'image') void exportImage();
+  else if (kind === 'pdf') void exportPdf();
+  else goBackToPath();
+}
+function onHeadMenuOutside(e: MouseEvent) {
+  if (!headMenuOpen.value) return;
+  const wrap = (e.target as HTMLElement | null)?.closest?.('.evaluation-head__more-wrap');
+  if (!wrap) headMenuOpen.value = false;
+}
+
 onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange);
+  document.addEventListener('click', onHeadMenuOutside);
   void fetchEvaluation();
 });
 onUnmounted(() => {
   componentUnmounted = true;
   stopPolling();
   document.removeEventListener('visibilitychange', handleVisibilityChange);
+  document.removeEventListener('click', onHeadMenuOutside);
 });
 </script>
 
@@ -642,6 +675,75 @@ onUnmounted(() => {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+}
+/* ⋮ 子菜单：仅窄屏启用（≤640 显示），桌面由 .evaluation-head__actions 并排承担 */
+.evaluation-head__more-wrap {
+  position: relative;
+  display: none;
+  flex-shrink: 0;
+}
+.evaluation-head__more {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-md);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0 2px;
+}
+.evaluation-head__more:hover {
+  color: var(--blue-deep);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.evaluation-head__pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 156px;
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 14px 34px rgba(23, 32, 51, 0.14);
+}
+.evaluation-head__pop-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.evaluation-head__pop-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--blue-deep);
+}
+.evaluation-head__pop-item:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+.pop-enter-active,
+.pop-leave-active {
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.pop-enter-from,
+.pop-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .evaluation-head__ai-note {
@@ -1100,32 +1202,6 @@ onUnmounted(() => {
     margin-top: 3px;
   }
 
-  .evaluation-head__actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    width: 100%;
-  }
-
-  /* 两枚次级按钮同行并分（窄到放不下才整体换行），主按钮整行；nowrap 让放不下的按钮
-     整体换行，而不是把「打印或另存为 PDF」压进 32px 高度里折行溢出。
-     flex-basis 用 auto 而非 50%：百分比基值在 320 下取整后正好卡满一行，反而把它们挤成两行 */
-  .evaluation-head__actions :deep(.btn-ghost),
-  .evaluation-head__actions :deep(.btn-primary) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 1 1 auto;
-    height: 32px;
-    padding: 0 12px;
-    font-size: 12.5px;
-    white-space: nowrap;
-  }
-
-  .evaluation-head__actions :deep(.btn-primary) {
-    flex-basis: 100%;
-  }
-
   .evaluation-shell :deep(.completion-summary) {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1136,6 +1212,24 @@ onUnmounted(() => {
 }
 
 @media (max-width: 640px) {
+  /* 头部动作收进 ⋮ 子菜单：390 下三枚按钮换行堆叠，把头部撑到 154px 且主次不清；
+     桌面（>640）仍是并排按钮，行为不变（2026-09-25 用户反馈） */
+  .evaluation-head__actions {
+    display: none;
+  }
+
+  .evaluation-head__more-wrap {
+    display: inline-flex;
+  }
+
+  /* ⋮ 拉回标题行：≤1100 块把头部改成纵向堆叠，窄屏改回一行（标题 + ⋮）更紧凑 */
+  .evaluation-head {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
   .evaluation-transcript-item {
     max-width: 100%;
     padding: 14px 14px;
@@ -1164,6 +1258,10 @@ onUnmounted(() => {
   }
 
   .evaluation-head__actions {
+    display: none;
+  }
+
+  .evaluation-head__more-wrap {
     display: none;
   }
 

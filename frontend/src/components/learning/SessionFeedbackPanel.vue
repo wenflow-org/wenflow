@@ -13,24 +13,31 @@
     <template v-else>
       <fieldset class="session-feedback__field">
         <legend>总体评分</legend>
-        <div class="rating-options" role="radiogroup" aria-label="总体评分">
+        <!-- 滑动打星：原 5 个带文字标签的选项在窄屏是 2 列 3 行 ≈124px；星轨一行 ≈40px，
+             选中后把文字标签跟在星轨右侧，信息不丢（2026-09-25 用户建议） -->
+        <div class="rating-stars" role="radiogroup" aria-label="总体评分" @mouseleave="hoverRating = 0">
           <button
             v-for="score in 5"
             :key="score"
             type="button"
             role="radio"
             :aria-checked="rating === score"
-            :class="['rating-option', { 'is-active': rating === score }]"
+            :aria-label="`${score} 星 · ${ratingLabels[score - 1]}`"
+            :class="['rating-star', { 'is-on': score <= (hoverRating || rating) }]"
             @click="rating = score"
+            @mouseenter="hoverRating = score"
           >
-            <span aria-hidden="true">{{ score }}</span>
-            <span>{{ ratingLabels[score - 1] }}</span>
+            <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+              <path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.5l-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z" fill="currentColor" />
+            </svg>
           </button>
+          <span class="rating-stars__label" :class="{ 'is-placeholder': !(hoverRating || rating) }">{{ (hoverRating || rating) ? ratingLabels[(hoverRating || rating) - 1] : '点星评分' }}</span>
         </div>
       </fieldset>
 
       <fieldset class="session-feedback__field">
         <legend>难度感受</legend>
+        <!-- 三段等分紧凑控件：原胶囊行在窄屏会折行，等宽三段一行放下 -->
         <div class="fit-options" role="radiogroup" aria-label="难度感受">
           <button
             v-for="option in difficultyOptions"
@@ -119,6 +126,8 @@ const emit = defineEmits<{
 }>()
 
 const rating = ref(0)
+/** 星轨悬停预览（0 = 无悬停，显示已选值） */
+const hoverRating = ref(0)
 const difficultyFit = ref<DifficultyFit | null>(null)
 const reasonCodes = ref<string[]>([])
 const comment = ref('')
@@ -285,17 +294,67 @@ onMounted(load)
   font-weight: 700;
 }
 
-.rating-options,
+/* 星轨（总体评分）：一行 5 星 + 当前档位文字；星形用 currentColor，
+   点亮态走 --color-warning，触达区 40px 高于 32px 下限 */
+.rating-stars {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.rating-star {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mk-radius-md, 10px);
+  background: none;
+  color: var(--border-default, #dce4ef);
+  cursor: pointer;
+  transition: color 140ms ease, transform 140ms ease, background 140ms ease;
+}
+
+.rating-star:hover {
+  background: color-mix(in srgb, var(--color-primary, #3478f6) 6%, transparent);
+}
+
+.rating-star.is-on {
+  color: var(--color-warning, #f4aa46);
+}
+
+.rating-star:active {
+  transform: scale(0.92);
+}
+
+.rating-star:focus-visible {
+  outline: 2px solid var(--color-primary, #3478f6);
+  outline-offset: 1px;
+}
+
+.rating-stars__label {
+  margin-left: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-warning-deep, #b45309);
+  min-width: 60px;
+}
+
+.rating-stars__label.is-placeholder {
+  color: var(--text-tertiary, #7a8599);
+  font-weight: 600;
+}
+
 .fit-options,
 .reason-options {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.rating-option,
-.fit-option,
-.reason-option {
+.fit-option {
   min-height: 40px;
   padding: 8px 14px;
   /* v2 的按钮 reset（.v2-page button:where(...) { font: inherit }，0-1-1）会把这几个
@@ -303,35 +362,15 @@ onMounted(load)
      是 15/12px，同一组选项两个字号。显式声明后两组都落在 13px（与 legend 13px 同级） */
   font-size: 13px;
   border: 1px solid var(--border-default, #dce4ef);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-lg, 999px);
   background: transparent;
   color: var(--text-secondary, #52657c);
   cursor: pointer;
   transition: border-color 180ms ease, background 180ms ease, color 180ms ease, transform 180ms ease;
 }
 
-.rating-option {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 96px;
-}
-
-.rating-option span:first-child {
-  color: var(--text-primary, #172033);
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.rating-option span:last-child {
-  font-size: 13px;
-}
-
-.rating-option:hover,
 .fit-option:hover,
 .reason-option:hover,
-.rating-option.is-active,
 .fit-option.is-active,
 .reason-option.is-active {
   border-color: var(--color-primary, #3478f6);
@@ -339,10 +378,23 @@ onMounted(load)
   color: var(--color-primary-dark, #1f57cc);
 }
 
-.rating-option:active,
 .fit-option:active,
 .reason-option:active {
   transform: translateY(1px);
+}
+
+/* 多选标签（主要问题）：与 fit-option 同底盘，3 列等宽 */
+.reason-option {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid var(--border-default, #dce4ef);
+  border-radius: var(--mk-radius-lg, 999px);
+  background: transparent;
+  color: var(--text-secondary, #52657c);
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease, transform 180ms ease;
 }
 
 .session-feedback__details {
@@ -508,11 +560,26 @@ onMounted(load)
     margin-bottom: 8px;
   }
 
-  .rating-option,
   .fit-option,
   .reason-option {
     min-height: 36px;
     padding: 6px 12px;
+  }
+
+  /* 星轨窄屏收一档：5×36 + 4×2 ≈188px，加右侧档位文字仍在 328px 内 */
+  .rating-star {
+    width: 36px;
+    height: 36px;
+  }
+
+  .rating-star svg {
+    width: 23px;
+    height: 23px;
+  }
+
+  .rating-stars__label {
+    min-width: 52px;
+    font-size: 12.5px;
   }
 
   .session-feedback__head,
@@ -523,15 +590,6 @@ onMounted(load)
 
   .session-feedback__actions {
     margin-top: 14px;
-  }
-
-  .rating-options {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .rating-option {
-    width: 100%;
   }
 
   .session-feedback__actions .feedback-btn {
