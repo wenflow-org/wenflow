@@ -438,7 +438,7 @@ function groupBadgeTitle(title: string): string {
   min-height: 0;
   overflow: hidden;
   background: var(--mk-bg, #f7f8fa);
-  color: #1a2a44;
+  color: var(--mk-ink);
   font-size: var(--mk-fs-body);
 }
 
@@ -446,8 +446,8 @@ function groupBadgeTitle(title: string): string {
 .mshell__side {
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border-right: 1px solid #e1e8f2;
+  background: var(--mk-side-bg);
+  border-right: 1px solid var(--mk-side-line);
   padding: 14px 10px 10px;
   gap: 14px;
   /* 高于抽屉遮罩(200)：抽屉打开时侧栏仍可点击，
@@ -483,7 +483,7 @@ function groupBadgeTitle(title: string): string {
   margin-bottom: 2px;
 }
 /* 置顶入口比组内子项略收高度：驾驶舱入口不再显高（用户反馈 2026-09-05） */
-.mshell__pinned .mshell__item { font-weight: 600; padding-top: 6px; padding-bottom: 6px; color: #42506a; }
+.mshell__pinned .mshell__item { font-weight: 600; padding-top: 6px; padding-bottom: 6px; color: var(--mk-side-item-fg); }
 .mshell__group { display: grid; gap: 1px; }
 /* 组头（可点击折叠）：组图标 + 组名 + 聚合徽章 + 箭头 */
 .mshell__group-head {
@@ -499,7 +499,7 @@ function groupBadgeTitle(title: string): string {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.03em;
-  color: #8593a8;
+  color: var(--mk-faint);
   cursor: pointer;
   border-radius: var(--mk-radius-sm);
   transition: color 0.12s ease, background 0.12s ease;
@@ -519,7 +519,7 @@ function groupBadgeTitle(title: string): string {
 .mshell__group-badge {
   padding: 0 6px;
   border-radius: 999px;
-  background: #eef2fa;
+  background: var(--mk-side-inset);
   color: var(--mk-faint);
   font-size: var(--mk-fs-micro);
   font-weight: 800;
@@ -527,7 +527,7 @@ function groupBadgeTitle(title: string): string {
   line-height: 16px;
 }
 .mshell__group-badge--alarm {
-  background: #fee2e2;
+  background: var(--mk-red-bg-strong);
   color: #b91c1c;
   animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
 }
@@ -565,12 +565,12 @@ function groupBadgeTitle(title: string): string {
   /* 选中/悬底内缩 8px：不贴侧栏左右缘，选中态从「通铺大蓝条」变成贴内容的胶囊 */
   margin: 0 8px;
 }
-.mshell__item:hover { background: #f6f9ff; color: #1a2a44; }
+.mshell__item:hover { background: var(--mk-side-hover); color: var(--mk-ink); }
 /* 点击导航后不残留聚焦描边环（选中态由 --active 底色+左条表达）；键盘 Tab 仍有可见环 */
 .mshell__item:focus { outline: none; }
 .mshell__item:focus-visible { outline: 2px solid var(--mk-blue, #2c63d0); outline-offset: -2px; }
 .mshell__item--active {
-  background: #eef5ff;
+  background: var(--mk-hover-surface);
   color: var(--mk-accent-deep, #1f57cc);
   box-shadow: inset 3px 0 0 var(--mk-blue, #2c63d0);
 }
@@ -582,27 +582,27 @@ function groupBadgeTitle(title: string): string {
   align-items: center;
   justify-content: center;
   border-radius: var(--mk-radius-sm);
-  background: #eef2fa;
-  color: #5b6577;
+  background: var(--mk-side-inset);
+  color: var(--mk-muted);
   font-size: var(--mk-fs-body);
   font-weight: 800;
   flex-shrink: 0;
   transition: background 0.12s ease, color 0.12s ease;
 }
-.mshell__item--active .mshell__item-glyph { background: #dbe9ff; color: var(--mk-accent-deep, #1f57cc); }
+.mshell__item--active .mshell__item-glyph { background: var(--mk-blue-bg-strong); color: var(--mk-accent-deep, #1f57cc); }
 /* 子项角标紧跟标签（不右推）：短标签 + 右对齐计数会在行中间拉出一条空洞 */
 .mshell__item-badge {
   padding: 1px 7px;
   border-radius: 999px;
-  background: #eef2fa;
+  background: var(--mk-side-inset);
   color: var(--mk-faint);
   font-size: var(--mk-fs-micro);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
-.mshell__item--active .mshell__item-badge { background: #dbe9ff; color: var(--mk-accent-deep, #1f57cc); }
+.mshell__item--active .mshell__item-badge { background: var(--mk-blue-bg-strong); color: var(--mk-accent-deep, #1f57cc); }
 .mshell__item-badge--alarm {
-  background: #fee2e2;
+  background: var(--mk-red-bg-strong);
   color: #b91c1c;
   animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
 }
@@ -616,7 +616,7 @@ function groupBadgeTitle(title: string): string {
   display: grid;
   gap: 8px;
   padding: 10px 10px 8px;
-  border-top: 1px solid #eef2fa;
+  border-top: 1px solid var(--mk-side-inset);
   flex-shrink: 0;
 }
 /* 工具行：刷新 / 这是什么 / 密度 / 主题，一行 icon 按钮（title 兜底语义，节省纵向空间） */
@@ -635,11 +635,11 @@ function groupBadgeTitle(title: string): string {
   border: 0;
   border-radius: var(--mk-radius-sm);
   background: transparent;
-  color: #8a97ab;
+  color: var(--mk-faint);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.mshell__tool:hover { background: #eef2fa; color: var(--mk-blue, #2c63d0); }
+.mshell__tool:hover { background: var(--mk-side-hover); color: var(--mk-blue, #2c63d0); }
 .mshell__tool:disabled { opacity: 0.45; cursor: default; }
 .mshell__tool-icon { font-size: var(--mk-fs-body); line-height: 1; display: inline-flex; }
 .mshell__tool-icon svg { width: 15px; height: 15px; display: block; }
@@ -654,7 +654,7 @@ function groupBadgeTitle(title: string): string {
   align-items: center;
   gap: 8px;
   padding: 6px 6px 6px 2px;
-  border-top: 1px solid #f2f5fb;
+  border-top: 1px solid var(--mk-side-line);
 }
 .mshell__user-avatar {
   display: inline-flex;
@@ -663,7 +663,7 @@ function groupBadgeTitle(title: string): string {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #dbe9ff;
+  background: var(--mk-blue-bg-strong);
   color: var(--mk-accent-deep, #1f57cc);
   font-size: var(--mk-fs-micro);
   font-weight: 800;
@@ -750,7 +750,7 @@ function groupBadgeTitle(title: string): string {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2b2d; }
+html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color: var(--mk-line); }
 
 /* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半） */
 @media (min-width: 1440px) {
@@ -908,35 +908,35 @@ html[data-theme='dark'] {
   .mshell { background: var(--mk-bg); color: var(--mk-ink); }
   /* 侧栏夹在 bg 与 surface 之间（bg < side < card < 表头条带）。原 #19191a 距 bg 仅 5 级，
      卡片抬到 #202124 后侧栏反而比内容更"浅"，主次颠倒。 */
-  .mshell__side { background: #1b1c1f; border-right-color: #36373c; }
+  .mshell__side { background: var(--mk-side-bg); border-right-color: var(--mk-side-line); }
   .mshell__pinned { border-bottom-color: #36373c; }
   .mshell__group-head { color: #808389; }
-  .mshell__group-head:hover { color: #7aa2ff; background: rgba(120, 140, 170, 0.08); }
-  .mshell__group-head--active { color: #7aa2ff; }
+  .mshell__group-head:hover { color: var(--mk-accent-deep); background: rgba(120, 140, 170, 0.08); }
+  .mshell__group-head--active { color: var(--mk-accent-deep); }
   .mshell__group-icon { color: #7a7e85; }
   .mshell__group-head:hover .mshell__group-icon,
-  .mshell__group-head--active .mshell__group-icon { color: #7aa2ff; }
-  .mshell__group-badge { background: #232325; color: var(--mk-muted, #afb1b6); }
+  .mshell__group-head--active .mshell__group-icon { color: var(--mk-accent-deep); }
+  .mshell__group-badge { background: var(--mk-side-inset); color: var(--mk-muted, #afb1b6); }
   .mshell__group-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
   .mshell__item-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
-  .mshell__item { color: #bdbec2; }
-  .mshell__item:hover { background: #252627; color: #efeff0; }
-  .mshell__item--active { background: rgba(91, 141, 239, 0.1); color: #7aa2ff; box-shadow: inset 3px 0 0 var(--mk-blue); }
-  .mshell__item-glyph { background: #232325; color: #afb1b6; }
-  .mshell__item--active .mshell__item-glyph { background: rgba(91, 141, 239, 0.22); color: #7aa2ff; }
-  .mshell__item-badge { background: #232325; color: #7a7e85; }
-  .mshell__item--active .mshell__item-badge { background: rgba(91, 141, 239, 0.22); color: #7aa2ff; }
-  .mshell__foot { border-top-color: #252627; }
+  .mshell__item { color: var(--mk-side-item-fg); }
+  .mshell__item:hover { background: var(--mk-side-hover); color: var(--mk-ink); }
+  .mshell__item--active { background: rgba(91, 141, 239, 0.1); color: var(--mk-accent-deep); box-shadow: inset 3px 0 0 var(--mk-blue); }
+  .mshell__item-glyph { background: var(--mk-side-inset); color: var(--mk-muted); }
+  .mshell__item--active .mshell__item-glyph { background: rgba(91, 141, 239, 0.22); color: var(--mk-accent-deep); }
+  .mshell__item-badge { background: var(--mk-side-inset); color: var(--mk-faint); }
+  .mshell__item--active .mshell__item-badge { background: rgba(91, 141, 239, 0.22); color: var(--mk-accent-deep); }
+  .mshell__foot { border-top-color: var(--mk-side-hover); }
   .mshell__foot-name { color: #a5a7ac; }
   .mshell__foot-ver { color: #8a8d93; }
-  .mshell__collapse { background: #19191a; border-color: #2a2b2d; color: #afb1b6; }
-  .mshell__collapse:hover { color: #7aa2ff; border-color: rgba(91, 141, 239, 0.4); }
+  .mshell__collapse { background: var(--mk-bg); border-color: var(--mk-line); color: var(--mk-muted); }
+  .mshell__collapse:hover { color: var(--mk-accent-deep); border-color: rgba(91, 141, 239, 0.4); }
   .mshell__tool { color: var(--mk-muted, #afb1b6); }
-  .mshell__tool:hover { background: #252627; color: #7aa2ff; }
-  .mshell__user { border-top-color: #252627; }
-  .mshell__user-avatar { background: #232325; color: #7aa2ff; }
+  .mshell__tool:hover { background: var(--mk-side-hover); color: var(--mk-accent-deep); }
+  .mshell__user { border-top-color: var(--mk-side-hover); }
+  .mshell__user-avatar { background: var(--mk-side-inset); color: var(--mk-accent-deep); }
   .mshell__user-name { color: #efeff0; }
   .mshell__logout { color: var(--mk-muted, #afb1b6); }
-  .mshell__logout:hover { background: rgba(220, 38, 38, 0.14); color: #f87171; }
+  .mshell__logout:hover { background: rgba(220, 38, 38, 0.14); color: var(--mk-red); }
 }
 </style>

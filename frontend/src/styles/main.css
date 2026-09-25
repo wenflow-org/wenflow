@@ -147,6 +147,13 @@
   --mk-overlay-btn-hover-bg: #f7f9fc;
   --mk-overlay-btn-hover-line: #9eb2cf;
   --mk-surface-deep: #1c1e23;         /* 深一档面板（仅暗色段使用，明暗同值） */
+  /* ---- 壳层（Shell 侧栏/面包屑）专用档 ---- */
+  --mk-side-bg: #ffffff;              /* 侧栏底 */
+  --mk-side-line: #e1e8f2;            /* 侧栏右缘线（比 --mk-line 深半档，压住内容区） */
+  --mk-side-item-fg: #42506a;         /* 侧栏项文字 */
+  --mk-side-inset: #eef2fa;           /* 侧栏内嵌面：badge/glyph/分组底 */
+  --mk-side-hover: #f6f9ff;           /* 侧栏悬停面 */
+  --mk-red-bg-strong: #fee2e2;        /* 告警徽章底（比 --mk-red-bg 深一档） */
   --mk-graph-pipe-bg: none;           /* 图形页流水线画布底：亮色无底，暗色给纵向渐变 */
   /* 实体头头像的品牌渐变（明暗同值，沿用既有表现） */
   --mk-entity-avatar-user-from: #31b16f;
@@ -431,6 +438,13 @@ html[data-theme='dark'] {
   --mk-overlay-btn-fg: #efeff0;
   --mk-overlay-btn-hover-bg: #2a2b2d;
   --mk-overlay-btn-hover-line: #434447;
+  /* 壳层专用档（暗色；与 :root 同名） */
+  --mk-side-bg: #1b1c1f;
+  --mk-side-line: #36373c;
+  --mk-side-item-fg: #bdbec2;
+  --mk-side-inset: #232325;
+  --mk-side-hover: #252627;
+  --mk-red-bg-strong: rgba(220, 38, 38, 0.28);
   --mk-graph-pipe-bg: linear-gradient(180deg, var(--mk-graph-canvas), #161718);
   --mk-purple: #a78bfa;
   --mk-teal: #2dd4bf;
