@@ -1068,7 +1068,20 @@ function buildPromptInput(input: TeachingTurnInput) {
 
   // KV 前缀缓存友好化：scenario 内动态子键（contextCompression/interactionProfile）挪到尾部，
   // 稳定主体（任务/路径/策略上下文）保持前置，最大化 user 内前缀命中
-  const { interactionProfile: scenarioInteractionProfile, contextCompression: scenarioCompression, ...stableScenario } = input.scenario;
+  const {
+    interactionProfile: scenarioInteractionProfile,
+    contextCompression: scenarioCompression,
+    // 载荷审计（2026-09-25）：这三个子键是 scenario 里仅有的逐回合变化项（其余 29 个子字段整课恒定），
+    // 留在 scenario 体内会把后面 promptDirectives/learner 的 ~12k 稳定字节全部打断 → 提取到载荷尾部。
+    // 模板里的引用路径同步改为顶层键名（core yaml 已同步）。
+    behavioralProfile: scenarioBehavioralProfile,
+    checkpointHistory: scenarioCheckpointHistory,
+    // 尾部已单独注入 supplementaryMaterial，scenario 体内不再重复携带
+    supplementaryMaterial: scenarioSupplementaryMaterial,
+    ...stableScenario
+  } = input.scenario;
+  // learner 唯一的动态子键：编排层逐回合改写的难度档位（baseline/adjusted/reasons/evidence）
+  const { taskDifficulty, ...stableLearner } = input.learner;
 
   const promptDirectives = {
     ...(strategyGuidancePrompt ? { strategyGuidance: strategyGuidancePrompt } : {}),
@@ -1099,16 +1112,25 @@ function buildPromptInput(input: TeachingTurnInput) {
   // （与 core 输入名一致；沙盘 ref sandbox:teaching.session.messages）。
   // 2026-09-25 前缀缓存修正：对话历史**不再放进载荷**，改由 buildMessages 以真 message 发送
   // （provider 实测只复用整条消息全同的前缀段，载荷内任何变动都会连 system 的 ~10.7k 缓存一起废掉）。
+  // 2026-09-25 载荷审计追加：提取 scenario.behavioralProfile / scenario.checkpointHistory /
+  // learner.taskDifficulty（彼时仅存的三个载荷内动态子键）到尾部，并把 conditionalRules
+  // 提到每回合必变键之前——低频键变化只牺牲其后本来不可命中的字节。
   if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
     return {
       scenario: stableScenario,
       promptDirectives,
-      learner: input.learner,
+      learner: stableLearner,
+      // —— 低频变化项（churn<1）：放在每回合必变键**之前**，稳定回合可并入前缀；
+      //    变化时也只牺牲其后本来就无法命中的动态键 ——
+      ...conditionalRulesPayload,
+      ...(taskDifficulty ? { taskDifficulty } : {}),
       // —— 以下为逐回合变化项，统一后置 ——
       controls: input.controls,
       knowledge: input.knowledge,
       classroomContext: input.classroomContext,
       classroomEventContext: input.classroomEventContext,
+      ...(scenarioCheckpointHistory ? { checkpointHistory: scenarioCheckpointHistory } : {}),
+      ...(scenarioBehavioralProfile ? { behavioralProfile: scenarioBehavioralProfile } : {}),
       interactionProfile: scenarioInteractionProfile ?? null,
       ...(scenarioCompression ? { contextCompression: scenarioCompression } : {}),
       latestLearnerMessage,
@@ -1116,8 +1138,7 @@ function buildPromptInput(input: TeachingTurnInput) {
       // 教学配图时机（逐回合变化 → 必须放**载荷尾部**，避免打断 KV 前缀缓存；见 buildPromptInput 注释）
       ...(input.visualOpportunity?.suggested ? { visualOpportunity: input.visualOpportunity } : {}),
       // 教师补充材料（逐回合变化 → 同样放载荷尾部）：上一轮 control.supplement 的入库成果
-      ...(input.scenario?.supplementaryMaterial ? { supplementaryMaterial: input.scenario.supplementaryMaterial } : {}),
-      ...conditionalRulesPayload,
+      ...(scenarioSupplementaryMaterial ? { supplementaryMaterial: scenarioSupplementaryMaterial } : {}),
     };
   }
 

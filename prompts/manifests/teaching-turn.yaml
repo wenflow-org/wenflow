@@ -35,6 +35,10 @@ promptContract:
     knowledge: { direction: state, visibility: handoff, owner: orchestrator }
     controls: { direction: input, visibility: internal }
     promptDirectives: { direction: input, visibility: internal }
+    # 载荷缓存重排（2026-09-25）：自 scenario/learner 提取的动态子键，落在载荷尾部顶层
+    taskDifficulty: { direction: state, visibility: handoff, owner: orchestrator }
+    behavioralProfile: { direction: state, visibility: handoff, owner: orchestrator }
+    checkpointHistory: { direction: state, visibility: handoff, owner: orchestrator }
     reply: { direction: output, visibility: user-visible }
     analysis: { direction: output, visibility: internal }
     pedagogy: { direction: output, visibility: internal }

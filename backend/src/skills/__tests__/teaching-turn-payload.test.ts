@@ -136,6 +136,51 @@ describe('teaching-turn payload snapshot parity', () => {
     expect(fields.reply).toMatchObject({ direction: 'output', visibility: 'user-visible' })
     expect(fields.knowledge).toMatchObject({ direction: 'state', visibility: 'handoff', owner: 'orchestrator' })
   })
+
+  it('载荷缓存重排：scenario/learner 内逐回合变化的子键提取为尾部顶层键（2026-09-25）', async () => {
+    const input = {
+      ...MINIMAL_INPUT,
+      learner: {
+        ...MINIMAL_INPUT.learner,
+        backgroundKnowledge: { reusableFoundations: ['作用域'] },
+        taskDifficulty: { baseline: 'standard', adjusted: 'easier', reasons: ['fragile_concepts'], evidence: '上一节卡在闭包' },
+      },
+      scenario: {
+        ...MINIMAL_INPUT.scenario,
+        pathBackgroundContext: '整条路径的背景（整课恒定）',
+        checkpointHistory: { total: 3, passed: 2, failed: 1, skipped: 0, recent: [{ title: '排水判断', passed: false }] },
+        behavioralProfile: { avgUnderstanding: 0.62, sampleSize: 8 },
+        supplementaryMaterial: { title: '补的材料', excerpt: '…' },
+      },
+    }
+    await teachingTurnAgentHandler(input as any)
+
+    const [spec, built] = mockCallPrompt.mock.calls[0]
+    const payload = spec.buildUserPayload(built, {})
+    const keys = Object.keys(payload)
+
+    // 提取后落在尾部：动态键不再出现在稳定区键名之后
+    expect(keys.indexOf('behavioralProfile')).toBeGreaterThan(keys.indexOf('learner'))
+    expect(keys.indexOf('checkpointHistory')).toBeGreaterThan(keys.indexOf('learner'))
+    expect(keys.indexOf('taskDifficulty')).toBeGreaterThan(keys.indexOf('learner'))
+    // scenario/learner 体内不再携带这些动态子键（消除载荷内发散点）
+    expect(payload.scenario).not.toHaveProperty('behavioralProfile')
+    expect(payload.scenario).not.toHaveProperty('checkpointHistory')
+    expect(payload.scenario).not.toHaveProperty('supplementaryMaterial')
+    expect(payload.learner).not.toHaveProperty('taskDifficulty')
+    // 稳定子键保留原位
+    expect(payload.scenario).toHaveProperty('pathBackgroundContext')
+    expect(payload.learner).toHaveProperty('backgroundKnowledge')
+    // 提取键的值原样搬运
+    expect(payload.taskDifficulty).toEqual({ baseline: 'standard', adjusted: 'easier', reasons: ['fragile_concepts'], evidence: '上一节卡在闭包' })
+    expect(payload.behavioralProfile).toEqual({ avgUnderstanding: 0.62, sampleSize: 8 })
+    expect(payload.checkpointHistory).toEqual({ total: 3, passed: 2, failed: 1, skipped: 0, recent: [{ title: '排水判断', passed: false }] })
+    expect(payload.supplementaryMaterial).toEqual({ title: '补的材料', excerpt: '…' })
+    // conditionalRules（低频键）排在每回合必变键之前
+    if (keys.includes('conditionalRules')) {
+      expect(keys.indexOf('conditionalRules')).toBeLessThan(keys.indexOf('classroomEventContext'))
+    }
+  })
 })
 
 describe('teaching-turn interactionProfile（认知负荷量测 · 前端情报层）', () => {
