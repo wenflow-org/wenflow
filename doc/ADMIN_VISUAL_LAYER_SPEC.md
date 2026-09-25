@@ -46,6 +46,9 @@
 
 `--mk-focus-ring`（亮 `rgba(44,99,208,.18)` / 暗 `rgba(91,141,239,.32)`），
 输入族 = 蓝边 + ring；按钮族 = 纯 ring（`outline: none`）。禁止自写第二圈。
+已登记例外：**运行态脉冲动画**（RunStateBadge / RunStageBar / VirtualLearnerRunningBar
+的 box-shadow keyframes 呼吸环）是「运行中」的功能指示，允许彩色 box-shadow 动画；
+守卫规则 15 剥离 @keyframes 后计数，不视为档外。
 
 ### 控件高度：28 / 32 / 36
 
@@ -66,8 +69,9 @@
 ### 数字
 
 数据数字一律 `font-variant-numeric: tabular-nums`（`.mk-table td/th` 已是默认）；
-标识符/耗时/字节数用 `--mk-mono`。图表坐标轴与 series 数值同规则（ECharts 用字面量色不解析
-CSS 变量，属于登记过的残留，改图表时顺手带 palette 统一）。
+标识符/耗时/字节数用 `--mk-mono`。图表色唯一来源：`components/mk/chartPalette.ts`
+（MkChart 已注册 mk-light/mk-dark 主题兜底轴色与系列色；页面禁止再写图表字面量色，
+新增图表先看 palette 里有没有语义名）。
 
 ## 0. 定位
 
@@ -134,19 +138,22 @@ CSS 变量，属于登记过的残留，改图表时顺手带 palette 统一）�
 - 视觉层改动只允许发生在 token / 原语层；页面级 scoped style 只允许布局（grid/flex/定位）。
 - 数值迭代：改共享层 → 真机对比 → 全站生效；永不逐页追。
 
-## 6. 洼地收口状态（2026-09-25 复核；数字为当日 grep 实测）
+## 6. 洼地收口状态（2026-09-25 二次复核，统一批次 B-E 之后）
 
 | 批次 | 对象 | 状态 |
 |---|---|---|
-| 1 | SessionCockpit | ✅ 暗色海军块去蓝 + 亮色语义 token 化（133→78 hex，剩余为暗色强调/徽章语义色/JS 图表色） |
-| 2 | VirtualProfile / LearnerDetail | ✅ 同规则 token 化（99→70、36→24）；LearnerDetail 私写表格 ld-mt → mk-table |
+| 1 | SessionCockpit | ✅ 暗色海军块去蓝 + 亮色语义 token 化 + 同值直换（133→**48** hex；余为徽章语义水彩/暗色水彩文字） |
+| 2 | VirtualProfile / LearnerDetail | ✅ token 化 + 曲线色板上移 chartPalette（VP 99→**45**、LD 24） |
 | 3 | 两代 KPI 组件 | ✅ 裁定：MkKpi（详情页瓦片）与 MkStatStrip（页头指标条）为两种布局用途，不做机械合并；MkKpi 硬编码边框/底已接 token |
-| 4 | Login | ✅ 核查（09-25 复核：24 处 var(--mk-*)）：rgba 为品牌水彩，无需迁移；作为独立视觉页保留 |
-| 5 | Overview | 保留手作体系（视觉尚可，作为质感标尺）；约 690 行 scoped / 99 处 hex 暂不动——**下一个收敛对象** |
+| 4 | Login | ✅ 核查（09-25）：登录卡环境影已接 `--mk-shadow-pop`；rgba 水彩保留，独立视觉页 |
+| 5 | Overview | ✅ 09-25 收敛一轮（99→**64**）：KPI 瓦片本就是 MkKpi；琥珀/红告警渐变压平为 color-mix 语义色；装饰渐变删除；hover 面接 token。剩余为环形分 SVG/图表语义色 |
+| 6 | 壳层 Shell | ✅ 09-25（90→**12**）：侧栏/面包屑字面量清零，走 --mk-side-* 六个新 token |
+| 7 | 图表配色 | ✅ 09-25：chartPalette.ts 单一来源 + MkChart 注册 mk-light/mk-dark 主题；三页字面量删除 |
 
-残留 hex 均为：暗色强调色（#7aa2ff 系）、徽章语义水彩、JS 图表配置色（ECharts 不解析 CSS 变量）。
-v2 起新增洼地面：**页面私写 shadow-sm 的非吸顶面板**（SessionCockpit / SkillDrawer / TraceWaterfall /
-DataFlowGraph 各 1 处）——按 §0.5"面=平"应随各自批次摘除；原语层已清零（`.mk-status` 曾带阴影，09-25 摘除）。
+当前全站私写 hex 存量 **649**（基线棘轮已同步）。余下构成：徽章语义水彩、暗色强调
+（#7aa2ff 系已在壳层清零，页面侧随批次收敛）、SVG/图表语义色、Overview 环形分。
+页面私写 shadow-sm 洼地（SessionCockpit/SkillDrawer/TraceWaterfall/DataFlowGraph 各 1 处）
+**待各自批次摘除**；原语层已清零。
 
 ## 7. 内容宽度（Content width，2026-09-24 补）
 
