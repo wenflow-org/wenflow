@@ -504,8 +504,8 @@ function groupBadgeTitle(title: string): string {
   border-radius: var(--mk-radius-sm);
   transition: color 0.12s ease, background 0.12s ease;
 }
-.mshell__group-head:hover { color: var(--mk-accent-deep, #1f57cc); background: rgba(90, 110, 140, 0.06); }
-.mshell__group-head--active { color: var(--mk-accent-deep, #1f57cc); }
+.mshell__group-head:hover { color: var(--mk-accent-deep, var(--mk-accent-deep)); background: rgba(90, 110, 140, 0.06); }
+.mshell__group-head--active { color: var(--mk-accent-deep, var(--mk-accent-deep)); }
 .mshell__group-icon {
   width: 16px;
   height: 16px;
@@ -514,7 +514,7 @@ function groupBadgeTitle(title: string): string {
   transition: color 0.12s ease;
 }
 .mshell__group-head:hover .mshell__group-icon,
-.mshell__group-head--active .mshell__group-icon { color: var(--mk-accent-deep, #1f57cc); }
+.mshell__group-head--active .mshell__group-icon { color: var(--mk-accent-deep, var(--mk-accent-deep)); }
 .mshell__group-name { text-align: left; }
 .mshell__group-badge {
   padding: 0 6px;
@@ -528,7 +528,7 @@ function groupBadgeTitle(title: string): string {
 }
 .mshell__group-badge--alarm {
   background: var(--mk-red-bg-strong);
-  color: #b91c1c;
+  color: var(--mk-red-strong);
   animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
 }
 .mshell__group-arrow {
@@ -571,7 +571,7 @@ function groupBadgeTitle(title: string): string {
 .mshell__item:focus-visible { outline: 2px solid var(--mk-blue, #2c63d0); outline-offset: -2px; }
 .mshell__item--active {
   background: var(--mk-hover-surface);
-  color: var(--mk-accent-deep, #1f57cc);
+  color: var(--mk-accent-deep, var(--mk-accent-deep));
   box-shadow: inset 3px 0 0 var(--mk-blue, #2c63d0);
 }
 /* 展开态不显単字图标（仅折叠态显示，见 data-collapsed 规则） */
@@ -589,7 +589,7 @@ function groupBadgeTitle(title: string): string {
   flex-shrink: 0;
   transition: background 0.12s ease, color 0.12s ease;
 }
-.mshell__item--active .mshell__item-glyph { background: var(--mk-blue-bg-strong); color: var(--mk-accent-deep, #1f57cc); }
+.mshell__item--active .mshell__item-glyph { background: var(--mk-blue-bg-strong); color: var(--mk-accent-deep, var(--mk-accent-deep)); }
 /* 子项角标紧跟标签（不右推）：短标签 + 右对齐计数会在行中间拉出一条空洞 */
 .mshell__item-badge {
   padding: 1px 7px;
@@ -600,10 +600,10 @@ function groupBadgeTitle(title: string): string {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
-.mshell__item--active .mshell__item-badge { background: var(--mk-blue-bg-strong); color: var(--mk-accent-deep, #1f57cc); }
+.mshell__item--active .mshell__item-badge { background: var(--mk-blue-bg-strong); color: var(--mk-accent-deep, var(--mk-accent-deep)); }
 .mshell__item-badge--alarm {
   background: var(--mk-red-bg-strong);
-  color: #b91c1c;
+  color: var(--mk-red-strong);
   animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
 }
 @keyframes mshell-alarm-pulse {
@@ -664,7 +664,7 @@ function groupBadgeTitle(title: string): string {
   height: 24px;
   border-radius: 50%;
   background: var(--mk-blue-bg-strong);
-  color: var(--mk-accent-deep, #1f57cc);
+  color: var(--mk-accent-deep, var(--mk-accent-deep));
   font-size: var(--mk-fs-micro);
   font-weight: 800;
   flex-shrink: 0;
@@ -692,7 +692,7 @@ function groupBadgeTitle(title: string): string {
   transition: background 0.15s ease, color 0.15s ease;
   white-space: nowrap;
 }
-.mshell__logout:hover { background: rgba(220, 38, 38, 0.08); color: var(--mk-red, #dc2626); }
+.mshell__logout:hover { background: rgba(220, 38, 38, 0.08); color: var(--mk-red, var(--mk-red)); }
 
 /* 品牌行弱化 */
 .mshell__brandline {
@@ -738,14 +738,14 @@ function groupBadgeTitle(title: string): string {
   align-items: center;
   gap: 8px;
   padding: 7px 16px;
-  border-bottom: 1px solid var(--mk-line, #e6ebf4);
+  border-bottom: 1px solid var(--mk-line, var(--mk-line));
   background: var(--mk-surface, #fff);
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint, #8a97ab);
 }
 .mshell__crumb-label {
   font-weight: 700;
-  color: var(--mk-muted, #5b6577);
+  color: var(--mk-muted, var(--mk-muted));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -862,7 +862,7 @@ html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color:
 .mshell__collapse {
   border: 1px solid var(--mk-line, #e1e8f2);
   background: var(--mk-surface, #fff);
-  color: var(--mk-muted, #5b6577);
+  color: var(--mk-muted, var(--mk-muted));
   width: 28px; height: 28px;
   border-radius: var(--mk-radius-sm);
   font-size: var(--mk-fs-micro); line-height: 1;

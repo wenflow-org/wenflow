@@ -2131,7 +2131,7 @@ async function quietReload(id: string) {
   padding: 5px 12px;
   border-radius: 999px;
   border: 1px solid var(--mk-line);
-  background: #fff;
+  background: var(--mk-surface);
   font-size: var(--mk-fs-micro);
   font-weight: 800;
   color: var(--mk-ink);
@@ -2291,7 +2291,7 @@ async function quietReload(id: string) {
   flex-shrink: 0;
   border-radius: 50%;
   border: 2px solid #c4ccd9;
-  background: #fff;
+  background: var(--mk-surface);
   transition: border-color 0.14s ease;
 }
 .vp-story.is-selected .vp-story__radio {
@@ -2444,7 +2444,7 @@ async function quietReload(id: string) {
   white-space: nowrap;
 }
 .vp-quality__time { font-weight: 600; opacity: 0.75; }
-.vp-quality--ok { color: #1a7f4b; background: var(--mk-green-bg); }
+.vp-quality--ok { color: var(--mk-alert-ok-fg); background: var(--mk-green-bg); }
 .vp-quality--warn { color: var(--mk-amber, #b7791f); background: var(--mk-amber-bg); }
 .vp-quality--bad { color: var(--mk-red); background: var(--mk-red-bg); }
 .vp-quality--none { color: var(--mk-faint); background: var(--mk-surface-2); }
@@ -2742,23 +2742,23 @@ async function quietReload(id: string) {
 html[data-theme='dark'] {
   .vp-top { background: #19191a; border-color: #2a2b2d; }
   .vp-tab { background: #202122; }
-  .vp-tab.is-active { background: rgba(91, 141, 239, 0.16); color: #7aa2ff; }
+  .vp-tab.is-active { background: rgba(91, 141, 239, 0.16); color: var(--mk-accent-deep); }
   .vp-story__row:hover { background: #252627; }
   .vp-story.is-selected .vp-story__row { background: rgba(91, 141, 239, 0.12); }
-  .vp-quality--ok { color: #6ee7a0; background: rgba(74, 222, 128, 0.12); }
+  .vp-quality--ok { color: var(--mk-btn-ok-fg); background: rgba(74, 222, 128, 0.12); }
   .vp-quality--warn { color: #fcd34d; background: rgba(251, 191, 36, 0.12); }
   .vp-quality--bad { color: #fca5a5; background: rgba(248, 113, 113, 0.12); }
-  .vp-quality--none { background: #2d2d2f; }
+  .vp-quality--none { background: var(--mk-close-bg); }
   .vp-top__goal { background: #202122; }
   .vp-life--ok { background: rgba(74, 222, 128, 0.12); }
   .vp-life--warn { background: rgba(251, 191, 36, 0.12); }
   .vp-life--bad { background: rgba(248, 113, 113, 0.12); }
-  .vp-life--muted { background: #2d2d2f; border-color: #393a3c; }
+  .vp-life--muted { background: var(--mk-close-bg); border-color: #393a3c; }
   .vp-story { background: #19191a; border-color: #2a2b2d; }
   .vp-story__radio { background: #202122; }
   .vp-story.is-selected { background: rgba(91, 141, 239, 0.1); border-color: rgba(91, 141, 239, 0.35); }
   /* 补漏：特征标签/目标/预算徽章/运行卡/工具/记忆统计/警告标签 */
-  .vp-trait { background: #2d2d2f; color: #afb1b6; }
+  .vp-trait { background: var(--mk-close-bg); color: #afb1b6; }
   .vp-goal { background: #19191a; border-color: #2a2b2d; }
   .vp-story__budget-badge { background: #232325; color: #afb1b6; }
   .vp-memory__stat { background: #19191a; border-color: #2a2b2d; }
