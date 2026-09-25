@@ -253,7 +253,7 @@
                   @copy="copyMessage(m.text)"
                   @feedback="(up) => sendMessageFeedback(m, up)"
                 />
-                <span v-if="showConfusionAt(mi)" class="msg__chip msg__chip--confuse">捕获到卡点「{{ (m.confusion || []).join('、') }}」· 导师会在这里多做确认</span>
+                <span v-if="showConfusionAt(mi)" class="msg__chip msg__chip--confuse">捕获到卡点「{{ confusionDeltaAt(mi).join('、') }}」· 导师会在这里多做确认</span>
                 <div class="msg__meta">
                   问流导师 · {{ m.time }}
                   <span v-if="m.failed" class="msg__retry" @click="retryLast">重试</span>
@@ -655,16 +655,24 @@ function closeSupplement(): void {
   supplementPreview.value.open = false;
 }
 /**
- * 卡点条只在「与上一条消息的卡点不同」时展示。
- * 分析里的 confusionPoints 会被逐轮带下去（同一卡点能连挂好几轮），
- * 全量展示会让人以为系统没在看进展（走查 P4）。
+ * 卡点条只在出现「没见过的新卡点」时展示一次，且只展示新增部分。
+ * 后端的 confusionPoints 会逐轮累积/改写，旧口径只和紧邻上一条比对，
+ * 内容稍有变化就再挂一条（真课实测：几乎每条老师消息都带，像坏了一样）。
+ * 现在与前面**所有**消息的卡点并集比对取差集：差集为空 → 隐藏。
  */
-function showConfusionAt(i: number): boolean {
+function confusionDeltaAt(i: number): string[] {
   const list = msgs.value;
-  const cur = Array.isArray(list[i]?.confusion) ? list[i]!.confusion!.join('、') : '';
-  if (!cur) return false;
-  const prev = i > 0 && Array.isArray(list[i - 1]?.confusion) ? list[i - 1]!.confusion!.join('、') : '';
-  return cur !== prev;
+  const cur = Array.isArray(list[i]?.confusion) ? (list[i]!.confusion as string[]) : [];
+  if (!cur.length) return [];
+  const seen = new Set<string>();
+  for (let j = 0; j < i; j++) {
+    const prev = Array.isArray(list[j]?.confusion) ? (list[j]!.confusion as string[]) : [];
+    for (const item of prev) seen.add(String(item));
+  }
+  return cur.map(String).filter((item) => !seen.has(item));
+}
+function showConfusionAt(i: number): boolean {
+  return confusionDeltaAt(i).length > 0;
 }
 const quickReplies = ref<string[]>([]);
 /** 开场摸底引导（opening.question 收敛进行动台面板的一行小字，不再单独成待答气泡）；仅在有动作选项时收进面板 */
@@ -1530,10 +1538,10 @@ onBeforeUnmount(() => {
 .kp__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .kp__bar { height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
 .kp__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
-/* 视图切换（列表/图谱）：轻量分段控件，走既有 token */
-.kp__views { display: inline-flex; gap: 2px; padding: 2px; border-radius: 99px; background: rgba(230, 237, 247, 0.6); align-self: flex-start; }
+/* 视图切换（列表/图谱）：轻量分段控件，走既有 token（mk token 深浅主题自动跟随，2026-09-25 深色修复） */
+.kp__views { display: inline-flex; gap: 2px; padding: 2px; border-radius: 99px; background: var(--mk-surface-2); align-self: flex-start; }
 .kp__view { border: 0; background: transparent; cursor: pointer; padding: 3px 10px; border-radius: 99px; font-size: 11.5px; font-weight: 700; color: var(--faint); }
-.kp__view--on { background: var(--surface-2, #fff); color: var(--blue-deep); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08); }
+.kp__view--on { background: var(--surface); color: var(--blue-deep); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08); }
 .kp__hint { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--faint); }
 .kp__hint--err { color: var(--danger, #c0392b); }
 /* 通向「知识图谱」聚合页的桥：学习页这里只画当前路径，想看全部路径要去聚合页 */
