@@ -165,6 +165,10 @@ onUnmounted(() => {
   background: var(--v2nav-bg, rgba(255, 255, 255, 0.94));
   border-bottom: 1px solid var(--line, #e3e9f4);
   position: sticky; top: 0; z-index: 30;
+  /* 毛玻璃：94% 半透明底在滚动时会让下层文字透出（移动端走查实测详情/状态页重影），
+     blur 后保留通透观感同时压掉透字 */
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 /* 内层容器：与页面内容同宽居中（<1680 时 1080，大屏 1360），zoom 下与页面容器天然对齐 */
 .v2nav__in {

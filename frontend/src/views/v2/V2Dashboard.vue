@@ -457,7 +457,8 @@
               <div class="sheet__summary-wide"><small>主要内容</small><strong>{{ daySheet.primaryTask }}</strong></div>
             </div>
 
-            <div class="sheet__block">
+            <!-- 空日 analysis 与「学习记录」空态同文案，重复展示（2026-09-26 走查 07 号截图） -->
+            <div v-if="daySheet.count > 0" class="sheet__block">
               <h4>当天观察</h4>
               <p>{{ daySheet.analysis }}</p>
             </div>

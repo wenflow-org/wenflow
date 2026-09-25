@@ -670,6 +670,10 @@ onUnmounted(() => {
 }
 
 .evaluation-head {
+  /* position+z-index 建立层叠上下文：头部 ⋮ 弹层（absolute z-20）此前与后面的
+     完成卡比较时被盖住，弹层首项不可点（2026-09-26 移动端 E2E 视觉走查） */
+  position: relative;
+  z-index: 30;
   display: flex;
   justify-content: space-between;
   align-items: center;
