@@ -44,10 +44,18 @@ export function useOpeningSceneViews(openingScene: Ref<Record<string, any> | nul
   });
   /** 前序掌握较弱的阶段提醒（at-risk / partial） */
   const sceneMasteryWarn = computed(() => {
-    const list: Array<{ stage: number; title: string; state: string }> = openingScene.value?.mastery || [];
+    const list: Array<{ stage: number; title: string; state: string; completedTasks?: number; totalTasks?: number }> = openingScene.value?.mastery || [];
     const weak = list.filter((m) => m.state === 'at-risk' || m.state === 'partial').slice(0, 2);
     if (!weak.length) return '';
-    return weak.map((m) => `第 ${m.stage} 阶段「${m.title}」还不太稳`).join('；');
+    // 2026-09-25 训练局 P2：阶段内任务全部完成但仍 partial 时（mastery 口径比进度慢半拍），
+    // 文案从"还不太稳"改为"刚学完还在巩固"——否则任务做完还被系统否定，观感矛盾。
+    return weak.map((m) => {
+      const allDone = typeof m.completedTasks === 'number' && typeof m.totalTasks === 'number'
+        && m.totalTasks > 0 && m.completedTasks >= m.totalTasks;
+      return allDone
+        ? `第 ${m.stage} 阶段「${m.title}」刚学完，还在巩固`
+        : `第 ${m.stage} 阶段「${m.title}」还不太稳`;
+    }).join('；');
   });
   /** 开场行动台标题：跟随进入方式，避免每次都是冷冰冰的「开场建议」 */
   const quickReplyKicker = computed(() => {

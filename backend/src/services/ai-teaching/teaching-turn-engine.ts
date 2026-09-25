@@ -85,6 +85,20 @@ import {
   requireTeachingRevision,
 } from './teaching-turn-shared';
 
+/**
+ * 软收口知识地板（2026-09-25 训练局 P1）：老师语义明确收课且无 pending 点时，
+ * 平均目标进度达到此值即允许完成。低于硬门禁（80）但高于"刚起步"（30 上下）——
+ * 轻量任务（单知识点）常停在 70，硬门禁永远够不着，课就永远收不了。
+ */
+const SOFT_COMPLETION_PROGRESS_FLOOR = 60;
+/** 老师"今天就到这儿 / 这一节就齐了"式收课话术（reply 里出现即视为收课信号） */
+const CLOSING_REPLY_PATTERNS: RegExp[] = [
+  /今天(就)?(到这儿|到这里|收到这儿|就到这)/,
+  /这节课?(就)?(到这儿|到这里|结束了)/,
+  /这一?节(就)?齐了/,
+  /(我们)?(先|就)(到这|到这里)/,
+];
+
 export async function generateOpening(context: TeachingScenarioContext): Promise<TeachingOpening> {
   const runtimeSignals = deriveTeachingRuntimeSignals(context);
   const openingMode: TeachingOpening['mode'] = context.taskType === 'project'
@@ -364,12 +378,24 @@ export async function processStudentMessage(
     && teachingTurns >= COMPLETION_TURNS_BACKSTOP
     && mergedKnowledge.every((point) => point.status !== 'pending')
     && knowledgeStateService.averageTargetProgress(completionTargets, mergedKnowledge) >= COMPLETION_TARGET_PROGRESS_FLOOR;
-  const completionReady = targetsConsolidated || backstopReady;
+  // 软收口（2026-09-25 训练局 P1）：老师**语义上明确收课**（"今天就到这儿/这一节就齐了"）且
+  // 知识进度已过软地板（≥60、无 pending）时，尊重老师的判断放行——
+  // 此前这里用 completionReady 无条件覆盖模型请求，轻量任务（单知识点、进度停在 70%）的课
+  // 永远弹不出完成面板，任务悬挂 active 只能手动收尾（真课实测：路径2 两节共 24 轮无一触发）。
+  const noPendingPoints = mergedKnowledge.every((point) => point.status !== 'pending');
+  const avgTargetProgress = knowledgeStateService.averageTargetProgress(completionTargets, mergedKnowledge);
+  const modelRequestedCompletion = teachingOutput.control?.isCompletionCandidate === true;
+  const replySignalsClosing = CLOSING_REPLY_PATTERNS.some((pattern) => pattern.test(teachingOutput.reply || ''));
+  const softCompletionReady = targetsFrozenBefore
+    && noPendingPoints
+    && avgTargetProgress >= SOFT_COMPLETION_PROGRESS_FLOOR
+    && (modelRequestedCompletion || replySignalsClosing);
+  const completionReady = targetsConsolidated || backstopReady || softCompletionReady;
   const envelopeCompletionSignal =
     turnRuntimeEnvelope?.businessState?.phase === 'completion-candidate'
     || turnRuntimeEnvelope?.businessState?.isTerminal === true;
   // soft-AND：双方都同意完成时记 alignment=agree；仅 envelope 喊完成时 disagree（不改变硬门禁）
-  const completionAlignment: 'agree' | 'envelope-only' | 'knowledge-only' | 'neither' =
+  const completionAlignment: 'agree' | 'envelope-only' | 'knowledge-only' | 'neither' | 'soft-model' =
     completionReady && envelopeCompletionSignal
       ? 'agree'
       : !completionReady && envelopeCompletionSignal
@@ -377,6 +403,11 @@ export async function processStudentMessage(
         : completionReady && !envelopeCompletionSignal
           ? 'knowledge-only'
           : 'neither';
+  const completionPath: 'targets' | 'backstop' | 'soft-model' | 'none' =
+    targetsConsolidated ? 'targets'
+      : backstopReady ? 'backstop'
+        : softCompletionReady ? 'soft-model'
+          : 'none';
   if (completionAlignment === 'envelope-only' || completionAlignment === 'knowledge-only') {
     logger.debug('[AITeaching] completion soft-AND 分歧', {
       sessionId: session.id,
@@ -509,6 +540,8 @@ export async function processStudentMessage(
   if (completionReady) {
     classroomEvents.push(buildClassroomEvent('completion-candidate', '本轮出现课堂完成候选信号', {
       focusKnowledgePoint: classroomContext.focus.currentKnowledgePoint,
+      completionPath,
+      avgTargetProgress,
     }));
   }
 

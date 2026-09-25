@@ -100,7 +100,7 @@ export function buildSessionOpeningScene(opts: {
         sourceStage: recap.sourceStageNumber ?? null,
         sourceTitle: recap.sourceTaskTitle ?? recap.sourceMilestoneTitle ?? null,
       } : null,
-      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [],
+      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState, completedTasks: m.completedTasks, totalTasks: m.totalTasks })) || [],
     };
   }
   if (mode === 'resumed') {
@@ -116,7 +116,7 @@ export function buildSessionOpeningScene(opts: {
         sourceStage: recap.sourceStageNumber ?? null,
         sourceTitle: recap.sourceTaskTitle ?? recap.sourceMilestoneTitle ?? null,
       } : null,
-      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [],
+      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState, completedTasks: m.completedTasks, totalTasks: m.totalTasks })) || [],
     };
   }
   // mode === 'new'：区分首课 / 同任务重学 / 第二课接续
@@ -134,7 +134,7 @@ export function buildSessionOpeningScene(opts: {
         sourceTitle: context.taskTitle,
       } : null,
       attempt: sameTaskAttempt,
-      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [],
+      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState, completedTasks: m.completedTasks, totalTasks: m.totalTasks })) || [],
     };
   }
   const hasAdjacent = recap && (recap.relation === 'same-milestone-prev-task' || recap.relation === 'prev-milestone');
@@ -151,10 +151,10 @@ export function buildSessionOpeningScene(opts: {
         sourceStage: recap.sourceStageNumber ?? null,
         sourceTitle: recap.sourceTaskTitle ?? recap.sourceMilestoneTitle ?? null,
       },
-      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [],
+      mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState, completedTasks: m.completedTasks, totalTasks: m.totalTasks })) || [],
     };
   }
-  return { kind: 'first', title: '开始这节课', mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState })) || [] };
+  return { kind: 'first', title: '开始这节课', mastery: prior?.priorMilestoneMastery?.map((m) => ({ stage: m.stageNumber, title: m.title, state: m.masteryState, completedTasks: m.completedTasks, totalTasks: m.totalTasks })) || [] };
 }
 
 export const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
