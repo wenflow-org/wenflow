@@ -11,20 +11,32 @@
         </button>
       </span>
     </header>
-    <!-- 概览卡：口径说明 + 筛选 + KPI 指标条收进同一张卡
-         （原 lead / 筛选行 / 指标条三段裸露在页面背景上，与全站卡片风格不符） -->
+    <!-- 口径与术语：默认折叠的引导带（mk-card + mk-section__summary，与 HealthCenter
+         「本页看什么?」同形态）——引导文字常驻会挤掉首屏的 KPI 与表格，全站渐进披露统一为默认收起 -->
+    <section class="mk-card">
+      <details>
+        <summary class="mk-card__head mk-section__summary">
+          <h3 class="mk-card__title">口径与术语</h3>
+          <span class="mk-card__meta">记忆层统计范围 · 观察模式 · 到期/建议/重新观察怎么读</span>
+        </summary>
+        <div class="mr-guide__body">
+          <p><b>记忆层（用户级、跨 path）</b>：到期积压 · 课内温故配额 · 概念归并审计；归并默认<b>观察模式</b>，只记录建议，不动 memory_traces。</p>
+          <p><b>到期 / 建议</b>：「到期」是到该复习而未复习的痕迹数；「建议」是系统给出的归并候选，需人工确认后才会执行。</p>
+          <p><b>重新观察</b>：对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹。</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- KPI 指标条：MkStatStrip 单源 + 独立成卡；筛选开关（包含虚拟学习者）进卡头——
+         卡头是全站筛选控件的惯例位置（people/virtual-learners 同款），不再和说明文字挤一行 -->
     <div class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">观测概览</h3>
-        <span class="mk-card__meta">
-          记忆层（用户级、跨 path）：到期积压 · 课内温故配额 · 概念归并审计；归并默认<strong>观察模式</strong>，只记录建议，不动 memory_traces
-        </span>
+        <h3 class="mk-card__title">记忆层概览</h3>
         <label class="mr__toggle" title="切换后整页重新统计">
           <input v-model="includeVirtual" type="checkbox" @change="loadOverview" />
           包含虚拟学习者
         </label>
       </div>
-      <!-- KPI 走 MkStatStrip 单源（原 MkKpi 方块 + 私写网格与全站风格不一致，且 7 个会折行） -->
       <MkStatStrip :items="kpiItems" />
     </div>
 
@@ -565,6 +577,10 @@ onMounted(async () => {
 <style scoped>
 .mr { display: flex; flex-direction: column; }
 .mr__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted, #5b6577); margin-left: auto; white-space: nowrap; }
+/* 折叠引导带正文：与 HealthCenter .hc-guide__body 同款刻度（页面 scoped 只做容器布局） */
+.mr-guide__body { padding: 10px 14px 12px; display: grid; gap: 6px; }
+.mr-guide__body p { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
+.mr-guide__body b { color: var(--mk-ink); font-weight: 700; }
 .mr__h4 { margin: 14px 0 6px; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 .mr__num { text-align: right; font-variant-numeric: tabular-nums; }
 .mr__num--warn { color: var(--mk-amber); font-weight: 700; }
