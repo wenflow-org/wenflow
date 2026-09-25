@@ -21,8 +21,33 @@ import {
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsCoreOption } from 'echarts/core'
 import { useIsDark } from '@/composables/useIsDark'
+import { MK_CHART_PALETTES, MK_CHART_THEME, type MkChartPalette } from './chartPalette'
 
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent, CanvasRenderer])
+
+/* 注册 admin 图表默认主题：轴/系列未显式指定颜色时落到 palette（chartPalette.ts），
+   三页散写的 #8492ab 轴色、#3d7cff 系列色由此收敛为单一来源。 */
+let themesRegistered = false
+function ensureThemes() {
+  if (themesRegistered) return
+  themesRegistered = true
+  for (const mode of ['light', 'dark'] as const) {
+    const p: MkChartPalette = MK_CHART_PALETTES[mode]
+    echarts.registerTheme(MK_CHART_THEME[mode], {
+      color: [p.primaryBright, p.warn, p.danger, p.primary, p.neutral],
+      xAxis: {
+        axisLine: { lineStyle: { color: p.axisLine } },
+        axisTick: { show: false },
+        axisLabel: { color: p.neutral },
+      },
+      yAxis: {
+        splitLine: { lineStyle: { color: p.splitLine } },
+        axisLabel: { color: p.neutral },
+      },
+    })
+  }
+}
+ensureThemes()
 
 const props = withDefaults(
   defineProps<{
@@ -47,7 +72,7 @@ function render() {
   if (!el.value) return
   if (!chart || appliedTheme !== resolvedTheme.value) {
     chart?.dispose()
-    chart = echarts.init(el.value, resolvedTheme.value)
+    chart = echarts.init(el.value, MK_CHART_THEME[resolvedTheme.value])
     appliedTheme = resolvedTheme.value
   }
   chart.setOption(props.option)

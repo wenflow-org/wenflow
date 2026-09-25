@@ -672,12 +672,10 @@
  */
 import type { EChartsCoreOption } from 'echarts/core'
 
-/** 看板曲线配色（按概念顺序取色；与图例同一顺序，保证颜色一致） */
-export const MEMORY_CURVE_COLORS = ['#2c63d0', '#dc2626', '#15803d', '#b7791f', '#7c3aed', '#0891b2'] as const
-
-export function memoryCurveColor(index: number): string {
-  return MEMORY_CURVE_COLORS[index % MEMORY_CURVE_COLORS.length]
-}
+/** 看板曲线配色：已上移共享模块 components/mk/chartPalette.ts（admin 图表唯一配色来源）；
+ *  此处 re-export 维持单测的导入路径（virtual-profile.memory-curve.test.ts）不变。 */
+export { MEMORY_CURVE_COLORS, memoryCurveColor } from '@/components/mk/chartPalette';
+import { memoryCurveColor as _memoryCurveColor } from '@/components/mk/chartPalette';
 
 export interface MemoryCurveConcept {
   name: string
@@ -705,7 +703,7 @@ export function buildMemoryRetentionChartOption(
   const axisLine = options.isDark ? 'rgba(230,237,247,0.22)' : 'rgba(23,32,51,0.15)'
   const splitLine = options.isDark ? 'rgba(230,237,247,0.08)' : 'rgba(23,32,51,0.06)'
   const series = concepts.map((concept, index) => {
-    const color = memoryCurveColor(index)
+    const color = _memoryCurveColor(index)
     return {
       name: concept.label || concept.name || `概念${index + 1}`,
       type: 'line' as const,
@@ -733,7 +731,7 @@ export function buildMemoryRetentionChartOption(
       boundaryGap: false,
       axisLine: { lineStyle: { color: axisLine } },
       axisTick: { show: false },
-      axisLabel: { color: '#8492ab', fontSize: 11 }
+      axisLabel: { fontSize: 11 }
     },
     yAxis: {
       type: 'value',
@@ -1558,11 +1556,11 @@ const memoryCurveConcepts = computed(() =>
 const memoryChartOption = computed<EChartsCoreOption>(() =>
   buildMemoryRetentionChartOption(memoryCurveConcepts.value, { isDark: isDark.value })
 )
-/** 图例与曲线同序取色（memoryCurveColor(index)），并给出当前保留率/已过天数 */
+/** 图例与曲线同序取色（_memoryCurveColor(index)），并给出当前保留率/已过天数 */
 const memoryChartLegend = computed(() =>
   memoryCurveConcepts.value.map((c, index) => ({
     name: c.label || c.name,
-    color: memoryCurveColor(index),
+    color: _memoryCurveColor(index),
     currentPercent: Math.round((c.curve?.currentRetention ?? c.retention ?? 0) * 100),
     elapsedDays: c.curve?.elapsedDays ?? 0,
     due: c.bucket === 'due'

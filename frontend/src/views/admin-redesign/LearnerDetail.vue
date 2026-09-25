@@ -575,6 +575,7 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { useIsDark } from '@/composables/useIsDark'
+import { MK_CHART_PALETTES } from '@/components/mk/chartPalette'
 
 const isDark = useIsDark()
 
@@ -1253,6 +1254,7 @@ const hasLoad = computed(() => loadSeries.value.some((p) => p.lss != null || p.l
 /* ECharts option：LSS/LF/LSB 统一 0-10 轴（LF 偶发略超 10，Y 域放宽到 -4~12 防贴顶裁切）；
    参考线：LSB=0（状态平衡线）与 LF=6（疲劳警戒线）；tooltip 跟随 + 平滑曲线 + 坐标轴刻度 */
 const loadChartOption = computed<EChartsCoreOption>(() => {
+  const pal = MK_CHART_PALETTES[isDark.value ? 'dark' : 'light'];
   const labels = loadSeries.value.map((p) => p.label)
   const lss = loadSeries.value.map((p) => p.lss)
   const lf = loadSeries.value.map((p) => p.lf)
@@ -1270,16 +1272,14 @@ const loadChartOption = computed<EChartsCoreOption>(() => {
       type: 'category',
       data: labels,
       boundaryGap: false,
-      axisLine: { lineStyle: { color: isDark.value ? 'rgba(230,237,247,0.22)' : 'rgba(23,32,51,0.15)' } },
       axisTick: { show: false },
-      axisLabel: { color: '#8492ab', fontSize: 11, interval: Math.max(0, Math.floor(labels.length / 8)) },
+      axisLabel: { fontSize: 11, interval: Math.max(0, Math.floor(labels.length / 8)) },
     },
     yAxis: {
       type: 'value',
       min: -4,
       max: 12,
-      splitLine: { lineStyle: { color: isDark.value ? 'rgba(230,237,247,0.08)' : 'rgba(23,32,51,0.06)' } },
-      axisLabel: { color: '#8492ab', fontSize: 11 },
+            axisLabel: { fontSize: 11 },
     },
     series: [
       {
@@ -1290,8 +1290,8 @@ const loadChartOption = computed<EChartsCoreOption>(() => {
         symbol: 'circle',
         symbolSize: 4,
         connectNulls: false,
-        lineStyle: { width: 2, color: '#2c63d0' },
-        itemStyle: { color: '#2c63d0' },
+        lineStyle: { width: 2, color: pal.primary },
+        itemStyle: { color: pal.primary },
       },
       {
         name: 'LF 疲劳',
@@ -1301,8 +1301,8 @@ const loadChartOption = computed<EChartsCoreOption>(() => {
         symbol: 'circle',
         symbolSize: 4,
         connectNulls: false,
-        lineStyle: { width: 2, color: '#dc2626' },
-        itemStyle: { color: '#dc2626' },
+        lineStyle: { width: 2, color: pal.danger },
+        itemStyle: { color: pal.danger },
       },
       {
         name: 'LSB 状态',
@@ -1312,8 +1312,8 @@ const loadChartOption = computed<EChartsCoreOption>(() => {
         symbol: 'circle',
         symbolSize: 4,
         connectNulls: false,
-        lineStyle: { width: 2, color: '#15803d' },
-        itemStyle: { color: '#15803d' },
+        lineStyle: { width: 2, color: pal.success },
+        itemStyle: { color: pal.success },
       },
       /* 参考线：LSB=0 平衡线（灰虚）与 LF=6 疲劳警戒线（红虚） */
       {

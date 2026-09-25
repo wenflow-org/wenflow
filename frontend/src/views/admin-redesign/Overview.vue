@@ -378,6 +378,7 @@ import { adminHealthCenterApi } from '@/api/adminApi';
 import { TERMS } from './terms';
 import MkKpi from '@/components/mk/MkKpi.vue';
 import MkChart from '@/components/mk/MkChart.vue';
+import { MK_CHART_PALETTES } from '@/components/mk/chartPalette';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
 import type { EChartsCoreOption } from 'echarts/core';
@@ -457,7 +458,8 @@ const scoreTitle = computed(() => {
 const pulseChartOption = computed<EChartsCoreOption>(() => {
   const pts = data.value?.pulse || [];
   const labels = pts.map((b) => b.label || '');
-  return {
+  const pal = MK_CHART_PALETTES[isDark.value ? 'dark' : 'light'];
+    return {
     animationDuration: 300,
     grid: { left: 30, right: 8, top: 8, bottom: 20 },
     tooltip: {
@@ -475,15 +477,13 @@ const pulseChartOption = computed<EChartsCoreOption>(() => {
     xAxis: {
       type: 'category',
       data: labels,
-      axisLine: { lineStyle: { color: isDark.value ? 'rgba(230,237,247,0.22)' : 'rgba(23,32,51,0.15)' } },
-      axisTick: { show: false },
-      axisLabel: { color: '#8492ab', fontSize: 10, interval: 3 },
+            axisTick: { show: false },
+      axisLabel: { fontSize: 10, interval: 3 },
     },
     yAxis: {
       type: 'value',
       minInterval: 1,
-      splitLine: { lineStyle: { color: isDark.value ? 'rgba(230,237,247,0.08)' : 'rgba(23,32,51,0.06)' } },
-      axisLabel: { color: '#8492ab', fontSize: 10 },
+            axisLabel: { fontSize: 10 },
     },
     series: [
       {
@@ -492,7 +492,7 @@ const pulseChartOption = computed<EChartsCoreOption>(() => {
         data: pts.map((b) => b.calls),
         barWidth: '60%',
         itemStyle: {
-          color: (p: { dataIndex: number }) => (pts[p.dataIndex]?.issue ? '#f87171' : '#3d7cff'),
+          color: (p: { dataIndex: number }) => (pts[p.dataIndex]?.issue ? pal.danger : pal.primaryBright),
           borderRadius: [2, 2, 0, 0],
         },
       },
@@ -503,7 +503,8 @@ const pulseChartOption = computed<EChartsCoreOption>(() => {
 const trend7dChartOption = computed<EChartsCoreOption>(() => {
   const days = data.value?.trend7d || [];
   const labels = days.map((d) => dayLabel(d.date));
-  return {
+  const pal = MK_CHART_PALETTES[isDark.value ? 'dark' : 'light'];
+    return {
     animationDuration: 300,
     grid: { left: 34, right: 8, top: 8, bottom: 20 },
     tooltip: {
@@ -515,15 +516,13 @@ const trend7dChartOption = computed<EChartsCoreOption>(() => {
     xAxis: {
       type: 'category',
       data: labels,
-      axisLine: { lineStyle: { color: isDark.value ? 'rgba(230,237,247,0.22)' : 'rgba(23,32,51,0.15)' } },
-      axisTick: { show: false },
-      axisLabel: { color: '#8492ab', fontSize: 10 },
+            axisTick: { show: false },
+      axisLabel: { fontSize: 10 },
     },
     yAxis: {
       type: 'value',
       minInterval: 1,
-      splitLine: { lineStyle: { color: isDark.value ? 'rgba(230,237,247,0.08)' : 'rgba(23,32,51,0.06)' } },
-      axisLabel: { color: '#8492ab', fontSize: 10 },
+            axisLabel: { fontSize: 10 },
     },
     series: [
       {
@@ -531,14 +530,14 @@ const trend7dChartOption = computed<EChartsCoreOption>(() => {
         type: 'bar',
         data: days.map((d) => d.calls),
         barWidth: '30%',
-        itemStyle: { color: '#3d7cff', borderRadius: [2, 2, 0, 0] },
+        itemStyle: { color: pal.primaryBright, borderRadius: [2, 2, 0, 0] },
       },
       {
         name: '失败',
         type: 'bar',
         data: days.map((d) => d.failed),
         barWidth: '30%',
-        itemStyle: { color: '#d97706', borderRadius: [2, 2, 0, 0] },
+        itemStyle: { color: pal.warn, borderRadius: [2, 2, 0, 0] },
       },
     ],
   };
@@ -658,7 +657,7 @@ const trendSum = computed(() => {
   const trend = data.value?.trend || [];
   const total = trend.reduce((a, d) => a + d.total, 0);
   const completed = trend.reduce((a, d) => a + d.completed, 0);
-  return { total, completed };
+    return { total, completed };
 });
 // 漏斗相邻段速率说明（× 为 1:N 关系而非转化率）
 const rateHint = (i: number) => {
