@@ -73,13 +73,16 @@
       <table class="mk-table mk-table--click mk-table--fixed">
         <colgroup>
           <col v-if="isLive && !isNarrow" style="width:32px">
-          <!-- 文本列（虚拟学习者 / 长期倾向）：auto 吸收列，共享剩余宽度；
-               固定 token 只用于徽章/数字/时间/操作列。 -->
-          <col style="width:var(--mk-col-text)">
-          <col v-if="!isNarrow" style="width:var(--mk-col-text)">
+          <!-- 两个文本列走弹性档（.mk-col--flex）：内容长度不可预测，是唯一该吸收余量的列。
+               此前两列都写死 --mk-col-text(320)，而 10 列基准宽合计 1314 > 容器 1182，
+               fixed 布局按比例回缩后这两列只剩 220px —— 长期倾向 15 行里 9 行被截断。 -->
+          <col class="mk-col--flex">
+          <col v-if="!isNarrow" class="mk-col--flex">
           <col v-if="!isNarrow" style="width:var(--mk-col-badge)">
           <col v-if="!isNarrow" style="width:var(--mk-col-num)">
-          <col style="width:var(--mk-col-flex-min)">
+          <!-- 进行中 = 状态徽章 + 阶段条，需要固定宽度；原写 --mk-col-flex-min
+               （那是弹性列的 min 下限，不是列宽），198px 全落在进度条上。 -->
+          <col style="width:var(--mk-col-model-wide)">
           <col v-if="!isNarrow" style="width:var(--mk-col-num)">
           <col v-if="!isNarrow" style="width:var(--mk-col-num)">
           <col v-if="!isNarrow" style="width:var(--mk-col-time-full)">

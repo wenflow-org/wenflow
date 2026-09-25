@@ -905,9 +905,11 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
 
 /* ================= 暗色模式（D1）：壳层硬编码色覆写 ================= */
 html[data-theme='dark'] {
-  .mshell { background: #141415; color: #efeff0; }
-  .mshell__side { background: #19191a; border-right-color: #2a2b2d; }
-  .mshell__pinned { border-bottom-color: #2a2b2d; }
+  .mshell { background: var(--mk-bg); color: var(--mk-ink); }
+  /* 侧栏夹在 bg 与 surface 之间（bg < side < card < 表头条带）。原 #19191a 距 bg 仅 5 级，
+     卡片抬到 #202124 后侧栏反而比内容更"浅"，主次颠倒。 */
+  .mshell__side { background: #1b1c1f; border-right-color: #36373c; }
+  .mshell__pinned { border-bottom-color: #36373c; }
   .mshell__group-head { color: #808389; }
   .mshell__group-head:hover { color: #7aa2ff; background: rgba(120, 140, 170, 0.08); }
   .mshell__group-head--active { color: #7aa2ff; }

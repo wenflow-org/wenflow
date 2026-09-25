@@ -50,6 +50,21 @@
       <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" />
       <div v-else class="mk-table-scroll">
       <table class="mk-table mk-table--click mk-table--fixed">
+        <!-- 本表曾漏写 colgroup：mk-table--fixed 下没有列宽声明 = 10 列等分 118px，
+             于是 2 位数的数字列白占 118px、文本列被挤到换行（行高 108px、操作按钮折成两行）。
+             fixed 表必须每列都给宽度（ADMIN_PAGE_TEMPLATES §表格）。 -->
+        <colgroup>
+          <col style="width:var(--mk-col-text)">
+          <col style="width:var(--mk-col-num)">
+          <col style="width:var(--mk-col-num)">
+          <col style="width:var(--mk-col-num)">
+          <col style="width:var(--mk-col-num)">
+          <col style="width:var(--mk-col-num)">
+          <col style="width:var(--mk-col-num-wide)">
+          <col style="width:var(--mk-col-num)">
+          <col style="width:var(--mk-col-text-sm)">
+          <col style="width:var(--mk-col-actions-wide)">
+        </colgroup>
         <thead>
           <tr>
             <th>用户</th>
@@ -586,7 +601,7 @@ onMounted(async () => {
 .mr__num--warn { color: var(--mk-amber); font-weight: 700; }
 .mr__sub { display: block; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
 .mr__row--active { background: var(--mk-blue-bg); }
-.mr__actions { display: flex; gap: 6px; }
+.mr__actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
 .mr__error { margin: 6px 0; color: var(--mk-red-strong); font-size: var(--mk-fs-micro); }
 .mr__warn { margin-top: 8px; padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(217, 119, 6, 0.3); background: rgba(217, 119, 6, 0.06); font-size: var(--mk-fs-micro); }
 .mr__chip { display: inline-block; margin-left: 8px; }

@@ -35,9 +35,12 @@
       <MockSkeletonTable v-if="casesLoading && !cases.length" :cols="6" />
       <div v-else-if="cases.length" class="mk-table-scroll pe-list">
         <table class="mk-table mk-table--fixed">
+          <!-- 列宽合计不得超过容器宽（1440 下 1182px）：fixed 表的实际宽度取「100%」与
+               「列宽合计」的较大者，7 列原合计 1310 让整表横向溢出 128px。Agent 是短名，
+               用 text-sm 档。 -->
           <colgroup>
             <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-text)">
+            <col style="width:var(--mk-col-text-sm)">
             <col style="width:var(--mk-col-num)">
             <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-badge)">

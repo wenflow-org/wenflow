@@ -124,7 +124,7 @@
           <colgroup>
             <col v-if="!hiddenCols.has('time')" style="width:var(--mk-col-time-full)">
             <col v-if="!hiddenCols.has('kind')" style="width:36px">
-            <col v-if="!hiddenCols.has('agent')" style="width:var(--mk-col-model)">
+            <col v-if="!hiddenCols.has('agent')" style="width:var(--mk-col-text-sm)">
             <!-- 调用文本：弹性吸收列（不设宽度） -->
             <col v-if="!hiddenCols.has('msg')" style="width:var(--mk-col-text)">
             <col v-if="!hiddenCols.has('model')" style="width:var(--mk-col-model-wide)">

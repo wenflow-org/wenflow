@@ -69,10 +69,12 @@
         <table v-if="filtered.length" class="mk-table mk-table--fixed">
           <colgroup>
             <col style="width:var(--mk-col-text)">
-            <col v-if="!tsHiddenCols.has('user')" style="width:var(--mk-col-model-wide)">
+            <!-- 用户列放的是 昵称+ID 两行，model-wide(140) 回缩后只剩 165px，昵称被截（-33px）；
+                 进度 只是「3/8」这类组合数字，占 165px 纯属浪费。两者对调档位。 -->
+            <col v-if="!tsHiddenCols.has('user')" style="width:var(--mk-col-text-sm)">
             <col v-if="!tsHiddenCols.has('status')" style="width:var(--mk-col-badge)">
-            <col v-if="!tsHiddenCols.has('interact')" style="width:var(--mk-col-model-wide)">
-            <col v-if="!tsHiddenCols.has('progress')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!tsHiddenCols.has('interact')" style="width:var(--mk-col-model)">
+            <col v-if="!tsHiddenCols.has('progress')" style="width:var(--mk-col-num)">
             <col v-if="!tsHiddenCols.has('output')" style="width:var(--mk-col-badge)">
             <col v-if="!tsHiddenCols.has('attention')" style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-actions)">

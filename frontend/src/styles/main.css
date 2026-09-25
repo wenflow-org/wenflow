@@ -231,6 +231,9 @@
   --mk-col-time-full: 110px;     /* 相对时间 / 含日期时间戳 */
   --mk-col-datetime: 176px;      /* 完整日期时间戳 YYYY-MM-DD HH:mm（:ss），mono */
   --mk-col-text: 320px;          /* 文本列基准宽：fixed 表所有列都带宽度，余量按各列宽度权重摊开（无单一吸收列） */
+  --mk-col-text-sm: 168px;       /* 短文本列：阶段/类别/目标类型/「observe · 11 小时前」这类固定短语。
+                                    补 badge(64) 与 text(320) 之间的空档——此前这些列只能借用
+                                    model-wide(140) 或 num-wide(108) 凑合，或直接写死像素。 */
   --mk-col-badge: 64px;          /* 状态徽章（最长词 3 字 ≈ 64px 预算） */
   --mk-col-num: 56px;            /* 纯数字右对齐 */
   --mk-col-num-wide: 108px;      /* 组合数字（12,345 · 6,789） */
@@ -332,10 +335,12 @@ html[data-theme='dark'] {
   --mk-muted: #afb1b6;          /* 次级文字 */
   --mk-faint: #7a7e85;          /* 弱化文字 */
   --mk-faint-soft: #a2a5a9;     /* 弱化文字亮档（暗色下可读性补足） */
-  --mk-line: #313235;           /* 边框/分隔线 */
-  --mk-bg: #141415;             /* 页面背景 */
-  --mk-surface: #1b1c1d;        /* 卡片/面板表面 */
-  --mk-surface-2: #232325;      /* 次级表面（亮色 #eef2fa 的暗色等价物） */
+  --mk-line: #36373c;           /* 边框/分隔线 */
+  --mk-bg: #141415;             /* 页面背景（暗色下最深一档：面只能往上抬，往下就贴到视口黑） */
+  --mk-surface: #202124;        /* 卡片/面板表面：距 bg 12 级。原为 7 级（#1b1c1d），
+                                   亮色档 page→card 是 8 级且另有白底 + 阴影，暗色两样都没有，
+                                   于是卡片读不出"浮起"，全页糊成一块（审计：暗色层级） */
+  --mk-surface-2: #27282c;      /* 次级表面（亮色 #eef2fa 的暗色等价物） */
   --mk-blue: #5b8def;           /* 品牌蓝提亮（深底可读性） */
   --mk-accent-deep: #7aa2ff;
   --mk-green: #4ade80;
@@ -347,24 +352,27 @@ html[data-theme='dark'] {
   --mk-blue-bg: rgba(91, 141, 239, 0.16);
   --mk-blue-bg-strong: rgba(91, 141, 239, 0.26);
   /* 组件级表面/悬停对的暗色档（与 :root 同名；取代原 shared.css 暗色补丁段） */
-  --mk-surface-3: #2d2d2f;
-  --mk-table-head-bg: #19191a;
-  --mk-table-head-hover-bg: #202122;
-  --mk-table-row-line: #252627;
-  --mk-table-row-hover-bg: #202122;
-  --mk-menu-btn-hover-bg: #28282a;
-  --mk-menu-item-hover-bg: #252627;
-  --mk-pills-bg: #232325;
-  --mk-minibar-bg: #2a2b2d;
-  --mk-hover-surface: #252627;
-  --mk-btn-hover-bg: #252627;
+  --mk-surface-3: #34363b;
+  /* 表头条带在暗色下"比卡片更亮"（亮色档是"比卡片更暗"）。
+     暗色里比卡片更暗就贴近页面底色，读成"卡片上破了个洞"而不是"表头条带"；
+     同一 ΔL* 在暗端也不如亮端看得出来，故条带取 6 级台阶。 */
+  --mk-table-head-bg: #282a2e;
+  --mk-table-head-hover-bg: #303237;
+  --mk-table-row-line: #2c2d31;
+  --mk-table-row-hover-bg: #292a2e;
+  --mk-menu-btn-hover-bg: #2e3035;
+  --mk-menu-item-hover-bg: #2b2d31;
+  --mk-pills-bg: #27282c;
+  --mk-minibar-bg: #34363b;
+  --mk-hover-surface: #2b2d31;
+  --mk-btn-hover-bg: #2b2d31;
   --mk-blue-hover: #6a9cf3;
   /* 徽章族 / 按钮族 / 其余组件对的暗色档（与 :root 同名） */
   --mk-badge-info-bg: rgba(91, 141, 239, 0.18);
-  --mk-badge-virtual-bg: #202122;
+  --mk-badge-virtual-bg: #2a2b2f;
   --mk-badge-virtual-fg: #a2a5a9;
-  --mk-badge-virtual-line: #393a3c;
-  --mk-badge-deleted-bg: #28282a;
+  --mk-badge-virtual-line: #3f4146;
+  --mk-badge-deleted-bg: #2e3035;
   --mk-badge-deleted-fg: #a2a5a9;
   --mk-badge-hidden-bg: rgba(167, 139, 250, 0.16);
   --mk-badge-hidden-fg: #c4b5fd;
@@ -386,7 +394,7 @@ html[data-theme='dark'] {
   --mk-pill-active-fg: #9db8f5;
   --mk-pill-count-active-fg: #9db8f5;
   --mk-meta-link-on-fg: #9db8f5;
-  --mk-search-clear-bg: #313235;
+  --mk-search-clear-bg: #3a3c41;
   --mk-search-clear-fg: #afb1b6;
   --mk-meta-link-on-bg: rgba(91, 141, 239, 0.22);
   --mk-pill-count-active-bg: rgba(91, 141, 239, 0.24);
@@ -395,21 +403,21 @@ html[data-theme='dark'] {
   --mk-modal-close-hover-bg: #343537;
   --mk-drawer-close-bg: #2a2b2d;
   --mk-drawer-close-hover-bg: #343537;
-  --mk-card-foot-bg: #19191a;
-  --mk-card-foot-line: #2a2b2d;
-  --mk-batchbar-bg: #1b1c1d;
-  --mk-batchbar-line: #313235;
+  --mk-card-foot-bg: #27282c;
+  --mk-card-foot-line: #36373c;
+  --mk-batchbar-bg: #202124;
+  --mk-batchbar-line: #36373c;
   --mk-batchbar-danger-fg: #f87171;
   --mk-batchbar-danger-hover-bg: rgba(248, 113, 113, 0.26);
   --mk-alert-ok-bg: rgba(74, 222, 128, 0.12);
   --mk-alert-ok-fg: #6ee7a0;
   --mk-alert-info-bg: #19191a;
   --mk-alert-info-fg: #a2a5a9;
-  --mk-skeleton-from: #232325;
-  --mk-skeleton-to: #313235;
+  --mk-skeleton-from: #27282c;
+  --mk-skeleton-to: #36373c;
   /* 会话校验遮罩 + EP 覆写调色板的暗色档（与 :root 同名） */
   --mk-table-sort-hover-bg: rgba(91, 141, 239, 0.12);
-  --mk-search-clear-hover-bg: #393a3c;
+  --mk-search-clear-hover-bg: #45474c;
   --mk-link-active-hover-bg: rgba(91, 141, 239, 0.26);
   --mk-overlay-bg: #141415;
   --mk-overlay-card-line: #313235;

@@ -94,12 +94,12 @@
         <table class="mk-table mk-table--click mk-table--fixed">
           <colgroup>
             <col v-if="colVisible('time')" style="width:var(--mk-col-datetime)">
-            <col v-if="colVisible('admin')" class="al-col-admin" style="width:var(--mk-col-model-wide)">
+            <col v-if="colVisible('admin')" class="al-col-admin" style="width:var(--mk-col-text-sm)">
             <col v-if="colVisible('action')" class="al-col-action" style="width:var(--mk-col-text)">
-            <col v-if="!noTargetTypes && colVisible('tt')" style="width:var(--mk-col-model)">
+            <col v-if="!noTargetTypes && colVisible('tt')" style="width:var(--mk-col-id)">
             <col v-if="colVisible('target')" style="width:var(--mk-col-model-wide)">
-            <col v-if="colVisible('result')" style="width:var(--mk-col-badge)">
-            <col v-if="colVisible('ip')" style="width:var(--mk-col-model)">
+            <col v-if="colVisible('result')" style="width:var(--mk-col-num)">
+            <col v-if="colVisible('ip')" style="width:var(--mk-col-model-wide)">
             <col style="width:36px">
           </colgroup>
           <thead>
@@ -722,7 +722,10 @@ function goSessions(username: string) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 240px;
+  /* 200px（原 240px）：路径 + 分隔符 + 方法徽章同行内联排布，241+18+55 = 314px 超过
+     动作列 1440 下的内容盒（≈301px），方法徽章被挤到第二行、行高翻倍。200px 留出余量
+     后三者同行；完整路径仍在 title 与展开行里。 */
+  max-width: 200px;
   vertical-align: middle;
 }
 /* 非 API 动作（中文标签）：中性蓝 chip */

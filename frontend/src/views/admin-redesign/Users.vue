@@ -60,17 +60,19 @@
       />
       <div v-else-if="filtered.length" class="mk-table-scroll">
         <table class="mk-table mk-table--fixed">
-          <!-- 列宽单一来源：<colgroup> + token。「用户」不设宽度＝auto 吸收列，
-               其余列严格按 token 渲染（无吸收列时整表会被等比放大）。 -->
+          <!-- 列宽单一来源：<colgroup> + token。列宽合计必须 ≤ 容器宽（1440 下 1182px）：
+               fixed 表按列宽权重等比摊开余量，基准宽越大的列摊到越多。原基准合计 1056，
+               放大 1.12 倍后「角色」「操作」这类 2 字列各占 130px，而真正放昵称+邮箱的
+               用户列只有 358px、长邮箱被截。各列改回与内容相称的档位。 -->
           <colgroup>
             <col v-if="isLive && showCol('check')" style="width:32px">
             <col style="width:var(--mk-col-text)">
-            <col v-if="showCol('role')" style="width:var(--mk-col-model)">
-            <col v-if="showCol('level')" style="width:var(--mk-col-model-wide)">
+            <col v-if="showCol('role')" style="width:var(--mk-col-badge)">
+            <col v-if="showCol('level')" style="width:var(--mk-col-num-wide)">
             <col v-if="showCol('paths')" style="width:var(--mk-col-num-wide)">
-            <col v-if="showCol('created')" style="width:var(--mk-col-time-full)">
-            <col v-if="showCol('lastlogin')" style="width:var(--mk-col-time-full)">
-            <col style="width:var(--mk-col-actions-wide)">
+            <col v-if="showCol('created')" style="width:var(--mk-col-time)">
+            <col v-if="showCol('lastlogin')" style="width:var(--mk-col-time)">
+            <col style="width:var(--mk-col-actions)">
           </colgroup>
           <thead>
             <tr>

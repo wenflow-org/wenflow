@@ -357,15 +357,18 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
 .mk-table { width: 100%; border-collapse: collapse; }
 .mk-table th {
   text-align: left;
-  padding: 8px 13px;
+  padding: 8px 12px;
   font-size: var(--mk-fs-micro);
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  /* 表头不再是全大写 + 0.04em 字距：中文标签下 uppercase 无效果、字距只增加噪声，
+     拉丁标签（Skill / IP / core）则被强制大写、与页面文案的大小写脱节。
+     层级改由字重（600）与颜色（--mk-muted）承担，对齐 ADMIN_VISUAL_LAYER_SPEC §1。 */
+  letter-spacing: 0.01em;
   color: var(--mk-muted);
   background: var(--mk-table-head-bg);
   border-bottom: 1px solid var(--mk-line);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
   transition: background 0.12s, color 0.12s;
 }
 /* 表头 hover 反馈（对齐 AntD：无排序功能时仍给可交互提示的视觉响应） */
@@ -413,9 +416,13 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   border-top: 5px solid currentColor;
 }
 .mk-table td {
-  padding: 9px 13px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--mk-table-row-line);
   vertical-align: middle;
+  /* 等宽数字：数字列即使宽度不一，各位也对齐成一条竖线，扫读时不再左右跳。
+     这是表格的默认值（不是可选修饰），原先只有 .mk-num 单元格有，于是
+     未包 .mk-num 的数字列（余额/耗时/条数）退出等宽，整列看起来"歪"。 */
+  font-variant-numeric: tabular-nums;
 }
 .mk-table tr:last-child td { border-bottom: none; }
 .mk-table tbody tr { transition: background 0.12s; }
@@ -521,6 +528,11 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-cell-sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 数字列：不换行、右对齐、不被挤压（固定列宽规范） */
 .mk-num { font-family: var(--mk-mono); font-size: var(--mk-fs-body); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; min-width: 48px; }
+/* fixed 表里列宽即契约，min-width 反而越权：min-width 48 + 单元格左右 padding 24 = 72px，
+   把 56px 的 --mk-col-num 列撑溢出 16px，右对齐的数字因此越过本列右缘 ~4px、
+   挤进邻列的 padding——多个数字列并排时列间隙看起来忽宽忽窄。 */
+.mk-table--fixed .mk-num,
+.mk-table--fixed .mk-actions { min-width: 0; }
 .mk-na { color: var(--mk-faint); }
 /* 操作列：不换行、不被挤压 */
 .mk-actions { display: flex; gap: 4px; justify-content: flex-end; white-space: nowrap; min-width: 72px; }
@@ -535,6 +547,8 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-col--time { width: var(--mk-col-time); }
 .mk-col--time-full { width: var(--mk-col-time-full); }
 .mk-col--datetime { width: var(--mk-col-datetime); }
+.mk-col--text { width: var(--mk-col-text); }
+.mk-col--text-sm { width: var(--mk-col-text-sm); }
 .mk-col--badge { width: var(--mk-col-badge); }
 .mk-col--num { width: var(--mk-col-num); }
 .mk-col--num-wide { width: var(--mk-col-num-wide); }
@@ -1362,6 +1376,7 @@ html[data-theme='dark'] {
     --mk-col-time-full: 128px;
     --mk-col-datetime: 205px;
     --mk-col-text: 372px;
+    --mk-col-text-sm: 195px;
     --mk-col-badge: 76px;
     --mk-col-num: 64px;
     --mk-col-num-wide: 130px;
@@ -1448,6 +1463,7 @@ html[data-theme='dark'] {
     --mk-col-time-full: 154px;
     --mk-col-datetime: 246px;
     --mk-col-text: 448px;
+    --mk-col-text-sm: 235px;
     --mk-col-badge: 90px;
     --mk-col-num: 78px;
     --mk-col-num-wide: 156px;

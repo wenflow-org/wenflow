@@ -82,13 +82,16 @@
       <div v-if="view === 'list'" class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table sk-table mk-table--fixed">
           <colgroup>
-            <!-- Skill 名：弹性吸收列（不设宽度） -->
+            <!-- Skill 名 + 中文描述是唯一的长内容列，但基准合计 754 远小于容器 1182，
+                 fixed 布局把余量按权重等比摊给每一列（放大 1.57 倍）：右边四个 2-5 字列
+                 各占 100-220px，真正的 Skill 名反而只有 502px、长名被截。
+                 把「所属阶段」「最近调用」降档，让 Skill 列拿回宽度。 -->
             <col style="width:var(--mk-col-text)">
-            <col v-if="showCol('agent')" style="width:var(--mk-col-model-wide)">
+            <col v-if="showCol('agent')" style="width:var(--mk-col-badge)">
             <col v-if="showCol('cat')" style="width:var(--mk-col-badge)">
             <col v-if="showCol('completion')" style="width:var(--mk-col-badge)">
             <col v-if="showCol('rate')" style="width:var(--mk-col-num)">
-            <col v-if="showCol('last')" style="width:var(--mk-col-time-full)">
+            <col v-if="showCol('last')" style="width:var(--mk-col-time)">
           </colgroup>
           <thead>
             <tr>
