@@ -61,16 +61,9 @@
             </div>
           </template>
         </section>
-        <!-- 渐进式路径（批次 D）：后续阶段随学习进度生成，横幅只在有未就绪阶段时轻提示 -->
-        <section
-          v-else-if="lifecycle?.progressive && lifecycle.designedStages < lifecycle.totalPathStages"
-          class="genbar card genbar--working"
-        >
-          <div class="genbar__text">
-            <strong>第 {{ lifecycle.designedStages }}/{{ lifecycle.totalPathStages }} 阶段已就绪，后续阶段随学习进度生成</strong>
-            <p>完成当前阶段后，下一阶段会自动准备好。</p>
-          </div>
-        </section>
+        <!-- 渐进式路径横幅已移除：lifecycle.progressive/designedStages/totalPathStages
+           不在 GenerationLifecycleDTO（api/learning.ts:20-33）中，normalizeGenerationLifecycle
+           从不产出，原分支为不可达死代码（2026-09-25 清理） -->
 
         <!-- 头部 Hero -->
         <section class="hero card">
@@ -90,10 +83,11 @@
               class="hero__desc-toggle"
               @click="toggleHeroDesc"
             >{{ descExpanded ? '收起' : '展开全文' }}</button>
+            <!-- 指标只放「环以外」的信息：总进度由右侧进度环唯一承载（去重：原「任务进度」格
+                 与环的 percent 是同一比值，且每阶段卡、侧栏「还剩 N 个任务」已有计数） -->
             <div class="hero__metrics">
               <span class="metric"><b>{{ currentStageNo }} / {{ stages.length || '?' }}</b>当前阶段</span>
               <span class="metric"><b>{{ path.estimatedHours || '—' }} 小时</b>预计投入</span>
-              <span class="metric"><b>{{ doneTasks }} / {{ totalTasks }}</b>任务进度</span>
               <span v-if="path.deadlineText" class="metric"><b>{{ path.deadlineText }}</b>目标周期</span>
             </div>
             <div class="hero__actions">
@@ -273,8 +267,14 @@
                 <button type="button" class="tl__done-review" @click="timelineOpenStages.push(si)">回顾任务</button>
               </div>
 
-              <!-- 任务列表 -->
-              <div class="tl__tasks" :class="{ 'tl__tasks--open': timelineOpenStages.includes(si) }">
+              <!-- 任务列表：仅「当前阶段」或用户展开的阶段渲染任务行。
+                   列表视图已是权威任务区；时间线不再是第二套全量任务渲染
+                   （2026-09-25 去重：原实现把每个阶段的全部任务都渲一遍，待解锁阶段也渲染） -->
+              <div
+                v-if="stageStatus(stage, si) === 'current' || timelineOpenStages.includes(si)"
+                class="tl__tasks"
+                :class="{ 'tl__tasks--open': timelineOpenStages.includes(si) || stageStatus(stage, si) === 'current' }"
+              >
                 <div class="tl__tasks-inner">
                   <div
                     v-for="task in stageTasks(stage)"
@@ -318,36 +318,36 @@
           </div>
           </div><!-- /stages-col -->
 
-          <!-- 侧栏 -->
+          <!-- 侧栏（2026-09-25 收敛）：原 6 张异构卡 → 3 组
+               「进行到哪」（当前任务 + 接下来合并）／「学习资料」（资料 + 原文预览合并）／
+               「设计意图」（默认折叠，依据型信息）；「路径状态」空态卡删除（hero 指标已覆盖） -->
           <aside class="side">
-            <section v-if="!stages.length" class="card sidecard">
-              <span class="kicker">路径状态</span>
-              <p class="chart__empty">暂无任务安排</p>
-            </section>
-
-            <section v-if="currentTask" class="card sidecard sidecard--current">
-              <span class="kicker">当前任务</span>
-              <strong>{{ currentTask.title || currentTask.displayLabel }}</strong>
-              <p>完成后还剩 {{ remainingAfterCurrent }} 个任务。</p>
-              <div class="sidecard__meta">
-                <span class="tag tag--blue">约 {{ currentTask.estimatedMinutes || '—' }} 分钟</span>
-                <span class="tag">{{ taskKindText(currentTask) }}</span>
+            <section v-if="currentTask || nextTasks.length" class="card sidecard" :class="{ 'sidecard--current': currentTask }">
+              <span class="kicker">进行到哪</span>
+              <template v-if="currentTask">
+                <strong>{{ currentTask.title || currentTask.displayLabel }}</strong>
+                <p>完成后还剩 {{ remainingAfterCurrent }} 个任务。</p>
+                <div class="sidecard__meta">
+                  <span class="tag tag--blue">约 {{ currentTask.estimatedMinutes || '—' }} 分钟</span>
+                  <span class="tag">{{ taskKindText(currentTask) }}</span>
+                </div>
+                <button type="button" v-if="canLearn" class="btn-primary btn-primary--block" @click="goLearn(currentTask.id)">
+                  {{ currentTask.status === 'in_progress' ? '继续当前任务' : '开始学习' }}
+                </button>
+              </template>
+              <div v-if="nextTasks.length" class="sidecard__sub">
+                <span class="sidecard__sub-head">接下来</span>
+                <ol class="next-list">
+                  <li v-for="t in nextTasks" :key="t.id">
+                    <strong>{{ t.title || t.displayLabel }}</strong>
+                    <small>{{ t.estimatedMinutes || '—' }} 分钟</small>
+                  </li>
+                </ol>
               </div>
-              <button type="button" v-if="canLearn" class="btn-primary btn-primary--block" @click="goLearn(currentTask.id)">开始学习</button>
-            </section>
-
-            <section v-if="nextTasks.length" class="card sidecard">
-              <span class="kicker">接下来的任务</span>
-              <ol class="next-list">
-                <li v-for="t in nextTasks" :key="t.id">
-                  <strong>{{ t.title || t.displayLabel }}</strong>
-                  <small>{{ t.estimatedMinutes || '—' }} 分钟</small>
-                </li>
-              </ol>
             </section>
 
             <section v-if="pathMaterials.length" class="card sidecard">
-              <span class="kicker">本路径的资料</span>
+              <span class="kicker">学习资料</span>
               <ul class="materials-list">
                 <li v-for="(material, mi) in pathMaterials" :key="mi">
                   <strong>{{ material.title || '未命名资料' }}</strong>
@@ -364,51 +364,62 @@
                 </li>
               </ul>
               <p class="materials-note">这条路径按你上传的资料生成；学习时会围绕这些章节展开。</p>
-            </section>
-
-            <section v-if="materialPreview.open" class="card sidecard">
-              <span class="kicker">资料原文</span>
-              <strong>{{ materialPreview.title }}</strong>
-              <p v-if="materialPreview.loading" class="materials-note">正在读取…</p>
-              <template v-else>
-                <p v-if="materialPreview.sectionTitle" class="materials-note">对应章节：{{ materialPreview.sectionTitle }}</p>
-                <p v-if="materialPreview.quote" class="materials-note">引文：{{ materialPreview.quote }}</p>
-                <pre class="material-text">{{ materialPreview.text }}</pre>
+              <!-- 资料原文预览：并入本卡（原独立「资料原文」卡），打开章节引用时在此展开 -->
+              <template v-if="materialPreview.open">
+                <div class="sidecard__sub">
+                  <span class="sidecard__sub-head">原文 · {{ materialPreview.title }}</span>
+                  <p v-if="materialPreview.loading" class="materials-note">正在读取…</p>
+                  <template v-else>
+                    <p v-if="materialPreview.sectionTitle" class="materials-note">对应章节：{{ materialPreview.sectionTitle }}</p>
+                    <p v-if="materialPreview.quote" class="materials-note">引文：{{ materialPreview.quote }}</p>
+                    <pre class="material-text">{{ materialPreview.text }}</pre>
+                  </template>
+                  <button type="button" class="materials-toggle" @click="materialPreview.open = false">收起原文</button>
+                </div>
               </template>
-              <button type="button" class="materials-toggle" @click="materialPreview.open = false">收起</button>
             </section>
 
             <section v-if="sceneSummary" class="card sidecard">
-              <span class="kicker">设计意图</span>
-              <strong
-                v-if="sceneSummaryTitle"
-                ref="intentTitleRef"
-                class="sidecard__intent-title"
-                :class="{ 'sidecard__intent-title--expanded': intentExpanded }"
-              >{{ sceneSummaryTitle }}</strong>
               <button
-                v-if="intentOverflow"
                 type="button"
-                class="sidecard__intent-toggle"
-                @click="toggleIntentTitle"
-              >{{ intentExpanded ? '收起' : '展开全文' }}</button>
-              <dl v-if="sceneRows.length" class="sidecard__rows">
-                <div v-for="row in sceneRows" :key="row.label" class="sidecard__row">
-                  <dt>{{ row.label }}</dt>
-                  <dd>{{ row.value }}</dd>
-                </div>
-              </dl>
-              <div v-if="sceneProblemBackground" class="sidecard__bg">
+                class="sidecard__head"
+                :aria-expanded="intentOpen"
+                @click="intentOpen = !intentOpen"
+              >
+                <span class="kicker">设计意图</span>
+                <span class="sidecard__chev" :class="{ 'sidecard__chev--open': intentOpen }">▾</span>
+              </button>
+              <div v-show="intentOpen" class="sidecard__body">
+                <strong
+                  v-if="sceneSummaryTitle"
+                  ref="intentTitleRef"
+                  class="sidecard__intent-title"
+                  :class="{ 'sidecard__intent-title--expanded': intentExpanded }"
+                >{{ sceneSummaryTitle }}</strong>
                 <button
+                  v-if="intentOverflow"
                   type="button"
-                  class="sidecard__bg-head"
-                  :aria-expanded="bgExpanded"
-                  @click="bgExpanded = !bgExpanded"
-                >
-                  <span>问题背景</span>
-                  <span class="sidecard__bg-chev" :class="{ 'sidecard__bg-chev--open': bgExpanded }">▾</span>
-                </button>
-                <p v-if="bgExpanded" class="sidecard__bg-text">{{ sceneProblemBackground }}</p>
+                  class="sidecard__intent-toggle"
+                  @click="toggleIntentTitle"
+                >{{ intentExpanded ? '收起' : '展开全文' }}</button>
+                <dl v-if="sceneRows.length" class="sidecard__rows">
+                  <div v-for="row in sceneRows" :key="row.label" class="sidecard__row">
+                    <dt>{{ row.label }}</dt>
+                    <dd>{{ row.value }}</dd>
+                  </div>
+                </dl>
+                <div v-if="sceneProblemBackground" class="sidecard__bg">
+                  <button
+                    type="button"
+                    class="sidecard__bg-head"
+                    :aria-expanded="bgExpanded"
+                    @click="bgExpanded = !bgExpanded"
+                  >
+                    <span>问题背景</span>
+                    <span class="sidecard__bg-chev" :class="{ 'sidecard__bg-chev--open': bgExpanded }">▾</span>
+                  </button>
+                  <p v-if="bgExpanded" class="sidecard__bg-text">{{ sceneProblemBackground }}</p>
+                </div>
               </div>
             </section>
           </aside>
@@ -453,7 +464,7 @@
             </li>
           </ul>
           <div class="adjust-dialog__actions">
-            <button type="button" class="btn-ghost" :disabled="clearingSessions || retryingAfterClear" @click="dismissBlockingSessions; adjustMode = null">
+            <button type="button" class="btn-ghost" :disabled="clearingSessions || retryingAfterClear" @click="dismissBlockingSessions(); adjustMode = null">
               返回修改
             </button>
             <button
@@ -1377,6 +1388,8 @@ const sceneRows = computed(() => {
 
 /** 问题背景（问题原文 realProblem）：默认折叠；标题已是同一段时不再重复展示 */
 const bgExpanded = ref(false);
+/** 设计意图卡：默认收起（用户侧收敛：侧栏优先「进行到哪」，意图是依据型信息，2026-09-25） */
+const intentOpen = ref(false);
 const sceneProblemBackground = computed(() => {
   const s = sceneSummary.value;
   if (!s || typeof s === 'string') return '';
@@ -1630,6 +1643,18 @@ onBeforeUnmount(() => {
 .sidecard strong { font-size: 14.5px; line-height: 1.5; }
 .sidecard p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.65; }
 .sidecard__meta { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 侧栏折叠头（设计意图，2026-09-25）：与问题背景的 bg-head 同款箭头语言 */
+.sidecard__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  border: 0; background: transparent; padding: 0; margin: 0; font: inherit;
+  color: inherit; cursor: pointer; text-align: left;
+}
+.sidecard__chev { display: inline-block; color: var(--faint); transition: transform 0.16s ease; }
+.sidecard__chev--open { transform: rotate(90deg); }
+.sidecard__body { display: grid; gap: 10px; align-content: start; }
+/* 卡内子分区（接下来 / 原文预览）：与主 kicker 同语言、低一档 */
+.sidecard__sub { display: grid; gap: 6px; align-content: start; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 2px; }
+.sidecard__sub-head { font-size: 12px; font-weight: 700; color: var(--muted); }
 .materials-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .materials-list > li { display: flex; flex-direction: column; gap: 4px; }
 .materials-list strong { font-size: 13.5px; color: var(--ink); }
