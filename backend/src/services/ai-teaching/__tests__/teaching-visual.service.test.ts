@@ -12,6 +12,7 @@ import {
   composeTeachingVisualPrompt,
   countTeachingVisuals,
   detectAsciiStructure,
+  detectExerciseLeakInReply,
   generateTeachingVisual,
   isTeachingVisualEnabled,
   isUsableVisualPrompt,
@@ -202,5 +203,26 @@ describe('教学配图时机（S1：老师用字符画结构）', () => {
   it('开关关闭 → 不出信号（灰度回滚）', () => {
     process.env.TEACHING_VISUAL_DISABLED = '1';
     expect(buildVisualOpportunity([assistant('甲（前）●———→ 方向 →')])).toBeNull();
+  });
+});
+
+describe('防答案泄漏硬闸门（detectExerciseLeakInReply，2026-09-24 配图审计）', () => {
+  it('真实泄漏样本：同轮布置"你自己排位置"→ 判真', () => {
+    // 审计样本 1 的原话（消息 [10]）
+    expect(detectExerciseLeakInReply(
+      '先不急着查账。我想请你在纸上（或者就在这里用文字）把这些位置横着排一遍，每个位置后面标一句「这时它还是不是一整袋」',
+    )).toBe(true);
+    expect(detectExerciseLeakInReply('请你把它排成一条时间线，从进货到卖出。')).toBe(true);
+    expect(detectExerciseLeakInReply('在纸上画一条位置线，标出前后。')).toBe(true);
+    expect(detectExerciseLeakInReply('你先摆一下这几个环节，我们再往下走。')).toBe(true);
+  });
+
+  it('正常讲解/不布置动手练习 → 判假（不误伤配图）', () => {
+    expect(detectExerciseLeakInReply(
+      '同样一样东西，在店里换过几个位置、被人动过之后，它在账上能对上的那个"数"就变了。第一次在架子上，是「一袋25公斤」。',
+    )).toBe(false);
+    expect(detectExerciseLeakInReply('这就是整件事的根子——没人记它什么时候从"整袋"变成了"半袋"。')).toBe(false);
+    expect(detectExerciseLeakInReply('')).toBe(false);
+    expect(detectExerciseLeakInReply(null)).toBe(false);
   });
 });

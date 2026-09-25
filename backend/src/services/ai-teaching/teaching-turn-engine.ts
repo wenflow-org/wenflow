@@ -68,7 +68,7 @@ import {
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
 import { buildDeterministicOpening, pickPeerStrategy, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
-import { generateTeachingVisual, buildVisualOpportunity } from './teaching-visual.service';
+import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
@@ -592,7 +592,14 @@ export async function processStudentMessage(
 
   // 教学配图（owner 口径 2026-09-23「图片是一种特殊的文字」）：老师临场请求 → 代码闸门 → 画一张，
   // 内联在本轮消息里（`images`）。文本脱离图仍成立；生成失败/超上限一律 fail-open，不阻断课堂。
-  if (teachingOutput.visual) {
+  // 防答案泄漏硬闸门（2026-09-24 审计）：回复在同轮布置"你自己排/画"练习时不配图——
+  // 提示词例外句实测压不过配图时机信号（三次重放一致），故与 maxPerTask 同思路代码化。
+  if (teachingOutput.visual && detectExerciseLeakInReply(teachingOutput.reply)) {
+    logger.info('[AITeaching] 本轮回复布置了由学生自己排/画的练习，跳过配图（防答案泄漏）', {
+      sessionId,
+      taskId: session.taskId,
+    });
+  } else if (teachingOutput.visual) {
     const image = await generateTeachingVisual({
       request: teachingOutput.visual,
       messages: updatedMessages,

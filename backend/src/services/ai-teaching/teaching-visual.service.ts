@@ -81,7 +81,9 @@ export function countTeachingVisuals(messages: TeachingSessionMessage[] | null |
 
 /**
  * 组最终生图 prompt：**风格前缀 + 老师的描述**。
- * 风格前缀固定（教学示意图口径），描述原样保留——prompt 即"图所渲染的那段文字"。
+ * owner 口径 2026-09-24：图是"特殊的文字字符"——它呈现教学内容的**抽象关系**，但**不以文字形态出现**。
+ * 实测（doc/re_test/img-audit）：生图模型图内中文必坏（6 处标注 6 处乱码），故硬禁图内文字；
+ * 说明职责交给图下方 caption/reply（真实文本渠道）。
  */
 export function composeTeachingVisualPrompt(request: TeachingVisualRequest): string {
   const kind = String(request?.kind || '').trim();
@@ -90,10 +92,12 @@ export function composeTeachingVisualPrompt(request: TeachingVisualRequest): str
     '教学示意图（课堂辅助用）',
     kind ? `类型：${kind}` : null,
     '要求：白底、简洁、线条清晰、结构明确，只画描述里说的内容；不要多余的装饰与无关文字',
-    '如画面需要标注，用简短中文',
+    '画面里不要出现任何文字：不要标签、不要对话气泡、不要表格与编号；要说明的内容由图下方的说明文字承担，至多保留极少量数字符号',
+    '画关系不画故事：画面呈现的是顺序/层级/包含/对比/变化这类抽象关系；状态差异要画出可见区别（如满/半、开/合）',
     '构图：横向关系用横向构图，纵向层级用纵向构图，画面留白充足',
   ].filter(Boolean).join('；');
-  return `${style}。画面内容：${subject}`;
+  // 收尾再钉一次"无字"：老师的描述里常自带"标注××"类要求，放在末尾压过它（图像模型对尾部指令权重高）
+  return `${style}。画面内容：${subject}。再次强调：画面内不出现文字与标注，只画图形与关系。`;
 }
 
 /**
@@ -130,6 +134,27 @@ export function resolveTeachingVisualSpec(
 export function isUsableVisualPrompt(request: TeachingVisualRequest | null | undefined): boolean {
   const text = String(request?.prompt || '').trim();
   return text.length >= MIN_VISUAL_PROMPT_CHARS;
+}
+
+/**
+ * 回复是否在同轮布置了「由学生自己排出/画出该结构」的练习——此时配图 = 把答案先画给学生（答案泄漏）。
+ *
+ * 为什么代码化（2026-09-24 配图审计，doc/re_test/img-audit）：提示词例外句实测压不过"配图时机"信号
+ * （同一 payload 三次重放均仍出图），与 maxPerTask"提示词会被忽略→代码硬闸门"同思路。
+ * 判据刻意收紧（请你在纸上/把它排成/动手排这类明确指令），只拦真泄漏；宁漏不误——少配一张图无害。
+ */
+const EXERCISE_LEAK_PATTERNS: RegExp[] = [
+  /请你在(纸上|这里|下面)[^。！？\n]{0,24}(排|画|摆|写)/,
+  /请你(把|将)(它|这些|上面|刚才)[^。！？\n]{0,12}(排|画|摆)(一|成|出)/,
+  /在(纸上|草稿上)[^。！？\n]{0,24}(排|画|摆)(一|成|出|个)/,
+  /(你|先|来|动手|自己)(排|画|摆)一(排|遍|下|个)/,
+  /横着排(一|一遍)/,
+];
+
+export function detectExerciseLeakInReply(reply: string | null | undefined): boolean {
+  const text = String(reply ?? '');
+  if (!text) return false;
+  return EXERCISE_LEAK_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 /** ASCII 结构图特征字符：箭头 / 方框 / 圆点 / 长横线 —— 老师"用字符硬画结构"的痕迹。 */
@@ -181,8 +206,10 @@ export function buildVisualOpportunity(messages: TeachingSessionMessage[] | null
     reason: 'ascii-structure',
     instruction:
       '上一轮你用了箭头/方框/字符在 reply 里"画"结构——那说明这里本来就需要一张图。'
-      + '本轮请改为输出顶层块 visual：在 prompt 里把这张图画清楚（主体与关系），caption 写一句给学生看的说明；'
-      + 'reply 里不必再用字符画结构。',
+      + '**先判断**：若本轮正要布置「由学习者自己排出/画出这个结构」的练习（答案泄漏，2026-09-24 实测），'
+      + '则本轮**不要**输出 visual，直接布置练习，把图留到学生完成后的下一轮总结印证时再用；'
+      + '否则本轮请改为输出顶层块 visual：在 prompt 里把这张图画清楚（主体与抽象关系，画面里不出现文字），'
+      + 'caption 写一句给学生看的说明；reply 里不必再用字符画结构。',
   };
 }
 
