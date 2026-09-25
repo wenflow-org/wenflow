@@ -1071,11 +1071,12 @@ function buildPromptInput(input: TeachingTurnInput) {
   const {
     interactionProfile: scenarioInteractionProfile,
     contextCompression: scenarioCompression,
-    // 载荷审计（2026-09-25）：这三个子键是 scenario 里仅有的逐回合变化项（其余 29 个子字段整课恒定），
-    // 留在 scenario 体内会把后面 promptDirectives/learner 的 ~12k 稳定字节全部打断 → 提取到载荷尾部。
+    // 载荷审计（2026-09-25）：这四个子键是 scenario 里仅有的逐回合变化项（其余整课恒定），
+    // 留在 scenario 体内会把稳定主体打断 → 提取到载荷尾部（见 buildTeachingTurnMessages 的分流注释）。
     // 模板里的引用路径同步改为顶层键名（core yaml 已同步）。
     behavioralProfile: scenarioBehavioralProfile,
     checkpointHistory: scenarioCheckpointHistory,
+    priorMisconceptions: scenarioPriorMisconceptions,
     // 尾部已单独注入 supplementaryMaterial，scenario 体内不再重复携带
     supplementaryMaterial: scenarioSupplementaryMaterial,
     ...stableScenario
@@ -1131,6 +1132,7 @@ function buildPromptInput(input: TeachingTurnInput) {
       classroomEventContext: input.classroomEventContext,
       ...(scenarioCheckpointHistory ? { checkpointHistory: scenarioCheckpointHistory } : {}),
       ...(scenarioBehavioralProfile ? { behavioralProfile: scenarioBehavioralProfile } : {}),
+      ...(scenarioPriorMisconceptions ? { priorMisconceptions: scenarioPriorMisconceptions } : {}),
       interactionProfile: scenarioInteractionProfile ?? null,
       ...(scenarioCompression ? { contextCompression: scenarioCompression } : {}),
       latestLearnerMessage,
@@ -1276,6 +1278,9 @@ const OUTPUT_CONTRACT_TAIL =
   + '请严格按系统提示的输出契约，直接输出单个 JSON 对象：'
   + '不要输出任何对话正文、寒暄或代码围栏，JSON 必须是整条回复的第一个字符。';
 
+/** 会话内恒定、可安全并入 system 尾部的载荷键（buildPromptInput 已把动态子键从这两块里抽出）。 */
+const STABLE_CONTEXT_KEYS = new Set(['scenario', 'learner']);
+
 function buildTeachingTurnMessages(args: {
   input: TeachingTurnInput;
   systemPrompt: string;
@@ -1287,13 +1292,43 @@ function buildTeachingTurnMessages(args: {
     role: (message.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
     content: message.content,
   }));
-  const payload = args.retryMessage
-    ? `${args.userPayload}\n\n${args.retryMessage}`
-    : `${args.userPayload}${OUTPUT_CONTRACT_TAIL}`;
+  const suffix = args.retryMessage
+    ? `\n\n${args.retryMessage}`
+    : OUTPUT_CONTRACT_TAIL;
+
+  // 2026-09-25 第二段修正（逐回合命中遥测证伪了"载荷内重排"路线）：
+  // 真实请求流 [system, …历史, user(载荷)] 里，第 N 回合与第 N-1 回合的共同前缀止于
+  // a(N-2)——下一个槽位上一回合放的是**载荷消息**、本回合放的是**原始用户消息**，必然发散。
+  // 所以无论载荷内部多稳定，整个 user 载荷都落在发散点之后、逐回合全价重发
+  // （实测 hit 每回合仅 +256 tok，载荷内可命中 71% 也不兑现）。
+  // 修法：会话内恒定的稳定块（scenario/learner 主体，审计实测 ~12K 字节 ≈ 5K tok）
+  // 挪进 system 尾部——第 2 回合起进入可缓存前缀；user 载荷只留逐回合变化项（~6K 字节）。
+  // system 变更会使当回合缓存归零，因此低频变化块（promptDirectives/conditionalRules/
+  // taskDifficulty 等）一律**不进** system、留在 user 载荷尾部（EV 上更便宜）。
+  let systemContent = args.systemPrompt;
+  let userContent = `${args.userPayload}${suffix}`;
+  if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
+    try {
+      const parsed = JSON.parse(args.userPayload) as Record<string, unknown>;
+      const stable: Record<string, unknown> = {};
+      const dynamic: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(parsed)) {
+        (STABLE_CONTEXT_KEYS.has(key) ? stable : dynamic)[key] = value;
+      }
+      // 两个稳定块齐备才分流；否则维持整体载荷在 user（旧形状/异常输入的兜底）
+      if (stable.scenario && stable.learner && Object.keys(stable).length === STABLE_CONTEXT_KEYS.size) {
+        systemContent = `${args.systemPrompt}\n\n【课堂稳定上下文】以下是本节课内保持不变的背景数据（任务情境与学习者画像），全程有效、与动态状态配合使用：\n${JSON.stringify(stable)}`;
+        userContent = `${JSON.stringify(dynamic)}${suffix}`;
+      }
+    } catch {
+      // userPayload 非法 JSON（不应发生）时退回整体载荷形态
+    }
+  }
+
   return [
-    { role: 'system', content: args.systemPrompt },
+    { role: 'system', content: systemContent },
     ...history,
-    { role: 'user', content: payload },
+    { role: 'user', content: userContent },
   ];
 }
 

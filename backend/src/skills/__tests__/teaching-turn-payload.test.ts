@@ -150,6 +150,7 @@ describe('teaching-turn payload snapshot parity', () => {
         pathBackgroundContext: '整条路径的背景（整课恒定）',
         checkpointHistory: { total: 3, passed: 2, failed: 1, skipped: 0, recent: [{ title: '排水判断', passed: false }] },
         behavioralProfile: { avgUnderstanding: 0.62, sampleSize: 8 },
+        priorMisconceptions: [{ conceptKey: '闭包', hypothesis: '学生可能混淆闭包与拷贝', canonicalLabel: null, confidence: 0.6, status: 'active', occurrenceCount: 1 }],
         supplementaryMaterial: { title: '补的材料', excerpt: '…' },
       },
     }
@@ -163,10 +164,12 @@ describe('teaching-turn payload snapshot parity', () => {
     expect(keys.indexOf('behavioralProfile')).toBeGreaterThan(keys.indexOf('learner'))
     expect(keys.indexOf('checkpointHistory')).toBeGreaterThan(keys.indexOf('learner'))
     expect(keys.indexOf('taskDifficulty')).toBeGreaterThan(keys.indexOf('learner'))
+    expect(keys.indexOf('priorMisconceptions')).toBeGreaterThan(keys.indexOf('learner'))
     // scenario/learner 体内不再携带这些动态子键（消除载荷内发散点）
     expect(payload.scenario).not.toHaveProperty('behavioralProfile')
     expect(payload.scenario).not.toHaveProperty('checkpointHistory')
     expect(payload.scenario).not.toHaveProperty('supplementaryMaterial')
+    expect(payload.scenario).not.toHaveProperty('priorMisconceptions')
     expect(payload.learner).not.toHaveProperty('taskDifficulty')
     // 稳定子键保留原位
     expect(payload.scenario).toHaveProperty('pathBackgroundContext')
@@ -179,6 +182,50 @@ describe('teaching-turn payload snapshot parity', () => {
     // conditionalRules（低频键）排在每回合必变键之前
     if (keys.includes('conditionalRules')) {
       expect(keys.indexOf('conditionalRules')).toBeLessThan(keys.indexOf('classroomEventContext'))
+    }
+  })
+
+  it('buildMessages 分流：scenario/learner 并入 system 尾部，user 只留动态块（会话内缓存前缀最大化）', async () => {
+    await teachingTurnAgentHandler(MINIMAL_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const payload = spec.buildUserPayload(input, {})
+    const messages = spec.buildMessages({ input, systemPrompt: 'SYSTEM', userPayload: JSON.stringify(payload) })
+
+    expect(messages).toHaveLength(5) // system + 3 条历史 + user
+    const [system] = messages
+    const user = messages[messages.length - 1]
+    // system = 原系统提示 + 稳定上下文后缀（scenario/learner 数据在内）
+    expect(system.role).toBe('system')
+    expect(system.content.startsWith('SYSTEM')).toBe(true)
+    expect(system.content).toContain('【课堂稳定上下文】')
+    expect(system.content).toContain('"subject":"JavaScript"')
+    // user = 动态块 + 输出契约尾语；不再含 scenario/learner
+    expect(user.role).toBe('user')
+    const userParsed = JSON.parse(user.content.replace(/【输出契约】[\s\S]*$/, ''))
+    expect(userParsed.scenario).toBeUndefined()
+    expect(userParsed.learner).toBeUndefined()
+    expect(userParsed.controls).toBeDefined()
+    expect(userParsed.knowledge).toBeDefined()
+    expect(user.content).toContain('【输出契约】')
+    // 历史消息夹在中间、角色映射不变
+    expect(messages.slice(1, -1).every((m: any) => m.role === 'user' || m.role === 'assistant')).toBe(true)
+  })
+
+  it('buildMessages 分流可用 PAYLOAD_STABLE_PREFIX=0 关闭（回退整体载荷形态）', async () => {
+    const prev = process.env.PAYLOAD_STABLE_PREFIX
+    process.env.PAYLOAD_STABLE_PREFIX = '0'
+    try {
+      await teachingTurnAgentHandler(MINIMAL_INPUT as any)
+      const [spec, input] = mockCallPrompt.mock.calls[0]
+      const payload = spec.buildUserPayload(input, {})
+      const messages = spec.buildMessages({ input, systemPrompt: 'SYSTEM', userPayload: JSON.stringify(payload) })
+      const user = messages[messages.length - 1]
+      expect(messages[0].content).toBe('SYSTEM')
+      expect(JSON.parse(user.content.replace(/【输出契约】[\s\S]*$/, ''))).toHaveProperty('scenario')
+    } finally {
+      if (prev === undefined) delete process.env.PAYLOAD_STABLE_PREFIX
+      else process.env.PAYLOAD_STABLE_PREFIX = prev
     }
   })
 })
