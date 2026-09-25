@@ -198,3 +198,58 @@ describe('buildUploadedMaterialPacks', () => {
     expect(buildUploadedMaterialPacks('user-1')).toEqual([]);
   });
 });
+
+describe('buildUploadedMaterialPacks 排除联网入库记录（2026-09-26）', () => {
+  it("origin='web' 的记录不进附件注入（有库优先通道；混入会被 attachment:// 伪装 + materialId 去重双重吞掉）", () => {
+    writeMaterial(
+      makeRecord({ id: 'aaaaaaaa-2222-3333-4444-555555555555', name: '真附件.pdf' }),
+      '正文'
+    );
+    writeMaterial(
+      makeRecord({
+        id: 'bbbbbbbb-2222-3333-4444-555555555555',
+        name: '《3-6岁儿童学习与发展指南》',
+        ext: '.md',
+        format: 'web',
+        origin: 'web',
+        sourceUrl: 'https://104.18.3.128/media/8456/file/guide.pdf',
+      }),
+      '联网正文'
+    );
+
+    const packs = buildUploadedMaterialPacks('user-1');
+    expect(packs).toHaveLength(1);
+    expect(packs[0].pack!.title).toBe('真附件');
+    expect(packs[0].pack!.materialId).toBe('aaaaaaaa-2222-3333-4444-555555555555');
+  });
+
+  it('origin 缺省（历史记录）仍按附件注入（向后兼容）', () => {
+    writeMaterial(makeRecord({ name: '旧附件.pdf' }), '正文');
+    const packs = buildUploadedMaterialPacks('user-1');
+    expect(packs).toHaveLength(1);
+  });
+});
+
+describe('buildPackFromMaterial 身份标注（2026-09-26）', () => {
+  it("origin='web'：真源 URL + tier 分级 + 联网资料标签（不再 attachment:// 伪装成上传附件）", () => {
+    const record = makeRecord({
+      name: '《3-6岁儿童学习与发展指南》.md',
+      ext: '.md',
+      format: 'web',
+      origin: 'web',
+      sourceUrl: 'https://www.moe.gov.cn/srcsite/guide.html',
+    });
+    const built = buildPackFromMaterial(record, '正文内容');
+    expect(built.pack!.sourceUrl).toBe('https://www.moe.gov.cn/srcsite/guide.html');
+    expect(built.pack!.sourceTier).toBe('official');
+    expect(built.notes[0]).toContain('来自库中联网资料');
+    expect(built.notes[0]).not.toContain('用户上传');
+  });
+
+  it('上传附件（origin 缺省）：attachment:// 伪源 + 附件标签（口径不变）', () => {
+    const built = buildPackFromMaterial(makeRecord({ name: '指南.pdf' }), '正文内容');
+    expect(String(built.pack!.sourceUrl)).toContain('attachment://');
+    expect(built.pack!.sourceTier).toBe('unknown');
+    expect(built.notes[0]).toContain('来自用户上传的本地附件');
+  });
+});

@@ -14,6 +14,7 @@
  */
 import { listMaterials, readMaterial, type MaterialRecord } from './material-store';
 import { isProseTextLine, stripLineMarkers } from './document-parser.types';
+import { classifySourceTier } from '../../skills/material-collector';
 import type {
   MaterialKeyPoint,
   MaterialPack,
@@ -125,12 +126,18 @@ function buildKeyPoints(record: MaterialRecord, anchors: MaterialRecord['anchors
 export function buildPackFromMaterial(record: MaterialRecord, markdown: string): MaterialPackResult {
   const sections = buildSections(markdown, record.anchors || []);
   const keyPoints = buildKeyPoints(record, record.anchors || [], markdown);
-  const sourceUrl = attachmentSourceUrl(record.name);
+  // 联网入库资料（origin='web'）亮真身份：真源 URL + tier 分级；attachment:// 只属于真正的上传附件
+  // （2026-09-26 实测：库优先复用 web 记录时，此前的 attachment:// 伪装会让联网资料在路径详情里
+  //  假冒"用户上传附件"，真源 URL 与 tier 全部丢失）
+  const isWeb = record.origin === 'web';
+  const sourceUrl = isWeb
+    ? String(record.sourceUrl || '') || attachmentSourceUrl(record.name)
+    : attachmentSourceUrl(record.name);
 
   const pack: MaterialPack = {
     title: String(record.name || '').replace(/\.[^.]+$/, '') || record.name,
     publisher: null,
-    sourceTier: 'unknown',
+    sourceTier: isWeb ? classifySourceTier(sourceUrl) : 'unknown',
     sourceUrl,
     // 附件正文可回溯（学习者侧「点开看原文」）
     materialId: record.id,
@@ -142,7 +149,11 @@ export function buildPackFromMaterial(record: MaterialRecord, markdown: string):
     keyPoints,
   };
 
-  const notes = [`来自用户上传的本地附件：${record.name}（${record.charCount} 字，${sections.length} 章节，${keyPoints.length} 条原文要点）`];
+  const notes = [
+    isWeb
+      ? `来自库中联网资料：${record.name}（${record.charCount} 字，${sections.length} 章节，${keyPoints.length} 条原文要点）`
+      : `来自用户上传的本地附件：${record.name}（${record.charCount} 字，${sections.length} 章节，${keyPoints.length} 条原文要点）`,
+  ];
   for (const warning of (record.warnings || []).slice(0, 2)) notes.push(`解析提示：${warning}`);
 
   if (!keyPoints.length) {
@@ -173,6 +184,12 @@ export function buildPackFromMaterial(record: MaterialRecord, markdown: string):
 /**
  * 读取该用户上传的资料并转成资料包（新→旧，最多 MAX_UPLOAD_MATERIAL_PACKS 份）。
  * 任何异常都吞掉返回已成功的部分（fail-open：附件读不到不能挡路径生成）。
+ *
+ * 必须排除 origin='web'（2026-09-26 实测）：联网入库资料有自己的复用通道
+ * （path.coordinator 库优先 → findWebRecordByTitle → 真 sourceUrl/sourceTier 的联网包）。
+ * 若混进附件列表会被双重伤害：① attachment:// 伪源 + "用户上传附件" 假身份 + tier=unknown；
+ * ② 它的 materialId 进入 uploadedMaterialIds 后，真联网包在合并处被当作"与附件重复"丢弃——
+ * 净效果是第二次生成时联网资料"消失"，只剩一份假冒附件。
  */
 export function buildUploadedMaterialPacks(userId: string): MaterialPackResult[] {
   if (!userId) return [];
@@ -180,7 +197,9 @@ export function buildUploadedMaterialPacks(userId: string): MaterialPackResult[]
 
   let records: MaterialRecord[] = [];
   try {
-    records = listMaterials(userId).slice(0, MAX_UPLOAD_MATERIAL_PACKS);
+    records = listMaterials(userId)
+      .filter((record) => record.origin !== 'web')
+      .slice(0, MAX_UPLOAD_MATERIAL_PACKS);
   } catch {
     return [];
   }
