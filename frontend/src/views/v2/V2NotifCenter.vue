@@ -434,7 +434,7 @@ onBeforeUnmount(() => {
   border-radius: var(--mk-radius-pill);
   background: #e5484d;
   color: #fff;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 16px;
   text-align: center;
@@ -541,7 +541,7 @@ onBeforeUnmount(() => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-.nc__item-time { font-size: 11px; color: var(--faint, #8492ab); }
+.nc__item-time { font-size: 12px; color: var(--faint, #8492ab); }
 .nc__item-dot {
   width: 7px; height: 7px; margin-top: 6px;
   border-radius: 50%;
@@ -577,7 +577,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 2px 6px 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--faint, #8492ab);
@@ -610,7 +610,7 @@ onBeforeUnmount(() => {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .nc__task-times {
-  font-size: 10.5px;
+  font-size: 12px.5px;
   font-weight: 800;
   color: var(--blue-deep, #1f57cc);
   background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
@@ -643,7 +643,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 11.5px;
+  font-size: 12px.5px;
   line-height: 1.7;
 }
 .nc__task-detail-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
@@ -654,11 +654,11 @@ onBeforeUnmount(() => {
 .nc__task-detail-state {
   margin-left: auto;
   color: var(--muted, #5b6577);
-  font-size: 11px;
+  font-size: 12px;
 }
-.nc__task-time { margin-left: auto; font-size: 11px; color: var(--faint, #8492ab); flex-shrink: 0; }
+.nc__task-time { margin-left: auto; font-size: 12px; color: var(--faint, #8492ab); flex-shrink: 0; }
 .nc__task-status {
-  font-size: 10.5px; font-weight: 800;
+  font-size: 11px.5px; font-weight: 800;
   color: var(--blue, #3478f6);
   background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
   padding: 2px 7px;

@@ -930,7 +930,7 @@ onUnmounted(() => {
 }
 
 .evaluation-shell :deep(.metric-badge) {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 999px;

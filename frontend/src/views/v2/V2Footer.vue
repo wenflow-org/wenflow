@@ -64,7 +64,7 @@ const version = appVersion;
 .v2footer__brand-text { display: grid; gap: 0; min-width: 0; }
 .v2footer__name { font-size: 13px; font-weight: 700; color: var(--ink, #172033); line-height: 1.2; }
 .v2footer__tag {
-  font-size: 11px; color: var(--faint, #8492ab);
+  font-size: 12px; color: var(--faint, #8492ab);
   line-height: 1.3;
 }
 .v2footer__links { display: inline-flex; align-items: center; gap: 12px; }
@@ -85,7 +85,7 @@ const version = appVersion;
 .v2footer__link:hover::after { right: 0; }
 .v2footer__meta {
   display: inline-flex; align-items: center; gap: 8px;
-  font-size: 11.5px; color: var(--faint, #8492ab);
+  font-size: 12px; color: var(--faint, #8492ab);
   font-variant-numeric: tabular-nums;
 }
 .v2footer__divider { opacity: 0.5; }

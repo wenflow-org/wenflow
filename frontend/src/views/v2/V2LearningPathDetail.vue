@@ -1468,7 +1468,7 @@ onBeforeUnmount(() => {
   display: flex; justify-content: center;
   padding: 10px 28px 4px;
 }
-.detail__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
+.detail__ai-note :deep(.ai-note) { font-size: 12px; opacity: 0.75; }
 
 .detail__main {
   max-width: 1080px; margin: 0 auto;
@@ -1488,7 +1488,7 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-sm);
 }
 .kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
-.badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 11px; font-weight: 800; }
+.badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; }
 .badge--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
 
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; padding: 26px 28px; align-items: center; }
@@ -1521,7 +1521,7 @@ onBeforeUnmount(() => {
   padding: 9px 14px;
   background: var(--canvas, #f7faff); border: 1px solid var(--line, #e8eefb);
   border-radius: var(--mk-radius-xl);
-  font-size: 11.5px; color: var(--faint);
+  font-size: 12px; color: var(--faint);
 }
 .metric b { font-size: 14px; color: var(--ink); }
 .hero__actions { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
@@ -1548,7 +1548,7 @@ onBeforeUnmount(() => {
   display: grid; place-content: center; text-align: center; gap: 2px;
 }
 .hero__ring-text b { font-size: 22px; }
-.hero__ring-text small { font-size: 11px; color: var(--faint); }
+.hero__ring-text small { font-size: 12px; color: var(--faint); }
 
 .detail__grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
 .stages { display: grid; gap: 12px; }
@@ -1628,15 +1628,16 @@ onBeforeUnmount(() => {
 .task--todo .task__icon { border: 2px dashed #cfdaee; }
 .task--locked .task__icon { color: var(--faint); background: #eef2f8; }
 .task__body strong { display: block; font-size: 13.5px; }
-.task__body small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--faint); }
+.task__body small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 .task__cta {
+  min-height: 40px;
   font-size: 12px; font-weight: 800; color: #fff;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   padding: 6px 13px; border-radius: 9px;
   cursor: pointer;
   box-shadow: 0 6px 14px color-mix(in srgb, var(--blue) 25%, transparent);
 }
-.task__done-label { font-size: 12px; font-weight: 600; color: var(--green); cursor: pointer; }
+.task__done-label { font-size: 12px; font-weight: 600; color: var(--green); cursor: pointer; display: inline-block; padding: 12px 0; min-width: 44px; text-align: center; }
 .task__lock-label, .task__todo-label { font-size: 12px; color: var(--faint); }
 
 .side { display: grid; gap: 12px; position: sticky; top: 16px; }
@@ -1647,6 +1648,7 @@ onBeforeUnmount(() => {
 /* 侧栏折叠头（设计意图，2026-09-25）：与问题背景的 bg-head 同款箭头语言 */
 .sidecard__head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-height: 44px;
   border: 0; background: transparent; padding: 0; margin: 0; font: inherit;
   color: inherit; cursor: pointer; text-align: left;
 }
@@ -1664,21 +1666,21 @@ onBeforeUnmount(() => {
 .materials-sections li { font-size: 12px; color: var(--muted); }
 .materials-toggle { align-self: flex-start; background: none; border: none; padding: 0; font-size: 12px; color: var(--blue); cursor: pointer; }
 .materials-note { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
-.task__material { display: block; margin-top: 2px; font-size: 11.5px; color: var(--blue); }
+.task__material { display: block; margin-top: 2px; font-size: 12px; color: var(--blue); }
 .stage__material { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
-.material-ref { background: none; border: none; padding: 0 4px 0 0; font-size: 11.5px; color: var(--blue); cursor: pointer; text-decoration: underline; }
+.material-ref { background: none; border: none; padding: 0 4px 0 0; font-size: 12px; color: var(--blue); cursor: pointer; text-decoration: underline; }
 .material-ref:disabled { color: var(--muted); text-decoration: none; cursor: default; }
 .material-text { margin: 8px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.6; color: var(--ink); }
 .sidecard--current { border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
 .tag {
   padding: 4px 10px; border-radius: var(--mk-radius-pill);
   background: var(--line, #f1f5fb); border: 1px solid var(--line);
-  font-size: 11.5px; font-weight: 600; color: var(--muted);
+  font-size: 12px; font-weight: 600; color: var(--muted);
 }
 .tag--blue { background: rgba(52, 120, 246, 0.09); border-color: rgba(52, 120, 246, 0.3); color: var(--blue-deep); }
 .next-list { margin: 0; padding: 0 0 0 18px; display: grid; gap: 9px; }
 .next-list strong { display: block; font-size: 13px; line-height: 1.45; }
-.next-list small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--faint); }
+.next-list small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 .sidecard__sum { font-size: 12px; font-weight: 700; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 9px; }
 .sidecard__text { font-size: 13px; }
 .sidecard__intent-title {
@@ -1692,12 +1694,12 @@ onBeforeUnmount(() => {
 .sidecard__intent-title--expanded { display: block; overflow: visible; }
 .sidecard__rows { margin: 0; display: grid; gap: 8px; }
 .sidecard__row { display: grid; gap: 2px; }
-.sidecard__row dt { font-size: 11px; font-weight: 800; color: var(--faint); letter-spacing: 0.03em; }
+.sidecard__row dt { font-size: 12px; font-weight: 800; color: var(--faint); letter-spacing: 0.03em; }
 .sidecard__row dd { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
 .sidecard__bg { border-top: 1px dashed var(--line); padding-top: 8px; }
 .sidecard__bg-head {
   display: inline-flex; align-items: center; gap: 5px;
-  font-size: 11px; font-weight: 800; letter-spacing: 0.03em; color: var(--faint);
+  font-size: 12px; font-weight: 800; letter-spacing: 0.03em; color: var(--faint);
 }
 .sidecard__bg-head:hover { color: var(--blue-deep); }
 .sidecard__bg-chev { font-size: 10px; transition: transform 0.15s ease; }
@@ -1900,7 +1902,7 @@ onBeforeUnmount(() => {
   gap: 4px;
   padding: 2px 8px;
   border-radius: var(--mk-radius-pill);
-  font-size: 11px; font-weight: 700;
+  font-size: 12px; font-weight: 700;
   white-space: nowrap;
 }
 .tl__badge--done { background: rgba(49, 177, 111, 0.1); color: var(--green-ink); }
@@ -1921,7 +1923,7 @@ onBeforeUnmount(() => {
 }
 .tl__prog-text {
   display: block; margin-top: 4px;
-  font-size: 11.5px; color: var(--faint, #b0b8c8);
+  font-size: 12px; color: var(--faint, #b0b8c8);
 }
 
 /* 展开/折叠箭头 */
@@ -2009,14 +2011,14 @@ onBeforeUnmount(() => {
 /* 任务文本 */
 .tl__task-body { flex: 1; min-width: 0; }
 .tl__task-body strong { display: block; font-size: 13px; color: var(--ink, #172033); }
-.tl__task-body small { display: block; margin-top: 1px; font-size: 11.5px; color: var(--faint, #b0b8c8); }
+.tl__task-body small { display: block; margin-top: 1px; font-size: 12px; color: var(--faint, #b0b8c8); }
 
 /* 任务状态标签（图标 + 文字对齐） */
 .tl__task-status {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px; font-weight: 600;
+  font-size: 12px; font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -2186,7 +2188,7 @@ onBeforeUnmount(() => {
 }
 .clear-sessions__tag {
   justify-self: start;
-  font-size: 10.5px; font-weight: 800;
+  font-size: 11px; font-weight: 800;
   color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
@@ -2228,7 +2230,7 @@ onBeforeUnmount(() => {
 .clear-sessions__item-main .uc-badge { justify-self: start; }
 .clear-sessions__hint {
   margin: 0;
-  font-size: 11px; line-height: 1.6;
+  font-size: 12px; line-height: 1.6;
   color: #8492ab;
 }
 .btn-primary--sm {
@@ -2270,7 +2272,7 @@ onBeforeUnmount(() => {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .adjust-scope__opt strong { font-size: 12.5px; color: #1c2b45; }
-.adjust-scope__opt small { font-size: 11px; line-height: 1.5; color: #8492ab; }
+.adjust-scope__opt small { font-size: 12px; line-height: 1.5; color: #8492ab; }
 .adjust-scope__opt:hover { border-color: #c9d6ea; }
 .adjust-scope__opt.is-on {
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
@@ -2323,7 +2325,7 @@ onBeforeUnmount(() => {
 }
 .ai-advice__tag {
   flex: 0 0 auto;
-  font-size: 10.5px; font-weight: 800;
+  font-size: 11px; font-weight: 800;
   color: var(--purple-ink);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
@@ -2353,11 +2355,11 @@ onBeforeUnmount(() => {
   gap: 6px;
 }
 .ai-advice__chip-label {
-  font-size: 11px; font-weight: 700;
+  font-size: 12px; font-weight: 700;
   color: #8492ab;
 }
 .ai-advice__chip {
-  font-size: 11px; font-weight: 600;
+  font-size: 12px; font-weight: 600;
   color: var(--blue-ink);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   border-radius: var(--mk-radius-pill);
@@ -2369,7 +2371,7 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--amber) 30%, transparent);
 }
 .ai-advice__meta {
-  font-size: 11.5px;
+  font-size: 12px;
   color: #8492ab;
 }
 .ai-advice__actions { margin-top: 4px; }
@@ -2431,8 +2433,8 @@ onBeforeUnmount(() => {
    「问题背景」17、「展开全文 / 更多意图」19、视图切换 24、面包屑返回 30。加纵向 padding
    抬到 32–40，文字与配色不变；这几处背景都透明，加 padding 不产生视觉变化。 */
 @media (max-width: 1100px) {
-  .crumbs__back { padding: 9px 0; }             /* 30 → 38 */
-  .view-toggle__btn { padding: 7px 10px; }      /* 24 → 33 */
+  .crumbs__back { padding: 9px 0; min-height: 44px; display: inline-flex; align-items: center; }
+  .view-toggle__btn { padding: 7px 10px; min-height: 44px; }      /* 页级主切换，HIG 44 */
   .hero__desc-toggle,
   .sidecard__intent-toggle { padding: 7px 0; }  /* 19 → 33 */
   .sidecard__bg-head { padding: 8px 0; }        /* 17 → 33 */

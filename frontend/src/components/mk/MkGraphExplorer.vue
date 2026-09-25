@@ -268,8 +268,10 @@ function onIsolatedChange(event: Event) {
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
+input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue, #3478f6); }
 .mk-ge__select {
   max-width: 220px;
+  min-height: 44px;
   padding: 4px var(--mk-space-2);
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-sm);

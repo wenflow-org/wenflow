@@ -22,7 +22,7 @@ withDefaults(defineProps<{ text?: string }>(), {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--faint, #8492ab);
   font-weight: 500;

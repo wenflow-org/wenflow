@@ -431,7 +431,7 @@ onBeforeUnmount(() => {
   display: flex; justify-content: center;
   padding: 10px 28px 4px;
 }
-.paths__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
+.paths__ai-note :deep(.ai-note) { font-size: 12px; opacity: 0.75; }
 .kicker {
   font-size: 12px; font-weight: 800; letter-spacing: .06em;
   color: var(--blue-deep);
@@ -502,7 +502,7 @@ onBeforeUnmount(() => {
 .pcard--failed .pcard__thumb { background: linear-gradient(135deg, var(--red), var(--amber)); }
 .pcard__body { flex: 1; min-width: 0; }
 .pcard__head-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
-.pcard__badge { padding: 3px 9px; border-radius: var(--mk-radius-pill); font-size: 11px; font-weight: 800; flex: 0 0 auto; }
+.pcard__badge { padding: 3px 9px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; flex: 0 0 auto; }
 .pcard__badge--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .pcard__badge--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
 .pcard__badge--cyan { color: var(--blue-deep, #2b7a99); background: rgba(67, 176, 216, 0.14); }

@@ -1089,7 +1089,7 @@ function shuffleScenes() {
 }
 .resume__body { display: grid; gap: 1px; }
 .resume__body strong { font-size: 13.5px; }
-.resume__body small { font-size: 12px.5px; color: var(--muted); }
+.resume__body small { font-size: 12px; color: var(--muted); }
 .resume__go { font-size: 13px; font-weight: 800; color: var(--blue-deep); }
 
 .entry__hero {
@@ -1247,7 +1247,7 @@ function shuffleScenes() {
 .composer__hint {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap;
-  font-size: 12px.5px; color: var(--faint); padding-left: 6px;
+  font-size: 12px; color: var(--faint); padding-left: 6px;
 }
 .composer__hint-right { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .composer__count { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -1342,7 +1342,7 @@ function shuffleScenes() {
   padding: 2px 7px; border-radius: var(--mk-radius-pill);
 }
 .panel__tip {
-  font-size: 12px.5px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px;
+  font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px;
   margin-top: auto;
 }
 </style>
@@ -1382,7 +1382,7 @@ function shuffleScenes() {
 .stage-nav__item i {
   width: 17px; height: 17px; border-radius: 50%;
   background: color-mix(in srgb, var(--line) 60%, transparent); color: var(--faint);
-  font-size: 11px.5px; font-weight: 800; font-style: normal;
+  font-size: 11px; font-weight: 800; font-style: normal;
   display: grid; place-items: center;
 }
 .stage-nav__item--current { color: var(--blue-deep); background: rgba(52, 120, 246, 0.09); }
@@ -1424,7 +1424,7 @@ function shuffleScenes() {
 .msg__probe-tag { font-size: 12px; font-weight: 800; letter-spacing: .04em; color: var(--blue-deep); }
 .msg__probe-answer { font-size: 13px; font-weight: 600; line-height: 1.5; }
 .msg__probe-q {
-  font-size: 12px.5px; line-height: 1.5; color: var(--muted);
+  font-size: 12px; line-height: 1.5; color: var(--muted);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .msg--user .msg__bubble {
@@ -1568,7 +1568,7 @@ function shuffleScenes() {
   letter-spacing: 0.06em;
   color: var(--blue-deep);
 }
-.replies-panel__hint { font-size: 12px.5px; color: var(--faint); }
+.replies-panel__hint { font-size: 12px; color: var(--faint); }
 .replies-panel__options { display: grid; gap: 6px; }
 .replies-panel__option {
   display: flex;
@@ -1709,10 +1709,10 @@ function shuffleScenes() {
   border: 1px solid #e8eefb;
   text-align: left;
 }
-.proposal__row span { font-size: 12px.5px; font-weight: 800; color: var(--blue-deep); }
+.proposal__row span { font-size: 12px; font-weight: 800; color: var(--blue-deep); }
 .proposal__row p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--ink); }
 .proposal__stages { display: grid; gap: 10px; width: 100%; text-align: left; }
-.proposal__stages-label { font-size: 12px.5px; font-weight: 800; color: var(--muted); }
+.proposal__stages-label { font-size: 12px; font-weight: 800; color: var(--muted); }
 .proposal__stages ol {
   list-style: none; margin: 0; padding: 0;
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
@@ -1787,10 +1787,10 @@ function shuffleScenes() {
 .proposal__note {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap;
-  font-size: 12px.5px; line-height: 1.5; color: var(--faint);
+  font-size: 12px; line-height: 1.5; color: var(--faint);
 }
 .proposal__note :deep(.ai-note) {
-  font-size: 12px.5px; line-height: 1.5;
+  font-size: 12px; line-height: 1.5;
 }
 .proposal__supplement { display: grid; gap: 12px; width: 100%; }
 .proposal__supplement-input {
@@ -2005,7 +2005,7 @@ function shuffleScenes() {
   /* 阶段导航在窄屏收紧，给右上角的目标信息按钮腾位置（390 下两者刚好共处一行，
      合计 ~325px ≤ 头部带内容宽 336px） */
   .stage-nav { gap: 3px; }
-  .stage-nav__item { padding: 4px 5px; font-size: 12px.5px; gap: 4px; }
+  .stage-nav__item { padding: 4px 5px; font-size: 12px; gap: 4px; min-height: 40px; }
   .stage-nav__item i { width: 14px; height: 14px; font-size: 11px; }
   /* ≤360：非当前阶段只留序号（那三个字的宽度换 4 字标签+计数角标的位置） */
   @media (max-width: 360px) {

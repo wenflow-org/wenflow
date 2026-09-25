@@ -1475,10 +1475,10 @@ onBeforeUnmount(() => {
 .learn__back:hover { color: var(--blue-deep); }
 .learn__title { display: grid; gap: 3px; min-width: 0; }
 .learn__title strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.learn__title small { font-size: 12px.5px; color: var(--faint); }
+.learn__title small { font-size: 12px; color: var(--faint); }
 .learn__head-right { display: flex; align-items: center; gap: 10px; }
 .learn__state-link {
-  font-size: 12px.5px; font-weight: 700;
+  font-size: 12px; font-weight: 700;
   color: var(--muted);
   text-decoration: none;
   padding: 4px 11px; border-radius: var(--mk-radius-pill);
@@ -1523,16 +1523,16 @@ onBeforeUnmount(() => {
   border: 0; background: transparent; padding: 0; margin: 0;
   font: inherit; color: inherit; text-align: left; cursor: default;
 }
-.kp__head span { font-size: 12px.5px; font-weight: 800; color: var(--blue-deep); }
+.kp__head span { font-size: 12px; font-weight: 800; color: var(--blue-deep); }
 .kp__caret { display: none; font-size: 11px; color: var(--faint); flex-shrink: 0; }
 .kp__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .kp__bar { height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
 .kp__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 /* 视图切换（列表/图谱）：轻量分段控件，走既有 token（mk token 深浅主题自动跟随，2026-09-25 深色修复） */
 .kp__views { display: inline-flex; gap: 2px; padding: 2px; border-radius: 99px; background: var(--mk-surface-2); align-self: flex-start; }
-.kp__view { border: 0; background: transparent; cursor: pointer; padding: 3px 10px; border-radius: 99px; font-size: 12px.5px; font-weight: 700; color: var(--faint); }
+.kp__view { border: 0; background: transparent; cursor: pointer; padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; color: var(--faint); }
 .kp__view--on { background: var(--surface); color: var(--blue-deep); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08); }
-.kp__hint { margin: 0; font-size: 12px.5px; line-height: 1.5; color: var(--faint); }
+.kp__hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--faint); }
 .kp__hint--err { color: var(--danger, #c0392b); }
 /* 通向「知识图谱」聚合页的桥：学习页这里只画当前路径，想看全部路径要去聚合页 */
 .kp__more { margin-left: 6px; color: var(--mk-blue); text-decoration: none; white-space: nowrap; }
@@ -1556,7 +1556,7 @@ onBeforeUnmount(() => {
 .kp__name strong { display: block; font-size: 13px; line-height: 1.45; }
 .kp__name small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 .kp__item--current .kp__name small { color: var(--blue-deep); font-weight: 700; }
-.kp__time { font-size: 12px.5px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px; }
+.kp__time { font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px; }
 
 /* ---------- 导师对话 ---------- */
 .tutor {
@@ -1599,7 +1599,7 @@ onBeforeUnmount(() => {
 .tutor__resume-restart:hover { background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .tutor__resume-close {
   display: grid; place-items: center;
-  width: 22px; height: 22px;
+  width: 44px; height: 44px;
   border: 0; border-radius: var(--mk-radius-sm);
   background: transparent; color: var(--faint);
   cursor: pointer; flex: 0 0 auto;
@@ -1619,7 +1619,7 @@ onBeforeUnmount(() => {
 .oscene--review { border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
 .oscene__tag {
   justify-self: start;
-  font-size: 12px.5px; font-weight: 800;
+  font-size: 12px; font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--blue-deep, #1f57cc);
   background: color-mix(in srgb, var(--blue, #3478f6) 10%, transparent);
@@ -1645,7 +1645,7 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--amber) 32%, transparent);
   padding: 2px 9px; border-radius: var(--mk-radius-pill);
 }
-.oscene__warn { font-size: 12px.5px; line-height: 1.6; color: var(--amber, #b45309); }
+.oscene__warn { font-size: 12px; line-height: 1.6; color: var(--amber, #b45309); }
 .oscene__warn span { font-weight: 700; }
 .oscene__actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 .oscene__actions .btn-ghost { font-size: 12.5px; }
@@ -1944,7 +1944,7 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; gap: 8px; min-width: 0;
   padding: 0 2px;
 }
-.peerdock__meta small { font-size: 12px.5px; color: var(--faint); }
+.peerdock__meta small { font-size: 12px; color: var(--faint); }
 .peerdock__strategy {
   font-size: 12px; font-weight: 700; color: #c05e14;
   background: color-mix(in srgb, var(--amber) 12%, transparent);
@@ -2057,7 +2057,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--surface) 96%, transparent);
   display: grid; gap: 9px;
 }
-.kp-actions__label { font-size: 12px.5px; font-weight: 700; color: var(--faint); }
+.kp-actions__label { font-size: 12px; font-weight: 700; color: var(--faint); }
 .kp-actions__row { display: flex; gap: 10px; flex-wrap: wrap; }
 /* 自我评估二选一：掌握 ✓ 绿实心 / 未理解 ✗ 琥珀描边——语义色一眼可辨 */
 .kp-btn {
@@ -2310,10 +2310,10 @@ onBeforeUnmount(() => {
   .learn__title small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .learn__head-right { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .learn__live, .learn__state-link { white-space: nowrap; flex-shrink: 0; }
-  .learn__live { padding: 3px 9px; font-size: 12px.5px; }
+  .learn__live { padding: 3px 9px; font-size: 12px; }
   .learn__menu-wrap { position: relative; display: inline-flex; }
   /* ⋯ 视觉不变，热区 28→38（触屏） */
-  .learn__menu { padding: 0 4px; font-size: 20px; line-height: 1; display: inline-flex; align-items: center; height: 38px; }
+  .learn__menu { padding: 0 4px; font-size: 20px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; }
   /* 头部三行（「当前任务」标签 / 任务名 / 路径名）在手机上白占 22px——标签本身只是分类提示，
      去掉后头部 79→57px，全部还给消息区 */
   .learn__title { gap: 1px; }
@@ -2329,7 +2329,7 @@ onBeforeUnmount(() => {
     width: min(250px, calc(100vw - 28px));
   }
   /* 移动端知识点面板默认折叠：头部横条可点，收起时隐藏进度条/清单 */
-  .kp__head { cursor: pointer; padding: 5px 0; }   /* 24 → 34，触屏整条可点 */
+  .kp__head { cursor: pointer; padding: 5px 0; min-height: 44px; }   /* 触屏整条可点，HIG 44 */
   .kp__caret { display: inline; }
   .kp--collapsed .kp__body { display: none; }
 }
@@ -2365,7 +2365,7 @@ onBeforeUnmount(() => {
 .learn__menu-group { display: grid; gap: 1px; }
 .learn__menu-label {
   padding: 6px 12px 3px;
-  font-size: 11px.5px; font-weight: 800; letter-spacing: 0.06em;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
   color: var(--faint);
 }
 .learn__menu-sep { height: 1px; background: var(--line); margin: 4px 6px; }
@@ -2649,7 +2649,7 @@ onBeforeUnmount(() => {
   .learn__body--no-kp { grid-template-rows: minmax(0, 1fr); }
   .kp { padding: 0; }
   .kp:not(.kp--collapsed) { padding: 10px 12px; }
-  .kp--collapsed .kp__head { padding: 11px 12px; }   /* 折叠条 65 → 45px，触屏整条可点 */
+  .kp--collapsed .kp__head { padding: 11px 12px; min-height: 44px; }   /* 折叠条，触屏整条可点 */
   .composer { position: relative; gap: 0; padding: 8px 10px 22px; }
   /* AI 声明浮在底部 22px 留白条里，不再独立占一行（goal 页同款做法） */
   .composer__hint {

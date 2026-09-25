@@ -390,7 +390,7 @@ onUnmounted(() => {
     text-decoration: none;
   }
   .v2nav__tab-icon { display: grid; place-items: center; opacity: 0.75; }
-  .v2nav__tab-label { font-size: 10.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .v2nav__tab-label { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .v2nav__tab--active {
     color: var(--blue-deep, #1f57cc);
   }

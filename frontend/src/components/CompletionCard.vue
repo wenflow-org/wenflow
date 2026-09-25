@@ -351,7 +351,7 @@ const tagClass = (type: string) => ({
 .completion-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--green, #2e7d32); }
 .completion-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; padding: 12px; background-color: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; }
 .summary-item { display: flex; flex-direction: column; gap: 2px; }
-.summary-label { font-size: 11px; color: var(--muted, #78909c); }
+.summary-label { font-size: 12px; color: var(--muted, #78909c); }
 .summary-value { font-size: 13px; font-weight: 600; color: var(--green, #2e7d32); }
 .completion-section { margin-bottom: 16px; padding: 12px; background-color: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; }
 .advisory-section { border: 1px solid var(--line, #dfe7d6); }
@@ -360,7 +360,7 @@ const tagClass = (type: string) => ({
   margin-right: 6px;
   padding: 1px 7px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--amber-deep, #b45309);
   background: rgba(217, 119, 6, 0.12);
   border: 1px solid rgba(217, 119, 6, 0.3);
@@ -384,7 +384,7 @@ const tagClass = (type: string) => ({
 .metric-card { padding: 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--green, #1e9e58) 20%, var(--line)); background: var(--surface); }
 .metric-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .metric-label { font-size: 12px; color: var(--muted, #546e7a); }
-.metric-badge { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: color-mix(in srgb, var(--green, #1e9e58) 10%, var(--surface)); color: var(--green, #33691e); }
+.metric-badge { font-size: 12px; padding: 2px 6px; border-radius: 999px; background: color-mix(in srgb, var(--green, #1e9e58) 10%, var(--surface)); color: var(--green, #33691e); }
 .metric-value { margin-top: 6px; font-size: 22px; font-weight: 700; color: var(--green, #2e7d32); }
 .metric-desc { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted, #607d8b); }
 .metric-card--good { border-color: color-mix(in srgb, var(--green, #1e9e58) 30%, var(--line)); }
