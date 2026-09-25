@@ -799,7 +799,7 @@ defineExpose({ refreshNow })
   gap: 10px;
   margin: 0 16px 10px;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-red-bg);
   color: var(--mk-red);
   font-size: var(--mk-fs-micro);
@@ -854,7 +854,6 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--mk-faint);
   display: flex;
   align-items: center;
@@ -864,7 +863,7 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 .ts-degraded { margin-left: 6px; }
 .ts-card {
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   padding: 10px 12px;
   display: grid;
   gap: 4px;
@@ -897,14 +896,13 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--mk-faint);
   padding: 2px 0;
 }
 .ts-json {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-code-bg);
   color: var(--mk-code-fg);
   font: 10.5px/1.6 var(--mk-mono);

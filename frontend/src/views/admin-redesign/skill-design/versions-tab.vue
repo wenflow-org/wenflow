@@ -274,7 +274,7 @@ watch(
 .sdp-vtag {
   display: inline-block;
   padding: 1px 6px;
-  border-radius: 5px;
+  border-radius: var(--mk-radius-sm);
   background: #eef2fa;
   color: #41516e;
   font-size: var(--mk-fs-micro);

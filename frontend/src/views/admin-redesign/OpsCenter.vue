@@ -440,12 +440,12 @@ void loadDead()
 .oc-tabs {
   padding: 8px 14px;
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
 }
 .dt-grid { display: grid; grid-template-columns: 1.6fr 0.7fr 1.4fr auto; gap: 12px; align-items: end; }
 .dt-actions { display: grid; gap: 6px; }
-.dt-result { border: 1px solid var(--mk-line); border-radius: 10px; overflow: hidden; }
+.dt-result { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); overflow: hidden; }
 .dt-result__head {
   display: flex;
   align-items: center;
@@ -521,7 +521,7 @@ void loadDead()
 .ex-row__text strong { font-size: var(--mk-fs-body); }
 .ex-row__text span { font-size: var(--mk-fs-micro); color: var(--mk-muted); max-width: 640px; }
 .ex-row__actions { display: flex; align-items: center; gap: 8px; }
-.ex-row__actions .mk-filter__select { min-width: 110px; height: 30px; padding: 3px 8px; }
+.ex-row__actions .mk-filter__select { min-width: 110px; height: 32px; padding: 3px 8px; }
 .ex-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 @media (min-width: 2000px) {
   .ex-row__text strong { font-size: var(--mk-fs-body); }

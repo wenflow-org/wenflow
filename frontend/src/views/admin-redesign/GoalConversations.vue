@@ -855,7 +855,7 @@ onMounted(() => {
 .gc-stage-cell__dot {
   width: 6px;
   height: 6px;
-  border-radius: 99px;
+  border-radius: var(--mk-radius-pill);
   background: #e2e8f2;
 }
 .gc-stage-cell__dot.is-on { background: var(--mk-blue); }
@@ -912,7 +912,7 @@ onMounted(() => {
 /* 理解与方案卡片 */
 .gc-insight {
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   overflow: hidden;
 }
 .gc-insight__row {
@@ -952,7 +952,6 @@ onMounted(() => {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--mk-faint);
 }
 .gc-section h4 .mono { margin-left: 4px; }
@@ -1019,14 +1018,13 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #252627; }.gc-msg { dis
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--mk-faint);
   padding: 2px 0;
 }
 .gc-json {
   margin: 6px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-code-bg, #101826);
   border: 1px solid var(--mk-code-border, #1c2a40);
   color: var(--mk-code-fg, #9db8dc);

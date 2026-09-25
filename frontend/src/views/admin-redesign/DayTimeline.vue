@@ -254,7 +254,7 @@ watch(() => props.sessionId, load, { immediate: true })
 .dt-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: var(--mk-fs-micro); }
 .dt-auto { display: flex; align-items: center; gap: 4px; font-size: var(--mk-fs-micro); cursor: pointer; }
 .dt-hint { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.dt-day { border: 1px solid var(--mk-line); border-radius: 8px; padding: 10px 12px; }
+.dt-day { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); padding: 10px 12px; }
 .dt-day__head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .dt-day__label { font-weight: 600; }
 .dt-day__date { color: var(--mk-faint); font-size: var(--mk-fs-micro); }

@@ -133,7 +133,7 @@ function stageLabel(stage: string | null | undefined): string {
 .vl-running {
   margin: 10px 0 0;
   padding: 5px 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   border: 1px solid rgba(16, 185, 129, 0.3);
   background: rgba(16, 185, 129, 0.06);
   display: flex;
@@ -145,7 +145,7 @@ function stageLabel(stage: string | null | undefined): string {
   scrollbar-width: thin;
 }
 .vl-running::-webkit-scrollbar { height: 4px; }
-.vl-running::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.3); border-radius: 2px; }
+.vl-running::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.3); border-radius: var(--mk-radius-xs); }
 .vl-running__label {
   font-size: var(--mk-fs-micro);
   font-weight: 800;

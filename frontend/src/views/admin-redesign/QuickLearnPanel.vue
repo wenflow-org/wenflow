@@ -637,7 +637,7 @@ useEscape(() => props.visible, close)
 
 .ql-account-brief__item {
   border: 1px solid var(--mk-line);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   padding: 9px 10px;
   background: var(--mk-bg);
   display: grid;
@@ -742,7 +742,7 @@ useEscape(() => props.visible, close)
 
 .ql-status {
   border: 1px solid var(--mk-line);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   padding: 14px;
   margin-bottom: 14px;
 }

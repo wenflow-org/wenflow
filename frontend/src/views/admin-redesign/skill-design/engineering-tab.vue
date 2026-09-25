@@ -223,7 +223,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
 .sdp-protocols { display: grid; gap: 8px; }
 .sdp-protocol {
   border: 1px solid #e6ecf6;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   padding: 10px 12px;
   display: grid;
   gap: 4px;
@@ -237,7 +237,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   display: grid;
   gap: 4px;
   padding: 9px 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-amber-bg);
   border: 1px solid rgba(180, 83, 9, 0.3);
   color: var(--mk-amber);
@@ -250,7 +250,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   padding: 7px 10px 7px 12px;
   border-left: 2px solid rgba(141, 107, 255, 0.45);
   background: #faf9ff;
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--mk-radius-sm) var(--mk-radius-sm) 0;
   font-size: var(--mk-fs-micro);
 }
 .sdp-rule__id { color: #8d6bff; font-size: var(--mk-fs-micro); font-weight: 700; }

@@ -289,7 +289,7 @@ function openPanel() { recOpen.value = true; }
 .sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
 .sk-pill--bad { color: var(--mk-red-strong); background: #fdecec; }
 .sk-pill--warn { color: var(--mk-amber); background: #fdf3e3; }
-.sk-rec__refresh { border: 1px solid var(--mk-line); background: #fff; border-radius: 8px; padding: 3px 10px; font: inherit; font-size: var(--mk-fs-micro); color: var(--mk-muted); cursor: pointer; white-space: nowrap; }
+.sk-rec__refresh { border: 1px solid var(--mk-line); background: #fff; border-radius: var(--mk-radius-sm); padding: 3px 10px; font: inherit; font-size: var(--mk-fs-micro); color: var(--mk-muted); cursor: pointer; white-space: nowrap; }
 .sk-rec__refresh:hover { border-color: rgba(44,99,208,0.4); color: var(--mk-blue); }
 .sk-rec__refresh:disabled { opacity: 0.5; cursor: default; }
 .sk-rec__skeleton { padding: 12px; }

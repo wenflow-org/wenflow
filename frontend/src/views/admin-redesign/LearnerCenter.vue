@@ -487,7 +487,7 @@ async function recomputeAll() {
 .lc-trend--flat { color: var(--mk-muted); }
 .lc-trend__arrow { font-style: normal; }
 .lc-trend__bars { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 12px; }
-.lc-trend__bar { width: 3px; border-radius: 1px; background: currentColor; opacity: 0.55; }
+.lc-trend__bar { width: 3px; border-radius: var(--mk-radius-xs); background: currentColor; opacity: 0.55; }
 .lc-trend__bar--1 { height: 5px; }
 .lc-trend__bar--2 { height: 8px; }
 .lc-trend__bar--3 { height: 11px; }
@@ -521,7 +521,7 @@ html[data-theme='dark'] .lc-intervene--hot { color: #fbbf24; }
   display: grid;
   gap: 4px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-amber-bg);
   border: 1px solid rgba(180, 83, 9, 0.25);
   color: var(--mk-amber);

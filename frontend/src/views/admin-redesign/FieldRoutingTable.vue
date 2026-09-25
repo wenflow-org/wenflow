@@ -733,14 +733,14 @@ watch(() => props.stage, () => void loadStage());
   background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(230, 235, 244, 0.9);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--mk-shadow-sm);
 }
 .frt__stickybar .frt__toolbar { margin-bottom: 0; }
 .frt__notice {
   margin: 0 0 14px;
   padding: 8px 12px;
   border: 1px dashed rgba(44, 99, 208, 0.45);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #f0f5ff;
   color: var(--mk-blue, #2c63d0);
   font-size: var(--mk-fs-micro);
@@ -750,7 +750,7 @@ watch(() => props.stage, () => void loadStage());
 .frt__toolbar-btn {
   padding: 8px 16px;
   border: 1px solid var(--mk-line, #e6ebf4);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface, #fff);
   color: var(--mk-blue, #2c63d0);
   font: inherit;
@@ -772,7 +772,7 @@ watch(() => props.stage, () => void loadStage());
   margin: 0 0 12px;
   padding: 8px 12px;
   border: 1px dashed rgba(44, 99, 208, 0.4);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #f0f5ff;
   font-size: var(--mk-fs-micro);
   line-height: 1.5;
@@ -803,7 +803,7 @@ watch(() => props.stage, () => void loadStage());
 .frt__legend {
   margin: 0 0 12px;
   border: 1px solid var(--mk-line, #e6ebf4);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface, #fff);
   box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06));
 }
@@ -823,7 +823,6 @@ watch(() => props.stage, () => void loadStage());
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.05em;
-  text-transform: uppercase;
   color: var(--mk-faint, var(--mk-faint-soft));
 }
 .frt__legend-group--roles + .frt__legend-group .frt__legend-title { margin-top: 10px; }
@@ -852,7 +851,7 @@ watch(() => props.stage, () => void loadStage());
   flex-wrap: wrap;
   padding: 8px 12px;
   border: 1px solid var(--mk-line, #e6ebf4);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #fafbfd;
   color: var(--mk-muted, #5b6577);
   font-size: var(--mk-fs-micro);
@@ -864,7 +863,7 @@ watch(() => props.stage, () => void loadStage());
   box-sizing: border-box;
   padding: 12px;
   border: 1px solid var(--mk-line, #e6ebf4);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: #fbfcfe;
   color: var(--mk-ink, #1a2a44);
   font-size: var(--mk-fs-micro);
@@ -877,7 +876,7 @@ watch(() => props.stage, () => void loadStage());
   margin: 0;
   padding: 9px 12px;
   border: 1px solid rgba(44, 99, 208, 0.35);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-blue-bg);
   color: var(--mk-blue, #2c63d0);
   font-size: var(--mk-fs-micro);
@@ -940,7 +939,7 @@ watch(() => props.stage, () => void loadStage());
 /* 流转徽章（图例） */
 /* 落库键列：截断上限统一引用 token（原散落 180px） */
 .frt__persist { display: inline-block; max-width: var(--mk-col-id); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
-.frt__persist--alias { color: var(--mk-amber, #b45309); background: #fffbeb; border-radius: 5px; padding: 0 5px; }
+.frt__persist--alias { color: var(--mk-amber, #b45309); background: #fffbeb; border-radius: var(--mk-radius-sm); padding: 0 5px; }
 
 /* 编排弹窗值域速查条 */
 .frt__orch-quick {
@@ -951,7 +950,7 @@ watch(() => props.stage, () => void loadStage());
   padding: 7px 12px;
   margin-top: 8px;
   border: 1px dashed rgba(44, 99, 208, 0.4);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #f0f5ff;
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted, #5b6577);
@@ -1010,7 +1009,7 @@ html[data-theme='dark'] {
   .frt__stickybar {
     background: rgba(20, 28, 43, 0.94);
     border-bottom-color: rgba(42, 56, 80, 0.9);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--mk-shadow-sm);
   }
   .frt__toolbar { background: #19191a; border-color: #2a2b2d; }
   .frt__toolbar-btn:hover { background: #252627; }

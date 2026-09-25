@@ -501,7 +501,7 @@ function groupBadgeTitle(title: string): string {
   letter-spacing: 0.03em;
   color: #8593a8;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   transition: color 0.12s ease, background 0.12s ease;
 }
 .mshell__group-head:hover { color: var(--mk-accent-deep, #1f57cc); background: rgba(90, 110, 140, 0.06); }
@@ -553,7 +553,7 @@ function groupBadgeTitle(title: string): string {
   /* 宽度交给 grid 拉伸（保持整行可点）；不用 width:100%，否则与下方 margin 叠加会溢出 */
   padding: 8px 10px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: transparent;
   color: #42506a;
   font: inherit;
@@ -581,7 +581,7 @@ function groupBadgeTitle(title: string): string {
   height: 28px;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: #eef2fa;
   color: #5b6577;
   font-size: var(--mk-fs-body);
@@ -630,10 +630,10 @@ function groupBadgeTitle(title: string): string {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   background: transparent;
   color: #8a97ab;
   cursor: pointer;
@@ -792,7 +792,7 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
   .mshell__side { padding: 22px 18px 16px; gap: 22px; }
   .mshell__logo-full { height: 72px; }
   .mshell__group-name { font-size: var(--mk-fs-micro); }
-  .mshell__item { font-size: var(--mk-fs-body); padding: 14px 14px; gap: 10px; border-radius: 10px; }
+  .mshell__item { font-size: var(--mk-fs-body); padding: 14px 14px; gap: 10px; border-radius: var(--mk-radius-xl); }
   .mshell__item-badge { font-size: var(--mk-fs-micro); padding: 3px 10px; }
   .mshell__foot { font-size: var(--mk-fs-micro); padding: 12px 14px; }
   .mshell__tool { width: 36px; height: 36px; }
@@ -863,8 +863,8 @@ html[data-theme='dark'] .mshell__crumb { background: #19191a; border-color: #2a2
   border: 1px solid var(--mk-line, #e1e8f2);
   background: var(--mk-surface, #fff);
   color: var(--mk-muted, #5b6577);
-  width: 24px; height: 24px;
-  border-radius: 7px;
+  width: 28px; height: 28px;
+  border-radius: var(--mk-radius-sm);
   font-size: var(--mk-fs-micro); line-height: 1;
   cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;

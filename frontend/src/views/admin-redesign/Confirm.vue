@@ -136,7 +136,7 @@ function confirm() {
 }
 .mk-btn {
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line, #e1e8f2);
   background: var(--mk-surface, #fff);
   color: var(--mk-ink, #1a2a44);

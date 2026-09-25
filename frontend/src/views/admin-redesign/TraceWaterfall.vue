@@ -747,7 +747,7 @@ const verdictText = computed(() => {
   flex-wrap: wrap;
   padding: 8px 14px;
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
   margin-bottom: 12px;
   min-width: 0;
@@ -761,7 +761,7 @@ const verdictText = computed(() => {
 .wf-sort {
   padding: 6px 8px;
   border: 1px solid var(--mk-line);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface);
   font-size: var(--mk-fs-micro);
   color: var(--mk-ink);
@@ -776,7 +776,7 @@ const verdictText = computed(() => {
   gap: 10px;
   padding: 8px 14px;
   border: 1px solid var(--mk-graph-notice-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-graph-notice-bg);
   color: var(--mk-graph-notice-ink);
   font-size: var(--mk-fs-micro);
@@ -835,7 +835,7 @@ const verdictText = computed(() => {
   width: 120px;
   padding: 6px 10px;
   border: 1px solid var(--mk-line);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface);
   font-size: var(--mk-fs-micro);
   color: var(--mk-ink);
@@ -846,7 +846,7 @@ const verdictText = computed(() => {
   max-width: 320px;
   padding: 6px 10px;
   border: 1px solid var(--mk-line);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface);
   font-size: var(--mk-fs-micro);
   color: var(--mk-ink);
@@ -869,7 +869,6 @@ const verdictText = computed(() => {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--mk-faint);
 }
 .wf-ruler__track { position: relative; height: 26px; }
@@ -953,7 +952,7 @@ const verdictText = computed(() => {
   position: relative;
   height: 20px;
   background: var(--mk-graph-track-bg);
-  border-radius: 5px;
+  border-radius: var(--mk-radius-sm);
   overflow: hidden;
 }
 .wf-row__bar {
@@ -1028,7 +1027,7 @@ const verdictText = computed(() => {
   flex-wrap: wrap;
   border: 1px solid var(--mk-line);
   border-left: 3px solid var(--mk-green);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   padding: 7px 10px;
   background: var(--mk-graph-attempt-bg);
 }
@@ -1057,7 +1056,7 @@ const verdictText = computed(() => {
 .wf-payload {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-code-bg);
   color: var(--mk-code-fg);
   font: 11px/1.6 var(--mk-mono);
@@ -1071,7 +1070,7 @@ const verdictText = computed(() => {
 .wf-verdict {
   margin: 12px 14px 14px;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   border: 1px solid rgba(220, 38, 38, 0.2);
   background: var(--mk-graph-verdict-bg);
   display: grid;

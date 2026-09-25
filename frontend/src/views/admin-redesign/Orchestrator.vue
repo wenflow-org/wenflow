@@ -339,7 +339,7 @@ void stageTitle.value
 .orch-stage-tab {
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
   padding: 9px 14px;
-  border: 1px solid var(--mk-line); border-radius: 10px;
+  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
   background: var(--mk-surface); font: inherit; text-align: left;
   cursor: pointer;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
@@ -348,7 +348,7 @@ void stageTitle.value
 .orch-stage-tab.is-active {
   border-color: var(--mk-blue);
   background: rgba(44, 99, 208, 0.08);
-  box-shadow: 0 2px 8px rgba(44, 99, 208, 0.12);
+  box-shadow: inset 0 0 0 1px var(--mk-blue);
 }
 .orch-stage-tab__name { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
 .orch-stage-tab.is-active .orch-stage-tab__name { color: var(--mk-blue); }
@@ -385,7 +385,7 @@ html[data-theme='dark'] {
   .orch-stage-tab.is-active {
     background: rgba(91, 141, 239, 0.16);
     border-color: var(--mk-blue);
-    box-shadow: 0 2px 8px rgba(44, 99, 208, 0.22);
+    
   }
 
   /* 折叠层（字段路由 / 治理） */

@@ -269,7 +269,7 @@ watch(
 .sdp-pane { display: grid; gap: 14px; align-content: start; }
 .sdp-notice {
   padding: 9px 14px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: #eff6ff;
   border: 1px solid #dbe7f6;
   color: #41516e;
@@ -286,7 +286,7 @@ watch(
   flex-wrap: wrap;
   padding: 10px 12px;
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: #fff;
 }
 .sdp-chiprow__label { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); margin-right: 4px; }
@@ -342,7 +342,7 @@ watch(
 .sdp-btn--danger:hover { background: var(--mk-red-bg); }
 .sdp-error {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-red-bg);
   border: 1px solid rgba(220, 38, 38, 0.3);
   color: var(--mk-red);

@@ -484,7 +484,7 @@ onMounted(() => {
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
 }
 .ac-grant-target > div { flex: 1; display: grid; gap: 1px; min-width: 0; }
@@ -496,7 +496,7 @@ onMounted(() => {
   gap: 1px;
   padding: 8px 10px;
   border: 1px solid var(--mk-line);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface);
   font: inherit;
   text-align: left;

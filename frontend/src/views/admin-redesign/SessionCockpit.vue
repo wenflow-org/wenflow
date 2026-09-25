@@ -2059,7 +2059,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   gap: 6px;
   padding: 6px 13px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: transparent;
   font: inherit;
   font-size: var(--mk-fs-micro);
@@ -2146,7 +2146,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 }
 .cp-sidebar__section {
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
   overflow: hidden;
 }
@@ -2189,7 +2189,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   gap: 4px;
   padding: 8px 10px;
   background: var(--mk-surface-2);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
 }
 .cp-run__stage-row {
   display: flex;
@@ -2269,7 +2269,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 /* ===== Shared components ===== */
 .cp-btn {
   padding: 7px 14px;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   color: var(--mk-ink);
@@ -2310,7 +2310,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-log--error { padding: 4px 8px; border-radius: 6px; background: var(--mk-red-bg); }
 .cp-log__time { color: var(--mk-faint); font-family: var(--mk-mono); font-size: var(--mk-fs-micro); white-space: nowrap; padding-top: 1px; }
 .cp-log__phase {
-  padding: 0 5px; border-radius: 99px; font-size: var(--mk-fs-micro); font-weight: 700;
+  padding: 0 5px; border-radius: var(--mk-radius-pill); font-size: var(--mk-fs-micro); font-weight: 700;
   background: var(--mk-blue-bg); color: var(--mk-accent-deep); white-space: nowrap;
 }
 .cp-log__phase--error { background: var(--mk-red-fill, var(--mk-red)); color: #fff; }
@@ -2329,18 +2329,18 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 /* Degrade */
 .cp-degrade {
   margin: 0; display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro);
-  font-weight: 600; color: var(--mk-red); padding: 7px 10px; border-radius: 8px; background: var(--mk-red-bg);
+  font-weight: 600; color: var(--mk-red); padding: 7px 10px; border-radius: var(--mk-radius-sm); background: var(--mk-red-bg);
 }
 .cp-degrade .mk-link { font-size: var(--mk-fs-micro); }
 
 /* Transcripts */
 .cp-transcripts { display: grid; gap: 10px; padding: 12px 16px 16px; }
 .cp-transcript {
-  display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 10px;
+  display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
 }
 .cp-transcript summary { cursor: pointer; font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-muted); }
 .cp-transcript__message {
-  display: grid; gap: 3px; padding: 8px 10px; border-left: 3px solid var(--mk-line); border-radius: 5px; background: var(--mk-surface-2);
+  display: grid; gap: 3px; padding: 8px 10px; border-left: 3px solid var(--mk-line); border-radius: var(--mk-radius-sm); background: var(--mk-surface-2);
 }
 .cp-transcript__message.is-teacher { border-left-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .cp-transcript__message.is-learner { border-left-color: var(--mk-teal); background: #f0fdfa; }
@@ -2353,7 +2353,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-path-detail__head strong { font-size: var(--mk-fs-body); }
 .cp-path-detail__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .cp-path-detail__summary { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
-.cp-milestone { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--mk-line); border-radius: 8px; }
+.cp-milestone { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); }
 .cp-milestone__head { display: flex; align-items: baseline; gap: 8px; }
 .cp-milestone__head strong { font-size: var(--mk-fs-micro); }
 .cp-milestone__order { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); font-family: var(--mk-mono); }
@@ -2367,7 +2367,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-task-list__num { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; flex-shrink: 0; }
 
 /* Review */
-.cp-review { display: grid; gap: 8px; padding: 8px 10px; border-radius: 8px; background: var(--mk-surface-2); }
+.cp-review { display: grid; gap: 8px; padding: 8px 10px; border-radius: var(--mk-radius-sm); background: var(--mk-surface-2); }
 .cp-review__badges { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .cp-review__badge { padding: 2px 8px; border-radius: 4px; font-size: var(--mk-fs-micro); font-weight: 800; background: var(--mk-surface-2); color: var(--mk-muted); }
 .cp-review__badge[data-decision='accept'] { background: var(--mk-green-bg); color: var(--mk-green); }
@@ -2471,14 +2471,14 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 /* Lesson head */
 .cp-lesson-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
-  padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 10px; background: var(--mk-surface-2);
+  padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); background: var(--mk-surface-2);
   margin-bottom: 10px;
 }
 
 /* ===== 课时总结卡片 ===== */
 .cp-lesson-wrapup {
   border: 1px solid rgba(21, 128, 61, 0.3);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: linear-gradient(135deg, var(--mk-green-bg) 0%, var(--mk-surface-2) 100%);
   overflow: hidden;
   margin-bottom: 10px;
@@ -2506,7 +2506,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-lesson-wrapup__notice {
   margin: 0;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   font-size: var(--mk-fs-micro);
   line-height: 1.6;
   color: var(--mk-amber);
@@ -2545,8 +2545,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   font-weight: 800;
   color: var(--mk-faint);
   letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
+  }
 .cp-lesson-wrapup__text {
   margin: 0;
   font-size: var(--mk-fs-micro);
@@ -2590,14 +2589,14 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-lesson-wrapup__kp-status.is-review { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .cp-lesson-wrapup__kp-bar {
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--mk-radius-xs);
   background: var(--mk-line);
   overflow: hidden;
 }
 .cp-lesson-wrapup__kp-bar i {
   display: block;
   height: 100%;
-  border-radius: 2px;
+  border-radius: var(--mk-radius-xs);
   background: var(--mk-green);
   transition: width 0.3s ease;
 }
@@ -2759,7 +2758,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   border-bottom: 1px solid var(--mk-line);
 }
 .cp-wrapup-stats__goal { display: grid; gap: 4px; min-width: 0; flex: 1 1 300px; }
-.cp-wrapup-stats__label { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); letter-spacing: 0.04em; text-transform: uppercase; }
+.cp-wrapup-stats__label { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); letter-spacing: 0.04em; }
 .cp-wrapup-stats__goal strong { font-size: var(--mk-fs-body); color: var(--mk-ink); line-height: 1.4; }
 .cp-wrapup-stats__badges { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .cp-wrapup-stats__item { display: inline-flex; align-items: baseline; gap: 4px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
@@ -2775,7 +2774,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   gap: 14px;
   padding: 14px 16px;
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface-2);
   transition: border-color 0.12s ease;
 }
@@ -2787,12 +2786,12 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-blue-bg);
   flex-shrink: 0;
 }
 .cp-wrapup-card__body { display: grid; gap: 4px; min-width: 0; }
-.cp-wrapup-card__label { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); letter-spacing: 0.04em; text-transform: uppercase; }
+.cp-wrapup-card__label { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); letter-spacing: 0.04em; }
 .cp-wrapup-card__text { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-ink); line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
 
 .cp-wrapup-sections {
@@ -2805,7 +2804,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   gap: 4px;
   padding: 12px 14px;
   border: 1px solid var(--mk-line);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #fafbfc;
 }
 .cp-wrapup-section__label { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); letter-spacing: 0.04em; }
@@ -2826,7 +2825,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-raw { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .cp-raw summary { cursor: pointer; padding: 4px 2px; }
 .cp-raw pre {
-  margin: 8px 0 0; padding: 12px; border-radius: 10px; background: var(--mk-code-bg); color: var(--mk-code-fg);
+  margin: 8px 0 0; padding: 12px; border-radius: var(--mk-radius-xl); background: var(--mk-code-bg); color: var(--mk-code-fg);
   font: 10.5px/1.6 var(--mk-mono); max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all;
 }
 
@@ -2834,7 +2833,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 .cp-eval-group { display: grid; gap: 10px; padding: 14px 16px 4px; }
 .cp-eval-group + .cp-eval-group { border-top: 1px solid var(--mk-line); }
 .cp-eval-group__title { margin: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); letter-spacing: 0.04em; }
-.cp-eval { border: 1px solid var(--mk-line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; margin-bottom: 8px; }
+.cp-eval { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); padding: 12px 14px; display: grid; gap: 10px; margin-bottom: 8px; }
 .cp-eval__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .cp-eval__head strong { font-size: var(--mk-fs-body); }
 .cp-eval__time { display: block; font-size: var(--mk-fs-micro); color: var(--mk-faint); margin-top: 2px; }
@@ -2873,7 +2872,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 
 /* ===== Trace panels ===== */
 .cp-trace-panel {
-  border: 1px solid var(--mk-line); border-radius: 8px; background: var(--mk-surface-2);
+  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); background: var(--mk-surface-2);
 }
 .cp-trace-panel > summary {
   list-style: none; cursor: pointer; padding: 8px 12px; display: flex; align-items: center;

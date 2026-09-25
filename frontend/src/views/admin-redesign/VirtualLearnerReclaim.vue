@@ -128,7 +128,7 @@ defineExpose({ open, state })
   align-items: center;
   gap: 10px;
   padding: 7px 10px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: #fafbfd;
   border: 1px solid #e8ecf2;
   font-size: var(--mk-fs-micro);
@@ -140,7 +140,7 @@ defineExpose({ open, state })
 .vl-steps {
   margin: 0 0 4px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: #f4f7fc;
   color: var(--mk-muted, #5b6577);
   font-size: var(--mk-fs-micro);

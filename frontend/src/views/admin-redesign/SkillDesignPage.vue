@@ -394,7 +394,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   gap: 10px;
   flex-wrap: wrap;
   padding: 9px 14px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-amber-bg);
   border: 1px solid rgba(180, 83, 9, 0.3);
   color: var(--mk-amber);
@@ -420,7 +420,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   .sdp-drift code { font-size: var(--mk-fs-body); }
   .sdp .mk-pills { padding: 6px; }
   .sdp .mk-pill { font-size: var(--mk-fs-emphasis); padding: 10px 24px; }
-  .sdp .mk-pills { border-radius: 10px; }
+  .sdp .mk-pills { border-radius: var(--mk-radius-xl); }
   .sdp .mk-pill { font-size: var(--mk-fs-body); padding: 7px 18px; }
 }
 </style>

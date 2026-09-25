@@ -684,7 +684,7 @@ watch(
 .msk__icon {
   width: 38px;
   height: 38px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--soft);
   color: var(--hue);
   display: inline-flex;
@@ -759,7 +759,7 @@ watch(
   gap: 8px;
   padding: 8px 12px;
   border: 1px dashed var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
 }
 .msk__kv span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
 .msk__kv strong { font-size: var(--mk-fs-micro); color: #1a2a44; font-weight: 600; }
@@ -792,7 +792,7 @@ watch(
   align-items: center;
   padding: 8px 10px;
   border: 1px solid #e6ecf6;
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #fff;
   font: inherit;
   font-size: var(--mk-fs-micro);
@@ -842,7 +842,7 @@ watch(
 .msk__code {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-code-bg, #101826);
   border: 1px solid var(--mk-code-border, #1c2a40);
   color: var(--mk-code-fg, #9db8dc);
@@ -862,7 +862,7 @@ watch(
   gap: 10px;
   padding: 9px 12px;
   border: 1px dashed var(--mk-line);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   font-size: var(--mk-fs-micro);
   color: #5b6577;
 }
@@ -884,7 +884,7 @@ watch(
   gap: 8px;
   padding: 7px 10px;
   border: 1px solid #e6ecf6;
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #fbfcfe;
   font-size: var(--mk-fs-micro);
   color: #41516e;
@@ -907,7 +907,7 @@ watch(
   font-weight: 700;
   font-size: var(--mk-fs-micro);
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   cursor: pointer;
   width: 100%;
   text-align: left;
@@ -926,7 +926,7 @@ watch(
 .mt-resolved {
   margin: 0;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: #f2f6fd;
   border: 1px dashed #d3e0f5;
   font-size: var(--mk-fs-micro);
@@ -938,7 +938,7 @@ watch(
   display: grid;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   border: 1px solid var(--mk-line);
   background: #fff;
 }
@@ -963,7 +963,7 @@ watch(
 .mt-preview {
   margin: 0;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-code-bg, #101826);
   border: 1px solid var(--mk-code-border, #1c2a40);
   color: var(--mk-code-fg, #9db8dc);

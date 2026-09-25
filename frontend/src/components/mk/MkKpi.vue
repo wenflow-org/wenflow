@@ -50,7 +50,7 @@ withDefaults(
 .mk-kpi--linked-on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.18); }
 
 /* 紧凑模式（列表页顶部 KPI）：压高度 */
-.mk-kpi--compact { padding: 6px 10px; gap: 1px; border-radius: 8px; }
+.mk-kpi--compact { padding: 6px 10px; gap: 1px; border-radius: var(--mk-radius-sm); }
 .mk-kpi--compact .mk-kpi__label { font-size: var(--mk-fs-micro); }
 .mk-kpi--compact .mk-kpi__num { font-size: var(--mk-fs-emphasis); line-height: 1.2; }
 
@@ -63,7 +63,7 @@ withDefaults(
   align-items: baseline;
   padding: 8px 12px;
   gap: 1px 8px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
 }
 .mk-kpi--row .mk-kpi__label { grid-column: 1; grid-row: 1; font-size: var(--mk-fs-micro); }
 .mk-kpi--row .mk-kpi__num { grid-column: 2; grid-row: 1 / span 2; font-size: 19px; text-align: right; }
@@ -88,7 +88,7 @@ html[data-theme='dark'] .mk-kpi { background: var(--mk-surface-2); border-color:
 
 /* 4K 三档（对齐全站 mk 体系） */
 @media (min-width: 2000px) {
-  .mk-kpi { padding: 15px 18px; border-radius: 14px; gap: 4px; }
+  .mk-kpi { padding: 15px 18px; border-radius: var(--mk-radius-xl); gap: 4px; }
   .mk-kpi__label { font-size: var(--mk-fs-micro); }
   .mk-kpi__num { font-size: 24px; }
   .mk-kpi__hint { font-size: var(--mk-fs-micro); }

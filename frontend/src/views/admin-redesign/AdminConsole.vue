@@ -374,7 +374,7 @@ onMounted(() => {
   margin-top: 6px;
   padding: 8px 20px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-blue, #2c63d0);
   color: #fff;
   font: inherit;
@@ -395,7 +395,7 @@ onMounted(() => {
   display: block;
   margin-top: 6px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: #f3f5f9;
   color: var(--mk-muted);
   word-break: break-all;
@@ -403,13 +403,13 @@ onMounted(() => {
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15） ========== */
 @media (min-width: 2000px) {
-  .ac-error__card { gap: 12px; padding: 38px 48px; border-radius: 19px; }
+  .ac-error__card { gap: 12px; padding: 38px 48px; border-radius: var(--mk-radius-xl); }
   .ac-error__card strong { font-size: 18.5px; }
   .ac-error__card span { font-size: var(--mk-fs-body); }
-  .ac-error__retry { margin-top: 7px; padding: 9px 24px; border-radius: 10px; font-size: var(--mk-fs-body); }
+  .ac-error__retry { margin-top: 7px; padding: 9px 24px; border-radius: var(--mk-radius-xl); font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
-  .ac-error__card { gap: 14px; padding: 46px 58px; border-radius: 22px; }
+  .ac-error__card { gap: 14px; padding: 46px 58px; border-radius: var(--mk-radius-xl); }
   .ac-error__card strong { font-size: var(--mk-fs-emphasis); }
   .ac-error__card span { font-size: var(--mk-fs-body); }
   .ac-error__retry { margin-top: 8px; padding: 11px 28px; border-radius: 12px; font-size: var(--mk-fs-body); }

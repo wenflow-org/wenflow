@@ -521,7 +521,6 @@ onMounted(() => {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--mk-faint);
 }
 .fb-text { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-ink); line-height: 1.7; white-space: pre-wrap; }
@@ -537,7 +536,7 @@ onMounted(() => {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--mk-line);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
   font: inherit;
   font-size: var(--mk-fs-micro);

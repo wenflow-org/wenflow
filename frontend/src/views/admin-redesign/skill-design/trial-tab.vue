@@ -434,7 +434,6 @@ watch(
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--mk-faint);
 }
 .sdp-block__meta { display: inline-flex; align-items: center; gap: 10px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
@@ -457,7 +456,7 @@ watch(
   height: min(58vh, 620px);
   overflow: auto;
   padding: 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: #fbfcfe;
   border: 1px solid #eef2f8;
   white-space: pre-wrap;
@@ -485,7 +484,7 @@ watch(
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #dbe3ef;
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   font-size: var(--mk-fs-micro);
   line-height: 1.6;
   resize: vertical;
@@ -497,7 +496,7 @@ watch(
 .sdp-codehl--json,
 .sdp-codehl--json .sdp-codehl__pre,
 .sdp-codehl--json .sdp-codehl__ta { min-height: 0; }
-.sdp-codehl--json { height: 180px; margin-bottom: 12px; position: relative; display: flex; flex-direction: column; border-radius: 9px; overflow: hidden; }
+.sdp-codehl--json { height: 180px; margin-bottom: 12px; position: relative; display: flex; flex-direction: column; border-radius: var(--mk-radius-xl); overflow: hidden; }
 .sdp-codehl--json .sdp-codehl__pre,
 .sdp-codehl--json .sdp-codehl__ta { height: 100%; padding: 10px 12px; font-size: var(--mk-fs-micro); }
 .sdp-codehl--json .sdp-codehl__pre {
@@ -526,7 +525,7 @@ watch(
 .sdp-output {
   margin: 0;
   padding: 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-code-bg, #101826);
   border: 1px solid var(--mk-code-border, #1c2a40);
   color: var(--mk-code-fg, #9db8dc);
@@ -539,7 +538,7 @@ watch(
 }
 .sdp-error {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-red-bg);
   border: 1px solid rgba(220, 38, 38, 0.3);
   color: var(--mk-red);
@@ -552,7 +551,7 @@ watch(
   display: grid;
   grid-template-columns: 1fr auto;
   border: 1px solid #e6ecf6;
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #fff;
   overflow: hidden;
 }
@@ -608,7 +607,7 @@ watch(
 .sdp-log__io pre {
   margin: 0;
   padding: 8px 10px;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   background: #fff;
   border: 1px solid #eef2f8;
   font-size: var(--mk-fs-micro);

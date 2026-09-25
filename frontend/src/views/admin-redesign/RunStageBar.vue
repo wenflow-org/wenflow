@@ -80,7 +80,7 @@ const DONE_TEXT: Record<RunStageName, string> = { goal: '目标', path: '路径'
   line-height: 1;
 }
 .rs-bar__label { font-weight: 600; color: #94a3b8; }
-.rs-bar__connector { width: 10px; height: 2px; background: #e2e8f0; border-radius: 1px; flex-shrink: 0; }
+.rs-bar__connector { width: 10px; height: 2px; background: #e2e8f0; border-radius: var(--mk-radius-xs); flex-shrink: 0; }
 
 /* 节点状态着色 */
 .rs-bar__node--done .rs-bar__dot { background: #2ac769; color: #fff; }

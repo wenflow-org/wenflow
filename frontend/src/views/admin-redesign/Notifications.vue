@@ -443,7 +443,7 @@ void reload()
   gap: 1px;
   padding: 8px 10px;
   border: 1px solid var(--mk-line);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface);
   font: inherit;
   text-align: left;

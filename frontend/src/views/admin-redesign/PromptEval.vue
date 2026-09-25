@@ -1072,7 +1072,7 @@ void reloadRuns()
   flex-wrap: wrap;
   background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(14, 165, 233, 0.06));
   border: 1px solid rgba(99, 102, 241, 0.25);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   padding: 8px 12px;
   margin-bottom: 4px;
 }
@@ -1102,7 +1102,7 @@ void reloadRuns()
 .pe-tab-body {
   border: 1px solid var(--mk-line);
   border-top: 0;
-  border-radius: 0 0 10px 10px;
+  border-radius: 0 0 var(--mk-radius-xl) var(--mk-radius-xl);
   padding: 12px;
   display: grid;
   gap: 10px;
@@ -1157,7 +1157,7 @@ void reloadRuns()
 /* ===== 高级校验（期望内的二级折叠） ===== */
 .pe-adv {
   border: 1px dashed var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   padding: 8px 12px 12px;
   display: block;
 }
@@ -1186,13 +1186,13 @@ void reloadRuns()
 /* 运行概要：MkKpi 网格容器（统计卡本体由 MkKpi 提供） */
 .pe-run-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .pe-results { display: grid; gap: 8px; }
-.pe-result-row { border: 1px solid var(--mk-line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; background: var(--mk-surface); }
+.pe-result-row { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); padding: 10px 12px; display: grid; gap: 8px; background: var(--mk-surface); }
 .pe-result-row--fail { border-color: rgba(220, 38, 38, 0.35); background: var(--mk-red-bg, #fef2f2); }
 .pe-result-row__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pe-result-row__head strong { font-size: var(--mk-fs-micro); }
 .pe-result-row__meta { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .pe-result-row__checks { display: flex; gap: 6px; flex-wrap: wrap; }
-.pe-check { font-size: var(--mk-fs-micro); padding: 1px 8px; border-radius: 99px; font-weight: 600; }
+.pe-check { font-size: var(--mk-fs-micro); padding: 1px 8px; border-radius: var(--mk-radius-pill); font-weight: 600; }
 .pe-check--ok { background: var(--mk-green-bg); color: var(--mk-green); }
 .pe-check--fail { background: var(--mk-red-bg); color: var(--mk-red); }
 .pe-result-row__out {

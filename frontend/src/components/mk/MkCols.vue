@@ -82,7 +82,7 @@ function toggle(key: string) {
   gap: 2px;
   background: var(--mk-surface, #fff);
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   box-shadow: var(--mk-shadow-pop);
 }
 .mk-cols__item {
@@ -90,7 +90,7 @@ function toggle(key: string) {
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   cursor: pointer;
@@ -105,7 +105,7 @@ html[data-theme='dark'] .mk-cols__item:hover { background: #252627; }
   border: 0;
   background: transparent;
   padding: 6px 8px;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   border-top: 1px dashed var(--mk-line);
   font: inherit;
   font-size: var(--mk-fs-micro);

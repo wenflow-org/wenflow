@@ -54,7 +54,7 @@ const meta = computed(
 .ach-icon--lg {
   width: 26px;
   height: 26px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   font-size: var(--mk-fs-body);
   vertical-align: middle;
 }

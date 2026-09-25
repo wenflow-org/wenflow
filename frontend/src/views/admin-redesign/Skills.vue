@@ -625,7 +625,7 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-card--idle .sk-card__dot { background: #c3cede; }
 .sk-card--error .sk-card__dot { background: var(--mk-red); animation: sk-blink 1.2s ease infinite; }
 @keyframes sk-blink { 50% { opacity: 0.3; } }
-.sk-card__cat { font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mk-faint); }
+.sk-card__cat { font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.05em; color: var(--mk-faint); }
 .sk-card__flag { margin-left: auto; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-red); }
 .sk-card--idle .sk-card__flag { color: var(--mk-faint); }
 
@@ -659,8 +659,8 @@ function recGateDetail(completion: SkillCompletion): string {
 }
 .sk-card__err { color: var(--mk-red); font-weight: 700; }
 /* 失败率进度条 */
-.sk-card__rate { display: block; width: 100%; height: 4px; border-radius: 99px; background: var(--mk-line); overflow: hidden; margin-top: 2px; }
-.sk-card__rate-bar { display: block; height: 100%; border-radius: 99px; background: var(--mk-green); transition: width 0.15s ease; }
+.sk-card__rate { display: block; width: 100%; height: 4px; border-radius: var(--mk-radius-pill); background: var(--mk-line); overflow: hidden; margin-top: 2px; }
+.sk-card__rate-bar { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-green); transition: width 0.15s ease; }
 .sk-card__rate-bar.is-bad { background: var(--mk-red); }
 
 /* 所属阶段标签 */

@@ -532,7 +532,7 @@ defineExpose({ reload })
 .oc-desc { color: var(--mk-muted); font-size: var(--mk-fs-micro); margin: 0 0 12px; }
 .oc-milestone {
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   padding: 10px 12px;
   margin-bottom: 10px;
 }

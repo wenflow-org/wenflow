@@ -176,7 +176,7 @@ defineExpose({ open })
 .vl-steps {
   margin: 0 0 4px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: #f4f7fc;
   color: var(--mk-muted, #5b6577);
   font-size: var(--mk-fs-micro);
@@ -211,7 +211,7 @@ defineExpose({ open })
 .vl-persona-ok {
   margin: 0;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: #e8f7ee;
   color: #1a7f4b;
   font-size: var(--mk-fs-micro);
@@ -219,7 +219,7 @@ defineExpose({ open })
 }
 .vl-advanced {
   margin-top: 4px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   border: 1px solid #e8ecf2;
   background: #fafbfd;
   padding: 8px 12px;

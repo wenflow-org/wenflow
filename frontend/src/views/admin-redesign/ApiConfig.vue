@@ -1220,7 +1220,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   flex-shrink: 0;
   border: 1px solid var(--mk-line);
   background: #fafbfc;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   width: 32px;
   height: 32px;
   font-size: var(--mk-fs-body);
@@ -1264,7 +1264,7 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-models { display: flex; gap: 6px; flex-wrap: wrap; }
 .ac-model {
   padding: 4px 10px;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   background: #eef2fa;
   color: var(--mk-muted);
   font-family: var(--mk-mono);
@@ -1278,7 +1278,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   gap: 8px;
   padding: 8px 12px;
   border: 1px dashed var(--mk-line);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: #fafbfc;
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
@@ -1389,7 +1389,6 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.05em;
-  text-transform: uppercase;
   color: var(--mk-faint);
 }
 .ac-health__head span:last-child { white-space: nowrap; }
@@ -1590,7 +1589,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   /* zoom 1.15 档：字号继续放大 */
   .ac-body { gap: 18px; padding: 8px 22px 22px; }
   .mk-field__label { font-size: var(--mk-fs-micro); }
-  .ac-model { font-size: var(--mk-fs-micro); padding: 6px 14px; border-radius: 9px; }
+  .ac-model { font-size: var(--mk-fs-micro); padding: 6px 14px; border-radius: var(--mk-radius-xl); }
 
   .ac-policy { gap: 18px 0; padding: 8px 22px 22px; }
   .ac-policy__label { font-size: var(--mk-fs-micro); }

@@ -995,7 +995,7 @@ html[data-theme='dark'] .exec-kind-group .mk-badge { background: #2d2d2f; color:
   font-weight: 700;
   letter-spacing: 0.03em;
   padding: 1px 6px;
-  border-radius: 5px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-line, #e6ebf4);
   color: var(--mk-muted, #5b6577);
   white-space: nowrap;
@@ -1027,8 +1027,8 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   border: 0;
   border-radius: 6px;
@@ -1117,7 +1117,7 @@ html[data-theme='dark'] .exec-detail td { background: #161718; }
   gap: 8px;
   padding: 10px 14px;
   border-left: 3px solid var(--mk-line);
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--mk-radius-sm) var(--mk-radius-sm) 0;
   background: var(--mk-surface);
 }
 .exec-detail__links { display: inline-flex; gap: 12px; }
@@ -1186,7 +1186,7 @@ html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; colo
 .exec-detail__box pre {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-code-bg);
   color: var(--mk-code-fg);
   font: 11px/1.6 var(--mk-mono);
@@ -1214,7 +1214,7 @@ html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; colo
 .tline-attempt {
   border: 1px solid var(--mk-line);
   border-left: 3px solid var(--mk-green);
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   padding: 8px 10px;
   display: grid;
   gap: 4px;

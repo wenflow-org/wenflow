@@ -280,8 +280,8 @@ onMounted(() => {
   grid-template-columns: 1fr 1fr;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 20px;
-  box-shadow: 0 2px 4px rgba(23, 32, 51, 0.04), 0 12px 32px rgba(23, 32, 51, 0.07);
+  border-radius: var(--mk-radius-xl);
+  box-shadow: var(--mk-shadow-pop);
   overflow: hidden;
 }
 
@@ -290,7 +290,7 @@ onMounted(() => {
   .auth__logo img { height: 76px; }
   .auth__card {
     width: min(1080px, 100%);
-    border-radius: 26px;
+    border-radius: var(--mk-radius-xl);
   }
   .auth__form-side { padding: 36px 40px 28px; gap: 22px; }
   .auth__demo-side { padding: 36px 36px 38px; }
@@ -414,10 +414,10 @@ onMounted(() => {
   right: 8px;
   top: 50%;
   transform: translateY(-50%);
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: transparent;
   color: var(--faint);
   cursor: pointer;
@@ -542,7 +542,7 @@ onMounted(() => {
 .demo__panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--mk-radius-xl);
   padding: 13px 15px;
   display: grid;
   gap: 10px;
@@ -571,7 +571,7 @@ onMounted(() => {
   display: grid;
   gap: 2px;
   padding: 8px 6px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--bubble-ai-bg);
   border: 1px solid var(--line);
   text-align: center;
@@ -637,7 +637,7 @@ onMounted(() => {
   background: color-mix(in srgb, var(--blue) 9%, var(--surface));
 }
 [data-theme='dark'] .auth__card {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.38);
+  box-shadow: var(--mk-shadow-pop);
 }
 
 @media (max-width: 760px) {

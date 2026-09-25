@@ -209,7 +209,7 @@ defineExpose({ open, task: batchTask, retry, dismiss, toggleDetail })
 .vl-steps {
   margin: 0 0 4px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: #f4f7fc;
   color: var(--mk-muted, #5b6577);
   font-size: var(--mk-fs-micro);

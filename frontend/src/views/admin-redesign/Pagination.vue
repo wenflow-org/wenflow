@@ -157,8 +157,8 @@ watch(
 }
 .mk-pagination__btn,
 .mk-pagination__num {
-  min-width: 30px;
-  height: 30px;
+  min-width: 28px;
+  height: 28px;
   padding: 0 9px;
   border: 1px solid var(--mk-line);
   border-radius: 6px;
@@ -204,7 +204,7 @@ watch(
 @media (min-width: 2000px) {
   .mk-pagination { font-size: var(--mk-fs-micro); gap: 12px; padding: 11px 18px 13px; }
   .mk-pagination__total { font-size: var(--mk-fs-micro); }
-  .mk-pagination__size { font-size: var(--mk-fs-micro); padding: 5px 10px; border-radius: 7px; }
+  .mk-pagination__size { font-size: var(--mk-fs-micro); padding: 5px 10px; border-radius: var(--mk-radius-sm); }
   .mk-pagination__btn, .mk-pagination__num { font-size: var(--mk-fs-micro); min-width: 32px; height: 32px; padding: 0 10px; }
 }
 @media (min-width: 3600px) {

@@ -378,7 +378,7 @@ onMounted(async () => {
 .sc-field__input {
   padding: 8px 11px;
   border: 1px solid var(--mk-line, #e6ebf4);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #fbfcfe;
   color: var(--mk-ink, #1a2a44);
   font: inherit;
@@ -391,7 +391,7 @@ onMounted(async () => {
   margin: 10px 0 0;
   padding: 9px 12px;
   border: 1px solid rgba(44, 99, 208, 0.35);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #f0f5ff;
   color: var(--mk-blue, #2c63d0);
   font-size: var(--mk-fs-micro);
@@ -407,7 +407,7 @@ onMounted(async () => {
   margin: 10px 0 0;
   padding: 8px 12px;
   border: 1px dashed rgba(180, 83, 9, 0.45);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-amber-bg);
   color: var(--mk-amber, #b45309);
   font-size: var(--mk-fs-micro);
@@ -426,7 +426,7 @@ onMounted(async () => {
   margin: 0;
   padding: 10px 12px;
   border: 1px solid var(--mk-line, #e6ebf4);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #f8fafc;
   color: var(--mk-ink, #1a2a44);
   font-size: var(--mk-fs-micro);

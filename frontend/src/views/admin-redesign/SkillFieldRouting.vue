@@ -588,7 +588,7 @@ onMounted(() => void load())
   margin-bottom: 10px;
   padding: 8px 12px;
   border: 1px dashed rgba(220, 38, 38, 0.4);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-red-bg, #fef2f2);
   font-size: var(--mk-fs-micro);
   line-height: 1.5;
@@ -606,7 +606,7 @@ onMounted(() => void load())
   margin-bottom: 10px;
   padding: 8px 12px;
   border: 1px dashed rgba(180, 83, 9, 0.45);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-amber-bg, #fffbeb);
   font-size: var(--mk-fs-micro);
 }
@@ -618,7 +618,7 @@ onMounted(() => void load())
 .sfr__legend {
   margin: 0 0 12px;
   border: 1px solid var(--mk-line, #e6ebf4);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface, #fff);
   box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06));
 }
@@ -636,7 +636,7 @@ onMounted(() => void load())
 .sfr__legend[open] .sfr__legend-summary::before { transform: rotate(90deg); }
 .sfr__legend-body { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; padding: 4px 14px 10px; }
 @media (max-width: 860px) { .sfr__legend-body { grid-template-columns: 1fr; } }
-.sfr__legend-title { margin: 0 0 6px; font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mk-faint, var(--mk-faint-soft)); }
+.sfr__legend-title { margin: 0 0 6px; font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.05em; color: var(--mk-faint, var(--mk-faint-soft)); }
 .sfr__legend-group--roles + .sfr__legend-group .sfr__legend-title { margin-top: 10px; }
 .sfr__legend-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
 .sfr__legend-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -661,7 +661,7 @@ onMounted(() => void load())
 
 /* 角色徽章（与编排图页同款 7 类着色） */
 .sfr__persist { display: inline-block; max-width: var(--mk-col-id); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
-.sfr__persist--alias { color: var(--mk-amber, #b45309); background: #fffbeb; border-radius: 5px; padding: 0 5px; }
+.sfr__persist--alias { color: var(--mk-amber, #b45309); background: #fffbeb; border-radius: var(--mk-radius-sm); padding: 0 5px; }
 
 /* core 状态列 */
 .sfr__emptyrow { color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; padding: 14px; }

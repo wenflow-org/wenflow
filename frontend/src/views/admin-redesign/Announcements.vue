@@ -508,7 +508,7 @@ function expiresLabel(iso: string): string {
 .an-severity { display: flex; gap: 6px; }
 .an-sev {
   padding: 6px 14px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   font: inherit;

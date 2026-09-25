@@ -1427,7 +1427,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-concept-list { display: flex; gap: 6px; flex-wrap: wrap; }
 .ld-concept {
   padding: 3px 10px;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
@@ -1471,7 +1471,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 }
 .ld-trend__bar {
   flex: 1;
-  border-radius: 4px 4px 2px 2px;
+  border-radius: 4px 4px var(--mk-radius-xs) var(--mk-radius-xs);
   background: linear-gradient(180deg, #6aa0ff, #3d7cff);
   min-height: 6px;
 }
@@ -1502,14 +1502,14 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-related { padding: 10px 12px; display: grid; gap: 6px; }
 .ld-related__item {
   display: flex; align-items: center; gap: 10px;
-  border: 1px solid var(--mk-line); border-radius: 10px;
+  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
   background: var(--mk-surface); padding: 9px 12px;
   font: inherit; text-align: left; cursor: pointer;
   transition: border-color 0.12s ease, transform 0.12s ease;
 }
 .ld-related__item:hover { border-color: rgba(44, 99, 208, 0.5); transform: translateY(-1px); }
 .ld-related__icon {
-  width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+  width: 30px; height: 30px; border-radius: var(--mk-radius-sm); flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
   background: rgba(44, 99, 208, 0.1); color: var(--mk-blue); font-size: var(--mk-fs-body);
 }
@@ -1539,7 +1539,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   font-weight: 600;
   color: var(--mk-faint);
   background: var(--mk-surface-2);
-  border-radius: 5px;
+  border-radius: var(--mk-radius-sm);
   padding: 0 6px;
 }
 
@@ -1653,7 +1653,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-ev__confbar {
   display: block;
   height: 5px;
-  border-radius: 99px;
+  border-radius: var(--mk-radius-pill);
   background: var(--mk-surface-2);
   overflow: hidden;
   position: relative;
@@ -1662,7 +1662,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 99px;
+  border-radius: var(--mk-radius-pill);
 }
 .ld-ev__confbar.is-ok::after { background: var(--mk-green); }
 .ld-ev__confbar.is-warn::after { background: var(--mk-amber); }
@@ -1688,7 +1688,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 /* 时间线限高内滚：50+ 条不撑爆页面，右栏随视口露出 */
 .ld-ev-main .ld-evidence { max-height: 640px; overflow-y: auto; }
 .ld-ev-main .ld-evidence::-webkit-scrollbar { width: 6px; }
-.ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #d5dce8; border-radius: 3px; }
+.ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #d5dce8; border-radius: var(--mk-radius-xs); }
 .ld-ev-side { display: grid; gap: 14px; min-width: 0; }
 
 /* ---------- 学习压力曲线（健康度/疲劳度 EWMA，风格对齐用户侧 V2LearningState） ---------- */
@@ -1711,7 +1711,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 /* ---------- 预测校准（实证命中率 + 校准分布 + 最近预测） ---------- */
 .ld-cal { padding: 12px 14px 14px; display: grid; gap: 12px; }
 .ld-cal__hits { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.ld-cal__hit { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 10px; background: var(--mk-surface); }
+.ld-cal__hit { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); background: var(--mk-surface); }
 .ld-cal__hit span { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
 .ld-cal__hit strong { font-size: var(--mk-fs-20); font-variant-numeric: tabular-nums; }
 .ld-cal__hit strong.is-good { color: var(--mk-green); }

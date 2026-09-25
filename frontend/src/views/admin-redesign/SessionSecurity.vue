@@ -538,7 +538,7 @@ onMounted(async () => {
   flex-wrap: wrap;
   padding: 8px 14px;
   border: 1px dashed var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
@@ -550,7 +550,7 @@ onMounted(async () => {
   flex-wrap: wrap;
   padding: 8px 14px;
   border: 1px solid rgba(44, 99, 208, 0.3);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-blue-bg);
   font-size: var(--mk-fs-micro);
   color: var(--mk-ink);
@@ -568,7 +568,7 @@ onMounted(async () => {
   justify-items: center;
   padding: 28px 32px;
   border: 1px solid var(--mk-line);
-  border-radius: 14px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-modal);
   text-align: center;
@@ -608,7 +608,7 @@ onMounted(async () => {
   cursor: pointer;
   white-space: nowrap;
   padding: 4px 8px;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
 }
 .ss-group__revokeall:hover { background: var(--mk-red-bg, #fef2f2); text-decoration: underline; }
 

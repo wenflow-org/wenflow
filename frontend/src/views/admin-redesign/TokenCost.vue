@@ -320,7 +320,7 @@ function trendH(tokens: number): string {
   flex-wrap: wrap;
   padding: 8px 14px;
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
 }
 .tc-status--bad { color: var(--mk-red, #dc2626); font-weight: 700; }

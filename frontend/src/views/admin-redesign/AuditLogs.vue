@@ -690,7 +690,7 @@ function goSessions(username: string) {
   font-family: var(--mk-mono);
   font-size: var(--mk-fs-micro);
   font-weight: 800;
-  border-radius: 5px;
+  border-radius: var(--mk-radius-sm);
   padding: 1px 7px;
   margin-right: 7px;
   vertical-align: middle;
@@ -743,7 +743,7 @@ function goSessions(username: string) {
   display: inline-block;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
-  border-radius: 5px;
+  border-radius: var(--mk-radius-sm);
   padding: 1px 8px;
   background: var(--mk-blue-bg);
   color: var(--mk-blue);
@@ -828,7 +828,7 @@ function goSessions(username: string) {
 .log-payload pre {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: #0d1420;
   color: #8ba3c7;
   font: 11px/1.6 var(--mk-mono);

@@ -145,14 +145,14 @@ watch(() => props.stage, () => {
   margin: 0;
   padding: 8px 12px;
   border: 1px solid rgba(44, 99, 208, 0.35);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-blue-bg, #eff6ff);
   color: var(--mk-blue, #2c63d0);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
 }
 .fdp__guide-file .mono { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue, #2c63d0); }
-.fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: var(--mk-fs-micro); background: #f0f2f5; padding: 1px 6px; border-radius: 5px; }
+.fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: var(--mk-fs-micro); background: #f0f2f5; padding: 1px 6px; border-radius: var(--mk-radius-sm); }
 .fdp__drift-list { margin: 0; padding: 6px 14px 12px; list-style: none; }
 .fdp__drift-item {
   display: flex;
@@ -161,7 +161,7 @@ watch(() => props.stage, () => {
   padding: 7px 10px;
   margin-top: 6px;
   border: 1px solid var(--mk-line, #e6ebf4);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #fafbfd;
   font-size: var(--mk-fs-micro);
   flex-wrap: wrap;
@@ -175,8 +175,7 @@ watch(() => props.stage, () => {
   font-size: var(--mk-fs-micro);
   font-weight: 800;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
+  }
 .fdp__drift-key { font-weight: 700; color: var(--mk-ink, #1a2a44); }
 .fdp__drift-field { color: var(--mk-faint, var(--mk-faint-soft)); }
 .fdp__drift-val { font-size: var(--mk-fs-micro); }
@@ -190,7 +189,7 @@ watch(() => props.stage, () => {
   padding: 6px 10px;
   margin-top: 6px;
   border: 1px solid var(--mk-line, #e6ebf4);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   background: #fafbfd;
   font-size: var(--mk-fs-micro);
   flex-wrap: wrap;
@@ -203,8 +202,7 @@ watch(() => props.stage, () => {
   color: var(--mk-muted, #5b6577);
   font-size: var(--mk-fs-micro);
   font-weight: 800;
-  text-transform: uppercase;
-}
+  }
 .fdp__change-target { color: var(--mk-muted, #5b6577); }
 .fdp__empty { padding: 20px; color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; }
 

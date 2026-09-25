@@ -408,7 +408,7 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 .ud-grant__notice {
   margin: 0 16px 10px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   /* 走 token：浅色 #eff6ff、暗色 rgba(91,141,239,.16)，避免暗色下仍是白底（原硬编码 #eef5ff） */
   background: var(--mk-blue-bg, #eff6ff);
   color: var(--mk-blue);
@@ -431,7 +431,7 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
   gap: 2px 12px;
   padding: 8px 12px;
   border: 1px solid var(--mk-line);
-  border-radius: 9px;
+  border-radius: var(--mk-radius-xl);
   font-size: var(--mk-fs-micro);
 }
 .ud-grant__grid span { color: var(--mk-faint); font-weight: 700; font-size: var(--mk-fs-micro); white-space: nowrap; }

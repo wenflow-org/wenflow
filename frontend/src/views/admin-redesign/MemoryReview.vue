@@ -603,7 +603,7 @@ onMounted(async () => {
 .mr__row--active { background: var(--mk-blue-bg); }
 .mr__actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
 .mr__error { margin: 6px 0; color: var(--mk-red-strong); font-size: var(--mk-fs-micro); }
-.mr__warn { margin-top: 8px; padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(217, 119, 6, 0.3); background: rgba(217, 119, 6, 0.06); font-size: var(--mk-fs-micro); }
+.mr__warn { margin-top: 8px; padding: 8px 10px; border-radius: var(--mk-radius-xl); border: 1px solid rgba(217, 119, 6, 0.3); background: rgba(217, 119, 6, 0.06); font-size: var(--mk-fs-micro); }
 .mr__chip { display: inline-block; margin-left: 8px; }
 .mr__detail { display: grid; gap: 14px; }
 .mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }

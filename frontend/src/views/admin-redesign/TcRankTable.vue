@@ -182,7 +182,6 @@ function rowTitle(r: RankRow): string {
   font-size: var(--mk-fs-micro);
   font-weight: 600;
   letter-spacing: 0.05em;
-  text-transform: uppercase;
   color: var(--mk-faint);
 }
 
@@ -318,7 +317,7 @@ html[data-theme='dark'] .tc-share__bar { background: linear-gradient(90deg, #6fa
 @media (min-width: 2800px) {
   .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: var(--mk-fs-micro); }
   .tc-c__sub { font-size: var(--mk-fs-micro); }
-  .tc-rank__no { width: 26px; height: 26px; font-size: var(--mk-fs-micro); border-radius: 7px; }
+  .tc-rank__no { width: 26px; height: 26px; font-size: var(--mk-fs-micro); border-radius: var(--mk-radius-sm); }
   .tc-share__track { height: 8px; }
   .tc-share__num { font-size: var(--mk-fs-micro); }
   .tc-avatar { width: 28px; height: 28px; font-size: var(--mk-fs-micro); }
