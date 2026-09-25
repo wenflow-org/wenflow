@@ -22,20 +22,6 @@ exports[`teaching-turn payload snapshot parity payload contains exactly the keys
     "learningControlState": {},
     "stableProfile": {},
   },
-  "messages": [
-    {
-      "content": "闭包到底是什么？",
-      "role": "user",
-    },
-    {
-      "content": "先看词法作用域。",
-      "role": "assistant",
-    },
-    {
-      "content": "那变量为什么不会被回收？",
-      "role": "user",
-    },
-  ],
   "promptDirectives": Any<Object>,
   "scenario": {
     "subject": "JavaScript",

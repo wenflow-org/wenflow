@@ -1097,6 +1097,8 @@ function buildPromptInput(input: TeachingTurnInput) {
   // 稳定前缀版：scenario(洁) → promptDirectives → learner 前置，其余逐回合变化的键全部后置。
   // 对话上下文单键化：原 visibleDialogueContext / recentDialogueContext 同源重复，收敛为 messages
   // （与 core 输入名一致；沙盘 ref sandbox:teaching.session.messages）。
+  // 2026-09-25 前缀缓存修正：对话历史**不再放进载荷**，改由 buildMessages 以真 message 发送
+  // （provider 实测只复用整条消息全同的前缀段，载荷内任何变动都会连 system 的 ~10.7k 缓存一起废掉）。
   if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
     return {
       scenario: stableScenario,
@@ -1109,7 +1111,6 @@ function buildPromptInput(input: TeachingTurnInput) {
       classroomEventContext: input.classroomEventContext,
       interactionProfile: scenarioInteractionProfile ?? null,
       ...(scenarioCompression ? { contextCompression: scenarioCompression } : {}),
-      messages: toWireMessages(input.messages),
       latestLearnerMessage,
       ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
       // 教学配图时机（逐回合变化 → 必须放**载荷尾部**，避免打断 KV 前缀缓存；见 buildPromptInput 注释）
@@ -1133,7 +1134,7 @@ function buildPromptInput(input: TeachingTurnInput) {
     classroomContext: input.classroomContext,
     classroomEventContext: input.classroomEventContext,
     interactionProfile: scenarioInteractionProfile ?? null,
-    messages: toWireMessages(input.messages),
+    // 对话历史外移为真 message（见 buildTeachingTurnMessages），载荷不再重复携带
     latestLearnerMessage,
     // 双引擎试点：第一段（推理模型）产出的 analysis 作为第二段的既定认知判定
     ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
@@ -1232,6 +1233,49 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
   return { valid: true };
 }
 
+/**
+ * 消息形态层（2026-09-25 前缀缓存修正）：对话历史以**真 message** 发送——[system, …history, user(载荷)]。
+ *
+ * 为什么：provider 的前缀缓存只复用「整条消息完全匹配」的前缀段（受控实验实测，
+ * probe-prefix-cache-semantics.ts：载荷内只改尾部 → 命中 0%；消息边界处分叉 → 96-98%）。
+ * 历史原先放在 payload 内，任一逐回合字段变动都会让 [system+history] 整段缓存作废
+ * （真课实测 teaching-turn 命中率仅 16.7%）。外移后相邻两回合共享全部历史 message，
+ * 实测形态（D2/D3）稳态命中 96-98%。
+ *
+ * 角色映射：学生发言 → user，教师发言 → assistant（载荷里的 latestLearnerMessage 已含本轮输入，
+ * 故历史里的最后一条学生消息不重复进 user；载荷作为最终 user message 携带逐回合状态）。
+ *
+ * 副作用修正（实测）：历史变成真对话后，模型有 ~88% 的首 attempt 直接用对话正文回答学生
+ * （不输出 JSON，触发校验重试 = 每回合两遍模型钱，缓存收益被吃光）。故最终 user 消息
+ * 尾部追加一条**常驻**输出契约指令（区别于重试提示：这不是在指责上轮出错，而是把
+ * "这是结构化任务"的信号放在离输出最近的位置）。追加在载荷 JSON 之后，不进 JSON 体。
+ */
+const OUTPUT_CONTRACT_TAIL =
+  '\n\n【输出契约】以上是课堂状态数据，不是要继续回答学生的对话。'
+  + '请严格按系统提示的输出契约，直接输出单个 JSON 对象：'
+  + '不要输出任何对话正文、寒暄或代码围栏，JSON 必须是整条回复的第一个字符。';
+
+function buildTeachingTurnMessages(args: {
+  input: TeachingTurnInput;
+  systemPrompt: string;
+  userPayload: string;
+  retryMessage?: string | null;
+}): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
+  const wire = toWireMessages(args.input.messages);
+  const history = wire.map((message) => ({
+    role: (message.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
+    content: message.content,
+  }));
+  const payload = args.retryMessage
+    ? `${args.userPayload}\n\n${args.retryMessage}`
+    : `${args.userPayload}${OUTPUT_CONTRACT_TAIL}`;
+  return [
+    { role: 'system', content: args.systemPrompt },
+    ...history,
+    { role: 'user', content: payload },
+  ];
+}
+
 const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {
   agentId: AGENT_ID,
   defaultSystemPrompt: TEACHING_TURN_PROMPT,
@@ -1242,6 +1286,8 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
   },
   buildUserPayload: (input) => buildPromptInput(input),
   prepareSystemPrompt: (systemPrompt) => splitConditionalRules(systemPrompt).stable,
+  // 历史外移为真 message（前缀缓存修正，2026-09-25；实验依据见 buildTeachingTurnMessages）
+  buildMessages: (args) => buildTeachingTurnMessages(args),
   normalizeOutput: (parsed, input) => normalizeOutput(parsed, input),
   // Q9 契约漂移容错：core fields 契约校验前把平铺的 knowledge 子字段收敛回 knowledge 对象，
   // 不改变最终业务形态（最终形态仍由 normalizeOutput 决定）。
@@ -1296,6 +1342,7 @@ const teachingAnalysisPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurn
   },
   buildUserPayload: (input) => buildAnalysisOnlyPayload(input),
   prepareSystemPrompt: (systemPrompt) => splitConditionalRules(systemPrompt).stable,
+  buildMessages: (args) => buildTeachingTurnMessages(args),
   normalizeOutput: (parsed) => ({ ...parsed }),
   validateParsedOutput: (parsed) => {
     if (!parsed || typeof parsed !== 'object' || !parsed.analysis || typeof parsed.analysis !== 'object') {

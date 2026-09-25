@@ -83,12 +83,9 @@ describe('teaching-turn payload snapshot parity', () => {
       'knowledge',
       'latestLearnerMessage',
       'learner',
-      'messages',
       'promptDirectives',
       'scenario',
     ])
-    // 对话上下文单键化：runtime 键就是 core 输入名 messages
-    expect(payload.messages).toHaveLength(3)
     expect(payload.interactionProfile).toBeNull()
     expect(payload).toMatchSnapshot({
       latestLearnerMessage: expect.any(String),
@@ -103,7 +100,6 @@ describe('teaching-turn payload snapshot parity', () => {
     const payload = spec.buildUserPayload(input, {})
 
     expect(payload.latestLearnerMessage).toBe('那变量为什么不会被回收？')
-    expect(payload.messages).toHaveLength(3)
   })
 
   it('fields declaration reconciles with real payload and output keys (File-as-Truth)', async () => {
@@ -119,7 +115,6 @@ describe('teaching-turn payload snapshot parity', () => {
       'controls',
       'interactionProfile',
       'latestLearnerMessage',
-      'messages',
       'promptDirectives',
       'scenario',
     ])

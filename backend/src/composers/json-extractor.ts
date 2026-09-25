@@ -10,6 +10,51 @@
  *    + 不完整 JSON 修复 + 对话文本拆分（goal 阶段等需要"正文 + JSON"分离的场景）
  */
 
+/**
+ * 修复「字符串值内未转义的直引号」（2026-09-25 真课实测）：模型复述学员原话时常把
+ * 弯引号 “…” 规范成直引号且忘记转义——`{"reply":"你把两盆的"不浇"拆成了两个机制"}`
+ * 整段 JSON 直接非法（此前只能靠重试兜底 = 每回合两遍模型钱，真课实测 88% 中招）。
+ * 判定规则：字符串内的 `"` 只有紧跟结构字符（/,/}/]/EOF）时才是收尾引号，其余补转义。
+ */
+function escapeInnerQuotes(raw: string): string {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch !== '"') {
+      out += ch;
+      continue;
+    }
+    if (!inString) {
+      out += ch;
+      inString = true;
+      continue;
+    }
+    let j = i + 1;
+    while (j < raw.length && /\s/.test(raw[j])) j += 1;
+    const next = j < raw.length ? raw[j] : '';
+    // 结构字符：值串收尾（, } ] / EOF）与键串收尾（:）
+    if (next === '' || next === ',' || next === '}' || next === ']' || next === ':') {
+      out += ch;
+      inString = false;
+    } else {
+      out += '\\"';
+    }
+  }
+  return out;
+}
+
 function parseJsonLoose(raw: string): { json: string; parsed: any } | null {
   if (typeof raw !== 'string' || !raw.trim()) return null;
   // 1) 直接 parse
@@ -32,6 +77,13 @@ function parseJsonLoose(raw: string): { json: string; parsed: any } | null {
     try {
       return { json: jsonish, parsed: safeJsonParse(jsonish) };
     } catch { /* fall through */ }
+    // 3b) 字符串值内未转义直引号（模型复述学员弯引号的高发故障）
+    try {
+      const escaped = escapeInnerQuotes(jsonish);
+      if (escaped !== jsonish) {
+        return { json: escaped, parsed: safeJsonParse(escaped) };
+      }
+    } catch { /* fall through */ }
   }
   // 4) 截取首个完整 JSON 对象（跨层括号配对，丢弃尾部截断/多余文本）
   let depth = 0;
@@ -47,6 +99,12 @@ function parseJsonLoose(raw: string): { json: string; parsed: any } | null {
         try {
           const slice = raw.slice(start, i + 1);
           return { json: slice, parsed: JSON.parse(slice) };
+        } catch { /* fall through */ }
+        // 4b) 括号配对截取 + 内嵌引号修复（组合拳）
+        try {
+          const slice = raw.slice(start, i + 1);
+          const escaped = escapeInnerQuotes(slice);
+          return { json: escaped, parsed: safeJsonParse(escaped) };
         } catch { /* fall through */ }
       }
     }
