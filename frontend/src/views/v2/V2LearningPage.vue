@@ -384,6 +384,7 @@
               class="composer__textarea"
               rows="1"
               maxlength="800"
+              :disabled="completed"
               placeholder="随时提问，或说说你的理解…"
               @input="interactionMeta.onInput(input.length)"
               @keydown.enter.exact.prevent="send"
@@ -393,7 +394,7 @@
             <span
               v-if="!typing"
               class="composer__send"
-              :class="{ 'composer__send--off': !input.trim() || checkpointPending }"
+              :class="{ 'composer__send--off': !input.trim() || checkpointPending || completed }"
               role="button"
               tabindex="0"
               aria-label="发送"
@@ -1002,7 +1003,9 @@ async function send(e?: unknown) {
   const ke = e as KeyboardEvent | undefined;
   if (ke && (ke.isComposing || ke.keyCode === 229)) return;
   const t = input.value.trim();
-  if (!t || typing.value || checkpointPending.value || !session.value) return;
+  // 完课后输入即锁：完成候选轮教师常带一个收尾追问，若放行发送，回答会打给已终态化的会话
+  // （服务端拒绝、消息不入库、误报失败，且陈旧重试会重复推送同一条用户消息）。
+  if (!t || typing.value || checkpointPending.value || !session.value || completed.value) return;
   input.value = '';
   assessTarget.value = null; // 用户已表态/新回合开始，快选确认清除
   confirmCheck.value = null;
@@ -1010,7 +1013,7 @@ async function send(e?: unknown) {
 }
 
 async function sendDirect(text: string) {
-  if (typing.value || !session.value) return;
+  if (typing.value || !session.value || completed.value) return;
   assessTarget.value = null; // 点击快选确认/开场建议即表态，清除待确认
   await doSend(text);
 }
@@ -1081,7 +1084,8 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
           : await aiTeachingAPI.startSession(taskId)) as unknown as Record<string, any>;
         if (typeof fresh?.revision === 'number') session.value.revision = fresh.revision;
       } catch { /* 同步失败则直接展示失败气泡 */ }
-      await doSend(text, false);
+      // 重发不再重复推送用户气泡：首轮已经乐观渲染过，再推一次就是两条同样的「你」
+      await doSend(text, false, true);
       return;
     }
     pushMsg({ role: 'ai', text: '这次回复失败了，点下方「重试」。', time: nowTime(), failed: true });
