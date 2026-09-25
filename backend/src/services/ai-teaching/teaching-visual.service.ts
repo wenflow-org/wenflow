@@ -35,8 +35,12 @@ export interface TeachingVisualRequest {
 export type { TeachingImage };
 
 export const DEFAULT_TEACHING_VISUAL_MAX_PER_SESSION = 6;
-/** 每个任务（= 一个教学会话）最多几张：**代码硬闸门**（此前只在提示词里，模型可自行绕过）。 */
-export const DEFAULT_TEACHING_VISUAL_MAX_PER_TASK = 1;
+/**
+ * 每个**任务**（= 一个教学会话）的配图上限：owner 口径 2026-09-25 **放开每任务 1 张的限制**——
+ * 图该出就出，由外圈每会话上限（6）兜底防失控。设 `TEACHING_VISUAL_MAX_PER_TASK` 可再收紧（回滚用），
+ * 0 或负数 = 不限。历史背景：此闸门曾因"提示词挡不住模型自发出图"而代码化为 1；现在改为只拦会话级总量。
+ */
+export const DEFAULT_TEACHING_VISUAL_MAX_PER_TASK = Number.POSITIVE_INFINITY;
 /** 生图超时（毫秒）：实测单张约 12s，给足余量但不无限等。 */
 export const DEFAULT_TEACHING_VISUAL_TIMEOUT_MS = 60_000;
 /** 画面描述最短长度（太短无信息量，不值得画）。 */
@@ -60,17 +64,15 @@ export function resolveTeachingVisualMaxPerSession(value = process.env.TEACHING_
 }
 
 /**
- * 每**任务**上限（默认 1）。一个教学会话 = 一个任务，所以判据就是"本会话已有几张图"。
- * 这是**代码硬闸门**：此前"同一任务最多配一次"只写在提示词里，实测模型会自行绕过（一次任务出了 3 张）。
+ * 每**任务**上限（**默认不限**；0/负数 = 不限）。一个教学会话 = 一个任务，所以判据就是"本会话已有几张图"。
+ * owner 口径 2026-09-25：放开"每任务 1 张"，图该出就出，由每会话上限兜底；env 设正整数可再收紧（回滚用）。
+ * 历史背景：闸门因"提示词挡不住模型自发出图（一次 3 张）"而代码化为 1，现仅保留会话级总量控制。
  */
 export function resolveTeachingVisualMaxPerTask(value = process.env.TEACHING_VISUAL_MAX_PER_TASK): number {
   if (!value || String(value).trim() === '') return DEFAULT_TEACHING_VISUAL_MAX_PER_TASK;
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    logger.warn(`[teaching-visual] TEACHING_VISUAL_MAX_PER_TASK 无效（${value}），使用默认 ${DEFAULT_TEACHING_VISUAL_MAX_PER_TASK}`);
-    return DEFAULT_TEACHING_VISUAL_MAX_PER_TASK;
-  }
-  return parsed;
+  if (!Number.isInteger(parsed) || parsed < 0) return Number.POSITIVE_INFINITY;
+  return parsed === 0 ? Number.POSITIVE_INFINITY : parsed;
 }
 
 /** 课堂里已有的配图数量（用于上限判定）。 */
@@ -91,7 +93,7 @@ export function composeTeachingVisualPrompt(request: TeachingVisualRequest): str
   const style = [
     '教学示意图（课堂辅助用）',
     kind ? `类型：${kind}` : null,
-    '要求：白底、简洁、线条清晰、结构明确，只画描述里说的内容；不要多余的装饰与无关文字',
+    '要求：简洁、线条清晰、结构明确，只画描述里说的内容；不要多余的装饰与无关文字',
     '画面里不要出现任何文字：不要标签、不要对话气泡、不要表格与编号；要说明的内容由图下方的说明文字承担，至多保留极少量数字符号',
     '画关系不画故事：画面呈现的是顺序/层级/包含/对比/变化这类抽象关系；状态差异要画出可见区别（如满/半、开/合）',
     '构图：横向关系用横向构图，纵向层级用纵向构图，画面留白充足',
@@ -193,12 +195,12 @@ export interface VisualOpportunity {
  * 所以时机必须由代码判定后**显式送进去**，模型只负责"画什么"。
  *
  * 当前信号（S1，高精度）：**上一轮老师用字符画了结构**（ASCII 示意）——那正是"这里本来需要图"的证据。
- * 且本任务尚未配过图（一个教学会话 = 一个任务）。
+ * owner 口径 2026-09-25 放开"每任务一次"后允许重复触发：只要**紧邻上一轮**又画了字符结构就再提示
+ * （判据天然带节奏——不画结构的轮次不会触发）；总量仍由每会话上限兜底。
  */
 export function buildVisualOpportunity(messages: TeachingSessionMessage[] | null | undefined): VisualOpportunity | null {
   if (!isTeachingVisualEnabled()) return null;
   const list = Array.isArray(messages) ? messages : [];
-  if (countTeachingVisuals(list) > 0) return null;
   const lastAssistant = [...list].reverse().find((message) => message?.role === 'assistant');
   if (!detectAsciiStructure(lastAssistant?.content)) return null;
   return {

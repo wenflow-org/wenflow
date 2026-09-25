@@ -87,12 +87,29 @@ describe('teaching-visual 服务', () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
-  it('每任务硬闸门：本任务已有 1 张 → 不再生成（默认每任务 1 张）', async () => {
-    // 实测踩坑：模型会**自行**触发 visual，"同一任务最多配一次"只写在提示词里挡不住（一次任务出了 3 张）
+  it('每任务闸门已放开（owner 2026-09-25）：默认不限张数，已有图仍可再生成', async () => {
+    const messages = [messageWithImages(2)];
+    expect(resolveTeachingVisualMaxPerTask()).toBe(Number.POSITIVE_INFINITY);
+    const generate = jest.fn(async () => ({
+      provider: 'agnes',
+      attempts: ['agnes'],
+      model: 'agnes-image-2.5-flash',
+      latencyMs: 1,
+      images: [{ url: 'https://img.example/ok.png', provider: 'agnes' }],
+    }));
+    const image = await generateTeachingVisual({ request, messages, deps: { generate: generate as never } });
+    expect(image).not.toBeNull();
+    expect(generate).toHaveBeenCalled();
+  });
+
+  it('env 可再收紧每任务上限（回滚用）；0 = 不限', async () => {
+    process.env.TEACHING_VISUAL_MAX_PER_TASK = '1';
     const messages = [messageWithImages(1)];
     const generate = jest.fn();
     expect(await generateTeachingVisual({ request, messages, deps: { generate: generate as never } })).toBeNull();
     expect(generate).not.toHaveBeenCalled();
+    process.env.TEACHING_VISUAL_MAX_PER_TASK = '0';
+    expect(resolveTeachingVisualMaxPerTask()).toBe(Number.POSITIVE_INFINITY);
   });
 
   it('达每会话上限 → 不生成', async () => {
@@ -120,7 +137,7 @@ describe('teaching-visual 服务', () => {
     const prompt = composeTeachingVisualPrompt({ prompt: '两条平行线被一条斜线穿过' });
     expect(prompt).toContain('教学示意图');
     expect(prompt).toContain('两条平行线被一条斜线穿过');
-    expect(prompt).toContain('白底');
+    expect(prompt).toContain('简洁');
     expect(prompt).toContain('构图');
   });
 
@@ -195,9 +212,11 @@ describe('教学配图时机（S1：老师用字符画结构）', () => {
     expect(buildVisualOpportunity([])).toBeNull();
   });
 
-  it('本任务已配过图 → 不再建议（每任务 ≤1）', () => {
+  it('放开每任务一次后：已配过图、但紧邻上一轮又画了字符结构 → 仍出信号（总量由会话上限兜底）', () => {
     const withImage = assistant('…', [{ url: 'https://img/1.png', caption: null, prompt: 'p', provider: 'agnes', model: 'm', kind: null, createdAt: '2026-09-23T00:00:00.000Z' }]);
+    // 旧口径：配过图就不再建议 → 现在只看紧邻上一轮是否画了字符结构
     expect(buildVisualOpportunity([assistant('甲（前）●———→ 方向 →'), withImage])).toBeNull();
+    expect(buildVisualOpportunity([withImage, assistant('架子 → 案板边 → 盆')])).not.toBeNull();
   });
 
   it('开关关闭 → 不出信号（灰度回滚）', () => {
