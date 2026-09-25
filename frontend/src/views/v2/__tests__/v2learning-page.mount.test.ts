@@ -14,6 +14,8 @@ const api = vi.hoisted(() => ({
   getLatestTaskEvaluation: vi.fn(),
   streamSubmitCheckpoint: vi.fn(),
   submitCheckpoint: vi.fn(),
+  streamSendMessage: vi.fn(),
+  finalizeSessionReliably: vi.fn(),
 }));
 
 vi.mock('@/utils/api', () => ({
@@ -27,12 +29,12 @@ vi.mock('@/api/aiTeaching', () => ({
     startReviewSession: vi.fn(),
     getSessionDetail: api.getSessionDetail,
     getLatestTaskEvaluation: api.getLatestTaskEvaluation,
-    streamSendMessage: vi.fn(),
+    streamSendMessage: api.streamSendMessage,
     sendMessage: vi.fn(),
     streamContinueSession: vi.fn(),
     streamSubmitCheckpoint: api.streamSubmitCheckpoint,
     submitCheckpoint: api.submitCheckpoint,
-    finalizeSessionReliably: vi.fn(),
+    finalizeSessionReliably: api.finalizeSessionReliably,
     pauseSession: vi.fn().mockResolvedValue(1),
     resumeSession: vi.fn(),
     resetSession: vi.fn(),
@@ -203,6 +205,76 @@ describe('V2LearningPage 挂载回归', () => {
     expect(feedback.text()).toContain('回答正确');
     expect(w.find('.checkpoint__actions .btn-primary').exists()).toBe(false);
     expect(w.find('.checkpoint__actions').text()).toContain('继续');
+
+    w.unmount();
+  });
+
+  it('完课门禁：完成回合后输入锁定，收尾追问不再打进已终态化的会话', async () => {
+    api.startSession.mockResolvedValue({
+      sessionId: 's_done',
+      revision: 2,
+      mode: 'new',
+      opening: { message: '我们开始吧。', question: '准备好了吗？', quickReplies: [{ text: '开始' }] },
+    });
+    api.streamSendMessage.mockResolvedValue({
+      revision: 3,
+      aiResponse: '这节课到这儿就可以了。明天按格式报回来就行。',
+      isCompletion: true,
+    });
+    api.finalizeSessionReliably.mockResolvedValue({ wrapup: { summary: { topicSummary: '收官' }, progress: { newlyMastered: ['k1'] } } });
+
+    const w = await mountPage();
+    const before = api.streamSendMessage.mock.calls.length;
+
+    // 发一条触发完成候选的回复
+    await w.find('textarea').setValue('我明白了');
+    await w.find('[aria-label="发送"]').trigger('click');
+    await flushPromises();
+    await flushPromises();
+
+    // 完成面板：wrapup 落库、输入区锁死（textarea 原生禁用 + 发送键置灰）
+    expect(api.streamSendMessage.mock.calls.length).toBe(before + 1);
+    expect(w.find('.finish').exists()).toBe(true);
+    expect(w.find('textarea').attributes('disabled')).toBeDefined();
+    expect(w.find('[aria-label="发送"]').classes()).toContain('composer__send--off');
+
+    // 教师收尾追问还在屏上，但再点发送/回车都不产生新请求、不重复用户气泡
+    const userBubbles = w.findAll('.msg--user').length;
+    await w.find('[aria-label="发送"]').trigger('click');
+    await w.find('textarea').trigger('keydown.enter');
+    await flushPromises();
+    expect(api.streamSendMessage.mock.calls.length).toBe(before + 1);
+    expect(w.findAll('.msg--user')).toHaveLength(userBubbles);
+    expect(w.text()).not.toContain('这次回复失败了');
+
+    w.unmount();
+  });
+
+  it('陈旧 revision 重试：用户气泡只推一次（skipUserPush 修复双渲染）', async () => {
+    api.startSession.mockResolvedValue({
+      sessionId: 's_stale',
+      revision: 2,
+      mode: 'new',
+      opening: { message: '我们开始吧。', question: '准备好了吗？', quickReplies: [{ text: '开始' }] },
+    });
+    const staleErr = { response: { data: { error: { code: 'TEACHING_SESSION_STALE' } } } };
+    api.streamSendMessage
+      .mockRejectedValueOnce(staleErr)
+      .mockResolvedValue({ revision: 4, aiResponse: '接着说。' });
+
+    const w = await mountPage();
+
+    await w.find('textarea').setValue('第一条');
+    await w.find('[aria-label="发送"]').trigger('click');
+    await flushPromises();
+    await flushPromises();
+
+    // 首轮失败回退重发：同一条用户消息只渲染一个气泡
+    expect(w.findAll('.msg--user')).toHaveLength(1);
+    expect(w.findAll('.msg--user')[0].text()).toContain('第一条');
+    // 重发成功：AI 气泡落定，不再有失败提示
+    expect(w.findAll('.msg--ai .msg__bubble').length).toBeGreaterThan(0);
+    expect(w.text()).not.toContain('这次回复失败了');
 
     w.unmount();
   });
