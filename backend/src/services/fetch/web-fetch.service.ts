@@ -40,6 +40,16 @@ function summarizeErrors(result: FetchProviderResult): string {
     .join(', ');
 }
 
+/** 可选优化参数（尽力而为语义，非抓取硬能力）不被支持时：剥掉参数重试同一 provider */
+const OPTIONAL_PARAM_UNSUPPORTED = /缓存 ttl|单URL超时/;
+
+function stripOptionalFetchParams(request: FetchRequest): FetchRequest {
+  const stripped = { ...request };
+  delete stripped.ttl;
+  delete stripped.perUrlTimeoutMs;
+  return stripped;
+}
+
 export async function fetchWeb(request: FetchRequest, options: FetchWebOptions = {}): Promise<FetchResponse> {
   const normalized = normalizeFetchRequest(request);
   const providers = options.providers ?? createFetchProviders();
@@ -75,6 +85,43 @@ export async function fetchWeb(request: FetchRequest, options: FetchWebOptions =
       // 一条都没抓到：保留明细，继续尝试下一个 provider
       lastPartial = result;
     } catch (error) {
+      // 可选优化参数（缓存 ttl / 单 URL 超时）不被支持 ≠ 抓取能力不匹配：剥掉参数在同一 provider
+      // 上重试一次，而不是把整个 provider 踢出降级链。
+      // （2026-09-26 真实数据：TinyFish fetch 上游不可用时，Tavily 因 ttl 直接拒跑，降级链上
+      // 再无 provider → 抓取全链断，联网采集全体退化为 not_found。）
+      if (
+        error instanceof FetchError &&
+        error.code === 'FETCH_PROVIDER_UNSUPPORTED' &&
+        OPTIONAL_PARAM_UNSUPPORTED.test(error.message)
+      ) {
+        logger.warn('[web-fetch] provider 不支持可选优化参数，剥离后重试', {
+          provider: id,
+          message: error.message,
+        });
+        try {
+          const retryResult = await provider.fetch(stripOptionalFetchParams(normalized), {
+            signal: options.signal,
+            timeoutMs: options.timeoutMs,
+          });
+          if (retryResult.results.length > 0) {
+            return {
+              results: retryResult.results,
+              errors: retryResult.errors,
+              provider: id,
+              attempts,
+              latencyMs: Date.now() - startedAt,
+            };
+          }
+          lastPartial = retryResult;
+        } catch (retryError) {
+          lastError = retryError;
+          logger.warn('[web-fetch] 剥离可选参数重试仍失败，尝试降级', {
+            provider: id,
+            message: retryError instanceof Error ? retryError.message : String(retryError),
+          });
+        }
+        continue;
+      }
       lastError = error;
       logger.warn('[web-fetch] provider 调用失败，尝试降级', {
         provider: id,

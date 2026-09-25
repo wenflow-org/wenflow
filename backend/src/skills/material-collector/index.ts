@@ -129,6 +129,8 @@ export function documentSourceScore(url: string, title = ''): number {
 
 const DEFAULT_MAX_SOURCES = 5;
 const DEFAULT_MAX_RESULTS_PER_QUERY = 8;
+/** 同一 host 最多入选几条候选（2026-09-26）：防同站多页占满 maxSources 名额（原注释承诺、实现缺失） */
+const DEFAULT_MAX_PER_HOST = 2;
 
 /** 来源分级权重：官方/标准 > 教材 > 权威机构 > 社区 */
 const SOURCE_TIER_RANK: Record<SourceTier, number> = {
@@ -224,11 +226,14 @@ export interface RankedSource extends SearchResultItem {
 }
 
 /**
- * 选源：丢非法/黑名单 → 去重（同 URL + 同 host 只留最高优先）→ 白名单优先 → tier 降序 → 原位置升序。
+ * 选源排序：丢非法/黑名单 → 同 URL 去重 → 白名单优先 → 硬文档（可选）→ tier 降序 → 文档线索 → 原位置。
+ * 注意：这里只做**同 URL** 去重；「同 host 多页挤占名额」由 selectDiversifiedSources 在入选时截断
+ * （2026-09-26 拆分：原注释承诺"同 host 只留最高优先"但实现从未做过，同站 5 页会吃光全部抓取名额）。
+ * preferDocuments=false（课中补充槽语义）：跳过"硬文档优先"——补充要的是可读讲解页，不是 PDF 原文。
  */
 export function rankSources(
   results: SearchResultItem[],
-  options: { whitelist?: string[]; blocklist?: string[] } = {}
+  options: { whitelist?: string[]; blocklist?: string[]; preferDocuments?: boolean } = {}
 ): RankedSource[] {
   const whitelist = (options.whitelist ?? []).map((d) => d.toLowerCase());
   const blocklist = [...DEFAULT_BLOCKLIST, ...(options.blocklist ?? [])].map((d) => d.toLowerCase());
@@ -249,13 +254,14 @@ export function rankSources(
     });
   }
 
+  const preferDocuments = options.preferDocuments !== false;
   return candidates.sort((a, b) => {
     if (a.whitelisted !== b.whitelisted) return a.whitelisted ? -1 : 1;
     // ① 硬文档（真实文件扩展名，如 .pdf）优先——"官方域名的通知页"压过"非官方域的全文 PDF"
     //    是实测要修的（见 documentSourceScore 注释）。
     const aHard = documentSourceScore(a.url, a.title) === 2;
     const bHard = documentSourceScore(b.url, b.title) === 2;
-    if (aHard !== bHard) return aHard ? -1 : 1;
+    if (preferDocuments && aHard !== bHard) return aHard ? -1 : 1;
     // ② tier 必须压过**软文档线索**：标题里出现「下载/全文」只是线索，不足以让二手汇编越过权威源。
     //    2026-09-23 I-5 实测：unknown 层的「复习题汇编(文末下载)」因标题含「下载」排到了权威课标之前。
     const tierDiff = SOURCE_TIER_RANK[b.sourceTier] - SOURCE_TIER_RANK[a.sourceTier];
@@ -267,7 +273,7 @@ export function rankSources(
   });
 }
 
-function buildQueries(need: MaterialNeed, options: MaterialCollectorOptions): string[] {
+export function buildQueries(need: MaterialNeed, options: MaterialCollectorOptions): string[] {
   const explicit = (options.queries ?? need.queries ?? []).map(normalizeText).filter(Boolean);
   if (explicit.length > 0) return Array.from(new Set(explicit)).slice(0, 5);
   const title = normalizeText(need.title);
@@ -275,7 +281,53 @@ function buildQueries(need: MaterialNeed, options: MaterialCollectorOptions): st
   if (need.publisher) parts.push(normalizeText(need.publisher));
   if (need.kind) parts.push(normalizeText(need.kind));
   const query = parts.filter(Boolean).join(' ');
+  // 无显式查询时的兜底变体（2026-09-26，P0-b 教训的检索侧对齐）：我们要的常常是"原文"，
+  // 加一条「标题 + 全文」变体提升文档型候选召回，选源侧的文档型优先负责把它用好。
+  // 变体词跟随标题语言（英文标题拼「全文」是语言混搭，实测检索质量差）。
+  if (query && !/全文|原文/.test(query)) {
+    const variantSuffix = detectQueryLanguage(title) === 'en' ? 'full text' : '全文';
+    return Array.from(new Set([query, `${title} ${variantSuffix}`]));
+  }
   return query ? [query] : [];
+}
+
+/**
+ * 入选截断（2026-09-26）：排序完成后按序入选 maxSources 条，但同一 host 至多 maxPerHost 条。
+ * 修复：rankSources 原注释承诺"同 host 只留最高优先"但实现只去重了 URL——同站多页会占满
+ * maxSources 名额，把真正的第二来源挤出去（host 多样性 = 抓取/抽取的容错面）。
+ * strictWhitelist（检索已限定域）时调用方应放开 cap，否则白名单内多页会被误伤。
+ */
+export function selectDiversifiedSources(
+  ranked: RankedSource[],
+  options: { maxSources?: number; maxPerHost?: number } = {}
+): RankedSource[] {
+  const maxSources = Math.max(0, options.maxSources ?? DEFAULT_MAX_SOURCES);
+  const maxPerHost = Math.max(1, options.maxPerHost ?? DEFAULT_MAX_PER_HOST);
+  const hostCounts = new Map<string, number>();
+  const selected: RankedSource[] = [];
+  for (const item of ranked) {
+    if (selected.length >= maxSources) break;
+    const host = hostnameOf(item.url);
+    const used = host ? hostCounts.get(host) ?? 0 : 0;
+    if (host && used >= maxPerHost) continue;
+    if (host) hostCounts.set(host, used + 1);
+    selected.push(item);
+  }
+  return selected;
+}
+
+/**
+ * 检索语言缺省推断（2026-09-26）：SearchQuery.language 从前没有任何调用方传入（tinyfish/tavily
+ * 都真消费该参数），中文资料的检索一直按"无语言偏好"发给上游。按标题字符构成做确定性推断：
+ * CJK ≥2 → zh；无 CJK 且含 ASCII 词 → en；其余不推断（交上游默认）。
+ */
+export function detectQueryLanguage(text: string): 'zh' | 'en' | undefined {
+  const value = normalizeText(text);
+  if (!value) return undefined;
+  const cjk = (value.match(/[\u4e00-\u9fff]/g) ?? []).length;
+  if (cjk >= 2) return 'zh';
+  if (cjk === 0 && /[a-zA-Z]{3,}/.test(value)) return 'en';
+  return undefined;
 }
 
 /**
@@ -430,7 +482,8 @@ export async function collectMaterialPack(
           query,
           maxResults: options.maxResultsPerQuery ?? DEFAULT_MAX_RESULTS_PER_QUERY,
           purpose: `采集外部权威资料：${title}`,
-          language: options.language,
+          // 语言缺省推断（2026-09-26）：调用方不传时按标题判 zh/en，中文资料不再按无语言偏好检索
+          language: options.language ?? detectQueryLanguage(title),
           location: options.location,
           includeDomains: options.strictWhitelist && whitelist.length > 0 ? whitelist : undefined,
         },
@@ -449,7 +502,11 @@ export async function collectMaterialPack(
       '检索无可用候选源，显式返回 not_found（不使用模型记忆冒充资料内容）',
     ]);
   }
-  const selected = ranked.slice(0, maxSources);
+  // 入选截断（host 多样性）：同站多页不再占满抓取名额；strictWhitelist 时检索已限定域，放开 cap
+  const selected = selectDiversifiedSources(ranked, {
+    maxSources,
+    maxPerHost: options.strictWhitelist && whitelist.length > 0 ? maxSources : undefined,
+  });
 
   // --- 2) 抓取（部分成功语义：单条 URL 失败不影响其余；ttl 缓存复用；suspicious 丢弃） ---
   let fetchResponse: FetchResponse;

@@ -14,6 +14,7 @@ import { fetchWeb } from '../fetch';
 import { findWebRecordByTitle, ingestWebMaterial } from '../materials/material-web-ingest.service';
 import { extractSectionWindow } from '../materials/material-sections';
 import { readMaterial } from '../materials/material-store';
+import { rankSources, selectDiversifiedSources } from '../../skills/material-collector';
 
 /** 补充窗口上限（课堂上下文预算紧，正文截 1200 字）。 */
 export const SUPPLEMENT_EXCERPT_CHARS = 1200;
@@ -68,21 +69,17 @@ export async function fetchSupplementMaterial(
       return { ok: true, materialId: existing.id, sourceUrl: existing.sourceUrl ?? null };
     }
 
-    // ② 搜索（取前几条候选，官方域优先的排序已由 services/search 保证）
+    // ② 搜索 → 选源与备课采集**同源裁决**（2026-09-26）：此前只有 4 条内联黑名单、按位置抓前 3 条，
+    //    来源质量明显低于 material-collector 链；现在复用 rankSources（tier 分级 + 完整黑名单），
+    //    preferDocuments=false（补充要的是可读讲解页，不是 PDF 原文）+ 同 host ≤2 防同站占满候选。
     const search = await deps.searchWeb({ query: trimmedQuery, maxResults: 5 });
-    const candidates = (search?.results || []).filter((item) => {
-      const url = String(item?.url || '');
-      try {
-        const host = new URL(url).hostname;
-        return !/wenku\.baidu\.com|docin\.com|doc88\.com|360doc\.com/.test(host);
-      } catch {
-        return false;
-      }
+    const candidates = selectDiversifiedSources(rankSources(search?.results || [], { preferDocuments: false }), {
+      maxSources: 3,
     });
     if (candidates.length === 0) return { ok: false, error: 'no-search-results' };
 
     // ③ 逐条抓取，取第一条有正文的（不带 query 定向——补充要的是整页原文）
-    for (const candidate of candidates.slice(0, 3)) {
+    for (const candidate of candidates) {
       try {
         const response = await deps.fetchWeb({
           urls: [candidate.url],

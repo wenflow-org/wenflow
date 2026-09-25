@@ -179,3 +179,60 @@ describe('resolveFetchProviderOrder', () => {
     expect(() => resolveFetchProviderOrder('bing')).toThrow(/未知的抓取 provider/);
   });
 });
+
+describe('可选优化参数剥离重试（2026-09-26）', () => {
+  it('provider 因缓存 ttl 抛 UNSUPPORTED → 剥掉 ttl 重试同一 provider 成功（不再踢出降级链）', async () => {
+    const seen: Array<number | undefined> = [];
+    const strict = fakeProvider('tavily', async (request) => {
+      seen.push(request.ttl);
+      if (request.ttl !== undefined) {
+        throw new FetchError('FETCH_PROVIDER_UNSUPPORTED', 'Tavily 不支持 缓存 ttl');
+      }
+      return { results: [item('tavily')], errors: [] };
+    });
+
+    const result = await fetchWeb(
+      { urls: ['https://a.com'], ttl: 3600 },
+      { providerOrder: ['tavily'], providers: { tavily: strict } }
+    );
+
+    expect(result.provider).toBe('tavily');
+    expect(seen).toEqual([3600, undefined]);
+  });
+
+  it('剥离重试仍失败 → 正常降级到下一个 provider', async () => {
+    const strict = fakeProvider('tavily', async (request) => {
+      if (request.ttl !== undefined) {
+        throw new FetchError('FETCH_PROVIDER_UNSUPPORTED', 'Tavily 不支持 缓存 ttl');
+      }
+      throw new FetchError('FETCH_UPSTREAM_UNAVAILABLE', 'upstream down');
+    });
+    const fallback = fakeProvider('exa', async () => ({ results: [item('exa')], errors: [] }));
+
+    const result = await fetchWeb(
+      { urls: ['https://a.com'], ttl: 3600 },
+      { providerOrder: ['tavily', 'exa'], providers: { tavily: strict, exa: fallback } }
+    );
+
+    expect(result.provider).toBe('exa');
+    expect(result.attempts).toEqual(['tavily', 'exa']);
+  });
+
+  it('硬能力不匹配（format 不支持）不属于可剥离参数 → 不重试直接降级', async () => {
+    const strict = fakeProvider(
+      'tavily',
+      async () => {
+        throw new FetchError('FETCH_PROVIDER_UNSUPPORTED', 'Tavily 不支持 format=html（仅支持 markdown）');
+      }
+    );
+    const fallback = fakeProvider('exa', async () => ({ results: [item('exa')], errors: [] }));
+
+    const result = await fetchWeb(
+      { urls: ['https://a.com'], format: 'html' },
+      { providerOrder: ['tavily', 'exa'], providers: { tavily: strict, exa: fallback } }
+    );
+
+    expect(result.provider).toBe('exa');
+    expect(strict.fetch).toHaveBeenCalledTimes(1);
+  });
+});
