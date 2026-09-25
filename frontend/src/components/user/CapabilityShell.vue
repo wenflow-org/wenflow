@@ -190,7 +190,9 @@ function isActive(t: { match: string[] }) {
 @media (max-width: 1100px) {
   .uc.v2-page > main.uc__main {
     width: min(100% - 28px, 1180px);
-    padding: 14px 0 84px;
+    /* 底部留白 84→12：v2.css 的 .v2-page 已在根部预留 tabbar 高 + safe-area，
+       这里再垫 84px 会叠出 ~156px 空白（2026-09-25 移动端框架审查） */
+    padding: 14px 0 12px;
     gap: 12px;
   }
 

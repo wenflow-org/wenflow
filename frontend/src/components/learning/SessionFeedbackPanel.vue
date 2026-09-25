@@ -296,16 +296,17 @@ onMounted(load)
 
 /* 星轨（总体评分）：一行 5 星 + 当前档位文字；星形用 currentColor，
    点亮态走 --color-warning，触达区 40px 高于 32px 下限 */
+/* 星距 2px 是 2026-09-25 批5 引入的误触回归，按触控间距下限收回 6px */
 .rating-stars {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 2px;
+  gap: 6px;
 }
 
 .rating-star {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -355,7 +356,7 @@ onMounted(load)
 }
 
 .fit-option {
-  min-height: 40px;
+  min-height: 44px;
   padding: 8px 14px;
   /* v2 的按钮 reset（.v2-page button:where(...) { font: inherit }，0-1-1）会把这几个
      选项的字号交回继承值，于是「难度感受」跟着正文 16px 走，而「总体评分」的数字/标签
@@ -501,7 +502,7 @@ onMounted(load)
   cursor: pointer;
   font-family: inherit;
   line-height: 1;
-  height: 32px;
+  height: 44px;
   padding: 8px 15px;
   font-size: 14px;
   border: 1px solid transparent;
@@ -560,25 +561,20 @@ onMounted(load)
     margin-bottom: 8px;
   }
 
-  .fit-option,
-  .reason-option {
-    min-height: 36px;
+  .fit-option {
+    min-height: 44px;
     padding: 6px 12px;
   }
 
-  /* 星轨窄屏收一档：5×36 + 4×2 ≈188px，加右侧档位文字仍在 328px 内 */
-  .rating-star {
-    width: 36px;
-    height: 36px;
+  /* reason 多选是次级芯片，按分级口径走 40 档 */
+  .reason-option {
+    min-height: 40px;
   }
 
-  .rating-star svg {
-    width: 23px;
-    height: 23px;
-  }
-
+  /* 星轨保持 44px 触控下限（基线口径：主操作 ≥44），360 宽下 5×44+4×6=244px，
+     右侧档位文字收缩到 48px 仍在一行 */
   .rating-stars__label {
-    min-width: 52px;
+    min-width: 48px;
     font-size: 12.5px;
   }
 

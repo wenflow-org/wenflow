@@ -413,8 +413,10 @@ const tagClass = (type: string) => ({
 
 /* 第一方按钮：视觉对齐原 el-button 及其全局 EP 覆写（tremor-theme / design-system） */
 .completion-btn { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; white-space: nowrap; vertical-align: middle; cursor: pointer; font-family: inherit; line-height: 1; border: 1px solid transparent; border-radius: 999px; transition: all 180ms ease; }
-.completion-btn--action { height: 38px; padding: 0 18px; font-size: 13px; border-radius: 10px; font-weight: 600; }
-.completion-btn--small { height: 24px; padding: 5px 11px; font-size: 12px; }
+.completion-btn--action { height: 44px; padding: 0 18px; font-size: 13px; border-radius: 10px; font-weight: 600; }
+/* 2026-09-25 移动框架：这是「保持原计划/查看调整建议/确认调整」一类主决策钮，
+   桌面 24→36、≤640 44（原 34 仍低于 HIG 触控下限） */
+.completion-btn--small { height: 36px; padding: 5px 13px; font-size: 12px; }
 .completion-btn--default { background: var(--bg-surface); border-color: var(--border-default); color: var(--text-primary); font-weight: 600; }
 /* 底部动作按钮此前走 el-button 默认型（灰色文字），非 --default 型；对齐其视觉 */
 .completion-btn--action.completion-btn--default { color: var(--muted, #5b6577); }
@@ -464,6 +466,6 @@ const tagClass = (type: string) => ({
 
   /* --small 只有 24px 高，而这里正是「保持原计划 / 查看调整建议 / 确认调整后续阶段」
      这类主决策按钮；窄屏已铺满整宽，触屏高度抬到 34px */
-  .completion-btn--small { height: 34px; padding: 8px 12px; }
+  .completion-btn--small { height: 44px; padding: 8px 12px; }
 }
 </style>

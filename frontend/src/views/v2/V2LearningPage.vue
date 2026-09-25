@@ -2168,7 +2168,7 @@ onBeforeUnmount(() => {
 }
 .composer__count { font-size: 11px; color: var(--faint); align-self: center; }
 .composer__send {
-  width: 38px; height: 38px; border-radius: 11px;
+  width: 44px; height: 44px; border-radius: 11px;
   display: grid; place-items: center;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff; cursor: pointer;
@@ -2244,10 +2244,15 @@ onBeforeUnmount(() => {
 .finish__stats b { color: var(--ink); font-size: 15px; margin-right: 3px; }
 .finish__actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 
+/* 沉浸学习页无底部导航：v2.css 的移动端 .v2-page { padding-bottom: calc(72px + env()) }
+   对本页是纯空白，901~1100 段此前漏覆盖（底部 72px 死空间），提到 ≤1100 统一清零。 */
+@media (max-width: 1100px) {
+  .learn { padding-bottom: 0; }
+}
+
 @media (max-width: 900px) {
   /* 锁定视口高度：整页不滚动，tutor 内部滚动、composer 吸底，消除底部空白。
-     flex-grow:0 必须显式置零——.v2-page 全局 flex:1 会把 height:100dvh 拉伸到内容高度。
-     padding-bottom:0 覆盖 v2.css 的移动端全局 .v2-page { padding-bottom:72px }（沉浸学习页无底部导航，72px 是纯空白）。 */
+     flex-grow:0 必须显式置零——.v2-page 全局 flex:1 会把 height:100dvh 拉伸到内容高度。 */
   .learn { height: 100dvh; min-height: 0; flex: 0 0 auto; padding-bottom: 0; }
   .learn__body {
     flex: 1;
@@ -2270,7 +2275,7 @@ onBeforeUnmount(() => {
   .composer__box { padding: 6px; gap: 8px; }
   .composer__textarea { font-size: 16px; padding: 8px 0; }
   .composer__attach { margin-top: 4px; }
-  .composer__send { width: 36px; height: 36px; }
+  .composer__send { width: 44px; height: 44px; }
   /* 触屏没有键盘快捷键提示：这行是「Enter 发送 · Shift+Enter 换行」+ AI 声明，不隐藏的话两者
      在 340px 里折成两行（hint 行 17→33px）。隐藏后只剩声明，居中与入口页 .goal__ai-note 一致。 */
   .composer__hint > span:first-child { display: none; }

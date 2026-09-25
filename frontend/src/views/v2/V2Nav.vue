@@ -329,11 +329,19 @@ onUnmounted(() => {
     box-shadow: 0 4px 10px color-mix(in srgb, var(--blue) 22%, transparent);
   }
   .v2nav__right { gap: 4px; }
-  /* 铃铛在 V2NotifCenter 里是 40×40 按钮 + 20px 图标，需 :deep 才能收小 */
-  .v2nav__right :deep(.nc__bell) { width: 34px; height: 34px; }
-  .v2nav__right :deep(.nc__bell svg) { width: 18px; height: 18px; }
-  .v2nav__avatar { padding: 4px 6px 4px 4px; font-size: 12.5px; }
-  .v2nav__avatar i { width: 24px; height: 24px; font-size: 12px; }
+  /* 头部图标簇按 HIG 44px 触控下限执行（2026-09-25 移动框架）：铃铛原 34、头像原 32
+     都是页级常驻入口，误触/够不着代价高；视觉用小一号图标保持头部密度 */
+  .v2nav__right :deep(.nc__bell) { width: 44px; height: 44px; }
+  .v2nav__right :deep(.nc__bell svg) { width: 19px; height: 19px; }
+  .v2nav__avatar {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px 4px 4px;
+    font-size: 12.5px;
+  }
+  .v2nav__avatar i { width: 26px; height: 26px; font-size: 12px; }
   .v2nav__caret { font-size: 9px; }
   /* 手机段隐藏「规划新目标」CTA：底部 tab 的「目标规划」就是同一入口，重复且抢眼——
      84×32 的蓝色大按钮与品牌标并排会抢走主次。隐藏后头部只剩
@@ -358,8 +366,10 @@ onUnmounted(() => {
     display: grid;
     /* 5 个入口（学习台/目标规划/学习路径/知识图谱/学习状态）：
        列数必须与 items 数量一致，否则多出的 tab 换行把导航撑成两行（+49px）。
-       新增底部入口时同步改这里。 */
-    grid-template-columns: repeat(5, 1fr);
+       新增底部入口时同步改这里。
+       minmax(0,1fr) 而非 1fr：1fr 的下限是 min-content，标签变长会把整页撑出横向滚动
+       （V2Dashboard.vue 同类问题的注释口径）；minmax(0,1fr) + 标签 ellipsis 兜底。 */
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     position: fixed;
     left: 0; right: 0; bottom: 0;
     z-index: 40;
@@ -377,7 +387,7 @@ onUnmounted(() => {
     text-decoration: none;
   }
   .v2nav__tab-icon { display: grid; place-items: center; opacity: 0.75; }
-  .v2nav__tab-label { font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+  .v2nav__tab-label { font-size: 10.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .v2nav__tab--active {
     color: var(--blue-deep, #1f57cc);
   }

@@ -1184,7 +1184,7 @@ function shuffleScenes() {
   margin-top: 4.5px;
   flex: 0 0 auto;
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px;
+  width: 44px; height: 44px;
   border: 0; border-radius: 9px;
   background: transparent;
   color: var(--faint);
@@ -1223,7 +1223,7 @@ function shuffleScenes() {
   align-self: center;
 }
 .composer__send {
-  width: 40px; height: 40px; border-radius: var(--mk-radius-xl);
+  width: 44px; height: 44px; border-radius: var(--mk-radius-xl);
   display: grid; place-items: center;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff; cursor: pointer;
@@ -1974,7 +1974,7 @@ function shuffleScenes() {
   .composer__textarea::placeholder { font-size: 15px; }
   .composer__attach { margin-top: 4px; }
   .composer__attach svg { width: 14px; height: 14px; }
-  .composer__send { width: 36px; height: 36px; }
+  .composer__send { width: 44px; height: 44px; }
   .composer__send:not(.composer__send--stop) svg { width: 15px; height: 15px; }
   .proposal__stages ol { grid-template-columns: repeat(2, 1fr); }
   /* 方案确认卡：窄屏收掉浮层/卡片的大内边距（24/28 在 320 下只剩 250px 内容宽），
