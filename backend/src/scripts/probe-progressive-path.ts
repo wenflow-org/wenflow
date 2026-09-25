@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针脚本：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /* eslint-disable no-console -- 一次性验收 CLI */
 /**
  * 渐进式 stage 设计 E2E 探针（活的 path 批次 D，需 PROGRESSIVE_STAGE_DESIGN=1）：
