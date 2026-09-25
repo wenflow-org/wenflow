@@ -138,9 +138,15 @@ const FIELD_DEFS: Array<{ key: string; label: string; read: (u: GoalUnderstandin
   { key: 'success_criteria', label: '成功标准', read: (u) => pickText(u.success_criteria?.observable_result, u.success_criteria?.acceptance_check) }
 ];
 
+/** 模型偶发把未知字段原样写成 "unknown"（boundary-test-2026-09-26 A4）——展示层归一为空，回退「待补充」。 */
+export function normalizeFieldValue(raw: unknown): string {
+  const s = String(raw ?? '').trim();
+  return s.toLowerCase() === 'unknown' ? '' : s;
+}
+
 const fields = computed<LiveField[]>(() =>
   FIELD_DEFS.map((def) => {
-    const value = def.read(understanding.value, collected.value);
+    const value = normalizeFieldValue(def.read(understanding.value, collected.value));
     return {
       key: def.key,
       label: def.label,

@@ -247,7 +247,7 @@ router.post('/register', async (req, res, next) => {
       return res.status(400).json({
         success: false,
         error: {
-          message: '数据验证失败',
+          message: error.errors?.[0]?.message || '数据验证失败',
           details: error.errors
         }
       });
@@ -300,7 +300,7 @@ router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
       return res.status(400).json({
         success: false,
         error: {
-          message: '数据验证失败',
+          message: error.errors?.[0]?.message || '数据验证失败',
           details: error.errors
         }
       });
@@ -450,7 +450,7 @@ router.post('/change-password', authMiddleware, changePasswordLimiter, async (re
       return res.status(400).json({
         success: false,
         error: {
-          message: '数据验证失败',
+          message: error.errors?.[0]?.message || '数据验证失败',
           details: error.errors
         }
       });

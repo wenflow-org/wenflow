@@ -113,6 +113,7 @@ function touch(key: 'name' | 'password' | 'confirm') {
   if (key === 'name') {
     if (!form.name) errors.name = '请输入用户名';
     else if (form.name.length < 2 || form.name.length > 20) errors.name = '用户名长度需为 2 到 20 个字符';
+    else if (!/^[\p{L}\p{N}_-]+$/u.test(form.name)) errors.name = '用户名仅支持字母、数字、下划线和连字符';
     else errors.name = '';
   }
   if (key === 'password') {

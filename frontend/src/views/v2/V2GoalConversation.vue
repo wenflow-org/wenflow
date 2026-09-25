@@ -1359,6 +1359,12 @@ function shuffleScenes() {
   min-height: 0;
   height: 100%;
 }
+/* 桌面短屏（>1100px）：720p 下 .chat 曾随内容撑到 830px，composer 被顶出折叠线
+   （发送按钮不可见，boundary-test-2026-09-26 A1）。≤1100px 由 .goal 锁 100dvh 的
+   既有方案覆盖；桌面这里给 chat 设视口上限，头部/输入框恒在屏内，消息区内部滚动。 */
+@media (min-width: 1101px) {
+  .chat { max-height: calc(100dvh - 190px); min-height: 360px; }
+}
 .chat__head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 10px 16px;
