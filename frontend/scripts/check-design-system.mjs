@@ -27,7 +27,11 @@
  *
  * 用法：
  *   node scripts/check-design-system.mjs            # 检查（CI / npm run design:check）
- *   node scripts/check-design-system.mjs --update   # 重写硬编码色值基线
+ *   node scripts/check-design-system.mjs --update   # 重写基线（hex/死CSS/圆角/阴影，棘轮只降不升）
+ *
+ * 规则 14/15（2026-09-25 增，棘轮）：页面 scoped 的 border-radius 只允许语言四档
+ * （4/6/12/16 + 999/50%/0 或 var(--mk-radius-*)），box-shadow 只允许
+ * none / var(--mk-shadow-*) / inset 描边 / 0 0 0 Npx 环（ADMIN_VISUAL_LAYER_SPEC v2 §0.5）。
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs'
@@ -210,6 +214,22 @@ const handRolledSkeleton = [] // 规则 6
 const deadClasses = [] // 规则 7
 const badTokens = [] // 规则 8
 const hexCounts = {} // 规则 3
+const radiusCounts = {} // 规则 14：页面 scoped 圆角档外值（棘轮）
+const shadowCounts = {} // 规则 15：页面 scoped 非法 box-shadow（棘轮）
+
+/* 规则 14/15 的白名单（ADMIN_VISUAL_LAYER_SPEC v2 §0.5）：
+   圆角四档 xs4/sm6/xl12/modal16 + 胶囊 999 + 圆形 50% + 0（或 var(--mk-radius-*)）。
+   阴影三档：面=none、悬浮/弹层=var(--mk-shadow-*)、描边=inset 或 0 0 0 Npx 环
+   （含焦点环与脉冲初始态；@keyframes 里的脉冲帧在扫描前剥离）。 */
+const RADIUS_OK = new Set(['0', '4px', '6px', '12px', '16px', '999px', '50%'])
+const isRadiusOk = (v) =>
+  v.split(/\s+/).every((t) => RADIUS_OK.has(t) || /^var\(--mk-radius-/.test(t))
+const isShadowOk = (v) =>
+  v === 'none' ||
+  /^var\(--mk-shadow-/.test(v) ||
+  /^(inset\s+)?0\s+0\s+0(\s|$|,)/.test(v) ||
+  /\binset\b/.test(v)
+const stripKeyframes = (css) => css.replace(/@keyframes[^{]*\{(?:[^{}]|\{[^{}]*\})*\}/g, '')
 
 /* 规则 8：var(--mk-*) 引用的 token 必须已定义（引用面 = admin-redesign + 原语层 mk/ + src/styles） */
 const tokenRefTargets = walk(SRC).filter((abs) => {
@@ -262,6 +282,16 @@ for (const abs of vueFiles) {
       // 先剔除再计数，否则基线被 fallback 虚高、并产生假回退。
       const hits = countHardcodedHex(css)
       if (hits) hexCounts[relPath] = (hexCounts[relPath] || 0) + hits
+      // 规则 14/15：圆角 / 阴影只允许语言内的档位（SPEC v2 §0.5），存量棘轮只降不升
+      if (!primitiveLayer) {
+        const body = stripKeyframes(css.replace(/\/\*[\s\S]*?\*\//g, ''))
+        for (const m of body.matchAll(/border-radius\s*:\s*([^;}]*)/g)) {
+          if (!isRadiusOk(m[1].trim())) radiusCounts[relPath] = (radiusCounts[relPath] || 0) + 1
+        }
+        for (const m of body.matchAll(/box-shadow\s*:\s*([^;}]*)/g)) {
+          if (!isShadowOk(m[1].trim())) shadowCounts[relPath] = (shadowCounts[relPath] || 0) + 1
+        }
+      }
       // 规则 6：页面不得自搓骨架 shimmer（统一走 .mk-skeleton）
       //   特征：background-size 200%/220%（shimmer 位移）或 自定义 shimmer/skel keyframes
       if (!primitiveLayer && (/background-size:\s*2[02]0%/.test(css) || /@keyframes\s+[a-zA-Z-]*(shimmer|skel)/i.test(css))) {
@@ -561,8 +591,10 @@ if (process.argv.includes('--update')) {
         hex: hexCounts,
         mediaSpacing: mediaSpacingCounts,
         mediaFontSize: mediaFontSizeCounts,
+        radius: radiusCounts,
+        boxShadow: shadowCounts,
         deadClasses: deadByFile,
-        note: '硬编码 hex 色值 + 死 CSS 类基线（棘轮：只降不升）。收敛后请用 --update 下调。',
+        note: '硬编码 hex 色值 + 死 CSS 类 + 圆角/阴影档外值基线（棘轮：只降不升）。收敛后请用 --update 下调。',
       },
       null,
       2
@@ -570,7 +602,8 @@ if (process.argv.includes('--update')) {
   )
   console.log(
     `已更新基线：${Object.keys(hexCounts).length} 个文件、硬编码色值 ${Object.values(hexCounts).reduce((a, b) => a + b, 0)} 处；` +
-      `死 CSS ${deadClasses.length} 处（${Object.keys(deadByFile).length} 个文件）`
+      `死 CSS ${deadClasses.length} 处（${Object.keys(deadByFile).length} 个文件）；` +
+      `圆角档外 ${Object.values(radiusCounts).reduce((a, b) => a + b, 0)} 处、阴影档外 ${Object.values(shadowCounts).reduce((a, b) => a + b, 0)} 处`
   )
   process.exit(0)
 }
@@ -607,6 +640,32 @@ if (mediaFontRegressions.length) {
 ✖ 规则 10：媒体查询档位内的硬编码字号不得超过基线（只降不升）`)
   console.log('  档位里的字号应改为继承共享层的档位值，或在 token 层统一放大；逐页写死会让字号体系被档位打散。')
   for (const v of mediaFontRegressions) console.log(`    ${v.file}: ${v.base} → ${v.now}`)
+}
+
+const radiusRegressions = []
+for (const [file, n] of Object.entries(radiusCounts)) {
+  const base = baseline.radius?.[file] ?? 0
+  if (n > base) radiusRegressions.push({ file, now: n, base })
+}
+if (radiusRegressions.length) {
+  failed = true
+  console.log(`
+✖ 规则 14：页面 scoped 圆角档外值不得超过基线（只降不升）`)
+  console.log('  圆角只有四档（xs4/sm6/xl12/modal16）+ 胶囊/圆形，写法见 ADMIN_VISUAL_LAYER_SPEC v2 §0.5；用 var(--mk-radius-*) 引用。')
+  for (const v of radiusRegressions) console.log(`    ${v.file}: ${v.base} → ${v.now}`)
+}
+
+const shadowRegressions = []
+for (const [file, n] of Object.entries(shadowCounts)) {
+  const base = baseline.boxShadow?.[file] ?? 0
+  if (n > base) shadowRegressions.push({ file, now: n, base })
+}
+if (shadowRegressions.length) {
+  failed = true
+  console.log(`
+✖ 规则 15：页面 scoped 非法 box-shadow 不得超过基线（只降不升）`)
+  console.log('  阴影三档：面=none、悬浮/弹层=var(--mk-shadow-*)、描边=inset；彩色光晕/自写投影禁止（SPEC v2 §0.5）。')
+  for (const v of shadowRegressions) console.log(`    ${v.file}: ${v.base} → ${v.now}`)
 }
 
 if (tierRegressions.length) {
