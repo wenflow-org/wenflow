@@ -25,7 +25,7 @@
 :root :focus-visible {
   outline: 2px solid rgba(44, 99, 208, 0.85);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--mk-radius-xs);
 }
 
 /* ----- 应用式布局（列表页：右侧内容区占满视口，表格区内滚，分页器吸底） -----
@@ -77,7 +77,7 @@
      使同一条状态条在不同页高度不同（用户与学习者页曾收缩到 44.6）。 */
   flex: none;
   box-sizing: border-box;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-sm);
@@ -99,7 +99,7 @@
   bottom: calc(100% + 7px);
   transform: translateX(-50%) translateY(2px);
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-ink, #1a2a44);
   color: var(--mk-on-fill);
   font-size: var(--mk-fs-micro);
@@ -125,7 +125,7 @@
   margin-left: auto;
   height: 30px;
   padding: 0 11px;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   color: var(--mk-blue);
@@ -151,7 +151,7 @@
   padding: 4px 6px; margin: -4px -6px;
   font: inherit; font-size: var(--mk-fs-micro); font-weight: 700;
   color: var(--mk-muted); cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
   transition: color 0.12s ease, background 0.12s ease;
 }
 .mk-status__meta-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); }
@@ -184,12 +184,14 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
   padding: 0 2px;
 }
 
-/* ----- 卡片 ----- */
+/* ----- 卡片 -----
+   面是平的：0 阴影 + 1px 发丝线。elevation 只有三档——面=平、悬浮条=shadow-sm、
+   弹层=shadow-pop。此前卡片边框+阴影叠加，暗色下阴影不可见、亮色靠阴影撑质感，
+   明暗两套皮肤各自生长，是"每页各像各的"的主要来源。 */
 .mk-card {
   border: 1px solid var(--mk-line);
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-sm);
   /* overflow: clip（而非 hidden）：同样裁圆角溢出，但不产生滚动容器，
      卡内 sticky 表头/操作条才能相对视口吸顶（滚动修复 #1/#9 依赖） */
   overflow: clip;
@@ -220,7 +222,7 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
   gap: 12px;
   padding: 16px 18px 14px;
   border: 1px solid var(--mk-line);
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
 }
 /* 无卡片形态：头部与页面同平面（用于本身已有页面留白的详情页） */
@@ -230,7 +232,7 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
 .mk-entity__avatar {
   width: 46px;
   height: 46px;
-  border-radius: 14px;
+  border-radius: var(--mk-radius-xl);
   color: var(--mk-on-fill);
   display: grid;
   place-content: center;
@@ -474,7 +476,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   background: transparent;
   width: 26px;
   height: 26px;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   color: var(--mk-faint);
   font: inherit;
   font-size: var(--mk-fs-body);
@@ -494,7 +496,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   gap: 2px;
   background: var(--mk-surface);
   border: 1px solid var(--mk-line);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   box-shadow: var(--mk-shadow-pop);
 }
 .mk-menu__item {
@@ -504,7 +506,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   width: 100%;
   padding: 7px 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   background: transparent;
   color: var(--mk-muted);
   font: inherit;
@@ -597,7 +599,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 /* 已删除标记：灰色 */
 .mk-badge--deleted { background: var(--mk-badge-deleted-bg); color: var(--mk-badge-deleted-fg); }
 /* 直角徽章：需要与文字/表格行对齐的紧凑场景 */
-.mk-badge--chip { border-radius: 4px; }
+.mk-badge--chip { border-radius: var(--mk-radius-xs); }
 
 /* ----- 迷你进度条（进度量化统一表达：控制台评估维度条 / Goal 置信度条共用，ADMIN_DEEP_SESSION_AUDIT 4.3） ----- */
 .mk-minibar {
@@ -657,14 +659,14 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-filter__input,
 .mk-filter__select {
   padding: 7px 11px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   color: var(--mk-ink);
   font: inherit;
   font-size: var(--mk-fs-body);
   outline: none;
-  height: 34px;
+  height: 32px;
   box-sizing: border-box;
   line-height: 1.4;
 }
@@ -674,14 +676,14 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   width: auto;
 }
 .mk-filter__input:focus,
-.mk-filter__select:focus { border-color: var(--mk-blue); }
+.mk-filter__select:focus { border-color: var(--mk-blue); box-shadow: var(--mk-focus-ring); }
 /* 180px 下限只服务「筛选工具条」语境：.mk-filter（全站列表页筛选行）与
    .log-advpanel（执行日志高级面板）。此前为全局规则，会泄漏到表单输入框：
    撑破 ApiConfig 两列/三列栅格（服务地址挤掉 API Key）、并压过 VL RPM 的内联
    width:84px。表单输入框宽度由各自容器（.mk-field width:100% / 内联）决定。 */
 .mk-filter .mk-filter__input,
 .log-advpanel .mk-filter__input { min-width: 180px; }
-.mk-pills { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: var(--mk-pills-bg); border-radius: 10px; }
+.mk-pills { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: var(--mk-pills-bg); border-radius: var(--mk-radius-xl); }
 /* 主视图切换（.mk-page 的直接子级 pills）：统一左对齐 + 按内容宽度收缩。
    否则在 grid / flex 列容器里会被 justify-self:stretch / align-items:stretch 拉伸成整行
    ——虚拟学习者、执行日志、系统工具曾出现 pills 占满整行的「超长」形态。 */
@@ -690,7 +692,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   border: 0;
   background: transparent;
   padding: 5px 12px;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   font: inherit;
   font-size: var(--mk-fs-micro);
   font-weight: 600;
@@ -698,15 +700,15 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   cursor: pointer;
   white-space: nowrap;
 }
-/* 激活 = 筛选生效：蓝色文字 + 蓝色描边，与"按钮激活"的白底灰边区分 */
+/* 激活 = 筛选生效：蓝色文字 + 内描边（不用 box-shadow 外圈——发丝线是唯一的描边语言） */
 .mk-pill--active {
   background: var(--mk-pill-active-bg);
   color: var(--mk-pill-active-fg);
   font-weight: 700;
-  box-shadow: 0 0 0 1px rgba(44, 99, 208, 0.4), 0 1px 2px rgba(23, 32, 51, 0.08);
+  box-shadow: inset 0 0 0 1px var(--mk-blue);
 }
 html[data-theme='dark'] .mk-pill--active {
-  box-shadow: 0 0 0 1px rgba(91, 141, 239, 0.45);
+  box-shadow: inset 0 0 0 1px var(--mk-blue-hover);
 }
 /* 筛选 pill 内的计数徽章：默认弱化，激活态跟随主色 */
 .mk-pill__count {
@@ -764,7 +766,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   cursor: pointer;
   padding: 4px 8px;
   margin-left: -8px;
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
   width: fit-content;
   transition: background 0.12s ease, transform 0.1s ease;
 }
@@ -780,7 +782,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   font-size: var(--mk-fs-body);
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
   white-space: nowrap;
 }
 .mk-link:hover { background: var(--mk-hover-surface); }
@@ -803,7 +805,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   background: transparent;
   color: var(--mk-faint);
   cursor: pointer;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   transition: background 0.12s, color 0.12s;
 }
 .mk-icon-btn:hover { background: var(--mk-hover-surface); color: var(--mk-blue, #2c63d0); }
@@ -831,7 +833,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   width: 46px;
   height: 46px;
   margin-bottom: 6px;
-  border-radius: 13px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface-2);
   color: var(--mk-faint);
   display: grid;
@@ -842,7 +844,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-empty__action {
   margin-top: 8px;
   padding: 7px 16px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid rgba(44, 99, 208, 0.3);
   background: var(--mk-blue-bg);
   color: var(--mk-blue);
@@ -952,14 +954,14 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   gap: 4px;
   padding: 3px;
   background: var(--mk-pills-bg);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-xl);
   width: fit-content;
 }
 .mk-seg__item {
   border: 0;
   background: transparent;
   padding: 6px 12px;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   font: inherit;
   font-size: var(--mk-fs-micro);
   font-weight: 600;
@@ -1006,7 +1008,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   background: var(--mk-modal-close-bg);
   width: 28px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: var(--mk-radius-sm);
   cursor: pointer;
   color: var(--mk-muted);
   display: grid;
@@ -1051,7 +1053,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-field__textarea {
   width: 100%;
   padding: 8px 11px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line, #e1e8f2);
   background: var(--mk-surface, #fff);
   color: var(--mk-ink, #1a2a44);
@@ -1061,7 +1063,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 }
 .mk-field__input:focus,
 .mk-field__select:focus,
-.mk-field__textarea:focus { border-color: var(--mk-blue, #2c63d0); }
+.mk-field__textarea:focus { border-color: var(--mk-blue, #2c63d0); box-shadow: var(--mk-focus-ring); }
 .mk-field__textarea { min-height: 96px; resize: vertical; line-height: 1.6; }
 .mk-field--error .mk-field__input,
 .mk-field--error .mk-field__textarea { border-color: var(--mk-red, #dc2626); }
@@ -1072,7 +1074,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-input {
   width: 100%;
   padding: 8px 11px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line, #e6ebf4);
   background: var(--mk-surface, #fff);
   color: var(--mk-ink, #1a2a44);
@@ -1081,7 +1083,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   outline: none;
   box-sizing: border-box;
 }
-.mk-input:focus { border-color: var(--mk-blue, #2c63d0); }
+.mk-input:focus { border-color: var(--mk-blue, #2c63d0); box-shadow: var(--mk-focus-ring); }
 .mk-input:disabled { background: var(--mk-input-disabled-bg); color: var(--mk-faint, #5f6f8c); cursor: not-allowed; }
 /* 字段输入禁用态与 .mk-input:disabled 同基调（原只给了暗色值，亮色下无底色） */
 .mk-field__input:disabled { background: var(--mk-input-disabled-bg); }
@@ -1089,8 +1091,8 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 
 /* 按钮 */
 .mk-btn {
-  padding: 8px 16px;
-  border-radius: 8px;
+  padding: 5px 14px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line, #e1e8f2);
   background: var(--mk-surface, #fff);
   color: var(--mk-ink, #1a2a44);
@@ -1100,6 +1102,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   cursor: pointer;
 }
 .mk-btn svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px; }
+.mk-btn:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 .mk-btn:hover { background: var(--mk-btn-hover-bg); }
 .mk-btn--primary {
   background: var(--mk-blue, #2c63d0);
@@ -1144,7 +1147,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   color: var(--mk-btn-ok-fg);
 }
 .mk-btn--ok:hover { background: var(--mk-btn-ok-bg-hover); border-color: var(--mk-btn-ok-line-hover); }
-.mk-btn--sm { padding: 5px 11px; font-size: var(--mk-fs-micro); }
+.mk-btn--sm { padding: 3px 10px; font-size: var(--mk-fs-micro); }
 /* 通栏按钮：弹窗底部主操作占满一行。
    此前 VirtualLearners.vue:498 使用但全局零定义 → 按钮未按预期占满（视觉审计 附 A #8）。 */
 .mk-btn--block { display: block; width: 100%; }
@@ -1178,7 +1181,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   align-items: center;
   gap: 8px;
   padding: 7px 12px;
-  border-radius: 9px;
+  border-radius: var(--mk-radius-sm);
   font-size: var(--mk-fs-body);
   font-weight: 600;
 }
@@ -1273,7 +1276,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   color: var(--mk-muted, #5b6577);
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   cursor: pointer;
   font-size: var(--mk-fs-emphasis);
   flex-shrink: 0;
@@ -1607,7 +1610,7 @@ body.admin-route code { font-size: inherit; }
 .mk-alert {
   display: block;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-red-bg, #fef2f2);
   color: var(--mk-red, #dc2626);
   font-size: var(--mk-fs-body);
