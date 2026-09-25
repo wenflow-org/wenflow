@@ -25,6 +25,11 @@
             <div class="learn__menu-sep"></div>
             <div class="learn__menu-group">
               <span class="learn__menu-label">暂离或重学</span>
+              <!-- 纯返回：移动端「‹ 返回」按钮被收起后，菜单里原本每个离开项都带副作用
+                   （暂停/结束/完成），没有「只是回去看看」的出口（2026-09-25 移动框架审查 A2） -->
+              <button type="button" class="learn__menu-item" @click="leaveWithoutSideEffect">
+                <span class="learn__menu-item-main"><strong>返回路径详情</strong><small>不结束会话，进度原样保留</small></span>
+              </button>
               <button type="button" class="learn__menu-item" @click="pauseAndLeave">
                 <span class="learn__menu-item-main"><strong>暂停并离开</strong><small>进度保留，下次从这继续</small></span>
               </button>
@@ -1262,6 +1267,13 @@ async function pauseAndLeave() {
   goBack();
 }
 
+/** 纯返回：不调任何接口，会话保持原状（in_progress 照旧，下次进来续上）。
+    「暂停并离开」会写 pause 状态，「结束/完成」会结算——都替用户做了决定。 */
+function leaveWithoutSideEffect() {
+  menuOpen.value = false;
+  goBack();
+}
+
 async function restart() {
   menuOpen.value = false;
   resumedNotice.value = false;
@@ -1748,6 +1760,12 @@ onBeforeUnmount(() => {
 .supmodal__close { border: 0; background: transparent; font-size: 14px; cursor: pointer; color: #6b7280; }
 .supmodal__body { padding: 12px 16px 16px; overflow-y: auto; }
 .supmodal__text, .supmodal__loading { margin: 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; color: #1f2937; }
+/* 暗色：补充资料弹窗跟随主题（原为硬编码 #fff/#1f2937，暗色下在聊天区中央弹出一整块白） */
+:global([data-theme='dark']) .supmodal__card { background: var(--surface); box-shadow: 0 12px 40px rgba(0, 0, 0, .5); }
+:global([data-theme='dark']) .supmodal__head { border-bottom-color: var(--line); }
+:global([data-theme='dark']) .supmodal__close { color: var(--muted); }
+:global([data-theme='dark']) .supmodal__close:hover { background: rgba(230, 237, 247, 0.08); }
+:global([data-theme='dark']) .supmodal__text, :global([data-theme='dark']) .supmodal__loading { color: var(--ink); }
 .msg__visual { margin: 0; display: grid; gap: 4px; }
 .msg__visual img {
   display: block; max-width: 100%; max-height: 320px;

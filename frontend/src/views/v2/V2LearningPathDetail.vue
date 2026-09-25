@@ -1425,7 +1425,9 @@ function taskKindText(task: Record<string, any>) {
 }
 
 function goLearn(taskId: string) {
-  router.push(`/learn/${taskId}`);
+  // 带 pathId 进课堂：评估页的「返回学习路径」据此回本页（缺省只能退回列表，2026-09-25）
+  const pid = path.value?.id;
+  router.push(pid ? { path: `/learn/${taskId}`, query: { pathId: pid } } : `/learn/${taskId}`);
 }
 
 async function viewFeedback(task: Record<string, any>) {
@@ -1708,7 +1710,10 @@ onBeforeUnmount(() => {
   .hero__ring { justify-self: center; }
   .hero h1 { font-size: 18px; }
   .detail__grid { grid-template-columns: 1fr; }
-  .side { position: static; }
+  /* 侧栏提前：aside 在 DOM 里位于阶段列表之后，单列下「进行到哪/学习资料」
+     会垫在 2-4 屏外（2026-09-25 移动框架审查）；order:-1 提到阶段列表之前，
+     桌面双列布局不受影响（order 只在单列时改变视觉顺序） */
+  .side { position: static; order: -1; }
 }
 </style>
 

@@ -100,7 +100,10 @@ const items = [
    移到个人中心 /user/achievements、/user/learning-history，走 CapabilityShell 的分段导航；
    旧路径保留重定向，站内入口（首页快捷卡、复习行、状态页、路径详情）已改指新路径。 */
 
-function isActive(item: { match: string[] }) {
+function isActive(item: { to: string; match: string[] }) {
+  // 个人中心 /user/* 挂在「学习台」簇下（从学习台头像进入）：给 tab 一个当前态，
+  // 否则 5 个 tab 全灭、层级感丢失（2026-09-25 移动框架审查 A8）
+  if (route.path.startsWith('/user') && item.to === '/dashboard') return true;
   return item.match.some((m) => route.path.startsWith(m));
 }
 

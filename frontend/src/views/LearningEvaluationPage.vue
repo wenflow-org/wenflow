@@ -84,6 +84,15 @@
           @advisory-action="handleAdvisoryAction"
         />
 
+        <!-- 移动端吸底动作条：卡内动作条在完成卡末尾，滚到反馈/对话区（约 2 屏后）
+             就无法直接决策（2026-09-25 移动框架：核心 CTA 不能藏在长内容底部）。
+             ≤640 与卡内动作行互斥显示，桌面不受影响；写操作与卡内共用 handleAction -->
+        <div class="evaluation-ctabar">
+          <button type="button" class="evaluation-ctabar__btn" :disabled="completeTaskBusy" @click="handleAction('continue-task')">继续练习</button>
+          <button type="button" class="evaluation-ctabar__btn evaluation-ctabar__btn--link" aria-label="返回学习路径" :disabled="completeTaskBusy" @click="handleAction('end')">返回</button>
+          <button type="button" class="evaluation-ctabar__btn evaluation-ctabar__btn--primary" :disabled="completeTaskBusy" @click="handleAction('complete-task')">完成任务</button>
+        </div>
+
         <SessionFeedbackPanel
           v-if="canSubmitSessionFeedback"
           :session-id="sessionId"
@@ -683,8 +692,8 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 .evaluation-head__more {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   border: 1px solid var(--line);
@@ -1218,6 +1227,11 @@ onUnmounted(() => {
     display: none;
   }
 
+  /* 卡内动作按钮隐藏（说明文字保留），决策统一走吸底动作条 */
+  .evaluation-shell :deep(.completion-actions__row) {
+    display: none;
+  }
+
   .evaluation-head__more-wrap {
     display: inline-flex;
   }
@@ -1263,6 +1277,10 @@ onUnmounted(() => {
 
   .evaluation-head__more-wrap {
     display: none;
+  }
+
+  .evaluation-ctabar {
+    display: none !important;
   }
 
   .evaluation-head {
@@ -1523,7 +1541,7 @@ onUnmounted(() => {
   }
 
   .evaluation-transcript-card .evaluation-transcript-toggle {
-    min-height: 32px;
+    min-height: 44px;
     font-size: 12px;
   }
 
@@ -1542,5 +1560,55 @@ onUnmounted(() => {
   }
   .spin { font-size: 28px; }
   .evaluation-transcript-empty { padding: 14px; }
+}
+
+/* ---------- 移动端吸底动作条（≤640，批7 2026-09-25） ----------
+   完成任务/继续练习原本在完成卡末尾，滚到反馈/对话区（约 2 屏后）无法直接决策。
+   固定右下、避开 iOS 底部横条（safe-area）；桌面不渲染该条（display:none 基线）。 */
+.evaluation-ctabar { display: none; }
+
+@media (max-width: 640px) {
+  .evaluation-ctabar {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    z-index: 30;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.15fr);
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: color-mix(in srgb, var(--surface, #fff) 94%, transparent);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: 0 14px 36px rgba(23, 32, 51, 0.2);
+  }
+}
+
+.evaluation-ctabar__btn {
+  min-height: 44px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted, #5b6577);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.evaluation-ctabar__btn:disabled { opacity: 0.55; cursor: default; }
+.evaluation-ctabar__btn--link { border-color: transparent; background: none; }
+.evaluation-ctabar__btn--primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
+  color: #fff;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--blue, #3478f6) 30%, transparent);
 }
 </style>
