@@ -14,12 +14,14 @@ import {
   detectAsciiStructure,
   detectExerciseLeakInReply,
   generateTeachingVisual,
+  hasIdenticalVisualPrompt,
   isTeachingVisualEnabled,
   isUsableVisualPrompt,
   resolveTeachingVisualMaxPerSession,
   resolveTeachingVisualMaxPerTask,
   resolveTeachingVisualSpec,
 } from '../teaching-visual.service';
+import { ImageError } from '../../image/types';
 import type { TeachingSessionMessage } from '../TeachingSessionRepository';
 
 const request = { prompt: '一个直角三角形，直角在左下角，两条直角边分别标 3 和 4', caption: '先把边标上', kind: '示意图' };
@@ -156,6 +158,122 @@ describe('teaching-visual 服务', () => {
     });
     const [body] = generate.mock.calls[0] as unknown as [Record<string, unknown>, unknown];
     expect(body).toMatchObject({ size: '1312x736', ratio: '16:9', responseFormat: 'url' });
+  });
+});
+
+describe('同 prompt 去重（2026-09-26：不重复计费）', () => {
+  const composedPrompt = composeTeachingVisualPrompt(request);
+
+  const messageWithPrompt = (imagePrompt: string): TeachingSessionMessage => ({
+    role: 'assistant',
+    content: '看这里',
+    timestamp: '2026-09-26T00:00:00.000Z',
+    images: [{ url: 'https://img.example/1.png', caption: null, prompt: imagePrompt, provider: 'agnes', model: 'm', kind: null, createdAt: '2026-09-26T00:00:00.000Z' }],
+  });
+
+  it('hasIdenticalVisualPrompt：composed prompt 全等才判真', () => {
+    expect(hasIdenticalVisualPrompt([messageWithPrompt(composedPrompt)], composedPrompt)).toBe(true);
+    expect(hasIdenticalVisualPrompt([messageWithPrompt('别的图')], composedPrompt)).toBe(false);
+    expect(hasIdenticalVisualPrompt([], composedPrompt)).toBe(false);
+    expect(hasIdenticalVisualPrompt(null, composedPrompt)).toBe(false);
+    expect(hasIdenticalVisualPrompt([messageWithPrompt(composedPrompt)], '')).toBe(false);
+  });
+
+  it('本会话已画过同一 composed prompt → 不再生成（generate 不被调用）', async () => {
+    const generate = jest.fn();
+    const image = await generateTeachingVisual({
+      request,
+      messages: [messageWithPrompt(composedPrompt)],
+      deps: { generate: generate as never },
+    });
+    expect(image).toBeNull();
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('同会话不同 prompt（老师换了个画法）→ 正常生成', async () => {
+    const generate = jest.fn(async () => ({
+      provider: 'agnes',
+      attempts: ['agnes'],
+      model: 'm',
+      latencyMs: 1,
+      images: [{ url: 'https://img.example/ok.png', provider: 'agnes' }],
+    }));
+    const image = await generateTeachingVisual({
+      request,
+      messages: [messageWithPrompt('另一张图的 prompt')],
+      deps: { generate: generate as never },
+    });
+    expect(image).not.toBeNull();
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('瞬时失败有界重试（2026-09-26）', () => {
+  const okResult = {
+    provider: 'agnes',
+    attempts: ['agnes'],
+    model: 'm',
+    latencyMs: 1,
+    images: [{ url: 'https://img.example/ok.png', provider: 'agnes' }],
+  };
+
+  it('快速 5xx → 重试一次成功（generate 共调用 2 次）', async () => {
+    let calls = 0;
+    const generate = jest.fn(async () => {
+      calls += 1;
+      if (calls === 1) throw new ImageError('IMAGE_UPSTREAM_HTTP_ERROR', 'upstream 502', 502);
+      return okResult;
+    });
+    const image = await generateTeachingVisual({ request, messages: [], deps: { generate: generate as never } });
+    expect(image).not.toBeNull();
+    expect(generate).toHaveBeenCalledTimes(2);
+  });
+
+  it('非瞬时失败（请求本身无效）→ 不重试直接 fail-open', async () => {
+    const generate = jest.fn(async () => {
+      throw new ImageError('IMAGE_REQUEST_INVALID', 'bad request');
+    });
+    const image = await generateTeachingVisual({ request, messages: [], deps: { generate: generate as never } });
+    expect(image).toBeNull();
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('4xx → 不重试（请求问题重试必然复现）', async () => {
+    const generate = jest.fn(async () => {
+      throw new ImageError('IMAGE_UPSTREAM_HTTP_ERROR', 'upstream 400', 400);
+    });
+    await generateTeachingVisual({ request, messages: [], deps: { generate: generate as never } });
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('失败耗时超预算（模拟真超时 60s）→ 不重试（不把课堂拖两倍）', async () => {
+    let clock = 0;
+    const generate = jest.fn(async () => {
+      throw new ImageError('IMAGE_UPSTREAM_TIMEOUT', 'timed out');
+    });
+    const image = await generateTeachingVisual({
+      request,
+      messages: [],
+      deps: {
+        generate: generate as never,
+        // 第一次调用=起始时间，第二次（预算检查）已过去 61s
+        now: () => { clock += 61_000; return new Date(clock); },
+      },
+    });
+    expect(image).toBeNull();
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('重试成功后正常返回图（留痕 provider/model/prompt）', async () => {
+    let calls = 0;
+    const generate = jest.fn(async () => {
+      calls += 1;
+      if (calls === 1) throw new ImageError('IMAGE_EMPTY_RESULT', '0 images');
+      return okResult;
+    });
+    const image = await generateTeachingVisual({ request, messages: [], deps: { generate: generate as never } });
+    expect(image!.provider).toBe('agnes');
+    expect(image!.prompt).toContain('直角三角形');
   });
 });
 

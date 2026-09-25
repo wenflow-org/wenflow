@@ -12,14 +12,16 @@
  *   - 开关 `TEACHING_VISUAL_DISABLED=1` → 一律不生成（灰度回滚）；
  *   - 每会话 ≤ `TEACHING_VISUAL_MAX_PER_SESSION`（默认 6）张（单回合天然 ≤1）；
  *   - prompt 过短/空白 → 不生成；
- *   - 生成失败/超时 → 只告警，**绝不阻断课堂**（fail-open，与 material-collector 同款）。
+ *   - 同 prompt 本会话已画过 → 不重复生成（不重复计费，2026-09-26）；
+ *   - 生成失败/超时 → 只告警，**绝不阻断课堂**（fail-open，与 material-collector 同款）；
+ *     瞬时失败（超时/不可用/5xx/空结果）且失败得快 → 有界重试一次（2026-09-26）。
  *
  * 成本提示：单张实测约 12s 且计费，故必须有上限；上限可 env 调。
  */
 
 import { logger } from '../../utils/logger';
 import { generateImages } from '../image';
-import { ImageError, type ImageRatio } from '../image/types';
+import { ImageError, type ImageErrorCode, type ImageRatio } from '../image/types';
 import type { TeachingImage, TeachingSessionMessage } from './TeachingSessionRepository';
 
 /** 老师请求的配图（teaching-turn 输出的可选顶层块 `visual`）。 */
@@ -221,6 +223,36 @@ export interface GenerateTeachingVisualDeps {
   now?: () => Date;
 }
 
+/**
+ * 同 prompt 去重（2026-09-26）：本会话已经生成过**一模一样 composed prompt** 的图就不再生成——
+ * 生成约 12s 且计费，老师反复请求同一张图（学生没看懂再讲一遍）不应重复扣费。
+ * 返回 null 是安全的：文本自洽原则（③）本就要求 reply 不依赖图。
+ */
+export function hasIdenticalVisualPrompt(
+  messages: TeachingSessionMessage[] | null | undefined,
+  prompt: string
+): boolean {
+  if (!Array.isArray(messages) || !prompt) return false;
+  return messages.some((message) =>
+    Array.isArray(message?.images) ? message.images.some((image) => image?.prompt === prompt) : false
+  );
+}
+
+/** 瞬时失败有界重试（2026-09-26）：只重试"快速失败"的瞬错误，失败耗时超预算（≈真超时）不重试。 */
+const VISUAL_RETRY_ELAPSED_BUDGET_MS = 15_000;
+const RETRYABLE_IMAGE_CODES: ReadonlySet<ImageErrorCode> = new Set<ImageErrorCode>([
+  'IMAGE_UPSTREAM_TIMEOUT',
+  'IMAGE_UPSTREAM_UNAVAILABLE',
+  'IMAGE_EMPTY_RESULT',
+]);
+
+function isRetryableImageError(error: unknown): boolean {
+  if (!(error instanceof ImageError)) return false;
+  if (RETRYABLE_IMAGE_CODES.has(error.code)) return true;
+  // HTTP 错误只重试 5xx（上游抖动）；4xx 是请求本身的问题，重试必然复现
+  return error.code === 'IMAGE_UPSTREAM_HTTP_ERROR' && (error.status === undefined || error.status >= 500);
+}
+
 export interface GenerateTeachingVisualInput {
   request: TeachingVisualRequest | null | undefined;
   /** 该会话**已落库**的消息（用于上限判定）。 */
@@ -252,21 +284,44 @@ export async function generateTeachingVisual(input: GenerateTeachingVisualInput)
   }
 
   const prompt = composeTeachingVisualPrompt(request as TeachingVisualRequest);
+  // ③ 同 prompt 去重：本会话画过一模一样的图就不重复计费
+  if (hasIdenticalVisualPrompt(input.messages, prompt)) {
+    logger.info('[teaching-visual] 本会话已生成过同 prompt 配图，跳过（不重复计费）');
+    return null;
+  }
   const visualSpec = resolveTeachingVisualSpec(request?.kind, request?.prompt);
   const generate = input.deps?.generate ?? generateImages;
+  const imageRequest = {
+    prompt,
+    n: 1,
+    // 精确尺寸（主）+ 同向 ratio（兜底）：横向结构不再被压成方图
+    size: visualSpec.size,
+    ratio: visualSpec.ratio,
+    responseFormat: 'url',
+    purpose: 'classroom-visual-aid',
+  } as const;
+  const generateOptions = { signal: input.signal, timeoutMs: DEFAULT_TEACHING_VISUAL_TIMEOUT_MS };
+  // 可注入时钟统一成毫秒数（deps.now 返回 Date；缺省 Date.now 返回 number——重试预算只做差值比较）
+  const depsClock = (): number => {
+    const value = (input.deps?.now ?? Date.now)();
+    return value instanceof Date ? value.getTime() : value;
+  };
+  const attemptStartedAt = depsClock();
   try {
-    const result = await generate(
-      {
-        prompt,
-        n: 1,
-        // 精确尺寸（主）+ 同向 ratio（兜底）：横向结构不再被压成方图
-        size: visualSpec.size,
-        ratio: visualSpec.ratio,
-        responseFormat: 'url',
-        purpose: 'classroom-visual-aid',
-      },
-      { signal: input.signal, timeoutMs: DEFAULT_TEACHING_VISUAL_TIMEOUT_MS },
-    );
+    let result;
+    try {
+      result = await generate(imageRequest, generateOptions);
+    } catch (error) {
+      // 瞬时失败（超时/上游不可用/空结果/5xx）且**失败得够快** → 有界重试一次。
+      // 预算检查保证重试只发生在快速失败上（真超时 60s 的重试会把课堂拖到 2 分钟，绝不重试）。
+      const elapsedMs = depsClock() - attemptStartedAt;
+      if (!isRetryableImageError(error) || elapsedMs > VISUAL_RETRY_ELAPSED_BUDGET_MS) throw error;
+      logger.warn('[teaching-visual] 配图瞬时失败，有界重试一次', {
+        code: error instanceof ImageError ? error.code : undefined,
+        elapsedMs,
+      });
+      result = await generate(imageRequest, generateOptions);
+    }
     const first = result.images.find((image) => image?.url || image?.b64Json);
     const url = first?.url || (first?.b64Json ? `data:image/png;base64,${first.b64Json}` : '');
     if (!url) return null;
