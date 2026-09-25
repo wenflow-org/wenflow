@@ -595,6 +595,8 @@ onBeforeUnmount(() => {
   /* 移动端页标题 22→20：390 下「继续你的学习计划」占掉 270/362px 宽，
      比页内正文（13.5px）重得多。全站移动端页标题同步收一档（2026-09-24 反馈）。 */
   .paths__hero h1 { font-size: 18px; }
+  /* 副标题单行省略（批9 首屏微调）：窄屏不给它第二行 */
+  .paths__hero p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .cards { grid-template-columns: 1fr; }
   /* ⋯ 触发器视觉不变（18px 字形 + 6px 内边距 = 30×27），伪元素把热区扩到 44×43：
      触屏上 27px 高太难点，它又贴在卡片右上角、周边没有别的手势目标，扩热区无副作用 */

@@ -1996,7 +1996,8 @@ a.btn-primary { text-decoration: none; }
 .action__from { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 1100px) {
   .greet__left { flex-wrap: wrap; row-gap: 4px; }
-  .greet__sub { white-space: normal; flex-basis: 100%; }
+  /* 副标题保持单行省略（批9 首屏微调）：原 normal 换行让它独占 2-3 行，挤占首屏 */
+  .greet__sub { flex-basis: 100%; max-width: 100%; }
   .action__title { overflow-wrap: anywhere; }
 }
 </style>

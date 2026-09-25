@@ -649,6 +649,7 @@ onUnmounted(() => {
 
 .evaluation-degraded {
   padding: 14px 18px;
+  /* ≤1100 密度在下方媒体块覆写 */
   border: 1px solid var(--color-warning-border, rgba(244, 170, 70, 0.24));
   border-left: 4px solid var(--color-warning, #f4aa46);
   border-radius: 12px;
@@ -1218,6 +1219,11 @@ onUnmounted(() => {
   .evaluation-shell :deep(.metrics-grid--three) {
     grid-template-columns: 1fr;
   }
+}
+
+@media (max-width: 1100px) {
+  /* 降级横幅密度：18px 横向内边距在 375 下占掉 36px，收到与卡片一致的 14 */
+  .evaluation-degraded { padding: 10px 14px; }
 }
 
 @media (max-width: 640px) {
