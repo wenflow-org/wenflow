@@ -131,11 +131,16 @@
                 :title="`置信度 ${Math.round(r.confidence * 100)}%。低于 50% 表示证据不足`"
               >
                 {{ Math.round(r.confidence * 100) }}%<em v-if="evidenceLowConfidence(r.confidence)" class="conf__lack">证据不足</em>
+                <span class="mk-minibar lc-conf__bar" aria-hidden="true"><i :style="{ width: Math.round(r.confidence * 100) + '%' }"></i></span>
               </span>
               <span v-else class="mk-na" :title="r.task ? '' : '尚未开始学习，暂无置信度'">—</span>
             </td>
             <td v-if="!lcHiddenCols.has('risk')" class="risk-text" :class="{ 'mk-na': !r.risk }" :title="r.risk || ''">{{ r.risk || '—' }}</td>
-            <td v-if="!lcHiddenCols.has('updated')" class="lc-updated">{{ isUpdating(r.id) ? '重算中…' : r.updated }}</td>
+            <td v-if="!lcHiddenCols.has('updated')">
+              <span v-if="isUpdating(r.id)" class="lc-updated">重算中…</span>
+              <span v-else-if="r.updated" class="mk-fresh" :class="freshTone(r.ts)" :title="r.ts ? new Date(r.ts).toLocaleString() : undefined">{{ r.updated }}</span>
+              <span v-else class="mk-na">—</span>
+            </td>
             <td>
               <div class="mk-actions mk-actions--left">
                 <button type="button" class="mk-icon-btn" title="详情" @click.stop="openDetail(r)"><UserRound :size="15" :stroke-width="1.75" /></button>
@@ -260,6 +265,11 @@ const lcColDefs = [
 ] as const
 const lcHiddenCols = ref<Set<string>>(new Set())
 
+/* 更新列新鲜度三档（批B，mk-fresh 原语） */
+function freshTone(ts?: number): string {
+  if (!ts) return 'mk-fresh--never'
+  return Date.now() - ts < 24 * 3600000 ? 'mk-fresh--fresh' : ''
+}
 function openDetail(r: Row) {
   openSubPage('learner', r.id, includeTest.value ? { includeTest: true } : undefined)
 }
@@ -513,6 +523,7 @@ async function recomputeAll() {
 .conf { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-muted); cursor: help; }
 .conf__lack { font-style: normal; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
 .conf--low { color: var(--mk-amber); }
+.lc-conf__bar { display: block; width: 56px; margin-top: 3px; }
 
 @media (min-width: 2000px) {
   .risk-text { font-size: var(--mk-fs-body); }

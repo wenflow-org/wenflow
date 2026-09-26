@@ -1617,6 +1617,31 @@ body.admin-route code { font-size: inherit; }
   .mk-batchbar__btn, .mk-batchbar__danger { padding: 8px 19px; }
 }
 
+/* ===== 数据说话三原语（2026-09-26 全面设计方案批B）：时间/耗时/量表三类语义的统一形态 ===== */
+
+/* .mk-fresh 新鲜度点：时间列统一「点+相对时间，绝对时间入 title」。
+   修饰档：--fresh 24h 内（绿点+主文字色）/ 默认（灰点，天级）/ --never 从未（弱化）。
+   用法：<span class="mk-fresh mk-fresh--fresh" title="2026-09-26 18:00">5 分钟前</span> */
+.mk-fresh { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.mk-fresh::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--mk-faint); flex: none; }
+.mk-fresh--fresh { color: var(--mk-ink); }
+.mk-fresh--fresh::before { background: var(--mk-green); }
+.mk-fresh--never { color: var(--mk-faint); }
+.mk-fresh--never::before { opacity: 0.4; }
+
+/* .mk-latency 耗时阈值色阶：快=默认 mono，偏慢=琥珀，慢=红。
+   阈值由页面数据判定后挂修饰档；数值本体保持 tabular-nums。 */
+.mk-latency { font-variant-numeric: tabular-nums; font-weight: 600; }
+.mk-latency--warn { color: var(--mk-amber); }
+.mk-latency--slow { color: var(--mk-red-strong); font-weight: 700; }
+
+/* .mk-dots 1-5 量表五格点阵：filled 数=值。
+   用法：<span class="mk-dots"><i class="is-on"></i>×n …</span>；低值警示加 .mk-dots--warn（filled 转琥珀）。 */
+.mk-dots { display: inline-flex; gap: 3px; align-items: center; }
+.mk-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--mk-surface-3); }
+.mk-dots i.is-on { background: var(--mk-blue); }
+.mk-dots--warn i.is-on { background: var(--mk-amber); }
+
 /* ----- 提示/错误条（表单错误、批量任务提示等统一形态；替代页面级 errorbar/vl-steps）
    错误展示口径（2026-09-26 钉死，三通道各司其职，勿再自创）：
    ① 页级初始加载失败（整页无数据可显示）→ MkEmptyState tone="error" + 重试动作；

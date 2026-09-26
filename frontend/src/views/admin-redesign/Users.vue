@@ -146,7 +146,16 @@
                 ><i :style="{ width: xpPct(u.xp) + '%' }"></i></span>
               </div>
             </td>
-            <td v-if="showCol('paths')" class="mk-num">{{ u.paths }} / {{ u.sessions }}</td>
+            <td v-if="showCol('paths')">
+              <!-- 行级设计（批B）：双段迷你条——路径段蓝/会话段青，0 会话弱化；数字+条同列 -->
+              <div class="ul-ps" :title="`路径 ${u.paths} 条 · 会话 ${u.sessions} 次`">
+                <span class="ul-ps__nums"><b>{{ u.paths }}</b><i>/</i><b :class="{ 'ul-ps__zero': !u.sessions }">{{ u.sessions }}</b></span>
+                <span class="ul-ps__bar" aria-hidden="true">
+                  <i v-if="u.paths" class="ul-ps__seg ul-ps__seg--path" :style="{ width: psSegPct(u.paths, u.sessions) + '%' }"></i>
+                  <i v-if="u.sessions" class="ul-ps__seg ul-ps__seg--sess" :style="{ width: psSegPct(u.sessions, u.paths) + '%' }"></i>
+                </span>
+              </div>
+            </td>
             <td v-if="showCol('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
             <td v-if="showCol('lastlogin')">
               <span class="ul-login" :class="`ul-login--${loginTone(u.lastLogin)}`">
@@ -311,6 +320,12 @@ function xpPct(xp: number): number {
 }
 function xpToNext(xp: number): number {
   return xpProgress(xp).toNext
+}
+/** 双段迷你条：各自相对两者之和的宽度（互补关系一眼可读，而非共同分母） */
+function psSegPct(a: number, b: number): number {
+  const sum = (a || 0) + (b || 0)
+  if (!sum) return 0
+  return Math.round(((a || 0) / sum) * 100)
 }
 /** 最后登录新鲜度：自己的 timeAgo 产出格式按关键词分档 */
 function loginTone(text: string): 'fresh' | 'recent' | 'never' {
@@ -836,6 +851,17 @@ function clearFilters() {
 }
 .ul-level__bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-blue); opacity: 0.75; }
 .ul-level__badge--green ~ .ul-level__bar i { background: var(--mk-green); }
+
+/* 路径/会话双段迷你条（批B） */
+.ul-ps { display: grid; gap: 3px; justify-items: start; }
+.ul-ps__nums { display: inline-flex; align-items: baseline; gap: 4px; font-variant-numeric: tabular-nums; }
+.ul-ps__nums b { font-weight: 700; }
+.ul-ps__nums i { font-style: normal; color: var(--mk-faint); }
+.ul-ps__zero { color: var(--mk-faint); font-weight: 400; }
+.ul-ps__bar { display: flex; width: 64px; height: 4px; border-radius: var(--mk-radius-pill); background: var(--mk-surface-2); overflow: hidden; }
+.ul-ps__seg { display: block; height: 100%; }
+.ul-ps__seg--path { background: var(--mk-blue); opacity: 0.75; }
+.ul-ps__seg--sess { background: var(--mk-teal, #0d9488); opacity: 0.75; }
 
 /* 最后登录：新鲜度点（24h 内绿 / 天级默认 / 从未最弱） */
 .ul-login { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--mk-muted); }

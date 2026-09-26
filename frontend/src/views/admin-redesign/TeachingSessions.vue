@@ -139,8 +139,11 @@
               </td>
               <td v-if="!tsHiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
               <td v-if="!tsHiddenCols.has('interact')">
-                <span class="mk-num">{{ r.duration ? fmtDuration(r.duration) : '—' }} · {{ r.messageCount }} 条</span>
-                <span v-if="r.knowledgePointCount" class="mk-cell-sub">知识 {{ r.knowledgePointCount }} 点</span>
+                <!-- 行级设计（批B）：时长主值+档位 tone（≥25 分钟挂机红 / <1 分钟秒退弱化），消息/知识点降 sub 行 -->
+                <div class="ts-ia" :title="r.duration ? `时长 ${fmtDuration(r.duration)} · ${r.messageCount} 条消息` : undefined">
+                  <b class="ts-ia__dur" :class="{ 'mk-latency--slow': r.duration >= 1500, 'ts-ia__dur--brief': r.duration > 0 && r.duration < 60 }">{{ r.duration ? fmtDuration(r.duration) : '—' }}</b>
+                  <span class="mk-cell-sub">{{ r.messageCount }} 条<template v-if="r.knowledgePointCount"> · 知识 {{ r.knowledgePointCount }} 点</template></span>
+                </div>
               </td>
               <td v-if="!tsHiddenCols.has('progress')">
                 <template v-if="sessionProgressDone(r.status)">
@@ -775,6 +778,10 @@ defineExpose({ refreshNow })
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }
 /* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
+/* 互动列（批B）：时长主值+副行 */
+.ts-ia { display: grid; gap: 2px; justify-items: start; }
+.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }
+.ts-ia__dur--brief { color: var(--mk-faint); font-weight: 400; }
 .ts-prog { display: grid; gap: 4px; max-width: 96px; }
 .ts-prog__num { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }
 .ts-prog__bar { width: 88px; height: 5px; }

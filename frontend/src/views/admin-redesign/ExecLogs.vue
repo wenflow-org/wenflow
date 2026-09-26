@@ -192,8 +192,14 @@
                   </div>
                 </td>
                 <td v-if="!hiddenCols.has('model')"><span class="mono exec-model__name" :title="log.model || undefined">{{ log.model || '—' }}</span></td>
-                <td v-if="!hiddenCols.has('tokens')"><span class="mono exec-tokens" :title="tokensTitle(log)">{{ tokensText(log) }}</span></td>
-                <td v-if="!hiddenCols.has('dur')" class="right"><span class="mono exec-dur" :title="fmtMs(log.durationMs)">{{ fmtMs(log.durationMs) }}</span></td>
+                <td v-if="!hiddenCols.has('tokens')">
+                  <div class="exec-tok" :title="tokensTitle(log)">
+                    <b v-if="tokensSum(log) != null" class="exec-tok__num">{{ tokensSum(log)!.toLocaleString() }}</b>
+                    <span v-else class="mk-na">未统计</span>
+                    <span class="mk-cell-sub">{{ tokensSplitText(log) }}</span>
+                  </div>
+                </td>
+                <td v-if="!hiddenCols.has('dur')" class="right"><span class="mk-latency exec-dur" :class="latencyTone(log.durationMs)" :title="`${fmtMs(log.durationMs)}（P50 ${latencyP50} · P99 ${latencyP99}）`">{{ fmtMs(log.durationMs) }}</span></td>
                 <td v-if="!hiddenCols.has('status')"><span class="exec-status" :class="`exec-status--${log.status}`">{{ statusText[log.status] }}</span></td>
                 <td v-if="!hiddenCols.has('trace')" class="right"><span class="mono exec-trace" :title="`${log.traceId} · 在链路中查看完整 Trace`" @click.stop="showTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span></td>
               </tr>
@@ -488,6 +494,15 @@ function tokensText(log: TokenRow): string {
   if (log.promptTokens != null || log.completionTokens != null) {
     return `输入 ${log.promptTokens ?? 0} · 输出 ${log.completionTokens ?? 0}`
   }
+  const p = promptOf(log)
+  return p?.tokens || '未统计'
+}
+function tokensSum(log: TokenRow): number | null {
+  if (log.promptTokens != null || log.completionTokens != null) return (log.promptTokens ?? 0) + (log.completionTokens ?? 0)
+  return null
+}
+function tokensSplitText(log: TokenRow): string {
+  if (log.promptTokens != null || log.completionTokens != null) return `输入 ${log.promptTokens ?? 0} · 输出 ${log.completionTokens ?? 0}`
   const p = promptOf(log)
   return p?.tokens || '未统计'
 }
@@ -834,6 +849,30 @@ function percentileOf(durations: number[], q: number): string {
   const idx = Math.min(arr.length - 1, Math.max(0, Math.round((arr.length - 1) * q)))
   return fmtMs(arr[idx])
 }
+function percentileMsOf(durations: unknown[], q: number): number | null {
+  const arr = durations.filter((d): d is number => typeof d === 'number' && d >= 0).sort((a, b) => a - b)
+  if (!arr.length) return null
+  const idx = Math.min(arr.length - 1, Math.max(0, Math.round((arr.length - 1) * q)))
+  return arr[idx]
+}
+/* 行级设计（批B）：行耗时 vs 全局分位 → 三档 tone（≥P99 红 / ≥P50 琥珀 / 其余默认） */
+const latencyP50Ms = computed(() => {
+  const st = liveStats.value
+  if (st && st.latencyPercentiles?.p50 != null) return st.latencyPercentiles.p50
+  return percentileMsOf(logs.value.filter((l) => l.status === 'ok').map((l) => l.durationMs), 0.5)
+})
+const latencyP99Ms = computed(() => {
+  const st = liveStats.value
+  if (st && st.latencyPercentiles?.p99 != null) return st.latencyPercentiles.p99
+  return percentileMsOf(logs.value.filter((l) => l.status === 'ok').map((l) => l.durationMs), 0.99)
+})
+function latencyTone(durationMs: unknown): string {
+  const d = typeof durationMs === 'number' ? durationMs : -1
+  if (d < 0) return ''
+  if (latencyP99Ms.value != null && d >= latencyP99Ms.value) return 'mk-latency--slow'
+  if (latencyP50Ms.value != null && d >= latencyP50Ms.value) return 'mk-latency--warn'
+  return ''
+}
 const statusTone = computed(() => (!logs.value.length ? 'muted' : errCount.value ? 'bad' : 'ok'))
 /** 测试日志计数：默认态读后端 stats.canary（默认视图已排除 canary，行内数不到）；
     仅看测试态 = 该查询的 total（口径即测试行数） */
@@ -1066,15 +1105,6 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
   text-overflow: ellipsis;
   max-width: 100%;
 }
-.exec-tokens {
-  display: inline-block;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
 /* 状态列徽章（成功/超时/失败） */
 .exec-status {
   display: inline-flex;
@@ -1096,6 +1126,9 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* tokens 列主副行（批B） */
+.exec-tok { display: grid; gap: 2px; justify-items: start; }
+.exec-tok__num { font-variant-numeric: tabular-nums; font-weight: 600; }
 .exec-dur {
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
@@ -1244,7 +1277,7 @@ html[data-theme='dark'] .tline-attempt--fail { background: rgba(220, 38, 38, 0.0
   .exec-stage,
   .exec-model__name { font-size: var(--mk-fs-micro); }
   .exec-title { font-size: var(--mk-fs-body); }
-  .exec-tokens,
+  .exec-tok__num,
   .exec-status { font-size: var(--mk-fs-micro); }
   .tline__errcode,
   .tline__http,
@@ -1277,7 +1310,7 @@ html[data-theme='dark'] .tline-attempt--fail { background: rgba(220, 38, 38, 0.0
   .exec-stage,
   .exec-model__name { font-size: var(--mk-fs-micro); }
   .exec-title { font-size: var(--mk-fs-body); }
-  .exec-tokens,
+  .exec-tok__num,
   .exec-status { font-size: var(--mk-fs-micro); }
   .tline__errcode,
   .tline__http,

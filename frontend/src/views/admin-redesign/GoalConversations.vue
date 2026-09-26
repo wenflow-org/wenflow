@@ -60,6 +60,15 @@
               v-model:hidden="gcHiddenCols"
             />
             <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）<template v-if="stats && stats.total > rows.length"> · 仅显示最近 {{ rows.length }} 条</template></span>
+            <!-- 行级设计（批B）：目标对话四态比例条+完成率（stats 已拉取，此前从未渲染） -->
+            <span v-if="stats && stats.total > 0" class="gc-statusbar" role="img" :aria-label="`目标对话共 ${stats.total}：进行中 ${stats.active} · 已完成 ${stats.completed} · 已取消 ${gcCancelledCount} · 完成率 ${stats.completionRate}%`">
+              <span class="gc-statusbar__bar" aria-hidden="true">
+                <i class="gc-statusbar__seg gc-statusbar__seg--active" :style="{ width: gcStatusSeg(stats.active) + '%' }"></i>
+                <i class="gc-statusbar__seg gc-statusbar__seg--done" :style="{ width: gcStatusSeg(stats.completed) + '%' }"></i>
+                <i v-if="gcCancelledCount > 0" class="gc-statusbar__seg gc-statusbar__seg--cancel" :style="{ width: gcStatusSeg(gcCancelledCount) + '%' }"></i>
+              </span>
+              <span>完成率 <b>{{ stats.completionRate }}%</b></span>
+            </span>
           </div>
         </div>
 
@@ -361,6 +370,17 @@ const loading = ref(false)
 const rows = ref<Row[]>([])
 const loadError = ref('')
 const stats = ref<{ total: number; active: number; completed: number; completionRate: string } | null>(null)
+/* 四态比例条（批B）：已取消 = 总数 − 进行中 − 已完成（stats 无独立字段，推导并钳非负） */
+const gcCancelledCount = computed(() => {
+  const s = stats.value
+  if (!s) return 0
+  return Math.max(s.total - s.active - s.completed, 0)
+})
+function gcStatusSeg(n: number): number {
+  const s = stats.value
+  if (!s || !s.total) return 0
+  return Math.round((n / s.total) * 100)
+}
 const keyword = ref('')
 const statusFilter = ref('')
 
@@ -853,6 +873,14 @@ onMounted(() => {
 /* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
 /* 身份 chip：与 Users/MemoryReview 同一语言（真实蓝 / 虚拟紫 / 测试琥珀），三页统一 */
 .gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+/* 四态比例条（批B）：卡头内的目标对话状态构成 */
+.gc-statusbar { display: inline-flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.gc-statusbar b { color: var(--mk-ink); font-variant-numeric: tabular-nums; }
+.gc-statusbar__bar { display: inline-flex; width: 72px; height: 6px; border-radius: var(--mk-radius-pill); overflow: hidden; background: var(--mk-surface-2); }
+.gc-statusbar__seg { display: block; height: 100%; }
+.gc-statusbar__seg--active { background: var(--mk-blue); }
+.gc-statusbar__seg--done { background: var(--mk-green); }
+.gc-statusbar__seg--cancel { background: var(--mk-faint); opacity: 0.5; }
 .gc-user .mk-cell-main { min-width: 0; flex: 1; }
 .gc-ava {
   width: 28px; height: 28px; border-radius: 50%; flex: none;

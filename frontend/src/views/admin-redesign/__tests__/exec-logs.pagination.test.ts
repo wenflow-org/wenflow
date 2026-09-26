@@ -209,11 +209,11 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     ];
     const w = await mountExec();
     await nextTick();
-    const cell = w.find('.exec-tokens');
-    expect(cell.text()).toBe('输入 860 · 输出 204');
+    const cell = w.find('.exec-tok');
+    expect(cell.find('.exec-tok__num').text()).toBe('1,064');
+    expect(cell.find('.mk-cell-sub').text()).toBe('输入 860 · 输出 204');
     expect(cell.attributes('title')).toContain('传输层统计');
     expect(cell.attributes('title')).not.toContain('agent_call_logs');
-    expect(cell.text()).not.toBe('未统计');
   });
 
   it('P2 Tokens 列（列设置开启）：无 token 数据 → 「未统计」+ tooltip 说明（不再与 0 混淆）', async () => {
@@ -222,8 +222,8 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     liveLogsFiltered.value = [fakeSpan(1)];
     const w = await mountExec();
     await nextTick();
-    const cell = w.find('.exec-tokens');
-    expect(cell.text()).toBe('未统计');
+    const cell = w.find('.exec-tok');
+    expect(cell.find('.mk-na').text()).toBe('未统计');
     expect(cell.attributes('title')).toContain('未记录 token 用量');
   });
 
