@@ -63,6 +63,13 @@ import {
   checkAgentSnapshotsDrift,
   generateAgentSnapshotsContent,
 } from './prompt-manifest/generate-agent-snapshots';
+import {
+  analyzePromptCompileHealth,
+  type PromptCompileActiveRow,
+  type PromptCompileHealthReport,
+  type PromptCompileRunner,
+} from './prompt-manifest/check-prompt-compile-health';
+import { compilePrompt } from './prompt-compiler';
 import { compileAllCorePromptFiles } from './prompt-manifest/compile-core-files';
 import { ensureCoreAgentPrompts } from './prompt-manifest/seed-core-agent-prompts';
 import systemPrisma from '../config/system-database';
@@ -259,7 +266,7 @@ function buildItem(
 }
 
 /**
- * 单次扫描的中间产物：健康中心 13 项报告与巡检聚合报告共用的数据底座。
+ * 单次扫描的中间产物：健康中心 14 项报告与巡检聚合报告共用的数据底座。
  * 一次请求只做一次 fs 扫描 + 一次 DB 查询 + 一轮纯函数分析（YAML 解析走 yaml-file-cache）。
  */
 export interface HealthCenterScanData {
@@ -286,16 +293,18 @@ export interface HealthCenterScanData {
   snapshotCheck: { drifted: boolean; detail: string };
   yamlCheck: YamlVocabularyCheckReport;
   paramsCheck: ParamsConsistencyResult;
+  promptCompile: PromptCompileHealthReport;
 }
 
 /**
  * 单次扫描层：fs 目录扫描 + DB 查询 + 复用既有纯函数分析，一次取齐全部中间产物。
  * buildHealthCenterReport 与 buildHealthCenterSummaryReport 共用本层，
- * 两个端点不重复扫描/重复查询。options.book 仅供测试注入（无 skill 空态）。
+ * 两个端点不重复扫描/重复查询。options.book 仅供测试注入（无 skill 空态）；
+ * options.runCompile 仅供测试注入（编译层演练换桩，避免触碰真实路由表）。
  */
 export async function collectHealthCenterScan(
   db: HealthCenterDbAdapter,
-  options?: { book?: SkillsBook },
+  options?: { book?: SkillsBook; runCompile?: PromptCompileRunner },
 ): Promise<HealthCenterScanData> {
   const scan = scanPromptFiles();
   const book = options?.book ?? loadSkillsBookRaw();
@@ -304,7 +313,17 @@ export async function collectHealthCenterScan(
   const [activeRows, registrations, driftReport, parityActiveRows, overrideRows, runtimeDriftRows] = await Promise.all([
     db.agent_prompts.findMany({
       where: { status: 'ACTIVE' },
-      select: { agentId: true, metadata: true, coreHash: true, coreVersion: true },
+      select: {
+        agentId: true,
+        metadata: true,
+        coreHash: true,
+        coreVersion: true,
+        systemPrompt: true,
+        compileStatus: true,
+        compiledSystemPrompt: true,
+        sourceHash: true,
+        compileContextHash: true,
+      },
     }),
     db.skill_registrations.findMany({ select: { name: true, updatedAt: true } }),
     detectFieldRoutingDrift(db),
@@ -366,6 +385,12 @@ export async function collectHealthCenterScan(
     Promise.resolve(buildParamsConsistencyCheck()),
   ]);
 
+  // 编译层健康：对 ACTIVE prompt 逐条演练编译（默认 compilePrompt；测试可注入桩）
+  const promptCompile = await analyzePromptCompileHealth(
+    activeRows as unknown as PromptCompileActiveRow[],
+    options?.runCompile ?? compilePrompt,
+  );
+
   return {
     scan,
     book,
@@ -383,6 +408,7 @@ export async function collectHealthCenterScan(
     snapshotCheck,
     yamlCheck,
     paramsCheck,
+    promptCompile,
   };
 }
 
@@ -408,7 +434,7 @@ function groupRuntimeDriftRows(rows: { agentId: string; createdAt?: string | Dat
     .map(([agent, g]) => `${agent} ×${g.count}${g.latestIso ? ` @ ${g.latestIso}` : ''}`)
 }
 
-/** 纯组装：由单次扫描中间产物装配 13 项健康清单（健康中心与巡检聚合共用同一实现） */
+/** 纯组装：由单次扫描中间产物装配 14 项健康清单（健康中心与巡检聚合共用同一实现） */
 export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCenterItem[] {
   const {
     driftReport,
@@ -421,6 +447,7 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
     paramsCheck,
     overrideRows,
     runtimeDriftRows,
+    promptCompile,
   } = data;
 
   // ---- 字段路由漂移拆两维度（P4 名实不符：contract 维度真实基准为 manifest） ----
@@ -630,6 +657,40 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
       fixHint: '需开发处理：在 coordinator 定义里补 steps、登记豁免，或移除引用',
       source: 'skills-readiness.service.ts',
     }),
+    buildItem('prompt-compile', {
+      label: '编译层健康（生效提示词演练编译）',
+      base: 'bidirectional',
+      semantics: 'consistency',
+      severity: promptCompile.failures.length > 0
+        ? 'error'
+        : promptCompile.unresolved.length > 0 || promptCompile.stale.length > 0
+          ? 'warn'
+          : 'ok',
+      status: promptCompile.failures.length > 0
+        ? 'compile-failed'
+        : promptCompile.unresolved.length > 0
+          ? 'unresolved-refs'
+          : promptCompile.stale.length > 0
+            ? 'stale-products'
+            : promptCompile.total === 0
+              ? 'none'
+              : 'clean',
+      count: promptCompile.failures.length + promptCompile.unresolved.length + promptCompile.stale.length,
+      detail: [
+        ...promptCompile.failures.slice(0, 20).map((f) => `[错误] ${f.agentId}：演练编译失败：${f.error}`),
+        ...promptCompile.unresolved
+          .slice(0, 20)
+          .map((u) => `[警告] ${u.agentId}：${u.count} 个字段引用占位符未解析（原样发给模型）${u.sample ? `：${u.sample}` : ''}`),
+        ...promptCompile.stale.slice(0, 20).map((s) => `[警告] ${s.agentId}：已落库的编译产物已过期（源文本或路由表已变化）`),
+        promptCompile.total > 0
+          ? `[提示] 已落库编译产物 ${promptCompile.persistedFresh}/${promptCompile.total} 条；其余运行时由源文本直出（当前阶段编译为演练观察，不落库）`
+          : '',
+      ].filter(Boolean),
+      cause: '二级编译按字段路由表重写提示词的输入/输出说明：演练编译失败说明线上一直发的是未重写原文；失效的字段引用占位符会原样进提示词；已落库的重写产物过期时运行时用到旧版',
+      action: 'manual',
+      fixHint: '需开发处理：按明细修复提示词源文本或字段路由表；可在提示词工作台的编译预览里逐条对照复现',
+      source: 'check-prompt-compile-health.ts（compilePrompt 演练）',
+    }),
     // ============ override-record（覆盖层，info 只读） ============
     buildItem('override-record', {
       label: '覆盖行（覆盖权高于文件基准）',
@@ -731,6 +792,7 @@ export const HEALTH_CENTER_MANUAL_GUIDANCE: Record<string, string> = {
   'w1-active': 'W1 属一致性偏差：执行"编译+同步"补缺侧，或登记/清理残留侧',
   'w2-registration': 'W2 属一致性偏差：在 skills/index.ts 补注册片段后重启，或清理幽灵行',
   'w3-wiring': 'W3 属一致性偏差（两边各维护一份）：在 coordinator 定义里补 steps，或登记豁免、移除引用',
+  'prompt-compile': '编译层属一致性偏差（源文本与路由表双向）：需开发按明细修复提示词源文本或路由表，可在提示词工作台编译预览复现',
 };
 
 export const HEALTH_CENTER_READONLY_GUIDANCE: Record<string, string> = {

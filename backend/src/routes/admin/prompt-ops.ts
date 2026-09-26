@@ -37,6 +37,7 @@ import {
   findEvalRunById,
 } from '../../services/admin/prompt-ops.repo';
 import { findProfileById, filterExistingProfileIds } from '../../services/virtual-lab/virtual-learner-profile.repo';
+import { routingKeyFor } from '../../services/prompt-manifest/check-prompt-compile-health';
 import { logger } from '../../utils/logger';
 import { loadAllPromptFiles } from '../../composers/prompt-files/loader';
 import {
@@ -1776,8 +1777,8 @@ router.get('/:agentId/compile-info', async (req: Request, res: Response) => {
 
     const source: string = activePrompt.systemPrompt || '';
 
-    // routing 表用的 key 是无 skill: 前缀的版本 (从 seed 脚本和 goal-conversation/index.ts 推断)
-    const routingKey = rawId.startsWith('skill:') ? rawId.slice(6) : rawId;
+    // routing 表用的 key 是无 skill: 前缀的版本（约定收口在 routingKeyFor，与健康中心编译层检查共用）
+    const routingKey = routingKeyFor(rawId);
     const compileResult = await compilePrompt(source, routingKey);
 
     res.json({

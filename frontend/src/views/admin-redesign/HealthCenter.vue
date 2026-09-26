@@ -50,7 +50,7 @@
         <details>
           <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">本页看什么？</h3>
-            <span class="mk-card__meta">系统健康 13 项检查 · Skill 是否健康运行 · 点开看术语速查</span>
+            <span class="mk-card__meta">系统健康 {{ displayReport.health.summary.total }} 项检查 · Skill 是否健康运行 · 点开看术语速查</span>
           </summary>
           <div class="hc-guide__body">
             <p><b>健康检查</b>：系统自动检查 Skill 运行的各个环境（配置、注册、提示词版本等），异常项可一键修复或跳转处理。</p>
