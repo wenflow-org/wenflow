@@ -2633,6 +2633,12 @@ onBeforeUnmount(() => {
   .tutor__scroll { padding: 14px; }
   .oscene { padding: 12px 14px; }
   .learn__live { font-size: 12px; }
+  /* 续课卡三按钮收小（2026-09-26 用户「从这继续/重新开始/先看看按钮还很大」）：
+     卡内选项按触诊分级取紧凑档——主 40 / 次 36（非页级主 CTA，不占 44）；
+     align-items:center 防 flex stretch 把次钮拉到与主钮同高 */
+  .oscene__actions { align-items: center; }
+  .oscene__actions .btn-primary { padding: 8px 15px; font-size: 13px; min-height: 40px; }
+  .oscene__actions .btn-ghost { padding: 5px 12px; min-height: 36px; }
 }
 </style>
 
@@ -2665,6 +2671,9 @@ onBeforeUnmount(() => {
     border-radius: var(--mk-radius-modal);
     padding: 10px 12px 12px;
     box-shadow: 0 12px 32px rgba(23, 32, 51, 0.16);
+    /* 锚点 .kp 是 pointer-events:none（零占位锚点），面板必须单独放开——否则整个
+       悬浮层点击穿透，点面板实际按到下面盖住的续课卡按钮（2026-09-26 用户实测踩中） */
+    pointer-events: auto;
   }
   .composer { position: relative; gap: 0; padding: 8px 10px 22px; }
   /* AI 声明浮在底部 22px 留白条里，不再独立占一行（goal 页同款做法） */
