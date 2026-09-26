@@ -188,7 +188,12 @@
           <tbody>
             <tr v-for="item in detail.reviewPlan.items" :key="item.conceptKey">
               <td>{{ item.label }}<small class="mr__sub">{{ item.conceptKey }}</small></td>
-              <td class="mk-num">{{ Math.round(item.retention * 100) }}%</td>
+              <td class="mk-num">
+                <span class="mr-pct" :class="{ 'mr-pct--warn': item.retention < 0.7 }" :title="`记忆强度 ${Math.round(item.retention * 100)}%，低于 70% 优先安排`">
+                  <b>{{ Math.round(item.retention * 100) }}%</b>
+                  <span class="mr-pct__bar" aria-hidden="true"><i :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
+                </span>
+              </td>
               <td>{{ item.reason }}</td>
               <td class="mk-num">{{ item.load }}</td>
               <td class="mr__sub">{{ item.loadFactors.join('、') || '—' }}</td>
@@ -231,8 +236,18 @@
           <tbody>
             <tr v-for="trace in detail.duePreview" :key="trace.conceptKey">
               <td>{{ trace.label }}</td>
-              <td class="mk-num" :class="{ 'mr__num--warn': trace.retention < 0.7 }">{{ Math.round(trace.retention * 100) }}%</td>
-              <td class="mk-num">{{ Math.round(trace.masteryScore * 100) }}%</td>
+              <td class="mk-num">
+                <span class="mr-pct" :class="{ 'mr-pct--warn': trace.retention < 0.7 }" :title="`记忆强度 ${Math.round(trace.retention * 100)}%`">
+                  <b>{{ Math.round(trace.retention * 100) }}%</b>
+                  <span class="mr-pct__bar" aria-hidden="true"><i :style="{ width: Math.round(trace.retention * 100) + '%' }"></i></span>
+                </span>
+              </td>
+              <td class="mk-num">
+                <span class="mr-pct" :title="`掌握 ${Math.round(trace.masteryScore * 100)}%`">
+                  <b>{{ Math.round(trace.masteryScore * 100) }}%</b>
+                  <span class="mr-pct__bar mr-pct__bar--blue" aria-hidden="true"><i :style="{ width: Math.round(trace.masteryScore * 100) + '%' }"></i></span>
+                </span>
+              </td>
               <td class="mk-num">{{ trace.extractionCount }}</td>
               <td class="mr__sub">{{ trace.source }}</td>
               <td>{{ trace.dueAt ? new Date(trace.dueAt).toLocaleString() : '—' }}</td>
@@ -247,13 +262,27 @@
         <div class="mk-card__head">
           <h3 class="mk-card__title">概念归并审计</h3>
           <span class="mk-card__meta">
-            <template v-if="detail.audit">
-              {{ detail.audit.mode }} 模式 · {{ timeAgo(detail.audit.generatedAt) }} ·
-              候选 {{ detail.audit.stats.candidates }} · 建议 {{ detail.audit.stats.proposed }} ·
-              可自动 {{ detail.audit.stats.autoApplicable }} · 已执行 {{ detail.audit.stats.applied }} / 删除 {{ detail.audit.stats.deleted }}
-            </template>
+            <template v-if="detail.audit">{{ detail.audit.mode }} 模式 · {{ timeAgo(detail.audit.generatedAt) }}</template>
             <template v-else>尚未观察（点「重新观察」跑一次）</template>
           </span>
+        </div>
+        <!-- 审计计数（批E）：卡头 6 计数平摊 → 处理队列四格（与概览带同一语言） -->
+        <div v-if="detail.audit" class="mr-audit-queue">
+          <div class="mr-audit-queue__item">
+            <b>{{ detail.audit.stats.candidates }}</b><span>候选</span>
+          </div>
+          <div class="mr-audit-queue__item">
+            <b>{{ detail.audit.stats.proposed }}</b><span>建议</span>
+          </div>
+          <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': detail.audit.stats.autoApplicable > 0 }">
+            <b>{{ detail.audit.stats.autoApplicable }}</b><span>可自动</span>
+          </div>
+          <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': detail.audit.stats.ambiguous > 0 }">
+            <b>{{ detail.audit.stats.ambiguous }}</b><span>需人工看</span>
+          </div>
+          <div class="mr-audit-queue__item mr-audit-queue__item--quiet">
+            <b>{{ detail.audit.stats.applied }}<i>/ {{ detail.audit.stats.deleted }}</i></b><span>已执行 / 删除</span>
+          </div>
         </div>
 
         <template v-if="detail.audit">
@@ -298,8 +327,18 @@
                 </td>
                 <td>{{ proposal.canonical }}</td>
                 <td class="mr__sub">{{ proposal.aliases.join(' / ') }}</td>
-                <td class="mk-num">{{ Math.round(proposal.confidence * 100) }}%</td>
-                <td class="mk-num" :class="{ 'mr__num--warn': !proposal.autoApplicable }">{{ Math.round(proposal.lexicalSimilarity * 100) }}%</td>
+                <td class="mk-num">
+                  <span class="mr-pct" :title="`把握度 ${Math.round(proposal.confidence * 100)}%`">
+                    <b>{{ Math.round(proposal.confidence * 100) }}%</b>
+                    <span class="mr-pct__bar mr-pct__bar--blue" aria-hidden="true"><i :style="{ width: Math.round(proposal.confidence * 100) + '%' }"></i></span>
+                  </span>
+                </td>
+                <td class="mk-num">
+                  <span class="mr-pct" :class="{ 'mr-pct--warn': !proposal.autoApplicable }" :title="`词面相似 ${Math.round(proposal.lexicalSimilarity * 100)}%${proposal.autoApplicable ? '' : '（未过词面闸门）'}`">
+                    <b>{{ Math.round(proposal.lexicalSimilarity * 100) }}%</b>
+                    <span class="mr-pct__bar" aria-hidden="true"><i :style="{ width: Math.round(proposal.lexicalSimilarity * 100) + '%' }"></i></span>
+                  </span>
+                </td>
                 <td>{{ proposal.autoApplicable ? '是' : '需人工确认' }}</td>
                 <td class="mr__sub">{{ proposal.rationale || '—' }}</td>
               </tr>
@@ -746,6 +785,23 @@ onMounted(async () => {
 .mr__warn { margin-top: 8px; padding: 8px 10px; border-radius: var(--mk-radius-xl); border: 1px solid rgba(217, 119, 6, 0.3); background: rgba(217, 119, 6, 0.06); font-size: var(--mk-fs-micro); }
 .mr__chip { display: inline-block; margin-left: 8px; }
 .mr__detail { display: grid; gap: 14px; }
+/* 明细区百分比列（批E）：数字+色阶条，与概览带/用户表同一语言 */
+.mr-pct { display: grid; gap: 2px; justify-items: start; }
+.mr-pct b { font-variant-numeric: tabular-nums; font-weight: 700; }
+.mr-pct__bar { display: block; width: 52px; height: 4px; border-radius: var(--mk-radius-pill); background: var(--mk-surface-2); overflow: hidden; }
+.mr-pct__bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-green); }
+.mr-pct__bar--blue i { background: var(--mk-blue); }
+.mr-pct--warn .mr-pct__bar i { background: var(--mk-amber); }
+.mr-pct--warn b { color: var(--mk-amber); }
+/* 审计处理队列（批E）：复用概览带队列格语言 */
+.mr-audit-queue { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 10px 16px 4px; }
+.mr-audit-queue__item { display: grid; gap: 1px; padding: 8px 11px; border-radius: var(--mk-radius-lg); background: var(--mk-surface-2); }
+.mr-audit-queue__item--hot { background: color-mix(in srgb, var(--mk-amber) 10%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mk-amber) 32%, transparent); }
+.mr-audit-queue__item--hot b { color: var(--mk-amber); }
+.mr-audit-queue__item--quiet { background: transparent; }
+.mr-audit-queue__item b { font-size: 18px; font-weight: 800; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
+.mr-audit-queue__item b i { font-style: normal; font-size: 12px; font-weight: 600; color: var(--mk-faint); }
+.mr-audit-queue__item span { font-size: 11px; color: var(--mk-muted); }
 .mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
 .mr__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 10px; }
 .mr__warn-inline { color: var(--mk-amber); font-size: var(--mk-fs-micro); }
