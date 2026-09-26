@@ -439,6 +439,9 @@ onMounted(() => {
   /* 28×28 → 34×34 → 36×36（mobile:spec 的 lt36 门禁）：分享是卡角唯一的手势目标 */
   .ach-share { width: 36px; height: 36px; top: 4px; right: 4px; }
   .ov { padding: 12px 14px; }
+  /* 总览条原来横向 18px，和下面一整列 .ach-card 的 14px 差 4px——
+     同宽卡堆在一列里，内容左缘落在 33/29 两条线上（2026-09-26 对齐走查）。 */
+  .ov-line { padding-left: 14px; padding-right: 14px; }
   .ov b { font-size: 16px; } /* 统计数字全站统一 16px */
   .ov small { font-size: 12px; }
   .ach-card { padding: 12px 14px; }

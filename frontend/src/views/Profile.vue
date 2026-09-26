@@ -780,8 +780,10 @@ async function handleDeactivate() {
 
   /* 资料卡再收一档（2026-09-24 反馈「个人中心五个选项里的内容都偏大」）：
      390 下 hero 卡 182px 高，统计卡 8px 上下边距 + 17px 数字是主要开销。
-     只收内边距与数字，标签字号抬回 12px（见上面 stat-card span）——卡片可以紧，字不能更小。 */
-  .profile-hero { padding: 12px; }
+     只收内边距与数字，标签字号抬回 12px（见上面 stat-card span）——卡片可以紧，字不能更小。
+     横向跟 .uc-card 的 14px 对齐（2026-09-26 对齐走查）：原来是 12px，同页堆叠时
+     内容左缘比下面几张卡左 2px，一列卡看着就是「没对齐」。 */
+  .profile-hero { padding: 12px 14px; }
   .stat-card { padding: 6px 10px; }
   .stat-card strong { font-size: 16px; }
   .uc-card__foot { margin-top: 10px; padding-top: 10px; }

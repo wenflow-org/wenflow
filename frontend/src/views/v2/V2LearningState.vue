@@ -1090,7 +1090,10 @@ function loadGuidance() {
   .chart,
   .suggest,
   .decisions { padding: 14px 16px; }
-  .sidecard { padding: 12px 14px; }
+  /* 移动端单列堆叠，同宽卡片必须共用一条内容轨道：sidecard 原来横向 14 而
+     vitals / band 都是 16，内容左缘落在 29/31 两条线上（2026-09-26 对齐走查）。
+     只动横向，竖向 12 是它自己的紧凑节奏。 */
+  .sidecard { padding: 12px 16px; }
   .chart__loading { padding: 28px 0; }
   .chart__empty { padding: 24px 0; }
   /* 分段控件（42/90 天）与 AI 建议的 CTA 实测 34px，抬到 36（mobile:spec lt36 门禁）。
@@ -1125,4 +1128,19 @@ function loadGuidance() {
 .band__body { padding: 0 16px 16px; }
 .band.sidecard .band__toggle { padding: 12px 16px; }
 .band.sidecard .band__body { padding: 0 16px 14px; }
+
+/* 折叠带头部在 390 下会被挤爆（2026-09-26 用户侧对齐走查实测）：
+   .band__toggle 只分到 231px，而标题「健康度 · 疲劳 · 状态」按 white-space:normal
+   折成两行、副标「近 42 天趋势」需要 69px 只给 59px 被截成「近 42 天…」——
+   同一个头部同时出两种破版。根因是头部把「标题+副标+箭头」和「分段控件」塞在一行。
+   改成让位换行的顺序：标题+副标独占一行（330px 够放 209px 的内容），
+   42/90 天分段控件落到第二行贴右缘。
+   必须放在本条块之后：同权重下后出现者胜。 */
+@media (max-width: 1100px) {
+  .band__head { flex-wrap: wrap; row-gap: 2px; }
+  .band__toggle { flex: 1 1 100%; }
+  /* 标题折行读作「本节知识 / 点」那种断词，比截断更难看，直接禁掉 */
+  .band__toggle strong { white-space: nowrap; }
+  .band__extra { margin-left: auto; }
+}
 </style>

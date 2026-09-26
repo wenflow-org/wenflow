@@ -723,6 +723,10 @@ const testMcpTool = async (tool: UserMcpToolConfig) => {
   .api-form { gap: 12px; }
   .api-form__grid { gap: 10px; }
   .action-buttons { gap: 8px; margin-top: 4px; }
+  /* 移动端单列堆叠时，同宽卡片要共用一条内容轨道：状态条原来横向 18px、下面的
+     .uc-card 是 14px，内容左缘落在 33/29 两条线上（2026-09-26 对齐走查）。
+     只动横向，竖向内边距是它自己的节奏。 */
+  .settings-status { padding-left: 14px; padding-right: 14px; }
 }
 
 .api-form__grid {

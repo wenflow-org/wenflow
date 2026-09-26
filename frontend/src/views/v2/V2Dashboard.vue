@@ -1361,7 +1361,9 @@ onMounted(loadAll);
   display: grid; gap: 16px;
 }
 .greet { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
-.greet__left { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+/* min-width: 0：让 .greet__sub 的省略号接管「排不下」这件事（移动块本来就写了，
+   桌面端补上——不然 nowrap 的整句会成为 flex 下限，收缩不了、反而顶宽整行） */
+.greet__left { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 14px; color: var(--muted); }
 .greet__left strong { font-size: 16px; color: var(--ink); }
 .greet__dot { width: 4px; height: 4px; border-radius: 50%; background: var(--faint); }
 .streak {
@@ -1794,7 +1796,13 @@ a.btn-primary { text-decoration: none; }
 .greet__sub {
   font-size: 12px;
   color: var(--faint);
-  max-width: 46ch;
+  /* 原为 max-width: 46ch。46ch ≈ 324px，而 1440 实测这句问候需要 506px，
+     于是「…那我们从「别人能看…」被切断，右侧还空着 ~195px（行动卡行宽 1024，
+     问候 650 + 连续天数 179）——一个句子被硬帽截断比排不下才截断难看得多。
+     改成不设帽：靠 flex 收缩，只有真的排不下才出省略号。
+     min-width: 0 两处都要：不写的话 flex 项的下限是内容宽度（nowrap 全句），
+     收缩不了，最后会顶宽整行。 */
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
