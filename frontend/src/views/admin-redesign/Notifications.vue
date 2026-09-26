@@ -188,7 +188,7 @@
               </div>
               <p v-else-if="targetSearched" class="nt-none">没有匹配用户</p>
             </div>
-            <div v-if="sendError" class="mk-alert">{{ sendError }}</div>
+            <div v-if="sendError" class="mk-alert" role="alert">{{ sendError }}</div>
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" @click="sendOpen = false">取消</button>

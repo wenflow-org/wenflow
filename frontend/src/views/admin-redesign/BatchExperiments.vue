@@ -133,7 +133,7 @@
               </div>
               <button type="button" class="mk-link" :disabled="form.learners.length >= 20" @click="addLearner">+ 添加学习者</button>
             </div>
-            <div v-if="errorMsg" class="mk-alert">{{ errorMsg }}</div>
+            <div v-if="errorMsg" class="mk-alert" role="alert">{{ errorMsg }}</div>
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" @click="createOpen = false">取消</button>

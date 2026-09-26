@@ -205,7 +205,7 @@
               </button>
             </div>
             <p v-else-if="grantSearched" class="ac-none">没有匹配用户</p>
-            <div v-if="grantError" class="mk-alert">{{ grantError }}</div>
+            <div v-if="grantError" class="mk-alert" role="alert">{{ grantError }}</div>
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" @click="grantOpen = false">取消</button>

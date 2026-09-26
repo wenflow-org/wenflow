@@ -32,7 +32,7 @@
           <span class="mk-field__label">批次备注 <em class="vl-req-less">可选</em></span>
           <input v-model="batchNote" class="mk-field__input" placeholder="这批学习者用于什么实验 / 验收，方便以后识别" />
         </label>
-        <div v-if="batchError" class="mk-alert">{{ batchError }}</div>
+        <div v-if="batchError" class="mk-alert" role="alert">{{ batchError }}</div>
         <button type="button" class="mk-btn mk-btn--primary mk-btn--block" :disabled="batchCreating" @click="doBatchCreate">
           {{ batchCreating ? '创建中…' : `创建 ${batchFillCount || 0} 人 × ${batchStoryCount || 0} 故事（后台生成）` }}
         </button>

@@ -340,7 +340,7 @@
               <input v-model="form.enabled" type="checkbox" />
               <span class="mk-field__label" style="margin:0">参与批量评估（不勾就只单独试跑时用）</span>
             </label>
-            <div v-if="formError" class="mk-alert">{{ formError }}</div>
+            <div v-if="formError" class="mk-alert" role="alert">{{ formError }}</div>
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" :disabled="saving || savingRun" @click="formOpen = false">取消</button>

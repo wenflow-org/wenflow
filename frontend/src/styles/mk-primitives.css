@@ -683,6 +683,11 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-filter .mk-filter__input,
 .log-advpanel .mk-filter__input { min-width: 180px; }
 .mk-pills { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: var(--mk-pills-bg); border-radius: var(--mk-radius-xl); }
+/* 页签语言分工（2026-09-26 钉死，组件统一性调查复核结论）：
+   ① 顶层视图/筛选切换 → .mk-pills（胶囊，如 People/GoalConversations 视图 pills）；
+   ② 抽屉/弹窗**内部**内容分区 → 下划线式 tab（ts-tabs/pe-tabs 形态：底线+sticky），与胶囊是两种合法 genre，勿互改；
+   ③ 管线步骤可视化（阶段流转）→ stepper（RunStageBar/orch-stage-tabs/cp-stage），语义是流程不是选择，禁改成 pills。
+   已核验 LearnerDetail ld-tabs / VirtualProfile vp-tabsrow 实际用的就是 mk-pill，勿另起私搓容器。 */
 /* 主视图切换（.mk-page 的直接子级 pills）：统一左对齐 + 按内容宽度收缩。
    否则在 grid / flex 列容器里会被 justify-self:stretch / align-items:stretch 拉伸成整行
    ——虚拟学习者、执行日志、系统工具曾出现 pills 占满整行的「超长」形态。 */
@@ -1612,7 +1617,12 @@ body.admin-route code { font-size: inherit; }
   .mk-batchbar__btn, .mk-batchbar__danger { padding: 8px 19px; }
 }
 
-/* ----- 提示/错误条（表单错误、批量任务提示等统一形态；替代页面级 errorbar/vl-steps） ----- */
+/* ----- 提示/错误条（表单错误、批量任务提示等统一形态；替代页面级 errorbar/vl-steps）
+   错误展示口径（2026-09-26 钉死，三通道各司其职，勿再自创）：
+   ① 页级初始加载失败（整页无数据可显示）→ MkEmptyState tone="error" + 重试动作；
+   ② 区块级失败/降级（卡内或局部，页面其余部分可用、或有旧数据/占位展示）→ .mk-alert（必须 role="alert"）；
+   ③ 操作反馈（按钮触发的动作成败）→ toast（utils/toast），不落页面。
+   状态条 meta 翻红仅作为已有骨架的辅助信号，不单独承载错误文案。 ----- */
 .mk-alert {
   display: block;
   padding: 8px 12px;
