@@ -88,34 +88,11 @@
             <button type="button" class="mk-link" @click="goExecLogs">逐调用明细 →</button>
           </div>
         </div>
-        <div v-if="trend.length" class="tc-trend">
-          <!-- Y 轴刻度 -->
-          <div class="tc-trend__axis" aria-hidden="true">
-            <span>{{ fmtTokens(trendMax) }}</span>
-            <span>{{ fmtTokens(trendMax / 2) }}</span>
-            <span>0</span>
-          </div>
-          <div class="tc-trend__plot">
-            <div
-              v-for="d in trend"
-              :key="d.date"
-              class="tc-trend__col"
-              :title="`${d.date}：${fmtTokens(d.tokens)} · ${d.calls} 次 · 失败 ${d.failed}`"
-            >
-              <div class="tc-trend__bar-track">
-                <i
-                  v-if="d.tokens > 0"
-                  class="tc-trend__bar"
-                  :class="{ 'tc-trend__bar--today': isToday(d.date) }"
-                  :style="{ height: trendH(d.tokens) }"
-                >
-                  <span class="tc-trend__val">{{ fmtTokens(d.tokens) }}</span>
-                </i>
-              </div>
-              <span class="tc-trend__day" :class="{ 'tc-trend__day--today': isToday(d.date), 'tc-trend__day--empty': d.tokens === 0 }">{{ dayLabel(d.date) }}</span>
-            </div>
-          </div>
-        </div>
+        <!-- 批D：MkChart 双系列（Token 主柱+失败副柱），tooltip/图例/暗色主题随 mk 体系 -->
+        <MkChart v-if="trend.length" :option="trendChartOption" height="200px" />
+        <p v-if="trend.length" class="mk-card__note">
+          合计 {{ fmtTokens(trend.reduce((acc, d) => acc + d.tokens, 0)) }} token · {{ trend.reduce((acc, d) => acc + d.calls, 0) }} 次调用 · 失败 {{ trend.reduce((acc, d) => acc + d.failed, 0) }} 次
+        </p>
         <p v-else class="mk-card__note">近 {{ days }} 天暂无调用记录。</p>
       </section>
 
@@ -179,10 +156,14 @@ import { errMsg, isPageCacheFresh, markPageFetched } from './live'
 import { adminTokenCostApi } from '@/api/adminApi'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
+import MkChart from '@/components/mk/MkChart.vue'
+import { MK_CHART_PALETTES } from '@/components/mk/chartPalette'
+import { useIsDark } from '@/composables/useIsDark'
 import TcRankTable, { type RankRow } from './TcRankTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { toast } from '@/utils/toast'
+import type { EChartsCoreOption } from 'echarts/core'
 
 /** 嵌入模式：作为「执行日志」页「成本分析」tab 渲染（仅去掉外层壳，状态条/筛选/排行保留） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
@@ -296,16 +277,44 @@ function dayLabel(date: string): string {
   return `${m}/${d}`
 }
 
-function isToday(date: string): boolean {
-  const [y, m, d] = date.split('-').map(Number)
-  const today = new Date()
-  return y === today.getFullYear() && m === today.getMonth() + 1 && d === today.getDate()
-}
+/* 批D：手搓柱的 isToday/trendMax/trendH 随 MkChart 迁移移除 */
 
-const trendMax = computed(() => Math.max(1, ...trend.value.map((t) => t.tokens)))
-function trendH(tokens: number): string {
-  return `${Math.max(2, Math.round((tokens / trendMax.value) * 100))}%`
-}
+/* 批D：手搓 CSS 趋势柱 → MkChart 双系列（tokens 主柱 + failed 副柱）。
+   数据与 Overview trend7d 同构；今日列用 axisLabel 强调替代原「实色柱」。 */
+const isDark = useIsDark()
+const trendChartOption = computed<EChartsCoreOption>(() => {
+  const days = trend.value
+  const pal = MK_CHART_PALETTES[isDark.value ? 'dark' : 'light']
+  return {
+    animationDuration: 300,
+    grid: { left: 46, right: 8, top: 14, bottom: 20 },
+    tooltip: { trigger: 'axis', confine: true, axisPointer: { type: 'shadow' } },
+    legend: { show: true, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 10 } },
+    xAxis: {
+      type: 'category',
+      data: days.map((d) => dayLabel(d.date)),
+      axisTick: { show: false },
+      axisLabel: { fontSize: 10 },
+    },
+    yAxis: { type: 'value', axisLabel: { fontSize: 10, formatter: (v: number) => fmtTokens(v) } },
+    series: [
+      {
+        name: 'Token',
+        type: 'bar',
+        data: days.map((d) => d.tokens),
+        barWidth: '38%',
+        itemStyle: { color: pal.primaryBright, borderRadius: [2, 2, 0, 0] },
+      },
+      {
+        name: '失败调用',
+        type: 'bar',
+        data: days.map((d) => d.failed),
+        barWidth: '18%',
+        itemStyle: { color: pal.danger, borderRadius: [2, 2, 0, 0] },
+      },
+    ],
+  }
+})
 </script>
 
 <style scoped>
@@ -340,92 +349,7 @@ function trendH(tokens: number): string {
   margin-left: auto;
 }
 .tc-head-links .mk-card__meta { margin-left: 0; }
-.tc-trend {
-  display: grid;
-  grid-template-columns: 48px 1fr;
-  gap: 12px;
-  height: 200px;
-  padding: 14px 16px 12px;
-}
-/* Y 轴刻度（max / max/2 / 0 三档，与网格线对齐） */
-.tc-trend__axis {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-end;
-  padding-bottom: 24px; /* 留出底部日期行高，使 0 刻度线不与日期重叠 */
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.tc-trend__plot {
-  display: flex;
-  gap: 8px;
-  /* 三条水平网格线：max / max/2 / 0（背景渐变重复模拟虚线网格） */
-  background-image: repeating-linear-gradient(
-    to top,
-    transparent 0,
-    transparent calc(33.333% - 1px),
-    var(--mk-line) calc(33.333% - 1px),
-    var(--mk-line) 33.333%
-  );
-  background-size: 100% 100%;
-  padding-bottom: 24px;
-}
-.tc-trend__col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.tc-trend__bar-track {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-.tc-trend__bar {
-  position: relative;
-  width: 62%;
-  min-height: 2px;
-  background: linear-gradient(180deg, var(--mk-blue, #5b8def), var(--mk-accent-deep, #2f6fed));
-  border-radius: 4px 4px 0 0;
-  opacity: 0.72;
-  transition: opacity 0.12s;
-}
-.tc-trend__bar:hover { opacity: 1; }
-/* 今日柱：实色高亮（非透明），视觉聚焦最新一天 */
-.tc-trend__bar--today {
-  opacity: 1;
-  background: linear-gradient(180deg, #5b8def, #1f57cc);
-  box-shadow: 0 0 0 1px rgba(44, 99, 208, 0.25);
-}
-/* 柱顶数值（柱子够高时显示；矮柱可借 hover title 查看） */
-.tc-trend__val {
-  position: absolute;
-  top: -18px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  pointer-events: none;
-}
-.tc-trend__day {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.tc-trend__day--today { color: var(--mk-blue); font-weight: 700; }
-.tc-trend__day--empty { color: var(--mk-faint); opacity: 0.55; }
+/* 批D：手搓 tc-trend 柱图已换 MkChart（双系列 tokens+failed），原 80 行私有图表 CSS 与 6 处渐变 hex 一并移除 */
 
 /* —— 用量排行 —— */
 .tc-card--skill { grid-column: 1 / -1; }
@@ -452,29 +376,13 @@ function trendH(tokens: number): string {
   cursor: pointer;
   transition: background 0.12s;
 }
-.tc-more:hover { background: rgba(44, 99, 208, 0.08); }
+.tc-more:hover { background: color-mix(in srgb, var(--mk-blue) 8%, transparent); }
 
-/* 4K：趋势图跟随全站节奏 */
-@media (min-width: 2000px) {
-  .tc-trend { height: 230px; }
-  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: var(--mk-fs-micro); }
-  .tc-trend__bar { width: 58%; }
-}
-@media (min-width: 2800px) {
-  .tc-trend { height: 270px; }
-  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: var(--mk-fs-micro); }
-  .tc-trend__bar { width: 54%; }
-}
-@media (min-width: 3600px) {
-  .tc-trend { height: 310px; }
-  .tc-trend__day, .tc-trend__val, .tc-trend__axis { font-size: var(--mk-fs-body); }
-  .tc-trend__bar { width: 50%; }
-}
+/* 4K 档 tc-trend 规则随 MkChart 迁移移除（批D）；MkChart 高度如需 4K 放大走其组件内档位 */
 
 /* 暗色模式（D1 补完）：Token 成本 */
 html[data-theme='dark'] {
-  .tc-trend__bar { background: linear-gradient(180deg, #5b8def, #2f6fed); }
-  .tc-trend__bar--today { background: linear-gradient(180deg, #7aa2ff, #3b6fe0); }
+  /* tc-trend 柱暗色渐变已随 MkChart 迁移移除（批D），图表暗色走 MK_CHART_PALETTES.dark */
   .tc-more:hover { background: rgba(91, 141, 239, 0.14); }
 }
 
