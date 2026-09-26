@@ -71,9 +71,18 @@
       <!-- 左：知识点面板（移动端默认折叠为头部横条，点击展开；桌面恒展开） -->
       <aside v-if="knowledgePoints.length" class="kp" :class="{ 'kp--collapsed': !kpExpanded }">
         <button type="button" class="kp__head" :aria-expanded="kpExpanded" @click="toggleKp">
-          <strong>本节知识点</strong>
-          <span>{{ masteredCount }} / {{ knowledgePoints.length }} 已掌握<template v-if="inProgressCount"> · 进行中 {{ inProgressCount }}</template></span>
-          <span class="kp__caret" aria-hidden="true">{{ kpExpanded ? '▾' : '▸' }}</span>
+          <span class="kp__head-main">
+            <svg class="kp__ring" viewBox="0 0 20 20" aria-hidden="true">
+              <circle class="kp__ring-track" cx="10" cy="10" r="8" />
+              <circle class="kp__ring-val" :class="{ 'kp__ring-val--none': !masteredCount }" cx="10" cy="10" r="8" :stroke-dasharray="kpRingDash" />
+            </svg>
+            <strong>本节知识点</strong>
+          </span>
+          <span class="kp__head-meta">
+            <span v-if="inProgressCount" class="kp__chip kp__chip--progress">进行中 {{ inProgressCount }}</span>
+            <span class="kp__chip kp__chip--mastered" :class="{ 'kp__chip--empty': !masteredCount }">{{ masteredCount }}/{{ knowledgePoints.length }} 已掌握</span>
+            <span class="kp__caret" aria-hidden="true">{{ kpExpanded ? '▾' : '▸' }}</span>
+          </span>
         </button>
         <div class="kp__body">
           <div class="kp__bar"><i :style="{ width: weightedProgressPct + '%' }"></i></div>
@@ -1319,6 +1328,14 @@ const {
   masteredCount, inProgressCount, weightedProgressPct
 } = useKnowledgePanel(knowledgePoints)
 
+/* 头部掌握度小圆环：r=8 → 周长 2πr≈50.27，弧长 = 已掌握/总数（与「n/N 已掌握」胶囊同口径） */
+const KP_RING_C = 2 * Math.PI * 8;
+const kpRingDash = computed(() => {
+  const total = knowledgePoints.value.length;
+  const frac = total ? masteredCount.value / total : 0;
+  return `${(frac * KP_RING_C).toFixed(2)} ${KP_RING_C.toFixed(2)}`;
+});
+
 /* ---------- 知识点图谱（列表/图谱切换；图谱按需加载，只取当前路径） ---------- */
 const kpView = ref<'list' | 'graph'>('list')
 const graphNodes = ref<MkGraphNode[]>([])
@@ -1527,7 +1544,24 @@ onBeforeUnmount(() => {
   border: 0; background: transparent; padding: 0; margin: 0;
   font: inherit; color: inherit; text-align: left; cursor: default;
 }
-.kp__head span { font-size: 12px; font-weight: 800; color: var(--blue-deep); }
+/* 头部信息组（2026-09-26 用户「0/2已掌握进行中1 太丑，数据平摊着」）：
+   左 = 掌握度小圆环 + 标题，右 = 语义色胶囊（掌握绿 / 进行中蓝，全空灰显），
+   数据不再是裸文字平铺。 */
+.kp__head-main { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.kp__ring { width: 18px; height: 18px; flex-shrink: 0; transform: rotate(-90deg); }
+.kp__ring circle { fill: none; stroke-width: 3; }
+.kp__ring-track { stroke: var(--line); }
+.kp__ring-val { stroke: var(--green); stroke-linecap: round; transition: stroke-dasharray .4s ease; }
+/* 0 掌握时 round 端帽会在起点渲染出绿点（读作进度假象），整段隐藏 */
+.kp__ring-val--none { visibility: hidden; }
+.kp__head-meta { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.kp__chip {
+  font-size: 12px; font-weight: 800; line-height: 1;
+  padding: 4px 8px; border-radius: 999px; white-space: nowrap;
+}
+.kp__chip--mastered { color: var(--green-ink); background: color-mix(in srgb, var(--green) 12%, transparent); }
+.kp__chip--mastered.kp__chip--empty { color: var(--faint); background: var(--mk-surface-2); }
+.kp__chip--progress { color: var(--blue-ink); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .kp__caret { display: none; font-size: 11px; color: var(--faint); flex-shrink: 0; }
 .kp__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .kp__bar { height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
