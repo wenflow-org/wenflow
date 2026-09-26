@@ -1574,6 +1574,7 @@ onBeforeUnmount(() => {
   padding: 20px;
   display: flex; flex-direction: column; gap: 18px;
 }
+
 /* 恢复进度横幅：续上历史时的可见确认（替代一次性 toast） */
 .tutor__resume {
   display: flex;
@@ -2658,5 +2659,13 @@ onBeforeUnmount(() => {
     align-items: flex-start;
     justify-content: center;
   }
+}
+
+/* 桌面阅读宽度：>1100（全局列宽收窄不生效的区段）把消息/卡片限在 ~760px 居中，
+   1440 下一行 70-80 字太宽，65-75 字符/行才可扫读（2026-09-26 布局建议批10）。
+   移动端 ≤1100 由 v2.css 列宽收窄覆盖，不受影响。 */
+@media (min-width: 1101px) {
+  .tutor__scroll > * { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
+  .composer__box { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
 }
 </style>

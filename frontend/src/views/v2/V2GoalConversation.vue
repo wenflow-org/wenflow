@@ -1405,6 +1405,7 @@ function shuffleScenes() {
   display: flex; flex-direction: column; gap: 18px;
   transition: filter .2s ease, opacity .2s ease;
 }
+
 .chat__scroll--dim { filter: blur(2px); opacity: .45; pointer-events: none; }
 
 .msg { display: flex; flex-direction: column; gap: 5px; max-width: 82%; }
@@ -2140,5 +2141,11 @@ function shuffleScenes() {
 [data-theme='dark'] .skeleton i {
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.06) 25%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.06) 75%);
   background-size: 200% 100%;
+}
+
+/* 桌面阅读宽度：>1100 对话内容限 ~760px 居中（同课堂页批10） */
+@media (min-width: 1101px) {
+  .chat__scroll > * { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
+  .composer__box { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
 }
 </style>

@@ -35,12 +35,12 @@
         <div class="summary-item"><span class="summary-label">学习消息</span><span class="summary-value">{{ summaryCounters.display.messages ?? messageCount }} 条</span></div>
       </div>
 
-      <div class="completion-section">
+      <div id="sec-topic" class="completion-section">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Document /></span>主题总结</h4>
         <p class="section-content">{{ summary.topicSummary }}</p>
       </div>
 
-      <div v-if="progressHighlights.length" class="completion-section">
+      <div v-if="progressHighlights.length" id="sec-progress" class="completion-section">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Opportunity /></span>本节进展</h4>
         <ul class="knowledge-list">
           <li v-for="item in progressHighlights" :key="item.title" class="knowledge-item">
@@ -58,7 +58,7 @@
         </ul>
       </div>
 
-      <div v-if="evaluation" class="completion-section">
+      <div v-if="evaluation" id="sec-perf" class="completion-section">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><DataAnalysis /></span>本节表现</h4>
         <p class="section-hint">{{ sessionInterpretation }}</p>
         <div class="metrics-grid metrics-grid--three">
@@ -70,7 +70,7 @@
         </div>
       </div>
 
-      <div v-if="evaluation" class="completion-section">
+      <div v-if="evaluation" id="sec-longterm" class="completion-section">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><TrendCharts /></span>长期状态四维</h4>
         <p class="section-hint">{{ longTermInterpretation }}</p>
         <div class="metrics-grid">
@@ -82,7 +82,7 @@
         </div>
       </div>
 
-      <div class="completion-section">
+      <div id="sec-knowledge" class="completion-section">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Collection /></span>知识点掌握</h4>
         <ul v-if="knowledgeItems.length" class="knowledge-list">
           <li v-for="item in knowledgeItems" :key="item.name" class="knowledge-item">
@@ -96,18 +96,18 @@
         <p v-else class="section-content">{{ summary.knowledgeSummary }}</p>
       </div>
 
-      <div v-if="keyTakeaways.length" class="completion-section">
+      <div v-if="keyTakeaways.length" id="sec-takeaways" class="completion-section">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Collection /></span>关键收获</h4>
         <ol class="ordered-list"><li v-for="(item, idx) in keyTakeaways" :key="`${idx}-${item}`">{{ item }}</li></ol>
       </div>
 
-      <div class="completion-section">
+      <div id="sec-next" class="completion-section">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Compass /></span>下一步建议</h4>
         <ol v-if="actionPlan.length" class="ordered-list"><li v-for="(item, idx) in actionPlan" :key="`${idx}-${item}`">{{ item }}</li></ol>
         <div v-else class="section-content"><MarkdownRenderer :content="summary.practiceAdvice" /></div>
       </div>
 
-      <div class="completion-section">
+      <div id="sec-evaluation" class="completion-section">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><TrendCharts /></span>学习评价</h4>
         <div v-if="hasHighlights" class="evaluation-block">
           <p v-if="formattedStrengths" class="evaluation-line"><strong>亮点：</strong>{{ formattedStrengths }}</p>

@@ -30,6 +30,18 @@
         </span>
       </header>
 
+      <!-- 页内目录：仅 ≥1440 宽显示（报告单列 1080 之外的空地），滚动高亮当前章节 -->
+      <nav class="eval-toc" aria-label="报告目录">
+        <button
+          v-for="item in tocItems"
+          :key="item.id"
+          type="button"
+          class="eval-toc__link"
+          :class="{ 'is-active': activeToc === item.id }"
+          @click="scrollToToc(item.id)"
+        >{{ item.label }}</button>
+      </nav>
+
       <section v-if="loading" class="evaluation-loading">
         <div class="evaluation-loading__inner">
           <div class="evaluation-loading__head">
@@ -93,14 +105,16 @@
           <button type="button" class="evaluation-ctabar__btn evaluation-ctabar__btn--primary" :disabled="completeTaskBusy" @click="handleAction('complete-task')">完成任务</button>
         </div>
 
-        <SessionFeedbackPanel
-          v-if="canSubmitSessionFeedback"
-          :session-id="sessionId"
-          :task-id="taskId"
-          @difficulty-change="subjectiveDifficulty = $event"
-        />
+        <div id="sec-feedback">
+          <SessionFeedbackPanel
+            v-if="canSubmitSessionFeedback"
+            :session-id="sessionId"
+            :task-id="taskId"
+            @difficulty-change="subjectiveDifficulty = $event"
+          />
+        </div>
 
-        <section class="evaluation-transcript-card">
+        <section id="sec-transcript" class="evaluation-transcript-card">
           <div class="evaluation-transcript-card__head">
             <div>
               <p class="evaluation-transcript-card__kicker">本次学习</p>
@@ -584,6 +598,37 @@ const exportPdf = async () => {
 
 /* ── 头部 ⋮ 子菜单（窄屏专用；桌面仍并排按钮） ── */
 const headMenuOpen = ref(false);
+
+/* ── 页内目录（≥1440 固定右栏）：滚动高亮当前章节 ── */
+const tocItems = [
+  { id: 'sec-topic', label: '主题总结' },
+  { id: 'sec-progress', label: '本节进展' },
+  { id: 'sec-perf', label: '本节表现' },
+  { id: 'sec-longterm', label: '长期四维' },
+  { id: 'sec-knowledge', label: '知识点' },
+  { id: 'sec-next', label: '下一步建议' },
+  { id: 'sec-evaluation', label: '学习评价' },
+  { id: 'sec-feedback', label: '你的感受' },
+  { id: 'sec-transcript', label: '当堂对话' },
+];
+const activeToc = ref('');
+function scrollToToc(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function updateTocActive() {
+  let current = '';
+  for (const item of tocItems) {
+    const el = document.getElementById(item.id);
+    if (el && el.getBoundingClientRect().top <= 130) current = item.id;
+  }
+  activeToc.value = current;
+}
+let tocTick = false;
+function onTocScroll() {
+  if (tocTick) return;
+  tocTick = true;
+  requestAnimationFrame(() => { tocTick = false; updateTocActive(); });
+}
 function pickHeadMenu(kind: 'image' | 'pdf' | 'back') {
   headMenuOpen.value = false;
   if (kind === 'image') void exportImage();
@@ -599,6 +644,7 @@ function onHeadMenuOutside(e: MouseEvent) {
 onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange);
   document.addEventListener('click', onHeadMenuOutside);
+  window.addEventListener('scroll', onTocScroll, { passive: true });
   void fetchEvaluation();
 });
 onUnmounted(() => {
@@ -606,6 +652,7 @@ onUnmounted(() => {
   stopPolling();
   document.removeEventListener('visibilitychange', handleVisibilityChange);
   document.removeEventListener('click', onHeadMenuOutside);
+  window.removeEventListener('scroll', onTocScroll);
 });
 </script>
 
@@ -1621,4 +1668,40 @@ onUnmounted(() => {
   color: #fff;
   box-shadow: 0 8px 18px color-mix(in srgb, var(--blue, #3478f6) 30%, transparent);
 }
+
+/* ---------- 页内目录（批10：≥1440 宽屏独占报告右侧空地；窄屏不渲染占位） ---------- */
+.eval-toc { display: none; }
+@media (min-width: 1440px) {
+  .eval-toc {
+    display: grid;
+    gap: 2px;
+    position: fixed;
+    left: calc(50% + 556px);
+    top: 96px;
+    width: 172px;
+    z-index: 10;
+  }
+}
+.eval-toc__link {
+  text-align: left;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted, #5b6577);
+  background: none;
+  border: 0;
+  border-left: 2px solid var(--line, #e3e9f4);
+  border-radius: 0 var(--mk-radius-sm, 6px) var(--mk-radius-sm, 6px) 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+.eval-toc__link:hover { color: var(--blue-deep, #1f57cc); }
+.eval-toc__link.is-active {
+  color: var(--blue-deep, #1f57cc);
+  border-left-color: var(--blue, #3478f6);
+  background: color-mix(in srgb, var(--blue, #3478f6) 7%, transparent);
+}
+/* 锚点落点留出呼吸空间 */
+#sec-topic, #sec-progress, #sec-perf, #sec-longterm, #sec-knowledge,
+#sec-next, #sec-evaluation, #sec-feedback, #sec-transcript { scroll-margin-top: 16px; }
 </style>
