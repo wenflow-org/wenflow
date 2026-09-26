@@ -32,14 +32,15 @@ function isMaterialCollectionEnabled(): boolean {
 
 /**
  * 总超时上限（毫秒）：到点即 fail-open 跳过，避免 path 生成被检索拖死。env 可覆盖，封顶 120s。
- * 默认 60s（2026-09-26 实测调整）：单次抽取 LLM 真实延迟 22.4s（agnes-3.0-flash，15.6k tokens），
- * 旧默认 20s 意味着 sync（preview/诊断）口径**必然超时**——抽取永远跑不完。生产 async 链路
- * 不走此预算（后台 90s），故放宽只影响诊断等待时长。
+ * 默认 90s（2026-09-26 多案例实测对齐 async）：阶段实测 = 搜索 ~4s + 抓取 ~8s（4/5 成功）
+ * + 抽取 22-30s/**条候选串行**——60s 只够"第一条抽取一次成功"，第一条 not_found 再试
+ * 第二条必爆（五案例 E2E 中 3/5 超时即此因）。90s 容纳"抓取顺利 + 两条候选"；
+ * 生产 async 本就走同一预算（后台），不阻塞 path 生成。
  */
 function resolveMaterialCollectionTimeoutMs(): number {
   const raw = Number(process.env.MATERIAL_COLLECTION_TIMEOUT_MS);
   if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 120_000);
-  return 60_000;
+  return 90_000;
 }
 
 /** 单次生成最多采集几条 need（防批量/恶意大量声明拖慢 path 生成）。 */
