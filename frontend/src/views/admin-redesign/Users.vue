@@ -121,27 +121,38 @@
           <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" @click="openSubPage('user', u.id)">
             <td v-if="isLive && showCol('check')"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isTestAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
-              <div class="mk-cell-main">
-                <strong>{{ u.name }}</strong>
-                <span class="mk-cell-sub">{{ u.email }}</span>
-              </div>
-              <div class="ul-tags">
-                <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
-                <span v-else-if="isSelf(u)" class="mk-badge mk-badge--sm mk-badge--self">当前管理员</span>
-                <span v-else-if="u.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
-                <span v-else-if="isTestAccount(u)" class="mk-badge mk-badge--sm mk-badge--warn">测试账号</span>
+              <div class="ul-user">
+                <i class="ul-ava" :class="`ul-ava--${avaTone(u)}`" aria-hidden="true">{{ (u.name || '用')[0] }}</i>
+                <div class="mk-cell-main">
+                  <strong>{{ u.name }}</strong>
+                  <span class="mk-cell-sub">{{ u.email }}</span>
+                </div>
+                <div class="ul-tags">
+                  <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
+                  <span v-else-if="isSelf(u)" class="mk-badge mk-badge--sm mk-badge--self">当前管理员</span>
+                  <span v-else-if="u.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
+                  <span v-else-if="isTestAccount(u)" class="mk-badge mk-badge--sm mk-badge--warn">测试账号</span>
+                </div>
               </div>
             </td>
             <td v-if="showCol('role')"><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
             <td v-if="showCol('level')">
               <div class="ul-level">
-                <span class="ul-level__badge" :title="`XP 推导等级 ${levelFromXp(u.xp)}`">{{ levelLabel(u.xp) }}</span>
+                <span class="ul-level__badge" :class="`ul-level__badge--${levelTone(u.xp)}`" :title="`XP 推导等级 ${levelFromXp(u.xp)}`">{{ levelLabel(u.xp) }}</span>
                 <span class="ul-level__xp" :class="{ 'mk-na': u.xp === 0 }">{{ u.xp }} XP</span>
+                <span
+                  class="ul-level__bar"
+                  :title="u.xp === 0 ? '尚无经验值' : `距 L${levelFromXp(u.xp) + 1} 还需 ${xpToNext(u.xp)} XP`"
+                ><i :style="{ width: xpPct(u.xp) + '%' }"></i></span>
               </div>
             </td>
             <td v-if="showCol('paths')" class="mk-num">{{ u.paths }} / {{ u.sessions }}</td>
             <td v-if="showCol('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
-            <td v-if="showCol('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
+            <td v-if="showCol('lastlogin')">
+              <span class="ul-login" :class="`ul-login--${loginTone(u.lastLogin)}`">
+                <i class="ul-login__dot" aria-hidden="true"></i>{{ u.lastLogin }}
+              </span>
+            </td>
             <td>
               <div class="mk-actions">
                 <button type="button" class="mk-icon-btn" title="详情" @click.stop="openSubPage('user', u.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
@@ -269,6 +280,43 @@ import { useEscape } from './useEscape'
 import { useIsNarrow } from './useIsNarrow'
 import { toast } from '@/utils/toast'
 import { isTestAccountUser, levelFromXp, levelLabel } from './learner-profile'
+
+/* ---- 行级设计派生（2026-09-26）：身份 chip 色 / 等级色阶 / 升级进度 / 登录新鲜度 ---- */
+type UlUserLite = { deleted?: boolean; isVirtualLearner?: boolean; name?: string; email?: string; id?: string; xp?: number }
+function avaTone(u: UlUserLite): 'real' | 'virtual' | 'test' | 'muted' {
+  if (u.deleted) return 'muted'
+  if (u.isVirtualLearner) return 'virtual'
+  if (isTestAccountUser(u)) return 'test'
+  return 'real'
+}
+/** 等级色阶：L1 安静 → L2 蓝 → L3 紫 → ≥L4 绿（资历越高越醒目） */
+function levelTone(xp: number): 'muted' | 'blue' | 'purple' | 'green' {
+  const lv = levelFromXp(xp)
+  if (lv >= 4) return 'green'
+  if (lv === 3) return 'purple'
+  if (lv === 2) return 'blue'
+  return 'muted'
+}
+/** 升级进度：等级公式 floor(sqrt(xp/100))+1 → 当前级下限 100·(n-1)²，下一级门槛 100·n² */
+function xpProgress(xp: number): { pct: number; toNext: number } {
+  const n = levelFromXp(xp)
+  const floor = 100 * (n - 1) * (n - 1)
+  const ceil = 100 * n * n
+  const pct = Math.min(Math.max(Math.round(((xp - floor) / Math.max(ceil - floor, 1)) * 100), 0), 100)
+  return { pct, toNext: Math.max(ceil - xp, 0) }
+}
+function xpPct(xp: number): number {
+  return xpProgress(xp).pct
+}
+function xpToNext(xp: number): number {
+  return xpProgress(xp).toNext
+}
+/** 最后登录新鲜度：自己的 timeAgo 产出格式按关键词分档 */
+function loginTone(text: string): 'fresh' | 'recent' | 'never' {
+  if (/从未/.test(text)) return 'never'
+  if (/分钟|小时|刚刚/.test(text)) return 'fresh'
+  return 'recent'
+}
 
 /** 嵌入模式：作为「用户与学习者」页「账号管理」tab 渲染（仅去掉外层壳，状态条/列表/弹窗保留）。
     count 事件：用户总量就绪后上报（宿主「用户 N」徽章；embedded 才消费） */
@@ -746,20 +794,55 @@ function clearFilters() {
 .u-embedded { flex: 1; min-height: 0; overflow: hidden; }
 .ul-row { cursor: pointer; }
 .ul-row--deleted { opacity: 0.62; filter: saturate(0.2); }
-.ul-tags { display: flex; gap: 5px; margin-top: 2px; }
-.ul-level { display: flex; align-items: center; gap: 6px; }
+
+/* ===== 行级设计（2026-09-26）：身份 chip / 等级色阶+升级条 / 登录新鲜度 ===== */
+.ul-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.ul-ava {
+  width: 28px; height: 28px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  font-style: normal; font-size: 12px; font-weight: 800;
+  background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
+  color: var(--mk-accent-deep);
+}
+.ul-ava--virtual { background: color-mix(in srgb, var(--mk-purple) 14%, transparent); color: var(--mk-purple); }
+.ul-ava--test { background: color-mix(in srgb, var(--mk-amber) 14%, transparent); color: var(--mk-amber); }
+.ul-ava--muted { background: var(--mk-surface-3); color: var(--mk-faint); }
+.ul-user .mk-cell-main { min-width: 0; flex: 1; }
+.ul-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }
+
+/* 等级：色阶 chip + XP + 距下一级进度条（公式 floor(sqrt(xp/100))+1，与后端同源） */
+.ul-level { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 3px 7px; }
 .ul-level__badge {
   padding: 1px 8px;
   border-radius: 999px;
   font-size: var(--mk-fs-micro);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.03em;
   line-height: 1.5;
-  background: #e0f2fe;
-  color: #0369a1;
+  background: var(--mk-surface-3);
+  color: var(--mk-muted);
   cursor: help;
+  justify-self: start;
 }
-.ul-level__xp { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
+.ul-level__badge--blue { background: color-mix(in srgb, var(--mk-blue) 14%, transparent); color: var(--mk-accent-deep); }
+.ul-level__badge--purple { background: color-mix(in srgb, var(--mk-purple) 15%, transparent); color: var(--mk-purple); }
+.ul-level__badge--green { background: color-mix(in srgb, var(--mk-green) 15%, transparent); color: var(--mk-green); }
+.ul-level__xp { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; text-align: right; }
+.ul-level__bar {
+  grid-column: 1 / -1;
+  display: block; height: 4px; border-radius: var(--mk-radius-pill);
+  background: var(--mk-surface-2); overflow: hidden;
+}
+.ul-level__bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-blue); opacity: 0.75; }
+.ul-level__badge--green ~ .ul-level__bar i { background: var(--mk-green); }
+
+/* 最后登录：新鲜度点（24h 内绿 / 天级默认 / 从未最弱） */
+.ul-login { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--mk-muted); }
+.ul-login__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mk-faint); flex: none; }
+.ul-login--fresh .ul-login__dot { background: var(--mk-green); }
+.ul-login--fresh { color: var(--mk-ink); }
+.ul-login--never .ul-login__dot { opacity: 0.4; }
+.ul-login--never { color: var(--mk-faint); }
 
 @media (min-width: 2000px) {
   .ul-tags { gap: 6px; margin-top: 3px; }
@@ -770,7 +853,7 @@ function clearFilters() {
 
 /* ================= 暗色模式（D1）：用户页局部覆写 ================= */
 html[data-theme='dark'] {
-  .ul-level__badge { background: rgba(91, 141, 239, 0.2); color: #9db8f5; }
+  /* 等级 chip 色阶已 token 化（2026-09-26），暗色随 --mk-* 翻转，无需覆写 */
   /* 表格行内复选框：暗色下自定义外观（原生 checkbox 边框过亮） */
   .mk-table input[type='checkbox'] {
     appearance: none;
