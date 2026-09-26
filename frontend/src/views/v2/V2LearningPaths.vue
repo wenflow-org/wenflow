@@ -855,6 +855,15 @@ onBeforeUnmount(() => {
     font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
   }
   .paths__filter-btn:hover { color: var(--blue-deep, #1f57cc); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+  /* ⋯ 更多操作实测 27×27，触屏上是最难点的目标之一；抬到 36（同 .adjust-dialog__close 的口径） */
+  .pcard__more {
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
 }
 .paths__filter-mask {
   position: fixed; inset: 0; z-index: 60;

@@ -2503,5 +2503,12 @@ onBeforeUnmount(() => {
   .adjust-dialog { padding: 16px 18px; }
   /* 26×26 对拇指偏小（弹窗右上角唯一退出路径），抬到 36 */
   .adjust-dialog__close { width: 36px; height: 36px; }
+  /* 「展开全文 / 收起」是 33px 的纯文字链，抬到 36（同上的手势目标口径） */
+  .hero__desc-toggle,
+  .sidecard__intent-toggle {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+  }
 }
 </style>

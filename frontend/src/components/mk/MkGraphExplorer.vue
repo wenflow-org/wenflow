@@ -423,6 +423,14 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue, #3
     grid-template-columns: minmax(0, 1fr);
   }
   /* 视图分段控件（全部/核心概念/知识组件）只有 27px 高，触屏上它是最常用的过滤器 */
-  .mk-ge__seg-btn { padding: 8px var(--mk-space-3); }
+  .mk-ge__seg-btn {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--mk-space-3);
+  }
+  /* 「显示无关系的概念」是一行 label + 原生 18px checkbox：点 label 任意处都能切换，
+     所以手势目标是 label 本身——它原来只有 ~19px 高，补齐到 36（mobile:spec 按 label 量） */
+  .mk-ge__check { min-height: 36px; }
 }
 </style>

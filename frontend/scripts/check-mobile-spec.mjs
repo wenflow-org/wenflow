@@ -1,9 +1,17 @@
-/* 移动端规格守卫（2026-09-26 批14 入库）：
-   在 375×812 视口扫描用户侧六个核心页，断言三类指标不越阈值——
-   - 交互元素（宽或高）< 44px 的数量（分级口径：主操作须 ≥44；文字链/紧凑芯片 36-40，
+/* 移动端规格守卫（2026-09-26 批14 入库 / 2026-09-26 对齐走查校准）：
+   在 375×812 视口扫描用户侧核心页，断言四类指标不越阈值——
+   - lt44：交互元素（宽或高）< 44px 的数量（分级口径：主操作须 ≥44；文字链/紧凑芯片 36-40，
      各页阈值即按当前分级保留量设定，新增 <44 元素必须走口径评审）
-   - 计算字号 < 12px 的文本数（下限 token 见 styles/main.css --mk-fs-*）
-   - 横向溢出（scrollWidth - innerWidth > 2 视为破版）
+   - lt36：交互元素 < 36px 的数量，阈值一律 0 —— 这是"36-40 紧凑带"的下沿，比 lt44 更硬：
+     lt44 按页留了分级保留量，lt36 则编码"任何可点元素都不许低于 36px"
+   - fonts：计算字号 < 12px 的文本数（下限 token 见 styles/main.css --mk-fs-*）
+   - hOver：横向溢出（scrollWidth - innerWidth > 2 视为破版）
+
+   两条测量校准（2026-09-26，否则会把不是问题的东西报成问题）：
+   ① 移出视口的 position:fixed 元素不计——App.vue 的 .skip-link 用 transform:translateY(-200%)
+      藏起来、只在键盘聚焦时可见，但它永远有 bounding box，会白占掉 dashboard 的 lt44 预算；
+   ② checkbox/radio 若包在 <label> 里，按 **label 的盒子**量——点 label 任意处都能切换，
+      真正的手势目标就是 label，不是那个 18px 的原生方框。
 
    运行前提：前端 dev server（默认 http://localhost:5173）与后端在跑。
    用法：npm run mobile:spec            （BASE=env BASE_URL，账号=env SPEC_USER/SPEC_PASS）
@@ -15,13 +23,13 @@ const USER = process.env.SPEC_USER || 'logocheck2';
 const PASS = process.env.SPEC_PASS || 'Abc123456';
 const W = 375, H = 812;
 
-/* 阈值 = 2026-09-26 四批整改后的分级保留量；只许收紧，不许放松 */
+/* 阈值 = 2026-09-26 四批整改 + 对齐走查后的分级保留量；只许收紧，不许放松 */
 const PAGES = [
-  { key: 'dashboard', path: '/dashboard', gate: '.dash__main .card', budget: { lt44: 3, fonts: 0, hOver: 0 } },
-  { key: 'paths', path: '/learning-paths', gate: '.pcard, .empty', budget: { lt44: 8, fonts: 0, hOver: 0 } },
-  { key: 'path-detail', path: '/learning-path/lp_1790165713901_bigjo2r', gate: '.hero', budget: { lt44: 4, fonts: 1, hOver: 0 } },
-  { key: 'state', path: '/learning-state', gate: '.metrics, main .card', budget: { lt44: 6, fonts: 0, hOver: 0 } },
-  { key: 'kmap', path: '/knowledge-map', gate: 'main', budget: { lt44: 7, fonts: 0, hOver: 0 } },
+  { key: 'dashboard', path: '/dashboard', gate: '.dash__main .card', budget: { lt36: 0, lt44: 3, fonts: 0, hOver: 0 } },
+  { key: 'paths', path: '/learning-paths', gate: '.pcard, .empty', budget: { lt36: 0, lt44: 8, fonts: 0, hOver: 0 } },
+  { key: 'path-detail', path: '/learning-path/lp_1790165713901_bigjo2r', gate: '.hero', budget: { lt36: 0, lt44: 4, fonts: 1, hOver: 0 } },
+  { key: 'state', path: '/learning-state', gate: '.metrics, main .card', budget: { lt36: 0, lt44: 6, fonts: 0, hOver: 0 } },
+  { key: 'kmap', path: '/knowledge-map', gate: 'main', budget: { lt36: 0, lt44: 7, fonts: 0, hOver: 0 } },
 ];
 const EVAL_PATH = process.env.SPEC_EVAL_URL || '';
 
@@ -45,14 +53,21 @@ for (let a = 0; a < 3; a++) {
 async function scan() {
   return p.evaluate(() => {
     const SEL = 'button, a, [role="button"], [role="radio"], [role="tab"], [role="option"], input, textarea, select, [onclick]';
-    let lt44 = 0, lt32 = 0, fonts = 0;
+    let lt36 = 0, lt44 = 0, lt32 = 0, fonts = 0;
     const hOver = Math.round(document.documentElement.scrollWidth - window.innerWidth);
     for (const el of document.querySelectorAll(SEL)) {
-      const r = el.getBoundingClientRect();
-      if (r.width <= 0 || r.height <= 0) continue;
       const cs = getComputedStyle(el);
       if (cs.visibility === 'hidden' || cs.pointerEvents === 'none') continue;
       if (el.closest('[aria-hidden="true"]')) continue;
+      // ① 移出视口的 fixed 元素（.skip-link）不算手势目标
+      const fb = el.getBoundingClientRect();
+      if (cs.position === 'fixed' && (fb.bottom <= 0 || fb.right <= 0)) continue;
+      // ② checkbox/radio 按包着它的 label 量
+      const target =
+        /^(checkbox|radio)$/.test(el.type || '') && el.closest('label') ? el.closest('label') : el;
+      const r = target.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) continue;
+      if (Math.round(r.height) < 36 || Math.round(r.width) < 36) lt36++;
       if (Math.round(r.height) < 44 || Math.round(r.width) < 44) { lt44++; if (r.height < 32 || r.width < 32) lt32++; }
     }
     for (const el of document.querySelectorAll('body *')) {
@@ -61,7 +76,7 @@ async function scan() {
       if (!hasText) continue;
       if (parseFloat(getComputedStyle(el).fontSize) < 12) fonts++;
     }
-    return { lt44, lt32, fonts, hOver };
+    return { lt36, lt44, lt32, fonts, hOver };
   });
 }
 
@@ -77,16 +92,16 @@ const run = async (key, path, gate, budget) => {
   await p.waitForTimeout(2200);
   const m = await scan();
   const over = [];
-  if (m.lt44 > budget.lt44) over.push(`lt44 ${m.lt44}>${budget.lt44}`);
-  if (m.fonts > budget.fonts) over.push(`fonts ${m.fonts}>${budget.fonts}`);
-  if (m.hOver > budget.hOver) over.push(`hOver ${m.hOver}>${budget.hOver}`);
+  for (const k of ['lt36', 'lt44', 'fonts', 'hOver']) {
+    if (budget[k] !== undefined && m[k] > budget[k]) over.push(`${k} ${m[k]}>${budget[k]}`);
+  }
   if (over.length) failed = true;
   results[key] = { ...m, budget, over };
-  console.log(`${over.length ? '✖' : '✓'} ${key}: lt44=${m.lt44}/${budget.lt44} fonts=${m.fonts}/${budget.fonts} hOver=${m.hOver}${over.length ? ' → ' + over.join(', ') : ''}`);
+  console.log(`${over.length ? '✖' : '✓'} ${key}: lt36=${m.lt36}/${budget.lt36} lt44=${m.lt44}/${budget.lt44} fonts=${m.fonts}/${budget.fonts} hOver=${m.hOver}${over.length ? ' → ' + over.join(', ') : ''}`);
 };
 
 for (const pg of PAGES) await run(pg.key, pg.path, pg.gate, pg.budget);
-if (EVAL_PATH) await run('evaluation', EVAL_PATH, '.evaluation-shell .completion-card', { lt44: 1, fonts: 0, hOver: 0 });
+if (EVAL_PATH) await run('evaluation', EVAL_PATH, '.evaluation-shell .completion-card', { lt36: 0, lt44: 1, fonts: 0, hOver: 0 });
 
 await b.close();
 if (process.argv.includes('--json')) console.log(JSON.stringify(results));
@@ -95,3 +110,4 @@ if (failed) {
   process.exit(1);
 }
 console.log('\nmobile-spec：全部页面在阈值内。');
+

@@ -1093,6 +1093,18 @@ function loadGuidance() {
   .sidecard { padding: 12px 14px; }
   .chart__loading { padding: 28px 0; }
   .chart__empty { padding: 24px 0; }
+  /* 分段控件（42/90 天）与 AI 建议的 CTA 实测 34px，抬到 36（mobile:spec lt36 门禁）。
+     .seg 容器自带 3px 内边距会跟着长高，视觉上仍是同一个药丸。 */
+  .seg__item {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .sug__cta {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+  }
 }
 
 /* ---------- 折叠带（批11 首屏重构）：卡头即开合，long-tail 内容默认收起 ---------- */

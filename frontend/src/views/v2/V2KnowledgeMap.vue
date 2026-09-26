@@ -220,5 +220,11 @@ onMounted(async () => {
   .km__hero h1 {
     font-size: var(--mk-fs-18);
   }
+  /* 「查看学习状态」文字链实测 34px，抬到 36（mobile:spec lt36 门禁） */
+  .km__link {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+  }
 }
 </style>

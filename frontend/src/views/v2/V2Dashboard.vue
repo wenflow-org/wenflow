@@ -2162,5 +2162,39 @@ a.btn-primary { text-decoration: none; }
   .budget__bw { grid-area: bw; }
   .budget__num { grid-area: num; width: auto; }
   .budget__bar { grid-area: bar; width: 100%; }
+
+  /* ── 卡内边距归一（2026-09-26 用户侧对齐走查）─────────────────────────
+     .card 基座（1414 行）只给背景/边框/圆角/阴影，内边距一直是每张卡自己写，
+     移动块再各覆盖一次：.action 18 / .path 16 / .agenda 14。三张同宽全宽卡堆在
+     同一列里，内容左缘落在 33/31/29 三条轨道上——眼睛看到的不是「某张卡留白不对」，
+     而是「这几张卡没对齐」，比差 8px 更刺眼。
+     统一到 16（本页多数派，也落在「大卡 16」的密度口径内），只动横向：竖向内边距
+     是行间节奏、不是对齐轨道，不动。 */
+  .dash__main .card,
+  .dash__main .quick__item,
+  .dash__main .tip {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  /* ── 手势目标补齐到 36px（mobile:spec 的 lt36 门禁）─────────────────────
+     下面三个在 375 下实测 30/32/35px，低于仓库自己定的「次级操作 36-40」带。
+     只加最小高度与居中，不动字号与视觉。 */
+  .link-muted {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .path__detail-link {
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .review__more {
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+  }
 }
 </style>
