@@ -245,6 +245,8 @@ doc/re_test/*
 !doc/LEARNING_SCIENCE_AUDIT.md
 !doc/AGENT_IO_DESIGN_V3.md
 !doc/SKILL_DEVELOPMENT_GUIDE.md
+# 例外：Prompt 调整指引（prompts/_README.md「如何修改 Prompt」按路径引用它）
+!doc/PROMPT_ADJUSTMENT_GUIDE.md
 !doc/AGENT_SKILL_MANUAL.md
 !doc/UPGRADE_DIRECTION_20Q.md
 !doc/LEARNER_CENTER_AND_STATE_FUSION.md
