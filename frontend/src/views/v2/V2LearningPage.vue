@@ -1150,7 +1150,11 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
 
 async function retryLast() {
   msgs.value = msgs.value.filter((m) => !m.failed);
-  if (lastUserText) await doSend(lastUserText);
+  if (!lastUserText) return;
+  // 失败回合的用户气泡还留在列表里（过滤只清失败气泡）：重试复用它，不再追加第二条同样的「你」
+  const last = msgs.value[msgs.value.length - 1];
+  const reuseUserBubble = last?.role === 'user' && last.text === lastUserText;
+  await doSend(lastUserText, true, reuseUserBubble);
 }
 
 /* ---------- 结束 ---------- */
