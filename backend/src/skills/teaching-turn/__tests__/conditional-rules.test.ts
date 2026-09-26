@@ -147,7 +147,7 @@ describe('条件规则接线（真实编译产物）', () => {
     expect(payload).not.toHaveProperty('conditionalRules');
   });
 
-  it('输入提供 scenario.materials → 只注入对应那条（在载荷尾部）', async () => {
+  it('输入提供 scenario.materials → 只注入对应那条（在稳定前缀之后、逐回合键之前）', async () => {
     const { payload } = await capture({
       ...INPUT,
       scenario: { ...INPUT.scenario, materials: [{ title: '水循环.pdf' }] },
@@ -155,8 +155,12 @@ describe('条件规则接线（真实编译产物）', () => {
     expect(payload.conditionalRules).toContain('【本轮适用规则】');
     expect(payload.conditionalRules).toContain('scenario.materials');
     expect(payload.conditionalRules).not.toContain('scenario.behavioralProfile');
-    // 放尾部：位于逐回合变化项之后（不打断前缀缓存）
-    expect(Object.keys(payload).indexOf('conditionalRules')).toBe(Object.keys(payload).length - 1);
+    // 2026-09-25 载荷缓存重排后（PAYLOAD_STABLE_PREFIX 默认序）：条件规则是低频键，
+    // 提到稳定前缀（scenario/promptDirectives/learner）之后、逐回合必变键（controls 起）之前——
+    // 它变化时只牺牲其后本来就无法命中的动态字节
+    const keys = Object.keys(payload);
+    expect(keys.indexOf('conditionalRules')).toBeGreaterThan(keys.indexOf('learner'));
+    expect(keys.indexOf('conditionalRules')).toBeLessThan(keys.indexOf('controls'));
   });
 
   it('spec.prepareSystemPrompt 把条件规则从 system 里剥掉（system 稳定 → 可缓存）', async () => {
