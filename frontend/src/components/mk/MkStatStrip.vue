@@ -99,10 +99,10 @@ defineEmits<{ select: [key: string | undefined] }>()
   border-radius: 6px;
   transition: color 0.12s ease, background 0.12s ease;
 }
-.mk-stat--clickable:hover { background: rgba(44, 99, 208, 0.08); }
+.mk-stat--clickable:hover { background: color-mix(in srgb, var(--mk-blue) 8%, transparent); }
 .mk-stat--clickable:hover .mk-stat__label,
 .mk-stat--clickable:hover .mk-stat__value { color: var(--mk-blue); }
-.mk-stat--on { background: rgba(44, 99, 208, 0.12); }
+.mk-stat--on { background: color-mix(in srgb, var(--mk-blue) 12%, transparent); }
 .mk-stat--on .mk-stat__label,
 .mk-stat--on .mk-stat__value { color: var(--mk-blue); }
 

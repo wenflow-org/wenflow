@@ -416,7 +416,6 @@ watch(
 }
 .sdp-prompt__facts b { color: var(--mk-ink); }
 .sdp-prompt__facts code { font-size: var(--mk-fs-micro); }
-.sdp-prompt__used { color: var(--mk-muted); }
 .sdp-prompt__code {
   margin: 0;
   height: min(58vh, 620px);
