@@ -12,22 +12,11 @@
           <button type="button" class="btn-ghost" @click="exportPdf">打印或另存为 PDF</button>
           <button type="button" class="btn-primary" @click="() => goBackToPath()">返回学习路径</button>
         </div>
-        <span class="evaluation-head__more-wrap">
-          <button
-            type="button"
-            class="evaluation-head__more"
-            title="更多操作"
-            :aria-expanded="headMenuOpen"
-            @click="headMenuOpen = !headMenuOpen"
-          >⋯</button>
-          <Transition name="pop">
-            <div v-if="headMenuOpen" class="evaluation-head__pop">
-              <button type="button" class="evaluation-head__pop-item" :disabled="exportingImage" @click="pickHeadMenu('image')">{{ exportingImage ? '导出中…' : '导出图片' }}</button>
-              <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('pdf')">打印或另存为 PDF</button>
-              <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('back')">返回学习路径</button>
-            </div>
-          </Transition>
-        </span>
+        <ImmersiveMenu>
+          <button type="button" class="evaluation-head__pop-item" :disabled="exportingImage" @click="pickHeadMenu('image')">{{ exportingImage ? '导出中…' : '导出图片' }}</button>
+          <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('pdf')">打印或另存为 PDF</button>
+          <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('back')">返回学习路径</button>
+        </ImmersiveMenu>
       </header>
 
       <!-- 页内目录：仅 ≥1440 宽显示（报告单列 1080 之外的空地），滚动高亮当前章节 -->
@@ -175,6 +164,7 @@ import CompletionCard from '@/components/CompletionCard.vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
 import SessionFeedbackPanel from '@/components/learning/SessionFeedbackPanel.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
+import ImmersiveMenu from '@/components/ImmersiveMenu.vue';
 import { aiTeachingAPI, type SessionDetail, type WrapupArtifact } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
 import api from '@/utils/api';
@@ -596,8 +586,7 @@ const exportPdf = async () => {
   if (collapsedForExport) transcriptExpanded.value = false;
 };
 
-/* ── 头部 ⋮ 子菜单（窄屏专用；桌面仍并排按钮） ── */
-const headMenuOpen = ref(false);
+/* ── 头部 ⋮ 子菜单（ImmersiveMenu 接管开合/点外关闭/Esc） ── */
 
 /* ── 页内目录（≥1440 固定右栏）：滚动高亮当前章节 ── */
 const tocItems = [
@@ -630,20 +619,13 @@ function onTocScroll() {
   requestAnimationFrame(() => { tocTick = false; updateTocActive(); });
 }
 function pickHeadMenu(kind: 'image' | 'pdf' | 'back') {
-  headMenuOpen.value = false;
   if (kind === 'image') void exportImage();
   else if (kind === 'pdf') void exportPdf();
   else goBackToPath();
 }
-function onHeadMenuOutside(e: MouseEvent) {
-  if (!headMenuOpen.value) return;
-  const wrap = (e.target as HTMLElement | null)?.closest?.('.evaluation-head__more-wrap');
-  if (!wrap) headMenuOpen.value = false;
-}
 
 onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange);
-  document.addEventListener('click', onHeadMenuOutside);
   window.addEventListener('scroll', onTocScroll, { passive: true });
   void fetchEvaluation();
 });
@@ -651,7 +633,6 @@ onUnmounted(() => {
   componentUnmounted = true;
   stopPolling();
   document.removeEventListener('visibilitychange', handleVisibilityChange);
-  document.removeEventListener('click', onHeadMenuOutside);
   window.removeEventListener('scroll', onTocScroll);
 });
 </script>
@@ -737,44 +718,9 @@ onUnmounted(() => {
   gap: 8px;
   flex-shrink: 0;
 }
-/* ⋮ 子菜单：仅窄屏启用（≤640 显示），桌面由 .evaluation-head__actions 并排承担 */
-.evaluation-head__more-wrap {
-  position: relative;
-  display: none;
-  flex-shrink: 0;
-}
-.evaluation-head__more {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-md);
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 17px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 0 2px;
-}
-.evaluation-head__more:hover {
-  color: var(--blue-deep);
-  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
-}
-.evaluation-head__pop {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 20;
-  min-width: 156px;
-  display: grid;
-  gap: 2px;
-  padding: 6px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 14px 34px rgba(23, 32, 51, 0.14);
-}
+/* ⋮ 子菜单容器/触发器由 ImmersiveMenu 提供（≤640 才显示，见下方媒体块）；
+   这里只保留菜单项样式（插槽内容编译在本组件作用域） */
+.evaluation-head :deep(.imm-menu) { display: none; flex-shrink: 0; }
 .evaluation-head__pop-item {
   display: block;
   width: 100%;
@@ -1289,7 +1235,7 @@ onUnmounted(() => {
     display: none;
   }
 
-  .evaluation-head__more-wrap {
+  .evaluation-head :deep(.imm-menu) {
     display: inline-flex;
   }
 
@@ -1332,7 +1278,7 @@ onUnmounted(() => {
     display: none;
   }
 
-  .evaluation-head__more-wrap {
+  .evaluation-head :deep(.imm-menu) {
     display: none;
   }
 

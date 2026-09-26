@@ -30,6 +30,8 @@ prompts/
 
 ## 如何修改 Prompt
 
+> 完整调整指引（管理台动线 / CLI 流 / 参数与模型 / 字段契约调整 / 验证清单 / 已知坑）见 **`doc/PROMPT_ADJUSTMENT_GUIDE.md`**。
+
 1. **编辑核心文件**：修改 `prompts/core/<skillId>.yaml`（不要在编译产物或 DB 上改）。
 2. **编译**：`cd backend && npm run prompts:compile-all`，或经管理端「Prompt 设计台」调用 compile-core（dry-run 预览 + 守门三查：结构合法 / 字段冻结 / 含义冻结）。
 3. **发布**：compile 守门通过后执行 publish-core，系统会自动备份当前产物到 `prompts/backups/`、写回 `prompts/skill.<skillId>.md`、并在 DB 创建新 ACTIVE 版本（旧版归档）。

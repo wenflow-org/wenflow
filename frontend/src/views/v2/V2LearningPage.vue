@@ -9,11 +9,8 @@
       </div>
       <div class="learn__head-right">
         <span class="learn__live">{{ session ? '学习中' : '连接中' }}</span>
-        <span class="learn__menu-wrap">
-          <button type="button" class="learn__menu" title="更多" @click="menuOpen = !menuOpen" :aria-expanded="menuOpen">⋯</button>
-          <Transition name="pop">
-            <div v-if="menuOpen" class="learn__menu-pop">
-            <div class="learn__menu-group">
+        <ImmersiveMenu>
+          <div class="learn__menu-group">
               <span class="learn__menu-label">结束本节课</span>
               <button type="button" class="learn__menu-item learn__menu-item--primary" @click="completeAndSettle">
                 <span class="learn__menu-item-main"><strong>完成并结算任务</strong><small>计入进度 · 生成本次学习总结</small></span>
@@ -37,9 +34,7 @@
                 <span class="learn__menu-item-main"><strong>重新开始</strong><small>清空当前进度与消息</small></span>
               </button>
             </div>
-          </div>
-        </Transition>
-        </span>
+        </ImmersiveMenu>
       </div>
     </header>
 
@@ -521,6 +516,7 @@ import request, { API_BASE_URL } from '@/utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { readMaterialSection } from '@/api/materials';
 import AiContentNote from '@/components/AiContentNote.vue';
+import ImmersiveMenu from '@/components/ImmersiveMenu.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import { toast } from '@/utils/toast';
 import { useInteractionMeta } from '@/composables/useInteractionMeta';
@@ -594,7 +590,6 @@ const initError = ref('');
 const typing = ref(false);
 /** 菜单危险动作（结束/重新开始）in-flight 防重 */
 const actionBusy = ref(false);
-const menuOpen = ref(false);
 
 const friendlyError = computed(() => {
   const raw = initError.value || '';
@@ -1205,7 +1200,6 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
 
 /** 完成并结算（拍板 2026-08-21 方案 B 主路径）：计入任务/里程碑/路径完成进度 */
 async function completeAndSettle() {
-  menuOpen.value = false;
   if (actionBusy.value) return;
   const ok = await askConfirm({
     title: '完成并结算任务',
@@ -1231,7 +1225,6 @@ async function completeAndSettle() {
 }
 
 async function endSession() {
-  menuOpen.value = false;
   if (actionBusy.value) return;
   const ok = await askConfirm({
     title: '结束学习（不计入完成）',
@@ -1257,7 +1250,6 @@ async function endSession() {
 }
 
 async function pauseAndLeave() {
-  menuOpen.value = false;
   if (session.value) {
     try {
       const rev = await aiTeachingAPI.pauseSession(session.value.sessionId, 'manual', session.value.revision);
@@ -1270,12 +1262,10 @@ async function pauseAndLeave() {
 /** 纯返回：不调任何接口，会话保持原状（in_progress 照旧，下次进来续上）。
     「暂停并离开」会写 pause 状态，「结束/完成」会结算——都替用户做了决定。 */
 function leaveWithoutSideEffect() {
-  menuOpen.value = false;
   goBack();
 }
 
 async function restart() {
-  menuOpen.value = false;
   resumedNotice.value = false;
   openingSceneDone.value = true;
   assessTarget.value = null;
@@ -1493,7 +1483,6 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(49, 177, 111, 0.3);
   padding: 4px 10px; border-radius: var(--mk-radius-pill);
 }
-.learn__menu { color: var(--faint); font-size: 18px; cursor: pointer; padding: 0 6px; background: none; border: 0; font-family: inherit; }
 
 /* ---------- 布局 ---------- */
 .learn__body {
@@ -1787,10 +1776,6 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: no-preference) {
   .msg { animation: msg-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
-  /* 更多菜单：弹出 */
-  .pop-enter-active, .pop-leave-active { transition: opacity .18s ease, transform .18s cubic-bezier(0.16, 1, 0.3, 1); }
-  .pop-enter-from { opacity: 0; transform: scale(.96) translateY(4px); }
-  .pop-leave-to { opacity: 0; transform: scale(.97) translateY(-2px); }
 
   /* 初始化/错误/课堂 三态切换：淡入。
      用 CSS 关键帧而非 Vue Transition —— 关键帧即使不执行，元素也停在默认的可见状态；
@@ -2312,9 +2297,8 @@ onBeforeUnmount(() => {
   .learn__head-right { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .learn__live, .learn__state-link { white-space: nowrap; flex-shrink: 0; }
   .learn__live { padding: 3px 9px; font-size: 12px; }
-  .learn__menu-wrap { position: relative; display: inline-flex; }
-  /* ⋯ 视觉不变，热区 28→38（触屏） */
-  .learn__menu { padding: 0 4px; font-size: 20px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; }
+  /* ⋯ 菜单（ImmersiveMenu）：弹层宽度在窄屏收敛到视口内 */
+  .learn__head-right :deep(.imm-menu__pop) { width: min(250px, calc(100vw - 28px)); }
   /* 头部三行（「当前任务」标签 / 任务名 / 路径名）在手机上白占 22px——标签本身只是分类提示，
      去掉后头部 79→57px，全部还给消息区 */
   .learn__title { gap: 1px; }
@@ -2323,12 +2307,6 @@ onBeforeUnmount(() => {
   /* 快捷块瘦身见文件末尾的媒体块：.replies/.reply 的基础规则在本文件靠后的 style 块里，
      同权重下写在这里会被覆盖 */
   /* 弹窗锚定在 ⋯ 按钮正下方、右对齐按钮 */
-  .learn__menu-pop {
-    top: calc(100% + 6px);
-    right: 0;
-    min-width: 0;
-    width: min(250px, calc(100vw - 28px));
-  }
   /* 移动端知识点面板默认折叠：头部横条可点，收起时隐藏进度条/清单 */
   .kp__head { cursor: pointer; padding: 5px 0; min-height: 44px; }   /* 触屏整条可点，HIG 44 */
   .kp__caret { display: inline; }
@@ -2356,13 +2334,6 @@ onBeforeUnmount(() => {
   color: var(--faint); font-size: 14px; padding: 80px 20px; text-align: center;
 }
 .learn__init-error { color: var(--red-ink); font-size: 14px; font-weight: 600; }
-.learn__menu-pop {
-  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40;
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--mk-radius-xl); padding: 5px;
-  box-shadow: 0 12px 30px rgba(23, 32, 51, 0.14);
-  display: grid; min-width: 220px;
-}
 .learn__menu-group { display: grid; gap: 1px; }
 .learn__menu-label {
   padding: 6px 12px 3px;
@@ -2385,7 +2356,6 @@ onBeforeUnmount(() => {
 .learn__menu-item--primary:hover { background: #e8effc; color: var(--blue, #2c63d0); }
 .learn__menu-item--danger { color: var(--red-ink); }
 .learn__menu-item--danger:hover { background: rgba(239, 117, 120, 0.1); color: var(--red-ink); }
-.learn__head-right { position: relative; }
 .checkpoint__option {
   display: flex; align-items: center; gap: 9px;
   padding: 9px 12px;
