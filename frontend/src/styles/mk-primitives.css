@@ -985,11 +985,18 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   max-height: calc(100vh - 60px);
   /* 头部/底部固定，仅 body 滚动：避免内容超长时把底部主操作按钮推出视口 */
   overflow: hidden;
+  /* 入场动画（2026-09-26 弹层对齐）：与抽屉 mk-drawer-in 0.18s 同词汇（fade+位移），
+     此前弹窗硬切、抽屉滑入，开合观感割裂；reduce-motion 由文件末尾全局兜底关停 */
+  animation: mk-modal-in 0.16s var(--mk-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
   background: var(--mk-surface, #fff);
   border-radius: var(--mk-radius-modal);
   box-shadow: var(--mk-shadow-modal);
   display: flex;
   flex-direction: column;
+}
+@keyframes mk-modal-in {
+  from { transform: translateY(10px) scale(0.98); opacity: 0; }
+  to { transform: none; opacity: 1; }
 }
 .mk-modal__panel--wide { width: min(var(--mk-modal-w-wide, 720px), 100%); }
 .mk-modal__head {

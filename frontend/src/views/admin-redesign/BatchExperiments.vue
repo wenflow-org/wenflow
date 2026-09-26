@@ -147,9 +147,9 @@
 
     <!-- 实验详情抽屉 -->
     <Teleport to="body">
-      <div v-if="detailOpen" class="mk-drawer">
+      <div v-if="detailOpen" ref="detailMaskRef" class="mk-drawer">
         <div class="mk-drawer__mask" @click="detailOpen = false"></div>
-        <div class="mk-drawer__panel mk-drawer__panel--wide" role="dialog" aria-label="实验详情">
+        <div ref="detailPanelRef" class="mk-drawer__panel mk-drawer__panel--wide" role="dialog" aria-label="实验详情">
           <div class="mk-drawer__head">
             <div>
               <h3 class="mk-drawer__title">{{ detail?.name }}</h3>
@@ -367,6 +367,12 @@ async function stop(e: ExpRow) {
 
 /* 详情抽屉 */
 const detailOpen = ref(false)
+/* 详情抽屉行为四件套（2026-09-26 弹层对齐）：与上方新建弹窗同一套钩子，ref 独立避免两弹层互踩 */
+const detailMaskRef = ref<HTMLElement | null>(null)
+const detailPanelRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => detailOpen.value), detailPanelRef)
+useMaskClose(detailMaskRef, () => { detailOpen.value = false })
+useEscape(() => detailOpen.value, () => { detailOpen.value = false })
 const detail = ref<BatchExperiment | null>(null)
 const detailRuns = ref<BatchExperimentRun[]>([])
 const detailLoading = ref(false)

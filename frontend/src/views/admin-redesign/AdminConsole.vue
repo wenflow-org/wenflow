@@ -360,7 +360,8 @@ onMounted(() => {
 .ac-error {
   position: fixed;
   inset: 0;
-  z-index: 400;
+  /* 全屏兜底层：用 critical 档（500），此前 400 字面量与 toast 同档会互相抢占（2026-09-26 对齐） */
+  z-index: var(--mk-z-critical, 500);
   background: var(--mk-bg, #f7f8fa);
   display: grid;
   place-content: center;

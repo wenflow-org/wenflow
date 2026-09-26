@@ -353,9 +353,9 @@
 
     <!-- 运行详情抽屉 -->
     <Teleport to="body">
-      <div v-if="runDetailOpen" class="mk-drawer">
+      <div v-if="runDetailOpen" ref="runMaskRef" class="mk-drawer">
         <div class="mk-drawer__mask" @click="runDetailOpen = false"></div>
-        <div class="mk-drawer__panel" role="dialog" aria-label="评估运行详情">
+        <div ref="runPanelRef" class="mk-drawer__panel" role="dialog" aria-label="评估运行详情">
           <div class="mk-drawer__head">
             <div>
               <h3 class="mk-drawer__title">评估运行详情</h3>
@@ -1010,6 +1010,12 @@ async function runSingle(c: EvalCase) {
 
 /* 运行详情 */
 const runDetailOpen = ref(false)
+/* 运行详情抽屉行为四件套（2026-09-26 弹层对齐）：与上方用例弹窗同一套钩子，ref 独立 */
+const runMaskRef = ref<HTMLElement | null>(null)
+const runPanelRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => runDetailOpen.value), runPanelRef)
+useMaskClose(runMaskRef, () => { runDetailOpen.value = false })
+useEscape(() => runDetailOpen.value, () => { runDetailOpen.value = false })
 const runDetailLoading = ref(false)
 const runDetail = ref<any>(null)
 

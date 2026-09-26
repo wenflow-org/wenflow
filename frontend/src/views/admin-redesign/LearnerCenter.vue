@@ -165,8 +165,8 @@
 
     <!-- C2 干预动线：风险学习者 → 查看会话 / 发送站内提醒（对标英跃"过程管理"） -->
     <Teleport to="body">
-      <div v-if="intervene" ref="interveneMask" class="mk-modal">
-        <div class="mk-modal__panel" role="dialog" aria-label="学习者干预">
+      <div v-if="intervene" ref="interveneMaskRef" class="mk-modal">
+        <div ref="intervenePanelRef" class="mk-modal__panel" role="dialog" aria-label="学习者干预">
           <div class="mk-modal__head">
             <h3 class="mk-modal__title">干预 · {{ intervene.name }}</h3>
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="intervene = null">✕</button>
@@ -215,6 +215,8 @@ import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkCols from '@/components/mk/MkCols.vue'
+import { useOverlay, useMaskClose } from './useOverlay'
+import { useEscape } from './useEscape'
 import { adminNotificationsApi } from '@/api/adminApi'
 
 /** 嵌入模式：作为「用户与学习者」页「学习状态」tab 渲染（仅去掉外层壳，状态条/列表/干预弹窗保留）。
@@ -266,6 +268,12 @@ const intervene = ref<Row | null>(null)
 const interveneTitle = ref('')
 const interveneBody = ref('')
 const interveneSending = ref(false)
+/* 干预弹窗行为四件套（2026-09-26 弹层对齐）：此前全目录唯一一个零钩子弹窗 */
+const interveneMaskRef = ref<HTMLElement | null>(null)
+const intervenePanelRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => !!intervene.value), intervenePanelRef)
+useMaskClose(interveneMaskRef, () => { intervene.value = null })
+useEscape(() => !!intervene.value, () => { intervene.value = null })
 
 function openIntervene(r: Row) {
   intervene.value = r

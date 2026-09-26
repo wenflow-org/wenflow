@@ -184,9 +184,9 @@
 
     <!-- 路径结构详情抽屉 -->
     <Teleport to="body">
-      <div v-if="detailOpen" class="mk-drawer">
+      <div v-if="detailOpen" ref="maskRef" class="mk-drawer">
         <div class="mk-drawer__mask" @click="detailOpen = false"></div>
-        <div class="mk-drawer__panel mk-drawer__panel--wide" role="dialog" aria-label="路径结构">
+        <div ref="panelRef" class="mk-drawer__panel mk-drawer__panel--wide" role="dialog" aria-label="路径结构">
           <div class="mk-drawer__head">
             <div>
               <h3 class="mk-drawer__title">{{ detail?.title }}</h3>
@@ -231,6 +231,8 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { useTableSort } from './useTableSort'
+import { useOverlay, useMaskClose } from './useOverlay'
+import { useEscape } from './useEscape'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -448,6 +450,12 @@ interface PathDetail { title: string; subject: string; user?: { name?: string } 
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detail = ref<PathDetail | null>(null)
+/* 详情抽屉行为四件套（2026-09-26 弹层对齐）：Esc/遮罩/焦点陷阱/滚动锁 */
+const maskRef = ref<HTMLElement | null>(null)
+const panelRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => detailOpen.value), panelRef)
+useMaskClose(maskRef, () => { detailOpen.value = false })
+useEscape(() => detailOpen.value, () => { detailOpen.value = false })
 
 async function openDetail(p: PathRow) {
   detailOpen.value = true

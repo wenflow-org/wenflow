@@ -1,7 +1,8 @@
 <template>
   <!-- 单步 Prompt 测试：用虚拟学习者的人设+故事直接跑一次对话，看字段产出 -->
   <Teleport v-if="render" to="body">
-  <div v-if="testTarget" ref="testMaskRef" class="mk-modal" @click.self="closePromptTest">
+  <!-- 关闭统一走 useMaskClose（按下+松开判定，防拖拽误关）；@click.self 双路径残留已清（2026-09-26 对齐） -->
+  <div v-if="testTarget" ref="testMaskRef" class="mk-modal">
     <div ref="testPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="单步 Prompt 测试">
       <div class="mk-modal__head">
         <h3 class="mk-modal__title">单步测试 · {{ testTarget.name }}</h3>

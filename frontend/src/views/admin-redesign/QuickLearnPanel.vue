@@ -9,7 +9,8 @@
   -->
   <Teleport to="body">
     <div v-if="visible" class="mk-modal">
-      <div class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="账号自动学习">
+      <!-- 遮罩点击关闭按设计不启用（长表单防误触，:625 注释口径）；焦点陷阱/滚动锁 2026-09-26 补齐 -->
+      <div ref="panelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="账号自动学习">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">账号自动学习</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
@@ -257,6 +258,7 @@ import { useSafePolling } from '@/composables/useSafePolling'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { statusText } from './statusText'
 import { useEscape } from './useEscape'
+import { useOverlay } from './useOverlay'
 
 const props = defineProps<{
   visible: boolean
@@ -625,6 +627,9 @@ watch(
 // Esc 关闭（原 EP el-dialog 自带；换成 mk-modal 后需显式登记）。遮罩点击不关闭，
 // 与原 :close-on-click-modal="false" 一致。
 useEscape(() => props.visible, close)
+/* 焦点陷阱 + 滚动锁（2026-09-26 弹层对齐）：此前 Tab 可逃出弹窗、背景可滚动 */
+const panelRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => props.visible), panelRef)
 </script>
 
 <style scoped>

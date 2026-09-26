@@ -20,12 +20,14 @@
      否则 <button>/滚动条/表单在深色主题下仍按 UA 浅色渲染（buttontext=纯黑）。 */
   color-scheme: light;
 
-  /* 层级 token：抽屉/弹窗/菜单统一 z-index，避免散落硬编码 */
+  /* 层级 token：抽屉/弹窗/菜单统一 z-index，避免散落硬编码。
+     critical：全屏兜底层（会话校验遮罩/启动失败卡），必须盖过一切业务弹层与 toast */
   --mk-z-menu: 60;
   --mk-z-drawer: 240;
   --mk-z-sidebar: 220;
   --mk-z-modal: 300;
   --mk-z-toast: 400;
+  --mk-z-critical: 500;
 
   /* 抽屉宽度档 token：所有右侧详情抽屉统一走此阶梯（base 560 → lg 700 → xl 880 → xxl 1040）。
      `.mk-drawer__panel` 用 base，`.mk-drawer__panel--wide` 用 lg；4K 各升一档。
