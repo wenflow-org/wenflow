@@ -776,8 +776,6 @@ onMounted(async () => {
 .mr__obs--never { color: var(--mk-faint); }
 
 .mr__h4 { margin: 14px 0 6px; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
-.mr__num { text-align: right; font-variant-numeric: tabular-nums; }
-.mr__num--warn { color: var(--mk-amber); font-weight: 700; }
 .mr__sub { display: block; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
 .mr__row--active { background: var(--mk-blue-bg); }
 .mr__actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
