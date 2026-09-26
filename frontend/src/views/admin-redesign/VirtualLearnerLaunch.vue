@@ -87,8 +87,8 @@ const launchStories = ref<LaunchStory[]>([])
 const launchPanelRef = ref<HTMLElement | null>(null)
 const launchMaskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => !!launchTarget.value), launchPanelRef)
-useMaskClose(launchMaskRef, () => { launchTarget.value = null })
-useEscape(() => !!launchTarget.value, () => { launchTarget.value = null })
+useMaskClose(launchMaskRef, () => { if (!launchBusy.value) launchTarget.value = null })
+useEscape(() => !!launchTarget.value, () => { if (!launchBusy.value) launchTarget.value = null })
 
 /** 父页面触发：加载故事并打开启动弹窗 */
 async function open(s: LaunchTarget) {

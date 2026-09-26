@@ -65,6 +65,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
+import { Check } from 'lucide-vue-next';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 import { TERMS } from './terms';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';

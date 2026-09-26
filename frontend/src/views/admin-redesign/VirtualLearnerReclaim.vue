@@ -141,7 +141,7 @@ defineExpose({ open, state })
   margin: 0 0 4px;
   padding: 8px 10px;
   border-radius: var(--mk-radius-xl);
-  background: #f4f7fc;
+  background: var(--mk-surface-2);
   color: var(--mk-muted, #5b6577);
   font-size: var(--mk-fs-micro);
   line-height: 1.5;

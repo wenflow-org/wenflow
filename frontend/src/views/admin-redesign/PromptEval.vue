@@ -411,6 +411,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { PenLine, Users } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { timeAgo, errMsg, shortId } from './live'
 import { adminPromptOpsApi, adminVirtualLearnersApi, type CreateEvalCasePayload } from '@/api/adminApi'

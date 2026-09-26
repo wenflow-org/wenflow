@@ -71,7 +71,7 @@
               <span class="mk-badge" :class="statusBadge(r)">{{ statusText(r) }}</span>
             </td>
             <td :class="{ 'mk-na': !r.publishedAt }" :title="r.publishedAt ? fmtDate(r.publishedAt) : ''">{{ r.publishedAt ? timeAgo(r.publishedAt) : '—' }}</td>
-            <td :class="{ 'mk-na': !r.expiresAt }" :title="r.expiresAt ? fmtDate(r.expiresAt) : ''">{{ r.expiresAt ? expiresLabel(r.expiresAt) : '不过期' }}</td>
+            <td :class="[r.expiresAt ? expiresTone(r.expiresAt) : 'mk-na']" :title="r.expiresAt ? fmtDate(r.expiresAt) : ''">{{ r.expiresAt ? expiresLabel(r.expiresAt) : '不过期' }}</td>
             <td>
               <div class="mk-actions">
                 <button v-if="r.status !== 'published'" type="button" class="mk-link" :disabled="r.busy" @click="publish(r)">发布</button>
@@ -478,6 +478,13 @@ function fmtDate(iso: string | null): string {
 }
 
 /** 过期列：未来显示「剩 X 天/小时」，已过显示「已过期」（timeAgo 对未来一律「刚刚」，误导） */
+function expiresTone(iso: string): string {
+  const t = new Date(iso).getTime()
+  if (!t || Number.isNaN(t)) return ''
+  const diff = t - Date.now()
+  if (diff <= 0) return 'an-exp--stale'
+  return diff < 24 * 3600000 ? 'an-exp--soon' : ''
+}
 function expiresLabel(iso: string): string {
   const t = new Date(iso).getTime()
   if (!t || Number.isNaN(t)) return '不过期'
@@ -539,4 +546,7 @@ function expiresLabel(iso: string): string {
   .an-severity { gap: 12px; }
   .an-sev { padding: 11px 22px; font-size: var(--mk-fs-body); }
 }
+/* 过期列 tone（批A）：24h 内即将过期琥珀、已过期弱化 */
+.an-exp--soon { color: var(--mk-amber); font-weight: 600; }
+.an-exp--stale { color: var(--mk-faint); }
 </style>

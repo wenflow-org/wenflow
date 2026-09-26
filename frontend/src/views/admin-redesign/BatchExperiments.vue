@@ -237,7 +237,7 @@ const progressPct = (e: ExpRow) => {
 const progressTone = (e: ExpRow) => {
   const pct = progressPct(e)
   if (failedRuns(e).length > 0) return 'bad'
-  return pct >= 100 ? 'ok' : pct > 0 ? 'warn' : 'warn'
+  return pct >= 100 ? 'ok' : 'warn'
 }
 const progressTitle = (e: ExpRow) =>
   `完成 ${doneRuns(e).length}/${e.runs?.length || 0} · 失败 ${failedRuns(e).length} · 进行中 ${(e.runs || []).filter((r) => r.status === 'active').length}`

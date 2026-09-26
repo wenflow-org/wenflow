@@ -305,6 +305,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { Waypoints } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { intent, openSkillDrawer, clearInvestigation, dataSource, tokenCostFilters } from './store'
 import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, totalPagesOf, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'

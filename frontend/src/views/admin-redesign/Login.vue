@@ -89,12 +89,13 @@
               <span class="demo__dot"></span>
               <strong>运行平稳</strong>
               <span class="demo__score">92</span>
+              <span class="demo__tag">示例</span>
             </div>
 
             <div class="demo__panel">
               <div class="demo__panel-head">
                 <strong>学习漏斗</strong>
-                <span>近 7 天</span>
+                <span>近 7 天 · 示例数据</span>
               </div>
               <div class="demo__funnel">
                 <div v-for="item in funnel" :key="item.label" class="demo__funnel-item">
@@ -659,5 +660,13 @@ onMounted(() => {
     padding: 36px 14px 28px;
     min-height: calc(100vh - 52px);
   }
+}
+.demo__tag {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: var(--mk-radius-pill);
+  font-size: 11px;
+  color: var(--mk-faint);
+  border: 1px solid var(--mk-line);
 }
 </style>
