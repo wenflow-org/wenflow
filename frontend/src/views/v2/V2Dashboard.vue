@@ -20,10 +20,10 @@
         </div>
       </div>
 
-      <!-- AI 提示条（warningCopy/paceHint 回填，按状态分级） -->
+      <!-- AI 提示条（warningCopy/paceHint 回填，按状态分级）：Sparkles 紫标注=AI 生成，全站 AI 要素统一语言 -->
       <div v-if="tipText && !tipDismissed" class="tip" :class="`tip--${tipTone}`">
         <span class="tip__icon">
-          <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74c.6.52 1 1.31 1 2.26v1h6v-1c0-.95.4-1.74 1-2.26A7 7 0 0 0 12 2z"/></svg>
+          <Sparkles :size="15" :stroke-width="1.75" />
         </span>
         <p>{{ tipText }}</p>
         <button type="button" class="tip__close" title="知道了" @click="tipDismissed = true">×</button>
@@ -60,7 +60,7 @@
               <h1 class="action__title">{{ todayTask?.title || '今天没有待办任务' }}</h1>
               <p v-if="actionDesc" class="action__desc">{{ actionDesc }}</p>
               <p v-if="actionReason" class="action__reason">
-                <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74c.6.52 1 1.31 1 2.26v1h6v-1c0-.95.4-1.74 1-2.26A7 7 0 0 0 12 2z"/></svg>
+                <Sparkles :size="13" :stroke-width="1.75" />
                 {{ actionReason }}
               </p>
               <!-- 分钟数只在底部进度条出现一次（原 meta 里的「约 N 分钟」与它同源，2026-09-25 去重） -->
@@ -88,7 +88,7 @@
               </div>
               <div class="action__today">
                 <div class="action__today-bar"><i :style="{ width: todayBarPct + '%' }"></i></div>
-                <span>今日已学 {{ todayMinutes }} / {{ todayTask?.minutes || 25 }} 分钟</span>
+                <span>今日已学 {{ todayMinutes }} / {{ todayTask?.minutes || 25 }} 分钟<template v-if="todayRemaining > 0"> · 还剩约 {{ todayRemaining }} 分钟</template></span>
               </div>
             </template>
           </section>
@@ -194,6 +194,88 @@
           </aside>
         </div>
 
+        <!-- 今日安排：预算台账 + 到期复习合成一张连续分区卡。
+             原折叠在「今日详情」里，但「今天学什么/复习什么」是每天的主体信息，不该收起（批17）。 -->
+        <section v-if="agendaVisible" class="card agenda">
+          <div class="agenda__head">
+            <strong>今日安排</strong>
+            <span v-if="agendaMeta" class="agenda__meta">{{ agendaMeta }}</span>
+          </div>
+
+          <!-- 预算（多目标调度台账） -->
+          <div v-if="sourceFailed.budget" class="agenda__fail">
+            预算数据加载失败。<button type="button" class="agenda__retry" @click="loadAll">重试</button>
+          </div>
+          <template v-else-if="todaySchedule?.activeGoals?.length">
+            <div class="agenda__group">今日预算 · {{ todaySchedule.activeGoals.length }} 个目标</div>
+            <ul class="budget__list">
+              <li v-for="g in todaySchedule.activeGoals" :key="g.goalId" class="budget__item">
+                <router-link v-if="g.pathId" :to="'/learning-path/' + g.pathId" class="budget__link" :title="'查看「' + g.title + '」的路径详情'">
+                  <span class="budget__name">{{ g.title }}</span>
+                  <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
+                  <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
+                  <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ bandwidthLabel(g.cognitiveBandwidth) }}</span>
+                </router-link>
+                <template v-else>
+                  <span class="budget__name">{{ g.title }}</span>
+                  <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
+                  <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
+                  <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ bandwidthLabel(g.cognitiveBandwidth) }}</span>
+                </template>
+              </li>
+            </ul>
+          </template>
+
+          <!-- 复习（到期旧知回捞） -->
+          <template v-if="reviewBlockVisible">
+            <div v-if="sourceFailed.review" class="agenda__fail">
+              复习数据加载失败。<button type="button" class="agenda__retry" @click="loadAll">重试</button>
+            </div>
+            <template v-else-if="reviewDue.length">
+              <div class="agenda__divider" role="presentation"></div>
+              <div class="agenda__group agenda__group--split">
+                <span class="agenda__group-label">今日复习 <strong class="review__title">{{ reviewTitle }}</strong></span>
+                <div class="review__stats">
+                  <span v-if="reviewUrgentCount" class="review__stat review__stat--urgent">记忆偏弱 {{ reviewUrgentCount }}</span>
+                  <span class="review__stat">按计划到期 {{ reviewDue.length - reviewUrgentCount }}</span>
+                  <span v-if="(reviewPlan?.tomorrowCount ?? 0) > 0" class="review__stat">明天预计 {{ reviewPlan?.tomorrowCount }}</span>
+                </div>
+              </div>
+              <!-- 概念行只呈现状态；全组唯一去向是底部「去上课」CTA（2026-09-25 口径） -->
+              <ul class="review__list">
+                <li
+                  v-for="item in visibleReviewDue"
+                  :key="item.conceptKey"
+                  class="review__item"
+                  :class="{ 'review__item--urgent': item.reason === 'below-threshold' }"
+                >
+                  <div class="review__row">
+                    <span class="review__name">{{ item.label }}</span>
+                    <span
+                      class="review__tag"
+                      :class="item.reason === 'below-threshold' ? 'review__tag--urgent' : 'review__tag--plan'"
+                    >{{ reviewReasonText(item.reason) }}</span>
+                    <span class="review__meter" :title="`当前记忆强度 ${reviewPct(item.retention)}`">
+                      <span class="review__bar"><i :style="{ width: reviewPct(item.retention) }"></i></span>
+                      <span class="review__pct">{{ reviewPct(item.retention) }}</span>
+                    </span>
+                  </div>
+                </li>
+              </ul>
+              <button
+                v-if="reviewDue.length > REVIEW_PREVIEW"
+                type="button"
+                class="review__more"
+                @click="reviewExpanded = !reviewExpanded"
+              >{{ reviewExpanded ? '收起' : `还有 ${reviewDue.length - REVIEW_PREVIEW} 个 · 展开全部` }}</button>
+              <div class="review__footer">
+                <router-link v-if="todayTask?.id" :to="`/learn/${todayTask.id}`" class="btn-primary review__go">去上课 · 顺带温故</router-link>
+                <span class="review__hint">{{ reviewFooterHint }}</span>
+              </div>
+            </template>
+          </template>
+        </section>
+
         <!-- 快捷入口（始终显示，不随折叠区隐藏） -->
         <div class="quick">
           <router-link to="/learning-state" class="quick__item">
@@ -219,104 +301,19 @@
           </router-link>
         </div>
 
-        <!-- 折叠区统称「今日详情」：预算/复习/周节奏/月历/激励都在里面（2026-09-25 更名，
-             原「展开更多」不说清里面是什么） -->
+        <!-- 折叠区=学习节奏：本周格+整月日历+激励（今日安排已上提为常显分区） -->
         <div class="more-toggle" v-if="hasFoldedContent">
           <button type="button" class="more-toggle__btn" :aria-expanded="showMore" @click="showMore = !showMore">
             <svg :class="{ 'more-toggle__arrow--open': showMore }" viewBox="0 0 24 24" width="16" height="16">
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
             </svg>
-            {{ showMore ? '收起今日详情' : '展开今日详情' }}
+            {{ showMore ? '收起学习节奏' : '展开学习节奏' }}
           </button>
         </div>
 
         <Transition name="fold">
           <div v-show="showMore" class="folded-sections">
-        <!-- 今日预算（多目标调度台账） -->
-        <section v-if="sourceFailed.budget" class="card dash__budget">
-          <div class="budget__head">
-            <span class="budget__title">今日预算</span>
-          </div>
-          <p class="dash__source-fail">预算数据加载失败。<button type="button" class="dash__source-retry" @click="loadAll">重试</button></p>
-        </section>
-        <section v-else-if="todaySchedule?.activeGoals?.length" class="card budget dash__budget">
-          <div class="budget__head">
-            <span class="budget__title">今日预算 · {{ todaySchedule.activeGoals.length }} 个目标</span>
-            <span class="budget__total">共 {{ todaySchedule.totalPlanned }} 分钟</span>
-          </div>
-          <ul class="budget__list">
-            <li v-for="g in todaySchedule.activeGoals" :key="g.goalId" class="budget__item">
-              <router-link v-if="g.pathId" :to="'/learning-path/' + g.pathId" class="budget__link" :title="'查看「' + g.title + '」的路径详情'">
-                <span class="budget__name">{{ g.title }}</span>
-                <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
-                <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
-                <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ bandwidthLabel(g.cognitiveBandwidth) }}</span>
-              </router-link>
-              <template v-else>
-                <span class="budget__name">{{ g.title }}</span>
-                <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
-                <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
-                <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ bandwidthLabel(g.cognitiveBandwidth) }}</span>
-              </template>
-            </li>
-          </ul>
-        </section>
-
-        <!-- 今日复习（到期旧知回捞） -->
-        <section v-if="sourceFailed.review" class="card dash__review">
-          <div class="review__head">
-            <span class="review__eyebrow">今日复习</span>
-          </div>
-          <p class="dash__source-fail">复习数据加载失败。<button type="button" class="dash__source-retry" @click="loadAll">重试</button></p>
-        </section>
-        <section v-else-if="reviewDue.length" class="card review dash__review">
-          <div class="review__head">
-            <div class="review__headline">
-              <span class="review__eyebrow">今日复习</span>
-              <strong class="review__title">{{ reviewTitle }}</strong>
-            </div>
-            <div class="review__stats">
-              <span v-if="reviewUrgentCount" class="review__stat review__stat--urgent">记忆偏弱 {{ reviewUrgentCount }}</span>
-              <span class="review__stat">按计划到期 {{ reviewDue.length - reviewUrgentCount }}</span>
-              <span v-if="(reviewPlan?.tomorrowCount ?? 0) > 0" class="review__stat">明天预计 {{ reviewPlan?.tomorrowCount }}</span>
-            </div>
-          </div>
-          <p class="review__lead">按记忆曲线排期，越靠前越该回捞；右侧为当前记忆强度。</p>
-          <!-- 概念行只呈现状态，不再整行链去成就页（那里没有概念级进度，链接名不副实）；
-               全卡唯一去向是底部「去上课」CTA（2026-09-25） -->
-          <ul class="review__list">
-            <li
-              v-for="item in visibleReviewDue"
-              :key="item.conceptKey"
-              class="review__item"
-              :class="{ 'review__item--urgent': item.reason === 'below-threshold' }"
-            >
-              <div class="review__row">
-                <span class="review__name">{{ item.label }}</span>
-                <span
-                  class="review__tag"
-                  :class="item.reason === 'below-threshold' ? 'review__tag--urgent' : 'review__tag--plan'"
-                >{{ reviewReasonText(item.reason) }}</span>
-                <span class="review__meter" :title="`当前记忆强度 ${reviewPct(item.retention)}`">
-                  <span class="review__bar"><i :style="{ width: reviewPct(item.retention) }"></i></span>
-                  <span class="review__pct">{{ reviewPct(item.retention) }}</span>
-                </span>
-              </div>
-            </li>
-          </ul>
-          <button
-            v-if="reviewDue.length > REVIEW_PREVIEW"
-            type="button"
-            class="review__more"
-            @click="reviewExpanded = !reviewExpanded"
-          >{{ reviewExpanded ? '收起' : `还有 ${reviewDue.length - REVIEW_PREVIEW} 个 · 展开全部` }}</button>
-          <div class="review__footer">
-            <router-link v-if="todayTask?.id" :to="`/learn/${todayTask.id}`" class="btn-primary review__go">去上课 · 顺带温故</router-link>
-            <span class="review__hint">{{ reviewFooterHint }}</span>
-          </div>
-        </section>
-
-        <!-- 本周节奏 + 激励区 -->
+        <!-- 学习节奏：本周一格 + 激励行压平（原 side-stack 两张小卡，卡套卡层级去除） -->
         <div class="dash__grid-week">
           <section class="card week">
             <div class="card-head">
@@ -343,30 +340,17 @@
               <span>本周 <b>{{ weekTotal }}</b> 分钟</span>
               <span><b>{{ weekActiveDays }}</b> 天有学习</span>
             </div>
+            <div v-if="streakNote || nearestAchievement" class="week__notes">
+              <p v-if="streakNote" class="week__note">
+                <Flame :size="14" :stroke-width="1.75" aria-hidden="true" />
+                <span>{{ streakNote }}</span>
+              </p>
+              <p v-if="nearestAchievement" class="week__note week__note--achv">
+                <Medal :size="14" :stroke-width="1.75" aria-hidden="true" />
+                <span>成就「{{ nearestAchievement.name }}」{{ nearestAchievement.achieved ? '即将解锁 · ' : '' }}{{ nearestAchievement.hint }}</span>
+              </p>
+            </div>
           </section>
-
-          <div class="side-stack">
-            <section class="card mini">
-              <div class="mini__icon mini__icon--flame">
-                <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/></svg>
-              </div>
-              <!-- 天数只在问候栏 streak pill 显示一次，这里给动作建议（2026-09-25 去重） -->
-              <div>
-                <strong>{{ streakDays > 0 ? (todayMinutes > 0 ? '今天已点亮' : '今天还没点亮') : '点亮第一天' }}</strong>
-                <p>{{ streakDays > 0 ? (todayMinutes > 0 ? '连续记录保住了，继续保持' : '学一会儿就能续上记录') : '今天学 10 分钟，开始连续记录' }}</p>
-              </div>
-            </section>
-            <section class="card mini" v-if="nearestAchievement">
-              <div class="mini__icon mini__icon--medal">
-                <img v-if="nearestAchievement.iconUrl" :src="nearestAchievement.iconUrl" alt="" class="mini__icon-img" />
-                <svg v-else viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></svg>
-              </div>
-              <div>
-                <strong>成就「{{ nearestAchievement.name }}」<span v-if="nearestAchievement.achieved" class="mini__badge">待解锁</span></strong>
-                <p>{{ nearestAchievement.hint }}</p>
-              </div>
-            </section>
-          </div>
         </div>
 
         <!-- 整月日历 -->
@@ -524,6 +508,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { Flame, Medal, Sparkles } from 'lucide-vue-next';
 import request from '@/utils/api';
 import { learningAPI } from '@/api/learning';
 import { toast } from '@/utils/toast';
@@ -1003,16 +988,37 @@ function bandwidthLabel(v: string): string {
   return map[v] ?? v;
 }
 
-/** 折叠区是否有实际动态内容（新手无数据时隐藏「展开更多」，避免点开看到空卡）；
-    快捷入口已移出折叠区（始终显示），不受此控制。
-    数据源失败也计入：失败提示行需要可见（区别于空态）。 */
-const hasFoldedContent = computed(
+/** 今日安排区可见性：预算/复习任一有数据或加载失败（批17 从折叠区上提，常显） */
+const agendaVisible = computed(
   () =>
     Boolean(todaySchedule.value?.activeGoals?.length) ||
     reviewDue.value.length > 0 ||
+    Boolean(sourceFailed.value.budget) ||
+    Boolean(sourceFailed.value.review)
+);
+/** 复习块独立可见（预算失败但复习正常时，复习块仍要出现） */
+const reviewBlockVisible = computed(() => Boolean(sourceFailed.value.review) || reviewDue.value.length > 0);
+const agendaMeta = computed(() => {
+  const parts: string[] = [];
+  if (todaySchedule.value?.activeGoals?.length) parts.push(`预算 ${todaySchedule.value.totalPlanned} 分钟`);
+  if (reviewDue.value.length) parts.push(`复习 ${reviewDue.value.length} 项`);
+  return parts.join(' · ');
+});
+/** 激励行（原 side-stack mini 卡内容压平）：天数已在问候栏 pill，这里只给行动建议 */
+const streakNote = computed(() => {
+  if (streakDays.value > 0) return todayMinutes.value > 0 ? '连续记录保住了，继续保持' : '今天还没点亮 · 学一会儿就能续上';
+  return '今天学 10 分钟，开始连续记录';
+});
+/** 还剩约多少分钟（行动卡进度行叙事，批17） */
+const todayRemaining = computed(() => Math.max((todayTask.value?.minutes || 25) - todayMinutes.value, 0));
+
+/** 折叠区=学习节奏是否有内容（预算/复习已上提，不再计入）；
+    数据源失败也计入：失败提示行需要可见（区别于空态）。 */
+const hasFoldedContent = computed(
+  () =>
     hasAnyMinutes.value ||
-    Boolean(nearestAchievement.value) ||
-    Object.values(sourceFailed.value).some(Boolean)
+    Boolean(sourceFailed.value.week) ||
+    Boolean(nearestAchievement.value)
 );
 
 const minutesByDate = computed(() => {
@@ -1419,10 +1425,22 @@ onMounted(loadAll);
 /* 折叠区内的卡片间距由 .folded-sections 的 grid gap 统一给（16px）。
    这里原有一层 margin-bottom: 16px 是折叠区抽出组件之前留下的：与 gap 叠加成 32px，
    展开后同页出现两套节奏（2026-09-24 反馈「展开后影响页面一致性」）。 */
-.budget { padding: 16px 18px; }
-.budget__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
-.budget__title { font-size: 14px; font-weight: 700; }
-.budget__total { font-size: 12px; color: var(--faint); }
+/* 今日安排（批17）：预算+复习合成一张连续分区卡，组间用细分隔线，不再两张卡叠放 */
+.agenda { padding: 16px 18px; display: grid; gap: 10px; }
+.agenda__head { display: flex; align-items: baseline; gap: 10px; }
+.agenda__head strong { font-size: 15px; font-weight: 700; }
+.agenda__meta { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.agenda__group { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; color: var(--muted); }
+.agenda__group--split { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.agenda__group-label { display: inline-flex; align-items: baseline; gap: 8px; }
+.agenda__group-label .review__title { font-size: 14px; }
+.agenda__divider { height: 1px; background: var(--line); margin: 2px 0; }
+.agenda__fail { font-size: 13px; color: var(--muted); }
+.agenda__retry {
+  border: 0; background: none; padding: 0; font: inherit; font-weight: 700;
+  color: var(--blue-deep); cursor: pointer;
+}
+.agenda__retry:hover { text-decoration: underline; }
 .budget__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .budget__item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .budget__link { display: flex; align-items: center; gap: 10px; flex: 1; text-decoration: none; color: inherit; }
@@ -1436,10 +1454,6 @@ onMounted(loadAll);
 
 /* ---------- 今日复习（复习闭环） ---------- */
 /* 同上：间距交给 .folded-sections 的 gap，不再叠一层 margin-bottom */
-.review { padding: 16px 18px; }
-.review__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.review__headline { display: grid; gap: 2px; min-width: 0; }
-.review__eyebrow { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; color: var(--blue-deep); }
 .review__title { font-size: 15px; font-weight: 700; color: var(--ink); }
 .review__stats { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .review__stat {
@@ -1451,7 +1465,6 @@ onMounted(loadAll);
   background: color-mix(in srgb, var(--amber) 16%, transparent);
   color: var(--amber-ink);
 }
-.review__lead { margin: 6px 0 10px; font-size: 12px; color: var(--faint); }
 /* minmax(0,1fr)：auto 轨道会被行的 max-content（名称 260 + 标签 58 + 强度条 132 + 间距）
    顶到 486px，即使容器只有 316px——320/390 窄屏下整卡被撑破、整页出横向滚动条。
    轨道下限钉 0 后由 .review__name 的 min-width:0 + ellipsis 正常收尾。 */
@@ -1594,7 +1607,7 @@ onMounted(loadAll);
 
 <style scoped>
 /* ---------- 本周节奏 ---------- */
-.dash__grid-week { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; }
+.dash__grid-week { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .week { padding: 16px 20px; display: grid; gap: 12px; align-content: start; }
 .week__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
 .day {
@@ -1643,19 +1656,14 @@ onMounted(loadAll);
 .week__stats b { color: var(--ink); }
 
 /* ---------- 激励小卡 ---------- */
-.side-stack { display: grid; gap: 16px; align-content: start; }
-.mini { display: flex; align-items: center; gap: 14px; padding: 16px 18px; }
-.mini__icon { width: 40px; height: 40px; border-radius: var(--mk-radius-xl); display: grid; place-items: center; flex: 0 0 auto; }
-.mini__icon--flame { color: #d9741a; background: color-mix(in srgb, var(--amber) 16%, transparent); }
-.mini__icon--medal { color: var(--accent); background: rgba(141, 107, 255, 0.13); }
-.mini__icon-img { width: 18px; height: 18px; object-fit: contain; display: block; }
-.mini strong { font-size: 14px; }
-.mini p { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
-.mini__badge {
-  margin-left: 4px; padding: 1px 6px; border-radius: var(--mk-radius-pill);
-  font-size: 11px; font-weight: 700; vertical-align: 2px;
-  color: var(--accent); background: rgba(141, 107, 255, 0.12);
+/* 激励行（批17）：原 side-stack 两张 mini 卡压平为周节奏卡内的两行提示 */
+.week__notes { display: grid; gap: 6px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.week__note {
+  margin: 0; display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--muted);
 }
+.week__note svg { flex-shrink: 0; color: var(--amber); }
+.week__note--achv svg { color: var(--accent); }
 
 /* ---------- 整月日历 ---------- */
 .month { padding: 20px 22px; display: grid; gap: 14px; }
@@ -1777,7 +1785,6 @@ a.btn-primary { text-decoration: none; }
 }
 .path__detail-link:hover { text-decoration: underline; }
 .step--blocked .step__dot { border-color: var(--red); box-shadow: 0 0 0 4px rgba(239, 117, 120, 0.14); }
-.mini__icon--medal { font-size: 18px; }
 .link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; text-decoration: none; padding: 5px 0; }
 .link-muted:hover { color: var(--blue-deep); }
 .dash__main { width: 100%; }
@@ -1996,9 +2003,21 @@ a.btn-primary { text-decoration: none; }
 .action__eyebrow { flex-wrap: wrap; row-gap: 4px; }
 .action__from { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 1100px) {
-  .greet__left { flex-wrap: wrap; row-gap: 4px; }
-  /* 副标题保持单行省略（批9 首屏微调）：原 normal 换行让它独占 2-3 行，挤占首屏 */
-  .greet__sub { flex-basis: 100%; max-width: 100%; }
+  .greet__left { flex-wrap: wrap; row-gap: 4px; min-width: 0; }
+  /* 副标题独占一行（批9 首屏微调）。单行省略不能靠 nowrap+max-width：min-content 测量时
+     百分比 max-width 被忽略、nowrap 全文宽（46ch≈506px）直接进 grid 轨道，375 屏整页
+     撑出 153px 横向滚动（2026-09-23 实测）。line-clamp 单行的 min-content 是单字宽，
+     截断效果与省略号一致。 */
+  .greet__sub {
+    flex-basis: 100%;
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
   .action__title { overflow-wrap: anywhere; }
 }
 </style>
@@ -2122,11 +2141,11 @@ a.btn-primary { text-decoration: none; }
 }
 
 /* ---------- ≤1100 密度补齐（2026-09-25 移动框架批8） ----------
-   budget/review/mini 三卡此前没有移动密度规则（横向 padding 仍 18px，与同页已收的卡两套节奏）；
+   budget/review 已并入「今日安排」单卡（批17），移动密度走 .agenda；
    预算行是「名称+进度条+数值+带宽」的桌面表格行，375 下进度条被压到 ~41px——
    转两行卡片：第一行名称+带宽+数值，第二行进度条通栏（框架：表格必须转垂直卡片流）。 */
 @media (max-width: 1100px) {
-  .budget, .review, .mini { padding: 14px; }
+  .agenda { padding: 14px; }
   .budget__item,
   .budget__link {
     display: grid;
