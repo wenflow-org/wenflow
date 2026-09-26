@@ -675,7 +675,7 @@ import type { EChartsCoreOption } from 'echarts/core'
 /** 看板曲线配色：已上移共享模块 components/mk/chartPalette.ts（admin 图表唯一配色来源）；
  *  此处 re-export 维持单测的导入路径（virtual-profile.memory-curve.test.ts）不变。 */
 export { MEMORY_CURVE_COLORS, memoryCurveColor } from '@/components/mk/chartPalette';
-import { memoryCurveColor as _memoryCurveColor } from '@/components/mk/chartPalette';
+import { memoryCurveColor as _memoryCurveColor, MK_CHART_PALETTES } from '@/components/mk/chartPalette';
 
 export interface MemoryCurveConcept {
   name: string
@@ -700,8 +700,10 @@ export function buildMemoryRetentionChartOption(
 ): EChartsCoreOption {
   const days = Array.isArray(concepts[0]?.curve?.days) ? concepts[0].curve.days : []
   const labels = days.map(memoryDayLabel)
-  const axisLine = options.isDark ? 'rgba(230,237,247,0.22)' : 'rgba(23,32,51,0.15)'
-  const splitLine = options.isDark ? 'rgba(230,237,247,0.08)' : 'rgba(23,32,51,0.06)'
+  // 轴色收敛进 chartPalette 单一来源（批26；此前与本文件内 isDark 三元自持一份同值色板）
+  const _palette = MK_CHART_PALETTES[options.isDark ? 'dark' : 'light']
+  const axisLine = _palette.axisLine
+  const splitLine = _palette.splitLine
   const series = concepts.map((concept, index) => {
     const color = _memoryCurveColor(index)
     return {

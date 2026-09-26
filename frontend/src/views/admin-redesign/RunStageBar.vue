@@ -79,37 +79,30 @@ const DONE_TEXT: Record<RunStageName, string> = { goal: '目标', path: '路径'
   font-weight: 800;
   line-height: 1;
 }
-.rs-bar__label { font-weight: 600; color: #94a3b8; }
-.rs-bar__connector { width: 10px; height: 2px; background: #e2e8f0; border-radius: var(--mk-radius-xs); flex-shrink: 0; }
+.rs-bar__label { font-weight: 600; color: var(--mk-faint-soft); }
+.rs-bar__connector { width: 10px; height: 2px; background: var(--mk-line); border-radius: var(--mk-radius-xs); flex-shrink: 0; }
 
 /* 节点状态着色 */
-.rs-bar__node--done .rs-bar__dot { background: #2ac769; color: #fff; }
-.rs-bar__node--done .rs-bar__label { color: #0e8a4d; }
-.rs-bar__node--doing .rs-bar__dot { background: #1860f2; color: #fff; animation: rsbar-pulse 1.4s infinite; }
-.rs-bar__node--doing .rs-bar__label { color: #1860f2; }
-.rs-bar__node--todo .rs-bar__dot { background: #f1f5f9; color: #94a3b8; border: 1px solid #cbd5e1; }
-.rs-bar__node--fail .rs-bar__dot { background: #fb4e4e; color: #fff; }
-.rs-bar__node--fail .rs-bar__label { color: #d92d20; }
-.rs-bar__node--skip .rs-bar__dot { background: #f8fafc; color: #cbd5e1; border: 1px dashed #e2e8f0; }
-.rs-bar__node--skip .rs-bar__label { color: #cbd5e1; text-decoration: line-through; }
+.rs-bar__node--done .rs-bar__dot { background: var(--mk-green); color: var(--mk-surface); }
+.rs-bar__node--done .rs-bar__label { color: var(--mk-green); }
+.rs-bar__node--doing .rs-bar__dot { background: var(--mk-blue); color: var(--mk-surface); animation: rsbar-pulse 1.4s infinite; }
+.rs-bar__node--doing .rs-bar__label { color: var(--mk-blue); }
+.rs-bar__node--todo .rs-bar__dot { background: var(--mk-surface-2); color: var(--mk-faint-soft); border: 1px solid var(--mk-line); }
+.rs-bar__node--fail .rs-bar__dot { background: var(--mk-red-fill); color: var(--mk-surface); }
+.rs-bar__node--fail .rs-bar__label { color: var(--mk-red); }
+.rs-bar__node--skip .rs-bar__dot { background: var(--mk-surface-2); color: var(--mk-faint-soft); border: 1px dashed var(--mk-line); }
+.rs-bar__node--skip .rs-bar__label { color: var(--mk-faint-soft); text-decoration: line-through; }
 
-.rs-bar__connector--done { background: #2ac769; }
-.rs-bar__task { margin-left: 4px; color: #64748b; font-weight: 600; font-size: var(--mk-fs-micro); }
-.rs-bar__done { margin-left: 4px; color: #0e8a4d; font-weight: 700; }
+.rs-bar__connector--done { background: var(--mk-green); }
+.rs-bar__task { margin-left: 4px; color: var(--mk-muted); font-weight: 600; font-size: var(--mk-fs-micro); }
+.rs-bar__done { margin-left: 4px; color: var(--mk-green); font-weight: 700; }
 
 @keyframes rsbar-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(24, 96, 242, 0.4); }
-  50% { box-shadow: 0 0 0 3px rgba(24, 96, 242, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-blue) 40%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue) 0%, transparent); }
 }
 
 /* 紧凑模式 */
 .rs-bar--compact .rs-bar__node { padding: 0 2px; }
 .rs-bar--compact .rs-bar__dot { width: 12px; height: 12px; font-size: var(--mk-fs-micro); }
-
-/* ================= 暗色模式（D1 补完）：阶段进度条 ================= */
-html[data-theme='dark'] {
-  .rs-bar__connector { background: #313235; }
-  .rs-bar__node--todo .rs-bar__dot { background: #232325; color: #73767d; border-color: #393a3c; }
-  .rs-bar__node--skip .rs-bar__dot { background: #232325; color: #404244; border-color: #313235; }
-}
 </style>

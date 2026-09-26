@@ -98,9 +98,9 @@ function stageLabel(stage: string | null | undefined): string {
 <style scoped>
 /* 「正在运行」折叠展开按钮 */
 .vl-running__more {
-  border: 1px dashed #cbd5e1;
-  background: #fff;
-  color: #64748b;
+  border: 1px dashed var(--mk-line);
+  background: var(--mk-surface);
+  color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   padding: 3px 10px;
@@ -109,21 +109,21 @@ function stageLabel(stage: string | null | undefined): string {
   transition: background 0.12s ease;
   flex-shrink: 0;
 }
-.vl-running__more:hover { background: rgba(100, 116, 139, 0.08); }
+.vl-running__more:hover { background: color-mix(in srgb, var(--mk-muted) 8%, transparent); }
 
 /* 批量生成 chip（并入「正在运行」区） */
-.vl-running__chip--batch { border-color: rgba(59, 130, 246, 0.4); color: #1d4ed8; }
-.vl-running__chip--batch .vl-running__dot { background: #3b82f6; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); animation: vl-pulse 1.6s infinite; }
+.vl-running__chip--batch { border-color: color-mix(in srgb, var(--mk-blue) 40%, transparent); color: var(--mk-blue); }
+.vl-running__chip--batch .vl-running__dot { background: var(--mk-blue); box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-blue) 50%, transparent); animation: vl-pulse 1.6s infinite; }
 /* 已暂停自动驾驶：灰色静态（无脉冲），点击进画像页 */
-.vl-running__chip--paused { border-color: rgba(148, 163, 184, 0.45); color: #64748b; }
-.vl-running__chip--paused .vl-running__dot { background: #94a3b8; box-shadow: none; animation: none; }
-.vl-running__chip--paused:hover { background: rgba(148, 163, 184, 0.12); }
-.vl-running__chip--batch.is-running { border-color: rgba(59, 130, 246, 0.45); }
-.vl-running__chip--batch.is-done { border-color: rgba(16, 185, 129, 0.4); color: #065f46; }
-.vl-running__chip--batch.is-done .vl-running__dot { background: #10b981; animation: none; }
-.vl-running__chip--batch.is-error { border-color: rgba(239, 68, 68, 0.45); color: #dc2626; }
-.vl-running__chip--batch.is-error .vl-running__dot { background: #ef4444; animation: none; }
-@keyframes vl-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); } 50% { box-shadow: 0 0 0 5px rgba(59, 130, 246, 0); } }
+.vl-running__chip--paused { border-color: color-mix(in srgb, var(--mk-faint-soft) 45%, transparent); color: var(--mk-muted); }
+.vl-running__chip--paused .vl-running__dot { background: var(--mk-faint-soft); box-shadow: none; animation: none; }
+.vl-running__chip--paused:hover { background: color-mix(in srgb, var(--mk-faint-soft) 12%, transparent); }
+.vl-running__chip--batch.is-running { border-color: color-mix(in srgb, var(--mk-blue) 45%, transparent); }
+.vl-running__chip--batch.is-done { border-color: color-mix(in srgb, var(--mk-green) 40%, transparent); color: var(--mk-green); }
+.vl-running__chip--batch.is-done .vl-running__dot { background: var(--mk-green); animation: none; }
+.vl-running__chip--batch.is-error { border-color: color-mix(in srgb, var(--mk-red-fill) 45%, transparent); color: var(--mk-red); }
+.vl-running__chip--batch.is-error .vl-running__dot { background: var(--mk-red-fill); animation: none; }
+@keyframes vl-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-blue) 40%, transparent); } 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--mk-blue) 0%, transparent); } }
 /* 批量生成详情行（点 chip 展开）：mk-alert 形态，此处只留弹性布局 */
 .vl-batch-detail { display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-basis: 100%; }
 .vl-batch-detail__text { color: var(--mk-muted, #5b6577); flex: 1; }
@@ -134,8 +134,8 @@ function stageLabel(stage: string | null | undefined): string {
   margin: 10px 0 0;
   padding: 5px 12px;
   border-radius: var(--mk-radius-xl);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  background: rgba(16, 185, 129, 0.06);
+  border: 1px solid color-mix(in srgb, var(--mk-green) 30%, transparent);
+  background: color-mix(in srgb, var(--mk-green) 6%, transparent);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -145,11 +145,11 @@ function stageLabel(stage: string | null | undefined): string {
   scrollbar-width: thin;
 }
 .vl-running::-webkit-scrollbar { height: 4px; }
-.vl-running::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.3); border-radius: var(--mk-radius-xs); }
+.vl-running::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--mk-green) 30%, transparent); border-radius: var(--mk-radius-xs); }
 .vl-running__label {
   font-size: var(--mk-fs-micro);
   font-weight: 800;
-  color: #047857;
+  color: var(--mk-green);
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
@@ -160,8 +160,8 @@ function stageLabel(stage: string | null | undefined): string {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+  background: var(--mk-green);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-green) 50%, transparent);
   animation: vl-pulse 1.6s infinite;
 }
 
@@ -171,9 +171,9 @@ function stageLabel(stage: string | null | undefined): string {
   gap: 6px;
   padding: 2px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  background: #fff;
-  color: #065f46;
+  border: 1px solid color-mix(in srgb, var(--mk-green) 35%, transparent);
+  background: var(--mk-surface);
+  color: var(--mk-green);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   cursor: pointer;
@@ -181,30 +181,19 @@ function stageLabel(stage: string | null | undefined): string {
   flex-shrink: 0;
   white-space: nowrap;
 }
-.vl-running__chip:hover { background: rgba(16, 185, 129, 0.1); }
+.vl-running__chip:hover { background: color-mix(in srgb, var(--mk-green) 10%, transparent); }
 .vl-running__dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+  background: var(--mk-green);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-green) 50%, transparent);
   animation: vl-pulse 1.6s infinite;
   flex-shrink: 0;
 }
 @keyframes vl-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
-  70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-}
-
-/* 暗色模式：正在运行条 */
-html[data-theme='dark'] {
-  .vl-running__chip { background: #19191a; border-color: #2a2b2d; color: #4ade80; }
-  .vl-running__chip--paused { color: #a2a5a9; }
-  .vl-running__chip--batch { color: #7aa2ff; }
-  .vl-running__chip--batch.is-done { color: #4ade80; }
-  .vl-running__chip--batch.is-error { color: #f87171; }
-  .vl-running__label { color: #4ade80; }
-  .vl-running__more { background: #19191a; border-color: #313235; color: #a2a5a9; }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-green) 50%, transparent); }
+  70% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--mk-green) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-green) 0%, transparent); }
 }
 </style>
