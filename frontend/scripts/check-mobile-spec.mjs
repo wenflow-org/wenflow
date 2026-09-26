@@ -23,13 +23,26 @@ const USER = process.env.SPEC_USER || 'logocheck2';
 const PASS = process.env.SPEC_PASS || 'Abc123456';
 const W = 375, H = 812;
 
-/* 阈值 = 2026-09-26 四批整改 + 对齐走查后的分级保留量；只许收紧，不许放松 */
+/* 阈值 = 2026-09-26 四批整改 + 对齐走查后的分级保留量；只许收紧，不许放松。
+
+   2026-09-26 对齐走查补的四页（原来只覆盖五个核心页，这四页是门禁盲区）：
+   achievements / onboarding / learning-history / agent-logs 的 fonts 预算非 0，
+   因为它们有一批「桌面本来就 10–11.5px」的微标签（见 project-mobile-density 里记的
+   边界②：单方面放大会让手机上同一个元素比桌面还大、卡片还更高）。这些值是两个断点
+   同值的基础声明，不是移动块压下去的，故按当前量登记、只许收紧：
+     .ach-rarity 10 / .ach-card__badge 10.5 / .ach-card__date 11.5 / .ach-card__prog 11
+     .ob__flow-item 的序号与说明 11 / 表格 th 11 / .ai-note 11（页脚 AI 声明，登记保留项）
+   新增 <12px 必须走分级口径评审，不许把登记值往上调。 */
 const PAGES = [
   { key: 'dashboard', path: '/dashboard', gate: '.dash__main .card', budget: { lt36: 0, lt44: 3, fonts: 0, hOver: 0 } },
   { key: 'paths', path: '/learning-paths', gate: '.pcard, .empty', budget: { lt36: 0, lt44: 8, fonts: 0, hOver: 0 } },
   { key: 'path-detail', path: '/learning-path/lp_1790165713901_bigjo2r', gate: '.hero', budget: { lt36: 0, lt44: 4, fonts: 1, hOver: 0 } },
   { key: 'state', path: '/learning-state', gate: '.metrics, main .card', budget: { lt36: 0, lt44: 6, fonts: 0, hOver: 0 } },
   { key: 'kmap', path: '/knowledge-map', gate: 'main', budget: { lt36: 0, lt44: 7, fonts: 0, hOver: 0 } },
+  { key: 'achievements', path: '/user/achievements', gate: '.grid, .empty, .ov', budget: { lt36: 0, lt44: 13, fonts: 30, hOver: 0 } },
+  { key: 'onboarding', path: '/onboarding', gate: '.ob__card, .ob', budget: { lt36: 0, lt44: 2, fonts: 0, hOver: 0 } },
+  { key: 'history', path: '/user/learning-history', gate: '.history__items, .empty', budget: { lt36: 0, lt44: 10, fonts: 1, hOver: 0 } },
+  { key: 'agent-logs', path: '/user/agent-logs', gate: '.uc-table, .empty, main', budget: { lt36: 0, lt44: 33, fonts: 0, hOver: 0 } },
 ];
 const EVAL_PATH = process.env.SPEC_EVAL_URL || '';
 

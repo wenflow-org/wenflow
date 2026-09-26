@@ -236,8 +236,14 @@ function isActive(t: { match: string[] }) {
 
   .uc__tab {
     /* 5 个分段（账户/成就/学习历史/API 接入/调用日志）在 390 下必须排成一行：
-       padding 12→10 省 20px 后总宽 ~337 < 可用 358，实测不再折行 */
+       padding 12→10 省 20px 后总宽 ~337 < 可用 358，实测不再折行。
+       高度补到 36（mobile:spec 的 lt36 门禁）：只加最小高度与居中，横向 padding
+       不动，所以「排成一行」的宽度预算不受影响。 */
     padding: 7px 10px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: 12.5px;
   }
 }

@@ -603,7 +603,12 @@ function goDashboard() {
   color: var(--faint);
   background: none;
   border: 0;
+  /* 28px → 36px（mobile:spec 的 lt36 门禁）：这是引导页唯一的退出路径。
+     保持 display:block + margin auto 的居中方式，靠 line-height 把文字居中，
+     换成 flex 会让它撑满整行、丢掉「一枚小字按钮」的样子。 */
   padding: 4px 8px;
+  min-height: 36px;
+  line-height: 28px;
   cursor: pointer;
   border-radius: var(--mk-radius-md);
   transition: color 0.15s, background 0.15s;

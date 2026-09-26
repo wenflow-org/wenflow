@@ -424,7 +424,12 @@ onMounted(() => {
   font-size: 12px; font-weight: 800;
   color: var(--blue-deep, #1f57cc);
   text-decoration: none;
+  /* 30px → 36px（mobile:spec 的 lt36 门禁）：行里就靠这两个按钮操作，
+     拇指目标不能只有 30；横向 padding 不动，标题列宽度预算不变。 */
   padding: 5px 12px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
   border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
   border-radius: var(--mk-radius-pill);
@@ -438,6 +443,9 @@ onMounted(() => {
   color: var(--muted, #5b6577);
   text-decoration: none;
   padding: 5px 12px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
   border: 1px solid var(--line, #e3e9f4);
   border-radius: var(--mk-radius-pill);
   white-space: nowrap;

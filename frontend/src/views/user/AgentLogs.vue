@@ -797,6 +797,9 @@ const copyText = async (text: string, successMessage: string) => {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* 「隐藏底层调用」这行是 label + 开关：点 label 任意处都能切换，手势目标就是 label 本身，
+     原来只有 28px 高（mobile:spec 按 label 量，lt36 门禁）。 */
+  min-height: 36px;
   padding-bottom: 6px;
 }
 
@@ -880,6 +883,9 @@ const copyText = async (text: string, successMessage: string) => {
   width: 110px;
   padding: 6px 10px;
   font-size: 12.5px;
+  /* 33px → 36px（mobile:spec 的 lt36 门禁）：它和其它 .uc-btn--sm 同排，
+     高矮不齐一眼可见 */
+  min-height: 36px;
 }
 
 .pagination__nav {

@@ -526,7 +526,16 @@ table.uc-table {
    只加纵向内边距，配色与视觉不变。 */
 @media (max-width: 1100px) {
   .uc-btn--link { padding: 9px 10px; }
-  .uc-btn--sm { padding: 8px 12px; }
+  /* 高度补到 36（mobile:spec 的 lt36 门禁）：8px 上下内边距 + 12.5px 字 = 33px，
+     而且 .uc-btn--primary 变体少一层边框（32）、.actions > * 又各写一份 padding，
+     同一排按钮高矮不齐。min-height 一下全齐，横向内边距不动。 */
+  .uc-btn--sm {
+    padding: 8px 12px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
 
   /* 移动端卡片密度：内边距 20/22 → 14px、标题块下间距 14 → 10px。
      个人中心一页三张卡，仅这一项就是 ~120px。 */
