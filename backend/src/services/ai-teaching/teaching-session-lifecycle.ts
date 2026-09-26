@@ -62,6 +62,8 @@ import { conceptLoadService } from '../memory/concept-load.service';
 import { fsrsRetrievability, type FsrsMemoryState } from '../memory/fsrs';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
 import { insightCalibrationService } from '../learner/insight-calibration.service';
+import { markMisconceptionsAddressed } from '../learner/misconception-ledger.service';
+import { recordChurnRiskAtFinalize } from '../learner/churn-evidence.service';
 import { learnerExitService } from '../learner/LearnerExitService';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { learnerSnapshotService } from '../learner/LearnerSnapshotService';
@@ -873,6 +875,21 @@ export async function endSession(
         sessionId,
         error: error instanceof Error ? error.message : String(error),
       });
+    });
+
+    // 误解结算（G-R-R 三态补全，2026-09-26）：本课已展示掌握的概念上的活跃误解 → addressed。
+    // 此前全仓无人写 addressed/resolvedAt——活跃误解只增不减，被持续注入后续课堂并压低 FSRS 稳定性。
+    const masteredConcepts: string[] = learnerReplanProjection?.mastery?.stableConcepts ?? [];
+    if (masteredConcepts.length > 0) {
+      void markMisconceptionsAddressed(session.userId, masteredConcepts, { source: 'lesson:mastery' });
+    }
+
+    // 休眠信号（疲劳→干预闭环第一刀，2026-09-26）：结算「开课时距上次活跃」的档位——
+    // 非 active 写证据、cooling/dormant 发站内轻提醒（详见 churn-evidence.service）；fail-open
+    void recordChurnRiskAtFinalize({
+      userId: session.userId,
+      sessionId: session.id,
+      sessionStartAt: session.startTime,
     });
 
     try {

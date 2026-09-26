@@ -347,6 +347,48 @@ export async function getActiveForConcepts(
   }
 }
 
+/**
+ * 误解结算（G-R-R 三态的最后一态，2026-09-26 补全）：把指定概念上的活跃误解（suspected/confirmed）
+ * 置为 addressed + resolvedAt。挂点 = 课末收束（learnerReplanProjection.mastery.strongConcepts）——
+ * 学生已展示掌握的概念，历史误解视为已消除。
+ *
+ * 为什么必须存在（2026-09-26 复查实锤）：此前全仓没有任何运行时代码写 addressed/resolvedAt——
+ * 三态设计只跑完前两态，活跃误解只增不减：既被持续注入后续课堂（getActiveForConcepts 过滤
+ * status!='addressed'），又持续压低 FSRS 记忆稳定性（ReviewCompletedConsumer ×0.85）。
+ * 失败 fail-open（记降级遥测 + warn，返回 0），不阻断收束。
+ */
+export async function markMisconceptionsAddressed(
+  userId: string,
+  conceptKeys: string[],
+  options: { now?: Date; source?: string } = {}
+): Promise<number> {
+  const keys = (conceptKeys || []).map((key) => String(key || '').trim()).filter(Boolean);
+  if (!userId || keys.length === 0) return 0;
+  try {
+    const result = await prisma.misconception_ledger.updateMany({
+      where: { userId, conceptKey: { in: keys }, status: { not: 'addressed' } },
+      data: { status: 'addressed', resolvedAt: options.now ?? new Date() },
+    });
+    if (result.count > 0) {
+      logger.info('[misconception-ledger] 误解已结算为 addressed', {
+        userId, count: result.count, concepts: keys.slice(0, 5), source: options.source ?? 'lesson:mastery',
+      });
+    }
+    return result.count;
+  } catch (error) {
+    recordDegradation({
+      source: 'learner/misconception-ledger',
+      faultCategory: 'DB_READ_FAILED',
+      severity: 'P3_NOTICE',
+      impactedDimensions: ['misconception.settlement'],
+      mitigationApplied: 'skip-addressed-settlement',
+      rootCauseMessage: degradationCause(error),
+    });
+    logger.warn('[misconception-ledger] 误解结算失败（fail-open）', { userId, error: error instanceof Error ? error.message : String(error) });
+    return 0;
+  }
+}
+
 /* ────────────────────────── 存量归并（清理历史重复行） ────────────────────────── */
 
 /** 参与归并的一行（只取归并需要的列） */

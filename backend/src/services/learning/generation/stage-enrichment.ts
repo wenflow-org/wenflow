@@ -410,6 +410,8 @@ export async function enrichLearningPathWithAnderson(
 
     // 任务级资料引用收集（key = subtaskId；写进模板 JSON，不新增表列）
     const materialRefsByTask: Record<string, any[]> = {};
+    // 任务级迷思预判收集（key = subtaskId；同 sidecar 模式，2026-09-26 课前注入）
+    const misconceptionHintsByTask: Record<string, any[]> = {};
 
     // 概念身份预解析（canonical，best-effort）：**必须在事务外**——SQLite 下事务持有写锁，
     // 事务内再写 concepts/aliases 会撞锁。设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.4
@@ -448,6 +450,7 @@ export async function enrichLearningPathWithAnderson(
       designedTaskCount = 0;
       // 同理：资料引用收集器声明在事务外，重试不清空会把上一次尝试的条目累加进模板
       for (const key of Object.keys(materialRefsByTask)) delete materialRefsByTask[key];
+      for (const key of Object.keys(misconceptionHintsByTask)) delete misconceptionHintsByTask[key];
       await assertGenerationRunFence(tx, pathId, runId);
       const lockedPath = await tx.learning_paths.updateMany({
         where: { id: pathId, activeGenerationRunId: runId },
@@ -485,6 +488,17 @@ export async function enrichLearningPathWithAnderson(
           // 任务 → 资料条目（skill 侧已逐字核对）：按 subtaskId 落进 aiPromptTemplate.materialRefs.byTask
           if (Array.isArray((taskData as any).materialRefs) && (taskData as any).materialRefs.length) {
             materialRefsByTask[subtaskId] = (taskData as any).materialRefs;
+          }
+          // 任务 → 迷思预判（课前注入半条链）：规范化后按 subtaskId 落进 aiPromptTemplate.misconceptionHints.byTask
+          if (Array.isArray((taskData as any).anticipatedMisconceptions) && (taskData as any).anticipatedMisconceptions.length) {
+            misconceptionHintsByTask[subtaskId] = (taskData as any).anticipatedMisconceptions
+              .map((hint: any) => ({
+                conceptKey: typeof hint?.conceptKey === 'string' ? hint.conceptKey.trim() : '',
+                label: typeof hint?.label === 'string' ? hint.label.trim() : '',
+                why: typeof hint?.why === 'string' ? hint.why.trim() : '',
+              }))
+              .filter((hint: { conceptKey: string; label: string }) => hint.conceptKey && hint.label)
+              .slice(0, 2);
           }
           await tx.subtasks.create({
             data: {
@@ -558,6 +572,22 @@ export async function enrichLearningPathWithAnderson(
                           ...materialRefsByTask,
                         }
                       : materialRefsByTask,
+                  },
+                }
+              : {}),
+            ...(Object.keys(misconceptionHintsByTask).length
+              ? {
+                  // 迷思预判 sidecar：合并语义与 materialRefs 相同（append/progressive 保留旧任务）
+                  misconceptionHints: {
+                    ...(parsedTemplate?.misconceptionHints && typeof parsedTemplate.misconceptionHints === 'object' ? parsedTemplate.misconceptionHints : {}),
+                    byTask: (appendOnly || progressive)
+                      ? {
+                          ...((parsedTemplate?.misconceptionHints as any)?.byTask && typeof (parsedTemplate as any).misconceptionHints.byTask === 'object'
+                            ? (parsedTemplate as any).misconceptionHints.byTask
+                            : {}),
+                          ...misconceptionHintsByTask,
+                        }
+                      : misconceptionHintsByTask,
                   },
                 }
               : {}),

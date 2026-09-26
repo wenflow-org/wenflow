@@ -1,6 +1,6 @@
 ---
 agentId: skill:stage-designer
-coreHash: e6f6c704226a3480d99d5601f32b52ec384456a335bb8b9527366dd3f85a30ca
+coreHash: 6aff2f6e1137a045356c1915d6b5f4e89ed6a063cf26142d95329392185c2d6d
 coreVersion: 1
 temperature: 0.3
 maxTokens: 32000
@@ -70,9 +70,14 @@ failurePolicy: retry
   "cognitiveLevel": "remember|understand|apply|analyze|evaluate|create",
   "icapLevel": "active|constructive|interactive",
   "transferable": true,
-  "materialRefs": [{ "packIndex": 0, "sectionId": "s-3", "quote": "逐字复制资料里的原文片段" }]
+  "materialRefs": [{ "packIndex": 0, "sectionId": "s-3", "quote": "逐字复制资料里的原文片段" }],
+  "anticipatedMisconceptions": [{ "conceptKey": "概念id（与 linkedConcept 同源）", "label": "学习者对该概念最容易形成的一句错误理解", "why": "为什么会自然地这么错（一句话）" }]
 }
+anticipatedMisconceptions 是**可选**的课前迷思预判（2026-09-26 新增，供教学层防患未然）：
+仅当你能具体说出"学习者在这个任务上很容易先想错成什么"时才给，每任务至多 2 条，没有就省略整个字段；
+label 必须是具体的错误理解陈述（如"以为整理就是把东西全都收进柜子"），不得写成空泛的"容易理解错"。
 
 ## 边界约束
 
+- anticipatedMisconceptions 只描述"学习者易错点"，不得包含教学内容、讲解话术或标准答案
 - 只输出一个 JSON 对象，字段名与上方输出字段表完全一致，不输出表外字段与解释文字。

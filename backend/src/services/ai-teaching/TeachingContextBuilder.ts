@@ -1015,6 +1015,67 @@ export function resolvePathMaterialsForTeaching(aiPromptTemplate: string | null 
  * ≤4 条引文——这是 parent-child 检索的「取大」半边（无向量、标题/引文锚定）。
  * 任一环失败 fail-open：返回 null，课堂行为与原先完全一致。
  */
+/**
+ * 任务级迷思预判读侧（课前注入半条链，2026-09-26）：从 aiPromptTemplate.misconceptionHints.byTask[taskId]
+ * 读回 stage-designer 的课前预判。与 resolveActiveTaskMaterialExcerpts 同款 sidecar 模式；失败 fail-open 返回 null。
+ */
+export function resolveTaskMisconceptionHints(params: {
+  aiPromptTemplate: string | null | undefined;
+  taskId: string;
+}): Array<{ conceptKey: string; label: string; why: string }> | null {
+  try {
+    const parsed = parsePathPromptTemplate(params.aiPromptTemplate || null);
+    const byTask = parsed?.misconceptionHints && typeof parsed.misconceptionHints === 'object'
+      ? (parsed.misconceptionHints as Record<string, unknown>).byTask
+      : null;
+    const hints: unknown[] = byTask && typeof byTask === 'object' ? ((byTask as Record<string, unknown>)[params.taskId] as unknown[]) || [] : [];
+    if (!Array.isArray(hints) || hints.length === 0) return null;
+    const rows = hints
+      .map((hint) => {
+        const record = (hint && typeof hint === 'object' ? hint : {}) as Record<string, unknown>;
+        return {
+          conceptKey: String(record.conceptKey ?? '').trim(),
+          label: String(record.label ?? '').trim(),
+          why: String(record.why ?? '').trim(),
+        };
+      })
+      .filter((hint) => hint.conceptKey && hint.label)
+      .slice(0, 3);
+    return rows.length > 0 ? rows : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 台账行（已观察）与课前预判行合成 priorMisconceptions：planned 行带 source='planned'，
+ * teaching-turn 据此区分话术（预判=设计诊断性提问；已观察=可引用过往错误）。
+ */
+export function buildPlannedMisconceptionRows(
+  hints: Array<{ conceptKey: string; label: string; why: string }> | null
+): Array<{
+  conceptKey: string;
+  hypothesis: string;
+  canonicalLabel: string;
+  confidence: number;
+  status: string;
+  occurrenceCount: number;
+  why: string | null;
+  source: 'planned';
+}> {
+  if (!hints || hints.length === 0) return [];
+  return hints.map((hint) => ({
+    conceptKey: hint.conceptKey,
+    hypothesis: hint.label,
+    canonicalLabel: hint.label,
+    confidence: 25,
+    status: 'suspected',
+    occurrenceCount: 0,
+    why: hint.why || null,
+    source: 'planned' as const,
+  }));
+}
+
 export async function resolveActiveTaskMaterialExcerpts(params: {
   aiPromptTemplate: string | null | undefined;
   taskId: string;
@@ -1220,19 +1281,30 @@ export async function buildTeachingScenarioContext(
     .filter((concept) => !primaryConcepts.includes(concept) && !prerequisiteConcepts.includes(concept))
     .slice(0, 3);
   // 误解台账（G-R-R Phase 2）：拉取当前任务相关概念的活跃误解，注入教学上下文
+  // 2026-09-26 课前注入：任务设计期的迷思预判（source='planned'）合成进同一通道，
+  // teaching-turn 按 source 区分话术（预判→诊断性提问；已观察→可引用过往错误）
   const priorMisconceptions = await getActiveForConcepts(userId, dedupeConcepts([
     ...primaryConcepts,
     ...prerequisiteConcepts,
     ...supportingConcepts,
     ...taskKcs.map((kc) => kc.name).filter((name) => !!name),
-  ]), 5).then((rows) => rows.length > 0 ? rows.map((r) => ({
-    conceptKey: r.conceptKey,
-    hypothesis: r.hypothesis,
-    canonicalLabel: r.canonicalLabel,
-    confidence: r.confidence,
-    status: r.status,
-    occurrenceCount: r.occurrenceCount,
-  })) : null);
+  ]), 5).then((rows) => {
+    const observed = rows.map((r) => ({
+      conceptKey: r.conceptKey,
+      hypothesis: r.hypothesis,
+      canonicalLabel: r.canonicalLabel,
+      confidence: r.confidence,
+      status: r.status,
+      occurrenceCount: r.occurrenceCount,
+      source: 'observed' as const,
+    }));
+    const planned = buildPlannedMisconceptionRows(resolveTaskMisconceptionHints({
+      aiPromptTemplate: path.aiPromptTemplate,
+      taskId: task.id,
+    }));
+    const merged = [...observed, ...planned];
+    return merged.length > 0 ? merged : null;
+  });
   const orderedTasks = Array.isArray(milestone?.subtasks) ? milestone.subtasks : [];
   const currentTaskOrder = typeof (task as any).order === 'number'
     ? (task as any).order

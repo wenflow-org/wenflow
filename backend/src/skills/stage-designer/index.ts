@@ -92,6 +92,18 @@ function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
       // 白名单归一**必须带上** materialRefs，否则任务级资料引用在此被丢掉
       // （随后由 withMaterialRefs 逐字核对；核对不过会在那里被删除）
       materialRefs: Array.isArray(item?.materialRefs) ? item.materialRefs : undefined,
+      // 同理必须带上 anticipatedMisconceptions（2026-09-26 课前注入）：白名单归一没带 =
+      // 模型输出了也被剥掉（真实 LLM 端到端实测：原始输出含键、sidecar 空）
+      anticipatedMisconceptions: Array.isArray(item?.anticipatedMisconceptions)
+        ? item.anticipatedMisconceptions
+            .map((hint: any) => ({
+              conceptKey: normalizeString(hint?.conceptKey) || '',
+              label: normalizeString(hint?.label) || '',
+              why: normalizeString(hint?.why) || '',
+            }))
+            .filter((hint: { conceptKey: string; label: string }) => hint.conceptKey && hint.label)
+            .slice(0, 2)
+        : undefined,
     }))
     .filter((item) => !!item.title);
 }
