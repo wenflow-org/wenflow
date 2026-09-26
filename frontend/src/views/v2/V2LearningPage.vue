@@ -1552,9 +1552,13 @@ onBeforeUnmount(() => {
 }
 .kp__head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  /* font 简写必须写在 font-size 之前：它会把字体重置为继承值，写在后面就把字号一起
+     打回 16px。这个顺序错误让「本节知识点」按 16px 渲染，需要 80px 而卡头只给 67px，
+     折成两行把卡头从 20px 撑到 48px（2026-09-26 用户侧对齐走查）。 */
+  font: inherit;
   font-size: 13px;
   border: 0; background: transparent; padding: 0; margin: 0;
-  font: inherit; color: inherit; text-align: left; cursor: default;
+  color: inherit; text-align: left; cursor: default;
 }
 /* 头部信息组（2026-09-26 用户「0/2已掌握进行中1 太丑，数据平摊着」）：
    左 = 掌握度小圆环 + 标题，右 = 语义色胶囊（掌握绿 / 进行中蓝，全空灰显），

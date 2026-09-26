@@ -217,6 +217,11 @@ onUnmounted(() => {
 .v2nav__user { position: relative; }
 .v2nav__avatar {
   display: flex; align-items: center; gap: 8px;
+  /* font 简写写在 font-size/font-weight 之前，否则会把两者一起重置为继承值——
+     桌面端用户名因此一直按 16px 渲染，比主导航链接（14.5px）还大（2026-09-26
+     用户侧对齐走查扫出的同族死规则，另一个在 V2LearningPage .kp__head）。
+     修后层级：主导航 14.5 > 用户名 13.5 > CTA 13。 */
+  font: inherit;
   font-size: 13.5px; font-weight: 700;
   color: var(--ink, #172033);
   background: transparent;
@@ -224,7 +229,6 @@ onUnmounted(() => {
   padding: 5px 10px 5px 5px;
   border-radius: var(--mk-radius-pill);
   cursor: pointer;
-  font: inherit;
   transition: background 0.15s ease;
 }
 .v2nav__avatar:hover { background: color-mix(in srgb, var(--surface) 92%, var(--ink)); }
