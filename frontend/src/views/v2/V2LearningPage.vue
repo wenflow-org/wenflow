@@ -2281,7 +2281,11 @@ onBeforeUnmount(() => {
     padding: 8px 10px;
     gap: 0;
   }
-  .kp { position: static; }
+  /* 移动端知识点面板：折叠为头部横条。position:relative + z-index 让展开后的
+     kp__body 以悬浮层盖在对话区上方（2026-09-26 用户：「展开后我希望的是悬浮」），
+     对话区高度不再被展开/收起挤压。top:auto 中和基础 sticky 规则的 top:16px——
+     relative 下那个 16px 会真把条压进对话区 8px。 */
+  .kp { position: relative; top: auto; z-index: 30; }
   .learn__back { display: none; }
   /* 移动端 tutor 撑满可用高度：聊天区内部滚动、composer 吸底，消除滚动到底的底部空白 */
   .tutor { max-height: none; height: 100%; min-height: 0; }
@@ -2293,6 +2297,9 @@ onBeforeUnmount(() => {
      盒内与目标对话页同款收紧：外内边距左 14→6、gap 10→8、textarea 上下 10→8、发送键 40→36。 */
   .composer__box { padding: 6px; gap: 8px; }
   .composer__textarea { font-size: 16px; padding: 8px 0; }
+  /* 占位符压到 15px（2026-09-26 用户：「随时提问这几个字非常的大」）：textarea 本身必须
+     留 16px 防 iOS 聚焦缩放，只能压 placeholder——与目标对话页同款口径。 */
+  .composer__textarea::placeholder { font-size: 15px; }
   .composer__attach { margin-top: 4px; }
   .composer__send { width: 44px; height: 44px; }
   /* 触屏没有键盘快捷键提示：这行是「Enter 发送 · Shift+Enter 换行」+ AI 声明，不隐藏的话两者
@@ -2322,8 +2329,9 @@ onBeforeUnmount(() => {
   /* 快捷块瘦身见文件末尾的媒体块：.replies/.reply 的基础规则在本文件靠后的 style 块里，
      同权重下写在这里会被覆盖 */
   /* 弹窗锚定在 ⋯ 按钮正下方、右对齐按钮 */
-  /* 移动端知识点面板默认折叠：头部横条可点，收起时隐藏进度条/清单 */
-  .kp__head { cursor: pointer; padding: 5px 0; min-height: 44px; }   /* 触屏整条可点，HIG 44 */
+  /* 移动端知识点面板默认折叠：头部横条可点，收起时隐藏进度条/清单。
+     两种状态头部同款内边距（折叠条与展开条都是 44px 触屏整条可点，HIG 44） */
+  .kp__head { cursor: pointer; padding: 11px 12px; min-height: 44px; }
   .kp__caret { display: inline; }
   .kp--collapsed .kp__body { display: none; }
 }
@@ -2627,15 +2635,28 @@ onBeforeUnmount(() => {
    （实测行高 280px），tutor 卡片悬到 y=346、与知识点条之间空 215px；消息多了才碰巧占满。
    另两处偏大：知识点折叠条 65px（桌面 16px 内边距原样留在手机上）、composer 103px
    （goal 页同款输入区净高只有 54px——hint 行 position:absolute; height:0 拿出文档流浮在底边）。
-   修法与 goal 页对齐：kp 行 auto、tutor 行吃满剩余；折叠条外层内边距清零；
+   修法与 goal 页对齐：kp 行 auto、tutor 行吃满剩余；折叠条与对话区之间 8px 呼吸
+   （2026-09-26 用户：「收起来的卡片和下面有重叠」——gap 0 时两条卡片贴死读作重叠）；
+   展开的 kp__body 改悬浮层盖在对话区上（见 ≤900 主块的 .kp 注释），不再挤对话区；
    hint 浮出文档流，composer 103 → 84px。对话区（消息+输入）合计 602 → 725px。 */
 @media (max-width: 900px) {
-  .learn__body { grid-template-rows: auto minmax(0, 1fr); }
+  .learn__body { grid-template-rows: auto minmax(0, 1fr); gap: 8px; }
   /* 无知识点变体只有 tutor 一个孩子：单行 1fr，别让它落进 auto 行 */
   .learn__body--no-kp { grid-template-rows: minmax(0, 1fr); }
   .kp { padding: 0; }
-  .kp:not(.kp--collapsed) { padding: 10px 12px; }
-  .kp--collapsed .kp__head { padding: 11px 12px; min-height: 44px; }   /* 折叠条，触屏整条可点 */
+  /* 展开：知识条本体高度不变，主体浮出为下拉面板（内部滚动，盖在消息区上） */
+  .kp:not(.kp--collapsed) .kp__body {
+    position: absolute;
+    top: calc(100% + 6px); left: 0; right: 0;
+    max-height: min(60dvh, 480px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--mk-radius-modal);
+    padding: 10px 12px 12px;
+    box-shadow: 0 12px 32px rgba(23, 32, 51, 0.16);
+  }
   .composer { position: relative; gap: 0; padding: 8px 10px 22px; }
   /* AI 声明浮在底部 22px 留白条里，不再独立占一行（goal 页同款做法） */
   .composer__hint {
