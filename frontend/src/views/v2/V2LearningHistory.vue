@@ -2,20 +2,11 @@
   <CapabilityShell title="学习历史" description="按时间回看你的学习会话：学了什么、学多久、完成情况。">
     <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题 + 说明） -->
     <div class="history__body">
-      <!-- 统计（与首页/状态页同口径：后端已默认过滤 discarded/superseded 内部会话） -->
+      <!-- 统计行（批19）：三个数字合并为一行内联统计，不再三张等权卡片 -->
       <div class="history__stats">
-        <div class="card history__stat">
-          <span>学习次数</span>
-          <strong>{{ totalSessions }}<i> 次</i></strong>
-        </div>
-        <div class="card history__stat">
-          <span>累计时长</span>
-          <strong>{{ totalMinutes }}<i> 分钟</i></strong>
-        </div>
-        <div class="card history__stat">
-          <span>学习天数</span>
-          <strong>{{ activeDays }}<i> 天</i></strong>
-        </div>
+        <span class="history__stat">学习 <strong>{{ totalSessions }}</strong> 次</span>
+        <span class="history__stat">累计 <strong>{{ totalMinutes }}</strong> 分钟</span>
+        <span class="history__stat">共 <strong>{{ activeDays }}</strong> 天有学习</span>
       </div>
 
       <!-- 错误 -->
@@ -45,7 +36,8 @@
           </div>
           <ul class="history__items">
             <li v-for="s in group.items" :key="s.id" class="history__item">
-              <span class="history__dot" :class="`history__dot--${sessionState(s)}`"></span>
+              <!-- 色点对读屏是冗余（状态文案在右侧徽章里），标记装饰；批19 aria 补课 -->
+              <span class="history__dot" :class="`history__dot--${sessionState(s)}`" aria-hidden="true"></span>
               <div class="history__item-main">
                 <strong>{{ taskTitle(s) }}</strong>
                 <span v-if="sessionSummary(s)" class="history__item-sub">{{ sessionSummary(s) }}</span>
@@ -304,36 +296,27 @@ onMounted(() => {
   align-content: start;
 }
 
+/* 统计行（批19）：三个数字内联一行，不再三张等权卡 */
 .history__stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 22px;
+  flex-wrap: wrap;
+  padding: 2px 2px 0;
 }
 
 .history__stat {
-  padding: 16px 18px;
-  display: grid;
-  gap: 4px;
-}
-
-.history__stat span {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--faint, #67758f);
+  font-size: 13px;
+  color: var(--muted, #5b6577);
 }
 
 .history__stat strong {
-  font-size: 26px;
+  font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--ink, #172033);
-}
-
-.history__stat strong i {
-  font-size: 13px;
-  font-style: normal;
-  font-weight: 600;
-  color: var(--muted, #5b6577);
+  font-variant-numeric: tabular-nums;
+  margin: 0 2px;
 }
 
 .history__loading {
@@ -484,28 +467,12 @@ onMounted(() => {
      只装「学习次数 / 24 次」两行）。桌面本来就是三列，窄屏竖排是因为 26px 的数值
      在 100px 宽的列里放不下——把数值压到 19px、单位 11px、卡片内边距收到 10px 后
      三列重新放得下（320 下每列内容宽 72px，「271 分钟」实测 57px） */
-  .history__stats {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .history__stat {
-    padding: 10px 12px;
-    gap: 2px;
-  }
+  /* 统计已合并为内联一行（批19），窄屏自动换行，无需特殊处理 */
+  .history__stats { gap: 14px; }
 
   /* 加载态桌面 40px 上下留白，移动端收到 28（基线：加载/空态 ≤32） */
   .history__loading {
     padding: 28px 0;
-  }
-
-  .history__stat span {
-    font-size: 12px;
-  }
-
-  .history__stat strong {
-    /* 统计数字全站统一 16px（对齐账户页，2026-09-24 收数字轮） */
-    font-size: 16px;
   }
 
   .history__stat strong i {

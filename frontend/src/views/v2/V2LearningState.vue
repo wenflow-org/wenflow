@@ -12,14 +12,29 @@
         <router-link to="/learning-paths" class="btn-ghost">查看学习路径</router-link>
       </div>
 
-      <!-- 指标卡 -->
-      <div class="metrics">
-        <section v-for="m in metricCards" :key="m.key" class="card metric">
-          <small>{{ m.label }}</small>
-          <div class="metric__value" :style="{ color: m.color }">{{ m.value }}<i v-if="m.unit"> {{ m.unit }}</i></div>
-          <span class="metric__note" :class="`metric__note--${m.tone}`">{{ m.note }}</span>
-        </section>
-      </div>
+      <!-- 体检卡（批19）：整体状态为主指标突出，学习压力/掌握趋势/疲劳程度降为行内状态条
+           （原 4 张等权 KPI 卡墙）；读取失败/加载中各自有形态 -->
+      <section class="card vitals" :class="{ 'vitals--fail': currentLoadFailed }">
+        <div v-if="vitalsLoading" class="vitals__loading">
+          <SkeletonLoader variant="lines" :count="2" />
+        </div>
+        <template v-else>
+          <div class="vitals__main">
+            <small>{{ vitalMain.label }}</small>
+            <div class="vitals__value" :style="{ color: vitalMain.color }">
+              {{ vitalMain.value }}<i v-if="vitalMain.unit"> {{ vitalMain.unit }}</i>
+            </div>
+            <span class="metric__note" :class="`metric__note--${vitalMain.tone}`">{{ vitalMain.note }}</span>
+          </div>
+          <div class="vitals__subs">
+            <span v-for="m in vitalSubs" :key="m.key" class="vitals__sub">
+              <small>{{ m.label }}</small>
+              <b :style="{ color: m.color }">{{ m.value }}<i v-if="m.unit"> {{ m.unit }}</i></b>
+              <span class="metric__note" :class="`metric__note--${m.tone}`">{{ m.note }}</span>
+            </span>
+          </div>
+        </template>
+      </section>
 
       <div class="state__grid">
         <div class="state__col" :class="{ 'state__col--empty': !hasAnyLoad }">
@@ -40,11 +55,11 @@
             </div>
             <div v-show="openBands.chart" class="band__body">
 
-            <!-- 图例 + 当前状态 -->
+            <!-- 图例 + 当前状态（批19 术语自然化：缩写进说明带，图例行只说人话） -->
             <div class="ff-legend">
-              <span><i class="ff-dot ff-dot--fitness"></i>掌握趋势（KTL）</span>
-              <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度（LF）</span>
-              <span><i class="ff-dot ff-dot--lsb"></i>整体状态（LSB = KTL − LF）</span>
+              <span><i class="ff-dot ff-dot--fitness"></i>掌握趋势</span>
+              <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度</span>
+              <span><i class="ff-dot ff-dot--lsb"></i>整体状态（掌握 − 疲劳）</span>
               <span v-if="latestDay && hasAnyLoad" class="ff-form-chip" :class="`ff-form-chip--${latestDay.zone?.cls || 'risk'}`">
                 状态 {{ latestDay.lsb ?? '—' }} · {{ latestDay.zone?.label || '暂无' }}
               </span>
@@ -87,9 +102,9 @@
                 <span>状态 {{ displayDay.lsb ?? '—' }}（{{ displayDay.zone?.label || '暂无' }}）</span>
               </div>
               <div class="ff-zones">
-                <span><i class="ff-dot ff-dot--fresh"></i>精力充沛（LSB ≥ 40）</span>
-                <span><i class="ff-dot ff-dot--optimal"></i>最优训练区（20 ≤ LSB &lt; 40）</span>
-                <span><i class="ff-dot ff-dot--risk"></i>需要休息 / 高风险（LSB &lt; 20）</span>
+                <span><i class="ff-dot ff-dot--fresh"></i>精力充沛（状态 ≥ 40）</span>
+                <span><i class="ff-dot ff-dot--optimal"></i>最优训练区（状态 20 – 39）</span>
+                <span><i class="ff-dot ff-dot--risk"></i>需要休息 / 高风险（状态 &lt; 20）</span>
               </div>
             </template>
             </div><!-- /band__body -->
@@ -254,9 +269,9 @@
             </div>
             <div v-show="openBands.legend" class="band__body">
             <ul class="legend">
-              <li><b class="dot dot--blue"></b>掌握趋势（KTL）：长期学习积累的掌握水平，变化平缓</li>
-              <li><b class="dot dot--purple"></b>疲劳度（LF）：近期学习压力的累积，变化较快</li>
-              <li><b class="dot dot--green"></b>整体状态（LSB = KTL − LF）：疲劳高于掌握时状态下降，提醒休息</li>
+              <li><b class="dot dot--blue"></b>掌握趋势：长期学习积累的掌握水平，变化平缓（曲线里的 KTL）</li>
+              <li><b class="dot dot--purple"></b>疲劳度：近期学习压力的累积，变化较快（曲线里的 LF）</li>
+              <li><b class="dot dot--green"></b>整体状态＝掌握 − 疲劳：疲劳高于掌握时状态下降，提醒休息（曲线里的 LSB）</li>
               <li><b class="dot dot--amber"></b>保持规律学习让掌握趋势稳步上升；疲劳偏高时安排休息，避免长期处于低状态区</li>
             </ul>
             </div><!-- /band__body -->
@@ -301,7 +316,7 @@ const isNarrowAtMount = typeof window !== 'undefined'
   && window.matchMedia('(max-width: 1100px)').matches;
 const openBands = ref({
   chart: true,                 // 趋势图是本页核心，任何宽度都默认展开
-  suggest: !isNarrowAtMount,   // AI 建议移动端收起（学习台首屏已有建议头条）
+  suggest: true,               // AI 建议是本页最可行动的内容，全宽度默认展开（批19 从移动端收起改为常开）
   decisions: !isNarrowAtMount,
   prefs: !isNarrowAtMount,
   legend: !isNarrowAtMount,
@@ -348,6 +363,11 @@ const metricCards = computed(() =>
     return { ...m, value: v ?? '—', unit: m.key === 'lsb' ? '' : '分', ...t };
   })
 );
+
+/* 体检卡（批19）：主指标=整体状态，其余三项行内条 */
+const vitalsLoading = computed(() => current.value === null && !currentLoadFailed.value);
+const vitalMain = computed(() => metricCards.value[0]);
+const vitalSubs = computed(() => metricCards.value.slice(1));
 
 const heroTitle = computed(() => {
   const lsb = current.value?.lsb;
@@ -826,16 +846,29 @@ function loadGuidance() {
   cursor: pointer;
 }
 
-.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.metric { padding: 16px 18px; display: grid; gap: 8px; }
-.metric small { font-size: 12px; color: var(--faint); font-weight: 700; }
-.metric__value { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
-.metric__value i { font-size: 13px; font-style: normal; font-weight: 600; color: var(--faint); }
+/* 体检卡（批19）：主指标大数值 + 三项行内状态条，替代 4 张等权 KPI 卡 */
+.vitals { padding: 16px 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.vitals__loading { flex: 1; }
+.vitals__main { display: grid; gap: 4px; min-width: 128px; }
+.vitals__main small { font-size: 12px; color: var(--faint); font-weight: 700; }
+.vitals__value { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.vitals__value i { font-size: 13px; font-style: normal; font-weight: 600; color: var(--faint); }
+.vitals__subs { display: flex; gap: 22px; flex-wrap: wrap; flex: 1; justify-content: flex-end; }
+.vitals__sub { display: grid; gap: 3px; justify-items: start; }
+.vitals__sub small { font-size: 12px; color: var(--faint); font-weight: 700; }
+.vitals__sub b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.vitals__sub b i { font-size: 12px; font-style: normal; font-weight: 600; color: var(--faint); }
 .metric__note { width: fit-content; font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: var(--mk-radius-pill); }
 .metric__note--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .metric__note--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
 .metric__note--purple { color: var(--accent); background: rgba(141, 107, 255, 0.12); }
 .metric__note--amber { color: var(--amber-ink); background: rgba(244, 170, 70, 0.16); }
+.metric__note--red { color: var(--red-ink); background: rgba(239, 117, 120, 0.12); }
+
+@media (max-width: 720px) {
+  .vitals { align-items: flex-start; flex-direction: column; gap: 14px; }
+  .vitals__subs { justify-content: flex-start; gap: 16px; }
+}
 
 .state__grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
 .state__col { display: grid; gap: 16px; }
@@ -897,7 +930,6 @@ function loadGuidance() {
 @media (max-width: 1100px) {
   .state__main { padding: 16px 14px 32px; }
   .state__hero h1 { font-size: 18px; }
-  .metrics { grid-template-columns: repeat(2, 1fr); }
   .state__grid { grid-template-columns: 1fr; }
   .side { position: static; }
   /* 42/90 天分段控件是触屏主入口之一，28px 高对拇指偏小 → 34px */
@@ -1049,12 +1081,12 @@ function loadGuidance() {
 <style scoped>
 /* ===== 移动端密度（2026-09-24）=====
    判据：KPI 数字 16px（2026-09-24 用户指着统计卡数字说「数字也很大」后全站统一）、卡片内边距 12–16px、空态/加载留白 ≤32px。
-   实测 390 下整页 3359px（最长的一页），其中 .metric__value 原 30px×4 是全站最大的数字刻度：
-   两列卡各约 171px 宽，30px 数字占掉近 1/5 屏宽，与「扫一眼看数」的用法不匹配。
-   放在文件末尾：同权重下后出现者胜。 */
+   实测 390 下整页 3359px（最长的一页）。批19 起 KPI 卡墙改为体检卡（vitals），
+   主数值桌面 34px、移动 24px 仍受密度口径约束。放在文件末尾：同权重下后出现者胜。 */
 @media (max-width: 1100px) {
-  .metric__value { font-size: 16px; }
-  .metric { padding: 12px 14px; gap: 6px; }
+  .vitals__value { font-size: 24px; }
+  .vitals__subs { gap: 16px; }
+  .vitals { padding: 14px 16px; }
   .chart,
   .suggest,
   .decisions { padding: 14px 16px; }

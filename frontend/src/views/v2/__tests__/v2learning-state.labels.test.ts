@@ -68,18 +68,21 @@ describe('V2LearningState 中文指标标签（P3-3）', () => {
     getMock.mockReset();
   });
 
-  it('四张指标卡全中文标签：整体状态/学习压力/掌握趋势/疲劳程度', async () => {
+  it('体检卡四项全中文标签：整体状态/学习压力/掌握趋势/疲劳程度', async () => {
     const w = await mountState();
-    const labels = w.findAll('.metric small').map((n) => n.text());
+    const labels = [
+      w.find('.vitals__main small').text(),
+      ...w.findAll('.vitals__sub small').map((n) => n.text())
+    ];
     expect(labels).toEqual(['整体状态', '学习压力', '掌握趋势', '疲劳程度']);
   });
 
-  it('图例中文：掌握趋势（KTL）/ 疲劳度（LF）/ 整体状态（LSB）', async () => {
+  it('图例中文：掌握趋势 / 疲劳度 / 整体状态（掌握 − 疲劳）', async () => {
     const w = await mountState();
     const legend = w.find('.ff-legend');
-    expect(legend.text()).toContain('掌握趋势（KTL）');
-    expect(legend.text()).toContain('疲劳度（LF）');
-    expect(legend.text()).toContain('整体状态（LSB');
+    expect(legend.text()).toContain('掌握趋势');
+    expect(legend.text()).toContain('疲劳度');
+    expect(legend.text()).toContain('整体状态（掌握 − 疲劳）');
   });
 
   it('有数据时状态图例为「状态」中文（非 form）', async () => {

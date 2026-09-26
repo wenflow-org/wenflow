@@ -6,10 +6,16 @@
       <div class="km__hero">
         <div>
           <h1>知识图谱</h1>
-          <p>
-            把你所有学习路径里的概念汇成一张图：<strong>实线</strong>是前置依赖（先掌握左边才能学右边），
-            <strong>虚线</strong>是归属（知识组件属于哪个核心概念）；颜色是掌握度。
-          </p>
+          <p>把你所有学习路径里的概念汇成一张图，颜色是掌握程度。</p>
+          <!-- 图例教学收进帮助（批19）：首屏只留一句，连线语义点开再看 -->
+          <details class="km__help">
+            <summary>怎么看这张图</summary>
+            <ul>
+              <li><strong>实线</strong>＝前置依赖：先掌握左边，才能学右边。</li>
+              <li><strong>虚线</strong>＝归属：知识组件属于哪个核心概念。</li>
+              <li>节点颜色越深，掌握越牢。</li>
+            </ul>
+          </details>
         </div>
         <router-link to="/learning-state" class="km__link">查看学习状态</router-link>
       </div>
@@ -30,6 +36,10 @@
           @update:path-id="onPathChange"
         />
       </section>
+      <!-- 组件内错误只渲染文字没有重试（批19 补）：原地重拉，不必整页刷新 -->
+      <div v-if="error && !loading" class="km__error-row">
+        <button type="button" class="btn-ghost" @click="load()">重试加载</button>
+      </div>
     </main>
   </div>
 </template>
@@ -157,6 +167,22 @@ onMounted(async () => {
 .km__link:hover {
   color: var(--mk-blue);
 }
+/* 帮助折叠（批19）：native details，无 JS 依赖，键盘可达 */
+.km__help {
+  margin-top: var(--mk-space-2);
+  font-size: var(--mk-fs-12_5);
+  color: var(--mk-muted);
+}
+.km__help summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--mk-blue);
+  font-weight: 600;
+  padding: 4px 0;
+  list-style-position: inside;
+}
+.km__help ul { margin: var(--mk-space-2) 0 0; padding-left: 18px; display: grid; gap: 4px; line-height: 1.6; }
+.km__error-row { display: flex; justify-content: center; margin-top: var(--mk-space-3); }
 /* 触屏：「查看学习状态」这类文字链接只有 20px 高，加纵向内边距抬到 34px（配色不变） */
 @media (max-width: 1100px) {
   .km__link { padding: 7px 0; }

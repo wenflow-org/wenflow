@@ -13,13 +13,17 @@
       </div>
 
       <template v-else>
-        <!-- 概览 -->
-        <div class="overview">
-          <section class="card ov"><small>已解锁</small><b>{{ unlockedCount }}</b><span>个成就</span></section>
-          <section class="card ov"><small>待解锁</small><b>{{ items.length - unlockedCount }}</b><span>个成就</span></section>
-          <section class="card ov"><small>已获得经验值</small><b>{{ totalXpAll }}</b><span>XP{{ achXpHint }}</span></section>
-          <section class="card ov"><small>解锁进度</small><b>{{ items.length ? Math.round((unlockedCount / items.length) * 100) : 0 }}%</b><span>{{ unlockedCount }} / {{ items.length }}</span></section>
-        </div>
+        <!-- 概览（批19）：四张等权 KPI 卡合并为一行摘要 + 进度条 -->
+        <section class="card ov-line" aria-label="成就概览">
+          <div class="ov-line__text">
+            已解锁 <strong>{{ unlockedCount }}</strong> / {{ items.length }} 个成就
+            <template v-if="items.length - unlockedCount > 0">，还剩 {{ items.length - unlockedCount }} 个</template>
+            <span class="ov-line__xp">已获得 {{ totalXpAll }} XP{{ achXpHint }}</span>
+          </div>
+          <div class="ov-line__bar" role="img" :aria-label="`解锁进度 ${items.length ? Math.round((unlockedCount / items.length) * 100) : 0}%`">
+            <i :style="{ width: (items.length ? Math.round((unlockedCount / items.length) * 100) : 0) + '%' }"></i>
+          </div>
+        </section>
 
         <!-- 筛选 -->
         <div class="filters">
@@ -291,12 +295,13 @@ onMounted(() => {
   box-shadow: var(--shadow-sm);
 }
 
-.overview { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.ov { padding: 16px 18px; display: grid; gap: 3px; }
-.ov small { font-size: 12px; color: var(--faint); font-weight: 700; }
-/* P3-19：四张统计卡统一为「主色数值 + 中性标签」两档，去掉逐卡变色（原 1 绿 / 3 蓝 / 2·4 黑） */
-.ov b { font-size: 28px; letter-spacing: -0.02em; color: var(--accent); }
-.ov span { font-size: 11.5px; color: var(--faint); }
+/* 概览一行摘要（批19）：替代四张等权 KPI 卡 */
+.ov-line { padding: 14px 18px; display: grid; gap: 8px; }
+.ov-line__text { font-size: 13.5px; color: var(--muted); }
+.ov-line__text strong { font-size: 17px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ov-line__xp { margin-left: 10px; font-size: 12px; color: var(--faint); }
+.ov-line__bar { height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
+.ov-line__bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.4s ease; }
 
 .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .filter {

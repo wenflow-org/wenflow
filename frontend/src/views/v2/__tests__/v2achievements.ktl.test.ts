@@ -85,8 +85,8 @@ describe('V2Achievements 经验值口径（与账号页同源）', () => {
     useUserStore().user = { id: 'u1', name: 't', xp: 60, level: 1 } as never;
     await flushPromises();
 
-    const kpi = w.findAll('.ov').find((c) => c.text().includes('已获得经验值'));
-    expect(kpi?.text()).toContain('60');
-    expect(kpi?.text()).toContain('其中成就 10');
+    const kpi = w.find('.ov-line');
+    expect(kpi.text()).toContain('60');
+    expect(kpi.text()).toContain('其中成就 10');
   });
 });
