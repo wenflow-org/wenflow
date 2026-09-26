@@ -112,13 +112,16 @@
           <tbody>
             <tr v-for="r in paged" :key="r.id" class="gc-row" @click="openDetail(r)">
               <td>
-                <div class="mk-cell-main">
-                  <strong>{{ r.userName }}</strong>
-                  <span class="mk-cell-sub">{{ r.userEmail }}</span>
-                </div>
-                <div class="gc-tags">
-                  <span v-if="r.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
-                  <span v-else-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="测试/审计账号">测试</span>
+                <div class="gc-user">
+                  <i class="gc-ava" :class="{ 'gc-ava--virtual': r.isVirtualLearner, 'gc-ava--test': !r.isVirtualLearner && r.isTestAccount }" aria-hidden="true">{{ (r.userName || '用')[0] }}</i>
+                  <div class="mk-cell-main">
+                    <strong>{{ r.userName }}</strong>
+                    <span class="mk-cell-sub">{{ r.userEmail }}</span>
+                  </div>
+                  <div class="gc-tags">
+                    <span v-if="r.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
+                    <span v-else-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="测试/审计账号">测试</span>
+                  </div>
                 </div>
               </td>
               <td v-if="!gcHiddenCols.has('summary')"><span class="gc-summary" :title="r.summary">{{ r.summary }}</span></td>
@@ -847,7 +850,19 @@ onMounted(() => {
 /* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
 .gc-row { cursor: pointer; }
 /* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
-.gc-tags { display: flex; gap: 5px; margin-top: 2px; }
+/* 身份 chip：与 Users/MemoryReview 同一语言（真实蓝 / 虚拟紫 / 测试琥珀），三页统一 */
+.gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.gc-user .mk-cell-main { min-width: 0; flex: 1; }
+.gc-ava {
+  width: 28px; height: 28px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  font-style: normal; font-size: 12px; font-weight: 800;
+  background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
+  color: var(--mk-accent-deep);
+}
+.gc-ava--virtual { background: color-mix(in srgb, var(--mk-purple) 14%, transparent); color: var(--mk-purple); }
+.gc-ava--test { background: color-mix(in srgb, var(--mk-amber) 14%, transparent); color: var(--mk-amber); }
+.gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }
 /* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
 .gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }
 .gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }
