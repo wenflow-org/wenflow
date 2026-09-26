@@ -20,7 +20,7 @@
         </div>
       </div>
       <div class="ud-kpis">
-        <MkKpi v-for="s in d.stats" :key="s.label" :label="s.label" :value="s.value" />
+        <MkKpi v-for="s in d.stats" :key="s.label" :label="s.label" :value="s.value" :hint="s.hint" />
       </div>
     </header>
 
@@ -135,13 +135,20 @@ interface Detail {
   email: string
   role: string
   joined: string
-  stats: { label: string; value: string }[]
+  stats: { label: string; value: string; hint?: string }[]
   recentPaths: { title: string; stage: string; pct: number; tone: 'ok' | 'warn' }[]
   activity: { time: string; text: string }[]
 }
 
 const liveDetail = ref<Detail | null>(null)
 /** 等级英→中映射 */
+
+/** XP 项的升级语境（批E，公式与后端 level.util.ts 同源） */
+function xpHintOf(xp: number): string {
+  const n = Math.floor(Math.sqrt(Math.max(0, xp) / 100)) + 1
+  const toNext = Math.max(100 * n * n - xp, 0)
+  return toNext > 0 ? `距 L${n + 1} 还需 ${toNext} XP` : '已达最高档'
+}
 function levelLabel(level: string | null | undefined): string {
   if (!level) return '—'
   const map: Record<string, string> = { beginner: '初学', intermediate: '进阶', advanced: '高级' }
@@ -313,8 +320,8 @@ async function loadDetail() {
       stats: [
         { label: '路径', value: String(base?.paths ?? pathCount) },
         { label: '会话', value: String(base?.sessions ?? 0) },
-        { label: 'XP', value: String(user.xp ?? 0) },
-        { label: '等级', value: levelLabel(String(user.currentLevel)) }
+        { label: 'XP', value: String(user.xp ?? 0), hint: xpHintOf(Number(user.xp ?? 0)) },
+        { label: '等级', value: levelLabel(String(user.currentLevel)), hint: '按 XP 推导' }
       ],
       recentPaths: [],
       activity: activityOf(base)
@@ -330,8 +337,8 @@ async function loadDetail() {
         stats: [
           { label: '路径', value: String(base.paths) },
           { label: '会话', value: String(base.sessions) },
-          { label: 'XP', value: String(base.xp) },
-          { label: '等级', value: levelLabel(base.currentLevel) }
+          { label: 'XP', value: String(base.xp), hint: xpHintOf(Number(base.xp)) },
+          { label: '等级', value: levelLabel(base.currentLevel), hint: '按 XP 推导' }
         ],
         recentPaths: [],
         activity: activityOf(base)

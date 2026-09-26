@@ -47,7 +47,7 @@
               </td>
               <td><span class="mk-badge" :class="typeBadge(d.type)">{{ typeText(d.type) }}</span></td>
               <td class="mk-cell-text" :title="reqTitle(d.requirement)">{{ reqText(d.requirement) }}</td>
-              <td class="mk-num">+{{ d.xpReward }}</td>
+              <td class="mk-num"><span class="oa-xp" :title="`解锁可得 ${d.xpReward} XP`">+{{ d.xpReward }} XP</span></td>
               <td class="mk-num">{{ d.unlockCount }}</td>
               <td>
                 <div class="mk-actions">
@@ -523,5 +523,17 @@ onMounted(() => {
   .ac-candidate strong { font-size: var(--mk-fs-emphasis); }
   .ac-candidate { padding: 14px 16px; }
   .ac-none { font-size: var(--mk-fs-emphasis); }
+}
+
+/* XP 列 chip（批E）：沿用 Users 等级色阶语义（奖励值蓝调胶囊） */
+.oa-xp {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: var(--mk-radius-pill);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: var(--mk-fs-micro);
+  background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
+  color: var(--mk-accent-deep);
 }
 </style>
