@@ -588,8 +588,11 @@ const session = ref<{ sessionId: string; revision: number } | null>(null);
 const initing = ref(true);
 const initError = ref('');
 const typing = ref(false);
-/** 菜单危险动作（结束/重新开始）in-flight 防重 */
+// 菜单危险动作（结束/重新开始）in-flight 防重
 const actionBusy = ref(false);
+/** 完课结算 in-flight：finalize 含自动关课+wrapup（LLM，可达数十秒），期间锁发送，
+    防止用户在结算窗口发消息打出「面板弹出后教师又回消息」的幽灵回合 */
+const finalizing = ref(false);
 
 const friendlyError = computed(() => {
   const raw = initError.value || '';
@@ -673,13 +676,12 @@ const shouldAskSelfAssess = computed(() => {
   return !!confirmCheck.value;
 });
 
+const completed = ref(false);
 const {
   checkpoint, selectedOptions, answerText, checkpointFeedback, checkpointPassed,
   checkpointPending, checkpointSubmitting, checkpointStreaming,
   toggleOption, dismissCheckpoint, submitCheckpoint, skipCheckpoint, disposeCheckpoint
-} = useCheckpointFlow(session, typing)
-
-const completed = ref(false);
+} = useCheckpointFlow(session, typing, completed)
 /** 恢复会话提示条：mode=resumed 且回填到历史时显示「已恢复上次进度」，附重新开始出口 */
 const resumedNotice = ref(false);
 
@@ -983,7 +985,8 @@ async function send(e?: unknown) {
   const t = input.value.trim();
   // 完课后输入即锁：完成候选轮教师常带一个收尾追问，若放行发送，回答会打给已终态化的会话
   // （服务端拒绝、消息不入库、误报失败，且陈旧重试会重复推送同一条用户消息）。
-  if (!t || typing.value || checkpointPending.value || !session.value || completed.value) return;
+  // 结算中（finalizing）同样锁：finalize 含自动关课+wrapup，期间放行会打出面板后的幽灵教师回合。
+  if (!t || typing.value || checkpointPending.value || !session.value || completed.value || finalizing.value) return;
   input.value = '';
   assessTarget.value = null; // 用户已表态/新回合开始，快选确认清除
   confirmCheck.value = null;
@@ -991,7 +994,7 @@ async function send(e?: unknown) {
 }
 
 async function sendDirect(text: string) {
-  if (typing.value || !session.value || completed.value) return;
+  if (typing.value || !session.value || completed.value || finalizing.value) return;
   assessTarget.value = null; // 点击快选确认/开场建议即表态，清除待确认
   await doSend(text);
 }
@@ -1134,7 +1137,8 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
     assessTarget.value = null;
     confirmCheck.value = null;
   }
-  if (r.checkpoint) {
+  // 完课回合不落检查点：服务端已终态化（提交必 409），卡片只会成为面板后的死入口
+  if (r.checkpoint && !r.isCompletion) {
     checkpoint.value = r.checkpoint;
     checkpointFeedback.value = '';
     selectedOptions.value = [];
@@ -1149,6 +1153,8 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
 }
 
 async function retryLast() {
+  // 结算中/已完课不放行重试：会话已（或将）终态化，重试只会打出幽灵回合
+  if (finalizing.value || completed.value) return;
   msgs.value = msgs.value.filter((m) => !m.failed);
   if (!lastUserText) return;
   // 失败回合的用户气泡还留在列表里（过滤只清失败气泡）：重试复用它，不再追加第二条同样的「你」
@@ -1160,6 +1166,7 @@ async function retryLast() {
 /* ---------- 结束 ---------- */
 async function finish(action: 'complete_task' | 'end_only' | 'complete_review') {
   if (!session.value || completed.value) return;
+  finalizing.value = true;
   try {
     const r = await aiTeachingAPI.finalizeSessionReliably(session.value.sessionId, {
       action,
@@ -1199,6 +1206,8 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
       });
       if (go && evaluationUrl.value) router.push(evaluationUrl.value);
     }
+    // 结算失败回到对话态：解锁发送（会话可能仍可继续或重试结算）
+    finalizing.value = false;
   }
 }
 
@@ -1294,6 +1303,7 @@ async function restart() {
     checkpoint.value = null;
     checkpointPending.value = false;
     completed.value = false;
+    finalizing.value = false;
     // 伴学窗同步重置（B7：上一会话内容不残留到新开课）
     resetPeer();
     await boot();
@@ -1390,6 +1400,7 @@ async function recoverSession(sid: string) {
       checkpointFeedback.value = '';
       checkpointPending.value = false;
       completed.value = false;
+      finalizing.value = false;
       quickReplies.value = (s.opening?.quickReplies || []).map((q: Record<string, any>) => q.text || q).filter(Boolean);
       if (Array.isArray(s.knowledgePoints) && s.knowledgePoints.length) {
         knowledgePoints.value = s.knowledgePoints;

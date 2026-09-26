@@ -283,7 +283,10 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
         pushMessage({ role: 'user', content: opts.userText, time: nowTime() });
       }
     }
-    if (env.userVisible) pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
+    // 完成信封不再把 userVisible 落进对话：确认后的收尾语（「已收到确认，正在生成…」）
+    // 服务端不落库（updateConversationLifecycle 只追加 user 确认消息），客户端渲染会造成
+    // 「阶段结束后 AI 还发消息」且刷新后凭空消失的双态不一致；该信息由 done 面板承载。
+    if (env.userVisible && stage.value !== 'completed') pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
   }
   // P2-14：恢复会话时用最后一条带快捷补充的 AI 消息回填当前轮面板（刷新后不再只剩输入框）
   if (!quickReplies.value.length) {

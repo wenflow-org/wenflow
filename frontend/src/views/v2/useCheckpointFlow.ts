@@ -10,7 +10,8 @@ import { isCheckpointAlreadyHandled } from '@/utils/checkpoint';
 
 export function useCheckpointFlow(
   session: Ref<{ sessionId: string; revision: number } | null>,
-  typing: Ref<boolean>
+  typing: Ref<boolean>,
+  completed: Ref<boolean>
 ) {
   const checkpoint = ref<Record<string, any> | null>(null);
   const selectedOptions = ref<string[]>([]);
@@ -69,7 +70,8 @@ export function useCheckpointFlow(
     // checkpointPending 必须一并拦住：提交请求内含一次教学回合（LLM，数十秒），
     // 期间再点一次会打出第二个必然失败的请求（走查实测：第一次 200、第二次 404
     // → 误报「提交失败，再试一次」，且卡片留在页面上反复失败）
-    if (!checkpoint.value || !session.value || typing.value || checkpointSubmitting.value || checkpointPending.value) return;
+    // completed 一并拦住：完课面板弹出后检查点不应再可交（服务端已终态化，提交必然失败）
+    if (completed.value || !checkpoint.value || !session.value || typing.value || checkpointSubmitting.value || checkpointPending.value) return;
     // 空值校验：空选项/空简答直接提示，不消耗一轮 AI 判定
     if (checkpoint.value.options?.length && !selectedOptions.value.length) {
       checkpointFeedback.value = '请先选择一个选项';
@@ -160,7 +162,7 @@ export function useCheckpointFlow(
   }
 
   async function skipCheckpoint() {
-    if (!checkpoint.value || !session.value || typing.value || checkpointPending.value || checkpointSubmitting.value) return;
+    if (completed.value || !checkpoint.value || !session.value || typing.value || checkpointPending.value || checkpointSubmitting.value) return;
     const cp = checkpoint.value;
     checkpoint.value = null;
     checkpointPending.value = true;
