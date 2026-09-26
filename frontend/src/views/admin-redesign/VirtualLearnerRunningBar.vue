@@ -27,10 +27,13 @@
     <!-- 批量生成详情行（点 chip 展开）：进度 + 重试 + 关闭 -->
     <div v-if="task?.active && task.expanded" class="mk-alert mk-alert--info vl-batch-detail" role="status">
       <span class="vl-batch-detail__text">
-        创建 {{ task.created }}/{{ task.total }} 人
-        <template v-if="task.personaLeft > 0"> · 生成身份 {{ task.total - task.personaLeft }}/{{ task.total }}</template>
-        <template v-if="task.totalStories"> · 生成故事 {{ task.storiesDone }}/{{ task.totalStories }}</template>
-        <template v-if="task.error"> · <span class="vl-batch-detail__err">{{ task.error }}</span></template>
+        <span class="mk-minibar vl-batch-detail__bar" aria-hidden="true"><i :style="{ width: batchPct + '%' }"></i></span>
+        <span>
+          创建 {{ task.created }}/{{ task.total }} 人
+          <template v-if="task.personaLeft > 0"> · 生成身份 {{ task.total - task.personaLeft }}/{{ task.total }}</template>
+          <template v-if="task.totalStories"> · 生成故事 {{ task.storiesDone }}/{{ task.totalStories }}</template>
+          <template v-if="task.error"> · <span class="vl-batch-detail__err">{{ task.error }}</span></template>
+        </span>
       </span>
       <button v-if="task.status === 'error'" type="button" class="mk-btn mk-btn--sm" @click="emit('retry')">重试失败</button>
       <button v-if="task.status === 'done' || task.status === 'error'" type="button" class="mk-link" @click="emit('dismiss')">✕ 关闭</button>
@@ -60,6 +63,15 @@ const batchTaskStatusTitle = computed(() => {
   if (t.status === 'done') return `批量创建完成：${t.created} 人${t.totalStories ? ` · ${t.storiesDone} 个故事` : ''}`
   if (t.status === 'error') return `批量生成有失败：${t.error}（点击展开可重试）`
   return `后台生成中：身份 ${t.total - t.personaLeft}/${t.total}${t.totalStories ? ` · 故事 ${t.storiesDone}/${t.totalStories}` : ''}（点击展开详情）`
+})
+/* 批量进度（批F）：三阶段（建人/身份/故事）加权折算百分比 */
+const batchPct = computed(() => {
+  const t = props.task
+  if (!t || !t.total) return 0
+  const stages = [t.created, t.total - (t.personaLeft || 0), t.totalStories ? t.storiesDone : null].filter((v): v is number => v != null)
+  const done = stages.reduce((a, b) => a + b, 0)
+  const sum = stages.length * t.total
+  return Math.min(Math.round((done / Math.max(sum, 1)) * 100), 100)
 })
 
 /* 「正在运行」区折叠：默认显示前 RUN_CHIPS_LIMIT 个 chip，超出折叠（压缩顶部高度，表格尽早露出） */
@@ -126,7 +138,9 @@ function stageLabel(stage: string | null | undefined): string {
 @keyframes vl-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-blue) 40%, transparent); } 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--mk-blue) 0%, transparent); } }
 /* 批量生成详情行（点 chip 展开）：mk-alert 形态，此处只留弹性布局 */
 .vl-batch-detail { display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-basis: 100%; }
-.vl-batch-detail__text { color: var(--mk-muted, #5b6577); flex: 1; }
+.vl-batch-detail__bar { display: block; width: 120px; height: 5px; flex: none; }
+.vl-batch-detail__bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-blue); transition: width 0.3s ease; }
+.vl-batch-detail__text { display: flex; align-items: center; gap: 10px; color: var(--mk-muted, #5b6577); flex: 1; }
 .vl-batch-detail__err { color: var(--mk-red, #dc2626); }
 
 /* ===== 正在运行条：直接列名当前活跃虚拟学习者（绿点呼吸动画） ===== */
