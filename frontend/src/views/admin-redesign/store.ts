@@ -235,11 +235,15 @@ export function closeSubPage() {
 
 /* ---------- 总览推导 ---------- */
 export const overviewHealth = computed(() => {
-  // 真实数据模式：用后端统计推导
+  // 只信真实数据：live 总览未就绪（首载中 / 后端拉取失败保留旧值）时如实显示空态，
+  // 不再编造分数与结论（原「92 运行平稳 / 61 429 限流」是写死的演示残留）
   if (liveOverview.value) return liveOverview.value
-  const errs = spans.value.filter((s) => s.status === 'err').length
-  if (errs > 0) return { tone: 'warn' as const, score: 61, headline: `需要关注：${errs} 次失败`, subline: '教学链路连续 429 限流，伴学已降级介入。' }
-  return { tone: 'ok' as const, score: 92, headline: '运行平稳', subline: '学习链路与模型服务都在正常区间。' }
+  return {
+    tone: 'muted' as const,
+    score: null,
+    headline: '统计尚未就绪',
+    subline: '总览统计加载中或后端不可达；健康结论以健康中心检查清单为准。',
+  }
 })
 
 /* ================= 页面数据缓存新鲜度（避免切 tab 重复拉取） ================= */
