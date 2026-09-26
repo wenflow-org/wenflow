@@ -2023,9 +2023,11 @@ onBeforeUnmount(() => {
   background: var(--red); border: 2px solid #fff;
 }
 @media (max-width: 640px) {
-  .peerdock { right: 12px; left: 12px; bottom: 12px; width: auto; max-height: 60dvh; }
-  .peerfab { right: 14px; bottom: 14px; width: 46px; height: 46px; }
-  .peerfab__q { font-size: 23px; }
+  /* 小启整体抬到 composer 上方（composer ≈90px 高）——此前 fab bottom:14 正压在发送键上、
+     dock 展开盖住整个输入区（2026-09-26 用户：「挡住了发送按钮」）；面板限高收一档 */
+  .peerdock { right: 12px; left: 12px; bottom: 104px; width: auto; max-height: 52dvh; }
+  .peerfab { right: 14px; bottom: 104px; width: 44px; height: 44px; }
+  .peerfab__q { font-size: 20px; }
 }
 /* 窄屏（平板/小窗）：dock 收窄并抬高，避免与底部输入区重叠（长消息上探场景） */
 @media (min-width: 641px) and (max-width: 1100px) {
@@ -2281,11 +2283,17 @@ onBeforeUnmount(() => {
     padding: 8px 10px;
     gap: 0;
   }
-  /* 移动端知识点面板：折叠为头部横条。position:relative + z-index 让展开后的
-     kp__body 以悬浮层盖在对话区上方（2026-09-26 用户：「展开后我希望的是悬浮」），
-     对话区高度不再被展开/收起挤压。top:auto 中和基础 sticky 规则的 top:16px——
-     relative 下那个 16px 会真把条压进对话区 8px。 */
-  .kp { position: relative; top: auto; z-index: 30; }
+  /* 移动端知识点面板：并入对话区（2026-09-26 用户：「直接做到对话区，不再独立模块，
+     类似 goal 的目标信息」）。aside 脱离网格流，absolute 锚成 tutor 顶部 44px 头部带的
+     零占位锚点（goal 页 .panel 同款手法）：aside 盒子 pointer-events:none 不挡内容，
+     触发头单独放开 pointer-events；tutor 用 padding-top 预留同高条带（见文件末尾块）。
+     z-index 让展开的 kp__body 悬浮面板盖在消息区上，对话区高度不再被展开/收起挤压。 */
+  .kp {
+    position: absolute; top: 8px; left: 10px; right: 10px;
+    height: 44px; z-index: 30;
+    background: none; border: 0;
+    pointer-events: none;
+  }
   .learn__back { display: none; }
   /* 移动端 tutor 撑满可用高度：聊天区内部滚动、composer 吸底，消除滚动到底的底部空白 */
   .tutor { max-height: none; height: 100%; min-height: 0; }
@@ -2330,8 +2338,9 @@ onBeforeUnmount(() => {
      同权重下写在这里会被覆盖 */
   /* 弹窗锚定在 ⋯ 按钮正下方、右对齐按钮 */
   /* 移动端知识点面板默认折叠：头部横条可点，收起时隐藏进度条/清单。
-     两种状态头部同款内边距（折叠条与展开条都是 44px 触屏整条可点，HIG 44） */
-  .kp__head { cursor: pointer; padding: 11px 12px; min-height: 44px; }
+     两种状态头部同款内边距（44px 触屏整条可点，HIG 44）；border-bottom 是对话卡
+     顶部带的分隔线（aside 已无卡片壳）；aside 锚点 pointer-events:none，触发头放开 */
+  .kp__head { cursor: pointer; padding: 11px 12px; min-height: 44px; pointer-events: auto; border-bottom: 1px solid var(--line); }
   .kp__caret { display: inline; }
   .kp--collapsed .kp__body { display: none; }
 }
@@ -2635,14 +2644,14 @@ onBeforeUnmount(() => {
    （实测行高 280px），tutor 卡片悬到 y=346、与知识点条之间空 215px；消息多了才碰巧占满。
    另两处偏大：知识点折叠条 65px（桌面 16px 内边距原样留在手机上）、composer 103px
    （goal 页同款输入区净高只有 54px——hint 行 position:absolute; height:0 拿出文档流浮在底边）。
-   修法与 goal 页对齐：kp 行 auto、tutor 行吃满剩余；折叠条与对话区之间 8px 呼吸
-   （2026-09-26 用户：「收起来的卡片和下面有重叠」——gap 0 时两条卡片贴死读作重叠）；
-   展开的 kp__body 改悬浮层盖在对话区上（见 ≤900 主块的 .kp 注释），不再挤对话区；
-   hint 浮出文档流，composer 103 → 84px。对话区（消息+输入）合计 602 → 725px。 */
+   修法与 goal 页对齐：tutor 行吃满剩余；展开的 kp__body 悬浮层盖在对话区上，不挤对话区。
+   2026-09-26 二轮（用户：「知识点直接做到对话区，不再独立模块，类似 goal 的目标信息」）：
+   kp aside 脱离网格流（单行 1fr），absolute 锚成 tutor 顶部 44px 头部带的零占位锚点，
+   tutor padding-top 预留条带、kp__head 落在其中作对话卡头部；hint 浮出文档流，composer 103 → 84px。 */
 @media (max-width: 900px) {
-  .learn__body { grid-template-rows: auto minmax(0, 1fr); gap: 8px; }
-  /* 无知识点变体只有 tutor 一个孩子：单行 1fr，别让它落进 auto 行 */
-  .learn__body--no-kp { grid-template-rows: minmax(0, 1fr); }
+  .learn__body { position: relative; }
+  /* tutor 顶部预留 44px 头部带给 kp 触发条（无知识点变体不预留） */
+  .learn__body:not(.learn__body--no-kp) .tutor { padding-top: 44px; }
   .kp { padding: 0; }
   /* 展开：知识条本体高度不变，主体浮出为下拉面板（内部滚动，盖在消息区上） */
   .kp:not(.kp--collapsed) .kp__body {
