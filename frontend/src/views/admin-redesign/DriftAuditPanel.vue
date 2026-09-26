@@ -26,7 +26,7 @@
         compact
         @action="loadDrift"
       />
-      <div v-else-if="drift.items.length === 0" class="fdp__empty"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg> 无漂移（编排文件与数据库一致）</div>
+      <div v-else-if="drift.items.length === 0" class="fdp__empty"><Check :size="14" :stroke-width="1.75" style="vertical-align:-2px" /> 无漂移（编排文件与数据库一致）</div>
       <ul v-else class="fdp__drift-list">
         <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
           <span class="mono fdp__drift-kind">{{ kindLabel(d.kind) }}</span>

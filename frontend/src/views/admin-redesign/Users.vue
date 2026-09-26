@@ -155,7 +155,7 @@
             </td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-icon-btn" title="详情" @click.stop="openSubPage('user', u.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg></button>
+                <button type="button" class="mk-icon-btn" title="详情" @click.stop="openSubPage('user', u.id)"><UserRound :size="15" :stroke-width="1.75" /></button>
                 <div v-if="isLive" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(u.id)">⋯</button>
                   <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -279,6 +279,7 @@ import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useIsNarrow } from './useIsNarrow'
 import { toast } from '@/utils/toast'
+import { UserRound } from 'lucide-vue-next';
 import { isTestAccountUser, levelFromXp, levelLabel } from './learner-profile'
 
 /* ---- 行级设计派生（2026-09-26）：身份 chip 色 / 等级色阶 / 升级进度 / 登录新鲜度 ---- */

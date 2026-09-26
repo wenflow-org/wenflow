@@ -222,9 +222,9 @@
             <div class="pe-input-block">
               <div class="pe-tabs" role="tablist">
                 <button type="button" class="pe-tab" role="tab" :aria-selected="form.inputSource === 'manual'"
-                  :class="{ 'pe-tab--on': form.inputSource === 'manual' }" @click="form.inputSource = 'manual'"><svg class="pe-tab__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>手写对话</button>
+                  :class="{ 'pe-tab--on': form.inputSource === 'manual' }" @click="form.inputSource = 'manual'"><PenLine class="pe-tab__icon" :size="14" :stroke-width="1.75" aria-hidden="true" />手写对话</button>
                 <button type="button" class="pe-tab" role="tab" :aria-selected="form.inputSource === 'simulated'"
-                  :class="{ 'pe-tab--on': form.inputSource === 'simulated' }" @click="form.inputSource = 'simulated'"><svg class="pe-tab__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.4" /><path d="M3.2 20a5.8 5.8 0 0 1 11.6 0" /><path d="M16.2 5.3a3 3 0 0 1 0 5.4" /><path d="M17.8 14.3A5.8 5.8 0 0 1 21.2 19.6" /></svg>模拟学生</button>
+                  :class="{ 'pe-tab--on': form.inputSource === 'simulated' }" @click="form.inputSource = 'simulated'"><Users class="pe-tab__icon" :size="14" :stroke-width="1.75" aria-hidden="true" />模拟学生</button>
               </div>
 
               <div class="pe-tab-body">
