@@ -24,16 +24,21 @@
       <div class="state__grid">
         <div class="state__col" :class="{ 'state__col--empty': !hasAnyLoad }">
           <!-- 趋势图 -->
-          <section class="card chart">
-            <div class="card-head">
-              <strong>健康度 · 疲劳 · 状态</strong>
-              <div class="chart__controls">
+          <section class="card band">
+            <div class="band__head">
+              <button type="button" class="band__toggle" :aria-expanded="openBands.chart" @click="toggleBand('chart')">
+                <strong>健康度 · 疲劳 · 状态</strong>
+                <span class="band__meta">近 {{ range }} 天趋势</span>
+                <span class="band__chev" :class="{ 'band__chev--open': openBands.chart }" aria-hidden="true">▾</span>
+              </button>
+              <div class="band__extra" @click.stop>
                 <div class="seg">
                   <button type="button" class="seg__item" :class="{ 'seg__item--on': range === 42 }" @click="setRange(42)">42 天</button>
                   <button type="button" class="seg__item" :class="{ 'seg__item--on': range === 90 }" @click="setRange(90)">90 天</button>
                 </div>
               </div>
             </div>
+            <div v-show="openBands.chart" class="band__body">
 
             <!-- 图例 + 当前状态 -->
             <div class="ff-legend">
@@ -87,14 +92,19 @@
                 <span><i class="ff-dot ff-dot--risk"></i>需要休息 / 高风险（LSB &lt; 20）</span>
               </div>
             </template>
+            </div><!-- /band__body -->
           </section>
 
           <!-- AI 建议（skill: adaptive-guidance-copy 生成，静态规则兜底） -->
-          <section class="card suggest">
-            <div class="card-head">
-              <strong>AI 建议</strong>
-              <span class="muted">{{ suggestSource }}</span>
+          <section class="card band">
+            <div class="band__head">
+              <button type="button" class="band__toggle" :aria-expanded="openBands.suggest" @click="toggleBand('suggest')">
+                <strong>AI 建议</strong>
+                <span class="band__meta">{{ suggestSource }}</span>
+                <span class="band__chev" :class="{ 'band__chev--open': openBands.suggest }" aria-hidden="true">▾</span>
+              </button>
             </div>
+            <!-- 加载失败常显（收起也不许吞掉错误，P1 口径） -->
 
             <!-- skill 生成块 -->
             <!-- P1 修复：guidance 加载失败可见提示（可原地重试，不再冒充"没有数据"） -->
@@ -104,6 +114,7 @@
                 {{ guidanceLoading ? '重试中…' : '重试' }}
               </button>
             </div>
+            <div v-show="openBands.suggest" class="band__body">
             <template v-if="skillCopy">
               <div class="guide">
                 <h3 class="guide__title">{{ skillCopy.headline }}</h3>
@@ -166,6 +177,8 @@
               </div>
             </template>
 
+            </div><!-- /band__body：预警常显，不随折叠消失 -->
+
             <!-- 预警（数据告警，两种模式都展示） -->
             <div v-if="warningsLoadFailed" class="chart__empty" role="alert">
               预警数据加载失败，请刷新页面重试。
@@ -182,11 +195,15 @@
           </section>
 
           <!-- AI 决策记录：捕获了什么 → 怎么判断 → 参与了什么决策 -->
-          <section class="card decisions">
-            <div class="card-head">
-              <strong>AI 决策记录</strong>
-              <span class="muted">AI 捕获了什么 · 怎么参与下一步</span>
+          <section class="card band">
+            <div class="band__head">
+              <button type="button" class="band__toggle" :aria-expanded="openBands.decisions" @click="toggleBand('decisions')">
+                <strong>AI 决策记录</strong>
+                <span class="band__meta">{{ decisions.length ? `${decisions.length} 条记录` : '暂无' }}</span>
+                <span class="band__chev" :class="{ 'band__chev--open': openBands.decisions }" aria-hidden="true">▾</span>
+              </button>
             </div>
+            <div v-show="openBands.decisions" class="band__body">
             <div v-if="!decisions.length" class="chart__empty">
               还没有决策记录。上完一节课后，这里会记下 AI 捕获的点与下一步调整。
             </div>
@@ -199,6 +216,7 @@
               </div>
               <time v-if="decisionTime(d.at)">{{ decisionTime(d.at) }}</time>
             </article>
+            </div><!-- /band__body -->
           </section>
         </div>
 
@@ -209,24 +227,39 @@
             <span class="kicker">学习画像</span>
             <p class="chart__empty">画像数据加载失败，请刷新页面重试。</p>
           </section>
-          <section v-if="preferenceItems.length && hasAnyLoad" class="card sidecard">
-            <span class="kicker">学习偏好</span>
-            <ul class="pref">
-              <li v-for="(p, i) in preferenceItems" :key="i"><strong>{{ p.label }}</strong><span>{{ p.value }}</span></li>
-            </ul>
+          <section v-if="preferenceItems.length && hasAnyLoad" class="card band sidecard">
+            <div class="band__head">
+              <button type="button" class="band__toggle" :aria-expanded="openBands.prefs" @click="toggleBand('prefs')">
+                <span class="kicker">学习偏好</span>
+                <span class="band__meta">{{ preferenceItems.length }} 项</span>
+                <span class="band__chev" :class="{ 'band__chev--open': openBands.prefs }" aria-hidden="true">▾</span>
+              </button>
+            </div>
+            <div v-show="openBands.prefs" class="band__body">
+              <ul class="pref">
+                <li v-for="(p, i) in preferenceItems" :key="i"><strong>{{ p.label }}</strong><span>{{ p.value }}</span></li>
+              </ul>
+            </div>
           </section>
           <section class="card sidecard">
             <span class="kicker">学习记录</span>
             <router-link to="/user/learning-history" class="btn-ghost btn-ghost--block">查看学习历史</router-link>
           </section>
-          <section class="card sidecard">
-            <span class="kicker">指标说明</span>
+          <section class="card band sidecard">
+            <div class="band__head">
+              <button type="button" class="band__toggle" :aria-expanded="openBands.legend" @click="toggleBand('legend')">
+                <span class="kicker">指标说明</span>
+                <span class="band__chev" :class="{ 'band__chev--open': openBands.legend }" aria-hidden="true">▾</span>
+              </button>
+            </div>
+            <div v-show="openBands.legend" class="band__body">
             <ul class="legend">
               <li><b class="dot dot--blue"></b>掌握趋势（KTL）：长期学习积累的掌握水平，变化平缓</li>
               <li><b class="dot dot--purple"></b>疲劳度（LF）：近期学习压力的累积，变化较快</li>
               <li><b class="dot dot--green"></b>整体状态（LSB = KTL − LF）：疲劳高于掌握时状态下降，提醒休息</li>
               <li><b class="dot dot--amber"></b>保持规律学习让掌握趋势稳步上升；疲劳偏高时安排休息，避免长期处于低状态区</li>
             </ul>
+            </div><!-- /band__body -->
           </section>
         </aside>
       </div>
@@ -260,6 +293,22 @@ const warnings = ref<Array<Record<string, any>>>([]);
 const trendLoading = ref(true);
 const trendError = ref(false);
 const range = ref<42 | 90>(42);
+
+/* ---------- 折叠带（批11 首屏重构）：桌面默认全开展示，移动端默认只留
+   「结论（指标卡）+ 学习曲线 + AI 建议」首屏，长尾内容（决策/偏好/说明）收起。
+   折叠状态在挂载时按视口定一次，之后手动切换不随视口变化。 ---------- */
+const isNarrowAtMount = typeof window !== 'undefined'
+  && window.matchMedia('(max-width: 1100px)').matches;
+const openBands = ref({
+  chart: true,                 // 趋势图是本页核心，任何宽度都默认展开
+  suggest: !isNarrowAtMount,   // AI 建议移动端收起（学习台首屏已有建议头条）
+  decisions: !isNarrowAtMount,
+  prefs: !isNarrowAtMount,
+  legend: !isNarrowAtMount,
+});
+function toggleBand(key: keyof typeof openBands.value) {
+  openBands.value[key] = !openBands.value[key];
+}
 
 const metricOptions: Array<{ key: MetricKey; label: string }> = [
   { key: 'lsb', label: '整体状态' },
@@ -1013,4 +1062,23 @@ function loadGuidance() {
   .chart__loading { padding: 28px 0; }
   .chart__empty { padding: 24px 0; }
 }
+
+/* ---------- 折叠带（批11 首屏重构）：卡头即开合，long-tail 内容默认收起 ---------- */
+.band { padding: 0; }
+.band__head { display: flex; align-items: center; }
+.band__toggle {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px;
+  background: none; border: 0; font-family: inherit;
+  text-align: left; cursor: pointer;
+}
+.band__toggle strong, .band__toggle .kicker { font-size: 14px; }
+.band__meta { font-size: 12px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.band__chev { flex: 0 0 auto; color: var(--faint); transition: transform 0.2s ease; }
+.band__chev--open { transform: rotate(180deg); }
+.band__extra { padding-right: 12px; }
+.band__body { padding: 0 16px 16px; }
+.band.sidecard .band__toggle { padding: 12px 16px; }
+.band.sidecard .band__body { padding: 0 16px 14px; }
 </style>
