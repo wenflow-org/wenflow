@@ -1,4 +1,5 @@
 /* eslint-disable no-console -- 一次性诊断 CLI */
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /**
  * 目标阶段「path 长度」边界探测（用户要求：过长过短都测上限）：
  *  S1 极短 3 字        → 能否收敛（追问还是直接进入方案）
@@ -8,13 +9,19 @@
  *  S5 超限 5000 字      → 期望明确 400
  * 每枪记录：HTTP 状态、耗时、是否收敛（结构）、AI 回复首段。
  * 用法：npx ts-node --transpile-only src/scripts/probe-goal-length-limits.ts
+ * 账号从环境变量读取（PROBE_ACCOUNT_NAME / PROBE_ACCOUNT_PASSWORD），不再写入源码。
  */
 import 'dotenv/config';
 import axios from 'axios';
 
 const BASE = process.env.API_BASE_URL || 'http://localhost:3001/api';
-const NAME = 'EvalRound2';
-const PASSWORD = 'EvalPass2026';
+const NAME = process.env.PROBE_ACCOUNT_NAME || '';
+const PASSWORD = process.env.PROBE_ACCOUNT_PASSWORD || '';
+
+if (!NAME || !PASSWORD) {
+  console.error('缺少 PROBE_ACCOUNT_NAME / PROBE_ACCOUNT_PASSWORD 环境变量，无法登录');
+  process.exit(1);
+}
 
 async function login(): Promise<string> {
   const res = await axios.post(`${BASE}/auth/login`, { name: NAME, password: PASSWORD });

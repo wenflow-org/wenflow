@@ -301,6 +301,7 @@ function serializeManifest(manifest: PromptLabManifest) {
 }
 
 async function loadPromptFrontmatter(skillId: string) {
+  assertValidSkillId(skillId); // 文件名由 skillId 拼接，进入路径前复验（防穿越，勿删）
   const filePath = path.join(PROMPTS_DIR, `skill.${skillId}.md`);
   try {
     const raw = await fs.readFile(filePath, 'utf-8');
@@ -335,6 +336,7 @@ function mergeManifestWithPromptFrontmatter(skillId: string, manifest: PromptLab
 }
 
 async function loadManifest(skillId: string, sourceContent = '') {
+  assertValidSkillId(skillId); // manifest 文件名由 skillId 拼接，进入路径前复验（防穿越，勿删）
   const filePath = path.join(MANIFESTS_DIR, `${skillId}.yaml`);
   try {
     const raw = await fs.readFile(filePath, 'utf-8');
@@ -364,6 +366,7 @@ async function loadManifest(skillId: string, sourceContent = '') {
 }
 
 async function writeManifest(skillId: string, manifestInput: any, sourceContent = '') {
+  assertValidSkillId(skillId); // manifest 文件名由 skillId 拼接，写盘前复验（防穿越，勿删）
   const manifest = normalizeManifest(skillId, manifestInput, sourceContent);
   const filePath = path.join(MANIFESTS_DIR, `${skillId}.yaml`);
   await fs.mkdir(MANIFESTS_DIR, { recursive: true });

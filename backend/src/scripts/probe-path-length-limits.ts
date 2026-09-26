@@ -1,4 +1,5 @@
 /* eslint-disable no-console -- 一次性诊断 CLI */
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /**
  * 目标阶段「path 长度」上下限探测（输出侧）：以不同**广度**的目标走完 目标对话→确认生成，
  * 量生成路径的形态（阶段数/任务数/预计小时/生成耗时）。
@@ -25,7 +26,11 @@ interface ProbeResult {
 }
 
 async function login(): Promise<string> {
-  const res = await axios.post(`${BASE}/auth/login`, { name: 'EvalRound2', password: 'EvalPass2026' });
+  // 探针账号从环境变量读取（PROBE_ACCOUNT_NAME / PROBE_ACCOUNT_PASSWORD），不写入源码
+  const name = process.env.PROBE_ACCOUNT_NAME || '';
+  const password = process.env.PROBE_ACCOUNT_PASSWORD || '';
+  if (!name || !password) throw new Error('缺少 PROBE_ACCOUNT_NAME / PROBE_ACCOUNT_PASSWORD 环境变量，无法登录');
+  const res = await axios.post(`${BASE}/auth/login`, { name, password });
   return (res.headers['set-cookie']?.[0] || '').split(';')[0];
 }
 

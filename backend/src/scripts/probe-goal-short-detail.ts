@@ -1,9 +1,14 @@
 /* eslint-disable no-console */
+/* eslint-disable @typescript-eslint/no-explicit-any -- 探针：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 import 'dotenv/config';
 import axios from 'axios';
 const BASE = 'http://localhost:3001/api';
 async function main() {
-  const login = await axios.post(`${BASE}/auth/login`, { name: 'EvalRound2', password: 'EvalPass2026' });
+  // 探针账号从环境变量读取（PROBE_ACCOUNT_NAME / PROBE_ACCOUNT_PASSWORD），不写入源码
+  const name = process.env.PROBE_ACCOUNT_NAME || '';
+  const password = process.env.PROBE_ACCOUNT_PASSWORD || '';
+  if (!name || !password) throw new Error('缺少 PROBE_ACCOUNT_NAME / PROBE_ACCOUNT_PASSWORD 环境变量，无法登录');
+  const login = await axios.post(`${BASE}/auth/login`, { name, password });
   const cookie = (login.headers['set-cookie']?.[0] || '').split(';')[0];
   // 1) 3 字目标的完整响应
   const r3 = await axios.post(`${BASE}/goal-conversation/start`, { input: { text: '学英语' } }, { headers: { Cookie: cookie, 'Content-Type': 'application/json', Origin: 'http://localhost:5173' }, timeout: 240000 });

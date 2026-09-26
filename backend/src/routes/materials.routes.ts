@@ -25,7 +25,7 @@ const upload = multer({
 });
 
 /**
- * multer 1.x（busboy 默认 latin1）会把 UTF-8 文件名按 latin1 解码，
+ * multer（busboy 默认 latin1）会把 UTF-8 文件名按 latin1 解码，
  * 中文名会变乱码；此处按需还原（还原后出现替换符则保留原值）。
  */
 function decodeUploadName(raw: string): string {

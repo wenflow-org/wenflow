@@ -517,11 +517,15 @@ export function parseCoreFile(
   return { core, diagnostics: [] };
 }
 
+/** skillId 字符白名单：与路由层 assertValidSkillId 同式；在加载器内复验，防新调用点绕过路由校验拼路径 */
+const SKILL_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/i;
+
 /** 按 skillId 加载单个核心文件；文件不存在返回 null，存在但非法时 core 为 null */
 export function loadCoreFile(
   skillId: string,
   dir = CORE_FILES_DIR
 ): { core: CoreFile | null; diagnostics: CoreFileDiagnostic[] } | null {
+  if (!SKILL_ID_PATTERN.test(String(skillId || ''))) return null;
   const filePath = path.join(dir, `${skillId}.yaml`);
   if (!fs.existsSync(filePath)) return null;
   let raw: string;
