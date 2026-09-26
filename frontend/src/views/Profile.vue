@@ -470,15 +470,17 @@ async function handleDeactivate() {
   width: 96px;
   height: 96px;
   border-radius: 999px;
-  background: linear-gradient(135deg, var(--blue, #3478f6), var(--accent, #8d6bff));
-  color: #fff;
+  /* 去蓝紫跨色相渐变与蓝色光晕（2026-09-26 视觉走查）：与 V2Nav 头像同一扁平语言
+     （blue 12% 底 + blue-deep 字），暗色随 token 翻转 */
+  background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
+  color: var(--blue-deep, #1f57cc);
   font-size: 34px;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  box-shadow: 0 0 0 5px rgba(52, 120, 246, 0.12), 0 12px 28px rgba(52, 120, 246, 0.25);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--blue) 10%, transparent);
 }
 
 .profile-identity__main {
@@ -694,7 +696,7 @@ async function handleDeactivate() {
     width: 48px;
     height: 48px;
     font-size: 20px;
-    box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12), 0 6px 16px rgba(52, 120, 246, 0.2);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 10%, transparent);
   }
 
   .profile-name-row {
