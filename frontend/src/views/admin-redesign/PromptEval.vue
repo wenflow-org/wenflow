@@ -155,6 +155,7 @@
               <td>
                 <div class="pe-result" :class="resultTone(r)">
                   <strong>{{ r.summary.passRate ?? 0 }}%</strong>
+                  <span class="mk-minibar pe-result__bar" aria-hidden="true"><i :style="{ width: (r.summary.passRate ?? 0) + '%' }"></i></span>
                   <span>{{ r.summary.passedCount ?? 0 }}/{{ r.summary.totalRuns ?? 0 }} 通过</span>
                 </div>
               </td>
@@ -1046,9 +1047,13 @@ void reloadRuns()
 .pe-list { min-height: 0; }
 .pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .pe-persona-missing { margin-left: 6px; }
-.pe-result { display: flex; align-items: baseline; gap: 6px; }
+.pe-result { display: grid; gap: 3px; justify-items: start; }
 .pe-result strong { font-size: var(--mk-fs-body); font-family: var(--mk-mono); }
 .pe-result span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.pe-result__bar { display: block; width: 64px; }
+.pe-result--ok .pe-result__bar i { background: var(--mk-green); }
+.pe-result--warn .pe-result__bar i { background: var(--mk-amber); }
+.pe-result--bad .pe-result__bar i { background: var(--mk-red-fill); }
 .pe-result--ok strong { color: var(--mk-green); }
 .pe-result--warn strong { color: var(--mk-amber); }
 .pe-result--bad strong { color: var(--mk-red); }

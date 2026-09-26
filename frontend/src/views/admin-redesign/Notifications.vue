@@ -78,7 +78,10 @@
               </td>
               <td><span class="mk-badge" :class="kindBadge(n.kind)">{{ kindText(n.kind) }}</span></td>
               <td>
-                <span class="mk-badge" :class="n.isRead ? 'mk-badge--muted' : 'mk-badge--info'">{{ n.isRead ? '已读' : '未读' }}</span>
+                <!-- 批C：未读=蓝点+粗体（行底色冗余信号降为一枚点），已读=弱化点；徽章位让给语义 -->
+                <span class="nt-read" :class="n.isRead ? 'nt-read--yes' : 'nt-read--no'">
+                  <i class="nt-read__dot" aria-hidden="true"></i>{{ n.isRead ? '已读' : '未读' }}
+                </span>
               </td>
               <td :title="fmtDate(n.createdAt)">{{ timeAgo(n.createdAt) }}</td>
               <td>
@@ -435,6 +438,11 @@ void reload()
 .nt-list { flex: 1; min-height: 0; overflow-y: auto; }
 .nt-row--unread { background: var(--mk-blue-bg, #f6f9ff); }
 .nt-row--unread .mk-cell-main strong { color: var(--mk-blue); }
+/* 未读状态（批C）：点+文字替代胶囊徽章 */
+.nt-read { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
+.nt-read__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mk-surface-3); flex: none; }
+.nt-read--no { color: var(--mk-blue); font-weight: 700; }
+.nt-read--no .nt-read__dot { background: var(--mk-blue); }
 
 .nt-scope { display: flex; gap: 8px; }
 .nt-candidates { display: grid; gap: 6px; max-height: 200px; overflow-y: auto; margin-top: 8px; }

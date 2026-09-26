@@ -118,7 +118,10 @@
               </td>
               <td class="mk-num">
                 <span class="fb-rating" :class="{ 'fb-rating--low': r.rating <= 2 }">
-                  <b class="mono">{{ r.rating }}</b>★
+                  <span class="mk-dots" :class="{ 'mk-dots--warn': r.rating <= 2 }" role="img" :aria-label="`评分 ${r.rating}/5`">
+                    <i v-for="d in 5" :key="d" :class="{ 'is-on': d <= r.rating }"></i>
+                  </span>
+                  <b class="mono">{{ r.rating }}</b>
                 </span>
               </td>
               <td><span class="fb-comment" :title="r.comment">{{ r.comment || '—' }}</span></td>
@@ -171,10 +174,10 @@
           </header>
           <div class="mk-drawer__body fb-body">
             <div class="fb-facts">
-              <div><span>评分</span><strong class="mono">{{ detail.rating }}★</strong></div>
-              <div><span>有用度</span><strong class="mono">{{ detail.helpfulness ?? '—' }}</strong></div>
-              <div><span>清晰度</span><strong class="mono">{{ detail.clarity ?? '—' }}</strong></div>
-              <div><span>难度</span><strong class="mono">{{ detail.difficulty ?? '—' }}</strong></div>
+              <div><span>评分</span><span class="mk-dots" :class="{ 'mk-dots--warn': detail.rating <= 2 }" role="img" :aria-label="`评分 ${detail.rating}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': d <= detail.rating }"></i></span><strong class="mono">{{ detail.rating }}/5</strong></div>
+              <div><span>有用度</span><span class="mk-dots" role="img" :aria-label="`有用度 ${detail.helpfulness ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.helpfulness != null && d <= detail.helpfulness }"></i></span><strong class="mono">{{ detail.helpfulness ?? '—' }}</strong></div>
+              <div><span>清晰度</span><span class="mk-dots" role="img" :aria-label="`清晰度 ${detail.clarity ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.clarity != null && d <= detail.clarity }"></i></span><strong class="mono">{{ detail.clarity ?? '—' }}</strong></div>
+              <div><span>难度</span><span class="mk-dots" role="img" :aria-label="`难度 ${detail.difficulty ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.difficulty != null && d <= detail.difficulty }"></i></span><strong class="mono">{{ detail.difficulty ?? '—' }}</strong></div>
               <div><span>难度适配</span><strong>{{ detail.difficultyFit || '—' }}</strong></div>
               <div><span>轮次</span><strong class="mono">{{ detail.roundNumber ?? '—' }}</strong></div>
               <div><span>节点</span><strong class="mono">{{ detail.agentId || '—' }}</strong></div>

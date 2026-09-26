@@ -159,7 +159,13 @@
                 >{{ completionBadgeOf(s.id)!.text }}</span>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td v-if="showCol('rate')" class="mk-num" :class="rateTone(s)">{{ successRate(s) }}</td>
+              <td v-if="showCol('rate')">
+                <!-- 行级设计（批C）：数字+比例条（与网格卡 sk-card__rate 同语言，消灭同页双形态） -->
+                <div class="sk-rate" :class="rateTone(s)" :title="s.calls ? `成功率 ${s.calls - s.errors}/${s.calls}` : '窗口内无调用'">
+                  <b>{{ successRate(s) }}</b>
+                  <span v-if="s.calls" class="sk-rate__bar" aria-hidden="true"><i :style="{ width: rateNum(s) + '%' }"></i></span>
+                </div>
+              </td>
               <td v-if="showCol('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
               <td>
                 <div class="mk-actions">
@@ -492,6 +498,8 @@ const hostTone = computed(() => (tab.value === 'run' ? statusTone.value : hcCoun
 
 const successRate = (s: { calls: number; errors: number }) =>
   s.calls ? `${(((s.calls - s.errors) / s.calls) * 100).toFixed(0)}%` : '—'
+const rateNum = (s: { calls: number; errors: number }) =>
+  s.calls ? ((s.calls - s.errors) / s.calls) * 100 : 0
 
 /* ================= 对账数据（目录表完成度列投影） =================
    明细对账面板本体在健康中心内嵌的 SkillReconciliation（含 ?recon=/?diff= 深链定位）；
@@ -607,6 +615,13 @@ function recGateDetail(completion: SkillCompletion): string {
 /* 指标阈值着色 */
 .sk-rate--bad { color: var(--mk-red); font-weight: 700; }
 .sk-rate--warn { color: var(--mk-amber); font-weight: 700; }
+/* 列表成功率列（批C）：数字+比例条，与网格卡同语言 */
+.sk-rate { display: grid; gap: 3px; justify-items: end; }
+.sk-rate b { font-variant-numeric: tabular-nums; }
+.sk-rate__bar { display: block; width: 56px; height: 4px; border-radius: var(--mk-radius-pill); background: var(--mk-line); overflow: hidden; }
+.sk-rate__bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-green); }
+.sk-rate--warn .sk-rate__bar i { background: var(--mk-amber); }
+.sk-rate--bad .sk-rate__bar i { background: var(--mk-red); }
 
 /* 网格视图 */
 .sk-grid {

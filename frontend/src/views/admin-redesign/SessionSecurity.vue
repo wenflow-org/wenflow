@@ -126,7 +126,11 @@
                 <td class="ss-ip mono" :title="s.ip || ''">{{ ipText(s.ip) }}</td>
                 <td class="ss-time mono" :title="fmtFull(s.issuedAt)">{{ fmtDateTime(s.issuedAt) }}</td>
                 <td class="ss-time mono" :title="s.lastSeenAt ? fmtFull(s.lastSeenAt) : ''">
-                  {{ s.lastSeenAt ? fmtDateTime(s.lastSeenAt) : '—' }}
+                  <!-- 批C：新鲜度点做活跃度视觉锚；绝对时间保留（安全审计回溯刚需，不藏 title） -->
+                  <span class="mk-fresh" :class="lastSeenFreshTone(s)" style="justify-content: flex-end">
+                    <template v-if="s.lastSeenAt">{{ fmtDateTime(s.lastSeenAt) }}</template>
+                    <template v-else>—</template>
+                  </span>
                 </td>
                 <td class="ss-time mono" :class="{ 'ss-time--soon': expiringSoon(s) }" :title="fmtFull(s.expiresAt)">
                   {{ fmtDateTime(s.expiresAt) }}
@@ -454,6 +458,11 @@ function uaFull(s: AdminSessionRow): string {
 function expiringSoon(s: AdminSessionRow): boolean {
   if (statusOf(s) !== 'active') return false
   return new Date(s.expiresAt).getTime() - Date.now() <= 24 * 60 * 60 * 1000
+}
+/* 批C：最后活跃新鲜度三档（mk-fresh 原语；24h 内=新鲜） */
+function lastSeenFreshTone(s: AdminSessionRow): string {
+  if (!s.lastSeenAt) return 'mk-fresh--never'
+  return Date.now() - new Date(s.lastSeenAt).getTime() < 24 * 60 * 60 * 1000 ? 'mk-fresh--fresh' : ''
 }
 
 async function revoke(s: AdminSessionRow) {
