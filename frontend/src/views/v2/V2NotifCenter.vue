@@ -512,7 +512,7 @@ onBeforeUnmount(() => {
     left: 12px;
     right: 12px;
     width: auto;
-    max-height: calc(100dvh - 140px);
+    max-height: calc((100dvh - 140px) / var(--vp-zoom, 1));
     display: flex;
     flex-direction: column;
   }

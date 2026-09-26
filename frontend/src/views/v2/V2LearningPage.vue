@@ -1487,7 +1487,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.learn { min-height: 100vh; display: flex; flex-direction: column; background: var(--canvas); }
+.learn { min-height: calc(100vh / var(--vp-zoom, 1)); display: flex; flex-direction: column; background: var(--canvas); }
 
 /* ---------- 头部 ---------- */
 .learn__head {
@@ -1621,7 +1621,7 @@ onBeforeUnmount(() => {
   border-radius: var(--mk-radius-modal);
   overflow: hidden;
   min-height: 560px;
-  max-height: calc(100vh - 120px);
+  max-height: calc((100vh - 120px) / var(--vp-zoom, 1));
 }
 .tutor__scroll {
   flex: 1; overflow-y: auto;
@@ -2336,7 +2336,7 @@ onBeforeUnmount(() => {
 @media (max-width: 900px) {
   /* 锁定视口高度：整页不滚动，tutor 内部滚动、composer 吸底，消除底部空白。
      flex-grow:0 必须显式置零——.v2-page 全局 flex:1 会把 height:100dvh 拉伸到内容高度。 */
-  .learn { height: 100dvh; min-height: 0; flex: 0 0 auto; padding-bottom: 0; }
+  .learn { height: calc(100dvh / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; padding-bottom: 0; }
   .learn__body {
     flex: 1;
     min-height: 0;
@@ -2607,7 +2607,7 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 .learn__body--no-kp .tutor {
-  max-height: calc(100vh - 120px);
+  max-height: calc((100vh - 120px) / var(--vp-zoom, 1));
 }
 </style>
 

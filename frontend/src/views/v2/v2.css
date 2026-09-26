@@ -589,15 +589,21 @@ html, body {
    此前该区间无 zoom，页面定宽容器（1080/960）在 2560 视口下两侧留白过大、
    信息密度骤降（手动流程问题测试 2026-09-26「大片空白/两侧太空」）。 */
 @media (min-width: 2000px) and (max-width: 2799px) {
-  .v2-page { zoom: 1.15; }
+  .v2-page { zoom: 1.15; --vp-zoom: 1.15; }
 }
 /* 2800+（4K@100% 及更高）：整体等比放大（数值档位，避开 zoom+clamp 兼容问题） */
 @media (min-width: 2800px) {
-  .v2-page { zoom: 1.15; }
+  .v2-page { zoom: 1.15; --vp-zoom: 1.15; }
 }
 @media (min-width: 3600px) {
-  .v2-page { zoom: 1.3; }
+  .v2-page { zoom: 1.3; --vp-zoom: 1.3; }
 }
+/* ⚠ zoom 会连 viewport 单位一起放大：zoom:1.15 下 height:100dvh 渲染出来是
+   1.15 个视口高——锁视口的页面（goal/learn）在 2K/4K 会比屏幕高一截、输入框
+   被顶出屏（2026-09-27 4K 验收实测：composer bottom 2786 > 2160）。
+   所以凡 100dvh/100vh 的锁高/上限，一律写 calc(... / var(--vp-zoom, 1))，
+   渲染高度 = (视口/系数)×系数 = 恰好一屏。 */
+:root { --vp-zoom: 1; }
 
 /* 2000-2799：认证页（无 zoom 覆盖区间）表单字号随视口放大 */
 @media (min-width: 2000px) and (max-width: 2799px) {

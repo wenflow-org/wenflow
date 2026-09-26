@@ -1378,7 +1378,7 @@ function shuffleScenes() {
 @media (min-width: 1101px) {
   /* overflow:hidden：锁高之后内容若比视口高，只允许在 entry/chat 内部滚，
      不许把文档撑出滚动条 */
-  .goal { height: 100dvh; min-height: 0; flex: 0 0 auto; overflow: hidden; }
+  .goal { height: calc(100dvh / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; overflow: hidden; }
 }
 .chat__head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -1859,7 +1859,7 @@ function shuffleScenes() {
   /* 锁定视口高度：会话态整页不滚动，chat 内部滚动、composer 吸底在底部导航之上。
      flex-grow:0 显式置零（.v2-page 全局 flex:1 会把 height:100dvh 拉伸到内容高度）。
      v2.css 全局 .v2-page { padding-bottom:72px } 为底部导航让位，此处保留。 */
-  .goal { height: 100dvh; min-height: 0; flex: 0 0 auto; overflow: hidden; }
+  .goal { height: calc(100dvh / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; overflow: hidden; }
   .work {
     grid-template-columns: 1fr;
     /* 信息面板在移动端改绝对定位（零占位锚点），chat 独占整行撑满 */
@@ -1926,7 +1926,7 @@ function shuffleScenes() {
     /* 高度上限取「不超过 60% 视口」与「给 composer 留位」的较小值：
        悬浮层顶边在头部带下方 ≈118px，下方要留 composer(103) + 底部导航(62) ≈ 300px，
        短屏（320×568）下 60dvh 会盖住输入框，靠这一项兜住。内容仍超高时面板内部滚动。 */
-    max-height: min(60dvh, calc(100dvh - 320px));
+    max-height: min(calc(60dvh / var(--vp-zoom, 1)), calc((100dvh - 320px) / var(--vp-zoom, 1)));
     overflow: auto;
     padding: 12px;
     background: var(--surface);
