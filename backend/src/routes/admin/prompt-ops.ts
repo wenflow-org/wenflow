@@ -37,7 +37,6 @@ import {
   findEvalRunById,
 } from '../../services/admin/prompt-ops.repo';
 import { findProfileById, filterExistingProfileIds } from '../../services/virtual-lab/virtual-learner-profile.repo';
-import { routingKeyFor } from '../../services/prompt-manifest/check-prompt-compile-health';
 import { logger } from '../../utils/logger';
 import { loadAllPromptFiles } from '../../composers/prompt-files/loader';
 import {
@@ -61,7 +60,6 @@ import { callPrompt } from '../../composers/prompt-composer';
 import {
   parsePromptSchema,
 } from '../../services/prompt-schema';
-import { compilePrompt } from '../../services/prompt-compiler';
 import {
   listTopLevelAgents,
   listSkillsOfAgent,
@@ -1740,78 +1738,6 @@ async function resolvePrompt(
     model: payload.model || null,
   };
 }
-
-/**
- * 编译预览 — P-PROMPT-COMPILE
- * GET /admin/prompt-ops/:agentId/compile-info
- *
- * 返回:
- *   - source: PromptSource 文本 (来自 DB ACTIVE 版本)
- *   - compiled: 实时编译产物 (调 compilePrompt)
- *   - sourceHash / contextHash
- *   - status: fresh | failed
- *   - rewritten / fieldsApplied
- *   - storedCompiledAt / storedSourceHash 等 (DB 存的产物元信息, 后续 C3 会用到)
- *
- * 注: 当前阶段 (C2) 是"实时 dry-run 编译", 不落库. C3 会改为优先用 DB 已存产物.
- */
-router.get('/:agentId/compile-info', async (req: Request, res: Response) => {
-  try {
-    const rawId = req.params.agentId;
-    // 兼容 'goal-conversation' / 'skill:goal-conversation' 两种入参
-    const ids = rawId.startsWith('skill:') ? [rawId, rawId.slice(6)] : [rawId, `skill:${rawId}`];
-
-    // 找 DB ACTIVE prompt
-    let activePrompt: any = null;
-    for (const id of ids) {
-      activePrompt = await findActiveAgentPrompt(id);
-      if (activePrompt) break;
-    }
-
-    if (!activePrompt) {
-      return res.status(404).json({
-        success: false,
-        error: `未找到 agentId=${rawId} 的 ACTIVE prompt`,
-      });
-    }
-
-    const source: string = activePrompt.systemPrompt || '';
-
-    // routing 表用的 key 是无 skill: 前缀的版本（约定收口在 routingKeyFor，与健康中心编译层检查共用）
-    const routingKey = routingKeyFor(rawId);
-    const compileResult = await compilePrompt(source, routingKey);
-
-    res.json({
-      success: true,
-      data: {
-        agentId: rawId,
-        routingKey,
-        promptVersion: activePrompt.version,
-        promptName: activePrompt.name,
-        source,
-        compiled: compileResult.compiled,
-        status: compileResult.status,
-        error: compileResult.error || null,
-        warnings: compileResult.warnings,
-        rewritten: compileResult.rewritten,
-        fieldsApplied: compileResult.fieldsApplied,
-        sourceHash: compileResult.sourceHash,
-        compileContextHash: compileResult.compileContextHash,
-        // DB 落库的产物 (C3 后会非空)
-        storedCompiledAt: activePrompt.compiledAt,
-        storedSourceHash: activePrompt.sourceHash,
-        storedContextHash: activePrompt.compileContextHash,
-        storedStatus: activePrompt.compileStatus,
-      },
-    });
-  } catch (error: any) {
-    logger.error('compile-info 失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '编译预览失败',
-    });
-  }
-});
 
 /**
  * skill-catalog — 用于前端可视化字段选择器 (SkillFieldPicker)

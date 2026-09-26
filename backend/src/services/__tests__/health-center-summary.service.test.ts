@@ -1,7 +1,7 @@
 /**
  * 巡检聚合服务测试（GET /health-center/summary 数据源）
  *
- * 1. 正常返回：五分组结构齐备、健康 14 项带 base/semantics、漂移/对账/完成度/全局计数合法。
+ * 1. 正常返回：五分组结构齐备、健康 13 项带 base/semantics、漂移/对账/完成度/全局计数合法。
  * 2. 与现有端点一致（抽查）：health.items 与 buildHealthCenterReport 逐项 count 一致；
  *    reconciliation 各字段与 runSkillReadinessChecks（/skills/readiness 同源）数组长度一致；
  *    drift 与 health 对应项 count 一致。
@@ -39,12 +39,12 @@ beforeEach(() => {
 });
 
 describe('巡检聚合（health-center/summary）', () => {
-  it('正常返回：五分组结构齐备，健康 14 项带 base/semantics 语义', async () => {
+  it('正常返回：五分组结构齐备，健康 13 项带 base/semantics 语义', async () => {
     const report = await buildHealthCenterSummaryReport(EMPTY_DB);
 
     expect(report.generatedAt).toBeTruthy();
 
-    // health：14 项全量 + 汇总
+    // health：13 项全量 + 汇总
     expect(report.health.items.length).toBeGreaterThanOrEqual(13);
     expect(report.health.summary.total).toBe(report.health.items.length);
     expect(report.health.abnormal).toBe(

@@ -60,7 +60,6 @@ const EXPECTED_BASE_BY_ID: Record<string, string> = {
   'w1-active': 'file:skills.yaml',
   'w2-registration': 'file:skills.yaml',
   'w3-wiring': 'bidirectional',
-  'prompt-compile': 'bidirectional',
   'override-record': 'db:managed',
   'runtime-prompt': 'runtime',
 };
@@ -77,7 +76,6 @@ const EXPECTED_SEMANTICS_BY_ID: Record<string, string> = {
   'w1-active': 'consistency',
   'w2-registration': 'consistency',
   'w3-wiring': 'consistency',
-  'prompt-compile': 'consistency',
   'override-record': 'override-record',
   'runtime-prompt': 'runtime-info',
 };
@@ -94,7 +92,7 @@ describe('健康中心聚合（基准体系版）', () => {
     expect(report.summary.total).toBe(report.items.length);
     expect(report.summary.total).toBeGreaterThanOrEqual(13);
     expect(report.summary.baselineDrift).toBe(7);
-    expect(report.summary.consistency).toBe(5);
+    expect(report.summary.consistency).toBe(4);
     expect(report.summary.overrideRecord).toBe(1);
     expect(typeof report.summary.fixable).toBe('number');
 
@@ -165,15 +163,6 @@ describe('健康中心聚合（基准体系版）', () => {
     expect(runtime.semantics).toBe('runtime-info');
     expect(runtime.base).toBe('runtime');
     expect(runtime.severity).toBe('info');
-
-    // 编译层：EMPTY_DB 无 ACTIVE 行 → 编译层无事可查，空态不告警
-    const promptCompile = byId.get('prompt-compile')!;
-    expect(promptCompile.semantics).toBe('consistency');
-    expect(promptCompile.base).toBe('bidirectional');
-    expect(promptCompile.count).toBe(0);
-    expect(promptCompile.severity).toBe('ok');
-    expect(promptCompile.status).toBe('none');
-    expect(promptCompile.action).toBe('manual');
 
     // baseline-drift 各项 action 归属：可修 4 项，人工 3 项（contract-parity/yaml/params）
     expect(report.items.filter((i) => i.semantics === 'baseline-drift').map((i) => i.action).sort())

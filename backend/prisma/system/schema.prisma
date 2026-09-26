@@ -46,6 +46,9 @@ model agent_prompts {
   name         String
   description  String?
   systemPrompt String
+  /// @deprecated（2026-09-26）二级编译（prompt-compiler 服务）已退役：prompt 调整统一走
+  /// v4 确定性编译链（core.yaml → skill.*.md → 本表 systemPrompt 镜像）。以下 6 列为历史
+  /// 编译产物残留，已无任何读写方；列保留防历史数据丢失，摘除待后续迁移批次统一处理。
   compiledSystemPrompt String?
   compileStatus        String?
   compileError         String?

@@ -88,8 +88,7 @@ vi.mock('@/api/adminApi', () => ({
     }))
   }),
   adminPromptOpsApi: apiObject({
-    getAgentOverview: vi.fn(async () => ({ data: { data: { items: [overviewItem] } } })),
-    getPromptCompileInfo: vi.fn(async () => ({ data: { data: { promptVersion: 2, sourceHash: 'src-hash', status: 'ok', source: 'source text', compiled: 'compiled text' } } }))
+    getAgentOverview: vi.fn(async () => ({ data: { data: { items: [overviewItem] } } }))
   }),
   adminSkillWorkbenchApi: apiObject({
     getMeta: vi.fn(async () => ({ data: { data: { parentAgent: { id: 'agent-a', name: 'Agent A' }, stats: { totalCalls: 12, successRate: 92, avgDuration: 300 } } } }))

@@ -3,10 +3,10 @@
  *
  * 覆盖三件事：
  *   1. 每个挂载端点未认证请求一律 401（真实 adminAccessRestrictMiddleware + adminAuthMiddleware）
- *   2. 已删端点（agent-fields / recent-call-samples / prompt-schema / sync / recompile / source）
+ *   2. 已删端点（agent-fields / recent-call-samples / prompt-schema / sync / recompile / source /
+ *      compile-info——二级编译 2026-09 退役）
  *      已从路由中移除 → 请求 404（防"删了又挂回来"回归）
- *   3. 关键端点基本行为：agent-overview 返回三源概览、compile-info 对无 ACTIVE 的 agent 返回 404、
- *      eval-cases 列表返回空数组
+ *   3. 关键端点基本行为：agent-overview 返回三源概览、eval-cases 列表返回空数组
  */
 
 import express from 'express'
@@ -17,7 +17,6 @@ const mockAgentPromptsFindMany = jest.fn()
 const mockAgentPromptsFindFirst = jest.fn()
 const mockEvalCasesFindMany = jest.fn()
 const mockEvalRunsFindMany = jest.fn()
-const mockCompilePrompt = jest.fn()
 const mockResolveRuntimeContracts = jest.fn()
 const mockExecuteSkill = jest.fn()
 
@@ -83,10 +82,6 @@ jest.mock('../../services/prompt-schema', () => ({
   }),
 }))
 
-jest.mock('../../services/prompt-compiler', () => ({
-  compilePrompt: (...args: unknown[]) => mockCompilePrompt(...args),
-}))
-
 jest.mock('../../services/prompt-lab/resolve-runtime-contract', () => ({
   resolveRuntimeContractsForAgents: (...args: unknown[]) => mockResolveRuntimeContracts(...args),
 }))
@@ -130,7 +125,6 @@ const KEPT_ENDPOINTS = [
   ['POST', '/api/admin/prompt-ops/run-eval'],
   ['GET', '/api/admin/prompt-ops/eval-runs'],
   ['GET', '/api/admin/prompt-ops/eval-runs/run-1'],
-  ['GET', '/api/admin/prompt-ops/goal-conversation/compile-info'],
   ['GET', '/api/admin/prompt-ops/skill-catalog'],
 ] as const
 
@@ -142,6 +136,8 @@ const DELETED_ENDPOINTS = [
   ['POST', '/api/admin/prompt-ops/sync'],
   ['POST', '/api/admin/prompt-ops/goal-conversation/recompile'],
   ['PUT', '/api/admin/prompt-ops/goal-conversation/source'],
+  // 二级编译 2026-09 退役：prompt 调整统一走 v4 确定性编译（core.yaml → md → DB 镜像）
+  ['GET', '/api/admin/prompt-ops/goal-conversation/compile-info'],
 ] as const
 
 describe('admin prompt-ops 路由冒烟', () => {
@@ -152,16 +148,6 @@ describe('admin prompt-ops 路由冒烟', () => {
     mockAgentPromptsFindFirst.mockResolvedValue(null)
     mockEvalCasesFindMany.mockResolvedValue([])
     mockEvalRunsFindMany.mockResolvedValue([])
-    mockCompilePrompt.mockResolvedValue({
-      status: 'ok',
-      compiled: 'compiled',
-      warnings: [],
-      error: null,
-      rewritten: false,
-      fieldsApplied: 0,
-      sourceHash: 'h',
-      compileContextHash: 'c',
-    })
     mockResolveRuntimeContracts.mockResolvedValue(new Map())
     mockExecuteSkill.mockResolvedValue({})
   })
@@ -261,21 +247,6 @@ describe('admin prompt-ops 路由冒烟', () => {
         const body = (await response.json()) as { success: boolean; data: unknown }
         expect(body.success).toBe(true)
         expect(body.data).toBeDefined()
-      })
-    })
-
-    it('GET /:agentId/compile-info 对无 ACTIVE prompt 的 agent 返回 404', async () => {
-      mockAgentPromptsFindFirst.mockResolvedValue(null)
-
-      const app = express()
-      app.use(express.json())
-      app.use('/api/admin/prompt-ops', adminAccessRestrictMiddleware, adminAuthMiddleware, router)
-
-      await withServer(app, async (baseUrl) => {
-        const response = await fetch(`${baseUrl}/api/admin/prompt-ops/unknown-agent/compile-info`, {
-          headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
-        })
-        expect(response.status).toBe(404)
       })
     })
   })

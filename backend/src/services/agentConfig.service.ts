@@ -200,12 +200,9 @@ export class AgentConfigService {
   /**
    * 获取一个 agent 的 ACTIVE prompt.
    *
-   * 关键: 热更换支持 — systemPrompt 字段优先返回 compiledSystemPrompt (编译产物),
-   * 当编译产物不可用 (未编译 / 失败 / null) 时降级到 systemPrompt (源).
-   *
-   * 所有运行时调用方读 `prompt.systemPrompt` 就自动拿到产物或源.
-   * 同时暴露 _source / _compiled / _compileStatus / _sourceHash / _compileContextHash
-   * 让消费方在需要时区分.
+   * systemPrompt 即生效文本：prompt 调整统一走 v4 File-as-Truth 链
+   * （core.yaml → 确定性编译 skill.*.md → DB 镜像）。二级编译（compiledSystemPrompt
+   * 产物优先）已于 2026-09 退役删除，历史编译列见 system schema @deprecated 注记。
    */
   async getActivePrompt(agentId: string) {
     const now = Date.now();
@@ -219,35 +216,8 @@ export class AgentConfigService {
     });
     if (!prompt) return null;
 
-    // 编译产物优先 (热更换关键路径)
-    const useCompiled =
-      prompt.compileStatus === 'fresh' &&
-      typeof prompt.compiledSystemPrompt === 'string' &&
-      prompt.compiledSystemPrompt.length > 0;
-
-    const result = useCompiled
-      ? {
-          ...prompt,
-          systemPrompt: prompt.compiledSystemPrompt!,
-          _source: prompt.systemPrompt,
-          _compiled: prompt.compiledSystemPrompt!,
-          _compileStatus: prompt.compileStatus,
-          _sourceHash: prompt.sourceHash,
-          _compileContextHash: prompt.compileContextHash,
-          _usedCompiled: true,
-        }
-      : {
-          ...prompt,
-          _source: prompt.systemPrompt,
-          _compiled: null,
-          _compileStatus: prompt.compileStatus,
-          _sourceHash: prompt.sourceHash,
-          _compileContextHash: prompt.compileContextHash,
-          _usedCompiled: false,
-        };
-
-    this.activePromptCache.set(agentId, { loadedAt: now, value: result });
-    return result;
+    this.activePromptCache.set(agentId, { loadedAt: now, value: prompt });
+    return prompt;
   }
 
   /** 清除单个 agent 的 ACTIVE prompt 缓存（admin 发布/回滚/删除时调用） */

@@ -68,8 +68,6 @@ export function listAllActiveAgentPrompts() {
     select: {
       agentId: true,
       systemPrompt: true,
-      compiledSystemPrompt: true,
-      compileStatus: true,
       name: true,
       version: true,
     },

@@ -2,7 +2,7 @@
  * 巡检聚合服务（G1 一页式巡检工作台后端，ADMIN_RECONSTRUCTION_MASTERPLAN 阶段 2）
  *
  * GET /api/admin/health-center/summary —— 一次请求返回巡检需要的全部数据：
- * - health：健康检查 14 项全量（含 base/semantics 语义，与 /health-center 同一实现）
+ * - health：健康检查 13 项全量（含 base/semantics 语义，与 /health-center 同一实现）
  * - drift：漂移分维度计数（契约漂移 / W4 哈希漂移 / 运行时漂移）
  * - reconciliation：对账摘要（W1-W5 简版：缺注册/幽灵注册/缺 ACTIVE/幽灵 ACTIVE/接线差集）
  * - completion：各 skill 完成度五档分布计数（明细仍走 /skills/reconciliation）

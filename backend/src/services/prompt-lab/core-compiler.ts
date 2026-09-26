@@ -53,8 +53,9 @@ export interface CompiledCorePrompt {
 export const V4_BLOCK_HEADINGS = ['身份', '使用通道', '执行规则', '输出字段', '边界约束'] as const;
 
 /**
- * v4 编译约定文本（external-spec）——供 prompt-compiler 的 LLM 编译与 /compile-spec 端点使用。
+ * v4 编译约定文本（external-spec）——供 /compile-spec 端点使用。
  * 由平台常量生成，唯一来源，取代历史 compiler-skill/compile-spec.md（v2 八段约定）。
+ * （原 second consumer「prompt-compiler LLM 编译」已于 2026-09 退役删除。）
  */
 export function buildV4CompileSpecText(): string {
   const channelLines = (Object.entries(CORE_CHANNEL_DESCRIPTIONS) as Array<[CoreChannel, string]>)

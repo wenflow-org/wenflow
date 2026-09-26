@@ -42,36 +42,17 @@
     <!-- 右：ACTIVE Prompt 只读参照 -->
     <section class="sdp-prompt">
       <header class="sdp-block__head">
-        <div class="mk-pills">
-          <button
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': promptView === 'source' }"
-            @click="promptView = 'source'"
-          >
-            源内容
-          </button>
-          <button
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': promptView === 'compiled' }"
-            @click="promptView = 'compiled'"
-          >
-            编译产物
-          </button>
-        </div>
-        <button type="button" class="mk-link" @click="copy(promptView === 'source' ? compileInfo?.source || '' : compileInfo?.compiled || '')">
+        <h4>ACTIVE Prompt</h4>
+        <button type="button" class="mk-link" @click="copy(effectivePrompt?.prompt?.systemPrompt || '')">
           复制
         </button>
       </header>
       <div class="sdp-prompt__facts">
-        <span>DB ACTIVE <b class="mono">v{{ compileInfo?.promptVersion ?? '—' }}</b></span>
-        <span>Hash <code class="mono">{{ shortHash(compileInfo?.sourceHash) }}</code></span>
-        <span>{{ compileInfo?.status || '—' }}</span>
-        <span class="sdp-prompt__used">{{ effectivePrompt?.prompt?._usedCompiled ? '运行时使用编译产物' : '运行时使用源内容' }}</span>
+        <span>DB ACTIVE <b class="mono">v{{ effectivePrompt?.prompt?.version ?? '—' }}</b></span>
+        <span>源文本直出（编译层已退役）</span>
       </div>
       <p v-if="inspectError" class="sdp-none sdp-bad-text">Prompt 检视加载失败。<button type="button" class="mk-link" @click="loadInspect">重试</button></p>
-      <pre class="sdp-prompt__code">{{ (promptView === 'source' ? compileInfo?.source : compileInfo?.compiled) || (inspectError ? '加载失败，请重试' : '暂无内容') }}</pre>
+      <pre class="sdp-prompt__code">{{ effectivePrompt?.prompt?.systemPrompt || (inspectError ? '加载失败，请重试' : '暂无内容') }}</pre>
       <p class="sdp-prompt__hint">
         File-as-Truth：正式内容只能修改 <code class="mono">{{ filePath || 'prompts/skill.*.md' }}</code>，经部署同步生效。
       </p>
@@ -137,11 +118,10 @@ import json from 'highlight.js/lib/languages/json'
 import 'highlight.js/styles/github-dark.css'
 import {
   adminAgentsApi,
-  adminPromptOpsApi,
   adminSkillsApi
 } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
-import { fmtMs, shortHash, errText } from './sdp-shared'
+import { fmtMs, errText } from './sdp-shared'
 import { humanizeHttpError } from '../terms'
 import MkLoading from '@/components/mk/MkLoading.vue'
 
@@ -151,35 +131,21 @@ const props = defineProps<{ skillId: string; filePath?: string; refreshTick: num
 const emit = defineEmits<{ (e: 'failures', n: number): void }>()
 
 /* ---------- Prompt 内容 ---------- */
-interface CompileInfo {
-  promptVersion?: number | string
-  sourceHash?: string
-  status?: string
-  source?: string
-  compiled?: string
-}
+/* 二级编译已退役：ACTIVE Prompt 只有源文本一条数据源（effective-prompt），无编译产物视图 */
 interface EffectivePrompt {
-  prompt?: { _usedCompiled?: boolean; version?: number | string; systemPrompt?: string }
+  prompt?: { version?: number | string; systemPrompt?: string }
 }
-const compileInfo = ref<CompileInfo | null>(null)
 const effectivePrompt = ref<EffectivePrompt | null>(null)
-const promptView = ref<'source' | 'compiled'>('source')
 const inspectError = ref(false)
 
 async function loadInspect() {
   const id = props.skillId
   inspectError.value = false
-  let ciOk = true
-  let epOk = true
-  const ci = await adminPromptOpsApi
-    .getPromptCompileInfo(`skill:${id}`)
-    .catch(() => { ciOk = false; return null })
   const ep = await adminSkillsApi
     .getEffectiveSkillPrompt(id)
-    .catch(() => { epOk = false; return null })
+    .catch(() => null)
   if (id !== props.skillId) return
-  inspectError.value = !ciOk || !epOk
-  compileInfo.value = ci?.data?.data ?? null
+  inspectError.value = ep === null
   effectivePrompt.value = ep?.data?.data ?? null
 }
 

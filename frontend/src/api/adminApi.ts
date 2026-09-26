@@ -1623,14 +1623,7 @@ export const adminPromptOpsApi = {
     return adminAxios.get('/admin/prompt-ops/skill-rules-overview');
   },
 
-  // P-PROMPT-COMPILE: 编译产物预览 + 重编译
-  getPromptCompileInfo: async (agentId: string) => {
-    return adminAxios.get(`/admin/prompt-ops/${encodeURIComponent(agentId)}/compile-info`);
-  },
-
-  // P-PROMPT-COMPILE: 保存源 + 自动编译 + 失效缓存 (一键 编辑→编译)
-
-  // P-PROMPT-COMPILE: skill 目录 (agent.skill.字段 三级树, 用于可视化字段选择器)
+  // skill 目录 (agent.skill.字段 三级树, 用于可视化字段选择器)
   getSkillCatalog: async () => {
     return adminAxios.get('/admin/prompt-ops/skill-catalog');
   },

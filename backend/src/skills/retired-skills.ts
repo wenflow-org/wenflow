@@ -84,7 +84,7 @@ export const PURGED_SKILLS: readonly string[] = [
   'goal-analysis',
   // 2026-08 零调用退役：goal-profile-inference / learning-pattern-distiller（画像叙述改由
   // profile-aggregator 确定性 buildNarrativeInsights 产出）、structured-output-parser（无消费方）、
-  // prompt-compiler skill（与 services/prompt-compiler 确定性编译器同名，且无生产调用）
+  // prompt-compiler skill（与已退役删除的 services/prompt-compiler 编译器同名，且无生产调用）
   'goal-profile-inference',
   'learning-pattern-distiller',
   'structured-output-parser',
