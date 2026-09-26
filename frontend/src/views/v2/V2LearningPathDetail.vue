@@ -118,7 +118,7 @@
               <circle
                 cx="60" cy="60" r="52" fill="none"
                 stroke="url(#v2ringGrad)" stroke-width="10" stroke-linecap="round"
-                :stroke-dasharray="326.7" :stroke-dashoffset="326.7 * (1 - percent / 100)"
+                :stroke-dasharray="326.7" :stroke-dashoffset="326.7 * (1 - displayPercent / 100)"
                 transform="rotate(-90 60 60)"
               />
               <defs>
@@ -128,7 +128,7 @@
                 </linearGradient>
               </defs>
             </svg>
-            <div class="hero__ring-text"><b>{{ percent }}%</b><small>整体进度</small></div>
+            <div class="hero__ring-text"><b>{{ displayPercent }}%</b><small>整体进度</small></div>
           </div>
         </section>
 
@@ -928,6 +928,15 @@ async function doRetry() {
 /* ---------- 调整路径（三场景） ---------- */
 type AdjustMode = 'rebuild' | 'reshape' | 'auto' | null;
 const adjustDialogOpen = ref(false);
+/* Esc 关闭调整弹窗（批18）：此前只能点遮罩/关闭钮 */
+function onAdjustDialogKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') adjustDialogOpen.value = false;
+}
+watch(adjustDialogOpen, (open) => {
+  if (open) window.addEventListener('keydown', onAdjustDialogKey);
+  else window.removeEventListener('keydown', onAdjustDialogKey);
+});
+onBeforeUnmount(() => window.removeEventListener('keydown', onAdjustDialogKey));
 const adjustText = ref('');
 const adjusting = ref(false);
 const adjustMode = ref<AdjustMode>(null);
@@ -1326,6 +1335,39 @@ const allTasks = computed(() => stages.value.flatMap((s) => stageTasks(s)));
 const totalTasks = computed(() => allTasks.value.length);
 const doneTasks = computed(() => allTasks.value.filter((t) => t.status === 'completed').length);
 const percent = computed(() => (totalTasks.value ? Math.round((doneTasks.value / totalTasks.value) * 100) : 0));
+
+/* 进度环数字滚动（批18 招牌动效）：入场与变化时 ease-out 计数。
+   rAF 不受全局 prefers-reduced-motion CSS 兜底管，这里手动豁免直出终值。 */
+const displayPercent = ref(percent.value);
+let percentRaf = 0;
+function animatePercent() {
+  cancelAnimationFrame(percentRaf);
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    displayPercent.value = percent.value;
+    return;
+  }
+  const from = displayPercent.value;
+  const to = percent.value;
+  if (from === to) return;
+  const start = performance.now();
+  const dur = 640;
+  const step = (now: number) => {
+    const t = Math.min((now - start) / dur, 1);
+    const eased = 1 - Math.pow(1 - t, 3);
+    displayPercent.value = Math.round(from + (to - from) * eased);
+    if (t < 1) percentRaf = requestAnimationFrame(step);
+  };
+  percentRaf = requestAnimationFrame(step);
+}
+watch(percent, animatePercent);
+onMounted(() => {
+  // 入场从 0 滚到当前进度（0 值本身不动画）
+  if (percent.value > 0) {
+    displayPercent.value = 0;
+    animatePercent();
+  }
+});
+onBeforeUnmount(() => cancelAnimationFrame(percentRaf));
 const allDone = computed(() => totalTasks.value > 0 && doneTasks.value === totalTasks.value);
 
 /* 当前任务 = 全局第一个 in_progress，否则第一个 todo；与学习台「今日行动」共用
@@ -1515,15 +1557,15 @@ onBeforeUnmount(() => {
   cursor: pointer;
   text-align: left;
 }
-.hero__metrics { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+/* 指标一行 meta（批18）：去卡片框，值+标签同基线排列——hero 右侧已有进度环，
+   这些辅助计数不该再各占一个盒子（KPI 盒子墙观感） */
+.hero__metrics { display: flex; gap: 18px; margin-top: 14px; flex-wrap: wrap; }
 .metric {
-  display: grid; gap: 2px;
-  padding: 9px 14px;
-  background: var(--canvas, #f7faff); border: 1px solid var(--line, #e8eefb);
-  border-radius: var(--mk-radius-xl);
-  font-size: 12px; color: var(--faint);
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 0; background: none; border: 0;
+  font-size: 12.5px; color: var(--faint);
 }
-.metric b { font-size: 14px; color: var(--ink); }
+.metric b { font-size: 13.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .hero__actions { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;

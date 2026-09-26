@@ -45,6 +45,27 @@
           </button>
         </div>
 
+        <!-- 搜索 + 排序（批18）：路径多了以后不能只靠分类芯片逐个翻；q 入 URL 与筛选同口径 -->
+        <div v-if="cards.length" class="paths__tools">
+          <label class="paths__search">
+            <Search :size="15" :stroke-width="1.75" aria-hidden="true" />
+            <input
+              v-model="search"
+              type="search"
+              placeholder="搜索路径标题或内容"
+              aria-label="搜索学习路径"
+            />
+            <button v-if="search" type="button" class="paths__search-clear" aria-label="清空搜索" @click="search = ''">×</button>
+          </label>
+          <label class="paths__sort">
+            <span class="paths__sort-label">排序</span>
+            <select v-model="sort" aria-label="排序方式">
+              <option value="default">默认</option>
+              <option value="progress">按进度</option>
+            </select>
+          </label>
+        </div>
+
         <!-- 移动端筛选（批13）：芯片行在 375 折两行占首屏 ~9%，≤1100 收进按钮 + 底部弹层；
              桌面仍用芯片行。单选即点即生效并收起。 -->
         <button
@@ -80,11 +101,20 @@
 
         <!-- 卡片列表 -->
         <div v-if="visibleCards.length" class="cards">
-          <article v-for="card in visibleCards" :key="card.id" class="pcard" :class="`pcard--${card.kind}`" @click="openPath(card)">
+          <article
+            v-for="card in visibleCards"
+            :key="card.id"
+            class="pcard"
+            :class="`pcard--${card.kind}`"
+            @click="openPath(card)"
+          >
             <div class="pcard__head">
               <span class="pcard__thumb" aria-hidden="true">{{ thumbLetter(card) }}</span>
               <div class="pcard__body">
-                <h3 class="pcard__title">{{ card.title }}</h3>
+                <h3 class="pcard__title">
+                  <!-- 标题是真链接：键盘 Tab/读屏由此进入详情（整卡点击只是鼠标便利，批18） -->
+                  <router-link :to="'/learning-path/' + card.id" @click.stop>{{ card.title }}</router-link>
+                </h3>
                 <p class="pcard__desc">{{ card.desc }}</p>
               </div>
               <div class="pcard__head-right">
@@ -122,13 +152,12 @@
               </div>
             </template>
 
-            <!-- generating：生成中 -->
+            <!-- generating：生成中（不做假骨架填高：真实信息只有 phaseText 与刷新，2026-09-23 批18） -->
             <template v-else-if="card.kind === 'generating'">
               <div class="pcard__generating">
                 <span class="spinner--sm spinner" style="border-color: color-mix(in srgb, var(--cyan) 30%, transparent); border-top-color: var(--cyan);"></span>
                 <span>{{ card.phaseText }}</span>
               </div>
-              <div class="pcard__skeleton"><i style="width: 76%"></i><i style="width: 52%"></i><i style="width: 64%"></i></div>
               <div class="pcard__actions">
                 <button type="button" class="btn-ghost" @click.stop="refreshStatus(card)">刷新状态</button>
               </div>
@@ -152,12 +181,12 @@
           </article>
         </div>
 
-        <!-- 筛选空态 -->
+        <!-- 筛选/搜索空态 -->
         <div v-else class="empty">
           <div class="empty__illus"><span></span><span></span><span></span></div>
-          <p>{{ filter === 'all' ? '还没有学习路径，从规划一个目标开始' : '这个分类下还没有路径' }}</p>
-          <router-link v-if="filter === 'all'" to="/goal-conversation" class="btn-primary">规划第一个目标</router-link>
-          <button type="button" v-else class="btn-ghost" @click="filter = 'all'">查看全部</button>
+          <p>{{ emptyText }}</p>
+          <router-link v-if="cards.length === 0" to="/goal-conversation" class="btn-primary">规划第一个目标</router-link>
+          <button v-else type="button" class="btn-ghost" @click="search ? (search = '') : (filter = 'all')">{{ search ? '清除搜索' : '查看全部' }}</button>
         </div>
       </template>
     </main>
@@ -175,6 +204,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { Search } from 'lucide-vue-next';
 import request, { AI_REQUEST_TIMEOUT } from '@/utils/api';
 import { toast } from '@/utils/toast';
 import { learningAPI } from '@/api/learning';
@@ -212,6 +242,9 @@ const FILTER_KEYS: FilterKey[] = ['all', 'ready', 'completed', 'generating', 'fa
 const filter = ref<FilterKey>(
   FILTER_KEYS.includes(route.query.filter as FilterKey) ? (route.query.filter as FilterKey) : 'all'
 );
+/* 搜索（q 入 URL，与 filter 同口径：返回/刷新不丢）与排序（运行态，不入 URL） */
+const search = ref(typeof route.query.q === 'string' ? route.query.q : '');
+const sort = ref<'default' | 'progress'>('default');
 const retrying = ref('');
 const menuFor = ref('');
 const deleting = ref('');
@@ -432,13 +465,23 @@ watch(filterSheetOpen, (open) => {
   }
 });
 
+const emptyText = computed(() => {
+  if (search.value) return '没有匹配的路径，换个关键词试试';
+  if (cards.value.length === 0) return '还没有学习路径，从规划一个目标开始';
+  return '这个分类下还没有路径';
+});
+
 const visibleCards = computed(() => {
-  if (filter.value === 'all') return cards.value;
-  return cards.value.filter((c) => c.kind === filter.value);
+  let list = cards.value;
+  if (filter.value !== 'all') list = list.filter((c) => c.kind === filter.value);
+  const kw = search.value.trim().toLowerCase();
+  if (kw) list = list.filter((c) => (c.title + ' ' + c.desc).toLowerCase().includes(kw));
+  if (sort.value === 'progress') list = [...list].sort((a, b) => b.percent - a.percent);
+  return list;
 });
 
 /* 筛选态 ↔ URL 双向同步：点芯片 replace 进 query（不产生历史项）；
-   浏览器返回/前进时从 query 恢复筛选（filterSheetOpen 等运行态不进 URL） */
+   浏览器返回/前进时从 query 恢复筛选（filterSheetOpen/sort 等运行态不进 URL） */
 watch(filter, (v) => {
   const q = { ...route.query };
   if (v === 'all') delete q.filter;
@@ -450,6 +493,19 @@ watch(
   (v) => {
     const next: FilterKey = FILTER_KEYS.includes(v as FilterKey) ? (v as FilterKey) : 'all';
     if (filter.value !== next) filter.value = next;
+  }
+);
+watch(search, (v) => {
+  const q = { ...route.query };
+  if (v) q.q = v;
+  else delete q.q;
+  void router.replace({ query: q }).catch(() => {});
+});
+watch(
+  () => route.query.q,
+  (v) => {
+    const next = typeof v === 'string' ? v : '';
+    if (search.value !== next) search.value = next;
   }
 );
 
@@ -497,6 +553,33 @@ onBeforeUnmount(() => {
   display: grid; gap: 18px;
 }
 .paths__hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+/* 搜索+排序工具行（批18）：全尺寸常显（移动端芯片行收弹层后，这里是唯一检索入口） */
+.paths__tools { display: flex; align-items: center; gap: 10px; margin: 14px 0 2px; flex-wrap: wrap; }
+.paths__search {
+  flex: 1 1 220px; max-width: 420px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 12px; min-height: 38px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  color: var(--faint);
+  transition: border-color var(--mk-dur-fast, 120ms) ease, box-shadow var(--mk-dur-fast, 120ms) ease;
+}
+.paths__search:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 14%, transparent);
+}
+.paths__search input {
+  flex: 1; min-width: 0; min-height: 44px; border: 0; background: none; font: inherit; font-size: 13.5px;
+  color: var(--ink); outline: none;
+}
+.paths__search input::placeholder { color: var(--faint); }
+.paths__search-clear { border: 0; background: none; padding: 4px; font-size: 15px; color: var(--faint); cursor: pointer; line-height: 1; }
+.paths__search-clear:hover { color: var(--ink); }
+.paths__sort { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.paths__sort select {
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink);
+  padding: 7px 8px; border-radius: var(--mk-radius-md);
+  border: 1px solid var(--line); background: var(--surface); cursor: pointer;
+}
 /* wrapper 沉底：AI 提示与页脚一起贴近底部 */
 .paths__foot { margin-top: auto; }
 .paths__ai-note {
@@ -587,6 +670,13 @@ onBeforeUnmount(() => {
   min-height: calc(1.4em * 2);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+.pcard__title a {
+  color: inherit; text-decoration: none;
+  /* 块级撑满标题 clamp 区并负边距外扩：单行标题也有 ≥44 触诊高（mobile:spec），视觉不变 */
+  display: block; padding: 8px 10px; margin: -8px -10px;
+  min-height: 44px;
+}
+.pcard__title a:hover { color: var(--blue-deep); }
 .pcard__desc {
   margin: 4px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6;
   /* 固定 2 行展示高度（与 title 同理） */
@@ -617,16 +707,8 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; gap: 9px;
   font-size: 13px; color: var(--blue-deep, #2b7a99); font-weight: 600;
 }
-/* 生成中：中间内容区弹性拉伸，底部操作行压底（与 ready 卡内容高度对齐） */
-.pcard--generating .pcard__skeleton { flex: 1; align-content: center; }
-.pcard__skeleton { display: grid; gap: 8px; }
-.pcard__skeleton i {
-  height: 11px; border-radius: var(--mk-radius-sm);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--surface) 55%, var(--canvas)) 25%, var(--surface) 50%, color-mix(in srgb, var(--surface) 55%, var(--canvas)) 75%);
-  background-size: 200% 100%;
-  animation: paths-shimmer 1.5s ease infinite;
-}
-@keyframes paths-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+/* 生成中不再用假骨架填高（批18）：真实信息只有 phaseText 与刷新动作 */
+
 .pcard__fail-reason {
   font-size: 12.5px; line-height: 1.6; color: var(--red, #c0454a);
   background: color-mix(in srgb, var(--red) 7%, transparent);
@@ -669,6 +751,9 @@ onBeforeUnmount(() => {
   .paths__hero h1 { font-size: 18px; }
   /* 副标题单行省略（批9 首屏微调）：窄屏不给它第二行 */
   .paths__hero p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  /* 触诊下限（mobile:spec lt44 只紧不松）：搜索框/排序在 375 抬到 44px */
+  .paths__search { min-height: 44px; }
+  .paths__sort select { min-height: 44px; }
   .cards { grid-template-columns: 1fr; }
   /* ⋯ 触发器视觉不变（18px 字形 + 6px 内边距 = 30×27），伪元素把热区扩到 44×43：
      触屏上 27px 高太难点，它又贴在卡片右上角、周边没有别的手势目标，扩热区无副作用 */
