@@ -179,6 +179,11 @@
         </div>
 
         <div ref="scrollEl" class="tutor__scroll" @scroll="updateNearBottom">
+          <!-- 消息空态（批20）：跳过开场（「先看看」）或会话被清空时不再是纯白滚动区 -->
+          <div v-if="!msgs.length" class="tutor__empty">
+            <strong>准备开始</strong>
+            <p>发一条消息，或点下面的选项告诉老师你的情况。</p>
+          </div>
           <template v-for="(m, mi) in msgs" :key="m.id">
             <div v-if="m.role === 'user'" class="msg msg--user" :class="{ 'msg--editing': editingMsgId === m.id }">
               <!-- 编辑态：textarea 替换气泡 -->
@@ -1619,6 +1624,18 @@ onBeforeUnmount(() => {
   padding: 20px;
   display: flex; flex-direction: column; gap: 18px;
 }
+
+/* 消息空态（批20）：居中轻提示，不抢开场卡 */
+.tutor__empty {
+  margin: auto;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  text-align: center;
+  color: var(--faint);
+}
+.tutor__empty strong { font-size: 15px; color: var(--muted); }
+.tutor__empty p { margin: 0; font-size: 13px; }
 
 /* 恢复进度横幅：续上历史时的可见确认（替代一次性 toast） */
 .tutor__resume {

@@ -23,8 +23,8 @@
               :disabled="submitting"
             />
             <button type="button" class="field__eye" @click="showPwd = !showPwd" :aria-label="showPwd ? '隐藏密码' : '显示密码'">
-              <svg v-if="!showPwd" viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-2.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
-              <svg v-else viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M2.1 3.5 3.5 2.1l18.4 18.4-1.4 1.4-3.2-3.2c-1.6.8-3.4 1.3-5.3 1.3-5 0-9.3-3-11-7a12.4 12.4 0 0 1 4.7-5.5L2.1 3.5zM12 5c1.4 0 2.8.3 4 .9L8.9 8.8A4.48 4.48 0 0 1 12 7.5a4.5 4.5 0 0 1 4.5 4.5c0 1.2-.4 2.2-1.1 3l2.9 2.9c2-1.3 3.6-3.2 4.7-5.4-2-3.7-6.1-6-11-6z"/></svg>
+              <Eye v-if="!showPwd" :size="17" :stroke-width="1.75" />
+              <EyeOff v-else :size="17" :stroke-width="1.75" />
             </button>
           </span>
           <span v-if="errors.newPassword" class="field__error">{{ errors.newPassword }}</span>
@@ -72,6 +72,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { Eye, EyeOff } from 'lucide-vue-next';
 import { toast } from '@/utils/toast';
 import { authAPI } from '@/api/auth';
 import V2AuthLayout from './V2AuthLayout.vue';

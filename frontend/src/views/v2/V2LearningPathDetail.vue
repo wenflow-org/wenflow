@@ -363,7 +363,6 @@
                   >{{ openMaterial === mi ? '收起章节' : '查看章节' }}</button>
                 </li>
               </ul>
-              <p class="materials-note">这条路径按你上传的资料生成；学习时会围绕这些章节展开。</p>
               <!-- 资料原文预览：并入本卡（原独立「资料原文」卡），打开章节引用时在此展开 -->
               <template v-if="materialPreview.open">
                 <div class="sidecard__sub">
