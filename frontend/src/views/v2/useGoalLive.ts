@@ -144,6 +144,32 @@ export function normalizeFieldValue(raw: unknown): string {
   return s.toLowerCase() === 'unknown' ? '' : s;
 }
 
+/** 方案确认短语（normalize 后全等命中才确认；带调整/疑问意图的一律不确认） */
+const PROPOSAL_CONFIRM_HEADS = [
+  '按这个来', '就按这个来', '按这个方案来', '就按这个方案', '按这个走', '就按这个走',
+  '按这版来', '就按这版', '就这版', '这版可以', '就这么定', '这么定', '就这样定',
+  '确认生成', '确认并生成路径', '生成路径', '生成', '可以生成', '生成吧', '确认',
+  '同意', '没问题', '可以了', '就这个', '行就这个', '就按这个',
+];
+const PROPOSAL_CONFIRM_STRIP_HEAD = /^(好的?|行|可以|ok|嗯+|好呀|行呀)[，,。!！\s]+/;
+const PROPOSAL_CONFIRM_STRIP_TAIL = /[吧呢啊了呗哦～~。!！\s]+$/g;
+const PROPOSAL_ADJUST_RE = /但是|不过|想调|调整|改成|换一|换下|先别|不要|再想|补充|还想|另外|或者|不如|如果|是不是|吗|？|\?/;
+
+/**
+ * 纯文本是否等价于「确认方案」：方案卡在展示时，用户键入这类短语
+ * 应走 confirmProposal 通道（与确认按钮同权），否则模型永远只能复述方案
+ * ——goal 阶段绕圈圈的根因。命中口径刻意收窄：归一后全等短语表 +
+ * 剥离前后缀应答词，含任何调整/疑问意图直接放行为普通回复。
+ */
+export function isProposalConfirmText(raw: string): boolean {
+  let t = String(raw || '').trim().toLowerCase();
+  if (!t || t.length > 16) return false;
+  if (PROPOSAL_ADJUST_RE.test(t)) return false;
+  // 先查原串（"可以了"这类剥后缀会变义），再查剥应答词后的串（"按这个来吧"→"按这个来"）
+  const stripped = t.replace(PROPOSAL_CONFIRM_STRIP_HEAD, '').replace(PROPOSAL_CONFIRM_STRIP_TAIL, '').trim();
+  return PROPOSAL_CONFIRM_HEADS.includes(t) || PROPOSAL_CONFIRM_HEADS.includes(stripped);
+}
+
 const fields = computed<LiveField[]>(() =>
   FIELD_DEFS.map((def) => {
     const value = normalizeFieldValue(def.read(understanding.value, collected.value));
@@ -427,6 +453,14 @@ async function send(text: string, skipUserPush = false) {
   const meta = metaTracker.collect(t);
   if (!conversationId.value) {
     await run('start', t, meta);
+  } else if (
+    (stage.value === 'proposing' || stage.value === 'ready')
+    && proposal.value
+    && isProposalConfirmText(t)
+  ) {
+    // 方案卡在展示时键入确认短语 = 与确认按钮同权的显式确认；
+    // 不路由的话模型只能复述方案（硬规则禁模型自报 ready）→ goal 阶段绕圈圈
+    await run('confirm', t);
   } else {
     await run('reply', t, meta);
   }
