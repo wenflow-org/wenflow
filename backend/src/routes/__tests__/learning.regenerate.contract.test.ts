@@ -29,12 +29,29 @@ jest.mock('../../services/learning/learning.service', () => ({
   },
 }));
 
+const mockRunRebuildFromGoalAsync = jest.fn();
 jest.mock('../../coordinators/path.coordinator', () => ({
   __esModule: true,
   default: {
     runGoalAsync: (...args: unknown[]) => mockRunGoalAsync(...args),
     runAsync: (...args: unknown[]) => mockRunAsync(...args),
+    runRebuildFromGoalAsync: (...args: unknown[]) => mockRunRebuildFromGoalAsync(...args),
   },
+}));
+
+const mockFindGoalConversation = jest.fn();
+jest.mock('../../services/learning/learning-routes.repo', () => ({
+  __esModule: true,
+  findGoalConversationForPathSummary: (...args: unknown[]) => mockFindGoalConversation(...args),
+  // 以下函数走既有 prisma learning_paths.findUnique mock（basePath fixtures 按 findUnique 形状返回）
+  findLearningPathWithMilestones: (...args: unknown[]) => mockFindUnique(...args),
+  findOwnedLearningPathById: (...args: unknown[]) => mockFindUnique(...args),
+  findLearningPathById: (...args: unknown[]) => mockFindUnique(...args),
+  findLearningPathOwner: async (...args: unknown[]) => {
+    const path = await mockFindUnique(...args);
+    return path ? { userId: path.userId } : null;
+  },
+  listMilestonesWithTaskIds: async () => [],
 }));
 
 jest.mock('../../middleware/auth.middleware', () => ({
@@ -43,9 +60,9 @@ jest.mock('../../middleware/auth.middleware', () => ({
 jest.mock('../../middleware/api-rate-limit.middleware', () => ({
   learningPathsPollingLimiter: (_req: any, _res: any, next: () => void) => next(),
 }));
-jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn() } }));
+jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn() } }));
 jest.mock('../../services/learning/goal-path-visible-summary', () => ({
-  buildGoalPathVisibleSummary: jest.fn(),
+  buildGoalPathVisibleSummary: jest.fn((input: unknown) => input),
 }));
 jest.mock('../../services/learning/path-mutation-safety', () => ({
   isPathMutationConflictError: jest.fn(() => false),
@@ -103,6 +120,8 @@ function basePath(overrides: Record<string, any> = {}) {
 describe('POST /paths/:pathId/regenerate（补充说明重新生成）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // 默认无关联会话：rebuild-all 回落到模板存储画像
+    mockFindGoalConversation.mockResolvedValue(null);
   });
 
   it('无学习进度 + 补充说明 → 整路径重建，adjustments 透传 runGoalAsync', async () => {
@@ -280,7 +299,7 @@ describe('POST /paths/:pathId/regenerate（补充说明重新生成）', () => {
       ],
     }));
     mockClaimPathCoreGeneration.mockResolvedValue('run-3');
-    mockRunAsync.mockImplementation(() => {});
+    mockRunRebuildFromGoalAsync.mockImplementation(() => {});
 
     const handler = getPostHandler('/paths/:pathId/regenerate');
     const req = createRequest({ body: { adjustments: '之前选错了方向，想整条重来', mode: 'rebuild-all' } });
@@ -292,31 +311,32 @@ describe('POST /paths/:pathId/regenerate（补充说明重新生成）', () => {
     expect(mockRequestPathReplan).not.toHaveBeenCalled();
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
     expect(mockClaimPathCoreGeneration).toHaveBeenCalledWith('path-1', null, { allowCompleted: true });
-    expect(mockRunAsync).toHaveBeenCalledTimes(1);
-    const runInput = mockRunAsync.mock.calls[0][0];
-    // forceReplace 放行标记透传（learning.service 侧据此允许 replace-path 覆盖已完成任务）
-    expect(runInput.userProfile.replan).toEqual(expect.objectContaining({
+    expect(mockRunRebuildFromGoalAsync).toHaveBeenCalledTimes(1);
+    const runInput = mockRunRebuildFromGoalAsync.mock.calls[0][0];
+    // forceReplace 放行标记透传（replace-path 已完成任务保护据此放行）
+    expect(runInput.replan).toEqual(expect.objectContaining({
       mode: 'overwrite',
       forceReplace: true,
       triggerSource: 'api',
       sourcePathId: 'path-1',
     }));
-    // 补充说明拼入描述
-    expect(runInput.description).toContain('整条重建');
-    expect(runInput.description).toContain('之前选错了方向，想整条重来');
+    // 补充说明作为结构化 adjustments 进规划输入（最高优先级调整信号）
+    expect(runInput.adjustments).toBe('之前选错了方向，想整条重来');
+    // 原始目标（模板存储 rawGoal）原样透传，不被重建标记污染
+    expect(runInput.rawGoal).toBe('学会 TypeScript');
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       success: true,
       data: expect.objectContaining({ runId: 'run-3', mode: 'rebuild-all' }),
     }));
   });
 
-  it('rebuild-all 基底用原始 rawGoal，不随 path.description 累积污染', async () => {
+  it('rebuild-all 原始 rawGoal 不随 path.description 累积污染；描述污染不再进规划输入', async () => {
     // path.description 已被历次重建污染（含前次「（整条重建）…」嵌套）
     mockFindUnique.mockResolvedValue(basePath({
       description: '（整条重建）（整条重建）原始目标。用户补充说明：旧说明。用户补充说明：更旧说明',
     }));
     mockClaimPathCoreGeneration.mockResolvedValue('run-4');
-    mockRunAsync.mockImplementation(() => {});
+    mockRunRebuildFromGoalAsync.mockImplementation(() => {});
 
     const handler = getPostHandler('/paths/:pathId/regenerate');
     const req = createRequest({ body: { adjustments: '新说明', mode: 'rebuild-all' } });
@@ -324,14 +344,65 @@ describe('POST /paths/:pathId/regenerate（补充说明重新生成）', () => {
 
     await handler(req, res, jest.fn());
 
-    expect(mockRunAsync).toHaveBeenCalledTimes(1);
-    const runInput = mockRunAsync.mock.calls[0][0];
-    // 基底是 aiPromptTemplate 里的原始 rawGoal（学会 TypeScript），不含污染
-    expect(runInput.description).toContain('学会 TypeScript');
-    expect(runInput.description).not.toContain('旧说明');
-    expect(runInput.description).toContain('新说明');
-    // 整条重建前缀只出现一次
-    expect(runInput.description.match(/整条重建/g)?.length ?? 0).toBe(1);
+    expect(mockRunRebuildFromGoalAsync).toHaveBeenCalledTimes(1);
+    const runInput = mockRunRebuildFromGoalAsync.mock.calls[0][0];
+    // 基底是模板存储的原始 rawGoal（学会 TypeScript），description 污染不再进入规划输入
+    expect(runInput.rawGoal).toBe('学会 TypeScript');
+    expect(runInput.rawGoal).not.toContain('整条重建');
+    expect(runInput.adjustments).toBe('新说明');
+  });
+
+  it('rebuild-all 优先回灌 goal 会话画像（collectedData），存储画像次之', async () => {
+    mockFindUnique.mockResolvedValue(basePath());
+    mockClaimPathCoreGeneration.mockResolvedValue('run-5');
+    mockRunRebuildFromGoalAsync.mockImplementation(() => {});
+    mockFindGoalConversation.mockResolvedValue({
+      id: 'conv-1',
+      userId: 'user-1',
+      description: '我想学英语',
+      stage: 'completed',
+      collectedData: JSON.stringify({
+        understanding: { real_problem: '零基础想系统学英语' },
+        confirmedProposal: { key_stages: ['音-词', '词汇+阅读'] },
+        messages: [
+          { role: 'user', content: '我想学英语' },
+          { role: 'ai', content: '先聚焦阅读这条线' },
+        ],
+      }),
+    });
+
+    const handler = getPostHandler('/paths/:pathId/regenerate');
+    const req = createRequest({ body: { adjustments: '太短了，改成半年节奏', mode: 'rebuild-all' } });
+    const res = createResponse();
+
+    await handler(req, res, jest.fn());
+
+    expect(mockRunRebuildFromGoalAsync).toHaveBeenCalledTimes(1);
+    const runInput = mockRunRebuildFromGoalAsync.mock.calls[0][0];
+    // 原始目标来自会话（干净），可见摘要含会话内确认的阶段提案，完整对话史回灌
+    expect(runInput.rawGoal).toBe('我想学英语');
+    expect(runInput.visibleSummary.confirmedProposal.key_stages).toEqual(['音-词', '词汇+阅读']);
+    expect(runInput.conversationHistory?.length).toBe(2);
+    expect(runInput.adjustments).toBe('太短了，改成半年节奏');
+  });
+
+  it('画像回灌失败（会话查询异常）fail-open：回落存储画像，不阻断重建', async () => {
+    mockFindUnique.mockResolvedValue(basePath());
+    mockClaimPathCoreGeneration.mockResolvedValue('run-6');
+    mockRunRebuildFromGoalAsync.mockImplementation(() => {});
+    mockFindGoalConversation.mockRejectedValue(new Error('db busy'));
+
+    const handler = getPostHandler('/paths/:pathId/regenerate');
+    const req = createRequest({ body: { adjustments: '调整说明', mode: 'rebuild-all' } });
+    const res = createResponse();
+
+    await handler(req, res, jest.fn());
+
+    expect(mockRunRebuildFromGoalAsync).toHaveBeenCalledTimes(1);
+    const runInput = mockRunRebuildFromGoalAsync.mock.calls[0][0];
+    // 回落到模板存储画像（rawGoal=学会 TypeScript）
+    expect(runInput.rawGoal).toBe('学会 TypeScript');
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 
   it('有 in_progress 任务 + mode=rebuild-all → 仍拦截（进行中任务需先结束）', async () => {

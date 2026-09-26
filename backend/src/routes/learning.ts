@@ -16,6 +16,7 @@ import { learningPathsPollingLimiter } from '../middleware/api-rate-limit.middle
 import { logger } from '../utils/logger';
 import pathOrchestrator from '../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
+import { resolveLearnerLoadProfileFromCollectedData } from '../services/learning/learner-load-profile';
 import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
 import { openSessionClearanceService } from '../services/learning/open-session-clearance.service';
 import { conceptGraphService } from '../services/learner/concept-graph.service';
@@ -223,6 +224,8 @@ const buildGoalPathRequestFromConversation = async (path: {
       }))
       .filter((message: { role: string; content: string }) => message.content),
     finalUserVisible: typeof collectedData.finalUserVisible === 'string' ? collectedData.finalUserVisible : undefined,
+    structuredData: (collectedData as any)?.structuredData || null,
+    learnerLoadProfile: resolveLearnerLoadProfileFromCollectedData(collectedData),
     prerequisiteCheckResults: Array.isArray(collectedData.understanding?.prerequisiteCheckResults)
       ? collectedData.understanding.prerequisiteCheckResults
       : null,
@@ -775,28 +778,26 @@ router.post('/paths/:pathId/regenerate', llmGenerateUserLimiter, async (req, res
       }
       const runId = await learningService.claimPathCoreGeneration(pathId, path.activeGenerationRunId, { allowCompleted: true });
 
-      // 整建统一走 runAsync（forceReplace 经 userProfile.replan 透传；runGoalAsync 无此通道）
-      const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
-      // 基底用原始用户目标（goalFinalPayload.rawGoal / 会话 description），
-      // 避免用已被历次重建污染的 path.description 造成「（整条重建）（整条重建）…」嵌套累积
-      const parsedPromptTemplate = parsePromptTemplate(path.aiPromptTemplate);
-      const rawGoal = typeof parsedPromptTemplate?.goalFinalPayload?.rawGoal === 'string'
-        && parsedPromptTemplate.goalFinalPayload.rawGoal.trim()
-        ? parsedPromptTemplate.goalFinalPayload.rawGoal.trim()
-        : null;
-      const baseGoal = rawGoal || path.description || path.title || path.name || '个性化学习路径';
-      pathOrchestrator.runAsync({
-        userId,
-        description: adjustments
-          ? `（整条重建）${baseGoal}。用户补充说明：${adjustments}`
-          : `（整条重建）${baseGoal}`,
-        subject: path.subject || undefined,
-        deadline: path.deadline || undefined,
-        deadlineText: path.deadlineText || undefined,
-        sourceConversationId,
-        existingPathId: pathId,
-        generationRunId: runId,
-        userProfile: {
+      // 重建必须回灌 goal 结构化画像：只带 description 时规划器仅看得到污染单行
+      // （surfaceGoal=原文拼接、conversationHistory=0、confirmedProposal 丢失），
+      // 实测产出纯认知脚手架、零学科内容（半年英语/社交路径两案，2026-09-26）。
+      // 画像优先级：goal 会话 collectedData（干净完整）> 模板存储 goalFinalPayload（可能被历次重建污染）。
+      // 都取不到时回落裸 description（旧行为），并保留（整条重建）标记供日志/人工复核。
+      // fail-open：画像回灌失败（会话查不到/脏数据）不阻断重建，回落存储画像或旧行为
+      let rebuiltGoalRequest: Awaited<ReturnType<typeof buildGoalPathRequestFromConversation>> | ReturnType<typeof buildStoredGoalPathRequest> | null = null;
+      try {
+        rebuiltGoalRequest = await buildGoalPathRequestFromConversation(path);
+      } catch (profileError) {
+        logger.warn(`整条重建回灌 goal 画像失败（回落存储画像）:${pathId}`, profileError);
+      }
+      rebuiltGoalRequest = rebuiltGoalRequest || buildStoredGoalPathRequest(path, adjustments);
+
+      if (rebuiltGoalRequest) {
+        pathOrchestrator.runRebuildFromGoalAsync({
+          ...rebuiltGoalRequest,
+          adjustments: adjustments || undefined,
+          existingPathId: pathId,
+          generationRunId: runId,
           replan: {
             mode: 'overwrite',
             forceReplace: true,
@@ -804,13 +805,49 @@ router.post('/paths/:pathId/regenerate', llmGenerateUserLimiter, async (req, res
             sourcePathId: pathId,
             reason: adjustments || '用户选择整条重建'
           }
-        }
-      }, {
-        onError: async (error) => {
-          logger.error(`整条重建学习路径失败：${pathId}`, error);
-          await learningService.markActiveGenerationFailed(pathId, error, runId);
-        }
-      });
+        }, {
+          onError: async (error) => {
+            logger.error(`整条重建学习路径失败：${pathId}`, error);
+            await learningService.markActiveGenerationFailed(pathId, error, runId);
+          }
+        });
+      } else {
+        const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
+        // 基底用原始用户目标（goalFinalPayload.rawGoal / 会话 description），
+        // 避免用已被历次重建污染的 path.description 造成「（整条重建）（整条重建）…」嵌套累积
+        const parsedPromptTemplate = parsePromptTemplate(path.aiPromptTemplate);
+        const rawGoal = typeof parsedPromptTemplate?.goalFinalPayload?.rawGoal === 'string'
+          && parsedPromptTemplate.goalFinalPayload.rawGoal.trim()
+          ? parsedPromptTemplate.goalFinalPayload.rawGoal.trim()
+          : null;
+        const baseGoal = rawGoal || path.description || path.title || path.name || '个性化学习路径';
+        pathOrchestrator.runAsync({
+          userId,
+          description: adjustments
+            ? `（整条重建）${baseGoal}。用户补充说明：${adjustments}`
+            : `（整条重建）${baseGoal}`,
+          subject: path.subject || undefined,
+          deadline: path.deadline || undefined,
+          deadlineText: path.deadlineText || undefined,
+          sourceConversationId,
+          existingPathId: pathId,
+          generationRunId: runId,
+          userProfile: {
+            replan: {
+              mode: 'overwrite',
+              forceReplace: true,
+              triggerSource: 'api',
+              sourcePathId: pathId,
+              reason: adjustments || '用户选择整条重建'
+            }
+          }
+        }, {
+          onError: async (error) => {
+            logger.error(`整条重建学习路径失败：${pathId}`, error);
+            await learningService.markActiveGenerationFailed(pathId, error, runId);
+          }
+        });
+      }
 
       return res.json({
         success: true,

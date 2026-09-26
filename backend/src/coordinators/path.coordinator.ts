@@ -783,6 +783,63 @@ class PathCoordinator {
     return this.generate(await this.normalizeGoalRequest(input));
   }
 
+  /**
+   * 整条重建专用：goal 画像回灌版 runGoalAsync。
+   * 重建若只带 description，规划器仅看得到污染单行（surfaceGoal=原文拼接），
+   * 丢失 goal 会话全部结构化画像（阅读线/预算/提案/出范围）——实测产出纯认知
+   * 脚手架、零学科内容（半年英语/社交路径两案）。本方法在 goal 归一化之后
+   * 合入 replan 配置（forceReplace 放行 replace-path 已完成任务保护）。
+   */
+  runRebuildFromGoalAsync(
+    input: GoalPathRequest & {
+      replan?: PathGenerationInput['userProfile']['replan'];
+    },
+    hooks?: {
+      onSuccess?: () => Promise<void> | void;
+      onError?: (error: unknown) => Promise<void> | void;
+    }
+  ): void {
+    if (!backgroundTaskTracker.isAccepting()) {
+      const error = new BackgroundTaskRejectedError('learning.path.goal-generation');
+      void Promise.resolve(hooks?.onError?.(error)).catch(hookError => {
+        logger.error('[path-coordinator] rebuild rejection hook failed', {
+          userId: input.userId,
+          existingPathId: input.existingPathId,
+          error: hookError instanceof Error ? hookError.message : String(hookError)
+        });
+      });
+      return;
+    }
+    runBackgroundTask('learning.path.goal-generation', async () => {
+      try {
+        const normalizedInput = await this.normalizeGoalRequest(input);
+        if (input.replan) {
+          normalizedInput.userProfile.replan = { ...(normalizedInput.userProfile.replan || {}), ...input.replan };
+        }
+        await this.generate(normalizedInput);
+        await hooks?.onSuccess?.();
+      } catch (error) {
+        logger.error('[path-coordinator] rebuild from goal failed', {
+          agentId: this.id,
+          userId: input.userId,
+          existingPathId: input.existingPathId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        try {
+          await hooks?.onError?.(error);
+        } catch (hookError) {
+          logger.error('[path-coordinator] rebuild error hook failed', {
+            agentId: this.id,
+            userId: input.userId,
+            existingPathId: input.existingPathId,
+            error: hookError instanceof Error ? hookError.message : String(hookError)
+          });
+        }
+        throw error;
+      }
+    }, { userId: input.userId, existingPathId: input.existingPathId });
+  }
+
   runAsync(
     input: PathGenerationInput,
     hooks?: {
