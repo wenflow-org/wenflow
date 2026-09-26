@@ -298,7 +298,7 @@ onMounted(() => {
 /* 概览一行摘要（批19）：替代四张等权 KPI 卡 */
 .ov-line { padding: 14px 18px; display: grid; gap: 8px; }
 .ov-line__text { font-size: 13.5px; color: var(--muted); }
-.ov-line__text strong { font-size: 17px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ov-line__text strong { font-size: 16px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 .ov-line__xp { margin-left: 10px; font-size: 12px; color: var(--faint); }
 .ov-line__bar { height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
 .ov-line__bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.4s ease; }

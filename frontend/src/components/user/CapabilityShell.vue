@@ -96,7 +96,7 @@ function isActive(t: { match: string[] }) {
 
 .uc__head h1 {
   margin: 0 0 6px;
-  font-size: 28px;
+  font-size: 20px;
   letter-spacing: -0.01em;
   line-height: 1.2;
 }

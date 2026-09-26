@@ -474,7 +474,8 @@ async function handleDeactivate() {
      （blue 12% 底 + blue-deep 字），暗色随 token 翻转 */
   background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
   color: var(--blue-deep, #1f57cc);
-  font-size: 34px;
+  /* 34 → 24（2026-09-27 桌面刻度统一）：这是头像圆里的字母，不是页面标题 */
+  font-size: 24px;
   font-weight: 800;
   display: flex;
   align-items: center;
@@ -497,7 +498,8 @@ async function handleDeactivate() {
 
 .profile-name-row h2 {
   margin: 0;
-  font-size: 24px;
+  /* 24 → 20：用户名是页面级标题，不是展示字 */
+  font-size: 20px;
   letter-spacing: -0.01em;
 }
 
@@ -588,7 +590,8 @@ async function handleDeactivate() {
 }
 
 .stat-card strong {
-  font-size: 22px;
+  /* 22 → 20：统计卡数字档 */
+  font-size: 20px;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--ink, #172033);

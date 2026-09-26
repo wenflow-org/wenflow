@@ -2321,7 +2321,7 @@ onBeforeUnmount(() => {
   display: grid; place-items: center;
   box-shadow: 0 0 0 8px rgba(49, 177, 111, 0.07);
 }
-.finish__card h2 { margin: 0; font-size: 22px; }
+.finish__card h2 { margin: 0; font-size: 20px; }
 .finish__card p { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.7; }
 .finish__stats { display: flex; gap: 18px; font-size: 12px; color: var(--muted); }
 .finish__stats b { color: var(--ink); font-size: 15px; margin-right: 3px; }

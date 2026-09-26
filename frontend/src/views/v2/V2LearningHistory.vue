@@ -311,7 +311,8 @@ onMounted(() => {
 }
 
 .history__stat strong {
-  font-size: 17px;
+  /* 17 → 16：行内次级数字档 */
+  font-size: 16px;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--ink, #172033);

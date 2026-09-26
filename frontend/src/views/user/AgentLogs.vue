@@ -840,7 +840,8 @@ const copyText = async (text: string, successMessage: string) => {
   }
 
   strong {
-    font-size: 22px;
+    /* 22 → 20（2026-09-27 桌面数字刻度：首屏主 KPI 24 / 统计卡 20 / 行内 16） */
+    font-size: 20px;
     font-weight: 800;
     color: var(--ink, #172033);
     line-height: 1.2;

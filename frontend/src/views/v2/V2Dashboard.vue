@@ -1522,7 +1522,7 @@ onMounted(loadAll);
 }
 .action__eyebrow--alert { color: var(--red-ink); }
 .action__from { font-weight: 600; letter-spacing: 0; color: var(--faint); }
-.action__title { margin: 0; font-size: 26px; line-height: 1.35; letter-spacing: -0.01em; }
+.action__title { margin: 0; font-size: 20px; line-height: 1.4; letter-spacing: -0.01em; }
 .action__desc { margin: 0; font-size: 14px; line-height: 1.7; color: var(--muted); max-width: 56ch; }
 .action__reason {
   display: inline-flex; align-items: center; gap: 6px;

@@ -22,6 +22,8 @@ const BASE = process.env.BASE_URL || 'http://localhost:5173';
 const USER = process.env.SPEC_USER || 'logocheck2';
 const PASS = process.env.SPEC_PASS || 'Abc123456';
 const W = 375, H = 812;
+/* 桌面比例档（2026-09-27 新增）：用户侧桌面视觉比例测试也在这条门禁里 */
+const DW = 1440, DH = 900;
 
 /* 阈值 = 2026-09-26 四批整改 + 对齐走查后的分级保留量；只许收紧，不许放松。
 
@@ -40,6 +42,7 @@ const PAGES = [
   { key: 'state', path: '/learning-state', gate: '.metrics, main .card', budget: { lt36: 0, lt44: 6, fonts: 0, hOver: 0 } },
   { key: 'kmap', path: '/knowledge-map', gate: 'main', budget: { lt36: 0, lt44: 7, fonts: 0, hOver: 0 } },
   { key: 'achievements', path: '/user/achievements', gate: '.grid, .empty, .ov', budget: { lt36: 0, lt44: 13, fonts: 30, hOver: 0 } },
+  { key: 'account', path: '/user/account', gate: '.uc-card, .profile-hero, .empty', budget: { lt36: 0, lt44: 16, fonts: 0, hOver: 0 } },
   { key: 'onboarding', path: '/onboarding', gate: '.ob__card, .ob', budget: { lt36: 0, lt44: 2, fonts: 0, hOver: 0 } },
   { key: 'history', path: '/user/learning-history', gate: '.history__items, .empty', budget: { lt36: 0, lt44: 10, fonts: 1, hOver: 0 } },
   { key: 'agent-logs', path: '/user/agent-logs', gate: '.uc-table, .empty, main', budget: { lt36: 0, lt44: 33, fonts: 0, hOver: 0 } },
@@ -115,6 +118,80 @@ const run = async (key, path, gate, budget) => {
 
 for (const pg of PAGES) await run(pg.key, pg.path, pg.gate, pg.budget);
 if (EVAL_PATH) await run('evaluation', EVAL_PATH, '.evaluation-shell .completion-card', { lt36: 0, lt44: 1, fonts: 0, hOver: 0 });
+
+/* ── 桌面视觉比例档（2026-09-27）────────────────────────────────────────
+   用户反馈「大的大、小的小，没有视觉比例测试」。标准（GitHub Primer body 14、
+   2025 仪表盘共识 13–15 基座 + ~1.2 模数 + 6–8 级 + token 化）落地为三条硬指标：
+   - max ≤ 24：桌面用户侧不允许出现展示字（原 34px KPI / 28px 页标题已收进
+     页标题 20 / 卡片大标题 18 / KPI 24 / 统计卡 20 / 行内数字 16 五档）
+   - steps ≤ 10：一页的不同字号档数。修复前 9–13 档、最多 22 种字号散布全站；
+     先按现状登记，只许收紧
+   - small：登记的桌面长尾（.ach-rarity 10 / .ach-card__badge 10.5 / 表头 11 /
+     .ai-note 11 / 时间戳 11.5），边界②登记项，新增需评审 */
+const DESKTOP = [
+  { key: 'dashboard', path: '/dashboard', gate: '.dash__main .card', budget: { max: 24, steps: 10, small: 0 } },
+  { key: 'paths', path: '/learning-paths', gate: '.pcard, .empty', budget: { max: 24, steps: 8, small: 0 } },
+  { key: 'path-detail', path: '/learning-path/lp_1790165713901_bigjo2r', gate: '.hero', budget: { max: 24, steps: 9, small: 0 } },
+  { key: 'state', path: '/learning-state', gate: '.metrics, main .card', budget: { max: 24, steps: 10, small: 0 } },
+  { key: 'kmap', path: '/knowledge-map', gate: 'main', budget: { max: 24, steps: 7, small: 0 } },
+  { key: 'achievements', path: '/user/achievements', gate: '.grid, .empty, .ov', budget: { max: 24, steps: 13, small: 30 } },
+  { key: 'account', path: '/user/account', gate: '.uc-card, .profile-hero, .empty', budget: { max: 24, steps: 10, small: 0 } },
+  { key: 'history', path: '/user/learning-history', gate: '.history__items, .empty', budget: { max: 24, steps: 10, small: 1 } },
+  { key: 'settings', path: '/user/settings', gate: '.uc-card, main', budget: { max: 24, steps: 10, small: 1 } },
+  { key: 'agent-logs', path: '/user/agent-logs', gate: '.uc-table, .empty, main', budget: { max: 24, steps: 10, small: 24 } },
+];
+
+const dctx = await b.newContext({ viewport: { width: DW, height: DH } });
+const dp = await dctx.newPage();
+{
+  for (let a = 0; a < 3; a++) {
+    await dp.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' });
+    await dp.waitForTimeout(2000);
+    if (!dp.url().includes('/login')) break;
+    const ins = await dp.locator('input:visible').all();
+    if (ins.length < 2) { await dp.waitForTimeout(6000); continue; }
+    await ins[0].fill(USER); await ins[1].fill(PASS);
+    await dp.click('button:has-text("登录")');
+    if (await dp.waitForURL((u) => !String(u).includes('/login'), { timeout: 20000 }).then(() => true).catch(() => false)) break;
+    await dp.waitForTimeout(8000);
+  }
+}
+
+const dscan = () =>
+  dp.evaluate(() => {
+    const sizes = new Map();
+    let max = 0, small = 0;
+    for (const el of document.querySelectorAll('body *')) {
+      if (!el.getClientRects().length) continue;
+      if (el.closest('svg') || el.closest('[aria-hidden="true"]')) continue;
+      const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+      if (!own) continue;
+      const fs = Math.round(parseFloat(getComputedStyle(el).fontSize) * 2) / 2;
+      sizes.set(fs, (sizes.get(fs) || 0) + 1);
+      if (fs > max) max = fs;
+      if (fs < 12) small++;
+    }
+    return { max, small, steps: sizes.size };
+  });
+
+for (const pg of DESKTOP) {
+  await dp.goto(`${BASE}${pg.path}`, { waitUntil: 'domcontentloaded' });
+  for (let a = 0; a < 3; a++) {
+    if (await dp.waitForSelector(pg.gate, { timeout: 40000 }).then(() => true).catch(() => false)) break;
+    await dp.waitForTimeout(8000);
+    await dp.goto(`${BASE}${pg.path}`, { waitUntil: 'domcontentloaded' }).catch(() => {});
+  }
+  await dp.waitForTimeout(2200);
+  const m = await dscan();
+  const over = [];
+  for (const k of ['max', 'steps', 'small']) {
+    if (m[k] > pg.budget[k]) over.push(`${k} ${m[k]}>${pg.budget[k]}`);
+  }
+  if (over.length) failed = true;
+  results['桌面 ' + pg.key] = { ...m, budget: pg.budget, over };
+  console.log(`${over.length ? '✖' : '✓'} 桌面 ${pg.key}: max=${m.max}/${pg.budget.max} steps=${m.steps}/${pg.budget.steps} small=${m.small}/${pg.budget.small}${over.length ? ' → ' + over.join(', ') : ''}`);
+}
+await dctx.close();
 
 await b.close();
 if (process.argv.includes('--json')) console.log(JSON.stringify(results));

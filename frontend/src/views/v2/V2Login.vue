@@ -157,7 +157,7 @@ onMounted(() => {
 
 <style scoped>
 .head { display: grid; gap: 5px; }
-.head h2 { margin: 0; font-size: 22px; }
+.head h2 { margin: 0; font-size: 20px; }
 .head p { margin: 0; font-size: 13px; color: var(--muted); }
 
 .form { display: grid; gap: 14px; }

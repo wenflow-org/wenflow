@@ -591,7 +591,7 @@ onBeforeUnmount(() => {
   font-size: 12px; font-weight: 800; letter-spacing: .06em;
   color: var(--blue-deep);
 }
-.paths__hero h1 { margin: 6px 0 4px; font-size: 28px; letter-spacing: -0.01em; }
+.paths__hero h1 { margin: 6px 0 4px; font-size: 20px; letter-spacing: -0.01em; }
 .paths__hero p { margin: 0; font-size: 13.5px; color: var(--muted); }
 
 .btn-primary {

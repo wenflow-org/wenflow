@@ -449,12 +449,14 @@
       </section>
     </main>
 
-    <!-- AI 生成提示 + 页脚：一起沉底 -->
+    <!-- AI 生成提示：沉底。营销页脚（V2Footer）已移除——这是对话工作台，
+         和 ChatGPT/Linear 一样应当满视口、零文档滚动；愿景/文档/GitHub 入口
+         导航与 /docs 都有，不需要在这里再给一条（2026-09-27 用户反馈
+         「窗口为什么还滚动了，页脚还得往下滑」）。 -->
     <div v-if="!live.started" class="goal__foot">
       <div class="goal__ai-note">
         <AiContentNote />
       </div>
-      <V2Footer />
     </div>
   </div>
 </template>
@@ -468,7 +470,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { useGoalLive, type LiveMessage } from './useGoalLive';
 import { isProbeAnswer, probeAnswerParts } from './probeAnswer';
 import V2Nav from './V2Nav.vue';
-import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import MaterialUploadArea from '@/components/learning/MaterialUploadArea.vue';
@@ -1042,7 +1043,12 @@ function shuffleScenes() {
   /* 初始态是完整叙事块：垂直居中落在视口中部，消除底部大片空白 */
   padding: 40px 28px;
   display: flex; flex-direction: column; gap: 18px;
-  justify-content: center;
+  /* safe center：内容比视口高时降级为顶对齐 + 内部滚动，居中布局的经典陷阱是
+     overflow 后顶部被裁掉且滚不回去；输入框在内容末尾，必须永远可达
+     （2026-09-27 用户反馈「到了 goal 阶段，输入框都在屏幕外了」） */
+  justify-content: safe center;
+  min-height: 0;
+  overflow: auto;
 }
 /* 统一内容列：hero 文字 / 场景卡 / 输入框（含资料 chips 层）共用 640 一条列，
    不再 hero 通栏左对齐、卡片居中的混搭（比例失调的根源） */
@@ -1066,7 +1072,7 @@ function shuffleScenes() {
   padding: 48px 32px;
   display: grid; gap: 14px; justify-items: center; text-align: center;
 }
-.login-gate h1 { margin: 0; font-size: 26px; }
+.login-gate h1 { margin: 0; font-size: 20px; }
 .login-gate p { margin: 0; font-size: 14px; color: var(--muted); max-width: 52ch; line-height: 1.7; }
 
 .resume {
@@ -1097,7 +1103,7 @@ function shuffleScenes() {
   gap: 20px; flex-wrap: wrap;
 }
 .entry__hero-text { display: grid; gap: 10px; }
-.entry__hero h1 { margin: 0; font-size: 28px; letter-spacing: -0.01em; }
+.entry__hero h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
 .entry__hero p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 52ch; line-height: 1.7; }
 
 .errorbar {
@@ -1370,7 +1376,9 @@ function shuffleScenes() {
    对话区域底部悬空不贴底（手动流程问题测试 2026-09-26）。锁高后消息区内部滚动，
    头部/输入框恒在屏内，chat 底沿与视口底部对齐。 */
 @media (min-width: 1101px) {
-  .goal { height: 100dvh; min-height: 0; flex: 0 0 auto; }
+  /* overflow:hidden：锁高之后内容若比视口高，只允许在 entry/chat 内部滚，
+     不许把文档撑出滚动条 */
+  .goal { height: 100dvh; min-height: 0; flex: 0 0 auto; overflow: hidden; }
 }
 .chat__head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -1712,7 +1720,7 @@ function shuffleScenes() {
 }
 .proposal__stop:hover { background: color-mix(in srgb, var(--blue) 14%, transparent); }
 .proposal__eyebrow { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
-.proposal__title { margin: 0; font-size: 21px; letter-spacing: -0.01em; }
+.proposal__title { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
 .proposal__generating-note { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.7; max-width: 44ch; }
 .proposal__rows { display: grid; gap: 10px; width: 100%; }
 .proposal__row {
@@ -1851,7 +1859,7 @@ function shuffleScenes() {
   /* 锁定视口高度：会话态整页不滚动，chat 内部滚动、composer 吸底在底部导航之上。
      flex-grow:0 显式置零（.v2-page 全局 flex:1 会把 height:100dvh 拉伸到内容高度）。
      v2.css 全局 .v2-page { padding-bottom:72px } 为底部导航让位，此处保留。 */
-  .goal { height: 100dvh; min-height: 0; flex: 0 0 auto; }
+  .goal { height: 100dvh; min-height: 0; flex: 0 0 auto; overflow: hidden; }
   .work {
     grid-template-columns: 1fr;
     /* 信息面板在移动端改绝对定位（零占位锚点），chat 独占整行撑满 */

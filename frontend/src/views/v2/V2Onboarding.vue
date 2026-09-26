@@ -246,7 +246,7 @@ function goDashboard() {
 /* 大屏（2K/4K 桌面）：520px 定宽卡在 3840px 视口下视觉过小，按断点放大卡片与主字号 */
 @media (min-width: 1600px) {
   .ob__card { width: min(660px, 100%); padding: 34px 44px 32px; border-radius: 24px; }
-  .ob__title { font-size: 26px; }
+  .ob__title { font-size: 20px; }
   .ob__sub { font-size: 15px; }
   .ob__logo img { height: 52px; }
 }

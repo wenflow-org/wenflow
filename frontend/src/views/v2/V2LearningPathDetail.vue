@@ -1534,7 +1534,7 @@ onBeforeUnmount(() => {
 
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; padding: 26px 28px; align-items: center; }
 .hero__tags { display: flex; align-items: center; gap: 10px; }
-.hero h1 { margin: 8px 0 6px; font-size: 28px; letter-spacing: -0.01em; }
+.hero h1 { margin: 8px 0 6px; font-size: 20px; letter-spacing: -0.01em; }
 .hero p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.7; max-width: 56ch; }
 /* Hero 描述：默认 3 行截断，展开后完整显示（老数据无 summary 时兜底原文，避免整段糊屏） */
 .hero__desc {
@@ -1588,7 +1588,8 @@ onBeforeUnmount(() => {
   position: absolute; inset: 0;
   display: grid; place-content: center; text-align: center; gap: 2px;
 }
-.hero__ring-text b { font-size: 22px; }
+/* 22 → 20：数字档 */
+.hero__ring-text b { font-size: 20px; }
 .hero__ring-text small { font-size: 12px; color: var(--faint); }
 
 .detail__grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }

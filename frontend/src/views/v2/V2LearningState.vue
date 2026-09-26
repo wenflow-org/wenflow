@@ -828,7 +828,7 @@ function loadGuidance() {
 }
 .state__hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
-.state__hero h1 { margin: 6px 0 4px; font-size: 28px; letter-spacing: -0.01em; }
+.state__hero h1 { margin: 6px 0 4px; font-size: 20px; letter-spacing: -0.01em; }
 .state__hero p { margin: 0; font-size: 13.5px; color: var(--muted); }
 
 .card {
@@ -851,12 +851,13 @@ function loadGuidance() {
 .vitals__loading { flex: 1; }
 .vitals__main { display: grid; gap: 4px; min-width: 128px; }
 .vitals__main small { font-size: 12px; color: var(--faint); font-weight: 700; }
-.vitals__value { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+/* 34 → 24（2026-09-27 桌面刻度统一：KPI 大数字档 24，原值在令牌体系之外） */
+.vitals__value { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .vitals__value i { font-size: 13px; font-style: normal; font-weight: 600; color: var(--faint); }
 .vitals__subs { display: flex; gap: 22px; flex-wrap: wrap; flex: 1; justify-content: flex-end; }
 .vitals__sub { display: grid; gap: 3px; justify-items: start; }
 .vitals__sub small { font-size: 12px; color: var(--faint); font-weight: 700; }
-.vitals__sub b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.vitals__sub b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .vitals__sub b i { font-size: 12px; font-style: normal; font-weight: 600; color: var(--faint); }
 .metric__note { width: fit-content; font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: var(--mk-radius-pill); }
 .metric__note--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
@@ -962,7 +963,7 @@ function loadGuidance() {
 <style scoped>
 /* skill 引导块 */
 .guide { display: grid; gap: 6px; }
-.guide__title { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
+.guide__title { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
 .guide__sub { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.65; }
 .guide__warn {
   display: flex; align-items: center; gap: 8px;

@@ -610,8 +610,11 @@ onBeforeUnmount(() => {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .nc__task-times {
-  font-size: 12px.5px;
-  font-weight: 800;
+  /* 原为 12px.5px —— 非法值，整条声明被浏览器丢弃、字号回落继承的 16px，
+     于是「共 3 次」成了整个抽屉最大的字、比任务名还抢眼（2026-09-27 用户指出）。
+     次数只是合并计数，必须小于任务名。 */
+  font-size: 12.5px;
+  font-weight: 700;
   color: var(--blue-deep, #1f57cc);
   background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
   border-radius: var(--mk-radius-pill);
@@ -643,7 +646,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 12px.5px;
+  /* 同上：12px.5px 是非法值，明细行一直按继承的 16px 渲染 */
+  font-size: 12.5px;
   line-height: 1.7;
 }
 .nc__task-detail-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
@@ -658,7 +662,8 @@ onBeforeUnmount(() => {
 }
 .nc__task-time { margin-left: auto; font-size: 12px; color: var(--faint, #8492ab); flex-shrink: 0; }
 .nc__task-status {
-  font-size: 11px.5px; font-weight: 800;
+  /* 原为 11px.5px（非法值回落 16px）——「运行中」徽章因此比任务名还大 */
+  font-size: 12px; font-weight: 700;
   color: var(--blue, #3478f6);
   background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
   padding: 2px 7px;
