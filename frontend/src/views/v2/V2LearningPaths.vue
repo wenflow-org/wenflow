@@ -45,6 +45,39 @@
           </button>
         </div>
 
+        <!-- 移动端筛选（批13）：芯片行在 375 折两行占首屏 ~9%，≤1100 收进按钮 + 底部弹层；
+             桌面仍用芯片行。单选即点即生效并收起。 -->
+        <button
+          v-if="cards.length"
+          type="button"
+          class="paths__filter-btn"
+          :aria-expanded="filterSheetOpen ? 'true' : 'false'"
+          @click="filterSheetOpen = true"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M3 5h18l-7 8v5l-4-2v-3z"/></svg>
+          筛选 · {{ activeFilterLabel }}
+        </button>
+        <div v-if="filterSheetOpen" class="paths__filter-mask" @click.self="filterSheetOpen = false">
+          <div class="paths__filter-sheet" role="dialog" aria-label="筛选路径">
+            <div class="paths__filter-head">
+              <strong>筛选路径</strong>
+              <button type="button" class="paths__filter-close" aria-label="关闭" @click="filterSheetOpen = false">×</button>
+            </div>
+            <button
+              v-for="f in filterList"
+              :key="f.key"
+              type="button"
+              class="paths__filter-opt"
+              :class="{ 'is-active': filter === f.key }"
+              @click="filter = f.key; filterSheetOpen = false"
+            >
+              <span>{{ f.label }}</span>
+              <b>{{ f.count }}</b>
+              <i v-if="filter === f.key" class="paths__filter-tick" aria-hidden="true">✓</i>
+            </button>
+          </div>
+        </div>
+
         <!-- 卡片列表 -->
         <div v-if="visibleCards.length" class="cards">
           <article v-for="card in visibleCards" :key="card.id" class="pcard" :class="`pcard--${card.kind}`" @click="openPath(card)">
@@ -140,7 +173,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import request, { AI_REQUEST_TIMEOUT } from '@/utils/api';
 import { toast } from '@/utils/toast';
@@ -377,6 +410,22 @@ function openPath(card: PathCard) {
   { key: 'failed' as const, label: '待重试', count: countOf('failed') }
 ]);
 
+/* 移动端筛选弹层（批13）：Esc 关闭 + 开启时锁页面滚动 */
+const filterSheetOpen = ref(false);
+const activeFilterLabel = computed(() => filterList.value.find((f) => f.key === filter.value)?.label || '全部');
+function onFilterSheetKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') filterSheetOpen.value = false;
+}
+watch(filterSheetOpen, (open) => {
+  if (open) {
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onFilterSheetKey);
+  } else {
+    document.body.style.overflow = '';
+    window.removeEventListener('keydown', onFilterSheetKey);
+  }
+});
+
 const visibleCards = computed(() => {
   if (filter.value === 'all') return cards.value;
   return cards.value.filter((c) => c.kind === filter.value);
@@ -412,6 +461,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  filterSheetOpen.value = false;
   window.clearTimeout(pollTimer);
   window.removeEventListener('keydown', onMenuKey);
   window.removeEventListener('click', onWindowClick);
@@ -684,5 +734,63 @@ onBeforeUnmount(() => {
   .empty { min-height: 40vh; padding: 32px 0; }
   .paths__loading { padding: 32px 0; }
 }
+
+/* ---------- 移动端筛选弹层（批13）：≤1100 芯片行收进按钮 + 底部弹层 ---------- */
+.paths__filter-btn { display: none; }
+@media (max-width: 1100px) {
+  .filters { display: none; }
+  .paths__filter-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    min-height: 44px; padding: 0 14px;
+    align-self: flex-start;
+    border: 1px solid var(--line); border-radius: var(--mk-radius-xl, 12px);
+    background: var(--surface); color: var(--muted, #5b6577);
+    font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
+  }
+  .paths__filter-btn:hover { color: var(--blue-deep, #1f57cc); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+}
+.paths__filter-mask {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(15, 22, 32, 0.45);
+  display: flex; align-items: flex-end;
+}
+.paths__filter-sheet {
+  width: 100%;
+  background: var(--surface);
+  border-radius: 18px 18px 0 0;
+  padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  display: grid; gap: 8px;
+  box-shadow: 0 -14px 40px rgba(15, 22, 32, 0.25);
+}
+.paths__filter-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 2px 2px 6px;
+}
+.paths__filter-head strong { font-size: 15px; }
+.paths__filter-close {
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border: 0; background: none;
+  color: var(--muted, #5b6577); font-size: 22px;
+  cursor: pointer; border-radius: var(--mk-radius-md, 10px); font-family: inherit;
+}
+.paths__filter-opt {
+  min-height: 44px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line); border-radius: var(--mk-radius-lg, 12px);
+  background: transparent;
+  font-size: 13.5px; font-weight: 600; font-family: inherit;
+  color: var(--ink, #172033);
+  cursor: pointer; text-align: left;
+}
+.paths__filter-opt b { margin-left: auto; color: var(--faint, #8492ab); font-size: 12px; }
+.paths__filter-opt.is-active {
+  border-color: var(--blue, #3478f6);
+  background: color-mix(in srgb, var(--blue, #3478f6) 8%, transparent);
+  color: var(--blue-deep, #1f57cc);
+}
+.paths__filter-tick { margin-left: auto; font-style: normal; color: var(--blue, #3478f6); font-weight: 800; }
+.paths__filter-opt.is-active b { margin-left: 0; }
 </style>
 
