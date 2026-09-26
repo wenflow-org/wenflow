@@ -4,7 +4,7 @@
       <span class="mk-status__dot" aria-hidden="true"></span>
       <strong class="mk-status__title">记忆与复习观测</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">用户 {{ totals.users }} · 记忆痕迹 {{ totals.traces }} · 当前到期 {{ totals.due }}</span>
+      <span class="mk-status__meta">用户 {{ totals.users }} · 记忆痕迹 {{ totals.traces }} · <b :class="{ 'mr__meta-due': totals.due > 0 }">当前到期 {{ totals.due }}</b></span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="loading" @click="loadOverview">
           {{ loading ? '刷新中…' : '刷新' }}
@@ -27,8 +27,9 @@
       </details>
     </section>
 
-    <!-- KPI 指标条：MkStatStrip 单源 + 独立成卡；筛选开关（包含虚拟学习者）进卡头——
-         卡头是全站筛选控件的惯例位置（people/virtual-learners 同款），不再和说明文字挤一行 -->
+    <!-- 概览卡（2026-09-26 重设计）：平摊 7 数字 → 一个比例叙事 + 一行处理队列。
+         上半：记忆痕迹里「健康 vs 到期」的构成条——到期占比是这页真正的警报线；
+         下半：归并处理队列按「要动手的程度」从左到右排列，已执行记录退为安静档。 -->
     <div class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">记忆层概览</h3>
@@ -37,7 +38,41 @@
           包含虚拟学习者
         </label>
       </div>
-      <MkStatStrip :items="kpiItems" />
+      <div class="mr-summary">
+        <div class="mr-summary__chart">
+          <div
+            class="mr-summary__ratio"
+            role="img"
+            :aria-label="`记忆痕迹 ${totals.traces} 条，其中到期 ${totals.due} 条，占 ${duePct}%`"
+          >
+            <i class="mr-summary__seg mr-summary__seg--ok" :style="{ width: okPct + '%' }"></i>
+            <i class="mr-summary__seg mr-summary__seg--due" :style="{ width: duePct + '%' }"></i>
+          </div>
+          <div class="mr-summary__legend">
+            <span><i class="mr-summary__dot mr-summary__dot--ok" aria-hidden="true"></i>健康 <b>{{ okTraces }}</b></span>
+            <span><i class="mr-summary__dot mr-summary__dot--due" aria-hidden="true"></i>到期 <b>{{ totals.due }}</b><template v-if="totals.traces"> · 占 {{ duePct }}%</template></span>
+            <span class="mr-summary__cap">覆盖 {{ totals.users }} 位用户</span>
+          </div>
+        </div>
+        <div class="mr-summary__queue">
+          <div class="mr-queue" :class="{ 'mr-queue--warn': totals.ambiguous > 0 }">
+            <b class="mr-queue__num">{{ totals.ambiguous }}</b>
+            <span class="mr-queue__label">需人工看<small>像但不确定，不会自动执行</small></span>
+          </div>
+          <div class="mr-queue">
+            <b class="mr-queue__num">{{ totals.autoApplicable }}</b>
+            <span class="mr-queue__label">可自动执行<small>把握度 + 词面闸门都过</small></span>
+          </div>
+          <div class="mr-queue">
+            <b class="mr-queue__num">{{ totals.proposed }}</b>
+            <span class="mr-queue__label">待归并建议<small>模型给出的同义候选</small></span>
+          </div>
+          <div class="mr-queue mr-queue--quiet">
+            <b class="mr-queue__num">{{ totals.applied }}<i>/ {{ totals.deleted }}</i></b>
+            <span class="mr-queue__label">已执行 / 删除<small>留快照，可回滚</small></span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="mk-card mk-card--fill">
@@ -69,7 +104,7 @@
           <tr>
             <th>用户</th>
             <th class="mk-num">痕迹</th>
-            <th class="mk-num">到期</th>
+            <th class="mk-num" title="到该复习而未复习的痕迹数，条内小条 = 占该用户痕迹比例">到期</th>
             <th class="mk-num">建议</th>
             <th class="mk-num">可自动</th>
             <th class="mk-num">需人工看</th>
@@ -88,18 +123,38 @@
             @click="openDetail(row.userId)"
           >
             <td>
-              <strong>{{ row.name || '未命名' }}</strong>
-              <small class="mr__sub">{{ shortId(row.userId) }}</small>
-              <span v-if="row.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
+              <div class="mr__user">
+                <i class="mr__ava" :class="{ 'mr__ava--virtual': row.isVirtualLearner }" aria-hidden="true">{{ (row.name || '未')[0] }}</i>
+                <span class="mr__user-main">
+                  <strong>{{ row.name || '未命名' }}</strong>
+                  <small class="mr__sub">{{ shortId(row.userId) }}</small>
+                </span>
+                <span v-if="row.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
+              </div>
             </td>
             <td class="mk-num">{{ row.traces }}</td>
-            <td class="mk-num" :class="{ 'mr__num--warn': row.due > 6 }">{{ row.due }}</td>
+            <td class="mk-num">
+              <!-- 到期压力条：数字 + 占该用户痕迹的比例，重压用户扫一眼可见 -->
+              <div class="mr__due" :class="`mr__due--${dueTone(row)}`">
+                <b>{{ row.due }}</b>
+                <span class="mr__due-bar" aria-hidden="true"><i :style="{ width: duePctOf(row) + '%' }"></i></span>
+              </div>
+            </td>
             <td class="mk-num">{{ row.audit?.proposed ?? '—' }}</td>
             <td class="mk-num">{{ row.audit?.autoApplicable ?? '—' }}</td>
-            <td class="mk-num">{{ row.audit?.ambiguous ?? '—' }}</td>
+            <td class="mk-num">
+              <span v-if="row.audit?.ambiguous" class="mr__need">{{ row.audit.ambiguous }}</span>
+              <span v-else class="mr__none">—</span>
+            </td>
             <td class="mk-num">{{ row.audit ? `${row.audit.applied}/${row.audit.deleted}` : '—' }}</td>
-            <td class="mk-num">{{ rollbackableCount(row) }}</td>
-            <td>{{ row.audit ? `${row.audit.mode} · ${timeAgo(row.audit.generatedAt)}` : '未观察' }}</td>
+            <td class="mk-num" :class="{ 'mr__none': !row.merges?.rollbackable }">{{ rollbackableCount(row) }}</td>
+            <td>
+              <span class="mr__obs" :class="`mr__obs--${obsTone(row)}`">
+                <i class="mr__obs-dot" aria-hidden="true"></i>
+                <template v-if="row.audit">{{ row.audit.mode }} · {{ timeAgo(row.audit.generatedAt) }}</template>
+                <template v-else>未观察</template>
+              </span>
+            </td>
             <td class="mr__actions">
               <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(row.userId)">明细</button>
               <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" @click.stop="recompute(row.userId)">重新观察</button>
@@ -376,15 +431,27 @@ const totals = ref({
 })
 
 /** 页头 KPI 条（MkStatStrip，与虚拟学习者等页同一组件；hint 收进 title 悬停） */
-const kpiItems = computed<MkStatItem[]>(() => [
-  { key: 'users', label: '用户', value: totals.value.users },
-  { key: 'traces', label: '记忆痕迹', value: totals.value.traces },
-  { key: 'due', label: '当前到期', value: totals.value.due, tone: totals.value.due > 0 ? 'warn' : '' },
-  { key: 'proposed', label: '待归并建议', value: totals.value.proposed, title: '模型给出的同义合并建议' },
-  { key: 'auto', label: '可自动执行', value: totals.value.autoApplicable, title: '把握度 + 词面闸门都过' },
-  { key: 'ambiguous', label: '需人工看', value: totals.value.ambiguous, tone: 'warn', title: '像但不确定，不会被执行' },
-  { key: 'applied', label: '已执行 / 已删除', value: `${totals.value.applied} / ${totals.value.deleted}` }
-])
+
+/* ---- 概览带（2026-09-26 重设计）的三组派生 ---- */
+const duePct = computed(() => (totals.value.traces ? Math.round((totals.value.due / totals.value.traces) * 100) : 0));
+const okPct = computed(() => 100 - duePct.value);
+const okTraces = computed(() => Math.max(totals.value.traces - totals.value.due, 0));
+
+/** 到期压力档：0=安静；占痕迹 ≥50% 或绝对数 ≥12 = 重压（红）；其余 = 提醒（琥珀） */
+function dueTone(row: OverviewRow): 'none' | 'warn' | 'high' {
+  if (!row.due) return 'none';
+  const pct = row.traces ? (row.due / row.traces) * 100 : 100;
+  return pct >= 50 || row.due >= 12 ? 'high' : 'warn';
+}
+function duePctOf(row: OverviewRow): number {
+  return row.traces ? Math.min(Math.round((row.due / row.traces) * 100), 100) : row.due ? 100 : 0;
+}
+/** 最近观察的新鲜度：24h 内=新鲜（绿点）；从未观察=最弱档 */
+function obsTone(row: OverviewRow): 'fresh' | 'stale' | 'never' {
+  if (!row.audit) return 'never';
+  const ageMs = Date.now() - new Date(row.audit.generatedAt).getTime();
+  return ageMs < 24 * 3600_000 ? 'fresh' : 'stale';
+}
 
 /** 明细 · 课内温故计划 KPI 条（同上，走共享组件） */
 const planKpiItems = computed<MkStatItem[]>(() => {
@@ -591,11 +658,84 @@ onMounted(async () => {
 
 <style scoped>
 .mr { display: flex; flex-direction: column; }
+/* 状态条里的到期数 >0 时抬琥珀（headTone 已把状态点转琥珀，数字跟随） */
+.mr__meta-due { color: var(--mk-amber); font-weight: 700; font-variant-numeric: tabular-nums; }
 .mr__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted, #5b6577); margin-left: auto; white-space: nowrap; }
 /* 折叠引导带正文：与 HealthCenter .hc-guide__body 同款刻度（页面 scoped 只做容器布局） */
 .mr-guide__body { padding: 10px 14px 12px; display: grid; gap: 6px; }
 .mr-guide__body p { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
 .mr-guide__body b { color: var(--mk-ink); font-weight: 700; }
+
+/* ===== 概览带（2026-09-26 重设计）：比例叙事 + 处理队列 ===== */
+.mr-summary { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 22px; padding: 14px 16px 16px; align-items: center; }
+.mr-summary__ratio {
+  display: flex; height: 14px; border-radius: var(--mk-radius-pill); overflow: hidden;
+  background: var(--mk-surface-2);
+}
+.mr-summary__seg { display: block; height: 100%; }
+.mr-summary__seg--ok { background: var(--mk-green); opacity: 0.55; }
+.mr-summary__seg--due { background: var(--mk-amber); }
+.mr-summary__legend { display: flex; align-items: baseline; gap: 16px; margin-top: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); flex-wrap: wrap; }
+.mr-summary__legend b { color: var(--mk-ink); font-variant-numeric: tabular-nums; font-weight: 700; }
+.mr-summary__dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+.mr-summary__dot--ok { background: var(--mk-green); opacity: 0.55; }
+.mr-summary__dot--due { background: var(--mk-amber); }
+.mr-summary__cap { margin-left: auto; color: var(--mk-faint); }
+.mr-summary__queue { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.mr-queue {
+  display: grid; gap: 2px; justify-items: start;
+  padding: 9px 12px; border-radius: var(--mk-radius-lg);
+  background: var(--mk-surface-2);
+}
+/* 需人工看 > 0：琥珀描边提示——这是队列里唯一必须人动手的档 */
+.mr-queue--warn { background: color-mix(in srgb, var(--mk-amber) 10%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mk-amber) 32%, transparent); }
+.mr-queue__num { font-size: 21px; font-weight: 800; line-height: 1.15; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
+.mr-queue--warn .mr-queue__num { color: var(--mk-amber); }
+.mr-queue--quiet .mr-queue__num { color: var(--mk-faint); }
+.mr-queue__num i { font-style: normal; font-size: 13px; font-weight: 600; color: var(--mk-faint); }
+.mr-queue__label { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); display: grid; }
+.mr-queue__label small { font-weight: 400; color: var(--mk-faint); font-size: 11px; line-height: 1.4; }
+
+/* ===== 用户表行设计 ===== */
+.mr__user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.mr__ava {
+  width: 28px; height: 28px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  font-style: normal; font-size: 12px; font-weight: 800;
+  background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
+  color: var(--mk-accent-deep);
+}
+.mr__ava--virtual { background: color-mix(in srgb, var(--mk-purple) 14%, transparent); color: var(--mk-purple); }
+.mr__user-main { display: grid; min-width: 0; }
+.mr__user-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 到期压力条：数字在上、比例条在下（列宽 --mk-col-num 内） */
+.mr__due { display: grid; gap: 3px; justify-items: start; }
+.mr__due b { font-variant-numeric: tabular-nums; font-weight: 700; }
+.mr__due--none b { color: var(--mk-faint); font-weight: 400; }
+.mr__due--warn b { color: var(--mk-amber); }
+.mr__due--high b { color: var(--mk-red-strong); }
+.mr__due-bar { display: block; width: 64px; height: 4px; border-radius: var(--mk-radius-pill); background: var(--mk-surface-2); overflow: hidden; }
+.mr__due-bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-amber); }
+.mr__due--none .mr__due-bar i { background: var(--mk-faint); opacity: 0.35; }
+.mr__due--high .mr__due-bar i { background: var(--mk-red-fill); }
+
+/* 需人工看：>0 抬成琥珀胶囊；0 压成安静破折号 */
+.mr__need {
+  display: inline-block; min-width: 22px; text-align: center;
+  padding: 1px 8px; border-radius: var(--mk-radius-pill);
+  background: color-mix(in srgb, var(--mk-amber) 14%, transparent);
+  color: var(--mk-amber); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.mr__none { color: var(--mk-faint); }
+
+/* 最近观察：新鲜度点（24h 绿 / 更早灰 / 从未最弱） */
+.mr__obs { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
+.mr__obs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mk-faint); flex: none; }
+.mr__obs--fresh .mr__obs-dot { background: var(--mk-green); }
+.mr__obs--fresh { color: var(--mk-ink); }
+.mr__obs--never { color: var(--mk-faint); }
+
 .mr__h4 { margin: 14px 0 6px; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 .mr__num { text-align: right; font-variant-numeric: tabular-nums; }
 .mr__num--warn { color: var(--mk-amber); font-weight: 700; }
@@ -609,4 +749,8 @@ onMounted(async () => {
 .mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
 .mr__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 10px; }
 .mr__warn-inline { color: var(--mk-amber); font-size: var(--mk-fs-micro); }
+
+@media (max-width: 1440px) {
+  .mr-summary { grid-template-columns: minmax(0, 1fr); }
+}
 </style>
