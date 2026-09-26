@@ -275,6 +275,10 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
   confidence.value = Math.round((core?.confidence ?? 0) * 100);
   isCompleted.value = core?.isCompleted === true;
   learningPath.value = core?.learningPath ?? null;
+  // 已完成的会话不再作为「继续上次的规划」入口：路径已生成，恢复终态会话只会造成
+  // 「已经产生了新路径，goal 还让继续上次规划」的困惑。清本地缓存（带 :conversationId
+  // 的 URL 回看不依赖该缓存，resumeById 按 id 直取）。
+  if (stage.value === 'completed') removeGoalConversationStorage();
 
   const prevValues = new Map(fields.value.map((f) => [f.key, f.value]));
   if (ext?.understanding) understanding.value = ext.understanding;

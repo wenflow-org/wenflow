@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <CapabilityShell title="成就" description="查看你的学习里程碑，每一次小进步都算数。">
     <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题 + 说明） -->
     <div class="ach__body">
@@ -98,13 +98,14 @@
     <!-- AI 生成提示（页脚由 CapabilityShell 提供） -->
     <div class="ach__ai-note">
       <AiContentNote />
+      <!-- Toast：必须留在 CapabilityShell 内——模板多根会变成 Fragment 根节点，
+           外层 <Transition mode="out-in"> 的 leave 收尾后 enter 永不挂载，
+           离开本页后整个路由视图永久空白（用户实测：成就→账户 黑屏）。 -->
+      <Transition name="toast">
+        <div v-if="toastMsg" class="ach-toast">{{ toastMsg }}</div>
+      </Transition>
     </div>
   </CapabilityShell>
-
-  <!-- Toast -->
-  <Transition name="toast">
-    <div v-if="toastMsg" class="ach-toast">{{ toastMsg }}</div>
-  </Transition>
 </template>
 
 <script setup lang="ts">

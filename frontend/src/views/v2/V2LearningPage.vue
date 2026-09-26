@@ -315,7 +315,8 @@
           <div class="checkpoint__head">
             <span class="checkpoint__badge">检查点</span>
             <strong>{{ checkpoint.title || checkpoint.question }}</strong>
-            <p v-if="checkpoint.title && checkpoint.question">{{ checkpoint.question }}</p>
+            <!-- 模型偶发把 title 与 question 填成同一句：重复渲染成"检查点出现两次"，同文去重 -->
+            <p v-if="checkpoint.title && checkpoint.question && checkpoint.title !== checkpoint.question">{{ checkpoint.question }}</p>
           </div>
           <template v-if="checkpoint.options?.length">
             <label v-for="opt in checkpoint.options" :key="opt.id" class="checkpoint__option" :class="{ 'checkpoint__option--on': selectedOptions.includes(opt.id) }">
@@ -1528,6 +1529,12 @@ onBeforeUnmount(() => {
   margin: 0 auto;
 }
 
+/* 宽屏（≥1500px）：1180 定宽在 2K/4K 下两侧留白过大（手动流程问题测试），
+   加宽到 1400，消息区获得更多阅读宽度 */
+@media (min-width: 1500px) {
+  .learn__body { max-width: 1400px; gap: 20px; }
+}
+
 /* ---------- 知识点面板 ---------- */
 .kp {
   background: var(--surface);
@@ -1813,9 +1820,9 @@ onBeforeUnmount(() => {
 }
 .msg__visual figcaption { font-size: 12px; color: var(--faint); line-height: 1.5; }
 .msg__avatar {
-  width: 30px; height: 30px; border-radius: var(--mk-radius-lg);
+  width: 34px; height: 34px; border-radius: var(--mk-radius-lg);
   background: linear-gradient(135deg, var(--blue), var(--accent));
-  color: #fff; font-size: 13px; font-weight: 800;
+  color: #fff; font-size: 14px; font-weight: 800;
   display: grid; place-items: center;
   flex: 0 0 auto; margin-top: 2px;
 }
@@ -2388,8 +2395,8 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 6px rgba(23, 32, 51, 0.08);
 }
 .msg__avatar img {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
 }
 </style>
