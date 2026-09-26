@@ -57,14 +57,14 @@ describe('Shell 导航', () => {
     const wrapper = mountShell({ current: 'skills' });
     const active = wrapper.findAll('.mshell__item--active');
     expect(active).toHaveLength(1);
-    expect(active[0]!.text()).toContain('Skill 运行');
+    expect(active[0]!.text()).toContain('Skill 与提示词');
   });
 
   it('点击菜单项 emit navigate(id)', async () => {
     const wrapper = mountShell();
     const skills = wrapper
       .findAll('.mshell__item')
-      .find((n) => n.text().includes('Skill 运行'))!;
+      .find((n) => n.text().includes('Skill 与提示词'))!;
     await skills.trigger('click');
     expect(wrapper.emitted('navigate')?.[0]).toEqual(['skills']);
   });

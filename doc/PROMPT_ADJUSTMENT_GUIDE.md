@@ -9,6 +9,10 @@
 **一切文本调整只能从 `prompts/core/<skillId>.yaml` 进**，经确定性编译变成 `prompts/skill.<skillId>.md`，
 再同步进数据库（`agent_prompts` ACTIVE 行）才对线上生效。运行时读的就是 DB 镜像的 `systemPrompt` 原文。
 
+**定位边界（2026-09 拍板）**：管理台只做**轻运营调整**——改已有 prompt 文案/参数、发布、回滚、试跑、看健康；
+**从 0 新建 Skill 是代码级动作**（scaffold 只出骨架片段，还需三处手工接线），统一走 CLI/
+开发流（`doc/SKILL_DEVELOPMENT_GUIDE.md`），管理台不再提供新建入口。
+
 | 层 | 位置 | 能否手改 |
 |---|---|---|
 | 真源 SSOT | `prompts/core/*.yaml`（32 个） | ✅ 唯一人工编辑入口 |
@@ -18,8 +22,8 @@
 ## 动线 A：管理台可视化（推荐，防呆最全）
 
 ```
-侧栏「Skill 运行」→ 列表点 skill → 抽屉「Prompt」页签（只读速览）
-  → 「打开 Prompt 设计页 →」→ 设计页「协议」页签（core YAML 编辑）
+侧栏「Skill 与提示词」→ 列表行「设计 →」直达设计页（或点行开抽屉速览 →「打开 Prompt 设计页」）
+  → 设计页「协议」页签（core YAML 编辑）
   → 保存并编译 → 发布 →（语义评审 409 SEMANTIC_UNCERTAIN 时确认强制发布）
 ```
 
@@ -27,9 +31,9 @@
 - 发布链自带守门：五块结构检查、字段冻结检查、LLM 语义评审、发布前自动备份、DB 版本化（coreHash/coreVersion 锚点）。
 - 回滚：设计页「版本」页签，或 `POST /api/prompt-lab/core/:skillId/rollback`。
 - 发布响应会提示哪些产物是 git 跟踪文件——**记得提交 git**。
-- 新建 Skill：`PromptWorkbench`（URL `/admin/skill-workbench`，侧栏隐藏场景）生成骨架
-  （core.yaml + 户口簿条目 + 编排契约 + handler 占位）。当前 UI 入口在健康中心的
-  漂移卡片跳转，直接敲 URL 也可达。
+- **新建 Skill 不在管理台**（2026-09 迁出）：走 CLI
+  `cd backend && npx ts-node --transpile-only scripts/scaffold-skill.ts --skill-id=... --kind=...`
+  然后按 `doc/SKILL_DEVELOPMENT_GUIDE.md` §4 完成三处接线。
 
 ## 动线 B：本地 CLI（日常开发）
 

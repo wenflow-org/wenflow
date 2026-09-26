@@ -9,9 +9,6 @@
       <span class="mk-status__meta pw-ok">同步 {{ countBy('synced') }}</span>
       <span class="mk-status__meta pw-warn">待编译发布 {{ countBy('pending-compile') }}</span>
       <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" @click="openScaffold">
-          新建 Skill
-        </button>
         <button type="button" class="mk-status__action" :disabled="loading" @click="loadList">
           <MkLoading v-if="loading" inline text="刷新中…" /><span v-else>刷新</span>
         </button>
@@ -21,7 +18,7 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">核心文件</h3>
-        <span class="mk-card__meta">编辑与发布在 Skill 设计页「协议」页签；「新建 Skill」生成骨架（core.yaml + 技能登记册条目 + 编排契约 + handler 占位）</span>
+        <span class="mk-card__meta">编辑与发布在 Skill 设计页「协议」页签；从 0 新建不在管理台——走 CLI（backend/scripts/scaffold-skill.ts，见 doc/SKILL_DEVELOPMENT_GUIDE.md）</span>
       </div>
       <div class="mk-table-scroll">
       <!-- 首载骨架屏（对齐全站「骨架替代空白」约定；此前整表无占位） -->
@@ -77,113 +74,17 @@
         @action="loadList"
       />
     </section>
-
-    <!-- 新建 Skill 弹窗（scaffold 一条龙） -->
-    <Teleport to="body">
-    <div v-if="scaffoldOpen" ref="scaffoldMaskRef" class="mk-modal">
-      <div ref="scaffoldPanelRef" class="mk-modal__panel mk-modal__panel--wide sc-panel" role="dialog" aria-label="新建 Skill">
-        <div class="mk-modal__head">
-          <h3 class="mk-modal__title">{{ result ? '新建 Skill · 完成' : '新建 Skill' }}</h3>
-          <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeScaffold">✕</button>
-        </div>
-        <div class="mk-modal__body">
-          <!-- 结果展示 -->
-          <template v-if="result">
-            <div class="sc-result__head">
-              <span class="mk-badge" :class="result.status === 'created' ? 'mk-badge--ok' : 'mk-badge--warn'">
-                {{ result.status === 'created' ? '已创建' : '已补全（幂等重放）' }}
-              </span>
-              <code class="mono sc-result__id">{{ result.skillId }}</code>
-              <span class="mk-badge sc-badge-kind">{{ kindLabel(result.kind) }}</span>
-            </div>
-            <p class="sc-result__note">{{ result.note }}</p>
-            <div class="sc-result__section">
-              <strong class="sc-result__title">生成文件（{{ result.generated.length }}）</strong>
-              <ul class="sc-result__files">
-                <li v-for="file in result.generated" :key="file"><code class="mono">{{ file }}</code></li>
-              </ul>
-            </div>
-            <details class="sc-result__snippets" v-if="result.snippets.length">
-              <summary>注册片段（复制后手工粘贴，scaffold 不自动改写 TS）</summary>
-              <div v-for="snippet in result.snippets" :key="snippet.title" class="sc-result__snippet">
-                <strong class="sc-result__snippet-title">{{ snippet.title }}</strong>
-                <pre class="mono sc-result__pre">{{ snippet.content }}</pre>
-              </div>
-            </details>
-          </template>
-
-          <!-- 表单 -->
-          <template v-else>
-            <div class="sc-form">
-              <label class="sc-field">
-                <span class="sc-field__label">Skill 标识（skillId） <em>*</em></span>
-                <input v-model="form.skillId" class="sc-field__input mono" placeholder="kebab-case，如 my-new-skill" spellcheck="false" />
-              </label>
-              <label class="sc-field">
-                <span class="sc-field__label">类型（kind） <em>*</em></span>
-                <select v-model="form.kind" class="sc-field__input">
-                  <option value="mainline">mainline（主链，进编排字段路由）</option>
-                  <option value="aux">aux（v4-aux-skills 旁挂）</option>
-                  <option value="handler-only">纯函数（无 LLM prompt）</option>
-                </select>
-              </label>
-              <template v-if="form.kind === 'mainline'">
-                <label class="sc-field">
-                  <span class="sc-field__label">stage <em>*</em></span>
-                  <select v-model="form.stage" class="sc-field__input">
-                    <option value="">— 选择阶段 —</option>
-                    <option v-for="stage in meta.stages" :key="stage" :value="stage">{{ stage }}</option>
-                  </select>
-                </label>
-                <label class="sc-field">
-                  <span class="sc-field__label">归属 Agent（parentAgent） <em>*</em></span>
-                  <select v-model="form.parentAgent" class="sc-field__input">
-                    <option value="">— 选择归属 Agent —</option>
-                    <option v-for="agent in meta.agents" :key="agent.id" :value="agent.id">{{ agent.id }}（{{ agent.name }}）</option>
-                  </select>
-                </label>
-              </template>
-              <label class="sc-field">
-                <span class="sc-field__label">displayName</span>
-                <input v-model="form.displayName" class="sc-field__input" placeholder="中文展示名（可选）" />
-              </label>
-              <label class="sc-field">
-                <span class="sc-field__label">description</span>
-                <textarea v-model="form.description" class="sc-field__input sc-field__textarea" rows="2" placeholder="一句话职责描述（可选）"></textarea>
-              </label>
-            </div>
-            <p v-if="scaffoldMsg" class="sc-msg" :class="{ 'sc-msg--error': scaffoldError }">{{ scaffoldMsg }}</p>
-          </template>
-        </div>
-        <div class="mk-modal__foot">
-          <template v-if="result">
-            <button type="button" class="mk-btn" @click="closeScaffold">关闭</button>
-            <button type="button" class="mk-btn mk-btn--primary" @click="openDesign(result.skillId)">打开设计页（协议页签）→</button>
-          </template>
-          <template v-else>
-            <button type="button" class="mk-btn" :disabled="scaffolding" @click="closeScaffold">取消</button>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="scaffolding" @click="submitScaffold">
-              {{ scaffolding ? '生成中…' : '生成骨架' }}
-            </button>
-          </template>
-        </div>
-      </div>
-    </div>
-    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>()
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { adminPromptWorkbenchApi, adminSkillsApi, type SkillScaffoldMeta, type SkillScaffoldResult } from '@/api/adminApi';
-import { useEscape } from './useEscape';
-import { useOverlay, useMaskClose } from './useOverlay';
+import { adminPromptWorkbenchApi } from '@/api/adminApi';
 import { useLoadMore } from './useLoadMore';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
-import { intent } from './store'
 import { errMsg } from './live'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue';
@@ -250,112 +151,10 @@ async function loadList() {
   }
 }
 
-// ============ 新建 Skill（scaffold 一条龙） ============
-
-const scaffoldOpen = ref(false);
-const scaffolding = ref(false);
-const scaffoldMsg = ref('');
-const scaffoldError = ref(false);
-const result = ref<SkillScaffoldResult | null>(null);
-const meta = ref<SkillScaffoldMeta>({ kinds: ['mainline', 'aux', 'handler-only'], stages: [], agents: [] });
-const form = ref({ skillId: '', kind: 'mainline' as 'mainline' | 'aux' | 'handler-only', stage: '', parentAgent: '', displayName: '', description: '' });
-const scaffoldPanelRef = ref<HTMLElement | null>(null);
-const scaffoldMaskRef = ref<HTMLElement | null>(null);
-
-useEscape(() => scaffoldOpen.value, () => { closeScaffold(); });
-useOverlay(scaffoldOpen, scaffoldPanelRef);
-useMaskClose(scaffoldMaskRef, () => { closeScaffold(); });
-
-/* intent 快捷动作「新建 Skill」：直达并打开 scaffold 弹窗 */
-watch(
-  () => intent.quickAction,
-  (a) => {
-    if (a === 'create-skill') {
-      intent.quickAction = ''
-      void openScaffold()
-    }
-  },
-  { immediate: true }
-)
-
-function errOf(e: any) {
-  return e?.response?.data?.error?.message || e?.message || '操作失败';
-}
-
-function kindLabel(kind: string) {
-  if (kind === 'mainline') return 'mainline';
-  if (kind === 'aux') return 'aux';
-  return 'handler-only';
-}
-
-function resetForm() {
-  form.value = { skillId: '', kind: 'mainline', stage: '', parentAgent: '', displayName: '', description: '' };
-  result.value = null;
-  scaffoldMsg.value = '';
-  scaffoldError.value = false;
-}
-
-async function openScaffold() {
-  resetForm();
-  scaffoldOpen.value = true;
-  if (meta.value.agents.length === 0) {
-    try {
-      const res = await adminSkillsApi.getScaffoldMeta();
-      meta.value = res.data?.data || meta.value;
-    } catch (e: any) {
-      scaffoldMsg.value = `表单元数据加载失败：${errOf(e)}`;
-      scaffoldError.value = true;
-    }
-  }
-}
-
-/** 弹窗统一关闭路径：scaffold 提交中禁止 Esc/遮罩/✕ 误关（与其他弹窗同一守卫纪律） */
-function closeScaffold() {
-  if (!scaffolding.value) scaffoldOpen.value = false;
-}
-
-function validateForm(): string {
-  const f = form.value;
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(f.skillId)) return 'skillId 须为 kebab-case（小写字母/数字，短横线分隔）';
-  if (f.kind === 'mainline') {
-    if (!f.stage) return 'mainline 必选 stage';
-    if (!f.parentAgent) return 'mainline 必选 parentAgent';
-  }
-  return '';
-}
-
-async function submitScaffold() {
-  scaffoldMsg.value = '';
-  scaffoldError.value = false;
-  const invalid = validateForm();
-  if (invalid) {
-    scaffoldMsg.value = invalid;
-    scaffoldError.value = true;
-    return;
-  }
-  scaffolding.value = true;
-  try {
-    const payload: any = {
-      skillId: form.value.skillId,
-      kind: form.value.kind,
-      displayName: form.value.displayName || undefined,
-      description: form.value.description || undefined,
-    };
-    if (form.value.kind === 'mainline') {
-      payload.stage = form.value.stage;
-      payload.parentAgent = form.value.parentAgent;
-    }
-    const res = await adminSkillsApi.scaffold(payload);
-    result.value = res.data?.data || null;
-    toast.success(result.value?.status === 'completed' ? '已补齐缺失生成物' : 'Skill 骨架已生成');
-    await loadList();
-  } catch (e: any) {
-    scaffoldMsg.value = errOf(e);
-    scaffoldError.value = true;
-  } finally {
-    scaffolding.value = false;
-  }
-}
+// ============ 新建 Skill（scaffold）已迁出管理台 ============
+// 定位收敛（2026-09 拍板）：管理台只做轻运营调整（改已有 prompt/参数/发布/回滚/试跑）；
+// 从 0 新建是代码级动作（scaffold 只出片段，还需 manifest/skills/index.ts/coordinator
+// 三处手工接线），统一走 CLI：backend/scripts/scaffold-skill.ts（同一服务层 scaffoldSkill）。
 
 onMounted(async () => {
   await loadList();

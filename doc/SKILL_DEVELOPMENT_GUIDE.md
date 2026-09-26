@@ -38,9 +38,21 @@
 
 ---
 
-## 2. scaffold：POST /api/admin/skills/scaffold
+## 2. scaffold：CLI / POST /api/admin/skills/scaffold
 
-一次请求生成全部骨架（幂等：条目与生成物齐备 → 409 `already-exists`；部分缺失 → 补齐）。
+> 定位（2026-09 拍板）：从 0 新建是代码级动作（生成物之外还需 §4 的三处手工接线），
+> **已迁出管理台**，由 CLI / API 承接；管理台只做轻运营调整（改已有 prompt/参数/发布/回滚/试跑）。
+
+推荐走 CLI（与管理台原表单同一服务层，幂等，输出生成文件与注册片段）：
+
+```bash
+cd backend
+npx ts-node --transpile-only scripts/scaffold-skill.ts \
+  --skill-id=my-new-skill --kind=mainline --stage=path --parent-agent=path-agent \
+  --display-name="我的新 Skill" --description="负责……"
+```
+
+或直接调 API（一次请求生成全部骨架；幂等：条目与生成物齐备 → 409 `already-exists`；部分缺失 → 补齐）：
 
 ```bash
 curl -X POST http://localhost:3000/api/admin/skills/scaffold \

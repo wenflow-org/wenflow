@@ -92,6 +92,7 @@
             <col v-if="showCol('completion')" style="width:var(--mk-col-badge)">
             <col v-if="showCol('rate')" style="width:var(--mk-col-num)">
             <col v-if="showCol('last')" style="width:var(--mk-col-time)">
+            <col style="width:var(--mk-col-actions)">
           </colgroup>
           <thead>
             <tr>
@@ -130,6 +131,7 @@
                 @click="toggleSort('rate')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')">成功率<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="showCol('last')">最近调用</th>
+              <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -159,6 +161,12 @@
               </td>
               <td v-if="showCol('rate')" class="mk-num" :class="rateTone(s)">{{ successRate(s) }}</td>
               <td v-if="showCol('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
+              <td>
+                <div class="mk-actions">
+                  <!-- 轻运营直达：跳过抽屉一跳，直接进设计页「协议」页签改提示词 -->
+                  <button type="button" class="mk-link" @click.stop="openDesign(s.id)">设计 →</button>
+                </div>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -263,6 +271,12 @@ const hcCount = ref(0)
 const hcRefreshing = ref(false)
 /** 健康中心嵌入视图：run tab 未激活时才挂载，run 不会出现 */
 const hcView = computed<'health' | 'drift' | 'recon'>(() => (tab.value === 'run' ? 'health' : tab.value))
+
+/** 轻运营直达：列表行「设计」→ 设计页「协议」页签（改提示词的唯一编辑点） */
+function openDesign(id: string) {
+  void router.push(`/admin/skills/${encodeURIComponent(id)}?tab=protocol`)
+}
+
 const hcStatusLabel = computed(() => {
   if (tab.value === 'health') return `健康检查异常 ${hcCount.value}`
   if (tab.value === 'drift') return `需处理 ${hcCount.value}`
