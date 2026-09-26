@@ -243,6 +243,20 @@ function goDashboard() {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* 大屏（2K/4K 桌面）：520px 定宽卡在 3840px 视口下视觉过小，按断点放大卡片与主字号 */
+@media (min-width: 1600px) {
+  .ob__card { width: min(660px, 100%); padding: 34px 44px 32px; border-radius: 24px; }
+  .ob__title { font-size: 26px; }
+  .ob__sub { font-size: 15px; }
+  .ob__logo img { height: 52px; }
+}
+@media (min-width: 2560px) {
+  .ob__card { width: min(780px, 100%); padding: 42px 56px 40px; }
+  .ob__title { font-size: 30px; }
+  .ob__sub { font-size: 16.5px; }
+  .ob__logo img { height: 60px; }
+}
+
 /* 步骤进度：4 段 */
 .ob__progress {
   display: flex;

@@ -599,6 +599,12 @@ html, body {
   .v2-page .v2footer__inner { max-width: 1360px; }
 }
 
+/* 2000-2799（4K@150% 缩放 = 2560 CSS px、2K@100%）：并入等比放大档。
+   此前该区间无 zoom，页面定宽容器（1080/960）在 2560 视口下两侧留白过大、
+   信息密度骤降（手动流程问题测试 2026-09-26「大片空白/两侧太空」）。 */
+@media (min-width: 2000px) and (max-width: 2799px) {
+  .v2-page { zoom: 1.15; }
+}
 /* 2800+（4K@100% 及更高）：整体等比放大（数值档位，避开 zoom+clamp 兼容问题） */
 @media (min-width: 2800px) {
   .v2-page { zoom: 1.15; }

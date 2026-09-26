@@ -652,6 +652,13 @@ onUnmounted(() => {
   gap: 20px;
 }
 
+/* 宽屏（≥1500px）：1080 报告在 2K/4K 下两侧大片空白、信息密度骤降
+   （手动流程问题测试 2026-09-26）；加宽并同步放宽目录偏移 */
+@media (min-width: 1500px) {
+  .evaluation-shell { max-width: 1240px; gap: 24px; }
+  .eval-toc { left: calc(50% + 636px); }
+}
+
 /* 入场编排：数据就绪后各块依次上浮出现 */
 @media (prefers-reduced-motion: no-preference) {
   .evaluation-head,

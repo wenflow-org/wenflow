@@ -1270,6 +1270,12 @@ function shuffleScenes() {
   box-sizing: border-box;
 }
 
+/* 宽屏（≥1500px）：1080 定宽在 2K/4K 下两侧留白过大（手动流程问题测试），
+   加宽到 1280 并同步放大行距 */
+@media (min-width: 1500px) {
+  .work { max-width: 1280px; gap: 20px; }
+}
+
 /* ---------- 左：信息清单（移动端默认折叠为头部横条，点击展开；桌面恒展开） ---------- */
 .panel {
   background: var(--surface);
@@ -1359,11 +1365,12 @@ function shuffleScenes() {
   min-height: 0;
   height: 100%;
 }
-/* 桌面短屏（>1100px）：720p 下 .chat 曾随内容撑到 830px，composer 被顶出折叠线
-   （发送按钮不可见，boundary-test-2026-09-26 A1）。≤1100px 由 .goal 锁 100dvh 的
-   既有方案覆盖；桌面这里给 chat 设视口上限，头部/输入框恒在屏内，消息区内部滚动。 */
+/* 桌面（>1100px）：与移动端同一套锁高方案——.goal 锁 100dvh、main.work flex:1、
+   .chat height:100%。此前用 max-height 上限法，chat 比工作区矮 ~74px，
+   对话区域底部悬空不贴底（手动流程问题测试 2026-09-26）。锁高后消息区内部滚动，
+   头部/输入框恒在屏内，chat 底沿与视口底部对齐。 */
 @media (min-width: 1101px) {
-  .chat { max-height: calc(100dvh - 190px); min-height: 360px; }
+  .goal { height: 100dvh; min-height: 0; flex: 0 0 auto; }
 }
 .chat__head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -1540,9 +1547,9 @@ function shuffleScenes() {
 .msg__bubble--typing i:nth-child(3) { animation-delay: .3s; }
 @keyframes typing { 0%, 60%, 100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
 .msg__avatar {
-  width: 30px; height: 30px; border-radius: var(--mk-radius-lg);
+  width: 34px; height: 34px; border-radius: var(--mk-radius-lg);
   background: linear-gradient(135deg, var(--blue), var(--accent));
-  color: #fff; font-size: 13px; font-weight: 800;
+  color: #fff; font-size: 14px; font-weight: 800;
   display: grid; place-items: center;
   flex: 0 0 auto; margin-top: 2px;
 }
@@ -2045,8 +2052,8 @@ function shuffleScenes() {
   box-shadow: 0 2px 6px rgba(23, 32, 51, 0.08);
 }
 .msg__avatar img {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
 }
 </style>
