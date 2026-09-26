@@ -1617,7 +1617,7 @@ onBeforeUnmount(() => {
   padding: 2px 9px; border-radius: var(--mk-radius-pill);
 }
 .oscene--review .oscene__tag { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.12); border-color: rgba(52, 120, 246, 0.32); }
-.oscene__title { margin: 0; font-size: 15.5px; font-weight: 800; color: var(--ink, #1c2b45); }
+.oscene__title { margin: 0; font-size: 15px; font-weight: 800; color: var(--ink, #1c2b45); }
 .oscene__lead { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
 .oscene__summary {
   margin: 0;

@@ -559,7 +559,7 @@ onBeforeUnmount(() => {
 .pcard__badge--red { color: var(--red, #c0454a); background: rgba(239, 117, 120, 0.12); }
 .pcard__more { color: var(--faint); font-size: 18px; cursor: pointer; padding: 0 6px; }
 .pcard__title {
-  margin: 0; font-size: 15.5px; line-height: 1.4;
+  margin: 0; font-size: 15px; line-height: 1.4;
   min-width: 0;
   /* 固定 2 行展示高度：1 行标题与 2 行标题的卡 head 高度一致，内部元素水平对齐 */
   min-height: calc(1.4em * 2);

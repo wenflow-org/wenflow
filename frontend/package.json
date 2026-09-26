@@ -15,6 +15,7 @@
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "design:check": "node scripts/check-design-system.mjs",
     "design:baseline": "node scripts/check-design-system.mjs --update",
+    "mobile:spec": "node scripts/check-mobile-spec.mjs",
     "format": "prettier --write src/"
   },
   "dependencies": {

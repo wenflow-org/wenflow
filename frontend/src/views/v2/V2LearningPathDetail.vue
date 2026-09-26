@@ -1589,7 +1589,7 @@ onBeforeUnmount(() => {
 }
 .stage__no--done { background: var(--green); color: #fff; }
 .stage__no--current { background: linear-gradient(135deg, var(--blue), var(--blue-deep)); color: #fff; box-shadow: 0 0 0 4px rgba(52, 120, 246, 0.13); }
-.stage__title strong { display: block; font-size: 14.5px; }
+.stage__title strong { display: block; font-size: 15px; }
 .stage__title small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 .stage__prog { font-size: 12px; font-weight: 800; color: var(--muted); }
 .stage--current .stage__prog { color: var(--blue-deep); }
@@ -1642,7 +1642,7 @@ onBeforeUnmount(() => {
 
 .side { display: grid; gap: 12px; position: sticky; top: 16px; }
 .sidecard { padding: 16px 18px; display: grid; gap: 10px; align-content: start; }
-.sidecard strong { font-size: 14.5px; line-height: 1.5; }
+.sidecard strong { font-size: 15px; line-height: 1.5; }
 .sidecard p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.65; }
 .sidecard__meta { display: flex; gap: 8px; flex-wrap: wrap; }
 /* 侧栏折叠头（设计意图，2026-09-25）：与问题背景的 bg-head 同款箭头语言 */
@@ -1892,7 +1892,7 @@ onBeforeUnmount(() => {
 /* 阶段信息区 */
 .tl__info { flex: 1; min-width: 0; }
 .tl__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.tl__title { font-size: 14.5px; color: var(--ink, #172033); }
+.tl__title { font-size: 15px; color: var(--ink, #172033); }
 .tl__desc { display: block; margin-top: 2px; font-size: 12.5px; color: var(--faint, #b0b8c8); line-height: 1.5; }
 
 /* 状态徽章（图标 + 文字对齐） */
