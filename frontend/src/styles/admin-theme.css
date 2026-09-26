@@ -1,11 +1,9 @@
-﻿/* Admin Element Plus theme overrides（收敛自原 admin-theme.css，阶段 1B）。
-   保留三块：
+﻿/* Admin 壳层杂项（2026-09-25 对账后更名说明：EP theme overrides 已不存在）。
+   现存两块：
    1. 会话验证遮罩（main.ts 动态创建，独立于 mk 体系）；
-   2. body.admin-route 下 EP 覆写的最小集——唯一消费方是 QuickLearnPanel.vue
-      （el-dialog/el-button/el-tag/el-input/el-select/el-textarea），全部改用 --mk-* token、
-      品牌蓝统一 #2c63d0；原 el-table/el-drawer/el-pagination/el-tabs/el-form-item 等覆写
-      无消费方，已随 admin-list.css/admin-surface.css 一并删除；
-   3. 4K 超大屏 zoom（壳层全局等比放大）。 */
+   2. 4K 超大屏 zoom（壳层全局等比放大）。
+   原 EP 覆写块已随 Element Plus 全量移除而删除（QuickLearnPanel 2026-09 重写为 mk-* 原语，
+   全仓现无任何 element-plus import；见 doc/ADMIN_PAGE_TEMPLATES.md §① 的 09-25 批注）。 */
 
 html.admin-session-concealed,
 html.admin-session-concealed body,

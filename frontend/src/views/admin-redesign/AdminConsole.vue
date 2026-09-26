@@ -6,8 +6,8 @@
         <strong>控制台暂时无法打开</strong>
         <span>数据服务返回异常，所有页面受影响。可直接重试；若仍失败，请复制下方诊断信息发给研发。</span>
         <div class="ac-error__actions">
-          <button type="button" class="ac-error__retry" @click="boot">重试</button>
-          <button type="button" class="ac-error__retry ac-error__retry--ghost" @click="copyDiagnostics">复制诊断信息</button>
+          <button type="button" class="mk-btn mk-btn--primary" @click="boot">重试</button>
+          <button type="button" class="mk-btn" @click="copyDiagnostics">复制诊断信息</button>
         </div>
         <details class="ac-error__diag">
           <summary>诊断信息</summary>
@@ -45,10 +45,17 @@ function asyncPage(loader: () => Promise<any>) {
     delay: 200,
     errorComponent: {
       setup() {
-        return () => h('div', { class: 'errorbar admin-page-error' }, [
-          h('strong', '页面加载失败'),
-          h('p', '资源加载失败（部署更新或网络异常）'),
-          h('button', { type: 'button', class: 'errorbar__retry', onClick: () => window.location.reload() }, '刷新页面')
+        // 错误面统一 mk-alert--row（原 errorbar 是零定义死类，渲染成无样式裸文字）
+        return () => h('div', { class: 'admin-page-error' }, [
+          h('div', { class: 'mk-alert mk-alert--row' }, [
+            h('div', { class: 'mk-alert__msg' }, [
+              h('strong', { style: 'margin-right: 8px' }, '页面加载失败'),
+              h('span', '资源加载失败（部署更新或网络异常）'),
+            ]),
+            h('div', { class: 'mk-alert__act' }, [
+              h('button', { type: 'button', class: 'mk-btn mk-btn--sm', onClick: () => window.location.reload() }, '刷新页面'),
+            ]),
+          ]),
         ]);
       }
     },
@@ -369,26 +376,8 @@ onMounted(() => {
   box-shadow: var(--mk-shadow-modal);
 }
 .ac-error__card strong { font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
-.ac-error__card span { font-size: var(--mk-fs-body); color: #5b6577; }
-.ac-error__retry {
-  margin-top: 6px;
-  padding: 8px 20px;
-  border: 0;
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-blue, #2c63d0);
-  color: #fff;
-  font: inherit;
-  font-size: var(--mk-fs-body);
-  font-weight: 700;
-  cursor: pointer;
-}
+.ac-error__card span { font-size: var(--mk-fs-body); color: var(--mk-muted); }
 .ac-error__actions { display: flex; gap: 10px; margin-top: 6px; }
-.ac-error__actions .ac-error__retry { margin-top: 0; }
-.ac-error__retry--ghost {
-  background: transparent;
-  color: var(--mk-blue, #2c63d0);
-  border: 1px solid var(--mk-line);
-}
 .ac-error__diag { max-width: 460px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .ac-error__diag summary { cursor: pointer; }
 .ac-error__diag code {
@@ -396,23 +385,19 @@ onMounted(() => {
   margin-top: 6px;
   padding: 8px 10px;
   border-radius: var(--mk-radius-sm);
-  background: #f3f5f9;
+  background: var(--mk-surface-3);
   color: var(--mk-muted);
   word-break: break-all;
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15） ========== */
 @media (min-width: 2000px) {
-  .ac-error__card { gap: 12px; padding: 38px 48px; border-radius: var(--mk-radius-xl); }
+  .ac-error__card { gap: 12px; padding: 38px 48px; }
   .ac-error__card strong { font-size: 18.5px; }
-  .ac-error__card span { font-size: var(--mk-fs-body); }
-  .ac-error__retry { margin-top: 7px; padding: 9px 24px; border-radius: var(--mk-radius-xl); font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
-  .ac-error__card { gap: 14px; padding: 46px 58px; border-radius: var(--mk-radius-xl); }
+  .ac-error__card { gap: 14px; padding: 46px 58px; }
   .ac-error__card strong { font-size: var(--mk-fs-emphasis); }
-  .ac-error__card span { font-size: var(--mk-fs-body); }
-  .ac-error__retry { margin-top: 8px; padding: 11px 28px; border-radius: 12px; font-size: var(--mk-fs-body); }
 }
 
 /* 异步 tab 过渡态：错误卡（加载骨架已统一走 SkeletonTable） */
