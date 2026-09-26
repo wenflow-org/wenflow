@@ -26,6 +26,7 @@
     "highlight.js": "^11.11.1",
     "html2canvas-pro": "^2.0.2",
     "katex": "^0.16.44",
+    "lucide-vue-next": "^1.0.0",
     "markdown-it": "^14.3.0",
     "markdown-it-texmath": "^1.0.0",
     "mermaid": "^11.16.1",

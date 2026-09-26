@@ -12,8 +12,12 @@
 /* V2 共享设计变量与基础类 */
 
 /* ====== 全局变量定义在 :root，所有元素可继承 ====== */
-/* token 归一口径（2026-09-19）：中性色/结构项以 --mk-* 为准（admin 设计系统），
-   本块只做别名转接；语义色同样以 mk 为准（blue/green/amber/red/accent），blue-deep/cyan 及 -ink 变体因 mk 无对应档暂留字面量。 */
+/* token 归一口径（2026-09-23 二次收敛）：中性色/语义色一律引用 --mk-*（admin 设计系统唯一源），
+   暗色不再二次声明——html[data-theme='dark'] 上 --mk-* 翻转后别名自动跟随。
+   mk 无对应档的 v2 独有色（blue-deep/*-ink 墨色/气泡底）用 color-mix(基色, --mk-ink) 派生：
+   ink 明暗翻转方向与文字对比度需求一致，一条声明双主题生效。
+   仅 --cyan（无 mk 档）与三个半透明底保留字面量。
+   blue-deep 直引 --mk-accent-deep（mk 既有深蓝档，明值与旧字面量完全一致）。 */
 :root {
   --ink: var(--mk-ink);
   --muted: var(--mk-muted);
@@ -22,47 +26,29 @@
   --canvas: var(--mk-bg);
   --surface: var(--mk-surface);
   --blue: var(--mk-blue);
-  --blue-deep: #1f57cc;
   --accent: var(--mk-purple);
-  --cyan: #43b0d8;
   --green: var(--mk-green);
   --amber: var(--mk-amber);
   --red: var(--mk-red);
-  --bubble-ai-bg: #f2f6fc;
-  --supplement-bg: #fafcff;
-  --v2nav-bg: rgba(255, 255, 255, 0.86);
-  /* 状态文字墨色（浅色主题用深色保证对比度；暗色主题见下方覆盖） */
-  --green-ink: #1d7a4c;
-  --cyan-ink: #2b7a99;
-  --blue-ink: #1f57cc;
-  --purple-ink: #6b4ae0;
-  --amber-ink: #b3540a;
-  --red-ink: #c0454a;
+  --blue-deep: var(--mk-accent-deep);
+  --cyan: #43b0d8;
+  --bubble-ai-bg: color-mix(in srgb, var(--mk-blue) 5%, var(--mk-surface));
+  --supplement-bg: color-mix(in srgb, var(--mk-blue) 3%, var(--mk-surface));
+  --v2nav-bg: color-mix(in srgb, var(--mk-surface) 86%, transparent);
+  /* 状态文字墨色：基色提饱和、ink 压深（暗色下自动反向提亮），替代旧双份字面量 */
+  --green-ink: color-mix(in srgb, var(--mk-green) 75%, var(--mk-ink));
+  --cyan-ink: color-mix(in srgb, var(--cyan) 75%, var(--mk-ink));
+  --blue-ink: color-mix(in srgb, var(--mk-blue) 75%, var(--mk-ink));
+  --purple-ink: color-mix(in srgb, var(--mk-purple) 75%, var(--mk-ink));
+  --amber-ink: color-mix(in srgb, var(--mk-amber) 75%, var(--mk-ink));
+  --red-ink: color-mix(in srgb, var(--mk-red) 75%, var(--mk-ink));
 }
 [data-theme='dark'] {
-  --ink: var(--mk-ink);
-  --muted: var(--mk-muted);
-  --faint: var(--mk-faint);
-  --line: var(--mk-line);
-  --canvas: var(--mk-bg);
-  --surface: var(--mk-surface);
-  --blue: #4d8bf8;
-  --blue-deep: #6fa3ff;
-  --accent: #a78bff;
+  /* 语义色随 --mk-* 自动翻转；仅补 mk 没有的 v2 独有档 */
   --cyan: #5fc3e6;
-  --green: #3ec984;
-  --amber: #f6bb63;
-  --red: #f28588;
   --bubble-ai-bg: rgba(24, 34, 48, 0.8);
   --supplement-bg: rgba(246, 187, 99, 0.06);
   --v2nav-bg: rgba(15, 22, 32, 0.88);
-  /* 状态文字墨色：暗色主题用亮色保证对比度 */
-  --green-ink: #3ec984;
-  --cyan-ink: #5fc3e6;
-  --blue-ink: #6fa3ff;
-  --purple-ink: #a78bff;
-  --amber-ink: #f6bb63;
-  --red-ink: #f28588;
 }
 
 /* ====== 全局背景兜底：路由切换过渡期间防止白闪 ====== */

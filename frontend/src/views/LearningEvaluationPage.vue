@@ -425,6 +425,14 @@ const goBackToPath = (forceRefresh?: boolean) => {
     router.push({ path: `${learningPathDetailBasePath.value}/${pathId}`, query });
     return;
   }
+  /* 无 pathId（历史页等入口进来）：优先回到 SPA 来路，别把用户甩到路径列表（2026-09-23） */
+  if (!forceRefresh) {
+    const back = router.options.history.state.back;
+    if (typeof back === 'string' && back.startsWith('/')) {
+      router.back();
+      return;
+    }
+  }
   router.push(learningPathsPath.value);
 };
 

@@ -29,7 +29,9 @@
           >
             <i>{{ avatarLetter }}</i>
             <span class="v2nav__name">{{ userName }}</span>
-            <span class="v2nav__caret" :class="{ 'v2nav__caret--open': menuOpen }" aria-hidden="true">▾</span>
+            <span class="v2nav__caret" :class="{ 'v2nav__caret--open': menuOpen }" aria-hidden="true">
+              <ChevronDown :size="13" :stroke-width="2.25" />
+            </span>
           </button>
           <Transition name="v2menu">
             <div v-if="menuOpen" class="v2nav__menu" role="menu">
@@ -37,8 +39,8 @@
               <button type="button" role="menuitem" class="v2nav__menu-theme" @click="toggleTheme">
                 <span class="v2nav__menu-theme-label">{{ isDark ? '切换到亮色模式' : '切换到暗色模式' }}</span>
                 <span class="v2nav__menu-theme-icon" aria-hidden="true">
-                  <svg v-if="isDark" viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2a7 7 0 1 1 0-14 7 7 0 0 1 0 14zm0-15V2m0 20v-2m-9-9H1m22 0h-2M4.9 4.9 3.5 3.5m17 17-1.4-1.4m0-14.2 1.4-1.4m-17 17 1.4-1.4"/></svg>
-                  <svg v-else viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+                  <Sun v-if="isDark" :size="14" :stroke-width="2" />
+                  <Moon v-else :size="14" :stroke-width="2" />
                 </span>
               </button>
               <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
@@ -60,15 +62,18 @@
       class="v2nav__tab"
       :class="{ 'v2nav__tab--active': isActive(item) }"
     >
-      <span class="v2nav__tab-icon" v-html="item.icon"></span>
+      <span class="v2nav__tab-icon" aria-hidden="true">
+        <component :is="item.icon" :size="20" :stroke-width="1.75" />
+      </span>
       <span class="v2nav__tab-label">{{ item.label }}</span>
     </router-link>
   </nav>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { Activity, ChevronDown, House, Layers, MessageSquareText, Moon, Sun, Waypoints } from 'lucide-vue-next';
 import { useUserStore } from '@/stores/user';
 import { toast } from '@/utils/toast';
 import { applyDocumentTheme, readTheme, writeTheme } from '@/utils/theme';
@@ -81,20 +86,13 @@ const userStore = useUserStore();
 const menuOpen = ref(false);
 const userMenuRef = ref<HTMLElement | null>(null);
 
-const icons = {
-  home: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="m12 3 9 8h-3v9h-4v-6h-4v6H6v-9H3l9-8z"/></svg>',
-  goal: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM7 9h10v2H7V9zm6 5H7v-2h6v2zm4-6H7V6h10v2z"/></svg>',
-  layers: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="m12 2 10 5-10 5L2 7l10-5zm0 7.6L18.9 7 12 4.4 5.1 7 12 9.6zM2 12l10 5 10-5v2l-10 5L2 14v-2zm0 5 10 5 10-5v2l-10 5L2 19v-2z" opacity=".9"/></svg>',
-  pulse: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 13h4l2-7 4 12 2-7h6v2h-4.6l-2.4 8.4L9.6 7.6 7.6 15H3v-2z"/></svg>',
-  graph: '<svg viewBox="0 0 24 24" width="20" height="20"><g fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8.7 6.8 15.3 9.3M8.1 9.1l-1 7"/></g><g fill="currentColor"><circle cx="6.5" cy="5.5" r="3"/><circle cx="17.5" cy="10.5" r="3"/><circle cx="7" cy="19" r="3"/></g></svg>'
-};
-
-const items = [
-  { to: '/dashboard', label: '学习台', match: ['/dashboard'], icon: icons.home },
-  { to: '/goal-conversation', label: '目标规划', match: ['/goal-conversation'], icon: icons.goal },
-  { to: '/learning-paths', label: '学习路径', match: ['/learning-paths', '/learning-path'], icon: icons.layers },
-  { to: '/knowledge-map', label: '知识图谱', match: ['/knowledge-map'], icon: icons.graph },
-  { to: '/learning-state', label: '学习状态', match: ['/learning-state'], icon: icons.pulse }
+/* 图标统一走 lucide（1.75 线宽与全站一致），替代原 v-html 字符串注入（批15） */
+const items: Array<{ to: string; label: string; match: string[]; icon: Component }> = [
+  { to: '/dashboard', label: '学习台', match: ['/dashboard'], icon: House },
+  { to: '/goal-conversation', label: '目标规划', match: ['/goal-conversation'], icon: MessageSquareText },
+  { to: '/learning-paths', label: '学习路径', match: ['/learning-paths', '/learning-path'], icon: Layers },
+  { to: '/knowledge-map', label: '知识图谱', match: ['/knowledge-map'], icon: Waypoints },
+  { to: '/learning-state', label: '学习状态', match: ['/learning-state'], icon: Activity }
 ];
 /* 「成就」「学习历史」不再是顶层入口（2026-09-24 用户拍板：成就意义不大、历史也太细），
    移到个人中心 /user/achievements、/user/learning-history，走 CapabilityShell 的分段导航；

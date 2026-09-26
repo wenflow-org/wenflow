@@ -246,7 +246,7 @@
           </div>
           <ul class="budget__list">
             <li v-for="g in todaySchedule.activeGoals" :key="g.goalId" class="budget__item">
-              <router-link v-if="g.pathId" :to="'/learning-paths/' + g.pathId" class="budget__link" :title="'查看「' + g.title + '」的路径详情'">
+              <router-link v-if="g.pathId" :to="'/learning-path/' + g.pathId" class="budget__link" :title="'查看「' + g.title + '」的路径详情'">
                 <span class="budget__name">{{ g.title }}</span>
                 <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
                 <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>

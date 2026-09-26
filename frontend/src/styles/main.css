@@ -192,6 +192,13 @@
   --mk-shadow-drawer: -16px 0 48px rgba(15, 23, 42, 0.18);
   --mk-shadow-modal: 0 24px 64px rgba(15, 23, 42, 0.22);
 
+  /* 动效令牌（双端共用，2026-09-23）：统一时长/缓动词汇；
+     reduce-motion 兜底已有文件末尾全局 @media，勿在页面里重复造 */
+  --mk-dur-fast: 120ms;
+  --mk-dur: 200ms;
+  --mk-dur-slow: 320ms;
+  --mk-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
   /* 业务徽章档位色（完成度五档 / 角色 / 流转 / 锁定 / core），供 mk-badge--* 扩展档引用 */
   --mk-rec-draft: #6b7280;
   --mk-rec-handler: #b45309;

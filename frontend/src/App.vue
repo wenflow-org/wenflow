@@ -1,6 +1,7 @@
 <template>
   <div id="app">
     <a href="#app-main" class="skip-link">跳到主要内容</a>
+    <OfflineBanner />
     <AnnouncementBanner />
     <div id="app-main" tabindex="-1">
       <RouterView v-slot="{ Component }">
@@ -21,6 +22,7 @@
 <script setup lang="ts">
 import { useUserStore } from './stores/user';
 import ToastHost from './components/ui/ToastHost.vue';
+import OfflineBanner from './components/ui/OfflineBanner.vue';
 import AnnouncementBanner from './components/AnnouncementBanner.vue';
 import MockConfirm from './views/admin-redesign/Confirm.vue';
 import { readTheme, applyDocumentTheme } from './utils/theme';

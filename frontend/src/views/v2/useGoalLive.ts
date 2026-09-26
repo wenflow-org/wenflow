@@ -162,7 +162,7 @@ const PROPOSAL_ADJUST_RE = /但是|不过|想调|调整|改成|换一|换下|先
  * 剥离前后缀应答词，含任何调整/疑问意图直接放行为普通回复。
  */
 export function isProposalConfirmText(raw: string): boolean {
-  let t = String(raw || '').trim().toLowerCase();
+  const t = String(raw || '').trim().toLowerCase();
   if (!t || t.length > 16) return false;
   if (PROPOSAL_ADJUST_RE.test(t)) return false;
   // 先查原串（"可以了"这类剥后缀会变义），再查剥应答词后的串（"按这个来吧"→"按这个来"）
