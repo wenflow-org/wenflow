@@ -35,7 +35,10 @@
           </button>
           <Transition name="v2menu">
             <div v-if="menuOpen" class="v2nav__menu" role="menu">
-              <router-link to="/user/account" role="menuitem" @click="menuOpen = false">个人中心</router-link>
+              <router-link to="/user/account" role="menuitem" @click="menuOpen = false">
+                <UserRound :size="15" :stroke-width="1.75" aria-hidden="true" />
+                <span>个人中心</span>
+              </router-link>
               <button type="button" role="menuitem" class="v2nav__menu-theme" @click="toggleTheme">
                 <span class="v2nav__menu-theme-label">{{ isDark ? '切换到亮色模式' : '切换到暗色模式' }}</span>
                 <span class="v2nav__menu-theme-icon" aria-hidden="true">
@@ -44,7 +47,8 @@
                 </span>
               </button>
               <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
-                退出登录
+                <LogOut :size="15" :stroke-width="1.75" aria-hidden="true" />
+                <span>退出登录</span>
               </button>
             </div>
           </Transition>
@@ -73,7 +77,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Activity, ChevronDown, House, Layers, MessageSquareText, Moon, Sun, Waypoints } from 'lucide-vue-next';
+import { Activity, ChevronDown, House, Layers, LogOut, MessageSquareText, Moon, Sun, UserRound, Waypoints } from 'lucide-vue-next';
 import { useUserStore } from '@/stores/user';
 import { toast } from '@/utils/toast';
 import { applyDocumentTheme, readTheme, writeTheme } from '@/utils/theme';
@@ -262,7 +266,8 @@ onUnmounted(() => {
 }
 .v2menu-enter-active,
 .v2menu-leave-active {
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  transition: opacity var(--mk-dur-fast, 120ms) var(--mk-ease-out, ease),
+    transform var(--mk-dur-fast, 120ms) var(--mk-ease-out, ease);
 }
 .v2menu-enter-from,
 .v2menu-leave-to {
@@ -271,7 +276,9 @@ onUnmounted(() => {
 }
 .v2nav__menu a,
 .v2nav__menu button {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
   padding: 10px 12px;
@@ -284,6 +291,14 @@ onUnmounted(() => {
   color: var(--ink, #172033);
   text-decoration: none;
   cursor: pointer;
+}
+.v2nav__menu a svg,
+.v2nav__menu button svg {
+  color: var(--muted, #5b6577);
+  flex-shrink: 0;
+}
+.v2nav__menu button.v2nav__menu-danger svg {
+  color: var(--red-ink);
 }
 .v2nav__menu a:hover,
 .v2nav__menu button:hover {

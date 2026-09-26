@@ -470,7 +470,7 @@ onBeforeUnmount(() => {
   z-index: 60;
   transform-origin: top right;
 }
-.nc-pop-enter-active, .nc-pop-leave-active { transition: opacity 0.16s ease, transform 0.16s ease; }
+.nc-pop-enter-active, .nc-pop-leave-active { transition: opacity var(--mk-dur-fast, 120ms) var(--mk-ease-out, ease), transform var(--mk-dur-fast, 120ms) var(--mk-ease-out, ease); }
 .nc-pop-enter-from, .nc-pop-leave-to { opacity: 0; transform: translateY(-6px) scale(0.97); }
 
 /* Tab 切换 */

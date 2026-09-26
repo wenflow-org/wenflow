@@ -205,7 +205,13 @@ const router = useRouter();
 const cards = ref<PathCard[]>([]);
 const loading = ref(true);
 const loadError = ref(false);
-const filter = ref<'all' | 'ready' | 'completed' | 'generating' | 'failed'>('all');
+type FilterKey = 'all' | 'ready' | 'completed' | 'generating' | 'failed';
+const FILTER_KEYS: FilterKey[] = ['all', 'ready', 'completed', 'generating', 'failed'];
+/* 筛选态入 URL（?filter=）：返回/刷新/分享都不丢（此前存组件 ref，返回列表重置回「全部」）。
+   all 时删键保持 URL 干净；replace 不清 from=goal 等同页既有 query。 */
+const filter = ref<FilterKey>(
+  FILTER_KEYS.includes(route.query.filter as FilterKey) ? (route.query.filter as FilterKey) : 'all'
+);
 const retrying = ref('');
 const menuFor = ref('');
 const deleting = ref('');
@@ -430,6 +436,22 @@ const visibleCards = computed(() => {
   if (filter.value === 'all') return cards.value;
   return cards.value.filter((c) => c.kind === filter.value);
 });
+
+/* 筛选态 ↔ URL 双向同步：点芯片 replace 进 query（不产生历史项）；
+   浏览器返回/前进时从 query 恢复筛选（filterSheetOpen 等运行态不进 URL） */
+watch(filter, (v) => {
+  const q = { ...route.query };
+  if (v === 'all') delete q.filter;
+  else q.filter = v;
+  void router.replace({ query: q }).catch(() => {});
+});
+watch(
+  () => route.query.filter,
+  (v) => {
+    const next: FilterKey = FILTER_KEYS.includes(v as FilterKey) ? (v as FilterKey) : 'all';
+    if (filter.value !== next) filter.value = next;
+  }
+);
 
 function statusLabel(card: PathCard) {
   if (card.kind === 'completed') return '已完成';

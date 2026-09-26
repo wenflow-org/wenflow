@@ -81,7 +81,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 14px 34px rgba(23, 32, 51, 0.14);
 }
 .imm-pop-enter-active,
-.imm-pop-leave-active { transition: opacity 140ms ease, transform 140ms ease; }
+.imm-pop-leave-active { transition: opacity var(--mk-dur-fast, 120ms) var(--mk-ease-out, ease), transform var(--mk-dur-fast, 120ms) var(--mk-ease-out, ease); }
 .imm-pop-enter-from,
 .imm-pop-leave-to { opacity: 0; transform: translateY(-4px); }
 </style>
