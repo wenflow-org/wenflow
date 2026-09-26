@@ -1371,10 +1371,6 @@ export const adminVirtualLearnersApi = {
     );
   },
 
-  generateBlackboxEvaluations: async (sessionId: string) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-evaluations`);
-  },
-
   rerunBlackboxVirtualSession: async (sessionId: string) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-rerun`, {});
   },
@@ -1951,6 +1947,17 @@ export interface BatchExperiment {
   updatedAt: string;
   runs?: BatchExperimentRun[];
 }
+
+/**
+ * 会话评审（裁判）独立面 — 2026-09-27 从 adminVirtualLearnersApi 迁出。
+ * VL 页面不再有评审入口/徽章；此命名空间供独立评审工具/脚本与将来的独立面板使用。
+ */
+export const adminSessionAuditsApi = {
+  /** 双评估：referee 终局评审 + actor 角色保真审计（报告按 fingerprint 幂等复用） */
+  generateEvaluations: async (sessionId: string) => {
+    return adminAxios.post(`/admin/session-audits/sessions/${sessionId}/evaluations`);
+  }
+};
 
 export const adminBatchExperimentsApi = {
   list: async () => {

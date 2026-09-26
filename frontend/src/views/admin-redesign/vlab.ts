@@ -1,6 +1,7 @@
 /**
- * 仿真域纯逻辑：画像会话推进 / 卡顿判定 / 质量徽章 / 运行历史去重。
+ * 仿真域纯逻辑：画像会话推进 / 卡顿判定 / 运行历史去重。
  * 与 live.ts 解耦（页面数据映射之外的可测纯函数集中于此）。
+ * （质量徽章提取 extractQuality 已随裁判独立面移除——2026-09-27 拍板，VL 页面不再展示裁判/保真分。）
  */
 
 /* ---------- 会话阶段推进（V2：Goal → Path → Learn → Wrapup） ---------- */
@@ -58,56 +59,6 @@ export function stallState(
   return { stalled: idleMins >= VLAB_STALL_MINUTES, idleMins }
 }
 
-/* ---------- 质量徽章（V3：最近一次裁判 / 保真分，数据在会话 stageResults.blackbox） ---------- */
-
-export interface QualityScore {
-  label: string
-  score: number
-  evaluatedAt: string
-}
-
-/** 从会话数组提取最近一次的裁判分与保真分（黑盒终局评估，stageResults.blackbox.*Reports） */
-export function extractQuality(sessions: Array<Record<string, unknown>>): {
-  referee: QualityScore | null
-  fidelity: QualityScore | null
-} {
-  let referee: QualityScore | null = null
-  let fidelity: QualityScore | null = null
-  for (const s of sessions) {
-    const raw = s.stageResults
-    const sr = typeof raw === 'string' ? tryParse(raw) : (raw && typeof raw === 'object' ? raw as Record<string, unknown> : null)
-    if (!sr) continue
-    const bb = (sr.blackbox && typeof sr.blackbox === 'object' ? sr.blackbox as Record<string, unknown> : null)
-    if (!bb) continue
-    const read = (list: unknown, target: QualityScore | null): QualityScore | null => {
-      if (!Array.isArray(list)) return target
-      for (const item of list) {
-        const r = item as Record<string, unknown>
-        if (!r || typeof r !== 'object') continue
-        const overall = (r.report as Record<string, unknown> | undefined)?.scores as Record<string, unknown> | undefined
-        const score = typeof overall?.overall === 'number' ? overall.overall : null
-        if (score === null) continue
-        const evaluatedAt = String(r.evaluatedAt || '')
-        if (!target || evaluatedAt > target.evaluatedAt) {
-          target = { label: '', score, evaluatedAt }
-        }
-      }
-      return target
-    }
-    referee = read(bb.refereeReports, referee)
-    fidelity = read(bb.actorAuditReports, fidelity)
-  }
-  return { referee, fidelity }
-}
-
-function tryParse(raw: string): Record<string, unknown> | null {
-  try {
-    const v = JSON.parse(raw)
-    return v && typeof v === 'object' ? v as Record<string, unknown> : null
-  } catch {
-    return null
-  }
-}
 
 /* ---------- 运行历史去重（D1：故事卡=最近摘要，运行 tab=全量） ---------- */
 

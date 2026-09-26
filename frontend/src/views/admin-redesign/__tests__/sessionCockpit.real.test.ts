@@ -168,7 +168,6 @@ const { stableVirtualApi } = vi.hoisted(() => {
     restartVirtualSessionPath: vi.fn(),
     restartVirtualLearning: vi.fn(),
     executeBlackboxVirtualAction: vi.fn(),
-    generateBlackboxEvaluations: vi.fn(),
     rerunBlackboxVirtualSession: vi.fn()
   };
   return { stableVirtualApi };
@@ -342,8 +341,9 @@ describe('SessionCockpit 双模式', () => {
     const wrapper = await mountCockpit('session', 'vs_1');
 
     expect(wrapper.text()).toContain('黑盒模式');
-    expect(wrapper.text()).toContain('终局评估');
-    expect(wrapper.text()).toContain('85%');
+    // 终局评估面板已随裁判独立面移除（2026-09-27）：不再渲染裁判/保真报告
+    expect(wrapper.text()).not.toContain('终局评估');
+    expect(wrapper.text()).not.toContain('85%');
 
     // Trace 诊断侧栏默认折叠：展开后可见三流统一时间线 + 裁判旁路诊断
     const traceToggle = wrapper.findAll('button').find((b) => b.text().includes('Trace 诊断'));

@@ -37,6 +37,7 @@ import adminMemoryReviewRoutes from '../routes/admin/memory-review';
 import adminAnnouncementsRoutes from '../routes/admin/announcements';
 import announcementsRoutes from '../routes/announcements';
 import adminVirtualLearnersRoutes from '../routes/admin/virtual-learners';
+import adminSessionAuditsRoutes from '../routes/admin/session-audits';
 import adminModelRegistryRoutes from '../routes/admin/model-registry';
 import adminSessionConsoleRoutes from '../routes/admin/session-console';
 import adminVirtualQuickLearnRoutes from '../routes/admin/virtual-quick-learn';
@@ -177,6 +178,7 @@ export function registerRoutes(app: express.Express): void {
   app.use('/api/admin/memory-review', ...adminRouteMiddleware, adminMemoryReviewRoutes);
   app.use('/api/admin/goal-conversations', ...adminRouteMiddleware, adminGoalConversationsRoutes);
   app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualLearnersRoutes);
+  app.use('/api/admin/session-audits', ...adminRouteMiddleware, adminSessionAuditsRoutes);
   app.use('/api/admin/model-registry', ...adminRouteMiddleware, adminModelRegistryRoutes);
   app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualQuickLearnRoutes);
   app.use('/api/admin/batch-experiments', ...adminRouteMiddleware, adminBatchExperimentsRoutes);

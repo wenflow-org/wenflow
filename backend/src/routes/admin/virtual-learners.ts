@@ -78,6 +78,7 @@ import { virtualCleanupService } from '../../services/virtual-lab/virtual-cleanu
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
 import { safeJsonParse } from '../../utils/safe-json';
 import { asErrorLike } from '../../virtual-lab/vlab-types';
+import { sendVirtualSessionError } from './virtual-session-http';
 import type { SimulationLogEntry } from '../../coordinators/simulation.types';
 import type {
   LeaseClientLike,
@@ -2330,27 +2331,6 @@ async function runAssistedSessionMutation<T>(
   });
 }
 
-function virtualSessionErrorStatus(error: unknown, fallback = 500) {
-  const err = asErrorLike(error);
-  if (typeof err.statusCode === 'number') return err.statusCode;
-  if (typeof err.status === 'number') return err.status;
-  const message = String(err.message || '');
-  if (message.includes('不存在')) return 404;
-  if (message.includes('不合法') || message.includes('缺少') || message.includes('不支持')) return 400;
-  if (message.includes('当前') || message.includes('不能') || message.includes('必须')) return 409;
-  return fallback;
-}
-
-function sendVirtualSessionError(res: express.Response, error: unknown, fallbackMessage: string, fallbackStatus = 500) {
-  const err = asErrorLike(error);
-  return res.status(virtualSessionErrorStatus(error, fallbackStatus)).json({
-    success: false,
-    error: err.message || fallbackMessage,
-    ...(err.code ? { code: err.code } : {}),
-    ...(typeof (error as { retryable?: unknown } | null)?.retryable === 'boolean' ? { retryable: (error as { retryable: boolean }).retryable } : {})
-  });
-}
-
 function getBlackboxCommandId(req: express.Request) {
   const header = req.get('Idempotency-Key');
   const bodyValue = typeof req.body?.commandId === 'string' ? req.body.commandId : '';
@@ -2417,21 +2397,8 @@ router.post('/sessions/:sessionId/blackbox-observe', async (req: Request, res) =
   }
 });
 
-router.post('/sessions/:sessionId/blackbox-evaluations', async (req: Request, res) => {
-  try {
-    const result = await blackboxVirtualLearnerRunner.runLeasedExclusive(
-      req.params.sessionId,
-      async () => ({
-        platform: await blackboxVirtualLearnerRunner.referee(req.params.sessionId, req.user.userId),
-        actor: await blackboxVirtualLearnerRunner.actorAudit(req.params.sessionId, req.user.userId)
-      })
-    );
-    res.json({ success: true, data: result });
-  } catch (error) {
-    logger.error('生成黑盒双评估报告失败:', error);
-    sendVirtualSessionError(res, error, '生成黑盒双评估报告失败', 502);
-  }
-});
+// 裁判/审计评估端点已迁出：POST /api/admin/session-audits/sessions/:id/evaluations
+// （2026-09-27 拍板裁判独立面，见 routes/admin/session-audits.ts；VL 路由不再暴露评审入口）
 
 /**
  * 全自动模式：以「最终目标（Path 全部任务完成）」为唯一终点的无人值守运行。

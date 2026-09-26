@@ -20,8 +20,6 @@ const mockVirtualSessionDelete = jest.fn()
 const mockAssertPathMutationSafe = jest.fn()
 const mockTransaction = jest.fn()
 const mockBlackboxRunLeasedExclusive = jest.fn()
-const mockBlackboxReferee = jest.fn()
-const mockBlackboxActorAudit = jest.fn()
 const mockAdminAuditLogCreate = jest.fn()
 const mockLearnerEvidenceDeleteMany = jest.fn()
 const mockLearnerProjectionDeleteMany = jest.fn()
@@ -108,9 +106,7 @@ jest.mock('../../utils/projection-token', () => ({
 jest.mock('../../virtual-lab/blackbox-runner', () => ({
   __esModule: true,
   default: {
-    runLeasedExclusive: mockBlackboxRunLeasedExclusive,
-    referee: mockBlackboxReferee,
-    actorAudit: mockBlackboxActorAudit
+    runLeasedExclusive: mockBlackboxRunLeasedExclusive
   }
 }))
 
@@ -191,8 +187,6 @@ describe('assisted virtual learner route leases', () => {
       mockDeleteMany.mockResolvedValue({ count: 0 })
     }
     mockBlackboxRunLeasedExclusive.mockImplementation(async (_sessionId: string, work: () => Promise<any>) => work())
-    mockBlackboxReferee.mockResolvedValue({ id: 'report-1' })
-    mockBlackboxActorAudit.mockResolvedValue({ id: 'audit-1' })
     mockTransaction.mockImplementation(async (work: (tx: any) => Promise<any>) => work({
       virtual_learner_profiles: {
         findUnique: mockVirtualProfileFindUnique,
@@ -404,26 +398,8 @@ describe('assisted virtual learner route leases', () => {
     expect(mockExecuteLearningStep).not.toHaveBeenCalled()
   })
 
-  it.each([
-    ['/sessions/:sessionId/blackbox-evaluations', '生成黑盒双评估报告失败']
-  ])('uses the shared typed response for %s', async (path) => {
-    mockBlackboxRunLeasedExclusive.mockRejectedValue(Object.assign(
-      new Error('租约数据库暂时繁忙，请稍后重试'),
-      { code: 'DB_BUSY', statusCode: 503, retryable: true }
-    ))
-    const handler = getPostHandler(path)
-    const res = createResponse()
-
-    await handler({ params: { sessionId: 'session-1' }, user: { userId: 'admin-1' } }, res)
-
-    expect(res.status).toHaveBeenCalledWith(503)
-    expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      error: '租约数据库暂时繁忙，请稍后重试',
-      code: 'DB_BUSY',
-      retryable: true
-    })
-  })
+  // 评审端点已迁出至 session-audits 独立面（2026-09-27），用例随迁：
+  // routes/__tests__/session-audits.test.ts
 
   it('wraps deletion in the shared lease and atomically removes related records for blackbox sessions', async () => {
     const session = {

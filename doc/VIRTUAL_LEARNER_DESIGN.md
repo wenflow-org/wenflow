@@ -112,7 +112,8 @@
 | `virtual-learner-goal-dialogue-simulator` | **Goal 阶段扮演学习者**（step 1，按 goal 轮次循环） |
 | `virtual-learner-learn-turn-simulator` | 教学阶段扮演学习者（step 5，按教学回合循环） |
 | `virtual-learner-memory-curator` | 课后记忆整理（step 9） |
-| `virtual-learner-referee` / `actor-auditor` / `epistemic-grounding` | 黑盒链的裁判/审计/接地 |
+| `virtual-learner-referee` / `actor-auditor` | **裁判/审计已独立出仿真系统**（2026-09-27 拍板）：评估走独立面 `POST /api/admin/session-audits/sessions/:id/evaluations`（`routes/admin/session-audits.ts`），VL 页面无评审入口/徽章；合回与否以后再议 |
+| `virtual-learner-epistemic-grounding` | 黑盒链的认知接地（仿真核内，不受裁判独立影响） |
 | `virtual-learner-path-evaluator` | 仅 legacy assisted 调试 |
 
 Goal 模拟器每轮的输入（`simulation.coordinator.ts`）：
@@ -161,7 +162,7 @@ learnerMemory: ← 长期记忆注入（见 §7）
 |---|---|
 | `scripts/vl-preset-run.mjs` | **基准语料跑批**（14 内置 preset）。`--only=姓名,presetKey`、`--concurrency`(默认1)、`--retries`(3)、`--backoff`(60s 起翻倍)、`--gap`(5s)、`--dry-run`。**在"学习者粒度"退避重试**，专治网关 429 ⇒ 一次 429 不再变成 `Provider request retry budget exhausted` |
 | `POST /:id/start-session` + `POST /sessions/:id/run-full` | 单例（`maxRounds` / `maxMilestones` / `autoAdvanceToPath`） |
-| 黑盒 | `start-blackbox-session` / `blackbox-step` / `blackbox-observe` / `blackbox-evaluations` / `blackbox-rerun` |
+| 黑盒 | `start-blackbox-session` / `blackbox-step` / `blackbox-observe` / `blackbox-rerun`（评审已独立：`POST /api/admin/session-audits/sessions/:id/evaluations`） |
 | 落盘 | `backend/vlab-runs/preset-run-<ts>.json`（**已 gitignore**）+ DB 表 |
 
 **网关硬限制（实测）**：`1 分钟最多 15 次请求`（超限 429）。批量跑批必须并发 1 + 退避；跑批期间**不要并行其它高并发活动**。

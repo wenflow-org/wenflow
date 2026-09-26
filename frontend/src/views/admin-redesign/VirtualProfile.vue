@@ -22,13 +22,7 @@
           <span v-if="d.archetype" class="mk-badge mk-badge--info">{{ d.archetype }}</span>
           <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
           <span v-if="goalText" class="vp-top__goal" :title="'长期倾向：影响模拟行为与学习需求'">{{ goalText }}</span>
-          <!-- 仿真质量徽章：只在已评估时显示（「未评估」灰标是空态噪声，详见画像 tab） -->
-          <span
-            v-if="isLive && (qualityReferee || qualityFidelity)"
-            class="vp-quality"
-            :class="qualityTone"
-            :title="qualityTitle"
-          >{{ qualityReferee ? `质量 ${qualityReferee}` : '质量 —' }}<template v-if="qualityFidelity"> · 保真 {{ qualityFidelity }}</template><span class="vp-quality__time">{{ qualityTime }}</span></span>
+          <!-- 质量徽章已随裁判独立面移除（2026-09-27）：VL 页面不再展示裁判/保真分 -->
         </div>
         <!-- 头部只留身份信息（状态 + 属性 pill）；tab 级操作在下方操作台，账号级操作在 tabs 行右端 ⋯ -->
       </div>
@@ -779,9 +773,7 @@ import { useSafePolling } from '@/composables/useSafePolling'
 import { useRowMenu } from './useRowMenu'
 import { useIsDark } from '@/composables/useIsDark'
 import {
-  extractQuality,
-  RUNS_TAB_WINDOW,
-  type QualityScore
+  RUNS_TAB_WINDOW
 } from './vlab'
 
 interface RunItem {
@@ -808,8 +800,7 @@ interface Detail {
   traits: string[]
   runs: RunItem[]
   aiProfile: { label: string; value: string }[]
-  /** V3：最近一次黑盒终局评估（裁判 / 保真分） */
-  quality: { referee: QualityScore | null; fidelity: QualityScore | null }
+  /** V3：最近一次黑盒终局评估（裁判 / 保真分）——已随裁判独立面移除（2026-09-27） */
   /** LLM 重试预算（以虚拟学习者为单位） */
   simulationBudget?: {
     maxRetriesPerStep: number
@@ -1432,7 +1423,6 @@ async function loadDetail(id?: string, quiet = false) {
           pathId
         }
       }),
-      quality: extractQuality(sessions),
       aiProfile: [
         { label: '知识水平', value: { beginner: '零基础', elementary: '入门', intermediate: '中级', advanced: '进阶' }[String(raw.knowledgeLevel)] || String(raw.knowledgeLevel || '—') },
         { label: '性格基线', value: String(p.emotionalBaseline || p.corePersonality || '—') }
@@ -1470,7 +1460,6 @@ async function loadDetail(id?: string, quiet = false) {
         notes: base.story,
         traits: [],
         runs: [],
-        quality: { referee: null, fidelity: null },
         aiProfile: [{ label: '知识水平', value: base.level || '—' }]
       }
       setSubPageLabel(base.name)
@@ -2030,30 +2019,6 @@ const runDayGroups = computed<RunDayGroup[]>(() => {
   return groups
 })
 
-/* ---- V3：仿真质量常驻徽章（最近一次裁判 / 保真分） ---- */
-const qualityReferee = computed<number | null>(() => d.value?.quality?.referee?.score ?? null)
-const qualityFidelity = computed<number | null>(() => d.value?.quality?.fidelity?.score ?? null)
-const qualityTime = computed(() => {
-  const at = d.value?.quality?.referee?.evaluatedAt || d.value?.quality?.fidelity?.evaluatedAt
-  return at ? timeAgo(at) : ''
-})
-const qualityTitle = computed(() => {
-  const r = d.value?.quality?.referee
-  const f = d.value?.quality?.fidelity
-  const parts: string[] = []
-  if (r) parts.push(`裁判 ${r.score}（${new Date(r.evaluatedAt).toLocaleString('zh-CN', { hour12: false })}）`)
-  if (f) parts.push(`保真 ${f.score}（${new Date(f.evaluatedAt).toLocaleString('zh-CN', { hour12: false })}）`)
-  return parts.length ? parts.join(' · ') : '尚无黑盒终局评估（裁判 / 保真）'
-})
-const qualityTone = computed(() => {
-  const scores = [qualityReferee.value, qualityFidelity.value].filter((v): v is number => v !== null)
-  if (!scores.length) return 'vp-quality--none'
-  const avg = scores.reduce((a, b) => a + b, 0) / scores.length
-  if (avg >= 80) return 'vp-quality--ok'
-  if (avg >= 60) return 'vp-quality--warn'
-  return 'vp-quality--bad'
-})
-
 /* 首字头像配色：按名称哈希取色（与虚拟学习者列表同 8 色板） */
 function avatarClassOf(name: string): string {
   let h = 0
@@ -2434,22 +2399,7 @@ async function quietReload(id: string) {
   50% { opacity: 0.35; transform: scale(0.8); }
 }
 
-/* V3：仿真质量常驻徽章 */
-.vp-quality {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  white-space: nowrap;
-}
-.vp-quality__time { font-weight: 600; opacity: 0.75; }
-.vp-quality--ok { color: var(--mk-alert-ok-fg); background: var(--mk-green-bg); }
-.vp-quality--warn { color: var(--mk-amber, #b7791f); background: var(--mk-amber-bg); }
-.vp-quality--bad { color: var(--mk-red); background: var(--mk-red-bg); }
-.vp-quality--none { color: var(--mk-faint); background: var(--mk-surface-2); }
+/* V3 质量徽章样式已随裁判独立面移除（2026-09-27） */
 
 /* 运行 tab：会话流水（按时间倒序 + 日期分组；轴与故事池互补） */
 .vp-run-flow { display: grid; gap: 14px; padding: 12px; }
@@ -2747,10 +2697,6 @@ html[data-theme='dark'] {
   .vp-tab.is-active { background: rgba(91, 141, 239, 0.16); color: var(--mk-accent-deep); }
   .vp-story__row:hover { background: #252627; }
   .vp-story.is-selected .vp-story__row { background: rgba(91, 141, 239, 0.12); }
-  .vp-quality--ok { color: var(--mk-btn-ok-fg); background: rgba(74, 222, 128, 0.12); }
-  .vp-quality--warn { color: #fcd34d; background: rgba(251, 191, 36, 0.12); }
-  .vp-quality--bad { color: #fca5a5; background: rgba(248, 113, 113, 0.12); }
-  .vp-quality--none { background: var(--mk-close-bg); }
   .vp-top__goal { background: #202122; }
   .vp-life--ok { background: rgba(74, 222, 128, 0.12); }
   .vp-life--warn { background: rgba(251, 191, 36, 0.12); }

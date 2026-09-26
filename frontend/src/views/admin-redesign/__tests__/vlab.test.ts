@@ -1,11 +1,11 @@
 /**
- * vlab.ts 纯逻辑测试：会话推进阶段映射 / 卡顿判定 / 质量徽章提取 / 运行历史窗口常量
+ * vlab.ts 纯逻辑测试：会话推进阶段映射 / 卡顿判定 / 运行历史窗口常量
+ * （质量徽章提取 extractQuality 已随裁判独立面移除，2026-09-27）
  */
 import { describe, expect, it } from 'vitest';
 import {
   sessionStageIndex,
   stallState,
-  extractQuality,
   latestRunTs,
   VLAB_STAGES,
   VLAB_STAGE_LABELS,
@@ -65,57 +65,6 @@ describe('vlab.stallState（V2 卡顿高亮：运行中且久无事件）', () =
 
   it('阈值常量 ≥ 1 分钟（可配置性锚点）', () => {
     expect(VLAB_STALL_MINUTES).toBe(5);
-  });
-});
-
-describe('vlab.extractQuality（V3 质量徽章：最近一次裁判 / 保真分）', () => {
-  const sessions = [
-    {
-      id: 's1',
-      stageResults: JSON.stringify({
-        blackbox: {
-          refereeReports: [
-            { evaluatedAt: '2026-08-12T10:00:00', report: { scores: { overall: 62 } } },
-            { evaluatedAt: '2026-08-13T09:00:00', report: { scores: { overall: 78 } } }
-          ],
-          actorAuditReports: [
-            { evaluatedAt: '2026-08-13T09:05:00', report: { scores: { overall: 81 } } }
-          ]
-        }
-      })
-    },
-    { id: 's2', stageResults: null }
-  ];
-
-  it('取最近一次评估（按 evaluatedAt 新者胜），裁判与保真各自独立', () => {
-    const q = extractQuality(sessions as unknown as Array<Record<string, unknown>>);
-    expect(q.referee?.score).toBe(78);
-    expect(q.referee?.evaluatedAt).toBe('2026-08-13T09:00:00');
-    expect(q.fidelity?.score).toBe(81);
-    expect(q.fidelity?.evaluatedAt).toBe('2026-08-13T09:05:00');
-  });
-
-  it('无黑盒评估 / 无 stageResults → null（徽章显示「未评估」）', () => {
-    expect(extractQuality([])).toEqual({ referee: null, fidelity: null });
-    expect(extractQuality([{ id: 'x', stageResults: '{}' }] as unknown as Array<Record<string, unknown>>)).toEqual({ referee: null, fidelity: null });
-    // 有报告但 overall 缺失 → 忽略
-    expect(
-      extractQuality([
-        { id: 'y', stageResults: { blackbox: { refereeReports: [{ evaluatedAt: '2026-08-13T09:00:00', report: { scores: {} } }] } } }
-      ] as unknown as Array<Record<string, unknown>>)
-    ).toEqual({ referee: null, fidelity: null });
-  });
-
-  it('stageResults 同时支持字符串与对象形态', () => {
-    const q = extractQuality([
-      {
-        id: 'z',
-        stageResults: {
-          blackbox: { refereeReports: [{ evaluatedAt: '2026-08-13T08:00:00', report: { scores: { overall: 90 } } }] }
-        }
-      }
-    ] as unknown as Array<Record<string, unknown>>);
-    expect(q.referee?.score).toBe(90);
   });
 });
 

@@ -410,81 +410,7 @@
           <p v-if="!hasWrapup && !lessonTree.length" class="cp-none" style="padding: 24px 16px;">{{ wrapupEmptyHint }}</p>
         </section>
 
-        <!-- 终局评估（黑盒终态） -->
-        <section v-if="refereeReports.length || actorAuditReports.length" class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">终局评估</h3>
-            <span class="mk-card__meta">平台 {{ refereeReports.length }} · 角色 {{ actorAuditReports.length }}</span>
-          </div>
-          <div v-if="refereeReports.length" class="cp-eval-group">
-            <h4 class="cp-eval-group__title">平台质量裁判</h4>
-            <template v-for="(r, i) in refereeReports" :key="`r-${i}`">
-              <article v-if="r.report" class="cp-eval">
-                <div class="cp-eval__head">
-                  <div><strong>{{ verdictLabel(r.report.verdict) }}</strong><span class="cp-eval__time">{{ formatTime(r.evaluatedAt) }}</span></div>
-                  <div class="cp-eval__overall">
-                    <span class="mk-badge" :class="scoreBadgeCls(r.report.scores?.overall)">{{ scoreToPct(r.report.scores?.overall) }}</span>
-                    <span class="mk-minibar cp-eval__overall-bar"><i class="mk-minibar__fill" :data-tone="scoreTone(r.report.scores?.overall)" :style="{ width: scoreFillPct(r.report.scores?.overall) + '%' }"></i></span>
-                  </div>
-                </div>
-                <div v-if="r.report.scores" class="cp-eval__scores">
-                  <span v-for="item in scoreItems(r.report.scores, 'referee')" :key="item.label" class="cp-eval__score"><code>{{ item.label }}</code><strong>{{ scoreToPct(item.value) }}</strong><span class="mk-minibar"><i class="mk-minibar__fill" :data-tone="scoreTone(item.value)" :style="{ width: scoreFillPct(item.value) + '%' }"></i></span></span>
-                </div>
-                <div v-if="r.report.findings?.length" class="cp-eval__section">
-                  <h5>平台发现</h5>
-                  <article v-for="f in r.report.findings" :key="f.code" class="cp-finding">
-                    <span class="cp-finding__sev" :data-sev="f.severity">{{ f.severity }}</span>
-                    <div><strong>{{ f.title }}</strong><p>{{ f.detail }}</p>
-                      <details v-if="findingEvidence(r, f).length" class="cp-evidence"><summary>证据 {{ findingEvidence(r, f).length }}</summary><div v-for="e in findingEvidence(r, f)" :key="e.id"><code>{{ e.source }}{{ e.index === null ? '' : `[${e.index}]` }} · {{ e.path }}</code><p>{{ e.excerpt || e.interpretation }}</p></div></details>
-                    </div>
-                  </article>
-                </div>
-                <div v-if="r.report.recommendations?.length" class="cp-eval__section">
-                  <h5>平台建议</h5>
-                  <article v-for="(rec, rIdx) in r.report.recommendations" :key="`rec-${rIdx}`" class="cp-rec">
-                    <div class="cp-rec__head"><strong>{{ rec.priority }}</strong><span v-if="rec.findingCodes?.length" class="cp-rec__codes"><code v-for="c in rec.findingCodes" :key="String(c)">{{ c }}</code></span></div>
-                    <p>{{ rec.action }}</p>
-                    <details v-if="rec.rationale" class="cp-rec__rationale"><summary>依据</summary><p>{{ rec.rationale }}</p></details>
-                  </article>
-                </div>
-              </article>
-            </template>
-          </div>
-          <div v-if="actorAuditReports.length" class="cp-eval-group">
-            <h4 class="cp-eval-group__title">角色保真审计</h4>
-            <template v-for="(r, i) in actorAuditReports" :key="`a-${i}`">
-              <article v-if="r.report" class="cp-eval">
-                <div class="cp-eval__head">
-                  <div><strong>{{ verdictLabel(r.report.verdict) }}</strong><span class="cp-eval__time">{{ formatTime(r.evaluatedAt) }}</span></div>
-                  <div class="cp-eval__overall">
-                    <span class="mk-badge" :class="scoreBadgeCls(r.report.scores?.overall)">{{ scoreToPct(r.report.scores?.overall) }}</span>
-                    <span class="mk-minibar cp-eval__overall-bar"><i class="mk-minibar__fill" :data-tone="scoreTone(r.report.scores?.overall)" :style="{ width: scoreFillPct(r.report.scores?.overall) + '%' }"></i></span>
-                  </div>
-                </div>
-                <div v-if="r.report.scores" class="cp-eval__scores cp-eval__scores--actor">
-                  <span v-for="item in scoreItems(r.report.scores, 'actor')" :key="item.label" class="cp-eval__score"><code>{{ item.label }}</code><strong>{{ scoreToPct(item.value) }}</strong><span class="mk-minibar"><i class="mk-minibar__fill" :data-tone="scoreTone(item.value)" :style="{ width: scoreFillPct(item.value) + '%' }"></i></span></span>
-                </div>
-                <div v-if="r.report.findings?.length" class="cp-eval__section">
-                  <h5>角色发现</h5>
-                  <article v-for="f in r.report.findings" :key="f.code" class="cp-finding">
-                    <span class="cp-finding__sev" :data-sev="f.severity">{{ f.severity }}</span>
-                    <div><strong>{{ f.title }}</strong><p>{{ f.detail }}</p>
-                      <details v-if="findingEvidence(r, f).length" class="cp-evidence"><summary>证据 {{ findingEvidence(r, f).length }}</summary><div v-for="e in findingEvidence(r, f)" :key="e.id"><code>{{ e.source }}{{ e.index === null ? '' : `[${e.index}]` }} · {{ e.path }}</code><p>{{ e.excerpt || e.interpretation }}</p></div></details>
-                    </div>
-                  </article>
-                </div>
-                <div v-if="r.report.recommendations?.length" class="cp-eval__section">
-                  <h5>模拟器建议</h5>
-                  <article v-for="(rec, rIdx) in r.report.recommendations" :key="`arec-${rIdx}`" class="cp-rec">
-                    <div class="cp-rec__head"><strong>{{ rec.priority }}</strong><span v-if="rec.findingCodes?.length" class="cp-rec__codes"><code v-for="c in rec.findingCodes" :key="String(c)">{{ c }}</code></span></div>
-                    <p>{{ rec.action }}</p>
-                    <details v-if="rec.rationale" class="cp-rec__rationale"><summary>依据</summary><p>{{ rec.rationale }}</p></details>
-                  </article>
-                </div>
-              </article>
-            </template>
-          </div>
-        </section>
+        <!-- 终局评估面板已随裁判独立面移除（2026-09-27）：报告仍在会话数据里，独立评审面为 /api/admin/session-audits -->
 
         <!-- 调试：原始 JSON -->
         <details class="cp-raw">
@@ -769,15 +695,13 @@ import RunStageBar from './RunStageBar.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { runHealthTone, statusText } from './statusText'
 import { parseLogEntry } from './sessionLog'
-import { scoreBadgeCls, scoreFillPct, scoreToPct, scoreTone } from './evalScore'
+// 评分助手（evalScore）原供终局评估面板使用；面板已随裁判独立面移除（2026-09-27），本组件不再引用
 import { useSafePolling } from '@/composables/useSafePolling'
 import {
   asRecord, normalized, firstText, boolValue, numberValue,
   conversationMessages, formatTime, stageLabel, wrapupCardIcon
 } from './cockpitFormat'
-import {
-  useCockpitTraces, timelineKindLabel, verdictLabel, scoreItems, findingEvidence
-} from './cockpitTraces'
+import { useCockpitTraces, timelineKindLabel } from './cockpitTraces'
 import { useCockpitLogs, LOG_WINDOW } from './useCockpitLogs'
 import { buildLessonWrapup, useCockpitWrapup } from './cockpitWrapup'
 import {
@@ -848,7 +772,7 @@ const stageResults = computed(() => (session.value?.stageResults || {}) as Recor
 const runtime = computed(() => (session.value?.runtime || {}) as Record<string, unknown>)
 const stageStatus = computed(() => (runtime.value.stageStatus || {}) as Record<string, Record<string, unknown>>)
 const {
-  refereeReports, actorAuditReports, refereeTrace, refereeTraceCount,
+  refereeTrace, refereeTraceCount,
   privateStateTrace, privateStateTraceCount, parseBlackbox, refereeTraceViews,
   hasTraceFlows, unifiedTimeline, resetTraces
 } = useCockpitTraces(stageResults, isRealMode, rawLogs)
@@ -1854,9 +1778,7 @@ async function act(kind: string) {
           blackboxTraceCount.value
         )
         break
-      case 'referee':
-        await adminVirtualLearnersApi.generateBlackboxEvaluations(id)
-        break
+      // 评审动作已随裁判独立面移除（2026-09-27）：/api/admin/session-audits
       case 'rerun': {
         const res = await adminVirtualLearnersApi.rerunBlackboxVirtualSession(id)
         const d = res.data?.data ?? res.data ?? {}
@@ -2829,46 +2751,7 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   font: 10.5px/1.6 var(--mk-mono); max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all;
 }
 
-/* ===== 终局评估 ===== */
-.cp-eval-group { display: grid; gap: 10px; padding: 14px 16px 4px; }
-.cp-eval-group + .cp-eval-group { border-top: 1px solid var(--mk-line); }
-.cp-eval-group__title { margin: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); letter-spacing: 0.04em; }
-.cp-eval { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); padding: 12px 14px; display: grid; gap: 10px; margin-bottom: 8px; }
-.cp-eval__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.cp-eval__head strong { font-size: var(--mk-fs-body); }
-.cp-eval__time { display: block; font-size: var(--mk-fs-micro); color: var(--mk-faint); margin-top: 2px; }
-.cp-eval__overall { display: grid; gap: 4px; justify-items: end; }
-.cp-eval__overall-bar { width: 110px; }
-.cp-eval__scores { display: flex; flex-wrap: wrap; gap: 8px; }
-.cp-eval__score { display: grid; gap: 3px; min-width: 104px; padding: 6px 9px; border-radius: 6px; background: var(--mk-surface-2); font-size: var(--mk-fs-micro); }
-.cp-eval__score code { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.cp-eval__score strong { font-variant-numeric: tabular-nums; color: var(--mk-ink); font-size: var(--mk-fs-micro); }
-.cp-eval__section { display: grid; gap: 6px; }
-.cp-eval__section h5 { margin: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
-.cp-finding { display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--mk-line); }
-.cp-finding:last-child { border-bottom: none; }
-.cp-finding strong { font-size: var(--mk-fs-micro); }
-.cp-finding p { margin: 4px 0 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
-.cp-finding__sev { padding: 1px 6px; border-radius: 4px; font-size: var(--mk-fs-micro); font-weight: 700; height: fit-content; background: var(--mk-surface-2); color: var(--mk-muted); }
-.cp-finding__sev[data-sev='critical'] { background: var(--mk-red-bg); color: var(--mk-red); }
-.cp-finding__sev[data-sev='major'] { background: var(--mk-amber-bg); color: var(--mk-amber); }
-.cp-finding__sev[data-sev='minor'] { background: var(--mk-blue-bg); color: #0958d9; }
-.cp-finding__sev[data-sev='info'] { background: var(--mk-green-bg); color: #389e0d; }
-.cp-evidence { margin-top: 6px; font-size: var(--mk-fs-micro); }
-.cp-evidence summary { cursor: pointer; color: var(--mk-faint); font-weight: 600; }
-.cp-evidence > div { padding: 4px 8px; border-left: 2px solid var(--mk-line); margin: 6px 0; }
-.cp-evidence code { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.cp-evidence p { margin: 2px 0 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.cp-rec { padding: 6px 0; border-bottom: 1px dashed var(--mk-line); }
-.cp-rec:last-child { border-bottom: none; }
-.cp-rec__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.cp-rec strong { font-size: var(--mk-fs-micro); }
-.cp-rec__codes { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.cp-rec__codes code { font-size: var(--mk-fs-micro); padding: 1px 5px; background: var(--mk-surface-2); color: var(--mk-faint); border-radius: 4px; }
-.cp-rec p { margin: 4px 0 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.cp-rec__rationale { margin-top: 6px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.cp-rec__rationale summary { cursor: pointer; font-weight: 600; }
-.cp-rec__rationale p { margin: 6px 0 0; }
+/* 终局评估样式已随裁判独立面移除（2026-09-27） */
 
 /* ===== Trace panels ===== */
 .cp-trace-panel {
