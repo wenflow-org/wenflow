@@ -136,8 +136,6 @@
               <span v-if="f.fresh" class="field__fresh">刚收录</span>
             </li>
           </ul>
-
-          <div class="panel__tip">信息由问流从对话中自动整理，会随对话逐步完善。够用时就会收敛方案，不用凑满。</div>
         </div>
       </aside>
 
@@ -332,9 +330,13 @@
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
             </button>
           </div>
+          <!-- 底部提示统一右带（2026-09-27 用户反馈）：原来快捷键在左、计数+AI 声明在右
+               两侧分散，且左栏的说明文案占一整块——全部收进这一行，从左到右按
+               「平台说明 → 快捷键 → 计数 → AI 声明」排，视觉一条基线 -->
           <div class="composer__hint">
-            <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
+            <span class="composer__hint-note">信息由问流从对话中自动整理，够用时就会收敛方案</span>
             <span class="composer__hint-right">
+              <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
               <span class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
               <AiContentNote />
             </span>
@@ -1257,6 +1259,7 @@ function shuffleScenes() {
   font-size: 12px; color: var(--faint); padding-left: 6px;
 }
 .composer__hint-right { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.composer__hint-note { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composer__count { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ---------- 工作台布局 ---------- */
@@ -1354,10 +1357,6 @@ function shuffleScenes() {
   background: rgba(49, 177, 111, 0.12);
   padding: 2px 7px; border-radius: var(--mk-radius-pill);
 }
-.panel__tip {
-  font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px;
-  margin-top: auto;
-}
 </style>
 
 <style scoped>
@@ -1424,7 +1423,7 @@ function shuffleScenes() {
 
 .chat__scroll--dim { filter: blur(2px); opacity: .45; pointer-events: none; }
 
-.msg { display: flex; flex-direction: column; gap: 5px; max-width: 82%; }
+.msg { display: flex; flex-direction: column; gap: 5px; max-width: 74%; } /* 82→74：对话行太长读感差，收窄两侧空白（2026-09-27 用户反馈） */
 /* 消息入场：新气泡浮出 */
 @media (prefers-reduced-motion: no-preference) {
   .msg { animation: msg-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
@@ -1947,7 +1946,6 @@ function shuffleScenes() {
   .field--todo .field__value { margin-top: 0; min-width: 0; }
   .field__fresh { top: 6px; right: 6px; }
   .panel__bar { height: 5px; }
-  .panel__tip { font-size: 12px; padding-top: 8px; }
   /* 移动端信息清单默认折叠：头部横条可点，收起时隐藏进度条/清单/提示 */
   .panel__head { cursor: pointer; }
   .panel__caret { display: inline; }
@@ -2061,8 +2059,8 @@ function shuffleScenes() {
   box-shadow: 0 2px 6px rgba(23, 32, 51, 0.08);
 }
 .msg__avatar img {
-  width: 24px;
-  height: 24px;
+  width: 28px;  /* 24→28：34px 框内留 3px 呼吸边即可，logo 更凸显（2026-09-27 用户反馈） */
+  height: 28px;
   object-fit: contain;
 }
 </style>

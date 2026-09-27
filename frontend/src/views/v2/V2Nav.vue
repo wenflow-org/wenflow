@@ -40,11 +40,11 @@
                 <span>个人中心</span>
               </router-link>
               <button type="button" role="menuitem" class="v2nav__menu-theme" @click="toggleTheme">
-                <span class="v2nav__menu-theme-label">{{ isDark ? '切换到亮色模式' : '切换到暗色模式' }}</span>
                 <span class="v2nav__menu-theme-icon" aria-hidden="true">
                   <Sun v-if="isDark" :size="14" :stroke-width="2" />
                   <Moon v-else :size="14" :stroke-width="2" />
                 </span>
+                <span class="v2nav__menu-theme-label">{{ isDark ? '切换到亮色模式' : '切换到暗色模式' }}</span>
               </button>
               <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
                 <LogOut :size="15" :stroke-width="1.75" aria-hidden="true" />
@@ -308,11 +308,10 @@ onUnmounted(() => {
 .v2nav__menu button:hover {
   background: color-mix(in srgb, var(--blue, #3478f6) 8%, var(--surface));
 }
-/* 主题切换项：图标居右 */
+/* 主题切换项：与其他菜单项同构（图标统一居左，2026-09-27 用户反馈） */
 .v2nav__menu-theme {
   display: flex !important;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 .v2nav__menu-theme-icon {

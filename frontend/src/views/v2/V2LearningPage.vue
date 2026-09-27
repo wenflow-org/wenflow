@@ -410,8 +410,9 @@
               <svg viewBox="0 0 24 24" width="13" height="13"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
             </span>
           </div>
-          <div class="composer__hint">
-            <span>Enter 发送 · Shift+Enter 换行</span>
+          <!-- 提示统一右带（goal 页同款口径）：快捷键与 AI 声明并到一条基线，不再两侧分散 -->
+          <div class="composer__hint composer__hint--single">
+            <span class="composer__hint-note">Enter 发送 · Shift+Enter 换行</span>
             <AiContentNote />
           </div>
         </div>
@@ -1751,7 +1752,7 @@ onBeforeUnmount(() => {
   transition: transform 0.15s ease, color 0.15s ease;
 }
 .tutor__jump-bottom:hover { color: var(--blue); transform: translateX(-50%) translateY(-1px); }
-.msg { display: flex; flex-direction: column; gap: 5px; max-width: 85%; }
+.msg { display: flex; flex-direction: column; gap: 5px; max-width: 76%; } /* 85→76：与 goal 页同口径收窄对话行（2026-09-27 用户反馈） */
 .msg--user { align-self: flex-end; align-items: flex-end; position: relative; }
 .msg--user .msg__bubble {
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
@@ -2300,6 +2301,8 @@ onBeforeUnmount(() => {
 .composer__hint :deep(.ai-note) {
   font-size: 12px; line-height: 1.5;
 }
+.composer__hint--single { justify-content: flex-end; }
+.composer__hint-note { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
@@ -2395,7 +2398,7 @@ onBeforeUnmount(() => {
   .composer__send { width: 44px; height: 44px; }
   /* 触屏没有键盘快捷键提示：这行是「Enter 发送 · Shift+Enter 换行」+ AI 声明，不隐藏的话两者
      在 340px 里折成两行（hint 行 17→33px）。隐藏后只剩声明，居中与入口页 .goal__ai-note 一致。 */
-  .composer__hint > span:first-child { display: none; }
+  .composer__hint > .composer__hint-note { display: none; }
   .composer__hint { flex-wrap: nowrap; justify-content: center; }
   /* 移动端头部：单行紧凑 —— 返回隐藏、标题占主列可截断，右侧「学习中」+「⋯」同行，不再换行占第二行 */
   .learn__head {
@@ -2437,8 +2440,8 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 6px rgba(23, 32, 51, 0.08);
 }
 .msg__avatar img {
-  width: 24px;
-  height: 24px;
+  width: 28px;  /* 24→28：与 goal 页同款，logo 更凸显（2026-09-27 用户反馈） */
+  height: 28px;
   object-fit: contain;
 }
 </style>
