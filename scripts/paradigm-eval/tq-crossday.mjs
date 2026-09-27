@@ -10,7 +10,12 @@
  *
  * 用法：node scripts/paradigm-eval/tq-crossday.mjs --user=pe-tq-phys-newton --days=3
  */
-import { PrismaClient } from '@prisma/client';
+// @prisma/client 装在 backend 下，本目录没有 node_modules——显式从 backend 解析
+import { createRequire } from 'node:module';
+import { dirname as _dirname, join as _join } from 'node:path';
+import { fileURLToPath as _f2p } from 'node:url';
+const backendRequire = createRequire(_join(_dirname(_f2p(import.meta.url)), '..', '..', 'backend', 'package.json'));
+const { PrismaClient } = backendRequire('@prisma/client');
 
 const args = Object.fromEntries(process.argv.slice(2).map(a => { const m = a.match(/^--([^=]+)=?(.*)$/); return m ? [m[1], m[2]] : [a, true]; }));
 const userName = String(args.user || '');

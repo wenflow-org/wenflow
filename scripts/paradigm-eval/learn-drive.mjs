@@ -153,7 +153,13 @@ async function main() {
   };
   if (d.mode === 'completed') { record.note = 'task already completed'; fs.writeFileSync(path.join(RESULTS, outName(`learn-${personaId}`)), JSON.stringify(record, null, 1)); return; }
 
-  const turns = pickPreset();
+  let turns = pickPreset();
+  // 教学质量评审：案例专属回合脚本（含误区 trap 措辞）可整体覆盖预设
+  const turnsFile = process.env.LEARN_TURNS_FILE || '';
+  if (turnsFile) {
+    const custom = JSON.parse(fs.readFileSync(path.join(__dirname, turnsFile), 'utf8'));
+    if (Array.isArray(custom) && custom.length) { turns = custom.map(String); log(`使用自定义回合脚本 ${turnsFile}（${turns.length} 轮）`); }
+  }
   const seekCompletion = process.env.LEARN_COMPLETION === '1';
   const COMPLETION_TURNS = [
     '我觉得这个点我已经掌握了，我们可以收尾了，帮我结算这一节。',

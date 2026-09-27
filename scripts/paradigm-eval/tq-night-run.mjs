@@ -92,7 +92,7 @@ function phaseCache() {
   const out = path.join(RESULTS, `tq-night-cache-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`);
   try {
     execFileSync('npx', ['ts-node', '--transpile-only', 'src/scripts/measure-prompt-cache-rate.ts', '--sinceMin=600'],
-      { stdio: ['ignore', fs.openSync(out, 'a'), 'ignore'], cwd: path.join(HERE, '..', '..', 'backend') });
+      { stdio: ['ignore', fs.openSync(out, 'a'), 'ignore'], cwd: path.join(HERE, '..', '..', 'backend'), shell: process.platform === 'win32' });
     log(`缓存率快照 → ${out}`);
   } catch (e) {
     log(`缓存率量测失败: ${e?.status ?? e?.message}`);
