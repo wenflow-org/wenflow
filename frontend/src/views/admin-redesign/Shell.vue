@@ -39,21 +39,18 @@
             >{{ badgeOf(item) }}</span>
           </button>
         </div>
-        <section v-for="group in groupedScenes" :key="group.title" class="mshell__group" :data-open="isGroupOpen(group.title) ? 'true' : 'false'">
-          <button
-            type="button"
-            class="mshell__group-head"
-            :class="{ 'mshell__group-head--active': groupContainsCurrent(group.title) }"
-            :aria-expanded="isGroupOpen(group.title)"
+        <!-- 分组标题是「标签」不是入口（走查 2026-09-27 用户反馈「组名比组大」：
+             原组头=可点按钮+图标+徽章+箭头，视觉比组内页面项还重，层级倒置。
+             现改为纯文字小标签、分组恒展开，页面项成为导航唯一主体） -->
+        <section v-for="group in groupedScenes" :key="group.title" class="mshell__group">
+          <div
+            class="mshell__caption"
+            :class="{ 'mshell__caption--active': groupContainsCurrent(group.title) }"
             :title="`${group.title}（${group.items.length} 页）`"
-            @click="toggleGroup(group.title)"
           >
-            <component :is="groupIcon(group.title)" class="mshell__group-icon" :size="16" :stroke-width="1.75" aria-hidden="true" />
-            <span class="mshell__group-name">{{ group.title }}</span>
-            <span v-if="groupBadgeCount(group.title)" class="mshell__group-badge" :class="{ 'mshell__group-badge--alarm': groupHasAlarm(group.title) }" :title="groupBadgeTitle(group.title)">{{ groupBadgeCount(group.title) }}</span>
-            <span class="mshell__group-arrow" aria-hidden="true">▸</span>
-          </button>
-          <div v-show="isGroupOpen(group.title)" class="mshell__group-body">
+            {{ group.title }}
+          </div>
+          <div class="mshell__group-body">
             <button
               v-for="item in group.items"
               :key="item.id"
@@ -158,8 +155,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
-import { ChartLine, CircleHelp, GraduationCap, Layers, Moon, RotateCw, SlidersHorizontal, Sun, Target, UserRound } from 'lucide-vue-next'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { CircleHelp, Moon, RotateCw, Sun } from 'lucide-vue-next'
 import { MOCK_SCENES, type MockSceneDef } from './manifest'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
 import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
@@ -349,60 +346,9 @@ const groupedScenes = computed(() => {
   return groups
 })
 
-/* ===== 组级折叠（对齐 AntD SubMenu 模式）：组标题点击展开/收起，
-   当前页所在组自动展开；状态 localStorage 持久化 ===== */
-/** 组标题图标（lucide 组件映射，2026-09-26 从 v-html path 字符串迁移，与全站图标语言统一） */
-const GROUP_ICONS: Record<string, Component> = {
-  虚拟学习者: UserRound,
-  教学: GraduationCap,
-  Skill: Layers,
-  观测: ChartLine,
-  系统: SlidersHorizontal,
-  运营: Target,
-}
-function groupIcon(title: string): Component {
-  return GROUP_ICONS[title] || CircleHelp
-}
-const GROUP_OPEN_KEY = 'wf_admin_group_open'
-const openGroups = ref<Set<string>>(loadOpenGroups())
-function loadOpenGroups(): Set<string> {
-  try {
-    const raw = localStorage.getItem(GROUP_OPEN_KEY)
-    if (!raw) return new Set()
-    const arr = JSON.parse(raw) as string[]
-    return new Set(Array.isArray(arr) ? arr : [])
-  } catch {
-    return new Set()
-  }
-}
-function persistOpenGroups() {
-  try { localStorage.setItem(GROUP_OPEN_KEY, JSON.stringify([...openGroups.value])) } catch { /* ignore */ }
-}
-function isGroupOpen(title: string): boolean {
-  if (collapsed.value) return true // 整栏折叠（64px 图标）时所有项可见
-  return openGroups.value.has(title)
-}
-function toggleGroup(title: string) {
-  const next = new Set(openGroups.value)
-  if (next.has(title)) next.delete(title)
-  else next.add(title)
-  openGroups.value = next
-  persistOpenGroups()
-}
-/** 当前页所在组：导航后自动展开（其他组保持用户状态） */
+/* 当前页所在组：仅用于给所在组的「标签」上强调色（分组已恒展开，不再有折叠状态机
+   —— 走查 2026-09-27 用户反馈「组名比组大」：组头降级为纯文字标签，见模板注释） */
 const groupContainsCurrent = (title: string) => groupedScenes.value.find((g) => g.title === title)?.items.some((i) => i.id === props.current) ?? false
-watch(
-  () => props.current,
-  (cur: string) => {
-    if (!cur || collapsed.value) return
-    const g = groupedScenes.value.find((x) => x.items.some((i) => i.id === cur))
-    if (g && !openGroups.value.has(g.title)) {
-      openGroups.value = new Set(openGroups.value).add(g.title)
-      persistOpenGroups()
-    }
-  },
-  { immediate: true }
-)
 /* 告警平息口径：进入告警场景即视为已读（侧栏 go() 之外，TabBar/深链直达也应平息；
    用 props.current watch 而非仅 Shell 点击，保证各导航路径一致） */
 watch(
@@ -413,21 +359,8 @@ watch(
   },
   { immediate: true }
 )
-/* 组徽章聚合：组内项徽章计数求和；含告警项时红色警示 */
-const groupItems = (title: string) => groupedScenes.value.find((g) => g.title === title)?.items ?? []
-const groupBadgeCount = (title: string) => {
-  let total = 0
-  for (const item of groupItems(title)) total += Number(badgeOf(item) || 0)
-  return total || ''
-}
-const groupHasAlarm = (title: string) => groupItems(title).some((i) => isAlarmBadge(i))
-function groupBadgeTitle(title: string): string {
-  const items = groupItems(title)
-  const parts = items.filter((i) => badgeOf(i)).map((i) => `${BADGE_MEANING[i.id] || i.label} ${badgeOf(i)}`)
-  return parts.length
-    ? `${title}（共 ${items.length} 页）· ` + parts.join(' · ')
-    : `${title}（共 ${items.length} 页）· 暂无可计数项`
-}
+/* 组级徽章聚合已随「组头降级为标签」移除：计数仍显示在具体页面项上
+   （虚拟学习者/Skill 与提示词/执行日志…），告警脉冲由 mshell__item-badge--alarm 承担 */
 </script>
 
 <style scoped>
@@ -486,62 +419,25 @@ function groupBadgeTitle(title: string): string {
 /* 置顶入口比组内子项略收高度：驾驶舱入口不再显高（用户反馈 2026-09-05） */
 .mshell__pinned .mshell__item { font-weight: 600; padding-top: 6px; padding-bottom: 6px; color: var(--mk-side-item-fg); }
 .mshell__group { display: grid; gap: 1px; }
-/* 组头（可点击折叠）：组图标 + 组名 + 聚合徽章 + 箭头 */
-.mshell__group-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 12px 10px 4px;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  /* 分组标题是「标签」不是内容：比组内可点页面小一号、弱一档（原 14/800 深色比子项还重，层级倒置） */
+/* 分组标题 = 纯文字小标签，不是可点入口（走查 2026-09-27「组名比组大」整改：
+   原组头是按钮+图标+徽章+箭头，比组内页面项还重。现在页面项是导航唯一主体，
+   标签只负责分区命名；恒展开，折叠状态机已删） */
+.mshell__caption {
+  padding: 14px 10px 5px;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.08em;
   color: var(--mk-faint);
-  cursor: pointer;
-  border-radius: var(--mk-radius-sm);
-  transition: color 0.12s ease, background 0.12s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
 }
-.mshell__group-head:hover { color: var(--mk-accent-deep, var(--mk-accent-deep)); background: rgba(90, 110, 140, 0.06); }
-.mshell__group-head--active { color: var(--mk-accent-deep, var(--mk-accent-deep)); }
-.mshell__group-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  color: var(--mk-faint);
-  transition: color 0.12s ease;
-}
-.mshell__group-head:hover .mshell__group-icon,
-.mshell__group-head--active .mshell__group-icon { color: var(--mk-accent-deep, var(--mk-accent-deep)); }
-.mshell__group-name { text-align: left; }
-.mshell__group-badge {
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--mk-side-inset);
-  color: var(--mk-faint);
-  font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  line-height: 16px;
-}
-.mshell__group-badge--alarm {
-  background: var(--mk-red-bg-strong);
-  color: var(--mk-red-strong);
-  animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
-}
-.mshell__group-arrow {
-  font-size: var(--mk-fs-micro);
-  opacity: 0.65;
-  transition: transform 0.15s ease;
-}
-.mshell__group[data-open='true'] .mshell__group-arrow { transform: rotate(90deg); }
+.mshell__caption--active { color: var(--mk-accent-deep, var(--mk-accent-deep)); }
 .mshell__group-body { display: grid; gap: 1px; }
-/* 子项层级：组内子项文字与组名文字左沿对齐（组名 = 侧栏内边距 + 组头内边距10 + 图标16 + 间距8 = 34），
-   子项不显単字图标（仅折叠态有），靠缩进表达从属关系（对齐 AntD inline menu 缩进层级） */
-.mshell__group-body .mshell__item { padding-left: 34px; }
+/* 子项缩进表达从属：与标签文字（内边距 10px）拉开一档，对齐 AntD inline menu 层级；
+   单字图标展开态不显示（仅折叠 64px 图标轨显示，见 data-collapsed 规则） */
+.mshell__group-body .mshell__item { padding-left: 24px; }
 .mshell__group-body .mshell__item .mshell__item-glyph {
   width: 20px;
   height: 20px;
@@ -757,7 +653,7 @@ html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color:
 @media (min-width: 1440px) {
   .mshell { grid-template-columns: 224px minmax(0, 1fr); }
   .mshell__item { font-size: var(--mk-fs-body); padding: 9px 11px; }
-  .mshell__group-name { font-size: var(--mk-fs-micro); }
+  .mshell__caption { font-size: var(--mk-fs-micro); }
   .mshell__item-badge { font-size: var(--mk-fs-micro); }
   .mshell__logo-full { height: 58px; }
 }
@@ -767,7 +663,7 @@ html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color:
 @media (min-width: 1920px) {
   .mshell { grid-template-columns: 240px minmax(0, 1fr); }
   .mshell__item { font-size: var(--mk-fs-body); padding: 10px 12px; }
-  .mshell__group-name { font-size: var(--mk-fs-micro); }
+  .mshell__caption { font-size: var(--mk-fs-micro); }
   .mshell__item-badge { font-size: var(--mk-fs-micro); }
   .mshell__logo-full { height: 64px; }
 }
@@ -777,9 +673,7 @@ html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color:
   }
   .mshell__side { padding: 18px 14px 14px; gap: 18px; }
   .mshell__logo-full { height: 72px; }
-  /* 组名只放字号，不加 padding：组头是 flex 行，padding-bottom 会撑高名字盒子，
-     居中后文字墨迹与组图标错行（宽屏下「图标和文字不在一行上」的根因） */
-  .mshell__group-name { font-size: var(--mk-fs-micro); }
+  .mshell__caption { font-size: var(--mk-fs-micro); }
   .mshell__item { font-size: var(--mk-fs-body); padding: 11px 12px; gap: 8px; }
   .mshell__item-badge { font-size: var(--mk-fs-micro); padding: 2px 9px; }
   .mshell__foot { font-size: var(--mk-fs-micro); padding: 10px 12px; }
@@ -792,7 +686,7 @@ html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color:
   }
   .mshell__side { padding: 22px 18px 16px; gap: 22px; }
   .mshell__logo-full { height: 72px; }
-  .mshell__group-name { font-size: var(--mk-fs-micro); }
+  .mshell__caption { font-size: var(--mk-fs-micro); }
   .mshell__item { font-size: var(--mk-fs-body); padding: 14px 14px; gap: 10px; border-radius: var(--mk-radius-xl); }
   .mshell__item-badge { font-size: var(--mk-fs-micro); padding: 3px 10px; }
   .mshell__foot { font-size: var(--mk-fs-micro); padding: 12px 14px; }
@@ -810,7 +704,7 @@ html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color:
   }
   .mshell__side { padding: 26px 22px 18px; gap: 26px; }
   .mshell__logo-full { height: 88px; }
-  .mshell__group-name { font-size: var(--mk-fs-body); }
+  .mshell__caption { font-size: var(--mk-fs-body); }
   .mshell__item { font-size: var(--mk-fs-emphasis); padding: 16px 16px; gap: 12px; }
   .mshell__item-badge { font-size: var(--mk-fs-body); padding: 4px 12px; }
   .mshell__foot { font-size: var(--mk-fs-body); padding: 14px 16px; }
@@ -827,7 +721,7 @@ html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color:
 .mshell[data-collapsed='true'] { grid-template-columns: 64px minmax(0, 1fr); }
 .mshell[data-collapsed='true'] .mshell__item-label,
 .mshell[data-collapsed='true'] .mshell__item-badge,
-.mshell[data-collapsed='true'] .mshell__group-head { display: none; }
+.mshell[data-collapsed='true'] .mshell__caption { display: none; }
 .mshell[data-collapsed='true'] .mshell__foot {
   display: grid;
   justify-items: center;
@@ -880,7 +774,7 @@ html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color:
   .mshell { grid-template-columns: 64px minmax(0, 1fr); }
   .mshell__item-label,
   .mshell__item-badge,
-  .mshell__group-head { display: none; }
+  .mshell__caption { display: none; }
   .mshell__foot {
     display: grid;
     justify-items: center;
@@ -911,16 +805,10 @@ html[data-theme='dark'] {
      卡片抬到 #202124 后侧栏反而比内容更"浅"，主次颠倒。 */
   .mshell__side { background: var(--mk-side-bg); border-right-color: var(--mk-side-line); }
   .mshell__pinned { border-bottom-color: #36373c; }
-  /* 组名（次级文字）：走查实测 #808389 在侧栏底 --mk-side-bg(#1b1c1f) 上对比度 4.43:1，
+  /* 分组标签（次级文字）：走查实测 #808389 在侧栏底 --mk-side-bg(#1b1c1f) 上对比度 4.43:1，
      未达 WCAG 4.5:1。同色相等量提亮为 #898d94（WCAG 公式复算 5.11:1），达标且不明显破坏次级层级。 */
-  .mshell__group-head { color: #898d94; }
-  .mshell__group-head:hover { color: var(--mk-accent-deep); background: rgba(120, 140, 170, 0.08); }
-  .mshell__group-head--active { color: var(--mk-accent-deep); }
-  .mshell__group-icon { color: #7a7e85; }
-  .mshell__group-head:hover .mshell__group-icon,
-  .mshell__group-head--active .mshell__group-icon { color: var(--mk-accent-deep); }
-  .mshell__group-badge { background: var(--mk-side-inset); color: var(--mk-muted, #afb1b6); }
-  .mshell__group-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
+  .mshell__caption { color: #898d94; }
+  .mshell__caption--active { color: var(--mk-accent-deep); }
   .mshell__item-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
   .mshell__item { color: var(--mk-side-item-fg); }
   .mshell__item:hover { background: var(--mk-side-hover); color: var(--mk-ink); }

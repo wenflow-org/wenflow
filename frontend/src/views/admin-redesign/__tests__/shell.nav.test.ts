@@ -37,7 +37,8 @@ describe('Shell 导航', () => {
 
   it('导航分组齐全且顺序稳定（总览为置顶入口，不进分组）', () => {
     const wrapper = mountShell();
-    const groups = wrapper.findAll('.mshell__group-name').map((n) => n.text());
+    // 分组标题自 2026-09-27 起降级为纯文字标签（.mshell__caption），不再是可折叠按钮
+    const groups = wrapper.findAll('.mshell__caption').map((n) => n.text());
     expect(groups).toEqual(['教学', '虚拟学习者', 'Skill', '观测', '系统', '运营']);
   });
 
