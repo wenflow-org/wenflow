@@ -109,8 +109,11 @@ function handleFeedback(thumbsUp: boolean) {
 
 <style scoped>
 .msg-actions {
-  /* 气泡下方独立行（文档流内），不再是绝对定位浮层——浮层会遮住气泡正文末行 */
+  /* 气泡下方独立行（文档流内），不再是绝对定位浮层——浮层会遮住气泡正文末行。
+     右对齐 = 气泡右下角（2026-09-27 用户反馈）：AI 气泡靠左，操作条收到右缘
+     与 meta 行（左）形成对角平衡，也更贴近常见的聊天操作位 */
   display: flex;
+  justify-content: flex-end;
   gap: 2px;
   padding: 2px 0;
   margin-top: -2px;
