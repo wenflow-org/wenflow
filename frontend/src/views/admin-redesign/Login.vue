@@ -260,7 +260,7 @@ onMounted(() => {
 }
 
 .auth__logo img {
-  height: 64px;
+  height: 84px;
   width: auto;
   display: block;
 }
@@ -278,7 +278,7 @@ onMounted(() => {
 
 /* 大屏（2000-2799）：卡片与内容放大；2800+ 交由 v2.css zoom 机制 */
 @media (min-width: 2000px) and (max-width: 2799px) {
-  .auth__logo img { height: 76px; }
+  .auth__logo img { height: 96px; }
   .auth__card {
     width: min(1080px, 100%);
     border-radius: var(--mk-radius-xl);
@@ -632,6 +632,8 @@ onMounted(() => {
 }
 
 @media (max-width: 760px) {
+  .auth__logo img { height: 60px; }
+
   .auth__card {
     grid-template-columns: 1fr;
   }
