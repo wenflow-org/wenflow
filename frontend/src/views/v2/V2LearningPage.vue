@@ -2308,7 +2308,7 @@ onBeforeUnmount(() => {
   font-size: 12px; line-height: 1.5;
 }
 .composer__hint--single { justify-content: flex-end; }
-.composer__hint-note { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer__hint-note { flex: 0 0 auto; } /* flex:1 会撑满整行、把 flex-end 废掉——快捷键要与 AI 声明并排贴右 */
 
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
