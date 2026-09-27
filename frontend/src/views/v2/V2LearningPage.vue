@@ -652,16 +652,36 @@ function closeSupplement(): void {
  * 内容稍有变化就再挂一条（真课实测：几乎每条老师消息都带，像坏了一样）。
  * 现在与前面**所有**消息的卡点并集比对取差集：差集为空 → 隐藏。
  */
+/** 卡点相似度：字符二元组（bigram）Jaccard。措辞级去重会漏掉同义改写
+ *  （"时间长度未经校准" vs "时长未确认"零字符串交集但语义相同），
+ *  bigram 重叠 ≥0.5 视为同一卡点的改写，不再重复挂 chip（基线 31 格实测连续 4 轮刷屏）。 */
+function confusionSimilar(a: string, b: string): boolean {
+  const norm = (s: string) => s.replace(/[\s，。、「」『』""''？！?!,.:：;；的了吗呢吧啊地得]/g, '');
+  const x = norm(a); const y = norm(b);
+  if (!x || !y) return false;
+  if (x.includes(y) || y.includes(x)) return true;
+  const grams = (s: string) => {
+    const set = new Set<string>();
+    for (let k = 0; k < s.length - 1; k++) set.add(s.slice(k, k + 2));
+    return set;
+  };
+  const gx = grams(x); const gy = grams(y);
+  if (!gx.size || !gy.size) return x === y;
+  let inter = 0;
+  for (const g of gx) if (gy.has(g)) inter++;
+  return inter / (gx.size + gy.size - inter) >= 0.5;
+}
 function confusionDeltaAt(i: number): string[] {
   const list = msgs.value;
   const cur = Array.isArray(list[i]?.confusion) ? (list[i]!.confusion as string[]) : [];
   if (!cur.length) return [];
-  const seen = new Set<string>();
+  const seen: string[] = [];
   for (let j = 0; j < i; j++) {
     const prev = Array.isArray(list[j]?.confusion) ? (list[j]!.confusion as string[]) : [];
-    for (const item of prev) seen.add(String(item));
+    for (const item of prev) seen.push(String(item));
   }
-  return cur.map(String).filter((item) => !seen.has(item));
+  // 当前条目若与历史任一卡点相似 → 视为同一卡点的改写，不计为新增
+  return cur.map(String).filter((item) => !seen.some((prev) => confusionSimilar(item, prev)));
 }
 function showConfusionAt(i: number): boolean {
   return confusionDeltaAt(i).length > 0;

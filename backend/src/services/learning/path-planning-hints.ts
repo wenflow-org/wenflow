@@ -182,6 +182,8 @@ export interface PlanningHints {
   targetMilestones: number | null;
   /** 强制每阶段子任务目标数量（由总学时/里程碑数推导，stage-designer 必须精确输出该值） */
   targetSubtasksPerStage: number | null;
+  /** 锚定总学时（课次×单次时长/goal 直接推断；存在时 path-planning 须把各阶段学时之和分配到 ±50% 内） */
+  targetTotalHours: number | null;
 }
 
 /**
@@ -494,9 +496,39 @@ export function derivePlanningHints(
         ? (timeDimensions!.totalWeeks as number) * (timeDimensions!.sessionsPerWeek as number)
           * (timeDimensions!.sessionsLengthMin as number) / 60
         : null;
+  // ---- 大预算扩容（2026-09-27，基线 31 格实测驱动）：锚定总学时超过结构天花板
+  // （阶段×任务×单任务分钟上限）时，按需抬升每阶段任务上限与单任务分钟上界——
+  // 任务语义升级为「学习单元（可含多次坐学）」。基线收缩比 0.07-0.74（中位 0.13-0.26）
+  // 的根因即此天花板：90-180h 真实预算被 5 阶段×6 任务×120min 压掉 70-90%，
+  // 且 mastery 人设的"把预算排满"抵抗对它零效果（对话信号不进结构先验）。
+  // 触发判据 = 容量赤字：锚定分钟数 > 当前上界容量（分钟上界×每阶段任务上限）。
+  const perStageHours = targetMilestones !== null && estimatedHoursTotal !== null
+    ? estimatedHoursTotal / targetMilestones
+    : null;
+  const capacityMin = subtaskMinutesRange[1] * subtasksPerStageRange[1];
+  const anchorMin = estimatedHoursTotal !== null ? estimatedHoursTotal * 60 : null;
+  const capacityDeficit = anchorMin !== null && perStageHours !== null && targetMilestones !== null
+    ? anchorMin > capacityMin && perStageHours > 6
+    : false;
+  if (capacityDeficit) {
+    const perStageMin = anchorMin / targetMilestones;
+    const needed = Math.ceil(perStageMin / Math.min(subtaskMinutesRange[1], 120));
+    subtasksPerStageRange = [
+      Math.max(3, Math.min(subtasksPerStageRange[0], Math.ceil(needed / 2))),
+      Math.min(10, Math.max(subtasksPerStageRange[1], needed)),
+    ];
+    const avgTaskMin = Math.ceil(perStageMin / subtasksPerStageRange[1]);
+    subtaskMinutesRange = [
+      Math.max(subtaskMinutesRange[0], 30),
+      Math.min(240, Math.max(subtaskMinutesRange[1], avgTaskMin * 2)),
+    ];
+  }
+  // 锚定总学时透传（供 path-planning prompt 把"总预算"显式交给 LLM 分配）
+  const targetTotalHours = estimatedHoursTotal;
   // perStage 从总学时反推时，上限必须被 subtasksPerStageRange 钳制：scope_size 是"问题多大"的硬约束，
   // 不能因为 goal 碰巧推断出 estimatedHours 就突破 scope 的任务密度上限（否则 micro/small 又会被撑大）。
   // 下限保持宽松（硬编码 2），允许比 pace 默认更少，不被抬升。
+  // 单任务小时：常规 1h/任务；仅抬升分支按均摊小时计（任务=学习单元，含多次坐学）。
   const subtasksCap = subtasksPerStageRange[1];
   const perStageFromHours: number | null =
     targetMilestones !== null && estimatedHoursTotal !== null
@@ -524,6 +556,7 @@ export function derivePlanningHints(
     conceptRange,
     subtasksPerStageRange: effectiveSubtasksPerStageRange,
     targetSubtasksPerStage,
+    targetTotalHours,
     subtaskMinutesRange,
     maxWeeks,
   };

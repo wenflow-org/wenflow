@@ -238,13 +238,17 @@ describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数�
     expect(hints.subtasksPerStageRange).toEqual([4, 6]);
   });
 
-  it('每阶段任务数超出范围时按 pace 区间上限夹取（无 scope 时 standard 上限 5）', () => {
-    // 30h / 3 里程碑 / 1h → 10，null 时间 → standard subtasksPerStageRange=[3,5]，夹取到 5
+  it('每阶段任务数超范围时触发大预算扩容（2026-09-27）：30h 预算不再被 5 任务×1h 压成 15h', () => {
+    // 旧口径：30h/3 里程碑/1h → 10，被 standard 上限 5 夹住 ⇒ 全路径只承载 15h（收缩 50%）。
+    // 新口径：容量赤字（1800min > 90min×5）触发扩容——每阶段任务上限抬到 7、分钟上界抬到 128，
+    // 让结构容量 ≥ 预算（3×7×~128min ≈ 30h）。这是量级守恒（P0-3）的核心行为变更。
     const high = derivePlanningHints(
       null, null, null, null, ['S1', 'S2', 'S3'],
       { totalWeeks: null, estimatedHours: 30, sessionsPerWeek: null, sessionsLengthMin: null }
     );
-    expect(high.targetSubtasksPerStage).toBe(5);
+    expect(high.targetSubtasksPerStage).toBe(7);
+    expect(high.subtaskMinutesRange[1]).toBeGreaterThan(90);
+    expect(high.targetTotalHours).toBe(30);
     // 1.4h / 4 里程碑 → ~0.35，下限硬编码 2
     const low = derivePlanningHints(
       null, null, null, null, ['S1', 'S2', 'S3', 'S4'],
