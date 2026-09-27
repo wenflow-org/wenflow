@@ -1468,7 +1468,7 @@ onMounted(loadAll);
   display: grid; place-items: center;
   font-size: 12px; font-weight: 800;
 }
-.day__min { font-size: 12px; color: var(--muted); }
+.day__min { font-size: 12px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* 脏数据（如单日 1622 分）不破格 */
 /* 热力色阶（浅色）：背景=学习强度；`.mday` 的日期数字始终可读 */
 .day__cell--h0, .mday--h0 { background: #eef2f8; color: var(--ink, #172033); }
 .day__cell--h1, .mday--h1 { background: color-mix(in srgb, var(--blue) 20%, transparent); color: var(--blue-deep); }
