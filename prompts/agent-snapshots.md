@@ -208,7 +208,7 @@ sandbox:path-agent.subtasks.title
 
 | 字段 | 类型 | handoff |
 |---|---|---|
-| `reply` | string | teaching-agent |
+| `reply` | string | teaching-agent, skill:peer-reinforcement |
 | `analysis.levelScore` | number | teaching-agent |
 | `analysis.confusionPoints` | array<string> | teaching-agent |
 | `analysis.engagement` | number | teaching-agent |
