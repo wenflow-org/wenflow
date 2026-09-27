@@ -663,11 +663,13 @@ onMounted(() => {
     min-height: calc(100vh - 52px);
   }
 }
+/* 2026-09-27 admin 走查：原 11px 低于项目微字下限（--mk-fs-micro: 12px），提至 12px；
+   水平 padding 7px→6px 补偿字号变大带来的视觉重量。 */
 .demo__tag {
   margin-left: auto;
-  padding: 1px 7px;
+  padding: 1px 6px;
   border-radius: var(--mk-radius-pill);
-  font-size: 11px;
+  font-size: var(--mk-fs-micro, 12px);
   color: var(--mk-faint);
   border: 1px solid var(--mk-line);
 }

@@ -1345,7 +1345,9 @@ function stepHue(step: FlowStep): string {
   border-color: color-mix(in srgb, var(--fam-path) 36%, var(--mk-line));
   border-style: dashed;
 }
-.dfg-journey__node.is-start .dfg-journey__dir { color: var(--fam-path); }
+/* 2026-09-27 admin 走查：「↑ 数据起点」方向标注用 --fam-path（#16a34a）在浅色卡面仅 3.3:1（<4.5:1），
+   换同色相深档 --mk-green（#15803d，白底约 5.0:1） */
+.dfg-journey__node.is-start .dfg-journey__dir { color: var(--mk-green); }
 .dfg-journey__node.is-end {
   cursor: default;
   background: linear-gradient(180deg, var(--mk-graph-node-top), var(--mk-graph-end-b));
@@ -1435,7 +1437,9 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-gate__icon {
   width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--mk-radius-sm); color: var(--mk-graph-on-accent); font-size: var(--mk-fs-micro); font-weight: 800; flex-shrink: 0;
-  background: var(--hz);
+  /* 2026-09-27 admin 走查：白字压 --hz 实心底最低仅 3.74:1（path 青 #0d9488）<4.5:1，
+     底色混入 --mk-ink 加深为同色相深档（白字对青升到约 5.6:1、最差的琥珀约 5.0:1，白字本身不动） */
+  background: color-mix(in srgb, var(--hz) 70%, var(--mk-ink));
 }
 .dfg-gate__title { display: grid; gap: 1px; min-width: 0; flex: 1; }
 .dfg-gate__title strong { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
@@ -1695,6 +1699,8 @@ html[data-theme='dark'] {
   }
   .dfg-gate { background: color-mix(in srgb, var(--hz) 7%, var(--mk-graph-gate)); border-color: color-mix(in srgb, var(--hz) 40%, var(--mk-line)); }
   .dfg-gate--exit { background: color-mix(in srgb, var(--hz) 8%, var(--mk-graph-journey-a)); }
+  /* 暗色下 --mk-ink 翻转为浅色，上面的加深混色会反向；回退实心 --hz 维持走查前表现（本次走查范围为浅色卡面） */
+  .dfg-gate__icon { background: var(--hz); }
   .dfg-gate__title strong { color: var(--mk-graph-node-ink); }
   .dfg-gate__count { background: var(--mk-graph-badge-bg); color: var(--mk-muted); }
   .dfg-step { background: var(--mk-graph-canvas); border-color: color-mix(in srgb, var(--hz) 20%, var(--mk-line)); }

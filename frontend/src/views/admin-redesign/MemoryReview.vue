@@ -733,7 +733,9 @@ onMounted(async () => {
 .mr-queue--quiet .mr-queue__num { color: var(--mk-faint); }
 .mr-queue__num i { font-style: normal; font-size: 13px; font-weight: 600; color: var(--mk-faint); }
 .mr-queue__label { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); display: grid; }
-.mr-queue__label small { font-weight: 400; color: var(--mk-faint); font-size: 11px; line-height: 1.4; }
+/* 2026-09-27 admin 走查：四张队列卡（需人工看/可自动执行/待归并建议/已执行÷删除）的
+   说明文字 11px 低于项目字号下限 12px，抬到 12px（四卡共用本条规则） */
+.mr-queue__label small { font-weight: 400; color: var(--mk-faint); font-size: 12px; line-height: 1.4; }
 
 /* ===== 用户表行设计 ===== */
 .mr__user { display: flex; align-items: center; gap: 9px; min-width: 0; }
