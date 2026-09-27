@@ -85,6 +85,27 @@ async function ensureProbeUser(personaId) {
   return { name, existed: reg.status !== 201 };
 }
 
+/** v1.3 带文件格：先把 fixtures 上传到用户资料库（multipart，字段名 file），返回材料 id 列表。 */
+async function uploadFixtures(persona) {
+  const ids = [];
+  for (const up of persona.uploads || []) {
+    const filePath = path.join(__dirname, 'fixtures', up.fixture);
+    const buf = fs.readFileSync(filePath);
+    const form = new FormData();
+    form.append('file', new Blob([buf]), up.fixture);
+    const res = await fetch(BASE + '/api/materials', {
+      method: 'POST',
+      headers: { Cookie: cookie, Origin: 'http://localhost:5173' },
+      body: form,
+    });
+    const j = await res.json().catch(() => ({}));
+    const id = j?.data?.id || j?.data?.materialId || j?.data?.record?.id || null;
+    log(`upload ${up.fixture} -> ${res.status}${id ? ' id=' + String(id).slice(0, 18) : ' body=' + JSON.stringify(j).slice(0, 120)}`);
+    if (id) ids.push(String(id));
+  }
+  return ids;
+}
+
 function statePath(personaId, run) { return path.join(RESULTS, `${personaId}-r${run}.json`); }
 function loadState(p) { return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null; }
 function saveState(p, st) { fs.writeFileSync(p, JSON.stringify(st, null, 1)); }
@@ -102,6 +123,12 @@ async function driveCell(personaId, runIndex) {
   };
 
   await ensureProbeUser(personaId);
+
+  // ---- 带文件格：先上传 fixtures（幂等：只在会话首次驱动时传一次） ----
+  if ((persona.uploads || []).length && !st.uploadedMaterialIds) {
+    st.uploadedMaterialIds = await uploadFixtures(persona);
+    saveState(sp, st);
+  }
 
   // ---- 会话阶段 ----
   if (!st.conversationId) {
@@ -180,12 +207,17 @@ async function driveCell(personaId, runIndex) {
   // ---- 生成等待阶段 ----
   if (st.status === 'awaiting-path' && st.pathId) {
     const deadline = Date.now() + GEN_TIMEOUT_MS;
+    let failGrace = 0; // 2026-09-27：生成器有自动重试（attempt1 failed → attempt2 succeeded），
+    // 首次 failed 只记账，连续 4 次（≈1min）仍 failed 才判死——避免把重试中的运行误判为 failed-gen
     while (Date.now() < deadline) {
       const g = await api('GET', `/api/learning/paths/${st.pathId}/generation-status`);
       const lc = g.json?.data?.lifecycle || '';
       st.generationLifecycle = lc;
       if (lc === 'ready') break;
-      if (String(lc).includes('failed')) { st.status = 'failed-gen'; break; }
+      if (String(lc).includes('failed')) {
+        failGrace += 1;
+        if (failGrace >= 4) { st.status = 'failed-gen'; break; }
+      } else failGrace = 0;
       await sleep(15000);
     }
     if (st.status === 'awaiting-path') {

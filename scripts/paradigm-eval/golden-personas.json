@@ -1,9 +1,9 @@
 {
  "$meta": {
   "name": "paradigm-evolution-golden-personas",
-  "version": "1.2-horizontal",
+  "version": "1.3-timing-files",
   "date": "2026-09-27",
-  "purpose": "多范式演进效果测试金料人设集。配套 TESTPLAN-paradigm-evolution-2026-09-27.md。10 正格（repeat:3）+ 2 域适配负样本（repeat:1）；v1.1 增补 3 个真实语料亚型（refresh/app-fatigue/plateau）；v1.2 横向扩展 10 个人设：新领域（日语/历史/中文写作/统计/数据分析/ML数学/法考）× 新压力面（转行/读论文/小预算/大预算/中途改需求/未成年/纯兴趣/多目标打架）。",
+  "purpose": "多范式演进效果测试金料人设集。配套 TESTPLAN-paradigm-evolution-2026-09-27.md。v1.0 十正格+2 负样本；v1.1 +3 真实语料亚型；v1.2 横向 10 人设；v1.3 +8：时长两极（sprint-interview 6h/cram-python 12h/longrun-fullstack 2190h/slow-tongjian 487h）+ 联网时机强信号（exam-jiaozhi/policy-teacher）+ 带文件用户（file-syllabus/file-mistakes，uploads 字段由 driver 先传 /api/materials）。",
   "v12ExpansionAxes": [
    "领域横向：脱离英语主导（v1.1 里 7/13 正格是英语），补语言第二外语、人文通识、写作、应用统计、数据职业、法考大考纲",
    "预算横向：daily-jp 15min/天小预算下限压测、heavy-fp 6h/天大预算上限压测（直击扩容块与守恒 prompt）、switch-data 270h 中大预算",
@@ -486,6 +486,130 @@
     "那就按英语来，出方案吧。"
    ],
    "expectedStageShape": "对话应引导收敛到单一主线（英语），不得生成三合一杂烩路径",
+   "repeat": 1
+  },
+  {
+   "personaId": "sprint-interview",
+   "intentType": "problem-fix",
+   "domain": "英语·面试突击",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "3 天", "horizonDays": 3, "dailyMinutes": 120, "expectedHours": 6 },
+   "opening": "这周五有个外资公司的数据岗面试，今天周二，满打满算 3 天，每天下班能准备 2 小时。英语底子四级，想突击一下面试口语和常见问答。",
+   "followUps": [
+    "岗位是数据分析，会用英语让我讲简历里的项目经历，还会问一些行为问题。",
+    "四级 520 分，能读但开口卡，一紧张就蹦单词。",
+    "面试是 30 分钟视频，其中 10 分钟英语交流。可以，出方案吧。"
+   ],
+   "expectedStageShape": "1-2 个阶段的微型路径（3 天可完成），任务颗粒 30-60 分钟，围绕面试问答准备",
+   "repeat": 1
+  },
+  {
+   "personaId": "cram-python",
+   "intentType": "exam",
+   "domain": "编程·Python二级",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "4 天", "horizonDays": 4, "dailyMinutes": 180, "expectedHours": 12 },
+   "opening": "这周日考计算机二级 Python，今天还剩 4 天，我每天能挤 3 小时。求一个冲刺安排。",
+   "followUps": [
+    "做过两套真题，选择题能拿 30 分上下，操作题基本空着不会下手。",
+    "大学学过一学期 Python，循环和函数会写，文件操作和组合数据类型没学好。",
+    "目标就是 60 分过。可以，出方案吧。"
+   ],
+   "expectedStageShape": "4 天可完成的冲刺结构；操作题占 60 分应为主要篇幅，不得按学期节奏铺开",
+   "repeat": 1
+  },
+  {
+   "personaId": "longrun-fullstack",
+   "intentType": "career-switch",
+   "domain": "编程·全栈转行",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "三年", "horizonDays": 1095, "dailyMinutes": 120, "expectedHours": 2190 },
+   "opening": "我今年 24 岁，毕业后做了两年行政，想转行做全栈开发。给自己三年时间，每天下班学 2 小时。从零基础开始，HTML 都不会。",
+   "followUps": [
+    "目标是三年后能拿到全栈开发的 offer，能独立做出完整的 web 项目。",
+    "每天雷打不动 2 小时，周末能到 4 小时，按平均每天 2 小时算。"
+   ],
+   "expectedStageShape": "超大预算（2000h+）应诚实处理：8-12 阶段长期大纲或明示分程（先规划第一段），不得缩成 20h 小闭环也不得编造 2000h",
+   "repeat": 1
+  },
+  {
+   "personaId": "slow-tongjian",
+   "intentType": "interest",
+   "domain": "历史·资治通鉴通读",
+   "expectedParadigm": "chronological-thematic",
+   "budget": { "horizon": "两年", "horizonDays": 730, "dailyMinutes": 40, "expectedHours": 487 },
+   "opening": "我想用两年时间把《资治通鉴》通读下来，每天睡前 40 分钟。以前翻过白话版，文言文底子是高中水平。",
+   "followUps": [
+    "不求逐字精读，能通读下来、抓住司马光对每段历史的判断就够了。",
+    "就按你的思路来，给我出方案吧。"
+   ],
+   "expectedStageShape": "长周期分卷/分阶段通读规划，量级应接近 300-500h 而非 10h 小闭环；无考核需求应被尊重",
+   "repeat": 1
+  },
+  {
+   "personaId": "exam-jiaozhi",
+   "intentType": "exam",
+   "domain": "应试·教师资格证",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "两个月", "horizonDays": 60, "dailyMinutes": 120, "expectedHours": 120 },
+   "opening": "准备考小学教师资格证，科目一综合素质和科目二教育教学知识与能力都没底，两个月后考试，每天能学 2 小时。",
+   "followUps": [
+    "非师范专业，教育学心理学完全零基础。",
+    "刷过一点真题，客观题基本靠蒙，主观题不知道答题框架。",
+    "目标笔试一次过。可以，出方案吧。"
+   ],
+   "expectedStageShape": "阶段按两科考纲模块组织；理想情况 needsMaterial 命中国权威考纲/真题结构（联网时机探针）",
+   "repeat": 1
+  },
+  {
+   "personaId": "policy-teacher",
+   "intentType": "problem-fix",
+   "domain": "教育·新课标理解",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "三个月", "horizonDays": 90, "dailyMinutes": 60, "expectedHours": 90 },
+   "opening": "我是初中英语老师，2022 版义务教育英语新课标出来了，里面的『学业质量标准』和『英语学习活动观』我总是吃不透。想系统搞懂新课标比 2011 版变了什么、课堂上怎么落地。每天晚自习后 1 小时。",
+   "followUps": [
+    "教龄 6 年，教材换新版了，教研组讨论我插不上话。",
+    "最想搞懂学业质量标准怎么用来命题和评课。",
+    "三个月内能在教研组做个新课标分享。可以，出方案吧。"
+   ],
+   "expectedStageShape": "围绕课标文本的关键概念组织（学业质量标准/学习活动观/主题语境）；理想情况 needsMaterial 应想抓课标原文（联网时机探针）",
+   "repeat": 1
+  },
+  {
+   "personaId": "file-syllabus",
+   "intentType": "exam",
+   "domain": "编程·Python二级（带考纲文件）",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "5 周", "horizonDays": 35, "dailyMinutes": 60, "expectedHours": 35 },
+   "uploads": [
+    { "fixture": "Python二级考纲.txt", "mention": "《Python二级考纲》" }
+   ],
+   "opening": "我要考计算机二级 Python，考纲文件我已经上传到资料库里了（就是那份《Python二级考纲》）。还有 5 周，每天能学 1 小时，帮我按这份考纲安排复习。",
+   "followUps": [
+    "大学学过一学期，函数和循环会写。",
+    "最怕操作题，真题的操作题基本拿不到分。",
+    "目标 60 分过。可以，出方案吧。"
+   ],
+   "expectedStageShape": "阶段应围绕上传考纲的章节/题型组织（组合数据类型/文件/操作题专项等）；验收=里程碑或任务引用考纲概念",
+   "repeat": 1
+  },
+  {
+   "personaId": "file-mistakes",
+   "intentType": "problem-fix",
+   "domain": "英语·高二错题（带错题本文件）",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "一个多月", "horizonDays": 40, "dailyMinutes": 40, "expectedHours": 27 },
+   "uploads": [
+    { "fixture": "英语错题本.md", "mention": "英语错题本" }
+   ],
+   "opening": "我高二，这学期的英语错题本我上传到资料库里了（英语错题本.md），里面有 20 条错题。期末还有一个多月，每天 40 分钟，帮我按错题本把语法漏洞补上。",
+   "followUps": [
+    "错题集中在时态和从句，完形和作文最疼。",
+    "语法选择题正确率 60% 左右。",
+    "目标期末语法正确率 80%。可以，出方案吧。"
+   ],
+   "expectedStageShape": "阶段应按错题本薄弱类目组织（时态/从句/非谓语/固定搭配），任务应引用错题条目或题型（错题本总结里自己写了类目分布）",
    "repeat": 1
   }
  ]
