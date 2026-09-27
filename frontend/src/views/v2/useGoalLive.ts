@@ -112,7 +112,6 @@ const pushMessage = (m: LiveMessage): LiveMessage => {
 /** 交互特征采集器（认知负荷量测 · 前端情报层），暴露给页面做输入埋点 */
 const metaTracker = useInteractionMeta();
 const stage = ref<'understanding' | 'proposing' | 'ready' | 'completed' | ''>('');
-const confidence = ref(0);
 const isCompleted = ref(false);
 const understanding = ref<GoalUnderstanding>({});
 const collected = ref<Record<string, unknown>>({});
@@ -123,6 +122,9 @@ const probeAnswers = ref<Record<string, string>>({});
 const learningPath = ref<{ id: string; status?: string } | null>(null);
 const sending = ref(false);
 const failed = ref<'start' | 'reply' | 'confirm' | 'supplement' | 'resume' | ''>('');
+/** 最近一次「用户主动停止」的动作：与 failed 并行记录。主动中止不是故障，
+    视图据此显示「已停止」而非「连接失败」（failed 仍置位以保留重试入口） */
+const stopped = ref<'start' | 'reply' | 'confirm' | 'supplement' | ''>('');
 const lastPayload = ref('');
 const freshKeys = ref<string[]>([]);
 const started = ref(false);
@@ -272,9 +274,8 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
   stage.value = rawStage === 'understanding' || rawStage === 'proposing' || rawStage === 'ready' || rawStage === 'completed'
     ? rawStage
     : 'understanding';
-  confidence.value = Math.round((core?.confidence ?? 0) * 100);
-  isCompleted.value = core?.isCompleted === true;
-  learningPath.value = core?.learningPath ?? null;
+  // confidence：信封仍带该字段，但页面从不渲染（2026-09-27 死状态清理），不再维护
+  isCompleted.value = core?.isCompleted === true;  learningPath.value = core?.learningPath ?? null;
   // 已完成的会话不再作为「继续上次的规划」入口：路径已生成，恢复终态会话只会造成
   // 「已经产生了新路径，goal 还让继续上次规划」的困惑。清本地缓存（带 :conversationId
   // 的 URL 回看不依赖该缓存，resumeById 按 id 直取）。
@@ -343,6 +344,7 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
   const gen = generation;
   sending.value = true;
   failed.value = '';
+  stopped.value = '';
   lastPayload.value = text;
   // 流式渐进渲染：SSE delta 累积实时上屏；goal skill 为 JSON 输出（无结构化 delta），
   // 展示原始模型文本作为「正在思考」的可见反馈，final 到达后以官方消息为准替换。
@@ -367,10 +369,17 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
       }
     } catch (streamError) {
       const e = streamError as { cancelled?: boolean; transport?: boolean; recoveryEnvelope?: GoalConversationEnvelope };
-      // 用户主动停止：置 failed 提供重试入口（流式部分保留在 streamingText）
+      // 用户主动停止：stopped 置位（视图显示「已停止」而非「连接失败」），
+      // failed 仍置位提供重试入口；已收到的流式部分落成消息，
+      // 否则 finally 清空 streamingText 后用户读到一半的答案直接消失
       if (e.cancelled && userStopped) {
+        stopped.value = action;
         failed.value = action;
-        if (action !== 'start' && action !== 'supplement') {
+        const partial = streamingText.value.trim();
+        if (partial) {
+          // 打 failed 标记：重试会先移除该条再重发，避免新旧答案叠在一起
+          pushMessage({ role: 'ai', content: partial, time: nowTime(), failed: true });
+        } else if (action !== 'supplement') {
           pushMessage({ role: 'ai', content: '已停止生成。可以点下方「重试」继续，或直接输入新内容。', time: nowTime(), failed: true });
         }
         throw streamError;
@@ -440,7 +449,8 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
     if (currentAbort === abort) currentAbort = null;
   }
 }
-/** 中止当前流式生成：SSE 连接断开，已流出的部分保留在 streamingText（可继续/重试） */
+/** 中止当前流式生成：SSE 连接断开；已流出的部分在 run 的 catch 里落成消息（不随
+    finally 清空消失），并置 stopped/failed 提供「已停止」文案与重试入口 */
 function stop() {
   userStopped = true;
   currentAbort?.abort();
@@ -548,7 +558,6 @@ function reset(clearStorage = true) {
   conversationId.value = '';
   messages.value = [];
   stage.value = '';
-  confidence.value = 0;
   isCompleted.value = false;
   understanding.value = {};
   collected.value = {};
@@ -557,6 +566,7 @@ function reset(clearStorage = true) {
   learningPath.value = null;
   freshKeys.value = [];
   failed.value = '';
+  stopped.value = '';
   started.value = false;
   if (clearStorage) {
     removeGoalConversationStorage();
@@ -578,7 +588,6 @@ export function useGoalLive() {
     messages,
     stage,
     stageIndex,
-    confidence,
     isCompleted,
     fields,
     filledCount,
@@ -590,6 +599,7 @@ export function useGoalLive() {
     sending,
     streamingText,
     failed,
+    stopped,
     started,
     meta: metaTracker,
     send,

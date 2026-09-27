@@ -156,8 +156,11 @@ export function usePeerAssistant(session: Ref<{ sessionId: string; revision: num
     await sendPeerCore(t);
   }
 
-  /** 重新开课时清空伴学窗（上一会话内容不残留到新开课） */
+  /** 重新开课时清空伴学窗（上一会话内容不残留到新开课）。
+      清空前先中止在途伴学流式请求：旧会话的响应落到新会话的浮窗里就是串场 */
   function resetPeer() {
+    peerStreamAbort?.abort();
+    peerStreamAbort = null;
     peerItems.value = [];
     peerUnread.value = false;
     peerOpen.value = false;

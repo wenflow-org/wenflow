@@ -116,11 +116,17 @@ function handleFeedback(thumbsUp: boolean) {
   padding: 2px 0;
   margin-top: -2px;
 }
-/* 占位隐藏（visibility 而非 display:none）：操作条隐藏时仍撑住 meta 行高度，
-   hover 出现/消失时下方文字不再上下跳动（2026-09-27 用户反馈） */
+/* 占位隐藏：隐藏时仍撑住 meta 行高度，出现/消失时下方文字不上下跳动。
+   用 opacity 而非 visibility:hidden——visibility 会把按钮移出 Tab 焦点序，
+   键盘用户永远够不到操作（P2 a11y）；opacity 占位效果相同，按钮仍可聚焦，
+   聚焦进入时经 :focus-within 显形（键盘可达 = 可见，鼠标 hover 逻辑不变） */
 .msg-actions--hidden {
-  visibility: hidden;
+  opacity: 0;
   pointer-events: none;
+}
+.msg-actions--hidden:focus-within {
+  opacity: 1;
+  pointer-events: auto;
 }
 .msg-actions__btn {
   display: inline-flex;

@@ -39,7 +39,12 @@ function onDocClick(e: MouseEvent) {
   if (!wrapRef.value.contains(e.target as Node)) open.value = false;
 }
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') open.value = false;
+  // 只在菜单开着时响应并阻断冒泡：页面级 Esc 处理器挂在 window（document 之后触发），
+  // 不阻断的话同一次 Esc 会既关菜单又触发页面语义（停止生成/跳过检查点——
+  // 跳过会真调后端计数，必答检查点也会被绕过）
+  if (e.key !== 'Escape' || !open.value) return;
+  open.value = false;
+  e.stopPropagation();
 }
 
 onMounted(() => {

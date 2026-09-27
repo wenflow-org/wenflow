@@ -82,8 +82,12 @@ export function useMessageActions(deps: {
 
   async function regenerateMessage(m: ChatMsg) {
     if (typing.value || !session.value) return;
-    // Find the user message preceding this AI message
     const idx = msgs.value.indexOf(m);
+    // 只允许重生成最后一条 AI 消息（与模板入口口径一致，双保险）：重生成会删除该气泡并
+    // 重发其前驱问题，对历史中段的 AI 消息触发会把其后整个对话错位清掉
+    const lastAiIdx = msgs.value.map((x) => x.role).lastIndexOf('ai');
+    if (idx < 0 || idx !== lastAiIdx) { toast.info('只能重新生成最新的回复'); return; }
+    // Find the user message preceding this AI message
     let lastUser = '';
     for (let i = idx - 1; i >= 0; i--) {
       if (msgs.value[i].role === 'user') { lastUser = msgs.value[i].text; break; }

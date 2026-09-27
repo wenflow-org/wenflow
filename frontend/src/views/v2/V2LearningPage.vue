@@ -50,6 +50,11 @@
         <h2>正在准备本节内容…</h2>
         <p>问流正在为「{{ taskTitle || '当前任务' }}」组织讲解和练习，一般几秒到十几秒。</p>
         <div class="stage-card__skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
+        <!-- 返回常驻（移动端头部返回键被隐藏）；长时间无响应再亮出重试，页面不无出口 -->
+        <div class="stage-card__actions">
+          <button v-if="initStuck" type="button" class="btn-primary" @click="boot">重新尝试</button>
+          <button type="button" class="btn-ghost" @click="goBack">‹ 返回路径详情</button>
+        </div>
       </div>
     </div>
 
@@ -259,14 +264,16 @@
                   <span class="msg__supplement-title">{{ m.supplement.title }}</span>
                   <span class="msg__supplement-topic">关于「{{ m.supplement.topic }}」· 点开看原文</span>
                 </button>
+                <!-- streaming 复用为「不可重生成」口径：MessageActions 以 streaming 隐藏「重新生成」，
+                     非最后一条 AI 消息一律不可重生成（避免历史中段重生成导致顺序错乱） -->
                 <MessageActions
                   :show="hoveredMsgId === m.id"
-                  :streaming="typing && streamingBubbleIndex === msgs.indexOf(m)"
+                  :streaming="(typing && streamingBubbleIndex === mi) || mi !== lastAiIndex"
                   @regenerate="regenerateMessage(m)"
                   @copy="copyMessage(m.text)"
                   @feedback="(up) => sendMessageFeedback(m, up)"
                 />
-                <span v-if="showConfusionAt(mi)" class="msg__chip msg__chip--confuse">捕获到卡点「{{ confusionDeltaAt(mi).join('、') }}」· 导师会在这里多做确认</span>
+                <span v-if="confusionDeltas[mi]?.length" class="msg__chip msg__chip--confuse">捕获到卡点「{{ confusionDeltas[mi]?.join('、') }}」· 导师会在这里多做确认</span>
                 <div class="msg__meta">
                   问流导师 · {{ m.time }}
                   <button v-if="m.failed" type="button" class="msg__retry" @click="retryLast">重试</button>
@@ -368,6 +375,7 @@
               :tabindex="checkpointPending ? -1 : 0"
               @click="submitCheckpoint"
               @keydown.enter="submitCheckpoint"
+              @keydown.space.prevent="submitCheckpoint"
             >{{ checkpointPending ? '判定中…' : '提交' }}</span>
             <span
               v-if="checkpoint.allowSkip !== false && !checkpointPending && !checkpointSubmitting"
@@ -376,6 +384,7 @@
               tabindex="0"
               @click="skipCheckpoint"
               @keydown.enter="skipCheckpoint"
+              @keydown.space.prevent="skipCheckpoint"
             >跳过</span>
             <span
               v-if="checkpointSubmitting && !checkpointStreaming"
@@ -384,6 +393,7 @@
               tabindex="0"
               @click="dismissCheckpoint"
               @keydown.enter="dismissCheckpoint"
+              @keydown.space.prevent="dismissCheckpoint"
             >继续 ›</span>
             <span v-else-if="checkpointStreaming" class="checkpoint__streaming">导师正在讲解…</span>
           </div>
@@ -426,6 +436,7 @@
               title="停止生成"
               @click="stopGeneration"
               @keydown.enter="stopGeneration"
+              @keydown.space.prevent="stopGeneration"
             >
               <svg viewBox="0 0 24 24" width="13" height="13"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
             </span>
@@ -450,8 +461,8 @@
               <span v-for="(s, i) in finishStats" :key="i"><b>{{ s.value }}</b>{{ s.label }}</span>
             </div>
             <div class="finish__actions">
-              <span class="btn-primary" role="button" tabindex="0" @click="goBack" @keydown.enter="goBack">回到路径详情</span>
-              <span v-if="evaluationUrl" class="btn-ghost" role="button" tabindex="0" @click="goEvaluation" @keydown.enter="goEvaluation">查看学习反馈</span>
+              <span class="btn-primary" role="button" tabindex="0" @click="goBack" @keydown.enter="goBack" @keydown.space.prevent="goBack">回到路径详情</span>
+              <span v-if="evaluationUrl" class="btn-ghost" role="button" tabindex="0" @click="goEvaluation" @keydown.enter="goEvaluation" @keydown.space.prevent="goEvaluation">查看学习反馈</span>
             </div>
           </div>
         </div>
@@ -532,7 +543,7 @@
       <div class="supmodal__card" role="dialog" aria-label="补充资料原文">
         <div class="supmodal__head">
           <strong>{{ supplementPreview.title }}</strong>
-          <button type="button" class="supmodal__close" aria-label="关闭" @click="closeSupplement">✕</button>
+          <button ref="supCloseBtn" type="button" class="supmodal__close" aria-label="关闭" @click="closeSupplement">✕</button>
         </div>
         <div class="supmodal__body">
           <p v-if="supplementPreview.loading" class="supmodal__loading">正在读取原文…</p>
@@ -559,7 +570,6 @@ import TeachingDiagram from '@/components/TeachingDiagram.vue';
 import TeachingFigure from '@/components/TeachingFigure.vue';
 import { toast } from '@/utils/toast';
 import { useInteractionMeta } from '@/composables/useInteractionMeta';
-import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { unwrap } from './unwrap';
@@ -594,30 +604,39 @@ function onNarrowChange(e: MediaQueryListEvent) {
 }
 
 /* ---------- 键盘快捷键 ---------- */
-useKeyboardShortcuts([
-  {
-    key: 'Escape',
-    handler: () => {
-      if (completed.value) return;
-      // 流式生成中：中止
-      if (typing.value && streamAbort) {
-        streamAbort.abort();
-        streamAbort = null;
-        return;
-      }
-      // 检查点可见：已提交（含答错上锁）时 Esc 收起，未提交时才「跳过」
-      if (checkpoint.value && checkpointSubmitting.value) {
-        dismissCheckpoint();
-        return;
-      }
-      if (checkpoint.value) {
-        skipCheckpoint();
-        return;
-      }
-    },
-    description: '停止生成 / 跳过检查点',
-  },
-]);
+/* Esc 由页面自管 window keydown（不走 useKeyboardShortcuts）：处理器需要拿到事件目标——
+   焦点处于输入区（composer/检查点作答/消息编辑框）或弹层时必须直返，
+   否则编辑态 Esc 会冒泡误触「停止生成/跳过检查点」（跳过会真调后端计一次跳过）。
+   菜单开着时由 ImmersiveMenu 在 document 层 stopPropagation，本处理器收不到。 */
+function onPageKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return;
+  // 补充资料弹层在场：Esc 只关弹层
+  if (supplementPreview.value.open) {
+    e.preventDefault();
+    closeSupplement();
+    return;
+  }
+  // 目标守卫：焦点在输入控件内 → 交给元素自身（如编辑框的 @keydown.esc 退出编辑）
+  const t = e.target as HTMLElement | null;
+  if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return;
+  // 目标守卫：焦点在任何弹层/菜单弹层内 → 不做全局动作（确认框、伴学窗等自带 Esc 语义）
+  if (t && typeof t.closest === 'function' && t.closest('[role="dialog"], .imm-menu__pop')) return;
+  if (completed.value) return;
+  // 流式生成中：中止
+  if (typing.value && streamAbort) {
+    stopGeneration();
+    return;
+  }
+  // 检查点可见：已提交（含答错上锁）时 Esc 收起，未提交时才「跳过」
+  if (checkpoint.value && checkpointSubmitting.value) {
+    dismissCheckpoint();
+    return;
+  }
+  // 必答检查点（allowSkip:false）没有跳过出口：Esc 不绕过（与「跳过」按钮渲染条件同口径）
+  if (checkpoint.value && checkpoint.value.allowSkip !== false) {
+    skipCheckpoint();
+  }
+}
 
 /* ---------- 基础 ---------- */
 const taskTitle = ref('');
@@ -626,6 +645,15 @@ const pathId = ref('');
 const session = ref<{ sessionId: string; revision: number } | null>(null);
 const initing = ref(true);
 const initError = ref('');
+/** initing 卡死出口：开课请求可能长时间无响应（弱网/代理挂起），20s 后亮出「重新尝试」；
+    「返回」入口常驻——移动端头部返回键 display:none，挂起时页面原本没有任何出口 */
+const initStuck = ref(false);
+let initStuckTimer = 0;
+/** initing 收尾统一出口：清挂起计时器（try 正常完成与 catch 失败两条路都要走） */
+function finishInit() {
+  window.clearTimeout(initStuckTimer);
+  initing.value = false;
+}
 const typing = ref(false);
 // 菜单危险动作（结束/重新开始）in-flight 防重
 const actionBusy = ref(false);
@@ -656,8 +684,15 @@ function pushMsg(m: ChatMsg): ChatMsg {
 const supplementPreview = ref<{ open: boolean; loading: boolean; title: string; text: string }>({
   open: false, loading: false, title: '', text: '',
 });
+const supCloseBtn = ref<HTMLButtonElement | null>(null);
+/** 焦点管理：打开前记住触发元素，关闭时归还——键盘用户按 Esc 关掉弹层后不被丢在文档顶部 */
+let supplementReturnFocus: HTMLElement | null = null;
 async function openSupplement(supplement: ChatSupplement): Promise<void> {
+  supplementReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   supplementPreview.value = { open: true, loading: true, title: supplement.title, text: '' };
+  // 聚焦关闭键：Esc/Enter 都能立刻关掉弹层（Esc 走页面级 onPageKeydown 的弹层分支）
+  await nextTick();
+  supCloseBtn.value?.focus();
   try {
     const section = await readMaterialSection(supplement.materialId, {});
     supplementPreview.value.text = String(section?.excerpt || supplement.excerpt || '') || '（正文为空）';
@@ -669,6 +704,8 @@ async function openSupplement(supplement: ChatSupplement): Promise<void> {
 }
 function closeSupplement(): void {
   supplementPreview.value.open = false;
+  supplementReturnFocus?.focus();
+  supplementReturnFocus = null;
 }
 /**
  * 卡点条只在出现「没见过的新卡点」时展示一次，且只展示新增部分。
@@ -695,21 +732,20 @@ function confusionSimilar(a: string, b: string): boolean {
   for (const g of gx) if (gy.has(g)) inter++;
   return inter / (gx.size + gy.size - inter) >= 0.5;
 }
-function confusionDeltaAt(i: number): string[] {
-  const list = msgs.value;
-  const cur = Array.isArray(list[i]?.confusion) ? (list[i]!.confusion as string[]) : [];
-  if (!cur.length) return [];
+/** 卡点增量一次性预计算（下标与 msgs 对齐，空数组 = 无新增不挂 chip）。
+ *  旧实现 showConfusionAt/confusionDeltaAt 在模板里逐条调用，每条都要与前面
+ *  所有消息的卡点并集做 bigram 相似度比对（O(n²)），流式期间每次重渲染都全量重算。
+ *  computed 只在 msgs 变化时算一遍，模板按 v-for 索引直接取用。 */
+const confusionDeltas = computed<string[][]>(() => {
   const seen: string[] = [];
-  for (let j = 0; j < i; j++) {
-    const prev = Array.isArray(list[j]?.confusion) ? (list[j]!.confusion as string[]) : [];
-    for (const item of prev) seen.push(String(item));
-  }
-  // 当前条目若与历史任一卡点相似 → 视为同一卡点的改写，不计为新增
-  return cur.map(String).filter((item) => !seen.some((prev) => confusionSimilar(item, prev)));
-}
-function showConfusionAt(i: number): boolean {
-  return confusionDeltaAt(i).length > 0;
-}
+  return msgs.value.map((m) => {
+    const cur = Array.isArray(m.confusion) ? (m.confusion as string[]).map(String) : [];
+    // 当前条目若与历史任一卡点相似 → 视为同一卡点的改写，不计为新增
+    const fresh = cur.filter((item) => !seen.some((prev) => confusionSimilar(item, prev)));
+    for (const item of cur) seen.push(item);
+    return fresh;
+  });
+});
 const quickReplies = ref<string[]>([]);
 /** 开场摸底引导（opening.question 收敛进行动台面板的一行小字，不再单独成待答气泡）；仅在有动作选项时收进面板 */
 const openingQuestion = ref('');
@@ -886,6 +922,10 @@ function jumpToBottom() {
 async function boot() {
   initing.value = true;
   initError.value = '';
+  // 开课挂起计时：20s 无响应亮出「重新尝试」（见 initStuck 注释）
+  initStuck.value = false;
+  window.clearTimeout(initStuckTimer);
+  initStuckTimer = window.setTimeout(() => { if (initing.value) initStuck.value = true; }, 20000);
   resumedNotice.value = false;
   assessTarget.value = null;
   confirmCheck.value = null;
@@ -1011,10 +1051,10 @@ async function boot() {
         })
         .catch(() => {});
     }
-    initing.value = false;
+    finishInit();
   } catch (e: any) {
     initError.value = e?.message || e?.response?.data?.error?.message || '开课失败，请重试';
-    initing.value = false;
+    finishInit();
   }
 }
 
@@ -1029,14 +1069,37 @@ let streamAbort: AbortController | null = null;
  */
 const streamingBubbleIndex = ref(-1);
 
+/** 最后一条 AI 消息的下标：「重新生成」入口只对它开放——重生成会删掉该气泡并重发
+ *  其前驱问题，对历史中段的 AI 消息触发会把其后整个对话错位清掉 */
+const lastAiIndex = computed(() => {
+  for (let i = msgs.value.length - 1; i >= 0; i--) {
+    if (msgs.value[i].role === 'ai') return i;
+  }
+  return -1;
+});
 const {
   hoveredMsgId, onBubbleEnter, onBubbleLeave, copyMessage, sendMessageFeedback,
   editingMsgId, editingText, canEditMessage, startEdit, cancelEdit, saveEdit, regenerateMessage
 } = useMessageActions({ msgs, typing, completed, session, doSend })
 
+/** 向服务端向前同步 revision（尽力而为）：中止流式生成后，服务端可能已消费该回合并 +1，
+ *  本地 revision 落后。doSend 撞 TEACHING_SESSION_STALE 有自愈重发，但 finalize
+ *  （finalizeSessionReliably）没有 STALE 自愈——必须在结算前主动拉一次权威 revision。 */
+async function syncRevisionFromServer(): Promise<void> {
+  if (!session.value) return;
+  try {
+    const detail = await aiTeachingAPI.getSessionDetail(session.value.sessionId);
+    if (detail && Number.isInteger(detail.revision) && session.value) {
+      session.value.revision = detail.revision;
+    }
+  } catch { /* 拉取失败沿用本地值，由后端返回明确错误 */ }
+}
+
 function stopGeneration() {
   streamAbort?.abort();
   streamAbort = null;
+  // 中止后立即向前同步：用户「停止 → 完成并结算」是常见路径，不等下一步才补
+  void syncRevisionFromServer();
 }
 
 async function send(e?: unknown) {
@@ -1231,6 +1294,9 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
   if (!session.value || completed.value) return;
   finalizing.value = true;
   try {
+    // 结算前向前同步 revision：complete/end 的入口会先 abort 在途流式（不走 stopGeneration），
+    // 同步兜住这条路径的陈旧 revision——finalize 无 STALE 自愈，409 后只能整单失败
+    await syncRevisionFromServer();
     const r = await aiTeachingAPI.finalizeSessionReliably(session.value.sessionId, {
       action,
       revision: session.value.revision,
@@ -1357,9 +1423,14 @@ async function restart() {
   if (!ok) return;
   actionBusy.value = true;
   try {
-    // 流式生成中先中止，避免与 reset 竞态
+    // 流式生成或检查点判定 in-flight：先中止并等它收尾再 reset（与 complete/end 同一套等待循环）。
+    // 检查点提交 settle 时会把 revision 回写 session（useCheckpointFlow.ts）——不等它就 reset+boot，
+    // 旧提交的收尾代码会把旧会话的 revision 写到新开课的 session 上，后续请求必 409 STALE
     streamAbort?.abort();
     streamAbort = null;
+    for (let i = 0; i < 20 && (typing.value || checkpointPending.value); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
     const rev = await aiTeachingAPI.resetSession(session.value.sessionId, session.value.revision);
     session.value.revision = typeof rev === 'number' ? rev : session.value.revision + 1;
     msgs.value = [];
@@ -1517,12 +1588,15 @@ function onVisibilityChange() {
 
 onMounted(() => {
   boot();
+  window.addEventListener('keydown', onPageKeydown);
   narrowMq?.addEventListener('change', onNarrowChange);
   window.addEventListener('pagehide', onPageHide);
   document.addEventListener('visibilitychange', onVisibilityChange);
 });
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onPageKeydown);
   narrowMq?.removeEventListener('change', onNarrowChange);
+  window.clearTimeout(initStuckTimer);
   streamAbort?.abort();
   abortPeer();
   disposeCheckpoint();
@@ -2658,7 +2732,8 @@ onBeforeUnmount(() => {
 .stage-card__skeleton { display: grid; gap: 8px; width: 100%; margin-top: 6px; }
 .stage-card__skeleton i {
   height: 12px; border-radius: var(--mk-radius-sm);
-  background: linear-gradient(90deg, #edf1f8 25%, #f7faff 50%, #edf1f8 75%);
+  /* mk token 双主题自动跟随（旧字面量 #edf1f8/#f7faff 在深色下是一块刺眼的亮条） */
+  background: linear-gradient(90deg, var(--mk-surface-2, #edf1f8) 25%, var(--surface, #f7faff) 50%, var(--mk-surface-2, #edf1f8) 75%);
   background-size: 200% 100%;
   animation: stage-shimmer 1.4s ease infinite;
 }

@@ -30,8 +30,12 @@
         </button>
       </div>
 
-      <div v-if="live.failed === 'start'" class="errorbar">
+      <!-- stopped 与 failed 并行：主动停止不是「连接失败」，用独立文案（useGoalLive.stopped） -->
+      <div v-if="live.failed === 'start' && !live.stopped" class="errorbar">
         连接失败，没能开始对话。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
+      </div>
+      <div v-else-if="live.stopped === 'start'" class="errorbar">
+        已停止生成。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
       </div>
 
       <div class="entry__cards">
@@ -73,6 +77,7 @@
           </button>
           <textarea
             id="goal-entry-input"
+            ref="entryInputEl"
             v-model="input"
             class="composer__textarea"
             rows="1"
@@ -161,12 +166,18 @@
           <button type="button" class="chat__clear" @click="doReset">清空重聊</button>
         </div>
 
-        <!-- 会话态内 start 失败：错误条 + 重试（初始态 errorbar 在此视图不渲染） -->
-        <div v-if="live.failed === 'start'" class="errorbar chat__errorbar">
+        <!-- 会话态内 start 失败：错误条 + 重试（初始态 errorbar 在此视图不渲染）；
+             主动停止走「已停止」分支，不误报「连接失败」 -->
+        <div v-if="live.failed === 'start' && !live.stopped" class="errorbar chat__errorbar">
           连接失败，没能开始对话。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
         </div>
+        <div v-else-if="live.stopped === 'start'" class="errorbar chat__errorbar">
+          已停止生成。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
+        </div>
 
-        <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal }" aria-live="polite" @scroll.passive="onScrollPin">
+        <!-- 不在整条消息流上挂 aria-live：流式重渲/每条新消息都会被读屏连播（含原始 JSON delta），
+             收窄到下方等待条的 aria-live（P3） -->
+        <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal }" @scroll.passive="onScrollPin">
           <template v-for="km in keyedMessages" :key="km.key">
             <div v-if="km.msg.role === 'user'" class="msg msg--user" :class="{ 'msg--editing': editingMsgId === km.key }">
               <!-- 编辑态：textarea 替换气泡 -->
@@ -180,8 +191,9 @@
                   @keydown.esc="cancelEdit"
                 ></textarea>
                 <div class="msg__edit-actions">
-                  <span class="msg__edit-save" role="button" tabindex="0" @click="saveEdit(km.msg)" @keydown.enter="saveEdit(km.msg)">保存</span>
-                  <span class="msg__edit-cancel" role="button" tabindex="0" @click="cancelEdit" @keydown.enter="cancelEdit">取消</span>
+                  <!-- role=button 的 span 必须同时响应 Enter 与 Space（WAI-ARIA 按钮语义） -->
+                  <span class="msg__edit-save" role="button" tabindex="0" @click="saveEdit(km.msg)" @keydown.enter="saveEdit(km.msg)" @keydown.space.prevent="saveEdit(km.msg)">保存</span>
+                  <span class="msg__edit-cancel" role="button" tabindex="0" @click="cancelEdit" @keydown.enter="cancelEdit" @keydown.space.prevent="cancelEdit">取消</span>
                 </div>
               </div>
               <template v-else>
@@ -213,7 +225,7 @@
                 @mouseenter="onBubbleEnter(km.key)"
                 @mouseleave="onBubbleLeave"
               >
-                <div class="msg__bubble msg__bubble--html msg__bubble--relative" v-html="formatMessage(km.msg.content)"></div>
+                <div class="msg__bubble msg__bubble--html msg__bubble--relative" v-html="messageHtml(km.msg)"></div>
                 <!-- P2-14：历史轮次的快捷补充随消息渲染（当前轮由下方面板承担），点选填入输入框 -->
                 <div v-if="km.msg.quickReplies?.length && km.key !== lastAiKey" class="msg__replies">
                   <button
@@ -245,7 +257,8 @@
             <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
             <div class="msg__content">
               <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
-              <div class="msg__meta">{{ chatWaitText }}</div>
+              <!-- 收窄后的 live region：只播报等待文案，不再让整条消息流进读屏队列 -->
+              <div class="msg__meta" aria-live="polite">{{ chatWaitText }}</div>
             </div>
           </div>
 
@@ -307,6 +320,7 @@
             </button>
             <textarea
               id="goal-chat-input"
+              ref="chatInputEl"
               v-model="input"
               class="composer__textarea"
               rows="1"
@@ -340,6 +354,16 @@
           <!-- 底部提示一条基线（2026-09-27 用户反馈）：快捷键+计数+AI 声明归右带；
                左侧不再放平台说明（那句话已回左栏信息面板底部） -->
           <div class="composer__hint">
+            <!-- P1：≤1100 移动端唯一的「规划新目标」入口——底部 tab「目标规划」同路由点击
+                 不派发 v2:new-goal（V2Nav 只在顶部 CTA 挂了该逻辑，≤900 已隐藏），
+                 本页 .chat__clear 移动端又隐藏，会话态会被锁死在旧对话。
+                 走 onNewGoalEvent：回初始态、本地保留「继续上次的规划」，不删记录。 -->
+            <button
+              type="button"
+              class="composer__new-goal"
+              title="规划新目标（当前对话保留在本机，可恢复）"
+              @click="onNewGoalEvent"
+            >新目标</button>
             <span class="composer__hint-right">
               <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
               <span class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
@@ -348,8 +372,16 @@
           </div>
         </div>
 
-        <!-- 方案确认浮层 -->
-        <div v-if="showProposal" class="overlay">
+        <!-- 方案确认浮层：dialog 语义 + 打开时移焦/关闭归还（onProposalKey/watch showProposal） -->
+        <div
+          v-if="showProposal"
+          ref="overlayRef"
+          class="overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="方案确认"
+          tabindex="-1"
+        >
           <!-- 预览 -->
           <div v-if="phase === 'preview' && live.proposal" class="proposal">
             <div class="proposal__eyebrow">路径预览 · 请确认</div>
@@ -429,10 +461,10 @@
             <h2 class="proposal__title">正在生成你的路径…</h2>
             <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解，一般需要 1-2 分钟。</p>
             <div class="skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
-            <!-- 流式进度：模型输出实时可见（原始思考文本），生成不再是无反馈等待 -->
-            <div v-if="live.streamingText" class="proposal__stream">
-              <span class="proposal__stream-label">实时生成中</span>
-              <p class="proposal__stream-text">{{ live.streamingText }}</p>
+            <!-- 生成阶段模型输出是 JSON（对用户不可读）：delta 阶段给中性进度文案，不直出原始流（P3） -->
+            <div class="proposal__stream">
+              <span class="proposal__stream-label">生成进度</span>
+              <p class="proposal__stream-text">正在逐项整理方案内容，完成后会自动展示。</p>
             </div>
             <div class="proposal__note">可以离开本页，生成进度会保留。</div>
             <button type="button" class="proposal__stop" @click="live.stop()">
@@ -450,7 +482,8 @@
             <p class="proposal__generating-note">阶段与任务正在后台组装，稍后即可查看。</p>
             <div class="proposal__actions proposal__actions--center">
               <button type="button" class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</button>
-              <button type="button" class="btn-ghost" @click="phase = 'preview'">返回方案</button>
+              <!-- 只在方案还在（stage=proposing）时给「返回方案」：否则点了只是关浮层，无路可回 -->
+              <button v-if="live.stage === 'proposing' && live.proposal" type="button" class="btn-ghost" @click="phase = 'preview'">返回方案</button>
             </div>
           </div>
         </div>
@@ -482,7 +515,7 @@ import AiContentNote from '@/components/AiContentNote.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import MaterialUploadArea from '@/components/learning/MaterialUploadArea.vue';
 import { hasUserSession } from '@/utils/api';
-import { plainMessageHtml } from '@/utils/messageMarkdown';
+import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
 import { feedbackApi } from '@/api/feedback';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
@@ -497,8 +530,8 @@ const narrowMq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 
 const isNarrow = ref(narrowMq?.matches ?? false);
 const panelOpen = ref(false);
 const panelExpanded = computed(() => !isNarrow.value || panelOpen.value);
-/** 输入上限：后端 GOAL_INPUT_MAX_CHARS 是 4096，前端 500 太紧——用户常要一次性贴一段背景 */
-const INPUT_MAX = 1000;
+/** 输入上限：后端 GOAL_INPUT_MAX_CHARS 是 4096，前端再收紧只会把「贴一段背景」截断，对齐后端 */
+const INPUT_MAX = 4096;
 /* 移动端输入框 placeholder 缩短（长文案换行后被裁，占两行以上无法完整显示） */
 const entryPlaceholder = computed(() => isNarrow.value ? '先说说你想解决什么…' : '先说说你最近想解决什么，或现在卡在哪里…');
 const chatPlaceholder = computed(() => isNarrow.value ? '回答问题，或补充基础、时间…' : '回答上面的问题，或补充你的基础、时间和限制…');
@@ -547,7 +580,7 @@ onMounted(() => {
     return;
   }
   if (cid && cid !== live.conversationId) {
-    live.resumeById(cid).catch(() => {});
+    resumeFromRoute(cid);
   } else if (!cid && live.started) {
     // SPA 内从旧会话切换回来（如路径页点「规划新目标」）：清掉模块级残留的上一轮对话，
     // 回到初始态；localStorage 保留，仍可「继续上次的规划」恢复。
@@ -581,13 +614,22 @@ function onNewGoalEvent() {
   }
 }
 
+/** 路由 cid 恢复入口：失败且本地无会话可回退时明示——否则坏 cid 链接打开
+    只见全新初始页，用户以为内容丢了（P2）；本地有会话时初始页已有
+    「恢复失败，点这里重试」按钮承接，不重复弹 */
+function resumeFromRoute(cid: string) {
+  void live.resumeById(cid).then((ok) => {
+    if (!ok && !live.hasSession()) toast.error('原会话未能恢复，已为你开启新对话');
+  });
+}
+
 // 会话 ID 变化时同步视图状态（分享链接 / 恢复旧会话）
 watch(
   () => route.params.conversationId,
   (cid) => {
     const next = typeof cid === 'string' ? cid : '';
     if (next && next !== live.conversationId) {
-      live.resumeById(next).catch(() => {});
+      resumeFromRoute(next);
     } else if (!next && live.started) {
       // 导航到无参路由（如「规划新目标」）时组件被复用、onMounted 不重跑：
       // 这里清掉模块级残留的上一轮对话回到初始态；localStorage 保留，仍可恢复
@@ -612,6 +654,20 @@ function goPaths() {
 }
 
 const input = ref('');
+/* 两个输入框（初始态/会话态互斥渲染）的 DOM 引用：autogrow 用 */
+const entryInputEl = ref<HTMLTextAreaElement | null>(null);
+const chatInputEl = ref<HTMLTextAreaElement | null>(null);
+/** 自增高（移植 ChatInput.vue autogrow）：rows=1 固定单行时 max-height:120px 是死样式，
+    多行输入被裁。内容变化后按 scrollHeight 重设高度，上限 120 */
+function autogrow(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+// 走 watch 而非 @input：点选快选/发送后清空是程序改值，不触发 input 事件
+watch(input, () => {
+  void nextTick(() => { autogrow(chatInputEl.value); autogrow(entryInputEl.value); });
+});
 /** 当前展示轮的快捷补充入口（快选为勾选语义：全部常驻，点选打勾，再点取消） */
 const currentQuickReplies = ref<Array<{ text: string; icon?: string }>>([]);
 
@@ -756,6 +812,20 @@ async function regenerateMessage(msg: LiveMessage) {
 }
 
 const formatMessage = (text: string) => plainMessageHtml(text);
+/* 历史消息 HTML 走 WeakMap 缓存（键=消息对象，对象稳定不重建）：响应式重渲不再每条
+   重跑 markdown-it+DOMPurify（P2）。cachedMessageHtml 按 {text} 盒取缓存，这里给每条
+   消息配一个稳定内容盒；流式文本是字符串字面量，保持 plainMessageHtml 直渲染 */
+const htmlBoxCache = new WeakMap<object, { text: string }>();
+function messageHtml(m: LiveMessage): string {
+  let box = htmlBoxCache.get(m);
+  if (!box) {
+    box = { text: m.content };
+    htmlBoxCache.set(m, box);
+  } else if (box.text !== m.content) {
+    box.text = m.content;
+  }
+  return cachedMessageHtml(box);
+}
 
 const stageLabel = computed(() => {
   if (live.stageIndex === 3) return '可生成路径';
@@ -766,6 +836,19 @@ const stageLabel = computed(() => {
 const showProposal = computed(
   () => !proposalDismissed.value && ((live.stage === 'proposing' && !!live.proposal) || phase.value === 'generating' || phase.value === 'done')
 );
+/* 焦点管理（P2）：浮层打开把焦点移入对话框（读屏按 dialog 播报、Esc 立即可用），
+   关闭时归还原焦点，键盘用户不至于被「丢」在页面里 */
+const overlayRef = ref<HTMLElement | null>(null);
+let preOverlayFocus: HTMLElement | null = null;
+watch(showProposal, (open) => {
+  if (open) {
+    preOverlayFocus = document.activeElement as HTMLElement | null;
+    void nextTick(() => overlayRef.value?.focus());
+  } else {
+    preOverlayFocus?.focus();
+    preOverlayFocus = null;
+  }
+});
 /** Escape 关闭方案浮层（状态保留，对话可继续）；新提案到达时重新显示 */
 const proposalDismissed = ref(false);
 function onProposalKey(e: KeyboardEvent) {
@@ -1021,44 +1104,6 @@ function shuffleScenes() {
 </script>
 
 <style scoped>
-/* ---------- 导航 ---------- */
-.nav {
-  display: flex; align-items: center; gap: 28px;
-  padding: 0 28px; height: 60px;
-  background: rgba(255, 255, 255, 0.92);
-  border-bottom: 1px solid var(--line);
-}
-.nav__brand { display: flex; align-items: center; gap: 9px; }
-.nav__logo {
-  width: 28px; height: 28px; border-radius: 9px;
-  background: linear-gradient(135deg, var(--blue), var(--accent));
-  color: #fff; font-size: 14px; font-weight: 800;
-  display: grid; place-items: center;
-}
-.nav__name { font-weight: 700; font-size: 14px; }
-.nav__links { display: flex; gap: 4px; flex: 1; }
-.nav__links a {
-  padding: 7px 12px; border-radius: 9px;
-  font-size: 13px; font-weight: 600; color: var(--muted);
-  cursor: pointer; text-decoration: none;
-}
-.nav__links a.active { color: var(--blue-deep); background: rgba(52, 120, 246, 0.09); }
-.nav__right { display: flex; align-items: center; gap: 12px; }
-.live-badge {
-  font-size: 12px; font-weight: 800;
-  color: var(--green);
-  background: rgba(49, 177, 111, 0.1);
-  border: 1px solid rgba(49, 177, 111, 0.3);
-  padding: 3px 9px; border-radius: var(--mk-radius-pill);
-}
-.nav__avatar { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; }
-.nav__avatar i {
-  width: 26px; height: 26px; border-radius: 50%;
-  background: var(--blue-deep); color: #fff;
-  font-style: normal; font-size: 12px;
-  display: grid; place-items: center;
-}
-
 /* ---------- 初始态 / 登录门 ---------- */
 .entry {
   flex: 1; width: 100%;
@@ -1206,7 +1251,7 @@ function shuffleScenes() {
 }
 /* 资料附件：输入框左下回形针入口（主流附件模式），角标显示已传份数。
    与右侧首行文字中线对齐：首行中心 = textarea 上内边距 10 + 行高一半 10.5 = 20.5，
-   按钮 32 高、中线偏 16，故 margin-top: 4.5px 顶到行首。textarea 单行不 autogrow，首行位置恒定。 */
+   按钮 32 高、中线偏 16，故 margin-top: 4.5px 顶到行首。autogrow 只改高度，首行位置恒定。 */
 .composer__attach {
   position: relative;
   align-self: flex-start;
@@ -1284,6 +1329,9 @@ function shuffleScenes() {
   margin-top: auto;
 }
 .composer__count { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* 「新目标」入口：桌面隐藏（chat 头部「清空重聊」+ 导航「规划新目标」CTA 已覆盖）；
+   ≤1100 移动端它是唯一入口（见模板注释），在移动端媒体查询内放开 */
+.composer__new-goal { display: none; }
 
 /* ---------- 工作台布局 ---------- */
 .work {
@@ -1794,15 +1842,6 @@ function shuffleScenes() {
   display: grid; place-items: center;
 }
 .pstep strong { display: block; font-size: 12.5px; line-height: 1.45; }
-.proposal__skip {
-  width: 100%;
-  font-size: 12px; color: var(--muted);
-  border: 1px dashed var(--line);
-  border-radius: var(--mk-radius-lg);
-  padding: 9px 12px;
-  background: var(--supplement-bg, #fafcff);
-  text-align: left;
-}
 .proposal__probes {
   display: grid; gap: 10px; width: 100%; text-align: left;
 }
@@ -1893,7 +1932,6 @@ function shuffleScenes() {
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 1100px) {
-  .nav__links { display: none; }
   /* 移动端保留顶部导航：与其余页面一致的 logo+铃铛+头像（CTA 已在 V2Nav ≤900 隐藏），
      底部 tabs 同时保留。本页 .goal 锁 100dvh，头部 56px 入流后由 main flex:1 自动让位。 */
   /* 锁定视口高度：会话态整页不滚动，chat 内部滚动、composer 吸底在底部导航之上。
@@ -2000,7 +2038,6 @@ function shuffleScenes() {
      视线与拇指都不用上下跑。 */
   .chat__scroll > :first-child { margin-top: auto; }
   .msg { max-width: 96%; }
-  .replies { margin-left: 0; }
   /* 快捷补充面板占满整宽：基础样式的 margin-left 40（对齐气泡正文）在手机上白丢 40px 宽度，
      而这是整屏最常点的区域 */
   .replies-panel { margin-left: 0; }
@@ -2011,7 +2048,7 @@ function shuffleScenes() {
     inset: -6px;
   }
   /* 移动端 hint 行整体脱离文档流（0 高，原占 17px + gap 7px），内容挂到输入框与底部导航
-     之间那道缝里：左边「0 / 1000」计数、右边 AI 生成声明。触屏没有键盘快捷键提示，隐藏之。 */
+     之间那道缝里：左「新目标」入口、中计数、右 AI 生成声明。触屏没有键盘快捷键提示，隐藏之。 */
   .composer { position: relative; }
   .composer__hint {
     position: absolute;
@@ -2021,6 +2058,16 @@ function shuffleScenes() {
     justify-content: space-between;
     flex-wrap: nowrap;
     padding: 0;
+  }
+  /* P1：移动端唯一「规划新目标」入口（桌面隐藏）。挂在输入区下的 0 高 hint 缝里：
+     chat 头部带在移动端已被阶段导航 + 目标信息药丸占满（390 下合计 ~325/336px），
+     没有第二块空地。36px 高满足触屏门禁，向下溢到 composer 与底部导航的空隙里 */
+  .composer__new-goal {
+    display: inline-flex; align-items: center; flex: 0 0 auto;
+    min-height: 36px; padding: 4px 12px;
+    border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+    background: var(--surface); color: var(--muted);
+    font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
   }
   .composer__hint-shortcut { display: none; }
   /* 计数与 AI 声明分列缝的两端（两者原本裹在 .composer__hint-right 里，会挤成一堆） */
@@ -2082,8 +2129,8 @@ function shuffleScenes() {
      登录态巡检量不到，按基线推导。
      刻意不动的：.stage-nav__item(11.5px) 与 .panel__caret(9px)——前者与右上角目标信息
      按钮共享一行、注释里记着 390 下只有 11px 余量，后者是纯装饰字形。
-     另注：本文件的 .nav/.nav__* 只在 CSS 里存在、模板没有用到（顶栏早换成了 V2Nav），
-     是死规则；本轮不动它，留待一次专门的死 CSS 清理。 */
+     （2026-09-27 死 CSS 清理：.nav 及 .nav__ 系列、.live-badge、.proposal__skip、
+     .replies、.peerdock 暗色档均已移除——模板早已不渲染这些类。） */
   .chat__scroll { padding: 14px; }
   .login-gate { padding: 28px 20px; border-radius: var(--mk-radius-modal); }
   .login-gate h1 { font-size: 18px; }
@@ -2129,10 +2176,6 @@ function shuffleScenes() {
   background: rgba(255, 255, 255, 0.03);
   border-color: var(--line);
 }
-[data-theme='dark'] .proposal__skip {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: var(--line);
-}
 [data-theme='dark'] .pstep {
   background: rgba(255, 255, 255, 0.03);
   border-color: var(--line);
@@ -2172,25 +2215,17 @@ function shuffleScenes() {
 [data-theme='dark'] .scene-card:hover:not(:disabled) {
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25);
 }
-[data-theme='dark'] .peerdock {
-  background: var(--surface);
-  border-color: rgba(167, 139, 255, 0.18);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);
+/* 亮色 hover 用近黑叠加 rgba(23,32,51,.05/.06)，在暗色画布上完全不可见：补暗色档（P3） */
+[data-theme='dark'] .cards-nav__btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
 }
-[data-theme='dark'] .peerdock__bubble {
-  background: rgba(167, 139, 255, 0.1);
-  border-color: rgba(167, 139, 255, 0.15);
-}
-[data-theme='dark'] .peerdock__input input {
-  background: var(--canvas);
-  border-color: var(--line);
-  color: var(--ink);
+[data-theme='dark'] .composer__attach:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 [data-theme='dark'] .replies-panel {
   background: var(--surface);
   border-color: var(--line);
 }
-[data-theme='dark'] .nav { background: var(--v2nav-bg); }
 [data-theme='dark'] .field--todo .field__mark { border-color: var(--line); }
 [data-theme='dark'] .skeleton i {
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.06) 25%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.06) 75%);

@@ -84,6 +84,9 @@ export function useCheckpointFlow(
     const payload: Record<string, any> = {};
     if (checkpoint.value.options?.length) payload.selectedOptionIds = selectedOptions.value;
     else payload.answerText = answerText.value;
+    // 记住提交时的会话对象：提交含一次教学回合（可达数十秒），期间用户可能「重新开始」
+    // 换了新会话——settle 后旧 revision 不得回写到新会话（restart 有等待循环，这里兜底）
+    const sessionAtSubmit = session.value;
     checkpointPending.value = true;
     checkpointFeedback.value = '';
     checkpointStreaming.value = false;
@@ -117,7 +120,10 @@ export function useCheckpointFlow(
         if (!streamError?.transport) throw streamError;
         r = await aiTeachingAPI.submitCheckpoint(sessionId, checkpointId, payload, revision) as unknown as Record<string, any>;
       }
-      session.value.revision = r.revision ?? session.value.revision + 1;
+      // 会话已被替换（重新开课）时不再回写：旧会话的 revision 写到新会话上必 409
+      if (session.value === sessionAtSubmit) {
+        session.value.revision = r.revision ?? session.value.revision + 1;
+      }
       checkpointPassed.value = r.passed === true;
       // 后端把整段导师回复放在 feedback（答错时即纠正正文），需要留足阅读时间
       checkpointFeedback.value = r.feedback || (r.passed ? '回答正确' : r.hint || '再想想');
@@ -163,12 +169,19 @@ export function useCheckpointFlow(
 
   async function skipCheckpoint() {
     if (completed.value || !checkpoint.value || !session.value || typing.value || checkpointPending.value || checkpointSubmitting.value) return;
+    // 必答检查点没有跳过出口：模板不渲染「跳过」按钮，这里兜底拦截
+    // Esc 等旁路，防止绕过后端「跳过」计数
+    if (checkpoint.value.allowSkip === false) return;
     const cp = checkpoint.value;
+    const sessionAtSkip = session.value;
     checkpoint.value = null;
     checkpointPending.value = true;
     try {
       const r = await aiTeachingAPI.submitCheckpoint(session.value.sessionId, cp.id, { skip: true }, session.value.revision) as unknown as Record<string, any>;
-      session.value.revision = typeof r?.revision === 'number' ? r.revision : session.value.revision + 1;
+      // 会话已被替换（重新开课）时不再回写：旧会话的 revision 写到新会话上必 409
+      if (session.value === sessionAtSkip) {
+        session.value.revision = typeof r?.revision === 'number' ? r.revision : session.value.revision + 1;
+      }
     } catch (e: any) {
       toast.error(e?.message || e?.response?.data?.error?.message || '跳过检查点失败');
       // 失败恢复检查点，允许用户重试或改作答
