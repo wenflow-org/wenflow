@@ -278,9 +278,12 @@ export function buildGoalConversationUserPayload(input: {
       ]
     },
     ...materialsBlock,
-    state: statePayload,
+    // KV 前缀缓存（2026-09-28）：conversationContext 是追加式历史（本轮 = 上轮 + 新增两条），
+    // 必须排在「每轮全量重写的 state」**之前**——否则 state 一变缓存即断，增长的对话史永远
+    // 吃不到缓存。次序=稳定头 → 追加史 → 当轮输入 → 每轮重写块。
+    conversationContext,
     userInput: input.userInput,
-    conversationContext
+    state: statePayload
   }, null, 2);
 
   // supplement 作为 JSON 外前缀文本（不污染 JSON 键集）；无 supplement 时纯 JSON
