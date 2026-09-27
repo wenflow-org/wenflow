@@ -84,7 +84,8 @@
           <h4>24h 系统脉搏</h4>
           <button type="button" class="brief-card__go" @click="jump('execution-logs')">执行日志 →</button>
         </div>
-        <MkChart v-if="data.pulse.length" :option="pulseChartOption" height="150px" />
+        <!-- 统一柱状语言（OvBars）：24 列稀标签、无数值行；红柱=该小时有异常 -->
+        <OvBars v-if="data.pulse.length" :cols="pulseCols" :show-nums="false" :label-every="4" :min-bars-height="96" />
         <div class="pulse__meta">
           <span title="近 24 小时调用量（滚动窗口，仅真实用户）">24h 调用 <strong>{{ data.totalCalls }}</strong></span>
           <span title="近 24 小时失败 + 超时合计（仅真实用户）">异常 <strong :class="{ 'is-bad': data.totalIssues > 0 }">{{ data.totalIssues }}</strong></span>
@@ -99,8 +100,8 @@
           <button type="button" class="brief-card__go" @click="jump('execution-logs')">执行日志 →</button>
         </div>
         <div v-if="trend7dSum > 0" class="ov-trend">
-          <MkChart :option="trend7dChartOption" height="160px" />
-          <p class="ov-trend__sum">合计 {{ trend7dSum }} 次调用 · 失败 {{ trend7dFail }} 次</p>
+          <OvBars :cols="trend7dCols" :min-bars-height="104" />
+          <p class="ov-trend__sum">合计 {{ trend7dSum.toLocaleString() }} 次调用 · 失败 {{ trend7dFail.toLocaleString() }} 次</p>
         </div>
         <p v-else class="brief-card__note">近 7 天暂无真实调用。</p>
       </section>
@@ -112,15 +113,7 @@
           <button type="button" class="brief-card__go" @click="jump('people')">用户与学习者 →</button>
         </div>
         <div v-if="growthSum > 0" class="ov-growth">
-          <div class="ov-growth__rows">
-            <div v-for="g in data.growth7d" :key="g.date" class="ov-growth__day" :title="`${g.date}：新增 ${g.newUsers} · 活跃 ${g.activeUsers}`">
-              <div class="ov-growth__bars">
-                <i class="ov-growth__bar ov-growth__bar--new" :style="{ height: barPct(g.newUsers, growth7dMax) }"></i>
-                <i class="ov-growth__bar ov-growth__bar--active" :style="{ height: barPct(g.activeUsers, growth7dMax) }"></i>
-              </div>
-              <span class="ov-growth__label">{{ dayLabel(g.date) }}</span>
-            </div>
-          </div>
+          <OvBars :cols="growthCols" :min-bars-height="72" />
           <div class="ov-growth__legend">
             <span><i class="ov-growth__dot ov-growth__dot--new"></i>新增</span>
             <span><i class="ov-growth__dot ov-growth__dot--active"></i>活跃</span>
@@ -142,24 +135,7 @@
             <button type="button" class="brief-card__go" @click="jump('sessions')">目标对话 →</button>
           </span>
         </div>
-        <div v-if="data.trend.length" class="trend">
-          <div
-            v-for="d in data.trend"
-            :key="d.date"
-            class="trend__col"
-            :class="{ 'trend__col--today': isToday(d.date) }"
-            :title="`${d.date}：新增 ${d.total} 个对话，完成 ${d.completed} 个`"
-          >
-            <span class="trend__num" :class="{ 'trend__num--zero': !d.total }">{{ d.total || '·' }}</span>
-            <div class="trend__bars">
-              <i class="trend__bar" :style="{ height: trendH(d.total) }"></i>
-              <i class="trend__bar trend__bar--ok" :style="{ height: trendH(d.completed) }"></i>
-            </div>
-            <span class="trend__day" :class="{ 'trend__day--today': isToday(d.date) }">
-              {{ isToday(d.date) ? '今日' : trendLabel(d.date) }}
-            </span>
-          </div>
-        </div>
+        <OvBars v-if="data.trend.length" :cols="trendCols" :min-bars-height="88" />
         <p v-else class="brief-card__note">近 7 天暂无新增目标对话。</p>
         <p v-if="data.trend.length" class="trend__sum">
           合计新增 {{ trendSum.total }} · 完成 {{ trendSum.completed }}
@@ -355,15 +331,10 @@ import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, l
 import { adminHealthCenterApi } from '@/api/adminApi';
 import { TERMS } from './terms';
 import MkKpi from '@/components/mk/MkKpi.vue';
-import MkChart from '@/components/mk/MkChart.vue';
-import { MK_CHART_PALETTES } from '@/components/mk/chartPalette';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
-import type { EChartsCoreOption } from 'echarts/core';
+import OvBars from './OvBars.vue';
 import { useSafePolling } from '@/composables/useSafePolling';
-import { useIsDark } from '@/composables/useIsDark';
-
-const isDark = useIsDark();
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
@@ -432,100 +403,58 @@ const scoreTitle = computed(() => {
   return `${TERMS.healthScoreTitle}（${label}）\n${health.value.subline}`
 });
 
-/* ===== ECharts 图表（B1 收尾：24h 脉搏 / 7 天调用趋势）===== */
-const pulseChartOption = computed<EChartsCoreOption>(() => {
-  const pts = data.value?.pulse || [];
-  const labels = pts.map((b) => b.label || '');
-  const pal = MK_CHART_PALETTES[isDark.value ? 'dark' : 'light'];
-    return {
-    animationDuration: 300,
-    grid: { left: 30, right: 8, top: 8, bottom: 20 },
-    tooltip: {
-      trigger: 'axis',
-      confine: true,
-      axisPointer: { type: 'shadow' },
-      formatter: (params: unknown) => {
-        const arr = params as Array<{ axisValue: string; data: number; color: string }>;
-        const i = arr[0]?.axisValue || '';
-        const b = pts[labels.indexOf(i)];
-        if (!b) return i
-        return `${i}<br/>调用 <b>${b.calls}</b> 次<br/>异常 <b>${b.issue}</b> 次`
-      },
-    },
-    xAxis: {
-      type: 'category',
-      data: labels,
-            axisTick: { show: false },
-      axisLabel: { fontSize: 10, interval: 3 },
-    },
-    yAxis: {
-      type: 'value',
-      minInterval: 1,
-            axisLabel: { fontSize: 10 },
-    },
-    series: [
-      {
-        name: '调用',
-        type: 'bar',
-        data: pts.map((b) => b.calls),
-        barWidth: '60%',
-        itemStyle: {
-          color: (p: { dataIndex: number }) => (pts[p.dataIndex]?.issue ? pal.danger : pal.primaryBright),
-          borderRadius: [2, 2, 0, 0],
-        },
-      },
-    ],
-  };
-});
-
-const trend7dChartOption = computed<EChartsCoreOption>(() => {
-  const days = data.value?.trend7d || [];
-  const labels = days.map((d) => dayLabel(d.date));
-  const pal = MK_CHART_PALETTES[isDark.value ? 'dark' : 'light'];
-    return {
-    animationDuration: 300,
-    grid: { left: 34, right: 8, top: 8, bottom: 20 },
-    tooltip: {
-      trigger: 'axis',
-      confine: true,
-      axisPointer: { type: 'shadow' },
-    },
-    legend: { show: false },
-    xAxis: {
-      type: 'category',
-      data: labels,
-            axisTick: { show: false },
-      axisLabel: { fontSize: 10 },
-    },
-    yAxis: {
-      type: 'value',
-      minInterval: 1,
-            axisLabel: { fontSize: 10 },
-    },
-    series: [
-      {
-        name: '调用',
-        type: 'bar',
-        data: days.map((d) => d.calls),
-        barWidth: '30%',
-        itemStyle: { color: pal.primaryBright, borderRadius: [2, 2, 0, 0] },
-      },
-      {
-        name: '失败',
-        type: 'bar',
-        data: days.map((d) => d.failed),
-        barWidth: '30%',
-        itemStyle: { color: pal.warn, borderRadius: [2, 2, 0, 0] },
-      },
-    ],
-  };
-});
-/* ===== G 系列新增：7 天趋势 / Top Skill / 用户增长 图表 helpers ===== */
+/* ===== 统一柱状图（OvBars）数据映射：四个柱状图收敛为同一种视觉语言
+   （2026-09-27 走查「四个柱状图两种款式」——脉搏/调用趋势是 ECharts、
+   用户增长/目标对话是手写 DOM，现全部走 OvBars 列式结构） ===== */
 const barPct = (v: number, max: number) => `${v > 0 ? Math.max(Math.round((v / max) * 100), 6) : 3}%`;
 const dayLabel = (date: string) => {
   const [, m, d] = date.split('-').map(Number);
   return `${m}/${d}`;
 };
+const pulseMax = computed(() => Math.max(1, ...(data.value?.pulse.map((b) => b.calls) || [])));
+const pulseCols = computed(() => (data.value?.pulse || []).map((b) => ({
+  key: b.label || `h-${b.calls}-${b.issue}`,
+  label: b.label || '',
+  title: `${b.label || '该时段'}：调用 ${b.calls} 次 · 异常 ${b.issue} 次`,
+  bars: [{ pct: barPct(b.calls, pulseMax.value), tone: b.issue > 0 ? ('red' as const) : ('blue' as const) }],
+})));
+
+const trend7dMax = computed(() => Math.max(1, ...(data.value?.trend7d.map((d) => d.calls) || [])));
+const trend7dCols = computed(() => (data.value?.trend7d || []).map((d) => ({
+  key: d.date,
+  label: dayLabel(d.date),
+  today: isToday(d.date),
+  title: `${d.date}：调用 ${d.calls.toLocaleString()} 次 · 失败 ${d.failed.toLocaleString()} 次`,
+  num: d.calls.toLocaleString(),
+  bars: [
+    { pct: barPct(d.calls, trend7dMax.value), tone: 'blue' as const },
+    { pct: barPct(d.failed, trend7dMax.value), tone: 'amber' as const },
+  ],
+})));
+
+const growthCols = computed(() => (data.value?.growth7d || []).map((g) => ({
+  key: g.date,
+  label: dayLabel(g.date),
+  today: isToday(g.date),
+  title: `${g.date}：新增 ${g.newUsers} · 活跃 ${g.activeUsers}`,
+  num: String(g.newUsers || 0),
+  bars: [
+    { pct: barPct(g.newUsers, growth7dMax.value), tone: 'blue' as const },
+    { pct: barPct(g.activeUsers, growth7dMax.value), tone: 'green' as const },
+  ],
+})));
+
+const trendCols = computed(() => (data.value?.trend || []).map((d) => ({
+  key: d.date,
+  label: isToday(d.date) ? '今日' : trendLabel(d.date),
+  today: isToday(d.date),
+  title: `${d.date}：新增 ${d.total} 个对话，完成 ${d.completed} 个`,
+  num: String(d.total || 0),
+  bars: [
+    { pct: trendH(d.total), tone: 'blue' as const },
+    { pct: trendH(d.completed), tone: 'green' as const },
+  ],
+})));
 const trend7dSum = computed(() => (data.value?.trend7d || []).reduce((a, d) => a + d.calls, 0));
 const trend7dFail = computed(() => (data.value?.trend7d || []).reduce((a, d) => a + d.failed, 0));
 const growth7dMax = computed(() => Math.max(1, ...(data.value?.growth7d || []).flatMap((g) => [g.newUsers, g.activeUsers])));
@@ -1059,21 +988,8 @@ watch(liveLoading, (loading) => {
 .ov-skill__calls { font-size: var(--mk-fs-micro); color: var(--mk-muted); text-align: right; white-space: nowrap; }
 .ov-skill__fail { font-style: normal; color: var(--mk-amber); font-weight: 700; }
 
-/* 用户增长（新增/活跃双柱） */
+/* 用户增长（新增/活跃双柱）：柱区走 OvBars 统一组件，这里只留图例 */
 .ov-growth { display: grid; gap: 8px; flex: 1; min-height: 0; align-content: end; }
-.ov-growth__rows {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 8px;
-  flex: 1;
-  min-height: 0;
-}
-.ov-growth__day { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; min-height: 0; }
-.ov-growth__bars { display: flex; align-items: flex-end; gap: 3px; height: 68px; }
-.ov-growth__bar { width: 8px; border-radius: var(--mk-radius-xs) var(--mk-radius-xs) var(--mk-radius-xs) var(--mk-radius-xs); }
-.ov-growth__bar--new { background: linear-gradient(180deg, color-mix(in srgb, var(--mk-blue) 72%, white), var(--mk-blue)); }
-.ov-growth__bar--active { background: linear-gradient(180deg, #34d399, var(--mk-green)); }
-.ov-growth__label { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ov-growth__legend { display: flex; align-items: center; gap: 12px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .ov-growth__legend .mk-card__meta { margin-left: auto; }
 .ov-growth__dot { width: 7px; height: 7px; border-radius: var(--mk-radius-xs); display: inline-block; margin-right: 4px; }
@@ -1144,27 +1060,17 @@ watch(liveLoading, (loading) => {
 
 /* 近 7 天趋势（柱状区弹性撑满卡片，避免等高网格内留白） */
 .brief-card--trend { display: flex; flex-direction: column; }
-.brief-card--trend .trend { flex: 1; min-height: 0; }
+.brief-card--trend .ovbars { flex: 1; min-height: 0; }
 .trend__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .trend__head-right { display: inline-flex; align-items: center; gap: 12px; }
 .trend__legend { display: inline-flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 .trend__dot { width: 7px; height: 7px; border-radius: var(--mk-radius-xs); display: inline-block; margin-right: 3px; }
 .trend__dot--new { background: linear-gradient(180deg, color-mix(in srgb, var(--mk-blue) 72%, white), var(--mk-blue)); }
 .trend__dot--done { background: linear-gradient(180deg, #34d399, var(--mk-green)); }
-.trend { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
-.trend__col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; min-height: 0; border-radius: var(--mk-radius-sm); }
-.trend__col--today { background: #f0f6ff; box-shadow: inset 0 0 0 1px rgba(44, 99, 208, 0.25); }
-.trend__bars { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 3px; width: 100%; min-height: 56px; }
-.trend__day--today { color: var(--mk-blue); font-weight: 800; }
 .trend__sum { margin: 0; padding-top: 8px; border-top: 1px dashed var(--mk-line); font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
 /* 累计行（收编自学习漏斗卡）：与合计行同族，弱一档 */
 .trend__cum { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
-.trend__bar { width: 9px; border-radius: var(--mk-radius-xs) var(--mk-radius-xs) var(--mk-radius-xs) var(--mk-radius-xs); background: linear-gradient(180deg, color-mix(in srgb, var(--mk-blue) 72%, white), var(--mk-blue)); opacity: 0.85; }
-.trend__bar--ok { background: linear-gradient(180deg, #34d399, var(--mk-green)); opacity: 1; }
-.trend__num { height: 18px; display: flex; align-items: flex-end; justify-content: center; font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; color: var(--mk-muted); font-weight: 700; }
-.trend__num--zero { color: var(--mk-faint); font-weight: 600; }
-/* 日期行锁高 + 不换行：折行会把该列柱区压短，柱子基线与其他列错位（走查 2026-09-27） */
-.trend__day { height: 18px; display: flex; align-items: center; justify-content: center; white-space: nowrap; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 柱区/数字/日期已由 OvBars 统一组件承担（2026-09-27 四图收敛），仅保留卡头图例与合计/累计行 */
 
 /* 漏斗卡已撤（2026-09-27）：1:N 展开配 ×倍数是假漏斗，真指标在目标对话卡累计行 */
 
@@ -1298,8 +1204,6 @@ watch(liveLoading, (loading) => {
   .usage__label { font-size: var(--mk-fs-micro); }
   .usage__row { font-size: var(--mk-fs-body); }
   .trend__legend { font-size: var(--mk-fs-micro); }
-  .trend__num { font-size: var(--mk-fs-micro); }
-  .trend__day { font-size: var(--mk-fs-micro); }
   .trend__sum { font-size: var(--mk-fs-body); }
   .pulse__meta { font-size: var(--mk-fs-body); }
 }
@@ -1325,8 +1229,6 @@ watch(liveLoading, (loading) => {
   .usage__label { font-size: var(--mk-fs-micro); }
   .usage__row { font-size: var(--mk-fs-micro); }
   .trend__legend { font-size: var(--mk-fs-micro); }
-  .trend__num { font-size: var(--mk-fs-micro); }
-  .trend__day { font-size: var(--mk-fs-micro); }
   .trend__sum { font-size: var(--mk-fs-micro); }
   .pulse__meta { font-size: var(--mk-fs-body); }
 }
@@ -1354,8 +1256,6 @@ watch(liveLoading, (loading) => {
   .usage__label { font-size: var(--mk-fs-micro); }
   .usage__row { font-size: var(--mk-fs-micro); }
   .trend__legend { font-size: var(--mk-fs-micro); }
-  .trend__num { font-size: var(--mk-fs-micro); }
-  .trend__day { font-size: var(--mk-fs-micro); }
   .trend__sum { font-size: var(--mk-fs-micro); }
   .pulse__meta { font-size: var(--mk-fs-micro); }
 }
@@ -1374,7 +1274,6 @@ html[data-theme='dark'] {
   .ov-skill:hover, .usage__row--clickable:hover, .feed__item:hover { background: #252627; }
   .feed__item--bad:hover { background: #2a1414; }
   .feed__item--warn:hover { background: #2a2410; }
-  .trend__col--today { background: rgba(91, 141, 239, 0.12); box-shadow: inset 0 0 0 1px rgba(91, 141, 239, 0.3); }
   .usage__hero { background: linear-gradient(180deg, #19191a, #19191a); border-color: #2a2b2d; }
   .usage__hero-sep { background: #2a2b2d; }
   .brief-card__go:hover { background: rgba(91, 141, 239, 0.14); }
