@@ -217,8 +217,9 @@ export function normalizeSessionDurationMinutes(session: {
 }): number {
   const rawDuration = session.duration ?? 0;
   if (rawDuration > 0) {
-    // 历史兼容：部分会话把秒写入 duration
-    return rawDuration > 24 * 60 ? Math.round(rawDuration / 60) : rawDuration;
+    // 历史兼容：部分会话把秒写入 duration；同时封顶 24 小时（防脏数据污染累计口径）
+    const minutes = rawDuration > 24 * 60 ? Math.round(rawDuration / 60) : rawDuration;
+    return Math.max(1, Math.min(minutes, 24 * 60));
   }
   const start = session.startTime ? new Date(session.startTime).getTime() : NaN;
   const end = session.endTime ? new Date(session.endTime).getTime() : NaN;
@@ -226,7 +227,13 @@ export function normalizeSessionDurationMinutes(session: {
     return Math.max(1, Math.min(30, Math.round((end - start) / 60000)));
   }
   if (!Number.isFinite(start)) return 0;
-  return estimateActiveMinutes(session, start);
+  // 2026-09-27 口径修复（外部走查）：估算分支必须和上面同档封顶，且没有消息就不许猜。
+  // 实测：跨夜没关的暂停会话被判成 1623 分钟（27 小时，且 0 条消息），
+  // 同日总计「2 次 · 1624 分钟」与累计「1756 分钟」全是假数；同一天里
+  // 「已超时」的同类中止会话却因走封顶分支显示 30 分钟——三条路径三种口径。
+  // 现在：无消息 = 无学习证据 → 0（前端显示「—」）；有消息 → 与结束分支同档封顶。
+  if (!readMessageTimestamps(session?.messages).length) return 0;
+  return Math.max(1, Math.min(30, estimateActiveMinutes(session, start)));
 }
 
 export function normalizeStringArray(value: any): string[] {
