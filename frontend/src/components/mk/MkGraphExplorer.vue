@@ -67,18 +67,21 @@
       <aside class="mk-ge__side">
         <template v-if="selected">
           <h4 class="mk-ge__side-title">{{ selected.label }}</h4>
+          <!-- 字段分区（2026-09-27）：概览四格 + 关系分区（发丝线分隔），替代原来的平铺 kv 行 -->
           <dl class="mk-ge__kv">
-            <dt>层级</dt><dd>{{ selected.level === 'concept' ? '核心概念' : '知识组件' }}</dd>
-            <dt>掌握度</dt>
-            <dd>
-              <span v-if="selected.masteryScore === null || selected.masteryScore === undefined">未评估</span>
-              <span v-else>{{ Math.round(selected.masteryScore * 100) }}%</span>
-            </dd>
-            <dt>稳定性</dt><dd>{{ selected.stability || '—' }}</dd>
-            <dt>提取次数</dt><dd>{{ selected.extractionCount ?? 0 }}</dd>
+            <div class="mk-ge__cell"><dt>层级</dt><dd>{{ selected.level === 'concept' ? '核心概念' : '知识组件' }}</dd></div>
+            <div class="mk-ge__cell">
+              <dt>掌握度</dt>
+              <dd>
+                <span v-if="selected.masteryScore === null || selected.masteryScore === undefined">未评估</span>
+                <span v-else>{{ Math.round(selected.masteryScore * 100) }}%</span>
+              </dd>
+            </div>
+            <div class="mk-ge__cell"><dt>稳定性</dt><dd>{{ selected.stability || '—' }}</dd></div>
+            <div class="mk-ge__cell"><dt>提取次数</dt><dd>{{ selected.extractionCount ?? 0 }}</dd></div>
           </dl>
           <div v-for="group in relationGroups" :key="group.label" class="mk-ge__rel">
-            <p class="mk-ge__rel-label">{{ group.label }}</p>
+            <p class="mk-ge__rel-label">{{ group.label }}<b>{{ group.items.length }}</b></p>
             <ul class="mk-ge__rel-list">
               <li v-for="item in group.items" :key="item.id">
                 <button type="button" class="mk-ge__rel-item" @click="focusNode(item.id)">{{ item.label }}</button>
@@ -379,26 +382,44 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue, #3
   line-height: 1.6;
   color: var(--mk-muted);
 }
+/* 概览字段分区：2×2 条带格（dt 标签在上、值在下），和 badge 同用 surface-3 条带底，
+   暗色比卡片亮一档（admin 表格体系同口径） */
 .mk-ge__kv {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--mk-space-1) var(--mk-space-3);
+  grid-template-columns: 1fr 1fr;
+  gap: var(--mk-space-1);
   margin: 0;
-  font-size: var(--mk-fs-micro);
 }
-.mk-ge__kv dt {
+.mk-ge__cell {
+  padding: 5px 9px 6px;
+  border-radius: var(--mk-radius-sm, 8px);
+  background: var(--mk-surface-3);
+}
+.mk-ge__cell dt {
+  font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
-.mk-ge__kv dd {
-  margin: 0;
+.mk-ge__cell dd {
+  margin: 1px 0 0;
+  font-size: var(--mk-fs-body);
+  font-weight: 700;
 }
+/* 关系分区：每组一条发丝线起头 + 组名加计数，三个组（前置/后继/所属）扫一眼可分 */
 .mk-ge__rel {
   margin-top: var(--mk-space-3);
+  padding-top: var(--mk-space-3);
+  border-top: 1px solid var(--mk-line);
 }
 .mk-ge__rel-label {
   margin: 0 0 var(--mk-space-1);
   font-size: var(--mk-fs-micro);
+  font-weight: 700;
   color: var(--mk-muted);
+}
+.mk-ge__rel-label b {
+  margin-left: 5px;
+  font-weight: 600;
+  color: var(--mk-blue);
 }
 .mk-ge__rel-list {
   margin: 0;
@@ -406,16 +427,21 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue, #3
   list-style: none;
 }
 .mk-ge__rel-item {
-  padding: 2px 0;
+  display: block;
+  width: 100%;
+  padding: 3px 7px;
   border: 0;
+  border-radius: var(--mk-radius-sm, 8px);
   background: transparent;
   color: inherit;
   font-size: var(--mk-fs-micro);
   line-height: 1.5;
   text-align: left;
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 .mk-ge__rel-item:hover {
+  background: var(--mk-surface-3);
   color: var(--mk-blue);
 }
 @media (max-width: 900px) {
