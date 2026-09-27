@@ -22,6 +22,7 @@ import {
   resolvePrerequisiteCheckResultsFromUnderstanding,
 } from './learner-load-profile';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
+import { isProposalConfirmationText } from './goal-conversation.confirm-text';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
 import systemPrisma from '../../config/system-database';
 import {
@@ -608,10 +609,21 @@ async continueConversation(
           };
         }
 
-        // 只接受 UI 显式确认动作，不再依赖自然语言文本猜测“行/可以”是否代表确认。
-        const confirmProposal = options?.confirmProposal === true;
+        // 确认双通道（2026-09-27 绕圈缺陷修复）：①UI 显式标志（首选，优先级不变）；
+        // ②自然语言确认（快捷选项/打字）——原先只认标志，proposing 阶段 AI 连续 5 轮
+        // 重复"请在下面点一下确认"而用户回「就按这个来，确认」永远推不动（confidence 卡 0.88）。
+        // 文本探测是高精度白名单（只认最后一个语义段的纯确认短语，否决/改需求尾缀一律不认，
+        // 见 goal-conversation.confirm-text.ts 文件头），误确认面收得很窄。
+        const confirmProposal = options?.confirmProposal === true || isProposalConfirmationText(userReply);
 
         if (conversation.stage === 'proposing' && confirmProposal) {
+          if (options?.confirmProposal !== true) {
+            logger.info('[goal-conversation] 自然语言确认命中，按 confirmProposal 推进', {
+              conversationId,
+              userId,
+              replyPreview: userReply.slice(0, 40),
+            });
+          }
           const data = JSON.parse(conversation.collectedData || '{}');
           const understanding = data.understanding || {};
 
