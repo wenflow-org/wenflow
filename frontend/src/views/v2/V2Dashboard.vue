@@ -69,20 +69,20 @@
                 <span class="tag">{{ todayTask?.kind || '任务' }}</span>
               </div>
               <div class="action__footer">
-                <!-- skill todayActions 回填（≤3 条，语义跳转已解析） -->
+                <!-- 主 CTA 独大（2026-09-27 信噪比重设计）：学习台的职责是分发「现在做什么」，
+                     导览出口（学习状态/成就/全部路径）各有导航与快捷入口，不再挤主 CTA 的位置 -->
                 <template v-if="skillActions.length">
                   <router-link :to="skillActions[0].to" class="btn-primary">
                     <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
                     {{ skillActions[0].label }}
                   </router-link>
-                  <router-link v-for="a in skillActions.slice(1)" :key="a.label" :to="a.to" class="btn-ghost">{{ a.label }}</router-link>
                 </template>
                 <template v-else>
                   <button type="button" v-if="todayTask" class="btn-primary" @click="goLearn">
                     <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
                     开始学习
                   </button>
-                  <router-link to="/learning-paths" class="link-muted">查看全部路径</router-link>
+                  <router-link v-else to="/learning-paths" class="btn-primary">查看全部路径</router-link>
                 </template>
                 <button type="button" class="link-muted" @click="setResting(true)">今天休息</button>
               </div>
@@ -150,36 +150,24 @@
             </div>
           </section>
 
-          <!-- 路径进度卡 -->
+          <!-- 路径进度条卡（2026-09-27 信噪比重设计）：5 阶段全量标题是路径详情页的内容，
+               学习台只保留「当前位置 + 一句话 + 去向」；阶段全量列表与预估投入见详情页 -->
           <aside v-if="primaryPath" class="card path">
             <div class="path__head">
               <div class="path__title">
                 <strong>{{ primaryPath.title }}</strong>
-                <span class="path__sub">{{ pathHintText }}</span>
+                <span class="path__sub">{{ pathStageSummary }}</span>
               </div>
               <span class="badge" :class="pathBadge.cls">{{ pathBadge.text }}</span>
             </div>
-            <div v-if="pathStruggleNote" class="path__note">
-              <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M12 2 1 21h22L12 2zm0 6 7 12H5l7-12zm-1 4v3h2v-3h-2zm0 4v2h2v-2h-2z"/></svg>
-              {{ pathStruggleNote }}
-            </div>
-            <ol v-if="primaryPath.stages.length" class="steps">
-              <li v-for="(s, i) in primaryPath.stages" :key="i" class="step" :class="`step--${s.status}`">
-                <span class="step__dot"></span>
-                <div class="step__body">
-                  <strong>{{ s.title }}</strong>
-                  <small>{{ s.note }}</small>
-                </div>
-              </li>
-            </ol>
             <div class="path__foot">
               <div class="path__progress"><i :style="{ width: primaryPath.percent + '%' }"></i></div>
               <div class="path__nums">
                 <span>整体 {{ primaryPath.percent }}%</span>
-                <span v-if="primaryPath.hours">预计投入 {{ primaryPath.hours }} 小时</span>
+                <span v-if="currentStageNote">{{ currentStageNote }}</span>
               </div>
+              <router-link :to="`/learning-path/${primaryPath.id}`" class="path__detail-link">路径详情 ›</router-link>
             </div>
-            <router-link :to="`/learning-path/${primaryPath.id}`" class="path__detail-link">查看路径详情 ›</router-link>
           </aside>
 
           <!-- 新手态路径占位卡 -->
@@ -226,7 +214,10 @@
             </ul>
           </template>
 
-          <!-- 复习（到期旧知回捞） -->
+          <!-- 复习（到期旧知回捞）——2026-09-27 信噪比重设计：
+               16 项逐条罗列 + 五种数字口径（课上接/排队/到期/明天/额度）的信息都在页面里，
+               但学习者要做的决定只有一个：照常去上课。概念明细、记忆强度、排队台账
+               属于学习状态页，学习台只保留「会发生什么 + 去上课」。 -->
           <template v-if="reviewBlockVisible">
             <div v-if="sourceFailed.review" class="agenda__fail">
               复习数据加载失败。<button type="button" class="agenda__retry" @click="loadAll">重试</button>
@@ -234,72 +225,22 @@
             <template v-else-if="reviewDue.length">
               <div class="agenda__divider" role="presentation"></div>
               <div class="agenda__group agenda__group--split">
-                <span class="agenda__group-label">今日复习 <strong class="review__title">{{ reviewTitle }}</strong></span>
-                <div class="review__stats">
-                  <span v-if="reviewUrgentCount" class="review__stat review__stat--urgent">记忆偏弱 {{ reviewUrgentCount }}</span>
-                  <span class="review__stat">按计划到期 {{ reviewDue.length - reviewUrgentCount }}</span>
-                  <span v-if="(reviewPlan?.tomorrowCount ?? 0) > 0" class="review__stat">明天预计 {{ reviewPlan?.tomorrowCount }}</span>
-                </div>
+                <span class="agenda__group-label">今日复习</span>
               </div>
-              <!-- 概念行只呈现状态；全组唯一去向是底部「去上课」CTA（2026-09-25 口径） -->
-              <ul class="review__list">
-                <li
-                  v-for="item in visibleReviewDue"
-                  :key="item.conceptKey"
-                  class="review__item"
-                  :class="{ 'review__item--urgent': item.reason === 'below-threshold' }"
-                >
-                  <div class="review__row">
-                    <span class="review__name">{{ item.label }}</span>
-                    <span
-                      class="review__tag"
-                      :class="item.reason === 'below-threshold' ? 'review__tag--urgent' : 'review__tag--plan'"
-                    >{{ reviewReasonText(item.reason) }}</span>
-                    <span class="review__meter" :title="`当前记忆强度 ${reviewPct(item.retention)}`">
-                      <span class="review__bar"><i :style="{ width: reviewPct(item.retention) }"></i></span>
-                      <span class="review__pct">{{ reviewPct(item.retention) }}</span>
-                    </span>
-                  </div>
-                </li>
-              </ul>
-              <button
-                v-if="reviewDue.length > REVIEW_PREVIEW"
-                type="button"
-                class="review__more"
-                @click="reviewExpanded = !reviewExpanded"
-              >{{ reviewExpanded ? '收起' : `还有 ${reviewDue.length - REVIEW_PREVIEW} 个 · 展开全部` }}</button>
-              <div class="review__footer">
-                <router-link v-if="todayTask?.id" :to="`/learn/${todayTask.id}`" class="btn-primary review__go">去上课 · 顺带温故</router-link>
-                <span class="review__hint">{{ reviewFooterHint }}</span>
+              <div class="review__plan">
+                <div class="review__plan-body">
+                  <strong>{{ reviewHeadline }}</strong>
+                  <span>{{ reviewFooterHint }}</span>
+                </div>
+                <router-link v-if="todayTask?.id" :to="`/learn/${todayTask.id}`" class="btn-ghost review__go">去上课</router-link>
               </div>
             </template>
           </template>
         </section>
 
-        <!-- 快捷入口（始终显示，不随折叠区隐藏） -->
-        <div class="quick">
-          <router-link to="/learning-state" class="quick__item">
-            <span class="quick__icon quick__icon--pulse">
-              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 13h4l2-7 4 12 2-7h6v2h-4.6l-2.4 8.4L9.6 7.6 7.6 15H3v-2z"/></svg>
-            </span>
-            <span class="quick__body"><strong>学习状态</strong><small>节奏 · 负荷 · AI 建议</small></span>
-            <span class="quick__go">›</span>
-          </router-link>
-          <router-link to="/learning-paths" class="quick__item">
-            <span class="quick__icon quick__icon--layers">
-              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="m12 2 10 5-10 5L2 7l10-5zm0 7.6L18.9 7 12 4.4 5.1 7 12 9.6zM2 12l10 5 10-5v2l-10 5L2 14v-2zm0 5 10 5 10-5v2l-10 5L2 19v-2z" opacity=".9"/></svg>
-            </span>
-            <span class="quick__body"><strong>全部路径</strong><small>{{ pathsCountText }}</small></span>
-            <span class="quick__go">›</span>
-          </router-link>
-          <router-link to="/user/achievements" class="quick__item">
-            <span class="quick__icon quick__icon--medal">
-              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V22l4-2 4 2v-7.26A7 7 0 0 0 12 2z"/></svg>
-            </span>
-            <span class="quick__body"><strong>成就</strong><small>{{ achievementsText }}</small></span>
-            <span class="quick__go">›</span>
-          </router-link>
-        </div>
+        <!-- 快捷入口整块移除（2026-09-27 信噪比重设计）：学习状态/全部路径/成就
+             三项与主导航重复（学习状态、学习路径在导航条；成就在个人中心），
+             且每个数字在各自页面重复展示。学习台的信息职责回归「今天做什么」。 -->
 
         <!-- 折叠区=学习节奏：本周格+整月日历+激励（今日安排已上提为常显分区） -->
         <div class="more-toggle" v-if="hasFoldedContent">
@@ -583,43 +524,22 @@ const reviewPlan = ref<{
   daily?: { date: string; limitLoad: number; usedLoad: number; remainingLoad: number };
   tomorrowCount?: number;
 } | null>(null);
-/** 今日复习列表默认预览条数（其余折叠为「还有 N 个」） */
-const REVIEW_PREVIEW = 5;
-const reviewExpanded = ref(false);
-const visibleReviewDue = computed(() =>
-  reviewExpanded.value ? reviewDue.value : reviewDue.value.slice(0, REVIEW_PREVIEW)
-);
-/** below-threshold = 记忆已跌破阈值（偏弱/该优先）；interval-elapsed = 按计划到期 */
-const reviewUrgentCount = computed(() => reviewDue.value.filter((item) => item.reason === 'below-threshold').length);
-
-/** 标题：以「今天课上实际接几个」为主口径，排队量单独说（避免把接口上限 20 当总数） */
-const reviewTitle = computed(() => {
+/** 复习行只保留一句话口径（2026-09-27 信噪比重设计）：
+    主句=今天会发生什么（课上接几个）；概念明细/排队/明天/额度台账移到学习状态页 */
+const reviewHeadline = computed(() => {
   const planned = reviewPlan.value?.items?.length ?? 0;
-  if (planned > 0) return `今天课上接 ${planned} 个 · 排队 ${reviewPlan.value?.backlogCount ?? 0} 个`;
-  return `${reviewDue.value.length} 个知识点待回捞`;
+  if (planned > 0) return `这节课会先回捞 ${planned} 个旧知识点`;
+  const weak = reviewDue.value.filter((item) => item.reason === 'below-threshold').length;
+  if (weak > 0) return `${weak} 个知识点记忆偏弱，会在课上优先回捞`;
+  return `${reviewDue.value.length} 个知识点到期`;
 });
 const reviewFooterHint = computed(() => {
-  const planned = reviewPlan.value?.items?.length ?? 0;
   const daily = reviewPlan.value?.daily;
-  const quota = daily ? `今日额度 ${daily.usedLoad}/${daily.limitLoad}` : '';
-  if (planned > 0) {
-    return `上课时会先花 1–2 分钟回捞这 ${planned} 个，不用额外开一节复习课${quota ? `（${quota}）` : ''}`;
-  }
   if (daily && daily.remainingLoad <= 0) {
-    return `今日温故额度已用完（${quota}），剩下的明天继续`;
+    return `今日温故额度已用完（${daily.usedLoad}/${daily.limitLoad}），剩下的明天继续`;
   }
-  return '到期知识点会在上课时顺带回捞';
+  return '不用额外安排，照常上课就行';
 });
-function reviewPct(retention: number): string {
-  const value = Number(retention);
-  const safe = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
-  return `${Math.round(safe * 100)}%`;
-}
-function reviewReasonText(reason: string): string {
-  if (reason === 'below-threshold') return '记忆偏弱';
-  if (reason === 'interval-elapsed') return '计划到期';
-  return '待复习';
-}
 const todaySchedule = ref<Record<string, any> | null>(null);
 const loadError = ref(false);
 /** 各数据源失败标记：区块级降级提示（不整页失败，也不伪装成空态） */
@@ -841,24 +761,25 @@ const skillActions = computed<SkillAction[]>(() => {
         return '/learning-paths';
     }
   };
-  return list.slice(0, 3).map((item: Record<string, any>, i: number) => ({
-    label: i === 0
-      ? item.action || item.title || ACTION_LABEL_BY_TO[item.to] || '去学习'
-      : ACTION_LABEL_BY_TO[item.to] || item.action || item.title || '去学习',
+  return list.slice(0, 1).map((item: Record<string, any>) => ({
+    label: item.action || item.title || ACTION_LABEL_BY_TO[item.to] || '去学习',
     to: resolve(item.to),
-    primary: i === 0
+    primary: true
   }));
 });
 
-/* 路径卡描述（pathHint 回填）与卡点提醒 */
-const pathHintText = computed(() => guidanceCopy.value?.pathHint || primaryPath.value?.sub || '');
-const pathStruggleNote = computed(() => {
-  const p = guidanceSummary.value?.path;
-  if (!p) return '';
-  if (p.hasPrerequisiteGaps) return '有前置知识缺口，建议先补基础再推进';
-  if (p.hasStrugglingConcepts) return '近期有卡点的概念，适合安排复习';
-  if (p.hasFragileConcepts) return '部分概念还不够稳，注意巩固';
-  return '';
+/* 路径条卡（2026-09-27 信噪比重设计）：阶段全量标题归路径详情页，
+   这里只给「第 N/M 阶段 · 当前阶段进度」一句话 */
+const currentStage = computed(() => primaryPath.value?.stages.find((s) => s.status === 'current') ?? null);
+const pathStageSummary = computed(() => {
+  const stages = primaryPath.value?.stages ?? [];
+  if (!stages.length) return primaryPath.value?.sub || '';
+  const idx = stages.findIndex((s) => s === currentStage.value);
+  return idx >= 0 ? `第 ${idx + 1} / ${stages.length} 阶段 · ${currentStage.value?.title ?? ''}` : `共 ${stages.length} 个阶段`;
+});
+const currentStageNote = computed(() => {
+  const note = currentStage.value?.note;
+  return note ? `本阶段 ${note}` : '';
 });
 
 const todayBarPct = computed(() => {
@@ -866,11 +787,13 @@ const todayBarPct = computed(() => {
   return Math.min(100, Math.round((todayMinutes.value / target) * 100));
 });
 
-/* 今日行动描述：desc 与标题重复时不重复展示 */
+/* 今日行动描述：标题已说清任务，desc 只保留「怎么做」的第一句（≤64 字），
+   其余进课堂页看完整说明（2026-09-27 信噪比重设计：原 98 字含后段心理按摩） */
 const actionDesc = computed(() => {
   const desc = todayTask.value?.desc?.trim();
   if (!desc || desc === todayTask.value?.title) return '';
-  return desc;
+  const firstSentence = desc.split(/(?<=[。！？!?])/)[0] || desc;
+  return firstSentence.length > 64 ? firstSentence.slice(0, 64) + '…' : firstSentence;
 });
 
 /* 带上 pathId 进课堂：评估页的「返回学习路径」靠它回详情页（缺省只能回列表），
@@ -943,18 +866,6 @@ const pathBadge = computed(() => {
   if (primaryPath.value.generating) return { text: '生成中', cls: 'badge--cyan' };
   if (primaryPath.value.percent >= 100) return { text: '已完成', cls: 'badge--green' };
   return { text: '进行中', cls: 'badge--blue' };
-});
-
-const pathsCountText = computed(() => {
-  const total = paths.value.length;
-  if (!total) return '还没有路径';
-  const active = paths.value.filter((p) => p.generationLifecycle?.phase === 'ready' && p.status !== 'completed').length;
-  return active ? `${active} 条进行中` : `${total} 条路径`;
-});
-
-const achievementsText = computed(() => {
-  const unlocked = achievements.value.filter((a) => a.unlocked).length;
-  return achievements.value.length ? `已解锁 ${unlocked} / ${achievements.value.length}` : '完成学习即可解锁';
 });
 
 const nearestAchievement = computed(() => {
@@ -1435,7 +1346,6 @@ onMounted(loadAll);
 .agenda__group { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; color: var(--muted); }
 .agenda__group--split { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .agenda__group-label { display: inline-flex; align-items: baseline; gap: 8px; }
-.agenda__group-label .review__title { font-size: 14px; }
 .agenda__divider { height: 1px; background: var(--line); margin: 2px 0; }
 .agenda__fail { font-size: 13px; color: var(--muted); }
 .agenda__retry {
@@ -1454,45 +1364,20 @@ onMounted(loadAll);
 .budget__num { width: 110px; text-align: right; color: var(--faint); font-size: 12px; }
 .budget__bw { padding: 1px 6px; border-radius: var(--mk-radius-xs); background: color-mix(in srgb, var(--green, #1e9e58) 8%, var(--surface)); color: var(--green, #047857); font-size: 12px; }
 
-/* ---------- 今日复习（复习闭环） ---------- */
-/* 同上：间距交给 .folded-sections 的 gap，不再叠一层 margin-bottom */
-.review__title { font-size: 15px; font-weight: 700; color: var(--ink); }
-.review__stats { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-.review__stat {
-  padding: 2px 8px; border-radius: var(--mk-radius-pill); white-space: nowrap;
-  background: color-mix(in srgb, var(--blue) 8%, transparent);
-  color: var(--blue-deep); font-size: 12px; font-weight: 700;
-}
-.review__stat--urgent {
-  background: color-mix(in srgb, var(--amber) 16%, transparent);
-  color: var(--amber-ink);
-}
-/* minmax(0,1fr)：auto 轨道会被行的 max-content（名称 260 + 标签 58 + 强度条 132 + 间距）
-   顶到 486px，即使容器只有 316px——320/390 窄屏下整卡被撑破、整页出横向滚动条。
-   轨道下限钉 0 后由 .review__name 的 min-width:0 + ellipsis 正常收尾。 */
-.review__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; grid-template-columns: minmax(0, 1fr); }
-.review__item { border-radius: var(--mk-radius-md); }
-.review__row {
-  display: flex; align-items: center; gap: 10px; padding: 5px 8px;
+/* ---------- 今日复习（2026-09-27 收敛为单行计划条） ----------
+   原 16 项逐条列表 + 强度条 + 五种数字口径的样式整体退役；
+   学习台只说「会发生什么 + 去上课」，明细归学习状态页。 */
+.review__plan {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap;
+  padding: 12px 14px;
   border-radius: var(--mk-radius-md);
+  background: color-mix(in srgb, var(--blue) 4%, var(--surface));
 }
-.review__name {
-  flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.review__tag { flex: 0 0 auto; padding: 1px 7px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 700; white-space: nowrap; }
-.review__tag--urgent { background: color-mix(in srgb, var(--amber) 18%, transparent); color: var(--amber-ink); }
-.review__tag--plan { background: color-mix(in srgb, var(--faint) 12%, transparent); color: var(--faint); }
-.review__meter { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; width: 132px; }
-.review__bar { flex: 1; height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
-.review__bar i { display: block; height: 100%; border-radius: 3px; background: var(--blue); transition: width 0.4s ease; }
-.review__item--urgent .review__bar i { background: var(--amber); }
-.review__pct { width: 34px; text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.review__more { margin-top: 8px; padding: 8px 0; font-size: 12.5px; font-weight: 700; color: var(--blue-deep); }
-.review__more:hover { text-decoration: underline; }
-.review__footer { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
-.review__go { padding: 8px 18px; border-radius: var(--mk-radius-lg); }
-.review__hint { font-size: 12px; color: var(--faint); }
+.review__plan-body { display: grid; gap: 3px; min-width: 0; }
+.review__plan-body strong { font-size: 14px; color: var(--ink); }
+.review__plan-body span { font-size: 12.5px; color: var(--muted); }
+.review__go { flex: 0 0 auto; }
 
 /* ---------- 主区 ---------- */
 .dash__grid-main {  display: grid;
@@ -1572,26 +1457,6 @@ onMounted(loadAll);
 .badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; }
 .badge--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
 .badge--red { color: var(--red-ink); background: rgba(239, 117, 120, 0.12); }
-.steps { list-style: none; margin: 0; padding: 0; display: grid; }
-.step { display: grid; grid-template-columns: 18px 1fr; gap: 10px; position: relative; padding-bottom: 16px; }
-.step:last-child { padding-bottom: 0; }
-.step::before {
-  content: ''; position: absolute; left: 8px; top: 18px; bottom: 0;
-  width: 2px; background: color-mix(in srgb, var(--line) 60%, transparent);
-}
-.step:last-child::before { display: none; }
-.step__dot {
-  width: 18px; height: 18px; border-radius: 50%;
-  border: 2px solid var(--line); background: var(--surface);
-  margin-top: 1px; position: relative; z-index: 1;
-}
-.step--done .step__dot { border-color: var(--green); background: var(--green); box-shadow: inset 0 0 0 3px #fff; }
-.step--done::before { background: var(--green); }
-.step--current .step__dot { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(52, 120, 246, 0.15); }
-.step--blocked .step__dot { border-color: var(--red); box-shadow: 0 0 0 4px rgba(239, 117, 120, 0.14); }
-.step__body strong { display: block; font-size: 13.5px; line-height: 1.4; }
-.step__body small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
-.step--current .step__body small { color: var(--blue-deep); font-weight: 600; }
 .path__foot { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; }
 .path__progress { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .path__progress i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
@@ -1715,32 +1580,6 @@ onMounted(loadAll);
 .day-detail__date { font-size: 13px; font-weight: 800; }
 .day-detail__lead { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
 
-/* ---------- 快捷入口 ---------- */
-.quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.quick__item {
-  display: flex; align-items: center; gap: 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 14px 16px;
-  cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
-}
-.quick__item:hover { border-color: color-mix(in srgb, var(--blue) 40%, transparent); box-shadow: 0 8px 20px color-mix(in srgb, var(--blue) 10%, transparent); }
-.quick__icon {
-  width: 36px; height: 36px; border-radius: 11px;
-  display: grid; place-items: center; flex: 0 0 auto;
-}
-.quick__icon--pulse { color: var(--cyan); background: rgba(67, 176, 216, 0.13); }
-.quick__icon--layers { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
-.quick__icon--medal { color: var(--accent); background: rgba(141, 107, 255, 0.13); }
-.quick__body { flex: 1; display: grid; gap: 2px; }
-.quick__body strong { font-size: 13.5px; }
-.quick__body small { font-size: 12px; color: var(--faint); }
-.quick__go { color: var(--faint); font-size: 18px; }
-.quick__item:hover .quick__go { color: var(--blue-deep); }
-
 /* ---------- 响应式 ---------- */
 @media (max-width: 1100px) {
   .nav__links { display: none; }
@@ -1750,12 +1589,6 @@ onMounted(loadAll);
   .month__body { grid-template-columns: 1fr; }
   .mweek { grid-template-columns: 1fr; gap: 6px; }
   .mweek__side { display: flex; gap: 8px; align-items: baseline; }
-  .quick { grid-template-columns: 1fr; }
-  /* 复习行移动端换行：单行布局里标签 58 + 强度条 132 是固定的，名称只能分到 ~90px，
-     长知识点名退化成「按维度定位…」。改两行：名称独占一行（可折行）+ 标签/强度条/百分比一行。 */
-  .review__row { flex-wrap: wrap; row-gap: 4px; }
-  .review__name { flex: 1 1 100%; white-space: normal; overflow: visible; }
-  .review__meter { flex: 1 1 auto; width: auto; min-width: 0; }
   /* 卡内标题按基线收到 14px——16px 比路径页卡标题（用户点过名的 15.5px 档）还大一档 */
   .action__title { font-size: 14px; line-height: 1.4; }
   .dash__main { padding: 16px 14px 32px; }
@@ -1768,7 +1601,6 @@ onMounted(loadAll);
 .nav__links a { text-decoration: none; }
 .nav__cta { text-decoration: none; }
 a.btn-primary { text-decoration: none; }
-.quick__item { text-decoration: none; color: inherit; }
 .example { text-decoration: none; }
 
 .action__eyebrow--rest { color: var(--faint); }
@@ -1786,7 +1618,6 @@ a.btn-primary { text-decoration: none; }
   border-top: 1px solid var(--line); padding-top: 12px;
 }
 .path__detail-link:hover { text-decoration: underline; }
-.step--blocked .step__dot { border-color: var(--red); box-shadow: 0 0 0 4px rgba(239, 117, 120, 0.14); }
 .link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; text-decoration: none; padding: 5px 0; }
 .link-muted:hover { color: var(--blue-deep); }
 .dash__main { width: 100%; }
@@ -2113,9 +1944,7 @@ a.btn-primary { text-decoration: none; }
 [data-theme='dark'] .day__cell--h3,
 [data-theme='dark'] .mday--h3 { background: rgba(77, 139, 248, 0.85); color: #ffffff; }
 [data-theme='dark'] .nav { background: var(--v2nav-bg); }
-[data-theme='dark'] .budget__bar,
-[data-theme='dark'] .review__bar { background: rgba(230, 237, 247, 0.12); }
-[data-theme='dark'] .step--done .step__dot { box-shadow: inset 0 0 0 3px var(--surface); }
+[data-theme='dark'] .budget__bar { background: rgba(230, 237, 247, 0.12); }
 [data-theme='dark'] .mday--prev,
 [data-theme='dark'] .mday--future { color: var(--faint); }
 [data-theme='dark'] .sheet__zone--none { background: rgba(230, 237, 247, 0.1); }
@@ -2179,7 +2008,6 @@ a.btn-primary { text-decoration: none; }
      统一到 16（本页多数派，也落在「大卡 16」的密度口径内），只动横向：竖向内边距
      是行间节奏、不是对齐轨道，不动。 */
   .dash__main .card,
-  .dash__main .quick__item,
   .dash__main .tip {
     padding-left: 16px;
     padding-right: 16px;

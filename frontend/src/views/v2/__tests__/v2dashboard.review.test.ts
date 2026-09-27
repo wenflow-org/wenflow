@@ -1,10 +1,10 @@
 /**
- * V2Dashboard「今日复习」卡重设计回归：
- * - 头部口径：以「今天课上实际接几个（课内温故计划）」为主，排队量单独说
- *   （避免把 due 接口上限 20 当成真实总数）；计划拿不到时回退到到期清单总数。
- * - 行内去掉由 retention 推导出来的假「约 X 分钟」，改为「到期原因 + 记忆强度」。
- * - 默认只预览前 5 条，其余折叠为「还有 N 个 · 展开全部」。
- * - 入口：复习藏在日常课里（默认去上课顺带温故），不再借壳开独立复习课。
+ * V2Dashboard「今日复习」区回归（2026-09-27 信噪比重设计版）：
+ * - 学习台只保留一行「会发生什么」：这节课会先回捞 N 个（课内温故计划为主口径，
+ *   计划拿不到时回退到期清单/偏弱计数，不显示 0 或空）。
+ * - 概念明细、排队量、明日预告、逐条记忆强度全部移出学习台（归学习状态页），
+ *   这里断言它们不再出现。
+ * - 唯一行动入口「去上课」；额度用完时提示顺延明天。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -96,7 +96,7 @@ async function mountDashboard(options: { withPlan?: boolean; plan?: Record<strin
   return w;
 }
 
-describe('V2Dashboard 今日复习卡（重设计）', () => {
+describe('V2Dashboard 今日复习区（信噪比重设计）', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     getMock.mockReset();
@@ -105,57 +105,36 @@ describe('V2Dashboard 今日复习卡（重设计）', () => {
     getAdaptiveGuidance.mockReset();
   });
 
-  it('头部口径：今天课上接几个 + 排队几个（不把接口上限当总数）', async () => {
+  it('主口径：这节课会先回捞 N 个（以课内温故计划为准）', async () => {
     const w = await mountDashboard();
-    expect(w.find('.review__title').text()).toBe('今天课上接 3 个 · 排队 4 个');
-    expect(w.find('.review__stat--urgent').text()).toContain('记忆偏弱 2');
-    const stats = w.findAll('.review__stat').map((n) => n.text());
-    expect(stats).toContain('按计划到期 5');
+    expect(w.find('.review__plan-body strong').text()).toBe('这节课会先回捞 3 个旧知识点');
   });
 
-  it('温故计划拿不到时回退到到期清单总数（不显示 0/空）', async () => {
+  it('温故计划拿不到时回退到偏弱计数（不显示 0/空）', async () => {
     const w = await mountDashboard({ withPlan: false });
-    expect(w.find('.review__title').text()).toBe('7 个知识点待回捞');
+    expect(w.find('.review__plan-body strong').text()).toBe('2 个知识点记忆偏弱，会在课上优先回捞');
   });
 
-  it('行内用「到期原因 + 记忆强度」，不再出现由 retention 推导的假时长', async () => {
+  it('概念明细/排队量/明日预告/逐条强度不再出现在学习台', async () => {
     const w = await mountDashboard();
-    const list = w.find('.review__list');
-    expect(list.text()).not.toContain('分钟');
-    expect(list.text()).toContain('记忆偏弱');
-    expect(list.text()).toContain('计划到期');
-    expect(list.text()).toContain('42%');
-    expect(w.findAll('.review__minutes').length).toBe(0);
+    const text = w.find('.agenda').text();
+    expect(text).not.toContain('排队 4');
+    expect(text).not.toContain('明天预计 5');
+    expect(text).not.toContain('42%');
+    expect(w.findAll('.review__item').length).toBe(0);
+    expect(w.find('.review__more').exists()).toBe(false);
   });
 
-  it('默认预览前 5 条，可展开全部', async () => {
+  it('唯一行动入口是「去上课」+ 一句指引', async () => {
     const w = await mountDashboard();
-    expect(w.findAll('.review__item').length).toBe(5);
-    const more = w.find('.review__more');
-    expect(more.text()).toContain('还有 2 个');
-    await more.trigger('click');
-    expect(w.findAll('.review__item').length).toBe(7);
-    expect(w.find('.review__more').text()).toBe('收起');
-  });
-
-  it('入口是「去上课 · 顺带温故」，并说明课上会先花 1–2 分钟回捞 + 今日额度', async () => {
-    const w = await mountDashboard();
-    expect(w.find('.review__go').text()).toContain('去上课 · 顺带温故');
-    expect(w.find('.review__hint').text()).toContain('回捞这 3 个');
-    expect(w.find('.review__hint').text()).toContain('不用额外开一节复习课');
-    expect(w.find('.review__hint').text()).toContain('今日额度 3.5/6');
-  });
-
-  it('明日预告：有明日到期点时显示「明天预计 N」', async () => {
-    const w = await mountDashboard();
-    const stats = w.findAll('.review__stat').map((n) => n.text());
-    expect(stats).toContain('明天预计 5');
+    expect(w.find('.review__go').text()).toBe('去上课');
+    expect(w.find('.review__plan-body span').text()).toBe('不用额外安排，照常上课就行');
   });
 
   it('今日额度用完 → 提示顺延到明天', async () => {
     const w = await mountDashboard({ plan: { ...PLAN, items: [], daily: { date: '2026-09-15', limitLoad: 6, usedLoad: 6, remainingLoad: 0 } } });
-    expect(w.find('.review__hint').text()).toContain('今日温故额度已用完');
-    expect(w.find('.review__hint').text()).toContain('明天继续');
+    const hint = w.find('.review__plan-body span').text();
+    expect(hint).toContain('今日温故额度已用完');
+    expect(hint).toContain('明天继续');
   });
 });
-
