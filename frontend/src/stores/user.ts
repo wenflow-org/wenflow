@@ -87,6 +87,7 @@ export const useUserStore = defineStore('user', () => {
       const profile = await userAPI.getProfile();
       user.value = profile;
       localStorage.setItem('user', JSON.stringify(profile));
+      noteProfileFetched();
     } catch (err: any) {
       error.value = err.message || '获取用户信息失败';
       if (err.status === 401) {
@@ -97,19 +98,37 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  /* 档案拉取时间戳：onboardingCompleted=false 的缓存只信一小段窗口（见 ensureProfile），
+     登出时随用户域数据一并清除 */
+  const PROFILE_FETCHED_AT_KEY = 'user_fetched_at';
+  const STALE_FALSE_PROFILE_MS = 5 * 60 * 1000;
+  const profileFetchedAt = ref(0);
+  function noteProfileFetched() {
+    profileFetchedAt.value = Date.now();
+    localStorage.setItem(PROFILE_FETCHED_AT_KEY, String(profileFetchedAt.value));
+  }
+
   /* 守卫专用档案读取（审计 #10：路由守卫不再每次导航都请求 profile）。
      缓存命中条件是 onboardingCompleted 已知——markLoggedIn 只写 id/name 部分档案，
-     未水合完整档案前不算有效缓存；并发导航共享同一次在途请求。 */
+     未水合完整档案前不算有效缓存；并发导航共享同一次在途请求。
+     时效（走查 2026-09-27）：false 档案永久可信会让「他端已完成引导/后台已改回」
+     永远挡在本地旧值后面——连 /login 都被守卫顶回 /onboarding 且不自愈；
+     completed 档案长期可信，不增加任何常规流量。 */
   let ensureProfileInFlight: Promise<UserProfile | null> | null = null;
   async function ensureProfile(): Promise<UserProfile | null> {
     if (!hasSession.value) return null;
-    if (user.value && user.value.onboardingCompleted !== undefined) return user.value;
+    if (user.value && user.value.onboardingCompleted !== undefined) {
+      const fresh = user.value.onboardingCompleted
+        || Date.now() - profileFetchedAt.value < STALE_FALSE_PROFILE_MS;
+      if (fresh) return user.value;
+    }
     if (ensureProfileInFlight) return ensureProfileInFlight;
     ensureProfileInFlight = (async () => {
       try {
         const profile = await userAPI.getProfile();
         user.value = profile;
         localStorage.setItem('user', JSON.stringify(profile));
+        noteProfileFetched();
         return profile;
       } catch {
         // 与守卫原语义一致：获取失败不阻塞导航（401 由 api 实例拦截器统一处理）
@@ -139,6 +158,7 @@ export const useUserStore = defineStore('user', () => {
         try {
           const profile = await userAPI.getProfile();
           markLoggedIn(profile);
+          noteProfileFetched();
           return true;
         } catch {
           return false;
@@ -158,6 +178,7 @@ export const useUserStore = defineStore('user', () => {
       const updated = await userAPI.updateProfile(data);
       user.value = updated;
       localStorage.setItem('user', JSON.stringify(updated));
+      noteProfileFetched();
       return updated;
     } catch (err: any) {
       error.value = err.message || '更新失败';
@@ -184,6 +205,8 @@ export const useUserStore = defineStore('user', () => {
 
   function initFromStorage() {
     const storedUser = localStorage.getItem('user');
+    // 无时间戳（旧版写入/被清理）按 0 处理：false 缓存冷启动即过期，首次导航重拉一次自愈
+    profileFetchedAt.value = Number(localStorage.getItem(PROFILE_FETCHED_AT_KEY)) || 0;
     hasSession.value = hasUserSession();
     if (storedUser && hasSession.value) {
       try {

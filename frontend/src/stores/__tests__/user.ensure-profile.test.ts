@@ -107,6 +107,31 @@ describe('user store：守卫档案缓存', () => {
     expect(getProfile).toHaveBeenCalledTimes(1);
   });
 
+  it('false 档案缓存过期（>5min）后重拉——他端已完成引导时本端能自愈（走查 2026-09-27）', async () => {
+    const pending = { ...FULL_PROFILE, onboardingCompleted: false };
+    getProfile.mockResolvedValue(pending);
+    hasUserSessionMock.mockReturnValue(true);
+    const store = useUserStore();
+    store.hasSession = true;
+
+    await expect(store.ensureProfile()).resolves.toMatchObject({ onboardingCompleted: false });
+    expect(getProfile).toHaveBeenCalledTimes(1);
+    // 窗口内：缓存命中零请求
+    await expect(store.ensureProfile()).resolves.toMatchObject({ onboardingCompleted: false });
+    expect(getProfile).toHaveBeenCalledTimes(1);
+
+    // 模拟时间流逝：缓存时间戳退回 6 分钟前（与 localStorage 同源，走 initFromStorage 口径）
+    localStorage.setItem('user_fetched_at', String(Date.now() - 6 * 60 * 1000));
+    store.initFromStorage();
+    // 服务端已改回 true：过期后的重拉拿到新状态，不再弹回引导页
+    getProfile.mockResolvedValue({ ...FULL_PROFILE });
+    await expect(store.ensureProfile()).resolves.toMatchObject({ onboardingCompleted: true });
+    expect(getProfile).toHaveBeenCalledTimes(2);
+    // 拉到 completed 档案后恢复长期缓存
+    await expect(store.ensureProfile()).resolves.toMatchObject({ onboardingCompleted: true });
+    expect(getProfile).toHaveBeenCalledTimes(2);
+  });
+
   it('拉取失败：返回 null 不抛出（守卫导航不被阻塞）', async () => {
     hasUserSessionMock.mockReturnValue(true);
     getProfile.mockRejectedValue(new Error('boom'));

@@ -111,6 +111,8 @@ export function clearUserLocalState(): void {
   clearGoalConversationStorage();
   localStorage.removeItem('token');
   localStorage.removeItem('user');
+  // 档案拉取时间戳与 'user' 同生命周期（user store 的 false 缓存 TTL 依赖）
+  localStorage.removeItem('user_fetched_at');
   localStorage.removeItem('wenflow_session');
   // 投影令牌（真实凭据）登出必清
   clearProjectionToken();
