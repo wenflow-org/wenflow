@@ -1273,11 +1273,11 @@ function shuffleScenes() {
   flex: 1;
   min-height: 0;
   width: 100%;
-  max-width: 1080px;
+  max-width: 1000px;  /* 1080→1000：左右两栏同步收窄（2026-09-27 用户反馈三改） */
   margin: 0 auto;
   padding: 12px 20px 16px;
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 272px minmax(0, 1fr);  /* 300→272：左栏收一档 */
   grid-template-rows: minmax(0, 1fr);
   gap: 16px;
   align-content: stretch;
@@ -1285,10 +1285,11 @@ function shuffleScenes() {
   box-sizing: border-box;
 }
 
-/* 宽屏（≥1500px）：1080 定宽在 2K/4K 下两侧留白过大（手动流程问题测试），
-   加宽到 1280 并同步放大行距 */
+/* 宽屏（≥1500px）：定宽在 2K/4K 下两侧留白过大（手动流程问题测试）。
+   2026-09-27 三改：基础档收窄到 1000 后，宽屏同步放宽为 1180（左栏仍 272，
+   富余全给对话列），保持大屏舒展但不回到原 1280 的松散感 */
 @media (min-width: 1500px) {
-  .work { max-width: 1280px; gap: 20px; }
+  .work { max-width: 1180px; gap: 20px; }
 }
 
 /* ---------- 左：信息清单（移动端默认折叠为头部横条，点击展开；桌面恒展开） ---------- */
@@ -1428,7 +1429,8 @@ function shuffleScenes() {
 
 .chat__scroll--dim { filter: blur(2px); opacity: .45; pointer-events: none; }
 
-.msg { display: flex; flex-direction: column; gap: 5px; max-width: 74%; } /* 82→74：对话行太长读感差，收窄两侧空白（2026-09-27 用户反馈） */
+.msg { display: flex; flex-direction: column; gap: 5px; max-width: 78%; } /* 82→78：随两栏同步收窄后的读感档（2026-09-27 三改） */
+/* 三改：聊天列本身已收窄，气泡 74% 配合 work 1000px 总宽即可 */
 /* 消息入场：新气泡浮出 */
 @media (prefers-reduced-motion: no-preference) {
   .msg { animation: msg-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
