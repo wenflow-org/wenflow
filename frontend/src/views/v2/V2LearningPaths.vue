@@ -671,7 +671,9 @@ onBeforeUnmount(() => {
 .pcard--failed::before { background: linear-gradient(180deg, var(--red), var(--amber)); }
 .pcard--generating { background: linear-gradient(180deg, rgba(67, 176, 216, 0.04), var(--surface) 55%); }
 .pcard--failed { border-color: color-mix(in srgb, var(--red) 30%, transparent); }
-.pcard__head { display: flex; align-items: center; gap: 12px; }
+/* 2026-09-27 二次重排：head 顶对齐——⋯ 随之落到右上角（原来垂直居中悬在卡片中腰），
+   标题/描述恢复自然高度（固定两行盒在单行标题时撑出一行空白，是卡片中间的「鸿沟」） */
+.pcard__head { display: flex; align-items: flex-start; gap: 12px; }
 .pcard__thumb {
   width: 36px; height: 36px; border-radius: 11px;
   display: grid; place-items: center;
@@ -703,21 +705,17 @@ onBeforeUnmount(() => {
 .pcard__title {
   margin: 0; font-size: 15px; line-height: 1.4;
   min-width: 0;
-  /* 固定 2 行展示高度：1 行标题与 2 行标题的卡 head 高度一致，内部元素水平对齐 */
-  min-height: calc(1.4em * 2);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .pcard__title a {
   color: inherit; text-decoration: none;
-  /* 块级撑满标题 clamp 区并负边距外扩：单行标题也有 ≥44 触诊高（mobile:spec），视觉不变 */
+  /* 负边距外扩触诊区（视觉不变、不占布局）；不能用 min-height 撑 44——
+     单行标题会被撑出一行空白，就是卡头中间那道「鸿沟」 */
   display: block; padding: 8px 10px; margin: -8px -10px;
-  min-height: 44px;
 }
 .pcard__title a:hover { color: var(--blue-deep); }
 .pcard__desc {
   margin: 4px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6;
-  /* 固定 2 行展示高度（与 title 同理） */
-  min-height: calc(1.6em * 2);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 
