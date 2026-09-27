@@ -64,6 +64,7 @@
                   class="mk-filter__input"
                   :type="keyVisible ? 'text' : 'password'"
                   v-model="form.apiKey"
+                  autocomplete="new-password"
                   :placeholder="keySet ? '已配置，留空沿用' : '输入 API Key'"
                   @input="markDirty('conn')"
                 />
@@ -89,7 +90,7 @@
             <div v-else class="ac-models__empty">
               <span class="ac-models__empty-icon" aria-hidden="true">﹢</span>
               <span v-if="fetchError">拉取失败：{{ fetchError }}。请检查服务地址 / 密钥后重试。</span>
-              <span v-else>模型清单尚未拉取（连接状态：{{ connBadge.text }}）。下方「路由默认」标「当前生效」的是平台实际在用模型；点击右上角「连接并拉取」获取服务商列表。</span>
+              <span v-else>模型清单尚未拉取（连接状态：{{ connBadge.text }}）。平台实际在用模型见「模型总览」tab 的解析结果；点击右上角「连接并拉取」获取服务商列表。</span>
             </div>
           </div>
         </label>
@@ -216,13 +217,14 @@
         <div class="ac-policy ac-policy--2x2">
           <div class="ac-policy__item">
             <span class="ac-policy__label">Admin 访问范围</span>
-            <div class="mk-seg">
+            <div class="mk-seg" role="radiogroup" aria-label="Admin 访问范围">
               <button
                 v-for="opt in accessOptions"
                 :key="opt.id"
                 type="button"
                 class="mk-seg__item"
                 :class="{ 'mk-seg__item--active': policy.adminAccessMode === opt.id }"
+                :aria-pressed="policy.adminAccessMode === opt.id"
                 @click="policy.adminAccessMode = opt.id; markDirty('policy')"
               >
                 {{ opt.label }}
@@ -242,11 +244,12 @@
           </div>
           <div class="ac-policy__item">
             <span class="ac-policy__label">私有网络服务</span>
-            <div class="mk-seg">
+            <div class="mk-seg" role="radiogroup" aria-label="私有网络服务">
               <button
                 type="button"
                 class="mk-seg__item"
                 :class="{ 'mk-seg__item--active': policy.allowPrivateNetwork }"
+                :aria-pressed="policy.allowPrivateNetwork"
                 @click="policy.allowPrivateNetwork = true; markDirty('policy')"
               >
                 允许
@@ -255,6 +258,7 @@
                 type="button"
                 class="mk-seg__item"
                 :class="{ 'mk-seg__item--active': !policy.allowPrivateNetwork }"
+                :aria-pressed="!policy.allowPrivateNetwork"
                 @click="policy.allowPrivateNetwork = false; markDirty('policy')"
               >
                 仅白名单
@@ -278,7 +282,6 @@
             <button
               type="button"
               class="mk-seg__item ac-policy__toggle"
-              :class="{ 'mk-seg__item--active': true }"
               :disabled="registrationBusy"
               @click="toggleRegistration"
             >
@@ -490,7 +493,7 @@
     </template>
 
     <!-- ===== Tab2: 模型总览（只读；消费 /api/admin/model-registry） ===== -->
-    <ModelRegistryOverview v-else-if="tab === 'overview'" ref="registryRef" @count="registryCount = $event" />
+    <ModelRegistryOverview v-else-if="tab === 'overview'" ref="registryRef" @count="registryCount = $event" @aliases="aliasOptions = $event" />
 
     <!-- ===== Tab3: 外挂能力（Addons embedded） ===== -->
     <Addons v-else ref="addonsRef" embedded @count="addonsCount = $event" />
@@ -498,7 +501,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { dataSource, isLive } from './store'
 import Addons from './Addons.vue'
@@ -512,7 +515,7 @@ import {
   timeAgo,
   errMsg
 } from './live'
-import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi, adminApiConfigApi } from '@/api/adminApi'
+import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi } from '@/api/adminApi'
 import {
   registrationEnabled,
   registerIpQuotaEnabled,
@@ -537,19 +540,10 @@ const addonsRef = ref<{ refresh?: () => void } | null>(null)
 const registryCount = ref({ models: 0, warnings: 0 })
 const registryRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
 
-/** 逻辑别名候选（来自后端只读总览，避免前端硬编码与注册表漂移） */
+/** 逻辑别名候选（来自后端只读总览，避免前端硬编码与注册表漂移）。
+    不再进页即拉：与总览 tab 的 getModelRegistry 是同一份接口，重复请求；
+    改由 ModelRegistryOverview 首次挂载（首次切到总览 tab）加载后经 @aliases 回传 */
 const aliasOptions = ref<string[]>([])
-onMounted(async () => {
-  try {
-    const res = await adminApiConfigApi.getModelRegistry()
-    const aliases = res?.data?.data?.aliases
-    aliasOptions.value = Array.isArray(aliases)
-      ? aliases.map((item: { alias: string }) => item.alias).filter(Boolean)
-      : []
-  } catch {
-    aliasOptions.value = []
-  }
-})
 watch(
   () => route?.query?.tab,
   (t) => {
@@ -882,7 +876,7 @@ watch(
     if (dirty.value.size > 0) {
       const ok = await askConfirm({
         title: '丢弃未保存的配置修改?',
-        message: `配置数据已刷新,继续将覆盖以下未保存的修改:${[...dirty.value].join(' / ')}。`,
+        message: `配置数据已刷新,继续将覆盖以下未保存的修改:${dirtyGroups.value.join(' / ')}。`,
         confirmText: '覆盖'
       })
       if (ok) applyLiveConfig()
@@ -901,7 +895,7 @@ onBeforeRouteLeave(async () => {
   if (dirty.value.size === 0) return true
   const ok = await askConfirm({
     title: '有未保存的配置修改',
-    message: `尚未保存的域:${[...dirty.value].join(' / ')}。离开将丢弃这些修改,确认离开?`,
+    message: `尚未保存的域:${dirtyGroups.value.join(' / ')}。离开将丢弃这些修改,确认离开?`,
     confirmText: '丢弃并离开'
   })
   return ok === true
@@ -948,7 +942,7 @@ const routeCount = computed(() => [form.defaultModel, form.defaultReasoningModel
 const modelListTitle = computed(() =>
   models.value.length
     ? `已拉取 ${models.value.length} 个服务商模型`
-    : '尚未拉取服务商模型清单；下方「路由默认」标「当前生效」的是平台实际在用模型，切换取值需先拉取清单',
+    : '尚未拉取服务商模型清单；平台实际在用模型见「模型总览」tab 的解析结果，切换取值需先拉取清单',
 )
 const routeTitle = computed(
   () => `已指定 ${routeCount.value} / 3 条默认路由（对话 / 推理 / 评估）。路由数只表示已指定，不代表模型清单已就绪`,
@@ -1153,11 +1147,19 @@ watch(
 )
 const quotaEnabledText = computed(() => registerIpQuotaEnabled.value ? `已启用 · 每 IP 每日 ${quotaInput.value} 个` : '未启用（不限制注册数量）')
 
+/** 配额输入只在 change 时校验：清空/非法值回退最近一次有效值（Number('')=0 是合法整数，
+    会被钳到 1 静默改值，对齐同页 reliability 的 intOr 回退思路）；不即时保存，
+    落盘统一走「启用/关闭配额」的 saveQuota，避免半成品数字被静默提交 */
 function onQuotaInput(e: Event) {
-  const v = Number((e.target as HTMLInputElement).value)
-  if (!Number.isInteger(v)) return
+  const input = e.target as HTMLInputElement
+  const raw = input.value.trim()
+  const v = Number(raw)
+  if (!raw || !Number.isInteger(v) || v < 1) {
+    // :value 绑定值未变时 Vue 不会重写 DOM，需手动回写输入框，保证所见即所存
+    input.value = String(quotaInput.value)
+    return
+  }
   quotaInput.value = Math.min(100, Math.max(1, v))
-  void saveQuota(true, quotaInput.value)
 }
 
 async function setQuotaEnabled(enabled: boolean) {

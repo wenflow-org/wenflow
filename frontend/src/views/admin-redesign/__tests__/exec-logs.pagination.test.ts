@@ -58,7 +58,9 @@ vi.mock('../store', async () => {
     openTrace: vi.fn(),
     openSession: vi.fn(),
     openSkillDrawer: vi.fn(),
-    clearInvestigation: vi.fn()
+    clearInvestigation: vi.fn(),
+    // 节点筛选下拉数据源（2026-09-27 扩为注册表全集）：本测试不关注，给空映射
+    liveSkillStatsMap: ref({}),
   };
 });
 

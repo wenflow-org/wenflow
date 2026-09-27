@@ -35,7 +35,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
-import { loadLiveData, errMsg } from './live'
+import { loadLiveData, errMsg, liveVirtualRunStats } from './live'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
@@ -46,7 +46,14 @@ const emit = defineEmits<{ (e: 'done'): void }>()
 withDefaults(defineProps<{ render?: boolean }>(), { render: true })
 
 /* ===== A2 一键回收 / 批量清理卡死：dryRun 清单 → 确认 → dryRun=false 落地 ===== */
-const reclaimThresholdLabel = '24 小时'
+/* 回收阈值从 /stats 的 reclaimThresholdMs 派生（此前硬编码「24 小时」，服务端调阈值后文案会失真）；
+   stats 未拉到或为 0 时回退 24 小时 */
+const reclaimThresholdLabel = computed(() => {
+  const ms = liveVirtualRunStats.value.reclaimThresholdMs
+  if (!ms || ms <= 0) return '24 小时'
+  const hours = ms / 3600000
+  return Number.isInteger(hours) ? `${hours} 小时` : `${hours.toFixed(1)} 小时`
+})
 /* 用 reactive 暴露 busy/清单，父页面状态条可读取同一对象（:disabled / 文案） */
 const state = reactive({
   open: false,

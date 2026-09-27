@@ -52,8 +52,9 @@
       </label>
     </div>
     <div class="sd-settings__foot">
-      <span class="sd-settings__hint">默认关闭；只对虚拟学习者生效，不影响真实用户。</span>
-      <button type="button" class="mk-btn mk-btn--primary" :disabled="!dirty || saving" @click="save">
+      <span v-if="loadFailed" class="sd-settings__hint sd-settings__hint--bad" title="设置加载失败，当前展示的是默认值；为避免用默认值覆盖服务端配置，保存已禁用，请刷新页面重试">设置未加载，保存已禁用（请刷新重试）</span>
+      <span v-else class="sd-settings__hint">默认关闭；只对虚拟学习者生效，不影响真实用户。</span>
+      <button type="button" class="mk-btn mk-btn--primary" :disabled="!dirty || saving || loadFailed" @click="save">
         {{ saving ? '保存中…' : '保存日期模拟设置' }}
       </button>
     </div>
@@ -90,6 +91,9 @@ const WEEKDAYS = [
 const form = reactive({ ...DEFAULT })
 const dirty = ref(false)
 const saving = ref(false)
+/* 加载失败守卫：失败时表单停在默认值，若仍允许保存，管理员一次保存就会把
+   服务端已配好的值整体覆盖成默认值 → loadFailed 禁用保存并提示 */
+const loadFailed = ref(false)
 /** 设置体默认收起（虚拟学习者页首屏让位给列表；用户反馈：常开占 400px 高）。
     开启「日期模拟」开关或已有开启配置时自动展开，避免开关与表单分离找不到 */
 const expanded = ref(false)
@@ -118,7 +122,11 @@ async function load() {
     const settings = (res.data?.data ?? res.data)?.settings ?? {}
     apply(settings.dateSimulation)
     dirty.value = false
-  } catch { /* 保留默认 */ }
+    loadFailed.value = false
+  } catch {
+    /* 加载失败：不能静默留在默认值（保存会覆盖服务端配置）→ 标记 loadFailed 禁用保存 */
+    loadFailed.value = true
+  }
 }
 
 async function save() {
@@ -160,6 +168,7 @@ onMounted(load)
 .sd-settings__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 12px; margin-top: 8px; }
 .sd-settings__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
 .sd-settings__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.sd-settings__hint--bad { color: var(--mk-red, #dc2626); }
 .sd-weekdays { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; font-size: var(--mk-fs-micro); }
 .sd-weekday { display: flex; align-items: center; gap: 4px; cursor: pointer; }
 </style>

@@ -6,7 +6,8 @@
       <strong class="mk-status__title">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta mono">{{ total }} 条</span>
-      <span v-if="total" class="mk-status__meta mono">失败 {{ failed }}</span>
+      <!-- 「共 N · 失败 M」只在状态条展示一处（卡片头的重复已删）；stats 挂掉退化时标注（本页） -->
+      <span v-if="failed" class="mk-status__meta mono">失败 {{ failed }}<template v-if="failedIsLocal">（本页）</template></span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="loading" @click="applyFilters">
           {{ loading ? '刷新中…' : '刷新' }}
@@ -61,16 +62,21 @@
         </div>
         <div class="mk-card__head-right">
           <span v-if="failureByAction.length" class="al-fails">
-            <span class="al-fails__label" title="失败最多的动作（近 2000 条失败内聚合）">失败 TOP</span>
-            <span
+            <span class="al-fails__label" title="失败最多的动作（近 2000 条失败内聚合），点击 chip 下钻只看失败">失败 TOP</span>
+            <!-- P2：span→button。后端 /admin/audit-logs 支持 success=true/false 白名单参数（parseSuccess），
+                 点击 = 只看失败 + path 首段关键词；再点已激活的 chip 退出下钻 -->
+            <button
               v-for="f in failureByAction"
               :key="f.action"
+              type="button"
               class="al-fails__chip"
+              :class="{ 'al-fails__chip--on': failedOnly && failedAction === f.action }"
               :title="f.action"
-            >{{ failureLabel(f.action) }} <b>{{ f.count }}</b></span>
+              :aria-pressed="failedOnly && failedAction === f.action"
+              @click="filterByFailure(f.action)"
+            >{{ failureLabel(f.action) }} <b>{{ f.count }}</b></button>
           </span>
           <MkCols :col-defs="alColDefs" :storage-key="AL_COLS_KEY" v-model:hidden="hiddenCols" />
-          <span class="mk-card__meta">共 {{ total }} 条<template v-if="failed"> · 失败 {{ failed }}</template></span>
         </div>
       </div>
 
@@ -86,7 +92,8 @@
     />
 
     <!-- 加载中骨架 -->
-    <MockSkeletonTable v-else-if="loading && !rows.length" :cols="tab === 'login' ? 5 : 7" :rows="6" />
+    <!-- 登录表 6 列（时间/用户名/IP/结果/原因/操作），骨架列数与真实表头对齐 -->
+    <MockSkeletonTable v-else-if="loading && !rows.length" :cols="tab === 'login' ? 6 : 7" :rows="6" />
 
     <!-- 操作审计列表 -->
     <div v-else-if="tab === 'operation' && logs.length" class="log-body">
@@ -136,6 +143,7 @@
                 tabindex="0"
                 @click="openId = openId === log.id ? '' : log.id"
                 @keydown.enter.prevent="openId = openId === log.id ? '' : log.id"
+                @keydown.space.prevent="openId = openId === log.id ? '' : log.id"
               >
                 <td v-if="colVisible('time')" class="log-time mono" :title="fmtFull(log.createdAt)">{{ fmtTime(log.createdAt) }}</td>
                 <td v-if="colVisible('admin')" class="log-admin" :title="log.adminName || log.adminId || ''">
@@ -230,7 +238,7 @@
               class="log-tr"
               :class="a.success ? 'log-tr--ok' : 'log-tr--err'"
             >
-              <td class="log-time mono" :title="fmtFull(a.createdAt)">{{ fmtLoginTime(a.createdAt) }}</td>
+              <td class="log-time mono" :title="fmtFull(a.createdAt)">{{ fmtTime(a.createdAt) }}</td>
               <td class="log-admin" :title="a.username">{{ a.username || '—' }}</td>
               <td class="log-ip mono" :title="a.ip || ''">{{ ipText(a.ip) }}</td>
               <td><span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span></td>
@@ -356,6 +364,11 @@ const logs = ref<AuditLogRow[]>([])
 const attempts = ref<LoginAttemptRow[]>([])
 const total = ref(0)
 const failed = ref(0)
+/** 失败 TOP chip 下钻态：success=false（后端白名单参数）+ path 首段做 keyword contains */
+const failedOnly = ref(false)
+const failedAction = ref('')
+/** stats 接口失败 → failed 退化为当前页样本数，状态条标注「本页」防误读成全量 */
+const failedIsLocal = ref(false)
 /** P2-16：失败按动作聚合 TOP（后端 /stats 返回），作为「失败 N」的下钻入口 */
 const failureByAction = ref<Array<{ action: string; count: number }>>([])
 /** 当前页（1 基）；筛选/tab/每页条数变化回第 1 页 */
@@ -435,6 +448,8 @@ function buildParams(nextPage: number, scopeOverride?: typeof tab.value): AuditL
     timeRange: timeRange.value === 'all' ? undefined : timeRange.value,
     sort: (alSortKey.value || undefined) as AuditLogQuery['sort'],
     order: alSortDir.value,
+    /* 只看失败（失败 TOP chip 下钻）：后端 parseSuccess 白名单 true/false */
+    success: failedOnly.value ? false : undefined,
   }
 }
 
@@ -471,9 +486,15 @@ async function goPage(p: number) {
   window.scrollTo(0, 0)
 }
 
+/* stats 独立代际号：applyFilters 并行发起列表与统计，慢的旧 stats 响应
+   不得覆盖新筛选的结果（与 fetchPage 同款 last-wins 守卫） */
+let statsSeq = 0
 async function fetchStats() {
+  const seq = ++statsSeq
   try {
     const res = await adminAuditApi.getAuditStats(buildParams(1))
+    if (seq !== statsSeq) return // 已有更新的统计请求在途/完成：丢弃过期响应
+    failedIsLocal.value = false
     const stats = res.data?.data?.stats
     if (stats) {
       total.value = typeof stats.total === 'number' ? stats.total : total.value
@@ -484,8 +505,10 @@ async function fetchStats() {
       ? byAction.filter((f: { action?: unknown; count?: unknown }) => typeof f?.action === 'string' && Number(f?.count) > 0)
       : []
   } catch {
-    // 统计接口不可用时回退到已加载样本计算（与执行日志页同策略）
+    if (seq !== statsSeq) return
+    // 统计接口不可用：failed 退化为当前页样本并标注（本页），不再伪装成全量
     failed.value = rows.value.filter((r) => !r.success).length
+    failedIsLocal.value = true
     failureByAction.value = []
   }
 }
@@ -500,6 +523,28 @@ function failureLabel(action: string): string {
   return pathActionText(path, method) || action
 }
 
+/** 下钻关键词：老数据 action 是 `METHOD /path`（含真实 id，统计侧已归一化为 :id），
+    精确 action 过滤命中不了 → 取 path 首段做 contains（path 列在 keyword 搜索白名单内）；
+    语义键（非 API 动作）原样搜 action 列 */
+function failureKeyword(action: string): string {
+  const m = action.match(/^[A-Z]+\s+(\/[^/]+)/)
+  return m ? m[1] : action
+}
+
+/** 失败 TOP chip 下钻：只看失败 + 该动作关键词；再点已激活的 chip = 退出下钻（关键词一并还原） */
+function filterByFailure(action: string) {
+  if (failedOnly.value && failedAction.value === action) {
+    failedOnly.value = false
+    failedAction.value = ''
+    keyword.value = ''
+  } else {
+    failedOnly.value = true
+    failedAction.value = action
+    keyword.value = failureKeyword(action)
+  }
+  void applyFilters()
+}
+
 async function applyFilters() {
   loadError.value = ''
   loading.value = true
@@ -507,14 +552,26 @@ async function applyFilters() {
   logs.value = []
   attempts.value = []
   openId.value = ''
-  await fetchPage(1)
-  await fetchStats()
+  /* stats 与列表并行发起：列表返回即渲染（loading 只跟列表走），stats 晚到异步补——
+     原串行 await 会让慢 stats 拖住首屏列表 */
+  const pageTask = fetchPage(1)
+  void fetchStats()
+  await pageTask
   loading.value = false
+}
+
+/** tab 回写 URL query：与 ?tab=login 深链闭环（切回默认 operation 时清掉参数） */
+function syncTabQuery(id: TabId) {
+  const next = { ...route.query }
+  if (id === 'login') next.tab = 'login'
+  else delete next.tab
+  void router.replace({ query: next })
 }
 
 function switchTab(id: TabId) {
   if (tab.value === id) return
   tab.value = id
+  syncTabQuery(id)
   void applyFilters()
 }
 
@@ -523,10 +580,12 @@ watch([alSortKey, alSortDir], () => {
   void applyFilters()
 })
 
-const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'week')
+const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'week' || failedOnly.value)
 function clearFilters() {
   keyword.value = ''
   timeRange.value = 'week'
+  failedOnly.value = false
+  failedAction.value = ''
   void applyFilters()
 }
 
@@ -569,6 +628,10 @@ function savedViewTitle(v: SavedView): string {
 function applySavedView(v: SavedView) {
   const q = v.query || {}
   tab.value = q.tab === 'login' ? 'login' : 'operation'
+  syncTabQuery(tab.value)
+  /* 下钻态不在保存视图快照内：应用视图时一并还原，避免残留「只看失败」 */
+  failedOnly.value = false
+  failedAction.value = ''
   keyword.value = q.q || ''
   timeRange.value = (TIME_RANGES as readonly string[]).includes(q.range)
     ? (q.range as typeof timeRange.value)
@@ -622,13 +685,7 @@ function fmtFull(iso?: string | null): string {
   if (Number.isNaN(d.getTime())) return ''
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
-/* 登录审计时间（P3）：始终带日期（MM-DD HH:MM:SS），避免当天记录只有时刻、无日期可溯 */
-function fmtLoginTime(iso?: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '—'
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
+/* 登录审计时间与操作审计同用 fmtTime（两者实现逐字符相同，P3 合并；均始终带日期） */
 
 onMounted(() => {
   void applyFilters()
@@ -659,17 +716,18 @@ function goSessions(username: string) {
 .log-tr--ok td:first-child { border-left-color: var(--mk-green, #16a34a); }
 .log-tr--err { background: rgba(220, 38, 38, 0.04); }
 .log-tr--err td:first-child { border-left-color: var(--mk-red, #dc2626); }
-.log-tr--open td { background: #fafbff; }
+.log-tr--open td { background: var(--mk-blue-bg); }
 .log-tr--open .log-arrow { transform: rotate(90deg); }
 
 /* 展开的 payload 行：整行铺开，不参与行点击 */
 .log-payload-row { cursor: default; }
 .log-payload-row td {
   padding: 4px 14px 14px 62px !important;
-  background: #fafbfc;
-  border-bottom: 1px solid #eef1f6;
+  /* 变量化后暗色自动适配，无需再写 dark 覆盖 */
+  background: var(--mk-surface-2);
+  border-bottom: 1px solid var(--mk-line);
 }
-.log-payload-row:hover td { background: #fafbfc; }
+.log-payload-row:hover td { background: var(--mk-surface-2); }
 
 /* 单元格 */
 .log-time {
@@ -766,7 +824,11 @@ function goSessions(username: string) {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   padding: 2px 8px;
+  /* span→button：重置按钮默认字体并补手型 */
+  cursor: pointer;
+  font-family: inherit;
 }
+.al-fails__chip--on { border-color: var(--mk-red, #dc2626); color: var(--mk-red, #dc2626); }
 .al-fails__chip b { color: #b91c1c; font-variant-numeric: tabular-nums; }
 .log-tt {
   font-size: var(--mk-fs-micro);
@@ -902,31 +964,14 @@ function goSessions(username: string) {
   .log-arrow { font-size: var(--mk-fs-body); }
 }
 
-/* ================= 暗色模式（D1 补完）：审计日志 ================= */
-html[data-theme='dark'] {
-  .log-tr--open td { background: #252627; }
-  .log-payload-row td,
-  .log-payload-row:hover td { background: #252627; }
-  .log-method--get { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
-  .log-method--post { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
-  .log-method--put { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
-  .log-method--patch { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
-  .log-method--delete { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
-  .log-method--head { background: #2d2d2f; color: #afb1b6; }
-}
-
-/* ================= D3 表格增强：审计列设置菜单 ================= */
-
-
-
-
-
-
-
-
-
-html[data-theme='dark'] .log-tr--open td { background: #19191a; }
-html[data-theme='dark'] .log-payload-row td,
-html[data-theme='dark'] .log-payload-row:hover td { background: #161718; }
-html[data-theme='dark'] .log-payload-row td { border-bottom-color: #232325; }
+/* ================= 暗色模式：仅方法徽标需单独配色。行底/嵌套面已随
+   --mk-blue-bg / --mk-surface-2 / --mk-line 变量自动适配，
+   原嵌套块与扁平规则两组重复覆盖一并删除 ================= */
+html[data-theme='dark'] .log-method--get { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
+html[data-theme='dark'] .log-method--post { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
+html[data-theme='dark'] .log-method--put { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
+html[data-theme='dark'] .log-method--patch { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
+html[data-theme='dark'] .log-method--delete { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
+html[data-theme='dark'] .log-method--options,
+html[data-theme='dark'] .log-method--head { background: #2d2d2f; color: #afb1b6; }
 </style>

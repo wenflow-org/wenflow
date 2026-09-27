@@ -262,7 +262,7 @@
                     <span class="ts-timeline__dot" aria-hidden="true"></span>
                     <div class="ts-timeline__body">
                       <strong>{{ ev.text }}</strong>
-                      <span>{{ ev.time }}</span>
+                      <span v-if="ev.time">{{ ev.time }}</span>
                     </div>
                   </li>
                 </ul>
@@ -612,14 +612,15 @@ function clearFilters() {
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
    数据全量在客户端（live 拉取），筛选后按页切片；
-   筛选/数据变化自动回第 1 页（watch filtered） */
+   仅筛选输入变化时回第 1 页：20s 轮询整表替换 rows 也会让 filtered 重算，
+   若监听 filtered 会把用户所在页打回第 1 页（P2）——故监听筛选输入而非结果 */
 const page = ref(1)
 const pageSize = ref(15)
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch(filtered, () => {
+watch([pill, statusFilter, dateFilter, keyword], () => {
   page.value = 1
 })
 
@@ -645,24 +646,26 @@ const panelTabs = [
   { id: 'advisory' as const, label: '建议' },
   { id: 'raw' as const, label: '原始数据' }
 ]
-/** 事件时间线（P2-2）：由行数据派生非消息事件，按时间倒序 */
+/** 事件时间线（P2-2）：由行数据派生非消息事件。
+ *  后端无逐事件时间戳：除「会话开始」（真实 startAt）外一律不显示 time，
+ *  不再用 startAt 统一虚构各事件时刻（P2：伪造时间轴会误导排查） */
 function timelineOf(r: Row): Array<{ text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }> {
   const events: Array<{ text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }> = []
   events.push({ text: '会话开始', time: r.startAt, tone: 'muted' })
   if (r.status === 'completed' || r.status === 'succeeded') {
-    events.push({ text: '会话完成', time: r.startAt, tone: 'ok' })
+    events.push({ text: '会话完成', time: '', tone: 'ok' })
   } else if (r.status === 'failed' || r.status === 'timeout') {
-    events.push({ text: `会话${r.status === 'timeout' ? '超时' : '失败'}`, time: r.startAt, tone: 'bad' })
+    events.push({ text: `会话${r.status === 'timeout' ? '超时' : '失败'}`, time: '', tone: 'bad' })
   } else if (r.status === 'active' || r.status === 'initializing' || r.status === 'finalizing') {
-    events.push({ text: '会话进行中', time: r.startAt, tone: 'muted' })
+    events.push({ text: '会话进行中', time: '', tone: 'muted' })
   }
   if (r.wrapupStatus === 'complete' && r.wrapup) {
-    events.push({ text: `课后总结生成（${r.wrapupSource}）`, time: r.startAt, tone: 'ok' })
+    events.push({ text: `课后总结生成（${r.wrapupSource}）`, time: '', tone: 'ok' })
   } else if (r.wrapupStatus === 'missing') {
-    events.push({ text: '缺少课后总结', time: r.startAt, tone: 'warn' })
+    events.push({ text: '缺少课后总结', time: '', tone: 'warn' })
   }
   if (r.hasAdvisory && r.advisory) {
-    events.push({ text: `建议触发（优先级 ${r.advisory.priority}）`, time: r.startAt, tone: r.advisory.priority === 'high' ? 'bad' : 'warn' })
+    events.push({ text: `建议触发（优先级 ${r.advisory.priority}）`, time: '', tone: r.advisory.priority === 'high' ? 'bad' : 'warn' })
   }
   return events
 }

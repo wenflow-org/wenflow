@@ -40,6 +40,17 @@
                   <td class="mono">{{ data.defaults.defaultReasoningModelResolved ?? '—' }}</td>
                   <td><span class="mk-badge" :class="sourceBadge(data.defaults.defaultReasoningModelSource)">{{ sourceLabel(data.defaults.defaultReasoningModelSource) }}</span></td>
                 </tr>
+                <tr>
+                  <!-- 评估默认：宿主「默认路由 x/3」按对话/推理/评估三档计数，本表须三行齐全；
+                       后端 /model-registry 暂未下发评估档字段，先渲染 '—' 占位（数据源待后端补齐后自动展示） -->
+                  <td>评估默认</td>
+                  <td class="mono">{{ data.defaults.defaultEvaluationModelConfigured ?? '—' }}</td>
+                  <td class="mono">{{ data.defaults.defaultEvaluationModelResolved ?? '—' }}</td>
+                  <td>
+                    <span v-if="data.defaults.defaultEvaluationModelSource" class="mk-badge" :class="sourceBadge(data.defaults.defaultEvaluationModelSource)">{{ sourceLabel(data.defaults.defaultEvaluationModelSource) }}</span>
+                    <span v-else class="mono">—</span>
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -211,6 +222,10 @@ interface ModelRegistryOverviewData {
     defaultReasoningModelConfigured: string | null
     defaultReasoningModelResolved: string | null
     defaultReasoningModelSource: 'alias' | 'concrete' | 'unset'
+    // 后端暂未返回评估档字段，按可选声明；模板据此显示 '—' 占位
+    defaultEvaluationModelConfigured?: string | null
+    defaultEvaluationModelResolved?: string | null
+    defaultEvaluationModelSource?: 'alias' | 'concrete' | 'unset'
   }
   fallbackChains: Array<{
     model: string
@@ -224,7 +239,10 @@ interface ModelRegistryOverviewData {
   deprecatedPromptModelCount: number
 }
 
-const emit = defineEmits<{ count: [payload: { models: number; warnings: number }] }>()
+const emit = defineEmits<{
+  count: [payload: { models: number; warnings: number }]
+  aliases: [aliases: string[]]
+}>()
 
 const data = ref<ModelRegistryOverviewData | null>(null)
 const failed = ref(false)
@@ -259,6 +277,8 @@ async function refresh(force = false): Promise<void> {
       models: data.value?.models.length ?? 0,
       warnings: data.value?.warnings.length ?? 0
     })
+    // 别名清单回传宿主（路由输入 datalist 候选）：共用本次请求，宿主不必再单独拉 getModelRegistry
+    emit('aliases', (data.value?.aliases ?? []).map((a) => a.alias).filter(Boolean))
   } catch (error: unknown) {
     failed.value = true
     errorText.value = errMsg(error)

@@ -9,7 +9,7 @@
         <span class="mk-status__meta">待处理反馈 {{ wbErrors.feedback ? '—' : wbPendingFeedback }}</span>
         <span class="mk-status__meta" :class="wbFailedPaths > 0 ? 'mk-status__meta--bad' : ''">失败路径 {{ wbErrors.paths ? '—' : wbFailedPaths }}</span>
         <span class="mk-status__meta" :class="wbDeadLetters > 0 ? 'mk-status__meta--bad' : ''">死信 {{ wbErrors.dead ? '—' : wbDeadLetters }}</span>
-        <span class="mk-status__meta">公告 {{ ann.rows }} 条</span>
+        <span class="mk-status__meta">公告 {{ annFailed ? '—' : ann.rows }} 条</span>
         <span v-if="wbHasError" class="mk-status__meta mk-status__meta--bad" :title="wbErrorText">待办数据加载失败</span>
       </template>
       <template v-else-if="tab === 'feedback'">
@@ -147,7 +147,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { timeAgo, liveAnnouncements, errMsg } from './live'
+import { timeAgo, liveAnnouncements, liveFailures, errMsg } from './live'
 import { intent } from './store'
 import { adminFeedbackApi, adminLearningContentApi, adminDevtoolsApi, type LearningContentStats } from '@/api/adminApi'
 import { announcementCounts, segmentPct, PATH_STATUS_TEXT } from './opsShared'
@@ -219,7 +219,8 @@ watch(
   },
   { immediate: true }
 )
-/* intent 快捷动作「新建公告」：确保落在公告 tab（Announcements 挂载后自行消费 quickAction） */
+/* intent 快捷动作「新建公告」：本层只负责切到公告 tab；打开新建弹窗与清空 quickAction
+   由 Announcements 自己的 watcher 消费（已在 announce tab 时也由其触发，无需重复处理） */
 watch(
   () => intent.quickAction,
   (a) => {
@@ -281,8 +282,13 @@ async function loadWorkbench() {
 }
 
 /** 任一待办域加载失败 → 页面基调降为 bad（禁止静默归零后仍显示「一切正常」） */
-const wbHasError = computed(() => Object.keys(wbErrors.value).length > 0)
-const wbErrorText = computed(() => Object.values(wbErrors.value).filter(Boolean).join('；'))
+const wbHasError = computed(() => Object.keys(wbErrors.value).length > 0 || annFailed.value)
+/** 公告域失败标志来自 live 层（只读既有导出 liveFailures，不改 live.ts）：
+    公告由 live 层加载而非本页 loadWorkbench，失败时草稿公告计数同样不可信 */
+const annFailed = computed(() => !!liveFailures.value.announcements)
+const wbErrorText = computed(() =>
+  [...Object.values(wbErrors.value).filter(Boolean), ...(annFailed.value ? ['公告列表加载失败'] : [])].join('；')
+)
 /** 页头基调：任一域失败 → bad；有失败路径/死信 → warn；否则 ok（R2 状态语义表） */
 const statusTone = computed(() =>
   wbHasError.value
@@ -304,7 +310,7 @@ const todoItems = computed(() => [
   { key: 'feedback', label: '待处理反馈', hint: '学习者低分反馈等待分流', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback },
   { key: 'paths', label: '生成失败路径', hint: '目标对话产出路径失败，需排查', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths },
   { key: 'dead', label: 'Outbox 死信', hint: '领域事件投递失败，影响画像/成就', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead },
-  { key: 'draft', label: '草稿公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: false },
+  { key: 'draft', label: '草稿公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value },
 ])
 
 /* 公告三态计数（live 层共享，与侧栏徽章同源） */

@@ -166,7 +166,10 @@ import { toast } from '@/utils/toast'
 import type { EChartsCoreOption } from 'echarts/core'
 
 /** 嵌入模式：作为「执行日志」页「成本分析」tab 渲染（仅去掉外层壳，状态条/筛选/排行保留） */
-withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+
+/* 嵌入在宿主执行日志页内时，切明细由宿主切换页内 tab（emit）；独立渲染时退回跨页 intent */
+const emit = defineEmits<{ (e: 'goto-logs'): void }>()
 
 interface Summary {
   days: number
@@ -226,6 +229,12 @@ const failRateHint = computed(() => {
    口径说明：本页为 token-cost 端点精确聚合（含重试终态失败）；执行日志展示逐调用行级 token 明细；
    总览「LLM 用量」卡为近 7 天汇总 hero。三处同域但粒度/窗口不同，互跳避免口径黑盒。 */
 function goExecLogs() {
+  /* 宿主已是 execution-logs scene：AdminConsole 对 intent.scene 的 watch 值相等不触发，
+     点击无反应——嵌入态改为让宿主切页内 tab 到日志页 */
+  if (props.embedded) {
+    emit('goto-logs')
+    return
+  }
   intent.scene = 'execution-logs'
 }
 function goOverview() {

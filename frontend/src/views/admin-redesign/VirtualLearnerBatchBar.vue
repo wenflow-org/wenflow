@@ -4,13 +4,13 @@
     <span>已选 {{ selected.length }} 人</span>
     <button type="button" class="mk-link" @click="emit('update:selected', [])">取消选择</button>
     <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'为每个选中的虚拟学习者启动其全部故事的实验会话（一个故事一个会话）'" @click="batchLaunchAllStories">
-      {{ batchActionBusy ? '处理中…' : '启动全部故事' }}
+      {{ batchActionBusy ? `处理中${batchProgress}…` : '启动全部故事' }}
     </button>
     <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'对选中虚拟人全部故事的最新会话开启自动驾驶（不新建会话；已运行的自动跳过）'" @click="batchAutopilotStart">
-      {{ batchActionBusy ? '处理中…' : '批量启动自动驾驶' }}
+      {{ batchActionBusy ? `处理中${batchProgress}…` : '批量启动自动驾驶' }}
     </button>
     <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'停止选中虚拟人全部故事最新会话的自动驾驶（学习进度保留，可随时再启动）'" @click="batchAutopilotStop">
-      {{ batchActionBusy ? '处理中…' : '批量停止自动驾驶' }}
+      {{ batchActionBusy ? `处理中${batchProgress}…` : '批量停止自动驾驶' }}
     </button>
     <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" @click="batchTerminate">
       {{ batchActionBusy ? '处理中…' : '批量终止' }}
@@ -45,6 +45,8 @@ const emit = defineEmits<{
 
 /* 批量操作互斥标志：删除/清理/自动驾驶等共用 */
 const batchActionBusy = ref(false)
+/* 逐人循环进度（(i/n)）：批量启动/自动驾驶要串行打几十个请求，无进度会像卡死 */
+const batchProgress = ref('')
 
 /** 批量启动全部故事：为每个选中的虚拟学习者启动其全部故事的实验会话（一个故事一个会话），
  *  并自动开启自动驾驶（target=final 直达 Path 全部完成），无需手动逐个启动 */
@@ -72,7 +74,8 @@ async function batchLaunchAllStories() {
   let launched = 0
   let autopiloted = 0
   let failed = 0
-  for (const id of ids) {
+  for (const [i, id] of ids.entries()) {
+    batchProgress.value = `(${i + 1}/${ids.length})`
     const s = props.samples.find((x) => x.id === id)
     if (!s) continue
     try {
@@ -109,6 +112,7 @@ async function batchLaunchAllStories() {
     }
   }
   batchActionBusy.value = false
+  batchProgress.value = ''
   if (launched > 0) {
     toast.success(`已启动 ${launched} 个会话并开启自动驾驶 ${autopiloted} 个（失败 ${failed}）`)
     emit('update:selected', [])
@@ -151,7 +155,8 @@ async function batchAutopilotStart() {
   let started = 0
   let skipped = 0
   let failed = 0
-  for (const id of ids) {
+  for (const [i, id] of ids.entries()) {
+    batchProgress.value = `(${i + 1}/${ids.length})`
     const s = props.samples.find((x) => x.id === id)
     try {
       const res = await adminVirtualLearnersApi.getVirtualLearnerStories(id)
@@ -177,6 +182,7 @@ async function batchAutopilotStart() {
     }
   }
   batchActionBusy.value = false
+  batchProgress.value = ''
   if (started > 0 || skipped > 0) {
     toast.success(`已启动自动驾驶 ${started} 个${skipped ? `（跳过 ${skipped}）` : ''}${failed ? `，失败 ${failed}` : ''}`)
     emit('update:selected', [])
@@ -201,7 +207,8 @@ async function batchAutopilotStop() {
   let stopped = 0
   let skipped = 0
   let failed = 0
-  for (const id of ids) {
+  for (const [i, id] of ids.entries()) {
+    batchProgress.value = `(${i + 1}/${ids.length})`
     const s = props.samples.find((x) => x.id === id)
     try {
       const res = await adminVirtualLearnersApi.getVirtualLearnerStories(id)
@@ -226,6 +233,7 @@ async function batchAutopilotStop() {
     }
   }
   batchActionBusy.value = false
+  batchProgress.value = ''
   if (stopped > 0 || skipped > 0) {
     toast.success(`已停止自动驾驶 ${stopped} 个${skipped ? `（跳过 ${skipped}）` : ''}${failed ? `，失败 ${failed}` : ''}`)
     emit('update:selected', [])

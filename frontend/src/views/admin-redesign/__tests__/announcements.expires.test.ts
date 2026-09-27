@@ -127,6 +127,7 @@ describe('Announcements 过期语义（expiresAt）', () => {
     expect(w.text()).toContain('生效中');
     expect(w.text()).toContain('公告中心');
     expect(w.text()).toContain('生效中 1');
-    expect(w.text()).not.toContain('已过期');
+    // 状态筛选下拉含「已过期」选项（2026-09-27 新增），断言收窄到列表行：该公告徽章不是已过期
+    expect(w.find('tbody').text()).not.toContain('已过期');
   });
 });

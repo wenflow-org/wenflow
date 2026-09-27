@@ -153,8 +153,8 @@ const testForm = ref({
 const testPanelRef = ref<HTMLElement | null>(null)
 const testMaskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => !!testTarget.value), testPanelRef)
-useMaskClose(testMaskRef, () => { if (!testRunning.value) testTarget.value = null })
-useEscape(() => !!testTarget.value, () => { if (!testRunning.value) testTarget.value = null })
+useMaskClose(testMaskRef, () => { testTarget.value = null })
+useEscape(() => !!testTarget.value, () => { testTarget.value = null })
 
 /** 父页面触发：打开测试弹窗并重置状态 */
 function open(s: PromptTestTarget) {
@@ -163,7 +163,9 @@ function open(s: PromptTestTarget) {
   testForm.value = { agentId: 'skill:goal-conversation', dialogueRounds: 2, friction: 'normal' }
 }
 function closePromptTest() {
-  if (testRunning.value) return
+  /* 试跑期间也允许关闭（此前直接 return，请求 30s-2min 把弹窗完全锁死）：
+     请求继续在后台跑，常驻 busy toast 与完成/失败 toast 由 runPromptTest 收尾，
+     关闭后仍能看到结果通知 */
   testTarget.value = null
 }
 
@@ -304,7 +306,7 @@ html[data-theme='dark'] .pt-field { background: rgba(129, 140, 248, 0.14); color
   margin: 0 0 4px;
   padding: 8px 10px;
   border-radius: var(--mk-radius-xl);
-  background: #f4f7fc;
+  background: var(--mk-surface-2); /* 走查：原硬编码 #f4f7fc 暗色模式下刺眼，改走 token */
   color: var(--mk-muted, #5b6577);
   font-size: var(--mk-fs-micro);
   line-height: 1.5;

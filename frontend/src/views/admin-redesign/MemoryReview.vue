@@ -6,7 +6,7 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">用户 {{ totals.users }} · 记忆痕迹 {{ totals.traces }} · <b :class="{ 'mr__meta-due': totals.due > 0 }">当前到期 {{ totals.due }}</b></span>
       <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="loading" @click="loadOverview">
+        <button type="button" class="mk-status__action" :disabled="loading" @click="refreshAll">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
       </span>
@@ -68,7 +68,7 @@
             <span class="mr-queue__label">待归并建议<small>模型给出的同义候选</small></span>
           </div>
           <div class="mr-queue mr-queue--quiet">
-            <b class="mr-queue__num">{{ totals.applied }}<i>/ {{ totals.deleted }}</i></b>
+            <b class="mr-queue__num">{{ totals.applied }}<i>/{{ totals.deleted }}</i></b>
             <span class="mr-queue__label">已执行 / 删除<small>留快照，可回滚</small></span>
           </div>
         </div>
@@ -157,7 +157,7 @@
             </td>
             <td class="mr__actions">
               <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(row.userId)">明细</button>
-              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" @click.stop="recompute(row.userId)">重新观察</button>
+              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" @click.stop="recompute(row.userId)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
             </td>
           </tr>
         </tbody>
@@ -281,7 +281,7 @@
             <b>{{ detail.audit.stats.ambiguous }}</b><span>需人工看</span>
           </div>
           <div class="mr-audit-queue__item mr-audit-queue__item--quiet">
-            <b>{{ detail.audit.stats.applied }}<i>/ {{ detail.audit.stats.deleted }}</i></b><span>已执行 / 删除</span>
+            <b>{{ detail.audit.stats.applied }}<i>/{{ detail.audit.stats.deleted }}</i></b><span>已执行 / 删除</span>
           </div>
         </div>
 
@@ -321,7 +321,7 @@
                   <input
                     type="checkbox"
                     :checked="selected[proposal.canonical] === true"
-                    :data-auto="proposal.autoApplicable ? '1' : '0'"
+                    :aria-label="`勾选执行归并：${proposal.canonical}${proposal.autoApplicable ? '' : '（需人工确认）'}`"
                     @change="toggleSelect(proposal.canonical, proposal.autoApplicable)"
                   />
                 </td>
@@ -381,7 +381,7 @@
           </div>
           <p v-else class="mr__sub">没有可回滚的归并。</p>
           <p v-if="legacyWindowOnlyMerges.length" class="mr__sub">
-            另有 {{ legacyWindowOnlyMerges.length }} 条早期归并：凭据只在审计窗口内（仍可回滚，但没有长期留档）——
+            另有 {{ legacyWindowOnlyMerges.length }} 条早期归并：凭据只在审计窗口内（没有长期留档，页面内暂不支持回滚，如需回滚请联系管理员）——
             {{ legacyWindowOnlyMerges.map((m) => m.canonical).slice(0, 3).join('、') }}
           </p>
           <p v-if="rolledBackMerges.length" class="mr__sub">
@@ -438,6 +438,54 @@ interface AppliedMergeView {
   appliedAt: string
   rolledBackAt: string | null
   deletedRows: number
+}
+
+/** 明细响应类型（P3 量力补齐）：只声明模板/脚本实际读取的字段，后端多余字段不声明 */
+interface ReviewPlanItem {
+  conceptKey: string
+  label: string
+  retention: number
+  reason?: string
+  load: number
+  loadFactors: string[]
+  originPathTitle?: string | null
+  consecutiveAgain?: number
+}
+
+interface ReviewDetail {
+  user: { name: string | null }
+  summary: {
+    traces: number
+    due: number
+    duplicatedFamilies: number
+    duplicatedTraces: number
+    neverExtracted: number
+    withFsrsState: number
+  }
+  reviewPlan: {
+    budget: number
+    usedLoad: number
+    backlogCount: number
+    successRate: number | null
+    items: ReviewPlanItem[]
+    relearnSuggestions: ReviewPlanItem[]
+    daily?: { usedLoad?: number; limitLoad?: number; remainingLoad?: number } | null
+    tomorrowCount?: number | null
+  } | null
+  audit: {
+    mode: string
+    generatedAt: string
+    stats: { candidates: number; proposed: number; autoApplicable: number; ambiguous: number; applied: number; deleted: number }
+    proposals: Array<{ canonical: string; aliases: string[]; confidence: number; lexicalSimilarity: number; autoApplicable: boolean; rationale?: string | null }>
+    ambiguous: Array<{ a: string; b: string; reason?: string | null }>
+  } | null
+  appliedMerges?: {
+    rollbackable: AppliedMergeView[]
+    rolledBack: AppliedMergeView[]
+    legacyWindowOnly: AppliedMergeView[]
+  }
+  duplicatedFamilies: Array<{ family: string; size: number; members: Array<{ conceptKey: string; extractionCount: number; masteryScore: number }> }>
+  duePreview: Array<{ conceptKey: string; label: string; retention: number; masteryScore: number; extractionCount: number; source?: string | null; dueAt?: string | null }>
 }
 
 const rollbackableCount = (row: OverviewRow) => {
@@ -519,7 +567,7 @@ const planKpiItems = computed<MkStatItem[]>(() => {
   ]
 })
 const selectedId = ref('')// detail.appliedMerges = 按次留档的归并凭据视图（rollbackable / rolledBack / legacyWindowOnly）
-const detail = ref<any>(null)
+const detail = ref<ReviewDetail | null>(null)
 const route = useRoute()
 const router = useRouter()
 /** 勾选状态（key = 规范键）；默认只勾「可自动执行」的 */
@@ -534,7 +582,7 @@ const selectedNeedsReview = computed(() => {
   })
 })
 
-function resetSelection(audit: any) {
+function resetSelection(audit?: ReviewDetail['audit']) {
   const next: Record<string, boolean> = {}
   for (const proposal of audit?.proposals ?? []) next[proposal.canonical] = !!proposal.autoApplicable
   selected.value = next
@@ -562,7 +610,7 @@ async function applySelected() {
     title: '执行概念归并',
     message: needsReview > 0
       ? `将执行 ${keys.length} 条归并（其中 ${needsReview} 条属于「需人工确认」），会删除该用户的重复记忆痕迹。执行后可回滚，但请先确认这些确实是同一个概念。`
-      : `将执行 ${keys.length} 条归并，会删除该用户的重复记忆痕迹（保留并字段后的那条）。执行后可回滚。`,
+      : `将执行 ${keys.length} 条归并，会删除该用户的重复记忆痕迹（保留合并字段后的那条）。执行后可回滚。`,
     confirmText: '执行归并',
     danger: true,
   })
@@ -605,27 +653,37 @@ async function rollbackOne(canonical: string) {
   }
 }
 
+/* last-wins 代际号（P2）：快速点行 / 切「包含虚拟学习者」时，旧响应不得覆盖新状态 */
+let overviewSeq = 0
+let detailSeq = 0
+
 async function loadOverview() {
+  const seq = ++overviewSeq
   loading.value = true
   error.value = ''
   try {
     const res: any = await adminMemoryReviewApi.overview({ limit: 50, includeVirtual: includeVirtual.value })
+    if (seq !== overviewSeq) return // 已有更新的概览请求在途/完成：丢弃过期响应
     const body = res.data?.data ?? res.data ?? {}
     rows.value = Array.isArray(body.users) ? body.users : []
     totals.value = { ...totals.value, ...(body.totals || {}) }
   } catch (e) {
+    if (seq !== overviewSeq) return
     error.value = errMsg(e)
   } finally {
-    loading.value = false
+    // 只有最新一代才能收 loading，否则会把在途新请求的骨架屏提前打断
+    if (seq === overviewSeq) loading.value = false
   }
 }
 
 async function openDetail(userId: string) {
+  const seq = ++detailSeq
   selectedId.value = userId
   busy.value = true
   error.value = ''
   try {
     const res: any = await adminMemoryReviewApi.detail(userId)
+    if (seq !== detailSeq) return // 用户已点了另一行：丢弃本次过期明细
     detail.value = res.data?.data ?? res.data ?? null
     resetSelection(detail.value?.audit)
     // 双向深链：选中即写进 URL，页面可收藏/分享（进来时靠 route.query.userId 落位）
@@ -633,6 +691,7 @@ async function openDetail(userId: string) {
       router.replace({ query: { ...route.query, userId } })
     }
   } catch (e) {
+    if (seq !== detailSeq) return
     error.value = errMsg(e)
     // 坏深链（用户不存在/被删除）→ 清掉参数，避免地址栏一直挂着一个打不开的 id
     detail.value = null
@@ -642,8 +701,14 @@ async function openDetail(userId: string) {
       router.replace({ query: next })
     }
   } finally {
-    busy.value = false
+    if (seq === detailSeq) busy.value = false
   }
+}
+
+/** 页头刷新：概览必刷；已选明细一并刷，避免上下两块数据口径不同步 */
+async function refreshAll() {
+  await loadOverview()
+  if (selectedId.value) await openDetail(selectedId.value)
 }
 
 /** 收起明细：同时清掉 URL 上的 userId（否则刷新又会弹回来） */
@@ -671,17 +736,23 @@ async function copyDeepLink() {
   }
 }
 
+/** 行内「重新观察」进行中标记：只转该行按钮文案，不锁整页 */
+const recomputingId = ref('')
+
 async function recompute(userId: string) {
   busy.value = true
+  recomputingId.value = userId
   error.value = ''
   try {
     await adminMemoryReviewApi.recompute(userId)
     await openDetail(userId)
     await loadOverview()
+    toast.success('已完成一次记忆复盘')
   } catch (e) {
     error.value = errMsg(e)
   } finally {
     busy.value = false
+    recomputingId.value = ''
   }
 }
 
@@ -782,7 +853,8 @@ onMounted(async () => {
 .mr__row--active { background: var(--mk-blue-bg); }
 .mr__actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
 .mr__error { margin: 6px 0; color: var(--mk-red-strong); font-size: var(--mk-fs-micro); }
-.mr__warn { margin-top: 8px; padding: 8px 10px; border-radius: var(--mk-radius-xl); border: 1px solid rgba(217, 119, 6, 0.3); background: rgba(217, 119, 6, 0.06); font-size: var(--mk-fs-micro); }
+/* 琥珀改走 --mk-amber color-mix：暗色主题自动适配（原 rgba(217,119,6) 是写死的浅色语义） */
+.mr__warn { margin-top: 8px; padding: 8px 10px; border-radius: var(--mk-radius-xl); border: 1px solid color-mix(in srgb, var(--mk-amber) 30%, transparent); background: color-mix(in srgb, var(--mk-amber) 6%, transparent); font-size: var(--mk-fs-micro); }
 .mr__chip { display: inline-block; margin-left: 8px; }
 .mr__detail { display: grid; gap: 14px; }
 /* 明细区百分比列（批E）：数字+色阶条，与概览带/用户表同一语言 */
@@ -794,7 +866,8 @@ onMounted(async () => {
 .mr-pct--warn .mr-pct__bar i { background: var(--mk-amber); }
 .mr-pct--warn b { color: var(--mk-amber); }
 /* 审计处理队列（批E）：复用概览带队列格语言 */
-.mr-audit-queue { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 10px 16px 4px; }
+/* auto-fit：窄屏不挤成 5 等份，宽屏不浪费（原固定 repeat(5) 在窄屏下每格 <100px） */
+.mr-audit-queue { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; padding: 10px 16px 4px; }
 .mr-audit-queue__item { display: grid; gap: 1px; padding: 8px 11px; border-radius: var(--mk-radius-lg); background: var(--mk-surface-2); }
 .mr-audit-queue__item--hot { background: color-mix(in srgb, var(--mk-amber) 10%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mk-amber) 32%, transparent); }
 .mr-audit-queue__item--hot b { color: var(--mk-amber); }

@@ -334,18 +334,28 @@ watch([achSortKey, achSortDir], () => {
   void reloadRecords()
 })
 
+/** 输入是否形如用户 id：user_/virtual_ 前缀 + uuid 体（auth.service 注册生成）。
+    命中时仍走 userId 精确匹配兼容分支；普通姓名/邮箱走 q 模糊。 */
+const USER_ID_LIKE = /^(?:user|virtual)_[0-9a-f-]{8,}$/i
+
 async function reloadRecords() {
   recordsLoading.value = true
   recordsFailed.value = false
   try {
+    // 搜索语义对齐占位符「按姓名/邮箱」：常规输入作为 q 模糊传给后端（原先误作 userId
+    // 精确匹配，搜索恒为空）。q 不在 adminApi 的 params 类型里（该文件本次只读未改），此处收窄一次。
+    const term = recordSearch.value.trim()
+    const search: { userId?: string; q?: string } = term
+      ? (USER_ID_LIKE.test(term) ? { userId: term } : { q: term })
+      : {}
     const res = await adminAchievementsApi.getRecords({
       page: recordPage.value,
       limit: pageSize.value,
-      userId: recordSearch.value.trim() || undefined,
+      ...search,
       includeTest: achIncludeTest.value || undefined,
       sort: (achSortKey.value || undefined) as 'earnedAt' | 'xpReward',
       order: achSortDir.value,
-    })
+    } as Parameters<typeof adminAchievementsApi.getRecords>[0])
     const body = res.data?.data ?? res.data ?? {}
     records.value = (body.records || []).map((r) => ({ ...r, busy: false }))
     totalRecords.value = body.pagination?.total ?? records.value.length

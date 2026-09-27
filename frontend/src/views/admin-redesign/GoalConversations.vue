@@ -6,7 +6,7 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">学习会话</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" title="学习会话三视图合计（教学会话 + 目标对话 + 学习路径，均为仅真实口径）">共 {{ domainTotal }} 项</span>
+      <span class="mk-status__meta" title="学习会话三视图合计（教学会话 + 目标对话 + 学习路径，均为仅真实口径）">共 {{ domainTotal ?? '—' }} 项</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" @click="refreshActive">刷新</button>
       </span>
@@ -14,9 +14,9 @@
 
     <!-- 视图切换 pills（唯一的 tab 控件）：各视图计数随 pill 呈现，状态条不再放同义可点计数 -->
     <div class="mk-pills gc-tabs">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'teaching' }" @click="switchGcTab('teaching')">教学会话<span class="mk-pill__count">{{ domainCount.teaching }}</span></button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'conversations' }" @click="switchGcTab('conversations')">目标对话<span class="mk-pill__count">{{ domainCount.conversations }}</span></button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'paths' }" @click="switchGcTab('paths')">学习路径<span class="mk-pill__count">{{ domainCount.paths }}</span></button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'teaching' }" @click="switchGcTab('teaching')">教学会话<span class="mk-pill__count">{{ domainCount.teaching ?? '—' }}</span></button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'conversations' }" @click="switchGcTab('conversations')">目标对话<span class="mk-pill__count">{{ domainCount.conversations ?? '—' }}</span></button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'paths' }" @click="switchGcTab('paths')">学习路径<span class="mk-pill__count">{{ domainCount.paths ?? '—' }}</span></button>
     </div>
 
     <!-- ===== Tab0: 教学会话（嵌入 TeachingSessions 组件；embedded 不含状态条，计数上报宿主） ===== -->
@@ -25,9 +25,9 @@
     <!-- ===== Tab1: 目标对话（列表内联于宿主；宿主状态条承载统计） ===== -->
     <template v-if="gcTab === 'conversations'">
 
-    <!-- 空态：无数据时显示（live 列表为空） -->
+    <!-- 空态：无数据且无失败时显示；loadError 时让位给卡内 gc-error 重试块（否则失败被外层空态伪装成「暂无数据」） -->
     <MkEmptyState
-      v-if="!rows.length && !loading"
+      v-if="!rows.length && !loading && !loadError"
       title="暂无 Goal 会话数据"
       description="学习者发起目标对话后自动呈现。"
     />
@@ -119,7 +119,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in paged" :key="r.id" class="gc-row" @click="openDetail(r)">
+            <tr v-for="r in paged" :key="r.id" class="gc-row" tabindex="0" @click="openDetail(r)" @keydown.enter.prevent="openDetail(r)">
               <td>
                 <div class="gc-user">
                   <i class="gc-ava" :class="{ 'gc-ava--virtual': r.isVirtualLearner, 'gc-ava--test': !r.isVirtualLearner && r.isTestAccount }" aria-hidden="true">{{ (r.userName || '用')[0] }}</i>
@@ -455,8 +455,8 @@ watch(
       if (r) void openDetail(r)
       else {
         detail.value = null
-        // 目标可能超出最近 100 条或已被删除：明示而非静默关闭
-        toast.warning('未能定位该会话：可能不在最近 100 条内，或已被删除')
+        // 目标可能超出最近 LIST_LIMIT 条或已被删除：明示而非静默关闭
+        toast.warning(`未能定位该会话：可能不在最近 ${LIST_LIMIT} 条内，或已被删除`)
       }
     } else if (!gid && detail.value) {
       detail.value = null
@@ -498,13 +498,20 @@ function confToneCls(pct: number): string {
 }
 
 /* ===== 宿主状态条（学习会话：三域计数徽章 + 切视图） ===== */
-/** 三域计数（由激活子视图上报；conversations 域用 stats.total 兜底） */
-const domainCount = ref<{ teaching: number; conversations: number; paths: number }>({ teaching: 0, conversations: 0, paths: 0 })
-const domainTotal = computed(() => domainCount.value.teaching + domainCount.value.conversations + domainCount.value.paths)
+/** 三域计数（由激活子视图上报；conversations 域用 stats.total 兜底）。
+ *  null = 该 tab 未访问过、子视图从未上报——徽章/合计显示 '—' 而非假 0/假合计（P2：初始 0 会误导「该域没数据」的排查结论） */
+const domainCount = ref<{ teaching: number | null; conversations: number | null; paths: number | null }>({ teaching: null, conversations: null, paths: null })
+/** 合计仅在三域都已上报时才真实：任一为 null 显示 '—' */
+const domainTotal = computed(() => {
+  const d = domainCount.value
+  if (d.teaching === null || d.conversations === null || d.paths === null) return null
+  return d.teaching + d.conversations + d.paths
+})
 /** 基调：无任何数据 muted；任一域有数即 ok（观测页统一语义） */
 const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   const d = domainCount.value
-  if (!stats.value && d.teaching === 0 && d.paths === 0) return 'muted'
+  /* null（未上报）按无数据处理：避免把「未知」当成「确认无数据」参与基调判定 */
+  if (!stats.value && (d.teaching ?? 0) === 0 && (d.paths ?? 0) === 0) return 'muted'
   return 'ok'
 })
 function onDomainCount(domain: 'teaching' | 'conversations' | 'paths', n: number) {
@@ -633,7 +640,7 @@ function clearFilters() {
 }
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
-   列表为客户端全量数据（limit:100 拉取后本地筛选），按页切片；
+   列表为客户端全量数据（limit:LIST_LIMIT 拉取后本地筛选），按页切片；
    筛选/数据变化自动回第 1 页（watch filtered） */
 const page = ref(1)
 const pageSize = ref(15)
@@ -644,6 +651,9 @@ const paged = computed(() => {
 watch(filtered, () => {
   page.value = 1
 })
+
+/* 列表拉取上限：请求与深链提示文案共用同一常量，避免「文案 100 / 实现 1000」再次漂移（同 TeachingSessions.LIST_LIMIT） */
+const LIST_LIMIT = 1000
 
 /* force = true 绕过页面级 TTL 缓存（显式刷新/口径切换用），保证用户操作必然重拉 */
 /* stats 请求代际号：stats 改为后台回填后，用代际比对丢弃迟到的旧口径响应（includeTest 切换/重拉场景） */
@@ -658,7 +668,7 @@ async function load(force = false) {
   loadError.value = ''
   try {
     // 首屏主体是会话列表：只 await 列表接口，页面就绪时间不再被 stats 拖住
-    const listRes = await adminGoalConversationsApi.list({ limit: 1000, includeTest: includeTest.value })
+    const listRes = await adminGoalConversationsApi.list({ limit: LIST_LIMIT, includeTest: includeTest.value })
     const body = listRes.data?.data ?? listRes.data ?? {}
     rows.value = ((body.conversations as Record<string, unknown>[]) || []).map(mapRow)
   } catch (e) {
@@ -690,25 +700,6 @@ async function load(force = false) {
     .catch(() => {
       if (seq === statsReqSeq) stats.value = null
     })
-}
-
-/** 顶层 messages 兜底解析（兼容 JSON 字符串或数组） */
-function parseMessages(raw: unknown): Array<{ role: string; text: string; time: string }> {
-  let arr: unknown[] = []
-  try {
-    const v = typeof raw === 'string' ? JSON.parse(raw) : raw
-    if (Array.isArray(v)) arr = v
-  } catch {
-    arr = []
-  }
-  return arr.slice(0, 60).map((m: unknown) => {
-    const mm = (m ?? {}) as Record<string, unknown>
-    return {
-      role: normRole(mm.role),
-      text: String(mm.content ?? mm.text ?? mm.message ?? ''),
-      time: mm.time ? timeAgo(String(mm.time)) : ''
-    }
-  })
 }
 
 /** 详情面板加载态 */
@@ -793,7 +784,7 @@ async function openDetail(r: Row) {
       completedAt: c.completedAt ? timeAgo(String(c.completedAt)) : '',
       collectedData: parsed.obj ? JSON.stringify(parsed.obj, null, 2) : '',
       collectedRaw: parsed.obj,
-      messages: parsed.messages.length ? parsed.messages : parseMessages(c.messages)
+      messages: parsed.messages
     }
   } catch (e) {
     if (seq !== detailReqSeq) return
@@ -858,13 +849,18 @@ watch(includeTest, () => {
   void load(true)
 })
 onMounted(() => {
-  if (isLive.value) void load()
+  /* 深链 ?tab=teaching|paths 时不预拉目标对话（省一次 list+stats）；首次切到 conversations 再补拉（见下方 watch） */
+  if (isLive.value && gcTab.value === 'conversations') void load()
   /* 深链：运营工作台「生成失败路径」→ 直达「学习路径」tab 并预筛失败（消费后清空，避免菜单直达被残留污染） */
   if (intent.statusFilter === 'failed') {
     gcTab.value = 'paths'
     pathInitialStatus.value = 'failed'
     intent.statusFilter = ''
   }
+})
+/* 按需首拉：从 teaching/paths 首次切到 conversations 且从未加载成功过时补拉（stats 在 load 内，随之延后） */
+watch(gcTab, (t) => {
+  if (t === 'conversations' && isLive.value && !rows.value.length && !loadError.value) void load()
 })
 </script>
 
@@ -882,6 +878,8 @@ onMounted(() => {
 .gc-host > .mk-status { flex: none; }
 /* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
 .gc-row { cursor: pointer; }
+/* 键盘可达（对齐 TeachingSessions 行写法）：行可聚焦，焦点态描边提示当前位置 */
+.gc-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
 /* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
 /* 身份 chip：与 Users/MemoryReview 同一语言（真实蓝 / 虚拟紫 / 测试琥珀），三页统一 */
 .gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }

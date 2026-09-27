@@ -48,8 +48,9 @@
 
             <label class="faw__field">
               <span>类型（core 侧） <em class="faw__req">*</em></span>
+              <!-- enum 仅 core 侧可声明（编排侧无对应 valueType 写法），置灰防误选；存量 enum 编辑仍回显，由 formProblems 拦提交 -->
               <select v-model="form.type" class="mk-input">
-                <option v-for="t in CORE_TYPES" :key="t" :value="t">{{ t }}</option>
+                <option v-for="t in CORE_TYPES" :key="t" :value="t" :disabled="t === 'enum'">{{ t === 'enum' ? 'enum（仅 core 侧，编排无对应写法）' : t }}</option>
               </select>
               <span class="faw__hint" :class="typeHintCls">{{ typeHint }}</span>
             </label>
@@ -114,7 +115,8 @@
           <!-- 开关行 -->
           <div class="faw__checks">
             <label class="faw__check"><input v-model="form.optional" type="checkbox" /> optional（core type 加 ?，仅顶层）</label>
-            <label class="faw__check"><input v-model="form.turn" type="checkbox" :disabled="isNested" /> turn（回合输出，仅顶层）</label>
+            <!-- title 挂 label 而非 input：disabled 的 checkbox 在部分浏览器不触发自身 title -->
+            <label class="faw__check" :title="isNested ? 'turn 仅顶层字段可配：嵌套字段随顶层声明回合输出' : ''"><input v-model="form.turn" type="checkbox" :disabled="isNested" /> turn（回合输出，仅顶层）</label>
             <label class="faw__check"><input v-model="form.internal" type="checkbox" /> internal（内部标记，与 handoff 互斥）</label>
             <label class="faw__check"><input v-model="form.accumulate" type="checkbox" /> accumulate（累积进学习者状态）</label>
           </div>
@@ -214,6 +216,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ saved: []; close: [] }>()
 
+/** enum 只能在 core 文件声明（编排侧无对应写法），选择器中置灰并注明（见 typeHint / formProblems） */
 const CORE_TYPES = ['string', 'number', 'boolean', 'enum', 'object', 'object[]', 'string[]'] as const
 const STAGE_NAMES = ['goal', 'path', 'teaching', 'profile', 'simulation']
 /** core → 编排 valueType 归一（与后端 yaml-vocabulary coreTypeToValueType 同源） */
@@ -267,15 +270,17 @@ const subText = computed(() =>
     ? '一次保存 → 双文件联动修改（core.yaml fields + 编排 fields/routings）→ 原子保存（写盘 / 全量对账同步 / 复检）；字段名不可改'
     : '一次填写 → 双文件生成（core.yaml fields + 编排 fields/routings）→ 原子保存（写入/同步/复检）'
 )
-const resultTitle = computed(() =>
-  result.value?.changed === false
-    ? '无变化（幂等）'
-    : isEdit.value
-      ? '已更新并回填路由 ✓'
-      : '已保存并回填路由 ✓'
-)
+const resultTitle = computed(() => {
+  if (result.value?.changed === false) return '无变化（幂等）'
+  // add 模式 synced=false：文件已写但落库同步失败，标题同步降级（与结果列表的红色失败行一致）
+  if (!isEdit.value && result.value?.synced === false) return '已写入文件但落库同步失败'
+  return isEdit.value ? '已更新并回填路由 ✓' : '已保存并回填路由 ✓'
+})
 const resultNote = computed(() => {
   if (result.value?.changed === false) return '字段现状与提交内容一致，未写盘 / 未同步 / 未记审计。'
+  if (!isEdit.value && result.value?.synced === false) {
+    return '新字段已写入双文件，但落库同步失败（DB 尚无该字段）。请按失败提示排查后重试同步；发布 core 变更前先确认 DB 对账恢复。'
+  }
   if (isEdit.value) {
     return '字段修改已生效（core 声明 + 编排路由 + DB 对账）；记得去「协议」tab 编译预览 → 发布 core 变更（发布需 developerApproval 治理，不并入本次保存）。'
   }
@@ -499,7 +504,9 @@ async function submit() {
       const payload = { name: form.value.name.trim(), ...buildPayload() }
       const res = await adminPromptWorkbenchApi.addSkillField(props.skillId, payload)
       result.value = (res.data?.data || {}) as SaveResult
-      toast.success('新字段已登记路由并同步')
+      // synced=false 时文件已写但落库同步失败，成功文案会误导（结果列表同帧已标红失败行）
+      if (result.value.synced === false) toast.warning('已写入文件但落库同步失败')
+      else toast.success('新字段已登记路由并同步')
     }
     emit('saved')
   } catch (e: any) {

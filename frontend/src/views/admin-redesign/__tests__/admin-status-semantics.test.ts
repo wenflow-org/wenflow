@@ -32,6 +32,7 @@ vi.mock('../live', async () => {
   const { ref } = await import('vue')
   return {
     liveAnnouncements: ref([]),
+    liveFailures: ref({}),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
     shortId: (s: string) => s,

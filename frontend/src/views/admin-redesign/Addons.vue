@@ -122,7 +122,7 @@
               {{ testResult.ok ? `通过 · ${testResult.latencyMs}ms` : `失败 · ${testResult.error || ''}` }}
             </span>
             <div class="mk-menu">
-              <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(t.id)">⋯</button>
+              <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === t.id" @click.stop="toggleMenu(t.id)">⋯</button>
               <div v-if="openMenu === t.id" class="mk-menu__pop" :style="popStyle" @click.stop>
                 <button type="button" class="mk-menu__item" @click="menuEdit(t)">编辑</button>
                 <div class="mk-menu__sep"></div>
@@ -474,7 +474,7 @@ const testingId = ref('')
 const testResult = ref<{ id: string; ok: boolean; latencyMs?: number; error?: string } | null>(null)
 
 /* 行内 ⋯ 菜单：编辑/删除收进菜单，测试（带行内结果）保持平铺 */
-const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
+const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 
 function menuEdit(t: McpTool) {
   closeMenu()
@@ -528,7 +528,8 @@ function goLogs(skillId: string) {
   investigateAgent(skillId)
 }
 function goConfig() {
-  void router.push('/admin/api-config')
+  // 本页常以 ?tab=addons 嵌入宿主；push 同路径不带 query 不会重置 tab，显式指定落到「接入与模型」
+  void router.push({ path: '/admin/api-config', query: { tab: 'model' } })
 }
 
 /* toast */

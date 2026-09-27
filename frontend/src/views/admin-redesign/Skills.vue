@@ -6,19 +6,23 @@
       <span class="mk-status__sep"></span>
       <template v-if="tab === 'run'">
         <MkLoading v-if="liveLoading && !cards.length" inline text="Skill 加载中…" /><span v-else class="mk-status__meta" :title="skillCountHint">共 {{ cards.length }} 个 Skill</span>
-        <span v-if="overallRate != null" class="mk-status__meta" :class="rateNumTone === 'bad' ? 'mk-status__meta--bad' : rateNumTone === 'warn' ? 'mk-status__meta--warn' : ''" :title="'窗口内成功率 = 成功调用 / 总调用'">
-          成功率 {{ overallRate }}%<template v-if="totalCalls">（{{ okCalls }}/{{ totalCalls }}）</template>
-        </span>
-        <button
-          v-if="errorCount > 0"
-          type="button"
-          class="mk-status__meta-link"
-          :class="{ 'mk-status__meta-link--on': onlyAttention }"
-          :title="'窗口内出现失败调用的节点数；点击筛选「仅看需关注」'"
-          @click="onlyAttention = !onlyAttention"
-        >失败节点 {{ errorCount }}</button>
-        <span v-if="idleCount > 0" class="mk-status__meta" title="窗口内无调用的 Skill 数">空闲 {{ idleCount }}</span>
-        <span v-if="avgLatencyText !== '—'" class="mk-status__meta" title="成功调用平均耗时（按调用量加权）">平均耗时 {{ avgLatencyText }}</span>
+        <!-- 窗口切换刷新中：先摘掉旧窗口的统计数字，避免新口径加载完成前旧 KPI 滞留误导（live.ts 侧 boot 窗口静默 no-op 属 live.ts，这里只兜 UI 观感） -->
+        <MkLoading v-if="rangeRefreshing" inline text="统计刷新中…" />
+        <template v-else>
+          <span v-if="overallRate != null" class="mk-status__meta" :class="rateNumTone === 'bad' ? 'mk-status__meta--bad' : rateNumTone === 'warn' ? 'mk-status__meta--warn' : ''" :title="'窗口内成功率 = 成功调用 / 总调用'">
+            成功率 {{ overallRate }}%<template v-if="totalCalls">（{{ okCalls }}/{{ totalCalls }}）</template>
+          </span>
+          <button
+            v-if="errorCount > 0"
+            type="button"
+            class="mk-status__meta-link"
+            :class="{ 'mk-status__meta-link--on': onlyAttention }"
+            :title="'窗口内出现失败调用的节点数；点击筛选「仅看需关注」'"
+            @click="onlyAttention = !onlyAttention"
+          >失败节点 {{ errorCount }}</button>
+          <span v-if="idleCount > 0" class="mk-status__meta" title="窗口内无调用的 Skill 数">空闲 {{ idleCount }}</span>
+          <span v-if="avgLatencyText !== '—'" class="mk-status__meta" title="成功调用平均耗时（按调用量加权）">平均耗时 {{ avgLatencyText }}</span>
+        </template>
       </template>
       <template v-else>
         <span class="mk-status__meta" :class="hcCount > 0 ? 'mk-status__meta--bad' : ''">{{ hcStatusLabel }}</span>
@@ -30,11 +34,11 @@
     </div>
 
     <!-- 视图切换 pills（唯一的 tab 控件）：Skill 运行 / 健康检查 / 漂移 / 对账（健康中心折入） -->
-    <div class="mk-pills skills-tabs">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'run' }" @click="switchTab('run')">Skill 运行</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'health' }" @click="switchTab('health')">健康检查</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'drift' }" @click="switchTab('drift')">漂移</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'recon' }" @click="switchTab('recon')">对账</button>
+    <div class="mk-pills skills-tabs" role="tablist" aria-label="Skill 视图切换">
+      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'run'" :class="{ 'mk-pill--active': tab === 'run' }" @click="switchTab('run')">Skill 运行</button>
+      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'health'" :class="{ 'mk-pill--active': tab === 'health' }" @click="switchTab('health')">健康检查</button>
+      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'drift'" :class="{ 'mk-pill--active': tab === 'drift' }" @click="switchTab('drift')">漂移</button>
+      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'recon'" :class="{ 'mk-pill--active': tab === 'recon' }" @click="switchTab('recon')">对账</button>
     </div>
 
     <!-- ===== Tab1: Skill 运行（原 Skills.vue 全量内容） ===== -->
@@ -135,7 +139,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in paged" :key="s.id" class="sk-row" @click="openSkillDrawer(s.id)">
+            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" @click="openSkillDrawer(s.id)" @keydown.enter.prevent="openSkillDrawer(s.id)">
               <td>
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
@@ -238,9 +242,12 @@
       v-else
       ref="hcRef"
       :view="hcView"
+      :recon-report="recReport"
+      :recon-error="recError"
       embedded
       @count="hcCount = $event"
       @navigate="switchTab"
+      @refresh-recon="refreshReconciliation"
     />
   </div>
 </template>
@@ -377,14 +384,17 @@ function rateTone(s: { calls: number; errors: number }) {
   if (rate < 90) return 'sk-rate--warn'
   return ''
 }
-/** 平均耗时阈值着色：>40s 红、>20s 琥珀 */
-// 时间窗口切换 → 按新窗口重新拉取统计
+// 时间窗口切换 → 按新窗口重新拉取统计；期间状态条展示局部 loading，摘掉旧窗口数字
+const rangeRefreshing = ref(false)
 watch(statsRange, async () => {
+  rangeRefreshing.value = true
   try {
     await refreshLiveSkills()
     liveSkillsError.value = ''
   } catch (e) {
     liveSkillsError.value = errMsg(e)
+  } finally {
+    rangeRefreshing.value = false
   }
 })
 
@@ -481,15 +491,21 @@ function clearFilters() {
 /* 长列表分批渲染：每批 15 行 */
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
    数据全量在客户端（live 拉取），筛选后按页切片；
-   筛选/数据变化自动回第 1 页（watch filtered）；recShown 属对账明细，仍用加载更多 */
+   仅筛选条件变化才回第 1 页；后台数据刷新（轮询/窗口切换）不重置页码，
+   否则每次刷新都把用户翻到的页拽回去；越界时收敛到最后一页；
+   recShown 属对账明细，仍用加载更多 */
 const page = ref(1)
 const pageSize = ref(15)
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch(filtered, () => {
+watch([onlyAttention, keyword, categoryFilter], () => {
   page.value = 1
+})
+watch(filtered, (list) => {
+  const maxPage = Math.max(1, Math.ceil(list.length / pageSize.value))
+  if (page.value > maxPage) page.value = maxPage
 })
 
 const statusTone = computed(() => (errorCount.value ? 'mk-status--bad' : activeCount.value ? 'mk-status--ok' : 'mk-status--muted'))
@@ -501,9 +517,11 @@ const successRate = (s: { calls: number; errors: number }) =>
 const rateNum = (s: { calls: number; errors: number }) =>
   s.calls ? ((s.calls - s.errors) / s.calls) * 100 : 0
 
-/* ================= 对账数据（目录表完成度列投影） =================
-   明细对账面板本体在健康中心内嵌的 SkillReconciliation（含 ?recon=/?diff= 深链定位）；
-   本页只消费其 completion 映射用于完成度列，不再重复深链逻辑。 */
+/* ================= 对账数据（目录表完成度列投影；唯一拉取方） =================
+   明细对账面板本体在健康中心内嵌的 SkillReconciliation（含 ?recon=/?diff= 深链定位）。
+   对账报告本页与面板都要用（本页完成度列 + 排序在 run tab，彼时面板尚未挂载），
+   故本页是唯一拉取方，报告经 HealthCenter 以 prop 下发给面板，避免双请求；
+   面板内的「刷新」/isLive 刷新经 @refreshRecon 回流到本页 refreshReconciliation。 */
 const recReport = ref<SkillReconciliationReport | null>(null)
 const recLoading = ref(false)
 const recError = ref('')
@@ -753,23 +771,4 @@ html[data-theme='dark'] {
   .sk-agent-tag { background: #2a2b2d; color: #afb1b6; }
 }
 
-/* ================= D3 表格增强：Skill 列设置菜单 ================= */
-
-
-
-
-
-
-
-
-
-@media (min-width: 2000px) {
-
-}
-@media (min-width: 2800px) {
-
-}
-@media (min-width: 3600px) {
-
-}
 </style>

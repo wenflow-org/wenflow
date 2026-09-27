@@ -149,10 +149,20 @@ import MkEmptyState from "@/components/mk/MkEmptyState.vue";
 import MkLoading from "@/components/mk/MkLoading.vue";
 import MkSkeleton from "@/components/mk/MkSkeleton.vue";
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from "@/api/adminApi";
+// adminSkillsApi 仍被自取模式（无 report prop）使用
 
-const recReport = ref<SkillReconciliationReport | null>(null);
+const props = defineProps<{ report?: SkillReconciliationReport | null; error?: string | null }>();
+const emit = defineEmits<{ (e: "openSkill", id: string): void; (e: "refresh"): void }>();
+
+const ownReport = ref<SkillReconciliationReport | null>(null);
+const ownError = ref("");
+/** 宿主（Skills 目录表）是唯一拉取方并经 prop 下发（避免同屏双请求）；prop 缺省（独立挂载/测试）时自取。
+    报告与错误都用 computed 收敛两条来源，下游 watch/模板无需感知差别（失败态仍走「重试」→ 事件回流宿主） */
+const recReport = computed<SkillReconciliationReport | null>(() =>
+  props.report !== undefined ? props.report : ownReport.value
+);
+const recError = computed<string>(() => (props.error !== undefined ? props.error || "" : ownError.value));
 const recLoading = ref(false);
-const recError = ref("");
 const recOpen = ref(false);
 const recOnlyAbnormal = ref(false);
 const route = useRoute();
@@ -176,20 +186,26 @@ watch(recReport, async (report) => {
 });
 
 async function refresh() {
+  // prop 模式下数据归宿主所有 → 事件回流请宿主重拉，避免出现两份各自为政的报告状态
+  if (props.report !== undefined) {
+    emit("refresh");
+    return;
+  }
   recLoading.value = true;
-  recError.value = "";
+  ownError.value = "";
   try {
     const res = await adminSkillsApi.getReconciliation();
-    recReport.value = res.data?.data ?? null;
+    ownReport.value = res.data?.data ?? null;
   } catch (e) {
-    recError.value = errMsg(e);
-    recReport.value = null;
+    ownError.value = errMsg(e);
+    ownReport.value = null;
   } finally {
     recLoading.value = false;
   }
 }
 
-watch(isLive, () => { refresh(); });
+// isLive 翻转的刷新节奏由宿主承担（prop 模式），仅自取模式在此响应
+watch(isLive, () => { if (props.report === undefined) refresh(); });
 onMounted(() => { applyRecQuery(); refresh(); });
 
 const recStatusOrder = ["draft", "handler-ready", "core-ready", "fields-synced", "live"] as const;
@@ -320,6 +336,54 @@ function openPanel() { recOpen.value = true; }
 .sk-rec-legend__item { display: inline-flex; align-items: center; gap: 4px; }
 .sk-rec-legend .mk-card__meta { margin-left: auto; }
 
+/* ===== 目录行基础样式（复制自宿主 Skills.vue 的 scoped CSS） =====
+   这些类（.sk-row/.sk-cell/.sk-id-main/.sk-name-desc/.sk-dot）此前只存在于宿主
+   scoped style，跨组件不生效 → 对账行健康点不可见、样式全丢。scoped 隔离机制
+   不动，改为本组件自带同款声明（保持与宿主目录表视觉一致）。 */
+.sk-row { cursor: pointer; }
+.sk-cell { display: flex; align-items: center; gap: 10px; }
+.sk-id-main {
+  font-family: var(--mk-mono);
+  font-weight: 700;
+  max-width: var(--mk-cell-main-max);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sk-name-desc {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+  line-height: 1.5;
+  font-family: inherit;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  max-width: var(--mk-cell-main-max);
+}
+.sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sk-dot--ok { background: var(--mk-green); }
+.sk-dot--idle { background: #c3cede; }
+.sk-dot--error { background: var(--mk-red); animation: sk-blink 1.2s ease infinite; }
+@keyframes sk-blink { 50% { opacity: 0.3; } }
+
+/* 大屏档位与宿主同款（mk 体系：2000 ≈×1.15，2800 ≈×1.17，3600 ≈×1.3） */
+@media (min-width: 2000px) {
+  .sk-dot { width: 10px; height: 10px; }
+  .sk-id-main { font-size: var(--mk-fs-micro); }
+  .sk-name-desc { font-size: var(--mk-fs-micro); }
+}
+@media (min-width: 2800px) {
+  .sk-dot { width: 12px; height: 12px; }
+  .sk-id-main { font-size: var(--mk-fs-micro); }
+  .sk-name-desc { font-size: var(--mk-fs-micro); }
+}
+@media (min-width: 3600px) {
+  .sk-dot { width: 14px; height: 14px; }
+  .sk-id-main { font-size: var(--mk-fs-emphasis); }
+  .sk-name-desc { font-size: var(--mk-fs-body); }
+}
+
 /* ================= 暗色模式（D1 补完）：Skill 对账 ================= */
 html[data-theme='dark'] {
   .sk-rec__refresh { background: #1b1c1d; }
@@ -329,5 +393,11 @@ html[data-theme='dark'] {
   /* 补漏：pill 语义底 */
   .sk-pill--bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
   .sk-pill--warn { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
+  /* 补漏：目录行（同宿主 Skills 暗色档） */
+  .sk-dot--idle { background: #4d4e51; }
+  /* 补漏：差集定位闪烁底色 #fdf3e3 是亮色琥珀，暗色下换成半透明琥珀 */
+  .sk-rec-flash { animation-name: sk-rec-flash-dark; }
 }
+/* 暗色版闪烁关键帧（scoped 会同组件改名，animation-name 与此处配套） */
+@keyframes sk-rec-flash-dark { 0%,100% { background: transparent; } 50% { background: rgba(251, 191, 36, 0.18); } }
 </style>

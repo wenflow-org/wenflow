@@ -61,7 +61,7 @@
           <!-- VL RPM 是「写」控件，与只读指标条以竖线分隔，避免读/写混作一行 -->
           <label class="vl-rpm" title="虚拟学习者专属出站 RPM 上限（0=不限）；与平台全局速率相互独立，不会挤占真实用户额度">
             <span class="vl-rpm__label">VL RPM</span>
-            <input v-model.number="vlRpm.limit" type="number" min="0" max="100000" step="10" class="mk-filter__input vl-rpm__input" @change="saveVlRpm" />
+            <input v-model.number="vlRpm.limit" type="number" min="0" max="100000" step="10" class="mk-filter__input vl-rpm__input" @focus="vlRpmFocused = true" @blur="vlRpmFocused = false" @input="vlRpmDirty = true" @change="saveVlRpm" />
           </label>
         </div>
       </div>
@@ -91,7 +91,7 @@
         <thead>
           <tr>
             <th v-if="isLive && !isNarrow" scope="col">
-              <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
+              <input type="checkbox" aria-label="全选（含跨页）" title="全选/清空当前筛选下的全部虚拟学习者（含跨页，不只当前页）" :checked="allChecked" @change="toggleAll" />
             </th>
             <th
               scope="col"
@@ -152,7 +152,7 @@
           <tr v-for="s in paged" :key="s.id" class="vl-row">
             <td v-if="isLive && !isNarrow"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
             <td>
-              <div class="mk-cell-main vl-cell vl-cell--click" role="button" tabindex="0" :title="`查看 ${s.name} 的画像：故事池 / 运行记录 / 会话控制`" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)">
+              <div class="mk-cell-main vl-cell vl-cell--click" role="button" tabindex="0" :title="`查看 ${s.name} 的画像：故事池 / 运行记录 / 会话控制`" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)" @keydown.space.prevent="openSubPage('virtual', s.id)">
                 <strong class="vl-name">
                   <span class="vl-avatar" :class="avatarClass(s)" aria-hidden="true">{{ s.name.slice(0, 1) }}</span>
                   <span class="vl-name__text">{{ s.name }}</span>
@@ -281,6 +281,7 @@
 
 <script setup lang="ts">
 import { computed, ref, reactive, watch, nextTick } from 'vue'
+import { Play, SquareCheckBig } from 'lucide-vue-next'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
@@ -488,13 +489,20 @@ const concurrencyTone = computed(() => {
 
 /* 虚拟学习者专属出站速率（RPM）：设置 + 运行态。与平台全局速率相互独立。 */
 const vlRpm = reactive({ limit: 0, inFlight: 0, queued: 0, rpm: 0 })
+/* 轮询回填保护：limit 是输入框 v-model（写控件），若 10s 轮询无条件覆写，
+   会冲掉管理员正在输入/未保存的值 → 仅在非聚焦且无未保存编辑时回填 limit，
+   rpm/inFlight/queued 是只读展示字段，始终照常刷新 */
+const vlRpmFocused = ref(false)
+const vlRpmDirty = ref(false)
 async function loadVlRpm() {
   try {
     const res = await adminVirtualLearnersApi.getVirtualLabSettings()
     const d = res.data?.data ?? {}
     const s = d.settings ?? {}
     const r = d.rpm ?? {}
-    vlRpm.limit = Number(s.virtualLearnerRpmLimit ?? 0)
+    if (!vlRpmFocused.value && !vlRpmDirty.value) {
+      vlRpm.limit = Number(s.virtualLearnerRpmLimit ?? 0)
+    }
     vlRpm.rpm = Number(r.rpm ?? 0)
     vlRpm.inFlight = Number(r.inFlight ?? 0)
     vlRpm.queued = Number(r.queued ?? 0)
@@ -505,6 +513,7 @@ async function saveVlRpm() {
   vlRpm.limit = value
   try {
     const res = await adminVirtualLearnersApi.updateVirtualLabSettings({ virtualLearnerRpmLimit: value })
+    vlRpmDirty.value = false /* 已保存：服务端值与输入一致，恢复轮询回填 */
     const r = res.data?.data?.rpm
     if (r) {
       vlRpm.rpm = Number(r.rpm ?? value)

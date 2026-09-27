@@ -27,6 +27,7 @@
           <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
             <option value="">全部状态</option>
             <option value="published">生效中</option>
+            <option value="expired">已过期</option>
             <option value="draft">草稿</option>
             <option value="archived">已下线</option>
           </select>
@@ -123,7 +124,8 @@
         <div class="mk-modal__body">
           <label class="mk-field" :class="{ 'mk-field--error': errors.title }">
             <span class="mk-field__label">标题 <em class="mk-field__req">*</em></span>
-            <input v-model="form.title" class="mk-field__input" placeholder="例如：系统维护通知" />
+            <input v-model="form.title" class="mk-field__input" placeholder="例如：系统维护通知" maxlength="100" />
+            <span class="mk-field__hint">{{ form.title.length }} / 100 字</span>
             <span v-if="errors.title" class="mk-field__err">{{ errors.title }}</span>
           </label>
           <label class="mk-field">
@@ -231,9 +233,11 @@ const filtered = computed(() => {
   return rows.value.filter((r) => {
     if (severityFilter.value && r.severity !== severityFilter.value) return false
     if (statusFilter.value) {
-      // 状态口径与徽章一致：「生效中」仅含未过期的 published（已过期由徽章在「全部状态」中标识）
+      // 状态口径与徽章一致：「生效中」仅含未过期的 published；已过期拆为独立选项——
+      // 过期公告仍占列表却不属于任何旧筛选项，此前只能回「全部状态」人工翻找
       const expired = r.status === 'published' && r.expiresAt && new Date(r.expiresAt).getTime() <= Date.now()
-      if (statusFilter.value === 'published' ? expired || r.status !== 'published' : r.status !== statusFilter.value) return false
+      const st = r.status === 'published' ? (expired ? 'expired' : 'published') : r.status
+      if (st !== statusFilter.value) return false
     }
     if (q && !`${r.title} ${r.body}`.toLowerCase().includes(q)) return false
     return true
@@ -360,11 +364,13 @@ const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => createOpen.value), panelRef)
 useMaskClose(maskRef, closeCreate)
 
-/* intent 快捷动作：直达并打开新建弹窗 */
+/* intent 快捷动作「新建公告」：真正打开新建弹窗（原实现只清空不打开，快捷动作沦为死代码，
+   上游入口承诺「直达新建」却毫无反应）。openCreate 为函数声明，提升可用。 */
 watch(
   () => intent.quickAction,
   (a) => {
     if (a === 'create-announcement') {
+      openCreate()
       intent.quickAction = ''
     }
   },

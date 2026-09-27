@@ -118,6 +118,8 @@
             </tr>
           </thead>
         <tbody>
+          <!-- 键盘等价：行点击只是鼠标快捷路径，语义由行内「详情」图标按钮承载（可 Tab 聚焦+回车）；
+               行本身不设 tabindex，避免与行内多个控件形成双份焦点停靠 -->
           <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" @click="openSubPage('user', u.id)">
             <td v-if="isLive && showCol('check')"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isTestAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
@@ -166,7 +168,7 @@
               <div class="mk-actions">
                 <button type="button" class="mk-icon-btn" title="详情" @click.stop="openSubPage('user', u.id)"><UserRound :size="15" :stroke-width="1.75" /></button>
                 <div v-if="isLive" class="mk-menu">
-                  <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(u.id)">⋯</button>
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === u.id" @click.stop="toggleMenu(u.id)">⋯</button>
                   <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
                     <button v-if="u.deleted" type="button" class="mk-menu__item" :disabled="u.busy" @click="menuRestore(u)">恢复</button>
                     <template v-else>
@@ -342,21 +344,20 @@ const emit = defineEmits<{ (e: 'count', total: number): void }>()
 /** 与后端 validatePasswordRule 一致：≥8 位且同时包含字母和数字 */
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
 
-/* 当前登录管理员（保护自己不被降级/删除） */
+/* 当前登录管理员（保护自己不被降级/删除）。
+   仅按 id 匹配：昵称/邮箱可能与他人重合（真有昵称叫 admin 的用户会被误判为自己，
+   从而无法降级/删除）；读不到 storage 时 id 置空使匹配恒为 false——宁可不保护也不误伤真实用户 */
 const currentAdmin = computed(() => {
   const raw = localStorage.getItem('admin_user') || sessionStorage.getItem('admin_user')
-  if (!raw) return { id: '', name: 'admin', email: 'admin@wenflow.local' }
+  if (!raw) return { id: '' }
   try {
     const d = JSON.parse(raw)
-    return { id: String(d.id || ''), name: String(d.name || ''), email: String(d.email || '') }
+    return { id: String(d.id || '') }
   } catch {
-    return { id: '', name: 'admin', email: 'admin@wenflow.local' }
+    return { id: '' }
   }
 })
-const isSelf = (u: UserRow) =>
-  u.id === currentAdmin.value.id ||
-  u.email === currentAdmin.value.email ||
-  (!!currentAdmin.value.name && u.name === currentAdmin.value.name)
+const isSelf = (u: UserRow) => !!currentAdmin.value.id && u.id === currentAdmin.value.id
 /** 虚拟学习者与审计/测试账号：不参与管理员提升（无意义且有风险）；识别逻辑单点见 learner-profile.ts */
 const isTestAccount = isTestAccountUser
 
@@ -416,8 +417,10 @@ async function loadDeletedUsers() {
     const body = res.data?.data ?? res.data ?? {}
     const items = body.users || body.items || []
     deletedUsers.value = items.map(mapDeletedRow)
-  } catch {
+  } catch (e) {
+    // 失败不静默：置空列表会让「已删除」pill 看起来像"没有已删用户"，误导管理员
     deletedUsers.value = []
+    toast.error(`已删除用户加载失败：${errMsg(e)}`)
   } finally {
     deletedLoading.value = false
   }
@@ -450,7 +453,10 @@ const keyword = ref('')
 /* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后按新口径重拉并灰标虚拟/测试行 */
 const includeTest = ref(false)
 watch(includeTest, (v) => {
-  if (isLive.value && pill.value !== 'deleted') void liveSetUsersIncludeTest(v)
+  // 切换失败不静默：用户以为已切到全量/仅真实口径，实际列表还是旧口径
+  if (isLive.value && pill.value !== 'deleted') {
+    liveSetUsersIncludeTest(v).catch((e) => toast.error(`切换数据范围失败：${errMsg(e)}`))
+  }
 })
 
 /* D3 表格增强：列显隐（公共组件 MkCols 接管：菜单 + localStorage 持久化；6 列可隐藏，用户/操作列固定） */
@@ -520,7 +526,7 @@ function closeCreate() {
   if (!creating.value) createOpen.value = false
 }
 useEscape(() => createOpen.value, closeCreate)
-const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
+const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 
 /** 行内 ⋯ 菜单项：先关菜单再执行 */
 function menuEdit(u: UserRow) {
@@ -601,7 +607,7 @@ async function saveUser() {
         target.email = form.value.email.trim()
         target.isAdmin = form.value.admin
       }
-      toast.success('用户已更新（真实写入）')
+      toast.success('用户已更新')
     } else {
       await liveCreateUser({
         name: form.value.name.trim(),
@@ -609,7 +615,7 @@ async function saveUser() {
         password: form.value.password,
         admin: form.value.admin
       })
-      toast.success('用户已创建（真实写入）')
+      toast.success('用户已创建')
     }
     createOpen.value = false
     pill.value = 'all'
@@ -666,7 +672,9 @@ function exportSelected() {
     .filter((u): u is UserRow => !!u)
   if (!rows.length) return
   const esc = (v: unknown) => {
-    const s = String(v ?? '')
+    let s = String(v ?? '')
+    // 防公式注入（CSV）：昵称等用户可控字段以 = + - @ 开头时会被 Excel/WPS 当公式执行，前缀 ' 强制按文本呈现
+    if (/^[=+\-@]/.test(s)) s = `'${s}`
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
   const header = ['姓名', '邮箱', '角色', '等级/XP', '路径/会话', '注册时间', '最后登录', '类型']

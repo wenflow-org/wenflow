@@ -24,7 +24,7 @@
       <span v-if="byStatus('archived') > 0" class="mk-status__meta">已下线 {{ byStatus('archived') }}</span>
       <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats?.total ?? '—' }} 条 · 里程碑 {{ stats?.totalMilestones ?? '—' }} · 任务 {{ stats?.totalTasks ?? '—' }}</span>
       <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="loading" @click="reload">
+        <button type="button" class="mk-status__action" :disabled="loading" @click="reload(true)">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
       </span>
@@ -65,7 +65,7 @@
       <MockSkeletonTable v-if="loading && !rows.length" :cols="7" />
       <div v-else-if="failed" class="oc-error" role="alert">
         <span>路径列表加载失败</span>
-        <button type="button" class="mk-link" @click="reload">重试</button>
+        <button type="button" class="mk-link" @click="reload(true)">重试</button>
       </div>
       <div v-else-if="filtered.length" class="mk-table-scroll oc-list">
         <table class="mk-table mk-table--fixed">
@@ -196,6 +196,11 @@
           </div>
           <div class="mk-drawer__body">
             <MkLoading v-if="detailLoading" inline />
+            <!-- 详情加载失败：错误条 + 重试（对齐另两个抽屉；此前失败仅 toast，抽屉留白） -->
+            <div v-else-if="detailError" class="oc-error" role="alert">
+              <span>{{ detailError }}</span>
+              <button type="button" class="mk-link" @click="retryDetail">重试</button>
+            </div>
             <template v-else-if="detail">
               <p v-if="detail.description" class="oc-desc">{{ detail.description }}</p>
               <div v-for="m in detail.milestones" :key="m.id" class="oc-milestone">
@@ -224,7 +229,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { timeAgo, errMsg, shortId } from './live'
+import { timeAgo, errMsg, shortId, isPageCacheFresh, markPageFetched } from './live'
 import { intent } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
@@ -302,7 +307,7 @@ const { toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows } = u
   storageKey: 'wf_ops_content_sort'
 })
 
-/* 客户端过滤（与教学会话/目标对话 tab 一致：全量拉最近 100 条后本地即时过滤，无「查询」按钮） */
+/* 客户端过滤（与教学会话/目标对话 tab 一致：全量拉最近 1000 条后本地即时过滤，无「查询」按钮） */
 const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
   return sortOcRows(rows.value.filter((p) => {
@@ -343,11 +348,14 @@ function fmtDate(iso?: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-async function reload() {
+async function reload(force = false) {
+  // 页面级 TTL 缓存（与另两 tab 同款模式）：显式刷新/口径切换传 force 绕过；
+  // 切走再切回（embedded 下重新挂载触发 onMounted）时 TTL 内且已有数据则跳过重拉
+  if (!force && isPageCacheFresh('learning-paths') && rows.value.length) return
   loading.value = true
   failed.value = false
   try {
-    /* 全量拉最近 100 条后客户端过滤（与教学会话/目标对话一致；筛选即时响应，无服务端往返） */
+    /* 全量拉最近 1000 条后客户端过滤（与教学会话/目标对话一致；筛选即时响应，无服务端往返） */
     const res = await adminLearningContentApi.listPaths({
       page: 1,
       limit: 1000,
@@ -356,6 +364,8 @@ async function reload() {
     const body = res.data?.data ?? res.data ?? {}
     rows.value = (body.paths || []).map((p: PathRow) => ({ ...p, busy: false }))
     total.value = body.pagination?.total ?? rows.value.length
+    // 仅成功后标记缓存：失败不缓存，下次进入自动重拉
+    markPageFetched('learning-paths')
   } catch (e) {
     failed.value = true
     toast.error(`加载失败：${errMsg(e)}`)
@@ -449,7 +459,10 @@ interface PathMilestone { id: string; stageNumber: number; title: string; status
 interface PathDetail { title: string; subject: string; user?: { name?: string } | null; description?: string; milestones: PathMilestone[] }
 const detailOpen = ref(false)
 const detailLoading = ref(false)
+const detailError = ref('')
 const detail = ref<PathDetail | null>(null)
+/** 最近一次请求详情的行（重试时重放） */
+let detailRow: PathRow | null = null
 /* 详情抽屉行为四件套（2026-09-26 弹层对齐）：Esc/遮罩/焦点陷阱/滚动锁 */
 const maskRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
@@ -458,17 +471,26 @@ useMaskClose(maskRef, () => { detailOpen.value = false })
 useEscape(() => detailOpen.value, () => { detailOpen.value = false })
 
 async function openDetail(p: PathRow) {
+  detailRow = p
   detailOpen.value = true
   detailLoading.value = true
+  detailError.value = ''
   detail.value = null
   try {
     const res = await adminLearningContentApi.getPathDetail(p.id)
     detail.value = res.data?.data ?? res.data
   } catch (e) {
-    toast.error(`加载详情失败：${errMsg(e)}`)
+    // 错误条 + 重试（对齐目标对话/教学会话抽屉）：此前失败仅 toast，抽屉体留白
+    detailError.value = `加载详情失败：${errMsg(e)}`
+    toast.error(detailError.value)
   } finally {
     detailLoading.value = false
   }
+}
+
+/** 详情加载失败重试：重放最近一次请求 */
+function retryDetail() {
+  if (detailRow) void openDetail(detailRow)
 }
 
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
@@ -493,13 +515,13 @@ onMounted(() => {
   void reload()
   void loadStats()
 })
-/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（切换后立即按新口径重拉） */
+/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（口径变化需绕过 TTL 缓存强制重拉） */
 watch(includeTest, () => {
-  void reload()
+  void reload(true)
 })
 
-/* 宿主刷新联动（学习会话合并宿主「刷新」按钮 → reload） */
-defineExpose({ reload })
+/* 宿主刷新联动（学习会话合并宿主「刷新」按钮 → 强制重拉：包装 force，TTL 内点击仍生效） */
+defineExpose({ reload: () => void reload(true) })
 </script>
 
 <style scoped>

@@ -8,8 +8,10 @@
       <span class="mk-status__sep"></span>
       <span
         class="mk-status__meta"
-        :title="tab === 'state' ? '账号数与学习画像份数覆盖同一批真实用户，合计不重复计人' : '平台真实用户数（不含测试/虚拟）'"
+        :title="tab === 'state' ? '账号数与学习画像份数覆盖同一批真实用户，合计不重复计人' : '平台用户总数（是否含测试/模拟账号随「含模拟」开关切换）'"
       >共 {{ userCount }} 人<template v-if="tab === 'state'"> · {{ domainCount.learners }} 份学习画像</template></span>
+      <!-- 学习者域后端 limit=50 截断（live.ts 不动）：画像数满 50 时给出静态口径说明 -->
+      <span v-if="tab === 'state' && domainCount.learners >= 50" class="mk-status__meta">仅加载前 50 位，可按筛选缩小范围</span>
       <span class="mk-status__actions">
         <button v-if="tab === 'account'" type="button" class="mk-status__action mk-status__action--primary" @click="usersRef?.openCreate?.()">新建用户</button>
         <button type="button" class="mk-status__action" @click="refreshActive">刷新</button>
@@ -60,6 +62,8 @@ const domainCount = ref<{ users: number; learners: number }>({ users: 0, learner
 /**
  * 账号总数以全局 live 单源为准：Users 只在「账号管理」Tab 挂载，
  * 若沿用子视图 emit，切到「学习状态」后 users 会停留在旧值、深链直连则取不到。
+ * 口径说明：该数跟随当前「含模拟」开关（切换后后端按新口径返回 total），
+ * 状态条 tooltip 用固定表述，不再断言「不含测试/虚拟」以免与实际口径漂移。
  */
 const userCount = computed(() => liveUsersTotal.value || domainCount.value.users)
 const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() =>

@@ -124,10 +124,15 @@
             <header class="mk-section__head">
               <h4>生效 Prompt</h4>
               <span class="msk__sec-meta">
-                <span class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
+                <!-- meta 接口失败不再静默显示「默认」；加载中如实呈现（metaLoading 此前只赋值从未消费） -->
+                <MkLoading v-if="metaLoading" text="生效版本加载中…" inline />
+                <template v-else-if="metaFailed" title="生效版本 / Prompt 接口获取失败，版本信息不可用">版本获取失败</template>
+                <span v-else class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
               </span>
             </header>
             <pre v-if="liveMeta?.effectivePrompt" class="msk__code msk__code--cap">{{ liveMeta.effectivePrompt }}</pre>
+            <!-- 长提示词截断提示：抽屉只做只读速览，完整内容在设计页 -->
+            <p v-if="promptTruncated" class="msk__none">已截断：仅显示前 1200 字（共 {{ liveMeta?.effectivePromptLen }} 字），完整内容请到设计页查看。</p>
             <div class="msk__prompt">
               <span class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
               <button type="button" class="mk-link" @click="goPromptLab">编辑协议 / 发布 →</button>
@@ -270,6 +275,8 @@
     <div v-else-if="intent.skillDrawerId" class="msk__notfound">
       <strong>未找到 Skill「{{ intent.skillDrawerId }}」</strong>
       <span>它可能未注册或 ID 有误。</span>
+      <!-- 未找到态此前无任何出口（遮罩不覆盖该分支），补关闭按钮收起抽屉 -->
+      <button type="button" class="mk-btn" @click="closeSkillDrawer">关闭</button>
     </div>
   </Teleport>
 </template>
@@ -287,6 +294,7 @@ import {
 } from './store'
 import { liveSkillProfiles, liveExtraProfiles } from './live'
 import { adminSkillWorkbenchApi, adminSkillsApi } from '@/api/adminApi'
+import MkLoading from '@/components/mk/MkLoading.vue'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 
@@ -363,6 +371,8 @@ interface LiveMeta {
   modelSource: string
   promptVersion: string
   effectivePrompt: string
+  /** 截断前的完整长度：供「已截断」提示（effectivePrompt 固定 slice(0, 1200)） */
+  effectivePromptLen: number
   llmTemperature: number | null
   llmMaxTokens: number | null
   statsSource: string
@@ -370,6 +380,10 @@ interface LiveMeta {
 }
 const liveMeta = ref<LiveMeta | null>(null)
 const metaLoading = ref(false)
+/** meta / effective-prompt 任一接口失败即置位：版本位不再静默显示「默认」误导用户 */
+const metaFailed = ref(false)
+/** 生效 Prompt 抽屉侧截断上限（slice(0, 1200)），超限即提示已截断 */
+const promptTruncated = computed(() => (liveMeta.value?.effectivePromptLen ?? 0) > 1200)
 
 const statsSourceNote = computed(() => {
   if (!liveMeta.value?.statsSource) return ''
@@ -388,6 +402,7 @@ watch(
   async (id) => {
     liveMeta.value = null
     metaLoading.value = true
+    metaFailed.value = false
     activeTab.value = 'overview'
     if (!id || !skillProfile.value) { metaLoading.value = false; return }
     try {
@@ -407,20 +422,25 @@ watch(
       const version = prompt.version ? `v${String(prompt.version)}` : ''
       const promptName = prompt.name ? String(prompt.name) : ''
       const llmModel = llmRequest.model != null ? String(llmRequest.model) : modelCfg.model ? String(modelCfg.model) : ''
+      const fullPrompt = String(prompt.systemPrompt || '')
       liveMeta.value = {
         agentName: String(parent.name || parent.id || ''),
         category: String(skill.category || skillProfile.value?.category || ''),
         model: llmModel || (modelCfg.tier ? `档位 ${String(modelCfg.tier)}` : ''),
         modelSource: String(llmRequest.source || modelCfg.source || ''),
         promptVersion: [version, promptName].filter(Boolean).join(' · '),
-        effectivePrompt: String(prompt.systemPrompt || '').slice(0, 1200),
+        effectivePrompt: fullPrompt.slice(0, 1200),
+        effectivePromptLen: fullPrompt.length,
         llmTemperature: llmRequest.temperature != null ? Number(llmRequest.temperature) : null,
         llmMaxTokens: llmRequest.maxTokens != null ? Number(llmRequest.maxTokens) : null,
         statsSource: String(stats.source || ''),
         statsRange: String(stats.range || 'all')
       }
+      // 两个接口都被 .catch(() => null) 吞错：任一缺失即如实上报失败
+      metaFailed.value = !metaRes || !promptRes
     } catch {
       liveMeta.value = null
+      metaFailed.value = true
     } finally {
       metaLoading.value = false
     }
@@ -1032,6 +1052,8 @@ html[data-theme='dark'] {
   .mk-pill--active .msk__tab-badge { background: rgba(91, 141, 239, 0.22); color: var(--mk-ghost-fg); }
   .msk__row { background: #1b1c1d; border-color: #2a2b2d; }
   .msk__row:hover { background: #252627; }
+  /* 补漏：指标条分隔线硬编码亮色 #eef2f8，暗色下过亮 */
+  .msk__stat + .msk__stat { border-left-color: #2a2b2d; }
   .msk__primary-link:hover { background: rgba(91, 141, 239, 0.14); }
   .msk__section { background: #19191a; }
   .mt-result { background: #1b1c1d; border-color: #2a2b2d; }

@@ -49,8 +49,9 @@
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ (e.runs || []).length }} 名</strong>
-                  <span class="mk-cell-sub" :class="{ 'be-cell--fail': failedRuns(e).length > 0 }" :title="`完成 ${doneRuns(e).length} · 失败 ${failedRuns(e).length} · 进行中 ${(e.runs || []).filter((r) => r.status === 'active').length}`">
-                    完成 {{ doneRuns(e).length }}<template v-if="failedRuns(e).length"> · <b class="be-fail-num">失败 {{ failedRuns(e).length }}</b></template>
+                  <!-- 手动停止后后端把 active run 写成 failed，直接显示「失败 N」会误导成故障：本地记 stoppedIds 改口「已中止」灰调 -->
+                  <span class="mk-cell-sub" :class="{ 'be-cell--fail': failedRuns(e).length > 0 && !manualStopped(e) }" :title="progressTitle(e)">
+                    完成 {{ doneRuns(e).length }}<template v-if="failedRuns(e).length"> · <template v-if="manualStopped(e)">已中止 {{ failedRuns(e).length }}</template><b v-else class="be-fail-num">失败 {{ failedRuns(e).length }}</b></template>
                   </span>
                 </div>
               </td>
@@ -112,12 +113,12 @@
           <div class="mk-modal__body">
             <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
               <span class="mk-field__label">实验名称 <em class="mk-field__req">*</em></span>
-              <input v-model="form.name" class="mk-field__input" placeholder="例如：记忆衰减基线实验" />
+              <input v-model="form.name" class="mk-field__input" placeholder="例如：记忆衰减基线实验" maxlength="100" />
               <span v-if="errors.name" class="mk-field__err">{{ errors.name }}</span>
             </label>
             <label class="mk-field">
               <span class="mk-field__label">描述（可选）</span>
-              <textarea v-model="form.description" class="mk-field__textarea" rows="2" placeholder="实验目的、变量、对照组…" />
+              <textarea v-model="form.description" class="mk-field__textarea" rows="2" maxlength="500" placeholder="实验目的、变量、对照组…" />
             </label>
             <div class="mk-field">
               <span class="mk-field__label">学习者配置 <em class="mk-field__req">*</em>（最多 20 名）</span>
@@ -126,14 +127,16 @@
                   <span>名称</span><span>学习目标</span><span>分心程度</span><span></span>
                 </div>
                 <div v-for="(r, i) in form.learners" :key="i" class="be-row">
-                  <input v-model="r.name" class="mk-input" placeholder="学习者名称" />
-                  <input v-model="r.learningGoal" class="mk-input" placeholder="学习目标（可选）" />
-                  <select v-model="r.frictionBudget" class="mk-input be-budget">
+                  <input v-model="r.name" class="mk-input" placeholder="学习者名称" maxlength="64" aria-label="学习者名称" />
+                  <input v-model="r.learningGoal" class="mk-input" placeholder="学习目标（可选）" maxlength="200" aria-label="学习目标" />
+                  <select v-model="r.frictionBudget" class="mk-input be-budget" aria-label="分心程度">
                     <option v-for="b in budgets" :key="b.id" :value="b.id">{{ b.label }}</option>
                   </select>
                   <button type="button" class="mk-link mk-link--danger" :disabled="form.learners.length <= 1" @click="form.learners.splice(i, 1)">✕</button>
                 </div>
               </div>
+              <!-- 重名只提示不拦截：后端允许同名 run（同名仅影响结果辨识，不报错） -->
+              <div v-if="dupLearnerNames.length" class="be-dup-hint">学习者名称重复：{{ dupLearnerNames.join('、') }}</div>
               <button type="button" class="mk-link" :disabled="form.learners.length >= 20" @click="addLearner">+ 添加学习者</button>
             </div>
             <div v-if="errorMsg" class="mk-alert" role="alert">{{ errorMsg }}</div>
@@ -178,8 +181,9 @@
                   <span class="be-run__meta be-run__time">{{ timeAgo(r.updatedAt) }}</span>
                 </div>
                 <div class="be-run__actions">
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail" title="推进一个阶段：快进到该运行的下一个阶段" @click="advance(detail!.id, r.id)">推进</button>
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail" title="模拟跨日衰减：按衰减模型更新该运行的学习状态" @click="decay(detail!.id, r.id)">衰减</button>
+                  <!-- 推进/衰减只对 active run 有意义：后端 advanceRun 对非 active 直接空转，前端禁用并说明原因；快照只读不受限 -->
+                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail || r.status !== 'active'" :title="r.status === 'active' ? '推进一个阶段：快进到该运行的下一个阶段' : '该运行已结束'" @click="advance(detail!.id, r.id)">推进</button>
+                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail || r.status !== 'active'" :title="r.status === 'active' ? '模拟跨日衰减：按衰减模型更新该运行的学习状态' : '该运行已结束'" @click="decay(detail!.id, r.id)">衰减</button>
                   <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail" title="保存当前快照（只读，不改变状态）" @click="snapshot(detail!.id, r.id)">快照</button>
                 </div>
               </div>
@@ -198,13 +202,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { timeAgo, errMsg } from './live'
 import { askConfirm } from './useConfirm'
 import { adminBatchExperimentsApi, type BatchExperiment, type BatchExperimentRun } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
+import { useSafePolling } from '@/composables/useSafePolling'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -219,6 +224,9 @@ interface ExpRow extends BatchExperiment {
 }
 
 const experiments = ref<ExpRow[]>([])
+/* 本会话内手动停止过的实验 id：后端停止时把 active run 写成 failed，若不记录会把人工终止当故障展示
+   （仅前端记忆，刷新后丢失——届时实验状态已是持久化的 stopped，只是 run 级徽章口径回退） */
+const stoppedIds = ref(new Set<string>())
 const loading = ref(false)
 const failed = ref(false)
 const runBusy = ref(false)
@@ -227,8 +235,12 @@ const statusTone = computed(() => (runningCount.value > 0 ? 'mk-status--ok' : 'm
 const runningCount = computed(() => experiments.value.filter((e) => e.status === 'running').length)
 const learnerTotal = computed(() => experiments.value.reduce((s, e) => s + (e.runs?.length || 0), 0))
 
+/* paused：后端不产生该状态（创建默认 running、收尾写 done、停止写 stopped），分支保留纯防御 */
 const statusBadge = (s: string) =>
   s === 'running' ? 'mk-badge--ok' : s === 'paused' ? 'mk-badge--warn' : s === 'done' ? 'mk-badge--info' : 'mk-badge--muted'
+
+const manualStopped = (e: ExpRow) => stoppedIds.value.has(e.id)
+const failText = (e: ExpRow) => (manualStopped(e) ? '已中止' : '失败')
 
 const doneRuns = (e: ExpRow) => (e.runs || []).filter((r) => r.status === 'done')
 const failedRuns = (e: ExpRow) => (e.runs || []).filter((r) => r.status === 'failed')
@@ -239,11 +251,12 @@ const progressPct = (e: ExpRow) => {
 }
 const progressTone = (e: ExpRow) => {
   const pct = progressPct(e)
-  if (failedRuns(e).length > 0) return 'bad'
+  // 手动停止产生的 failed 是人工终止不是故障，进度条不标红
+  if (failedRuns(e).length > 0 && !manualStopped(e)) return 'bad'
   return pct >= 100 ? 'ok' : 'warn'
 }
 const progressTitle = (e: ExpRow) =>
-  `完成 ${doneRuns(e).length}/${e.runs?.length || 0} · 失败 ${failedRuns(e).length} · 进行中 ${(e.runs || []).filter((r) => r.status === 'active').length}`
+  `完成 ${doneRuns(e).length}/${e.runs?.length || 0} · ${failText(e)} ${failedRuns(e).length} · 进行中 ${(e.runs || []).filter((r) => r.status === 'active').length}`
 
 function fmtDate(iso: string): string {
   const d = new Date(iso)
@@ -251,9 +264,14 @@ function fmtDate(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-async function load() {
-  loading.value = true
-  failed.value = false
+async function load(opts: { silent?: boolean } = {}) {
+  // silent：轮询后台刷新用——不动 loading/failed（避免骨架闪烁），失败不 toast（重试节奏交给轮询器退避）
+  const silent = opts.silent === true
+  if (!silent) {
+    loading.value = true
+    failed.value = false
+  }
+  let ok = true
   try {
     const res = await adminBatchExperimentsApi.list()
     const items = (res.data?.data ?? res.data) || []
@@ -269,11 +287,15 @@ async function load() {
       runs: Array.isArray(e.runs) ? e.runs : [],
     })) as unknown as ExpRow[]
   } catch (e) {
-    failed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
+    ok = false
+    if (!silent) {
+      failed.value = true
+      toast.error(`加载失败：${errMsg(e)}`)
+    }
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
+  return ok
 }
 
 /* 创建弹窗 */
@@ -302,6 +324,19 @@ const errors = ref<{ name?: string }>({})
 const creating = ref(false)
 const errorMsg = ref('')
 
+/* 重名即时提示（trim 后比较）：非阻断，提交照常放行 */
+const dupLearnerNames = computed(() => {
+  const seen = new Set<string>()
+  const dups = new Set<string>()
+  for (const l of form.value.learners) {
+    const n = l.name.trim()
+    if (!n) continue
+    if (seen.has(n)) dups.add(n)
+    else seen.add(n)
+  }
+  return [...dups]
+})
+
 function openCreate() {
   form.value = { name: '', description: '', learners: [{ name: '', learningGoal: '', frictionBudget: 'normal' }] }
   errors.value = {}
@@ -318,8 +353,11 @@ async function create() {
   errors.value = {}
   errorMsg.value = ''
   if (!form.value.name.trim()) { errors.value.name = '请输入实验名称'; return }
+  // 未填名称的行会被过滤掉——这是静默丢数据，统计被忽略行数并明确告知
+  const skipped = form.value.learners.filter((l) => !l.name.trim()).length
   const learners = form.value.learners.filter((l) => l.name.trim())
   if (!learners.length) { errorMsg.value = '至少需要一个学习者配置'; return }
+  if (skipped > 0) toast.info(`已忽略 ${skipped} 个未填写名称的学习者行`)
   creating.value = true
   try {
     await adminBatchExperimentsApi.create({
@@ -359,6 +397,7 @@ async function stop(e: ExpRow) {
   try {
     await adminBatchExperimentsApi.stop(e.id)
     e.status = 'stopped'
+    stoppedIds.value.add(e.id) // 供列表把停止产生的 failed run 显示为「已中止」
     toast.success(`实验「${e.name}」已停止`)
     void load()
   } catch (err) {
@@ -380,30 +419,38 @@ const detail = ref<BatchExperiment | null>(null)
 const detailRuns = ref<BatchExperimentRun[]>([])
 const detailLoading = ref(false)
 
+function mapRun(r: Record<string, unknown>): BatchExperimentRun {
+  return {
+    id: String(r.id),
+    experimentId: String(r.experimentId || ''),
+    learnerName: String(r.learnerName || ''),
+    frictionBudget: String(r.frictionBudget || ''),
+    phase: String(r.phase || ''),
+    status: String(r.status || ''),
+    completedTasks: Number(r.completedTasks || 0),
+    totalTasks: r.totalTasks != null ? Number(r.totalTasks) : null,
+    currentTask: (r.currentTask as string) || null,
+    stallCount: Number(r.stallCount || 0),
+    lastError: (r.lastError as string) || null,
+    updatedAt: String(r.updatedAt || ''),
+    createdAt: String(r.createdAt || ''),
+  }
+}
+
+/** 只增量刷新 runs：保持 detail 对象与滚动位置——整抽屉重拉（重建 detail）会让标题/内容闪空、滚动复位 */
+async function refreshDetailRuns(experimentId: string) {
+  const res = await adminBatchExperimentsApi.detail(experimentId)
+  const d = res.data?.data ?? res.data
+  detailRuns.value = (d?.runs || []).map(mapRun)
+}
+
 async function openDetail(e: ExpRow) {
   detail.value = e
   detailOpen.value = true
   detailLoading.value = true
   detailRuns.value = []
   try {
-    const res = await adminBatchExperimentsApi.detail(e.id)
-    const d = res.data?.data ?? res.data
-    detail.value = d
-    detailRuns.value = (d?.runs || []).map((r: Record<string, unknown>) => ({
-      id: String(r.id),
-      experimentId: String(r.experimentId || ''),
-      learnerName: String(r.learnerName || ''),
-      frictionBudget: String(r.frictionBudget || ''),
-      phase: String(r.phase || ''),
-      status: String(r.status || ''),
-      completedTasks: Number(r.completedTasks || 0),
-      totalTasks: r.totalTasks != null ? Number(r.totalTasks) : null,
-      currentTask: (r.currentTask as string) || null,
-      stallCount: Number(r.stallCount || 0),
-      lastError: (r.lastError as string) || null,
-      updatedAt: String(r.updatedAt || ''),
-      createdAt: String(r.createdAt || ''),
-    }))
+    await refreshDetailRuns(e.id)
   } catch (err) {
     toast.error(`加载详情失败：${errMsg(err)}`)
   } finally {
@@ -430,7 +477,7 @@ async function advance(experimentId: string, runId: string) {
   try {
     await adminBatchExperimentsApi.advanceRun(experimentId, runId)
     toast.success('已推进一个阶段')
-    await openDetail({ id: experimentId } as ExpRow)
+    await refreshDetailRuns(experimentId) // 原位刷新 runs，不动 detail（避免抽屉闪空/滚动复位）
   } catch (e) {
     toast.error(`推进失败：${errMsg(e)}`)
   } finally {
@@ -451,7 +498,7 @@ async function decay(experimentId: string, runId: string) {
   try {
     await adminBatchExperimentsApi.decayRun(experimentId, runId)
     toast.success('已模拟跨日衰减')
-    await openDetail({ id: experimentId } as ExpRow)
+    await refreshDetailRuns(experimentId) // 原位刷新 runs，不动 detail
   } catch (e) {
     toast.error(`衰减失败：${errMsg(e)}`)
   } finally {
@@ -464,7 +511,7 @@ async function snapshot(experimentId: string, runId: string) {
   try {
     await adminBatchExperimentsApi.snapshotRun(experimentId, runId)
     toast.success('快照已生成')
-    await openDetail({ id: experimentId } as ExpRow)
+    await refreshDetailRuns(experimentId) // 原位刷新 runs，不动 detail
   } catch (e) {
     toast.error(`快照失败：${errMsg(e)}`)
   } finally {
@@ -473,13 +520,39 @@ async function snapshot(experimentId: string, runId: string) {
 }
 
 load()
+
+/* 轮询（2026-09-27）：后端调度器每 30s 推进 run，此前页面只在挂载时拉一次，运行中数据必然陈旧。
+   触发条件：列表有运行中实验，或详情抽屉开着且其中有 active run——抽屉打开时只增量刷该实验的 runs，
+   不整表重拉（整表重拉会让表格重渲染、抽屉背后的行跳动）。useSafePolling 自带 document.hidden
+   暂停与失败退避，20s 间隔对齐调度粒度（30s）留出余量。 */
+const poll = useSafePolling(
+  async () => {
+    if (detailOpen.value && detail.value) {
+      await refreshDetailRuns(detail.value.id)
+      return
+    }
+    // silent 失败返回 false 时抛错，让轮询器计入退避/断路器，而不是当成功白转
+    const ok = await load({ silent: true })
+    if (!ok) throw new Error('batch experiment list refresh failed')
+  },
+  { interval: 20000, immediate: false, skipWhenHidden: true },
+)
+const shouldPoll = computed(
+  () =>
+    runningCount.value > 0 ||
+    (detailOpen.value &&
+      (detailRuns.value.some((r) => r.status === 'active') ||
+        experiments.value.some((e) => e.id === detail.value?.id && e.status === 'running'))),
+)
+watch(shouldPoll, (on) => (on ? poll.start() : poll.stop()), { immediate: true })
 </script>
 
 <style scoped>
 .be-progress { display: flex; align-items: center; gap: 8px; min-width: 140px; }
 /* 学习者列：失败数红色强调（失败有值时突出，无失败保持副行灰） */
 .be-fail-num { color: var(--mk-red); font-weight: 700; }
-.be-cell--fail { color: var(--mk-red); }.be-progress .mk-minibar { flex: 1; }
+.be-cell--fail { color: var(--mk-red); }
+.be-progress .mk-minibar { flex: 1; }
 .be-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
 
 .be-rows { display: grid; gap: 6px; }
@@ -487,6 +560,8 @@ load()
 .be-row--head { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; }
 .be-row--head span:last-child { visibility: hidden; }
 .be-budget { height: 34px; }
+/* 创建弹窗：学习者重名即时提示（非阻断，后端允许同名 run，仅影响辨识） */
+.be-dup-hint { font-size: var(--mk-fs-micro); color: var(--mk-amber); }
 
 
 /* 详情 run 卡：mk-card 形态（边框/圆角/背景由全局类提供，此处只留内部布局） */

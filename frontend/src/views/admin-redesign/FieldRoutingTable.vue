@@ -242,7 +242,7 @@
       <div ref="orchPanelRef" class="mk-modal__panel mk-modal__panel--wide frt__orch-panel" role="dialog" aria-label="编排文件编辑">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">编排文件 · {{ stage }}.yaml</h3>
-          <button type="button" class="mk-modal__close" aria-label="关闭" @click="orchOpen = false">✕</button>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeOrchestration">✕</button>
         </div>
         <div class="mk-modal__body">
           <div class="frt__orch-summary">
@@ -267,7 +267,7 @@
           <p v-if="orchMsg" class="frt__orch-msg">{{ orchMsg }}</p>
         </div>
         <div class="mk-modal__foot">
-          <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="orchOpen = false">关闭</button>
+          <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="closeOrchestration">关闭</button>
           <button type="button" class="mk-btn frt__prune" :disabled="orchSaving || orchSyncing || orchPruning" @click="runPrune(false)">
             {{ orchPruning ? '清理中…' : '清理孤儿行' }}
           </button>
@@ -298,6 +298,7 @@ import { useOverlay, useMaskClose } from './useOverlay';
 import { toast } from '@/utils/toast';
 import { askConfirm } from './useConfirm';
 import { TERMS } from './terms';
+import { errMsg } from './live';
 import Pagination from './Pagination.vue';
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue';
 import { useTableSort } from './useTableSort';
@@ -384,11 +385,12 @@ function rowsOf(agentId: string) {
 /* 筛选/搜索/排序变化 → 页码回到第 1 页（与 useLoadMore 同语义） */
 watch([keyword, roleFilter, sortKey, sortDir], () => { agentPages.value = {}; });
 
-const fieldMap = () => new Map(fields.value.map((f) => [f.fieldId, f]));
+/** fieldId → 字段声明映射：computed 缓存（原函数式每次调用重建 Map，逐行渲染即重建 N 次） */
+const fieldMap = computed(() => new Map(fields.value.map((f) => [f.fieldId, f])));
 
-function typeOf(fieldId: string) { return fieldMap().get(fieldId)?.valueType || '—'; }
-function descOf(fieldId: string) { return fieldMap().get(fieldId)?.description || ''; }
-function roleOf(fieldId: string) { return fieldMap().get(fieldId)?.promptRole || ''; }
+function typeOf(fieldId: string) { return fieldMap.value.get(fieldId)?.valueType || '—'; }
+function descOf(fieldId: string) { return fieldMap.value.get(fieldId)?.description || ''; }
+function roleOf(fieldId: string) { return fieldMap.value.get(fieldId)?.promptRole || ''; }
 function roleMetaOf(fieldId: string) {
   const role = roleOf(fieldId);
   if (!role) return undefined;
@@ -457,7 +459,7 @@ function meaningTitle(row: RoutingItem) {
   const parts: string[] = [];
   const desc = descOf(row.fieldId);
   if (desc) parts.push(desc);
-  const ev = fieldMap().get(row.fieldId)?.enumValues;
+  const ev = fieldMap.value.get(row.fieldId)?.enumValues;
   if (Array.isArray(ev) && ev.length) parts.push(`取值：${ev.join(' / ')}`);
   const path = pathOf(row.fieldId);
   if (path) parts.push(`抽取路径（pathInRawOutput）：${path}`);
@@ -467,20 +469,26 @@ function meaningTitle(row: RoutingItem) {
 
 /** 落库键：编排声明了 persistKey 用 persistKey，否则默认与 fieldId 一致 */
 function persistKeyOf(row: RoutingItem) {
-  const k = fieldMap().get(row.fieldId)?.persistKey;
+  const k = fieldMap.value.get(row.fieldId)?.persistKey;
   return k || row.fieldId;
 }
 /** 字段值在产出方原始输出里的物理抽取路径（pathInRawOutput，可空） */
 function pathOf(fieldId: string) {
-  return fieldMap().get(fieldId)?.pathInRawOutput || '';
+  return fieldMap.value.get(fieldId)?.pathInRawOutput || '';
 }
-/** render 枚举 → 中文（原始值保留在 title 的 renderHint） */
+/** render 枚举 → 中文（原始值保留在 title 的 renderHint）；未知取值回显原值，避免被误标为「可见」 */
 function renderText(render: string) {
-  return render === 'hidden' ? '隐藏' : '可见'
+  if (render === 'hidden') return '隐藏'
+  if (render === 'visible') return '可见'
+  return render
 }
 
 function renderHint(row: RoutingItem) {
-  const base = row.render === 'hidden' ? '隐藏：仅内部流转，不对外展示' : '可见：会出现在对外交付（用户 / 界面）';
+  const base = row.render === 'hidden'
+    ? '隐藏：仅内部流转，不对外展示'
+    : row.render === 'visible'
+      ? '可见：会出现在对外交付（用户 / 界面）'
+      : `render 取值不在受控词表：${row.render}`;
   return row.visibilityPreset ? `${base}\n可见性预设：${row.visibilityPreset}` : base;
 }
 function lockLabel(level?: string) {
@@ -507,7 +515,8 @@ async function loadStage() {
     agentPages.value = {};
     await loadSkillSyncs();
   } catch (e: any) {
-    error.value = e?.message || '加载失败';
+    // 人话化走全站单源 errMsg（此前直出 e?.message，网关/限流黑话管理员看不懂）
+    error.value = errMsg(e);
   } finally {
     loading.value = false;
   }
@@ -531,7 +540,12 @@ const router = useRouter();
 const skillSyncs = ref<SkillSyncBadge[]>([]);
 const skillSyncLoading = ref(false);
 
-/** 逐 skill 拉 M1 单 skill 投影（GET /field-routings/skill/:skillId），失败静默降级（角标不显示） */
+/**
+ * 逐 skill 拉 M1 单 skill 投影（GET /field-routings/skill/:skillId），失败静默降级（角标不显示）。
+ * 欠账标注（P2 N+1）：后端已有批量端点 GET /skill-batch?stage=X（backend field-routings.ts:244），
+ * 但 adminApi.ts 未封装（本次不可动），故保持逐 skill GET + Promise.all 并发（无串行，仅请求数仍为 N）。
+ * save/sync/prune 后维持全量 loadStage：三者均整阶段文件改动，全量刷新语义正确，无需增量。
+ */
 async function loadSkillSyncs() {
   const skillAgents = agents.value
     .map((a) => a.agentId)
@@ -577,6 +591,9 @@ function goSkill(skillId: string) {
 
 const orchOpen = ref(false);
 const orchContent = ref('');
+/** 打开时快照：关闭前与当前内容比对，脏（不一致）则确认再丢，防 ✕/遮罩/Esc 静默弃稿 */
+const orchBaseline = ref('');
+const orchDirty = computed(() => orchContent.value !== orchBaseline.value);
 const orchSummary = ref({ contractCount: 0, fieldCount: 0, routingCount: 0 });
 const orchSaving = ref(false);
 const orchSyncing = ref(false);
@@ -586,9 +603,24 @@ const orchMsg = ref('');
 const orchPanelRef = ref<HTMLElement | null>(null);
 const orchMaskRef = ref<HTMLElement | null>(null);
 
-useEscape(() => orchOpen.value, () => { orchOpen.value = false; });
+/** 弹窗关闭统一入口（✕/关闭/遮罩/Esc 共用）：有未保存修改时先确认再丢 */
+async function closeOrchestration() {
+  if (orchOpen.value && orchDirty.value) {
+    // 脏检查兜底：此前四个关闭路径都直连 orchOpen=false，编辑中的 YAML 改动会被静默丢弃
+    const ok = await askConfirm({
+      title: '放弃未保存的修改？',
+      message: '编排文件内容已被修改且尚未保存到文件，关闭将丢弃这些改动。',
+      confirmText: '丢弃并关闭',
+      danger: true,
+    });
+    if (!ok) return;
+  }
+  orchOpen.value = false;
+}
+
+useEscape(() => orchOpen.value, () => { void closeOrchestration(); });
 useOverlay(orchOpen, orchPanelRef);
-useMaskClose(orchMaskRef, () => { orchOpen.value = false; });
+useMaskClose(orchMaskRef, () => { void closeOrchestration(); });
 
 function errOf(e: any) {
   return e?.response?.data?.error?.message || e?.message || '操作失败';
@@ -601,6 +633,7 @@ async function openOrchestration() {
     const res = await adminFieldRoutingsApi.getOrchestrationFile(props.stage);
     const data = res.data?.data || {};
     orchContent.value = data.content || '';
+    orchBaseline.value = orchContent.value; // 记录打开时快照，供脏检查比对
     orchSummary.value = data.parsed || { contractCount: 0, fieldCount: 0, routingCount: 0 };
     orchOpen.value = true;
   } catch (e: any) {
@@ -664,6 +697,14 @@ async function saveOrchestration() {
     orchMsg.value = '内容为空，未保存';
     return;
   }
+  // 写盘前轻量确认：保存即覆写磁盘上的字段路由唯一声明源（对齐 forceSync 的二次确认；落库另走「同步到 DB」）
+  const ok = await askConfirm({
+    title: TERMS.saveToFile,
+    message: `将以当前编辑内容覆写 prompts/orchestration/${props.stage}.yaml。此操作只写编排文件，不影响数据库；落库需再点「${TERMS.syncToDb}」。`,
+    confirmText: '保存到文件',
+    danger: false,
+  });
+  if (!ok) return;
   orchSaving.value = true;
   try {
     const res = await adminFieldRoutingsApi.saveOrchestrationFile(props.stage, orchContent.value);
@@ -674,6 +715,7 @@ async function saveOrchestration() {
       routingCount: Number(data.routingCount) || 0,
     };
     orchMsg.value = data.syncHint || '已保存';
+    orchBaseline.value = orchContent.value; // 保存成功后重置脏基线，关闭不再拦截
     toast.success('编排文件已保存');
     await loadStage();
     emit('changed');

@@ -59,6 +59,8 @@
             storage-key="wf_learner_hidden_cols"
             v-model:hidden="lcHiddenCols"
           />
+          <!-- 后端学习者域 limit=50 截断无提示（live.ts 不动）：列表满 50 时给出静态口径说明 -->
+          <span v-if="rows.length >= 50" class="mk-card__meta" title="学习者快照单次最多加载 50 条">仅加载前 50 位，可按筛选缩小范围</span>
           <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 人</span>
         </div>
       </div>
@@ -97,6 +99,8 @@
           </tr>
         </thead>
         <tbody>
+          <!-- 键盘等价：行点击只是鼠标快捷路径，语义由行内「详情」图标按钮承载（可 Tab 聚焦+回车）；
+               行本身不设 tabindex，避免与行内三个操作按钮形成双份焦点停靠 -->
           <tr v-for="r in paged" :key="r.id" class="lc-row" @click="openDetail(r)">
             <td v-if="!lcHiddenCols.has('learner')">
               <div class="mk-cell-main">
@@ -193,7 +197,7 @@
               <span class="mk-field__label">提醒内容</span>
               <textarea v-model="interveneBody" class="mk-field__textarea" rows="3" placeholder="如：检测到疲劳度偏高，建议休息后继续学习。"></textarea>
             </label>
-            <p class="lc-iv__hint">提醒将出现在该学习者的站内通知中（scope=user）。</p>
+            <p class="lc-iv__hint">提醒将出现在该学习者的站内通知中。</p>
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" @click="intervene = null">取消</button>
@@ -223,7 +227,7 @@ import MkCols from '@/components/mk/MkCols.vue'
 import { Bell, RotateCw, UserRound } from 'lucide-vue-next'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
-import { adminNotificationsApi } from '@/api/adminApi'
+import { adminNotificationsApi, adminLearnerModelsApi } from '@/api/adminApi'
 
 /** 嵌入模式：作为「用户与学习者」页「学习状态」tab 渲染（仅去掉外层壳，状态条/列表/干预弹窗保留）。
     count 事件：学习者快照就绪后上报（宿主「学习者 N」徽章；embedded 才消费） */
@@ -250,7 +254,10 @@ const pill = ref<'all' | 'risk' | 'stale'>('all')
 const keyword = ref('')
 const includeTest = ref(false)
 watch(includeTest, (v) => {
-  if (isLive.value) void liveSetLearnersIncludeTest(v)
+  // 切换失败不静默：用户以为已切到全量/仅真实口径，实际列表还是旧口径
+  if (isLive.value) {
+    liveSetLearnersIncludeTest(v).catch((e) => toast.error(`切换数据范围失败：${errMsg(e)}`))
+  }
 })
 
 /* P1-3 列显隐（公共组件 MkCols）：学习者/进度/趋势/疲劳/置信/风险/更新 可隐藏，操作固定 */
@@ -420,7 +427,8 @@ watch(filtered, () => {
   page.value = 1
 })
 
-const trendText = (t: string) => (t === 'up' ? '↗ 上升' : t === 'down' ? '↘ 下降' : '→ 稳定')
+/** 趋势纯文案（箭头由模板的 .lc-trend__arrow 图标渲染，文本再带箭头会「↗ ↗ 上升」双重箭头） */
+const trendText = (t: string) => (t === 'up' ? '上升' : t === 'down' ? '下降' : '稳定')
 const trendTitle = (r: Row) =>
   `近况趋势：${trendText(r.trend)}${r.trend === 'down' ? '（需关注）' : r.trend === 'up' ? '（学习状态向好）' : '（状态平稳）'}。趋势基于近期学习表现，详细曲线见详情页`
 const fatigueBadge = (f: string) => (f === '高' ? 'mk-badge--bad' : f === '中' ? 'mk-badge--warn' : 'mk-badge--ok')
@@ -444,7 +452,7 @@ async function recompute(row: Row) {
   updatingIds.value = new Set(updatingIds.value).add(row.id)
   try {
     await liveRecomputeLearner(row.id)
-    toast.success(`「${row.name}」快照已重算（真实）`)
+    toast.success(`「${row.name}」快照已重算`)
   } catch (e) {
     toast.error(`重算失败：${errMsg(e)}`)
   } finally {
@@ -470,7 +478,9 @@ async function recomputeAll() {
   for (const r of rows.value) {
     updatingIds.value = new Set(updatingIds.value).add(r.id)
     try {
-      await liveRecomputeLearner(r.id)
+      // 循环内只调重算接口、不刷列表：liveRecomputeLearner 每次附带全量重拉学习者域，
+      // N 人重算会触发 N 次全量请求；改为循环结束统一刷新一次
+      await adminLearnerModelsApi.recompute(r.id)
       ok++
     } catch {
       fail++
@@ -481,10 +491,16 @@ async function recomputeAll() {
       recomputeProgress.value++
     }
   }
+  // 循环结束统一刷新一次（带当前「含模拟」口径，保持列表范围一致）
+  try {
+    await liveSetLearnersIncludeTest(includeTest.value)
+  } catch {
+    toast.error('重算完成，但列表刷新失败，请手动刷新')
+  }
   if (fail) {
     toast.error(`重算完成：${ok} 成功 · ${fail} 失败`)
   } else {
-    toast.success(`已重算 ${ok} 个快照（真实）`)
+    toast.success(`已重算 ${ok} 个快照`)
   }
   recomputingAll.value = false
 }

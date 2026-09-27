@@ -54,6 +54,8 @@ vi.mock('../live', () => ({
   timeAgo: (v: string) => v,
   errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
   shortId: (id: string, h: number, t: number) => (id ? `${id.slice(0, h)}…${id.slice(-t)}` : id),
+  isPageCacheFresh: () => false,
+  markPageFetched: () => {},
 }));
 
 const rows = [

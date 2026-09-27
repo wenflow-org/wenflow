@@ -8,21 +8,23 @@
       <span class="mk-status__meta">评估历史 {{ runs.length }}</span>
       <span class="mk-status__meta" :title="lastRunHint">{{ lastRunText }}</span>
       <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="!canRunBatch" @click="runBatch">批量跑评估</button>
+        <!-- running：批量/试跑期间互斥禁用，防止并发多批真实 LLM 调用重复烧 token -->
+        <button type="button" class="mk-status__action" :disabled="!canRunBatch || running" @click="runBatch">{{ running ? '评估运行中…' : '批量跑评估' }}</button>
         <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建用例</button>
       </span>
     </div>
 
     <!-- 主视图切换（统一样板：状态条正下方的独立一行，按内容宽度、左对齐） -->
     <div class="mk-pills" role="tablist" aria-label="评估视图切换">
-      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'cases'" :class="{ 'mk-pill--active': tab === 'cases' }" @click="switchTab('cases')">评估用例</button>
-      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'runs'" :class="{ 'mk-pill--active': tab === 'runs' }" @click="switchTab('runs')">评估历史</button>
+      <button type="button" role="tab" id="pe-tab-cases" aria-controls="pe-panel-cases" class="mk-pill" :aria-selected="tab === 'cases'" :class="{ 'mk-pill--active': tab === 'cases' }" @click="switchTab('cases')">评估用例</button>
+      <button type="button" role="tab" id="pe-tab-runs" aria-controls="pe-panel-runs" class="mk-pill" :aria-selected="tab === 'runs'" :class="{ 'mk-pill--active': tab === 'runs' }" @click="switchTab('runs')">评估历史</button>
     </div>
 
     <!-- 筛选行 -->
     <div class="mk-card">
       <div class="pe-filter">
-        <select v-model="agentFilter" class="mk-filter__select" aria-label="按 Agent 筛选" @change="reloadCases">
+        <!-- onAgentFilterChange：用例与历史共用该筛选，切换时两边都重拉（原只刷用例） -->
+        <select v-model="agentFilter" class="mk-filter__select" aria-label="按 Agent 筛选" @change="onAgentFilterChange">
           <option value="">全部 Agent</option>
           <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.label }}</option>
         </select>
@@ -31,7 +33,7 @@
     </div>
 
     <!-- 用例 Tab -->
-    <div v-if="tab === 'cases'" class="mk-card">
+    <div v-if="tab === 'cases'" id="pe-panel-cases" role="tabpanel" aria-labelledby="pe-tab-cases" class="mk-card">
       <MockSkeletonTable v-if="casesLoading && !cases.length" :cols="6" />
       <div v-else-if="cases.length" class="mk-table-scroll pe-list">
         <table class="mk-table mk-table--fixed">
@@ -89,7 +91,7 @@
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === c.id" @click.stop="toggleMenu(c.id)">⋯</button>
                     <div v-if="openMenu === c.id" class="mk-menu__pop" :style="popStyle" @click.stop>
                       <button type="button" class="mk-menu__item" @click="menuEdit(c)">编辑用例</button>
-                      <button type="button" class="mk-menu__item" @click="menuRunSingle(c)">单条试跑</button>
+                      <button type="button" class="mk-menu__item" :disabled="running" @click="menuRunSingle(c)">单条试跑</button>
                       <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuDelete(c)">删除</button>
                     </div>
                   </div>
@@ -101,6 +103,7 @@
       </div>
       <MkEmptyState
         v-else-if="casesFailed"
+        tone="error"
         icon="!"
         title="评估用例加载失败"
         description="无法从服务读取用例列表。"
@@ -119,7 +122,7 @@
     </div>
 
     <!-- 历史 Tab -->
-    <div v-else class="mk-card">
+    <div v-else id="pe-panel-runs" role="tabpanel" aria-labelledby="pe-tab-runs" class="mk-card">
       <MockSkeletonTable v-if="runsLoading && !runs.length" :cols="6" />
       <div v-else-if="runs.length" class="mk-table-scroll pe-list">
         <table class="mk-table mk-table--fixed">
@@ -173,8 +176,10 @@
       </div>
       <MkEmptyState
         v-else-if="runsFailed"
+        tone="error"
         icon="!"
         title="评估历史加载失败"
+        description="无法从服务读取评估历史。"
         action-text="重试"
         @action="reloadRuns"
       />
@@ -221,14 +226,14 @@
 
             <!-- 学生输入：标准 tab 切换 -->
             <div class="pe-input-block">
-              <div class="pe-tabs" role="tablist">
-                <button type="button" class="pe-tab" role="tab" :aria-selected="form.inputSource === 'manual'"
+              <div class="pe-tabs" role="tablist" aria-label="学生输入方式">
+                <button type="button" class="pe-tab" role="tab" id="pe-tab-manual" aria-controls="pe-input-panel" :aria-selected="form.inputSource === 'manual'"
                   :class="{ 'pe-tab--on': form.inputSource === 'manual' }" @click="form.inputSource = 'manual'"><PenLine class="pe-tab__icon" :size="14" :stroke-width="1.75" aria-hidden="true" />手写对话</button>
-                <button type="button" class="pe-tab" role="tab" :aria-selected="form.inputSource === 'simulated'"
+                <button type="button" class="pe-tab" role="tab" id="pe-tab-simulated" aria-controls="pe-input-panel" :aria-selected="form.inputSource === 'simulated'"
                   :class="{ 'pe-tab--on': form.inputSource === 'simulated' }" @click="form.inputSource = 'simulated'"><Users class="pe-tab__icon" :size="14" :stroke-width="1.75" aria-hidden="true" />模拟学生</button>
               </div>
 
-              <div class="pe-tab-body">
+              <div class="pe-tab-body" id="pe-input-panel" role="tabpanel" :aria-labelledby="form.inputSource === 'manual' ? 'pe-tab-manual' : 'pe-tab-simulated'">
                 <!-- 手写对话 -->
                 <template v-if="form.inputSource === 'manual'">
                   <div class="pe-msgs">
@@ -261,7 +266,7 @@
                       <option v-for="v in virtualLearners" :key="v.id" :value="v.id">{{ v.label }}</option>
                     </select>
                   </label>
-                  <!-- 模拟参数：一行内联，不折叠 -->
+                  <!-- 模拟参数：一行内联，不折叠（收敛门禁字段为进阶配置，挪入下方「高级校验」折叠） -->
                   <div class="pe-params">
                     <label class="pe-param">
                       <span class="pe-param__label">对话轮数</span>
@@ -276,10 +281,6 @@
                         <option value="high">high · 难缠</option>
                         <option value="stress_test">stress · 极端</option>
                       </select>
-                    </label>
-                    <label class="pe-param pe-param--grow">
-                      <span class="pe-param__label">收敛门禁字段（可选）</span>
-                      <input v-model="form.convergeRequires" class="mk-input mono" placeholder="real_problem,confirmedProposal" />
                     </label>
                   </div>
                 </template>
@@ -330,6 +331,12 @@
                     @change="parseInputPayload" />
                   <span v-if="form.inputPayloadError" class="mk-field__err">{{ form.inputPayloadError }}</span>
                 </div>
+                <!-- 原「收敛门禁字段」：内部术语白化为「对话收尾条件」，属进阶配置故收进高级折叠 -->
+                <div v-if="form.inputSource === 'simulated'" class="mk-field">
+                  <span class="mk-field__label">对话收尾条件 <span class="mk-field__opt">（进阶）</span></span>
+                  <input v-model="form.convergeRequires" class="mk-field__input mono" placeholder="real_problem,confirmedProposal" />
+                  <span class="mk-field__hint">模拟对话收集齐这些信息才算聊完，一般保持默认即可。</span>
+                </div>
               </details>
               <label class="mk-field">
                 <span class="mk-field__label">备注（可选）</span>
@@ -346,7 +353,7 @@
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" :disabled="saving || savingRun" @click="formOpen = false">取消</button>
             <button type="button" class="mk-btn" :disabled="saving || savingRun" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving || savingRun" @click="saveAndRun">{{ savingRun ? '试跑中…' : '保存并立即试跑' }}</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving || savingRun || running" @click="saveAndRun">{{ savingRun ? '试跑中…' : '保存并立即试跑' }}</button>
           </div>
         </div>
       </div>
@@ -378,7 +385,7 @@
                   <div class="pe-result-row__head">
                     <strong>{{ res.caseName }} <span class="mk-na">({{ res.caseId }})</span></strong>
                     <span class="mk-badge" :class="res.passed ? 'mk-badge--ok' : 'mk-badge--bad'">{{ res.passed ? '通过' : '未通过' }}</span>
-                    <span class="pe-result-row__meta mono">#{{ res.runIndex }} · {{ fmtMs(res.durationMs) }} · stage={{ res.output?.stage ?? '—' }}</span>
+                    <span class="pe-result-row__meta mono">#{{ res.runIndex }} · {{ fmtMs(res.durationMs) }} · 阶段：{{ stageText(res.output?.stage) }}</span>
                   </div>
                   <div v-if="!res.passed" class="pe-result-row__checks">
                     <span v-for="(v, k) in res.checks" :key="k" class="pe-check" :class="v ? 'pe-check--ok' : 'pe-check--fail'">{{ v ? '✓' : '✗' }} {{ checkLabel(String(k)) }}</span>
@@ -393,7 +400,7 @@
                         <div v-if="t.error" class="pe-transcript__meta">⚠️ {{ t.error }}</div>
                         <div v-if="t.learnerState" class="pe-transcript__meta">
                           学生状态：被理解 {{ Math.round((t.learnerState.feltUnderstood ?? 0) * 100) }}% · 目标清晰 {{ Math.round((t.learnerState.problemClarity ?? 0) * 100) }}% ·
-                          readyToProceed={{ t.learnerState.readyToProceed === true ? '是' : '否' }}{{ t.emotion ? ` · 情绪 ${t.emotion}` : '' }}
+                          是否愿意推进：{{ t.learnerState.readyToProceed === true ? '是' : '否' }}{{ t.emotion ? ` · 情绪 ${t.emotion}` : '' }}
                         </div>
                       </div>
                     </div>
@@ -419,6 +426,7 @@ import { adminPromptOpsApi, adminVirtualLearnersApi, type CreateEvalCasePayload 
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
+import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
@@ -499,16 +507,6 @@ const agentMustContainPlaceholder = computed(() => `例如：${AGENT_META[form.v
 const tab = ref<'cases' | 'runs'>('cases')
 const route = useRoute()
 const router = useRouter()
-/* URL ↔ tab 双向同步(对齐合并宿主页 ?tab= 约定;此前刷新/深链落回默认 tab) */
-watch(
-  () => route.query.tab,
-  (t) => {
-    const v = t === 'runs' ? 'runs' : 'cases'
-    if (v !== tab.value) tab.value = v
-    if (v === 'runs' && !runs.value.length && !runsLoading.value) void reloadRuns()
-  },
-  { immediate: true }
-)
 const agentFilter = ref('')
 const cases = ref<EvalCase[]>([])
 const runs = ref<EvalRun[]>([])
@@ -516,6 +514,33 @@ const casesLoading = ref(false)
 const runsLoading = ref(false)
 const casesFailed = ref(false)
 const runsFailed = ref(false)
+
+/* URL ↔ tab 双向同步(对齐合并宿主页 ?tab= 约定;此前刷新/深链落回默认 tab)。
+   immediate 首跑兼作唯一挂载加载入口（原先 setup 末尾还有一组裸 reload，深链 ?tab=runs 时会双拉，
+   且该 watch 必须放在 cases/runs 等 ref 声明之后，否则 immediate 回调会撞 TDZ） */
+let bootstrapped = false
+watch(
+  () => route.query.tab,
+  (t) => {
+    const v = t === 'runs' ? 'runs' : 'cases'
+    if (v !== tab.value) tab.value = v
+    if (!bootstrapped) {
+      // 首屏用例与历史都拉：状态条「评估历史 N」不因停留在用例 Tab 而显示 0
+      bootstrapped = true
+      void reloadCases()
+      void reloadRuns()
+      return
+    }
+    if (v === 'runs' && !runs.value.length && !runsLoading.value) void reloadRuns()
+  },
+  { immediate: true }
+)
+
+/* agent 筛选同时作用于用例与历史：切换时两边都重拉（原只刷用例，历史还停留在旧 agent 的数据） */
+function onAgentFilterChange() {
+  void reloadCases()
+  void reloadRuns()
+}
 
 /* 页面基调必须反映加载失败：原为硬编码 'mk-status--ok'，接口挂了顶栏仍是绿色「正常」（审计 附 A #4） */
 const statusTone = computed(() =>
@@ -565,12 +590,20 @@ const resultTone = (r: EvalRun) => {
   const p = r.summary.passRate ?? 0
   return p >= 90 ? 'pe-result--ok' : p >= 60 ? 'pe-result--warn' : 'pe-result--bad'
 }
+/** stage 英文枚举 → 白话（结果明细不再直接甩原始字段；未知值原样兜底） */
+const stageText = (v: unknown): string => {
+  if (v == null || v === '') return '—'
+  const map: Record<string, string> = { understanding: '理解目标', proposal: '给出方案', confirmed: '已确认' }
+  return map[String(v)] || String(v)
+}
 const expectationText = (c: EvalCase) => {
   const e = c.expectations
   if (!e) return ''
   const parts: string[] = []
   if (e.mode === 'simulated') parts.push(`模拟场景${e.scenario ? `：${e.scenario}` : ''}`)
   if (e.dialogueRounds) parts.push(`${e.dialogueRounds} 轮`)
+  // 原漏计 mustContainText：列表期望摘要看不到「必须做到」配置，会误判用例没有期望
+  if (e.mustContainText?.length) parts.push(`须含 ${e.mustContainText.length} 句`)
   if (e.expectedStage) parts.push(`stage=${e.expectedStage}`)
   if (e.mustIncludeFields?.length) parts.push(`含 ${e.mustIncludeFields.length} 字段`)
   if (e.mustNotInclude?.length) parts.push(`不含 ${e.mustNotInclude.length} 词`)
@@ -926,6 +959,13 @@ function menuDelete(c: EvalCase) { closeMenu(); void removeCase(c) }
 async function menuRunSingle(c: EvalCase) { closeMenu(); await runSingle(c) }
 
 async function removeCase(c: EvalCase) {
+  // 删除不可恢复且可能连带调好的期望配置：先二次确认（对齐全站 askConfirm 模式）
+  const ok = await askConfirm({
+    title: '删除用例',
+    message: `确认删除用例「${c.name}」？删除后不可恢复。`,
+    confirmText: '删除',
+  })
+  if (!ok) return
   try {
     await adminPromptOpsApi.deleteEvalCase(c.id)
     cases.value = cases.value.filter((x) => x.id !== c.id)
@@ -951,36 +991,62 @@ async function toggleEnabled(c: EvalCase) {
 
 /** 批量跑评估：对当前 agentFilter 下所有启用用例跑（走 DB caseIds） */
 const canRunBatch = computed(() => cases.value.some((c) => c.enabled))
+/* 运行互斥：批量/试跑都是真实 LLM 调用，运行期间禁用全部入口，防止并发多批重复烧 token */
+const running = ref(false)
 async function runBatch() {
+  if (running.value) return
   if (!canRunBatch.value) { toast.info('请先创建并启用至少一个用例'); return }
   const target = agentFilter.value || ''
   const targetCases = cases.value.filter((c) => c.enabled && (!target || c.agentId === target))
   if (!targetCases.length) { toast.info('当前筛选下没有启用的用例'); return }
-  const busy = toast.info(`正在批量评估 ${targetCases.length} 个用例…`, 0)
+  // 后端按 agentId 过滤 caseIds（findEnabledEvalCasesByIds）：跨 agent 混一批会被静默丢弃、
+  // toast 却谎报全部已跑，必须按 agentId 分组逐批提交；串行避免并发压 LLM
+  const groups = new Map<string, EvalCase[]>()
+  for (const c of targetCases) {
+    const list = groups.get(c.agentId)
+    if (list) list.push(c)
+    else groups.set(c.agentId, [c])
+  }
+  const totalCases = targetCases.length
+  const busy = toast.info(`正在批量评估 ${totalCases} 个用例…`, 0)
+  running.value = true
   try {
-    const res = await adminPromptOpsApi.runEval({
-      agentId: targetCases[0].agentId,
-      caseIds: targetCases.map((c) => c.caseId),
-      repeatCount: 1,
-    })
-    const data = res.data?.data ?? res.data
-    const summary = data?.summary || {}
-    const skipped = Array.isArray(data?.skipped) ? data.skipped : []
+    let passed = 0
+    let totalRuns = 0
+    const skippedAll: string[] = []
+    for (const [agentId, list] of groups) {
+      const res = await adminPromptOpsApi.runEval({
+        agentId,
+        caseIds: list.map((c) => c.caseId),
+        repeatCount: 1,
+      })
+      const data = res.data?.data ?? res.data
+      const summary = data?.summary || {}
+      passed += Number(summary.passedCount ?? 0)
+      totalRuns += Number(summary.totalRuns ?? 0)
+      const skipped = Array.isArray(data?.skipped) ? data.skipped : []
+      for (const s of skipped) skippedAll.push(`[${agentLabel(agentId)}] ${String((s as any)?.reason || '未知原因')}`)
+    }
     toast.close(busy)
-    toast.success(`批量完成：${summary.passedCount ?? 0}/${summary.totalRuns ?? 0} 通过（${summary.passRate ?? 0}%）`)
-    if (skipped.length) {
-      toast.info(`跳过 ${skipped.length} 个用例：${skipped.map((s: any) => s.reason).join('；')}`, 0)
+    const passRate = totalRuns > 0 ? Math.round((passed / totalRuns) * 100) : 0
+    toast.success(`批量完成 ${totalCases} 个用例：${passed}/${totalRuns} 通过（${passRate}%）`)
+    if (skippedAll.length) {
+      toast.info(`跳过 ${skippedAll.length} 个用例：${skippedAll.join('；')}`, 0)
     }
     void reloadRuns()
   } catch (e) {
     toast.close(busy)
     toast.error(`批量评估失败：${errMsg(e)}`)
+  } finally {
+    running.value = false
   }
 }
 
 /** 单条试跑：直接跑一个用例（不回写历史） */
 async function runSingle(c: EvalCase) {
+  if (running.value) { toast.info('已有评估在运行，请等它结束再试跑'); return }
   const busy = toast.info(`正在试跑「${c.name}」…`, 0)
+  running.value = true
   try {
     const structured = {
       ...((c as any).previousState || {}),
@@ -1007,6 +1073,8 @@ async function runSingle(c: EvalCase) {
   } catch (e) {
     toast.close(busy)
     toast.error(`试跑失败：${errMsg(e)}`)
+  } finally {
+    running.value = false
   }
 }
 
@@ -1035,9 +1103,7 @@ async function openRunDetail(r: EvalRun) {
   }
 }
 
-void reloadCases()
-// 首屏就拉评估历史，保证状态条「评估历史 N」不是 0（原仅切到历史 Tab 才加载）
-void reloadRuns()
+// 挂载加载统一走上方 watch 的 immediate 首跑（bootstrapped 分支），此处不再裸拉一遍
 </script>
 
 <style scoped>
@@ -1121,8 +1187,8 @@ void reloadRuns()
   background: var(--mk-surface);
 }
 
-/* 模拟参数：一行内联 */
-.pe-params { display: grid; grid-template-columns: 84px 150px 1fr; gap: 10px; align-items: end; }
+/* 模拟参数：一行内联（收尾条件挪进高级折叠后只剩两项） */
+.pe-params { display: grid; grid-template-columns: 84px 150px; gap: 10px; align-items: end; }
 .pe-param { display: grid; gap: 4px; }
 .pe-param__label { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); }
 

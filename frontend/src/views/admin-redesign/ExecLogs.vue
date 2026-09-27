@@ -7,7 +7,7 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ liveLogsTotal }} 条</span>
       <span v-if="logs.length" class="mk-status__meta">失败 {{ errCount }} · 成功率 {{ successRate }}%</span>
-      <span v-if="logs.length" class="mk-status__meta mono" :title="'延迟分位（仅成功日志）：P50 = 中位耗时 · P99 = 99% 请求耗时'">耗时 P50 {{ latencyP50 }} · P99 {{ latencyP99 }}</span>
+      <span v-if="logs.length" class="mk-status__meta mono" :title="'延迟分位（仅成功日志）：P50 = 中位耗时 · P99 = 99% 请求耗时'">耗时 P50 {{ latencyP50 }} · P99 {{ latencyP99 }}<template v-if="latencySampled">（样本估算）</template></span>
       <button
         v-if="testCount > 0"
         type="button"
@@ -23,7 +23,8 @@
         <button type="button" class="mk-status__clear" @click="clearFilter">×</button>
       </span>
       <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" @click="exportJson">导出</button>
+        <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注 -->
+        <button type="button" class="mk-status__action" @click="exportJson">导出本页</button>
       </span>
     </div>
 
@@ -59,7 +60,8 @@
           待补单价模型 {{ missingPricingModels.length }} 个：{{ missingPricingModels.join('、') }}
         </div>
       </div>
-      <TokenCost embedded />
+      <!-- 宿主侧承接成本 tab 的「逐调用明细」：切页内 tab 回日志页（跨页 intent 同值不触发） -->
+      <TokenCost embedded @goto-logs="switchElTab('logs')" />
     </template>
 
     <!-- ===== Tab1: 日志流（默认） ===== -->
@@ -78,8 +80,8 @@
           <div class="mk-pills">
             <button v-for="p in statusPills" :key="p.id" type="button" class="mk-pill" :class="{ 'mk-pill--active': statusFilter === p.id }" @click="statusFilter = statusFilter === p.id ? '' : p.id">{{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span></button>
           </div>
-          <MkFilterSearch v-model="keyword" placeholder="关键词搜索" @keydown.enter="applyServerQuery" />
-          <MkFilterSearch v-model="traceId" placeholder="Trace ID（链路 ID）" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery" />
+          <MkFilterSearch v-model="keyword" placeholder="关键词搜索" @keydown.enter="applyServerQuery()" />
+          <MkFilterSearch v-model="traceId" placeholder="Trace ID（链路 ID）" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery()" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
           <SavedViewsBar
@@ -103,12 +105,12 @@
         </div>
       </div>
       <div v-if="advOpen" class="log-advpanel">
-        <select v-model="agentFilter" class="mk-filter__select mono">
+        <select v-model="agentFilter" class="mk-filter__select mono" aria-label="按节点（Skill）筛选">
           <option value="">全部节点</option>
           <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
         </select>
-        <input v-model="sessionId" class="mk-filter__input" placeholder="sessionId" @keydown.enter="applyServerQuery" />
-        <select v-model="timeRange" class="mk-filter__select" @change="applyServerQuery">
+        <input v-model="sessionId" class="mk-filter__input" placeholder="sessionId" aria-label="按会话 sessionId 筛选" @keydown.enter="applyServerQuery()" />
+        <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围筛选" @change="applyServerQuery()">
           <option value="today">今天</option>
           <option value="yesterday">昨天</option>
           <option value="week">近 7 天</option>
@@ -117,8 +119,8 @@
         </select>
         <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
       </div>
-      <MockSkeletonTable v-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="6" :rows="6" />
-      <div v-else-if="filtered.length" class="mk-table-scroll">
+      <!-- 旧加载骨架分支已删：外层卡片仅在 filtered.length 时渲染，!logs.length 在此不可达 -->
+      <div class="mk-table-scroll">
         <table class="mk-table mk-table--click mk-table--fixed exec-table">
 
           <colgroup>
@@ -160,7 +162,7 @@
           </thead>
           <tbody>
             <template v-for="log in shown" :key="log.id">
-              <tr class="exec-row" :class="[`exec-row--${log.status}`, { 'exec-row--test': isTestLog(log), 'exec-row--open': openId === log.id }]" @click="openId = openId === log.id ? '' : log.id">
+              <tr class="exec-row" :class="[`exec-row--${log.status}`, { 'exec-row--test': isTestLog(log), 'exec-row--open': openId === log.id }]" tabindex="0" role="button" :aria-expanded="openId === log.id" @click="toggleRowOpen(log.id)" @keydown.enter="toggleRowOpen(log.id, $event)">
                 <td v-if="!hiddenCols.has('time')"><span class="mono exec-time" :title="fmtFull(log.ts)">{{ fmtTime(log.ts) }}</span></td>
                 <td v-if="!hiddenCols.has('kind')">
                   <span class="exec-kind-group">
@@ -313,7 +315,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { Waypoints } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
-import { intent, openSkillDrawer, clearInvestigation, dataSource, tokenCostFilters } from './store'
+import { intent, openSkillDrawer, clearInvestigation, dataSource, tokenCostFilters, liveSkillStatsMap } from './store'
 import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, totalPagesOf, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -431,6 +433,13 @@ const testFilter = ref<'only' | ''>('')
 const autoRefresh = ref(false)
 const advOpen = ref(false)
 
+/** 行展开切换（click / Enter 复用）：键盘事件仅目标为行自身时生效，
+    避免行内按钮（trace 入口/节点链接）的 Enter 冒泡误触发展开 */
+function toggleRowOpen(id: string, e?: Event) {
+  if (e && e.target !== e.currentTarget) return
+  openId.value = openId.value === id ? '' : id
+}
+
 /* D3 表格增强：列显隐（localStorage 持久化；9 列 → 勾选隐藏） */
 const COLS_KEY = 'wf_exec_hidden_cols'
 const colDefs = [
@@ -459,7 +468,8 @@ onMounted(() => {
 })
 watch(dataSource, () => {
   void loadPromptIndex()
-  void applyServerQuery()
+  // 数据源/注册表切换即使查询参数未变也必须重拉，force 绕过同签名去重
+  void applyServerQuery(true)
 })
 function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | undefined {
   const list = livePromptIndex.value[log.traceId]
@@ -551,7 +561,13 @@ function currentQuery(): SpanQuery {
   }
 }
 
-async function applyServerQuery() {
+/* 上次已下发查询签名：同签名重复触发（显式调用与 watch 叠加、URL 回写回环）直接跳过，
+   消除深链/筛选改动造成的重复请求；真正变化仍每次下发（last-wins 串行化由 live.ts 保证） */
+let lastQuerySig = ''
+async function applyServerQuery(force = false) {
+  const sig = JSON.stringify(currentQuery())
+  if (!force && sig === lastQuerySig) return
+  lastQuerySig = sig
   /* 筛选/搜索/traceId/sessionId 直达/每页条数等变化：回第 1 页（传统分页语义） */
   await reloadLiveSpans(currentQuery())
 }
@@ -596,9 +612,9 @@ watch([logSortKey, logSortDir], () => {
   void applyServerQuery()
 })
 
-/* P0 修复：错误横幅重试 */
+/* P0 修复：错误横幅重试（同签名也必须重发，force 绕过去重） */
 function retryLiveLogs() {
-  void applyServerQuery()
+  void applyServerQuery(true)
 }
 
 /* 自动刷新：setTimeout 链 + 并发守卫 + 指数退避 */
@@ -692,6 +708,10 @@ watch(
 const FILTER_QUERY_KEYS = ['agent', 'status', 'cat', 'range', 'q', 'trace', 'session', 'test'] as const
 const EL_TIME_RANGES = ['today', 'yesterday', 'week', 'month', 'all'] as const
 const queryVal = (v: unknown): string => (typeof v === 'string' ? v : '')
+/* 上次 URL 筛选签名：route watch 对比完整查询签名，任一筛选变化即重查。
+   此前仅 status/agent/test 的 ref watch 触发重查，前进/后退/深链改
+   q/trace/session/cat/range 时只改 URL 列表不刷新 */
+let lastUrlSig = FILTER_QUERY_KEYS.map((k) => queryVal(route.query[k])).join('\u0001')
 watch(
   () => FILTER_QUERY_KEYS.map((k) => route.query[k]),
   (vals) => {
@@ -706,6 +726,10 @@ watch(
       ? (range as typeof timeRange.value)
       : 'week'
     testFilter.value = test === 'only' ? 'only' : ''
+    const sig = vals.map(queryVal).join('\u0001')
+    if (sig === lastUrlSig) return
+    lastUrlSig = sig
+    void applyServerQuery()
   },
   { immediate: true }
 )
@@ -788,7 +812,16 @@ function onSaveView(name: string) {
 }
 
 const logs = computed(() => liveLogsFiltered.value)
-const agentOptions = computed(() => [...new Set(logs.value.map((s) => s.agent))].sort())
+/* 节点下拉数据源不能只来自当前页 30 行（截断后筛不到页外的 skill）。
+   组合三源：注册表 skill 全集（liveSkillStatsMap，boot 域预载，去掉 skill: 前缀与行内
+   agent 口径对齐）+ 当前页实际出现的节点（网关/流程行不在注册表）+ 保存视图历史用过的节点 */
+const agentOptions = computed(() => {
+  const set = new Set<string>()
+  for (const k of Object.keys(liveSkillStatsMap.value ?? {})) set.add(k.replace(/^skill:/, ''))
+  for (const s of logs.value) set.add(s.agent)
+  for (const v of savedViews.value) if (v.query?.agent) set.add(v.query.agent)
+  return [...set].sort()
+})
 
 /** 连通性/探活测试日志识别：sourceEntry = system-canary（模型接入页探活 + 测试连接产生） */
 const isTestLog = (l: { sourceEntry?: string }) => l.sourceEntry === 'system-canary'
@@ -796,15 +829,10 @@ const isTestLog = (l: { sourceEntry?: string }) => l.sourceEntry === 'system-can
    旧三态的「排除测试」与默认视图语义重合（后端默认排除 canary），已并入默认态 */
 
 /* P0 分页正确性：测试日志筛选随查询上移服务端（sourceEntry 参数），
-   与 status/agentId 同批修复「本地过滤 × 服务端分页」组合缺陷——
-   旧实现在当前页行上过滤，第 2 页可能整页被滤空而页码器仍显示可达 */
-const filtered = computed(() =>
-  logs.value.filter((l) => {
-    if (agentFilter.value && l.agent !== agentFilter.value) return false
-    if (statusFilter.value && l.status !== statusFilter.value) return false
-    return true
-  })
-)
+   与 status/agentId 同批修复「本地过滤 × 服务端分页」组合缺陷。
+   节点/状态复滤已删：服务端按 agentId 过滤（skill:/agent: 前缀规范化，兼容裸名），
+   行内 agent 是去前缀的裸名——URL 带 skill: 前缀时旧客户端复滤会把整表滤空 */
+const filtered = computed(() => logs.value)
 
 const shown = computed(() => filtered.value)
 
@@ -849,6 +877,10 @@ function percentileOf(durations: number[], q: number): string {
   const idx = Math.min(arr.length - 1, Math.max(0, Math.round((arr.length - 1) * q)))
   return fmtMs(arr[idx])
 }
+/* P50/P99 回退到当前页样本估算时如实标注（后端 stats 未带分位，30 行样本非全量口径） */
+const latencySampled = computed(
+  () => !(liveStats.value?.latencyPercentiles?.p50 != null) && logs.value.some((l) => l.status === 'ok')
+)
 function percentileMsOf(durations: unknown[], q: number): number | null {
   const arr = durations.filter((d): d is number => typeof d === 'number' && d >= 0).sort((a, b) => a - b)
   if (!arr.length) return null
@@ -880,10 +912,9 @@ const testCount = computed(() => {
   if (testFilter.value === 'only') return liveLogsTotal.value
   return liveStats.value?.canary ?? 0
 })
-/** 测试筛选两态切换：默认（已排除测试）→ 仅看测试 → 默认 */
+/** 测试筛选两态切换：默认（已排除测试）→ 仅看测试 → 默认（重查由 status/agent/test watch 触发） */
 function toggleTestFilter() {
   testFilter.value = testFilter.value === '' ? 'only' : ''
-  void applyServerQuery()
 }
 /* 排查徽章：读本地筛选（修复此前读 intent 导致的空值）；live 下补充关键词/时间范围/trace/会话 */
 const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const

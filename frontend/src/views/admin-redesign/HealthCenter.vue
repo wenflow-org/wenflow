@@ -191,7 +191,7 @@
       <!-- 技能对账（SkillReconciliation 自身即是 mk-card，外层仅作滚动锚点，避免卡中卡） -->
       <section v-if="showView('recon')" id="hc-recon" class="hc-anchor">
         <!-- @openSkill 此前未绑定 → 对账行点击无反应（审计 附 A #5）。绑定到全局 skill 抽屉。 -->
-        <SkillReconciliation ref="reconRef" @openSkill="openSkillDrawer" />
+        <SkillReconciliation ref="reconRef" :report="reconReport" :error="reconError" @openSkill="openSkillDrawer" @refresh="emit('refreshRecon')" />
       </section>
 
       <!-- 完成度分布（归属对账视图：完成度即对账 completion 映射的来源） -->
@@ -230,6 +230,7 @@ import {
   type HealthDriftSummary,
   type HealthGlobalSummary,
   type HealthReconciliationSummary,
+  type SkillReconciliationReport,
 } from '@/api/adminApi'
 import { TERMS } from './terms'
 import { COMPLETION_META, SEMANTICS_META } from './glossaryMeta'
@@ -244,8 +245,10 @@ import SkillReconciliation from './SkillReconciliation.vue'
    - view=health|drift|recon = 仅渲染对应区块（宿主 4 tab 之一），不再嵌套 pills（R1）；
    - embedded：隐藏自身状态条（计数由宿主状态条承载）、上报 @count、refresh 供宿主刷新。 */
 type HcView = 'health' | 'drift' | 'recon'
-const props = withDefaults(defineProps<{ view?: HcView; embedded?: boolean }>(), { embedded: false })
-const emit = defineEmits<{ (e: 'count', n: number): void; (e: 'navigate', v: HcView): void }>()
+/* reconReport：宿主（Skills）是唯一拉取方，经此 prop 下发给对账面板，避免双请求；
+   缺省（独立挂载）时面板自行拉取。面板「刷新」经 refreshRecon 回流宿主。 */
+const props = withDefaults(defineProps<{ view?: HcView; embedded?: boolean; reconReport?: SkillReconciliationReport | null; reconError?: string | null }>(), { embedded: false })
+const emit = defineEmits<{ (e: 'count', n: number): void; (e: 'navigate', v: HcView): void; (e: 'refreshRecon'): void }>()
 const showView = (v: HcView) => !props.view || props.view === v
 
 const reconRef = ref<{ openPanel?: () => void } | null>(null)
@@ -478,11 +481,12 @@ function goDrift(kind: keyof HealthDriftSummary) {
   else void router.push('/admin/execution-logs')
 }
 
-/** manual 项跳对应面板：字段路由/契约维度 → 编排图漂移 tab；参数/契约/对账类 → Skills；yaml → Skill 工作台 */
+/** manual 项跳对应面板：字段路由/契约维度 → 编排图漂移 tab；参数/契约/对账类 → Skills；yaml → Skill 工作台。
+    Skills 兜底带 ?tab=health：目标检查项就落在 Skills 宿主的健康检查 tab，保住「查看 →」动线 */
 function jump(id: HealthCenterItemId) {
   if (id === 'field-routing' || id === 'field-routing-contract' || id === 'fields-sync') void router.push('/admin/orchestrator?tab=drift')
   else if (id === 'yaml-crosscheck' || id === 'params-consistency') void router.push('/admin/skill-workbench')
-  else void router.push('/admin/skills')
+  else void router.push('/admin/skills?tab=health')
 }
 
 async function fix(id: HealthCenterItemId) {
