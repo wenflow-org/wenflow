@@ -802,7 +802,7 @@ const testMcpTool = async (tool: UserMcpToolConfig) => {
   background: rgba(52, 120, 246, 0.08);
   color: var(--blue-deep, #1f57cc);
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .model-more {
@@ -846,7 +846,7 @@ const testMcpTool = async (tool: UserMcpToolConfig) => {
   min-width: 46px;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.03em;
   background: var(--canvas, #f3f6fb);
@@ -912,7 +912,7 @@ const testMcpTool = async (tool: UserMcpToolConfig) => {
 
 .mcp-hint code {
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-  font-size: 11.5px;
+  font-size: 12px;
   background: rgba(52, 120, 246, 0.08);
   color: var(--blue-deep, #1f57cc);
   padding: 1px 5px;

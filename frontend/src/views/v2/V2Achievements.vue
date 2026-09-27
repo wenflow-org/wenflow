@@ -281,7 +281,7 @@ onMounted(() => {
   display: flex; justify-content: center;
   padding: 4px 0 0;
 }
-.ach__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
+.ach__ai-note :deep(.ai-note) { font-size: 12px; opacity: 0.75; }
 
 /* 内容容器：宽度/内边距交给 CapabilityShell 的 .uc__main，这里只管卡间距 */
 .ach__body {
@@ -386,10 +386,10 @@ onMounted(() => {
   letter-spacing: 0.02em;
 }
 
-/* ── Rarity tag ── */
+/* ── Rarity tag ──（微字下限 12px，走查 2026-09-27 原为 10px） */
 .ach-rarity {
-  font-size: 10px; font-weight: 800;
-  padding: 2px 7px; border-radius: var(--mk-radius-pill);
+  font-size: 12px; font-weight: 800;
+  padding: 2px 9px; border-radius: var(--mk-radius-pill);
   letter-spacing: 0.3px;
 }
 .rarity--common { color: var(--mk-faint); background: rgba(103,117,143,0.1); }
@@ -398,7 +398,7 @@ onMounted(() => {
 .rarity--epic { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 
 /* ── Badge ── */
-.ach-card__badge { font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-radius: var(--mk-radius-pill); }
+.ach-card__badge { font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: var(--mk-radius-pill); }
 .ach-card__badge--on { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .ach-card__badge--off { color: var(--muted); background: var(--line, #e8edf5); }
 .ach-card__name { font-size: 15px; }
@@ -406,11 +406,11 @@ onMounted(() => {
 .ach-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
 .ach-card__xp { font-size: 12px; font-weight: 800; color: var(--accent, #6a4de0); }
 .ach-card__xp--off { color: var(--faint); }
-.ach-card__date { font-size: 11.5px; color: var(--faint); }
+.ach-card__date { font-size: 12px; color: var(--faint); }
 .ach-card__prog { display: flex; align-items: center; gap: 8px; flex: 1; }
 .ach-card__prog-bar { flex: 1; height: 6px; border-radius: 99px; background: var(--line, #edf1f8); overflow: hidden; }
 .ach-card__prog-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
-.ach-card__prog span { font-size: 11px; color: var(--faint); white-space: nowrap; }
+.ach-card__prog span { font-size: 12px; color: var(--faint); white-space: nowrap; }
 
 /* ── Share button ── */
 .ach-share {

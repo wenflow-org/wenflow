@@ -61,13 +61,13 @@
             <div class="uc-card__head">
               <div>
                 <h3>修改密码</h3>
-                <p>定期更换密码，保障账号安全</p>
+                <!-- 原「定期更换密码，保障账号安全」是无信息量泛化提示（走查 2026-09-27），删 -->
               </div>
             </div>
             <div class="pwd-grid">
               <label class="uc-field pwd-field pwd-field--wide">
                 <span class="uc-field__label">当前密码</span>
-                <input v-model="pwdForm.oldPassword" type="password" class="uc-field__input" placeholder="输入当前密码" />
+                <input v-model="pwdForm.oldPassword" type="password" class="uc-field__input" />
               </label>
               <label class="uc-field pwd-field">
                 <span class="uc-field__label">新密码</span>
