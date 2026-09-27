@@ -54,9 +54,8 @@
           </div>
         </article>
 
-        <!-- 两栏：修改密码 + 协助排查 -->
-        <div class="profile-cols">
-        <article class="uc-card">
+        <!-- 修改密码（2026-09-27：「协助排查」投影授权卡删除，两栏收成一栏） -->
+        <article class="uc-card uc-card--pwd">
           <div class="uc-card__head">
             <div>
               <h3>修改密码</h3>
@@ -84,56 +83,7 @@
           </div>
         </article>
 
-        <!-- 协助排查 -->
-        <article class="uc-card">
-          <template v-if="projectionGrantLoading">
-            <div class="uc-loading">
-              <span class="uc-spinner"></span>
-              读取授权状态…
-            </div>
-          </template>
-          <template v-else>
-          <div class="uc-card__head uc-card__head--spread">
-            <div>
-              <h3>协助排查</h3>
-              <p>{{ projectionGrantStatusLabel }}{{ projectionGrantStatus === 'active' ? ` · ${projectionGrantExpiresAtLabel}` : '' }}</p>
-            </div>
-            <button type="button" class="uc-btn uc-btn--sm" @click="loadProjectionGrant">刷新</button>
-          </div>
 
-          <template v-if="!projectionGrantLoadError">
-            <div class="grant-form-grid">
-              <div class="uc-field">
-                <span class="uc-field__label">范围</span>
-                <div class="grant-scope-fixed">仅学习台</div>
-              </div>
-              <label class="uc-field">
-                <span class="uc-field__label">时长（小时）</span>
-                <input
-                  v-model.number="projectionGrantForm.expiresInHours"
-                  type="number"
-                  min="1"
-                  max="168"
-                  class="uc-field__input"
-                />
-              </label>
-            </div>
-            <label class="uc-field grant-form-full">
-              <span class="uc-field__label">说明（可选）</span>
-              <textarea v-model="projectionGrantForm.note" class="uc-field__input" rows="2" maxlength="200" placeholder="问题简述"></textarea>
-            </label>
-            <div class="uc-card__foot">
-              <button type="button" class="uc-btn uc-btn--primary" :disabled="projectionGrantSubmitting" @click="handleCreateProjectionGrant">
-                {{ projectionGrantSubmitting ? '提交中…' : projectionGrantActionLabel }}
-              </button>
-              <button type="button" class="uc-btn" :disabled="projectionGrantStatus !== 'active' || projectionGrantSubmitting" @click="handleRevokeProjectionGrant">
-                {{ projectionGrantRevoking ? '撤销中…' : '撤销' }}
-              </button>
-            </div>
-          </template>
-          </template>
-        </article>
-        </div>
 
         <!-- 危险操作：注销 -->
         <article class="uc-card uc-card--danger">
@@ -160,15 +110,6 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CapabilityShell from '@/components/user/CapabilityShell.vue'
 import { askConfirm, doneConfirm, failConfirm } from '@/views/admin-redesign/useConfirm'
-import {
-  createUserProjectionGrant,
-  getProjectionGrantStatus,
-  getUserProjectionGrant,
-  normalizeProjectionGrant,
-  revokeUserProjectionGrant,
-  type ProjectionGrant,
-  type ProjectionGrantScope
-} from '@/api/userCustom'
 import { toast } from '@/utils/toast'
 import request from '@/utils/api'
 import { useUserStore } from '../stores/user'
@@ -230,39 +171,9 @@ const nameSubmitting = ref(false)
 // 注销
 const deactivatePassword = ref('')
 const deactivating = ref(false)
-const projectionGrant = ref<ProjectionGrant | null>(null)
-const projectionGrantLoading = ref(false)
-const projectionGrantSubmitting = ref(false)
-const projectionGrantRevoking = ref(false)
-const projectionGrantMessage = ref('')
-const projectionGrantLoadError = ref(false)
-const projectionGrantForm = reactive({
-  scope: 'dashboard' as ProjectionGrantScope,
-  expiresInHours: 24,
-  note: ''
-})
-
-const projectionGrantStatus = computed(() => getProjectionGrantStatus(projectionGrant.value))
-const projectionGrantStatusLabel = computed(() => {
-  if (projectionGrantLoadError.value) return '读取失败'
-  if (projectionGrantStatus.value === 'active') return '已授权'
-  if (projectionGrantStatus.value === 'expired') return '已过期'
-  if (projectionGrantStatus.value === 'revoked') return '已撤销'
-  return '未授权'
-})
-const projectionGrantExpiresAtLabel = computed(() => formatDateTime(projectionGrant.value?.expiresAt))
-const projectionGrantActionLabel = computed(() => (projectionGrantStatus.value === 'active' ? '更新授权' : `授权 ${projectionGrantForm.expiresInHours} 小时`))
-
 onMounted(async () => {
-  await Promise.all([loadUserProfile(), loadProjectionGrant()])
+  await loadUserProfile()
 })
-
-function formatDateTime(value?: string | null) {
-  if (!value) return '未设置'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '未设置'
-  return date.toLocaleString('zh-CN')
-}
 
 function formatDateShort(value?: string | null) {
   if (!value) return '—'
@@ -273,12 +184,6 @@ function formatDateShort(value?: string | null) {
 
 function getErrorMessage(error: any, fallback: string) {
   return error?.response?.data?.error?.message || error?.response?.data?.error || error?.message || fallback
-}
-
-function hydrateProjectionGrantForm(grant: ProjectionGrant | null) {
-  if (!grant) return
-  projectionGrantForm.scope = grant.scope === 'full' ? 'full' : 'dashboard'
-  projectionGrantForm.note = grant.note || grant.purpose || ''
 }
 
 async function loadUserProfile() {
@@ -300,32 +205,6 @@ async function loadUserProfile() {
     profileLoadError.value = getErrorMessage(error, '无法读取账户信息，请稍后重试。')
   } finally {
     profileLoading.value = false
-  }
-}
-
-async function loadProjectionGrant() {
-  projectionGrantLoading.value = true
-  projectionGrantMessage.value = ''
-  projectionGrantLoadError.value = false
-  try {
-    const res = await getUserProjectionGrant()
-    projectionGrant.value = normalizeProjectionGrant(res)
-    hydrateProjectionGrantForm(projectionGrant.value)
-
-    if (!projectionGrant.value) {
-      projectionGrantMessage.value = '未授权'
-    }
-  } catch (error: any) {
-    projectionGrant.value = null
-    if (error?.response?.status === 404) {
-      projectionGrantMessage.value = '未授权'
-      return
-    }
-    projectionGrantMessage.value = '读取失败'
-    projectionGrantLoadError.value = true
-    console.error('读取协助授权失败:', error)
-  } finally {
-    projectionGrantLoading.value = false
   }
 }
 
@@ -360,54 +239,6 @@ async function handleSaveName() {
     toast.error(getErrorMessage(error, '更新用户名失败'))
   } finally {
     nameSubmitting.value = false
-  }
-}
-
-// ---- 协助排查 ----
-async function handleCreateProjectionGrant() {
-  if (projectionGrantSubmitting.value) return
-  projectionGrantSubmitting.value = true
-  try {
-    await createUserProjectionGrant({
-      scope: projectionGrantForm.scope,
-      expiresInHours: projectionGrantForm.expiresInHours,
-      note: projectionGrantForm.note
-    })
-    toast.success('协助授权已开通')
-    await loadProjectionGrant()
-  } catch (error: any) {
-    toast.error(getErrorMessage(error, '开通协助授权失败'))
-  } finally {
-    projectionGrantSubmitting.value = false
-  }
-}
-
-// ---- 全局确认弹窗（askConfirm 单例，busy 模式：确认后防重复提交） ----
-async function handleRevokeProjectionGrant() {
-  if (projectionGrantRevoking.value) return
-  const ok = await askConfirm({
-    title: '撤销协助授权',
-    message: '撤销后，工作人员将不能再凭这份授权查看你的页面，确认继续吗？',
-    confirmText: '撤销',
-    danger: true,
-    busy: true
-  })
-  if (!ok) return
-  projectionGrantRevoking.value = true
-  try {
-    const res = await revokeUserProjectionGrant(projectionGrant.value?.id)
-    projectionGrant.value = normalizeProjectionGrant(res)
-    if (!projectionGrant.value) {
-      projectionGrantMessage.value = '已撤销'
-    }
-    toast.success('协助授权已撤销')
-    await loadProjectionGrant()
-    doneConfirm()
-  } catch (error: any) {
-    toast.error(getErrorMessage(error, '撤销协助授权失败'))
-    failConfirm()
-  } finally {
-    projectionGrantRevoking.value = false
   }
 }
 
@@ -528,14 +359,9 @@ async function handleDeactivate() {
   min-width: 0;
 }
 
-/* 两栏布局：改密 + 协助排查（等高卡片，内容顶部对齐，按钮贴底） */
-.profile-cols {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.profile-cols .uc-card {
+/* 修改密码卡（2026-09-27：「协助排查」卡删除后原两栏布局收成一栏，
+   等高/贴底样式迁到专属类上；字段区限宽避免全宽卡片里输入框拉得过长） */
+.uc-card--pwd {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -543,21 +369,18 @@ async function handleDeactivate() {
 
 /* 卡脚上留白：桌面 16px；移动端收到 12px（见本文件移动块里的覆盖——这里不能直接改，
    否则 1440 也吃到了）。 */
-.profile-cols .uc-card__foot {
+.uc-card--pwd .uc-card__foot {
   margin-top: auto;
   padding-top: 16px;
 }
 
-.profile-cols .uc-card .pwd-grid {
+.uc-card--pwd .pwd-grid {
   flex: 1;
   align-content: start;
+  max-width: 680px;
 }
 
 @media (max-width: 1100px) {
-  .profile-cols {
-    grid-template-columns: 1fr;
-  }
-
   .profile-identity {
     flex-direction: column;
     align-items: flex-start;
@@ -619,36 +442,6 @@ async function handleDeactivate() {
   gap: 10px;
   margin-top: 16px;
   flex-wrap: wrap;
-}
-
-.grant-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
-  max-width: 520px;
-}
-
-@media (max-width: 640px) {
-  .grant-form-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.grant-scope-fixed {
-  display: flex;
-  align-items: center;
-  padding: 10px 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(52, 120, 246, 0.35);
-  background: rgba(52, 120, 246, 0.07);
-  color: var(--blue-deep, #1f57cc);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.grant-form-full {
-  max-width: 520px;
 }
 
 .uc-card--danger {
@@ -743,10 +536,6 @@ async function handleDeactivate() {
     font-size: 17px;
   }
 
-  .profile-cols {
-    gap: 12px;
-  }
-
   .pwd-grid {
     gap: 10px;
   }
@@ -757,19 +546,9 @@ async function handleDeactivate() {
   }
 
   /* 卡脚上留白 16 → 12（按钮与上方字段之间，390 下偏松）。
-     只覆盖 .profile-cols 内的：这条权重 (0,2,0) 才压得住基础规则里的同权重版本。 */
-  .profile-cols .uc-card__foot {
+     权重 (0,2,0) 压住基础规则里的同权重版本。 */
+  .uc-card--pwd .uc-card__foot {
     padding-top: 12px;
-  }
-
-  .grant-form-grid {
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-
-  .grant-scope-fixed {
-    padding: 8px 12px;
-    font-size: 13px;
   }
 
   .danger-form {
