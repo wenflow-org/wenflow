@@ -266,30 +266,57 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
  * 获取平台概览数据
  * GET /api/admin/overview/stats
  *
- * 服务端缓存：45s TTL，避免每次进入概览页重复执行 20+ 条统计查询。
- * /overview/stats 无请求参数，使用固定 key；/activity 的 key 含 excludeTest 与 limit。
+ * 服务端缓存：60s TTL + 在途请求去重。单次全量聚合 20+ 条统计查询，1.7GB 库实测 4-5s，
+ * 不缓存时每次进入概览页都要付一次全款；仪表盘统计对 ≤60s 陈旧可接受，故取 60s 换取命中窗口。
+ * 去重：缓存失效窗口内的并发请求共享同一次在途计算（同一 Promise），不会叠加 DB 压力。
+ * 失效语义：计算失败不写缓存且摘除在途句柄，下一次请求立即重算；无主动失效，
+ * 仅等 TTL 自然过期。绕过：?fresh=1 跳过缓存与去重直接重算（结果仍写回缓存）。
+ * /overview/stats 无业务查询参数，使用固定 key（fresh 仅作绕过开关，不参与 key）；
+ * /activity 的 key 含 excludeTest 与 limit。
  */
-const OVERVIEW_CACHE_TTL_MS = 45 * 1000;
+const OVERVIEW_CACHE_TTL_MS = 60 * 1000;
 const overviewStatsCache = new Map<string, { payload: unknown; cachedAt: number }>();
+/** 在途计算去重：key → 未落地的计算 Promise（与缓存共用 key 空间，仅 overview/stats 写入） */
+const overviewStatsInflight = new Map<string, Promise<unknown>>();
 
-/** 拓扑接口缓存（按 range 分 key；45s TTL 与概览一致） */
+/** 拓扑接口缓存（按 range 分 key；45s TTL，负载与概览同量级但刷新要求更高，独立口径） */
 const TOPOLOGY_CACHE_TTL_MS = 45 * 1000;
 const topologyCache = new Map<string, { payload: unknown; cachedAt: number }>();
 
-/** 测试辅助：清空概览/动态缓存（45s TTL 会跨用例复用，污染路由级断言） */
+/** 测试辅助：清空概览/动态缓存与在途句柄（60s TTL 会跨用例复用，污染路由级断言） */
 export function clearOverviewStatsCache(): void {
   overviewStatsCache.clear();
+  overviewStatsInflight.clear();
 }
 
 router.get('/overview/stats', async (req: Request, res: Response) => {
   try {
     const cacheKey = 'overview-stats';
-    const cached = overviewStatsCache.get(cacheKey);
-    if (cached && Date.now() - cached.cachedAt < OVERVIEW_CACHE_TTL_MS) {
-      return res.json({ success: true, data: cached.payload });
+    const wantsFresh = req.query?.fresh === '1';
+    if (!wantsFresh) {
+      const cached = overviewStatsCache.get(cacheKey);
+      if (cached && Date.now() - cached.cachedAt < OVERVIEW_CACHE_TTL_MS) {
+        return res.json({ success: true, data: cached.payload });
+      }
+      // 在途去重：已有同 key 计算未落地时直接共享其结果，不再发起第二次聚合
+      const inflight = overviewStatsInflight.get(cacheKey);
+      if (inflight) {
+        return res.json({ success: true, data: await inflight });
+      }
     }
-    const data = await computeOverviewStats();
-    overviewStatsCache.set(cacheKey, { payload: data, cachedAt: Date.now() });
+    const computation = computeOverviewStats()
+      .then((data) => {
+        overviewStatsCache.set(cacheKey, { payload: data, cachedAt: Date.now() });
+        return data;
+      })
+      .finally(() => {
+        // 成败都摘除在途句柄：失败不缓存，下一请求直接重算（identity 比对防误删并发 fresh 计算的句柄）
+        if (overviewStatsInflight.get(cacheKey) === computation) {
+          overviewStatsInflight.delete(cacheKey);
+        }
+      });
+    overviewStatsInflight.set(cacheKey, computation);
+    const data = await computation;
     res.json({ success: true, data });
   } catch (error: any) {
     logger.error('[admin-platform] 获取平台概览失败', { error });
@@ -1267,7 +1294,7 @@ router.get('/agents/logs/:id', async (req: Request, res: Response) => {
 /**
  * GET /api/admin/activity
  * 获取最近活动日志
- * 服务端缓存：45s TTL；key 含 excludeTest 与 limit（同概览统计，见 OVERVIEW_CACHE_TTL_MS）。
+ * 服务端缓存：60s TTL（与 /overview/stats 共用 OVERVIEW_CACHE_TTL_MS）；key 含 excludeTest 与 limit。
  */
 router.get('/activity', async (req: Request, res: Response) => {
   try {

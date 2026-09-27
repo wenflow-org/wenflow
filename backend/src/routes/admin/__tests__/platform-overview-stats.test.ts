@@ -360,4 +360,44 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     // 失败归因行数 = mock 返回行数（12；where 注入已由上方 agentWhere 断言覆盖）
     expect(payload.usage.failed7d).toBe(12);
   });
+
+  it('缓存去重：TTL 内二次请求命中缓存不重复计算；并发请求共享同一次在途计算', async () => {
+    mockAgentCallLogs.findMany.mockImplementation((args: any) =>
+      args?.select?.output ? Promise.resolve([]) : Promise.resolve([])
+    );
+
+    const handler = getRouteHandler('/overview/stats', 'get');
+
+    // 首次请求：真实计算（users.count 单次计算内固定 2 次：总用户 + 今日新增，作为计算次数探针）
+    const res1 = createResponse();
+    await handler({}, res1);
+    expect(mockPrisma.users.count).toHaveBeenCalledTimes(2);
+
+    // TTL 内二次请求：直接回缓存，不再触发任何计算，payload 与首次一致
+    const res2 = createResponse();
+    await handler({}, res2);
+    expect(mockPrisma.users.count).toHaveBeenCalledTimes(2);
+    expect(res2.json.mock.calls[0][0]).toEqual(res1.json.mock.calls[0][0]);
+
+    // 清缓存后并发两请求：第二个共享第一个的在途 Promise，全库只发生一次真实计算
+    clearOverviewStatsCache();
+    mockPrisma.users.count.mockClear();
+    let releaseGate!: (v: number) => void;
+    const gate = new Promise<number>((resolve) => { releaseGate = resolve; });
+    mockPrisma.users.count.mockImplementationOnce(() => gate);
+
+    const resA = createResponse();
+    const resB = createResponse();
+    const pA = handler({}, resA);
+    const pB = handler({}, resB);
+    releaseGate(0);
+    await Promise.all([pA, pB]);
+
+    // 若去重失效，两个请求会各自计算一次（探针 4 次）→ 失败；共享时恰好一次计算（2 次）
+    expect(mockPrisma.users.count).toHaveBeenCalledTimes(2);
+    expect(resA.json.mock.calls[0][0]).toEqual(resB.json.mock.calls[0][0]);
+
+    // 清理：不把本用例写入的缓存留给后续用例
+    clearOverviewStatsCache();
+  });
 });

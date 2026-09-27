@@ -646,28 +646,21 @@ watch(filtered, () => {
 })
 
 /* force = true 绕过页面级 TTL 缓存（显式刷新/口径切换用），保证用户操作必然重拉 */
+/* stats 请求代际号：stats 改为后台回填后，用代际比对丢弃迟到的旧口径响应（includeTest 切换/重拉场景） */
+let statsReqSeq = 0
+
 async function load(force = false) {
   if (!isLive.value || loading.value) return
   // 页面级 TTL 缓存
   if (!force && isPageCacheFresh('goal-conversations') && rows.value.length) return
+  const seq = ++statsReqSeq
   loading.value = true
   loadError.value = ''
   try {
-    const [listRes, statsRes] = await Promise.all([
-      adminGoalConversationsApi.list({ limit: 1000, includeTest: includeTest.value }),
-      adminGoalConversationsApi.getStats().catch(() => null)
-    ])
+    // 首屏主体是会话列表：只 await 列表接口，页面就绪时间不再被 stats 拖住
+    const listRes = await adminGoalConversationsApi.list({ limit: 1000, includeTest: includeTest.value })
     const body = listRes.data?.data ?? listRes.data ?? {}
     rows.value = ((body.conversations as Record<string, unknown>[]) || []).map(mapRow)
-    const s = statsRes?.data?.data ?? statsRes?.data
-    stats.value = s
-      ? {
-          total: Number(s.total || 0),
-          active: Number(s.active || 0),
-          completed: Number(s.completed || 0),
-          completionRate: String(s.completionRate || '0')
-        }
-      : null
   } catch (e) {
     // P0 修复：失败置行内错误标记（此前只有 toast，列表显示「暂无会话」伪装空态）
     rows.value = []
@@ -678,6 +671,25 @@ async function load(force = false) {
     loading.value = false
     markPageFetched('goal-conversations')
   }
+  /* stats 非阻塞后台拉取：到达后回填四态比例条与域计数。
+     容错取舍：stats 只驱动比例条/徽章，失败时静默置空（比例条隐藏），
+     绝不回滚列表、不阻塞首屏；代际不符（已发起新一轮 load）的迟到响应直接丢弃 */
+  void adminGoalConversationsApi.getStats()
+    .then((statsRes) => {
+      if (seq !== statsReqSeq) return
+      const s = statsRes?.data?.data ?? statsRes?.data
+      stats.value = s
+        ? {
+            total: Number(s.total || 0),
+            active: Number(s.active || 0),
+            completed: Number(s.completed || 0),
+            completionRate: String(s.completionRate || '0')
+          }
+        : null
+    })
+    .catch(() => {
+      if (seq === statsReqSeq) stats.value = null
+    })
 }
 
 /** 顶层 messages 兜底解析（兼容 JSON 字符串或数组） */
