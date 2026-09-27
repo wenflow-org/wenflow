@@ -178,6 +178,4 @@ onMounted(async () => {
   /* 4K（zoom 1.3 档）：字号继续放大，与表格正文对齐 */
     .pw-hash { font-size: var(--mk-fs-body); }
 }
-
-}
 </style>

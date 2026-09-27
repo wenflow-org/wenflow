@@ -215,7 +215,7 @@ routings:
   - agentId: skill:teaching-turn
     fieldId: reply
     render: visible
-    handoff: [teaching-agent]
+    handoff: [teaching-agent, skill:peer-reinforcement] # reply 原文同链交付伴学（tutorLatestReply）
     internal: false
     accumulate: false
   - agentId: skill:teaching-turn

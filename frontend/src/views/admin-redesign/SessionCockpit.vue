@@ -2862,23 +2862,6 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-wrapup__json { font-size: var(--mk-fs-micro); }
   .cp-raw { font-size: var(--mk-fs-micro); }
   .cp-raw pre { font-size: var(--mk-fs-micro); }
-  .cp-eval-group__title { font-size: var(--mk-fs-micro); }
-  .cp-eval__head strong { font-size: var(--mk-fs-body); }
-  .cp-eval__time { font-size: var(--mk-fs-micro); }
-  .cp-eval__score { font-size: var(--mk-fs-micro); }
-  .cp-eval__score code { font-size: var(--mk-fs-micro); }
-  .cp-eval__score strong { font-size: var(--mk-fs-micro); }
-  .cp-eval__section h5 { font-size: var(--mk-fs-micro); }
-  .cp-finding strong { font-size: var(--mk-fs-body); }
-  .cp-finding p { font-size: var(--mk-fs-micro); }
-  .cp-finding__sev { font-size: var(--mk-fs-micro); }
-  .cp-evidence { font-size: var(--mk-fs-micro); }
-  .cp-evidence code { font-size: var(--mk-fs-micro); }
-  .cp-evidence p { font-size: var(--mk-fs-micro); }
-  .cp-rec strong { font-size: var(--mk-fs-micro); }
-  .cp-rec__codes code { font-size: var(--mk-fs-micro); }
-  .cp-rec p { font-size: var(--mk-fs-body); }
-  .cp-rec__rationale { font-size: var(--mk-fs-micro); }
   .cp-trace-panel > summary { font-size: var(--mk-fs-micro); }
   .cp-trace-panel > summary code { font-size: var(--mk-fs-micro); }
   .cp-trace-list__head { font-size: var(--mk-fs-micro); }
@@ -2938,23 +2921,6 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   .cp-wrapup__json { font-size: var(--mk-fs-micro); }
   .cp-raw { font-size: var(--mk-fs-micro); }
   .cp-raw pre { font-size: var(--mk-fs-micro); }
-  .cp-eval-group__title { font-size: var(--mk-fs-micro); }
-  .cp-eval__head strong { font-size: var(--mk-fs-body); }
-  .cp-eval__time { font-size: var(--mk-fs-micro); }
-  .cp-eval__score { font-size: var(--mk-fs-micro); }
-  .cp-eval__score code { font-size: var(--mk-fs-micro); }
-  .cp-eval__score strong { font-size: var(--mk-fs-micro); }
-  .cp-eval__section h5 { font-size: var(--mk-fs-micro); }
-  .cp-finding strong { font-size: var(--mk-fs-body); }
-  .cp-finding p { font-size: var(--mk-fs-micro); }
-  .cp-finding__sev { font-size: var(--mk-fs-micro); }
-  .cp-evidence { font-size: var(--mk-fs-micro); }
-  .cp-evidence code { font-size: var(--mk-fs-micro); }
-  .cp-evidence p { font-size: var(--mk-fs-micro); }
-  .cp-rec strong { font-size: var(--mk-fs-micro); }
-  .cp-rec__codes code { font-size: var(--mk-fs-micro); }
-  .cp-rec p { font-size: var(--mk-fs-body); }
-  .cp-rec__rationale { font-size: var(--mk-fs-micro); }
   .cp-trace-panel > summary { font-size: var(--mk-fs-micro); }
   .cp-trace-panel > summary code { font-size: var(--mk-fs-micro); }
   .cp-trace-list__head { font-size: var(--mk-fs-micro); }
@@ -3019,11 +2985,6 @@ html[data-theme='dark'] {
   .cp-lesson-wrapup { background: linear-gradient(135deg, rgba(74, 222, 128, 0.1), #19191a); }
   .cp-wrapup-stats { background: linear-gradient(135deg, rgba(91, 141, 239, 0.1), #19191a); }
   .cp-trace-list > li { background: #19191a; }
-  .cp-eval__score { background: #232325; }
-  .cp-finding__sev { background: var(--mk-close-bg); }
-  .cp-finding__sev[data-sev='minor'] { background: rgba(91, 141, 239, 0.16); color: var(--mk-ghost-fg); }
-  .cp-finding__sev[data-sev='info'] { background: rgba(74, 222, 128, 0.14); color: var(--mk-btn-ok-fg); }
-  .cp-rec__codes code { background: var(--mk-close-bg); }
   .cp-timeline__kind { background: var(--mk-close-bg); }
   .cp-timeline__stage { background: rgba(91, 141, 239, 0.16); color: var(--mk-ghost-fg); }
   .cp-timeline__stage[data-stage='learning'],
