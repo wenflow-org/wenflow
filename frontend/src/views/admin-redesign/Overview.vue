@@ -50,6 +50,16 @@
           </span>
           <button type="button" class="brief-actions__btn" @click="jump('virtual-learners')">虚拟学习者 →</button>
         </li>
+        <!-- 总结质量条件行（原「总结产出质量」恒真满分卡撤除，走查 2026-09-27）：
+             只有出现兜底/失败才在此露头，健康时整个行动作列表里没有它 -->
+        <li v-if="wrapupIssue" :title="wrapupIssue.text">
+          <span class="brief-actions__dot" :class="`brief-actions__dot--${wrapupIssue.tone}`"></span>
+          <span class="brief-actions__text">
+            <strong>课后总结质量</strong>
+            <small>{{ wrapupIssue.text }}</small>
+          </span>
+          <button type="button" class="brief-actions__btn" @click="jump('sessions', 'teaching')">教学会话 →</button>
+        </li>
       </ul>
     </header>
 
@@ -123,7 +133,7 @@
       <!-- 近 7 天目标对话趋势（与调用/用户增长同属趋势区） -->
       <section class="brief-card brief-card--trend">
         <div class="trend__head">
-          <h4>新增目标对话 · 近 7 天</h4>
+          <h4 title="每日新增目标对话 vs 当天完成（近 7 天）">目标对话 · 新增与完成</h4>
           <span class="trend__head-right">
             <span class="trend__legend">
               <i class="trend__dot trend__dot--new"></i>当日新增
@@ -154,97 +164,17 @@
         <p v-if="data.trend.length" class="trend__sum">
           合计新增 {{ trendSum.total }} · 完成 {{ trendSum.completed }}
         </p>
+        <!-- 累计口径收编自「学习漏斗」卡（走查 2026-09-27 撤卡）：假漏斗（1:N 展开配 ×倍数）只留真指标
+             ——任务完成率。任务 1:N 于路径属正常，不显示路径/任务的倍数 -->
+        <p v-if="cum.tasks !== '—'" class="trend__cum" title="累计口径：任务完成率 = 完成任务 / 任务总数">
+          累计 {{ cum.conversations }} 对话 · {{ cum.paths }} 路径 · 任务完成 {{ cum.done }}/{{ cum.tasks }}（{{ cum.doneRate }}）
+        </p>
       </section>
 
-      <!-- 总结产出质量 -->
-      <section class="brief-card">
-        <div class="brief-card__head">
-          <h4 title="最近 50 次课后总结的生成质量分布">总结产出质量</h4>
-          <span v-if="wrapupModelPct != null" class="wq__pct" :class="wrapupPctTone" :title="`${data.wrapup.summaryModel}/${data.wrapup.sampleSize} 次由模型直接生成`">
-            {{ wrapupModelPct }}% 模型生成
-          </span>
-          <button type="button" class="brief-card__go" @click="jump('sessions', 'teaching')">教学会话 →</button>
-        </div>
-        <div v-if="data.wrapup.sampleSize > 0 && hasWrapupStats" class="wq">
-          <div class="wq__row">
-            <span class="wq__label">主题总结</span>
-            <div class="wq__bars">
-              <i class="wq__bar wq__bar--ok" :style="{ width: pct(data.wrapup.summaryModel, data.wrapup.sampleSize) }"></i>
-              <i class="wq__bar wq__bar--warn" :style="{ width: pct(data.wrapup.summaryFallback, data.wrapup.sampleSize) }"></i>
-            </div>
-            <span class="wq__nums">{{ data.wrapup.summaryModel }} 模型 / {{ data.wrapup.summaryFallback }} 兜底</span>
-          </div>
-          <div class="wq__row">
-            <span class="wq__label">表现分析</span>
-            <div class="wq__bars">
-              <i class="wq__bar wq__bar--ok" :style="{ width: pct(data.wrapup.evaluationModel, data.wrapup.sampleSize) }"></i>
-              <i class="wq__bar wq__bar--bad" :style="{ width: pct(data.wrapup.evaluationFailed, data.wrapup.sampleSize) }"></i>
-            </div>
-            <span class="wq__nums">{{ data.wrapup.evaluationModel }} 模型 / {{ data.wrapup.evaluationFailed }} 失败</span>
-          </div>
-          <p class="wq__note">样本 {{ data.wrapup.sampleSize }} 次</p>
-        </div>
-        <p v-else-if="data.wrapup.sampleSize > 0" class="brief-card__note">已积累 {{ data.wrapup.sampleSize }} 次课后总结，正在分析生成质量…</p>
-        <p v-else class="brief-card__note">暂无课后总结，教学会话结束后会自动生成。</p>
-      </section>
+      <!-- Top Skill 卡移至 LLM 用量卡之后（2026-09-27 三卡整改：与动态同排，grid 无空洞） -->
 
-      <!-- Top Skill 活跃榜（G4：近 7 天调用最多的节点） -->
-      <section class="brief-card">
-        <div class="brief-card__head">
-          <h4 title="近 7 天调用最多的 Skill（真实用户口径）">Top Skill · 近 7 天</h4>
-          <button type="button" class="brief-card__go" @click="jump('skills')">Skill 运行 →</button>
-        </div>
-        <ul v-if="data.topSkills.length" class="ov-skills">
-          <li
-            v-for="(s, i) in data.topSkills"
-            :key="s.agentId"
-            class="ov-skill"
-            :title="`${s.agentId}：${s.calls} 次调用 · ${s.failed} 次失败 · 点击查看 Skill 运行`"
-            role="button"
-            tabindex="0"
-            :aria-label="`查看 ${s.agentId} 的 Skill 运行`"
-            @click="jump('skills')"
-            @keydown.enter.prevent="jump('skills')"
-            @keydown.space.prevent="jump('skills')"
-          >
-            <span class="ov-skill__rank">{{ i + 1 }}</span>
-            <span class="ov-skill__name mono" :title="s.agentId">{{ s.agentId }}</span>
-            <div class="ov-skill__track">
-              <i class="ov-skill__bar" :style="{ width: skillPct(s.calls) }"></i>
-            </div>
-            <span class="ov-skill__calls mono">{{ s.calls }}<template v-if="s.failed"> · <em class="ov-skill__fail">{{ s.failed }}</em></template></span>
-          </li>
-        </ul>
-        <p v-else class="brief-card__note">近 7 天暂无调用，无排行。</p>
-      </section>
-
-      <!-- 学习漏斗（业务主线，累计口径；下沉到明细区） -->
-      <section class="brief-card">
-        <h4>学习漏斗 · 累计</h4>
-        <div class="funnel">
-          <template v-for="(n, i) in data.funnel" :key="n.label">
-            <div
-              class="funnel__node funnel__node--clickable"
-              :class="{ 'funnel__node--idle': n.idle }"
-              :title="funnelTitle(i)"
-              role="button"
-              :tabindex="n.idle ? -1 : 0"
-              :aria-label="`查看${n.label}明细`"
-              @click="jump(funnelTargets[i].scene, funnelTargets[i].tab)"
-              @keydown.enter.prevent="jump(funnelTargets[i].scene, funnelTargets[i].tab)"
-              @keydown.space.prevent="jump(funnelTargets[i].scene, funnelTargets[i].tab)"
-            >
-              <span>{{ n.label }}</span>
-              <strong>{{ n.value }}</strong>
-            </div>
-            <span
-              v-if="i < data.funnel.length - 1"
-              class="funnel__rate"
-              :title="rateHint(i)"
-            >{{ data.rates[i] }}</span>
-          </template>
-        </div>
-      </section>
+      <!-- 学习漏斗卡已撤（走查 2026-09-27）：用户→对话→路径→任务是 1:N 展开不是转化，
+           ×倍数无信息量；真指标（任务完成率）收编进上方「目标对话」卡的累计行 -->
 
       <!-- LLM 用量与失败归因（跨 2 列；头部时间窗 + 数据即跳转入口） -->
       <section class="brief-card brief-card--wide2">
@@ -307,8 +237,39 @@
         <p v-else class="brief-card__note">近 7 天暂无 LLM 调用记录。</p>
       </section>
 
-      <!-- 动态时间线（全宽；异常事件置顶，普通事件折叠，近 24h 时间窗） -->
-      <section class="brief-card brief-card--feed brief-card--feed-full">
+      <!-- Top Skill 活跃榜（G4：近 7 天调用最多的节点） -->
+      <section class="brief-card">
+        <div class="brief-card__head">
+          <h4 title="近 7 天调用最多的 Skill（真实用户口径）">Top Skill · 近 7 天</h4>
+          <button type="button" class="brief-card__go" @click="jump('skills')">Skill 运行 →</button>
+        </div>
+        <ul v-if="data.topSkills.length" class="ov-skills">
+          <li
+            v-for="(s, i) in data.topSkills"
+            :key="s.agentId"
+            class="ov-skill"
+            :title="`${s.agentId}：${s.calls} 次调用 · ${s.failed} 次失败 · 点击查看 Skill 运行`"
+            role="button"
+            tabindex="0"
+            :aria-label="`查看 ${s.agentId} 的 Skill 运行`"
+            @click="jump('skills')"
+            @keydown.enter.prevent="jump('skills')"
+            @keydown.space.prevent="jump('skills')"
+          >
+            <span class="ov-skill__rank">{{ i + 1 }}</span>
+            <span class="ov-skill__name mono" :title="s.agentId">{{ s.agentId }}</span>
+            <div class="ov-skill__track">
+              <i class="ov-skill__bar" :style="{ width: skillPct(s.calls) }"></i>
+            </div>
+            <span class="ov-skill__calls mono">{{ s.calls }}<template v-if="s.failed"> · <em class="ov-skill__fail">{{ s.failed }}</em></template></span>
+          </li>
+        </ul>
+        <p v-else class="brief-card__note">近 7 天暂无调用，无排行。</p>
+      </section>
+
+      <!-- 动态时间线（宽 2/3：与 Top Skill 同排；异常事件置顶，普通事件折叠，近 24h 时间窗。
+           原全宽每行只填 ~40%，收窄后右侧不再有大片空行） -->
+      <section class="brief-card brief-card--feed brief-card--wide2">
         <div class="brief-card__head brief-card__head--feed">
           <h4>动态 · 近 24h<span v-if="lastUpdated" class="feed-fresh">更新于 {{ lastUpdated }}</span></h4>
           <label class="feed-filter">
@@ -547,7 +508,6 @@ const trend7dChartOption = computed<EChartsCoreOption>(() => {
     ],
   };
 });
-const pct = (n: number, total: number) => `${total > 0 ? Math.round((n / total) * 100) : 0}%`;
 /* ===== G 系列新增：7 天趋势 / Top Skill / 用户增长 图表 helpers ===== */
 const barPct = (v: number, max: number) => `${v > 0 ? Math.max(Math.round((v / max) * 100), 6) : 3}%`;
 const dayLabel = (date: string) => {
@@ -622,19 +582,6 @@ const hasWrapupStats = computed(() => {
   if (!w) return false;
   return w.summaryModel > 0 || w.summaryFallback > 0 || w.evaluationModel > 0 || w.evaluationAiFallback > 0 || w.evaluationFailed > 0;
 });
-/** 总结质量主导百分比（P3）：模型直接生成占比；无样本时为 null */
-const wrapupModelPct = computed(() => {
-  const w = data.value?.wrapup;
-  if (!w || !w.sampleSize || w.sampleSize <= 0) return null;
-  return Math.round((w.summaryModel / w.sampleSize) * 100);
-});
-const wrapupPctTone = computed(() => {
-  const p = wrapupModelPct.value;
-  if (p == null) return '';
-  if (p >= 90) return 'wq__pct--ok';
-  if (p >= 70) return 'wq__pct--warn';
-  return 'wq__pct--bad';
-});
 const usageHasData = computed(() => {
   const u = data.value?.usage;
   return !!u && (u.totalTokens7d > 0 || u.models7d.length > 0);
@@ -664,16 +611,27 @@ const trendSum = computed(() => {
   const completed = trend.reduce((a, d) => a + d.completed, 0);
     return { total, completed };
 });
-// 漏斗相邻段速率说明（× 为 1:N 关系而非转化率）
-const rateHint = (i: number) => {
-  const pairs = [
-    '每位用户发起的澄清对话数（可 >1）',
-    '每条完成澄清对话生成的路径数',
-    '每条路径下的任务数（1:N 正常）',
-    '任务完成率'
-  ]
-  return pairs[i] || ''
-};
+/* 累计口径（收编自已撤的「学习漏斗」卡，走查 2026-09-27）：漏斗的 ×倍数是 1:N 展开不是
+   转化率，无信息量；只保留真指标——任务完成率（完成任务/任务总数）。下标与后端 funnel
+   数组顺序耦合：0 用户 / 1 目标对话 / 2 路径 / 3 任务 / 4 完成 */
+const cum = computed(() => {
+  const f = data.value?.funnel ?? [];
+  const v = (i: number) => f[i]?.value ?? '—';
+  return { conversations: v(1), paths: v(2), tasks: v(3), done: v(4), doneRate: data.value?.rates?.[3] ?? '—' };
+});
+/* 总结质量条件行：恒真满分卡已撤（2026-09-27），只在出现兜底/失败时于头部动作列表露头 */
+const wrapupIssue = computed(() => {
+  const w = data.value?.wrapup;
+  if (!w || !hasWrapupStats.value) return null;
+  const parts: string[] = [];
+  if (w.summaryFallback > 0) parts.push(`${w.summaryFallback} 次兜底`);
+  if (w.evaluationFailed > 0) parts.push(`${w.evaluationFailed} 次失败`);
+  if (!parts.length) return null;
+  return {
+    tone: w.evaluationFailed > 0 ? 'bad' : 'warn',
+    text: `最近 ${w.sampleSize} 次课后总结：${parts.join(' · ')}`,
+  };
+});
 
 // 重试按钮：force 跳过 liveLoading 守卫保证点击必重拉
 async function retryOverview() {
@@ -690,13 +648,6 @@ const kpiTargets: Array<{ scene: string; tab?: string }> = [
   { scene: 'people' },
   { scene: 'sessions' }
 ]
-const funnelTargets: Array<{ scene: string; tab?: string }> = [
-  { scene: 'people' },
-  { scene: 'sessions' },
-  { scene: 'sessions' },
-  { scene: 'people', tab: 'state' },
-  { scene: 'people', tab: 'state' }
-]
 
 const KPI_HINTS: string[] = [
   '今日自然日（00:00 起）',
@@ -711,12 +662,6 @@ function kpiTitle(i: number): string {
     : target === 'people' ? '用户与学习者'
       : target === 'sessions' ? '学习会话' : 'Skill 目录'
   return [hint, `点击查看${label}`].filter(Boolean).join(' · ')
-}
-function funnelTitle(i: number): string {
-  const t = funnelTargets[i]
-  if (!t) return ''
-  if (t.scene === 'people') return t.tab === 'state' ? '查看学习者中心' : '查看用户'
-  return '查看学习会话'
 }
 function jump(scene: string, tab?: string) {
   if (!scene) return
@@ -995,8 +940,7 @@ watch(liveLoading, (loading) => {
   color: var(--mk-faint);
 }
 .brief-card__note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-/* 短卡（总结/用量）：等高拉伸时把内容贴底，避免"卡片内空一大块" */
-.brief-card > .wq:last-child,
+/* 短卡（用量）：等高拉伸时把内容贴底，避免"卡片内空一大块" */
 .brief-card > .usage:last-child { margin-top: auto; }
 /* 空态说明：卡内垂直居中（等高栅格中避免贴顶 + 大留白） */
 .brief-card > .brief-card__note:last-child {
@@ -1006,7 +950,6 @@ watch(liveLoading, (loading) => {
   line-height: 1.7;
   padding: 8px 0;
 }
-.brief-card--feed-full { grid-column: 1 / -1; }
 .brief-card__head--feed {
   display: flex;
   align-items: center;
@@ -1027,29 +970,8 @@ watch(liveLoading, (loading) => {
   accent-color: var(--mk-blue, #2c63d0);
 }
 
-/* 总结产出质量 */
-.wq { display: grid; gap: 12px; }
-.wq__row { display: grid; grid-template-columns: 64px 1fr; gap: 8px 10px; align-items: center; }
-.wq__label { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); }
-.wq__bars { display: flex; gap: 2px; height: 8px; border-radius: var(--mk-radius-pill); overflow: hidden; background: #f0f3f9; }
-.wq__bar { height: 100%; border-radius: var(--mk-radius-pill); }
-.wq__bar--ok { background: var(--mk-green); }
-
-.wq__bar--warn { background: var(--mk-amber); }
-.wq__bar--bad { background: var(--mk-red); }
-.wq__nums { grid-column: 2; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.wq__note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
-/* P3：模型生成占比徽标（卡头，色随占比） */
-.wq__pct {
-  font-size: var(--mk-fs-micro); font-weight: 800; padding: 2px 9px; border-radius: 999px;
-  font-variant-numeric: tabular-nums; white-space: nowrap;
-}
-.wq__pct--ok { background: rgba(22, 163, 74, 0.12); color: var(--mk-green); }
-.wq__pct--warn { background: rgba(245, 158, 11, 0.14); color: var(--mk-amber); }
-.wq__pct--bad { background: rgba(220, 38, 38, 0.12); color: var(--mk-red); }
-html[data-theme='dark'] .wq__pct--ok { background: rgba(22, 163, 74, 0.18); color: #4ade80; }
-html[data-theme='dark'] .wq__pct--warn { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
-html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); color: #fca5a5; }
+/* 「总结产出质量」卡已撤（走查 2026-09-27：恒真满分卡零信息量），
+   劣化时由简报头动作列表的条件行承担（见模板 wrapupIssue） */
 
 /* 卡片头部统一：标题左 + 快捷跳转/时间窗 右（见板 = 状态一瞥 + 一键直达） */
 .brief-card__head {
@@ -1229,38 +1151,15 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
 .trend__bars { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 3px; width: 100%; min-height: 56px; }
 .trend__day--today { color: var(--mk-blue); font-weight: 800; }
 .trend__sum { margin: 0; padding-top: 8px; border-top: 1px dashed var(--mk-line); font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+/* 累计行（收编自学习漏斗卡）：与合计行同族，弱一档 */
+.trend__cum { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 .trend__bar { width: 9px; border-radius: var(--mk-radius-xs) var(--mk-radius-xs) var(--mk-radius-xs) var(--mk-radius-xs); background: linear-gradient(180deg, color-mix(in srgb, var(--mk-blue) 72%, white), var(--mk-blue)); opacity: 0.85; }
 .trend__bar--ok { background: linear-gradient(180deg, #34d399, var(--mk-green)); opacity: 1; }
 .trend__num { font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; color: var(--mk-muted); font-weight: 700; }
 .trend__num--zero { color: var(--mk-faint); font-weight: 600; }
 .trend__day { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
-
-/* 漏斗 */
-.funnel {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.funnel__node {
-  flex: 1 1 64px;
-  display: grid;
-  gap: 2px;
-  padding: 10px 8px;
-  border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--mk-line);
-  background: var(--mk-card-foot-bg);
-  text-align: center;
-}
-.funnel__node span { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
-.funnel__node strong { font-size: 19px; font-variant-numeric: tabular-nums; }
-/* 空置漏斗节点：浅实线 + 淡底（虚线易被误读为加载/禁用态） */
-.funnel__node--idle { border-style: solid; border-color: #edf0f5; background: var(--mk-skeleton-to); }
-.funnel__node--idle strong { color: var(--mk-faint); }
-.funnel__node--clickable { cursor: pointer; transition: border-color 0.12s ease; }
-.funnel__node--clickable:hover { border-color: rgba(44, 99, 208, 0.5); }
-.funnel__rate { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); }
+/* 漏斗卡已撤（2026-09-27）：1:N 展开配 ×倍数是假漏斗，真指标在目标对话卡累计行 */
 
 /* 脉搏（ECharts 图表；仅保留 meta 行样式） */
 .pulse__meta {
@@ -1383,9 +1282,6 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .feed li strong { font-size: var(--mk-fs-body); }
   .feed li span { font-size: var(--mk-fs-micro); }
   .feed--full li strong { font-size: var(--mk-fs-body); }
-  .wq__label { font-size: var(--mk-fs-body); }
-  .wq__nums { font-size: var(--mk-fs-micro); }
-  .wq__note { font-size: var(--mk-fs-body); }
 
 
 
@@ -1396,13 +1292,9 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .trend__num { font-size: var(--mk-fs-micro); }
   .trend__day { font-size: var(--mk-fs-micro); }
   .trend__sum { font-size: var(--mk-fs-body); }
-  .funnel__node span { font-size: var(--mk-fs-micro); }
-  .funnel__node strong { font-size: 22px; }
-  .funnel__rate { font-size: var(--mk-fs-micro); }
   .pulse__meta { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
-  .funnel__node span { font-size: var(--mk-fs-micro); }
   .brief-card { padding: 24px 30px; }
   .brief-card h4 { font-size: var(--mk-fs-micro); }
   .brief-score { width: 76px; height: 76px; }
@@ -1418,9 +1310,6 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .feed li strong { font-size: var(--mk-fs-body); }
   .feed li span { font-size: var(--mk-fs-micro); }
   .feed--full li strong { font-size: var(--mk-fs-body); }
-  .wq__label { font-size: var(--mk-fs-micro); }
-  .wq__nums { font-size: var(--mk-fs-micro); }
-  .wq__note { font-size: var(--mk-fs-micro); }
 
 
 
@@ -1431,16 +1320,12 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .trend__num { font-size: var(--mk-fs-micro); }
   .trend__day { font-size: var(--mk-fs-micro); }
   .trend__sum { font-size: var(--mk-fs-micro); }
-  .funnel__node span { font-size: var(--mk-fs-micro); }
-  .funnel__node strong { font-size: 26px; }
-  .funnel__rate { font-size: var(--mk-fs-micro); }
   .pulse__meta { font-size: var(--mk-fs-body); }
 }
-/* 3600+（zoom 1.3 档）：卡片延续 2800 放大节奏（约 1.17×），补齐 2000/2800 未覆盖的卡片内文字（feed/pulse/trend/wq/usage/funnel）
+/* 3600+（zoom 1.3 档）：卡片延续 2800 放大节奏（约 1.17×），补齐 2000/2800 未覆盖的卡片内文字（feed/pulse/trend/usage）
    注：本档 px 是"除过 zoom 1.3"的补偿值（2800 档生效时壳层 zoom 1.15）。
-   2026-09-24 桌面端验收：5 处补偿不足，有效字号反而小于 2800 档（如 .funnel__node strong
-   26×1.15=29.9 → 22×1.3=28.6），已上调到 ≥ 2800 的有效值；守卫见
-   scripts/check-design-system.mjs 规则 11（档位字号单调性，按 zoom 折算比较）。 */
+   2026-09-24 桌面端验收：5 处补偿不足，有效字号反而小于 2800 档，已上调到 ≥ 2800 的有效值；
+   守卫见 scripts/check-design-system.mjs 规则 11（档位字号单调性，按 zoom 折算比较）。 */
 @media (min-width: 3600px) {
   .brief-card { padding: 28px 36px; }
   .brief-card h4 { font-size: var(--mk-fs-emphasis); }
@@ -1455,9 +1340,6 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .feed li strong { font-size: var(--mk-fs-micro); }
   .feed li span { font-size: var(--mk-fs-micro); }
   .feed--full li strong { font-size: var(--mk-fs-micro); }
-  .wq__label { font-size: var(--mk-fs-micro); }
-  .wq__nums { font-size: var(--mk-fs-micro); }
-  .wq__note { font-size: var(--mk-fs-micro); }
 
 
 
@@ -1468,9 +1350,6 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .trend__num { font-size: var(--mk-fs-micro); }
   .trend__day { font-size: var(--mk-fs-micro); }
   .trend__sum { font-size: var(--mk-fs-micro); }
-  .funnel__node span { font-size: var(--mk-fs-micro); }
-  .funnel__node strong { font-size: 23.5px; }
-  .funnel__rate { font-size: var(--mk-fs-micro); }
   .pulse__meta { font-size: var(--mk-fs-micro); }
 }
 
@@ -1484,13 +1363,11 @@ html[data-theme='dark'] {
   .brief-card { background: #19191a; }
   .brief-actions__btn { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.35); }
   .brief-actions__btn:hover { background: rgba(91, 141, 239, 0.26); }
-  .wq__bars, .ov-skill__track, .usage__bar-track { background: #2a2b2d; }
+  .ov-skill__track, .usage__bar-track { background: #2a2b2d; }
   .ov-skill:hover, .usage__fail:hover, .feed__item:hover { background: #252627; }
   .feed__item--bad:hover { background: #2a1414; }
   .feed__item--warn:hover { background: #2a2410; }
   .trend__col--today { background: rgba(91, 141, 239, 0.12); box-shadow: inset 0 0 0 1px rgba(91, 141, 239, 0.3); }
-  .funnel__node { background: #252627; border-color: #2a2b2d; }
-  .funnel__node--idle { background: #19191a; border-color: #2a2b2d; }
   .usage__hero { background: linear-gradient(180deg, #19191a, #19191a); border-color: #2a2b2d; }
   .usage__hero-sep { background: #2a2b2d; }
   .brief-card__go:hover { background: rgba(91, 141, 239, 0.14); }
