@@ -75,6 +75,15 @@
             <template v-else>
               <div class="ff-chart" @mousemove="onChartHover" @mouseleave="hoverDay = null">
                 <svg :viewBox="`0 0 ${chartW} ${chartH}`" preserveAspectRatio="none" aria-hidden="true">
+                  <!-- 横向网格线（2026-09-27 外部评审：原来没有任何坐标参照，曲线悬空感） -->
+                  <g class="ff-grid">
+                    <line
+                      v-for="i in 5" :key="i"
+                      :x1="0" :x2="chartW"
+                      :y1="(chartH / 4) * (i - 1)" :y2="(chartH / 4) * (i - 1)"
+                      vector-effect="non-scaling-stroke"
+                    />
+                  </g>
                   <rect
                     v-for="p in points" :key="p.date"
                     class="ff-bar"
@@ -457,18 +466,46 @@ const chartW = 760;
 const chartH = 240;
 const chartPad = 8;
 
-const maxY = computed(() => {
-  const m = Math.max(40, ...series.value.map((d) => Math.max(d.ktl ?? 0, d.lf ?? 0, d.lsb ?? 0)));
-  return m * 1.15;
+/* 2026-09-27 外部视觉评审修复：
+   ① 裁掉开头无数据日（原来 42 天窗口里曲线只占右侧 40%，左侧空旷悬空）；
+   ② y 轴改动态量程（原来固定 0-100，40-50 的曲线压成一条扁线）；
+   ③ 活动柱（时长）用自己的刻度且封顶 28% 图高——原来复用指标刻度，
+      分钟数大的日子柱条直接画穿画布（y=-7238 那种）。 */
+const activeSeries = computed(() => {
+  const days = series.value;
+  const first = days.findIndex((d) => d.ktl !== null || d.lf !== null || d.lsb !== null || d.minutes > 0);
+  if (first <= 1) return days;
+  return days.slice(Math.max(0, first - 2));
 });
 
+const valueDomain = computed(() => {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const d of activeSeries.value) {
+    for (const v of [d.ktl, d.lf, d.lsb]) {
+      if (v === null) continue;
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+  }
+  if (!Number.isFinite(lo)) return { lo: 0, hi: 100 };
+  const pad = Math.max(5, (hi - lo) * 0.18);
+  return { lo: Math.max(0, lo - pad), hi: hi + pad };
+});
+
+const maxMinutes = computed(() => Math.max(10, ...activeSeries.value.map((d) => d.minutes)));
+
 const points = computed<TrendPoint[]>(() => {
-  const n = series.value.length;
+  const n = activeSeries.value.length;
   const usableW = chartW - chartPad * 2;
   const step = n > 1 ? usableW / (n - 1) : 0;
-  const yOf = (v: number) => chartH - (v / maxY.value) * chartH;
-  return series.value.map((d, i) => {
+  const { lo, hi } = valueDomain.value;
+  const span = hi - lo || 1;
+  const yOf = (v: number) => chartH - ((v - lo) / span) * chartH;
+  const barCap = chartH * 0.28;
+  return activeSeries.value.map((d, i) => {
     const x = chartPad + step * i;
+    const bh = Math.min(barCap, (d.minutes / maxMinutes.value) * barCap);
     return {
       ...d,
       x,
@@ -476,14 +513,14 @@ const points = computed<TrendPoint[]>(() => {
       ly: d.lf !== null ? yOf(d.lf) : null,
       sy: d.lsb !== null ? yOf(d.lsb) : null,
       bx: x - barW.value / 2,
-      by: yOf(d.minutes),
-      bh: chartH - yOf(d.minutes)
+      by: chartH - bh,
+      bh
     };
   });
 });
 
 const barW = computed(() => {
-  const n = series.value.length || 1;
+  const n = activeSeries.value.length || 1;
   return Math.max(2, Math.min(10, ((chartW - chartPad * 2) / n) * 0.55));
 });
 
@@ -856,11 +893,12 @@ function loadGuidance() {
 .vitals__sub b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .vitals__sub b i { font-size: 12px; font-style: normal; font-weight: 600; color: var(--faint); }
 .metric__note { width: fit-content; font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: var(--mk-radius-pill); }
-.metric__note--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
-.metric__note--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
-.metric__note--purple { color: var(--accent); background: rgba(141, 107, 255, 0.12); }
-.metric__note--amber { color: var(--amber-ink); background: rgba(244, 170, 70, 0.16); }
-.metric__note--red { color: var(--red-ink); background: rgba(239, 117, 120, 0.12); }
+/* 胶囊底色用「前景 ink × 表面」混色：暗色主题自动降饱和（外部评审：原 rgba 撞色在暗底上刺眼） */
+.metric__note--green { color: var(--green-ink); background: color-mix(in srgb, var(--green-ink) 13%, var(--surface)); }
+.metric__note--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue-deep) 13%, var(--surface)); }
+.metric__note--purple { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, var(--surface)); }
+.metric__note--amber { color: var(--amber-ink); background: color-mix(in srgb, var(--amber-ink) 14%, var(--surface)); }
+.metric__note--red { color: var(--red-ink); background: color-mix(in srgb, var(--red-ink) 13%, var(--surface)); }
 
 @media (max-width: 720px) {
   /* 窄屏：主指标整行 + 三个子指标 2 列环绕（第三格落下一行时无边框起头） */
@@ -917,9 +955,9 @@ function loadGuidance() {
 .sidecard { padding: 16px 18px; display: grid; gap: 10px; }
 .pref, .legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .pref li { display: grid; gap: 2px; }
-.pref strong { font-size: 12.5px; }
-.pref span { font-size: 12px; color: var(--muted); }
-.legend li { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.pref strong { font-size: 13px; }
+.pref span { font-size: 12.5px; color: color-mix(in srgb, var(--ink) 72%, var(--muted)); }
+.legend li { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: color-mix(in srgb, var(--ink) 72%, var(--muted)); line-height: 1.65; }
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
 .dot--green { background: #31b16f; }
 .dot--blue { background: var(--blue); }
@@ -937,7 +975,7 @@ function loadGuidance() {
 </style>
 
 <style scoped>
-.metric__note--red { color: var(--red-ink); background: rgba(239, 117, 120, 0.12); }
+.metric__note--red { color: var(--red-ink); background: color-mix(in srgb, var(--red-ink) 13%, var(--surface)); }
 .chart__controls { display: flex; gap: 8px; flex-wrap: wrap; }
 .chart__loading { display: grid; justify-items: center; padding: 40px 0; }
 .chart__retry {
@@ -966,15 +1004,18 @@ function loadGuidance() {
 .guide__warn {
   display: flex; align-items: center; gap: 8px;
   font-size: 12.5px; font-weight: 600; color: var(--amber-ink);
-  background: color-mix(in srgb, var(--amber) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 30%, transparent);
+  background: color-mix(in srgb, var(--amber-ink) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--amber-ink) 28%, var(--surface));
   border-radius: var(--mk-radius-lg); padding: 9px 12px;
 }
 .guide__foot {
   display: grid; gap: 6px;
   border-top: 1px dashed var(--line);
   padding-top: 10px;
-  font-size: 12.5px; color: var(--muted); line-height: 1.6;
+  font-size: 12.5px; line-height: 1.7;
+  /* 2026-09-27 外部评审：底部两行说明原来 12.5px muted 贴着卡片底边，提亮一档并留出呼吸 */
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  padding-bottom: 2px;
 }
 .guide__foot b {
   color: var(--blue-deep);
@@ -1048,11 +1089,12 @@ function loadGuidance() {
 .ff-chart { width: 100%; }
 .ff-chart svg { display: block; width: 100%; height: auto; }
 .ff-bar { fill: color-mix(in srgb, var(--blue) 14%, transparent); }
-.ff-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.ff-grid line { stroke: var(--line); stroke-width: 1; opacity: 0.6; }
+.ff-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .ff-line--fitness { stroke: var(--blue); }
 .ff-line--fatigue { stroke: var(--accent); }
 .ff-line--lsb { stroke: #31b16f; }
-.ff-cursor { stroke: color-mix(in srgb, var(--ink) 20%, transparent); stroke-width: 1; stroke-dasharray: 3 3; }
+.ff-cursor { stroke: color-mix(in srgb, var(--ink) 20%, transparent); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 .ff-pt { stroke: #fff; stroke-width: 2; }
 .ff-pt--fitness { fill: var(--blue); }
 .ff-pt--fatigue { fill: var(--accent); }
