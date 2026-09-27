@@ -2,6 +2,25 @@ import api, { AI_REQUEST_TIMEOUT } from '../utils/api';
 import { streamSsePost } from '../utils/sse';
 import type { InteractionMeta } from '../composables/useInteractionMeta';
 
+/**
+ * 位置线图载荷（2026-09-27 双通道重构 Scope B）：空间位置关系的确定性渲染。
+ * 数值域由后端归一化保证覆盖全部取值；前端只做坐标映射（TeachingFigure.vue）。
+ */
+export interface TeachingFigurePayload {
+  engine: string;
+  kind: string;
+  axis: {
+    min: number;
+    max: number;
+    unit?: string | null;
+    ticks?: Array<{ at: number; label?: string | null }>;
+  };
+  marks: Array<{ at: number; label: string; dir?: 'right' | 'left' | 'none' }>;
+  spans?: Array<{ from: number; to: number; label: string }>;
+  guides?: Array<{ at: number; label?: string | null }>;
+  caption?: string | null;
+}
+
 export interface TeachingSession {
   sessionId: string;
   subject: string;
@@ -61,6 +80,8 @@ export interface MessageResult {
   images?: Array<{ url: string; caption?: string | null; prompt?: string; kind?: string | null }>;
   /** 课堂结构图（2026-09-27 双通道重构）——mermaid 源码，前端确定性渲染，内联在回复里 */
   diagrams?: Array<{ engine: string; code: string; caption?: string | null }>;
+  /** 位置线图（Scope B）——结构化数值域，前端确定性渲染成 SVG，内联在回复里 */
+  figures?: TeachingFigurePayload[];
   analysis: {
     cognitiveLevel: string;
     levelScore: number;
@@ -160,7 +181,7 @@ export interface SessionDetail {
   endTime: string | null;
   duration: number | null;
   status: string;
-  messages: Array<{ role: string; content: string; timestamp: string; analysis?: Record<string, unknown>; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: Record<string, unknown> | null; peerTriggered?: boolean; peerMessage?: string | null; peerStrategy?: string | null; peerFollowUpQuestions?: string[]; peerDebug?: Record<string, unknown> | null; peer?: boolean; images?: Array<{ url: string; caption?: string | null; prompt?: string; kind?: string | null }>; diagrams?: Array<{ engine: string; code: string; caption?: string | null }> }>;
+  messages: Array<{ role: string; content: string; timestamp: string; analysis?: Record<string, unknown>; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: Record<string, unknown> | null; peerTriggered?: boolean; peerMessage?: string | null; peerStrategy?: string | null; peerFollowUpQuestions?: string[]; peerDebug?: Record<string, unknown> | null; peer?: boolean; images?: Array<{ url: string; caption?: string | null; prompt?: string; kind?: string | null }>; diagrams?: Array<{ engine: string; code: string; caption?: string | null }>; figures?: TeachingFigurePayload[] }>;
   state: Record<string, unknown> | null;
   knowledgePoints?: KnowledgePointStatus[];
   wrapup?: WrapupArtifact | null;

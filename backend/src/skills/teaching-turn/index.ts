@@ -441,6 +441,47 @@ export interface TeachingTurnOutput {
     /** 图下方一句说明（学生可见）；归一化后恒为 string|null */
     caption: string | null;
   } | null;
+  /**
+   * 位置线图（2026-09-27 双通道重构 Scope B）：**空间位置关系**的确定性渲染。
+   *
+   * 真实语料实证（小学追及题：把「小明在前、小红在后，两人都往右」摆成一条线）——
+   * 这类内容 mermaid 的节点-边表达不了，需要自由定位原语（线段/箭头/刻度/标注）。
+   * 与 diagram 分工：节点-边类（流程/时序/层级/分类）走 mermaid；**位置/距离/方向**类走本块。
+   *
+   * 规则：
+   * - 只画"对话正在用文字描述的空间关系"（谁在哪、朝哪、隔多远），**不要**画抽象结构；
+   * - `at` 用与题意一致的数值（米/格/序号都行，只要同一图内同单位）；不必等比真实比例，但顺序必须对；
+   * - 标签写**学科实指**（甲/乙/小明/起点/追及点），不要写"物体 1"这类占位；
+   * - 若本轮正要布置"由学生自己画位置线"的练习，本轮**不要**输出（答案泄漏）；
+   * - reply 必须脱离图也成立（图是同一关系的更直观呈现）。
+   */
+  figure?: {
+    /** 渲染引擎；归一化后恒为 'svg'（其他值整块丢弃，见 normalizeFigure） */
+    engine: string;
+    /** 图型；归一化后恒为 'position-line'（v1 唯一图型） */
+    kind: string;
+    /** 轴（数值域 + 单位 + 刻度）；归一化保证存在且覆盖所有取值 */
+    axis: {
+      min: number;
+      max: number;
+      /** 单位（如「米」「格」「秒」）；无单位则 null */
+      unit: string | null;
+      ticks: Array<{ at: number; label: string | null }>;
+    };
+    /** 线上的对象（人物/物/点）；1~6 个，按 at 升序 */
+    marks: Array<{
+      at: number;
+      label: string;
+      /** 朝向箭头：right/left/none（静态点） */
+      dir: 'right' | 'left' | 'none';
+    }>;
+    /** 区间标注（距离/差）；0~3 条，画在轴下方 */
+    spans: Array<{ from: number; to: number; label: string }>;
+    /** 竖直参考线（追及点/相遇点/分界）；0~4 条 */
+    guides: Array<{ at: number; label: string | null }>;
+    /** 图下方一句说明（学生可见）；归一化后恒为 string|null */
+    caption: string | null;
+  } | null;
 }
 
 /**
@@ -504,7 +545,9 @@ export const teachingTurnAgentDefinition: AgentDefinition = {
       // 2026-09-27 起扩散生图默认停用（owner 终审，设计文档 §九），该块保留但不再生成图片。
       visual: { type: 'object' },
       // 可选：课堂结构图（mermaid 代码，前端确定性渲染；见 TeachingTurnOutput.diagram）
-      diagram: { type: 'object' }
+      diagram: { type: 'object' },
+      // 可选：位置线图（空间位置关系，确定性 SVG 渲染；见 TeachingTurnOutput.figure）
+      figure: { type: 'object' }
     },
     required: ['reply', 'analysis', 'knowledge', 'pedagogy', 'control']
   },
@@ -713,6 +756,145 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
     },
     ...(normalizeVisual(parsed.visual) ?? {}),
     ...(normalizeDiagram(parsed.diagram) ?? {}),
+    ...(normalizeFigure(parsed.figure) ?? {}),
+  };
+}
+
+const FIGURE_MARKS_MAX = 6;
+const FIGURE_SPANS_MAX = 3;
+const FIGURE_GUIDES_MAX = 4;
+const FIGURE_TICKS_MAX = 8;
+/** 图内文本上限：标签是教学信息，超长说明模型没在"画图"而是在"写段落"——宁缺毋滥 */
+const FIGURE_LABEL_MAX = 16;
+const FIGURE_SPAN_LABEL_MAX = 24;
+const FIGURE_CAPTION_MAX = 200;
+const FIGURE_UNIT_MAX = 8;
+
+/** 数值字段归一：只认有限数（含数字字符串）；其余 → null */
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim()) {
+    const n = Number(value.trim());
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/** 图内文本归一：去控制字符、裁长、空串归 null（用于可选文本：caption/unit） */
+function toFigureText(value: unknown, max: number): string | null {
+  if (typeof value !== 'string') return null;
+  const text = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
+  return text || null;
+}
+
+/**
+ * 图内文本归一（严格版）：超长 → null，**不截断**。
+ * 标签是教学信息本身，截成半句话比没有更糟；可选文本（tick/guide 的 label）超长则丢标签保位置。
+ */
+function toFigureLabel(value: unknown, max: number): string | null {
+  if (typeof value !== 'string') return null;
+  const text = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+  if (!text || text.length > max) return null;
+  return text;
+}
+
+/**
+ * 归一化老师给的位置线图（契约见 `TeachingTurnOutput.figure`，2026-09-27 Scope B）。
+ *
+ * 规则（宁缺毋滥 + 确定性可渲染）：
+ * - 只认 `kind: position-line`（缺省视为 position-line；其他图型整块丢弃）；
+ * - **必须至少有一个有效 mark**（没有对象就没有位置关系，整块丢弃）；
+ * - 数值域由代码统一推导：取 axis/ticks/marks/spans/guides 的全部取值求并集，两端各留 4% 余量——
+ *   模型给的 min/max 只作为单位与刻度的来源，**不得把取值挡在域外**（挡了就是画错图）；
+ * - marks 按 at 升序、去重（同位置只留第一个）；spans 要求 from≠to；越界/非法项丢弃；
+ * - 各数组超上限截断；标签超长丢弃该条（不截断成半句话）。
+ */
+function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput['figure']> } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+  const kind = typeof record.kind === 'string' ? record.kind.trim().toLowerCase() : '';
+  if (kind && kind !== 'position-line') return null;
+
+  const rawMarks = Array.isArray(record.marks) ? record.marks : [];
+  const marks: Array<{ at: number; label: string; dir: 'right' | 'left' | 'none' }> = [];
+  for (const item of rawMarks) {
+    if (!item || typeof item !== 'object') continue;
+    const mark = item as Record<string, unknown>;
+    const at = toFiniteNumber(mark.at);
+    const label = toFigureLabel(mark.label, FIGURE_LABEL_MAX);
+    if (at === null || !label) continue;
+    const dirRaw = typeof mark.dir === 'string' ? mark.dir.trim().toLowerCase() : '';
+    const dir = dirRaw === 'right' || dirRaw === 'left' ? dirRaw : 'none';
+    marks.push({ at, label, dir });
+    if (marks.length >= FIGURE_MARKS_MAX) break;
+  }
+  if (!marks.length) return null;
+
+  const axisRecord = record.axis && typeof record.axis === 'object' ? (record.axis as Record<string, unknown>) : null;
+  const unit = toFigureText(axisRecord?.unit, FIGURE_UNIT_MAX);
+  const ticks: Array<{ at: number; label: string | null }> = [];
+  for (const item of Array.isArray(axisRecord?.ticks) ? (axisRecord?.ticks as unknown[]) : []) {
+    if (!item || typeof item !== 'object') continue;
+    const tick = item as Record<string, unknown>;
+    const at = toFiniteNumber(tick.at);
+    if (at === null) continue;
+    ticks.push({ at, label: toFigureLabel(tick.label, FIGURE_LABEL_MAX) });
+    if (ticks.length >= FIGURE_TICKS_MAX) break;
+  }
+
+  const spans: Array<{ from: number; to: number; label: string }> = [];
+  for (const item of Array.isArray(record.spans) ? (record.spans as unknown[]) : []) {
+    if (!item || typeof item !== 'object') continue;
+    const span = item as Record<string, unknown>;
+    const from = toFiniteNumber(span.from);
+    const to = toFiniteNumber(span.to);
+    const label = toFigureLabel(span.label, FIGURE_SPAN_LABEL_MAX);
+    if (from === null || to === null || from === to || !label) continue;
+    spans.push({ from: Math.min(from, to), to: Math.max(from, to), label });
+    if (spans.length >= FIGURE_SPANS_MAX) break;
+  }
+
+  const guides: Array<{ at: number; label: string | null }> = [];
+  for (const item of Array.isArray(record.guides) ? (record.guides as unknown[]) : []) {
+    if (!item || typeof item !== 'object') continue;
+    const guide = item as Record<string, unknown>;
+    const at = toFiniteNumber(guide.at);
+    if (at === null) continue;
+    guides.push({ at, label: toFigureLabel(guide.label, FIGURE_LABEL_MAX) });
+    if (guides.length >= FIGURE_GUIDES_MAX) break;
+  }
+
+  // 数值域 = 所有取值的并集（模型的 min/max 不得把取值挡在域外）
+  const allValues = [
+    ...marks.map((m) => m.at),
+    ...ticks.map((t) => t.at),
+    ...spans.flatMap((s) => [s.from, s.to]),
+    ...guides.map((g) => g.at),
+    toFiniteNumber(axisRecord?.min),
+    toFiniteNumber(axisRecord?.max),
+  ].filter((v): v is number => v !== null);
+  if (!allValues.length) return null;
+  const lo = Math.min(...allValues);
+  const hi = Math.max(...allValues);
+  // 单点/零宽域：给一个人造跨度，否则除零（刻度仍是诚实的最小刻度）
+  const pad = hi > lo ? (hi - lo) * 0.04 : Math.max(Math.abs(hi) * 0.1, 1);
+  const axis = { min: lo - pad, max: hi + pad, unit, ticks };
+
+  const dedupedMarks = marks
+    .sort((a, b) => a.at - b.at)
+    .filter((mark, index, list) => index === 0 || mark.at !== list[index - 1].at);
+  const caption = toFigureText(record.caption, FIGURE_CAPTION_MAX);
+
+  return {
+    figure: {
+      engine: 'svg',
+      kind: 'position-line',
+      axis,
+      marks: dedupedMarks,
+      spans,
+      guides,
+      caption,
+    },
   };
 }
 

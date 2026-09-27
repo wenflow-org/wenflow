@@ -242,6 +242,12 @@
                   :code="d.code"
                   :caption="d.caption"
                 />
+                <!-- 位置线图（Scope B）——空间位置关系的确定性渲染（追及/相遇这类"摆成一条线"的内容） -->
+                <TeachingFigure
+                  v-for="(f, fi) in m.figures"
+                  :key="'f' + fi"
+                  :figure="f"
+                />
                 <!-- 教师补充材料卡片（批次 E）：主线之外的公开网络资料，点开看原文窗口 -->
                 <button
                   v-if="m.supplement?.materialId"
@@ -549,6 +555,7 @@ import AiContentNote from '@/components/AiContentNote.vue';
 import ImmersiveMenu from '@/components/ImmersiveMenu.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import TeachingDiagram from '@/components/TeachingDiagram.vue';
+import TeachingFigure from '@/components/TeachingFigure.vue';
 import { toast } from '@/utils/toast';
 import { useInteractionMeta } from '@/composables/useInteractionMeta';
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
@@ -956,6 +963,7 @@ async function boot() {
                 time: nowTime(),
                 ...(Array.isArray(m.images) && m.images.length ? { images: m.images } : {}),
                 ...(Array.isArray(m.diagrams) && m.diagrams.length ? { diagrams: m.diagrams } : {}),
+                ...(Array.isArray(m.figures) && m.figures.length ? { figures: m.figures } : {}),
               }));
             restoredCount = restored.length;
             if (restored.length) scrollDown();
@@ -1143,10 +1151,11 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
     aiMsg.confusion = confusion;
     if (Array.isArray(r.images) && r.images.length) (aiMsg as ChatMsg).images = r.images;
     if (Array.isArray(r.diagrams) && r.diagrams.length) (aiMsg as ChatMsg).diagrams = r.diagrams;
+    if (Array.isArray(r.figures) && r.figures.length) (aiMsg as ChatMsg).figures = r.figures;
     // 教师补充材料卡片（批次 E）：承诺的"下轮补充"在本轮送达
     if (r.supplementaryMaterial?.materialId) (aiMsg as ChatMsg).supplement = r.supplementaryMaterial;
   } else if (r.aiResponse) {
-    pushMsg({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion, ...(Array.isArray(r.images) && r.images.length ? { images: r.images } : {}), ...(Array.isArray(r.diagrams) && r.diagrams.length ? { diagrams: r.diagrams } : {}), ...(r.supplementaryMaterial ? { supplement: r.supplementaryMaterial } : {}) });
+    pushMsg({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion, ...(Array.isArray(r.images) && r.images.length ? { images: r.images } : {}), ...(Array.isArray(r.diagrams) && r.diagrams.length ? { diagrams: r.diagrams } : {}), ...(Array.isArray(r.figures) && r.figures.length ? { figures: r.figures } : {}), ...(r.supplementaryMaterial ? { supplement: r.supplementaryMaterial } : {}) });
   }
   // 兜底：AI 全程未返回任何内容（空响应）时给占位气泡，避免本轮「无声消失」
   if (!r.aiResponse && (!aiMsg || !aiMsg.text.trim())) {

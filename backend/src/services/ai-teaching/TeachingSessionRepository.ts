@@ -95,6 +95,12 @@ export interface TeachingSessionMessage {
    * **图内可写中文标签**（标签即教学信息）。
    */
   diagrams?: TeachingDiagram[];
+  /**
+   * 位置线图（2026-09-27 双通道重构 Scope B）——**内联在消息流里**，老师给的结构化数值域 +
+   * 对象/区间/参考线，由前端确定性渲染成 SVG。真实语料实证：追及题的学习对象本身就是
+   * "把文字关系摆成一条位置线"，这类空间关系 mermaid 的节点-边表达不了。
+   */
+  figures?: TeachingFigure[];
 }
 
 /**
@@ -118,6 +124,28 @@ export interface TeachingImage {
 export interface TeachingDiagram {
   engine: string;
   code: string;
+  caption: string | null;
+}
+
+/**
+ * 位置线图（2026-09-27 双通道重构 Scope B）：空间位置关系的确定性渲染载荷。
+ * 数值域由 skill normalizeFigure 统一推导（保证覆盖所有取值），前端只做坐标映射——
+ * 渲染是纯函数，无生成、无乱码、无联网。
+ */
+export interface TeachingFigure {
+  /** 归一化后恒为 'svg' */
+  engine: string;
+  /** 归一化后恒为 'position-line'（v1 唯一图型） */
+  kind: string;
+  axis: {
+    min: number;
+    max: number;
+    unit: string | null;
+    ticks: Array<{ at: number; label: string | null }>;
+  };
+  marks: Array<{ at: number; label: string; dir: 'right' | 'left' | 'none' }>;
+  spans: Array<{ from: number; to: number; label: string }>;
+  guides: Array<{ at: number; label: string | null }>;
   caption: string | null;
 }
 

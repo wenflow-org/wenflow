@@ -21,6 +21,9 @@ entries:
   - { skillId: teaching-turn, field: knowledge, consumers: ['backend: AITeachingCoordinator reconcileTeachingKnowledgeState（看板回灌）', 'frontend: LearningPage.vue（knowledgePoints）'] }
   - { skillId: teaching-turn, field: pedagogy, consumers: ['frontend: LearningPage.vue（strategies）'] }
   - { skillId: teaching-turn, field: control, consumers: ['backend: AITeachingCoordinator（课堂收束判断）', 'backend: peerTriggerService.shouldTrigger（同伴触发）'] }
+  # 图示双通道（2026-09-27 双通道重构）：结构类走 diagram（mermaid）、空间位置类走 figure（确定性 SVG）
+  - { skillId: teaching-turn, field: diagram, consumers: ['backend: teaching-turn-engine（防答案泄漏硬闸后随消息落库）', 'backend: routes/ai-teaching.routes buildMessageResultData（白名单下发）', 'frontend: TeachingDiagram.vue（mermaid 渲染）', 'frontend: V2LearningPage.vue（实况 + 历史两条映射）'] }
+  - { skillId: teaching-turn, field: figure, consumers: ['backend: teaching-turn-engine（防答案泄漏硬闸后随消息落库）', 'backend: routes/ai-teaching.routes buildMessageResultData（白名单下发）', 'frontend: TeachingFigure.vue（确定性 SVG 渲染）', 'frontend: V2LearningPage.vue（实况 + 历史两条映射）'] }
   # session-wrapup
   - { skillId: session-wrapup, field: summary, consumers: ['frontend: CompletionCard.vue', 'backend: learner.coordinator / LessonKnowledgeEnrichmentConsumer（回灌蒸馏器）'] }
   - { skillId: session-wrapup, field: evaluation, consumers: ['backend: AITeachingCoordinator.endSession（持久化）', 'frontend: LearningEvaluationPage.vue'] }

@@ -86,6 +86,14 @@ const TURN_PRESETS = {
     '行，那下一层。',
     '好，我自己消化。',
   ],
+  // 位置线探针（LEARN_PRESET=position）：学生在追及/相遇题里用文字描述位置关系并索要位置线
+  position: [
+    '这道追及题我先说说我的理解：甲在后面，乙在前面，两个人都在往右走，甲比乙快一些。',
+    '我能感觉到甲在缩短距离，但具体怎么摆我说不清——你能把他们的位置摆出来给我看看吗？',
+    '对，就摆成这样。那追上的那个点，在图上应该在哪个位置？',
+    '我复述一遍：甲从后面出发、乙在前面、两人同向，甲快，所以距离一直在缩短，直到甲追上乙。对吗？',
+    '行，那下一步我自己试着摆。',
+  ],
 };
 
 function pickPreset() {
@@ -112,6 +120,7 @@ async function main() {
       if (st.pathId) { pathId = st.pathId; break; }
     }
   }
+  if (process.env.LEARN_PATH_ID) pathId = process.env.LEARN_PATH_ID;
   if (!pathId) {
     const paths = await api('GET', '/api/learning/paths');
     pathId = (paths.data || []).find(p => p.status === 'active')?.id || (paths.data || [])[0]?.id;
@@ -119,7 +128,9 @@ async function main() {
   if (!pathId) throw new Error('no path for ' + personaId);
   const detail = await api('GET', '/api/learning/paths/' + pathId);
   const pathData = detail.data || {};
-  const firstTask = (pathData.stages || []).flatMap(s => (s.subtasks || []).map(t => ({ ...t, stageNumber: s.stageNumber })))[0];
+  const allTasks = (pathData.stages || []).flatMap(s => (s.subtasks || []).map(t => ({ ...t, stageNumber: s.stageNumber })));
+  const wantedTaskId = process.env.LEARN_TASK_ID || '';
+  const firstTask = (wantedTaskId && allTasks.find((t) => t.id === wantedTaskId)) || allTasks[0];
   if (!firstTask) throw new Error('no tasks');
   log(`path=${pathId} | ${pathData.name || pathData.title} | task=S${firstTask.stageNumber}T1 ${String(firstTask.title).slice(0, 30)} (${firstTask.id})`);
 
@@ -194,11 +205,12 @@ async function main() {
       endReason: d2.endReason || null,
       images: imgs,
       diagrams: (d2.diagrams || []).map((g) => ({ engine: g.engine, code: String(g.code || '').slice(0, 400), caption: g.caption })),
+      figures: (d2.figures || []).map((f) => ({ engine: f.engine, kind: f.kind, marks: (f.marks || []).length, spans: (f.spans || []).length, guides: (f.guides || []).length, caption: f.caption })),
       quickReplies: (d2.quickReplies || d2.suggestedReplies || []).slice(0, 4),
       revision,
     };
     record.turns.push(turn);
-    log(`turn${i + 1}: level=${turn.analysis?.cognitiveLevel}/${turn.analysis?.levelScore} kp=${turn.knowledgePoints.length} img=${imgs.length} diagram=${turn.diagrams.length} ckpt=${turn.checkpoint ? 'Y' : 'N'} complete=${turn.isCompletion}`);
+    log(`turn${i + 1}: level=${turn.analysis?.cognitiveLevel}/${turn.analysis?.levelScore} kp=${turn.knowledgePoints.length} img=${imgs.length} diagram=${turn.diagrams.length} figure=${turn.figures.length} ckpt=${turn.checkpoint ? 'Y' : 'N'} complete=${turn.isCompletion}`);
 
     // 检查点：按水平作答（弱=第一个选项，中=第二个，强=第二个）
     if (turn.checkpoint) {

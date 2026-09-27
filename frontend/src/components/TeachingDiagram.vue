@@ -221,7 +221,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.06);
   color: #6b7280;
-  font-size: 11px;
+  font-size: var(--mk-fs-micro, 12px);
   pointer-events: none;
 }
 /* 放大层（Teleport 到 body，不受 scoped 限制但保留前缀便于识别） */

@@ -12,6 +12,7 @@ import {
   composeTeachingVisualPrompt,
   countTeachingVisuals,
   detectAsciiStructure,
+  detectPositionDescription,
   detectExerciseLeakInReply,
   generateTeachingVisual,
   hasIdenticalVisualPrompt,
@@ -352,6 +353,51 @@ describe('教学配图时机（S1：老师用字符画结构）', () => {
     delete process.env.TEACHING_VISUAL_ENABLED; // 顶层 beforeEach 默认开着 visual，这里一并关掉
     process.env.TEACHING_DIAGRAM_DISABLED = '1';
     expect(buildVisualOpportunity([assistant('甲（前）●———→ 方向 →')])).toBeNull();
+  });
+
+  // 位置线时机（Scope B，2026-09-27 语料实证：学生描述完位置关系 → 外化成图请他核验）
+  const user = (content: string): TeachingSessionMessage => ({ role: 'user', content, timestamp: '2026-09-27T00:00:00.000Z' });
+  const assistantWithFigure = (content: string): TeachingSessionMessage => ({
+    role: 'assistant',
+    content,
+    timestamp: '2026-09-27T00:00:00.000Z',
+    figures: [{
+      engine: 'svg',
+      kind: 'position-line',
+      axis: { min: 0, max: 100, unit: '米', ticks: [] },
+      marks: [{ at: 20, label: '甲', dir: 'right' }],
+      spans: [],
+      guides: [],
+      caption: null,
+    }],
+  });
+
+  it('detectPositionDescription：位置关系描述为真；日常用语为假', () => {
+    expect(detectPositionDescription('小明在小红后面 40 米，两个人都往右走')).toBe(true);
+    expect(detectPositionDescription('甲在前乙在后，相距 20 米，同向追及')).toBe(true);
+    expect(detectPositionDescription('我画好了：左边是小明，右边是小红，中间写 40 米')).toBe(true);
+    expect(detectPositionDescription('我后面再看这个知识点')).toBe(false);
+    expect(detectPositionDescription('这个函数的返回值是什么')).toBe(false);
+    expect(detectPositionDescription('')).toBe(false);
+  });
+
+  it('学生描述了位置关系 → 建议输出 figure（位置线），而不是 mermaid', () => {
+    const opportunity = buildVisualOpportunity([user('小明在小红后面 40 米，两个人都往右走')]);
+    expect(opportunity).not.toBeNull();
+    expect(opportunity!.reason).toBe('position-description');
+    expect(opportunity!.instruction).toContain('figure');
+    expect(opportunity!.instruction).toContain('position-line');
+  });
+
+  it('上一轮已摆过位置线 → 不重复摆；会话上限到了 → 不出信号', () => {
+    expect(buildVisualOpportunity([assistantWithFigure('摆好了'), user('小明在小红后面 40 米，都往右走')])).toBeNull();
+    process.env.TEACHING_FIGURE_MAX_PER_SESSION = '1';
+    try {
+      // 历史里已有 1 张、且上一轮不是摆图轮 → 会话上限 1 生效，不再出信号
+      expect(buildVisualOpportunity([assistantWithFigure('摆好了'), assistant('下一步看速度差'), user('相距 40 米，同向追及，甲在前')])).toBeNull();
+    } finally {
+      delete process.env.TEACHING_FIGURE_MAX_PER_SESSION;
+    }
   });
 });
 

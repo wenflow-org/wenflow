@@ -179,6 +179,8 @@ describe('ai-teaching routes', () => {
         checkpoint: { id: 'checkpoint-1', question: '何时使用 infer？' },
         // 教学配图（owner 口径：图片是一种特殊的文字）——字段恒在，本轮无图则为空数组
         images: [],
+        // 位置线图（Scope B）——字段恒在，本轮无图则为空数组
+        figures: [],
         // 课堂结构图（2026-09-27 双通道重构）——字段恒在，本轮无图则为空数组
         diagrams: [],
         // 教师补充材料卡片（批次 E）——字段恒在，本轮无补充则为 null

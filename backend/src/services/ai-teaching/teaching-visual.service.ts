@@ -187,10 +187,49 @@ export function detectAsciiStructure(text: string | null | undefined): boolean {
 /** 本轮"结构图/配图时机"信号（喂给教学回合的**显式**输入，见 buildVisualOpportunity 注释）。 */
 export interface VisualOpportunity {
   suggested: true;
-  reason: 'ascii-structure';
+  reason: 'ascii-structure' | 'position-description';
   /** 给模型的**显式、正向**要求 */
   instruction: string;
 }
+
+/**
+ * 学生用文字描述**空间位置关系**的语言特征（位置/方向/距离/先后）。
+ * 判据：≥2 种特征词、或 ≥3 处命中——单个「后面」这种日常用词不算（宁漏不误）。
+ */
+const POSITION_LANGUAGE = /(相距|追及|追上|相遇|同向|相向|背向|在前|在后|前面|后面|左边|右边|左侧|右侧|左端|右端|往右|往左|向东|向西|向南|向北|速度差|先出发|位置线|起点|终点)/g;
+
+export function detectPositionDescription(text: string | null | undefined): boolean {
+  const value = String(text ?? '');
+  if (!value) return false;
+  const hits = value.match(POSITION_LANGUAGE) || [];
+  return new Set(hits).size >= 2 || hits.length >= 3;
+}
+
+/** 位置线图每会话上限（默认 4；防"每轮都摆一遍"）。 */
+const DEFAULT_FIGURE_MAX_PER_SESSION = 4;
+
+export function resolveFigureMaxPerSession(value = process.env.TEACHING_FIGURE_MAX_PER_SESSION): number {
+  if (!value || String(value).trim() === '') return DEFAULT_FIGURE_MAX_PER_SESSION;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    logger.warn(`[teaching-visual] TEACHING_FIGURE_MAX_PER_SESSION 无效（${value}），使用默认 ${DEFAULT_FIGURE_MAX_PER_SESSION}`);
+    return DEFAULT_FIGURE_MAX_PER_SESSION;
+  }
+  return parsed;
+}
+
+/** 本会话已摆过的位置线图数量（上限判定用）。 */
+export function countTeachingFigures(messages: TeachingSessionMessage[] | null | undefined): number {
+  if (!Array.isArray(messages)) return 0;
+  return messages.reduce((sum, message) => sum + (Array.isArray(message?.figures) ? message.figures.length : 0), 0);
+}
+
+/** 上一轮老师已经摆过位置线 → 本轮不再重复摆（判据天然带节奏）。 */
+function lastAssistantHasFigure(messages: TeachingSessionMessage[]): boolean {
+  const lastAssistant = [...messages].reverse().find((message) => message?.role === 'assistant');
+  return Boolean(lastAssistant && Array.isArray(lastAssistant.figures) && lastAssistant.figures.length);
+}
+
 
 /**
  * 算本轮的"结构图时机"（**代码裁决**，2026-09-23 建、2026-09-27 双通道重构）。
@@ -211,18 +250,41 @@ export function buildVisualOpportunity(messages: TeachingSessionMessage[] | null
   if (!isTeachingVisualEnabled() && !isTeachingDiagramOpportunityEnabled()) return null;
   const list = Array.isArray(messages) ? messages : [];
   const lastAssistant = [...list].reverse().find((message) => message?.role === 'assistant');
-  if (!detectAsciiStructure(lastAssistant?.content)) return null;
-  return {
-    suggested: true,
-    reason: 'ascii-structure',
-    instruction:
-      '上一轮你用了箭头/方框/字符在 reply 里"画"结构——那说明这里本来就需要一张结构图，而且**别再用字符画**。'
-      + '**先判断**：若本轮正要布置「由学习者自己排出/画出这个结构」的练习（答案泄漏，2026-09-24 实测），'
-      + '则本轮**不要**输出 diagram，直接布置练习，把图留到学生完成后的下一轮总结印证时再用；'
-      + '否则本轮请输出顶层块 diagram：engine 用 mermaid，把这段结构画成 flowchart（流程/层级/对比）或 '
-      + 'sequenceDiagram（时序）——**图内要写中文标签**（节点名、关键量、方向词），标签就是教学信息本身；'
-      + 'caption 写一句给学生看的说明；reply 里不必再用字符画结构。',
-  };
+  if (detectAsciiStructure(lastAssistant?.content)) {
+    return {
+      suggested: true,
+      reason: 'ascii-structure',
+      instruction:
+        '上一轮你用了箭头/方框/字符在 reply 里"画"结构——那说明这里本来就需要一张图，而且**别再用字符画**。'
+        + '**先判断**：若本轮正要布置「由学习者自己排出/画出这个结构」的练习（答案泄漏，2026-09-24 实测），'
+        + '则本轮**不要**输出 diagram/figure，直接布置练习，把图留到学生完成后的下一轮总结印证时再用；'
+        + '**再分流**：内容是**空间位置关系**（谁在前谁在后、朝哪走、隔多远、追及/相遇）→ 输出 `figure`（位置线图，'
+        + '数值域 + 对象 + 朝向箭头 + 区间标注，mermaid 画不出位置）；其余结构类（流程/层级/时序/对比）→ 输出 `diagram`：'
+        + 'engine 用 mermaid，把这段结构画成 flowchart（流程/层级/对比）或 sequenceDiagram（时序）——'
+        + '**图内要写中文标签**（节点名、关键量、方向词），标签就是教学信息本身；'
+        + 'caption 写一句给学生看的说明；reply 里不必再用字符画结构。',
+    };
+  }
+  // 位置线时机（Scope B，2026-09-27 语料实证的"正当时机①：学生描述完 → 外化其描述以核验"）：
+  // 学生上一轮在用文字描述位置关系（谁在前谁在后、朝哪走、隔多远）——那正是位置线该出场的时候。
+  // 上一轮老师已摆过 / 本会话已达上限 → 不再触发（判据天然带节奏）。
+  const lastUser = [...list].reverse().find((message) => message?.role === 'user');
+  if (detectPositionDescription(lastUser?.content)) {
+    if (lastAssistantHasFigure(list)) return null;
+    if (countTeachingFigures(list) >= resolveFigureMaxPerSession()) return null;
+    return {
+      suggested: true,
+      reason: 'position-description',
+      instruction:
+        '学生正在用文字描述**空间位置关系**（谁在前谁在后、朝哪走、隔多远）——把他说的话**摆成一条位置线**给他核验，'
+        + '这是这类课的共同坐标系。**先判断**：若本轮正要布置「由学习者自己画/摆出这条位置线」的练习（答案泄漏），'
+        + '则本轮**不要**输出 figure，直接布置练习；否则输出顶层块 `figure`（kind 用 position-line，'
+        + 'marks 写学生的对象与朝向、spans 写他提到的距离、guides 写追及点/相遇点这类参考位置），'
+        + '**图内标签写学科实指**（甲/乙/小明/追及点）；caption 一句给学生看的话；**不要**改用 mermaid（节点-边画不出位置）。'
+        + 'reply 里不必再复述位置关系。',
+    };
+  }
+  return null;
 }
 
 /** 结构图时机开关（新通道，默认开启；env 可关用于回放对照）。 */

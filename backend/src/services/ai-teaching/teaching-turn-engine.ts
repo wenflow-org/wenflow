@@ -658,6 +658,19 @@ export async function processStudentMessage(
     }
   }
 
+  // 位置线图（2026-09-27 双通道重构 Scope B，同一条防答案泄漏硬闸）：
+  // 追及/相遇题里"学生自己画位置线"正是练习本体——本轮布置了这类练习就不能给图，给了等于把答案摆出来。
+  if (teachingOutput.figure) {
+    if (detectExerciseLeakInReply(teachingOutput.reply)) {
+      logger.info('[AITeaching] 本轮回复布置了由学生自己画的练习，跳过位置线图（防答案泄漏）', {
+        sessionId,
+        taskId: session.taskId,
+      });
+    } else {
+      assistantMessage.figures = [teachingOutput.figure];
+    }
+  }
+
   if (!completionReady && hasPrematureNextStepLanguage(assistantMessage.content)) {
     logger.warn('[AITeaching] 教学回复越界，尚未满足结束条件却提到下一环节', {
       sessionId,
@@ -929,6 +942,8 @@ export async function processStudentMessage(
     ...(assistantMessage.images?.length ? { images: assistantMessage.images } : {}),
     // 课堂结构图（2026-09-27 双通道重构）：mermaid 源码下行，前端确定性渲染
     ...(assistantMessage.diagrams?.length ? { diagrams: assistantMessage.diagrams } : {}),
+    // 位置线图（Scope B）：结构化数值域下行，前端确定性渲染成 SVG
+    ...(assistantMessage.figures?.length ? { figures: assistantMessage.figures } : {}),
     // 教师补充材料卡片（批次 E）：本轮晋升成功时随消息下发（前端渲染卡片，点开看章节）
     ...(supplementPromotion.payload ? { supplementaryMaterial: supplementPromotion.payload } : {}),
     strategies: effectiveTeachingOutput.pedagogy.strategies,

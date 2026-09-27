@@ -1,9 +1,9 @@
 {
  "$meta": {
   "name": "paradigm-evolution-golden-personas",
-  "version": "1.3-timing-files",
+  "version": "1.4-position-figure",
   "date": "2026-09-27",
-  "purpose": "多范式演进效果测试金料人设集。配套 TESTPLAN-paradigm-evolution-2026-09-27.md。v1.0 十正格+2 负样本；v1.1 +3 真实语料亚型；v1.2 横向 10 人设；v1.3 +8：时长两极（sprint-interview 6h/cram-python 12h/longrun-fullstack 2190h/slow-tongjian 487h）+ 联网时机强信号（exam-jiaozhi/policy-teacher）+ 带文件用户（file-syllabus/file-mistakes，uploads 字段由 driver 先传 /api/materials）。",
+  "purpose": "多范式演进效果测试金料人设集（v1.4 +1：elem-chase 小学追及——位置线通道验证）。配套 TESTPLAN-paradigm-evolution-2026-09-27.md。v1.0 十正格+2 负样本；v1.1 +3 真实语料亚型；v1.2 横向 10 人设；v1.3 +8：时长两极（sprint-interview 6h/cram-python 12h/longrun-fullstack 2190h/slow-tongjian 487h）+ 联网时机强信号（exam-jiaozhi/policy-teacher）+ 带文件用户（file-syllabus/file-mistakes，uploads 字段由 driver 先传 /api/materials）。",
   "v12ExpansionAxes": [
    "领域横向：脱离英语主导（v1.1 里 7/13 正格是英语），补语言第二外语、人文通识、写作、应用统计、数据职业、法考大考纲",
    "预算横向：daily-jp 15min/天小预算下限压测、heavy-fp 6h/天大预算上限压测（直击扩容块与守恒 prompt）、switch-data 270h 中大预算",
@@ -610,6 +610,27 @@
     "目标期末语法正确率 80%。可以，出方案吧。"
    ],
    "expectedStageShape": "阶段应按错题本薄弱类目组织（时态/从句/非谓语/固定搭配），任务应引用错题条目或题型（错题本总结里自己写了类目分布）",
+   "repeat": 1
+  },
+  {
+   "personaId": "elem-chase",
+   "intentType": "problem-fix",
+   "domain": "数学·小学行程（追及）",
+   "expectedParadigm": "pbl",
+   "budget": {
+    "horizon": "6 周",
+    "horizonDays": 42,
+    "dailyMinutes": 25,
+    "expectedHours": 17
+   },
+   "opening": "我孩子上小学五年级，追及问题完全不会——「甲在前面乙在后面」这类题他总是搞不清谁在追谁，画不出图。我想先自己弄明白怎么给孩子讲清楚。",
+   "followUps": [
+    "就是那种两个人同向走、一个快一个慢的题，题目里还常带「相距多少米」。",
+    "我自己数学还行，就是不会把题目里的关系摆出来给孩子看。",
+    "每天陪孩子学 25 分钟。",
+    "六周后孩子拿一道追及题给我，我能一步步给他摆明白。可以，生成吧。"
+   ],
+   "expectedStageShape": "阶段围绕「能给孩子摆出位置关系并讲清追及」组织",
    "repeat": 1
   }
  ]

@@ -296,6 +296,8 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
     images: Array.isArray(result.images) ? result.images : [],
     // 课堂结构图（2026-09-27 双通道重构）——mermaid 源码下行，前端确定性渲染，内联在回复里。
     diagrams: Array.isArray(result.diagrams) ? result.diagrams : [],
+    // 位置线图（Scope B）——结构化数值域下行，前端确定性渲染成 SVG，内联在回复里。
+    figures: Array.isArray(result.figures) ? result.figures : [],
     // 教师补充材料卡片（活的 path 批次 E）——上一轮 control.supplement 的入库成果，本轮晋升下发。
     supplementaryMaterial: result.supplementaryMaterial || null,
     // 提示词调试信封默认不下发（见 promptDebugEnabled 注释）
