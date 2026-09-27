@@ -736,11 +736,11 @@ html[data-theme='dark'] .mk-pill__count { background: rgba(148, 163, 184, 0.18);
 .mk-search > .mk-filter__input { padding-right: 28px; }
 .mk-search__clear {
   position: absolute;
-  right: 6px;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
-  width: 18px;
-  height: 18px;
+  width: 24px; /* 18→24：WCAG 2.5.8 目标尺寸下限（盒扩大，图标视觉不变） */
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

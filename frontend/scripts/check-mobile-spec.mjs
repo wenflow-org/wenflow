@@ -43,9 +43,15 @@ const PAGES = [
   { key: 'kmap', path: '/knowledge-map', gate: 'main', budget: { lt36: 0, lt44: 7, fonts: 0, hOver: 0 } },
   { key: 'achievements', path: '/user/achievements', gate: '.grid, .empty, .ov', budget: { lt36: 0, lt44: 13, fonts: 30, hOver: 0 } },
   { key: 'account', path: '/user/account', gate: '.uc-card, .profile-hero, .empty', budget: { lt36: 0, lt44: 16, fonts: 0, hOver: 0 } },
-  { key: 'onboarding', path: '/onboarding', gate: '.ob__card, .ob', budget: { lt36: 0, lt44: 2, fonts: 0, hOver: 0 } },
+  /* onboarding fonts 0→6（2026-09-27）：P0-6 修复把 ob__flow 从 aria-hidden 里放出来（三步流程是信息内容，读屏必须可读），其中已登记的 11px 序号/说明（6 处）随之进入 fonts 口径。登记保留，只许收紧。 */
+  { key: 'onboarding', path: '/onboarding', gate: '.ob__card, .ob', budget: { lt36: 0, lt44: 2, fonts: 6, hOver: 0 } },
   { key: 'history', path: '/user/learning-history', gate: '.history__items, .empty', budget: { lt36: 0, lt44: 10, fonts: 1, hOver: 0 } },
   { key: 'agent-logs', path: '/user/agent-logs', gate: '.uc-table, .empty, main', budget: { lt36: 0, lt44: 33, fonts: 0, hOver: 0 } },
+  /* 2026-09-27 UI 审计 P0-8② 补盲：课堂页与目标对话页是用户主链路，此前从未纳入度量。
+     learn 用 logocheck2 名下已完结会话走只读续读（驱动配方见 project-mobile-density），
+     goal 量的是入口态（无进行中对话的确定性状态）。 */
+  { key: 'learn', path: '/learn/teaching_user_c2aad129-66b3-4783-a125-bf7dd7981283_6fb99ca2-1379-4986-a3fa-dfc5278a1048', gate: '.learn, .learn__gate, main', budget: { lt36: 0, lt44: 0, fonts: 0, hOver: 0 } },
+  { key: 'goal', path: '/goal-conversation', gate: '.goal, .entry, main', budget: { lt36: 0, lt44: 2, fonts: 0, hOver: 0 } },
 ];
 const EVAL_PATH = process.env.SPEC_EVAL_URL || '';
 
@@ -139,6 +145,8 @@ const DESKTOP = [
   { key: 'history', path: '/user/learning-history', gate: '.history__items, .empty', budget: { max: 24, steps: 10, small: 1 } },
   { key: 'settings', path: '/user/settings', gate: '.uc-card, main', budget: { max: 24, steps: 10, small: 1 } },
   { key: 'agent-logs', path: '/user/agent-logs', gate: '.uc-table, .empty, main', budget: { max: 24, steps: 10, small: 24 } },
+  { key: 'learn', path: '/learn/teaching_user_c2aad129-66b3-4783-a125-bf7dd7981283_6fb99ca2-1379-4986-a3fa-dfc5278a1048', gate: '.learn, .learn__gate, main', budget: { max: 22, steps: 7, small: 0 } },
+  { key: 'goal', path: '/goal-conversation', gate: '.goal, .entry, main', budget: { max: 20, steps: 8, small: 0 } },
 ];
 
 const dctx = await b.newContext({ viewport: { width: DW, height: DH } });

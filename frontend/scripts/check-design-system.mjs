@@ -404,6 +404,65 @@ for (const relPath of HEX_CSS_TARGETS) {
   if (f) mediaFontSizeCounts[relPath] = f
 }
 
+/* ---------- 规则 16：基础作用域的 <12px 硬编码字号（棘轮） ----------
+   规则 10 只覆盖 @media 档位内的字号；实测全 src 的 <12px 声明约 94% 落在
+   基础作用域，规则 10 完全不可见（UI 审计报告 2026-09-27 P0-8①）。
+   本规则把「基础作用域写死 <12px」纳入棘轮：存量按 10-11.5px 微标签登记保留
+   （边界②：不单方面放大桌面微标签），但只降不升——新增一处即失败。 */
+const SMALL_FONT_RE = /font-size\s*:\s*(\d+(?:\.\d+)?)px/g
+
+/** 剥掉所有 @media 块（含嵌套），只留基础作用域文本 */
+function cssWithoutMediaBlocks(css) {
+  let out = css
+  let m
+  while ((m = /@media[^{]*\{/.exec(out)) !== null) {
+    let depth = 1
+    let k = m.index + m[0].length
+    while (k < out.length && depth > 0) {
+      if (out[k] === '{') depth += 1
+      else if (out[k] === '}') depth -= 1
+      k += 1
+    }
+    out = out.slice(0, m.index) + out.slice(k)
+  }
+  return out
+}
+
+function countBaseSmallFonts(css) {
+  const s = cssWithoutMediaBlocks(css.replace(/\/\*[\s\S]*?\*\//g, ''))
+  let n = 0
+  for (const m of s.matchAll(SMALL_FONT_RE)) {
+    if (parseFloat(m[1]) < 12) n += 1
+  }
+  return n
+}
+
+const baseSmallFontCounts = {}
+{
+  // 治理面 = 全部 .vue 的 scoped 块（字号问题不限于 admin——审计范围是全前端）
+  const seen = new Set()
+  const allVue = [
+    ...walk(join(SRC, 'views')),
+    ...walk(join(SRC, 'components')),
+    ...walk(SRC).filter((p) => p.endsWith('.vue')),
+  ]
+  for (const abs of allVue) {
+    if (seen.has(abs)) continue
+    seen.add(abs)
+    const text = readFileSync(abs, 'utf8')
+    let total = 0
+    for (const { css } of styleBlocks(text)) total += countBaseSmallFonts(css)
+    if (total) baseSmallFontCounts[rel(abs)] = total
+  }
+  // 原语层 CSS（与规则 9/10 同一治理面）
+  for (const relPath of HEX_CSS_TARGETS) {
+    const abs = join(ROOT, relPath)
+    if (!existsSync(abs)) continue
+    const n = countBaseSmallFonts(readFileSync(abs, 'utf8'))
+    if (n) baseSmallFontCounts[relPath] = n
+  }
+}
+
 /* ---------- 规则 11：档位字号单调性（硬失败，无基线） ----------
    响应式档位的语义是"屏幕越大越舒展"。曾出现 1920 档字号大于相邻 2000 档
    （.mk-page 15→14.5、.mk-table td 15→13.5 等 12 个类）——越大屏字越小，
@@ -591,6 +650,7 @@ if (process.argv.includes('--update')) {
         hex: hexCounts,
         mediaSpacing: mediaSpacingCounts,
         mediaFontSize: mediaFontSizeCounts,
+        baseSmallFont: baseSmallFontCounts,
         radius: radiusCounts,
         boxShadow: shadowCounts,
         deadClasses: deadByFile,
@@ -666,6 +726,19 @@ if (shadowRegressions.length) {
 ✖ 规则 15：页面 scoped 非法 box-shadow 不得超过基线（只降不升）`)
   console.log('  阴影三档：面=none、悬浮/弹层=var(--mk-shadow-*)、描边=inset；彩色光晕/自写投影禁止（SPEC v2 §0.5）。')
   for (const v of shadowRegressions) console.log(`    ${v.file}: ${v.base} → ${v.now}`)
+}
+
+const baseSmallFontRegressions = []
+for (const [file, n] of Object.entries(baseSmallFontCounts)) {
+  const base = baseline.baseSmallFont?.[file] ?? 0
+  if (n > base) baseSmallFontRegressions.push({ file, now: n, base })
+}
+if (baseSmallFontRegressions.length) {
+  failed = true
+  console.log(`
+✖ 规则 16：基础作用域写死的 <12px 字号不得超过基线（只降不升）`)
+  console.log('  <12px 请用 var(--mk-fs-micro)（12px 起，档位自动放大）；确需更小的装饰字形请 --update 记账并写明理由。')
+  for (const v of baseSmallFontRegressions) console.log(`    ${v.file}: ${v.base} → ${v.now}`)
 }
 
 if (tierRegressions.length) {
