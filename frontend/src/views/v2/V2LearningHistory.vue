@@ -2,8 +2,9 @@
   <CapabilityShell title="学习历史" description="按时间回看你的学习会话：学了什么、学多久、完成情况。">
     <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题 + 说明） -->
     <div class="history__body">
-      <!-- 统计行（批19）：三个数字合并为一行内联统计，不再三张等权卡片 -->
-      <div class="history__stats">
+      <!-- 统计行（批19）：三个数字合并为一行内联统计，不再三张等权卡片。
+           接口失败时整行隐藏——显 0 会让学习者误以为「没学过」 -->
+      <div v-if="statsOk" class="history__stats">
         <span class="history__stat">学习 <strong>{{ totalSessions }}</strong> 次</span>
         <span class="history__stat">累计 <strong>{{ totalMinutes }}</strong> 分钟</span>
         <span class="history__stat">共 <strong>{{ activeDays }}</strong> 天有学习</span>
@@ -30,6 +31,12 @@
       <!-- 按日期分组的会话列表（2026-09-27 重排：按「日期 → 任务」聚合，
            同一天同一个任务的多条会话合并成一条，明细用「查看每次会话」展开） -->
       <div v-else class="history__list">
+        <!-- 翻页失败：内联横幅 + 「重试本页」。已加载行与页码原样保留
+             （页码由 sessions.length 推出，失败时没追加数据，重试天然落在同一页） -->
+        <div v-if="pageError" class="errorbar" role="alert">
+          {{ pageError }}
+          <button type="button" class="errorbar__retry" @click="loadMore">重试本页</button>
+        </div>
         <section v-for="group in groupedSessions" :key="group.date" class="card history__day">
           <div class="history__day-head">
             <strong>{{ group.label }}</strong>
@@ -134,7 +141,10 @@ const PAGE_SIZE = 30;
 
 const sessions = ref<SessionRecord[]>([]);
 const loading = ref(true);
+/** 首屏失败：整页错误态（列表还没内容，只能整页重试） */
 const loadError = ref('');
+/** 翻页失败：内联横幅，已加载行保留 */
+const pageError = ref('');
 const hasMore = ref(true);
 
 const doneStatuses = new Set(['completed', 'done', 'finished', 'closed']);
@@ -231,21 +241,19 @@ function sessionSummary(s: SessionRecord): string {
 const totalSessions = ref(0);
 const totalMinutes = ref(0);
 const activeDays = ref(0);
+/** 统计可用才渲染统计行：失败就隐藏，不用 0 冒充「没学过」 */
+const statsOk = ref(false);
 
 async function loadStats() {
   try {
-    const [sessionsRes, statsRes] = await Promise.all([
-      request.get('/users/me/sessions', { params: { limit: 1 } }),
-      request.get('/learning/stats')
-    ]);
-    // total 在响应顶层（与 data 平级），不能用 unwrap（它只取 data）
-    const sessionsBody = sessionsRes as { total?: number };
-    if (typeof sessionsBody?.total === 'number') totalSessions.value = sessionsBody.total;
+    // totalSessions 不再单独发 limit=1 请求：首屏列表响应顶层就带 total（见 load 里回填）
+    const statsRes = await request.get('/learning/stats');
     const stats = unwrap<{ time?: { totalMinutes?: number; activeLearningDays?: number } }>(statsRes);
     if (typeof stats?.time?.totalMinutes === 'number') totalMinutes.value = stats.time.totalMinutes;
     if (typeof stats?.time?.activeLearningDays === 'number') activeDays.value = stats.time.activeLearningDays;
+    statsOk.value = true;
   } catch {
-    /* 统计加载失败不阻塞列表（静默降级为 0） */
+    /* 统计加载失败不阻塞列表：隐藏统计行（模板 v-if="statsOk"），不显 0 */
   }
 }
 
@@ -361,11 +369,18 @@ async function load(reset = false) {
   if (loading.value && sessions.value.length > 0) return;
   loading.value = true;
   loadError.value = '';
+  pageError.value = '';
+  // 只有首屏失败才进整页错误态；翻页失败必须保住已加载的列表
+  const isFirstScreen = reset || sessions.value.length === 0;
   try {
     const page = reset ? 1 : Math.floor(sessions.value.length / PAGE_SIZE) + 1;
     const res = await request.get('/users/me/sessions', {
       params: { page, limit: PAGE_SIZE }
     });
+    // total 在响应顶层（与 data 平级，unwrap 只取 data）：首屏顺带回填「学习 N 次」统计，
+    // 省掉原来单独的 limit=1 请求
+    const body = res as { total?: number };
+    if (typeof body?.total === 'number') totalSessions.value = body.total;
     const data = unwrap<{ sessions?: SessionRecord[] }>(res);
     const items = Array.isArray(data) ? data as unknown as SessionRecord[] : data?.sessions || [];
     hasMore.value = items.length >= PAGE_SIZE;
@@ -376,7 +391,12 @@ async function load(reset = false) {
       sessions.value = [...sessions.value, ...items.filter((s) => !seen.has(s.id))];
     }
   } catch {
-    loadError.value = '无法读取学习记录，请稍后重试。';
+    // 翻页失败不动 sessions：已加载行保留，页码由 length 推出、天然落在失败的那一页
+    if (isFirstScreen) {
+      loadError.value = '无法读取学习记录，请稍后重试。';
+    } else {
+      pageError.value = '本页加载失败，已加载的记录仍保留。';
+    }
   } finally {
     loading.value = false;
   }
@@ -622,10 +642,6 @@ onMounted(() => {
   /* 加载态桌面 40px 上下留白，移动端收到 28（基线：加载/空态 ≤32） */
   .history__loading {
     padding: 28px 0;
-  }
-
-  .history__stat strong i {
-    font-size: 12px;
   }
 
   .history__body {

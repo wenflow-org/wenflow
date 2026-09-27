@@ -5,7 +5,7 @@
     <main class="paths__main">
       <!-- 从目标页过来：生成提示 -->
       <transition name="toast">
-        <div v-if="goalBanner" class="goal-banner">
+        <div v-if="goalBanner && hasGenerating" class="goal-banner">
           <span class="goal-banner__dot"></span>
           这版路径正在生成，一般 1-3 分钟。页面会自动刷新状态。
           <button type="button" class="goal-banner__close" @click="goalBanner = false">×</button>
@@ -156,9 +156,10 @@
                 <span class="pcard__percent">{{ card.percent }}%</span>
               </div>
               <div class="pcard__foot">
-                <span class="pcard__meta">
-                  阶段 {{ Math.max(1, Math.min(card.stageDone + 1, card.stages)) }} / {{ card.stages }}
-                  <template v-if="card.hours"> · 预计 {{ card.hours }} 小时</template>
+                <!-- stages=0（后端未给阶段数）时不渲染「阶段 1 / 0」这种破数 -->
+                <span v-if="card.stages || card.hours" class="pcard__meta">
+                  <template v-if="card.stages">阶段 {{ Math.max(1, Math.min(card.stageDone + 1, card.stages)) }} / {{ card.stages }}</template>
+                  <template v-if="card.hours">{{ card.stages ? ' · ' : '' }}预计 {{ card.hours }} 小时</template>
                 </span>
                 <span class="pcard__cta">
                   {{ card.kind === 'completed' ? '查看学习成果' : '继续学习' }}
@@ -269,6 +270,8 @@ const retrying = ref('');
 const menuFor = ref('');
 const deleting = ref('');
 const goalBanner = ref(route.query.from === 'goal');
+/** 存在生成中卡才显示「正在生成」横幅：生成早已完成/列表为空时这条提示是误导 */
+const hasGenerating = computed(() => cards.value.some((c) => c.kind === 'generating'));
 /** 生成状态轮询连续失败计数（超过阈值停止空转） */
 const pollFailCount = ref(0);
 
@@ -461,7 +464,9 @@ function thumbLetter(card: PathCard) {
 /** 整卡可点击：进入路径详情页 */
 function openPath(card: PathCard) {
   router.push(`/learning-path/${card.id}`);
-}const filterList = computed(() => [
+}
+
+const filterList = computed(() => [
   { key: 'all' as const, label: '全部', count: cards.value.length },
   { key: 'ready' as const, label: '进行中', count: countOf('ready') },
   { key: 'completed' as const, label: '已完成', count: countOf('completed') },
@@ -720,7 +725,8 @@ onBeforeUnmount(() => {
 }
 
 .pcard__progress-row { display: flex; align-items: center; gap: 10px; flex: 1; }
-.pcard__progress { flex: 1; height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
+/* 轨道/空态插画用主题线色：#edf1f8/#e7edf7 是亮底硬编码，暗色下整页唯一的亮块 */
+.pcard__progress { flex: 1; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
 .pcard__progress i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 .pcard__percent {
   font-size: 12px; font-weight: 800; color: var(--blue-deep);
@@ -760,22 +766,11 @@ onBeforeUnmount(() => {
   padding: 56px 0; color: var(--faint); font-size: 14px;
 }
 .empty__illus { display: flex; gap: 6px; }
-.empty__illus span { width: 26px; height: 8px; border-radius: 99px; background: #e7edf7; }
+.empty__illus span { width: 26px; height: 8px; border-radius: 99px; background: var(--line); }
 .empty__illus span:nth-child(2) { background: color-mix(in srgb, var(--blue) 30%, transparent); }
 
-.toast {
-  position: fixed; top: 76px; right: 24px; z-index: 50;
-  display: flex; align-items: center; gap: 9px;
-  background: var(--ink); color: #fff;
-  font-size: 13px; font-weight: 600;
-  padding: 11px 16px; border-radius: var(--mk-radius-xl);
-  box-shadow: 0 16px 40px rgba(23, 32, 51, 0.3);
-}
-.toast__icon {
-  width: 20px; height: 20px; border-radius: 50%;
-  background: var(--green); color: #fff;
-  display: grid; place-items: center; flex: 0 0 auto;
-}
+/* .toast/.toast__icon 本体是死 CSS 已删：全局 toast 由 utils/toast 独立渲染，不落在本组件；
+   下面的 toast-enter/leave 是上方 goal-banner <transition name="toast"> 的过渡类，保留 */
 .toast-enter-active, .toast-leave-active { transition: .25s ease; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-8px); }
 

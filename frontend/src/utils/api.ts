@@ -25,7 +25,8 @@ async function tryRefresh(): Promise<boolean> {
   if (refreshPromise) return refreshPromise;
   refreshPromise = (async () => {
     try {
-      const resp = await axios.post('/api/auth/refresh', null, { withCredentials: true });
+      // 走 resolveApiBaseUrl：prod 配 VITE_API_BASE_URL 跨源部署时，硬编码相对路径会静默刷新失败
+      const resp = await axios.post(`${resolveApiBaseUrl()}/auth/refresh`, null, { withCredentials: true });
       if (resp.data?.success === true) {
         // 刷新成功说明 HttpOnly 会话仍有效,补回本地标记,避免存储被清后守卫误判未登录
         localStorage.setItem(USER_SESSION_KEY, '1');

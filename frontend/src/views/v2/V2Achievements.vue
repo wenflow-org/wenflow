@@ -225,11 +225,11 @@ function formatDate(d?: string | Date) {
   return `${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-function rarityOf(xp: number): { label: string; cls: string; color: string } {
-  if (xp >= 200) return { label: '史诗', cls: 'rarity--epic', color: 'var(--accent)' }
-  if (xp >= 100) return { label: '稀有', cls: 'rarity--rare', color: 'var(--blue)' }
-  if (xp >= 50) return { label: '精良', cls: 'rarity--uncommon', color: 'var(--green)' }
-  return { label: '普通', cls: 'rarity--common', color: 'var(--mk-faint)' }
+function rarityOf(xp: number): { label: string; cls: string } {
+  if (xp >= 200) return { label: '史诗', cls: 'rarity--epic' }
+  if (xp >= 100) return { label: '稀有', cls: 'rarity--rare' }
+  if (xp >= 50) return { label: '精良', cls: 'rarity--uncommon' }
+  return { label: '普通', cls: 'rarity--common' }
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -300,7 +300,7 @@ onMounted(() => {
 .ov-line__text { font-size: 13.5px; color: var(--muted); }
 .ov-line__text strong { font-size: 16px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 .ov-line__xp { margin-left: 10px; font-size: 12px; color: var(--faint); }
-.ov-line__bar { height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
+.ov-line__bar { height: 6px; border-radius: 3px; background: var(--line, #eef0f4); overflow: hidden; }
 .ov-line__bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.4s ease; }
 
 .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -417,14 +417,15 @@ onMounted(() => {
   position: absolute; top: 8px; right: 8px;
   width: 28px; height: 28px;
   border-radius: var(--mk-radius-md); border: 0;
-  background: rgba(0,0,0,0.04);
+  /* 底色用 ink 派生：写死的 rgba(0,0,0,…) 在暗色下看不见 */
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: var(--faint);
   display: grid; place-items: center;
   cursor: pointer;
   opacity: 0; transition: opacity 0.15s, background 0.15s;
 }
 .ach-card:hover .ach-share { opacity: 1; }
-.ach-share:hover { background: rgba(0,0,0,0.08); color: var(--ink); }
+.ach-share:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); }
 /* 触屏没有 hover：不常显这个分享入口就永远点不到（此前只有 .ach-card:hover 一条路径） */
 @media (hover: none) {
   .ach-share { opacity: 1; }
@@ -434,16 +435,12 @@ onMounted(() => {
   /* 收进个人中心后的移动端压缩（2026-09-24 反馈「内容都偏大」）：
      390 下 2 列统计卡的 KPI 数字原为 28px（卡宽仅 ~165px）、成就卡内边距 16px、卡片高 176px——
      一张"我是谁"式的概览要吃掉整屏。按学习侧 KPI 刻度压到 21px/12px 边距。 */
-  .overview { grid-template-columns: repeat(2, 1fr); }
   .grid { grid-template-columns: 1fr 1fr; }
   /* 28×28 → 34×34 → 36×36（mobile:spec 的 lt36 门禁）：分享是卡角唯一的手势目标 */
   .ach-share { width: 36px; height: 36px; top: 4px; right: 4px; }
-  .ov { padding: 12px 14px; }
   /* 总览条原来横向 18px，和下面一整列 .ach-card 的 14px 差 4px——
      同宽卡堆在一列里，内容左缘落在 33/29 两条线上（2026-09-26 对齐走查）。 */
   .ov-line { padding-left: 14px; padding-right: 14px; }
-  .ov b { font-size: 16px; } /* 统计数字全站统一 16px */
-  .ov small { font-size: 12px; }
   .ach-card { padding: 12px 14px; }
   .ach-card__name { font-size: 14px; }
   .ach-card__icon-mark { font-size: 15px; }
@@ -459,13 +456,6 @@ onMounted(() => {
 
 <style scoped>
 .ach__loading { display: grid; justify-items: center; gap: 12px; padding: 64px 0; color: var(--faint); font-size: 13px; }
-.spinner {
-  width: 36px; height: 36px; border-radius: 50%;
-  border: 4px solid color-mix(in srgb, var(--blue) 15%, transparent);
-  border-top-color: var(--blue, #3478f6);
-  animation: ach-spin 0.9s linear infinite;
-}
-@keyframes ach-spin { to { transform: rotate(360deg); } }
 .errorbar {
   display: flex; align-items: center; gap: 8px;
   padding: 12px 16px;

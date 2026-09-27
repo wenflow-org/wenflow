@@ -14,8 +14,10 @@
       </div>
 
       <!-- 体检卡（批19）：整体状态为主指标突出，学习压力/掌握趋势/疲劳程度降为行内状态条
-           （原 4 张等权 KPI 卡墙）；读取失败/加载中各自有形态 -->
-      <section class="card vitals" :class="{ 'vitals--fail': currentLoadFailed }">
+           （原 4 张等权 KPI 卡墙）；读取失败/加载中各自有形态。
+           （原 vitals--fail 空类已删：失败已由每个指标的红色「读取失败」note 表达，
+           卡片级 class 既无样式也无额外信息量——2026-09-27 a11y 走查二选一，选删绑定） -->
+      <section class="card vitals">
         <div v-if="vitalsLoading" class="vitals__loading">
           <SkeletonLoader variant="lines" :count="2" />
         </div>
@@ -49,9 +51,10 @@
               <!-- 窗口选择器只在真的有更长历史可看时出现（数据不足 42 天时两档是同一条图，
                    留着只会让口径与图对不上——2026-09-27 外部走查） -->
               <div v-if="showRangeSeg" class="band__extra">
-                <div class="seg">
-                  <button type="button" class="seg__item" :class="{ 'seg__item--on': range === 42 }" @click="setRange(42)">42 天</button>
-                  <button type="button" class="seg__item" :class="{ 'seg__item--on': range === 90 }" @click="setRange(90)">90 天</button>
+                <!-- role+aria-pressed（2026-09-27 a11y）：纯视觉的选中底色读屏听不出，与图谱页层级分段同口径 -->
+                <div class="seg" role="group" aria-label="趋势时间窗口">
+                  <button type="button" class="seg__item" :class="{ 'seg__item--on': range === 42 }" :aria-pressed="range === 42" @click="setRange(42)">42 天</button>
+                  <button type="button" class="seg__item" :class="{ 'seg__item--on': range === 90 }" :aria-pressed="range === 90" @click="setRange(90)">90 天</button>
                 </div>
               </div>
             </div>
@@ -75,7 +78,9 @@
               <p>完成第一个任务后开始记录，连续学习约 3 天即可看到掌握趋势、疲劳度与整体状态曲线。</p>
             </div>
             <template v-else>
-              <div class="ff-chart" @mousemove="onChartHover" @mouseleave="hoverDay = null">
+              <!-- 触屏补 touchstart/touchmove（2026-09-27 a11y）：历史值此前只认 mousemove，
+                   手机上永远看不到。不 preventDefault，手势仍归页面滚动 -->
+              <div class="ff-chart" @mousemove="onChartHover" @touchstart="onChartHover" @touchmove="onChartHover" @mouseleave="hoverDay = null">
                 <svg :viewBox="`0 0 ${chartW} ${chartH}`" preserveAspectRatio="none" aria-hidden="true">
                   <!-- 横向网格线（2026-09-27 外部评审：原来没有任何坐标参照，曲线悬空感） -->
                   <g class="ff-grid">
@@ -102,7 +107,11 @@
                   </template>
                 </svg>
               </div>
-              <div v-if="displayDay" class="ff-info">
+              <!-- 500 条上限的口径说明（2026-09-27）：凑满上限说明大概率被截断，
+                   早段日子没有背景柱不是故障，先说清楚 -->
+              <p v-if="sessionsTruncated" class="ff-trunc">时长背景柱仅统计最近 {{ SESSIONS_LIMIT }} 次学习记录，更早的日子未计入。</p>
+              <!-- aria-live：SVG 本体 aria-hidden，唯一的历史值出口在这里，切日时 polite 播报 -->
+              <div v-if="displayDay" class="ff-info" aria-live="polite">
                 <b>{{ displayDay.label }}</b>
                 <span>时长 {{ displayDay.minutes }} 分钟</span>
                 <span class="ff-info__fitness">掌握 {{ displayDay.ktl ?? '—' }}</span>
@@ -114,8 +123,9 @@
             </div><!-- /band__body -->
           </section>
 
-          <!-- AI 建议（skill: adaptive-guidance-copy 生成，静态规则兜底） -->
-          <section class="card band">
+          <!-- AI 建议（skill: adaptive-guidance-copy 生成，静态规则兜底）
+               band--suggest：新用户空态时靠 order:-1 提到首屏（原挂在已删的 .suggest 卡上） -->
+          <section class="card band band--suggest">
             <div class="band__head">
               <div class="band__title">
                 <strong>AI 建议</strong>
@@ -263,11 +273,15 @@
 
               <!-- 诊断依据（原「状态评审」）：AI 的诊断书——为什么这么调，默认收起 -->
               <section v-if="reviewNarrative || reviewInsights.length" class="review ctl__review">
-                <button type="button" class="review__toggle" :aria-expanded="reviewOpen" @click="reviewOpen = !reviewOpen">
-                  <h3 class="review__title">诊断依据</h3>
-                  <span class="review__src">{{ reviewSource === 'model' ? 'AI 诊断' : '规则' }}<template v-if="reviewReliabilityText"> · {{ reviewReliabilityText }}</template></span>
-                  <span class="band__chev" :class="{ 'band__chev--open': reviewOpen }" aria-hidden="true">▾</span>
-                </button>
+                <!-- h3 包 button（2026-09-27 a11y）：button 的内容模型只允许 phrasing，标题进按钮非法；
+                     反过来包既保住标题语义又保住整行可点（APG disclosure 惯用式） -->
+                <h3 class="review__title">
+                  <button type="button" class="review__toggle" :aria-expanded="reviewOpen" @click="reviewOpen = !reviewOpen">
+                    诊断依据
+                    <span class="review__src">{{ reviewSource === 'model' ? 'AI 诊断' : '规则' }}<template v-if="reviewReliabilityText"> · {{ reviewReliabilityText }}</template></span>
+                    <span class="band__chev" :class="{ 'band__chev--open': reviewOpen }" aria-hidden="true">▾</span>
+                  </button>
+                </h3>
                 <div v-show="reviewOpen" class="review__body">
                   <p v-if="reviewNarrative" class="review__narrative">{{ reviewNarrative }}</p>
                   <ul v-if="reviewInsights.length" class="review__list">
@@ -617,10 +631,14 @@ const latestDay = computed<TrendPoint | null>(() => {
 const hoverDay = ref<TrendPoint | null>(null);
 const displayDay = computed<TrendPoint | null>(() => hoverDay.value ?? latestDay.value);
 
-function onChartHover(e: MouseEvent) {
+/** 鼠标与触屏共用（2026-09-27 a11y）：触屏事件没有顶层 clientX，取第一个触点
+ *  （只服务单指走查，多指交给浏览器滚动） */
+function onChartHover(e: MouseEvent | TouchEvent) {
   const el = e.currentTarget as HTMLElement;
   const rect = el.getBoundingClientRect();
-  const relX = ((e.clientX - rect.left) / rect.width) * chartW;
+  const x = 'touches' in e ? e.touches[0]?.clientX : e.clientX;
+  if (x === undefined) return;
+  const relX = ((x - rect.left) / rect.width) * chartW;
   let best: TrendPoint | null = null;
   let bestDist = Infinity;
   for (const p of points.value) {
@@ -633,16 +651,36 @@ function onChartHover(e: MouseEvent) {
   hoverDay.value = best;
 }
 
+/** 时长背景柱（仅展示不参与状态计算）：与 42/90 窗口无关，进页拉一次即可——
+ *  切窗口只重拉 trends，省一次 500 条全量请求（2026-09-27 从 loadTrends 拆出） */
+const SESSIONS_LIMIT = 500;
+const sessionsTruncated = ref(false);
+async function loadSessions() {
+  try {
+    const sessionRes = await request.get('/users/me/sessions', { params: { limit: SESSIONS_LIMIT } });
+    const list = unwrapArray(sessionRes);
+    // 正好顶到上限 → 大概率被截断，图上给出口径说明（见模板 ff-trunc）
+    sessionsTruncated.value = list.length >= SESSIONS_LIMIT;
+    const map = new Map<string, number>();
+    for (const s of list) {
+      const key = localDateKeyFromIso(typeof s.startTime === 'string' ? s.startTime : null);
+      if (!key) continue;
+      const duration = typeof s.durationMinutes === 'number' ? s.durationMinutes : 0;
+      map.set(key, (map.get(key) ?? 0) + duration);
+    }
+    dailyLoad.value = [...map.entries()].map(([date, minutes]) => ({ date, minutes }));
+  } catch {
+    // 背景柱是装饰层：失败就少画柱，不值得把整张趋势图打成错误态
+  }
+}
+
 let trendSeq = 0;
 async function loadTrends() {
   const seq = ++trendSeq;
   trendLoading.value = true;
   try {
     // 权威口径：后端 /state/trends（LSS/KTL/LF/LSB，与指标卡同源），替代前端自算 EWMA
-    const [trendRes, sessionRes] = await Promise.all([
-      request.get('/state/trends', { params: { days: range.value, range: 'recent' } }),
-      request.get('/users/me/sessions', { params: { limit: 500 } })
-    ]);
+    const trendRes = await request.get('/state/trends', { params: { days: range.value, range: 'recent' } });
     if (seq !== trendSeq) return;
     const trendData = unwrap<{ trends?: Array<{ date: string; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null }> }>(trendRes);
     stateTrends.value = (trendData?.trends || []).map((t) => ({
@@ -653,23 +691,12 @@ async function loadTrends() {
       lf: typeof t.lf === 'number' ? t.lf : null,
       lsb: typeof t.lsb === 'number' ? t.lsb : null
     }));
-    // 当日时长背景柱：仅展示，不参与状态计算（口径不冲突）
-    const list = unwrapArray(sessionRes);
-    const map = new Map<string, number>();
-    for (const s of list) {
-      const key = localDateKeyFromIso(typeof s.startTime === 'string' ? s.startTime : null);
-      if (!key) continue;
-      const duration = typeof s.durationMinutes === 'number' ? s.durationMinutes : 0;
-      map.set(key, (map.get(key) ?? 0) + duration);
-    }
-    dailyLoad.value = [...map.entries()].map(([date, minutes]) => ({ date, minutes }));
     trendError.value = false;
   } catch {
     // 只有最新一次请求的失败才展示错误态（旧请求的失败不覆盖新结果）
     if (seq !== trendSeq) return;
     trendError.value = true;
     stateTrends.value = [];
-    dailyLoad.value = [];
   } finally {
     if (seq === trendSeq) trendLoading.value = false;
   }
@@ -938,6 +965,7 @@ const guidanceLoading = ref(false);
 onMounted(() => {
   // 各数据源独立并发，互不阻塞（skill 引导最慢，不应拖住其他区块）
   void loadTrends();
+  void loadSessions();
 
   metricsAPI.getCurrentState()
     .then((v) => { current.value = v as Record<string, any> | null; })
@@ -998,8 +1026,7 @@ function loadGuidance() {
   border-radius: var(--mk-radius-modal);
   box-shadow: var(--shadow-sm);
 }
-.card-head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
-.muted { font-size: 12px; color: var(--faint); }
+/* 2026-09-27 死 CSS 清理：.card-head / .muted 模板已无对应元素（卡头统一走 band__head） */
 .btn-ghost {
   padding: 10px 18px; border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line); background: var(--surface, #fff);
@@ -1040,11 +1067,12 @@ function loadGuidance() {
 
 .state__grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
 .state__col { display: grid; gap: 16px; }
-/* P2-11：新用户（指标为空）时把「AI 建议」提到最前，作为首屏主内容；图表空态降级为「积累中」说明 */
-.state__col--empty .suggest { order: -1; }
+/* P2-11：新用户（指标为空）时把「AI 建议」提到最前，作为首屏主内容；图表空态降级为「积累中」说明
+   （原选择器 .suggest 随旧卡结构删除，2026-09-27 改挂到现役的 AI 建议 band 卡） */
+.state__col--empty .band--suggest { order: -1; }
 
-/* ---------- 趋势图 ---------- */
-.chart { padding: 20px 22px; display: grid; gap: 16px; }
+/* ---------- 趋势图 ----------
+   2026-09-27 死 CSS 清理：.chart / .suggest 卡级容器模板已无（现役卡是 band），删除 */
 .seg { display: inline-flex; padding: 3px; background: var(--line, #eef2fa); border-radius: var(--mk-radius-lg); gap: 2px; }
 .seg__item {
   border: 0; background: transparent; padding: 5px 11px; border-radius: var(--mk-radius-md);
@@ -1053,7 +1081,6 @@ function loadGuidance() {
 .seg__item--on { background: var(--surface, #fff); color: var(--ink); box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12); }
 
 /* ---------- AI 建议 ---------- */
-.suggest { padding: 20px 22px; display: grid; gap: 14px; }
 .suggest__list { display: grid; gap: 10px; }
 .sug {
   display: grid; grid-template-columns: 38px 1fr auto;
@@ -1063,7 +1090,6 @@ function loadGuidance() {
   border-radius: 13px;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.sug--done { opacity: .66; background: var(--canvas, #fafcff); }
 .sug__icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; }
 .sug__body strong { font-size: 13.5px; }
 .sug__body p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
@@ -1075,11 +1101,7 @@ function loadGuidance() {
   cursor: pointer; white-space: nowrap;
 }
 .sug__cta:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
-.sug__done {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 12px; font-weight: 800; color: var(--green);
-  white-space: nowrap;
-}
+/* 2026-09-27 死 CSS 清理：.sug--done / .sug__done 的「已完成」形态模板已无（level 只剩 info/warning/critical） */
 
 /* ---------- 侧栏 ---------- */
 .side { display: grid; gap: 12px; position: sticky; top: 16px; }
@@ -1106,8 +1128,7 @@ function loadGuidance() {
 </style>
 
 <style scoped>
-.metric__note--red { color: var(--red-ink); background: color-mix(in srgb, var(--red-ink) 13%, var(--surface)); }
-.chart__controls { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 2026-09-27 死 CSS 清理：.metric__note--red 与上一块重复、.chart__controls 模板已无 */
 .chart__loading { display: grid; justify-items: center; padding: 40px 0; }
 .chart__retry {
   margin-top: 10px;
@@ -1155,6 +1176,8 @@ function loadGuidance() {
 .ctl__review { margin-top: 16px; padding: 14px 0 0; border: 0; border-top: 1px solid var(--line); }
 .review__toggle {
   width: 100%; min-height: 36px;
+  /* font: inherit：h3 包 button 后，标题字号/字重由 h3 提供（button 默认不吃继承字体） */
+  font: inherit;
   display: flex; align-items: center; gap: 8px;
   padding: 0; border: 0; background: none; cursor: pointer; text-align: left;
 }
@@ -1252,6 +1275,8 @@ function loadGuidance() {
 
 .ff-chart { width: 100%; }
 .ff-chart svg { display: block; width: 100%; height: auto; }
+/* 背景柱 500 条上限的口径说明（见模板 ff-trunc） */
+.ff-trunc { margin: 8px 0 0; font-size: 12px; color: var(--faint); }
 .ff-bar { fill: color-mix(in srgb, var(--blue) 14%, transparent); }
 .ff-grid line { stroke: var(--line); stroke-width: 1; opacity: 0.6; }
 .ff-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
@@ -1283,11 +1308,9 @@ function loadGuidance() {
 @media (max-width: 1100px) {
   .vitals__value { font-size: 24px; }
   .vitals { padding: 14px 16px; }
-  .chart,
-  .suggest,
   /* 移动端单列堆叠，同宽卡片必须共用一条内容轨道：sidecard 原来横向 14 而
      vitals / band 都是 16，内容左缘落在 29/31 两条线上（2026-09-26 对齐走查）。
-     只动横向，竖向 12 是它自己的紧凑节奏。 */
+     只动横向，竖向 12 是它自己的紧凑节奏。（原 .chart / .suggest 死选择器已清） */
   .sidecard { padding: 12px 16px; }
   .chart__loading { padding: 28px 0; }
   .chart__empty { padding: 24px 0; }

@@ -107,14 +107,14 @@ describe('V2Dashboard 今日复习区（信噪比重设计）', () => {
     getAdaptiveGuidance.mockReset();
   });
 
-  it('主口径：下节课开头会先回捞 N 个（以课内温故计划为准）', async () => {
+  it('主口径：下节课开头会先复习 N 个（以课内温故计划为准；「回捞」口语已改「复习」）', async () => {
     const w = await mountDashboard();
-    expect(w.find('.review__plan-body strong').text()).toBe('下节课开头会先回捞 3 个旧知识点');
+    expect(w.find('.review__plan-body strong').text()).toBe('下节课开头会先复习 3 个旧知识点');
   });
 
   it('温故计划拿不到时回退到偏弱计数（不显示 0/空）', async () => {
     const w = await mountDashboard({ withPlan: false });
-    expect(w.find('.review__plan-body strong').text()).toBe('2 个知识点记忆偏弱，课开头会优先回捞');
+    expect(w.find('.review__plan-body strong').text()).toBe('2 个知识点记忆偏弱，课开头会优先复习');
   });
 
   it('概念明细/排队量/明日预告/逐条强度不再出现在学习台', async () => {

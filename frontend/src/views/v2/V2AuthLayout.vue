@@ -142,7 +142,8 @@ const isDark = useIsDark();
 .demo__msg { font-size: 13px; line-height: 1.6; }
 .demo__msg--user {
   justify-self: end;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 渐变浅端混 20% 深蓝：原纯 --blue 偏浅，白字对比度不足（走查 2026-09-27 P3，选加深而非文字投影——投影在浅色主题下发灰） */
+  background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 80%, var(--blue-deep)), var(--blue-deep));
   color: #fff;
   padding: 9px 13px;
   border-radius: 14px 14px 4px 14px;
@@ -238,7 +239,8 @@ const isDark = useIsDark();
 .demo__panel-bar i {
   animation:
     auth-bar-fill 1.6s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both,
-    auth-bar-pulse 3.4s ease-in-out 2.4s infinite alternate;
+    /* 限 3 次循环：装饰动画无限循环会持续分散注意力（走查 2026-09-27 P3；reduced-motion 已另行兜底） */
+    auth-bar-pulse 3.4s ease-in-out 2.4s 3 alternate;
 }
 @keyframes auth-bar-fill {
   from { width: 0; }
@@ -249,7 +251,8 @@ const isDark = useIsDark();
   to { width: 50%; }
 }
 .demo__field--asking .mark--asking {
-  animation: auth-ask 2.2s ease-in-out 2.4s infinite;
+  /* 同上：限 3 次后停（走查 2026-09-27 P3） */
+  animation: auth-ask 2.2s ease-in-out 2.4s 3;
 }
 @keyframes auth-ask {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 30%, transparent); }

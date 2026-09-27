@@ -31,6 +31,8 @@
     </div>
 
     <form v-else class="form" :aria-busy="loading" @submit.prevent="handleRegister">
+      <div v-if="formError" class="errorbar" role="alert">{{ formError }}</div>
+
       <label class="field" :class="{ 'field--error': errors.name }">
         <span class="field__label">用户名</span>
         <input v-model.trim="form.name" type="text" class="field__input" placeholder="2 - 20 个字符" autocomplete="username" autofocus @blur="touch('name')" />
@@ -65,10 +67,8 @@
         {{ loading ? '正在创建账号…' : '创建账号' }}
       </button>
 
-      <!-- 面向用户的表述；「防批量注册」是内部风控口径，不对用户解释 -->
-      <p v-if="dailyQuota > 0" class="quota-hint">
-        同一网络每天最多注册 {{ dailyQuota }} 个账号
-      </p>
+      <!-- 每 IP 配额不在页首预展示具体数字（走查 2026-09-27 P3：向访客泄露风控阈值）；
+           触达限制时后端错误信息会经下方 errorbar 自然提示 -->
 
       <div class="switch">
         <span>已有账号？</span>
@@ -93,11 +93,11 @@ const userStore = useUserStore();
 const loading = ref(false);
 
 const status = ref<'checking' | 'enabled' | 'disabled' | 'temporaryUnavailable' | 'failed'>('checking');
-const dailyQuota = ref(0);
 
 const form = reactive({ name: '', password: '', confirm: '' });
 const errors = reactive({ name: '', password: '', confirm: '' });
 const showPwd = ref(false);
+const formError = ref('');
 
 const checks = computed(() => ({
   length: form.password.length >= 8,
@@ -142,7 +142,6 @@ async function loadStatus() {
   status.value = 'checking';
   try {
     const s = await authAPI.getRegistrationStatus();
-    dailyQuota.value = Number(s.maxAccountsPerIpPerDay) || 0;
     if (s.registrationEnabled) status.value = 'enabled';
     else status.value = s.temporaryUnavailable ? 'temporaryUnavailable' : 'disabled';
   } catch {
@@ -151,6 +150,7 @@ async function loadStatus() {
 }
 
 async function handleRegister() {
+  formError.value = '';
   touch('name');
   touch('password');
   touch('confirm');
@@ -166,10 +166,17 @@ async function handleRegister() {
     const message = error && typeof error === 'object' && 'message' in error
       ? String(error.message)
       : '注册失败，请稍后重试';
-    toast.error(message);
+    // 行内 errorbar 为主，toast 只留给网络类错误（走查 2026-09-27 P3 三页统一）
+    formError.value = message;
+    if (isNetworkError(error)) toast.error(message);
   } finally {
     loading.value = false;
   }
+}
+
+/* http 层约定：断网/超时的 reject 不带 status 字段，业务错误一定带 */
+function isNetworkError(error: unknown): boolean {
+  return !(error && typeof error === 'object' && 'status' in error);
 }
 
 function goLogin() {
@@ -220,7 +227,6 @@ onMounted(loadStatus);
 .field__error { font-size: 12px; color: var(--red-ink); font-weight: 600; }
 
 .hint { margin: 0; font-size: 12px; color: var(--faint); }
-.quota-hint { margin: -4px 0 0; font-size: 12px; color: var(--faint); text-align: center; }
 .rules { list-style: none; margin: 0; padding: 0; display: flex; gap: 12px; flex-wrap: wrap; }
 .rules li { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--faint); }
 .rules li.is-ok { color: var(--green); font-weight: 700; }

@@ -257,8 +257,10 @@ select.uc-field__input {
   white-space: nowrap;
 }
 
-.uc-badge--ok { color: #1d7a4c; background: rgba(30, 158, 88, 0.1); }
-.uc-badge--warn { color: #b3540a; background: rgba(244, 170, 70, 0.14); }
+/* 墨色走 v2.css :root 的 *-ink token（color-mix 派生，暗色自动反向提亮）：
+   此前 ok/warn 写死浅色主题墨值，暗色下对比度掉档（--bad 已是同法） */
+.uc-badge--ok { color: var(--green-ink, #1d7a4c); background: rgba(30, 158, 88, 0.1); }
+.uc-badge--warn { color: var(--amber-ink, #b3540a); background: rgba(244, 170, 70, 0.14); }
 .uc-badge--bad { color: var(--red-ink); background: rgba(239, 117, 120, 0.1); }
 .uc-badge--info { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.1); }
 .uc-badge--muted { color: var(--faint, #67758f); background: rgba(103, 117, 143, 0.1); }

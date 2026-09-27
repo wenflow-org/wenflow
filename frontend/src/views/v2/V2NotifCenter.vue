@@ -187,12 +187,15 @@
  * - 面板：Tab 切换「通知」/「AI 任务」，默认落在有内容的一栏
  */
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '@/utils/api';
 import { timeAgo } from '@/views/admin-redesign/live';
 import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { getAgentLogs } from '@/api/userCustom';
 import { agentLabelOf } from './agent-labels';
+
+const router = useRouter();
 
 interface NotifItem {
   id: string; title: string; body: string | null; kind: string;
@@ -219,7 +222,11 @@ const notifPage = ref(1);
 const notifLoading = ref(false);
 const notifError = ref(false);
 
-const unread = computed(() => notifItems.value.filter((n) => !n.isRead).length);
+/* 未读数以后端列表接口自带的权威 unread 为准（服务端全量统计）：
+   此前 computed 只数「已加载首页 ≤10 条」且轮询从不刷新通知——
+   第 11 条未读开始角标就永远偏小、新通知不亮灯（2026-09-27 修复） */
+const unreadCount = ref(0);
+const unread = computed(() => unreadCount.value);
 
 async function notifLoad(reset = true) {
   if (reset) { notifPage.value = 1; notifItems.value = []; }
@@ -232,25 +239,45 @@ async function notifLoad(reset = true) {
     if (reset) notifItems.value = list;
     else notifItems.value = [...notifItems.value, ...list];
     notifTotal.value = data.total ?? notifItems.value.length;
+    if (typeof data.unread === 'number') unreadCount.value = data.unread;
   } catch {
     notifError.value = true;
   } finally {
     notifLoading.value = false;
   }
 }
+/** 角标专用轻量刷新（limit=1 最小负载，只要 data.unread）：挂在既有轮询上顺带执行 */
+async function refreshUnread() {
+  try {
+    const res = await api.get('/notifications', { params: { page: 1, limit: 1 } });
+    const data = res.data?.data ?? {};
+    if (typeof data.unread === 'number') unreadCount.value = data.unread;
+  } catch { /* 静默：角标失败不干扰 AI 任务轮询 */ }
+}
 function notifLoadMore() { notifPage.value += 1; void notifLoad(false); }
 async function notifReadAll() {
   try {
     await api.post('/notifications/read-all');
     notifItems.value = notifItems.value.map((n) => ({ ...n, isRead: true }));
+    unreadCount.value = 0;
   } catch { /* 静默 */ }
 }
 function onNotifClick(n: NotifItem) {
   if (!n.isRead) {
     void api.post(`/notifications/${encodeURIComponent(n.id)}/read`);
     n.isRead = true;
+    unreadCount.value = Math.max(0, unreadCount.value - 1);
   }
-  if (n.link) window.location.href = n.link;
+  const link = n.link;
+  if (!link) return;
+  // 仅放行 http(s) 与站内相对路径；javascript:/data: 等危险 scheme 一律丢弃。
+  // 站内路径此前走 window.location.href 整页刷新，改 router.push 走 SPA 导航
+  if (/^https?:\/\//i.test(link)) {
+    window.location.href = link;
+  } else if (link.startsWith('/')) {
+    open.value = false;
+    void router.push(link);
+  }
 }
 
 /* ---------- AI 任务（原 V2TaskCenter 逻辑） ---------- */
@@ -345,7 +372,8 @@ async function refresh() {
   const prevBusy = busy;
   const prevCount = busyItems.value.length;
   busyItems.value = [];
-  await Promise.allSettled([collectBusy(), feedRefresh()]);
+  // 未读角标刷新挂在同一轮询上：轮询本来就在跑（忙 12s/闲 60s），不另起定时器
+  await Promise.allSettled([collectBusy(), feedRefresh(), refreshUnread()]);
   busy = busyItems.value.length > 0;
   if (busy !== prevBusy && !busy && prevCount > 0) await feedRefresh();
   lastSync.value = Date.now();

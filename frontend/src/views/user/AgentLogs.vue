@@ -22,8 +22,10 @@
         <select v-model="filters.agentId" class="uc-field__input filter-select">
           <option value="">全部</option>
           <option value="skill:path-planning">Path Agent</option>
-          <option value="teaching-agent">AI Teaching Agent</option>
-          <option value="ai-teaching-agent">AI Teaching Agent (legacy)</option>
+          <!-- 两个 id 都是授课（新 teaching-agent / 旧 ai-teaching-agent），展示名统一「AI 授课」；
+               旧 id 只服务历史数据，保留独立筛选项 -->
+          <option value="teaching-agent">AI 授课</option>
+          <option value="ai-teaching-agent">AI 授课（legacy）</option>
           <option value="learner-model-agent">Learner State Hub</option>
         </select>
       </label>
@@ -35,7 +37,9 @@
           <option value="path">路径规划</option>
           <option value="teaching">教学讲解</option>
           <option value="tutoring">辅导答疑</option>
-          <option value="profile">学习画像更新</option>
+          <!-- 与下方 getCapabilityTypeLabel 的 profile 标签同词（能力列显示「学习者模型」），
+               此前筛选项叫「学习画像更新」、表格里叫「学习者模型」，同一类两条名 -->
+          <option value="profile">学习者模型</option>
           <option value="system">系统底层调用</option>
         </select>
       </label>
@@ -165,7 +169,9 @@
 
     <!-- 详情弹窗 -->
     <div v-if="detailVisible && currentLog" class="uc-dialog-mask" @click.self="closeDetail">
-      <div class="uc-dialog uc-dialog--detail" role="dialog" aria-modal="true" aria-label="日志详情与诊断">
+      <!-- 弹窗可访问性：Esc 关闭 / 打开时聚焦关闭钮 / Tab 圈禁复用 admin-redesign 的
+           useEscape + useOverlay（后者顺带锁背景滚动、关闭后焦点回落触发元素） -->
+      <div ref="detailPanel" class="uc-dialog uc-dialog--detail" role="dialog" aria-modal="true" aria-label="日志详情与诊断">
         <div class="uc-dialog__head">
           <h3>日志详情与诊断</h3>
           <button type="button" class="uc-dialog__close" aria-label="关闭" @click="closeDetail">✕</button>
@@ -239,10 +245,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { toast } from '../../utils/toast';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { getAgentLogDetail, getAgentLogs, exportAgentLogs } from '@/api/userCustom';
+import { useEscape } from '@/views/admin-redesign/useEscape';
+import { useOverlay } from '@/views/admin-redesign/useOverlay';
 import dayjs from 'dayjs';
 import '@/components/user/uc.css';
 
@@ -280,7 +288,8 @@ const loading = ref(false);
 const logs = ref<AgentLogItem[]>([]);
 const detailVisible = ref(false);
 const currentLog = ref<AgentLogItem | null>(null);
-const isMobileDetail = ref(false);
+/** 详情弹窗根元素：useOverlay 的焦点圈禁 / 初始聚焦作用域 */
+const detailPanel = ref<HTMLElement | null>(null);
 const detailLoading = ref(false);
 const detailError = ref('');
 const loadError = ref('');
@@ -296,7 +305,6 @@ const filters = reactive({
   endDate: ''
 });
 
-const dateRange = ref<[Date, Date] | null>(null);
 // 手作日期筛选（原生 date input）
 const startDateInput = ref(filters?.startDate || '');
 const endDateInput = ref(filters?.endDate || '');
@@ -307,21 +315,22 @@ const pagination = reactive({
   total: 0
 });
 
-// 统计数据
+// 统计口径与表格一致：基于 displayLogs（客户端能力过滤后的当前页）。
+// 此前用未过滤的 logs，筛选「学习者模型」时成功率/耗时仍是全页的，数字对不上表。
 const successRate = computed(() => {
-  if (logs.value.length === 0) return 0;
-  const successCount = logs.value.filter(l => l.success).length;
-  return ((successCount / logs.value.length) * 100).toFixed(1);
+  if (displayLogs.value.length === 0) return 0;
+  const successCount = displayLogs.value.filter(l => l.success).length;
+  return ((successCount / displayLogs.value.length) * 100).toFixed(1);
 });
 
 const avgDuration = computed(() => {
-  if (logs.value.length === 0) return 0;
-  const total = logs.value.reduce((sum, l) => sum + (l.durationMs || 0), 0);
-  return Math.round(total / logs.value.length);
+  if (displayLogs.value.length === 0) return 0;
+  const total = displayLogs.value.reduce((sum, l) => sum + (l.durationMs || 0), 0);
+  return Math.round(total / displayLogs.value.length);
 });
 
 const totalTokens = computed(() => {
-  return logs.value.reduce((sum, l) => sum + (l.tokensUsed || 0), 0);
+  return displayLogs.value.reduce((sum, l) => sum + (l.tokensUsed || 0), 0);
 });
 
 const displayLogs = computed(() => {
@@ -336,18 +345,8 @@ let loadLogsSeq = 0;
 let detailSeq = 0;
 
 onMounted(() => {
-  syncDetailViewport();
-  window.addEventListener('resize', syncDetailViewport);
   loadLogs();
 });
-
-onUnmounted(() => {
-  window.removeEventListener('resize', syncDetailViewport);
-});
-
-const syncDetailViewport = () => {
-  isMobileDetail.value = window.innerWidth <= 768;
-};
 
 const loadLogs = async () => {
   // 竞态守卫：seq 代际号 last-wins，快速翻页/连点查询时丢弃过期响应
@@ -416,6 +415,11 @@ const closeDetail = () => {
   currentLog.value = null;
 };
 
+// Esc 关闭 + 焦点圈禁（useOverlay 打开时自动聚焦弹窗内首个按钮，即右上角关闭钮；
+// 关闭后焦点回落触发元素、解锁背景滚动）。放在 closeDetail 之后：实参按值求值，不能前引。
+useEscape(() => detailVisible.value, closeDetail);
+useOverlay(detailVisible, detailPanel);
+
 const sourceBadgeClass = (log: AgentLogItem) =>
   getLogSourceLabel(log) === '平台底层' ? 'uc-badge--muted' : 'uc-badge--info';
 
@@ -426,7 +430,6 @@ const resetFilters = () => {
   filters.includeSystem = false;
   filters.startDate = '';
   filters.endDate = '';
-  dateRange.value = null;
   startDateInput.value = '';
   endDateInput.value = '';
   pagination.page = 1;
@@ -976,7 +979,8 @@ const copyText = async (text: string, successMessage: string) => {
 .detail-error-box {
   background: rgba(239, 117, 120, 0.08);
   border: 1px solid rgba(239, 117, 120, 0.3);
-  color: #c0454a;
+  /* 墨色走 token：写死的 #c0454a 在暗色下对比度不足 */
+  color: var(--red-ink, #c0454a);
   border-radius: 10px;
   padding: 12px;
   margin: 12px;

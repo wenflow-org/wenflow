@@ -6,9 +6,9 @@
       </router-link>
 
       <section class="ob__card">
-        <!-- 步骤进度（4 段） -->
-        <div class="ob__progress" aria-hidden="true">
-          <span v-for="i in totalSteps" :key="i" :class="{ 'is-on': i <= step }"></span>
+        <!-- 步骤进度（4 段）：对读屏可感知——当前步标 aria-current（走查 2026-09-27 P3） -->
+        <div class="ob__progress">
+          <span v-for="i in totalSteps" :key="i" :class="{ 'is-on': i <= step }" :aria-current="i === step ? 'step' : undefined"></span>
         </div>
 
         <Transition name="ob-swap" mode="out-in">
@@ -169,21 +169,40 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useIsDark } from '@/composables/useIsDark';
 
 const isDark = useIsDark();
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import api from '@/utils/api'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 const userName = computed(() => userStore.user?.name || '同学')
 
 const totalSteps = 4
 const step = ref(1)
+
+/* 待补发标记：onboarding 接口失败时本地已写 completed=true，store 的 false 缓存
+   TTL 只对 false 生效、之后不会再有重拉，必须自己记一笔（走查 2026-09-27 P2） */
+const ONBOARDING_PENDING_KEY = 'wf_onboarding_pending'
+
+/* 与登录/注册页同一套同源校验：守卫把用户弹来引导页时存了 ?redirect=，
+   完成/跳过后应回原目标而不是一刀切 /dashboard（走查 2026-09-27 P2） */
+const safeRedirect = computed(() => {
+  const value = Array.isArray(route.query.redirect) ? route.query.redirect[0] : route.query.redirect;
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return null;
+  try {
+    const target = new URL(value, window.location.origin);
+    if (target.origin !== window.location.origin) return null;
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return null;
+  }
+});
 
 function next() {
   if (step.value < totalSteps) step.value++
@@ -201,13 +220,24 @@ async function markDone() {
   userStore.markOnboardingCompleted()
   try {
     await api.post('/users/me/onboarding')
-  } catch { /* 失败不阻塞导航；store 的 false 缓存 TTL 会兜底重拉档案 */ }
+    sessionStorage.removeItem(ONBOARDING_PENDING_KEY)
+  } catch {
+    /* 失败不阻塞导航；写待补发标记，下次进入本页且仍为登录态时静默补发一次 */
+    try { sessionStorage.setItem(ONBOARDING_PENDING_KEY, '1') } catch { /* 隐私模式等下拿不到 sessionStorage，静默放弃 */ }
+  }
 }
+
+/* 补发：登出后补发只会 401，仅在仍登录时执行 */
+onMounted(() => {
+  if (sessionStorage.getItem(ONBOARDING_PENDING_KEY) && userStore.isLoggedIn) {
+    markDone()
+  }
+})
 
 /* 引导只教「怎么用」，目标规划交给 /goal-conversation 自己完成 */
 async function goDashboard() {
   await markDone()
-  router.replace('/dashboard')
+  router.replace(safeRedirect.value || '/dashboard')
 }
 </script>
 

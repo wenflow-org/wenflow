@@ -26,6 +26,7 @@
                     class="uc-field__input profile-name-input"
                     maxlength="64"
                     placeholder="输入新用户名"
+                    aria-label="用户名"
                     @keyup.enter="handleSaveName"
                   />
                   <button type="button" class="uc-btn uc-btn--primary uc-btn--sm" :disabled="nameSubmitting" @click="handleSaveName">
@@ -94,7 +95,7 @@
               </div>
             </div>
             <div class="danger-form">
-              <input v-model="deactivatePassword" type="password" class="uc-field__input" placeholder="输入当前密码确认注销" @keyup.enter="handleDeactivate" />
+              <input v-model="deactivatePassword" type="password" class="uc-field__input" placeholder="输入当前密码确认注销" aria-label="当前密码（确认注销）" @keyup.enter="handleDeactivate" />
               <button type="button" class="uc-btn uc-btn--danger" :disabled="deactivating" @click="handleDeactivate">
                 {{ deactivating ? '注销中…' : '注销账号' }}
               </button>
@@ -278,13 +279,6 @@ async function handleDeactivate() {
 .profile-page {
   display: grid;
   gap: 16px;
-  min-width: 0;
-}
-
-.profile-content {
-  display: grid;
-  gap: 16px;
-  min-height: 200px;
   min-width: 0;
 }
 
@@ -472,13 +466,6 @@ async function handleDeactivate() {
 .danger-form .uc-field__input {
   max-width: 320px;
 }
-
-.confirm-desc {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--ink, #172033);
-}
 </style>
 
 <style scoped>
@@ -567,11 +554,6 @@ async function handleDeactivate() {
 
   .danger-form {
     gap: 8px;
-  }
-
-  .confirm-desc {
-    font-size: 13px;
-    line-height: 1.6;
   }
 
   /* 资料卡再收一档（2026-09-24 反馈「个人中心五个选项里的内容都偏大」）：

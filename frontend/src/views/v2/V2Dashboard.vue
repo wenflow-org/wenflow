@@ -128,7 +128,7 @@
               <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
             </div>
             <h1 class="action__title">路径正在生成，稍等一下</h1>
-            <p class="action__desc">生成一般需要 1-2 分钟，完成后页面会自动刷新，这里会出现今日行动。你也可以先去别的页面看看。</p>
+            <p class="action__desc">生成一般需要 1-2 分钟，这一页会自动检查进度，完成后直接出现今日行动。你也可以先去别的页面看看。</p>
             <div class="action__meta">
               <span class="tag tag--cyan">正在生成</span>
               <span class="tag">信息已保留</span>
@@ -284,9 +284,9 @@
           <div class="card-head">
             <strong>整月节奏</strong>
             <div class="month__nav">
-              <button type="button" class="month__arrow" @click="shiftMonth(-1)">‹</button>
+              <button type="button" class="month__arrow" aria-label="上一月" @click="shiftMonth(-1)">‹</button>
               <span>{{ monthLabel }}</span>
-              <button type="button" class="month__arrow" :class="{ 'month__arrow--off': isCurrentMonth }" @click="shiftMonth(1)">›</button>
+              <button type="button" class="month__arrow" :class="{ 'month__arrow--off': isCurrentMonth }" aria-label="下一月" @click="shiftMonth(1)">›</button>
             </div>
             <button type="button" class="link-muted" @click="monthOpen = false">收起</button>
           </div>
@@ -344,7 +344,7 @@
     <!-- 当天学习复盘抽屉 -->
     <transition name="sheet">
       <div v-if="daySheetOpen" class="sheet-mask" @click.self="daySheetOpen = false">
-        <aside class="sheet" role="dialog" aria-label="当天学习明细">
+        <aside ref="daySheetRef" class="sheet" role="dialog" aria-modal="true" aria-label="当天学习明细" tabindex="-1">
           <header class="sheet__head">
             <div class="sheet__head-main">
               <div class="sheet__date">{{ daySheet.title }}</div>
@@ -429,7 +429,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Flame, Medal, Sparkles } from 'lucide-vue-next';
 import request from '@/utils/api';
@@ -442,6 +442,7 @@ import AiContentNote from '@/components/AiContentNote.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
 import { useCurrentTask } from '@/composables/useCurrentTask';
+import { useSafePolling } from '@/composables/useSafePolling';
 import { unwrapArray } from './unwrap';
 
 const router = useRouter();
@@ -511,9 +512,9 @@ const reviewPlan = ref<{
     回捞是带在下一节课开头做的，原文案会让人以为要另上一节复习课 */
 const reviewHeadline = computed(() => {
   const planned = reviewPlan.value?.items?.length ?? 0;
-  if (planned > 0) return `下节课开头会先回捞 ${planned} 个旧知识点`;
+  if (planned > 0) return `下节课开头会先复习 ${planned} 个旧知识点`;
   const weak = reviewDue.value.filter((item) => item.reason === 'below-threshold').length;
-  if (weak > 0) return `${weak} 个知识点记忆偏弱，课开头会优先回捞`;
+  if (weak > 0) return `${weak} 个知识点记忆偏弱，课开头会优先复习`;
   return `${reviewDue.value.length} 个知识点到期，上课时会带`;
 });
 const reviewFooterHint = computed(() => {
@@ -550,6 +551,8 @@ function buildDashboardSnapshot() {
 let dashboardSnapshot: ReturnType<typeof buildDashboardSnapshot> | null = null;
 
 async function loadAll() {
+  // 作废所有在途的月历会话请求：loadAll 的结果总是最新，翻月/选日的慢响应不得覆盖
+  sessionsSeq += 1;
   const snap = dashboardSnapshot;
   const sameMonth = !!snap
     && snap.monthCursor.year === monthCursor.value.year
@@ -682,6 +685,28 @@ const pageState = computed<'active' | 'attention' | 'generating' | 'empty'>(() =
   if (primaryPath.value.generating) return 'generating';
   return 'active';
 });
+
+/* 生成中轮询（2026-09-27 修复）：生成卡与提示条一直承诺「完成后自动刷新」，
+   但此前没有任何轮询兑现——用户在卡前干等永远不更新。现按承诺用 useSafePolling
+   每 25s 拉一次 getPaths：phase 离开 generating（ready/failed）即停轮询并 loadAll
+   刷新全量（失败态走手动重试卡，不再轮询）；skipWhenHidden 页面隐藏时跳过，
+   连续失败有退避+断路器兜底。失败态点「重新生成」成功后 loadAll 把状态推回
+   generating，这里同样接管后续轮询。 */
+const generationPolling = useSafePolling(
+  async () => {
+    paths.value = (await learningAPI.getPaths()) as unknown as Array<Record<string, any>>;
+    if (pageState.value !== 'generating') {
+      // 到达终态：fn 内 stop 避免再调度（composable 约定的业务终止方式），再刷全量
+      generationPolling.stop();
+      await loadAll();
+    }
+  },
+  { interval: 25000, skipWhenHidden: true }
+);
+watch(pageState, (state) => {
+  if (state === 'generating') generationPolling.start();
+  else generationPolling.stop();
+}, { immediate: true });
 
 /* ================= 今日任务 ================= */
 /* 用共享 pickCurrentTask/useCurrentTask（与路径详情页 currentTask 同一算法）：
@@ -831,7 +856,7 @@ const tipTone = computed(() => {
 
 const tipText = computed(() => {
   if (pageState.value === 'attention') return '路径生成失败通常是暂时的。重新生成一般需要 1-2 分钟，已确认的信息都会保留。';
-  if (pageState.value === 'generating') return '路径正在生成中，一般需要 1-2 分钟。页面会自动刷新，你也可以先去别的页面看看。';
+  if (pageState.value === 'generating') return '路径正在生成中，一般需要 1-2 分钟，完成后这一页会自动更新。';
   const copy = guidanceCopy.value;
   const warning = copy?.warningCopy;
   if (warning && warning !== '当前没有明显风险。') return warning;
@@ -891,13 +916,13 @@ function sessionLocalDate(s: { startTime?: string | null }): string {
 }
 const todayStr = localDateKey(new Date());
 
-/** 认知带宽枚举 → 中文（light/medium/heavy 等） */
+/** 认知带宽枚举 → 中文（light/medium/heavy 等）；stress_test 是埋造数据，对外统一显示「—」 */
 function bandwidthLabel(v: string): string {
   const map: Record<string, string> = {
     light: '轻度',
     medium: '中度',
     heavy: '重度',
-    stress_test: '压力测试'
+    stress_test: '—'
   };
   return map[v] ?? v;
 }
@@ -915,7 +940,12 @@ const reviewBlockVisible = computed(() => Boolean(sourceFailed.value.review) || 
 const agendaMeta = computed(() => {
   const parts: string[] = [];
   if (todaySchedule.value?.activeGoals?.length) parts.push(`预算 ${todaySchedule.value.totalPlanned} 分钟`);
-  if (reviewDue.value.length) parts.push(`复习 ${reviewDue.value.length} 项`);
+  if (reviewDue.value.length) {
+    // 与下方复习行同口径标注两个数字：到期=接口全量、课上带=预算裁剪后的计划数——
+    // 此前卡头「复习 6 项」与计划行「先复习 1 个」同屏无解释，像同一个数字的两个说法
+    const planned = reviewPlan.value?.items?.length ?? 0;
+    parts.push(planned > 0 ? `到期 ${reviewDue.value.length} · 课上带 ${planned}` : `到期 ${reviewDue.value.length}`);
+  }
   return parts.join(' · ');
 });
 /** 激励行（原 side-stack mini 卡内容压平）：天数已在问候栏 pill，这里只给行动建议 */
@@ -996,11 +1026,17 @@ const isCurrentMonth = computed(() => {
 });
 const monthLabel = computed(() => `${monthCursor.value.year}年${monthCursor.value.month + 1}月`);
 
+/* 月历会话请求序号：快速翻月/连点日期时，慢的旧请求后到会把新月份的数据整个覆盖
+   （sessions 是月历唯一数据源）。只接受最后一次发起的结果（2026-09-27 竞态修复） */
+let sessionsSeq = 0;
+
 async function shiftMonth(dir: number) {
   if (dir > 0 && isCurrentMonth.value) return;
   const d = new Date(monthCursor.value.year, monthCursor.value.month + dir, 1);
   monthCursor.value = { year: d.getFullYear(), month: d.getMonth() };
-  sessions.value = await fetchSessions(monthCursor.value).catch(() => []);
+  const seq = ++sessionsSeq;
+  const list = await fetchSessions(monthCursor.value).catch(() => []);
+  if (seq === sessionsSeq) sessions.value = list;
 }
 
 interface MonthCell { date: string; dayNum: number; minutes: number; outside: boolean; future: boolean; isToday: boolean; level: 0 | 1 | 2 | 3 }
@@ -1056,7 +1092,10 @@ function selectDay(date: string) {
   if (date.slice(0, 7) !== `${monthCursor.value.year}-${String(monthCursor.value.month + 1).padStart(2, '0')}`) {
     const [y, m] = date.split('-').map(Number);
     monthCursor.value = { year: y, month: m - 1 };
-    fetchSessions(monthCursor.value).then((list) => (sessions.value = list)).catch(() => {});
+    const seq = ++sessionsSeq;
+    fetchSessions(monthCursor.value)
+      .then((list) => { if (seq === sessionsSeq) sessions.value = list; })
+      .catch(() => {});
   }
   monthOpen.value = true;
 }
@@ -1075,13 +1114,19 @@ const selectedInfo = computed(() => {
 /* ================= 当天学习复盘抽屉 ================= */
 const daySheetOpen = ref(false);
 const openSessionEvents = ref<Set<string>>(new Set());
+const daySheetRef = ref<HTMLElement | null>(null);
 
 function onSheetKey(e: KeyboardEvent) {
   if (e.key === 'Escape') daySheetOpen.value = false;
 }
 watch(daySheetOpen, (open) => {
-  if (open) window.addEventListener('keydown', onSheetKey);
-  else window.removeEventListener('keydown', onSheetKey);
+  if (open) {
+    window.addEventListener('keydown', onSheetKey);
+    // 打开即移焦进抽屉：role=dialog 配 aria-modal 后键盘/读屏用户要能直接在抽屉内操作
+    nextTick(() => daySheetRef.value?.focus({ preventScroll: true }));
+  } else {
+    window.removeEventListener('keydown', onSheetKey);
+  }
 });
 onBeforeUnmount(() => window.removeEventListener('keydown', onSheetKey));
 
@@ -1223,42 +1268,6 @@ onMounted(loadAll);
 </script>
 
 <style scoped>
-/* ---------- 导航 ---------- */
-.nav {
-  display: flex; align-items: center; gap: 28px;
-  padding: 0 28px; height: 60px;
-  background: rgba(255, 255, 255, 0.92);
-  border-bottom: 1px solid var(--line);
-}
-.nav__brand { display: flex; align-items: center; gap: 9px; }
-.nav__logo {
-  width: 28px; height: 28px; border-radius: 9px;
-  background: linear-gradient(135deg, var(--blue), var(--accent));
-  color: #fff; font-size: 14px; font-weight: 800;
-  display: grid; place-items: center;
-}
-.nav__name { font-weight: 700; font-size: 14px; }
-.nav__links { display: flex; gap: 4px; flex: 1; }
-.nav__links a {
-  padding: 7px 12px; border-radius: 9px;
-  font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer;
-}
-.nav__links a.active { color: var(--blue-deep); background: rgba(52, 120, 246, 0.09); }
-.nav__right { display: flex; align-items: center; gap: 12px; }
-.nav__cta {
-  padding: 8px 16px; border-radius: var(--mk-radius-pill);
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  color: #fff; font-size: 13px; font-weight: 700;
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--blue) 28%, transparent); cursor: pointer;
-}
-.nav__avatar { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; }
-.nav__avatar i {
-  width: 26px; height: 26px; border-radius: 50%;
-  background: var(--blue-deep); color: #fff;
-  font-style: normal; font-size: 12px;
-  display: grid; place-items: center;
-}
-
 /* ---------- 布局 ---------- */
 .dash__main {
   max-width: 1080px; margin: 0 auto;
@@ -1293,7 +1302,6 @@ onMounted(loadAll);
   background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 7%, transparent), color-mix(in srgb, var(--cyan) 5%, transparent));
 }
 .tip--attention { border-color: color-mix(in srgb, var(--red) 25%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--red) 7%, transparent), color-mix(in srgb, var(--amber) 5%, transparent)); }
-.tip--empty { border-color: color-mix(in srgb, var(--accent) 22%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 7%, transparent), color-mix(in srgb, var(--blue) 4%, transparent)); }
 .tip__icon {
   width: 26px; height: 26px; border-radius: var(--mk-radius-md);
   background: var(--surface, #fff); color: var(--blue-deep);
@@ -1301,7 +1309,6 @@ onMounted(loadAll);
   box-shadow: 0 1px 3px rgba(23, 32, 51, 0.1);
 }
 .tip--attention .tip__icon { color: var(--red-ink); }
-.tip--empty .tip__icon { color: var(--accent); }
 .tip p { margin: 0; flex: 1; font-size: 13px; line-height: 1.6; color: var(--ink); }
 /* 关闭钮按 44 触控下限扩区（视觉 × 仍 16px，居中） */
 .tip__close { color: var(--faint); font-size: 16px; cursor: pointer; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; }
@@ -1325,7 +1332,8 @@ onMounted(loadAll);
   box-shadow: var(--shadow-sm);
 }
 .card-head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
-.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; padding: 5px 0; transition: color 0.15s ease; }
+/* .link-muted 全页唯一基础定义：多个 router-link 渲染成 <a>，须自带去下划线 */
+.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; text-decoration: none; padding: 5px 0; transition: color 0.15s ease; }
 .link-muted:hover { color: var(--blue-deep); }
 
 /* ---------- 今日预算（多目标调度台账） ---------- */
@@ -1579,7 +1587,6 @@ onMounted(loadAll);
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 1100px) {
-  .nav__links { display: none; }
   /* 单列轨道用 minmax(0,1fr) 而非 1fr：1fr = minmax(auto,1fr)，下限仍是内容 min-content，
      折叠区里的 nowrap 内容会顺着这条链把整页顶宽（展开态 390→538px、居中按钮被迫右移）。 */
   .dash__grid-main, .dash__grid-week { grid-template-columns: minmax(0, 1fr); }
@@ -1595,13 +1602,10 @@ onMounted(loadAll);
 
 <style scoped>
 /* ---------- 交互补充 ---------- */
-.nav__links a { text-decoration: none; }
-.nav__cta { text-decoration: none; }
 a.btn-primary { text-decoration: none; }
 .example { text-decoration: none; }
 
 .action__eyebrow--rest { color: var(--faint); }
-.action__eyebrow--ok { color: var(--green); }
 
 </style>
 
@@ -1615,8 +1619,6 @@ a.btn-primary { text-decoration: none; }
   border-top: 1px solid var(--line); padding-top: 12px;
 }
 .path__detail-link:hover { text-decoration: underline; }
-.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; text-decoration: none; padding: 5px 0; }
-.link-muted:hover { color: var(--blue-deep); }
 .dash__main { width: 100%; }
 </style>
 
@@ -1642,19 +1644,11 @@ a.btn-primary { text-decoration: none; }
 .tip--attention { border-color: color-mix(in srgb, var(--red) 25%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--red) 7%, transparent), color-mix(in srgb, var(--amber) 5%, transparent)); }
 .tip--attention .tip__icon { color: var(--red-ink); }
 .tip--normal { border-color: color-mix(in srgb, var(--blue) 18%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 7%, transparent), color-mix(in srgb, var(--cyan) 5%, transparent)); }
-.path__note {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 12px; font-weight: 600; color: var(--amber, #b3540a);
-  background: color-mix(in srgb, var(--amber) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 30%, transparent);
-  border-radius: var(--mk-radius-lg);
-  padding: 8px 11px;
-}
 </style>
 
 <style scoped>
-/* 超长机器生成标题：两行截断 */
-.pcard__title, .hero h1, .path__title strong {
+/* 超长机器生成标题：两行截断（.pcard__title/.hero h1 是旧版遗留选择器，已随卡片退役） */
+.path__title strong {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1884,7 +1878,6 @@ a.btn-primary { text-decoration: none; }
 [data-theme='dark'] .mday--h2 { background: rgba(77, 139, 248, 0.45); color: var(--mk-ink); }
 [data-theme='dark'] .day__cell--h3,
 [data-theme='dark'] .mday--h3 { background: rgba(77, 139, 248, 0.85); color: #ffffff; }
-[data-theme='dark'] .nav { background: var(--v2nav-bg); }
 [data-theme='dark'] .budget__bar { background: rgba(230, 237, 247, 0.12); }
 [data-theme='dark'] .mday--prev,
 [data-theme='dark'] .mday--future { color: var(--faint); }
@@ -1968,11 +1961,6 @@ a.btn-primary { text-decoration: none; }
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-  .review__more {
-    min-height: 36px;
-    display: flex;
-    align-items: center;
   }
 }
 </style>

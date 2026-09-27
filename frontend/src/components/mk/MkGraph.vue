@@ -1,6 +1,44 @@
+<script lang="ts">
+/**
+ * 关系线样式（按主题出色）：画布 links 与 MkGraphExplorer 的 DOM 图例必须同源
+ * （此前图例画 --mk-blue、图里实际是 #7a8ba6，两处各自为政）。改色只改这一处。
+ * 放普通 <script> 块是因为 <script setup> 不允许值导出（type 导出可以）。
+ */
+export interface RelationStyle {
+  color: string
+  width: number
+  type: 'solid' | 'dashed'
+}
+export function relationStyleOf(relation: string, dark: boolean): RelationStyle {
+  if (relation === 'prerequisite') return { color: dark ? '#8ea6c8' : '#7a8ba6', width: 1.6, type: 'solid' }
+  if (relation === 'part_of') return { color: dark ? '#7c828c' : '#b9bec7', width: 1, type: 'dashed' }
+  // 未知关系沿用"属于"的灰色，但保持实线（与旧版兜底一致）
+  return { color: dark ? '#7c828c' : '#b9bec7', width: 1, type: 'solid' }
+}
+// 节点/边的类型导出放普通 <script> 块：<script setup> 与普通块并存时，
+// setup 内的 type 导出不再出现在模块导出面（vue-tsc 实测），消费方的 import type 会断
+export interface MkGraphNode {
+  id: string
+  label: string
+  /** 概念层级：concept（coreConcept）/ kc（知识组件） */
+  level?: string
+  taxonomy?: string | null
+  masteryScore?: number | null
+  stability?: string | null
+  extractionCount?: number
+  lastSeenAt?: string | null
+}
+export interface MkGraphEdge {
+  fromConceptId: string
+  toConceptId: string
+  relation: string
+}
+</script>
+
 <template>
   <div class="mk-graph-wrap">
-    <div ref="el" class="mk-graph" :style="{ height }"></div>
+    <!-- 高度走 CSS 变量：窄屏要在样式层按 ≤720px 档位减半，内联 height 会压过媒体查询 -->
+    <div ref="el" class="mk-graph" :style="{ '--mkg-h': height }"></div>
     <p v-if="isolatedCount > 0" class="mk-graph__note">
       另有 {{ isolatedCount }} 个概念暂无前置/归属关系，未在图中显示
     </p>
@@ -35,22 +73,7 @@ import type { EChartsCoreOption } from 'echarts/core'
 
 echarts.use([GraphChart, TooltipComponent, CanvasRenderer])
 
-export interface MkGraphNode {
-  id: string
-  label: string
-  /** 概念层级：concept（coreConcept）/ kc（知识组件） */
-  level?: string
-  taxonomy?: string | null
-  masteryScore?: number | null
-  stability?: string | null
-  extractionCount?: number
-  lastSeenAt?: string | null
-}
-export interface MkGraphEdge {
-  fromConceptId: string
-  toConceptId: string
-  relation: string
-}
+// MkGraphNode / MkGraphEdge 类型导出移至顶部普通 <script> 块（与普通块并存时 setup 内 type 导出不可见）
 
 const props = withDefaults(
   defineProps<{
@@ -104,11 +127,6 @@ function colorOf(node: MkGraphNode, dark: boolean): string {
   return dark ? '#8a8f7a' : '#7d8470'
 }
 
-const RELATION_STYLE: Record<string, { color: string; width: number; type: 'solid' | 'dashed' }> = {
-  prerequisite: { color: '#7a8ba6', width: 1.6, type: 'solid' },
-  part_of: { color: '#b9bec7', width: 1, type: 'dashed' }
-}
-
 /**
  * 折行（最多 2 行，超出加省略号）。中文概念名普遍 10-20 字，
  * 单行会横跨整张图并互相压；两行折行后长度可控、也不再被截成"…"。
@@ -120,6 +138,14 @@ function wrapLabel(text: string, perLine: number): string {
   const rest = value.slice(perLine)
   if (rest.length <= perLine) return `${first}\n${rest}`
   return `${first}\n${rest.slice(0, perLine - 1)}…`
+}
+
+/** tooltip formatter 输出的是 HTML：label 来自概念名（课程/用户数据），
+ *  不转义会把名字里的 & <> 直接吃进标记——既毁排版也是注入面 */
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (ch) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch
+  ))
 }
 
 function buildOption(): EChartsCoreOption {
@@ -167,7 +193,7 @@ function buildOption(): EChartsCoreOption {
           ? '未评估'
           : `${Math.round(node.masteryScore * 100)}%`
         return [
-          `<b>${node.label}</b>`,
+          `<b>${escapeHtml(node.label)}</b>`,
           `${node.level === 'concept' ? '核心概念' : '知识组件'}`,
           `掌握度：${mastery}${node.stability ? ` · ${node.stability}` : ''}`,
           `提取次数：${node.extractionCount ?? 0}`
@@ -233,17 +259,27 @@ function buildOption(): EChartsCoreOption {
             source: edge.fromConceptId,
             target: edge.toConceptId,
             relation: edge.relation,
-            lineStyle: RELATION_STYLE[edge.relation] ?? { color: '#b9bec7', width: 1, type: 'solid' }
+            // 与 DOM 图例同源（见文件头 relationStyleOf 注释）
+            lineStyle: relationStyleOf(edge.relation, dark)
           }))
       }
     ]
   }
 }
 
+let chartTheme: 'light' | 'dark' | null = null
+
 function render() {
   if (!el.value) return
+  // 主题是 echarts.init 时烘进实例的（tooltip 底色/文字色跟着主题走），setOption 换不掉：
+  // 运行时切主题必须 dispose 重建，否则暗色页面里还弹亮底 tooltip。
+  if (chart && chartTheme !== props.theme) {
+    chart.dispose()
+    chart = null
+  }
   if (!chart) {
     chart = echarts.init(el.value, props.theme)
+    chartTheme = props.theme
     // 不注解入参（交给 ECharts 的 ECElementEvent），内部按图节点形状取值——避免 any
     chart.on('click', (params) => {
       if (params?.dataType !== 'node') { emit('select', null); return }
@@ -292,6 +328,19 @@ onBeforeUnmount(() => {
 }
 .mk-graph {
   width: 100%;
+  height: var(--mkg-h, 520px);
+  /* roam:true 会接管画布手势，单指竖向拖动把页面滚动一起吞掉。pan-y 只把「竖向滑动」
+     还给浏览器（页面照常滚，zrender 收 pointercancel 自然收手）；双指捏合不属于 pan-y，
+     触摸事件照常到达 zrender，缩放不受影响。
+     （已核 zrender 6.1：自身不写 touch-action、不对 touchmove preventDefault，纯 CSS 即生效） */
+  touch-action: pan-y;
+}
+/* 窄屏画布降档（≤720px 减半）：竖屏手机上 560px 高的力导向图大半是空云团，
+   砍半档露出核心结构，也少吞一屏滚动距离 */
+@media (max-width: 720px) {
+  .mk-graph {
+    height: calc(var(--mkg-h, 520px) / 2);
+  }
 }
 .mk-graph__note {
   margin: 6px 0 0;

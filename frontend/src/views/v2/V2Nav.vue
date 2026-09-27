@@ -10,6 +10,7 @@
           :key="item.to"
           :to="item.to"
           :class="{ active: isActive(item) }"
+          :aria-current="isActive(item) ? 'page' : undefined"
         >{{ item.label }}</router-link>
       </nav>
       <div class="v2nav__right">
@@ -65,6 +66,7 @@
       :to="item.to"
       class="v2nav__tab"
       :class="{ 'v2nav__tab--active': isActive(item) }"
+      :aria-current="isActive(item) ? 'page' : undefined"
     >
       <span class="v2nav__tab-icon" aria-hidden="true">
         <component :is="item.icon" :size="20" :stroke-width="1.75" />
@@ -81,6 +83,7 @@ import { Activity, ChevronDown, House, Layers, LogOut, MessageSquareText, Moon, 
 import { useUserStore } from '@/stores/user';
 import { toast } from '@/utils/toast';
 import { applyDocumentTheme, readTheme, writeTheme } from '@/utils/theme';
+import { useIsDark } from '@/composables/useIsDark';
 import V2NotifCenter from './V2NotifCenter.vue';
 
 const route = useRoute();
@@ -123,10 +126,11 @@ function onNewGoalClick() {
 const userName = computed(() => userStore.user?.name || '学习者');
 const avatarLetter = computed(() => (userStore.user?.name || '学').charAt(0));
 
-/* 主题切换（原 ThemeToggle 逻辑，移入头像菜单） */
-const isDark = ref(false);
+/* 主题切换（原 ThemeToggle 逻辑，移入头像菜单）。
+   isDark 改用 useIsDark 组合式（单一事实源 = <html data-theme>）：此前自维护 ref，
+   别处（如路由 syncThemeForRoute）改主题时这里不同步，logo 暗色版/菜单文案会错位 */
+const isDark = useIsDark();
 function applyTheme(dark: boolean) {
-  isDark.value = dark;
   applyDocumentTheme(dark ? 'dark' : 'light');
   writeTheme(dark ? 'dark' : 'light');
 }
@@ -136,8 +140,10 @@ function toggleTheme() {
 
 async function handleLogout() {
   menuOpen.value = false;
-  userStore.logout();
-  toast.success('已退出登录');
+  // 等 logout 真正结束再按结果提示：此前不等结果就报成功——网络失败时
+  // store 已 toast「登出失败」，会再叠一条自相矛盾的「已退出登录」
+  if (await userStore.logout()) toast.success('已退出登录');
+  // 本地会话状态在 store.logout 里先行清理，无论后端登出成败都应回登录页
   await router.push('/login');
 }
 

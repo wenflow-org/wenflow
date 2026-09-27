@@ -57,14 +57,22 @@
             <i class="mk-ge__dot mk-ge__dot--none" />未评估
           </span>
           <span class="mk-ge__legend-group">
-            <i class="mk-ge__line mk-ge__line--prereq" />前置依赖（先掌握左边）
-            <i class="mk-ge__line mk-ge__line--part" />属于（知识组件 → 核心概念）
+            <i
+              class="mk-ge__line"
+              :style="{ borderTop: `${legendLines.prereq.width}px ${legendLines.prereq.type} ${legendLines.prereq.color}` }"
+            />前置依赖（先掌握左边）
+            <i
+              class="mk-ge__line"
+              :style="{ borderTop: `${legendLines.part.width}px ${legendLines.part.type} ${legendLines.part.color}` }"
+            />属于（知识组件 → 核心概念）
           </span>
           <span class="mk-ge__legend-group mk-ge__legend-hint">圆点=核心概念 · 方块=知识组件 · 拖动/滚轮可缩放</span>
         </div>
       </div>
 
-      <aside class="mk-ge__side">
+      <!-- 侧栏详情随画布点选切换，对读屏是「远端变更」→ polite 播报摘要
+           （完整 AT 等价画布清单为长期项，不在本次实施范围——2026-09-27 a11y 走查） -->
+      <aside class="mk-ge__side" aria-live="polite">
         <template v-if="selected">
           <h4 class="mk-ge__side-title">{{ selected.label }}</h4>
           <!-- 字段分区（2026-09-27）：概览四格 + 关系分区（发丝线分隔），替代原来的平铺 kv 行 -->
@@ -106,7 +114,7 @@
  * 它要重新请求（后端按 pathId 收敛节点与边），不是纯前端过滤。
  */
 import { computed, ref } from 'vue'
-import MkGraph from './MkGraph.vue'
+import MkGraph, { relationStyleOf } from './MkGraph.vue'
 import type { MkGraphEdge, MkGraphNode } from './MkGraph.vue'
 import MkLoading from './MkLoading.vue'
 
@@ -173,6 +181,16 @@ const counts = computed(() => {
 })
 
 const labelById = computed(() => new Map(props.nodes.map((n) => [n.id, n.label])))
+
+/** 图例线样式与画布边线同源（relationStyleOf 按 theme 出色）：此前图例写死 --mk-blue，
+ *  画布实际是 #7a8ba6，图例教的颜色和图里画的不是同一个 */
+const legendLines = computed(() => {
+  const dark = props.theme === 'dark'
+  return {
+    prereq: relationStyleOf('prerequisite', dark),
+    part: relationStyleOf('part_of', dark)
+  }
+})
 
 /**
  * 选中节点的关系分组。方向语义（实测标定）：
@@ -360,8 +378,7 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue, #3
   height: 0;
   border-top-width: 2px;
 }
-.mk-ge__line--prereq { border-top: 2px solid var(--mk-blue); }
-.mk-ge__line--part { border-top: 2px dashed var(--mk-line); }
+/* 线色不再写死在 CSS：图例与画布同源取 relationStyleOf（见 script legendLines） */
 .mk-ge__legend-hint {
   opacity: 0.8;
 }

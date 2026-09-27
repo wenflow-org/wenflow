@@ -115,7 +115,9 @@ async function handleLogin() {
   loading.value = true;
   try {
     await userStore.login(form.name, form.password, remember.value);
-    localStorage.setItem(LAST_NAME_KEY, form.name);
+    // 「记住我」勾选才记住用户名：未勾选仍写入会让勾选框语义落空（走查 2026-09-27 P3）
+    if (remember.value) localStorage.setItem(LAST_NAME_KEY, form.name);
+    else localStorage.removeItem(LAST_NAME_KEY);
     toast.success('登录成功');
     // 新用户引导：未完成 onboarding → 跳转引导页
     if (userStore.user?.onboardingCompleted === false) {
@@ -128,10 +130,16 @@ async function handleLogin() {
       ? String(error.message)
       : '登录失败，请检查用户名和密码';
     formError.value = message;
-    toast.error(message);
+    // 行内 errorbar 为主，toast 只留给网络类错误（走查 2026-09-27 P3 三页统一）
+    if (isNetworkError(error)) toast.error(message);
   } finally {
     loading.value = false;
   }
+}
+
+/* http 层约定：断网/超时的 reject 不带 status 字段，业务错误一定带 */
+function isNetworkError(error: unknown): boolean {
+  return !(error && typeof error === 'object' && 'status' in error);
 }
 
 async function goRegister() {

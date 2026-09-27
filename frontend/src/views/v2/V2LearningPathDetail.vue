@@ -68,7 +68,7 @@
                  与环的 percent 是同一比值，且每阶段卡、侧栏「还剩 N 个任务」已有计数） -->
             <div class="hero__metrics">
               <span class="metric"><b>{{ currentStageNo }} / {{ stages.length || '?' }}</b>当前阶段</span>
-              <span class="metric"><b>{{ path.estimatedHours || '—' }} 小时</b>预计投入</span>
+              <span class="metric"><b>{{ path.estimatedHours ? `${path.estimatedHours} 小时` : '—' }}</b>预计投入</span>
               <span v-if="path.deadlineText" class="metric"><b>{{ path.deadlineText }}</b>目标周期</span>
             </div>
             <div class="hero__actions">
@@ -123,7 +123,7 @@
               <p>阶段与任务生成后，会在这里展示学习计划。请稍后刷新页面查看。</p>
             </section>
             <section v-for="(stage, si) in stages" :key="stage.id || si" class="stage card" :class="`stage--${stageStatus(stage, si)}`">
-              <button type="button" class="stage__head" @click="toggleStage(si)">
+              <button type="button" class="stage__head" :aria-expanded="openStages.includes(si)" @click="toggleStage(si)">
                 <span class="stage__no" :class="`stage__no--${stageStatus(stage, si)}`">
                   <svg v-if="stageStatus(stage, si) === 'done'" viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
                   <template v-else>{{ stageNo(stage, si) }}</template>
@@ -166,7 +166,7 @@
                   </span>
                   <div class="task__body">
                     <strong>{{ task.title || task.displayLabel }}</strong>
-                    <small>{{ taskKindText(task) }} · 约 {{ task.estimatedMinutes || '—' }} 分钟</small>
+                    <small>{{ taskKindText(task) }} · {{ task.estimatedMinutes ? `约 ${task.estimatedMinutes} 分钟` : '—' }}</small>
                     <small v-if="materialRefLabels(task).length" class="task__material">
                       资料：
                       <button
@@ -205,7 +205,7 @@
                 <strong>{{ currentTask.title || currentTask.displayLabel }}</strong>
                 <p>完成后还剩 {{ remainingAfterCurrent }} 个任务。</p>
                 <div class="sidecard__meta">
-                  <span class="tag tag--blue">约 {{ currentTask.estimatedMinutes || '—' }} 分钟</span>
+                  <span class="tag tag--blue">{{ currentTask.estimatedMinutes ? `约 ${currentTask.estimatedMinutes} 分钟` : '—' }}</span>
                   <span class="tag">{{ taskKindText(currentTask) }}</span>
                 </div>
                 <button type="button" v-if="canLearn" class="btn-primary btn-primary--block" @click="goLearn(currentTask.id)">
@@ -217,7 +217,7 @@
                 <ol class="next-list">
                   <li v-for="t in nextTasks" :key="t.id">
                     <strong>{{ t.title || t.displayLabel }}</strong>
-                    <small>{{ t.estimatedMinutes || '—' }} 分钟</small>
+                    <small>{{ t.estimatedMinutes ? `${t.estimatedMinutes} 分钟` : '—' }}</small>
                   </li>
                 </ol>
               </div>
@@ -305,10 +305,11 @@
 
     <!-- 调整路径弹窗：三场景（学不好重来 / 学了些调剩余 / 系统按学习情况建议） -->
     <div v-if="adjustDialogOpen" class="adjust-dialog-mask" @click.self="adjustDialogOpen = false">
-      <div class="adjust-dialog card">
+      <!-- role/aria-modal + 打开移焦：含破坏性 rebuild，读屏与键盘用户要能感知弹窗边界并从弹窗内开始 Tab -->
+      <div ref="adjustDialogRef" class="adjust-dialog card" role="dialog" aria-modal="true" aria-labelledby="adjustDialogTitle" tabindex="-1">
         <div class="adjust-dialog__head">
           <div>
-            <h3 class="adjust-dialog__title">调整这条路径</h3>
+            <h3 id="adjustDialogTitle" class="adjust-dialog__title">调整这条路径</h3>
             <p class="adjust-dialog__desc">说说你的情况和想法，选一种调整方式。已学完的内容我们会帮你保留衔接。</p>
           </div>
           <button type="button" class="adjust-dialog__close" aria-label="关闭" @click="adjustDialogOpen = false">
@@ -419,11 +420,13 @@
                 <strong>当前及之后全部</strong>
                 <small>从当前阶段（第 {{ firstOpenStageNo || '?' }} 阶段）起，把后面还没学的阶段一起按新说明调整</small>
               </button>
+              <!-- 切到 from 即取第一个可选项：select 所见第一项而 v-model 仍为 null 时，
+                   提交判空会静默降级成「仅当前阶段」，与用户所见错配 -->
               <button
                 type="button"
                 class="adjust-scope__opt"
                 :class="{ 'is-on': adjustScope === 'from' }"
-                @click="adjustScope = 'from'"
+                @click="adjustScope = 'from'; adjustFromStage = adjustFromStage ?? reshapeFromOptions[0]?.stageNumber ?? null"
               >
                 <strong>自选起始阶段</strong>
                 <small>从你指定的某个未学阶段起调整，之前的计划保持不变</small>
@@ -727,6 +730,8 @@ const canLearn = computed(() => !lifecycle.value || lifecycle.value.phase === 'r
 
 /* ---------- 生成轮询 ---------- */
 let pollTimer = 0;
+/** 状态查询连续失败计数：超过阈值熔断，停止空转轮询（对齐列表页断路器） */
+let pollFailCount = 0;
 function schedulePoll() {
   window.clearTimeout(pollTimer);
   pollTimer = window.setTimeout(pollOnce, 5000);
@@ -734,13 +739,21 @@ function schedulePoll() {
 async function pollOnce() {
   try {
     const lc = await learningAPI.getPathGenerationStatus(pathId.value) as unknown as Record<string, any>;
+    pollFailCount = 0;
     if (lc.phase === 'ready' || lc.status === 'failed' || lc.status === 'stale') {
       // 生成完成/失败：静默刷新详情，避免整页 loading 闪烁
       await load(true);
       return;
     }
     lifecycle.value = lc;
-  } catch { /* ignore */ }
+  } catch {
+    // 静默失败不该无限轮询：连续 6 次失败说明状态接口异常，熔断并交还用户手动刷新
+    pollFailCount += 1;
+    if (pollFailCount >= 6) {
+      toast.error('生成状态查询失败，已停止自动刷新，请稍后手动刷新页面');
+      return;
+    }
+  }
   schedulePoll();
 }
 
@@ -765,13 +778,17 @@ async function doRetry() {
 /* ---------- 调整路径（三场景） ---------- */
 type AdjustMode = 'rebuild' | 'reshape' | 'auto' | null;
 const adjustDialogOpen = ref(false);
+const adjustDialogRef = ref<HTMLElement | null>(null);
 /* Esc 关闭调整弹窗（批18）：此前只能点遮罩/关闭钮 */
 function onAdjustDialogKey(e: KeyboardEvent) {
   if (e.key === 'Escape') adjustDialogOpen.value = false;
 }
 watch(adjustDialogOpen, (open) => {
-  if (open) window.addEventListener('keydown', onAdjustDialogKey);
-  else window.removeEventListener('keydown', onAdjustDialogKey);
+  if (open) {
+    window.addEventListener('keydown', onAdjustDialogKey);
+    // 打开即移焦到弹窗：否则焦点仍留在页底「调整路径」按钮上，Tab 会先穿过整页内容
+    nextTick(() => adjustDialogRef.value?.focus());
+  } else window.removeEventListener('keydown', onAdjustDialogKey);
 });
 onBeforeUnmount(() => window.removeEventListener('keydown', onAdjustDialogKey));
 const adjustText = ref('');
@@ -933,6 +950,21 @@ async function runAdjustIntent(mode: NonNullable<AdjustMode>, t: string, fromSta
   }
 }
 
+/** 409 拦截统一处理（submitAdjust / confirmAiAdvice 两入口共用）：调整范围内有未结束课堂 →
+    弹窗内列出，供一键放弃后自动重试原调整；返回是否命中 */
+function handleSessionConflict(err: any, retry: () => Promise<void>): boolean {
+  const code = err?.response?.data?.error?.code;
+  const sessions = err?.response?.data?.error?.details?.sessions;
+  if (err?.response?.status === 409 && code === 'PATH_MUTATION_HAS_OPEN_SESSION' && Array.isArray(sessions) && sessions.length > 0) {
+    clearedSessionIds.value = [];
+    blockingSessions.value = sessions;
+    pendingAdjustRetry.value = retry;
+    toast.info(`还有 ${sessions.length} 个未结束课堂，结束它们即可继续调整`);
+    return true;
+  }
+  return false;
+}
+
 async function submitAdjust() {
   const t = adjustText.value.trim();
   const mode = adjustMode.value;
@@ -944,8 +976,10 @@ async function submitAdjust() {
   }
   if (adjusting.value) return;
   adjusting.value = true;
+  /* 409 重试闭包在 catch 里也引用起点，故声明提到 try 外（const 在 try 内对 catch 不可见） */
+  let fromStageNumber: number | undefined;
   try {
-    const fromStageNumber = mode === 'reshape'
+    fromStageNumber = mode === 'reshape'
       ? (adjustScope.value === 'rest' && firstOpenStageNo.value
         ? firstOpenStageNo.value
         : (adjustScope.value === 'from' && adjustFromStage.value
@@ -955,15 +989,10 @@ async function submitAdjust() {
     pendingAdjustRetry.value = () => runAdjustIntent(mode, t, fromStageNumber, clearedSessionIds.value);
     await runAdjustIntent(mode, t, fromStageNumber);
   } catch (err: any) {
-    const code = err?.response?.data?.error?.code;
-    const sessions = err?.response?.data?.error?.details?.sessions;
     const msg = err?.response?.data?.error?.message || err?.message || '调整失败，请稍后再试';
     // 409：调整范围内有未结束课堂 → 弹窗内列出，供一键放弃后自动重试
-    if (err?.response?.status === 409 && code === 'PATH_MUTATION_HAS_OPEN_SESSION' && Array.isArray(sessions) && sessions.length > 0) {
-      clearedSessionIds.value = [];
-      blockingSessions.value = sessions;
+    if (handleSessionConflict(err, () => runAdjustIntent(mode, t, fromStageNumber, clearedSessionIds.value))) {
       adjusting.value = false;
-      toast.info(`还有 ${sessions.length} 个未结束课堂，结束它们即可继续调整`);
       return;
     }
     toast.error(msg);
@@ -1103,6 +1132,11 @@ async function confirmAiAdvice() {
       setTimeout(() => { load(true); }, 1500);
     }
   } catch (err: any) {
+    // 与 submitAdjust 对齐：409 课堂拦截复用「清场 → 自动重试」闭环（重试时 aiAdvice 仍在，原诊断 reason 原样再执行）
+    if (handleSessionConflict(err, () => confirmAiAdvice())) {
+      adjusting.value = false;
+      return;
+    }
     toast.error(err?.response?.data?.error?.message || err?.message || '调整失败，请稍后再试');
   } finally {
     adjusting.value = false;
@@ -1662,6 +1696,8 @@ onBeforeUnmount(() => {
   max-width: 480px;
   padding: 22px 24px;
 }
+/* tabindex=-1 承接打开移焦：编程性聚焦不画焦点框，键盘 Tab 进入控件时仍正常显示 */
+.adjust-dialog:focus { outline: none; }
 .adjust-dialog__title {
   margin: 0 0 8px;
   font-size: 17px;
@@ -1993,6 +2029,13 @@ onBeforeUnmount(() => {
   color: var(--mk-ink);
 }
 [data-theme='dark'] .adjust-dialog__close:hover { background: rgba(230, 237, 247, 0.08); color: var(--mk-ink); }
+/* 弹窗内说明/警示文字暗色档：基础规则用了亮底硬编码色（#9a4b08/#5a6b85/#8492ab），暗底下发灰难读 */
+[data-theme='dark'] .adjust-form__warn { color: var(--amber-ink); }
+[data-theme='dark'] .adjust-form__hint,
+[data-theme='dark'] .adjust-scope__picker,
+[data-theme='dark'] .clear-sessions__hint,
+[data-theme='dark'] .ai-advice__chip-label,
+[data-theme='dark'] .ai-advice__meta { color: var(--mk-muted); }
 [data-theme='dark'] .progress-track { stroke: var(--line); }
 [data-theme='dark'] .stage__no { background: rgba(230, 237, 247, 0.1); }
 [data-theme='dark'] .task--locked .task__icon { background: rgba(230, 237, 247, 0.1); }
