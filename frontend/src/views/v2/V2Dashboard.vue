@@ -143,9 +143,9 @@
             </div>
           </section>
 
-          <!-- 新手态：引导卡 -->
+          <!-- 新手态：引导卡（占满双列——原右侧「还没有学习路径」占位卡与这里同屏
+               说两遍同一件事，走查 2026-09-27 冗余项，合并为一处，行动留给本卡） -->
           <section v-else class="card action action--empty">
-            <div class="action__eyebrow"><span>开始你的第一个学习计划</span></div>
             <h1 class="action__title">用 2 分钟，理出一条能执行的路径</h1>
             <p class="action__desc">{{ guidanceEmptyText }}</p>
             <div class="action__examples">
@@ -174,17 +174,6 @@
                 <span v-if="currentStageNote">{{ currentStageNote }}</span>
               </div>
               <router-link :to="`/learning-path/${primaryPath.id}`" class="path__detail-link">路径详情 ›</router-link>
-            </div>
-          </aside>
-
-          <!-- 新手态路径占位卡 -->
-          <aside v-else class="card path path--empty">
-            <div class="path__head">
-              <div class="path__title"><strong>还没有学习路径</strong></div>
-            </div>
-            <div class="path__empty-body">
-              <div class="path__empty-illus"><span></span><span></span><span></span><span></span></div>
-              <p>规划第一个目标后，这里会出现你的学习路径。</p>
             </div>
           </aside>
         </div>
@@ -1390,8 +1379,10 @@ onMounted(loadAll);
   display: flex; flex-direction: column; gap: 10px;
   position: relative; overflow: hidden;
 }
-/* 新手空态卡：紧凑化，避免空态内容把页脚挤出首屏 */
+/* 新手空态卡：占满双列（右侧占位卡已删，走查 2026-09-27 冗余项）；
+   紧凑化，避免空态内容把页脚挤出首屏 */
 .action--empty {
+  grid-column: 1 / -1;
   padding: 18px 24px;
   gap: 9px;
 }
@@ -1476,15 +1467,6 @@ onMounted(loadAll);
 .path__progress { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .path__progress i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .path__nums { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
-.path--empty { justify-content: flex-start; }
-.path__empty-body {
-  flex: 1; display: grid; place-content: center; gap: 14px;
-  text-align: center; color: var(--faint); font-size: 13px; padding: 24px 0;
-}
-.path__empty-illus { display: flex; gap: 6px; justify-content: center; }
-.path__empty-illus span { width: 26px; height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--line) 60%, transparent); }
-.path__empty-illus span:nth-child(1) { background: rgba(49, 177, 111, 0.4); }
-.path__empty-illus span:nth-child(2) { background: color-mix(in srgb, var(--blue) 40%, transparent); }
 </style>
 
 <style scoped>
@@ -1927,7 +1909,6 @@ a.btn-primary { text-decoration: none; }
   .action__control { min-height: 44px; }
   .path { padding: 14px 16px; gap: 12px; }
   .path__title strong { font-size: 14px; }
-  .path__empty-body { padding: 18px 0; }
   .week__empty { padding: 18px 0; }
   .dash__loading { padding: 32px 0; }
   .sheet__head { padding: 14px 16px 12px; }
