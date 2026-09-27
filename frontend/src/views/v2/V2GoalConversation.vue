@@ -136,6 +136,10 @@
               <span v-if="f.fresh" class="field__fresh">刚收录</span>
             </li>
           </ul>
+
+          <!-- 说明属于左侧信息面板（它描述的就是这份清单的整理机制）：
+               短版贴清单底部，不做整块 tip（2026-09-27 用户反馈二改） -->
+          <div class="panel__tip">信息由问流从对话中自动整理，够用时就会收敛方案。</div>
         </div>
       </aside>
 
@@ -330,11 +334,9 @@
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
             </button>
           </div>
-          <!-- 底部提示统一右带（2026-09-27 用户反馈）：原来快捷键在左、计数+AI 声明在右
-               两侧分散，且左栏的说明文案占一整块——全部收进这一行，从左到右按
-               「平台说明 → 快捷键 → 计数 → AI 声明」排，视觉一条基线 -->
+          <!-- 底部提示一条基线（2026-09-27 用户反馈）：快捷键+计数+AI 声明归右带；
+               左侧不再放平台说明（那句话已回左栏信息面板底部） -->
           <div class="composer__hint">
-            <span class="composer__hint-note">信息由问流从对话中自动整理，够用时就会收敛方案</span>
             <span class="composer__hint-right">
               <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
               <span class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
@@ -1254,12 +1256,15 @@ function shuffleScenes() {
 }
 .composer__send--stop:active { transform: translateY(0) scale(0.97); }
 .composer__hint {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 12px;
   font-size: 12px; color: var(--faint); padding-left: 6px;
 }
 .composer__hint-right { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.composer__hint-note { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel__tip {
+  font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px;
+  margin-top: auto;
+}
 .composer__count { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ---------- 工作台布局 ---------- */
