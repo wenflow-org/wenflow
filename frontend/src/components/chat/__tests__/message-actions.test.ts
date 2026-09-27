@@ -4,7 +4,8 @@
  * 2026-09-27 用户反馈：原绝对定位在气泡右上角（top:6 right:6 浮层），
  * hover 展开时会压住气泡正文末行。改为文档流内的独立行（气泡下方展开），
  * 这里锁两件事：
- *  1. .msg-actions 不再是 position:absolute（脱离文档流才会遮内容）；
+ *  1. .msg-actions 不再是 position:absolute（脱离文档流才会遮内容），
+     且隐藏=visibility 占位（display:none 会让下方文字随 hover 上下跳动）；
  *  2. 触屏模式常显、桌面 hover 驱动的既有口径不回归。
  */
 import { describe, expect, it } from 'vitest';
@@ -45,12 +46,12 @@ describe('MessageActions 位置口径', () => {
       value: (q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} }),
     });
     const w = mount(MessageActions, { props: { show: false } });
-    // v-show 口径直接断言内联样式（isVisible 会被本环境的 transition-stub 祖先干扰）
-    const styleOf = () => w.find('.msg-actions').attributes('style') ?? '';
-    expect(styleOf()).toContain('display: none');
+    // 占位隐藏口径：隐藏=挂 msg-actions--hidden 类（visibility:hidden，撑住 meta 行高度）
+    const hidden = () => w.find('.msg-actions').classes().includes('msg-actions--hidden');
+    expect(hidden()).toBe(true);
     await w.setProps({ show: true });
     await nextTick();
-    expect(styleOf()).not.toContain('display: none');
+    expect(hidden()).toBe(false);
     w.unmount();
   });
 

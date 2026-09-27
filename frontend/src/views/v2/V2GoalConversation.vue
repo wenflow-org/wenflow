@@ -1552,6 +1552,21 @@ function shuffleScenes() {
 /* MessageActions 定位容器 */
 .msg__bubble--relative { position: relative; }
 .msg__content--actions { position: relative; }
+/* meta 行与操作条同行（左 meta / 右操作条），配合组件的 visibility 占位隐藏：
+   hover 出现/消失时布局零跳动 */
+.msg__content--actions {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-auto-flow: dense;
+}
+.msg__content--actions > .msg__bubble,
+.msg__content--actions > .msg__replies { grid-column: 1 / -1; }
+.msg__content--actions > .msg-actions {
+  grid-column: 2;
+  align-self: center;
+  margin-top: 0;
+}
+.msg__content--actions > .msg__meta { grid-column: 1; align-self: center; }
+
 .msg__bubble--typing { display: inline-flex; gap: 5px; align-items: center; padding: 14px 16px; }
 .msg__bubble--typing i {
   width: 7px; height: 7px; border-radius: 50%;

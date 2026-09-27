@@ -57,8 +57,7 @@ function handleFeedback(thumbsUp: boolean) {
 </script>
 
 <template>
-  <Transition name="actions-pop">
-    <div v-show="visible" class="msg-actions">
+  <div class="msg-actions" :class="{ 'msg-actions--hidden': !visible }">
       <button
         type="button"
         class="msg-actions__btn"
@@ -104,7 +103,6 @@ function handleFeedback(thumbsUp: boolean) {
         <span>{{ copied ? '已复制' : '复制' }}</span>
       </button>
     </div>
-  </Transition>
 </template>
 
 <style scoped>
@@ -117,6 +115,12 @@ function handleFeedback(thumbsUp: boolean) {
   gap: 2px;
   padding: 2px 0;
   margin-top: -2px;
+}
+/* 占位隐藏（visibility 而非 display:none）：操作条隐藏时仍撑住 meta 行高度，
+   hover 出现/消失时下方文字不再上下跳动（2026-09-27 用户反馈） */
+.msg-actions--hidden {
+  visibility: hidden;
+  pointer-events: none;
 }
 .msg-actions__btn {
   display: inline-flex;
@@ -165,8 +169,4 @@ function handleFeedback(thumbsUp: boolean) {
 }
 
 /* Transition */
-.actions-pop-enter-active { transition: opacity 0.15s ease; }
-.actions-pop-leave-active { transition: opacity 0.1s ease; }
-.actions-pop-enter-from { opacity: 0; }
-.actions-pop-leave-to { opacity: 0; }
 </style>
