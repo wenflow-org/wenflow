@@ -213,13 +213,15 @@ async function goDashboard() {
 
 <style scoped>
 .ob {
-  min-height: 100vh;
+  /* 除以 zoom：1600+ 档有 zoom 时 min-height:100vh 会渲染成 1.08 个视口高，
+     页面凭空多出 8% 滚动（v2.css zoom ⚠ 注释同款问题） */
+  min-height: calc(100vh / var(--vp-zoom, 1));
   position: relative;
 }
 
 .ob__main {
   position: relative;
-  min-height: 100vh;
+  min-height: calc(100vh / var(--vp-zoom, 1));
   display: flex;
   flex-direction: column;
   align-items: center;
