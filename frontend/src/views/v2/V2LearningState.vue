@@ -42,20 +42,21 @@
           <!-- 趋势图 -->
           <section class="card band">
             <div class="band__head">
-              <button type="button" class="band__toggle" :aria-expanded="openBands.chart" @click="toggleBand('chart')">
+              <div class="band__title">
                 <strong>健康度 · 疲劳 · 状态</strong>
-                <span class="band__meta">近 {{ range }} 天趋势</span>
-                <span class="band__chev" :class="{ 'band__chev--open': openBands.chart }" aria-hidden="true">▾</span>
-              </button>
-              <div class="band__extra" @click.stop>
+                <span class="band__meta">{{ drawnSpanLabel }}</span>
+              </div>
+              <!-- 窗口选择器只在真的有更长历史可看时出现（数据不足 42 天时两档是同一条图，
+                   留着只会让口径与图对不上——2026-09-27 外部走查） -->
+              <div v-if="showRangeSeg" class="band__extra">
                 <div class="seg">
                   <button type="button" class="seg__item" :class="{ 'seg__item--on': range === 42 }" @click="setRange(42)">42 天</button>
                   <button type="button" class="seg__item" :class="{ 'seg__item--on': range === 90 }" @click="setRange(90)">90 天</button>
                 </div>
               </div>
             </div>
-            <div v-show="openBands.chart" class="band__body">
 
+            <div class="band__body">
             <!-- 图例（批19 术语自然化；2026-09-27 删状态 chip：与体检卡主指标重复） -->
             <div class="ff-legend">
               <span><i class="ff-dot ff-dot--fitness"></i>掌握趋势</span>
@@ -116,11 +117,10 @@
           <!-- AI 建议（skill: adaptive-guidance-copy 生成，静态规则兜底） -->
           <section class="card band">
             <div class="band__head">
-              <button type="button" class="band__toggle" :aria-expanded="openBands.suggest" @click="toggleBand('suggest')">
+              <div class="band__title">
                 <strong>AI 建议</strong>
                 <span class="band__meta">{{ suggestSource }}</span>
-                <span class="band__chev" :class="{ 'band__chev--open': openBands.suggest }" aria-hidden="true">▾</span>
-              </button>
+              </div>
             </div>
             <!-- 加载失败常显（收起也不许吞掉错误，P1 口径） -->
 
@@ -132,16 +132,18 @@
                 {{ guidanceLoading ? '重试中…' : '重试' }}
               </button>
             </div>
-            <div v-show="openBands.suggest" class="band__body">
+            <div class="band__body">
             <template v-if="skillCopy">
+              <!-- 2026-09-27 重排：一段结论（标题 + 一句说明）+ 一个动作 + 一行脚注。
+                   原来四层文本处理（副标 / 琥珀警告框 / 依据行 / 带标签的下一步·节奏两行）堆在一起，
+                   且副标与警告框语义重叠——现在副标与警告二选一（取更具体的警告），
+                   下一步·节奏合并成一行脚注。 -->
               <div class="guide">
                 <h3 class="guide__title">{{ skillCopy.headline }}</h3>
-                <p v-if="skillCopy.subtitle" class="guide__sub">{{ skillCopy.subtitle }}</p>
-                <p v-if="evidenceHint" class="guide__evidence">依据：{{ evidenceHint }}（详见下方「学习调控」）</p>
-              </div>
-              <div v-if="skillWarning" class="guide__warn">
-                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 2 1 21h22L12 2zm0 6 7 12H5l7-12zm-1 4v3h2v-3h-2zm0 4v2h2v-2h-2z"/></svg>
-                {{ skillWarning }}
+                <p v-if="skillWarning || skillCopy.subtitle" class="guide__sub" :class="{ 'guide__sub--warn': !!skillWarning }">
+                  <svg v-if="skillWarning" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M12 2 1 21h22L12 2zm0 6 7 12H5l7-12zm-1 4v3h2v-3h-2zm0 4v2h2v-2h-2z"/></svg>
+                  {{ skillWarning || skillCopy.subtitle }}
+                </p>
               </div>
               <div v-if="guideActions.length" class="suggest__list">
                 <article v-for="(a, i) in guideActions" :key="i" class="sug">
@@ -153,10 +155,12 @@
                   <router-link :to="a.resolved" class="sug__cta">{{ a.action || '前往' }}</router-link>
                 </article>
               </div>
-              <div class="guide__foot">
-                <span v-if="skillCopy.nextStep"><b>下一步</b>{{ skillCopy.nextStep }}</span>
-                <span v-if="skillCopy.paceHint"><b>节奏</b>{{ skillCopy.paceHint }}</span>
-              </div>
+              <p v-if="skillCopy.nextStep || skillCopy.paceHint" class="guide__foot">
+                <template v-if="skillCopy.nextStep">下一步：{{ skillCopy.nextStep }}</template>
+                <template v-if="skillCopy.nextStep && skillCopy.paceHint"> · </template>
+                <template v-if="skillCopy.paceHint">节奏：{{ skillCopy.paceHint }}</template>
+              </p>
+              <p v-if="evidenceHint" class="guide__evidence">依据：{{ evidenceHint }}（详见下方「学习调控」）</p>
             </template>
 
             <!-- 状态评审（AI 诊断书）已移至「学习调控」区第三层「诊断依据」（2026-09-27）：
@@ -203,13 +207,12 @@
                本页成为完课卡之外的第二确认入口。 -->
           <section class="card band">
             <div class="band__head">
-              <button type="button" class="band__toggle" :aria-expanded="openBands.decisions" @click="toggleBand('decisions')">
+              <div class="band__title">
                 <strong>学习调控</strong>
                 <span class="band__meta">{{ pendingAdjust.length ? `${pendingAdjust.length} 条待确认` : '暂无待确认' }}</span>
-                <span class="band__chev" :class="{ 'band__chev--open': openBands.decisions }" aria-hidden="true">▾</span>
-              </button>
+              </div>
             </div>
-            <div v-show="openBands.decisions" class="band__body">
+            <div class="band__body">
               <!-- 待你确认：课后 advisory，确认走与完课卡同一个 replan 接口 -->
               <section class="ctl">
                 <p class="ctl__label">待你确认<b v-if="pendingAdjust.length">{{ pendingAdjust.length }}</b></p>
@@ -288,13 +291,12 @@
           </section>
           <section v-if="preferenceItems.length && hasAnyLoad" class="card band sidecard">
             <div class="band__head">
-              <button type="button" class="band__toggle" :aria-expanded="openBands.prefs" @click="toggleBand('prefs')">
+              <div class="band__title">
                 <span class="kicker">学习偏好</span>
                 <span class="band__meta">{{ preferenceItems.length }} 项</span>
-                <span class="band__chev" :class="{ 'band__chev--open': openBands.prefs }" aria-hidden="true">▾</span>
-              </button>
+              </div>
             </div>
-            <div v-show="openBands.prefs" class="band__body">
+            <div class="band__body">
               <ul class="pref">
                 <li v-for="(p, i) in preferenceItems" :key="i"><strong>{{ p.label }}</strong><span>{{ p.value }}</span></li>
               </ul>
@@ -303,12 +305,11 @@
           <!-- 2026-09-27：独立「学习记录」卡删除——整卡只有一个链接，入口上移到 hero 按钮 -->
           <section class="card band sidecard">
             <div class="band__head">
-              <button type="button" class="band__toggle" :aria-expanded="openBands.legend" @click="toggleBand('legend')">
+              <div class="band__title">
                 <span class="kicker">指标说明</span>
-                <span class="band__chev" :class="{ 'band__chev--open': openBands.legend }" aria-hidden="true">▾</span>
-              </button>
+              </div>
             </div>
-            <div v-show="openBands.legend" class="band__body">
+            <div class="band__body">
             <ul class="legend">
               <li><b class="dot dot--blue"></b>掌握趋势：长期学习积累的掌握水平，变化平缓（曲线里的 KTL）</li>
               <li><b class="dot dot--purple"></b>疲劳度：近期学习压力的累积，变化较快（曲线里的 LF）</li>
@@ -352,22 +353,10 @@ const trendLoading = ref(true);
 const trendError = ref(false);
 const range = ref<42 | 90>(42);
 
-/* ---------- 折叠带（批11 首屏重构）：桌面默认全开展示，移动端默认只留
-   「结论（指标卡）+ 学习曲线 + AI 建议」首屏，长尾内容（决策/偏好/说明）收起。
-   折叠状态在挂载时按视口定一次，之后手动切换不随视口变化。 ---------- */
-const isNarrowAtMount = typeof window !== 'undefined'
-  && window.matchMedia('(max-width: 1100px)').matches;
-const openBands = ref({
-  chart: true,                 // 趋势图是本页核心，任何宽度都默认展开
-  suggest: true,               // AI 建议是本页最可行动的内容，全宽度默认展开（批19 从移动端收起改为常开）
-  decisions: true,             // 学习调控（2026-09-27 升级为可操作调控流）：待确认项必须可见
-  prefs: !isNarrowAtMount,     // 学习偏好：PC 常开（2026-09-27 用户反馈），窄屏收起省密度
-  legend: !isNarrowAtMount,    // 指标说明：PC 常开（2026-09-27 用户反馈），窄屏收起
-});
+/* ---------- 卡片常显（2026-09-27）：本页所有 band 全部默认展开，折叠按钮退役——
+   藏内容的成本（一次点击 + 预期管理）高于滚动成本（与学习台同口径）。仅
+   「诊断依据」保留展开/收起：那是评审向行话，属于需要时才看的参考层。 ---------- */
 const reviewOpen = ref(false);
-function toggleBand(key: keyof typeof openBands.value) {
-  openBands.value[key] = !openBands.value[key];
-}
 
 const metricOptions: Array<{ key: MetricKey; label: string }> = [
   { key: 'lsb', label: '整体状态' },
@@ -536,6 +525,22 @@ const valueDomain = computed(() => {
 });
 
 const maxMinutes = computed(() => Math.max(10, ...activeSeries.value.map((d) => d.minutes)));
+
+/* 口径诚实化（2026-09-27 外部走查）：标签按「图里实际画了几天」出，不再照抄请求窗口
+   （原来固定写「近 42 天」，数据只有 9 天时口径与图对不上）；历史短于 42 天时
+   42/90 两档窗口画出同一条线 → 切换器直接不出现，避免假开关。 */
+const drawnSpanLabel = computed(() =>
+  activeSeries.value.length ? `近 ${activeSeries.value.length} 天` : '暂无数据'
+);
+const historyDays = computed(() => {
+  const dates = stateTrends.value.map((t) => t.date).filter(Boolean).slice().sort();
+  if (dates.length < 2) return dates.length;
+  const first = new Date(dates[0]).getTime();
+  const last = new Date(dates[dates.length - 1]).getTime();
+  if (Number.isNaN(first) || Number.isNaN(last)) return dates.length;
+  return Math.round((last - first) / 86400000) + 1;
+});
+const showRangeSeg = computed(() => historyDays.value > 42);
 
 const points = computed<TrendPoint[]>(() => {
   const n = activeSeries.value.length;
@@ -1121,28 +1126,20 @@ function loadGuidance() {
 .guide__title { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
 .guide__sub { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.65; }
 /* 建议与调控互相引用（2026-09-27）：依据行把 AI 建议挂回到调控区的证据条目 */
-.guide__evidence { margin: 0; font-size: 12px; color: var(--blue-deep); line-height: 1.6; }
-.guide__warn {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12.5px; font-weight: 600; color: var(--amber-ink);
-  background: color-mix(in srgb, var(--amber-ink) 10%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--amber-ink) 28%, var(--surface));
-  border-radius: var(--mk-radius-lg); padding: 9px 12px;
+.guide__evidence { margin: 0; font-size: 12px; color: var(--faint); line-height: 1.6; }
+/* 说明句：警告优先（更具体），无警告时用副标——原来两者同屏 + 琥珀实底框，
+   四层文本处理堆在一起显乱（2026-09-27 重排） */
+.guide__sub--warn {
+  display: inline-flex; align-items: flex-start; gap: 6px;
+  color: var(--amber-ink);
 }
+.guide__sub--warn svg { flex: 0 0 auto; margin-top: 3px; }
 .guide__foot {
-  display: grid; gap: 6px;
+  margin: 0;
   border-top: 1px dashed var(--line);
   padding-top: 10px;
   font-size: 12.5px; line-height: 1.7;
-  /* 2026-09-27 外部评审：底部两行说明原来 12.5px muted 贴着卡片底边，提亮一档并留出呼吸 */
   color: color-mix(in srgb, var(--ink) 72%, var(--muted));
-  padding-bottom: 2px;
-}
-.guide__foot b {
-  color: var(--blue-deep);
-  font-size: 12px;
-  margin-right: 8px;
-  letter-spacing: 0.05em;
 }
 .suggest__list--warnings { border-top: 1px dashed var(--line); padding-top: 12px; }
 
@@ -1301,37 +1298,32 @@ function loadGuidance() {
   }
 }
 
-/* ---------- 折叠带（批11 首屏重构）：卡头即开合，long-tail 内容默认收起 ---------- */
+/* ---------- 卡片头（2026-09-27）：本页折叠按钮退役，卡头变静态标题；
+   仅「诊断依据」保留 chevron 开合 ---------- */
 .band { padding: 0; }
 .band__head { display: flex; align-items: center; }
-.band__toggle {
+.band__title {
   flex: 1; min-width: 0;
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: baseline; gap: 10px;
   padding: 14px 16px;
-  background: none; border: 0; font-family: inherit;
-  text-align: left; cursor: pointer;
+  text-align: left;
 }
-.band__toggle strong, .band__toggle .kicker { font-size: 14px; }
+.band__title strong, .band__title .kicker { font-size: 14px; }
 .band__meta { font-size: 12px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .band__chev { flex: 0 0 auto; color: var(--faint); transition: transform 0.2s ease; }
 .band__chev--open { transform: rotate(180deg); }
 .band__extra { padding-right: 12px; }
 .band__body { padding: 0 16px 16px; }
-.band.sidecard .band__toggle { padding: 12px 16px; }
+.band.sidecard .band__title { padding: 12px 16px; }
 .band.sidecard .band__body { padding: 0 16px 14px; }
 
-/* 折叠带头部在 390 下会被挤爆（2026-09-26 用户侧对齐走查实测）：
-   .band__toggle 只分到 231px，而标题「健康度 · 疲劳 · 状态」按 white-space:normal
-   折成两行、副标「近 42 天趋势」需要 69px 只给 59px 被截成「近 42 天…」——
-   同一个头部同时出两种破版。根因是头部把「标题+副标+箭头」和「分段控件」塞在一行。
-   改成让位换行的顺序：标题+副标独占一行（330px 够放 209px 的内容），
-   42/90 天分段控件落到第二行贴右缘。
-   必须放在本条块之后：同权重下后出现者胜。 */
+/* 卡头在 390 下会被挤爆（2026-09-26 用户侧对齐走查实测）：标题+副标独占一行、
+   42/90 天分段控件落到第二行贴右缘（同权重下后出现者胜，必须放在本条块之后）。 */
 @media (max-width: 1100px) {
   .band__head { flex-wrap: wrap; row-gap: 2px; }
-  .band__toggle { flex: 1 1 100%; }
+  .band__title { flex: 1 1 100%; }
   /* 标题折行读作「本节知识 / 点」那种断词，比截断更难看，直接禁掉 */
-  .band__toggle strong { white-space: nowrap; }
+  .band__title strong { white-space: nowrap; }
   .band__extra { margin-left: auto; }
 }
 </style>
