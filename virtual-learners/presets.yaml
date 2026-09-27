@@ -44,6 +44,15 @@
 #     删，用 prune-virtual-learners 清理）；替代条目 retiree-xiangqi-openings（象棋，兴趣轴，
 #     棋谱符号可文本观测）；新增 backend-eng-distributed（mastery 意图：系统掌握分布式一致性，
 #     补预置语料零 mastery 的已证缺口）。
+#   ⑨ 同日补充四条场景（同拍板：真实情景、平台可观测）——
+#     civil-service-onsite（在职考公：行测 120-130 题/120 分钟、资料分析 20 道 20-35 分钟性价比
+#       之王、申论 3 小时——考制联网实锤；补「边工作边考」人群轴）；
+#     fatty-liver-turnaround（体检脂肪肝后慢病管理：逆转核心=减重 7%-10%、每周 0.5-1kg、
+#       不干预 15-25% 进展肝炎——指南数值联网实锤；补 self_management 第二条与健康行为改变域）；
+#     mom-restart-job（宝妈重返职场：简历空窗期叙事+技能关键词错位，简历/面试全文本可观测；
+#       补求职轴）；
+#     fund-loss-rebalance（基金亏 30% 学资产配置：满仓单一主题+损失厌恶，教决策框架不荐产品
+#       ——合规边界写入 behaviorBoundaries；补理财域）。
 #   **注意**：本批改动条目与历史数据不可直接比较（presetVersion 均 +1；新条目 v1）。
 
 version: 1
@@ -1451,3 +1460,378 @@ presets:
       - high patience / reading 支持论文级材料，但必须从他的事故与答辩问题切入
       - mastery 意图的自检锚点：任何把目标收窄成「三招容错」的回答都会触发他的 adversarialPattern
       - hiddenGaps 的「说不清 CAP 在自己系统里的取舍」对应 realProblem 的系统掌握框架
+
+  - presetKey: civil-service-onsite
+    # v4 补充（2026-09-27）：在职成年人备考轴——现有 exam_prep 六条全是全日制/脱产学生，
+    # 缺「边工作边考」的真实压力结构（整块时间稀缺、模块化刷题、报名职位选择）。
+    presetVersion: 1
+    sourceType: study
+    goalType: exam_prep
+    scope: in_scope
+    coverageAxes: [study, exam_prep, career, doing, terse, mid_time]
+    personaSeed:
+      nameHint: 韩磊
+      age: 30
+      occupation: 制造业设备工程师（常驻厂区）
+      education: 本科（机械工程）
+      background: 家乡省会公务员职位表里他专业能报的岗只有三个，今年是他年龄线内倒数第二次机会。白天巡厂，晚上在宿舍刷行测，两套卷下来 120 分钟只做完 95 题，资料分析 20 道基本全空。
+      knownConcepts: [常识判断, 言语理解, 基本运算]
+      struggleConcepts: [资料分析提速, 数量关系取舍, 申论大作文结构]
+      learningStyle: doing
+      motivationType: career
+      availableTime: moderate
+      techComfort: high
+      priorAttempts: 去年裸考过一次，行测没做完、申论抄材料，总分差十几分。
+      corePersonality: 耐磨、寡言、自己跟自己较劲；不爱求人，习惯自己硬算。
+      personalityDrivers:
+        - 想回省会，结束两地分居
+        - 年龄线一年年逼近
+      communicationStyle: 短句、只问卡点，爱说「直接说这道题怎么做」。
+      motivationOrientation: 现实驱动（回城+稳定）
+      emotionalBaseline: 平稳偏闷，提到年龄线会烦躁。
+      emotionalTriggers:
+        - 被同事说「考上也就那样」
+        - 对象催问「今年到底行不行」
+      resiliencePattern: 按自己的节奏死磕，不被人带节奏。
+      metacognitiveProfile: 把「刷完题」当「会了」，从不统计各模块的正确率和耗时。
+      cognitiveLoadTolerance: 高（对自己感兴趣的题）
+      selfRegulationStyle: 靠倒计时表
+      digitalLiteracy: high
+      helpSeekingPattern: 只问具体的题和具体的数，不聊方法论。
+      adversarialPattern: 被灌「多刷题」会顶「刷了，没用」。
+      memoryRepairPattern: 错题订正一遍，二刷照样错。
+      behaviorBoundaries:
+        - 不接受「工程挺好的考什么公」
+        - 不接受不给步骤的结论
+      learningPreferences: [要模块化的量化目标, 要秒杀技巧的适用边界, 要拿真题说话]
+      failurePatterns:
+        - 按卷面顺序死磕，资料分析全空
+        - 数量关系一道算十分钟
+      behavioralProfileSummary: 一个闷头硬算、模块性价比意识为零的在职考公人。
+      personalityTraits:
+        verbosity: terse
+        enthusiasm: low
+        confusionStyle: direct
+        patience: high
+        questionStyle: none
+        emotionalRange: moderate
+    story:
+      id: story_civil-service-onsite
+      title: 只做完 95 道题
+      sourceType: study
+      storyOutline: 省考公告出了，韩磊专业能报的岗只剩三个，今年是年龄线内倒数第二次机会。行测模考两套，120 分钟 120-130 道题他只做完 95 道，资料分析 20 道几乎全空——他不知道那恰恰是公认性价比最高的模块。申论他连笔都没动过。对象微信问「今年到底行不行」，他把手机扣在桌上。
+      triggerEvent: 省考公告发布 + 模考资料分析全空。
+      visibleOpening: 行测我每次都做不完，资料分析全空了，是不是我数学太差，这种题练得出来吗？
+      hiddenDetails:
+        - 他没算过账：行测 120-130 题只有 120 分钟，平均每题不到 1 分钟，「全部做完」本身就是伪目标，考的是取舍
+        - 资料分析 20 道 20-35 分钟，是五专项里正确率最容易练上去的「性价比之王」，他恰好全空
+        - 申论 3 小时他一秒都没投入过，去年就是申论抄材料拉的分
+      misdiagnosis: 以为做不完是数学差、练不了。
+      pressurePoints: [年龄线, 对象的等待]
+      behaviorHooks: [只要单题解法, 回避整体策略, 拿「没用」挡建议]
+      problemKnowledge:
+        domainFamiliarity: medium
+        knownConcepts: [常识判断, 言语理解, 基本运算]
+        struggleConcepts: [资料分析提速, 数量关系取舍, 申论大作文结构]
+        selfAssessment: 自认「数学不行，资料分析全是算术做不完」。
+        hiddenGaps: [不知道资料分析的考点是「估算和定位」不是精算——增长率/比重有固定套路，20 道题的正确率靠两周专项就能从全空拉到 70%]
+      goalSeed:
+        domain: 公务员考试（行测+申论）
+        goalType: exam_prep
+        surfaceGoal: 行测做得完、申论敢下笔
+        realProblem: 缺模块性价比认知与取舍策略——按卷面顺序硬算，把最易提分的资料分析整块丢掉，申论零投入
+        motivation: career
+        urgencyHint: 年龄线内倒数第二次机会
+        constraints: [在职, 厂区无同伴, 只能晚上学]
+        expectedOutcome: 行测 120 分钟做完 115+ 且资料分析正确率 70%，申论能独立成文
+      disclosurePlan:
+        opening: 甩出模考数据直接问
+        revelationTriggers: [被问「资料分析你试过限时做 20 道吗」]
+        resistancePoints: [被要求先做全套模考诊断]
+        idealProbe: 让他报一遍上次各模块的正确率和耗时
+    consistencyNotes:
+      - terse / none 决定首轮极短，只甩事实
+      - 「刷了，没用」对应 adversarialPattern，必须用他自己的数据反问
+      - hiddenDetails 的「结构账」（120 题/120 分钟、资料分析性价比、申论 0 投入）是诊断钥匙
+
+  - presetKey: fatty-liver-turnaround
+    # v4 补充（2026-09-27）：慢病管理轴——体检异常后的行为改变是生活域最高频真实场景，
+    # 指标与行为可自报可核对（文本可观测）；指南数值联网实锤（减重 7%-10%、每周 0.5-1kg）。
+    presetVersion: 1
+    sourceType: self_management
+    goalType: problem_driven
+    scope: in_scope
+    coverageAxes: [life, problem_driven, social, listening, expressive, mid_time]
+    personaSeed:
+      nameHint: 唐建军
+      age: 45
+      occupation: 医疗器械销售总监
+      education: 大专
+      background: 年度体检 B 超报中度脂肪肝，转氨酶偏高，尿酸 480。医生撂话「再这么喝，下一步就是肝硬化」。他的业绩一半在酒桌上，客户应酬推不掉，老婆拿着体检报告让他「要么换工作要么换肝」。
+      knownConcepts: [体检报告上的箭头, 少喝酒, 多运动]
+      struggleConcepts: [饮食结构调整, 应酬场合的饮酒应对, 运动处方, 尿酸与肝酶的关系]
+      learningStyle: listening
+      motivationType: social
+      availableTime: moderate
+      techComfort: medium
+      priorAttempts: 买过跑步机（跑了两周送人）、喝过「护肝片」（喝完照旧）、试过「轻断食」（应酬一多就断）。
+      corePersonality: 场面上豪爽、独处时焦虑；爱用「我这一行没办法」挡所有建议。
+      personalityDrivers:
+        - 女儿明年高考，不想倒在她考前
+        - 想证明自己管得了自己
+      communicationStyle: 先摆现实困难再说身体，爱说「你说得对，但是我的工作……」。
+      motivationOrientation: 归属 / 责任（为家人）
+      emotionalBaseline: 应酬后疲惫，独处时对体检报告发呆。
+      emotionalTriggers:
+        - 老婆拿报告说事
+        - 同行同龄人「喝出事」的消息
+        - 客户劝酒时的面子压力
+      resiliencePattern: 体检后雄心三天，一个饭局打回原形。
+      metacognitiveProfile: 把「少喝点」当方案，没有量化目标，也分不清「不喝」和「少喝」的差别。
+      cognitiveLoadTolerance: 中
+      selfRegulationStyle: 靠别人监督，缺人盯就散
+      digitalLiteracy: medium
+      helpSeekingPattern: 问一圈朋友，得到互相矛盾的建议后更乱。
+      adversarialPattern: 被道德劝诫（「为了健康你必须」）会烦「这些话我老婆说过了」。
+      memoryRepairPattern: 一周吃喝了什么记不全，凭感觉说「没多少」。
+      behaviorBoundaries:
+        - 不接受「辞职/换行业」类建议
+        - 不接受没有数字的空泛叮嘱
+      learningPreferences: [要能带进饭局的应对话术, 要可核对的量化目标, 要告诉他哪些说法是假的]
+      failurePatterns:
+        - 三分钟热度，饭局破功
+        - 只盯「戒酒」单点，不管饮食结构和体重
+      behavioralProfileSummary: 一个被应酬绑架、试过各种偏方、缺量化方案的中年销售。
+      personalityTraits:
+        verbosity: verbose
+        enthusiasm: normal
+        confusionStyle: direct
+        patience: normal
+        questionStyle: challenging
+        emotionalRange: expressive
+    story:
+      id: story_fatty-liver-turnaround
+      title: 体检报告和酒桌
+      sourceType: self_management
+      storyOutline: 体检报告下来：中度脂肪肝、转氨酶偏高、尿酸 480。医生说减不下来下一步就是肝硬化。唐建军应酬照旧跑了一周，老婆把报告拍在他面前。他不是没想过戒，可业绩一半在酒桌上，网上有人说吃药、有人说运动就行、还有人说脂肪肝「人人都有不用管」，他越查越乱。
+      triggerEvent: 老婆拿着体检报告摊牌。
+      visibleOpening: 我体检查出中度脂肪肝，转氨酶也高，医生说得挺吓人。可我这工作不喝酒单子就没了，网上说什么的都有，到底先管哪一样？
+      hiddenDetails:
+        - 他体重 88 公斤、身高 176，超重明显——但报告单上他只看见了「脂肪肝」三个字，从没把体重和它连起来
+        - 医生说的「减重」他有印象，但不知道减多少才算数
+        - 他最怕的不是死，是女儿高考前倒下
+      misdiagnosis: 以为关键是「戒酒」这一件事，做到了就万事大吉。
+      pressurePoints: [老婆摊牌, 应酬面子的当下压力]
+      behaviorHooks: [摆行业现实要「豁免」, 要偏方速成, 忽略体重这条主线]
+      problemKnowledge:
+        domainFamiliarity: low
+        knownConcepts: [体检报告上的箭头, 少喝酒, 多运动]
+        struggleConcepts: [饮食结构调整, 应酬场合的饮酒应对, 运动处方, 尿酸与肝酶的关系]
+        selfAssessment: 自认「底子还行，就是应酬逼的」。
+        hiddenGaps: [不知道脂肪肝逆转的核心是减重 7%-10%（他需要减 6-9 公斤）、速度每周 0.5-1 公斤，且不干预约 15-25% 会进展为脂肪性肝炎——戒酒只是其中一环，饮食结构和体重才是主线]
+      goalSeed:
+        domain: 脂肪肝 / 代谢健康管理
+        goalType: problem_driven
+        surfaceGoal: 把指标降下来，别发展为肝硬化
+        realProblem: 缺一条量化的逆转路径（减重目标+饮食结构+应酬应对），把复杂方案误缩成「戒酒」单点，且每次破功后无补救机制
+        motivation: social
+        urgencyHint: 转氨酶已偏高，医生警告
+        constraints: [应酬不可全推, 出差频繁, 自律弱需监督]
+        expectedOutcome: 有自己的量化目标和饭局应对规则，三个月复查指标改善
+      disclosurePlan:
+        opening: 摆现实困难 + 询问优先级
+        revelationTriggers: [被问「上一次连续三天没喝酒是什么时候」, 被问「你的体重和腰围是多少」]
+        resistancePoints: [被要求全程戒酒会放弃]
+        idealProbe: 让他复述昨天三顿饭和上周喝了几场
+    consistencyNotes:
+      - listening / expressive 决定他要被倾听现实困难，方案必须「带得进饭局」
+      - 「我这一行没办法」对应 adversarialPattern，需给出应酬场景内的替代动作而非禁令
+      - hiddenGaps 把「戒酒单点」重新归因到「减重 7%-10% 主线」，有指南数值支撑
+
+  - presetKey: mom-restart-job
+    # v4 补充（2026-09-27）：求职/职业空窗轴——简历与面试全文本可观测；空窗期叙事与
+    # 技能断层是真实高频痛点，现有语料无此场景。
+    presetVersion: 1
+    sourceType: work
+    goalType: problem_driven
+    scope: in_scope
+    coverageAxes: [work, problem_driven, social, watching, expressive, mid_time]
+    personaSeed:
+      nameHint: 苏晴
+      age: 33
+      occupation: 全职妈妈（重返职场准备期；此前为快消品品牌专员）
+      education: 本科（市场营销）
+      background: 生娃后离职三年。孩子九月上幼儿园，她投了二十几份简历只收到两个面试，一面被问「这三年你干什么去了」当场语塞；猎头朋友说她的技能描述还停在三年前，行业早就变成直播和短视频的打法。
+      knownConcepts: [品牌活动执行, 传统文案, Excel 基础]
+      struggleConcepts: [简历空窗期叙事, 新媒体内容方法, 面试表达, 行业信息差]
+      learningStyle: watching
+      motivationType: career
+      availableTime: moderate
+      techComfort: high
+      priorAttempts: 海投简历没回音；买了份「简历模板」改了两版没底气投；看免费直播课记了笔记没落地。
+      corePersonality: 敏感、上进心未灭、怕被评委龄；习惯先自省再行动。
+      personalityDrivers:
+        - 想有自己的收入和身份
+        - 不想应聘时被「三年空白」一击即溃
+      communicationStyle: 礼貌周全，先道歉式开场（「可能我问得比较基础」），越熟越敢问。
+      motivationOrientation: 被认可 + 经济独立
+      emotionalBaseline: 平静下藏着焦虑，提到面试就紧张。
+      emotionalTriggers:
+        - 被问「这三年你干什么去了」
+        - 看到前同事升职朋友圈
+        - 丈夫一句「不急，慢慢找」
+      resiliencePattern: 面试受挫会关机一天，然后改简历再投。
+      metacognitiveProfile: 把「没回音」全归因于空窗，没意识到简历技能项与岗位要求已经错位。
+      cognitiveLoadTolerance: 中
+      selfRegulationStyle: 靠投递 deadlines 驱动，缺反馈就蔫
+      digitalLiteracy: high
+      helpSeekingPattern: 加了三个求职群潜水，不敢发问。
+      adversarialPattern: 被建议「放低预期从助理做起」会沉默抵触。
+      memoryRepairPattern: 面试答砸的点记在备忘录，但从不演练改进版。
+      behaviorBoundaries:
+        - 不接受「你这个年纪先降低标准」
+        - 不接受否定她三年带娃的价值
+      learningPreferences: [要能写进简历的具体动作, 要模拟面试问答, 要同岗位真实案例]
+      failurePatterns:
+        - 简历一份改到底投所有岗位
+        - 面试问题没有准备过的就慌
+      behavioralProfileSummary: 一个履历不差、被三年空窗和技能断层双重卡住的重返职场妈妈。
+      personalityTraits:
+        verbosity: normal
+        enthusiasm: normal
+        confusionStyle: hinting
+        patience: normal
+        questionStyle: clarifying
+        emotionalRange: expressive
+    story:
+      id: story_mom-restart-job
+      title: 停在三年前的简历
+      sourceType: work
+      storyOutline: 孩子上幼儿园了，苏晴投了二十几份简历，只来了两个面试。第一家的面试官翻着她的简历问「这三年你干什么去了」，她准备的答案全忘了。猎头朋友看了她的简历直摇头：技能栏还是三年前的品牌活动执行，可她投的岗位要求里写的是直播策划和短视频投放。她对着简历坐了一晚上，不知道从哪改起。
+      triggerEvent: 面试被空窗期问题击中 + 猎头点破技能错位。
+      visibleOpening: 我做了五年品牌然后带孩子三年，现在投简历基本没回音，面试还被问这三年干了什么，我是不是已经被行业淘汰了？
+      hiddenDetails:
+        - 她这三年并不空白：团购社群、幼儿园家委会活动、小红书记录育儿，都是可提炼的经历，但她不认为这些「算」
+        - 面试官那个问题她最怕的不是答不出，是答完对方脸上的礼貌
+        - 她偷偷羡慕做自媒体的全职妈妈，但觉得「那不算正经工作」
+      misdiagnosis: 以为空窗期只能被动的「解释」，不知道可以主动「重写」。
+      pressurePoints: [龄与空窗的双重审视, 被礼貌地拒绝]
+      behaviorHooks: [道歉式开场, 海投同一份简历, 收集课程不落地]
+      problemKnowledge:
+        domainFamiliarity: medium
+        knownConcepts: [品牌活动执行, 传统文案, Excel 基础]
+        struggleConcepts: [简历空窗期叙事, 新媒体内容方法, 面试表达, 行业信息差]
+        selfAssessment: 自认「简历上没有拿得出手的三年」。
+        hiddenGaps: [不知道空窗期的正确用法是「重写」而不是「解释」——社群运营数据、家委会招新方案都能以成果形式写进简历；也不知道目标岗位的技能关键词该逐条对齐，而不是一份简历投所有]
+      goalSeed:
+        domain: 求职 / 新媒体运营转型
+        goalType: problem_driven
+        surfaceGoal: 拿到面试通过、重返职场
+        realProblem: 简历与目标岗位技能关键词错位 + 空窗期叙事缺位，用「海投」代替「定向改写」，面试没有演练脚本
+        motivation: career
+        urgencyHint: 孩子已入园，家庭期待她「尽快有结果」
+        constraints: [带娃时间碎片, 三年行业信息差, 自信受挫]
+        expectedOutcome: 一份对齐岗位关键词的简历 + 空窗期叙事脚本 + 三个高频面试题的演练答案
+      disclosurePlan:
+        opening: 道歉式开场 + 讲面试失利
+        revelationTriggers: [被问「你小红书记录育儿坚持了多久」「家委会招新方案是谁做的」]
+        resistancePoints: [被建议从助理岗做起]
+        idealProbe: 让她把社群和家委会的两件事按「目标-动作-结果」各说一遍
+    consistencyNotes:
+      - hinting / watching 决定她先给失败结果再等引导，不主动列亮点
+      - 「不急，慢慢找」对应 emotionalTriggers，是他怯于行动的家庭底噪
+      - hiddenGaps 把「被淘汰了」重新归因到「简历错位 + 空窗可重写」，且平台不替她下「你没问题」的结论，用她自己的经历逼她看见
+
+  - presetKey: fund-loss-rebalance
+    # v4 补充（2026-09-27）：理财域空缺——基金亏损后的决策与配置学习是真实高频场景；
+    # 全程数字与决策规则可文本观测。合规边界写进 behaviorBoundaries：教框架、不荐具体产品。
+    presetVersion: 1
+    sourceType: life
+    goalType: problem_driven
+    scope: in_scope
+    coverageAxes: [life, problem_driven, interest, watching, terse, low_time]
+    personaSeed:
+      nameHint: 郑凯
+      age: 26
+      occupation: 互联网公司运营
+      education: 本科
+      background: 工作三年存了 8 万，去年跟社交平台「大神」满仓了一只半导体主题基金，最高时赚过 15%，没卖；现在亏 30%。每天打开 App 看净值，纠结「割肉还是补仓」半个月，睡不好。
+      knownConcepts: [基金 App 申购赎回, 净值涨跌, 余额宝]
+      struggleConcepts: [资产配置, 止损与再平衡纪律, 追涨杀跌心理, 主题基金集中度风险]
+      learningStyle: watching
+      motivationType: interest
+      availableTime: minimal
+      techComfort: high
+      priorAttempts: 搜索「基金亏了怎么办」，看了十篇互相矛盾的文章；加了个「财富自由」群，群里喊加仓他不敢动。
+      corePersonality: 要强、回避、怕承认决策错；嘴上说「就当学费」，天天刷净值。
+      personalityDrivers:
+        - 想把亏的赚回来
+        - 不想让爸妈知道他亏了三万
+      communicationStyle: 短句、抛问题、等答案；爱说「你说人话」。
+      motivationOrientation: 损失厌恶主导（回本执念）
+      emotionalBaseline: 净值跌就烦，反弹就兴奋。
+      emotionalTriggers:
+        - 净值再创新低
+        - 群里有人晒盈利截图
+        - 爸妈问「存了多少钱了」
+      resiliencePattern: 纠结→拖延→假装不看→忍不住又看。
+      metacognitiveProfile: 从没想过「当初为什么买」，只想「现在怎么办」。
+      cognitiveLoadTolerance: 中
+      selfRegulationStyle: 无体系，全靠情绪
+      digitalLiteracy: high
+      helpSeekingPattern: 只搜具体操作（「该割肉吗」），不系统学原理。
+      adversarialPattern: 被讲长期主义大道理会烦「亏的是我」。
+      memoryRepairPattern: 买入理由三天就忘，只记得成本价。
+      behaviorBoundaries:
+        - 不接受被说「年轻人不懂投资」
+        - 不接受没有理由的「拿住别动」
+      learningPreferences: [要能直接执行的规则, 要说清为什么, 要结合他的真实持仓讲]
+      failurePatterns:
+        - 高位买入满仓单一主题
+        - 用「回本」当卖出条件
+      behavioralProfileSummary: 一个追高满仓、被损失厌恶钉住、想要回本万能钥匙的年轻基民。
+      personalityTraits:
+        verbosity: terse
+        enthusiasm: low
+        confusionStyle: direct
+        patience: low
+        questionStyle: challenging
+        emotionalRange: moderate
+    story:
+      id: story_fund-loss-rebalance
+      title: 亏了三万的那只基金
+      sourceType: life
+      storyOutline: 郑凯去年跟「大神」满仓了一只半导体主题基金，最高赚 15% 没卖，现在亏 30%——三万块。他每天打开 App 看净值，在「割肉认栽」和「补仓摊薄」之间摇摆了半个月：割了就真亏了，补了再跌呢？群里有人说「拿住等回本」，有人说「年轻人赌性别太重」，他谁都没听，但也谁都没法不听。
+      triggerEvent: 净值创新低 + 群里两种对立声音。
+      visibleOpening: 我一只基金亏了 30%，割肉还是补仓？网上说的都不一样，有没有人能直接告诉我怎么办？
+      hiddenDetails:
+        - 买入的直接原因是「大神说半导体十年一遇」，他没查过这只基金持仓集中度
+        - 他把「回本」当唯一的卖出条件，从没想过「如果是今天，我还会买它吗」
+        - 这 8 万是他全部的存款，没有应急现金——他是拿「不能亏的钱」在赌
+      misdiagnosis: 以为问题的答案是「割还是补」这个动作。
+      pressurePoints: [净值新低, 同辈盈利对比]
+      behaviorHooks: [只要买/卖的二选一, 回避「当初为什么买」, 刷净值上瘾]
+      problemKnowledge:
+        domainFamiliarity: low
+        knownConcepts: [基金 App 申购赎回, 净值涨跌, 余额宝]
+        struggleConcepts: [资产配置, 止损与再平衡纪律, 追涨杀跌心理, 主题基金集中度风险]
+        selfAssessment: 自认「运气差，选错了票」。
+        hiddenGaps: [不知道「割还是补」取决于仓位结构而不是预测：满仓单一主题本身就是错——应急钱和投资钱混在一起，且没有「跌到 X% 减多少」的事前规则，所以他只能靠情绪决定]
+      goalSeed:
+        domain: 个人理财 / 资产配置
+        goalType: problem_driven
+        surfaceGoal: 回本，或者至少别再亏
+        realProblem: 没有资产配置和事前规则（应急现金/仓位上限/再平衡纪律），满仓单一主题后只能靠情绪做割补决定；要学的是决策框架，而不是预测行情
+        motivation: interest
+        urgencyHint: 天天看净值，持续焦虑
+        constraints: [本金是全部存款, 时间少, 排斥长篇理论]
+        expectedOutcome: 一套自己的规则：留多少应急钱、单主题上限多少、跌/涨到什么位再平衡
+      disclosurePlan:
+        opening: 二选一逼问（割还是补）
+        revelationTriggers: [被问「当初为什么买它」「这 8 万是你所有的钱吗」]
+        resistancePoints: [被讲与持仓无关的理论]
+        idealProbe: 让他复述买入那天的理由，再看今天是否还成立
+    consistencyNotes:
+      - terse / challenging 决定首轮是逼问式的二选一，不是请教
+      - 「亏的是我」对应 adversarialPattern，大道理会立刻失去他
+      - hiddenGaps 把「割还是补」重新归因到「缺事前规则与仓位结构」，且平台只教框架不荐产品（behaviorBoundaries 合规边界）

@@ -14,9 +14,10 @@ describe('builtin-learners 预制虚拟学习者', () => {
   const loaded = loadBuiltinLearnerPresets();
 
   it('预制文件加载成功且无校验诊断', () => {
-    // v4 语料（2026-09-27）：退役 retiree-phone-photography、新增 retiree-xiangqi-openings
-    // 与 backend-eng-distributed ⇒ 14 → 15
-    expect(loaded.presets.length).toBe(15);
+    // v4 语料（2026-09-27）：退役 retiree-phone-photography；新增 retiree-xiangqi-openings、
+    // backend-eng-distributed、civil-service-onsite、fatty-liver-turnaround、mom-restart-job、
+    // fund-loss-rebalance ⇒ 14 → 19
+    expect(loaded.presets.length).toBe(19);
     expect(loaded.diagnostics).toEqual([]);
   });
 
