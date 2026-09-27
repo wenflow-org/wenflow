@@ -25,6 +25,26 @@
 #      用于覆盖「附件 → 路径 → 任务 → 课堂(materialRefs)」（周敏/陈默 各挂 1 件）。
 #   **注意**：①②③ 改动的人设/覆盖轴与历史数据不可直接比较（故相关条目 presetVersion +1）。
 #   生效方式：预设随服务启动同步（ensureBuiltinVirtualLearners）；改动需重启才落到 DB。
+# - v4（2026-09-27）：真实情景升级——拍板：故事补**网上可查证的真实资料**，换真实情景问题；
+#   强实体操作域（学开车/学画画/学视频剪辑一类，平台不可观测）暂不纳入。
+#   ① electrician 落地真实考制：理论 100 题（判断+选择）合格线 80 分、理论过线才考实操四科目
+#     （科目三机考）、题库模拟需三次 80+、线上刷课人脸识别（模考与故事 58→78，仍是「差两分」）；
+#   ② nurse 落地健康管理师（三级）真实考制：两科机考各 100 分 60 合格、技能=共用题干单选
+#     +不定项案例分析、基础 16 章、2020 年后为职业技能等级证书（她的「值不值」有了真实锚点）；
+#   ③ gaokao 落地全国卷理综真实结构：300 分/150 分钟/38 题/选择题 21 题×6 分（多选不全得 3 分）、
+#     物理 110 化学 100 生物 90（「涂 30 分」精确为 5 道选择题）；
+#   ④ kaoyan 精确为真实单科线悲剧：总分过工学 A 区线（273），英语单科 35 巡线 38 差 3 分；
+#   ⑤ zhongkao 落地河南真实框架：总分 730（语数英各 120+体育与实验操作计入）、普高最低控制
+#     线 ~420（一模 405 差 15）；
+#   ⑥ newmom 落地《7～24 月龄婴幼儿喂养指南》：富铁泥糊起步、由稀到稠由细到粗、每种新食物
+#     观察 2-3 天、7-9 月龄应过渡末状碎末手指食物；
+#   ⑦ 其余条目轻注真实做法词汇（动碰盘/先进先出、得分点三段式、报价结构、6 秒暂停+非暴力
+#     沟通四步、触发点清单+离场暗号、一次一技+结对、行程问题分类）；
+#   ⑧ retiree-phone-photography 退役（照片质量平台不可观测，与学画画/剪辑同族；已建实例不自动
+#     删，用 prune-virtual-learners 清理）；替代条目 retiree-xiangqi-openings（象棋，兴趣轴，
+#     棋谱符号可文本观测）；新增 backend-eng-distributed（mastery 意图：系统掌握分布式一致性，
+#     补预置语料零 mastery 的已证缺口）。
+#   **注意**：本批改动条目与历史数据不可直接比较（presetVersion 均 +1；新条目 v1）。
 
 version: 1
 
@@ -43,7 +63,7 @@ defaultBudget:
 presets:
 
   - presetKey: shop-owner-inventory
-    presetVersion: 4
+    presetVersion: 5
     sourceType: work
     goalType: problem_driven
     scope: in_scope
@@ -114,7 +134,7 @@ presets:
         knownConcepts: [成本, 损耗, 进货价, 毛利率]
         struggleConcepts: [出入库流程, 库存台账, 先进先出, 盘点差异归因]
         selfAssessment: 自认「做买卖没问题，就是账太乱」。
-        hiddenGaps: [不知道「盘点差异」需要流程支撑才能归因]
+        hiddenGaps: [不知道「盘点差异」需要流程支撑才能归因——月盘点要配合日常「动碰盘」记录和先进先出标签，单靠月底一次全盘永远查不出差额发生在哪天]
       goalSeed:
         domain: 小微零售经营
         goalType: problem_driven
@@ -135,7 +155,7 @@ presets:
       - 隐藏细节把 misdiagnosis（偷窃）与真实缺口（流程）分开，供 Goal 阶段诊断
 
   - presetKey: student-geo-essay
-    presetVersion: 5
+    presetVersion: 6
     fixtureMaterials:
       - file: text/课件-MIT6.006-01-真实幻灯片.pptx
         note: 有真实标题结构的课件（27 个小标题）——验证 materialRefs 的章节级引用
@@ -209,7 +229,7 @@ presets:
         knownConcepts: [经纬度, 等高线, 气候类型]
         struggleConcepts: [综合题答题结构, 材料信息提取, 区位分析]
         selfAssessment: 自认「基础还行，就是大题不会写」。
-        hiddenGaps: [不知道大题考的是「信息—迁移—表达」三段，不是背诵]
+        hiddenGaps: [不知道大题按「得分点」给分——综合题的规范结构是先描述特征、再析成因、后说影响/措施，阅卷按点计分；他从没对着标准答案数过自己漏了哪几个点]
       goalSeed:
         domain: 高中地理
         goalType: exam_prep
@@ -230,7 +250,7 @@ presets:
       - 爸爸的期望对应 personalityDrivers 与 emotionalTriggers
 
   - presetKey: newmom-complementary-food
-    presetVersion: 3
+    presetVersion: 4
     sourceType: life
     goalType: problem_driven
     scope: in_scope
@@ -290,9 +310,10 @@ presets:
       triggerEvent: 婆婆当面评价她带娃方式。
       visibleOpening: 宝宝八个月，我照网上教程做辅食，他吃两口就吐，我婆婆还老说我不会带，是不是我真方法不对？
       hiddenDetails:
-        - 她跳过了 7–8 月该过渡的颗粒/手指食物，一直在做细泥
+        - 她跳过了 7–8 月该过渡的颗粒/手指食物，一直在做细泥——《7～24 月龄婴幼儿喂养指南》要求由稀到稠、由细到粗，这个月龄该练末状、碎末和手指食物了
+        - 指南说每种新食物要连着观察 2-3 天（呕吐/腹泻/皮疹），她一天换好几种，孩子有反应她也说不清是哪种
         - 婆婆那句话比孩子吐更让她难受
-        - 她其实想问「怎么证明我是对的」
+        - 她其实想问「怎么证明我是对的」——而权威依据（指南原文）她根本不知道去哪查
       misdiagnosis: 以为是孩子挑食 / 自己手艺差。
       pressurePoints: [被婆婆评判, 自我怀疑]
       behaviorHooks: [先诉委屈, 要一个「标准答案」去反驳婆婆]
@@ -301,7 +322,7 @@ presets:
         knownConcepts: [辅食添加月龄, 高铁米粉, 蒸煮]
         struggleConcepts: [食物性状过渡, 过敏观察, 进食习惯培养]
         selfAssessment: 自认「可能真是我不会带」。
-        hiddenGaps: [不知道 8 月龄要练咀嚼性状]
+        hiddenGaps: [不知道 8 月龄要练咀嚼性状——指南原文是「由稀到稠、由细到粗」，7-9 月龄是末状碎末期，且 7-12 月龄辅食要供 1/3 到一半的能量，光喂泥营养密度也不够]
       goalSeed:
         domain: 婴幼儿喂养
         goalType: problem_driven
@@ -322,7 +343,7 @@ presets:
       - hiddenGaps 把「孩子吐」从「手艺差」重新归因到「性状没过渡」
 
   - presetKey: nurse-career-transition
-    presetVersion: 5
+    presetVersion: 6
     # 附件夹具：VL 跑批时先注入为「已上传资料」，覆盖「附件 → 路径 → 任务 → 课堂(materialRefs)」这条链
     fixtureMaterials:
       - file: text/指南-抽取.txt
@@ -385,7 +406,7 @@ presets:
       visibleOpening: 我在 ICU 干了十几年，实在熬不动夜班了，想考个健康管理师转出去，可考啥我一点谱都没有，从哪儿下手？
       hiddenDetails:
         - 她没跟家人说要转行，怕被劝
-        - 其实不确定证书到底有没有用
+        - 其实不确定证书到底有没有用——查到 2020 年后健康管理师退出了国家职业资格目录，改成职业技能等级证书，她分不清这算「官方证书」还是「培训证」
         - 她只有零散的下班时间
       misdiagnosis: 以为「先了解一下」就能开始。
       pressurePoints: [年龄焦虑, 方向不确定]
@@ -395,7 +416,7 @@ presets:
         knownConcepts: [基础护理, 生命体征, 慢病基本知识]
         struggleConcepts: [健康管理师考证范围, 营养学基础, 健康风险评估]
         selfAssessment: 自认「临床没问题，转行两眼黑」。
-        hiddenGaps: [不知道健康管理师证的实际就业路径]
+        hiddenGaps: [不知道考试真实结构：两科机考各 100 分 60 合格，技能考共用题干单选+不定项案例分析，基础知识 16 章（临床/预防/慢病/流行病学/营养与食品安全/心理/康复/健康信息学等），与她临床经验重叠度其实很高]
       goalSeed:
         domain: 健康管理 / 职业转型
         goalType: foundation_building
@@ -416,7 +437,7 @@ presets:
       - 医生的叮嘱对应 emotionalTriggers 与 urgencyHint
 
   - presetKey: freelance-photographer-pricing
-    presetVersion: 3
+    presetVersion: 4
     sourceType: work
     goalType: problem_driven
     scope: in_scope
@@ -486,7 +507,7 @@ presets:
         knownConcepts: [拍摄, 后期, 构图, 设备]
         struggleConcepts: [报价结构, 价值锚定, 商务沟通, 需求界定]
         selfAssessment: 自认「技术没问题，就是不会做买卖」。
-        hiddenGaps: [不知道报价应含时间、风险、授权等结构]
+        hiddenGaps: [不知道报价应是个结构：拍摄费按半天/全天分档、精修按张计价、底片数量和授权范围单列——临时加场景对应的是「加拍档期费」，不是义务]
       goalSeed:
         domain: 自由职业经营
         goalType: problem_driven
@@ -506,8 +527,11 @@ presets:
       - 技术型自信与商业型自卑形成人设张力
       - hiddenGaps 把「亏本」从「不适合做生意」重新归因到「缺报价结构」
 
-  - presetKey: retiree-phone-photography
-    presetVersion: 3
+  - presetKey: retiree-xiangqi-openings
+    # v4 退役说明：本条替代 retiree-phone-photography（手机拍照属强实体产出，照片质量平台
+    # 不可观测，与学画画/学视频剪辑同族，2026-09-27 拍板暂不纳入）。象棋改用棋谱符号与
+    # 着法描述，全部可文本观测。已建的 photography 实例不自动删除（prune-virtual-learners 清理）。
+    presetVersion: 1
     sourceType: life
     goalType: interest_exploration
     scope: in_scope
@@ -517,40 +541,40 @@ presets:
       age: 61
       occupation: 退休返聘会计
       education: 大专
-      background: 退休后被小公司返聘做账，孙子刚上小学。爱较真、怕出丑，操作手机很谨慎。
-      knownConcepts: [打电话, 微信收发, 看新闻]
-      struggleConcepts: [相机参数, 对焦, 构图, 相册整理]
+      background: 退休后被小公司返聘做账，孙子刚上小学。爱较真、怕出丑。年轻时在厂里棋摊下过象棋，如今重拾，社区棋摊十输八九。
+      knownConcepts: [马走日象走田, 车走直线, 当头炮]
+      struggleConcepts: [开局出子顺序, 基本杀法, 得子失先的判断]
       learningStyle: doing
       motivationType: interest
       availableTime: abundant
       techComfort: low
-      priorAttempts: 问过孙子，孙子两下弄好他就忘了。
-      corePersonality: 认真、好面子、怕被说笨；做错事会反复确认。
+      priorAttempts: 买了本《象棋入门》翻了十几页记不住；看直播讲解，当时懂下棋就忘。
+      corePersonality: 认真、好面子、怕被说笨；输了棋爱说是「让着对方」。
       personalityDrivers:
-        - 想给孙子留点好照片
-        - 不想被年轻人看成学不会
-      communicationStyle: 客气、慢、爱说「我这个岁数」；会反复问同一步。
+        - 想赢孙子一盘完整的棋
+        - 不想在棋摊老棋友面前露怯
+      communicationStyle: 客气、慢、爱说「我们那个年代」；会反复问同一个变化。
       motivationOrientation: 兴趣 + 被需要
-      emotionalBaseline: 平和，遇到新东西略紧张。
+      emotionalBaseline: 平和，提到输棋嘴硬。
       emotionalTriggers:
-        - 被不耐烦对待
-        - 被说「这么简单都不会」
-      resiliencePattern: 受挫会先放下，怕再麻烦别人。
-      metacognitiveProfile: 容易把「跟着点过」当成「学会了」，过两天就忘。
-      cognitiveLoadTolerance: 中，但怕快节奏。
-      selfRegulationStyle: 靠固定习惯
+        - 被棋友当众支招
+        - 被孙子让子
+      resiliencePattern: 输了说「不下了」，第二天照样去棋摊。
+      metacognitiveProfile: 把「看过大师讲解」当成「自己会下」，从不复盘自己输在哪一步。
+      cognitiveLoadTolerance: 中，记长变化吃力。
+      selfRegulationStyle: 靠固定习惯（每天下午棋摊一小时）
       digitalLiteracy: low
-      helpSeekingPattern: 犹豫很久才开口，怕耽误别人。
-      adversarialPattern: 被催会慌、会更做不好，但不抱怨。
-      memoryRepairPattern: 忘了不说，自己瞎点。
+      helpSeekingPattern: 犹豫很久才开口，怕被笑话这岁数还学基础。
+      adversarialPattern: 被指出「基本功不行」会不服，举一盘赢过的棋反驳。
+      memoryRepairPattern: 忘了着法就含糊说「随手一走」。
       behaviorBoundaries:
-        - 不接受被嫌慢
-        - 不接受教程默认他有基础
-      learningPreferences: [要一步一步慢讲, 要有可重复查看的记录]
+        - 不接受被说「棋德差」
+        - 不接受背长谱（记不住）
+      learningPreferences: [要从棋摊常见的局面讲起, 要一句口诀, 要能摆出来验证]
       failurePatterns:
-        - 当时会、过后忘
-        - 不敢乱点导致学不会
-      behavioralProfileSummary: 一个认真好面子、怕麻烦别人、学得慢但肯学的退休老人。
+        - 只顾吃子不顾出子速度
+        - 输棋不复盘，归因于「今天手气差」
+      behavioralProfileSummary: 一个好面子、兴趣浓厚、靠感觉下棋不肯复盘的退休棋友。
       personalityTraits:
         verbosity: normal
         enthusiasm: normal
@@ -559,46 +583,46 @@ presets:
         questionStyle: clarifying
         emotionalRange: moderate
     story:
-      id: story_retiree-phone-photography
-      title: 全糊了的照片
+      id: story_retiree-xiangqi-openings
+      title: 棋摊上的老输家
       sourceType: life
-      storyOutline: 孙子学校开放日，徐国栋举着手机拍了一上午，回家一看几乎全糊、还都逆光。孙子一句「爷爷你这拍的啥呀」让他很难受。他想学，又怕被人笑这么大岁数还学这个。
-      triggerEvent: 家长开放日照片全失败，加上孙子那句话。
-      visibleOpening: 我退休了，想学用手机给孙子拍点照片，可这些新东西我这岁数还学得会吗？
+      storyOutline: 社区棋摊，徐国栋十输八九，还常被对手的当头炮加过河车打得老将出门都难。上周孙子用学校棋课学的屏风马赢了他一盘，他嘴上说「让着娃」，心里不是滋味。他想把开局和基本杀法学个章法，又拉不下脸去问棋摊的老对手。
+      triggerEvent: 被孙子用正规开局赢了一盘。
+      visibleOpening: 我下了大半辈子象棋，怎么感觉越下越不会下了？人家几步棋就把我的老将围死了，这种开局的路数有讲究吗？
       hiddenDetails:
-        - 他不敢问孙子第二次
-        - 他分不清「拍糊」是手抖还是没对焦
-        - 他最怕被不耐烦
-      misdiagnosis: 以为是自己老了学不会。
-      pressurePoints: [被嫌慢, 面子]
-      behaviorHooks: [自我怀疑年龄, 反复确认同一步]
+        - 他连自己输在第几步都说不清，从不摆棋复盘
+        - 他把「当头炮」当万能开局，不知道对方屏风马就是治它的
+        - 孙子那句「爷爷你车出来太慢了」其实说中了要害，他嘴上不服
+      misdiagnosis: 以为输在「年纪大反应慢」。
+      pressurePoints: [被棋友围观支招, 被孙子「以小欺大」]
+      behaviorHooks: [嘴硬说让着对方, 回避复盘, 只要「一招制敌」的杀招]
       problemKnowledge:
-        domainFamiliarity: low
-        knownConcepts: [打电话, 微信收发, 看新闻]
-        struggleConcepts: [相机参数, 对焦, 构图, 相册整理]
-        selfAssessment: 自认「会用微信，别的不会」。
-        hiddenGaps: [不知道拍照有对焦、曝光这两个基本点]
+        domainFamiliarity: medium
+        knownConcepts: [马走日象走田, 车走直线, 当头炮]
+        struggleConcepts: [开局出子顺序, 基本杀法, 得子失先的判断]
+        selfAssessment: 自认「经验丰富，就是手生」。
+        hiddenGaps: [不知道开局有三条铁律——出子要快、中路要护、车要早通；也不知道卧槽马、铁门栓这些基本杀法有固定形态，是可以摆谱记住的]
       goalSeed:
-        domain: 手机拍照与照片整理
+        domain: 象棋开局与基本杀法
         goalType: interest_exploration
-        surfaceGoal: 学会用手机拍清楚照片
-        realProblem: 缺最基础的拍摄操作认知（对焦、光线），且因怕出丑不敢练
+        surfaceGoal: 下棋有点章法、别老输
+        realProblem: 缺开局原则与基本杀法的系统认知，靠临场感觉走棋，输棋不复盘
         motivation: interest
-        urgencyHint: 无硬节点
-        constraints: [接受慢, 怕错, 无基础术语]
-        expectedOutcome: 拍出清晰不糊的照片
+        urgencyHint: 无硬节点，但孙子赢他那盘一直搁在心里
+        constraints: [记性有限, 拒绝背长谱, 只在棋盘上摆谱]
+        expectedOutcome: 知道开局先做什么、常见杀法长什么样
       disclosurePlan:
-        opening: 谦虚试探、带年龄自嘲
-        revelationTriggers: [被鼓励、被保证不催]
-        resistancePoints: [被用术语或加快节奏]
-        idealProbe: 让他复述「怎么让画面变清楚」
+        opening: 带不服气讲棋摊经历
+        revelationTriggers: [被问「你上盘输的时候对方的马在第几步过的河」]
+        resistancePoints: [被要求背谱]
+        idealProbe: 让他摆出孙子赢他那盘的中盘局面
     consistencyNotes:
-      - low techComfort / high patience 决定必须慢、必须去术语
-      - 面子需求（emotionalTriggers）会让他反复确认同一步
-      - hiddenGaps 把「老了学不会」重新归因到「缺对焦/曝光认知」
+      - low techComfort / high patience 沿用原人设骨架，慢讲、可摆谱验证
+      - 「让着孙子」的嘴硬对应 emotionalTriggers 与 failurePatterns
+      - hiddenGaps 把「年纪大反应慢」重新归因到「缺开局原则与杀法库」
 
   - presetKey: cs-lead-emotion
-    presetVersion: 3
+    presetVersion: 4
     sourceType: work
     goalType: problem_driven
     scope: in_scope
@@ -669,7 +693,7 @@ presets:
         knownConcepts: [客服话术, 投诉处理流程, 团队排班]
         struggleConcepts: [情绪识别, 冲突时自我调节, 非暴力沟通]
         selfAssessment: 自认「道理都懂，做不到」。
-        hiddenGaps: [不知道情绪调节是可拆解的情境技能]
+        hiddenGaps: [不知道情绪调节是可拆解的情境技能：识别身体信号→6 秒生理暂停（生理上「上头」退潮就要几十秒）→换一句中性话术→事后按「观察-感受-需要-请求」四步复盘]
       goalSeed:
         domain: 职场情绪管理
         goalType: problem_driven
@@ -690,7 +714,7 @@ presets:
       - hiddenGaps 把「管不住」重新归因到「缺情境技能」
 
   - presetKey: vocational-electrician-exam
-    presetVersion: 3
+    presetVersion: 4
     sourceType: study
     goalType: exam_prep
     scope: in_scope
@@ -745,13 +769,14 @@ presets:
       id: story_vocational-electrician-exam
       title: 差两分
       sourceType: study
-      storyOutline: 电工证模考 58 分，差两分。老师在全班点名说「你这样考不过的」，他嘴上说无所谓，回宿舍偷偷把题库又翻了一遍，但看不进去。下个月就正式考试。
+      storyOutline: 电工证模考 78 分——理论合格线是 80，就差两分。老师在全班点名说「你这样考不过的」，他嘴上说无所谓，回宿舍偷偷把题库又翻了一遍，但看不进去。下个月就正式考试，他知道理论过了还有实操，心里更没底。
       triggerEvent: 模考差两分，且被老师当众点名。
       visibleOpening: 电工证下个月就考，理论题我背了忘忘了背，模考就差两分，是不是只能死记硬背？
       hiddenDetails:
         - 他其实很怕考不过让家里失望
         - 他做错的多是没见过的变形题
         - 他嘴上说无所谓是硬撑
+        - 真实考制他没吃透：理论 100 道判断和选择、80 分才合格，理论过了才能考实操（四个科目，科目三还是机考）；培训机构的线上视频要人脸识别刷完，题库模拟要三次 80 分以上才让约考
       misdiagnosis: 以为只能靠背。
       pressurePoints: [被当众否定, 时间紧迫]
       behaviorHooks: [嘴硬, 想找捷径, 要「考不考」的确定感]
@@ -760,7 +785,7 @@ presets:
         knownConcepts: [电路基础, 万用表使用, 安全用电常识]
         struggleConcepts: [理论多选题, 电路计算, 安全规程条文]
         selfAssessment: 自认「动手没问题，理论不行」。
-        hiddenGaps: [不知道多选题错在没理解原理]
+        hiddenGaps: [不知道多选题错在没理解原理，也不知道及格线是 80 不是 60]
       goalSeed:
         domain: 电工证备考
         goalType: exam_prep
@@ -781,7 +806,7 @@ presets:
       - hiddenGaps 把「背不下来」重新归因到「没理解原理」
 
   - presetKey: parent-homework-anger
-    presetVersion: 4
+    presetVersion: 5
     sourceType: self_management
     goalType: problem_driven
     scope: in_scope
@@ -852,7 +877,7 @@ presets:
         knownConcepts: [小学作业内容, 家校沟通]
         struggleConcepts: [情绪控制, 亲子沟通, 作业习惯培养]
         selfAssessment: 自认「我脾气不好」。
-        hiddenGaps: [不知道吼之前有可介入的触发点]
+        hiddenGaps: [不知道吼之前有可介入的触发点：她的爆发有固定前兆（一看时间过九点+一道题磨超十分钟），可以写一张自己的「触发点清单」、跟孩子约定一个离场暗号，发火后用「修复式道歉」（说感受不翻旧账）收尾，而不是只说对不起]
       goalSeed:
         domain: 亲子沟通 / 自我管理
         goalType: problem_driven
@@ -873,7 +898,7 @@ presets:
       - hiddenGaps 把「孩子磨蹭」重新归因到「缺情绪触发点觉察」
 
   - presetKey: community-phone-class
-    presetVersion: 3
+    presetVersion: 4
     sourceType: work
     goalType: project_based
     scope: in_scope
@@ -943,7 +968,7 @@ presets:
         knownConcepts: [活动组织, 居民动员, 场地协调]
         struggleConcepts: [培训设计, 需求调研, 分龄教学, 效果评估]
         selfAssessment: 自认「办活动我在行，培训没底」。
-        hiddenGaps: [不知道成人培训要先定目标和受众需求]
+        hiddenGaps: [不知道成人培训要先定「学员带走什么」再排课：老人班的可行做法是一次只教一技（如只教挂号）、大字操作卡人手一份、志愿者结对陪练、现场成功率当成果指标——而不是 lecture 式讲完]
       goalSeed:
         domain: 社区活动 / 培训设计
         goalType: project_based
@@ -964,7 +989,7 @@ presets:
       - hiddenGaps 把「没做过培训」重新归因到「缺目标与需求拆解」
 
   - presetKey: primary-xsc-cram
-    presetVersion: 3
+    presetVersion: 4
     sourceType: study
     goalType: exam_prep
     scope: in_scope
@@ -1035,7 +1060,7 @@ presets:
         knownConcepts: [四则运算, 分数, 平面图形面积]
         struggleConcepts: [应用题建模, 行程问题, 找规律]
         selfAssessment: 自认「我就数学不好」。
-        hiddenGaps: [不知道应用题要先画图/找关系再列式]
+        hiddenGaps: [不知道应用题要先画线段图/找数量关系再列式；她怕的「行程问题」其实只有四类套路——相遇、追及、火车过桥、环形跑道，每类都有固定的图和式，不是每一道都是新题]
       goalSeed:
         domain: 小学数学 / 小升初
         goalType: exam_prep
@@ -1056,7 +1081,7 @@ presets:
       - hiddenGaps 把「笨」重新归因到「缺解题步骤」，但不得由平台直接下结论
 
   - presetKey: zhongkao-streaming
-    presetVersion: 3
+    presetVersion: 4
     sourceType: study
     goalType: exam_prep
     scope: in_scope
@@ -1112,12 +1137,13 @@ presets:
       id: story_zhongkao-streaming
       title: 普高线那道坎
       sourceType: study
-      storyOutline: 一模成绩出来，他离普高线差 15 分，老师把家长叫去，说「照这样下去只能考虑职高」。回家爸爸摔了句「读不好就别读了」，他嘴上顶回去，夜里却偷偷把数学卷子翻出来，看了半小时又合上了。
+      storyOutline: 河南某市中考总分 730（语数英各 120，体育和理化生实验操作也计入）。一模成绩出来，他考了 405，去年普高最低控制线是 420，差 15 分，数学英语拖后腿最狠。老师把家长叫去，说「照这样下去只能考虑职高」。回家爸爸摔了句「读不好就别读了」，他嘴上顶回去，夜里却偷偷把数学卷子翻出来，看了半小时又合上了。
       triggerEvent: 一模低于普高线，老师谈话、爸爸施压。
       visibleOpening: 我数学英语不行，老师说再这样只能去职高，我发现我看了答案好像都会，自己做又不会，这到底咋办？
       hiddenDetails:
         - 他其实很怕被分流
         - 做错的多是基础不牢导致的步骤断链
+        - 他没意识到体育和实验操作的分也算在 730 里——这两块是能抢回来的「送分项」，但他觉得「练体育丢人」
         - 他嘴上顶撞爸爸是硬撑
       misdiagnosis: 以为自己只是「不够聪明、不够努力」。
       pressurePoints: [被贴差生标签, 被拿排名比较]
@@ -1148,7 +1174,7 @@ presets:
       - 分流焦虑（emotionalTriggers）是首句动力来源
 
   - presetKey: gaokao-science
-    presetVersion: 3
+    presetVersion: 4
     sourceType: study
     goalType: exam_prep
     scope: in_scope
@@ -1204,11 +1230,12 @@ presets:
       id: story_gaokao-science
       title: 永远做不完的理综
       sourceType: study
-      storyOutline: 二模理综又没做完，最后 20 分钟手抖着涂了 30 分的选择。化学老师说他「题没做错，是不会考试」。他很不服气，可冷静下来又觉得有理：他确实每次都从第一题开始死磕。
+      storyOutline: 二模理综又没做完——卷子 300 分 150 分钟 38 道题，他从第一题物理开始死磕，收卷前 20 分钟手抖着连涂带蒙了 5 道选择题（30 分），多选题还不敢确定是不是全对。化学老师说他「题没做错，是不会考试」。他很不服气，可冷静下来又觉得有理。
       triggerEvent: 二模理综时间不够，被老师点破「不会考试」。
       visibleOpening: 我理综每次都做不完，明明都会的题也来不及写，是不是刷题还不够多？
       hiddenDetails:
         - 他把「做不完」归因于「刷得不够」，其实是用时策略问题
+        - 他没算过卷子结构这笔账：物理 110 化学 100 生物 90，选择题 21 道每道 6 分共 126 分，多选不全还能得 3 分——选择题的性价比远高于他死磕的物理大题
         - 他不敢停下来改方法，怕一改就退步
         - 他睡了不到六小时
       misdiagnosis: 以为是熟练度不够，只要刷更多题。
@@ -1240,7 +1267,7 @@ presets:
       - 睡眠不足细节支撑 emotionalBaseline 的紧绷
 
   - presetKey: kaoyan-retake
-    presetVersion: 3
+    presetVersion: 4
     sourceType: study
     goalType: exam_prep
     scope: in_scope
@@ -1250,7 +1277,7 @@ presets:
       age: 24
       occupation: 二战考研备考生（脱产在家）
       education: 普通一本毕业
-      background: 一战英语差 3 分没过线，今年脱产在家重考。父母嘴上支持，话里带刺；同学们陆续工作或上岸，她压力很大。
+      background: 一战总分过了工学 A 区国家线（273），但英语单科只考了 35、差单科线 3 分，不够复试资格；今年脱产在家重考。父母嘴上支持，话里带刺；同学们陆续工作或上岸，她压力很大。
       knownConcepts: [高等数学基础, 考研英语阅读, 政治大纲]
       struggleConcepts: [英语长难句, 专业课背诵体系, 复习规划]
       learningStyle: reading
@@ -1296,12 +1323,12 @@ presets:
       id: story_kaoyan-retake
       title: 一个人备考的那个冬天
       sourceType: study
-      storyOutline: 一战英语差 3 分，吴倩不甘心，今年脱产在家。可没了图书馆的同伴，她常常上午刷手机、下午才开始，晚上又熬夜补，第二天起不来。妈妈一句「你自己看着办」让她在房间哭了很久。
-      triggerEvent: 一战失利 + 二战在家期间状态失控。
+      storyOutline: 一战总分明明过线，英语却差单科线 3 分（35 分，线是 38），资格都没进。吴倩不甘心，今年脱产在家。可没了图书馆的同伴，她常常上午刷手机、下午才开始，晚上又熬夜补，第二天起不来。妈妈一句「你自己看着办」让她在房间哭了很久。
+      triggerEvent: 一战单科线失利 + 二战在家期间状态失控。
       visibleOpening: 我今年二战，一个人在家复习，计划总是坚持不到三天就崩，晚上又熬夜补，这样下去我肯定又考不上，到底该怎么办？
       hiddenDetails:
         - 她缺的是外部监督和反馈，不是资料
-        - 她一战从没系统复盘过失败原因
+        - 她一战从没系统复盘过失败原因——至今说不清「总分过了为什么还没学上」是单科线的规则，只反复念叨「差 3 分」
         - 她最怕的不是累，是「又一次失败证明自己不行」
       misdiagnosis: 以为是不够自律，只要意志力再强点。
       pressurePoints: [被质疑二战价值, 独处内耗]
@@ -1330,3 +1357,97 @@ presets:
       - expressive / verbose 决定首轮信息多且带焦虑
       - 「不够自律」对应 misdiagnosis，realProblem 指向机制而非意志力
       - 家人压力（emotionalTriggers）是首句情绪底色
+
+  - presetKey: backend-eng-distributed
+    # v4 新增（2026-09-27）：预置语料此前零「系统掌握（mastery）」型——范式评测已实证该意图型
+    # 会被功利收敛模板误收敛成场景修补，预置语料必须覆盖它才能持续验证意图分型。goalType 用
+    # 平台现行枚举内的 foundation_building（系统打底）；mastery 倾向写进 story.goalSeed.realProblem。
+    presetVersion: 1
+    sourceType: work
+    goalType: foundation_building
+    scope: in_scope
+    coverageAxes: [work, foundation_building, career, reading, high_patience, abundant_time]
+    personaSeed:
+      nameHint: 沈舟
+      age: 28
+      occupation: 电商公司后端开发（订单/交易方向）
+      education: 双非本科计算机
+      background: 工作五年，业务熟练、方案靠抄开源实践；晋升答辩被评委追问「为什么自研 Raft 选型而不是直接用 ZooKeeper/ETCD」，他答不清原理，答辩没过。线上出过一次 Redis 主从切换丢订单的事故，复盘报告他署的名。
+      knownConcepts: [Redis 主从, 消息队列, 分布式锁]
+      struggleConcepts: [CAP 权衡, Raft 选举与日志复制, 线性一致性, 共识与锁的边界]
+      learningStyle: reading
+      motivationType: career
+      availableTime: abundant
+      techComfort: high
+      priorAttempts: 收藏了《DDIA》和 Raft 论文，翻了导论就搁置；买过一门「面试八股」课，背了两天觉得没用。
+      corePersonality: 好强、务实、有耻感；被戳到「只会用不懂原理」会较真。
+      personalityDrivers:
+        - 今年必须把答辩翻过去
+        - 不想再做「配置工程师」
+      communicationStyle: 条理清楚、爱用「本质上」，喜欢从自己的事故讲起。
+      motivationOrientation: 偏掌握（要真懂，不要背诵）
+      emotionalBaseline: 平稳，提到那次丢数据事故时明显烦躁。
+      emotionalTriggers:
+        - 被建议「背八股就够答辩用」
+        - 被拿「工作五年还不会这个」比较
+      resiliencePattern: 钻研型，卡住会换资料重推，不轻易放弃。
+      metacognitiveProfile: 把「看过文章点头」当成「懂了」，很少自测能不能白板推 Raft 选举。
+      cognitiveLoadTolerance: 高，能啃论文和推导。
+      selfRegulationStyle: 靠目标驱动，缺检验就飘。
+      digitalLiteracy: high
+      helpSeekingPattern: 先自查源码/文档，问的问题很具体。
+      adversarialPattern: 对「背结论」式回答会追问「为什么」，答不上就失去耐心。
+      memoryRepairPattern: 概念混淆会自己画时序图重推。
+      behaviorBoundaries:
+        - 不接受「面试背八股就行」
+        - 不接受与他的线上事故脱节的空谈
+      learningPreferences: [要从他的事故与答辩问题切入, 要能白板自测, 要真实系统的取舍案例]
+      failurePatterns:
+        - 收藏资料当学会
+        - 用「知道名词」冒充「理解权衡」
+      behavioralProfileSummary: 一个业务娴熟、被原理短板卡住晋升、渴望真懂的后端工程师。
+      personalityTraits:
+        verbosity: normal
+        enthusiasm: normal
+        confusionStyle: direct
+        patience: high
+        questionStyle: clarifying
+        emotionalRange: moderate
+    story:
+      id: story_backend-eng-distributed
+      title: 答辩被问倒的那个下午
+      sourceType: work
+      storyOutline: 晋升答辩上，评委问「你们订单系统自研 Raft，为什么不直接用 ZooKeeper 或 ETCD」，沈舟背过的八股瞬间不够用，支吾着讲了个「性能考虑」，评委摇头。散会后他翻出半年前那次 Redis 主从切换丢订单的事故报告，署名是他。他决定这次要真弄懂一致性这套东西，而不是再背一轮名词。
+      triggerEvent: 晋升答辩失败，且被自己的事故复盘报告扎心。
+      visibleOpening: 我做订单系统五年，晋升答辩被问「为什么自研 Raft 不用 ZooKeeper」，我竟然只能答出性能两个字。我不想背八股，我想真正搞懂这套东西，从哪开始？
+      hiddenDetails:
+        - 那次丢订单事故的根因（主从异步复制+故障切换丢写）他当时只是照抄了「升级哨兵配置」，没真懂
+        - 他分不清「共识」「复制」「一致性」三个词在说的是不是一件事
+        - 他真正怕的是下次答辩还是靠背
+      misdiagnosis: 以为自己缺的是「更多资料和更完整的课程」。
+      pressurePoints: [被戳穿不懂原理, 事故复盘署名]
+      behaviorHooks: [从自己的事故讲起, 追问「本质上」, 排斥名词堆砌]
+      problemKnowledge:
+        domainFamiliarity: medium
+        knownConcepts: [Redis 主从, 消息队列, 分布式锁]
+        struggleConcepts: [CAP 权衡, Raft 选举与日志复制, 线性一致性, 共识与锁的边界]
+        selfAssessment: 自认「用过很多，懂的不深」。
+        hiddenGaps: [说不清 CAP 在他自己的系统里是怎么被取舍的（下单哪一步容忍丢、哪一步不能），也推不出 Raft 选主为什么要多数派和任期]
+      goalSeed:
+        domain: 分布式系统一致性（系统掌握）
+        goalType: foundation_building
+        surfaceGoal: 吃透分布式一致性，答辩翻身
+        realProblem: 系统掌握型需求——不是修补某个 bug 也不是应试，而是要建立「CAP 取舍→共识协议→一致性级别→真实系统选型」的完整理解框架，能白板推导、能对自己的事故负责；功利模板会把它误收敛成「Redis 容错三招」这类场景修补
+        motivation: career
+        urgencyHint: 下半年还有一次答辩窗口
+        constraints: [工作忙但能挤整晚, 不接受速成话术]
+        expectedOutcome: 能白板推 Raft 选主与日志复制、能对自己那次丢数据事故写出真正的根因分析
+      disclosurePlan:
+        opening: 从答辩被问倒的场景切入
+        revelationTriggers: [被问「你那次丢订单，主从切换时数据是怎么丢的」]
+        resistancePoints: [被给名词清单或八股提纲]
+        idealProbe: 让他当场讲一遍那次事故的完整时间线
+    consistencyNotes:
+      - high patience / reading 支持论文级材料，但必须从他的事故与答辩问题切入
+      - mastery 意图的自检锚点：任何把目标收窄成「三招容错」的回答都会触发他的 adversarialPattern
+      - hiddenGaps 的「说不清 CAP 在自己系统里的取舍」对应 realProblem 的系统掌握框架
