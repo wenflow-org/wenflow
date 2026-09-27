@@ -605,7 +605,42 @@ html, body {
    渲染高度 = (视口/系数)×系数 = 恰好一屏。 */
 :root { --vp-zoom: 1; }
 
+/* 认证页（登录/注册/重置）退出全局 zoom（2026-09-27 用户反馈「4K 下过大」）：
+   它是居中单卡页，zoom 1.3 会把卡片渲染到 1066px 宽、min-height:100vh 也被放大
+   1.3 倍 → 4K 凭空多出 ~650px 滚动；且与下方 2000-2799 的 auth 专属字级叠加成
+   双重放大。改走自己的字级阶梯（见下方 auth 桌面基线与高分屏块）。 */
+@media (min-width: 2000px) {
+  .v2-page.auth { zoom: 1; --vp-zoom: 1; }
+}
+
+/* 认证页桌面基线（≥1101）：聚焦单卡页，字级比应用页大半档
+   （2026-09-27 用户反馈「1080p 不太清楚」）。移动端不受影响（块是 min-width）。 */
+@media (min-width: 1101px) {
+  .v2-page .auth__card .head h2 { font-size: 22px; }
+  .v2-page .auth__card .head p { font-size: 14.5px; }
+  .v2-page .auth__card .field__label { font-size: 13px; }
+  .v2-page .auth__card .field__input { font-size: 15px; }
+  .v2-page .auth__card .btn-primary--block { font-size: 15px; }
+}
+
 /* 2000-2799：认证页（无 zoom 覆盖区间）表单字号随视口放大 */
+@media (min-width: 2800px) {
+  .v2-page.auth .auth__card { width: min(920px, 100%); }
+  .v2-page .auth__card .head h2 { font-size: 28px; }
+  .v2-page .auth__card .head p { font-size: 16px; }
+  .v2-page .auth__card .field__label { font-size: 14.5px; }
+  .v2-page .auth__card .field__input { font-size: 16px; padding: 13px 16px; }
+  .v2-page .auth__card .btn-primary--block { font-size: 16px; }
+  /* 演示面板（卡片右半）跟阶梯一起走，别在 30px 标题旁边还是 13px（评审提示） */
+  .v2-page .auth .demo__msg, .v2-page .auth .demo__panel { font-size: 15px; }
+  .v2-page .auth .demo__chips button, .v2-page .auth .demo__field small { font-size: 13.5px; }
+}
+@media (min-width: 3600px) {
+  .v2-page.auth .auth__card { width: min(980px, 100%); }
+  .v2-page .auth__card .head h2 { font-size: 30px; }
+  .v2-page .auth__card .field__input { font-size: 17px; }
+  .v2-page .auth .demo__msg, .v2-page .auth .demo__panel { font-size: 16px; }
+}
 @media (min-width: 2000px) and (max-width: 2799px) {
   .v2-page .auth__card .head h2 { font-size: 26px; }
   .v2-page .auth__card .head p { font-size: 15px; }
