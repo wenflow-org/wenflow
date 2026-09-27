@@ -9,7 +9,8 @@
           <h1>{{ heroTitle }}</h1>
           <p>基于你的学习记录实时评估。</p>
         </div>
-        <router-link to="/learning-paths" class="btn-ghost">查看学习路径</router-link>
+        <!-- 2026-09-27：本页不再放「学习路径」入口（导航已有），hero 按钮改跳学习历史（原侧栏学习记录卡删除） -->
+        <router-link to="/user/learning-history" class="btn-ghost">查看学习历史</router-link>
       </div>
 
       <!-- 体检卡（批19）：整体状态为主指标突出，学习压力/掌握趋势/疲劳程度降为行内状态条
@@ -297,10 +298,7 @@
               </ul>
             </div>
           </section>
-          <section class="card sidecard">
-            <span class="kicker">学习记录</span>
-            <router-link to="/user/learning-history" class="btn-ghost btn-ghost--block">查看学习历史</router-link>
-          </section>
+          <!-- 2026-09-27：独立「学习记录」卡删除——整卡只有一个链接，入口上移到 hero 按钮 -->
           <section class="card band sidecard">
             <div class="band__head">
               <button type="button" class="band__toggle" :aria-expanded="openBands.legend" @click="toggleBand('legend')">
@@ -355,12 +353,14 @@ const range = ref<42 | 90>(42);
 /* ---------- 折叠带（批11 首屏重构）：桌面默认全开展示，移动端默认只留
    「结论（指标卡）+ 学习曲线 + AI 建议」首屏，长尾内容（决策/偏好/说明）收起。
    折叠状态在挂载时按视口定一次，之后手动切换不随视口变化。 ---------- */
+const isNarrowAtMount = typeof window !== 'undefined'
+  && window.matchMedia('(max-width: 1100px)').matches;
 const openBands = ref({
   chart: true,                 // 趋势图是本页核心，任何宽度都默认展开
   suggest: true,               // AI 建议是本页最可行动的内容，全宽度默认展开（批19 从移动端收起改为常开）
   decisions: true,             // 学习调控（2026-09-27 升级为可操作调控流）：待确认项必须可见
-  prefs: false,                // 画像偏好默认收起（2026-09-27 降噪）
-  legend: false,               // 指标说明默认收起（2026-09-27 降噪：阈值口径折到这里，需要时打开）
+  prefs: !isNarrowAtMount,     // 学习偏好：PC 常开（2026-09-27 用户反馈），窄屏收起省密度
+  legend: !isNarrowAtMount,    // 指标说明：PC 常开（2026-09-27 用户反馈），窄屏收起
 });
 const reviewOpen = ref(false);
 function toggleBand(key: keyof typeof openBands.value) {
