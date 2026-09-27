@@ -314,8 +314,10 @@ onUnmounted(() => {
   --blue: #3478f6;
   --blue-deep: #1f57cc;
   --cyan: #43b0d8;
-  --green: #31b16f;
-  --green-deep: #1f8a52;
+  /* 与 main.css 的 --mk-green 同源（走查 2026-09-27：原 #31b16f/#1f8a52 当白底
+     文字色只有 2.75/4.36:1；暗色档提亮供深底文字用，保留） */
+  --green: #15803d;
+  --green-deep: #166534;
   --accent: #8d6bff;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   [data-theme='dark'] & {
@@ -556,7 +558,7 @@ main {
 }
 .hn-chip--green {
   color: var(--green-deep);
-  background: rgba(49, 177, 111, 0.12);
+  background: rgba(21, 128, 61, 0.1);
 }
 [data-theme='dark'] .hn-chip--green {
   background: rgba(62, 201, 132, 0.16);
@@ -1077,7 +1079,8 @@ main {
 .hn-state__metrics .hn-state__form {
   font-size: 12px;
   line-height: 1.3;
-  color: var(--green);
+  /* 12px 小字给深一档的绿（--green 是 5.0:1，这里 7.1:1 更稳，走查 2026-09-27） */
+  color: var(--green-deep);
 }
 .hn-state__hint {
   margin-top: 12px;

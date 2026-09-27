@@ -383,7 +383,7 @@ async function goDashboard() {
   border-radius: var(--mk-radius-pill);
 }
 .ob__chip--green {
-  color: #0f8a4d;
+  color: var(--green-ink);
   background: rgba(22,163,94,0.12);
 }
 
@@ -452,7 +452,7 @@ async function goDashboard() {
 .ob__stage b { font-size: 12px; color: var(--ink); }
 .ob__stage small { font-size: 10.5px; color: var(--faint); }
 .ob__stage.is-done i {
-  color: #0f8a4d;
+  color: var(--green-ink);
   border-color: rgba(22,163,94,0.4);
   background: rgba(22,163,94,0.1);
 }
@@ -528,7 +528,7 @@ async function goDashboard() {
 }
 .ob__demo-metrics small { font-size: 10.5px; color: var(--faint); }
 .ob__demo-metrics b { font-size: 15px; color: var(--ink); }
-.ob__demo-metrics b.is-good { font-size: 11.5px; color: #0f8a4d; }
+.ob__demo-metrics b.is-good { font-size: 11.5px; color: var(--green-ink); }
 .ob__demo-tip {
   font-size: 11px;
   color: var(--muted);

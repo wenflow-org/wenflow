@@ -56,6 +56,9 @@
   --mk-surface: #ffffff;
   --mk-surface-2: #eef2fa;       /* 次级表面：空态图标底、嵌套面、表格头等的浅底 */
   --mk-blue: #2c63d0;
+  /* 绿色文字基线：白底 5.0:1。文字级要更深用 v2.css 的 --green-ink；
+     不要自造更亮的绿当文字色（如 #31b16f 仅 2.75:1，走查 2026-09-27）。
+     填充底色（配白字）另有 --mk-green-fill，见下方「实心语义底色」。 */
   --mk-green: #15803d;
   --mk-green-bg: #ecfdf5;
   --mk-amber: #b45309;
