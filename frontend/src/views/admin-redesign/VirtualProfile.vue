@@ -1114,7 +1114,9 @@ async function saveBudget() {
     budgetErrors.value.maxRetriesPerStep = '单步重试须为 1–20 的整数'
     return
   }
-  if (!Number.isFinite(total) || total < 1 || total > 500) {
+  // 上限与后端 clamp 对齐：virtual-learners.ts 的 clampBudgetValue(x, 600, 1, 1000)——
+  // 此前前端拦 500 而文案/输入框 max/后端都是 1000，输入 501-1000 会被误判为非法
+  if (!Number.isFinite(total) || total < 1 || total > 1000) {
     budgetErrors.value.maxRetriesTotal = '总重试预算须为 1–1000 的整数'
     return
   }
@@ -1472,8 +1474,13 @@ async function loadDetail(id?: string, quiet = false) {
 watch(
   () => subPage.value?.id,
   async (id) => {
-    if (id) await loadDetail(id)
-    if (id) void loadMemory(false)
+    if (id) {
+      // 换虚拟人先清旧记忆池：否则新详情页会短暂渲染上一个人的记忆数据
+      memoryData.value = null
+      memoryLoadFailed.value = false
+      await loadDetail(id)
+      void loadMemory(false)
+    }
   },
   { immediate: true }
 )
@@ -1558,14 +1565,20 @@ const memoryChartLegend = computed(() =>
   }))
 )
 
+/** 记忆池加载序号：与详情轮询/手动刷新/切换虚拟人竞态时丢弃旧响应（last-wins） */
+let memoryLoadSeq = 0
+
 async function loadMemory(force = false) {
   const id = subPage.value?.id
   if (!id) return
-  if (memoryLoading.value && !force) return
+  // 忙时不丢弃新加载：记序号直接重跑，旧响应按序号作废（此前 memoryLoading 早退会卡在旧数据）
+  const seq = ++memoryLoadSeq
   memoryLoading.value = true
   memoryLoadFailed.value = false
   try {
     const res = await adminVirtualLearnersApi.getVirtualLearnerMemory(id)
+    // 竞态守卫：await 期间已切到别的虚拟人（或触发了更新的加载），丢弃本响应
+    if (seq !== memoryLoadSeq || subPage.value?.id !== id) return
     const body = res.data?.data ?? res.data ?? null
     const d = body || {}
     memoryData.value = {
@@ -1578,10 +1591,11 @@ async function loadMemory(force = false) {
       asOf: typeof d.asOf === 'string' ? d.asOf : undefined
     }
   } catch {
+    if (seq !== memoryLoadSeq || subPage.value?.id !== id) return
     memoryLoadFailed.value = true
     if (!force) memoryData.value = null
   } finally {
-    memoryLoading.value = false
+    if (seq === memoryLoadSeq) memoryLoading.value = false
   }
 }
 
@@ -1885,7 +1899,8 @@ const timelineSessionOptions = computed(() =>
     .filter((r) => !!r.sessionId)
     .map((r) => ({
       sessionId: String(r.sessionId),
-      label: `${formatRunResult(r.result)} · ${r.storyTitle || '未关联故事'} · ${timeAgo(r.time)}`,
+      // 传原始时间 createdAt（RunItem 内 time 已是 timeAgo 文案，再喂 timeAgo 会二次格式化出 Invalid Date）
+      label: `${formatRunResult(r.result)} · ${r.storyTitle || '未关联故事'} · ${timeAgo(String(r.createdAt || ''))}`,
     })),
 )
 watch(
@@ -2357,7 +2372,8 @@ async function quietReload(id: string) {
   content: '📈 ';
   font-size: var(--mk-fs-micro);
 }
-/* 最近结果：色调徽标 */
+/* 最近结果占位（仅「未运行」文案在用；is-ok/is-bad/is-warn/is-running/is-none 等修饰类
+   从未在模板里绑定，属死 CSS 已删） */
 .vp-story__latest {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
@@ -2365,21 +2381,6 @@ async function quietReload(id: string) {
   flex-shrink: 0;
   margin-left: auto;
 }
-.vp-story__latest.is-ok { color: var(--mk-green, #16a34a); }
-.vp-story__latest.is-bad { color: var(--mk-red, var(--mk-red)); }
-.vp-story__latest.is-warn { color: var(--mk-amber, #b7791f); }
-.vp-story__latest.is-running { color: var(--mk-amber, #b7791f); }
-.vp-story__latest.is-running::before {
-  content: '';
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  margin-right: 5px;
-  animation: vp-pulse 1.4s ease-in-out infinite;
-}
-.vp-story__latest.is-none { color: var(--mk-faint); font-weight: 600; }
 /* 行内操作 */
 .vp-story__ops {
   display: flex;
@@ -2392,11 +2393,6 @@ async function quietReload(id: string) {
   color: #c4ccd9;
   font-size: var(--mk-fs-micro);
   flex-shrink: 0;
-}
-
-@keyframes vp-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(0.8); }
 }
 
 /* V3 质量徽章样式已随裁判独立面移除（2026-09-27） */
@@ -2692,9 +2688,8 @@ async function quietReload(id: string) {
 
 /* ================= 暗色模式（D1 补完）：虚拟画像页 ================= */
 html[data-theme='dark'] {
-  .vp-top { background: #19191a; border-color: #2a2b2d; }
-  .vp-tab { background: #202122; }
-  .vp-tab.is-active { background: rgba(91, 141, 239, 0.16); color: var(--mk-accent-deep); }
+  /* （原 .vp-top/.vp-tab/.vp-tab.is-active 死选择器已删：模板用的是 vp-tabsrow/vp-tabs/vp-tab__count，
+     这三条从未命中任何元素） */
   .vp-story__row:hover { background: #252627; }
   .vp-story.is-selected .vp-story__row { background: rgba(91, 141, 239, 0.12); }
   .vp-top__goal { background: #202122; }

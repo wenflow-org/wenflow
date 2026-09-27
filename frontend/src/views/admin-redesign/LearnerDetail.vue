@@ -1,7 +1,10 @@
 <template>
   <div v-if="detailError" class="mk-page ld">
+    <!-- 错误态与其他分支一致补返回入口：此前错误全屏只有重试，只能靠浏览器后退离开 -->
+    <button type="button" class="mk-back" @click="closeSubPage">← 用户与学习者</button>
     <MkEmptyState
       icon="◌"
+      tone="error"
       title="详情加载失败"
       description="暂时无法获取该学习者的完整快照。"
       action-text="重试"
@@ -28,7 +31,7 @@
               <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">快照 {{ d.snapshot.version }} · {{ d.snapshot.generatedAt }}</span>
             </span>
           </div>
-          <span class="mk-entity__sub">{{ d.email }} · 加入 {{ d.joined || '—' }}</span>
+          <span class="mk-entity__sub">{{ d.email }}</span>
         </div>
         <div class="mk-entity__actions">
           <button type="button" class="mk-status__action" :disabled="recomputing" @click="recompute">
@@ -108,28 +111,8 @@
       </div>
 
       <div class="ld-col">
-        <!-- 7 天活跃趋势：有数据时展示柱图，无数据时展示空态提示 -->
-        <section class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">7 天活跃趋势</h3>
-            <span class="mk-card__meta">{{ trendHint }}</span>
-          </div>
-          <div v-if="d.trend7d.some((v) => v > 0)" class="ld-trend">
-            <span
-              v-for="(v, i) in d.trend7d"
-              :key="i"
-              class="ld-trend__bar"
-              :class="{ 'ld-trend__bar--down': d.trend === 'down' }"
-              :style="{ height: (v / 7) * 100 + '%' }"
-              :title="`${['周一','周二','周三','周四','周五','周六','周日'][i]} · 活跃 ${v}`"
-            ></span>
-          </div>
-          <p v-else class="ld-none">
-            {{ '暂无 7 天活跃数据' }}
-            <span class="ld-none__hint">学习者产生会话后将自动生成。</span>
-          </p>
-        </section>
-
+        <!-- （原「7 天活跃趋势」卡已移除：trend7d 无任何数据来源，恒为 0 的假卡只会渲染
+             「学习者产生会话后将自动生成」的误导空态；后端 learner-models 无按日活跃接口） -->
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">最近会话</h3>
@@ -529,16 +512,17 @@
       </div>
     </div>
 
-    <!-- ============ 知识图谱：概念图画布（节点=概念，边=前置/属于） ============ -->
+    <!-- ============ 知识图谱：概念图画布（节点=概念，边=前置/属于）
+         卡片走 .mk-card 原语（原 ld-card* 是不存在的私有类，渲染成无样式裸块） ============ -->
     <div v-else-if="tab === 'graph'" class="ld-tabpage">
-      <section class="ld-card">
-        <header class="ld-card__head">
-          <h3 class="ld-card__title">知识图谱</h3>
-          <span v-if="graphMeta" class="ld-card__hint">
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">知识图谱</h3>
+          <span v-if="graphMeta" class="mk-card__meta">
             <template v-if="graphMeta.truncated">已截断，共 {{ graphMeta.totalConcepts }} 个概念 · </template>
             默认展示全部路径的聚合图
           </span>
-        </header>
+        </div>
         <MkGraphExplorer
           :nodes="graphNodes"
           :edges="graphEdges"
@@ -582,7 +566,6 @@ const isDark = useIsDark()
 interface Detail {
   name: string
   email: string
-  joined: string
   trend: 'up' | 'down' | 'flat'
   fatigue: string
   path: string
@@ -590,7 +573,6 @@ interface Detail {
   task: string
   pct: number
   concepts: { mastered: string[]; struggling: string[]; fragile: string[] }
-  trend7d: number[]
   sessions: { time: string; title: string; result: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; concepts?: string[] }[]
   snapshot: { version: string; generatedAt: string }
 }
@@ -705,7 +687,161 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   })
 }
 
-let detailLoading = false
+/** 详情加载序号：id 快速切换时旧请求后到会覆盖新数据——last-wins 守卫（忙时新加载不被丢弃，直接重跑） */
+let detailLoadSeq = 0
+/** 上次成功发起加载的学习者 id：区分「换人」与「同人重算」 */
+let lastLoadedId: string | null = null
+
+/** 换学习者时清空派生 state：graphNodes/predictionCalib/memoryTraces/loadCurveRaw 等是
+    异步独立加载的模块级 ref，不重置会把上一个人的图谱/校准/压力曲线渲染到新详情页上 */
+function resetDerivedState(id: string) {
+  liveDetail.value = null
+  rawDetail.value = null
+  liveEvidence.value = []
+  memoryTraces.value = []
+  loadCurveRaw.value = []
+  predictionCalib.value = null
+  // 图谱仅在进入 graph tab 时按需加载（无 watch 兜底重拉）：
+  // 只在真正换人时清空；同人重算/刷新若也清空会留下一张再不加载的空图
+  if (id !== lastLoadedId) {
+    graphNodes.value = []
+    graphEdges.value = []
+    graphMeta.value = null
+    graphPathId.value = null
+  }
+}
+
+async function loadDetail(id: string | undefined) {
+  if (!id) return
+  const seq = ++detailLoadSeq
+  resetDerivedState(id)
+  lastLoadedId = id
+  detailError.value = false
+  // 深链保持：URL 明确带 ?tab= 时尊重它，否则回落总览。
+  // （此前无条件置 'overview'，会把 ?tab=profile/evidence/graph 的深链与刷新全部冲掉——
+  //  与上方「P0-2 tab 路由化：?tab= 深链/刷新保持」的约定相矛盾，实测发现。）
+  const urlTab = typeof tabRoute.query.tab === 'string' ? tabRoute.query.tab.trim() : ''
+  tab.value = urlTab ? normalizeLearnerTab(urlTab) : 'overview'
+  const base = liveLearners.value.find((l) => l.userId === id)
+  const pathId = base?.pathId
+  // 从用户详情显式进入学习者画像时携带 includeTest（虚拟/测试账号可查，默认视图仍排除）
+  const includeTest = subPage.value?.includeTest
+  // 面包屑先以列表兜底名回写（详情加载成功后覆盖为详情名）
+  if (base?.name) setSubPageLabel(base.name)
+  // 竞态守卫：任一 await 之后 id 已变（或已触发更新的加载）→ 丢弃本响应
+  const stale = () => seq !== detailLoadSeq || subPage.value?.id !== id
+  try {
+    // 详情与证据并行（此前串行 await：两个独立接口白等一趟 RTT）
+    const [raw, evidenceRes] = await Promise.all([
+      withTimeout(liveGetLearnerDetail(id, pathId, includeTest), 12000) as Promise<Record<string, unknown>>,
+      liveGetLearnerEvidence(id, pathId, includeTest).catch(() => ({ items: [], domain: [], loadCurve: [] }))
+    ])
+    if (stale()) return
+    const model = (raw.model as Record<string, unknown>) || raw
+    const km = ((model.knowledgeMemory as Record<string, unknown>) || (raw.knowledgeMemory as Record<string, unknown>) || {}) as Record<string, unknown>
+    const currentPath = (km.currentPath || {}) as Record<string, unknown>
+    const progress = (currentPath.progress || {}) as Record<string, number>
+    const globalSignals = (km.globalSignals || {}) as Record<string, unknown>
+    const conceptStates = Array.isArray(currentPath.conceptStates)
+      ? (currentPath.conceptStates as { label?: string; status?: string }[])
+      : []
+    const totalTasks = Number(progress.totalTasks || 0)
+    const completedTasks = Number(progress.completedTasks || 0)
+    const pct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+    const mapEvidence = (e: Record<string, unknown>): EvidenceItem => {
+      const raw = e as LearnerEvidenceRaw
+      return {
+        title: String(raw.type || raw.kind || '学习事件'),
+        detail: String(raw.detail || raw.signal || ''),
+        time: timeAgo(String(raw.happenedAt || raw.createdAt || '')),
+        signal: String(raw.signal || ''),
+        score: Number(raw.score || 0),
+        concepts: Array.isArray(raw.conceptKeys) ? raw.conceptKeys.map(String) : [],
+        sessionId: raw.sessionId ? String(raw.sessionId) : undefined,
+        taskId: raw.taskId ? String(raw.taskId) : undefined,
+        happenedAt: raw.happenedAt ? String(raw.happenedAt) : undefined
+      }
+    }
+    // 教学域 4 类 + 目标/路径域（learner_evidence 表持久化事件）合并为完整时间线，按时间倒序
+    const merged = [
+      ...evidenceRes.items.map(mapEvidence),
+      ...evidenceRes.domain.map(mapEvidence)
+    ].sort((a, b) => {
+      const ta = a.happenedAt ? new Date(a.happenedAt).getTime() : 0
+      const tb = b.happenedAt ? new Date(b.happenedAt).getTime() : 0
+      return tb - ta
+    })
+    liveEvidence.value = merged
+    loadCurveRaw.value = evidenceRes.loadCurve || []
+    // 校准/记忆痕迹：fire-and-forget 但必须带序号守卫，否则旧 id 的迟响应会写穿新详情
+    void liveGetLearnerPredictions(id, includeTest).then((calib) => {
+      if (stale()) return
+      predictionCalib.value = calib
+    })
+    void liveGetMemoryTraces({ userId: id, includeVirtual: includeTest })
+      .then((rows) => {
+        if (stale()) return
+        memoryTraces.value = rows
+      })
+      .catch(() => {
+        if (stale()) return
+        memoryTraces.value = []
+      })
+    liveDetail.value = {
+      name: base?.name || String(model.userName || id),
+      email: base?.email || '',
+      trend: base?.trend || 'flat',
+      fatigue: base?.fatigue || '低',
+      path: String((currentPath.pathTitle as string) || model.pathTitle || '尚未开始学习'),
+      stage: base?.currentMilestone || String(progress.totalMilestones ? `已完成 ${progress.completedMilestones ?? 0}/${progress.totalMilestones} 个里程碑` : ''),
+      task: base?.currentTask || '未开始',
+      pct,
+      concepts: {
+        mastered: (globalSignals.masteredConcepts as string[]) || [],
+        struggling: base?.struggling || conceptStates.filter((c) => c.status === 'struggling').map((c) => String(c.label)),
+        fragile: base?.fragile || conceptStates.filter((c) => c.status === 'fragile').map((c) => String(c.label))
+      },
+      sessions: liveEvidence.value.slice(0, 6).map((e) => ({
+        time: e.time,
+        title: e.title,
+        result: evidenceSignalZh(e.signal, e.title) || e.detail || '—',
+        tone: evidenceDotTone(e.signal, e.score, e.title),
+        concepts: e.concepts
+      })),
+      snapshot: {
+        version: base ? `置信 ${(base.confidence * 100).toFixed(0)}%${evidenceLowConfidence(base.confidence) ? ' · 证据不足' : ''}` : '—',
+        generatedAt: timeAgo(base?.generatedAt)
+      }
+    }
+    // 面包屑回写详情名（内部 ID → 中文名；title 仍保留全 ID）
+    setSubPageLabel(liveDetail.value.name)
+  } catch (e) {
+    if (stale()) return
+    if (base) {
+      // 列表兜底：详情接口失败时至少展示列表里已有的信息
+      liveDetail.value = {
+        name: base.name,
+        email: base.email,
+        trend: base.trend,
+        fatigue: base.fatigue,
+        path: base.pathTitle || '尚未开始学习',
+        stage: base.currentMilestone || '',
+        task: base.currentTask || '未开始',
+        pct: 0,
+        concepts: { mastered: [], struggling: base.struggling, fragile: base.fragile },
+        sessions: [],
+        snapshot: {
+          version: `置信 ${(base.confidence * 100).toFixed(0)}%${evidenceLowConfidence(base.confidence) ? ' · 证据不足' : ''}`,
+          generatedAt: timeAgo(base.generatedAt)
+        }
+      }
+      setSubPageLabel(base.name)
+      toast.error(`详情接口暂时不可用，已显示列表快照：${errMsg(e)}`)
+    } else {
+      detailError.value = true
+    }
+  }
+}
 
 /** 关联实体（P1）：查看该学习者的用户账号（记忆返回来源） */
 function goUser() {
@@ -732,130 +868,6 @@ watch(
   { immediate: true, flush: 'sync' }
 )
 
-async function loadDetail(id: string | undefined) {
-  if (detailLoading) return
-  if (!id) return
-  detailLoading = true
-  liveDetail.value = null
-  rawDetail.value = null
-  liveEvidence.value = []
-  detailError.value = false
-  // 深链保持：URL 明确带 ?tab= 时尊重它，否则回落总览。
-  // （此前无条件置 'overview'，会把 ?tab=profile/evidence/graph 的深链与刷新全部冲掉——
-  //  与上方「P0-2 tab 路由化：?tab= 深链/刷新保持」的约定相矛盾，实测发现。）
-  const urlTab = typeof tabRoute.query.tab === 'string' ? tabRoute.query.tab.trim() : ''
-  tab.value = urlTab ? normalizeLearnerTab(urlTab) : 'overview'
-  const base = liveLearners.value.find((l) => l.userId === id)
-  const pathId = base?.pathId
-  // 从用户详情显式进入学习者画像时携带 includeTest（虚拟/测试账号可查，默认视图仍排除）
-  const includeTest = subPage.value?.includeTest
-  // 面包屑先以列表兜底名回写（详情加载成功后覆盖为详情名）
-  if (base?.name) setSubPageLabel(base.name)
-  try {
-    const raw = (await withTimeout(liveGetLearnerDetail(id, pathId, includeTest), 12000)) as Record<string, unknown>
-    rawDetail.value = raw
-    const model = (raw.model as Record<string, unknown>) || raw
-    const km = ((model.knowledgeMemory as Record<string, unknown>) || (raw.knowledgeMemory as Record<string, unknown>) || {}) as Record<string, unknown>
-    const currentPath = (km.currentPath || {}) as Record<string, unknown>
-    const progress = (currentPath.progress || {}) as Record<string, number>
-    const globalSignals = (km.globalSignals || {}) as Record<string, unknown>
-    const conceptStates = Array.isArray(currentPath.conceptStates)
-      ? (currentPath.conceptStates as { label?: string; status?: string }[])
-      : []
-    const totalTasks = Number(progress.totalTasks || 0)
-    const completedTasks = Number(progress.completedTasks || 0)
-    const pct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
-    const evidenceRes = await liveGetLearnerEvidence(id, pathId, includeTest).catch(() => ({ items: [], domain: [], loadCurve: [] }))
-    const mapEvidence = (e: Record<string, unknown>): EvidenceItem => {
-      const raw = e as LearnerEvidenceRaw
-      return {
-        title: String(raw.type || raw.kind || '学习事件'),
-        detail: String(raw.detail || raw.signal || ''),
-        time: timeAgo(String(raw.happenedAt || raw.createdAt || '')),
-        signal: String(raw.signal || ''),
-        score: Number(raw.score || 0),
-        concepts: Array.isArray(raw.conceptKeys) ? raw.conceptKeys.map(String) : [],
-        sessionId: raw.sessionId ? String(raw.sessionId) : undefined,
-        taskId: raw.taskId ? String(raw.taskId) : undefined,
-        happenedAt: raw.happenedAt ? String(raw.happenedAt) : undefined
-      }
-    }
-    // 教学域 4 类 + 目标/路径域（learner_evidence 表持久化事件）合并为完整时间线，按时间倒序
-    const merged = [
-      ...evidenceRes.items.map(mapEvidence),
-      ...evidenceRes.domain.map(mapEvidence)
-    ].sort((a, b) => {
-      const ta = a.happenedAt ? new Date(a.happenedAt).getTime() : 0
-      const tb = b.happenedAt ? new Date(b.happenedAt).getTime() : 0
-      return tb - ta
-    })
-    liveEvidence.value = merged
-    loadCurveRaw.value = evidenceRes.loadCurve || []
-    // 校准数据独立容错（失败仅卡片不显示）
-    void liveGetLearnerPredictions(id, includeTest).then((calib) => { predictionCalib.value = calib })
-    // 记忆痕迹（含 FSRS 保持率）独立容错（失败仅卡片不显示）
-    void liveGetMemoryTraces({ userId: id, includeVirtual: includeTest }).then((rows) => { memoryTraces.value = rows }).catch(() => { memoryTraces.value = [] })
-    liveDetail.value = {
-      name: base?.name || String(model.userName || id),
-      email: base?.email || '',
-      joined: '—',
-      trend: base?.trend || 'flat',
-      fatigue: base?.fatigue || '低',
-      path: String((currentPath.pathTitle as string) || model.pathTitle || '尚未开始学习'),
-      stage: base?.currentMilestone || String(progress.totalMilestones ? `已完成 ${progress.completedMilestones ?? 0}/${progress.totalMilestones} 个里程碑` : ''),
-      task: base?.currentTask || '未开始',
-      pct,
-      concepts: {
-        mastered: (globalSignals.masteredConcepts as string[]) || [],
-        struggling: base?.struggling || conceptStates.filter((c) => c.status === 'struggling').map((c) => String(c.label)),
-        fragile: base?.fragile || conceptStates.filter((c) => c.status === 'fragile').map((c) => String(c.label))
-      },
-      trend7d: [0, 0, 0, 0, 0, 0, 0],
-      sessions: liveEvidence.value.slice(0, 6).map((e) => ({
-        time: e.time,
-        title: e.title,
-        result: evidenceSignalZh(e.signal, e.title) || e.detail || '—',
-        tone: evidenceDotTone(e.signal, e.score, e.title),
-        concepts: e.concepts
-      })),
-      snapshot: {
-        version: base ? `置信 ${(base.confidence * 100).toFixed(0)}%${evidenceLowConfidence(base.confidence) ? ' · 证据不足' : ''}` : '—',
-        generatedAt: timeAgo(base?.generatedAt)
-      }
-    }
-    // 面包屑回写详情名（内部 ID → 中文名；title 仍保留全 ID）
-    setSubPageLabel(liveDetail.value.name)
-  } catch (e) {
-    if (base) {
-      // 列表兜底：详情接口失败时至少展示列表里已有的信息
-      liveDetail.value = {
-        name: base.name,
-        email: base.email,
-        joined: '—',
-        trend: base.trend,
-        fatigue: base.fatigue,
-        path: base.pathTitle || '尚未开始学习',
-        stage: base.currentMilestone || '',
-        task: base.currentTask || '未开始',
-        pct: 0,
-        concepts: { mastered: [], struggling: base.struggling, fragile: base.fragile },
-        trend7d: [0, 0, 0, 0, 0, 0, 0],
-        sessions: [],
-        snapshot: {
-          version: `置信 ${(base.confidence * 100).toFixed(0)}%${evidenceLowConfidence(base.confidence) ? ' · 证据不足' : ''}`,
-          generatedAt: timeAgo(base.generatedAt)
-        }
-      }
-      setSubPageLabel(base.name)
-      toast.error(`详情接口暂时不可用，已显示列表快照：${errMsg(e)}`)
-    } else {
-      detailError.value = true
-    }
-  } finally {
-    detailLoading = false
-  }
-}
-
 async function recompute() {
   const id = subPage.value?.id
   if (!id || recomputing.value) return
@@ -871,7 +883,7 @@ async function recompute() {
   try {
     const base = liveLearners.value.find((l) => l.userId === id)
     await liveRecomputeLearner(id, base?.pathId)
-    toast.success('快照已重算（真实）')
+    toast.success('快照已重算')
     const prevTab = tab.value
     await loadDetail(id)
     tab.value = prevTab
@@ -1041,17 +1053,25 @@ const narrativeInsights = computed(() => {
 const metricCards = computed(() => {
   const m = (dynamicState.value?.metrics || {}) as Record<string, number>
   const fmt = (v?: number) => (v == null ? '—' : v.toFixed(1))
-  /** 0 值 = 无数据（中性灰，不误报警告红）；>0 才按阈值上色 */
-  const tone = (v?: number): 'ok' | 'bad' | '' => {
+  /* 后端语义核实（backend/src/services/learning/learning-state.service.ts）：
+     LSS=Learning Stress Score 学习压力（0-10，越高越累）、KTL=Knowledge Training Load 训练负荷
+     （LSS 的慢 EWMA，高=负荷重）、LF=Learning Fatigue 疲劳（≥6 警戒）；三者均为负荷类——
+     高值是坏（红）、低值是好（绿）。LSB=KTL−LF 状态平衡，正=状态好。此前负荷类高值标绿与
+     同卡图例「越高越累」自相矛盾，已按真实语义反转。 */
+  const toneLoad = (v?: number): 'ok' | 'bad' | '' => {
     if (v == null || v === 0) return ''
-    return v >= 7 ? 'ok' : v <= 4 ? 'bad' : ''
+    return v >= 7 ? 'bad' : v <= 4 ? 'ok' : ''
+  }
+  const toneBalance = (v?: number): 'ok' | 'bad' | '' => {
+    if (v == null || v === 0) return ''
+    return v >= 1 ? 'ok' : v <= -3 ? 'bad' : ''
   }
   const hint = (v?: number, fallback = '') => (v == null || v === 0 ? '暂无数据' : fallback)
   return [
-    { label: 'LSS 学习状态', value: fmt(m.lss), hint: hint(m.lss, '整体学习健康度'), tone: tone(m.lss) },
-    { label: 'KTL 知识轨迹', value: fmt(m.ktl), hint: hint(m.ktl, '知识增长曲线'), tone: tone(m.ktl) },
-    { label: 'LF 学习疲劳', value: fmt(m.lf), hint: hint(m.lf, '越低越好'), tone: m.lf != null && m.lf > 0 && m.lf >= 6 ? 'bad' : tone(m.lf) },
-    { label: 'LSB 行为稳定', value: fmt(m.lsb), hint: hint(m.lsb, '行为一致性'), tone: tone(m.lsb) }
+    { label: 'LSS 学习压力', value: fmt(m.lss), hint: hint(m.lss, '0-10，越高越累'), tone: toneLoad(m.lss) },
+    { label: 'KTL 训练负荷', value: fmt(m.ktl), hint: hint(m.ktl, '压力长期累积（慢 EWMA）'), tone: toneLoad(m.ktl) },
+    { label: 'LF 学习疲劳', value: fmt(m.lf), hint: hint(m.lf, '越高越疲劳，≥6 警戒'), tone: m.lf != null && m.lf > 0 && m.lf >= 6 ? 'bad' : toneLoad(m.lf) },
+    { label: 'LSB 状态平衡', value: fmt(m.lsb), hint: hint(m.lsb, 'KTL−LF，正=状态好'), tone: toneBalance(m.lsb) }
   ]
 })
 
@@ -1389,7 +1409,6 @@ const snapshotHint = computed(() => {
   const v = d.value?.snapshot.version || ''
   return v.includes('证据不足') ? '快照置信度低于 50%，证据不足，建议重算' : '快照置信度'
 })
-const trendHint = computed(() => (d.value?.trend === 'down' ? '连续走低，建议介入' : d.value?.trend === 'up' ? '稳步上升' : '平稳'))
 
 function barToneBadge(tone: ConceptBarTone): string {
   return tone === 'ok' ? 'mk-badge--ok' : tone === 'warn' ? 'mk-badge--warn' : tone === 'bad' ? 'mk-badge--bad' : 'mk-badge--muted'
@@ -1462,21 +1481,7 @@ function barToneBadge(tone: ConceptBarTone): string {
    muted 档原语没有，保留本页一个色调类 */
 .ld-bar__fill--muted { background: var(--mk-faint); }
 
-.ld-trend {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  height: 90px;
-  padding: 16px;
-}
-.ld-trend__bar {
-  flex: 1;
-  border-radius: 4px 4px var(--mk-radius-xs) var(--mk-radius-xs);
-  background: linear-gradient(180deg, #6aa0ff, #3d7cff);
-  min-height: 6px;
-}
-.ld-trend__bar--down { background: linear-gradient(180deg, #fca5a5, var(--mk-red)); }
-
+/* （.ld-trend* 柱图样式已随「7 天活跃趋势」假卡移除） */
 .ld-sessions { display: grid; }
 .ld-session {
   display: flex;
@@ -1771,7 +1776,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-bars { padding: 16px 18px 18px; }
   .ld-actions { padding: 16px 18px; }
   .ld-found { padding: 16px 18px; }
-  .ld-trend { height: 104px; padding: 18px; }
   .ld-session { padding: 13px 18px; gap: 14px; }
   .ld-session__dot { width: 9px; height: 9px; }
   .ld-kv__row { grid-template-columns: 160px 1fr; gap: 14px; padding: 12px 18px; }
@@ -1811,7 +1815,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-bars { padding: 19px 21px 21px; }
   .ld-actions { padding: 19px 21px; }
   .ld-found { padding: 19px 21px; }
-  .ld-trend { height: 122px; padding: 21px; }
   .ld-session { padding: 15px 21px; gap: 16px; }
   .ld-session__dot { width: 11px; height: 11px; }
   .ld-kv__row { grid-template-columns: 184px 1fr; gap: 16px; padding: 14px 21px; }
@@ -1851,7 +1854,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-bars { padding: 22px 25px 25px; }
   .ld-actions { padding: 22px 25px; }
   .ld-found { padding: 22px 25px; }
-  .ld-trend { height: 143px; padding: 25px; }
   .ld-session { padding: 17px 25px; gap: 19px; }
   .ld-session__dot { width: 13px; height: 13px; }
   .ld-kv__row { grid-template-columns: 216px 1fr; gap: 19px; padding: 16px 25px; }
@@ -1865,24 +1867,22 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 /* ================= 暗色模式（D1 补完）：学习者详情（此前完全缺失） ================= */
 html[data-theme='dark'] {
-  /* 进度条/概念账本/趋势/会话/证据/日历 浅灰底统一替换 */
+  /* 进度条/概念账本/会话/证据 浅灰底统一替换 */
   .ld-progress__bar,
   .ld-bar__track,
   .ld-bar__ev--zero,
   .ld-cal__bar,
   .ld-cal__outcome.is-pending,
   .ld-ev__signal.is-muted,
-  /* 分隔线（进度/趋势/会话/证据/日历） */
-  .ld-trend,
+  /* 分隔线（会话/证据/校准行/kv 行） */
   .ld-session,
   .ld-ev,
   .ld-cal__row,
-  .ld-bar__ev { border-bottom-color: #2a2b2d; }
-  /* 语义渐变（warn/bad 用暗色系，避免浅红/浅琥珀过亮） */
-  .ld-trend__bar--down { background: linear-gradient(90deg, var(--mk-red-strong), #7f1d1d); }
+  .ld-bar__ev,
+  .ld-kv__row { border-bottom-color: #2a2b2d; }
   .ld-bar__ev { background: #2a2b2d; }
-  .ld-kv__row,
-  /* 滚动条 */
+  /* 滚动条 thumb 与行分隔线是两种语义：此前误共用一条规则，
+     把 .ld-kv__row 整行背景也涂成了 thumb 灰（#393a3c），已拆开 */
   .ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #393a3c; }
   /* 补漏：操作提示标签/概念 chip/置信条/加载分段 */
   .ld-actions__k { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }

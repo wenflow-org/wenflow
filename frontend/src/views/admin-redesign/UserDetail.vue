@@ -24,29 +24,11 @@
       </div>
     </header>
 
-    <!-- 主区双栏（左 2/3 主内容 · 右 1/3 侧栏） -->
+    <!-- 主区双栏（左 2/3 主内容 · 右 1/3 侧栏）。
+         原「学习路径」卡已移除：后端用户详情不返回 learning_paths 明细，recentPaths 恒为空数组，
+         卡片永远只显示「暂无学习路径记录」的误导空态。左栏改由「最近活跃」承担。 -->
     <div class="ud-main">
       <div class="ud-col ud-col--main">
-        <section class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">学习路径</h3>
-            <span class="mk-card__meta">{{ d.recentPaths.length }} 条</span>
-          </div>
-          <div class="ud-paths">
-            <div v-for="p in d.recentPaths" :key="p.title" class="ud-path">
-              <div class="ud-path__main">
-                <strong>{{ p.title }}</strong>
-                <span>{{ p.stage }}</span>
-              </div>
-              <span class="mk-minibar"><i class="mk-minibar__fill" :style="{ width: p.pct + '%' }" :data-tone="p.tone === 'warn' ? 'warn' : undefined"></i></span>
-              <span class="ud-path__pct">{{ p.pct }}%</span>
-            </div>
-            <p v-if="!d.recentPaths.length" class="ud-none">该用户暂无学习路径记录。开始一条学习路径后，这里会显示各路径的阶段与进度明细。</p>
-          </div>
-        </section>
-      </div>
-
-      <div class="ud-col ud-col--side">
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">最近活跃</h3>
@@ -60,7 +42,9 @@
             <p v-if="!d.activity.length" class="ud-none">暂无动态记录</p>
           </div>
         </section>
+      </div>
 
+      <div class="ud-col ud-col--side">
         <!-- 开发视角许可（侧栏卡，与活跃并列） -->
         <section class="mk-card ud-grant">
           <div class="mk-card__head">
@@ -99,8 +83,9 @@
     <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
     <MkEmptyState
       icon="◌"
+      tone="error"
       title="详情加载失败"
-      description="暂时无法获取该用户的完整信息。"
+      :description="detailErrorMsg || '暂时无法获取该用户的完整信息。'"
       action-text="重试"
       @action="loadDetail"
     />
@@ -136,7 +121,6 @@ interface Detail {
   role: string
   joined: string
   stats: { label: string; value: string; hint?: string }[]
-  recentPaths: { title: string; stage: string; pct: number; tone: 'ok' | 'warn' }[]
   activity: { time: string; text: string }[]
 }
 
@@ -156,6 +140,8 @@ function levelLabel(level: string | null | undefined): string {
 }
 /** 详情接口失败且无列表兜底 → 明确错误态 + 重试（参照 VirtualProfile.detailError 模式） */
 const detailError = ref(false)
+/** 错误文案：区分「用户不存在/已删除」(404) 与网络/服务异常 */
+const detailErrorMsg = ref('')
 /** Phase 2：目标为已软删账号（详情走 includeDeleted=1 放行）→ 头部展示恢复入口 */
 const isDeleted = ref(false)
 const restoring = ref(false)
@@ -201,6 +187,8 @@ async function loadGrant() {
   grantMessage.value = ''
   try {
     const res = await adminUsersApi.getProjectionGrant(id)
+    // 竞态守卫：await 期间用户已切到别的用户，丢弃本响应
+    if (subPage.value?.id !== id) return
     const body = res.data?.data ?? res.data
     const list = Array.isArray(body) ? body : body?.items || body?.grants || (body ? [body] : [])
     const first = list[0] || null
@@ -228,9 +216,6 @@ async function openDebugStation() {
       entry: 'dashboard'
     })
     const body = response?.data || response
-    if (!body?.success && body?.data?.token == null) {
-      // 兼容部分封装直接返回 data
-    }
     const token = body?.data?.token || body?.token
     if (!token) throw new Error(body?.error?.message || body?.error || '投影 token 缺失')
     setProjectionToken(token, {
@@ -278,6 +263,8 @@ async function doRestore() {
   restoring.value = true
   try {
     await restoreUser(id)
+    // 竞态守卫：恢复期间用户已切到别的用户，不再改写当前详情状态
+    if (subPage.value?.id !== id) return
     toast.success('用户已恢复，可重新登录')
     isDeleted.value = false
     void loadDetail()
@@ -288,11 +275,16 @@ async function doRestore() {
   }
 }
 
+/** 加载序号：详情在两个用户间快速切换时，旧请求后到会覆盖新数据——last-wins 守卫 */
+let detailLoadSeq = 0
+
 async function loadDetail() {
   const id = subPage.value?.id
   if (!id) return
+  const seq = ++detailLoadSeq
   liveDetail.value = null
   detailError.value = false
+  detailErrorMsg.value = ''
   void loadGrant()
   const base = liveUsers.value.find((u) => u.id === id)
   // 活跃明细无接口：用列表数据的最后登录/会话数合成，保证卡片有真实内容
@@ -306,10 +298,12 @@ async function loadDetail() {
   try {
     // 已软删账号默认被详情接口隐藏（404 语义），Phase 2 用 includeDeleted=1 放行恢复入口
     const res = await getUserIncludingDeleted(id)
+    // 竞态守卫：await 期间用户已切走或触发了更新的加载，丢弃本响应
+    if (seq !== detailLoadSeq || subPage.value?.id !== id) return
     const raw = (res.data?.data ?? res.data ?? {}) as Record<string, unknown>
     isDeleted.value = !!raw.deletedAt
     const user = (raw.user as Record<string, unknown>) || raw
-    // 后端不返回 learning_paths 明细：路径计数用 _count 兜底，卡片显示空态（与统计条口径一致）
+    // 后端不返回 learning_paths 明细：路径计数用 _count 兜底，与统计条口径一致
     const counts = (user._count as Record<string, number>) || {}
     const pathCount = Number(counts.learningPaths ?? counts.learning_paths ?? base?.paths ?? 0)
     liveDetail.value = {
@@ -319,14 +313,15 @@ async function loadDetail() {
       joined: timeAgo(String(user.createdAt || base?.createdAt || '')),
       stats: [
         { label: '路径', value: String(base?.paths ?? pathCount) },
-        { label: '会话', value: String(base?.sessions ?? 0) },
+        // 列表兜底缺失时不臆造 0：无数据显示 '—'
+        { label: '会话', value: base?.sessions != null ? String(base.sessions) : '—' },
         { label: 'XP', value: String(user.xp ?? 0), hint: xpHintOf(Number(user.xp ?? 0)) },
         { label: '等级', value: levelLabel(String(user.currentLevel)), hint: '按 XP 推导' }
       ],
-      recentPaths: [],
       activity: activityOf(base)
     }
-  } catch {
+  } catch (e) {
+    if (seq !== detailLoadSeq || subPage.value?.id !== id) return
     // 详情接口失败：用列表数据兜底；无兜底 → 明确错误态
     if (base) {
       liveDetail.value = {
@@ -340,10 +335,13 @@ async function loadDetail() {
           { label: 'XP', value: String(base.xp), hint: xpHintOf(Number(base.xp)) },
           { label: '等级', value: levelLabel(base.currentLevel), hint: '按 XP 推导' }
         ],
-        recentPaths: [],
         activity: activityOf(base)
       }
     } else {
+      // 404 = 用户不存在/已删除（includeDeleted 也未放行），与网络/服务异常区分开
+      const status = (e as { response?: { status?: number } })?.response?.status
+      detailErrorMsg.value =
+        status === 404 ? '该用户不存在或已被删除。' : '网络异常，暂时无法获取该用户的完整信息。'
       detailError.value = true
     }
   }
@@ -374,22 +372,6 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
   align-items: start;
 }
 .ud-col { display: grid; gap: 14px; align-content: start; }
-.ud-paths { display: grid; }
-.ud-path {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 130px 40px;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--mk-line, #e6ebf4);
-}
-.ud-path:last-child { border-bottom: none; }
-.ud-path__main { display: grid; min-width: 0; }
-.ud-path__main strong { font-size: var(--mk-fs-body); }
-.ud-path__main span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-/* 进度条统一走 .mk-minibar（shared.css），填充色走 data-tone
-   （原为渐变：linear-gradient(#6aa0ff→蓝) / (#fcd34d→#f59e0b)，属 §4 点名的违规） */
-.ud-path__pct { font-size: var(--mk-fs-micro); color: var(--mk-muted); text-align: right; font-variant-numeric: tabular-nums; }
 .ud-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 .ud-activity { display: grid; }
@@ -458,9 +440,6 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .ud-path__main strong { font-size: var(--mk-fs-body); }
-  .ud-path__main span { font-size: var(--mk-fs-micro); }
-  .ud-path__pct { font-size: var(--mk-fs-body); }
   .ud-none { font-size: var(--mk-fs-body); }
   .ud-act { font-size: var(--mk-fs-body); }
   .ud-act__time { font-size: var(--mk-fs-micro); }
@@ -471,9 +450,6 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
-  .ud-path__main strong { font-size: var(--mk-fs-body); }
-  .ud-path__main span { font-size: var(--mk-fs-micro); }
-  .ud-path__pct { font-size: var(--mk-fs-body); }
   .ud-none { font-size: var(--mk-fs-body); }
   .ud-act { font-size: var(--mk-fs-body); }
   .ud-act__time { font-size: var(--mk-fs-micro); }
@@ -484,9 +460,6 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
-  .ud-path__main strong { font-size: var(--mk-fs-emphasis); }
-  .ud-path__main span { font-size: var(--mk-fs-emphasis); }
-  .ud-path__pct { font-size: var(--mk-fs-emphasis); }
   .ud-none { font-size: var(--mk-fs-emphasis); }
   .ud-act { font-size: var(--mk-fs-emphasis); }
   .ud-act__time { font-size: var(--mk-fs-emphasis); }

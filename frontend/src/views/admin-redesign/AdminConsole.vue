@@ -18,7 +18,9 @@
 
     <Shell :current="scene" :crumb="crumbLabel" :crumb-title="crumbTitle" release @navigate="navigate" @glossary="glossaryOpen = true">
       <MockSkeletonTable v-if="booting" :rows="7" :cols="6" />
-      <component v-else :is="detailComponent || currentComponent" />
+      <!-- :key=详情 id：两个实体深链间前进/后退（如 learner A → learner B）时强制重建组件，
+           否则 <component> 同类型复用实例，旧实体的异步写入会串到新 id 的页面上 -->
+      <component v-else :is="detailComponent || currentComponent" :key="subPage?.id" />
     </Shell>
 
     <AdminGlossaryDrawer :open="glossaryOpen" @close="glossaryOpen = false" />
@@ -60,7 +62,10 @@ function asyncPage(loader: () => Promise<any>) {
       }
     },
     onError(error, retry, fail, _attempts) {
-      if (String(error?.message || error || '').includes('Failed to fetch')) { retry(); } else { fail(); }
+      // 宽化重试匹配：动态 import 的失败信息随浏览器/打包器而异（Failed to fetch /
+      // error loading dynamically imported module / Importing a module script failed / Loading chunk X failed），
+      // 只精确匹配 'Failed to fetch' 会漏掉部署更新后 chunk 404 的主流报错，重试机制形同虚设
+      if (/failed to fetch|module|import|load/i.test(String(error?.message || error || ''))) { retry(); } else { fail(); }
     }
   });
 }

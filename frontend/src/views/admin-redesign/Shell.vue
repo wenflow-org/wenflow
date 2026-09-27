@@ -12,12 +12,14 @@
           class="mshell__collapse"
           :title="collapsed ? '展开侧栏' : '收起侧栏'"
           :aria-label="collapsed ? '展开侧栏' : '收起侧栏'"
+          :aria-expanded="collapsed ? 'false' : 'true'"
           @click="toggleCollapse"
         >
           <span aria-hidden="true">{{ collapsed ? '»' : '«' }}</span>
         </button>
       </div>
-      <nav class="mshell__nav">
+      <!-- aria-label：页面内存在多个 <nav>/地标时读屏需要可区分的名称 -->
+      <nav class="mshell__nav" aria-label="管理导航">
         <!-- 置顶独立入口（D5）：驾驶舱类页面渲染在分组上方，无组标题 -->
         <div v-if="pinnedScenes.length" class="mshell__pinned">
           <button
@@ -26,6 +28,7 @@
             type="button"
             class="mshell__item"
             :class="{ 'mshell__item--active': item.id === current }"
+            :aria-current="item.id === current ? 'page' : undefined"
             :title="item.label"
             @click="go(item)"
           >
@@ -57,6 +60,7 @@
               type="button"
               class="mshell__item"
               :class="{ 'mshell__item--active': item.id === current }"
+              :aria-current="item.id === current ? 'page' : undefined"
               :title="item.label"
               @click="go(item)"
             >
@@ -309,14 +313,21 @@ function go(item: MockSceneDef) {
 }
 
 /* release 模式：管理员信息与退出登录 */
-const adminName = computed(() => {
-  const raw = localStorage.getItem('admin_user') || sessionStorage.getItem('admin_user')
-  if (!raw) return 'admin'
+/** localStorage 非响应式：computed 无响应式依赖会永久缓存，登录写入后本页不刷新名字。
+     改为 setup 时读一次 ref + storage 事件（跨标签页写入也会同步刷新）。 */
+const ADMIN_USER_KEY = 'admin_user'
+function readAdminName(): string {
   try {
+    const raw = localStorage.getItem(ADMIN_USER_KEY) || sessionStorage.getItem(ADMIN_USER_KEY)
+    if (!raw) return 'admin'
     return String(JSON.parse(raw).name || 'admin')
   } catch {
     return 'admin'
   }
+}
+const adminName = ref(readAdminName())
+window.addEventListener('storage', (e) => {
+  if (e.key === ADMIN_USER_KEY || e.key === null) adminName.value = readAdminName()
 })
 
 async function logout() {
@@ -326,7 +337,9 @@ async function logout() {
     // 登出接口失败：本地清理会话再跳转，避免守卫检测到残留会话又弹回控制台
     clearAdminSession()
   }
-  window.location.replace('/admin/login')
+  // 带 redirect：登录成功后回到登出时的深链（含二级页 ?view=&id=，Login.safeRedirect 已做同源校验）
+  const back = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)
+  window.location.replace(`/admin/login?redirect=${back}`)
 }
 
 /** 置顶独立入口（D5）：pinned 项渲染在分组上方（无组标题） */
