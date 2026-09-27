@@ -136,6 +136,7 @@
               <div class="guide">
                 <h3 class="guide__title">{{ skillCopy.headline }}</h3>
                 <p v-if="skillCopy.subtitle" class="guide__sub">{{ skillCopy.subtitle }}</p>
+                <p v-if="evidenceHint" class="guide__evidence">依据：{{ evidenceHint }}（详见下方「学习调控」）</p>
               </div>
               <div v-if="skillWarning" class="guide__warn">
                 <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 2 1 21h22L12 2zm0 6 7 12H5l7-12zm-1 4v3h2v-3h-2zm0 4v2h2v-2h-2z"/></svg>
@@ -212,28 +213,65 @@
             </div>
           </section>
 
-          <!-- AI 决策记录：捕获了什么 → 怎么判断 → 参与了什么决策 -->
+          <!-- 学习调控（2026-09-27 重构）：待你确认 / 已自动处理 / 已执行的调整。
+               原「AI 决策记录」是纯日志；现在待确认卡带 pathId + advisory 摘要，
+               本页成为完课卡之外的第二确认入口。 -->
           <section class="card band">
             <div class="band__head">
               <button type="button" class="band__toggle" :aria-expanded="openBands.decisions" @click="toggleBand('decisions')">
-                <strong>AI 决策记录</strong>
-                <span class="band__meta">{{ decisions.length ? `${decisions.length} 条记录` : '暂无' }}</span>
+                <strong>学习调控</strong>
+                <span class="band__meta">{{ pendingAdjust.length ? `${pendingAdjust.length} 条待确认` : '暂无待确认' }}</span>
                 <span class="band__chev" :class="{ 'band__chev--open': openBands.decisions }" aria-hidden="true">▾</span>
               </button>
             </div>
             <div v-show="openBands.decisions" class="band__body">
-            <div v-if="!decisions.length" class="chart__empty">
-              还没有决策记录。上完一节课后，这里会记下 AI 捕获的点与下一步调整。
-            </div>
-            <article v-for="d in decisions" :key="d.id" class="dec">
-              <span class="dec__tag" :class="decisionKindMeta[d.kind]?.cls">{{ decisionKindMeta[d.kind]?.label || '调控' }}</span>
-              <div class="dec__body">
-                <p><b>捕获</b><span>{{ d.captured }}</span></p>
-                <p><b>判断</b><span>{{ d.judgment }}</span></p>
-                <p><b>动作</b><span>{{ d.action }}</span></p>
-              </div>
-              <time v-if="decisionTime(d.at)">{{ decisionTime(d.at) }}</time>
-            </article>
+              <!-- 待你确认：课后 advisory，确认走与完课卡同一个 replan 接口 -->
+              <section class="ctl">
+                <p class="ctl__label">待你确认<b v-if="pendingAdjust.length">{{ pendingAdjust.length }}</b></p>
+                <p v-if="!pendingAdjust.length" class="ctl__empty">没有待处理的调整。课后 AI 认为需要调整时，会在这里出现，你可以在这里确认或忽略。</p>
+                <article v-for="card in pendingAdjust" :key="card.id" class="ctl-card">
+                  <header class="ctl-card__head">
+                    <span class="dec__tag dec__tag--blue">{{ card.pathTitle || '当前路径' }}</span>
+                    <span v-if="card.mergedCount && card.mergedCount > 1" class="ctl-card__merged">近 {{ card.mergedCount }} 次课反复提示</span>
+                    <time v-if="decisionTime(card.at)">{{ decisionTime(card.at) }}</time>
+                  </header>
+                  <p class="ctl-card__body">{{ card.body || card.judgment }}</p>
+                  <p class="ctl-card__evidence">依据：{{ card.captured }}</p>
+                  <div v-if="confirmingId !== card.id" class="ctl-card__actions">
+                    <button type="button" class="ctl-btn ctl-btn--primary" :disabled="replanBusy" @click="confirmingId = card.id">确认调整</button>
+                    <button type="button" class="ctl-btn" :disabled="!card.pathId" @click="jumpToAdjust(card)">查看建议</button>
+                    <button type="button" class="ctl-btn ctl-btn--ghost" @click="dismissDecision(card)">保持原计划</button>
+                  </div>
+                  <div v-else class="ctl-card__confirm">
+                    <span>这会调整该路径的后续阶段安排，已完成内容保留不变。</span>
+                    <button type="button" class="ctl-btn ctl-btn--primary" :disabled="replanBusy" @click="confirmAdjust(card)">{{ replanBusy ? '正在调整…' : '确认' }}</button>
+                    <button type="button" class="ctl-btn ctl-btn--ghost" @click="confirmingId = ''">取消</button>
+                  </div>
+                </article>
+              </section>
+
+              <!-- 系统已自动处理：一句话一条，不再捕获/判断/动作三行铺开 -->
+              <section v-if="autoHandled.length" class="ctl">
+                <p class="ctl__label">系统已自动处理<b>{{ autoHandled.length }}</b></p>
+                <ul class="ctl__rows">
+                  <li v-for="card in autoHandled" :key="card.id">
+                    <span class="dec__tag" :class="decisionKindMeta[card.kind]?.cls">{{ decisionKindMeta[card.kind]?.label }}</span>
+                    <span class="ctl__row-text">{{ card.captured }}。{{ card.action }}</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- 已执行的调整：replan 历史 -->
+              <section v-if="replannedRows.length" class="ctl">
+                <p class="ctl__label">已执行的调整<b>{{ replannedRows.length }}</b></p>
+                <ul class="ctl__rows">
+                  <li v-for="card in replannedRows" :key="card.id">
+                    <span class="dec__tag dec__tag--purple">已调整</span>
+                    <span class="ctl__row-text">{{ card.captured }}。{{ card.action }}</span>
+                    <time v-if="decisionTime(card.at)" class="ctl__row-time">{{ decisionTime(card.at) }}</time>
+                  </li>
+                </ul>
+              </section>
             </div><!-- /band__body -->
           </section>
         </div>
@@ -295,7 +333,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import request from '@/utils/api';
+import { toast } from '@/utils/toast';
 import { metricsAPI } from '@/api/metrics';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
@@ -318,7 +358,7 @@ const range = ref<42 | 90>(42);
 const openBands = ref({
   chart: true,                 // 趋势图是本页核心，任何宽度都默认展开
   suggest: true,               // AI 建议是本页最可行动的内容，全宽度默认展开（批19 从移动端收起改为常开）
-  decisions: false,            // 决策日志默认收起（2026-09-27 降噪：每条 3 行 ×5 条，头部有计数）
+  decisions: true,             // 学习调控（2026-09-27 升级为可操作调控流）：待确认项必须可见
   prefs: false,                // 画像偏好默认收起（2026-09-27 降噪）
   legend: false,               // 指标说明默认收起（2026-09-27 降噪：阈值口径折到这里，需要时打开）
 });
@@ -629,6 +669,7 @@ function setRange(r: 42 | 90) {
 /* ---------- skill 引导（adaptive-guidance-copy, view=learning-state） ---------- */
 const guidance = ref<Record<string, any> | null>(null);
 
+const router = useRouter();
 const skillCopy = computed(() => guidance.value?.copy || null);
 
 /* ---------- 状态评审诊断（diagnosis 层，Slice 2c） ---------- */
@@ -646,7 +687,15 @@ const reviewReliabilityText = computed(() => {
   return `历史核对 ${c.n} 条 · 命中 ${Math.round(c.hitRate * 100)}%`;
 });
 
-/* ---------- AI 决策记录（同一接口返回，LearningDecisionFeedService 组装） ---------- */
+/* ---------- 学习调控（2026-09-27 重构）：待确认 / 已自动处理 / 已执行的调整 ----------
+   原「AI 决策记录」是纯日志；现在 path-adjust 卡带 pathId + advisory 摘要，
+   本页成为完课卡之外的第二确认入口。 */
+interface DecisionOption {
+  key: string;
+  label: string;
+  description?: string;
+}
+
 interface DecisionCard {
   id: string;
   kind: 'path-adjust' | 'path-replanned' | 'kp-carryover' | 'concept-watch' | 'pace';
@@ -655,6 +704,13 @@ interface DecisionCard {
   action: string;
   priority: 'high' | 'medium' | 'low' | 'info';
   at: string | null;
+  pathId?: string | null;
+  pathTitle?: string | null;
+  recommendation?: string | null;
+  body?: string;
+  options?: DecisionOption[];
+  advisory?: Record<string, any>;
+  mergedCount?: number;
 }
 
 const decisions = computed<DecisionCard[]>(() =>
@@ -674,6 +730,63 @@ function decisionTime(at: string | null): string {
   const d = new Date(at);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+/* 三段分组：待确认（可操作，可忽略消账）/ 已自动处理 / 已执行 */
+const DISMISS_KEY = 'learning_state_dismissed_advisories';
+const dismissedAdvisories = ref<string[]>((() => {
+  try { return JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]') as string[]; } catch { return []; }
+})());
+function dismissDecision(card: DecisionCard) {
+  dismissedAdvisories.value = [...dismissedAdvisories.value, card.id];
+  try { localStorage.setItem(DISMISS_KEY, JSON.stringify(dismissedAdvisories.value)); } catch { /* ignore */ }
+  confirmingId.value = '';
+}
+
+const pendingAdjust = computed(() =>
+  decisions.value.filter((d) => d.kind === 'path-adjust' && !dismissedAdvisories.value.includes(d.id))
+);
+const autoHandled = computed(() =>
+  decisions.value.filter((d) => d.kind === 'kp-carryover' || d.kind === 'concept-watch' || d.kind === 'pace')
+);
+const replannedRows = computed(() => decisions.value.filter((d) => d.kind === 'path-replanned'));
+
+/* AI 建议区的依据行：与待确认调控互相引用（此前两块各自为政） */
+const evidenceHint = computed(() => pendingAdjust.value[0]?.captured || '');
+
+/* 内联确认：与完课卡同一个 replan 接口、同一份 evidence 语义 */
+const confirmingId = ref('');
+const replanBusy = ref(false);
+const REPLAN_REASON: Record<string, string> = {
+  reinforce: '根据课后建议，为下一阶段补强关键薄弱点',
+  resequence: '根据课后建议，调整下一阶段顺序以降低理解风险',
+  accelerate: '根据课后建议，压缩下一阶段以加快推进',
+  slow_down: '根据课后建议，放慢下一阶段节奏'
+};
+
+async function confirmAdjust(card: DecisionCard) {
+  if (!card.pathId || replanBusy.value) return;
+  replanBusy.value = true;
+  try {
+    await request.post(`/learning/paths/${card.pathId}/replan`, {
+      triggerSource: 'ai-teaching',
+      mode: 'overwrite',
+      reason: REPLAN_REASON[card.recommendation || 'reinforce'] || '根据课后建议调整后续阶段',
+      requireConfirmation: false,
+      evidence: { advisoryAction: card.recommendation || 'reinforce', advisory: card.advisory || null }
+    });
+    toast.success(`已调整「${card.pathTitle || '当前路径'}」的后续阶段`);
+    dismissDecision(card);
+  } catch (e: any) {
+    toast.error(e?.message || '调整失败，请稍后再试');
+  } finally {
+    replanBusy.value = false;
+  }
+}
+
+function jumpToAdjust(card: DecisionCard) {
+  if (!card.pathId) return;
+  router.push({ path: `/learning-path/${card.pathId}`, query: { adjust: 'ai' } });
 }
 
 const suggestSource = computed(() => {
@@ -697,10 +810,14 @@ const guideActions = computed(() => {
   const list = skillCopy.value?.todayActions;
   if (!Array.isArray(list)) return [];
   const pathId = guidance.value?.summary?.path?.pathId || null;
+  const taskId = guidance.value?.summary?.path?.taskId || null;
   const resolve = (to?: string): string => {
     switch (to) {
-      case 'continue-learning':
+      case 'continue-learning': {
+        // 2026-09-27：直达当前任务（summary.path.taskId），不再落路径详情页多一跳
+        if (taskId) return pathId ? `/learn/${taskId}?pathId=${pathId}` : `/learn/${taskId}`;
         return pathId ? `/learning-path/${pathId}` : '/dashboard';
+      }
       case 'path-detail':
         return pathId ? `/learning-path/${pathId}` : '/learning-paths';
       case 'learning-state':
@@ -1001,6 +1118,8 @@ function loadGuidance() {
 .guide { display: grid; gap: 6px; }
 .guide__title { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
 .guide__sub { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.65; }
+/* 建议与调控互相引用（2026-09-27）：依据行把 AI 建议挂回到调控区的证据条目 */
+.guide__evidence { margin: 0; font-size: 12px; color: var(--blue-deep); line-height: 1.6; }
 .guide__warn {
   display: flex; align-items: center; gap: 8px;
   font-size: 12.5px; font-weight: 600; color: var(--amber-ink);
@@ -1026,7 +1145,6 @@ function loadGuidance() {
 .suggest__list--warnings { border-top: 1px dashed var(--line); padding-top: 12px; }
 
 /* ---------- AI 决策记录 ---------- */
-.decisions { padding: 20px 22px; display: grid; gap: 12px; }
 .review { margin-top: 14px; padding: 14px 18px; border: 1px solid var(--line, #e5e7eb); border-radius: var(--mk-radius-xl); }
 /* 评审向内容默认收起（2026-09-27 降噪）：卡头即开合，与 band 同一交互语言 */
 .review__toggle {
@@ -1043,23 +1161,64 @@ function loadGuidance() {
 .review__list { margin: 10px 0 0; padding-left: 16px; display: grid; gap: 8px; }
 .review__item strong { display: block; font-size: 13px; }
 .review__action { display: block; margin-top: 2px; font-size: 12px; color: var(--faint, #6b7280); }
-.dec {
-  display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: start;
-  padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas, #fbfcff);
+/* ---------- 学习调控（2026-09-27）：待确认 / 已自动处理 / 已执行的调整 ---------- */
+.ctl { display: grid; gap: 8px; }
+.ctl + .ctl { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ctl__label { margin: 0; font-size: 12px; font-weight: 800; color: var(--faint); letter-spacing: 0.04em; }
+.ctl__label b { margin-left: 6px; color: var(--blue); }
+.ctl__empty { margin: 0; font-size: 12.5px; color: var(--faint); line-height: 1.6; }
+.ctl-card {
+  display: grid; gap: 8px;
+  padding: 13px 15px;
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--blue) 4%, var(--surface));
 }
+.ctl-card__head { display: flex; align-items: center; gap: 8px; }
+.ctl-card__head time { margin-left: auto; font-size: 12px; color: var(--faint); white-space: nowrap; }
+.ctl-card__merged { font-size: 12px; color: var(--amber-ink); }
+.ctl-card__body { margin: 0; font-size: 13px; line-height: 1.65; color: var(--ink); }
+.ctl-card__evidence { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.ctl-card__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ctl-card__confirm {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 12.5px; color: var(--muted);
+  padding: 9px 11px;
+  border: 1px dashed var(--line); border-radius: var(--mk-radius-lg);
+  background: var(--canvas, #fafcff);
+}
+.ctl-card__confirm > span { flex: 1; min-width: 0; }
+.ctl-btn {
+  min-height: 36px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  background: var(--surface, #fff); color: var(--muted);
+  font-size: 12.5px; font-weight: 700; cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.ctl-btn:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
+.ctl-btn--primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  color: #fff; font-weight: 800;
+}
+.ctl-btn--primary:hover { color: #fff; filter: brightness(1.06); border-color: transparent; }
+.ctl-btn--primary:disabled { filter: saturate(0.4); cursor: default; }
+.ctl-btn--ghost { border-color: transparent; background: transparent; }
+.ctl__rows { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.ctl__rows li { display: flex; align-items: baseline; gap: 10px; }
+.ctl__row-text { flex: 1; min-width: 0; font-size: 12.5px; color: color-mix(in srgb, var(--ink) 72%, var(--muted)); line-height: 1.6; }
+.ctl__row-time { font-size: 12px; color: var(--faint); white-space: nowrap; }
 .dec__tag { font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: var(--mk-radius-pill); white-space: nowrap; }
-.dec__tag--blue { color: var(--blue-ink); background: rgba(52, 120, 246, 0.1); }
-.dec__tag--purple { color: var(--purple-ink); background: rgba(141, 107, 255, 0.12); }
-.dec__tag--cyan { color: #3593b5; background: color-mix(in srgb, var(--cyan) 12%, transparent); }
-.dec__tag--amber { color: var(--amber-ink); background: rgba(244, 170, 70, 0.14); }
-.dec__tag--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
-.dec__body { display: grid; gap: 6px; }
-.dec__body p { margin: 0; display: grid; grid-template-columns: 34px 1fr; gap: 10px; font-size: 13px; line-height: 1.65; color: var(--ink); }
-.dec__body b { font-size: 12px; font-weight: 800; color: var(--faint); padding-top: 2.5px; }
-.dec time { font-size: 12px; color: var(--faint); white-space: nowrap; padding-top: 2px; }
+.dec__tag--blue { color: var(--blue-ink); background: color-mix(in srgb, var(--blue-deep) 12%, var(--surface)); }
+.dec__tag--purple { color: var(--purple-ink); background: color-mix(in srgb, var(--purple-ink) 12%, var(--surface)); }
+.dec__tag--cyan { color: #3593b5; background: color-mix(in srgb, var(--cyan) 12%, var(--surface)); }
+.dec__tag--amber { color: var(--amber-ink); background: color-mix(in srgb, var(--amber-ink) 13%, var(--surface)); }
+.dec__tag--green { color: var(--green-ink); background: color-mix(in srgb, var(--green-ink) 12%, var(--surface)); }
 @media (max-width: 640px) {
-  .dec { grid-template-columns: 1fr; gap: 8px; }
-  .dec time { justify-self: end; }
+  /* 确认调整是本页关键动作，触屏抬到 44 触控带（mobile:spec lt44 口径） */
+  .ctl-card__actions .ctl-btn,
+  .ctl-card__confirm .ctl-btn { min-height: 44px; flex: 1; }
+  .ctl__rows li { flex-wrap: wrap; }
 }
 </style>
 
@@ -1121,7 +1280,6 @@ function loadGuidance() {
   .vitals { padding: 14px 16px; }
   .chart,
   .suggest,
-  .decisions { padding: 14px 16px; }
   /* 移动端单列堆叠，同宽卡片必须共用一条内容轨道：sidecard 原来横向 14 而
      vitals / band 都是 16，内容左缘落在 29/31 两条线上（2026-09-26 对齐走查）。
      只动横向，竖向 12 是它自己的紧凑节奏。 */

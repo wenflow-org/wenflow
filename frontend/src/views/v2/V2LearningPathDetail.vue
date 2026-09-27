@@ -695,6 +695,13 @@ async function load(silent = false) {
     // 默认展开：第一个未完成的阶段 + 当前阶段
     const idx = stages.value.findIndex((s) => stageStatusRaw(s) !== 'done');
     openStages.value = idx >= 0 ? [...new Set([Math.max(0, idx - 1), idx])] : stages.value.map((_, i) => i);
+    // 学习状态页调控卡「查看建议」直达（2026-09-27）：?adjust=ai 打开调整弹窗的 AI 诊断场景，
+    // 用完即清，避免刷新时再次弹出
+    if (route.query.adjust === 'ai') {
+      adjustDialogOpen.value = true;
+      adjustMode.value = 'auto';
+      void router.replace({ query: { ...route.query, adjust: undefined } }).catch(() => {});
+    }
     nextTick(measureClampedText);
   } catch {
     if (!silent) loadError.value = true;
