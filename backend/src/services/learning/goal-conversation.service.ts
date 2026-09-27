@@ -831,9 +831,11 @@ async continueConversation(
     const understanding = this.getGoalExt(aiResponse.internal).understanding || {};
     const realGoal = understanding.real_problem || conversation.description;
     const subject = this.inferSubject(realGoal);
-    const title = realGoal && String(realGoal).trim()
-      ? `${String(realGoal).trim().slice(0, 28)}学习路径`
-      : '个性化学习路径';
+    // 占位标题用中性文案（2026-09-27 用户端走查）：真名由路径生成落地时写入；
+    // 生成期间列表/学习台引用的都是这条占位——拼问题原句会出现「……无学习路径学习路径」式怪标题，
+    // 且生成失败时占位名会长期留在列表里。状态语义交给 status 字段（列表有「生成中/待重试」筛选），
+    // 标题不掺状态词，失败态也不会自相矛盾。
+    const title = '个性化学习路径';
     const pathId = `lp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const promptTemplatePayload = this.buildPlaceholderPromptTemplatePayload(conversation, aiResponse, pathId);
 

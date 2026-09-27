@@ -379,9 +379,16 @@ function toneOf(key: MetricKey, v: number): { tone: string; color: string; note:
     if (v === 0) return { tone: 'blue', color: 'var(--blue-deep)', note: '持平' };
     return { tone: 'amber', color: 'var(--amber-ink)', note: '下降' };
   }
-  // lss / lf 越低越好
-  if (v <= 35) return { tone: 'green', color: 'var(--green-ink)', note: key === 'lss' ? '适中' : '较低' };
-  if (v <= 65) return { tone: 'amber', color: 'var(--amber-ink)', note: key === 'lss' ? '偏高' : '偏高' };
+  // lss / lf 越低越好；分档对齐后端 LearningMetricService 建议阈值
+  // （lss ≤50 无提示/50-75「压力适中」/>75「压力过大」；lf >60 才提示「疲劳度较高」）——
+  // 旧档（35/65）把新用户首课的 40 分就标成「偏高」，与同页「最优训练区」自相矛盾
+  if (key === 'lss') {
+    if (v <= 50) return { tone: 'green', color: 'var(--green-ink)', note: '适中' };
+    if (v <= 75) return { tone: 'amber', color: 'var(--amber-ink)', note: '偏高' };
+    return { tone: 'red', color: 'var(--red-ink)', note: '过高' };
+  }
+  if (v <= 60) return { tone: 'green', color: 'var(--green-ink)', note: '较低' };
+  if (v <= 85) return { tone: 'amber', color: 'var(--amber-ink)', note: '偏高' };
   return { tone: 'red', color: 'var(--red-ink)', note: '过高' };
 }
 

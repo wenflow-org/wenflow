@@ -414,6 +414,7 @@
               aria-label="发送"
               @click="send"
               @keydown.enter="send"
+              @keydown.space.prevent="send"
             >
               <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
             </span>
