@@ -3,7 +3,9 @@
     <form class="reset" @submit.prevent="submit">
       <div class="head">
         <h2>{{ hasToken ? '设置新密码' : '找回密码' }}</h2>
-        <p v-if="!hasToken">输入注册时使用的用户名，重置链接将通过可用通道发送。</p>
+        <!-- 不再复述「输入用户名」（label 已说一次，走查 2026-09-27 冗余文案项）；
+             也不承诺「发送链接」——当前链路是验证身份后直接设置新密码 -->
+        <p v-if="!hasToken">验证通过后即可设置新密码。</p>
         <p v-else>输入新密码完成重置，重置后所有已登录设备将退出。</p>
       </div>
 
@@ -36,7 +38,6 @@
             v-model="form.confirmPassword"
             type="password"
             class="field__input"
-            placeholder="请再次输入新密码"
             :disabled="submitting"
           />
           <span v-if="errors.confirmPassword" class="field__error">{{ errors.confirmPassword }}</span>
@@ -50,7 +51,6 @@
             v-model="form.name"
             type="text"
             class="field__input"
-            placeholder="请输入注册用户名"
             :disabled="submitting"
           />
           <span v-if="errors.name" class="field__error">{{ errors.name }}</span>
@@ -165,7 +165,7 @@ function goLogin() {
   border-color: color-mix(in srgb, var(--blue) 55%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
 }
-.field__error { font-size: 11.5px; color: var(--red-ink); font-weight: 600; }
+.field__error { font-size: 12px; color: var(--red-ink); font-weight: 600; }
 
 .btn-primary--block {
   justify-content: center;
@@ -196,7 +196,11 @@ function goLogin() {
   border: 0; background: transparent;
   color: var(--blue-deep);
   font: inherit; font-weight: 800;
-  cursor: pointer; padding: 0;
+  cursor: pointer;
+  min-height: 36px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
 }
 .switch button:hover { text-decoration: underline; }
 

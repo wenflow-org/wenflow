@@ -40,7 +40,7 @@
       <label class="field" :class="{ 'field--error': errors.password }">
         <span class="field__label">密码</span>
         <span class="field__pwd">
-          <input v-model="form.password" :type="showPwd ? 'text' : 'password'" class="field__input" placeholder="请输入密码" autocomplete="new-password" @blur="touch('password')" />
+          <input v-model="form.password" :type="showPwd ? 'text' : 'password'" class="field__input" autocomplete="new-password" @blur="touch('password')" />
           <button type="button" class="field__eye" :aria-label="showPwd ? '隐藏密码' : '显示密码'" @click="showPwd = !showPwd">
             <Eye v-if="showPwd" :size="17" :stroke-width="1.75" />
             <EyeOff v-else :size="17" :stroke-width="1.75" />
@@ -57,21 +57,17 @@
 
       <label class="field" :class="{ 'field--error': errors.confirm }">
         <span class="field__label">确认密码</span>
-        <input v-model="form.confirm" :type="showPwd ? 'text' : 'password'" class="field__input" placeholder="请再次输入密码" autocomplete="new-password" @blur="touch('confirm')" />
+        <input v-model="form.confirm" :type="showPwd ? 'text' : 'password'" class="field__input" autocomplete="new-password" @blur="touch('confirm')" />
         <span v-if="errors.confirm" class="field__error">{{ errors.confirm }}</span>
-      </label>
-
-      <label class="remember-row">
-        <input type="checkbox" v-model="remember" class="remember-cb" />
-        <span>记住我</span>
       </label>
 
       <button type="submit" class="btn-primary btn-primary--block" :disabled="loading">
         {{ loading ? '正在创建账号…' : '创建账号' }}
       </button>
 
+      <!-- 面向用户的表述；「防批量注册」是内部风控口径，不对用户解释 -->
       <p v-if="dailyQuota > 0" class="quota-hint">
-        同一 IP 每天最多注册 {{ dailyQuota }} 个账号（防批量注册）
+        同一网络每天最多注册 {{ dailyQuota }} 个账号
       </p>
 
       <div class="switch">
@@ -102,7 +98,6 @@ const dailyQuota = ref(0);
 const form = reactive({ name: '', password: '', confirm: '' });
 const errors = reactive({ name: '', password: '', confirm: '' });
 const showPwd = ref(false);
-const remember = ref(false);
 
 const checks = computed(() => ({
   length: form.password.length >= 8,
@@ -163,7 +158,8 @@ async function handleRegister() {
 
   loading.value = true;
   try {
-    await userStore.register(form.name, form.password, remember.value);
+    // 注册成功本就应保持登录：记住会话不做成选项（走查 2026-09-27：注册页「记住我」语义冗余）
+    await userStore.register(form.name, form.password, true);
     toast.success('注册成功');
     await router.replace('/onboarding');
   } catch (error: unknown) {
@@ -221,12 +217,12 @@ onMounted(loadStatus);
 }
 .field--error .field__input { border-color: color-mix(in srgb, var(--red) 60%, transparent); }
 .field--error .field__input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 12%, transparent); }
-.field__error { font-size: 11.5px; color: var(--red-ink); font-weight: 600; }
+.field__error { font-size: 12px; color: var(--red-ink); font-weight: 600; }
 
-.hint { margin: 0; font-size: 11.5px; color: var(--faint); }
-.quota-hint { margin: -4px 0 0; font-size: 11.5px; color: var(--faint); text-align: center; }
+.hint { margin: 0; font-size: 12px; color: var(--faint); }
+.quota-hint { margin: -4px 0 0; font-size: 12px; color: var(--faint); text-align: center; }
 .rules { list-style: none; margin: 0; padding: 0; display: flex; gap: 12px; flex-wrap: wrap; }
-.rules li { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--faint); }
+.rules li { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--faint); }
 .rules li.is-ok { color: var(--green); font-weight: 700; }
 .rules li i { font-style: normal; }
 
@@ -239,46 +235,11 @@ onMounted(loadStatus);
   color: var(--blue-deep);
   font: inherit; font-weight: 800;
   cursor: pointer;
-  padding: 5px 6px;
-  min-height: 24px;
+  padding: 5px 8px;
+  min-height: 36px;
   border-radius: var(--mk-radius-md);
 }
 .switch button:hover { text-decoration: underline; }
-
-.remember-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--muted);
-  cursor: pointer;
-  min-height: 24px;
-  margin-bottom: 4px;
-}
-.remember-cb {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  border: 1.5px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface);
-  cursor: pointer;
-  position: relative;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.remember-cb:hover { border-color: color-mix(in srgb, var(--blue) 50%, transparent); }
-.remember-cb:checked { background: var(--blue); border-color: var(--blue); }
-.remember-cb:checked::after {
-  content: '';
-  position: absolute;
-  left: 7px; top: 3px;
-  width: 6px; height: 11px;
-  border: solid #fff;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
-}
 </style>
 
 <style scoped>

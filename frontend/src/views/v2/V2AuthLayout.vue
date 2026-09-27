@@ -64,7 +64,8 @@
       </div>
     </main>
 
-    <V2Footer />
+    <!-- compact：认证页是终端用户入口，页脚不露 开发者文档/GitHub（走查 2026-09-27 冗余文案项） -->
+    <V2Footer compact />
   </div>
 </template>
 
@@ -111,7 +112,11 @@ const isDark = useIsDark();
   gap: 18px;
   align-content: start;
 }
-.auth__back { font-size: 12.5px; font-weight: 600; color: var(--faint); text-decoration: none; justify-self: start; }
+.auth__back {
+  font-size: 12.5px; font-weight: 600; color: var(--faint); text-decoration: none; justify-self: start;
+  /* ≥36px 可点高度（走查 2026-09-27：19px 高的文字链触控不达标） */
+  display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px;
+}
 .auth__back:hover { color: var(--blue-deep); }
 .auth__back--bottom { margin-top: 4px; }
 
@@ -291,6 +296,21 @@ const isDark = useIsDark();
   .auth__logo img { height: 60px; }
   .auth__card { border-radius: var(--mk-radius-modal); }
   .auth__form-side :deep(.field__input) { font-size: 14px; }
+}
+
+/* ---------- 桌面基线（≥1101）：演示面板字级与表单侧同档起步 ----------
+   表单侧在 v2.css 有 ≥1101 抬档（「1080p 不太清楚」），演示面板此前唯一放大档是
+   2000+——1920 下同一张卡里左边 22px 标题、右边 10.5px 字段/9px 勾选圈
+   （走查 2026-09-27 P1）。2000+ 档在下方保持原有更大值，不受本块影响。 */
+@media (min-width: 1101px) {
+  .demo__tagline { font-size: 15px; }
+  .demo__msg { font-size: 14px; }
+  .demo__chip { font-size: 12px; }
+  .demo__panel-head { font-size: 13px; }
+  .demo__panel-head span { font-size: 12px; }
+  .demo__field small { font-size: 12px; }
+  .demo__field strong { font-size: 13.5px; }
+  .mark { font-size: 11px; }
 }
 
 /* ---------- 超大屏（2K）：卡片与演示放大；2800+ 交由 v2.css zoom 机制，避免叠加 ---------- */

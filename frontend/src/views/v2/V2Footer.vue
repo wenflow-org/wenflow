@@ -10,8 +10,11 @@
       </router-link>
       <nav class="v2footer__links" aria-label="footer">
         <router-link to="/vision" class="v2footer__link">愿景</router-link>
-        <router-link to="/docs" class="v2footer__link">开发者文档</router-link>
-        <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer" class="v2footer__link">GitHub</a>
+        <!-- 开发者链接按场景收放：认证页（compact）不露给终端用户，应用页保留 -->
+        <template v-if="!compact">
+          <router-link to="/docs" class="v2footer__link">开发者文档</router-link>
+          <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer" class="v2footer__link">GitHub</a>
+        </template>
       </nav>
       <div class="v2footer__meta">
         <span>© {{ year }} 问流</span>
@@ -26,6 +29,8 @@
 import { computed } from 'vue';
 import { version as appVersion } from '../../../package.json';
 import { useIsDark } from '@/composables/useIsDark';
+
+withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
 
 const isDark = useIsDark();
 const year = computed(() => new Date().getFullYear());

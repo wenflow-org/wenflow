@@ -14,7 +14,6 @@
           v-model.trim="form.name"
           type="text"
           class="field__input"
-          placeholder="请输入用户名"
           autocomplete="username"
           autofocus
           @blur="touch('name')"
@@ -30,7 +29,6 @@
             v-model="form.password"
             :type="showPwd ? 'text' : 'password'"
             class="field__input"
-            placeholder="请输入密码"
             autocomplete="current-password"
             @blur="touch('password')"
             @input="formError = ''"
@@ -181,7 +179,7 @@ onMounted(() => {
 }
 .field--error .field__input { border-color: color-mix(in srgb, var(--red) 60%, transparent); }
 .field--error .field__input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 12%, transparent); }
-.field__error { font-size: 11.5px; color: var(--red-ink); font-weight: 600; }
+.field__error { font-size: 12px; color: var(--red-ink); font-weight: 600; }
 
 .btn-primary--block {
   justify-content: center;
@@ -200,8 +198,8 @@ onMounted(() => {
   color: var(--blue-deep);
   font: inherit; font-weight: 800;
   cursor: pointer;
-  padding: 5px 6px;
-  min-height: 24px;
+  padding: 5px 8px;
+  min-height: 36px;
   border-radius: var(--mk-radius-md);
 }
 .switch button:hover { text-decoration: underline; }
@@ -215,6 +213,11 @@ onMounted(() => {
   font-size: 12.5px;
   color: var(--muted);
   text-decoration: none;
+  /* ≥36px 可点高度（走查 2026-09-27：19px 高的文字链触控不达标） */
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 6px;
 }
 .forgot-link:hover {
   color: var(--blue-deep);
@@ -228,7 +231,8 @@ onMounted(() => {
   font-size: 13px;
   color: var(--muted);
   cursor: pointer;
-  min-height: 24px;
+  /* 整行都是可点区域，高度给到 44（走查 2026-09-27：勾选框本体只有 24×24） */
+  min-height: 44px;
   margin-bottom: 4px;
 }
 .remember-cb {
