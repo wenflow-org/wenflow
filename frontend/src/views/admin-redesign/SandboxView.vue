@@ -189,7 +189,7 @@ onMounted(() => void loadSandboxView());
 .sbx__col { min-width: 0; }
 .sbx__label { margin: 2px 0 8px; font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.05em; color: var(--mk-faint, var(--mk-faint-soft)); }
 .sbx__list { margin: 0; padding: 8px 12px; list-style: none; max-height: 300px; overflow-y: auto; background: var(--mk-surface); border: 1px solid var(--mk-line, #e6ebf4); border-radius: var(--mk-radius-xl); }
-.sbx__li { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; border-bottom: 1px dashed #edf0f6; font-size: var(--mk-fs-micro); }
+.sbx__li { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; border-bottom: 1px dashed var(--mk-line, #edf0f6); font-size: var(--mk-fs-micro); }
 .sbx__li:last-child { border-bottom: none; }
 .sbx__path { color: var(--mk-ink, #1a2a44); word-break: break-all; min-width: 0; }
 .sbx__type { color: var(--mk-faint, var(--mk-faint-soft)); flex-shrink: 0; }

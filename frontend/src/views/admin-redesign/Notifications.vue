@@ -97,6 +97,7 @@
         v-else-if="failed"
         icon="!"
         title="通知加载失败"
+        tone="error"
         action-text="重试"
         @action="reload"
       />

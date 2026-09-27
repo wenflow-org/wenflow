@@ -70,8 +70,11 @@ const dismissToast = (item: ToastItem) => {
   width: min(340px, calc(100vw - 40px));
   padding: 12px 14px;
   border-radius: 6px;
-  background: var(--surface, #ffffff);
-  border: 1px solid var(--line, rgba(0, 0, 0, 0.06));
+  /* 直接引 --mk-* token（勿用 v2 的 --surface/--line/--ink 别名层）：
+     ToastHost teleport 到 body，admin 页面只有 --mk-* 保证有定义（含暗色翻转），
+     旧变量依赖 v2.css 的 :root 别名，别名层一旦按需加载/移除，暗色下会出现白底 toast */
+  background: var(--mk-surface, #ffffff);
+  border: 1px solid var(--mk-line, rgba(0, 0, 0, 0.06));
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
   pointer-events: auto;
   transition: box-shadow 0.2s ease;
@@ -124,7 +127,7 @@ const dismissToast = (item: ToastItem) => {
   font-size: 13px;
   font-weight: 500;
   line-height: 1.55;
-  color: var(--ink, #333333);
+  color: var(--mk-ink, #333333);
   word-break: break-word;
 }
 
@@ -137,7 +140,7 @@ const dismissToast = (item: ToastItem) => {
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--faint, #999999);
+  color: var(--mk-faint, #999999);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
@@ -146,7 +149,7 @@ const dismissToast = (item: ToastItem) => {
 }
 
 .toast-close:hover {
-  color: var(--muted, #555555);
+  color: var(--mk-muted, #555555);
   background: rgba(0, 0, 0, 0.04);
 }
 

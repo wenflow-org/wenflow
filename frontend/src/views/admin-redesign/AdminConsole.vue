@@ -18,9 +18,11 @@
 
     <Shell :current="scene" :crumb="crumbLabel" :crumb-title="crumbTitle" release @navigate="navigate" @glossary="glossaryOpen = true">
       <MockSkeletonTable v-if="booting" :rows="7" :cols="6" />
-      <!-- :key=详情 id：两个实体深链间前进/后退（如 learner A → learner B）时强制重建组件，
-           否则 <component> 同类型复用实例，旧实体的异步写入会串到新 id 的页面上 -->
-      <component v-else :is="detailComponent || currentComponent" :key="subPage?.id" />
+      <!-- :key=详情 id+includeTest（回归 R3）：两个实体深链间前进/后退时强制重建组件，
+           否则 <component> 同类型复用实例，旧实体的异步写入会串到新 id 的页面上；
+           同 id 深链带/不带 includeTest 是两次不同取数（LearnerDetail 挂载时读 subPage.includeTest），
+           仅 key=id 时 includeTest 变化不会重建组件，旧取数（不含测试数据）残留 -->
+      <component v-else :is="detailComponent || currentComponent" :key="pageKey" />
     </Shell>
 
     <AdminGlossaryDrawer :open="glossaryOpen" @close="glossaryOpen = false" />
@@ -61,11 +63,13 @@ function asyncPage(loader: () => Promise<any>) {
         ]);
       }
     },
-    onError(error, retry, fail, _attempts) {
+    onError(error, retry, fail, attempts) {
       // 宽化重试匹配：动态 import 的失败信息随浏览器/打包器而异（Failed to fetch /
       // error loading dynamically imported module / Importing a module script failed / Loading chunk X failed），
       // 只精确匹配 'Failed to fetch' 会漏掉部署更新后 chunk 404 的主流报错，重试机制形同虚设
-      if (/failed to fetch|module|import|load/i.test(String(error?.message || error || ''))) { retry(); } else { fail(); }
+      // attempts 封顶 3（回归 R1）：持久性 chunk 404（部署更新后旧文件已消失）重试永远不会成功，
+      // 不封顶会无限重试打爆网络与控制台；到顶 fail() 交错误面，由用户点「刷新页面」人工 reload
+      if (attempts < 3 && /failed to fetch|module|import|load/i.test(String(error?.message || error || ''))) { retry(); } else { fail(); }
     }
   });
 }
@@ -151,6 +155,8 @@ const bootError = ref('');
 
 const currentComponent = computed(() => components[scene.value]);
 const detailComponent = computed(() => (subPage.value ? detailComponents[subPage.value.view] : null));
+// 详情组件 key（回归 R3）：id + includeTest 二元化，includeTest 深链变化也强制重建详情组件
+const pageKey = computed(() => (subPage.value ? `${subPage.value.id}:${subPage.value.includeTest ? 1 : 0}` : undefined));
 /* 面包屑：二级页优先显示中文名/短标识（label），未设置时回退 ID 截断；title 始终给全 ID。
    三级页（会话座舱由画像打开）拼出「二级 / 三级」，否则进详情后会丢掉二级名。 */
 function crumbPart(label?: string, id?: string): string {

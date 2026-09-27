@@ -46,8 +46,8 @@ withDefaults(
 .mk-kpi--ok .mk-kpi__num { color: var(--mk-green); }
 .mk-kpi--clickable { cursor: pointer; transition: border-color 0.12s ease, transform 0.12s ease; }
 .mk-kpi--clickable:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); transform: translateY(-1px); }
-/* 筛选联动激活态（P0-4）：KPI 作为筛选锚点，激活时高亮边框 */
-.mk-kpi--linked-on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px color-mix(in srgb, var(--mk-blue) 18%, transparent); }
+/* 已删除死样式 .mk-kpi--linked-on（P3）：组件模板从未输出该类，全仓也无调用方传入，
+   「筛选联动激活态」需求未接线——如需启用应加 prop（如 linkedOn）而不是保留不可达样式 */
 
 /* 紧凑模式（列表页顶部 KPI）：压高度 */
 .mk-kpi--compact { padding: 6px 10px; gap: 1px; border-radius: var(--mk-radius-sm); }

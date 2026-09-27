@@ -58,11 +58,20 @@ const blackboxCommandKeyCache = new Map<string, string>();
 export function getOrCreateBlackboxCommandKey(sessionId: string, commandKey: string): string {
   const cacheKey = `${sessionId}::${commandKey}`;
   let value = blackboxCommandKeyCache.get(cacheKey);
-  if (!value) {
-    if (blackboxCommandKeyCache.size >= BLACKBOX_COMMAND_KEY_CACHE_LIMIT) blackboxCommandKeyCache.clear();
-    value = createCommandId();
+  if (value) {
+    // LRU 触达续期：删后重插使其移到 Map 尾部（Map 迭代序=插入序，头部即最久未用）
+    blackboxCommandKeyCache.delete(cacheKey);
     blackboxCommandKeyCache.set(cacheKey, value);
+    return value;
   }
+  if (blackboxCommandKeyCache.size >= BLACKBOX_COMMAND_KEY_CACHE_LIMIT) {
+    // LRU 逐出最旧一条（原 clear() 整表清空会把仍在途命令的 key 一并清掉——
+    // 这些命令重试时后端无法按同 key 对账，幂等屏障形同虚设）
+    const oldest = blackboxCommandKeyCache.keys().next().value;
+    if (oldest !== undefined) blackboxCommandKeyCache.delete(oldest);
+  }
+  value = createCommandId();
+  blackboxCommandKeyCache.set(cacheKey, value);
   return value;
 }
 

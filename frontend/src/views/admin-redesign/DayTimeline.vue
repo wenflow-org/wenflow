@@ -40,6 +40,15 @@
         日期模拟默认关闭。下方按天读数是该会话既有历史的自然日聚合（以会话创建日为第 1 天），可直接用于负担/干预观测。
       </p>
 
+      <!-- 操作类失败（推进/自动推进/重置）走行内 alert：error ref 只留给 load() 整页失败，
+           操作失败不再把已渲染的整条时间线替换成错误态 -->
+      <div v-if="actionError" class="mk-alert mk-alert--row" role="alert">
+        <div class="mk-alert__msg">{{ actionError }}</div>
+        <div class="mk-alert__act">
+          <button type="button" class="mk-btn mk-btn--sm" @click="actionError = ''">知道了</button>
+        </div>
+      </div>
+
       <div v-if="!days.length" class="dt-state">暂无按天数据</div>
 
       <div v-for="day in days" :key="day.dayIndex" class="dt-day">
@@ -137,6 +146,8 @@ const props = withDefaults(defineProps<{ sessionId: string; from?: number; to?: 
 
 const loading = ref(false)
 const error = ref('')
+/** 操作类失败（推进/自动推进/重置）的行内提示：不写 error（那是整页错误态，会顶掉整条时间线） */
+const actionError = ref('')
 const clock = ref<SimulationClock | null>(null)
 const days = ref<DayEntry[]>([])
 const resetting = ref(false)
@@ -159,11 +170,13 @@ function pickErr(e: unknown, fallback: string): string {
 async function advance(days: number, runTasks = false) {
   if (!props.sessionId) return
   advancing.value = true
+  actionError.value = ''
   try {
     await adminVirtualLearnersApi.advanceVirtualSessionDay(props.sessionId, { days, runTasks })
     await load()
   } catch (e) {
-    error.value = pickErr(e, '推进失败')
+    // 操作失败只提示，不顶掉时间线（error ref 会触发 v-else-if 整页错误态）
+    actionError.value = pickErr(e, '推进失败')
   } finally {
     advancing.value = false
   }
@@ -172,11 +185,12 @@ async function advance(days: number, runTasks = false) {
 async function toggleAuto(next: boolean) {
   if (!props.sessionId) return
   advancing.value = true
+  actionError.value = ''
   try {
     await adminVirtualLearnersApi.updateSessionSimulationConfig(props.sessionId, { simulationClock: { autoAdvance: next } })
     await load()
   } catch (e) {
-    error.value = pickErr(e, '切换自动推进失败')
+    actionError.value = pickErr(e, '切换自动推进失败')
   } finally {
     advancing.value = false
   }
@@ -192,11 +206,13 @@ async function resetClock() {
   })
   if (!ok) return
   resetting.value = true
+  actionError.value = ''
   try {
     await adminVirtualLearnersApi.resetVirtualSessionClock(props.sessionId)
     await load()
   } catch (e) {
-    error.value = errMsg(e)
+    // 同 advance/toggleAuto：重置是操作不是加载，失败走行内 alert 保留时间线
+    actionError.value = errMsg(e)
   } finally {
     resetting.value = false
   }

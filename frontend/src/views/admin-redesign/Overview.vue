@@ -259,7 +259,7 @@
            原全宽每行只填 ~40%，收窄后右侧不再有大片空行） -->
       <section class="brief-card brief-card--feed brief-card--wide2">
         <div class="brief-card__head brief-card__head--feed">
-          <h4>动态 · 近 24h<span v-if="lastUpdated" class="feed-fresh">更新于 {{ lastUpdated }}</span></h4>
+          <h4>动态 · 近 24h<span v-if="lastUpdated" class="feed-fresh">更新于 {{ lastUpdated }}</span><span v-if="overviewStale" class="feed-fresh feed-fresh--stale" role="status">刷新失败，展示上次数据</span></h4>
           <label class="feed-filter">
             <input type="checkbox" v-model="hideTestAccounts" />
             <span>隐藏模拟账号</span>
@@ -327,7 +327,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource } from './store';
-import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveVirtualRunStats } from './live';
+import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing, liveVirtualRunStats } from './live';
 import { adminHealthCenterApi } from '@/api/adminApi';
 import { TERMS } from './terms';
 import MkKpi from '@/components/mk/MkKpi.vue';
@@ -582,9 +582,10 @@ const wrapupIssue = computed(() => {
   };
 });
 
-// 重试按钮：force 跳过 liveLoading 守卫保证点击必重拉
+// 重试按钮：force 跳过 liveLoading 守卫保证点击必重拉；成败走 tracked 包装（失败不刷时间戳）
 async function retryOverview() {
-  await refreshLiveOverview(true)
+  const ok = await refreshOverviewTracked(true)
+  if (ok) lastUpdated.value = new Date().toTimeString().slice(0, 5)
 }
 
 // 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤并重新拉取）
@@ -644,10 +645,32 @@ function feedJump(f: { tone: string; errorCategory?: string }) {
 /* R6：10s 自动刷新（使用 setTimeout 链 + 并发守卫 + 指数退避，
    后端不可用时不会堆积请求导致内存暴涨） */
 const lastUpdated = ref('')
+/* P2「更新于」假新鲜修复：live.ts 的 refreshLiveOverview 吞错不抛（live.ts 只读不改），
+   这里在 Overview 侧包装成败判定——fetchLiveOverview 成功路径必写入新对象（liveOverviewFull 引用替换），
+   失败/守卫早退时引用不变，据此决定是否更新时间戳并在状态条标注降级 */
+const overviewStale = ref(false)
+async function refreshOverviewTracked(force = false): Promise<boolean> {
+  const before = liveOverviewFull.value
+  try {
+    await refreshLiveOverview(force)
+  } catch {
+    /* live.ts 内部已吞错，理论不可达；兜底按未刷新处理 */
+  }
+  if (liveOverviewFull.value !== before) {
+    overviewStale.value = false
+    return true
+  }
+  // 引用未变且确无他人在刷：本次请求失败，保留旧数据并标注「刷新失败」；
+  // 若并发守卫/初始加载在跑（liveRefreshing/liveLoading），不算失败也不假刷时间戳，交给在跑的那次
+  if (liveRefreshing.value || liveLoading.value) return false
+  overviewStale.value = true
+  return false
+}
 const { start: startAutoRefresh } = useSafePolling(
   async () => {
-    await refreshLiveOverview()
-    lastUpdated.value = new Date().toTimeString().slice(0, 5)
+    const ok = await refreshOverviewTracked()
+    // 只有确认拉到新数据才更新「更新于」：失败时保留旧时间戳，避免假新鲜
+    if (ok) lastUpdated.value = new Date().toTimeString().slice(0, 5)
   },
   {
     interval: 10000,
@@ -1138,6 +1161,8 @@ watch(liveLoading, (loading) => {
 .feed__empty { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-body); }
 /* 新鲜度标注（R6：显示最近一次自动刷新的时间） */
 .feed-fresh { margin-left: 6px; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; letter-spacing: 0.02em; }
+/* 刷新失败降级标注（琥珀色与全站 warn 档一致，区别于正常时间戳的弱化灰） */
+.feed-fresh--stale { color: var(--mk-amber, #b45309); }
 /* 异常事件条目（bad/warn 置顶可点）——键盘可达：role=button + tabindex + Enter/Space 见模板。
    「排查 →」原来是 hover 才出现的（opacity 0），鼠标用户之外看不到这个行可点；
    改成常态半透明（0.5）、hover/focus 时点亮，键盘聚焦也画 focus ring。 */

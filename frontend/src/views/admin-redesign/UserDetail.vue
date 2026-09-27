@@ -198,11 +198,15 @@ async function loadGrant() {
       grantMsgTone.value = 'ud-grant__notice--info'
     }
   } catch (e) {
+    // 竞态守卫（回归 R2）：catch 侧同样要比对 id——await 期间已切到别的用户时，
+    // 旧用户的失败结果不能写到新用户页面（try 侧守卫只覆盖成功路径）
+    if (subPage.value?.id !== id) return
     projectionGrant.value = null
     grantMessage.value = `许可读取失败：${errMsg(e)}`
     grantMsgTone.value = 'ud-grant__notice--error'
   } finally {
-    grantLoading.value = false
+    // loading 复位也要带守卫：新用户请求已在途时，旧请求的 finally 不能提前关掉它的 loading
+    if (subPage.value?.id === id) grantLoading.value = false
   }
 }
 
