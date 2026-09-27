@@ -2,7 +2,9 @@
 /**
  * MessageActions — hover action menu for AI message bubbles.
  * Shows: 有用 / 不佳 (message feedback), 重新生成 (hidden during streaming), 复制
- * Positioned top-right of the message bubble using CSS.
+ * Positioned as an inline row BELOW the bubble（2026-09-27 用户反馈）：
+ * 原绝对定位在气泡右上角，浮层压住正文末行；改为文档流内的独立小行，
+ * hover 时在气泡下方展开，永不遮挡消息内容。
  */
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 
@@ -107,17 +109,11 @@ function handleFeedback(thumbsUp: boolean) {
 
 <style scoped>
 .msg-actions {
-  position: absolute;
-  top: 6px;
-  right: 6px;
+  /* 气泡下方独立行（文档流内），不再是绝对定位浮层——浮层会遮住气泡正文末行 */
   display: flex;
   gap: 2px;
-  padding: 3px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface, #fff) 92%, transparent);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.1);
-  z-index: 2;
+  padding: 2px 0;
+  margin-top: -2px;
 }
 .msg-actions__btn {
   display: inline-flex;
@@ -166,8 +162,8 @@ function handleFeedback(thumbsUp: boolean) {
 }
 
 /* Transition */
-.actions-pop-enter-active { transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1); }
-.actions-pop-leave-active { transition: opacity 0.1s ease, transform 0.1s ease; }
-.actions-pop-enter-from { opacity: 0; transform: scale(0.95) translateY(-2px); }
-.actions-pop-leave-to { opacity: 0; transform: scale(0.97); }
+.actions-pop-enter-active { transition: opacity 0.15s ease; }
+.actions-pop-leave-active { transition: opacity 0.1s ease; }
+.actions-pop-enter-from { opacity: 0; }
+.actions-pop-leave-to { opacity: 0; }
 </style>
