@@ -121,9 +121,14 @@
                 <span v-if="card.kind === 'generating' || card.kind === 'failed'" class="pcard__badge" :class="badgeCls(card)">{{ statusLabel(card) }}</span>
                 <span class="pcard__more-wrap">
                   <button type="button" class="pcard__more" title="更多操作" @click.stop="menuFor = menuFor === card.id ? '' : card.id">⋯</button>
-                  <div v-if="menuFor === card.id" class="pcard__menu" @click.stop>
-                    <button type="button" v-if="card.kind === 'failed'" class="pcard__menu-item" @click="doRetry(card)">重新生成</button>
-                    <button type="button" class="pcard__menu-item pcard__menu-item--danger" @click="askDelete(card)">删除路径</button>
+                  <div v-if="menuFor === card.id" class="pcard__menu" role="menu" @click.stop>
+                    <button type="button" v-if="card.kind === 'failed'" class="pcard__menu-item" role="menuitem" @click="doRetry(card)">
+                      <RotateCcw :size="15" aria-hidden="true" />重新生成
+                    </button>
+                    <div v-if="card.kind === 'failed'" class="pcard__menu-sep" role="separator"></div>
+                    <button type="button" class="pcard__menu-item pcard__menu-item--danger" role="menuitem" @click="askDelete(card)">
+                      <Trash2 :size="15" aria-hidden="true" />删除路径
+                    </button>
                   </div>
                 </span>
               </div>
@@ -146,7 +151,7 @@
                 </span>
               </div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
-                确认删除这条路径？
+                <span>确认删除这条路径？删除后不可自行恢复。</span>
                 <button type="button" class="pcard__confirm-yes" @click="doDelete(card)">删除</button>
                 <button type="button" class="pcard__confirm-no" @click="deleting = ''">取消</button>
               </div>
@@ -167,7 +172,7 @@
             <template v-else>
               <div class="pcard__fail-reason">{{ card.errorText || '生成失败，目标和已确认信息已保留。' }}</div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
-                确认删除这条路径？
+                <span>确认删除这条路径？删除后不可自行恢复。</span>
                 <button type="button" class="pcard__confirm-yes" @click="doDelete(card)">删除</button>
                 <button type="button" class="pcard__confirm-no" @click="deleting = ''">取消</button>
               </div>
@@ -204,7 +209,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Search } from 'lucide-vue-next';
+import { RotateCcw, Search, Trash2 } from 'lucide-vue-next';
 import request, { AI_REQUEST_TIMEOUT } from '@/utils/api';
 import { toast } from '@/utils/toast';
 import { learningAPI } from '@/api/learning';
@@ -528,6 +533,11 @@ function onMenuKey(e: KeyboardEvent) {
 function onWindowClick() {
   menuFor.value = '';
 }
+/* 滚动即收起「⋯」菜单：它悬在卡片之上，滚动后停留位置不可预期，
+   是「删除路径」误触的主要来源（2026-09-27 用户反馈容易误触） */
+function onWindowScroll() {
+  menuFor.value = '';
+}
 
 onMounted(() => {
   load();
@@ -536,6 +546,7 @@ onMounted(() => {
   }
   window.addEventListener('keydown', onMenuKey);
   window.addEventListener('click', onWindowClick);
+  window.addEventListener('scroll', onWindowScroll, { passive: true });
 });
 
 onBeforeUnmount(() => {
@@ -543,6 +554,7 @@ onBeforeUnmount(() => {
   window.clearTimeout(pollTimer);
   window.removeEventListener('keydown', onMenuKey);
   window.removeEventListener('click', onWindowClick);
+  window.removeEventListener('scroll', onWindowScroll);
 });
 </script>
 
@@ -766,30 +778,54 @@ onBeforeUnmount(() => {
 .pcard__badge--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .pcard__more-wrap { position: relative; }
 .pcard__menu {
-  position: absolute; top: 26px; right: 0; z-index: 10;
+  /* top 40 = 触发器（36px）下沿贴齐：原来 26px 会压住按钮一半 */
+  position: absolute; top: 40px; right: 0; z-index: 10;
   background: var(--surface, #fff); border: 1px solid var(--line);
-  border-radius: var(--mk-radius-xl); padding: 5px;
+  border-radius: var(--mk-radius-xl); padding: 6px;
   box-shadow: 0 12px 30px rgba(23, 32, 51, 0.14);
-  display: grid; min-width: 120px;
+  display: grid; min-width: 152px;
 }
 .pcard__menu-item {
-  padding: 8px 11px; border-radius: var(--mk-radius-md);
-  font-size: 12.5px; font-weight: 600; color: var(--muted);
+  /* 2026-09-27 防误触重设计：两个操作原来是贴着的 33px 文本行，「重新生成」
+     一下没点中就落到「删除路径」。加高到 40（移动 44）、拉开间距、加分隔线、
+     配 lucide 图标，让两个操作在触觉上就不是一个量级的操作。 */
+  min-height: 40px; padding: 0 11px; border-radius: var(--mk-radius-md);
+  font-size: 13px; font-weight: 600; color: var(--muted);
   cursor: pointer; white-space: nowrap;
   text-align: left;
+  display: flex; align-items: center; gap: 8px;
   transition: background 0.15s ease, color 0.15s ease;
 }
+.pcard__menu-sep { height: 1px; background: var(--line, #e3e9f4); margin: 5px 4px; }
 .pcard__menu-item:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); color: var(--ink); }
 .pcard__menu-item--danger { color: var(--red, #c0454a); }
 .pcard__menu-item--danger:hover { background: rgba(239, 117, 120, 0.08); color: var(--red, #c0454a); }
 .pcard__confirm {
-  display: flex; align-items: center; gap: 9px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   font-size: 12.5px; color: var(--muted);
   background: var(--canvas, #fafcff); border: 1px dashed var(--line);
-  border-radius: var(--mk-radius-lg); padding: 8px 11px;
+  border-radius: var(--mk-radius-lg); padding: 9px 11px;
 }
-.pcard__confirm-yes { color: var(--red, #c0454a); font-weight: 800; cursor: pointer; }
-.pcard__confirm-no { color: var(--faint); font-weight: 600; cursor: pointer; }
+.pcard__confirm > span:first-child { flex: 1; min-width: 0; }
+/* 防误触重设计（2026-09-27）：原来「删除/取消」是两粒挨着的小字，一记快 tap 就能
+   确认销毁。改成实体按钮——「删除」实底红、「取消」描边 ghost，中间留 8px 间隔，
+   高度 36 进触控带；文案补一句后果说明（不可自行恢复），给用户一次真正的阅读机会。 */
+.pcard__confirm-yes {
+  min-height: 36px; padding: 0 14px;
+  border: 0; border-radius: var(--mk-radius-pill);
+  background: var(--red, #c0454a); color: #fff;
+  font-size: 12.5px; font-weight: 800; cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.pcard__confirm-yes:hover { filter: brightness(1.06); }
+.pcard__confirm-no {
+  min-height: 36px; padding: 0 12px;
+  border: 1px solid var(--line, #e3e9f4); border-radius: var(--mk-radius-pill);
+  background: var(--surface, #fff); color: var(--muted, #5b6577);
+  font-size: 12.5px; font-weight: 700; cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.pcard__confirm-no:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
 .paths__loading { display: grid; justify-items: center; gap: 12px; padding: 64px 0; color: var(--faint); font-size: 13px; }
 .goal-banner {
   display: flex; align-items: center; gap: 10px;
@@ -864,6 +900,11 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: center;
   }
+  /* 菜单项进 44 触控带：弹出层是悬浮的，点偏了没有 hover 兜底 */
+  .pcard__menu { min-width: 168px; }
+  .pcard__menu-item { min-height: 44px; }
+  .pcard__confirm-yes,
+  .pcard__confirm-no { min-height: 40px; }
 }
 .paths__filter-mask {
   position: fixed; inset: 0; z-index: 60;
