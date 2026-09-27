@@ -38,12 +38,13 @@ defineProps<{ title: string; description?: string }>()
 
 const route = useRoute()
 
+/* 2026-09-27 撤入口留能力：「API 接入」「调用日志」从学习者可见的 tab 栏撤下
+   （面向开发者/排查的面板，全量库实测零使用；后端路由/网关分支/数据表全部保留，
+   需要时直达 URL 仍可用）。未来做开发者/团队版再放出。 */
 const tabs = [
   { to: '/user/account', label: '账户', match: ['/user/account'] },
   { to: '/user/achievements', label: '成就', match: ['/user/achievements'] },
-  { to: '/user/learning-history', label: '学习历史', match: ['/user/learning-history'] },
-  { to: '/user/settings', label: 'API 接入', match: ['/user/settings'] },
-  { to: '/user/agent-logs', label: '调用日志', match: ['/user/agent-logs'] }
+  { to: '/user/learning-history', label: '学习历史', match: ['/user/learning-history'] }
 ]
 
 function isActive(t: { match: string[] }) {
@@ -235,10 +236,9 @@ function isActive(t: { match: string[] }) {
   }
 
   .uc__tab {
-    /* 5 个分段（账户/成就/学习历史/API 接入/调用日志）在 390 下必须排成一行：
-       padding 12→10 省 20px 后总宽 ~337 < 可用 358，实测不再折行。
-       高度补到 36（mobile:spec 的 lt36 门禁）：只加最小高度与居中，横向 padding
-       不动，所以「排成一行」的宽度预算不受影响。 */
+    /* 3 个分段（账户/成就/学习历史）在 390 下自然排成一行（撤掉 API 接入/调用日志后
+       宽度更宽松）；高度补到 36（mobile:spec 的 lt36 门禁）：只加最小高度与居中，
+       横向 padding 不动。 */
     padding: 7px 10px;
     min-height: 36px;
     display: inline-flex;
