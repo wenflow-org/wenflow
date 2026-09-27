@@ -90,7 +90,7 @@ const isDark = useIsDark();
 }
 
 .auth__logo { display: inline-flex; }
-.auth__logo img { height: 64px; width: auto; display: block; }
+.auth__logo img { height: 84px; width: auto; display: block; }
 
 /* ---------- 一体式双栏卡 ---------- */
 .auth__card {
@@ -288,14 +288,14 @@ const isDark = useIsDark();
    （理由与「不要表单里字大大小小」的权衡见 uc.css 的 .uc-field__input 注释）。 */
 @media (max-width: 760px) {
   .auth__main { gap: 20px; padding: 28px 16px 24px; }
-  .auth__logo img { height: 48px; }
+  .auth__logo img { height: 60px; }
   .auth__card { border-radius: var(--mk-radius-modal); }
   .auth__form-side :deep(.field__input) { font-size: 14px; }
 }
 
 /* ---------- 超大屏（2K）：卡片与演示放大；2800+ 交由 v2.css zoom 机制，避免叠加 ---------- */
 @media (min-width: 2000px) and (max-width: 2799px) {
-  .auth__logo img { height: 76px; }
+  .auth__logo img { height: 96px; }
   .auth__main { gap: 36px; }
   .auth__card {
     width: min(1080px, 100%);
