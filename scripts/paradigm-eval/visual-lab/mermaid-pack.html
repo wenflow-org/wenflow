@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>教学配图实验：Mermaid 通道（结构图）</title>
+<script src="./mermaid.min.js"></script>
+<style>
+  body { font-family: "Microsoft YaHei", sans-serif; background: #fff; margin: 0; padding: 24px; }
+  h2 { font-size: 18px; margin: 28px 0 8px; color: #333; border-left: 4px solid #0288d1; padding-left: 10px; }
+  .cap { color: #666; font-size: 13px; margin: 0 0 10px 14px; }
+  .mermaid { border: 1px solid #eee; border-radius: 8px; padding: 16px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<h2>① 超时与回程丢包（翻车案的正确通道版）</h2>
+<p class="cap">caption：右侧状态已经固化，但确认信号被吞噬在回程的路上。</p>
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor C as 客户端（等待时钟 3s）
+    participant S as 服务端（数据库）
+    C->>S: POST /transfer 扣款 100 元
+    Note over S: 扣款执行成功，已写入 DB
+    S--xC: 200 OK（响应在回程丢失）
+    Note over C: 3 秒到！判定「超时失败」
+</pre>
+
+<h2>② 重试灾难（幂等性的发生学刚需）</h2>
+<p class="cap">caption：客户端按「失败就重试」的常识再发一次——账本上扣了两次。</p>
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor C as 客户端
+    participant S as 服务端（账本）
+    C->>S: 扣款 100 元（第 1 次）
+    Note over S: 扣款成功，余额 -100
+    S--xC: 响应在回程丢失
+    Note over C: 判定失败，自动重试
+    C->>S: 扣款 100 元（第 2 次）
+    Note over S: 又扣一次！余额 -200
+</pre>
+
+<h2>③ 极小对：did 还是 had done（磁带 vs 双轨时间轴）</h2>
+<p class="cap">caption：同样是「电影开始了」，站在哪个参照点看，决定用哪个时态。</p>
+<pre class="mermaid">
+flowchart LR
+    A1(["① 更早：电影开始"]) ==> A2(["② 过去：我们到达"])
+    A2 -.->|先发生的先退一步：had started| A3["We arrived. The movie had started."]
+    B1(["① 过去：电影开始"]) ==> B2(["② 过去：我们到达"])
+    B2 -.->|同一层过去：直说 started| B3["We arrived. The movie started."]
+</pre>
+
+<h2>④ 极小对：heard her sing 还是 singing（整盘磁带 vs 快门截面）</h2>
+<p class="cap">caption：左边是拿到整盘磁带的交接单；右边是路过走廊时，耳朵被一段流淌的声波撞了一下。</p>
+<pre class="mermaid">
+flowchart TB
+    subgraph S1[I heard her sing —— 完整事件]
+        direction LR
+        L1([起点]) --> E1[整件事从头到尾：她唱完了] --> L2([终点])
+    end
+    subgraph S2[I heard her singing —— 截取瞬间]
+        direction LR
+        P1([未知过去]) --> C1[只截到一帧：正在唱] --> P2([未知未来])
+    end
+</pre>
+
+<h2>⑤ 非谓语动词降级电路板（总结全景图）</h2>
+<p class="cap">caption：英文句法主板——一个回路只焊一颗芯片；多余的动词必须拔掉引脚，套上转接头做外挂。</p>
+<pre class="mermaid">
+flowchart TD
+    Engine[核心动词：句子唯一的内燃机] -->|驱动全句| Core[提供时态、人称、主干动力]
+    Sub[第二、第三个动词想挤进句子] --> Demote{必须交出动词执照：降级封印}
+    Demote -->|打上 -ing 封条| NounMod[变身形容词或名词：动作被凝固为标签]
+    Demote -->|打上 -ed 封条| PassiveMod[变身被动态或完成态：动作被凝固为结果]
+    Demote -->|戴上 to 紧箍咒| FutureMod[变身目的或方向挂件：动力尚未点燃]
+    style Engine fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+    style Demote fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+</pre>
+
+<h2>⑥ 并发可见性：写线程的两步 vs 读线程的半成品（编程域候选）</h2>
+<p class="cap">caption：引用先可见、字段后可见——读线程拿到了「有地址但没内容」的半成品。</p>
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant W as 写线程
+    participant M as 内存（堆）
+    participant R as 读线程
+    Note over W: 第 1 步：构造对象，填好每个字段
+    W->>M: 在堆上写入字段
+    Note over W: 第 2 步：把引用指过去
+    W->>M: 写入 shared 引用
+    M--xR: 引用可见了，字段却没跟着可见
+    Note over R: 读到非空引用 → 直接开用 → 拿到半成品
+</pre>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'neutral' });
+</script>
+</body>
+</html>
