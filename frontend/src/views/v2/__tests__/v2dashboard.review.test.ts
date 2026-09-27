@@ -1,10 +1,12 @@
 /**
- * V2Dashboard「今日复习」区回归（2026-09-27 信噪比重设计版）：
- * - 学习台只保留一行「会发生什么」：这节课会先回捞 N 个（课内温故计划为主口径，
- *   计划拿不到时回退到期清单/偏弱计数，不显示 0 或空）。
+ * V2Dashboard「今日复习」区回归（2026-09-27 信噪比重设计版 + 同日二次去重）：
+ * - 学习台只保留一行「下节课开头会发生什么」（课内温故计划为主口径，
+ *   计划拿不到时回退偏弱计数，不显示 0 或空）；措辞明确「没有单独的复习课」，
+ *   回捞是带在下一节课开头的。
  * - 概念明细、排队量、明日预告、逐条记忆强度全部移出学习台（归学习状态页），
  *   这里断言它们不再出现。
- * - 唯一行动入口「去上课」；额度用完时提示顺延明天。
+ * - 行动入口收归页面上方主 CTA（原来的「去上课」与之同课重复且漏 pathId，已删）；
+ *   额度用完时提示顺延明天。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -105,14 +107,14 @@ describe('V2Dashboard 今日复习区（信噪比重设计）', () => {
     getAdaptiveGuidance.mockReset();
   });
 
-  it('主口径：这节课会先回捞 N 个（以课内温故计划为准）', async () => {
+  it('主口径：下节课开头会先回捞 N 个（以课内温故计划为准）', async () => {
     const w = await mountDashboard();
-    expect(w.find('.review__plan-body strong').text()).toBe('这节课会先回捞 3 个旧知识点');
+    expect(w.find('.review__plan-body strong').text()).toBe('下节课开头会先回捞 3 个旧知识点');
   });
 
   it('温故计划拿不到时回退到偏弱计数（不显示 0/空）', async () => {
     const w = await mountDashboard({ withPlan: false });
-    expect(w.find('.review__plan-body strong').text()).toBe('2 个知识点记忆偏弱，会在课上优先回捞');
+    expect(w.find('.review__plan-body strong').text()).toBe('2 个知识点记忆偏弱，课开头会优先回捞');
   });
 
   it('概念明细/排队量/明日预告/逐条强度不再出现在学习台', async () => {
@@ -125,10 +127,10 @@ describe('V2Dashboard 今日复习区（信噪比重设计）', () => {
     expect(w.find('.review__more').exists()).toBe(false);
   });
 
-  it('唯一行动入口是「去上课」+ 一句指引', async () => {
+  it('不再有重复的「去上课」入口（与主 CTA 同一节课）；指引点明没有单独复习课', async () => {
     const w = await mountDashboard();
-    expect(w.find('.review__go').text()).toBe('去上课');
-    expect(w.find('.review__plan-body span').text()).toBe('不用额外安排，照常上课就行');
+    expect(w.find('.review__go').exists()).toBe(false);
+    expect(w.find('.review__plan-body span').text()).toBe('没有单独的复习课，不用额外安排');
   });
 
   it('今日额度用完 → 提示顺延到明天', async () => {

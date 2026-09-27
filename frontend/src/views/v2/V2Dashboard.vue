@@ -230,16 +230,15 @@
               复习数据加载失败。<button type="button" class="agenda__retry" @click="loadAll">重试</button>
             </div>
             <template v-else-if="reviewDue.length">
-              <div class="agenda__divider" role="presentation"></div>
-              <div class="agenda__group agenda__group--split">
-                <span class="agenda__group-label">今日复习</span>
-              </div>
+              <!-- 2026-09-27 二次去重：①「今日复习」组标与卡头 meta「复习 N 项」重复，删除；
+                   ②分隔线只在有预算分区的上方存在时才画；③原来的「去上课」按钮与上方主 CTA
+                   指向同一节课（且漏带 pathId），属重复入口，收掉——本行只做信息说明。 -->
+              <div v-if="todaySchedule?.activeGoals?.length" class="agenda__divider" role="presentation"></div>
               <div class="review__plan">
                 <div class="review__plan-body">
                   <strong>{{ reviewHeadline }}</strong>
                   <span>{{ reviewFooterHint }}</span>
                 </div>
-                <router-link v-if="todayTask?.id" :to="`/learn/${todayTask.id}`" class="btn-ghost review__go">去上课</router-link>
               </div>
             </template>
           </template>
@@ -518,20 +517,22 @@ const reviewPlan = ref<{
   tomorrowCount?: number;
 } | null>(null);
 /** 复习行只保留一句话口径（2026-09-27 信噪比重设计）：
-    主句=今天会发生什么（课上接几个）；概念明细/排队/明天/额度台账移到学习状态页 */
+    主句=下节课开头会发生什么；概念明细/排队/明天/额度台账移到学习状态页。
+    2026-09-27 二次修：「这节课」改「下节课开头」——不存在单独的复习课，
+    回捞是带在下一节课开头做的，原文案会让人以为要另上一节复习课 */
 const reviewHeadline = computed(() => {
   const planned = reviewPlan.value?.items?.length ?? 0;
-  if (planned > 0) return `这节课会先回捞 ${planned} 个旧知识点`;
+  if (planned > 0) return `下节课开头会先回捞 ${planned} 个旧知识点`;
   const weak = reviewDue.value.filter((item) => item.reason === 'below-threshold').length;
-  if (weak > 0) return `${weak} 个知识点记忆偏弱，会在课上优先回捞`;
-  return `${reviewDue.value.length} 个知识点到期`;
+  if (weak > 0) return `${weak} 个知识点记忆偏弱，课开头会优先回捞`;
+  return `${reviewDue.value.length} 个知识点到期，上课时会带`;
 });
 const reviewFooterHint = computed(() => {
   const daily = reviewPlan.value?.daily;
   if (daily && daily.remainingLoad <= 0) {
     return `今日温故额度已用完（${daily.usedLoad}/${daily.limitLoad}），剩下的明天继续`;
   }
-  return '不用额外安排，照常上课就行';
+  return '没有单独的复习课，不用额外安排';
 });
 const todaySchedule = ref<Record<string, any> | null>(null);
 const loadError = ref(false);
@@ -1346,8 +1347,6 @@ onMounted(loadAll);
 .agenda__head strong { font-size: 15px; font-weight: 700; }
 .agenda__meta { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .agenda__group { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; color: var(--muted); }
-.agenda__group--split { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.agenda__group-label { display: inline-flex; align-items: baseline; gap: 8px; }
 .agenda__divider { height: 1px; background: var(--line); margin: 2px 0; }
 .agenda__fail { font-size: 13px; color: var(--muted); }
 .agenda__retry {
@@ -1379,7 +1378,6 @@ onMounted(loadAll);
 .review__plan-body { display: grid; gap: 3px; min-width: 0; }
 .review__plan-body strong { font-size: 14px; color: var(--ink); }
 .review__plan-body span { font-size: 12.5px; color: var(--muted); }
-.review__go { flex: 0 0 auto; }
 
 /* ---------- 主区 ---------- */
 .dash__grid-main {  display: grid;
