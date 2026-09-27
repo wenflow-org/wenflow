@@ -14,14 +14,14 @@
     <!-- core 联动提示条（M3 轻量：当前 stage 各 skill 的 fields-sync 状态角标） -->
     <div v-if="skillSyncs.length" class="frt-syncbar">
       <span class="frt-syncbar__title">core 联动</span>
-      <a
+      <button
         v-for="s in skillSyncs"
         :key="s.skillId"
+        type="button"
         class="frt-syncbar__badge"
         :class="`frt-syncbar__badge--${s.tone}`"
         :title="s.title"
-        href="#"
-        @click.prevent="goSkill(s.skillId)"
+        @click="goSkill(s.skillId)"
       >
         <code class="mono">{{ s.skillId }}</code>
         <template v-if="s.sync">
@@ -34,7 +34,7 @@
           <span v-if="s.sync.typeMismatch.length" class="frt-syncbar__count">类型不一致 {{ s.sync.typeMismatch.length }}</span>
         </template>
         <span v-else class="frt-syncbar__count">未核对</span>
-      </a>
+      </button>
       <span class="frt-syncbar__hint">该字段未登记 core 声明 / 未登记路由 → 去 Skill 设计页补全（字段路由 tab）</span>
     </div>
     <div v-else-if="skillSyncLoading" class="frt-syncbar frt-syncbar--muted">
@@ -788,6 +788,10 @@ watch(() => props.stage, () => void loadStage());
   font-weight: 700;
   font-size: var(--mk-fs-micro);
   text-decoration: none;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
   transition: filter 0.12s ease;
 }
 .frt-syncbar__badge:hover { filter: brightness(0.97); }

@@ -73,7 +73,14 @@
                   <span class="sk-rec-group__meta">live {{ e.group.liveCount }} / {{ e.group.items.length }}</span>
                 </td>
               </tr>
-              <tr v-else class="sk-row" :class="{ 'sk-rec-flash': recDiff && e.row.diff === recDiff }" @click="$emit('openSkill', e.row.skillId)">
+              <tr
+                v-else
+                class="sk-row"
+                :class="{ 'sk-rec-flash': recDiff && e.row.diff === recDiff }"
+                tabindex="0"
+                @click="$emit('openSkill', e.row.skillId)"
+                @keydown.enter.prevent="$emit('openSkill', e.row.skillId)"
+              >
                 <td>
                   <div class="sk-cell">
                     <span class="sk-dot" :class="`sk-dot--${recDotTone(e.row)}`"></span>

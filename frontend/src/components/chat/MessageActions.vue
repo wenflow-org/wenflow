@@ -62,6 +62,7 @@ function handleFeedback(thumbsUp: boolean) {
         class="msg-actions__btn"
         :class="{ 'msg-actions__btn--sent-up': feedbackSent === 'up' }"
         :title="feedbackSent === 'up' ? '已标记有用' : '这条回复有用'"
+        :aria-label="feedbackSent === 'up' ? '已标记有用' : '标记这条回复有用'"
         :disabled="!!feedbackSent"
         @click.stop="handleFeedback(true)"
       >
@@ -73,6 +74,7 @@ function handleFeedback(thumbsUp: boolean) {
         class="msg-actions__btn"
         :class="{ 'msg-actions__btn--sent-down': feedbackSent === 'down' }"
         :title="feedbackSent === 'down' ? '已标记不佳' : '这条回复不佳'"
+        :aria-label="feedbackSent === 'down' ? '已标记不佳' : '标记这条回复不佳'"
         :disabled="!!feedbackSent"
         @click.stop="handleFeedback(false)"
       >

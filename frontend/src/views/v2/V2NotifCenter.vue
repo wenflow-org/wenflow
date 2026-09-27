@@ -54,7 +54,11 @@
                 class="nc__item"
                 :class="{ 'nc__item--unread': !n.isRead }"
                 :title="n.body || ''"
+                role="button"
+                tabindex="0"
+                :aria-label="n.title"
                 @click="onNotifClick(n)"
+                @keydown.enter.prevent="onNotifClick(n)"
               >
                 <div class="nc__item-main">
                   <strong>{{ n.title }}</strong>
@@ -142,6 +146,7 @@
                     type="button"
                     class="nc__task-expand"
                     :title="expanded.has(ev.key) ? '收起' : '展开查看每次调用'"
+                    :aria-label="expanded.has(ev.key) ? '收起' : '展开查看每次调用'"
                     @click="toggleExpand(ev.key)"
                   >
                     <svg viewBox="0 0 24 24" width="11" height="11" :style="{ transform: expanded.has(ev.key) ? 'rotate(180deg)' : 'none' }"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>
@@ -150,6 +155,7 @@
                     type="button"
                     class="nc__task-dismiss"
                     title="移除"
+                    aria-label="移除这条动态"
                     @click="feedDismiss(ev.key)"
                   >
                     <svg viewBox="0 0 24 24" width="11" height="11"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>

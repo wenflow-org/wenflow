@@ -81,7 +81,7 @@ defineExpose({ scrollEl, scrollDown, jumpToBottom, nearBottom });
           <span v-if="m.confusion?.length" class="msg__chip msg__chip--confuse">捕获到卡点「{{ m.confusion.join('、') }}」· 导师会在这里多做确认</span>
           <div class="msg__meta">
             {{ aiLabel }} · {{ m.time || nowTime() }}
-            <span v-if="m.failed" class="msg__retry" @click="emit('retry')">重试</span>
+            <button v-if="m.failed" type="button" class="msg__retry" @click="emit('retry')">重试</button>
           </div>
         </div>
       </div>
@@ -95,5 +95,17 @@ defineExpose({ scrollEl, scrollDown, jumpToBottom, nearBottom });
   flex-direction: column;
   gap: 18px;
   overflow-y: auto;
+}
+/* 发送失败重试：真按钮（父页 scoped 样式够不到本组件，这里自带 reset 兜底） */
+.msg__retry {
+  margin-left: 8px;
+  color: var(--mk-red, #c81e1e);
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
 }
 </style>

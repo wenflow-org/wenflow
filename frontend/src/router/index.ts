@@ -1,4 +1,5 @@
 ﻿import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
+import { nextTick } from 'vue';
 import { useUserStore } from '../stores/user';
 import { hasAdminSession } from '../api/adminApi';
 import { getProjectionToken } from '../utils/projection';
@@ -449,6 +450,17 @@ router.beforeEach(async (to, _from, next) => {
   }
   
   next();
+});
+
+/* 路由切换后把焦点交给主内容容器（WCAG 2.4.3 / 4.1.3）：
+   键盘与读屏用户导航后焦点不再滞留在旧页链接上，新页标题可被立即播报。
+   app-main 带 tabindex="-1"（App.vue 预留的 skip-link 落点），
+   程序化 focus 不匹配 :focus-visible，不会画出焦点环。 */
+router.afterEach((to, from) => {
+  if (to.path === from.path) return; // 仅路径变化（hash/query 变更不打断当前阅读）
+  nextTick(() => {
+    document.getElementById('app-main')?.focus({ preventScroll: true });
+  });
 });
 
 export default router;

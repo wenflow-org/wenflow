@@ -9,7 +9,9 @@
       @click="toggle"
     >⋯</button>
     <Transition name="imm-pop">
-      <div v-if="open" class="imm-menu__pop" role="menu" @click="onItemClick">
+      <!-- 插槽内容是真 button 列表（keyboard 原生可达），容器只做点击委托收起菜单；
+           不标 role="menu"——menu 语义要求子项为 menuitem，与真按钮不符 -->
+      <div v-if="open" class="imm-menu__pop" @click="onItemClick">
         <slot />
       </div>
     </Transition>

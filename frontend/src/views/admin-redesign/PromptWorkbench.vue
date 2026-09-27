@@ -43,7 +43,13 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in shownCores" :key="item.skillId" @click="openDesign(item.skillId)">
+          <tr
+            v-for="item in shownCores"
+            :key="item.skillId"
+            tabindex="0"
+            @click="openDesign(item.skillId)"
+            @keydown.enter.prevent="openDesign(item.skillId)"
+          >
             <td><code class="mono">{{ item.skillId }}</code></td>
             <td class="mk-na">{{ item.fields }} 字段 · {{ item.channels.length }} 通道</td>
             <td class="mk-na">{{ item.outputMedia }}<template v-if="item.deltaOutput"> · delta</template></td>

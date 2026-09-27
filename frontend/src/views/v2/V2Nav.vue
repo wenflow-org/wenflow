@@ -1,9 +1,9 @@
 ﻿<template>
   <header class="v2nav">
     <div class="v2nav__in">
-      <div class="v2nav__brand" @click="$router.push('/dashboard')">
-        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" class="v2nav__logo" />
-      </div>
+      <router-link to="/dashboard" class="v2nav__brand" aria-label="问流 WenFlow，返回工作台">
+        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="" class="v2nav__logo" />
+      </router-link>
       <nav class="v2nav__links">
         <router-link
           v-for="item in items"

@@ -205,7 +205,12 @@
             :key="s.agentId"
             class="ov-skill"
             :title="`${s.agentId}：${s.calls} 次调用 · ${s.failed} 次失败 · 点击查看 Skill 运行`"
+            role="button"
+            tabindex="0"
+            :aria-label="`查看 ${s.agentId} 的 Skill 运行`"
             @click="jump('skills')"
+            @keydown.enter.prevent="jump('skills')"
+            @keydown.space.prevent="jump('skills')"
           >
             <span class="ov-skill__rank">{{ i + 1 }}</span>
             <span class="ov-skill__name mono" :title="s.agentId">{{ s.agentId }}</span>
@@ -227,7 +232,12 @@
               class="funnel__node funnel__node--clickable"
               :class="{ 'funnel__node--idle': n.idle }"
               :title="funnelTitle(i)"
+              role="button"
+              :tabindex="n.idle ? -1 : 0"
+              :aria-label="`查看${n.label}明细`"
               @click="jump(funnelTargets[i].scene, funnelTargets[i].tab)"
+              @keydown.enter.prevent="jump(funnelTargets[i].scene, funnelTargets[i].tab)"
+              @keydown.space.prevent="jump(funnelTargets[i].scene, funnelTargets[i].tab)"
             >
               <span>{{ n.label }}</span>
               <strong>{{ n.value }}</strong>

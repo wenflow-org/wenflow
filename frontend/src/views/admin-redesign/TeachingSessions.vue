@@ -115,7 +115,15 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in paged" :key="r.id" class="ts-row" :class="`ts-row--att-${r.attention}`" @click="openDetail(r)">
+            <tr
+              v-for="r in paged"
+              :key="r.id"
+              class="ts-row"
+              :class="`ts-row--att-${r.attention}`"
+              tabindex="0"
+              @click="openDetail(r)"
+              @keydown.enter.prevent="openDetail(r)"
+            >
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ r.topic }}</strong>

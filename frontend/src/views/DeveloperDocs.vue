@@ -275,7 +275,7 @@ prompts/                     # 仓库根，与 backend/ 同级
               <span class="steps__no">6</span>
               <div>
                 <strong>控制台验证</strong>
-                <p><a href="/admin/console" target="_blank">/admin/console</a>：字段数据旅程（逻辑图）看字段流转与调用用量 → Skill 抽屉试跑 → <code>/admin/skills/my-skill</code> 设计页看生效 Prompt 与版本。</p>
+                <p><a href="/admin/console" target="_blank" rel="noopener noreferrer">/admin/console</a>：字段数据旅程（逻辑图）看字段流转与调用用量 → Skill 抽屉试跑 → <code>/admin/skills/my-skill</code> 设计页看生效 Prompt 与版本。</p>
               </div>
             </li>
           </ol>
@@ -284,7 +284,7 @@ prompts/                     # 仓库根，与 backend/ 同级
         <!-- ================= 控制台 ================= -->
         <section id="console" class="docs-sec">
           <h2>控制台</h2>
-          <p class="docs-lead"><a href="/admin/console" target="_blank">/admin/console</a> 是运维与调试主入口（管理员登录）：</p>
+          <p class="docs-lead"><a href="/admin/console" target="_blank" rel="noopener noreferrer">/admin/console</a> 是运维与调试主入口（管理员登录）：</p>
 
           <div class="mini-grid">
             <div class="mini"><strong>平台总览</strong><p>健康简报、24h 调用脉搏、待办。</p></div>

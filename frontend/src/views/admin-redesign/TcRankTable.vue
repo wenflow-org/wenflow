@@ -1,29 +1,30 @@
 <template>
-  <div class="tc-table" :class="`tc-table--${variant}`">
-    <!-- 表头：与行共用同一列模板，保证列对齐 -->
-    <div class="tc-table__head" aria-hidden="true">
-      <span class="tc-c tc-c--rk">#</span>
-      <span class="tc-c tc-c--name">{{ nameLabel }}</span>
-      <span class="tc-c tc-c--num">调用</span>
-      <span class="tc-c tc-c--num">失败</span>
-      <span v-if="variant === 'skill'" class="tc-c tc-c--num">平均/次</span>
-      <span class="tc-c tc-c--tok">Token 用量</span>
-      <span class="tc-c tc-c--share">占比</span>
+  <div class="tc-table" :class="`tc-table--${variant}`" role="table" :aria-label="`${nameLabel}维度调用排行`">
+    <!-- 表头：与行共用同一列模板，保证列对齐；ARIA 表格语义让列标题可被读屏播报 -->
+    <div class="tc-table__head" role="row">
+      <span class="tc-c tc-c--rk" role="columnheader">#</span>
+      <span class="tc-c tc-c--name" role="columnheader">{{ nameLabel }}</span>
+      <span class="tc-c tc-c--num" role="columnheader">调用</span>
+      <span class="tc-c tc-c--num" role="columnheader">失败</span>
+      <span v-if="variant === 'skill'" class="tc-c tc-c--num" role="columnheader">平均/次</span>
+      <span class="tc-c tc-c--tok" role="columnheader">Token 用量</span>
+      <span class="tc-c tc-c--share" role="columnheader">占比</span>
     </div>
 
     <div
       v-for="(r, i) in items"
       :key="r.key"
       class="tc-table__row"
+      role="row"
       :title="rowTitle(r)"
     >
       <!-- 排名徽章：1/2/3 实心蓝（前三），其余中性 -->
-      <span class="tc-c tc-c--rk">
+      <span class="tc-c tc-c--rk" role="cell">
         <i class="tc-rank__no" :class="{ 'tc-rank__no--top': i < 3 }">{{ i + 1 }}</i>
       </span>
 
       <!-- 名称列（各维度形态不同） -->
-      <div class="tc-c tc-c--name">
+      <div class="tc-c tc-c--name" role="cell">
         <template v-if="variant === 'user'">
           <i class="tc-avatar" aria-hidden="true">{{ avatarChar(r) }}</i>
           <span class="tc-c__main">
@@ -41,23 +42,23 @@
         </template>
       </div>
 
-      <span class="tc-c tc-c--num tc-num">{{ r.calls }}</span>
+      <span class="tc-c tc-c--num tc-num" role="cell">{{ r.calls }}</span>
 
       <!-- 失败：红字 + 失败率小注；0 弱化 -->
-      <span class="tc-c tc-c--num" :class="r.failed > 0 ? 'tc-fail--bad' : 'tc-fail--ok'">
+      <span class="tc-c tc-c--num" :class="r.failed > 0 ? 'tc-fail--bad' : 'tc-fail--ok'" role="cell">
         {{ r.failed > 0 ? r.failed : '0' }}<em v-if="r.failed > 0" class="tc-c__sub">{{ failRate(r) }}</em>
       </span>
 
-      <span v-if="variant === 'skill'" class="tc-c tc-c--num tc-num tc-avg">{{ avgPerCall(r) }}</span>
+      <span v-if="variant === 'skill'" class="tc-c tc-c--num tc-num tc-avg" role="cell">{{ avgPerCall(r) }}</span>
 
       <!-- Token 用量：主值 + prompt·completion 拆分 -->
-      <div class="tc-c tc-c--tok">
+      <div class="tc-c tc-c--tok" role="cell">
         <strong class="tc-num">{{ fmtTokens(r.tokens) }}</strong>
         <em class="tc-c__sub">prompt {{ fmtTokens(r.promptTokens) }}<template v-if="(r.completionTokens ?? 0) > 0"> · comp {{ fmtTokens(r.completionTokens) }}</template></em>
       </div>
 
       <!-- 占比：细条 + 百分比 -->
-      <div class="tc-c tc-c--share">
+      <div class="tc-c tc-c--share" role="cell">
         <i class="tc-share__track"><b class="tc-share__bar" :style="{ width: shareW(r.tokens) }"></b></i>
         <span class="tc-share__num">{{ sharePct(r.tokens) }}</span>
       </div>

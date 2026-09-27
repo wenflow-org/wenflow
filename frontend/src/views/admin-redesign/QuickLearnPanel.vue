@@ -108,7 +108,16 @@
         <!-- 历史运行 -->
         <div v-if="historyRuns.length" class="ql-history">
           <div class="ql-section__title">最近自动学习</div>
-          <div v-for="run in historyRuns" :key="run.runId" class="ql-history-item" @click="loadRun(run.runId)">
+          <div
+            v-for="run in historyRuns"
+            :key="run.runId"
+            class="ql-history-item"
+            role="button"
+            tabindex="0"
+            @click="loadRun(run.runId)"
+            @keydown.enter.prevent="loadRun(run.runId)"
+            @keydown.space.prevent="loadRun(run.runId)"
+          >
             <span class="mk-badge" :class="statusBadgeTone(run.status)">{{ statusLabel(run.status) }}</span>
             <span class="ql-history-item__meta">{{ run.turns }} 轮 · {{ formatTime(run.createdAt) }}</span>
             <span class="ql-history-item__open">打开 →</span>

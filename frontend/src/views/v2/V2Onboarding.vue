@@ -17,13 +17,15 @@
             <h1 class="ob__title">欢迎，{{ userName }}</h1>
             <p class="ob__sub">问流把你的真实问题，变成一条能执行的学习路径。<br />不用先囤课，也不用写完美计划。</p>
 
-            <div class="ob__flow" aria-hidden="true">
+            <!-- 三步流程是信息性内容（全页唯一讲清产品用法的文案），不对读屏隐藏；
+                 仅纯装饰的箭头图标标记 aria-hidden -->
+            <div class="ob__flow">
               <span class="ob__flow-item">
                 <i>1</i>
                 <strong>说出问题</strong>
                 <small>一句话就行</small>
               </span>
-              <span class="ob__flow-arrow">
+              <span class="ob__flow-arrow" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>
               </span>
               <span class="ob__flow-item">
@@ -31,7 +33,7 @@
                 <strong>生成路径</strong>
                 <small>阶段 + 任务</small>
               </span>
-              <span class="ob__flow-arrow">
+              <span class="ob__flow-arrow" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>
               </span>
               <span class="ob__flow-item">

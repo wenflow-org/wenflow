@@ -1,18 +1,30 @@
 <template>
   <span class="sv-bar">
     <template v-if="!naming">
-      <button
+      <span
         v-for="v in views"
         :key="v.id"
-        type="button"
         class="sv-pill"
         :class="{ 'sv-pill--active': v.name === activeName }"
-        :title="viewTitle(v)"
-        @click="$emit('apply', v)"
       >
-        <span class="sv-pill__name">{{ v.name }}</span>
-        <span class="sv-pill__del" title="删除此视图" @click.stop="$emit('remove', v.id)">×</span>
-      </button>
+        <!-- 应用/删除是两个真按钮的兄弟结构：button 内嵌套交互元素是无效 HTML，
+             原「span × 删除」键盘不可达 -->
+        <button
+          type="button"
+          class="sv-pill__apply"
+          :title="viewTitle(v)"
+          @click="$emit('apply', v)"
+        >
+          <span class="sv-pill__name">{{ v.name }}</span>
+        </button>
+        <button
+          type="button"
+          class="sv-pill__del"
+          title="删除此视图"
+          :aria-label="`删除视图 ${v.name}`"
+          @click.stop="$emit('remove', v.id)"
+        >×</button>
+      </span>
       <button v-if="canSave" type="button" class="mk-link" @click="startNaming">保存视图</button>
     </template>
     <input
@@ -88,6 +100,15 @@ function viewTitle(v: SavedView): string {
   gap: 4px;
   max-width: 200px;
 }
+.sv-pill__apply {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
 .sv-pill__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sv-pill__del {
   cursor: pointer;
@@ -95,6 +116,11 @@ function viewTitle(v: SavedView): string {
   font-weight: 700;
   line-height: 1;
   padding: 0 2px;
+  border: 0;
+  background: none;
+  font: inherit;
+  min-width: 20px;
+  min-height: 20px;
   border-radius: 4px;
 }
 .sv-pill__del:hover { color: var(--mk-red); background: var(--mk-red-bg); }

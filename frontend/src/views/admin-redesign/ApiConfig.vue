@@ -445,20 +445,20 @@
               <span v-else-if="health" class="ac-health__stale">尚未探测</span>
             </span>
           </div>
-          <div v-if="health" class="ac-health">
-            <div class="ac-health__head" aria-hidden="true">
-              <span></span>
-              <span>能力</span>
-              <span>信息</span>
-              <span>响应</span>
-              <span>最近探测</span>
+          <div v-if="health" class="ac-health" role="table" aria-label="模型能力健康探测">
+            <div class="ac-health__head" role="row">
+              <span role="columnheader"><span aria-hidden="true"></span></span>
+              <span role="columnheader">能力</span>
+              <span role="columnheader">信息</span>
+              <span role="columnheader">响应</span>
+              <span role="columnheader">最近探测</span>
             </div>
-            <div v-for="c in health.capabilities" :key="c.id" class="ac-health__row">
-              <span class="ac-health__dot" :class="`is-${c.status}`"></span>
-              <span class="ac-health__id mono">{{ c.id }}</span>
-              <span class="ac-health__msg">{{ c.message }}</span>
-              <span class="ac-health__lat mono">{{ c.latencyMs != null ? `${c.latencyMs}ms` : '—' }}</span>
-              <span class="ac-health__time">{{ c.checkedAt ? timeAgo(c.checkedAt) : '未探测' }}</span>
+            <div v-for="c in health.capabilities" :key="c.id" class="ac-health__row" role="row">
+              <span class="ac-health__dot" :class="`is-${c.status}`" role="cell" :aria-label="c.status"></span>
+              <span class="ac-health__id mono" role="cell">{{ c.id }}</span>
+              <span class="ac-health__msg" role="cell">{{ c.message }}</span>
+              <span class="ac-health__lat mono" role="cell">{{ c.latencyMs != null ? `${c.latencyMs}ms` : '—' }}</span>
+              <span class="ac-health__time" role="cell">{{ c.checkedAt ? timeAgo(c.checkedAt) : '未探测' }}</span>
             </div>
           </div>
           <div v-else-if="healthFailed" class="ac-rel__note ac-rel__error">

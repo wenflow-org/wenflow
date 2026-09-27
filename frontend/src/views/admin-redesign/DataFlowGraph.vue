@@ -1303,8 +1303,8 @@ function stepHue(step: FlowStep): string {
 }
 .dfg-search__input:focus { border-color: var(--mk-blue); box-shadow: 0 0 0 3px rgba(44, 99, 208, 0.12); }
 .dfg-search__clear {
-  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-  width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center;
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; /* 16→24：WCAG 2.5.8 */
   border: 0; border-radius: 50%; background: var(--mk-graph-clear-bg); color: var(--mk-muted);
   font-size: var(--mk-fs-micro); line-height: 1; cursor: pointer; padding: 0;
 }

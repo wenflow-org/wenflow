@@ -133,7 +133,9 @@
                 :class="[log.success ? 'log-tr--ok' : 'log-tr--err', { 'log-tr--open': openId === log.id }]"
                 :aria-expanded="openId === log.id"
                 :aria-controls="`audit-payload-${log.id}`"
+                tabindex="0"
                 @click="openId = openId === log.id ? '' : log.id"
+                @keydown.enter.prevent="openId = openId === log.id ? '' : log.id"
               >
                 <td v-if="colVisible('time')" class="log-time mono" :title="fmtFull(log.createdAt)">{{ fmtTime(log.createdAt) }}</td>
                 <td v-if="colVisible('admin')" class="log-admin" :title="log.adminName || log.adminId || ''">

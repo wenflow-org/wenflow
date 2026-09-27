@@ -168,7 +168,7 @@
                     <span v-if="isTestLog(log)" class="exec-test-tag" title="模型接入页的连通性/探活测试调用（system-canary）">测试</span>
                   </span>
                 </td>
-                <td v-if="!hiddenCols.has('agent')"><span class="mono exec-stage" :title="log.agent" @click.stop="openSkillDrawer(log.agent)">{{ log.stage }}</span></td>
+                <td v-if="!hiddenCols.has('agent')"><span class="mono exec-stage" :title="log.agent" role="button" tabindex="0" :aria-label="`查看 ${log.agent} 详情`" @click.stop="openSkillDrawer(log.agent)" @keydown.enter.stop.prevent="openSkillDrawer(log.agent)">{{ log.stage }}</span></td>
                 <td v-if="!hiddenCols.has('msg')">
                   <div class="exec-cell">
                     <div class="exec-cell__line">
@@ -187,7 +187,7 @@
                       <span v-if="log.statusCode && log.statusCode >= 400" class="tline__http mono">HTTP {{ log.statusCode }}</span>
                       <span v-if="log.recoveredByRetry" class="tline__recovered">重试 {{ (log.attempts || 1) - 1 }} 次后成功</span>
                       <span v-if="promptOf(log)?.drift" class="tline__drift">{{ TERMS.driftRuntime }}</span>
-                      <span v-if="log.sessionId" class="tline__session mono" :title="`按业务会话在链路中归组查看：${log.sessionId}`" @click.stop="showTrace(undefined, log.sessionId)">会话 {{ shortTrace(log.sessionId) }}</span>
+                      <span v-if="log.sessionId" class="tline__session mono" :title="`按业务会话在链路中归组查看：${log.sessionId}`" role="button" tabindex="0" :aria-label="`查看会话 ${log.sessionId} 链路`" @click.stop="showTrace(undefined, log.sessionId)" @keydown.enter.stop.prevent="showTrace(undefined, log.sessionId)">会话 {{ shortTrace(log.sessionId) }}</span>
                     </div>
                   </div>
                 </td>
@@ -201,7 +201,7 @@
                 </td>
                 <td v-if="!hiddenCols.has('dur')" class="right"><span class="mk-latency exec-dur" :class="latencyTone(log.durationMs)" :title="`${fmtMs(log.durationMs)}（P50 ${latencyP50} · P99 ${latencyP99}）`">{{ fmtMs(log.durationMs) }}</span></td>
                 <td v-if="!hiddenCols.has('status')"><span class="exec-status" :class="`exec-status--${log.status}`">{{ statusText[log.status] }}</span></td>
-                <td v-if="!hiddenCols.has('trace')" class="right"><span class="mono exec-trace" :title="`${log.traceId} · 在链路中查看完整 Trace`" @click.stop="showTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span></td>
+                <td v-if="!hiddenCols.has('trace')" class="right"><span class="mono exec-trace" :title="`${log.traceId} · 在链路中查看完整 Trace`" role="button" tabindex="0" :aria-label="`查看链路 ${shortTrace(log.traceId)}`" @click.stop="showTrace(log.traceId)" @keydown.enter.stop.prevent="showTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span></td>
               </tr>
               <tr v-if="openId === log.id" class="exec-detail">
                 <td :colspan="visibleColCount">

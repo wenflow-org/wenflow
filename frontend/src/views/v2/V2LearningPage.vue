@@ -208,6 +208,7 @@
                   type="button"
                   class="msg__edit-btn"
                   title="编辑这条消息"
+                  aria-label="编辑这条消息"
                   @click="startEdit(m)"
                 ><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
               </template>
@@ -249,7 +250,7 @@
                 <span v-if="showConfusionAt(mi)" class="msg__chip msg__chip--confuse">捕获到卡点「{{ confusionDeltaAt(mi).join('、') }}」· 导师会在这里多做确认</span>
                 <div class="msg__meta">
                   问流导师 · {{ m.time }}
-                  <span v-if="m.failed" class="msg__retry" @click="retryLast">重试</span>
+                  <button v-if="m.failed" type="button" class="msg__retry" @click="retryLast">重试</button>
                 </div>
               </div>
             </div>
@@ -2485,7 +2486,7 @@ onBeforeUnmount(() => {
   border-radius: var(--mk-radius-lg); padding: 9px 12px;
 }
 .checkpoint__feedback--ok { color: var(--green-ink); background: rgba(49, 177, 111, 0.1); }
-.msg__retry { margin-left: 8px; color: var(--red-ink); font-weight: 800; text-decoration: underline; cursor: pointer; }
+.msg__retry { margin-left: 8px; color: var(--red-ink); font-weight: 800; text-decoration: underline; cursor: pointer; border: 0; background: none; padding: 0; font: inherit; }
 .msg__bubble--html :deep(p) { margin: 0 0 8px; }
 .msg__bubble--html :deep(p:last-child) { margin-bottom: 0; }
 .msg__bubble--html :deep(ul), .msg__bubble--html :deep(ol) { margin: 4px 0; padding-left: 18px; }

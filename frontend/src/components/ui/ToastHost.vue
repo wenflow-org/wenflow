@@ -130,8 +130,8 @@ const dismissToast = (item: ToastItem) => {
 
 .toast-close {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 24px;  /* 20→24：WCAG 2.5.8 目标尺寸下限 */
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

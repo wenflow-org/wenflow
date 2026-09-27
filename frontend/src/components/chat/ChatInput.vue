@@ -80,13 +80,16 @@ defineExpose({ focus, textareaRef });
         @keydown="onKeydown"
       ></textarea>
       <span class="composer__count">{{ charCount }} / {{ maxlength }}</span>
-      <span
+      <button
+        type="button"
         class="composer__send"
         :class="{ 'composer__send--off': !canSend }"
+        :disabled="!canSend"
+        aria-label="发送"
         @click="doSend"
       >
-        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
-      </span>
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
+      </button>
     </div>
     <div v-if="showHint" class="composer__hint">
       <span>Enter 发送 · Shift+Enter 换行</span>

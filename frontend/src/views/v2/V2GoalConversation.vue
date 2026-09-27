@@ -37,7 +37,7 @@
       <div class="entry__cards">
           <div class="entry__cards-head">
             <span class="entry__cards-title">试试这些方向</span>
-            <button type="button" class="cards-nav__btn" title="换一批" :disabled="live.sending" @click="shuffleScenes">
+            <button type="button" class="cards-nav__btn" title="换一批" aria-label="换一批" :disabled="live.sending" @click="shuffleScenes">
               <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
             </button>
           </div>
@@ -196,6 +196,7 @@
                   type="button"
                   class="msg__edit-btn"
                   title="编辑这条消息"
+                  aria-label="编辑这条消息"
                   @click="startEdit(km.msg, km.key)"
                 ><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
               </template>
@@ -1126,7 +1127,7 @@ function shuffleScenes() {
 .entry__cards-title { font-size: 12px; font-weight: 700; color: var(--faint); }
 .cards-nav__btn {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; padding: 0;
+  width: 36px; height: 36px; padding: 0; /* 30→36：lt36 门禁口径（任何可点元素 ≥36px） */
   border: 0; border-radius: var(--mk-radius-md);
   background: transparent; color: var(--faint);
   font: inherit; cursor: pointer;
