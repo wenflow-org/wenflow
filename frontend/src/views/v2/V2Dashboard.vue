@@ -9,7 +9,7 @@
           <strong>{{ greetHeadline }}</strong>
           <span class="greet__dot"></span>
           <span>{{ dateText }}</span>
-          <span v-if="greetSub" class="greet__sub">{{ greetSub }}</span>
+          <span v-if="greetSub && !tipVisible" class="greet__sub">{{ greetSub }}</span>
         </div>
         <!-- 连续学习天数的唯一出处：0 态也给一句话，不整块消失（2026-09-25 去重：
              原侧栏 mini 卡把同一个数字再显示一遍，现 mini 只留鼓励文案） -->
@@ -786,6 +786,12 @@ const actionDesc = computed(() => {
   const desc = todayTask.value?.desc?.trim();
   if (!desc || desc === todayTask.value?.title) return '';
   const firstSentence = desc.split(/(?<=[。！？!?])/)[0] || desc;
+  // 提示条在场时只留首个分句（纯操作说明，2026-09-27 去重规则）：
+  // 提示条已承担「今天先做最小的那一步」的语义，卡片不再复述判断入口那半句
+  if (tipVisible.value) {
+    const clause = firstSentence.split(/[，；]/)[0];
+    return clause.length > 32 ? clause.slice(0, 32) + '…' : clause;
+  }
   return firstSentence.length > 64 ? firstSentence.slice(0, 64) + '…' : firstSentence;
 });
 
@@ -843,6 +849,10 @@ const tipText = computed(() => {
   if (copy?.paceHint && copy.paceHint !== '当前节奏稳定，继续保持。') return copy.paceHint;
   return '';
 });
+
+/* 提示条在场判定（2026-09-27 去重规则共用）：与模板 v-if="tipText && !tipDismissed" 同条件。
+   副标与提示条二选一、卡片描述收成纯操作说明，都以此为界 */
+const tipVisible = computed(() => !!tipText.value && !tipDismissed.value);
 
 /* ================= 重试 ================= */
 async function doRetry() {
