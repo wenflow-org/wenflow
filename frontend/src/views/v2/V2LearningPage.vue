@@ -79,8 +79,10 @@
             <strong>本节知识点</strong>
           </span>
           <span class="kp__head-meta">
-            <span v-if="inProgressCount" class="kp__chip kp__chip--progress">进行中 {{ inProgressCount }}</span>
-            <span class="kp__chip kp__chip--mastered" :class="{ 'kp__chip--empty': !masteredCount }">{{ masteredCount }}/{{ knowledgePoints.length }} 已掌握</span>
+            <span
+              class="kp__chip kp__chip--mastered"
+              :class="{ 'kp__chip--empty': !masteredCount, 'kp__chip--none': !knowledgePoints.length }"
+            >{{ masteredCount }}/{{ knowledgePoints.length }} 已掌握</span>
             <span class="kp__caret" aria-hidden="true">{{ kpExpanded ? '▾' : '▸' }}</span>
           </span>
         </button>
@@ -1353,7 +1355,7 @@ async function restart() {
 
 /* ---------- 知识点 ---------- */
 const {
-  masteredCount, inProgressCount, weightedProgressPct
+  masteredCount, weightedProgressPct
 } = useKnowledgePanel(knowledgePoints)
 
 /* 头部掌握度小圆环：r=8 → 周长 2πr≈50.27，弧长 = 已掌握/总数（与「n/N 已掌握」胶囊同口径） */
@@ -1598,8 +1600,10 @@ onBeforeUnmount(() => {
   padding: 4px 8px; border-radius: 999px; white-space: nowrap;
 }
 .kp__chip--mastered { color: var(--green-ink); background: color-mix(in srgb, var(--green) 12%, transparent); }
-.kp__chip--mastered.kp__chip--empty { color: var(--faint); background: var(--mk-surface-2); }
-.kp__chip--progress { color: var(--blue-ink); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+/* 0 态也用蓝 chip（2026-09-27 用户反馈：进行中 chip 删除后，颜色转移到已掌握）：
+   有知识点在进行中（未全掌握且存在）时，0/N 本身就是「进行中」的信息 */
+.kp__chip--mastered.kp__chip--empty { color: var(--blue-ink); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+.kp__chip--mastered.kp__chip--empty.kp__chip--none { color: var(--faint); background: var(--mk-surface-2); }
 .kp__caret { display: none; font-size: 11px; color: var(--faint); flex-shrink: 0; }
 .kp__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .kp__bar { height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
@@ -2257,8 +2261,8 @@ onBeforeUnmount(() => {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 6px 6px 6px 14px;
-  min-height: 50px;
+  padding: 4px 4px 4px 12px;   /* 6→4：盒高收一档（2026-09-27 用户反馈「输入框太大」） */
+  min-height: 44px;
 }
 /* 有内容/聚焦：柔和提示 —— 细蓝边 + 淡外发光（替代原整圈硬蓝边） */
 .composer__box--active {
@@ -2269,11 +2273,11 @@ onBeforeUnmount(() => {
   flex: 1; border: 0; outline: none; resize: none;
   font: inherit; font-size: 14px; line-height: 1.5;
   color: var(--ink); background: transparent;
-  padding: 10px 0; max-height: 120px; align-self: center;
+  padding: 7px 0; max-height: 120px; align-self: center;
 }
 .composer__count { font-size: 11px; color: var(--faint); align-self: center; }
 .composer__send {
-  width: 44px; height: 44px; border-radius: 11px;
+  width: 36px; height: 36px; border-radius: 9px; /* 44→36：随盒收窄（lt36 门禁恰在 36 及格线） */
   display: grid; place-items: center;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   color: #fff; cursor: pointer;
@@ -2389,13 +2393,13 @@ onBeforeUnmount(() => {
   .tutor__scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——移动端提到 16px。
      盒内与目标对话页同款收紧：外内边距左 14→6、gap 10→8、textarea 上下 10→8、发送键 40→36。 */
-  .composer__box { padding: 6px; gap: 8px; }
-  .composer__textarea { font-size: 16px; padding: 8px 0; }
+  .composer__box { padding: 4px; gap: 8px; }
+  .composer__textarea { font-size: 16px; padding: 6px 0; }
   /* 占位符压到 15px（2026-09-26 用户：「随时提问这几个字非常的大」）：textarea 本身必须
      留 16px 防 iOS 聚焦缩放，只能压 placeholder——与目标对话页同款口径。 */
   .composer__textarea::placeholder { font-size: 15px; }
   .composer__attach { margin-top: 4px; }
-  .composer__send { width: 44px; height: 44px; }
+  .composer__send { width: 44px; height: 44px; } /* 移动端维持 44：主操作口径（触屏 hit area），桌面才收 36 */
   /* 触屏没有键盘快捷键提示：这行是「Enter 发送 · Shift+Enter 换行」+ AI 声明，不隐藏的话两者
      在 340px 里折成两行（hint 行 17→33px）。隐藏后只剩声明，居中与入口页 .goal__ai-note 一致。 */
   .composer__hint > .composer__hint-note { display: none; }
