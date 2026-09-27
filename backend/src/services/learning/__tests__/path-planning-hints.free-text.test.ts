@@ -404,3 +404,33 @@ describe('derivePlanningHints：紧预算同时收紧建议值与区间上界（
     expect(normal.milestoneRange).toEqual([3, 5]);
   });
 });
+
+describe('keyStages 缺失时的学时兜底（2026-09-27 横向扩测 heavy-fp#4 塌方）', () => {
+  it('keyStages 空但有 estimatedHours=490 → 里程碑兜底生效、锚链全链生效', () => {
+    const hints = derivePlanningHints(null, null, null, null, [], {
+      totalWeeks: 10, estimatedHours: 490, sessionsPerWeek: 7, sessionsLengthMin: 420, totalSessions: 70,
+    });
+    // 兜底按学时反推 round(490/45)=11，再被节奏档上限钳制（测试未传 timeHorizon → 非 extended 档 cap=5；
+    // 真实 heavy-fp#4 场景 time_horizon='三个月全职备考' → extended cap=8）
+    expect(hints.targetMilestones).toBe(5);
+    expect(hints.targetMilestones).not.toBeNull();
+    // 扩容链：perStage=490/5=98h>8 → 每阶段锚 = min(结构容量 40h, 98) = 40；单任务锚被 240min 上限钳制
+    expect(hints.targetHoursPerMilestone).toBe(40);
+    expect(hints.targetMinutesPerTask).toBe(240);
+    expect(hints.subtaskMinutesRange[1]).toBe(240);
+    expect(hints.targetSubtasksPerStage).toBe(10);
+  });
+
+  it('keyStages 空且无学时信号 → 维持旧行为（scope 无则 null）', () => {
+    const hints = derivePlanningHints(null, null, null, null, [], null);
+    expect(hints.targetMilestones).toBeNull();
+    expect(hints.targetHoursPerMilestone).toBeNull();
+  });
+
+  it('keyStages 存在时兜底不生效（21h + 3 个 keyStages → 仍以 keyStages 为准）', () => {
+    const hints = derivePlanningHints(null, null, null, null, ['一', '二', '三'], {
+      totalWeeks: 6, estimatedHours: 21, sessionsPerWeek: 7, sessionsLengthMin: 30, totalSessions: 42,
+    });
+    expect(hints.targetMilestones).toBe(3);
+  });
+});

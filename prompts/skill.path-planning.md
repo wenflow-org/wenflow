@@ -1,7 +1,7 @@
 ---
 agentId: skill:path-planning
-coreHash: 2823d213d135d2f3c175bfb15667e959e50980bd3dda12db829affa0c9daf61f
-coreVersion: 2
+coreHash: 246ccfc9fa22889606c218c4813d1e6ae98d9fd0cff1dc7a672c113c7704f9e8
+coreVersion: 4
 temperature: 0.5
 maxTokens: 12000
 failurePolicy: retry
@@ -59,10 +59,10 @@ failurePolicy: retry
 27. 如果目标涉及多个功能或模块，必须围绕一个共同交付物收口，而不是平均拆分
 28. 每个里程碑是一个独立学习目标，可以独立评估完成度；每个 milestone 必须明确绑定 1 个 coreConcept
 29. hub concept 必须被非首阶段 milestone 显式复用（在 description 中体现"在新场景中回捞"），不允许每个概念只出现一次；复用下限按里程碑数量分档：milestone ≥ 3 时至少被 2 个非首阶段 milestone 复用，milestone = 2 时至少被 1 个非首阶段 milestone 复用（这是下限，不是上限）
-30. 「总学时预算守恒」：若 normalizedInput.planningHints.targetTotalHours 存在，各 milestone 的 estimatedHours 之和必须落在其 [0.6, 1.8] 倍区间内，并按阶段认知负荷分配（收尾/过渡阶段可以轻，主阶段必须重）；禁止把 60-180 小时的长期路径压缩成 10-25 小时的小闭环——用户声明的周期与投入是硬预算，不是参考
+30. 「总学时预算守恒」：若 normalizedInput.planningHints.targetTotalHours 存在，各 milestone 的 estimatedHours 之和必须落在其 [0.6, 1.8] 倍区间内，并按阶段认知负荷分配（收尾/过渡阶段可以轻，主阶段必须重）；若 targetHoursPerMilestone 存在，每个 milestone 的 estimatedHours 应落在其 [0.5, 1.5] 倍内（收尾阶段允许低于锚，中段主阶段不得低于锚）；若 targetMinutesPerTask 存在，各 subtask 的 estimatedMinutes 均值必须向它靠拢（±40% 内），不允许习惯性全按 45-90 分钟填充。锚是**均值目标而非上限**：2026-09-27 复测发现模型系统性贴着下限走（锚 40h/阶段写 28h、锚 240min/任务写 170min）——主阶段学时应向锚取值或略超，连续多个阶段贴下限视为变相砍预算。禁止把 60-180 小时的长期路径压缩成 10-25 小时的小闭环——用户声明的周期与投入是硬预算，不是参考
 31. milestone 数量为强制值：若 normalizedInput.planningHints.targetMilestones 存在（由上游用户已确认的 keyStages 数量直接得出），必须且只能输出恰好该数量的 milestone，不得增减；targetMilestones 缺失时再回落 planningHints.milestoneRange 区间；两者皆缺时默认 3-6 个
 32. milestone 只写阶段级骨架，不要输出任何 subtask、task slot、acceptanceCriteria、教学脚本或周计划；title 不要写成"第1周""第2周"这类排期语句，也不要写成"记录/梳理/提炼/整合"这类操作步骤句
-33. milestone title 必须表达"认知动作 + 关系对象"，不能退化为孤立主题名词：好的如"识别动力传递临界点的信号并建立稳定维持框架"（动作"识别/建立"+ 关系对象"临界点信号/维持框架"），不好的如"离合器""动力传递""排序算法"这类名词标签
+33. milestone title 必须表达"认知动作 + 关系对象"，不能退化为孤立主题名词：好的如"识别动力传递临界点的信号并建立稳定维持框架"（动作"识别/建立"+ 关系对象"临界点信号/维持框架"），不好的如"离合器""动力传递""排序算法"这类名词标签。关系对象必须是**本学科的实质对象**（如英语的"时态/长难句"、法的"构成要件/诉讼期限"、统计的"p 值/统计功效"、SQL 的"执行计划/驱动表"），禁止用"判断环节/认知框架/知识网络/消化闭环/双线节奏"这类任何学科都能套的泛指——出现泛指关系对象的 title 视为空壳阶段
 34. 如果 normalizedInput.confirmedProposal.firstDeliverable 存在，第一个 milestone 必须直接服务于它；第一个 milestone 的 goal 应明确首阶段要建立的核心能力入口，而不是写成完整执行处方
 35. 如果 successCriteria.observableResult 存在，所有里程碑 goal 必须通向该结果；如果 observableResult 缺失但 firstDeliverable 存在，用 firstDeliverable 作为首阶段和早期验收的主锚点；如果两者都缺失，再依据 realProblem 与 keyStages 组织路径；若 realProblem 与 keyStages 也皆为空，先按三问框架的第一问写出对该用户真实困境的诊断（"这个人真正在应对什么"），再依据诊断组织路径
 36. goal 必须是用户可观察的阶段结果，但保持阶段级，不要下钻成 task 级验收细则

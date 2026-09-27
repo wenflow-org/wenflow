@@ -184,6 +184,10 @@ export interface PlanningHints {
   targetSubtasksPerStage: number | null;
   /** 锚定总学时（课次×单次时长/goal 直接推断；存在时 path-planning 须把各阶段学时之和分配到 ±50% 内） */
   targetTotalHours: number | null;
+  /** 每阶段学时锚（= targetTotalHours / targetMilestones；存在时各 milestone estimatedHours 应向它收敛，防大预算被模型惯性压回 ~10h/阶段） */
+  targetHoursPerMilestone: number | null;
+  /** 单任务分钟锚（= 总分钟 / 总任务数；存在时 subtask estimatedMinutes 均值应向它靠拢，防扩容后模型仍按 ~60min/任务填充） */
+  targetMinutesPerTask: number | null;
 }
 
 /**
@@ -325,9 +329,27 @@ export function derivePlanningHints(
   //   为什么不再塌成 [t,t]：体量是"这条路径该分几步"的语义判断，属于 LLM 的活；
   //   代码只该给边界（防压小/防撑大），不该替它拍一个精确数——枚举拍死正是"过于死板"的来源。
   let milestoneRange: [number, number] = [scopeMilestoneFloor, milestoneCap];
+  // 学时早估（仅用于 keyStages 缺失时的里程碑兜底；与后文 estimatedHoursTotal 同源不同时机）
+  const earlyHoursEstimate: number | null = (() => {
+    const td: Record<string, unknown> | null | undefined = timeDimensions;
+    const est = Number(td?.estimatedHours);
+    if (Number.isFinite(est) && est > 0) return est;
+    const sessions = Number(td?.totalSessions);
+    const lenMin = Number(td?.sessionsLengthMin);
+    if (Number.isFinite(sessions) && sessions > 0 && Number.isFinite(lenMin) && lenMin > 0) {
+      return (sessions * lenMin) / 60;
+    }
+    return null;
+  })();
   let targetMilestones: number | null = keyStageCount > 0
     ? Math.min(milestoneCap, Math.max(scopeMilestoneFloor, keyStageCount))
-    : (scope ? scopeMilestoneFloor : null);
+    : earlyHoursEstimate !== null && earlyHoursEstimate > 0
+      // 2026-09-27 横向扩测（heavy-fp#4）：提案缺 key_stages ⇒ targetMilestones=null ⇒ 整条锚链塌光
+      // （subtasksPerStageRange 落 [4,6]、subtaskMinutesRange 落 [15,30]），490h 预算被写成 12.8h。
+      // keyStages 缺失但有学时信号时按学时分档反推兜底（分档与 goal 层 key_stages 折算公式同源）；
+      // keyStages 存在时本分支永不生效。
+      ? Math.min(milestoneCap, Math.max(2, Math.round(earlyHoursEstimate / (earlyHoursEstimate > 200 ? 45 : 12))))
+      : (scope ? scopeMilestoneFloor : null);
 
   // 每阶段任务数同理（含 micro 的特殊处理）：否则"每阶段 2 个任务"的塌缩不变。
   let subtasksPerStageRange: [number, number] = scope === 'micro'
@@ -548,6 +570,27 @@ export function derivePlanningHints(
         : [fallbackPerStage, subtasksCap])
     : subtasksPerStageRange;
 
+  // ---- 量级锚（2026-09-27 横向扩测驱动）：switch-data 270h 预算实得 94.5h（收缩比 0.35）——
+  // 扩容块抬了结构天花板，但模型惯性仍按 ~11h/阶段、~60min/任务填充，守恒 prompt 的抽象区间被无视。
+  // 显式数字锚比区间可跟随：每阶段学时锚 + 单任务分钟锚，直接随 hints JSON 进 prompt。
+  // 每阶段学时锚被结构容量（任务数上限×分钟上限）钳制：预算真装不下时锚到容量上限（诚实装不下），
+  // 而不是给出任务层永远填不满的账面注水锚（里程碑学时与任务分钟两张皮）。
+  const structureStageCapacityHours = (effectiveSubtasksPerStageRange[1] * subtaskMinutesRange[1]) / 60;
+  const targetHoursPerMilestone =
+    targetMilestones !== null && estimatedHoursTotal !== null
+      ? Math.min(
+          structureStageCapacityHours,
+          Math.round((estimatedHoursTotal / targetMilestones) * 10) / 10,
+        )
+      : null;
+  const targetMinutesPerTask =
+    targetMilestones !== null && estimatedHoursTotal !== null && targetSubtasksPerStage !== null
+      ? Math.min(
+          subtaskMinutesRange[1],
+          Math.round((estimatedHoursTotal * 60) / (targetMilestones * targetSubtasksPerStage)),
+        )
+      : null;
+
   return {
     paceSignal,
     scopeSize: scope,
@@ -557,6 +600,8 @@ export function derivePlanningHints(
     subtasksPerStageRange: effectiveSubtasksPerStageRange,
     targetSubtasksPerStage,
     targetTotalHours,
+    targetHoursPerMilestone,
+    targetMinutesPerTask,
     subtaskMinutesRange,
     maxWeeks,
   };

@@ -1,0 +1,492 @@
+{
+ "$meta": {
+  "name": "paradigm-evolution-golden-personas",
+  "version": "1.2-horizontal",
+  "date": "2026-09-27",
+  "purpose": "多范式演进效果测试金料人设集。配套 TESTPLAN-paradigm-evolution-2026-09-27.md。10 正格（repeat:3）+ 2 域适配负样本（repeat:1）；v1.1 增补 3 个真实语料亚型（refresh/app-fatigue/plateau）；v1.2 横向扩展 10 个人设：新领域（日语/历史/中文写作/统计/数据分析/ML数学/法考）× 新压力面（转行/读论文/小预算/大预算/中途改需求/未成年/纯兴趣/多目标打架）。",
+  "v12ExpansionAxes": [
+   "领域横向：脱离英语主导（v1.1 里 7/13 正格是英语），补语言第二外语、人文通识、写作、应用统计、数据职业、法考大考纲",
+   "预算横向：daily-jp 15min/天小预算下限压测、heavy-fp 6h/天大预算上限压测（直击扩容块与守恒 prompt）、switch-data 270h 中大预算",
+   "交互横向：change-sql 对话中途改需求+提案阶段砍阶段（用户核心关切：输入能不能改 path）、multi-goal 三合一诉求收敛、vague-history 模糊兴趣",
+   "人群横向：junior-eng 14 岁未成年年龄适配、paper-ml 研究生读论文、switch-data 职业转型"
+  ],
+  "constraints": {
+   "domainWhitelist": [
+    "英语（含初中校内）",
+    "数学·微积分与应试数学与概率统计",
+    "数学·机器学习基础",
+    "编程·系统设计·并发·SQL·数据分析",
+    "应试（健康管理师/高考/法考）",
+    "日语（兴趣+旅行）",
+    "历史·罗马史通识",
+    "中文写作·职场"
+   ],
+   "domainBlacklist": [
+    "乐器",
+    "绘画",
+    "驾驶",
+    "视频剪辑",
+    "体育等实体交互类"
+   ],
+   "note": "黑名单域仅作域适配负样本（neg-*），验证系统诚实说明局限而非编造假实操任务"
+  },
+  "resistancePolicy": {
+   "appliesTo": "mastery",
+   "rule": "首次进入 proposing 时注入 resistanceAtProposal 消息（普通 reply，非确认）；此后再次进入 proposing 即确认。understanding 阶段被追问场景时按 followUps 顺序抵抗。"
+  },
+  "driverNotes": {
+   "goalLimitPerUser": "60/h，每格独立探针账号 pe-<personaId>",
+   "probePassword": "ParadigmEval2026",
+   "stateDir": "scripts/paradigm-eval/results/"
+  }
+ },
+ "personas": [
+  {
+   "personaId": "mastery-eng",
+   "intentType": "mastery",
+   "domain": "英语",
+   "expectedParadigm": "genetic-crisis",
+   "budget": {
+    "horizon": "半年",
+    "horizonDays": 180,
+    "dailyMinutes": 30,
+    "expectedHours": 90
+   },
+   "opening": "我今年 32 岁，什么都不为了——不考试、不出国、工作也不刚需。我就是想彻底系统地搞懂英语这门语言本身：它是怎么运作的，为什么我始终学不会。我想从底层机制开始学，把它变成一套真正理解了的东西，而不是背下来的技能。",
+   "followUps": [
+    "没有具体场景。我就是想系统搞懂英语本身——它的结构、逻辑、为什么我一直学不会。你按这门语言该有的样子教我就行，别老追问我在哪用。",
+    "以前学过很多年：背单词、刷语法题，全都半途而废。我现在怀疑问题出在我从来没理解过英语的运作方式，只会死记。",
+    "每天能投入 30 分钟左右，坚持半年没问题。我要的是完整体系，别给我裁成一个格子的小目标，把半年排满。",
+    "行，就按这个来，出方案吧。"
+   ],
+   "resistanceAtProposal": "方向还行，但我要的是完整体系——阶段多一点没关系，把半年的预算排满，别只留一小块。按完整体系调整后出方案。",
+   "expectedStageShape": "阶段按语言底层机制的认知递进组织（骨架→时态思维→小词网络→语篇），而非外部场景交付",
+   "repeat": 3
+  },
+  {
+   "personaId": "mastery-calc",
+   "intentType": "mastery",
+   "domain": "数学·微积分",
+   "expectedParadigm": "genetic-crisis",
+   "budget": {
+    "horizon": "半年",
+    "horizonDays": 180,
+    "dailyMinutes": 40,
+    "expectedHours": 120
+   },
+   "opening": "我工作不搞科研，这辈子大概也不考研。但我不想只活在加减乘除的静态世界里，我想真正建立对'变化'的数学心智模型——微积分到底在说什么，为什么它是现代科学的语言。我想系统地把它搞懂。",
+   "followUps": [
+    "没有要应付的考试或者具体用得上的地方。就是觉得一个受过高分教育的人不该不懂微积分，我想把它真的想明白。",
+    "高考数学一百二十多，多年没碰了。公式都忘得差不多，但数学的直觉还在。",
+    "每天 40 分钟，能坚持半年。我要的是把微积分的思想从头到尾建起来，不是刷题应付，阶段排满半年。",
+    "对，就按这个来，出方案吧。"
+   ],
+   "resistanceAtProposal": "方向可以，但这太薄了——半年、每天 40 分钟，我要一份覆盖完整微积分思想的分阶段大纲，别只给两三个小目标。按完整大纲重新出。",
+   "expectedStageShape": "阶段按'极限思想的产生→导数→积分→微积分基本定理'的认知危机递进，而非公式表目录",
+   "repeat": 3
+  },
+  {
+   "personaId": "mastery-code",
+   "intentType": "mastery",
+   "domain": "编程·系统设计",
+   "expectedParadigm": "genetic-crisis",
+   "budget": {
+    "horizon": "3 个月",
+    "horizonDays": 90,
+    "dailyMinutes": 40,
+    "expectedHours": 60
+   },
+   "opening": "我写代码好几年了，但对分布式系统的底层原理一直是黑盒。我想系统搞懂：为什么共识这么难、CAP 到底在约束什么、Raft 是怎么一步步被逼出来的。不是为了面试，就是想把这块的心智模型建起来。",
+   "followUps": [
+    "没有立刻要上的项目。就是每次用这些中间件都觉得在念咒语，我想知道它们为什么被设计成这样，不设计成这样会死在哪。",
+    "会写业务代码，懂 HTTP 和数据库，但一致性、选举这些只在文章里看过名词。",
+    "每天 40 分钟，三个月。把分布式共识这条线从问题到方案完整建起来，别只挑一两个名词讲讲。",
+    "可以，就按这个生成。"
+   ],
+   "resistanceAtProposal": "我要的是从'为什么需要共识'到完整机制演化的系统大纲，把三个月排满——别收成一个小专题。按完整线重新出。",
+   "expectedStageShape": "阶段按'问题存在性→失败尝试→机制演化→边界辨析'递进，而非 API 教程",
+   "repeat": 3
+  },
+  {
+   "personaId": "fix-eng",
+   "intentType": "problem-fix",
+   "domain": "英语",
+   "expectedParadigm": "pbl",
+   "budget": {
+    "horizon": "3 个月",
+    "horizonDays": 90,
+    "dailyMinutes": 30,
+    "expectedHours": 45
+   },
+   "opening": "我工作里看英文邮件和文档很吃力。上周开会前收到一页英文议程，我读了三遍才敢确认时间地点。想在三个月内把工作读写练扎实。",
+   "followUps": [
+    "最常看的是项目进度和风险类邮件，专业词倒还好，主要是句子一长就抓不住重点。",
+    "大学四级水平，丢了很多年了。",
+    "每天下班能学 30 分钟，周末多一点。",
+    "三个月后工作邮件能顺顺利利读完、该回的能回对。可以，出方案吧。"
+   ],
+   "expectedStageShape": "阶段围绕工作邮件/文档的真实交付物组织",
+   "repeat": 3
+  },
+  {
+   "personaId": "fix-math",
+   "intentType": "problem-fix",
+   "domain": "数学·初中应用",
+   "expectedParadigm": "pbl",
+   "budget": {
+    "horizon": "2 个月",
+    "horizonDays": 60,
+    "dailyMinutes": 30,
+    "expectedHours": 30
+   },
+   "opening": "孩子上初中，数学应用题总丢分，我想辅导但发现自己也讲不清。想自己先学会初中应用题的解法，能给孩子讲明白。",
+   "followUps": [
+    "主要是行程、工程这类要用等量关系列方程的题，我看答案能懂，自己下手就乱。",
+    "我当年数学中等偏上， bases 还在，就是很多年没用过。",
+    "每天晚上 30 分钟。",
+    "两个月后孩子拿一道应用题给我，我能讲清思路。可以，生成吧。"
+   ],
+   "expectedStageShape": "阶段围绕'能辅导孩子讲题'这个交付物组织",
+   "repeat": 3
+  },
+  {
+   "personaId": "fix-code",
+   "intentType": "problem-fix",
+   "domain": "编程·并发",
+   "expectedParadigm": "pbl",
+   "budget": {
+    "horizon": "2 个月",
+    "horizonDays": 60,
+    "dailyMinutes": 60,
+    "expectedHours": 60
+   },
+   "opening": "我写的后端代码总出并发 bug，上个月锁用错了导致线上事故。想系统学会并发编程，别再出这种事。",
+   "followUps": [
+    "技术栈是 Java，出事的是共享状态没保护对，用了双重检查锁但没加 volatile。",
+    "会正常的增删改查和多线程 API，但对内存可见性、锁的语义一直似懂非懂。",
+    "每天一小时。",
+    "目标是以后写并发代码心里有底。可以，生成吧。"
+   ],
+   "expectedStageShape": "阶段围绕'能写出正确的并发代码'交付物组织",
+   "repeat": 3
+  },
+  {
+   "personaId": "troub-eng",
+   "intentType": "troubleshooting",
+   "domain": "英语",
+   "expectedParadigm": "failure-mode",
+   "budget": {
+    "horizon": "2 个月",
+    "horizonDays": 60,
+    "dailyMinutes": 30,
+    "expectedHours": 30
+   },
+   "opening": "我总写出中式长难句，外国同事说读起来喘不过气。我想知道这类句子到底错在哪，怎么系统改掉这个毛病。",
+   "followUps": [
+    "比如我会写'因为天气不好所以我们决定取消原定于今天下午举行的会议'这种一堆逗号的句子。",
+    "词汇量还行，阅读没问题，就是自己动手写就变成了中文直译。",
+    "每天半小时。",
+    "两个月内能写出地道短的英文邮件。可以，出方案吧。"
+   ],
+   "expectedStageShape": "阶段按'典型翻车现场→根因（信息流重心/连接词滥用）→改写抗体'组织",
+   "repeat": 3
+  },
+  {
+   "personaId": "troub-code",
+   "intentType": "troubleshooting",
+   "domain": "编程·系统",
+   "expectedParadigm": "failure-mode",
+   "budget": {
+    "horizon": "2 个月",
+    "horizonDays": 60,
+    "dailyMinutes": 40,
+    "expectedHours": 40
+   },
+   "opening": "我写的接口高并发一上来就崩，超时、雪崩、连接池打满都遇到过。我想系统学会诊断和排错，看到现象就知道哪里爆了。",
+   "followUps": [
+    "最近一次是大促压测，数据库连接池耗尽，整个服务连锁超时。",
+    "会用监控面板看 CPU 和 QPS，但不知道从现象怎么倒推到根因。",
+    "每天 40 分钟。",
+    "两个月后再遇到故障，我能自己定位。可以，生成吧。"
+   ],
+   "expectedStageShape": "阶段按'高频故障现场→根因下钻→防护抗体'组织",
+   "repeat": 3
+  },
+  {
+   "personaId": "exam-cert",
+   "intentType": "exam",
+   "domain": "应试·健康管理师",
+   "expectedParadigm": "pbl",
+   "budget": {
+    "horizon": "3 个月",
+    "horizonDays": 90,
+    "dailyMinutes": 60,
+    "expectedHours": 90
+   },
+   "opening": "三个月后考健康管理师，理论这块没底。帮我系统过一遍考点，重点攻克我容易混的部分。",
+   "followUps": [
+    "最怕的是慢性病防控和营养学这两块，数字和指标特别容易混。",
+    "有医学相关的工作经验，基础常识有。",
+    "每天一小时。",
+    "三个月后理论过线。可以，生成吧。"
+   ],
+   "expectedStageShape": "阶段按考纲模块组织，含刷题与模考",
+   "repeat": 3
+  },
+  {
+   "personaId": "exam-gaokao",
+   "intentType": "exam",
+   "domain": "应试·高考数学",
+   "expectedParadigm": "pbl",
+   "budget": {
+    "horizon": "4 个月",
+    "horizonDays": 120,
+    "dailyMinutes": 60,
+    "expectedHours": 120
+   },
+   "opening": "高考数学的圆锥曲线大题我总是拿不满分，想接下来四个月专项突破这块。",
+   "followUps": [
+    "一般是第一问能拿满，第二问联立方程算到一半就算不下去，或者设线的方式不对。",
+    "其他板块还行，就是这块的运算量和套路总结不够。",
+    "每天一小时。",
+    "四个月后圆锥曲线大题能稳定拿到 10 分以上。可以，出方案吧。"
+   ],
+   "expectedStageShape": "阶段按圆锥曲线考点专题+限时训练组织",
+   "repeat": 3
+  },
+  {
+   "personaId": "neg-guitar",
+   "intentType": "domain-adaptation",
+   "domain": "吉他（黑名单负样本）",
+   "expectedParadigm": null,
+   "budget": null,
+   "opening": "我想学会弹吉他，能弹唱流行歌那种。",
+   "followUps": [
+    "就是零基础，琴都还没买。"
+   ],
+   "expectedBehavior": "诚实性二选一 PASS：(a)收窄到可文本化的理论部分（乐理/和弦构成）并明确说明实操需线下；(b)声明弹奏技能不适合本平台。编造'每天练和弦拍照给我看'类假实操任务=FAIL。",
+   "repeat": 1
+  },
+  {
+   "personaId": "neg-video",
+   "intentType": "domain-adaptation",
+   "domain": "视频剪辑（黑名单负样本）",
+   "expectedParadigm": null,
+   "budget": null,
+   "opening": "我想学短视频剪辑，剪出那种卡点流畅的视频。",
+   "followUps": [
+    "用剪映就行，手机上剪。"
+   ],
+   "expectedBehavior": "同 neg-guitar：诚实说明或收窄到叙事/节奏理论，不编造假剪辑实操任务。",
+   "repeat": 1
+  },
+  {
+   "personaId": "refresh-eng",
+   "intentType": "mastery-refresh",
+   "domain": "英语",
+   "expectedParadigm": "genetic-crisis",
+   "budget": {
+    "horizon": "3 个月",
+    "horizonDays": 90,
+    "dailyMinutes": 30,
+    "expectedHours": 45
+   },
+   "opening": "我大学过了四六级，从小到大英语成绩也不错，毕业以后用得少，很多都忘记了，现在想重新把英语捡起来，系统地恢复到能自如使用的水平。",
+   "followUps": [
+    "读写还行的基础还在，主要是出口能力退化明显——想说什么到嘴边想不起来，写出来的句子自己也觉得别扭。",
+    "每天半小时，坚持三个月没问题。"
+   ],
+   "expectedStageShape": "首阶段应为「激活旧基础」而非从零开始；阶段按出口能力恢复递进",
+   "repeat": 2
+  },
+  {
+   "personaId": "app-fatigue-eng",
+   "intentType": "mastery",
+   "domain": "英语",
+   "expectedParadigm": "genetic-crisis",
+   "budget": {
+    "horizon": "半年",
+    "horizonDays": 180,
+    "dailyMinutes": 30,
+    "expectedHours": 90
+   },
+   "opening": "我 Duolingo 打卡打卡了四百多天，句子都能翻译对，但让我自己说一段话，脑子完全一片空白。我不信打卡那套了，我想真正学会英语——它是怎么运作的，我想系统搞懂。",
+   "followUps": [
+    "对，就是这种感觉：App 里全对，真实世界一片空白。我不想要打卡和游戏化那套了。",
+    "每天半小时，半年。我想知道英语这个系统本身是怎么回事。"
+   ],
+   "expectedStageShape": "reply 应先承认打卡式学习的局限再给体系方案（不得机械追问场景）；阶段按语言机制递进",
+   "repeat": 2
+  },
+  {
+   "personaId": "plateau-a2",
+   "intentType": "troubleshooting",
+   "domain": "英语",
+   "expectedParadigm": "failure-mode",
+   "budget": {
+    "horizon": "2 个月",
+    "horizonDays": 60,
+    "dailyMinutes": 30,
+    "expectedHours": 30
+   },
+   "opening": "我学英语很多年了，水平一直卡在 A2 动不了。单词也在背、剧也在看，就是不涨。我想搞清楚我到底卡在哪，怎么突破这个平台期。",
+   "followUps": [
+    "阅读能连蒙带猜，一听真实语速就抓瞎；想开口说，说出来全是中式直译。",
+    "每天半小时。"
+   ],
+   "expectedStageShape": "阶段按「诊断卡点根因（输入假性理解/产出缺失）→针对性抗体」组织",
+   "repeat": 2
+  },
+  {
+   "personaId": "switch-data",
+   "intentType": "career-switch",
+   "domain": "编程·数据分析",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "半年", "horizonDays": 180, "dailyMinutes": 90, "expectedHours": 270 },
+   "opening": "我 28 岁，在电商公司做运营快四年了，天天看数据报表但只会用 Excel 筛。想转行做数据分析，给自己半年时间，每天能挤出一个半小时。",
+   "followUps": [
+    "SQL 完全没用过，Python 也是零基础。Excel 的透视表、vlookup 这些熟。",
+    "目标很明确：半年后能投数据分析岗，要有拿得出手的项目作品集，面试的手写 SQL 和统计学问题也不能崩。",
+    "工作日晚上一个半小时，周末能到三小时，平均下来每天 90 分钟。"
+   ],
+   "expectedStageShape": "阶段围绕转行交付物组织（SQL 取数→Python 分析→统计基础→完整项目作品集→求职冲刺），末段应含求职向产出",
+   "repeat": 1
+  },
+  {
+   "personaId": "paper-ml",
+   "intentType": "research",
+   "domain": "数学·机器学习基础",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "4 个月", "horizonDays": 120, "dailyMinutes": 60, "expectedHours": 120 },
+   "opening": "我研一，方向要读机器学习论文，但数学底子太薄——线性代数只剩矩阵乘法，概率论全忘了，论文里的推导直接跳过。想用四个月把读论文需要的数学补起来，每天一小时。",
+   "followUps": [
+    "主要是深度学习方向的论文，推导集中在矩阵求导、概率分布、优化方法这几块。",
+    "本科学过线代和概率论，分数不低但全是应试，现在就剩名词了。编程没问题，PyTorch 会用。",
+    "四个月，每天一小时。最后目标是能独立精读一篇 NeurIPS 级别的论文，每步推导都看得懂。"
+   ],
+   "expectedStageShape": "阶段按「读论文所需数学工具链（线代/概率/优化）+ 论文精读实战」组织，终点交付=独立精读一篇论文",
+   "repeat": 1
+  },
+  {
+   "personaId": "daily-jp",
+   "intentType": "interest",
+   "domain": "日语（兴趣+旅行）",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "一年", "horizonDays": 365, "dailyMinutes": 15, "expectedHours": 90 },
+   "opening": "我想学日语，纯兴趣——动漫看了十几年，明年想自己去日本自由行。每天时间不多，通勤加睡前也就 15 分钟。",
+   "followUps": [
+    "五十音图勉强认识，单词会一些动漫里听熟的，语法零基础。",
+    "15 分钟是每天固定能保证的，周末可能多一点。目标是一年后旅游够用：看懂车站指示牌、点餐、简单问路。"
+   ],
+   "expectedStageShape": "任务颗粒适配 15 分钟小预算（单任务≤25 分钟）；阶段围绕旅行生存日语（交通/点餐/问路/购物）组织",
+   "repeat": 1
+  },
+  {
+   "personaId": "heavy-fp",
+   "intentType": "exam",
+   "domain": "应试·法律职业资格",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "3 个月（全职备考）", "horizonDays": 90, "dailyMinutes": 360, "expectedHours": 540 },
+   "opening": "我辞职了，接下来三个月全职备考法考客观题，每天能学 6 个小时以上。去年在职考过一次差 20 多分，刑法和民法两大科最没底。这次想系统把八科过一遍，重点攻刑民。",
+   "followUps": [
+    "对，全天投入，6 小时是保守说法，状态好能到 8 小时。九月中旬考试。",
+    "去年跟过一轮网课，民法总则和刑法总论还有印象，分则基本没记住，诉讼法几乎从零开始。",
+    "目标就是客观题过线 180 分。八科都要覆盖，刑民占大头。可以，出方案吧。"
+   ],
+   "expectedStageShape": "阶段按法考科目考纲组织（刑/民/诉/行政/商经/三国），含刷题与模考；总学时应达 300h+ 量级而非被结构天花板压成几十小时",
+   "repeat": 2
+  },
+  {
+   "personaId": "change-sql",
+   "intentType": "problem-fix",
+   "domain": "编程·SQL",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "4 周（对话中改小的最终口径）", "horizonDays": 28, "dailyMinutes": 30, "expectedHours": 14 },
+   "budgetNote": "前几轮自报 2 个月×1h/天，第 3 轮主动改小为 4 周×30min；本 budget 为最终口径，R1 守真比按此算。关键验收：提案阶段收到「砍成 2 阶段」异议后，修订提案与最终路径阶段数≈2、总时长≈14h 量级——这是「用户输入能否改变 path」的直接探针。",
+   "opening": "我后台查数特别慢，几百万行的表，多表 join 套子查询，一跑十几秒，老板等着我出数。想系统学学 SQL 优化，别再卡在这。",
+   "followUps": [
+    "用的是 MySQL，报表全是 join 四五张表再套两层子查询，索引只知道有这个东西，从没自己建过。",
+    "增删改查都会写，就是慢查询一出来抓瞎，explain 也看不太懂。",
+    "哦对了，我时间得压缩一下——本来想每天一小时学两个月，但最近项目太忙只能半小时，而且我希望 4 周内就见效，先把最疼的报表慢查询解决掉，系统的东西以后再说。"
+   ],
+   "objectionAtProposal": "这个方案太重了。我只要 2 个阶段、4 周搞定——把后面的都砍掉或合并，先解决我报表慢查询这一个问题。按 2 个阶段重新出。",
+   "expectedStageShape": "最终路径≈2 个阶段、4 周可完成、总量级≈14h；阶段围绕「报表慢查询诊断与治理」单一交付物",
+   "repeat": 2
+  },
+  {
+   "personaId": "junior-eng",
+   "intentType": "problem-fix",
+   "domain": "英语·初中校内",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "一学期+", "horizonDays": 120, "dailyMinutes": 40, "expectedHours": 80 },
+   "opening": "我今年 14 岁上初二，英语一直在 70 分左右（满分 120），想在初三前把英语提上去。我妈同意我每天用 40 分钟学。",
+   "followUps": [
+    "丢分主要在完形填空和作文，单词老是背了就忘，语法题靠语感蒙。",
+    "课本是人教版，学校进度挺快的，我总跟不上复习。",
+    "每天放学写完作业学 40 分钟，周末能多点。目标是初三模拟考能上 100 分。"
+   ],
+   "expectedStageShape": "阶段围绕初中校内英语（人教版单元同步、中考题型）组织；任务不得出现职场/成人向内容（商务邮件、裸听美剧等）",
+   "repeat": 1
+  },
+  {
+   "personaId": "vague-history",
+   "intentType": "interest",
+   "domain": "历史·罗马史通识",
+   "expectedParadigm": "chronological-thematic",
+   "budget": { "horizon": "3 个月", "horizonDays": 90, "dailyMinutes": 30, "expectedHours": 45 },
+   "opening": "我对罗马史特别感兴趣，纪录片看了好几遍，最近买了《罗马人的故事》但读不进去。想系统了解罗马从台伯河边的小城邦到地中海霸主再到灭亡这一千多年，但我也说不清学到什么程度算『学会了』。",
+   "followUps": [
+    "没有考试或输出需求，就是想把这千百年真正看明白：它凭什么崛起，又为什么会衰亡。王政、共和国、帝国这些阶段我老是理不清。",
+    "每天睡前半小时。",
+    "就按你的思路来，给我出方案吧。"
+   ],
+   "expectedStageShape": "编年主线+主题式通识（制度/军事/经济）；不得硬套交付物或问题解决叙事；『无考核需求』应被尊重而非被安排测验",
+   "repeat": 1
+  },
+  {
+   "personaId": "stats-biz",
+   "intentType": "problem-fix",
+   "domain": "数学·概率统计应用",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "一个半月", "horizonDays": 45, "dailyMinutes": 30, "expectedHours": 22 },
+   "opening": "我是产品经理，每个迭代都做 A/B 实验，但分析师给我的报告我只会看结论那行——显著性、置信区间、p 值其实不懂，被开发怼两句就露怯。想搞懂实验背后的统计。",
+   "followUps": [
+    "比如上次实验，分析师说『提升 2% 但不显著』，我不明白不显著为什么不发版；还有一次样本量没算够，实验白跑两周。",
+    "高中数学底子，大学文科微积分学过，概率统计基本忘光。",
+    "每天半小时，一个半月。目标是自己能设计实验、判读报告，不用事事求人。"
+   ],
+   "expectedStageShape": "阶段围绕 A/B 实验工作流（设计→样本量→判读→常见坑）交付物组织，概念以业务语言落地",
+   "repeat": 1
+  },
+  {
+   "personaId": "write-cn",
+   "intentType": "problem-fix",
+   "domain": "中文写作·职场",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "六周", "horizonDays": 42, "dailyMinutes": 30, "expectedHours": 21 },
+   "opening": "我工作五年，最怕写汇报和方案。上次晋升述职，领导说我写得像流水账，重点全埋在段落里。想把职场写作练出来，尤其是结构和重点表达。",
+   "followUps": [
+    "主要是季度汇报、项目方案、给高管的邮件三类。语法没问题，就是抓不住『读者要什么』，想到哪写到哪。",
+    "每天半小时。",
+    "六周后下次述职能让领导三分钟抓住重点。可以，出方案吧。"
+   ],
+   "expectedStageShape": "阶段围绕真实职场文档交付物组织（述职/方案/高管邮件），非文学创作",
+   "repeat": 1
+  },
+  {
+   "personaId": "multi-goal",
+   "intentType": "multi-goal",
+   "domain": "混合诉求（英语×编程×PPT）",
+   "expectedParadigm": "pbl",
+   "budget": { "horizon": "3 个月", "horizonDays": 90, "dailyMinutes": 60, "expectedHours": 90 },
+   "opening": "我想提升自己，但又想学英语又想学编程，还想着顺便把 PPT 做好看点。三个都想要，帮我都规划上吧，每天我能学一小时。",
+   "followUps": [
+    "英语是工作偶尔要用；编程是想往技术转但还没想好；PPT 是最近汇报老被说丑。",
+    "呃……如果只能选一个先学的话，英语吧，工作上马上用得上。编程和 PPT 以后再说。",
+    "那就按英语来，出方案吧。"
+   ],
+   "expectedStageShape": "对话应引导收敛到单一主线（英语），不得生成三合一杂烩路径",
+   "repeat": 1
+  }
+ ]
+}
