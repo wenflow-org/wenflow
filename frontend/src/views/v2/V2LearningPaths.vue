@@ -105,7 +105,7 @@
             v-for="card in visibleCards"
             :key="card.id"
             class="pcard"
-            :class="`pcard--${card.kind}`"
+            :class="[`pcard--${card.kind}`, { 'pcard--menu-open': menuFor === card.id }]"
             @click="openPath(card)"
           >
             <div class="pcard__head">
@@ -120,7 +120,22 @@
               <div class="pcard__head-right">
                 <span v-if="card.kind === 'generating' || card.kind === 'failed'" class="pcard__badge" :class="badgeCls(card)">{{ statusLabel(card) }}</span>
                 <span class="pcard__more-wrap">
-                  <button type="button" class="pcard__more" title="更多操作" @click.stop="menuFor = menuFor === card.id ? '' : card.id">⋯</button>
+                  <button
+                    type="button"
+                    class="pcard__more"
+                    :class="{ 'is-open': menuFor === card.id }"
+                    title="更多操作"
+                    aria-label="更多操作"
+                    aria-haspopup="menu"
+                    :aria-expanded="menuFor === card.id ? 'true' : 'false'"
+                    @click.stop="menuFor = menuFor === card.id ? '' : card.id"
+                  >
+                    <MoreHorizontal :size="17" aria-hidden="true" />
+                  </button>
+                  <!-- 防误触（2026-09-27）：菜单开着时全屏透明遮罩把「关菜单的那一tap」吃掉，
+                       不让它落到「删除路径」或卡片导航上；开菜单的卡片钉住不抬升，
+                       否则 transform 会把 fixed 遮罩的包含块改成卡片自身 -->
+                  <div v-if="menuFor === card.id" class="pcard__menu-scrim" @click.stop="menuFor = ''"></div>
                   <div v-if="menuFor === card.id" class="pcard__menu" role="menu" @click.stop>
                     <button type="button" v-if="card.kind === 'failed'" class="pcard__menu-item" role="menuitem" @click="doRetry(card)">
                       <RotateCcw :size="15" aria-hidden="true" />重新生成
@@ -209,7 +224,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { RotateCcw, Search, Trash2 } from 'lucide-vue-next';
+import { MoreHorizontal, RotateCcw, Search, Trash2 } from 'lucide-vue-next';
 import request, { AI_REQUEST_TIMEOUT } from '@/utils/api';
 import { toast } from '@/utils/toast';
 import { learningAPI } from '@/api/learning';
@@ -586,7 +601,7 @@ onBeforeUnmount(() => {
 .paths__search input::placeholder { color: var(--faint); }
 .paths__search-clear { border: 0; background: none; padding: 4px; font-size: 15px; color: var(--faint); cursor: pointer; line-height: 1; }
 .paths__search-clear:hover { color: var(--ink); }
-.paths__sort { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.paths__sort { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
 .paths__sort select {
   font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink);
   padding: 7px 8px; border-radius: var(--mk-radius-md);
@@ -674,7 +689,17 @@ onBeforeUnmount(() => {
 .pcard__badge--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
 .pcard__badge--cyan { color: var(--blue-deep, #2b7a99); background: rgba(67, 176, 216, 0.14); }
 .pcard__badge--red { color: var(--red, #c0454a); background: rgba(239, 117, 120, 0.12); }
-.pcard__more { color: var(--faint); font-size: 18px; cursor: pointer; padding: 0 6px; }
+/* 2026-09-27 防误触：⋯ 从裸文本字形升级成实体幽灵按钮——有边界、有 hover/open 态，
+   32×32（移动 36 + 伪元素热区 52+），误触概率与「看起来能不能按」同时收敛 */
+.pcard__more {
+  width: 32px; height: 32px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: var(--mk-radius-md, 10px);
+  background: none; color: var(--faint); cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.pcard__more:hover,
+.pcard__more.is-open { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
 .pcard__title {
   margin: 0; font-size: 15px; line-height: 1.4;
   min-width: 0;
@@ -767,9 +792,9 @@ onBeforeUnmount(() => {
   .paths__search { min-height: 44px; }
   .paths__sort select { min-height: 44px; }
   .cards { grid-template-columns: 1fr; }
-  /* ⋯ 触发器视觉不变（18px 字形 + 6px 内边距 = 30×27），伪元素把热区扩到 44×43：
-     触屏上 27px 高太难点，它又贴在卡片右上角、周边没有别的手势目标，扩热区无副作用 */
-  .pcard__more { position: relative; }
+  /* ⋯ 触发器 36×36（mobile:spec lt36=0 预算），伪元素把热区再外扩到 50+：
+     它贴在卡片右上角、周边没有别的手势目标，扩热区无副作用 */
+  .pcard__more { position: relative; width: 36px; height: 36px; }
   .pcard__more::before { content: ''; position: absolute; inset: -8px -7px; }
 }
 </style>
@@ -777,9 +802,19 @@ onBeforeUnmount(() => {
 <style scoped>
 .pcard__badge--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .pcard__more-wrap { position: relative; }
+/* 菜单开着时钉住卡片：hover 抬升的 transform 会把 fixed 遮罩的包含块改成卡片，
+   遮罩就只剩卡片那么大；钉住后遮罩真正铺满视口 */
+.pcard.pcard--menu-open,
+.pcard.pcard--menu-open:hover { transform: none; }
+.pcard__menu-scrim {
+  position: fixed; inset: 0; z-index: 9;
+  background: transparent;
+  cursor: default;
+}
 .pcard__menu {
-  /* top 40 = 触发器（36px）下沿贴齐：原来 26px 会压住按钮一半 */
-  position: absolute; top: 40px; right: 0; z-index: 10;
+  /* 与触发器隔开 6px 空隙：指尖停在 ⋯ 上时不在任何菜单项里；
+     原来贴着（top 40 = 触发器下沿）是误触的另一来源 */
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 10;
   background: var(--surface, #fff); border: 1px solid var(--line);
   border-radius: var(--mk-radius-xl); padding: 6px;
   box-shadow: 0 12px 30px rgba(23, 32, 51, 0.14);
@@ -891,15 +926,6 @@ onBeforeUnmount(() => {
     font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
   }
   .paths__filter-btn:hover { color: var(--blue-deep, #1f57cc); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
-  /* ⋯ 更多操作实测 27×27，触屏上是最难点的目标之一；抬到 36（同 .adjust-dialog__close 的口径） */
-  .pcard__more {
-    min-width: 36px;
-    min-height: 36px;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
   /* 菜单项进 44 触控带：弹出层是悬浮的，点偏了没有 hover 兜底 */
   .pcard__menu { min-width: 168px; }
   .pcard__menu-item { min-height: 44px; }
