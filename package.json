@@ -14,6 +14,7 @@
     "dev:lan": "powershell -ExecutionPolicy Bypass -File ./start-lan.ps1",
     "env:setup": "powershell -ExecutionPolicy Bypass -File ./setup-env.ps1",
     "env:edit": "powershell -ExecutionPolicy Bypass -File ./setup-env.ps1 -EditOnly",
+    "doctor": "node scripts/doctor.mjs",
     "secrets:audit": "npm --prefix backend run secrets:audit",
     "secrets:migrate": "npm --prefix backend run secrets:migrate",
     "prisma:migrate:verify-clean": "npm --prefix backend run prisma:migrate:verify-clean",
