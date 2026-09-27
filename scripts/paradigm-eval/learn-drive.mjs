@@ -14,6 +14,8 @@ const RESULTS = path.join(__dirname, 'results');
 const personaId = process.argv[2] || '';
 const maxTurns = Number(process.argv[3] || 6);
 if (!personaId) { console.error('usage: learn-drive.mjs <personaId> [maxTurns]'); process.exit(1); }
+// 产物文件名标签（A/B 会话分开落盘，避免夜跑时同案例互相覆盖）
+const outName = (base) => `${base}${process.env.LEARN_TAG ? '-' + process.env.LEARN_TAG : ''}.json`;
 
 let cookie = '';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -130,7 +132,10 @@ async function main() {
   const pathData = detail.data || {};
   const allTasks = (pathData.stages || []).flatMap(s => (s.subtasks || []).map(t => ({ ...t, stageNumber: s.stageNumber })));
   const wantedTaskId = process.env.LEARN_TASK_ID || '';
-  const firstTask = (wantedTaskId && allTasks.find((t) => t.id === wantedTaskId)) || allTasks[0];
+  const taskIndex = Number(process.env.LEARN_TASK_INDEX || '0');
+  const firstTask = (wantedTaskId && allTasks.find((t) => t.id === wantedTaskId))
+    || allTasks[Number.isInteger(taskIndex) && taskIndex > 0 ? Math.min(taskIndex, allTasks.length - 1) : 0]
+    || allTasks[0];
   if (!firstTask) throw new Error('no tasks');
   log(`path=${pathId} | ${pathData.name || pathData.title} | task=S${firstTask.stageNumber}T1 ${String(firstTask.title).slice(0, 30)} (${firstTask.id})`);
 
@@ -146,7 +151,7 @@ async function main() {
     welcome: String(d.welcomeMessage || '').slice(0, 500),
     turns: [], checkpoints: [], completion: null, endSummary: null, startedAt: Date.now(),
   };
-  if (d.mode === 'completed') { record.note = 'task already completed'; fs.writeFileSync(path.join(RESULTS, `learn-${personaId}.json`), JSON.stringify(record, null, 1)); return; }
+  if (d.mode === 'completed') { record.note = 'task already completed'; fs.writeFileSync(path.join(RESULTS, outName(`learn-${personaId}`)), JSON.stringify(record, null, 1)); return; }
 
   const turns = pickPreset();
   const seekCompletion = process.env.LEARN_COMPLETION === '1';
@@ -277,7 +282,7 @@ async function main() {
 
   record.images = images;
   record.imageTiming = images.map(i => `turn${i.turn}`);
-  fs.writeFileSync(path.join(RESULTS, `learn-${personaId}.json`), JSON.stringify(record, null, 1));
+  fs.writeFileSync(path.join(RESULTS, outName(`learn-${personaId}`)), JSON.stringify(record, null, 1));
   log(`DONE learn-${personaId}.json | turns=${record.turns.length} images=${images.length} checkpoints=${record.checkpoints.length}`);
 }
 
