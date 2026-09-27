@@ -54,52 +54,53 @@
           </div>
         </article>
 
-        <!-- 修改密码（2026-09-27：「协助排查」投影授权卡删除，两栏收成一栏） -->
-        <article class="uc-card uc-card--pwd">
-          <div class="uc-card__head">
-            <div>
-              <h3>修改密码</h3>
-              <p>定期更换密码，保障账号安全</p>
+        <!-- 账号安全双栏（2026-09-27 区域利用率重排）：改密主栏 + 注销危区右栏。
+             此前两张卡各自整行、内容只占左半屏，右侧一半全是死空白。 -->
+        <div class="profile-cols">
+          <article class="uc-card uc-card--pwd">
+            <div class="uc-card__head">
+              <div>
+                <h3>修改密码</h3>
+                <p>定期更换密码，保障账号安全</p>
+              </div>
             </div>
-          </div>
-          <div class="pwd-grid">
-            <label class="uc-field pwd-field pwd-field--wide">
-              <span class="uc-field__label">当前密码</span>
-              <input v-model="pwdForm.oldPassword" type="password" class="uc-field__input" placeholder="输入当前密码" />
-            </label>
-            <label class="uc-field pwd-field">
-              <span class="uc-field__label">新密码</span>
-              <input v-model="pwdForm.newPassword" type="password" class="uc-field__input" placeholder="至少 8 位，含字母和数字" />
-            </label>
-            <label class="uc-field pwd-field">
-              <span class="uc-field__label">确认新密码</span>
-              <input v-model="pwdForm.confirmPassword" type="password" class="uc-field__input" placeholder="再输入一次" />
-            </label>
-          </div>
-          <div class="uc-card__foot">
-            <button type="button" class="uc-btn uc-btn--primary" :disabled="!pwdCanSubmit || pwdSubmitting" @click="handleChangePassword">
-              {{ pwdSubmitting ? '更新中…' : '更新密码' }}
-            </button>
-          </div>
-        </article>
-
-
-
-        <!-- 危险操作：注销 -->
-        <article class="uc-card uc-card--danger">
-          <div class="uc-card__head">
-            <div>
-              <h3>注销账号</h3>
-              <p>注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销（可联系管理员恢复）。</p>
+            <div class="pwd-grid">
+              <label class="uc-field pwd-field pwd-field--wide">
+                <span class="uc-field__label">当前密码</span>
+                <input v-model="pwdForm.oldPassword" type="password" class="uc-field__input" placeholder="输入当前密码" />
+              </label>
+              <label class="uc-field pwd-field">
+                <span class="uc-field__label">新密码</span>
+                <input v-model="pwdForm.newPassword" type="password" class="uc-field__input" placeholder="至少 8 位，含字母和数字" />
+              </label>
+              <label class="uc-field pwd-field">
+                <span class="uc-field__label">确认新密码</span>
+                <input v-model="pwdForm.confirmPassword" type="password" class="uc-field__input" placeholder="再输入一次" />
+              </label>
             </div>
-          </div>
-          <div class="danger-form">
-            <input v-model="deactivatePassword" type="password" class="uc-field__input" placeholder="输入当前密码确认注销" @keyup.enter="handleDeactivate" />
-            <button type="button" class="uc-btn uc-btn--danger" :disabled="deactivating" @click="handleDeactivate">
-              {{ deactivating ? '注销中…' : '注销账号' }}
-            </button>
-          </div>
-        </article>
+            <div class="uc-card__foot">
+              <button type="button" class="uc-btn uc-btn--primary" :disabled="!pwdCanSubmit || pwdSubmitting" @click="handleChangePassword">
+                {{ pwdSubmitting ? '更新中…' : '更新密码' }}
+              </button>
+            </div>
+          </article>
+
+          <!-- 危险操作：注销 -->
+          <article class="uc-card uc-card--danger">
+            <div class="uc-card__head">
+              <div>
+                <h3>注销账号</h3>
+                <p>注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销（可联系管理员恢复）。</p>
+              </div>
+            </div>
+            <div class="danger-form">
+              <input v-model="deactivatePassword" type="password" class="uc-field__input" placeholder="输入当前密码确认注销" @keyup.enter="handleDeactivate" />
+              <button type="button" class="uc-btn uc-btn--danger" :disabled="deactivating" @click="handleDeactivate">
+                {{ deactivating ? '注销中…' : '注销账号' }}
+              </button>
+            </div>
+          </article>
+        </div>
         </template>
     </div>
   </CapabilityShell>
@@ -359,8 +360,22 @@ async function handleDeactivate() {
   min-width: 0;
 }
 
-/* 修改密码卡（2026-09-27：「协助排查」卡删除后原两栏布局收成一栏，
-   等高/贴底样式迁到专属类上；字段区限宽避免全宽卡片里输入框拉得过长） */
+/* 账号安全双栏（2026-09-27）：改密主栏 1.7fr + 注销危区 1fr，
+   两张卡等高（默认 stretch），改密按钮由 foot margin-top:auto 压到同一底线 */
+.profile-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .profile-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 修改密码卡：列内与注销卡等高，按钮贴底 */
 .uc-card--pwd {
   display: flex;
   flex-direction: column;
@@ -375,9 +390,8 @@ async function handleDeactivate() {
 }
 
 .uc-card--pwd .pwd-grid {
-  flex: 1;
+  flex: 0 0 auto;
   align-content: start;
-  max-width: 680px;
 }
 
 @media (max-width: 1100px) {
