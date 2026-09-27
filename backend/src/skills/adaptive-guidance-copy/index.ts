@@ -117,7 +117,9 @@ function buildPrompt(input: AdaptiveGuidanceCopyInput): string {
   return JSON.stringify(ordered, null, 2);
 }
 
-function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanceCopyOutput {
+// 2026-09-27 导出：learning-state 引导改为复用 dashboard 快照，快照缺失时
+// 直接用本构造器出静态文案兜底（不再为兜底单独跑一次 LLM）
+export function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanceCopyOutput {
   const name = safeText(input.learnerSnapshot?.profile?.name) || '同学';
   const recentTrend = safeText(input.learnerSnapshot?.dynamicState?.recentTrend) || 'stable';
   const pace = safeText(input.learnerSnapshot?.dynamicState?.recommendedPacing) || 'moderate';

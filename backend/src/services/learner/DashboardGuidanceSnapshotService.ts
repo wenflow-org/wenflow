@@ -3,6 +3,7 @@ import { executeSkillWithResult } from '../../skills';
 import { adaptiveGuidanceCopyDefinition, type AdaptiveGuidanceCopyOutput } from '../../skills/adaptive-guidance-copy';
 import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
+import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
 import { assembleLearningState } from './assemble-learning-state';
 import { learnerProjectionService } from './LearnerProjectionService';
 import { learnerStateReviewService, type LearnerStateReviewPayload } from './LearnerStateReviewService';
@@ -27,6 +28,8 @@ export interface DashboardGuidanceSnapshotPayload {
   source: 'model' | 'fallback';
   copy: AdaptiveGuidanceCopyOutput;
   summary: LearnerStateSummaryOutput;
+  /** 待处理调控（2026-09-27）：path-adjust 卡带 pathId/标题，dashboard 据此出「去处理」提醒位 */
+  decisions?: LearningDecisionCard[];
   /** 状态评审诊断（诊断层闭环）；无则 null */
   review?: LearnerStateReviewPayload | null;
   debug?: {
@@ -137,7 +140,7 @@ class DashboardGuidanceSnapshotService {
       const assembled = await assembleLearningState(userId, { snapshotScope: 'path' });
       if (!assembled) return null;
 
-      const { primaryPath, learnerSnapshot, learningState, sessionWrapup, advisory, warnings } = assembled;
+      const { primaryPath, paths, sessions, learnerSnapshot, learningState, sessionWrapup, advisory, warnings } = assembled;
       if (!primaryPath) {
         await this.clear(userId);
         return null;
@@ -148,6 +151,14 @@ class DashboardGuidanceSnapshotService {
         learningState,
         path: primaryPath,
         warningCount: warnings.length,
+      });
+
+      // 待处理调控（2026-09-27）：与 learning-state 同源同消账规则，dashboard 出「去处理」提醒
+      const decisions = learningDecisionFeedService.build({
+        paths,
+        sessions,
+        learnerSnapshot,
+        summary,
       });
 
       // 呈现层投影：裁剪与文案无关的大字段（path 整行 / knowledgeMemory 明细），避免上下文膨胀
@@ -177,6 +188,7 @@ class DashboardGuidanceSnapshotService {
           : result.cached ? 'fallback' : 'model',
         copy: result.output,
         summary,
+        decisions,
         debug: {
           skillId: result.debug?.skillId || 'adaptive-guidance-copy',
           model: result.debug?.model || null,

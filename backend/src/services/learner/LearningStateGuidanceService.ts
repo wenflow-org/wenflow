@@ -1,16 +1,19 @@
 /**
  * LearningStateGuidanceService
  *
- * 为 learning-state 页面按需生成 skill 引导文案（adaptive-guidance-copy，view='learning-state'）。
- * 与 DashboardGuidanceSnapshotService 的事件驱动快照不同，这里采用"按需生成 + 15 分钟内存缓存"：
- * learning-state 是低频页面，每次进入都打 LLM 不值当；缓存命中则零延迟返回。
- * LLM/网关失败时 skill 内部会自动产出 learning-state 版 fallback 文案（source='fallback'）。
+ * 为 learning-state 页面组装引导负载（adaptive-guidance/copy?view=learning-state）。
+ * 2026-09-27 行动建议统一：copy 复用 dashboard 事件驱动快照（不再独立跑 LLM），
+ * 本服务专注 learning-state 独有的部分——决策流（LearningDecisionFeed）与状态评审诊断。
+ * 快照缺失时 copy 回落 learning-state 静态文案；聚合结果保留 15 分钟内存缓存（stale-while-revalidate）。
  */
 
-import { executeSkillWithResult } from '../../skills';
-import { adaptiveGuidanceCopyDefinition, type AdaptiveGuidanceCopyOutput } from '../../skills/adaptive-guidance-copy';
+import {
+  buildFallback,
+  type AdaptiveGuidanceCopyOutput,
+} from '../../skills/adaptive-guidance-copy';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
+import { dashboardGuidanceSnapshotService } from './DashboardGuidanceSnapshotService';
 import { assembleLearningState } from './assemble-learning-state';
 import { learnerProjectionService } from './LearnerProjectionService';
 import { learnerStateReviewService, type LearnerStateReviewPayload } from './LearnerStateReviewService';
@@ -101,16 +104,25 @@ class LearningStateGuidanceService {
       // 呈现层投影：裁剪与文案无关的大字段（path 整行 / knowledgeMemory 明细），避免上下文膨胀
       const guidanceProjection = learnerProjectionService.toGuidanceProjection(learnerSnapshot, primaryPath);
 
-      // v4 §5.2：统一经 executeSkillWithResult 入口（遥测/用户级开关/归一化），
-      // 需读取 quality/debug/output，故用返回完整结果的版本（executeSkill 会拆包只留 output）。
-      const result = await executeSkillWithResult(adaptiveGuidanceCopyDefinition, {
-        view: 'learning-state',
-        learnerSnapshot: guidanceProjection.learnerSnapshot,
-        learningState,
-        path: guidanceProjection.path ?? undefined,
-        sessionWrapup: sessionWrapup ?? undefined,
-        userId,
-      });
+      // 2026-09-27 行动建议统一：复用 dashboard 事件驱动快照的 copy（两页字面完全一致，
+      // 消除「同 skill 两份生成、两页建议重叠且措辞不一」）；快照缺失时用 learning-state
+      // 静态文案兜底（纯本地构造，不再为兜底跑 LLM）。
+      const dashSnapshot = await dashboardGuidanceSnapshotService.get(userId).catch(() => null);
+      let copy: AdaptiveGuidanceCopyOutput;
+      let source: 'model' | 'fallback';
+      if (dashSnapshot?.copy) {
+        copy = dashSnapshot.copy;
+        source = dashSnapshot.source === 'model' ? 'model' : 'fallback';
+      } else {
+        copy = buildFallback({
+          view: 'learning-state',
+          learnerSnapshot: guidanceProjection.learnerSnapshot,
+          learningState,
+          path: guidanceProjection.path ?? undefined,
+          sessionWrapup: sessionWrapup ?? undefined,
+        });
+        source = 'fallback';
+      }
 
       const decisions = learningDecisionFeedService.build({
         paths,
@@ -124,21 +136,12 @@ class LearningStateGuidanceService {
         schemaVersion: 'learning-state-guidance-v1',
         view: 'learning-state',
         generatedAt,
-        source: result.quality
-          ? (result.quality === 'model' || result.quality === 'cache' ? 'model' : 'fallback')
-          : result.cached ? 'fallback' : 'model',
-        copy: result.output,
+        source,
+        copy,
         summary,
         decisions,
         review: await loadLatestReview(userId, primaryPath?.id ?? null),
-        debug: {
-          skillId: result.debug?.skillId || 'adaptive-guidance-copy',
-          model: result.debug?.model || null,
-          systemPromptVersion: result.debug?.systemPromptVersion || null,
-          durationMs: result.debug?.durationMs || result.duration || 0,
-          cached: result.cached === true,
-          generatedAt,
-        },
+        debug: null,
       };
     } catch (error: any) {
       logger.warn('[learning-state-guidance] refresh failed', { userId, error: error?.message || String(error) });
