@@ -22,6 +22,8 @@ export interface LearnerPathStateSummary {
   progressPercent: number;
   stageTitle?: string;
   taskTitle?: string;
+  /** 2026-09-27：当前任务 id——学习状态页「继续学习」据此直达 /learn/:taskId（原先只落路径详情页） */
+  taskId?: string;
   hasPrerequisiteGaps: boolean;
   hasFragileConcepts: boolean;
   hasStrugglingConcepts: boolean;
@@ -84,6 +86,7 @@ class LearnerStateSummaryService {
         : 0,
       stageTitle: currentPath.currentPosition.milestoneTitle,
       taskTitle: currentPath.currentPosition.taskTitle,
+      taskId: currentPath.currentPosition.taskId,
       hasPrerequisiteGaps: currentPath.prerequisiteGaps.length > 0,
       hasFragileConcepts: snapshot.knowledgeMemory.globalSignals.fragileConcepts.length > 0,
       hasStrugglingConcepts: snapshot.knowledgeMemory.globalSignals.strugglingConcepts.length > 0,

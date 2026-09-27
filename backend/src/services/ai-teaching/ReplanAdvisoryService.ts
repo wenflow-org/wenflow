@@ -143,11 +143,13 @@ export class ReplanAdvisoryService {
     const evaluationTiers = (wrapup.evaluation as { metricTiers?: { sessionLss?: string; sessionLf?: string } } | undefined)?.metricTiers;
     const isHighSignal = (tier: string | undefined, value: number | null): boolean =>
       tier ? tier === 'high' : (typeof value === 'number' && Number.isFinite(value) && value >= 6);
+    // 2026-09-27 阈值收紧：movedToReview（知识点移入复习队列）是每节课的正常产物，
+    // 不能单独构成 highRisk——全量库实测 361 节结课 163 节触发建议（45%），
+    // "调整"动作被稀释成每课必发的噪音。highRisk 只保留评估高档与前置缺口两类真异常。
     const highRisk = (
       isHighSignal(evaluationTiers?.sessionLss, lss) ||
       isHighSignal(evaluationTiers?.sessionLf, lf) ||
-      prerequisiteGaps.some((item) => item.severity === 'high') ||
-      wrapup.progress.movedToReview.length > 0
+      prerequisiteGaps.some((item) => item.severity === 'high')
     );
 
     if (learnerSignal?.shouldSuggest) {
@@ -189,7 +191,9 @@ export class ReplanAdvisoryService {
       wrapup.progress.stillLearning.length > 0 ||
       fragileConcepts.length > 0 ||
       strugglingConcepts.length > 0 ||
-      repeatedConfusion
+      repeatedConfusion ||
+      // movedToReview 降档后归入补强语义：阶段收尾时还有点在复习队列 → 建议补强（而非风险）
+      wrapup.progress.movedToReview.length > 0
     );
     // 层级要对齐：`ktl` 是**本会话**的训练负荷（这节课练得扎实，会话量纲 0-10），
     // 而"能不能加速"是**学习者级**判断 —— 后者必须看学习者级疲劳/负荷，

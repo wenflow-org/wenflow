@@ -22,6 +22,12 @@ export type LearningDecisionKind =
   | 'concept-watch'
   | 'pace';
 
+export interface LearningDecisionOption {
+  key: string;
+  label: string;
+  description?: string;
+}
+
 export interface LearningDecisionCard {
   id: string;
   kind: LearningDecisionKind;
@@ -33,6 +39,16 @@ export interface LearningDecisionCard {
   action: string;
   priority: 'high' | 'medium' | 'low' | 'info';
   at: string | null;
+  /** 2026-09-27 联动补全：path-adjust 卡携带受影响路径与 advisory 原文摘要，
+      让学习状态页可以直达确认（此前卡是纯日志，无 pathId 无动作） */
+  pathId?: string | null;
+  pathTitle?: string | null;
+  recommendation?: string | null;
+  body?: string;
+  options?: LearningDecisionOption[];
+  advisory?: Record<string, any>;
+  /** 判断+动作完全相同的重复建议合并计数 */
+  mergedCount?: number;
 }
 
 interface SessionLike {
@@ -41,6 +57,7 @@ interface SessionLike {
   updatedAt?: Date | null;
   advisory?: string | null;
   wrapup?: string | null;
+  learningPathId?: string | null;
 }
 
 interface PathLike {
@@ -93,17 +110,32 @@ export class LearningDecisionFeedService {
     const cards: LearningDecisionCard[] = [];
 
     // ---------- 1. 课后调整建议（advisory，最强的调控证据） ----------
+    // 消账（2026-09-27）：session 所属路径在该课之后已发生过 replan，
+    // 视为这条建议已被吸收/取代，不再进入决策流——否则旧建议永远挂着（45% 触发率下尤其灾难）。
+    const pathById = new Map((input.paths || []).map((p) => [p.id, p]));
+    const pathAdjustCards: LearningDecisionCard[] = [];
     for (const session of input.sessions || []) {
       const advisory = parseJsonSafe<any>(session.advisory);
       if (!advisory?.shouldSuggest) continue;
+
+      const sessionAt = toIso(session.endTime) || toIso(session.updatedAt);
+      const sessionPath = session.learningPathId ? pathById.get(session.learningPathId) : null;
+      if (
+        sessionPath?.replanReason &&
+        sessionPath.updatedAt &&
+        sessionAt &&
+        new Date(toIso(sessionPath.updatedAt) || 0) > new Date(sessionAt)
+      ) {
+        continue;
+      }
 
       const wrapup = parseJsonSafe<any>(session.wrapup);
       const focus = joinNames([
         ...(wrapup?.progress?.stillLearning || []),
         ...(wrapup?.progress?.movedToReview || [])
       ]);
-      cards.push({
-        id: `path-adjust-${toIso(session.endTime) || toIso(session.updatedAt) || cards.length}`,
+      pathAdjustCards.push({
+        id: `path-adjust-${sessionAt || pathAdjustCards.length}`,
         kind: 'path-adjust',
         captured: focus
           ? `一节课结束后，「${focus}」仍不稳定`
@@ -111,9 +143,30 @@ export class LearningDecisionFeedService {
         judgment: String(advisory.rationale || '当前学习者状态提示后续安排需要重新确认。'),
         action: String(advisory?.ui?.title || '建议调整后续路径'),
         priority: advisory.priority === 'high' ? 'high' : advisory.priority === 'medium' ? 'medium' : 'low',
-        at: toIso(session.endTime) || toIso(session.updatedAt)
+        at: sessionAt,
+        pathId: session.learningPathId || sessionPath?.id || null,
+        pathTitle: sessionPath?.title || null,
+        recommendation: advisory.recommendation || null,
+        body: advisory?.ui?.body || '',
+        options: Array.isArray(advisory?.ui?.options) ? advisory.ui.options : [],
+        advisory
       });
     }
+    // 同文案去重：判断+动作完全一致的重复建议只留最新一条，带合并计数
+    const dedupKey = (card: LearningDecisionCard) => `${card.judgment}|${card.action}`;
+    const dedupMap = new Map<string, { card: LearningDecisionCard; count: number }>();
+    for (const card of pathAdjustCards) {
+      const hit = dedupMap.get(dedupKey(card));
+      if (!hit) {
+        dedupMap.set(dedupKey(card), { card, count: 1 });
+        continue;
+      }
+      if ((card.at || '') > (hit.card.at || '')) hit.card = card;
+      hit.count += 1;
+    }
+    cards.push(
+      ...[...dedupMap.values()].map(({ card, count }) => (count > 1 ? { ...card, mergedCount: count } : card))
+    );
 
     // ---------- 2. 路径调整（replan 已发生的决策） ----------
     const replanned = (input.paths || [])
