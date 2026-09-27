@@ -380,6 +380,24 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
         }))
     : [];
 
+  // learner 里的概念数组逐回合被画像回写（persistProfileConcepts），放进稳定前缀会从
+  // 第 4 个键起打断 KV 缓存；剥到尾部 conceptProgress（数据不丢，位置后移）
+  const learnerSrc = (input.learner && typeof input.learner === 'object' ? input.learner : {}) as Record<string, any>;
+  const { knownConcepts, struggleConcepts, ...learnerRest } = learnerSrc;
+  const learnerProfileSrc = learnerRest.profile && typeof learnerRest.profile === 'object'
+    ? { ...(learnerRest.profile as Record<string, any>) }
+    : null;
+  if (learnerProfileSrc) {
+    delete learnerProfileSrc.knownConcepts;
+    delete learnerProfileSrc.struggleConcepts;
+  }
+  const stableLearner: Record<string, any> = { ...learnerRest };
+  if (learnerProfileSrc) stableLearner.profile = learnerProfileSrc;
+  const conceptProgress = {
+    knownConcepts: Array.isArray(knownConcepts) ? knownConcepts : [],
+    struggleConcepts: Array.isArray(struggleConcepts) ? struggleConcepts : [],
+  };
+
   const body = {
     learner: input.learner || {},
     story: input.story || null,
@@ -423,18 +441,19 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
     ...(pendingCheckpoint ? { pendingCheckpoint } : {})
   };
 
-  // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：常量/慢变块（task/personaAnchorHint/story/learner）前置，
-  // 逐回合变化块后置
+  // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：常量/慢变块（task/personaAnchorHint/story/learner 去易变概念数组）前置，
+  // 逐回合变化块后置。knownConcepts/struggleConcepts 每回合被画像回写，从 learner 剥离到尾部 conceptProgress
   if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
     return {
       task: body.task,
       personaAnchorHint: body.personaAnchorHint,
       story: body.story,
-      learner: body.learner,
+      learner: stableLearner,
       currentPhase: body.currentPhase,
       previousLearnerState: body.previousLearnerState,
       currentTask: body.currentTask,
       knowledgeSnapshot: body.knowledgeSnapshot,
+      conceptProgress,
       ...(temporalContext ? { temporalContext } : {}),
       learnerMemory: body.learnerMemory,
       ...(memoryRecall.length ? { memoryRecall } : {}),

@@ -1311,7 +1311,7 @@ function buildPromptInput(input: TeachingTurnInput) {
   const {
     interactionProfile: scenarioInteractionProfile,
     contextCompression: scenarioCompression,
-    // 载荷审计（2026-09-25）：这四个子键是 scenario 里仅有的逐回合变化项（其余整课恒定），
+    // 载荷审计（2026-09-25）：这些子键是 scenario 里的逐回合变化项（其余整课恒定），
     // 留在 scenario 体内会把稳定主体打断 → 提取到载荷尾部（见 buildTeachingTurnMessages 的分流注释）。
     // 模板里的引用路径同步改为顶层键名（core yaml 已同步）。
     behavioralProfile: scenarioBehavioralProfile,
@@ -1319,6 +1319,10 @@ function buildPromptInput(input: TeachingTurnInput) {
     priorMisconceptions: scenarioPriorMisconceptions,
     // 尾部已单独注入 supplementaryMaterial，scenario 体内不再重复携带
     supplementaryMaterial: scenarioSupplementaryMaterial,
+    // 缓存追踪实测（2026-09-28）：memoryWarmup 是漏网的第 7 个逐回合变化子键——温故点被消费后
+    // 逐回合合并回计划（teaching-warmup.ts），留在 scenario（system 消息）会让消费温故的回合
+    // 整段 KV 缓存归零。提取到载荷尾部，模板引用路径同步改为顶层键名（core yaml 已同步）。
+    memoryWarmup: scenarioMemoryWarmup,
     ...stableScenario
   } = input.scenario;
   // learner 唯一的动态子键：编排层逐回合改写的难度档位（baseline/adjusted/reasons/evidence）
@@ -1381,6 +1385,8 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(input.visualOpportunity?.suggested ? { visualOpportunity: input.visualOpportunity } : {}),
       // 教师补充材料（逐回合变化 → 同样放载荷尾部）：上一轮 control.supplement 的入库成果
       ...(scenarioSupplementaryMaterial ? { supplementaryMaterial: scenarioSupplementaryMaterial } : {}),
+      // 温故计划（逐回合被消费合并 → 载荷尾部；模板引用路径已同步为顶层 memoryWarmup）
+      ...(scenarioMemoryWarmup ? { memoryWarmup: scenarioMemoryWarmup } : {}),
     };
   }
 
@@ -1389,6 +1395,7 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...stableScenario,
       ...(scenarioCompression ? { contextCompression: scenarioCompression } : {}),
       interactionProfile: scenarioInteractionProfile,
+      ...(scenarioMemoryWarmup ? { memoryWarmup: scenarioMemoryWarmup } : {}),
     },
     promptDirectives,
     knowledge: input.knowledge,

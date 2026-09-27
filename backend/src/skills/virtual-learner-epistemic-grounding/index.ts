@@ -51,9 +51,24 @@ function normalizeGrounding(parsed: any): EpistemicGrounding {
 }
 
 function buildUserPayload(input: EpistemicGroundingInput) {
+  // 缓存前缀优化：learner 里逐回合被回写的概念数组（knownConcepts/struggleConcepts，含 profile 内副本）
+  // 移到 payload 尾部，稳定画像（profile/learningGoal/personalityTraits 等）前置——否则首个键即变化，前缀缓存全灭
+  const learnerSrc = (input.learner && typeof input.learner === 'object' ? input.learner : {}) as Record<string, any>;
+  const { knownConcepts, struggleConcepts, ...learnerRest } = learnerSrc;
+  const learnerProfileSrc = learnerRest.profile && typeof learnerRest.profile === 'object'
+    ? { ...(learnerRest.profile as Record<string, any>) }
+    : null;
+  if (learnerProfileSrc) {
+    delete learnerProfileSrc.knownConcepts;
+    delete learnerProfileSrc.struggleConcepts;
+  }
+  const stableLearner: Record<string, any> = { ...learnerRest };
+  if (learnerProfileSrc) stableLearner.profile = learnerProfileSrc;
   return {
-    learner: input.learner || {},
+    learner: stableLearner,
     currentTask: input.currentTask || null,
+    knownConcepts: Array.isArray(knownConcepts) ? knownConcepts : [],
+    struggleConcepts: Array.isArray(struggleConcepts) ? struggleConcepts : [],
     knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : [],
     previousLearnerState: input.previousLearnerState || null,
   };
