@@ -159,24 +159,8 @@
               </div>
             </template>
 
-            <!-- 状态评审诊断（diagnosis 层，Slice 2c）：评审向的行话默认收起（2026-09-27 降噪） -->
-            <section v-if="reviewNarrative || reviewInsights.length" class="review">
-              <button type="button" class="review__toggle" :aria-expanded="reviewOpen" @click="reviewOpen = !reviewOpen">
-                <h3 class="review__title">状态评审</h3>
-                <span class="review__src">{{ reviewSource === 'model' ? 'AI 诊断' : '规则' }}</span>
-                <span class="band__chev" :class="{ 'band__chev--open': reviewOpen }" aria-hidden="true">▾</span>
-              </button>
-              <div v-show="reviewOpen" class="review__body">
-                <p v-if="reviewReliabilityText" class="review__rel">{{ reviewReliabilityText }}</p>
-                <p v-if="reviewNarrative" class="review__narrative">{{ reviewNarrative }}</p>
-                <ul v-if="reviewInsights.length" class="review__list">
-                  <li v-for="(it, i) in reviewInsights" :key="i" class="review__item">
-                    <strong>{{ it.claim }}</strong>
-                    <span v-if="it.action" class="review__action">{{ it.action }}</span>
-                  </li>
-                </ul>
-              </div>
-            </section>
+            <!-- 状态评审（AI 诊断书）已移至「学习调控」区第三层「诊断依据」（2026-09-27）：
+                 它是建议的依据层而非建议本身，放在建议卡内部让人看不懂两者关系 -->
 
             <!-- 静态规则兜底块 -->
             <template v-else>
@@ -272,6 +256,24 @@
                     <time v-if="decisionTime(card.at)" class="ctl__row-time">{{ decisionTime(card.at) }}</time>
                   </li>
                 </ul>
+              </section>
+
+              <!-- 诊断依据（原「状态评审」）：AI 的诊断书——为什么这么调，默认收起 -->
+              <section v-if="reviewNarrative || reviewInsights.length" class="review ctl__review">
+                <button type="button" class="review__toggle" :aria-expanded="reviewOpen" @click="reviewOpen = !reviewOpen">
+                  <h3 class="review__title">诊断依据</h3>
+                  <span class="review__src">{{ reviewSource === 'model' ? 'AI 诊断' : '规则' }}<template v-if="reviewReliabilityText"> · {{ reviewReliabilityText }}</template></span>
+                  <span class="band__chev" :class="{ 'band__chev--open': reviewOpen }" aria-hidden="true">▾</span>
+                </button>
+                <div v-show="reviewOpen" class="review__body">
+                  <p v-if="reviewNarrative" class="review__narrative">{{ reviewNarrative }}</p>
+                  <ul v-if="reviewInsights.length" class="review__list">
+                    <li v-for="(it, i) in reviewInsights" :key="i" class="review__item">
+                      <strong>{{ it.claim }}</strong>
+                      <span v-if="it.action" class="review__action">{{ it.action }}</span>
+                    </li>
+                  </ul>
+                </div>
               </section>
             </div><!-- /band__body -->
           </section>
@@ -857,7 +859,7 @@ const guideActions = computed(() => {
       seen.add(key);
       return true;
     })
-    .slice(0, 3);
+    .slice(0, 1);
 });
 
 /* 预警行（skill 模式下追加展示） */
@@ -1145,8 +1147,8 @@ function loadGuidance() {
 .suggest__list--warnings { border-top: 1px dashed var(--line); padding-top: 12px; }
 
 /* ---------- AI 决策记录 ---------- */
-.review { margin-top: 14px; padding: 14px 18px; border: 1px solid var(--line, #e5e7eb); border-radius: var(--mk-radius-xl); }
-/* 评审向内容默认收起（2026-09-27 降噪）：卡头即开合，与 band 同一交互语言 */
+/* 诊断依据（原「状态评审」，2026-09-27 移入调控区）：与 ctl 各段同一分隔语言 */
+.ctl__review { margin-top: 16px; padding: 14px 0 0; border: 0; border-top: 1px solid var(--line); }
 .review__toggle {
   width: 100%; min-height: 36px;
   display: flex; align-items: center; gap: 8px;
@@ -1156,7 +1158,6 @@ function loadGuidance() {
 .review__body { margin-top: 10px; }
 .review__title { margin: 0; font-size: 15px; }
 .review__src { font-size: 12px; color: var(--faint, #6b7280); }
-.review__rel { margin: 4px 0 0; font-size: 12px; color: var(--faint, #6b7280); }
 .review__narrative { margin: 8px 0 0; font-size: 13px; line-height: 1.6; }
 .review__list { margin: 10px 0 0; padding-left: 16px; display: grid; gap: 8px; }
 .review__item strong { display: block; font-size: 13px; }

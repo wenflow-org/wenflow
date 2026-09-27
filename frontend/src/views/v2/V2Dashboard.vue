@@ -86,6 +86,13 @@
                 </template>
                 <button type="button" class="link-muted" @click="setResting(true)">今天休息</button>
               </div>
+              <!-- 调控提醒位（2026-09-27）：有待确认的调整建议时在行动卡就地露头，
+                   不用进学习状态页才能发现；点击进入该页调控区处理 -->
+              <router-link v-if="pendingControl" to="/learning-state" class="action__control">
+                <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M12 2 1 21h22L12 2zm0 6 7 12H5l7-12zm-1 4v3h2v-3h-2zm0 4v2h2v-2h-2z"/></svg>
+                <span class="action__control-text">AI 建议调整「{{ pendingControl.pathTitle || primaryPath?.title || '当前路径' }}」的后续安排</span>
+                <b>去处理</b>
+              </router-link>
               <div class="action__today">
                 <div class="action__today-bar"><i :style="{ width: todayBarPct + '%' }"></i></div>
                 <span>今日已学 {{ todayMinutes }} / {{ todayTask?.minutes || 25 }} 分钟<template v-if="todayRemaining > 0"> · 还剩约 {{ todayRemaining }} 分钟</template></span>
@@ -794,6 +801,16 @@ function goLearn() {
 const guidanceCopy = computed(() => guidance.value?.copy || null);
 const guidanceSummary = computed(() => guidance.value?.summary || null);
 
+/* 调控提醒位（2026-09-27）：快照 decisions 里第一条待确认的 path-adjust。
+   忽略记录与学习状态页共用同一 localStorage 键——在那边「保持原计划」过的不再来。 */
+const DISMISSED_ADVISORIES_KEY = 'learning_state_dismissed_advisories';
+const pendingControl = computed<Record<string, any> | null>(() => {
+  const list = Array.isArray(guidance.value?.decisions) ? guidance.value.decisions : [];
+  let dismissed: string[] = [];
+  try { dismissed = JSON.parse(localStorage.getItem(DISMISSED_ADVISORIES_KEY) || '[]'); } catch { /* ignore */ }
+  return list.find((d: Record<string, any>) => d?.kind === 'path-adjust' && !dismissed.includes(d?.id)) || null;
+});
+
 /* 今日行动依据：为什么是这节课（来自学习者快照的推荐动作，无信号则不显示） */
 const actionReason = computed(() => {
   if (!todayTask.value) return '';
@@ -1414,6 +1431,21 @@ onMounted(loadAll);
   font-size: 14px; font-weight: 700; color: var(--muted); cursor: pointer;
 }
 .action__today { display: flex; align-items: center; gap: 10px; margin-top: 0; font-size: 12px; color: var(--faint); }
+/* 调控提醒位（2026-09-27）：有要拍板的调整时在行动卡就地露头，蓝色弱底不抢主 CTA */
+.action__control {
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, transparent);
+  border-radius: var(--mk-radius-lg, 12px);
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+  font-size: 12.5px; color: var(--muted);
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.action__control:hover { border-color: color-mix(in srgb, var(--blue) 50%, transparent); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+.action__control > svg { color: var(--amber-ink); flex: 0 0 auto; }
+.action__control-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.action__control b { color: var(--blue-deep); font-weight: 800; white-space: nowrap; }
 .action__today-bar { width: 120px; height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .action__today-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .action__examples { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -1883,6 +1915,8 @@ a.btn-primary { text-decoration: none; }
   .action { padding: 16px 18px; gap: 8px; }
   .action--empty { padding: 14px 16px; }
   .action__footer { gap: 8px; }
+  /* 调控提醒行是触屏上的跳转入口，抬到 44 触控带（mobile:spec lt44 口径） */
+  .action__control { min-height: 44px; }
   .path { padding: 14px 16px; gap: 12px; }
   .path__title strong { font-size: 14px; }
   .path__empty-body { padding: 18px 0; }
