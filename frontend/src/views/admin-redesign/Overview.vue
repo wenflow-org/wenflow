@@ -18,45 +18,40 @@
           <p>{{ health.subline }}</p>
         </div>
       </div>
-      <ul v-if="effectiveActions.length" class="brief-actions">
-        <li v-for="(a, i) in effectiveActions" :key="i">
-          <span class="brief-actions__dot" :class="`brief-actions__dot--${a.tone}`"></span>
-          <span class="brief-actions__text">{{ a.text }}</span>
-          <button type="button" class="brief-actions__btn" @click="investigateAgent(a.agentId)">
-            去排查
-          </button>
+      <!-- 后续动作：Skill 失败排查 + 系统健康 + 仿真通道（原两条全宽摘要条收拢进此列表，
+           2026-09-27 用户反馈「头部还是比较空」——结论在左、动作在右，宽屏下头部横向撑满，
+           页面也少两层横幅；窄屏仍堆叠在结论下方） -->
+      <ul class="brief-actions">
+        <template v-if="effectiveActions.length">
+          <li v-for="(a, i) in effectiveActions" :key="'agent-' + i">
+            <span class="brief-actions__dot" :class="`brief-actions__dot--${a.tone}`"></span>
+            <span class="brief-actions__text">{{ a.text }}</span>
+            <button type="button" class="brief-actions__btn" @click="investigateAgent(a.agentId)">
+              去排查
+            </button>
+          </li>
+        </template>
+        <li v-else>
+          <span class="brief-actions__dot brief-actions__dot--ok"></span>
+          <span class="brief-actions__text">没有需要立即处理的事项。</span>
+        </li>
+        <li :title="'查看健康中心完整检查清单'">
+          <span class="brief-actions__dot" :class="healthTone === 'muted' ? '' : `brief-actions__dot--${healthTone}`"></span>
+          <span class="brief-actions__text">
+            <strong>系统健康 · {{ healthText }}</strong>
+          </span>
+          <button type="button" class="brief-actions__btn" @click="jump('skills', 'health')">健康中心 →</button>
+        </li>
+        <li :title="simTitle">
+          <span class="brief-actions__dot" :class="simTone === 'muted' ? '' : `brief-actions__dot--${simTone}`"></span>
+          <span class="brief-actions__text">
+            <strong>仿真通道 · {{ simHeadline }}</strong>
+            <small>今日虚拟调用 {{ runStats.todayCalls.toLocaleString() }} · 完成率 {{ runStats.completionRate }}% · 进行中 {{ runStats.running }} · 失败 {{ runStats.failed }}</small>
+          </span>
+          <button type="button" class="brief-actions__btn" @click="jump('virtual-learners')">虚拟学习者 →</button>
         </li>
       </ul>
-      <p v-else class="brief-actions__clear">没有需要立即处理的事项。</p>
     </header>
-
-    <!-- 系统健康摘要条（G 系列新增：13 项检查一瞥 + 跳转健康中心） -->
-    <button
-      type="button"
-      class="ov-health"
-      :class="`ov-health--${healthTone}`"
-      :title="'查看健康中心完整检查清单'"
-      @click="jump('skills', 'health')"
-    >
-      <span class="ov-health__dot" aria-hidden="true"></span>
-      <strong class="ov-health__title">{{ healthText }}</strong>
-      <span class="ov-health__sub">系统健康 13 项检查 · 点击查看清单</span>
-      <span class="brief-card__go">健康中心 →</span>
-    </button>
-
-    <!-- 仿真通道摘要条（虚拟学习者）：与上方真实用户 KPI 互斥——避免总览首屏把仿真失败完全遮住 -->
-    <button
-      type="button"
-      class="ov-health ov-sim"
-      :class="`ov-health--${simTone}`"
-      :title="simTitle"
-      @click="jump('virtual-learners')"
-    >
-      <span class="ov-health__dot" aria-hidden="true"></span>
-      <strong class="ov-health__title">仿真通道 · {{ simHeadline }}</strong>
-      <span class="ov-health__sub">今日虚拟调用 {{ runStats.todayCalls.toLocaleString() }} · 完成率 {{ runStats.completionRate }}% · 进行中 {{ runStats.running }} · 失败 {{ runStats.failed }}</span>
-      <span class="brief-card__go">虚拟学习者 →</span>
-    </button>
 
     <div class="brief-grid">
       <!-- KPI 行：今日窗口指标（共享 MkKpi，clickable 跳转） -->
@@ -909,9 +904,13 @@ watch(liveLoading, (loading) => {
 .brief-actions__text {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   font-weight: 600;
   line-height: 1.4;
 }
+.brief-actions__text strong { font-weight: 700; flex-shrink: 0; }
 .brief-actions__btn {
   flex: 0 0 auto;
   margin-left: auto;
@@ -931,12 +930,37 @@ watch(liveLoading, (loading) => {
   background: #dbeafe;
   border-color: rgba(44, 99, 208, 0.45);
 }
-.brief-actions__clear {
-  margin: 0;
-  padding-top: 10px;
-  border-top: 1px dashed var(--mk-line);
+.brief-actions__dot--ok { background: var(--mk-green); }
+/* 系统健康/仿真两行动作：主标题 + 弱化的统计尾巴（长串省略，不挤按钮） */
+.brief-actions__text strong { font-weight: 700; }
+.brief-actions__text small {
+  flex: 1;
+  min-width: 0;
+  margin-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--mk-fs-micro);
+  font-weight: 400;
   color: var(--mk-faint);
-  font-size: var(--mk-fs-body);
+}
+
+/* ≥1281 桌面：结论在左、后续动作在右（走查 2026-09-27 用户反馈「头部还是比较空」：
+   1640 宽的横幅里结论只占左侧一小块）。1280 及以下仍上下堆叠（基础样式）。 */
+@media (min-width: 1281px) {
+  .brief-head {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    align-items: center;
+    gap: 18px;
+  }
+  .brief-actions {
+    align-self: stretch;
+    align-content: center;
+    padding-top: 0;
+    padding-left: 18px;
+    border-top: 0;
+    border-left: 1px dashed var(--mk-line);
+  }
 }
 
 /* 总览栅格：三等宽列（等宽才能形成稳定节奏；LLM 宽卡/动态全宽按需跨列） */
@@ -1057,33 +1081,6 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   transition: opacity 0.12s ease, background 0.12s ease;
 }
 .brief-card__go:hover { opacity: 1; background: #eff6ff; }
-
-/* 系统健康摘要条（简报头下全宽按钮条：状态点 + 结论 + 跳转） */
-.ov-health {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 16px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  transition: border-color 0.12s ease;
-}
-.ov-health:hover { border-color: rgba(44, 99, 208, 0.5); }
-.ov-health__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-faint); flex-shrink: 0; }
-.ov-health--ok .ov-health__dot { background: var(--mk-green); box-shadow: 0 0 0 3px rgba(49, 177, 111, 0.12); }
-.ov-health--warn .ov-health__dot { background: var(--mk-amber); }
-.ov-health--bad .ov-health__dot { background: var(--mk-red); box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12); }
-.ov-health__title { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
-.ov-health__sub { flex: 1; font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ov-health .brief-card__go { margin-right: 0; }
-/* 仿真通道条：与系统健康条同形，用左侧强调线区分「虚拟/仿真口径」 */
-.ov-sim { border-left: 3px solid var(--mk-purple); }
-.ov-sim .ov-health__title { white-space: nowrap; }
 
 /* 近 7 天调用趋势（ECharts 图表；仅保留容器与合计行） */
 .ov-trend { display: grid; gap: 8px; flex: 1; min-height: 0; align-content: end; }
@@ -1380,7 +1377,6 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .brief-head__verdict p { font-size: var(--mk-fs-body); }
   .brief-actions li { font-size: var(--mk-fs-body); }
   .brief-actions__btn { font-size: var(--mk-fs-body); }
-  .brief-actions__clear { font-size: var(--mk-fs-body); }
   .brief-card__note { font-size: var(--mk-fs-body); }
   .feed-filter { font-size: var(--mk-fs-micro); }
   .feed__empty { font-size: var(--mk-fs-body); }
@@ -1416,7 +1412,6 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .brief-head__verdict p { font-size: var(--mk-fs-body); }
   .brief-actions li { font-size: var(--mk-fs-body); }
   .brief-actions__btn { font-size: var(--mk-fs-micro); }
-  .brief-actions__clear { font-size: var(--mk-fs-body); }
   .brief-card__note { font-size: var(--mk-fs-body); }
   .feed-filter { font-size: var(--mk-fs-micro); }
   .feed__empty { font-size: var(--mk-fs-body); }
@@ -1455,7 +1450,6 @@ html[data-theme='dark'] .wq__pct--bad { background: rgba(248, 113, 113, 0.16); c
   .brief-score__cap { font-size: var(--mk-fs-micro); }
   .brief-actions li { font-size: var(--mk-fs-micro); }
   .brief-actions__btn { font-size: var(--mk-fs-micro); }
-  .brief-actions__clear { font-size: var(--mk-fs-micro); }
   .feed-filter { font-size: var(--mk-fs-micro); }
   .feed__empty { font-size: var(--mk-fs-micro); }
   .feed li strong { font-size: var(--mk-fs-micro); }
@@ -1500,7 +1494,6 @@ html[data-theme='dark'] {
   .usage__hero { background: linear-gradient(180deg, #19191a, #19191a); border-color: #2a2b2d; }
   .usage__hero-sep { background: #2a2b2d; }
   .brief-card__go:hover { background: rgba(91, 141, 239, 0.14); }
-  .ov-health { background: #19191a; }
   /* 品牌渐变已 token 化（批23），暗色随 --mk-blue 自动翻转，无需覆写 */
 
   .ov-skill__rank { background: #232325; }
