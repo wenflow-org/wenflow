@@ -7,15 +7,8 @@
         <div>
           <h1>知识图谱</h1>
           <p>把你所有学习路径里的概念汇成一张图，颜色是掌握程度。</p>
-          <!-- 图例教学收进帮助（批19）：首屏只留一句，连线语义点开再看 -->
-          <details class="km__help">
-            <summary>怎么看这张图</summary>
-            <ul>
-              <li><strong>实线</strong>＝前置依赖：先掌握左边，才能学右边。</li>
-              <li><strong>虚线</strong>＝归属：知识组件属于哪个核心概念。</li>
-              <li>节点颜色越深，掌握越牢。</li>
-            </ul>
-          </details>
+          <!-- 「怎么看这张图」折叠图例已删（2026-09-27）：图谱卡底部的 mk-ge__legend
+               常驻覆盖同一套语义（线型/颜色/形状），顶部那份是重复教学 -->
         </div>
         <router-link to="/learning-state" class="km__link">查看学习状态</router-link>
       </div>
@@ -167,21 +160,6 @@ onMounted(async () => {
 .km__link:hover {
   color: var(--mk-blue);
 }
-/* 帮助折叠（批19）：native details，无 JS 依赖，键盘可达 */
-.km__help {
-  margin-top: var(--mk-space-2);
-  font-size: var(--mk-fs-12_5);
-  color: var(--mk-muted);
-}
-.km__help summary {
-  width: fit-content;
-  cursor: pointer;
-  color: var(--mk-blue);
-  font-weight: 600;
-  padding: 4px 0;
-  list-style-position: inside;
-}
-.km__help ul { margin: var(--mk-space-2) 0 0; padding-left: 18px; display: grid; gap: 4px; line-height: 1.6; }
 .km__error-row { display: flex; justify-content: center; margin-top: var(--mk-space-3); }
 /* 触屏：「查看学习状态」这类文字链接只有 20px 高，加纵向内边距抬到 34px（配色不变） */
 @media (max-width: 1100px) {
