@@ -911,7 +911,9 @@ html[data-theme='dark'] {
      卡片抬到 #202124 后侧栏反而比内容更"浅"，主次颠倒。 */
   .mshell__side { background: var(--mk-side-bg); border-right-color: var(--mk-side-line); }
   .mshell__pinned { border-bottom-color: #36373c; }
-  .mshell__group-head { color: #808389; }
+  /* 组名（次级文字）：走查实测 #808389 在侧栏底 --mk-side-bg(#1b1c1f) 上对比度 4.43:1，
+     未达 WCAG 4.5:1。同色相等量提亮为 #898d94（WCAG 公式复算 5.11:1），达标且不明显破坏次级层级。 */
+  .mshell__group-head { color: #898d94; }
   .mshell__group-head:hover { color: var(--mk-accent-deep); background: rgba(120, 140, 170, 0.08); }
   .mshell__group-head--active { color: var(--mk-accent-deep); }
   .mshell__group-icon { color: #7a7e85; }
