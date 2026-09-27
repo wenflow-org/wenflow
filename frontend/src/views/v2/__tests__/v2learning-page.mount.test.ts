@@ -115,11 +115,11 @@ describe('V2LearningPage 挂载回归', () => {
     // 首课（无 scene）行动台标题回落「怎么开始」
     expect(w.find('.replies__kicker').text()).toBe('怎么开始');
 
-    // 知识点面板头部（2026-09-26 改版）：掌握胶囊 1/2 已掌握 + 进行中胶囊
+    // 知识点面板头部（2026-09-27 收敛）：只保留掌握胶囊，进行中胶囊退役
     expect(w.find('.kp__head').text()).toContain('1/2 已掌握');
-    expect(w.find('.kp__head').text()).toContain('进行中 1');
+    expect(w.find('.kp__head').text()).not.toContain('进行中');
     expect(w.find('.kp__chip--mastered').exists()).toBe(true);
-    expect(w.find('.kp__chip--progress').exists()).toBe(true);
+    expect(w.find('.kp__chip--progress').exists()).toBe(false);
     expect(w.find('.kp__list').text()).toContain('已掌握');
     expect(w.find('.kp__list').text()).toContain('学习中 · 40%');
 

@@ -205,6 +205,10 @@
               </div>
               <template v-else>
                 <div class="msg__bubble">{{ m.text }}</div>
+              </template>
+              <div class="msg__meta">
+                你 · {{ m.time }}
+                <!-- 编辑入口归 meta 行（与 AI 操作条同一语言）：不再悬浮在气泡外遮字 -->
                 <button
                   v-if="canEditMessage(m)"
                   type="button"
@@ -213,8 +217,7 @@
                   aria-label="编辑这条消息"
                   @click="startEdit(m)"
                 ><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
-              </template>
-              <div class="msg__meta">你 · {{ m.time }}</div>
+              </div>
             </div>
             <div v-else class="msg msg--ai">
               <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
@@ -1765,23 +1768,22 @@ onBeforeUnmount(() => {
   white-space: pre-wrap;
 }
 /* 用户消息编辑按钮（hover 显示；触屏常显） */
+/* 编辑入口收进 meta 行：你 · 时间（左）… 铅笔（右），hover 消息显现 */
+.msg--user .msg__meta { display: inline-flex; align-items: center; gap: 7px; }
 .msg--user .msg__edit-btn {
-  position: absolute;
-  top: 2px; right: 100%;
-  margin-right: 6px;
-  width: 24px; height: 24px;
-  display: grid; place-items: center;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-md);
-  background: var(--surface);
+  width: 20px; height: 20px;
+  display: inline-grid; place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mk-radius-sm);
+  background: none;
   color: var(--faint);
-  font-size: 12px;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: opacity 0.15s ease, color 0.15s ease;
 }
 .msg--user:hover .msg__edit-btn { opacity: 1; }
-.msg--user .msg__edit-btn:hover { color: var(--blue-deep); border-color: rgba(52, 120, 246, 0.4); }
+.msg--user .msg__edit-btn:hover { color: var(--blue-deep); }
 @media (hover: none) {
   .msg--user .msg__edit-btn { opacity: 1; }
 }
