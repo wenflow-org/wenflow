@@ -89,8 +89,11 @@
         :action-busy="loading"
         @action="load"
       />
+      <!-- 空态撑满主区（2026-09-27 走查「空态利用」）：min 走全局 mk-empty--min 机制（min-height + 垂直居中），
+           偏移与上限的推导见底部样式注释；嵌入 tab（embedded）不拉伸，保持原样 -->
       <MkEmptyState
         v-else
+        :min="!embedded"
         title="还没有批量实验"
         description="一次创建多个虚拟学习者，系统级队列实验：目标 → 路径 → 学习 → 跨日衰减。"
         action-text="新建实验"
@@ -497,6 +500,28 @@ load()
 .be-run__error { color: var(--mk-red); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .be-run__time { margin-left: auto; }
 .be-run__actions { display: flex; gap: 6px; }
+
+/* 空态撑满主区剩余高度（2026-09-27 走查「空态利用」：无实验时空态卡只占视口顶部约 200px，
+   下方约 70% 视口是空白画布，与全站「空态应利用主区高度」取向不符）。
+   走全局 mk-empty--min 机制（模板 min prop 提供 min-height + place-content: center 垂直居中），
+   此处只按本页壳层覆盖偏移变量 --mk-empty-min-h（mk-primitives.css 预留的页面覆盖口）。
+   150px 推导（1920×1080、无 zoom；本页挂在 AdminConsole 壳层 .mshell__content 内滚动）：
+     面包屑 .mshell__crumb        ~32（上下 7px 内边距 + 12px 微字号行高 ~18 + 1px 下边框）
+     页面 padding-top              16（.mk-page 的 --mk-space-4）
+     状态条 .mk-status             48（min-height，本页带「新建实验」按钮即撑满该高度）
+     状态条与卡片间距              16（.mk-page 的 grid gap = --mk-space-4）
+     页面 padding-bottom           20（.mk-page 的 --mk-space-5）
+     卡片上下边框                   2
+   合计 ≈134，留 ~16px 余量取整 150。加载骨架/错误态/表格分支不带 mk-empty--min，不受影响。
+   上限用 min(..., 1200px) 而非 max-height：CSS 里 min-height 优先于 max-height，
+   超长竖屏下直接写 max-height 会被 min 顶掉不生效，min() 才能真正收口；
+   1080p 下 min 930px < 1200px，上限不参与。zoom：--vp-zoom 变量只存在于用户侧
+   v2.css（.v2-page），admin 语境没有；admin zoom 写在 body.admin-route .ac 上且仅
+   ≥2800px（1.15）/≥3600px（1.3）生效，并有 .ac/.mshell min-height ÷zoom 换算机制
+   （admin-theme.css），与全局 mk-empty--min 默认口径一致，视口高度直写 100dvh 即可。 */
+.mk-card > .mk-empty--min {
+  --mk-empty-min-h: min(calc(100dvh - 150px), 1200px);
+}
 
 @media (min-width: 2000px) {
   .be-run { padding: 14px 16px; }
