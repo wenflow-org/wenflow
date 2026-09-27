@@ -242,19 +242,9 @@
              三项与主导航重复（学习状态、学习路径在导航条；成就在个人中心），
              且每个数字在各自页面重复展示。学习台的信息职责回归「今天做什么」。 -->
 
-        <!-- 折叠区=学习节奏：本周格+整月日历+激励（今日安排已上提为常显分区） -->
-        <div class="more-toggle" v-if="hasFoldedContent">
-          <button type="button" class="more-toggle__btn" :aria-expanded="showMore" @click="showMore = !showMore">
-            <svg :class="{ 'more-toggle__arrow--open': showMore }" viewBox="0 0 24 24" width="16" height="16">
-              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
-            </svg>
-            {{ showMore ? '收起学习节奏' : '展开学习节奏' }}
-          </button>
-        </div>
-
-        <Transition name="fold">
-          <div v-show="showMore" class="folded-sections">
-        <!-- 学习节奏：本周一格 + 激励行压平（原 side-stack 两张小卡，卡套卡层级去除） -->
+        <!-- 学习节奏常显（2026-09-27）：信噪比重设计后主区已收敛，折叠开关失去存在
+             意义——藏内容的成本（一次点击+预期管理）高于滚动成本，本周节奏直接展开。
+             「展开整月」保留：整月日历是低频回看，且高度大（4-5 周格），仍值得收。 -->
         <div class="dash__grid-week">
           <section class="card week">
             <div class="card-head">
@@ -353,9 +343,6 @@
             </aside>
           </div>
         </section>
-
-          </div>
-        </Transition>
       </template>
     </main>
 
@@ -483,7 +470,6 @@ function setResting(v: boolean) {
 }
 const retrying = ref(false);
 const monthOpen = ref(false);
-const showMore = ref(false);
 
 const stats = ref<Record<string, any> | null>(null);
 const paths = ref<Array<Record<string, any>>>([]);
@@ -923,15 +909,6 @@ const streakNote = computed(() => {
 /** 还剩约多少分钟（行动卡进度行叙事，批17） */
 const todayRemaining = computed(() => Math.max((todayTask.value?.minutes || 25) - todayMinutes.value, 0));
 
-/** 折叠区=学习节奏是否有内容（预算/复习已上提，不再计入）；
-    数据源失败也计入：失败提示行需要可见（区别于空态）。 */
-const hasFoldedContent = computed(
-  () =>
-    hasAnyMinutes.value ||
-    Boolean(sourceFailed.value.week) ||
-    Boolean(nearestAchievement.value)
-);
-
 const minutesByDate = computed(() => {
   const map = new Map<string, number>();
   for (const s of sessions.value) {
@@ -1335,9 +1312,7 @@ onMounted(loadAll);
 .link-muted:hover { color: var(--blue-deep); }
 
 /* ---------- 今日预算（多目标调度台账） ---------- */
-/* 折叠区内的卡片间距由 .folded-sections 的 grid gap 统一给（16px）。
-   这里原有一层 margin-bottom: 16px 是折叠区抽出组件之前留下的：与 gap 叠加成 32px，
-   展开后同页出现两套节奏（2026-09-24 反馈「展开后影响页面一致性」）。 */
+
 /* 今日安排（批17）：预算+复习合成一张连续分区卡，组间用细分隔线，不再两张卡叠放 */
 .agenda { padding: 16px 18px; display: grid; gap: 10px; }
 .agenda__head { display: flex; align-items: baseline; gap: 10px; }
@@ -1862,11 +1837,14 @@ a.btn-primary { text-decoration: none; }
 </style>
 
 <style scoped>
-/* 移动端：本周条 7 列收缩适配窄屏 */
+/* 移动端：本周条 7 列收缩适配窄屏
+   节奏区改常显（2026-09-27）后 .day 进入 mobile:spec 口径：375 下 7 列每格
+   只有 ~44px 宽，格子高度不足 44——按「日历格子属次级交互」的分级口径补
+   min-height ≥44 并垂直铺满（手势目标=整格），格子视觉（28px 数字块）不变。 */
 @media (max-width: 1100px) {
   .week { padding: 16px 14px; }
   .week__grid { gap: 5px; }
-  .day { padding: 6px 2px 8px; }
+  .day { padding: 6px 2px 8px; min-height: 44px; align-content: space-between; }
   .day__cell { width: 28px; height: 28px; border-radius: var(--mk-radius-md); font-size: 11px; }
   .month { padding: 16px 14px; }
   .month__meta { gap: 10px; }
@@ -1875,65 +1853,6 @@ a.btn-primary { text-decoration: none; }
 
 <style scoped>
 /* ---------- 展开/收起 ---------- */
-.fold-enter-active,
-.fold-leave-active {
-  transition: all 0.3s ease;
-  overflow: hidden;
-}
-.fold-enter-from,
-.fold-leave-to {
-  opacity: 0;
-  max-height: 0;
-}
-.fold-enter-to,
-.fold-leave-from {
-  opacity: 1;
-  max-height: 2000px;
-}
-
-.folded-sections {
-  display: grid;
-  gap: 16px;
-  /* 隐式 auto 轨道会被子项的 max-content 撑开（auto 轨道的下限是 min-content，而 flex 行
-     的下限能被 Chrome 算成 max-content）：折叠区里任何 nowrap 行都能把整页顶出横向滚动条。
-     minmax(0,1fr) 把轨道下限钉到 0，宽度只由容器决定。 */
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.more-toggle {
-  display: flex;
-  justify-content: center;
-  padding: 2px 0;
-}
-/* 折叠控件改用页面既有的「次级展开」语言（同 .link-muted、卡头里的「展开整月 ›」）：
-   原来是描边胶囊——全页唯一一个胶囊按钮，展开后夹在快捷入口与折叠区之间像一块外来元素，
-   而同一页另外三处展开/收起都是文字链（2026-09-24 反馈「展开后影响页面一致性」）。
-   去掉描边后纵向内边距留 8px，触控高度仍有 ~36px。 */
-.more-toggle__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--faint);
-  background: none;
-  border: 0;
-  border-radius: var(--mk-radius-md);
-  padding: 8px 12px;
-  cursor: pointer;
-  transition: color 0.15s;
-}
-.more-toggle__btn:hover {
-  color: var(--blue-deep);
-}
-.more-toggle__arrow--open {
-  transform: rotate(180deg);
-}
-.more-toggle__btn svg {
-  transition: transform 0.2s ease;
-}
-
 /* ---------- 暗色模式覆写 ---------- */
 [data-theme='dark'] .day__cell--h0,
 [data-theme='dark'] .mday--h0 { background: rgba(230, 237, 247, 0.1); color: var(--ink, #efeff0); }

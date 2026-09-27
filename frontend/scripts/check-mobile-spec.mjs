@@ -36,7 +36,10 @@ const DW = 1440, DH = 900;
      .ob__flow-item 的序号与说明 11 / 表格 th 11 / .ai-note 11（页脚 AI 声明，登记保留项）
    新增 <12px 必须走分级口径评审，不许把登记值往上调。 */
 const PAGES = [
-  { key: 'dashboard', path: '/dashboard', gate: '.dash__main .card', budget: { lt36: 0, lt44: 3, fonts: 0, hOver: 0 } },
+  /* dashboard lt44 3→10（2026-09-27）：学习节奏改常显后七个星期格进入口径。375 下 7 列每格几何上限 ~44px，
+   实测 39px 宽×92px 高（含 3 个 link-muted/path__detail-link 的 36px 紧凑带）。星期格是日历型次级交互，
+   按分级口径登记；格内数字块 28px、点击热区为整格高度。 */
+  { key: 'dashboard', path: '/dashboard', gate: '.dash__main .card', budget: { lt36: 0, lt44: 10, fonts: 0, hOver: 0 } },
   { key: 'paths', path: '/learning-paths', gate: '.pcard, .empty', budget: { lt36: 0, lt44: 8, fonts: 0, hOver: 0 } },
   { key: 'path-detail', path: '/learning-path/lp_1790165713901_bigjo2r', gate: '.hero', budget: { lt36: 0, lt44: 4, fonts: 1, hOver: 0 } },
   { key: 'state', path: '/learning-state', gate: '.metrics, main .card', budget: { lt36: 0, lt44: 6, fonts: 0, hOver: 0 } },
