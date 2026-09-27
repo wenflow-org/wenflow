@@ -47,18 +47,34 @@ describe('V2LearningHistory', () => {
     getMock.mockReset();
   });
 
-  it('状态三态标签正确（已结束会话不再被标成「进行中」）', async () => {
+  it('状态标签人话化（含「已超时→中断未完成」「paused→上次停在这里」）', async () => {
     const w = await mountHistory();
     const labels = w.findAll('.history__item .uc-badge').map((n) => n.text());
-    expect(labels).toEqual(['已完成', '已超时', '进行中', '已暂停', '已重开']);
+    expect(labels).toEqual(['已完成', '中断未完成', '进行中', '上次停在这里', '已重开']);
   });
 
-  it('「继续」只给 active/paused；已结束会话给「查看反馈」', async () => {
+  it('动作与状态匹配：可继续→继续、中断→重新开始、完成且有小结→查看反馈', async () => {
     const w = await mountHistory();
     // s3(active) + s4(paused) 可继续
     expect(w.findAll('.history__resume').length).toBe(2);
-    // s1(completed) + s2(timeout) 有 wrapup → 查看反馈
-    expect(w.findAll('.history__feedback').length).toBe(2);
+    // s2(timeout) + s5(discarded) 中断未完成 → 重新开始（不再给无内容的「查看反馈」）
+    expect(w.findAll('.history__restart').length).toBe(2);
+    // 只有 s1(completed 且有 wrapup) 给「查看反馈」
+    expect(w.findAll('.history__feedback').length).toBe(1);
+  });
+
+  it('同日同任务的多条会话聚合成一行（带 N 次会话与明细）', async () => {
+    const sameTask = [
+      { id: 'a1', taskId: 't9', taskTitle: '同一个任务', status: 'paused', startTime: '2026-09-14T09:00:00Z', durationMinutes: 0 },
+      { id: 'a2', taskId: 't9', taskTitle: '同一个任务', status: 'completed', startTime: '2026-09-14T10:00:00Z', durationMinutes: 20, wrapup: '{"summary":{}}' },
+    ];
+    const w = await mountHistory(sameTask);
+    expect(w.findAll('.history__item').length).toBe(1);
+    expect(w.find('.history__item-meta').text()).toContain('2 次会话');
+    expect(w.find('.history__subs').exists()).toBe(true);
+    expect(w.findAll('.history__sublist li').length).toBe(2);
+    // 聚合态：有可继续会话 → 行给「继续」
+    expect(w.findAll('.history__resume').length).toBe(1);
   });
 
   it('列表请求带分页参数（page/limit），配合后端 skip 支持「加载更多」', async () => {

@@ -27,32 +27,63 @@
         <p>完成第一次学习后，这里会按时间记录你的每次会话。</p>
       </div>
 
-      <!-- 按日期分组的会话列表 -->
+      <!-- 按日期分组的会话列表（2026-09-27 重排：按「日期 → 任务」聚合，
+           同一天同一个任务的多条会话合并成一条，明细用「查看每次会话」展开） -->
       <div v-else class="history__list">
         <section v-for="group in groupedSessions" :key="group.date" class="card history__day">
           <div class="history__day-head">
             <strong>{{ group.label }}</strong>
-            <span class="muted">{{ group.items.length }} 次 · {{ group.minutes }} 分钟</span>
+            <span class="muted">
+              {{ group.items.length }} 次<template v-if="group.minutes"> · {{ group.minutes }} 分钟</template>
+            </span>
           </div>
           <ul class="history__items">
-            <li v-for="s in group.items" :key="s.id" class="history__item">
+            <li v-for="t in group.tasks" :key="t.key" class="history__item">
               <!-- 色点对读屏是冗余（状态文案在右侧徽章里），标记装饰；批19 aria 补课 -->
-              <span class="history__dot" :class="`history__dot--${sessionState(s)}`" aria-hidden="true"></span>
+              <span class="history__dot" :class="`history__dot--${t.state}`" aria-hidden="true"></span>
               <div class="history__item-main">
-                <strong>{{ taskTitle(s) }}</strong>
-                <span v-if="sessionSummary(s)" class="history__item-sub">{{ sessionSummary(s) }}</span>
+                <strong>{{ t.title }}</strong>
+                <span v-if="t.sessions.length > 1" class="history__item-meta">
+                  {{ t.sessions.length }} 次会话<template v-if="t.minutes"> · 共 {{ t.minutes }} 分钟</template>
+                </span>
+                <span v-if="summaryOf(t)" class="history__item-sub">{{ summaryOf(t) }}</span>
+                <!-- 明细：同日同任务的每次会话（时长/状态各自成行）。
+                     动作只给「查看反馈」（每次会话各自的反馈页，目标不同）；
+                     「继续/重新开始」由聚合行统一给（目标与明细相同的链接不重复渲染）。 -->
+                <details v-if="t.sessions.length > 1" class="history__subs">
+                  <summary>查看每次会话</summary>
+                  <ul class="history__sublist">
+                    <li v-for="s in t.sessions" :key="s.id">
+                      <span class="history__sub-time">{{ sessionClock(s) }}</span>
+                      <span class="uc-badge" :class="stateBadgeCls(s)">{{ stateLabel(s) }}</span>
+                      <span class="history__sub-min">{{ s.durationMinutes ? `${s.durationMinutes} 分钟` : '—' }}</span>
+                      <router-link
+                        v-if="canViewFeedback(s)"
+                        :to="feedbackLink(s)"
+                        class="history__feedback"
+                      >查看反馈 ›</router-link>
+                    </li>
+                  </ul>
+                </details>
               </div>
-              <span class="uc-badge" :class="stateBadgeCls(s)">{{ stateLabel(s) }}</span>
-              <span class="history__item-time">{{ s.durationMinutes ? `${s.durationMinutes} 分钟` : '—' }}</span>
-              <!-- 可继续的会话（active/paused）才给「继续」；已结束/已完成不再误导 -->
+              <span class="uc-badge" :class="t.sessions.length > 1 ? stateBadgeClsForState(t.state) : stateBadgeCls(t.lead)">
+                {{ t.sessions.length > 1 ? stateLabelForState(t.state) : stateLabel(t.lead) }}
+              </span>
+              <span class="history__item-time">{{ t.minutes ? `${t.minutes} 分钟` : '—' }}</span>
+              <!-- 动作与状态匹配（2026-09-27）：可继续 → 继续；中断未完成 → 重新开始；已完成且有小结 → 查看反馈 -->
               <router-link
-                v-if="sessionState(s) === 'resumable' && s.taskId"
-                :to="`/learn/${s.taskId}`"
+                v-if="t.state === 'resumable' && t.lead.taskId"
+                :to="`/learn/${t.lead.taskId}`"
                 class="history__resume"
               >继续 ›</router-link>
               <router-link
-                v-else-if="canViewFeedback(s)"
-                :to="feedbackLink(s)"
+                v-else-if="t.state === 'ended' && t.lead.taskId"
+                :to="`/learn/${t.lead.taskId}`"
+                class="history__restart"
+              >重新开始 ›</router-link>
+              <router-link
+                v-else-if="feedbackLinkFor(t)"
+                :to="feedbackLinkFor(t)"
                 class="history__feedback"
               >查看反馈 ›</router-link>
             </li>
@@ -122,17 +153,28 @@ function sessionState(s: SessionRecord): SessionState {
 function stateLabel(s: SessionRecord): string {
   const status = String(s.status || '').toLowerCase();
   if (doneStatuses.has(status)) return '已完成';
-  if (status === 'paused') return '已暂停';
+  if (status === 'paused') return '上次停在这里';
   if (status === 'active' || status === 'in_progress') return '进行中';
-  if (status === 'timeout') return '已超时';
+  // 「已超时」是内部状态名，对学习者没有意义——它就是「中断了、没学完」（2026-09-27）
+  if (status === 'timeout') return '中断未完成';
   // discarded = 用户点「重新开始」后旧会话被丢弃（duration 是真实有效时长，计入学习）
   if (status === 'discarded') return '已重开';
   if (status === 'superseded') return '已取代';
   return '已结束';
 }
 
+/** 聚合行的状态文案（多会话合并时用）：只说「能不能继续 / 完没完成」 */
+function stateLabelForState(state: SessionState): string {
+  if (state === 'completed') return '已完成';
+  if (state === 'resumable') return '可继续';
+  return '未完成';
+}
+
 function stateBadgeCls(s: SessionRecord): string {
-  const state = sessionState(s);
+  return stateBadgeClsForState(sessionState(s));
+}
+
+function stateBadgeClsForState(state: SessionState): string {
   if (state === 'completed') return 'uc-badge--ok';
   if (state === 'resumable') return 'uc-badge--warn';
   return 'uc-badge--muted';
@@ -158,16 +200,23 @@ function plainSnippet(text: string): string {
     .trim();
 }
 
+/** 摘要截断：60 字上限 + 省略号（2026-09-27：此前裸 slice 把句子切在半句上，
+    看起来像数据坏了） */
+function snippet(text: string, max = 60): string {
+  const trimmed = text.trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
+}
+
 function sessionSummary(s: SessionRecord): string {
   try {
     const state = s.teachingState ? JSON.parse(s.teachingState) : null;
     const topic = state?.topicSummary || state?.summary?.topicSummary || state?.knowledgeSummary;
-    if (typeof topic === 'string' && topic.trim()) return topic.trim().slice(0, 60);
+    if (typeof topic === 'string' && topic.trim()) return snippet(topic);
     const msg = s.messages ? JSON.parse(s.messages) : null;
     if (Array.isArray(msg) && msg.length) {
       const last = msg[msg.length - 1];
       const text = plainSnippet(String(last?.content || last?.text || ''));
-      if (text) return text.slice(0, 60);
+      if (text) return snippet(text);
     }
   } catch {
     /* 忽略解析失败 */
@@ -205,6 +254,19 @@ interface DayGroup {
   label: string;
   minutes: number;
   items: SessionRecord[];
+  /** 同日同任务聚合后的行（2026-09-27）：同一天同一个任务的多条会话合并成一条 */
+  tasks: TaskGroup[];
+}
+
+interface TaskGroup {
+  key: string;
+  title: string;
+  /** 按时间倒序 */
+  sessions: SessionRecord[];
+  minutes: number;
+  state: SessionState;
+  /** 代表性会话：可继续优先，其次最新（用于摘要与动作） */
+  lead: SessionRecord;
 }
 
 /**
@@ -229,6 +291,39 @@ const dayLabel = (dateKey: string) => {
   return `${yy}年${Number(mm)}月${Number(dd)}日`;
 };
 
+/** 聚合行的状态：能继续 > 完成过 > 都没完成 */
+function aggregateState(list: SessionRecord[]): SessionState {
+  if (list.some((s) => sessionState(s) === 'resumable')) return 'resumable';
+  if (list.some((s) => sessionState(s) === 'completed')) return 'completed';
+  return 'ended';
+}
+
+/** 代表性会话：可继续的优先（给「继续」动作），否则取最新一条 */
+function leadSession(list: SessionRecord[]): SessionRecord {
+  return list.find((s) => sessionState(s) === 'resumable') || list[0];
+}
+
+/** 聚合行摘要：优先代表性会话，没有则找最近一条有摘要的 */
+function summaryOf(t: TaskGroup): string {
+  const lead = sessionSummary(t.lead);
+  if (lead) return lead;
+  const withSummary = t.sessions.find((s) => sessionSummary(s));
+  return withSummary ? sessionSummary(withSummary) : '';
+}
+
+/** 聚合行的反馈入口（最近一条有当堂小结的会话的链接；没有则空串） */
+function feedbackLinkFor(t: TaskGroup): string {
+  const s = t.sessions.find((x) => canViewFeedback(x));
+  return s ? feedbackLink(s) : '';
+}
+
+/** 明细行的时刻（本地 HH:mm） */
+function sessionClock(s: SessionRecord): string {
+  const d = new Date(String(s.startTime || s.endTime || ''));
+  if (Number.isNaN(d.getTime())) return '—';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 const groupedSessions = computed<DayGroup[]>(() => {
   const map = new Map<string, DayGroup>();
   for (const s of sessions.value) {
@@ -236,11 +331,27 @@ const groupedSessions = computed<DayGroup[]>(() => {
     if (!key) continue;
     let group = map.get(key);
     if (!group) {
-      group = { date: key, label: dayLabel(key), minutes: 0, items: [] };
+      group = { date: key, label: dayLabel(key), minutes: 0, items: [], tasks: [] };
       map.set(key, group);
     }
     group.items.push(s);
     group.minutes += s.durationMinutes || 0;
+    // 聚合键：任务 id 优先，缺 id 退化为标题（旧数据）
+    const taskKey = s.taskId || taskTitle(s);
+    let task = group.tasks.find((t) => t.key === taskKey);
+    if (!task) {
+      task = { key: taskKey, title: taskTitle(s), sessions: [], minutes: 0, state: 'completed', lead: s };
+      group.tasks.push(task);
+    }
+    task.sessions.push(s);
+    task.minutes += s.durationMinutes || 0;
+  }
+  for (const group of map.values()) {
+    for (const task of group.tasks) {
+      task.sessions.sort((a, b) => String(b.startTime || '').localeCompare(String(a.startTime || '')));
+      task.state = aggregateState(task.sessions);
+      task.lead = leadSession(task.sessions);
+    }
   }
   return [...map.values()];
 });
@@ -407,6 +518,33 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 
+/* 聚合行元信息（N 次会话 · 共 X 分钟） */
+.history__item-meta {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted, #5b6577);
+}
+
+/* 明细展开（同日同任务的每次会话） */
+.history__subs { margin-top: 4px; }
+.history__subs > summary {
+  cursor: pointer;
+  width: fit-content;
+  font-size: 12px;
+  color: var(--blue-deep, #1f57cc);
+}
+.history__sublist {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 0 0 10px;
+  display: grid;
+  gap: 6px;
+  border-left: 2px solid var(--line, #e3e9f4);
+}
+.history__sublist li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.history__sub-time { font-size: 12px; color: var(--muted, #5b6577); font-variant-numeric: tabular-nums; }
+.history__sub-min { font-size: 12px; color: var(--faint, #67758f); font-variant-numeric: tabular-nums; }
+
 .history__item-sub {
   font-size: 12px;
   color: var(--faint, #67758f);
@@ -439,7 +577,8 @@ onMounted(() => {
 }
 .history__resume:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 
-.history__feedback {
+.history__feedback,
+.history__restart {
   font-size: 12px; font-weight: 800;
   color: var(--muted, #5b6577);
   text-decoration: none;
@@ -452,7 +591,8 @@ onMounted(() => {
   white-space: nowrap;
   transition: color 0.15s ease, border-color 0.15s ease;
 }
-.history__feedback:hover { color: var(--blue-deep, #1f57cc); border-color: rgba(52, 120, 246, 0.4); }
+.history__feedback:hover,
+.history__restart:hover { color: var(--blue-deep, #1f57cc); border-color: rgba(52, 120, 246, 0.4); }
 
 .history__more {
   display: flex;
