@@ -51,7 +51,10 @@ const MAX_VISUAL_PROMPT_CHARS = 800;
 
 /** 开关：`TEACHING_VISUAL_DISABLED=1` 时课堂一律不配图（灰度回滚）。 */
 export function isTeachingVisualEnabled(): boolean {
-  return process.env.TEACHING_VISUAL_DISABLED !== '1';
+  // owner 终审 2026-09-27（设计文档 §九）：扩散生图**停用**——「我没感觉这些图有任何的教育意义」
+  // （17 样本实测：语义全在 caption、结构类还会语义反转）。默认关闭；仅显式设
+  // TEACHING_VISUAL_ENABLED=1 时启用（实验/回放用，生产不设）。
+  return process.env.TEACHING_VISUAL_ENABLED === '1';
 }
 
 /** 每会话上限（正整数；非法值回落默认并告警）。 */
@@ -181,7 +184,7 @@ export function detectAsciiStructure(text: string | null | undefined): boolean {
   return hits.length >= 2;
 }
 
-/** 本轮"配图时机"信号（喂给教学回合的**显式**输入，见 buildVisualOpportunity 注释）。 */
+/** 本轮"结构图/配图时机"信号（喂给教学回合的**显式**输入，见 buildVisualOpportunity 注释）。 */
 export interface VisualOpportunity {
   suggested: true;
   reason: 'ascii-structure';
@@ -190,7 +193,7 @@ export interface VisualOpportunity {
 }
 
 /**
- * 算本轮的配图时机（**代码裁决**，2026-09-23）。
+ * 算本轮的"结构图时机"（**代码裁决**，2026-09-23 建、2026-09-27 双通道重构）。
  *
  * 为什么由代码算、且要写进**本轮输入**：实测同一个 system prompt + 同一份输入，
  * 埋在 2 万字 prompt 里的规则（三档加码）全被忽略，而**把要求显式放进该轮输入**一次就生效。
@@ -199,9 +202,13 @@ export interface VisualOpportunity {
  * 当前信号（S1，高精度）：**上一轮老师用字符画了结构**（ASCII 示意）——那正是"这里本来需要图"的证据。
  * owner 口径 2026-09-25 放开"每任务一次"后允许重复触发：只要**紧邻上一轮**又画了字符结构就再提示
  * （判据天然带节奏——不画结构的轮次不会触发）；总量仍由每会话上限兜底。
+ *
+ * 2026-09-27 重构要点：去向从"扩散生图（visual）"改为**确定性渲染（diagram/mermaid）**——
+ * 字符画本身就是最精简的结构图，翻成扩散生图会丢语义精度（断口丢失事故）且图内不能标字；
+ * mermaid 零乱码、图内可写中文标签、毫秒渲染零成本（owner 终审拍板双通道，设计文档 §七-§十）。
  */
 export function buildVisualOpportunity(messages: TeachingSessionMessage[] | null | undefined): VisualOpportunity | null {
-  if (!isTeachingVisualEnabled()) return null;
+  if (!isTeachingVisualEnabled() && !isTeachingDiagramOpportunityEnabled()) return null;
   const list = Array.isArray(messages) ? messages : [];
   const lastAssistant = [...list].reverse().find((message) => message?.role === 'assistant');
   if (!detectAsciiStructure(lastAssistant?.content)) return null;
@@ -209,12 +216,18 @@ export function buildVisualOpportunity(messages: TeachingSessionMessage[] | null
     suggested: true,
     reason: 'ascii-structure',
     instruction:
-      '上一轮你用了箭头/方框/字符在 reply 里"画"结构——那说明这里本来就需要一张图。'
+      '上一轮你用了箭头/方框/字符在 reply 里"画"结构——那说明这里本来就需要一张结构图，而且**别再用字符画**。'
       + '**先判断**：若本轮正要布置「由学习者自己排出/画出这个结构」的练习（答案泄漏，2026-09-24 实测），'
-      + '则本轮**不要**输出 visual，直接布置练习，把图留到学生完成后的下一轮总结印证时再用；'
-      + '否则本轮请改为输出顶层块 visual：在 prompt 里把这张图画清楚（主体与抽象关系，画面里不出现文字），'
+      + '则本轮**不要**输出 diagram，直接布置练习，把图留到学生完成后的下一轮总结印证时再用；'
+      + '否则本轮请输出顶层块 diagram：engine 用 mermaid，把这段结构画成 flowchart（流程/层级/对比）或 '
+      + 'sequenceDiagram（时序）——**图内要写中文标签**（节点名、关键量、方向词），标签就是教学信息本身；'
       + 'caption 写一句给学生看的说明；reply 里不必再用字符画结构。',
   };
+}
+
+/** 结构图时机开关（新通道，默认开启；env 可关用于回放对照）。 */
+export function isTeachingDiagramOpportunityEnabled(): boolean {
+  return process.env.TEACHING_DIAGRAM_DISABLED !== '1';
 }
 
 export interface GenerateTeachingVisualDeps {

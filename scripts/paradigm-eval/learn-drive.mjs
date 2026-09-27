@@ -77,9 +77,20 @@ const TURN_PRESETS = {
     '作文里我总写 I very like，怎么改才地道？',
     '好，那我先把这些规则抄到错题本旁边。',
   ],
+  // 结构图探针（LEARN_PRESET=diagram）：学生主动索要结构/流程展示，观察 diagram 通道是否真产出
+  diagram: [
+    '这块我熟，你直接用最清楚的方式，把「超时那一刻起每一步会发生什么」按顺序串给我看。',
+    '对，就这个流程；如果画成图更清楚就直接画出来，我想按顺序对着看。',
+    '那重试之后呢？把「成功路径」和「重试路径」两条并排摆出来对比着看。',
+    '按你说的我复述一遍：请求发出→对端处理完→响应丢在回程→本地判超时。接下去我该盯哪一步？',
+    '行，那下一层。',
+    '好，我自己消化。',
+  ],
 };
 
 function pickPreset() {
+  const override = process.env.LEARN_PRESET && TURN_PRESETS[process.env.LEARN_PRESET];
+  if (override) return override;
   if (TURN_PRESETS[personaId]) return TURN_PRESETS[personaId];
   if (personaId.startsWith('mastery') || personaId.startsWith('paper-ml')) return TURN_PRESETS.strong;
   if (personaId.startsWith('file-')) return TURN_PRESETS.file;
@@ -182,11 +193,12 @@ async function main() {
       shouldConfirmEnd: !!d2.shouldConfirmEnd,
       endReason: d2.endReason || null,
       images: imgs,
+      diagrams: (d2.diagrams || []).map((g) => ({ engine: g.engine, code: String(g.code || '').slice(0, 400), caption: g.caption })),
       quickReplies: (d2.quickReplies || d2.suggestedReplies || []).slice(0, 4),
       revision,
     };
     record.turns.push(turn);
-    log(`turn${i + 1}: level=${turn.analysis?.cognitiveLevel}/${turn.analysis?.levelScore} kp=${turn.knowledgePoints.length} img=${imgs.length} ckpt=${turn.checkpoint ? 'Y' : 'N'} complete=${turn.isCompletion}`);
+    log(`turn${i + 1}: level=${turn.analysis?.cognitiveLevel}/${turn.analysis?.levelScore} kp=${turn.knowledgePoints.length} img=${imgs.length} diagram=${turn.diagrams.length} ckpt=${turn.checkpoint ? 'Y' : 'N'} complete=${turn.isCompletion}`);
 
     // 检查点：按水平作答（弱=第一个选项，中=第二个，强=第二个）
     if (turn.checkpoint) {

@@ -73,3 +73,57 @@ describe('teaching-turn visual 归一化', () => {
     expect(teaching.visual).toEqual({ prompt: '两条平行线被一条斜线穿过，标出内错角', caption: null, kind: null });
   });
 });
+
+describe('teaching-turn diagram 归一化（2026-09-27 双通道重构）', () => {
+  beforeEach(() => mockCallPrompt.mockReset());
+
+  async function runWithDiagram(raw: any): Promise<any> {
+    mockCallPrompt.mockReset();
+    mockCallPrompt.mockImplementation(async (spec: any) => ({
+      success: true,
+      output: spec.normalizeOutput({ ...basePayload, diagram: raw }, input),
+      runtimeEnvelope: null,
+      debug: {},
+    }));
+    const output = await teachingTurnAgentHandler(input);
+    return (output.internal?.ext as any)?.teaching;
+  }
+
+  it('mermaid 源码保留；剥 ```mermaid 围栏；engine 缺省归 mermaid', async () => {
+    const teaching = await runWithDiagram({
+      code: '```mermaid\nflowchart LR\n  A[起点] --> B[终点]\n```',
+      caption: ' 两步走 ',
+    });
+    expect(teaching.diagram).toEqual({
+      engine: 'mermaid',
+      code: 'flowchart LR\n  A[起点] --> B[终点]',
+      caption: '两步走',
+    });
+  });
+
+  it('危险/干扰指令整行剔除：%%{init 配置块 / click / href（纵深防御首道）', async () => {
+    const teaching = await runWithDiagram({
+      code: [
+        '%%{init: {"theme":"dark"}}%%',
+        'flowchart LR',
+        '  A[甲] --> B[乙]',
+        '  click A href "https://evil.example"',
+        '  href B "https://evil.example"',
+      ].join('\n'),
+    });
+    expect(teaching.diagram.code).toBe('flowchart LR\n  A[甲] --> B[乙]');
+  });
+
+  it('非法输入整块丢弃：code 空白 / 非对象 / 其他引擎 / 超长', async () => {
+    expect((await runWithDiagram({ code: '   ' })).diagram).toBeUndefined();
+    expect((await runWithDiagram('flowchart LR')).diagram).toBeUndefined();
+    expect((await runWithDiagram({ engine: 'svg', code: 'flowchart LR\n A-->B' })).diagram).toBeUndefined();
+    expect((await runWithDiagram({ code: 'flowchart LR\n' + '  A-->B\n'.repeat(300) })).diagram).toBeUndefined();
+  });
+
+  it('围栏剥掉后为空 → 丢弃；caption 缺省归 null', async () => {
+    expect((await runWithDiagram({ code: '```mermaid\n```' })).diagram).toBeUndefined();
+    const teaching = await runWithDiagram({ code: 'sequenceDiagram\n  A->>B: 请求' });
+    expect(teaching.diagram).toEqual({ engine: 'mermaid', code: 'sequenceDiagram\n  A->>B: 请求', caption: null });
+  });
+});

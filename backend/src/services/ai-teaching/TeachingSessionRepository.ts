@@ -89,6 +89,12 @@ export interface TeachingSessionMessage {
    * 由老师给的一段文字描述生成（`prompt` 即原文，可回溯）。文本脱离图仍成立。
    */
   images?: TeachingImage[];
+  /**
+   * 课堂结构图（2026-09-27 双通道重构）——**内联在消息流里**，老师给的 mermaid 源码，
+   * 由前端确定性渲染。与 images 的本质区别：不是生成物而是代码——零乱码、毫秒渲染、
+   * **图内可写中文标签**（标签即教学信息）。
+   */
+  diagrams?: TeachingDiagram[];
 }
 
 /**
@@ -103,6 +109,16 @@ export interface TeachingImage {
   model: string;
   kind: string | null;
   createdAt: string;
+}
+
+/**
+ * 课堂结构图（2026-09-27 双通道重构，owner 终审：扩散生图停用，结构类走代码渲染）。
+ * 老师给的 mermaid 源码（出口过滤见 skill normalizeDiagram），前端 securityLevel:'strict' 渲染。
+ */
+export interface TeachingDiagram {
+  engine: string;
+  code: string;
+  caption: string | null;
 }
 
 export interface TeachingKnowledgePointState {

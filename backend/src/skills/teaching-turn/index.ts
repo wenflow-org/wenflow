@@ -416,6 +416,31 @@ export interface TeachingTurnOutput {
     /** 图类型（如 示意图 / 对比图 / 流程图）；仅作润色与留痕 */
     kind?: string | null;
   } | null;
+  /**
+   * 课堂结构图（可选）——2026-09-27 双通道重构（owner 终审：扩散生图停用，结构类走代码渲染）。
+   *
+   * 语义：老师要用**结构图**把当前内容的"空间/时序/层级/对比"关系画清楚时，输出本块。
+   * 由前端 mermaid 确定性渲染（毫秒级、零乱码、**图内可直接写中文标签**）——这与旧生图
+   * （`visual`，禁图内字、抽象画）的本质区别：结构图的文字标注就是教学信息本身。
+   *
+   * 硬边界：
+   * - 只画**结构类**（过程/循环、空间位置、结构装配、多对象对比、时序、层级）；
+   *   定义/定理/论证/术语辨析/纯计算/背诵清单类**不要画**（用符号语言就能精确定住）；
+   * - **不要用字符画**（箭头/方框/`┌─┐`）——直接输出本块；
+   * - 与本轮内容一致：reply 必须脱离图也成立，图是同一信息的更直观呈现，不是新信息；
+   * - 若本轮正要布置"由学生自己排出/画出该结构"的练习，本轮**不要**输出（答案泄漏，
+   *   留到学生完成后的下一轮印证）；
+   * - 语法必须在 mermaid 支持范围内（flowchart/sequenceDiagram/stateDiagram 等常用图型），
+   *   **禁止** `%%{init}%%` 配置块、`click`、`href`（出口会被代码过滤）。
+   */
+  diagram?: {
+    /** 渲染引擎；归一化后恒为 'mermaid'（其他值整块丢弃，见 normalizeDiagram） */
+    engine: string;
+    /** mermaid 源码（必填）；图内中文标签是允许且鼓励的 */
+    code: string;
+    /** 图下方一句说明（学生可见）；归一化后恒为 string|null */
+    caption: string | null;
+  } | null;
 }
 
 /**
@@ -475,8 +500,11 @@ export const teachingTurnAgentDefinition: AgentDefinition = {
       knowledge: { type: 'object' },
       pedagogy: { type: 'object' },
       control: { type: 'object' },
-      // 可选：老师临场请求的一张教学配图（图 = 一段文字的渲染；见 TeachingTurnOutput.visual）
-      visual: { type: 'object' }
+      // 可选：老师临场请求的一张教学配图（图 = 一段文字的渲染；见 TeachingTurnOutput.visual）。
+      // 2026-09-27 起扩散生图默认停用（owner 终审，设计文档 §九），该块保留但不再生成图片。
+      visual: { type: 'object' },
+      // 可选：课堂结构图（mermaid 代码，前端确定性渲染；见 TeachingTurnOutput.diagram）
+      diagram: { type: 'object' }
     },
     required: ['reply', 'analysis', 'knowledge', 'pedagogy', 'control']
   },
@@ -684,7 +712,37 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
       ...(normalizeSupplement(control.supplement) ?? {}),
     },
     ...(normalizeVisual(parsed.visual) ?? {}),
+    ...(normalizeDiagram(parsed.diagram) ?? {}),
   };
+}
+
+/**
+ * 归一化老师请求的课堂结构图（契约见 `TeachingTurnOutput.diagram`，2026-09-27 双通道重构）。
+ *
+ * 规则（宁缺毋滥）：
+ * - 只认 mermaid（缺省 engine 视为 mermaid；其他引擎值 → 整块丢弃）；
+ * - `code` 非空才保留；剥掉模型习惯包的 ```mermaid 围栏；裁行过滤后超过长度上限 → 丢弃
+ *   （截断必然产生坏语法，丢弃比截断诚实）；
+ * - **出口过滤危险/干扰指令**：`%%{` 配置块、`click`、`href` 整行剔除——
+ *   前端 securityLevel:'strict' 是二道防线，这里是首道（纵深防御）；
+ * - `caption` 裁长；空串归 null。
+ */
+function normalizeDiagram(raw: unknown): { diagram: NonNullable<TeachingTurnOutput['diagram']> } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+  const engine = typeof record.engine === 'string' ? record.engine.trim().toLowerCase() : '';
+  if (engine && engine !== 'mermaid') return null;
+  let code = typeof record.code === 'string' ? record.code.trim() : '';
+  if (!code) return null;
+  code = code.replace(/^```(?:mermaid)?[ \t]*\r?\n/i, '').replace(/\r?\n?```[ \t]*$/, '');
+  const filtered = code
+    .split('\n')
+    .filter((line) => !/^\s*%%\{/.test(line) && !/^\s*click\b/i.test(line) && !/^\s*href\b/i.test(line))
+    .join('\n')
+    .trim();
+  if (!filtered || filtered.length > 1500) return null;
+  const caption = typeof record.caption === 'string' ? record.caption.trim().slice(0, 200) : '';
+  return { diagram: { engine: 'mermaid', code: filtered, caption: caption || null } };
 }
 
 /**

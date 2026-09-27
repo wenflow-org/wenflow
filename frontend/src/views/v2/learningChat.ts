@@ -10,6 +10,16 @@ export interface ChatImage {
   kind?: string | null;
 }
 
+/**
+ * 课堂结构图（2026-09-27 双通道重构）——老师给的 mermaid 源码，前端确定性渲染。
+ * 与 ChatImage 的本质区别：不是生成物而是代码——零乱码、图内可写中文标签、毫秒渲染。
+ */
+export interface TeachingDiagram {
+  engine: string;
+  code: string;
+  caption?: string | null;
+}
+
 /** 教师补充材料（活的 path 批次 E）：上一轮学生问到主线之外的信息，老师请求采集的公开网络资料。 */
 export interface ChatSupplement {
   materialId: string;
@@ -25,8 +35,10 @@ export interface ChatMsg {
   time: string;
   failed?: boolean;
   confusion?: string[];
-  /** 本轮老师临场附的教学配图（可选，内联在气泡里） */
+  /** 本轮老师临场附的教学配图（可选，内联在气泡里）。2026-09-27 扩散生图停用，仅历史消息会带。 */
   images?: ChatImage[];
+  /** 课堂结构图（2026-09-27 双通道重构）——mermaid 源码，确定性渲染，内联在气泡里 */
+  diagrams?: TeachingDiagram[];
   /** 本轮送达的教师补充材料卡片（可选，气泡下方） */
   supplement?: ChatSupplement;
   id?: string;

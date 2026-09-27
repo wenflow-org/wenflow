@@ -13,8 +13,7 @@ import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, peerAgentD
 import { teachingTurnAgentDefinition } from '../../skills/teaching-turn';
 import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
-import { teachingSessionRepository, type TeachingSessionRecord, type TeachingImage } from './TeachingSessionRepository';
-import { knowledgeStateService, COMPLETION_TARGET_PROGRESS_FLOOR } from './KnowledgeStateService';
+import { teachingSessionRepository, type TeachingSessionRecord, type TeachingImage, type TeachingDiagram } from './TeachingSessionRepository';import { knowledgeStateService, COMPLETION_TARGET_PROGRESS_FLOOR } from './KnowledgeStateService';
 import { peerTriggerService } from './PeerTriggerService';
 import { buildTeachingScenarioContext, type TeachingScenarioContext } from './TeachingContextBuilder';
 import { fenceLearnerMessagesForModel } from './input-fence';
@@ -172,6 +171,8 @@ export async function processStudentMessage(
   aiResponse: string;
   /** 教学配图（owner 口径：图片是一种特殊的文字）——本轮老师临场要给学生看的一张图，内联在回复里 */
   images?: TeachingImage[];
+  /** 课堂结构图（2026-09-27 双通道重构）——mermaid 源码，前端确定性渲染，内联在回复里 */
+  diagrams?: TeachingDiagram[];
   strategies: string[];
   knowledgePoint: string | null;
   knowledgePoints: KnowledgePointStatus[];
@@ -643,6 +644,20 @@ export async function processStudentMessage(
     if (image) assistantMessage.images = [image];
   }
 
+  // 课堂结构图（2026-09-27 双通道重构，owner 终审：扩散生图停用、结构类走代码渲染）：
+  // 不需要生成——skill 出口已归一化/过滤（normalizeDiagram），这里只过防答案泄漏硬闸
+  // （与配图同一条 9/24 审计结论：回复在同轮布置"你自己排/画"练习时不得给结构图）。
+  if (teachingOutput.diagram) {
+    if (detectExerciseLeakInReply(teachingOutput.reply)) {
+      logger.info('[AITeaching] 本轮回复布置了由学生自己排/画的练习，跳过结构图（防答案泄漏）', {
+        sessionId,
+        taskId: session.taskId,
+      });
+    } else {
+      assistantMessage.diagrams = [teachingOutput.diagram];
+    }
+  }
+
   if (!completionReady && hasPrematureNextStepLanguage(assistantMessage.content)) {
     logger.warn('[AITeaching] 教学回复越界，尚未满足结束条件却提到下一环节', {
       sessionId,
@@ -912,6 +927,8 @@ export async function processStudentMessage(
     analysis: teachingOutput.analysis,
     aiResponse: teachingOutput.reply,
     ...(assistantMessage.images?.length ? { images: assistantMessage.images } : {}),
+    // 课堂结构图（2026-09-27 双通道重构）：mermaid 源码下行，前端确定性渲染
+    ...(assistantMessage.diagrams?.length ? { diagrams: assistantMessage.diagrams } : {}),
     // 教师补充材料卡片（批次 E）：本轮晋升成功时随消息下发（前端渲染卡片，点开看章节）
     ...(supplementPromotion.payload ? { supplementaryMaterial: supplementPromotion.payload } : {}),
     strategies: effectiveTeachingOutput.pedagogy.strategies,

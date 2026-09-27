@@ -234,6 +234,14 @@
                     <figcaption v-if="img.caption">{{ img.caption }}</figcaption>
                   </figure>
                 </div>
+                <!-- 课堂结构图（2026-09-27 双通道重构）——老师给的 mermaid 源码，前端确定性渲染；
+                     图内中文标签就是教学信息，文本仍自洽（不看图也能继续）。 -->
+                <TeachingDiagram
+                  v-for="(d, di) in m.diagrams"
+                  :key="'d' + di"
+                  :code="d.code"
+                  :caption="d.caption"
+                />
                 <!-- 教师补充材料卡片（批次 E）：主线之外的公开网络资料，点开看原文窗口 -->
                 <button
                   v-if="m.supplement?.materialId"
@@ -540,6 +548,7 @@ import { readMaterialSection } from '@/api/materials';
 import AiContentNote from '@/components/AiContentNote.vue';
 import ImmersiveMenu from '@/components/ImmersiveMenu.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
+import TeachingDiagram from '@/components/TeachingDiagram.vue';
 import { toast } from '@/utils/toast';
 import { useInteractionMeta } from '@/composables/useInteractionMeta';
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
@@ -946,6 +955,7 @@ async function boot() {
                 text: String(m.content || ''),
                 time: nowTime(),
                 ...(Array.isArray(m.images) && m.images.length ? { images: m.images } : {}),
+                ...(Array.isArray(m.diagrams) && m.diagrams.length ? { diagrams: m.diagrams } : {}),
               }));
             restoredCount = restored.length;
             if (restored.length) scrollDown();
@@ -1132,10 +1142,11 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
     aiMsg.text = r.aiResponse || aiMsg.text;
     aiMsg.confusion = confusion;
     if (Array.isArray(r.images) && r.images.length) (aiMsg as ChatMsg).images = r.images;
+    if (Array.isArray(r.diagrams) && r.diagrams.length) (aiMsg as ChatMsg).diagrams = r.diagrams;
     // 教师补充材料卡片（批次 E）：承诺的"下轮补充"在本轮送达
     if (r.supplementaryMaterial?.materialId) (aiMsg as ChatMsg).supplement = r.supplementaryMaterial;
   } else if (r.aiResponse) {
-    pushMsg({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion, ...(Array.isArray(r.images) && r.images.length ? { images: r.images } : {}), ...(r.supplementaryMaterial ? { supplement: r.supplementaryMaterial } : {}) });
+    pushMsg({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion, ...(Array.isArray(r.images) && r.images.length ? { images: r.images } : {}), ...(Array.isArray(r.diagrams) && r.diagrams.length ? { diagrams: r.diagrams } : {}), ...(r.supplementaryMaterial ? { supplement: r.supplementaryMaterial } : {}) });
   }
   // 兜底：AI 全程未返回任何内容（空响应）时给占位气泡，避免本轮「无声消失」
   if (!r.aiResponse && (!aiMsg || !aiMsg.text.trim())) {

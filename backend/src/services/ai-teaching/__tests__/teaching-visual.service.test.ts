@@ -51,10 +51,18 @@ const okGenerate = (async () => ({
   images: [{ url: 'https://img.example/ok.png', provider: 'agnes' }],
 })) as never;
 
+// 2026-09-27 owner 终审：扩散生图默认**停用**（设计文档 §九）。生成能力保留，仅显式 opt-in
+// （TEACHING_VISUAL_ENABLED=1）时启用——本文件所有生成类用例由顶层 beforeEach 统一打开；
+// 「默认停用」用例自行 delete 开关后断言 false。
+beforeEach(() => {
+  process.env.TEACHING_VISUAL_ENABLED = '1';
+});
+
 afterEach(() => {
-  delete process.env.TEACHING_VISUAL_DISABLED;
+  delete process.env.TEACHING_VISUAL_ENABLED;
   delete process.env.TEACHING_VISUAL_MAX_PER_SESSION;
   delete process.env.TEACHING_VISUAL_MAX_PER_TASK;
+  delete process.env.TEACHING_DIAGRAM_DISABLED;
 });
 
 describe('teaching-visual 服务', () => {
@@ -72,8 +80,8 @@ describe('teaching-visual 服务', () => {
     expect(image!.prompt).toContain('两条直角边分别标 3 和 4');
   });
 
-  it('开关关闭（TEACHING_VISUAL_DISABLED=1）→ 不生成（灰度回滚）', async () => {
-    process.env.TEACHING_VISUAL_DISABLED = '1';
+  it('默认停用（owner 终审 2026-09-27）：未显式开开关 → isTeachingVisualEnabled=false，且不生成', async () => {
+    delete process.env.TEACHING_VISUAL_ENABLED;
     expect(isTeachingVisualEnabled()).toBe(false);
     const generate = jest.fn();
     const image = await generateTeachingVisual({ request, messages: [], deps: { generate: generate as never } });
@@ -322,7 +330,10 @@ describe('教学配图时机（S1：老师用字符画结构）', () => {
     expect(opportunity).not.toBeNull();
     expect(opportunity!.suggested).toBe(true);
     expect(opportunity!.reason).toBe('ascii-structure');
-    expect(opportunity!.instruction).toContain('visual');
+    // 2026-09-27 双通道重构：去向从扩散生图改为**结构图（diagram/mermaid）**，且明确"别再用字符画"
+    expect(opportunity!.instruction).toContain('diagram');
+    expect(opportunity!.instruction).toContain('mermaid');
+    expect(opportunity!.instruction).not.toContain('输出 `visual`');
   });
 
   it('上一轮没画字符结构 → 不出信号（不是每轮都配图）', () => {
@@ -337,8 +348,9 @@ describe('教学配图时机（S1：老师用字符画结构）', () => {
     expect(buildVisualOpportunity([withImage, assistant('架子 → 案板边 → 盆')])).not.toBeNull();
   });
 
-  it('开关关闭 → 不出信号（灰度回滚）', () => {
-    process.env.TEACHING_VISUAL_DISABLED = '1';
+  it('两个时机开关都关 → 不出信号（回放对照）', () => {
+    delete process.env.TEACHING_VISUAL_ENABLED; // 顶层 beforeEach 默认开着 visual，这里一并关掉
+    process.env.TEACHING_DIAGRAM_DISABLED = '1';
     expect(buildVisualOpportunity([assistant('甲（前）●———→ 方向 →')])).toBeNull();
   });
 });
