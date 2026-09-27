@@ -19,7 +19,9 @@ const PASSWORD = 'ParadigmEval2026';
 const GEN_TIMEOUT_MS = 8 * 60 * 1000;
 
 const personas = JSON.parse(fs.readFileSync(path.join(__dirname, 'golden-personas.json'), 'utf8')).personas;
-const byId = id => personas.find(p => p.personaId === id);
+// 教学质量案例库（tq-*）：与人设 schema 同构，合并进 lookup 使 goal→path→learn 全链可直接驱动
+const tqCases = JSON.parse(fs.readFileSync(path.join(__dirname, 'teaching-quality-cases.json'), 'utf8')).cases;
+const byId = id => personas.concat(tqCases).find(p => p.personaId === id);
 
 let cookie = '';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
