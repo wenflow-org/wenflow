@@ -164,6 +164,18 @@ export const ORPHAN_EXEMPT_FIELDS: ReadonlyArray<{ skillId: string; field: strin
     field: 'visual',
     evidence: 'prompts/core/teaching-turn.yaml:179 教学配图（2026-09-23 全链路）：handler 侧 normalizeVisual 直通前端渲染（skills/teaching-turn/index.ts:663，渲染开关与配额在 teaching-visual.service），不进编排数据面路由',
   },
+  // 以下两条为 2026-09-27 图示双通道重构（771b4c1f Mermaid 结构图 / b1e76064 位置线）引入的孤儿，
+  // 2026-09-28 健康中心验收走查补登记——与 visual 同口径：handler 侧归一化直通前端确定性渲染，不进编排数据面路由
+  {
+    skillId: 'teaching-turn',
+    field: 'diagram',
+    evidence: 'prompts/core/teaching-turn.yaml:186 课堂结构图 mermaid 源码（2026-09-27 双通道重构）：handler 侧 normalizeDiagram 直通前端渲染（skills/teaching-turn/index.ts:912，index.ts:758 随消息下发），不进编排数据面路由',
+  },
+  {
+    skillId: 'teaching-turn',
+    field: 'figure',
+    evidence: 'prompts/core/teaching-turn.yaml:198 位置线图结构化 spec（2026-09-27 Scope B）：handler 侧 normalizeFigure 直通前端渲染（skills/teaching-turn/index.ts:812，index.ts:759 随消息下发），不进编排数据面路由',
+  },
 ];
 
 /** skillId → 已豁免字段名集合（孤儿判定过滤用） */

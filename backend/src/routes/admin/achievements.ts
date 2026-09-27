@@ -66,11 +66,24 @@ router.get('/records', async (req: Request, res: Response) => {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
     const skip = (page - 1) * limit;
     const userId = typeof req.query.userId === 'string' && req.query.userId.trim() ? String(req.query.userId).trim() : undefined;
+    // q：姓名/邮箱模糊搜索（对齐前端占位符「按姓名/邮箱」）。原先只支持 userId 精确匹配，
+    // 占位符承诺的搜索永远查不到结果。
+    const q = typeof req.query.q === 'string' && req.query.q.trim() ? String(req.query.q).trim() : undefined;
     const includeTest = String(req.query.includeTest || '') === 'true';
 
     const where: any = {};
-    if (userId) where.userId = userId;
-    if (!includeTest) where.users = REAL_USER_WHERE;
+    if (userId) {
+      // 兼容分支：前端仅在输入形如用户 id 时传 userId，仍走精确匹配
+      where.userId = userId;
+    } else if (q) {
+      // users 为 to-one 关系（achievements.userId → users.id），过滤形态为 users: { OR: [...] }；
+      // contains 条件由 Prisma 参数化执行，无字符串拼接 SQL。
+      where.users = { OR: [{ name: { contains: q } }, { email: { contains: q } }] };
+    }
+    if (!includeTest) {
+      // 与模糊条件共存时用 AND 合并，避免直接覆盖丢失过滤
+      where.users = where.users ? { AND: [where.users, REAL_USER_WHERE] } : REAL_USER_WHERE;
+    }
 
     /* 服务端排序：白名单（earnedAt / xpReward）+ 方向；非法 400。
        并列时以「earnedAt 倒序 + id」为稳定次级键。 */
