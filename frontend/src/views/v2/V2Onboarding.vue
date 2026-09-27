@@ -15,7 +15,8 @@
           <!-- ===== 第 1 步：认识问流（平台做什么） ===== -->
           <div v-if="step === 1" key="s1" class="ob__page">
             <h1 class="ob__title">欢迎，{{ userName }}</h1>
-            <p class="ob__sub">问流把你的真实问题，变成一条能执行的学习路径。<br />不用先囤课，也不用写完美计划。</p>
+            <!-- 「不用先囤课/不用写计划」的保证统一收在第 2 步的关键词条（走查 2026-09-27：跨步重复） -->
+            <p class="ob__sub">问流把你的真实问题，变成一条能执行的学习路径。</p>
 
             <!-- 三步流程是信息性内容（全页唯一讲清产品用法的文案），不对读屏隐藏；
                  仅纯装饰的箭头图标标记 aria-hidden -->
@@ -192,18 +193,20 @@ function prev() {
   if (step.value > 1) step.value--
 }
 
-/* 标记引导完成（完成或跳过时调用）；成功后回写 store 档案缓存，
-   否则路由守卫按缓存的 onboardingCompleted=false 会把用户再拉回引导页 */
+/* 标记引导完成（完成或跳过时调用）。本地档案必须先写、请求后发：
+   goDashboard 的导航不等接口，若等 /users/me/onboarding 回来才写缓存，
+   守卫读到的仍是 onboardingCompleted=false，会把用户弹回引导页——
+   新用户首次点「进入学习台」必现、要点第二次才进得去（走查 2026-09-27 P1）。 */
 async function markDone() {
+  userStore.markOnboardingCompleted()
   try {
     await api.post('/users/me/onboarding')
-    userStore.markOnboardingCompleted()
-  } catch { /* 不阻塞 */ }
+  } catch { /* 失败不阻塞导航；store 的 false 缓存 TTL 会兜底重拉档案 */ }
 }
 
 /* 引导只教「怎么用」，目标规划交给 /goal-conversation 自己完成 */
-function goDashboard() {
-  markDone()
+async function goDashboard() {
+  await markDone()
   router.replace('/dashboard')
 }
 </script>
@@ -588,7 +591,11 @@ function goDashboard() {
 
 /* 第 4 步：次要入口（不抢 goal 的活，只给入口） */
 .ob__goal {
-  display: block;
+  /* 整行可点且 ≥36px 高（走查 2026-09-27：原 19px 高的整条链接触控不达标） */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
   margin-top: 14px;
   font-size: 12.5px;
   font-weight: 700;
