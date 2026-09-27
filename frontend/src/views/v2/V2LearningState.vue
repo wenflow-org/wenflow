@@ -55,14 +55,11 @@
             </div>
             <div v-show="openBands.chart" class="band__body">
 
-            <!-- 图例 + 当前状态（批19 术语自然化：缩写进说明带，图例行只说人话） -->
+            <!-- 图例（批19 术语自然化；2026-09-27 删状态 chip：与体检卡主指标重复） -->
             <div class="ff-legend">
               <span><i class="ff-dot ff-dot--fitness"></i>掌握趋势</span>
               <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度</span>
               <span><i class="ff-dot ff-dot--lsb"></i>整体状态（掌握 − 疲劳）</span>
-              <span v-if="latestDay && hasAnyLoad" class="ff-form-chip" :class="`ff-form-chip--${latestDay.zone?.cls || 'risk'}`">
-                状态 {{ latestDay.lsb ?? '—' }} · {{ latestDay.zone?.label || '暂无' }}
-              </span>
             </div>
 
             <div v-if="trendLoading" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
@@ -101,11 +98,7 @@
                 <span class="ff-info__fatigue">疲劳 {{ displayDay.lf ?? '—' }}</span>
                 <span>状态 {{ displayDay.lsb ?? '—' }}（{{ displayDay.zone?.label || '暂无' }}）</span>
               </div>
-              <div class="ff-zones">
-                <span><i class="ff-dot ff-dot--fresh"></i>精力充沛（状态 ≥ 40）</span>
-                <span><i class="ff-dot ff-dot--optimal"></i>最优训练区（状态 20 – 39）</span>
-                <span><i class="ff-dot ff-dot--risk"></i>需要休息 / 高风险（状态 &lt; 20）</span>
-              </div>
+              <!-- ff-zones 三档阈值行已删（2026-09-27）：口径折进侧栏「指标说明」，图上一行字不占 -->
             </template>
             </div><!-- /band__body -->
           </section>
@@ -152,25 +145,26 @@
               <div class="guide__foot">
                 <span v-if="skillCopy.nextStep"><b>下一步</b>{{ skillCopy.nextStep }}</span>
                 <span v-if="skillCopy.paceHint"><b>节奏</b>{{ skillCopy.paceHint }}</span>
-                <AiContentNote />
               </div>
             </template>
 
-            <!-- 状态评审诊断（diagnosis 层，Slice 2c） -->
+            <!-- 状态评审诊断（diagnosis 层，Slice 2c）：评审向的行话默认收起（2026-09-27 降噪） -->
             <section v-if="reviewNarrative || reviewInsights.length" class="review">
-              <header class="review__head">
+              <button type="button" class="review__toggle" :aria-expanded="reviewOpen" @click="reviewOpen = !reviewOpen">
                 <h3 class="review__title">状态评审</h3>
                 <span class="review__src">{{ reviewSource === 'model' ? 'AI 诊断' : '规则' }}</span>
-              </header>
-              <p v-if="reviewReliabilityText" class="review__rel">{{ reviewReliabilityText }}</p>
-              <p v-if="reviewNarrative" class="review__narrative">{{ reviewNarrative }}</p>
-              <ul v-if="reviewInsights.length" class="review__list">
-                <li v-for="(it, i) in reviewInsights" :key="i" class="review__item">
-                  <strong>{{ it.claim }}</strong>
-                  <span v-if="it.action" class="review__action">{{ it.action }}</span>
-                </li>
-              </ul>
-              <AiContentNote />
+                <span class="band__chev" :class="{ 'band__chev--open': reviewOpen }" aria-hidden="true">▾</span>
+              </button>
+              <div v-show="reviewOpen" class="review__body">
+                <p v-if="reviewReliabilityText" class="review__rel">{{ reviewReliabilityText }}</p>
+                <p v-if="reviewNarrative" class="review__narrative">{{ reviewNarrative }}</p>
+                <ul v-if="reviewInsights.length" class="review__list">
+                  <li v-for="(it, i) in reviewInsights" :key="i" class="review__item">
+                    <strong>{{ it.claim }}</strong>
+                    <span v-if="it.action" class="review__action">{{ it.action }}</span>
+                  </li>
+                </ul>
+              </div>
             </section>
 
             <!-- 静态规则兜底块 -->
@@ -271,7 +265,7 @@
             <ul class="legend">
               <li><b class="dot dot--blue"></b>掌握趋势：长期学习积累的掌握水平，变化平缓（曲线里的 KTL）</li>
               <li><b class="dot dot--purple"></b>疲劳度：近期学习压力的累积，变化较快（曲线里的 LF）</li>
-              <li><b class="dot dot--green"></b>整体状态＝掌握 − 疲劳：疲劳高于掌握时状态下降，提醒休息（曲线里的 LSB）</li>
+              <li><b class="dot dot--green"></b>整体状态＝掌握 − 疲劳（曲线里的 LSB）：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
               <li><b class="dot dot--amber"></b>保持规律学习让掌握趋势稳步上升；疲劳偏高时安排休息，避免长期处于低状态区</li>
             </ul>
             </div><!-- /band__body -->
@@ -312,15 +306,14 @@ const range = ref<42 | 90>(42);
 /* ---------- 折叠带（批11 首屏重构）：桌面默认全开展示，移动端默认只留
    「结论（指标卡）+ 学习曲线 + AI 建议」首屏，长尾内容（决策/偏好/说明）收起。
    折叠状态在挂载时按视口定一次，之后手动切换不随视口变化。 ---------- */
-const isNarrowAtMount = typeof window !== 'undefined'
-  && window.matchMedia('(max-width: 1100px)').matches;
 const openBands = ref({
   chart: true,                 // 趋势图是本页核心，任何宽度都默认展开
   suggest: true,               // AI 建议是本页最可行动的内容，全宽度默认展开（批19 从移动端收起改为常开）
-  decisions: !isNarrowAtMount,
-  prefs: !isNarrowAtMount,
-  legend: !isNarrowAtMount,
+  decisions: false,            // 决策日志默认收起（2026-09-27 降噪：每条 3 行 ×5 条，头部有计数）
+  prefs: false,                // 画像偏好默认收起（2026-09-27 降噪）
+  legend: false,               // 指标说明默认收起（2026-09-27 降噪：阈值口径折到这里，需要时打开）
 });
+const reviewOpen = ref(false);
 function toggleBand(key: keyof typeof openBands.value) {
   openBands.value[key] = !openBands.value[key];
 }
@@ -847,16 +840,19 @@ function loadGuidance() {
 }
 
 /* 体检卡（批19）：主指标大数值 + 三项行内状态条，替代 4 张等权 KPI 卡 */
-.vitals { padding: 16px 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-.vitals__loading { flex: 1; }
-.vitals__main { display: grid; gap: 4px; min-width: 128px; }
-.vitals__main small { font-size: 12px; color: var(--faint); font-weight: 700; }
+/* 体检卡（2026-09-27 重排）：四段等位网格（主指标稍宽）+ 发丝线分隔，
+   替代原来「左一大块 + 右挤三根」的 flex 布局——1300px 宽下中间是死空白。
+   subs 用 display:contents 直接成为卡片网格的格子。 */
+.vitals { padding: 16px 20px; display: grid; grid-template-columns: 1.25fr 1fr 1fr 1fr; align-items: center; }
+.vitals__loading { grid-column: 1 / -1; }
+.vitals__main { display: grid; grid-template-columns: auto auto; gap: 4px 10px; justify-items: start; align-items: center; min-width: 0; padding-right: 18px; }
+.vitals__main small { grid-column: 1 / -1; font-size: 12px; color: var(--faint); font-weight: 700; }
 /* 34 → 24（2026-09-27 桌面刻度统一：KPI 大数字档 24，原值在令牌体系之外） */
 .vitals__value { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .vitals__value i { font-size: 13px; font-style: normal; font-weight: 600; color: var(--faint); }
-.vitals__subs { display: flex; gap: 22px; flex-wrap: wrap; flex: 1; justify-content: flex-end; }
-.vitals__sub { display: grid; gap: 3px; justify-items: start; }
-.vitals__sub small { font-size: 12px; color: var(--faint); font-weight: 700; }
+.vitals__subs { display: contents; }
+.vitals__sub { display: grid; grid-template-columns: auto auto; gap: 4px 8px; justify-items: start; align-items: center; min-width: 0; padding: 2px 0 2px 20px; border-left: 1px solid var(--line); }
+.vitals__sub small { grid-column: 1 / -1; font-size: 12px; color: var(--faint); font-weight: 700; }
 .vitals__sub b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .vitals__sub b i { font-size: 12px; font-style: normal; font-weight: 600; color: var(--faint); }
 .metric__note { width: fit-content; font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: var(--mk-radius-pill); }
@@ -867,8 +863,10 @@ function loadGuidance() {
 .metric__note--red { color: var(--red-ink); background: rgba(239, 117, 120, 0.12); }
 
 @media (max-width: 720px) {
-  .vitals { align-items: flex-start; flex-direction: column; gap: 14px; }
-  .vitals__subs { justify-content: flex-start; gap: 16px; }
+  /* 窄屏：主指标整行 + 三个子指标 2 列环绕（第三格落下一行时无边框起头） */
+  .vitals { grid-template-columns: 1fr 1fr; row-gap: 14px; }
+  .vitals__main { grid-column: 1 / -1; padding: 0 0 12px; border-bottom: 1px solid var(--line); }
+  .vitals__sub:nth-child(odd) { border-left: 0; padding-left: 0; }
 }
 
 .state__grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
@@ -988,8 +986,15 @@ function loadGuidance() {
 
 /* ---------- AI 决策记录 ---------- */
 .decisions { padding: 20px 22px; display: grid; gap: 12px; }
-.review { margin-top: 14px; padding: 16px 18px; border: 1px solid var(--line, #e5e7eb); border-radius: var(--mk-radius-xl); }
-.review__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.review { margin-top: 14px; padding: 14px 18px; border: 1px solid var(--line, #e5e7eb); border-radius: var(--mk-radius-xl); }
+/* 评审向内容默认收起（2026-09-27 降噪）：卡头即开合，与 band 同一交互语言 */
+.review__toggle {
+  width: 100%; min-height: 36px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0; border: 0; background: none; cursor: pointer; text-align: left;
+}
+.review__toggle .band__chev { margin-left: auto; }
+.review__body { margin-top: 10px; }
 .review__title { margin: 0; font-size: 15px; }
 .review__src { font-size: 12px; color: var(--faint, #6b7280); }
 .review__rel { margin: 4px 0 0; font-size: 12px; color: var(--faint, #6b7280); }
@@ -1039,17 +1044,6 @@ function loadGuidance() {
 .ff-dot--fitness { background: var(--blue); }
 .ff-dot--fatigue { background: var(--accent); }
 .ff-dot--lsb { background: #31b16f; }
-.ff-dot--fresh { background: #31b16f; }
-.ff-dot--optimal { background: var(--blue); }
-.ff-dot--risk { background: var(--red); }
-.ff-form-chip {
-  margin-left: auto;
-  font-size: 12px; font-weight: 800;
-  padding: 4px 11px; border-radius: var(--mk-radius-pill);
-}
-.ff-form-chip--fresh { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
-.ff-form-chip--optimal { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
-.ff-form-chip--risk { color: var(--red-ink); background: rgba(239, 117, 120, 0.12); }
 
 .ff-chart { width: 100%; }
 .ff-chart svg { display: block; width: 100%; height: auto; }
@@ -1073,10 +1067,6 @@ function loadGuidance() {
 .ff-info b { color: var(--ink); }
 .ff-info__fitness { color: var(--blue-deep); font-weight: 700; }
 .ff-info__fatigue { color: var(--accent); font-weight: 700; }
-.ff-zones {
-  display: flex; flex-wrap: wrap; gap: 8px 16px;
-  font-size: 12px; color: var(--faint);
-}
 </style>
 
 <style scoped>
@@ -1086,7 +1076,6 @@ function loadGuidance() {
    主数值桌面 34px、移动 24px 仍受密度口径约束。放在文件末尾：同权重下后出现者胜。 */
 @media (max-width: 1100px) {
   .vitals__value { font-size: 24px; }
-  .vitals__subs { gap: 16px; }
   .vitals { padding: 14px 16px; }
   .chart,
   .suggest,

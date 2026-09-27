@@ -90,13 +90,14 @@ describe('V2LearningState 中文指标标签（P3-3）', () => {
     expect(w.find('.ff-legend').text()).toContain('状态');
   });
 
-  it('区间说明全中文（精力充沛/最优训练区/需要休息或高风险）', async () => {
+  it('三档阈值口径收进指标说明（精力充沛/最优训练区/需要休息）——ff-zones 行已删（2026-09-27 降噪）', async () => {
     const w = await mountState([{ startTime: new Date().toISOString(), durationMinutes: 30 }]);
-    const zones = w.find('.ff-zones');
-    expect(zones.exists()).toBe(true);
-    expect(zones.text()).toContain('精力充沛');
-    expect(zones.text()).toContain('最优训练区');
-    expect(zones.text()).toContain('需要休息');
+    const legend = w.find('.legend');
+    expect(legend.exists()).toBe(true);
+    const text = legend.text();
+    expect(text).toContain('精力充沛');
+    expect(text).toContain('最优训练区');
+    expect(text).toContain('需要休息');
   });
 
   it('页面可见文本无英文内部指标词直出', async () => {
