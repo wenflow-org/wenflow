@@ -156,7 +156,7 @@
               <i class="trend__bar trend__bar--ok" :style="{ height: trendH(d.completed) }"></i>
             </div>
             <span class="trend__day" :class="{ 'trend__day--today': isToday(d.date) }">
-              {{ trendLabel(d.date) }}{{ isToday(d.date) ? ' 今日' : '' }}
+              {{ isToday(d.date) ? '今日' : trendLabel(d.date) }}
             </span>
           </div>
         </div>
@@ -188,12 +188,12 @@
             <button type="button" class="usage__stat usage__stat--big" title="近 7 天真实用户 Token 消耗 · 查看执行日志" @click="jump('execution-logs')">
               <span class="usage__stat-label">Token 消耗</span>
               <strong>{{ fmtTokens(data.usage.totalTokens7d) }}</strong>
-              <span class="usage__stat-sub">仅真实用户</span>
+              <span class="usage__stat-sub">仅真实用户<template v-if="usageFullDiffers"> · 全量 {{ fmtTokens(data.usage.totalTokens7dAll ?? 0) }}</template></span>
             </button>
             <i class="usage__hero-sep" aria-hidden="true"></i>
             <button type="button" class="usage__stat" title="近 7 天调用次数 · 查看执行日志" @click="jump('execution-logs')">
               <span class="usage__stat-label">调用</span>
-              <strong>{{ data.usage.calls7d }}</strong>
+              <strong>{{ data.usage.calls7d.toLocaleString() }}</strong>
               <span class="usage__stat-sub">次</span>
             </button>
             <button
@@ -204,10 +204,9 @@
               @click="jump('execution-logs')"
             >
               <span class="usage__stat-label">失败</span>
-              <strong>{{ data.usage.failed7d }}</strong>
-              <span class="usage__stat-sub">次</span>
+              <strong>{{ data.usage.failed7d.toLocaleString() }}</strong>
+              <span class="usage__stat-sub">次<template v-if="usageFailRate"> · 失败率 {{ usageFailRate }}</template></span>
             </button>
-            <p v-if="usageFullDiffers" class="usage__note">全量口径（含模拟账号）{{ fmtTokens(data.usage.totalTokens7dAll ?? 0) }} · {{ data.usage.calls7dAll ?? 0 }} 次</p>
           </div>
           <div class="usage__cols">
             <div v-if="data.usage.models7d.length" class="usage__section">
@@ -224,13 +223,26 @@
             </div>
             <div v-if="data.usage.failures7d.length" class="usage__section">
               <span class="usage__label">失败原因分布</span>
-              <ul class="usage__fails">
-                <li v-for="f in data.usage.failures7d" :key="f.category" class="usage__fail" :title="`查看 ${f.category} 类别失败日志（近 7 天）`" @click="jumpToFailures(f.category)">
-                  <span class="usage__dot"></span>
-                  <span>{{ f.category }}</span>
-                  <strong>{{ f.count }}</strong>
-                </li>
-              </ul>
+              <!-- 与左侧「模型用量」同款行+条形：同一张卡里只保留一种图表语言 -->
+              <div class="usage__rows">
+                <div
+                  v-for="f in data.usage.failures7d"
+                  :key="f.category"
+                  class="usage__row usage__row--clickable"
+                  :title="`查看 ${f.category} 类别失败日志（近 7 天）`"
+                  role="button"
+                  tabindex="0"
+                  @click="jumpToFailures(f.category)"
+                  @keydown.enter.prevent="jumpToFailures(f.category)"
+                  @keydown.space.prevent="jumpToFailures(f.category)"
+                >
+                  <span class="usage__row-name"><i class="usage__dot"></i>{{ f.category }}</span>
+                  <div class="usage__bar-track">
+                    <i class="usage__bar usage__bar--amber" :style="{ width: failPct(f.count) }"></i>
+                  </div>
+                  <span class="usage__row-num">{{ f.count }}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -596,6 +608,14 @@ const usageFullDiffers = computed(() => {
 const fmtTokens = (n: number) => (n >= 1000000 ? `${(n / 1000000).toFixed(2)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || '—'));
 const modelMax = computed(() => Math.max(1, ...(data.value?.usage.models7d.map((m) => m.tokens) || [])));
 const modelPct = (tokens: number) => `${tokens > 0 ? Math.round((tokens / modelMax.value) * 100) : 0}%`;
+/* 失败率（失败/调用）：裸失败次数没有分母读不出好坏（走查 2026-09-27 两卡重设计） */
+const usageFailRate = computed(() => {
+  const u = data.value?.usage;
+  if (!u || !u.calls7d) return null;
+  return `${((u.failed7d / u.calls7d) * 100).toFixed(1)}%`;
+});
+const failMax = computed(() => Math.max(1, ...(data.value?.usage.failures7d.map((f) => f.count) || [])));
+const failPct = (count: number) => `${count > 0 ? Math.max(Math.round((count / failMax.value) * 100), 6) : 0}%`;
 const trendMax = computed(() => Math.max(1, ...(data.value?.trend.map((d) => d.total) || [])));
 const trendH = (n: number) => `${n > 0 ? Math.max((n / trendMax.value) * 100, 10) : 4}%`;
 const trendLabel = (date: string) => {
@@ -1102,19 +1122,6 @@ watch(liveLoading, (loading) => {
 .usage__stat--bad strong { color: var(--mk-red); }
 .usage__stat-sub { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .usage__hero-sep { width: 1px; align-self: center; height: 34px; background: var(--mk-line); flex-shrink: 0; }
-.usage__note {
-  position: absolute;
-  right: 14px;
-  bottom: 8px;
-  margin: 0;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  max-width: 46%;
-  text-align: right;
-  line-height: 1.5;
-}
 /* 模型用量 / 失败原因 横向两栏（宽卡内避免纵向长串） */
 .usage__cols {
   display: grid;
@@ -1125,16 +1132,15 @@ watch(liveLoading, (loading) => {
 .usage__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; }
 .usage__rows { display: grid; gap: 5px; }
 .usage__row { display: grid; grid-template-columns: minmax(0, 1fr) 88px 52px; gap: 8px; align-items: center; font-size: var(--mk-fs-micro); }
+.usage__row--clickable { cursor: pointer; border-radius: 6px; transition: background 0.12s ease; }
+.usage__row--clickable:hover { background: var(--mk-btn-hover-bg); }
 .usage__row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--mk-ink); }
 .usage__bar-track { height: 6px; border-radius: var(--mk-radius-pill); background: #f0f3f9; overflow: hidden; }
 .usage__bar { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: linear-gradient(90deg, color-mix(in srgb, var(--mk-blue) 72%, white), var(--mk-blue)); }
+/* 失败原因条形：琥珀与「异常」语义一致，区别于模型用量的蓝 */
+.usage__bar--amber { background: linear-gradient(90deg, color-mix(in srgb, var(--mk-amber) 72%, white), var(--mk-amber)); }
 .usage__row-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--mk-muted); }
-.usage__fails { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; }
-.usage__fails li { display: flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.usage__fail { cursor: pointer; border-radius: 6px; transition: background 0.12s ease; }
-.usage__fail:hover { background: var(--mk-btn-hover-bg); }
-.usage__fails strong { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--mk-ink); }
-.usage__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mk-amber); flex-shrink: 0; }
+.usage__dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--mk-amber); margin-right: 6px; vertical-align: 1px; }
 
 /* 近 7 天趋势（柱状区弹性撑满卡片，避免等高网格内留白） */
 .brief-card--trend { display: flex; flex-direction: column; }
@@ -1155,9 +1161,10 @@ watch(liveLoading, (loading) => {
 .trend__cum { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 .trend__bar { width: 9px; border-radius: var(--mk-radius-xs) var(--mk-radius-xs) var(--mk-radius-xs) var(--mk-radius-xs); background: linear-gradient(180deg, color-mix(in srgb, var(--mk-blue) 72%, white), var(--mk-blue)); opacity: 0.85; }
 .trend__bar--ok { background: linear-gradient(180deg, #34d399, var(--mk-green)); opacity: 1; }
-.trend__num { font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; color: var(--mk-muted); font-weight: 700; }
+.trend__num { height: 18px; display: flex; align-items: flex-end; justify-content: center; font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; color: var(--mk-muted); font-weight: 700; }
 .trend__num--zero { color: var(--mk-faint); font-weight: 600; }
-.trend__day { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 日期行锁高 + 不换行：折行会把该列柱区压短，柱子基线与其他列错位（走查 2026-09-27） */
+.trend__day { height: 18px; display: flex; align-items: center; justify-content: center; white-space: nowrap; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 漏斗卡已撤（2026-09-27）：1:N 展开配 ×倍数是假漏斗，真指标在目标对话卡累计行 */
 
@@ -1182,13 +1189,16 @@ watch(liveLoading, (loading) => {
   gap: 12px;
 }
 .feed--full {
+  /* 两列行式（走查 2026-09-27 重设计）：原来是 auto-fill 碎列，条目长短不一时参差；
+     固定两列 + 单行条目（点 | 文本省略 | 时间 | 排查）读起来是整齐的表格感 */
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 32px;
 }
 .feed--full::before { display: none; }
-.feed--full li { display: flex; gap: 9px; align-items: flex-start; }
-.feed--full li strong { font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.feed--full li { display: flex; gap: 9px; align-items: center; }
+.feed--full li .feed__body { display: flex; align-items: baseline; gap: 8px; }
+.feed--full li strong { font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .feed::before {
   content: '';
   position: absolute;
@@ -1287,7 +1297,6 @@ watch(liveLoading, (loading) => {
 
   .usage__label { font-size: var(--mk-fs-micro); }
   .usage__row { font-size: var(--mk-fs-body); }
-  .usage__fails li { font-size: var(--mk-fs-body); }
   .trend__legend { font-size: var(--mk-fs-micro); }
   .trend__num { font-size: var(--mk-fs-micro); }
   .trend__day { font-size: var(--mk-fs-micro); }
@@ -1315,7 +1324,6 @@ watch(liveLoading, (loading) => {
 
   .usage__label { font-size: var(--mk-fs-micro); }
   .usage__row { font-size: var(--mk-fs-micro); }
-  .usage__fails li { font-size: var(--mk-fs-micro); }
   .trend__legend { font-size: var(--mk-fs-micro); }
   .trend__num { font-size: var(--mk-fs-micro); }
   .trend__day { font-size: var(--mk-fs-micro); }
@@ -1345,7 +1353,6 @@ watch(liveLoading, (loading) => {
 
   .usage__label { font-size: var(--mk-fs-micro); }
   .usage__row { font-size: var(--mk-fs-micro); }
-  .usage__fails li { font-size: var(--mk-fs-micro); }
   .trend__legend { font-size: var(--mk-fs-micro); }
   .trend__num { font-size: var(--mk-fs-micro); }
   .trend__day { font-size: var(--mk-fs-micro); }
@@ -1364,7 +1371,7 @@ html[data-theme='dark'] {
   .brief-actions__btn { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.35); }
   .brief-actions__btn:hover { background: rgba(91, 141, 239, 0.26); }
   .ov-skill__track, .usage__bar-track { background: #2a2b2d; }
-  .ov-skill:hover, .usage__fail:hover, .feed__item:hover { background: #252627; }
+  .ov-skill:hover, .usage__row--clickable:hover, .feed__item:hover { background: #252627; }
   .feed__item--bad:hover { background: #2a1414; }
   .feed__item--warn:hover { background: #2a2410; }
   .trend__col--today { background: rgba(91, 141, 239, 0.12); box-shadow: inset 0 0 0 1px rgba(91, 141, 239, 0.3); }
