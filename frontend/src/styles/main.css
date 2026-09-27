@@ -50,7 +50,7 @@
   --mk-ink: #1a2a44;
   --mk-muted: #5b6577;
   --mk-faint: #5f6f8c;
-  --mk-faint-soft: #71809a;      /* 弱化文字更浅档（详情页元信息/表格说明等零星硬编码收敛） */
+  --mk-faint-soft: #5b6572;      /* 弱化文字更浅档（详情页元信息/表格说明等零星硬编码收敛） */
   --mk-line: #e6ebf4;
   --mk-bg: #f7f8fa;
   --mk-surface: #ffffff;
@@ -60,7 +60,7 @@
   --mk-green-bg: #ecfdf5;
   --mk-amber: #b45309;
   --mk-amber-bg: #fffbeb;
-  --mk-red: #dc2626;
+  --mk-red: #c81e1e;
   --mk-red-bg: #fef2f2;
   --mk-blue-bg: #eff6ff;         /* 胶囊底（浅）：徽章/幽灵按钮/空态动作 */
   --mk-blue-bg-strong: #dbeafe;  /* 胶囊底（深）：上述元素的悬停档 */
@@ -85,7 +85,7 @@
      因为这些是各变体专有的 tint（4 种绿、3 种 slate 面等近邻值无法无损合并）。 */
   --mk-badge-info-bg: #eff6ff;
   --mk-badge-virtual-bg: #f1f5f9;
-  --mk-badge-virtual-fg: #64748b;
+  --mk-badge-virtual-fg: #5b6572;
   --mk-badge-virtual-line: #cbd5e1;
   --mk-badge-deleted-bg: #e5e7eb;
   --mk-badge-deleted-fg: #4b5563;
@@ -177,7 +177,7 @@
   --mk-sans: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Inter, sans-serif;
   --mk-accent-deep: #1f57cc;
   --mk-purple: #8d6bff;
-  --mk-teal: #0d9488;
+  --mk-teal: #0f766e;
   --mk-red-strong: #b91c1c;
   --mk-code-bg: #0d1420;
   --mk-code-fg: #8ba3c7;

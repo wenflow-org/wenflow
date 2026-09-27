@@ -17,7 +17,7 @@
      ========================================== */
   
   /* 主色系 - 友好蓝 */
-  --color-primary: #3478f6;
+  --color-primary: #2f6ae0;
   --color-primary-light: #5a94f8;
   --color-primary-lighter: #8db3fa;
   --color-primary-dark: #1f57cc;
@@ -554,20 +554,9 @@ pre code {
 /* 背景色 */
 .bg-body { background: var(--bg-body); }
 .bg-surface { background: var(--bg-surface); }
-.bg-muted { background: var(--bg-muted); }
-
-/* 圆角 */
-.rounded-sm { border-radius: var(--radius-sm); }
-.rounded-md { border-radius: var(--radius-md); }
-.rounded-lg { border-radius: var(--radius-lg); }
-.rounded-xl { border-radius: var(--radius-xl); }
-.rounded-full { border-radius: var(--radius-full); }
 
 /* 阴影 */
 .shadow-sm { box-shadow: var(--shadow-sm); }
-.shadow-md { box-shadow: var(--shadow-md); }
-.shadow-lg { box-shadow: var(--shadow-lg); }
-.shadow-xl { box-shadow: var(--shadow-xl); }
 
 /* 过渡 */
 .transition { transition: all var(--transition-normal); }
@@ -589,248 +578,6 @@ pre code {
   --admin-drawer-lg: min(68%, 980px);
 }
 
-/* Admin 按钮组件 - UI Lab 渐变风格 */
-.admin-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-weight: 700;
-  border-radius: var(--lab-radius-button);
-  transition: all 180ms ease;
-  min-height: 40px;
-  padding: 0 16px;
-  border: none;
-  cursor: pointer;
-}
-
-.admin-btn--primary {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-  color: white;
-  box-shadow: 0 14px 28px rgba(52, 120, 246, 0.24);
-}
-
-.admin-btn--primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 18px 36px rgba(52, 120, 246, 0.3);
-}
-
-.admin-btn--ghost {
-  border: 1px solid var(--lab-color-border);
-  background: color-mix(in srgb, var(--lab-color-surface-alt) 80%, white);
-  color: var(--lab-color-text);
-}
-
-.admin-btn--ghost:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.admin-btn--danger {
-  background: linear-gradient(135deg, var(--color-danger), var(--color-danger-dark));
-  color: white;
-}
-
-.admin-btn--danger:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 28px rgba(239, 117, 120, 0.3);
-}
-
-.admin-btn--success {
-  background: linear-gradient(135deg, var(--color-success), #248a53);
-  color: white;
-}
-
-.admin-btn--success:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 28px rgba(49, 177, 111, 0.3);
-}
-
-.admin-btn--small {
-  min-height: 36px;
-  padding: 0 14px;
-  border-radius: var(--lab-radius-button-small);
-  font-size: 14px;
-}
-
-/* Admin 卡片组件 - 34px 圆角 */
-.admin-card {
-  border-radius: var(--lab-radius-card);
-  border: 1px solid var(--lab-color-border);
-  background: color-mix(in srgb, var(--lab-color-surface) 90%, white);
-  box-shadow: var(--lab-shadow-lg);
-  padding: 1.25rem;
-}
-
-/* Admin 输入框组件 */
-.admin-input {
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid var(--lab-color-border);
-  border-radius: var(--lab-radius-button);
-  background: var(--lab-color-surface);
-  font-size: 15px;
-  transition: all 180ms ease;
-}
-
-.admin-input:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.1);
-}
-
-/* ==========================================
-   Admin 页面公共组件（风格 A · 扁平干净）
-   ========================================== */
-
-/* Hero 区域 */
-.admin-page-hero {
-  position: relative;
-  z-index: 1;
-  margin-bottom: 1.5rem;
-  padding: 24px 28px;
-  border-radius: 20px;
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  background: var(--bg-surface, #fff);
-}
-
-/* Pill 标签 */
-.admin-pill {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  min-height: 26px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-primary) 10%, white);
-  color: var(--color-primary-dark, #1f57cc);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-/* 页面标题 */
-.admin-page-title {
-  margin: 8px 0 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.03em;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.admin-page-title__icon {
-  font-size: 1.25rem;
-  color: var(--color-primary);
-}
-
-/* 页面副标题 */
-.admin-page-subtitle {
-  margin: 4px 0 0;
-  color: var(--text-secondary);
-  font-size: 0.9375rem;
-}
-
-/* Summary Grid */
-.admin-summary-grid {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.admin-summary-card {
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-default);
-  background: var(--glass-bg-light);
-  padding: 1rem 1.25rem;
-}
-
-.admin-summary-card .label {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-weight: 600;
-}
-
-.admin-summary-card .value {
-  font-size: 1.75rem;
-  font-weight: 800;
-  margin-top: 0.25rem;
-}
-
-/* Toolbar */
-.admin-list-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-  position: relative;
-  z-index: 1;
-}
-
-.admin-list-toolbar__group {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.admin-list-toolbar .search {
-  width: 220px;
-}
-
-.admin-list-toolbar .select {
-  width: 120px;
-}
-
-/* List Card（统一表格容器） */
-.admin-list-card {
-  width: 100%;
-  position: relative;
-  z-index: 1;
-  background: color-mix(in srgb, #ffffff 90%, white);
-  border: 1px solid #d2dbf3;
-  border-radius: 28px;
-  padding: 1rem;
-  box-shadow: 0 16px 40px rgba(58, 101, 197, 0.12);
-}
-/* ==========================================
-   全局按钮系统（用户端）
-   .btn 是统一容器，配合修饰符使用
-   - .btn--primary 主操作（实色蓝渐变）
-   - .btn--ghost   次操作（半透明白底）
-   - .btn--text    文本按钮（无边框）
-   - .btn--danger  危险操作
-   - .btn--lg / .btn--sm 尺寸
-   - .btn--full    全宽
-   ========================================== */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 18px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  background: transparent;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.2;
-  white-space: nowrap;
-  text-decoration: none;
-  color: inherit;
-  cursor: pointer;
-  transition: transform 160ms ease, box-shadow 200ms ease, background 200ms ease, border-color 200ms ease;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  box-sizing: border-box;
-}
-
 .btn:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
@@ -845,7 +592,6 @@ pre code {
 
 .btn--lg { min-height: 50px; padding: 0 24px; font-size: 15px; }
 .btn--sm { min-height: 32px; padding: 0 12px; font-size: 13px; gap: 4px; }
-.btn--full { width: 100%; }
 
 .btn--primary {
   color: #fff;
@@ -904,33 +650,4 @@ pre code {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.2);
   color: var(--color-primary-light);
-}
-
-
-
-/* ==========================================
-   响应式：dashboard 和 header 在 1024 以下 nav 横向滚动
-
-   （Dashboard / LearningPaths / LearningState / Achievements / LearningPathDetail / GoalConversation 页面的 .header-nav）
-
-   ========================================== */
-@media (max-width: 1024px) {
-  .header-nav {
-    overflow-x: auto;
-    scrollbar-width: thin;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x proximity;
-    margin: 0 -8px;
-    padding: 0 8px;
-    flex-wrap: nowrap !important;
-    max-width: 100%;
-  }
-  .header-nav::-webkit-scrollbar { height: 0; }
-  .header-nav > * {
-    flex-shrink: 0;
-    scroll-snap-align: start;
-  }
-  .user-chip {
-    min-width: auto;
-  }
 }
