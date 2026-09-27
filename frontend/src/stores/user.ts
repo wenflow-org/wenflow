@@ -34,6 +34,8 @@ export const useUserStore = defineStore('user', () => {
     dropLegacyGoalConversationStorage();
     hasSession.value = true;
     user.value = profile as UserProfile;
+    // 会话已确立，撤销 restoreFromCookie 的未登录负缓存（若还挂着会误拦 60s）
+    restoreFailedAt = 0;
     localStorage.setItem(USER_SESSION_KEY, '1');
     localStorage.setItem('user', JSON.stringify(profile));
   }
@@ -151,8 +153,14 @@ export const useUserStore = defineStore('user', () => {
      守卫在首次导航前的自举恢复——探一次档案,成功则恢复会话标记与用户档案。
      单例在途;失败按未登录走原分支(刷新页面可重试)。 */
   let restoreInFlight: Promise<boolean> | null = null;
+  /* 未登录负缓存（仅内存）：游客每次导航守卫都会调 restoreFromCookie，
+     每次都打一条注定 401 的 /users/me（巡检实测失败请求大头）。失败后 60s 内
+     直接按未登录放行，不再重复请求；登录成功经 markLoggedIn 撤销。 */
+  const RESTORE_NEGATIVE_TTL_MS = 60 * 1000;
+  let restoreFailedAt = 0;
   async function restoreFromCookie(): Promise<boolean> {
     if (hasSession.value) return true;
+    if (restoreFailedAt && Date.now() - restoreFailedAt < RESTORE_NEGATIVE_TTL_MS) return false;
     if (!restoreInFlight) {
       restoreInFlight = (async () => {
         try {
@@ -161,6 +169,7 @@ export const useUserStore = defineStore('user', () => {
           noteProfileFetched();
           return true;
         } catch {
+          restoreFailedAt = Date.now();
           return false;
         } finally {
           restoreInFlight = null;
@@ -188,7 +197,8 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  async function logout() {
+  /** 登出：本地状态先行清理，后端 Cookie 清除结果以返回值给出（调用方按结果提示） */
+  async function logout(): Promise<boolean> {
     // 本地状态先行清理（登出必须清空全部用户域数据，防止下个用户恢复上人对话/投影）
     user.value = null;
     hasSession.value = false;
@@ -198,8 +208,10 @@ export const useUserStore = defineStore('user', () => {
     // 通知后端清除 HttpOnly Cookie；失败时提示（此时 Cookie 仍有效，避免"假登出"）
     try {
       await api.post('/auth/logout');
+      return true;
     } catch {
       toast.error('登出失败，请检查网络后重试');
+      return false;
     }
   }
 
