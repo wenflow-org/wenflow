@@ -836,6 +836,21 @@ async function doSend(e?: unknown) {
   }
 }
 
+// 相位对齐（2026-09-27 绕圈修复的前端半边）：文本确认走普通 reply 通道、不经 doConfirm，
+// 恢复/重试/URL 直进也可能「打开时已是 completed」——phase 停在 preview 会出现
+// 「后端已完成、页面静默」（completed 信封按设计不落 AI 气泡，收尾语由 done 面板承载）。
+// 统一在会话终态出现时对齐到 done 面板。
+watch(
+  () => [live.stage, live.isCompleted, live.learningPath?.id] as const,
+  () => {
+    if (!live.started && !live.conversationId) return;
+    if (live.isCompleted || live.stage === 'completed' || live.stage === 'ready' || live.learningPath) {
+      phase.value = 'done';
+    }
+  },
+  { immediate: true }
+);
+
 async function startWith(seed: string) {
   if (live.sending) return;
   try {
