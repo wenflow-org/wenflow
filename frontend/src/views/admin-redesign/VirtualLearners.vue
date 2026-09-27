@@ -308,8 +308,9 @@ import VirtualLearnerBatchBar from './VirtualLearnerBatchBar.vue'
 import VirtualLearnerPromptTest from './VirtualLearnerPromptTest.vue'
 import type { VirtualLearnerRow as Sample, BatchTask } from './virtualLearnersTypes'
 
-/* 头像色板：按名称哈希取色，同一人恒定同色 */
-const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#64748b']
+/* 头像色板：按名称哈希取色，同一人恒定同色（此处仅取 length 做哈希模，
+   色值真身在 .vl-avatar--N 样式，两处须同步；走查 2026-09-27 加深至白字对比度 ≥4.5:1） */
+const AVATAR_COLORS = ['#2563eb', '#7c3aed', '#047857', '#b45309', '#dc2626', '#0e7490', '#db2777', '#64748b']
 function avatarClass(s: Sample): string {
   let h = 0
   for (let i = 0; i < s.name.length; i++) h = (h * 31 + s.name.charCodeAt(i)) >>> 0
@@ -665,7 +666,11 @@ function openRunningSession(s: Sample) {
 .vl-num--bad { color: var(--mk-red, #dc2626); font-weight: 800; }
 .vl-faillink {
   border: 0;
-  padding: 0;
+  /* 走查 2026-09-27：数字裸按钮可点区仅约 9×25px，宽度远低于 24px 下限——
+     补横向 padding 与 24px 最小可点尺寸，视觉仍是行内紧凑数字 */
+  padding: 0 9px;
+  min-width: 24px;
+  min-height: 24px;
   background: transparent;
   font: inherit;
   cursor: pointer;
@@ -706,7 +711,14 @@ function openRunningSession(s: Sample) {
 
 .vl-truncated { color: var(--mk-amber); font-weight: 700; }
 
-/* 名称头像：按名字哈希取色，同一人恒定同色 */
+/* 走查 2026-09-27：「正在运行」条胶囊按钮由子组件 VirtualLearnerRunningBar 渲染，
+   实测高 23px 低于 24px 可点下限——本页 :deep 提最小高度补足 1px，padding 不动、视觉不变 */
+.vl-running :deep(.vl-running__chip) { min-height: 24px; }
+
+/* 名称头像：按名字哈希取色，同一人恒定同色。
+   色板整改（走查 2026-09-27）：彩底白字对比度须 ≥4.5:1，各色保持色相加深至达标
+   （emerald/amber/cyan 需取 700 档；slate 原 #64748b 已 4.76:1 达标不动），
+   26px 尺寸不变；行尾为对比白的前后比值，与 JS 侧 AVATAR_COLORS 同步维护 */
 .vl-avatar {
   width: 26px;
   height: 26px;
@@ -719,14 +731,14 @@ function openRunningSession(s: Sample) {
   font-weight: 800;
   flex-shrink: 0;
 }
-.vl-avatar--0 { background: #3b82f6; }
-.vl-avatar--1 { background: #8b5cf6; }
-.vl-avatar--2 { background: #10b981; }
-.vl-avatar--3 { background: #f59e0b; }
-.vl-avatar--4 { background: #ef4444; }
-.vl-avatar--5 { background: #06b6d4; }
-.vl-avatar--6 { background: #ec4899; }
-.vl-avatar--7 { background: #64748b; }
+.vl-avatar--0 { background: #2563eb; } /* 蓝 3.68→5.17 */
+.vl-avatar--1 { background: #7c3aed; } /* 紫 4.23→5.70 */
+.vl-avatar--2 { background: #047857; } /* 绿 2.54→5.48 */
+.vl-avatar--3 { background: #b45309; } /* 琥珀 2.15→5.02 */
+.vl-avatar--4 { background: #dc2626; } /* 红 3.76→4.83 */
+.vl-avatar--5 { background: #0e7490; } /* 青 2.43→5.36 */
+.vl-avatar--6 { background: #db2777; } /* 粉 3.53→4.60 */
+.vl-avatar--7 { background: #64748b; } /* 灰 4.76 原值已达标 */
 .vl-name {
   display: flex;
   align-items: center;
