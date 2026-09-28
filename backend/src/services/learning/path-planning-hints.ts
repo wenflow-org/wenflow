@@ -396,16 +396,50 @@ export function derivePlanningHints(
   //（正则只抓首个数字），所有「每天N小时」用户的预算被静默压缩 20-60 倍，
   // 且单课分钟档被压到 30min 下限——大预算守恒异常的一大隐藏根因。
   // 顺序：N小时（×60）→ N分钟 → 半小时(=30) → 裸数字（当分钟）。
+  // 会话时长解析（含中文数字——2026-09-29 第三波评审实证漏解析：「一天三小时」
+  // 正则只认阿拉伯数字 → 回退默认档 [30,120]，本该 [45,120]，整条路径排了 90min 课）。
+  // 支持：3小时/3.5小时/三个半小时/半小时/三十分钟/30分钟/裸数字（分钟）/一个钟头。
+  const CN_DIGIT: Record<string, number> = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  const parseCnNum = (s: string): number | null => {
+    if (!s) return null;
+    if (/^\d+(?:\.\d+)?$/.test(s)) return Number(s);
+    let total = 0;
+    let num = 0;
+    for (const ch of s) {
+      if (ch in CN_DIGIT) num = CN_DIGIT[ch];
+      else if (ch === '十') { total += (num === 0 ? 1 : num) * 10; num = 0; }
+      else if (ch === '百') { total += (num === 0 ? 1 : num) * 100; num = 0; }
+      else return null;
+    }
+    return total + num;
+  };
+  const NUM = '[0-9]+(?:\\.[0-9]+)?|[零一二两三四五六七八九十百]+';
   const parsedSessionMinutes = (() => {
     const text = (timePerSession || '').trim();
     if (!text) return null;
-    const hour = text.match(/(\d+(?:\.\d+)?)\s*(?:个)?小时/);
-    if (hour) return Math.round(Number(hour[1]) * 60);
-    const minute = text.match(/(\d+)\s*分钟/);
-    if (minute) return Number(minute[1]);
+    // X个半小时 → (X+0.5) 小时（「一个半小时」=1.5h=90min，「三个半小时」=3.5h=210min）
+    const halfHours = text.match(new RegExp(`(${NUM})\\s*(?:个)?半\\s*(?:个)?小时`));
+    if (halfHours) {
+      const n = parseCnNum(halfHours[1]);
+      if (n !== null) return Math.round(n * 60 + 30);
+    }
+    const hour = text.match(new RegExp(`(${NUM})\\s*(?:个)?\\s*(?:小时|钟头|时辰)`));
+    if (hour) {
+      const n = parseCnNum(hour[1]);
+      if (n !== null) return Math.round(n * 60);
+    }
+    const minute = text.match(new RegExp(`(${NUM})\\s*(?:分钟|分种|min)`));
+    if (minute) {
+      const n = parseCnNum(minute[1]);
+      if (n !== null) return Math.round(n);
+    }
     if (/半\s*小时/.test(text)) return 30;
-    const bare = text.match(/(\d+)/);
-    return bare ? Number(bare[1]) : null;
+    const bare = text.match(new RegExp(`(${NUM})`));
+    if (bare) {
+      const n = parseCnNum(bare[1]);
+      if (n !== null) return Math.round(n);
+    }
+    return null;
   })();
 
   // 2026-09-28 R2（rw-school-15 案例：20min 早读被排 30min 课）：上界不得突破会话时长——
