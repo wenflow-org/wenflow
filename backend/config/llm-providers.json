@@ -3,7 +3,7 @@
   "$rules": [
     "provider 不带 baseUrl = 「继承通道」：端点/密钥沿用 platform_api_configs 与上层路由解析（历史行为）",
     "provider 带 baseUrl 时必须同时给 apiKeyEnv（密钥只走环境变量，本文件严禁出现真实密钥）",
-    "modelId 全局唯一（跨 provider 不得重名），字符集 [a-zA-Z0-9._-]；配置里可用 \"providerId/modelId\" 精确指到某通道",
+    "modelId 字符集 [a-zA-Z0-9._-]；多通道重名允许：裸 id 解析取声明在前的启用通道（总览告警），跨通道引用用 \"providerId/modelId\" 限定式",
     "enabled=false 的 provider 不进运行时注册表（可留作示例/停用）"
   ],
   "providers": {
@@ -58,25 +58,28 @@
     },
     "deepseek-official": {
       "name": "DeepSeek 官方",
-      "description": "示例条目（enabled=false 不进注册表）：自部署/多通道时按此结构添加供应商——baseUrl + apiKeyEnv + models",
+      "description": "示例条目（enabled=false 不进注册表）：自部署/多通道时按此结构添加供应商——baseUrl + apiKeyEnv + models。现行官方模型即 v4.1-flash / v4-pro（chat/reasoner 旧名已下线）；模型 id 允许与平台通道重名",
       "enabled": false,
       "baseUrl": "https://api.deepseek.com/v1",
       "apiKeyEnv": "DEEPSEEK_OFFICIAL_API_KEY",
       "models": {
-        "deepseek-chat": {
-          "label": "DeepSeek Chat",
+        "deepseek-v4.1-flash": {
+          "label": "DeepSeek V4.1 Flash（官方通道）",
           "tier": "chat",
-          "supportsThinking": false,
-          "supportsReasoningEffort": false,
-          "defaultMaxTokens": 32768
+          "supportsThinking": true,
+          "supportsReasoningEffort": true,
+          "maxOutputTokens": 131072,
+          "defaultMaxTokens": 32768,
+          "reasoningReserveTokens": 8192
         },
-        "deepseek-reasoner": {
-          "label": "DeepSeek Reasoner",
+        "deepseek-v4-pro": {
+          "label": "DeepSeek V4 Pro（官方通道）",
           "tier": "reasoning",
           "supportsThinking": true,
           "supportsReasoningEffort": true,
+          "maxOutputTokens": 131072,
           "defaultMaxTokens": 32768,
-          "reasoningReserveTokens": 8192
+          "reasoningReserveTokens": 16384
         }
       }
     }

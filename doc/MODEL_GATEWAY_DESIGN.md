@@ -197,7 +197,7 @@ aliases / defaults
 - **失败语义**：文件缺失 = 内置兜底目录（4 个种子模型，fresh clone 可启动）；文件存在但非法 = **fail-loud** 拒绝启动；运行期热重载失败 = 保留上一次好目录 + 日志 + registry 总览告警。
 - **热重载**：`APIRouter.resolve()` 每次解析前 `reloadLlmProvidersIfChanged()`（mtime 变更才重读）；路径可用 `LLM_PROVIDERS_CONFIG` 环境变量覆盖。
 - **供应商端点**：provider 声明 `baseUrl` 时必须给 `apiKeyEnv`（密钥只走环境变量，严禁入文件）。路由层规则（`APIRouter.applyProviderEndpoint`）：解析后的模型命中自带端点的供应商 ⇒ `endpoint/apiKey` 整体切换（`source='provider-endpoint'`，`privateNetworkPolicy='runtime'`）；密钥 env 缺失 = 明确报错不带病调用；**用户自带 provider（source user-*）不受覆盖**。继承通道（无 baseUrl）行为与历史版本一致。
-- **模型引用**：裸 id（全局唯一，历史 DB 配置零迁移）或限定式 `providerId/modelId`（仅当命中已注册供应商+目录内模型才按限定式解析；聚合网关自带 `/` 的字面模型 id 不误伤）。请求空间只认裸 id——限定式在路由层还原为上游字面 id。
+- **模型引用**：裸 id（历史 DB 配置零迁移）或限定式 `providerId/modelId`（仅当命中已注册供应商+目录内模型才按限定式解析；聚合网关自带 `/` 的字面模型 id 不误伤）。**多通道重名合法**（同一模型经聚合网关与官方各服务一份是常态）：裸 id 解析取声明在前的启用通道（first-wins），registry 总览发歧义告警，限定式全量可解析。请求空间只认裸 id——限定式在路由层还原为上游字面 id。
 - **降级边界**：skill 兜底链候选必须**同供应商**（保存侧校验拒绝跨供应商）；跨供应商兜底需等端点感知降级（候选自带 endpoint/key，未做）。
 - **可观测**：`/admin/model-registry` 总览新增 providers 段 + registry 文件状态（source/mtime/lastError）+ 缺密钥告警；`/api/config/available-models` 返回 providers 维度。
 

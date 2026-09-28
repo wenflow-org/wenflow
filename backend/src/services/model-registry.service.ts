@@ -148,6 +148,22 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     }
   }
 
+  // 多通道重名歧义：裸 id 解析取声明在前的启用通道，跨通道引用必须用 provider/model 限定式
+  const providerOwners = new Map<string, string[]>();
+  for (const p of getProviderCatalog()) {
+    if (!p.enabled) continue;
+    for (const m of p.models) {
+      const owners = providerOwners.get(m.id) ?? [];
+      owners.push(p.id);
+      providerOwners.set(m.id, owners);
+    }
+  }
+  for (const [modelId, owners] of providerOwners) {
+    if (owners.length > 1) {
+      warnings.push(`模型「${modelId}」由多个启用供应商声明（${owners.join('、')}）：裸 id 解析取声明在前的「${owners[0]}」，指定其他通道请用 ${owners[1]}/${modelId} 限定式引用。`);
+    }
+  }
+
   // 别名：DB 覆盖优先，代码注册表兜底
   const aliases = Object.keys(MODEL_ALIASES).map((alias) => {
     const dbMembers = dbLists[alias] ?? [];

@@ -218,17 +218,25 @@ function buildEmbeddedFallback(): RegistrySnapshot {
 /** 把快照**原地**灌进历史导出（数组/Map/对象身份不变，热重载后旧引用继续有效）。 */
 function applySnapshot(snapshot: RegistrySnapshot): void {
   const enabledProviders = snapshot.providers.filter((p) => p.enabled);
-  const models = enabledProviders.flatMap((p) => p.models);
+  const allEnabledModels = enabledProviders.flatMap((p) => p.models);
+
+  // 多通道重名允许（同一模型经聚合网关与官方 API 各服务一份是常态）：
+  // 裸 id 归声明在前的启用通道（first-wins，总览告警提示歧义）；
+  // 限定式 providerId/modelId 全量入限定表，跨通道精确引用不受影响。
+  MODEL_MAP.clear();
+  QUALIFIED_MODEL_MAP.clear();
+  const seen = new Set<string>();
+  const models: ModelDefinition[] = [];
+  for (const m of allEnabledModels) {
+    QUALIFIED_MODEL_MAP.set(`${m.providerId}/${m.id}`, m);
+    if (seen.has(m.id)) continue;
+    seen.add(m.id);
+    models.push(m);
+    MODEL_MAP.set(m.id, m);
+  }
 
   AVAILABLE_MODELS.length = 0;
   AVAILABLE_MODELS.push(...models);
-
-  MODEL_MAP.clear();
-  QUALIFIED_MODEL_MAP.clear();
-  for (const m of models) {
-    MODEL_MAP.set(m.id, m);
-    QUALIFIED_MODEL_MAP.set(`${m.providerId}/${m.id}`, m);
-  }
 
   MODELS_BY_TIER.chat = models.filter((m) => m.tier === 'chat');
   MODELS_BY_TIER.reasoning = models.filter((m) => m.tier === 'reasoning');
@@ -302,7 +310,6 @@ export function parseLlmProvidersConfig(raw: string): RegistrySnapshot {
     throw new Error('llm-providers.json：缺少 providers 对象');
   }
 
-  const seenModelIds = new Set<string>();
   const providers: ProviderDefinition[] = [];
   for (const [providerId, value] of Object.entries(root.providers as Record<string, unknown>)) {
     if (!PROVIDER_ID_PATTERN.test(providerId)) {
@@ -330,12 +337,7 @@ export function parseLlmProvidersConfig(raw: string): RegistrySnapshot {
     const models = Object.entries(p.models as Record<string, unknown>).map(([modelId, m]) =>
       parseModelEntry(providerId, String(p.name || providerId), endpoint, modelId, m)
     );
-    for (const m of models) {
-      if (seenModelIds.has(m.id)) {
-        throw new Error(`llm-providers.json：模型 id「${m.id}」在多个 provider 下重复（模型 id 全局唯一；需要同名校分请用不同 id 或在配置里用「providerId/modelId」限定式引用）`);
-      }
-      seenModelIds.add(m.id);
-    }
+    // 跨 provider 重名合法（裸 id first-wins + 总览告警，见 applySnapshot）；provider 内 JSON 键天然唯一
     providers.push({
       id: providerId,
       name: typeof p.name === 'string' && p.name.trim() ? p.name.trim() : providerId,

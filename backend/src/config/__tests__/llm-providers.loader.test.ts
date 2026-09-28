@@ -80,12 +80,14 @@ describe('llm-providers.json 加载器', () => {
 
   it('parseLlmProvidersConfig：坏 JSON / 重复 id / baseUrl 缺 apiKeyEnv / 空注册表 全部 fail-loud', () => {
     expect(() => parseLlmProvidersConfig('{oops')).toThrow(/不是合法 JSON/);
-    expect(() => parseLlmProvidersConfig(JSON.stringify({
+    // 跨 provider 重名合法（同一模型多通道服务是常态）：解析不抛，运行时裸 id first-wins
+    const dup = parseLlmProvidersConfig(JSON.stringify({
       providers: {
         a: { models: { 'same-id': { tier: 'chat' } } },
         b: { models: { 'same-id': { tier: 'chat' } } }
       }
-    }))).toThrow(/重复/);
+    }));
+    expect(dup.models).toHaveLength(2);
     expect(() => parseLlmProvidersConfig(JSON.stringify({
       providers: { a: { baseUrl: 'http://x/v1', models: { m: { tier: 'chat' } } } }
     }))).toThrow(/apiKeyEnv/);
@@ -113,6 +115,23 @@ describe('llm-providers.json 加载器', () => {
       expect(def?.providerEndpoint).toEqual({ baseUrl: 'http://testprov.local/v1', apiKeyEnv: 'TEST_PROV_KEY' });
       expect(getModelDefaults().chat).toBe('custom-model');
       expect(resolveModelRef('testprov/custom-model')?.definition.id).toBe('custom-model');
+    });
+
+    it('多通道重名：裸 id first-wins，限定式仍可精确指到后续通道', () => {
+      writeTempConfig(JSON.stringify({
+        providers: {
+          first: { name: '先声明', models: { 'shared-model': { label: 'S1', tier: 'chat', defaultMaxTokens: 32768 } } },
+          second: { name: '后声明', baseUrl: 'http://second.local/v1', apiKeyEnv: 'UT_SECOND_KEY', models: { 'shared-model': { label: 'S2', tier: 'chat', defaultMaxTokens: 32768 } } }
+        },
+        aliases: {},
+        defaults: { chat: 'shared-model', reasoning: 'shared-model' }
+      }));
+      expect(reloadLlmProvidersIfChanged().reloaded).toBe(true);
+      expect(MODEL_MAP.get('shared-model')?.providerId).toBe('first'); // 裸 id 归声明在前的通道
+      const viaQualified = resolveModelRef('second/shared-model');
+      expect(viaQualified?.providerId).toBe('second');
+      expect(viaQualified?.definition.providerEndpoint?.baseUrl).toBe('http://second.local/v1');
+      expect(MODEL_MAP.size).toBe(1); // 扁平注册表去重，不重复收录
     });
 
     it('坏文件 → 保留上一次好目录并带 error；文件删失同理', () => {
