@@ -2027,8 +2027,10 @@ onBeforeUnmount(() => {
 /* 卡点依据 chip */
 .msg__chip {
   display: inline-flex; align-items: center; gap: 5px;
-  width: fit-content; padding: 4px 10px; border-radius: var(--mk-radius-pill);
+  width: fit-content; max-width: 100%; padding: 4px 10px; border-radius: var(--mk-radius-pill);
   font-size: 12px; font-weight: 700; line-height: 1.5;
+  /* chip 放在 grid 布局的 msg__content 里时必须跨全列，否则被挤进窄列竖排 */
+  grid-column: 1 / -1;
 }
 .msg__chip--confuse { color: var(--amber-ink); background: rgba(244, 170, 70, 0.12); border: 1px solid rgba(244, 170, 70, 0.2); margin-top: 6px; }
 

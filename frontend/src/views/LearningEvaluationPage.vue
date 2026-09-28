@@ -1586,6 +1586,8 @@ onUnmounted(() => {
 .evaluation-ctabar { display: none; }
 
 @media (max-width: 640px) {
+  /* 吸底动作条高约 56px + bottom 10px + safe-area → 页面尾部预留 */
+  .evaluation-page { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   .evaluation-ctabar {
     position: fixed;
     left: 10px;
