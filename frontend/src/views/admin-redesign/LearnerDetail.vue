@@ -115,7 +115,8 @@
              「学习者产生会话后将自动生成」的误导空态；后端 learner-models 无按日活跃接口） -->
         <section class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">最近会话</h3>
+            <!-- 更名「最近动态」：卡内取的是合并时间线前 6 条（教学/目标/路径域事件，不只 session） -->
+            <h3 class="mk-card__title">最近动态</h3>
             <span class="mk-card__meta">人类化证据</span>
           </div>
           <div class="ld-sessions">
@@ -340,7 +341,8 @@
         <section class="mk-card ld-ev-main">
           <div class="mk-card__head">
             <h3 class="mk-card__title">证据时间线</h3>
-            <span class="mk-card__meta">{{ evidence.length }} 条学习事件 · 点色=信号，条=置信</span>
+            <!-- 标注「仅最近 20 条」：接口侧 limit=20（live.ts liveGetLearnerEvidence），列表非全量，防「共 N 条」误读 -->
+            <span class="mk-card__meta">{{ evidence.length }} 条学习事件（仅最近 20 条）· 点色=信号，条=置信</span>
           </div>
           <!-- T2 硬约束 2「结论与细节分层」：结论行常驻可见，明细折叠。
                结论文字完全取自本卡已有数据（条数 + 卡片里本来就标的「证据不足」），未新增判断。 -->
@@ -1271,7 +1273,8 @@ const loadSeries = computed<LoadPoint[]>(() => {
 })
 const hasLoad = computed(() => loadSeries.value.some((p) => p.lss != null || p.lf != null || p.lsb != null))
 
-/* ECharts option：LSS/LF/LSB 统一 0-10 轴（LF 偶发略超 10，Y 域放宽到 -4~12 防贴顶裁切）；
+/* ECharts option：LSS/LF/LSB 统一 0-10 轴（LF 偶发略超 10，上界放宽到 12 防贴顶裁切）；
+   下界随数据自适应——LSB=KTL−LF 理论可到 −10，固定 -4 会截断曲线（无负值时仍取 -4 留白）；
    参考线：LSB=0（状态平衡线）与 LF=6（疲劳警戒线）；tooltip 跟随 + 平滑曲线 + 坐标轴刻度 */
 const loadChartOption = computed<EChartsCoreOption>(() => {
   const pal = MK_CHART_PALETTES[isDark.value ? 'dark' : 'light'];
@@ -1297,9 +1300,10 @@ const loadChartOption = computed<EChartsCoreOption>(() => {
     },
     yAxis: {
       type: 'value',
-      min: -4,
+      // min 用回调：数据里出现 < -4 的 LSB（如 KTL=0、LF=10 → −10）时下界跟着走，避免截断
+      min: (e: { min: number }) => Math.min(-4, e.min),
       max: 12,
-            axisLabel: { fontSize: 11 },
+      axisLabel: { fontSize: 11 },
     },
     series: [
       {

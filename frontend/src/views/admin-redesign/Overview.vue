@@ -36,14 +36,14 @@
           <span class="brief-actions__text">没有需要立即处理的事项。</span>
         </li>
         <li :title="'查看健康中心完整检查清单'">
-          <span class="brief-actions__dot" :class="healthTone === 'muted' ? '' : `brief-actions__dot--${healthTone}`"></span>
+          <span class="brief-actions__dot" :class="`brief-actions__dot--${healthTone}`"></span>
           <span class="brief-actions__text">
             <strong>系统健康 · {{ healthText }}</strong>
           </span>
           <button type="button" class="brief-actions__btn" @click="jump('skills', 'health')">健康中心 →</button>
         </li>
         <li :title="simTitle">
-          <span class="brief-actions__dot" :class="simTone === 'muted' ? '' : `brief-actions__dot--${simTone}`"></span>
+          <span class="brief-actions__dot" :class="`brief-actions__dot--${simTone}`"></span>
           <span class="brief-actions__text">
             <strong>仿真通道 · {{ simHeadline }}</strong>
             <small>今日虚拟调用 {{ runStats.todayCalls.toLocaleString() }} · 完成率 {{ runStats.completionRate }}% · 进行中 {{ runStats.running }} · 失败 {{ runStats.failed }}</small>
@@ -82,7 +82,8 @@
       <section class="brief-card">
         <div class="brief-card__head">
           <h4>24h 系统脉搏</h4>
-          <button type="button" class="brief-card__go" @click="jump('execution-logs')">执行日志 →</button>
+          <!-- 「执行日志 →」原与下方趋势卡同文案同屏重复，按各自时间窗差异化 -->
+          <button type="button" class="brief-card__go" title="按时间窗查看 24h 调用与异常日志" @click="jump('execution-logs')">24h 日志 →</button>
         </div>
         <!-- 统一柱状语言（OvBars）：24 列稀标签、无数值行；红柱=该小时有异常 -->
         <OvBars v-if="data.pulse.length" :cols="pulseCols" :show-nums="false" :label-every="4" :min-bars-height="96" />
@@ -97,7 +98,7 @@
       <section class="brief-card brief-card--trend">
         <div class="trend__head">
           <h4 title="近 7 天每日调用量（真实用户口径）">调用趋势 · 近 7 天</h4>
-          <button type="button" class="brief-card__go" @click="jump('execution-logs')">执行日志 →</button>
+          <button type="button" class="brief-card__go" title="按时间窗查看近 7 天调用与失败日志" @click="jump('execution-logs')">7 天日志 →</button>
         </div>
         <div v-if="trend7dSum > 0" class="ov-trend">
           <OvBars :cols="trend7dCols" :min-bars-height="104" />
@@ -225,8 +226,8 @@
         <p v-else class="brief-card__note">近 7 天暂无 LLM 调用记录。</p>
       </section>
 
-      <!-- Top Skill 活跃榜（G4：近 7 天调用最多的节点） -->
-      <section class="brief-card">
+      <!-- Top Skill 活跃榜（G4：近 7 天调用最多的节点；1001-1280 档跨满整行，见媒体查询） -->
+      <section class="brief-card brief-card--skills">
         <div class="brief-card__head">
           <h4 title="近 7 天调用最多的 Skill（真实用户口径）">Top Skill · 近 7 天</h4>
           <button type="button" class="brief-card__go" @click="jump('skills')">Skill 运行 →</button>
@@ -327,7 +328,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource } from './store';
-import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing, liveVirtualRunStats } from './live';
+import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing, liveVirtualRunStats, type LiveOverviewFull } from './live';
 import { adminHealthCenterApi } from '@/api/adminApi';
 import { TERMS } from './terms';
 import MkKpi from '@/components/mk/MkKpi.vue';
@@ -338,46 +339,9 @@ import { useSafePolling } from '@/composables/useSafePolling';
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
-interface BriefData {
-  tone: Tone;
-  score: number | null;
-  headline: string;
-  subline: string;
-  actions: { text: string; link: string; tone: Tone; agentId: string }[];
-  kpis: { label: string; value: string; hint: string }[];
-  wrapup: {
-    sampleSize: number;
-    summaryModel: number;
-    summaryFallback: number;
-    evaluationModel: number;
-    evaluationAiFallback: number;
-    evaluationFailed: number;
-  };
-  usage: {
-    calls7d: number;
-    failed7d: number;
-    totalTokens7d: number;
-    models7d: { model: string; calls: number; tokens: number }[];
-    failures7d: { category: string; count: number }[];
-    /** 全量副口径（含虚拟/测试账号，供标注对比） */
-    calls7dAll?: number;
-    totalTokens7dAll?: number;
-  };
-  trend: { date: string; total: number; completed: number }[];
-  /** G1：近 7 天每日调用/失败趋势 */
-  trend7d: { date: string; calls: number; failed: number }[];
-  /** G4：近 7 天 Top Skill 活跃榜 */
-  topSkills: { agentId: string; calls: number; failed: number }[];
-  /** G2/G3：近 7 天每日新增注册 / 活跃用户 */
-  growth7d: { date: string; newUsers: number; activeUsers: number }[];
-  funnel: { label: string; value: string; idle: boolean }[];
-  rates: string[];
-  pulse: { calls: number; issue: number; label?: string }[];
-  totalCalls: number;
-  totalIssues: number;
-  peak: string;
-  feed: { text: string; time: string; tone: Tone; ts?: number; errorCategory?: string; agentId?: string }[];
-}
+// 简报数据即 live.ts 的总览全量类型（单一事实源）：此前手工复制全部字段，live.ts 演进时
+// 两份定义会漂移（新增字段这里收不到、改口径不同步），改为直接复用其导出类型
+type BriefData = LiveOverviewFull;
 
 // 结论来自 store（由 spans 推导，与日志/瀑布/Skill 同源）；全部数据来自后端统计
 const health = computed(() => overviewHealth.value);
@@ -388,7 +352,9 @@ const effectiveActions = computed(() => {
   if (data.value.actions.length) return data.value.actions;
   const tone = health.value.tone;
   if (tone === 'warn') {
-    return [{ text: '教学链路出现失败，检查模型服务与限流配置', tone: 'bad' as Tone, agentId: 'teaching-agent', link: '' }];
+    // 兜底动作不伪造 agentId（健康结论由 spans 推导，并无具体异常 agent）：空串让
+    // investigateAgent 只带失败状态筛选、不带 agent 过滤，避免跳进「过滤后为空」的日志视图
+    return [{ text: '教学链路出现失败，检查模型服务与限流配置', tone: 'bad' as Tone, agentId: '', link: '' }];
   }
   return [];
 });
@@ -818,6 +784,8 @@ watch(liveLoading, (loading) => {
 .brief-actions__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .brief-actions__dot--bad { background: var(--mk-red); }
 .brief-actions__dot--warn { background: var(--mk-amber); }
+/* muted（健康检查/仿真加载中或空闲）：灰底对齐 feed__dot 默认灰，否则渲染成透明圆点 */
+.brief-actions__dot--muted { background: #c3cede; }
 .brief-actions__text {
   flex: 1;
   min-width: 0;
@@ -1198,6 +1166,9 @@ watch(liveLoading, (loading) => {
   .brief-grid { grid-template-columns: 1fr 1fr; }
   .brief-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .brief-card--feed { grid-column: 1 / -1; }
+  /* Top Skill 也跨满整行：两列档里它只占 1 列时，span2 的动态卡放不进剩余 1 列，
+     会在 Top Skill 行的右列留下空洞 */
+  .brief-card--skills { grid-column: 1 / -1; }
   .usage__cols { grid-template-columns: 1fr; }
 }
 
@@ -1305,6 +1276,7 @@ html[data-theme='dark'] {
   /* 品牌渐变已 token 化（批23），暗色随 --mk-blue 自动翻转，无需覆写 */
 
   .ov-skill__rank { background: #232325; }
+  .brief-actions__dot--muted { background: #4d4e51; }
   .feed__dot { background: #4d4e51; box-shadow: 0 0 0 3px #19191a; }
   .ov-skill:nth-child(1) .ov-skill__rank { background: rgba(91, 141, 239, 0.22); color: var(--mk-ghost-fg); }
   .feed__toggle:hover { background: #252627; }

@@ -888,21 +888,30 @@ async function batchRunStories() {
   if (!targets.length) { toast.error('请先勾选要运行的故事'); return }
   const id = subPage.value?.id
   if (!id || running.value) return
+  // 与批量自动驾驶/删除保持一致：批量会话会为每个故事各建一个真实 LLM 会话，
+  // 属于高成本、难回滚的操作，先让用户确认数量与预算消耗，避免误点批量勾选
+  const ok = await askConfirm({
+    title: '批量运行故事',
+    message: `将为勾选的 ${targets.length} 个故事各创建一个真实 LLM 会话并自动运行，将消耗 AI 调用预算。确定继续？`,
+    confirmText: '批量运行',
+    danger: false
+  })
+  if (!ok) return
   running.value = true
-  let ok = 0
+  let okCount = 0
   for (const { s, i } of targets) {
     try {
       const payload = storyPayload(s, i)
       const res = await adminVirtualLearnersApi.startVirtualSession(id, payload)
       const session = res.data?.data ?? res.data ?? {}
       toast.success(`已按「${s.title || '故事'}」启动：${String(session.id || session.sessionId || '').slice(0, 14)}…`)
-      ok++
+      okCount++
     } catch (e) {
       toast.error(`「${s.title || '故事'}」启动失败：${errMsg(e)}`)
     }
   }
   running.value = false
-  if (ok > 0) {
+  if (okCount > 0) {
     selectedStoryKeys.value = new Set()
     await loadDetail(id)
   }

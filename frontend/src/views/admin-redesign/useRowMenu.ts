@@ -70,6 +70,9 @@ export function useRowMenu() {
     switch (e.key) {
       case 'Escape':
         e.preventDefault()
+        // 行菜单盖在抽屉/弹窗之上：Esc 只关菜单。必须拦下冒泡，
+        // 否则 window 层 useEscape 的 LIFO 栈会在同一次按键把底层抽屉一并关掉
+        e.stopPropagation()
         closeMenu()
         break
       case 'ArrowDown':
@@ -158,7 +161,12 @@ export function useRowMenu() {
     lastClickTarget = e.target
   }
   function onDocKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && openMenu.value) closeMenu()
+    // 焦点不在菜单内时 Esc 走到这里（document 冒泡先于 window 监听）：
+    // 关菜单后 stopPropagation，阻断 useEscape 的 LIFO 栈在同一次 Esc 里继续关底层抽屉
+    if (e.key === 'Escape' && openMenu.value) {
+      e.stopPropagation()
+      closeMenu()
+    }
   }
   function onDocScroll() {
     if (!openMenu.value) return

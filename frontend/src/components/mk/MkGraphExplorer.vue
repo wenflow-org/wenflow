@@ -71,7 +71,7 @@
       </div>
 
       <!-- 侧栏详情随画布点选切换，对读屏是「远端变更」→ polite 播报摘要
-           （完整 AT 等价画布清单为长期项，不在本次实施范围——2026-09-27 a11y 走查） -->
+           （画布的完整 AT 等价清单见下方 sr-only 概念清单——2026-09-27 a11y 走查，P2 收尾落地） -->
       <aside class="mk-ge__side" aria-live="polite">
         <template v-if="selected">
           <h4 class="mk-ge__side-title">{{ selected.label }}</h4>
@@ -99,6 +99,24 @@
         </template>
         <p v-else class="mk-ge__side-hint">点图中任意节点，这里显示它的掌握度与前后关系。</p>
       </aside>
+
+      <!-- 读屏等价清单（P2 收尾）：节点信息此前只存在于 canvas 点击/悬停里，键盘/读屏用户完全拿不到。
+           刻意放在 aria-live 侧栏**外**：路径切换时整份清单会重渲染，
+           若在 live 区域内会被当成「远端变更」整段播报（40 条），对读屏用户是灾难。
+           视觉隐藏复用全局 .visually-hidden（main.css），不在本组件重复定义。
+           条数上界：V2KnowledgeMap 的 AUTO_NARROW_CONNECTED_NODES=40 收窄护栏保证有界，无性能问题 -->
+      <section
+        v-if="!error && !loading && nodes.length"
+        class="visually-hidden mk-ge__inventory"
+        aria-labelledby="mk-ge-inventory-heading"
+      >
+        <h4 id="mk-ge-inventory-heading">当前图谱包含的概念</h4>
+        <ul>
+          <li v-for="n in listNodes" :key="n.id">
+            {{ n.label }}（{{ n.level === 'concept' ? '核心概念' : '知识组件' }}，掌握度 {{ masteryText(n) }}）
+          </li>
+        </ul>
+      </section>
     </div>
   </div>
 </template>
@@ -167,6 +185,26 @@ const levelEdges = computed(() => {
   const ids = new Set(levelNodes.value.map((n) => n.id))
   return props.edges.filter((e) => ids.has(e.fromConceptId) && ids.has(e.toConceptId))
 })
+
+/** 读屏清单与画布同口径：MkGraph 内部会按 hideIsolated 滤掉孤立节点（其 visibleNodes 逻辑）。
+ *  清单若不复制这条规则，「图上看不到的概念」会出现在读屏清单里，两套信息互相矛盾 */
+const listNodes = computed(() => {
+  if (!hideIsolated.value) return levelNodes.value
+  const connected = new Set<string>()
+  for (const e of levelEdges.value) {
+    connected.add(e.fromConceptId)
+    connected.add(e.toConceptId)
+  }
+  const kept = levelNodes.value.filter((n) => connected.has(n.id))
+  return kept.length > 0 ? kept : levelNodes.value
+})
+
+/** 掌握度读屏文案与侧栏同口径（百分比）：raw 0-1 小数直接念出来很难懂 */
+function masteryText(n: MkGraphNode): string {
+  return n.masteryScore === null || n.masteryScore === undefined
+    ? '未知'
+    : `${Math.round(n.masteryScore * 100)}%`
+}
 
 /** 统计口径与画布着色一致，避免"图上红一片、统计说都好" */
 const counts = computed(() => {
@@ -398,6 +436,19 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue, #3
   font-size: var(--mk-fs-micro);
   line-height: 1.6;
   color: var(--mk-muted);
+}
+/* 读屏等价清单：整段钉在页面既有字号档（micro）上——h4/ul 的浏览器默认字号
+   会给 mobile:spec 的 steps 档数 +1，而视觉隐藏的清单字号无视觉意义 */
+.mk-ge__inventory {
+  font-size: var(--mk-fs-micro);
+}
+.mk-ge__inventory h4,
+.mk-ge__inventory ul,
+.mk-ge__inventory li {
+  margin: 0;
+  padding: 0;
+  font-size: var(--mk-fs-micro);
+  list-style: none;
 }
 /* 概览字段分区：2×2 条带格（dt 标签在上、值在下），和 badge 同用 surface-3 条带底，
    暗色比卡片亮一档（admin 表格体系同口径） */

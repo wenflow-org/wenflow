@@ -29,8 +29,10 @@
         >
           模拟 {{ simClock.enabled ? `第 ${simClock.dayIndex} 天` : '未开启' }}
         </span>
-        <!-- 预算消耗预警条（累积 AI 调用）：成本护栏。无配置时显示「不限」，不猜默认值 -->
+        <!-- 预算消耗预警条（累积 AI 调用）：成本护栏。无配置时显示「不限」，不猜默认值；
+             真实会话没有这套 AI 调用预算模型，恒显「0/不限」是噪音，故隐藏 -->
         <span
+          v-if="!isRealMode"
           class="cp-budget"
           :class="`is-${budgetTone}`"
           :title="budgetUsage.unlimited
@@ -62,8 +64,11 @@
         <button
           v-for="st in stageFlow"
           :key="st"
+          :id="`cp-tab-${st}`"
           type="button"
+          role="tab"
           class="cp-stage"
+          :aria-selected="activeTab === st"
           :class="[stageCls(st), { 'cp-stage--tab': !isBlackbox && activeTab === st }]"
           :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `查看 ${stageLabel(st)} 页签`"
           :disabled="isBlackbox"
@@ -142,8 +147,12 @@
     <div class="cp-body">
       <!-- 主内容区 -->
       <main class="cp-main">
+        <!-- 首次加载失败兜底（对齐页内 cp-degrade 模式）：否则失败仅 toast，主区永远停在骨架/「加载中…」 -->
+        <section v-if="sessionLoadFailed && !session" class="mk-card">
+          <p class="cp-degrade">会话数据加载失败 <button type="button" class="mk-link" @click="refresh">重试</button></p>
+        </section>
         <!-- Path 内容 -->
-        <section v-if="!isBlackbox && activeTab === 'path'" class="mk-card">
+        <section v-if="!isBlackbox && activeTab === 'path'" role="tabpanel" :aria-labelledby="`cp-tab-path`" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">Path 内容</h3>
             <span class="mk-card__meta">{{ pathDetailMeta || '等待 Path 生成' }}</span>
@@ -184,7 +193,7 @@
         </section>
 
         <!-- Goal 对话 -->
-        <section v-if="!isBlackbox && activeTab === 'goal'" class="mk-card">
+        <section v-if="!isBlackbox && activeTab === 'goal'" role="tabpanel" :aria-labelledby="`cp-tab-goal`" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">Goal 对话</h3>
             <span class="mk-card__meta">
@@ -206,7 +215,7 @@
         </section>
 
         <!-- Learn 课堂 -->
-        <section v-if="!isBlackbox && activeTab === 'learning'" class="mk-card">
+        <section v-if="!isBlackbox && activeTab === 'learning'" role="tabpanel" :aria-labelledby="`cp-tab-learning`" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">Learn 课堂</h3>
             <span class="mk-card__meta">
@@ -340,7 +349,7 @@
         </section>
 
         <!-- 总结 -->
-        <section v-if="!isBlackbox && activeTab === 'wrapup'" class="mk-card">
+        <section v-if="!isBlackbox && activeTab === 'wrapup'" role="tabpanel" :aria-labelledby="`cp-tab-wrapup`" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">学习总结</h3>
             <span class="mk-card__meta">
@@ -356,18 +365,21 @@
                 <span class="cp-wrapup-ms__title">{{ group.milestone }}</span>
                 <span class="cp-wrapup-ms__count">{{ group.doneCount }}/{{ group.lessons.length }}</span>
               </div>
-              <div
+              <!-- 行即 button（原 div+click 键盘不可达）：仅可查看总结的课可聚焦，其余行 disabled 出 tab 序 -->
+              <button
                 v-for="l in group.lessons"
                 :key="l.taskId"
+                type="button"
                 class="cp-wrapup-lesson"
                 :class="{ 'is-done': l.state === 'done', 'is-active': l.state === 'active' }"
-                @click="l.state === 'done' && l.teachingSessionId && viewLessonSummary(l)"
+                :disabled="!(l.state === 'done' && l.teachingSessionId)"
+                @click="viewLessonSummary(l)"
               >
                 <span class="cp-wrapup-lesson__mark">{{ lessonMark(l.state) }}</span>
                 <span class="cp-wrapup-lesson__num">第{{ lessonNumber(l.taskId) }}课</span>
                 <span class="cp-wrapup-lesson__title">{{ l.title }}</span>
                 <span v-if="l.state === 'done' && l.teachingSessionId" class="cp-wrapup-lesson__action">查看总结 →</span>
-              </div>
+              </button>
             </div>
           </div>
 
@@ -413,7 +425,8 @@
         <!-- 终局评估面板已随裁判独立面移除（2026-09-27）：报告仍在会话数据里，独立评审面为 /api/admin/session-audits -->
 
         <!-- 调试：原始 JSON -->
-        <details class="cp-raw">
+        <!-- rawJson 惰性计算：仅展开时序列化（见脚本 rawJsonOpen），折叠态 pre 渲染空串 -->
+        <details class="cp-raw" @toggle="onRawToggle">
           <summary>原始会话数据</summary>
           <pre>{{ rawJson }}</pre>
         </details>
@@ -605,8 +618,9 @@
             <div v-if="session && logPhases.length > 1" class="cp-logs__filter">
               <button v-for="p in logPhases" :key="p" type="button" class="cp-logs__filter-chip" :class="{ 'is-active': logPhaseFilter === p }" @click="logPhaseFilter = logPhaseFilter === p ? '' : p">{{ p }}</button>
             </div>
-            <div class="cp-logs" ref="logBox" aria-live="polite" aria-label="实时日志" @scroll="onLogScroll">
-              <span class="cp-logs__follow" :class="{ 'is-paused': !logFollowsBottom }" :title="logFollowsBottom ? '自动跟随最新日志' : '已暂停跟随'" @click="scrollToBottom">{{ logFollowsBottom ? '⏵' : '⏸' }}</span>
+            <div class="cp-logs" ref="logBox" aria-label="实时日志" @scroll="onLogScroll">
+              <!-- 跟随开关用 button（原 span+click 键盘不可达）；aria-live 已从容器移除：5s 轮询整表重渲染会让读屏反复播报全部日志，视觉跟随已足够 -->
+              <button type="button" class="cp-logs__follow" :class="{ 'is-paused': !logFollowsBottom }" :title="logFollowsBottom ? '自动跟随最新日志' : '已暂停跟随'" :aria-label="logFollowsBottom ? '已跟随最新日志' : '恢复跟随最新日志'" @click="scrollToBottom">{{ logFollowsBottom ? '⏵' : '⏸' }}</button>
               <template v-if="!session">
                 <MkSkeleton v-for="n in 4" :key="n" :h="11" :radius="4" />
               </template>
@@ -751,6 +765,8 @@ const timelineEntries = ref<Array<{ time: string; kind: string; title: string; d
 const rawLogs = ref<Record<string, unknown>[]>([])
 
 const session = ref<Record<string, unknown> | null>(null)
+/** 首次加载失败标记：refresh 失败原本只 toast，session 恒 null 时页面会永远「加载中…」 */
+const sessionLoadFailed = ref(false)
 const {
   logsFailed, logBox, logFollowsBottom, logPhaseFilter,
   logPhases, filteredLogs, onLogScroll, scrollToBottom, appendLogs, resetLogs
@@ -1393,6 +1409,7 @@ async function refresh() {
       const res = await adminVirtualLearnersApi.getRealSessionConsole(id)
       if (sessionId.value !== id) return
       session.value = res.data?.data ?? res.data ?? {}
+      sessionLoadFailed.value = false
       const kind = String((session.value as Record<string, unknown>)?.kind || '')
       realKind.value = kind === 'goal' ? 'goal' : 'teaching'
       timelineEntries.value = Array.isArray((session.value as Record<string, unknown>)?.timeline)
@@ -1406,6 +1423,7 @@ async function refresh() {
     const res = await adminVirtualLearnersApi.getVirtualSession(id)
     if (sessionId.value !== id) return
     session.value = res.data?.data ?? res.data ?? {}
+    sessionLoadFailed.value = false
     const sr = (session.value?.stageResults || {}) as Record<string, unknown>
     const simCfg = (sr.simulationConfig || {}) as Record<string, unknown>
     const fb = String(simCfg.frictionBudget || '')
@@ -1428,6 +1446,8 @@ async function refresh() {
     ])
   } catch (e) {
     if (sessionId.value !== id) return
+    // 只有「从未加载成功」才算首载失败（session 已有旧数据时失败仅 toast，避免误盖错误条）
+    if (!session.value) sessionLoadFailed.value = true
     toast.error(`加载失败：${errMsg(e)}`)
   }
 }
@@ -1437,8 +1457,10 @@ async function loadLogs() {
   if (!id) return
   try {
     if (isRealMode.value) {
-      const items = timelineEntries.value.map((t, i) => ({
-        id: `tl-${i}`,
+      // 稳定 id：下标 id 在时间线窗口滑动后错位（appendLogs 按 id 去重，旧 id 抢占新内容 → 丢行/串行），
+      // 改用 时间+类型+标题/详情前缀 组合，内容不变则 id 稳定
+      const items = timelineEntries.value.map((t) => ({
+        id: `${t.time || ''}|${t.kind || ''}|${String(t.title || '').slice(0, 60)}|${String(t.detail || '').slice(0, 40)}`,
         createdAt: t.time || '',
         timestamp: t.time || '',
         phase: t.kind,
@@ -1889,6 +1911,7 @@ watch(
     if (!id) return
     stopPolling()
     session.value = null
+    sessionLoadFailed.value = false
     resetLogs()
     pathStatus.value = null
     pathStatusFailed.value = false
@@ -1908,7 +1931,11 @@ watch(
   { immediate: true }
 )
 
-const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 4000) || '')
+/* rawJson 惰性计算：session 每 5s 轮询全量更新，computed 常驻 stringify 会让每个轮询拍
+   都完整序列化一次大 JSON；改为仅在「原始数据」details 展开时才计算 */
+const rawJsonOpen = ref(false)
+function onRawToggle(e: Event) { rawJsonOpen.value = (e.target as HTMLDetailsElement).open }
+const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value, null, 2)?.slice(0, 4000) : '') || '')
 </script>
 
 <style scoped>
@@ -2171,6 +2198,8 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   z-index: 2;
   margin-left: auto;
   width: fit-content;
+  border: none;
+  font: inherit;
   font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-green); cursor: pointer;
   padding: 2px 6px; border-radius: 999px; background: rgba(16, 185, 129, 0.08);
 }
@@ -2622,16 +2651,23 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
   border-radius: 999px;
 }
 .cp-wrapup-lesson {
+  /* 行即 button（键盘可达）：重置 button 默认外观，保持原行布局 */
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 8px;
   padding: 8px 20px 8px 32px;
+  border: none;
+  background: transparent;
+  font: inherit;
   font-size: var(--mk-fs-micro);
+  text-align: left;
   color: var(--mk-muted);
   cursor: default;
   border-left: 3px solid transparent;
   transition: background 0.1s ease;
 }
+.cp-wrapup-lesson:disabled { cursor: default; }
 .cp-wrapup-lesson.is-done {
   color: var(--mk-green);
   cursor: pointer;
@@ -2940,6 +2976,9 @@ const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 
 /* ================= 暗色模式（D1 补完）：会话座舱 ================= */
 html[data-theme='dark'] {
   .cp-stage:hover:not(:disabled) { background: #252627; }
+  /* hover 补漏：rgba(0,0,0,0.02) 叠在暗色底上不可见，改用与 cp-stage 同档的实色 */
+  .cp-sidebar__toggle:hover { background: #252627; }
+  .cp-learn-tree__lesson:hover:not(:disabled) { background: #252627; }
   .cp-stage--active { background: rgba(91, 141, 239, 0.16); color: var(--mk-accent-deep); border-color: rgba(91, 141, 239, 0.4); }
   .cp-run__autopilot-result { background: #19191a; }
   .cp-transcript__message { background: #19191a; border-left-color: #313235; }

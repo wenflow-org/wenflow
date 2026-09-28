@@ -246,7 +246,7 @@ watch(
 )
 function switchTab(t: OcTab) {
   tab.value = t
-  if (t === 'tools' && !deadLoaded.value) void loadDead()
+  /* tools 死信懒加载统一交给文件尾的 tab watcher：此处直接调会与 watcher 同帧各发一次请求 */
   /* URL 同步（?tab=…）：深链/刷新/前进后退可寻址 */
   if (route && route.query.tab !== t) void router?.replace({ query: { ...route.query, tab: t } })
 }
@@ -259,7 +259,16 @@ const statusTone = computed(() => (tab.value === 'tools' && deadCount.value > 0 
 
 /* 时间推进 */
 const advance = ref({ userId: '', days: 30, pathId: '' })
-const advanceResult = ref<any>(null)
+/** 模拟结果结构：后端 /admin/devtools/advance-time 的 data 载荷（adminApi.ts 侧响应尚未标注类型，按模板消费字段镜像） */
+interface AdvanceTimeResult {
+  dayDiff: number
+  simulatedAsOf: string
+  hasMetricRecord?: boolean
+  latestMetricAt?: string | null
+  before: unknown
+  after: unknown
+}
+const advanceResult = ref<AdvanceTimeResult | null>(null)
 
 async function runAdvance() {
   advanceBusy.value = true
@@ -280,8 +289,18 @@ async function runAdvance() {
 }
 
 /* 死信 */
+/** 死信行结构：镜像 adminApi.ts getOutboxDead 泛型内联类型（api 侧未导出，只能就地声明） */
+interface OutboxDeadItem {
+  id: string
+  eventType: string
+  userId: string | null
+  aggregateId: string | null
+  attemptCount: number
+  lastError: string | null
+  occurredAt: string
+}
 const deadCount = ref(0)
-const deadItems = ref<any[]>([])
+const deadItems = ref<OutboxDeadItem[]>([])
 const deadLoading = ref(false)
 const deadFailed = ref(false)
 const deadLoaded = ref(false)
@@ -350,7 +369,7 @@ async function requeueOne(eventType: string) {
 
 async function refreshAll() {
   refreshing.value = true
-  await Promise.all([loadDead()])
+  await loadDead()
   refreshing.value = false
 }
 
@@ -419,7 +438,12 @@ async function doExport(key: string) {
   }
 }
 
-void loadDead()
+/* 死信懒加载：挂载只拉首屏 tab（深链 ?tab=export/security 不预取多打一次）；
+   前进/后退经 route watch 直改 tab、不走 switchTab，故以 tab watcher 兜底补拉 */
+if (tab.value === 'tools') void loadDead()
+watch(tab, (t) => {
+  if (t === 'tools' && !deadLoaded.value) void loadDead()
+})
 </script>
 
 <style scoped>

@@ -103,12 +103,18 @@
           </span>
         </div>
       </div>
+
+      <!-- 长会话回看：30 天窗口之外按档翻页；到头隐藏对应按钮（窗口尚在数据范围内时即使本档无数据也可翻回） -->
+      <div v-if="canPageOlder || canPageNewer" class="dt-pager">
+        <button v-if="canPageOlder" type="button" class="mk-link" @click="pageWindow(-1)">更早 30 天</button>
+        <button v-if="canPageNewer" type="button" class="mk-link" @click="pageWindow(1)">更近 30 天</button>
+      </div>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { errMsg } from './live'
@@ -143,6 +149,21 @@ const props = withDefaults(defineProps<{ sessionId: string; from?: number; to?: 
   from: 0,
   to: 29,
 })
+
+/** 分页窗口：默认窗口只有 30 天，长会话更早的历史按 30 天一档翻页回看；load() 沿用这组 from/to 拉取参数 */
+const PAGE_SPAN = 30
+const windowFrom = ref(props.from)
+const windowTo = ref(props.to)
+/* 「更早」到头即第 0 天；「更近」的上界取 maxSimulatedDays（模拟日总档数）——
+   时钟关闭时按天数据是会话创建以来的全部历史，不受已推进 dayIndex 约束，故不能用 dayIndex 判到头 */
+const canPageOlder = computed(() => windowFrom.value > 0)
+const canPageNewer = computed(() => !!clock.value && windowTo.value + 1 < clock.value.maxSimulatedDays)
+
+function pageWindow(dir: -1 | 1) {
+  windowFrom.value += dir * PAGE_SPAN
+  windowTo.value += dir * PAGE_SPAN
+  load()
+}
 
 const loading = ref(false)
 const error = ref('')
@@ -241,7 +262,7 @@ async function load() {
   try {
     const [clockRes, timelineRes] = await Promise.all([
       adminVirtualLearnersApi.getVirtualSessionSimulationClock(props.sessionId),
-      adminVirtualLearnersApi.getVirtualSessionDayTimeline(props.sessionId, { from: props.from, to: props.to }),
+      adminVirtualLearnersApi.getVirtualSessionDayTimeline(props.sessionId, { from: windowFrom.value, to: windowTo.value }),
     ])
     clock.value = clockRes.data?.data ?? clockRes.data ?? null
     const timeline = timelineRes.data?.data ?? timelineRes.data
@@ -255,7 +276,16 @@ async function load() {
   }
 }
 
-watch(() => props.sessionId, load, { immediate: true })
+watch(
+  () => props.sessionId,
+  () => {
+    // 换会话回到默认窗口：上一会话的分页偏移不应带过去
+    windowFrom.value = props.from
+    windowTo.value = props.to
+    load()
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>
@@ -289,4 +319,5 @@ watch(() => props.sessionId, load, { immediate: true })
 .dt-adjust__item { background: rgba(140, 140, 140, 0.1); padding: 1px 6px; border-radius: 4px; }
 .dt-adjust__item em { font-style: normal; margin-left: 4px; color: var(--mk-faint); }
 .dt-paths { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.dt-pager { display: flex; justify-content: center; gap: 12px; font-size: var(--mk-fs-micro); }
 </style>

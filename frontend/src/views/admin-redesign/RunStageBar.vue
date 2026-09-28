@@ -29,7 +29,6 @@ const states = computed<Record<RunStageName, RunStageState>>(() =>
 const taskText = computed(() => (props.showTaskText ? runTaskProgressText(props.taskProgress) : ''))
 
 const LABEL: Record<RunStageName, string> = { goal: 'Goal', path: 'Path', learn: 'Learn' }
-const DONE_TEXT: Record<RunStageName, string> = { goal: '目标', path: '路径', learn: '学习' }
 </script>
 
 <template>
@@ -48,7 +47,8 @@ const DONE_TEXT: Record<RunStageName, string> = { goal: '目标', path: '路径'
       <span v-if="i < RUN_STAGE_ORDER.length - 1" class="rs-bar__connector" :class="{ 'rs-bar__connector--done': states[RUN_STAGE_ORDER[i]] === 'done' }" aria-hidden="true"></span>
     </template>
     <span v-if="taskText && !compact" class="rs-bar__task">{{ taskText }}</span>
-    <span v-if="DONE_TEXT && status === 'completed' && compact" class="rs-bar__done">已跑完</span>
+    <!-- 原条件里的 DONE_TEXT && 恒真（非空常量对象），仅保留真实条件：紧凑模式下节点绿✓过小，补一个「已跑完」尾标 -->
+    <span v-if="status === 'completed' && compact" class="rs-bar__done">已跑完</span>
   </span>
 </template>
 

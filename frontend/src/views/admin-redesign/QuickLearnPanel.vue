@@ -59,6 +59,13 @@
             </option>
           </optgroup>
         </select>
+        <!-- 内联错误+重试：加载失败时不能只靠 toast（会自动消失），这里常驻展示并可直接重试 -->
+        <p v-if="tasksError" class="ql-status__error">
+          {{ tasksError }}
+          <button type="button" class="mk-link" :disabled="tasksLoading" @click="loadTasks">
+            {{ tasksLoading ? '重试中…' : '重试' }}
+          </button>
+        </p>
         <div class="ql-run-config">
           <span class="ql-label">本节课最多</span>
           <input v-model.number="maxTurns" type="number" min="1" max="40" class="mk-field__input ql-num" />
@@ -347,6 +354,9 @@ interface ApiErrorLike {
 
 const tasksLoading = ref(false)
 const taskTree = ref<QuickLearnPath[]>([])
+// 内联错误态：loadTasks 失败时 select 区域为空且无任何提示，仅 toast 一闪而过，
+// 用户无法得知列表为何为空；记录错误文案以支持内联展示+重试
+const tasksError = ref('')
 const selectedTaskId = ref('')
 const maxTurns = ref(25)
 const selectedStoryId = ref('')
@@ -486,11 +496,14 @@ async function openFrontend(entry: 'evaluation' | 'path' | 'task' | 'learning-st
 
 async function loadTasks() {
   tasksLoading.value = true
+  tasksError.value = ''
   try {
     const { data } = await adminApi.getQuickLearnTasks(props.profileId)
     taskTree.value = data.data || []
   } catch (error: unknown) {
-    toast.error(apiErrorMessage(error, '加载任务列表失败'))
+    // toast 之外再留内联错误，select 空列表时有据可查；「刷新」按钮即重试入口，保持可用
+    tasksError.value = apiErrorMessage(error, '加载任务列表失败')
+    toast.error(tasksError.value)
   } finally {
     tasksLoading.value = false
   }
