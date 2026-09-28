@@ -649,7 +649,7 @@ function openRunningSession(s: Sample) {
 /* 长期倾向列：单行截断 + title（原可换行撑高行，ADMIN_COLUMN_WIDTH_AUDIT ⑤）；空值统一「未设置」降噪 */
 .vl-goal {
   display: inline-block;
-  max-width: var(--mk-cell-main-max);
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

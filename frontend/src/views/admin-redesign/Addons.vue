@@ -341,8 +341,9 @@ const mcpCount = computed(() => capabilityRows.value.filter((r) => r.type === 'm
 const capabilityCount = computed(() => capabilityRows.value.filter((r) => r.type === 'capability').length)
 const readyCount = computed(() => capabilityRows.value.filter((r) => r.ready).length)
 
-/** E3 并栏：两张卡片行数都少时 1fr 1fr 并排利用宽幅，数据增长后回单列全宽 */
-const sideBySide = computed(() => capabilityRows.value.length <= 5 && mcpTools.value.length <= 5)
+/* 2026-09-29 拆回模型与接入宿主 tab 后容器从全宽变为 ac-tab-body 内嵌，
+   半宽卡内能力表 874px 溢出 506px 容器 370px——外挂能力表和 MCP 服务改为堆叠全宽 */
+const sideBySide = ref(false)
 
 /* ---------- ② MCP 服务（平台工具） ---------- */
 interface McpTool {
