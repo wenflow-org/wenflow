@@ -339,9 +339,22 @@ function loginTone(text: string): 'fresh' | 'recent' | 'never' {
 }
 
 /** 嵌入模式：作为「用户与学习者」页「账号管理」tab 渲染（仅去掉外层壳，状态条/列表/弹窗保留）。
-    count 事件：用户总量就绪后上报（宿主「用户 N」徽章；embedded 才消费） */
+    count 事件：用户总量就绪后上报（宿主「用户 N」徽章；embedded 才消费）
+    stats 事件：账号域页级数字（宿主 KPI 区；同样只在 embedded 被消费） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
-const emit = defineEmits<{ (e: 'count', total: number): void }>()
+export interface AccountStats {
+  /** 后端全量用户数（含/不含模拟随 includeTest 口径） */
+  total: number
+  /** 非测试/非虚拟的真实账号数 */
+  real: number
+  /** 测试 + 虚拟学习者账号数（当前口径内的） */
+  testVirtual: number
+  /** 当前是否含模拟口径——false 时 testVirtual 恒 0，KPI 卡按「未纳入」呈现 */
+  includeTest: boolean
+  /** 名下有 ≥1 条学习路径的人数（路径覆盖；与筛选 pill 的口径无关） */
+  withPaths: number
+}
+const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'stats', stats: AccountStats): void }>()
 
 /** 与后端 validatePasswordRule 一致：≥8 位且同时包含字母和数字 */
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
@@ -498,6 +511,20 @@ function retryLoad() {
 watch(liveUsersTotal, (n) => {
   emit('count', Number(n || 0))
 }, { immediate: true })
+/* 宿主 KPI 区：账号域三个页级数字。口径与筛选 pill 无关（取全量 live 集），
+   否则点「管理员」pill 会让页头 KPI 跟着缩水，读起来像平台用户数变了 */
+const accountStats = computed<AccountStats>(() => {
+  const all = liveUsers.value
+  const real = all.filter((u) => !isTestAccountUser(u)).length
+  return {
+    total: Number(liveUsersTotal.value || all.length),
+    real,
+    testVirtual: Math.max(all.length - real, 0),
+    includeTest: includeTest.value,
+    withPaths: all.filter((u) => Number(u.paths || 0) > 0).length
+  }
+})
+watch(accountStats, (s) => emit('stats', s), { immediate: true })
 /* 宿主刷新联动（用户与学习者合并宿主「刷新」按钮 → 重拉 live 用户域） */
 defineExpose({ refresh: () => { void loadLiveData() }, openCreate })
 /* 筛选 pill（角色 / 活跃 / 生命周期单源；已去掉原「全部角色」下拉，避免与「管理员」pill 语义冲突）。

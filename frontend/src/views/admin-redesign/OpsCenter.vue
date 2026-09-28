@@ -560,7 +560,7 @@ watch(tab, (t) => {
 .ex-row__text strong { font-size: var(--mk-fs-body); }
 .ex-row__text span { font-size: var(--mk-fs-micro); color: var(--mk-muted); max-width: 640px; }
 .ex-row__actions { display: flex; align-items: center; gap: 8px; }
-.ex-row__actions .mk-filter__select { min-width: 110px; height: 32px; padding: 3px 8px; }
+.ex-row__actions .mk-filter__select { min-width: 110px; height: 32px; padding: 3px 8px; padding-right: 1.75em; }
 .ex-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 @media (min-width: 2000px) {
   .ex-row__text strong { font-size: var(--mk-fs-body); }

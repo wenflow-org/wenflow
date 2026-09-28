@@ -182,6 +182,36 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
   font-size: var(--mk-fs-body);
   padding: 0 2px;
 }
+/* 状态条内的作用域开关（含虚拟学习者 / 仅真实 …）：口径开关属于页级读法而非表格筛选，
+   单独放在表格卡头会读成「表格控件」。视觉同 .mk-status__meta，热区抬到控件档。
+   与 .mk-status__actions 同处右侧集群（两者都 margin-left:auto 会各分走一半余量）。 */
+.mk-status__scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: var(--mk-radius-sm);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mk-status__scope:hover { background: color-mix(in srgb, var(--mk-blue) 8%, transparent); }
+.mk-status__scope input { accent-color: var(--mk-blue); }
+
+/* ----- 页头 KPI 区（MkKpi 卡栅格）-----
+   页级关键数字的单一形态：标签 + 数值 + 副行，等宽卡横向铺开。
+   与总览 .brief-kpis / 健康中心 .hc-summary / 成本分析 .tc-overview 同形，
+   那三处是页面私有栅格，本类收敛为共享容器，新页不再各写一份 repeat(N,1fr)。
+   列数不写死：按最小卡宽自动降列（4K 一行 5 张、窄屏两三张），免逐档媒体查询。
+   flex: none —— 列表页 .mk-page--fill 是 flex 列，KPI 区被压缩会把数字挤扁
+   （.mk-status 同样原因显式 flex: none）。 */
+.mk-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+  gap: 10px;
+  flex: none;
+}
 
 /* ----- 卡片 -----
    面是平的：0 阴影 + 1px 发丝线。elevation 只有三档——面=平、悬浮条=shadow-sm、
@@ -464,6 +494,8 @@ html[data-density='compact'] .mk-badge { font-size: 11px; padding: 1px 7px; }
 html[data-density='compact'] .mk-pill { font-size: 12px; padding: 4px 11px; }
 html[data-density='compact'] .mk-filter__input,
 html[data-density='compact'] .mk-filter__select { font-size: 12px; padding: 6px 10px; height: 31px; }
+/* 紧凑档同样要留箭头空档：上面的 padding 简写会把基准规则里的 padding-right 重置回 10px */
+html[data-density='compact'] .mk-filter__select { padding-right: 1.75em; }
 html[data-density='compact'] .mk-btn--sm { font-size: 11.5px; padding: 4px 10px; }
 html[data-density='compact'] .mk-cell-sub { font-size: 11px; }
 html[data-density='compact'] .mk-card__meta { font-size: 12px; }
@@ -529,6 +561,9 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-cell-sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 数字列：不换行、右对齐、不被挤压（固定列宽规范） */
 .mk-num { font-family: var(--mk-mono); font-size: var(--mk-fs-body); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; min-width: 48px; }
+/* 数字列表头必须显式右对齐：.mk-table th 的 text-align:left（特异性 0,1,1）压过 .mk-num（0,1,0），
+   否则表头靠左、数字靠右各站一边——全站所有 <th class="mk-num"> 都受影响。 */
+.mk-table th.mk-num { text-align: right; }
 /* fixed 表里列宽即契约，min-width 反而越权：min-width 48 + 单元格左右 padding 24 = 72px，
    把 56px 的 --mk-col-num 列撑溢出 16px，右对齐的数字因此越过本列右缘 ~4px、
    挤进邻列的 padding——多个数字列并排时列间隙看起来忽宽忽窄。 */
@@ -669,10 +704,13 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   box-sizing: border-box;
   line-height: 1.4;
 }
-/* 下拉筛选：固定最小宽度，避免选中不同长度选项时 select 宽度跳动导致布局抖动 */
+/* 下拉筛选：固定最小宽度，避免选中不同长度选项时 select 宽度跳动导致布局抖动。
+   另给原生箭头留专属空档（1.75em，随字号缩放）：Chrome 的固有宽度把「文字 + 箭头」
+   算得刚好贴边，中文字形又没有侧边空白，15px 档下「全部状态」末字会被裁掉一点点。 */
 .mk-filter__select {
   min-width: 104px;
   width: auto;
+  padding-right: 1.75em;
 }
 .mk-filter__input:focus,
 .mk-filter__select:focus { border-color: var(--mk-blue); box-shadow: var(--mk-focus-ring); }
@@ -1405,6 +1443,7 @@ html[data-theme='dark'] {
   .mk-menu__btn { width: 30px; height: 30px; }
   .mk-filter__input,
   .mk-filter__select { padding: 9px 13px; height: 42px; }
+  .mk-filter__select { padding-right: 1.75em; }
   .mk-pill { padding: 6px 14px; }
   .mk-empty__action { padding: 8px 18px; }
   .mk-modal__panel { width: min(var(--mk-modal-w-lg, 620px), 100%); }
@@ -1446,6 +1485,7 @@ html[data-theme='dark'] {
   .mk-badge--warn { padding: 3px 11px; }
   .mk-filter__input,
   .mk-filter__select { padding: 11px 16px; height: 50px; }
+  .mk-filter__select { padding-right: 1.75em; }
   .mk-pill { padding: 7px 17px; }
   .mk-empty__action { padding: 10px 22px; }
   .mk-modal__panel { width: min(var(--mk-modal-w-xl, 760px), 100%); }

@@ -353,9 +353,20 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
-    count 事件：列表加载完成后上报总条数（宿主「教学 N」徽章） */
+    count 事件：列表加载完成后上报总条数（宿主「教学 N」徽章）
+    stats 事件：宿主 KPI 区用的会话健康档（同样只在 embedded 被消费） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
-const emit = defineEmits<{ (e: 'count', total: number): void }>()
+export interface TeachingStats {
+  /** 会话总数（后端全量口径；达列表上限时仍给真实总量） */
+  total: number
+  /** 已完成 */
+  completed: number
+  /** 失败 + 收尾失败 */
+  failed: number
+  /** 含教学建议的会话数 */
+  advisory: number
+}
+const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'stats', stats: TeachingStats): void }>()
 
 interface WrapupSummary {
   topicSummary?: string
@@ -677,6 +688,17 @@ const tsDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if (attentionCount.value > 0) return 'warn'
   return 'ok'
 })
+
+/* 宿主 KPI 区：会话总数 + 三个终态/建议档。总数之外刻意不取「进行中/待关注/缺总结」——
+   那三档已是卡头 pills 的筛选口径，宿主页头再给一遍就是同一数字两处渲染。
+   失败口径含收尾失败（与「失败」状态筛选项同源：两者都是运营要排查的失败终态） */
+const teachingStats = computed<TeachingStats>(() => ({
+  total: listTotal.value || rows.value.length,
+  completed: rows.value.filter((r) => r.status === 'completed').length,
+  failed: rows.value.filter((r) => r.status === 'failed' || r.status === 'finalization_failed').length,
+  advisory: advisoryCount.value
+}))
+watch(teachingStats, (s) => emit('stats', s), { immediate: true })
 
 /* 详情 — URL 同步 ?session=id 支持深链/刷新恢复 */
 const detail = ref<Row | null>(null)

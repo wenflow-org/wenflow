@@ -2,87 +2,40 @@
   <div class="mr mk-page mk-page--fill">
     <header class="mk-status" :class="`mk-status--${headTone}`">
       <span class="mk-status__dot" aria-hidden="true"></span>
-      <strong class="mk-status__title">记忆与复习观测</strong>
+      <!-- 口径与术语：2026-09-28 撤掉独立折叠卡（首屏第一块是说明卡、且三句话的术语各自
+           在用到的地方已有 title：到期列头 / 队列各档 / 重新观察按钮）。scope 与观察模式
+           两句合并进页标题的 title，信息不落地丢失。 -->
+      <strong
+        class="mk-status__title"
+        title="记忆层（用户级、跨 path）：到期积压 · 课内温故配额 · 概念归并审计；归并默认观察模式，只记录建议，不动 memory_traces"
+      >记忆与复习观测</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">用户 {{ totals.users }} · 记忆痕迹 {{ totals.traces }} · <b :class="{ 'mr__meta-due': totals.due > 0 }">当前到期 {{ totals.due }}</b></span>
       <span class="mk-status__actions">
+        <!-- 作用域开关收在状态条（原在「记忆层概览」卡头）：它切换的是整页口径，
+             而卡片区读起来像「表格控件」。绝对值移到 KPI 区后状态条只留身份 + 作用域 + 操作。 -->
+        <label class="mk-status__scope" title="切换后整页重新统计：含虚拟学习者时，用户 / 痕迹 / 到期与归并队列一并纳入仿真账号">
+          <input v-model="includeVirtual" type="checkbox" @change="refreshAll" />
+          包含虚拟学习者
+        </label>
         <button type="button" class="mk-status__action" :disabled="loading" @click="refreshAll">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
       </span>
     </header>
-    <!-- 口径与术语：默认折叠的引导带（mk-card + mk-section__summary，与 HealthCenter
-         「本页看什么?」同形态）——引导文字常驻会挤掉首屏的 KPI 与表格，全站渐进披露统一为默认收起 -->
-    <section class="mk-card">
-      <details>
-        <summary class="mk-card__head mk-section__summary">
-          <h3 class="mk-card__title">口径与术语</h3>
-          <span class="mk-card__meta">记忆层统计范围 · 观察模式 · 到期/建议/重新观察怎么读</span>
-        </summary>
-        <div class="mr-guide__body">
-          <p><b>记忆层（用户级、跨 path）</b>：到期积压 · 课内温故配额 · 概念归并审计；归并默认<b>观察模式</b>，只记录建议，不动 memory_traces。</p>
-          <p><b>到期 / 建议</b>：「到期」是到该复习而未复习的痕迹数；「建议」是系统给出的归并候选，需人工确认后才会执行。</p>
-          <p><b>重新观察</b>：对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹。</p>
-        </div>
-      </details>
-    </section>
-
-    <!-- 概览卡（2026-09-26 重设计）：平摊 7 数字 → 一个比例叙事 + 一行处理队列。
-         上半：记忆痕迹里「健康 vs 到期」的构成条——到期占比是这页真正的警报线；
-         下半：归并处理队列按「要动手的程度」从左到右排列，已执行记录退为安静档。 -->
-    <div class="mk-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">记忆层概览</h3>
-        <label class="mr__toggle" title="切换后整页重新统计">
-          <input v-model="includeVirtual" type="checkbox" @change="refreshAll" />
-          包含虚拟学习者
-        </label>
-      </div>
-      <!-- traces=0 的降级态：okPct 会算成 100，比例条整条全绿 + 「健康 0 · 覆盖 0 位用户」
-           读起来像 100% 健康。没有任何痕迹时不给比例叙事，改用空态说清楚「为什么空 + 下一步」，
-           归并处理队列四格一并隐藏（没有痕迹就没有归并对象）。 -->
-      <MkEmptyState
-        v-if="!loading && !totals.traces"
-        icon="◌"
-        title="暂无记忆痕迹"
-        description="当前口径内还没有任何记忆痕迹：等学习者产生学习路径并完成概念提取后，这里才会显示健康 / 到期的构成。切换「包含虚拟学习者」可把仿真账号一并纳入统计。"
+    <!-- 页头 KPI 区（2026-09-28）：原「状态条散文 3 数 + 概览卡 880px 构成条 + 四张队列卡」
+         三处各说一遍同一批数。现在全站页头统一为 MkKpi 卡栅格（同总览/健康中心/成本分析形态），
+         页级绝对值只在这里出现一次；口径说明进各卡 title，比例条由「占痕迹 N%」副行承担。 -->
+    <section class="mk-kpi-grid">
+      <MkKpi
+        v-for="card in overviewCards"
+        :key="card.label"
+        :label="card.label"
+        :value="card.value"
+        :hint="card.hint"
+        :tone="card.tone"
+        :title="card.title"
       />
-      <div v-else-if="totals.traces" class="mr-summary">
-        <div class="mr-summary__chart">
-          <div
-            class="mr-summary__ratio"
-            role="img"
-            :aria-label="`记忆痕迹 ${totals.traces} 条，其中到期 ${totals.due} 条，占 ${duePct}%`"
-          >
-            <i class="mr-summary__seg mr-summary__seg--ok" :style="{ width: okPct + '%' }"></i>
-            <i class="mr-summary__seg mr-summary__seg--due" :style="{ width: duePct + '%' }"></i>
-          </div>
-          <div class="mr-summary__legend">
-            <span><i class="mr-summary__dot mr-summary__dot--ok" aria-hidden="true"></i>健康 <b>{{ okTraces }}</b></span>
-            <span><i class="mr-summary__dot mr-summary__dot--due" aria-hidden="true"></i>到期 <b>{{ totals.due }}</b><template v-if="totals.traces"> · 占 {{ duePct }}%</template></span>
-            <span class="mr-summary__cap">覆盖 {{ totals.users }} 位用户</span>
-          </div>
-        </div>
-        <div class="mr-summary__queue">
-          <div class="mr-queue" :class="{ 'mr-queue--warn': totals.ambiguous > 0 }">
-            <b class="mr-queue__num">{{ totals.ambiguous }}</b>
-            <span class="mr-queue__label">需人工看<small>像但不确定，不会自动执行</small></span>
-          </div>
-          <div class="mr-queue">
-            <b class="mr-queue__num">{{ totals.autoApplicable }}</b>
-            <span class="mr-queue__label">可自动执行<small>把握度 + 词面闸门都过</small></span>
-          </div>
-          <div class="mr-queue">
-            <b class="mr-queue__num">{{ totals.proposed }}</b>
-            <span class="mr-queue__label">待归并建议<small>模型给出的同义候选</small></span>
-          </div>
-          <div class="mr-queue mr-queue--quiet">
-            <b class="mr-queue__num">{{ totals.applied }}<i>/{{ totals.deleted }}</i></b>
-            <span class="mr-queue__label">已执行 / 删除<small>留快照，可回滚</small></span>
-          </div>
-        </div>
-      </div>
-    </div>
+    </section>
 
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
@@ -92,44 +45,67 @@
         <span class="mk-card__meta" title="后端口径为全量有记忆痕迹用户；列表按痕迹数倒序只取前 {{ rows.length }} 名，暂无分页">共 {{ totals.users }} 位有记忆痕迹用户（展示前 {{ rows.length }}）· 按痕迹数倒序</span>
       </div>
       <p v-if="error" class="mr__error">{{ error }}</p>
-      <MockSkeletonTable v-if="loading && !rows.length" :cols="6" :rows="8" />
+      <MockSkeletonTable v-if="loading && !rows.length" :cols="5" :rows="8" />
       <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="当前口径内还没有用户产生记忆痕迹。等学习者开始学习并完成概念提取后，这里会按痕迹数倒序列出用户。" />
-      <!-- 用户列表（2026-09-27）：10 列密表 → mk 行级原语（MkRowList + MkRow，与
-           ud-row / ld-sessrow 收敛为同一份行结构）。身份走 lead（头像 + 虚拟徽章）与 title/sub
-           （名称 / shortId）；右列只留「到期压力 + 需人工看」两个要运营动手的信号与行内操作，
-           逐用户的其余计数（痕迹/建议/可自动/已执行÷删除/可回滚/最近观察）在下方明细卡全量展开，
-           列表不再 10 列平摊稀释注意力。原 colgroup/列宽事故记录见 ADMIN_COLUMN_WIDTH_SPEC。 -->
-      <MkRowList v-else class="mr__rows">
-        <MkRow
-          v-for="row in rows"
-          :key="row.userId"
-          :title="row.name || '未命名'"
-          :sub="shortId(row.userId)"
-          :class="{ 'mr__row--active': row.userId === selectedId }"
-          @click="openDetail(row.userId)"
-        >
-          <template #lead>
-            <MkCellAvatar :name="row.name" :tone="row.isVirtualLearner ? 'virtual' : 'default'" />
-            <MkVariantBadge v-if="row.isVirtualLearner" kind="virtual" />
-          </template>
-          <template #trail>
-            <span class="mr__trail">
-              <!-- 到期压力条：数字 + 占该用户痕迹的比例，重压用户扫一眼可见 -->
-              <span class="mr__due" :class="`mr__due--${dueTone(row)}`" :title="`到该复习而未复习 ${row.due} 条，占该用户痕迹 ${duePctOf(row)}%`">
-                <b>{{ row.due }}</b>
-                <span class="mr__due-bar" aria-hidden="true"><i :style="{ width: duePctOf(row) + '%' }"></i></span>
-              </span>
-              <!-- 需人工看：>0 抬成琥珀胶囊；0 压成安静破折号（像但不确定，不会自动执行） -->
-              <span v-if="row.audit?.ambiguous" class="mr__need" :title="`${row.audit?.ambiguous} 条归并候选需人工确认，不会自动执行`">{{ row.audit.ambiguous }}</span>
-              <span v-else class="mr__none" title="没有待人工确认的归并候选">—</span>
-              <span class="mr__actions">
+      <!-- 用户列表（2026-09-27 由 10 列密表收敛；2026-09-28 收回表头）：
+           行列表没有表头，右侧两个裸数字（到期积压 / 待人工看）读者无从判断含义。
+           保留「只留要动手的信号、其余计数进明细卡」这个决定，只补回表头与排序键：
+           用户 | 痕迹（本表倒序键）| 到期 | 需人工看 | 操作。
+           fixed 表的 colgroup 即比例契约，每列都要给宽度（ADMIN_COLUMN_WIDTH_SPEC）。 -->
+      <div v-else class="mk-table-scroll">
+        <table class="mk-table mk-table--click mk-table--fixed">
+          <colgroup>
+            <col style="width:var(--mk-col-text)" />
+            <col style="width:var(--mk-col-num)" />
+            <col style="width:var(--mk-col-num-wide)" />
+            <col style="width:var(--mk-col-num)" />
+            <col style="width:var(--mk-col-actions-wide)" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>用户</th>
+              <th class="mk-num" title="该用户名下的记忆痕迹总数；本表按此列倒序">痕迹</th>
+              <th class="mk-num" title="到该复习而未复习的痕迹数；条内小条 = 占该用户痕迹比例">到期</th>
+              <th class="mk-num" title="像但不确定的归并候选，需人工确认，不会自动执行">需人工看</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in rows"
+              :key="row.userId"
+              :class="{ 'mr__row--active': row.userId === selectedId }"
+              @click="openDetail(row.userId)"
+            >
+              <td>
+                <div class="mr__user">
+                  <MkCellAvatar :name="row.name" :tone="row.isVirtualLearner ? 'virtual' : 'default'" />
+                  <div class="mk-cell-main">
+                    <strong>{{ row.name || '未命名' }}</strong>
+                    <span class="mk-cell-sub">{{ shortId(row.userId) }}</span>
+                  </div>
+                  <MkVariantBadge v-if="row.isVirtualLearner" kind="virtual" />
+                </div>
+              </td>
+              <td class="mk-num">{{ row.traces }}</td>
+              <td class="mk-num">
+                <span class="mr__due" :class="`mr__due--${dueTone(row)}`" :title="`到该复习而未复习 ${row.due} 条，占该用户痕迹 ${duePctOf(row)}%`">
+                  <b>{{ row.due }}</b>
+                  <span class="mr__due-bar" aria-hidden="true"><i :style="{ width: duePctOf(row) + '%' }"></i></span>
+                </span>
+              </td>
+              <td class="mk-num">
+                <span v-if="row.audit?.ambiguous" class="mr__need" :title="`${row.audit.ambiguous} 条归并候选需人工确认，不会自动执行`">{{ row.audit.ambiguous }}</span>
+                <span v-else class="mk-na" title="没有待人工确认的归并候选">—</span>
+              </td>
+              <td class="mk-actions">
                 <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(row.userId)">明细</button>
-                <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" @click.stop="recompute(row.userId)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
-              </span>
-            </span>
-          </template>
-        </MkRow>
-      </MkRowList>
+                <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" title="对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹" @click.stop="recompute(row.userId)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
     <div v-if="detail" class="mr__detail">
       <div class="mk-card">
@@ -373,8 +349,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminMemoryReviewApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import MkRow from '@/components/mk/MkRow.vue'
-import MkRowList from '@/components/mk/MkRowList.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
@@ -488,12 +463,56 @@ const totals = ref({
   deleted: 0
 })
 
-/** 页头 KPI 条（MkStatStrip，与虚拟学习者等页同一组件；hint 收进 title 悬停） */
-
-/* ---- 概览带（2026-09-26 重设计）的三组派生 ---- */
+/* ---- 页头 KPI 区（2026-09-28 收口后的派生） ---- */
 const duePct = computed(() => (totals.value.traces ? Math.round((totals.value.due / totals.value.traces) * 100) : 0));
-const okPct = computed(() => 100 - duePct.value);
-const okTraces = computed(() => Math.max(totals.value.traces - totals.value.due, 0));
+
+interface OverviewCard {
+  label: string
+  value: string | number
+  hint: string
+  title: string
+  tone?: 'ok' | 'warn' | 'bad' | ''
+}
+
+/** 页级绝对值单一来源：用户 / 痕迹 / 到期 / 归并队列都只在 KPI 区出现一次（原状态条散文与
+ *  概览卡 legend 各重说一遍）。到期与需人工看是运营可行动项，>0 才抬琥珀；其余保持中性墨色。 */
+const overviewCards = computed<OverviewCard[]>(() => {
+  const t = totals.value;
+  return [
+    {
+      label: '用户',
+      value: t.users,
+      hint: '有记忆痕迹',
+      title: '后端口径为全量有记忆痕迹用户；是否含虚拟学习者随状态条开关'
+    },
+    {
+      label: '记忆痕迹',
+      value: t.traces,
+      hint: '跨全部学习路径',
+      title: '记忆层痕迹总数（用户级、跨该用户全部 path）'
+    },
+    {
+      label: '当前到期',
+      value: t.due,
+      hint: t.traces ? `占痕迹 ${duePct.value}%` : '暂无痕迹',
+      tone: t.due > 0 ? 'warn' : '',
+      title: `到该复习而未复习 ${t.due} 条，占全部痕迹 ${duePct.value}%`
+    },
+    {
+      label: '需人工看',
+      value: t.ambiguous,
+      hint: '归并候选 · 不自动执行',
+      tone: t.ambiguous > 0 ? 'warn' : '',
+      title: '像但不确定的归并候选，需人工确认，不会自动执行'
+    },
+    {
+      label: '待归并建议',
+      value: t.proposed,
+      hint: `可自动 ${t.autoApplicable} · 已执行 ${t.applied}/${t.deleted}`,
+      title: '模型给出的同义候选；「可自动」= 把握度 + 词面闸门都过；「已执行 / 删除」留快照可回滚'
+    }
+  ];
+});
 
 /** 到期压力档：0=安静；占痕迹 ≥50% 或绝对数 ≥12 = 重压（红）；其余 = 提醒（琥珀） */
 function dueTone(row: OverviewRow): 'none' | 'warn' | 'high' {
@@ -504,7 +523,7 @@ function dueTone(row: OverviewRow): 'none' | 'warn' | 'high' {
 function duePctOf(row: OverviewRow): number {
   return row.traces ? Math.min(Math.round((row.due / row.traces) * 100), 100) : row.due ? 100 : 0;
 }
-/** 明细 · 课内温故计划 KPI 条（同上，走共享组件） */
+/** 明细 · 课内温故计划 KPI 条（MkStatStrip，与虚拟学习者页头同一组件；hint 收进 title） */
 const planKpiItems = computed<MkStatItem[]>(() => {
   const plan = detail.value?.reviewPlan
   if (!plan) return []
@@ -732,54 +751,14 @@ onMounted(async () => {
 
 <style scoped>
 .mr { display: flex; flex-direction: column; }
-/* 状态条里的到期数 >0 时抬琥珀（headTone 已把状态点转琥珀，数字跟随） */
-.mr__meta-due { color: var(--mk-amber); font-weight: 700; font-variant-numeric: tabular-nums; }
-.mr__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted, #5b6577); margin-left: auto; white-space: nowrap; }
-/* 折叠引导带正文：与 HealthCenter .hc-guide__body 同款刻度（页面 scoped 只做容器布局） */
-.mr-guide__body { padding: 10px 14px 12px; display: grid; gap: 6px; }
-.mr-guide__body p { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
-.mr-guide__body b { color: var(--mk-ink); font-weight: 700; }
 
-/* ===== 概览带（2026-09-26 重设计）：比例叙事 + 处理队列 ===== */
-.mr-summary { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 22px; padding: 14px 16px 16px; align-items: center; }
-.mr-summary__ratio {
-  display: flex; height: 14px; border-radius: var(--mk-radius-pill); overflow: hidden;
-  background: var(--mk-surface-2);
-}
-.mr-summary__seg { display: block; height: 100%; }
-.mr-summary__seg--ok { background: var(--mk-green); opacity: 0.55; }
-.mr-summary__seg--due { background: var(--mk-amber); }
-.mr-summary__legend { display: flex; align-items: baseline; gap: 16px; margin-top: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); flex-wrap: wrap; }
-.mr-summary__legend b { color: var(--mk-ink); font-variant-numeric: tabular-nums; font-weight: 700; }
-.mr-summary__dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
-.mr-summary__dot--ok { background: var(--mk-green); opacity: 0.55; }
-.mr-summary__dot--due { background: var(--mk-amber); }
-.mr-summary__cap { margin-left: auto; color: var(--mk-faint); }
-.mr-summary__queue { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.mr-queue {
-  display: grid; gap: 2px; justify-items: start;
-  padding: 9px 12px; border-radius: var(--mk-radius-lg);
-  background: var(--mk-surface-2);
-}
-/* 需人工看 > 0：琥珀描边提示——这是队列里唯一必须人动手的档 */
-.mr-queue--warn { background: color-mix(in srgb, var(--mk-amber) 10%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mk-amber) 32%, transparent); }
-.mr-queue__num { font-size: 21px; font-weight: 800; line-height: 1.15; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
-.mr-queue--warn .mr-queue__num { color: var(--mk-amber); }
-.mr-queue--quiet .mr-queue__num { color: var(--mk-faint); }
-.mr-queue__num i { font-style: normal; font-size: 13px; font-weight: 600; color: var(--mk-faint); }
-.mr-queue__label { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); display: grid; }
-/* 2026-09-27 admin 走查：四张队列卡（需人工看/可自动执行/待归并建议/已执行÷删除）的
-   说明文字 11px 低于项目字号下限 12px，抬到 12px（四卡共用本条规则） */
-.mr-queue__label small { font-weight: 400; color: var(--mk-faint); font-size: 12px; line-height: 1.4; }
+/* ===== 用户列表（2026-09-28：表头回归——行列表没有表头，右侧裸数字无从解读）===== */
+/* 身份格：头像 + 名称/shortId + 虚拟徽章；名称溢出由 .mk-cell-main 统一截断 */
+.mr__user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.mr__user .mk-cell-main { min-width: 0; flex: 1; }
 
-/* ===== 用户列表行设计（2026-09-27：10 列密表 → mk 行级原语 MkRowList + MkRow）===== */
-/* 行列表容器：fill 卡内接管纵向滚动（原 .mk-table-scroll 的职责；窄屏横向由 overflow 兜底） */
-.mr__rows { flex: 1; min-height: 0; overflow-y: auto; }
-/* trail slot 右列簇：到期压力条 + 需人工看 + 行内操作横排不换行 */
-.mr__trail { display: flex; align-items: center; gap: 10px; }
-
-/* 到期压力条：数字在上、比例条在下（trail 右列内） */
-.mr__due { display: grid; gap: 3px; justify-items: start; }
+/* 到期压力条：数字在上、比例条在下；右对齐与同列的数字表头对齐 */
+.mr__due { display: grid; gap: 3px; justify-items: end; }
 .mr__due b { font-variant-numeric: tabular-nums; font-weight: 700; }
 .mr__due--none b { color: var(--mk-faint); font-weight: 400; }
 .mr__due--warn b { color: var(--mk-amber); }
@@ -796,14 +775,12 @@ onMounted(async () => {
   background: color-mix(in srgb, var(--mk-amber) 14%, transparent);
   color: var(--mk-amber); font-weight: 700; font-variant-numeric: tabular-nums;
 }
-.mr__none { color: var(--mk-faint); }
 
 .mr__h4 { margin: 14px 0 6px; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 /* 归并表勾选列表头：收窄，别把「选择」撑成正文列宽 */
 .mr__th-check { width: 40px; }
 .mr__sub { display: block; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
 .mr__row--active { background: var(--mk-blue-bg); }
-.mr__actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
 .mr__error { margin: 6px 0; color: var(--mk-red-strong); font-size: var(--mk-fs-micro); }
 /* 琥珀改走 --mk-amber color-mix：暗色主题自动适配（原 rgba(217,119,6) 是写死的浅色语义） */
 .mr__warn { margin-top: 8px; padding: 8px 10px; border-radius: var(--mk-radius-xl); border: 1px solid color-mix(in srgb, var(--mk-amber) 30%, transparent); background: color-mix(in srgb, var(--mk-amber) 6%, transparent); font-size: var(--mk-fs-micro); }
@@ -830,8 +807,4 @@ onMounted(async () => {
 .mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
 .mr__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 10px; }
 .mr__warn-inline { color: var(--mk-amber); font-size: var(--mk-fs-micro); }
-
-@media (max-width: 1440px) {
-  .mr-summary { grid-template-columns: minmax(0, 1fr); }
-}
 </style>

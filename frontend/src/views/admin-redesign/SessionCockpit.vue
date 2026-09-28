@@ -163,7 +163,6 @@
               <template v-if="hasPath">
                 <div class="cp-path-detail__head">
                   <strong>{{ pathDetailTitle }}</strong>
-                  <span v-if="pathDetailMeta" class="cp-path-detail__meta">{{ pathDetailMeta }}</span>
                 </div>
                 <p v-if="pathDetailSummary" class="cp-path-detail__summary">{{ pathDetailSummary }}</p>
                 <details v-if="pathMilestonesView.length" class="cp-transcript" open>
@@ -2302,7 +2301,6 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-path-detail { display: grid; gap: 10px; padding: 12px 16px 16px; align-content: start; }
 .cp-path-detail__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .cp-path-detail__head strong { font-size: var(--mk-fs-body); }
-.cp-path-detail__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .cp-path-detail__summary { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
 .cp-milestone { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); }
 .cp-milestone__head { display: flex; align-items: baseline; gap: 8px; }
@@ -2878,7 +2876,6 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
   .cp-transcript__message span { font-size: var(--mk-fs-micro); }
   .cp-transcript__message p { font-size: var(--mk-fs-micro); }
   .cp-path-detail__head strong { font-size: var(--mk-fs-emphasis); }
-  .cp-path-detail__meta { font-size: var(--mk-fs-micro); }
   .cp-path-detail__summary { font-size: var(--mk-fs-micro); }
   .cp-milestone__head strong { font-size: var(--mk-fs-body); }
   .cp-milestone__order { font-size: var(--mk-fs-micro); }
@@ -2937,7 +2934,6 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
   .cp-transcript__message span { font-size: var(--mk-fs-micro); }
   .cp-transcript__message p { font-size: var(--mk-fs-micro); }
   .cp-path-detail__head strong { font-size: var(--mk-fs-body); }
-  .cp-path-detail__meta { font-size: var(--mk-fs-micro); }
   .cp-path-detail__summary { font-size: var(--mk-fs-micro); }
   .cp-milestone__head strong { font-size: var(--mk-fs-body); }
   .cp-milestone__order { font-size: var(--mk-fs-micro); }

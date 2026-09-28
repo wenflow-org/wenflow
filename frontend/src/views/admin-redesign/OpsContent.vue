@@ -249,9 +249,20 @@ import { statusText, statusBadge } from './opsShared'
 
 /** 嵌入模式：作为「目标对话」页内「学习路径」tab 渲染（隐藏页面壳与状态条，筛选/表格/抽屉保留）；
     initialStatus：宿主深链预筛（如工作台「生成失败路径」→ 'failed'），挂载时应用。
-    count 事件：stats 加载完成后上报路径总数（宿主「路径 N」徽章） */
+    count 事件：stats 加载完成后上报路径总数（宿主「路径 N」徽章）
+    stats 事件：宿主 KPI 区用的路径域规模（同样只在 embedded 被消费） */
 const props = withDefaults(defineProps<{ embedded?: boolean; initialStatus?: string }>(), { embedded: false, initialStatus: '' })
-const emit = defineEmits<{ (e: 'count', total: number): void }>()
+export interface PathsStats {
+  /** 路径总数（含各状态） */
+  total: number
+  /** 里程碑总数（全平台） */
+  milestones: number
+  /** 任务总数（全平台） */
+  tasks: number
+  /** 已下线（archived）路径数 */
+  archived: number
+}
+const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'stats', stats: PathsStats): void }>()
 
 type PathRow = LearningPathRow & { busy?: boolean; isTestAccount?: boolean }
 
@@ -380,6 +391,14 @@ async function loadStats() {
     stats.value = res.data?.data ?? res.data
     /* 宿主域计数徽章（embedded 才消费） */
     emit('count', Number(stats.value?.total || 0))
+    /* 宿主 KPI 区：路径域规模（总数/里程碑/任务/已下线）。取「规模」而非状态分档——
+       学习中/已完成/生成失败已是卡头 pills 的筛选口径，宿主页头不重说一遍 */
+    emit('stats', {
+      total: Number(stats.value?.total || 0),
+      milestones: Number(stats.value?.totalMilestones || 0),
+      tasks: Number(stats.value?.totalTasks || 0),
+      archived: Number(stats.value?.byStatus?.archived || 0)
+    })
   } catch {
     stats.value = null
   }

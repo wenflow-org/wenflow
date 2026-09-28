@@ -1,16 +1,30 @@
 <template>
   <div class="mk-page mk-page--fill gc-host">
-    <!-- 页面级状态条：场景名 + 同域三视图计数徽章（点击直达对应视图）+ 刷新。
-         徽章=当前视图聚合概览，计数由激活子视图上报（域计数徽章方案） -->
+    <!-- 页面级状态条：场景名 + 口径提示 + 刷新（三域合计由下方 KPI 区随视图呈现，状态条不再重说） -->
     <div class="mk-status" :class="`mk-status--${dashTone}`">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">学习会话</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" title="学习会话三视图合计（教学会话 + 目标对话 + 学习路径，均为仅真实口径）">共 {{ domainTotal ?? '—' }} 项</span>
+      <span class="mk-status__meta" title="教学会话 / 目标对话 / 学习路径三视图均按「仅真实」口径统计">仅真实用户口径</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" @click="refreshActive">刷新</button>
       </span>
     </div>
+
+    <!-- 页头 KPI 区（2026-09-28 统一形态，同用户与学习者 / 记忆与复习）：随当前视图切换。
+         刻意不重说卡头 pills 的筛选计数（进行中 / 待关注 / 缺总结 / 已完成…），
+         只给「总数 + 运营要看的健康档」：教学成败、目标对话完成率、路径规模。 -->
+    <section class="mk-kpi-grid">
+      <MkKpi
+        v-for="card in kpiCards"
+        :key="card.label"
+        :label="card.label"
+        :value="card.value"
+        :hint="card.hint"
+        :tone="card.tone"
+        :title="card.title"
+      />
+    </section>
 
     <!-- 视图切换 pills（唯一的 tab 控件）：各视图计数随 pill 呈现，状态条不再放同义可点计数 -->
     <div class="mk-pills gc-tabs">
@@ -20,7 +34,7 @@
     </div>
 
     <!-- ===== Tab0: 教学会话（嵌入 TeachingSessions 组件；embedded 不含状态条，计数上报宿主） ===== -->
-    <TeachingSessions v-if="gcTab === 'teaching'" ref="teachingRef" embedded @count="onDomainCount('teaching', $event)" />
+    <TeachingSessions v-if="gcTab === 'teaching'" ref="teachingRef" embedded @count="onDomainCount('teaching', $event)" @stats="teachingStats = $event" />
 
     <!-- ===== Tab1: 目标对话（列表内联于宿主；宿主状态条承载统计） ===== -->
     <template v-if="gcTab === 'conversations'">
@@ -61,13 +75,14 @@
             />
             <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）<template v-if="stats && stats.total > rows.length"> · 仅显示最近 {{ rows.length }} 条</template></span>
             <!-- 行级设计（批B）：目标对话四态比例条+完成率（stats 已拉取，此前从未渲染） -->
-            <span v-if="stats && stats.total > 0" class="gc-statusbar" role="img" :aria-label="`目标对话共 ${stats.total}：进行中 ${stats.active} · 已完成 ${stats.completed} · 已取消 ${gcCancelledCount} · 完成率 ${stats.completionRate}%`">
+            <!-- 四态构成条：只给比例，不给数字——完成率与已取消数已由页头 KPI 卡承载，
+                 同屏再说一遍就是同一数字两处渲染（批27 去重口径）。 -->
+            <span v-if="stats && stats.total > 0" class="gc-statusbar" role="img" :aria-label="`目标对话共 ${stats.total}：进行中 ${stats.active} · 已完成 ${stats.completed} · 已取消 ${gcCancelledCount}`" title="目标对话四态构成（蓝=进行中 / 绿=已完成 / 灰=已取消）">
               <span class="gc-statusbar__bar" aria-hidden="true">
                 <i class="gc-statusbar__seg gc-statusbar__seg--active" :style="{ width: gcStatusSeg(stats.active) + '%' }"></i>
                 <i class="gc-statusbar__seg gc-statusbar__seg--done" :style="{ width: gcStatusSeg(stats.completed) + '%' }"></i>
                 <i v-if="gcCancelledCount > 0" class="gc-statusbar__seg gc-statusbar__seg--cancel" :style="{ width: gcStatusSeg(gcCancelledCount) + '%' }"></i>
               </span>
-              <span>完成率 <b>{{ stats.completionRate }}%</b></span>
             </span>
           </div>
         </div>
@@ -191,7 +206,7 @@
     </template>
 
     <!-- ===== Tab2: 学习路径（原「内容管理」合并：路径是目标对话的产出物，同域治理视图） ===== -->
-    <OpsContent v-if="gcTab === 'paths'" ref="pathsRef" embedded :initial-status="pathInitialStatus" @count="onDomainCount('paths', $event)" />
+    <OpsContent v-if="gcTab === 'paths'" ref="pathsRef" embedded :initial-status="pathInitialStatus" @count="onDomainCount('paths', $event)" @stats="pathsStats = $event" />
 
     <!-- 详情面板 -->
     <Teleport to="body">
@@ -327,13 +342,16 @@ import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import { useTableSort } from './useTableSort'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import OpsContent from './OpsContent.vue'
+import type { PathsStats } from './OpsContent.vue'
 import TeachingSessions from './TeachingSessions.vue'
+import type { TeachingStats } from './TeachingSessions.vue'
 import { adminGoalConversationsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -499,16 +517,10 @@ function confToneCls(pct: number): string {
   return confTone(pct) === 'bad' ? 'gc-conf--low' : confTone(pct) === 'warn' ? 'gc-conf--warn' : ''
 }
 
-/* ===== 宿主状态条（学习会话：三域计数徽章 + 切视图） ===== */
+/* ===== 宿主页头（学习会话：三域计数随 pills / KPI 区呈现 + 切视图） ===== */
 /** 三域计数（由激活子视图上报；conversations 域用 stats.total 兜底）。
- *  null = 该 tab 未访问过、子视图从未上报——徽章/合计显示 '—' 而非假 0/假合计（P2：初始 0 会误导「该域没数据」的排查结论） */
+ *  null = 该 tab 未访问过、子视图从未上报——徽章显示 '—' 而非假 0（P2：初始 0 会误导「该域没数据」的排查结论） */
 const domainCount = ref<{ teaching: number | null; conversations: number | null; paths: number | null }>({ teaching: null, conversations: null, paths: null })
-/** 合计仅在三域都已上报时才真实：任一为 null 显示 '—' */
-const domainTotal = computed(() => {
-  const d = domainCount.value
-  if (d.teaching === null || d.conversations === null || d.paths === null) return null
-  return d.teaching + d.conversations + d.paths
-})
 /** 基调：无任何数据 muted；任一域有数即 ok（观测页统一语义） */
 const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   const d = domainCount.value
@@ -522,6 +534,56 @@ function onDomainCount(domain: 'teaching' | 'conversations' | 'paths', n: number
 /* conversations 加载后同步域计数 */
 watch(stats, (s) => {
   if (s) onDomainCount('conversations', Number(s.total || 0))
+})
+
+/* ===== 页头 KPI 区（子视图上报 stats） ===== */
+const teachingStats = ref<TeachingStats | null>(null)
+const pathsStats = ref<PathsStats | null>(null)
+interface KpiCard {
+  label: string
+  value: string | number
+  hint: string
+  title: string
+  tone?: 'ok' | 'warn' | 'bad' | ''
+}
+const kpiCards = computed<KpiCard[]>(() => {
+  if (gcTab.value === 'teaching') {
+    const s = teachingStats.value
+    return [
+      { label: '会话总数', value: s ? s.total : '—', hint: '最近窗口', title: '教学会话总数（后端全量口径）；列表按最近加载，达上限时仍显示真实总量' },
+      { label: '已完成', value: s ? s.completed : '—', hint: '正常收尾', tone: s && s.completed > 0 ? 'ok' : '', title: '状态已完成的会话数' },
+      { label: '失败', value: s ? s.failed : '—', hint: '含收尾失败', tone: s && s.failed > 0 ? 'bad' : '', title: '状态失败或收尾失败的会话数——这两档都要排查' },
+      { label: '有建议', value: s ? s.advisory : '—', hint: '含教学建议', title: '带教学建议的会话数（建议来自收尾评估）' }
+    ]
+  }
+  if (gcTab.value === 'paths') {
+    const s = pathsStats.value
+    return [
+      { label: '学习路径', value: s ? s.total : '—', hint: '含各状态', title: '平台学习路径总数（含学习中 / 已完成 / 生成失败 / 已下线）' },
+      { label: '里程碑', value: s ? s.milestones : '—', hint: '全平台合计', title: '全部路径的里程碑总数' },
+      { label: '任务', value: s ? s.tasks : '—', hint: '全平台合计', title: '全部路径下的任务总数' },
+      { label: '已下线', value: s ? s.archived : '—', hint: '归档不再分发', title: '已下线（archived）路径数——仍在库中，可回溯' }
+    ]
+  }
+  const s = stats.value
+  const cancelled = gcCancelledCount.value
+  return [
+    { label: '目标对话', value: s ? s.total : '—', hint: '用户发起', title: '目标对话总数（用户与系统澄清目标的多轮会话）' },
+    {
+      label: '完成率',
+      value: s ? `${s.completionRate}%` : '—',
+      hint: '已完成 / 总数',
+      tone: s && Number(s.completionRate) >= 60 ? 'ok' : s && Number(s.completionRate) < 30 ? 'warn' : '',
+      title: '目标对话走到「已完成」态的比例——偏低说明澄清过程流失'
+    },
+    {
+      label: '已取消',
+      value: s ? cancelled : '—',
+      hint: '用户中途放弃',
+      tone: cancelled > 0 ? 'warn' : '',
+      title: '用户中途取消的对话数（后端无独立字段，按 总数 − 进行中 − 已完成 推导）'
+    }
+  ]
 })
 /** 刷新：转交当前激活子视图（teaching/paths 暴露 refresh；conversations 走 load） */
 const teachingRef = ref<{ refreshNow: () => void } | null>(null)
@@ -886,7 +948,6 @@ watch(gcTab, (t) => {
 .gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 /* 四态比例条（批B）：卡头内的目标对话状态构成 */
 .gc-statusbar { display: inline-flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.gc-statusbar b { color: var(--mk-ink); font-variant-numeric: tabular-nums; }
 .gc-statusbar__bar { display: inline-flex; width: 72px; height: 6px; border-radius: var(--mk-radius-pill); overflow: hidden; background: var(--mk-surface-2); }
 .gc-statusbar__seg { display: block; height: 100%; }
 .gc-statusbar__seg--active { background: var(--mk-blue); }
