@@ -182,9 +182,18 @@ describe('ApiConfig P1 修复批', () => {
     getReliabilityMock.mockResolvedValue({ data: { data: { settings: { maxUpstreamAttempts: 3, maxTransportRetries: 1, maxLogicalRetries: 1, defaultRequestTimeoutMs: 600000, retryBaseDelayMs: 2000, maxRetryAfterMs: 30000, jitterEnabled: true } } } });
   });
 
+  /** 2026-09-29 拆 tab 后：能力健康/调用参数在「调用与健康」tab，路由在「模型路由」tab */
+  async function gotoTab(wrapper: ReturnType<typeof mountApiConfig> extends Promise<infer W> ? W : never, label: string) {
+    const pill = wrapper.findAll('.mk-pill').find((b) => b.text().includes(label));
+    expect(pill, `应存在「${label}」tab`).toBeTruthy();
+    await pill!.trigger('click');
+    await flushPromises();
+  }
+
   it('汇总角标：「5 能力 · 1 异常」（degraded 计异常）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '调用与健康');
     expect(wrapper.text()).toContain('5 能力 · 1 异常');
     expect(wrapper.find('.ac-sec__title .mk-badge--warn').exists()).toBe(true);
     wrapper.unmount();
@@ -206,6 +215,7 @@ describe('ApiConfig P1 修复批', () => {
       }
     });
     const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '调用与健康');
     expect(wrapper.text()).toContain('5 能力 · 全部正常');
     wrapper.unmount();
   });
@@ -219,6 +229,7 @@ describe('ApiConfig P1 修复批', () => {
     let resolveProbe: (v: unknown) => void = () => {};
     probeCapabilitiesMock.mockReturnValue(new Promise((r) => { resolveProbe = r; }));
     const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '调用与健康');
     expect(getCapabilitiesMock).toHaveBeenCalled();
     expect(probeCapabilitiesMock).toHaveBeenCalledTimes(1);
     // stale 语义：上次探测时间 + 已过期提示 + 探测中
@@ -239,6 +250,7 @@ describe('ApiConfig P1 修复批', () => {
       data: { data: makeSnapshot({ overall: 'unknown', stale: true }) }
     });
     const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '调用与健康');
     expect(getCapabilitiesMock).toHaveBeenCalled();
     expect(probeCapabilitiesMock).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('快照已过期');
@@ -257,7 +269,9 @@ describe('ApiConfig P1 修复批', () => {
     // 分段保存：只在该段有脏位时出现（连接段出现，路由段不出现）
     expect(wrapper.text()).toContain('保存连接');
     expect(wrapper.text()).not.toContain('保存路由');
-    // 修改安全策略（点「仅白名单」）→ 策略组追加
+    // 修改安全策略（点「仅白名单」）→ 策略组追加（拆 tab 后策略在「安全与访问」tab；
+    // 底部保存条在四个配置 tab 常驻，跨 tab 不丢脏位）
+    await gotoTab(wrapper, '安全与访问');
     const policyButtons = wrapper.findAll('.ac-policy__item .mk-seg__item');
     await policyButtons.find((b) => b.text() === '仅白名单')!.trigger('click');
     await nextTick();
@@ -270,6 +284,7 @@ describe('ApiConfig P1 修复批', () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
     expect(wrapper.find('.mk-status').text()).toContain('上次探测');
+    await gotoTab(wrapper, '调用与健康');
     expect(wrapper.find('.ac-sec__sub').text()).toContain('最近探测');
     wrapper.unmount();
   });
@@ -296,6 +311,7 @@ describe('ApiConfig P1 修复批', () => {
   it('路由默认支持逻辑别名：输入框可填 chat（不再受模型清单未拉取限制）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '模型路由');
     const input = wrapper.find('input[list="ac-model-options"]');
     expect(input.exists(), '路由默认应为可输入（支持别名）').toBe(true);
 

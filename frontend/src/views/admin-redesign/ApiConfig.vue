@@ -5,7 +5,7 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">模型与接入</strong>
       <span class="mk-status__sep"></span>
-      <template v-if="tab === 'model'">
+      <template v-if="isConfigTab">
         <span class="mk-status__meta" title="服务商 API Key 是否已配置">密钥：{{ apiConfigFailed ? '—' : (keySet ? '已配置' : '未配置') }}</span>
         <span class="mk-status__meta" :title="modelListTitle">模型清单：{{ apiConfigFailed ? '—' : (models.length ? `${models.length} 个` : '未拉取') }}</span>
         <span class="mk-status__meta" :title="routeTitle">默认路由：{{ apiConfigFailed ? '—' : `${routeCount}/3` }}</span>
@@ -20,7 +20,7 @@
         <span class="mk-status__meta">外挂能力 {{ addonsCount }} 个</span>
       </template>
       <span class="mk-status__actions">
-        <button v-if="tab === 'model'" type="button" class="mk-status__action" :disabled="fetching || !form.apiUrl" @click="fetchModels">
+        <button v-if="tab === 'connection'" type="button" class="mk-status__action" :disabled="fetching || !form.apiUrl" @click="fetchModels">
           <MkLoading v-if="fetching" inline text="拉取中…" />
           <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
         </button>
@@ -30,19 +30,22 @@
     </div>
 
     <!-- 视图切换 pills（唯一的 tab 控件）：接入与模型 / 模型总览 / 外挂能力 -->
-    <div class="mk-pills ac-tabs">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'model' }" @click="switchTab('model')">接入与模型</button>
+        <div class="mk-pills ac-tabs">
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'connection' }" @click="switchTab('connection')">接入与验证</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'routing' }" @click="switchTab('routing')">模型路由</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'runtime' }" @click="switchTab('runtime')">调用与健康</button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'security' }" @click="switchTab('security')">安全与访问</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'overview' }" @click="switchTab('overview')">模型总览</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'addons' }" @click="switchTab('addons')">外挂能力<span class="mk-pill__count">{{ addonsCount }}</span></button>
     </div>
 
-    <!-- ===== Tab1: 接入与模型（原 ApiConfig 全量内容） ===== -->
-    <template v-if="tab === 'model'">
+
+        
+    <!-- ===== Tab1-4：接入与验证 / 模型路由 / 调用与健康 / 安全与访问（2026-09-29 由单一大 tab 拆分，每 tab 一张语义卡；分段保存按钮随卡） ===== -->
+    <template v-if="isConfigTab">
+    <template v-if="tab === 'connection'">
     <div class="ac-tab-body mk-narrow">
-    <!-- 主布局：左列(接入与模型+安全与访问 纵向) / 右列(AI 调用与健康) -->
-    <div class="ac-layout">
-      <div class="ac-layout__main">
-        <!-- 接入与模型(重设计):长卡拆两张语义卡——连接与验证 / 模型路由与思考 -->
+<!-- 接入与模型(重设计):长卡拆两张语义卡——连接与验证 / 模型路由与思考 -->
         <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">连接与验证</h3>
@@ -122,7 +125,12 @@
       </div>
     </section>
 
-    <section class="mk-card">
+    
+    </div>
+    </template>
+    <template v-else-if="tab === 'routing'">
+    <div class="ac-tab-body mk-narrow">
+<section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">模型路由与思考</h3>
         <span class="ac-sec__hint">可填具体模型 id、provider/model 限定式引用，或逻辑别名（chat / reasoning / light）</span>
@@ -213,7 +221,12 @@
       </div>
     </section>
 
-      <!-- 安全与访问（左列第二张卡：2×2 宫格，填满左列下方） -->
+      
+    </div>
+    </template>
+    <template v-else-if="tab === 'security'">
+    <div class="ac-tab-body mk-narrow">
+<!-- 安全与访问（左列第二张卡：2×2 宫格，填满左列下方） -->
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">安全与访问</h3>
@@ -333,10 +346,11 @@
           </div>
         </div>
       </section>
-      </div><!-- /ac-layout__main -->
-
-      <!-- AI 调用与健康（右列） -->
-      <div class="ac-layout__side">
+      
+    </div>
+    </template>
+    <template v-else-if="tab === 'runtime'">
+    <div class="ac-tab-body">
       <section v-if="isLive && (reliability || probe.loaded || configLoadFailed)" class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">AI 调用与健康</h3>
@@ -485,13 +499,13 @@
             <span v-else-if="health?.checkedAt" class="ac-health__stale">快照有效 · 最近 {{ timeAgo(health.checkedAt) }} 更新</span>
           </div>
         </div>
-      </div>
-      </div><!-- /ac-body -->
+        </div><!-- /ac-cols -->
+        </div><!-- /ac-body -->
       </section>
-      </div><!-- /ac-layout__side -->
-    </div><!-- /ac-layout -->
+    </div>
+    </template>
 
-    <!-- 保存条：脏位分域标注（连接/路由/策略/可靠性/探测） -->
+    <!-- 保存条（四个配置 tab 共享；脏位跨 tab 不丢） -->
     <div v-if="dirty.size > 0" class="ac-save">
       <span class="ac-save__dot"></span>
       <span>{{ dirtyGroups.join(' + ') }} · {{ dirty.size }} 组未保存变更</span>
@@ -500,8 +514,8 @@
         {{ saving ? '保存中…' : '保存变更' }}
       </button>
     </div>
-    </div><!-- /ac-tab-body -->
     </template>
+
 
     <!-- ===== Tab2: 模型总览（只读；消费 /api/admin/model-registry） ===== -->
     <ModelRegistryOverview v-else-if="tab === 'overview'" ref="registryRef" @count="registryCount = $event" @aliases="aliasOptions = $event" />
@@ -547,9 +561,11 @@ import { toast } from '@/utils/toast'
 /* ---------- 宿主：接入与模型 · 模型总览 · 外挂能力 ----------
    ?tab=model|overview|addons 双向同步；模型总览嵌入只读 ModelRegistryOverview，
    外挂能力嵌入 Addons（embedded，域计数上报宿主） */
-const AC_TABS = ['model', 'overview', 'addons'] as const
+const AC_TABS = ['connection', 'routing', 'runtime', 'security', 'overview', 'addons'] as const
 type AcTab = (typeof AC_TABS)[number]
-const tab = ref<AcTab>('model')
+const tab = ref<AcTab>('connection')
+/** 四个配置 tab 共享底部保存条（脏位跨 tab 不丢） */
+const isConfigTab = computed(() => ['connection', 'routing', 'runtime', 'security'].includes(tab.value))
 const route = useRoute()
 const router = useRouter()
 const addonsCount = ref(0)
@@ -566,7 +582,7 @@ watch(
   (t) => {
     const v = typeof t === 'string' && (AC_TABS as readonly string[]).includes(t) ? (t as AcTab) : null
     if (v && v !== tab.value) tab.value = v
-    else if (!v && tab.value !== 'model') tab.value = 'model'
+    else if (!v && tab.value !== 'connection') tab.value = 'connection'
   },
   { immediate: true }
 )
@@ -1356,27 +1372,6 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 }
 .ac-quota-field .mk-filter__input { width: 76px; text-align: center; }
 .ac-quota-field em { font-style: normal; color: var(--mk-faint); }
-/* 主布局：左列(接入与模型 + 安全与访问 纵向叠放) / 右列(AI 调用与健康)。
-   安全卡放左列下方填满空档；两栏 1.1:1 接近等宽，右列监控表亦不受挤 */
-.ac-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-}
-.ac-layout__main {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  align-content: start;
-}
-.ac-layout__side {
-  min-width: 0;
-  display: grid;
-  gap: 12px;
-  align-content: start;
-}
-.ac-layout > .mk-card, .ac-layout__main > .mk-card, .ac-layout__side > .mk-card { min-width: 0; }
 /* 分段小标题（连接 / 路由默认 / 默认思考 / 连通性验证 / 调用参数 / 能力健康）：
    统一简洁粗体灰字——不放大写、不加横线后缀，用留白分区（与全站表单一致） */
 .ac-sec__title {
@@ -1566,7 +1561,6 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 
 /* 侧栏占 208px，断点需按视口 1100px 触发（内容区 ≈ 892px），安全策略单列 */
 @media (max-width: 1100px) {
-  .ac-layout { grid-template-columns: 1fr; }
   .ac-policy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ac-cols { grid-template-columns: 1fr; }
   .ac-cols__main { padding: 0 16px; }
