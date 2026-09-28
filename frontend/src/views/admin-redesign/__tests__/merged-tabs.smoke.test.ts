@@ -3,7 +3,7 @@
  * - People（用户与学习者：账号/学习状态 tab + ?tab= 深链 + intent quickAction 新建用户直达）
  * - Sessions（学习会话：教学会话/目标对话/学习路径 tab + ?tab= 深链）
  * - OpsHub（通知与公告：公告/站内通知 tab + ?tab= 深链；2026-09-19 由已下线的 Messages 宿主承接）
- * - ExecLogs（执行日志：成本分析 tab 嵌入 TokenCost）
+ * - ExecLogs（执行日志）+ TokenCost（成本分析，2026-09-29 拆回独立页 token-cost）
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -188,12 +188,20 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     w.unmount();
   });
 
-  it('ExecLogs：深链 /admin/execution-logs?tab=cost 渲染 TokenCost（成本分析 tab）', async () => {
-    const { router, ready } = mockRouter('/admin/execution-logs?tab=cost');
+  it('拆页（2026-09-29）：成本分析独立成 token-cost 场景，执行日志页不再内嵌 TokenCost', async () => {
+    const { router, ready } = mockRouter('/admin/token-cost');
     await ready;
-    const w = mount(ExecLogs, { global: { plugins: [router] } });
+    const w = mount(TokenCost, { global: { plugins: [router] } });
     await settle();
-    expect(w.findComponent(TokenCost).exists()).toBe(true);
+    expect(w.find('.cost-strip').exists()).toBe(true);
+    expect(w.find('.mk-status__title').text()).toBe('Token 成本');
     w.unmount();
+
+    const { router: r2, ready: ready2 } = mockRouter('/admin/execution-logs');
+    await ready2;
+    const w2 = mount(ExecLogs, { global: { plugins: [r2] } });
+    await settle();
+    expect(w2.findComponent(TokenCost).exists()).toBe(false);
+    w2.unmount();
   });
 });

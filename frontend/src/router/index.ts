@@ -372,11 +372,6 @@ const routes: RouteRecordRaw[] = [
     redirect: (to) => ({ path: '/admin/ops-center', query: { ...to.query, tab: 'security' } })
   },
   {
-    // Token 成本已并入执行日志第三 tab（成本分析），旧 URL 兼容
-    path: '/admin/token-cost',
-    redirect: () => ({ path: '/admin/execution-logs', query: { tab: 'cost' } })
-  },
-  {
     // 管理控制台：/admin/:page 反映当前页面（深链/前进后退），动态段置于静态路由之后
     path: '/admin/:page?',
     name: 'AdminConsole',

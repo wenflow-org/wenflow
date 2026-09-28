@@ -93,6 +93,8 @@ const VirtualLearners = asyncPage(() => import('./VirtualLearners.vue'));
 const Skills = asyncPage(() => import('./Skills.vue'));
 const Orchestrator = asyncPage(() => import('./Orchestrator.vue'));
 const ExecLogs = asyncPage(() => import('./ExecLogs.vue'));
+// 2026-09-29 拆回独立页：成本分析从执行日志宿主释放
+const TokenCost = asyncPage(() => import('./TokenCost.vue'));
 const AuditLogs = asyncPage(() => import('./AuditLogs.vue'));
 const ApiConfig = asyncPage(() => import('./ApiConfig.vue'));
 const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
@@ -123,6 +125,7 @@ const components: Record<string, unknown> = {
   'orchestrator': Orchestrator,
   'prompt-eval': PromptEval,
   'execution-logs': ExecLogs,
+  'token-cost': TokenCost,
   'memory-review': MemoryReview,
   'batch-experiments': BatchExperiments,
   'audit-logs': AuditLogs,

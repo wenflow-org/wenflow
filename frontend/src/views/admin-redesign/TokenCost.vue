@@ -1,5 +1,5 @@
 <template>
-  <div :class="embedded ? 'mk-page tc-embedded' : 'mk-page'">
+  <div class="mk-page">
     <!-- 状态条（单行：计数 + 刷新；范围/数据范围移入下方筛选条） -->
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
@@ -17,6 +17,32 @@
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
       </span>
+    </div>
+
+    <!-- 调用成本金额条（2026-09-29 从执行日志宿主搬入，随独立页回归本组件）：
+         读取 token-cost 端点金额字段；单价未配置时显式提示（绝不用 0 冒充）。
+         加载失败与「无调用」是两回事：失败显式报错并可重试，只有双 0 且未失败才说「无调用」。 -->
+    <div class="mk-card cost-strip" :class="{ 'cost-strip--unknown': !costPricingKnown }">
+      <div class="cost-strip__main">
+        <span class="cost-strip__label">调用成本（近 {{ days }} 天{{ includeTest ? ' · 含测试流量' : '' }}）</span>
+        <strong v-if="costLoading" class="cost-strip__value">统计中…</strong>
+        <strong v-else-if="costFailed" class="cost-strip__value cost-strip__value--unknown">加载失败</strong>
+        <strong v-else-if="costUsd !== null" class="cost-strip__value mono">≈ ${{ fmtCostUsd(costUsd) }}</strong>
+        <strong v-else-if="costPricedCalls === 0 && costMissingCalls === 0" class="cost-strip__value cost-strip__value--unknown">无调用</strong>
+        <strong v-else class="cost-strip__value cost-strip__value--unknown">单价未配置</strong>
+        <span v-if="!costLoading" class="cost-strip__hint">
+          <template v-if="costFailed">金额统计拉取失败，不影响下方逐调用明细，可重试。</template>
+          <template v-else-if="costUsd !== null">
+            已定价 {{ costPricedCalls }} 次<template v-if="costMissingCalls > 0"> · {{ costMissingCalls }} 次未定价（未计入）</template>
+          </template>
+          <template v-else-if="costPricedCalls === 0 && costMissingCalls === 0">近 {{ days }} 天没有带 token 的 LLM 调用</template>
+          <template v-else>models.config.ts 的 pricing 尚未填权威单价，暂不展示金额</template>
+        </span>
+        <button v-if="costFailed" type="button" class="mk-link" @click="loadCostSummary">重试</button>
+      </div>
+      <div v-if="missingPricingModels.length" class="cost-strip__missing" :title="missingPricingModels.join('、')">
+        待补单价模型 {{ missingPricingModels.length }} 个：{{ missingPricingModels.join('、') }}
+      </div>
     </div>
 
     <!-- 加载失败（优先于空态） -->
@@ -170,12 +196,6 @@ import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { toast } from '@/utils/toast'
 import type { EChartsCoreOption } from 'echarts/core'
 
-/** 嵌入模式：作为「执行日志」页「成本分析」tab 渲染（仅去掉外层壳，状态条/筛选/排行保留） */
-const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
-
-/* 嵌入在宿主执行日志页内时，切明细由宿主切换页内 tab（emit）；独立渲染时退回跨页 intent */
-const emit = defineEmits<{ (e: 'goto-logs'): void }>()
-
 interface Summary {
   days: number
   includeTest: boolean
@@ -237,12 +257,6 @@ const failRateHint = computed(() => {
    口径说明：本页为 token-cost 端点精确聚合（含重试终态失败）；执行日志展示逐调用行级 token 明细；
    总览「LLM 用量」卡为近 7 天汇总 hero。三处同域但粒度/窗口不同，互跳避免口径黑盒。 */
 function goExecLogs() {
-  /* 宿主已是 execution-logs scene：AdminConsole 对 intent.scene 的 watch 值相等不触发，
-     点击无反应——嵌入态改为让宿主切页内 tab 到日志页 */
-  if (props.embedded) {
-    emit('goto-logs')
-    return
-  }
   intent.scene = 'execution-logs'
 }
 function goOverview() {
@@ -251,7 +265,46 @@ function goOverview() {
 
 watch([days, includeTest], () => {
   void load()
+  void loadCostSummary()
 }, { immediate: true })
+
+/* ===== 调用成本金额条（2026-09-29 随拆页从执行日志宿主搬入） =====
+   读取 token-cost 端点金额字段，口径跟随 days/includeTest；单价未配置时后端返回
+   usd=null，显示「单价未配置」而非 0；pricingStatus.missingPricingModels 给补价清单。 */
+const costLoading = ref(false)
+const costFailed = ref(false)
+const costUsd = ref<number | null>(null)
+const costPricingKnown = ref(false)
+const costPricedCalls = ref(0)
+const costMissingCalls = ref(0)
+const missingPricingModels = ref<string[]>([])
+
+function fmtCostUsd(v: number): string {
+  if (!Number.isFinite(v) || v < 0) return '0.000000'
+  return v.toFixed(6)
+}
+
+async function loadCostSummary() {
+  if (costLoading.value) return
+  costLoading.value = true
+  costFailed.value = false
+  try {
+    const res = await adminTokenCostApi.getSummary({ days: days.value, includeTest: includeTest.value })
+    const totals = res.data?.data?.totals ?? null
+    costUsd.value = totals?.usd ?? null
+    costPricingKnown.value = totals?.pricingKnown ?? false
+    costPricedCalls.value = totals?.pricedCalls ?? 0
+    costMissingCalls.value = totals?.callsMissingPricing ?? 0
+    missingPricingModels.value = res.data?.pricingStatus?.missingPricingModels ?? []
+  } catch {
+    /* 金额条为辅助信息：失败显式报错并可重试，绝不静默降级成「无调用」 */
+    costFailed.value = true
+    costUsd.value = null
+    costPricingKnown.value = false
+  } finally {
+    costLoading.value = false
+  }
+}
 
 async function load(force = false) {
   if (loading.value) return
@@ -336,7 +389,6 @@ const trendChartOption = computed<EChartsCoreOption>(() => {
 
 <style scoped>
 /* 嵌入模式（宿主执行日志页 flex 列内）：占满剩余高度，整页接管滚动 */
-.tc-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .tc-pills { display: inline-flex; }
 /* 筛选条（范围 + 数据范围，独立一行卡片形态） */
 .tc-filterbar {
@@ -408,4 +460,17 @@ html[data-theme='dark'] {
 .tc-skel-kpi { display: grid; gap: 8px; }
 /* 骨架内边距（形状由 MkSkeleton 提供） */
 .tc-skel-pad { padding: 12px 16px 16px; }
+
+/* ===== 调用成本金额条（2026-09-29 自执行日志宿主搬入） ===== */
+.cost-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 12px; }
+.cost-strip--unknown { border-left: 3px solid var(--mk-amber, #d97706); }
+.cost-strip__main { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex-wrap: wrap; }
+.cost-strip__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
+.cost-strip__value { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--mk-ink); }
+.cost-strip__value--unknown { color: var(--mk-faint); }
+.cost-strip__hint { color: var(--mk-faint, #5f6f8c); font-size: var(--mk-fs-micro); }
+.cost-strip__missing { font-size: var(--mk-fs-micro); color: var(--mk-amber, #d97706); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 1440px) { .cost-strip__value { font-size: 20px; } }
+@media (min-width: 1920px) { .cost-strip__value { font-size: 22px; } }
+@media (min-width: 2800px) { .cost-strip__value { font-size: 26px; } }
 </style>

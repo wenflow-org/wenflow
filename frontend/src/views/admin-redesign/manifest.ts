@@ -50,7 +50,9 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'skills', label: 'Skill 与提示词', group: 'Skill', glyph: '能' },
   { id: 'prompt-eval', label: 'Prompt 评估', group: 'Skill', glyph: '评' },
   // 观测组：Token 成本并入执行日志第三 tab（成本分析）；记忆与复习移出后只剩日志双子页
+  // 2026-09-29 用户拍板拆回独立页：成本分析从执行日志宿主 tab 释放（原 2026-09-04 并入）
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志' },
+  { id: 'token-cost', label: '成本分析', group: '观测', glyph: '费' },
   { id: 'audit-logs', label: '审计日志', group: '观测', glyph: '审' },
   // 系统组：原「配置」组改名；模型与接入成为 tab 宿主（接入与模型 · 外挂能力）；
   // 系统工具成为 tab 宿主（运维工具 · 数据导出 · 会话安全）

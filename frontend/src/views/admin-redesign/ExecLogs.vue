@@ -28,46 +28,15 @@
       </span>
     </div>
 
-    <!-- 日志 / Trace 链路 / 成本分析 tab（Trace 为执行日志下钻视图；成本分析为同源观测并入） -->
+    <!-- 日志 / Trace 链路 tab（Trace 为执行日志下钻视图）；成本分析 2026-09-29 拆回独立页 /admin/token-cost -->
     <div class="mk-pills">
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'logs' }" @click="switchElTab('logs')">日志</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'trace' }" @click="switchElTab('trace')">Trace 链路</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'cost' }" @click="switchElTab('cost')">成本分析</button>
     </div>
 
     <!-- ===== Tab2: Trace 链路（嵌入 TraceWaterfall 组件） ===== -->
     <TraceWaterfall v-if="elTab === 'trace'" embedded />
 
-    <!-- ===== Tab3: 成本分析（嵌入 TokenCost 组件，观测同域并入 2026-09-04） ===== -->
-    <template v-if="elTab === 'cost'">
-      <!-- 成本金额条：读取 token-cost 端点新增的金额字段；单价未配置时显式提示「单价未配置」（绝不用 0 冒充）。
-           加载失败与「无调用」是两回事：失败显式报错并可重试，只有双 0 且未失败才说「无调用」——
-           此前失败被静默伪装成「无调用/没有带 token 的 LLM 调用」，与下方 TokenCost 的「加载失败」自相矛盾 -->
-      <div class="mk-card cost-strip" :class="{ 'cost-strip--unknown': !costPricingKnown }">
-        <div class="cost-strip__main">
-          <span class="cost-strip__label">调用成本（近 {{ tokenCostFilters.days }} 天{{ tokenCostFilters.includeTest ? ' · 含测试流量' : '' }}）</span>
-          <strong v-if="costLoading" class="cost-strip__value">统计中…</strong>
-          <strong v-else-if="costFailed" class="cost-strip__value cost-strip__value--unknown">加载失败</strong>
-          <strong v-else-if="costUsd !== null" class="cost-strip__value mono">≈ ${{ fmtCostUsd(costUsd) }}</strong>
-          <strong v-else-if="costPricedCalls === 0 && costMissingCalls === 0" class="cost-strip__value cost-strip__value--unknown">无调用</strong>
-          <strong v-else class="cost-strip__value cost-strip__value--unknown">单价未配置</strong>
-          <span class="cost-strip__hint">
-            <template v-if="costFailed">金额统计拉取失败，不影响下方逐调用明细，可重试。</template>
-            <template v-else-if="costUsd !== null">
-              已定价 {{ costPricedCalls }} 次<template v-if="costMissingCalls > 0"> · {{ costMissingCalls }} 次未定价（未计入）</template>
-            </template>
-            <template v-else-if="costPricedCalls === 0 && costMissingCalls === 0">近 {{ tokenCostFilters.days }} 天没有带 token 的 LLM 调用</template>
-            <template v-else>models.config.ts 的 pricing 尚未填权威单价，暂不展示金额</template>
-          </span>
-          <button v-if="costFailed" type="button" class="mk-link" @click="loadCostSummary">重试</button>
-        </div>
-        <div v-if="missingPricingModels.length" class="cost-strip__missing" :title="missingPricingModels.join('、')">
-          待补单价模型 {{ missingPricingModels.length }} 个：{{ missingPricingModels.join('、') }}
-        </div>
-      </div>
-      <!-- 宿主侧承接成本 tab 的「逐调用明细」：切页内 tab 回日志页（跨页 intent 同值不触发） -->
-      <TokenCost embedded @goto-logs="switchElTab('logs')" />
-    </template>
 
     <!-- ===== Tab1: 日志流（默认） ===== -->
     <!-- P0 修复：卡片常驻（对齐 Users.vue 结构：卡片壳 + 常驻筛选头，骨架/错误/空态/表格/分页都在卡片内）。
@@ -334,7 +303,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { Waypoints } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
-import { intent, openSkillDrawer, clearInvestigation, dataSource, tokenCostFilters, liveSkillStatsMap } from './store'
+import { intent, openSkillDrawer, clearInvestigation, dataSource, liveSkillStatsMap } from './store'
 import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -344,15 +313,13 @@ import MkLoading from '@/components/mk/MkLoading.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
-import TokenCost from './TokenCost.vue'
-import { adminTokenCostApi } from '@/api/adminApi'
 import { TERMS, errorCodeLabel, routeSourceLabel } from './terms'
 import { useTableSort } from './useTableSort'
 import SavedViewsBar from './SavedViewsBar.vue'
 import { useSavedViews, sameViewQuery, type SavedView } from './useSavedViews'
 
-/* 日志 / Trace 链路 / 成本分析 tab（Trace 为执行日志下钻视图；成本分析为观测同域并入） */
-const EL_TABS = ['logs', 'trace', 'cost'] as const
+/* 日志 / Trace 链路 tab（Trace 为执行日志下钻视图） */
+const EL_TABS = ['logs', 'trace'] as const
 type ElTab = (typeof EL_TABS)[number]
 const elTab = ref<ElTab>('logs')
 const route = useRoute()
@@ -362,6 +329,12 @@ watch(
   () => route.query.tab,
   (t) => {
     const v = typeof t === 'string' && (EL_TABS as readonly string[]).includes(t) ? (t as ElTab) : null
+    if (t === 'cost') {  // 成本分析 2026-09-29 拆回独立页：深链转投 /admin/token-cost
+      const q = { ...route.query }
+      delete q.tab
+      void router.replace({ path: '/admin/token-cost', query: q })
+      return
+    }
     if (v && v !== elTab.value) elTab.value = v
     else if (!v && elTab.value !== 'logs') elTab.value = 'logs'
   },
@@ -373,58 +346,7 @@ function switchElTab(t: ElTab) {
   if (route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
 }
 
-/* 成本金额条（成本 tab）：读取 token-cost 端点金额字段，口径跟随共享筛选
-   （store.tokenCostFilters，与嵌入的 TokenCost 组件同一份状态，切换时间窗同步刷新）。
-   单价未配置时后端返回 usd=null，这里显示「单价未配置」而非 0 / 空白；
-   pricingStatus.missingPricingModels 给出运维补价清单。 */
-const costLoading = ref(false)
-const costLoaded = ref(false)
-/** 金额条单独失败态（P0）：与「无调用」区分——失败时说「加载失败 + 重试」，
-    绝不把接口错误静默降级成「近 N 天没有带 token 的 LLM 调用」（与同 tab TokenCost 自相矛盾） */
-const costFailed = ref(false)
-const costUsd = ref<number | null>(null)
-const costPricingKnown = ref(false)
-const costPricedCalls = ref(0)
-const costMissingCalls = ref(0)
-const missingPricingModels = ref<string[]>([])
 
-function fmtCostUsd(v: number): string {
-  if (!Number.isFinite(v) || v < 0) return '0.000000'
-  return v.toFixed(6)
-}
-
-async function loadCostSummary() {
-  if (costLoading.value) return
-  costLoading.value = true
-  costFailed.value = false
-  try {
-    const res = await adminTokenCostApi.getSummary({ days: tokenCostFilters.days, includeTest: tokenCostFilters.includeTest })
-    const totals = res.data?.data?.totals ?? null
-    costUsd.value = totals?.usd ?? null
-    costPricingKnown.value = totals?.pricingKnown ?? false
-    costPricedCalls.value = totals?.pricedCalls ?? 0
-    costMissingCalls.value = totals?.callsMissingPricing ?? 0
-    missingPricingModels.value = res.data?.pricingStatus?.missingPricingModels ?? []
-    costLoaded.value = true
-  } catch {
-    // 金额条为辅助信息：失败不再静默伪装「无调用」——置失败态由用户重试或看下方 TokenCost 明细
-    costFailed.value = true
-    costUsd.value = null
-    costPricingKnown.value = false
-  } finally {
-    costLoading.value = false
-  }
-}
-/* 进入成本 tab 时懒加载一次（深链 ?tab=cost 由 route watch 改写 elTab 后触发） */
-watch(elTab, (t) => {
-  if (t === 'cost' && !costLoaded.value) void loadCostSummary()
-}, { immediate: true })
-// 筛选变化（与 TokenCost 同源）→ 金额条失效；在成本 tab 上立即刷新，否则下次进入刷新
-// （此前括号错位把本 watch 嵌进了 elTab 回调：每切一次 tab 泄漏注册一个 watcher）
-watch(tokenCostFilters, () => {
-  costLoaded.value = false
-  if (elTab.value === 'cost') void loadCostSummary()
-})
 /** 切到 Trace tab 并让瀑布聚焦指定链路/会话（openTrace/openSession 深链接入） */
 function showTrace(traceId?: string, sessionId?: string) {
   elTab.value = 'trace'
@@ -1434,35 +1356,4 @@ html[data-theme='dark'] {
 
 
 
-/* ================= 成本金额条（成本 tab 顶部） ================= */
-.cost-strip {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
-}
-.cost-strip__main { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.cost-strip__label { color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); font-weight: 600; }
-.cost-strip__value { font-size: var(--mk-fs-18); font-weight: 750; color: var(--mk-green, #16a34a); font-variant-numeric: tabular-nums; }
-.cost-strip__value--unknown { color: var(--mk-amber, #d97706); }
-.cost-strip__hint { color: var(--mk-faint, #5f6f8c); font-size: var(--mk-fs-micro); }
-.cost-strip__missing {
-  margin-left: auto;
-  max-width: 52%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--mk-amber, #d97706);
-  font-size: var(--mk-fs-micro);
-}
-.cost-strip--unknown { border-left: 3px solid var(--mk-amber, #d97706); }
-
-
-/* 成本金额条的值是**展示型数字**（KPI 语义）：随档位放大，且每个档都要大于该档的
-   emphasis × 1.15，否则在 3840 会落进文本带、变成第 4 个文本档
-   （巡检实测 execution-cost@3840 就是它冒出来的 18px）。 */
-@media (min-width: 1440px) { .cost-strip__value { font-size: 20px; } }
-@media (min-width: 1920px) { .cost-strip__value { font-size: 22px; } }
-@media (min-width: 2800px) { .cost-strip__value { font-size: 26px; } }
 </style>
