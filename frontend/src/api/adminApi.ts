@@ -586,6 +586,16 @@ export const adminFieldRoutingsApi = {
   getSkillRoutings: async (skillId: string) =>
     adminAxios.get(`/admin/field-routings/skill/${encodeURIComponent(skillId)}`),
 
+  /**
+   * 阶段级批量 skill 投影（P2 N+1 收尾）：一次拉全该 stage 全部 skill，替代
+   * loadSkillSyncs 逐 skill GET /skill/:skillId 的 N 次请求。
+   * 响应形状：data = { stage, promptRoleMeta, skills }，其中 skills[i] 与单 skill
+   * 端点的 data 同构（skillId/routings/fields/core.sync），唯一差异是 promptRoleMeta
+   * 只在顶层下发一次（元信息不随 skill 变化，后端约定如此，消费方无需逐条映射）。
+   */
+  getSkillBatch: async (stage: string) =>
+    adminAxios.get('/admin/field-routings/skill-batch', { params: { stage } }),
+
   getChanges: async (params?: { stage?: string; fieldId?: string; limit?: number }) =>
     adminAxios.get('/admin/field-routings/changes', { params }),
 

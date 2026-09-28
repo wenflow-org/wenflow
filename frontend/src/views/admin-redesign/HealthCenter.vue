@@ -475,9 +475,43 @@ async function refresh(force = false) {
 }
 
 /* ---------- 跳转（2B 起全部 router 导航；入口卡 → 明细页） ---------- */
+/** 归一 skillId：去 skill: 前缀并校验词法，不合法返回 null（detail 是自由文本，宁缺毋滥） */
+function normSkillId(token: string | undefined): string | null {
+  const t = (token ?? '').replace(/^skill:/, '')
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(t) ? t : null
+}
+/** 从检查项明细尽力提取首个 skillId（hash/yaml 异常跳 Skill 工作台时深链 ?skill= 定位用）。
+    后端 detail 为自由文本，按各检查项的实际格式宽松解析：w4 行首是 agentId（`skill:<id> status=…`）、
+    params 行首是裸 skillId（`<id> <字段>：core=…`，缺声明行首是「[提示]」自然解析不出）、
+    yaml 交叉校验的 skillId 内嵌在全角冒号后（`…：<id>` / `…：<id>=`）。提取不到则退回不带参跳转。 */
+function extractSkillId(id: HealthCenterItemId): string | null {
+  const lines = displayReport.value?.health.items.find((i) => i.id === id)?.detail ?? []
+  if (id === 'w4-corehash') return normSkillId(lines[0]?.split(/\s+/)[0])
+  if (id === 'params-consistency') {
+    for (const line of lines) {
+      const hit = normSkillId(line.split(/\s+/)[0])
+      if (hit) return hit
+    }
+    return null
+  }
+  for (const line of lines) {
+    const m = /[：:]\s*([a-z0-9]+(?:-[a-z0-9]+)*)(?:[=\s]|$)/.exec(line)
+    if (m) return m[1]
+  }
+  return null
+}
+/** Skill 工作台深链：能定位到具体 skill 就带上 ?skill=。
+    注意：目标页 PromptWorkbench.vue（/admin/skill-workbench）目前【未】消费该参数
+    （纯核心文件清单页，无 route.query 读取），本次只把参数带上、不改目标页，
+    待其支持后深链即自动生效（落点为列表页首行定位的预留约定）。 */
+function workbenchPath(id: HealthCenterItemId): string {
+  const skillId = extractSkillId(id)
+  return skillId ? `/admin/skill-workbench?skill=${encodeURIComponent(skillId)}` : '/admin/skill-workbench'
+}
 function goDrift(kind: keyof HealthDriftSummary) {
   if (kind === 'contract') void router.push('/admin/orchestrator?tab=drift')
-  else if (kind === 'hash') void router.push('/admin/skill-workbench')
+  // hash 漂移即健康项 w4-corehash 的口径（HealthDriftSummary 注释），深链带上首个漂移 skill
+  else if (kind === 'hash') void router.push(workbenchPath('w4-corehash'))
   else void router.push('/admin/execution-logs')
 }
 
@@ -485,7 +519,7 @@ function goDrift(kind: keyof HealthDriftSummary) {
     Skills 兜底带 ?tab=health：目标检查项就落在 Skills 宿主的健康检查 tab，保住「查看 →」动线 */
 function jump(id: HealthCenterItemId) {
   if (id === 'field-routing' || id === 'field-routing-contract' || id === 'fields-sync') void router.push('/admin/orchestrator?tab=drift')
-  else if (id === 'yaml-crosscheck' || id === 'params-consistency') void router.push('/admin/skill-workbench')
+  else if (id === 'yaml-crosscheck' || id === 'params-consistency') void router.push(workbenchPath(id))
   else void router.push('/admin/skills?tab=health')
 }
 

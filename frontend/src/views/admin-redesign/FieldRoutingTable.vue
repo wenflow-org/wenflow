@@ -541,9 +541,13 @@ const skillSyncs = ref<SkillSyncBadge[]>([]);
 const skillSyncLoading = ref(false);
 
 /**
- * 逐 skill 拉 M1 单 skill 投影（GET /field-routings/skill/:skillId），失败静默降级（角标不显示）。
- * 欠账标注（P2 N+1）：后端已有批量端点 GET /skill-batch?stage=X（backend field-routings.ts:244），
- * 但 adminApi.ts 未封装（本次不可动），故保持逐 skill GET + Promise.all 并发（无串行，仅请求数仍为 N）。
+ * 批量拉当前 stage 全部 skill 的 core-sync 投影（GET /field-routings/skill-batch?stage=X）。
+ * P2 N+1 收尾：此前逐 skill GET /skill/:skillId + Promise.all（请求数 = skill 数），
+ * 现改一次批量拉全。响应字段与旧逐个拉取的合并结果对齐，无需字段映射：
+ *   data.skills[i].skillId   ↔ 旧由 agentId 去前缀反解
+ *   data.skills[i].core.sync ↔ 旧 res.data.data.core.sync
+ * 唯一差异 promptRoleMeta 收敛到 data 顶层（本函数不消费该元信息）。
+ * 失败静默降级（角标整体不显示）：批量为单请求，部分成功语义不再保留（旧版可跳过单 skill 失败）。
  * save/sync/prune 后维持全量 loadStage：三者均整阶段文件改动，全量刷新语义正确，无需增量。
  */
 async function loadSkillSyncs() {
@@ -556,12 +560,15 @@ async function loadSkillSyncs() {
     return;
   }
   skillSyncLoading.value = true;
-  const results = await Promise.all(
-    skillAgents.map(async (agentId) => {
-      const skillId = agentId.replace(/^skill:/, '');
-      try {
-        const res = await adminFieldRoutingsApi.getSkillRoutings(skillId);
-        const sync = res.data?.data?.core?.sync ?? null;
+  try {
+    const res = await adminFieldRoutingsApi.getSkillBatch(props.stage);
+    // 与旧逐个拉取同口径：只保留当前 stage 详情 agents 里登记的 skill，
+    // 编排文件与 skills.yaml 极端漂移时不引入多余额标
+    const want = new Set(skillAgents.map((id) => id.replace(/^skill:/, '')));
+    skillSyncs.value = ((res.data?.data?.skills ?? []) as Array<{ skillId: string; core?: { sync?: SkillSyncBadge['sync'] } }>)
+      .filter((s) => want.has(s.skillId))
+      .map((s) => {
+        const sync = s.core?.sync ?? null;
         const tone = !sync
           ? 'muted'
           : sync.missing.length
@@ -573,14 +580,13 @@ async function loadSkillSyncs() {
           sync?.state === 'no-core' ? 'core 文件缺失（协议 tab 未建核心声明）' : '',
           sync ? `${TERMS.statusMissing} ${sync.missing.length} · ${TERMS.statusOrphan} ${sync.orphan.length} · 类型不一致 ${sync.typeMismatch.length}` : 'core 投影不可用'
         ].filter(Boolean).join('\n');
-        return { skillId, sync, tone, title };
-      } catch {
-        return null;
-      }
-    })
-  );
-  skillSyncLoading.value = false;
-  skillSyncs.value = results.filter((r): r is SkillSyncBadge => r !== null);
+        return { skillId: s.skillId, sync, tone, title };
+      });
+  } catch {
+    skillSyncs.value = [];
+  } finally {
+    skillSyncLoading.value = false;
+  }
 }
 
 function goSkill(skillId: string) {
