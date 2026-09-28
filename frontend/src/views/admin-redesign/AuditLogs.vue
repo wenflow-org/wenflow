@@ -101,8 +101,8 @@
         <table class="mk-table mk-table--click mk-table--fixed">
           <colgroup>
             <col v-if="colVisible('time')" style="width:var(--mk-col-datetime)">
-            <col v-if="colVisible('admin')" class="al-col-admin" style="width:var(--mk-col-text-sm)">
-            <col v-if="colVisible('action')" class="al-col-action" style="width:var(--mk-col-text)">
+            <col v-if="colVisible('admin')" class="al-col-admin" style="width:var(--mk-col-badge)">
+            <col v-if="colVisible('action')" class="al-col-action" style="width:var(--mk-col-model)">
             <col v-if="!noTargetTypes && colVisible('tt')" style="width:var(--mk-col-id)">
             <col v-if="colVisible('target')" style="width:var(--mk-col-model-wide)">
             <col v-if="colVisible('result')" style="width:var(--mk-col-num)">
@@ -208,7 +208,7 @@
             <col style="width:var(--mk-col-model-wide)">
             <col style="width:var(--mk-col-model)">
             <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-text)">
+            <col style="width:var(--mk-col-model-wide)">
             <col style="width:var(--mk-col-actions)">
           </colgroup>
           <thead>

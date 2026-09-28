@@ -90,7 +90,7 @@
             <col v-if="!tsHiddenCols.has('user')" style="width:var(--mk-col-text-sm)">
             <col v-if="!tsHiddenCols.has('status')" style="width:var(--mk-col-badge)">
             <col v-if="!tsHiddenCols.has('interact')" style="width:var(--mk-col-model)">
-            <col v-if="!tsHiddenCols.has('progress')" style="width:var(--mk-col-num)">
+            <col v-if="!tsHiddenCols.has('progress')" style="width:var(--mk-col-model)">
             <col v-if="!tsHiddenCols.has('output')" style="width:var(--mk-col-badge)">
             <col v-if="!tsHiddenCols.has('attention')" style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-actions)">
