@@ -2,7 +2,7 @@
 
 > 📌 类型：活规范（实现度 ~85%；§3.3 多源真值已接线 2026-09-28 更新）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
 
-> **本文回答两个原始"北星"问题**（见 [`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §0.5、[`20questions/TWELVE_QUESTIONS_INVESTIGATION.md`](./20questions/TWELVE_QUESTIONS_INVESTIGATION.md) §6/§7）：
+> **本文回答两个原始"北星"问题**（见 [`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §0.5、`20questions/TWELVE_QUESTIONS_INVESTIGATION.md` §6/§7——本地研究资料，未入库）：
 >
 > - **Q6**：从学习支持服务角度来看，学习者模型更像是学习者中心；**通常有哪些需要考虑的维度，哪些是本项目特异的**？
 > - **Q7**：知识或状态的**聚合、拆分、融合、评估**，**具体是怎么做到的**？
@@ -46,7 +46,7 @@
 
 ## 0. 为什么有这份文档
 
-**Q6 原话**（[`20questions/TWELVE_QUESTIONS_INVESTIGATION.md:80`](./20questions/TWELVE_QUESTIONS_INVESTIGATION.md)）：
+**Q6 原话**（`20questions/TWELVE_QUESTIONS_INVESTIGATION.md:80`，本地研究资料，未入库）：
 > 从学习支持服务角度看学习者模型（通常要考虑什么 / 什么是特异的）。
 
 **Q7 原话**（同文件 `:90`）：
