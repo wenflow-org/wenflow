@@ -144,8 +144,8 @@
                   <span v-else-if="r.userId" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
                 </div>
                 <div class="ts-tags">
-                  <span v-if="r.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
-                  <span v-else-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="测试/审计账号">测试</span>
+                  <MkVariantBadge v-if="r.isVirtualLearner" kind="virtual" />
+                  <MkVariantBadge v-else-if="r.isTestAccount" kind="test" />
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
@@ -350,6 +350,7 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
     count 事件：列表加载完成后上报总条数（宿主「教学 N」徽章） */

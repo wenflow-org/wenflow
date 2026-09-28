@@ -193,7 +193,8 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     const tags = wrapper.findAll('.mk-badge--sm');
     expect(tags).toHaveLength(2);
     expect(tags[0].text()).toBe('虚拟');
-    expect(tags[1].text()).toBe('测试');
+    // 徽章文案已统一为 MkVariantBadge（原页私有「测试」→ 与 Users 一致的「测试账号」）
+    expect(tags[1].text()).toBe('测试账号');
     wrapper.unmount();
   });
 });

@@ -122,14 +122,14 @@
             <tr v-for="r in paged" :key="r.id" class="gc-row" tabindex="0" @click="openDetail(r)" @keydown.enter.prevent="openDetail(r)">
               <td>
                 <div class="gc-user">
-                  <i class="gc-ava" :class="{ 'gc-ava--virtual': r.isVirtualLearner, 'gc-ava--test': !r.isVirtualLearner && r.isTestAccount }" aria-hidden="true">{{ (r.userName || '用')[0] }}</i>
+                  <MkCellAvatar :name="r.userName" :tone="r.isVirtualLearner ? 'virtual' : (!r.isVirtualLearner && r.isTestAccount ? 'test' : 'default')" />
                   <div class="mk-cell-main">
                     <strong>{{ r.userName }}</strong>
                     <span class="mk-cell-sub">{{ r.userEmail }}</span>
                   </div>
                   <div class="gc-tags">
-                    <span v-if="r.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
-                    <span v-else-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="测试/审计账号">测试</span>
+                    <MkVariantBadge v-if="r.isVirtualLearner" kind="virtual" />
+                    <MkVariantBadge v-else-if="r.isTestAccount" kind="test" />
                   </div>
                 </div>
               </td>
@@ -330,6 +330,8 @@ import MkLoading from '@/components/mk/MkLoading.vue'
 import { useTableSort } from './useTableSort'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from '@/components/mk/MkCols.vue'
+import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import OpsContent from './OpsContent.vue'
 import TeachingSessions from './TeachingSessions.vue'
 import { adminGoalConversationsApi } from '@/api/adminApi'
@@ -881,7 +883,6 @@ watch(gcTab, (t) => {
 /* 键盘可达（对齐 TeachingSessions 行写法）：行可聚焦，焦点态描边提示当前位置 */
 .gc-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
 /* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
-/* 身份 chip：与 Users/MemoryReview 同一语言（真实蓝 / 虚拟紫 / 测试琥珀），三页统一 */
 .gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 /* 四态比例条（批B）：卡头内的目标对话状态构成 */
 .gc-statusbar { display: inline-flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
@@ -892,15 +893,6 @@ watch(gcTab, (t) => {
 .gc-statusbar__seg--done { background: var(--mk-green); }
 .gc-statusbar__seg--cancel { background: var(--mk-faint); opacity: 0.5; }
 .gc-user .mk-cell-main { min-width: 0; flex: 1; }
-.gc-ava {
-  width: 28px; height: 28px; border-radius: 50%; flex: none;
-  display: grid; place-items: center;
-  font-style: normal; font-size: 12px; font-weight: 800;
-  background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
-  color: var(--mk-accent-deep);
-}
-.gc-ava--virtual { background: color-mix(in srgb, var(--mk-purple) 14%, transparent); color: var(--mk-purple); }
-.gc-ava--test { background: color-mix(in srgb, var(--mk-amber) 14%, transparent); color: var(--mk-amber); }
 .gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }
 /* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
 .gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }

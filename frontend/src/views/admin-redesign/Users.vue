@@ -124,7 +124,7 @@
             <td v-if="isLive && showCol('check')"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isTestAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
               <div class="ul-user">
-                <i class="ul-ava" :class="`ul-ava--${avaTone(u)}`" aria-hidden="true">{{ (u.name || '用')[0] }}</i>
+                <MkCellAvatar :name="u.name" :tone="avaTone(u)" />
                 <div class="mk-cell-main">
                   <strong>{{ u.name }}</strong>
                   <span class="mk-cell-sub">{{ u.email }}</span>
@@ -132,8 +132,8 @@
                 <div class="ul-tags">
                   <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
                   <span v-else-if="isSelf(u)" class="mk-badge mk-badge--sm mk-badge--self">当前管理员</span>
-                  <span v-else-if="u.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
-                  <span v-else-if="isTestAccount(u)" class="mk-badge mk-badge--sm mk-badge--warn">测试账号</span>
+                  <MkVariantBadge v-else-if="u.isVirtualLearner" kind="virtual" />
+                  <MkVariantBadge v-else-if="isTestAccount(u)" kind="test" />
                 </div>
               </div>
             </td>
@@ -285,6 +285,8 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from '@/components/mk/MkCols.vue'
+import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
@@ -295,11 +297,11 @@ import { isTestAccountUser, levelFromXp, levelLabel } from './learner-profile'
 
 /* ---- 行级设计派生（2026-09-26）：身份 chip 色 / 等级色阶 / 升级进度 / 登录新鲜度 ---- */
 type UlUserLite = { deleted?: boolean; isVirtualLearner?: boolean; name?: string; email?: string; id?: string; xp?: number }
-function avaTone(u: UlUserLite): 'real' | 'virtual' | 'test' | 'muted' {
+function avaTone(u: UlUserLite): 'default' | 'virtual' | 'test' | 'muted' {
   if (u.deleted) return 'muted'
   if (u.isVirtualLearner) return 'virtual'
   if (isTestAccountUser(u)) return 'test'
-  return 'real'
+  return 'default'
 }
 /** 等级色阶：L1 安静 → L2 蓝 → L3 紫 → ≥L4 绿（资历越高越醒目） */
 function levelTone(xp: number): 'muted' | 'blue' | 'purple' | 'green' {
@@ -821,16 +823,6 @@ function clearFilters() {
 
 /* ===== 行级设计（2026-09-26）：身份 chip / 等级色阶+升级条 / 登录新鲜度 ===== */
 .ul-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.ul-ava {
-  width: 28px; height: 28px; border-radius: 50%; flex: none;
-  display: grid; place-items: center;
-  font-style: normal; font-size: 12px; font-weight: 800;
-  background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
-  color: var(--mk-accent-deep);
-}
-.ul-ava--virtual { background: color-mix(in srgb, var(--mk-purple) 14%, transparent); color: var(--mk-purple); }
-.ul-ava--test { background: color-mix(in srgb, var(--mk-amber) 14%, transparent); color: var(--mk-amber); }
-.ul-ava--muted { background: var(--mk-surface-3); color: var(--mk-faint); }
 .ul-user .mk-cell-main { min-width: 0; flex: 1; }
 .ul-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }
 

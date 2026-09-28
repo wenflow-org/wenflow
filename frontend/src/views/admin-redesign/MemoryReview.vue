@@ -109,8 +109,8 @@
           @click="openDetail(row.userId)"
         >
           <template #lead>
-            <i class="mr__ava" :class="{ 'mr__ava--virtual': row.isVirtualLearner }" aria-hidden="true">{{ (row.name || '未')[0] }}</i>
-            <span v-if="row.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
+            <MkCellAvatar :name="row.name" :tone="row.isVirtualLearner ? 'virtual' : 'default'" />
+            <MkVariantBadge v-if="row.isVirtualLearner" kind="virtual" />
           </template>
           <template #trail>
             <span class="mr__trail">
@@ -376,6 +376,8 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkRow from '@/components/mk/MkRow.vue'
 import MkRowList from '@/components/mk/MkRowList.vue'
 import MkStatStrip from '@/components/mk/MkStatStrip.vue'
+import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
 import { askConfirm } from './useConfirm'
@@ -771,15 +773,6 @@ onMounted(async () => {
 .mr-queue__label small { font-weight: 400; color: var(--mk-faint); font-size: 12px; line-height: 1.4; }
 
 /* ===== 用户列表行设计（2026-09-27：10 列密表 → mk 行级原语 MkRowList + MkRow）===== */
-/* 头像：放 MkRow lead slot，保持极简（圆形字徽，无私有结构） */
-.mr__ava {
-  width: 28px; height: 28px; border-radius: 50%; flex: none;
-  display: grid; place-items: center;
-  font-style: normal; font-size: 12px; font-weight: 800;
-  background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
-  color: var(--mk-accent-deep);
-}
-.mr__ava--virtual { background: color-mix(in srgb, var(--mk-purple) 14%, transparent); color: var(--mk-purple); }
 /* 行列表容器：fill 卡内接管纵向滚动（原 .mk-table-scroll 的职责；窄屏横向由 overflow 兜底） */
 .mr__rows { flex: 1; min-height: 0; overflow-y: auto; }
 /* trail slot 右列簇：到期压力条 + 需人工看 + 行内操作横排不换行 */
