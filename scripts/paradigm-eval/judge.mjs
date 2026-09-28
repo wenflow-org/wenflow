@@ -13,7 +13,8 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const RESULTS = path.join(__dirname, 'results');
 const DB_PATH = path.join(ROOT, 'backend', 'prisma', 'dev.db');
 const personas = JSON.parse(fs.readFileSync(path.join(__dirname, 'golden-personas.json'), 'utf8')).personas;
-const byId = id => personas.find(p => p.personaId === id);
+const realGoalCases = JSON.parse(fs.readFileSync(path.join(__dirname, 'real-goals-cases.json'), 'utf8')).cases;
+const byId = id => personas.concat(realGoalCases).find(p => p.personaId === id);
 
 // 「时间线」从黑名单移除（2026-09-27 横向扩测误报：职场写作的项目时间线、诉讼法的期限线都是正当用法；
 // 保留更具体的「剪辑时间线」）

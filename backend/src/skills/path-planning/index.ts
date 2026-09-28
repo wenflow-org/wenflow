@@ -119,6 +119,82 @@ export function coercePathPlanningParsed(parsed: any, materials?: PromptMaterial
 }
 
 /**
+ * 量级守恒硬执行（2026-09-28 P0，真实案例驱动）。
+ *
+ * 背景：模型系统性欠填学时——mastery-eng（每天 30min × 半年 = 90h）实际产出 37h，
+ * 低于守恒下限 0.6×90=54h，且多数阶段低于每阶段锚 7h；提示词规则 30 的
+ * 「连续多个阶段贴下限视为变相砍预算」被无视。与 9/27「收缩比 0.07-0.26」同根。
+ *
+ * 规则（确定性代码，不再信任模型自觉）：
+ * - sum(milestone.estimatedHours) < 0.6×targetTotalHours → 按比例放大；
+ * - sum > 1.8×targetTotalHours → 按比例缩小；
+ * - 放大/缩小的上界受**结构容量**钳制：阶段数 × 每阶段任务上限（subtasksPerStageRange[1]）
+ *   × 单课分钟上界（subtaskMinutesRange[1]，已按用户会话档校准）；
+ * - 容量 < 0.6×预算 → 放大到容量并产出**缺口声明**（gapNote，追加到路径 summary）：
+ *   向用户诚实说明结构承载上限与建议，禁止虚标完整覆盖（法考 56h 案例教训）。
+ *
+ * 直接原地改写 milestone.estimatedHours（一位小数）；下游 stage-enrichment 按改写后的
+ * 阶段学时逐阶段反推任务数，守恒由此传导为课数。
+ */
+export function enforceBudgetConservation(
+  milestones: any,
+  hints: any,
+): { totalAfter: number; gapNote: string | null; report: { target: number; before: number; after: number; capacitySum: number; scaled: boolean } | null } {
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  const noop = { totalAfter: 0, gapNote: null as string | null, report: null as any };
+  if (!Array.isArray(milestones) || milestones.length === 0) return noop;
+  const target = Number(hints?.targetTotalHours);
+  if (!Number.isFinite(target) || target <= 0) {
+    // 无预算锚：只汇总，不做校正（保持历史行为）
+    const sum = milestones.reduce((acc: number, m: any) => acc + (Number(m?.estimatedHours) || 0), 0);
+    return { totalAfter: round1(sum), gapNote: null, report: null };
+  }
+  const perStageCap = ((Number(hints?.subtasksPerStageRange?.[1]) || 8) * (Number(hints?.subtaskMinutesRange?.[1]) || 60)) / 60;
+  const n = milestones.length;
+  const capacitySum = perStageCap * n;
+  const stageAnchor = Math.min(Number(hints?.targetHoursPerMilestone) || target / n, perStageCap);
+  // 缺失/非法学时先补到每阶段锚（不允许 0 学时阶段参与守恒）
+  const hours = milestones.map((m: any) => {
+    const v = Number(m?.estimatedHours);
+    return Number.isFinite(v) && v > 0 ? v : Math.max(0.5, stageAnchor);
+  });
+  const before = hours.reduce((a: number, b: number) => a + b, 0);
+  const floor = 0.6 * target;
+  const ceiling = 1.8 * target;
+  const effectiveCeiling = Math.min(ceiling, capacitySum);
+  // 放大用「按剩余空间比例」的迭代重分配：均匀因子会在部分阶段已顶容量时填不到 target
+  // （实测 37h→56h 目标只到 49h，因为 7h 顶格阶段吃不了因子）。收缩用均匀因子即可。
+  let work = [...hours];
+  if (before < floor && effectiveCeiling > before) {
+    const desired = Math.min(target, effectiveCeiling);
+    for (let pass = 0; pass < 6; pass++) {
+      const sum = work.reduce((a: number, b: number) => a + b, 0);
+      if (sum >= desired - 0.05) break;
+      const headroom = work.reduce((a: number, h: number) => a + Math.max(0, perStageCap - h), 0);
+      if (headroom <= 0.01) break;
+      const deficit = Math.min(desired - sum, headroom);
+      work = work.map((h: number) => h + deficit * (Math.max(0, perStageCap - h) / headroom));
+    }
+  } else if (before > effectiveCeiling) {
+    const factor = effectiveCeiling / before;
+    work = work.map((h: number) => Math.max(0.5, h * factor));
+  }
+  const after = work.map((h: number) => round1(Math.max(0.5, Math.min(perStageCap, h))));
+  milestones.forEach((m: any, i: number) => {
+    if (m && typeof m === 'object') m.estimatedHours = after[i];
+  });
+  const totalAfter = round1(after.reduce((a: number, b: number) => a + b, 0));
+  const gapNote = capacitySum < floor
+    ? `容量说明：按你的周期与每日投入，学习预算约 ${Math.round(target)} 小时；当前阶段结构最多承载约 ${Math.round(capacitySum)} 小时。建议增加阶段数或提高单次学习时长；本路径优先覆盖主干，其余主题需另行安排。`
+    : null;
+  return {
+    totalAfter,
+    gapNote,
+    report: { target: round1(target), before: round1(before), after: totalAfter, capacitySum: round1(capacitySum), scaled: Math.abs(totalAfter - before) > 0.05 },
+  };
+}
+
+/**
  * 校验失败 → **针对性**修复提示（只用于重试那一轮）。
  *
  * 为什么需要它：通用提示（"请输出合法 JSON"）对"缺 hub""带了 subtasks"这类结构性违规
@@ -921,8 +997,22 @@ ${replan ? renderReplanSection(replan) : ''}
         if (!Number.isFinite(n) || n <= 0 || n > 104) return null;
         return n;
       };
-      const estimatedHours = clampHours(pathData.estimatedHours);
       const estimatedWeeks = clampWeeks(pathData.estimatedWeeks);
+      // 量级守恒硬执行（2026-09-28 P0）：模型系统性欠填学时（实测 90h 预算产出 37h，
+      // 低于 0.6× 下限 54h；提示词规则 30 的「禁止变相砍预算」被无视）。
+      // 代码级确定性校正：[0.6, 1.8]×targetTotalHours 带内按比例缩放，上界受结构容量
+      // （阶段数×每阶段任务上限×单课分钟上界）钳制；容量 < 0.6× 预算时产出缺口声明
+      // （追加到 summary，向用户诚实说明），禁止虚标完整覆盖。
+      const hints = (input as any)?.metadata?.normalizedInput?.planningHints || null;
+      const conservation = enforceBudgetConservation(pathData.milestones, hints);
+      if (conservation.gapNote) {
+        logger.warn('[path-planning] 结构容量低于学习预算，已产出缺口声明', {
+          userId,
+          targetTotalHours: conservation.report?.target,
+          capacitySum: conservation.report?.capacitySum,
+        });
+      }
+      const estimatedHours = Math.round(conservation.totalAfter) || clampHours(pathData.estimatedHours);
       // materialRefs 覆盖度观测（有资料却没引用 → 可观测，不阻断生成）
       if (promptMaterials?.length) {
         const milestones = Array.isArray(pathData.milestones) ? pathData.milestones : [];
@@ -938,7 +1028,9 @@ ${replan ? renderReplanSection(replan) : ''}
       return {
         id: `path_${Date.now()}`,
         name: pathData.name,
-        summary: typeof pathData.summary === 'string' ? pathData.summary : undefined,
+        summary: typeof pathData.summary === 'string'
+          ? (conservation.gapNote ? `${pathData.summary}\n\n${conservation.gapNote}` : pathData.summary)
+          : conservation.gapNote || undefined,
         subject: analysis.subject,
         totalMilestones: pathData.totalMilestones,
         estimatedHours,

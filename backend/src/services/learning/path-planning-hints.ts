@@ -392,9 +392,21 @@ export function derivePlanningHints(
     ? Math.min(52, Math.max(1, Math.ceil(inferredWeeks * 1.2)))
     : paceConfig.maxWeeks;
 
-  const parsedSessionMinutes = timePerSession && timePerSession.match(/(\d+)/)
-    ? Number(timePerSession.match(/(\d+)/)?.[1])
-    : null;
+  // 单次时长解析（2026-09-28 修单位 bug）：「每天3小时」此前被解析成 3 **分钟**
+  //（正则只抓首个数字），所有「每天N小时」用户的预算被静默压缩 20-60 倍，
+  // 且单课分钟档被压到 30min 下限——大预算守恒异常的一大隐藏根因。
+  // 顺序：N小时（×60）→ N分钟 → 半小时(=30) → 裸数字（当分钟）。
+  const parsedSessionMinutes = (() => {
+    const text = (timePerSession || '').trim();
+    if (!text) return null;
+    const hour = text.match(/(\d+(?:\.\d+)?)\s*(?:个)?小时/);
+    if (hour) return Math.round(Number(hour[1]) * 60);
+    const minute = text.match(/(\d+)\s*分钟/);
+    if (minute) return Number(minute[1]);
+    if (/半\s*小时/.test(text)) return 30;
+    const bare = text.match(/(\d+)/);
+    return bare ? Number(bare[1]) : null;
+  })();
 
   let subtaskMinutesRange: [number, number] = Number.isFinite(parsedSessionMinutes)
     ? [
@@ -511,7 +523,15 @@ export function derivePlanningHints(
   //   ① timeDimensions.estimatedHours（goal 直接推断）
   //   ② totalWeeks × sessionsPerWeek × sessionsLengthMin/60（频率×时长×周期推算总小时）
   //   ③ pace 档位中位数（compact→3, standard→4, extended→5）
-  const estimatedHoursTotal =
+  // 2026-09-28 P0（真实案例 rw-school-16=2340h / rw-career-14=无锚 双驱动）：
+  // a) 结构化 timeDimensions 可能给出荒谬预算（180min/天 × 252 天被算成 2340h）——
+  //    用户自述的「每日可投入 × 周期」是现实上限，超过它按现实钳制；
+  // b) 结构化字段缺失但 timeHorizon + timePerSession 可解析时，做兜底推断
+  //    （周期天数 × 每日分钟），否则这类案例完全没有守恒锚（career-14 空锚）。
+  const inferredBudgetCap = Number.isFinite(parsedSessionMinutes) && inferredWeeks
+    ? Math.round(((parsedSessionMinutes as number) * inferredWeeks * 7) / 60)
+    : null;
+  const structuredHoursTotal =
     totalSessions !== null && oneSessionMinutes !== null
       ? totalSessions * oneSessionMinutes / 60
       : Number.isFinite(timeDimensions?.estimatedHours) && (timeDimensions!.estimatedHours as number) > 0
@@ -525,6 +545,14 @@ export function derivePlanningHints(
         ? (timeDimensions!.totalWeeks as number) * (timeDimensions!.sessionsPerWeek as number)
           * (timeDimensions!.sessionsLengthMin as number) / 60
         : null;
+  const estimatedHoursTotal =
+    structuredHoursTotal !== null && inferredBudgetCap !== null
+      // R1-d（rw-school-11/exam-12 target=1h 案例）：结构化锚也可能被污染成荒谬小值，
+      // 直接 min() 会信任垃圾下限。预算应落在每日现实上限的 [25%, 100%] 带内。
+      ? Math.max(Math.min(structuredHoursTotal, inferredBudgetCap), inferredBudgetCap * 0.25)
+      : structuredHoursTotal !== null
+        ? structuredHoursTotal
+        : inferredBudgetCap;
   // ---- 大预算扩容（2026-09-27，基线 31 格实测驱动）：锚定总学时超过结构天花板
   // （阶段×任务×单任务分钟上限）时，按需抬升每阶段任务上限与单任务分钟上界——
   // 任务语义升级为「学习单元（可含多次坐学）」。基线收缩比 0.07-0.74（中位 0.13-0.26）
