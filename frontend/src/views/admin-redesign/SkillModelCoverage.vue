@@ -70,6 +70,12 @@ const bulkSaving = ref(false)
 const bulkMsg = ref('')
 const bulkErr = ref(false)
 
+/** axios 错误文本归一（unknown 收窄；管理端错误体 {error:{message}}） */
+function httpErrText(e: unknown): string {
+  const err = e as { response?: { data?: { error?: { message?: string } } }; message?: string }
+  return err?.response?.data?.error?.message || err?.message || String(e)
+}
+
 const allChecked = computed(() => rows.value.length > 0 && selected.value.length === rows.value.length)
 
 function toggleAll(on: boolean) {
@@ -82,9 +88,9 @@ async function load() {
     const res = await adminSkillsApi.getSkillModelCoverage()
     const data = res.data?.data as { skills?: Row[] } | undefined
     rows.value = data?.skills || []
-  } catch (e: any) {
+  } catch (e: unknown) {
     bulkErr.value = true
-    bulkMsg.value = `加载失败：${e?.response?.data?.error?.message || e.message}`
+    bulkMsg.value = `加载失败：${httpErrText(e)}`
   } finally {
     loading.value = false
   }
@@ -108,9 +114,9 @@ async function applyBulk() {
     bulkErr.value = failed.length > 0
     bulkMsg.value = `已套用 ${data?.applied ?? 0} 个，失败 ${failed.length} 个${failed.length ? '：' + failed.map(f => `${f.skillId}(${f.error})`).join('；') : ''}`
     await load()
-  } catch (e: any) {
+  } catch (e: unknown) {
     bulkErr.value = true
-    bulkMsg.value = `套用失败：${e?.response?.data?.error?.message || e.message}`
+    bulkMsg.value = `套用失败：${httpErrText(e)}`
   } finally {
     bulkSaving.value = false
   }

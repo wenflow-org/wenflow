@@ -352,7 +352,7 @@ async function saveRuntime() {
     if (Object.keys(overrides).length > 0) payload.paramOverrides = overrides
     else if (hadParamOverrides.value) payload.paramOverrides = null
     if (fallbackTouched.value) payload.fallbackChain = fallbackChain.value
-    await adminSkillsApi.updateSkillModelConfig(props.skillId, payload as any)
+    await adminSkillsApi.updateSkillModelConfig(props.skillId, payload)
     rtErr.value = false
     rtMsg.value = '已更新（生成参数覆盖/兜底链同表管理，生效值见上方投影）'
     fallbackTouched.value = false
