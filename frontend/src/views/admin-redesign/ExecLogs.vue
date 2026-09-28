@@ -290,7 +290,7 @@
         icon="◌"
         :title="emptyTitle"
         :description="emptyDesc"
-        :action-text="isFiltered ? '清除筛选并看全部时间范围' : ''"
+        :action-text="isFiltered ? '清除筛选，回「今天」窗口' : ''"
         @action="clearFilterToAll"
       />
       <Pagination v-if="logs.length" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" />
@@ -369,7 +369,7 @@ watch(
 const openId = ref('')
 const statusFilter = ref('')
 const agentFilter = ref('')
-const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('week')
+const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('today')
 const keyword = ref('')
 const traceId = ref('')
 const sessionId = ref('')
@@ -670,7 +670,7 @@ watch(
     sessionId.value = session
     timeRange.value = (EL_TIME_RANGES as readonly string[]).includes(range)
       ? (range as typeof timeRange.value)
-      : 'week'
+      : 'today'
     testFilter.value = test === 'only' ? 'only' : ''
     const sig = vals.map(queryVal).join('\u0001')
     if (sig === lastUrlSig) return
@@ -685,7 +685,7 @@ function filterSnapshot(): Record<string, string> {
   if (agentFilter.value) desired.agent = agentFilter.value
   if (statusFilter.value) desired.status = statusFilter.value
   if (errorCategory.value) desired.cat = errorCategory.value
-  if (timeRange.value !== 'week') desired.range = timeRange.value
+  if (timeRange.value !== 'today') desired.range = timeRange.value
   if (keyword.value.trim()) desired.q = keyword.value.trim()
   if (traceId.value.trim()) desired.trace = traceId.value.trim()
   if (sessionId.value.trim()) desired.session = sessionId.value.trim()
@@ -740,7 +740,7 @@ function applySavedView(v: SavedView) {
   sessionId.value = q.session || ''
   timeRange.value = (EL_TIME_RANGES as readonly string[]).includes(q.range)
     ? (q.range as typeof timeRange.value)
-    : 'week'
+    : 'today'
   testFilter.value = q.test === 'only' ? 'only' : ''
   /* keyword/trace/session 等输入项不在 watch 内（输入即查询防抖动），需显式重查 */
   void applyServerQuery()
@@ -783,7 +783,7 @@ const filtered = computed(() => logs.value)
 const shown = computed(() => filtered.value)
 
 /* 口径与 AuditLogs 一致：时间范围非默认值也计入筛选态，空态才显示「当前筛选无日志」而非「暂无日志」 */
-const isFiltered = computed(() => !!(testFilter.value || agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim() || errorCategory.value || timeRange.value !== 'week'))
+const isFiltered = computed(() => !!(testFilter.value || agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim() || errorCategory.value || timeRange.value !== 'today'))
 /* traceId/sessionId 服务端查询未命中时的空态提示（与 TraceWaterfall 的 wf-notice「样本截断」兜底互补：
    此处是服务端精确查询的直接未命中）。返回裸值，展示层做 shortTrace 截断 + 完整值回显 */
 const traceMiss = computed(() => {
@@ -892,7 +892,7 @@ function toggleTestFilter() {
 const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
 const filterLabel = computed(() =>
   [
-    timeRange.value !== 'week' ? timeRangeLabels[timeRange.value] : '',
+    timeRange.value !== 'today' ? timeRangeLabels[timeRange.value] : '',
     testFilter.value === 'only' ? '仅看测试' : '',
     agentFilter.value || '',
     statusFilter.value === 'err' ? '仅失败' : statusFilter.value === 'warn' ? '仅超时' : statusFilter.value === 'ok' ? '仅成功' : '',
@@ -922,7 +922,7 @@ function clearFilter() {
   traceId.value = ''
   sessionId.value = ''
   errorCategory.value = ''
-  timeRange.value = 'week' // 时间范围计入 isFiltered 口径，清除时需一并还原
+  timeRange.value = 'today' // 时间范围计入 isFiltered 口径，清除时需一并还原（默认=当天）
   clearInvestigation()
   /* 服务端筛选下必须重查：仅清本地值不会刷新列表（traceId/sessionId 不在 watch 内，
      避免输入即查询；状态/节点变化由 watch 触发，此处兜底全清场景） */

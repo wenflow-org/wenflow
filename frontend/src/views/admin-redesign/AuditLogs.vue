@@ -356,7 +356,7 @@ type TabId = (typeof tabs)[number]['id']
 
 const tab = ref<TabId>('operation')
 const keyword = ref('')
-const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('week')
+const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('today')
 
 /* 深链：?tab=login 直达登录审计（会话安全页「审计日志 · 登录审计 →」跳入） */
 const route = useRoute()
@@ -583,10 +583,10 @@ watch([alSortKey, alSortDir], () => {
   void applyFilters()
 })
 
-const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'week' || failedOnly.value)
+const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'today' || failedOnly.value)
 function clearFilters() {
   keyword.value = ''
-  timeRange.value = 'week'
+  timeRange.value = 'today'
   failedOnly.value = false
   failedAction.value = ''
   void applyFilters()
@@ -604,14 +604,14 @@ function filterSnapshot(): Record<string, string> {
   const snap: Record<string, string> = {}
   if (tab.value !== 'operation') snap.tab = tab.value
   if (keyword.value.trim()) snap.q = keyword.value.trim()
-  if (timeRange.value !== 'week') snap.range = timeRange.value
+  if (timeRange.value !== 'today') snap.range = timeRange.value
   return snap
 }
 
 /** 快照可读摘要（pill 悬停说明 / 命名建议） */
 const filterLabel = computed(() => {
   const parts: string[] = []
-  if (timeRange.value !== 'week') parts.push(timeRangeLabels[timeRange.value])
+  if (timeRange.value !== 'today') parts.push(timeRangeLabels[timeRange.value])
   if (keyword.value.trim()) parts.push(`关键词「${keyword.value.trim()}」`)
   if (tab.value === 'login') parts.push('登录审计')
   return parts.join(' · ') || ''
@@ -638,7 +638,7 @@ function applySavedView(v: SavedView) {
   keyword.value = q.q || ''
   timeRange.value = (TIME_RANGES as readonly string[]).includes(q.range)
     ? (q.range as typeof timeRange.value)
-    : 'week'
+    : 'today'
   void applyFilters()
 }
 
