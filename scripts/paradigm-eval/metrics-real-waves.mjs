@@ -37,7 +37,7 @@ const rows = db.prepare(`
 const out = [];
 for (const p of rows) {
   if (ids.size && !ids.has(p.userName)) continue;
-  const ms = db.prepare('SELECT id, stageNumber, estimatedHours FROM milestones WHERE learningPathId=? ORDER BY stageNumber').all(p.pathId);
+  const ms = db.prepare('SELECT id, stageNumber, estimatedHours, description FROM milestones WHERE learningPathId=? ORDER BY stageNumber').all(p.pathId);
   if (!ms.length) continue;
   const counts = ms.map((m) => db.prepare('SELECT COUNT(*) c FROM subtasks WHERE milestoneId=?').get(m.id).c);
   const mins = db.prepare('SELECT s.estimatedMinutes AS em FROM subtasks s JOIN milestones m ON s.milestoneId=m.id WHERE m.learningPathId=?').all(p.pathId).map((r) => r.em);
@@ -102,7 +102,10 @@ for (const p of rows) {
     equalSplit: new Set(counts).size === 1 && counts.length >= 3,
     avgMin,
     maxMin: mins.length ? Math.max(...mins) : 0,
-    gapDeclared: /容量说明/.test(p.description || '') || /容量说明/.test(p.title || ''),
+    // 缺口声明（容量说明）落在 path-planning summary → 随 aiPromptTemplate 持久化
+    gapDeclared: /容量说明/.test(p.aiPromptTemplate || '') || /容量说明/.test(p.description || '') || /容量说明/.test(p.title || ''),
+    // H 维：阶段级欠 fill 诚实声明（R3 起 milestone.description 追加「容量说明」）
+    stageFillNotes: ms.filter((m) => /容量说明/.test(m.description || '')).length,
     stageHp: ms.map((m) => m.estimatedHours).join('/'),
     modelStageH,
   });
