@@ -97,6 +97,7 @@ export class ReviewCompletedConsumer {
       // B1/Q3：本轮有多少条目的"误解干扰"读取降级（数据不全时仍写证据，但显式打标）
       let degradedItems = 0;
 
+      let skippedNegativeInterval = 0;
       for (const item of items) {
         const conceptKey = String(item.conceptKey || '').trim();
         if (!conceptKey) continue;
@@ -111,6 +112,13 @@ export class ReviewCompletedConsumer {
         const elapsedDays = existing
           ? Math.round(((event.occurredAt.getTime() - existing.lastSeenAt.getTime()) / DAY_MS) * 100) / 100
           : null;
+        // 负间隔守卫（2026-09-29）：事件 occurredAt 早于 lastSeenAt = 乱序事件
+        // （旧代码曾以 "Invalid delta_t" 拒绝并死信，重构后校验随旧路径消失——
+        //   负间隔写进证据会污染记忆保持率曲线）。跳过该条的记忆写入，仅计数上报。
+        if (elapsedDays !== null && elapsedDays < 0) {
+          skippedNegativeInterval += 1;
+          continue;
+        }
 
         // 语义干扰矩阵（2026-09-17 自旧直写路径 bumpReviewInterval 下移，保持"单一写入者"）：
         // 活跃误解 → 稳定性 ×0.85、到期更早。复习课与课内温故两条来路行为一致。
@@ -225,6 +233,7 @@ export class ReviewCompletedConsumer {
         sessionId: data.sessionId,
         itemCount: items.length,
         ...(degradedItems > 0 ? { degradedItems } : {}),
+        ...(skippedNegativeInterval > 0 ? { skippedNegativeInterval } : {}),
       });
     }, { label: 'learner.review-completed-consumer' });
   }

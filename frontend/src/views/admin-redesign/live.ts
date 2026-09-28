@@ -1955,6 +1955,14 @@ export async function refreshLiveSkills() {
  */
 const LIVE_DATA_TTL = 45_000
 const liveFetchAt: Record<string, number> = {}
+/* 分域 TTL 覆盖：周级聚合样本不需要 45s 级新鲜度——
+   spans（近 7 天 200 条样本）喂的是总览健康结论/待办失败计数/执行日志状态条这类
+   周级聚合，实测该请求 1.3-3.8s 是全站引导最贵的一笔；45s TTL 使跨页导航
+   （超过 45s）反复重付。提到 5 分钟：聚合口径的陈旧容忍远高于此，
+   执行日志列表/Trace 有各自的服务端重查，不依赖此样本的新鲜度。 */
+const LIVE_DOMAIN_TTL_OVERRIDE: Record<string, number> = {
+  spans: 300_000,
+}
 
 /* ================= 页面级缓存（非 Boot 域用） =================
  * TeachingSessions / GoalConversations / Feedback / AuditLogs / SessionSecurity 等页面
@@ -1990,7 +1998,8 @@ const liveDomainReady: Record<string, () => boolean> = {
 
 const liveDomainFresh = (key: string): boolean => {
   const at = liveFetchAt[key]
-  return !!at && Date.now() - at < LIVE_DATA_TTL
+  const ttl = LIVE_DOMAIN_TTL_OVERRIDE[key] ?? LIVE_DATA_TTL
+  return !!at && Date.now() - at < ttl
 }
 
 const liveDomainSkippable = (key: string, force: boolean): boolean =>
