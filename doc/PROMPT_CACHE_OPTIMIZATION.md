@@ -133,11 +133,22 @@ prompt 中 ~44% 是必要新鲜内容（学员最新消息 + 课堂状态变更 
 
 ### 3.5 各技能预期缓存率（标准通道参考值）
 
-| 技能形态 | 预期稳态 | 说明 |
+标准运行配置：单 key（会话亲和型）+ 单模型 `deepseek-v4.1-flash`，21 个链路技能统一路由。
+2026-09-28 三账号 × (goal + 2 课) 纯净复测：
+
+| 技能 | 实测（3 账号） | 说明 |
 |---|---|---|
-| goal-conversation | ~90% | 公共前缀大、会话轮间满命中 |
-| teaching-turn | ~58% | 必要新鲜内容占比高的结构上限 |
+| goal-conversation | 68.9% / 83.8% / 79.7% | 轮 2 起满命中；波动主要来自首轮冷启与对话轮数 |
+| teaching-turn | 65.0% / 71.6% / 64.6% | 每节课轮 1 = 0%（任务级前缀不跨会话共享），轮 2 起即 87-98% |
 | 短 prompt 单发技能（adaptive-guidance-copy 等） | 0-15% | 无稳定前缀可缓存，属正常 |
+
+### 3.6 输出预算地板（32k）
+
+所有 skill 的 `maxTokens` 统一为 **32000**（prompts/skill.*.md frontmatter，2026-09-28 起，
+经 prompts:sync 发布）。背景：模型变体输出量可达旧预算（4000/8000）的 2-4 倍，低预算
+导致 finishReason=length 截断（path-reviewer@4000 2/2、material-collector@4000 等）。
+maxTokens 是上限不是目标——抬高不增加成本，只消除截断。判定截断：
+`finishReason='length' 且 completionTokens=maxTokens`。
 
 ## 四、运维与配置
 
@@ -146,7 +157,7 @@ prompt 中 ~44% 是必要新鲜内容（学员最新消息 + 课堂状态变更 
 | 配置 | 位置 | 说明 |
 |---|---|---|
 | `AI_CACHE_SESSION_HEADER` | backend/.env | 设为通道要求的会话头名即启用亲和注入；删除或留空即关闭，无其他行为变化 |
-| skill 级路由（key/endpoint） | admin → skill-model-configs | 按 skill 指定通道；路由读取**裸 skillId 行** |
+| skill 级路由（key/endpoint/model） | admin → skill-model-configs | 按 skill 指定通道与模型；标准运行=21 个链路技能统一（标准 key + deepseek-v4.1-flash） |
 
 ### 4.2 路由配置三个坑（踩过实锤）
 
