@@ -3,7 +3,7 @@ agentId: skill:path-reviewer
 coreHash: dfdea7bed54cc461d40cd8cef931ed03dbd7a9279d98bc20453aec2b6e3ff9eb
 coreVersion: 1
 temperature: 0.3
-maxTokens: 4000
+maxTokens: 32000
 failurePolicy: propagate
 ---
 

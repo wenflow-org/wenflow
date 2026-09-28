@@ -3,7 +3,7 @@ agentId: skill:replan-attribution
 coreHash: e482a53337068dfc402f87bcd1bac7957e24de6b3b22b7eead6fd5e572872248
 coreVersion: 1
 temperature: 0.3
-maxTokens: 1200
+maxTokens: 32000
 failurePolicy: propagate
 ---
 

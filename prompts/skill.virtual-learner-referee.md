@@ -3,7 +3,7 @@ agentId: skill:virtual-learner-referee
 coreHash: eea2d4d23251b082ea0a1ebd5f6740d3bfbcd628992b4d08eda80bf4a993c93b
 coreVersion: 1
 temperature: 0.2
-maxTokens: 2400
+maxTokens: 32000
 failurePolicy: retry
 ---
 

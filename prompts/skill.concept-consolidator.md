@@ -3,7 +3,7 @@ agentId: skill:concept-consolidator
 coreHash: be0e366a0bf2862623baf7a8cff4f0adf01ebf6c9961a5b0307ff8e36a3aca87
 coreVersion: 1
 temperature: 0.2
-maxTokens: 1600
+maxTokens: 32000
 failurePolicy: propagate
 ---
 

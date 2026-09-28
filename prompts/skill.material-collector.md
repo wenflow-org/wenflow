@@ -3,7 +3,7 @@ agentId: skill:material-collector
 coreHash: af631f373b93bb9717b0c991403765b02c0d337874ac80a52f8fa0263a2e711c
 coreVersion: 1
 temperature: 0.1
-maxTokens: 4000
+maxTokens: 32000
 failurePolicy: retry
 ---
 

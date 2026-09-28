@@ -3,7 +3,7 @@ agentId: skill:virtual-learner-goal-dialogue-simulator
 coreHash: 84409672bfc2898365fc9bad682c8c95f9ae0932fe287143fedaf8f01678a462
 coreVersion: 1
 temperature: 0.8
-maxTokens: 2400
+maxTokens: 32000
 failurePolicy: propagate
 ---
 

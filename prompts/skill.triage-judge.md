@@ -3,7 +3,7 @@ agentId: skill:triage-judge
 coreHash: fbb2b8cd95fd702a005288cc57da364eb5291b83550bf0c690c257bcb9385f5f
 coreVersion: 1
 temperature: 0.1
-maxTokens: 2600
+maxTokens: 32000
 failurePolicy: retry
 ---
 

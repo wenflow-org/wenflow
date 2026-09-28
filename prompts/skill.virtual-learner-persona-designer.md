@@ -3,7 +3,7 @@ agentId: skill:virtual-learner-persona-designer
 coreHash: ddddeb2c7575fa90e92a2cd14afc0efdb9d1d616aacbd3e50be683212e1a6cc9
 coreVersion: 1
 temperature: 0.8
-maxTokens: 8000
+maxTokens: 32000
 failurePolicy: retry
 ---
 
