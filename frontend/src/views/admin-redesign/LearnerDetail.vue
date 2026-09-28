@@ -118,20 +118,21 @@
               <template v-else>{{ ldSessError ? '加载失败' : `${ldSessionRows.length} 条` }}</template>
             </span>
           </div>
-          <div class="ld-sesslist">
-            <button v-for="s in ldSessionRows" :key="s.id" type="button" class="ld-sessrow" @click="openSessionCockpit(s.id)">
-              <span class="mk-badge" :class="sessBadgeCls(s.status)">{{ statusText(s.status) || '—' }}</span>
-              <span class="ld-sessrow__main">
-                <strong :title="s.topic">{{ s.topic }}</strong>
-                <span>{{ s.subject }} · {{ s.messageCount }} 条消息</span>
-              </span>
-              <span class="ld-sessrow__time">{{ s.startAgo }}</span>
-            </button>
-            <p v-if="!ldSessLoading && !ldSessionRows.length" class="ld-none">
-              {{ '暂无教学会话' }}
-              <span class="ld-none__hint">该学习者上课后，这里会出现会话列表。</span>
-            </p>
-          </div>
+          <MkRowList :empty="!ldSessionRows.length" :loading="ldSessLoading" empty-text="暂无教学会话" empty-hint="该学习者上课后，这里会出现会话列表。">
+            <MkRow
+              v-for="s in ldSessionRows"
+              :key="s.id"
+              clickable
+              :title="s.topic"
+              :sub="s.subText"
+              :time="s.startAgo"
+              @click="openSessionCockpit(s.id)"
+            >
+              <template #lead>
+                <span class="mk-badge" :class="sessBadgeCls(s.status)">{{ statusText(s.status) || '—' }}</span>
+              </template>
+            </MkRow>
+          </MkRowList>
         </section>
       </div>
 
@@ -593,6 +594,8 @@ import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkRowList from '@/components/mk/MkRowList.vue'
+import MkRow from '@/components/mk/MkRow.vue'
 import { useIsDark } from '@/composables/useIsDark'
 import { MK_CHART_PALETTES } from '@/components/mk/chartPalette'
 
@@ -751,9 +754,8 @@ function resetDerivedState(id: string) {
 interface LdSessionRow {
   id: string
   topic: string
+  subText: string
   status: string
-  subject: string
-  messageCount: number
   startAgo: string
 }
 const ldSessionRows = ref<LdSessionRow[]>([])
@@ -785,9 +787,8 @@ async function loadLdSessions(id: string) {
     ldSessionRows.value = ((body.items as Record<string, unknown>[]) || []).map((s) => ({
       id: String(s.id),
       topic: String(s.topic || s.taskId || '未命名会话'),
+      subText: `${String(s.subject || '—')} · ${Number(s.messageCount || 0)} 条消息`,
       status: String(s.status || ''),
-      subject: String(s.subject || '—'),
-      messageCount: Number(s.messageCount || 0),
       startAgo: timeAgo(String(s.startTime || ''))
     }))
   } catch {
@@ -1527,43 +1528,8 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .ld-tabpage { display: grid; gap: 14px; align-content: start; }
 .ld-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-
-/* 最近会话行卡（总览左栏）：与 UserDetail.ud-row 同构——徽章 + 标题/副行 + 时间 */
-.ld-sesslist { display: grid; }
-.ld-sessrow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border: none;
-  border-bottom: 1px solid var(--mk-line, #e6ebf4);
-  background: transparent;
-  width: 100%;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-.ld-sessrow:last-child { border-bottom: none; }
-.ld-sessrow:hover { background: var(--mk-surface-2, rgba(15, 23, 42, 0.03)); }
-.ld-sessrow:focus-visible { outline: none; box-shadow: var(--mk-focus-ring, inset 0 0 0 2px var(--mk-blue)); }
-.ld-sessrow__main { display: grid; gap: 2px; min-width: 0; flex: 1; }
-.ld-sessrow__main strong {
-  color: var(--mk-ink);
-  font-size: var(--mk-fs-body);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ld-sessrow__main span {
-  color: var(--mk-faint);
-  font-size: var(--mk-fs-micro);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ld-sessrow__time { color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
 .ld-none__hint { display: block; margin-top: 4px; font-size: var(--mk-fs-micro); opacity: 0.9; }
+/* 最近会话行已统一为全局原语 MkRowList/MkRow（components/mk），本页不再私有行样式 */
 
 /* 主区双栏（左 2fr 主内容 · 右 1fr 侧栏） */
 .ld-grid {
@@ -1891,7 +1857,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
   .ld-none { font-size: var(--mk-fs-body); }
-  .ld-sessrow__main span { font-size: var(--mk-fs-body); }
+  .mk-row__sub { font-size: var(--mk-fs-body); }
   .ld-progress strong { font-size: var(--mk-fs-emphasis); }
   .ld-progress__stage, .ld-progress__task { font-size: var(--mk-fs-body); }
   .ld-concept-label { font-size: var(--mk-fs-micro); }

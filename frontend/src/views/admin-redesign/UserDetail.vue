@@ -36,19 +36,21 @@
           <template v-else>{{ tsError ? '加载失败' : `${tsRows.length} 条` }}</template>
         </span>
       </div>
-      <div class="ud-list">
-        <button v-for="s in tsRows" :key="s.id" type="button" class="ud-row" @click="openSession(s.id)">
-          <span class="mk-badge" :class="sessBadge(s.status)">{{ statusText(s.status) || '—' }}</span>
-          <span class="ud-row__main">
-            <strong class="ud-row__title" :title="s.topic">{{ s.topic }}</strong>
-            <span class="ud-row__sub">
-              {{ s.subject }} · {{ s.messageCount }} 条消息<template v-if="s.durationText"> · 时长 {{ s.durationText }}</template>
-            </span>
-          </span>
-          <span class="ud-row__time">{{ s.startAgo }}</span>
-        </button>
-        <p v-if="!tsLoading && !tsRows.length" class="ud-none">暂无教学会话</p>
-      </div>
+      <MkRowList :empty="!tsRows.length" :loading="tsLoading" empty-text="暂无教学会话">
+        <MkRow
+          v-for="s in tsRows"
+          :key="s.id"
+          clickable
+          :title="s.topic"
+          :sub="s.subText"
+          :time="s.startAgo"
+          @click="openSession(s.id)"
+        >
+          <template #lead>
+            <span class="mk-badge" :class="sessBadge(s.status)">{{ statusText(s.status) || '—' }}</span>
+          </template>
+        </MkRow>
+      </MkRowList>
     </section>
 
     <section class="mk-card">
@@ -59,17 +61,13 @@
           <template v-else>{{ gcError ? '加载失败' : `${gcRows.length} 条` }}</template>
         </span>
       </div>
-      <div class="ud-list">
-        <div v-for="g in gcRows" :key="g.id" class="ud-row ud-row--static">
-          <span class="mk-badge" :class="stageBadgeCls(g.stage)">{{ stageText(g.stage) || '—' }}</span>
-          <span class="ud-row__main">
-            <strong class="ud-row__title" :title="g.summary">{{ g.summary }}</strong>
-            <span class="ud-row__sub">{{ statusText(g.status) || '—' }}<template v-if="g.hasPath"> · 已生成学习路径</template></span>
-          </span>
-          <span class="ud-row__time">{{ g.createdAgo }}</span>
-        </div>
-        <p v-if="!gcLoading && !gcRows.length" class="ud-none">暂无目标对话</p>
-      </div>
+      <MkRowList :empty="!gcRows.length" :loading="gcLoading" empty-text="暂无目标对话">
+        <MkRow v-for="g in gcRows" :key="g.id" :title="g.summary" :sub="g.subText" :time="g.createdAgo">
+          <template #lead>
+            <span class="mk-badge" :class="stageBadgeCls(g.stage)">{{ stageText(g.stage) || '—' }}</span>
+          </template>
+        </MkRow>
+      </MkRowList>
     </section>
 
     <!-- 开发视角许可：一行条（未授权 = 徽章 + 一句说明 + 刷新；授权 = 展开范围/到期与打开按钮） -->
@@ -131,6 +129,8 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkRowList from '@/components/mk/MkRowList.vue'
+import MkRow from '@/components/mk/MkRow.vue'
 import { liveUsers, timeAgo, errMsg } from './live'
 import { adminUsersApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { statusText, stageText, stageBadgeCls } from './statusText'
@@ -168,18 +168,15 @@ function levelLabel(level: string | null | undefined): string {
 interface SessionRow {
   id: string
   topic: string
-  subject: string
+  subText: string
   status: string
-  messageCount: number
-  durationText: string
   startAgo: string
 }
 interface GoalRow {
   id: string
   stage: string
-  status: string
   summary: string
-  hasPath: boolean
+  subText: string
   createdAgo: string
 }
 const tsRows = ref<SessionRow[]>([])
@@ -220,13 +217,12 @@ async function loadActivity(id: string) {
       const body = res.data?.data ?? res.data ?? {}
       tsRows.value = ((body.items as Record<string, unknown>[]) || []).map((s) => {
         const dur = Number(s.duration || 0)
+        const durationText = dur >= 60 ? `${Math.round(dur / 60)} 分钟` : dur > 0 ? `${dur} 秒` : ''
         return {
           id: String(s.id),
           topic: String(s.topic || s.taskId || '未命名会话'),
-          subject: String(s.subject || '—'),
+          subText: `${String(s.subject || '—')} · ${Number(s.messageCount || 0)} 条消息${durationText ? ` · 时长 ${durationText}` : ''}`,
           status: String(s.status || ''),
-          messageCount: Number(s.messageCount || 0),
-          durationText: dur >= 60 ? `${Math.round(dur / 60)} 分钟` : dur > 0 ? `${dur} 秒` : '',
           startAgo: timeAgo(String(s.startTime || ''))
         }
       })
@@ -245,9 +241,8 @@ async function loadActivity(id: string) {
       gcRows.value = ((body.conversations as Record<string, unknown>[]) || []).map((c) => ({
         id: String(c.id),
         stage: String(c.stage || ''),
-        status: String(c.status || ''),
         summary: goalSummaryOf(c),
-        hasPath: !!c.learningPathId,
+        subText: `${statusText(String(c.status || '')) || '—'}${c.learningPathId ? ' · 已生成学习路径' : ''}`,
         createdAgo: timeAgo(String(c.createdAt || ''))
       }))
     })
@@ -550,44 +545,7 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 }
 
 /* 主区通栏：卡片直接入 .ud 网格堆叠（原双栏右列与 KPI 重复，已删） */
-.ud-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-
-.ud-list { display: grid; }
-/* 可点击行（教学会话）与静态行（目标对话）同构：徽章 + 标题/副行 + 时间 */
-.ud-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border: none;
-  border-bottom: 1px solid var(--mk-line, #e6ebf4);
-  background: transparent;
-  width: 100%;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-.ud-row:last-child { border-bottom: none; }
-.ud-row--static { cursor: default; }
-.ud-row:hover { background: var(--mk-surface-2, rgba(15, 23, 42, 0.03)); }
-.ud-row:focus-visible { outline: none; box-shadow: var(--mk-focus-ring, inset 0 0 0 2px var(--mk-blue)); }
-.ud-row__main { display: grid; gap: 2px; min-width: 0; flex: 1; }
-.ud-row__title {
-  color: var(--mk-ink);
-  font-size: var(--mk-fs-body);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ud-row__sub {
-  color: var(--mk-faint);
-  font-size: var(--mk-fs-micro);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ud-row__time { color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
+/* 行式列表已统一为全局原语 MkRowList/MkRow（components/mk），本页不再私有行样式 */
 
 /* 开发视角许可：一行条（未授权 = 徽章 + 一句说明；授权才展开范围与打开按钮） */
 .ud-grant__bar {
@@ -627,22 +585,19 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .ud-none { font-size: var(--mk-fs-body); }
-  .ud-row__sub { font-size: var(--mk-fs-body); }
+  .mk-row__sub { font-size: var(--mk-fs-body); }
   .ud-grant__meta { font-size: var(--mk-fs-body); }
   .ud-grant__notice { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
-  .ud-none { font-size: var(--mk-fs-body); }
-  .ud-row__sub { font-size: var(--mk-fs-body); }
+  .mk-row__sub { font-size: var(--mk-fs-body); }
   .ud-grant__meta { font-size: var(--mk-fs-body); }
   .ud-grant__notice { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
-  .ud-none { font-size: var(--mk-fs-emphasis); }
-  .ud-row__sub { font-size: var(--mk-fs-emphasis); }
+  .mk-row__sub { font-size: var(--mk-fs-emphasis); }
   .ud-grant__meta { font-size: var(--mk-fs-emphasis); }
   .ud-grant__notice { font-size: var(--mk-fs-emphasis); }
 }

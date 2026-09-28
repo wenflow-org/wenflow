@@ -94,86 +94,42 @@
       <p v-if="error" class="mr__error">{{ error }}</p>
       <MockSkeletonTable v-if="loading && !rows.length" :cols="6" :rows="8" />
       <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="当前口径内还没有用户产生记忆痕迹。等学习者开始学习并完成概念提取后，这里会按痕迹数倒序列出用户。" />
-      <div v-else class="mk-table-scroll">
-      <table class="mk-table mk-table--click mk-table--fixed">
-        <!-- 本表曾漏写 colgroup：mk-table--fixed 下没有列宽声明 = 10 列等分 118px，
-             于是 2 位数的数字列白占 118px、文本列被挤到换行（行高 108px、操作按钮折成两行）。
-             fixed 表必须每列都给宽度（ADMIN_PAGE_TEMPLATES §表格）。 -->
-        <colgroup>
-          <col style="width:var(--mk-col-text)">
-          <col style="width:var(--mk-col-num)">
-          <col style="width:var(--mk-col-num)">
-          <col style="width:var(--mk-col-num)">
-          <col style="width:var(--mk-col-num)">
-          <col style="width:var(--mk-col-num)">
-          <col style="width:var(--mk-col-num-wide)">
-          <col style="width:var(--mk-col-num)">
-          <col style="width:var(--mk-col-text-sm)">
-          <col style="width:var(--mk-col-actions-wide)">
-        </colgroup>
-        <thead>
-          <tr>
-            <th>用户</th>
-            <th class="mk-num">痕迹</th>
-            <th class="mk-num" title="到该复习而未复习的痕迹数，条内小条 = 占该用户痕迹比例">到期</th>
-            <th class="mk-num">建议</th>
-            <th class="mk-num">可自动</th>
-            <th class="mk-num">需人工看</th>
-            <th class="mk-num">已执行/删除</th>
-            <th class="mk-num">可回滚</th>
-            <th>最近观察</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="row in rows"
-            :key="row.userId"
-            class="mk-table--rowclick"
-            :class="{ 'mr__row--active': row.userId === selectedId }"
-            @click="openDetail(row.userId)"
-          >
-            <td>
-              <div class="mr__user">
-                <i class="mr__ava" :class="{ 'mr__ava--virtual': row.isVirtualLearner }" aria-hidden="true">{{ (row.name || '未')[0] }}</i>
-                <span class="mr__user-main">
-                  <strong>{{ row.name || '未命名' }}</strong>
-                  <small class="mr__sub">{{ shortId(row.userId) }}</small>
-                </span>
-                <span v-if="row.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
-              </div>
-            </td>
-            <td class="mk-num">{{ row.traces }}</td>
-            <td class="mk-num">
+      <!-- 用户列表（2026-09-27）：10 列密表 → mk 行级原语（MkRowList + MkRow，与
+           ud-row / ld-sessrow 收敛为同一份行结构）。身份走 lead（头像 + 虚拟徽章）与 title/sub
+           （名称 / shortId）；右列只留「到期压力 + 需人工看」两个要运营动手的信号与行内操作，
+           逐用户的其余计数（痕迹/建议/可自动/已执行÷删除/可回滚/最近观察）在下方明细卡全量展开，
+           列表不再 10 列平摊稀释注意力。原 colgroup/列宽事故记录见 ADMIN_COLUMN_WIDTH_SPEC。 -->
+      <MkRowList v-else class="mr__rows">
+        <MkRow
+          v-for="row in rows"
+          :key="row.userId"
+          :title="row.name || '未命名'"
+          :sub="shortId(row.userId)"
+          :class="{ 'mr__row--active': row.userId === selectedId }"
+          @click="openDetail(row.userId)"
+        >
+          <template #lead>
+            <i class="mr__ava" :class="{ 'mr__ava--virtual': row.isVirtualLearner }" aria-hidden="true">{{ (row.name || '未')[0] }}</i>
+            <span v-if="row.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
+          </template>
+          <template #trail>
+            <span class="mr__trail">
               <!-- 到期压力条：数字 + 占该用户痕迹的比例，重压用户扫一眼可见 -->
-              <div class="mr__due" :class="`mr__due--${dueTone(row)}`">
+              <span class="mr__due" :class="`mr__due--${dueTone(row)}`" :title="`到该复习而未复习 ${row.due} 条，占该用户痕迹 ${duePctOf(row)}%`">
                 <b>{{ row.due }}</b>
                 <span class="mr__due-bar" aria-hidden="true"><i :style="{ width: duePctOf(row) + '%' }"></i></span>
-              </div>
-            </td>
-            <td class="mk-num">{{ row.audit?.proposed ?? '—' }}</td>
-            <td class="mk-num">{{ row.audit?.autoApplicable ?? '—' }}</td>
-            <td class="mk-num">
-              <span v-if="row.audit?.ambiguous" class="mr__need">{{ row.audit.ambiguous }}</span>
-              <span v-else class="mr__none">—</span>
-            </td>
-            <td class="mk-num">{{ row.audit ? `${row.audit.applied}/${row.audit.deleted}` : '—' }}</td>
-            <td class="mk-num" :class="{ 'mr__none': !row.merges?.rollbackable }">{{ rollbackableCount(row) }}</td>
-            <td>
-              <span class="mr__obs" :class="`mr__obs--${obsTone(row)}`">
-                <i class="mr__obs-dot" aria-hidden="true"></i>
-                <template v-if="row.audit">{{ row.audit.mode }} · {{ timeAgo(row.audit.generatedAt) }}</template>
-                <template v-else>未观察</template>
               </span>
-            </td>
-            <td class="mr__actions">
-              <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(row.userId)">明细</button>
-              <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" @click.stop="recompute(row.userId)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+              <!-- 需人工看：>0 抬成琥珀胶囊；0 压成安静破折号（像但不确定，不会自动执行） -->
+              <span v-if="row.audit?.ambiguous" class="mr__need" :title="`${row.audit?.ambiguous} 条归并候选需人工确认，不会自动执行`">{{ row.audit.ambiguous }}</span>
+              <span v-else class="mr__none" title="没有待人工确认的归并候选">—</span>
+              <span class="mr__actions">
+                <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(row.userId)">明细</button>
+                <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" @click.stop="recompute(row.userId)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
+              </span>
+            </span>
+          </template>
+        </MkRow>
+      </MkRowList>
 
     <div v-if="detail" class="mr__detail">
       <div class="mk-card">
@@ -417,6 +373,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminMemoryReviewApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkRow from '@/components/mk/MkRow.vue'
+import MkRowList from '@/components/mk/MkRowList.vue'
 import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
@@ -505,12 +463,6 @@ interface ReviewDetail {
   duePreview: Array<{ conceptKey: string; label: string; retention: number; masteryScore: number; extractionCount: number; source?: string | null; dueAt?: string | null }>
 }
 
-const rollbackableCount = (row: OverviewRow) => {
-  const merges = row.merges
-  if (!merges) return '—'
-  return merges.rolledBack > 0 ? `${merges.rollbackable}（已回滚 ${merges.rolledBack}）` : String(merges.rollbackable)
-}
-
 const rollbackableMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.rollbackable ?? [])
 const rolledBackMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.rolledBack ?? [])
 const legacyWindowOnlyMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.legacyWindowOnly ?? [])
@@ -550,13 +502,6 @@ function dueTone(row: OverviewRow): 'none' | 'warn' | 'high' {
 function duePctOf(row: OverviewRow): number {
   return row.traces ? Math.min(Math.round((row.due / row.traces) * 100), 100) : row.due ? 100 : 0;
 }
-/** 最近观察的新鲜度：24h 内=新鲜（绿点）；从未观察=最弱档 */
-function obsTone(row: OverviewRow): 'fresh' | 'stale' | 'never' {
-  if (!row.audit) return 'never';
-  const ageMs = Date.now() - new Date(row.audit.generatedAt).getTime();
-  return ageMs < 24 * 3600_000 ? 'fresh' : 'stale';
-}
-
 /** 明细 · 课内温故计划 KPI 条（同上，走共享组件） */
 const planKpiItems = computed<MkStatItem[]>(() => {
   const plan = detail.value?.reviewPlan
@@ -825,8 +770,8 @@ onMounted(async () => {
    说明文字 11px 低于项目字号下限 12px，抬到 12px（四卡共用本条规则） */
 .mr-queue__label small { font-weight: 400; color: var(--mk-faint); font-size: 12px; line-height: 1.4; }
 
-/* ===== 用户表行设计 ===== */
-.mr__user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+/* ===== 用户列表行设计（2026-09-27：10 列密表 → mk 行级原语 MkRowList + MkRow）===== */
+/* 头像：放 MkRow lead slot，保持极简（圆形字徽，无私有结构） */
 .mr__ava {
   width: 28px; height: 28px; border-radius: 50%; flex: none;
   display: grid; place-items: center;
@@ -835,10 +780,12 @@ onMounted(async () => {
   color: var(--mk-accent-deep);
 }
 .mr__ava--virtual { background: color-mix(in srgb, var(--mk-purple) 14%, transparent); color: var(--mk-purple); }
-.mr__user-main { display: grid; min-width: 0; }
-.mr__user-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 行列表容器：fill 卡内接管纵向滚动（原 .mk-table-scroll 的职责；窄屏横向由 overflow 兜底） */
+.mr__rows { flex: 1; min-height: 0; overflow-y: auto; }
+/* trail slot 右列簇：到期压力条 + 需人工看 + 行内操作横排不换行 */
+.mr__trail { display: flex; align-items: center; gap: 10px; }
 
-/* 到期压力条：数字在上、比例条在下（列宽 --mk-col-num 内） */
+/* 到期压力条：数字在上、比例条在下（trail 右列内） */
 .mr__due { display: grid; gap: 3px; justify-items: start; }
 .mr__due b { font-variant-numeric: tabular-nums; font-weight: 700; }
 .mr__due--none b { color: var(--mk-faint); font-weight: 400; }
@@ -857,13 +804,6 @@ onMounted(async () => {
   color: var(--mk-amber); font-weight: 700; font-variant-numeric: tabular-nums;
 }
 .mr__none { color: var(--mk-faint); }
-
-/* 最近观察：新鲜度点（24h 绿 / 更早灰 / 从未最弱） */
-.mr__obs { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
-.mr__obs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mk-faint); flex: none; }
-.mr__obs--fresh .mr__obs-dot { background: var(--mk-green); }
-.mr__obs--fresh { color: var(--mk-ink); }
-.mr__obs--never { color: var(--mk-faint); }
 
 .mr__h4 { margin: 14px 0 6px; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 /* 归并表勾选列表头：收窄，别把「选择」撑成正文列宽 */
