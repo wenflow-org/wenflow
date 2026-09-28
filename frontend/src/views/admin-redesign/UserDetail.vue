@@ -16,7 +16,7 @@
           <button v-if="isDeleted" type="button" class="mk-status__action" :disabled="restoring" @click="doRestore">
             {{ restoring ? '恢复中…' : '恢复用户' }}
           </button>
-          <button type="button" class="mk-status__action" @click="toLearner">查看学习者画像 →</button>
+          <button type="button" class="mk-btn mk-btn--primary" @click="toLearner">查看学习者画像 →</button>
         </div>
       </div>
       <div class="ud-kpis">

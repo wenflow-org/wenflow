@@ -108,6 +108,31 @@
             <span class="ld-none__hint">重算快照后由知识记忆服务生成。</span>
           </p>
         </section>
+
+        <!-- 最近会话（真实接口 userId 过滤）：填平原左栏下方空旷，行点击下钻只读座舱 -->
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">最近会话</h3>
+            <span class="mk-card__meta">
+              <MkLoading v-if="ldSessLoading" inline min text="加载中…" />
+              <template v-else>{{ ldSessError ? '加载失败' : `${ldSessionRows.length} 条` }}</template>
+            </span>
+          </div>
+          <div class="ld-sesslist">
+            <button v-for="s in ldSessionRows" :key="s.id" type="button" class="ld-sessrow" @click="openSessionCockpit(s.id)">
+              <span class="mk-badge" :class="sessBadgeCls(s.status)">{{ statusText(s.status) || '—' }}</span>
+              <span class="ld-sessrow__main">
+                <strong :title="s.topic">{{ s.topic }}</strong>
+                <span>{{ s.subject }} · {{ s.messageCount }} 条消息</span>
+              </span>
+              <span class="ld-sessrow__time">{{ s.startAgo }}</span>
+            </button>
+            <p v-if="!ldSessLoading && !ldSessionRows.length" class="ld-none">
+              {{ '暂无教学会话' }}
+              <span class="ld-none__hint">该学习者上课后，这里会出现会话列表。</span>
+            </p>
+          </div>
+        </section>
       </div>
 
       <div class="ld-col">
@@ -315,10 +340,15 @@
           </div>
         </section>
       </template>
-      <p v-else class="ld-none">
-        {{ '暂无认知画像数据' }}
-        <span class="ld-none__hint">重算快照后生成。</span>
-      </p>
+      <MkEmptyState
+        v-else
+        icon="◌"
+        title="暂无认知画像数据"
+        description="重算快照后由知识记忆服务生成；画像/派生洞察等卡将随快照一起更新。"
+        action-text="重算快照"
+        :action-busy="recomputing"
+        @action="recompute"
+      />
     </div>
 
     <!-- ============ 证据：指标卡横排 + 左时间线 / 右曲线·建议·密度 两栏 ============ -->
@@ -350,7 +380,9 @@
             共 {{ evidence.length }} 条学习事件，其中
             {{ evidence.filter((e) => evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)).length }} 条置信度低于 50%（仅供参照）。
           </p>
-          <details v-if="evidence.length" class="ld-ev-details">
+          <!-- T2「结论与细节分层」：结论行常驻，明细可折叠；默认展开——
+               折着的时间线让左栏只剩一行结论、主视区大面积空白（实测 19 条事件全收在折叠里）。 -->
+          <details v-if="evidence.length" class="ld-ev-details" open>
             <summary class="mk-section__summary">逐条明细</summary>
             <div class="ld-evidence">
             <div v-for="(e, i) in evidence" :key="i" class="ld-ev">
@@ -549,7 +581,8 @@ import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, memoryReviewUrl, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
-import { adminMemoryReviewApi } from '@/api/adminApi'
+import { adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
+import { statusText } from './statusText'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -703,6 +736,7 @@ function resetDerivedState(id: string) {
   memoryTraces.value = []
   loadCurveRaw.value = []
   predictionCalib.value = null
+  ldSessionRows.value = []
   // 图谱仅在进入 graph tab 时按需加载（无 watch 兜底重拉）：
   // 只在真正换人时清空；同人重算/刷新若也清空会留下一张再不加载的空图
   if (id !== lastLoadedId) {
@@ -710,6 +744,56 @@ function resetDerivedState(id: string) {
     graphEdges.value = []
     graphMeta.value = null
     graphPathId.value = null
+  }
+}
+
+// ===== 最近会话（总览左栏；teaching-sessions 支持 userId 过滤，行点击下钻只读座舱） =====
+interface LdSessionRow {
+  id: string
+  topic: string
+  status: string
+  subject: string
+  messageCount: number
+  startAgo: string
+}
+const ldSessionRows = ref<LdSessionRow[]>([])
+const ldSessLoading = ref(false)
+const ldSessError = ref(false)
+/** 状态徽章降噪（对齐 TeachingSessions.statusBadge）：仅异常态上色，正常态灰 */
+const sessBadgeCls = (s: string) =>
+  s === 'failed' || s === 'timeout' || s === 'discarded' || s === 'finalization_failed'
+    ? 'mk-badge--bad'
+    : s === 'superseded'
+      ? 'mk-badge--warn'
+      : 'mk-badge--muted'
+
+function openSessionCockpit(sessionId: string) {
+  const sp = subPage.value
+  openSubPage('session-real', sessionId, sp ? { from: { view: sp.view, id: sp.id, label: liveDetail.value?.name } } : undefined)
+}
+
+async function loadLdSessions(id: string) {
+  const seq = detailLoadSeq
+  ldSessLoading.value = true
+  ldSessError.value = false
+  const stale = () => seq !== detailLoadSeq || subPage.value?.id !== id
+  try {
+    const res = await adminTeachingSessionsApi.list({ userId: id, limit: 5, includeTest: subPage.value?.includeTest })
+    // 竞态守卫与 loadDetail 同款：换人/重载后丢弃旧响应
+    if (stale()) return
+    const body = res.data?.data ?? res.data ?? {}
+    ldSessionRows.value = ((body.items as Record<string, unknown>[]) || []).map((s) => ({
+      id: String(s.id),
+      topic: String(s.topic || s.taskId || '未命名会话'),
+      status: String(s.status || ''),
+      subject: String(s.subject || '—'),
+      messageCount: Number(s.messageCount || 0),
+      startAgo: timeAgo(String(s.startTime || ''))
+    }))
+  } catch {
+    if (!stale()) ldSessError.value = true
+  } finally {
+    if (!stale()) ldSessLoading.value = false
   }
 }
 
@@ -817,6 +901,23 @@ async function loadDetail(id: string | undefined) {
     }
     // 面包屑回写详情名（内部 ID → 中文名；title 仍保留全 ID）
     setSubPageLabel(liveDetail.value.name)
+    // 深链直达时列表兜底（base）常缺失，model.userName 又只有 ID：补拉用户记录回填真实姓名/邮箱，
+    // 否则头部 h1 是裸 user_id（快照里没存昵称的账号全中招）
+    if (!base) {
+      void getUserIncludingDeleted(id)
+        .then((res) => {
+          if (stale()) return
+          const u = ((res.data?.data ?? res.data ?? {}) as Record<string, unknown>)
+          const nm = String(u.name || '')
+          if (nm && liveDetail.value && liveDetail.value.name === id) {
+            liveDetail.value = { ...liveDetail.value, name: nm, email: String(u.email || liveDetail.value.email) }
+            setSubPageLabel(nm)
+          }
+        })
+        .catch(() => { /* 名称兜底失败不阻塞详情页 */ })
+    }
+    // 总览左栏「最近会话」：独立接口，失败不影响主详情
+    void loadLdSessions(id)
   } catch (e) {
     if (stale()) return
     if (base) {
@@ -1426,6 +1527,42 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .ld-tabpage { display: grid; gap: 14px; align-content: start; }
 .ld-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+
+/* 最近会话行卡（总览左栏）：与 UserDetail.ud-row 同构——徽章 + 标题/副行 + 时间 */
+.ld-sesslist { display: grid; }
+.ld-sessrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border: none;
+  border-bottom: 1px solid var(--mk-line, #e6ebf4);
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.ld-sessrow:last-child { border-bottom: none; }
+.ld-sessrow:hover { background: var(--mk-surface-2, rgba(15, 23, 42, 0.03)); }
+.ld-sessrow:focus-visible { outline: none; box-shadow: var(--mk-focus-ring, inset 0 0 0 2px var(--mk-blue)); }
+.ld-sessrow__main { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.ld-sessrow__main strong {
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ld-sessrow__main span {
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ld-sessrow__time { color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
 .ld-none__hint { display: block; margin-top: 4px; font-size: var(--mk-fs-micro); opacity: 0.9; }
 
 /* 主区双栏（左 2fr 主内容 · 右 1fr 侧栏） */
@@ -1754,6 +1891,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
   .ld-none { font-size: var(--mk-fs-body); }
+  .ld-sessrow__main span { font-size: var(--mk-fs-body); }
   .ld-progress strong { font-size: var(--mk-fs-emphasis); }
   .ld-progress__stage, .ld-progress__task { font-size: var(--mk-fs-body); }
   .ld-concept-label { font-size: var(--mk-fs-micro); }
