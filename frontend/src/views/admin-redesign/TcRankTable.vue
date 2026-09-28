@@ -26,7 +26,7 @@
       <!-- 名称列（各维度形态不同） -->
       <div class="tc-c tc-c--name" role="cell">
         <template v-if="variant === 'user'">
-          <i class="tc-avatar" aria-hidden="true">{{ avatarChar(r) }}</i>
+          <MkCellAvatar :name="r.name || r.key" />
           <span class="tc-c__main">
             <strong :title="r.name || r.key">{{ r.name || shortId(r.key) }}</strong>
             <em class="tc-c__sub" :title="r.email || r.key">
@@ -82,6 +82,7 @@ export interface RankRow {
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -108,14 +109,6 @@ function fmtTokens(n: number | undefined): string {
 function shortId(id: string): string {
   if (!id) return '—'
   return id.length > 18 ? `${id.slice(0, 12)}…${id.slice(-4)}` : id
-}
-
-function avatarChar(r: RankRow): string {
-  const src = (r.name || r.key || '?').trim()
-  if (!src) return '?'
-  // 优先取中文/英文首字符，数字用户回退 key 前两位
-  const ch = src[0]
-  return /^[0-9a-zA-Z\u4e00-\u9fa5]$/.test(ch) ? ch.toUpperCase() : '?'
 }
 
 function shareW(tokens: number): string {
@@ -248,21 +241,6 @@ html[data-theme='dark'] .tc-rank__no--top { background: rgba(91, 141, 239, 0.2);
   text-overflow: ellipsis;
 }
 
-/* 用户头像圆片 */
-.tc-avatar {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  font-style: normal;
-  background: var(--mk-blue-bg);
-  color: var(--mk-blue);
-}
 
 /* 数字 */
 .tc-num {
@@ -313,7 +291,8 @@ html[data-theme='dark'] .tc-share__bar { background: linear-gradient(90deg, #6fa
   .tc-rank__no { width: 22px; height: 22px; font-size: var(--mk-fs-micro); }
   .tc-share__track { height: 7px; }
   .tc-share__num { font-size: var(--mk-fs-micro); }
-  .tc-avatar { width: 24px; height: 24px; font-size: var(--mk-fs-micro); }
+  /* MkCellAvatar 根节点（scoped 可命中子组件根）：排行表紧凑尺寸 + 大屏三档缩放 */
+  .mk-ava { width: 22px; height: 22px; font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: var(--mk-fs-micro); }
@@ -321,7 +300,7 @@ html[data-theme='dark'] .tc-share__bar { background: linear-gradient(90deg, #6fa
   .tc-rank__no { width: 26px; height: 26px; font-size: var(--mk-fs-micro); border-radius: var(--mk-radius-sm); }
   .tc-share__track { height: 8px; }
   .tc-share__num { font-size: var(--mk-fs-micro); }
-  .tc-avatar { width: 28px; height: 28px; font-size: var(--mk-fs-micro); }
+  .mk-ava { width: 28px; height: 28px; font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: var(--mk-fs-emphasis); }
@@ -329,6 +308,6 @@ html[data-theme='dark'] .tc-share__bar { background: linear-gradient(90deg, #6fa
   .tc-rank__no { width: 30px; height: 30px; font-size: var(--mk-fs-micro); }
   .tc-share__track { height: 10px; }
   .tc-share__num { font-size: var(--mk-fs-body); }
-  .tc-avatar { width: 32px; height: 32px; font-size: var(--mk-fs-micro); }
+  .mk-ava { width: 32px; height: 32px; font-size: var(--mk-fs-micro); }
 }
 </style>
