@@ -219,9 +219,34 @@ async function main() {
       figures: (d2.figures || []).map((f) => ({ engine: f.engine, kind: f.kind, marks: (f.marks || []).length, spans: (f.spans || []).length, guides: (f.guides || []).length, caption: f.caption })),
       quickReplies: (d2.quickReplies || d2.suggestedReplies || []).slice(0, 4),
       revision,
+      // 伴学：老师轮可能内嵌伴学插话（PeerTriggerService：model-control/help-keyword/低理解窗口，带冷却）
+      peer: {
+        triggered: !!d2.peerTriggered,
+        message: d2.peerMessage ? String(d2.peerMessage).slice(0, 400) : null,
+        strategy: d2.peerStrategy || null,
+        followUps: (d2.peerFollowUpQuestions || []).slice(0, 3),
+      },
     };
     record.turns.push(turn);
-    log(`turn${i + 1}: level=${turn.analysis?.cognitiveLevel}/${turn.analysis?.levelScore} kp=${turn.knowledgePoints.length} img=${imgs.length} diagram=${turn.diagrams.length} figure=${turn.figures.length} ckpt=${turn.checkpoint ? 'Y' : 'N'} complete=${turn.isCompletion}`);
+    log(`turn${i + 1}: level=${turn.analysis?.cognitiveLevel}/${turn.analysis?.levelScore} kp=${turn.knowledgePoints.length} img=${imgs.length} diagram=${turn.diagrams.length} figure=${turn.figures.length} ckpt=${turn.checkpoint ? 'Y' : 'N'} complete=${turn.isCompletion} peer=${turn.peer.triggered ? 'Y' : 'N'}`);
+
+    // 伴学对话（LEARN_PEER=1）：老师轮带伴学插话且有跟进问 → 学习者回伴学一句（真实用户行为：回应伴学面板）
+    if (process.env.LEARN_PEER === '1' && turn.peer.triggered && turn.peer.followUps.length) {
+      const peerMsg = String(turn.peer.followUps[0] || '').includes('？')
+        ? '我跟上了，刚才那一步我再自己消化一下。'
+        : '好的，收到。';
+      try {
+        const pr = await api('POST', `/api/ai-teaching/sessions/${sessionId}/peer/messages`, { message: peerMsg });
+        const pd = pr.data || {};
+        turn.peer.reply = {
+          user: peerMsg,
+          response: String(pd.peerResponse || '').slice(0, 400),
+          strategy: pd.peerStrategy || null,
+          followUps: (pd.peerFollowUpQuestions || []).slice(0, 3),
+        };
+        log(`  peer replied: strategy=${turn.peer.reply.strategy || '-'} resp=${turn.peer.reply.response.slice(0, 40)}`);
+      } catch (e) { turn.peer.reply = { error: String(e).slice(0, 160) }; }
+    }
 
     // 检查点：按水平作答（弱=第一个选项，中=第二个，强=第二个）
     if (turn.checkpoint) {
