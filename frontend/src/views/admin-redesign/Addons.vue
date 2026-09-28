@@ -227,8 +227,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { dataSource, openSkillDrawer, investigateAgent } from './store'
-import { timeAgo, errMsg } from './live'
+import { dataSource, openSkillDrawer, investigateAgent, liveSkillStatsMap } from './store'
+import { errMsg } from './live'
 import { adminSkillsApi, adminMcpApi } from '@/api/adminApi'
 import { EXTRA_COMPONENT_VISIBLE_SKILLS, EXTRA_CAPABILITY_META } from './capabilityCatalog'
 import { useEscape } from './useEscape'
@@ -308,6 +308,7 @@ async function loadConfigs() {
 }
 
 const capabilityRows = computed<CapabilityRow[]>(() => {
+  void liveSkillStatsMap.value // 运行时统计变化时随重算（最近调用列）
   const out: CapabilityRow[] = []
   for (const id of EXTRA_COMPONENT_VISIBLE_SKILLS) {
     const meta = CAPABILITY_META[id] || { name: id, type: id === 'mcp-tool' ? ('mcp' as const) : ('capability' as const) }
@@ -320,7 +321,9 @@ const capabilityRows = computed<CapabilityRow[]>(() => {
         ready: true,
         model: c.model ? String(c.model) : '继承全局',
         timeout: formatTimeout(c.requestTimeoutMs),
-        last: timeAgo(c.lastCalledAt as string)
+        /* 最近调用与 Skill 运行页同源（网关运行时统计）。skill_model_configs 行没有
+           调用字段——原读 c.lastCalledAt 恒 undefined，整列永远显示「从未」 */
+        last: liveSkillStatsMap.value?.[id]?.lastAt || '从未'
       })
     } else {
       out.push({ id, name: meta.name, type: meta.type, ready: false, model: '', timeout: '', last: '' })
