@@ -134,18 +134,6 @@ describe('Skills 新页头（单行状态条）', () => {
     expect(warnMeta.length).toBeGreaterThan(0)
   })
 
-  it('网格视图无内滚（双滚动条已消除）', async () => {
-    const w = await mountSkills()
-    // 切网格
-    const gridPill = w.findAll('.mk-pill').find((p) => p.text() === '网格')
-    await gridPill!.trigger('click')
-    await flushPromises()
-    const grid = w.find('.sk-grid--inset')
-    expect(grid.exists()).toBe(true)
-    const style = (grid.element as HTMLElement).style
-    expect(style.maxHeight).toBe('')
-  })
-
   it('表头排序：点击「成功率」在 none → descending → ascending 间切换 aria-sort', async () => {
     localStorage.removeItem('wf_skills_sort')
     const w = await mountSkills()

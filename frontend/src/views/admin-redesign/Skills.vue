@@ -33,7 +33,7 @@
       </span>
     </div>
 
-    <!-- 视图切换 pills（唯一的 tab 控件）：Skill 运行 / 健康检查 / 漂移 / 对账（健康中心折入） -->
+    <!-- 视图切换 pills（唯一的 tab 控件）：Skill 运行 / 健康检查 / 漂移 / 对账 / 模型路由 -->
     <div class="mk-pills skills-tabs" role="tablist" aria-label="Skill 视图切换">
       <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'run'" :class="{ 'mk-pill--active': tab === 'run' }" @click="switchTab('run')">Skill 运行</button>
       <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'health'" :class="{ 'mk-pill--active': tab === 'health' }" @click="switchTab('health')">健康检查</button>
@@ -44,11 +44,6 @@
 
     <!-- ===== Tab1: Skill 运行（原 Skills.vue 全量内容） ===== -->
     <template v-if="tab === 'run'">
-    <!-- 主视图切换（统一样板：状态条正下方的独立一行，按内容宽度、左对齐） -->
-    <div class="mk-pills" role="tablist" aria-label="视图模式切换">
-      <button type="button" role="tab" class="mk-pill" :aria-selected="view === 'list'" :class="{ 'mk-pill--active': view === 'list' }" @click="view = 'list'">列表</button>
-      <button type="button" role="tab" class="mk-pill" :aria-selected="view === 'grid'" :class="{ 'mk-pill--active': view === 'grid' }" @click="view = 'grid'">网格</button>
-    </div>
 
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
@@ -72,7 +67,6 @@
         </div>
         <div class="mk-card__head-right">
           <MkCols
-            v-if="view === 'list'"
             :col-defs="skColDefs"
             :storage-key="SK_COLS_KEY"
             v-model:hidden="hiddenCols"
@@ -84,13 +78,13 @@
       <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="10" />
       <template v-else>
       <!-- 列表视图：列对齐 + 排序，问题浮顶 -->
-      <div v-if="view === 'list'" class="mk-table-scroll">
+      <div class="mk-table-scroll">
         <table v-if="filtered.length" class="mk-table sk-table mk-table--fixed">
           <colgroup>
             <!-- Skill 名 + 中文描述是唯一的长内容列，但基准合计 754 远小于容器 1182，
-                 fixed 布局把余量按权重等比摊给每一列（放大 1.57 倍）：右边四个 2-5 字列
-                 各占 100-220px，真正的 Skill 名反而只有 502px、长名被截。
-                 把「所属阶段」「最近调用」降档，让 Skill 列拿回宽度。 -->
+                fixed 布局把余量按权重等比摊给每一列（放大 1.57 倍）：右边四个 2-5 字列
+                各占 100-220px，真正的 Skill 名反而只有 502px、长名被截。
+                把「所属阶段」「最近调用」降档，让 Skill 列拿回宽度。 -->
             <col style="width:var(--mk-col-text)">
             <col v-if="showCol('agent')" style="width:var(--mk-col-badge)">
             <col v-if="showCol('cat')" style="width:var(--mk-col-badge)">
@@ -145,8 +139,8 @@
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
                   <div class="mk-cell-main">
-                    <strong class="sk-id-main mk-ellipsis" :title="s.id">{{ s.id }}</strong>
-                    <span class="sk-name-desc mk-ellipsis" :title="s.name">{{ s.name }}</span>
+                    <strong class="sk-name-main mk-ellipsis" :title="s.name">{{ s.name }}</strong>
+                    <span class="sk-id-desc mk-ellipsis mono" :title="s.id">{{ s.id }}</span>
                   </div>
                 </div>
               </td>
@@ -162,7 +156,11 @@
                   :class="completionBadgeOf(s.id)!.cls"
                   :title="completionBadgeOf(s.id)!.title"
                 >{{ completionBadgeOf(s.id)!.text }}</span>
-                <span v-else class="mk-na">—</span>
+                <!-- 对账未就绪三态：加载中 / 加载失败 / 不在对账口径。
+                     此前失败与无数据同显「—」，整列塌成无意义符号、用户无从判断 -->
+                <span v-else-if="recLoading" class="mk-na" title="对账报告加载中，完成度暂不可用">…</span>
+                <span v-else-if="recError" class="mk-na sk-rec-fail" :title="`对账加载失败：${recError}`">对账失败</span>
+                <span v-else class="mk-na" title="对账报告中无此 Skill（外挂能力等不在对账口径内）">—</span>
               </td>
               <td v-if="showCol('rate')">
                 <!-- 行级设计（批C）：数字+比例条（与网格卡 sk-card__rate 同语言，消灭同页双形态） -->
@@ -183,35 +181,6 @@
         </table>
       </div>
 
-      <!-- 网格视图：健康矩阵（保留对比）；与列表共用同一分页器 -->
-      <div v-else class="sk-grid sk-grid--inset">
-        <button
-          v-for="s in paged"
-          :key="s.id"
-          type="button"
-          class="sk-card"
-          :class="`sk-card--${s.health}`"
-          @click="openSkillDrawer(s.id)"
-        >
-          <span class="sk-card__head">
-            <span class="sk-card__dot"></span>
-            <span class="sk-card__cat">{{ categoryText(s.category) }}</span>
-            <span v-if="s.health !== 'ok'" class="sk-card__flag">{{ healthLabel(s.health) }}</span>
-          </span>
-          <strong class="sk-card__name" :title="s.name">{{ s.id }}</strong>
-          <span class="sk-card__id">{{ s.name }}</span>
-          <span class="sk-card__stats">
-            <span>{{ s.calls }} 调用</span>
-            <span v-if="s.errors" class="sk-card__err">{{ s.errors }} 失败</span>
-            <span v-else :class="{ 'mk-na': !s.calls }">{{ s.calls ? '无失败' : '—' }}</span>
-          </span>
-          <!-- 失败率进度条 -->
-          <span v-if="s.calls > 0" class="sk-card__rate" :title="`成功率 ${s.calls - s.errors}/${s.calls}`">
-            <i class="sk-card__rate-bar" :class="{ 'is-bad': s.errors > 0 }" :style="{ width: ((s.calls - s.errors) / s.calls * 100) + '%' }"></i>
-          </span>
-        </button>
-      </div>
-
       <MkEmptyState
         v-if="skillsError && !cards.length"
         title="Skill 数据加载失败"
@@ -227,7 +196,7 @@
         @action="clearFilters"
       />
       </template>
-      <!-- 客户端分页（统一 mk-pagination 页码器）：列表/网格共用，筛选后按页切片 -->
+      <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
       <Pagination
         v-if="filtered.length"
         v-model:page="page"
@@ -276,7 +245,7 @@ import HealthCenter from './HealthCenter.vue'
 import SkillModelCoverage from './SkillModelCoverage.vue'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
-/* ================= 宿主：Skill 运行 · 健康检查 · 漂移 · 对账（阶段 3 导航收敛） =================
+/* ================= 宿主：Skill 运行 · 健康检查 · 漂移 · 对账 · 模型路由（阶段 3 导航收敛） =================
    健康中心由独立场景折入本宿主 tab（侧栏 15→14 项）；?tab= 双向同步，深链/刷新/前进后退可寻址；
    唯一 tab 控件 = 本行 pills（健康中心内不再嵌套 pills，R1）。 */
 const SKILLS_TABS = ['run', 'health', 'drift', 'recon', 'model-routing'] as const
@@ -287,7 +256,7 @@ const router = useRouter()
 const hcRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
 const hcCount = ref(0)
 const hcRefreshing = ref(false)
-/** 健康中心嵌入视图：run tab 未激活时才挂载，run 不会出现 */
+/** 健康中心嵌入视图：run / model-routing tab 未激活时才挂载，二者不会出现 */
 const hcView = computed<'health' | 'drift' | 'recon'>(() =>
   tab.value === 'health' || tab.value === 'drift' || tab.value === 'recon' ? tab.value : 'health'
 )
@@ -354,7 +323,6 @@ interface SkillRow {
 const onlyAttention = ref(false)
 const keyword = ref('')
 const categoryFilter = ref('')
-const view = ref<'list' | 'grid'>('list')
 
 /* D3 表格增强：列显隐（持久化 / 点击外部与 Esc 关闭由共享 MkCols 组件承担；Skill 列固定） */
 const SK_COLS_KEY = 'wf_skills_hidden_cols'
@@ -611,21 +579,20 @@ function recGateDetail(completion: SkillCompletion): string {
 /* 列宽统一走 <colgroup> + token（见模板上方）；Skill 列为 auto 吸收列。
    此处不再用 th/td:nth-child 写宽——它与 colgroup 冲突，且 nth-child(7~10) 已无对应列，
    会导致列宽既非 colgroup 也非 token、且不可预测。 */
-/* 英文原名（id）主行：等宽突出；中文描述副行：灰色正文（非 mono）。
+/* 中文名主行（正文重色，与同站 SkillDrawer 头部一致）；英文 id 降副行（等宽灰）。
    截断上限统一引用 token（原散落 460px） */
-.sk-id-main {
-  font-family: var(--mk-mono);
+.sk-name-main {
   font-weight: 700;
   max-width: var(--mk-cell-main-max);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.sk-name-desc {
+.sk-id-desc {
+  font-family: var(--mk-mono);
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   line-height: 1.5;
-  font-family: inherit;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -636,86 +603,19 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-dot--ok { background: var(--mk-green); }
 .sk-dot--idle { background: #c3cede; }
 .sk-dot--error { background: var(--mk-red); animation: sk-blink 1.2s ease infinite; }
+/* 完成度列：对账拉取失败的行内提示（红字 + title 带原因） */
+.sk-rec-fail { color: var(--mk-red); font-weight: 700; }
 
 /* 指标阈值着色 */
 .sk-rate--bad { color: var(--mk-red); font-weight: 700; }
 .sk-rate--warn { color: var(--mk-amber); font-weight: 700; }
-/* 列表成功率列（批C）：数字+比例条，与网格卡同语言 */
+/* 列表成功率列（批C）：数字+比例条 */
 .sk-rate { display: grid; gap: 3px; justify-items: end; }
 .sk-rate b { font-variant-numeric: tabular-nums; }
 .sk-rate__bar { display: block; width: 56px; height: 4px; border-radius: var(--mk-radius-pill); background: var(--mk-line); overflow: hidden; }
 .sk-rate__bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-green); }
 .sk-rate--warn .sk-rate__bar i { background: var(--mk-amber); }
 .sk-rate--bad .sk-rate__bar i { background: var(--mk-red); }
-
-/* 网格视图 */
-.sk-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
-}
-/* 应用式布局（mk-card--fill）：不内滚，高度交给页面滚动（消除双滚动条） */
-.sk-grid--inset {
-  padding: 12px;
-}
-.sk-card {
-  display: grid;
-  gap: 6px;
-  min-height: 110px;
-  padding: 13px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: 0.14s ease;
-}
-.sk-card:hover { border-color: rgba(44, 99, 208, 0.35); transform: translateY(-1px); }
-.sk-card--error { border-color: rgba(220, 38, 38, 0.4); background: linear-gradient(180deg, #fff7f7, #fff); }
-
-.sk-card__head { display: flex; align-items: center; gap: 7px; }
-.sk-card__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-green); }
-.sk-card--idle .sk-card__dot { background: #c3cede; }
-.sk-card--error .sk-card__dot { background: var(--mk-red); animation: sk-blink 1.2s ease infinite; }
-@keyframes sk-blink { 50% { opacity: 0.3; } }
-.sk-card__cat { font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.05em; color: var(--mk-faint); }
-.sk-card__flag { margin-left: auto; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-red); }
-.sk-card--idle .sk-card__flag { color: var(--mk-faint); }
-
-/* 英文原名（id）主行 + 中文解释副行 */
-.sk-card__name {
-  font-family: var(--mk-mono);
-  font-size: var(--mk-fs-body);
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sk-card__id {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  line-height: 1.5;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-.sk-card__stats {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  font-variant-numeric: tabular-nums;
-  border-top: 1px dashed var(--mk-line);
-  padding-top: 7px;
-  margin-top: 2px;
-}
-.sk-card__err { color: var(--mk-red); font-weight: 700; }
-/* 失败率进度条 */
-.sk-card__rate { display: block; width: 100%; height: 4px; border-radius: var(--mk-radius-pill); background: var(--mk-line); overflow: hidden; margin-top: 2px; }
-.sk-card__rate-bar { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-green); transition: width 0.15s ease; }
-.sk-card__rate-bar.is-bad { background: var(--mk-red); }
 
 /* 所属阶段标签 */
 .sk-agent-tag {
@@ -741,40 +641,29 @@ function recGateDetail(completion: SkillCompletion): string {
 
 /* 大屏档位（mk 体系：2000 ≈×1.15，2800 ≈×1.17，3600 ≈×1.3） */
 @media (min-width: 2000px) {
-  .sk-card__cat,
-  .sk-card__flag { font-size: var(--mk-fs-micro); }
   .sk-dot { width: 10px; height: 10px; }
   .sk-agent-tag { font-size: var(--mk-fs-micro); padding: 3px 11px; }
 
-  .sk-id-main { font-size: var(--mk-fs-micro); }
-  .sk-name-desc { font-size: var(--mk-fs-micro); }
+  .sk-name-main { font-size: var(--mk-fs-micro); }
+  .sk-id-desc { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .sk-card__cat,
-  .sk-card__flag { font-size: var(--mk-fs-micro); }
   .sk-dot { width: 12px; height: 12px; }
   .sk-agent-tag { font-size: var(--mk-fs-micro); padding: 4px 13px; }
 
-  .sk-id-main { font-size: var(--mk-fs-micro); }
-  .sk-name-desc { font-size: var(--mk-fs-micro); }
+  .sk-name-main { font-size: var(--mk-fs-micro); }
+  .sk-id-desc { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
-  .sk-card__cat,
-  .sk-card__flag { font-size: var(--mk-fs-body); }
   .sk-dot { width: 14px; height: 14px; }
   .sk-agent-tag { font-size: var(--mk-fs-body); padding: 5px 15px; }
 
-  .sk-id-main { font-size: var(--mk-fs-emphasis); }
-  .sk-name-desc { font-size: var(--mk-fs-body); }
+  .sk-name-main { font-size: var(--mk-fs-emphasis); }
+  .sk-id-desc { font-size: var(--mk-fs-body); }
 }
 
 /* ================= 暗色模式（D1 补完）：Skill 运行 ================= */
 html[data-theme='dark'] {
-  .sk-card__rate { background: #2a2b2d; }
-  .sk-card { background: #19191a; border-color: #2a2b2d; }
-  .sk-card__head { border-bottom-color: #2a2b2d; }
-  .sk-card--error { background: linear-gradient(180deg, #241a1a, #19191a); }
-  .sk-dot--idle, .sk-card--idle .sk-card__dot { background: #4d4e51; }
   .sk-agent-tag { background: #2a2b2d; color: #afb1b6; }
 }
 
