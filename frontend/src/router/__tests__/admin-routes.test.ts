@@ -107,9 +107,9 @@ describe('Admin 路由重定向', () => {
     await router.push('/admin/notifications');
     expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
     expect(router.currentRoute.value.query.tab).toBe('inapp');
+    // 2026-09-29 拆页：token-cost 旧重定向退役，成本分析独立成场景
     await router.push('/admin/token-cost');
-    expect(router.currentRoute.value.path).toBe('/admin/execution-logs');
-    expect(router.currentRoute.value.query.tab).toBe('cost');
+    expect(router.currentRoute.value.path).toBe('/admin/token-cost');
   });
 
   it('导航一级收敛（阶段 1）：退役场景 URL 重定向到对应宿主 + tab', async () => {
