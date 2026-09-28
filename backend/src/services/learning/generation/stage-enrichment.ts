@@ -13,6 +13,7 @@ import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
+import { buildStageFillNote } from './stage-fill-note';
 import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS } from '../../materials/material-prompt-projection';
@@ -571,9 +572,28 @@ export async function enrichLearningPathWithAnderson(
         const stageHours = stageTasks.length > 0 ? Math.max(1, Math.ceil(stageTotalMinutes / 60)) : null;
         if (stageHours !== null) {
           pathNormalizedHours += stageHours;
+          // R3 欠 fill 诚实声明：锚必须在回写前读（回写后 estimatedHours 即任务汇总，锚丢失）
+          const fillNote = buildStageFillNote(
+            Number(milestone.estimatedHours) || null,
+            stageHours,
+            (milestone as { description?: string | null }).description,
+          );
+          if (fillNote) {
+            logger.info('[stage-enrichment] 阶段课时欠 fill，已追加容量说明', {
+              pathId: learningPath.id,
+              milestoneId: milestone.id,
+              stageNumber: milestone.stageNumber,
+              anchorHours: Number(milestone.estimatedHours) || null,
+              stageHours,
+            });
+          }
           await tx.milestones.update({
             where: { id: milestone.id },
-            data: { estimatedHours: stageHours, updatedAt: new Date() }
+            data: {
+              estimatedHours: stageHours,
+              ...(fillNote ? { description: fillNote } : {}),
+              updatedAt: new Date(),
+            }
           });
         }
       }
