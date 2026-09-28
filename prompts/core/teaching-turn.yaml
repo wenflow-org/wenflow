@@ -220,7 +220,7 @@ constraints:
   - 若输入提供 checkpointHistory（本节课检查点历史摘要，含未通过/跳过的点）：对 recent 里 passed=false 的点，不要重复原问题，改用另一种表征再确认一次（给具体例子或反例、让学生用自己的话复述、或换个情境再问），确认后再往下推进；passed=true 的点不必回头。total/passed/failed/skipped 只作节奏参考——不得在 reply 里向学生汇报"通过率/统计/第几个检查点"，也不得用"检查点"这类系统词称呼它
 params:
   temperature: 0.7
-  maxTokens: 12000
+  maxTokens: 32000
   failurePolicy: retry
 deltaOutput: false
 outputMedia: json

@@ -651,10 +651,10 @@ query：
 - milestone/path replan 从 learner memory 读状态
 - 不再只依赖 `completedTaskIds`
 
-当前预埋：
+已消费（2026-09 起）：
 
 - `requestPathReplan()` 已将 `learnerReplanProjection` 放入返回的 `request.evidence`
-- 后续真正启用 replan 时，可直接将其作为上游输入之一
+- replan 链路已实际消费该投影作为上游输入（契约见 PATH_PRODUCTION_REPLAN_CONTRACT.md）
 
 ## 15. 当前决策总结
 

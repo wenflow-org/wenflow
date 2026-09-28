@@ -1,5 +1,8 @@
 # 路径场景中的 Anderson 标注迭代方向
 
+> ⚫ **已归档（2026-09-28）**：本文是「为什么砍掉二阶段 Anderson 重规划」的唯一决策留痕。短期方案已全部落地（`stage-designer.yaml` / `retired-skills.ts` / `DISPLAY_LABEL_MAP.procedural`）。内容停止更新，勿作为现行规范引用。
+
+
 ## 背景
 
 当前路径场景里的 Anderson 相关逻辑，已经从阻塞式后处理调整为路径可用后的 enrichment 阶段执行。

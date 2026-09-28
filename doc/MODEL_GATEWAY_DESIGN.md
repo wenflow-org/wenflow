@@ -275,7 +275,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
   ②别名映射（成员、DB 覆盖声明、默认选中、`requireThinking` 下的选中与降级标记）、
   ③平台默认模型的**解析结果与来源**（别名 / 具体 / 未配置）、
   ④降级链、⑤**当前冷却中的部署**（进程内快照）、⑥配置漂移告警（未注册模型、别名为空、模型未被引用、废弃 `prompt.model` 副本数）。
-  该接口**不做写操作**（方案 B），模型能力仍以代码注册表为唯一写源。
+  该接口**不做写操作**（方案 B）。写源辨析：模型能力以代码注册表为唯一写源；`skill_model_configs` 已于 2026-09-28 落地 File-as-Truth（§4.2a，管理台可写）；`agent_model_configs` 的唯一写方是迁移脚本 `migrate-database-secrets.ts:112`——三处语义不同，勿混淆。
 - **成本金额已接线**：`services/cost/call-cost-aggregation.ts`（纯函数）提供按模型/会话/技能/节点的金额聚合，
   管理端 `routes/admin/token-cost.ts` 的排行条目与 `totals` 追加 `usd / pricingKnown / callsMissingPricing / pricedCalls`，
   响应顶层新增 `pricingStatus`（列出「已配置 / 待补单价」模型）；前端成本 tab 有金额条。

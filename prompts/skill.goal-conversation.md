@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-conversation
-coreHash: 2a4e822d38833b78e493d464c4d2c794795a441db1d845816c39219d835bacb4
+coreHash: 6704e019a3d4af739e6001798d62052ced88a6b980200721a8f04d711bbb6980
 coreVersion: 6
 temperature: 0.7
 maxTokens: 32000

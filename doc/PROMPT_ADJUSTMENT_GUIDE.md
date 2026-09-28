@@ -78,7 +78,7 @@ npm run prompts:snapshots
 
 ## 改完怎么验证（按成本递增）
 
-1. **守门巡检**：`npm run prompts:lint`、`prompts:drift-check`、`prompts:snapshots:check`、`npm run check:all`；
+1. **守门巡检**：`npm run prompts:lint`、`prompts:drift-check`、`prompts:snapshots:check`、`prompts:check:all`（均在 backend 下）；
 2. **单 skill 试跑**：设计页「试跑」页签，真实输入真模型执行，最近调用可一键重跑；
 3. **回归 eval**：管理台「Prompt 评估」（目前仅 goal-conversation / path-planning / stage-designer
    有 evalAdapter，其余 skill 用试跑兜底）;
@@ -95,7 +95,7 @@ npm run prompts:snapshots
 
 1. `prompts:sync` 是**全量**对账，会把他人未提交的 md 一并推进共享 system.db——
    单点微调用 `backend/scripts/sync-one-prompt.ts --dry` 先报告再同步；
-2. 改字段声明不跑 `prompts:snapshots` ⇒ `check:all` 报"说明书漂移"；
+2. 改字段声明不跑 `prompts:snapshots` ⇒ `prompts:snapshots:check` 报"说明书漂移"；
 3. 字段种子**只建不更新**：本地老库改编排字段描述后残留旧值 ⇒ `prompts:drift-check` 红
    （CI 空库不会）⇒ 用 `backend/scripts/align-field-description.ts` 对齐本地库；
 4. 共享工作树：多人同仓时，改 prompt 前先 `git status` 看他人 WIP；提交按路径点名 add；
@@ -106,4 +106,4 @@ npm run prompts:snapshots
 - `doc/SKILL_DEVELOPMENT_GUIDE.md` —— 从零**新建/改造 Skill** 全流程（scaffold/接线/门禁/发布），本指南是其「调整已有 prompt」侧的姊妹篇
 - `doc/SKILL_PROTOCOL_V4.md` —— 协议机制（五块结构/字段冻结/发布原子性）
 - `prompts/_README.md` —— 目录结构与两级模型
-- `doc/DRIFT_BASELINE_SURVEY.md` —— 健康中心三分语义与基准体系
+- 健康中心三分语义与基准体系：见 `backend/src/services/health-center.service.ts` 头注（原 DRIFT_BASELINE_SURVEY 文档已不在仓库）

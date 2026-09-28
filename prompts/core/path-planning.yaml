@@ -131,7 +131,7 @@ constraints:
   - cognitiveDesign = cognitiveCore；cognitiveDesign 和 milestones 只是兼容镜像，不得与正式输出语义不一致
 params:
   temperature: 0.5
-  maxTokens: 12000
+  maxTokens: 32000
   failurePolicy: retry
 deltaOutput: false
 outputMedia: json

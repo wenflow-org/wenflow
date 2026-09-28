@@ -647,10 +647,10 @@ Goal:
 - Milestone/path replan read state from learner memory
 - No longer only depend on `completedTaskIds`
 
-Current prebuilt:
+Consumed (since 2026-09):
 
 - `requestPathReplan()` already put `learnerReplanProjection` into returned `request.evidence`
-- Future when truly enable replan, can directly use as one of upstream inputs
+- The replan flow consumes this projection as one of its upstream inputs (see PATH_PRODUCTION_REPLAN_CONTRACT.md)
 
 ## 15. Current Decision Summary
 

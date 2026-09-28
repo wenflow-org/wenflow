@@ -63,6 +63,6 @@ constraints:
   - 不重写路径内容，只评审
   - 每个维度评分必须有引用依据，不可只给分数
   - overall 计算必须与 dimensions 加权一致
-params: { temperature: 0.3, maxTokens: 4000, failurePolicy: propagate }
+params: { temperature: 0.3, maxTokens: 32000, failurePolicy: propagate }
 deltaOutput: false
 outputMedia: json

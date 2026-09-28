@@ -28,7 +28,7 @@
 - [3. 融合（fusion）](#3-融合fusion)
   - [3.1 总纪律：LLM 只出观测/建议，代码裁决](#31-总纪律llm-只出观测建议代码裁决)
   - [3.2 概念身份归并：真正的多源融合落地](#32-概念身份归并真正的多源融合落地)
-  - [3.3 多源真值发现：算法已实现，**未接线**](#33-多源真值发现算法已实现未接线)
+  - [3.3 多源真值发现：已实现并接线](#33-多源真值发现已实现并接线)
   - [3.4 冲突信号怎么处理](#34-冲突信号怎么处理)
 - [4. 评估（evaluation）](#4-评估evaluation)
   - [4.1 "学会了吗"目前的判据](#41-学会了吗目前的判据)
@@ -185,7 +185,7 @@
 
 **冲突信号（同词异义）**：候选带 `pathTitles`（归属路径），跨 path 是风险信号（`ConceptConsolidatorService.ts:426` `attachOriginPaths`）；不确定的建议落入 `ambiguous` 而非强行合并。
 
-### 3.3 多源真值发现：算法已实现，**未接线**
+### 3.3 多源真值发现：已实现并接线（2026-09）
 
 `backend/src/services/learner/truth-discovery.ts` 是 Q7 里"多源加权融合"的算法实现，**纯函数、无 IO、确定性**：
 
@@ -198,6 +198,7 @@
 > - **已实现**：融合数学 + 单元测试（`1e1b0fba`）。
 > - **未接线**：没有把 `checkpoint:result`/`learner-state-review`/自评各自转成 `TruthClaim`，也没有消费融合值去向 `concept-belief` 或 profile 写状态。
 > - 因此 Q7 的"多源真值融合"当前是**可用的纯算法，不是运行中的回路**。
+> - **2026-09-28 更新**：已接线——`LearnerStateReviewService.ts:199-215` 实调 `adjudicateConceptTruth` 并经 `applyObservations` 落状态；上文「未接线」为改造前状态。
 
 ### 3.4 冲突信号怎么处理
 

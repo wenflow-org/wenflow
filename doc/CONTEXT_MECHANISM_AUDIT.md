@@ -11,7 +11,7 @@
 
 1. **输入体积不是瓶颈**。实测 12,537 次真实调用：平均 input **10,646** tokens、p50 6,886、p90 25,780、p99 59,016、max 89,086 —— 远低于当前模型 1M 上下文。
 2. **40k 压缩窗口是"百轮级安全阀"，实际几乎不触发**（`TeachingContextCompressionService` 注释即写「此前 1M 实际永不触发」；实测 teaching-turn p90 仅 33k、max 41k ≈ 阈值）。
-3. **真正的成本杠杆是前缀缓存命中率**：全局仅 **20.9%**；**前 4 个 skill 占全部 miss 的 87%**。
+3. **真正的成本杠杆是前缀缓存命中率**：全局 **20.9%（改造前基线；2026-09-28 实测已 51-56%，见 PROMPT_CACHE_OPTIMIZATION.md）**；**前 4 个 skill 占全部 miss 的 87%**。
 4. 优化应聚焦 **「稳定前缀前置 + 动态内容后置」**（复刻 goal/path 的做法），以及 `adaptive-guidance-copy` 的 **90KB 动态 payload** 缩减——它命中率只有 **1.8%**，缓存救不了，只能缩。
 
 ---
@@ -54,7 +54,7 @@
 | path-planning | 204 | 673k | 0.6% | **55.9%** | 6KB |
 | lesson-knowledge-enricher | 158 | 1,398k | 1.3% | 2.8% | 20KB |
 | session-wrapup | 80 | 465k | 0.4% | 8.3% | 9KB |
-| **全局** | **12,537** | **105,540k** | 100% | **20.9%** | — |
+| **全局** | **12,537** | **105,540k** | 100% | **20.9%（改造前基线）** | — |
 
 > **前 4 个 skill 占全部 miss 的 87.4%。** 其中 `adaptive-guidance-copy` 单次最贵（≈40k miss/次）。
 
@@ -302,7 +302,7 @@ ORDER BY avg_prompt DESC;
 
 - 结论：新键序在**真实业务**里确实把 `teaching-turn` 同会话可缓存前缀从 ~22% 提到 ~80%；provider 侧命中受**路由/驱逐 best-effort** 影响噪声大，但方向为正（中位 30% → ~40–60%）。
 - provider 命中不完全跟随确定性前缀（个别回合前缀 60% 却只命中 2%），说明**确定性前缀是上界/稳定属性，实际命中另受网关路由影响**。
-- 环境约束：provider 限 **10 请求/分**；并发跑批（`scripts/run-vl-learn-concurrent.mjs`）长期占用配额，导致 429 与 ON 样本偏小。
+- 环境约束：provider 限 **10 请求/分**；并发跑批（`scripts/run-vl-learn-concurrent.mjs`——该文件已不存在，系历史名称；现行跑批入口为 `vl-preset-run.mjs` / `run-vl-learn.mjs`）长期占用配额，导致 429 与 ON 样本偏小。
 - 功能面无回归：改造后完整链（goal/path/learn）在默认新序下跑通至 `completed`。
 
 ### 7.10 §3/§4 待改点 · 逐条复核（2026-09-15）

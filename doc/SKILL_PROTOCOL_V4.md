@@ -17,7 +17,7 @@
 
 ### 1.2 范围
 
-- 本协议约束 **`prompts/core/` 下的全部 core skill**（清单见附录 A）。**以 `prompts/core/` 实际文件数为准**（2026-09-14 复核：30 个 yaml 文件 = 20 mainline + 10 aux；session-evaluation-fallback 已退役；此前 26/25/24 等口径均已过期）。
+- 本协议约束 **`prompts/core/` 下的全部 core skill**（清单见附录 A）。**以 `prompts/core/` 实际文件数为准**（2026-09-28 复核：32 个 yaml 文件；2026-09-14 口径 30 = 20 mainline + 10 aux、更早 26/25/24 等均已过期）。
 - code-only skill（acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector）豁免，不进入核心文件体系（handler-only 确定性组件，无 LLM prompt）。
 - 无生产调用点的注册 skill（label-generator 等 11 个）维持现状，接入生产时必须先满足本协议。
 
@@ -58,9 +58,9 @@ outputMedia: enum            # 可选，json（默认）| markdown | text；决�
 deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5.4（仅 outputMedia=json 时生效）
 ```
 
-> **`params.maxTokens` 的运行时口径（2026-09-18 补，审计观察项）**：它是**下限请求**，不是有效上限。
+> **`params.maxTokens` 的运行时口径（2026-09-28 更正）**：它是**下限请求**；运行时按模型上限做 clamp（旧「无条件抬顶」描述已废，实现见 services/resolve-llm-call-params.ts）。
 > `services/resolve-llm-call-params.ts` 解析出最终模型后，会把低于该模型输出上限的 `maxTokens`
-> 一律**抬到模型上限**（deepseek=128k / agnes=64k），以避免长输出被截断漏字段；显式配置超过模型上限则压回上限。
+> 低于模型上限时抬到上限、超过则压回（clamp）。2026-09-27 起全量 maxTokens 地板统一 32000（core 与编译产物已对齐）。
 > 唯一例外是"运行时显式覆盖"（`runtime-override`，调试/低耗时才可调小）。
 > 因此 core 文件里的 `maxTokens`（多为 1200–8000）只表达"至少给这么多预算"，**实际有效上限由模型决定**。
 
@@ -78,7 +78,7 @@ deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5
 1. **平铺命名**：字段名在 prompt 内部平铺使用（如 `surface_goal`）；组装成嵌套结构（如 `state.understanding.surface_goal`）是平台数据面的事，核心文件不声明嵌套。
 2. **turn 标记**：`turn: true` 字段当轮消费后丢弃（reply/questions/quickReplies 类）；未标记字段默认由平台取走（累积进 state 或持久化）。
 3. **平台字段禁出**：`success`、`quality`、`stage`、`raw` 等与 SkillResult/meta 碰撞的平台包装字段禁止出现在 fields 表（stage 推进以规则文字描述，由平台状态机仲裁）。注意：`debug` 不在禁出名单——部分 skill（如 virtual-learner 模拟器）的 debug 对象本身就是模型产出的业务字段，由字段表正常声明。
-4. **残留输入注记**：skill 特有输入（放不进六池的配置物料，如 prompt-compiler 的 yaml 配置）在 rules 首条以"输入："前缀注记，不开输入侧字段表。
+4. **残留输入注记**：skill 特有输入（放不进六池的配置物料——原 prompt-compiler 的 yaml 配置即属此类；该 LLM 编译器已于 2026-09-26 退役删除，16c3cabd）在 rules 首条以"输入："前缀注记，不开输入侧字段表。
 
 ### 2.5 输入契约声明（inputs）
 
@@ -245,6 +245,8 @@ frontmatter 只含执行参数与溯源锚点（agentId/coreHash/coreVersion/温
 
 LLM 编译器的权限被压至最低：只允许改写 prose 表达与排版，字段集合和字段含义只读。
 
+> ⚠️ **2026-09-26 退役**：二级编译（prompt-compiler 服务）已整体删除（16c3cabd）——v4 产物为确定性渲染，不经 LLM 编译改写（见 `routes/prompt-lab.ts` publish-core 注释）。本条为历史设计。
+
 ### 4.3 编译器全局注入条款（写入产物的边界约束块）
 
 - `outputMedia=json`（默认）："只输出一个 JSON 对象，字段名与输出字段表完全一致，不输出表外字段与解释文字。"
@@ -333,7 +335,7 @@ type SkillResult = {
 
 ### 6.1 版本模型
 
-- 现行 24 个核心文件（含 semantic-freeze-judge；以 `prompts/core/` 实际文件数为准）登记为基准 v1（baseVersion=1）。
+- 现行 32 个核心文件（含 semantic-freeze-judge；以 `prompts/core/` 实际文件数为准）登记为基准 v1（baseVersion=1）。
 - 每次编译发布产生新版本（agent_prompts 同 agentId 多行，version 递增，单 ACTIVE）。
 - 编译产物行必须携带 `coreHash` 与 `coreVersion`（新增列）。
 - **回滚 = 目标历史版本置 ACTIVE、其余置 ARCHIVED**，不需要重新编译。
@@ -378,7 +380,7 @@ coreHash 写入侧 = 编译发布流程（与 sourceHash 同批落库）；判�
 
 ## 附录 A. 受约束 skill 清单（30 core；3 个 code-only 组件已退役）
 
-> 2026-09-14 复核：以 `prompts/core/` 实际文件数为准（30 个 yaml = 20 mainline + 10 aux；此前 26/25/24 等口径均已过期）。
+> 2026-09-28 复核：以 `prompts/core/` 实际文件数为准（现 32 个 yaml；2026-09-14 口径 30、更早 26/25/24 均已过期）。
 
 首批（15）：
 conversational：goal-conversation、teaching-turn、virtual-learner-goal-dialogue-simulator、virtual-learner-learn-turn-simulator
@@ -389,7 +391,7 @@ copywriter：adaptive-guidance-copy、peer-reinforcement
 
 后续新增（core，未列入首批）：path-reviewer、kc-mapper、virtual-learner-epistemic-grounding
 
-辅助 Skill（5，§5.6，v4-aux-skills index.ts 实际 handler 数；generic-chat 于 **2026-09-15 正式退役**；course-design / basic-evaluator / goal-alignment-checker 同日退役（四同步，详见附录 A 退役注记）；concept-priority / path-adjustment-generator **已退役，仅 manifest 残留（2026-08）**，无 core.yaml，均不计数）：
+辅助 Skill（9，2026-09-28 复核 = v4-aux-skills index.ts 实际 handler 数；generic-chat 于 **2026-09-15 正式退役**；course-design / basic-evaluator / goal-alignment-checker 同日退役（四同步，详见附录 A 退役注记）；concept-priority / path-adjustment-generator **已退役，仅 manifest 残留（2026-08）**，无 core.yaml，均不计数）：
 generator：teaching-opening-generator（~~course-design~~ 2026-09-15 退役）
 extractor：skill-compiler、learner-state-review（~~basic-evaluator~~、~~goal-alignment-checker~~ 2026-09-15 退役）
 copywriter：learner-progress-report、skill-author

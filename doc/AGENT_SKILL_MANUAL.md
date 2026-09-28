@@ -104,7 +104,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 
 - **依据**：`backend/src/coordinators/goal.definition.ts`、`prompts/orchestration/goal.yaml`、[`AGENT_IO_DESIGN_V3.md`](./AGENT_IO_DESIGN_V3.md) §7。
 - **缘由（要解决什么）**：项目核心命题是"**学习始于对真实问题的澄清**"（[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §1）。用户最初的诉求（"向上汇报抓不住重点"）不是可规划的输入——必须通过多轮对话把**表面目标**穿透为**真实问题**，并收敛出一版方向方案，路径才不是凭空生成。
-- **为什么单独设 Agent**：Goal 阶段有 28 个字段要产出并按 `handoff: [goal-agent] → [path]` 优雅转交（`goal.yaml`）。字段路由策略需要归属主体；同时"何时推进 understanding→proposing→ready"是对话状态机的事，不应硬编码进对话 Skill 的输出。goal-agent 就是"目标路由 + 阶段收敛"的持有者。
+- **为什么单独设 Agent**：Goal 阶段有 32 个字段要产出并按 `handoff: [goal-agent] → [path]` 优雅转交（`goal.yaml`）。字段路由策略需要归属主体；同时"何时推进 understanding→proposing→ready"是对话状态机的事，不应硬编码进对话 Skill 的输出。goal-agent 就是"目标路由 + 阶段收敛"的持有者。
 - **编排什么 Skill**：`skill:goal-conversation`（唯一 step，`loopOver: conversation-rounds`，`condition: until goal confirmed`）。
 - **输入/输出**：输入 = 用户消息 + goal 状态池；输出 = `understanding.*`（surface_goal/real_problem/背景/约束…）、`confirmedProposal.*`（learning_direction/first_deliverable/key_stages/scope_size）、`userVisible`、control-signal（core.stage/confidence/isCompleted）。全部经 `goal.yaml` routings handoff 给 path。
 - **边界与不负责**：不直接解决业务问题、不展开完整路径正文、不判定用户目标是否合理（goal agent 定义与 `goal-conversation` constraints）。`ready` 只能由用户界面按钮显式确认后输出，模型不得自行宣布（`goal.yaml` / core 规则）。
@@ -121,7 +121,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
   - `path-reviewer` / `kc-mapper`：**不在 `path.definition.ts` steps 内**，由 `learning.service.ts` 内联调用（`skills.yaml` notes），但仍登记在 `path.yaml contracts` 里参与字段路由。
 - **输入/输出**：输入 = goal handoff 字段 + `buildFramedNormalizedInput` 确定性定帧产物 + 用户补充说明（regenerate→replan）；输出 = `path.*` / `cognitiveCore.*` / `milestones.*` / `subtasks.*`，handoff 到 teaching。
 - **边界与不负责**：不授课；路径重排是**人工确认制**（`replanSignal` 只作建议+预览，`UPGRADE_DIRECTION_20Q.md` §2 Q17、[`LEARNING_SCIENCE_AUDIT.md`](./LEARNING_SCIENCE_AUDIT.md) §5.1-6）；不聚合学习者状态。
-- **失败/降级行为**：`buildFramedNormalizedInput` 为纯确定性（无 LLM framing，`path.definition.ts` step1）。`stage-designer` 异步生成 subtasks，过早 `start-learning` 会"第一个里程碑没有可用任务"（[`CONTEXT_MECHANISM_AUDIT.md`](./CONTEXT_MECHANISM_AUDIT.md) §259）；虚拟链路对空任务有最多一次 `restartPathPhase` 重生成兜底（同文 §503）。
+- **失败/降级行为**：`buildFramedNormalizedInput` 为纯确定性（无 LLM framing，`path.definition.ts` step1）。`stage-designer` 异步生成 subtasks，过早 `start-learning` 会"第一个里程碑没有可用任务"（[`CONTEXT_MECHANISM_AUDIT.md`](./CONTEXT_MECHANISM_AUDIT.md) §259）；虚拟链路对空任务有最多一次 `retryPathEnrichment` 重生成兜底（原 `restartPathPhase` 已废除）（同文 §503）。
 - **已知断链（开发者需知）**：`path-planning` 的"按 mastered/fragile/struggling 校准路径"规则因 `learnerLearningContext` 未被 `buildPromptFriendlyNormalizedInput` 带上而**永不生效**；`path-reviewer` 的 `successCriteria` 未传（[`LEARNING_SCIENCE_AUDIT.md`](./LEARNING_SCIENCE_AUDIT.md) §3.19(3)）。
 
 ### 2.3 teaching-agent（Teaching 阶段）
@@ -212,7 +212,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 
 #### `path-reviewer`（路径评审 Skill）
 
-- **一句话缘由**：对生成的路径做**独立质量门禁**（CIDPP 五维：clarity/integrity/depth/practicality/pertinence），低于阈值输出可执行的重规划指令，触发一次自动重规划。
+- **一句话缘由**：对生成的路径做**独立质量门禁**（CIDDP 五维：clarity/integrity/depth/practicality/pertinence），低于阈值输出可执行的重规划指令，触发一次自动重规划。
 - **关键输入/输出**：输入 `pathPlan` + `goalContext` + `prerequisiteTree`；输出 `score`、`dimensions` 五维分、`issues[]`（带引用依据）、`passed`（overall≥0.75）、`replanInstructions`（失败时必给、须引用具体 milestone 编号或概念名）。
 - **设计意图/边界**：**生成与评审解耦**——让另一个 Skill 而不是生成者自评，降低"自己觉得自己对"的偏差。不重写路径内容、不判断用户目标是否合理。它在实现上由 `learning.service.ts` 内联调用（非 coordinator steps），运行于服务侧（`skills.yaml` notes）。退役的 `goal-alignment-checker` 被本 Skill 完全覆盖（[`SKILL_PROTOCOL_V4.md`](./SKILL_PROTOCOL_V4.md) 附录 A 退役注记）。
 - **依据**：core identity、`skills.yaml` notes、`SKILL_PROTOCOL_V4.md` 附录 A。

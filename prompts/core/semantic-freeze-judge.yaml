@@ -30,5 +30,5 @@ fields:
 constraints:
   - 只做语义对账，不重写、不建议、不评价风格
   - 拿不准一律 uncertain，不得为了给出结论而硬判 equivalent 或 divergent
-params: { temperature: 0.1, maxTokens: 4000, failurePolicy: retry }
+params: { temperature: 0.1, maxTokens: 32000, failurePolicy: retry }
 deltaOutput: false

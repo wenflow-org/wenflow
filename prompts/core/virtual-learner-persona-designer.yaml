@@ -72,5 +72,5 @@ fields:
       · behaviorBoundaries / learningPreferences（string[]，可选）
       · priorAttempts（string，可选）过往失败经历
 constraints: []
-params: { temperature: 0.8, maxTokens: 8000, failurePolicy: retry }
+params: { temperature: 0.8, maxTokens: 32000, failurePolicy: retry }
 deltaOutput: false

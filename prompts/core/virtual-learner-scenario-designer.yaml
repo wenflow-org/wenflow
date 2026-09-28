@@ -115,5 +115,5 @@ fields:
     type: "string[]"
     desc: 2-4 条故事与 persona 的一致性校验点（pressurePoints/behaviorHooks/visibleOpening 与 persona 对应字段如何对齐）
 constraints: []
-params: { temperature: 0.9, maxTokens: 8000, failurePolicy: retry }
+params: { temperature: 0.9, maxTokens: 32000, failurePolicy: retry }
 deltaOutput: false
