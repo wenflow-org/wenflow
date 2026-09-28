@@ -408,11 +408,16 @@ export function derivePlanningHints(
     return bare ? Number(bare[1]) : null;
   })();
 
+  // 2026-09-28 R2（rw-school-15 案例：20min 早读被排 30min 课）：上界不得突破会话时长——
+  // 「每步一次坐完」的硬约束优先于「任务别太小」的下限偏好。
+  // 下界=clamp(0.3×会话, 8, 45)；上界=min(会话时长, clamp(0.8×会话, 15, 120))。
   let subtaskMinutesRange: [number, number] = Number.isFinite(parsedSessionMinutes)
-    ? [
-        Math.max(15, Math.round((parsedSessionMinutes as number) * 0.3)),
-        Math.max(30, Math.min(120, Math.round((parsedSessionMinutes as number) * 0.8))),
-      ]
+    ? (() => {
+        const s = parsedSessionMinutes as number;
+        const lower = Math.max(8, Math.min(45, Math.round(s * 0.3)));
+        const upper = Math.min(Math.max(10, s), Math.max(15, Math.min(120, Math.round(s * 0.8))));
+        return [lower, Math.max(lower, upper)] as [number, number];
+      })()
     : defaultMinutesRange;
 
   const parsedBudgetMinutes = parseBudgetMinutes(timeBudget);

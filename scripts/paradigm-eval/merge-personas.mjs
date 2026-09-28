@@ -57,6 +57,15 @@ for (const f of FILES) {
         c.budget.expectedHours = Math.round((daily * dw * 7) / 60);
       }
     }
+    // 校内案例：schoolAnchor（教材/考纲/节奏）必须进对话——否则规划器看不到考试范围，
+    // 路径会把学生主诉的单一卡点放大成整个备考方案、整块丢考试范围（2026-09-28 评审实锤）。
+    if (c.schoolAnchor && Array.isArray(c.followUps)) {
+      const sa = c.schoolAnchor;
+      const parts = [sa.examScope, sa.textbook, sa.pace].filter((x) => typeof x === 'string' && x.trim());
+      if (parts.length && !c.followUps.some((f) => typeof f === 'string' && /考纲|教材|范围|进度/.test(f))) {
+        c.followUps.push('补充一下考试和进度：' + parts.join('；') + '。这些范围都要覆盖，别只盯我一个卡点。');
+      }
+    }
     if (all.some((x) => x.personaId === c.personaId)) { problems.push(`dup id ${c.personaId}`); continue; }
     all.push(c);
   }
@@ -79,19 +88,31 @@ for (const c of all) {
 }
 for (const arr of strata.values()) arr.sort(() => rand() - 0.5);
 
-// 轮转抽留出：每层按比例抽，总量逼近 HOLDOUT_N
+// 轮转抽留出：每层按比例抽，总量逼近 HOLDOUT_N。
+// 已有冻结文件时**复用原留出 id**（切分一旦冻结不得因重跑合并而漂移——反过拟合纪律）。
+const freezePath = path.join(SRC, 'holdout-freeze.json');
+let frozenIds = null;
+if (fs.existsSync(freezePath)) {
+  try { frozenIds = new Set(JSON.parse(fs.readFileSync(freezePath, 'utf8')).ids || []); } catch { frozenIds = null; }
+}
 const holdout = [];
 const driver = [];
-const keys = [...strata.keys()];
-let gi = 0;
-while (holdout.length < HOLDOUT_N && keys.length) {
-  const key = keys[gi % keys.length];
-  const arr = strata.get(key);
-  if (arr.length) holdout.push(arr.shift());
-  if (!arr.length) { keys.splice(gi % keys.length, 1); continue; }
-  gi++;
+if (frozenIds) {
+  for (const c of all) (frozenIds.has(c.personaId) ? holdout : driver).push(c);
+  const missing = [...frozenIds].filter((id) => !holdout.some((c) => c.personaId === id));
+  if (missing.length) console.log('warning: frozen ids missing from pool:', missing.join(','));
+} else {
+  const keys = [...strata.keys()];
+  let gi = 0;
+  while (holdout.length < HOLDOUT_N && keys.length) {
+    const key = keys[gi % keys.length];
+    const arr = strata.get(key);
+    if (arr.length) holdout.push(arr.shift());
+    if (!arr.length) { keys.splice(gi % keys.length, 1); continue; }
+    gi++;
+  }
+  for (const arr of strata.values()) driver.push(...arr);
 }
-for (const arr of strata.values()) driver.push(...arr);
 
 fs.writeFileSync(path.join(HERE, 'real-goals-cases.json'), JSON.stringify({ cases: all }, null, 1));
 fs.writeFileSync(path.join(SRC, 'holdout-freeze.json'), JSON.stringify({
