@@ -9,6 +9,13 @@ function syncThemeForRoute(_path: string) {
   applyDocumentTheme(readTheme());
 }
 
+/** 拆页重定向用：去掉 query 里的 tab 键（tab 已映射为目标页面路径） */
+function stripTab(to: { query: Record<string, unknown> }): Record<string, unknown> {
+  const q: Record<string, unknown> = { ...to.query }
+  delete q.tab
+  return q
+}
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -224,13 +231,15 @@ const routes: RouteRecordRaw[] = [
     redirect: () => ({ path: '/admin/people', query: { tab: 'state' } })
   },
   {
-    // 导航收敛 2026-09-04：教学会话+目标对话（含学习路径）合并为「学习会话」
-    path: '/admin/teaching-sessions',
-    redirect: () => ({ path: '/admin/sessions', query: { tab: 'teaching' } })
-  },
-  {
-    path: '/admin/goal-conversations',
-    redirect: '/admin/sessions'
+    // 2026-09-29 拆回独立页：教学会话 / 目标对话 / 学习路径各自成场景，旧重定向退役；
+    // /admin/sessions 合并宿主 URL 保留重定向（tab 映射到对应独立页）
+    path: '/admin/sessions',
+    redirect: (to) => {
+      const tab = typeof to.query.tab === 'string' ? to.query.tab : ''
+      if (tab === 'conversations') return { path: '/admin/goal-conversations', query: stripTab(to) }
+      if (tab === 'paths') return { path: '/admin/learning-paths', query: stripTab(to) }
+      return { path: '/admin/teaching-sessions', query: stripTab(to) }
+    }
   },
   {
     // 兼容：Agent 拓扑视图已并入编排图页（拓扑数据并入运行时统计），旧 URL 落在默认阶段视图（?tab=topology 仅作兼容 query，编排页按阶段泳道渲染）
@@ -322,13 +331,13 @@ const routes: RouteRecordRaw[] = [
     redirect: () => ({ path: '/admin/ops-center', query: { tab: 'export' } })
   },
   {
-    // 内容管理（学习路径）已并入「学习会话」页（同域治理视图），旧 URL / ops-content 兼容直达路径 tab
+    // 内容管理（学习路径）2026-09-29 拆回独立页 learning-paths，旧 URL 兼容重定向
     path: '/admin/content',
-    redirect: () => ({ path: '/admin/sessions', query: { tab: 'paths' } })
+    redirect: '/admin/learning-paths'
   },
   {
     path: '/admin/ops-content',
-    redirect: () => ({ path: '/admin/sessions', query: { tab: 'paths' } })
+    redirect: '/admin/learning-paths'
   },
   {
     // 导航一级收敛 2026-09-19（阶段 1）：公告/站内通知折入「运营中心」宿主 tab

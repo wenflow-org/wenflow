@@ -392,8 +392,7 @@ function goFeedbackPending() {
 /** 生成失败路径 → 学习会话页「学习路径」tab（预筛 failed，宿主消费 intent.statusFilter/tab 后清空） */
 function goFailedPaths() {
   intent.statusFilter = 'failed'
-  intent.tab = 'paths'
-  intent.scene = 'sessions'
+  intent.scene = 'learning-paths'
 }
 /** outbox 死信 → 系统工具页（原运维中心） */
 function goDeadLetters() {
@@ -401,8 +400,7 @@ function goDeadLetters() {
 }
 /** 学习路径管理 → 学习会话页「学习路径」tab */
 function goContent() {
-  intent.tab = 'paths'
-  intent.scene = 'sessions'
+  intent.scene = 'learning-paths'
 }
 /** 公告管理（运营中心 · 公告 tab） */
 function goAnnouncements() {

@@ -85,7 +85,10 @@ function asyncPage(loader: () => Promise<any>) {
 
 const Overview = asyncPage(() => import('./Overview.vue'));
 const People = asyncPage(() => import('./People.vue'));
-const Sessions = asyncPage(() => import('./GoalConversations.vue'));
+// 2026-09-29 用户拍板拆回独立页：「学习会话」合并宿主退役，教学会话/目标对话/学习路径各自成页
+const TeachingSessions = asyncPage(() => import('./TeachingSessions.vue'));
+const GoalConversations = asyncPage(() => import('./GoalConversations.vue'));
+const LearningPaths = asyncPage(() => import('./OpsContent.vue'));
 const VirtualLearners = asyncPage(() => import('./VirtualLearners.vue'));
 const Skills = asyncPage(() => import('./Skills.vue'));
 const Orchestrator = asyncPage(() => import('./Orchestrator.vue'));
@@ -105,13 +108,16 @@ const BatchExperiments = asyncPage(() => import('./BatchExperiments.vue'));
 
 const components: Record<string, unknown> = {
   'overview': Overview,
-  // 导航收敛 2026-09-04：users+learner-center → people；teaching-sessions+goal-conversations → sessions；
-  // announcements+notifications → messages；token-cost → execution-logs（成本分析 tab）
+  // 导航收敛 2026-09-04：users+learner-center → people；announcements+notifications → messages；token-cost → execution-logs（成本分析 tab）
   // 导航一级收敛 2026-09-19（阶段 1）：feedback/ops-achievements/messages → ops-hub 宿主 tab；
   // addons → api-config 宿主 tab；session-security → ops-center 宿主 tab（场景下线，URL 重定向兼容）
   // 阶段 3（2026-09-19）：health-center → skills 宿主 tab（健康检查/漂移/对账），场景下线
+  // 2026-09-29 用户拍板拆回：teaching-sessions / goal-conversations / learning-paths 各自独立成页
+  //（2026-09-04 曾合并为「学习会话」宿主 sessions，场景已下线，URL 重定向兼容）
   'people': People,
-  'sessions': Sessions,
+  'teaching-sessions': TeachingSessions,
+  'goal-conversations': GoalConversations,
+  'learning-paths': LearningPaths,
   'virtual-learners': VirtualLearners,
   'skills': Skills,
   'orchestrator': Orchestrator,

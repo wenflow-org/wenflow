@@ -93,18 +93,14 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     w.unmount();
   });
 
-  it('Sessions：三视图各有自己的 KPI 档（目标对话 / 教学会话 / 学习路径）', async () => {
-    const { router, ready } = mockRouter('/admin/sessions');
+  it('目标对话独立页：KPI 三卡（总数 / 完成率 / 已取消），宿主 pills 已随拆页退役', async () => {
+    const { router, ready } = mockRouter('/admin/goal-conversations');
     await ready;
     const w = mount(GoalConversations, { global: { plugins: [router] } });
     await settle();
     expect(kpiLabels(w)).toEqual(['目标对话', '完成率', '已取消']);
-
-    await clickPill(w, '教学会话');
-    expect(kpiLabels(w)).toEqual(['会话总数', '已完成', '失败', '有建议']);
-
-    await clickPill(w, '学习路径');
-    expect(kpiLabels(w)).toEqual(['学习路径', '里程碑', '任务', '已下线']);
+    // 2026-09-29 拆回独立页：学习会话合并宿主的视图切换 pills 不应再出现
+    expect(w.find('.gc-tabs').exists()).toBe(false);
     w.unmount();
   });
 

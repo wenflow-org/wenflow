@@ -80,7 +80,7 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.params.agentId).toEqual(['goal-agent']);
   });
 
-  it('导航收敛旧 URL 重定向（2026-09-04：同域双子视图合并为单页 tab）', async () => {
+  it('导航收敛旧 URL 重定向（2026-09-04 合并 + 2026-09-29 学习会话拆回独立页）', async () => {
     await router.push('/admin/users');
     expect(router.currentRoute.value.path).toBe('/admin/people');
     expect(router.currentRoute.value.query.tab).toBe('account');
@@ -90,17 +90,17 @@ describe('Admin 路由重定向', () => {
     await router.push('/admin/learner-models/u1');
     expect(router.currentRoute.value.path).toBe('/admin/people');
     expect(router.currentRoute.value.query.tab).toBe('state');
-    await router.push('/admin/teaching-sessions');
-    expect(router.currentRoute.value.path).toBe('/admin/sessions');
-    expect(router.currentRoute.value.query.tab).toBe('teaching');
-    await router.push('/admin/goal-conversations');
-    expect(router.currentRoute.value.path).toBe('/admin/sessions');
+    // 2026-09-29 拆页：教学会话/目标对话/学习路径各自成场景，旧合并 URL /admin/sessions 反向重定向
+    await router.push('/admin/sessions');
+    expect(router.currentRoute.value.path).toBe('/admin/teaching-sessions');
+    await router.push('/admin/sessions?tab=conversations');
+    expect(router.currentRoute.value.path).toBe('/admin/goal-conversations');
+    await router.push('/admin/sessions?tab=paths');
+    expect(router.currentRoute.value.path).toBe('/admin/learning-paths');
     await router.push('/admin/content');
-    expect(router.currentRoute.value.path).toBe('/admin/sessions');
-    expect(router.currentRoute.value.query.tab).toBe('paths');
+    expect(router.currentRoute.value.path).toBe('/admin/learning-paths');
     await router.push('/admin/ops-content');
-    expect(router.currentRoute.value.path).toBe('/admin/sessions');
-    expect(router.currentRoute.value.query.tab).toBe('paths');
+    expect(router.currentRoute.value.path).toBe('/admin/learning-paths');
     await router.push('/admin/announcements');
     expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
     expect(router.currentRoute.value.query.tab).toBe('announce');

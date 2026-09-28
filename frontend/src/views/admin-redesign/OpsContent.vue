@@ -30,6 +30,20 @@
       </span>
     </div>
 
+    <!-- 页头 KPI 区（2026-09-29 拆回独立页）：路径规模四档——学习中/已完成/生成失败已是
+         卡头 pills 的筛选口径，这里只给「总数 + 规模 + 已下线」。 -->
+    <section v-if="!embedded" class="mk-kpi-grid">
+      <MkKpi
+        v-for="card in pathsKpiCards"
+        :key="card.label"
+        :label="card.label"
+        :value="card.value"
+        :hint="card.hint"
+        :tone="card.tone"
+        :title="card.title"
+      />
+    </section>
+
     <!-- 筛选 + 列表（单行头部与教学会话/目标对话 tab 一致：pill 组 + 搜索 + 数据口径 + 列显隐） -->
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
@@ -234,6 +248,7 @@ import { intent } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { useTableSort } from './useTableSort'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -300,6 +315,24 @@ const hiddenCols = ref<Set<string>>(new Set())
 
 /* 状态条四态计数 + 基调（与目标对话/教学会话同形态：失败>0 警示琥珀，空库静默） */
 const byStatus = (s: string) => stats.value?.byStatus?.[s] || 0
+/* 独立模式页头 KPI 卡（embedded 时由宿主渲染——2026-09-29 拆页后本页常态独立） */
+interface PathsKpiCard {
+  label: string
+  value: string | number
+  hint: string
+  title: string
+  tone?: 'ok' | 'warn' | 'bad' | ''
+}
+const pathsKpiCards = computed<PathsKpiCard[]>(() => {
+  const s = stats.value
+  return [
+    { label: '学习路径', value: s ? s.total : '—', hint: '含各状态', title: '平台学习路径总数（含学习中 / 已完成 / 生成失败 / 已下线）' },
+    { label: '里程碑', value: s ? s.totalMilestones : '—', hint: '全平台合计', title: '全部路径的里程碑总数' },
+    { label: '任务', value: s ? s.totalTasks : '—', hint: '全平台合计', title: '全部路径下的任务总数' },
+    { label: '已下线', value: s ? byStatus('archived') : '—', hint: '归档不再分发', title: '已下线（archived）路径数——仍在库中，可回溯' }
+  ]
+})
+
 const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if (!stats.value || stats.value.total === 0) return 'muted'
   if ((stats.value.byStatus?.failed || 0) > 0) return 'warn'

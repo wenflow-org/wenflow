@@ -58,7 +58,7 @@
             <strong>课后总结质量</strong>
             <small>{{ wrapupIssue.text }}</small>
           </span>
-          <button type="button" class="brief-actions__btn" @click="jump('sessions', 'teaching')">教学会话 →</button>
+          <button type="button" class="brief-actions__btn" @click="jump('teaching-sessions')">教学会话 →</button>
         </li>
       </ul>
     </header>
@@ -133,7 +133,7 @@
               <i class="trend__dot trend__dot--new"></i>当日新增
               <i class="trend__dot trend__dot--done"></i>当日完成
             </span>
-            <button type="button" class="brief-card__go" @click="jump('sessions')">目标对话 →</button>
+            <button type="button" class="brief-card__go" @click="jump('goal-conversations')">目标对话 →</button>
           </span>
         </div>
         <OvBars v-if="data.trend.length" :cols="trendCols" :min-bars-height="88" />
@@ -562,7 +562,7 @@ const kpiTargets: Array<{ scene: string; tab?: string }> = [
   { scene: 'execution-logs' },
   { scene: 'execution-logs' },
   { scene: 'people' },
-  { scene: 'sessions' }
+  { scene: 'goal-conversations' }
 ]
 
 const KPI_HINTS: string[] = [
@@ -576,7 +576,7 @@ function kpiTitle(i: number): string {
   const target = kpiTargets[i]?.scene || ''
   const label = target === 'execution-logs' ? '执行日志'
     : target === 'people' ? '用户与学习者'
-      : target === 'sessions' ? '学习会话' : 'Skill 目录'
+      : target === 'goal-conversations' ? '目标对话' : 'Skill 目录'
   return [hint, `点击查看${label}`].filter(Boolean).join(' · ')
 }
 function jump(scene: string, tab?: string) {

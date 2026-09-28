@@ -18,6 +18,20 @@
       </span>
     </div>
 
+    <!-- 页头 KPI 区（2026-09-29 拆回独立页）：总数 / 已完成 / 失败 / 有建议。
+         刻意不重说卡头 pills 的筛选计数（进行中 / 待关注 / 缺总结）。 -->
+    <section v-if="!embedded" class="mk-kpi-grid">
+      <MkKpi
+        v-for="card in teachingKpiCards"
+        :key="card.label"
+        :label="card.label"
+        :value="card.value"
+        :hint="card.hint"
+        :tone="card.tone"
+        :title="card.title"
+      />
+    </section>
+
     <!-- 深链未命中提示：?session= 存在但当前列表（最近 LIST_LIMIT 条）中找不到 -->
     <div v-if="deepLinkMiss" class="mk-alert" role="alert">
       未能定位该会话：它可能不在当前列表范围内（最近 {{ LIST_LIMIT }} 条），或已被删除。
@@ -350,6 +364,7 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
@@ -699,6 +714,24 @@ const teachingStats = computed<TeachingStats>(() => ({
   advisory: advisoryCount.value
 }))
 watch(teachingStats, (s) => emit('stats', s), { immediate: true })
+
+/* 独立模式页头 KPI 卡（embedded 时由合并宿主渲染——2026-09-29 拆页后本页常态独立） */
+interface TeachingKpiCard {
+  label: string
+  value: string | number
+  hint: string
+  title: string
+  tone?: 'ok' | 'warn' | 'bad' | ''
+}
+const teachingKpiCards = computed<TeachingKpiCard[]>(() => {
+  const s = teachingStats.value
+  return [
+    { label: '会话总数', value: s ? s.total : '—', hint: '最近窗口', title: '教学会话总数（后端全量口径）；列表按最近加载，达上限时仍显示真实总量' },
+    { label: '已完成', value: s ? s.completed : '—', hint: '正常收尾', tone: s && s.completed > 0 ? 'ok' : '', title: '状态已完成的会话数' },
+    { label: '失败', value: s ? s.failed : '—', hint: '含收尾失败', tone: s && s.failed > 0 ? 'bad' : '', title: '状态失败或收尾失败的会话数——这两档都要排查' },
+    { label: '有建议', value: s ? s.advisory : '—', hint: '含教学建议', title: '带教学建议的会话数（建议来自收尾评估）' }
+  ]
+})
 
 /* 详情 — URL 同步 ?session=id 支持深链/刷新恢复 */
 const detail = ref<Row | null>(null)

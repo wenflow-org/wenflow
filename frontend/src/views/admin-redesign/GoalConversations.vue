@@ -1,19 +1,20 @@
 <template>
   <div class="mk-page mk-page--fill gc-host">
-    <!-- 页面级状态条：场景名 + 口径提示 + 刷新（三域合计由下方 KPI 区随视图呈现，状态条不再重说） -->
+    <!-- 页面级状态条：场景名 + 口径提示 + 刷新。
+         2026-09-29 拆回独立页：本组件从「学习会话」合并宿主还原为「目标对话」单页
+         （教学会话 / 学习路径各自独立成页），不再承载宿主状态条 / 视图 pills / 子视图上报。 -->
     <div class="mk-status" :class="`mk-status--${dashTone}`">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">学习会话</strong>
+      <strong class="mk-status__title">目标对话</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" title="教学会话 / 目标对话 / 学习路径三视图均按「仅真实」口径统计">仅真实用户口径</span>
+      <span class="mk-status__meta" title="用户与系统澄清目标的多轮会话；仅真实用户口径">仅真实用户口径</span>
       <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" @click="refreshActive">刷新</button>
+        <button type="button" class="mk-status__action" :disabled="loading" @click="load(true)">{{ loading ? '刷新中…' : '刷新' }}</button>
       </span>
     </div>
 
-    <!-- 页头 KPI 区（2026-09-28 统一形态，同用户与学习者 / 记忆与复习）：随当前视图切换。
-         刻意不重说卡头 pills 的筛选计数（进行中 / 待关注 / 缺总结 / 已完成…），
-         只给「总数 + 运营要看的健康档」：教学成败、目标对话完成率、路径规模。 -->
+    <!-- 页头 KPI 区（统一形态）：总数 / 完成率 / 已取消。
+         刻意不重说卡头 pills 的筛选计数（进行中 / 已完成…）。 -->
     <section class="mk-kpi-grid">
       <MkKpi
         v-for="card in kpiCards"
@@ -26,20 +27,7 @@
       />
     </section>
 
-    <!-- 视图切换 pills（唯一的 tab 控件）：各视图计数随 pill 呈现，状态条不再放同义可点计数 -->
-    <div class="mk-pills gc-tabs">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'teaching' }" @click="switchGcTab('teaching')">教学会话<span class="mk-pill__count">{{ domainCount.teaching ?? '—' }}</span></button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'conversations' }" @click="switchGcTab('conversations')">目标对话<span class="mk-pill__count">{{ domainCount.conversations ?? '—' }}</span></button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': gcTab === 'paths' }" @click="switchGcTab('paths')">学习路径<span class="mk-pill__count">{{ domainCount.paths ?? '—' }}</span></button>
-    </div>
-
-    <!-- ===== Tab0: 教学会话（嵌入 TeachingSessions 组件；embedded 不含状态条，计数上报宿主） ===== -->
-    <TeachingSessions v-if="gcTab === 'teaching'" ref="teachingRef" embedded @count="onDomainCount('teaching', $event)" @stats="teachingStats = $event" />
-
-    <!-- ===== Tab1: 目标对话（列表内联于宿主；宿主状态条承载统计） ===== -->
-    <template v-if="gcTab === 'conversations'">
-
-    <!-- 空态：无数据且无失败时显示；loadError 时让位给卡内 gc-error 重试块（否则失败被外层空态伪装成「暂无数据」） -->
+    <!-- ===== 目标对话列表 ===== -->
     <MkEmptyState
       v-if="!rows.length && !loading && !loadError"
       title="暂无 Goal 会话数据"
@@ -203,10 +191,6 @@
         />
       </div>
     </template>
-    </template>
-
-    <!-- ===== Tab2: 学习路径（原「内容管理」合并：路径是目标对话的产出物，同域治理视图） ===== -->
-    <OpsContent v-if="gcTab === 'paths'" ref="pathsRef" embedded :initial-status="pathInitialStatus" @count="onDomainCount('paths', $event)" @stats="pathsStats = $event" />
 
     <!-- 详情面板 -->
     <Teleport to="body">
@@ -329,7 +313,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { isLive, intent } from './store'
+import { isLive } from './store'
 import { useSessionDrill } from './useSessionDrill'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS, statusText } from './statusText'
@@ -348,10 +332,6 @@ import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
-import OpsContent from './OpsContent.vue'
-import type { PathsStats } from './OpsContent.vue'
-import TeachingSessions from './TeachingSessions.vue'
-import type { TeachingStats } from './TeachingSessions.vue'
 import { adminGoalConversationsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -404,20 +384,6 @@ function gcStatusSeg(n: number): number {
 const keyword = ref('')
 const statusFilter = ref('')
 
-/* 二级 tab：教学会话 / 目标对话 / 学习路径（同域合并：教学会话=上课记录、学习路径=目标对话产出物；
-   「内容管理」独立场景已并入；2026-09-04 导航收敛并入教学会话） */
-const GC_TABS = ['teaching', 'conversations', 'paths'] as const
-type GcTab = (typeof GC_TABS)[number]
-const gcTab = ref<GcTab>('conversations')
-/** 深链预筛（工作台「生成失败路径」→ failed）；用户手动切 tab 即视为已消费，下次切回恢复全部 */
-const pathInitialStatus = ref('')
-function switchGcTab(t: GcTab) {
-  gcTab.value = t
-  if (t === 'paths') pathInitialStatus.value = ''
-  /* URL 同步（?tab=…）：深链/刷新/前进后退可寻址（合并宿主页统一约定；与 ?goal 详情参数共存） */
-  if (route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
-}
-
 /* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/阶段/路径/创建时间 可隐藏，用户/操作固定 */
 const gcColDefs = [
   { key: 'summary', label: '目标摘要', title: '对话目标摘要' },
@@ -432,27 +398,6 @@ const detail = ref<Detail | null>(null)
 /* URL 同步：?goal=id 记录当前打开的详情，支持深链/刷新恢复 */
 const route = useRoute()
 const router = useRouter()
-/* URL → tab（含合并页深链直达：/admin/sessions?tab=teaching|conversations|paths） */
-watch(
-  () => route.query.tab,
-  (t) => {
-    const v = typeof t === 'string' && (GC_TABS as readonly string[]).includes(t) ? (t as GcTab) : null
-    if (v && v !== gcTab.value) gcTab.value = v
-    else if (!v && gcTab.value !== 'conversations') gcTab.value = 'conversations'
-  },
-  { immediate: true }
-)
-/* intent 深链（运营中心「管理 →/生成失败路径」、总览「教学会话」卡）：tab + 预筛按需下发 */
-watch(
-  () => intent.tab,
-  (t) => {
-    if (t === 'teaching' || t === 'paths' || t === 'conversations') {
-      gcTab.value = t
-      intent.tab = ''
-    }
-  },
-  { immediate: true }
-)
 /* URL → detail：页面加载/刷新时恢复 */
 watch(
   () => route.query.goal,
@@ -517,28 +462,10 @@ function confToneCls(pct: number): string {
   return confTone(pct) === 'bad' ? 'gc-conf--low' : confTone(pct) === 'warn' ? 'gc-conf--warn' : ''
 }
 
-/* ===== 宿主页头（学习会话：三域计数随 pills / KPI 区呈现 + 切视图） ===== */
-/** 三域计数（由激活子视图上报；conversations 域用 stats.total 兜底）。
- *  null = 该 tab 未访问过、子视图从未上报——徽章显示 '—' 而非假 0（P2：初始 0 会误导「该域没数据」的排查结论） */
-const domainCount = ref<{ teaching: number | null; conversations: number | null; paths: number | null }>({ teaching: null, conversations: null, paths: null })
-/** 基调：无任何数据 muted；任一域有数即 ok（观测页统一语义） */
-const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
-  const d = domainCount.value
-  /* null（未上报）按无数据处理：避免把「未知」当成「确认无数据」参与基调判定 */
-  if (!stats.value && (d.teaching ?? 0) === 0 && (d.paths ?? 0) === 0) return 'muted'
-  return 'ok'
-})
-function onDomainCount(domain: 'teaching' | 'conversations' | 'paths', n: number) {
-  domainCount.value[domain] = n
-}
-/* conversations 加载后同步域计数 */
-watch(stats, (s) => {
-  if (s) onDomainCount('conversations', Number(s.total || 0))
-})
+/* ===== 页头（目标对话：基调 + KPI 卡） ===== */
+/** 基调：无任何数据 muted；有数即 ok（观测页统一语义） */
+const dashTone = computed<'ok' | 'warn' | 'muted'>(() => (stats.value ? 'ok' : 'muted'))
 
-/* ===== 页头 KPI 区（子视图上报 stats） ===== */
-const teachingStats = ref<TeachingStats | null>(null)
-const pathsStats = ref<PathsStats | null>(null)
 interface KpiCard {
   label: string
   value: string | number
@@ -547,24 +474,6 @@ interface KpiCard {
   tone?: 'ok' | 'warn' | 'bad' | ''
 }
 const kpiCards = computed<KpiCard[]>(() => {
-  if (gcTab.value === 'teaching') {
-    const s = teachingStats.value
-    return [
-      { label: '会话总数', value: s ? s.total : '—', hint: '最近窗口', title: '教学会话总数（后端全量口径）；列表按最近加载，达上限时仍显示真实总量' },
-      { label: '已完成', value: s ? s.completed : '—', hint: '正常收尾', tone: s && s.completed > 0 ? 'ok' : '', title: '状态已完成的会话数' },
-      { label: '失败', value: s ? s.failed : '—', hint: '含收尾失败', tone: s && s.failed > 0 ? 'bad' : '', title: '状态失败或收尾失败的会话数——这两档都要排查' },
-      { label: '有建议', value: s ? s.advisory : '—', hint: '含教学建议', title: '带教学建议的会话数（建议来自收尾评估）' }
-    ]
-  }
-  if (gcTab.value === 'paths') {
-    const s = pathsStats.value
-    return [
-      { label: '学习路径', value: s ? s.total : '—', hint: '含各状态', title: '平台学习路径总数（含学习中 / 已完成 / 生成失败 / 已下线）' },
-      { label: '里程碑', value: s ? s.milestones : '—', hint: '全平台合计', title: '全部路径的里程碑总数' },
-      { label: '任务', value: s ? s.tasks : '—', hint: '全平台合计', title: '全部路径下的任务总数' },
-      { label: '已下线', value: s ? s.archived : '—', hint: '归档不再分发', title: '已下线（archived）路径数——仍在库中，可回溯' }
-    ]
-  }
   const s = stats.value
   const cancelled = gcCancelledCount.value
   return [
@@ -585,15 +494,6 @@ const kpiCards = computed<KpiCard[]>(() => {
     }
   ]
 })
-/** 刷新：转交当前激活子视图（teaching/paths 暴露 refresh；conversations 走 load） */
-const teachingRef = ref<{ refreshNow: () => void } | null>(null)
-const pathsRef = ref<{ reload: () => void } | null>(null)
-function refreshActive() {
-  if (gcTab.value === 'teaching') teachingRef.value?.refreshNow()
-  else if (gcTab.value === 'paths') pathsRef.value?.reload()
-  else void load(true)
-}
-
 useEscape(() => !!detail.value, closeDetail)
 const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
 
@@ -913,26 +813,14 @@ watch(includeTest, () => {
   void load(true)
 })
 onMounted(() => {
-  /* 深链 ?tab=teaching|paths 时不预拉目标对话（省一次 list+stats）；首次切到 conversations 再补拉（见下方 watch） */
-  if (isLive.value && gcTab.value === 'conversations') void load()
-  /* 深链：运营工作台「生成失败路径」→ 直达「学习路径」tab 并预筛失败（消费后清空，避免菜单直达被残留污染） */
-  if (intent.statusFilter === 'failed') {
-    gcTab.value = 'paths'
-    pathInitialStatus.value = 'failed'
-    intent.statusFilter = ''
-  }
-})
-/* 按需首拉：从 teaching/paths 首次切到 conversations 且从未加载成功过时补拉（stats 在 load 内，随之延后） */
-watch(gcTab, (t) => {
-  if (t === 'conversations' && isLive.value && !rows.value.length && !loadError.value) void load()
+  if (isLive.value) void load()
 })
 </script>
 
 <style scoped>
-/* 合并宿主（对齐观测组执行日志形态）：应用式 fill 容器 + 顶部视图切换 pills + 子组件占满 */
-/* 宿主容器沿用 .mk-page 的响应式内边距（对齐 pp-host / 虚拟学习者单页容器），
+/* 2026-09-29 拆回「目标对话」独立页：合并宿主的视图切换 pills（gc-tabs）随之退役。
+   宿主容器沿用 .mk-page 的响应式内边距（对齐 pp-host / 虚拟学习者单页容器），
    避免 ≥1440px 档位状态条起始位置与其它页脱节。 */
-.gc-tabs { width: fit-content; }
 /* 子组件根节点（.mk-page--fill）：占满剩余高度，表格区内滚（对齐 pp-host > .mk-page--fill 先例） */
 .gc-host > .mk-page--fill {
   flex: 1 1 auto;

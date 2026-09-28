@@ -66,7 +66,19 @@ vi.mock('@/api/adminApi', () => ({
 function mockRouter(initialPath: string) {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+    routes: [
+      { path: '/admin/:page?', component: { template: '<div />' } },
+      // 与真实路由同款的拆页重定向（2026-09-29）：/admin/sessions 合并宿主 URL → 对应独立页
+      {
+        path: '/admin/sessions',
+        redirect: (to) => {
+          const tab = typeof to.query.tab === 'string' ? to.query.tab : '';
+          if (tab === 'conversations') return { path: '/admin/goal-conversations' };
+          if (tab === 'paths') return { path: '/admin/learning-paths' };
+          return { path: '/admin/teaching-sessions' };
+        }
+      }
+    ],
   });
   const ready = router.push(initialPath).then(() => router.isReady());
   return { router, ready };
@@ -136,41 +148,29 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     document.body.innerHTML = '';
   });
 
-  it('Sessions：默认目标对话 tab；切「教学会话」→ TeachingSessions + ?tab=teaching；「学习路径」→ OpsContent', async () => {
-    const { router, ready } = mockRouter('/admin/sessions');
+  it('拆页（2026-09-29）：目标对话独立页不再承载教学会话/学习路径子视图与视图切换 pills', async () => {
+    const { router, ready } = mockRouter('/admin/goal-conversations');
     await ready;
     const w = mount(GoalConversations, { global: { plugins: [router] } });
     await settle();
     expect(w.findComponent(OpsContent).exists()).toBe(false);
     expect(w.findComponent(TeachingSessions).exists()).toBe(false);
-
-    await clickPill(w, '教学会话');
-    await settle();
-    expect(w.findComponent(TeachingSessions).exists()).toBe(true);
-    expect(router.currentRoute.value.query.tab).toBe('teaching');
-
-    await clickPill(w, '学习路径');
-    await settle();
-    expect(w.findComponent(OpsContent).exists()).toBe(true);
-    expect(router.currentRoute.value.query.tab).toBe('paths');
+    expect(w.find('.gc-tabs').exists()).toBe(false);
     w.unmount();
   });
 
-  it('Sessions：深链 /admin/sessions?tab=paths + intent.tab 直达（运营中心「管理 →」）', async () => {
+  it('拆页重定向：/admin/sessions（含旧 ?tab=）映射到对应独立页', async () => {
     const { router, ready } = mockRouter('/admin/sessions?tab=paths');
     await ready;
-    const w = mount(GoalConversations, { global: { plugins: [router] } });
-    await settle();
-    expect(w.findComponent(OpsContent).exists()).toBe(true);
-    w.unmount();
+    expect(router.currentRoute.value.path).toBe('/admin/learning-paths');
 
-    intent.tab = 'teaching';
-    const { router: r2, ready: ready2 } = mockRouter('/admin/sessions');
+    const { router: r2, ready: ready2 } = mockRouter('/admin/sessions?tab=conversations');
     await ready2;
-    const w2 = mount(GoalConversations, { global: { plugins: [r2] } });
-    await settle();
-    expect(w2.findComponent(TeachingSessions).exists()).toBe(true);
-    w2.unmount();
+    expect(r2.currentRoute.value.path).toBe('/admin/goal-conversations');
+
+    const { router: r3, ready: ready3 } = mockRouter('/admin/sessions');
+    await ready3;
+    expect(r3.currentRoute.value.path).toBe('/admin/teaching-sessions');
   });
 
   it('OpsHub：深链 ?tab=announce 渲染 Announcements；切「站内通知」→ Notifications + ?tab=inapp', async () => {

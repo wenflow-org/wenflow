@@ -6,7 +6,7 @@
       <strong class="mk-status__title">用户与学习者</strong>
       <span class="mk-status__sep"></span>
       <!-- 学习者域后端 limit=50 截断（live.ts 不动）：画像数满 50 时给出静态口径说明 -->
-      <span v-if="tab === 'state' && domainCount.learners >= 50" class="mk-status__meta" title="学习者快照单次最多加载 50 条">仅加载前 50 位，可按筛选缩小范围</span>
+      <span v-if="tab === 'state' && learnerCount >= 50" class="mk-status__meta" title="学习者快照单次最多加载 50 条">仅加载前 50 位，可按筛选缩小范围</span>
       <span class="mk-status__actions">
         <button v-if="tab === 'account'" type="button" class="mk-status__action mk-status__action--primary" @click="usersRef?.openCreate?.()">新建用户</button>
         <button type="button" class="mk-status__action" @click="refreshActive">刷新</button>
@@ -29,7 +29,9 @@
       />
     </section>
 
-    <!-- 视图切换 pills（唯一的 tab 控件）：各视图计数随 pill 呈现，状态条不再放同义可点计数 -->
+    <!-- 视图切换 pills（唯一的 tab 控件）：各视图计数随 pill 呈现。
+         学习状态计数直接读 boot 已拉的 liveLearners（2026-09-29 修复：原靠子视图上报、
+         未进过该 tab 就恒显 0，读起来像「没有学习状态」） -->
     <div class="mk-pills pp-tabs">
       <button
         type="button"
@@ -42,13 +44,13 @@
         class="mk-pill"
         :class="{ 'mk-pill--active': tab === 'state' }"
         @click="switchTab('state')"
-      >学习状态<span class="mk-pill__count">{{ domainCount.learners }}</span></button>
+      >学习状态<span class="mk-pill__count">{{ learnerCount }}</span></button>
     </div>
 
     <!-- 账号管理：Users（embedded 不含状态条，计数上报宿主；新建用户入口在卡头） -->
-    <Users v-if="tab === 'account'" ref="usersRef" embedded @count="onDomainCount('users', $event)" @stats="accountStats = $event" />
+    <Users v-if="tab === 'account'" ref="usersRef" embedded @count="onDomainCount($event)" @stats="accountStats = $event" />
     <!-- 学习状态：LearnerCenter（embedded 不含状态条，计数上报宿主） -->
-    <LearnerCenter v-else ref="learnersRef" embedded @count="onDomainCount('learners', $event)" @stats="learnerStats = $event" />
+    <LearnerCenter v-else ref="learnersRef" embedded @stats="learnerStats = $event" />
   </div>
 </template>
 
@@ -56,7 +58,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { intent } from './store'
-import { liveUsersTotal } from './live'
+import { liveUsersTotal, liveLearners } from './live'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import Users from './Users.vue'
 import type { AccountStats } from './Users.vue'
@@ -79,8 +81,8 @@ const route = useRoute()
 const router = useRouter()
 
 /* ===== 宿主页头（用户与学习者：两域计数随 pills 呈现 + 切视图） ===== */
-/** 两域计数（由激活子视图上报；域计数徽章方案，对齐学习会话宿主） */
-const domainCount = ref<{ users: number; learners: number }>({ users: 0, learners: 0 })
+/** 账号域计数（Users 上报，兜底用） */
+const domainCount = ref<{ users: number }>({ users: 0 })
 /**
  * 账号总数以全局 live 单源为准：Users 只在「账号管理」Tab 挂载，
  * 若沿用子视图 emit，切到「学习状态」后 users 会停留在旧值、深链直连则取不到。
@@ -88,11 +90,15 @@ const domainCount = ref<{ users: number; learners: number }>({ users: 0, learner
  * 状态条 tooltip 用固定表述，不再断言「不含测试/虚拟」以免与实际口径漂移。
  */
 const userCount = computed(() => liveUsersTotal.value || domainCount.value.users)
+/** 学习状态计数：live 全局单源（boot 即拉 learners 域，与是否进过该 tab 无关——
+ *  2026-09-29 修复：原靠 LearnerCenter 挂载后上报，没点进过「学习状态」就恒显 0，
+ *  读起来像「这个域没有数据」） */
+const learnerCount = computed(() => liveLearners.value.length)
 const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() =>
   userCount.value > 0 ? 'ok' : 'muted'
 )
-function onDomainCount(domain: 'users' | 'learners', n: number) {
-  domainCount.value[domain] = n
+function onDomainCount(n: number) {
+  domainCount.value.users = n
 }
 
 /* ===== 页头 KPI 区（子视图上报 stats；卡内容随视图切换） ===== */
@@ -135,11 +141,6 @@ const kpiCards = computed<KpiCard[]>(() => {
     title: '名下有 ≥1 条学习路径的人数——路径覆盖率，与表格筛选 pill 无关（全量口径）'
   })
   return cards
-})
-/* 学习画像与账号是同一批人：离开「学习状态」即清零，
-   避免「用户 19 + 学习者 19 = 共 38 人」的重复计数误读 */
-watch(tab, (t) => {
-  if (t !== 'state') domainCount.value.learners = 0
 })
 const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
 const learnersRef = ref<{ refresh?: () => void } | null>(null)

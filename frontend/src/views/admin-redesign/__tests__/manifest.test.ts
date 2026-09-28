@@ -39,8 +39,8 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('导航（阶段 3）：7 分组 / 14 场景与目标 IA 完全一致', () => {
-    expect(MOCK_SCENES).toHaveLength(14);
+  it('导航（2026-09-29 拆页）：7 分组 / 16 场景与目标 IA 完全一致', () => {
+    expect(MOCK_SCENES).toHaveLength(16);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
     const groups = MOCK_SCENES.map((s) => s.group);
     expect([...new Set(groups)]).toEqual(['总览', '教学', '虚拟学习者', 'Skill', '观测', '系统', '运营']);
@@ -48,7 +48,7 @@ describe('AdminConsole 页面注册表', () => {
     for (const s of MOCK_SCENES) (byGroup[s.group] ||= []).push(s.id);
     expect(byGroup).toEqual({
       总览: ['overview'],
-      教学: ['people', 'sessions', 'memory-review'],
+      教学: ['people', 'teaching-sessions', 'goal-conversations', 'learning-paths', 'memory-review'],
       虚拟学习者: ['virtual-learners', 'batch-experiments'],
       Skill: ['orchestrator', 'skills', 'prompt-eval'],
       观测: ['execution-logs', 'audit-logs'],
