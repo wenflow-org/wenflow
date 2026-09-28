@@ -298,6 +298,11 @@ async function openDebugStation() {
   }
 }
 
+/** 加载序号：详情在两个用户间快速切换时，旧请求后到会覆盖新数据——last-wins 守卫。
+    必须声明在下方 watch 之前：watch 带 immediate，深链挂载（subPage 已设）时会在
+    setup 期间同步调用 loadDetail，声明在后会撞 TDZ（ReferenceError），请求永不发出 */
+let detailLoadSeq = 0
+
 watch(
   () => subPage.value?.id,
   () => {
@@ -338,9 +343,6 @@ async function doRestore() {
     restoring.value = false
   }
 }
-
-/** 加载序号：详情在两个用户间快速切换时，旧请求后到会覆盖新数据——last-wins 守卫 */
-let detailLoadSeq = 0
 
 async function loadDetail() {
   const id = subPage.value?.id

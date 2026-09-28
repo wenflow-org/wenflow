@@ -263,8 +263,16 @@ watch(scene, (s) => {
     const q = intentQueryParams(s)
     if (Object.keys(q).length) void router.push({ path: `/admin/${s}`, query: q })
     else void router.push(`/admin/${s}`)
+    subPage.value = null;
+  } else {
+    // route 驱动的场景变化（刷新深链 / 浏览器前进后退 / 带 query 的直达 push）：
+    // 目标 URL 自带合法 ?view=&id= 时，subPage 的恢复权归「URL → subPage」watch，
+    // 此处不得清空——本 watch 注册晚于该 watch，同一 flush 里会「先恢复后误杀」，
+    // 深链详情永远打不开（刷新 /admin/people?view=user&id=xx 卡骨架屏的根因）。
+    const qv = typeof route.query.view === 'string' ? route.query.view : ''
+    const qid = typeof route.query.id === 'string' ? route.query.id : ''
+    if (!(qid && SUBPAGE_VIEWS.includes(qv))) subPage.value = null;
   }
-  subPage.value = null;
   // 切换页面时自动关闭 Skill 抽屉，避免遮挡侧栏导航
   closeSkillDrawer();
 });

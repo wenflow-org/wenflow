@@ -5,7 +5,7 @@
  * 2. manifest 全部菜单项（阶段 1 收敛后 14 项）逐一点击 → 路由跳转 /admin/:id + 对应页面组件真正渲染
  * 3. 深链直达 /admin/:page 渲染对应页面；非法 page 回退 /admin/overview 并修正 URL
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
@@ -68,6 +68,11 @@ vi.mock('@/api/adminApi', () => ({
   restoreUser: vi.fn(async () => ({ data: {} }))
 }));
 
+vi.mock('@/api/userCustom', () => ({
+  getProjectionGrantStatus: vi.fn(async () => ({ data: {} })),
+  normalizeProjectionGrant: vi.fn(() => null)
+}));
+
 async function settle() {
   await flushPromises();
   await nextTick();
@@ -89,9 +94,17 @@ async function mountConsole(initialPath: string) {
     global: { plugins: [router] },
     attachTo: document.body
   });
+  mountedWrappers.push(wrapper);
   await settle();
   return { wrapper, router };
 }
+
+/** 泄漏的 AdminConsole 实例会持有共享 store（subPage/intent）的存活 watcher，
+    断言失败跳过 unmount 时会把残留状态写进后续用例——统一在 afterEach 兜底卸载 */
+const mountedWrappers: { unmount: () => void }[] = [];
+afterEach(() => {
+  mountedWrappers.splice(0).forEach((w) => w.unmount());
+});
 
 describe('AdminConsole 导航冒烟', () => {
   beforeEach(() => {
@@ -130,7 +143,6 @@ describe('AdminConsole 导航冒烟', () => {
       ).toBeTruthy();
       expect(wrapper.find('.ac-error').exists(), `「${scene.label}」页面出现整页错误`).toBe(false);
     }
-    wrapper.unmount();
   });
 
   it('深链直达 /admin/skills 渲染 Skill 目录', async () => {
@@ -154,5 +166,37 @@ describe('AdminConsole 导航冒烟', () => {
     expect(router.currentRoute.value.params.page).toBe('overview');
     expect(intent.scene).toBe('overview');
     expect(wrapper.findComponent(Overview).exists()).toBe(true);
+  });
+
+  it('刷新二级页深链 ?view=user&id= 不被 scene watch 误杀（subPage 存活 + URL query 保留）', async () => {
+    // 根因回归：scene watch 注册晚于「URL → subPage」watch，同一 flush 里
+    // 「先恢复后误杀」曾导致刷新深链卡在详情骨架屏、请求永不发出
+    const { wrapper, router } = await mountConsole('/admin/people?view=user&id=user_abc');
+    await settle();
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'user', id: 'user_abc' });
+    expect(subPage.value).toMatchObject({ view: 'user', id: 'user_abc' });
+    // 详情组件走 asyncPage（delay:200），等待异步 chunk 挂载；全量跑批时机器慢，放宽超时
+    await vi.waitFor(() => expect(wrapper.find('.mk-page.ud').exists()).toBe(true), { timeout: 5000 });
+  });
+
+  it('跨场景深链 push（overview → people?view=user&id=）同样存活', async () => {
+    const { wrapper, router } = await mountConsole('/admin/overview');
+    await router.push('/admin/people?view=user&id=user_abc');
+    await settle();
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'user', id: 'user_abc' });
+    expect(subPage.value).toMatchObject({ view: 'user', id: 'user_abc' });
+    await vi.waitFor(() => expect(wrapper.find('.mk-page.ud').exists()).toBe(true), { timeout: 3000 });
+  });
+
+  it('侧栏切换场景仍关闭详情（手动切换不受深链守卫影响）', async () => {
+    const { wrapper } = await mountConsole('/admin/people?view=user&id=user_abc');
+    await settle();
+    expect(subPage.value).not.toBeNull();
+    const overviewLabel = MOCK_SCENES.find((s) => s.id === 'overview')!.label;
+    const item = wrapper.findAll('.mshell__item').find((n) => n.text().includes(overviewLabel));
+    expect(item).toBeDefined();
+    await item!.trigger('click');
+    await settle();
+    expect(subPage.value).toBeNull();
   });
 });
