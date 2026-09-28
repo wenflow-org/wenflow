@@ -376,6 +376,7 @@
         "src/skills/lesson-knowledge-enricher/index.ts",
         "src/skills/mcp-tool/__tests__/index.test.ts",
         "src/skills/mcp-tool/index.ts",
+        "src/skills/path-planning/__tests__/budget-conservation.test.ts",
         "src/skills/path-planning/__tests__/raw-validator.test.ts",
         "src/skills/path-planning/index.ts",
         "src/skills/path-reviewer/index.ts",
