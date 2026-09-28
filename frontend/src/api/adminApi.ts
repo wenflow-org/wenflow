@@ -1099,11 +1099,36 @@ export const adminSkillsApi = {
     model?: string | null;
     thinkingMode?: string;
     reasoningEffort?: string;
+    paramOverrides?: Record<string, number> | null;
+    fallbackChain?: string[] | null;
     requestTimeoutMs?: number | null;
     maxLogicalRetries?: number | null;
     enabled?: boolean;
   }) => {
     return adminAxios.put(`/admin/skill-model-configs/${skillId}`, data);
+  },
+
+  /** 覆盖矩阵：注册表技能 × 实际路由（含未配置=平台默认的技能） */
+  getSkillModelCoverage: async () => {
+    return adminAxios.get('/admin/skill-model-configs/coverage');
+  },
+
+  /** 批量套用同一份通道/模型/参数/兜底配置到多个 skill */
+  bulkApplySkillModelConfig: async (data: {
+    skillIds: string[];
+    endpoint: string;
+    apiKey: string;
+    model?: string;
+    tier?: string;
+    paramOverrides?: Record<string, number> | null;
+    fallbackChain?: string[] | null;
+  }) => {
+    return adminAxios.post('/admin/skill-model-configs/bulk-apply', data);
+  },
+
+  /** 通道能力探测：返回该 endpoint+key 下可用的模型列表 */
+  probeSkillChannel: async (skillId: string) => {
+    return adminAxios.post(`/admin/skill-model-configs/${encodeURIComponent(skillId)}/probe`);
   },
 
   deleteSkillModelConfig: async (skillId: string) => {

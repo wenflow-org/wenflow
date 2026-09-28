@@ -2,9 +2,9 @@
   <!-- 运行时：路由与可靠性配置 -->
   <div class="sdp-pane">
     <div class="sdp-notice">
-      <strong>路由与可靠性</strong>
-      只配置 endpoint / model 路由 / 超时 / 逻辑重试；温度、Max Tokens 与最终 model 由 ACTIVE Prompt 管理
-      （Prompt 未声明 model 时回退到此处路由）。
+      <strong>路由、可靠性与生成参数</strong>
+      配置 endpoint / model 路由 / 超时 / 逻辑重试 / 参数覆盖 / 兜底链。
+      生成参数默认来自 ACTIVE Prompt（File-as-Truth），本页可逐字段覆盖；生效值与来源见上方「生成参数」投影。
     </div>
 
     <div class="sdp-chiprows">
@@ -18,11 +18,20 @@
         <span class="sdp-chip">思考 <b class="mono">{{ thinkingLabel }}</b></span>
       </div>
       <div class="sdp-chiprow">
-        <span class="sdp-chiprow__label">生成参数（只读）</span>
-        <span class="sdp-chip sdp-chip--amber">T=<b class="mono">{{ generationParams?.temperature ?? '—' }}</b></span>
-        <span class="sdp-chip sdp-chip--amber">Max=<b class="mono">{{ generationParams?.maxTokens ?? '—' }}</b></span>
+        <span class="sdp-chiprow__label">生成参数（生效值）</span>
+        <span class="sdp-chip sdp-chip--amber">T=<b class="mono">{{ generationParams?.temperature ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('temperature') }}</em></span>
+        <span class="sdp-chip sdp-chip--amber">topP=<b class="mono">{{ generationParams?.topP ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('topP') }}</em></span>
+        <span class="sdp-chip sdp-chip--amber">Max=<b class="mono">{{ generationParams?.maxTokens ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('maxTokens') }}</em></span>
         <span class="sdp-chip">{{ generationParams?.model || '继承路由模型' }}</span>
-        <span class="sdp-chip">来源={{ generationParams?.sources?.temperature || generationParams?.owner || 'ACTIVE Prompt' }}</span>
+      </div>
+      <div class="sdp-chiprow">
+        <span class="sdp-chiprow__label">兜底链</span>
+        <span v-if="fallbackChain.length" class="sdp-chip">{{ fallbackChain.join(' → ') }}</span>
+        <span v-else class="sdp-chip">未配置（用模型注册表默认链）</span>
+        <button type="button" class="mk-link" :disabled="probing || !rtForm.enabled" @click="probeChannel">
+          {{ probing ? '探测中…' : '探测当前通道可用模型' }}
+        </button>
+        <span v-if="probeMsg" class="sdp-chip" :class="probeErr ? 'sdp-chip--danger' : 'sdp-chip--ok'">{{ probeMsg }}</span>
       </div>
     </div>
 
@@ -68,8 +77,49 @@
       </div>
 
       <div class="sdp-divider">
-        <strong>失败处理与重试</strong>
-        <span>逻辑重试独立于模型覆盖；传输重试由平台统一管理。</span>
+        <strong>参数覆盖（覆盖 ACTIVE Prompt 默认值）</strong>
+        <span>每字段三选：继承（File-as-Truth 默认）/ 覆盖（写入本表，即时生效）。清空全部覆盖=恢复继承。</span>
+      </div>
+
+      <div class="sdp-form__grid">
+        <label class="sdp-field">
+          <span>temperature</span>
+          <select v-model="paramT.mode" class="mk-input" :disabled="!rtForm.enabled">
+            <option value="inherit">继承 ACTIVE Prompt</option>
+            <option value="override">覆盖</option>
+          </select>
+        </label>
+        <label v-if="paramT.mode === 'override'" class="sdp-field">
+          <span>temperature 值（0-2）</span>
+          <input v-model.number="paramT.value" type="number" min="0" max="2" step="0.1" class="mk-input mono" :disabled="!rtForm.enabled" />
+        </label>
+        <label class="sdp-field">
+          <span>topP</span>
+          <select v-model="paramTopP.mode" class="mk-input" :disabled="!rtForm.enabled">
+            <option value="inherit">继承（ACTIVE Prompt 无此字段时不发送）</option>
+            <option value="override">覆盖</option>
+          </select>
+        </label>
+        <label v-if="paramTopP.mode === 'override'" class="sdp-field">
+          <span>topP 值（0-1）</span>
+          <input v-model.number="paramTopP.value" type="number" min="0.01" max="1" step="0.05" class="mk-input mono" :disabled="!rtForm.enabled" />
+        </label>
+        <label class="sdp-field">
+          <span>maxTokens（输出预算）</span>
+          <select v-model="paramMax.mode" class="mk-input" :disabled="!rtForm.enabled">
+            <option value="inherit">继承 ACTIVE Prompt</option>
+            <option value="override">覆盖</option>
+          </select>
+        </label>
+        <label v-if="paramMax.mode === 'override'" class="sdp-field">
+          <span>maxTokens 值（256-131072）</span>
+          <input v-model.number="paramMax.value" type="number" min="256" max="131072" step="1000" class="mk-input mono" :disabled="!rtForm.enabled" />
+        </label>
+      </div>
+
+      <div class="sdp-divider">
+        <strong>失败处理与模型兜底</strong>
+        <span>逻辑重试独立于模型覆盖；传输重试由平台统一管理；兜底链最多 2 跳、同 tier、保存时校验通道可用性。</span>
       </div>
 
       <div class="sdp-form__grid">
@@ -85,10 +135,14 @@
           <span>最大逻辑重试次数</span>
           <input v-model.number="customLogicalRetries" type="number" :min="1" :max="platformLogicalRetries" step="1" class="mk-input" />
         </label>
-        <label class="sdp-field">
-          <span>业务回退</span>
-          <input class="mk-input" model-value="由 Skill 代码定义" disabled />
-        </label>
+        <div class="sdp-field">
+          <span>兜底链（最多 2 个候选）<em>留空=用模型注册表默认链；空数组保存=显式无链</em></span>
+          <div class="sdp-fallback-editor">
+            <span v-for="m in fallbackChain" :key="m" class="sdp-chip">{{ m }}<button type="button" class="mk-link mk-link--danger" :disabled="!rtForm.enabled" @click="removeFallback(m)">×</button></span>
+            <input v-model="newFallback" class="mk-input mono" placeholder="模型 id，回车添加" :disabled="!rtForm.enabled || fallbackChain.length >= 2" @keydown.enter.prevent="addFallback" />
+            <button type="button" class="mk-btn" :disabled="!rtForm.enabled || fallbackChain.length >= 2" @click="addFallback">添加</button>
+          </div>
+        </div>
       </div>
 
       <div class="sdp-form__footer">
@@ -137,7 +191,23 @@ const rtLoadFailed = ref(false)
 const platformLogicalRetries = ref(1)
 const logicalRetryMode = ref<'inherit' | 'disabled' | 'custom'>('inherit')
 const customLogicalRetries = ref(1)
-const generationParams = ref<{ model?: string | null; temperature?: number | null; maxTokens?: number | null; sources?: Record<string, string>; owner?: string } | null>(null)
+const generationParams = ref<{ model?: string | null; temperature?: number | null; topP?: number | null; maxTokens?: number | null; sources?: Record<string, string>; owner?: string } | null>(null)
+
+// ── 参数覆盖（paramOverrides）：每字段「继承 / 覆盖」三选 ──
+type ParamMode = 'inherit' | 'override'
+interface ParamField { mode: ParamMode; value: number | null }
+const paramT = ref<ParamField>({ mode: 'inherit', value: null })
+const paramTopP = ref<ParamField>({ mode: 'inherit', value: null })
+const paramMax = ref<ParamField>({ mode: 'inherit', value: null })
+// 加载时该 skill 是否已有覆盖（决定保存时是发对象、发 null 清空、还是不发）
+const hadParamOverrides = ref(false)
+// ── 兜底链（fallbackChain）：[]=显式无链；未动过则不发送（继承 registry 默认链）──
+const fallbackChain = ref<string[]>([])
+const fallbackTouched = ref(false)
+const newFallback = ref('')
+const probing = ref(false)
+const probeMsg = ref('')
+const probeErr = ref(false)
 
 const effectiveLogicalRetries = computed(() =>
   logicalRetryMode.value === 'inherit' ? platformLogicalRetries.value : logicalRetryMode.value === 'disabled' ? 0 : customLogicalRetries.value
@@ -145,6 +215,41 @@ const effectiveLogicalRetries = computed(() =>
 const thinkingLabel = computed(() =>
   rtForm.value.thinkingMode === 'enabled' ? '开启' : rtForm.value.thinkingMode === 'disabled' ? '关闭' : '继承/默认'
 )
+const sourceLabel = (k: string) => generationParams.value?.sources?.[k] || '—'
+
+/** 通道探测：用该 skill 已保存的 endpoint+key 拉可用模型列表 */
+async function probeChannel() {
+  if (probing.value) return
+  probing.value = true
+  probeMsg.value = ''
+  probeErr.value = false
+  try {
+    const res = await adminSkillsApi.probeSkillChannel(props.skillId)
+    const d = res.data?.data as { ok: boolean; count?: number; models?: string[]; message?: string } | undefined
+    if (d?.ok) probeMsg.value = `通道可用模型 ${d.count} 个：${(d.models || []).join(', ')}`
+    else { probeErr.value = true; probeMsg.value = d?.message || '探测失败' }
+  } catch (e) {
+    probeErr.value = true
+    probeMsg.value = `探测失败：${errText(e)}`
+  } finally {
+    probing.value = false
+  }
+}
+
+/** 兜底链编辑 */
+function addFallback() {
+  const m = newFallback.value.trim()
+  if (!m) return
+  if (fallbackChain.value.includes(m)) { newFallback.value = ''; return }
+  if (fallbackChain.value.length >= 2) return
+  fallbackChain.value = [...fallbackChain.value, m]
+  fallbackTouched.value = true
+  newFallback.value = ''
+}
+function removeFallback(m: string) {
+  fallbackChain.value = fallbackChain.value.filter(x => x !== m)
+  fallbackTouched.value = true
+}
 
 watch(
   () => rtForm.value.thinkingMode,
@@ -165,6 +270,15 @@ function resetRtForm() {
   }
   logicalRetryMode.value = 'inherit'
   customLogicalRetries.value = 1
+  paramT.value = { mode: 'inherit', value: null }
+  paramTopP.value = { mode: 'inherit', value: null }
+  paramMax.value = { mode: 'inherit', value: null }
+  hadParamOverrides.value = false
+  fallbackChain.value = []
+  fallbackTouched.value = false
+  newFallback.value = ''
+  probeMsg.value = ''
+  probeErr.value = false
 }
 
 async function loadRuntime() {
@@ -180,7 +294,7 @@ async function loadRuntime() {
     platformLogicalRetries.value = Number(relRes.value.data?.data?.settings?.maxLogicalRetries ?? 1)
   }
   if (skillRes.status === 'fulfilled') {
-    const raw = (skillRes.value.data?.data || null) as (RuntimeForm & { maxLogicalRetries?: number | null; generationParams?: typeof generationParams.value }) | null
+    const raw = (skillRes.value.data?.data || null) as (RuntimeForm & { maxLogicalRetries?: number | null; paramOverrides?: string | null; fallbackChain?: string | null; generationParams?: typeof generationParams.value }) | null
     generationParams.value = raw?.generationParams || null
     rtForm.value = {
       tier: raw?.tier === 'reasoning' ? 'reasoning' : 'chat',
@@ -192,6 +306,18 @@ async function loadRuntime() {
     }
     logicalRetryMode.value = raw?.maxLogicalRetries == null ? 'inherit' : raw.maxLogicalRetries === 0 ? 'disabled' : 'custom'
     customLogicalRetries.value = raw?.maxLogicalRetries && raw.maxLogicalRetries > 0 ? Math.min(raw.maxLogicalRetries, platformLogicalRetries.value || 1) : 1
+    // 参数覆盖：JSON 原文 → 每字段 mode/value；缺字段=继承
+    let po: Record<string, number> = {}
+    if (raw?.paramOverrides) { try { po = JSON.parse(raw.paramOverrides) || {} } catch { po = {} } }
+    hadParamOverrides.value = Object.keys(po).length > 0
+    paramT.value = po.temperature != null ? { mode: 'override', value: po.temperature } : { mode: 'inherit', value: null }
+    paramTopP.value = po.topP != null ? { mode: 'override', value: po.topP } : { mode: 'inherit', value: null }
+    paramMax.value = po.maxTokens != null ? { mode: 'override', value: po.maxTokens } : { mode: 'inherit', value: null }
+    // 兜底链：JSON 原文 → string[]（未配置=registry 默认链）
+    let fc: string[] = []
+    if (raw?.fallbackChain) { try { fc = (JSON.parse(raw.fallbackChain) || []).filter((x: unknown) => typeof x === 'string') } catch { fc = [] } }
+    fallbackChain.value = fc
+    fallbackTouched.value = false
   } else {
     // 无独立配置（404）等失败：显式重置为默认值，不残留上一 skill
     resetRtForm()
@@ -209,7 +335,12 @@ async function saveRuntime() {
     return Number(v)
   }
   try {
-    await adminSkillsApi.updateSkillModelConfig(props.skillId, {
+    // 参数覆盖：有 override 发对象；本有覆盖但被清空 → 发 null 显式清空；本就无覆盖且无 override → 不发
+    const overrides: Record<string, number> = {}
+    if (paramT.value.mode === 'override' && paramT.value.value != null) overrides.temperature = Number(paramT.value.value)
+    if (paramTopP.value.mode === 'override' && paramTopP.value.value != null) overrides.topP = Number(paramTopP.value.value)
+    if (paramMax.value.mode === 'override' && paramMax.value.value != null) overrides.maxTokens = Number(paramMax.value.value)
+    const payload: Record<string, unknown> = {
       tier: rtForm.value.tier,
       model: rtForm.value.model || undefined,
       thinkingMode: rtForm.value.thinkingMode,
@@ -217,9 +348,14 @@ async function saveRuntime() {
       requestTimeoutMs: rtForm.value.enabled ? normNum(rtForm.value.requestTimeoutMs) : null,
       maxLogicalRetries: logicalRetryMode.value === 'inherit' ? null : logicalRetryMode.value === 'disabled' ? 0 : normNum(customLogicalRetries.value),
       enabled: rtForm.value.enabled
-    })
+    }
+    if (Object.keys(overrides).length > 0) payload.paramOverrides = overrides
+    else if (hadParamOverrides.value) payload.paramOverrides = null
+    if (fallbackTouched.value) payload.fallbackChain = fallbackChain.value
+    await adminSkillsApi.updateSkillModelConfig(props.skillId, payload as any)
     rtErr.value = false
-    rtMsg.value = '路由/可靠性已更新（生成参数仍由 ACTIVE Prompt 管理）'
+    rtMsg.value = '已更新（生成参数覆盖/兜底链同表管理，生效值见上方投影）'
+    fallbackTouched.value = false
     await loadRuntime()
   } catch (e) {
     rtErr.value = true
@@ -302,6 +438,12 @@ watch(
   font-weight: 600;
 }
 .sdp-chip b { color: var(--mk-ink); font-weight: 600; }
+.sdp-chip__src { font-style: normal; font-size: var(--mk-fs-micro); color: var(--mk-faint); margin-left: 2px; }
+.sdp-chip--ok { background: var(--mk-green-bg, #e8f5ec); color: var(--mk-green, #20704a); }
+.sdp-chip--danger { background: var(--mk-red-bg, #fdecec); color: var(--mk-red, #b3372f); }
+.sdp-fallback-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sdp-fallback-editor .mk-input { flex: 1; min-width: 200px; }
+.mk-link--danger { color: var(--mk-red, #b3372f); }
 .sdp-chip--amber { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .sdp-chip--amber b { color: var(--mk-amber); }
 .sdp-form { padding: 14px 16px; display: grid; gap: 12px; }

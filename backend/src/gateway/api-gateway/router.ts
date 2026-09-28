@@ -37,6 +37,36 @@ interface AgentConfigRecord {
   maxTokens: number | null;
 }
 
+/** 解析 skill_model_configs.paramOverrides（JSON）。非对象/坏 JSON 一律视为未覆盖。 */
+function parseSkillParamOverrides(raw: unknown): ResolvedRoute['skillParamOverrides'] {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return null; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const b = parsed as Record<string, unknown>;
+  const num = (v: unknown): number | null | undefined => (v === null ? null : (typeof v === 'number' && Number.isFinite(v) ? v : undefined));
+  const temperature = num(b.temperature);
+  const topP = num(b.topP);
+  const maxTokens = num(b.maxTokens);
+  if (temperature === undefined && topP === undefined && maxTokens === undefined) return null;
+  return {
+    ...(temperature !== undefined ? { temperature } : {}),
+    ...(topP !== undefined ? { topP } : {}),
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
+  };
+}
+
+/** 解析 skill_model_configs.fallbackChain（JSON string[]）。坏值视为未声明（null=用 registry 默认链）。 */
+function parseSkillFallbackChain(raw: unknown): string[] | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const out = parsed.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map(s => s.trim());
+    return out.length ? out : [];
+  } catch { return null; }
+}
+
 export class APIRouter {
   private resolveBaseEndpoint(): string {
     return (process.env.AI_API_URL || '').trim() || 'https://api.openai.com/v1';
@@ -197,8 +227,12 @@ export class APIRouter {
         modelExplicit: Boolean(config.model),
         thinkingMode: this.normalizeThinkingMode(config.thinkingMode || inheritedRoute.thinkingMode),
         reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort || inheritedRoute.reasoningEffort),
-        // Phase 2：生成参数 T/maxTokens 不由 skill_model_configs 覆盖（File-as-Truth / resolveLlmGenerationParams）
-        // 路由仅继承上层 temperature/maxTokens，供未声明 prompt 的调用回退
+        // 2026-09-28 配置体系优化：skill 级参数覆盖（paramOverrides JSON）与兜底链
+        // （fallbackChain JSON）经路由透传；temperature/maxTokens 列本身仍是 deprecated 占位。
+        // 上层字段级优先级见 services/resolve-llm-call-params.ts 头注释。
+        skillParamOverrides: parseSkillParamOverrides(config.paramOverrides),
+        skillFallbackChain: parseSkillFallbackChain(config.fallbackChain),
+        // 路由仅继承上层 temperature/maxTokens，供未声明 prompt/覆盖的调用回退
         temperature: inheritedRoute.temperature,
         maxTokens: inheritedRoute.maxTokens,
         timeoutMs: config.requestTimeoutMs == null

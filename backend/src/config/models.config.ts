@@ -78,11 +78,14 @@ export interface ModelDefinition {
  * DB 覆盖来源：`platform_api_configs.chatModels / reasoningModels / lightModels`
  * （此前是只回显的死字段，现作为别名映射的动态来源）。见 doc/MODEL_GATEWAY_DESIGN.md §4.2。
  *
- * ⚠️ 网关实况（2026-09-22 实测）：网关对 `deepseek-v4-flash` 的请求实际由 **deepseek-v4.1**
- * 部署服务（响应体 model 字段为 deepseek-v4.1-flash）；而字面 id `deepseek-v4.1-flash`
- * 在当前订阅下**无配额**（"subscription quota insufficient"），不可直接配置。因此这里
- * 继续用 `deepseek-v4-flash` 指代线上部署，不要在拿到 v4.1 字面配额前改配置——
- * v4.1 部署自身的输出质量波动（长 prompt 不合 JSON 契约）只能等网关侧或提示词侧解决。
+ * 网关实况（两段，别只记前一半）：
+ * - 2026-09-22 旧订阅实测：字面 `deepseek-v4.1-flash` 无配额（"subscription quota
+ *   insufficient"），`deepseek-v4-flash` 别名实际由 v4.1 部署服务——当时只能写别名。
+ * - 2026-09-28 新订阅（标准 key）实测：字面 id `deepseek-v4.1-flash` 正常服务且输出
+ *   契约稳定（path-planning 满预算 fr=stop）。现全链标准配置=字面 id，
+ *   MODEL_ALIASES.chat 仍保留别名供旧通道/灰度回退。
+ * - 历史坑：别名背后的部署会静默漂移（v4.1→啰嗦变体），大 JSON 技能因此截断；
+ *   判定口径 finishReason=length 恰等于 maxTokens；durable 修法=字面 id + 32k 预算地板。
  */
 export const MODEL_ALIASES: Record<string, string[]> = {
   chat: ['deepseek-v4-flash', 'agnes-3.0-flash'],
@@ -122,6 +125,21 @@ export function getModelAliasMembers(
  */
 export const AVAILABLE_MODELS: ModelDefinition[] = [
   {
+    id: 'deepseek-v4.1-flash',
+    label: 'DeepSeek V4.1 Flash',
+    tier: 'chat',
+    provider: 'deepseek',
+    supportsThinking: true,
+    supportsReasoningEffort: true,
+    maxOutputTokens: 131072,
+    defaultMaxTokens: 32768,
+    reasoningReserveTokens: 8192,
+    // 显式空链：同通道可用模型里没有同 tier 候选（agnes 不在标准 key 分组上）。
+    // 兜底改用 skill 级 fallbackChain 声明 + 保存时通道能力校验（见 routes/admin/skill-model-configs.ts）。
+    fallbacks: [],
+    description: 'V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）'
+  },
+  {
     id: 'deepseek-v4-flash',
     label: 'DeepSeek V4 Flash',
     tier: 'chat',
@@ -132,7 +150,7 @@ export const AVAILABLE_MODELS: ModelDefinition[] = [
     defaultMaxTokens: 32768,
     reasoningReserveTokens: 8192,
     fallbacks: ['agnes-3.0-flash'],
-    description: '快速响应，适合日常对话和轻量级任务'
+    description: 'V4 Flash（含混别名：部分渠道实际由 V4.1 部署服务，输出量波动大，见下方说明）'
   },
   {
     id: 'deepseek-v4-pro',

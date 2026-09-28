@@ -11,7 +11,8 @@ jest.mock('express', () => ({
   Router: () => ({
     get: (path: string, handler: RouteHandler) => { routes[`GET ${path}`] = handler },
     put: (path: string, handler: RouteHandler) => { routes[`PUT ${path}`] = handler },
-    delete: (path: string, handler: RouteHandler) => { routes[`DELETE ${path}`] = handler }
+    delete: (path: string, handler: RouteHandler) => { routes[`DELETE ${path}`] = handler },
+    post: (path: string, handler: RouteHandler) => { routes[`POST ${path}`] = handler }
   })
 }))
 

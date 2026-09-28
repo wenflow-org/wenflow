@@ -151,6 +151,12 @@ model skill_model_configs {
   requestTimeoutMs Int?
   maxLogicalRetries Int?
   enabled          Boolean  @default(true)
+  /// 参数覆盖（JSON：{"temperature":0.6,"topP":0.9,"maxTokens":32000}，null=继承 ACTIVE prompt）。
+  /// 字段级跳过（缺哪个字段不覆盖哪个）；写入经路由 PUT 校验范围。
+  paramOverrides   String?
+  /// 兜底模型链（JSON string[]，最多 2 跳；null=模型 registry 默认链；[]=显式无链）。
+  /// 保存时校验：候选须在 registry、与主模型同 tier、且该 skill 通道可服务。
+  fallbackChain    String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime
 }

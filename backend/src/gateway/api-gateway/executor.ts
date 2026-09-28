@@ -352,7 +352,8 @@ export class APIExecutor {
     );
     // 降级：主候选在「值得换部署」的错误上耗尽重试 → 换 fallback 模型重跑（限一跳）。
     // 见 doc/MODEL_GATEWAY_DESIGN.md §4.5（成熟参照：LiteLLM fallbacks + deployment cooldown）。
-    const fallbackModel = this.resolveModelCandidates(primaryModel)[1];
+    // 链来源优先级：skill 级声明（skill_model_configs.fallbackChain）> 模型注册表全局链。
+    const fallbackModel = this.resolveModelCandidates(primaryModel, route.skillFallbackChain)[1];
     const terminalError = lastError as GatewayExecutionError | null;
     if (
       !normalizedContext.fallbackFrom
@@ -379,7 +380,12 @@ export class APIExecutor {
       return this.execute(
         route,
         { ...request, model: fallbackModel },
-        { ...normalizedContext, fallbackFrom: primaryModel }
+        {
+          ...normalizedContext,
+          fallbackFrom: primaryModel,
+          // 链来源记账：skill 级声明链 vs 模型注册表全局链（便于回看「空气兜底」治理效果）
+          fallbackChainSource: route.skillFallbackChain ? 'skill' : 'registry',
+        }
       );
     }
 
@@ -511,10 +517,18 @@ export class APIExecutor {
       requestUrl,
       requestPath: context.requestPath
     });
-    const headers = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${route.apiKey}`
     };
+    // 前缀缓存会话亲和（2026-09-28）：上游（如 opencode 类通道）支持按会话头粘实例时，
+    // 设置 AI_CACHE_SESSION_HEADER=<头名> 即注入。会话键取 conversationId（同会话轮次
+    // 稳定→轮次间共享前缀命中；不同会话散开不挤占），无会话的调用回落 agentId（同 skill
+    // 批跑共享暖前缀）。未设置该 env 时零行为变化。
+    const cacheSessionHeader = process.env.AI_CACHE_SESSION_HEADER;
+    if (cacheSessionHeader) {
+      headers[cacheSessionHeader] = context.conversationId || context.agentId || 'wenflow-global';
+    }
     const privateNetworkPolicy = route.privateNetworkPolicy
       || (route.source === 'user-provider' || route.source === 'user-agent-override'
         ? 'public-only'
@@ -686,6 +700,7 @@ export class APIExecutor {
       ...request,
       model: hoisted.model || route.model,
       temperature: hoisted.temperature ?? route.temperature,
+      top_p: hoisted.top_p,
       max_tokens: hoisted.max_tokens ?? route.maxTokens
     };
     // 上游兼容：当前平台的 zijian 网关（101.43.146.102:30001）实测会**静默丢弃 role:'system'**
@@ -710,10 +725,13 @@ export class APIExecutor {
   }
 
   /** 降级候选链：主模型 + 声明的 fallback（去重、过滤未知模型、限量）。 */
-  private resolveModelCandidates(primaryModel: string): string[] {
+  private resolveModelCandidates(primaryModel: string, declaredFallbacks?: readonly string[] | null): string[] {
     if (!primaryModel) return [primaryModel];
     const candidates = [primaryModel];
-    for (const fallback of getModelFallbacks(primaryModel)) {
+    // 优先用 skill 级声明链（route.skillFallbackChain，保存时已校验 registry/同 tier/通道可服务）；
+    // 未声明则回落到模型注册表全局链。
+    const fallbacks = declaredFallbacks ?? getModelFallbacks(primaryModel);
+    for (const fallback of fallbacks) {
       if (candidates.length >= MAX_MODEL_CANDIDATES) break;
       if (!getModelDefinition(fallback)) continue;
       candidates.push(fallback);
@@ -1006,6 +1024,7 @@ export class APIExecutor {
         executionMode,
         // 降级记账：本次调用是作为 fallback 发起时的来源模型（P1，见 §4.5）
         fallbackFrom: context.fallbackFrom || null,
+        fallbackChainSource: context.fallbackChainSource || null,
         skillId: context.skillId || null, agentId: context.agentId || null,
         sessionId: context.sessionId || null,
         conversationId: context.conversationId || null,

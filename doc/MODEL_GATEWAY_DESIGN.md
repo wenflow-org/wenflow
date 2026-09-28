@@ -218,9 +218,10 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 **已实现（P1）**：
 - **部署级 cooldown**：`deployment-health.ts`，键 = `providerId|endpoint|model`；仅「可降级错误类」触发；进程内实现，不引入 Redis。
 - **降级链**：模型声明 `fallbacks`（`models.config.ts`）。当前默认：`deepseek-v4-pro → deepseek-v4-flash`、`deepseek-v4-flash → agnes-3.0-flash`（同层互为备份；agnes 无思考能力，由 `thinking-policy` 自动裁剪字段）。限一跳，且仅在 `!streamStarted`（内容未透传）时生效。
+- **skill 级兜底链（2026-09-28）**：`skill_model_configs.fallbackChain`（JSON string[]，≤2 跳）优先于 registry 全局链；保存时校验候选在 registry、与主模型同 tier、且**在该 skill 的 endpoint+key 上可服务**（`routes/admin/skill-model-configs.ts` 的频道探测，30min 缓存）。背景：registry 默认链里的 agnes-3.0-flash 在新 key 分组不存在，400→503「空气兜底」会掩盖真因。探测走 `utils/safe-http`（协议/保留地址/凭据 URL 检查，policy=runtime 与 executor 同款）。
 - **单端点前提（2026-09-24 补记）**：降级只换 `model`、不换 `endpoint/apiKey`——`deepseek → agnes` 成立的前提是所有模型经由**同一聚合网关**。若将来 per-provider 端点落地，fallback 链必须随部署（endpoint+key）整体切换，否则跨 provider 直接 404。
 - **可降级错误类**：`rate_limit` / `provider_http` / `network` / `provider_timeout`；**不含** `quota`（账号/余额级，换模型无效）、`authentication`、`configuration`、`protocol`。
-- **降级记账**：失败候选与降级调用**各自成行**（`agent_call_logs`），降级请求上下文带 `ExecutionContext.fallbackFrom`（不发给上游）；冷却中候选会被跳过。
+- **降级记账**：失败候选与降级调用**各自成行**（`agent_call_logs`），降级请求上下文带 `ExecutionContext.fallbackFrom` 与 `fallbackChainSource`（skill/registry，不发给上游）；冷却中候选会被跳过。
 - **语义失败定向重试**：`TRUNCATED_EMPTY_OUTPUT`（`content` 空 且 `finish_reason=length`）判为可重试，重试时**关闭思考**（不是整包翻倍 maxTokens）。
 - **未做（留 P2 ④）**：provider 级多部署负载均衡、per-model 并发上限。
 
@@ -325,7 +326,9 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 5. **无行为变化**：当前平台 `defaultModel` 与 30 条副本同为 `deepseek-v4-flash`，因此顺序调整**当天零差异**；但它解锁了"改一处即全量生效"。
 6. **清理历史副本（已完成）**：`scripts/clear-deprecated-prompt-model.ts`（默认 dry-run，`--apply` 才写库；幂等；先备份 `system.db`）已于 2026-09-19 清理 **30 条** ACTIVE 行的 `model` 副本 ⇒ 只读总览的 `deprecatedPromptModelCount = 0`；`skill_model_configs.model`（18 条）未触碰。
 
-**不做**：不删 `agent_prompts.model` 列（保留兼容与审计）；不把 `temperature/maxTokens` 搬出提示词工件（捆绑派理由成立：审查局部性、回滚粒度、作者上下文）。
+**不做**：不删 `agent_prompts.model` 列（保留兼容与审计）；不把提示词工件的 `temperature/maxTokens` 默认值搬走（保留审查局部性与回滚粒度）。
+
+**参数覆盖层（2026-09-28，用户拍板）**：`skill_model_configs.paramOverrides`（JSON，temperature/topP/maxTokens 三字段，缺字段=不覆盖）作为**运行时可调层**加在 ACTIVE prompt 之上——解析序 `runtimeOverride > skill-override > ACTIVE prompt > codeDefaults > routeFallback`（`services/resolve-llm-call-params.ts`）。File-as-Truth 仍是**默认值与 Git 审查单元**，覆盖走管理端（保存即生效，逐字段三选继承/覆盖，GET 投影返回生效值+来源徽标）。理由：模型变体漂移（output 量级 2-4 倍抖动）需要**不改 prompt、不动发布**即可调预算；对应 §3.6 的 32k 地板。
 
 ### 4.10 传输层（safe-http）——2026-09-24 对账补册
 

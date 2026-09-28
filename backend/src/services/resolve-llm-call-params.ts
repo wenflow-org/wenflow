@@ -2,10 +2,12 @@
  * 单一 LLM 生成参数读路径（Phase 1 源头统一）
  *
  * 合并顺序（字段级，undefined = 未声明，跳过）：
- *   runtimeOverride → ACTIVE agent_prompts → codeDefaults → routeFallback
+ *   runtimeOverride → skill-override(skill_model_configs.paramOverrides) → ACTIVE agent_prompts
+ *   → codeDefaults → routeFallback
  *
  * 路由层（endpoint/key/timeout/skill_model_configs T）仍由 resolveRoute 负责；
- * 本模块只决定最终发给模型的 model / temperature / max_tokens。
+ * model/温度/topP/预算的最终值由本模块决定。skill-override 层经 ResolvedRoute.skillParamOverrides
+ * 透传（router.getSkillConfig 解析 JSON 后挂上）。
  *
  * File-as-Truth：ACTIVE prompt 的 T/maxTokens 优先于 skill_model_configs（route）。
  */
@@ -19,6 +21,7 @@ export const MIN_OUTPUT_TOKENS = 256;
 
 export type LlmParamSource =
   | 'runtime-override'
+  | 'skill-override'
   | 'active-prompt'
   | 'code-defaults'
   | 'route-fallback'
@@ -27,6 +30,7 @@ export type LlmParamSource =
 export interface LlmGenerationParams {
   model?: string;
   temperature?: number;
+  topP?: number;
   maxTokens?: number;
 }
 
@@ -34,12 +38,14 @@ export interface LlmCallParamsResolution extends LlmGenerationParams {
   sources: {
     model: LlmParamSource;
     temperature: LlmParamSource;
+    topP: LlmParamSource;
     maxTokens: LlmParamSource;
   };
   /** 与 ChatRequest 对齐的字段名 */
   request: {
     model?: string;
     temperature?: number;
+    top_p?: number;
     max_tokens?: number;
   };
 }
@@ -48,17 +54,26 @@ export interface ResolveLlmGenerationParamsInput {
   runtimeOverride?: {
     model?: string | null;
     temperature?: number | null;
+    topP?: number | null;
     maxTokens?: number | null;
   };
-  /** ACTIVE agent_prompts 行（或等价结构） */
+  /** skill 级覆盖（skill_model_configs.paramOverrides，null=未覆盖；字段级跳过） */
+  skillOverrides?: {
+    temperature?: number | null;
+    topP?: number | null;
+    maxTokens?: number | null;
+  } | null;
+  /** ACTIVE agent_prompts 行（或等价结构；topP 该表暂无列，恒空） */
   promptConfig?: {
     model?: string | null;
     temperature?: number | null;
+    topP?: number | null;
     maxTokens?: number | null;
   } | null;
   codeDefaults?: {
     model?: string | null;
     temperature?: number | null;
+    topP?: number | null;
     maxTokens?: number | null;
     /** 截断保护下限；与 maxTokens 取 max */
     minMaxTokens?: number | null;
@@ -67,7 +82,14 @@ export interface ResolveLlmGenerationParamsInput {
   routeFallback?: {
     model?: string | null;
     temperature?: number | null;
+    topP?: number | null;
     maxTokens?: number | null;
+    /** 经 ResolvedRoute 透传的 skill 级覆盖（不走 pickNumber 链，单独作 skill-override 层） */
+    skillParamOverrides?: {
+      temperature?: number | null;
+      topP?: number | null;
+      maxTokens?: number | null;
+    } | null;
   } | null;
 }
 
@@ -112,6 +134,7 @@ export function resolveLlmGenerationParams(
   input: ResolveLlmGenerationParamsInput
 ): LlmCallParamsResolution {
   const override = input.runtimeOverride || {};
+  const skillOverride = input.skillOverrides || null;
   const prompt = input.promptConfig || null;
   const code = input.codeDefaults || {};
   const route = input.routeFallback || null;
@@ -120,6 +143,7 @@ export function resolveLlmGenerationParams(
   // `agent_prompts.model`（active-prompt）是历史遗留的**绑定副本**，已废弃，仅作最后兜底——
   // 否则它会抢走 route 的权威，导致「改平台默认模型对已 seed 的 skill 不生效」
   // （2026-09 实测：30/30 ACTIVE prompt 带 model 副本；见 doc/MODEL_GATEWAY_DESIGN.md §4.9）。
+  // skill_model_configs.model 经 router.getSkillConfig 进 ResolvedRoute.model（modelExplicit 标记）。
   const model = pickString([
     { value: override.model, source: 'runtime-override' },
     { value: route?.model, source: 'route-fallback' },
@@ -127,15 +151,29 @@ export function resolveLlmGenerationParams(
     { value: prompt?.model, source: 'active-prompt' },
   ]);
 
+  // 温度/topP/maxTokens 合并序（2026-09-28 起）：runtime-override > skill-override
+  // > active-prompt(File-as-Truth) > code-defaults > route-fallback。
+  // skill-override = skill_model_configs.paramOverrides（管理端可配，覆盖即优先）。
   const temperature = pickNumber([
     { value: override.temperature, source: 'runtime-override' },
+    { value: skillOverride?.temperature, source: 'skill-override' },
     { value: prompt?.temperature, source: 'active-prompt' },
     { value: code.temperature, source: 'code-defaults' },
     { value: route?.temperature, source: 'route-fallback' },
   ]);
 
+  // topP：agent_prompts 暂无列 → active-prompt 层恒空，只有 runtime / skill / code / route 四层
+  const topP = pickNumber([
+    { value: override.topP, source: 'runtime-override' },
+    { value: skillOverride?.topP, source: 'skill-override' },
+    { value: prompt?.topP, source: 'active-prompt' },
+    { value: code.topP, source: 'code-defaults' },
+    { value: route?.topP, source: 'route-fallback' },
+  ]);
+
   let maxTokens = pickNumber([
     { value: override.maxTokens, source: 'runtime-override' },
+    { value: skillOverride?.maxTokens, source: 'skill-override' },
     { value: prompt?.maxTokens, source: 'active-prompt' },
     { value: code.maxTokens, source: 'code-defaults' },
     { value: route?.maxTokens, source: 'route-fallback' },
@@ -178,15 +216,18 @@ export function resolveLlmGenerationParams(
   return {
     model: model.value,
     temperature: temperature.value,
+    topP: topP.value,
     maxTokens: maxTokens.value,
     sources: {
       model: model.source,
       temperature: temperature.source,
+      topP: topP.source,
       maxTokens: maxTokens.source,
     },
     request: {
       model: model.value,
       temperature: temperature.value,
+      top_p: topP.value,
       max_tokens: maxTokens.value,
     },
   };
@@ -198,6 +239,8 @@ export interface ResolveLlmCallParamsInput {
   /** 已加载的 ACTIVE prompt；不传则按 skillId/agentId 自动加载 */
   promptConfig?: ResolveLlmGenerationParamsInput['promptConfig'];
   runtimeOverride?: ResolveLlmGenerationParamsInput['runtimeOverride'];
+  /** skill 级参数覆盖（不传则从 route 行读取 paramOverrides） */
+  skillOverrides?: ResolveLlmGenerationParamsInput['skillOverrides'];
   codeDefaults?: ResolveLlmGenerationParamsInput['codeDefaults'];
   /** 是否解析 route 作为最后回退（默认 true） */
   includeRouteFallback?: boolean;
@@ -257,6 +300,8 @@ export async function resolveLlmCallParams(
         model: route.model,
         temperature: route.temperature,
         maxTokens: route.maxTokens,
+        // skill 级覆盖（paramOverrides JSON）经 ResolvedRoute 透传，供 skill-override 层
+        skillParamOverrides: (route as any).skillParamOverrides ?? null,
       };
     } catch {
       routeFallback = null;
@@ -265,6 +310,7 @@ export async function resolveLlmCallParams(
 
   const resolved = resolveLlmGenerationParams({
     runtimeOverride: input.runtimeOverride,
+    skillOverrides: input.skillOverrides ?? routeFallback?.skillParamOverrides ?? null,
     promptConfig,
     codeDefaults: input.codeDefaults,
     routeFallback,
@@ -282,12 +328,15 @@ export function hoistLlmParamsFromContext(
   request: {
     model?: string;
     temperature?: number;
+    top_p?: number;
     max_tokens?: number;
     [key: string]: any;
   },
   context?: {
     model?: string;
     temperature?: number;
+    topP?: number;
+    top_p?: number;
     maxTokens?: number;
     max_tokens?: number;
     [key: string]: any;
@@ -295,6 +344,7 @@ export function hoistLlmParamsFromContext(
 ): {
   model?: string;
   temperature?: number;
+  top_p?: number;
   max_tokens?: number;
 } {
   const ctx = context || {};
@@ -302,6 +352,10 @@ export function hoistLlmParamsFromContext(
     model: nonEmptyString(request.model) ?? nonEmptyString(ctx.model),
     temperature:
       finiteNumber(request.temperature) ?? finiteNumber(ctx.temperature),
+    top_p:
+      finiteNumber(request.top_p)
+      ?? finiteNumber(ctx.topP)
+      ?? finiteNumber(ctx.top_p),
     max_tokens:
       finiteNumber(request.max_tokens)
       ?? finiteNumber(ctx.max_tokens)

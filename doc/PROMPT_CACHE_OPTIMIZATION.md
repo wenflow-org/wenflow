@@ -175,7 +175,13 @@ maxTokens 是上限不是目标——抬高不增加成本，只消除截断。�
 | 配置 | 位置 | 说明 |
 |---|---|---|
 | `AI_CACHE_SESSION_HEADER` | backend/.env | 设为通道要求的会话头名即启用亲和注入；删除或留空即关闭，无其他行为变化 |
-| skill 级路由（key/endpoint/model） | admin → skill-model-configs | 按 skill 指定通道与模型；标准运行=21 个链路技能统一（标准 key + deepseek-v4.1-flash） |
+| skill 级路由（key/endpoint/model/参数/兜底） | admin → Skill 与提示词 → 模型路由 tab | 21 个链路技能统一（标准 key + deepseek-v4.1-flash）；覆盖率矩阵看「未配置=平台默认」高亮，批量套用带审计 |
+
+skill_model_configs 是运行时绑定层：路由（endpoint/key）、模型（tier/model/thinking/effort）、
+参数覆盖（paramOverrides：temperature/topP/maxTokens，逐字段继承/覆盖）、兜底链（fallbackChain，
+≤2 跳、同 tier、保存时校验该通道真能服务）。**运行时路由只读裸 skillId 行**（`skill:` 前缀行是
+展示名，PUT 会拒绝写入）。endpoint 必须带 scheme。生效值与来源以管理端 GET 投影为准
+（`generationParams.sources`）。详见 doc/MODEL_GATEWAY_DESIGN.md §4.5/§4.9。
 
 ### 4.2 路由配置三个坑（踩过实锤）
 

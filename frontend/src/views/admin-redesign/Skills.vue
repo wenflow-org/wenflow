@@ -39,6 +39,7 @@
       <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'health'" :class="{ 'mk-pill--active': tab === 'health' }" @click="switchTab('health')">健康检查</button>
       <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'drift'" :class="{ 'mk-pill--active': tab === 'drift' }" @click="switchTab('drift')">漂移</button>
       <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'recon'" :class="{ 'mk-pill--active': tab === 'recon' }" @click="switchTab('recon')">对账</button>
+      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'model-routing'" :class="{ 'mk-pill--active': tab === 'model-routing' }" @click="switchTab('model-routing')">模型路由</button>
     </div>
 
     <!-- ===== Tab1: Skill 运行（原 Skills.vue 全量内容） ===== -->
@@ -239,7 +240,7 @@
 
     <!-- ===== Tab2-4: 健康检查 / 漂移 / 对账（HealthCenter embedded，同一报表，view 切换不重挂载） ===== -->
     <HealthCenter
-      v-else
+      v-if="tab !== 'run' && tab !== 'model-routing'"
       ref="hcRef"
       :view="hcView"
       :recon-report="recReport"
@@ -249,6 +250,9 @@
       @navigate="switchTab"
       @refresh-recon="refreshReconciliation"
     />
+
+    <!-- ===== Tab5: 模型路由覆盖矩阵（技能 × 通道 × 参数 × 兜底） ===== -->
+    <SkillModelCoverage v-if="tab === 'model-routing'" />
   </div>
 </template>
 
@@ -269,12 +273,13 @@ import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import HealthCenter from './HealthCenter.vue'
+import SkillModelCoverage from './SkillModelCoverage.vue'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
 /* ================= 宿主：Skill 运行 · 健康检查 · 漂移 · 对账（阶段 3 导航收敛） =================
    健康中心由独立场景折入本宿主 tab（侧栏 15→14 项）；?tab= 双向同步，深链/刷新/前进后退可寻址；
    唯一 tab 控件 = 本行 pills（健康中心内不再嵌套 pills，R1）。 */
-const SKILLS_TABS = ['run', 'health', 'drift', 'recon'] as const
+const SKILLS_TABS = ['run', 'health', 'drift', 'recon', 'model-routing'] as const
 type SkillsTab = (typeof SKILLS_TABS)[number]
 const tab = ref<SkillsTab>('run')
 const route = useRoute()
@@ -283,7 +288,9 @@ const hcRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
 const hcCount = ref(0)
 const hcRefreshing = ref(false)
 /** 健康中心嵌入视图：run tab 未激活时才挂载，run 不会出现 */
-const hcView = computed<'health' | 'drift' | 'recon'>(() => (tab.value === 'run' ? 'health' : tab.value))
+const hcView = computed<'health' | 'drift' | 'recon'>(() =>
+  tab.value === 'health' || tab.value === 'drift' || tab.value === 'recon' ? tab.value : 'health'
+)
 
 /** 轻运营直达：列表行「设计」→ 设计页「协议」页签（改提示词的唯一编辑点） */
 function openDesign(id: string) {

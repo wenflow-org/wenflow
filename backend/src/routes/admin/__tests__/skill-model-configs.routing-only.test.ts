@@ -59,7 +59,7 @@ describe('skill-model-configs routing-only write path', () => {
     })
   })
 
-  it('strips temperature/maxTokens on PUT and returns generationParams projection', async () => {
+  it('PUT 忽略裸 temperature/maxTokens，接受 paramOverrides/fallbackChain 并返回新契约投影', async () => {
     mockGet.mockResolvedValue({
       skillId: 'goal-conversation',
       enabled: true,
@@ -85,47 +85,94 @@ describe('skill-model-configs routing-only write path', () => {
           maxTokens: 999,
           maxLogicalRetries: 1,
           requestTimeoutMs: 60000,
+          paramOverrides: { temperature: 0.4, topP: 0.9, maxTokens: 32000 },
+          fallbackChain: ['deepseek-v4-pro'],
         },
       },
       res
     )
 
-    expect(mockUpsert).toHaveBeenCalledWith(
-      'goal-conversation',
-      expect.not.objectContaining({
-        temperature: expect.anything(),
-        maxTokens: expect.anything(),
-      })
-    )
+    // 裸 temperature/maxTokens 仍被忽略（兼容旧客户端；请改用 paramOverrides）
     expect(mockUpsert.mock.calls[0][1]).toEqual(
       expect.objectContaining({
         model: 'override-model',
         maxLogicalRetries: 1,
         requestTimeoutMs: 60000,
         enabled: true,
+        paramOverrides: JSON.stringify({ temperature: 0.4, topP: 0.9, maxTokens: 32000 }),
+        fallbackChain: JSON.stringify(['deepseek-v4-pro']),
       })
     )
+    expect(mockUpsert.mock.calls[0][1]).not.toHaveProperty('temperature', 0.1)
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
         data: expect.objectContaining({
-          routingOnly: true,
+          routingOnly: false,
           generationParams: expect.objectContaining({
             temperature: 0.7,
+            topP: null,
             maxTokens: 8000,
-            owner: 'agent_prompts.ACTIVE (File-as-Truth)',
+            sources: expect.objectContaining({
+              temperature: 'active-prompt',
+              maxTokens: 'active-prompt',
+            }),
+            owner: expect.stringContaining('skill-override'),
           }),
         }),
       })
     )
   })
 
-  it('GET exposes generationParams without treating skill_model_configs T as owner', async () => {
+  it('PUT 拒绝 skill: 前缀幽灵行写入', async () => {
+    mockGet.mockResolvedValue(null)
+    const handler = getHandler('put', '/:skillId')
+    const res = createRes()
+    await handler(
+      { params: { skillId: 'skill:goal-conversation' }, body: { enabled: true } },
+      res
+    )
+    expect(res.status).toHaveBeenCalledWith(400)
+    expect(mockUpsert).not.toHaveBeenCalled()
+  })
+
+  it('PUT 拒绝无 scheme 的 endpoint', async () => {
+    mockGet.mockResolvedValue({ skillId: 'goal-conversation', enabled: true, apiKey: null })
+    mockUpsert.mockResolvedValue({ skillId: 'goal-conversation' })
+    const handler = getHandler('put', '/:skillId')
+    const res = createRes()
+    await handler(
+      {
+        params: { skillId: 'goal-conversation' },
+        body: { enabled: true, endpoint: '101.43.146.102:30001', apiKey: 'k' },
+      },
+      res
+    )
+    expect(res.status).toHaveBeenCalledWith(400)
+  })
+
+  it('PUT 拒绝跨 tier 的 fallback 候选', async () => {
+    mockGet.mockResolvedValue({ skillId: 'goal-conversation', enabled: true, model: 'deepseek-v4.1-flash', apiKey: null })
+    const handler = getHandler('put', '/:skillId')
+    const res = createRes()
+    await handler(
+      {
+        params: { skillId: 'goal-conversation' },
+        body: { enabled: true, fallbackChain: ['deepseek-v4-pro'] },
+      },
+      res
+    )
+    expect(res.status).toHaveBeenCalledWith(400)
+  })
+
+  it('GET 暴露含 topP 与 sources 的生成参数投影', async () => {
     mockGet.mockResolvedValue({
       skillId: 'goal-conversation',
       enabled: false,
       temperature: 0.2,
       maxTokens: 2000,
+      paramOverrides: null,
+      fallbackChain: null,
     })
     const handler = getHandler('get', '/:skillId')
     const res = createRes()
@@ -135,9 +182,10 @@ describe('skill-model-configs routing-only write path', () => {
       expect.objectContaining({
         success: true,
         data: expect.objectContaining({
-          routingOnly: true,
+          routingOnly: false,
           generationParams: expect.objectContaining({
             temperature: 0.7,
+            topP: null,
             maxTokens: 8000,
           }),
         }),

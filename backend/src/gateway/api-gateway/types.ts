@@ -33,6 +33,15 @@ export interface ResolvedRoute {
   reasoningEffort?: 'default' | 'low' | 'high' | 'max';
   temperature: number;
   maxTokens: number;
+  /** skill 级参数覆盖（skill_model_configs.paramOverrides 解析值；null=未覆盖）。
+   *  resolve-llm-call-params 的 skill-override 层数据源；key 出现才覆盖。 */
+  skillParamOverrides?: {
+    temperature?: number | null;
+    topP?: number | null;
+    maxTokens?: number | null;
+  } | null;
+  /** skill 级兜底链（skill_model_configs.fallbackChain 解析值；null=用 registry 默认链）。 */
+  skillFallbackChain?: string[] | null;
   timeoutMs?: number;
   timeoutSource?: 'skill-override' | 'agent-override' | 'route-override' | 'environment-default';
   privateNetworkPolicy: 'runtime' | 'public-only';

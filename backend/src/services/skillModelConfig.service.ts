@@ -28,6 +28,10 @@ export interface SkillModelConfig {
   apiKey?: string | null;
   temperature: number;
   maxTokens: number;
+  /** 参数覆盖 JSON 原文（{"temperature":..,"topP":..,"maxTokens":..}，null=未覆盖） */
+  paramOverrides?: string | null;
+  /** 兜底链 JSON 原文（string[]，null=registry 默认链） */
+  fallbackChain?: string | null;
   requestTimeoutMs?: number | null;
   maxLogicalRetries?: number | null;
   enabled: boolean;
