@@ -158,6 +158,25 @@ function buildRequestBodySnapshot(body: unknown): string | undefined {
   }
 }
 
+/**
+ * targetId 回退解析：路由历史上约定 `:id`，但部分路由使用语义化参数名
+ * （如 projection-access-grants 的 `:grantId`、sessions 的 `:sessionId`），
+ * 只读 `req.params.id` 会导致审计行有 action/adminId 却查不到操作对象。
+ * 通用回退：优先 `req.params.id`（既有行为兼容），缺失时取 params 中
+ * 第一个非空字符串值（Express 按路由定义顺序填充 params，首个即主资源标识），
+ * 避免逐路由硬编码维护清单。
+ */
+function resolveAuditTargetId(req: Request): string | null {
+  const params = req.params as Record<string, unknown> | undefined;
+  if (!params || typeof params !== 'object') return null;
+  const id = params.id;
+  if (typeof id === 'string' && id) return id;
+  for (const value of Object.values(params)) {
+    if (typeof value === 'string' && value) return value;
+  }
+  return null;
+}
+
 function serializeSnapshot(value: unknown): string | undefined {
   try {
     const json = JSON.stringify(redactLogValue(value));
@@ -193,7 +212,7 @@ export const adminAuditMiddleware = (req: Request, res: Response, next: NextFunc
 
       const context = getAuditContext(res);
       const inferred = inferAction(req, effectivePath);
-      const targetId = context.targetId || (typeof req.params?.id === 'string' ? req.params.id : null);
+      const targetId = context.targetId || resolveAuditTargetId(req);
 
       const record = {
         adminId: req.user?.userId ?? null,

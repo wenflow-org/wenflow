@@ -226,11 +226,6 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).toContain('1/2 里程碑');
     expect(wrapper.text()).toContain('对话 1 轮');
 
-    // Path 里程碑渲染（读 stageResults.path 兜底）
-    expect(wrapper.text()).toContain('Python 入门学习路径');
-    expect(wrapper.text()).toContain('函数基础');
-    expect(wrapper.text()).toContain('参数与返回值');
-
     // 时间线日志卡（真实模式由 payload.timeline 承载，会话总结已生成在尾部）
     const logText = wrapper.find('.cp-logs').text();
     expect(logText).toContain('学习路径已生成');
@@ -240,6 +235,16 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).toContain('主题摘要');
     expect(wrapper.text()).toContain('围绕函数作用域展开');
     expect(wrapper.text()).toContain('模型生成');
+
+    // 原始 JSON（rawJson 惰性计算：展开 details 才序列化，2026-09-27 性能整改）
+    const rawDetails = wrapper.find('details.cp-raw');
+    (rawDetails.element as HTMLDetailsElement).open = true;
+    await rawDetails.trigger('toggle');
+    await nextTick();
+    // Path 里程碑渲染（读 stageResults.path 兜底）：里程碑名出现在原始 JSON 中
+    expect(wrapper.text()).toContain('Python 入门学习路径');
+    expect(wrapper.text()).toContain('函数基础');
+    expect(wrapper.text()).toContain('参数与返回值');
 
     // 黑盒/仿真专属区隐藏：无 act() 按钮、无对抗预算、无删除会话、无评审面板
     expect(wrapper.find('.cp-config').exists()).toBe(false);

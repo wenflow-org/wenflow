@@ -12,6 +12,7 @@ import {
   listExportAuditLogs,
 } from '../../services/admin/export.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
+import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { REAL_USER_WHERE } from '../../utils/test-account';
 
@@ -50,7 +51,52 @@ function sendCsv(res: Response, filename: string, csv: string): void {
 
 const MAX_ROWS = 20000;
 
+const EXPORT_AUDIT_IP_MAX_CHARS = 100;
+const EXPORT_AUDIT_USER_AGENT_MAX_CHARS = 300;
+
+/**
+ * 导出审计（P2 安全缺口修复）：导出端点是 GET，admin-audit 中间件只审计写操作，
+ * 全量用户 PII 导出此前无任何审计痕迹。这里在成功响应前显式写一条审计，
+ * 参考中间件对 requeue-dead 等写操作的落库口径（同表同字段、fire-and-forget、失败仅告警）。
+ * 只记录表名/筛选/行数等元信息，绝不落导出内容本身。
+ * 注：/export/audit-logs 不调用本函数 —— 审计表自身导出沿用 audit-logs 查询路由
+ * 「审计操作不入审计」的既有豁免口径（见 bootstrap/routers.ts），避免自激循环。
+ */
+function writeExportAudit(
+  req: Request,
+  table: string,
+  filters: Record<string, unknown>,
+  rowCount: number,
+  startedAt: number
+): void {
+  prisma.admin_audit_logs.create({
+    data: {
+      adminId: req.user?.userId ?? null,
+      adminName: req.user?.email ?? null,
+      action: 'export-data',
+      targetType: 'user',
+      targetId: null,
+      method: req.method,
+      path: req.originalUrl,
+      statusCode: 200,
+      success: true,
+      requestJson: JSON.stringify({ table, filters, rows: rowCount }),
+      ip: (req.ip || 'unknown').toString().slice(0, EXPORT_AUDIT_IP_MAX_CHARS),
+      userAgent: typeof req.headers['user-agent'] === 'string'
+        ? req.headers['user-agent'].slice(0, EXPORT_AUDIT_USER_AGENT_MAX_CHARS)
+        : null,
+      durationMs: Date.now() - startedAt
+    }
+  }).catch((error: unknown) => {
+    logger.warn('[admin-export] 导出审计写入失败', {
+      error: error instanceof Error ? error.message : String(error),
+      table
+    });
+  });
+}
+
 router.get('/users', async (req: Request, res: Response) => {
+  const startedAt = Date.now();
   try {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
@@ -60,6 +106,9 @@ router.get('/users', async (req: Request, res: Response) => {
     if (!includeTest) where.isVirtualLearner = false;
 
     const users = await listExportUsers(where, MAX_ROWS);
+
+    // 含姓名/邮箱等 PII 的全量用户导出：成功响应前落一条审计（含 PII 导出必须有痕迹）
+    writeExportAudit(req, 'users', { includeTest }, users.length, startedAt);
 
     const csv = toCsv(
       ['ID', '姓名', '邮箱', '角色', '管理员', '虚拟学习者', 'XP', '等级', '注册时间', '最近登录'],

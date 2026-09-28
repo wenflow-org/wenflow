@@ -59,6 +59,10 @@
             <div><span>开放范围</span><strong>{{ grantScopeLabel }}</strong></div>
             <div><span>到期时间</span><strong>{{ grantExpiresLabel }}</strong></div>
             <div><span>协助说明</span><strong>{{ grantNoteLabel }}</strong></div>
+            <!-- 冒充凭据有效期：过期后轮询清键，本行自动消失 -->
+            <div v-if="projectionTokenExpiryLabel">
+              <span>冒充凭据</span><strong>{{ projectionTokenExpiryLabel }}</strong>
+            </div>
           </div>
           <div class="ud-grant__actions">
             <button type="button" class="mk-status__action" :disabled="grantLoading" @click="loadGrant">
@@ -103,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { subPage, closeSubPage, openSubPage } from './store'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -111,7 +115,7 @@ import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { liveUsers, timeAgo, errMsg } from './live'
 import { adminUsersApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
-import { setProjectionToken } from '@/utils/projection'
+import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { toast } from '@/utils/toast'
 import { askConfirm } from './useConfirm'
 
@@ -180,6 +184,52 @@ const grantExpiresLabel = computed(() => {
 })
 const grantNoteLabel = computed(() => projectionGrant.value?.note?.trim() || '用户未填写协助说明')
 
+// ===== 投影 token（冒充用户）的本地生命周期 =====
+// 为什么：投影 token 与管理员自身凭据同存 localStorage 且此前无过期清理，
+// 残留即等于一个 30 分钟的冒充窗口。后端签发响应只有 tokenExpiresIn: '30m'
+// 字符串（无绝对过期时间戳），故过期时刻按「签发时刻 + 30 分钟」本地记账；
+// 若服务端将来返回绝对过期字段则优先采用。
+const PROJECTION_TOKEN_TTL_MS = 30 * 60 * 1000
+const PROJECTION_TOKEN_EXPIRES_KEY = 'projection_token_expires_at'
+/** 当前本地投影 token 的过期时刻（ms）；null = 本地无有效记录 */
+const projectionTokenExpiresAt = ref<number | null>(null)
+
+/** 有效期展示：过期后由轮询清键置 null，该行随之消失 */
+const projectionTokenExpiryLabel = computed(() => {
+  const exp = projectionTokenExpiresAt.value
+  if (exp == null || Date.now() >= exp) return ''
+  const hhmm = new Date(exp).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })
+  return `token 有效期至 ${hhmm}（30 分钟）`
+})
+
+/** 过期即清两个键：不清理的话，过期 token 会一直躺在同源存储里冒充凭据可被复用 */
+function purgeExpiredProjectionToken() {
+  let exp = projectionTokenExpiresAt.value
+  if (exp == null) {
+    // ref 为空时以 localStorage 为准（覆盖其他页签/上次会话留下的残留）
+    const raw = Number(localStorage.getItem(PROJECTION_TOKEN_EXPIRES_KEY))
+    if (!Number.isFinite(raw) || raw <= 0) return
+    exp = raw
+    projectionTokenExpiresAt.value = raw
+  }
+  if (Date.now() < exp) return
+  clearProjectionToken() // token + context（utils 已封装）
+  localStorage.removeItem(PROJECTION_TOKEN_EXPIRES_KEY)
+  projectionTokenExpiresAt.value = null
+  // 刚跨过过期线：重拉许可，卡片与按钮态（grantStatus）回到真实状态
+  if (subPage.value?.id) void loadGrant()
+}
+
+/** 挂载即清一次 + 每 60s 轮询：其他页签的残留也要在回到本页时被清掉 */
+let projectionExpiryTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  purgeExpiredProjectionToken()
+  projectionExpiryTimer = setInterval(purgeExpiredProjectionToken, 60_000)
+})
+onBeforeUnmount(() => {
+  if (projectionExpiryTimer) clearInterval(projectionExpiryTimer)
+})
+
 async function loadGrant() {
   const id = subPage.value?.id
   if (!id) return
@@ -213,6 +263,8 @@ async function loadGrant() {
 async function openDebugStation() {
   const id = subPage.value?.id
   if (!id || grantStatus.value !== 'active' || !projectionGrant.value?.id) return
+  // 打开前先校验并清掉过期残留：本地不留已被服务端拒收的旧 token（本次会重新签发）
+  purgeExpiredProjectionToken()
   grantOpening.value = true
   try {
     const response = await adminUsersApi.createProjectionTokenFromGrant(projectionGrant.value.id, {
@@ -222,6 +274,11 @@ async function openDebugStation() {
     const body = response?.data || response
     const token = body?.data?.token || body?.token
     if (!token) throw new Error(body?.error?.message || body?.error || '投影 token 缺失')
+    // 过期时刻：优先取服务端绝对时间；当前后端只回 tokenExpiresIn: '30m'，
+    // 故兜底为签发时刻 + 30 分钟（与后端 30min 签发窗口一致）
+    const serverExp = body?.data?.expiresAt ?? body?.data?.tokenExpiresAt
+    const parsedServerExp = serverExp != null ? new Date(serverExp).getTime() : NaN
+    const expiresAt = Number.isFinite(parsedServerExp) ? parsedServerExp : Date.now() + PROJECTION_TOKEN_TTL_MS
     setProjectionToken(token, {
       userId: id,
       userName: liveDetail.value?.name,
@@ -229,6 +286,9 @@ async function openDebugStation() {
       scope: projectionGrant.value.scope === 'full' ? 'full' : 'dashboard',
       source: 'user-projection-grant'
     })
+    // 与 token 同步落过期时刻：先有 token 后有期限，避免出现无法清理的孤儿 token
+    localStorage.setItem(PROJECTION_TOKEN_EXPIRES_KEY, String(expiresAt))
+    projectionTokenExpiresAt.value = expiresAt
     window.open('/admin/console', '_blank')
   } catch (e) {
     grantMessage.value = `打开失败：${errMsg(e)}`

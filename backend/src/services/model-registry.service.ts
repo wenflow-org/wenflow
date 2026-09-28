@@ -51,6 +51,10 @@ export interface ModelRegistryOverview {
     defaultReasoningModelConfigured: string | null;
     defaultReasoningModelResolved: string | null;
     defaultReasoningModelSource: 'alias' | 'concrete' | 'unset';
+    /** 评估默认路由（platform_api_configs.defaultEvaluationModel，经 api-config 页配置） */
+    defaultEvaluationModelConfigured: string | null;
+    defaultEvaluationModelResolved: string | null;
+    defaultEvaluationModelSource: 'alias' | 'concrete' | 'unset';
   };
   fallbackChains: Array<{
     model: string;
@@ -115,10 +119,15 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
 
   const defaultModel = platform?.defaultModel ?? null;
   const reasoningModel = platform?.defaultReasoningModel ?? null;
+  // 评估默认是真实存在的第三档路由（api-config 页可配置，schema defaultEvaluationModel）；
+  // 运行时经 apiConfig.service 读取，未配置时兜底 env AI_MODEL_REASONING。
+  // 总览与其余两档同口径：只展示 platform 行上的已配置值，不做 env 兜底/伪造。
+  const evaluationModel = platform?.defaultEvaluationModel ?? null;
   const chatSelection = defaultModel ? selectModelForAlias(defaultModel, { overrides: dbLists }) : null;
   const reasoningSelection = reasoningModel
     ? selectModelForAlias(reasoningModel, { overrides: dbLists, requireThinking: true })
     : null;
+  const evaluationSelection = evaluationModel ? selectModelForAlias(evaluationModel, { overrides: dbLists }) : null;
 
   const models = AVAILABLE_MODELS.map((model) => ({
     id: model.id,
@@ -204,7 +213,10 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
       defaultModelSource: defaultModel ? (chatSelection ? 'alias' : 'concrete') : 'unset',
       defaultReasoningModelConfigured: reasoningModel,
       defaultReasoningModelResolved: reasoningSelection?.model ?? reasoningModel,
-      defaultReasoningModelSource: reasoningModel ? (reasoningSelection ? 'alias' : 'concrete') : 'unset'
+      defaultReasoningModelSource: reasoningModel ? (reasoningSelection ? 'alias' : 'concrete') : 'unset',
+      defaultEvaluationModelConfigured: evaluationModel,
+      defaultEvaluationModelResolved: evaluationSelection?.model ?? evaluationModel,
+      defaultEvaluationModelSource: evaluationModel ? (evaluationSelection ? 'alias' : 'concrete') : 'unset'
     },
     fallbackChains,
     runtime,

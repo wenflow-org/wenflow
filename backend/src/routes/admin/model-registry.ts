@@ -10,7 +10,7 @@ const router = Router();
  * 汇总「代码能力注册表 + platform_api_configs 别名覆盖 + 部署冷却」的生效状态：
  * - models：每个模型的能力（思考/推理档）与限额（输出上限、缺省、推理预留、并发）
  * - aliases：别名成员、DB 覆盖声明、默认选中项、requireThinking 下的选中项与降级标记
- * - defaults：平台 defaultModel / defaultReasoningModel 的解析结果与来源（别名/具体）
+ * - defaults：平台 defaultModel / defaultReasoningModel / defaultEvaluationModel 的解析结果与来源（别名/具体）
  * - fallbackChains：降级链
  * - cooldowns：当前处于冷却期的部署（进程内快照）
  * - warnings：配置漂移（未注册模型、别名为空、未被引用、废弃 model 副本）

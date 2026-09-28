@@ -116,7 +116,7 @@ router.get('/', async (req, res) => {
       else bucket.rollbackable += 1;
       mergesByUser.set(row.userId, bucket);
     }
-    const rows = traceCounts
+    const ranked = traceCounts
       .map((row) => {
         const audit = parseAudit(auditByUser.get(row.userId)?.payload ?? null);
         const merges = mergesByUser.get(row.userId) ?? { rollbackable: 0, rolledBack: 0 };
@@ -140,8 +140,11 @@ router.get('/', async (req, res) => {
             : null,
         };
       })
-      .sort((a, b) => b.traces - a.traces)
-      .slice(0, limit);
+      .sort((a, b) => b.traces - a.traces);
+    // 列表只返回 top limit，但 totals 必须按全量聚合：
+    // totals.users 是全量有痕迹用户数，若 traces/due 只对切片求和，
+    // 用户数超过 limit 时前端的「覆盖 N 位用户」与到期比例条口径不一致（到期占比被低估）。
+    const rows = ranked.slice(0, limit);
 
     const userIds = rows.map((row) => row.userId);
     const users = userIds.length > 0
@@ -150,9 +153,9 @@ router.get('/', async (req, res) => {
     const userById = new Map(users.map((row) => [row.id, row]));
 
     const totals = {
-      users: traceCounts.length,
-      traces: rows.reduce((sum, row) => sum + row.traces, 0),
-      due: rows.reduce((sum, row) => sum + row.due, 0),
+      users: ranked.length,
+      traces: ranked.reduce((sum, row) => sum + row.traces, 0),
+      due: ranked.reduce((sum, row) => sum + row.due, 0),
       usersWithAudit: auditByUser.size,
       proposed: 0,
       autoApplicable: 0,
@@ -162,7 +165,7 @@ router.get('/', async (req, res) => {
       rollbackableMerges: 0,
       rolledBackMerges: 0,
     };
-    for (const row of rows) {
+    for (const row of ranked) {
       totals.rollbackableMerges += row.merges.rollbackable;
       totals.rolledBackMerges += row.merges.rolledBack;
       if (!row.audit) continue;
