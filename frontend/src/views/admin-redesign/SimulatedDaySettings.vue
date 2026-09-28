@@ -11,12 +11,18 @@
     >
       <span class="sd-settings__title">日期模拟</span>
       <span class="sd-settings__arrow" :data-open="expanded ? 'true' : 'false'" aria-hidden="true">▸</span>
+      <!-- 收起时的状态摘要：折叠后头部仍能看出当前配置（原折叠是坏的——设置体常驻可见） -->
+      <span v-if="!expanded && collapsedSummary" class="sd-settings__sum">{{ collapsedSummary }}</span>
       <label class="sd-switch" :title="form.enabled ? '已开启：允许按自然日推进虚拟学习' : '默认关闭，现网零变化'" @click.stop @keydown.stop>
         <input v-model="form.enabled" type="checkbox" @change="onToggleEnabled" />
         <span>{{ form.enabled ? '已开启' : '已关闭' }}</span>
       </label>
     </div>
-    <div v-show="expanded" class="sd-settings__grid">
+    <!-- 折叠体：设置网格 / 上课星期 / 保存行全部收进这里（2026-09-29 修——
+         原来只有第一格进了 v-show，星期/每天几节/保存按钮常驻可见，
+         头部写着「▸ 已关闭」却占着 ~200px，折叠形同虚设） -->
+    <div v-show="expanded" class="sd-settings__body">
+      <div class="sd-settings__grid">
       <label class="mk-field">
         <span class="mk-field__label">每日时长上限（分钟）</span>
         <input v-model.number="form.defaultDailyMinutesCap" type="number" min="5" max="480" class="mk-field__input" @input="dirty = true" />
@@ -51,18 +57,19 @@
         <span>允许自动推进</span>
       </label>
     </div>
-    <div class="sd-settings__foot">
-      <span v-if="loadFailed" class="sd-settings__hint sd-settings__hint--bad" title="设置加载失败，当前展示的是默认值；为避免用默认值覆盖服务端配置，保存已禁用，请刷新页面重试">设置未加载，保存已禁用（请刷新重试）</span>
-      <span v-else class="sd-settings__hint">默认关闭；只对虚拟学习者生效，不影响真实用户。</span>
-      <button type="button" class="mk-btn mk-btn--primary" :disabled="!dirty || saving || loadFailed" @click="save">
-        {{ saving ? '保存中…' : '保存日期模拟设置' }}
-      </button>
+      <div class="sd-settings__foot">
+        <span v-if="loadFailed" class="sd-settings__hint sd-settings__hint--bad" title="设置加载失败，当前展示的是默认值；为避免用默认值覆盖服务端配置，保存已禁用，请刷新页面重试">设置未加载，保存已禁用（请刷新重试）</span>
+        <span v-else class="sd-settings__hint">默认关闭；只对虚拟学习者生效，不影响真实用户。</span>
+        <button type="button" class="mk-btn mk-btn--primary" :disabled="!dirty || saving || loadFailed" @click="save">
+          {{ saving ? '保存中…' : '保存日期模拟设置' }}
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import { errMsg } from './live'
@@ -101,6 +108,13 @@ function onToggleEnabled() {
   dirty.value = true
   if (form.enabled) expanded.value = true
 }
+/** 收起态摘要：折叠后头部一眼看出当前课表（未开启时给「已关闭」由开关承载，这里只讲开启态） */
+const collapsedSummary = computed(() => {
+  if (!form.enabled) return ''
+  const days = form.defaultDaysPerWeek > 0 ? `每周 ${form.defaultDaysPerWeek} 天` : '每周不限'
+  const base = `每日 ${form.defaultDailyMinutesCap} 分钟 · ${days} · 每天 ${form.lessonsPerDay} 节`
+  return dirty.value ? `${base} · 未保存` : base
+})
 
 function apply(raw: Partial<typeof DEFAULT> | null | undefined) {
   form.enabled = raw?.enabled === true
@@ -165,7 +179,9 @@ onMounted(load)
 .sd-settings__arrow[data-open='true'] { transform: rotate(90deg); }
 .sd-settings__title { font-weight: 600; font-size: var(--mk-fs-body); }
 .sd-switch { display: flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); cursor: pointer; }
+.sd-settings__body { padding-top: 4px; }
 .sd-settings__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 12px; margin-top: 8px; }
+.sd-settings__sum { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sd-settings__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
 .sd-settings__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .sd-settings__hint--bad { color: var(--mk-red, #dc2626); }

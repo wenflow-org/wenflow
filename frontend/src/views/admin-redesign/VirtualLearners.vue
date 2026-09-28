@@ -34,6 +34,18 @@
       </span>
     </div>
 
+    <!-- 运行指标带（2026-09-29 从列表卡头搬出）：完成率/失败率/并发/今日调用/速率 + VL RPM 写控件。
+         原来塞在列表卡头（夹在搜索框与 RPM 之间），label/数值上下堆叠把卡头撑到 73px 且拥挤难读；
+         独立成带后卡头回归「搜索 + 行数」。学习者 N/M 不再重复（状态条共 N 人 + 底部分页已覆盖）。 -->
+    <div class="vl-kpi">
+      <MkStatStrip :items="runStatItems" />
+      <!-- VL RPM 是「写」控件，与只读指标条以竖线分隔，避免读/写混作一行 -->
+      <label class="vl-rpm" title="虚拟学习者专属出站 RPM 上限（0=不限）；与平台全局速率相互独立，不会挤占真实用户额度">
+        <span class="vl-rpm__label">VL RPM</span>
+        <input v-model.number="vlRpm.limit" type="number" min="0" max="100000" step="10" class="mk-filter__input vl-rpm__input" @focus="vlRpmFocused = true" @blur="vlRpmFocused = false" @input="vlRpmDirty = true" @change="saveVlRpm" />
+      </label>
+    </div>
+
     <!-- 学习者列表（「批量实验」已独立成页：/admin/batch-experiments） -->
     <!-- 正在运行：列出有活跃会话的虚拟学习者（折叠：默认前 8 个，展开看全部）；批量生成也在此显示 -->
     <VirtualLearnerRunningBar
@@ -52,18 +64,7 @@
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
-        <div class="mk-card__head-right vl-head-stats">
-          <!-- 分格指标条：复用 MkStatStrip（标签在上/数值在下的层级 + 窄屏换行），
-               取代此前把 5 项指标用 `·` 串成一行的 .vl-runstats —— 后者 nowrap 叠加
-               卡头 flex-shrink:0，整条宽度溢出卡片后被 .mk-card 的 overflow:clip 裁掉
-               （即「18 / 18 人 · 点…」被切断的成因）。 -->
-          <MkStatStrip :items="runStatItems" />
-          <!-- VL RPM 是「写」控件，与只读指标条以竖线分隔，避免读/写混作一行 -->
-          <label class="vl-rpm" title="虚拟学习者专属出站 RPM 上限（0=不限）；与平台全局速率相互独立，不会挤占真实用户额度">
-            <span class="vl-rpm__label">VL RPM</span>
-            <input v-model.number="vlRpm.limit" type="number" min="0" max="100000" step="10" class="mk-filter__input vl-rpm__input" @focus="vlRpmFocused = true" @blur="vlRpmFocused = false" @input="vlRpmDirty = true" @change="saveVlRpm" />
-          </label>
-        </div>
+        <span class="mk-card__meta" title="当前筛选后的行数 / 总数">{{ filtered.length }} / {{ samples.length }} 人</span>
       </div>
 
       <SimulatedDaySettings />
@@ -600,11 +601,6 @@ const runStatItems = computed<MkStatItem[]>(() => [
     value: rateText.value,
     title: '虚拟学习者出站速率：在途 / 上限 RPM（与右侧 VL RPM 上限对应）'
   },
-  {
-    label: '学习者',
-    value: `${filtered.value.length} / ${samples.value.length}`,
-    title: '当前筛选后的行数 / 总数；点击行查看画像'
-  }
 ])
 
 /* 仿真概览结论已收敛到单行状态条（KPI/结论随状态条 meta 展示，双块移除） */
@@ -689,15 +685,18 @@ function openRunningSession(s: Sample) {
 .vl-faillink:hover { color: var(--mk-blue); background: #eff6ff; box-shadow: 0 0 0 3px #eff6ff; }
 /* .mk-num--na 已收敛到既有全局 .mk-na（同一张表里两个类表达同一概念） */
 
-/* 卡头右组：内容为「分格指标条 + VL RPM 控件」，必须允许收缩并换行。
-   全局 .mk-card__head-right 是 flex-shrink:0（适合单个按钮/短 meta），在本页
-   会把整条顶出卡片宽度，再被 .mk-card 的 overflow:clip 裁掉（截断的真正成因）。 */
-.vl-head-stats {
-  flex-shrink: 1;
-  min-width: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+/* 运行指标带（2026-09-29 从列表卡头搬出）：左侧指标条自由收缩换行，右侧 VL RPM 钉住 */
+.vl-kpi {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 16px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  background: var(--mk-surface);
+  flex: none;
 }
+.vl-kpi .mk-stat-strip { flex: 1 1 auto; min-width: 0; }
 /* VL RPM（写控件）：与只读指标条以竖线分隔，避免读/写混作一行 */
 .vl-rpm {
   display: inline-flex;
@@ -705,6 +704,7 @@ function openRunningSession(s: Sample) {
   gap: 6px;
   padding-left: 12px;
   border-left: 1px solid var(--mk-line);
+  flex: none;
 }
 .vl-rpm__label {
   font-size: var(--mk-fs-micro);
