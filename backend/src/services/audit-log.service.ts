@@ -43,3 +43,10 @@ export function findAuditLogs(
 ): Promise<Array<Record<string, unknown>>> {
   return resolveAuditModel(scope).findMany(args);
 }
+
+/** 写操作审计（导出/批量操作等 fire-and-forget 落库口径：同表同字段，失败仅告警）。
+ *  路由层不得直连 prisma（边界棘轮），写侧统一经本服务。 */
+export function createAuditLog(data: Record<string, unknown>): Promise<unknown> {
+  return (prisma.admin_audit_logs as unknown as { create: (args: { data: Record<string, unknown> }) => Promise<unknown> })
+    .create({ data });
+}

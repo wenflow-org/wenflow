@@ -46,7 +46,7 @@ describe('LearningStateGuidanceService', () => {
   })
 
   it('快照有 copy：原样透传，source 透传快照来源', async () => {
-    ;(dashboardGuidanceSnapshotService.get as jest.Mock).mockResolvedValue({
+    (dashboardGuidanceSnapshotService.get as jest.Mock).mockResolvedValue({
       copy: { headline: 'H', subtitle: 's' },
       source: 'model',
     })

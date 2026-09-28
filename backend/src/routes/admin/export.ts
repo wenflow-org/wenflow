@@ -12,7 +12,7 @@ import {
   listExportAuditLogs,
 } from '../../services/admin/export.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
-import prisma from '../../config/database';
+import { createAuditLog } from '../../services/audit-log.service';
 import { logger } from '../../utils/logger';
 import { REAL_USER_WHERE } from '../../utils/test-account';
 
@@ -69,24 +69,22 @@ function writeExportAudit(
   rowCount: number,
   startedAt: number
 ): void {
-  prisma.admin_audit_logs.create({
-    data: {
-      adminId: req.user?.userId ?? null,
-      adminName: req.user?.email ?? null,
-      action: 'export-data',
-      targetType: 'user',
-      targetId: null,
-      method: req.method,
-      path: req.originalUrl,
-      statusCode: 200,
-      success: true,
-      requestJson: JSON.stringify({ table, filters, rows: rowCount }),
-      ip: (req.ip || 'unknown').toString().slice(0, EXPORT_AUDIT_IP_MAX_CHARS),
-      userAgent: typeof req.headers['user-agent'] === 'string'
-        ? req.headers['user-agent'].slice(0, EXPORT_AUDIT_USER_AGENT_MAX_CHARS)
-        : null,
-      durationMs: Date.now() - startedAt
-    }
+  createAuditLog({
+    adminId: req.user?.userId ?? null,
+    adminName: req.user?.email ?? null,
+    action: 'export-data',
+    targetType: 'user',
+    targetId: null,
+    method: req.method,
+    path: req.originalUrl,
+    statusCode: 200,
+    success: true,
+    requestJson: JSON.stringify({ table, filters, rows: rowCount }),
+    ip: (req.ip || 'unknown').toString().slice(0, EXPORT_AUDIT_IP_MAX_CHARS),
+    userAgent: typeof req.headers['user-agent'] === 'string'
+      ? req.headers['user-agent'].slice(0, EXPORT_AUDIT_USER_AGENT_MAX_CHARS)
+      : null,
+    durationMs: Date.now() - startedAt
   }).catch((error: unknown) => {
     logger.warn('[admin-export] 导出审计写入失败', {
       error: error instanceof Error ? error.message : String(error),

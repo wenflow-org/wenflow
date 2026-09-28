@@ -128,7 +128,7 @@
               <span class="msk__sec-meta">
                 <!-- meta 接口失败不再静默显示「默认」；加载中如实呈现（metaLoading 此前只赋值从未消费） -->
                 <MkLoading v-if="metaLoading" text="生效版本加载中…" inline />
-                <template v-else-if="metaFailed" title="生效版本 / Prompt 接口获取失败，版本信息不可用">版本获取失败</template>
+                <span v-else-if="metaFailed" title="生效版本 / Prompt 接口获取失败，版本信息不可用">版本获取失败</span>
                 <span v-else class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
               </span>
             </header>

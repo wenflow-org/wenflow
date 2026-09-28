@@ -783,6 +783,8 @@ function toFiniteNumber(value: unknown): number | null {
 /** 图内文本归一：去控制字符、裁长、空串归 null（用于可选文本：caption/unit） */
 function toFigureText(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
+  // 有意匹配控制字符区间替换为空格（文本清洗用途），非残留控制码
+  // eslint-disable-next-line no-control-regex
   const text = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
   return text || null;
 }
@@ -793,6 +795,8 @@ function toFigureText(value: unknown, max: number): string | null {
  */
 function toFigureLabel(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
+  // 有意匹配控制字符区间替换为空格（同上，清洗用途）
+  // eslint-disable-next-line no-control-regex
   const text = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
   if (!text || text.length > max) return null;
   return text;
