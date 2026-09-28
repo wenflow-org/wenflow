@@ -167,7 +167,7 @@ describe('MemoryReview 归并执行交互', () => {
     expect(rollback).toHaveBeenCalledWith('u1', ['离开前翻页立好']);
   });
 
-  it('深链：选中写入 URL、收起清掉参数（可收藏/分享）', async () => {
+  it('深链：选中写入 URL、返回清掉参数（可收藏/分享）', async () => {
     routeQuery.value = {};
     const w = await mountPage();
     await w.findAll('button').find((b) => b.text() === '明细')!.trigger('click');
@@ -177,7 +177,8 @@ describe('MemoryReview 归并执行交互', () => {
     // 真实路由里 replace 之后 query 会变成 { userId }，这里同步模拟
     routeQuery.value = { userId: 'u1' };
     routerReplace.mockClear();
-    await w.findAll('button').find((b) => b.text() === '收起')!.trigger('click');
+    // 明细态是二级页：退出口是返回栏的「← 用户列表」（原卡头「收起」，2026-09-28 重设计）
+    await w.findAll('button').find((b) => b.text().includes('用户列表'))!.trigger('click');
     await flushPromises();
     expect(routerReplace).toHaveBeenCalledWith({ query: {} });
   });

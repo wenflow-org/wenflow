@@ -1,5 +1,12 @@
 <template>
   <div class="mr mk-page mk-page--fill">
+    <!-- ===== 列表态 / 明细态二选一 =====
+         选中用户前：状态条 + KPI 区 + 用户列表（列表卡内部滚动）；
+         选中用户后：整页让位给「该用户的记忆复盘」二级页（明细拿到整幅宽高）。
+         旧版把明细塞在用户列表卡内部共用一条 flex 列：表网格 flex:1 被明细压成 0 高
+         （一选用户列表整条消失），超出的 2000+px 又被 .mk-card 的 overflow:clip 裁掉，
+         下半页永远滚不到。二级页形态与「用户与学习者 → 用户详情」「虚拟学习者 → 画像」一致。 -->
+    <template v-if="!detail">
     <header class="mk-status" :class="`mk-status--${headTone}`">
       <span class="mk-status__dot" aria-hidden="true"></span>
       <!-- 口径与术语：2026-09-28 撤掉独立折叠卡（首屏第一块是说明卡、且三句话的术语各自
@@ -106,24 +113,36 @@
           </tbody>
         </table>
       </div>
+    </div>
+    </template>
 
-    <div v-if="detail" class="mr__detail">
-      <div class="mk-card">
+    <!-- ===== 明细态（二级页）===== -->
+    <template v-else>
+      <header class="mk-status" :class="`mk-status--${detailTone}`">
+        <button type="button" class="mk-back" title="返回用户列表（Esc）" @click="closeDetail">← 用户列表</button>
+        <span class="mk-status__sep"></span>
+        <strong class="mk-status__title">记忆复盘 · {{ detail.user.name || '未命名' }}</strong>
+        <span
+          class="mk-status__meta"
+          title="该用户名下记忆痕迹总览：到期 = 到该复习而未复习；同族重复 = 归一化键相同、措辞不同的痕迹（组 / 条）；从未提取 = 一直没被当作复习点接住过"
+        >痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} · 同族重复 {{ detail.summary.duplicatedFamilies }} 组/{{ detail.summary.duplicatedTraces }} 条 · 从未提取 {{ detail.summary.neverExtracted }} · FSRS {{ detail.summary.withFsrsState }}</span>
+        <span class="mk-status__actions">
+          <button type="button" class="mk-status__action" title="复制该用户记忆复盘的深链（可分享 / 收藏，打开即落位）" @click="copyDeepLink">复制深链</button>
+          <button type="button" class="mk-status__action" :disabled="recomputingId === selectedId" title="对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹" @click="recompute(selectedId)">{{ recomputingId === selectedId ? '观察中…' : '重新观察' }}</button>
+        </span>
+      </header>
+
+      <div class="mr__detail">
+      <!-- 1. 课内温故计划：本节该接几个 + 每个记忆点的负担与来源 -->
+      <section class="mk-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">明细 · {{ detail.user.name || '未命名' }}</h3>
-          <span class="mk-card__meta">
-            痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} ·
-            同族重复 {{ detail.summary.duplicatedFamilies }} 组 / {{ detail.summary.duplicatedTraces }} 条 ·
-            从未提取 {{ detail.summary.neverExtracted }} · 有 FSRS 状态 {{ detail.summary.withFsrsState }}
-          </span>
-          <button type="button" class="mk-btn mk-btn--sm" @click="copyDeepLink">复制深链</button>
-          <button type="button" class="mk-btn mk-btn--sm" @click="closeDetail">收起</button>
+          <h3 class="mk-card__title">课内温故计划</h3>
+          <span class="mk-card__meta" title="负担单位由后端按学习者状态动态校准；排队中 = 还没排进本节队列的到期痕迹">本节该接几个 · 按负担预算排队</span>
         </div>
 
         <!-- 温故计划整块按 detail.reviewPlan 有无渲染：reviewPlan=null 时原来只剩一个裸标题 -->
         <template v-if="detail.reviewPlan">
-          <h4 class="mr__h4">课内温故计划（本节该接几个）</h4>
-          <MkStatStrip :items="planKpiItems" />
+          <div class="mr__strip"><MkStatStrip :items="planKpiItems" /></div>
 
           <div v-if="detail.reviewPlan?.items.length" class="mk-table-scroll">
           <table class="mk-table">
@@ -157,28 +176,14 @@
           </div>
         </template>
         <p v-else class="mr__sub">暂无温故计划：该用户名下还没有可安排的记忆痕迹。</p>
+      </section>
 
-        <h4 class="mr__h4">同族重复（「过多过杂」的直接证据）</h4>
-        <p v-if="!detail.duplicatedFamilies.length" class="mr__sub">没有同族重复。</p>
-        <div v-else class="mk-table-scroll">
-      <table class="mk-table">
-          <thead><tr><th>族（归一化键）</th><th class="mk-num">条数</th><th>成员</th></tr></thead>
-          <tbody>
-            <tr v-for="family in detail.duplicatedFamilies" :key="family.family">
-              <!-- 归一化键没有人类可读 label（后端只回 key）→ 同 负担因子 口径降为 sub，不冒充正文 -->
-              <td class="mr__sub">{{ family.family }}</td>
-              <td class="mk-num">{{ family.size }}</td>
-              <td class="mr__sub">
-                <div v-for="member in family.members" :key="member.conceptKey">
-                  {{ member.conceptKey }}（提取 {{ member.extractionCount }} · 掌握 {{ Math.round(member.masteryScore * 100) }}%）
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- 2. 到期清单预览：到期积压的证据（谁先到期、掌握多少） -->
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">到期清单预览</h3>
+          <span class="mk-card__meta" title="按记忆强度升序：越靠前越该先复习；列表最多前 20 条">前 20 · 记忆强度升序</span>
         </div>
-
-        <h4 class="mr__h4">到期清单预览（前 20，按记忆强度升序）</h4>
         <div v-if="detail.duePreview.length" class="mk-table-scroll">
           <table class="mk-table">
           <thead><tr><th>概念</th><th class="mk-num">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th>到期时间</th></tr></thead>
@@ -203,11 +208,38 @@
             </tr>
           </tbody>
         </table>
-          </div>
+        </div>
         <MkEmptyState v-else title="当前没有到期点" description="该用户的记忆痕迹都还没到复习时间；到期后会按记忆强度升序列在这里（前 20 条）。" />
-      </div>
+      </section>
 
-      <div class="mk-card">
+      <!-- 3. 同族重复：措辞不同、说的是同一件事（归并的输入） -->
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">同族重复</h3>
+          <span class="mk-card__meta" title="归一化键相同、措辞不同的痕迹：是「过多过杂」的直接证据，可用下方归并收拢">「过多过杂」的直接证据</span>
+        </div>
+        <p v-if="!detail.duplicatedFamilies.length" class="mr__sub">没有同族重复。</p>
+        <div v-else class="mk-table-scroll">
+          <table class="mk-table">
+          <thead><tr><th>族（归一化键）</th><th class="mk-num">条数</th><th>成员</th></tr></thead>
+          <tbody>
+            <tr v-for="family in detail.duplicatedFamilies" :key="family.family">
+              <!-- 归一化键没有人类可读 label（后端只回 key）→ 同 负担因子 口径降为 sub，不冒充正文 -->
+              <td class="mr__sub">{{ family.family }}</td>
+              <td class="mk-num">{{ family.size }}</td>
+              <td class="mr__sub">
+                <div v-for="member in family.members" :key="member.conceptKey">
+                  {{ member.conceptKey }}（提取 {{ member.extractionCount }} · 掌握 {{ Math.round(member.masteryScore * 100) }}%）
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <!-- 4. 概念归并审计：可写动作（勾选执行 / 回滚），默认观察模式 -->
+      <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">概念归并审计</h3>
           <span class="mk-card__meta">
@@ -338,9 +370,9 @@
             {{ rolledBackMerges.map((m) => m.canonical).slice(0, 3).join('、') }}
           </p>
         </template>
+      </section>
       </div>
-    </div>
-  </div>
+    </template>
   </div>
 </template>
 
@@ -356,6 +388,7 @@ import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
 import { askConfirm } from './useConfirm'
+import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
 import { errMsg, shortId, timeAgo } from './live'
 
@@ -451,6 +484,8 @@ const includeVirtual = ref(false)
 const rows = ref<OverviewRow[]>([])
 /** 页头状态档（R2）：到期积压 > 0 = 需关注且运营可行动；未加载 = 无数据（不猜） */
 const headTone = computed(() => (loading.value || !totals.value.users ? 'muted' : totals.value.due > 0 ? 'warn' : 'ok'))
+/** 明细态状态点：该用户有到期积压 = 需关注（与列表态同一语义，不猜） */
+const detailTone = computed<'ok' | 'warn' | 'muted'>(() => (!detail.value ? 'muted' : detail.value.summary.due > 0 ? 'warn' : 'ok'))
 const totals = ref({
   users: 0,
   traces: 0,
@@ -704,6 +739,8 @@ function closeDetail() {
     router.replace({ query: next })
   }
 }
+/* 明细态的返回：Esc 与左上角「← 用户列表」同一条路径（二级页的通用退出口） */
+useEscape(() => !!detail.value, closeDetail)
 
 /** 复制当前学习者的深链（供运维贴到工单/IM，不必手拼 URL） */
 async function copyDeepLink() {
@@ -776,16 +813,25 @@ onMounted(async () => {
   color: var(--mk-amber); font-weight: 700; font-variant-numeric: tabular-nums;
 }
 
-.mr__h4 { margin: 14px 0 6px; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
+/* 卡内小节标题（归并审计卡里的三段子列表）：左右 16px 与卡头对齐 */
+.mr__h4 { margin: 14px 16px 6px; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 /* 归并表勾选列表头：收窄，别把「选择」撑成正文列宽 */
 .mr__th-check { width: 40px; }
 .mr__sub { display: block; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
+/* 卡内说明段（非表格单元格里的 sub 文本）：补 16px 内边距与卡头文字对齐 —— 原来贴着卡左缘，
+   看起来像漏排；表格仍按设计通边（单元格自带 padding） */
+.mr p.mr__sub { margin: 0; padding: 10px 16px 14px; }
 .mr__row--active { background: var(--mk-blue-bg); }
-.mr__error { margin: 6px 0; color: var(--mk-red-strong); font-size: var(--mk-fs-micro); }
-/* 琥珀改走 --mk-amber color-mix：暗色主题自动适配（原 rgba(217,119,6) 是写死的浅色语义） */
-.mr__warn { margin-top: 8px; padding: 8px 10px; border-radius: var(--mk-radius-xl); border: 1px solid color-mix(in srgb, var(--mk-amber) 30%, transparent); background: color-mix(in srgb, var(--mk-amber) 6%, transparent); font-size: var(--mk-fs-micro); }
+/* 列表卡内的错误行同样要内边距（与卡头对齐） */
+.mr__error { margin: 6px 16px; color: var(--mk-red-strong); font-size: var(--mk-fs-micro); }
+
+.mr__warn { margin: 8px 16px 14px; padding: 8px 10px; border-radius: var(--mk-radius-xl); border: 1px solid color-mix(in srgb, var(--mk-amber) 30%, transparent); background: color-mix(in srgb, var(--mk-amber) 6%, transparent); font-size: var(--mk-fs-micro); }
 .mr__chip { display: inline-block; margin-left: 8px; }
-.mr__detail { display: grid; gap: 14px; }
+/* 明细态容器：二级页里自己是滚动容器（头部返回栏常驻）。flex:1 + min-height:0 缺一不可，
+   否则卡片按内容撑高、被 .mk-page--fill 的 overflow:hidden 裁掉 */
+.mr__detail { display: grid; gap: 12px; align-content: start; flex: 1; min-height: 0; overflow-y: auto; }
+/* 温故计划指标条：MkStatStrip 首格 padding-left:0，放进卡里需自备横向内边距 */
+.mr__strip { padding: 8px 16px 10px; border-bottom: 1px solid var(--mk-line); }
 /* 明细区百分比列（批E）：数字+色阶条，与概览带/用户表同一语言 */
 .mr-pct { display: grid; gap: 2px; justify-items: start; }
 .mr-pct b { font-variant-numeric: tabular-nums; font-weight: 700; }
@@ -805,6 +851,6 @@ onMounted(async () => {
 .mr-audit-queue__item b i { font-style: normal; font-size: 12px; font-weight: 600; color: var(--mk-faint); }
 .mr-audit-queue__item span { font-size: 11px; color: var(--mk-muted); }
 .mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
-.mr__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 10px; }
+.mr__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 16px 10px; }
 .mr__warn-inline { color: var(--mk-amber); font-size: var(--mk-fs-micro); }
 </style>
