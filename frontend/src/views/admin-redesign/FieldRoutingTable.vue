@@ -950,7 +950,10 @@ watch(() => props.stage, () => void loadStage());
   background: var(--mk-red-fill-strong);
   border-color: var(--mk-red-fill-strong);
 }
-.frt__agent { margin-bottom: 18px; border: 1px solid var(--mk-line); border-radius: 12px; overflow: hidden; background: var(--mk-surface); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
+/* flex-shrink: 0 —— 拆回独立 tab 后 .frt 被外层 fill 容器约束高度，
+   无 shrink:0 时 flex 子项按比例压扁（仿真 10 卡只剩 5-11px 细条），
+   改为不收缩 + 外层 .frt 容器自身滚动 */
+.frt__agent { flex-shrink: 0; margin-bottom: 18px; border: 1px solid var(--mk-line); border-radius: 12px; overflow: hidden; background: var(--mk-surface); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
 .frt__agenthead { padding: 10px 14px; background: #fafbfd; border-bottom: 1px solid var(--mk-line); display: flex; align-items: baseline; gap: 10px; }
 .frt__agentname { font-weight: 700; color: var(--mk-ink); }
 .frt__agentdesc { color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

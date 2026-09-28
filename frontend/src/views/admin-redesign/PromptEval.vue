@@ -68,8 +68,8 @@
                   <span class="mk-cell-sub" :title="c.caseId">{{ c.caseId }}</span>
                 </div>
               </td>
-              <td><span class="mk-badge mk-badge--info">{{ agentLabel(c.agentId) }}</span></td>
-              <td class="mk-num" :title="c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟用例：学生话由模拟器生成，无需手写消息' : ''">{{ c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟' : c.messages.length }}</td>
+              <td style="overflow:hidden"><span class="mk-badge mk-badge--info" style="max-width:100%;overflow:hidden;text-overflow:ellipsis">{{ agentLabel(c.agentId) }}</span></td>
+              <td class="mk-num" style="overflow:hidden" :title="c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟用例：学生话由模拟器生成，无需手写消息' : ''">{{ c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟' : c.messages.length }}</td>
               <td>
                 <div v-if="expectationText(c)" class="pe-expect" :title="expectationText(c)">{{ expectationText(c) }}</div>
                 <span v-else class="mk-na">无</span>

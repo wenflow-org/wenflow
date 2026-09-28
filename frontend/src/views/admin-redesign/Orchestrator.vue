@@ -421,7 +421,7 @@ const govMetaTitle = computed(() =>
 .orch-pane--scroll { overflow-y: auto; }
 .orch-pane--center { justify-content: center; }
 /* 字段路由：卡头 + 工具条吸顶，仅表格区内滚（.frt__scroll 自带 .mk-table-scroll 横向滚动） */
-.orch-routing .frt { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.orch-routing .frt { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
 .orch-routing .frt__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* fill 布局下阶段导航的外边距由页面 gap（12px）接管 */
 .mk-page--fill .orch-stage-tabs { margin: 0; }

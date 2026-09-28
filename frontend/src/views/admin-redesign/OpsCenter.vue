@@ -515,7 +515,7 @@ watch(tab, (t) => {
 
 .dt-err {
   display: inline-block;
-  max-width: 320px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
