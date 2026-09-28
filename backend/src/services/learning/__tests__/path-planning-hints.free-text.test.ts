@@ -218,7 +218,8 @@ describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数�
       { totalWeeks: 12, estimatedHours: 12, sessionsPerWeek: null, sessionsLengthMin: null }
     );
     expect(hints.targetSubtasksPerStage).toBe(4);
-    expect(hints.subtasksPerStageRange).toEqual([4, 4]);
+    // 2026-09-28 去等分：单点 [4,4] 改为锚 ±3 带（各阶段按自身学时占比在带内定数）
+    expect(hints.subtasksPerStageRange).toEqual([2, 6]);
   });
 
   it('estimatedHours 缺失但频率信息完整时由 totalWeeks×sessionsPerWeek×分钟/60 推算总学时', () => {
@@ -228,7 +229,8 @@ describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数�
       { totalWeeks: 4, estimatedHours: null, sessionsPerWeek: 2, sessionsLengthMin: 60 }
     );
     expect(hints.targetSubtasksPerStage).toBe(2);
-    expect(hints.subtasksPerStageRange).toEqual([2, 2]);
+    // 去等分带（锚 2 → [2,5]）
+    expect(hints.subtasksPerStageRange).toEqual([2, 5]);
   });
 
   it('estimatedHours 与频率都缺失时用 pace 档位下限兜底（不再 null）', () => {
@@ -240,14 +242,17 @@ describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数�
 
   it('每阶段任务数超范围时触发大预算扩容（2026-09-27）：30h 预算不再被 5 任务×1h 压成 15h', () => {
     // 旧口径：30h/3 里程碑/1h → 10，被 standard 上限 5 夹住 ⇒ 全路径只承载 15h（收缩 50%）。
-    // 新口径：容量赤字（1800min > 90min×5）触发扩容——每阶段任务上限抬到 7、分钟上界抬到 128，
-    // 让结构容量 ≥ 预算（3×7×~128min ≈ 30h）。这是量级守恒（P0-3）的核心行为变更。
+    // 2026-09-27 口径：扩容同时抬任务数（→7）与分钟上界（→128）。
+    // 2026-09-28 粒度修正：分钟上界不再膨胀（单课 ≤ 会话/默认档 90min——50×82min 教训：
+    // 单课超用户单次可用时间 = 一节课一天上不完）；预算缺口由课数吸收（上界 10→14）。
+    // 30h/3 段：needed=ceil(600/90)=7 → range [3,7]，结构容量 3×7×90min=31.5h ≥ 30h，守恒由课数达成。
     const high = derivePlanningHints(
       null, null, null, null, ['S1', 'S2', 'S3'],
       { totalWeeks: null, estimatedHours: 30, sessionsPerWeek: null, sessionsLengthMin: null }
     );
     expect(high.targetSubtasksPerStage).toBe(7);
-    expect(high.subtaskMinutesRange[1]).toBeGreaterThan(90);
+    expect(high.subtasksPerStageRange).toEqual([4, 7]);
+    expect(high.subtaskMinutesRange[1]).toBeLessThanOrEqual(90);
     expect(high.targetTotalHours).toBe(30);
     // 1.4h / 4 里程碑 → ~0.35，下限硬编码 2
     const low = derivePlanningHints(
@@ -265,7 +270,8 @@ describe('targetSubtasksPerStage（每阶段任务数，总学时/里程碑数�
     );
     // A″：上界取 max(scope small 3, pace extended 6) = 6，故 16h/3≈5 不再被 scope 的 3 砍到 3；仍受 6 夹住
     expect(hints.targetSubtasksPerStage).toBe(5);
-    expect(hints.subtasksPerStageRange).toEqual([5, 5]);
+    // 去等分带（锚 5 → [2,8] 被 cap 6 夹住）
+    expect(hints.subtasksPerStageRange).toEqual([2, 6]);
   });
 
   it('keyStages 缺失时 targetSubtasksPerStage 为 null，沿用 pace 区间', () => {
@@ -299,7 +305,8 @@ describe('缺陷修复：学时未知时每阶段任务数不再落到 1', () =>
       { totalWeeks: 12, estimatedHours: 12, sessionsPerWeek: null, sessionsLengthMin: null }
     );
     expect(hints.targetSubtasksPerStage).toBe(4);
-    expect(hints.subtasksPerStageRange).toEqual([4, 4]);
+    // 去等分带（锚 4 → [2,7] 被 cap 6 夹住）
+    expect(hints.subtasksPerStageRange).toEqual([2, 6]);
     expect(hints.milestoneRange).toEqual([2, 8]);
     expect(hints.maxWeeks).toBe(15);
   });
@@ -414,11 +421,14 @@ describe('keyStages 缺失时的学时兜底（2026-09-27 横向扩测 heavy-fp#
     // 真实 heavy-fp#4 场景 time_horizon='三个月全职备考' → extended cap=8）
     expect(hints.targetMilestones).toBe(5);
     expect(hints.targetMilestones).not.toBeNull();
-    // 扩容链：perStage=490/5=98h>8 → 每阶段锚 = min(结构容量 40h, 98) = 40；单任务锚被 240min 上限钳制
-    expect(hints.targetHoursPerMilestone).toBe(40);
-    expect(hints.targetMinutesPerTask).toBe(240);
-    expect(hints.subtaskMinutesRange[1]).toBe(240);
-    expect(hints.targetSubtasksPerStage).toBe(10);
+    // 2026-09-28 粒度修正后：扩容只加课数不加单课分钟——分钟上界保持默认档 90min
+    //（不再被扩容块顶到 240）；课数上界 10→14，锚带 [11,14]；
+    // 结构容量 14×90min=21h/阶段（诚实装不下 98h/阶段，钳到 21）；
+    // 学时反推锚 round(490/5)=98 被 14 夹住 → targetSubtasksPerStage=14。
+    expect(hints.targetHoursPerMilestone).toBe(21);
+    expect(hints.targetMinutesPerTask).toBe(90);
+    expect(hints.subtaskMinutesRange[1]).toBe(90);
+    expect(hints.targetSubtasksPerStage).toBe(14);
   });
 
   it('keyStages 空且无学时信号 → 维持旧行为（scope 无则 null）', () => {

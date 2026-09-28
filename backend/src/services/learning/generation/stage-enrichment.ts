@@ -204,6 +204,28 @@ export async function enrichLearningPathWithAnderson(
     inFlightStageItemIds = new Set<string>();
     let completedStageCount = 0;
 
+    /**
+     * 逐阶段任务锚（2026-09-28 去等分）：按**本阶段实际学时**反推该阶段该出几个任务，
+     * 注入 planningHints.targetSubtasksForStage（stage-designer 规则 8 优先采用）。
+     * 全局 targetSubtasksPerStage 按总学时均摊，配合「恰好 N 课」强规则会把路径切成
+     * 5×10 式等分（真实案例：90h 预算 → 5×10，且单课分钟被扩容块顶穿会话档）。
+     * 锚分钟取 targetMinutesPerTask（已被会话档钳过），缺省退分钟上界 / 60。
+     */
+    const buildStageHints = (milestone: { estimatedHours: number | null }): any | null => {
+      const baseHints = (normalizedInput as any)?.planningHints || null;
+      if (!baseHints) return null;
+      const stageHours = Number(milestone.estimatedHours);
+      if (!Number.isFinite(stageHours) || stageHours <= 0) return { ...baseHints };
+      const anchorMinutes = Number(baseHints.targetMinutesPerTask)
+        || Number(baseHints.subtaskMinutesRange?.[1])
+        || 60;
+      const cap = Number(baseHints.subtasksPerStageRange?.[1]) || 14;
+      return {
+        ...baseHints,
+        targetSubtasksForStage: Math.max(2, Math.min(cap, Math.round((stageHours * 60) / anchorMinutes))),
+      };
+    };
+
     const processStageDesign = async (stageIndex: number): Promise<void> => {
       const milestone = learningPath.milestones[stageIndex];
       const stageStartedAt = new Date();
@@ -237,6 +259,13 @@ export async function enrichLearningPathWithAnderson(
           skipped: designerSkipped,
         });
       }
+      // 逐阶段任务锚（2026-09-28 去等分）：按本阶段实际学时反推 targetSubtasksForStage，
+      // 替换共享 baseInput 里的全局 planningHints（全局锚按总学时均摊 + 「恰好 N 课」规则
+      // = 5×10 式等分的来源）。clamp 用同一份逐阶段 hints，保证锚与硬上界一致。
+      const stageHints = buildStageHints(milestone);
+      const stageNormalizedInput = stageHints && (normalizedInput as any)
+        ? { ...(normalizedInput as any), planningHints: stageHints }
+        : normalizedInput;
       const stageDesignerInput = {
         milestone: {
           stageNumber: milestone.stageNumber,
@@ -254,6 +283,7 @@ export async function enrichLearningPathWithAnderson(
           } : null),
         } : {}),
         ...stageDesignerBaseInput,
+        normalizedInput: stageNormalizedInput,
         // 渐进式（批次 D）：上一阶段的学习者账本信号——脆弱/挣扎概念、先修缺口、
         // wrapup 里仍未掌握的点。stage-designer 据此调整下一阶段的坡度与回补任务。
         ...(progressive && options.previousStageOutcome
@@ -266,7 +296,7 @@ export async function enrichLearningPathWithAnderson(
       const rawStageTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
       // hints 硬执行：模型把 subtasksPerStageRange 当软参考（实测 hints=[2,2] 仍给 5 任务/段），
       // 这里按上界兜底裁剪，否则体量锚在上端失效（输出不随锚变化 ⇒ 连校准都测不了）。
-      const stageTasks = clampStageTasksToHints(rawStageTasks, (normalizedInput as any)?.planningHints);
+      const stageTasks = clampStageTasksToHints(rawStageTasks, stageHints || (normalizedInput as any)?.planningHints);
       if (stageTasks.length !== rawStageTasks.length) {
         logger.warn(`[stage-hints-clamp] 任务数按 hints 兜底裁剪：stage${milestone.stageNumber} ${rawStageTasks.length} → ${stageTasks.length}`);
       }

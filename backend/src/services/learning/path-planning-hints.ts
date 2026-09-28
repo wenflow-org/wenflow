@@ -182,6 +182,12 @@ export interface PlanningHints {
   targetMilestones: number | null;
   /** 强制每阶段子任务目标数量（由总学时/里程碑数推导，stage-designer 必须精确输出该值） */
   targetSubtasksPerStage: number | null;
+  /**
+   * 本阶段任务锚（2026-09-28 去等分）：stage-enrichment 逐阶段按该 milestone 实际学时反推，
+   * 存在时优先于 targetSubtasksPerStage（全局锚是按总学时均摊的，会合法化 5×10 式等分）。
+   * 仅 stage-designer 逐阶段调用时被注入，path-planning 主生成时为 null。
+   */
+  targetSubtasksForStage: number | null;
   /** 锚定总学时（课次×单次时长/goal 直接推断；存在时 path-planning 须把各阶段学时之和分配到 ±50% 内） */
   targetTotalHours: number | null;
   /** 每阶段学时锚（= targetTotalHours / targetMilestones；存在时各 milestone estimatedHours 应向它收敛，防大预算被模型惯性压回 ~10h/阶段） */
@@ -285,6 +291,7 @@ export function clampHintsToOneSitting(hints: PlanningHints): PlanningHints {
     maxWeeks: Math.min(hints.maxWeeks, cap.maxWeeks),
     targetMilestones: capTarget(hints.targetMilestones ?? null, cap.milestoneRange[1]),
     targetSubtasksPerStage: capTarget(hints.targetSubtasksPerStage ?? null, cap.subtasksPerStageRange[1]),
+    targetSubtasksForStage: capTarget(hints.targetSubtasksForStage ?? null, cap.subtasksPerStageRange[1]),
   };
 }
 
@@ -533,16 +540,18 @@ export function derivePlanningHints(
     ? anchorMin > capacityMin && perStageHours > 6
     : false;
   if (capacityDeficit) {
+    // 2026-09-28 粒度修正：扩容只加「课数」，不再放大「单课时长」。此前 avgTaskMin*2 会把
+    // 分钟上界顶到 240（session=60min 时实测单课均值 82min、锚 108min）——单课超过用户
+    // 单次可用时间 = 一节课一天上不完（真实案例：90h 预算被切成 5×10×82min）。
+    // 单课上界保持会话档（subtaskMinutesRange[1]，已按 timePerSession 校准，再封 90 防无会话
+    // 信息时默认 90 以上）；预算缺口由课数吸收（上界 10→14）；仍装不下的部分由
+    // targetHoursPerMilestone 的结构容量钳制诚实收缩（不多排账面学时）。
     const perStageMin = anchorMin / targetMilestones;
-    const needed = Math.ceil(perStageMin / Math.min(subtaskMinutesRange[1], 120));
+    const lessonMinutesCap = Math.min(subtaskMinutesRange[1], 90);
+    const needed = Math.ceil(perStageMin / lessonMinutesCap);
     subtasksPerStageRange = [
-      Math.max(3, Math.min(subtasksPerStageRange[0], Math.ceil(needed / 2))),
-      Math.min(10, Math.max(subtasksPerStageRange[1], needed)),
-    ];
-    const avgTaskMin = Math.ceil(perStageMin / subtasksPerStageRange[1]);
-    subtaskMinutesRange = [
-      Math.max(subtaskMinutesRange[0], 30),
-      Math.min(240, Math.max(subtaskMinutesRange[1], avgTaskMin * 2)),
+      Math.max(3, Math.min(subtasksPerStageRange[0], Math.ceil(needed / 3))),
+      Math.min(14, Math.max(subtasksPerStageRange[1], needed)),
     ];
   }
   // 锚定总学时透传（供 path-planning prompt 把"总预算"显式交给 LLM 分配）
@@ -562,11 +571,13 @@ export function derivePlanningHints(
   const fallbackPerStage = Math.min(subtasksCap, Math.max(paceFloor, 2));
   const targetSubtasksPerStage: number | null =
     perStageFromHours ?? (targetMilestones !== null ? fallbackPerStage : null);
-  // 学时反推时区间精确化为 [target, target]（沿用旧行为）；
-  // 兜底时区间与目标自洽但不塌成单点：下界抬到 ≥2，上界保留 subtasksCap。
+  // 2026-09-28 去等分：学时反推的锚从单点 [t,t] 改为 ±3 带。单点锚 + stage-designer
+  // 「恰好 N 课」强规则 = 全路径每阶段等数（真实案例 5×10；WPS 小预算路径 5×2 同理），
+  // 与各阶段学时占比脱钩。带内由逐阶段锚（stage-enrichment 的 targetSubtasksForStage）
+  // 按本阶段学时定数，全局锚只兜底无学时信息的阶段。
   const effectiveSubtasksPerStageRange: [number, number] = targetSubtasksPerStage !== null
     ? (perStageFromHours !== null
-        ? [targetSubtasksPerStage, targetSubtasksPerStage]
+        ? [Math.max(2, targetSubtasksPerStage - 3), Math.min(subtasksCap, targetSubtasksPerStage + 3)]
         : [fallbackPerStage, subtasksCap])
     : subtasksPerStageRange;
 
@@ -599,6 +610,7 @@ export function derivePlanningHints(
     conceptRange,
     subtasksPerStageRange: effectiveSubtasksPerStageRange,
     targetSubtasksPerStage,
+    targetSubtasksForStage: null,
     targetTotalHours,
     targetHoursPerMilestone,
     targetMinutesPerTask,
