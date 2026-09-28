@@ -14,6 +14,7 @@ import { executeSkill } from '../../../skills';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
 import { buildStageFillNote } from './stage-fill-note';
+import { detectStageFiller, isStageFiller } from './stage-filler';
 import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS } from '../../materials/material-prompt-projection';
@@ -500,6 +501,20 @@ export async function enrichLearningPathWithAnderson(
         }
         const stageOutput = stageDesignOutputs.find((item) => item.milestoneId === milestone.id);
         const stageTasks = stageOutput?.subtasks || [];
+        // R6-1 filler 观测（只观测不阻断）：R5 容量扩容后评审实证 filler ~10-15%
+        //（同对象第三遍、同卡三遍、循环多跑轮次、回锅填空四模式）。强删会误伤合法
+        // consolidation（同对象第二遍整合是设计内），故只落 log 供后续决策。
+        const fillerReport = detectStageFiller(stageTasks as Array<{ title?: string }>);
+        if (isStageFiller(fillerReport)) {
+          logger.warn('[stage-enrichment] 阶段任务检出 filler 形态（观测，不阻断）', {
+            pathId: learningPath.id,
+            milestoneId: milestone.id,
+            stageNumber: milestone.stageNumber,
+            tasks: stageTasks.length,
+            duplicatePairs: fillerReport.duplicatePairs.slice(0, 3).map((p) => `${p.a.slice(0, 18)}≈${p.b.slice(0, 18)}`),
+            repeatedObjects: fillerReport.repeatedObjects.slice(0, 4).map((o) => `${o.object}×${o.hits}`),
+          });
+        }
         // 阶段估时回写：以本阶段任务分钟汇总为准（ceil 到整小时），供各处展示与路径汇总使用
         const stageTotalMinutes = (stageTasks as Array<{ estimatedMinutes?: number }>)
           .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
