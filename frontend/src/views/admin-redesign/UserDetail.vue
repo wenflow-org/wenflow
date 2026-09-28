@@ -24,110 +24,81 @@
       </div>
     </header>
 
-    <!-- 主区双栏（左 2/3 主内容 · 右 1/3 侧栏）。
-         原「最近活跃」卡只有两行合成文字（最后登录/累计会话），左栏大面积留白；
-         改为真实接口数据：teaching-sessions / goal-conversations 均支持 userId 过滤，
-         会话行可下钻只读座舱（session-real，带 from 记忆返回本页）。 -->
-    <div class="ud-main">
-      <div class="ud-col ud-col--main">
-        <section class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">教学会话</h3>
-            <span class="mk-card__meta">
-              <MkLoading v-if="tsLoading" inline min text="加载中…" />
-              <template v-else>{{ tsError ? '加载失败' : `${tsRows.length} 条` }}</template>
-            </span>
-          </div>
-          <div class="ud-list">
-            <button v-for="s in tsRows" :key="s.id" type="button" class="ud-row" @click="openSession(s.id)">
-              <span class="mk-badge" :class="sessBadge(s.status)">{{ statusText(s.status) || '—' }}</span>
-              <span class="ud-row__main">
-                <strong class="ud-row__title" :title="s.topic">{{ s.topic }}</strong>
-                <span class="ud-row__sub">
-                  {{ s.subject }} · {{ s.messageCount }} 条消息<template v-if="s.durationText"> · 时长 {{ s.durationText }}</template>
-                </span>
-              </span>
-              <span class="ud-row__time">{{ s.startAgo }}</span>
-            </button>
-            <p v-if="!tsLoading && !tsRows.length" class="ud-none">暂无教学会话</p>
-          </div>
-        </section>
-
-        <section class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">目标对话</h3>
-            <span class="mk-card__meta">
-              <MkLoading v-if="gcLoading" inline min text="加载中…" />
-              <template v-else>{{ gcError ? '加载失败' : `${gcRows.length} 条` }}</template>
-            </span>
-          </div>
-          <div class="ud-list">
-            <div v-for="g in gcRows" :key="g.id" class="ud-row ud-row--static">
-              <span class="mk-badge" :class="stageBadgeCls(g.stage)">{{ stageText(g.stage) || '—' }}</span>
-              <span class="ud-row__main">
-                <strong class="ud-row__title" :title="g.summary">{{ g.summary }}</strong>
-                <span class="ud-row__sub">{{ statusText(g.status) || '—' }}<template v-if="g.hasPath"> · 已生成学习路径</template></span>
-              </span>
-              <span class="ud-row__time">{{ g.createdAgo }}</span>
-            </div>
-            <p v-if="!gcLoading && !gcRows.length" class="ud-none">暂无目标对话</p>
-          </div>
-        </section>
+    <!-- 主区通栏：教学会话 / 目标对话为真实接口数据（userId 过滤），
+         会话行可下钻只读座舱（session-real，带 from 记忆返回本页）。
+         原「等级进度」卡与页头 XP/等级 KPI 完全重复，删；
+         开发视角许可降级为一行条：未授权只留一句说明，授权才展开范围与动作。 -->
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">教学会话</h3>
+        <span class="mk-card__meta">
+          <MkLoading v-if="tsLoading" inline min text="加载中…" />
+          <template v-else>{{ tsError ? '加载失败' : `${tsRows.length} 条` }}</template>
+        </span>
       </div>
-
-      <div class="ud-col ud-col--side">
-        <!-- 等级进度（XP 公式与后端 level.util.ts 同源，进度条复用 .mk-minibar 原语） -->
-        <section class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">等级进度</h3>
-            <span class="mk-card__meta">{{ levelLabel(d.level) }}</span>
-          </div>
-          <div class="ud-level">
-            <span class="mk-minibar"><span class="mk-minibar__fill" :style="{ width: levelPct + '%' }"></span></span>
-            <p class="ud-level__hint">{{ xpHintOf(d.xp) }}</p>
-            <div class="ud-level__grid">
-              <div><span>累计 XP</span><strong>{{ d.xp }}</strong></div>
-              <div><span>当前等级</span><strong>{{ levelLabel(d.level) }}</strong></div>
-            </div>
-          </div>
-        </section>
-
-        <!-- 开发视角许可（侧栏卡，与活跃并列） -->
-        <section class="mk-card ud-grant">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">开发视角许可</h3>
-            <span class="mk-badge" :class="grantBadgeCls">{{ grantStatusLabel }}</span>
-          </div>
-          <p class="ud-grant__copy">
-            仅当用户明确授予协助许可后，才能打开开发调试站进入该用户视角排查问题。
-          </p>
-          <div v-if="grantMessage" class="ud-grant__notice" :class="grantMsgTone">{{ grantMessage }}</div>
-          <div class="ud-grant__grid">
-            <div><span>开放范围</span><strong>{{ grantScopeLabel }}</strong></div>
-            <div><span>到期时间</span><strong>{{ grantExpiresLabel }}</strong></div>
-            <div><span>协助说明</span><strong>{{ grantNoteLabel }}</strong></div>
-            <!-- 冒充凭据有效期：过期后轮询清键，本行自动消失 -->
-            <div v-if="projectionTokenExpiryLabel">
-              <span>冒充凭据</span><strong>{{ projectionTokenExpiryLabel }}</strong>
-            </div>
-          </div>
-          <div class="ud-grant__actions">
-            <button type="button" class="mk-status__action" :disabled="grantLoading" @click="loadGrant">
-              {{ grantLoading ? '刷新中…' : '刷新许可' }}
-            </button>
-            <button
-              type="button"
-              class="mk-status__action mk-status__action--primary"
-              :disabled="grantStatus !== 'active' || grantOpening"
-              :title="grantStatus !== 'active' ? '需先授权' : undefined"
-              @click="openDebugStation"
-            >
-              {{ grantOpening ? '打开中…' : '打开开发调试站' }}
-            </button>
-          </div>
-        </section>
+      <div class="ud-list">
+        <button v-for="s in tsRows" :key="s.id" type="button" class="ud-row" @click="openSession(s.id)">
+          <span class="mk-badge" :class="sessBadge(s.status)">{{ statusText(s.status) || '—' }}</span>
+          <span class="ud-row__main">
+            <strong class="ud-row__title" :title="s.topic">{{ s.topic }}</strong>
+            <span class="ud-row__sub">
+              {{ s.subject }} · {{ s.messageCount }} 条消息<template v-if="s.durationText"> · 时长 {{ s.durationText }}</template>
+            </span>
+          </span>
+          <span class="ud-row__time">{{ s.startAgo }}</span>
+        </button>
+        <p v-if="!tsLoading && !tsRows.length" class="ud-none">暂无教学会话</p>
       </div>
-    </div>
+    </section>
+
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">目标对话</h3>
+        <span class="mk-card__meta">
+          <MkLoading v-if="gcLoading" inline min text="加载中…" />
+          <template v-else>{{ gcError ? '加载失败' : `${gcRows.length} 条` }}</template>
+        </span>
+      </div>
+      <div class="ud-list">
+        <div v-for="g in gcRows" :key="g.id" class="ud-row ud-row--static">
+          <span class="mk-badge" :class="stageBadgeCls(g.stage)">{{ stageText(g.stage) || '—' }}</span>
+          <span class="ud-row__main">
+            <strong class="ud-row__title" :title="g.summary">{{ g.summary }}</strong>
+            <span class="ud-row__sub">{{ statusText(g.status) || '—' }}<template v-if="g.hasPath"> · 已生成学习路径</template></span>
+          </span>
+          <span class="ud-row__time">{{ g.createdAgo }}</span>
+        </div>
+        <p v-if="!gcLoading && !gcRows.length" class="ud-none">暂无目标对话</p>
+      </div>
+    </section>
+
+    <!-- 开发视角许可：一行条（未授权 = 徽章 + 一句说明 + 刷新；授权 = 展开范围/到期与打开按钮） -->
+    <section class="mk-card ud-grant">
+      <div class="ud-grant__bar">
+        <span class="mk-badge" :class="grantBadgeCls">开发视角许可 · {{ grantStatusLabel }}</span>
+        <span class="ud-grant__meta" :title="grantStatus === 'active' ? grantNoteLabel : undefined">
+          <template v-if="grantStatus === 'active'">
+            {{ grantScopeLabel }}<template v-if="projectionGrant?.expiresAt"> · 至 {{ grantExpiresLabel }}</template><template v-if="projectionTokenExpiryLabel"> · {{ projectionTokenExpiryLabel }}</template>
+          </template>
+          <template v-else>用户授予协助许可后，可打开开发调试站进入其视角排查问题</template>
+        </span>
+        <span class="ud-grant__bar-actions">
+          <button type="button" class="mk-status__action" :disabled="grantLoading" @click="loadGrant">
+            {{ grantLoading ? '刷新中…' : '刷新' }}
+          </button>
+          <button
+            v-if="grantStatus === 'active'"
+            type="button"
+            class="mk-status__action mk-status__action--primary"
+            :disabled="grantOpening"
+            @click="openDebugStation"
+          >
+            {{ grantOpening ? '打开中…' : '打开开发调试站' }}
+          </button>
+        </span>
+      </div>
+      <div v-if="grantMsgTone === 'ud-grant__notice--error'" class="ud-grant__notice ud-grant__notice--error">{{ grantMessage }}</div>
+    </section>
   </div>
 
   <div v-else-if="detailError" class="mk-page ud">
@@ -175,9 +146,6 @@ interface Detail {
   joined: string
   /** 最后登录（仅列表兜底数据有；详情接口不回该字段） */
   lastLogin: string
-  /** 等级进度卡原始值（XP 公式与后端 level.util 同源） */
-  xp: number
-  level: string
   stats: { label: string; value: string; hint?: string }[]
 }
 
@@ -195,15 +163,6 @@ function levelLabel(level: string | null | undefined): string {
   const map: Record<string, string> = { beginner: '初学', intermediate: '进阶', advanced: '高级' }
   return map[level] || level
 }
-
-// ===== 等级进度（当前等级内的 XP 百分比；阈值公式与 xpHintOf 同源） =====
-const levelPct = computed(() => {
-  const xp = Math.max(0, liveDetail.value?.xp ?? 0)
-  const n = Math.floor(Math.sqrt(xp / 100)) + 1
-  const next = 100 * n * n
-  const prev = 100 * (n - 1) * (n - 1)
-  return Math.min(100, Math.max(0, Math.round(((xp - prev) / Math.max(next - prev, 1)) * 100)))
-})
 
 // ===== 用户维度活动数据（教学会话 / 目标对话，真实接口 userId 过滤） =====
 interface SessionRow {
@@ -538,8 +497,6 @@ async function loadDetail() {
       role: user.isAdmin || base?.isAdmin ? '管理员' : '用户',
       joined: timeAgo(String(user.createdAt || base?.createdAt || '')),
       lastLogin: base?.lastLoginAt ? timeAgo(String(base.lastLoginAt)) : '',
-      xp: Number(user.xp ?? base?.xp ?? 0),
-      level: String(user.currentLevel || base?.currentLevel || ''),
       stats: [
         { label: '路径', value: String(base?.paths ?? pathCount) },
         // 列表兜底缺失时不臆造 0：无数据显示 '—'
@@ -558,8 +515,6 @@ async function loadDetail() {
         role: base.isAdmin ? '管理员' : '用户',
         joined: timeAgo(base.createdAt),
         lastLogin: base.lastLoginAt ? timeAgo(String(base.lastLoginAt)) : '',
-        xp: Number(base.xp || 0),
-        level: String(base.currentLevel || ''),
         stats: [
           { label: '路径', value: String(base.paths) },
           { label: '会话', value: String(base.sessions) },
@@ -594,14 +549,7 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
   gap: 12px;
 }
 
-/* 主区双栏（左 2/3 主内容 · 右 1/3 侧栏） */
-.ud-main {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-}
-.ud-col { display: grid; gap: 14px; align-content: start; }
+/* 主区通栏：卡片直接入 .ud 网格堆叠（原双栏右列与 KPI 重复，已删） */
 .ud-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 .ud-list { display: grid; }
@@ -641,27 +589,24 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 }
 .ud-row__time { color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
 
-.ud-level { display: grid; gap: 10px; padding: 14px 16px 16px; }
-.ud-level__hint { margin: 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.ud-level__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.ud-level__grid div {
-  display: grid;
-  gap: 2px;
-  padding: 8px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  font-size: var(--mk-fs-micro);
+/* 开发视角许可：一行条（未授权 = 徽章 + 一句说明；授权才展开范围与打开按钮） */
+.ud-grant__bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
 }
-.ud-level__grid span { color: var(--mk-faint); font-weight: 700; font-size: var(--mk-fs-micro); }
-
-.ud-grant { margin-top: 0; }
-.ud-grant__copy {
-  margin: 0;
-  padding: 0 16px 10px;
+.ud-grant__meta {
+  flex: 1;
+  min-width: 0;
+  color: var(--mk-faint);
   font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  line-height: 1.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.ud-grant__bar-actions { display: flex; gap: 8px; margin-left: auto; }
 .ud-grant__notice {
   margin: 0 16px 10px;
   padding: 8px 10px;
@@ -675,62 +620,30 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
   background: var(--mk-red-bg, #fef2f2);
   color: var(--mk-red, #dc2626);
 }
-.ud-grant__grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  padding: 0 16px 12px;
-}
-.ud-grant__grid div {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  gap: 2px 12px;
-  padding: 8px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  font-size: var(--mk-fs-micro);
-}
-.ud-grant__grid span { color: var(--mk-faint); font-weight: 700; font-size: var(--mk-fs-micro); white-space: nowrap; }
-.ud-grant__grid strong { text-align: right; min-width: 0; }
-.ud-grant__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 0 16px 16px;
-}
 
 @media (max-width: 1100px) {
   .ud-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ud-main { grid-template-columns: 1fr; }
-  .ud-grant__grid { grid-template-columns: 1fr; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
   .ud-none { font-size: var(--mk-fs-body); }
   .ud-row__sub { font-size: var(--mk-fs-body); }
-  .ud-grant__copy { font-size: var(--mk-fs-body); }
+  .ud-grant__meta { font-size: var(--mk-fs-body); }
   .ud-grant__notice { font-size: var(--mk-fs-body); }
-  .ud-grant__grid div { font-size: var(--mk-fs-body); }
-  .ud-grant__grid span { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
   .ud-none { font-size: var(--mk-fs-body); }
   .ud-row__sub { font-size: var(--mk-fs-body); }
-  .ud-grant__copy { font-size: var(--mk-fs-body); }
+  .ud-grant__meta { font-size: var(--mk-fs-body); }
   .ud-grant__notice { font-size: var(--mk-fs-body); }
-  .ud-grant__grid div { font-size: var(--mk-fs-body); }
-  .ud-grant__grid span { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
   .ud-none { font-size: var(--mk-fs-emphasis); }
   .ud-row__sub { font-size: var(--mk-fs-emphasis); }
-  .ud-grant__copy { font-size: var(--mk-fs-emphasis); }
+  .ud-grant__meta { font-size: var(--mk-fs-emphasis); }
   .ud-grant__notice { font-size: var(--mk-fs-emphasis); }
-  .ud-grant__grid div { font-size: var(--mk-fs-emphasis); }
-  .ud-grant__grid span { font-size: var(--mk-fs-body); }
 }
 </style>
