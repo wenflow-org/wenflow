@@ -10,7 +10,8 @@
       <span v-if="unresolvedCount > 0" class="mk-status__meta mk-status__meta--bad">未解析 {{ unresolvedCount }}</span>
       <span v-if="w4Drifted.length" class="mk-status__meta mk-status__meta--bad">{{ TERMS.driftHashQualified }} {{ w4Drifted.length }}</span>
       <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">刷新</button>
+        <!-- 刷新此前只重拉 definitions， stages / 对账仍是旧值（治理面板数字对不上）→ 三个域全拉 -->
+        <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
       </span>
     </div>
 
@@ -22,6 +23,7 @@
         type="button"
         class="orch-stage-tab"
         :class="{ 'is-active': pane !== 'sandbox' && active === s.id }"
+        :title="stageTabTitle(s)"
         @click="selectStage(s.id)"
       >
         <span class="orch-stage-tab__name">{{ s.name.replace(/阶段$/, '') }}</span>
@@ -49,15 +51,25 @@
     <section v-else-if="current && pane === 'routing'" class="mk-card mk-card--fill orch-pane orch-routing">
       <div class="mk-card__head">
         <h3 class="mk-card__title">字段路由与编排文件</h3>
-        <span class="mk-card__meta">{{ current.skills.length }} Skill · 批量查阅 / 编辑编排 YAML</span>
+        <!-- 阶段级变量流：截断只显示前 5 项，必须把总数说出来（此前静默 slice） -->
+        <span class="mk-card__meta" :title="ioContractTitle(current)">
+          {{ current.skills.length }} Skill · 输入 {{ current.consumes.length }}/{{ current.consumesTotal }} 字段 · 输出 {{ current.produces.length }}/{{ current.producesTotal }} 字段
+        </span>
       </div>
       <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
     </section>
     <section v-else-if="current && pane === 'governance'" class="mk-card mk-card--fill orch-pane orch-pane--scroll">
       <div class="mk-card__head">
         <h3 class="mk-card__title">治理：{{ TERMS.driftContract }}报告 + 变更审计</h3>
-        <span class="mk-card__meta">编辑后核对文件与库一致</span>
+        <!-- 运行时定义与对账口径落到治理面板：orchCount/skillDefCount/recReport 此前只写不读 -->
+        <span class="mk-card__meta" :title="govMetaTitle">
+          编辑后核对文件与库一致 · 编排定义 {{ orchCount }} · Skill 定义 {{ skillDefCount }}<template v-if="recReport"> · 对账已上线 {{ recLiveCount }}/{{ recTotalCount }}</template>
+        </span>
       </div>
+      <!-- 定义明细（definitionNotes 此前只写不读，两个定义接口等于白拉） -->
+      <ul v-if="definitionNotes.length" class="orch-gov-defs">
+        <li v-for="(n, i) in definitionNotes" :key="i" class="orch-gov-defs__item">{{ n }}</li>
+      </ul>
       <DriftAuditPanel :stage="active" />
     </section>
     <div v-else-if="pane === 'sandbox'" class="orch-pane orch-pane--scroll">
@@ -69,7 +81,22 @@
         <MockSkeletonTable :cols="6" :rows="8" />
         <MkLoading text="编排数据加载中…" />
       </template>
-      <MkEmptyState v-else title="暂无编排阶段数据" />
+      <!-- 接口失败 ≠ 没有数据：此前拓扑/阶段拉取失败也落「暂无编排阶段数据」，
+           管理员无从判断是该重试还是后端本就为空 -->
+      <MkEmptyState
+        v-else-if="topoFailure"
+        tone="error"
+        icon="⚠"
+        title="编排阶段数据加载失败"
+        :description="topoFailure"
+        action-text="重试"
+        @action="retryStages"
+      />
+      <MkEmptyState
+        v-else
+        title="暂无编排阶段数据"
+        description="后端未登记任何阶段：编排文件与拓扑 Agent 均为空。"
+      />
     </div>
   </div>
 </template>
@@ -78,7 +105,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource } from './store'
-import { liveTopoNodes, liveSkillCatalog, liveLoading, errMsg } from './live'
+import { liveTopoNodes, liveSkillCatalog, liveLoading, liveFailures, errMsg, reloadLiveTopology } from './live'
 import { TERMS } from './terms'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
@@ -133,26 +160,37 @@ function selectStage(id: string) {
 
 const defsLoading = ref(false)
 const defsLoaded = ref(false)
+/** 阶段清单端点拉取中（与 defsLoading / recLoading 共同驱动状态条「刷新」忙碌态） */
+const stagesLoading = ref(false)
 const orchCount = ref(0)
 const skillDefCount = ref(0)
 const definitionNotes = ref<string[]>([])
 const orchDefs = ref<Array<Record<string, any>>>([])
-// selectStage 由阶段泳道快捷入口调用（保留语义：切阶段 + 回主视图）
-void selectStage
 
 /* ================= 完成度对账（reconciliation + readiness W4，live-only） ================= */
 const recReport = ref<SkillReconciliationReport | null>(null)
 const w4Drifted = ref<string[]>([])
+/** 对账拉取中（供「刷新」按钮统一忙碌态） */
+const recLoading = ref(false)
 
 async function loadReconciliation() {
-  const [rec, read] = await Promise.all([
-    adminSkillsApi.getReconciliation().catch(() => null),
-    adminSkillsApi.getReadiness(false).catch(() => null),
-  ])
-  recReport.value = rec?.data?.data ?? null
-  const checks = (read?.data?.data as { checks?: { W4?: { drifted?: string[] } } } | undefined)?.checks
-  w4Drifted.value = checks?.W4?.drifted || []
+  recLoading.value = true
+  try {
+    const [rec, read] = await Promise.all([
+      adminSkillsApi.getReconciliation().catch(() => null),
+      adminSkillsApi.getReadiness(false).catch(() => null),
+    ])
+    recReport.value = rec?.data?.data ?? null
+    const checks = (read?.data?.data as { checks?: { W4?: { drifted?: string[] } } } | undefined)?.checks
+    w4Drifted.value = checks?.W4?.drifted || []
+  } finally {
+    recLoading.value = false
+  }
 }
+
+/** 对账口径（治理面板）：已上线 = status=live 的行数 / 登记总数 */
+const recLiveCount = computed(() => recReport.value?.summary.byStatus?.live ?? 0)
+const recTotalCount = computed(() => recReport.value?.summary.total ?? 0)
 
 async function loadDefinitions() {
   defsLoading.value = true
@@ -197,6 +235,13 @@ watch(dataSource, () => {
   if (!recReport.value) void loadReconciliation()
 })
 
+/** 状态条「刷新」：三个域（阶段清单 / 运行时定义 / 对账）全拉，避免只刷一半 */
+const refreshing = computed(() => defsLoading.value || stagesLoading.value || recLoading.value)
+async function refreshAll() {
+  if (refreshing.value) return
+  await Promise.all([loadDefinitions(), loadStages(), loadReconciliation()])
+}
+
 interface SkillNode { id: string; name: string; calls: number; produces: string[] }
 interface DefStep { step: number; role?: string; condition?: string; loopOver?: string; agentId?: string; resolved?: { displayName?: string; kind?: string; nodeKind?: string; unresolved?: boolean } }
 interface Stage {
@@ -205,6 +250,9 @@ interface Stage {
   agentId: string
   consumes: string[]
   produces: string[]
+  /** 阶段级变量流总数（consumes/produces 本身最多显示前 5 项） */
+  consumesTotal: number
+  producesTotal: number
   skills: SkillNode[]
   defSteps?: DefStep[]
 }
@@ -228,6 +276,7 @@ const defById = computed(() => new Map(orchDefs.value.map((d) => [d.id, d])))// 
 const stageList = ref<Array<{ id: string; displayName: string }>>([])
 
 async function loadStages() {
+  stagesLoading.value = true
   try {
     const res = await adminFieldRoutingsApi.getStages()
     const stages = res.data?.data?.stages || []
@@ -240,6 +289,8 @@ async function loadStages() {
   } catch {
     // 端点不可用：stageList 置空（由拓扑 Agent 节点派生，仍为真实数据）
     stageList.value = []
+  } finally {
+    stagesLoading.value = false
   }
 }
 
@@ -284,8 +335,11 @@ const stages = computed<Stage[]>(() => {
       id: s.id,
       name: s.displayName,
       agentId,
+      // 截断到前 5 项，但总数随数据带出（面板/ tooltip 报「共 N 项」）
       consumes: allInputs.slice(0, 5),
       produces: allOutputs.slice(0, 5),
+      consumesTotal: allInputs.length,
+      producesTotal: allOutputs.length,
       skills,
       defSteps: def?.steps || []
     }
@@ -311,13 +365,59 @@ const statusTone = computed(() => {
   const unresolved = stages.value.some((s) => s.defSteps?.some((d) => d.resolved?.unresolved))
   return unresolved ? 'warn' : 'ok'
 })
-// 后端阶段名已含"阶段"（如"Goal 阶段"），避免重复拼接
-const stageTitle = computed(() => {
-  const name = current.value?.name || ''
-  return name.endsWith('阶段') ? name : `${name}阶段`
-})
-void stageTitle.value
+
+/* ================= 失败态：接口失败 ≠ 没有数据 =================
+   阶段清单依赖 live boot 的 topology 域（liveFailures.topology）。
+   该域失败时 liveTopoNodes 为空 → stages 为空，此前与「后端本就没数据」
+   同落「暂无编排阶段数据」，把接口失败伪装成空态；这里区分并给重试。 */
+const topoFailure = computed(() => liveFailures.value.topology || '')
+
+async function retryStages() {
+  await Promise.all([
+    loadStages(),
+    reloadLiveTopology('all')
+      .then(() => { delete liveFailures.value.topology })
+      // 仍失败：保留 liveFailures.topology，错误态继续给原因 + 可再次重试
+      .catch(() => undefined)
+  ])
+}
+
+/** 阶段 tab tooltip：skills=0 时说明去向（此前 tab 只显示「0 Skill」，无从判断是真空还是没拉到） */
+function stageTabTitle(s: Stage): string {
+  if (!s.skills.length) return '该阶段下辖 0 个 Skill：可能调度树未登记，或拓扑 / 目录尚未拉取成功'
+  return `${s.name}：${s.skills.length} 个 Skill · ${stageCalls(s)} 次调用`
+}
+
+/** 字段路由卡头 tooltip：阶段级变量流总量（截断前口径） */
+function ioContractTitle(s: Stage): string {
+  return `阶段级变量流来自下辖 Skill 的输入/输出字段（去重）；输入、输出各最多显示前 5 项，共 ${s.consumesTotal} 输入 / ${s.producesTotal} 输出`
+}
+
+/** 治理卡头 tooltip：定义与对账口径说明 */
+const govMetaTitle = computed(() =>
+  [
+    '运行时定义：GET /admin/runtime-definitions（orchestrator / agent 两类）',
+    recReport.value ? `对账：已上线 ${recLiveCount.value} / 登记 ${recTotalCount.value}（口径含外挂能力）` : '对账报告不可用'
+  ].join('；')
+)
 </script><style scoped>
+/* 治理面板：运行时定义明细（definitionNotes，micro 列表，不抢漂移报告的视觉重心） */
+.orch-gov-defs {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+}
+.orch-gov-defs__item {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* 阶段导航：五个 tab = 五个阶段（大分段卡，每卡含阶段名 + Skill/调用概要） */
 .orch-pane-tabs { margin-bottom: 2px; }
 /* ===== 阶段工作区（fill 布局：占满剩余视高，底部不再留空白；面板各自内滚，页面不滚） ===== */

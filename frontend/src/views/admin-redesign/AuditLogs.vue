@@ -266,10 +266,13 @@
       />
     </div>
 
-    <!-- 空态 -->
+    <!-- 空态（P1-1/P2-8，2026-09-27 走查）：
+         min：本页是 .mk-card--fill 应用式布局，未传 :min 时空态贴卡片头、下方 60-70% 视口空白；
+         文案按 tab 分流，筛选无结果时登录 tab 也说「无登录记录」而非统一的「无审计记录」 -->
     <MkEmptyState
       v-else
-      :title="isFiltered ? '当前筛选无审计记录' : tab === 'login' ? '暂无登录审计' : '暂无审计记录'"
+      min
+      :title="isFiltered ? (tab === 'login' ? '当前筛选无登录记录' : '当前筛选无审计记录') : tab === 'login' ? '暂无登录审计' : '暂无审计记录'"
       :description="tab === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕'"
       :action-text="isFiltered ? '清除筛选' : ''"
       @action="clearFilters"
@@ -974,4 +977,29 @@ html[data-theme='dark'] .log-method--patch { background: rgba(167, 139, 250, 0.1
 html[data-theme='dark'] .log-method--delete { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
 html[data-theme='dark'] .log-method--options,
 html[data-theme='dark'] .log-method--head { background: #2d2d2f; color: #afb1b6; }
+
+/* ================= 空态撑满主区剩余高度（P1-1，2026-09-27 走查「空态利用」）=================
+   本页是 .mk-page--fill + .mk-card--fill 应用式布局：空态带 mk-empty--min 后若不按本页壳层
+   覆写 --mk-empty-min-h，会用全局默认口径（100dvh - 230px）——本页状态条上方还多一行 pills
+   切换、卡片内多一层筛选头，默认值会把空态撑出卡片导致底部裁切。走 BatchExperiments.vue
+   同款页面覆写口（mk-primitives.css 预留），按本页壳层实测逐项推导（1920×1080、无 zoom；
+   本页挂在 AdminConsole 壳层 .mshell__content 内滚动）：
+     面包屑 .mshell__crumb         ~32（上下 7px 内边距 + 12px 微字号行高 ~18 + 1px 下边框）
+     页面 padding-top               16（.mk-page--fill 的 --mk-space-4）
+     状态条 .mk-status              48（min-height，带「刷新」按钮即撑满该高度）
+     gap（状态条 → pills 行）        12（.mk-page--fill 的 gap）
+     pills 视图切换行               ~36（容器 3px×2 + 胶囊 5px×2 + 微字号行高 ~20）
+     gap（pills → 主卡片）           12（.mk-page--fill 的 gap）
+     卡片头 .mk-card__head          ~54（11px 内边距×2 + 32px 筛选控件；失败 TOP chips 换行的
+                                       场景必有数据，不会落到空态分支，不参与推导）
+     卡片上下边框                    2
+     页面 padding-bottom            20（.mk-page 的 --mk-space-5）
+   合计 ≈232，留 ~8px 余量取整 240（宁少勿溢：多留余量只是空态盒底部差一点撑满，
+   少留则 min-height 顶破 flex 高度被 .mk-page--fill 的 overflow:hidden 裁掉）。
+   上限用 min(..., 1200px) 而非 max-height：CSS 里 min-height 优先于 max-height，
+   超长竖屏下直接写 max-height 会被 min 顶掉不生效，min() 才能真正收口。
+   骨架/错误态/列表分支不带 mk-empty--min，不受影响。 */
+.mk-card--fill > .mk-empty--min {
+  --mk-empty-min-h: min(calc(100dvh - 240px), 1200px);
+}
 </style>

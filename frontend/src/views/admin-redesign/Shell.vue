@@ -139,7 +139,18 @@
     <div class="mshell__main">
       <main ref="contentEl" class="mshell__content">
         <div v-if="crumb" class="mshell__crumb">
-          <span class="mshell__crumb-label" :title="crumbTitle || undefined">{{ crumb }}</span>
+          <!-- 深层子页的可点「返回上一级」：此前是不可点 span（仅 title 全 ID），
+               二级页虽各有 mk-back，但面包屑本身不可点仍是走查反馈的可达性问题 -->
+          <button
+            v-if="crumbClickable"
+            type="button"
+            class="mshell__crumb-label mshell__crumb-label--action"
+            :title="`${crumbTitle || crumb}（点击返回上一级）`"
+            @click="$emit('crumb-click')"
+          >
+            {{ crumb }}
+          </button>
+          <span v-else class="mshell__crumb-label" :title="crumbTitle || undefined">{{ crumb }}</span>
         </div>
         <slot />
       </main>
@@ -167,8 +178,8 @@ import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
 import { readTheme, writeTheme, applyDocumentTheme } from '@/utils/theme'
 import { version as appVersion } from '../../../package.json'
 
-const props = defineProps<{ current: string; crumb?: string; crumbTitle?: string; release?: boolean }>()
-const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'glossary'): void }>()
+const props = defineProps<{ current: string; crumb?: string; crumbTitle?: string; crumbClickable?: boolean; release?: boolean }>()
+const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'glossary'): void; (e: 'crumb-click'): void }>()
 
 /* 滚动修复 #9：回到顶部按钮（内容区滚动时出现）；
    应用式布局下真正滚动的是页面级容器（admin 为 .mk-page），
@@ -660,6 +671,16 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 可点面包屑（二级/三级页「返回上一级」）：hover/聚焦给可点反馈，命中区 24px 保底 */
+.mshell__crumb-label--action {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.mshell__crumb-label--action:hover { color: var(--mk-ink); text-decoration: underline; }
+.mshell__crumb-label--action:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color: var(--mk-line); }
 
 /* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半） */

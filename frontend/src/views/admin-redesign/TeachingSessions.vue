@@ -8,7 +8,9 @@
       <strong v-if="!embedded" class="mk-status__title">教学会话</strong>
       <span v-if="!embedded" class="mk-status__sep"></span>
       <span v-if="advisoryCount" class="mk-status__meta" title="含建议的会话数">有建议 {{ advisoryCount }}</span>
-      <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ rows.length }} 条 · 仅显示最近 {{ LIST_LIMIT }} 条</span>
+      <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ listTotal }} 条</span>
+      <!-- 达 LIST_LIMIT 上限才提示截断，并用后端 body.total 给出真实总量（不足上限时列表即全量，不渲染该提示） -->
+      <span v-if="truncated" class="mk-status__meta" :title="listTotal > LIST_LIMIT ? `后端共 ${listTotal} 条，页面仅加载最近 ${LIST_LIMIT} 条` : `页面仅加载最近 ${LIST_LIMIT} 条`">仅显示最近 {{ LIST_LIMIT }} 条<template v-if="listTotal > LIST_LIMIT">（共 {{ listTotal }} 条）</template></span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshNow">
           {{ refreshing ? '刷新中…' : '刷新' }}
@@ -18,7 +20,7 @@
 
     <!-- 深链未命中提示：?session= 存在但当前列表（最近 LIST_LIMIT 条）中找不到 -->
     <div v-if="deepLinkMiss" class="mk-alert" role="alert">
-      未能定位该会话：它可能不在最近 {{ rows.length }} 条记录内，或已被删除。
+      未能定位该会话：它可能不在当前列表范围内（最近 {{ LIST_LIMIT }} 条），或已被删除。
     </div>
 
     <div class="mk-card mk-card--fill">
@@ -36,7 +38,7 @@
               {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
             </button>
           </div>
-          <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / ID" />
+          <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / 邮箱 / ID" />
           <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
             <option value="">全部状态</option>
             <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
@@ -116,8 +118,8 @@
           </thead>
           <tbody>
             <tr
-              v-for="r in paged"
-              :key="r.id"
+              v-for="(r, i) in paged"
+              :key="r.id || `row-${i}`"
               class="ts-row"
               :class="`ts-row--att-${r.attention}`"
               tabindex="0"
@@ -138,7 +140,8 @@
               <td v-if="!tsHiddenCols.has('user')">
                 <div class="mk-cell-main">
                   <strong>{{ r.userName }}</strong>
-                  <span class="mk-cell-sub">{{ r.email }}</span>
+                  <span v-if="r.email" class="mk-cell-sub">{{ r.email }}</span>
+                  <span v-else-if="r.userId" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
                 </div>
                 <div class="ts-tags">
                   <span v-if="r.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
@@ -172,9 +175,7 @@
                 <span v-else class="mk-na">—</span>
               </td>
               <td v-if="!tsHiddenCols.has('output')">
-                <span class="mk-badge" :class="r.wrapupStatus === 'complete' ? 'mk-badge--ok' : 'mk-badge--muted'">
-                  {{ r.wrapupStatus === 'complete' ? '有总结' : '缺总结' }}
-                </span>
+                <span class="mk-badge" :class="wrapupBadge(r)">{{ wrapupText(r) }}</span>
                 <span v-if="r.hasAdvisory" class="mk-badge" :class="advisoryBadge(r.advisory?.priority)" style="margin-left:4px">建议</span>
               </td>
               <td v-if="!tsHiddenCols.has('attention')">
@@ -223,7 +224,7 @@
                 {{ detail.attention === 'high' ? '高关注' : detail.attention === 'medium' ? '中关注' : '低关注' }}
               </span>
               <h3 class="mk-drawer__title">{{ detail.topic }}</h3>
-              <span class="mk-drawer__sub mono">{{ detail.id }}</span>
+              <span v-if="detail.id" class="mk-drawer__sub mono">{{ detail.id }}</span>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeDetail">✕</button>
           </header>
@@ -335,7 +336,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource } from './store'
 import { useSessionDrill } from './useSessionDrill'
-import { timeAgo, isPageCacheFresh, markPageFetched } from './live'
+import { timeAgo, isPageCacheFresh, markPageFetched, shortId } from './live'
 import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone } from './statusText'
 import type { SessionProgress } from './statusText'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -403,6 +404,17 @@ const includeTest = ref(false)
    （此前文案写「最近 100 条」而实现是 limit: 1000 —— 审计 附 A #9） */
 const LIST_LIMIT = 1000
 
+/* 终态集合：只有终态（completed/failed/timeout/discarded/finalization_failed）会话
+   才适用「缺总结」口径；initializing/active/paused/finalizing 等非终态总结尚未到
+   生成时机，缺失是正常过程态（此前把进行中会话也算「缺总结」，页头恒 warn、
+   pill 计数虚高 —— P1） */
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'timeout', 'discarded', 'finalization_failed'])
+const isTerminal = (s: string) => TERMINAL_STATUSES.has(s)
+
+/* 列表真实总量（后端 body.total）：达 LIST_LIMIT 上限时用于真实截断提示 */
+const listTotal = ref(0)
+const truncated = computed(() => rows.value.length >= LIST_LIMIT)
+
 /* 静默拉取：成功即整表替换；失败保留旧数据（轮询不闪空态），并标记错误条。
    force = true 绕过页面级 TTL 缓存（显式刷新/口径切换/轮询用） */
 async function fetchRows(force = false): Promise<boolean> {
@@ -413,6 +425,9 @@ async function fetchRows(force = false): Promise<boolean> {
     const body = res.data?.data ?? res.data ?? {}
     const items = body.items || []
     rows.value = items.map((s: Record<string, unknown>) => mapRow(s))
+    /* 后端总量：达上限时给「共 N 条 · 仅显示最近 LIST_LIMIT 条」的真实截断提示（此前前端未用） */
+    const total = Number(body.total)
+    listTotal.value = Number.isFinite(total) && total > 0 ? total : rows.value.length
     loadFailed.value = false
     markPageFetched('teaching-sessions')
     /* 宿主域计数徽章（embedded 才消费；独立场景 emit 无监听者无副作用） */
@@ -472,6 +487,16 @@ watch(includeTest, () => {
   })
 })
 
+/** 用户名兜底：userName → 邮箱前缀 → 「用户 ·尾4位」（不把裸 cuid 显示给运营） */
+function displayName(s: Record<string, unknown>): string {
+  const name = String(s.userName || '').trim()
+  if (name) return name
+  const email = String(s.email || '').trim()
+  if (email && email.includes('@')) return email.slice(0, email.indexOf('@')) || email
+  const uid = String(s.userId || '').trim()
+  return uid ? `用户 ·${uid.slice(-4)}` : '用户'
+}
+
 function mapRow(s: Record<string, unknown>): Row {
   const wrapup = (s.wrapup as Record<string, unknown>) || null
   const summary = (wrapup?.summary as WrapupSummary) || null
@@ -501,12 +526,14 @@ function mapRow(s: Record<string, unknown>): Row {
           ? 'medium'
           : 'low'
   return {
-    id: String(s.id),
+    /* s.id 缺失不得拼出 "undefined"（控制台按钮/抽屉标题已由 v-if="r.id" 守卫） */
+    id: s.id ? String(s.id) : '',
     userId: String(s.userId || ''),
-    topic: String(s.topic || s.taskId || '未命名会话'),
+    /* 兜底不展示裸 cuid：主题回「未命名会话」；用户缺失降级邮箱前缀 → 「用户 ·尾4位」 */
+    topic: String(s.topic || '未命名会话'),
     subject: String(s.subject || '—'),
     taskType: String(s.taskType || ''),
-    userName: String(s.userName || s.userId),
+    userName: displayName(s),
     email: String(s.email || ''),
     isVirtualLearner: !!s.isVirtualLearner,
     isTestAccount: !!s.isTestAccount,
@@ -585,7 +612,7 @@ const filtered = computed(() => {
   let list = rows.value
   if (pill.value === 'active') list = list.filter((r) => r.status === 'active')
   if (pill.value === 'attention') list = list.filter((r) => r.attention !== 'low')
-  if (pill.value === 'missing') list = list.filter((r) => r.wrapupStatus === 'missing')
+  if (pill.value === 'missing') list = list.filter(isMissingWrapup)
   if (statusFilter.value) {
     list = list.filter((r) => r.status === statusFilter.value)
   }
@@ -625,10 +652,24 @@ watch([pill, statusFilter, dateFilter, keyword], () => {
 })
 
 const advisoryCount = computed(() => rows.value.filter((r) => r.hasAdvisory).length)
-const missingWrapupCount = computed(() => rows.value.filter((r) => r.wrapupStatus === 'missing').length)
+/* P1：只有终态会话的总结缺失才算运营口径「缺总结」；非终态缺失是过程态（未生成） */
+const missingWrapupCount = computed(() => rows.value.filter(isMissingWrapup).length)
 const attentionCount = computed(() => rows.value.filter((r) => r.attention !== 'low').length)
 
-/* 教学概览（ts-dash：会话域结论，状态条承载基调；逐项计数由卡头 pills 承载，不重复渲染） */
+/* 总结口径三档（P1）：complete=有总结；终态缺失=缺总结（运营关注，warn）；
+   非终态缺失=未生成（总结尚未到生成时机，muted 不做告警）。
+   页头基调与「缺总结」pill 同源：missingWrapupCount 只数终态缺失，避免只要有
+   进行中会话页头就恒 warn、计数虚高。 */
+const wrapupTier = (r: Row): 'complete' | 'missing' | 'pending' =>
+  r.wrapupStatus === 'complete' ? 'complete' : isTerminal(r.status) ? 'missing' : 'pending'
+const wrapupText = (r: Row) => (wrapupTier(r) === 'complete' ? '有总结' : wrapupTier(r) === 'missing' ? '缺总结' : '未生成')
+const wrapupBadge = (r: Row) =>
+  wrapupTier(r) === 'complete' ? 'mk-badge--ok' : wrapupTier(r) === 'missing' ? 'mk-badge--warn' : 'mk-badge--muted'
+const isMissingWrapup = (r: Row) => wrapupTier(r) === 'missing'
+
+/* 教学概览（ts-dash：会话域结论，状态条承载基调；逐项计数由卡头 pills 承载，不重复渲染）。
+   warn 只由终态缺失 / 待关注触发：missingWrapupCount 已按 P1 口径只数终态会话，
+   进行中会话不再把页头钉死在 warn。 */
 const tsDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if (!rows.value.length) return 'muted'
   if (missingWrapupCount.value > 0) return 'warn'
@@ -662,7 +703,10 @@ function timelineOf(r: Row): Array<{ text: string; time: string; tone: 'ok' | 'w
   if (r.wrapupStatus === 'complete' && r.wrapup) {
     events.push({ text: `课后总结生成（${r.wrapupSource}）`, time: '', tone: 'ok' })
   } else if (r.wrapupStatus === 'missing') {
-    events.push({ text: '缺少课后总结', time: '', tone: 'warn' })
+    /* 时间线与徽章同口径：终态缺失=告警；非终态缺失=过程态（静音） */
+    events.push(isTerminal(r.status)
+      ? { text: '缺少课后总结', time: '', tone: 'warn' }
+      : { text: '总结未生成（会话未结束）', time: '', tone: 'muted' })
   }
   if (r.hasAdvisory && r.advisory) {
     events.push({ text: `建议触发（优先级 ${r.advisory.priority}）`, time: '', tone: r.advisory.priority === 'high' ? 'bad' : 'warn' })
@@ -708,7 +752,8 @@ function closeDetail() {
 function openDetail(r: Row) {
   detail.value = r
   openCards.value = new Set()
-  void router.push({ query: { ...route.query, session: r.id } })
+  /* id 缺失（后端历史脏数据）：保持抽屉打开，不写 ?session= 深链避免空串误判为「无深链」 */
+  if (r.id) void router.push({ query: { ...route.query, session: r.id } })
 }
 
 /** 真实教学会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：轻量深链 = 学习者详情 / Trace 瀑布按 sessionId 归组 */

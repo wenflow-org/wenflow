@@ -8,8 +8,8 @@
       <span class="mk-status__meta">共 {{ liveLogsTotal }} 条</span>
       <span v-if="logs.length" class="mk-status__meta">失败 {{ errCount }} · 成功率 {{ successRate }}%</span>
       <span v-if="logs.length" class="mk-status__meta mono" :title="'延迟分位（仅成功日志）：P50 = 中位耗时 · P99 = 99% 请求耗时'">耗时 P50 {{ latencyP50 }} · P99 {{ latencyP99 }}<template v-if="latencySampled">（样本估算）</template></span>
+      <!-- 测试入口常驻：即使计数为 0（或「仅看测试」态查空）也保持可点，否则切过去后失去切回入口 -->
       <button
-        v-if="testCount > 0"
         type="button"
         class="mk-status__meta-link"
         :class="{ 'mk-status__meta-link--on': testFilter !== '' }"
@@ -23,8 +23,8 @@
         <button type="button" class="mk-status__clear" @click="clearFilter">×</button>
       </span>
       <span class="mk-status__actions">
-        <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注 -->
-        <button type="button" class="mk-status__action" @click="exportJson">导出本页</button>
+        <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注；无数据时禁用 -->
+        <button type="button" class="mk-status__action" :disabled="!logs.length" @click="exportJson">导出本页</button>
       </span>
     </div>
 
@@ -40,21 +40,26 @@
 
     <!-- ===== Tab3: 成本分析（嵌入 TokenCost 组件，观测同域并入 2026-09-04） ===== -->
     <template v-if="elTab === 'cost'">
-      <!-- 成本金额条：读取 token-cost 端点新增的金额字段；单价未配置时显式提示「单价未配置」（绝不用 0 冒充） -->
+      <!-- 成本金额条：读取 token-cost 端点新增的金额字段；单价未配置时显式提示「单价未配置」（绝不用 0 冒充）。
+           加载失败与「无调用」是两回事：失败显式报错并可重试，只有双 0 且未失败才说「无调用」——
+           此前失败被静默伪装成「无调用/没有带 token 的 LLM 调用」，与下方 TokenCost 的「加载失败」自相矛盾 -->
       <div class="mk-card cost-strip" :class="{ 'cost-strip--unknown': !costPricingKnown }">
         <div class="cost-strip__main">
           <span class="cost-strip__label">调用成本（近 {{ tokenCostFilters.days }} 天{{ tokenCostFilters.includeTest ? ' · 含测试流量' : '' }}）</span>
           <strong v-if="costLoading" class="cost-strip__value">统计中…</strong>
+          <strong v-else-if="costFailed" class="cost-strip__value cost-strip__value--unknown">加载失败</strong>
           <strong v-else-if="costUsd !== null" class="cost-strip__value mono">≈ ${{ fmtCostUsd(costUsd) }}</strong>
           <strong v-else-if="costPricedCalls === 0 && costMissingCalls === 0" class="cost-strip__value cost-strip__value--unknown">无调用</strong>
           <strong v-else class="cost-strip__value cost-strip__value--unknown">单价未配置</strong>
           <span class="cost-strip__hint">
-            <template v-if="costUsd !== null">
+            <template v-if="costFailed">金额统计拉取失败，不影响下方逐调用明细，可重试。</template>
+            <template v-else-if="costUsd !== null">
               已定价 {{ costPricedCalls }} 次<template v-if="costMissingCalls > 0"> · {{ costMissingCalls }} 次未定价（未计入）</template>
             </template>
             <template v-else-if="costPricedCalls === 0 && costMissingCalls === 0">近 {{ tokenCostFilters.days }} 天没有带 token 的 LLM 调用</template>
             <template v-else>models.config.ts 的 pricing 尚未填权威单价，暂不展示金额</template>
           </span>
+          <button v-if="costFailed" type="button" class="mk-link" @click="loadCostSummary">重试</button>
         </div>
         <div v-if="missingPricingModels.length" class="cost-strip__missing" :title="missingPricingModels.join('、')">
           待补单价模型 {{ missingPricingModels.length }} 个：{{ missingPricingModels.join('、') }}
@@ -65,15 +70,11 @@
     </template>
 
     <!-- ===== Tab1: 日志流（默认） ===== -->
+    <!-- P0 修复：卡片常驻（对齐 Users.vue 结构：卡片壳 + 常驻筛选头，骨架/错误/空态/表格/分页都在卡片内）。
+         旧实现把渲染条件挂在卡片外壳（v-else-if="filtered.length"），空列表时状态 pills / 搜索 /
+         高级筛选 / 列设置 / 保存视图 / 页码器整组消失，只剩一页没有任何筛选出口的死路空态 -->
     <template v-if="elTab === 'logs'">
-    <!-- 日志流 -->
-    <!-- P0 修复：加载失败显示错误横幅 + 重试，不再伪装成「暂无日志」 -->
-    <div v-if="liveLogsError" class="mk-alert mk-alert--row" role="alert">
-      <span class="mk-alert__msg">{{ liveLogsError }}</span>
-      <button type="button" class="mk-alert__btn" @click="retryLiveLogs">重试</button>
-    </div>
-    <MockSkeletonTable v-else-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="4" :rows="6" />
-    <div v-else-if="filtered.length" class="mk-card mk-card--fill">
+    <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <!-- 左侧筛选组（对齐 Users：pills + 搜索框） -->
         <div class="mk-filter">
@@ -101,7 +102,6 @@
           <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
           <button type="button" class="mk-link" :class="{ 'mk-link--active': advOpen }" @click="advOpen = !advOpen" title="高级筛选">高级</button>
           <MkCols :col-defs="colDefs" :storage-key="COLS_KEY" :default-hidden="DEFAULT_HIDDEN" v-model:hidden="hiddenCols" />
-          <span class="mk-card__meta">第 {{ liveLogsPage }} / {{ totalPagesOf(liveLogsTotal, liveLogsPageSize) }} 页</span>
         </div>
       </div>
       <div v-if="advOpen" class="log-advpanel">
@@ -117,10 +117,20 @@
           <option value="month">近 30 天</option>
           <option value="all">全部</option>
         </select>
-        <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
       </div>
-      <!-- 旧加载骨架分支已删：外层卡片仅在 filtered.length 时渲染，!logs.length 在此不可达 -->
-      <div class="mk-table-scroll">
+      <!-- 三态均在卡片内（对齐 Users.vue）：首载骨架 / 加载失败 / 表格；筛选头常驻不随数据空否消失 -->
+      <MockSkeletonTable v-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="4" :rows="6" />
+      <!-- 错误态走 MkEmptyState tone="error"（role=alert + 红系图标 + 重试按钮），不再手拼 mk-alert 横幅 -->
+      <MkEmptyState
+        v-else-if="liveLogsError && !logs.length"
+        icon="◌"
+        tone="error"
+        title="日志加载失败"
+        :description="liveLogsError"
+        action-text="重试"
+        @action="retryLiveLogs"
+      />
+      <div v-else-if="logs.length" class="mk-table-scroll">
         <table class="mk-table mk-table--click mk-table--fixed exec-table">
 
           <colgroup>
@@ -209,7 +219,8 @@
                 <td :colspan="visibleColCount">
                   <div class="exec-detail__box">
                     <div class="tline__payload-meta">
-                      <span class="mono">trace {{ log.traceId }}</span>
+                      <!-- 展开区同款口径：短 Trace 显示 + title 全值（不裸奔整条 UUID） -->
+                      <span class="mono" :title="log.traceId">trace {{ shortTrace(log.traceId) }}</span>
                       <span class="exec-detail__links">
                         <button type="button" class="mk-btn mk-btn--ghost mk-btn--sm" @click.stop="showTrace(log.traceId)">
                           <Waypoints :size="15" :stroke-width="1.75" />
@@ -301,15 +312,20 @@
           </tbody>
         </table>
       </div>
-      <Pagination v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" />
-    </div>
 
-    <MkEmptyState
-      v-else
-      :title="traceMiss ? `未找到「${traceMiss}」的日志（可能超出保留期或 ID 不完整）` : isFiltered ? '当前筛选无日志' : '暂无日志'"
-    >
-      <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
-    </MkEmptyState>
+      <!-- 空态（卡片内，对齐 Users.vue）：区分「筛选无结果 / 直达未命中 / 真的没日志」，
+           自带 description 与逃生动作，最低高度撑满卡片剩余空间而不是一行标题 -->
+      <MkEmptyState
+        v-else
+        min
+        icon="◌"
+        :title="emptyTitle"
+        :description="emptyDesc"
+        :action-text="isFiltered ? '清除筛选并看全部时间范围' : ''"
+        @action="clearFilterToAll"
+      />
+      <Pagination v-if="logs.length" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" />
+    </div>
     </template>
   </div>
 </template>
@@ -319,7 +335,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Waypoints } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { intent, openSkillDrawer, clearInvestigation, dataSource, tokenCostFilters, liveSkillStatsMap } from './store'
-import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, totalPagesOf, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
+import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from '@/components/mk/MkCols.vue'
@@ -363,6 +379,9 @@ function switchElTab(t: ElTab) {
    pricingStatus.missingPricingModels 给出运维补价清单。 */
 const costLoading = ref(false)
 const costLoaded = ref(false)
+/** 金额条单独失败态（P0）：与「无调用」区分——失败时说「加载失败 + 重试」，
+    绝不把接口错误静默降级成「近 N 天没有带 token 的 LLM 调用」（与同 tab TokenCost 自相矛盾） */
+const costFailed = ref(false)
 const costUsd = ref<number | null>(null)
 const costPricingKnown = ref(false)
 const costPricedCalls = ref(0)
@@ -377,6 +396,7 @@ function fmtCostUsd(v: number): string {
 async function loadCostSummary() {
   if (costLoading.value) return
   costLoading.value = true
+  costFailed.value = false
   try {
     const res = await adminTokenCostApi.getSummary({ days: tokenCostFilters.days, includeTest: tokenCostFilters.includeTest })
     const totals = res.data?.data?.totals ?? null
@@ -387,7 +407,8 @@ async function loadCostSummary() {
     missingPricingModels.value = res.data?.pricingStatus?.missingPricingModels ?? []
     costLoaded.value = true
   } catch {
-    // 金额条为辅助信息：失败静默（嵌入的 TokenCost 组件自身有加载失败提示/重试）
+    // 金额条为辅助信息：失败不再静默伪装「无调用」——置失败态由用户重试或看下方 TokenCost 明细
+    costFailed.value = true
     costUsd.value = null
     costPricingKnown.value = false
   } finally {
@@ -842,13 +863,39 @@ const shown = computed(() => filtered.value)
 /* 口径与 AuditLogs 一致：时间范围非默认值也计入筛选态，空态才显示「当前筛选无日志」而非「暂无日志」 */
 const isFiltered = computed(() => !!(testFilter.value || agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim() || errorCategory.value || timeRange.value !== 'week'))
 /* traceId/sessionId 服务端查询未命中时的空态提示（与 TraceWaterfall 的 wf-notice「样本截断」兜底互补：
-   此处是服务端精确查询的直接未命中） */
+   此处是服务端精确查询的直接未命中）。返回裸值，展示层做 shortTrace 截断 + 完整值回显 */
 const traceMiss = computed(() => {
   if (filtered.value.length) return ''
-  if (traceId.value.trim()) return `traceId ${traceId.value.trim()}`
-  if (sessionId.value.trim()) return `sessionId ${sessionId.value.trim()}`
+  if (traceId.value.trim()) return traceId.value.trim()
+  if (sessionId.value.trim()) return sessionId.value.trim()
   return ''
 })
+/* 空态三态文案（P0 走查补 description/action）：直达未命中 / 筛选无结果 / 真的没日志 */
+const emptyTitle = computed(() =>
+  traceMiss.value
+    ? `未找到「${shortTrace(traceMiss.value)}」的日志`
+    : isFiltered.value ? '当前筛选无日志' : '暂无日志'
+)
+const emptyDesc = computed(() =>
+  traceMiss.value
+    ? `完整标识 ${traceMiss.value}：可能超出日志保留期，或 ID 不完整（traceId/sessionId 均支持精确直达）。`
+    : isFiltered.value
+      ? '当前筛选组合下没有命中的日志；清除筛选并放宽时间范围（全部）通常就能看到数据。'
+      : '有真实调用发生后，这里按时间倒序展示每条执行 / 网关日志。'
+)
+/** 空态逃生动作：清全部筛选 + 时间范围放宽到「全部」——窄时间窗/筛选态无日志时的最小代价出口 */
+function clearFilterToAll() {
+  testFilter.value = ''
+  agentFilter.value = ''
+  statusFilter.value = ''
+  keyword.value = ''
+  traceId.value = ''
+  sessionId.value = ''
+  errorCategory.value = ''
+  timeRange.value = 'all'
+  clearInvestigation()
+  void applyServerQuery()
+}
 /* 全量统计来自后端 stats（非 200 行样本） */
 const liveStats = computed(() => liveLogStats.value)
 const errCount = computed(() =>

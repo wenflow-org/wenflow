@@ -1,13 +1,16 @@
 <template>
   <div :class="{ 'mk-page': !embedded }">
     <!-- 状态条（嵌入编排图时隐藏，编排页已有自己的状态栏） -->
-    <div v-if="!embedded" class="mk-status" :class="cores.some((c) => c.status === 'pending-compile') ? 'mk-status--warn' : cores.length ? 'mk-status--ok' : 'mk-status--muted'">
+    <div v-if="!embedded" class="mk-status" :class="cores.some((c) => c.status === 'pending-compile') ? 'mk-status--warn' : syncedCount ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">Skill 工作台</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">核心文件 {{ cores.length }}</span>
-      <span class="mk-status__meta pw-ok">同步 {{ countBy('synced') }}</span>
-      <span class="mk-status__meta pw-warn">待编译发布 {{ countBy('pending-compile') }}</span>
+      <!-- 三态合计口径：此前全量 no-prompt 时只显示「同步 0 / 待编译发布 0」，
+           与「核心文件 N」对不上，用户以为数据没加载 -->
+      <span class="mk-status__meta" :title="coreCountTitle">核心文件 {{ cores.length }}</span>
+      <span class="mk-status__meta pw-ok" :title="`已同步：编译产物与 core.yaml 一致（${syncedCount} 个）`">同步 {{ syncedCount }}</span>
+      <span class="mk-status__meta pw-warn" :title="`待编译发布：core.yaml 有改动但未重新编译（${pendingCount} 个）`">待编译发布 {{ pendingCount }}</span>
+      <span v-if="noPromptCount" class="mk-status__meta pw-na" :title="`无 Prompt：尚未创建 core.yaml，不参与编译（${noPromptCount} 个）`">无 Prompt {{ noPromptCount }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="loading" @click="loadList">
           <MkLoading v-if="loading" inline text="刷新中…" /><span v-else>刷新</span>
@@ -18,7 +21,7 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">核心文件</h3>
-        <span class="mk-card__meta">编辑与发布在 Skill 设计页「协议」页签；从 0 新建不在管理台——走 CLI（backend/scripts/scaffold-skill.ts，见 doc/SKILL_DEVELOPMENT_GUIDE.md）</span>
+        <span class="mk-card__meta">改提示词与发布在 Skill 设计页「协议」页签；从 0 新建是代码级动作，走 CLI：backend/scripts/scaffold-skill.ts（见 doc/SKILL_DEVELOPMENT_GUIDE.md）</span>
       </div>
       <div class="mk-table-scroll">
       <!-- 首载骨架屏（对齐全站「骨架替代空白」约定；此前整表无占位） -->
@@ -73,7 +76,8 @@
       </div>
       <MkEmptyState
         v-if="!cores.length && !loading"
-        :icon="loadError ? '' : '◌'"
+        :icon="loadError ? '⚠' : '◌'"
+        :tone="loadError ? 'error' : 'neutral'"
         :title="loadError ? '清单加载失败' : '未发现核心文件'"
         :description="loadError || '编辑与发布入口在 Skill 设计页的「协议」页签。'"
         :action-text="loadError ? '重试' : ''"
@@ -114,6 +118,15 @@ const loadError = ref('');
 
 /* 滚动修复 #8：核心文件表 15 行/页（客户端切片，加载更多翻页） */
 const { shown: shownCores, canMore: canMoreCores, loadMore: loadMoreCores } = useLoadMore(computed(() => cores.value), 15);
+
+const syncedCount = computed(() => countBy('synced'));
+const pendingCount = computed(() => countBy('pending-compile'));
+const noPromptCount = computed(() => countBy('no-prompt'));
+
+/** 三态合计口径：已同步 + 待编译发布 + 无 Prompt = 核心文件总数（statusBar title） */
+const coreCountTitle = computed(() =>
+  `三态合计：已同步 ${syncedCount.value} + 待编译发布 ${pendingCount.value} + 无 Prompt ${noPromptCount.value} = 核心文件 ${cores.value.length}`
+);
 
 function countBy(status: string) {
   return cores.value.filter((c) => c.status === status).length;
@@ -170,6 +183,7 @@ onMounted(async () => {
 <style scoped>
 .pw-ok { color: var(--mk-green, #15803d); }
 .pw-warn { color: var(--mk-amber, #b45309); }
+.pw-na { color: var(--mk-faint, #5b6577); }
 .pw-hash { font-size: var(--mk-fs-micro); }
 .mk-table--click tbody tr { cursor: pointer; }
 

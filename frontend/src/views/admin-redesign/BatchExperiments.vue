@@ -171,7 +171,7 @@
                   <strong>{{ r.learnerName }}</strong>
                   <span class="mk-badge" :class="runStatusBadge(r.status)">{{ runStatusText(r.status) }}</span>
                   <span class="mk-badge mk-badge--muted">{{ budgetLabel(r.frictionBudget) }}</span>
-                  <span class="be-run__phase mono">{{ r.phase }}</span>
+                  <span class="be-run__phase mono" :title="r.phase">{{ phaseText(r.phase) }}</span>
                 </div>
                 <div class="be-run__body">
                   <span class="be-run__meta">任务 {{ r.completedTasks }}<template v-if="r.totalTasks"> / {{ r.totalTasks }}</template></span>
@@ -188,6 +188,17 @@
                 </div>
               </div>
             </template>
+            <MkEmptyState
+              v-else-if="detailError"
+              tone="error"
+              title="运行记录加载失败"
+              description="无法从服务读取该实验的运行列表。"
+              action-text="重试"
+              action-busy-text="重试中…"
+              :action-busy="detailLoading"
+              @action="retryDetail"
+              compact
+            />
             <MkEmptyState
               v-else
               title="暂无运行记录"
@@ -231,7 +242,12 @@ const loading = ref(false)
 const failed = ref(false)
 const runBusy = ref(false)
 
-const statusTone = computed(() => (runningCount.value > 0 ? 'mk-status--ok' : 'mk-status--muted'))
+/* 状态条基调：加载失败必须退红（P2-6，2026-09-27 走查）——此前失败时 experiments 为空、
+   runningCount 归零，状态条退化成灰 muted「正常无数据」，与卡片内的错误态自相矛盾。
+   口径对齐 AuditLogs.vue 的 statusTone：bad > ok > muted */
+const statusTone = computed(() =>
+  failed.value ? 'mk-status--bad' : runningCount.value > 0 ? 'mk-status--ok' : 'mk-status--muted'
+)
 const runningCount = computed(() => experiments.value.filter((e) => e.status === 'running').length)
 const learnerTotal = computed(() => experiments.value.reduce((s, e) => s + (e.runs?.length || 0), 0))
 
@@ -418,6 +434,10 @@ useEscape(() => detailOpen.value, () => { detailOpen.value = false })
 const detail = ref<BatchExperiment | null>(null)
 const detailRuns = ref<BatchExperimentRun[]>([])
 const detailLoading = ref(false)
+/* 详情 runs 拉取失败：与列表 failed 分流——列表失败走空态错误卡，详情失败在抽屉内给可重试的错误空态。
+   此前失败只 toast，detailRuns 为空让抽屉显示「暂无运行记录/实验创建后由调度器自动推进」，
+   把服务端明明有 runs 的故障误导成真为空（2026-09-27 走查 P1-2） */
+const detailError = ref(false)
 
 function mapRun(r: Record<string, unknown>): BatchExperimentRun {
   return {
@@ -448,14 +468,21 @@ async function openDetail(e: ExpRow) {
   detail.value = e
   detailOpen.value = true
   detailLoading.value = true
+  detailError.value = false
   detailRuns.value = []
   try {
     await refreshDetailRuns(e.id)
   } catch (err) {
+    detailError.value = true
     toast.error(`加载详情失败：${errMsg(err)}`)
   } finally {
     detailLoading.value = false
   }
+}
+
+/** 抽屉内「重试」：重开同一实验的详情（detailError 复位、loading 态由 openDetail 接管） */
+function retryDetail() {
+  if (detail.value) void openDetail(detail.value)
 }
 
 /* 运行态文案统一走全局字典单源：stalled（卡死）已收录、done 统一「已完成」
@@ -463,6 +490,23 @@ async function openDetail(e: ExpRow) {
 const runStatusText = (s: string) => statusText(s)
 const runStatusBadge = (s: string) =>
   s === 'done' ? 'mk-badge--ok' : s === 'failed' ? 'mk-badge--bad' : s === 'stalled' ? 'mk-badge--warn' : 'mk-badge--info'
+
+/* run 阶段（phase）英文裸枚举 → 白话（P2-3，2026-09-27 走查）：setup/goal/path/learn/
+   learn-done/decay/done 按调度器推进链路翻译；未知值原样兜底（后端新增阶段时不至于消失）。
+   写法对齐 PromptEval.vue 的 stageText */
+const PHASE_TEXT: Record<string, string> = {
+  setup: '初始化',
+  goal: '目标阶段',
+  path: '路径阶段',
+  learn: '学习中',
+  'learn-done': '学习完成',
+  decay: '跨日衰减',
+  done: '完成',
+}
+const phaseText = (p: string): string => {
+  if (!p) return '—'
+  return PHASE_TEXT[p] || p
+}
 
 async function advance(experimentId: string, runId: string) {
   // 会直接改变虚拟学习者阶段状态：执行前确认

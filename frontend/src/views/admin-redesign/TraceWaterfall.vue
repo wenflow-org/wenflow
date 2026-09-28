@@ -59,6 +59,17 @@
           <option value="dur-desc">耗时 ↓</option>
           <option value="dur-asc">耗时 ↑</option>
         </select>
+        <!-- 嵌入态（执行日志「Trace 链路」tab）不渲染整条状态条：失败定位入口随状态条一起消失，
+             空瀑布时用户没有任何「去看失败链路」的抓手，故在筛选条上补回同一入口 -->
+        <button
+          v-if="embedded && failedTraceIds.length"
+          type="button"
+          class="wf-locate mk-link"
+          :title="'样本内含失败的链路，点击跳到第一条失败链路'"
+          @click="locateFailure"
+        >
+          {{ failedTraceIds.length }} 条链路含失败，定位 →
+        </button>
       </span>
       <template v-if="viewMode === 'session'">
         <span class="wf-tracepick__count">{{ sessionIds.length }} 个会话</span>
@@ -89,6 +100,13 @@
     <div v-if="notice" class="wf-notice" role="alert">
       <span>{{ notice }}</span>
       <button type="button" class="wf-notice__close" aria-label="关闭提示" @click="notice = ''">×</button>
+    </div>
+
+    <!-- 嵌入态样本上限提示：独立页由状态条「已达上限 N 条」承担，嵌入态整条状态条被隐藏——
+         达上限时「加载更多样本」入口随之消失，若无任何说明就像按钮丢了/没数据了。
+         这里常驻 wf-notice 说清「为什么不再有更多样本 + 怎么继续看」 -->
+    <div v-if="embedded && waterfallCapReached" class="wf-notice" role="alert">
+      <span>已达本地样本上限 {{ WATERFALL_MAX_SPANS }} 条，为保持流畅已停止追加；要看更多链路，请在上方输入完整链路 ID 回车直达。</span>
     </div>
 
     <!-- 链路概要卡 -->
@@ -241,11 +259,17 @@
       </div>
     </div>
 
+    <!-- P0 走查：空态必须区分「筛选态为空」与「真的没数据」——开着「仅失败」但当前链路没有失败 span、
+         或链路 ID 筛选无命中时，说「暂无链路数据 / 有真实调用后…」是误导（样本里明明有调用）。
+         文案与逃生动作按 failuresOnly / traceKeyword 分支，见 wfEmpty -->
     <MkEmptyState
       v-else
       min
-      :title="viewMode === 'session' && !sessionIds.length ? '暂无会话数据' : '暂无链路数据'"
-      :description="viewMode === 'session' && !sessionIds.length ? '教学 / 目标对话等业务调用产生后，这里按 sessionId 自动跨链路归组。' : '有真实调用发生后，这里按 Trace 展开完整链路。'"
+      icon="◌"
+      :title="wfEmpty.title"
+      :description="wfEmpty.description"
+      :action-text="wfEmpty.actionText"
+      @action="wfEmpty.action"
     />
   </div>
 </template>
@@ -714,6 +738,45 @@ function traceLabel(t: string) {
 /* 样本内失败总数（「仅失败」按钮角标） */
 const errorTotal = computed(() => baseSpans.value.filter((s) => s.status === 'err').length)
 
+/* 空态分态（P0 走查）：区分「筛选态为空」与「真的没数据」。
+   开着「仅失败」而当前视图（链路/会话）没有失败 span、或链路 ID 筛选无命中时，
+   文案必须说清是筛选结果为空并给逃生动作（关闭仅失败 / 清除链路筛选），
+   而不是「暂无链路数据 / 有真实调用后…」——样本里明明有调用，那样写是误导。 */
+const wfEmpty = computed(() => {
+  const raw = viewMode.value === 'session' ? spansOfSession.value : spansOfTrace.value
+  if (failuresOnly.value && !raw.some((s) => s.status === 'err')) {
+    return {
+      title: '当前视图没有失败 span',
+      description: '「仅失败」筛选下没有失败记录，可关闭筛选查看当前视图的全部 span。',
+      actionText: '关闭仅失败',
+      action: () => { failuresOnly.value = false }
+    }
+  }
+  const q = traceKeyword.value.trim()
+  if (q && !traceIds.value.length) {
+    return {
+      title: '没有匹配的链路',
+      description: `筛选「${q}」未匹配到任何链路 ID，可清除筛选，或输入完整 ID 回车服务端直达。`,
+      actionText: '清除链路筛选',
+      action: () => { traceKeyword.value = '' }
+    }
+  }
+  if (viewMode.value === 'session' && !sessionIds.value.length) {
+    return {
+      title: '暂无会话数据',
+      description: '教学 / 目标对话等业务调用产生后，这里按 sessionId 自动跨链路归组。',
+      actionText: '',
+      action: () => {}
+    }
+  }
+  return {
+    title: '暂无链路数据',
+    description: '有真实调用发生后，这里按 Trace 展开完整链路。',
+    actionText: '',
+    action: () => {}
+  }
+})
+
 /* 结论完全由当前视图数据推导，不带预设立场 */
 const verdictText = computed(() => {
   const errs = activeSpans.value.filter((s) => s.status === 'err')
@@ -732,6 +795,10 @@ const verdictText = computed(() => {
 </script>
 
 <style scoped>
+/* 嵌入态（执行日志「Trace 链路」tab）：外壳不作为布局盒子，内部各块（筛选条/提示/瀑布/空态）
+   直接成为宿主 flex 列的子项，与宿主其余区块共享等比间距（此前该类无任何规则 = 死类） */
+.wf-embedded { display: contents; }
+
 .wf {
   border: 1px solid var(--mk-line);
   border-radius: 12px;

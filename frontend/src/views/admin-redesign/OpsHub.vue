@@ -6,9 +6,9 @@
       <strong class="mk-status__title">运营中心</strong>
       <span class="mk-status__sep"></span>
       <template v-if="tab === 'todo'">
-        <span class="mk-status__meta">待处理反馈 {{ wbErrors.feedback ? '—' : wbPendingFeedback }}</span>
-        <span class="mk-status__meta" :class="wbFailedPaths > 0 ? 'mk-status__meta--bad' : ''">失败路径 {{ wbErrors.paths ? '—' : wbFailedPaths }}</span>
-        <span class="mk-status__meta" :class="wbDeadLetters > 0 ? 'mk-status__meta--bad' : ''">死信 {{ wbErrors.dead ? '—' : wbDeadLetters }}</span>
+        <span class="mk-status__meta">待处理反馈 {{ wbLoading ? '…' : (wbErrors.feedback ? '—' : wbPendingFeedback) }}</span>
+        <span class="mk-status__meta" :class="wbFailedPaths > 0 ? 'mk-status__meta--bad' : ''">失败路径 {{ wbLoading ? '…' : (wbErrors.paths ? '—' : wbFailedPaths) }}</span>
+        <span class="mk-status__meta" :class="wbDeadLetters > 0 ? 'mk-status__meta--bad' : ''">死信 {{ wbLoading ? '…' : (wbErrors.dead ? '—' : wbDeadLetters) }}</span>
         <span class="mk-status__meta">公告 {{ annFailed ? '—' : ann.rows }} 条</span>
         <span v-if="wbHasError" class="mk-status__meta mk-status__meta--bad" :title="wbErrorText">待办数据加载失败</span>
       </template>
@@ -19,7 +19,7 @@
         <span class="mk-status__meta">解锁 {{ domainCount.achievements }}</span>
       </template>
       <template v-else-if="tab === 'announce'">
-        <span class="mk-status__meta">公告 {{ domainCount.announce }} 条</span>
+        <span class="mk-status__meta">公告 {{ announcePillCount }} 条</span>
       </template>
       <template v-else>
         <span class="mk-status__meta">站内通知 {{ domainCount.inapp }} 条</span>
@@ -36,7 +36,7 @@
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'todo' }" @click="switchTab('todo')">运营待办</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'feedback' }" @click="switchTab('feedback')">反馈<span class="mk-pill__count">{{ domainCount.feedback }}</span></button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'achievements' }" @click="switchTab('achievements')">成就<span class="mk-pill__count">{{ domainCount.achievements }}</span></button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'announce' }" @click="switchTab('announce')">公告<span class="mk-pill__count">{{ domainCount.announce }}</span></button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'announce' }" @click="switchTab('announce')">公告<span class="mk-pill__count">{{ announcePillCount }}</span></button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'inapp' }" @click="switchTab('inapp')">站内通知<span class="mk-pill__count">{{ domainCount.inapp }}</span></button>
     </div>
 
@@ -60,9 +60,9 @@
           :key="t.key"
           type="button"
           class="ow-todo"
-          :class="[`ow-todo--${t.severity}`, { 'ow-todo--done': t.count === 0 && !t.failed, 'ow-todo--failed': t.failed }]"
+          :class="[`ow-todo--${t.severity}`, { 'ow-todo--done': t.count === 0 && !t.failed, 'ow-todo--failed': t.failed, 'ow-todo--act': t.actionable }]"
           :title="t.failed ? '该域数据加载失败，计数不可信' : (t.count > 0 ? t.hint : '该事项已清零')"
-          @click="t.action"
+          @click="t.actionable ? t.action() : undefined"
         >
           <i class="ow-todo__dot" aria-hidden="true"></i>
           <span class="ow-todo__main">
@@ -305,16 +305,32 @@ const hostTone = computed(() => {
 })
 
 /* 待办清单：按严重度排序（坏>警告>中性），零值弱化为「已清零」；
-   域加载失败时该行显示「—」+「加载失败」，不再伪装成 0 */
+   域加载失败时该行显示「—」+「加载失败」，不再伪装成 0；
+   actionable = 有计数且未失败——「已清零 / 加载失败」行不给 pointer 样式也不挂跳转
+   （原实现 cursor 已是 default，点击却仍跳转，是「看起来不可点其实可点」的误导） */
 const todoItems = computed(() => [
-  { key: 'feedback', label: '待处理反馈', hint: '学习者低分反馈等待分流', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback },
-  { key: 'paths', label: '生成失败路径', hint: '目标对话产出路径失败，需排查', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths },
-  { key: 'dead', label: 'Outbox 死信', hint: '领域事件投递失败，影响画像/成就', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead },
-  { key: 'draft', label: '草稿公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value },
+  { key: 'feedback', label: '待处理反馈', hint: '学习者低分反馈等待分流', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback, actionable: !wbErrors.value.feedback && wbPendingFeedback.value > 0 },
+  { key: 'paths', label: '生成失败路径', hint: '目标对话产出路径失败，需排查', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths, actionable: !wbErrors.value.paths && wbFailedPaths.value > 0 },
+  { key: 'dead', label: 'Outbox 死信', hint: '领域事件投递失败，影响画像/成就', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead, actionable: !wbErrors.value.dead && wbDeadLetters.value > 0 },
+  { key: 'draft', label: '草稿公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value, actionable: !annFailed.value && ann.value.draft > 0 },
 ])
 
 /* 公告三态计数（live 层共享，与侧栏徽章同源） */
 const ann = announcementCounts
+
+/**
+ * 公告 pill / 状态条计数（P1-4）：
+ * 原实现走嵌入门 @count（domainCount.announce），未访问 announce tab 前恒为 0——
+ * 而同页待办的公告数用 live 层真实 N 条，同一指标两种口径互相矛盾。
+ * 改为以 live 层已加载计数 announcementCounts.rows 为 seed，
+ * 嵌入门 @count 仅作覆盖刷新（进入 tab 后仍以其上报为准）。
+ */
+const announcePillCount = computed(() => {
+  if (annFailed.value) return '—'
+  const embedded = domainCount.value.announce
+  if (embedded > 0) return embedded
+  return ann.value.rows
+})
 
 /* 状态面板：路径四态 + 公告三态（比例条 + 行式计数） */
 const pathSegments = computed(() =>
@@ -438,9 +454,10 @@ onMounted(() => {
   background: transparent;
   font: inherit;
   text-align: left;
-  cursor: pointer;
   transition: background 0.12s;
 }
+/* 仅可跳转的行给 pointer：已清零 / 加载失败行不可点（不给「看起来能点」的错觉） */
+.ow-todo--act { cursor: pointer; }
 .ow-todo:last-child { border-bottom: none; }
 .ow-todo:hover { background: #f6f9ff; }
 html[data-theme='dark'] .ow-todo { border-bottom-color: #252627; }

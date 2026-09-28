@@ -149,9 +149,13 @@
           <tbody>
             <tr v-for="r in runs" :key="r.id">
               <td>
+                <!-- P2-5（2026-09-27 走查）：主标识原先只有截断 UUID（#a1b2c3d4），扫一行看不出
+                     这次评估结果如何。主行改为「通过率% · N 例 × M 次」，副行「agent · 时间」，
+                     run id 连同 prompt 版本来源降为第三行（mono，title 给全量 id 便于反馈排查） -->
                 <div class="mk-cell-main">
-                  <strong>#{{ shortId(r.id, 8, 4) }}</strong>
-                  <span class="mk-cell-sub">{{ r.mode }} · {{ promptSourceText(r.promptSource) }} v{{ r.promptVersion ?? '—' }}</span>
+                  <strong>{{ r.summary.passRate ?? 0 }}% · {{ r.caseCount }} 例 × {{ r.summary.repeatCount ?? 1 }} 次</strong>
+                  <span class="mk-cell-sub">{{ agentLabel(r.agentId) }} · {{ timeAgo(r.createdAt) }}</span>
+                  <span class="mk-cell-sub" :title="`run id ${r.id}`">#{{ shortId(r.id, 8, 4) }} · {{ r.mode }} · {{ promptSourceText(r.promptSource) }} v{{ r.promptVersion ?? '—' }}</span>
                 </div>
               </td>
               <td><span class="mk-badge mk-badge--info">{{ agentLabel(r.agentId) }}</span></td>
@@ -188,7 +192,9 @@
         icon="◌"
         min
         title="还没有评估记录"
-        description="在用例列表选择「跑评估」或「单条试跑」后，历史会记录在这里。"
+        description="跑评估的两个真实入口：状态条「批量跑评估」一次跑完当前筛选下所有启用用例；单条试跑在用例行 ⋯ 菜单里。运行记录会自动汇总到这里。"
+        action-text="去评估用例"
+        @action="switchTab('cases')"
       />
     </div>
 
@@ -367,7 +373,7 @@
           <div class="mk-drawer__head">
             <div>
               <h3 class="mk-drawer__title">评估运行详情</h3>
-              <span class="mk-drawer__sub">{{ runDetail?.agentId }} · {{ fmtDate(runDetail?.createdAt || '') }}</span>
+              <span class="mk-drawer__sub">{{ agentLabel(runDetail?.agentId || '') }} · {{ fmtDate(runDetail?.createdAt || '') }}</span>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="runDetailOpen = false">✕</button>
           </div>
@@ -410,6 +416,18 @@
               </div>
               <MkEmptyState v-else compact title="无结果明细" />
             </template>
+            <!-- P2-1（2026-09-27 走查）：详情拉取失败时抽屉正文此前整块空白、无重试入口
+                 （toast 转瞬即逝，用户只能关掉抽屉再点一次「详情」）。补 tone=error 空态，
+                 与列表三态（MkLoading / 有数据 / 失败）口径一致 -->
+            <MkEmptyState
+              v-else
+              tone="error"
+              compact
+              title="详情加载失败"
+              description="无法读取该次评估运行的结果明细。"
+              action-text="重试"
+              @action="retryRunDetail"
+            />
           </div>
         </div>
       </div>
@@ -1088,8 +1106,11 @@ useMaskClose(runMaskRef, () => { runDetailOpen.value = false })
 useEscape(() => runDetailOpen.value, () => { runDetailOpen.value = false })
 const runDetailLoading = ref(false)
 const runDetail = ref<any>(null)
+/* 当前抽屉对应的运行行：失败空态的「重试」需要拿到它（openRunDetail 入参在抽屉打开后即丢失） */
+const runDetailTarget = ref<EvalRun | null>(null)
 
 async function openRunDetail(r: EvalRun) {
+  runDetailTarget.value = r
   runDetailOpen.value = true
   runDetailLoading.value = true
   runDetail.value = null
@@ -1101,6 +1122,11 @@ async function openRunDetail(r: EvalRun) {
   } finally {
     runDetailLoading.value = false
   }
+}
+
+/** 抽屉内「重试」：重拉同一运行的详情 */
+function retryRunDetail() {
+  if (runDetailTarget.value) void openRunDetail(runDetailTarget.value)
 }
 
 // 挂载加载统一走上方 watch 的 immediate 首跑（bootstrapped 分支），此处不再裸拉一遍

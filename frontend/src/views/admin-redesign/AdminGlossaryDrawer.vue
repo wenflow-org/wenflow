@@ -11,7 +11,16 @@
           <button type="button" class="mk-drawer__close" aria-label="关闭" @click="close">✕</button>
         </div>
 
+        <!-- 加载失败：此前只 console.warn，界面全空显示「无匹配词条」，
+             把接口失败伪装成没有词条；这里给原因 + 重试入口。
+             放在 search 容器内（而非面板直属子节点）：.agd__panel 是
+             grid-template-rows: auto auto 1fr（头/搜索/正文），
+             多一个直属子节点会把正文挤出自适应行、塌高度不滚。 -->
         <div class="agd__search">
+          <div v-if="loadError" class="agd__error" role="alert">
+            <span class="agd__error-text">术语表加载失败：{{ loadError }}</span>
+            <button type="button" class="mk-btn mk-btn--sm" @click="retryLoad">重试</button>
+          </div>
           <input v-model="keyword" type="search" class="mk-input" placeholder="搜索术语 / 定义…" />
           <div class="mk-pills">
             <button
@@ -38,34 +47,20 @@
 
         <div ref="bodyRef" class="mk-drawer__body agd__body" @scroll.passive="onBodyScroll">
           <template v-if="!loaded">
-            <div class="agd__loading">加载术语表中…</div>
+            <!-- mk 原语 loading（原 .agd__loading 手拼文案，无 spinner） -->
+            <MkLoading text="术语表加载中…" />
           </template>
           <template v-else>
             <!-- 角色与流转 -->
             <section id="agd-sec-flow" v-if="showCategory('flow')" class="agd__section">
               <h4 class="agd__section-title">角色与流转</h4>
               <ul class="agd__list">
+                <!-- 动态 promptRoles + 4 条固有角色语义（FLOW_EXTRAS）同口径过滤/计数 -->
                 <li v-for="m in filteredRoles" :key="m.id" class="agd__term">
                   <span class="agd__term-name">
                     {{ m.label }}<span class="agd__term-en mono">{{ m.id }}</span>
                   </span>
                   <span class="agd__term-def">{{ m.hint }}</span>
-                </li>
-                <li v-if="filteredRoles.length" class="agd__term">
-                  <span class="agd__term-name">render</span>
-                  <span class="agd__term-def">字段是否对外可见：visible=会出现在对外交付，hidden=仅内部流转</span>
-                </li>
-                <li v-if="filteredRoles.length" class="agd__term">
-                  <span class="agd__term-name">handoff（移交）</span>
-                  <span class="agd__term-def">字段产完后交给谁：可交给下一阶段（如 path）或指定 agent/skill；空=不转交</span>
-                </li>
-                <li v-if="filteredRoles.length" class="agd__term">
-                  <span class="agd__term-name">internal（内部标记）</span>
-                  <span class="agd__term-def">仅供平台内部/UI 控制使用，不进业务状态的字段标记</span>
-                </li>
-                <li v-if="filteredRoles.length" class="agd__term">
-                  <span class="agd__term-name">accumulate（累积）</span>
-                  <span class="agd__term-def">值会累积进学习者状态（画像/上下文），供后续阶段持续使用</span>
                 </li>
                 <li v-if="filteredRoles.length === 0" class="agd__empty">无匹配词条</li>
               </ul>
@@ -134,11 +129,23 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { adminGlossaryApi } from '@/api/adminApi'
 import { COMPLETION_META, SEMANTICS_META, type GlossaryTerm } from './glossaryMeta'
 import { errMsg } from './live'
+import MkLoading from '@/components/mk/MkLoading.vue'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 
 interface PromptRoleMeta { id: string; label: string; hint: string }
 interface StageMeta { id: string; label: string; hint: string }
+
+/** 字段角色的 4 条固有语义（render/handoff/internal/accumulate）：
+    后端 glossary 接口未下发，但属运营必查词条。并入动态 promptRoles 同一数组，
+    统一走 keyword 过滤与 flow 分类计数——此前它们裸渲染在模板里，
+    搜「移交」搜不到、flow pill 计数也不含它们。 */
+const FLOW_EXTRAS: PromptRoleMeta[] = [
+  { id: 'render', label: 'render', hint: '字段是否对外可见：visible=会出现在对外交付，hidden=仅内部流转' },
+  { id: 'handoff', label: 'handoff（移交）', hint: '字段产完后交给谁：可交给下一阶段（如 path）或指定 agent/skill；空=不转交' },
+  { id: 'internal', label: 'internal（内部标记）', hint: '仅供平台内部/UI 控制使用，不进业务状态的字段标记' },
+  { id: 'accumulate', label: 'accumulate（累积）', hint: '值会累积进学习者状态（画像/上下文），供后续阶段持续使用' },
+]
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
@@ -146,6 +153,8 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 const keyword = ref('')
 const category = ref<CategoryId>('all')
 const loaded = ref(false)
+/** 加载失败原因（非空 = 顶部错误条 + 重试）；此前只 console.warn，界面静默全空 */
+const loadError = ref('')
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 
@@ -204,17 +213,17 @@ function onBodyScroll() {
 }
 
 function showCategory(id: string) {
-  if (category.value !== 'all' && category.value !== id) return false
-  if (category.value === 'all') {
-    if (id === 'concept' || id === 'health') return true
-  }
-  return true
+  // 全部视图 = 所有分区；单分类 = 只留命中那一格
+  return category.value === 'all' || category.value === id
 }
 
+/** 角色与流转的完整口径：接口动态词条 + 4 条固有语义 */
+const flowRoles = computed<PromptRoleMeta[]>(() => [...promptRoles.value, ...FLOW_EXTRAS])
+
 function countOf(id: string) {
-  if (id === 'all') return promptRoles.value.length + completionStates.value.length + semantics.value.length + stages.value.length + terms.value.length + docs.value.length
-  /* flow 分类 = 动态 promptRoles + terms 中 category='flow' 的词条（勿写死数量：静态/接口词条会增减） */
-  if (id === 'flow') return promptRoles.value.length + terms.value.filter((t) => t.category === 'flow').length
+  if (id === 'all') return flowRoles.value.length + completionStates.value.length + semantics.value.length + stages.value.length + terms.value.length + docs.value.length
+  /* flow 分类 = 动态 promptRoles + 固有语义 + terms 中 category='flow' 的词条（勿写死数量：静态/接口词条会增减） */
+  if (id === 'flow') return flowRoles.value.length + terms.value.filter((t) => t.category === 'flow').length
   if (id === 'status') return completionStates.value.length + semantics.value.length
   if (id === 'stage') return stages.value.length
   return terms.value.filter((t) => t.category === id).length
@@ -227,7 +236,7 @@ function termsOf(id: 'concept' | 'health') {
 
 const kwLower = computed(() => keyword.value.trim().toLowerCase())
 
-const filteredRoles = computed(() => promptRoles.value.filter((m) =>
+const filteredRoles = computed(() => flowRoles.value.filter((m) =>
   !kwLower.value || m.id.includes(kwLower.value) || m.label.includes(kwLower.value) || m.hint.includes(kwLower.value)))
 const filteredCompletion = computed(() => completionStates.value.filter((m) =>
   !kwLower.value || m.status.includes(kwLower.value) || m.label.includes(kwLower.value) || m.hint.includes(kwLower.value)))
@@ -239,10 +248,16 @@ const filteredDocs = computed(() => docs.value.filter((d) =>
   !kwLower.value || d.title.includes(kwLower.value) || d.path.includes(kwLower.value) || d.desc.includes(kwLower.value)))
 
 async function load() {
+  loaded.value = false
+  loadError.value = ''
   try {
     const res = await adminGlossaryApi.get()
     const data = res.data?.data
-    if (!data) return
+    // 空响应等同失败：全部词条落空会让界面显示成「无匹配词条」，把故障说成没数据
+    if (!data) {
+      loadError.value = '接口未返回词条数据'
+      return
+    }
     promptRoles.value = data.promptRoles || []
     completionStates.value = data.completionStates || COMPLETION_META
     semantics.value = data.semantics || SEMANTICS_META
@@ -250,16 +265,25 @@ async function load() {
     terms.value = data.terms || []
     docs.value = data.docs || []
   } catch (e) {
-    console.warn('术语表加载失败（使用内置词条兜底）：', errMsg(e))
+    // 失败必须可见：顶部错误条给原因 + 重试（此前仅 console.warn）
+    loadError.value = errMsg(e)
   } finally {
     loaded.value = true
   }
+}
+
+/** 错误条「重试」：清掉搜索词重新拉一次，期间回到加载态 */
+async function retryLoad() {
+  keyword.value = ''
+  activeSection.value = 'flow'
+  await load()
 }
 
 watch(() => props.open, (o) => {
   if (o) {
     loaded.value = false
     keyword.value = ''
+    loadError.value = ''
     activeSection.value = 'flow'
     void load()
   }
@@ -286,6 +310,19 @@ function close() { emit('close') }
 .agd__title strong { font-size: var(--mk-fs-emphasis); color: var(--mk-ink, #1a2a44); }
 .agd__subtitle { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); }
 .agd__search { display: grid; gap: 8px; padding: 6px 18px 12px; border-bottom: 1px solid var(--mk-line, #e6ebf4); }
+/* 加载失败条（错误态：红系底 + role=alert，与全站 mk 错误态同语言） */
+.agd__error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--mk-radius-xl);
+  background: var(--mk-red-bg);
+  color: var(--mk-red);
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+}
+.agd__error-text { flex: 1 1 auto; min-width: 0; }
 /* 滚动修复 #10：分类锚点导航条（横向滚动小胶囊） */
 .agd__nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
 .agd__nav-item {
@@ -296,7 +333,6 @@ function close() { emit('close') }
 .agd__nav-item:hover { color: var(--mk-blue, #2c63d0); }
 .agd__nav-item.is-active { background: #dbe9ff; color: var(--mk-accent-deep, #1f57cc); border-color: rgba(44, 99, 208, 0.35); }
 .agd__body { overflow-y: auto; padding: 6px 18px 20px; }
-.agd__loading { padding: 30px 0; text-align: center; color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-micro); }
 .agd__section { margin-top: 14px; }
 /* 滚动修复 #10：分类标题吸顶（抽屉内部滚动时分区标题常驻顶部） */
 .agd__section-title {
@@ -326,7 +362,6 @@ function close() { emit('close') }
   .agd__search { padding: 8px 24px 14px; }
   .agd__nav-item { font-size: var(--mk-fs-micro); }
   .agd__body { padding: 8px 24px 24px; }
-  .agd__loading { font-size: var(--mk-fs-body); }
   .agd__section-title { font-size: var(--mk-fs-micro); }
   .agd__term-name { font-size: var(--mk-fs-body); }
   .agd__term-en { font-size: var(--mk-fs-micro); }
@@ -340,7 +375,6 @@ function close() { emit('close') }
   .agd__search { padding: 10px 30px 16px; }
   .agd__nav-item { font-size: var(--mk-fs-micro); }
   .agd__body { padding: 10px 30px 30px; }
-  .agd__loading { font-size: var(--mk-fs-body); }
   .agd__section-title { font-size: var(--mk-fs-micro); }
   .agd__term-name { font-size: var(--mk-fs-body); }
   .agd__term-en { font-size: var(--mk-fs-micro); }
@@ -354,7 +388,6 @@ function close() { emit('close') }
   .agd__search { padding: 12px 36px 18px; }
   .agd__nav-item { font-size: var(--mk-fs-body); }
   .agd__body { padding: 12px 36px 36px; }
-  .agd__loading { font-size: var(--mk-fs-emphasis); }
   .agd__section-title { font-size: var(--mk-fs-emphasis); }
   .agd__term-name { font-size: var(--mk-fs-emphasis); }
   .agd__term-en { font-size: var(--mk-fs-body); }

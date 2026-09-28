@@ -6,9 +6,9 @@
       <strong class="mk-status__title">模型与接入</strong>
       <span class="mk-status__sep"></span>
       <template v-if="tab === 'model'">
-        <span class="mk-status__meta" title="服务商 API Key 是否已配置">密钥：{{ keySet ? '已配置' : '未配置' }}</span>
-        <span class="mk-status__meta" :title="modelListTitle">模型清单：{{ models.length ? `${models.length} 个` : '未拉取' }}</span>
-        <span class="mk-status__meta" :title="routeTitle">默认路由：{{ routeCount }}/3</span>
+        <span class="mk-status__meta" title="服务商 API Key 是否已配置">密钥：{{ apiConfigFailed ? '—' : (keySet ? '已配置' : '未配置') }}</span>
+        <span class="mk-status__meta" :title="modelListTitle">模型清单：{{ apiConfigFailed ? '—' : (models.length ? `${models.length} 个` : '未拉取') }}</span>
+        <span class="mk-status__meta" :title="routeTitle">默认路由：{{ apiConfigFailed ? '—' : `${routeCount}/3` }}</span>
         <span v-if="isLive && lastCheckedText" class="mk-status__meta" title="连通性 / 能力探测时间">上次探测：{{ lastCheckedText }}</span>
       </template>
       <template v-else-if="tab === 'overview'">
@@ -48,6 +48,11 @@
         <h3 class="mk-card__title">连接与验证</h3>
         <span class="mk-badge" :class="connBadge.cls">{{ connBadge.text }}</span>
         <button v-if="dirty.has('conn')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['conn'])">{{ saving ? '保存中…' : '保存连接' }}</button>
+      </div>
+      <!-- 接入域（live 层）读取失败：表单全空不得伪装成「未配置」，显式失败 + 重试 -->
+      <div v-if="apiConfigFailed" class="mk-alert mk-alert--row ac-config-error" role="alert">
+        <span class="mk-alert__msg">配置读取失败，表单为空是读取失败而非未配置</span>
+        <button type="button" class="mk-alert__btn" @click="retryApiConfigLoad">重试</button>
       </div>
       <div class="ac-body">
         <!-- 连接凭证：地址与密钥并排，密钥附显示切换 -->
@@ -166,7 +171,7 @@
         </datalist>
 
         <!-- 默认思考：平台级开关 + 强度（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖） -->
-        <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖</span><button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button></div>
+        <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖<span v-if="dirty.has('route')"> · 保存见卡头「保存路由」</span></span></div>
         <div class="ac-row ac-row--3 ac-think">
           <label class="mk-field mk-field--switch">
             <input
@@ -383,6 +388,11 @@
           </button>
         </div>
       </div>
+      <!-- 探针设置单独读取失败：不得静默消失（原实现整段不渲染，用户以为平台没有探针能力） -->
+      <div v-else-if="configLoadFailed" class="ac-rel__note ac-rel__error">
+        探针设置读取失败，无法确认能力探针开关状态
+        <button type="button" class="mk-link" @click="retryConfigLoad">重试</button>
+      </div>
 
       <!-- 两列：左 = 调用参数，右 = 能力健康 -->
       <div class="ac-cols">
@@ -513,16 +523,16 @@ import {
   liveRunModelTest,
   liveSaveNetworkPolicy,
   timeAgo,
-  errMsg
-} from './live'
-import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi } from '@/api/adminApi'
-import {
+  errMsg,
+  liveFailures,
+  loadLiveData,
   registrationEnabled,
   registerIpQuotaEnabled,
   registerIpDailyQuota,
   updateRegistrationSetting,
   updateRegisterIpQuotaSetting
 } from './live'
+import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { toast } from '@/utils/toast'
@@ -657,6 +667,17 @@ async function probeHealth() {
 }
 
 /* ---------- 表单状态（live 一套交互） ---------- */
+/**
+ * 接入域（live 层 getConfig）读取失败：表单全空 + 状态条三 meta 显示「—」+ 卡内 alert。
+ * 原实现失败时 keySet/models/routeCount 全部为初始值，状态条显示确定态「未配置/未拉取/0-3」——
+ * 把「读不到」伪装成「没配置」，是审计不可接受的假信号。失败态由 liveFailures.apiConfig 驱动
+ * （live.ts 已导出；读取成功后自动清除，无需本地维护）。
+ */
+const apiConfigFailed = computed(() => !!liveFailures.value.apiConfig)
+/** 重试：重新走中央加载器拉取 apiConfig 域（liveFetchAt 未落 → 不会被 TTL 缓存跳过） */
+function retryApiConfigLoad() {
+  void loadLiveData()
+}
 const form = reactive({
   apiUrl: '',
   apiKey: '',
@@ -948,6 +969,7 @@ const routeTitle = computed(
   () => `已指定 ${routeCount.value} / 3 条默认路由（对话 / 推理 / 评估）。路由数只表示已指定，不代表模型清单已就绪`,
 )
 const statusTone = computed(() => {
+  if (apiConfigFailed.value) return 'mk-status--bad'
   if (ready.value) return 'mk-status--ok'
   if (keySet.value) return 'mk-status--muted'
   return 'mk-status--warn'

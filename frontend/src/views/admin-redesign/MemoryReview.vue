@@ -34,11 +34,20 @@
       <div class="mk-card__head">
         <h3 class="mk-card__title">记忆层概览</h3>
         <label class="mr__toggle" title="切换后整页重新统计">
-          <input v-model="includeVirtual" type="checkbox" @change="loadOverview" />
+          <input v-model="includeVirtual" type="checkbox" @change="refreshAll" />
           包含虚拟学习者
         </label>
       </div>
-      <div class="mr-summary">
+      <!-- traces=0 的降级态：okPct 会算成 100，比例条整条全绿 + 「健康 0 · 覆盖 0 位用户」
+           读起来像 100% 健康。没有任何痕迹时不给比例叙事，改用空态说清楚「为什么空 + 下一步」，
+           归并处理队列四格一并隐藏（没有痕迹就没有归并对象）。 -->
+      <MkEmptyState
+        v-if="!loading && !totals.traces"
+        icon="◌"
+        title="暂无记忆痕迹"
+        description="当前口径内还没有任何记忆痕迹：等学习者产生学习路径并完成概念提取后，这里才会显示健康 / 到期的构成。切换「包含虚拟学习者」可把仿真账号一并纳入统计。"
+      />
+      <div v-else-if="totals.traces" class="mr-summary">
         <div class="mr-summary__chart">
           <div
             class="mr-summary__ratio"
@@ -78,11 +87,13 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <h3 class="mk-card__title">用户列表</h3>
-        <span class="mk-card__meta">共 {{ rows.length }} 位有痕迹用户 · 按痕迹数倒序</span>
+        <!-- 口径：totals.users 是后端全量统计，列表只取痕迹数倒序前 N 且暂无分页——
+             两个数字必须同时给出，否则「页头 137 / 表下共 50」读起来像数据缺失 -->
+        <span class="mk-card__meta" title="后端口径为全量有记忆痕迹用户；列表按痕迹数倒序只取前 {{ rows.length }} 名，暂无分页">共 {{ totals.users }} 位有记忆痕迹用户（展示前 {{ rows.length }}）· 按痕迹数倒序</span>
       </div>
       <p v-if="error" class="mr__error">{{ error }}</p>
       <MockSkeletonTable v-if="loading && !rows.length" :cols="6" :rows="8" />
-      <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" />
+      <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="当前口径内还没有用户产生记忆痕迹。等学习者开始学习并完成概念提取后，这里会按痕迹数倒序列出用户。" />
       <div v-else class="mk-table-scroll">
       <table class="mk-table mk-table--click mk-table--fixed">
         <!-- 本表曾漏写 colgroup：mk-table--fixed 下没有列宽声明 = 10 列等分 118px，
@@ -157,7 +168,7 @@
             </td>
             <td class="mr__actions">
               <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(row.userId)">明细</button>
-              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" @click.stop="recompute(row.userId)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
+              <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" @click.stop="recompute(row.userId)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
             </td>
           </tr>
         </tbody>
@@ -177,38 +188,43 @@
           <button type="button" class="mk-btn mk-btn--sm" @click="closeDetail">收起</button>
         </div>
 
-        <h4 class="mr__h4">课内温故计划（本节该接几个）</h4>
-        <MkStatStrip v-if="detail.reviewPlan" :items="planKpiItems" />
+        <!-- 温故计划整块按 detail.reviewPlan 有无渲染：reviewPlan=null 时原来只剩一个裸标题 -->
+        <template v-if="detail.reviewPlan">
+          <h4 class="mr__h4">课内温故计划（本节该接几个）</h4>
+          <MkStatStrip :items="planKpiItems" />
 
-        <div v-if="detail.reviewPlan?.items.length" class="mk-table-scroll">
-        <table class="mk-table">
-          <thead>
-            <tr><th>概念</th><th class="mk-num">记忆强度</th><th>到期原因</th><th class="mk-num">负担</th><th>负担因子</th><th>来源路径</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in detail.reviewPlan.items" :key="item.conceptKey">
-              <td>{{ item.label }}<small class="mr__sub">{{ item.conceptKey }}</small></td>
-              <td class="mk-num">
-                <span class="mr-pct" :class="{ 'mr-pct--warn': item.retention < 0.7 }" :title="`记忆强度 ${Math.round(item.retention * 100)}%，低于 70% 优先安排`">
-                  <b>{{ Math.round(item.retention * 100) }}%</b>
-                  <span class="mr-pct__bar" aria-hidden="true"><i :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
-                </span>
-              </td>
-              <td>{{ item.reason }}</td>
-              <td class="mk-num">{{ item.load }}</td>
-              <td class="mr__sub">{{ item.loadFactors.join('、') || '—' }}</td>
-              <td>{{ item.originPathTitle || '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
+          <div v-if="detail.reviewPlan?.items.length" class="mk-table-scroll">
+          <table class="mk-table">
+            <thead>
+              <tr><th>概念</th><th class="mk-num">记忆强度</th><th>到期原因</th><th class="mk-num">负担</th><th>负担因子</th><th>来源路径</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in detail.reviewPlan.items" :key="item.conceptKey">
+                <td>{{ item.label }}<small class="mr__sub">{{ item.conceptKey }}</small></td>
+                <td class="mk-num">
+                  <span class="mr-pct" :class="{ 'mr-pct--warn': item.retention < 0.7 }" :title="`记忆强度 ${Math.round(item.retention * 100)}%，低于 70% 优先安排`">
+                    <b>{{ Math.round(item.retention * 100) }}%</b>
+                    <span class="mr-pct__bar" aria-hidden="true"><i :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
+                  </span>
+                </td>
+                <td>{{ item.reason }}</td>
+                <td class="mk-num">{{ item.load }}</td>
+                <td class="mr__sub">{{ item.loadFactors.join('、') || '—' }}</td>
+                <td>{{ item.originPathTitle || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+          </div>
+          <p v-else class="mr__sub">当前没有需要在本节接住的记忆点。</p>
 
-        <div v-if="detail.reviewPlan?.relearnSuggestions.length" class="mr__warn">
-          <strong>建议回路径重学：</strong>
-          <span v-for="item in detail.reviewPlan.relearnSuggestions" :key="item.conceptKey" class="mr__chip">
-            {{ item.label }}（连续 {{ item.consecutiveAgain }} 次没接上）
-          </span>
-        </div>
+          <div v-if="detail.reviewPlan?.relearnSuggestions.length" class="mr__warn">
+            <strong>建议回路径重学：</strong>
+            <span v-for="item in detail.reviewPlan.relearnSuggestions" :key="item.conceptKey" class="mr__chip">
+              {{ item.label }}（连续 {{ item.consecutiveAgain }} 次没接上）
+            </span>
+          </div>
+        </template>
+        <p v-else class="mr__sub">暂无温故计划：该用户名下还没有可安排的记忆痕迹。</p>
 
         <h4 class="mr__h4">同族重复（「过多过杂」的直接证据）</h4>
         <p v-if="!detail.duplicatedFamilies.length" class="mr__sub">没有同族重复。</p>
@@ -217,7 +233,8 @@
           <thead><tr><th>族（归一化键）</th><th class="mk-num">条数</th><th>成员</th></tr></thead>
           <tbody>
             <tr v-for="family in detail.duplicatedFamilies" :key="family.family">
-              <td>{{ family.family }}</td>
+              <!-- 归一化键没有人类可读 label（后端只回 key）→ 同 负担因子 口径降为 sub，不冒充正文 -->
+              <td class="mr__sub">{{ family.family }}</td>
               <td class="mk-num">{{ family.size }}</td>
               <td class="mr__sub">
                 <div v-for="member in family.members" :key="member.conceptKey">
@@ -255,7 +272,7 @@
           </tbody>
         </table>
           </div>
-        <MkEmptyState v-else title="当前没有到期点" />
+        <MkEmptyState v-else title="当前没有到期点" description="该用户的记忆痕迹都还没到复习时间；到期后会按记忆强度升序列在这里（前 20 条）。" />
       </div>
 
       <div class="mk-card">
@@ -310,7 +327,7 @@
           <table class="mk-table">
             <thead>
               <tr>
-                <th></th>
+                <th class="mr__th-check">选择</th>
                 <th>规范键</th><th>别名</th><th class="mk-num">把握度</th><th class="mk-num">词面相似</th>
                 <th>可自动执行</th><th>理由</th>
               </tr>
@@ -325,7 +342,7 @@
                     @change="toggleSelect(proposal.canonical, proposal.autoApplicable)"
                   />
                 </td>
-                <td>{{ proposal.canonical }}</td>
+                <td class="mr__sub">{{ proposal.canonical }}</td>
                 <td class="mr__sub">{{ proposal.aliases.join(' / ') }}</td>
                 <td class="mk-num">
                   <span class="mr-pct" :title="`把握度 ${Math.round(proposal.confidence * 100)}%`">
@@ -368,7 +385,7 @@
             <thead><tr><th>规范键</th><th>别名</th><th class="mk-num">删除条数</th><th>执行时间</th><th></th></tr></thead>
             <tbody>
               <tr v-for="merge in rollbackableMerges" :key="merge.mergeId || `${merge.canonical}-${merge.appliedAt}`">
-                <td>{{ merge.canonical }}</td>
+                <td class="mr__sub">{{ merge.canonical }}</td>
                 <td class="mr__sub">{{ merge.aliases.join(' / ') }}</td>
                 <td class="mk-num">{{ merge.deletedRows }}</td>
                 <td>{{ new Date(merge.appliedAt).toLocaleString() }}</td>
@@ -849,6 +866,8 @@ onMounted(async () => {
 .mr__obs--never { color: var(--mk-faint); }
 
 .mr__h4 { margin: 14px 0 6px; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
+/* 归并表勾选列表头：收窄，别把「选择」撑成正文列宽 */
+.mr__th-check { width: 40px; }
 .mr__sub { display: block; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
 .mr__row--active { background: var(--mk-blue-bg); }
 .mr__actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }

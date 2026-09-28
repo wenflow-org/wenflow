@@ -46,16 +46,10 @@
       </section>
     </template>
 
-    <!-- 整页无数据（真实空态）：summary 为空且已加载完成 -->
-    <MkEmptyState
-      v-else-if="!summary && !loading"
-      min
-      title="暂无 Token 成本数据"
-      :description="`近 ${days} 天没有任何 LLM 调用记录，产生调用后这里会展示用量与成本。`"
-    />
-
+    <!-- 加载完成（含空窗口）：后端 getSummary 恒返回对象，「!summary」整页空态不可达——空窗口
+         改判 summary.totals.calls===0，在筛选条之下渲染一次 MkEmptyState，替掉 4 处零值卡 + 「暂无数据」 -->
     <template v-else>
-      <!-- 筛选条（范围 + 数据范围，独立一行，对齐 TraceWaterfall 筛选条形态） -->
+      <!-- 筛选条（范围 + 数据范围，独立一行，对齐 TraceWaterfall 筛选条形态）：空窗口同样常驻，窗口切换不被遮 -->
       <div class="tc-filterbar">
         <div class="mk-pills tc-pills">
           <button
@@ -71,6 +65,16 @@
         </div>
         <DataScopeToggle v-if="isLive" v-model="includeTest" />
       </div>
+      <MkEmptyState
+        v-if="summaryEmpty"
+        min
+        icon="◌"
+        title="这个时间窗暂无 LLM 调用"
+        :description="`近 ${days} 天${includeTest ? '（含测试流量）' : ''}没有任何调用记录，产生调用后这里展示 Token 用量、趋势与排行。`"
+        :action-text="days !== 90 ? '看近 90 天' : ''"
+        @action="days = 90"
+      />
+      <template v-else>
       <!-- 概览卡（MkKpi 统一形态） -->
       <section class="tc-overview">
         <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`prompt ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · completion ${summary ? fmtTokens(summary.totals.completionTokens) : '—'}`" />
@@ -145,6 +149,7 @@
           <p v-else class="mk-card__note">暂无数据。</p>
         </section>
       </div>
+      </template>
     </template>
   </div>
 </template>
@@ -211,6 +216,9 @@ const rangePills = [
 
 const trend = computed(() => summary.value?.trend || [])
 const totalTokens = computed(() => summary.value?.totals.tokens || 0)
+/* 空窗口判据：后端 getSummary 恒返回对象（totals 全 0），「!summary」整页空态不可达；
+   以 calls === 0 判空，筛选项（时间窗/测试流量）切换后用户仍可换窗自救 */
+const summaryEmpty = computed(() => !!summary.value && summary.value.totals.calls === 0)
 const skillRows = computed(() => bySkill.value.slice(0, skillAll.value ? bySkill.value.length : skillLimit))
 const userRows = computed(() => byUser.value.slice(0, userAll.value ? byUser.value.length : userLimit))
 const statusTone = computed(() =>

@@ -161,7 +161,7 @@
             </div>
             <div class="vp-goal">
               <span>长期倾向（可选）</span>
-              <strong>{{ d.goal || '由故事产生当次学习需求' }}</strong>
+              <strong>{{ goalText || '由故事产生当次学习需求' }}</strong>
             </div>
           </div>
         </section>
@@ -374,9 +374,18 @@
               </template>
             </div>
           </div>
-          <!-- 空态三态：底层无故事 / 筛选无匹配（故事存在但过滤后为空） -->
+          <!-- 故事池三态：加载失败（接口挂了，不是没故事）/ 底层无故事 / 筛选无匹配 -->
           <MkEmptyState
-            v-if="isLive && !stories.length"
+            v-if="isLive && storiesLoadFailed"
+            tone="error"
+            title="故事池加载失败"
+            description="暂时无法读取该虚拟学习者的故事列表，可重试；这不是「没有故事」。"
+            action-text="重试"
+            compact
+            @action="retryStories"
+          />
+          <MkEmptyState
+            v-else-if="isLive && !stories.length"
             title="故事池为空"
             description="故事产生学习需求；点击「生成故事」由 AI 根据画像与倾向产出开场故事。"
             compact
@@ -423,8 +432,8 @@
                   </div>
                   <p class="vp-story__outline" :title="s.outline">{{ s.outline || '暂无故事概述' }}</p>
                   <div class="vp-story__stats">
-                    <span v-if="(s.runCount || 0) > 0" class="vp-story__stats-item" title="共运行的会话次数">运行 {{ s.runCount }} 次</span>
-                    <span v-if="stageCountsText(s)" class="vp-story__stats-item" title="会话进度：目标对话 / 路径规划 / 教学回合 的累计会话数（0 段省略）">{{ stageCountsText(s) }}</span>
+                    <span v-if="(s.runCount || 0) > 0" class="vp-story__stats-item vp-story__stats-item--runs" title="共运行的会话次数">运行 {{ s.runCount }} 次</span>
+                    <span v-if="stageCountsText(s)" class="vp-story__stats-item vp-story__stats-item--stages" title="会话进度：目标对话 / 路径规划 / 教学回合 的累计会话数（0 段省略）">{{ stageCountsText(s) }}</span>
                     <!-- 双轴状态：生命周期徽章（轴 A）+ 阶段条（轴 B）；与一级页同源组件 -->
                     <template v-if="s.latestRun?.sessionId">
                       <RunStateBadge :status="storyRunState(s)" :hint="`${formatRunResult(s.latestRun?.status || '')} · ${timeAgo(String(s.latestRun?.updatedAt || s.latestRun?.createdAt || ''))}`" :pulse="false" />
@@ -524,6 +533,7 @@
       v-if="isLive && subPage?.id"
       v-model:visible="quickLearnOpen"
       :profile-id="subPage.id"
+      @token-issued="recordProjectionTokenExpiry"
     />
 
     <!-- 编辑画像 -->
@@ -651,10 +661,7 @@
 
   <div v-else class="mk-page">
     <button type="button" class="mk-back" @click="closeSubPage">← 虚拟学习者</button>
-    <MkEmptyState
-      title="加载中…"
-      description="正在拉取真实画像。"
-    />
+    <MkLoading text="正在拉取真实画像…" />
   </div>
 </template>
 
@@ -746,12 +753,13 @@ export function buildMemoryRetentionChartOption(
 </script>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { statusText } from './statusText'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import QuickLearnPanel from './QuickLearnPanel.vue'
+import { clearProjectionToken } from '@/utils/projection'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -856,6 +864,8 @@ const liveDetail = ref<Detail | null>(null)
 /** 主题感知：图表坐标轴/网格线颜色随暗色切换（与 LearnerDetail 负荷曲线同源） */
 const isDark = useIsDark()
 const stories = ref<StoryItem[]>([])
+/** 故事池接口失败（区别于「真的没有故事」）：此前静默兜底会显示「故事池为空」，误导为无故事 */
+const storiesLoadFailed = ref(false)
 const selectedStoryId = ref<string | null>(null)
 /** 故事多选（对齐一级页批量操作）：勾选多个故事后可批量运行/删除；与单选运行目标并存 */
 const selectedStoryKeys = ref<Set<string>>(new Set())
@@ -1087,6 +1097,52 @@ const saving = ref(false)
 const storyBusy = ref(false)
 const sessionBusy = ref(false)
 const quickLearnOpen = ref(false)
+
+/* ===== 投影 token（冒充该虚拟人）的本地生命周期 =====
+   为什么：QuickLearnPanel 签发的投影 token 与管理员自身凭据同存 localStorage，
+   后端 TTL 30m。此前无过期簿记——token 到期后仍躺在存储里并被请求头注入，
+   表现为管理员前台会话被反复踢下线（静默 401）。本页作为 QuickLearnPanel 的宿主，
+   复刻 UserDetail.vue 的「本地过期记账 + 60s 轮询清理」：
+   签发处（QuickLearnPanel）只透传到期时刻，簿记与清理集中在这里一处。 */
+const PROJECTION_TOKEN_TTL_MS = 30 * 60 * 1000
+const PROJECTION_TOKEN_EXPIRES_KEY = 'projection_token_expires_at'
+/** 当前本地投影 token 的过期时刻（ms）；null = 本地无有效记录 */
+const projectionTokenExpiresAt = ref<number | null>(null)
+
+/** QuickLearnPanel 签发成功回调：落过期时刻（先有 token 后有期限，避免孤儿 token） */
+function recordProjectionTokenExpiry(payload: { token: string; expiresAt: number }) {
+  // 服务端给不出可信日期时，按后端 30min TTL 兜底记账（宁可早清也不留无法清理的孤儿 token）
+  const exp = Number(payload?.expiresAt)
+  const at = Number.isFinite(exp) && exp > 0 ? exp : Date.now() + PROJECTION_TOKEN_TTL_MS
+  localStorage.setItem(PROJECTION_TOKEN_EXPIRES_KEY, String(at))
+  projectionTokenExpiresAt.value = at
+}
+
+/** 过期即清两个键：不清理的话，过期 token 会一直躺在同源存储里继续冒充凭据 */
+function purgeExpiredProjectionToken() {
+  let exp = projectionTokenExpiresAt.value
+  if (exp == null) {
+    // ref 为空时以 localStorage 为准（覆盖其他页签/上次会话留下的残留）
+    const raw = Number(localStorage.getItem(PROJECTION_TOKEN_EXPIRES_KEY))
+    if (!Number.isFinite(raw) || raw <= 0) return
+    exp = raw
+    projectionTokenExpiresAt.value = raw
+  }
+  if (Date.now() < exp) return
+  clearProjectionToken() // token + context（utils 已封装）
+  localStorage.removeItem(PROJECTION_TOKEN_EXPIRES_KEY)
+  projectionTokenExpiresAt.value = null
+}
+
+/** 挂载即清一次 + 每 60s 轮询：其他页签的残留也要在回到本页时被清掉 */
+let projectionExpiryTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  purgeExpiredProjectionToken()
+  projectionExpiryTimer = setInterval(purgeExpiredProjectionToken, 60_000)
+})
+onBeforeUnmount(() => {
+  if (projectionExpiryTimer) clearInterval(projectionExpiryTimer)
+})
 
 /* ===== 运行预算（画像 tab 常驻卡片；画像级持久，新会话创建时作为初始值） ===== */
 const budgetForm = ref({
@@ -1366,6 +1422,12 @@ function parseSessionStory(session: Record<string, unknown>) {
 /** 加载序号：quiet 轮询与手动加载竞态时丢弃旧响应（last-wins） */
 let loadSeq = 0
 
+/** 故事池重试：只重跑详情加载（quiet 不清屏），失败态可反复点 */
+function retryStories() {
+  const id = subPage.value?.id
+  if (id) void loadDetail(id, true)
+}
+
 async function loadDetail(id?: string, quiet = false) {
   if (!id) return
   const seq = ++loadSeq
@@ -1374,11 +1436,16 @@ async function loadDetail(id?: string, quiet = false) {
     stories.value = []
     detailError.value = false
     fallbackNotice.value = false
+    storiesLoadFailed.value = false
   }
+  // 故事接口失败需要与「接口成功但真的没有故事」区分：后者由 storyPool 兜底，
+  // 失败时 storiesRes 为 null 且 apiStories 也为 null，此前会被当成空池显示「故事池为空」
+  let storiesRequestFailed = false
   try {
     const [raw, storiesRes] = await Promise.all([
       liveGetVirtualDetail(id) as Promise<Record<string, unknown>>,
-      adminVirtualLearnersApi.getVirtualLearnerStories(id).catch(() => null)
+      adminVirtualLearnersApi.getVirtualLearnerStories(id)
+        .catch(() => { storiesRequestFailed = true; return null })
     ])
     if (seq !== loadSeq) return
     const p = (raw.profile as Record<string, unknown>) || {}
@@ -1389,9 +1456,12 @@ async function loadDetail(id?: string, quiet = false) {
     const apiStories = Array.isArray(storiesBody?.stories) ? storiesBody.stories as Record<string, unknown>[] : null
     if (apiStories) {
       stories.value = apiStories.map((s, i) => mapStoryItem(s, i))
+      storiesLoadFailed.value = false
     } else {
       const storyPool = (p.storyPool || raw.storyPool || raw.stories || []) as Record<string, unknown>[]
       stories.value = storyPool.map((s, i) => mapStoryItem(s, i))
+      // 仅「故事接口确实失败且故事池也空」才算失败态：详情接口给了 storyPool 时列表仍有内容
+      storiesLoadFailed.value = storiesRequestFailed && stories.value.length === 0 && !storyPool.length
     }
 
     if (stories.value.length === 1) {
@@ -2103,15 +2173,17 @@ async function quietReload(id: string) {
   padding: 18px 22px 28px;
 }
 /* 页头身份区走 .mk-entity（shared.css）：--flat + --round 头像 + --lg 名字。
-   以下是头像色板（按名称哈希取色，同一人恒定同色）：只给 background，形状来自原语。 */
-.vp-avatar--0 { background: #3b82f6; }
-.vp-avatar--1 { background: #8b5cf6; }
-.vp-avatar--2 { background: #10b981; }
-.vp-avatar--3 { background: #f59e0b; }
-.vp-avatar--4 { background: #ef4444; }
-.vp-avatar--5 { background: #06b6d4; }
-.vp-avatar--6 { background: #ec4899; }
-.vp-avatar--7 { background: #64748b; }
+   以下是头像色板（按名称哈希取色，同一人恒定同色）：只给 background，形状来自原语。
+   单源意图：色值与 VirtualLearners.vue 的 .vl-avatar--N 严格同值（两页同一人同色），
+   该 8 色板经走查 2026-09-27 加深至白字对比度 ≥4.5:1，两处须同步修改。 */
+.vp-avatar--0 { background: #2563eb; } /* 蓝 5.17 */
+.vp-avatar--1 { background: #7c3aed; } /* 紫 5.70 */
+.vp-avatar--2 { background: #047857; } /* 绿 5.48 */
+.vp-avatar--3 { background: #b45309; } /* 琥珀 5.02 */
+.vp-avatar--4 { background: #dc2626; } /* 红 4.83 */
+.vp-avatar--5 { background: #0e7490; } /* 青 5.36 */
+.vp-avatar--6 { background: #db2777; } /* 粉 4.60 */
+.vp-avatar--7 { background: #64748b; } /* 灰 4.76 */
 .vp-top__level { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
 /* 页头主操作走 .mk-entity__actions（shared.css） */
 /* 生命周期状态徽章（vlab-controls 唯一语义：进行中/已暂停/已失败/已终止/已完成…） */
@@ -2373,11 +2445,13 @@ async function quietReload(id: string) {
   font-weight: 600;
   white-space: nowrap;
 }
-.vp-story__stats-item:first-child::before {
+/* 统计项图标：显式修饰类（不用 :nth-child / :first-child）——runCount=0 时「运行」项不渲染，
+   位置选择器会把图标粘到状态徽章上（表情错位） */
+.vp-story__stats-item--runs::before {
   content: '🕐 ';
   font-size: var(--mk-fs-micro);
 }
-.vp-story__stats-item:nth-child(2)::before {
+.vp-story__stats-item--stages::before {
   content: '📈 ';
   font-size: var(--mk-fs-micro);
 }

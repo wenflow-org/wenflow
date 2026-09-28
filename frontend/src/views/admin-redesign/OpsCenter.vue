@@ -4,9 +4,9 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">系统工具</strong>
       <span class="mk-status__sep"></span>
-      <span v-if="tab === 'tools'" class="mk-status__meta" :class="deadCount > 0 ? 'mk-status__meta--bad' : ''">outbox 死信 {{ deadCount }}</span>
+      <span v-if="tab === 'tools'" class="mk-status__meta" :class="hasDeadAttention ? 'mk-status__meta--bad' : ''">outbox 死信 {{ deadMetaText }}</span>
       <span v-else-if="tab === 'export'" class="mk-status__meta">CSV 下载 · UTF-8（Excel 可直接打开）</span>
-      <span v-else class="mk-status__meta">管理员会话 {{ securityCount }} 个</span>
+      <span v-else class="mk-status__meta" :class="securityCount === null ? 'oc-meta--pending' : ''">管理员会话 {{ securityCount === null ? '—' : securityCount }} 个</span>
       <span class="mk-status__actions">
         <button v-if="tab === 'tools'" type="button" class="mk-status__action" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
         <button v-else-if="tab === 'security'" type="button" class="mk-status__action" @click="securityRef?.refresh?.()">刷新</button>
@@ -17,7 +17,7 @@
     <div class="mk-pills oc-tabs">
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'tools' }" @click="switchTab('tools')">运维工具</button>
       <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'export' }" @click="switchTab('export')">数据导出</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'security' }" @click="switchTab('security')">会话安全<span class="mk-pill__count">{{ securityCount }}</span></button>
+      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'security' }" @click="switchTab('security')">会话安全<span class="mk-pill__count">{{ securityCount === null ? '—' : securityCount }}</span></button>
     </div>
 
     <!-- ===== Tab1: 运维工具 ===== -->
@@ -231,8 +231,9 @@ type OcTab = (typeof OC_TABS)[number]
 const tab = ref<OcTab>('tools')
 const route = useRoute()
 const router = useRouter()
-/** 会话安全域计数（SessionSecurity embedded 上报） */
-const securityCount = ref(0)
+/** 会话安全域计数（SessionSecurity embedded 上报）；null = 尚未访问该 tab，
+    此时状态条/pill 显示「—」而非 0（0 会被读成「确认无会话」，是另一种假信号） */
+const securityCount = ref<number | null>(null)
 const securityRef = ref<{ refresh?: () => void } | null>(null)
 /* URL → tab（深链/刷新/前进后退）；非法值回落 tools。组件单测可无 router 挂载，故访问保持可选 */
 watch(
@@ -255,7 +256,19 @@ const refreshing = ref(false)
 const advanceBusy = ref(false)
 const requeueBusy = ref(false)
 
-const statusTone = computed(() => (tab.value === 'tools' && deadCount.value > 0 ? 'mk-status--warn' : 'mk-status--ok'))
+/** 死信域需要关注：有死信，或读取失败（deadCount 失败时保持 0，必须与「确实没有死信」区分） */
+const hasDeadAttention = computed(() => deadFailed.value || deadCount.value > 0)
+/** 死信 meta 文案：加载中「…」/ 失败「—」/ 就绪真实数（瞬态 0 会被误读为「确认无死信」） */
+const deadMetaText = computed(() => {
+  if (deadFailed.value) return '—'
+  if (deadLoading.value) return '…'
+  return String(deadCount.value)
+})
+
+const statusTone = computed(() => {
+  if (tab.value === 'tools' && deadFailed.value) return 'mk-status--bad'
+  return tab.value === 'tools' && deadCount.value > 0 ? 'mk-status--warn' : 'mk-status--ok'
+})
 
 /* 时间推进 */
 const advance = ref({ userId: '', days: 30, pathId: '' })
@@ -461,6 +474,8 @@ watch(tab, (t) => {
 .oc-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
 .dt-body { padding: 14px; display: grid; gap: 14px; }
 /* 工具/导出 tab 条（独立一行卡片形态，对齐全站筛选条） */
+/* 会话计数尚未就绪（未访问 tab）：弱化显示，区别于已确认的 0 */
+.oc-meta--pending { color: var(--mk-faint); }
 .oc-tabs {
   padding: 8px 14px;
   border: 1px solid var(--mk-line);

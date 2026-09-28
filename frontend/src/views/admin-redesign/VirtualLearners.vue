@@ -185,11 +185,6 @@
                   />
                 </template>
                 <span v-else class="vl-run vl-run--idle" title="当前没有进行中的会话">空闲</span>
-                <span
-                  v-if="s.simulation?.enabled"
-                  class="mk-badge mk-badge--sm"
-                  :title="`日期模拟：第 ${s.simulation.dayIndex} 天${s.simulation.baseDate ? ' · 起点 ' + s.simulation.baseDate : ''}${s.simulation.autoAdvance ? ' · 自动推进' : ''}`"
-                >模拟 第 {{ s.simulation.dayIndex }} 天</span>
               </div>
             </td>
             <td v-if="!isNarrow" class="mk-num">
@@ -248,7 +243,9 @@
       <MkEmptyState
         v-else
         :title="samples.length ? '当前筛选无虚拟学习者' : '暂无虚拟学习者'"
-        description="新建虚拟学习者后，在画像页生成故事即可运行。"
+        :description="samples.length
+          ? '当前筛选条件下没有匹配的虚拟学习者；可换关键词或清除筛选后重试。'
+          : '新建虚拟学习者后，在画像页生成故事即可运行。'"
         :action-text="isFiltered && samples.length ? '清除筛选' : ''"
         @action="clearFilters"
       />
@@ -280,7 +277,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive, watch, nextTick } from 'vue'
+import { computed, ref, reactive, watch, nextTick, onUnmounted } from 'vue'
 import { Play, SquareCheckBig } from 'lucide-vue-next'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency } from './live'
@@ -533,6 +530,8 @@ const vlRpmPolling = useSafePolling(() => loadVlRpm(), {
   immediate: true
 })
 vlRpmPolling.start()
+// 离开页面必须停：轮询是组件级副作用，卸载后继续打接口会打到已卸载页（泄漏到下一个页面）
+onUnmounted(() => vlRpmPolling.stop())
 
 /** 当前有活跃会话的虚拟学习者（"正在运行"条直接列名） */
 const runningSamples = computed(() => samples.value.filter((s) => s.runningCount > 0))
@@ -545,7 +544,6 @@ const partition = computed(() => {
   return {
     created: st.created,
     running: st.running,
-    failed: st.failed + st.abandoned,
     stale: liveVirtualStaleCount.value
   }
 })
@@ -625,9 +623,11 @@ function onBatchReclaim(ids: string[]) {
   void reclaimRef.value?.open(ids)
 }
 
-/** 「进行中」列点击直达会话座舱（画像页入口保持：行点击/画像按钮） */
+/** 「进行中」列点击直达会话座舱（画像页入口保持：行点击/画像按钮）。
+ *  仅暂停行（无进行中 id）回退到已暂停会话 id：徽章 title 承诺「点击进入会话座舱」，
+ *  否则该行点击无响应，等于一个说了不做的交互承诺 */
 function openRunningSession(s: Sample) {
-  const id = s.runningSessionIds[0]
+  const id = s.runningSessionIds[0] || s.pausedSessionIds?.[0]
   if (id) openSubPage('session', id)
 }
 </script>

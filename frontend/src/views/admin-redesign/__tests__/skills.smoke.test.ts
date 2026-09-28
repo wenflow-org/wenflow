@@ -244,10 +244,10 @@ describe('Skill 宿主 tab 化（健康中心折入）', () => {
     liveSkillStatsMap.value = null;
   });
 
-  it('?tab=health 落在健康检查 tab：4 个 tab 齐全且唯一 tab 控件', async () => {
+  it('?tab=health 落在健康检查 tab：5 个 tab 齐全且唯一 tab 控件', async () => {
     const { wrapper } = await mountHost('/admin/skills?tab=health');
     const tabs = wrapper.findAll('.skills-tabs .mk-pill');
-    expect(tabs.map((t) => t.text())).toEqual(['Skill 运行', '健康检查', '漂移', '对账']);
+    expect(tabs.map((t) => t.text())).toEqual(['Skill 运行', '健康检查', '漂移', '对账', '模型路由']);
     expect(tabs.find((t) => t.text() === '健康检查')!.classes()).toContain('mk-pill--active');
     // 嵌入的健康中心渲染（隐藏自身状态条 → 由宿主承载）
     expect(wrapper.find('.hc-embedded').exists()).toBe(true);

@@ -282,7 +282,10 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'update:visible': [value: boolean]
+  (e: 'update:visible', value: boolean): void
+  /** 投影 token 已签发：带本地记账用的过期时刻（ms）。宿主 VirtualProfile 据此
+   *  维护过期簿记并轮询清理，避免后端 30m TTL 到期后残留 token 继续冒充前台会话 */
+  (e: 'token-issued', payload: { token: string; expiresAt: number }): void
 }>()
 
 type QuickLearnStatus = 'queued' | 'running' | 'completed' | 'failed' | 'aborted' | 'interrupted' | string
@@ -451,6 +454,24 @@ function apiErrorMessage(error: unknown, fallback: string) {
   return value.response?.data?.error || value.message || fallback
 }
 
+/** 投影 token 过期时刻（ms）：后端只回 expiresIn:'30m' 相对窗口（无绝对时间戳），
+ *  故按签发时刻 + 窗口本地记账；若服务端将来给出绝对字段（expiresAt）则优先采用。
+ *  与 UserDetail.vue 的 PROJECTION_TOKEN_TTL_MS 保持同一常量值（后端 30min 签发窗口）。 */
+const PROJECTION_TOKEN_TTL_MS = 30 * 60 * 1000
+
+function resolveProjectionTokenExpiry(payload?: { expiresIn?: unknown; expiresAt?: unknown } | null): number {
+  const absolute = payload?.expiresAt != null ? new Date(String(payload.expiresAt)).getTime() : NaN
+  if (Number.isFinite(absolute) && absolute > 0) return absolute
+  const relative = String(payload?.expiresIn ?? '').trim().toLowerCase()
+  const match = relative.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d)?$/)
+  if (match) {
+    const unit = (match[2] || 's') as 'ms' | 's' | 'm' | 'h' | 'd'
+    const factor = { ms: 1, s: 1000, m: 60000, h: 3600000, d: 86400000 }[unit]
+    return Date.now() + Math.round(Number(match[1]) * factor)
+  }
+  return Date.now() + PROJECTION_TOKEN_TTL_MS
+}
+
 async function openFrontend(entry: 'evaluation' | 'path' | 'task' | 'learning-state' | 'next-task' | 'dashboard') {
   if (!currentRun.value) return
 
@@ -478,7 +499,9 @@ async function openFrontend(entry: 'evaluation' | 'path' | 'task' | 'learning-st
 
   try {
     openingFrontend.value = true
-    const { data } = await adminApi.createProjectionToken(props.profileId, { scope: 'full' })
+    // scope 取后端默认「前台学习台」：本面板只需以该虚拟人身份浏览前台，
+    // 不需要 full 完整开发视角（超最小必要，越权面更大）
+    const { data } = await adminApi.createProjectionToken(props.profileId, { scope: 'dashboard' })
     const token = data.data?.token
     if (!data.success || !token) throw new Error(data.error || '投影 token 缺失')
     setProjectionToken(token, {
@@ -486,6 +509,9 @@ async function openFrontend(entry: 'evaluation' | 'path' | 'task' | 'learning-st
       source: 'quick-learn',
       runId: currentRun.value.runId,
     })
+    // 过期时刻透传给宿主做本地簿记：后端只回 expiresIn:'30m'（TTL 30 分钟），
+    // 无本地过期记账时，到期 token 会一直躺在 localStorage 里继续被注入请求头
+    emit('token-issued', { token, expiresAt: resolveProjectionTokenExpiry(data.data) })
     window.open(target, '_blank')
   } catch (error: unknown) {
     toast.error(apiErrorMessage(error, '打开真实前台失败'))

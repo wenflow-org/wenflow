@@ -16,7 +16,16 @@
       </div>
     </div>
 
-    <Shell :current="scene" :crumb="crumbLabel" :crumb-title="crumbTitle" release @navigate="navigate" @glossary="glossaryOpen = true">
+    <Shell
+      :current="scene"
+      :crumb="crumbLabel"
+      :crumb-title="crumbTitle"
+      :crumb-clickable="!!subPage"
+      release
+      @navigate="navigate"
+      @glossary="glossaryOpen = true"
+      @crumb-click="closeSubPage"
+    >
       <MockSkeletonTable v-if="booting" :rows="7" :cols="6" />
       <!-- :key=详情 id+includeTest（回归 R3）：两个实体深链间前进/后退时强制重建组件，
            否则 <component> 同类型复用实例，旧实体的异步写入会串到新 id 的页面上；
@@ -143,7 +152,7 @@ import Shell from './Shell.vue';
 import SkillDrawer from './SkillDrawer.vue';
 import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
 import MockSkeletonTable from './SkeletonTable.vue';
-import { intent, intentQueryParams, subPage, closeSkillDrawer, type SubPageView } from './store';
+import { intent, intentQueryParams, subPage, closeSubPage, closeSkillDrawer, type SubPageView } from './store';
 import { loadLiveData } from './live';
 import { toast } from '@/utils/toast';
 import '@/styles/mk-primitives.css';

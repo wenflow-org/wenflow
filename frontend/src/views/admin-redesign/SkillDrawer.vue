@@ -37,9 +37,9 @@
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeSkillDrawer">✕</button>
           </div>
           <div class="msk__chips">
-            <span class="mk-badge" :class="stat.errors ? 'mk-badge--bad' : 'mk-badge--ok'">
-              {{ stat.errors ? `${stat.errors} 次失败` : '健康' }}
-            </span>
+            <!-- 健康三分态与列表 healthLabel 对齐：异常 / 空闲（0 调用）/ 健康；
+                 calls=0 曾恒显绿色「健康」，把从未调用说成运行良好 -->
+            <span class="mk-badge" :class="healthBadge.cls" :title="healthBadge.title">{{ healthBadge.text }}</span>
             <template v-if="skillProfile">
               <span class="mk-badge mk-badge--muted">{{ categoryLabel }}</span>
               <span class="mk-badge mk-badge--muted">{{ liveMeta?.agentName || skillProfile.agentName || '—' }}</span>
@@ -70,7 +70,9 @@
           <div class="msk__stats">
             <div class="msk__stat">
               <span>调用</span>
-              <strong>{{ stat.calls || '—' }}</strong>
+              <!-- 0 与未知必须分开：calls===0 显 0（下方有「暂无调用记录」说明），
+                   只有数据缺失才显示 — -->
+              <strong>{{ stat.calls }}</strong>
             </div>
             <div class="msk__stat">
               <span>失败</span>
@@ -109,9 +111,9 @@
                 @click="goTrace(s.traceId)"
               >
                 <span class="msk__dot" :class="`is-${s.status}`" :title="statusDotLabel(s.status)" :aria-label="statusDotLabel(s.status)"></span>
-                <span class="msk__row-title">{{ s.title }}</span>
+                <!-- traceId 从裸列降级为 title：人话行只留标题/耗时，traceId 供跳转排查悬停/复制 -->
+                <span class="msk__row-title" :title="`traceId：${s.traceId}`">{{ s.title }}</span>
                 <span class="msk__row-num mono">{{ fmtMs(s.durationMs) }}</span>
-                <span class="msk__row-id mono">{{ s.traceId }}</span>
               </button>
             </div>
             <p v-else class="msk__none">近 60 条日志窗口内无调用（统计为全量口径）。</p>
@@ -272,11 +274,16 @@
         </div>
       </aside>
     </div>
-    <div v-else-if="intent.skillDrawerId" class="msk__notfound">
-      <strong>未找到 Skill「{{ intent.skillDrawerId }}」</strong>
-      <span>它可能未注册或 ID 有误。</span>
-      <!-- 未找到态此前无任何出口（遮罩不覆盖该分支），补关闭按钮收起抽屉 -->
-      <button type="button" class="mk-btn" @click="closeSkillDrawer">关闭</button>
+    <!-- 未找到态：整层挂 .mk-drawer（fixed + 右对齐面板）并补遮罩；
+         此前该分支无遮罩，点击背后页面可穿透操作 -->
+    <div v-else-if="intent.skillDrawerId" class="mk-drawer">
+      <div ref="maskRef" class="mk-drawer__mask" @click="closeSkillDrawer"></div>
+      <div class="msk__notfound">
+        <strong>未找到 Skill「{{ intent.skillDrawerId }}」</strong>
+        <span>它可能未注册或 ID 有误。</span>
+        <!-- 未找到态此前无任何出口（遮罩不覆盖该分支），补关闭按钮收起抽屉 -->
+        <button type="button" class="mk-btn" @click="closeSkillDrawer">关闭</button>
+      </div>
     </div>
   </Teleport>
 </template>
@@ -314,7 +321,9 @@ const skillProfile = computed(() => {
     liveSkillProfiles.value.find((p) => p.id === id) ||
     liveExtraProfiles.value.find((p) => p.id === id)
   if (live) {
-    return { id: live.id, name: live.name, agentId: '', agentName: '', category: live.category, promptVersion: '', description: '' }
+    // agentId/agentName 透传 live 档案：此前硬编码 ''，头部阶段色 tone 恒落默认蓝、
+    // agent 徽章也只能靠 meta 接口的 parentAgent 兜底
+    return { id: live.id, name: live.name, agentId: live.agentId || '', agentName: live.agentName || '', category: live.category, promptVersion: '', description: '' }
   }
   return null
 })
@@ -454,6 +463,17 @@ const statusDotLabel = (s: string) => (s === 'ok' ? '成功' : s === 'err' ? '�
 const stat = computed(() => {
   if (skillProfile.value) return skillStatOf(skillProfile.value.id)
   return { calls: 0, errors: 0, avgMs: 0, lastAt: '从未' }
+})
+
+/** 头部健康徽章三分态（与 Skills.vue healthLabel 对齐）：异常 / 空闲（0 调用）/ 健康 */
+const healthBadge = computed<{ cls: string; text: string; title: string }>(() => {
+  if (stat.value.errors > 0) {
+    return { cls: 'mk-badge--bad', text: `${stat.value.errors} 次失败`, title: '窗口内存在失败调用' }
+  }
+  if (stat.value.calls === 0) {
+    return { cls: 'mk-badge--muted', text: '空闲', title: '窗口内无调用（从未调用不等于健康）' }
+  }
+  return { cls: 'mk-badge--ok', text: '健康', title: '窗口内调用全部成功' }
 })
 
 const recent = computed(() => (entity.value ? recentSpansOf(entity.value.id) : []))
@@ -807,7 +827,7 @@ watch(
 .msk__list { display: grid; gap: 4px; }
 .msk__row {
   display: grid;
-  grid-template-columns: 8px 1fr auto auto;
+  grid-template-columns: 8px 1fr auto;
   gap: 10px;
   align-items: center;
   padding: 8px 10px;
@@ -834,14 +854,6 @@ watch(
   text-overflow: ellipsis;
 }
 .msk__row-num { color: var(--mk-muted); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; }
-.msk__row-id {
-  color: var(--mk-faint);
-  font-size: var(--mk-fs-micro);
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .msk__none { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .msk__notfound {
   width: var(--mk-drawer-w, 560px);
@@ -1003,7 +1015,6 @@ watch(
   .msk__stat span { font-size: var(--mk-fs-micro); }
   .msk__stat strong { font-size: var(--mk-fs-emphasis); }
   .msk__row { font-size: var(--mk-fs-body); }
-  .msk__row-id { font-size: var(--mk-fs-micro); }
   .msk__row-num { font-size: var(--mk-fs-micro); }
   .msk__note { font-size: var(--mk-fs-micro); }
   .mk-section__head h4 { font-size: var(--mk-fs-micro); }
@@ -1018,7 +1029,6 @@ watch(
   .msk__stat span { font-size: var(--mk-fs-micro); }
   .msk__stat strong { font-size: var(--mk-fs-emphasis); }
   .msk__row { font-size: var(--mk-fs-body); }
-  .msk__row-id { font-size: var(--mk-fs-micro); }
   .msk__row-num { font-size: var(--mk-fs-micro); }
   .msk__note { font-size: var(--mk-fs-micro); }
   .mk-section__head h4 { font-size: var(--mk-fs-micro); }
@@ -1034,7 +1044,6 @@ watch(
   .msk__stat span { font-size: var(--mk-fs-body); }
   .msk__stat strong { font-size: 26px; }
   .msk__row { font-size: var(--mk-fs-emphasis); }
-  .msk__row-id { font-size: var(--mk-fs-body); }
   .msk__row-num { font-size: var(--mk-fs-body); }
   .msk__note { font-size: var(--mk-fs-body); }
   .mk-section__head h4 { font-size: var(--mk-fs-body); }
