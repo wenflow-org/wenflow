@@ -50,8 +50,8 @@
           </select>
         </label>
         <label class="sdp-field">
-          <span>模型（留空继承）<em>仅当 ACTIVE Prompt 未声明 model 时生效</em></span>
-          <input v-model="rtForm.model" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="继承 Agent / 平台默认" />
+          <span>模型（留空继承）<em>可填模型 id、provider/model 限定式或别名；候选来自模型目录</em></span>
+          <input v-model="rtForm.model" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="继承 Agent / 平台默认" list="rt-model-options" />
         </label>
         <label class="sdp-field">
           <span>思考模式</span>
@@ -119,7 +119,7 @@
 
       <div class="sdp-divider">
         <strong>失败处理与模型兜底</strong>
-        <span>逻辑重试独立于模型覆盖；传输重试由平台统一管理；兜底链最多 2 跳、同 tier、保存时校验通道可用性。</span>
+        <span>逻辑重试独立于模型覆盖；传输重试由平台统一管理；兜底链最多 2 跳、同 tier、同供应商（降级不换端点），保存时校验通道可用性。</span>
       </div>
 
       <div class="sdp-form__grid">
@@ -139,7 +139,7 @@
           <span>兜底链（最多 2 个候选）<em>留空=用模型注册表默认链；空数组保存=显式无链</em></span>
           <div class="sdp-fallback-editor">
             <span v-for="m in fallbackChain" :key="m" class="sdp-chip">{{ m }}<button type="button" class="mk-link mk-link--danger" :disabled="!rtForm.enabled" @click="removeFallback(m)">×</button></span>
-            <input v-model="newFallback" class="mk-input mono" placeholder="模型 id，回车添加" :disabled="!rtForm.enabled || fallbackChain.length >= 2" @keydown.enter.prevent="addFallback" />
+            <input v-model="newFallback" class="mk-input mono" placeholder="模型 id，回车添加" list="rt-model-options" :disabled="!rtForm.enabled || fallbackChain.length >= 2" @keydown.enter.prevent="addFallback" />
             <button type="button" class="mk-btn" :disabled="!rtForm.enabled || fallbackChain.length >= 2" @click="addFallback">添加</button>
           </div>
         </div>
@@ -154,6 +154,11 @@
         </button>
       </div>
     </div>
+
+    <!-- 模型目录候选：模型输入与兜底链输入共用（带「供应商 · tier」标注） -->
+    <datalist id="rt-model-options">
+      <option v-for="o in catalogOptions" :key="`cat-${o.value}`" :value="o.value" :label="o.label" />
+    </datalist>
   </div>
 </template>
 
@@ -165,6 +170,12 @@ import { computed, ref, watch } from 'vue'
 import { adminPlatformSettingsApi, adminSkillsApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
 import { errText } from './sdp-shared'
+import { useModelCatalog } from '@/composables/useModelCatalog'
+
+// 模型目录候选（File-as-Truth llm-providers.json）：模型输入与兜底链输入共用的 datalist；
+// 加载失败静默降级为空目录（输入框退化为自由文本，不影响配置）
+const { options: catalogOptions, load: loadModelCatalog } = useModelCatalog()
+loadModelCatalog()
 
 const props = defineProps<{ skillId: string; refreshTick: number }>()
 

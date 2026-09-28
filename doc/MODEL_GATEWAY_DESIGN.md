@@ -184,6 +184,23 @@ export interface ModelDefinition {
 - 向后兼容：具体模型 id / 未知值原样返回（非别名 ⇒ 行为与改动前完全一致）。
 - **待做**：别名权重与健康感知选路（多部署负载均衡）、管理端可视化。
 
+#### 4.2a 供应商注册表（File-as-Truth，2026-09-28 落地）
+
+模型目录的唯一写源从代码常量改为**配置文件** `backend/config/llm-providers.json`（参考 OpenCode `opencode.json` / ZCode `provider_config.json` 的供应商注册表模式）：
+
+```
+providers.{providerId} = { name, recommended?, enabled?, baseUrl?, apiKeyEnv?, models: { modelId: 能力表 } }
+aliases / defaults
+```
+
+- **加载器**：`config/models.config.ts` 启动时解析并**原地**摊平进历史导出（`AVAILABLE_MODELS` / `MODEL_MAP` / `MODEL_ALIASES` / `MODELS_BY_TIER`——数组/Map 身份不变，内容随热重载更新），别名过滤、skill 兜底链校验、成本价目表、`/api/config/available-models`、前端选择器**零改动**看到自定义模型。
+- **失败语义**：文件缺失 = 内置兜底目录（4 个种子模型，fresh clone 可启动）；文件存在但非法 = **fail-loud** 拒绝启动；运行期热重载失败 = 保留上一次好目录 + 日志 + registry 总览告警。
+- **热重载**：`APIRouter.resolve()` 每次解析前 `reloadLlmProvidersIfChanged()`（mtime 变更才重读）；路径可用 `LLM_PROVIDERS_CONFIG` 环境变量覆盖。
+- **供应商端点**：provider 声明 `baseUrl` 时必须给 `apiKeyEnv`（密钥只走环境变量，严禁入文件）。路由层规则（`APIRouter.applyProviderEndpoint`）：解析后的模型命中自带端点的供应商 ⇒ `endpoint/apiKey` 整体切换（`source='provider-endpoint'`，`privateNetworkPolicy='runtime'`）；密钥 env 缺失 = 明确报错不带病调用；**用户自带 provider（source user-*）不受覆盖**。继承通道（无 baseUrl）行为与历史版本一致。
+- **模型引用**：裸 id（全局唯一，历史 DB 配置零迁移）或限定式 `providerId/modelId`（仅当命中已注册供应商+目录内模型才按限定式解析；聚合网关自带 `/` 的字面模型 id 不误伤）。请求空间只认裸 id——限定式在路由层还原为上游字面 id。
+- **降级边界**：skill 兜底链候选必须**同供应商**（保存侧校验拒绝跨供应商）；跨供应商兜底需等端点感知降级（候选自带 endpoint/key，未做）。
+- **可观测**：`/admin/model-registry` 总览新增 providers 段 + registry 文件状态（source/mtime/lastError）+ 缺密钥告警；`/api/config/available-models` 返回 providers 维度。
+
 ### 4.3 ③ 参数解析策略（P0 已实现）
 
 **语义修正**：`maxOutputTokens` = 硬上限；`defaultMaxTokens` = 缺省值；声明值 = 权威意图。

@@ -3,7 +3,7 @@ import skillModelConfigService from '../../services/skillModelConfig.service';
 import { preserveConfiguredSecret, toSecretSafeResponse } from '../../utils/secret-redaction';
 import { normalizeEndpointIdentity } from '../../utils/endpoint-identity';
 import { getPlatformReliabilitySettings } from '../../services/reliability-settings.service';
-import { getModelDefinition } from '../../config/models.config';
+import { resolveModelRef } from '../../config/models.config';
 import { scanPromptFiles } from '../../composers/prompt-files/loader';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 
@@ -79,8 +79,14 @@ function validateParamOverrides(raw: unknown):
   return { ok: true, value: out };
 }
 
-/** 兜底链校验：≤2 跳；候选须在 registry、与主模型同 tier、不重复不含主模型。
- *  通道可服务性由调用方探测（probeChannelModels）补充。*/
+/** 候选的上游字面 id：注册表内的引用（含 provider/model 限定式）还原为裸 id，未知的按字面量。 */
+function upstreamModelIds(list: string[]): string[] {
+  return list.map((m) => resolveModelRef(m)?.modelId ?? m);
+}
+
+/** 兜底链校验：≤2 跳；候选须在注册表（支持 provider/model 限定式引用）、与主模型同 tier、
+ *  同供应商、不重复不含主模型。跨供应商候选被拒绝：当前运行时降级只换模型名不换端点
+ *  （doc/MODEL_GATEWAY_DESIGN.md §4.5）。通道可服务性由调用方探测（probeChannelModels）补充。*/
 function validateFallbackChain(raw: unknown, primaryModel: string | null):
   { ok: true; value: string[] } | { ok: false; error: string } {
   if (!Array.isArray(raw)) return { ok: false, error: 'fallbackChain 必须是字符串数组' };
@@ -90,13 +96,22 @@ function validateFallbackChain(raw: unknown, primaryModel: string | null):
   for (const m of chain) {
     if (seen.has(m)) return { ok: false, error: `fallbackChain 含重复模型: ${m}` };
     seen.add(m);
-    const def = getModelDefinition(m);
-    if (!def) return { ok: false, error: `fallback 候选不在模型注册表: ${m}` };
+    const ref = resolveModelRef(m);
+    if (!ref) return { ok: false, error: `fallback 候选不在模型注册表: ${m}` };
     if (primaryModel) {
+      const pRef = resolveModelRef(primaryModel);
+      // 同一模型的不同写法（裸 id vs provider/model 限定式）都视为自身
+      if (pRef && ref.definition === pRef.definition) {
+        return { ok: false, error: `fallback 候选不能是主模型自身: ${m}` };
+      }
       if (m === primaryModel) return { ok: false, error: `fallback 候选不能是主模型自身: ${m}` };
-      const pDef = getModelDefinition(primaryModel);
-      if (pDef && pDef.tier !== def.tier) {
-        return { ok: false, error: `fallback 禁止跨 tier：${primaryModel}(${pDef.tier})→${m}(${def.tier})` };
+      if (pRef) {
+        if (pRef.definition.tier !== ref.definition.tier) {
+          return { ok: false, error: `fallback 禁止跨 tier：${primaryModel}(${pRef.definition.tier})→${m}(${ref.definition.tier})` };
+        }
+        if (pRef.providerId !== ref.providerId) {
+          return { ok: false, error: `fallback 禁止跨供应商：${primaryModel}(${pRef.providerId})→${m}(${ref.providerId})。当前降级只换模型名不换端点，跨供应商候选不可达` };
+        }
       }
     }
   }
@@ -222,7 +237,7 @@ router.post('/bulk-apply', async (req, res) => {
       if (v.value.length && endpoint && apiKey) {
         const available = await probeChannelModels(endpoint, apiKey);
         if (available) {
-          const missing = v.value.filter(m => !available.has(m));
+          const missing = upstreamModelIds(v.value).filter(m => !available.has(m));
           if (missing.length) {
             return res.status(400).json({ success: false, error: `fallback 候选在该通道不可用：${missing.join(', ')}` });
           }
@@ -383,7 +398,7 @@ router.put('/:skillId', async (req, res) => {
       if (fallbackChainValue.length && finalEndpoint && probeKey) {
         const available = await probeChannelModels(finalEndpoint, probeKey);
         if (available) {
-          const missing = fallbackChainValue.filter(m => !available.has(m));
+          const missing = upstreamModelIds(fallbackChainValue).filter(m => !available.has(m));
           if (missing.length) {
             return res.status(400).json({
               success: false,

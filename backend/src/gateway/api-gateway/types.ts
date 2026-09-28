@@ -12,7 +12,9 @@ export type RouteSource =
   | 'user-provider'
   | 'agent-config'
   | 'platform'
-  | 'env-fallback';
+  | 'env-fallback'
+  /** 模型所属供应商自带端点（llm-providers.json 的 baseUrl+apiKeyEnv），endpoint/apiKey 已被供应商覆盖 */
+  | 'provider-endpoint';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';

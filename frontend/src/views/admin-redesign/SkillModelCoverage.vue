@@ -9,7 +9,7 @@
       <div class="skc__apply">
         <input v-model="bulk.endpoint" class="mk-input mono" placeholder="endpoint（http://host:30001）" :class="{ 'is-err': bulkErr }" />
         <input v-model="bulk.apiKey" class="mk-input mono" type="password" placeholder="apiKey" :class="{ 'is-err': bulkErr }" />
-        <input v-model="bulk.model" class="mk-input mono" placeholder="model（留空=不覆盖）" />
+        <input v-model="bulk.model" class="mk-input mono" placeholder="model（留空=不覆盖）" list="skc-model-options" />
         <button type="button" class="mk-btn mk-btn--primary" :disabled="bulkSaving || !selected.length" @click="applyBulk">
           {{ bulkSaving ? '套用中…' : `套用到 ${selected.length} 个技能` }}
         </button>
@@ -44,13 +44,22 @@
         </tr>
       </tbody>
     </table>
+
+    <!-- 模型目录候选（File-as-Truth llm-providers.json；带「供应商 · tier」标注） -->
+    <datalist id="skc-model-options">
+      <option v-for="o in catalogOptions" :key="`cat-${o.value}`" :value="o.value" :label="o.label" />
+    </datalist>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { adminSkillsApi } from '@/api/adminApi'
+import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkLoading from '@/components/mk/MkLoading.vue'
+
+const { options: catalogOptions, load: loadModelCatalog } = useModelCatalog()
+loadModelCatalog()
 
 interface Row {
   skillId: string
@@ -88,7 +97,7 @@ async function load() {
     const res = await adminSkillsApi.getSkillModelCoverage()
     const data = res.data?.data as { skills?: Row[] } | undefined
     rows.value = data?.skills || []
-  } catch (e: unknown) {
+  } catch (e) {
     bulkErr.value = true
     bulkMsg.value = `加载失败：${httpErrText(e)}`
   } finally {
@@ -114,7 +123,7 @@ async function applyBulk() {
     bulkErr.value = failed.length > 0
     bulkMsg.value = `已套用 ${data?.applied ?? 0} 个，失败 ${failed.length} 个${failed.length ? '：' + failed.map(f => `${f.skillId}(${f.error})`).join('；') : ''}`
     await load()
-  } catch (e: unknown) {
+  } catch (e) {
     bulkErr.value = true
     bulkMsg.value = `套用失败：${httpErrText(e)}`
   } finally {

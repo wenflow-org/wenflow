@@ -1,0 +1,93 @@
+{
+  "$header": "模型供应商注册表（File-as-Truth）。唯一写源=本文件；加载器=src/config/models.config.ts；热重载=改动后下一次路由解析自动生效。规则见 doc/MODEL_GATEWAY_DESIGN.md §4.2。",
+  "$rules": [
+    "provider 不带 baseUrl = 「继承通道」：端点/密钥沿用 platform_api_configs 与上层路由解析（历史行为）",
+    "provider 带 baseUrl 时必须同时给 apiKeyEnv（密钥只走环境变量，本文件严禁出现真实密钥）",
+    "modelId 全局唯一（跨 provider 不得重名），字符集 [a-zA-Z0-9._-]；配置里可用 \"providerId/modelId\" 精确指到某通道",
+    "enabled=false 的 provider 不进运行时注册表（可留作示例/停用）"
+  ],
+  "providers": {
+    "platform": {
+      "name": "平台通道（继承）",
+      "description": "不携带端点：沿用 platform_api_configs / 上层路由的端点与密钥解析，行为与历史版本一致",
+      "recommended": true,
+      "models": {
+        "deepseek-v4.1-flash": {
+          "label": "DeepSeek V4.1 Flash",
+          "tier": "chat",
+          "supportsThinking": true,
+          "supportsReasoningEffort": true,
+          "maxOutputTokens": 131072,
+          "defaultMaxTokens": 32768,
+          "reasoningReserveTokens": 8192,
+          "fallbacks": [],
+          "description": "V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）。显式空链：同通道无同 tier 候选，兜底用 skill 级 fallbackChain 声明"
+        },
+        "deepseek-v4-flash": {
+          "label": "DeepSeek V4 Flash",
+          "tier": "chat",
+          "supportsThinking": true,
+          "supportsReasoningEffort": true,
+          "maxOutputTokens": 131072,
+          "defaultMaxTokens": 32768,
+          "reasoningReserveTokens": 8192,
+          "fallbacks": ["agnes-3.0-flash"],
+          "description": "V4 Flash（含混别名：部分渠道实际由 V4.1 部署服务，输出量波动大；字面 id 优先）"
+        },
+        "deepseek-v4-pro": {
+          "label": "DeepSeek V4 Pro",
+          "tier": "reasoning",
+          "supportsThinking": true,
+          "supportsReasoningEffort": true,
+          "maxOutputTokens": 131072,
+          "defaultMaxTokens": 32768,
+          "reasoningReserveTokens": 16384,
+          "fallbacks": ["deepseek-v4-flash"],
+          "description": "强大推理能力，适合复杂任务和深度思考"
+        },
+        "agnes-3.0-flash": {
+          "label": "Agnes 3.0 Flash",
+          "tier": "chat",
+          "supportsThinking": false,
+          "supportsReasoningEffort": false,
+          "maxOutputTokens": 65536,
+          "defaultMaxTokens": 32768,
+          "description": "轻量快速模型，TPS 高，适合 skill 高频调用"
+        }
+      }
+    },
+    "deepseek-official": {
+      "name": "DeepSeek 官方",
+      "description": "示例条目（enabled=false 不进注册表）：自部署/多通道时按此结构添加供应商——baseUrl + apiKeyEnv + models",
+      "enabled": false,
+      "baseUrl": "https://api.deepseek.com/v1",
+      "apiKeyEnv": "DEEPSEEK_OFFICIAL_API_KEY",
+      "models": {
+        "deepseek-chat": {
+          "label": "DeepSeek Chat",
+          "tier": "chat",
+          "supportsThinking": false,
+          "supportsReasoningEffort": false,
+          "defaultMaxTokens": 32768
+        },
+        "deepseek-reasoner": {
+          "label": "DeepSeek Reasoner",
+          "tier": "reasoning",
+          "supportsThinking": true,
+          "supportsReasoningEffort": true,
+          "defaultMaxTokens": 32768,
+          "reasoningReserveTokens": 8192
+        }
+      }
+    }
+  },
+  "aliases": {
+    "chat": ["deepseek-v4-flash", "agnes-3.0-flash"],
+    "reasoning": ["deepseek-v4-pro", "deepseek-v4-flash"],
+    "light": ["agnes-3.0-flash"]
+  },
+  "defaults": {
+    "chat": "deepseek-v4-flash",
+    "reasoning": "deepseek-v4-pro"
+  }
+}

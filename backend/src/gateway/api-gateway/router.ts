@@ -6,6 +6,7 @@ import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.s
 import { decryptSecret, SecretCryptoError } from '../../utils/secret-crypto';
 import { endpointsMatch } from '../../utils/endpoint-identity';
 import { selectModelForAlias } from './model-alias';
+import { reloadLlmProvidersIfChanged, resolveModelRef } from '../../config/models.config';
 
 const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
 const AGENT_KEY_CONTEXT = 'system.agent_model_configs.apiKey';
@@ -68,8 +69,41 @@ function parseSkillFallbackChain(raw: unknown): string[] | null {
 }
 
 export class APIRouter {
+  /** 热重载错误只在该报错文本变化时记一次，避免每次 resolve 刷日志 */
+  private lastLoggedReloadError: string | null = null;
+
   private resolveBaseEndpoint(): string {
     return (process.env.AI_API_URL || '').trim() || 'https://api.openai.com/v1';
+  }
+
+  /**
+   * 供应商自带端点覆盖（llm-providers.json File-as-Truth）：
+   * 解析后的模型所属供应商声明了 baseUrl ⇒ endpoint/apiKey 整体切到该供应商
+   * （key 从 apiKeyEnv 环境变量读取，缺失 = 明确报错，不带病调用）。
+   * 用户自带 provider（source user-*）不受覆盖——用户模型身份属于用户自己的供应商空间。
+   */
+  private applyProviderEndpoint(route: ResolvedRoute): ResolvedRoute {
+    if (route.source === 'user-provider' || route.source === 'user-agent-override') return route;
+    const ref = resolveModelRef(route.model || '');
+    if (!ref) return route;
+    // 限定式引用统一还原为上游字面 id：配置空间可用 provider/model，请求空间只认裸 id
+    if (!ref.definition.providerEndpoint) {
+      return ref.definition.id === route.model ? route : { ...route, model: ref.definition.id };
+    }
+    const apiKey = (process.env[ref.definition.providerEndpoint.apiKeyEnv] || '').trim();
+    if (!apiKey) {
+      throw new Error(
+        `模型「${ref.definition.id}」所属供应商「${ref.providerId}」要求环境变量 ${ref.definition.providerEndpoint.apiKeyEnv}，但未配置（来源 llm-providers.json）。请在部署环境设置后重试。`
+      );
+    }
+    return {
+      ...route,
+      model: ref.definition.id,
+      endpoint: ref.definition.providerEndpoint.baseUrl,
+      apiKey,
+      privateNetworkPolicy: 'runtime',
+      source: 'provider-endpoint'
+    };
   }
 
   private withRequestTimeout(route: ResolvedRoute, agentId?: string): ResolvedRoute {
@@ -123,18 +157,28 @@ export class APIRouter {
   }
 
   async resolve(caller: CallerInfo, userId?: string): Promise<ResolvedRoute> {
+    // File-as-Truth 目录热重载：mtime 变了就地换注册表；坏文件保留上一次好目录，只记日志
+    const reload = reloadLlmProvidersIfChanged();
+    if (reload.error && reload.error !== this.lastLoggedReloadError) {
+      this.lastLoggedReloadError = reload.error;
+      logger.warn('[api-gateway] llm-providers.json 热重载失败，沿用上一次目录', { errorMessage: reload.error });
+    } else if (!reload.error && this.lastLoggedReloadError) {
+      this.lastLoggedReloadError = null;
+      logger.info('[api-gateway] llm-providers.json 已恢复并热重载成功');
+    }
+
     if (caller.skillId) {
       const inheritedRoute = await this.resolveBaseRoute(caller, userId);
       const skillRoute = await this.getSkillConfig(caller.skillId, inheritedRoute);
-      const route = skillRoute || inheritedRoute;
+      let route = skillRoute || inheritedRoute;
       // 守门 judge 必须关闭思考模式，避免审查调用因推理延长而拖慢发布链路。
       if (caller.skillId === 'semantic-freeze-judge') {
-        return this.withRequestTimeout({ ...route, thinkingMode: 'disabled', reasoningEffort: 'default' }, caller.agentId);
+        route = { ...route, thinkingMode: 'disabled', reasoningEffort: 'default' };
       }
-      return this.withRequestTimeout(route, caller.agentId);
+      return this.withRequestTimeout(this.applyProviderEndpoint(route), caller.agentId);
     }
 
-    return this.resolveBaseRoute(caller, userId);
+    return this.withRequestTimeout(this.applyProviderEndpoint(await this.resolveBaseRoute(caller, userId)), caller.agentId);
   }
 
   private async resolveBaseRoute(caller: CallerInfo, userId?: string): Promise<ResolvedRoute> {

@@ -8,18 +8,46 @@
  * 别名成员可由 `platform_api_configs.chatModels/reasoningModels/lightModels` 覆盖。
  */
 import systemPrisma from '../config/system-database';
-import { AVAILABLE_MODELS, MODEL_ALIASES, MODEL_MAP, getModelAliasMembers } from '../config/models.config';
+import {
+  AVAILABLE_MODELS, MODEL_ALIASES, MODEL_MAP, getModelAliasMembers,
+  getProviderCatalog, getLlmRegistryStatus, getModelDefaults, reloadLlmProvidersIfChanged
+} from '../config/models.config';
 import { selectModelForAlias } from '../gateway/api-gateway/model-alias';
 import { MAX_MODEL_CANDIDATES } from '../gateway/api-gateway/executor';
 import { listCoolingDowns, type CooldownSnapshot } from '../gateway/api-gateway/deployment-health';
 
 export interface ModelRegistryOverview {
   generatedAt: string;
+  providers: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    enabled: boolean;
+    recommended: boolean;
+    endpointSource: 'inherit' | 'own';
+    baseUrl: string | null;
+    apiKeyEnv: string | null;
+    keyConfigured: boolean | null;
+    modelIds: string[];
+  }>;
+  registry: {
+    /** File-as-Truth 目录文件状态（路径/来源/mtime/最近热重载错误） */
+    path: string;
+    source: 'file' | 'embedded-fallback';
+    mtimeMs: number | null;
+    lastError: string | null;
+    /** 文件内 defaults（运行时实际默认仍以 platform_api_configs DB 行为准，见 defaults 段） */
+    fileDefaults: { chat: string; reasoning: string };
+  };
   models: Array<{
     id: string;
     label: string;
     tier: string;
     provider: string;
+    providerId: string;
+    providerName?: string;
+    hasOwnEndpoint: boolean;
+    keyConfigured: boolean | null;
     capabilities: {
       supportsThinking: boolean;
       supportsReasoningEffort: boolean;
@@ -81,6 +109,8 @@ function parseModelList(raw?: string | null): string[] {
 }
 
 export async function getModelRegistryOverview(): Promise<ModelRegistryOverview> {
+  // 诊断页读最新目录：热重载检查后，热重载失败信息会如实进入 registry.lastError/warnings
+  reloadLlmProvidersIfChanged();
   const platform = await systemPrisma.platform_api_configs
     .findFirst({ where: { id: 'platform' } })
     .catch(() => null);
@@ -91,7 +121,32 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     light: parseModelList(platform?.lightModels)
   };
 
+  const providers = getProviderCatalog().map((p) => ({
+    id: p.id,
+    name: p.name,
+    ...(p.description ? { description: p.description } : {}),
+    enabled: p.enabled,
+    recommended: p.recommended,
+    endpointSource: p.endpointSource,
+    baseUrl: p.baseUrl ?? null,
+    apiKeyEnv: p.apiKeyEnv ?? null,
+    keyConfigured: p.apiKeyEnv ? Boolean((process.env[p.apiKeyEnv] || '').trim()) : null,
+    modelIds: p.models.map((m) => m.id)
+  }));
+  const registryStatus = getLlmRegistryStatus();
+
   const warnings: string[] = [];
+  if (registryStatus.source === 'embedded-fallback') {
+    warnings.push(`模型目录来自内置兜底（未读到 ${registryStatus.path}）。请检查配置文件是否在位。`);
+  }
+  if (registryStatus.lastError) {
+    warnings.push(`llm-providers.json 热重载失败，沿用上一次好目录：${registryStatus.lastError}`);
+  }
+  for (const p of providers) {
+    if (p.enabled && p.endpointSource === 'own' && p.keyConfigured === false) {
+      warnings.push(`供应商「${p.id}」的密钥环境变量 ${p.apiKeyEnv} 未配置，其模型（${p.modelIds.join('、')}）在运行时会直接报错。`);
+    }
+  }
 
   // 别名：DB 覆盖优先，代码注册表兜底
   const aliases = Object.keys(MODEL_ALIASES).map((alias) => {
@@ -134,6 +189,12 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     label: model.label,
     tier: model.tier,
     provider: model.provider,
+    providerId: model.providerId,
+    ...(model.providerName ? { providerName: model.providerName } : {}),
+    hasOwnEndpoint: Boolean(model.providerEndpoint),
+    keyConfigured: model.providerEndpoint
+      ? Boolean((process.env[model.providerEndpoint.apiKeyEnv] || '').trim())
+      : null,
     capabilities: {
       supportsThinking: model.supportsThinking === true,
       supportsReasoningEffort: model.supportsReasoningEffort === true
@@ -163,12 +224,16 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
   // 降级语义:仅切换模型名,网关与密钥沿用主调用(单网关拓扑下正确;多网关需候选自带部署)
   const runtime = { maxModelCandidates: runtimeMaxCandidates, fallbackSwapsModelOnly: true as const };
 
-  // 跨 provider 降级链提示:降级不换网关/密钥,跨 provider 链只在单网关拓扑下可用
+  // 跨供应商降级链提示:降级不换网关/密钥,跨供应商链只在单网关拓扑下可用。
+  // 两层口径：旧 provider 展示字段（deepseek/agnes 渠道差异）+ providerId（自带端点的独立供应商）。
   for (const model of AVAILABLE_MODELS) {
     for (const target of model.fallbacks ?? []) {
       const targetModel = AVAILABLE_MODELS.find((item) => item.id === target);
-      if (targetModel && targetModel.provider !== model.provider) {
+      if (!targetModel) continue;
+      if (targetModel.provider !== model.provider) {
         warnings.push(`模型「${model.id}」的降级目标「${target}」属于不同 provider（${model.provider} → ${targetModel.provider}）。降级仅切换模型名、网关与密钥沿用主调用：单网关拓扑下可用，多网关部署时该链不可用。`);
+      } else if (model.providerId !== targetModel.providerId) {
+        warnings.push(`模型「${model.id}」的降级目标「${target}」属于不同供应商（${model.providerId} → ${targetModel.providerId}）。降级不切换端点，跨供应商候选不可达。`);
       }
     }
   }
@@ -205,6 +270,14 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
 
   return {
     generatedAt: new Date().toISOString(),
+    providers,
+    registry: {
+      path: registryStatus.path,
+      source: registryStatus.source,
+      mtimeMs: registryStatus.mtimeMs,
+      lastError: registryStatus.lastError,
+      fileDefaults: getModelDefaults()
+    },
     models,
     aliases,
     defaults: {

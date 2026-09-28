@@ -125,7 +125,7 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">模型路由与思考</h3>
-        <span class="ac-sec__hint">可填具体模型 id，也可填逻辑别名（chat / reasoning / light）</span>
+        <span class="ac-sec__hint">可填具体模型 id、provider/model 限定式引用，或逻辑别名（chat / reasoning / light）</span>
         <button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button>
       </div>
       <div class="ac-body">
@@ -164,9 +164,10 @@
             />
           </label>
         </div>
-        <!-- 路由默认的候选：已拉取模型清单 + 后端注册表里的逻辑别名 -->
+        <!-- 路由默认的候选：模型目录（File-as-Truth，带「供应商 · tier」标注）+ 通道拉取清单 + 逻辑别名 -->
         <datalist id="ac-model-options">
-          <option v-for="m in models" :key="`model-${m}`" :value="m" />
+          <option v-for="o in catalogOptions" :key="`cat-${o.value}`" :value="o.value" :label="o.label" />
+          <option v-for="m in extraFetchedModels" :key="`model-${m}`" :value="m" />
           <option v-for="a in aliasOptions" :key="`alias-${a}`" :value="a" />
         </datalist>
 
@@ -533,6 +534,12 @@ import {
   updateRegisterIpQuotaSetting
 } from './live'
 import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi } from '@/api/adminApi'
+import { useModelCatalog } from '@/composables/useModelCatalog'
+
+// 模型目录候选（File-as-Truth llm-providers.json）：与通道拉取清单合并进路由 datalist；
+// 目录加载失败静默降级（候选只剩通道拉取值 + 别名，输入框仍可自由填写）
+const { options: catalogOptions, load: loadModelCatalog, extraIds } = useModelCatalog()
+loadModelCatalog()
 import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { toast } from '@/utils/toast'
@@ -932,6 +939,8 @@ window.addEventListener('beforeunload', onBeforeUnloadHandler)
 onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnloadHandler))
 
 const models = computed(() => fetchedModels.value)
+/** 通道拉取到、但不在模型目录里的 id（历史保存值/通道私有模型），仍保留在候选里 */
+const extraFetchedModels = computed(() => extraIds(models.value))
 
 /** 思考开关 = enabled(强制) 或 default(跟随模型) 视为"开"；disabled 视为"关"。
     关闭时后端仍可被 skill 级配置覆盖；此处仅表达平台默认。 */

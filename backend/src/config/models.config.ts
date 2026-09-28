@@ -1,11 +1,25 @@
 /**
- * 统一的模型配置模块
- * 
- * 这是模型列表的唯一真实来源（Single Source of Truth）
- * 所有模型相关的配置都应该从这里引用
- * 
- * 更新模型时只需修改这个文件
+ * 统一的模型配置模块（模型目录唯一真实来源，Single Source of Truth）。
+ *
+ * 目录本体是 **File-as-Truth 配置文件** `backend/config/llm-providers.json`
+ * （供应商 → 端点/密钥环境变量 → 模型能力表），本模块负责：
+ * 1. 启动加载 + schema 校验（文件存在但非法 = fail-loud 拒绝启动；文件缺失 = 内置兜底目录）；
+ * 2. 把目录摊平进历史导出（AVAILABLE_MODELS / MODEL_MAP / MODEL_ALIASES / MODELS_BY_TIER），
+ *    所有下游消费方（别名过滤、skill 兜底链校验、成本价目表、/api/config/available-models）
+ *    **零改动**看到自定义模型；
+ * 3. 热重载：文件 mtime 变化后由路由层在下次解析前触发 reload（改动无需重启，
+ *    解析失败的文件保留上一次好目录并在 status 里带 error）。
+ *
+ * 模型引用两种写法：
+ * - 裸 id（`deepseek-v4.1-flash`）：全局唯一，历史 DB 配置全部是这种，天然兼容；
+ * - 限定式 `providerId/modelId`：需要精确指到某通道时使用（仅当 providerId 命中已注册
+ *   供应商且 modelId 在其目录内才按限定式解析，否则整体按裸 id / 字面量处理——
+ *   聚合网关的模型 id 自带 `/`（如 openrouter 风格）不会被误伤）。
+ *
+ * 规则与示例见 `config/llm-providers.json` 的 $header/$rules 与 doc/MODEL_GATEWAY_DESIGN.md §4.2。
  */
+import fs from 'node:fs';
+import path from 'node:path';
 
 /**
  * 模型单价（USD / 1M tokens）。
@@ -30,7 +44,18 @@ export interface ModelDefinition {
   id: string;
   label: string;
   tier: 'chat' | 'reasoning';
-  provider: 'deepseek' | 'agnes';
+  /** 旧字段（'deepseek' | 'agnes' 展示口径）。新条目按 providerId 展示，此字段留作兼容。 */
+  provider: string;
+  /** 所属供应商 id（llm-providers.json 的 provider key；内置兜底为 'platform'） */
+  providerId: string;
+  /** 所属供应商显示名 */
+  providerName?: string;
+  /**
+   * 供应商自带端点（provider 声明了 baseUrl 时存在）。
+   * 路由层规则：模型解析落到带端点的供应商 ⇒ endpoint/apiKey 改用该供应商
+   * （apiKey 从 `apiKeyEnv` 环境变量读取；user 自带 provider 的路由不受此覆盖）。
+   */
+  providerEndpoint?: { baseUrl: string; apiKeyEnv: string };
   supportsThinking?: boolean;
   /** 是否支持 `reasoning_effort` 字段（不支持时即使 supportsThinking 也不发该字段） */
   supportsReasoningEffort?: boolean;
@@ -53,6 +78,7 @@ export interface ModelDefinition {
   /**
    * 降级候选（主模型在「可降级错误」上耗尽重试后按序尝试）。
    * 空/未配置 = 不降级（默认）。见 doc/MODEL_GATEWAY_DESIGN.md §4.5。
+   * 注意：当前运行时降级**只换模型名不换端点**，跨供应商候选在保存侧被拒绝（见 §4.5）。
    */
   fallbacks?: string[];
   /**
@@ -68,30 +94,381 @@ export interface ModelDefinition {
   description?: string;
 }
 
-/**
- * 逻辑别名 → 部署（模型 id）列表。
- *
- * 业务/配置只写**别名**（`chat` / `reasoning` / `light`），由别名层展开为具体模型：
- * - 换模型只改这里（或 DB 覆盖），不动任何 skill/提示词；
- * - `reasoning` 别名在解析时会按能力过滤（只选 `supportsThinking` 的模型）。
- *
- * DB 覆盖来源：`platform_api_configs.chatModels / reasoningModels / lightModels`
- * （此前是只回显的死字段，现作为别名映射的动态来源）。见 doc/MODEL_GATEWAY_DESIGN.md §4.2。
- *
- * 网关实况（两段，别只记前一半）：
- * - 2026-09-22 旧订阅实测：字面 `deepseek-v4.1-flash` 无配额（"subscription quota
- *   insufficient"），`deepseek-v4-flash` 别名实际由 v4.1 部署服务——当时只能写别名。
- * - 2026-09-28 新订阅（标准 key）实测：字面 id `deepseek-v4.1-flash` 正常服务且输出
- *   契约稳定（path-planning 满预算 fr=stop）。现全链标准配置=字面 id，
- *   MODEL_ALIASES.chat 仍保留别名供旧通道/灰度回退。
- * - 历史坑：别名背后的部署会静默漂移（v4.1→啰嗦变体），大 JSON 技能因此截断；
- *   判定口径 finishReason=length 恰等于 maxTokens；durable 修法=字面 id + 32k 预算地板。
- */
-export const MODEL_ALIASES: Record<string, string[]> = {
-  chat: ['deepseek-v4-flash', 'agnes-3.0-flash'],
-  reasoning: ['deepseek-v4-pro', 'deepseek-v4-flash'],
-  light: ['agnes-3.0-flash'],
+/** llm-providers.json 的 provider 条目（含未 enabled 的示例条目，供总览/前端展示全貌）。 */
+export interface ProviderDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  /** 推荐通道（UI 置顶标识；DeepSeek 官方/平台通道为 true） */
+  recommended: boolean;
+  /** 端点来源：'inherit' = 沿用平台路由解析；'own' = 供应商自带 baseUrl */
+  endpointSource: 'inherit' | 'own';
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  models: ModelDefinition[];
+}
+
+export interface RegistryStatus {
+  path: string;
+  /** 'file' = 目录来自配置文件；'embedded-fallback' = 文件缺失，用内置兜底目录 */
+  source: 'file' | 'embedded-fallback';
+  mtimeMs: number | null;
+  /** 最近一次热重载失败的报错（保留上一次好目录时出现）；无错为 null */
+  lastError: string | null;
+}
+
+/** 注册表快照（加载/解析的统一产物；applySnapshot 原地灌进历史导出）。 */
+interface RegistrySnapshot {
+  models: ModelDefinition[];
+  providers: ProviderDefinition[];
+  aliases: Record<string, string[]>;
+  defaults: { chat: string; reasoning: string };
+  source: RegistryStatus['source'];
+}
+
+/** 逻辑别名 → 模型 id 列表。业务/配置只写别名（chat / reasoning / light），由别名层展开为具体模型。 */
+export const MODEL_ALIASES: Record<string, string[]> = {};
+
+/** 可用模型列表（启动时由加载器摊平填充；热重载时**原地变更**，引用永不失效）。 */
+export const AVAILABLE_MODELS: ModelDefinition[] = [];
+
+/** 按 tier 分组（对象身份不变，属性随热重载更新）。 */
+export const MODELS_BY_TIER = {
+  chat: [] as ModelDefinition[],
+  reasoning: [] as ModelDefinition[]
 };
+
+/** 模型 ID 映射（用于快速查找；Map 身份不变，内容随热重载更新）。 */
+export const MODEL_MAP = new Map<string, ModelDefinition>();
+
+/**
+ * 默认模型配置（内置兜底值）。
+ * 运行时生效值走 `getModelDefaults()`（跟随配置文件）；此处仅为兼容保留的初始快照。
+ */
+export const DEFAULT_MODELS = {
+  chat: 'deepseek-v4-flash',
+  reasoning: 'deepseek-v4-pro'
+} as const;
+
+// ---------------------------------------------------------------------------
+// 加载器内部态（不在模块顶层导出，避免外部持有过期引用）
+// ---------------------------------------------------------------------------
+
+/** 配置文件路径：env 可覆盖（测试/多部署）；每次调用时解析，改 env 后下一次 reload 即生效。 */
+function resolveConfigPath(): string {
+  return (process.env.LLM_PROVIDERS_CONFIG || '').trim()
+    || path.resolve(__dirname, '../../config/llm-providers.json');
+}
+
+const MODEL_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+const PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
+
+/** 限定式引用 `providerId/modelId` → 定义（仅命中已注册供应商+其目录内模型时才有值）。 */
+const QUALIFIED_MODEL_MAP = new Map<string, ModelDefinition>();
+
+let activeProviders: ProviderDefinition[] = [];
+let activeDefaults: { chat: string; reasoning: string } = { ...DEFAULT_MODELS };
+let activeSource: RegistryStatus['source'] = 'embedded-fallback';
+let lastMtimeMs: number | null = null;
+let lastReloadError: string | null = null;
+
+function buildEmbeddedFallback(): RegistrySnapshot {
+  const models: ModelDefinition[] = [
+    {
+      id: 'deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash', tier: 'chat', provider: 'deepseek', providerId: 'platform',
+      supportsThinking: true, supportsReasoningEffort: true, maxOutputTokens: 131072, defaultMaxTokens: 32768,
+      reasoningReserveTokens: 8192, fallbacks: [],
+      description: 'V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）'
+    },
+    {
+      id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', tier: 'chat', provider: 'deepseek', providerId: 'platform',
+      supportsThinking: true, supportsReasoningEffort: true, maxOutputTokens: 131072, defaultMaxTokens: 32768,
+      reasoningReserveTokens: 8192, fallbacks: ['agnes-3.0-flash'],
+      description: 'V4 Flash（含混别名：部分渠道实际由 V4.1 部署服务，输出量波动大）'
+    },
+    {
+      id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', tier: 'reasoning', provider: 'deepseek', providerId: 'platform',
+      supportsThinking: true, supportsReasoningEffort: true, maxOutputTokens: 131072, defaultMaxTokens: 32768,
+      reasoningReserveTokens: 16384, fallbacks: ['deepseek-v4-flash'],
+      description: '强大推理能力，适合复杂任务和深度思考'
+    },
+    {
+      id: 'agnes-3.0-flash', label: 'Agnes 3.0 Flash', tier: 'chat', provider: 'agnes', providerId: 'platform',
+      supportsThinking: false, supportsReasoningEffort: false, maxOutputTokens: 65536, defaultMaxTokens: 32768,
+      description: '轻量快速模型，TPS 高，适合 skill 高频调用'
+    }
+  ];
+  const platform: ProviderDefinition = {
+    id: 'platform', name: '平台通道（继承）', enabled: true, recommended: true, endpointSource: 'inherit', models
+  };
+  return {
+    models,
+    providers: [platform],
+    aliases: {
+      chat: ['deepseek-v4-flash', 'agnes-3.0-flash'],
+      reasoning: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+      light: ['agnes-3.0-flash']
+    },
+    defaults: { chat: 'deepseek-v4-flash', reasoning: 'deepseek-v4-pro' },
+    source: 'embedded-fallback'
+  };
+}
+
+/** 把快照**原地**灌进历史导出（数组/Map/对象身份不变，热重载后旧引用继续有效）。 */
+function applySnapshot(snapshot: RegistrySnapshot): void {
+  const enabledProviders = snapshot.providers.filter((p) => p.enabled);
+  const models = enabledProviders.flatMap((p) => p.models);
+
+  AVAILABLE_MODELS.length = 0;
+  AVAILABLE_MODELS.push(...models);
+
+  MODEL_MAP.clear();
+  QUALIFIED_MODEL_MAP.clear();
+  for (const m of models) {
+    MODEL_MAP.set(m.id, m);
+    QUALIFIED_MODEL_MAP.set(`${m.providerId}/${m.id}`, m);
+  }
+
+  MODELS_BY_TIER.chat = models.filter((m) => m.tier === 'chat');
+  MODELS_BY_TIER.reasoning = models.filter((m) => m.tier === 'reasoning');
+
+  for (const key of Object.keys(MODEL_ALIASES)) delete MODEL_ALIASES[key];
+  Object.assign(MODEL_ALIASES, snapshot.aliases);
+
+  activeProviders = snapshot.providers;
+  activeDefaults = snapshot.defaults;
+  activeSource = snapshot.source;
+}
+
+function asNumber(value: unknown, field: string, where: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new Error(`llm-providers.json：${where} 的 ${field} 必须是正数，实际 ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
+function parseModelEntry(providerId: string, providerName: string, endpoint: { baseUrl: string; apiKeyEnv: string } | null, modelId: string, raw: unknown): ModelDefinition {
+  const where = `provider「${providerId}」模型「${modelId}」`;
+  if (!MODEL_ID_PATTERN.test(modelId)) {
+    throw new Error(`llm-providers.json：${where} 的 id 非法（允许 [a-zA-Z0-9._-]，不能带 /）`);
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`llm-providers.json：${where} 必须是对象`);
+  }
+  const b = raw as Record<string, unknown>;
+  const tier = b.tier === 'reasoning' ? 'reasoning' : b.tier === 'chat' ? 'chat' : null;
+  if (!tier) throw new Error(`llm-providers.json：${where} 的 tier 必须是 chat 或 reasoning`);
+  const def: ModelDefinition = {
+    id: modelId,
+    label: typeof b.label === 'string' && b.label.trim() ? b.label.trim() : modelId,
+    tier,
+    provider: providerId,
+    providerId,
+    providerName,
+    ...(endpoint ? { providerEndpoint: endpoint } : {}),
+    ...(b.supportsThinking === true ? { supportsThinking: true } : b.supportsThinking === false ? { supportsThinking: false } : {}),
+    ...(b.supportsReasoningEffort === true ? { supportsReasoningEffort: true } : b.supportsReasoningEffort === false ? { supportsReasoningEffort: false } : {}),
+    ...(b.maxOutputTokens != null ? { maxOutputTokens: asNumber(b.maxOutputTokens, 'maxOutputTokens', where) } : {}),
+    ...(b.defaultMaxTokens != null ? { defaultMaxTokens: asNumber(b.defaultMaxTokens, 'defaultMaxTokens', where) } : {}),
+    ...(b.reasoningReserveTokens != null ? { reasoningReserveTokens: asNumber(b.reasoningReserveTokens, 'reasoningReserveTokens', where) } : {}),
+    ...(b.maxParallelRequests != null ? { maxParallelRequests: asNumber(b.maxParallelRequests, 'maxParallelRequests', where) } : {}),
+    ...(Array.isArray(b.fallbacks) ? { fallbacks: b.fallbacks.map((x) => String(x).trim()).filter(Boolean) } : {}),
+    ...(b.pricing && typeof b.pricing === 'object' && !Array.isArray(b.pricing) ? { pricing: b.pricing as ModelPricing } : {}),
+    ...(typeof b.description === 'string' && b.description.trim() ? { description: b.description.trim() } : {})
+  };
+  if (def.supportsReasoningEffort === true && def.supportsThinking !== true) {
+    throw new Error(`llm-providers.json：${where} 声明了 supportsReasoningEffort 但未开 supportsThinking（矛盾）`);
+  }
+  return def;
+}
+
+/**
+ * 解析 llm-providers.json 文本 → 注册表快照。任何结构性问题直接抛错（带文件定位语义）。
+ * 语义约定：文件存在但非法 = fail-loud；调用方（启动）不吞这个错。
+ */
+export function parseLlmProvidersConfig(raw: string): RegistrySnapshot {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`llm-providers.json 不是合法 JSON：${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('llm-providers.json：顶层必须是对象');
+  }
+  const root = parsed as Record<string, unknown>;
+  if (!root.providers || typeof root.providers !== 'object' || Array.isArray(root.providers)) {
+    throw new Error('llm-providers.json：缺少 providers 对象');
+  }
+
+  const seenModelIds = new Set<string>();
+  const providers: ProviderDefinition[] = [];
+  for (const [providerId, value] of Object.entries(root.providers as Record<string, unknown>)) {
+    if (!PROVIDER_ID_PATTERN.test(providerId)) {
+      throw new Error(`llm-providers.json：provider id「${providerId}」非法（允许 [a-z0-9_-]）`);
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`llm-providers.json：provider「${providerId}」必须是对象`);
+    }
+    const p = value as Record<string, unknown>;
+    const baseUrl = typeof p.baseUrl === 'string' ? p.baseUrl.trim() : '';
+    const apiKeyEnv = typeof p.apiKeyEnv === 'string' ? p.apiKeyEnv.trim() : '';
+    if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
+      throw new Error(`llm-providers.json：provider「${providerId}」的 baseUrl 必须以 http(s):// 开头`);
+    }
+    if (baseUrl && !apiKeyEnv) {
+      throw new Error(`llm-providers.json：provider「${providerId}」声明了 baseUrl 就必须给 apiKeyEnv（密钥只走环境变量，严禁写进本文件）`);
+    }
+    if (!baseUrl && apiKeyEnv) {
+      throw new Error(`llm-providers.json：provider「${providerId}」只有继承通道不应声明 apiKeyEnv`);
+    }
+    if (!p.models || typeof p.models !== 'object' || Array.isArray(p.models)) {
+      throw new Error(`llm-providers.json：provider「${providerId}」缺少 models 对象`);
+    }
+    const endpoint = baseUrl ? { baseUrl, apiKeyEnv } : null;
+    const models = Object.entries(p.models as Record<string, unknown>).map(([modelId, m]) =>
+      parseModelEntry(providerId, String(p.name || providerId), endpoint, modelId, m)
+    );
+    for (const m of models) {
+      if (seenModelIds.has(m.id)) {
+        throw new Error(`llm-providers.json：模型 id「${m.id}」在多个 provider 下重复（模型 id 全局唯一；需要同名校分请用不同 id 或在配置里用「providerId/modelId」限定式引用）`);
+      }
+      seenModelIds.add(m.id);
+    }
+    providers.push({
+      id: providerId,
+      name: typeof p.name === 'string' && p.name.trim() ? p.name.trim() : providerId,
+      ...(typeof p.description === 'string' && p.description.trim() ? { description: p.description.trim() } : {}),
+      enabled: p.enabled !== false,
+      recommended: p.recommended === true,
+      endpointSource: baseUrl ? 'own' : 'inherit',
+      ...(baseUrl ? { baseUrl } : {}),
+      ...(apiKeyEnv ? { apiKeyEnv } : {}),
+      models
+    });
+  }
+  if (!providers.some((p) => p.enabled && p.models.length)) {
+    throw new Error('llm-providers.json：没有任何 enabled 的 provider 提供模型（注册表为空会令全平台无法路由）');
+  }
+
+  const aliases: Record<string, string[]> = {};
+  if (root.aliases != null) {
+    if (typeof root.aliases !== 'object' || Array.isArray(root.aliases)) {
+      throw new Error('llm-providers.json：aliases 必须是对象');
+    }
+    for (const [alias, members] of Object.entries(root.aliases as Record<string, unknown>)) {
+      if (!/^[a-z0-9_-]+$/.test(alias)) {
+        throw new Error(`llm-providers.json：别名「${alias}」非法（允许 [a-z0-9_-]）`);
+      }
+      if (!Array.isArray(members)) {
+        throw new Error(`llm-providers.json：别名「${alias}」的成员必须是字符串数组`);
+      }
+      aliases[alias] = members.map((x) => String(x).trim()).filter(Boolean);
+    }
+  }
+
+  const defaults: { chat: string; reasoning: string } = { chat: DEFAULT_MODELS.chat, reasoning: DEFAULT_MODELS.reasoning };
+  if (root.defaults != null) {
+    if (typeof root.defaults !== 'object' || Array.isArray(root.defaults)) {
+      throw new Error('llm-providers.json：defaults 必须是对象');
+    }
+    const d = root.defaults as Record<string, unknown>;
+    if (d.chat != null) {
+      if (typeof d.chat !== 'string' || !d.chat.trim()) throw new Error('llm-providers.json：defaults.chat 必须是非空字符串');
+      defaults.chat = d.chat.trim();
+    }
+    if (d.reasoning != null) {
+      if (typeof d.reasoning !== 'string' || !d.reasoning.trim()) throw new Error('llm-providers.json：defaults.reasoning 必须是非空字符串');
+      defaults.reasoning = d.reasoning.trim();
+    }
+  }
+
+  return { models: providers.flatMap((p) => p.models), providers, aliases, defaults, source: 'file' };
+}
+
+function initFromDisk(): void {
+  const configPath = resolveConfigPath();
+  let raw: string;
+  try {
+    raw = fs.readFileSync(configPath, 'utf-8');
+  } catch {
+    // 文件缺失 = 用内置兜底目录（fresh clone / 文件被挪走时后端必须能起）
+    applySnapshot(buildEmbeddedFallback());
+    return;
+  }
+  // 文件存在但非法 = fail-loud（静默回退会把运维配置错误藏起来）
+  const snapshot = parseLlmProvidersConfig(raw);
+  applySnapshot(snapshot);
+  try { lastMtimeMs = fs.statSync(configPath).mtimeMs; } catch { lastMtimeMs = null; }
+}
+initFromDisk();
+
+/**
+ * 热重载：文件 mtime 变化时重读并原地更新注册表。
+ * 解析失败时**保留上一次好目录**并把错误记入 status（运行中的服务不能因一次坏编辑崩溃）。
+ * 由路由层在每次 resolve 前调用（stat 开销远小于一次 LLM 调用）。
+ */
+export function reloadLlmProvidersIfChanged(): { reloaded: boolean; error: string | null } {
+  const configPath = resolveConfigPath();
+  let st: fs.Stats;
+  try {
+    st = fs.statSync(configPath);
+  } catch {
+    lastReloadError = `配置文件不可读：${configPath}`;
+    return { reloaded: false, error: lastReloadError };
+  }
+  if (lastMtimeMs !== null && st.mtimeMs === lastMtimeMs && activeSource === 'file') {
+    lastReloadError = null;
+    return { reloaded: false, error: null };
+  }
+  try {
+    const snapshot = parseLlmProvidersConfig(fs.readFileSync(configPath, 'utf-8'));
+    applySnapshot(snapshot);
+    lastMtimeMs = st.mtimeMs;
+    lastReloadError = null;
+    return { reloaded: true, error: null };
+  } catch (e) {
+    lastReloadError = e instanceof Error ? e.message : String(e);
+    return { reloaded: false, error: lastReloadError };
+  }
+}
+
+/** 注册表加载状态（model-registry 总览/健康检查用）。 */
+export function getLlmRegistryStatus(): RegistryStatus {
+  return { path: resolveConfigPath(), source: activeSource, mtimeMs: lastMtimeMs, lastError: lastReloadError };
+}
+
+/** 全部 provider 条目（含 enabled=false 的示例/停用条目，供总览与前端展示全貌）。 */
+export function getProviderCatalog(): ProviderDefinition[] {
+  return activeProviders;
+}
+
+/** 运行时生效的别名默认值（跟随配置文件；DEFAULT_MODELS 仅为兼容快照）。 */
+export function getModelDefaults(): { chat: string; reasoning: string } {
+  return { ...activeDefaults };
+}
+
+/**
+ * 解析模型引用：`providerId/modelId` 限定式（仅当命中已注册供应商+目录内模型）或裸 id。
+ * 未命中返回 null —— 调用方按「字面量透传」（历史行为：未知 id 原样发给上游）处理。
+ */
+export function resolveModelRef(ref: string): { providerId: string; modelId: string; definition: ModelDefinition } | null {
+  const value = String(ref || '').trim();
+  if (!value) return null;
+  const slash = value.indexOf('/');
+  if (slash > 0) {
+    const def = QUALIFIED_MODEL_MAP.get(value);
+    if (def) return { providerId: def.providerId, modelId: def.id, definition: def };
+  }
+  const bare = MODEL_MAP.get(value);
+  if (bare) return { providerId: bare.providerId, modelId: bare.id, definition: bare };
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// 历史查询 API（签名与语义不变；全部读 call-time 状态，天然跟随热重载）
+// ---------------------------------------------------------------------------
 
 /** 是否为已声明的逻辑别名（大小写不敏感）。 */
 export function isModelAlias(value: string): boolean {
@@ -100,7 +477,7 @@ export function isModelAlias(value: string): boolean {
 }
 
 /**
- * 展开别名成员：DB 覆盖优先，其次代码注册表；过滤未注册/重复的模型 id，保留声明顺序。
+ * 展开别名成员：DB 覆盖优先，其次配置文件注册表；过滤未注册/重复的模型 id，保留声明顺序。
  */
 export function getModelAliasMembers(
   alias: string,
@@ -119,87 +496,6 @@ export function getModelAliasMembers(
   }
   return out;
 }
-
-/**
- * 可用模型列表
- */
-export const AVAILABLE_MODELS: ModelDefinition[] = [
-  {
-    id: 'deepseek-v4.1-flash',
-    label: 'DeepSeek V4.1 Flash',
-    tier: 'chat',
-    provider: 'deepseek',
-    supportsThinking: true,
-    supportsReasoningEffort: true,
-    maxOutputTokens: 131072,
-    defaultMaxTokens: 32768,
-    reasoningReserveTokens: 8192,
-    // 显式空链：同通道可用模型里没有同 tier 候选（agnes 不在标准 key 分组上）。
-    // 兜底改用 skill 级 fallbackChain 声明 + 保存时通道能力校验（见 routes/admin/skill-model-configs.ts）。
-    fallbacks: [],
-    description: 'V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）'
-  },
-  {
-    id: 'deepseek-v4-flash',
-    label: 'DeepSeek V4 Flash',
-    tier: 'chat',
-    provider: 'deepseek',
-    supportsThinking: true,
-    supportsReasoningEffort: true,
-    maxOutputTokens: 131072,
-    defaultMaxTokens: 32768,
-    reasoningReserveTokens: 8192,
-    fallbacks: ['agnes-3.0-flash'],
-    description: 'V4 Flash（含混别名：部分渠道实际由 V4.1 部署服务，输出量波动大，见下方说明）'
-  },
-  {
-    id: 'deepseek-v4-pro',
-    label: 'DeepSeek V4 Pro',
-    tier: 'reasoning',
-    provider: 'deepseek',
-    supportsThinking: true,
-    supportsReasoningEffort: true,
-    maxOutputTokens: 131072,
-    defaultMaxTokens: 32768,
-    reasoningReserveTokens: 16384,
-    fallbacks: ['deepseek-v4-flash'],
-    description: '强大推理能力，适合复杂任务和深度思考'
-  },
-  {
-    id: 'agnes-3.0-flash',
-    label: 'Agnes 3.0 Flash',
-    tier: 'chat',
-    provider: 'agnes',
-    supportsThinking: false,
-    supportsReasoningEffort: false,
-    maxOutputTokens: 65536,
-    defaultMaxTokens: 32768,
-    description: '轻量快速模型，TPS 高，适合现阶段 skill 高频调用（暂代 deepseek 作为 skill 调用模型）'
-  }
-];
-
-/**
- * 默认模型配置
- */
-export const DEFAULT_MODELS = {
-  chat: 'deepseek-v4-flash',
-  reasoning: 'deepseek-v4-pro'
-} as const;
-
-/**
- * 按 tier 分组的模型列表
- */
-export const MODELS_BY_TIER = {
-  chat: AVAILABLE_MODELS.filter(m => m.tier === 'chat'),
-  reasoning: AVAILABLE_MODELS.filter(m => m.tier === 'reasoning')
-};
-
-/**
- * 模型 ID 映射（用于快速查找）
- */
-export const MODEL_MAP = new Map(
-  AVAILABLE_MODELS.map(m => [m.id, m])
-);
 
 /**
  * 检查是否为支持 Thinking Mode 的模型
@@ -284,5 +580,5 @@ export function isValidModel(modelId: string): boolean {
  * 获取所有模型 ID 列表（用于验证和配置）
  */
 export function getAllModelIds(): string[] {
-  return AVAILABLE_MODELS.map(m => m.id);
+  return AVAILABLE_MODELS.map((m) => m.id);
 }

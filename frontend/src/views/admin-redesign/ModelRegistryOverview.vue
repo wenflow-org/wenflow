@@ -93,17 +93,64 @@
           </p>
         </section>
 
-        <!-- ③ 模型能力与限额：代码注册表 = 唯一写源 -->
+        <!-- ②b 模型供应商：File-as-Truth 目录（llm-providers.json）的通道视图 -->
+        <section class="ac-mr-sect">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">模型供应商</h3>
+            <span class="mk-card__meta">
+              唯一写源 = File-as-Truth 模型目录（config/llm-providers.json，改动热重载）；继承通道沿用平台路由解析，自带端点的供应商在路由时整体切换 endpoint/key
+            </span>
+          </div>
+          <p v-if="data.registry?.source === 'embedded-fallback'" class="ac-mr-note">
+            当前目录来自内置兜底（未读到配置文件）：{{ data.registry?.path }}
+          </p>
+          <p v-else-if="data.registry?.lastError" class="ac-mr-note">
+            最近一次热重载失败，沿用上一次好目录：{{ data.registry?.lastError }}
+          </p>
+          <div class="mk-table-scroll">
+            <table class="mk-table mk-table--dense">
+              <thead>
+                <tr><th>供应商</th><th>端点</th><th>密钥</th><th>推荐</th><th>状态</th><th>模型</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="p in data.providers" :key="p.id">
+                  <td>
+                    <span class="mono">{{ p.id }}</span>
+                    <span class="ac-mr-label">{{ p.name }}</span>
+                  </td>
+                  <td class="mono">
+                    <template v-if="p.endpointSource === 'own'">{{ p.baseUrl }}</template>
+                    <template v-else>继承平台路由</template>
+                  </td>
+                  <td class="mono">
+                    <template v-if="p.endpointSource === 'own'">{{ p.apiKeyEnv }}（{{ p.keyConfigured ? '已配置' : '未配置' }}）</template>
+                    <template v-else>—</template>
+                  </td>
+                  <td>
+                    <span v-if="p.recommended" class="mk-badge mk-badge--ok">推荐</span>
+                    <template v-else>—</template>
+                  </td>
+                  <td>
+                    <span class="mk-badge" :class="p.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ p.enabled ? '启用' : '停用' }}</span>
+                  </td>
+                  <td class="mono">{{ p.modelIds.join(', ') || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ③ 模型能力与限额：目录文件 = 唯一写源 -->
         <section class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">模型能力与限额</h3>
-            <span class="mk-card__meta">唯一写源 = 后端代码注册表（models.config.ts）；此表只读。降级仅切换模型名，网关与密钥沿用主调用</span>
+            <span class="mk-card__meta">唯一写源 = File-as-Truth 模型目录（llm-providers.json）；此表只读。降级仅切换模型名，网关与密钥沿用主调用</span>
           </div>
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense">
               <thead>
                 <tr>
-                  <th>模型</th><th>档位</th><th>思考</th><th>推理强度</th>
+                  <th>模型</th><th>供应商</th><th>档位</th><th>思考</th><th>推理强度</th>
                   <th>输出上限</th><th>缺省输出</th><th>推理预留</th><th>并发上限</th><th>降级链</th>
                 </tr>
               </thead>
@@ -113,7 +160,10 @@
                     <span class="mono">{{ model.id }}</span>
                     <span class="ac-mr-label">{{ model.label }}</span>
                   </td>
-                  <td>{{ model.tier }}</td>
+                  <td>
+                    <span class="mono">{{ model.providerId }}</span>
+                    <span v-if="model.hasOwnEndpoint" class="ac-mr-label" title="该供应商自带端点：路由时整体切换 endpoint/key">独立端点</span>
+                  </td>
                   <td>
                     <span class="mk-badge" :class="model.capabilities.supportsThinking ? 'mk-badge--ok' : 'mk-badge--muted'">
                       {{ model.capabilities.supportsThinking ? '支持' : '不支持' }}
@@ -190,11 +240,34 @@ import { errMsg } from './live'
 
 interface ModelRegistryOverviewData {
   generatedAt: string
+  providers: Array<{
+    id: string
+    name: string
+    description?: string
+    enabled: boolean
+    recommended: boolean
+    endpointSource: 'inherit' | 'own'
+    baseUrl: string | null
+    apiKeyEnv: string | null
+    keyConfigured: boolean | null
+    modelIds: string[]
+  }>
+  registry: {
+    path: string
+    source: 'file' | 'embedded-fallback'
+    mtimeMs: number | null
+    lastError: string | null
+    fileDefaults: { chat: string; reasoning: string }
+  }
   models: Array<{
     id: string
     label: string
     tier: string
     provider: string
+    providerId: string
+    providerName?: string
+    hasOwnEndpoint: boolean
+    keyConfigured: boolean | null
     capabilities: { supportsThinking: boolean; supportsReasoningEffort: boolean }
     limits: {
       maxOutputTokens: number | null

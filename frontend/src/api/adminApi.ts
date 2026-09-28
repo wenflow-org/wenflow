@@ -694,10 +694,18 @@ export const adminApiConfigApi = {
 
   /**
    * 模型配置总览（只读）：能力注册表 / 别名映射 / 默认解析 / 降级链 / 部署冷却 / 配置漂移告警。
-   * 模型能力的唯一写源仍是后端代码注册表（doc/MODEL_GATEWAY_DESIGN.md §4.7）。
+   * 模型目录的唯一写源 = File-as-Truth 配置文件 llm-providers.json（doc/MODEL_GATEWAY_DESIGN.md §4.2）。
    */
   getModelRegistry: async () => {
     return adminAxios.get('/admin/model-registry');
+  },
+
+  /**
+   * 模型目录（File-as-Truth，llm-providers.json）：可用模型（带 providerId/providerName/
+   * 供应商端点）+ 供应商清单 + 别名默认值。供各模型选择器按供应商分组。
+   */
+  getModelCatalog: async () => {
+    return adminAxios.get('/config/available-models');
   }
 };
 

@@ -27,6 +27,10 @@ jest.mock('../../../utils/secret-redaction', () => ({
 }))
 
 import router from '../skill-model-configs'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { reloadLlmProvidersIfChanged } from '../../../config/models.config'
 
 function getHandler(method: 'get' | 'put', path: string) {
   const layer = (router as any).stack.find(
@@ -189,6 +193,88 @@ describe('skill-model-configs routing-only write path', () => {
             maxTokens: 8000,
           }),
         }),
+      })
+    )
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// 供应商维度（llm-providers.json File-as-Truth）：限定式引用 / 跨供应商兜底拒绝。
+// 用临时目录配置切换注册表，跑完恢复种子目录（不影响文件内前序用例的种子注册表状态）。
+// ---------------------------------------------------------------------------
+describe('skill-model-configs 兜底链的供应商校验', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-providers-skilltest-'))
+  const tempConfig = path.join(tmpDir, 'llm-providers.json')
+
+  beforeAll(() => {
+    fs.writeFileSync(tempConfig, JSON.stringify({
+      providers: {
+        platform: {
+          name: '平台通道',
+          models: {
+            'main-chat': { label: 'Main Chat', tier: 'chat', defaultMaxTokens: 32768 },
+            'alt-chat': { label: 'Alt Chat', tier: 'chat', defaultMaxTokens: 32768 },
+          },
+        },
+        other: {
+          name: '其他通道',
+          baseUrl: 'http://other.example/v1',
+          apiKeyEnv: 'UT_OTHER_KEY',
+          models: {
+            'other-chat': { label: 'Other Chat', tier: 'chat', defaultMaxTokens: 32768 },
+          },
+        },
+      },
+      aliases: {},
+      defaults: { chat: 'main-chat', reasoning: 'main-chat' },
+    }), 'utf-8')
+    process.env.LLM_PROVIDERS_CONFIG = tempConfig
+    process.env.UT_OTHER_KEY = 'ut-other-placeholder-key'
+    reloadLlmProvidersIfChanged()
+  })
+
+  afterAll(() => {
+    delete process.env.LLM_PROVIDERS_CONFIG
+    delete process.env.UT_OTHER_KEY
+    reloadLlmProvidersIfChanged()
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  function putFallback(body: Record<string, unknown>) {
+    const handler = getHandler('put', '/:skillId')
+    const res = createRes()
+    return handler(
+      { params: { skillId: 'goal-conversation' }, body: { enabled: true, model: 'main-chat', ...body } },
+      res
+    ).then(() => res)
+  }
+
+  it('接受同供应商限定式引用（platform/alt-chat）与裸 id（alt-chat）', async () => {
+    const res = await putFallback({ fallbackChain: ['platform/alt-chat'] })
+    expect(res.status).not.toHaveBeenCalledWith(400)
+    const res2 = await putFallback({ fallbackChain: ['alt-chat'] })
+    expect(res2.status).not.toHaveBeenCalledWith(400)
+  })
+
+  it('拒绝跨供应商候选（裸 id 或限定式，两种写法都拦）', async () => {
+    const res = await putFallback({ fallbackChain: ['other/other-chat'] })
+    expect(res.status).toHaveBeenCalledWith(400)
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.stringContaining('跨供应商'),
+      })
+    )
+    const res2 = await putFallback({ fallbackChain: ['other-chat'] })
+    expect(res2.status).toHaveBeenCalledWith(400)
+  })
+
+  it('限定式引用与裸 id 指向同一模型时视为自身并拒绝', async () => {
+    const res = await putFallback({ fallbackChain: ['platform/main-chat'] })
+    expect(res.status).toHaveBeenCalledWith(400)
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.stringContaining('不能是主模型自身'),
       })
     )
   })

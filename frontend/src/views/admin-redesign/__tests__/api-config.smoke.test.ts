@@ -119,6 +119,17 @@ describe('ApiConfig P1 修复批', () => {
       data: {
         data: {
           generatedAt: '2026-09-19T12:00:00.000Z',
+          providers: [
+            {
+              id: 'platform', name: '平台通道（继承）', enabled: true, recommended: true,
+              endpointSource: 'inherit', baseUrl: null, apiKeyEnv: null, keyConfigured: null,
+              modelIds: ['deepseek-v4-flash', 'agnes-3.0-flash']
+            }
+          ],
+          registry: {
+            path: 'backend/config/llm-providers.json', source: 'file', mtimeMs: 1, lastError: null,
+            fileDefaults: { chat: 'deepseek-v4-flash', reasoning: 'deepseek-v4-pro' }
+          },
           models: [
             {
               id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', tier: 'chat', provider: 'deepseek',
