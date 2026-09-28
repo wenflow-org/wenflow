@@ -263,14 +263,6 @@ function goOverview() {
   intent.scene = 'overview'
 }
 
-watch([days, includeTest], () => {
-  void load()
-  void loadCostSummary()
-}, { immediate: true })
-
-/* ===== 调用成本金额条（2026-09-29 随拆页从执行日志宿主搬入） =====
-   读取 token-cost 端点金额字段，口径跟随 days/includeTest；单价未配置时后端返回
-   usd=null，显示「单价未配置」而非 0；pricingStatus.missingPricingModels 给补价清单。 */
 const costLoading = ref(false)
 const costFailed = ref(false)
 const costUsd = ref<number | null>(null)
@@ -305,6 +297,13 @@ async function loadCostSummary() {
     costLoading.value = false
   }
 }
+
+watch([days, includeTest], () => {
+  void load()
+  void loadCostSummary()
+}, { immediate: true })
+
+
 
 async function load(force = false) {
   if (loading.value) return
