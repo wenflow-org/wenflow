@@ -1,5 +1,7 @@
 # KC 概念身份与图关系改造设计
 
+> 📌 类型：活规范（实现度 ~95%，时效管理最佳范式）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+
 > 状态：**L1/L2/L3 + 前端画布已落地**（见文末「交付状态」）｜日期：2026-09-22（2026-09-23 更新）
 > 关联：`doc/LEARNER_STATE_REVIEW_DESIGN.md`（调控分工纪律）、`doc/VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md`（跨日模拟契约）、`doc/LEARNER_MODEL_ARCHITECTURE.md`
 > 验证手段：现有虚拟学习者存量回填 + `src/scripts/simulate-learner-e2e.ts` 跨日对照

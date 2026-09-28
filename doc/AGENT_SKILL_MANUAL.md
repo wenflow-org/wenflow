@@ -1,5 +1,7 @@
 # Agent / Skill 全景与缘由（开发者向）
 
+> 📌 类型：活规范｜最后核验：2026-09-28（CIDDP/32 字段/retryPathEnrichment 已更正）。索引见 [doc/README.md](./README.md)。
+
 > 本文回答一个问题：**每个顶层 Agent 和每个 Skill 为什么存在**——功能缘由、设计意图、解决什么问题、边界在哪。
 >
 > **本文是什么（定位）**

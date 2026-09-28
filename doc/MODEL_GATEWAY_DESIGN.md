@@ -1,5 +1,7 @@
 # 模型 / 网关配置设计（以模型为中心）
 
+> 📌 类型：活规范（网关 SSOT，19 条核对 18 条准确）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+
 > 状态：P0~P3 已落地；2026-09-24 完成一次全面对账修订（见文末「修订记录」）。
 > §2「现状」为写作时点（2026-09-03 前后）快照，已解决项已就地标注——单读 §2 会低估现状。
 > 适用范围：`backend/src/gateway/**`、`backend/src/config/models.config.ts`、`backend/src/services/resolve-llm-call-params.ts`、平台/技能/Agent 三层模型配置

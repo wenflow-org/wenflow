@@ -1,5 +1,7 @@
 # Prompt 调整指引（PROMPT_ADJUSTMENT_GUIDE）
 
+> 📌 类型：活规范（提示词调整操作指南）｜最后核验：2026-09-28（死链/死命令已修）。索引见 [doc/README.md](./README.md)。
+
 > 面向拿到项目后需要调整提示词的开发者/运营。2026-09 起 prompt 体系**只有一条编译链**——
 > 原第二级编译（prompt-compiler 服务：routing 重写 + `{{}}` 引用注解）已整体退役（16c3cabd），
 > prompt 内容调整统一走 v4 确定性编译。机制详见 `doc/SKILL_PROTOCOL_V4.md` 与 `prompts/_README.md`。

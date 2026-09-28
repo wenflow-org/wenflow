@@ -149,6 +149,7 @@
 | 5 | Overview | ✅ 09-25 收敛一轮（99→**64**）：KPI 瓦片本就是 MkKpi；琥珀/红告警渐变压平为 color-mix 语义色；装饰渐变删除；hover 面接 token。剩余为环形分 SVG/图表语义色 |
 | 6 | 壳层 Shell | ✅ 09-25（90→**12**）：侧栏/面包屑字面量清零，走 --mk-side-* 六个新 token |
 | 7 | 图表配色 | ✅ 09-25：chartPalette.ts 单一来源 + MkChart 注册 mk-light/mk-dark 主题；三页字面量删除 |
+| 8 | AdminConsole 错误面 | ✅ 09-25 深夜：异步 chunk 错误面的 `errorbar` 是**零定义死类**（裸文字渲染）→ 改 mk-alert--row + mk-btn；boot 错误卡私有按钮 → mk-btn，余量 hex token 化。「唯一 EP 孤岛 QuickLearnPanel」实为陈旧说法——09-09 ㉒ 批已重写为 mk-*，全仓现无 element-plus import |
 
 当前全站私写 hex 存量 **649**（基线棘轮已同步）。余下构成：徽章语义水彩、暗色强调
 （#7aa2ff 系已在壳层清零，页面侧随批次收敛）、SVG/图表语义色、Overview 环形分。

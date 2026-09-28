@@ -3,6 +3,51 @@
 > 目录约定：根目录（doc/ 下）列出的 = **仓库内现行有效文档**（纳入 git，GitHub 可见）。
 > archive/、history/、design/、调查快照与历史改动记录等**过程材料仅存于本机**，不纳入 git（2026-09-05 起），不在本索引列链接；
 > 需要时以 doc/ 根目录现行文档与代码为准。
+> **登记门禁（2026-09-28 起）**：新文档入库三件套 = 白名单 + 本表登记 + 状态头；实现与「不做」声明相悖须同提交改文档。
+
+## 总索引（39 篇 · 全覆盖 · 2026-09-28）
+
+> 每篇文档头部有状态行（📌 类型｜最后核验）。**登记约定**：新增 doc/ 文档须同时 ①加入根 .gitignore 白名单 ②登记本表 ③写状态头；凡实现与文档「不做/待办」声明相悖的改动，须同一提交内更新该文档声明。审计详见 doc/local/DOC-TIMELINESS-AUDIT-2026-09-28（本机）。
+
+| 文档 | 类型 | 备注 |
+|---|---|---|
+| SKILL_PROTOCOL_V4.md | 活规范 | Skill 协议 SSOT（二级编译已退役） |
+| MODEL_GATEWAY_DESIGN.md | 活规范 | 网关 SSOT |
+| PROMPT_CACHE_OPTIMIZATION.md | 活规范 | 缓存优化（32k SSOT 已回写） |
+| PROMPT_ADJUSTMENT_GUIDE.md | 活规范 | 提示词调整操作指南 |
+| SKILL_DEVELOPMENT_GUIDE.md | 活规范 | 新建/改造 Skill 指南（§2 CLI 优先） |
+| AGENT_SKILL_MANUAL.md | 活规范 | Agent/Skill 全景 why |
+| KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md | 活规范 | KC 概念身份+图（95%） |
+| KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md | 活规范 | KC 多路径+学习者信号（§2 结论仍成立） |
+| LEARNER_CENTER_AND_STATE_FUSION.md | 活规范 | 学习者中心/状态融合（§3.3 已接线） |
+| LEARNER_MODEL_ARCHITECTURE.md（.en） | 活规范 | 学习者模型（Phase 5 已消费；§6/§10/§11 待补） |
+| LEARNER_STATE_REVIEW_DESIGN.md | 设计留痕 | 🔴 三张表未建，照抄会建错表 |
+| PATH_PRODUCTION_REPLAN_CONTRACT.md（.en） | 活规范 | ⚠️ 已知待办：2 处 409 判定 |
+| PATH_ANDERSON_ITERATION_NOTE.md（.en） | 设计留痕（已归档） | 砍二阶段的唯一决策留痕 |
+| SESSION_JSON_INCREMENTAL_DESIGN.md | 活规范 | 会话 JSON 增量（~95%） |
+| VIRTUAL_LEARNER_DESIGN.md | 活规范 | VL 主文档（裁判已独立） |
+| VIRTUAL_LEARNER_CHAIN.md | 活规范 | VL 链路 SoT（16/17） |
+| VIRTUAL_LEARNER_PRESET_DESIGN.md | 设计留痕（已归档） | 真源已迁 presets.yaml v4 |
+| VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md | 活规范 | ⚠️ 抬头待更新「已落地」 |
+| VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md | 设计留痕 | ⚠️ 抬头已失准，全套修订待做 |
+| AGENT_IO_DESIGN_V3.md | 设计留痕（部分归档） | §1-4 由 V4 §2.6 承接 |
+| UPGRADE_DIRECTION_20Q.md | 治理台账 | Q12 已改「已实施」 |
+| NON_FUNCTIONAL_GOVERNANCE_PLAN.md | 治理计划 | ⚠️ 状态基线 2026-07-17 |
+| EDUCATIONAL_THEORY_MAP.md | 参考资料 | 理论地图（文献已核实） |
+| ADMIN_TERMINOLOGY_AUDIT.md | 活规范 | 术语 SSOT（不可归档） |
+| ADMIN_VISUAL_LAYER_SPEC.md | 活规范 | ⛔ 禁归档（守卫硬引用）；并行整改中 |
+| ADMIN_COLUMN_WIDTH_SPEC.md | 活规范 | 48/48 全中 |
+| ADMIN_PAGE_TEMPLATES.md | 活规范（待拆分） | 1569 行 → ≤330 方案已定 |
+| ADMIN_TABS_BUSINESS_AUDIT.md | 历史审计 | 未核验 |
+| ADMIN_MODULE_BENCHMARK.md | 历史快照 | 未核验 |
+| CONTEXT_MECHANISM_AUDIT.md | 历史审计 | 缓存基线为改造前口径 |
+| LEARNING_SCIENCE_AUDIT.md | 历史审计 | 科学性判断仍有效 |
+| DEV_SCRIPTS.md | 活规范 | 脚本唯一索引（86 条零失效） |
+| ADMIN_UI_WALKTHROUGH.md | 历史快照 | 已迁 doc/re_test/ |
+| ADMIN_PAGE_AUDIT.md | 历史快照 | 已迁 doc/re_test/ |
+| README.md / README.en.md | 索引 | 本文档 |
+| re_test/（3 篇） | 历史快照 | 归档头已加 |
+
 
 ## 协议与 Prompt 体系
 

@@ -1,5 +1,7 @@
 # Admin 列宽规范（ADMIN_COLUMN_WIDTH_SPEC，v1 · 2026-09-25 追认成文）
 
+> 📌 类型：活规范｜最后核验：2026-09-28（审计 48/48 全中，原地保留）。索引见 [doc/README.md](./README.md)。
+
 > 状态：**先有实现、后补本文**。mk-primitives.css / main.css 的注释自 09 月起引用
 > 「ADMIN_COLUMN_WIDTH_SPEC §2/§3」，但该文件一直未创建（09-25 对账发现）。
 > 本文把已落地的实现口径集中成文；§号沿用代码注释里的既有引用（§2 token、§3 工具类与契约）。

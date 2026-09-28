@@ -1,5 +1,7 @@
 # 虚拟学习者链路（Source of Truth）
 
+> 📌 类型：活规范（优先级链 16/17；第 3 条 goalSeed.realProblem 已从代码剔除）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+
 ## 顶层模型
 
 ```

@@ -1,5 +1,7 @@
 # WenFlow 非功能治理与统一计划
 
+> 📌 类型：治理计划（⚠️ 状态基线 2026-07-17，判状态以 §9 为准）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+
 > 审计日期：2026-07-17  
 > 架构基线与对齐计划（ARCHITECTURE_BASELINE_2026-07、ARCHITECTURE_ALIGNMENT_AND_REMEDIATION_PLAN）
 > 属过程材料，已于 2026-09-05 清理、仅存本机，不在仓库。  

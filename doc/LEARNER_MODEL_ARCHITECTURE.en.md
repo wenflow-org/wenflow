@@ -1,5 +1,7 @@
 # Learner Model Scenario Design (New Architecture)
 
+> 📌 类型：活规范（英文同步版，与中文 .md 同步更新）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+
 ## 1. Objective
 
 This document defines learner model scenario under new architecture, with goals:

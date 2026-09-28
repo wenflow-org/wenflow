@@ -1,5 +1,7 @@
 # Anderson Annotation Iteration Direction in Path Scenario
 
+> 📌 类型：设计留痕（Archived 2026-09-28——decision record for cutting the two-stage Anderson replan）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+
 ## Background
 
 Current Anderson-related logic in the path scenario has been adjusted from blocking post-processing to execution during the enrichment phase after paths become available.

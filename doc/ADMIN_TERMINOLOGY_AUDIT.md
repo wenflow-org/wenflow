@@ -1,5 +1,7 @@
 # Admin 运营台术语治理审计（ADMIN_TERMINOLOGY_AUDIT）
 
+> 📌 类型：活规范（叫法 SSOT，不可归档）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+
 > 本文是 admin 运营台术语治理的**单源依据**。`frontend/src/views/admin-redesign/terms.ts`、
 > `statusText.ts` 与守卫测试 `backend/src/services/__tests__/terminology-guard.test.ts` 均以本文为准。
 

@@ -1,5 +1,7 @@
 # Path Production Scenario Refactoring Notes (Unified Architecture)
 
+> 📌 类型：活规范（英文同步版，与中文同样存在已知待办）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+
 ## Scope
 
 Only covers path production pipeline:

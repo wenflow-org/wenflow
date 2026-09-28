@@ -1,5 +1,7 @@
 # 单用户多路径 · 概念图有用性 · 学习者信号作用域
 
+> 📌 类型：活规范（实现度 ~90%；§2 C1-C4 结论仍成立）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+
 > 日期：2026-09-23 ｜ 关联：`doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md`（L1/L2/L3 设计）
 > 驱动：`backend/scripts/kc-multipath-run.ts`（单用户 3 路径 × 2 跨日；`--case=` 跑具名单案例）
 > 续跑：`backend/scripts/kc-resume-case.ts`（会话中断后补课，不重算路径与图）

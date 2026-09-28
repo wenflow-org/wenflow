@@ -1,5 +1,7 @@
 # Admin 模块级对标研究报告(2026-09-22)
 
+> 📌 类型：历史快照｜未核验（2026-09-28 普查登记）。索引见 [doc/README.md](./README.md)。
+
 > 定位:与 `ADMIN_PAGE_AUDIT.md`(静态审查)、`ADMIN_UI_WALKTHROUGH.md`(交互走查)互补的第三份报告——
 > **逐模块与成熟产品对标**,评估功能布局差距,并结合 WenFlow「AI 教学模拟平台」的产品特色给出取舍建议。
 > 性质:**纯研究报告**,不含代码改动。对标对象按域选择:Langfuse / LangSmith / Braintrust / promptfoo
