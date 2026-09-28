@@ -79,4 +79,31 @@ describe('enforceBudgetConservation（量级守恒硬执行）', () => {
     expect(r.gapNote).toBeNull();
     expect(ms.map((m) => m.estimatedHours)).toEqual([3, 4, 5]);
   });
+
+  it('垃圾锚防护：≥3 阶段但 target<2h（推导污染）→ 不执行守恒，按模型原样汇总（exam-12 型：target=1 把 70h 合规输出夹到 4.9h）', () => {
+    const ms = milestones([14, 14, 14, 14, 14]);
+    const hints = {
+      targetTotalHours: 1,
+      targetHoursPerMilestone: 0.2,
+      subtasksPerStageRange: [3, 14],
+      subtaskMinutesRange: [15, 90],
+    };
+    const r = enforceBudgetConservation(ms, hints);
+    expect(r.totalAfter).toBe(70);
+    expect(r.gapNote).toBeNull();
+    expect(ms.map((m) => m.estimatedHours)).toEqual([14, 14, 14, 14, 14]);
+  });
+
+  it('一节课路径（1-2 阶段）的 <2h 锚仍照常执行（规则 43 一次性操作形态合法）', () => {
+    const ms = milestones([3, 4]);
+    const hints = {
+      targetTotalHours: 1,
+      subtasksPerStageRange: [1, 2],
+      subtaskMinutesRange: [10, 15],
+    };
+    const r = enforceBudgetConservation(ms, hints);
+    // 容量 = 2 阶段 × 2 任务 × 15min = 1h；ceiling = min(1.8, 1) = 1 → 收缩
+    expect(r.totalAfter).toBeLessThanOrEqual(1);
+    expect(ms.map((m) => m.estimatedHours).reduce((a, b) => a + b, 0)).toBeCloseTo(r.totalAfter, 1);
+  });
 });

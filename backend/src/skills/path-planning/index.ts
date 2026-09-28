@@ -144,8 +144,13 @@ export function enforceBudgetConservation(
   const noop = { totalAfter: 0, gapNote: null as string | null, report: null as any };
   if (!Array.isArray(milestones) || milestones.length === 0) return noop;
   const target = Number(hints?.targetTotalHours);
-  if (!Number.isFinite(target) || target <= 0) {
-    // 无预算锚：只汇总，不做校正（保持历史行为）
+  // 垃圾锚防护（2026-09-29 R4）：target < 2h 只对 1-2 阶段的「一节课」路径成立
+  // （path-planning 规则 43：一次性操作 estimatedHours ≤ 1）。≥3 阶段却锚 <2h
+  // = 周期/预算推导污染（实测 rw-exam-12 target=1h 把模型 70h 合规输出夹到 4.9h），
+  // 此时按模型原样汇总，不执行守恒。
+  const junkAnchor = Number.isFinite(target) && target > 0 && target < 2 && milestones.length >= 3;
+  if (!Number.isFinite(target) || target <= 0 || junkAnchor) {
+    // 无预算锚（或垃圾锚）：只汇总，不做校正（保持历史行为）
     const sum = milestones.reduce((acc: number, m: any) => acc + (Number(m?.estimatedHours) || 0), 0);
     return { totalAfter: round1(sum), gapNote: null, report: null };
   }
