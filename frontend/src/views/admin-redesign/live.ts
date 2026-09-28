@@ -1752,22 +1752,20 @@ async function fetchLiveSkillCatalog(): Promise<void> {
   }))
 }
 
-/* ================= 拓扑 ================= */export interface LiveTopoNode {
+/* ================= 拓扑 ================= */
+/* 2026-09-28 拆除调用次数统计后，拓扑响应 = 纯定义视图（Agent/Skill 清单 + 隶属边 + 生效模型配置）；
+   9s+ 的 prompt_call_logs 聚合已在后端下线，这里不再有 range 口径。 */
+export interface LiveTopoNode {
   id: string
   type: string
   label: string
   parentAgentId?: string
   memberCount?: number
-  stats: { totalCalls: number; failed: number; avgDuration: number }
   ioContractVersion?: string
   modelConfig?: { model?: string; temperature?: number; maxTokens?: number; source?: string }
 }
 
 export const liveTopoNodes = ref<LiveTopoNode[]>([])
-
-/** 拓扑统计时间范围（页面可切换，触发服务端重查）。
-    默认 7d：all 是全历史聚合（实测 9s+，是编排页加载慢的主因），不宜作为默认口径 */
-export const liveTopoRange = ref<'24h' | '7d' | '30d' | 'all'>('7d')
 
 /** 原始拓扑响应的单飞行共享（boot 的 topology 域与 DataFlowGraph 等消费方此前各拉一次，
     同一重接口重复请求；现共享同一 in-flight 请求 + 缓存最近一次响应，切 range/显式 force 时失效） */
@@ -1778,7 +1776,7 @@ export async function ensureLiveTopologyRaw(force = false): Promise<Record<strin
   if (!force && liveTopoRawBody) return liveTopoRawBody
   if (!liveTopoInflight) {
     liveTopoInflight = adminAgentTopologyApi
-      .getTopology(liveTopoRange.value)
+      .getTopology()
       .then((res) => {
         const body = (res.data?.data ?? res.data ?? {}) as Record<string, unknown>
         liveTopoRawBody = body
@@ -1795,27 +1793,20 @@ async function fetchLiveTopology(force = false): Promise<void> {
   const body = await ensureLiveTopologyRaw(force)
   const nodes = (body.nodes as Array<Record<string, unknown>>) || []
   liveTopoNodes.value = nodes.map((n: Record<string, unknown>) => {
-    const stats = (n.stats as Record<string, unknown>) || {}
     return {
       id: String(n.id),
       type: String(n.type || ''),
       label: String(n.label || n.id),
       parentAgentId: n.parentAgentId ? String(n.parentAgentId) : undefined,
       memberCount: n.memberCount != null ? Number(n.memberCount) : undefined,
-      stats: {
-        totalCalls: Number(stats.totalCalls || 0),
-        failed: Number(stats.failed || 0),
-        avgDuration: Number(stats.avgDuration || 0)
-      },
       ioContractVersion: n.ioContractVersion ? String(n.ioContractVersion) : undefined,
       modelConfig: n.modelConfig as LiveTopoNode['modelConfig']
     }
   })
 }
 
-/** 切换拓扑时间范围并重查（range 变化必须绕过共享缓存） */
-export async function reloadLiveTopology(range: '24h' | '7d' | '30d' | 'all'): Promise<void> {
-  liveTopoRange.value = range
+/** 强制重查拓扑（绕过共享缓存；原带 range 参数，调用统计拆除后已无口径可切） */
+export async function reloadLiveTopology(): Promise<void> {
   await fetchLiveTopology(true)
 }
 

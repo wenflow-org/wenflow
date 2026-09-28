@@ -6,7 +6,6 @@
       <strong class="mk-status__title">编排图</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ pageLoading ? '—' : stages.length }} 阶段 · {{ pageLoading ? '—' : totalSkills }} 个 Skill</span>
-      <span class="mk-status__meta">总调用 {{ pageLoading ? '—' : totalCalls }}</span>
       <span v-if="unresolvedCount > 0" class="mk-status__meta mk-status__meta--bad">未解析 {{ unresolvedCount }}</span>
       <span v-if="w4Drifted.length" class="mk-status__meta mk-status__meta--bad">{{ TERMS.driftHashQualified }} {{ w4Drifted.length }}</span>
       <span class="mk-status__actions">
@@ -27,7 +26,7 @@
         @click="selectStage(s.id)"
       >
         <span class="orch-stage-tab__name">{{ s.name.replace(/阶段$/, '') }}</span>
-        <span class="orch-stage-tab__meta">{{ s.skills.length }} Skill · {{ stageCalls(s) }} 调用</span>
+        <span class="orch-stage-tab__meta">{{ s.skills.length }} Skill</span>
       </button>
     </div>
 
@@ -242,7 +241,7 @@ async function refreshAll() {
   await Promise.all([loadDefinitions(), loadStages(), loadReconciliation()])
 }
 
-interface SkillNode { id: string; name: string; calls: number; produces: string[] }
+interface SkillNode { id: string; name: string; produces: string[] }
 interface DefStep { step: number; role?: string; condition?: string; loopOver?: string; agentId?: string; resolved?: { displayName?: string; kind?: string; nodeKind?: string; unresolved?: boolean } }
 interface Stage {
   id: string
@@ -322,7 +321,6 @@ const stages = computed<Stage[]>(() => {
       return {
         id,
         name: node.label.replace(/ Skill$/, ''),
-        calls: node.stats.totalCalls,
         produces: catalog?.outputFields || []
       }
     })
@@ -347,7 +345,6 @@ const stages = computed<Stage[]>(() => {
 })
 
 const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + stage.skills.length, 0))
-const totalCalls = computed(() => stages.value.reduce((sum, st) => sum + stageCalls(st), 0))
 const unresolvedCount = computed(() =>
   stages.value.reduce(
     (sum, st) => sum + (st.defSteps || []).filter((d) => d.resolved?.unresolved).length,
@@ -358,7 +355,6 @@ const unresolvedCount = computed(() =>
 const current = computed<Stage | undefined>(() => stages.value.find((s) => s.id === active.value) || stages.value[0])
 // 首屏加载中（live boot 未完成且尚无阶段数据）：用于抑制「0 阶段 / 暂无数据」的假空态
 const pageLoading = computed(() => liveLoading.value && !stages.value.length)
-const stageCalls = (st: Stage) => st.skills.reduce((sum, s) => sum + (s.calls || 0), 0)
 // 概览卡结论点色/标题（唯一动态状态载体；状态条只剩身份 + 数量）
 const statusTone = computed(() => {
   if (!stages.value.length) return 'muted'
@@ -375,7 +371,7 @@ const topoFailure = computed(() => liveFailures.value.topology || '')
 async function retryStages() {
   await Promise.all([
     loadStages(),
-    reloadLiveTopology('all')
+    reloadLiveTopology()
       .then(() => { delete liveFailures.value.topology })
       // 仍失败：保留 liveFailures.topology，错误态继续给原因 + 可再次重试
       .catch(() => undefined)
@@ -385,7 +381,7 @@ async function retryStages() {
 /** 阶段 tab tooltip：skills=0 时说明去向（此前 tab 只显示「0 Skill」，无从判断是真空还是没拉到） */
 function stageTabTitle(s: Stage): string {
   if (!s.skills.length) return '该阶段下辖 0 个 Skill：可能调度树未登记，或拓扑 / 目录尚未拉取成功'
-  return `${s.name}：${s.skills.length} 个 Skill · ${stageCalls(s)} 次调用`
+  return `${s.name}：${s.skills.length} 个 Skill`
 }
 
 /** 字段路由卡头 tooltip：阶段级变量流总量（截断前口径） */

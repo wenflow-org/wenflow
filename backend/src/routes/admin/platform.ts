@@ -34,9 +34,6 @@ import {
   updatePlatformCapabilityProbeInterval
 } from '../../services/capability-probe-settings.service';
 import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
-import { scanCoreFiles } from '../../services/prompt-lab/core-file-loader';
-import { loadOrchestrationFiles } from '../../services/field-routing/orchestration-file';
-import { EXEMPT_ROOT_NAMES } from '../../services/prompt-manifest/check-core-fields-sync';
 import { checkIsAdmin } from '../../services/admin-access.service';
 import {
   timeoutErrorSignals,
@@ -48,16 +45,6 @@ import { collectManifestDiagnostics } from '../../services/admin/platform-manife
 import { fetchAgentLogPage, fetchAgentLogWithAttempts } from '../../services/admin/platform-agent-logs.service';
 import { getPlatformActivityFeed } from '../../services/admin/platform-activity.service';
 import { listTeachingSessionsDebug } from '../../services/admin/platform-teaching-sessions.service';
-import { fetchTopologyLogAggregates, FIELD_STATS_ROW_CAP } from '../../services/topology/topology-log-stats';
-import { aggregateHandoffEdgeUsage } from '../../services/topology/handoff-edge-usage';
-import { attachEdgeStats } from '../../services/topology/topology-edge-stats';
-import { aggregateFieldHitRates, skillIdFromAgentId } from '../../services/topology/field-hit-rates';
-import {
-  attachFieldStats,
-  collectDeadRoutingEdges,
-  toSkillSummaries,
-  type RoutingEdgeLike,
-} from '../../services/topology/topology-field-stats';
 
 // 兼容 re-export：实现已下沉 service 层，单测/既有引用仍从本模块导入。
 export { classifyFailureCategory, buildErrorCategoryWhere } from '../../services/admin/failure-classification';
@@ -255,11 +242,15 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
  * Agent 拓扑可视化 API
  * GET /api/admin/agents/topology
  *
- * 返回 5 顶层 Agent + 下辖 Skill 的节点图数据：
- *   - nodes: 5 Agent + N Skill（带统计）
+ * 返回 5 顶层 Agent + 下辖 Skill 的节点图数据（纯定义视图）：
+ *   - nodes: 5 Agent + N Skill（含生效模型配置，不带调用统计）
  *   - edges: Agent -> Skill 隶属关系
+ *   - summary: { agentCount, skillCount, range }
  *
- * 时间窗口：?range=24h | 7d | 30d (默认 7d)
+ * 2026-09-28 拆除调用次数统计层（原 Q9：节点 stats / 隶属边用量 / 字段命中率，
+ * 聚合 prompt_call_logs 实测 9s+）：调用量不是编排图的判读对象，用量看执行日志 / 成本分析。
+ * 聚合实现保留在 services/topology/*（audit-handoff-edges 等 CLI 仍用），本路由不再调用。
+ * ?range= 兼容保留（旧前端仍会带），仅参与缓存 key 与 summary 回显，不再影响返回内容。
  */
 
 /**
@@ -330,72 +321,6 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
   }
 });
 
-/** Q9 后半程：把窗口内 prompt_call_logs 聚合出的字段命中率贴到逻辑图字段节点 / routing 边（纯 join） */
-function buildFieldStatsBlock(
-  rows: ReadonlyArray<{ agentId: string | null; extractedJson: string | null }>,
-  range: string,
-) {
-  // 声明字段（只读扫描 core 文件；与 CLI audit-field-hit-rates 同源）
-  const { files: coreFiles } = scanCoreFiles();
-  const declaredFieldsBySkill: Record<string, string[]> = {};
-  for (const core of coreFiles) {
-    declaredFieldsBySkill[core.skillId] = core.fields.map((field) => field.name);
-  }
-
-  const aggregation = aggregateFieldHitRates(rows, { declaredFieldsBySkill });
-
-  // 逻辑图字段节点 / routing 边（只读编排文件；仅 `skill:*` 产出行，与前端 DataFlowGraph 同源）
-  const nodesByKey = new Map<string, { agentId: string; fieldId: string }>();
-  const routingEdges: RoutingEdgeLike[] = [];
-  for (const stage of loadOrchestrationFiles()) {
-    for (const routing of stage.routings) {
-      if (!skillIdFromAgentId(routing.agentId)) continue;
-      const key = `${routing.agentId}\u0000${routing.fieldId}`;
-      if (!nodesByKey.has(key)) nodesByKey.set(key, { agentId: routing.agentId, fieldId: routing.fieldId });
-      routingEdges.push({
-        id: key,
-        agentId: routing.agentId,
-        fieldId: routing.fieldId,
-        handoff: routing.handoff,
-        stage: stage.stage,
-      });
-    }
-  }
-
-  const fields = attachFieldStats([...nodesByKey.values()], aggregation)
-    .map((node) => ({ agentId: node.agentId, fieldId: node.fieldId, ...node.fieldStats }))
-    .sort((a, b) => a.agentId.localeCompare(b.agentId) || a.fieldId.localeCompare(b.fieldId));
-
-  const deadRoutingEdges = collectDeadRoutingEdges(routingEdges, aggregation, EXEMPT_ROOT_NAMES);
-  const skills = toSkillSummaries(aggregation);
-
-  const countByStatus = (status: 'produced' | 'dead' | 'drift') =>
-    fields.filter((field) => field.status === status).length;
-
-  return {
-    range,
-    source: 'prompt_call_logs' as const,
-    queryCap: FIELD_STATS_ROW_CAP,
-    // 口径 caveat（解读前必读）：媒体产物 / deltaOutput / 校验归一化会造成死字段、漂移误报，
-    // 详见 field-hit-rates.ts 头注；分母为窗口内该 skill 全部调用（含失败 / 解析失败行）。
-    totalRows: aggregation.totalRows,
-    consideredRows: aggregation.consideredRows,
-    skippedMissingAgent: aggregation.skippedMissingAgent,
-    skippedNonSkillAgent: aggregation.skippedNonSkillAgent,
-    totals: {
-      skills: skills.length,
-      fields: fields.length,
-      produced: countByStatus('produced'),
-      dead: countByStatus('dead'),
-      drift: countByStatus('drift'),
-      deadRoutingEdges: deadRoutingEdges.length,
-    },
-    skills,
-    fields,
-    deadRoutingEdges,
-  };
-}
-
 router.get('/agents/topology', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
@@ -421,10 +346,7 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
     }
 
     const { listTopLevelAgents, listAgentManifest, getCanonicalAgentId } = await import('../../services/agent-manifest.service');
-    const {
-      getUnifiedSkillStats,
-      resolveEffectiveSkillRuntimeConfig,
-    } = await import('../../services/skill-runtime-contract.service');
+    const { resolveEffectiveSkillRuntimeConfig } = await import('../../services/skill-runtime-contract.service');
     const topAgents = listTopLevelAgents();
     const allManifest = listAgentManifest();
     const manifestMap = new Map(allManifest.map(m => [m.id, m]));
@@ -438,37 +360,6 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
         }
       }
     }
-
-    // Skill 统计与列表/抽屉统一；Agent 节点仍用 agent_call_logs（编排层）
-    const sinceMs = statsRange === '24h' ? 24 * 3600 * 1000
-      : statsRange === '30d' ? 30 * 24 * 3600 * 1000
-        : statsRange === '7d' ? 7 * 24 * 3600 * 1000
-          : null;
-    const since = sinceMs ? new Date(Date.now() - sinceMs) : null;
-    const [skillStatsMap, topologyAggregates] = await Promise.all([
-      getUnifiedSkillStats(skillIds, statsRange as any),
-      fetchTopologyLogAggregates(since),
-    ]);
-    const { callGroups, successGroups, edgeLogRows, fieldLogRows } = topologyAggregates;
-
-    const callMap = new Map<string, { total: number; avgDuration: number }>();
-    for (const g of callGroups) {
-      callMap.set(g.agentId, { total: g._count._all, avgDuration: Math.round(g._avg.durationMs || 0) });
-    }
-    const successMap = new Map<string, { success: number; failed: number }>();
-    for (const g of successGroups) {
-      const cur = successMap.get(g.agentId) || { success: 0, failed: 0 };
-      if (g.success) cur.success += g._count._all; else cur.failed += g._count._all;
-      successMap.set(g.agentId, cur);
-    }
-
-    const getAgentStats = (id: string) => {
-      const c = callMap.get(id);
-      const s = successMap.get(id) || { success: 0, failed: 0 };
-      const total = c?.total ?? 0;
-      const successRate = total > 0 ? Number(((s.success / total) * 100).toFixed(1)) : null;
-      return { totalCalls: total, successRate, avgDuration: c?.avgDuration ?? 0, failed: s.failed, source: 'agent_call_logs', range: statsRange };
-    };
 
     const nodes: any[] = [];
     const edges: any[] = [];
@@ -487,16 +378,13 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
     );
 
     for (const agent of topAgents) {
-      const agentStats = getAgentStats(agent.id);
-
       nodes.push({
         id: agent.id,
         type: 'agent',
         label: agent.name,
         description: agent.description,
         monitoringGroup: agent.monitoringGroup,
-        memberCount: (agent.agentMembers || []).length,
-        stats: agentStats
+        memberCount: (agent.agentMembers || []).length
       });
 
       for (const memberId of agent.agentMembers || []) {
@@ -505,15 +393,6 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
         if (!skill) continue;
 
         const shortId = canonical.replace(/^skill:/, '');
-        const unified = skillStatsMap.get(shortId);
-        const skillStats = {
-          totalCalls: unified?.callCount || 0,
-          successRate: unified?.successRate ?? null,
-          avgDuration: unified?.avgDurationMs || 0,
-          failed: unified?.failureCount || 0,
-          source: unified?.source || 'none',
-          range: statsRange,
-        };
 
         let modelConfig: Record<string, unknown> | null = skill.defaultModelConfig
           ? { ...skill.defaultModelConfig, source: 'manifest-default' }
@@ -544,8 +423,7 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
           parentAgentId: agent.id,
           ioContractVersion: skill.ioContractVersion,
           noPromptFile: !!skill.noPromptFile,
-          modelConfig,
-          stats: skillStats
+          modelConfig
         });
 
         edges.push({
@@ -557,37 +435,23 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
       }
     }
 
-    // Q9 后续：把窗口内已聚合的 handoff 边用量贴到 membership 边（caller=agent.id → callee=skill.id）
-    const edgeUsage = aggregateHandoffEdgeUsage(edgeLogRows, since ? { since } : {});
-    const edgesWithStats = attachEdgeStats(edges, edgeUsage.edges, statsRange);
-
-    // Q9 后半程：字段级运行时命中率（附加字段，保持向后兼容；失败降级为 null，不阻断拓扑响应）
-    let fieldStats: ReturnType<typeof buildFieldStatsBlock> | null = null;
-    try {
-      fieldStats = buildFieldStatsBlock(fieldLogRows, statsRange);
-    } catch (error) {
-      logger.warn('[admin-topology] 字段命中率计算失败，已降级为 null', { error });
-    }
+    /* 2026-09-28：调用次数统计整层拆除（总调用 / 成功率 / agent→skill 边用量 / 字段命中率）。
+       依据：range=all 全历史 groupBy + 字段命中率 payload 解析实测 9s+，是编排页最重的一笔；
+       而调用量本身不是编排图的判读对象（健康与用量在执行日志 / 成本分析有更对口的口径）。
+       拓扑回归纯定义视图：Agent/Skill 清单 + 隶属边 + 生效模型配置。
+       聚合实现保留在 services/topology/*（audit-handoff-edges 等 CLI 仍在用），只是本路由不再调。 */
 
     const summary = {
       agentCount: topAgents.length,
       skillCount: nodes.filter(n => n.type === 'skill').length,
-      totalCalls: nodes.reduce((s, n) => s + (n.stats?.totalCalls || 0), 0),
-      unhealthyCount: nodes.filter(n => n.stats?.totalCalls > 0 && (n.stats.successRate ?? 100) < 90).length,
-      idleCount: nodes.filter(n => n.type === 'skill' && (!n.stats?.totalCalls || n.stats.totalCalls === 0)).length,
-      // 隶属边运行时用量（附加字段，保持向后兼容）
-      edgeCount: edgesWithStats.length,
-      activeEdgeCount: edgesWithStats.filter(e => e.stats.totalCalls > 0).length,
-      deadEdgeCount: edgesWithStats.filter(e => e.stats.dead).length,
-      edgeTotalCalls: edgesWithStats.reduce((s, e) => s + e.stats.totalCalls, 0),
       range
     };
 
     res.json({
       success: true,
-      data: { nodes, edges: edgesWithStats, summary, fieldStats }
+      data: { nodes, edges, summary }
     });
-    topologyCache.set(topoCacheKey, { payload: { nodes, edges: edgesWithStats, summary, fieldStats }, cachedAt: Date.now() });
+    topologyCache.set(topoCacheKey, { payload: { nodes, edges, summary }, cachedAt: Date.now() });
   } catch (error: any) {
     logger.error('[admin-topology] 加载拓扑失败', { error });
     res.status(500).json({

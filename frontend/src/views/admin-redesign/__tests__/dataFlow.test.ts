@@ -8,12 +8,6 @@ import { fixtureDetails } from './fixture-details'
 
 const detailsById = fixtureDetails as Record<string, unknown>
 const stageNames = { goal: 'Goal 阶段', path: 'Path 阶段', teaching: '教学阶段' }
-const topo = [
-  { id: 'skill:goal-conversation', type: 'skill', parentAgentId: 'goal-agent', stats: { totalCalls: 387, failed: 32 } },
-  { id: 'skill:path-planning', type: 'skill', parentAgentId: 'path-agent', stats: { totalCalls: 490, failed: 7 } },
-  { id: 'skill:stage-designer', type: 'skill', parentAgentId: 'path-agent', stats: { totalCalls: 1767, failed: 90 } },
-  { id: 'skill:teaching-turn', type: 'skill', parentAgentId: 'teaching-agent', stats: { totalCalls: 3000, failed: 12 } },
-]
 
 const flowOf = (s: string) =>
   buildStageFlow(
@@ -27,7 +21,6 @@ const flowOf = (s: string) =>
           { step: 3, agentId: 'skill:stage-designer', role: 'stage-task-expansion', loopOver: 'milestones', resolved: { displayName: '阶段设计 Skill', kind: 'skill' } },
         ]
       : [],
-    topo as any,
     stageNames,
   )
 
@@ -52,11 +45,9 @@ describe('goal 阶段（链首：无入口，出口 24 字段 → path）', () =
     expect(f.exit.length).toBeGreaterThan(0)
     expect(f.exit.every((c) => c.handoffTargets.includes('path'))).toBe(true)
   })
-  it('步骤含 goal-conversation（统计来自拓扑）', () => {
+  it('步骤含 goal-conversation（编排定义步骤）', () => {
     const skill = f.steps.find((s) => s.agentId === 'skill:goal-conversation')
     expect(skill).toBeTruthy()
-    expect(skill!.calls).toBe(387)
-    expect(skill!.failed).toBe(32)
   })
 })
 
@@ -107,13 +98,12 @@ describe('path 阶段（入口 24 字段；闸口分发 normalizedInput；内部
     expect(svc!.kind).toBe('service')
     expect(svc!.outputs).toHaveLength(0)
   })
-  it('orphan 步骤：已注册 agent 但无字段契约（0 routing 行 + 不在 defSteps）→ kind=orphan，如实保留调用统计', () => {
+  it('orphan 步骤：已注册 agent 但无字段契约（0 routing 行 + 不在 defSteps）→ kind=orphan', () => {
     if (f.steps.some((s) => s.agentId === 'skill:kc-mapper')) {
       const o = f.steps.find((s) => s.agentId === 'skill:kc-mapper')!
       expect(o.kind).toBe('orphan')
       expect(o.outputs).toHaveLength(0)
       expect(o.inputs).toHaveLength(0)
-      expect(o.calls).toBe(0)
     } else {
       // fixture 无 orphan 时：确认 model 类型可表达且普通 skill 不受影响
       const pp = f.steps.find((s) => s.agentId === 'skill:path-planning')!
@@ -145,10 +135,7 @@ describe('teaching 阶段（入口 path 交接；teaching-turn 输入来自闸�
   })
 })
 
-describe('统计与数据族', () => {
-  it('path 阶段总调用 = 拓扑聚合（490 + 1767）', () => {
-    expect(flowOf('path').stats.calls).toBe(2257)
-  })
+describe('数据族', () => {
   it('数据族清单按字段数降序', () => {
     const fams = flowOf('path').families
     expect(fams.length).toBeGreaterThan(0)

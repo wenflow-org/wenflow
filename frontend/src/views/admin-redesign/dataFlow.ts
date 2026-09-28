@@ -92,13 +92,6 @@ export function familyHue(family: string): string {
   return PALETTE[h % PALETTE.length]
 }
 
-/** 调用量缩写：2820 → 2.8k */
-export function fmtCalls(n: number): string {
-  if (n >= 10000) return `${(n / 10000).toFixed(1)}w`
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
-  return String(n)
-}
-
 /* ================= 类型 ================= */
 
 /** 字段卡 = 一条 routing 行的投影（产出方 + 去向）；同一条卡可在多个槽位渲染（产出/输入/出口） */
@@ -123,8 +116,6 @@ export interface FlowChip {
   notes: string
   /** 去向标签（渲染用，按目标归类）：内部 skill / 出口 / 阶段 */
   toTags: Array<{ label: string; target: string; kind: 'skill' | 'bridge' | 'stage' | 'agent' }>
-  /** 字段级运行时统计（Q9 后半程）；null = 无数据（未接入 / 旧后端 / 非 skill 产出方） */
-  field: FieldStat | null
 }
 
 export interface FlowStep {
@@ -136,14 +127,10 @@ export interface FlowStep {
   loopOver?: string
   condition?: string
   unresolved: boolean
-  calls: number | null       // 调用用量（有即显示）
-  failed: number
   inputs: FlowChip[]         // 流入本步骤的字段（routing.handoff ∋ agentId）
   outputs: FlowChip[]        // 本步骤产出的字段（routing.agentId = agentId / bridge 归属）
   /** 步骤归属阶段（cross-agent 步骤标记来自其它阶段） */
   fromStage?: string
-  /** 调用隶属边（<stage>-agent → 本 Skill，agent→skill）运行时用量；null = 无数据（未接入 / 拉取失败） */
-  handoff: EdgeStat | null
 }
 
 export interface FlowEdge {
@@ -153,8 +140,6 @@ export interface FlowEdge {
   fieldId: string
   hue: string
   kind: 'internal' | 'exit' | 'entry'
-  /** 产出字段为死字段（Q9 后半程）；true = 虚线灰渲染 */
-  dead?: boolean
 }
 
 export interface StageFlow {
@@ -168,150 +153,7 @@ export interface StageFlow {
   exitTo: { stageId: string; stageName: string } | null
   steps: FlowStep[]
   edges: FlowEdge[]
-  stats: { calls: number; failed: number; rate: number }
-  /** 本阶段调用用量汇总；null = 无数据（未接入 / 拉取失败） */
-  edgeStats: {
-    edgeCount: number
-    usedEdgeCount: number
-    deadEdgeCount: number
-    totalCalls: number
-    failed: number
-  } | null
-  /** 字段级运行时命中率汇总；null = 无数据（未接入 / 旧后端 / 拉取失败） */
-  fieldStats: {
-    fieldCount: number
-    producedCount: number
-    deadCount: number
-    driftCount: number
-    deadRoutingEdges: number
-  } | null
   families: Array<{ name: string; hue: string; count: number }>
-}
-
-/* ================= 输入 ================= */
-
-export interface TopoNodeLike {
-  id: string
-  type: string
-  parentAgentId?: string
-  stats: { totalCalls: number; failed: number }
-}
-
-/** 调用隶属边（agent→skill，后端 Q9：`{ id, source, target, type, stats }`；stats 可缺省） */
-export interface TopoEdgeLike {
-  id?: string
-  source: string
-  target: string
-  type?: string
-  stats?: {
-    totalCalls?: number
-    failed?: number
-    successRate?: number | null
-    lastSeenAt?: string | Date | null
-  } | null
-}
-
-/** 调用隶属边运行时用量（agent→skill，前端投影；与后端 EdgeRuntimeStats 对齐并补 dead 判定） */
-export interface EdgeStat {
-  calls: number
-  failed: number
-  successRate: number | null
-  /** ISO 字符串；无记录为空串 */
-  lastSeenAt: string
-  /** 窗口内零调用（死边候选） */
-  dead: boolean
-}
-
-function edgeStatKey(source: string, target: string): string {
-  return `${source}\0${target}`
-}
-
-/**
- * 把后端调用隶属边（agent→skill）edges 投影成 `caller\0callee → EdgeStat` 索引（纯函数）。
- * 缺失 stats 视作零调用死边；successRate 缺失时由 calls/failed 现算。
- */
-export function indexEdgeStats(edges: readonly TopoEdgeLike[] | null | undefined): Map<string, EdgeStat> {
-  const map = new Map<string, EdgeStat>()
-  for (const e of edges || []) {
-    if (!e?.source || !e?.target) continue
-    const s = e.stats || {}
-    const calls = Number(s.totalCalls || 0)
-    const failed = Number(s.failed || 0)
-    const successRate = s.successRate != null
-      ? Number(s.successRate)
-      : calls > 0
-        ? Number((((calls - failed) / calls) * 100).toFixed(1))
-        : null
-    map.set(edgeStatKey(e.source, e.target), {
-      calls,
-      failed,
-      successRate,
-      lastSeenAt: s.lastSeenAt ? String(s.lastSeenAt) : '',
-      dead: calls === 0,
-    })
-  }
-  return map
-}
-
-/* ================= 字段级运行时命中率（Q9 后半程） ================= */
-
-/** 字段运行时状态：产出 / 死字段（声明但零产出，或 routing 根从未观测）/ 契约漂移（产出但未声明） */
-export type FieldRuntimeStatus = 'produced' | 'dead' | 'drift'
-
-/** 前端投影后的单字段运行时统计（tooltip：hits / totalCalls / hitRate） */
-export interface FieldStat {
-  declared: boolean
-  hits: number
-  hitRate: number
-  totalCalls: number
-  status: FieldRuntimeStatus
-}
-
-/** 后端 `fieldStats.fields[]` 元素（旧后端无此块 → 空索引，无视觉变化） */
-export interface TopoFieldStatLike {
-  agentId?: string
-  fieldId?: string
-  skillId?: string | null
-  root?: string
-  declared?: boolean
-  hits?: number
-  hitRate?: number
-  totalCalls?: number
-  status?: string
-}
-
-/** 后端 topology 响应的 `fieldStats` 块（附加字段；可缺省） */
-export interface FieldStatsBlock {
-  fields?: readonly TopoFieldStatLike[] | null
-  skills?: readonly unknown[] | null
-  deadRoutingEdges?: readonly unknown[] | null
-}
-
-function fieldStatKey(agentId: string, fieldId: string): string {
-  return `${agentId}\0${fieldId}`
-}
-
-function normalizeFieldStatus(value: unknown): FieldRuntimeStatus {
-  return value === 'dead' || value === 'drift' ? value : 'produced'
-}
-
-/**
- * 把后端 `fieldStats.fields[]` 投影成 `agentId\0fieldId → FieldStat` 索引（纯函数）。
- * 缺省 / 旧后端 / 非法项一律跳过（返回空索引，图退回无字段统计）；status 非法按 produced 兜底。
- */
-export function indexFieldStats(block: FieldStatsBlock | null | undefined): Map<string, FieldStat> {
-  const map = new Map<string, FieldStat>()
-  for (const entry of block?.fields || []) {
-    if (!entry?.agentId || !entry?.fieldId) continue
-    map.set(fieldStatKey(entry.agentId, entry.fieldId), {
-      declared: entry.declared === true,
-      hits: Number(entry.hits || 0),
-      hitRate: Number(entry.hitRate || 0),
-      totalCalls: Number(entry.totalCalls || 0),
-      status: normalizeFieldStatus(entry.status),
-    })
-  }
-  return map
 }
 
 export interface DefStepLike {
@@ -355,20 +197,13 @@ export function buildStageFlow(
   detail: StageDetailLike,
   detailsById: Record<string, StageDetailLike | null>,
   defSteps: DefStepLike[],
-  topoNodes: TopoNodeLike[],
   stageNames: Record<string, string>,
-  topoEdges?: readonly TopoEdgeLike[] | null,
-  fieldStatsBlock?: FieldStatsBlock | null,
 ): StageFlow {
   const stageName = stageNames[stageId] || STAGE_LABELS[stageId] || stageId
   const agentId = `${stageId}-agent`
   const myAgents = detail.agents.map((a) => a.agentId)
   const myIdentity = identityOf(stageId, myAgents)
   const fieldById = new Map(detail.fields.map((f) => [f.fieldId, f]))
-  // 调用用量索引（后端已聚合；缺省 = 无数据，不渲染调用统计）
-  const edgeStatIndex = topoEdges && topoEdges.length ? indexEdgeStats(topoEdges) : null
-  // 字段命中率索引（后端 Q9 后半程；缺省 = 无数据，不渲染字段状态）
-  const fieldStatIndex = fieldStatsBlock?.fields?.length ? indexFieldStats(fieldStatsBlock) : null
 
   const chipOf = (r: StageDetailLike['routings'][number]): FlowChip => {
     const f = fieldById.get(r.fieldId)
@@ -392,7 +227,6 @@ export function buildStageFlow(
       persistKey: f?.persistKey || '',
       notes: r.notes || '',
       toTags: toTagsOf(Array.isArray(r.handoff) ? r.handoff : r.handoff ? [r.handoff] : [], stageId),
-      field: fieldStatIndex ? fieldStatIndex.get(fieldStatKey(r.agentId, r.fieldId)) || null : null,
     }
   }
 
@@ -471,24 +305,6 @@ export function buildStageFlow(
   }
 
   const steps: FlowStep[] = []
-  const statBySkill = new Map<string, { totalCalls: number; failed: number }>()
-  for (const n of topoNodes) {
-    if (n.type !== 'skill') continue
-    const bare = n.id.replace(/^skill:/, '')
-    statBySkill.set(bare, { totalCalls: n.stats.totalCalls, failed: n.stats.failed })
-  }
-  const aggregateOf = (parent: string) => {
-    let calls = 0
-    let failed = 0
-    let found = false
-    for (const n of topoNodes) {
-      if (n.type !== 'skill' || n.parentAgentId !== parent) continue
-      calls += n.stats.totalCalls
-      failed += n.stats.failed
-      found = true
-    }
-    return found ? { calls, failed } : null
-  }
 
   stepOrder.forEach((item, i) => {
     const a = item.agentId
@@ -501,19 +317,10 @@ export function buildStageFlow(
     const inputs = isBridge
       ? []
       : allRoutings.filter((c) => c.agentId !== a && c.handoffTargets.includes(a))
-    let calls: number | null = null
-    let failed = 0
-    if (isSkill) {
-      const st = statBySkill.get(a.replace(/^skill:/, ''))
-      if (st) { calls = st.totalCalls; failed = st.failed }
-    } else if (isBridge) {
-      const agg = aggregateOf(agentId)
-      if (agg) { calls = agg.calls; failed = agg.failed }
-    }
     const resolvedName = def?.resolved?.displayName || ''
     const owner = isSkill || isBridge ? undefined : ownerStageOf(a)
-    // orphan：已注册 agent（agents 清单/调用统计），但无字段契约（0 routing 行）且不在 defSteps
-    // 如实呈现为「无契约 Skill」：保留调用统计（健康信号），标注 no-contract 而非误导性「0 产出」
+    // orphan：已注册 agent（agents 清单），但无字段契约（0 routing 行）且不在 defSteps
+    // 如实呈现为「无契约 Skill」：标注 no-contract 而非误导性「0 产出」
     const isOrphan = isSkill && !outputs.length && !inputs.length && !def
     const kind = isBridge ? 'bridge-entry' as const
       : isOrphan ? 'orphan' as const
@@ -521,8 +328,6 @@ export function buildStageFlow(
           : owner ? 'cross-agent' as const
             : (def?.resolved?.kind === 'service' ? 'service' as const : 'skill' as const)
     const name = isBridge ? `${stageName}闸口` : resolvedName || a.replace(/^skill:/, '')
-    // 调用隶属边 = 本阶段 agent → 本 Skill（agent→skill，与后端 membership 边同口径）
-    const handoff = isSkill && edgeStatIndex ? (edgeStatIndex.get(edgeStatKey(agentId, a)) || null) : null
     steps.push({
       index: i + 1,
       agentId: a,
@@ -532,39 +337,35 @@ export function buildStageFlow(
       loopOver: def?.loopOver,
       condition: def?.condition,
       unresolved: Boolean(def?.resolved?.unresolved),
-      calls,
-      failed,
       inputs,
       outputs,
       fromStage: owner || undefined,
-      handoff,
     })
   })
 
   /* ----- 边：内部流转（产出 chip → 消费 chip 副本）+ 出口聚合（产出 chip → 出口 chip） ----- */
   const edges: FlowEdge[] = []
   const edgeSeen = new Set<string>()
-  const addEdge = (from: string, to: string, fieldId: string, hue: string, kind: FlowEdge['kind'], dead = false) => {
+  const addEdge = (from: string, to: string, fieldId: string, hue: string, kind: FlowEdge['kind']) => {
     const id = `${from}→${to}`
     if (edgeSeen.has(id)) return
     edgeSeen.add(id)
-    edges.push({ id, from, to, fieldId, hue, kind, dead })
+    edges.push({ id, from, to, fieldId, hue, kind })
   }
   for (const c of allRoutings) {
     if (c.agentId === agentId) continue // 桥接分发边由入口/步骤槽位表达，不画
     const exitChip = exit.find((x) => x.fieldId === c.fieldId)
     const targets = new Set(c.handoffTargets)
-    const sourceDead = c.field?.status === 'dead'
     for (const t of targets) {
-      if (stepAgents.has(t)) addEdge(c.id, c.id, c.fieldId, c.hue, 'internal', sourceDead) // 同 chip 槽位间连线
+      if (stepAgents.has(t)) addEdge(c.id, c.id, c.fieldId, c.hue, 'internal') // 同 chip 槽位间连线
     }
     if (targets.has(agentId) && exitChip) {
-      addEdge(c.id, exitChip.id, c.fieldId, c.hue, 'exit', sourceDead)
+      addEdge(c.id, exitChip.id, c.fieldId, c.hue, 'exit')
     }
   }
   // 入口 → 桥接闸口：语义连接（入口字段经闸口整装后分发给内部 skill）
   for (const c of entryUnique.values()) {
-    if (bridgeDistribute.length) addEdge(c.id, `${agentId}\0__gate__`, c.fieldId, c.hue, 'entry', c.field?.status === 'dead')
+    if (bridgeDistribute.length) addEdge(c.id, `${agentId}\0__gate__`, c.fieldId, c.hue, 'entry')
   }
 
   /* ----- 汇总 ----- */
@@ -576,53 +377,6 @@ export function buildStageFlow(
       // 字段计数 = 该数据族在「字段定义」中的出现数（跨产出方去重）
       const uniq = new Set(detail.fields.filter((f) => familyOf(f.fieldId) === fam).map((f) => f.fieldId))
       familiesMap.set(fam, { hue: familyHue(fam), count: uniq.size })
-    }
-  }
-  const stat = aggregateOf(agentId)
-  // 调用用量汇总：仅统计本阶段 agent 发出的边（agent→skill，与 membership 边一一对应）
-  let stageEdgeStats: StageFlow['edgeStats'] = null
-  if (edgeStatIndex && topoEdges) {
-    let edgeCount = 0
-    let usedEdgeCount = 0
-    let deadEdgeCount = 0
-    let totalCalls = 0
-    let failed = 0
-    for (const e of topoEdges) {
-      if (e?.source !== agentId) continue
-      const es = edgeStatIndex.get(edgeStatKey(e.source, e.target))
-      const calls = es?.calls || 0
-      edgeCount++
-      if (calls > 0) usedEdgeCount++
-      else deadEdgeCount++
-      totalCalls += calls
-      failed += es?.failed || 0
-    }
-    stageEdgeStats = { edgeCount, usedEdgeCount, deadEdgeCount, totalCalls, failed }
-  }
-
-  // 字段命中率汇总：本阶段产出的 routing 行按 status 计数（去重），死边数按 stage 归属统计
-  let stageFieldStats: StageFlow['fieldStats'] = null
-  if (fieldStatIndex) {
-    const seenFieldKeys = new Set<string>()
-    let producedCount = 0
-    let deadCount = 0
-    let driftCount = 0
-    for (const c of allRoutings) {
-      const key = fieldStatKey(c.agentId, c.fieldId)
-      if (seenFieldKeys.has(key)) continue
-      seenFieldKeys.add(key)
-      const st = fieldStatIndex.get(key)
-      if (!st) continue
-      if (st.status === 'dead') deadCount++
-      else if (st.status === 'drift') driftCount++
-      else producedCount++
-    }
-    const deadRoutingEdges = (fieldStatsBlock?.deadRoutingEdges || []).filter(
-      (edge) => (edge as { stage?: string } | null)?.stage === stageId,
-    ).length
-    const fieldCount = producedCount + deadCount + driftCount
-    if (fieldCount > 0 || deadRoutingEdges > 0) {
-      stageFieldStats = { fieldCount, producedCount, deadCount, driftCount, deadRoutingEdges }
     }
   }
 
@@ -637,13 +391,6 @@ export function buildStageFlow(
     exitTo,
     steps,
     edges,
-    stats: {
-      calls: stat?.calls ?? 0,
-      failed: stat?.failed ?? 0,
-      rate: stat?.calls ? Math.round((stat.failed / stat.calls) * 1000) / 10 : 0,
-    },
-    edgeStats: stageEdgeStats,
-    fieldStats: stageFieldStats,
     families: [...familiesMap.entries()].sort((a, b) => b[1].count - a[1].count).map(([name, v]) => ({ name, hue: v.hue, count: v.count })),
   }
 }

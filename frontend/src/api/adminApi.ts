@@ -640,11 +640,11 @@ export const adminFieldRoutingsApi = {
 
 /**
  * Agent 拓扑可视化 API
- * 返回 5 Agent + 22 Skill 的节点图数据（含调用统计 + 隶属边）
+ * 返回 5 Agent + 22 Skill 的节点图数据（纯定义视图：清单 + 隶属边 + 生效模型配置；
+ * 2026-09-28 拆除调用次数统计层，不再聚合 prompt_call_logs）
  */
 export const adminAgentTopologyApi = {
-  getTopology: async (range: '24h' | '7d' | '30d' | 'all' = '7d') =>
-    adminAxios.get('/admin/agents/topology', { params: { range } }),
+  getTopology: async () => adminAxios.get('/admin/agents/topology'),
 };
 
 /**
