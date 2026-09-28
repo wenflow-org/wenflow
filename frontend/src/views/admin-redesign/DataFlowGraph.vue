@@ -1273,6 +1273,10 @@ function stepHue(step: FlowStep): string {
   /* 画布底：亮色无底（none）、暗色纵向渐变；此前只有暗色档、亮色缺配对 */
   background: var(--mk-graph-pipe-bg);
   display: grid;
+  /* 行轨必须 max-content：auto 轨的基准尺寸取 item 的最小贡献，而步骤卡 overflow:hidden
+     使其最小贡献=0（仅剩边框 2px）——定高网格里 9 张步骤卡全部塌成细条，内容被裁剪，
+     页面看起来「只剩入口/出口两张卡 + 一堆细线」。max-content 让行轨按卡片内容取尺寸。 */
+  grid-auto-rows: max-content;
   gap: 14px;
   align-content: start;
   transition: opacity 0.15s ease;
