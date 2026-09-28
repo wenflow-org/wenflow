@@ -577,14 +577,24 @@ export function derivePlanningHints(
     // 分钟上界顶到 240（session=60min 时实测单课均值 82min、锚 108min）——单课超过用户
     // 单次可用时间 = 一节课一天上不完（真实案例：90h 预算被切成 5×10×82min）。
     // 单课上界保持会话档（subtaskMinutesRange[1]，已按 timePerSession 校准，再封 90 防无会话
-    // 信息时默认 90 以上）；预算缺口由课数吸收（上界 10→14）；仍装不下的部分由
+    // 信息时默认 90 以上）；预算缺口由课数吸收；仍装不下的部分由
     // targetHoursPerMilestone 的结构容量钳制诚实收缩（不多排账面学时）。
+    //
+    // 2026-09-29 R5-1：旧代码硬帽 Math.min(14, needed)——needed=54（school-16 型：650h/8 阶段
+    // = 81h/阶段）被夹回 14，且下限公式产出倒挂区间 [18,14]（range[0]>range[1]，下游
+    // 「遵守区间」的消费方拿到垃圾）。实证：扩容从未真正生效，长周期路径交付比 7-42%，
+    // 31 条缺口声明全是这个天花板。改为按需抬升：上界 = clamp(needed, 14, 30)。
+    // 30 的上限是防 filler 副作用（评审实测：强填课会产换皮复读，B 维同质化）——
+    // 超过 30 课/阶段仍由缺口声明诚实兜底，不靠堆课数虚增容量。
     const perStageMin = anchorMin / targetMilestones;
     const lessonMinutesCap = Math.min(subtaskMinutesRange[1], 90);
     const needed = Math.ceil(perStageMin / lessonMinutesCap);
+    // 上界按需抬升（needed），30 封顶：强填课会产换皮复读（评审实证 B 维同质化），
+    // 超过 30 课/阶段仍由缺口声明诚实兜底，不靠堆课数虚增容量。
+    // 区间有序性天然保持：lower ≤ 原上界 ≤ 新上界。
     subtasksPerStageRange = [
       Math.max(3, Math.min(subtasksPerStageRange[0], Math.ceil(needed / 3))),
-      Math.min(14, Math.max(subtasksPerStageRange[1], needed)),
+      Math.min(30, Math.max(subtasksPerStageRange[1], needed)),
     ];
   }
   // 锚定总学时透传（供 path-planning prompt 把"总预算"显式交给 LLM 分配）

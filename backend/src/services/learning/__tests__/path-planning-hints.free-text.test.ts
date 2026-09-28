@@ -422,13 +422,16 @@ describe('keyStages 缺失时的学时兜底（2026-09-27 横向扩测 heavy-fp#
     expect(hints.targetMilestones).toBe(5);
     expect(hints.targetMilestones).not.toBeNull();
     // 2026-09-28 粒度修正后：扩容只加课数不加单课分钟——分钟上界保持默认档 90min
-    //（不再被扩容块顶到 240）；课数上界 10→14，锚带 [11,14]；
-    // 结构容量 14×90min=21h/阶段（诚实装不下 98h/阶段，钳到 21）；
-    // 学时反推锚 round(490/5)=98 被 14 夹住 → targetSubtasksPerStage=14。
-    expect(hints.targetHoursPerMilestone).toBe(21);
+    //（不再被扩容块顶到 240）。
+    // 2026-09-29 R5-1：课数上界从硬帽 14 改为按需抬升（30 封顶）——98h/阶段
+    // needed=66 → 上界 30；结构容量 30×90min=45h/阶段（诚实装不下 98h/阶段，钳到 45，
+    // 缺口由路径级容量说明声明）；学时反推锚 round(490/5)=98 被 30 夹住 →
+    // targetSubtasksPerStage=30。旧预期（14 课/21h）只覆盖 490h 的 21%，现覆盖 46%。
+    expect(hints.targetHoursPerMilestone).toBe(45);
     expect(hints.targetMinutesPerTask).toBe(90);
     expect(hints.subtaskMinutesRange[1]).toBe(90);
-    expect(hints.targetSubtasksPerStage).toBe(14);
+    expect(hints.targetSubtasksPerStage).toBe(30);
+    expect(hints.subtasksPerStageRange[0]).toBeLessThanOrEqual(hints.subtasksPerStageRange[1]);
   });
 
   it('keyStages 空且无学时信号 → 维持旧行为（scope 无则 null）', () => {
