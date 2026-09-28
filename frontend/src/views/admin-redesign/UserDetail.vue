@@ -10,7 +10,7 @@
             <h1 class="mk-entity__name">{{ d.name }}</h1>
             <span v-if="isDeleted" class="mk-badge mk-badge--sm mk-badge--deleted">已删除</span>
           </div>
-          <span class="mk-entity__sub">{{ d.email }} · {{ d.role }} · 加入 {{ d.joined }}</span>
+          <span class="mk-entity__sub">{{ d.email }} · {{ d.role }} · 加入 {{ d.joined }}<template v-if="d.lastLogin"> · 最后登录 {{ d.lastLogin }}</template></span>
         </div>
         <div class="mk-entity__actions">
           <button v-if="isDeleted" type="button" class="mk-status__action" :disabled="restoring" @click="doRestore">
@@ -25,26 +25,73 @@
     </header>
 
     <!-- 主区双栏（左 2/3 主内容 · 右 1/3 侧栏）。
-         原「学习路径」卡已移除：后端用户详情不返回 learning_paths 明细，recentPaths 恒为空数组，
-         卡片永远只显示「暂无学习路径记录」的误导空态。左栏改由「最近活跃」承担。 -->
+         原「最近活跃」卡只有两行合成文字（最后登录/累计会话），左栏大面积留白；
+         改为真实接口数据：teaching-sessions / goal-conversations 均支持 userId 过滤，
+         会话行可下钻只读座舱（session-real，带 from 记忆返回本页）。 -->
     <div class="ud-main">
       <div class="ud-col ud-col--main">
         <section class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">最近活跃</h3>
-            <span class="mk-card__meta">{{ d.activity.length }} 条</span>
+            <h3 class="mk-card__title">教学会话</h3>
+            <span class="mk-card__meta">
+              <MkLoading v-if="tsLoading" inline min text="加载中…" />
+              <template v-else>{{ tsError ? '加载失败' : `${tsRows.length} 条` }}</template>
+            </span>
           </div>
-          <div class="ud-activity">
-            <div v-for="(a, i) in d.activity" :key="i" class="ud-act">
-              <span>{{ a.text }}</span>
-              <span class="ud-act__time">{{ a.time }}</span>
+          <div class="ud-list">
+            <button v-for="s in tsRows" :key="s.id" type="button" class="ud-row" @click="openSession(s.id)">
+              <span class="mk-badge" :class="sessBadge(s.status)">{{ statusText(s.status) || '—' }}</span>
+              <span class="ud-row__main">
+                <strong class="ud-row__title" :title="s.topic">{{ s.topic }}</strong>
+                <span class="ud-row__sub">
+                  {{ s.subject }} · {{ s.messageCount }} 条消息<template v-if="s.durationText"> · 时长 {{ s.durationText }}</template>
+                </span>
+              </span>
+              <span class="ud-row__time">{{ s.startAgo }}</span>
+            </button>
+            <p v-if="!tsLoading && !tsRows.length" class="ud-none">暂无教学会话</p>
+          </div>
+        </section>
+
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">目标对话</h3>
+            <span class="mk-card__meta">
+              <MkLoading v-if="gcLoading" inline min text="加载中…" />
+              <template v-else>{{ gcError ? '加载失败' : `${gcRows.length} 条` }}</template>
+            </span>
+          </div>
+          <div class="ud-list">
+            <div v-for="g in gcRows" :key="g.id" class="ud-row ud-row--static">
+              <span class="mk-badge" :class="stageBadgeCls(g.stage)">{{ stageText(g.stage) || '—' }}</span>
+              <span class="ud-row__main">
+                <strong class="ud-row__title" :title="g.summary">{{ g.summary }}</strong>
+                <span class="ud-row__sub">{{ statusText(g.status) || '—' }}<template v-if="g.hasPath"> · 已生成学习路径</template></span>
+              </span>
+              <span class="ud-row__time">{{ g.createdAgo }}</span>
             </div>
-            <p v-if="!d.activity.length" class="ud-none">暂无动态记录</p>
+            <p v-if="!gcLoading && !gcRows.length" class="ud-none">暂无目标对话</p>
           </div>
         </section>
       </div>
 
       <div class="ud-col ud-col--side">
+        <!-- 等级进度（XP 公式与后端 level.util.ts 同源，进度条复用 .mk-minibar 原语） -->
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">等级进度</h3>
+            <span class="mk-card__meta">{{ levelLabel(d.level) }}</span>
+          </div>
+          <div class="ud-level">
+            <span class="mk-minibar"><span class="mk-minibar__fill" :style="{ width: levelPct + '%' }"></span></span>
+            <p class="ud-level__hint">{{ xpHintOf(d.xp) }}</p>
+            <div class="ud-level__grid">
+              <div><span>累计 XP</span><strong>{{ d.xp }}</strong></div>
+              <div><span>当前等级</span><strong>{{ levelLabel(d.level) }}</strong></div>
+            </div>
+          </div>
+        </section>
+
         <!-- 开发视角许可（侧栏卡，与活跃并列） -->
         <section class="mk-card ud-grant">
           <div class="mk-card__head">
@@ -112,8 +159,10 @@ import { subPage, closeSubPage, openSubPage } from './store'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 import { liveUsers, timeAgo, errMsg } from './live'
-import { adminUsersApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
+import { adminUsersApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
+import { statusText, stageText, stageBadgeCls } from './statusText'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { toast } from '@/utils/toast'
@@ -124,8 +173,12 @@ interface Detail {
   email: string
   role: string
   joined: string
+  /** 最后登录（仅列表兜底数据有；详情接口不回该字段） */
+  lastLogin: string
+  /** 等级进度卡原始值（XP 公式与后端 level.util 同源） */
+  xp: number
+  level: string
   stats: { label: string; value: string; hint?: string }[]
-  activity: { time: string; text: string }[]
 }
 
 const liveDetail = ref<Detail | null>(null)
@@ -141,6 +194,118 @@ function levelLabel(level: string | null | undefined): string {
   if (!level) return '—'
   const map: Record<string, string> = { beginner: '初学', intermediate: '进阶', advanced: '高级' }
   return map[level] || level
+}
+
+// ===== 等级进度（当前等级内的 XP 百分比；阈值公式与 xpHintOf 同源） =====
+const levelPct = computed(() => {
+  const xp = Math.max(0, liveDetail.value?.xp ?? 0)
+  const n = Math.floor(Math.sqrt(xp / 100)) + 1
+  const next = 100 * n * n
+  const prev = 100 * (n - 1) * (n - 1)
+  return Math.min(100, Math.max(0, Math.round(((xp - prev) / Math.max(next - prev, 1)) * 100)))
+})
+
+// ===== 用户维度活动数据（教学会话 / 目标对话，真实接口 userId 过滤） =====
+interface SessionRow {
+  id: string
+  topic: string
+  subject: string
+  status: string
+  messageCount: number
+  durationText: string
+  startAgo: string
+}
+interface GoalRow {
+  id: string
+  stage: string
+  status: string
+  summary: string
+  hasPath: boolean
+  createdAgo: string
+}
+const tsRows = ref<SessionRow[]>([])
+const gcRows = ref<GoalRow[]>([])
+const tsLoading = ref(false)
+const gcLoading = ref(false)
+const tsError = ref(false)
+const gcError = ref(false)
+
+/** 状态徽章降噪（对齐 TeachingSessions.statusBadge）：仅异常态上色，正常态灰 */
+const sessBadge = (s: string) =>
+  s === 'failed' || s === 'timeout' || s === 'discarded' || s === 'finalization_failed'
+    ? 'mk-badge--bad'
+    : s === 'superseded'
+      ? 'mk-badge--warn'
+      : 'mk-badge--muted'
+
+/** goal 摘要（对齐 GoalConversations.summaryOf：description 优先，兜底解析 collectedData） */
+function goalSummaryOf(c: Record<string, unknown>): string {
+  if (c.description) return String(c.description)
+  try {
+    const cd = JSON.parse(String(c.collectedData || '{}'))
+    return String(cd.goal || cd.learningGoal || cd.objective || cd.target || '—')
+  } catch {
+    return '—'
+  }
+}
+
+async function loadActivity(id: string) {
+  tsLoading.value = true
+  tsError.value = false
+  gcLoading.value = true
+  gcError.value = false
+  const ts = adminTeachingSessionsApi
+    .list({ userId: id, limit: 5, includeTest: true })
+    .then((res) => {
+      if (subPage.value?.id !== id) return
+      const body = res.data?.data ?? res.data ?? {}
+      tsRows.value = ((body.items as Record<string, unknown>[]) || []).map((s) => {
+        const dur = Number(s.duration || 0)
+        return {
+          id: String(s.id),
+          topic: String(s.topic || s.taskId || '未命名会话'),
+          subject: String(s.subject || '—'),
+          status: String(s.status || ''),
+          messageCount: Number(s.messageCount || 0),
+          durationText: dur >= 60 ? `${Math.round(dur / 60)} 分钟` : dur > 0 ? `${dur} 秒` : '',
+          startAgo: timeAgo(String(s.startTime || ''))
+        }
+      })
+    })
+    .catch(() => {
+      if (subPage.value?.id === id) tsError.value = true
+    })
+    .finally(() => {
+      if (subPage.value?.id === id) tsLoading.value = false
+    })
+  const gc = adminGoalConversationsApi
+    .list({ userId: id, limit: 4, includeTest: true })
+    .then((res) => {
+      if (subPage.value?.id !== id) return
+      const body = res.data?.data ?? res.data ?? {}
+      gcRows.value = ((body.conversations as Record<string, unknown>[]) || []).map((c) => ({
+        id: String(c.id),
+        stage: String(c.stage || ''),
+        status: String(c.status || ''),
+        summary: goalSummaryOf(c),
+        hasPath: !!c.learningPathId,
+        createdAgo: timeAgo(String(c.createdAt || ''))
+      }))
+    })
+    .catch(() => {
+      if (subPage.value?.id === id) gcError.value = true
+    })
+    .finally(() => {
+      if (subPage.value?.id === id) gcLoading.value = false
+    })
+  await Promise.all([ts, gc])
+}
+
+/** 会话行 → 真实会话只读座舱（座舱仅服务虚拟会话，真实会话走 session-real）；
+    from 记忆来源，座舱返回时回到本用户详情 */
+function openSession(sessionId: string) {
+  const sp = subPage.value
+  openSubPage('session-real', sessionId, sp ? { from: { view: sp.view, id: sp.id, label: sp.label } } : undefined)
 }
 /** 详情接口失败且无列表兜底 → 明确错误态 + 重试（参照 VirtualProfile.detailError 模式） */
 const detailError = ref(false)
@@ -352,15 +517,10 @@ async function loadDetail() {
   detailError.value = false
   detailErrorMsg.value = ''
   void loadGrant()
+  tsRows.value = []
+  gcRows.value = []
+  void loadActivity(id)
   const base = liveUsers.value.find((u) => u.id === id)
-  // 活跃明细无接口：用列表数据的最后登录/会话数合成，保证卡片有真实内容
-  const activityOf = (b: typeof base) =>
-    b
-      ? [
-          { text: `最后登录：${b.lastLoginAt ? timeAgo(String(b.lastLoginAt)) : '—'}`, time: '' },
-          ...(b.sessions ? [{ text: `累计会话 ${b.sessions} 次`, time: '' }] : [])
-        ]
-      : []
   try {
     // 已软删账号默认被详情接口隐藏（404 语义），Phase 2 用 includeDeleted=1 放行恢复入口
     const res = await getUserIncludingDeleted(id)
@@ -377,14 +537,16 @@ async function loadDetail() {
       email: String(user.email || base?.email || ''),
       role: user.isAdmin || base?.isAdmin ? '管理员' : '用户',
       joined: timeAgo(String(user.createdAt || base?.createdAt || '')),
+      lastLogin: base?.lastLoginAt ? timeAgo(String(base.lastLoginAt)) : '',
+      xp: Number(user.xp ?? base?.xp ?? 0),
+      level: String(user.currentLevel || base?.currentLevel || ''),
       stats: [
         { label: '路径', value: String(base?.paths ?? pathCount) },
         // 列表兜底缺失时不臆造 0：无数据显示 '—'
         { label: '会话', value: base?.sessions != null ? String(base.sessions) : '—' },
         { label: 'XP', value: String(user.xp ?? 0), hint: xpHintOf(Number(user.xp ?? 0)) },
         { label: '等级', value: levelLabel(String(user.currentLevel)), hint: '按 XP 推导' }
-      ],
-      activity: activityOf(base)
+      ]
     }
   } catch (e) {
     if (seq !== detailLoadSeq || subPage.value?.id !== id) return
@@ -395,13 +557,15 @@ async function loadDetail() {
         email: base.email,
         role: base.isAdmin ? '管理员' : '用户',
         joined: timeAgo(base.createdAt),
+        lastLogin: base.lastLoginAt ? timeAgo(String(base.lastLoginAt)) : '',
+        xp: Number(base.xp || 0),
+        level: String(base.currentLevel || ''),
         stats: [
           { label: '路径', value: String(base.paths) },
           { label: '会话', value: String(base.sessions) },
           { label: 'XP', value: String(base.xp), hint: xpHintOf(Number(base.xp)) },
           { label: '等级', value: levelLabel(base.currentLevel), hint: '按 XP 推导' }
-        ],
-        activity: activityOf(base)
+        ]
       }
     } else {
       // 404 = 用户不存在/已删除（includeDeleted 也未放行），与网络/服务异常区分开
@@ -440,17 +604,55 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 .ud-col { display: grid; gap: 14px; align-content: start; }
 .ud-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
-.ud-activity { display: grid; }
-.ud-act {
+.ud-list { display: grid; }
+/* 可点击行（教学会话）与静态行（目标对话）同构：徽章 + 标题/副行 + 时间 */
+.ud-row {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
   padding: 10px 16px;
+  border: none;
   border-bottom: 1px solid var(--mk-line, #e6ebf4);
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.ud-row:last-child { border-bottom: none; }
+.ud-row--static { cursor: default; }
+.ud-row:hover { background: var(--mk-surface-2, rgba(15, 23, 42, 0.03)); }
+.ud-row:focus-visible { outline: none; box-shadow: var(--mk-focus-ring, inset 0 0 0 2px var(--mk-blue)); }
+.ud-row__main { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.ud-row__title {
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ud-row__sub {
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ud-row__time { color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
+
+.ud-level { display: grid; gap: 10px; padding: 14px 16px 16px; }
+.ud-level__hint { margin: 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.ud-level__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ud-level__grid div {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
   font-size: var(--mk-fs-micro);
 }
-.ud-act:last-child { border-bottom: none; }
-.ud-act__time { color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
+.ud-level__grid span { color: var(--mk-faint); font-weight: 700; font-size: var(--mk-fs-micro); }
 
 .ud-grant { margin-top: 0; }
 .ud-grant__copy {
@@ -507,8 +709,7 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
   .ud-none { font-size: var(--mk-fs-body); }
-  .ud-act { font-size: var(--mk-fs-body); }
-  .ud-act__time { font-size: var(--mk-fs-micro); }
+  .ud-row__sub { font-size: var(--mk-fs-body); }
   .ud-grant__copy { font-size: var(--mk-fs-body); }
   .ud-grant__notice { font-size: var(--mk-fs-body); }
   .ud-grant__grid div { font-size: var(--mk-fs-body); }
@@ -517,8 +718,7 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
   .ud-none { font-size: var(--mk-fs-body); }
-  .ud-act { font-size: var(--mk-fs-body); }
-  .ud-act__time { font-size: var(--mk-fs-micro); }
+  .ud-row__sub { font-size: var(--mk-fs-body); }
   .ud-grant__copy { font-size: var(--mk-fs-body); }
   .ud-grant__notice { font-size: var(--mk-fs-body); }
   .ud-grant__grid div { font-size: var(--mk-fs-body); }
@@ -527,8 +727,7 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
   .ud-none { font-size: var(--mk-fs-emphasis); }
-  .ud-act { font-size: var(--mk-fs-emphasis); }
-  .ud-act__time { font-size: var(--mk-fs-emphasis); }
+  .ud-row__sub { font-size: var(--mk-fs-emphasis); }
   .ud-grant__copy { font-size: var(--mk-fs-emphasis); }
   .ud-grant__notice { font-size: var(--mk-fs-emphasis); }
   .ud-grant__grid div { font-size: var(--mk-fs-emphasis); }
