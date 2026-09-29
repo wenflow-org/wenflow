@@ -26,11 +26,9 @@
       @action="refresh(true)"
     />
 
-    <!-- 首载骨架（R3）：状态条保持可用，内容区用共享 MkSkeleton 版式占位，避免数秒空白 -->
+    <!-- 首载骨架（R3）：状态条保持可用，内容区用共享 MkSkeleton 版式占位，避免数秒空白。
+         版式与真实内容一致：KPI 行 + 健康检查卡（原首块是引导卡骨架，随引导卡一并撤除） -->
     <div v-else-if="loading && !displayReport" class="hc-skel" aria-hidden="true">
-      <section class="mk-card">
-        <div class="hc-guide__body"><MkSkeleton variant="rows" :count="2" :h="12" :jitter="true" /></div>
-      </section>
       <div class="hc-summary">
         <div v-for="i in 4" :key="i" class="mk-kpi hc-skel__kpi">
           <MkSkeleton w="48%" :h="12" />
@@ -44,22 +42,11 @@
     </div>
 
     <template v-else-if="displayReport">
-      <!-- 面向运营的一句话引导（与健康检查/漂移等折叠 section 同形态：mk-card + hc-details 折叠头）
-           独立成页后是「本页三段的读法」（健康检查 / 漂移 / 对账），整页唯一一份 -->
-      <section class="mk-card">
-        <details>
-          <summary class="mk-card__head mk-section__summary">
-            <h3 class="mk-card__title">本页看什么？</h3>
-            <span class="mk-card__meta">系统健康 {{ displayReport.health.summary.total }} 项检查 · Skill 是否健康运行 · 点开看术语速查</span>
-          </summary>
-          <div class="hc-guide__body">
-            <p><b>健康检查</b>：系统自动检查 Skill 运行的各个环境（配置、注册、提示词版本等），异常项可一键修复或跳转处理。</p>
-            <p><b>漂移</b>：配置内容与实际运行不一致——通常是修改了 Skill 配置但尚未同步/发布生效，去对应页面点「同步/发布」即可。</p>
-            <p><b>对账</b>：核对 Skill 在四个登记来源（配置文件、运行注册、生效版本、登记册）中是否齐全一致；「失效注册 / 无生效版本」等需要人工处理。</p>
-            <p><b>ACTIVE / W1-W5</b>：系统内部对「当前生效的提示词版本 / 各类自动检查」的编号称呼，处理时按页面提示操作即可，不影响理解问题本身。</p>
-          </div>
-        </details>
-      </section>
+      <!-- 「本页看什么？」引导卡 2026-09-29 撤除（用户：「这个说明文不需要占位了吧」）：
+           它原本的职责是解释「三个 tab 各是什么」，合一成页后三段标题自解释；
+           术语本身（ACTIVE / W1-W4 / 哈希漂移 / 遥测漂移…）在顶栏「运营术语表」的「健康」类下
+           有更细的词条，口径留在各段标题与卡片的 title 上，不必再占 48px 首屏。
+           下面删掉 kpi 前的引导卡后，概要 KPI 上移到首屏。 -->
 
       <!-- 概要 KPI（共享 MkKpi 统一形态：标签 + 数字 + 副行，可点击跳转锚点） -->
       <div class="hc-summary">
@@ -158,15 +145,19 @@
         </details>
       </section>
 
-      <!-- 漂移：配置与生效不一致（改完配置没同步/发布，普通运营可理解为「配置改了但没生效」） -->
+      <!-- 漂移：配置与生效不一致（改完配置没同步/发布，普通运营可理解为「配置改了但没生效」）
+           段内那行可见说明 2026-09-29 收进折叠头条的 title（用户：「说明文不需要占位」）：
+           三行漂移各自带「去同步/去发布/执行日志」出口与 title 口径，说明文只是重复。 -->
       <section v-if="driftAny" class="mk-card" id="hc-drift">
         <details open>
-          <summary class="mk-card__head mk-section__summary">
+          <summary
+            class="mk-card__head mk-section__summary"
+            title="配置内容与实际运行不一致：通常是修改了 Skill 配置但尚未同步/发布生效；处理后可保持线上行为与配置一致"
+          >
             <h3 class="mk-card__title">{{ TERMS.driftContract }}</h3>
             <span class="mk-card__meta">{{ driftActionable }} 项需处理</span>
             <span v-if="drift.runtime" class="mk-card__meta">遥测 {{ drift.runtime }} 条</span>
           </summary>
-          <p class="hc-drift__desc">配置内容与实际运行不一致：通常是修改了 Skill 配置但尚未同步/发布生效。处理后可保持线上行为与配置一致。</p>
           <div class="hc-drift">
             <div class="hc-drift__item" v-if="drift.contract">
               <strong :title="TERMS.driftValueMismatch">{{ TERMS.driftContractQualified }}</strong>
@@ -573,10 +564,6 @@ defineExpose({ refresh })
 
 /* 可折叠头走 .mk-section__summary（shared.css） */
 
-/* 面向运营的一句话引导（折叠区正文；容器已用 mk-card + hc-details 折叠头，与各 section 同形态） */
-.hc-guide__body { padding: 10px 14px 12px; display: grid; gap: 6px; }
-.hc-guide__body p { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
-.hc-guide__body b { color: var(--mk-ink); font-weight: 700; }
 
 /* 健康检查行 */
 .hc-check { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; padding: 0 16px; border-bottom: 1px solid var(--mk-line); }
@@ -608,7 +595,6 @@ defineExpose({ refresh })
 .hc-ok .hc-check:last-child { border-bottom: none; }
 
 /* 漂移 */
-.hc-drift__desc { margin: 0; padding: 10px 16px 2px; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; border-bottom: 1px solid var(--mk-line); }
 .hc-drift { padding: 8px 0; }
 .hc-drift__item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--mk-line); flex-wrap: wrap; }
 .hc-drift__item:last-child { border-bottom: none; }
