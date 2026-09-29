@@ -21,7 +21,7 @@
         :key="s.id"
         type="button"
         class="orch-stage-tab"
-        :class="{ 'is-active': pane !== 'sandbox' && active === s.id }"
+        :class="{ 'is-active': !['sandbox', 'overview'].includes(pane) && active === s.id }"
         :title="stageTabTitle(s)"
         @click="selectStage(s.id)"
       >
@@ -30,17 +30,97 @@
       </button>
     </div>
 
-    <!-- 子面板 pills：四个面板统一可达（此前非沙盘视图不显示沙盘 pill，只能深链进入）——chrome 固定 -->
+    <!-- 子面板 pills：五个面板统一可达——总览（全旅程 odg 画布，缺省）/字段旅程/字段路由/治理/沙盘 -->
     <div class="mk-pills orch-pane-tabs" role="tablist">
       <button v-for="pt in ORCH_PANES" :key="pt.id" type="button" role="tab"
         class="mk-pill" :class="{ 'mk-pill--active': pane === pt.id }"
         :aria-selected="pane === pt.id" @click="pane = pt.id">{{ pt.label }}</button>
     </div>
 
+    <!-- ===== 总览：全旅程 odg 画布（newui/admin odg-canvas 形态）=====
+         五阶段并列列（阶段头 + Skill 节点 + 入/出参 chip + 产出字段），
+         列间 SVG 三次贝塞尔连线（箭头 + 下一阶段入参字段标签），layoutOrch 在
+         渲染/窗口 resize 时重算；点节点进入该阶段工作区。 -->
+    <section v-if="pane === 'overview' && stages.length" class="mk-card mk-card--fill orch-pane orch-odg-page">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">字段数据旅程（逻辑图 · 字段血缘）</h3>
+        <span class="mk-card__meta">
+          <span class="orch-odg-chip orch-odg-chip--in">阶段入参</span>
+          <span class="orch-odg-chip orch-odg-chip--out">阶段产出</span>
+        </span>
+      </div>
+      <div class="orch-odg-scroll">
+        <div ref="odgCanvasEl" class="orch-odg-canvas">
+          <svg ref="odgSvgEl" class="orch-odg-svg" aria-hidden="true" />
+          <div v-for="(s, i) in stages" :key="s.id" class="orch-odg-col">
+            <header class="orch-odg-colhead">
+              <span class="orch-odg-no">{{ i + 1 }}</span>
+              <span class="orch-odg-colname">{{ s.name }}</span>
+              <span class="orch-odg-agent mono">{{ s.agentId }}</span>
+            </header>
+            <div class="orch-odg-body">
+              <button
+                v-for="(sk, j) in s.skills"
+                :key="sk.id"
+                type="button"
+                class="orch-odg-node"
+                :title="`进入「${s.name}」工作区`"
+                @click="openStageFromOverview(s.id)"
+              >
+                <span class="orch-odg-idx mono">{{ i + 1 }}.{{ j + 1 }}</span>
+                <span class="orch-odg-nodename">{{ sk.name }}</span>
+                <span class="orch-odg-nodemeta mono">{{ s.agentId }}</span>
+              </button>
+            </div>
+            <footer class="orch-odg-foot">
+              <span class="orch-odg-chip orch-odg-chip--in">入 {{ contractOf(s.id).ins.length }}</span>
+              <span class="orch-odg-chip orch-odg-chip--out">出 {{ contractOf(s.id).outs.length }}</span>
+              <span class="orch-odg-fields" :title="contractOf(s.id).outs.join(' · ')">{{ contractOf(s.id).outs.slice(0, 4).join(' · ') }}<template v-if="contractOf(s.id).outs.length > 4">…</template></span>
+            </footer>
+          </div>
+        </div>
+      </div>
+      <!-- 阶段交接明细（相邻阶段入参即交接契约） -->
+      <table class="mk-table orch-odg-table">
+        <thead>
+          <tr><th class="mono">#</th><th>从</th><th>到</th><th>交接字段（来源阶段产出）</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="(h, i) in stageHandoffs" :key="i">
+            <td class="mono">{{ i + 1 }}</td>
+            <td>{{ h.from }}</td>
+            <td>{{ h.to }}</td>
+            <td class="mono">{{ h.fields.join(' · ') || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+    <div v-else-if="pane === 'overview'" class="orch-pane orch-pane--center">
+      <!-- 总览无数据：走与既有一致的加载/空态（stages 为空时 current 也为空） -->
+      <template v-if="pageLoading">
+        <MockSkeletonTable :cols="6" :rows="8" />
+        <MkLoading text="编排数据加载中…" />
+      </template>
+      <MkEmptyState
+        v-else-if="topoFailure"
+        tone="error"
+        icon="⚠"
+        title="编排阶段数据加载失败"
+        :description="topoFailure"
+        action-text="重试"
+        @action="retryStages"
+      />
+      <MkEmptyState
+        v-else
+        title="暂无编排阶段数据"
+        description="后端未登记任何阶段：编排文件与拓扑 Agent 均为空。"
+      />
+    </div>
+
     <!-- 阶段工作区：占满剩余视高（fill 布局，底部不再有空白）。
          旅程图 = 卡内画布滚动（工具条/旅程条吸顶）；路由/治理/沙盘 = 面板内滚；页面本身不滚 -->
     <DataFlowGraph
-      v-if="current && pane === 'journey'"
+      v-else-if="current && pane === 'journey'"
       class="orch-pane orch-pane--journey"
       :key="`${active}-${flowKey}`"
       :stage="active"
@@ -101,7 +181,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource } from './store'
 import { liveTopoNodes, liveSkillCatalog, liveLoading, liveFailures, errMsg, reloadLiveTopology } from './live'
@@ -116,15 +196,16 @@ import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
-/** 阶段工作区子面板:字段旅程(默认)/字段路由/治理;沙盘为顶层独立面板(深链 ?tab=sandbox 兼容) */
-type OrchPane = 'journey' | 'routing' | 'governance' | 'sandbox'
+/** 阶段工作区子面板:总览(全旅程 odg 画布,缺省)/字段旅程/字段路由/治理;沙盘为顶层独立面板(深链 ?tab=sandbox 兼容) */
+type OrchPane = 'overview' | 'journey' | 'routing' | 'governance' | 'sandbox'
 const ORCH_PANES: Array<{ id: OrchPane; label: string }> = [
+  { id: 'overview', label: '总览' },
   { id: 'journey', label: '字段旅程' },
   { id: 'routing', label: '字段路由' },
   { id: 'governance', label: '治理' },
   { id: 'sandbox', label: '沙盘契约' },
 ]
-const pane = ref<OrchPane>('journey')
+const pane = ref<OrchPane>('overview')
 
 /** 字段流转图数据版本：行级编辑/字段路由变更后 +1 触发重挂载刷新 */
 const flowKey = ref(0)
@@ -144,11 +225,12 @@ function applyStageQuery() {
   const qStage = typeof route.query.stage === 'string' && route.query.stage.trim() ? route.query.stage.trim() : ''
   const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
   if (qStage) active.value = qStage
-  // ?tab= 语义:journey(缺省)/routing/governance/sandbox;legacy:drift→治理,topology→旅程
+  // ?tab= 语义:overview(缺省)/journey/routing/governance/sandbox;legacy:drift→治理,topology→旅程
   if (qTab === 'sandbox') pane.value = 'sandbox'
   else if (qTab === 'routing') pane.value = 'routing'
   else if (qTab === 'governance' || qTab === 'drift') pane.value = 'governance'
   else if (qTab === 'journey' || qTab === 'topology') pane.value = 'journey'
+  else pane.value = 'overview'
 
 }
 
@@ -157,6 +239,8 @@ function selectStage(id: string) {
   if (pane.value === 'sandbox') pane.value = 'journey'
   flowKey.value++
 }
+
+
 
 const defsLoading = ref(false)
 const defsLoaded = ref(false)
@@ -259,11 +343,11 @@ interface Stage {
 
 const active = ref('goal')
 /* 阶段/子面板变化回写 ?stage=&tab=(对齐全站"切换可寻址"约定;此前只读深链,
-   刷新丢失所在阶段与子面板)。journey 为缺省档,不占 URL。 */
+   刷新丢失所在阶段与子面板)。overview 为缺省档,不占 URL。 */
 watch([active, pane], ([s, p]) => {
   const curStage = typeof route.query.stage === 'string' ? route.query.stage : ''
   const curTab = typeof route.query.tab === 'string' ? route.query.tab : ''
-  const wantTab = p !== 'journey' ? p : ''
+  const wantTab = p !== 'overview' ? p : ''
   if (s === curStage && curTab === wantTab) return
   const q: Record<string, string> = { ...(route.query as Record<string, string>), stage: s }
   if (wantTab) q.tab = wantTab
@@ -343,6 +427,119 @@ const stages = computed<Stage[]>(() => {
       defSteps: def?.steps || []
     }
   })
+})
+
+/* ===== 总览 odg 画布（newui/admin odg-canvas）：列间贝塞尔连线 + 下一阶段入参标签 ===== */
+const odgCanvasEl = ref<HTMLElement | null>(null)
+const odgSvgEl = ref<SVGSVGElement | null>(null)
+
+/* 入/出口径来自字段路由注册表（真数据源，后端词表）：
+   入 = hard-required（必填，缺了本阶段无法推进；部分阶段确无必填 → 入 0 属实）；
+   出 = proposal-output + public-reply + derived-presentation（方案产出/公开回复/派生展示，
+   对外可见或可供下游消费的产出）。连线标签标注来源阶段的产出（沿边流动的内容）。 */
+interface StageFieldContract {
+  ins: string[]
+  outs: string[]
+}
+const OUT_ROLES = ['proposal-output', 'public-reply', 'derived-presentation']
+const stageFieldContract = ref<Record<string, StageFieldContract>>({})
+async function loadStageFieldContracts(ids: string[]) {
+  const results = await Promise.allSettled(
+    ids.map((id) => adminFieldRoutingsApi.getStageDetail(id)),
+  )
+  const map: Record<string, StageFieldContract> = {}
+  results.forEach((r, i) => {
+    if (r.status !== 'fulfilled') return
+    const fields = (r.value.data?.data?.fields ?? []) as Array<{ promptRole?: string; camelName?: string | null; fieldId: string }>
+    map[ids[i]] = {
+      ins: fields.filter((f) => f.promptRole === 'hard-required').map((f) => f.camelName || f.fieldId),
+      outs: fields.filter((f) => OUT_ROLES.includes(f.promptRole || '')).map((f) => f.camelName || f.fieldId),
+    }
+  })
+  stageFieldContract.value = map
+}
+watch(
+  stages,
+  (s) => {
+    if (s.length) void loadStageFieldContracts(s.map((x) => x.id))
+  },
+  { immediate: true },
+)
+function contractOf(id: string): StageFieldContract {
+  return stageFieldContract.value[id] ?? { ins: [], outs: [] }
+}
+
+/** 相邻阶段交接：下一阶段的必填入参即交接契约 */
+const stageHandoffs = computed(() => {
+  const out: Array<{ from: string; to: string; fields: string[] }> = []
+  for (let i = 0; i < stages.value.length - 1; i++) {
+    out.push({
+      from: stages.value[i].name,
+      to: stages.value[i + 1].name,
+      fields: contractOf(stages.value[i].id).outs,
+    })
+  }
+  return out
+})
+
+function escapeXml(text: string): string {
+  return text.replace(/[<>&"]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[ch] ?? ch)
+}
+
+/** 画布重算：列位置量出后画三次贝塞尔（箭头 + 下一阶段入参字段标签，白衬底防穿字） */
+function layoutOrch() {
+  const svg = odgSvgEl.value
+  const canvas = odgCanvasEl.value
+  if (!svg || !canvas) return
+  const cols = Array.from(canvas.querySelectorAll<HTMLElement>('.orch-odg-col'))
+  if (cols.length < 2) return
+  const W = canvas.scrollWidth
+  const H = canvas.scrollHeight
+  svg.setAttribute('width', String(W))
+  svg.setAttribute('height', String(H))
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`)
+  let out = '<defs><marker id="orchOdgArrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 z"/></marker></defs>'
+  for (let i = 0; i < cols.length - 1; i++) {
+    const a = cols[i]
+    const b = cols[i + 1]
+    const x1 = a.offsetLeft + a.offsetWidth + 2
+    const y1 = a.offsetTop + Math.round(a.offsetHeight / 2)
+    const x2 = b.offsetLeft - 6
+    const y2 = b.offsetTop + Math.round(b.offsetHeight / 2)
+    const dx = Math.max(26, Math.round((x2 - x1) / 2))
+    out += `<path class="orch-odg-edge" d="M${x1} ${y1} C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}" marker-end="url(#orchOdgArrow)"/>`
+    const fields = contractOf(stages.value[i].id).outs.slice(0, 6)
+    const midx = Math.round((x1 + x2) / 2)
+    const lineH = 13
+    const startY = Math.round((y1 + y2) / 2 - ((fields.length - 1) * lineH) / 2)
+    out += `<text class="orch-odg-edge-label">${fields
+      .map((f, k) => `<tspan x="${midx}" y="${startY + k * lineH}">${escapeXml(f)}</tspan>`)
+      .join('')}</text>`
+  }
+  svg.innerHTML = out
+}
+
+function openStageFromOverview(id: string) {
+  selectStage(id)
+  pane.value = 'journey'
+}
+
+let odgRaf = 0
+function onOdgResize() {
+  cancelAnimationFrame(odgRaf)
+  odgRaf = requestAnimationFrame(layoutOrch)
+}
+onMounted(() => {
+  window.addEventListener('resize', onOdgResize)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onOdgResize)
+  cancelAnimationFrame(odgRaf)
+})
+watch([pane, stages, flowKey], async () => {
+  if (pane.value !== 'overview') return
+  await nextTick()
+  layoutOrch()
 })
 
 const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + stage.skills.length, 0))
@@ -491,3 +688,63 @@ html[data-theme='dark'] {
   /* 沙盘顶部条返回按钮 */
 }
 </style>
+<style>
+/* ===== 总览 odg 画布（newui/admin odg-canvas）：连线和字段标签由 layoutOrch 以
+   innerHTML 注入，不带 scoped 属性，因此样式放在非 scoped 块并统一 .orch-odg 前缀命名空间 ===== */
+.orch-odg-scroll { overflow-x: auto; padding: 8px 12px 16px; }
+.orch-odg-canvas { position: relative; display: flex; align-items: flex-start; gap: 120px; min-width: max-content; }
+.orch-odg-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+.orch-odg-edge { fill: none; stroke: var(--mk-blue, #2c63d0); stroke-width: 1.6; opacity: 0.85; }
+.orch-odg-svg marker path { fill: var(--mk-blue, #2c63d0); }
+.orch-odg-edge-label {
+  fill: var(--mk-muted, #5b6577);
+  font-family: var(--mk-mono, Consolas, monospace);
+  font-size: var(--mk-fs-micro, 12px);
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--mk-surface, #fff);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.orch-odg-col { flex: 0 0 232px; display: flex; flex-direction: column; gap: 8px; }
+.orch-odg-colhead {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border: 1px solid var(--mk-line, #e6ebf4); border-radius: var(--mk-radius-lg, 10px);
+  background: var(--mk-surface-2, #eef2fa);
+}
+.orch-odg-no {
+  width: 20px; height: 20px; flex: none; display: grid; place-items: center;
+  border-radius: var(--mk-radius-sm, 6px);
+  background: color-mix(in srgb, var(--mk-blue, #2c63d0) 10%, transparent);
+  color: var(--mk-accent-deep, #1f57cc);
+  font-size: var(--mk-fs-micro, 12px); font-weight: 700;
+}
+.orch-odg-colname { font-weight: 700; font-size: var(--mk-fs-micro, 12px); color: var(--mk-ink); }
+.orch-odg-agent { margin-left: auto; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
+.orch-odg-body { display: flex; flex-direction: column; gap: 6px; }
+.orch-odg-node {
+  display: grid; gap: 1px; width: 100%; padding: 8px 10px; text-align: left;
+  border: 1px solid var(--mk-line, #e6ebf4); border-radius: var(--mk-radius-lg, 10px);
+  background: var(--mk-surface, #fff); cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.orch-odg-node:hover { border-color: var(--mk-blue, #2c63d0); box-shadow: var(--mk-shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.1)); }
+.orch-odg-idx { font-family: var(--mk-mono, Consolas, monospace); font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
+.orch-odg-nodename { font-size: var(--mk-fs-13, 13px); font-weight: 600; color: var(--mk-ink); }
+.orch-odg-nodemeta { font-family: var(--mk-mono, Consolas, monospace); font-size: var(--mk-fs-micro, 12px); color: var(--mk-muted); }
+.orch-odg-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-top: 2px; }
+.orch-odg-chip {
+  font-size: var(--mk-fs-micro, 12px); padding: 1px 6px;
+  border-radius: var(--mk-radius-sm, 6px);
+  background: var(--mk-surface-2, #eef2fa); color: var(--mk-muted); white-space: nowrap;
+}
+.orch-odg-chip--in { background: color-mix(in srgb, var(--mk-blue, #2c63d0) 10%, transparent); color: var(--mk-accent-deep, #1f57cc); }
+.orch-odg-chip--out { background: color-mix(in srgb, var(--mk-green, #15803d) 12%, transparent); color: var(--mk-accent-deep, #1f57cc); }
+.orch-odg-fields {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--mk-mono, Consolas, monospace);
+  font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint);
+}
+.orch-odg-table { margin-top: 4px; }
+</style>
+
