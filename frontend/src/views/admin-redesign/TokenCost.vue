@@ -99,8 +99,10 @@
             <button type="button" class="mk-link" @click="goExecLogs">逐调用明细 →</button>
           </div>
         </div>
-        <!-- 批D：MkChart 双系列（Token 主柱+失败副柱），tooltip/图例/暗色主题随 mk 体系 -->
-        <MkChart v-if="trend.length" :option="trendChartOption" height="200px" />
+        <!-- 趋势柱：走全 admin 统一图表语言 OvBars（2026-09-29 自 MkChart/ECharts 换入，
+             与总览「调用趋势 · 近 7 天」同构）。原 ECharts 双系列柱宽不一致（38%/18%），
+             失败柱压在调用柱后只露一条边；OvBars 双柱等宽并排，语义由列 title 承载。 -->
+        <OvBars v-if="trend.length" :cols="trendCols" :bar-width="44" :min-bars-height="150" />
         <p v-if="trend.length" class="mk-card__note">
           合计 {{ fmtTokens(trend.reduce((acc, d) => acc + d.tokens, 0)) }} token · {{ trend.reduce((acc, d) => acc + d.calls, 0) }} 次调用 · 失败 {{ trend.reduce((acc, d) => acc + d.failed, 0) }} 次
         </p>
@@ -168,14 +170,11 @@ import { errMsg, isPageCacheFresh, markPageFetched } from './live'
 import { adminTokenCostApi } from '@/api/adminApi'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
-import MkChart from '@/components/mk/MkChart.vue'
-import { MK_CHART_PALETTES } from '@/components/mk/chartPalette'
-import { useIsDark } from '@/composables/useIsDark'
+import OvBars from './OvBars.vue'
 import TcRankTable, { type RankRow } from './TcRankTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { toast } from '@/utils/toast'
-import type { EChartsCoreOption } from 'echarts/core'
 
 interface Summary {
   days: number
@@ -343,51 +342,32 @@ function fmtTokens(n: number): string {
   return String(n)
 }
 
+/** M/D 标签（今日由 trendCols 单独给「今日」，此处不再判日） */
 function dayLabel(date: string): string {
-  const [y, m, d] = date.split('-').map(Number)
-  const today = new Date()
-  if (y === today.getFullYear() && m === today.getMonth() + 1 && d === today.getDate()) return '今'
+  const [, m, d] = date.split('-').map(Number)
   return `${m}/${d}`
 }
 
-/* 批D：手搓柱的 isToday/trendMax/trendH 随 MkChart 迁移移除 */
-
-/* 批D：手搓 CSS 趋势柱 → MkChart 双系列（tokens 主柱 + failed 副柱）。
-   数据与 Overview trend7d 同构；今日列用 axisLabel 强调替代原「实色柱」。 */
-const isDark = useIsDark()
-const trendChartOption = computed<EChartsCoreOption>(() => {
-  const days = trend.value
-  const pal = MK_CHART_PALETTES[isDark.value ? 'dark' : 'light']
-  return {
-    animationDuration: 300,
-    grid: { left: 46, right: 8, top: 14, bottom: 20 },
-    tooltip: { trigger: 'axis', confine: true, axisPointer: { type: 'shadow' } },
-    legend: { show: true, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 10 } },
-    xAxis: {
-      type: 'category',
-      data: days.map((d) => dayLabel(d.date)),
-      axisTick: { show: false },
-      axisLabel: { fontSize: 10 },
-    },
-    yAxis: { type: 'value', axisLabel: { fontSize: 10, formatter: (v: number) => fmtTokens(v) } },
-    series: [
-      {
-        name: 'Token',
-        type: 'bar',
-        data: days.map((d) => d.tokens),
-        barWidth: '38%',
-        itemStyle: { color: pal.primaryBright, borderRadius: [2, 2, 0, 0] },
-      },
-      {
-        name: '失败调用',
-        type: 'bar',
-        data: days.map((d) => d.failed),
-        barWidth: '18%',
-        itemStyle: { color: pal.danger, borderRadius: [2, 2, 0, 0] },
-      },
-    ],
-  }
+/* 趋势柱数据映射（OvBars 列式结构，与总览 trend7dCols 同构）：
+   主柱 Token（蓝）、副柱失败调用（琥珀）；数值行给 Token，失败数进 title。 */
+const trendMax = computed(() => Math.max(1, ...trend.value.map((d) => d.tokens)))
+const barPct = (v: number, max: number) => `${v > 0 ? Math.max(Math.round((v / max) * 100), 6) : 3}%`
+const todayKey = computed(() => {
+  const n = new Date()
+  const p = (x: number) => String(x).padStart(2, '0')
+  return `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())}`
 })
+const trendCols = computed(() => trend.value.map((d) => ({
+  key: d.date,
+  label: d.date === todayKey.value ? '今日' : dayLabel(d.date),
+  today: d.date === todayKey.value,
+  num: fmtTokens(d.tokens),
+  title: `${d.date}：Token ${fmtTokens(d.tokens)} · ${d.calls.toLocaleString()} 次调用 · 失败 ${d.failed.toLocaleString()} 次`,
+  bars: [
+    { pct: barPct(d.tokens, trendMax.value), tone: 'blue' as const },
+    { pct: barPct(d.failed, trendMax.value), tone: 'amber' as const },
+  ],
+})))
 </script>
 
 <style scoped>

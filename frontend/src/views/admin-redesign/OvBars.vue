@@ -9,7 +9,13 @@
     >
       <span v-if="showNums" class="ovbars__num" :class="{ 'ovbars__num--zero': !c.num || c.num === '0' }">{{ c.num || '·' }}</span>
       <div class="ovbars__bars">
-        <i v-for="(b, bi) in c.bars" :key="bi" class="ovbars__bar" :class="`ovbars__bar--${b.tone}`" :style="{ height: b.pct }"></i>
+        <i
+          v-for="(b, bi) in c.bars"
+          :key="bi"
+          class="ovbars__bar"
+          :class="`ovbars__bar--${b.tone}`"
+          :style="{ height: b.pct, width: `${barWidth}px` }"
+        ></i>
       </div>
       <span class="ovbars__label" :class="{ 'ovbars__label--today': c.today }">{{ labelShown(i) ? c.label : '\u00A0' }}</span>
     </div>
@@ -39,7 +45,10 @@ const props = withDefaults(defineProps<{
   labelEvery?: number;
   /** 柱区最小高度（px）：等高卡片里保证柱子有可读高度 */
   minBarsHeight?: number;
-}>(), { showNums: true, labelEvery: 1, minBarsHeight: 64 });
+  /** 单柱宽度（px）：默认 9（半宽卡）；全宽卡（如成本页趋势）传更宽的值，
+      否则 7 列铺满 1600px 时柱子细成发丝 */
+  barWidth?: number;
+}>(), { showNums: true, labelEvery: 1, minBarsHeight: 64, barWidth: 9 });
 
 const labelShown = computed(() => (i: number) => i % props.labelEvery === 0 || i === props.cols.length - 1);
 </script>
@@ -91,7 +100,7 @@ const labelShown = computed(() => (i: number) => i % props.labelEvery === 0 || i
   gap: 3px;
 }
 .ovbars__bar {
-  width: 9px;
+  /* width 由 barWidth prop 内联给（半宽卡 9px / 全宽卡更宽） */
   border-radius: var(--mk-radius-xs) var(--mk-radius-xs) 0 0;
   background: linear-gradient(180deg, color-mix(in srgb, var(--mk-blue) 72%, white), var(--mk-blue));
   opacity: 0.85;
