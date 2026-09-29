@@ -171,11 +171,14 @@ function rowTitle(r: RankRow): string {
     minmax(150px, 1.3fr)
     minmax(100px, 0.9fr);
 }
+/* user/model 半宽侧表：原「名称 1fr 独吃 + Token 固定 112px」——Token 副行
+   （prompt X · comp Y）实测宽 183px，溢出列宽 71px 压到「失败」列上（用户实测「挤着」）。
+   名称与 Token 双 fr 摊分：名称足够放邮箱（~178px），Token 放得下 183px 副行。 */
 .tc-table--user .tc-table__head,
 .tc-table--user .tc-table__row,
 .tc-table--model .tc-table__head,
 .tc-table--model .tc-table__row {
-  grid-template-columns: 26px minmax(0, 1fr) 52px 46px 112px 100px;
+  grid-template-columns: 26px minmax(140px, 1fr) 52px 46px minmax(180px, 1fr) 100px;
 }
 
 /* 表头 */
@@ -255,6 +258,10 @@ html[data-theme='dark'] .tc-rank__no--top { background: rgba(91, 141, 239, 0.2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* max-width 必须显式给：作为 grid/flex 子项时 auto 宽度取 min-content，
+     长于列宽的元素会溢出列（overflow:hidden 对自身超宽的元素无效），
+     2026-09-29 实测 Token 副行 183px 在 112px 列里压到「失败」列 */
+  max-width: 100%;
 }
 
 
