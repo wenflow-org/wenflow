@@ -110,8 +110,19 @@
         </div>
         <div v-if="!isNarrow" class="composer__hint">
           <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
+          <button type="button" class="entry__wizard-link" @click="wizardOpen = true">按步骤引导创建</button>
         </div>
       </div>
+
+      <!-- 目标新建三步向导（newui/home wfWizard 形态）：末步合成开场消息走真实对话链路 -->
+      <V2GoalWizard
+        :open="wizardOpen"
+        :sending="live.sending"
+        :scenes="displayScenes.map((c) => ({ title: c.title, seed: c.seed, desc: c.desc }))"
+        :seed="input"
+        @close="wizardOpen = false"
+        @confirm="onWizardConfirm"
+      />
     </main>
 
     <!-- 会话态 -->
@@ -511,6 +522,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useGoalLive, type LiveMessage } from './useGoalLive';
 import { isProbeAnswer, probeAnswerParts } from './probeAnswer';
 import V2Nav from './V2Nav.vue';
+import V2GoalWizard from './V2GoalWizard.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import MaterialUploadArea from '@/components/learning/MaterialUploadArea.vue';
@@ -654,6 +666,12 @@ function goPaths() {
 }
 
 const input = ref('');
+/* 三步向导（newui/home wfWizard）：末步合成开场消息走 startWith 真实链路 */
+const wizardOpen = ref(false);
+function onWizardConfirm(text: string) {
+  wizardOpen.value = false;
+  void startWith(text);
+}
 /* 两个输入框（初始态/会话态互斥渲染）的 DOM 引用：autogrow 用 */
 const entryInputEl = ref<HTMLTextAreaElement | null>(null);
 const chatInputEl = ref<HTMLTextAreaElement | null>(null);
@@ -833,6 +851,11 @@ const stageLabel = computed(() => {
   return '继续澄清中';
 });
 
+/** Escape 关闭方案浮层（状态保留，对话可继续）；新提案到达时重新显示。
+    注意：声明必须早于 showProposal computed——watch(showProposal, …) 在 setup 期
+    立即求值该 computed，晚于声明会撞 TDZ 导致整个路由白屏（P0 回归）。 */
+const proposalDismissed = ref(false);
+
 const showProposal = computed(
   () => !proposalDismissed.value && ((live.stage === 'proposing' && !!live.proposal) || phase.value === 'generating' || phase.value === 'done')
 );
@@ -849,8 +872,7 @@ watch(showProposal, (open) => {
     preOverlayFocus = null;
   }
 });
-/** Escape 关闭方案浮层（状态保留，对话可继续）；新提案到达时重新显示 */
-const proposalDismissed = ref(false);
+/** 键鼠交互：Escape 关闭方案浮层 */
 function onProposalKey(e: KeyboardEvent) {
   if (e.key === 'Escape' && showProposal.value && !live.sending) {
     proposalDismissed.value = true;
@@ -1323,6 +1345,14 @@ function shuffleScenes() {
   gap: 12px;
   font-size: 12px; color: var(--faint); padding-left: 6px;
 }
+/* 三步向导入口：弱文字链（主动作是发送，向导是替代路径） */
+.entry__wizard-link {
+  border: 0; background: transparent;
+  font: inherit; font-size: 12px; font-weight: 700;
+  color: var(--blue-deep); cursor: pointer;
+  padding: 2px 4px; border-radius: 6px;
+}
+.entry__wizard-link:hover { text-decoration: underline; }
 .composer__hint-right { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .panel__tip {
   font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px;
