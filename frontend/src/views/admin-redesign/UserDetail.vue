@@ -1,34 +1,30 @@
 <template>
   <div v-if="d" class="mk-page ud">
-    <!-- 页头卡（T2：身份区走 .mk-entity 唯一原语） -->
-    <header class="mk-entity">
-      <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
-      <div class="mk-entity__main">
-        <span class="mk-entity__avatar mk-entity__avatar--user">{{ d.name.charAt(0) }}</span>
-        <div class="mk-entity__id">
-          <div class="mk-entity__name-row">
-            <h1 class="mk-entity__name">{{ d.name }}</h1>
-            <span v-if="isDeleted" class="mk-badge mk-badge--sm mk-badge--deleted">已删除</span>
-          </div>
-          <span class="mk-entity__sub">{{ d.email }} · {{ d.role }} · 加入 {{ d.joined }}<template v-if="d.lastLogin"> · 最后登录 {{ d.lastLogin }}</template></span>
-        </div>
-        <div class="mk-entity__actions">
-          <button v-if="isDeleted" type="button" class="mk-status__action" :disabled="restoring" @click="doRestore">
-            {{ restoring ? '恢复中…' : '恢复用户' }}
-          </button>
-          <button type="button" class="mk-btn mk-btn--primary" @click="toLearner">查看学习者画像 →</button>
-        </div>
-      </div>
-      <div class="ud-kpis">
-        <MkKpi v-for="s in d.stats" :key="s.label" :label="s.label" :value="s.value" :hint="s.hint" />
-      </div>
-    </header>
+    <!-- 详情页头（newui/admin hero 形态，MkDetailHero）：头像盘 + 页名 + 副文 + pills + 右侧动作。
+         返回钮在壳层顶栏（面包屑 back），页内不再重复。 -->
+    <MkDetailHero :avatar="d.name.charAt(0)" :title="d.name" :sub="subLine">
+      <template #pills>
+        <span v-if="isDeleted" class="mk-badge mk-badge--sm mk-badge--deleted">已删除</span>
+      </template>
+      <template #actions>
+        <button v-if="isDeleted" type="button" class="mk-btn" :disabled="restoring" @click="doRestore">
+          {{ restoring ? '恢复中…' : '恢复用户' }}
+        </button>
+        <button type="button" class="mk-btn mk-btn--primary" @click="toLearner">查看学习者画像 →</button>
+      </template>
+    </MkDetailHero>
+    <div class="ud-kpis">
+      <MkKpi v-for="s in d.stats" :key="s.label" :label="s.label" :value="s.value" :hint="s.hint" />
+    </div>
+
+    <!-- 分区二级页签（newui/admin subtabs 形态）：并列分区收成页签；v-show 保持已加载状态 -->
+    <MkSubTabs v-model="activeTab" :tabs="TABS" />
 
     <!-- 主区通栏：教学会话 / 目标对话为真实接口数据（userId 过滤），
          会话行可下钻只读座舱（session-real，带 from 记忆返回本页）。
          原「等级进度」卡与页头 XP/等级 KPI 完全重复，删；
          开发视角许可降级为一行条：未授权只留一句说明，授权才展开范围与动作。 -->
-    <section class="mk-card">
+    <section v-show="activeTab === 'sessions'" class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">教学会话</h3>
         <span class="mk-card__meta">
@@ -53,7 +49,7 @@
       </MkRowList>
     </section>
 
-    <section class="mk-card">
+    <section v-show="activeTab === 'goals'" class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">目标对话</h3>
         <span class="mk-card__meta">
@@ -71,7 +67,7 @@
     </section>
 
     <!-- 开发视角许可：一行条（未授权 = 徽章 + 一句说明 + 刷新；授权 = 展开范围/到期与打开按钮） -->
-    <section class="mk-card ud-grant">
+    <section v-show="activeTab === 'grant'" class="mk-card ud-grant">
       <div class="ud-grant__bar">
         <span class="mk-badge" :class="grantBadgeCls">开发视角许可 · {{ grantStatusLabel }}</span>
         <span class="ud-grant__meta" :title="grantStatus === 'active' ? grantNoteLabel : undefined">
@@ -100,7 +96,6 @@
   </div>
 
   <div v-else-if="detailError" class="mk-page ud">
-    <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
     <MkEmptyState
       icon="◌"
       tone="error"
@@ -112,7 +107,6 @@
   </div>
 
   <div v-else class="mk-page ud">
-    <button type="button" class="mk-back" @click="closeSubPage">← 用户</button>
     <!-- 骨架屏（P0-2：替代纯文字 loading，避免布局跳动）。形状走 MkSkeleton 版式。 -->
     <div class="ud-skel" aria-hidden="true">
       <MkSkeleton variant="identity" :avatar="48" />
@@ -124,13 +118,15 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { subPage, closeSubPage, openSubPage } from './store'
+import { subPage, openSubPage } from './store'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkRowList from '@/components/mk/MkRowList.vue'
 import MkRow from '@/components/mk/MkRow.vue'
+import MkDetailHero from '@/components/mk/MkDetailHero.vue'
+import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import { liveUsers, timeAgo, errMsg } from './live'
 import { adminUsersApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { statusText, stageText, stageBadgeCls } from './statusText'
@@ -528,6 +524,20 @@ async function loadDetail() {
 }
 
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
+
+/* —— 分区二级页签（newui/admin subtabs）：并列分区收成页签，v-show 保持已加载状态 —— */
+const TABS: Array<{ key: string; label: string }> = [
+  { key: 'sessions', label: '教学会话' },
+  { key: 'goals', label: '目标对话' },
+  { key: 'grant', label: '许可与接入' },
+]
+const activeTab = ref('sessions')
+/** hero 副文：邮箱 · 角色 · 加入时间（· 最后登录，仅列表兜底数据有） */
+const subLine = computed(() => {
+  const v = d.value
+  if (!v) return ''
+  return `${v.email} · ${v.role} · 加入 ${v.joined}${v.lastLogin ? ` · 最后登录 ${v.lastLogin}` : ''}`
+})
 </script>
 
 <style scoped>
