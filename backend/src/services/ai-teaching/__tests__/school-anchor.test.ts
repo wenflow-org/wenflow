@@ -11,7 +11,7 @@
  */
 import { resolveSchoolAnchorForTeaching } from '../TeachingContextBuilder';
 
-const makeTemplate = (normalizedInput: Record<string, any>) => JSON.stringify({
+const makeTemplate = (normalizedInput: Record<string, unknown>) => JSON.stringify({
   sceneFraming: { normalizedInput },
 });
 
