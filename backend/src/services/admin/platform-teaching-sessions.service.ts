@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../../config/database';
 import { isTestAccountUser } from '../../utils/test-account';
 import { REAL_USER_WHERE } from './real-user-where';
@@ -14,6 +15,38 @@ function parseJsonSafe<T>(raw: string | null | undefined, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+/**
+ * 「消息数」列（只数用户消息，口径与改造前逐字一致）改为在库里算。
+ *
+ * 原实现为这一列把 `messages` 整列 JSON 读进 Node 再 JSON.parse 过滤：该列合计 **197.7MB**
+ * （单行最大 3.3MB），而列表页请求的是 `limit=1000`（真实用户 215 行 / 含测试 472 行），
+ * 2026-09-29 实测 2.4s / 4.4s。计数搬进库后这 197MB 不再出库。
+ *
+ * 口径沿用双读过渡（见 schema `teaching_session_messages` 注释）：**侧表有行即权威**；
+ * 无侧表行的历史会话回退 `messages` 列，回退分支用 json_each 在库内解析，同样不出库。
+ */
+async function countUserMessagesBySession(ids: string[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (ids.length === 0) return counts;
+  const rows = await prisma.$queryRaw<Array<{ id: string; userCount: number | bigint }>>`
+    SELECT s.id AS id,
+      CASE
+        WHEN EXISTS (SELECT 1 FROM teaching_session_messages m WHERE m.sessionId = s.id)
+          THEN (SELECT COUNT(*) FROM teaching_session_messages m
+                WHERE m.sessionId = s.id AND json_valid(m.payload)
+                  AND json_extract(m.payload, '$.role') = 'user')
+        WHEN json_valid(s.messages) AND json_type(s.messages) = 'array'
+          THEN (SELECT COUNT(*) FROM json_each(s.messages)
+                WHERE json_extract(value, '$.role') = 'user')
+        ELSE 0
+      END AS userCount
+    FROM teaching_sessions s
+    WHERE s.id IN (${Prisma.join(ids)})
+  `;
+  for (const row of rows) counts.set(row.id, Number(row.userCount));
+  return counts;
 }
 
 export async function listTeachingSessionsDebug(params: {
@@ -39,12 +72,29 @@ export async function listTeachingSessionsDebug(params: {
 
   const [total, sessions] = await Promise.all([
     prisma.teaching_sessions.count({ where }),
+    // select 而非 include：**排除 messages / teachingState 大 JSON 列**（前者 197.7MB，是这一页
+    // 的唯一性能黑洞；消息数改由 countUserMessagesBySession 在库内聚合）
     prisma.teaching_sessions.findMany({
       where,
       orderBy: { startTime: 'desc' },
       skip: (page - 1) * limit,
       take: limit,
-      include: {
+      select: {
+        id: true,
+        userId: true,
+        taskId: true,
+        learningPathId: true,
+        milestoneId: true,
+        subject: true,
+        topic: true,
+        taskType: true,
+        status: true,
+        startTime: true,
+        endTime: true,
+        duration: true,
+        knowledgeState: true,
+        wrapup: true,
+        advisory: true,
         users: {
           select: { id: true, name: true, email: true, isVirtualLearner: true }
         }
@@ -52,12 +102,14 @@ export async function listTeachingSessionsDebug(params: {
     })
   ]);
 
-  const progressById = await deriveTeachingSessionProgress(sessions);
+  const [progressById, userMessageCount] = await Promise.all([
+    deriveTeachingSessionProgress(sessions),
+    countUserMessagesBySession(sessions.map((s) => s.id)),
+  ]);
 
   const items = sessions.map((session) => {
     const wrapup = parseJsonSafe<any>(session.wrapup, null);
     const advisory = parseJsonSafe<any>(session.advisory, null);
-    const messages = parseJsonSafe<any[]>(session.messages, []);
     const knowledgePoints = parseJsonSafe<any[]>(session.knowledgeState, []);
 
     return {
@@ -78,7 +130,7 @@ export async function listTeachingSessionsDebug(params: {
       startTime: session.startTime,
       endTime: session.endTime,
       duration: session.duration,
-      messageCount: Array.isArray(messages) ? messages.filter((m: any) => m?.role === 'user').length : 0,
+      messageCount: userMessageCount.get(session.id) ?? 0,
       knowledgePointCount: Array.isArray(knowledgePoints) ? knowledgePoints.length : 0,
       progress: progressById.get(session.id) || null,
       wrapup,

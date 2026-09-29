@@ -20,6 +20,9 @@ jest.mock('../../../config/database', () => ({
   __esModule: true,
   default: {
     teaching_sessions: { count: tsCount, findMany: tsFindMany },
+    // 教学会话列表的「消息数」改为库内聚合（2026-09-29，不再读 197MB 的 messages 列），
+    // 这里只需给聚合查询一个空结果：本文件断言的是数据隔离过滤，不涉及计数
+    $queryRaw: jest.fn().mockResolvedValue([]),
     milestones: { findMany: jest.fn().mockResolvedValue([]) },
     subtasks: { findMany: jest.fn().mockResolvedValue([]) },
     goal_conversations: { count: gcCount, findMany: gcFindMany },
