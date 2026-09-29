@@ -1,17 +1,16 @@
 <template>
   <div class="mk-page mk-page--fill gc-host">
-    <!-- 页面级状态条：场景名 + 口径提示 + 刷新。
-         2026-09-29 拆回独立页：本组件从「学习会话」合并宿主还原为「目标对话」单页
-         （教学会话 / 学习路径各自独立成页），不再承载宿主状态条 / 视图 pills / 子视图上报。 -->
-    <div class="mk-status" :class="`mk-status--${dashTone}`">
-      <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">目标对话</strong>
-      <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" title="用户与系统澄清目标的多轮会话；仅真实用户口径">仅真实用户口径</span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="loading" @click="load(true)">{{ loading ? '刷新中…' : '刷新' }}</button>
-      </span>
-    </div>
+    <!-- 页头（newui/admin pagehead）：页名 + 口径副文 + 刷新上移；
+         2026-09-29 拆回独立页：本组件从「学习会话」合并宿主还原为「目标对话」单页。
+         原页面级状态条整体退役（dot 的加载/有数状态由 KPI 卡与列表自明）。 -->
+    <MkPageHead
+      title="目标对话"
+      sub="仅真实用户口径：用户与系统澄清目标的多轮会话"
+    >
+      <template #actions>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="load(true)">{{ loading ? '刷新中…' : '刷新' }}</button>
+      </template>
+    </MkPageHead>
 
     <!-- 页头 KPI 区（统一形态）：总数 / 完成率 / 已取消。
          刻意不重说卡头 pills 的筛选计数（进行中 / 已完成…）。 -->
@@ -327,6 +326,7 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from '@/components/mk/MkCols.vue'
@@ -462,9 +462,7 @@ function confToneCls(pct: number): string {
   return confTone(pct) === 'bad' ? 'gc-conf--low' : confTone(pct) === 'warn' ? 'gc-conf--warn' : ''
 }
 
-/* ===== 页头（目标对话：基调 + KPI 卡） ===== */
-/** 基调：无任何数据 muted；有数即 ok（观测页统一语义） */
-const dashTone = computed<'ok' | 'warn' | 'muted'>(() => (stats.value ? 'ok' : 'muted'))
+/* ===== 页头（目标对话：MkPageHead + KPI 卡） ===== */
 
 interface KpiCard {
   label: string

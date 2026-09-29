@@ -1,16 +1,16 @@
 <template>
   <div class="mk-page mk-page--fill pp-host">
-    <!-- 页面级状态条：场景名 + 口径提示 + 操作（域计数由下方 KPI 区承载，状态条不再重说一遍） -->
-    <div class="mk-status" :class="`mk-status--${dashTone}`">
+    <!-- 页头（newui/admin pagehead）：页名 + 主操作（新建用户随账号域出现）上移；
+         学习者域后端 limit=50 截断提示（live.ts 不动）降为条件状态条，仅在命中时出现 -->
+    <MkPageHead title="用户与学习者">
+      <template #actions>
+        <button v-if="tab === 'account'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="usersRef?.openCreate?.()">新建用户</button>
+        <button type="button" class="mk-btn mk-btn--sm" @click="refreshActive">刷新</button>
+      </template>
+    </MkPageHead>
+    <div v-if="tab === 'state' && learnerCount >= 50" class="mk-status mk-status--muted">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">用户与学习者</strong>
-      <span class="mk-status__sep"></span>
-      <!-- 学习者域后端 limit=50 截断（live.ts 不动）：画像数满 50 时给出静态口径说明 -->
-      <span v-if="tab === 'state' && learnerCount >= 50" class="mk-status__meta" title="学习者快照单次最多加载 50 条">仅加载前 50 位，可按筛选缩小范围</span>
-      <span class="mk-status__actions">
-        <button v-if="tab === 'account'" type="button" class="mk-status__action mk-status__action--primary" @click="usersRef?.openCreate?.()">新建用户</button>
-        <button type="button" class="mk-status__action" @click="refreshActive">刷新</button>
-      </span>
+      <span class="mk-status__meta" title="学习者快照单次最多加载 50 条">仅加载前 50 位，可按筛选缩小范围</span>
     </div>
 
     <!-- 页头 KPI 区（2026-09-28 统一形态，同记忆与复习 / 学习会话）：随当前视图切换的域级关键数字。
@@ -60,6 +60,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { intent } from './store'
 import { liveUsersTotal, liveLearners } from './live'
 import MkKpi from '@/components/mk/MkKpi.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import Users from './Users.vue'
 import type { AccountStats } from './Users.vue'
 import LearnerCenter from './LearnerCenter.vue'
@@ -94,9 +95,6 @@ const userCount = computed(() => liveUsersTotal.value || domainCount.value.users
  *  2026-09-29 修复：原靠 LearnerCenter 挂载后上报，没点进过「学习状态」就恒显 0，
  *  读起来像「这个域没有数据」） */
 const learnerCount = computed(() => liveLearners.value.length)
-const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() =>
-  userCount.value > 0 ? 'ok' : 'muted'
-)
 function onDomainCount(n: number) {
   domainCount.value.users = n
 }

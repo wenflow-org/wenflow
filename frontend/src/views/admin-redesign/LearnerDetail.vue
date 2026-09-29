@@ -1,7 +1,6 @@
 <template>
   <div v-if="detailError" class="mk-page ld">
-    <!-- 错误态与其他分支一致补返回入口：此前错误全屏只有重试，只能靠浏览器后退离开 -->
-    <button type="button" class="mk-back" @click="closeSubPage">← 用户与学习者</button>
+    <!-- 返回入口在壳层顶栏（面包屑 back）；错误态保留重试 -->
     <MkEmptyState
       icon="◌"
       tone="error"
@@ -12,48 +11,31 @@
     />
   </div>
   <div v-else-if="loading" class="mk-page ld">
-    <button type="button" class="mk-back" @click="closeSubPage">← 用户与学习者</button>
     <MkLoading min text="正在加载学习者详情…" />
   </div>
   <div v-else-if="d" class="mk-page ld">
 
-    <!-- 头部卡（T2：身份区走 .mk-entity 唯一原语） -->
-    <header class="mk-entity">
-      <button type="button" class="mk-back" @click="closeSubPage">← 用户与学习者</button>
-      <div class="mk-entity__main">
-        <span class="mk-entity__avatar mk-entity__avatar--learner">{{ d.name.charAt(0) }}</span>
-        <div class="mk-entity__id">
-          <div class="mk-entity__name-row">
-            <h1 class="mk-entity__name">{{ d.name }}</h1>
-            <span class="mk-entity__badges">
-              <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
-              <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
-              <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">快照 {{ d.snapshot.version }} · {{ d.snapshot.generatedAt }}</span>
-            </span>
-          </div>
-          <span class="mk-entity__sub">{{ d.email }}</span>
-        </div>
-        <div class="mk-entity__actions">
-          <button type="button" class="mk-status__action" :disabled="recomputing" @click="recompute">
-            {{ recomputing ? '重算中…' : '重算快照' }}
-          </button>
-        </div>
-      </div>
-    </header>
+    <!-- 详情页头（newui/admin hero 形态，MkDetailHero）：返回钮在壳层顶栏，页内不重复 -->
+    <MkDetailHero :avatar="d.name.charAt(0)" :title="d.name" :sub="d.email">
+      <template #pills>
+        <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
+        <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
+        <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">快照 {{ d.snapshot.version }} · {{ d.snapshot.generatedAt }}</span>
+      </template>
+      <template #actions>
+        <button type="button" class="mk-btn" :disabled="recomputing" @click="recompute">
+          {{ recomputing ? '重算中…' : '重算快照' }}
+        </button>
+      </template>
+    </MkDetailHero>
 
-    <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向） -->
-    <div class="ld-tabs">
-      <button
-        v-for="t in tabs"
-        :key="t.id"
-        type="button"
-        class="mk-pill"
-        :class="{ 'mk-pill--active': tab === t.id }"
-        @click="switchTab(t.id)"
-      >
-        {{ t.label }}
-      </button>
-    </div>
+    <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向）。
+         形态换 MkSubTabs（newui/admin 下划线式，替换胶囊 mk-pill） -->
+    <MkSubTabs
+      :tabs="tabs.map((t) => ({ key: t.id, label: t.label }))"
+      :model-value="tab"
+      @update:model-value="switchTab"
+    />
 
     <!-- ============ 总览：进度 + 概念掌握图形 + 活跃 + 会话 + 建议行动 ============ -->
     <div v-if="tab === 'overview'" class="ld-grid">
@@ -578,7 +560,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
+import { subPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, memoryReviewUrl, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
@@ -594,6 +576,8 @@ import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkDetailHero from '@/components/mk/MkDetailHero.vue'
+import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkRowList from '@/components/mk/MkRowList.vue'
 import MkRow from '@/components/mk/MkRow.vue'
 import { useIsDark } from '@/composables/useIsDark'
@@ -1525,7 +1509,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld { gap: 16px; }
 /* 页头身份区走 .mk-entity（shared.css） */
 
-.ld-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .ld-tabpage { display: grid; gap: 14px; align-content: start; }
 .ld-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .ld-none__hint { display: block; margin-top: 4px; font-size: var(--mk-fs-micro); opacity: 0.9; }
