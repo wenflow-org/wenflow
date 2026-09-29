@@ -146,7 +146,7 @@ async function mountRecon() {
     history: createMemoryHistory(),
     routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
   });
-  await router.push('/admin/skills?tab=recon');
+  await router.push('/admin/health-center');
   await router.isReady();
   const wrapper = mount(SkillReconciliation, { global: { plugins: [router] } });
   await flushPromises();

@@ -498,12 +498,17 @@ function goDrift(kind: keyof HealthDriftSummary) {
   else void router.push('/admin/execution-logs')
 }
 
-/** manual 项跳对应面板：字段路由/契约维度 → 编排图漂移 tab；参数/契约/对账类 → Skills；yaml → Skill 工作台。
-    Skills 兜底带 ?tab=health：目标检查项就落在 Skills 宿主的健康检查 tab，保住「查看 →」动线 */
+/** manual 项跳对应面板：字段路由/契约维度 → 编排图漂移 tab；参数/契约/yaml → Skill 工作台；
+    其余（W1/W2/W3 对账族等）**留在本页**：它们的检查行就在本页健康检查区，
+    展开明细并滚过去即可——原兜底指向 /admin/skills?tab=health，那是本页被抽出前的宿主，
+    2026-09-29 抽出后那条路径只会绕一圈回到本页（Skills 侧还会把退役 tab 改投回来）。 */
 function jump(id: HealthCenterItemId) {
   if (id === 'field-routing' || id === 'field-routing-contract' || id === 'fields-sync') void router.push('/admin/orchestrator?tab=drift')
   else if (id === 'yaml-crosscheck' || id === 'params-consistency') void router.push(workbenchPath(id))
-  else void router.push('/admin/skills?tab=health')
+  else {
+    scrollTo('health')
+    if (!detailOpen(id)) toggleDetail(id)
+  }
 }
 
 async function fix(id: HealthCenterItemId) {

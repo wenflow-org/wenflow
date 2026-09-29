@@ -47,7 +47,7 @@ export const MOCK_SCENES: MockSceneDef[] = [
   // 虚拟学习者组：个体实验 / 规模实验
   { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟学习者', glyph: '拟' },
   { id: 'batch-experiments', label: '批量实验', group: '虚拟学习者', glyph: '批' },
-  // Skill 组：阶段 3 收敛——健康中心折入「Skill 运行」宿主 tab（?tab=health/drift/recon），
+  // Skill 组：健康中心已于 2026-09-29 抽出为独立场景（系统组），本组只剩编排图/Skill/Prompt 评估
   // 场景下线，Skill 组由 4 项收敛为 3 项（orchestrator · skills · prompt-eval）。
   // label 带上「提示词」关键词（2026-09 定位收敛：管理台=轻运营调整，改 prompt 的
   // 动线从这里进——新人搜「提示词」能落到正确入口，不再误入 Prompt 评估）
