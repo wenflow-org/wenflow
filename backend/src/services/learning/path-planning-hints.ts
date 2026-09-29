@@ -204,6 +204,34 @@ export interface PlanningHints {
    * 用户侧只见 `learning_paths.estimatedHours`（如 26h）而不知自述可用时间是 650h。
    */
   capacityDeficit: CapacityDeficitReport | null;
+  /**
+   * 预算派生链留痕（2026-09-29 I6-3）：总学时锚从哪来、每阶段锚被容量夹了多少。
+   *
+   * 为什么需要：实审发现 `targetHoursPerMilestone` 与 `targetTotalHours/targetMilestones`
+   * 可差 68%（实测 22.4 vs 69.3），但两个字段都不带来源，评审只能记「hints 内部不自洽」而
+   * 判不了是谁造成的。有了本字段，「锚被结构容量夹」与「推导本身错了」可当场分开。
+   */
+  budgetDerivation: BudgetDerivation | null;
+}
+
+/** 预算派生链（可持久化、可审计；口径见 derivePlanningHints 内 budgetDerivation 块） */
+export interface BudgetDerivation {
+  /** 总学时锚的来源：结构化小时 / 会话频率推算 / 每日分钟兜底 / 无锚 */
+  source: 'structured_estimated_hours' | 'structured_sessions' | 'inferred_daily_minutes' | 'none';
+  /** 结构化 timeDimensions 原样给出的小时（未经带内钳制） */
+  structuredHours: number | null;
+  /** 现实上限（每日分钟 × 周期天数 / 60）：超过它按现实钳制 */
+  inferredCapHours: number | null;
+  /** 带内钳制后的总锚（= targetTotalHours） */
+  totalHours: number | null;
+  /** 均摊请求值 = totalHours / targetMilestones（未夹） */
+  perMilestoneRequested: number | null;
+  /** 结构容量上界 = 每阶段课数上界 × 单课分钟上界 / 60（夹的来源） */
+  structureStageCapacityHours: number | null;
+  /** 落地的每阶段锚（= targetHoursPerMilestone，= min(容量上界, 请求值)） */
+  perMilestoneAnchored: number | null;
+  /** 是否发生了容量夹（anchored < requested） */
+  anchorClamped: boolean;
 }
 
 /** 结构容量缺口报告（可持久化、可审计；口径见 derivePlanningHints 内 capacityDeficit 块） */
@@ -710,6 +738,43 @@ export function derivePlanningHints(
         )
       : null;
 
+  // ---- 预算派生链留痕（2026-09-29 I6-3）：把「每阶段锚为什么是这个数」记下来 ----
+  // 动机：实审只看到 targetHoursPerMilestone=22.4 与 targetTotalHours/targetMilestones=69.3
+  // 相差 68%，两个字段都不带来源，只能记「hints 内部不自洽」；实际是容量夹（22.4 = 14 课 ×
+  // 96min / 60）。留痕后「推导错」与「容量夹」当场可分。
+  // 注意口径：本字段记的是**锚的夹**（用 effectiveSubtasksPerStageRange[1]，与上一行同源）；
+  // 最终交付侧的夹是 skills/path-planning 的 enforceBudgetConservation（用 subtasksPerStageRange[1]），
+  // 两者在 effective 上界 < 原上界时会不同——所以两处都留痕，不做合并（合并即掩盖分歧）。
+  const budgetDerivation: BudgetDerivation | null = estimatedHoursTotal !== null
+    ? (() => {
+        const requestedPerMilestone = targetMilestones !== null
+          ? Math.round((estimatedHoursTotal / targetMilestones) * 10) / 10
+          : null;
+        const source: BudgetDerivation['source'] =
+          structuredHoursTotal !== null
+            ? (totalSessions !== null && oneSessionMinutes !== null
+                ? 'structured_sessions'
+                : Number.isFinite(timeDimensions?.estimatedHours) && (timeDimensions!.estimatedHours as number) > 0
+                  ? 'structured_estimated_hours'
+                  : 'structured_sessions')
+            : inferredBudgetCap !== null
+              ? 'inferred_daily_minutes'
+              : 'none';
+        return {
+          source,
+          structuredHours: structuredHoursTotal,
+          inferredCapHours: inferredBudgetCap,
+          totalHours: estimatedHoursTotal,
+          perMilestoneRequested: requestedPerMilestone,
+          structureStageCapacityHours: targetMilestones !== null ? structureStageCapacityHours : null,
+          perMilestoneAnchored: targetHoursPerMilestone,
+          anchorClamped: requestedPerMilestone !== null
+            && targetHoursPerMilestone !== null
+            && targetHoursPerMilestone < requestedPerMilestone - 0.05,
+        };
+      })()
+    : null;
+
   // ---- 结构容量缺口（2026-09-29 I2b）：把「装不下」变成可观测、可复核的事实 ----
   // 口径：容量上界 = 每阶段课数上界 × 单课分钟上界 × 阶段数。该上界同时受两道**有意设计**约束——
   //   ① 每阶段 30 课封顶（防 filler 换皮复读，评审实证 B 维同质化）；
@@ -772,6 +837,7 @@ export function derivePlanningHints(
     targetHoursPerMilestone,
     targetMinutesPerTask,
     capacityDeficit,
+    budgetDerivation,
     subtaskMinutesRange,
     maxWeeks,
   };

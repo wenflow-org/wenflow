@@ -427,6 +427,8 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
       // AI 生成的路径简短摘要（path-planning 输出），随 aiPromptTemplate 持久化，
       // 供列表接口 parsePathSummary 读取、前端卡片展示
       summary: typeof path.summary === 'string' && path.summary.trim() ? path.summary.trim() : null,
+      // 守恒执行层决策留痕（2026-09-29 I6-2）：skill 输出 → analysis → aiPromptTemplate._generation
+      budgetConservation: (path as any)?.budgetConservation || null,
       sceneFraming: framedNormalizedInput ? { normalizedInput: framedNormalizedInput } : null,
       sceneFramingRaw: null,
       sceneFramingInput: null,
@@ -494,6 +496,10 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
         coreStep: 'completed',
         stageDesign: 'pending',
         lastError: null,
+        // 守恒决策留痕（I6-2）：此前 report 只进日志（且仅在有 gapNote 时打），
+        // 路径落库后「是谁把学时夹下来的」无从复核（enforceBudgetConservation /
+        // clampStageTasksToHints / 结构容量上限三者都会改）。这里随生成记录落库。
+        budgetConservation: (analysis as any)?.budgetConservation || null,
         sourceConversationId: data.sourceConversationId || null,
         triggerSource: data.sourceConversationId ? 'goal-conversation' : data.source === 'learn' ? 'ai-teaching' : data.source === 'replan' ? 'system' : 'api',
         updatedAt: generationUpdatedAt,

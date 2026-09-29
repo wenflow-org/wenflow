@@ -136,10 +136,38 @@ export function coercePathPlanningParsed(parsed: any, materials?: PromptMaterial
  * 直接原地改写 milestone.estimatedHours（一位小数）；下游 stage-enrichment 按改写后的
  * 阶段学时逐阶段反推任务数，守恒由此传导为课数。
  */
+
+/**
+ * 守恒执行层的决策留痕（2026-09-29 I6-2）。
+ *
+ * 为什么需要：实审能判「norm 掉到带下」，判不了是 `enforceBudgetConservation`、
+ * `clampStageTasksToHints` 还是结构容量上限压的——三者都会改学时/课数，且此前
+ * report 只进日志（还只在有 gapNote 时打），路径落库后无从复核。
+ * 现在本报告随 path-planning 输出落进 `aiPromptTemplate._generation.budgetConservation`。
+ */
+export interface BudgetConservationReport {
+  target: number;
+  before: number;
+  after: number;
+  capacitySum: number;
+  scaled: boolean;
+  /**
+   * 夹的来源：capacity=结构容量顶住（装不下）；ceiling=1.8× 上限；floor=0.6× 下限；
+   * none=**未触发校正**（落带内）。
+   * ⚠ 读法：`none` 不等于「容量够」。本字段只回答「谁动了学时」，容量是否装得下要看
+   * hints.capacityDeficit（实测 1.3h 目标 / 1h 容量：缺口 25% 但 before 落带内 → none）。
+   */
+  clampReason: 'capacity' | 'ceiling' | 'floor' | 'none';
+  /** 每阶段容量上界（小时）= 每阶段任务上界 × 单任务分钟上界 / 60 */
+  perStageCapHours: number;
+  /** 逐阶段夹前→夹后（一位小数），用于核对「哪几个阶段被顶到容量」 */
+  perStage: Array<{ stage: number; before: number; after: number }>;
+}
+
 export function enforceBudgetConservation(
   milestones: any,
   hints: any,
-): { totalAfter: number; gapNote: string | null; report: { target: number; before: number; after: number; capacitySum: number; scaled: boolean } | null } {
+): { totalAfter: number; gapNote: string | null; report: BudgetConservationReport | null } {
   const round1 = (v: number) => Math.round(v * 10) / 10;
   const noop = { totalAfter: 0, gapNote: null as string | null, report: null as any };
   if (!Array.isArray(milestones) || milestones.length === 0) return noop;
@@ -167,6 +195,7 @@ export function enforceBudgetConservation(
   const floor = 0.6 * target;
   const ceiling = 1.8 * target;
   const effectiveCeiling = Math.min(ceiling, capacitySum);
+  let clampReason: BudgetConservationReport['clampReason'] = 'none';
   // 放大用「按剩余空间比例」的迭代重分配：均匀因子会在部分阶段已顶容量时填不到 target
   // （实测 37h→56h 目标只到 49h，因为 7h 顶格阶段吃不了因子）。收缩用均匀因子即可。
   let work = [...hours];
@@ -184,6 +213,15 @@ export function enforceBudgetConservation(
     const factor = effectiveCeiling / before;
     work = work.map((h: number) => Math.max(0.5, h * factor));
   }
+  // 夹的来源判定（先容量、后上下限）：容量顶住时，放大到不了 target、收缩也由容量决定，
+  // 都归 'capacity'——否则会把「装不下」误记成「模型超填被 1.8× 压」。
+  if (capacitySum < floor || (before > effectiveCeiling && capacitySum < ceiling)) {
+    clampReason = 'capacity';
+  } else if (before < floor && effectiveCeiling > before) {
+    clampReason = 'floor';
+  } else if (before > effectiveCeiling) {
+    clampReason = 'ceiling';
+  }
   const after = work.map((h: number) => round1(Math.max(0.5, Math.min(perStageCap, h))));
   milestones.forEach((m: any, i: number) => {
     if (m && typeof m === 'object') m.estimatedHours = after[i];
@@ -195,7 +233,20 @@ export function enforceBudgetConservation(
   return {
     totalAfter,
     gapNote,
-    report: { target: round1(target), before: round1(before), after: totalAfter, capacitySum: round1(capacitySum), scaled: Math.abs(totalAfter - before) > 0.05 },
+    report: {
+      target: round1(target),
+      before: round1(before),
+      after: totalAfter,
+      capacitySum: round1(capacitySum),
+      scaled: Math.abs(totalAfter - before) > 0.05,
+      clampReason,
+      perStageCapHours: round1(perStageCap),
+      perStage: hours.map((h: number, i: number) => ({
+        stage: i + 1,
+        before: round1(h),
+        after: after[i],
+      })),
+    },
   };
 }
 
@@ -1042,6 +1093,9 @@ ${replan ? renderReplanSection(replan) : ''}
         estimatedWeeks,
         cognitiveCore: pathData.cognitiveCore || pathData.cognitiveDesign,
         cognitiveDesign: pathData.cognitiveDesign || pathData.cognitiveCore,
+        // 守恒执行层决策留痕（I6-2）：随输出透传，最终落 aiPromptTemplate._generation.budgetConservation。
+        // 放在输出顶层而非 _debug：_debug 由调用方覆写（rawModelOutput/extractedJson），会被冲掉。
+        budgetConservation: conservation.report,
         // materialRefs 在**这里**做逐字核对（normalizeOutput 拿得到 input 侧的投影资料）：
         // coerce 只影响契约校验，真正落库的是本函数的产物。
         milestones: (Array.isArray(pathData.milestones) ? pathData.milestones : []).map((milestone: any) => {

@@ -107,3 +107,62 @@ describe('enforceBudgetConservation（量级守恒硬执行）', () => {
     expect(ms.map((m) => m.estimatedHours).reduce((a, b) => a + b, 0)).toBeCloseTo(r.totalAfter, 1);
   });
 });
+
+/**
+ * 决策留痕（2026-09-29 I6-2）：报告要能回答「是谁把学时夹下来的」。
+ * 此前 report 只进日志（且仅在有 gapNote 时打），路径落库后无从复核。
+ */
+describe('enforceBudgetConservation · 决策留痕（I6-2）', () => {
+  it('容量顶住 → clampReason=capacity，并逐阶段留痕（可核对哪几个阶段顶到容量）', () => {
+    const ms = milestones([7, 7, 7, 7, 7, 7, 7, 7]);
+    const r = enforceBudgetConservation(ms, {
+      targetTotalHours: 540,
+      targetHoursPerMilestone: 7,
+      subtasksPerStageRange: [8, 14],
+      subtaskMinutesRange: [15, 30],
+    });
+    expect(r.report!.clampReason).toBe('capacity');
+    expect(r.report!.perStageCapHours).toBe(7); // 14 × 30min / 60
+    expect(r.report!.perStage).toHaveLength(8);
+    // 逐阶段 before→after 与落库学时逐条对得上（留痕不是另算一套）
+    r.report!.perStage.forEach((s, i) => expect(s.after).toBe(ms[i].estimatedHours));
+  });
+
+  it('欠填但容量够 → clampReason=floor（是补预算，不是装不下）', () => {
+    const ms = milestones([4, 3, 4, 4, 7, 4, 4, 7]);
+    const r = enforceBudgetConservation(ms, {
+      targetTotalHours: 90,
+      targetHoursPerMilestone: 7,
+      subtasksPerStageRange: [8, 14],
+      subtaskMinutesRange: [15, 30],
+    });
+    expect(r.report!.clampReason).toBe('floor');
+  });
+
+  it('超填且非容量所致 → clampReason=ceiling（1.8× 上限，不是结构装不下）', () => {
+    const ms = milestones([5, 5, 5, 5, 5]);
+    const r = enforceBudgetConservation(ms, {
+      targetTotalHours: 10,
+      targetHoursPerMilestone: 2,
+      subtasksPerStageRange: [3, 8], // 容量 8×30min/60 = 4h/阶段 → 5 阶段共 20h > 1.8×10
+      subtaskMinutesRange: [15, 30],
+    });
+    expect(r.report!.clampReason).toBe('ceiling');
+  });
+
+  it('带内未动 → clampReason=none（不制造假的夹痕）', () => {
+    const ms = milestones([2, 2, 2]);
+    const r = enforceBudgetConservation(ms, {
+      targetTotalHours: 10,
+      targetHoursPerMilestone: 3,
+      subtasksPerStageRange: [4, 8],
+      subtaskMinutesRange: [30, 60],
+    });
+    expect(r.report!.scaled).toBe(false);
+    expect(r.report!.clampReason).toBe('none');
+  });
+
+  it('无预算锚 → report 为 null（缺信号时不编造留痕）', () => {
+    expect(enforceBudgetConservation(milestones([3, 4, 5]), null).report).toBeNull();
+  });
+});
