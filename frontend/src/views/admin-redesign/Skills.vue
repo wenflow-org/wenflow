@@ -25,20 +25,18 @@
         </template>
       </template>
       <template v-else>
-        <span class="mk-status__meta" :class="hcCount > 0 ? 'mk-status__meta--bad' : ''">{{ hcStatusLabel }}</span>
+        <span class="mk-status__meta" title="技能 × 通道 × 参数 × 兜底的覆盖矩阵">覆盖矩阵</span>
       </template>
       <span class="mk-status__actions">
         <span v-if="tab === 'run'" class="mk-status__meta">{{ rangeLabel }}</span>
-        <button v-else type="button" class="mk-status__action" :disabled="hcRefreshing" @click="refreshHc">{{ hcRefreshing ? '刷新中…' : '刷新' }}</button>
       </span>
     </div>
 
-    <!-- 视图切换 pills（唯一的 tab 控件）：Skill 运行 / 健康检查 / 漂移 / 对账 / 模型路由 -->
+    <!-- 视图切换 pills（唯一的 tab 控件）：Skill 运行 / 模型路由。
+         健康检查 · 漂移 · 对账三 tab 已退役（2026-09-29 用户拍板）：三者本就是同一份报表的三刀，
+         合一后独立成 /admin/health-center，侧栏落在「系统」组。 -->
     <div class="mk-pills skills-tabs" role="tablist" aria-label="Skill 视图切换">
       <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'run'" :class="{ 'mk-pill--active': tab === 'run' }" @click="switchTab('run')">Skill 运行</button>
-      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'health'" :class="{ 'mk-pill--active': tab === 'health' }" @click="switchTab('health')">健康检查</button>
-      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'drift'" :class="{ 'mk-pill--active': tab === 'drift' }" @click="switchTab('drift')">漂移</button>
-      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'recon'" :class="{ 'mk-pill--active': tab === 'recon' }" @click="switchTab('recon')">对账</button>
       <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'model-routing'" :class="{ 'mk-pill--active': tab === 'model-routing' }" @click="switchTab('model-routing')">模型路由</button>
     </div>
 
@@ -206,21 +204,7 @@
       />
     </div>
     </template>
-
-    <!-- ===== Tab2-4: 健康检查 / 漂移 / 对账（HealthCenter embedded，同一报表，view 切换不重挂载） ===== -->
-    <HealthCenter
-      v-if="tab !== 'run' && tab !== 'model-routing'"
-      ref="hcRef"
-      :view="hcView"
-      :recon-report="recReport"
-      :recon-error="recError"
-      embedded
-      @count="hcCount = $event"
-      @navigate="switchTab"
-      @refresh-recon="refreshReconciliation"
-    />
-
-    <!-- ===== Tab5: 模型路由覆盖矩阵（技能 × 通道 × 参数 × 兜底） ===== -->
+    <!-- ===== Tab2: 模型路由覆盖矩阵（技能 × 通道 × 参数 × 兜底） ===== -->
     <SkillModelCoverage v-if="tab === 'model-routing'" />
   </div>
 </template>
@@ -241,39 +225,36 @@ import { useIsNarrow } from './useIsNarrow'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
-import HealthCenter from './HealthCenter.vue'
 import SkillModelCoverage from './SkillModelCoverage.vue'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
-/* ================= 宿主：Skill 运行 · 健康检查 · 漂移 · 对账 · 模型路由（阶段 3 导航收敛） =================
+/* ================= 宿主：Skill 运行 · 模型路由（原 5 tab 收敛为 2，健康中心 2026-09-29 独立成页） =================
    健康中心由独立场景折入本宿主 tab（侧栏 15→14 项）；?tab= 双向同步，深链/刷新/前进后退可寻址；
    唯一 tab 控件 = 本行 pills（健康中心内不再嵌套 pills，R1）。 */
-const SKILLS_TABS = ['run', 'health', 'drift', 'recon', 'model-routing'] as const
+const SKILLS_TABS = ['run', 'model-routing'] as const
 type SkillsTab = (typeof SKILLS_TABS)[number]
 const tab = ref<SkillsTab>('run')
 const route = useRoute()
 const router = useRouter()
-const hcRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
-const hcCount = ref(0)
-const hcRefreshing = ref(false)
-/** 健康中心嵌入视图：run / model-routing tab 未激活时才挂载，二者不会出现 */
-const hcView = computed<'health' | 'drift' | 'recon'>(() =>
-  tab.value === 'health' || tab.value === 'drift' || tab.value === 'recon' ? tab.value : 'health'
-)
-
 /** 轻运营直达：列表行「设计」→ 设计页「协议」页签（改提示词的唯一编辑点） */
 function openDesign(id: string) {
   void router.push(`/admin/skills/${encodeURIComponent(id)}?tab=protocol`)
 }
 
-const hcStatusLabel = computed(() => {
-  if (tab.value === 'health') return `健康检查异常 ${hcCount.value}`
-  if (tab.value === 'drift') return `需处理 ${hcCount.value}`
-  return `对账异常 ${hcCount.value}`
-})
+/** 退役 tab 的老深链（健康检查/漂移/对账）改投独立页；只认现役 tab，其余回落 run */
+const RETIRED_TABS = new Set(['health', 'drift', 'recon'])
+const toHealthCenter = (extra: Record<string, string> = {}) =>
+  void router.replace({ path: '/admin/health-center', query: extra })
+
 watch(
   () => route?.query?.tab,
   (t) => {
+    if (typeof t === 'string' && RETIRED_TABS.has(t)) {
+      // 老书签 / 旧文档链接：/admin/skills?tab=health → /admin/health-center（?recon=/?diff= 等定位参数一并带走）
+      const { tab: _drop, ...rest } = route.query as Record<string, string>
+      toHealthCenter(rest)
+      return
+    }
     const v = typeof t === 'string' && (SKILLS_TABS as readonly string[]).includes(t) ? (t as SkillsTab) : null
     if (v && v !== tab.value) tab.value = v
     else if (!v && tab.value !== 'run') tab.value = 'run'
@@ -284,27 +265,23 @@ function switchTab(t: SkillsTab) {
   tab.value = t
   if (route && router && route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
 }
-/* 跨页深链（如总览「健康中心」入口）：intent.tab=health → 落在健康检查 tab */
+/* 跨页深链：intent.tab 指向退役 tab（旧调用方还在传 health/drift/recon）也改投独立页 */
 watch(
   () => intent.tab,
   (t) => {
-    if (t && (SKILLS_TABS as readonly string[]).includes(t)) {
+    if (!t) return
+    if (RETIRED_TABS.has(t)) {
+      intent.tab = ''
+      toHealthCenter()
+      return
+    }
+    if ((SKILLS_TABS as readonly string[]).includes(t)) {
       tab.value = t as SkillsTab
       intent.tab = ''
     }
   },
   { immediate: true }
 )
-async function refreshHc() {
-  if (hcRefreshing.value) return
-  hcRefreshing.value = true
-  try {
-    await hcRef.value?.refresh?.(true)
-  } finally {
-    hcRefreshing.value = false
-  }
-}
-
 type Health = 'ok' | 'idle' | 'error'
 /** 目录表行（档案 + 实时统计 + 健康态） */
 interface SkillRow {
@@ -484,19 +461,17 @@ watch(filtered, (list) => {
 })
 
 const statusTone = computed(() => (errorCount.value ? 'mk-status--bad' : activeCount.value ? 'mk-status--ok' : 'mk-status--muted'))
-/** 宿主状态条基调：run 沿用原三态；健康/漂移/对账按各自需关注计数（>0 → bad） */
-const hostTone = computed(() => (tab.value === 'run' ? statusTone.value : hcCount.value > 0 ? 'mk-status--bad' : 'mk-status--ok'))
+/** 状态条基调：只剩运行视图三态（健康/漂移/对账已独立成 /admin/health-center） */
+const hostTone = computed(() => statusTone.value)
 
 const successRate = (s: { calls: number; errors: number }) =>
   s.calls ? `${(((s.calls - s.errors) / s.calls) * 100).toFixed(0)}%` : '—'
 const rateNum = (s: { calls: number; errors: number }) =>
   s.calls ? ((s.calls - s.errors) / s.calls) * 100 : 0
 
-/* ================= 对账数据（目录表完成度列投影；唯一拉取方） =================
-   明细对账面板本体在健康中心内嵌的 SkillReconciliation（含 ?recon=/?diff= 深链定位）。
-   对账报告本页与面板都要用（本页完成度列 + 排序在 run tab，彼时面板尚未挂载），
-   故本页是唯一拉取方，报告经 HealthCenter 以 prop 下发给面板，避免双请求；
-   面板内的「刷新」/isLive 刷新经 @refreshRecon 回流到本页 refreshReconciliation。 */
+/* ================= 对账数据（目录表完成度列投影） =================
+   本页只用它渲染「完成度」列与排序（对账明细面板自 2026-09-29 起在独立页
+   /admin/health-center，那边自行拉取，不再经本页下发）。 */
 const recReport = ref<SkillReconciliationReport | null>(null)
 const recLoading = ref(false)
 const recError = ref('')
@@ -568,10 +543,8 @@ function recGateDetail(completion: SkillCompletion): string {
 </script>
 
 <style scoped>
-/* ================= 宿主布局（tab 宿主：运行 tab 内滚；嵌入子页占满剩余高度） ================= */
+/* ================= 宿主布局（tab 宿主：运行 tab 内滚；模型路由 tab 自管） ================= */
 .skills-tabs { width: fit-content; }
-/* 子组件根节点（.mk-page--fill + embedded 类）：占满剩余高度 */
-.skills-host > .hc-embedded { flex: 1 1 auto; min-height: 0; }
 
 /* 列表视图 */
 .sk-row { cursor: pointer; }

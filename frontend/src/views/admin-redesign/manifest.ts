@@ -15,6 +15,11 @@
  * 阶段 3（2026-09-19）：健康中心折入「Skill 运行」（skills）宿主 tab：
  * Skill 运行 · 健康检查 · 漂移 · 对账；health-center 场景下线（URL 重定向到 ?tab=health）；
  * 侧栏由 15 项/7 组收敛为 14 项/7 组。
+ *
+ * 2026-09-29（用户拍板）：上一步回退——健康中心折入后那三个 tab 是同一份报表的三刀
+ * （后端一次返回 13 项检查，其中 7 项 baseline-drift / 4 项 consistency；前端按手写维度切三个 view，
+ * 结果唯一 error 级的「参数一致性 19 处」只出现在健康检查里，漂移 tab 却显示 0 项需处理）。
+ * 合一成独立页并归入「系统」组；skills 只留 Skill 运行 / 模型路由 两个 tab。侧栏 17 项/7 组。
  */
 
 export interface MockSceneDef {
@@ -56,6 +61,9 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'audit-logs', label: '审计日志', group: '观测', glyph: '审' },
   // 系统组：原「配置」组改名；模型与接入成为 tab 宿主（接入与模型 · 外挂能力）；
   // 系统工具成为 tab 宿主（运维工具 · 数据导出 · 会话安全）
+  // 2026-09-29 用户拍板：健康中心从 skills 宿主 tab 释放，回独立场景并归入系统组
+  //（「健康检查/漂移/对账」三个 tab 本就是同一份报表的三刀，合一后独立成页）
+  { id: 'health-center', label: '健康中心', group: '系统', glyph: '康' },
   { id: 'api-config', label: '模型与接入', group: '系统', glyph: '安' },
   { id: 'ops-center', label: '系统工具', group: '系统', glyph: '维' },
   // 运营组：运营中心为 tab 宿主（运营待办 · 反馈 · 成就 · 公告 · 站内通知）

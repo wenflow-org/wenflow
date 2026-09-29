@@ -1,6 +1,6 @@
 <template>
-  <div :class="embedded ? 'mk-page--fill hc-embedded' : 'mk-page'">
-    <div v-if="!embedded" class="mk-status" :class="`mk-status--${barTone}`">
+  <div class="mk-page">
+    <div class="mk-status" :class="`mk-status--${barTone}`">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">健康中心</strong>
       <span class="mk-status__sep"></span>
@@ -45,8 +45,8 @@
 
     <template v-else-if="displayReport">
       <!-- 面向运营的一句话引导（与健康检查/漂移等折叠 section 同形态：mk-card + hc-details 折叠头）
-           单视图模式仅在健康检查 tab 展示，避免「漂移/对账」tab 出现全量导语 -->
-      <section v-if="showView('health')" class="mk-card">
+           独立成页后是「本页三段的读法」（健康检查 / 漂移 / 对账），整页唯一一份 -->
+      <section class="mk-card">
         <details>
           <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">本页看什么？</h3>
@@ -102,7 +102,7 @@
       </div>
 
       <!-- 健康检查 -->
-      <section v-if="showView('health')" class="mk-card" id="hc-health">
+      <section class="mk-card" id="hc-health">
         <details open>
           <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">健康检查</h3>
@@ -159,7 +159,7 @@
       </section>
 
       <!-- 漂移：配置与生效不一致（改完配置没同步/发布，普通运营可理解为「配置改了但没生效」） -->
-      <section v-if="showView('drift') && driftAny" class="mk-card" id="hc-drift">
+      <section v-if="driftAny" class="mk-card" id="hc-drift">
         <details open>
           <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">{{ TERMS.driftContract }}</h3>
@@ -189,13 +189,13 @@
       </section>
 
       <!-- 技能对账（SkillReconciliation 自身即是 mk-card，外层仅作滚动锚点，避免卡中卡） -->
-      <section v-if="showView('recon')" id="hc-recon" class="hc-anchor">
+      <section id="hc-recon" class="hc-anchor">
         <!-- @openSkill 此前未绑定 → 对账行点击无反应（审计 附 A #5）。绑定到全局 skill 抽屉。 -->
         <SkillReconciliation ref="reconRef" :report="reconReport" :error="reconError" @openSkill="openSkillDrawer" @refresh="emit('refreshRecon')" />
       </section>
 
       <!-- 完成度分布（归属对账视图：完成度即对账 completion 映射的来源） -->
-      <section v-if="showView('recon')" class="mk-card" id="hc-completion">
+      <section class="mk-card" id="hc-completion">
         <details>
           <summary class="mk-card__head mk-section__summary">
             <h3 class="mk-card__title">完成度分布</h3>
@@ -240,16 +240,16 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import SkillReconciliation from './SkillReconciliation.vue'
 
-/* ---------- 宿主契约（skills 宿主 tab 化）：view 单选视图 + embedded 嵌入形态 ----------
-   - 缺省 view = 原全量页（健康检查 + 漂移 + 对账 + 完成度），保证独立挂载/测试行为不变；
-   - view=health|drift|recon = 仅渲染对应区块（宿主 4 tab 之一），不再嵌套 pills（R1）；
-   - embedded：隐藏自身状态条（计数由宿主状态条承载）、上报 @count、refresh 供宿主刷新。 */
-type HcView = 'health' | 'drift' | 'recon'
-/* reconReport：宿主（Skills）是唯一拉取方，经此 prop 下发给对账面板，避免双请求；
-   缺省（独立挂载）时面板自行拉取。面板「刷新」经 refreshRecon 回流宿主。 */
-const props = withDefaults(defineProps<{ view?: HcView; embedded?: boolean; reconReport?: SkillReconciliationReport | null; reconError?: string | null }>(), { embedded: false })
-const emit = defineEmits<{ (e: 'count', n: number): void; (e: 'navigate', v: HcView): void; (e: 'refreshRecon'): void }>()
-const showView = (v: HcView) => !props.view || props.view === v
+/* ---------- 独立场景（2026-09-29 用户拍板：合一 + 独立 + 归系统组） ----------
+   此前它是 skills 宿主的 3 个 tab（健康检查 / 漂移 / 对账），靠 view prop 单选渲染。
+   那三个 tab 本就是同一份报表的三刀（后端一次返回 13 项检查 + 漂移分维度 + 对账 + 完成度），
+   且刀口切错：唯一 error 级的「参数一致性 19 处」属 baseline-drift，却只出现在健康检查里，
+   漂移 tab 显示 0 项需处理。现在整页呈现全部区块（健康检查 → 漂移 → 对账 → 完成度），
+   三个 id（#hc-health / #hc-drift / #hc-recon）继续存在，作为概要卡跳转的锚点。 */
+/* reconReport/reconError：对账面板可直接用外部下发的报告（缺省自行拉取）。
+   Skill 运行页的完成度列也要对账报告，跨页下发属可选优化，故两者都可缺省。 */
+defineProps<{ reconReport?: SkillReconciliationReport | null; reconError?: string | null }>()
+const emit = defineEmits<{ (e: 'refreshRecon'): void }>()
 
 const reconRef = ref<{ openPanel?: () => void } | null>(null)
 
@@ -310,16 +310,9 @@ function scrollTo(id: string) {
   el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-/** 概要卡跳转：本视图内锚点滚动；跨视图（宿主 tab 化后）改为通知宿主切换 tab */
+/** 概要卡跳转：整页呈现后一律锚点滚动（此前单视图模式下要通知宿主切 tab） */
 function kpiGo(target: 'health' | 'drift' | 'recon' | 'completion') {
-  if (target === 'completion') {
-    // 完成度归属对账视图
-    if (props.view && props.view !== 'recon') { emit('navigate', 'recon'); return }
-    scrollTo('completion')
-    return
-  }
-  if (props.view && props.view !== target) { emit('navigate', target); return }
-  scrollTo(target)
+  scrollTo(target === 'completion' ? 'completion' : target)
 }
 
 const router = useRouter()
@@ -356,16 +349,6 @@ const distribution = computed(() => displayReport.value?.completion.distribution
 const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
 const topAbnormal = computed(() => healthAbnormal.value + (displayReport.value?.global.abnormalSkills ?? 0))
 
-/** 宿主域计数（embedded 消费）：按当前视图上报「需关注」项数，供宿主状态条展示 */
-watch(
-  [displayReport, () => props.view],
-  () => {
-    const v = props.view
-    const n = v === 'drift' ? driftActionable.value : v === 'recon' ? reconAbnormal.value : topAbnormal.value
-    emit('count', n)
-  },
-  { immediate: true }
-)
 
 /** 客户端聚合严重度计数（服务端 summary 不输出 ok/warn/error 明细） */
 const counts = computed(() => {
@@ -575,8 +558,6 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
-/* 嵌入模式（skills 宿主 flex 列内）：占满剩余高度并内滚（对齐 fb-embedded / add-embedded 先例） */
-.hc-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* 概要 KPI（共享 MkKpi 组件：标签 + 数字 + 副行，点击跳转锚点） */
 .hc-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 /* 首载骨架（R3）：形状由 MkSkeleton 提供，本类只补占位布局与间距 */

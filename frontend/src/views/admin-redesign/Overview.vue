@@ -40,7 +40,7 @@
           <span class="brief-actions__text">
             <strong>系统健康 · {{ healthText }}</strong>
           </span>
-          <button type="button" class="brief-actions__btn" @click="jump('skills', 'health')">健康中心 →</button>
+          <button type="button" class="brief-actions__btn" @click="jump('health-center')">健康中心 →</button>
         </li>
         <li :title="simTitle">
           <span class="brief-actions__dot" :class="`brief-actions__dot--${simTone}`"></span>

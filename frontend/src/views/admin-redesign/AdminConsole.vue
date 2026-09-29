@@ -116,6 +116,8 @@ const components: Record<string, unknown> = {
   // 阶段 3（2026-09-19）：health-center → skills 宿主 tab（健康检查/漂移/对账），场景下线
   // 2026-09-29 用户拍板拆回：teaching-sessions / goal-conversations / learning-paths 各自独立成页
   //（2026-09-04 曾合并为「学习会话」宿主 sessions，场景已下线，URL 重定向兼容）
+  // 2026-09-29 用户拍板：健康中心从 skills 宿主 tab 释放为独立场景（系统组）
+  'health-center': HealthCenter,
   'people': People,
   'teaching-sessions': TeachingSessions,
   'goal-conversations': GoalConversations,
@@ -160,6 +162,7 @@ import { useRoute, useRouter } from 'vue-router';
 import Shell from './Shell.vue';
 import SkillDrawer from './SkillDrawer.vue';
 import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
+import HealthCenter from './HealthCenter.vue';
 import MockSkeletonTable from './SkeletonTable.vue';
 import { intent, intentQueryParams, subPage, closeSubPage, closeSkillDrawer, type SubPageView } from './store';
 import { loadLiveData } from './live';

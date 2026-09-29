@@ -220,12 +220,16 @@ describe('Skill 目录 P1 修复批', () => {
   });
 });
 
-/* 阶段 3 导航收敛：健康中心折入 skills 宿主 tab（唯一 tab 控件，?tab= 双向同步） */
+/* 2026-09-29 用户拍板：健康检查/漂移/对账三 tab 退役——三者本是同一份报表的三刀，
+   合一后独立成 /admin/health-center（系统组）。Skills 只剩 Skill 运行 / 模型路由。 */
 async function mountHost(path: string) {
   dataSource.value = 'live';
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+    routes: [
+      { path: '/admin/:page?', component: { template: '<div />' } },
+      { path: '/admin/health-center', component: { template: '<div />' } },
+    ],
   });
   await router.push(path);
   await router.isReady();
@@ -236,7 +240,7 @@ async function mountHost(path: string) {
   return { wrapper, router };
 }
 
-describe('Skill 宿主 tab 化（健康中心折入）', () => {
+describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
   beforeEach(() => {
     getReconciliationMock.mockReset();
     dataSource.value = 'live';
@@ -244,25 +248,34 @@ describe('Skill 宿主 tab 化（健康中心折入）', () => {
     liveSkillStatsMap.value = null;
   });
 
-  it('?tab=health 落在健康检查 tab：5 个 tab 齐全且唯一 tab 控件', async () => {
-    const { wrapper } = await mountHost('/admin/skills?tab=health');
+  it('只剩 Skill 运行 / 模型路由两个 tab，且不再渲染健康中心', async () => {
+    const { wrapper } = await mountHost('/admin/skills');
     const tabs = wrapper.findAll('.skills-tabs .mk-pill');
-    expect(tabs.map((t) => t.text())).toEqual(['Skill 运行', '健康检查', '漂移', '对账', '模型路由']);
-    expect(tabs.find((t) => t.text() === '健康检查')!.classes()).toContain('mk-pill--active');
-    // 嵌入的健康中心渲染（隐藏自身状态条 → 由宿主承载）
-    expect(wrapper.find('.hc-embedded').exists()).toBe(true);
-    expect(wrapper.find('.hc-embedded .mk-status').exists()).toBe(false);
-    // 非 run tab 不渲染运行目录表
-    expect(wrapper.find('.sk-table').exists()).toBe(false);
+    expect(tabs.map((t) => t.text())).toEqual(['Skill 运行', '模型路由']);
+    expect(wrapper.find('.hc-embedded').exists()).toBe(false);
+    // 运行视图在位：状态条走 run 分支（无档案时「共 0 个 Skill」）
+    expect(wrapper.text()).toContain('共 0 个 Skill');
     wrapper.unmount();
   });
 
-  it('点击「对账」切换 tab 并同步 ?tab=recon', async () => {
+  it('老深链 ?tab=health|drift|recon 改投 /admin/health-center（?refresh 等定位参数带走）', async () => {
+    for (const retired of ['health', 'drift', 'recon']) {
+      const { wrapper, router } = await mountHost(`/admin/skills?tab=${retired}&refresh=1`);
+      expect(router.currentRoute.value.path, `tab=${retired} 应改投健康中心`).toBe('/admin/health-center');
+      expect(router.currentRoute.value.query.tab).toBeUndefined();
+      expect(router.currentRoute.value.query.refresh).toBe('1');
+      wrapper.unmount();
+    }
+  });
+
+  it('点击「模型路由」切换 tab 并同步 ?tab=model-routing', async () => {
     const { wrapper, router } = await mountHost('/admin/skills');
-    await wrapper.findAll('.skills-tabs .mk-pill').find((t) => t.text() === '对账')!.trigger('click');
+    await wrapper.findAll('.skills-tabs .mk-pill').find((t) => t.text() === '模型路由')!.trigger('click');
     await flushPromises();
-    expect(router.currentRoute.value.query.tab).toBe('recon');
-    expect(wrapper.find('.hc-embedded').exists()).toBe(true);
+    expect(router.currentRoute.value.query.tab).toBe('model-routing');
+    // 离开运行视图后不再渲染目录（状态条换成覆盖矩阵口径）
+    expect(wrapper.text()).not.toContain('共 0 个 Skill');
+    expect(wrapper.text()).toContain('覆盖矩阵');
     wrapper.unmount();
   });
 });
