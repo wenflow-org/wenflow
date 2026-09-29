@@ -36,5 +36,5 @@ constraints:
   - 禁止输出 JSON 之外的任何字符：不写标题、不写前言与结语（如"这两个概念其实是…"）、不写分析段落、不画 markdown 表格、不用代码块围栏、不复述候选概念、不做学科解释
   - 顶层必须同时包含 merges、ambiguous、dropCandidates 三个数组字段（无内容给空数组 []），字段名逐字一致，不自创也不省略
   - 判定理由一律写进条目的 rationale / reason 字段，不要写在 JSON 之外
-params: { temperature: 0.2, maxTokens: 1600, failurePolicy: propagate }
+params: { temperature: 0.2, maxTokens: 32000, failurePolicy: propagate }
 deltaOutput: false

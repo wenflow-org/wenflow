@@ -72,5 +72,5 @@ constraints:
   - 不得把 Persona/Story 的私有内容当作本次公开对话中的已知事实
   - 不得输出 learner reply、availableActions 或下一步实时动作
   - 不得给平台体验打 pass/fail；平台质量由独立 Platform Referee 评价
-params: { temperature: 0.2, maxTokens: 5000, failurePolicy: retry }
+params: { temperature: 0.2, maxTokens: 32000, failurePolicy: retry }
 deltaOutput: false

@@ -15,6 +15,6 @@ fields:
     desc: 可直接作为 skill system prompt 的完整文本，600 到 1500 字，包含角色定位、输入理解、字段产出指引和输出格式要求
 constraints:
   - 不在草稿中承诺平台未提供的能力或数据
-params: { temperature: 0.5, maxTokens: 2400, failurePolicy: propagate }
+params: { temperature: 0.5, maxTokens: 32000, failurePolicy: propagate }
 deltaOutput: false
 outputMedia: markdown

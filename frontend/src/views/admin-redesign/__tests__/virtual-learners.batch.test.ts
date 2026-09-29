@@ -192,11 +192,17 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).toContain('30%');
   });
 
-  it('无会话数据时完成率/失败率显示 0%（状态条常驻）', async () => {
+  it('无会话数据时完成率/失败率显示 0%（共享 KPI 卡常驻）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    expect(w.text()).toContain('完成率 0%');
-    expect(w.text()).toContain('失败率 0%');
+    // 按卡片结构断言而非拼接文本（MkKpi 里 label 与数字是相邻元素，text() 无空格）
+    const kpiNum = (label: string) =>
+      w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
+    expect(kpiNum('完成率')).toBe('0%');
+    expect(kpiNum('失败率')).toBe('0%');
+    // 防回归：这一页的运行指标必须挂在共享 .mk-kpi-grid 下（2026-09-29 归一，原 MkStatStrip 自由条）
+    expect(w.find('.vl-kpi .mk-kpi-grid').exists()).toBe(true);
+    expect(w.findAll('.mk-kpi')).toHaveLength(5);
   });
 
   it('无卡死时不出现一键回收按钮；未截断时不出现截断提示', async () => {

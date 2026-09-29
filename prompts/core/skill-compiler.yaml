@@ -24,5 +24,5 @@ fields:
     desc: 候选输出的原始文本
 constraints:
   - 不修改输入 system prompt，不替它补齐字段，不输出修改建议
-params: { temperature: 0.3, maxTokens: 2000, failurePolicy: propagate }
+params: { temperature: 0.3, maxTokens: 32000, failurePolicy: propagate }
 deltaOutput: false

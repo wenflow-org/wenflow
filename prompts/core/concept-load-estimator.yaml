@@ -46,5 +46,5 @@ fields:
 constraints:
   - 不输出任何数值分数、百分比或掌握度
   - 不引用输入之外的概念名
-params: { temperature: 0.2, maxTokens: 2000, failurePolicy: propagate }
+params: { temperature: 0.2, maxTokens: 32000, failurePolicy: propagate }
 deltaOutput: false

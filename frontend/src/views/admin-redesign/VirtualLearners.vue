@@ -34,15 +34,35 @@
       </span>
     </div>
 
-    <!-- 运行指标带（2026-09-29 从列表卡头搬出）：完成率/失败率/并发/今日调用/速率 + VL RPM 写控件。
-         原来塞在列表卡头（夹在搜索框与 RPM 之间），label/数值上下堆叠把卡头撑到 73px 且拥挤难读；
-         独立成带后卡头回归「搜索 + 行数」。学习者 N/M 不再重复（状态条共 N 人 + 底部分页已覆盖）。 -->
+    <!-- 运行指标带（2026-09-29 从列表卡头搬出；2026-09-29 二次归一）：
+         完成率/失败率/并发/今日调用/速率本来是 MkStatStrip 自由指标条，与全站 KPI 语言
+         （共享 .mk-kpi-grid + MkKpi 卡）不是同一套（用户：「这个 kpi 还是很自由的 kpi 啊」），
+         现改走共享栅格；每张卡的 hint 给派生口径，不复述数字。
+         VL RPM 是「写」控件，与只读 KPI 保持分行/分块，不混进数字栅格。 -->
     <div class="vl-kpi">
-      <MkStatStrip :items="runStatItems" />
-      <!-- VL RPM 是「写」控件，与只读指标条以竖线分隔，避免读/写混作一行 -->
+      <section class="mk-kpi-grid">
+        <MkKpi label="完成率" :value="`${runStats.completionRate ?? 0}%`" :hint="`已完成 ${runStats.completed} / 全部 ${runStats.totalSessions}`" />
+        <MkKpi
+          label="失败率"
+          :value="`${runStats.systemFailureRate ?? 0}%`"
+          :tone="(runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''"
+          :hint="`系统失败 ${runStats.failed} · 人为终止 ${runStats.abandoned}`"
+        />
+        <MkKpi
+          label="并发"
+          :value="concurrencyText"
+          :tone="concurrencyTone === 'full' ? 'bad' : concurrencyTone === 'warn' ? 'warn' : 'ok'"
+          hint="自动驾驶并发配额"
+        />
+        <MkKpi label="今日调用" :value="runStats.todayCalls ?? 0" :hint="todayCallsHint" />
+        <MkKpi label="速率" :value="rateText" hint="出站上限，与下方 VL RPM 对应" />
+      </section>
+      <!-- VL RPM：写控件单独一行——与只读 KPI 分块（读/写不混排），也让 5 张卡在 1280 仍是一行
+           （同排时 RPM 抢走 114px，栅格降成 4 列、第 5 张孤零零换行） -->
       <label class="vl-rpm" title="虚拟学习者专属出站 RPM 上限（0=不限）；与平台全局速率相互独立，不会挤占真实用户额度">
         <span class="vl-rpm__label">VL RPM</span>
         <input v-model.number="vlRpm.limit" type="number" min="0" max="100000" step="10" class="mk-filter__input vl-rpm__input" @focus="vlRpmFocused = true" @blur="vlRpmFocused = false" @input="vlRpmDirty = true" @change="saveVlRpm" />
+        <span class="vl-rpm__hint">虚拟学习者专属出站上限，0 = 不限；与平台全局速率相互独立，不挤占真实用户额度</span>
       </label>
     </div>
 
@@ -291,8 +311,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
-import MkStatStrip from '@/components/mk/MkStatStrip.vue'
-import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import SimulatedDaySettings from './SimulatedDaySettings.vue'
 import { useTableSort } from './useTableSort'
 import RunStateBadge from './RunStateBadge.vue'
@@ -571,37 +590,18 @@ const rateText = computed(() => {
     : `${vlRpm.inFlight} 在途 / ${cap}`
 })
 
-/** 卡头分格指标条（MkStatStrip）：完成率 / 失败率 / 并发 / 今日调用 / 速率 / 学习者。
- *  失败率、并发沿用原有分档着色（>0 标红、满额标红、≥70% 标琥珀），口径与 .vl-runstats 时期一致。 */
-const runStatItems = computed<MkStatItem[]>(() => [
-  {
-    label: '完成率',
-    value: `${runStats.value.completionRate ?? 0}%`,
-    title: '全量口径：已完成会话 / 全部会话'
-  },
-  {
-    label: '失败率',
-    value: `${runStats.value.systemFailureRate ?? 0}%`,
-    tone: (runStats.value.systemFailureRate ?? 0) > 0 ? 'bad' : '',
-    title: '全量口径：系统失败占比（>0 标红）'
-  },
-  {
-    label: '并发',
-    value: concurrencyText.value,
-    tone: concurrencyTone.value === 'full' ? 'bad' : concurrencyTone.value === 'warn' ? 'warn' : 'ok',
-    title: '自动驾驶并发配额：使用中 / 上限（满额标红，≥70% 标琥珀）'
-  },
-  {
-    label: '今日调用',
-    value: runStats.value.todayCalls ?? 0,
-    title: '全量口径：今日 AI 调用次数'
-  },
-  {
-    label: '速率',
-    value: rateText.value,
-    title: '虚拟学习者出站速率：在途 / 上限 RPM（与右侧 VL RPM 上限对应）'
-  },
-])
+/** 「今日调用」卡的 hint：有调用给平均耗时（派生口径，数字不复述），没有就点明计数口径 */
+const todayCallsHint = computed(() => {
+  const s = runStats.value
+  if (!s.todayCalls) return '虚拟/测试账号口径'
+  const ms = s.avgDurationMs
+  const human = ms >= 60000 ? `${Math.round(ms / 60000)} 分钟` : ms >= 1000 ? `${(ms / 1000).toFixed(1)} 秒` : `${Math.round(ms)} 毫秒`
+  return `平均耗时 ${human}`
+})
+
+/** 运行指标已改走共享 KPI 栅格（模板内 MkKpi ×5）：原先的 MkStatStrip 自由指标条
+ *  （含下面这份 runStatItems）已删除，口径数据（全量会话/系统失败/人为终止/平均耗时）
+ *  改为卡片 hint 直接取 runStats 字段。 */
 
 /* 仿真概览结论已收敛到单行状态条（KPI/结论随状态条 meta 展示，双块移除） */
 
@@ -685,34 +685,34 @@ function openRunningSession(s: Sample) {
 .vl-faillink:hover { color: var(--mk-blue); background: #eff6ff; box-shadow: 0 0 0 3px #eff6ff; }
 /* .mk-num--na 已收敛到既有全局 .mk-na（同一张表里两个类表达同一概念） */
 
-/* 运行指标带（2026-09-29 从列表卡头搬出）：左侧指标条自由收缩换行，右侧 VL RPM 钉住 */
+/* 运行指标带：KPI 独占整行（共享 .mk-kpi-grid + MkKpi，卡自带面/描边，外层不套盒子）；
+   下一行是 VL RPM 写控件（读/写分块），一行小字说明口径，省掉只有 hover 才看得见的 title */
 .vl-kpi {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 8px 16px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
+  display: grid;
+  gap: 8px;
   flex: none;
 }
-.vl-kpi .mk-stat-strip { flex: 1 1 auto; min-width: 0; }
-/* VL RPM（写控件）：与只读指标条以竖线分隔，避免读/写混作一行 */
 .vl-rpm {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding-left: 12px;
-  border-left: 1px solid var(--mk-line);
-  flex: none;
+  gap: 8px;
+  min-width: 0;
 }
 .vl-rpm__label {
   font-size: var(--mk-fs-micro);
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   color: var(--mk-faint);
   white-space: nowrap;
 }
-.vl-rpm__input { width: 72px; }
+.vl-rpm__input { width: 84px; }
+.vl-rpm__hint {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* VL 语境收窄文本列：两列 --mk-col-text 320→200，列宽和 1314→1074，
    避免「操作」列越出内容区（超出时仍由 .mk-table-scroll 横向滚动兜底）。 */
 .vl-table-scroll { --mk-col-text: 200px; }

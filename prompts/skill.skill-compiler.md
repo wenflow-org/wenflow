@@ -1,6 +1,6 @@
 ---
 agentId: skill:skill-compiler
-coreHash: bc6a600541a0aea63e77e67358d9b68afc18ac6f0123ecea465a91c7e39c1d1a
+coreHash: ce697c7971cf367955e3bcc654dcdfe077deab93c142d85a47042277e02af996
 coreVersion: 1
 temperature: 0.3
 maxTokens: 32000

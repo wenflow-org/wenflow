@@ -1,6 +1,6 @@
 ---
 agentId: skill:learner-progress-report
-coreHash: eadc7fc5cbb78d654a819bbe472fb80cdbb5b3baeb86552141b3da916a33b79e
+coreHash: f05b4cf07d31e5565c52c645a45b6085f454d2b62fd17219cdd7f88481a64825
 coreVersion: 1
 temperature: 0.4
 maxTokens: 32000

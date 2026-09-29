@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-planning
-coreHash: cbd526e8d13f1053768f0fc5e1ba350902bb547ad282650d767da4ee28cb68d2
+coreHash: 0f6d69c81e0409fb90f44d6c089b9b09be50beb3d042f4f47debf878c3689268
 coreVersion: 4
 temperature: 0.5
 maxTokens: 32000

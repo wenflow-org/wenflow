@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-path-evaluator
-coreHash: 355aab07d4e2a1719155c2b17942acf3aed999c186468b5dd09d3911bf45691f
+coreHash: 72cd7cb04de23c00fada136ccd494c2ff63ce7ba2b84ef74488a034d9bf5f941
 coreVersion: 1
 temperature: 0.5
 maxTokens: 32000

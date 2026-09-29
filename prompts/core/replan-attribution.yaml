@@ -56,5 +56,5 @@ fields:
 constraints:
   - 不输出掌握度、难度、时长等数值
   - 不引用输入之外的概念名或证据 id
-params: { temperature: 0.3, maxTokens: 1200, failurePolicy: propagate }
+params: { temperature: 0.3, maxTokens: 32000, failurePolicy: propagate }
 deltaOutput: false

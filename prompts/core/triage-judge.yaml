@@ -61,5 +61,5 @@ constraints:
   - 只输出判定，不给学习建议、不排阶段、不写安抚话术（安抚是下游的事）
   - 情绪材料不得作为可迁移性的证据
   - 拿不准一律 null/unknown + low，不得为了给出结论而硬判
-params: { temperature: 0.1, maxTokens: 2600, failurePolicy: retry }
+params: { temperature: 0.1, maxTokens: 32000, failurePolicy: retry }
 deltaOutput: false

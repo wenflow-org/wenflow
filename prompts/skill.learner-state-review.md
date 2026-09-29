@@ -1,6 +1,6 @@
 ---
 agentId: skill:learner-state-review
-coreHash: 091c71cdc40a594304e39a9d7f6b0d279008abe0b7460b5b32469380015bff70
+coreHash: 8a4e6b589e4273007f7af0b4ea545705613860afe72ed1f6fb99c443fb9e16e9
 coreVersion: 1
 temperature: 0.3
 maxTokens: 32000

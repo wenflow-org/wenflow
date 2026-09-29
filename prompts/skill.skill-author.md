@@ -1,6 +1,6 @@
 ---
 agentId: skill:skill-author
-coreHash: c50ef27109b8c0ec132df20fa41a0d6bfd94a43f38d98f74df25cfbac9c26cf4
+coreHash: 55922d1a0a0692dd12d61271c872819864805724ce6eff4915be2b04c5beb003
 coreVersion: 1
 temperature: 0.5
 maxTokens: 32000

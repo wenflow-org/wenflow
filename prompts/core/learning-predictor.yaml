@@ -36,5 +36,5 @@ constraints:
   - 输出必须基于输入证据，禁止编造不存在的概念或信号
   - stallRisk 与 predictedTone 必须自洽（如 stallRisk>0.7 时 tone 不应是 smooth）
   - 预测要保守：不确定时往中间值靠，不极端
-params: { temperature: 0.2, maxTokens: 1200, failurePolicy: propagate }
+params: { temperature: 0.2, maxTokens: 32000, failurePolicy: propagate }
 deltaOutput: false

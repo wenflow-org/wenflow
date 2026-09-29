@@ -194,6 +194,34 @@ export interface PlanningHints {
   targetHoursPerMilestone: number | null;
   /** 单任务分钟锚（= 总分钟 / 总任务数；存在时 subtask estimatedMinutes 均值应向它靠拢，防扩容后模型仍按 ~60min/任务填充） */
   targetMinutesPerTask: number | null;
+  /**
+   * 结构容量缺口（2026-09-29 I2b 观测）：用户声明的总学时预算与结构容量上界（阶段×任务×单课分钟）
+   * 之间的差。null = 预算装得下（无需声明）；同结构体的字段会随 hints 一起落库到
+   * `aiPromptTemplate.normalizedInput...planningHints`，使「预算被结构容量吃掉多少」从不可观测变为可复核。
+   *
+   * 背景：容量上界受「每阶段课数上限 30」与「单课分钟按用户单次坐姿校准」两道**有意设计**约束，
+   * 长周期/大预算诉求会装不下。此前只做内部夹钳（targetHoursPerMilestone 被钳到容量上界），
+   * 用户侧只见 `learning_paths.estimatedHours`（如 26h）而不知自述可用时间是 650h。
+   */
+  capacityDeficit: CapacityDeficitReport | null;
+}
+
+/** 结构容量缺口报告（可持久化、可审计；口径见 derivePlanningHints 内 capacityDeficit 块） */
+export interface CapacityDeficitReport {
+  /** 用户声明的总学时预算（小时） */
+  requestedHours: number;
+  /** 结构容量上界（小时）= 每阶段课数上界 × 单课分钟上界 × 阶段数 / 60 */
+  capacityHours: number;
+  /** 缺口比例 = 1 - capacityHours/requestedHours（>0 即装不下） */
+  deficitRatio: number;
+  /** 瓶颈来源，便于判断该抬哪道上界 */
+  limitingFactor: 'lesson_count' | 'lesson_minutes' | 'milestone_count';
+  /** 触发时各上界的取值快照 */
+  bounds: {
+    subtasksPerStage: number;
+    subtaskMinutes: number;
+    milestones: number;
+  };
 }
 
 /**
@@ -603,10 +631,13 @@ export function derivePlanningHints(
     : null;
   const capacityMin = subtaskMinutesRange[1] * subtasksPerStageRange[1];
   const anchorMin = estimatedHoursTotal !== null ? estimatedHoursTotal * 60 : null;
-  const capacityDeficit = anchorMin !== null && perStageHours !== null && targetMilestones !== null
+  // 容量赤字布尔开关：锚定分钟数 > 当前上界容量，且每阶段需求 >6h（低于此不值得扩，见下方判据）。
+  // 与下方 `capacityDeficitReport`（可观测结构化报告）分工：本开关只决定「要不要扩容」，
+  // 报告负责「缺口多少、卡在哪道上界」。
+  const needsCapacityExpansion = anchorMin !== null && perStageHours !== null && targetMilestones !== null
     ? anchorMin > capacityMin && perStageHours > 6
     : false;
-  if (capacityDeficit) {
+  if (needsCapacityExpansion) {
     // 2026-09-28 粒度修正：扩容只加「课数」，不再放大「单课时长」。此前 avgTaskMin*2 会把
     // 分钟上界顶到 240（session=60min 时实测单课均值 82min、锚 108min）——单课超过用户
     // 单次可用时间 = 一节课一天上不完（真实案例：90h 预算被切成 5×10×82min）。
@@ -679,6 +710,55 @@ export function derivePlanningHints(
         )
       : null;
 
+  // ---- 结构容量缺口（2026-09-29 I2b）：把「装不下」变成可观测、可复核的事实 ----
+  // 口径：容量上界 = 每阶段课数上界 × 单课分钟上界 × 阶段数。该上界同时受两道**有意设计**约束——
+  //   ① 每阶段 30 课封顶（防 filler 换皮复读，评审实证 B 维同质化）；
+  //   ② 单课分钟上界按用户单次可用坐姿校准（一节课要能一次上完）。
+  // 因此长周期/大预算诉求必然装不下，问题从来不是「要不要夹」，而是「夹了多少有没有人知道」。
+  // 此前 targetHoursPerMilestone 被钳到容量上界（对规划器诚实），但缺口本身既不落库也无处可看，
+  // 用户侧只见 estimatedHours 而不知自述预算被吃掉多少。
+  const capacityDeficit: CapacityDeficitReport | null = (() => {
+    if (targetMilestones === null || estimatedHoursTotal === null) return null;
+    // 课数上界：沿用 `subtasksPerStageRange[1]`（容量扩容分支已按需抬到 ≤30）。
+    // 注意：**这里不再对课数封 30**——扩容块已经把上界压到 30 以内，再封一次是恒等的；
+    // 真正需要显式封顶的只有扩容块内部那个 `Math.min(30, ...)`。
+    const lessonCountCap = subtasksPerStageRange[1];
+    // 单课分钟上界：**必须与 targetHoursPerMilestone 的钳制口径逐字一致**（都用
+    // `subtaskMinutesRange[1]`，不再额外封 90）。否则报告的容量上界会和锚脱节：
+    // 用户单次坐姿只支持 30 分钟时写"上界 90 分钟"，等于把"一节课上不完"的约束瞒报。
+    const lessonMinutesCap = subtaskMinutesRange[1];
+    const capacityHours = (lessonCountCap * lessonMinutesCap * targetMilestones) / 60;
+    const deficitRatio = 1 - capacityHours / estimatedHoursTotal;
+    if (!(deficitRatio > 0.05)) return null; // 装得下（或只差一点点）→ 无需声明
+    // 瓶颈来源：分别把每道上界抬到能装下所需的量，看哪个最先触顶（倍数最小者）。
+    // 三个"所需上界"都以**另外两道保持现状**为前提，故只反映"单靠这一道能不能补救"。
+    const needCount = (estimatedHoursTotal * 60) / (lessonMinutesCap * targetMilestones);
+    const needMinutes = (estimatedHoursTotal * 60) / (lessonCountCap * targetMilestones);
+    // 判据与 ReplanAdvisoryService 的「缺口深度」不同义，这里纯粹是容量补救路径排序：
+    // 能补救的那道就是瓶颈。三者都补救不了时不谎称某个是唯一原因——标为 milestone_count
+    // 只是"相对最可能的一档"，故 bounds 里同时给出三道现值供人工判断。
+    const limitingFactor: CapacityDeficitReport['limitingFactor'] =
+      needCount <= 1.0001
+        ? 'lesson_count'
+        : needMinutes <= 1.0001
+          ? 'lesson_minutes'
+          : 'milestone_count';
+    return {
+      requestedHours: Math.round(estimatedHoursTotal * 10) / 10,
+      capacityHours: Math.round(capacityHours * 10) / 10,
+      deficitRatio: Math.round(deficitRatio * 1000) / 1000,
+      limitingFactor,
+      bounds: {
+        subtasksPerStage: lessonCountCap,
+        subtaskMinutes: lessonMinutesCap,
+        milestones: targetMilestones,
+      },
+    };
+  })();
+  // 缺口留痕由 `capacityDeficit` 随 hints 落库承担：本文件是**纯函数层**（被 coordinator / learning.service
+  // 直接调用，无 logger 依赖），不在此处打日志；审计侧读 aiPromptTemplate.normalizedInput.planningHints
+  // .capacityDeficit 即可拿到全部口径，不必翻日志。
+
   return {
     paceSignal,
     scopeSize: scope,
@@ -691,6 +771,7 @@ export function derivePlanningHints(
     targetTotalHours,
     targetHoursPerMilestone,
     targetMinutesPerTask,
+    capacityDeficit,
     subtaskMinutesRange,
     maxWeeks,
   };
