@@ -140,8 +140,17 @@ export function deriveReplanSignal(input: {
   const completedTasks = progress?.completedTasks ?? 0;
   const pathFullyComplete = totalTasks > 0 && completedTasks >= totalTasks;
   const completionRatio = totalTasks > 0 ? completedTasks / totalTasks : 0;
-  // 结构性风险（阻塞基础/前置缺口）才是「重排后续」的正当理由；单纯脆弱的点属于课内补强，不构成重排。
-  const structuralRisk = prerequisiteGapCount > 0 || blockedCount > 0;
+  // 结构性风险（**一跳直接前置缺口**）才是「重排后续」的正当理由；单纯脆弱的点属于课内补强，不构成重排。
+  // 判据与 ReplanAdvisoryService 的 highRisk 口径对齐：只有 severity==='high'（一跳直接阻塞当前任务）算结构性，
+  // 契约见 ai-teaching/__tests__/replan-prerequisite-severity.test.ts。
+  //
+  // 为什么这里还要再排除 `source==='fallback'`：图缺失时的回落口径算的是「**当前任务自己**的概念没掌握」，
+  // 那在 S4b 注释里正是被判定为"不是缺口"的旧口径，且它的 severity 按**稳定性**而非**深度**打，
+  // 与契约（severity=缺口深度）不同义。刚上完一节课、概念还没掌握的会话会稳定命中它——
+  // 全库实测 242 条带 advisory 的会话全部 shouldSuggest=true / priority=high /
+  // recommendation=resequence / 同一条 rationale，正是本注释 136-137 行记过的"只看计数"老毛病复发。
+  const structuralRisk = (knowledgeMemory.currentPath?.prerequisiteGaps || [])
+    .some((gap) => gap.severity === 'high' && gap.source !== 'fallback');
   // 接近完成（≥90%）且无结构性风险时，也不值得为「重排后续」打断收尾。
   const nearCompleteNoStructural = !pathFullyComplete && completionRatio >= 0.9 && !structuralRisk;
 
@@ -156,9 +165,17 @@ export function deriveReplanSignal(input: {
 
   // highRisk：疲劳/失衡/结构性风险。**路径已完成或接近完成且无结构性风险时，不进入 high**——
   // 此时没有「后续路径」可重排，报 high 只会误导用户去做一次空转的重规划。
-  const highRisk = (dynamicState.metrics.lf >= 6 || dynamicState.metrics.lsb < 0 || structuralRisk)
+  const fatigueOrImbalance = dynamicState.metrics.lf >= 6 || dynamicState.metrics.lsb < 0;
+  const highRisk = (fatigueOrImbalance || structuralRisk)
     && !pathFullyComplete
     && !nearCompleteNoStructural;
+  // 动作必须对准**触发源**：缺口触发 → 重排后续阶段；疲劳/失衡触发 → 降速。
+  // 2026-09-29 前这里按「prerequisiteGapCount>0 || blockedCount>0」挑派生动作，于是
+  // 疲劳/失衡触发的高危也被配成 resequence——学习者拿到一条与自身状态无关的「重排路径」建议
+  // （新采集会话实测：reasonCodes 只有 lsb_negative 仍是 recommendation=resequence）。
+  const highAction = structuralRisk
+    ? { recommendation: 'resequence' as const, scope: 'downstream_path' as const }
+    : { recommendation: 'slow_down' as const, scope: 'next_milestone' as const };
   // mediumRisk：非结构性但存在需补强的信号（脆弱/挣扎点、复习优先级高、趋势下滑）。
   // 接近完成且无结构性风险时也不进 medium——收尾阶段不再追加「补强建议」。
   const mediumRisk = !nearCompleteNoStructural
@@ -200,8 +217,8 @@ export function deriveReplanSignal(input: {
     return {
       shouldSuggest: true,
       priority: 'high',
-      recommendation: prerequisiteGapCount > 0 || blockedCount > 0 ? 'resequence' : 'slow_down',
-      scope: prerequisiteGapCount > 0 || blockedCount > 0 ? 'downstream_path' : 'next_milestone',
+      recommendation: highAction.recommendation,
+      scope: highAction.scope,
       rationale: '当前学习状态和知识风险都提示继续按原路径推进的成本偏高，建议先经过人工确认后再调整后续安排。',
       reasonCodes,
     };

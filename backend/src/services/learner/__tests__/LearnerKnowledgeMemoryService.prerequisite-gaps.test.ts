@@ -115,4 +115,30 @@ describe('前置缺口 = 上游未掌握（S4b）', () => {
     const memory = await learnerKnowledgeMemoryService.build({ userId: 'u1', learningPathId: 'p1', taskId: 't1' });
     expect((memory.currentPath?.prerequisiteGaps ?? []).length).toBe(1);
   });
+
+  // 2026-09-29：图缺失回落时，`!concept`（概念从未见过）曾被算成缺口。
+  // 后果是新任务一开局就自带 4 条"前置缺口" → 上层 structuralRisk 恒真 →
+  // 全库 242 条结课投影 242 条恒报 priority=high + resequence（同一条 rationale）。
+  // 新知识点没有任何负面证据，不构成缺口。
+  it('图缺失 + 概念从未见过 → 不算缺口（新知识点的正常开局）', async () => {
+    upstreamClosure.mockResolvedValue([]);
+    // 当前任务的概念在 conceptStates 里完全没有记录
+    prisma.memory_traces.findMany.mockResolvedValue([]);
+
+    const memory = await learnerKnowledgeMemoryService.build({ userId: 'u1', learningPathId: 'p1', taskId: 't1' });
+    expect(memory.currentPath?.prerequisiteGaps ?? []).toEqual([]);
+  });
+
+  it('图缺失 + 部分新概念部分脆弱 → 只把有负面证据的那条算缺口', async () => {
+    upstreamClosure.mockResolvedValue([]);
+    prisma.memory_traces.findMany.mockResolvedValue([
+      // 仅"汇总口径映射"有负面证据（fragile）；"未见过的新概念"来自 learningObjectives，无 memory_traces
+      { conceptKey: '汇总口径映射', label: null, conceptId: 'cpt_current', masteryScore: 0.3, stability: 'fragile', intervalFactor: 1, lastSeenAt: new Date('2026-09-05T00:00:00.000Z') },
+    ]);
+
+    const memory = await learnerKnowledgeMemoryService.build({ userId: 'u1', learningPathId: 'p1', taskId: 't1' });
+    const gaps = memory.currentPath?.prerequisiteGaps ?? [];
+    expect(gaps.length).toBe(1);
+    expect(gaps[0].label).toBe('汇总口径映射');
+  });
 });

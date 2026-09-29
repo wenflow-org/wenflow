@@ -241,14 +241,42 @@ describe('deriveReplanSignal · 完成度归一（I-11：已完成路径不再�
     expect(signal.shouldSuggest).toBe(false);
   });
 
-  it('无 currentPath（无进度信息）时保持原行为：结构性风险仍报 high（不误杀）', () => {
+  // 2026-09-29 修正：原先这里用 `currentPath: undefined` + `blockedFoundations: ['b1']` 触发 high。
+  // 但 blockedFoundations 由 `stability==='fragile'` 的概念聚合而来，与 globalSignals.fragileConcepts
+  // 同源，拿它当结构性风险等于让 highRisk 恒真——全库实测 242 条带 advisory 的会话 242 条
+  // shouldSuggest=true / priority=high / recommendation=resequence / 同一条 rationale。
+  // 「不误杀」的本意保留，换成两条真·依据：学习者级疲劳/失衡、一跳前置缺口。
+  it('无 currentPath 但学习者级疲劳/失衡 → 仍报 high（不因缺进度信息而漏报）', () => {
     const signal = deriveReplanSignal({
-      dynamicState: dyn(),
+      dynamicState: dyn({ metrics: { lss: 4, ktl: 6, lf: 7, lsb: -1 } }),
       learningControlState: { paceMode: 'steady', reviewPriority: 'high' } as any,
       knowledgeMemory: km({ currentPath: undefined }),
     });
     expect(signal.shouldSuggest).toBe(true);
     expect(signal.priority).toBe('high');
+  });
+
+  it('只有脆弱点（无结构性证据）→ 补强档，不因 blockedFoundations 虚报 high', () => {
+    const signal = deriveReplanSignal({
+      dynamicState: dyn(),
+      learningControlState: { paceMode: 'steady', reviewPriority: 'high' } as any,
+      knowledgeMemory: km({ currentPath: { prerequisiteGaps: [], progress: { totalTasks: 18, completedTasks: 2 } } }),
+    });
+    expect(signal.shouldSuggest).toBe(true);
+    expect(signal.priority).toBe('medium');
+    expect(signal.recommendation).toBe('reinforce');
+  });
+
+  it('无 currentPath + 一跳前置缺口（真结构性风险）→ high/resequence', () => {
+    const signal = deriveReplanSignal({
+      dynamicState: dyn(),
+      learningControlState: { paceMode: 'steady', reviewPriority: 'high' } as any,
+      knowledgeMemory: km({
+        currentPath: { prerequisiteGaps: [{ severity: 'high' }], progress: { totalTasks: 18, completedTasks: 2 } },
+      }),
+    });
+    expect(signal.priority).toBe('high');
+    expect(signal.recommendation).toBe('resequence');
   });
 });
 

@@ -676,7 +676,14 @@ export class LearnerKnowledgeMemoryService {
       ? graphGaps
       : currentTaskConcepts
         .map((conceptKey) => conceptStates.find((concept) => concept.conceptKey === conceptKey || concept.label === conceptKey))
-        .filter((concept) => !concept || concept.stability === 'fragile' || concept.status === 'review' || concept.masteryScore < 0.45)
+        // 只认「接触过且证据为负」的概念。反例（2026-09-29 全库实测 242/242 完课建议恒为
+        // priority=high + resequence 的根因之一）：
+        //   - 任务概念标签signal 会给**每个任务**（含 todo）推一条 score=0.1/status=pending 的记录，
+        //     于是"这课还没上"被当成"前置没掌握"，缺口恒非空；
+        //   - 上游结构里 `!state` 也曾被算缺口，等于"没见过"=没掌握。
+        // status==='pending' 表示没有任何接触证据（无会话、无痕迹、无完成记录），那不是缺口，是没开始。
+        .filter((concept) => concept && concept.status !== 'pending'
+          && (concept.stability === 'fragile' || concept.status === 'review' || concept.masteryScore < 0.45))
         .slice(0, 4)
         .map((concept) => ({
           conceptKey: concept?.conceptKey || 'unknown',
