@@ -159,7 +159,7 @@
                 <!-- stages=0（后端未给阶段数）时不渲染「阶段 1 / 0」这种破数 -->
                 <span v-if="card.stages || card.hours" class="pcard__meta">
                   <template v-if="card.stages">阶段 {{ Math.max(1, Math.min(card.stageDone + 1, card.stages)) }} / {{ card.stages }}</template>
-                  <template v-if="card.hours">{{ card.stages ? ' · ' : '' }}预计 {{ card.hours }} 小时</template>
+                  <template v-if="card.hours">{{ card.stages ? ' · ' : '' }}已备好 {{ card.lessons }} 节课 · 约 {{ card.hours }} 小时</template>
                 </span>
                 <span class="pcard__cta">
                   {{ card.kind === 'completed' ? '查看学习成果' : '继续学习' }}
@@ -244,6 +244,8 @@ interface PathCard {
   stageDone: number;
   percent: number;
   hours?: number;
+  /** 已组好的课数（2026-09-29 口径修正：呈现「已备好什么」，不呈现「预计你要投入多少」） */
+  lessons?: number;
   retryType: 'core' | 'stage_design' | null;
   retryLabel: string;
   phaseText: string;
@@ -322,7 +324,7 @@ function normalize(p: Record<string, any>): PathCard {
   const kind: CardKind = p.status === 'completed' || percent >= 100 ? 'completed' : 'ready';
   return {
     id: p.id, title, desc, kind, stages: stages || weeks.length, stageDone,
-    percent, hours, retryType: null, retryLabel: '', phaseText: '', errorText: '', status: p.status
+    percent, hours, lessons: totalTasks, retryType: null, retryLabel: '', phaseText: '', errorText: '', status: p.status
   };
 }
 

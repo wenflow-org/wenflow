@@ -68,7 +68,7 @@
                  与环的 percent 是同一比值，且每阶段卡、侧栏「还剩 N 个任务」已有计数） -->
             <div class="hero__metrics">
               <span class="metric"><b>{{ currentStageNo }} / {{ stages.length || '?' }}</b>当前阶段</span>
-              <span class="metric"><b>{{ path.estimatedHours ? `${path.estimatedHours} 小时` : '—' }}</b>预计投入</span>
+              <span class="metric"><b>{{ lessonCount ? `${lessonCount} 节课 · 约 ${path.estimatedHours} 小时` : '—' }}</b>已备好</span>
               <span v-if="path.deadlineText" class="metric"><b>{{ path.deadlineText }}</b>目标周期</span>
             </div>
             <div class="hero__actions">
@@ -1204,6 +1204,13 @@ const stages = computed<Array<Record<string, any>>>(() => {
 function stageTasks(stage: Record<string, any>) {
   return (stage.subtasks || stage.tasks || []) as Array<Record<string, any>>;
 }
+
+/**
+ * 已备好的课数（2026-09-29 口径修正）。
+ * 平台职责是「组课 + 保持就绪」，用户自定真实学习时间；所以这里呈现**已组好的课**，
+ * 不写「预计你要投入多少」——后者读起来像承诺，也把「这一轮覆盖什么」说成了「学完所需」。
+ */
+const lessonCount = computed(() => stages.value.reduce((n, s) => n + stageTasks(s).length, 0));
 
 function stageNo(stage: Record<string, any>, si: number) {
   return stage.stageNumber ?? stage.weekNumber ?? si + 1;
