@@ -157,10 +157,19 @@ function rowTitle(r: RankRow): string {
   align-items: center;
   gap: 10px;
 }
-/* skill = 全宽大表；user/model = 半宽侧表（统一列模板，跨卡对齐） */
+/* skill = 全宽大表；user/model = 半宽侧表（统一列模板，跨卡对齐）。
+   skill 表卡片 1638px：名称/数字列全按 fr 比例摊余量——原「名称 1fr 独吃」在宽卡下
+   名称列撑到 ~1100px，右侧五个定宽数字列全挤在 530px 里（用户实测「后面挤起来了」）。 */
 .tc-table--skill .tc-table__head,
 .tc-table--skill .tc-table__row {
-  grid-template-columns: 28px minmax(0, 1fr) 58px 56px 84px 128px 118px;
+  grid-template-columns:
+    28px
+    minmax(140px, 1.2fr)
+    minmax(56px, 0.6fr)
+    minmax(48px, 0.5fr)
+    minmax(64px, 0.7fr)
+    minmax(150px, 1.3fr)
+    minmax(100px, 0.9fr);
 }
 .tc-table--user .tc-table__head,
 .tc-table--user .tc-table__row,
@@ -192,7 +201,14 @@ html[data-theme='dark'] .tc-table__row:hover { background: #202122; }
 
 .tc-c { min-width: 0; }
 .tc-c--num { text-align: right; }
-.tc-c--tok { text-align: right; }
+.tc-c--tok {
+  text-align: right;
+  /* 主值 + prompt·comp 拆分必须两行堆叠：原靠 128px 定宽被迫换行，
+     列宽按 fr 摊开后装得下就横排成「48.7Mprompt 47.0M · comp 1.7M」 */
+  display: grid;
+  gap: 1px;
+  justify-items: end;
+}
 .tc-c--share {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 40px;
