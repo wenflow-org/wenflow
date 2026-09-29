@@ -143,7 +143,8 @@
 
 **适用（12 个导航页，最高杠杆）**：`people`、`sessions`、`virtual-learners`、`skills`、`prompt-eval`、`ops-achievements`、`feedback`、`messages`、`addons`、`session-security`、`execution-logs`、`audit-logs`
 
-> 状态（2026-09-19 校正）：**该清单已因导航收敛而过时**（写于 19 项侧栏时代）。现行侧栏为 **14 项 / 7 组**（`manifest.ts:31-54`）：总览 `overview`；教学 `people` · `sessions` · `memory-review`；虚拟实验 `virtual-learners` · `batch-experiments`；Skill `orchestrator` · `skills` · `prompt-eval`；观测 `execution-logs` · `audit-logs`；系统 `api-config` · `ops-center`；运营 `ops-hub`。原清单中的 `feedback` / `ops-achievements` / `messages`（→ `ops-hub` tab）、`addons`（→ `api-config` tab）、`session-security`（→ `ops-center` tab）、`health-center`（→ `skills` tab）**已下线为 tab 宿主子页，不再是侧栏场景**；`sessions` 现外层为 `GoalConversations`（内嵌 `TeachingSessions`/`OpsContent`）；`memory-review`、`batch-experiments` 升为独立场景。T1 模板本身不变，但"适用导航页"应读作「场景 + tab 宿主子页」。
+> 状态（2026-09-19 校正）：**该清单已因导航收敛而过时**（写于 19 项侧栏时代）。现行侧栏为 **14 项 / 7 组**（`manifest.ts:31-54`）：总览 `overview`；教学 `people` · `sessions` · `memory-review`；虚拟实验 `virtual-learners` · `batch-experiments`；Skill `orchestrator` · `skills` · `prompt-eval`；观测 `execution-logs` · `audit-logs`；系统 `api-config` · `ops-center`；运营 `ops-hub`。原清单中的 `feedback` / `ops-achievements` / `messages`（→ `ops-hub` tab）、`addons`（→ `api-config` tab）、`session-security`（→ `ops-center` tab）、`health-center`（→ `skills` tab）**已下线为 tab 宿主子页，不再是侧栏场景**
+> 状态（2026-09-29 校正）：**侧栏现为 18 项 / 7 组**，上句里的 `health-center` 已**回归独立场景**并归入「系统」组（顺序：健康中心 / 模型与接入 / 系统工具）——它折入 `skills` 的那三个 tab（健康检查 · 漂移 · 对账）本就是同一份报表的三刀，2026-09-29 合一成页并从 Skills 抽出；`skills` 只剩 Skill 运行 · 模型路由。另：`token-cost` 已从执行日志宿主 tab 释放为独立场景（观测组）。；`sessions` 现外层为 `GoalConversations`（内嵌 `TeachingSessions`/`OpsContent`）；`memory-review`、`batch-experiments` 升为独立场景。T1 模板本身不变，但"适用导航页"应读作「场景 + tab 宿主子页」。
 
 ```
 ┌─ T1 列表页 ──────────────────────────────────────────┐
@@ -286,6 +287,7 @@
 `overview`→T3 · `people` · `sessions` · `virtual-learners` · `skills` · `prompt-eval` · `ops-achievements` · `feedback` · `messages` · `addons` · `session-security` · `execution-logs` · `audit-logs`
 
 > 状态（2026-09-19 校正）：名单随导航收敛而变——侧栏已为 14 项 / 7 组；`feedback`/`ops-achievements`/`messages`/`addons`/`session-security`/`health-center` 现为 tab 子页，`memory-review`/`batch-experiments` 为独立场景。详见 §3 T1 校正注。
+> 状态（2026-09-29 校正）：侧栏 18 项 / 7 组；`health-center` 已回独立场景（系统组），不再是 tab 子页；`token-cost` 亦已独立。
 
 **T2 详情页（4~5）**
 `learner-detail` · `user-detail` · `virtual-profile` · `session-cockpit` · `skill-drawer`
@@ -1552,7 +1554,7 @@ hex 随之 1114 → 1032（死规则里带的硬编码一并清掉）。真机�
 | 状态 | 项 |
 |---|---|
 | ✅ 已修（含真机验证） | #7/#14 批量实验子标签 · #8 导出数据子标签 · #10 标签栏箭头常驻 · #1 健康中心骨架 · #12/#16 会话详情深链（并因此确认 URL 直达化，成了删标签栏的依据）· #21 缓存按 userId 隔离 + 登出清理 · #20 重试死路（根因在后端的结构化输出失败信封） |
-| ✅ 判定不成立（附证据） | #6 分页栏压表格（滚到底实测重叠 0）· #9 event-center/traces（显式带注释的兼容重定向，侧栏无该入口）· #3/#4/#15 375px（`docX=0`、侧栏标签 `display:none`）· #2 侧栏高亮（实测在可视区内且高亮）——仅「健康中心挂在 Skill 管理组下」这条信息架构疑问成立 |
+| ✅ 判定不成立（附证据） | #6 分页栏压表格（滚到底实测重叠 0）· #9 event-center/traces（显式带注释的兼容重定向，侧栏无该入口）· #3/#4/#15 375px（`docX=0`、侧栏标签 `display:none`）· #2 侧栏高亮（实测在可视区内且高亮）——仅「健康中心挂在 Skill 管理组下」这条信息架构疑问成立（**2026-09-29 已修**：健康中心合一为独立场景并移入「系统」组） |
 | ✅ 已裁定不改 | #5「立即探测」红色脉冲（是「快照过期且自动探针关闭」的唯一信号，R2 有据）· #11 操作列留白（已改，像素待复核） |
 | ✅ 由观察转结论 | #18 已中止原因提示（已加 title）· #19 auto-learning 每步 = 设计· #22 learningPathId = 写回时机 + regenerate 路由未写 |
 
