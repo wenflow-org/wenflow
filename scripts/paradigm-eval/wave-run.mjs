@@ -22,7 +22,7 @@ function arg(name, fallback) {
 
 const idsArg = arg('ids', '');
 const idsFile = arg('ids-file', '');
-const CONC = Math.max(1, Math.min(4, Number(arg('concurrency', '2'))));
+const CONC = Math.max(1, Math.min(8, Number(arg('concurrency', '2'))));
 const TAG = arg('tag', 'wave');
 const ids = (idsFile
   ? fs.readFileSync(path.resolve(HERE, idsFile), 'utf8').split(/\r?\n/).map((s) => s.trim()).filter(Boolean)

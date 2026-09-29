@@ -211,7 +211,8 @@ async function driveCell(personaId, runIndex) {
   if (st.status === 'awaiting-path' && st.pathId) {
     const deadline = Date.now() + GEN_TIMEOUT_MS;
     let failGrace = 0; // 2026-09-27：生成器有自动重试（attempt1 failed → attempt2 succeeded），
-    // 首次 failed 只记账，连续 4 次（≈1min）仍 failed 才判死——避免把重试中的运行误判为 failed-gen
+    // 首次 failed 只记账，连续约 1min 仍 failed 才判死——避免把重试中的运行误判为 failed-gen
+    // （轮询间隔 5s × 12 次 ≈ 60s；间隔从 15s 收紧以缩短单格空等）
     while (Date.now() < deadline) {
       const g = await api('GET', `/api/learning/paths/${st.pathId}/generation-status`);
       const lc = g.json?.data?.lifecycle || '';
@@ -219,9 +220,9 @@ async function driveCell(personaId, runIndex) {
       if (lc === 'ready') break;
       if (String(lc).includes('failed')) {
         failGrace += 1;
-        if (failGrace >= 4) { st.status = 'failed-gen'; break; }
+        if (failGrace >= 12) { st.status = 'failed-gen'; break; }
       } else failGrace = 0;
-      await sleep(15000);
+      await sleep(5000);
     }
     if (st.status === 'awaiting-path') {
       const detail = await api('GET', '/api/learning/paths/' + st.pathId);
