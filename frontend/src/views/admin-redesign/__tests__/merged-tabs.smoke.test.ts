@@ -197,10 +197,10 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     const labels = w.findAll('.mk-kpi-grid .mk-kpi__label').map((c) => c.text());
     expect(labels).toContain('调用成本');
     expect(labels).toContain('总 Token');
-    // 状态条不再复述 KPI 数字（只留身份 + 口径）
-    const statusText = w.find('.mk-status').text();
-    expect(statusText).toContain('Token 成本');
-    expect(statusText).not.toContain('次调用');
+    // 页头承担身份 + 口径（newui/admin pagehead 形态），状态条退役；不复述 KPI 数字
+    const headText = w.find('.mk-pagehead').text();
+    expect(headText).toContain('Token 成本');
+    expect(headText).not.toContain('次调用');
     w.unmount();
 
     const { router: r2, ready: ready2 } = mockRouter('/admin/execution-logs');

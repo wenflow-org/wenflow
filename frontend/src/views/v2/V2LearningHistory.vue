@@ -22,11 +22,13 @@
         加载学习记录…
       </div>
 
-      <!-- 空态 -->
-      <div v-else-if="!sessions.length" class="chart__empty">
-        <strong>还没有学习记录</strong>
-        <p>完成第一次学习后，这里会按时间记录你的每次会话。</p>
-      </div>
+      <!-- 空态（整页终态：统一结果组件） -->
+      <V2ResultState
+        v-else-if="!sessions.length"
+        tone="empty"
+        title="还没有学习记录"
+        description="完成第一次学习后，这里会按时间记录你的每次会话。"
+      />
 
       <!-- 按日期分组的会话列表（2026-09-27 重排：按「日期 → 任务」聚合，
            同一天同一个任务的多条会话合并成一条，明细用「查看每次会话」展开） -->
@@ -118,6 +120,7 @@
 import { computed, onMounted, ref } from 'vue';
 import request from '@/utils/api';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
+import V2ResultState from '@/components/ui/V2ResultState.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import { localDateKeyFromIso } from '@/utils/date';
 import { unwrap } from './unwrap';

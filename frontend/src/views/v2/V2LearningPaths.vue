@@ -12,8 +12,8 @@
         </div>
       </transition>
 
-      <!-- 页头 -->
-      <div class="paths__hero">
+      <!-- 页头（失败态隐藏：「还没有学习路径」与失败原因同屏会互相矛盾） -->
+      <div v-if="!loadError" class="paths__hero">
         <div>
           <h1>{{ cards.length ? '继续你的学习计划' : '还没有学习路径' }}</h1>
           <p>{{ cards.length ? '查看当前任务、路径进度和需要处理的问题。' : '规划第一个目标，问流会为你生成可执行的学习路径。' }}</p>
@@ -25,10 +25,15 @@
         <SkeletonLoader variant="list" :count="4" />
       </div>
 
-      <!-- 失败 -->
-      <div v-else-if="loadError" class="errorbar">
-        路径加载失败。<button type="button" class="errorbar__retry" @click="load">重试</button>
-      </div>
+      <!-- 失败：整页终态走统一结果组件（newui/home wf-error 形态：图标盘 + 标题 + 重试） -->
+      <V2ResultState
+        v-else-if="loadError"
+        tone="error"
+        title="路径加载失败"
+        description="网络或服务暂时不可用，你的学习进度不受影响。稍后重试即可继续。"
+        action-text="重试"
+        @action="load"
+      />
 
       <template v-else>
         <!-- 筛选（无任何路径时整行隐藏：空态下五个「0」芯片是噪音，2026-09-24 全新账号走查发现） -->
@@ -233,6 +238,7 @@ import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
+import V2ResultState from '@/components/ui/V2ResultState.vue';
 
 type CardKind = 'ready' | 'generating' | 'failed' | 'completed';
 interface PathCard {

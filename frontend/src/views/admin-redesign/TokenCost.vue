@@ -1,19 +1,18 @@
 <template>
   <div class="mk-page">
-    <!-- 状态条（身份 + 口径 + 操作）：三个数字全部移到下方 KPI 卡，避免同一批数
-         在状态条与 KPI 区各说一遍（用户 2026-09-29：「这是 KPI 区域吗」——原状态条
-         「120.7M / 29602 次调用 / 失败 1290」与前两张 KPI 卡逐字重复） -->
-    <div class="mk-status" :class="statusTone">
-      <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">Token 成本</strong>
-      <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">近 {{ days }} 天 · {{ includeTest ? '含测试流量' : '仅真实用户' }}</span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="loading" @click="() => load(true)">
+    <!-- 页头（newui/admin 原型 pagehead）：标题 + 口径副文 + 主操作上移；
+         原状态条承担的「身份+口径+刷新」迁入页头，三个数字仍归下方 KPI 卡
+         （避免同一批数在页头与 KPI 区各说一遍，2026-09-29 口径延续） -->
+    <MkPageHead
+      title="Token 成本"
+      :sub="`近 ${days} 天 · ${includeTest ? '含测试流量' : '仅真实用户'}`"
+    >
+      <template #actions>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="() => load(true)">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
-      </span>
-    </div>
+      </template>
+    </MkPageHead>
 
     <!-- 调用成本 2026-09-29 收编进概览区第四张 MkKpi 卡（原私有 cost-strip 金额条
          与全站 KPI 语言不一致；单价未配置/加载失败态由 KPI 卡 hint + tone 承担） -->
@@ -173,6 +172,7 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import OvBars from './OvBars.vue'
 import TcRankTable, { type RankRow } from './TcRankTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { toast } from '@/utils/toast'
 
@@ -221,11 +221,6 @@ const totalTokens = computed(() => summary.value?.totals.tokens || 0)
 const summaryEmpty = computed(() => !!summary.value && summary.value.totals.calls === 0)
 const skillRows = computed(() => bySkill.value.slice(0, skillAll.value ? bySkill.value.length : skillLimit))
 const userRows = computed(() => byUser.value.slice(0, userAll.value ? byUser.value.length : userLimit))
-const statusTone = computed(() =>
-  !summary.value ? 'mk-status--muted'
-    : summary.value.totals.failed > 0 ? 'mk-status--warn'
-      : 'mk-status--ok'
-)
 const failRateHint = computed(() => {
   const s = summary.value?.totals
   if (!s) return '含重试后的终态失败'
