@@ -1071,6 +1071,51 @@ router.post('/paths/:pathId/abandon-open-sessions', async (req, res, next) => {
   }
 });
 
+// 重排快照列表（R8 选项 B：快照 + 一键回退）——「调整前的安排已留存，可随时回退」
+router.get('/paths/:pathId/replan-snapshots', async (req, res, next) => {
+  try {
+    const data = await learningService.listPathReplanSnapshots({
+      pathId: req.params.pathId,
+      userId: req.user.userId,
+    });
+    res.json({ success: true, data });
+  } catch (error: any) {
+    if (error?.status === 403) {
+      return res.status(403).json({ success: false, error: { message: error.message } });
+    }
+    if (error?.message === '学习路径不存在') {
+      return res.status(404).json({ success: false, error: { message: error.message } });
+    }
+    next(error);
+  }
+});
+
+// 回退到某次重排之前
+router.post('/paths/:pathId/replan-rollback', async (req, res, next) => {
+  try {
+    const snapshotId = typeof req.body?.snapshotId === 'string' && req.body.snapshotId.trim()
+      ? req.body.snapshotId.trim()
+      : null;
+    const data = await learningService.rollbackPathReplan({
+      pathId: req.params.pathId,
+      userId: req.user.userId,
+      snapshotId,
+    });
+    res.json({ success: true, data });
+  } catch (error: any) {
+    if (isPathMutationConflictError(error)) {
+      return res.status(error.status || 409).json({
+        success: false,
+        error: { code: error.code, message: error.message, details: error.details },
+      });
+    }
+    if (error?.message === '学习路径不存在') {
+      return res.status(404).json({ success: false, error: { message: error.message } });
+    }
+    next(error);
+  }
+});
+
 // 删除学习路径
 router.delete('/paths/:pathId', async (req, res, next) => {
   try {

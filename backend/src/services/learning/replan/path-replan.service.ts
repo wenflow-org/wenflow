@@ -28,6 +28,13 @@ import {
   resolvePersistedNormalizedInput,
   resolveTaskConcept,
 } from '../learning.helpers';
+import {
+  appendReplanSnapshot,
+  buildReplanContentSnapshot,
+  buildRollbackPlan,
+  latestReplanSnapshot,
+  readReplanSnapshots,
+} from './path-replan-snapshot';
 import type { PathReplanRequest } from '../learning.types';
 import { createDomainEvent } from '../../../events/contracts';
 import { enqueueDomainEvent } from '../../../events/outbox.repository';
@@ -69,10 +76,27 @@ async function redesignMilestoneTasks(
   options: {
     skipFinalizeRun?: boolean;
     eventRunTotal?: number;
+    /** 多阶段重排：由首个阶段一次性写入覆盖全范围的**内容快照**（回退用），其余阶段 skip */
+    contentSnapshotMilestones?: any[] | null;
+    skipContentSnapshot?: boolean;
   } = {}
 ) {
-  const { skipFinalizeRun = false, eventRunTotal = 1 } = options;
+  const { skipFinalizeRun = false, eventRunTotal = 1, contentSnapshotMilestones = null, skipContentSnapshot = false } = options;
   const parsedTemplate = parsePathPromptTemplate(path.aiPromptTemplate || null);
+  // 重排内容快照（回退用，2026-09-29）：在**事务内**基于「当前库内模板」追加重排前内容。
+  // 不在此处预计算：多阶段重排循环共享同一 path 对象，用旧模板整包覆盖会抹掉前一阶段刚写的
+  // 快照与 stageDesigns（既有隐患）。事务内重读是唯一安全点。
+  const contentSnapshot = !skipContentSnapshot && contentSnapshotMilestones && contentSnapshotMilestones.length
+    ? buildReplanContentSnapshot({
+        pathId: path.id,
+        milestones: contentSnapshotMilestones,
+        reason: data.reason || null,
+        triggerSource: data.triggerSource || null,
+        mode: data.mode || 'overwrite',
+        fromStageNumber: (data as any).fromStageNumber ?? null,
+        pathEstimatedHours: path.estimatedHours ?? null,
+      })
+    : null;
   const pathCognitiveDesign = parsePathCognitiveDesign(path.aiPromptTemplate || null);
   const normalizedInput = getSceneFramingNormalizedInput(parsedTemplate?.sceneFraming)
     || resolvePersistedNormalizedInput(parsedTemplate)
@@ -125,6 +149,16 @@ async function redesignMilestoneTasks(
         ? { ignoreCompletedSessionIds: (data.evidence as any).clearedSessionIds as string[] }
         : {})
     });
+    // 事务内重读模板并追加内容快照（写回时用）：避免循环共享旧 path 覆盖先前写入
+    const txParsed = contentSnapshot
+      ? appendReplanSnapshot(
+          parsePathPromptTemplate((await tx.learning_paths.findUnique({
+            where: { id: path.id },
+            select: { aiPromptTemplate: true },
+          }))?.aiPromptTemplate || null),
+          contentSnapshot,
+        )
+      : parsedTemplate;
     await tx.subtasks.deleteMany({
       where: {
         milestoneId: milestone.id,
@@ -211,7 +245,7 @@ async function redesignMilestoneTasks(
         replanTriggerSource: data.triggerSource || 'api',
         replanReason: data.reason || null,
         aiPromptTemplate: JSON.stringify({
-          ...parsedTemplate,
+          ...txParsed,
           stageDesigns: {
             ...(parsedTemplate?.stageDesigns && typeof parsedTemplate.stageDesigns === 'object' ? parsedTemplate.stageDesigns : {}),
             [`stage-${milestone.stageNumber}`]: {
@@ -336,6 +370,10 @@ async function redesignMilestoneRange(
       {
         skipFinalizeRun: true,
         eventRunTotal: milestones.length,
+        // 内容快照只由首个阶段写入一次，覆盖整段范围（整段一份快照，回退一起回退）；
+        // 后续阶段 skipContentSnapshot（快照已在首个阶段的事务里原子落库）
+        contentSnapshotMilestones: index === 0 ? milestones : null,
+        skipContentSnapshot: index !== 0,
       }
     );
     redesignedStages += 1;
@@ -684,7 +722,10 @@ export async function requestPathReplan(data: PathReplanRequest) {
         prerequisiteGaps,
         freezeCompletedTaskIds: completedTaskIds,
       }
-    }, run.id, replanSnapshot);
+    }, run.id, replanSnapshot, {
+      // 单阶段重排：内容快照覆盖该阶段（回退用）
+      contentSnapshotMilestones: [targetMilestone],
+    });
   } catch (error) {
     if (isPathMutationConflictError(error)) {
       await restorePathAfterMutationConflict(data.pathId, run.id, error);
@@ -748,5 +789,176 @@ export async function requestPathReplan(data: PathReplanRequest) {
       mode,
       requestedMode,
     }
+  };
+}
+
+/** 列出可回退的重排快照（最新在前，回退 UI 用） */
+export async function listPathReplanSnapshots(data: { pathId: string; userId: string }) {
+  const path = await prisma.learning_paths.findUnique({
+    where: { id: data.pathId },
+    select: { id: true, userId: true, aiPromptTemplate: true },
+  });
+  if (!path) throw new Error('学习路径不存在');
+  if (path.userId !== data.userId) throw new Error('无权访问此学习路径');
+  const snapshots = readReplanSnapshots(parsePathPromptTemplate(path.aiPromptTemplate || null));
+  return snapshots.map((s) => ({
+    id: s.id,
+    createdAt: s.createdAt,
+    reason: s.reason,
+    triggerSource: s.triggerSource,
+    mode: s.mode,
+    fromStageNumber: s.fromStageNumber,
+    stageNumbers: s.stageNumbers,
+    taskCount: s.priorTaskIds.length,
+  }));
+}
+
+/**
+ * 回退到某次重排之前（2026-09-29 R8 / 用户拍板选项 B 轻量版）。
+ *
+ * 语义：删除重排新增的任务 → 按快照 id 还原任务原文与阶段元数据 → 路径总时重算。
+ * 保护：① 有未结束课堂时 409（复用 assertPathMutationSafe）；② 已开始学习的任务不倒退进度；
+ *       ③ 被回退的快照出栈（更早的快照仍可继续回退）。
+ * 只动快照覆盖的阶段（重排本就只改一个范围）。
+ */
+export async function rollbackPathReplan(data: {
+  pathId: string;
+  userId: string;
+  snapshotId?: string | null;
+}) {
+  const path = await prisma.learning_paths.findUnique({
+    where: { id: data.pathId },
+    include: { milestones: { include: { subtasks: { orderBy: { order: 'asc' } } } } },
+  });
+  if (!path) throw new Error('学习路径不存在');
+  if (path.userId !== data.userId) throw new Error('无权访问此学习路径');
+
+  const parsedTemplate = parsePathPromptTemplate(path.aiPromptTemplate || null);
+  const snapshot = latestReplanSnapshot(parsedTemplate, data.snapshotId || null);
+  if (!snapshot) {
+    throw new PathMutationConflictError(
+      '没有可回退的路径调整记录',
+      'PATH_ROLLBACK_NO_SNAPSHOT'
+    );
+  }
+
+  const plan = buildRollbackPlan(snapshot, path.milestones);
+  const stageNumbers = new Set(snapshot.stageNumbers);
+  const scopedMilestoneIds = path.milestones
+    .filter((m: any) => stageNumbers.has(Number(m.stageNumber)))
+    .map((m: any) => m.id);
+
+  const result = await withTransaction(async (tx) => {
+    // 未结束课堂保护：仅在真的要删除任务时校验（还原/更新既有任务不动课堂）
+    if (plan.taskIdsToDelete.length > 0) {
+      await assertPathMutationSafe(tx, path.id, 'replan-stage', { milestoneIds: scopedMilestoneIds });
+    }
+
+    let deleted = 0;
+    if (plan.taskIdsToDelete.length > 0) {
+      const del = await tx.subtasks.deleteMany({ where: { id: { in: plan.taskIdsToDelete } } });
+      deleted = del.count;
+    }
+
+    // 还原/重建任务（按 id upsert：存在的更新原文，缺失的重建）
+    let restored = 0;
+    for (const task of plan.tasksToRestore) {
+      const owner = snapshot.milestones.find((m) => m.subtasks.some((t) => t.id === task.id));
+      if (!owner) continue;
+      const payload = {
+        milestoneId: owner.id,
+        userId: path.userId,
+        title: task.title,
+        description: task.description,
+        taskType: task.taskType,
+        estimatedMinutes: task.estimatedMinutes,
+        acceptanceCriteria: task.acceptanceCriteria,
+        order: task.order,
+        status: task.status,
+        completedAt: task.completedAt ? new Date(task.completedAt) : null,
+        rating: task.rating,
+        feedback: task.feedback,
+        cognitiveLoad: task.cognitiveLoad,
+        cognitiveLevel: task.cognitiveLevel,
+        icapLevel: task.icapLevel,
+        coreConcept: task.coreConcept,
+        linkedConceptId: task.linkedConceptId,
+        linkedConceptName: task.linkedConceptName,
+        conceptId: task.conceptId,
+        knowledgeType: task.knowledgeType,
+        displayLabel: task.displayLabel,
+        transferable: task.transferable,
+        learningObjectives: task.learningObjectives,
+        annotationConfidence: task.annotationConfidence,
+        updatedAt: new Date(),
+      };
+      const existing = await tx.subtasks.findUnique({ where: { id: task.id }, select: { id: true } });
+      if (existing) {
+        await tx.subtasks.update({ where: { id: task.id }, data: payload });
+      } else {
+        await tx.subtasks.create({ data: { id: task.id, ...payload } });
+      }
+      restored += 1;
+    }
+
+    // 阶段元数据回原值
+    for (const m of plan.milestonesToRestore) {
+      await tx.milestones.update({
+        where: { id: m.id },
+        data: {
+          title: m.title,
+          description: m.description,
+          goal: m.goal,
+          estimatedHours: m.estimatedHours,
+          coreConceptId: m.coreConceptId,
+          coreConceptName: m.coreConceptName,
+          conceptId: m.conceptId,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    // 快照出栈：移除被回退的这条（更早的快照仍可回退）
+    const remaining = readReplanSnapshots(parsedTemplate).filter((s) => s.id !== snapshot.id);
+    await tx.learning_paths.update({
+      where: { id: path.id },
+      data: {
+        aiPromptTemplate: JSON.stringify({ ...parsedTemplate, replanSnapshots: remaining }),
+        ...(plan.pathEstimatedHoursAfter !== null ? { estimatedHours: plan.pathEstimatedHoursAfter } : {}),
+        updatedAt: new Date(),
+      },
+    });
+
+    await enqueueDomainEvent(tx, createDomainEvent({
+      type: 'path:adjusted',
+      aggregateType: 'path',
+      aggregateId: path.id,
+      userId: data.userId,
+      source: 'learning-service',
+      data: {
+        pathId: path.id,
+        rollbackFromSnapshotId: snapshot.id,
+        deletedTaskCount: deleted,
+        restoredTaskCount: restored,
+        reason: 'replan-rollback',
+      },
+    }));
+
+    return { deleted, restored };
+  });
+
+  dashboardGuidanceSnapshotService.refreshInBackground(data.userId, 'path-replanned');
+
+  return {
+    enabled: true,
+    status: 'rolled-back',
+    snapshotId: snapshot.id,
+    snapshotCreatedAt: snapshot.createdAt,
+    fromStageNumber: snapshot.fromStageNumber,
+    stageNumbers: snapshot.stageNumbers,
+    deletedTaskCount: result.deleted,
+    restoredTaskCount: result.restored,
+    pathEstimatedHours: plan.pathEstimatedHoursAfter,
+    warnings: plan.warnings,
   };
 }

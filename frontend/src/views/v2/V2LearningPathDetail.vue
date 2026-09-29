@@ -90,6 +90,17 @@
               >
                 调整路径
               </button>
+              <button
+                v-if="rollbackAvailable"
+                type="button"
+                class="btn-ghost"
+                :disabled="rollingBack"
+                title="回到最近一次调整前的安排（已学进度不倒退）"
+                @click="confirmRollback"
+              >
+                <span v-if="rollingBack" class="spinner spinner--sm"></span>
+                {{ rollingBack ? '正在回退…' : '回退上次调整' }}
+              </button>
               <span v-else-if="allDone" class="btn-ghost">全部任务已完成</span>
             </div>
           </div>
@@ -507,6 +518,7 @@
               </button>
             </div>
             <p v-if="!adjustText.trim() && !adjusting" class="adjust-form__hint">先写几句想怎么调整，再点{{ adjustConfirmText }}。</p>
+            <p class="adjust-form__hint adjust-form__hint--safety">调整前的安排会自动留存，之后可随时一键回退。</p>
           </template>
         </template>
       </div>
@@ -698,6 +710,8 @@ async function load(silent = false) {
     // 默认展开：第一个未完成的阶段 + 当前阶段
     const idx = stages.value.findIndex((s) => stageStatusRaw(s) !== 'done');
     openStages.value = idx >= 0 ? [...new Set([Math.max(0, idx - 1), idx])] : stages.value.map((_, i) => i);
+    // 回退可用性：有重排快照才显示「回退上次调整」（静默，失败不拦截页面）
+    void refreshRollbackAvailability();
     // 学习状态页调控卡「查看建议」直达（2026-09-27）：?adjust=ai 打开调整弹窗的 AI 诊断场景，
     // 用完即清，避免刷新时再次弹出
     if (route.query.adjust === 'ai') {
@@ -727,6 +741,37 @@ watch(
 
 const lifecycleFailed = computed(() => lifecycle.value && (lifecycle.value.status === 'failed' || lifecycle.value.status === 'stale'));
 const canLearn = computed(() => !lifecycle.value || lifecycle.value.phase === 'ready');
+
+// ---- 重排回退（R8 选项 B：调整前安排自动留存，一键回退） ----
+const rollbackAvailable = ref(false);
+const rollingBack = ref(false);
+
+async function refreshRollbackAvailability() {
+  try {
+    const snaps = await learningAPI.listPathReplanSnapshots(pathId.value);
+    rollbackAvailable.value = Array.isArray(snaps) && snaps.length > 0;
+  } catch {
+    rollbackAvailable.value = false;
+  }
+}
+
+async function confirmRollback() {
+  if (rollingBack.value) return;
+  if (!window.confirm('回退到最近一次调整前的安排？已开始的课堂进度不会被倒退，重排后新增的任务会被移除。')) return;
+  rollingBack.value = true;
+  try {
+    const r = await learningAPI.rollbackPathReplan(pathId.value);
+    const warn = Array.isArray(r?.warnings) && r.warnings.length ? `（${r.warnings.join('；')}）` : '';
+    toast.success(`已回退到 ${new Date(r.snapshotCreatedAt).toLocaleString('zh-CN',{hour12:false})} 的安排${warn}`);
+    rollbackAvailable.value = false;
+    await load(true);
+  } catch (e: any) {
+    const msg = e?.response?.data?.error?.message || e?.message || '回退失败，请稍后再试';
+    toast.error(msg);
+  } finally {
+    rollingBack.value = false;
+  }
+}
 
 /* ---------- 生成轮询 ---------- */
 let pollTimer = 0;
@@ -1783,6 +1828,11 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: #8492ab;
   text-align: right;
+}
+/* 回退保障提示：与操作提示同区、弱化一档 */
+.adjust-form__hint--safety {
+  margin-top: 4px;
+  color: #9aa6bd;
 }
 /* 挡路课堂清场视图 */
 .clear-sessions {

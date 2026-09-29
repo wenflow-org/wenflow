@@ -334,6 +334,32 @@ export interface PathReplanResponse {
   result?: Record<string, unknown> | null;
 }
 
+/** 重排快照摘要（replan-snapshots 列表项） */
+export interface ReplanSnapshotSummary {
+  id: string;
+  createdAt: string;
+  reason: string | null;
+  triggerSource: string | null;
+  mode: string;
+  fromStageNumber: number | null;
+  stageNumbers: number[];
+  taskCount: number;
+}
+
+/** 重排回退结果 */
+export interface ReplanRollbackResult {
+  enabled: boolean;
+  status: string;
+  snapshotId: string;
+  snapshotCreatedAt: string;
+  fromStageNumber: number | null;
+  stageNumbers: number[];
+  deletedTaskCount: number;
+  restoredTaskCount: number;
+  pathEstimatedHours: number | null;
+  warnings: string[];
+}
+
 const lifecycleValues = new Set<GenerationLifecycle>([
   'core_queued',
   'core_processing',
@@ -591,6 +617,17 @@ export const learningAPI = {
   async requestPathReplan(pathId: string, data: PathReplanRequest): Promise<PathReplanResponse> {
     const response = await api.post(`/learning/paths/${pathId}/replan`, data, { timeout: AI_REQUEST_TIMEOUT });
     return response.data;
+  },
+
+  // 重排快照列表与回退（R8 选项 B：调整前安排自动留存，可一键回退）
+  async listPathReplanSnapshots(pathId: string): Promise<ReplanSnapshotSummary[]> {
+    const response = await api.get(`/learning/paths/${pathId}/replan-snapshots`);
+    return (response?.data?.data ?? []) as ReplanSnapshotSummary[];
+  },
+
+  async rollbackPathReplan(pathId: string, snapshotId?: string | null): Promise<ReplanRollbackResult> {
+    const response = await api.post(`/learning/paths/${pathId}/replan-rollback`, snapshotId ? { snapshotId } : {});
+    return response?.data?.data as ReplanRollbackResult;
   },
 
   // 重新生成学习路径（支持用户侧补充说明 adjustments）

@@ -43,7 +43,7 @@ import {
   listEmptyMilestoneIds as listEmptyMilestoneIdsImpl,
   isAppendBlockedByInFlightGeneration,
 } from './generation/retry-policy';
-import { requestPathReplan } from './replan/path-replan.service';
+import { requestPathReplan, listPathReplanSnapshots, rollbackPathReplan } from './replan/path-replan.service';
 import {
   getLearningPath,
   getPathGenerationLifecycle,
@@ -645,6 +645,15 @@ class LearningService {
 
   async requestPathReplan(data: PathReplanRequest) {
     return requestPathReplan(data);
+  }
+
+  /** 重排快照列表与回退（R8 选项 B：快照 + 一键回退） */
+  async listPathReplanSnapshots(data: { pathId: string; userId: string }) {
+    return listPathReplanSnapshots(data);
+  }
+
+  async rollbackPathReplan(data: { pathId: string; userId: string; snapshotId?: string | null }) {
+    return rollbackPathReplan(data);
   }
 
 
