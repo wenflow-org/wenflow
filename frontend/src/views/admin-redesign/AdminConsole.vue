@@ -294,8 +294,11 @@ watch(scene, (s) => {
     const qid = typeof route.query.id === 'string' ? route.query.id : ''
     if (!(qid && SUBPAGE_VIEWS.includes(qv))) subPage.value = null;
   }
-  // 切换页面时自动关闭 Skill 抽屉，避免遮挡侧栏导航
-  closeSkillDrawer();
+  // 切换页面时自动关闭 Skill 抽屉，避免遮挡侧栏导航；
+  // 但目标 URL 自带 ?skill= 时以 URL 为准（跨页深链要**开**）：健康中心健康检查行「查看 →」
+  // 跳 /admin/skill-workbench?skill=<id>，落地页（核心文件清单）不消费该参数，抽屉是唯一的落点——
+  // 此前这里无条件关掉，等于点了没反应（2026-09-29 功能走查实测：50ms 采样全程 skillDrawerId=''）。
+  if (!(typeof route.query.skill === 'string' && route.query.skill)) closeSkillDrawer();
 });
 // SkillDrawer ↔ URL query（?skill=xxx）双向同步：刷新后恢复抽屉状态
 watch(

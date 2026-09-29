@@ -199,4 +199,24 @@ describe('AdminConsole 导航冒烟', () => {
     await settle();
     expect(subPage.value).toBeNull();
   });
+
+  /* 2026-09-29 功能走查：健康检查行「查看 →」跳 /admin/skill-workbench?skill=<id>，
+     落地页（核心文件清单）不消费该参数，Skill 抽屉是唯一落点——scene watcher 此前无条件
+     closeSkillDrawer()，把深链要开的抽屉一并关掉，等于点了没反应（真机 50ms 采样全程 id=''）。 */
+  it('跨场景深链带 ?skill= 时抽屉不被场景切换清掉；不带 ?skill= 时仍要关', async () => {
+    const { router } = await mountConsole('/admin/health-center');
+    intent.skillDrawerId = 'goal-conversation'; // 模拟抽屉已打开（URL 同步 watcher 写入 query）
+    await settle();
+    expect(router.currentRoute.value.query.skill).toBe('goal-conversation');
+
+    await router.push('/admin/skill-workbench?skill=goal-conversation');
+    await settle();
+    expect(router.currentRoute.value.params.page).toBe('skill-workbench');
+    expect(intent.skillDrawerId, '场景切换把深链要开的抽屉清掉了').toBe('goal-conversation');
+
+    // 反向：目标 URL 不带 ?skill=（侧栏/普通跳转）仍要关，避免遮挡导航
+    await router.push('/admin/execution-logs');
+    await settle();
+    expect(intent.skillDrawerId).toBe('');
+  });
 });
