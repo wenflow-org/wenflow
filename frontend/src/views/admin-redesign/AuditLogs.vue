@@ -1,18 +1,19 @@
 <template>
   <div class="mk-page mk-page--fill">
-    <!-- 状态条：标题 + 概览统计 + 刷新（筛选控件在下方卡片头，全站统一） -->
+    <!-- 页头（newui/admin pagehead）：页名随 tab（审计日志/登录审计）+ 刷新上移；
+         状态条退位为纯状态摘要（条数/失败），不再重复页名 -->
+    <MkPageHead :title="statusTitle">
+      <template #actions>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="applyFilters">
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
+      </template>
+    </MkPageHead>
     <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ statusTitle }}</strong>
-      <span class="mk-status__sep"></span>
       <span class="mk-status__meta mono">{{ total }} 条</span>
       <!-- 「共 N · 失败 M」只在状态条展示一处（卡片头的重复已删）；stats 挂掉退化时标注（本页） -->
       <span v-if="failed" class="mk-status__meta mono">失败 {{ failed }}<template v-if="failedIsLocal">（本页）</template></span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="loading" @click="applyFilters">
-          {{ loading ? '刷新中…' : '刷新' }}
-        </button>
-      </span>
     </div>
 
     <!-- 主视图切换（统一样板：状态条正下方的独立一行，按内容宽度、左对齐） -->
@@ -292,6 +293,7 @@ import { KeyRound, Lock } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
 import { errMsg, shortId } from './live'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'

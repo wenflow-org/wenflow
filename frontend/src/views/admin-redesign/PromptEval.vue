@@ -1,17 +1,18 @@
 <template>
   <div class="mk-page">
+    <!-- 页头（newui/admin pagehead）：页名 + 两个主操作上移；状态条退位为计数/最近运行摘要 -->
+    <MkPageHead title="Prompt 评估中心">
+      <template #actions>
+        <!-- running：批量/试跑期间互斥禁用，防止并发多批真实 LLM 调用重复烧 token -->
+        <button type="button" class="mk-btn" :disabled="!canRunBatch || running" @click="runBatch">{{ running ? '评估运行中…' : '批量跑评估' }}</button>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openCreate">新建用例</button>
+      </template>
+    </MkPageHead>
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">Prompt 评估中心</strong>
-      <span class="mk-status__sep"></span>
       <span class="mk-status__meta">用例 {{ cases.length }}</span>
       <span class="mk-status__meta">评估历史 {{ runs.length }}</span>
       <span class="mk-status__meta" :title="lastRunHint">{{ lastRunText }}</span>
-      <span class="mk-status__actions">
-        <!-- running：批量/试跑期间互斥禁用，防止并发多批真实 LLM 调用重复烧 token -->
-        <button type="button" class="mk-status__action" :disabled="!canRunBatch || running" @click="runBatch">{{ running ? '评估运行中…' : '批量跑评估' }}</button>
-        <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建用例</button>
-      </span>
     </div>
 
     <!-- 主视图切换（统一样板：状态条正下方的独立一行，按内容宽度、左对齐） -->
@@ -448,6 +449,7 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 
