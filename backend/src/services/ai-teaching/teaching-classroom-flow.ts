@@ -50,6 +50,10 @@ export function buildPathBackgroundContext(context: TeachingScenarioContext) {
       currentTaskOrder: context.pathProgress.currentTaskOrder,
       totalTasksInMilestone: context.pathProgress.totalTasksInMilestone,
     },
+    // 学校体系锚（2026-09-30）：教材版本/考纲/在校进度。此前教学层拿不到——实测线代 64 回合、
+    // 语文 25 回合对「同济版/统编版/新高考卷/统考」零引用，教师讲得再好也不知道「你的教材和你的考试」。
+    // 空数据时为 null 值字段，提示词按缺失处理，课堂行为不变。
+    schoolAnchor: context.schoolAnchor,
     taskIntent: {
       subject: context.subject,
       topic: context.topic,

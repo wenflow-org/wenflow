@@ -84,6 +84,14 @@ export interface TeachingScenarioContext {
     currentTaskOrder: number;
     totalTasksInMilestone: number;
   };
+  /** 学校体系锚（2026-09-30）：教材版本/考纲/在校进度。数据在 goal 提取的 learnerProfile 自由文本里，
+   *  此前教学层从不读取（实测 64 回合 0 引用）——见 resolveSchoolAnchorForTeaching。 */
+  schoolAnchor: {
+    /** 学习者背景句（含教材版本与考试形式，如「使用统编版教材，考试为新高考卷题型」） */
+    background: string | null;
+    /** 现状自评证据句（如「同济版教材，期末闭卷」「算会算，就是不知道为啥」） */
+    baselineEvidence: string | null;
+  };
   learningState: {
     lss: number;
     ktl: number;
@@ -984,6 +992,38 @@ function buildTeachingStrategyGuidance(taskProfile: TeachingScenarioContext['tas
 }
 
 /**
+ * 学校体系锚（2026-09-30 实测驱动）：教材版本/考纲/在校进度在人设与 goal 提取里给得很具体
+ * （「同济版教材，期末闭卷」「统编版教材，考试为新高考卷题型」「第 10 周讲到向量组」），
+ * 但教学对话 0 引用——线代 64 回合、语文 25 回合实测均为 0。数据在持久化 normalizedInput
+ * 的 learnerProfile 自由文本里，教学层从不读取。
+ * 这里随 pathBackgroundContext 进 teaching-turn 载荷（scenario 稳定块，整课恒定、可缓存）。
+ * 无数据 → null（提示词里不出现该键，课堂行为与原先完全一致）。
+ */
+export function resolveSchoolAnchorForTeaching(
+  aiPromptTemplate: string | null | undefined,
+): { background: string | null; baselineEvidence: string | null } | null {
+  const parsed = parsePathPromptTemplate(aiPromptTemplate || null);
+  if (!parsed) return null;
+  const snapshot = resolveNormalizedInputSnapshot(parsed);
+  const candidates: unknown[] = [
+    getSceneFramingNormalizedInput(parsed.sceneFraming),
+    resolvePersistedNormalizedInput(parsed),
+    snapshot,
+    (snapshot as any)?.normalizedInput,
+  ];
+  for (const candidate of candidates) {
+    const lp = (candidate as any)?.learnerProfile;
+    if (!lp || typeof lp !== 'object') continue;
+    const background = typeof lp.backgroundExperience === 'string' && lp.backgroundExperience.trim()
+      ? lp.backgroundExperience.trim() : null;
+    const baselineEvidence = typeof lp.currentBaseline?.evidence === 'string' && lp.currentBaseline.evidence.trim()
+      ? lp.currentBaseline.evidence.trim() : null;
+    if (background || baselineEvidence) return { background, baselineEvidence };
+  }
+  return null;
+}
+
+/**
  * 从路径模板（`learning_paths.aiPromptTemplate`）里取回该路径关联的资料，并投影成课堂用的最小集合。
  *
  * 数据位置：`sceneFraming.normalizedInput.resources.materials`（优先），回退持久化快照。
@@ -1419,6 +1459,7 @@ export async function buildTeachingScenarioContext(
       currentTaskOrder,
       totalTasksInMilestone: orderedTasks.length,
     },
+    schoolAnchor: resolveSchoolAnchorForTeaching(path.aiPromptTemplate) ?? { background: null, baselineEvidence: null },
     learningState: learningState ? {
       lss: learningState.lss,
       ktl: learningState.ktl,
