@@ -1,5 +1,5 @@
 <template>
-  <div class="mshell" :data-collapsed="collapsed ? 'true' : 'false'">
+  <div class="mshell" :data-collapsed="collapsed || forcedCollapse ? 'true' : 'false'">
     <!-- 迷你侧边栏（导航 + 侧栏再设计展示） -->
     <aside class="mshell__side">
       <div class="mshell__brand">
@@ -10,9 +10,10 @@
         <button
           type="button"
           class="mshell__collapse"
-          :title="collapsed ? '展开侧栏' : '收起侧栏'"
-          :aria-label="collapsed ? '展开侧栏' : '收起侧栏'"
-          :aria-expanded="collapsed ? 'false' : 'true'"
+          :title="forcedCollapse ? '窄屏下侧栏保持图标轨' : collapsed ? '展开侧栏' : '收起侧栏'"
+          :aria-label="forcedCollapse ? '窄屏下侧栏保持图标轨' : collapsed ? '展开侧栏' : '收起侧栏'"
+          :aria-expanded="collapsed || forcedCollapse ? 'false' : 'true'"
+          :disabled="forcedCollapse"
           @click="toggleCollapse"
         >
           <span aria-hidden="true">{{ collapsed ? '»' : '«' }}</span>
@@ -32,7 +33,7 @@
             :title="item.label"
             @click="go(item)"
           >
-            <span class="mshell__item-glyph">{{ item.glyph }}</span>
+            <span class="mshell__item-glyph" aria-hidden="true"><component :is="item.icon" :size="17" :stroke-width="1.75" /></span>
             <span class="mshell__item-label">{{ item.label }}</span>
             <span
               v-if="badgeOf(item)"
@@ -64,7 +65,7 @@
               :title="item.label"
               @click="go(item)"
             >
-              <span class="mshell__item-glyph">{{ item.glyph }}</span>
+              <span class="mshell__item-glyph" aria-hidden="true"><component :is="item.icon" :size="17" :stroke-width="1.75" /></span>
               <span class="mshell__item-label">{{ item.label }}</span>
               <span
                 v-if="badgeOf(item)"
@@ -121,13 +122,6 @@
             </button>
           </template>
         </div>
-        <template v-if="release">
-          <div class="mshell__user">
-            <span class="mshell__user-avatar" aria-hidden="true">{{ adminName.slice(0, 1).toUpperCase() }}</span>
-            <span class="mshell__user-name">{{ adminName }}</span>
-            <button type="button" class="mshell__logout" :title="'退出登录'" aria-label="退出登录" @click="logout">退出</button>
-          </div>
-        </template>
         <div class="mshell__brandline">
           <span class="mshell__foot-name">WenFlow Admin</span>
           <span class="mshell__foot-ver mono">v{{ version }}</span>
@@ -135,23 +129,85 @@
       </footer>
     </aside>
 
-    <!-- 主区 -->
+    <!-- 主区：顶栏（面包屑 / 搜索 / 主题 / 账户，newui/admin 原型壳）+ 内容 -->
     <div class="mshell__main">
-      <main ref="contentEl" class="mshell__content">
-        <div v-if="crumb" class="mshell__crumb">
-          <!-- 深层子页的可点「返回上一级」：此前是不可点 span（仅 title 全 ID），
-               二级页虽各有 mk-back，但面包屑本身不可点仍是走查反馈的可达性问题 -->
-          <button
-            v-if="crumbClickable"
-            type="button"
-            class="mshell__crumb-label mshell__crumb-label--action"
-            :title="`${crumbTitle || crumb}（点击返回上一级）`"
-            @click="$emit('crumb-click')"
-          >
-            {{ crumb }}
-          </button>
-          <span v-else class="mshell__crumb-label" :title="crumbTitle || undefined">{{ crumb }}</span>
+      <header class="mshell__top">
+        <button
+          v-if="crumb"
+          type="button"
+          class="mshell__top-back"
+          :title="`返回${topTitle}`"
+          aria-label="返回上一级"
+          @click="$emit('crumb-click')"
+        >
+          <ChevronLeft :size="18" :stroke-width="1.75" aria-hidden="true" />
+        </button>
+        <div class="mshell__top-crumb">
+          <strong class="mshell__top-title">{{ topTitle }}</strong>
+          <span v-if="topSub" class="mshell__top-sub">/ {{ topSub }}</span>
         </div>
+        <div class="mshell__top-grow" aria-hidden="true"></div>
+        <div class="mshell__search" ref="searchRef">
+          <Search :size="15" :stroke-width="1.75" aria-hidden="true" class="mshell__search-icon" />
+          <input
+            v-model="searchQuery"
+            class="mshell__search-input"
+            type="text"
+            placeholder="搜索页面…"
+            aria-label="搜索页面，按 / 聚焦"
+            @focus="searchOpen = true"
+            @input="searchOpen = true"
+            @keydown.enter.prevent="searchGoFirst"
+            @keydown.escape.prevent="closeSearch"
+          />
+          <kbd class="mshell__search-kbd" aria-hidden="true">/</kbd>
+          <div v-if="searchOpen && searchQuery.trim()" class="mshell__search-pop" role="listbox" aria-label="页面搜索结果">
+            <button
+              v-for="hit in searchHits"
+              :key="hit.id"
+              type="button"
+              role="option"
+              :aria-selected="hit.id === current"
+              class="mshell__search-hit"
+              @click="searchGo(hit)"
+            >
+              <component :is="hit.icon" :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <span class="mshell__search-hit-label">{{ hit.label }}</span>
+              <span class="mshell__search-hit-group">{{ hit.group }}</span>
+            </button>
+            <div v-if="!searchHits.length" class="mshell__search-empty">没有匹配的页面</div>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="mshell__top-btn"
+          :title="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
+          :aria-label="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
+          @click="toggleTheme"
+        >
+          <Sun v-if="theme === 'dark'" :size="16" :stroke-width="1.75" aria-hidden="true" />
+          <Moon v-else :size="16" :stroke-width="1.75" aria-hidden="true" />
+        </button>
+        <div v-if="release" class="mshell__user" ref="userMenuRef">
+          <button
+            type="button"
+            class="mshell__userchip"
+            :aria-expanded="userMenuOpen ? 'true' : 'false'"
+            aria-haspopup="menu"
+            @click="userMenuOpen = !userMenuOpen"
+          >
+            <span class="mshell__user-avatar" aria-hidden="true">{{ adminName.slice(0, 1).toUpperCase() }}</span>
+            <span class="mshell__user-name">{{ adminName }}</span>
+          </button>
+          <div v-if="userMenuOpen" class="mshell__user-menu" role="menu">
+            <button type="button" role="menuitem" class="mshell__user-item" @click="logout">
+              <LogOut :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <span>退出登录</span>
+            </button>
+          </div>
+        </div>
+      </header>
+      <main ref="contentEl" class="mshell__content">
         <slot />
       </main>
       <!-- 滚动修复 #9：回到顶部（>2 屏长页出现，全站统一由 Shell 挂载） -->
@@ -171,7 +227,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { CircleHelp, Moon, RotateCw, Sun } from 'lucide-vue-next'
+import { ChevronLeft, CircleHelp, LogOut, Moon, RotateCw, Search, Sun } from 'lucide-vue-next'
 import { MOCK_SCENES, type MockSceneDef } from './manifest'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
 import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
@@ -207,8 +263,80 @@ onMounted(() => {
   // 滚动事件不冒泡，但捕获阶段可命中后代滚动容器（.mk-page）
   contentEl.value?.addEventListener('scroll', onScroll, { passive: true, capture: true })
   onScroll()
+  document.addEventListener('click', onDocDown)
+  document.addEventListener('keydown', onGlobalKey)
+  collapseMq = window.matchMedia('(max-width: 1024px)')
+  syncForcedCollapse()
+  collapseMq.addEventListener('change', syncForcedCollapse)
 })
-onBeforeUnmount(() => contentEl.value?.removeEventListener('scroll', onScroll, true))
+onBeforeUnmount(() => {
+  contentEl.value?.removeEventListener('scroll', onScroll, true)
+  document.removeEventListener('click', onDocDown)
+  document.removeEventListener('keydown', onGlobalKey)
+  collapseMq?.removeEventListener('change', syncForcedCollapse)
+})
+
+/* —— 顶栏（newui/admin 原型壳）：面包屑 / 页面搜索 / 主题 / 账户菜单 —— */
+const userMenuOpen = ref(false)
+const userMenuRef = ref<HTMLElement | null>(null)
+const searchRef = ref<HTMLElement | null>(null)
+const searchQuery = ref('')
+const searchOpen = ref(false)
+
+const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.current))
+/* 详情页（有 crumb）：主标题=子页名、副行=所属页；L1 页：主标题=页面名、副行=分组 */
+const topTitle = computed(() => {
+  if (props.crumb) {
+    const parts = props.crumb.split(' / ')
+    return parts[parts.length - 1] || props.crumb
+  }
+  return currentScene.value?.label ?? '管理控制台'
+})
+const topSub = computed(() => {
+  if (props.crumb) return props.crumbTitle || currentScene.value?.label || ''
+  return currentScene.value?.group ?? ''
+})
+
+const searchHits = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return []
+  return MOCK_SCENES.filter((s) => `${s.label} ${s.group}`.toLowerCase().includes(q)).slice(0, 8)
+})
+function searchGo(scene: MockSceneDef) {
+  closeSearch()
+  go(scene)
+}
+function searchGoFirst() {
+  const first = searchHits.value[0]
+  if (first) searchGo(first)
+}
+function closeSearch() {
+  searchOpen.value = false
+  searchQuery.value = ''
+}
+/** `/` 全局聚焦页面搜索（输入态不抢焦点） */
+function onGlobalKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    userMenuOpen.value = false
+    return
+  }
+  if (e.key !== '/') return
+  const t = e.target as HTMLElement | null
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+  e.preventDefault()
+  searchRef.value?.querySelector<HTMLInputElement>('input')?.focus()
+}
+function onDocDown(e: MouseEvent) {
+  if (userMenuRef.value && !userMenuRef.value.contains(e.target as Node)) userMenuOpen.value = false
+  if (searchRef.value && !searchRef.value.contains(e.target as Node)) searchOpen.value = false
+}
+
+/* ≤1024 强制折叠（原型口径：窄屏只留图标轨）；用户的手动折叠只在宽屏生效 */
+const forcedCollapse = ref(false)
+let collapseMq: MediaQueryList | null = null
+function syncForcedCollapse() {
+  forcedCollapse.value = !!collapseMq?.matches
+}
 
 const version = appVersion
 
@@ -497,9 +625,10 @@ watch(
   color: var(--mk-accent-deep, var(--mk-accent-deep));
   box-shadow: inset 3px 0 0 var(--mk-blue, #2c63d0);
 }
-/* 展开态不显単字图标（仅折叠态显示，见 data-collapsed 规则） */
+/* 图标常显（newui/admin 原型壳：展开态=图标+文字，折叠轨=仅图标）。
+   原规则「展开态隐藏、仅折叠轨显示」服务于单字 glyph；换线性图标后图标是条目的视觉锚点。 */
 .mshell__item-glyph {
-  display: none;
+  display: inline-flex;
   width: 28px;
   height: 28px;
   align-items: center;
@@ -602,20 +731,6 @@ watch(
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mshell__logout {
-  border: 0;
-  background: transparent;
-  color: var(--mk-faint);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background 0.15s ease, color 0.15s ease;
-  white-space: nowrap;
-}
-.mshell__logout:hover { background: rgba(220, 38, 38, 0.08); color: var(--mk-red, var(--mk-red)); }
 
 /* 品牌行弱化 */
 .mshell__brandline {
@@ -635,55 +750,230 @@ watch(
 }
 
 /* 主区：高度锁定在壳层（shell 100dvh）内，content 行 1fr 承接剩余高度 */
-.mshell__main { display: grid; grid-template-rows: 1fr; min-width: 0; height: 100%; min-height: 0; }
-/* 内容区：应用式布局的唯一滚动容器（侧栏/工具行固定，内容区内滚；
+.mshell__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ====== 顶栏（newui/admin 原型壳）：56px 毛玻璃条——返回/面包屑/搜索/主题/账户 ====== */
+.mshell__top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 16px;
+  background: color-mix(in srgb, var(--mk-bg, #f7f8fa) 86%, transparent);
+  border-bottom: 1px solid var(--mk-line, #e6ebf4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  position: relative;
+  z-index: 20;
+}
+.mshell__top-back {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface, #fff);
+  color: var(--mk-ink);
+  cursor: pointer;
+  transition: border-color 0.14s ease, color 0.14s ease;
+}
+.mshell__top-back:hover { border-color: color-mix(in srgb, var(--mk-blue, #2c63d0) 40%, transparent); color: var(--mk-blue, #2c63d0); }
+.mshell__top-crumb { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.mshell__top-title {
+  font-size: var(--mk-fs-emphasis, 15px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--mk-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mshell__top-sub {
+  font-size: var(--mk-fs-micro, 12px);
+  color: var(--mk-faint);
+  white-space: nowrap;
+}
+.mshell__top-grow { flex: 1 1 auto; }
+.mshell__top-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 0;
+  border-radius: var(--mk-radius-md);
+  background: transparent;
+  color: var(--mk-muted);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.mshell__top-btn:hover { background: var(--mk-hover-surface); color: var(--mk-ink); }
+
+/* 页面搜索：场景跳转（label/组名过滤，Enter 去第一个命中） */
+.mshell__search { position: relative; flex: 0 1 280px; min-width: 200px; }
+.mshell__search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--mk-faint);
+  pointer-events: none;
+}
+.mshell__search-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 34px 0 30px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface, #fff);
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: var(--mk-fs-micro, 12px);
+  outline: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+.mshell__search-input::placeholder { color: var(--mk-faint); }
+.mshell__search-input:focus {
+  border-color: color-mix(in srgb, var(--mk-blue, #2c63d0) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue, #2c63d0) 12%, transparent);
+}
+.mshell__search-kbd {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mk-mono, monospace);
+  font-size: var(--mk-fs-micro, 12px);
+  color: var(--mk-faint);
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: 4px;
+  padding: 0 5px;
+  background: var(--mk-surface-2, #eef2fa);
+  pointer-events: none;
+}
+.mshell__search-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  padding: 6px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: var(--mk-radius-lg);
+  background: var(--mk-surface, #fff);
+  box-shadow: 0 16px 40px rgba(22, 34, 55, 0.14);
+  display: grid;
+  gap: 2px;
+  z-index: 60;
+}
+.mshell__search-hit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--mk-radius-md);
+  background: transparent;
+  font: inherit;
+  font-size: var(--mk-fs-micro, 12px);
+  font-weight: 600;
+  color: var(--mk-ink);
+  cursor: pointer;
+  text-align: left;
+}
+.mshell__search-hit svg { color: var(--mk-muted); flex: none; }
+.mshell__search-hit:hover { background: var(--mk-hover-surface); }
+.mshell__search-hit-group { margin-left: auto; color: var(--mk-faint); font-weight: 500; }
+.mshell__search-empty { padding: 10px; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
+
+/* 账户菜单（userchip）：头像 + 名字 → 退出登录 */
+.mshell__user { position: relative; flex: none; }
+.mshell__userchip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--mk-fs-micro, 12px);
+  font-weight: 700;
+  color: var(--mk-ink);
+  padding: 4px 8px 4px 4px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.mshell__userchip:hover { background: var(--mk-hover-surface); }
+.mshell__user-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 150px;
+  padding: 6px;
+  border: 1px solid var(--mk-line, #e6ebf4);
+  border-radius: var(--mk-radius-lg);
+  background: var(--mk-surface, #fff);
+  box-shadow: 0 16px 40px rgba(22, 34, 55, 0.14);
+  display: grid;
+  gap: 2px;
+  z-index: 60;
+  transform-origin: top right;
+  /* 进场动效直接用 animation（Vue Transition 的 name 派生类会被死类门禁误报） */
+  animation: mshell-pop-in 0.14s var(--mk-ease-out, ease);
+}
+@keyframes mshell-pop-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mshell__user-menu { animation: none; }
+}
+.mshell__user-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: var(--mk-radius-md);
+  background: transparent;
+  font: inherit;
+  font-size: var(--mk-fs-micro, 12px);
+  font-weight: 600;
+  color: var(--mk-ink);
+  cursor: pointer;
+  text-align: left;
+}
+.mshell__user-item svg { color: var(--mk-muted); flex: none; }
+.mshell__user-item:hover { background: var(--mk-hover-surface); }
+
+/* 内容区：应用式布局的唯一滚动容器（顶栏/侧栏固定，内容区内滚；
    列表页用 .mk-page--fill 让表格区内滚、分页器吸底。
-   flex 列：面包屑（.mshell__crumb，仅子页）固定，页面块（其余子元素）独占剩余高度并内滚）
+   flex 列：页面块独占顶栏之下的剩余高度并内滚）
    注：原多标签栏（.mk-tabbar）已删除，每个页面因此多回 36px 可用高度 */
 .mshell__content {
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
-.mshell__content > :not(.mshell__crumb) {
+.mshell__content > * {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
-/* 二级页面包屑（AdminConsole 传入 crumb/crumbTitle；此前为死 prop）：
-   固定在内容区顶部，随 TabBar 之下、页面块之上，不参与滚动 */
-.mshell__crumb {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 16px;
-  border-bottom: 1px solid var(--mk-line, var(--mk-line));
-  background: var(--mk-surface, #fff);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint, #8a97ab);
-}
-.mshell__crumb-label {
-  font-weight: 700;
-  color: var(--mk-muted, var(--mk-muted));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* 可点面包屑（二级/三级页「返回上一级」）：hover/聚焦给可点反馈，命中区 24px 保底 */
-.mshell__crumb-label--action {
-  border: 0;
-  background: transparent;
-  font: inherit;
-  cursor: pointer;
-  padding: 0;
-}
-.mshell__crumb-label--action:hover { color: var(--mk-ink); text-decoration: underline; }
-.mshell__crumb-label--action:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
-html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color: var(--mk-line); }
 
 /* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半） */
 @media (min-width: 1440px) {
@@ -771,7 +1061,6 @@ html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color:
 }
 .mshell[data-collapsed='true'] .mshell__user { flex-direction: column; gap: 4px; justify-content: center; padding: 6px 0; }
 .mshell[data-collapsed='true'] .mshell__user-name { display: none; }
-.mshell[data-collapsed='true'] .mshell__logout { padding: 4px; }
 .mshell[data-collapsed='true'] .mshell__brandline { display: none; }
 .mshell[data-collapsed='true'] .mshell__item { justify-content: center; padding: 4px 0; }
 .mshell[data-collapsed='true'] .mshell__group-body .mshell__item { padding-left: 0; }
@@ -820,7 +1109,6 @@ html[data-theme='dark'] .mshell__crumb { background: var(--mk-bg); border-color:
   .mshell__tools { flex-direction: column; gap: 6px; align-items: center; }
   .mshell__user { flex-direction: column; gap: 4px; justify-content: center; padding: 6px 0; }
   .mshell__user-name { display: none; }
-  .mshell__logout { padding: 4px; }
   .mshell__brandline { display: none; }
   /* 窄屏图标栏：显示单字图标，悬停提示全名 */
   .mshell__item { justify-content: center; padding: 4px 0; }
@@ -863,7 +1151,5 @@ html[data-theme='dark'] {
   .mshell__user { border-top-color: var(--mk-side-hover); }
   .mshell__user-avatar { background: var(--mk-side-inset); color: var(--mk-accent-deep); }
   .mshell__user-name { color: #efeff0; }
-  .mshell__logout { color: var(--mk-muted, #afb1b6); }
-  .mshell__logout:hover { background: rgba(220, 38, 38, 0.14); color: var(--mk-red); }
 }
 </style>

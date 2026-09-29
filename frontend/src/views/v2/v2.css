@@ -1,9 +1,11 @@
 /* ===== v2 用户侧样式层 =====
    断点刻度（唯一权威定义；页面媒体块不要另发明档位）：
    - ≤640    手机窄档：个别页面的紧凑微调（评估页头部、完成卡、反馈面板）
-   - ≤900    手机档：沉浸页锁 100dvh、导航头部 56px、CTA 隐藏
-   - ≤1100   「移动模式」总档：底部 tabbar 出现、全局列宽/密度/触控基线（本文件末尾媒体块）
-   - 901–1100 平板混合段：移动导航 + 720px 窄列（本文件尾部补丁）
+   - ≤900    手机档：沉浸页锁 100dvh、CTA 隐藏
+   - ≤1023   「移动模式」总档：底部 dock 出现、全局列宽/密度/触控基线（本文件末尾媒体块）
+   - ≥1024   桌面档：V2Nav 左侧栏（252px，--v2-sidebar-w）出现，.v2-page 左移让位
+             （2026-09-30 按 newui/home 原型壳改造：原 ≤1100 移动档收窄到 ≤1023，
+              页面级 ≤1100 密度块保留不动——它们是密度调整，与壳无关）
 
    级联约定：通用密度/触控规则写在本文件末尾的媒体块（同权重后出现者胜）；
    页面 scoped 媒体块只写该页特有规则，不重复通用值。
@@ -19,6 +21,8 @@
    仅 --cyan（无 mk 档）与三个半透明底保留字面量。
    blue-deep 直引 --mk-accent-deep（mk 既有深蓝档，明值与旧字面量完全一致）。 */
 :root {
+  /* 原型壳侧栏宽（newui/home --sidebar-w:252px）：V2Nav 侧栏与 .v2-page 左移距共用 */
+  --v2-sidebar-w: 252px;
   --ink: var(--mk-ink);
   --muted: var(--mk-muted);
   --faint: var(--mk-faint);
@@ -172,8 +176,8 @@ html, body {
   border-top-color: var(--line, #2d2d2f) !important;
 }
 
-/* 底部移动导航暗色适配 */
-[data-theme='dark'] .v2nav__tabs {
+/* 底部移动导航暗色适配（V2Nav 的 dock：类名 2026-09-30 由 v2nav__tabs 改 v2nav__dock） */
+[data-theme='dark'] .v2nav__dock {
   background: rgba(15, 22, 32, 0.92);
   border-top-color: var(--line, #2d2d2f);
 }
@@ -665,12 +669,10 @@ html, body {
   .v2-page .auth__card .hint { font-size: 13px; }
 }
 
-/* 移动端为底部导航留出空间：底部 tab 条在 ≤1100 就出现（V2Nav 的 .v2nav__tabs），
-   而留白此前只写到 900，901~1100 这一段页脚被固定 tab 条压住 62px
-   （实测 1000×700 滚到底：页脚 638~700、tab 条 638~700，页脚整行几乎不可见）。
-   底部再叠加 env(safe-area-inset-bottom)：viewport-fit=cover 后（index.html），
-   iOS 底部横条会把 tabbar 抬高 34px，页面留白必须同步长高，否则末行内容被压住。 */
-@media (max-width: 1100px) {
+/* 移动端为底部导航留出空间：底部 dock 在 ≤1023 出现（V2Nav 的 .v2nav__dock）。
+   底部叠加 env(safe-area-inset-bottom)：viewport-fit=cover 后（index.html），
+   iOS 底部横条会把 dock 抬高 34px，页面留白必须同步长高，否则末行内容被压住。 */
+@media (max-width: 1023.98px) {
   .v2-page { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
   /* 移动端基准字号 16 → 14。桌面 body 是 16px，任何「没写自己字号」的元素都会继承它，
      在 390 下比周围内容（12.5–13.5px）整整大一档——用户指的筛选条容器实测就是 16px
@@ -718,17 +720,22 @@ html, body {
   }
 }
 
-/* 901~1100 这一段是学习者的「移动端模式」——底部 tab 条已经出现（V2Nav ≤1100），
-   但主列还是桌面的 1080px 宽，密度也还是桌面刻度（实测 1000px：学习台 h1 26px、
-   行动卡 22×26；学习路径 h1 28px、路径卡 18×20；学习历史日分组卡 16×18）。
-   各页的移动块已统一到 ≤1100（本轮），这里再补列宽：14px 正文铺满 1000px 是每行
-   140 字符，收成 720px 居中列（约 72 字符），与 ≤900 的手机刻度接得上。
+/* 901~1023 这一段是学习者的「移动端模式」——底部 dock 已经出现（V2Nav ≤1023），
+   但主列还是桌面的 1080px 宽，密度也还是桌面刻度。
+   这里补列宽：14px 正文铺满 1000px 是每行 140 字符，收成 720px 居中列（约 72 字符），
+   与 ≤900 的手机刻度接得上。
    用 main[class] 而不是 main：各页 .dash__main / .paths__main / .state__main …
    自带 scoped 的 max-width: 1080px（权重 (0,2,0)），单写 main（(0,1,1)）压不住它。 */
-@media (min-width: 901px) and (max-width: 1100px) {
+@media (min-width: 901px) and (max-width: 1023.98px) {
   .v2-page > main[class] {
     max-width: 720px;
   }
+}
+
+/* ====== 桌面档（≥1024）：左侧栏出现，页面内容整体右移让位 ======
+   （V2Nav 的 .v2nav-side 为 fixed 左列；本规则只负责把内容推开。） */
+@media (min-width: 1024px) {
+  .v2-page { margin-left: var(--v2-sidebar-w); }
 }
 
 /* ====== 暗色模式：非 .card 抬升面投影 ======

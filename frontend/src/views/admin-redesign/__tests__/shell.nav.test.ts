@@ -70,14 +70,16 @@ describe('Shell 导航', () => {
     expect(wrapper.emitted('navigate')?.[0]).toEqual(['skills']);
   });
 
-  it('release 模式下展示管理员区（退出按钮）', () => {
+  it('release 模式下展示账户区（userchip + 退出菜单）', async () => {
     const wrapper = mountShell({ current: 'overview', release: true });
-    expect(wrapper.find('.mshell__logout').exists()).toBe(true);
+    expect(wrapper.find('.mshell__userchip').exists()).toBe(true);
+    await wrapper.find('.mshell__userchip').trigger('click');
+    expect(wrapper.find('.mshell__user-item').text()).toContain('退出登录');
   });
 
   it('非 release 模式不展示管理员区', () => {
     const wrapper = mountShell({ current: 'overview' });
-    expect(wrapper.find('.mshell__logout').exists()).toBe(false);
+    expect(wrapper.find('.mshell__userchip').exists()).toBe(false);
   });
 
   it('非法 current 不渲染任何高亮（回退场景由 AdminConsole 处理）', () => {
@@ -85,10 +87,11 @@ describe('Shell 导航', () => {
     expect(wrapper.findAll('.mshell__item--active')).toHaveLength(0);
   });
 
-  it('二级页面包屑：传入 crumb 时渲染，未传时不渲染（死 prop 已接入）', () => {
+  it('二级页面包屑上移顶栏：传入 crumb 时渲染子页名，未传时不渲染（死 prop 已接入）', () => {
     const withCrumb = mountShell({ current: 'skills', crumb: '虚拟学习者' });
-    expect(withCrumb.find('.mshell__crumb-label').text()).toBe('虚拟学习者');
+    expect(withCrumb.find('.mshell__top-title').text()).toBe('虚拟学习者');
     const without = mountShell({ current: 'overview' });
-    expect(without.find('.mshell__crumb').exists()).toBe(false);
+    // L1 页顶栏常显（页面名/分组），但不出现「返回上一级」钮
+    expect(without.find('.mshell__top-back').exists()).toBe(false);
   });
 });

@@ -24,12 +24,21 @@
  *   不是「配置改了没生效」的方向性漂移；19 处镜像滞后已按 b905880c 的 32k 预算同步归零。）
  */
 
+import type { Component } from 'vue'
+import {
+  Coins, FlaskConical, HeartPulse, History, Layers, LayoutDashboard, ListChecks,
+  Megaphone, MessagesSquare, Plug, Route, ScrollText, ShieldCheck, Sparkles,
+  Target, Users, Workflow, Wrench,
+} from 'lucide-vue-next'
+
 export interface MockSceneDef {
   id: string
   label: string
   group: string
   /** 窄屏（≤860px）折叠为 64px 图标栏时显示的单字图标 */
   glyph: string
+  /** 线性图标（newui/admin 原型壳：侧栏条目 17px 线性图标 + 文字；折叠轨同用） */
+  icon: Component
   /** 可选静态徽章；live 模式由 Shell 用真实计数覆盖 */
   badge?: string
   /** 置顶独立入口（D5 导航优化）：渲染在分组上方（如平台总览=驾驶舱入口） */
@@ -37,37 +46,37 @@ export interface MockSceneDef {
 }
 
 export const MOCK_SCENES: MockSceneDef[] = [
-  { id: 'overview', label: '平台总览', group: '总览', glyph: '览', pinned: true },
+  { id: 'overview', label: '平台总览', group: '总览', glyph: '览', icon: LayoutDashboard, pinned: true },
   // 教学组：真实学习者 / 会话 / 复习（虚拟学习者已独立成组）
-  { id: 'people', label: '用户与学习者', group: '教学', glyph: '人' },
+  { id: 'people', label: '用户与学习者', group: '教学', glyph: '人', icon: Users },
   // 2026-09-29 用户拍板拆回独立页：2026-09-04 曾合并为「学习会话」宿主（sessions，已下线、URL 重定向兼容），
   // 三域口径互异且入口层级深一层，教学会话 / 目标对话 / 学习路径各自占一个侧栏入口
-  { id: 'teaching-sessions', label: '教学会话', group: '教学', glyph: '教' },
-  { id: 'goal-conversations', label: '目标对话', group: '教学', glyph: '话' },
-  { id: 'learning-paths', label: '学习路径', group: '教学', glyph: '径' },
-  { id: 'memory-review', label: '记忆与复习', group: '教学', glyph: '忆' },
+  { id: 'teaching-sessions', label: '教学会话', group: '教学', glyph: '教', icon: MessagesSquare },
+  { id: 'goal-conversations', label: '目标对话', group: '教学', glyph: '话', icon: Target },
+  { id: 'learning-paths', label: '学习路径', group: '教学', glyph: '径', icon: Route },
+  { id: 'memory-review', label: '记忆与复习', group: '教学', glyph: '忆', icon: History },
   // 虚拟学习者组：个体实验 / 规模实验
-  { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟学习者', glyph: '拟' },
-  { id: 'batch-experiments', label: '批量实验', group: '虚拟学习者', glyph: '批' },
+  { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟学习者', glyph: '拟', icon: FlaskConical },
+  { id: 'batch-experiments', label: '批量实验', group: '虚拟学习者', glyph: '批', icon: Layers },
   // Skill 组：健康中心已于 2026-09-29 抽出为独立场景（系统组），本组只剩编排图/Skill/Prompt 评估
   // 场景下线，Skill 组由 4 项收敛为 3 项（orchestrator · skills · prompt-eval）。
   // label 带上「提示词」关键词（2026-09 定位收敛：管理台=轻运营调整，改 prompt 的
   // 动线从这里进——新人搜「提示词」能落到正确入口，不再误入 Prompt 评估）
-  { id: 'orchestrator', label: '编排图', group: 'Skill', glyph: '流' },
-  { id: 'skills', label: 'Skill 与提示词', group: 'Skill', glyph: '能' },
-  { id: 'prompt-eval', label: 'Prompt 评估', group: 'Skill', glyph: '评' },
+  { id: 'orchestrator', label: '编排图', group: 'Skill', glyph: '流', icon: Workflow },
+  { id: 'skills', label: 'Skill 与提示词', group: 'Skill', glyph: '能', icon: Sparkles },
+  { id: 'prompt-eval', label: 'Prompt 评估', group: 'Skill', glyph: '评', icon: ListChecks },
   // 观测组：Token 成本并入执行日志第三 tab（成本分析）；记忆与复习移出后只剩日志双子页
   // 2026-09-29 用户拍板拆回独立页：成本分析从执行日志宿主 tab 释放（原 2026-09-04 并入）
-  { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志' },
-  { id: 'token-cost', label: '成本分析', group: '观测', glyph: '费' },
-  { id: 'audit-logs', label: '审计日志', group: '观测', glyph: '审' },
+  { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志', icon: ScrollText },
+  { id: 'token-cost', label: '成本分析', group: '观测', glyph: '费', icon: Coins },
+  { id: 'audit-logs', label: '审计日志', group: '观测', glyph: '审', icon: ShieldCheck },
   // 系统组：原「配置」组改名；模型与接入成为 tab 宿主（接入与模型 · 外挂能力）；
   // 系统工具成为 tab 宿主（运维工具 · 数据导出 · 会话安全）
   // 2026-09-29 用户拍板：健康中心从 skills 宿主 tab 释放，回独立场景并归入系统组
   //（「健康检查/漂移/对账」三个 tab 本就是同一份报表的三刀，合一后独立成页）
-  { id: 'health-center', label: '健康中心', group: '系统', glyph: '康' },
-  { id: 'api-config', label: '模型与接入', group: '系统', glyph: '安' },
-  { id: 'ops-center', label: '系统工具', group: '系统', glyph: '维' },
+  { id: 'health-center', label: '健康中心', group: '系统', glyph: '康', icon: HeartPulse },
+  { id: 'api-config', label: '模型与接入', group: '系统', glyph: '安', icon: Plug },
+  { id: 'ops-center', label: '系统工具', group: '系统', glyph: '维', icon: Wrench },
   // 运营组：运营中心为 tab 宿主（运营待办 · 反馈 · 成就 · 公告 · 站内通知）
-  { id: 'ops-hub', label: '运营中心', group: '运营', glyph: '营' }
+  { id: 'ops-hub', label: '运营中心', group: '运营', glyph: '营', icon: Megaphone }
 ]
