@@ -108,6 +108,81 @@ export function detectStageFiller(
   return { duplicatePairs, repeatedObjects };
 }
 
+/** 跨阶段 filler 形态（观测用） */
+export interface CrossStageFillerReport {
+  /** 高相似标题对，且**两课分属不同阶段**（同阶段对已由 detectStageFiller 覆盖，不重复报） */
+  pairs: Array<{ a: string; b: string; similarity: number; stageA: number; stageB: number }>;
+  /** 同一知识对象跨阶段累计出现 ≥minObjectHits 次 */
+  repeatedObjects: Array<{ object: string; hits: number; stages: number[]; titles: string[] }>;
+}
+
+/**
+ * 跨阶段复读观测（2026-09-29 实测驱动）。
+ *
+ * 为什么要它：`detectStageFiller` 只吃**单个阶段**的标题，于是「同一节课被排在相邻两个阶段」
+ * 这类复读完全不在视野内。实测（`pe-rw-acad-05`，Zotero 路径）：
+ *   M1-2「在样式管理器中强制重载 AMA 11th，验证插件样式更新」
+ *   M2-1「在样式管理器中强制重载 AMA 11th 样式」
+ * 用本仓真实 `titleSimilarity` 算 **0.739（阈值 0.7 之上）**——**阈值没问题，缺的是扫描范围**。
+ * 后果在知识点上直接可见：两节课产出同一个知识点「执行样式强制重载」，第一遍 80%、第二遍 100%，
+ * 即一节课的时间被用来把同一个点再上一遍。
+ *
+ * 与 detectStageFiller 同口径：**只观测不阻断**（合法 consolidation 与复读在标题上难分，
+ * 强删会误伤设计内的第二遍整合）。
+ */
+export function detectCrossStageFiller(
+  stages: Array<{ stageNumber: number; tasks: Array<{ title?: string }> }>,
+  options: DetectStageFillerOptions = {},
+): CrossStageFillerReport {
+  const similarityThreshold = options.similarityThreshold ?? 0.7;
+  const minObjectHits = options.minObjectHits ?? 3;
+  const flat: Array<{ title: string; stage: number }> = [];
+  for (const s of stages) {
+    for (const t of s.tasks || []) {
+      const title = String(t?.title || '');
+      if (title) flat.push({ title, stage: s.stageNumber });
+    }
+  }
+  const pairs: CrossStageFillerReport['pairs'] = [];
+  for (let i = 0; i < flat.length; i++) {
+    for (let j = i + 1; j < flat.length; j++) {
+      if (flat[i].stage === flat[j].stage) continue; // 同阶段交给 detectStageFiller
+      const sim = titleSimilarity(flat[i].title, flat[j].title);
+      if (sim >= similarityThreshold) {
+        pairs.push({
+          a: flat[i].title, b: flat[j].title, similarity: +sim.toFixed(2),
+          stageA: flat[i].stage, stageB: flat[j].stage,
+        });
+      }
+    }
+  }
+  const byObject = new Map<string, Array<{ title: string; stage: number }>>();
+  for (const { title, stage } of flat) {
+    for (const o of extractObjects(title)) {
+      const arr = byObject.get(o) || [];
+      if (!arr.some((x) => x.title === title)) arr.push({ title, stage });
+      byObject.set(o, arr);
+    }
+  }
+  const repeatedObjects: CrossStageFillerReport['repeatedObjects'] = [];
+  for (const [object, hits] of byObject) {
+    if (hits.length >= minObjectHits) {
+      repeatedObjects.push({
+        object,
+        hits: hits.length,
+        stages: [...new Set(hits.map((h) => h.stage))].sort((a, b) => a - b),
+        titles: hits.map((h) => h.title),
+      });
+    }
+  }
+  return { pairs, repeatedObjects };
+}
+
+/** 跨阶段报告是否命中（观测侧用它决定要不要落 log） */
+export function isCrossStageFiller(report: CrossStageFillerReport): boolean {
+  return report.pairs.length > 0 || report.repeatedObjects.length > 0;
+}
+
 export function isStageFiller(report: StageFillerReport): boolean {
   return report.duplicatePairs.length > 0 || report.repeatedObjects.length > 0;
 }

@@ -14,7 +14,7 @@ import { executeSkill } from '../../../skills';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
 import { buildStageFillNote } from './stage-fill-note';
-import { detectStageFiller, isStageFiller } from './stage-filler';
+import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
 import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS } from '../../materials/material-prompt-projection';
@@ -747,6 +747,35 @@ export async function enrichLearningPathWithAnderson(
       taskCount: designedTaskCount,
       milestoneCount: learningPath.milestones.length,
     });
+
+    // 跨阶段复读观测（2026-09-29 实测驱动，只观测不阻断）：单阶段检测看不见「同一节课排在
+    // 相邻两个阶段」（实测 pe-rw-acad-05：M1-2 与 M2-1 相似度 0.739，两节课产出同一知识点）。
+    // 渐进模式（每次只设计一个阶段）下也成立——这里读的是**库里全部阶段**的现状，不是本轮的产物。
+    try {
+      const stages = await prisma.milestones.findMany({
+        where: { learningPathId: pathId },
+        select: {
+          stageNumber: true,
+          subtasks: { select: { title: true }, orderBy: { order: 'asc' } },
+        },
+        orderBy: { stageNumber: 'asc' },
+      });
+      const crossReport = detectCrossStageFiller(
+        stages.map((s: any) => ({ stageNumber: s.stageNumber, tasks: s.subtasks || [] })),
+      );
+      if (isCrossStageFiller(crossReport)) {
+        logger.warn('[stage-enrichment] 跨阶段检出 filler 形态（观测，不阻断）', {
+          pathId,
+          pairs: crossReport.pairs.slice(0, 4).map((p) => `M${p.stageA}「${p.a.slice(0, 14)}」≈M${p.stageB}「${p.b.slice(0, 14)}」${p.similarity}`),
+          repeatedObjects: crossReport.repeatedObjects.slice(0, 4).map((o) => `${o.object}×${o.hits}(M${o.stages.join(',')})`),
+        });
+      }
+    } catch (error) {
+      logger.warn('[stage-enrichment] 跨阶段 filler 观测失败（best-effort）', {
+        pathId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     await recordPathGenerationStageLog({
       userId: data.userId,
