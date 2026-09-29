@@ -132,6 +132,9 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+/* 密码显隐图标：模板用了 <Eye>/<EyeOff> 却从未 import → 按钮点得动但图标空白
+   （同 EyeOff 幽灵图标一类，2026-09-29 修） */
+import { Eye, EyeOff } from 'lucide-vue-next'
 import { useIsDark } from '@/composables/useIsDark';
 
 const isDark = useIsDark();

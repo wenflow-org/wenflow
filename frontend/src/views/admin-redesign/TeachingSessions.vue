@@ -366,6 +366,9 @@ import MkCols from '@/components/mk/MkCols.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
+/* 操作列图标：模板里的 <Link>/<SquareTerminal> 此前从未 import → 渲染为空白，
+   按钮却仍可点（同 EyeOff 幽灵图标一类，2026-09-29 修） */
+import { Link, SquareTerminal } from 'lucide-vue-next'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
     count 事件：列表加载完成后上报总条数（宿主「教学 N」徽章）

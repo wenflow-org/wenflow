@@ -25,7 +25,14 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
     'no-console': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
     'no-debugger': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
-    '@typescript-eslint/no-require-imports': 'off'
+    '@typescript-eslint/no-require-imports': 'off',
+    /* 幽灵组件门禁：模板用了却没 import 的组件（<Link> / <EyeOff> / <SquareTerminal>…）
+       会渲染成空白，但点击/交互仍然生效——极难自查（同 EyeOff 一类已复发三次，2026-09-29）。
+       该规则只认「模板里用了、组件作用域内没定义」的大写标签，原生 HTML 元素不受影响。 */
+    'vue/no-undef-components': ['error', {
+      // vue-router 全局注册的两个组件不在文件内定义，非幽灵组件
+      ignorePatterns: ['^Mk[A-Z]', '^router-link$', '^RouterLink$', '^router-view$', '^RouterView$']
+    }]
   },
   ignorePatterns: ['dist/**', 'node_modules/**'],
   overrides: [

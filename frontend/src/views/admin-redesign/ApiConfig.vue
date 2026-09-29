@@ -527,7 +527,9 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { EyeOff } from 'lucide-vue-next'
+/* Eye 与 EyeOff 成对使用（密钥显隐两态）：此前只导入了 EyeOff，
+   点「显示密钥」后切到 <Eye> 是空白图标（f66cd78d 漏了孪生图标，2026-09-29 补） */
+import { Eye, EyeOff } from 'lucide-vue-next'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { dataSource, isLive } from './store'
 import Addons from './Addons.vue'
