@@ -39,7 +39,7 @@ export const virtualLearnerLearnTurnSimulatorRuntimeDefinition: RuntimeDefinitio
     produces: ['reply', 'emotion', 'learnerState', 'learnerFeedback', 'checkpointAnswer', 'debug'],
   },
   capabilities: ['learn-stage-learner-simulation', 'visible-context-roleplay', 'short-teaching-reply'],
-  defaultMaxTokens: 2000,
+  defaultMaxTokens: 32000,
   defaultTemperature: 0.7,
   source: 'code',
   managedByCode: true,

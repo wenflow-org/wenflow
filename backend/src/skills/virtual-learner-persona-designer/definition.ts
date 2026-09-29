@@ -38,7 +38,7 @@ export const virtualLearnerPersonaDesignerRuntimeDefinition: RuntimeDefinitionRe
     ],
   },
   capabilities: ['virtual-learner-persona-design'],
-  defaultMaxTokens: 8000,
+  defaultMaxTokens: 32000,
   defaultTemperature: 0.8,
   source: 'code',
   managedByCode: true,

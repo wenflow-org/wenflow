@@ -71,7 +71,9 @@ const EXPECTED_SEMANTICS_BY_ID: Record<string, string> = {
   'contract-parity': 'baseline-drift',
   snapshots: 'baseline-drift',
   'yaml-crosscheck': 'baseline-drift',
-  'params-consistency': 'baseline-drift',
+  // 2026-09-29 语义重分类：参数一致性是「core ↔ definition.ts 镜像」的对等比对（core 唯一写源），
+  // 不是「配置改了没生效」的方向性漂移，归 consistency——漂移分维度（契约/W4/运行时）不含它
+  'params-consistency': 'consistency',
   'fields-sync': 'consistency',
   'w1-active': 'consistency',
   'w2-registration': 'consistency',
@@ -91,8 +93,8 @@ describe('健康中心聚合（基准体系版）', () => {
     expect(report.generatedAt).toBeTruthy();
     expect(report.summary.total).toBe(report.items.length);
     expect(report.summary.total).toBeGreaterThanOrEqual(13);
-    expect(report.summary.baselineDrift).toBe(7);
-    expect(report.summary.consistency).toBe(4);
+    expect(report.summary.baselineDrift).toBe(6);
+    expect(report.summary.consistency).toBe(5);
     expect(report.summary.overrideRecord).toBe(1);
     expect(typeof report.summary.fixable).toBe('number');
 
@@ -164,9 +166,10 @@ describe('健康中心聚合（基准体系版）', () => {
     expect(runtime.base).toBe('runtime');
     expect(runtime.severity).toBe('info');
 
-    // baseline-drift 各项 action 归属：可修 4 项，人工 3 项（contract-parity/yaml/params）
+    // baseline-drift 各项 action 归属：可修 4 项，人工 2 项（contract-parity/yaml）。
+    // params-consistency 2026-09-29 重分类为 consistency（core↔definition 镜像比对，无方向性）
     expect(report.items.filter((i) => i.semantics === 'baseline-drift').map((i) => i.action).sort())
-      .toEqual(['fixable', 'fixable', 'fixable', 'fixable', 'manual', 'manual', 'manual']);
+      .toEqual(['fixable', 'fixable', 'fixable', 'fixable', 'manual', 'manual']);
   });
 
   it('文案运营语守卫：label/cause/fixHint 不再包含源码内部锚点（file:line / 表名 / 内部编号）', async () => {

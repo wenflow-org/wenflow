@@ -71,7 +71,7 @@ export const virtualLearnerScenarioDesignerRuntimeDefinition: RuntimeDefinitionR
     ],
   },
   capabilities: ['virtual-learner-scenario-design', 'persona-goal-matching', 'multi-story-scenario-design'],
-  defaultMaxTokens: 8000,
+  defaultMaxTokens: 32000,
   defaultTemperature: 0.9,
   source: 'code',
   managedByCode: true,

@@ -17,9 +17,11 @@
  * 侧栏由 15 项/7 组收敛为 14 项/7 组。
  *
  * 2026-09-29（用户拍板）：上一步回退——健康中心折入后那三个 tab 是同一份报表的三刀
- * （后端一次返回 13 项检查，其中 7 项 baseline-drift / 4 项 consistency；前端按手写维度切三个 view，
+ * （后端一次返回 13 项检查，其中 6 项 baseline-drift / 5 项 consistency；前端按手写维度切三个 view，
  * 结果唯一 error 级的「参数一致性 19 处」只出现在健康检查里，漂移 tab 却显示 0 项需处理）。
  * 合一成独立页并归入「系统」组；skills 只留 Skill 运行 / 模型路由 两个 tab。侧栏 17 项/7 组。
+ * （同日收尾：参数一致性语义重分类为 consistency——它是 core↔definition 镜像的对等比对，
+ *   不是「配置改了没生效」的方向性漂移；19 处镜像滞后已按 b905880c 的 32k 预算同步归零。）
  */
 
 export interface MockSceneDef {

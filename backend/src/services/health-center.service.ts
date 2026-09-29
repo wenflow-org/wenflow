@@ -544,7 +544,11 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
     buildItem('params-consistency', {
       label: '参数一致性（core 与代码声明）',
       base: 'file:core.yaml',
-      semantics: 'baseline-drift',
+      // 语义=consistency 而非 baseline-drift：本项是「core 与 definition.ts 两处声明」的对等比对
+      //（definition 是镜像，core 为唯一写源），不存在「配置改了没生效」的方向性——那类（契约/W4/字段路由）
+      // 才进漂移分维度（health-center-summary 的 drift 摘要与前端漂移卡只收那三维，见 2026-09-29 走查：
+      // 按旧口径它算 baseline-drift 却不在漂移卡里，造成概要卡「漂移 0」与「1 异常」打架）。
+      semantics: 'consistency',
       severity: paramsCheck.mismatches.length > 0 ? 'error' : paramsCheck.missingDeclarations.length > 0 ? 'warn' : 'ok',
       status: paramsCheck.mismatches.length > 0
         ? 'drifted'

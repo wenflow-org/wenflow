@@ -31,7 +31,7 @@ export const virtualLearnerGoalDialogueSimulatorRuntimeDefinition: RuntimeDefini
     produces: ['reply', 'emotion', 'learnerState', 'debug'],
   },
   capabilities: ['goal-stage-learner-simulation', 'proposal-fit-evaluation', 'visible-context-roleplay'],
-  defaultMaxTokens: 2400,
+  defaultMaxTokens: 32000,
   defaultTemperature: 0.8,
   source: 'code',
   managedByCode: true,

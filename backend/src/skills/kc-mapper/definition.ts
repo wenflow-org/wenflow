@@ -28,7 +28,7 @@ export const kcMapperRuntimeDefinition: RuntimeDefinitionRecord = {
     },
   },
   capabilities: ['kc-mapping', 'knowledge-graph'],
-  defaultMaxTokens: 8000,
+  defaultMaxTokens: 32000,
   defaultTemperature: 0.3,
   source: 'code',
   managedByCode: true,

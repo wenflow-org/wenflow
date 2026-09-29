@@ -71,7 +71,7 @@ export const teachingTurnRuntimeDefinition: RuntimeDefinitionRecord = {
     'knowledge-state-suggestion',
     'teaching-strategy-selection',
   ],
-  defaultMaxTokens: 12000,
+  defaultMaxTokens: 32000,
   defaultTemperature: 0.7,
   source: 'code',
   managedByCode: true,

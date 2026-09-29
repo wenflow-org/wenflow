@@ -28,7 +28,7 @@ export const pathReviewerRuntimeDefinition: RuntimeDefinitionRecord = {
     },
   },
   capabilities: ['path-quality-review', 'cidpp-evaluation'],
-  defaultMaxTokens: 4000,
+  defaultMaxTokens: 32000,
   defaultTemperature: 0.3,
   source: 'code',
   managedByCode: true,

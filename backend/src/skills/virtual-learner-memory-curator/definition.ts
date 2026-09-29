@@ -29,7 +29,7 @@ export const virtualLearnerMemoryCuratorRuntimeDefinition: RuntimeDefinitionReco
     },
   },
   capabilities: ['virtual-learner-memory-curation', 'self-reported-mastery-extraction', 'persona-calibrated-self-assessment'],
-  defaultMaxTokens: 2400,
+  defaultMaxTokens: 32000,
   defaultTemperature: 0.3,
   source: 'code',
   managedByCode: true,

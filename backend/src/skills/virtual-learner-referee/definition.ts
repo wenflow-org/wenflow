@@ -32,7 +32,7 @@ export const virtualLearnerRefereeRuntimeDefinition: RuntimeDefinitionRecord = {
     produces: ['verdict', 'scores', 'findings', 'recommendations', 'evidence'],
   },
   capabilities: ['virtual-learner-experiment-referee', 'blackbox-trace-evaluation', 'side-channel-evidence-analysis'],
-  defaultMaxTokens: 2400,
+  defaultMaxTokens: 32000,
   defaultTemperature: 0.2,
   source: 'code',
   managedByCode: true,

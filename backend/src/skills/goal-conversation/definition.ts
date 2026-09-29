@@ -37,7 +37,7 @@ export const goalConversationRuntimeDefinition: RuntimeDefinitionRecord = {
     ],
   },
   capabilities: ['goal-clarification', 'problem-discovery', 'stage-transition'],
-  defaultMaxTokens: 8000,
+  defaultMaxTokens: 32000,
   defaultTemperature: 0.7,
   source: 'code',
   managedByCode: true,

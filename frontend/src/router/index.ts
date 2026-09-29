@@ -394,6 +394,18 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to, _from, next) => {
+  /* 退役 tab 老深链（健康检查/漂移/对账）→ 健康中心独立页。
+     此前改投写在 Skills.vue 的 query watch 里，要等控制台首屏启动完、Skills 场景挂载后才发生，
+     实测 3-5s 内用户先看到的是目标错误的页面；路由级在导航瞬间完成改投（2026-09-29 功能走查）。 */
+  if (to.path === '/admin/skills') {
+    const retiredTab = typeof to.query.tab === 'string' ? to.query.tab : '';
+    if (retiredTab === 'health' || retiredTab === 'drift' || retiredTab === 'recon') {
+      const query = { ...to.query };
+      delete query.tab;
+      next({ path: '/admin/health-center', query });
+      return;
+    }
+  }
   document.title = `${to.meta.title || '问流 WenFlow'} - 问流 WenFlow`;
   syncThemeForRoute(to.path);
   const usesAdminSurface = to.path.startsWith('/admin/') && to.path !== '/admin/login';

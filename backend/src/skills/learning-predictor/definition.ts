@@ -28,7 +28,7 @@ export const learningPredictorRuntimeDefinition: RuntimeDefinitionRecord = {
     },
   },
   capabilities: ['learning-prediction', 'calibration-feedback'],
-  defaultMaxTokens: 1200,
+  defaultMaxTokens: 32000,
   defaultTemperature: 0.2,
   source: 'code',
   managedByCode: true,
