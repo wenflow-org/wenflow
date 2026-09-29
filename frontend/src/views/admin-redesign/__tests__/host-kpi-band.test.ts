@@ -104,14 +104,15 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     w.unmount();
   });
 
-  it('MemoryReview：页级绝对值只住 KPI 卡，作用域开关在状态条，旧概览带与折叠说明卡都不在', async () => {
+  it('MemoryReview：页级绝对值只住 KPI 卡，作用域开关在页头，旧概览带与折叠说明卡都不在', async () => {
     const { router, ready } = mockRouter('/admin/memory-review');
     await ready;
     const w = mount(MemoryReview, { global: { plugins: [router] } });
     await settle();
     expect(kpiLabels(w)).toEqual(['用户', '记忆痕迹', '当前到期', '需人工看', '待归并建议']);
-    // 作用域开关（整页口径）在状态条，不在卡片区
-    expect(w.find('.mk-status .mk-status__scope').exists()).toBe(true);
+    // 页头为 pagehead 形态（newui/admin），作用域开关（整页口径）在页头动作区
+    expect(w.find('.mk-pagehead').exists()).toBe(true);
+    expect(w.find('.mk-pagehead .mk-status__scope').exists()).toBe(true);
     // 旧形态回归护栏：概览带 / 口径与术语折叠卡 / 状态条散文计数
     expect(w.find('.mr-summary').exists()).toBe(false);
     expect(w.find('.mk-section__summary').exists()).toBe(false);

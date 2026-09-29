@@ -1,16 +1,17 @@
 <template>
   <div class="mk-page mk-page--fill oc-host">
+    <!-- 页头（newui/admin pagehead）：页名 + 刷新上移；状态条退位为纯状态摘要（随 tab 变化） -->
+    <MkPageHead title="系统工具">
+      <template #actions>
+        <button v-if="tab === 'tools'" type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
+        <button v-else-if="tab === 'security'" type="button" class="mk-btn mk-btn--sm" @click="securityRef?.refresh?.()">刷新</button>
+      </template>
+    </MkPageHead>
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">系统工具</strong>
-      <span class="mk-status__sep"></span>
       <span v-if="tab === 'tools'" class="mk-status__meta" :class="hasDeadAttention ? 'mk-status__meta--bad' : ''">outbox 死信 {{ deadMetaText }}</span>
       <span v-else-if="tab === 'export'" class="mk-status__meta">CSV 下载 · UTF-8（Excel 可直接打开）</span>
       <span v-else class="mk-status__meta" :class="securityCount === null ? 'oc-meta--pending' : ''">管理员会话 {{ securityCount === null ? '—' : securityCount }} 个</span>
-      <span class="mk-status__actions">
-        <button v-if="tab === 'tools'" type="button" class="mk-status__action" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
-        <button v-else-if="tab === 'security'" type="button" class="mk-status__action" @click="securityRef?.refresh?.()">刷新</button>
-      </span>
     </div>
 
     <!-- 工具/导出/会话安全 tab 切换（唯一的 tab 控件） -->
@@ -220,6 +221,7 @@ import { askConfirm } from './useConfirm'
 import { adminDevtoolsApi, adminAxios } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import SessionSecurity from './SessionSecurity.vue'
 

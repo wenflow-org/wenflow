@@ -1,10 +1,15 @@
 <template>
   <div class="mk-page mk-page--fill oh-host">
-    <!-- 页面级状态条：tab 相关域计数 + 刷新/重试（域计数由激活子视图上报，对齐消息/用户宿主） -->
+    <!-- 页头（newui/admin pagehead）：页名 + 刷新/重试上移；状态条退位为纯状态摘要（随 tab 变化） -->
+    <MkPageHead title="运营中心">
+      <template #actions>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshActive">
+          {{ refreshing ? '刷新中…' : (tab === 'todo' && wbHasError ? '重试' : '刷新') }}
+        </button>
+      </template>
+    </MkPageHead>
     <div class="mk-status" :class="hostTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">运营中心</strong>
-      <span class="mk-status__sep"></span>
       <template v-if="tab === 'todo'">
         <span class="mk-status__meta">待处理反馈 {{ wbLoading ? '…' : (wbErrors.feedback ? '—' : wbPendingFeedback) }}</span>
         <span class="mk-status__meta" :class="wbFailedPaths > 0 ? 'mk-status__meta--bad' : ''">失败路径 {{ wbLoading ? '…' : (wbErrors.paths ? '—' : wbFailedPaths) }}</span>
@@ -24,11 +29,6 @@
       <template v-else>
         <span class="mk-status__meta">站内通知 {{ domainCount.inapp }} 条</span>
       </template>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshActive">
-          {{ refreshing ? '刷新中…' : (tab === 'todo' && wbHasError ? '重试' : '刷新') }}
-        </button>
-      </span>
     </div>
 
     <!-- 视图切换 pills（唯一的 tab 控件）：各视图计数随 pill 呈现 -->
@@ -155,6 +155,7 @@ import Feedback from './Feedback.vue'
 import OpsAchievements from './OpsAchievements.vue'
 import Announcements from './Announcements.vue'
 import Notifications from './Notifications.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 
 /* ===== 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知（阶段 1 导航收敛） =====
    低频页折入 tab 宿主；?tab= 双向同步，深链/刷新/前进后退可寻址（对齐消息/用户宿主约定） */

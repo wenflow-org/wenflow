@@ -1,21 +1,20 @@
 <template>
   <div :class="embedded ? 'mk-page--fill ts-embedded' : 'mk-page mk-page--fill'">
-    <!-- 教学会话页头（单行状态条：页面名 + 短计数 + 可点击筛选 + 刷新；与其他列表页统一形态。
-         embedded（学习会话合并宿主）时由宿主状态条承载域计数，本组件不再渲染状态条） -->
+    <!-- 教学会话页头（newui/admin pagehead：页名 + 刷新上移；embedded 由宿主承载，本组件不渲染页头）。
+         状态条退位为纯状态摘要（有建议/共 N 条/截断提示），embedded 时同样不渲染 -->
+    <MkPageHead v-if="!embedded" title="教学会话">
+      <template #actions>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshNow">
+          {{ refreshing ? '刷新中…' : '刷新' }}
+        </button>
+      </template>
+    </MkPageHead>
     <div v-if="!embedded" class="mk-status" :class="tsDashTone === 'bad' ? 'mk-status--bad' : tsDashTone === 'warn' ? 'mk-status--warn' : tsDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
       <span class="mk-status__dot"></span>
-      <!-- 视图切换 pills 已承载页名（合并宿主形态）：embedded 不再重复标题，独立场景保留 -->
-      <strong v-if="!embedded" class="mk-status__title">教学会话</strong>
-      <span v-if="!embedded" class="mk-status__sep"></span>
       <span v-if="advisoryCount" class="mk-status__meta" title="含建议的会话数">有建议 {{ advisoryCount }}</span>
       <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ listTotal }} 条</span>
       <!-- 达 LIST_LIMIT 上限才提示截断，并用后端 body.total 给出真实总量（不足上限时列表即全量，不渲染该提示） -->
       <span v-if="truncated" class="mk-status__meta" :title="listTotal > LIST_LIMIT ? `后端共 ${listTotal} 条，页面仅加载最近 ${LIST_LIMIT} 条` : `页面仅加载最近 ${LIST_LIMIT} 条`">仅显示最近 {{ LIST_LIMIT }} 条<template v-if="listTotal > LIST_LIMIT">（共 {{ listTotal }} 条）</template></span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshNow">
-          {{ refreshing ? '刷新中…' : '刷新' }}
-        </button>
-      </span>
     </div>
 
     <!-- 页头 KPI 区（2026-09-29 拆回独立页）：总数 / 已完成 / 失败 / 有建议。
@@ -366,6 +365,7 @@ import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 /* 操作列图标：模板里的 <Link>/<SquareTerminal> 此前从未 import → 渲染为空白，
    按钮却仍可点（同 EyeOff 幽灵图标一类，2026-09-29 修） */

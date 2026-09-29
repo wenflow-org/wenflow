@@ -1,8 +1,25 @@
 <template>
   <div class="mk-page mk-page--fill">
+    <!-- 页头（newui/admin pagehead）：页名 + 主操作（新建/批量新建/回收）上移；
+         状态条退位为纯状态摘要（人数/筛选/活动会话/截断提示） -->
+    <MkPageHead title="虚拟学习者">
+      <template #actions>
+        <button
+          v-if="partition.stale > 0"
+          type="button"
+          class="mk-btn mk-btn--sm"
+          :disabled="reclaimRef?.state.busy"
+          :title="'干跑确认清单后批量标记卡死会话为失败'"
+          @click="openReclaimModal()"
+        >
+          {{ reclaimRef?.state.busy ? '回收中…' : `回收卡死（${partition.stale}）` }}
+        </button>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" title="新建虚拟学习者：填写名称/目标/故事，生成后可运行实验会话" @click="openCreate">新建</button>
+        <button type="button" class="mk-btn mk-btn--sm" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="openBatchCreate">批量新建</button>
+      </template>
+    </MkPageHead>
     <div class="mk-status" :class="samples.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">虚拟学习者</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ samples.length }} 人</span>
       <button
@@ -17,20 +34,6 @@
       <span class="mk-status__meta" title="当前进行中 + 创建中会话数（含卡死）">活动会话 {{ partition.running + partition.created }}</span>
       <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-status__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
         已截断 · 共 {{ liveVirtualsTotal }} 人
-      </span>
-      <span class="mk-status__actions">
-        <button
-          v-if="partition.stale > 0"
-          type="button"
-          class="mk-status__action"
-          :disabled="reclaimRef?.state.busy"
-          :title="'干跑确认清单后批量标记卡死会话为失败'"
-          @click="openReclaimModal()"
-        >
-          {{ reclaimRef?.state.busy ? '回收中…' : `回收卡死（${partition.stale}）` }}
-        </button>
-        <button type="button" class="mk-status__action mk-status__action--primary" title="新建虚拟学习者：填写名称/目标/故事，生成后可运行实验会话" @click="openCreate">新建</button>
-        <button type="button" class="mk-status__action" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="openBatchCreate">批量新建</button>
       </span>
     </div>
 
@@ -312,6 +315,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import SimulatedDaySettings from './SimulatedDaySettings.vue'
 import { useTableSort } from './useTableSort'
 import RunStateBadge from './RunStateBadge.vue'

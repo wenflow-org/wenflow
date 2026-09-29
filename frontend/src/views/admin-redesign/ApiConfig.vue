@@ -1,10 +1,18 @@
 <template>
   <div class="mk-page mk-page--fill ac-host">
-    <!-- 单行健康条（模型 tab 展示接入态；外挂能力 tab 展示能力数） -->
+    <!-- 页头（newui/admin pagehead）：页名 + 各 tab 的主操作上移；状态条退位为纯状态摘要（随 tab 变化） -->
+    <MkPageHead title="模型与接入">
+      <template #actions>
+        <button v-if="tab === 'connection'" type="button" class="mk-btn mk-btn--sm" :disabled="fetching || !form.apiUrl" @click="fetchModels">
+          <MkLoading v-if="fetching" inline text="拉取中…" />
+          <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
+        </button>
+        <button v-else-if="tab === 'overview'" type="button" class="mk-btn mk-btn--sm" @click="registryRef?.refresh?.(true)">刷新</button>
+        <button v-else type="button" class="mk-btn mk-btn--sm" @click="addonsRef?.refresh?.()">刷新</button>
+      </template>
+    </MkPageHead>
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">模型与接入</strong>
-      <span class="mk-status__sep"></span>
       <template v-if="isConfigTab">
         <span class="mk-status__meta" title="服务商 API Key 是否已配置">密钥：{{ apiConfigFailed ? '—' : (keySet ? '已配置' : '未配置') }}</span>
         <span class="mk-status__meta" :title="modelListTitle">模型清单：{{ apiConfigFailed ? '—' : (models.length ? `${models.length} 个` : '未拉取') }}</span>
@@ -19,14 +27,6 @@
       <template v-else>
         <span class="mk-status__meta">外挂能力 {{ addonsCount }} 个</span>
       </template>
-      <span class="mk-status__actions">
-        <button v-if="tab === 'connection'" type="button" class="mk-status__action" :disabled="fetching || !form.apiUrl" @click="fetchModels">
-          <MkLoading v-if="fetching" inline text="拉取中…" />
-          <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
-        </button>
-        <button v-else-if="tab === 'overview'" type="button" class="mk-status__action" @click="registryRef?.refresh?.(true)">刷新</button>
-        <button v-else type="button" class="mk-status__action" @click="addonsRef?.refresh?.()">刷新</button>
-      </span>
     </div>
 
     <!-- 视图切换 pills（唯一的 tab 控件）：接入与模型 / 模型总览 / 外挂能力 -->
@@ -559,6 +559,7 @@ const { options: catalogOptions, load: loadModelCatalog, extraIds } = useModelCa
 loadModelCatalog()
 import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { toast } from '@/utils/toast'
 
 /* ---------- 宿主：接入与模型 · 模型总览 · 外挂能力 ----------

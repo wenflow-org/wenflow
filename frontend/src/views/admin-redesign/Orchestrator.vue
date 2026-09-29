@@ -1,17 +1,17 @@
 ﻿<template>
   <div class="mk-page mk-page--fill">
-    <!-- 状态条：标题 + 全局关键指标（紧凑单行）——chrome 固定 -->
+    <!-- 页头（newui/admin pagehead）：页名 + 刷新上移；状态条退位为纯状态摘要（阶段/Skill/未解析/W4） -->
+    <MkPageHead title="编排图">
+      <template #actions>
+        <!-- 刷新此前只重拉 definitions， stages / 对账仍是旧值（治理面板数字对不上）→ 三个域全拉 -->
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
+      </template>
+    </MkPageHead>
     <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">编排图</strong>
-      <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ pageLoading ? '—' : stages.length }} 阶段 · {{ pageLoading ? '—' : totalSkills }} 个 Skill</span>
       <span v-if="unresolvedCount > 0" class="mk-status__meta mk-status__meta--bad">未解析 {{ unresolvedCount }}</span>
       <span v-if="w4Drifted.length" class="mk-status__meta mk-status__meta--bad">{{ TERMS.driftHashQualified }} {{ w4Drifted.length }}</span>
-      <span class="mk-status__actions">
-        <!-- 刷新此前只重拉 definitions， stages / 对账仍是旧值（治理面板数字对不上）→ 三个域全拉 -->
-        <button type="button" class="mk-status__action" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
-      </span>
     </div>
 
     <!-- 阶段导航：五个 tab = 五个阶段（浏览 + 编辑 + 治理都在阶段工作区内）——chrome 固定 -->
@@ -112,6 +112,7 @@ import DataFlowGraph from './DataFlowGraph.vue'
 import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 

@@ -1,9 +1,9 @@
 <template>
   <div class="mk-page mk-page--fill skills-host">
+    <!-- 页头（newui/admin pagehead）：页名；本页无页级动作（范围控件在卡头），状态条承载活状态 -->
+    <MkPageHead title="Skill 运行" />
     <div class="mk-status" :class="hostTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">Skill 运行</strong>
-      <span class="mk-status__sep"></span>
       <template v-if="tab === 'run'">
         <MkLoading v-if="liveLoading && !cards.length" inline text="Skill 加载中…" /><span v-else class="mk-status__meta" :title="skillCountHint">共 {{ cards.length }} 个 Skill</span>
         <!-- 窗口切换刷新中：先摘掉旧窗口的统计数字，避免新口径加载完成前旧 KPI 滞留误导（live.ts 侧 boot 窗口静默 no-op 属 live.ts，这里只兜 UI 观感） -->
@@ -27,9 +27,7 @@
       <template v-else>
         <span class="mk-status__meta" title="技能 × 通道 × 参数 × 兜底的覆盖矩阵">覆盖矩阵</span>
       </template>
-      <span class="mk-status__actions">
-        <span v-if="tab === 'run'" class="mk-status__meta">{{ rangeLabel }}</span>
-      </span>
+      <span v-if="tab === 'run'" class="mk-status__meta">{{ rangeLabel }}</span>
     </div>
 
     <!-- 视图切换 pills（唯一的 tab 控件）：Skill 运行 / 模型路由。
@@ -219,6 +217,7 @@ import { COMPLETION_META, completionMetaOf } from './glossaryMeta'
 import { EXTRA_CAPABILITY_SKILLS } from './capabilityCatalog'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from '@/components/mk/MkCols.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import Pagination from './Pagination.vue'
 import { useIsNarrow } from './useIsNarrow'

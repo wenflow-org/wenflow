@@ -7,28 +7,24 @@
          （一选用户列表整条消失），超出的 2000+px 又被 .mk-card 的 overflow:clip 裁掉，
          下半页永远滚不到。二级页形态与「用户与学习者 → 用户详情」「虚拟学习者 → 画像」一致。 -->
     <template v-if="!detail">
-    <header class="mk-status" :class="`mk-status--${headTone}`">
-      <span class="mk-status__dot" aria-hidden="true"></span>
-      <!-- 口径与术语：2026-09-28 撤掉独立折叠卡（首屏第一块是说明卡、且三句话的术语各自
-           在用到的地方已有 title：到期列头 / 队列各档 / 重新观察按钮）。scope 与观察模式
-           两句合并进页标题的 title，信息不落地丢失。 -->
-      <strong
-        class="mk-status__title"
-        title="记忆层（用户级、跨 path）：到期积压 · 课内温故配额 · 概念归并审计；归并默认观察模式，只记录建议，不动 memory_traces"
-      >记忆与复习观测</strong>
-      <span class="mk-status__sep"></span>
-      <span class="mk-status__actions">
-        <!-- 作用域开关收在状态条（原在「记忆层概览」卡头）：它切换的是整页口径，
-             而卡片区读起来像「表格控件」。绝对值移到 KPI 区后状态条只留身份 + 作用域 + 操作。 -->
+    <!-- 页头（newui/admin pagehead）：页名（悬停带口径长注）+ 作用域开关/刷新上移；
+         原状态条整体退役 -->
+    <MkPageHead
+      title="记忆与复习观测"
+      hint="记忆层（用户级、跨 path）：到期积压 · 课内温故配额 · 概念归并审计；归并默认观察模式，只记录建议，不动 memory_traces"
+    >
+      <template #actions>
+        <!-- 作用域开关收在页头（原在「记忆层概览」卡头）：它切换的是整页口径，
+             而卡片区读起来像「表格控件」。绝对值移到 KPI 区后页头只留身份 + 作用域 + 操作。 -->
         <label class="mk-status__scope" title="切换后整页重新统计：含虚拟学习者时，用户 / 痕迹 / 到期与归并队列一并纳入仿真账号">
           <input v-model="includeVirtual" type="checkbox" @change="refreshAll" />
           包含虚拟学习者
         </label>
-        <button type="button" class="mk-status__action" :disabled="loading" @click="refreshAll">
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="refreshAll">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
-      </span>
-    </header>
+      </template>
+    </MkPageHead>
     <!-- 页头 KPI 区（2026-09-28）：原「状态条散文 3 数 + 概览卡 880px 构成条 + 四张队列卡」
          三处各说一遍同一批数。现在全站页头统一为 MkKpi 卡栅格（同总览/健康中心/成本分析形态），
          页级绝对值只在这里出现一次；口径说明进各卡 title，比例条由「占痕迹 N%」副行承担。 -->
@@ -382,6 +378,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { adminMemoryReviewApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
@@ -482,8 +479,6 @@ const busy = ref(false)
 const error = ref('')
 const includeVirtual = ref(false)
 const rows = ref<OverviewRow[]>([])
-/** 页头状态档（R2）：到期积压 > 0 = 需关注且运营可行动；未加载 = 无数据（不猜） */
-const headTone = computed(() => (loading.value || !totals.value.users ? 'muted' : totals.value.due > 0 ? 'warn' : 'ok'))
 /** 明细态状态点：该用户有到期积压 = 需关注（与列表态同一语义，不猜） */
 const detailTone = computed<'ok' | 'warn' | 'muted'>(() => (!detail.value ? 'muted' : detail.value.summary.due > 0 ? 'warn' : 'ok'))
 const totals = ref({

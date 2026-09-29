@@ -81,8 +81,8 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
       expect(row.text()).toContain('加载失败')
       expect(row.text()).not.toContain('已清零')
     }
-    // 重试入口
-    expect(w.find('.mk-status__action').text()).toContain('重试')
+    // 重试入口（页头动作区，newui/admin pagehead 形态）
+    expect(w.find('.mk-pagehead__actions button').text()).toContain('重试')
 
     w.unmount()
   })
