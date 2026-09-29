@@ -146,4 +146,49 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(w.find('tbody').text()).toContain('失败路径摘要');
     w.unmount();
   });
+
+  /** 拆列回归（2026-09-29）：难度/时长从路径副行拆成独立列
+   *  ——原副行 `lp_xxx · 入门 · ~9h` 挤在同一格，且 difficulty 直出英文 unknown。 */
+  it('拆列：难度/时长独立成列；难度枚举归一（unknown→未知，不直出英文）', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        data: {
+          paths: [
+            mkPath('lp_d1', { difficulty: 'intermediate', estimatedHours: 21 }),
+            mkPath('lp_d2', { difficulty: 'unknown', estimatedHours: null }),
+            mkPath('lp_d3', { difficulty: '能把 pandas 跑起来但缺失值处理不熟', estimatedHours: 9 }),
+          ],
+          pagination: { total: 3, page: 1, limit: 100 },
+        },
+      },
+    });
+    const w = mount(OpsContent, { props: { embedded: true } });
+    await flushPromises();
+    await nextTick();
+
+    const ths = w.findAll('thead th').map((t) => t.text());
+    expect(ths).toContain('难度');
+    expect(ths).toContain('时长');
+    // 难度在主题之后、用户之前（路径自身属性成组）
+    expect(ths.indexOf('难度')).toBe(ths.indexOf('主题') + 1);
+
+    // 路径列副行只留短 ID：不再夹带难度/时长
+    const subs = w.findAll('tbody tr td:first-child .mk-cell-sub').map((s) => s.text());
+    expect(subs.every((s) => !/入门|进阶|高阶|~?\d+h/.test(s))).toBe(true);
+    expect(subs[0]).toContain('lp_d1');
+
+    // 难度三态：枚举归一为中文、英文 unknown 与自述整句都收敛为「未知」
+    expect(w.findAll('.oc-diff').map((e) => e.text())).toEqual(['进阶', '未知', '未知']);
+    // 未知态把原因/原文放进 title，不把半句自述当难度展示
+    const diffTitles = w.findAll('.oc-diff').map((e) => e.attributes('title') || '');
+    expect(diffTitles[1]).toContain('未归入任何难度档');
+    expect(diffTitles[2]).toContain('原始记录');
+
+    // 时长：有值带 ~，无值给 —
+    expect(w.findAll('.oc-hours').map((e) => e.text())).toEqual(['~21h', '—', '~9h']);
+    // 数字列右对齐（表头 mk-th--right + 单元格 mk-num）
+    expect(w.findAll('thead th').some((t) => t.text().includes('时长') && t.classes().includes('mk-th--right'))).toBe(true);
+
+    w.unmount();
+  });
 });

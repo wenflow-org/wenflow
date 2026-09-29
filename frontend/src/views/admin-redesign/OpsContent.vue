@@ -84,8 +84,13 @@
       <div v-else-if="filtered.length" class="mk-table-scroll oc-list">
         <table class="mk-table mk-table--fixed">
           <colgroup>
-            <col class="mk-col--flex">
+            <!-- 路径列不再是 flex 吸收列：min/max-width 对 <col> 无效（fixed 布局下
+                 只认 width），实测被撑到 948px（占表 58%）。改为显式 token 宽度后，
+                 余量按各列宽度权重摊给所有列（.mk-table--fixed 的既定规则）。 -->
+            <col style="width:var(--mk-col-text)">
             <col v-if="!hiddenCols.has('subject')" style="width:var(--mk-col-model-wide)">
+            <col v-if="!hiddenCols.has('difficulty')" style="width:var(--mk-col-badge)">
+            <col v-if="!hiddenCols.has('hours')" style="width:var(--mk-col-num)">
             <col v-if="!hiddenCols.has('user')" style="width:var(--mk-col-model)">
             <col v-if="!hiddenCols.has('status')" style="width:var(--mk-col-badge)">
             <col v-if="!hiddenCols.has('progress')" style="width:var(--mk-col-model-wide)">
@@ -107,6 +112,20 @@
                 :aria-sort="ocSortState('subject')"
                 @click="toggleOcSort('subject')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('subject')">主题<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="!hiddenCols.has('difficulty')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="ocSortState('difficulty')"
+                @click="toggleOcSort('difficulty')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('difficulty')">难度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="!hiddenCols.has('hours')"
+                scope="col"
+                class="mk-th--sortable mk-th--right"
+                :aria-sort="ocSortState('hours')"
+                @click="toggleOcSort('hours')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('hours')">时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!hiddenCols.has('user')">用户</th>
               <th
                 v-if="!hiddenCols.has('status')"
@@ -137,10 +156,18 @@
               <td>
                 <div class="mk-cell-main">
                   <strong class="mk-cell-text">{{ p.title }}</strong>
-                  <span class="mk-cell-sub" :title="p.id">{{ shortId(p.id, 10, 4) }} · {{ difficultyText(p.difficulty) }}{{ p.estimatedHours ? ' · ~' + p.estimatedHours + 'h' : '' }}</span>
+                  <span class="mk-cell-sub" :title="p.id">{{ shortId(p.id, 10, 4) }}</span>
                 </div>
               </td>
               <td v-if="!hiddenCols.has('subject')"><span class="oc-subject" :title="p.subject || ''">{{ p.subject || '—' }}</span></td>
+              <td v-if="!hiddenCols.has('difficulty')">
+                <!-- 难度：只有三个枚举值可判；老数据里混着 unknown 与自述整句（~35%），
+                     一律显示「未知」，原文进 title，不把半句话当难度展示 -->
+                <span class="oc-diff" :title="difficultyTitle(p.difficulty)">{{ difficultyText(p.difficulty) }}</span>
+              </td>
+              <td v-if="!hiddenCols.has('hours')" class="mk-num">
+                <span class="oc-hours">{{ p.estimatedHours ? `~${p.estimatedHours}h` : '—' }}</span>
+              </td>
               <td v-if="!hiddenCols.has('user')">
                 <div class="mk-cell-main">
                   <strong>{{ p.user?.name || '—' }}</strong>
@@ -303,9 +330,11 @@ const statusPills = computed(() => {
   ]
 })
 
-/* 列显隐（与同页其他列表一致）：目标摘要/用户/状态/进度/更新 可隐藏，路径/操作固定 */
+/* 列显隐（与同页其他列表一致）：路径/操作固定，其余可隐藏 */
 const colDefs = [
   { key: 'subject', label: '主题', title: '路径主题（学科或目标）' },
+  { key: 'difficulty', label: '难度', title: '路径难度：由目标对话里的水平自述归一（入门/进阶/高阶）；无法判断时为未知' },
+  { key: 'hours', label: '时长', title: '预计学习时长（后端 estimatedHours 估算值，带 ~ 表示近似）' },
   { key: 'user', label: '用户', title: '所属用户' },
   { key: 'status', label: '状态', title: '路径状态' },
   { key: 'progress', label: '进度', title: '里程碑完成进度' },
@@ -344,6 +373,9 @@ const { toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows } = u
   accessors: {
     path: (p) => p.title,
     subject: (p) => p.subject || '',
+    /* 难度按语义序排（入门→进阶→高阶→未知），不按字符串字典序 */
+    difficulty: (p) => DIFF_ORDINAL[difficultyEnum(p.difficulty)],
+    hours: (p) => (typeof p.estimatedHours === 'number' && p.estimatedHours > 0 ? p.estimatedHours : null),
     status: (p) => p.status,
     progress: (p) => progressPct(p),
     updated: (p) => (p.updatedAt ? new Date(p.updatedAt).getTime() : null)
@@ -382,8 +414,32 @@ const progressTone = (p: PathRow) => {
   const pct = progressPct(p)
   return pct >= 100 ? 'ok' : p.status === 'failed' ? 'bad' : 'warn'
 }
-const difficultyText = (d: string) =>
-  ({ beginner: '入门', intermediate: '进阶', advanced: '高阶' }[d] || d || '—')
+/* 难度口径：后端 normalizePathDifficulty 产出 beginner/intermediate/advanced/unknown 四值，
+   但存量里还混着 normalize 之前写进去的短词（零基础/入门级…）与自述整句，共约 35%。
+   前端只认三个语义值 + 少量短词别名，其余一律「未知」（原文进 title）；
+   绝不把半句自述或英文 unknown 当难度展示——这正是旧副行直出的老毛病。 */
+type DiffEnum = 'beginner' | 'intermediate' | 'advanced' | 'unknown'
+const DIFF_ENUM_BY_ALIAS: Record<string, Exclude<DiffEnum, 'unknown'>> = {
+  beginner: 'beginner', 零基础: 'beginner', 零编程: 'beginner', 入门级: 'beginner', 初级: 'beginner', 新手: 'beginner',
+  intermediate: 'intermediate', 中级: 'intermediate', 进阶: 'intermediate',
+  advanced: 'advanced', 高级: 'advanced', 资深: 'advanced',
+}
+const DIFF_TEXT: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
+const DIFF_ORDINAL: Record<DiffEnum, number> = { beginner: 0, intermediate: 1, advanced: 2, unknown: 3 }
+
+function difficultyEnum(d?: string | null): DiffEnum {
+  return DIFF_ENUM_BY_ALIAS[String(d || '').trim().toLowerCase()] || 'unknown'
+}
+const difficultyText = (d?: string | null): string => DIFF_TEXT[difficultyEnum(d)] || '未知'
+/** 悬停说明：枚举值给官方口径，非枚举值把原文摊开（老数据里的自述整句） */
+const difficultyTitle = (d?: string | null): string => {
+  const e = difficultyEnum(d)
+  if (e !== 'unknown') return `路径难度：${DIFF_TEXT[e]}（来源：目标对话中的水平自述）`
+  const raw = String(d || '').trim()
+  return raw && raw !== 'unknown'
+    ? `无法归一到难度枚举，原始记录：${raw}`
+    : '目标对话里没有可判断水平的自述，未归入任何难度档'
+}
 
 function fmtDate(iso?: string | null): string {
   if (!iso) return '—'
@@ -610,6 +666,12 @@ defineExpose({ reload: () => void reload(true) })
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
+
+/* 难度：三个语义值 + 未知；未知降一档灰，不抢视觉 */
+.oc-diff { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
+.oc-diff:empty::after { content: '—'; }
+/* 时长：右对齐等宽数字（与表头 mk-th--right 对齐） */
+.oc-hours { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; color: var(--mk-muted); white-space: nowrap; }
 
 .oc-desc { color: var(--mk-muted); font-size: var(--mk-fs-micro); margin: 0 0 12px; }
 .oc-milestone {
