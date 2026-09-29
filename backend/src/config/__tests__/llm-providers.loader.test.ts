@@ -22,11 +22,18 @@ const SEED_PATH = path.resolve(__dirname, '../../../config/llm-providers.json');
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-providers-test-'));
 const tempConfig = path.join(tmpDir, 'llm-providers.json');
 
+/** 写入次数：保证每次写入的 mtime 严格单调递增（见下） */
+let mtimeSeq = 0
+
 function writeTempConfig(content: string): void {
-  fs.writeFileSync(tempConfig, content, 'utf-8');
-  // mtime 精度不足以区分连续两次写入，手动拨一下保证 reload 感知
-  const st = fs.statSync(tempConfig);
-  fs.utimesSync(tempConfig, st.atime, new Date(st.mtimeMs + 5));
+  fs.writeFileSync(tempConfig, content, 'utf-8')
+  /* 变更检测（reloadLlmProvidersIfChanged）只比 mtimeMs，同一毫秒内的两次写入会被正当地
+     判成「未变」——所以测试得手动把 mtime 拨开。原来用的是固定 `st.mtimeMs + 5`：
+     拨出来的值只领先真实时钟 5ms，**后续某次真实写入恰好落在那一毫秒就撞上**，测试随机变红
+     （2026-09-29 CI 实测红过一次：`expect(reloaded).toBe(true)` 收到 false，本地 NTFS 不复现）。
+     改为按写入序号单调前推（每次多 1 分钟，永远领先任何真实时钟），彻底消除这个窗口。 */
+  mtimeSeq += 1
+  fs.utimesSync(tempConfig, new Date(), new Date(Date.now() + mtimeSeq * 60_000))
 }
 
 const VALID_CUSTOM = JSON.stringify({
