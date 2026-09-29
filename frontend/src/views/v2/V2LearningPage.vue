@@ -2324,7 +2324,7 @@ onBeforeUnmount(() => {
 
 /* ---------- 检查点 ---------- */
 .checkpoint {
-  margin: 0 16px;
+  margin: 0 14px;
   padding: 14px 16px;
   border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
   background: color-mix(in srgb, var(--amber) 6%, transparent);
@@ -2631,7 +2631,7 @@ onBeforeUnmount(() => {
 .typing-fade-leave-to { opacity: 0; }
 
 .replies {
-  margin: 4px 16px 0;
+  margin: 4px 14px 0;
   padding: 13px 14px 14px;
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal);
@@ -2809,7 +2809,7 @@ onBeforeUnmount(() => {
    （头部 79 + 知识点条 58 已占掉 137）。这里只做瘦身而不给它内部滚动：第三个选项被藏进
    看不见的滚动区更糟。目标：块 ≤210px、消息区 ≥200px。 */
 @media (max-width: 900px) {
-  .replies { margin: 4px 12px 0; padding: 10px 12px 12px; }
+  .replies { margin: 4px 14px 0; padding: 10px 12px 12px; }
   .replies__head { padding-bottom: 6px; }
   .replies__question { margin-bottom: 6px; padding: 6px 9px; font-size: 12px; }
   .replies__row { gap: 5px; }
@@ -2896,5 +2896,24 @@ onBeforeUnmount(() => {
 @media (min-width: 1101px) {
   .tutor__scroll > * { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
   .composer__box { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
+  /* 滚动区之外的「行动台」同属这一列内容，必须与消息同宽：它们不是 .tutor__scroll 的孩子，
+     拿不到上面那条 760 上限——Chromium 实测（1920 视口 / tutor 1260px）检查点铺满
+     1226px、快捷引导同样 1226px，而消息列和输入盒是 760px：同一个聊天卡里两套宽度
+     （2026-09-28 用户「检查点面板超宽，是整个聊天区宽度」）。
+     开场卡/续课条/快捷引导/检查点都是卡片，直接收窄居中；行动台是通栏分隔条（border-top +
+     底色），条保持通栏、只用内边距把内容收进同一列（与 .composer 收 .composer__box 同法）。 */
+  .tutor > .oscene,
+  .tutor > .tutor__resume,
+  .tutor > .replies,
+  .tutor > .checkpoint {
+    width: calc(100% - 28px);
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .tutor > .kp-actions {
+    padding-left: max(16px, calc((100% - 760px) / 2));
+    padding-right: max(16px, calc((100% - 760px) / 2));
+  }
 }
 </style>
