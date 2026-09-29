@@ -500,12 +500,17 @@ export function derivePlanningHints(
 
   // 2026-09-28 R2（rw-school-15 案例：20min 早读被排 30min 课）：上界不得突破会话时长——
   // 「每步一次坐完」的硬约束优先于「任务别太小」的下限偏好。
-  // 下界=clamp(0.3×会话, 8, 45)；上界=min(会话时长, clamp(0.8×会话, 15, 120))。
+  // 下界=clamp(0.3×会话, 8, 45)；上界=min(会话时长, 120 理智上界)。
+  // 2026-09-29 用户口径修正（「没有数据支撑学习者每天不能学八小时，学校里的学生就是这样」）：
+  // **去掉 0.8 系数**——它把「课 ≤ 会话」偷偷变成「课 ≤ 0.8×会话」，白吃掉 20% 结构容量，
+  // 且无实证依据（原案例只要求「别超会话」，从没要求留 20% 余量）。改为一比一取用户自述会话时长；
+  // 120 分钟只作**理智上界**（防「一次 8 小时」这类口语被当单课长度），不是负荷判断。
+  // 实证：CPA 案例（自述一次 2h）单课档从 96 → 120，结构容量 240h → 300h（对 416h 目标缺口 42%→28%）。
   let subtaskMinutesRange: [number, number] = Number.isFinite(parsedSessionMinutes)
     ? (() => {
         const s = parsedSessionMinutes as number;
         const lower = Math.max(8, Math.min(45, Math.round(s * 0.3)));
-        const upper = Math.min(Math.max(10, s), Math.max(15, Math.min(120, Math.round(s * 0.8))));
+        const upper = Math.max(15, Math.min(120, s));
         return [lower, Math.max(lower, upper)] as [number, number];
       })()
     : defaultMinutesRange;
@@ -669,8 +674,8 @@ export function derivePlanningHints(
     // 2026-09-28 粒度修正：扩容只加「课数」，不再放大「单课时长」。此前 avgTaskMin*2 会把
     // 分钟上界顶到 240（session=60min 时实测单课均值 82min、锚 108min）——单课超过用户
     // 单次可用时间 = 一节课一天上不完（真实案例：90h 预算被切成 5×10×82min）。
-    // 单课上界保持会话档（subtaskMinutesRange[1]，已按 timePerSession 校准，再封 90 防无会话
-    // 信息时默认 90 以上）；预算缺口由课数吸收；仍装不下的部分由
+    // 单课上界保持会话档（subtaskMinutesRange[1]，已按 timePerSession 一比一校准）；
+    // 预算缺口由课数吸收；仍装不下的部分由
     // targetHoursPerMilestone 的结构容量钳制诚实收缩（不多排账面学时）。
     //
     // 2026-09-29 R5-1：旧代码硬帽 Math.min(14, needed)——needed=54（school-16 型：650h/8 阶段
@@ -679,8 +684,11 @@ export function derivePlanningHints(
     // 31 条缺口声明全是这个天花板。改为按需抬升：上界 = clamp(needed, 14, 30)。
     // 30 的上限是防 filler 副作用（评审实测：强填课会产换皮复读，B 维同质化）——
     // 超过 30 课/阶段仍由缺口声明诚实兜底，不靠堆课数虚增容量。
+    // 2026-09-29 用户口径修正：去掉这里额外的 90 封顶——它与 structureStageCapacityHours 用的
+    // subtaskMinutesRange[1] 不一致（CPA 实测 96 vs 90），造成「课数目标按 90 算、容量报告按 96 算」
+    // 两张皮。现在两处同源。
     const perStageMin = anchorMin / targetMilestones;
-    const lessonMinutesCap = Math.min(subtaskMinutesRange[1], 90);
+    const lessonMinutesCap = subtaskMinutesRange[1];
     const needed = Math.ceil(perStageMin / lessonMinutesCap);
     // 上界按需抬升（needed），30 封顶：强填课会产换皮复读（评审实证 B 维同质化），
     // 超过 30 课/阶段仍由缺口声明诚实兜底，不靠堆课数虚增容量。
