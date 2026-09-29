@@ -44,9 +44,9 @@ vi.mock('@/api/adminApi', () => ({
   adminTeachingSessionsApi: apiObject(),
   adminUsersApi: apiObject(),
   adminNotificationsApi: apiObject(),
-  // TokenCost 渲染需要 totals 结构（状态条色调推导），mock 真实载荷
+  // TokenCost 渲染需要 totals 结构（状态条色调推导 + 非空才渲染 KPI 栅格），mock 真实载荷
   adminTokenCostApi: {
-    getSummary: vi.fn(async () => ({ data: { data: { days: 7, includeTest: false, totals: { tokens: 0, promptTokens: 0, completionTokens: 0, calls: 0, failed: 0 }, trend: [] } } })),
+    getSummary: vi.fn(async () => ({ data: { data: { days: 7, includeTest: false, totals: { tokens: 1200, promptTokens: 1000, completionTokens: 200, calls: 12, failed: 0, usd: null, pricingKnown: false, pricedCalls: 0, callsMissingPricing: 12 }, trend: [] } } })),
     getBySkill: vi.fn(async () => ({ data: { data: [] } })),
     getByUser: vi.fn(async () => ({ data: { data: [] } })),
     getByModel: vi.fn(async () => ({ data: { data: [] } }))
@@ -193,7 +193,10 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     await ready;
     const w = mount(TokenCost, { global: { plugins: [router] } });
     await settle();
-    expect(w.find('.cost-strip').exists()).toBe(true);
+    // 成本金额条已收编进概览区第四张 MkKpi 卡（cost-strip 私有形态退役）
+    const labels = w.findAll('.tc-overview .mk-kpi__label').map((c) => c.text());
+    expect(labels).toContain('调用成本');
+    expect(labels).toContain('总 Token');
     expect(w.find('.mk-status__title').text()).toBe('Token 成本');
     w.unmount();
 

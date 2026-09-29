@@ -19,31 +19,8 @@
       </span>
     </div>
 
-    <!-- 调用成本金额条（2026-09-29 从执行日志宿主搬入，随独立页回归本组件）：
-         读取 token-cost 端点金额字段；单价未配置时显式提示（绝不用 0 冒充）。
-         加载失败与「无调用」是两回事：失败显式报错并可重试，只有双 0 且未失败才说「无调用」。 -->
-    <div class="mk-card cost-strip" :class="{ 'cost-strip--unknown': !costPricingKnown }">
-      <div class="cost-strip__main">
-        <span class="cost-strip__label">调用成本（近 {{ days }} 天{{ includeTest ? ' · 含测试流量' : '' }}）</span>
-        <strong v-if="costLoading" class="cost-strip__value">统计中…</strong>
-        <strong v-else-if="costFailed" class="cost-strip__value cost-strip__value--unknown">加载失败</strong>
-        <strong v-else-if="costUsd !== null" class="cost-strip__value mono">≈ ${{ fmtCostUsd(costUsd) }}</strong>
-        <strong v-else-if="costPricedCalls === 0 && costMissingCalls === 0" class="cost-strip__value cost-strip__value--unknown">无调用</strong>
-        <strong v-else class="cost-strip__value cost-strip__value--unknown">单价未配置</strong>
-        <span v-if="!costLoading" class="cost-strip__hint">
-          <template v-if="costFailed">金额统计拉取失败，不影响下方逐调用明细，可重试。</template>
-          <template v-else-if="costUsd !== null">
-            已定价 {{ costPricedCalls }} 次<template v-if="costMissingCalls > 0"> · {{ costMissingCalls }} 次未定价（未计入）</template>
-          </template>
-          <template v-else-if="costPricedCalls === 0 && costMissingCalls === 0">近 {{ days }} 天没有带 token 的 LLM 调用</template>
-          <template v-else>models.config.ts 的 pricing 尚未填权威单价，暂不展示金额</template>
-        </span>
-        <button v-if="costFailed" type="button" class="mk-link" @click="loadCostSummary">重试</button>
-      </div>
-      <div v-if="missingPricingModels.length" class="cost-strip__missing" :title="missingPricingModels.join('、')">
-        待补单价模型 {{ missingPricingModels.length }} 个：{{ missingPricingModels.join('、') }}
-      </div>
-    </div>
+    <!-- 调用成本 2026-09-29 收编进概览区第四张 MkKpi 卡（原私有 cost-strip 金额条
+         与全站 KPI 语言不一致；单价未配置/加载失败态由 KPI 卡 hint + tone 承担） -->
 
     <!-- 加载失败（优先于空态） -->
     <MkEmptyState
@@ -60,7 +37,7 @@
     <template v-else-if="!summary && loading">
       <div class="tc-filterbar tc-filterbar--skeleton"></div>
       <section class="tc-overview">
-        <div v-for="i in 3" :key="i" class="mk-kpi tc-skel-kpi"><MkSkeleton w="60%" :h="26" /><MkSkeleton w="40%" :h="12" /></div>
+        <div v-for="i in 4" :key="i" class="mk-kpi tc-skel-kpi"><MkSkeleton w="60%" :h="26" /><MkSkeleton w="40%" :h="12" /></div>
       </section>
       <section class="mk-card">
         <div class="mk-card__head"><MkSkeleton w="180" :h="14" /></div>
@@ -101,11 +78,18 @@
         @action="days = 90"
       />
       <template v-else>
-      <!-- 概览卡（MkKpi 统一形态） -->
+      <!-- 概览卡（MkKpi 统一形态）：第四张 = 调用成本（原 cost-strip 金额条收编；
+           单价未配置显式说明、绝不用 0 冒充；加载失败给 warn 态，重试走刷新） -->
       <section class="tc-overview">
         <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`prompt ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · completion ${summary ? fmtTokens(summary.totals.completionTokens) : '—'}`" />
         <MkKpi label="调用次数" :value="summary ? summary.totals.calls : '—'" :hint="`近 ${days} 天`" />
         <MkKpi label="失败调用" :value="summary ? summary.totals.failed : '—'" :tone="summary && summary.totals.failed > 0 ? 'bad' : ''" :hint="failRateHint" />
+        <MkKpi
+          label="调用成本"
+          :value="costLoading ? '…' : costFailed ? '加载失败' : costUsd !== null ? `≈ $${fmtCostUsd(costUsd)}` : (costPricedCalls === 0 && costMissingCalls === 0) ? '无调用' : '单价未配置'"
+          :tone="costFailed ? 'warn' : ''"
+          :hint="costHint"
+        />
       </section>
 
       <!-- 趋势图 -->
@@ -251,6 +235,21 @@ const failRateHint = computed(() => {
   if (!s) return '含重试后的终态失败'
   const rate = s.calls > 0 ? Math.round((s.failed / s.calls) * 100) : 0
   return `失败率 ${rate}% · 含重试后的终态失败`
+})
+
+/* 成本卡副行：数值本身只给结论，口径/待补模型明细收在 hint（title 可悬停展开） */
+const costHint = computed(() => {
+  if (costLoading.value) return '金额统计中'
+  if (costFailed.value) return '金额统计拉取失败，可刷新重试；不影响下方逐调用明细'
+  if (costUsd.value !== null) {
+    const priced = `已定价 ${costPricedCalls.value} 次`
+    return costMissingCalls.value > 0 ? `${priced} · ${costMissingCalls.value} 次未定价（未计入）` : priced
+  }
+  if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `近 ${days.value} 天没有带 token 的 LLM 调用`
+  const missing = missingPricingModels.value
+  return missing.length
+    ? `暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}`
+    : 'models.config.ts 的 pricing 尚未填权威单价，暂不展示金额'
 })
 
 /* 跨页互跳：成本聚合页 ⇄ 明细页（执行日志行级 token）/ 总览趋势
@@ -402,10 +401,11 @@ const trendChartOption = computed<EChartsCoreOption>(() => {
 }
 .tc-status--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
 
-/* 概览卡：MkKpi 网格容器（统计卡本体由 MkKpi 提供，含暗色/4K 自动适配） */
+/* 概览卡：MkKpi 网格容器（统计卡本体由 MkKpi 提供，含暗色/4K 自动适配）。
+   第四张 = 调用成本（原 cost-strip 金额条收编，2026-09-29） */
 .tc-overview {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -459,17 +459,4 @@ html[data-theme='dark'] {
 .tc-skel-kpi { display: grid; gap: 8px; }
 /* 骨架内边距（形状由 MkSkeleton 提供） */
 .tc-skel-pad { padding: 12px 16px 16px; }
-
-/* ===== 调用成本金额条（2026-09-29 自执行日志宿主搬入） ===== */
-.cost-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 12px; }
-.cost-strip--unknown { border-left: 3px solid var(--mk-amber, #d97706); }
-.cost-strip__main { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex-wrap: wrap; }
-.cost-strip__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
-.cost-strip__value { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--mk-ink); }
-.cost-strip__value--unknown { color: var(--mk-faint); }
-.cost-strip__hint { color: var(--mk-faint, #5f6f8c); font-size: var(--mk-fs-micro); }
-.cost-strip__missing { font-size: var(--mk-fs-micro); color: var(--mk-amber, #d97706); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (min-width: 1440px) { .cost-strip__value { font-size: 20px; } }
-@media (min-width: 1920px) { .cost-strip__value { font-size: 22px; } }
-@media (min-width: 2800px) { .cost-strip__value { font-size: 26px; } }
 </style>
