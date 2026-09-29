@@ -213,16 +213,27 @@ async function driveCell(personaId, runIndex) {
     let failGrace = 0; // 2026-09-27：生成器有自动重试（attempt1 failed → attempt2 succeeded），
     // 首次 failed 只记账，连续约 1min 仍 failed 才判死——避免把重试中的运行误判为 failed-gen
     // （轮询间隔 5s × 12 次 ≈ 60s；间隔从 15s 收紧以缩短单格空等）
+    let sawReady = false;
     while (Date.now() < deadline) {
       const g = await api('GET', `/api/learning/paths/${st.pathId}/generation-status`);
       const lc = g.json?.data?.lifecycle || '';
       st.generationLifecycle = lc;
-      if (lc === 'ready') break;
+      if (lc === 'ready') { sawReady = true; break; }
       if (String(lc).includes('failed')) {
         failGrace += 1;
         if (failGrace >= 12) { st.status = 'failed-gen'; break; }
       } else failGrace = 0;
       await sleep(5000);
+    }
+    // 2026-09-29 修正：此前 deadline 耗尽而未 ready 时，下方分支仍把它标成 done——
+    // 实测 wave4 有 4/30 条实际零内容（3 条 core 上游失败 + 1 条 stageDesign 重试耗尽）
+    // 却被记为成功，把跑批成功率虚高了 13%。未 ready 即未完成，必须如实记账。
+    if (!sawReady && st.status === 'awaiting-path') {
+      st.status = 'failed-gen';
+      st.error = `生成未在 ${Math.round(GEN_TIMEOUT_MS / 60000)} 分钟内就绪（lifecycle=${st.generationLifecycle || '未知'}）`;
+      saveState(sp, st);
+      log(`${personaId}#${runIndex} TIMEOUT: ${st.error}`);
+      return st;
     }
     if (st.status === 'awaiting-path') {
       const detail = await api('GET', '/api/learning/paths/' + st.pathId);
@@ -234,10 +245,19 @@ async function driveCell(personaId, runIndex) {
           subtasks: (s.subtasks || []).map(t => ({ title: t.title, taskType: t.taskType, estimatedMinutes: t.estimatedMinutes, acceptanceCriteria: t.acceptanceCriteria, icapLevel: t.icapLevel })),
         })),
       };
+      // 就绪但零课：core 成功而 stageDesign 未落地（如重试耗尽），同样是未完成。
+      const totalTasks = (st.path.stages || []).reduce((n, s) => n + (s.subtasks?.length || 0), 0);
+      if (!st.path.stages?.length || totalTasks === 0) {
+        st.status = 'failed-gen';
+        st.error = `路径就绪但内容为空（阶段 ${st.path.stages?.length || 0} 个 / 课 ${totalTasks} 个）`;
+        saveState(sp, st);
+        log(`${personaId}#${runIndex} EMPTY: ${st.error}`);
+        return st;
+      }
       st.status = 'done';
       st.finishedAt = Date.now();
       saveState(sp, st);
-      log(`${personaId}#${runIndex} DONE: ${st.path.name} (${st.path.stages?.length} stages)`);
+      log(`${personaId}#${runIndex} DONE: ${st.path.name} (${st.path.stages?.length} stages, ${totalTasks} tasks)`);
     } else {
       saveState(sp, st);
     }

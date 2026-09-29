@@ -22,6 +22,11 @@ type TelemetryDelegate = {
  */
 class TelemetryWriter {
   private pending = new Set<Promise<unknown>>();
+  /**
+   * 丢弃计数（按表）。缺行的遥测此前只留一行 logger.warn——审计侧无法区分
+   * 「这次调用没发生」与「INSERT 失败被吞」。计数让前者可证伪，并由管理端读走。
+   */
+  private drops = new Map<string, number>();
 
   async createAgentCall(data: any): Promise<boolean> {
     return this.safeCreate('agent_call_logs', (prisma as any).agent_call_logs, data, { background: true });
@@ -41,6 +46,21 @@ class TelemetryWriter {
     await Promise.allSettled([...this.pending]);
   }
 
+  /** 丢弃计数快照（管理端 / 审计用；进程内累计，重启归零） */
+  getDropStats(): { total: number; byTable: Record<string, number>; pending: number } {
+    const byTable = Object.fromEntries(this.drops);
+    return {
+      total: [...this.drops.values()].reduce((sum, n) => sum + n, 0),
+      byTable,
+      pending: this.pending.size
+    };
+  }
+
+  /** 清空丢弃计数（测试用） */
+  resetDropStats(): void {
+    this.drops.clear();
+  }
+
   private async safeCreate(
     name: string,
     delegate: TelemetryDelegate | undefined,
@@ -54,8 +74,10 @@ class TelemetryWriter {
         await delegate.create({ data });
         return true;
       } catch (error) {
+        this.drops.set(name, (this.drops.get(name) || 0) + 1);
         logger.warn('[telemetry] 日志写入失败', {
           table: name,
+          droppedTotal: this.drops.get(name),
           traceId: data?.traceId || null,
           error: error instanceof Error ? error.message : String(error)
         });

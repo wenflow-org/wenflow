@@ -23,6 +23,7 @@ import {
   updatePlatformReliabilitySettings
 , isFallbackEffectivelyDisabled } from '../../services/reliability-settings.service';
 import { applyRpmLimitsFromSettings } from '../../services/rpm-limit-config.service';
+import { telemetryWriter } from '../../services/telemetry-writer.service';
 import {
   getPlatformCapabilityProbeEnabled,
   getPlatformCapabilityProbeInterval,
@@ -910,6 +911,9 @@ router.get('/settings/reliability', async (req: Request, res: Response) => {
       data: {
         settings,
         hardLimits: getReliabilityHardLimits(),
+        // 遥测丢弃计数：prompt_call_logs / agent_call_logs 是后台写（仅 warn 不报错），
+        // 缺行此前无法与「调用没发生」区分——此处给出进程内累计，供审计侧证伪。
+        telemetry: telemetryWriter.getDropStats(),
         derived: {
           fallbackDisabled,
           ...(fallbackDisabled

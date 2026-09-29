@@ -54,6 +54,40 @@ import {
 } from './run-lifecycle';
 import { listEmptyMilestoneIds } from './retry-policy';
 
+/** 只依赖 deleteMany 的最小客户端面（便于单测注入假实现） */
+export interface StageItemPruneClient {
+  path_generation_stage_items: {
+    deleteMany: (args: {
+      where: { run: { learningPathId: string }; runId: { not: string } };
+    }) => Promise<unknown>;
+  };
+}
+
+/**
+ * 清理被取代 run 遗留的 stage items（重试不留脏行）。
+ *
+ * 背景：`path_generation_stage_items` 的唯一约束是 `[runId, stageNumber]`，
+ * 而一次 stageDesign 失败后重试会产生**新的 runId**，两轮的 stage items 并存 ⇒
+ * 同阶段出现互相矛盾的状态行（`succeeded/4` 与 `succeeded/6`）与永不解决的
+ * `processing/0` 废弃行（实测 74 个「路径×阶段」组合、20/118 条路径受影响）。
+ *
+ * 语义：replace 模式下本轮 run 取代此前所有尝试，故清掉非本轮 run 的行
+ * （与 `path-generation.core.ts` 的孤儿清理同口径）；
+ * **append 模式不清**——其行是既有阶段的追加记录，不是被取代的尝试。
+ */
+export async function pruneSupersededStageItems(
+  client: StageItemPruneClient,
+  pathId: string,
+  runId: string,
+  options: { appendOnly?: boolean } = {},
+): Promise<number> {
+  if (options.appendOnly) return 0;
+  const result: any = await client.path_generation_stage_items.deleteMany({
+    where: { run: { learningPathId: pathId }, runId: { not: runId } },
+  });
+  return Number(result?.count) || 0;
+}
+
 export async function enrichLearningPathWithAnderson(
   pathId: string,
   runId: string,
@@ -102,6 +136,12 @@ export async function enrichLearningPathWithAnderson(
       appendOnly ? 'append-tasks' : 'replace-tasks',
       appendOnly ? { milestoneIds: appendMilestoneIds } : {}
     );
+    // 重试不留脏行：replace 语义下本轮 run 取代此前所有 stageDesign 尝试，
+    // 但 stage items 的唯一约束是 [runId, stageNumber]，两轮 runId 不同故并存——
+    // 导致同阶段出现互相矛盾的状态行（succeeded/4 与 succeeded/6）与永不解决的
+    // processing/0 废弃行（实测 74 个「路径×阶段」组合、20/118 条路径受影响）。
+    // 与 path-generation.core.ts 的孤儿清理同口径。
+    await pruneSupersededStageItems(prisma, pathId, runId, { appendOnly });
     stopHeartbeat = startGenerationHeartbeat(pathId, runId);
 
     await recordPathGenerationStageLog({
