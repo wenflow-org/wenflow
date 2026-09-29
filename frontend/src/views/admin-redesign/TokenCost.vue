@@ -1,17 +1,13 @@
 <template>
   <div class="mk-page">
-    <!-- 状态条（单行：计数 + 刷新；范围/数据范围移入下方筛选条） -->
+    <!-- 状态条（身份 + 口径 + 操作）：三个数字全部移到下方 KPI 卡，避免同一批数
+         在状态条与 KPI 区各说一遍（用户 2026-09-29：「这是 KPI 区域吗」——原状态条
+         「120.7M / 29602 次调用 / 失败 1290」与前两张 KPI 卡逐字重复） -->
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">Token 成本</strong>
       <span class="mk-status__sep"></span>
-      <template v-if="isLive && summary">
-        <span class="mk-status__meta">{{ fmtTokens(summary.totals.tokens) }}</span>
-        <span class="mk-status__meta">{{ summary.totals.calls }} 次调用</span>
-        <span class="mk-status__meta" :class="{ 'tc-status--bad': summary.totals.failed > 0 }">
-          失败 {{ summary.totals.failed }}
-        </span>
-      </template>
+      <span class="mk-status__meta">近 {{ days }} 天 · {{ includeTest ? '含测试流量' : '仅真实用户' }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="loading" @click="() => load(true)">
           {{ loading ? '刷新中…' : '刷新' }}
@@ -36,7 +32,7 @@
     <!-- 首载骨架：KPI 卡 + 趋势图 + 排行占位（对齐全站 MockSkeleton 语言） -->
     <template v-else-if="!summary && loading">
       <div class="tc-filterbar tc-filterbar--skeleton"></div>
-      <section class="tc-overview">
+      <section class="mk-kpi-grid">
         <div v-for="i in 4" :key="i" class="mk-kpi tc-skel-kpi"><MkSkeleton w="60%" :h="26" /><MkSkeleton w="40%" :h="12" /></div>
       </section>
       <section class="mk-card">
@@ -78,11 +74,12 @@
         @action="days = 90"
       />
       <template v-else>
-      <!-- 概览卡（MkKpi 统一形态）：第四张 = 调用成本（原 cost-strip 金额条收编；
-           单价未配置显式说明、绝不用 0 冒充；加载失败给 warn 态，重试走刷新） -->
-      <section class="tc-overview">
+      <!-- 概览卡（统一走共享 .mk-kpi-grid + MkKpi）：四个数字的唯一去处——
+           状态条不再复述；第四张「调用成本」承接原私有 cost-strip 金额条。
+           每张卡的 hint 给派生口径（拆分/均值/失败率/待补单价），不是把数字再说一遍。 -->
+      <section class="mk-kpi-grid">
         <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`prompt ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · completion ${summary ? fmtTokens(summary.totals.completionTokens) : '—'}`" />
-        <MkKpi label="调用次数" :value="summary ? summary.totals.calls : '—'" :hint="`近 ${days} 天`" />
+        <MkKpi label="调用次数" :value="summary ? summary.totals.calls : '—'" :hint="callsHint" />
         <MkKpi label="失败调用" :value="summary ? summary.totals.failed : '—'" :tone="summary && summary.totals.failed > 0 ? 'bad' : ''" :hint="failRateHint" />
         <MkKpi
           label="调用成本"
@@ -235,6 +232,14 @@ const failRateHint = computed(() => {
   if (!s) return '含重试后的终态失败'
   const rate = s.calls > 0 ? Math.round((s.failed / s.calls) * 100) : 0
   return `失败率 ${rate}% · 含重试后的终态失败`
+})
+
+/* 调用次数副行：窗口 + 每次调用的平均 token（派生量，状态条不给） */
+const callsHint = computed(() => {
+  const s = summary.value?.totals
+  const window = `近 ${days.value} 天`
+  if (!s || s.calls <= 0) return window
+  return `${window} · 平均 ${fmtTokens(Math.round(s.tokens / s.calls))}/次`
 })
 
 /* 成本卡副行：数值本身只给结论，口径/待补模型明细收在 hint（title 可悬停展开） */
@@ -399,15 +404,9 @@ const trendChartOption = computed<EChartsCoreOption>(() => {
   border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
 }
-.tc-status--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
-
-/* 概览卡：MkKpi 网格容器（统计卡本体由 MkKpi 提供，含暗色/4K 自动适配）。
-   第四张 = 调用成本（原 cost-strip 金额条收编，2026-09-29） */
-.tc-overview {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
+/* KPI 区已改用共享 .mk-kpi-grid（2026-09-29 重设：原私有 .tc-overview
+   repeat(4,1fr)/gap14 与全站 KPI 栅格不是同一套；.tc-status--bad 随状态条
+   去数字一并退役 → 见下方模板注释 */
 
 /* 趋势图：柱状图 + Y 轴刻度 + 网格线 + 柱顶数值 + 今日高亮（对齐 AntD Chart 语言） */
 .tc-head-links {

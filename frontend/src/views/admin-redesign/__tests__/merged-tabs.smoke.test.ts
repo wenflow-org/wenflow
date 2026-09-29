@@ -193,11 +193,14 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     await ready;
     const w = mount(TokenCost, { global: { plugins: [router] } });
     await settle();
-    // 成本金额条已收编进概览区第四张 MkKpi 卡（cost-strip 私有形态退役）
-    const labels = w.findAll('.tc-overview .mk-kpi__label').map((c) => c.text());
+    // KPI 区收编成本卡后走共享 .mk-kpi-grid（私有 .tc-overview / cost-strip 均已退役）
+    const labels = w.findAll('.mk-kpi-grid .mk-kpi__label').map((c) => c.text());
     expect(labels).toContain('调用成本');
     expect(labels).toContain('总 Token');
-    expect(w.find('.mk-status__title').text()).toBe('Token 成本');
+    // 状态条不再复述 KPI 数字（只留身份 + 口径）
+    const statusText = w.find('.mk-status').text();
+    expect(statusText).toContain('Token 成本');
+    expect(statusText).not.toContain('次调用');
     w.unmount();
 
     const { router: r2, ready: ready2 } = mockRouter('/admin/execution-logs');
