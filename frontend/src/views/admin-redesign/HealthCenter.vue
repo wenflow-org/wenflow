@@ -80,10 +80,10 @@
         <MkKpi
           label="已上线"
           :value="completionLive"
-          :hint="`/ ${reconciliation.total}`"
+          :hint="completionHint"
           tone="ok"
           clickable
-          title="完成度已达 live 档的技能数"
+          :title="`完成度已达 live 档的技能数：${completionLive} / ${reconciliation.total} 个登记`"
           @click="kpiGo('completion')"
         />
       </div>
@@ -256,6 +256,12 @@ const reconAbnormal = computed(() => {
   return (r?.missingRegistration || 0) + (r?.zombieRegistration || 0) + (r?.missingActive || 0) + (r?.zombieActive || 0) + (r?.unwired || 0)
 })
 const completionLive = computed(() => displayReport.value?.completion?.live || 0)
+/** 概要卡副行统一成「状态词」：原来这张是裸 `/ 37`，与「1 异常 / 一致 / 另 50 条只读遥测」不成句。
+    总数仍可从卡头「已上线 37/37」与 title 读到，不必在副行重复。 */
+const completionHint = computed(() => {
+  const pending = reconciliation.value.total - completionLive.value
+  return pending > 0 ? `待上线 ${pending} 个` : '全部上线'
+})
 
 /** 概要卡 tooltip：解释口径，避免红色数字误读 */
 const driftCardTitle = computed(() => {

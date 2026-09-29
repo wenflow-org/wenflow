@@ -126,8 +126,8 @@ describe('健康中心（G1）', () => {
     expect(cards[1].text()).toContain('需处理');
     expect(cards[2].text()).toContain('8');       // 对账
     expect(cards[2].text()).toContain('5 异常');  // 1+0+2+1+0+1，zombieSkillActive 3 与健康检查同源不计
-    expect(cards[3].text()).toContain('2');       // 已上线
-    expect(cards[3].text()).toContain('/ 8');
+    expect(cards[3].text()).toContain('2');           // 已上线
+    expect(cards[3].text()).toContain('待上线 6 个');  // 副行与其余三张统一为状态词（原为裸 `/ 8`）
 
     // 健康检查 13 行全部渲染；异常/关注项默认展开，正常项收进折叠组
     const rows = wrapper.findAll('.hc-check__row');

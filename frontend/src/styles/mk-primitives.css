@@ -363,6 +363,14 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   border-bottom: 1px solid var(--mk-line);
   flex-wrap: wrap;
 }
+/* 头内成组：标题（首个元素）独占剩余宽度、其后元素紧凑成组贴右。
+   单靠 space-between 时，尾部元素≥2 个、或折叠头用 ::before 插入的 ▸ 标记（它也是一个
+   flex item）都会参与均分，把标题推到卡片中间、其余元素等距散开——实测 1920 下健康中心
+   「健康检查」标题落在 x=774（卡左内边距仅 273）、「13 项」悬在 x=1317、
+   「完成度分布」因文案更短又落到 x=1009（2026-09-29 走查：位置哪里的都有）。
+   首个元素吃掉全部剩余空间后，尾部元素自然贴右且彼此只隔 gap；
+   页面在尾部元素上写的 margin-left:auto 变成空操作（无剩余空间可分），无需逐页清理。 */
+.mk-card__head > :first-child { flex: 1 1 auto; }
 .mk-card__title { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; }
 .mk-card__meta { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 /* 卡内小字注解（图表/排行无数据时的说明行）。
