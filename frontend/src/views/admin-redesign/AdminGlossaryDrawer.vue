@@ -1,12 +1,12 @@
 <template>
   <Teleport to="body">
-    <div v-if="open" class="mk-drawer agd">
+    <div v-if="open" class="mk-drawer">
       <div ref="maskRef" class="mk-drawer__mask"></div>
-      <aside ref="panelRef" class="mk-drawer__panel agd__panel" role="dialog" aria-label="运营术语表">
+      <aside ref="panelRef" class="mk-drawer__panel mk-drawer__panel--wide agd__panel" role="dialog" aria-label="运营术语表">
         <div class="mk-drawer__head">
-          <div class="agd__title">
-            <strong>这是什么 · 运营术语表</strong>
-            <span class="agd__subtitle">不懂的词在这里查一句话人话</span>
+          <div>
+            <h3 class="mk-drawer__title">这是什么 · 运营术语表</h3>
+            <span class="mk-drawer__sub">不懂的词在这里查一句话人话</span>
           </div>
           <button type="button" class="mk-drawer__close" aria-label="关闭" @click="close">✕</button>
         </div>
@@ -294,21 +294,13 @@ function close() { emit('close') }
 </script>
 
 <style scoped>
-.agd { position: fixed; inset: 0; z-index: var(--mk-z-modal, 900); }
+/* 外壳（遮罩/面板/头/标题/关闭/正文/入场动画/z-index）全部由 .mk-drawer 体系提供，
+   这里只留两处内容层差异：面板多一行「搜索+分类」、正文顶部留白（搜索行自带下边距）。
+   2026-09-29 收敛：此前把外壳整套抄了一遍（连 4 个断点的宽度 token 都照抄），
+   后果是宽度阶梯与共享档位脱钩（≥2800 该 1040 却停在 880）且 z-index 走的是 modal 层。 */
 .agd__panel {
-  position: absolute;
-  top: 0; right: 0; bottom: 0;
-  width: var(--mk-drawer-w, 560px);
-  max-width: 92vw;
   grid-template-rows: auto auto 1fr;
-  background: #fff;
-  box-shadow: var(--mk-shadow-drawer);
-  animation: agd-in 0.18s ease;
 }
-@keyframes agd-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
-.agd__title { display: grid; gap: 2px; }
-.agd__title strong { font-size: var(--mk-fs-emphasis); color: var(--mk-ink, #1a2a44); }
-.agd__subtitle { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); }
 .agd__search { display: grid; gap: 8px; padding: 6px 18px 12px; border-bottom: 1px solid var(--mk-line, #e6ebf4); }
 /* 加载失败条（错误态：红系底 + role=alert，与全站 mk 错误态同语言） */
 .agd__error {
@@ -328,11 +320,12 @@ function close() { emit('close') }
 .agd__nav-item {
   flex-shrink: 0;
   padding: 2px 10px; border: 1px solid transparent; border-radius: 999px;
-  background: #f1f5fb; color: var(--mk-muted, #5b6577); font: inherit; font-size: var(--mk-fs-micro); font-weight: 700; cursor: pointer;
+  /* 底/字色走 token：原 #f1f5fb / #dbe9ff + 暗色补丁 #232325 三处硬编码已归 token */
+  background: var(--mk-surface-2, #eef2fa); color: var(--mk-muted, #5b6577); font: inherit; font-size: var(--mk-fs-micro); font-weight: 700; cursor: pointer;
 }
 .agd__nav-item:hover { color: var(--mk-blue, #2c63d0); }
-.agd__nav-item.is-active { background: #dbe9ff; color: var(--mk-accent-deep, #1f57cc); border-color: rgba(44, 99, 208, 0.35); }
-.agd__body { overflow-y: auto; padding: 6px 18px 20px; }
+.agd__nav-item.is-active { background: color-mix(in srgb, var(--mk-blue) 22%, transparent); color: var(--mk-accent-deep, #1f57cc); border-color: rgba(44, 99, 208, 0.35); }
+.agd__body { padding-top: 6px; }
 .agd__section { margin-top: 14px; }
 /* 滚动修复 #10：分类标题吸顶（抽屉内部滚动时分区标题常驻顶部） */
 .agd__section-title {
@@ -341,7 +334,8 @@ function close() { emit('close') }
   z-index: 1;
   margin: 0 0 6px;
   padding: 4px 0 6px;
-  background: #fff;
+  /* token 化：原 #fff + 暗色补丁 #1b1c1d 两处硬编码（吸顶必须不透明，故不能用 color-mix） */
+  background: var(--mk-surface, #fff);
   font-size: var(--mk-fs-micro);
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -356,9 +350,6 @@ function close() { emit('close') }
 .agd__empty { padding: 8px 0; color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-micro); }
 
 @media (min-width: 2000px) {
-  .agd__panel { width: var(--mk-drawer-w-lg, 700px); }
-  .agd__title strong { font-size: var(--mk-fs-emphasis); }
-  .agd__subtitle { font-size: var(--mk-fs-micro); }
   .agd__search { padding: 8px 24px 14px; }
   .agd__nav-item { font-size: var(--mk-fs-micro); }
   .agd__body { padding: 8px 24px 24px; }
@@ -369,12 +360,10 @@ function close() { emit('close') }
   .agd__empty { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
-  .agd__panel { width: var(--mk-drawer-w-xl, 880px); }
-  .agd__title strong { font-size: var(--mk-fs-emphasis); }
-  .agd__subtitle { font-size: var(--mk-fs-micro); }
-  .agd__search { padding: 10px 30px 16px; }
+  /* 30 → 28：与壳层正文左右内边距同档（壳 2800 档是 28，此前两行内容左右错 2px） */
+  .agd__search { padding: 10px 28px 16px; }
   .agd__nav-item { font-size: var(--mk-fs-micro); }
-  .agd__body { padding: 10px 30px 30px; }
+  .agd__body { padding: 10px 28px 30px; }
   .agd__section-title { font-size: var(--mk-fs-micro); }
   .agd__term-name { font-size: var(--mk-fs-body); }
   .agd__term-en { font-size: var(--mk-fs-micro); }
@@ -382,9 +371,6 @@ function close() { emit('close') }
   .agd__empty { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 3600px) {
-  .agd__panel { width: var(--mk-drawer-w-xxl, 1040px); }
-  .agd__title strong { font-size: var(--mk-fs-emphasis); }
-  .agd__subtitle { font-size: var(--mk-fs-emphasis); }
   .agd__search { padding: 12px 36px 18px; }
   .agd__nav-item { font-size: var(--mk-fs-body); }
   .agd__body { padding: 12px 36px 36px; }
@@ -395,13 +381,10 @@ function close() { emit('close') }
   .agd__empty { font-size: var(--mk-fs-emphasis); }
 }
 
-/* ================= 暗色模式（D1 补完）：术语表抽屉 ================= */
+/* ================= 暗色模式（D1 补完）：术语表抽屉 =================
+   面板底/分类吸顶底/胶囊底已全部走 token（--mk-surface / --mk-surface-2 / color-mix(blue)），
+   此块只剩内容块自己的底色。 */
 html[data-theme='dark'] {
-  .agd__panel { background: #1b1c1d; }
-  .agd__nav-item { background: #232325; }
-  .agd__nav-item.is-active { background: rgba(91, 141, 239, 0.22); color: #9db8f5; }
   .agd__term { background: #19191a; }
-  /* 吸顶分类标题：白底穿帮修复 */
-  .agd__section-title { background: #1b1c1d; }
 }
 </style>

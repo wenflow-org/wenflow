@@ -278,7 +278,7 @@
          此前该分支无遮罩，点击背后页面可穿透操作 -->
     <div v-else-if="intent.skillDrawerId" class="mk-drawer">
       <div ref="maskRef" class="mk-drawer__mask" @click="closeSkillDrawer"></div>
-      <div class="msk__notfound">
+      <div class="mk-drawer__panel msk__notfound">
         <strong>未找到 Skill「{{ intent.skillDrawerId }}」</strong>
         <span>它可能未注册或 ID 有误。</span>
         <!-- 未找到态此前无任何出口（遮罩不覆盖该分支），补关闭按钮收起抽屉 -->
@@ -855,13 +855,10 @@ watch(
 }
 .msk__row-num { color: var(--mk-muted); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; }
 .msk__none { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+/* 未找到态：面板骨架（宽/高/底色/阴影/入场动画/4K 宽度阶梯）复用 .mk-drawer__panel，
+   此处只补居中排布。原来自抄了一遍 560 宽度，4K 档下比真面板窄一档（2000→700 / 2800→880）。 */
 .msk__notfound {
-  width: var(--mk-drawer-w, 560px);
-  max-width: 100vw;
-  height: 100%;
-  margin-left: auto;
-  background: var(--mk-surface);
-  display: grid;
+  grid-template-rows: none;
   place-content: center;
   gap: 8px;
   text-align: center;

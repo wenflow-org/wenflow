@@ -1351,6 +1351,33 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   .mk-drawer__panel { width: 100vw; }
 }
 
+/* ----- 抽屉内的「事实栅格」（2026-09-29 收敛）-----
+   标签在上、值在下的三列栅格：目标对话 / 反馈 / 教学会话三个抽屉各写了一套
+   （.gc-facts / .fb-facts / .ts-facts），连 4K 字号阶梯都各抄一遍，且三份已经漂移
+   （> div 的 min-width:0 只有反馈有；值的省略号只有两份有）。此处合一：
+   值一律单行省略——事实格是「一眼扫」的定位信息，换行会把三列栅格撑成参差高度。
+   用法：<div class="mk-facts"><div><span>标签</span><strong>值</strong></div>…</div> */
+.mk-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.mk-facts > div { display: grid; gap: 2px; min-width: 0; }
+/* 子选择器而非后代：值里还会嵌自己的小结构（目标对话抽屉的置信度胶囊、
+   反馈抽屉的评分点阵），后代选择器会把它们的字色一起盖掉——置信度的
+   低/中档色（.gc-conf--low/--warn）此前就是这样被盖成灰的。 */
+.mk-facts > div > span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
+.mk-facts > div > strong {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .mk-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 /* ================= 暗色模式（D1）：shared.css 硬编码浅色兜底覆写 =================
    机制：html[data-theme='dark'] 下把散落的浅色背景/悬停/徽章底色替换为深色等价物。
    新代码应优先引用 --mk-* token，此段只兜底存量硬编码。 */
@@ -1459,6 +1486,8 @@ html[data-theme='dark'] {
   .mk-drawer__head { padding: 20px 24px 14px; }
   .mk-drawer__close { width: 32px; height: 32px; }
   .mk-drawer__body { padding: 18px 24px 26px; }
+  /* 抽屉内事实栅格：值与页内正文同档（原先三份私有阶梯各抄一遍，后两者已漂移） */
+  .mk-facts > div > strong { font-size: var(--mk-fs-body); }
 }
 
 @media (min-width: 2800px) {
@@ -1499,6 +1528,7 @@ html[data-theme='dark'] {
   .mk-drawer__head { padding: 24px 28px 16px; }
   .mk-drawer__close { width: 38px; height: 38px; }
   .mk-drawer__body { padding: 22px 28px 30px; }
+  .mk-facts > div > strong { font-size: var(--mk-fs-body); }
 }
 
 /* 3600 镜像档：Teleport 到 body 的覆盖层不受壳层 zoom 影响，需独立放大（与各文件 4K 镜像一致）。
@@ -1539,6 +1569,8 @@ html[data-theme='dark'] {
   .mk-drawer__title { font-size: 23px; }
   .mk-drawer__close { width: 46px; height: 46px; }
   .mk-drawer__body { padding: 26px 36px 36px; }
+  .mk-facts > div > span { font-size: var(--mk-fs-body); }
+  .mk-facts > div > strong { font-size: var(--mk-fs-emphasis); }
 }
 
 /* ---------- 复选框 ----------

@@ -206,7 +206,7 @@
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeDetail">✕</button>
           </header>
           <div ref="bodyRef" class="mk-drawer__body gc-detail__body">
-            <div class="gc-facts">
+            <div class="mk-facts">
               <div><span>邮箱</span><strong :title="detail.userEmail">{{ detail.userEmail || '—' }}</strong></div>
               <div>
                 <span>置信度</span>
@@ -233,7 +233,7 @@
             </div>
 
             <section v-if="detail.description" class="gc-section">
-              <h4>目标描述</h4>
+              <header class="mk-section__head"><h4>目标描述</h4></header>
               <p class="gc-desc">{{ detail.description }}</p>
             </section>
 
@@ -242,7 +242,7 @@
               v-if="detailUnderstanding.realProblem || detailUnderstanding.successCriterion || detailProposal.direction || detailProposal.stages.length"
               class="gc-section"
             >
-              <h4>理解与方案</h4>
+              <header class="mk-section__head"><h4>理解与方案</h4></header>
               <div class="gc-insight">
                 <div v-if="detailUnderstanding.realProblem" class="gc-insight__row">
                   <span>真实问题</span>
@@ -270,9 +270,9 @@
             </section>
 
             <section v-if="detail.messages.length" class="gc-section">
-              <h4>对话轮次 <span class="mono">{{ detail.messages.length }}</span>
+              <header class="mk-section__head"><h4>对话轮次 <span class="mono">{{ detail.messages.length }}</span>
                 <button type="button" class="gc-msg-jump" title="滚动到最新消息" @click="scrollMsgsToBottom">最新 ↓</button>
-              </h4>
+              </h4></header>
               <div class="gc-msgs">
                 <div v-for="(m, i) in detail.messages" :key="i" class="gc-msg" :class="`gc-msg--${m.role}`">
                   <div class="gc-msg__bubble">
@@ -875,20 +875,7 @@ onMounted(() => {
 .gc-detail__title { display: grid; gap: 6px; justify-items: start; }
 .gc-detail__body { display: grid; gap: 16px; align-content: start; }
 
-
-
-.gc-facts {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-.gc-facts > div { display: grid; gap: 2px; }
-.gc-facts span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
-.gc-facts strong { font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-@media (max-width: 560px) {
-  .gc-facts { grid-template-columns: repeat(2, 1fr); }
-}
+/* 事实栅格走共享原语 .mk-facts（原 .gc-facts 私有三列栅格 + 4K 阶梯已并进原语层） */
 
 /* 置信度 */
 .gc-conf {
@@ -942,13 +929,7 @@ onMounted(() => {
 }
 
 .gc-section { display: grid; gap: 8px; }
-.gc-section h4 {
-  margin: 0;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--mk-faint);
-}
+
 .gc-section h4 .mono { margin-left: 4px; }
 .gc-desc { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.7; }
 
@@ -1048,9 +1029,7 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #252627; }.gc-msg { dis
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大 */
 @media (min-width: 2000px) {
-  .gc-facts span { font-size: var(--mk-fs-micro); }
-  .gc-facts strong { font-size: var(--mk-fs-body); }
-  .gc-section h4 { font-size: var(--mk-fs-micro); }
+
   .gc-desc { font-size: var(--mk-fs-body); }
   .gc-msg { font-size: var(--mk-fs-body); }
   .gc-msg__role { font-size: var(--mk-fs-micro); }
@@ -1058,9 +1037,7 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #252627; }.gc-msg { dis
   .mk-btn--sm { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
-  .gc-facts span { font-size: var(--mk-fs-micro); }
-  .gc-facts strong { font-size: var(--mk-fs-body); }
-  .gc-section h4 { font-size: var(--mk-fs-micro); }
+
   .gc-desc { font-size: var(--mk-fs-body); }
   .gc-msg { font-size: var(--mk-fs-body); }
   .gc-msg__role { font-size: var(--mk-fs-micro); }
@@ -1069,9 +1046,7 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #252627; }.gc-msg { dis
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-  .gc-facts span { font-size: var(--mk-fs-body); }
-  .gc-facts strong { font-size: var(--mk-fs-emphasis); }
-  .gc-section h4 { font-size: var(--mk-fs-body); }
+
   .gc-desc { font-size: var(--mk-fs-emphasis); }
   .gc-msg { font-size: var(--mk-fs-emphasis); }
   .gc-msg__role { font-size: var(--mk-fs-body); }

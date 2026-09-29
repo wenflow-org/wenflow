@@ -173,7 +173,7 @@
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detail = null">✕</button>
           </header>
           <div class="mk-drawer__body fb-body">
-            <div class="fb-facts">
+            <div class="mk-facts">
               <div><span>评分</span><span class="mk-dots" :class="{ 'mk-dots--warn': detail.rating <= 2 }" role="img" :aria-label="`评分 ${detail.rating}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': d <= detail.rating }"></i></span><strong class="mono">{{ detail.rating }}/5</strong></div>
               <div><span>有用度</span><span class="mk-dots" role="img" :aria-label="`有用度 ${detail.helpfulness ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.helpfulness != null && d <= detail.helpfulness }"></i></span><strong class="mono">{{ detail.helpfulness ?? '—' }}</strong></div>
               <div><span>清晰度</span><span class="mk-dots" role="img" :aria-label="`清晰度 ${detail.clarity ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.clarity != null && d <= detail.clarity }"></i></span><strong class="mono">{{ detail.clarity ?? '—' }}</strong></div>
@@ -186,26 +186,26 @@
             </div>
 
             <section v-if="detail.comment" class="fb-section">
-              <h4>评论</h4>
+              <header class="mk-section__head"><h4>评论</h4></header>
               <p class="fb-text">{{ detail.comment }}</p>
             </section>
             <section v-if="detail.suggestions" class="fb-section">
-              <h4>建议</h4>
+              <header class="mk-section__head"><h4>建议</h4></header>
               <p class="fb-text">{{ detail.suggestions }}</p>
             </section>
             <section v-if="detail.confusionPoint" class="fb-section">
-              <h4>困惑点</h4>
+              <header class="mk-section__head"><h4>困惑点</h4></header>
               <p class="fb-text">{{ detail.confusionPoint }}</p>
             </section>
             <section v-if="detail.reasonCodes.length" class="fb-section">
-              <h4>原因标签</h4>
+              <header class="mk-section__head"><h4>原因标签</h4></header>
               <div class="fb-codes">
                 <span v-for="c in detail.reasonCodes" :key="c" class="fb-code mono">{{ c }}</span>
               </div>
             </section>
 
             <section class="fb-section">
-              <h4>内部备注</h4>
+              <header class="mk-section__head"><h4>内部备注</h4></header>
               <textarea v-model="noteDraft" class="fb-note" rows="3" placeholder="处理记录、归因、跟进结论…"></textarea>
             </section>
 
@@ -505,27 +505,9 @@ onMounted(() => {
 /* 抽屉内容区：mk-drawer__body 提供滚动/内边距，此处补纵向排布 */
 .fb-body { display: grid; gap: 16px; align-content: start; }
 
-.fb-facts {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-.fb-facts > div { display: grid; gap: 2px; min-width: 0; }
-.fb-facts span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
-.fb-facts strong { font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-@media (max-width: 560px) {
-  .fb-facts { grid-template-columns: repeat(2, 1fr); }
-}
+/* 事实栅格走共享原语 .mk-facts（原 .fb-facts 私有三列栅格 + 4K 阶梯已并进原语层） */
 
 .fb-section { display: grid; gap: 8px; }
-.fb-section h4 {
-  margin: 0;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--mk-faint);
-}
 .fb-text { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-ink); line-height: 1.7; white-space: pre-wrap; }
 .fb-codes { display: flex; gap: 6px; flex-wrap: wrap; }
 .fb-code {
@@ -556,10 +538,7 @@ onMounted(() => {
 @media (min-width: 2000px) {
   .fb-panel__title h3 { font-size: var(--mk-fs-emphasis); }
   .fb-panel__id { font-size: var(--mk-fs-micro); }
-  .fb-facts span { font-size: var(--mk-fs-micro); }
-  .fb-facts strong { font-size: var(--mk-fs-body); }
-  .fb-section h4 { font-size: var(--mk-fs-micro); }
-  .fb-text { font-size: var(--mk-fs-body); }
+    .fb-text { font-size: var(--mk-fs-body); }
   .fb-note { font-size: var(--mk-fs-body); }
   .fb-code { font-size: var(--mk-fs-micro); }
   .fb-meta { font-size: var(--mk-fs-micro); }
@@ -567,10 +546,7 @@ onMounted(() => {
 @media (min-width: 2800px) {
   .fb-panel__title h3 { font-size: var(--mk-fs-emphasis); }
   .fb-panel__id { font-size: var(--mk-fs-micro); }
-  .fb-facts span { font-size: var(--mk-fs-micro); }
-  .fb-facts strong { font-size: var(--mk-fs-body); }
-  .fb-section h4 { font-size: var(--mk-fs-micro); }
-  .fb-text { font-size: var(--mk-fs-body); }
+    .fb-text { font-size: var(--mk-fs-body); }
   .fb-note { font-size: var(--mk-fs-body); }
   .fb-code { font-size: var(--mk-fs-micro); }
   .fb-meta { font-size: var(--mk-fs-micro); }
@@ -579,10 +555,7 @@ onMounted(() => {
 @media (min-width: 3600px) {
   .fb-panel__title h3 { font-size: 23px; }
   .fb-panel__id { font-size: var(--mk-fs-body); }
-  .fb-facts span { font-size: var(--mk-fs-body); }
-  .fb-facts strong { font-size: var(--mk-fs-emphasis); }
-  .fb-section h4 { font-size: var(--mk-fs-body); }
-  .fb-text { font-size: var(--mk-fs-emphasis); }
+    .fb-text { font-size: var(--mk-fs-emphasis); }
   .fb-note { font-size: var(--mk-fs-emphasis); }
   .fb-code { font-size: var(--mk-fs-body); }
   .fb-meta { font-size: var(--mk-fs-body); }

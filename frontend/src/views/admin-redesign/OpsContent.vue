@@ -231,7 +231,7 @@
           <div class="mk-drawer__head">
             <div>
               <h3 class="mk-drawer__title">{{ detail?.title }}</h3>
-              <span class="mk-drawer__sub">{{ detail?.subject }} · {{ detail?.user?.name || '—' }} · {{ detail?.milestones?.length || 0 }} 个里程碑</span>
+              <span class="mk-drawer__sub">{{ detailSub }}</span>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detailOpen = false">✕</button>
           </div>
@@ -600,6 +600,18 @@ async function openDetail(p: PathRow) {
 function retryDetail() {
   if (detailRow) void openDetail(detailRow)
 }
+
+/** 抽屉副行：主题 · 用户 · N 个里程碑。
+ *  93% 的路径 subject 与 title 同值（638 行里 595 行，实测）——直接并排打印就是
+ *  「Python销售报表自动汇总入门」下一行再写「Python销售报表自动汇总入门 · 张三」，
+ *  标题看起来出现了两次，故同值时不重复。 */
+const detailSub = computed(() => {
+  const d = detail.value
+  if (!d) return ''
+  const parts = [d.subject, d.user?.name || '—', `${d.milestones?.length || 0} 个里程碑`]
+  if (d.subject && d.title && d.subject.trim() === d.title.trim()) parts.shift()
+  return parts.join(' · ')
+})
 
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 function menuDetail(p: PathRow) { closeMenu(); openDetail(p) }

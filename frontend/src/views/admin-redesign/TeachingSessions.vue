@@ -260,9 +260,10 @@
 
             <!-- 概览 tab -->
             <div v-if="panelTab === 'overview'">
-              <div class="ts-facts">
-                <div><span>用户</span><strong>{{ detail.userName }}</strong></div>
-                <div><span>学科</span><strong>{{ detail.subject }}</strong></div>
+              <div class="mk-facts">
+                <!-- 共享 .mk-facts 的值是单行省略：可能被截断的两格挂 title，别把信息藏起来 -->
+                <div><span>用户</span><strong :title="detail.userName">{{ detail.userName }}</strong></div>
+                <div><span>学科</span><strong :title="detail.subject">{{ detail.subject }}</strong></div>
                 <div><span>状态</span><strong>{{ statusText(detail.status) }}</strong></div>
                 <div><span>开始</span><strong>{{ detail.startAt }}</strong></div>
                 <div><span>时长</span><strong>{{ detail.duration ? fmtDuration(detail.duration) : '—' }}</strong></div>
@@ -271,7 +272,7 @@
 
               <!-- 事件时间线（P2-2：非消息事件，对齐 Intercom 左对齐垂直线） -->
               <section v-if="timelineOf(detail).length" class="ts-section">
-                <h4>事件时间线</h4>
+                <header class="mk-section__head"><h4>事件时间线</h4></header>
                 <ul class="ts-timeline">
                   <li v-for="(ev, i) in timelineOf(detail)" :key="i" class="ts-timeline__item" :class="`ts-timeline__item--${ev.tone}`">
                     <span class="ts-timeline__dot" aria-hidden="true"></span>
@@ -287,7 +288,7 @@
             <!-- 总结 tab -->
             <div v-if="panelTab === 'wrapup'">
               <section v-if="detail.wrapup" class="ts-section">
-                <h4>会话总结 <span class="ts-src">来源：<span class="mk-badge" :class="detail.wrapupSource === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ detail.wrapupSource }}</span><span v-if="detail.wrapupDegraded" class="mk-badge mk-badge--warn ts-degraded">降级总结 · 未完整结束</span></span></h4>
+                <header class="mk-section__head"><h4>会话总结 <span class="ts-src">来源：<span class="mk-badge" :class="detail.wrapupSource === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ detail.wrapupSource }}</span><span v-if="detail.wrapupDegraded" class="mk-badge mk-badge--warn ts-degraded">降级总结 · 未完整结束</span></span></h4></header>
                 <div class="ts-card" v-if="detail.wrapup.topicSummary">
                   <span>主题摘要</span>
                   <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('topic') }">{{ detail.wrapup.topicSummary }}</p>
@@ -315,7 +316,7 @@
             <!-- 建议 tab -->
             <div v-if="panelTab === 'advisory'">
               <section v-if="detail.advisory && detail.advisory.priority && detail.advisory.priority !== 'none'" class="ts-section">
-                <h4>额外建议</h4>
+                <header class="mk-section__head"><h4>额外建议</h4></header>
                 <div class="ts-card ts-card--advisory">
                   <span>优先级 {{ detail.advisory.priority || '—' }}<template v-if="detail.advisory.title"> · {{ detail.advisory.title }}</template></span>
                   <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('advisory') }">{{ detail.advisory.text || '—' }}</p>
@@ -957,30 +958,9 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 .ts-timeline__body strong { font-size: var(--mk-fs-micro); color: var(--mk-ink); }
 .ts-timeline__body span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
-.ts-facts {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-.ts-facts > div { display: grid; gap: 2px; }
-.ts-facts span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
-.ts-facts strong { font-size: var(--mk-fs-micro); }
-
-@media (max-width: 560px) {
-  .ts-facts { grid-template-columns: repeat(2, 1fr); }
-}
+/* 事实栅格走共享原语 .mk-facts（原 .ts-facts 私有三列栅格 + 4K 阶梯已并进原语层） */
 
 .ts-section { display: grid; gap: 8px; }
-.ts-section h4 {
-  margin: 0;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--mk-faint);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 .ts-src { font-size: var(--mk-fs-micro); font-weight: 600; text-transform: none; letter-spacing: 0; }
 .ts-degraded { margin-left: 6px; }
 .ts-card {
@@ -1036,29 +1016,20 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {
-  .ts-facts span { font-size: var(--mk-fs-micro); }
-  .ts-facts strong { font-size: var(--mk-fs-body); }
-  .ts-section h4 { font-size: var(--mk-fs-micro); }
-  .ts-card p { font-size: var(--mk-fs-body); }
+    .ts-card p { font-size: var(--mk-fs-body); }
   .ts-card span { font-size: var(--mk-fs-micro); }
   .ts-json { font-size: var(--mk-fs-micro); }
   .ts-more { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .ts-facts span { font-size: var(--mk-fs-micro); }
-  .ts-facts strong { font-size: var(--mk-fs-body); }
-  .ts-section h4 { font-size: var(--mk-fs-micro); }
-  .ts-card p { font-size: var(--mk-fs-body); }
+    .ts-card p { font-size: var(--mk-fs-body); }
   .ts-card span { font-size: var(--mk-fs-micro); }
   .ts-json { font-size: var(--mk-fs-micro); }
   .ts-more { font-size: var(--mk-fs-micro); }
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-  .ts-facts span { font-size: var(--mk-fs-body); }
-  .ts-facts strong { font-size: var(--mk-fs-emphasis); }
-  .ts-section h4 { font-size: var(--mk-fs-body); }
-  .ts-card p { font-size: var(--mk-fs-emphasis); }
+    .ts-card p { font-size: var(--mk-fs-emphasis); }
   .ts-card span { font-size: var(--mk-fs-body); }
   .ts-json { font-size: var(--mk-fs-body); }
   .ts-more { font-size: var(--mk-fs-emphasis); }
