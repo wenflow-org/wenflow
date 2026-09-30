@@ -24,23 +24,27 @@ withDefaults(
 </script>
 
 <style scoped>
+/* 规格对齐 newui「UI-分支优化设计」原型 .card + .kpi：白面卡片（不是蓝灰底）、
+   16px 内边距、数字 28px/700 —— KPI 是页面的标题数字，不是页内小指标。
+   蓝灰底（--mk-surface-2）留给卡内次级指标（MkStatStrip）。 */
 .mk-kpi {
   display: grid;
-  gap: 3px;
-  padding: 12px 14px;
+  gap: 6px;
+  padding: 16px;
   border-radius: 12px;
   border: 1px solid var(--mk-line);
-  background: var(--mk-surface-2);
+  background: var(--mk-surface);
 }
-.mk-kpi__label { font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.04em; color: var(--mk-faint); }
+.mk-kpi__label { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); }
 .mk-kpi__num {
-  font-size: var(--mk-fs-20);
-  font-weight: 800;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   color: var(--mk-ink);
   line-height: 1.25;
 }
-.mk-kpi__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.mk-kpi__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .mk-kpi--bad .mk-kpi__num { color: var(--mk-red); }
 .mk-kpi--warn .mk-kpi__num { color: var(--mk-amber); }
 .mk-kpi--ok .mk-kpi__num { color: var(--mk-green); }
@@ -69,39 +73,39 @@ withDefaults(
 .mk-kpi--row .mk-kpi__num { grid-column: 2; grid-row: 1 / span 2; font-size: 19px; text-align: right; }
 .mk-kpi--row .mk-kpi__hint { grid-column: 1; grid-row: 2; font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 暗色模式（D1） */
-html[data-theme='dark'] .mk-kpi { background: var(--mk-surface-2); border-color: var(--mk-line); }
+/* 暗色模式（D1）：底色已与普通卡片同档（--mk-surface），无需覆写 */
+html[data-theme='dark'] .mk-kpi { border-color: var(--mk-line); }
 
-/* 1440px 中间档 */
+/* 1440px 中间档（档位只放大数字，不再回到蓝灰底） */
 @media (min-width: 1440px) {
-  .mk-kpi { padding: 13px 16px; }
+  .mk-kpi { padding: 16px 17px; }
   .mk-kpi__label { font-size: var(--mk-fs-micro); }
-  .mk-kpi__num { font-size: 22px; }
+  .mk-kpi__num { font-size: 29px; }
   .mk-kpi__hint { font-size: var(--mk-fs-micro); }
 }
 
 /* 1920px 档（最低标准 1080p 全屏） */
 @media (min-width: 1920px) {
-  .mk-kpi { padding: 14px 17px; }
-  .mk-kpi__num { font-size: 23px; }
+  .mk-kpi { padding: 17px 18px; }
+  .mk-kpi__num { font-size: 30px; }
 }
 
 /* 4K 三档（对齐全站 mk 体系） */
 @media (min-width: 2000px) {
-  .mk-kpi { padding: 15px 18px; border-radius: var(--mk-radius-xl); gap: 4px; }
+  .mk-kpi { padding: 18px 20px; border-radius: var(--mk-radius-xl); gap: 6px; }
   .mk-kpi__label { font-size: var(--mk-fs-micro); }
-  .mk-kpi__num { font-size: 24px; }
+  .mk-kpi__num { font-size: 31px; }
   .mk-kpi__hint { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .mk-kpi { padding: 18px 22px; gap: 5px; }
+  .mk-kpi { padding: 20px 22px; gap: 7px; }
   .mk-kpi__label { font-size: var(--mk-fs-micro); }
-  .mk-kpi__num { font-size: 29px; }
+  .mk-kpi__num { font-size: 34px; }
   .mk-kpi__hint { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .mk-kpi__label { font-size: var(--mk-fs-body); }
-  .mk-kpi__num { font-size: 34px; }
+  .mk-kpi__num { font-size: 38px; }
   .mk-kpi__hint { font-size: var(--mk-fs-body); }
 }
 </style>

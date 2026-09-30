@@ -518,7 +518,10 @@ watch(
 <style scoped>
 .mshell {
   display: grid;
-  grid-template-columns: 208px minmax(0, 1fr);
+  /* 侧栏宽度 244px = newui「UI-分支优化设计」原型 --nav-w。原 208px 是按「子项缩进 24px」
+     那套层级量出来的；原型改成扁平导航（项与分组标签同一起点、图标自带 10px 间隙），
+     244px 才能让标签+计数在同一行不折行。折叠轨仍 64px（--nav-w-min）。 */
+  grid-template-columns: 244px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: 100dvh;
   min-height: 0;
@@ -534,8 +537,10 @@ watch(
   flex-direction: column;
   background: var(--mk-side-bg);
   border-right: 1px solid var(--mk-side-line);
-  padding: 14px 10px 10px;
-  gap: 14px;
+  /* 内边距/间距对齐原型 .side（12px 12px 8px，gap 8px）：导航项自带左右 10px，
+     与外沿 12px 只差 2px，选中胶囊看上去近乎贴边——这是原型的读法。 */
+  padding: 12px 12px 8px;
+  gap: 8px;
   /* 高于抽屉遮罩(200)：抽屉打开时侧栏仍可点击，
      点击导航由 AdminConsole watch(scene) 联动关闭抽屉 */
   position: relative;
@@ -544,12 +549,15 @@ watch(
 .mshell__brand {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 2px 8px 0;
+  /* 左对齐（原型 .brand 口径）：折叠按钮靠 margin-left:auto 顶到右端，
+     收紧到 34px 的字标不再居中悬浮 */
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 4px;
 }
 .mshell__logo-full {
-  height: 52px;
+  height: 34px;
   width: auto;
   display: block;
 }
@@ -559,8 +567,9 @@ watch(
   width: 34px;
 }
 
-/* 组间距 8px：组标题自带 padding-top，原 14px gap 叠加后组间隔 ≈28px 过散（用户反馈 2026-09-29） */
-.mshell__nav { flex: 1; overflow-y: auto; display: grid; gap: 8px; align-content: start; }
+/* 组间距 8px：组标题自带 padding-top，原 14px gap 叠加后组间隔 ≈28px 过散（用户反馈 2026-09-29）；
+   对齐原型后组间隔由 .mshell__group 的 margin-top 统一表达，容器 gap 收到 4px */
+.mshell__nav { flex: 1; overflow-y: auto; display: grid; gap: 4px; align-content: start; padding-bottom: 8px; }
 /* 置顶独立入口区（D5）：驾驶舱入口，与分组间用分隔线区分 */
 .mshell__pinned {
   display: grid;
@@ -571,15 +580,18 @@ watch(
 }
 /* 置顶入口比组内子项略收高度：驾驶舱入口不再显高（用户反馈 2026-09-05） */
 .mshell__pinned .mshell__item { font-weight: 600; padding-top: 6px; padding-bottom: 6px; color: var(--mk-side-item-fg); }
-.mshell__group { display: grid; gap: 1px; }
+.mshell__group { display: grid; gap: 1px; margin-top: 12px; }
 /* 分组标题 = 纯文字小标签，不是可点入口（走查 2026-09-27「组名比组大」整改：
    原组头是按钮+图标+徽章+箭头，比组内页面项还重。现在页面项是导航唯一主体，
-   标签只负责分区命名；恒展开，折叠状态机已删） */
+   标签只负责分区命名；恒展开，折叠状态机已删）。
+   规格对齐原型 .nav__cap：字距 0.12em + 大写，与导航项同一左起点（不再缩进子项）。 */
 .mshell__caption {
-  padding: 6px 10px 4px;
+  padding: 0 8px;
+  margin-bottom: 2px;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -588,71 +600,65 @@ watch(
 }
 .mshell__caption--active { color: var(--mk-accent-deep, var(--mk-accent-deep)); }
 .mshell__group-body { display: grid; gap: 1px; }
-/* 子项缩进表达从属：与标签文字（内边距 10px）拉开一档，对齐 AntD inline menu 层级；
-   单字图标展开态不显示（仅折叠 64px 图标轨显示，见 data-collapsed 规则） */
-.mshell__group-body .mshell__item { padding-left: 24px; }
-.mshell__group-body .mshell__item .mshell__item-glyph {
-  width: 20px;
-  height: 20px;
-  font-size: var(--mk-fs-micro);
-}
+/* 子项不再缩进：原型里分组标签与导航项共用同一左起点，层级由标签的小字/大写/字距承担，
+   缩进会把「组内从属」重复表达一次并把标签+计数挤到折行 */
+.mshell__group-body .mshell__item { padding-left: 10px; }
 .mshell__item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  /* 宽度交给 grid 拉伸（保持整行可点）；不用 width:100%，否则与下方 margin 叠加会溢出。
-     行高 7px 上下（原 8px）：组内项间距用户反馈偏大，整体收敛一档（触控下限 36px 仍守） */
-  padding: 7px 10px;
+  gap: 10px;
+  /* 宽度交给 grid 拉伸（保持整行可点）。
+     内缩 8px 与 3px 左条已撤：原型选中态是整行浅蓝胶囊（--brand-bg）+ 主色字 + 加粗，
+     不再用「左条 + 内缩胶囊」双重标注（原写法在扁平导航里会读成缩进层级）。 */
+  padding: 8px 10px;
   border: 0;
-  border-radius: var(--mk-radius-xl);
+  border-radius: var(--mk-radius-md);
   background: transparent;
-  color: #42506a;
+  /* 原型 .nav__item 用 --muted（不是侧栏专用的深一档文字色）：扁平导航下
+     条目与分组标签同色系，靠选中态（浅蓝胶囊+主色字）承担定位，不用整体加深 */
+  color: var(--mk-muted);
   font: inherit;
   font-size: var(--mk-fs-body);
-  font-weight: 600;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
   transition: 0.12s ease;
-  /* 选中/悬底内缩 8px：不贴侧栏左右缘，选中态从「通铺大蓝条」变成贴内容的胶囊 */
-  margin: 0 8px;
+  margin: 0;
 }
 .mshell__item:hover { background: var(--mk-side-hover); color: var(--mk-ink); }
-/* 点击导航后不残留聚焦描边环（选中态由 --active 底色+左条表达）；键盘 Tab 仍有可见环 */
+/* 点击导航后不残留聚焦描边环（选中态由 --active 底色表达）；键盘 Tab 仍有可见环 */
 .mshell__item:focus { outline: none; }
 .mshell__item:focus-visible { outline: 2px solid var(--mk-blue, #2c63d0); outline-offset: -2px; }
 .mshell__item--active {
-  background: var(--mk-hover-surface);
-  color: var(--mk-accent-deep, var(--mk-accent-deep));
-  box-shadow: inset 3px 0 0 var(--mk-blue, #2c63d0);
+  background: var(--mk-blue-bg);
+  color: var(--mk-blue);
+  font-weight: 600;
 }
-/* 图标常显（newui/admin 原型壳：展开态=图标+文字，折叠轨=仅图标）。
-   原规则「展开态隐藏、仅折叠轨显示」服务于单字 glyph；换线性图标后图标是条目的视觉锚点。 */
+/* 图标常显（newui 原型壳：展开态=图标+文字，折叠轨=仅图标）。
+   原型是裸线性图标（17px，无底衬），不做 28px 圆角芯片——芯片底在扁平导航里
+   会把每一项都读成「可点的方块」，选中态反而被稀释。 */
 .mshell__item-glyph {
   display: inline-flex;
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   align-items: center;
   justify-content: center;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-side-inset);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-body);
-  font-weight: 800;
+  color: inherit;
   flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease;
 }
-.mshell__item--active .mshell__item-glyph { background: var(--mk-blue-bg-strong); color: var(--mk-accent-deep, var(--mk-accent-deep)); }
-/* 子项角标紧跟标签（不右推）：短标签 + 右对齐计数会在行中间拉出一条空洞 */
+.mshell__item-glyph svg { display: block; }
+/* 子项角标紧跟标签（不右推）：短标签 + 右对齐计数会在行中间拉出一条空洞。
+   规格对齐原型 .nav__badge（中性灰底 / 选中蓝底） */
 .mshell__item-badge {
-  padding: 1px 7px;
+  padding: 1px 6px;
   border-radius: 999px;
-  background: var(--mk-side-inset);
-  color: var(--mk-faint);
+  background: var(--mk-surface-3);
+  color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
-  font-weight: 800;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.mshell__item--active .mshell__item-badge { background: var(--mk-blue-bg-strong); color: var(--mk-accent-deep, var(--mk-accent-deep)); }
+.mshell__item--active .mshell__item-badge { background: var(--mk-blue-bg-strong); color: var(--mk-blue); }
 .mshell__item-badge--alarm {
   background: var(--mk-red-bg-strong);
   color: var(--mk-red-strong);
@@ -758,14 +764,15 @@ watch(
   min-height: 0;
 }
 
-/* ====== 顶栏（newui/admin 原型壳）：56px 毛玻璃条——返回/面包屑/搜索/主题/账户 ====== */
+/* ====== 顶栏（newui 原型壳）：56px 毛玻璃条——返回/面包屑/搜索/主题/账户 ====== */
 .mshell__top {
   flex: none;
   display: flex;
   align-items: center;
   gap: 10px;
   height: 56px;
-  padding: 0 16px;
+  /* 左右 20px = 原型 .top（--sp-5），与页面容器的 20px 内边距对齐成同一条竖线 */
+  padding: 0 20px;
   background: color-mix(in srgb, var(--mk-bg, #f7f8fa) 86%, transparent);
   border-bottom: 1px solid var(--mk-line, #e6ebf4);
   backdrop-filter: blur(8px);
@@ -977,43 +984,43 @@ watch(
 
 /* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半） */
 @media (min-width: 1440px) {
-  .mshell { grid-template-columns: 224px minmax(0, 1fr); }
+  .mshell { grid-template-columns: 260px minmax(0, 1fr); }
   .mshell__item { font-size: var(--mk-fs-body); padding: 8px 11px; }
   .mshell__caption { font-size: var(--mk-fs-micro); }
   .mshell__item-badge { font-size: var(--mk-fs-micro); }
-  .mshell__logo-full { height: 58px; }
+  .mshell__logo-full { height: 36px; }
 }
 
 /* 大屏（2000+）：侧栏加宽、字号放大；2800+（4K）再升一档（zoom 之上叠加）。
    宽度只随内容（字号）增长、不随屏宽膨胀——短标签配宽侧栏会在行右拉出大片空洞 */
 @media (min-width: 1920px) {
-  .mshell { grid-template-columns: 240px minmax(0, 1fr); }
+  .mshell { grid-template-columns: 276px minmax(0, 1fr); }
   .mshell__item { font-size: var(--mk-fs-body); padding: 8px 12px; }
   .mshell__caption { font-size: var(--mk-fs-micro); }
   .mshell__item-badge { font-size: var(--mk-fs-micro); }
-  .mshell__logo-full { height: 64px; }
+  .mshell__logo-full { height: 38px; }
 }
 @media (min-width: 2000px) {
   .mshell {
-    grid-template-columns: 248px minmax(0, 1fr);
+    grid-template-columns: 284px minmax(0, 1fr);
   }
-  .mshell__side { padding: 18px 14px 14px; gap: 18px; }
-  .mshell__logo-full { height: 72px; }
+  .mshell__side { padding: 16px 14px 12px; gap: 10px; }
+  .mshell__logo-full { height: 40px; }
   .mshell__caption { font-size: var(--mk-fs-micro); }
-  .mshell__item { font-size: var(--mk-fs-body); padding: 9px 12px; gap: 8px; }
-  .mshell__item-badge { font-size: var(--mk-fs-micro); padding: 2px 9px; }
+  .mshell__item { font-size: var(--mk-fs-body); padding: 9px 12px; gap: 10px; }
+  .mshell__item-badge { font-size: var(--mk-fs-micro); padding: 2px 8px; }
   .mshell__foot { font-size: var(--mk-fs-micro); padding: 10px 12px; }
   .mshell__tool { width: 30px; height: 30px; }
   .mshell__user-avatar { width: 28px; height: 28px; }
 }
 @media (min-width: 2800px) {
   .mshell {
-    grid-template-columns: 288px minmax(0, 1fr);
+    grid-template-columns: 324px minmax(0, 1fr);
   }
-  .mshell__side { padding: 22px 18px 16px; gap: 22px; }
-  .mshell__logo-full { height: 72px; }
+  .mshell__side { padding: 18px 16px 12px; gap: 12px; }
+  .mshell__logo-full { height: 44px; }
   .mshell__caption { font-size: var(--mk-fs-micro); }
-  .mshell__item { font-size: var(--mk-fs-body); padding: 11px 14px; gap: 10px; border-radius: var(--mk-radius-xl); }
+  .mshell__item { font-size: var(--mk-fs-body); padding: 11px 14px; gap: 10px; border-radius: var(--mk-radius-md); }
   .mshell__item-badge { font-size: var(--mk-fs-micro); padding: 3px 10px; }
   .mshell__foot { font-size: var(--mk-fs-micro); padding: 12px 14px; }
   .mshell__tool { width: 36px; height: 36px; }
@@ -1026,10 +1033,10 @@ watch(
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：侧栏再加宽、字号继续放大 */
   .mshell {
-    grid-template-columns: 336px minmax(0, 1fr);
+    grid-template-columns: 372px minmax(0, 1fr);
   }
-  .mshell__side { padding: 26px 22px 18px; gap: 26px; }
-  .mshell__logo-full { height: 88px; }
+  .mshell__side { padding: 20px 18px 14px; gap: 14px; }
+  .mshell__logo-full { height: 52px; }
   .mshell__caption { font-size: var(--mk-fs-body); }
   .mshell__item { font-size: var(--mk-fs-emphasis); padding: 14px 16px; gap: 12px; }
   .mshell__item-badge { font-size: var(--mk-fs-body); padding: 4px 12px; }
@@ -1134,11 +1141,9 @@ html[data-theme='dark'] {
   .mshell__caption { color: #898d94; }
   .mshell__caption--active { color: var(--mk-accent-deep); }
   .mshell__item-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
-  .mshell__item { color: var(--mk-side-item-fg); }
   .mshell__item:hover { background: var(--mk-side-hover); color: var(--mk-ink); }
-  .mshell__item--active { background: rgba(91, 141, 239, 0.1); color: var(--mk-accent-deep); box-shadow: inset 3px 0 0 var(--mk-blue); }
-  .mshell__item-glyph { background: var(--mk-side-inset); color: var(--mk-muted); }
-  .mshell__item--active .mshell__item-glyph { background: rgba(91, 141, 239, 0.22); color: var(--mk-accent-deep); }
+  /* 选中态与亮色同构：整行浅蓝胶囊 + 主色字（左条/图标芯片已随扁平导航撤除） */
+  .mshell__item--active { background: rgba(91, 141, 239, 0.1); color: var(--mk-accent-deep); }
   .mshell__item-badge { background: var(--mk-side-inset); color: var(--mk-faint); }
   .mshell__item--active .mshell__item-badge { background: rgba(91, 141, 239, 0.22); color: var(--mk-accent-deep); }
   .mshell__foot { border-top-color: var(--mk-side-hover); }

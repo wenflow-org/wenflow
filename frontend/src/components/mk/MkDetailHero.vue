@@ -52,8 +52,9 @@ defineProps<{ avatar?: string; title: string; sub?: string }>();
 }
 .mk-hero__title {
   margin: 0;
-  font-size: var(--mk-fs-20, 20px);
-  font-weight: 800;
+  /* 与 MkPageHead 同一档（24px = 原型 .hero__meta h1），字重 700 */
+  font-size: 24px;
+  font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--mk-ink);
   line-height: 1.25;

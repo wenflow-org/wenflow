@@ -3,12 +3,24 @@
 /* --mk-* token 全局定义已上移至 src/styles/main.css（:root）：保证 admin-surface 兼容映射、
    admin-theme EP 覆写与 Teleport 到 body 的覆盖层全局可用。本文件只保留组件类。 */
 
+/* 页面容器内边距 token（唯一来源）：基础档 = 原型 .view 的 20/20/48；
+   响应式档位与密度档只覆写这四个 token，不再逐档重写 padding 简写——
+   档位里的 padding 字面量既不单调、也让「页面留白」散成六份（设计门禁规则 9 棘轮）。
+   fill 档单列：fill 页不随页面滚动，底部呼吸位从表格可视高度里白扣。 */
+:root {
+  --mk-page-pad-t: 20px;
+  --mk-page-pad-x: 20px;
+  --mk-page-pad-b: 48px;
+  --mk-page-pad-b-fill: 20px;
+}
+
 .mk-page {
   background: var(--mk-bg);
   color: var(--mk-ink);
   font-size: var(--mk-fs-body);
   line-height: 1.65;
-  padding: var(--mk-space-4) var(--mk-space-4) var(--mk-space-5);
+  /* 左右 20px 与顶栏左右 20px 成同一条竖线；底部 48px 是滚动到底的呼吸位 */
+  padding: var(--mk-page-pad-t) var(--mk-page-pad-x) var(--mk-page-pad-b);
   display: grid;
   gap: var(--mk-space-4);
   align-content: start;
@@ -39,6 +51,9 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  /* fill 布局页不随页面滚动（表格区内滚、分页器吸底），底部 48px 呼吸位无处可去，
+     只会从表格可视高度里白扣 28px → 收回到与左右同档 */
+  padding-bottom: var(--mk-page-pad-b-fill);
 }
 .mk-card--fill {
   flex: 1;
@@ -358,8 +373,9 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 11px 16px;
+  /* 12px 16px / gap 8 = 原型 .card__head（原 11px 16px / gap 10 是随手值） */
+  gap: 8px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--mk-line);
   flex-wrap: wrap;
 }
@@ -371,7 +387,9 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
    首个元素吃掉全部剩余空间后，尾部元素自然贴右且彼此只隔 gap；
    页面在尾部元素上写的 margin-left:auto 变成空操作（无剩余空间可分），无需逐页清理。 */
 .mk-card__head > :first-child { flex: 1 1 auto; }
-.mk-card__title { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; }
+/* 卡题 15px = 原型 .card__title（--fs-emp）。原与正文同为 14px，卡题只靠字重区分，
+   页名 24px 之下直接掉到 14px 落差过陡；15px 是页名与正文之间的那一级。 */
+.mk-card__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 700; }
 .mk-card__meta { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 /* 卡内小字注解（图表/排行无数据时的说明行）。
    此前 TokenCost.vue 4 处使用但全局零定义，渲染成无样式裸 <p>（视觉审计 附 A #7）。 */
@@ -396,7 +414,9 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
 .mk-table { width: 100%; border-collapse: collapse; }
 .mk-table th {
   text-align: left;
-  padding: 8px 12px;
+  /* 10px 16px = 原型 .tbl th（原 8px 12px 是「能塞下就行」的密度值，
+     单元格文字贴边导致整表读起来发紧） */
+  padding: 10px 16px;
   font-size: var(--mk-fs-micro);
   font-weight: 600;
   /* 表头不再是全大写 + 0.04em 字距：中文标签下 uppercase 无效果、字距只增加噪声，
@@ -455,7 +475,9 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   border-top: 5px solid currentColor;
 }
 .mk-table td {
-  padding: 9px 12px;
+  /* 与表头同档（原型 .tbl td 10px 16px）：头与体的左右内边距必须一致，
+     否则每列的表头文字与单元格文字错开 4px，整表像没对齐 */
+  padding: 10px 16px;
   border-bottom: 1px solid var(--mk-table-row-line);
   vertical-align: middle;
   /* 等宽数字：数字列即使宽度不一，各位也对齐成一条竖线，扫读时不再左右跳。
@@ -493,7 +515,13 @@ html[data-density='compact'] .mk-card__head { padding: 6px 10px; }
 html[data-density='compact'] .mk-card__title { font-size: 13.5px; }
 html[data-density='compact'] .mk-pagination { padding: 6px 10px 8px; }
 /* 无表格页体感：页面间距 + KPI 卡片 + 徽章 + 筛选器 */
-html[data-density='compact'] .mk-page { padding: 12px 14px 18px; gap: 10px; }
+html[data-density='compact'] {
+  --mk-page-pad-t: 16px;
+  --mk-page-pad-x: 16px;
+  --mk-page-pad-b: 32px;
+  --mk-page-pad-b-fill: 16px;
+}
+html[data-density='compact'] .mk-page { gap: 10px; }
 html[data-density='compact'] .mk-kpi { padding: 9px 12px; }
 html[data-density='compact'] .mk-kpi__num { font-size: 18px; }
 html[data-density='compact'] .mk-kpi__label { font-size: 11.5px; }
@@ -728,10 +756,16 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    width:84px。表单输入框宽度由各自容器（.mk-field width:100% / 内联）决定。 */
 .mk-filter .mk-filter__input,
 .log-advpanel .mk-filter__input { min-width: 180px; }
-.mk-pills { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: var(--mk-pills-bg); border-radius: var(--mk-radius-xl); }
-/* 页签语言分工（2026-09-26 钉死，组件统一性调查复核结论）：
-   ① 顶层视图/筛选切换 → .mk-pills（胶囊，如 People/GoalConversations 视图 pills）；
-   ② 抽屉/弹窗**内部**内容分区 → 下划线式 tab（ts-tabs/pe-tabs 形态：底线+sticky），与胶囊是两种合法 genre，勿互改；
+/* 视图/筛选切换：**独立描边胶囊**（原型 .chips / .chip），不再是灰底分段控件。
+   2026-09-26 曾定「顶层切换走分段控件（灰轨+白片）」，本次按 newui「UI-分支优化设计」
+   原型改回胶囊：原型里根本没有分段轨道，切换控件一律是描边胶囊（筛选）或下划线页签
+   （视图，见 MkSubTabs）——灰轨在页面里是一块额外的实色面，页头会被读成两级容器。
+   容器类名保持不变（25 个页面无需改标记）；页面里对 .mk-pills 写的 padding 随之失效，
+   属预期（胶囊行不再有内衬）。 */
+.mk-pills { display: inline-flex; flex-wrap: wrap; gap: var(--mk-space-2); }
+/* 页签语言分工（2026-09-26 钉死，2026-09-30 按原型修订）：
+   ① 顶层视图/筛选切换 → .mk-pills（描边胶囊，如 People/GoalConversations 视图 pills）；
+   ② 抽屉/弹窗**内部**内容分区 → 下划线式 tab（MkSubTabs/ts-tabs/pe-tabs 形态：底线+sticky），与胶囊是两种合法 genre，勿互改；
    ③ 管线步骤可视化（阶段流转）→ stepper（RunStageBar/orch-stage-tabs/cp-stage），语义是流程不是选择，禁改成 pills。
    已核验 LearnerDetail ld-tabs / VirtualProfile vp-tabsrow 实际用的就是 mk-pill，勿另起私搓容器。 */
 /* 主视图切换（.mk-page 的直接子级 pills）：统一左对齐 + 按内容宽度收缩。
@@ -739,43 +773,51 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    ——虚拟学习者、执行日志、系统工具曾出现 pills 占满整行的「超长」形态。 */
 .mk-page > .mk-pills { width: fit-content; justify-self: start; align-self: flex-start; }
 .mk-pill {
-  border: 0;
-  background: transparent;
+  /* 描边胶囊 = 原型 .chip：底色与卡片同面（--mk-surface），靠 1px 发丝线定形 */
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface);
   padding: 5px 12px;
-  border-radius: var(--mk-radius-sm);
+  border-radius: 999px;
   font: inherit;
   font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-muted);
   cursor: pointer;
   white-space: nowrap;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
 }
-/* 激活 = 筛选生效：蓝色文字 + 内描边（不用 box-shadow 外圈——发丝线是唯一的描边语言） */
+.mk-pill:hover {
+  color: var(--mk-blue);
+  border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line));
+}
+/* 激活 = 筛选生效：浅蓝底 + 主色字 + 主色描边（原型 .chip[aria-pressed=true]），
+   不再用内描边单线——胶囊现在自带描边，激活要换的是「底 + 描边色」两个通道 */
 .mk-pill--active {
-  background: var(--mk-pill-active-bg);
+  background: var(--mk-blue-bg);
   color: var(--mk-pill-active-fg);
   font-weight: 700;
-  box-shadow: inset 0 0 0 1px var(--mk-blue);
+  border-color: color-mix(in srgb, var(--mk-blue) 44%, var(--mk-line));
 }
 html[data-theme='dark'] .mk-pill--active {
-  box-shadow: inset 0 0 0 1px var(--mk-blue-hover);
+  background: var(--mk-blue-bg);
+  border-color: color-mix(in srgb, var(--mk-blue) 44%, var(--mk-line));
 }
 /* 筛选 pill 内的计数徽章：默认弱化，激活态跟随主色 */
 .mk-pill__count {
   margin-left: 6px;
   padding: 0 6px;
   border-radius: 999px;
-  background: rgba(100, 116, 139, 0.14);
+  background: var(--mk-surface-3);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .mk-pill--active .mk-pill__count {
-  background: var(--mk-pill-count-active-bg);
+  background: var(--mk-blue-bg-strong);
   color: var(--mk-pill-count-active-fg);
 }
-html[data-theme='dark'] .mk-pill__count { background: rgba(148, 163, 184, 0.18); }
+html[data-theme='dark'] .mk-pill__count { background: var(--mk-surface-3); }
 
 /* 搜索框清空按钮（输入有值时显示）：包一层 .mk-search 提供定位锚点 */
 .mk-search { position: relative; display: inline-flex; align-items: center; }
@@ -1149,13 +1191,18 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 /* 按钮 */
 .mk-btn {
   padding: 5px 14px;
-  border-radius: var(--mk-radius-sm);
+  /* 圆角 8px = 原型 .btn（--r-md）：按钮与输入框/搜索框同档（都是 8px），
+     原先 6px 让按钮在一排控件里显得比输入框「小一号」。
+     字重 600 = 原型；字号保留 14px 是**有意偏离**——原型 .btn 与 .btn--sm 同为 12px，
+     字号在那里不承载层级，高度（34/28）才是；我们保留 14/12 让两级按钮多一维区分，
+     且 12px 中文按钮标签在密集管理台里偏小。 */
+  border-radius: var(--mk-radius-md);
   border: 1px solid var(--mk-line, #e1e8f2);
   background: var(--mk-surface, #fff);
   color: var(--mk-ink, #1a2a44);
   font: inherit;
   font-size: var(--mk-fs-body);
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .mk-btn svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px; }
@@ -1511,7 +1558,9 @@ html[data-theme='dark'] {
   .mk-menu__btn { width: 36px; height: 36px; }
   .mk-modal__close { width: 40px; height: 40px; }
   /* —— 间距 / 尺寸（本档的另一半职责） —— */
-  .mk-page { padding: 22px 28px 32px; gap: 16px; }
+  /* 页面留白：只覆写 token（档内不再出现 padding 字面量） */
+  :root { --mk-page-pad-t: 26px; --mk-page-pad-x: 32px; --mk-page-pad-b: 56px; --mk-page-pad-b-fill: 26px; }
+  .mk-page { gap: 16px; }
   .mk-status { padding: 10px 18px; min-height: 52px; border-radius: 14px; }
   .mk-status__action { padding: 6px 14px; }
   .mk-table th { padding: 13px 20px; }

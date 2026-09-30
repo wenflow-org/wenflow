@@ -32,8 +32,11 @@ defineProps<{ title: string; sub?: string; hint?: string }>();
 .mk-pagehead__text { min-width: 0; }
 .mk-pagehead__title {
   margin: 0;
-  font-size: var(--mk-fs-20, 20px);
-  font-weight: 800;
+  /* 页名 24px = 原型 .pagehead h1（--fs-24）。20px 与卡片标题 15px 只差一档，
+     页名立不住；字重从 800 收到 700，与 hero 标题、卡片标题同一套字重语言。
+     与 MkKpi 数字、4K 档位一样属展示型字号（不占 micro/body/emphasis 三级文本档）。 */
+  font-size: 24px;
+  font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--mk-ink);
   line-height: 1.25;
