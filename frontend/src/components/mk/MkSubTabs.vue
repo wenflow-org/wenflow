@@ -26,9 +26,12 @@ defineEmits<{ (e: 'update:modelValue', key: string): void }>();
 <style scoped>
 .mk-subtabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   border-bottom: 1px solid var(--mk-line, #e6ebf4);
-  overflow-x: auto;
+  /* 勿用 overflow-x:auto 横滚：定高 grid 页（.mk-page）的 auto 行轨按「最小贡献」收缩，
+     overflow 非 visible 会把贡献清零 → 组件被压成 1px、页签被裁剪到点不到
+     （LearnerDetail 实测，min-height:max-content 也救不回）。窄屏放不下时换行。 */
 }
 .mk-subtab {
   border: 0;
