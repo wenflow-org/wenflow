@@ -1,4 +1,5 @@
 import prisma from '../../config/database';
+import { loadTeachingMessagesForIds } from './teaching-session-message-store';
 import learningStateService from '../learning/learning-state.service';
 import { getSceneFramingNormalizedInput, resolveNormalizedInputSnapshot, resolvePersistedNormalizedInput } from '../learning/learning.helpers';
 import { extractPromptMaterials, TEACHING_MATERIAL_LIMITS, type PromptMaterial } from '../materials/material-prompt-projection';
@@ -1632,17 +1633,24 @@ export async function fetchBehavioralProfile(
   currentSession?: { messages?: unknown } | null,
 ): Promise<TeachingScenarioContext['behavioralProfile']> {
   try {
+    // messages 大列已侧表化（2026-10-01 列裁剪）：直读热表大列会让本查询拖上
+    // 全表 246MB 的 blob 页（实测列表基础扫描 3.5s），改走 store 权威读 + 批量。
     const recentSessions = await prisma.teaching_sessions.findMany({
       where: { userId, status: 'completed' },
       orderBy: { updatedAt: 'desc' },
       take: 3,
-      select: { messages: true },
+      // messages 保留作回退源（侧表无行的老会话）；侧表有行即权威内容。
+      // 直读不再整包扫热表——列已在 2026-10-01 侧表化清理中置 NULL（仅侧表有行的会话）。
+      select: { id: true, messages: true },
     });
+    const messagesById = await loadTeachingMessagesForIds(recentSessions.map((s) => s.id));
     // **本节课（进行中）的消息也必须计入**（18 号报告 N9）：求助软拦截最需要生效的场景正是
     // "本节课里连续直接要答案"，而此前只统计 status='completed' 的历史会话 → 本节课计数恒为 0。
     // 顺序按时间升序（历史由旧到新 + 本节课最后），这样 `recentHelpSeeking.slice(-5)` 取的是最近 5 条。
     const orderedMessageLists: unknown[][] = [
-      ...[...recentSessions].reverse().map((session) => (Array.isArray(session.messages) ? session.messages : [])),
+      ...[...recentSessions]
+        .reverse()
+        .map((session) => messagesById.get(session.id) ?? (Array.isArray(session.messages) ? session.messages : [])),
       ...(currentSession && Array.isArray(currentSession.messages) ? [currentSession.messages] : []),
     ];
     const allAnalysis: any[] = [];

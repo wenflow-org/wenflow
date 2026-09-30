@@ -95,9 +95,12 @@ interface RankEntry extends CostBucket {
 
 /* 计算结果缓存：4 个端点共用的 loadTokenData 是全量聚合（全表扫 agent_call_logs），
    页面并发请求 summary/by-skill/by-user/by-model 会把它重复执行 4 遍（实测 3.7 万行 ×4 ≈ 10s）。
-   加 30s TTL 内存缓存（key = days + includeTest）：并发 4 请求只计算 1 次，其余秒回。
-   数据的写入路径不在本路由（api-gateway 落库），TTL 内新调用延迟 30s 可见属可接受口径延迟。 */
-const TOKEN_CACHE_TTL_MS = 30_000;
+   加 5min TTL 内存缓存（key = days + includeTest）：并发 4 请求只计算 1 次，其余秒回。
+   数据的写入路径不在本路由（api-gateway 落库），TTL 内新调用延迟 5min 可见属可接受口径延迟（分析页非操作面）。 */
+/* 2026-10-01 性能批次：TTL 30s→5min。全表聚合冷载实测 3.9s（4 万+ 行物化+解析），
+   页面 4 端点并发共享本缓存；分析页非操作面，5min 口径延迟可接受（与 spans 300s 同先例），
+   换取 5 分钟内重复进入秒回。 */
+const TOKEN_CACHE_TTL_MS = 300_000;
 
 interface TokenDataResult {
   totals: CostBucket & { tokens: number; failed: number };

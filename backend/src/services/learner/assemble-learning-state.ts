@@ -8,6 +8,7 @@ import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService } from './LearnerStateSummaryService';
 import stateTrackingService from '../learning/learning-state.service';
 import { normalizeSessionDurationMinutes } from '../learning/learning.helpers';
+import { loadTeachingMessagesForIds } from '../ai-teaching/teaching-session-message-store';
 import { getLevelFromXp } from './level.util';
 
 export interface AssembledLearningState {
@@ -116,12 +117,15 @@ export async function assembleLearningState(
     prisma.teaching_sessions.findMany({
       where: { userId, status: { notIn: ['superseded'] } },
       select: {
+        id: true,
         duration: true,
         startTime: true,
         endTime: true,
         // 未结束会话（active/paused）的时长需按活跃时长估算，
-        // 见 normalizeSessionDurationMinutes（走查 P9）
+        // 见 normalizeSessionDurationMinutes（走查 P9）；
+        // messages 大列已侧表化：下方经 store 批量水合（直读热表大列实测拖慢全表扫描）
         status: true,
+        // messages 保留作回退源（侧表无行的老会话）；2026-10-01 侧表化清理后仅侧表有行的会话已置 NULL
         messages: true,
         teachingState: true,
         updatedAt: true,
@@ -130,6 +134,11 @@ export async function assembleLearningState(
   ]);
 
   if (!user) return null;
+
+  // messages 大列侧表化：store 批量权威读水合（无侧表行 → []，与「无消息=0」口径一致）。
+  // 消息的消费者是 timeSessions（normalizeSessionDurationMinutes 的活跃时长估算分支）。
+  const messagesById = await loadTeachingMessagesForIds(timeSessions.map((s) => s.id));
+  const timeSessionsHydrated = timeSessions.map((s) => ({ ...s, messages: messagesById.get(s.id) ?? s.messages }));
 
   const primaryPath = pickPrimaryPath(paths) || paths[0] || null;
   if (!primaryPath) {
@@ -166,7 +175,7 @@ export async function assembleLearningState(
   const inProgressSubtasks = subtasks.filter((task: any) => task.status === 'in_progress');
   const todoSubtasks = subtasks.filter((task: any) => task.status === 'todo');
   const totalEstimatedMinutes = subtasks.reduce((sum: number, task: any) => sum + (task.estimatedMinutes || 0), 0);
-  const totalMinutes = timeSessions.reduce((sum: number, session: any) => sum + normalizeSessionDurationMinutes(session), 0);
+  const totalMinutes = timeSessionsHydrated.reduce((sum: number, session: any) => sum + normalizeSessionDurationMinutes(session), 0);
   const activeLearningDays = new Set(timeSessions.map((session: any) => session.startTime.toISOString().split('T')[0])).size;
   const avgDailyMinutes = activeLearningDays > 0 ? Number((totalMinutes / activeLearningDays).toFixed(1)) : 0;
 

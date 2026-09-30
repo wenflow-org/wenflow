@@ -12,6 +12,8 @@ jest.mock('../../../config/database', () => ({
   default: {
     teaching_sessions: { findMany: mockTeachingFindMany },
     memory_traces: { findMany: mockMemoryFindMany },
+    // messages 大列侧表化后 fetchBehavioralProfile 走 store 批量权威读：mock 侧表无行
+    teaching_session_messages: { findMany: jest.fn().mockResolvedValue([]) },
   },
 }))
 jest.mock('../../../utils/logger', () => ({

@@ -26,11 +26,11 @@ export interface TeachingMessageStoreClient {
   };
   teaching_session_messages: {
     findMany(args: {
-      where: { sessionId: string };
+      where: { sessionId: string } | { sessionId: { in: string[] } };
       orderBy?: { id: 'asc' };
       take?: number;
-      select: { id: true; payload?: true };
-    }): Promise<Array<{ id: number; payload?: string }>>;
+      select: { id: true; payload?: true } | { sessionId: true; payload?: true };
+    }): Promise<Array<{ id: number; payload?: string; sessionId?: string }>>;
     count(args: { where: { sessionId: string } }): Promise<number>;
     createMany(args: { data: Array<{ sessionId: string; payload: string }> }): Promise<unknown>;
   };
@@ -92,6 +92,33 @@ export async function loadTeachingMessages(
   return rows
     .map((row) => parsePayload(String(row.payload ?? '')))
     .filter((message): message is TeachingSessionMessage => message !== null);
+}
+
+/**
+ * 批量读多个会话的权威消息（侧表有行即内容；无行 → null，调用方按旧列/无消息回退）。
+ * 供「列裁剪后仍需消息内容」的读点（行为画像/反馈/学习状态时长估算）一次性取数，
+ * 替代逐会话 select { messages: true } 直读热表大列（该列均摊 499KB/行，2026-10-01 实测）。
+ */
+export async function loadTeachingMessagesForIds(
+  sessionIds: string[],
+  db: TeachingMessageStoreClient = prisma as unknown as TeachingMessageStoreClient
+): Promise<Map<string, TeachingSessionMessage[] | null>> {
+  const result = new Map<string, TeachingSessionMessage[] | null>();
+  if (sessionIds.length === 0) return result;
+  const rows = await db.teaching_session_messages.findMany({
+    where: { sessionId: { in: sessionIds } },
+    orderBy: { id: 'asc' },
+    select: { sessionId: true, payload: true },
+  });
+  for (const id of sessionIds) result.set(id, null);
+  for (const row of rows) {
+    const message = parsePayload(String(row.payload ?? ''));
+    if (!message) continue;
+    const list = result.get(row.sessionId);
+    if (list === null) result.set(row.sessionId, [message]);
+    else list?.push(message);
+  }
+  return result;
 }
 
 /**

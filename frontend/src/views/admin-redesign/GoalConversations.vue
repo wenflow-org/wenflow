@@ -32,15 +32,9 @@
     <section v-if="stats && stats.total > 0" class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">目标对话构成</h3>
-        <span class="mk-card__meta">状态构成 · 四态条数与占比（页头 KPI 只报总量与完成率）</span>
+        <span class="mk-card__meta">状态构成 · 三态条数与占比（总量见页头 KPI，不复读）</span>
       </div>
       <div class="buckets">
-        <div class="bucket">
-          <span class="bucket__v">{{ stats.total }}</span>
-          <span class="bucket__l">目标对话</span>
-          <span class="bucket__bar" aria-hidden="true"><i :style="{ width: '100%', background: 'var(--mk-blue)' }"></i></span>
-          <span class="bucket__l bucket__foot">四态合计</span>
-        </div>
         <div class="bucket">
           <span class="bucket__v">{{ stats.active }}</span>
           <span class="bucket__l">进行中</span>
@@ -603,7 +597,9 @@ function mapRow(c: Record<string, unknown>): Row {
     isTestAccount: !!c.isTestAccount,
     status: String(c.status || ''),
     stage,
-    summary: summaryOf(c),
+    // 2026-10-01 列表列裁剪：服务端已按同口径解析 summary（description 优先，
+    // 其次 collectedData.goal——该大列不再随列表出库）；summaryOf 仅作旧响应兜底
+    summary: String(c.summary ?? '') || summaryOf(c),
     hasPath: !!c.learningPathId,
     createdAt: timeAgo(String(c.createdAt || '')),
     stageIndex: stageProgressIndex(stage),

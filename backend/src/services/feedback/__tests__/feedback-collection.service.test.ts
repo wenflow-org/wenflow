@@ -1,5 +1,6 @@
 const mockPrisma: any = {
   teaching_sessions: { findUnique: jest.fn() },
+  teaching_session_messages: { findMany: jest.fn().mockResolvedValue([]) },
   content_feedback: {
     upsert: jest.fn(),
     findUnique: jest.fn(),

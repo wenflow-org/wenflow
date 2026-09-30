@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import prisma from '../../config/database';
+import { loadTeachingMessages } from '../ai-teaching/teaching-session-message-store';
 import { logger } from '../../utils/logger';
 
 export type FeedbackStatus = 'new' | 'triaged' | 'resolved' | 'dismissed';
@@ -97,6 +98,7 @@ export class FeedbackCollectionService {
         id: true,
         userId: true,
         taskId: true,
+        // 回退源：侧表无行的老会话仍从列读（2026-10-01 侧表化后仅侧表有行的会话已置 NULL）
         messages: true
       }
     });
@@ -111,7 +113,10 @@ export class FeedbackCollectionService {
       throw new FeedbackCollectionError('反馈任务与学习会话不一致', 409, 'FEEDBACK_TASK_MISMATCH');
     }
 
-    const messages = parseJson<FeedbackMessage[]>(session.messages, []);
+    // messages 大列已侧表化：store 权威读（侧表无行 → null → 空数组；旧列 2026-10-01 起退役置 NULL）
+    // store 权威读优先；侧表无行的老会话回退读列（旧列内容仍在，仅侧表有行者已置 NULL）
+    const sideMessages = await loadTeachingMessages(params.sessionId);
+    const messages = sideMessages ?? parseJson<FeedbackMessage[]>(session.messages, []);
     const latestStrategy = [...messages]
       .reverse()
       .find(message => Array.isArray(message.strategies) && message.strategies.length > 0)
@@ -202,7 +207,10 @@ export class FeedbackCollectionService {
       throw new FeedbackCollectionError('消息内容为空', 400, 'FEEDBACK_MESSAGE_EMPTY');
     }
 
-    const messages = parseJson<FeedbackMessage[]>(session.messages, []);
+    // messages 大列已侧表化：store 权威读（侧表无行 → null → 空数组；旧列 2026-10-01 起退役置 NULL）
+    // store 权威读优先；侧表无行的老会话回退读列（旧列内容仍在，仅侧表有行者已置 NULL）
+    const sideMessages = await loadTeachingMessages(params.sessionId);
+    const messages = sideMessages ?? parseJson<FeedbackMessage[]>(session.messages, []);
     const latestStrategy = [...messages]
       .reverse()
       .find(message => Array.isArray(message.strategies) && message.strategies.length > 0)

@@ -6,6 +6,7 @@
  * 场景摘要 / 实际投入分钟等视图组装件。行为与拆分前 learning.service 同名方法逐一等价。
  */
 import prisma from '../../../config/database';
+import { loadTeachingMessagesForIds } from '../../ai-teaching/teaching-session-message-store';
 import { logger } from '../../../utils/logger';
 import stateTrackingService from '../learning-state.service';
 import {
@@ -902,18 +903,24 @@ export async function getLearningStats(userId: string) {
     const sessions = await prisma.teaching_sessions.findMany({
       where: { userId, status: { notIn: ['superseded'] } },
       select: {
+        id: true,
         duration: true,
         startTime: true,
         endTime: true,
         // 未结束会话（active/paused）的时长需按活跃时长估算，见
-        // normalizeSessionDurationMinutes（走查 P9）
+        // normalizeSessionDurationMinutes（走查 P9）；messages 大列已侧表化，
+        // 下方经 store 批量水合（直读热表大列实测拖慢全表扫描）
         status: true,
+        // messages 保留作回退源（侧表无行的老会话）；2026-10-01 侧表化清理后仅侧表有行的会话已置 NULL
         messages: true,
         teachingState: true,
         updatedAt: true,
       },
     });
-    const totalMinutes = sessions.reduce((sum, session) => sum + normalizeSessionDurationMinutes(session), 0);
+    // messages 大列侧表化：store 批量权威读水合（无侧表行 → []，与「无消息=0」口径一致）
+    const messagesById = await loadTeachingMessagesForIds(sessions.map((s) => s.id));
+    const hydrated = sessions.map((s) => ({ ...s, messages: messagesById.get(s.id) ?? s.messages }));
+    const totalMinutes = hydrated.reduce((sum, session) => sum + normalizeSessionDurationMinutes(session), 0);
     const activeLearningDays = new Set(
       sessions.map((session) => session.startTime.toISOString().split('T')[0])
     ).size;
