@@ -4,20 +4,11 @@
     <aside class="mshell__side">
       <div class="mshell__brand">
         <!-- 展开：长方形全 logo（图标 + 问流）；折叠：正方形图标。
-             暗色用深色版资产（深墨字标→浅色，保留品牌蓝），而非 CSS 提亮滤镜 -->
+             暗色用深色版资产（深墨字标→浅色，保留品牌蓝），而非 CSS 提亮滤镜。
+             折叠开关不在这里——原型把「收起导航」放在侧栏底部（见 .mshell__foot），
+             品牌行只承担品牌。 -->
         <img :src="theme === 'dark' ? '/logo-dark.png' : '/logo.png'" alt="问流" class="mshell__logo-full" />
         <img :src="theme === 'dark' ? '/favicon-dark.png' : '/favicon.png'" alt="问流" class="mshell__logo-mark" />
-        <button
-          type="button"
-          class="mshell__collapse"
-          :title="forcedCollapse ? '窄屏下侧栏保持图标轨' : collapsed ? '展开侧栏' : '收起侧栏'"
-          :aria-label="forcedCollapse ? '窄屏下侧栏保持图标轨' : collapsed ? '展开侧栏' : '收起侧栏'"
-          :aria-expanded="collapsed || forcedCollapse ? 'false' : 'true'"
-          :disabled="forcedCollapse"
-          @click="toggleCollapse"
-        >
-          <span aria-hidden="true">{{ collapsed ? '»' : '«' }}</span>
-        </button>
       </div>
       <!-- aria-label：页面内存在多个 <nav>/地标时读屏需要可区分的名称 -->
       <nav class="mshell__nav" aria-label="管理导航">
@@ -77,55 +68,25 @@
           </div>
         </section>
       </nav>
-      <!-- 左侧底部：工具行（刷新/这是什么/密度/主题，原顶栏迁入）+ 用户区（admin + 退出） -->
+      <!-- 左侧底部：收起/展开导航一行（原型 .side__foot = 单个 nav__item）。
+           刷新/术语/密度/主题 四个工具钮已上移顶栏右侧（原型侧栏底部只有这一行）。 -->
       <footer class="mshell__foot">
-        <div class="mshell__tools">
-          <button
-            type="button"
-            class="mshell__tool"
-            :disabled="liveLoading"
-            :title="liveLoading ? '刷新中…' : '刷新真实数据'"
-            :aria-label="liveLoading ? '刷新中…' : '刷新真实数据'"
-            @click="refreshData"
-          >
-            <span class="mshell__refresh-icon" :class="{ 'is-spinning': liveLoading }"><RotateCw :size="15" :stroke-width="1.75" /></span>
-          </button>
-          <button type="button" class="mshell__tool" title="运营术语表 / 这是什么" aria-label="运营术语表 / 这是什么" @click="$emit('glossary')">
-            <span class="mshell__tool-icon" aria-hidden="true"><CircleHelp :size="15" :stroke-width="1.75" /></span>
-          </button>
-          <template v-if="release">
-            <button
-              type="button"
-              class="mshell__tool"
-              :title="density === 'compact' ? '当前紧凑密度 · 点击切换标准' : '当前标准密度 · 点击切换紧凑'"
-              :aria-label="density === 'compact' ? '切换到标准密度' : '切换到紧凑密度'"
-              @click="toggleDensity"
-            >
-              <span class="mshell__tool-icon" aria-hidden="true">
-                <!-- 标准密度：四条均匀行线；紧凑密度：上两行收紧、下两行疏（形似压缩） -->
-                <svg v-if="density !== 'compact'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 6.5h16"/><path d="M4 11h16"/><path d="M4 15.5h16"/><path d="M4 20h16"/></svg>
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 5.5h16"/><path d="M4 9.5h16"/><path d="M4 16h16"/><path d="M4 20h16"/></svg>
-              </span>
-            </button>
-            <button
-              type="button"
-              class="mshell__tool"
-              :title="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
-              :aria-label="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
-              @click="toggleTheme"
-            >
-              <span class="mshell__tool-icon" aria-hidden="true">
-                <!-- 当前暗色 → 点按切浅色（显示太阳）；当前浅色 → 点按切暗色（显示月亮） -->
-                <Sun v-if="theme === 'dark'" :size="15" :stroke-width="1.75" />
-                <Moon v-else :size="15" :stroke-width="1.75" />
-              </span>
-            </button>
-          </template>
-        </div>
-        <div class="mshell__brandline">
-          <span class="mshell__foot-name">WenFlow Admin</span>
-          <span class="mshell__foot-ver mono">v{{ version }}</span>
-        </div>
+        <button
+          type="button"
+          class="mshell__collapse"
+          :title="forcedCollapse ? '窄屏下侧栏保持图标轨' : collapsed ? '展开导航' : '收起导航'"
+          :aria-label="forcedCollapse ? '窄屏下侧栏保持图标轨' : collapsed ? '展开导航' : '收起导航'"
+          :aria-expanded="collapsed || forcedCollapse ? 'false' : 'true'"
+          :disabled="forcedCollapse"
+          @click="toggleCollapse"
+        >
+          <span class="mshell__collapse-icon" aria-hidden="true">
+            <!-- 展开态显示「收起」（面板箭头向左），收起态显示「展开」（箭头向右） -->
+            <PanelLeftClose v-if="!collapsed && !forcedCollapse" :size="17" :stroke-width="1.75" />
+            <PanelLeftOpen v-else :size="17" :stroke-width="1.75" />
+          </span>
+          <span class="mshell__collapse-label">{{ collapsed ? '展开导航' : '收起导航' }}</span>
+        </button>
       </footer>
     </aside>
 
@@ -178,6 +139,39 @@
             <div v-if="!searchHits.length" class="mshell__search-empty">没有匹配的页面</div>
           </div>
         </div>
+        <!-- 工具钮：刷新 / 术语表 / 密度（原型侧栏底部只有「收起导航」一行，
+             这四个低频工具钮回归顶栏右侧；主题钮紧随其后） -->
+        <button
+          type="button"
+          class="mshell__top-btn"
+          :disabled="liveLoading"
+          :title="liveLoading ? '刷新中…' : '刷新真实数据'"
+          :aria-label="liveLoading ? '刷新中…' : '刷新真实数据'"
+          @click="refreshData"
+        >
+          <RotateCw :size="16" :stroke-width="1.75" :class="{ 'mshell__spin': liveLoading }" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          class="mshell__top-btn"
+          title="运营术语表 / 这是什么"
+          aria-label="运营术语表 / 这是什么"
+          @click="$emit('glossary')"
+        >
+          <CircleHelp :size="16" :stroke-width="1.75" aria-hidden="true" />
+        </button>
+        <button
+          v-if="release"
+          type="button"
+          class="mshell__top-btn"
+          :title="density === 'compact' ? '当前紧凑密度 · 点击切换标准' : '当前标准密度 · 点击切换紧凑'"
+          :aria-label="density === 'compact' ? '切换到标准密度' : '切换到紧凑密度'"
+          @click="toggleDensity"
+        >
+          <!-- 标准密度：四条均匀行线；紧凑密度：上两行收紧、下两行疏（形似压缩） -->
+          <svg v-if="density !== 'compact'" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M4 6.5h16"/><path d="M4 11h16"/><path d="M4 15.5h16"/><path d="M4 20h16"/></svg>
+          <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M4 5.5h16"/><path d="M4 9.5h16"/><path d="M4 16h16"/><path d="M4 20h16"/></svg>
+        </button>
         <button
           type="button"
           class="mshell__top-btn"
@@ -227,12 +221,11 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ChevronLeft, CircleHelp, LogOut, Moon, RotateCw, Search, Sun } from 'lucide-vue-next'
+import { ChevronLeft, CircleHelp, LogOut, Moon, PanelLeftClose, PanelLeftOpen, RotateCw, Search, Sun } from 'lucide-vue-next'
 import { MOCK_SCENES, type MockSceneDef } from './manifest'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
 import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
 import { readTheme, writeTheme, applyDocumentTheme } from '@/utils/theme'
-import { version as appVersion } from '../../../package.json'
 
 const props = defineProps<{ current: string; crumb?: string; crumbTitle?: string; crumbClickable?: boolean; release?: boolean }>()
 const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'glossary'): void; (e: 'crumb-click'): void }>()
@@ -337,8 +330,6 @@ let collapseMq: MediaQueryList | null = null
 function syncForcedCollapse() {
   forcedCollapse.value = !!collapseMq?.matches
 }
-
-const version = appVersion
 
 /* D1 暗色模式：统一走 utils/theme.ts SSOT（readTheme/writeTheme）。
    背景：主题 key 已收敛到 v2_theme（用户侧 ThemeToggle 原 key）+ wenflow-theme 兼容 key，
@@ -578,8 +569,12 @@ watch(
   border-bottom: 1px solid var(--mk-line, #e1e8f2);
   margin-bottom: 2px;
 }
-/* 置顶入口比组内子项略收高度：驾驶舱入口不再显高（用户反馈 2026-09-05） */
-.mshell__pinned .mshell__item { font-weight: 600; padding-top: 6px; padding-bottom: 6px; color: var(--mk-side-item-fg); }
+/* 置顶入口比组内子项略收高度：驾驶舱入口不再显高（用户反馈 2026-09-05）。
+   注意：这里**不能写 color**——`.mshell__pinned .mshell__item`（0,2,0）会压过
+   `.mshell__item--active`（0,1,0），而置顶项（平台总览）恰恰常年是选中项，
+   于是它的文字被这条抢成灰色，选中态只剩浅蓝底、没有主色字。
+   文字色统一由 .mshell__item / --active 决定。 */
+.mshell__pinned .mshell__item { font-weight: 600; padding-top: 6px; padding-bottom: 6px; }
 .mshell__group { display: grid; gap: 1px; margin-top: 12px; }
 /* 分组标题 = 纯文字小标签，不是可点入口（走查 2026-09-27「组名比组大」整改：
    原组头是按钮+图标+徽章+箭头，比组内页面项还重。现在页面项是导航唯一主体，
@@ -669,51 +664,46 @@ watch(
   50% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0); }
 }
 
-/* 左侧底部：工具行 + 用户区 + 品牌行（原顶栏功能迁入侧栏 C5） */
+/* 左侧底部：收起/展开导航一行（原型 .side__foot = 单个 nav__item）。
+   规格对齐原型：上边框 1px、padding 8px 0 0、gap 2px，行本身是导航项样式
+   （图标 17px + 文字，8px 10px 内边距、8px 圆角，高约 39px）。 */
 .mshell__foot {
   display: grid;
-  gap: 8px;
-  padding: 10px 10px 8px;
-  border-top: 1px solid var(--mk-side-inset);
+  gap: 2px;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--mk-side-line);
   flex-shrink: 0;
 }
-/* 工具行：刷新 / 这是什么 / 密度 / 主题，一行 icon 按钮（title 兜底语义，节省纵向空间） */
-.mshell__tools {
+.mshell__collapse {
   display: flex;
   align-items: center;
-  gap: 4px;
-  justify-content: flex-start;
-}
-.mshell__tool {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
   border: 0;
-  border-radius: var(--mk-radius-sm);
+  border-radius: var(--mk-radius-md);
   background: transparent;
-  color: var(--mk-faint);
+  color: var(--mk-muted);
+  font: inherit;
+  font-size: var(--mk-fs-body);
+  font-weight: 500;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: 0.12s ease;
 }
-.mshell__tool:hover { background: var(--mk-side-hover); color: var(--mk-blue, #2c63d0); }
-.mshell__tool:disabled { opacity: 0.45; cursor: default; }
-.mshell__tool-icon { font-size: var(--mk-fs-body); line-height: 1; display: inline-flex; }
-.mshell__tool-icon svg { width: 15px; height: 15px; display: block; }
-.mshell__refresh-icon { display: inline-flex; }
-.mshell__refresh-icon svg { width: 15px; height: 15px; display: block; }
-.mshell__refresh-icon.is-spinning { animation: mshell-spin 0.8s linear infinite; }
+.mshell__collapse:hover { background: var(--mk-side-hover); color: var(--mk-ink); }
+.mshell__collapse:disabled { cursor: default; opacity: 0.5; }
+.mshell__collapse:focus { outline: none; }
+.mshell__collapse:focus-visible { outline: 2px solid var(--mk-blue, #2c63d0); outline-offset: -2px; }
+.mshell__collapse-icon { display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; flex-shrink: 0; }
+.mshell__collapse-icon svg { display: block; }
+.mshell__collapse-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mshell__spin { animation: mshell-spin 0.8s linear infinite; }
 @keyframes mshell-spin { to { transform: rotate(360deg); } }
 
-/* 用户区：头像 + 用户名 + 退出 */
-.mshell__user {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 6px 6px 2px;
-  border-top: 1px solid var(--mk-side-line);
-}
+/* 用户区（顶栏账户 chip）：头像 + 名字 → 退出菜单。
+   原侧栏底部版本（带 border-top / 竖排折叠态）随底部改版删除，
+   账户现在只出现在顶栏（原型 .userchip 同位置）。 */
 .mshell__user-avatar {
   display: inline-flex;
   align-items: center;
@@ -735,23 +725,6 @@ watch(
   color: var(--mk-ink);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 品牌行弱化 */
-.mshell__brandline {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 2px;
-  color: var(--mk-faint);
-  font-size: var(--mk-fs-micro);
-}
-.mshell__foot-name { font-weight: 700; color: var(--mk-faint, #5f6f8c); letter-spacing: 0.02em; }
-.mshell__foot-ver {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint, #5f6f8c);
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -902,7 +875,9 @@ watch(
 .mshell__search-hit-group { margin-left: auto; color: var(--mk-faint); font-weight: 500; }
 .mshell__search-empty { padding: 10px; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
 
-/* 账户菜单（userchip）：头像 + 名字 → 退出登录 */
+/* 账户菜单（userchip）：头像 + 名字 → 退出登录。
+   顶栏账户区定位（原侧栏底部的 .mshell__user 规则随底部改版删除——
+   原型侧栏底部只有「收起导航」一行，账户在顶栏） */
 .mshell__user { position: relative; flex: none; }
 .mshell__userchip {
   display: flex;
@@ -1009,8 +984,7 @@ watch(
   .mshell__caption { font-size: var(--mk-fs-micro); }
   .mshell__item { font-size: var(--mk-fs-body); padding: 9px 12px; gap: 10px; }
   .mshell__item-badge { font-size: var(--mk-fs-micro); padding: 2px 8px; }
-  .mshell__foot { font-size: var(--mk-fs-micro); padding: 10px 12px; }
-  .mshell__tool { width: 30px; height: 30px; }
+  .mshell__foot { font-size: var(--mk-fs-micro); }
   .mshell__user-avatar { width: 28px; height: 28px; }
 }
 @media (min-width: 2800px) {
@@ -1022,11 +996,7 @@ watch(
   .mshell__caption { font-size: var(--mk-fs-micro); }
   .mshell__item { font-size: var(--mk-fs-body); padding: 11px 14px; gap: 10px; border-radius: var(--mk-radius-md); }
   .mshell__item-badge { font-size: var(--mk-fs-micro); padding: 3px 10px; }
-  .mshell__foot { font-size: var(--mk-fs-micro); padding: 12px 14px; }
-  .mshell__tool { width: 36px; height: 36px; }
-  .mshell__tool-icon { font-size: var(--mk-fs-micro); }
-  .mshell__tool-icon svg,
-  .mshell__refresh-icon svg { width: 18px; height: 18px; }
+  .mshell__foot { font-size: var(--mk-fs-micro); }
   .mshell__user-avatar { width: 32px; height: 32px; }
   .mshell__user-name { font-size: var(--mk-fs-micro); }
 }
@@ -1040,11 +1010,7 @@ watch(
   .mshell__caption { font-size: var(--mk-fs-body); }
   .mshell__item { font-size: var(--mk-fs-emphasis); padding: 14px 16px; gap: 12px; }
   .mshell__item-badge { font-size: var(--mk-fs-body); padding: 4px 12px; }
-  .mshell__foot { font-size: var(--mk-fs-body); padding: 14px 16px; }
-  .mshell__tool { width: 42px; height: 42px; }
-  .mshell__tool-icon { font-size: var(--mk-fs-emphasis); }
-  .mshell__tool-icon svg,
-  .mshell__refresh-icon svg { width: 21px; height: 21px; }
+  .mshell__foot { font-size: var(--mk-fs-body); }
   .mshell__user-avatar { width: 38px; height: 38px; }
   .mshell__user-name { font-size: var(--mk-fs-body); }
 }
@@ -1055,27 +1021,16 @@ watch(
 .mshell[data-collapsed='true'] .mshell__item-label,
 .mshell[data-collapsed='true'] .mshell__item-badge,
 .mshell[data-collapsed='true'] .mshell__caption { display: none; }
-.mshell[data-collapsed='true'] .mshell__foot {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  padding: 10px 8px 8px;
-}
-.mshell[data-collapsed='true'] .mshell__tools {
-  flex-direction: column;
-  gap: 6px;
-  align-items: center;
-}
-.mshell[data-collapsed='true'] .mshell__user { flex-direction: column; gap: 4px; justify-content: center; padding: 6px 0; }
-.mshell[data-collapsed='true'] .mshell__user-name { display: none; }
-.mshell[data-collapsed='true'] .mshell__brandline { display: none; }
+/* 折叠轨里「收起导航」只剩图标（文字会撑破 64px 轨道） */
+.mshell[data-collapsed='true'] .mshell__foot { padding: 8px 0 0; }
+.mshell[data-collapsed='true'] .mshell__collapse { justify-content: center; padding: 8px 0; }
+.mshell[data-collapsed='true'] .mshell__collapse-label { display: none; }
 .mshell[data-collapsed='true'] .mshell__item { justify-content: center; padding: 4px 0; }
 .mshell[data-collapsed='true'] .mshell__group-body .mshell__item { padding-left: 0; }
 .mshell[data-collapsed='true'] .mshell__item-glyph { display: inline-flex; }
 .mshell[data-collapsed='true'] .mshell__logo-full { display: none; }
 .mshell[data-collapsed='true'] .mshell__logo-mark { display: block; }
 .mshell[data-collapsed='true'] .mshell__brand { justify-content: center; padding: 2px 0 0; }
-.mshell[data-collapsed='true'] .mshell__collapse { position: static; margin: 4px auto 0; display: block; }
 .mshell[data-collapsed='true'] .mshell__pinned { justify-content: center; padding-bottom: 8px; border-bottom: 0; }
 .mshell[data-collapsed='true'] .mshell__group { margin-top: 10px; }
 /* 折叠态组间分隔线:单字按钮平铺无分组上下文,用细线+留白恢复结构 */
@@ -1085,38 +1040,14 @@ watch(
   border-top: 1px solid var(--mk-line, #2f3239);
 }
 
-/* 折叠按钮（展开态右上角，悬停显示 tooltip 由 title 提供） */
-.mshell__collapse {
-  border: 1px solid var(--mk-line, #e1e8f2);
-  background: var(--mk-surface, #fff);
-  color: var(--mk-muted, var(--mk-muted));
-  width: 28px; height: 28px;
-  border-radius: var(--mk-radius-sm);
-  font-size: var(--mk-fs-micro); line-height: 1;
-  cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 0;
-  margin-left: auto;
-  flex-shrink: 0;
-  transition: border-color 0.12s ease, color 0.12s ease;
-}
-.mshell__collapse:hover { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
-
 @media (max-width: 860px) {
   .mshell { grid-template-columns: 64px minmax(0, 1fr); }
   .mshell__item-label,
   .mshell__item-badge,
   .mshell__caption { display: none; }
-  .mshell__foot {
-    display: grid;
-    justify-items: center;
-    gap: 8px;
-    padding: 10px 8px 8px;
-  }
-  .mshell__tools { flex-direction: column; gap: 6px; align-items: center; }
-  .mshell__user { flex-direction: column; gap: 4px; justify-content: center; padding: 6px 0; }
-  .mshell__user-name { display: none; }
-  .mshell__brandline { display: none; }
+  .mshell__foot { padding: 8px 0 0; }
+  .mshell__collapse { justify-content: center; padding: 8px 0; }
+  .mshell__collapse-label { display: none; }
   /* 窄屏图标栏：显示单字图标，悬停提示全名 */
   .mshell__item { justify-content: center; padding: 4px 0; }
   .mshell__pinned .mshell__item { padding-top: 4px; padding-bottom: 4px; }
@@ -1147,13 +1078,8 @@ html[data-theme='dark'] {
   .mshell__item-badge { background: var(--mk-side-inset); color: var(--mk-faint); }
   .mshell__item--active .mshell__item-badge { background: rgba(91, 141, 239, 0.22); color: var(--mk-accent-deep); }
   .mshell__foot { border-top-color: var(--mk-side-hover); }
-  .mshell__foot-name { color: #a5a7ac; }
-  .mshell__foot-ver { color: #8a8d93; }
-  .mshell__collapse { background: var(--mk-bg); border-color: var(--mk-line); color: var(--mk-muted); }
-  .mshell__collapse:hover { color: var(--mk-accent-deep); border-color: rgba(91, 141, 239, 0.4); }
-  .mshell__tool { color: var(--mk-muted, #afb1b6); }
-  .mshell__tool:hover { background: var(--mk-side-hover); color: var(--mk-accent-deep); }
-  .mshell__user { border-top-color: var(--mk-side-hover); }
+  .mshell__collapse { color: var(--mk-muted); }
+  .mshell__collapse:hover { background: var(--mk-side-hover); color: var(--mk-accent-deep); }
   .mshell__user-avatar { background: var(--mk-side-inset); color: var(--mk-accent-deep); }
   .mshell__user-name { color: #efeff0; }
 }
