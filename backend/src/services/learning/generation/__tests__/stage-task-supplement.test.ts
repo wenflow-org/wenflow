@@ -32,26 +32,26 @@ describe('mergeSupplementTasks', () => {
     expect(dropped).toHaveLength(0);
   });
 
-  it('同阶段换皮课（标题近似 ≥0.7，与 stage-filler 同口径）被丢弃，不并回清单', () => {
+  it('同阶段换皮课（标题近似 ≥0.6 补课口径）被丢弃，不并回清单', () => {
     const existing = [task('串联并联电功率计算的综合自测与查漏')];
     const incoming = [
       task('串联并联电功率计算的综合自测与查漏巩固'), // 实测 0.875：纯换皮 → 丢
       task('串并联电路电功率计算的综合自测与查漏练习'), // 实测 0.632：换了对象词 → 留
     ];
     const { merged, added, dropped } = mergeSupplementTasks(existing, incoming, { upper: 10 });
-    expect(merged).toHaveLength(2);
-    expect(added).toHaveLength(1);
-    expect(dropped).toHaveLength(1);
-    expect(merged[1].title).toBe('串并联电路电功率计算的综合自测与查漏练习');
+    // 0.632 的「换了对象词」对在补课口径（0.6）下判重丢弃：补课场景宁少勿换皮
+    expect(merged).toHaveLength(1);
+    expect(added).toHaveLength(0);
+    expect(dropped).toHaveLength(2);
   });
 
   it('补课任务之间也互相去重', () => {
     const existing = [task('刑法：犯罪构成四要件初识')];
     const incoming = [task('刑法：罪名判断映射训练'), task('刑法：罪名判断映射练习')];
     const { merged, added } = mergeSupplementTasks(existing, incoming, { upper: 10 });
-    // 训练/练习对实测 0.636，低于 0.7 判据——两条都留（阈值语义见 merge 注释）
-    expect(merged).toHaveLength(3);
-    expect(added).toHaveLength(2);
+    // 训练/练习对实测 0.636：在补课口径 0.6 下属近复读，第二条被拦
+    expect(merged).toHaveLength(2);
+    expect(added).toHaveLength(1);
   });
 
   it('显式抬高阈值可拦下改写对（0.8 时 0.875 拦、0.632 仍放行）', () => {
@@ -98,15 +98,51 @@ describe('补课动作族闸（requireTypeNovelty）', () => {
     expect(dropReasons.typeRepeat).toBe(1);
   });
 
-  it('未标注类型的补课任务不被动作族闸误杀', () => {
+  it('未标注类型的补课任务被拒收（评审实证的穿透路径）', () => {
     const existing = [task('建立基础认知', 60, 'acquire')];
     const incoming = [task('无类型的新方向课', 60)];
     const { added, dropReasons } = mergeSupplementTasks(existing, incoming, {
       upper: 10,
       requireTypeNovelty: 'taskType',
     });
+    expect(added).toHaveLength(0);
+    expect(dropReasons.noType).toBe(1);
+  });
+
+  it('显式关闭 rejectNoType 时无类型任务放行（向后兼容）', () => {
+    const existing = [task('建立基础认知', 60, 'acquire')];
+    const incoming = [task('无类型的新方向课', 60)];
+    const { added } = mergeSupplementTasks(existing, incoming, {
+      upper: 10,
+      requireTypeNovelty: 'taskType',
+      rejectNoType: false,
+    });
     expect(added).toHaveLength(1);
-    expect(dropReasons.typeRepeat).toBe(0);
+  });
+
+  it('公共前缀判据：同题干换尾缀（相似度 0.47）也能拦', () => {
+    // b2 评审实证对：「搭建单调性证明的符号推理链骨架」vs「搭建单调性证明的完整推理链框架」
+    const existing = [task('搭建单调性证明的符号推理链骨架', 45, 'model')];
+    const incoming = [task('搭建单调性证明的完整推理链框架', 45, 'execute')];
+    const { added, dropReasons } = mergeSupplementTasks(existing, incoming, {
+      upper: 10,
+      requireTypeNovelty: 'taskType',
+    });
+    expect(added).toHaveLength(0);
+    expect(dropReasons.duplicate).toBe(1);
+  });
+
+  it('补课阈值默认 0.6：换措辞的近复读（0.6-0.7 段）也被拦', () => {
+    // 「近期错题三类归因」vs「本周错题三类归因」实测 0.667——0.6 闸门拦住
+    // （类型给不同族，确保走到的是近重复判定而不是类型闸）
+    const existing = [task('把近期错题按判型、计算、讨论三类归因', 45, 'diagnose')];
+    const incoming = [task('把本周错题按判型、计算、讨论三类归因', 45, 'execute')];
+    const { added, dropReasons } = mergeSupplementTasks(existing, incoming, {
+      upper: 10,
+      requireTypeNovelty: 'taskType',
+    });
+    expect(added).toHaveLength(0);
+    expect(dropReasons.duplicate).toBe(1);
   });
 
   it('不传 requireTypeNovelty 时行为与只查重一致（向后兼容）', () => {
@@ -129,7 +165,7 @@ describe('补课动作族闸（requireTypeNovelty）', () => {
       requireTypeNovelty: 'taskType',
     });
     expect(added).toHaveLength(1);
-    expect(dropReasons).toEqual({ duplicate: 1, typeRepeat: 1, invalid: 1 });
+    expect(dropReasons).toEqual({ duplicate: 1, typeRepeat: 1, noType: 0, invalid: 1 });
   });
 
   it('补课后总数不超过结构上界', () => {

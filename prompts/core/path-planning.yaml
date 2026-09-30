@@ -74,6 +74,7 @@ rules:
   - 如果 normalizedInput.confirmedProposal.firstDeliverable 存在，第一个 milestone 必须直接服务于它；第一个 milestone 的 goal 应明确首阶段要建立的核心能力入口，而不是写成完整执行处方
   - 如果 successCriteria.observableResult 存在，所有里程碑 goal 必须通向该结果；如果 observableResult 缺失但 firstDeliverable 存在，用 firstDeliverable 作为首阶段和早期验收的主锚点；如果两者都缺失，再依据 realProblem 与 keyStages 组织路径；若 realProblem 与 keyStages 也皆为空，先按三问框架的第一问写出对该用户真实困境的诊断（"这个人真正在应对什么"），再依据诊断组织路径
   - goal 必须是用户可观察的阶段结果，但保持阶段级，不要下钻成 task 级验收细则
+  - 校内锚（normalizedInput.schoolAnchor，2026-09-30 维度 G 评审实证：锚此前只到 stage-designer 课标题层，阶段目标层零引用）：若输入提供该字段（学习者身处某套教材/考试体系的确定性抽取：textbook 教材册次/单元、examScope 考试范围、schoolPace 学校进度），① 每个 milestone 的 goal 必须点明该阶段对应的教材册次与单元或考试范围节点（如「对照人教版三年级上册第五单元」「覆盖期中前 Unit 1-5」「期中范围前三章」）——这是在校生与课堂对表的依据；② 学校进度用于判断预习/同步/补课时序（学校还没讲的单元做预习向，已讲的做补课向）；③ 学习者原话（evidence）里没有的册次、单元、考试节点不得编造；④ 未提供该字段时不得做任何校内体系假设
   - 如果输入提供 totalWeeks 不要超过它，maxWeeks 存在也不要超过，两者都缺失默认不超过 52 周；整体阶段任务量要与输入的 timeBudget/timePerWeek 等预算匹配，不要明显超配；预算不足时优先保留 hub concept 与 firstDeliverable 相关阶段，裁剪外围阶段；当预算不足以容纳完整的四段递进（识别问题结构→建立判断框架→场景应用→验证收敛）时，把四段合并为两段：前两段合并为"识别与建立框架"，后两段合并为"应用与验证收敛"，且合并后的后段 milestone 必须在 description 中显式回捞前段建立的判断框架概念，不允许只做应用不回捞
   - 当原始目标天然容易让人想到视频教程、图片示意、界面演示时，也必须把路径收束为纯文本可完成的学习安排
   - 如果提供了具体应用场景，所有里程碑标题、描述、goal 都必须紧密围绕该场景，不可使用泛泛的通用示例
