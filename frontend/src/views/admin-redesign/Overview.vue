@@ -15,7 +15,8 @@
       <span class="mk-status__dot"></span>
       <span class="mk-status__title">{{ health.headline }}</span>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">{{ health.subline }}</span>
+      <!-- subline（今日调用/失败）与下方 KPI 前两卡完全重复，不进状态条——
+           1280 实测它会把「查看健康中心」动作挤换行（2026-10-01 视觉回顾） -->
       <template v-if="effectiveActions.length">
         <button
           v-for="(a, i) in effectiveActions"
@@ -71,10 +72,7 @@
         <div class="kpi">
           <span class="kpi__label">{{ k.label }}</span>
           <span class="kpi__value">{{ k.value }}</span>
-          <span class="kpi__foot">
-            <span v-if="k.trend" class="trend" :class="k.up ? 'trend--up' : 'trend--down'">{{ k.up ? '▲' : '▼' }} {{ k.trend }}</span>
-            <span>{{ k.foot }}</span>
-          </span>
+          <span class="kpi__foot">{{ k.foot }}</span>
         </div>
       </div>
     </div>
@@ -342,30 +340,15 @@ const headSub = computed(() => {
 });
 function refreshNow() { void refreshOverviewTracked(true); }
 
-/* ===== KPI（原型 .kpi + 趋势 foot）=====
-   趋势真实来源：今日调用 vs 昨日（trend7d 末两项）、今日活跃 vs 昨日（growth7d 末两项）。
-   成功率/系统活跃无可比基线，不造趋势。 */
-interface KpiCard { label: string; value: string; foot: string; trend: string | null; up: boolean }
-const kpiCards = computed<KpiCard[]>(() => {
-  const base = data.value?.kpis ?? [];
-  const calls = data.value?.trend7d ?? [];
-  const growth = data.value?.growth7d ?? [];
-  const prevCalls = calls.length >= 2 ? calls[calls.length - 2].calls : null;
-  const curCalls = calls.length ? calls[calls.length - 1].calls : null;
-  const prevActive = growth.length >= 2 ? growth[growth.length - 2].activeUsers : null;
-  const curActive = growth.length ? growth[growth.length - 1].activeUsers : null;
-  const delta = (t: number | null, y: number | null): { trend: string | null; up: boolean } => {
-    if (t == null || y == null || y <= 0) return { trend: null, up: true };
-    const pct = Math.round(((t - y) / y) * 100);
-    return { trend: `${pct >= 0 ? '+' : ''}${pct}%`, up: pct >= 0 };
-  };
-  const callTrend = delta(curCalls, prevCalls);
-  const activeTrend = delta(curActive, prevActive);
-  return base.map((k, i) => {
-    const t = i === 0 ? callTrend : i === 2 ? activeTrend : { trend: null, up: true };
-    return { label: k.label, value: k.value, foot: k.hint, trend: t.trend, up: t.up };
-  });
-});
+/* ===== KPI（原型 .kpi）=====
+   原型 kpi__foot 的 ▲▼ 趋势**有意不搬**：我们的窗口是「今日自然日（进行中）」，
+   与「昨日全日」直接相比必然失真——2026-10-01 凌晨实测 ▼-97%（调用）/▼-100%（活跃），
+   数字真实但结论错误。等后端提供「同期对比」（昨日同时刻窗口）再恢复趋势 foot。
+   spec §9.7 已登记。 */
+interface KpiCard { label: string; value: string; foot: string }
+const kpiCards = computed<KpiCard[]>(() =>
+  (data.value?.kpis ?? []).map((k) => ({ label: k.label, value: k.value, foot: k.hint }))
+);
 
 /* ===== 近 7 天活跃学习者（原型 .barchart：顶部数值 + 渐变柱 + 星期帽）===== */
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -635,9 +618,6 @@ watch(dataSource, () => {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .kpi__foot { display: flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.trend { font-weight: 700; font-variant-numeric: tabular-nums; }
-.trend--up { color: var(--mk-green); }
-.trend--down { color: var(--mk-red); }
 
 /* ---- 卡片（原型 .card：head 12/16 分隔线 + body 16）---- */
 .card {

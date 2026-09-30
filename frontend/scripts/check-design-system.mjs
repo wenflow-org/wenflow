@@ -31,7 +31,7 @@
  *
  * 规则 14/15（2026-09-25 增，棘轮）：页面 scoped 的 border-radius 只允许语言四档
  * （4/6/12/16 + 999/50%/0 或 var(--mk-radius-*)），box-shadow 只允许
- * none / var(--mk-shadow-*) / inset 描边 / 0 0 0 Npx 环（ADMIN_VISUAL_LAYER_SPEC v2 §0.5）。
+ * none / var(--mk-shadow-*) / inset 描边 / 0 0 0 Npx 环（ADMIN_VISUAL_LAYER_SPEC v3 §0.5）。
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs'
@@ -217,7 +217,7 @@ const hexCounts = {} // 规则 3
 const radiusCounts = {} // 规则 14：页面 scoped 圆角档外值（棘轮）
 const shadowCounts = {} // 规则 15：页面 scoped 非法 box-shadow（棘轮）
 
-/* 规则 14/15 的白名单（ADMIN_VISUAL_LAYER_SPEC v2 §0.5）：
+/* 规则 14/15 的白名单（ADMIN_VISUAL_LAYER_SPEC v3 §0.5）：
    圆角四档 xs4/sm6/xl12/modal16 + 胶囊 999 + 圆形 50% + 0（或 var(--mk-radius-*)）。
    阴影三档：面=none、悬浮/弹层=var(--mk-shadow-*)、描边=inset 或 0 0 0 Npx 环
    （含焦点环与脉冲初始态；@keyframes 里的脉冲帧在扫描前剥离）。 */
@@ -711,7 +711,7 @@ if (radiusRegressions.length) {
   failed = true
   console.log(`
 ✖ 规则 14：页面 scoped 圆角档外值不得超过基线（只降不升）`)
-  console.log('  圆角只有四档（xs4/sm6/xl12/modal16）+ 胶囊/圆形，写法见 ADMIN_VISUAL_LAYER_SPEC v2 §0.5；用 var(--mk-radius-*) 引用。')
+  console.log('  圆角只有四档（xs4/sm6/xl12/modal16）+ 胶囊/圆形，写法见 ADMIN_VISUAL_LAYER_SPEC v3 §0.5；用 var(--mk-radius-*) 引用。')
   for (const v of radiusRegressions) console.log(`    ${v.file}: ${v.base} → ${v.now}`)
 }
 

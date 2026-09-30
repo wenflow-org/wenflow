@@ -1,6 +1,12 @@
 # 管理后台页面模板规范（v1 草案）
 
 > 📌 类型：活规范（待拆分瘦身 1569→≤330 行，方案见 DOC-TIMELINESS-AUDIT §四）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+>
+> **⚠ 视觉口径换源（2026-09-30）**：设计语言升格 **v3**，源 = `newui/UI-分支优化设计/index.html`，
+> 现行视觉口径唯一以 `doc/ADMIN_VISUAL_LAYER_SPEC.md`（**v3**）为准（下文原"以 v2 为准"字样一并改指 v3）。
+> v3 的页面骨架新增「页头 → KPI → 状态条 → 本页招牌块（分布条/桶组/事件流）→ 行卡」节奏与
+> 组件词汇表（stageband/buckets/feed/loop/barchart/ranklist/meterrow 的原型类 ↔ admin 承载映射），
+> 见 v3 spec §2/§6；与原型的已登记偏离见 v3 spec §9。本文只管骨架与规则，视觉规格不再在本文重复。
 
 > 依据：`doc/ADMIN_UI_CONSISTENCY_AUDIT`（2026-09-15 全量审计，18 个导航页 / 约 4.26 万行 Vue / 5 组并行审查 + 逐条实测验证）。
 > **⚠ 该依据文件已不在仓库**（09-25 对账发现）；可追溯的实测记录见 `doc/re_test/admin-audit-2026-09-24.md` 与 `doc/ADMIN_PAGE_AUDIT.md`。

@@ -1,4 +1,6 @@
-/* Admin 重设计实验室：共享样式（mk- 前缀，全局可用）。统一“运维简报式 Admin”语言：状态条 / 紧凑表格 / mono 点缀 */
+/* Admin 共享原语（mk- 前缀，全局可用）。
+   设计语言源：newui/UI-分支优化设计（v3，见 doc/ADMIN_VISUAL_LAYER_SPEC.md）——
+   页头/KPI/状态条/卡片/表格/描边胶囊/分布条词汇，规格取值以该 spec 为准。 */
 
 /* --mk-* token 全局定义已上移至 src/styles/main.css（:root）：保证 admin-surface 兼容映射、
    admin-theme EP 覆写与 Teleport 到 body 的覆盖层全局可用。本文件只保留组件类。 */
@@ -421,7 +423,7 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   font-weight: 600;
   /* 表头不再是全大写 + 0.04em 字距：中文标签下 uppercase 无效果、字距只增加噪声，
      拉丁标签（Skill / IP / core）则被强制大写、与页面文案的大小写脱节。
-     层级改由字重（600）与颜色（--mk-muted）承担，对齐 ADMIN_VISUAL_LAYER_SPEC §1。 */
+     层级改由字重（600）与颜色（--mk-muted）承担，对齐 ADMIN_VISUAL_LAYER_SPEC v3 §1。 */
   letter-spacing: 0.01em;
   color: var(--mk-muted);
   background: var(--mk-table-head-bg);

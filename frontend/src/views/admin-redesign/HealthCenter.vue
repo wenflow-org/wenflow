@@ -88,6 +88,68 @@
         />
       </div>
 
+      <!-- 服务卡组（复刻 newui 原型 .service/.tile「服务卡」）：13 项检查按基准真源归域成卡
+           （分组字段 = item.base，后端 health-center.service.ts buildItem 逐项标注「谁是真源」）。
+           状态点取域内最高严重度（有 error 红 / 有 warn 琥珀 / 全正常绿），计数全部来自真实检查项。
+           卡壳沿用本页统一的 mk-card（原型里 .tile 也只是 .card 的内容网格，.service 承载网格与内边距）。 -->
+      <div class="hc-services">
+        <section v-for="card in serviceCards" :key="card.base" class="mk-card">
+          <div class="service">
+            <div class="service__top">
+              <span class="service__dot" :class="`service__dot--${card.tone}`"></span>
+              <span class="service__name">{{ card.name }}</span>
+            </div>
+            <div class="service__metrics">
+              <span>检查 <b>{{ card.total }}</b></span>
+              <span>正常 <b>{{ card.ok }}</b></span>
+              <span>需关注 <b>{{ card.attention }}</b></span>
+              <span v-if="card.info">观测 <b>{{ card.info }}</b></span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- 告警与事件流（复刻 newui 原型 .feed/.feedrow「告警与事件」）：只收 severity=warn/error 的
+           检查项（info 只读观测不入流），与概要 KPI「健康检查 · N 异常」同一数据源同一口径。
+           后端检查项不带逐项时间，行内时间统一取报告 generatedAt，时间窗写在卡头 meta。
+           行点击复用既有 jump() 深链（字段路由/参数类跳对应面板，其余滚动到检查行并展开明细）；
+           全部正常时渲染一条 ok 行，不空卡。 -->
+      <section class="mk-card" id="hc-feed">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">告警与事件</h3>
+          <span class="mk-card__meta">{{ feedWindow }}</span>
+        </div>
+        <div class="feed">
+          <button
+            v-for="item in feedItems"
+            :key="item.id"
+            type="button"
+            class="feedrow feedrow--link"
+            :title="`${feedDesc(item)}（点击查看该检查详情）`"
+            @click="jump(item.id)"
+          >
+            <span class="feedrow__time">{{ feedTime }}</span>
+            <span class="feedrow__grow">
+              <span class="feedrow__title">
+                <i class="feedrow__dot" :class="`feedrow__dot--${item.severity}`"></i>
+                <span class="t">{{ item.label }}</span>
+              </span>
+              <span class="d">{{ feedDesc(item) }}</span>
+            </span>
+          </button>
+          <div v-if="!feedItems.length" class="feedrow feedrow--ok">
+            <span class="feedrow__time">{{ feedTime }}</span>
+            <span class="feedrow__grow">
+              <span class="feedrow__title">
+                <i class="feedrow__dot feedrow__dot--ok"></i>
+                <span class="t">全部正常</span>
+              </span>
+              <span class="d">{{ displayReport.health.summary.total }} 项检查全部正常</span>
+            </span>
+          </div>
+        </div>
+      </section>
+
       <!-- 健康检查 -->
       <section class="mk-card" id="hc-health">
         <details open>
@@ -376,6 +438,64 @@ function isHealthAbnormal(item: HealthCenterItem): boolean {
 const healthHighlight = computed(() => sortedHealthItems.value.filter(isHealthAbnormal))
 const healthRemaining = computed(() => sortedHealthItems.value.filter((i) => !isHealthAbnormal(i)))
 
+/* ---------- 服务卡 + 告警事件流（复刻 newui 原型「服务卡 / 告警与事件」两区块） ---------- */
+/** 服务卡按「基准真源」归域：分组字段 = HealthCenterItem.base（后端 health-center.service.ts
+    buildItem 逐项标注，DRIFT_BASELINE_SURVEY §4.1「谁是真源」）；中文名与其各检查项 cause 文案同口径 */
+const SERVICE_GROUP_NAMES: Record<HealthCenterItem['base'], string> = {
+  'file:core.yaml': '核心文件（core.yaml）',
+  'file:manifest': '契约清单（manifest）',
+  'file:orchestration': '编排声明（orchestration）',
+  'file:skills.yaml': '技能户口簿（skills.yaml）',
+  bidirectional: '双向对账',
+  'db:managed': '数据库托管（覆盖行）',
+  runtime: '运行时遥测',
+}
+/** 13 项检查 → 每基准域一张服务卡：状态点取域内最高严重度，计数为域内检查项的真实分布 */
+const serviceCards = computed(() => {
+  const byBase = new Map<HealthCenterItem['base'], HealthCenterItem[]>()
+  for (const item of displayReport.value?.health.items ?? []) {
+    const list = byBase.get(item.base)
+    if (list) list.push(item)
+    else byBase.set(item.base, [item])
+  }
+  return [...byBase.entries()].map(([base, list]) => {
+    const severityCount = (s: HealthCenterItem['severity']): number => list.filter((i) => i.severity === s).length
+    const error = severityCount('error')
+    const warn = severityCount('warn')
+    return {
+      base,
+      name: SERVICE_GROUP_NAMES[base] || base,
+      total: list.length,
+      ok: severityCount('ok'),
+      info: severityCount('info'),
+      attention: error + warn,
+      tone: error > 0 ? 'error' : warn > 0 ? 'warn' : 'ok',
+    }
+  })
+})
+/** 告警事件流 = severity 为 warn/error 的检查项（口径同后端 health.abnormal 与概要 KPI；info 观测项不入流，
+    全部正常时模板渲染一条 ok 行不空卡）。按严重度降序排（error 在前）。 */
+const feedItems = computed(() => sortedHealthItems.value.filter((i) => i.severity === 'error' || i.severity === 'warn'))
+/** 事件行时间：后端检查项不带逐项时间字段，统一取报告 generatedAt 的本地 HH:mm */
+function hhmm(iso: string | undefined): string {
+  const ts = iso ? new Date(iso).getTime() : NaN
+  if (!Number.isFinite(ts)) return '--:--'
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())}`
+}
+const feedTime = computed(() => hhmm(displayReport.value?.generatedAt))
+/** 卡头时间窗：报告生成时刻 + 相对时间（timeAgo 与顶栏同源） */
+const feedWindow = computed(() => {
+  const iso = displayReport.value?.generatedAt
+  return iso ? `截至 ${hhmm(iso)} · ${timeAgo(iso)}` : '生成时间未知'
+})
+/** 事件行副行：计数（单位口径同检查表 COUNT_UNITS）+ 该检查项的人话成因（cause） */
+function feedDesc(item: HealthCenterItem): string {
+  const unit = COUNT_UNITS[item.semantics] || '项'
+  return (item.count > 0 ? `${item.count} ${unit}：` : '') + item.cause
+}
+
 /** 行内明细展开状态（默认：异常/关注项展开，正常项收起） */
 const detailOpenIds = ref<Set<string>>(new Set())
 function seedDetailOpen(items: HealthCenterItem[]) {
@@ -569,6 +689,37 @@ defineExpose({ refresh })
 .hc-skel__rows { padding: 12px 16px 14px; }
 /* 滚动锚点（技能对账外层：组件自身即卡，这里只留定位不留卡盒） */
 .hc-anchor { scroll-margin-top: 14px; }
+
+/* 服务卡组（复刻 newui .service/.tile：卡壳用本页统一的 mk-card，.service 只管内容网格与内边距；
+   原型 token 映射：--sp-*→间距字面量与 hc-summary 同节奏、--muted→--mk-muted、--ink→--mk-ink） */
+.hc-services { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.service { display: grid; gap: 10px; padding: 14px 16px; }
+.service__top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.service__dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.service__dot--ok { background: var(--mk-green); }
+.service__dot--warn { background: var(--mk-amber); }
+.service__dot--error { background: var(--mk-red); }
+.service__name { min-width: 0; font-size: var(--mk-fs-body); font-weight: 700; }
+.service__metrics { display: flex; flex-wrap: wrap; gap: 14px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.service__metrics b { color: var(--mk-ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* 告警与事件流（复刻 newui .feed/.feedrow：结构/悬停与 Overview 页既有 feedrow 同款；
+   原型 11px 时间列按下限取 --mk-fs-micro，--faint→--mk-faint、--muted→--mk-muted、--mono→--mk-mono） */
+.feed { display: grid; gap: 2px; padding: 4px 16px 10px; }
+.feedrow { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--mk-line); text-align: left; }
+.feedrow:last-child { border-bottom: none; }
+.feedrow--link { width: 100%; background: none; border: 0; border-bottom: 1px solid var(--mk-line); font: inherit; cursor: pointer; border-radius: var(--mk-radius-sm); }
+.feedrow--link:hover { background: var(--mk-btn-hover-bg); }
+.feedrow--ok .t { color: var(--mk-green); }
+.feedrow__time { width: 62px; flex: none; color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); font-variant-numeric: tabular-nums; }
+.feedrow__grow { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.feedrow__title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.feedrow__title .t { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feedrow__grow .d { color: var(--mk-muted); font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feedrow__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.feedrow__dot--error { background: var(--mk-red); }
+.feedrow__dot--warn { background: var(--mk-amber); }
+.feedrow__dot--ok { background: var(--mk-green); }
 
 /* 可折叠头走 .mk-section__summary（shared.css） */
 

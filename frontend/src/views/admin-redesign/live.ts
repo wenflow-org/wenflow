@@ -995,7 +995,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     { label: '今日调用', value: fmt(todayCalls), hint: todayCalls > 0 ? `超时 ${Number(agents.todayTimeouts || 0)}` : todayOnlySimulated ? '今日无真实调用 · 虚拟仿真见「虚拟学习者」' : '等待学习者开始' },
     { label: '今日成功率', value: todayCalls > 0 ? `${todaySuccessRate}%` : '—', hint: todayFailed > 0 ? `${todayFailed} 次失败` : todayOnlySimulated ? '暂无真实用户调用' : '无失败' },
     { label: '用户活跃', value: `${fmt(Number(users.newToday || 0))} 新增 / ${fmt(activeUsers)} 活跃`, hint: `总用户 ${users.total ?? 0}（真实，不含测试/虚拟）` },
-    { label: '系统活跃', value: `${fmt(Number(conv.active || 0))} 对话 / ${fmt(Number(agents.activeAgents24h || 0))} Skill`, hint: '目标澄清 + 近 24h Skill 调用' },
+    { label: '系统活跃', value: `${fmt(Number(conv.active || 0))} 对话`, hint: `${fmt(Number(agents.activeAgents24h || 0))} Skill 有调用 · 目标澄清 + 近 24h` },
   ]
   if (todayCallsAll > todayCalls && !todayOnlySimulated) {
     kpis[0] = { ...kpis[0], hint: `${kpis[0].hint} · 全量（含虚拟/测试）${todayCallsAll} 次` }

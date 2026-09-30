@@ -1,131 +1,97 @@
 <template>
   <div class="auth v2-page">
-    <main class="auth__main">
-      <router-link to="/" class="auth__logo">
-        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" />
-      </router-link>
-
-      <div class="auth__card">
-        <section class="auth__form-side">
-          <div class="auth__card-top">
-            <span class="auth__pill">管理后台</span>
-            <router-link to="/" class="auth__back">← 返回首页</router-link>
+    <!-- newui 原型 renderLogin 分栏布局：左品牌栏 + 右登录表单，≤1024 收成单列 -->
+    <main class="login">
+      <div class="login__shell">
+        <aside class="login__aside">
+          <img class="brand__logo" :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" />
+          <div class="login__lead">
+            <h2>学习始于对真实问题的澄清，而非对课程的选择。</h2>
+            <p>管理员控制台：管理学习者、教学闭环、编排图与平台运行状态。</p>
           </div>
-
-          <div class="head">
-            <h2>管理员登录</h2>
-            <p>登录后管理用户、日志与系统配置。</p>
-          </div>
-
-          <form class="form" :aria-busy="loading" @submit.prevent="handleLogin">
-            <div v-if="loginError" class="errorbar" role="alert">{{ loginError }}</div>
-            <label class="field" :class="{ 'field--error': errors.name }">
-              <span class="field__label">管理员账号</span>
-              <input
-                v-model.trim="loginForm.name"
-                type="text"
-                class="field__input"
-                placeholder="请输入管理员账号"
-                autocomplete="username"
-                autofocus
-                :aria-invalid="!!errors.name"
-                :aria-describedby="errors.name ? 'login-err-name' : undefined"
-                @blur="touch('name')"
-                @input="loginError = ''"
-              />
-              <span v-if="errors.name" id="login-err-name" class="field__error">{{ errors.name }}</span>
-            </label>
-
-            <label class="field" :class="{ 'field--error': errors.password }">
-              <span class="field__label">密码</span>
-              <span class="field__pwd">
-                <input
-                  v-model="loginForm.password"
-                  :type="showPwd ? 'text' : 'password'"
-                  class="field__input"
-                  placeholder="请输入密码"
-                  autocomplete="current-password"
-                  :aria-invalid="!!errors.password"
-                  :aria-describedby="errors.password ? 'login-err-password' : undefined"
-                  @blur="touch('password')"
-                />
-                <button
-                  type="button"
-                  class="field__eye"
-                  :aria-label="showPwd ? '隐藏密码' : '显示密码'"
-                  @click="showPwd = !showPwd"
-                >
-                  <Eye v-if="showPwd" :size="17" :stroke-width="1.75" />
-                  <EyeOff v-else :size="17" :stroke-width="1.75" />
-                </button>
-              </span>
-              <span v-if="errors.password" id="login-err-password" class="field__error">{{ errors.password }}</span>
-            </label>
-
-            <label class="remember">
-              <input v-model="loginForm.remember" type="checkbox" />
-              <span>记住本机登录状态</span>
-            </label>
-
-            <button type="submit" class="btn-primary btn-primary--block" :disabled="loading">
-              {{ loading ? '正在登录…' : '登录后台' }}
-            </button>
-
-            <div class="switch">
-              <span>没有账号或无法登录？</span>
-              <strong>请联系平台所有者开通</strong>
-            </div>
-          </form>
-        </section>
-
-        <aside class="auth__demo-side">
-          <div class="demo">
-            <p class="demo__tagline">WenFlow 管理后台</p>
-            <div class="demo__intro">
-              <p>AI 教学模拟 · 学习路径编排 · 实时观测</p>
-            </div>
-
-            <div class="demo__status">
-              <span class="demo__dot"></span>
-              <strong>运行平稳</strong>
-              <span class="demo__score">92</span>
-              <span class="demo__tag">示例</span>
-            </div>
-
-            <div class="demo__panel">
-              <div class="demo__panel-head">
-                <strong>学习漏斗</strong>
-                <span>近 7 天 · 示例数据</span>
-              </div>
-              <div class="demo__funnel">
-                <div v-for="item in funnel" :key="item.label" class="demo__funnel-item">
-                  <small>{{ item.label }}</small>
-                  <strong>{{ item.value }}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div class="demo__panel">
-              <div class="demo__panel-head">
-                <strong>动态</strong>
-                <!-- 硬编码示意数据：明确标注，避免被误读为真实实时指标 -->
-                <span>示例数据</span>
-              </div>
-              <ul class="demo__feed">
-                <li v-for="item in feed" :key="item.text">
-                  <strong>{{ item.text }}</strong>
-                  <span>{{ item.time }}</span>
-                </li>
-              </ul>
-            </div>
+          <div class="login__points">
+            <span class="login__point"><i>1</i>JWT 身份 + 数据库管理员权限双重校验</span>
+            <span class="login__point"><i>2</i>来源网络策略限制（默认仅私有网段）</span>
+            <span class="login__point"><i>3</i>拒绝 Projection / Synthetic 身份登录</span>
           </div>
         </aside>
+
+        <div class="login__panel">
+          <div class="login__card">
+            <img class="brand__logo login__brandsm" :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" />
+            <div>
+              <h1>登录管理后台</h1>
+              <p class="lead">使用管理员账户登录 WenFlow Admin Console</p>
+            </div>
+
+            <form class="form" :aria-busy="loading" @submit.prevent="handleLogin">
+              <div v-if="loginError" class="errorbar" role="alert">{{ loginError }}</div>
+              <label class="field" :class="{ 'field--error': errors.name }">
+                <span class="field__label">管理员账号 <span class="req">*</span></span>
+                <input
+                  v-model.trim="loginForm.name"
+                  type="text"
+                  class="field__input"
+                  placeholder="请输入管理员账号"
+                  autocomplete="username"
+                  autofocus
+                  :aria-invalid="!!errors.name"
+                  :aria-describedby="errors.name ? 'login-err-name' : undefined"
+                  @blur="touch('name')"
+                  @input="loginError = ''"
+                />
+                <span v-if="errors.name" id="login-err-name" class="field__error">{{ errors.name }}</span>
+              </label>
+
+              <label class="field" :class="{ 'field--error': errors.password }">
+                <span class="field__label">密码 <span class="req">*</span></span>
+                <span class="field__pwd">
+                  <input
+                    v-model="loginForm.password"
+                    :type="showPwd ? 'text' : 'password'"
+                    class="field__input"
+                    placeholder="请输入密码"
+                    autocomplete="current-password"
+                    :aria-invalid="!!errors.password"
+                    :aria-describedby="errors.password ? 'login-err-password' : undefined"
+                    @blur="touch('password')"
+                  />
+                  <button
+                    type="button"
+                    class="field__eye"
+                    :aria-label="showPwd ? '隐藏密码' : '显示密码'"
+                    @click="showPwd = !showPwd"
+                  >
+                    <Eye v-if="showPwd" :size="17" :stroke-width="1.75" />
+                    <EyeOff v-else :size="17" :stroke-width="1.75" />
+                  </button>
+                </span>
+                <span v-if="errors.password" id="login-err-password" class="field__error">{{ errors.password }}</span>
+              </label>
+
+              <label class="remember">
+                <input v-model="loginForm.remember" type="checkbox" />
+                <span>记住本机登录状态</span>
+              </label>
+
+              <button type="submit" class="btn-primary btn-primary--block" :disabled="loading">
+                {{ loading ? '正在登录…' : '登录后台' }}
+              </button>
+
+              <div class="switch">
+                <span>没有账号或无法登录？</span>
+                <strong>请联系平台所有者开通</strong>
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
     </main>
 
     <footer class="auth__footer">
       <img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="" class="auth__footer-logo" />
       <span>WenFlow Admin</span>
+      <router-link to="/" class="auth__back">← 返回首页</router-link>
     </footer>
   </div>
 </template>
@@ -159,19 +125,6 @@ const errors = reactive({
   password: ''
 })
 const loginError = ref('')
-
-const funnel = [
-  { label: '用户', value: '128' },
-  { label: '目标', value: '86' },
-  { label: '路径', value: '64' },
-  { label: '完成', value: '217' }
-]
-
-const feed = [
-  { text: '路径「Excel 自动化」生成成功', time: '6 分钟前' },
-  { text: '新用户注册：liu**@163.com', time: '18 分钟前' },
-  { text: '学习者快照重算完成 ×12', time: '1 小时前' }
-]
 
 function touch(key: 'name' | 'password') {
   if (key === 'name') errors.name = loginForm.name ? '' : '请输入管理员账号'
@@ -248,106 +201,137 @@ onMounted(() => {
   position: relative;
 }
 
-.auth__main {
-  position: relative;
-  min-height: calc(100vh - 56px);
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: 30px;
-  padding: 48px 20px 40px;
-}
-
-.auth__logo {
-  display: inline-flex;
-}
-
-.auth__logo img {
-  height: 84px;
-  width: auto;
-  display: block;
-}
-
-.auth__card {
-  width: min(820px, 100%);
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-xl);
-  box-shadow: var(--mk-shadow-pop);
-  overflow: hidden;
-}
-
-/* 大屏（2000-2799）：卡片与内容放大；2800+ 交由 v2.css zoom 机制 */
-@media (min-width: 2000px) and (max-width: 2799px) {
-  .auth__logo img { height: 96px; }
-  .auth__card {
-    width: min(1080px, 100%);
-    border-radius: var(--mk-radius-xl);
-  }
-  .auth__form-side { padding: 36px 40px 28px; gap: 22px; }
-  .auth__demo-side { padding: 36px 36px 38px; }
-  .auth__main { gap: 36px; }
-  .demo__tagline { font-size: var(--mk-fs-emphasis); }
-  .demo__msg { font-size: var(--mk-fs-body); }
-}
-
-.auth__form-side {
-  padding: 26px 28px 28px;
-  display: grid;
-  gap: 18px;
-  align-content: start;
-}
-
-.auth__card-top {
+/* ===== newui 原型 renderLogin（2026-09-30 复刻）=====
+   .login 主舞台 flex 居中偏右；.login__shell 双栏白卡；
+   左 .login__aside 品牌栏（上下 space-between），右 .login__panel 表单。 */
+.login {
+  flex: 1;
+  min-height: calc(100vh - 128px);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
+  padding: var(--mk-space-6) clamp(20px, 5vw, 72px);
 }
 
-.auth__pill {
-  font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  color: var(--blue-deep);
-  background: rgba(52, 120, 246, 0.09);
-  padding: 5px 12px;
-  border-radius: 999px;
-}
-
-.auth__back {
-  /* 热区：原来只有文字行高 19px，低于 24px 鼠标可点下限；纵向补内边距到 ~27px */
-  display: inline-block;
-  padding: 4px 2px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  color: var(--faint);
-  text-decoration: none;
-}
-
-.auth__back:hover {
-  color: var(--blue-deep);
-}
-
-.head {
+.login__shell {
+  width: 100%;
+  max-width: 1180px;
+  min-height: 560px;
   display: grid;
-  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  overflow: hidden;
+  box-shadow: var(--mk-shadow-modal);
 }
 
-.head h2 {
+.login__aside {
+  /* 原型渐变锚点 #000/#06122e 用 --mk-code-bg（双主题恒暗 token）+ color-mix 表达：
+     亮色档 ≈ 原型深蓝；暗色档 --mk-blue 提亮后混入仍压得住白字，无需另写补丁 */
+  background: radial-gradient(
+    120% 90% at 12% 8%,
+    color-mix(in srgb, var(--mk-blue) 92%, var(--mk-code-bg)) 0%,
+    var(--mk-blue) 42%,
+    color-mix(in srgb, var(--mk-blue) 55%, var(--mk-code-bg)) 100%
+  );
+  color: rgba(255, 255, 255, 1);
+  padding: var(--mk-space-8);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--mk-space-5);
+}
+
+.login__aside .brand__logo {
+  filter: brightness(0) invert(1);
+  height: 30px;
+  width: auto;
+  display: block;
+  align-self: flex-start;
+}
+
+.login__lead {
+  display: grid;
+  gap: var(--mk-space-4);
+}
+
+.login__aside h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 30px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  max-width: 22ch;
 }
 
-.head p {
+.login__aside p {
   margin: 0;
-  font-size: var(--mk-fs-body);
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.78);
+  max-width: 40ch;
 }
 
+.login__points {
+  display: grid;
+  gap: 10px;
+}
+
+.login__point {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: var(--mk-fs-micro);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.login__point i {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.16);
+  font-style: normal;
+  font-size: var(--mk-fs-micro);
+  flex: none;
+}
+
+.login__panel {
+  display: grid;
+  place-items: center;
+  padding: var(--mk-space-8) var(--mk-space-6);
+  background: var(--mk-surface);
+}
+
+.login__card {
+  width: min(380px, 100%);
+  display: grid;
+  gap: var(--mk-space-4);
+}
+
+.login__card h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.login__card .lead {
+  margin: 0;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+}
+
+/* ≤1024 aside 隐藏后，卡内顶部的小 logo（原型 .login__brandsm） */
+.login__brandsm {
+  display: none;
+  height: 28px;
+  width: auto;
+  margin: 0 auto;
+}
+
+/* ===== 表单 =====
+   类名沿用既有 field__* / errorbar：v2.css 的暗色 autofill 与 .v2-page .errorbar 修正依赖它们 */
 .form {
   display: grid;
-  gap: 14px;
+  gap: var(--mk-space-4);
 }
 
 .field {
@@ -358,34 +342,40 @@ onMounted(() => {
 .field__label {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
-  color: var(--muted);
+  color: var(--mk-ink);
 }
 
+.req {
+  color: var(--mk-red);
+}
+
+/* 原型 .input：h36 / r-md / focus 蓝边 + 3px 环 */
 .field__input {
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 11px 14px;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface);
+  color: var(--mk-ink);
   font: inherit;
   font-size: var(--mk-fs-body);
-  color: var(--ink);
-  background: var(--surface);
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   box-sizing: border-box;
 }
 
 .field__input:focus {
-  border-color: rgba(52, 120, 246, 0.55);
-  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12);
+  border-color: var(--mk-blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue) 20%, transparent);
 }
 
 .field--error .field__input {
-  border-color: rgba(239, 117, 120, 0.6);
+  border-color: color-mix(in srgb, var(--mk-red) 60%, transparent);
 }
 
 .field--error .field__input:focus {
-  box-shadow: 0 0 0 3px rgba(239, 117, 120, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-red) 12%, transparent);
 }
 
 .field__error {
@@ -413,15 +403,15 @@ onMounted(() => {
   border: 0;
   border-radius: var(--mk-radius-sm);
   background: transparent;
-  color: var(--faint);
+  color: var(--mk-faint);
   cursor: pointer;
   display: grid;
   place-items: center;
 }
 
 .field__eye:hover {
-  color: var(--blue-deep);
-  background: rgba(52, 120, 246, 0.07);
+  color: var(--mk-blue);
+  background: var(--mk-blue-bg);
 }
 
 .remember {
@@ -430,7 +420,7 @@ onMounted(() => {
   gap: 8px;
   font-size: var(--mk-fs-micro);
   font-weight: 600;
-  color: var(--muted);
+  color: var(--mk-muted);
   cursor: pointer;
   user-select: none;
 }
@@ -438,13 +428,15 @@ onMounted(() => {
 .remember input {
   width: 15px;
   height: 15px;
-  accent-color: var(--blue);
+  accent-color: var(--mk-blue);
 }
 
+/* 原型 .btn.btn--primary：h40 居中；底座样式来自 v2.css 的 .v2-page .btn-primary */
 .btn-primary--block {
   justify-content: center;
   width: 100%;
-  padding: 12px;
+  height: 40px;
+  padding: 0 14px;
   font-size: var(--mk-fs-emphasis);
 }
 
@@ -461,149 +453,13 @@ onMounted(() => {
   gap: 8px;
   flex-wrap: wrap;
   font-size: var(--mk-fs-body);
-  color: var(--muted);
+  color: var(--mk-muted);
   text-align: center;
 }
 
 .switch strong {
-  color: var(--ink);
+  color: var(--mk-ink);
   font-weight: 800;
-}
-
-.auth__demo-side {
-  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
-  border-left: 1px solid var(--line);
-  padding: 26px 26px 28px;
-  display: grid;
-  align-content: center;
-}
-
-.demo {
-  display: grid;
-  gap: 14px;
-}
-
-.demo__tagline {
-  margin: 0;
-  font-size: var(--mk-fs-emphasis);
-  font-weight: 600;
-  line-height: 1.7;
-  color: var(--ink);
-  max-width: 32ch;
-}
-
-.demo__intro {
-  margin: 0;
-}
-
-.demo__intro p {
-  margin: 0;
-  font-size: var(--mk-fs-micro);
-  color: var(--muted);
-  line-height: 1.6;
-}
-
-.demo__status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.demo__dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--green);
-  flex: 0 0 auto;
-}
-
-.demo__status strong {
-  font-size: var(--mk-fs-body);
-}
-
-.demo__score {
-  margin-left: auto;
-  font-size: var(--mk-fs-18);
-  font-weight: 800;
-  color: var(--blue-deep);
-  font-variant-numeric: tabular-nums;
-}
-
-.demo__panel {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-xl);
-  padding: 13px 15px;
-  display: grid;
-  gap: 10px;
-}
-
-.demo__panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: var(--mk-fs-micro);
-}
-
-.demo__panel-head span {
-  font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  color: var(--blue-deep);
-}
-
-.demo__funnel {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.demo__funnel-item {
-  display: grid;
-  gap: 2px;
-  padding: 8px 6px;
-  border-radius: var(--mk-radius-xl);
-  background: var(--bubble-ai-bg);
-  border: 1px solid var(--line);
-  text-align: center;
-}
-
-.demo__funnel-item small {
-  font-size: var(--mk-fs-micro);
-  color: var(--faint);
-  font-weight: 700;
-}
-
-.demo__funnel-item strong {
-  font-size: var(--mk-fs-body);
-  font-variant-numeric: tabular-nums;
-}
-
-.demo__feed {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.demo__feed li {
-  display: grid;
-  gap: 2px;
-}
-
-.demo__feed strong {
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  line-height: 1.45;
-}
-
-.demo__feed span {
-  font-size: var(--mk-fs-micro);
-  color: var(--faint);
 }
 
 .auth__footer {
@@ -613,8 +469,8 @@ onMounted(() => {
   justify-content: center;
   gap: 8px;
   padding: 14px 20px 18px;
-  border-top: 1px solid var(--line);
-  color: var(--faint);
+  border-top: 1px solid var(--mk-line);
+  color: var(--mk-faint);
   font-size: var(--mk-fs-micro);
   background: var(--v2nav-bg);
 }
@@ -626,54 +482,37 @@ onMounted(() => {
   opacity: 0.8;
 }
 
-/* ===== 深色模式（data-theme=dark）：统计卡/页脚随变量反转 ===== */
-[data-theme='dark'] .auth__demo-side {
-  background: color-mix(in srgb, var(--blue) 9%, var(--surface));
-}
-[data-theme='dark'] .auth__card {
-  box-shadow: var(--mk-shadow-pop);
+.auth__back {
+  /* 热区：纵向内边距补到 ~27px，高于 24px 鼠标可点下限 */
+  display: inline-block;
+  padding: 4px 2px;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  color: var(--mk-faint);
+  text-decoration: none;
 }
 
-@media (max-width: 760px) {
-  .auth__logo img { height: 60px; }
+.auth__back:hover {
+  color: var(--mk-blue);
+}
 
-  .auth__card {
+/* 原型 ≤1024：壳单列、aside 隐藏、卡内小 logo 显示、舞台居中 */
+@media (max-width: 1024px) {
+  .login {
+    justify-content: center;
+    padding: var(--mk-space-4);
+  }
+
+  .login__shell {
     grid-template-columns: 1fr;
   }
 
-  .auth__demo-side {
-    border-left: 0;
-    border-top: 1px solid var(--line);
-    padding: 20px 22px 22px;
-  }
-
-  .demo__tagline {
-    font-size: var(--mk-fs-body);
-  }
-
-  .auth__form-side {
-    padding: 22px 20px 24px;
-  }
-}
-
-@media (max-width: 480px) {
-  .auth__demo-side {
+  .login__aside {
     display: none;
   }
 
-  .auth__main {
-    padding: 36px 14px 28px;
-    min-height: calc(100vh - 52px);
+  .login__brandsm {
+    display: block;
   }
-}
-/* 2026-09-27 admin 走查：原 11px 低于项目微字下限（--mk-fs-micro: 12px），提至 12px；
-   水平 padding 7px→6px 补偿字号变大带来的视觉重量。 */
-.demo__tag {
-  margin-left: auto;
-  padding: 1px 6px;
-  border-radius: var(--mk-radius-pill);
-  font-size: var(--mk-fs-micro, 12px);
-  color: var(--mk-faint);
-  border: 1px solid var(--mk-line);
 }
 </style>
