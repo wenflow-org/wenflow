@@ -1,53 +1,31 @@
 ﻿<template>
-  <!-- ===== 侧栏：≥1024px 固定左列（原型 newui/home wf-sidebar 形态），<1024px 隐藏改用底部导航 ===== -->
-  <aside class="v2nav-side" aria-label="主导航">
-    <router-link to="/dashboard" class="v2nav-side__brand" aria-label="问流 WenFlow，返回工作台">
-      <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="" class="v2nav-side__logo" />
-    </router-link>
-    <nav class="v2nav-side__group">
-      <router-link
-        v-for="item in items"
-        :key="item.to"
-        :to="item.to"
-        class="v2nav-side__link"
-        :class="{ 'v2nav-side__link--active': isActive(item) }"
-        :aria-current="isActive(item) ? 'page' : undefined"
-      >
-        <component :is="item.icon" :size="20" :stroke-width="1.75" aria-hidden="true" />
-        <span>{{ item.label }}</span>
-      </router-link>
-    </nav>
-    <div class="v2nav-side__foot">
-      <router-link to="/user/account" class="v2nav-side__link">
-        <UserRound :size="20" :stroke-width="1.75" aria-hidden="true" />
-        <span>个人中心</span>
-      </router-link>
-      <button type="button" class="v2nav-side__link" @click="toggleTheme">
-        <span class="v2nav-side__link-icon" aria-hidden="true">
-          <Sun v-if="isDark" :size="20" :stroke-width="1.75" />
-          <Moon v-else :size="20" :stroke-width="1.75" />
-        </span>
-        <span>切换深浅色</span>
-      </button>
-    </div>
-  </aside>
-
-  <!-- ===== 顶栏：内容列顶部的毛玻璃条（原型 wf-appbar）===== -->
-  <header class="v2nav-bar">
+  <!-- ===== 顶栏：品牌居左 · 胶囊导航居中 · 操作居右（原型 2026-09-30 版 wf-appbar：桌面无侧栏）===== -->
+  <header class="v2nav-bar" :data-current="onDashboard ? 'dashboard' : 'other'">
     <div class="v2nav-bar__left">
       <button v-if="showBack" type="button" class="v2nav-back" aria-label="返回上一页" @click="goBack">
         <ChevronLeft :size="20" :stroke-width="2" aria-hidden="true" />
       </button>
-      <router-link
-        v-if="onDashboard"
-        to="/dashboard"
-        class="v2nav-bar__brand"
-        aria-label="问流 WenFlow"
-      >
+      <router-link to="/dashboard" class="v2nav-bar__brand" aria-label="问流 WenFlow，返回工作台">
         <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="" class="v2nav-bar__logo" />
       </router-link>
       <strong v-if="pageTitle" class="v2nav-bar__title" :class="{ 'v2nav-bar__title--dash': onDashboard }">{{ pageTitle }}</strong>
     </div>
+
+    <!-- 桌面主导航（≥1024）：图标+文字胶囊，<1024 由底部 dock 接管 -->
+    <nav class="v2nav-topnav" aria-label="主导航">
+      <router-link
+        v-for="item in items"
+        :key="item.to"
+        :to="item.to"
+        class="v2nav-topnav__link"
+        :class="{ 'v2nav-topnav__link--active': isActive(item) }"
+        :aria-current="isActive(item) ? 'page' : undefined"
+      >
+        <component :is="item.icon" :size="18" :stroke-width="1.75" aria-hidden="true" />
+        <span>{{ item.label }}</span>
+      </router-link>
+    </nav>
+
     <div class="v2nav-bar__right">
       <V2NotifCenter />
       <div class="v2nav__user" ref="userMenuRef">
@@ -56,19 +34,28 @@
           class="v2nav__avatar"
           :aria-expanded="menuOpen ? 'true' : 'false'"
           aria-haspopup="menu"
+          :aria-label="`账户菜单：${userName}`"
           @click="menuOpen = !menuOpen"
         >
           <i>{{ avatarLetter }}</i>
-          <span class="v2nav__name">{{ userName }}</span>
-          <span class="v2nav__caret" :class="{ 'v2nav__caret--open': menuOpen }" aria-hidden="true">
-            <ChevronDown :size="13" :stroke-width="2.25" />
-          </span>
         </button>
         <Transition name="v2menu">
           <div v-if="menuOpen" class="v2nav__menu" role="menu">
+            <div class="v2nav__menu-head">
+              <span class="v2nav__name">{{ userName }}</span>
+              <span class="v2nav__menu-role">学习者</span>
+            </div>
             <router-link to="/user/account" role="menuitem" @click="menuOpen = false">
               <UserRound :size="15" :stroke-width="1.75" aria-hidden="true" />
               <span>个人中心</span>
+            </router-link>
+            <router-link to="/user/achievements" role="menuitem" @click="menuOpen = false">
+              <Trophy :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <span>我的成就</span>
+            </router-link>
+            <router-link to="/user/learning-history" role="menuitem" @click="menuOpen = false">
+              <History :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <span>学习历史</span>
             </router-link>
             <button type="button" role="menuitem" class="v2nav__menu-theme" @click="toggleTheme">
               <span class="v2nav__menu-theme-icon" aria-hidden="true">
@@ -108,7 +95,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Activity, ChevronDown, ChevronLeft, House, Layers, LogOut, MessageSquareText, Moon, Sun, UserRound, Waypoints } from 'lucide-vue-next';
+import { Activity, ChevronLeft, History, House, Layers, LogOut, MessageSquareText, Moon, Sun, Trophy, UserRound, Waypoints } from 'lucide-vue-next';
 import { useUserStore } from '@/stores/user';
 import { toast } from '@/utils/toast';
 import { applyDocumentTheme, readTheme, writeTheme } from '@/utils/theme';
@@ -130,11 +117,11 @@ const items: Array<{ to: string; label: string; match: string[]; icon: Component
   { to: '/knowledge-map', label: '知识图谱', match: ['/knowledge-map'], icon: Waypoints },
   { to: '/learning-state', label: '学习状态', match: ['/learning-state'], icon: Activity }
 ];
-/* 「成就」「学习历史」不再是顶层入口（2026-09-24 用户拍板），收在个人中心分段里；
-   旧路径保留重定向。 */
+/* 「成就」「学习历史」不进主导航（2026-09-24 用户拍板收进个人中心分段），
+   头像菜单保留两条捷径（原型 wf-user-menu 同款五项） */
 
 function isActive(item: { to: string; match: string[] }) {
-  // 个人中心 /user/* 挂在「学习台」簇下（从学习台侧栏/头像进入）：给入口一个当前态
+  // 个人中心 /user/* 挂在「学习台」簇下（从学习台头像菜单进入）：给入口一个当前态
   if (route.path.startsWith('/user') && item.to === '/dashboard') return true;
   return item.match.some((m) => route.path.startsWith(m));
 }
@@ -157,7 +144,7 @@ function goBack() {
 const userName = computed(() => userStore.user?.name || '学习者');
 const avatarLetter = computed(() => (userStore.user?.name || '学').charAt(0));
 
-/* 主题切换：单一事实源 = <html data-theme>（useIsDark），侧栏足部与头像菜单双入口（原型两处都有） */
+/* 主题切换：单一事实源 = <html data-theme>（useIsDark），入口在头像菜单（原型同款） */
 const isDark = useIsDark();
 function applyTheme(dark: boolean) {
   applyDocumentTheme(dark ? 'dark' : 'light');
@@ -198,20 +185,17 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* ===== 侧栏（≥1024）：固定左列，页面内容由 v2.css 的 .v2-page 左移距让位 ===== */
-.v2nav-side { display: none; }
-
-/* ===== 顶栏（内容列毛玻璃条）===== */
+/* ===== 顶栏（品牌 · 胶囊导航 · 操作）：毛玻璃条，sticky 于页面滚动 ===== */
 .v2nav-bar {
   position: sticky; top: 0; z-index: 30;
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 16px;
+  display: flex; align-items: center; gap: 8px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
   background: var(--v2nav-bg, rgba(255, 255, 255, 0.94));
   border-bottom: 1px solid var(--line, #e3e9f4);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
-.v2nav-bar__left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.v2nav-bar__left { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 返回钮：44px 圆形触控（HIG 下限），仅非 tab 屏渲染 */
 .v2nav-back {
   display: grid; place-items: center;
@@ -222,105 +206,81 @@ onUnmounted(() => {
 }
 .v2nav-back:hover { background: color-mix(in srgb, var(--blue) 8%, transparent); }
 .v2nav-bar__brand { display: flex; align-items: center; flex: none; }
-.v2nav-bar__logo { height: 34px; width: auto; object-fit: contain; display: block; }
+.v2nav-bar__logo { height: 38px; width: auto; object-fit: contain; display: block; }
 .v2nav-bar__title {
   margin: 0;
   font-size: 17px; font-weight: 800; letter-spacing: -0.01em;
   color: var(--ink, #172033);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.v2nav-bar__right { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.v2nav-bar__right { display: flex; align-items: center; gap: 2px; margin-left: auto; }
 
-/* 窄屏：dashboard 显品牌、其余屏显标题；标题常显于 ≥1024 */
-.v2nav-bar__brand { display: none; }
-.v2nav-bar__title { display: none; }
-@media (max-width: 1023.98px) {
-  .v2nav-bar__brand { display: flex; }
-  .v2nav-bar__title:not(.v2nav-bar__title--dash) { display: block; }
-}
+/* 桌面主导航（原型 wf-topnav）：默认隐藏，≥1024 居中胶囊 */
+.v2nav-topnav { display: none; }
 @media (min-width: 1024px) {
-  /* 左移距由页面根 .v2-page 统一给（本组件渲染在 .v2-page 内部，这里不再加，
-     否则双重 252px——真机实测 barLeft=504） */
-  .v2nav-bar__title { display: block; }
-}
-.v2nav-bar__title--dash { display: none; }
-@media (min-width: 1024px) {
-  .v2nav-bar__title--dash { display: block; }
-}
-
-/* ===== 侧栏展开态（≥1024）===== */
-@media (min-width: 1024px) {
-  .v2nav-side {
-    display: flex; flex-direction: column; gap: 6px;
-    position: fixed; top: 0; bottom: 0; left: 0;
-    width: var(--v2-sidebar-w, 252px);
-    padding: 20px 14px 18px;
-    background: var(--surface, #ffffff);
-    border-right: 1px solid var(--line, #e3e9f4);
-    overflow-y: auto;
-    z-index: 40;
+  /* 品牌与操作两翼 flex:1 把导航推到真正居中（原型同款三段式） */
+  .v2nav-bar__left { flex: 1 1 0; }
+  .v2nav-bar__right { flex: 1 1 0; justify-content: flex-end; margin-left: 0; }
+  .v2nav-topnav {
+    display: flex; align-items: center; gap: 2px; flex: none;
+    margin: 0 8px;
   }
-  .v2nav-side__brand { display: flex; align-items: center; padding: 2px 10px 18px; }
-  .v2nav-side__logo { height: 40px; width: auto; object-fit: contain; display: block; }
-  .v2nav-side__group { display: grid; gap: 2px; }
-  .v2nav-side__foot {
-    margin-top: auto; padding-top: 12px;
-    border-top: 1px solid var(--line, #e3e9f4);
-    display: grid; gap: 2px;
-  }
-  .v2nav-side__link {
-    display: flex; align-items: center; gap: 11px; width: 100%;
-    min-height: 44px; padding: 0 12px;
-    border: 0; border-radius: 10px;
-    background: transparent; color: var(--muted, #5b6577);
-    font: inherit; font-size: 14px; font-weight: 600; text-align: left;
-    cursor: pointer; text-decoration: none;
+  .v2nav-topnav__link {
+    display: flex; align-items: center; gap: 7px;
+    min-height: 40px; padding: 0 12px;
+    border-radius: 999px;
+    color: var(--muted, #5b6577);
+    font-size: 13.5px; font-weight: 600; text-decoration: none;
+    white-space: nowrap;
     transition: background 0.14s ease, color 0.14s ease;
   }
-  .v2nav-side__link svg { flex: none; opacity: 0.82; }
-  .v2nav-side__link:hover { background: var(--mk-surface-2, #eef2fa); color: var(--ink, #172033); }
-  .v2nav-side__link--active { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue-deep, #1f57cc); }
-  .v2nav-side__link--active svg { opacity: 1; }
-  .v2nav-side__link:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-  .v2nav-side__link-icon { display: grid; place-items: center; }
+  .v2nav-topnav__link svg { flex: none; opacity: 0.82; }
+  .v2nav-topnav__link:hover { background: var(--mk-surface-2, #eef2fa); color: var(--ink, #172033); }
+  .v2nav-topnav__link--active { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue-deep, #1f57cc); }
+  .v2nav-topnav__link--active svg { opacity: 1; }
+  .v2nav-topnav__link:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+}
+
+/* 窄屏：dashboard 显品牌、其余屏显标题（原型同款互斥）；≥1024 品牌常驻
+   （位置感由导航胶囊表达，原型已在桌面隐藏页题） */
+.v2nav-bar__brand { display: none; }
+.v2nav-bar__title { display: none; }
+.v2nav-bar__title--dash { display: none; }
+@media (max-width: 1023.98px) {
+  .v2nav-bar[data-current='dashboard'] .v2nav-bar__brand { display: flex; }
+  .v2nav-bar:not([data-current='dashboard']) .v2nav-bar__title { display: block; }
+}
+@media (min-width: 1024px) {
+  .v2nav-bar__brand { display: flex; }
 }
 
 /* ===== 头像菜单（沿用既有类名：v2nav.fallback 测试与页内样式依赖）===== */
 .v2nav__user { position: relative; }
+/* 头像-only（原型 wf-avatar）：名字移进菜单头，正文区不再重复身份 */
 .v2nav__avatar {
-  display: flex; align-items: center; gap: 8px;
+  display: grid; place-items: center;
+  width: 44px; height: 44px;
   font: inherit;
-  font-size: 13.5px; font-weight: 700;
-  color: var(--ink, #172033);
   background: transparent;
   border: 0;
-  padding: 5px 10px 5px 5px;
-  border-radius: var(--mk-radius-pill);
+  border-radius: 50%;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 .v2nav__avatar:hover { background: color-mix(in srgb, var(--surface) 92%, var(--ink)); }
 .v2nav__avatar i {
   width: 34px; height: 34px; border-radius: 50%;
-  flex: 0 0 auto;
-  /* 扁平强调色底 + 同色系首字母（2026-09-24 去炫彩口径），与侧栏活跃态同一语言 */
+  /* 扁平强调色底 + 同色系首字母（2026-09-24 去炫彩口径），与导航活跃态同一语言 */
   background: color-mix(in srgb, var(--blue) 12%, transparent);
   color: var(--blue-deep, #1f57cc);
-  font-style: normal; font-size: 15px; font-weight: 800;
+  font-style: normal; font-size: 14px; font-weight: 800;
   display: grid; place-items: center;
 }
-.v2nav__caret {
-  font-size: 10px;
-  color: var(--faint, #8492ab);
-  transition: transform 0.15s ease;
-  line-height: 1;
-}
-.v2nav__caret--open { transform: rotate(180deg); }
 .v2nav__menu {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  min-width: 160px;
+  min-width: 180px;
   padding: 6px;
   border-radius: var(--mk-radius-xl);
   background: var(--surface, #fff);
@@ -341,6 +301,19 @@ onUnmounted(() => {
   opacity: 0;
   transform: translateY(-6px) scale(0.97);
 }
+/* 菜单头（原型 wf-popover__title）：名字 + 身份，替代旧顶栏常显用户名 */
+.v2nav__menu-head {
+  padding: 8px 10px 6px;
+  display: flex; align-items: baseline; gap: 6px;
+  border-bottom: 1px solid var(--line, #e3e9f4);
+  margin-bottom: 4px;
+}
+.v2nav__name {
+  font-size: 13px; font-weight: 800;
+  color: var(--ink, #172033);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.v2nav__menu-role { font-size: 12px; color: var(--faint, #8492ab); flex: none; }
 .v2nav__menu a,
 .v2nav__menu button {
   display: flex;
@@ -391,15 +364,12 @@ onUnmounted(() => {
   margin-top: 2px;
   border-radius: 0 0 8px 8px !important;
 }
-/* 窄屏顶栏：隐藏用户名，头像 44px 触控 */
+/* 窄屏顶栏：头像 44px 触控（已由基线保证），图标微缩 */
 @media (max-width: 1023.98px) {
-  .v2nav__name { display: none; }
   .v2nav__right { gap: 4px; }
   .v2nav__right :deep(.nc__bell) { width: 44px; height: 44px; }
   .v2nav__right :deep(.nc__bell svg) { width: 19px; height: 19px; }
-  .v2nav__avatar { min-width: 44px; min-height: 44px; padding: 4px 8px 4px 4px; font-size: 12.5px; }
-  .v2nav__avatar i { width: 26px; height: 26px; font-size: 12px; }
-  .v2nav__caret { font-size: 9px; }
+  .v2nav__avatar i { width: 28px; height: 28px; font-size: 12px; }
 }
 </style>
 
