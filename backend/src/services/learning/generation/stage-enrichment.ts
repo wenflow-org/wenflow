@@ -733,6 +733,9 @@ export async function enrichLearningPathWithAnderson(
           }
           // 阶段目标锚补齐（b3 评审）：模型自发引用率 ~30%（抽签），缺锚时确定性追加对照括注
           const anchorNote = buildAnchorGoalNote(pathSchoolAnchor, String(milestone.goal || ''));
+          const anchorGoalBase = anchorNote
+            ? String(milestone.goal || '').replace(/[。.;；\s]+$/, '') // 收掉句尾标点，避免「。（月考前）」
+            : null;
           if (anchorNote) {
             anchorGoalNotes += 1;
           }
@@ -740,7 +743,7 @@ export async function enrichLearningPathWithAnderson(
             where: { id: milestone.id },
             data: {
               estimatedHours: stageHours,
-              ...(anchorNote ? { goal: `${milestone.goal || ''}${anchorNote}` } : {}),
+              ...(anchorNote && anchorGoalBase !== null ? { goal: `${anchorGoalBase}${anchorNote}` } : {}),
               ...(fillNote ? { description: fillNote } : {}),
               updatedAt: new Date(),
             }
