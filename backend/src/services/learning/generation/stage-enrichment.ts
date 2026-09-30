@@ -405,7 +405,7 @@ export async function enrichLearningPathWithAnderson(
             dropReasons,
             final: stageTasks.length,
           };
-          logger.warn(`[stage-supplement] stage${milestone.stageNumber} 补课：要 ${wantedLessons} 首轮 ${initialCount} → 新增 ${added.length}（丢弃近重复 ${dropped.length}）→ ${stageTasks.length}`, {
+          logger.warn(`[stage-supplement] stage${milestone.stageNumber} 补课：要 ${wantedLessons} 首轮 ${initialCount} → 新增 ${added.length}（丢弃 ${dropped.length}：近重复${dropReasons.duplicate}/同动作族${dropReasons.typeRepeat}/无类型${dropReasons.noType}/脏数据${dropReasons.invalid}）→ ${stageTasks.length}`, {
             runId,
             milestoneId: milestone.id,
           });
@@ -703,12 +703,14 @@ export async function enrichLearningPathWithAnderson(
       }
 
       // 阶段/路径估时回写：任务分钟汇总（ceil 整小时）覆盖骨架期 LLM 粗估
+      let pathTotalMinutes = 0;
       let pathNormalizedHours = 0;
       for (const milestone of learningPath.milestones) {
         const stageOutput = stageDesignOutputs.find((item) => item.milestoneId === milestone.id);
         const stageTasks = stageOutput?.subtasks || [];
         const stageTotalMinutes = (stageTasks as Array<{ estimatedMinutes?: number }>)
           .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+        pathTotalMinutes += stageTotalMinutes;
         const stageHours = stageTasks.length > 0 ? Math.max(1, Math.ceil(stageTotalMinutes / 60)) : null;
         if (stageHours !== null) {
           pathNormalizedHours += stageHours;
@@ -737,6 +739,33 @@ export async function enrichLearningPathWithAnderson(
           });
         }
       }
+      // 容量对表（2026-09-30 b3 评审实证：rw-school5-62 每天 60 分钟 × 25 天 = 25h 容量，
+      // 路径却排了 41h——总量超容量 1.64 倍且没有任何环节拦截，学习者问「每天一小时够吗」
+      // 时平台给的是排不完的计划）。结构化容量（sessionsLengthMin × totalSessions）存在时
+      // 如实记账并 warn：优先保证可执行性口径，裁剪策略留给后续决策（本轮先让事实可见）。
+      const capacityMinutes = (() => {
+        const td = (normalizedInput as any)?.timeDimensions;
+        const len = Number(td?.sessionsLengthMin);
+        const sessions = Number(td?.totalSessions);
+        if (Number.isFinite(len) && len > 0 && Number.isFinite(sessions) && sessions > 0) return len * sessions;
+        const weeks = Number(td?.totalWeeks);
+        const perWeek = Number(td?.sessionsPerWeek);
+        if (Number.isFinite(len) && len > 0 && Number.isFinite(weeks) && weeks > 0 && Number.isFinite(perWeek) && perWeek > 0) return len * weeks * perWeek;
+        return null;
+      })();
+      const capacityOverload = capacityMinutes !== null && pathTotalMinutes > capacityMinutes * 1.05
+        ? {
+            pathMinutes: pathTotalMinutes,
+            capacityMinutes,
+            ratio: Math.round((pathTotalMinutes / capacityMinutes) * 100) / 100,
+          }
+        : null;
+      if (capacityOverload) {
+        logger.warn('[stage-enrichment] 路径总量超出学习者时间容量（计划排不完）', {
+          pathId: learningPath.id,
+          ...capacityOverload,
+        });
+      }
       const pathHoursToWrite = pathNormalizedHours > 0 ? pathNormalizedHours : undefined;
 
       await tx.learning_paths.update({
@@ -747,6 +776,7 @@ export async function enrichLearningPathWithAnderson(
             ...parsedTemplate,
             stageDesigns: stageDesignRawOutputs,
             kcAnnotation,
+            ...(capacityOverload ? { capacityOverload } : {}),
             ...(Object.keys(materialRefsByTask).length
               ? {
                   materialRefs: {
