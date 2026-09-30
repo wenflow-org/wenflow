@@ -147,6 +147,8 @@ v3 修订两条：
 | `.feed/.feedrow` | 页面本地复刻（Overview 最近事件；健康中心告警流） | 页面 |
 | `.ranklist/.rankrow`、`.meterrow/.meter` | 页面本地复刻（Overview Row B） | 页面 |
 | `.hero` | `MkDetailHero`（24px 标题） | 原语组件 |
+| `.statstrip`（L2 详情页 hero 下的一行分格读数） | LearnerDetail 页面本地复刻（四格：进度/阶段/任务/最近会话） | 页面 |
+| L2 详情骨架（hero + statstrip + subtabs） | UserDetail / LearnerDetail 已按此骨架（318da349 起） | 页面 |
 | `.login*` | `Login.vue` 页面复刻（分栏品牌 aside + 表单 panel） | 页面 |
 | `odg-*` | `DataFlowGraph`（orch-odg-*） | 页面 |
 
@@ -189,6 +191,15 @@ v3 修订两条：
 7. **KPI 趋势 foot 暂缓**：原型四卡全带 ▲▼；曾用「今日 vs 昨日全日」实现过，
    2026-10-01 凌晨实测 ▼-97%/▼-100%——自然日的部分窗口与全日直接相比必然失真，
    已下线。等后端提供「昨日同时刻」同期窗口再恢复。
+8. **L2/L3 详情页的模板分工**（2026-10-01 勘察）：
+   - UserDetail / LearnerDetail = 标准 L2（MkDetailHero + 状态条/MkKpi + MkSubTabs），已对齐；
+   - VirtualProfile 头部**有意**只留身份信息（2026-09-27 决策「数量即 tab 角标，不单设 KPI 行」），
+     不加 statstrip——复刻时不要替它补；
+   - SessionCockpit 是 **T3 驾驶舱自有模板**（cp-topbar + RunStageBar 已覆盖原型
+     session-detail 的 hero/stepper 职责，且多出日志/瀑布/自动驾控等监控面），
+     不按 L2 详情改造；
+   - SkillDesignPage 是**编辑工作台**（sdp-head + mk-pills 页签），原型 skill-detail
+     是只读视图——工作台不降级成只读页。
 
 ## 10. 内容宽度（v3 更新数值）
 

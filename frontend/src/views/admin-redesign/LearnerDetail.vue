@@ -29,6 +29,29 @@
       </template>
     </MkDetailHero>
 
+    <!-- 状态条（原型 renderLearnerDetail 的 statstrip：hero 与 subtabs 之间的一行四格读数）。
+         全部来自已加载的 Detail：进度/阶段/任务/最近会话窗口。 -->
+    <section class="mk-card">
+      <div class="statstrip" role="list" aria-label="学习者概览">
+        <div class="statstrip__stat" role="listitem">
+          <span class="statstrip__label">路径进度</span>
+          <span class="statstrip__value">{{ d.pct }}%</span>
+        </div>
+        <div class="statstrip__stat" role="listitem">
+          <span class="statstrip__label">当前阶段</span>
+          <span class="statstrip__value" :title="d.stage">{{ d.stage || '—' }}</span>
+        </div>
+        <div class="statstrip__stat" role="listitem">
+          <span class="statstrip__label">当前任务</span>
+          <span class="statstrip__value" :title="d.task">{{ d.task || '—' }}</span>
+        </div>
+        <div class="statstrip__stat" role="listitem">
+          <span class="statstrip__label">最近会话</span>
+          <span class="statstrip__value">{{ d.sessions.length }} 条<span class="statstrip__unit">（加载窗口）</span></span>
+        </div>
+      </div>
+    </section>
+
     <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向）。
          形态换 MkSubTabs（newui/admin 下划线式，替换胶囊 mk-pill） -->
     <MkSubTabs
@@ -1507,6 +1530,23 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 <style scoped>
 .ld { gap: 16px; }
+
+/* 状态条（原型 .statstrip：hero 与 subtabs 之间的一行分格读数，格子间 1px 竖分隔） */
+.statstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.statstrip__stat {
+  display: grid; gap: 6px; align-content: start;
+  padding: 12px 16px;
+  border-right: 1px solid var(--mk-line);
+}
+.statstrip__stat:last-child { border-right: 0; }
+.statstrip__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.statstrip__value {
+  font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums; color: var(--mk-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.statstrip__unit { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); letter-spacing: 0; }
+
 /* 页头身份区走 .mk-entity（shared.css） */
 
 .ld-tabpage { display: grid; gap: 14px; align-content: start; }
