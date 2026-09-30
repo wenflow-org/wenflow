@@ -95,7 +95,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Activity, ChevronLeft, History, House, Layers, LogOut, MessageSquareText, Moon, Sun, Trophy, UserRound, Waypoints } from 'lucide-vue-next';
+import { Activity, ChevronLeft, History, House, Layers2, LogOut, MessageCircle, Moon, Sun, Trophy, UserRound, Waypoints } from 'lucide-vue-next';
 import { useUserStore } from '@/stores/user';
 import { toast } from '@/utils/toast';
 import { applyDocumentTheme, readTheme, writeTheme } from '@/utils/theme';
@@ -109,11 +109,13 @@ const userStore = useUserStore();
 const menuOpen = ref(false);
 const userMenuRef = ref<HTMLElement | null>(null);
 
-/* 图标统一走 lucide（1.75 线宽与全站一致） */
+/* 图标统一走 lucide（1.75 线宽与全站一致）；逐项对齐原型 2026-09-30 版顶栏：
+   学习台=House、目标规划=圆角气泡 MessageCircle（原型对话气泡，非方框带线）、
+   学习路径=两层叠 Layers2（原型双层，非三层）、知识图谱=Waypoints、学习状态=Activity */
 const items: Array<{ to: string; label: string; match: string[]; icon: Component }> = [
   { to: '/dashboard', label: '学习台', match: ['/dashboard'], icon: House },
-  { to: '/goal-conversation', label: '目标规划', match: ['/goal-conversation'], icon: MessageSquareText },
-  { to: '/learning-paths', label: '学习路径', match: ['/learning-paths', '/learning-path'], icon: Layers },
+  { to: '/goal-conversation', label: '目标规划', match: ['/goal-conversation'], icon: MessageCircle },
+  { to: '/learning-paths', label: '学习路径', match: ['/learning-paths', '/learning-path'], icon: Layers2 },
   { to: '/knowledge-map', label: '知识图谱', match: ['/knowledge-map'], icon: Waypoints },
   { to: '/learning-state', label: '学习状态', match: ['/learning-state'], icon: Activity }
 ];

@@ -10,14 +10,14 @@
       :aria-expanded="open ? 'true' : 'false'"
       @click="toggle"
     >
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 8a6 6 0 0 1 12 0c0 7 2 9 2 9H4s2-2 2-9" />
+        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
       </svg>
       <!-- AI 任务运行中：脉冲环 -->
       <span v-if="busyItems.length" class="nc__pulse-ring" aria-hidden="true"></span>
-      <!-- 通知未读：红色数字角标（优先级高于脉冲环） -->
-      <span v-if="unread > 0" class="nc__dot">{{ unread > 99 ? '99+' : unread }}</span>
+      <!-- 通知未读：红点徽标（原型 wf-bell__dot 形态；具体条数在 aria-label 与面板 tab 里） -->
+      <span v-if="unread > 0" class="nc__dot" aria-hidden="true"></span>
     </button>
 
     <!-- 合并下拉面板 -->
@@ -60,12 +60,13 @@
                 @click="onNotifClick(n)"
                 @keydown.enter.prevent="onNotifClick(n)"
               >
+                <!-- 未读点在左（原型 wf-notif__dot 同位） -->
+                <span class="nc__item-dot" :class="{ 'nc__item-dot--off': n.isRead }" aria-hidden="true"></span>
                 <div class="nc__item-main">
                   <strong>{{ n.title }}</strong>
                   <span v-if="n.body" class="nc__item-body">{{ n.body }}</span>
                   <span class="nc__item-time">{{ timeAgo(n.createdAt) }}</span>
                 </div>
-                <span v-if="!n.isRead" class="nc__item-dot" aria-hidden="true"></span>
               </div>
               <div class="nc__foot">
                 <button v-if="notifTotal > notifItems.length" type="button" class="nc__more" @click="notifLoadMore">加载更多</button>
@@ -438,41 +439,36 @@ onBeforeUnmount(() => {
 <style scoped>
 .nc { position: relative; flex-shrink: 0; }
 
-/* ================= 铃铛按钮（无边框圆形，初始风格） ================= */
+/* ================= 铃铛按钮（无边框圆形，原型 wf-iconbtn 44px） ================= */
 .nc__bell {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--mk-radius-pill);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   border: 0;
   background: transparent;
   color: var(--muted, #5b6577);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.nc__bell:hover { background: rgba(52, 120, 246, 0.08); color: var(--blue-deep, #1f57cc); }
-.nc__bell--open { background: rgba(52, 120, 246, 0.1); color: var(--blue-deep, #1f57cc); }
+.nc__bell:hover { background: var(--mk-surface-2, #eef2fa); color: var(--ink, #172033); }
+.nc__bell--open { background: var(--mk-surface-2, #eef2fa); color: var(--ink, #172033); }
 .nc__bell--busy { color: var(--blue, #3478f6); }
 
-/* 通知未读角标 */
+/* 通知未读徽标：原型红点形态（8px 圆 + 表面描边圈，钉在铃铛右上角） */
 .nc__dot {
   position: absolute;
-  top: 3px;
-  right: 2px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: var(--mk-radius-pill);
-  background: #e5484d;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 16px;
-  text-align: center;
-  box-shadow: 0 0 0 2px var(--surface, #fff);
+  top: 9px;
+  right: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red, #e5484d);
+  border: 2px solid var(--surface, #fff);
+  pointer-events: none;
 }
 
 /* AI 任务运行中脉冲环 */
@@ -553,7 +549,7 @@ onBeforeUnmount(() => {
   .nc__body { flex: 1; min-height: 0; max-height: none; }
 }
 
-/* 通知列表 */
+/* 通知列表：条目 = 蓝点（未读）+ 标题 + 摘要 + 时间（原型 wf-notif 同构） */
 .nc__item {
   display: flex;
   align-items: flex-start;
@@ -576,12 +572,14 @@ onBeforeUnmount(() => {
   -webkit-box-orient: vertical;
 }
 .nc__item-time { font-size: 12px; color: var(--faint, #8492ab); }
+/* 未读蓝点：已读时淡化为轨道色（保留行首对齐） */
 .nc__item-dot {
   width: 7px; height: 7px; margin-top: 6px;
   border-radius: 50%;
   background: var(--blue, #3478f6);
   flex-shrink: 0;
 }
+.nc__item-dot--off { background: color-mix(in srgb, var(--line, #e3e9f4) 70%, transparent); }
 
 /* 面板底部操作行 */
 .nc__foot {
@@ -775,7 +773,7 @@ onBeforeUnmount(() => {
 [data-theme='dark'] .nc__retry { color: var(--blue-deep, #4d8bf8); background: rgba(77, 139, 248, 0.12); border-color: rgba(77, 139, 248, 0.4); }
 [data-theme='dark'] .nc__tab { color: var(--muted, #aaacb1); }
 [data-theme='dark'] .nc__tab:hover, [data-theme='dark'] .nc__tab--on { color: var(--blue-deep, #4d8bf8); }
-[data-theme='dark'] .nc__dot { box-shadow: 0 0 0 2px var(--surface, #1e1e20); }
+[data-theme='dark'] .nc__dot { border-color: var(--surface, #1e1e20); }
 </style>
 
 <style scoped>

@@ -14,10 +14,10 @@
       </div>
 
       <template v-if="!profileLoading && !profileLoadError">
-        <!-- 资料 hero 卡：横贯全宽 -->
+        <!-- 资料卡（原型 2026-09-30 wf-profile）：头像 + 名字 + 身份行，XP 收进身份行不再单独立卡 -->
         <article class="uc-card profile-hero">
           <div class="profile-identity">
-            <div class="profile-avatar">{{ user.name?.charAt(0) || '用' }}</div>
+            <span class="profile-avatar" aria-hidden="true">{{ user.name?.charAt(0) || '用' }}</span>
             <div class="profile-identity__main">
               <div class="profile-name-row">
                 <template v-if="editingName">
@@ -39,21 +39,54 @@
                   <button type="button" class="uc-btn uc-btn--link" @click="startEditName">编辑</button>
                 </template>
               </div>
-              <p class="profile-email">{{ user.email || '未绑定邮箱' }}</p>
-              <p class="profile-meta">注册于 {{ formatDateShort(user.createdAt) }} · 最近登录 {{ formatDateShort(user.lastLoginAt) }}</p>
-            </div>
-            <div class="profile-stats">
-              <div class="stat-card">
-                <span>经验值（XP）</span>
-                <strong>{{ user.xp || 0 }}</strong>
-              </div>
-              <div class="stat-card">
-                <span>等级</span>
-                <strong>{{ user.level || 1 }} 级</strong>
-              </div>
+              <span class="profile-identity__role">学习者 · Lv.{{ user.level || 1 }} · {{ user.xp || 0 }} XP</span>
+              <p class="profile-meta">{{ user.email || '未绑定邮箱' }} · 注册于 {{ formatDateShort(user.createdAt) }} · 最近登录 {{ formatDateShort(user.lastLoginAt) }}</p>
             </div>
           </div>
         </article>
+
+        <!-- 学习概览 KPI（原型 wf-kpis）：连续天数（/users/me 自带）+ 成就解锁（轻请求）+ 已掌握概念（图谱 stability） -->
+        <div class="profile-kpis" role="list" aria-label="学习概览">
+          <div class="profile-kpi" role="listitem">
+            <strong>{{ kpi.streak ?? '—' }}</strong>
+            <span>连续天数</span>
+          </div>
+          <div class="profile-kpi" role="listitem">
+            <strong>{{ kpi.achievements ?? '—' }}</strong>
+            <span>已解锁成就</span>
+          </div>
+          <div class="profile-kpi" role="listitem">
+            <strong>{{ kpi.mastery ?? '—' }}</strong>
+            <span>已掌握知识点</span>
+          </div>
+        </div>
+
+        <!-- 快捷入口列表卡（原型 wf-list 同构） -->
+        <section class="uc-card">
+          <ul class="profile-menu">
+            <li>
+              <router-link to="/user/achievements" class="profile-menu__item">
+                <Trophy :size="17" :stroke-width="1.75" aria-hidden="true" />
+                <span>我的成就</span>
+                <span class="profile-menu__chev" aria-hidden="true">›</span>
+              </router-link>
+            </li>
+            <li>
+              <router-link to="/user/learning-history" class="profile-menu__item">
+                <History :size="17" :stroke-width="1.75" aria-hidden="true" />
+                <span>学习历史</span>
+                <span class="profile-menu__chev" aria-hidden="true">›</span>
+              </router-link>
+            </li>
+            <li>
+              <router-link to="/user/settings" class="profile-menu__item">
+                <Settings :size="17" :stroke-width="1.75" aria-hidden="true" />
+                <span>设置</span>
+                <span class="profile-menu__chev" aria-hidden="true">›</span>
+              </router-link>
+            </li>
+          </ul>
+        </section>
 
         <!-- 账号安全双栏（2026-09-27 区域利用率重排）：改密主栏 + 注销危区右栏。
              此前两张卡各自整行、内容只占左半屏，右侧一半全是死空白。 -->
@@ -110,16 +143,39 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { History, Settings, Trophy } from 'lucide-vue-next'
 import CapabilityShell from '@/components/user/CapabilityShell.vue'
 import { askConfirm, doneConfirm, failConfirm } from '@/views/admin-redesign/useConfirm'
 import { toast } from '@/utils/toast'
 import request from '@/utils/api'
+import { learningAPI } from '@/api/learning'
+import { unwrapArray } from '@/views/v2/unwrap'
 import { useUserStore } from '../stores/user'
 import '@/components/user/uc.css'
 
 const router = useRouter()
 const userStore = useUserStore()
 const api = request
+
+/* ---------- 学习概览 KPI（原型 wf-kpis 三卡） ----------
+   连续天数随 /users/me 免费带回；成就与概念掌握各发一个轻请求，
+   失败静默显示「—」，不阻塞资料卡渲染。 */
+const kpi = ref<{ streak?: number; achievements?: number; mastery?: number }>({})
+
+async function loadKpis() {
+  const streak = (userStore.user as { streakDays?: number } | null)?.streakDays
+  if (typeof streak === 'number') kpi.value.streak = streak
+  try {
+    const res = await request.get('/achievements/all')
+    const items = unwrapArray<{ unlocked?: boolean }>(res)
+    kpi.value.achievements = items.filter((a) => a.unlocked).length
+  } catch { /* 静默：KPI 缺数好过卡报错 */ }
+  try {
+    const graph = (await learningAPI.getConceptGraph()) as { nodes?: Array<{ stability?: string | null }> } | null
+    const nodes = Array.isArray(graph?.nodes) ? graph!.nodes! : []
+    kpi.value.mastery = nodes.filter((n) => n.stability === 'stable').length
+  } catch { /* 静默 */ }
+}
 
 /* ---------- 修改密码 ---------- */
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
@@ -175,6 +231,7 @@ const deactivatePassword = ref('')
 const deactivating = ref(false)
 onMounted(async () => {
   await loadUserProfile()
+  void loadKpis()
 })
 
 function formatDateShort(value?: string | null) {
@@ -283,36 +340,35 @@ async function handleDeactivate() {
 }
 
 .profile-hero {
-  padding: 24px 26px;
+  padding: 20px 24px;
 }
 
 .profile-identity {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
 }
 
 .profile-avatar {
-  width: 96px;
-  height: 96px;
-  border-radius: 999px;
-  /* 去蓝紫跨色相渐变与蓝色光晕（2026-09-26 视觉走查）：与 V2Nav 头像同一扁平语言
-     （blue 12% 底 + blue-deep 字），暗色随 token 翻转 */
+  /* 原型 wf-profile__av：54px 圆 + blue 12% 底 + blue-deep 字（去旧 96px 大头像盘） */
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
   background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
   color: var(--blue-deep, #1f57cc);
-  /* 34 → 24（2026-09-27 桌面刻度统一）：这是头像圆里的字母，不是页面标题 */
-  font-size: 24px;
+  font-size: 21px;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--blue) 10%, transparent);
 }
 
 .profile-identity__main {
   min-width: 0;
   flex: 1;
+  display: grid;
+  gap: 3px;
 }
 
 .profile-name-row {
@@ -324,8 +380,9 @@ async function handleDeactivate() {
 
 .profile-name-row h2 {
   margin: 0;
-  /* 24 → 20：用户名是页面级标题，不是展示字 */
-  font-size: 20px;
+  /* 原型 17px：名字是资料卡身份行，不是页面级展示字 */
+  font-size: 17px;
+  font-weight: 800;
   letter-spacing: -0.01em;
 }
 
@@ -334,24 +391,92 @@ async function handleDeactivate() {
   max-width: 100%;
 }
 
-.profile-email {
-  margin: 5px 0 0;
-  color: var(--muted, #5b6577);
-  font-size: 14px;
+/* 身份行（原型：学习者 · Lv.4 · 240 XP） */
+.profile-identity__role {
+  font-size: 12.5px;
+  color: var(--faint, #67758f);
 }
 
 .profile-meta {
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--faint, #67758f);
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.profile-stats {
+/* 学习概览 KPI（原型 wf-kpis/wf-kpi 三卡） */
+.profile-kpis {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  flex: 0 1 auto;
-  min-width: 0;
+}
+
+.profile-kpi {
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e3e9f4);
+  border-radius: var(--mk-radius-modal, 16px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
+  padding: 13px 8px;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.profile-kpi strong {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink, #172033);
+}
+
+.profile-kpi span {
+  /* 原型为 11px，本仓门禁下限 12px（--mk-fs-micro 档即 12px 起） */
+  font-size: 12px;
+  color: var(--faint, #67758f);
+}
+
+/* 快捷入口列表（原型 wf-list：行 52px + 行顶分割线 + 尾部 chevron） */
+.profile-menu {
+  list-style: none;
+  margin: 0;
+  padding: 4px 18px;
+}
+
+.profile-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 52px;
+  padding: 4px 2px;
+  border-top: 1px solid var(--line, #e3e9f4);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink, #172033);
+  text-decoration: none;
+  transition: color 0.14s ease;
+}
+
+.profile-menu li:first-child .profile-menu__item {
+  border-top: 0;
+}
+
+.profile-menu__item svg {
+  color: var(--muted, #5b6577);
+  flex: none;
+}
+
+.profile-menu__item:hover {
+  color: var(--blue-deep, #1f57cc);
+}
+
+.profile-menu__chev {
+  margin-left: auto;
+  font-size: 18px;
+  color: var(--faint, #8492ab);
 }
 
 /* 账号安全双栏（2026-09-27）：改密主栏 1.7fr + 注销危区 1fr，
@@ -394,39 +519,9 @@ async function handleDeactivate() {
     align-items: flex-start;
   }
 
-  .profile-stats {
-    width: 100%;
+  .profile-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-}
-
-.stat-card {
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px solid var(--line, #e3e9f4);
-  background: var(--canvas, #f3f6fb);
-  display: grid;
-  gap: 6px;
-  min-width: 132px;
-  overflow: hidden;
-}
-
-.stat-card span {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--faint, #67758f);
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.stat-card strong {
-  /* 22 → 20：统计卡数字档 */
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--ink, #172033);
-  overflow-wrap: anywhere;
 }
 
 .pwd-grid {
@@ -470,12 +565,8 @@ async function handleDeactivate() {
 
 <style scoped>
 /* 移动端重新排版（用户："个人中心也是很大，要针对移动端重新设计大小"）。
-   390 下资料卡 354px：≤900 的 `.profile-identity` 改成了竖排（头像 96 独占一行），
-   加两栏统计卡全宽，一张"我是谁"的卡就吃掉半屏。这里改回横向：
-   头像 56 + 姓名/邮箱/注册信息同一行，两张统计卡换成下一行的紧凑横条。
-
-   放文件末尾：.profile-avatar / .profile-hero / .stat-card 的基础规则在前面的块里，
-   而 ≤900 / ≤560 / ≤640 三个媒体块也在中间，同权重下后出现者胜。 */
+   390 下资料卡 354px：资料卡改回横向（头像 48 + 姓名行），KPI 三卡保持一行紧凑。
+   放文件末尾：基础规则在前面的块里，同权重下后出现者胜。 */
 @media (max-width: 1100px) {
   .profile-hero {
     padding: 14px;
@@ -493,47 +584,30 @@ async function handleDeactivate() {
     width: 48px;
     height: 48px;
     font-size: 20px;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 10%, transparent);
   }
 
   .profile-name-row {
     gap: 6px;
   }
 
-  /* 昵称 18 → 16：页标题 h1 已收到 18，昵称再同档分不出主次 */
+  /* 昵称 17 → 16：页标题 h1 已收到 18，昵称再同档分不出主次 */
   .profile-name-row h2 {
     font-size: 16px;
   }
 
-  .profile-email {
-    margin-top: 3px;
-    font-size: 12.5px;
-  }
-
   .profile-meta {
-    margin-top: 2px;
-    font-size: 12px;
+    white-space: normal;
   }
 
-  /* 统计卡换行到下一行，两张并排 */
-  .profile-stats {
-    flex: 1 1 100%;
-    width: 100%;
+  .profile-kpis {
     gap: 8px;
   }
 
-  .stat-card {
-    min-width: 0;
-    padding: 8px 10px;
-    gap: 2px;
+  .profile-kpi {
+    padding: 10px 6px;
   }
 
-  /* 12px 是移动端最小可读字号（业界共识），11px 原来是压过头的 */
-  .stat-card span {
-    font-size: 12px;
-  }
-
-  .stat-card strong {
+  .profile-kpi strong {
     font-size: 17px;
   }
 
@@ -557,13 +631,12 @@ async function handleDeactivate() {
   }
 
   /* 资料卡再收一档（2026-09-24 反馈「个人中心五个选项里的内容都偏大」）：
-     390 下 hero 卡 182px 高，统计卡 8px 上下边距 + 17px 数字是主要开销。
-     只收内边距与数字，标签字号抬回 12px（见上面 stat-card span）——卡片可以紧，字不能更小。
-     横向跟 .uc-card 的 14px 对齐（2026-09-26 对齐走查）：原来是 12px，同页堆叠时
-     内容左缘比下面几张卡左 2px，一列卡看着就是「没对齐」。 */
+     390 下 hero 卡主要开销是内边距与数字。横向跟 .uc-card 的 14px 对齐
+     （2026-09-26 对齐走查）：原来是 12px，同页堆叠时内容左缘比下面几张卡左 2px，
+     一列卡看着就是「没对齐」。 */
   .profile-hero { padding: 12px 14px; }
-  .stat-card { padding: 6px 10px; }
-  .stat-card strong { font-size: 16px; }
+  .profile-kpi { padding: 8px 6px; }
+  .profile-kpi strong { font-size: 16px; }
   .uc-card__foot { margin-top: 10px; padding-top: 10px; }
 }
 </style>

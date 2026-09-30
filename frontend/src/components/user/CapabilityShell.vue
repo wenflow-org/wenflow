@@ -3,22 +3,29 @@
     <V2Nav />
 
     <main class="uc__main">
-      <header class="uc__head">
-        <div class="uc__head-text">
-          <span class="uc__kicker">个人中心</span>
-          <h1>{{ title }}</h1>
-          <p v-if="description">{{ description }}</p>
-        </div>
-        <div v-if="$slots.actions" class="uc__head-actions">
-          <slot name="actions" />
-        </div>
-      </header>
-
-      <nav class="uc__tabs" aria-label="个人中心导航">
-        <router-link v-for="t in tabs" :key="t.to" :to="t.to" class="uc__tab" :class="{ 'uc__tab--on': isActive(t) }">
+      <!-- 页头=原型 2026-09-30 版整宽三分段器（wf-seg 同构），替代旧 kicker+h1+药丸 tabs -->
+      <nav class="uc__seg" aria-label="个人中心分区">
+        <router-link
+          v-for="t in tabs"
+          :key="t.to"
+          :to="t.to"
+          class="uc__seg__btn"
+          :class="{ 'uc__seg__btn--on': isActive(t) }"
+          :aria-current="isActive(t) ? 'page' : undefined"
+        >
           {{ t.label }}
         </router-link>
       </nav>
+
+      <!-- 分段器只覆盖三个能力页；深页（设置/调用日志）保留可见标题与动作区 -->
+      <div v-if="!onCapabilityTab" class="uc__deeptitle">
+        <h1>{{ title }}</h1>
+        <p v-if="description">{{ description }}</p>
+        <div v-if="$slots.actions" class="uc__head-actions">
+          <slot name="actions" />
+        </div>
+      </div>
+      <h1 v-else class="uc__vh">{{ title }}</h1>
 
       <div class="uc__body">
         <slot />
@@ -30,6 +37,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import V2Nav from '@/views/v2/V2Nav.vue'
 import V2Footer from '@/views/v2/V2Footer.vue'
@@ -50,6 +58,8 @@ const tabs = [
 function isActive(t: { match: string[] }) {
   return t.match.some((m) => route.path.startsWith(m))
 }
+
+const onCapabilityTab = computed(() => tabs.some(isActive))
 </script>
 
 <style scoped>
@@ -78,38 +88,51 @@ function isActive(t: { match: string[] }) {
   }
 }
 
-.uc__head {
+/* ===== 页头分段器（原型 wf-seg）：整宽三分格 + 白色激活胶囊 ===== */
+.uc__seg {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--line, #e3e9f4) 45%, transparent);
+  border-radius: 999px;
+}
+
+.uc__seg__btn {
+  min-height: 40px;
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
-  padding: 4px 2px 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--muted, #5b6577);
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-.uc__kicker {
-  display: inline-block;
-  margin-bottom: 8px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
+.uc__seg__btn:hover { color: var(--ink, #172033); }
+.uc__seg__btn--on {
+  background: var(--surface, #fff);
   color: var(--blue-deep, #1f57cc);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06));
 }
+.uc__seg__btn:focus-visible { outline: 2px solid var(--blue, #3478f6); outline-offset: 2px; }
 
-.uc__head h1 {
-  margin: 0 0 6px;
+/* 深页（设置/调用日志）标题行：分段器不覆盖时保留可见 h1 */
+.uc__deeptitle h1 {
+  margin: 4px 0 0;
   font-size: 20px;
   letter-spacing: -0.01em;
   line-height: 1.2;
 }
-
-.uc__head p {
-  margin: 0;
+.uc__deeptitle p {
+  margin: 4px 0 0;
   max-width: 48em;
   font-size: 14px;
   line-height: 1.7;
   color: var(--muted, #5b6577);
 }
-
 .uc__head-actions {
   display: flex;
   flex-wrap: wrap;
@@ -117,36 +140,13 @@ function isActive(t: { match: string[] }) {
   justify-content: flex-end;
 }
 
-.uc__tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 2px 2px 0;
-}
-
-.uc__tab {
-  padding: 8px 16px;
-  border-radius: var(--mk-radius-pill);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--muted, #5b6577);
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #e3e9f4);
-  text-decoration: none;
-  transition: all 0.15s ease;
-}
-
-.uc__tab:hover {
-  color: var(--blue-deep, #1f57cc);
-  border-color: rgba(52, 120, 246, 0.35);
-}
-
-/* v2 风格激活态：淡彩药丸（蓝 7% 底 + 蓝 45% 边框 + blue-deep 字），替代渐变实底 */
-.uc__tab--on {
-  color: var(--blue-deep, #1f57cc);
-  background: rgba(52, 120, 246, 0.07);
-  border-color: rgba(52, 120, 246, 0.45);
-  box-shadow: none;
+/* 能力页 h1 仅供读屏/文档结构（视觉位置由分段器承担） */
+.uc__vh {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .uc__body {
