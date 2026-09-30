@@ -1964,9 +1964,10 @@ onBeforeUnmount(() => {
 }
 .msg__visual figcaption { font-size: 12px; color: var(--faint); line-height: 1.5; }
 .msg__avatar {
-  width: 34px; height: 34px; border-radius: var(--mk-radius-lg);
-  background: linear-gradient(135deg, var(--blue), var(--accent));
-  color: #fff; font-size: 14px; font-weight: 800;
+  /* 原型 wf-msg__avatar：蓝 12% 扁平圆 + blue-deep 字（去蓝→紫渐变方块，2026-09-30 视觉收敛） */
+  width: 30px; height: 30px; border-radius: 50%;
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  color: var(--blue-deep); font-size: 13px; font-weight: 800;
   display: grid; place-items: center;
   flex: 0 0 auto; margin-top: 2px;
 }

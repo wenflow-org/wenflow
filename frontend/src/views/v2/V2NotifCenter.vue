@@ -712,7 +712,8 @@ onBeforeUnmount(() => {
 .nc__task-progress i {
   display: block; height: 100%; width: 38%;
   border-radius: 3px;
-  background: linear-gradient(90deg, var(--blue, #3478f6), color-mix(in srgb, var(--blue, #3478f6) 50%, #8d6bff));
+  /* 原「蓝→#8d6bff 紫」为旧强调色残余 → 收敛到全站进度条同款蓝→青 */
+  background: linear-gradient(90deg, var(--blue, #3478f6), var(--cyan, #43b0d8));
   animation: nc-slide 1.3s ease-in-out infinite;
 }
 @keyframes nc-slide {

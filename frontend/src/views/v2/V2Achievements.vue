@@ -300,8 +300,9 @@ onMounted(() => {
 .ov-line__text { font-size: 13.5px; color: var(--muted); }
 .ov-line__text strong { font-size: 16px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 .ov-line__xp { margin-left: 10px; font-size: 12px; color: var(--faint); }
-.ov-line__bar { height: 6px; border-radius: 3px; background: var(--line, #eef0f4); overflow: hidden; }
-.ov-line__bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.4s ease; }
+.ov-line__bar { height: 6px; border-radius: 99px; background: var(--bar-track, color-mix(in srgb, var(--line, #eef0f4) 60%, transparent)); overflow: hidden; }
+/* 原为纯紫 --accent（旧强调色语言）→ 原型 wf-bar 填充：蓝→青 */
+.ov-line__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width 0.4s ease; }
 
 .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .filter {
@@ -372,7 +373,8 @@ onMounted(() => {
 }
 .ach-card__icon--on { color: var(--blue-deep); }
 .ach-card__icon--on .ach-card__icon-wrap::before {
-  background: linear-gradient(135deg, var(--blue), var(--accent));
+  /* 原为蓝→紫渐变（旧强调色语言）→ 原型 wf-ach__icon：蓝扁平淡彩底 */
+  background: var(--blue);
 }
 .ach-card__icon--off { color: var(--faint); }
 .ach-card__icon--off .ach-card__icon-wrap::before {

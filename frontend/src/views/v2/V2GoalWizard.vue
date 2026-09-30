@@ -271,7 +271,7 @@ function finish() {
   cursor: pointer;
   transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.15s ease;
 }
-.wiz__btn:hover:not(:disabled) { transform: translateY(-1px); }
+/* 原型按钮悬停无位移 */ .wiz__btn:hover:not(:disabled) { filter: brightness(1.04); }
 .wiz__btn--primary {
   border: 0;
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));

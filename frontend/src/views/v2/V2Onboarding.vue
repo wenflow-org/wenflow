@@ -614,7 +614,7 @@ async function goDashboard() {
   transition: transform 0.18s, box-shadow 0.18s;
 }
 .ob__cta:hover {
-  transform: translateY(-1px);
+  /* 原型按钮悬停无位移，只留投影微升 */
   box-shadow: 0 12px 28px color-mix(in srgb, var(--blue) 30%, transparent);
 }
 .ob__cta:active {

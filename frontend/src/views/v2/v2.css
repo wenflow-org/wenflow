@@ -357,11 +357,11 @@ html, body {
   box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent);
   cursor: pointer;
   text-decoration: none;
+  /* 原型 wf-btn 悬停无抬升（仅 :active scale(.98)）——去掉旧的 -2px 悬浮 */
   transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
 }
 .v2-page .btn-primary:not(:disabled):hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 28px color-mix(in srgb, var(--blue) 34%, transparent);
+  filter: brightness(1.04);
 }
 .v2-page .btn-primary:not(:disabled):active {
   transform: translateY(0) scale(0.98);
@@ -386,9 +386,9 @@ html, body {
   transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 .v2-page .btn-ghost:not(:disabled):hover {
+  /* 原型 wf-btn--ghost:hover：边框/文字变色即可，无抬升 */
   border-color: color-mix(in srgb, var(--blue) 35%, transparent);
   color: var(--blue-deep);
-  transform: translateY(-2px);
 }
 .v2-page .btn-ghost:not(:disabled):active {
   transform: translateY(0) scale(0.98);
