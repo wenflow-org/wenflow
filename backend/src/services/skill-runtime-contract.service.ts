@@ -162,26 +162,7 @@ export async function getUnifiedSkillStats(
   const promptWhere: any = { agentId: { in: promptAgentIds } };
   if (since) promptWhere.createdAt = { gte: since };
 
-  const agentWhere: any = {
-    AND: [
-      {
-        OR: [
-          { executionLayer: null },
-          { executionLayer: { not: 'api-gateway' } },
-        ],
-      },
-      {
-        OR: shortIds.flatMap((name) => [
-          { agentId: `skill:${name}` },
-          { metadata: { contains: `"skillId":"${name}"` } },
-          { metadata: { contains: `"skillId":"skill:${name}"` } },
-        ]),
-      },
-    ],
-  };
-  if (since) agentWhere.AND.push({ calledAt: { gte: since } });
-
-  const [promptGroups, promptSuccessGroups, agentLogs] = await Promise.all([
+  const [promptGroups, promptSuccessGroups, agentLogRows] = await Promise.all([
     prisma.prompt_call_logs.groupBy({
       by: ['agentId'],
       where: promptWhere,
@@ -194,16 +175,27 @@ export async function getUnifiedSkillStats(
       where: promptWhere,
       _count: { _all: true },
     }),
-    prisma.agent_call_logs.findMany({
-      where: agentWhere,
-      select: {
-        agentId: true,
-        metadata: true,
-        success: true,
-        durationMs: true,
-        calledAt: true,
-      },
-    }),
+    /* agent_call_logs 归属统计（性能批 2026-09-30）：
+       原写法把每个 skill 的 2 条 metadata LIKE 拼进同一 OR（40 skill ≈ 80 个 LIKE，
+       每行 80 次子串匹配）还整列拉回 metadata 大 JSON 文本，7d 窗口实测 ~1.8s。
+       改为一次原生扫描：json_valid 守卫 + json_extract 只取 $.skillId（SQLite C 速度），
+       归属判断留在端内，与原逐行逻辑同语义（agentId 带 skill: 前缀优先，否则取 metadata.skillId）。 */
+    since
+      ? prisma.$queryRaw<Array<{ agentId: string; skillId: string | null; success: boolean; durationMs: number; calledAt: Date }>>`
+          SELECT "agentId",
+                 CASE WHEN "metadata" IS NOT NULL AND json_valid("metadata")
+                      THEN json_extract("metadata", '$.skillId') END AS "skillId",
+                 "success", "durationMs", "calledAt"
+          FROM "agent_call_logs"
+          WHERE ("executionLayer" IS NULL OR "executionLayer" != 'api-gateway')
+            AND "calledAt" >= ${since}`
+      : prisma.$queryRaw<Array<{ agentId: string; skillId: string | null; success: boolean; durationMs: number; calledAt: Date }>>`
+          SELECT "agentId",
+                 CASE WHEN "metadata" IS NOT NULL AND json_valid("metadata")
+                      THEN json_extract("metadata", '$.skillId') END AS "skillId",
+                 "success", "durationMs", "calledAt"
+          FROM "agent_call_logs"
+          WHERE ("executionLayer" IS NULL OR "executionLayer" != 'api-gateway')`,
   ]);
 
   const promptSuccessMap = new Map<string, number>();
@@ -236,18 +228,14 @@ export async function getUnifiedSkillStats(
     string,
     { total: number; success: number; durationTotal: number; lastCalledAt: Date | null }
   >();
-  for (const log of agentLogs) {
+  for (const log of agentLogRows) {
     let short = '';
     if (typeof log.agentId === 'string' && log.agentId.startsWith('skill:')) {
       short = log.agentId.replace(/^skill:/, '');
     } else {
-      try {
-        const metadata = log.metadata ? JSON.parse(log.metadata) : null;
-        const raw = typeof metadata?.skillId === 'string' ? metadata.skillId : '';
-        short = raw.replace(/^skill:/, '');
-      } catch {
-        short = '';
-      }
+      // metadata.skillId 已由 json_extract 在库端取出（无效 JSON → null）
+      const raw = typeof log.skillId === 'string' ? log.skillId : '';
+      short = raw.replace(/^skill:/, '');
     }
     if (!shortIds.includes(short)) continue;
     if (promptBacked.has(short)) continue;
