@@ -46,27 +46,33 @@ describe('课分钟档上界钳制到结构化日槽位', () => {
   });
 });
 
-describe('定帧层带出校内锚（buildFramedNormalizedInput）', () => {
-  it('学习者自述含教材册次 → 定帧输出含 schoolAnchor', () => {
+describe('定帧层透传校内锚（LLM 口径，2026-09-30 用户拍板）', () => {
+  // 锚由 goal-conversation 的 understanding.school_anchor（LLM 判断）产生，经 coordinator
+  // 带进 normalizedInput.schoolAnchor；定帧层只做形状归一与透传，不再用正则从自述里抽。
+  it('LLM 给出的锚 → 定帧输出原样透传', () => {
     const framed = buildFramedNormalizedInput({
-      learnerProfile: {
-        surfaceGoal: '把计算补起来',
-        backgroundExperience: '孩子三年级，人教版上册第五单元',
-        currentBaseline: { evidence: '单元测验 82 分' },
-      },
+      learnerProfile: { surfaceGoal: '把计算补起来', backgroundExperience: '家长每天陪半小时' },
+      schoolAnchor: { textbook: '人教版三年级上册第五单元', examScope: '校内单元测与期中期末', schoolPace: '每周约1个单元' },
       timeDimensions: { totalWeeks: 9, sessionsPerWeek: 5, sessionsLengthMin: 30 },
     });
-    expect(framed.schoolAnchor).toBeTruthy();
-    expect(framed.schoolAnchor.textbook).toContain('三年级');
-    expect(framed.schoolAnchor.textbook).toContain('第五单元');
+    expect(framed.schoolAnchor).toEqual({
+      textbook: '人教版三年级上册第五单元',
+      examScope: '校内单元测与期中期末',
+      schoolPace: '每周约1个单元',
+    });
   });
 
-  it('非校内人设 → 定帧输出不含 schoolAnchor 键（行为不变）', () => {
+  it('非校内学习者（无该键）→ 定帧输出不含 schoolAnchor（行为不变）', () => {
     const framed = buildFramedNormalizedInput({
-      learnerProfile: {
-        surfaceGoal: '想转行做数据分析',
-        backgroundExperience: '电商公司做运营四年',
-      },
+      learnerProfile: { surfaceGoal: '想转行做数据分析', backgroundExperience: '电商公司做运营四年' },
+    });
+    expect('schoolAnchor' in framed).toBe(false);
+  });
+
+  it('三项全空的锚形状 → 按无锚处理（不注入空壳）', () => {
+    const framed = buildFramedNormalizedInput({
+      learnerProfile: { surfaceGoal: '学点什么' },
+      schoolAnchor: { textbook: null, examScope: '', schoolPace: null },
     });
     expect('schoolAnchor' in framed).toBe(false);
   });

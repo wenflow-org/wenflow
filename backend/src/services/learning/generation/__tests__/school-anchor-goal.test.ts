@@ -30,8 +30,13 @@ describe('buildAnchorGoalNote', () => {
     expect(buildAnchorGoalNote(anchor(), '期中前完形错误控制在 3 个以内')).toBeNull();
   });
 
-  it('无册次只有考试范围 → 补考试节点括注', () => {
+  it('无册次只有截止型考试范围 → 补「XX前」括注', () => {
     expect(buildAnchorGoalNote(anchor({ textbook: null }), '把计算补起来')).toBe('（期中前）');
+  });
+
+  it('进行型复习节点不带「前」（一轮复习 ≠ 一轮复习前）', () => {
+    expect(buildAnchorGoalNote(anchor({ textbook: null, examScope: '一轮复习，按板块推进' }), '把采分点练稳'))
+      .toBe('（一轮复习）');
   });
 
   it('无锚 → null（非校内路径行为不变）', () => {

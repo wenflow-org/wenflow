@@ -8,7 +8,6 @@
 
 import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig } from '../../config/pedagogy.config';
 import { normalizePathDifficulty } from './path-difficulty';
-import { resolveSchoolAnchorForPathDesign } from './generation/school-anchor';
 
 export type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
 export type TimeBudgetCadence = 'per_day' | 'per_week' | 'per_session' | 'flexible' | 'unclear';
@@ -961,9 +960,23 @@ export function buildFramedNormalizedInput(input: any): any {
     ? (input.triage as TriageHint)
     : null;
   const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize, learnerLoadProfile, triage);
-  const schoolAnchor = resolveSchoolAnchorForPathDesign(input);
+  // 校内锚：LLM 抽取口径（2026-09-30 用户拍板「不要走正则，走大模型自身的推理理解」）。
+  // goal-conversation 的 understanding.school_anchor → visibleSummary → buildNormalizedInputV1
+  // → 此处透传。没有该键（非校内学习者/旧链路）时**不注入**，不做任何关键词匹配兜底。
+  const rawAnchor = input.schoolAnchor && typeof input.schoolAnchor === 'object' ? input.schoolAnchor : null;
+  const anchorStr = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const schoolAnchor: { textbook: string | null; examScope: string | null; schoolPace: string | null } | null = rawAnchor
+    ? (() => {
+        const parsed = {
+          textbook: anchorStr((rawAnchor as any).textbook),
+          examScope: anchorStr((rawAnchor as any).examScope),
+          schoolPace: anchorStr((rawAnchor as any).schoolPace),
+        };
+        return parsed.textbook || parsed.examScope || parsed.schoolPace ? parsed : null;
+      })()
+    : null;
 
-  return {
+  const framed: Record<string, any> = {
     ...input,
     version: typeof input.version === 'string' ? input.version : '1.0',
     learnerProfile: {
@@ -1013,6 +1026,10 @@ export function buildFramedNormalizedInput(input: any): any {
     // 校内锚（2026-09-30 维度 G 评审）：从学习者自述确定性抽取教材册次/单元/考试范围/学校进度，
     // 随定帧输入一起进入 path-planning 与 stage-designer 提示词（无锚时该键不出现，行为不变）。
     // 抽取放在定帧层而不是各 skill 内：单一真相源，两处提示词引用同一对象。
-    ...(schoolAnchor ? { schoolAnchor } : {}),
   };
+  // 锚透传：LLM 给出且至少一项有值才带出；否则把入参里可能存在的空壳键删掉
+  // （下游按"键不存在"判定非校内路径，空壳会让锚规则误触发）。
+  if (schoolAnchor) framed.schoolAnchor = schoolAnchor;
+  else delete framed.schoolAnchor;
+  return framed;
 }

@@ -26,6 +26,16 @@ export interface GoalPathVisibleSummary {
     timeHorizon: string | null;
     deadlineText: string | null;
   } | null;
+  /**
+   * 校内锚（2026-09-30，LLM 抽取替代正则）：学习者身处某套教材/考试体系时，由 goal-conversation
+   * 的 understanding.school_anchor 产出（模型自己的判断，不靠正则匹配关键词）。
+   * textbook=教材册次/单元、examScope=考试范围、schoolPace=学校进度；非校内学习者该字段为 null。
+   */
+  schoolAnchor: {
+    textbook: string | null;
+    examScope: string | null;
+    schoolPace: string | null;
+  } | null;
   /** LLM 推断的时间维度数值（totalWeeks/estimatedHours/sessionsPerWeek/sessionsLengthMin） */
   timeDimensions: {
     totalWeeks?: number | null;
@@ -161,6 +171,7 @@ export function buildGoalPathVisibleSummary(params: {
   const scenario = buildScenario(understanding, backgroundExperience, realProblem);
   const currentBaseline = buildCurrentBaseline(understanding);
   const needsMaterial = normalizeNeedsMaterial(understanding?.needsMaterial);
+  const schoolAnchor = normalizeSchoolAnchorShape(understanding?.school_anchor);
 
   const hasResources = !!(timeBudget || timePerSession || timeHorizon || deadlineText);
   const observableResult = normalizeString(understanding?.success_criteria?.observable_result);
@@ -173,6 +184,7 @@ export function buildGoalPathVisibleSummary(params: {
 
   return {
     surfaceGoal,
+    schoolAnchor,
     realProblem,
     motivation: normalizeString(understanding?.motivation),
     urgency: normalizeString(understanding?.urgency),
@@ -230,4 +242,15 @@ function buildTimeDimensions(raw: unknown): NonNullable<GoalPathVisibleSummary['
     totalSessions: num(r.totalSessions),
   };
   return Object.values(result).some((v) => v !== null) ? result : null;
+}
+
+/** 校内锚形状归一化（LLM 产出口径）：三项都可空，但至少一项有值；否则按无锚处理（不编造） */
+export function normalizeSchoolAnchorShape(raw: any): GoalPathVisibleSummary['schoolAnchor'] {
+  if (!raw || typeof raw !== 'object') return null;
+  const str = (v: any): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null);
+  const textbook = str(raw.textbook);
+  const examScope = str(raw.examScope);
+  const schoolPace = str(raw.schoolPace);
+  if (!textbook && !examScope && !schoolPace) return null;
+  return { textbook, examScope, schoolPace };
 }

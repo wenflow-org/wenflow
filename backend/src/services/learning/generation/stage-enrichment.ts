@@ -16,7 +16,7 @@ import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS }
 import { buildStageFillNote } from './stage-fill-note';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
 import { buildSupplementRequest, mergeSupplementTasks, needsLessonSupplement } from './stage-task-supplement';
-import { resolveSchoolAnchorForPathDesign, schoolAnchorCoverage } from './school-anchor';
+import { schoolAnchorCoverage, type PathSchoolAnchor } from './school-anchor';
 import { buildAnchorGoalNote } from './school-anchor-goal';
 import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
@@ -243,10 +243,12 @@ export async function enrichLearningPathWithAnderson(
     }> = [];
     let designedTaskCount = 0;
 
-    // 校内锚（2026-09-30 维度 G 评审）：学习者身处某套教材/考试体系时，把册次单元、
-    // 考试范围、学校进度确定性抽取出来喂给 stage-designer（提示词规则 33 要求阶段目标与
-    // 课标题引用）；抽取不到就不注入该键，非校内路径行为与原先完全一致。
-    const pathSchoolAnchor = resolveSchoolAnchorForPathDesign(normalizedInput);
+    // 校内锚（2026-09-30 维度 G 评审 → 用户拍板改 LLM 口径）：锚由 goal-conversation 的
+    // understanding.school_anchor（模型自己判断学习者是否身处某套教材/考试体系）经定帧层
+    // 透传到这里；非校内学习者该键不出现，stage-designer 行为与原先完全一致。
+    const pathSchoolAnchor = (normalizedInput as any)?.schoolAnchor
+      ? ((normalizedInput as any).schoolAnchor as PathSchoolAnchor)
+      : null;
     let anchorGoalNotes = 0;
     if (pathSchoolAnchor) {
       logger.info('[school-anchor] 校内锚已解析，注入 stage-designer', {

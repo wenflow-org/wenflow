@@ -13,7 +13,11 @@
  */
 import type { PathSchoolAnchor } from './school-anchor';
 
-const EXAM_NODES = ['期末', '期中', '月考', '高考', '中考', '学业水平', '会考', '模拟考', '模考', '单元测', '一轮复习', '二轮复习'];
+/** 截止型考试节点：括注带「前」（期中前 = 到期中考试之前） */
+const EXAM_DEADLINES = ['期末', '期中', '月考', '高考', '中考', '学业水平', '会考', '模拟考', '模考', '单元测'];
+/** 进行型复习节点：括注不带「前」（一轮复习 ≠ 一轮复习前，修正 2026-09-30 实测反义） */
+const REVIEW_PHASES = ['一轮复习', '二轮复习', '总复习'];
+const EXAM_NODES = [...EXAM_DEADLINES, ...REVIEW_PHASES];
 
 /** 从锚里取出可追加的括注；已引用或无法构造时返回 null */
 export function buildAnchorGoalNote(anchor: PathSchoolAnchor | null, goal: string): string | null {
@@ -25,12 +29,16 @@ export function buildAnchorGoalNote(anchor: PathSchoolAnchor | null, goal: strin
     const core = anchor.textbook.replace(/^(人教|北师大|苏教|外研|沪教|湘教|教科|鲁教|粤教|部编)版?/, '');
     const gradeTerm = core.split(/第/)[0];
     if (hasExam || text.includes(anchor.textbook) || text.includes(core) || text.includes(gradeTerm)) return null;
-    const examSuffix = !hasExam && anchor.examScope ? `·${pickExamNode(anchor.examScope) || ''}` : '';
+    const examSuffix = !hasExam && anchor.examScope && pickExamNode(anchor.examScope)
+      ? `·${pickExamNode(anchor.examScope)}`
+      : '';
     return `（对照${anchor.textbook}${examSuffix}）`;
   }
   if (!hasExam && anchor.examScope) {
     const node = pickExamNode(anchor.examScope);
-    if (node) return `（${node}前）`;
+    if (node) {
+      return REVIEW_PHASES.includes(node) ? `（${node}）` : `（${node}前）`;
+    }
   }
   return null;
 }

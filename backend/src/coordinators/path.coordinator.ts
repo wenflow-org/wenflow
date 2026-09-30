@@ -17,6 +17,7 @@ import {
   type PathAgentInputConfig
 } from '../services/agentConfig.service';
 import type { GoalPathTimeBudgetCadence, GoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
+import { normalizeSchoolAnchorShape } from '../services/learning/goal-path-visible-summary';
 import type { MaterialNeed, MaterialPackResult } from '../skills/material-collector/types';
 
 const COORDINATOR_ID = 'path-agent';
@@ -293,6 +294,11 @@ class PathCoordinator {
 
     return {
       version: '1.0',
+      // 校内锚（2026-09-30 LLM 抽取）：goal-conversation 的 understanding.school_anchor 经
+      // visibleSummary 带到此处；非校内学习者整键不出现（下游行为与原先完全一致）。
+      ...(normalizeSchoolAnchorForV1(pick('understanding.school_anchor') ?? visibleSummary?.schoolAnchor)
+        ? { schoolAnchor: normalizeSchoolAnchorForV1(pick('understanding.school_anchor') ?? visibleSummary?.schoolAnchor)! }
+        : {}),
       learnerProfile: {
         surfaceGoal: str('understanding.surface_goal', visibleSummary?.surfaceGoal)
           || this.normalizeString(rawGoal),
@@ -938,3 +944,8 @@ class PathCoordinator {
 export const pathCoordinator = new PathCoordinator();
 export default pathCoordinator;
 
+
+/** V1 形状的校内锚（与 visibleSummary 同口径，避免重复 import 命名冲突） */
+function normalizeSchoolAnchorForV1(raw: any): { textbook: string | null; examScope: string | null; schoolPace: string | null } | null {
+  return normalizeSchoolAnchorShape(raw);
+}
