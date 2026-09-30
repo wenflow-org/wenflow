@@ -14,7 +14,8 @@ export const timeoutErrorSignals = [
 
 // 超时识别：优先 errorCode/errorCategory（现代 gateway 行写 errorCode=ATTEMPT_TIMEOUT、errorCategory=provider_timeout），
 // 兼容旧行 errorCode 中直接含 timeout 字样（ETIMEDOUT 等）。
-export const isTimeoutLog = (log: { errorCode: string | null; errorCategory?: string | null }) => {
+// errorCode 允许缺省（2026-09-30 性能批）：7d 趋势行只取 calledAt+success（覆盖索引），超时分类由失败行覆盖层完成
+export const isTimeoutLog = (log: { errorCode?: string | null; errorCategory?: string | null }) => {
   const errorCode = String(log.errorCode || '').toLowerCase();
   const errorCategory = String(log.errorCategory || '').toLowerCase();
   return errorCategory.includes('timeout')

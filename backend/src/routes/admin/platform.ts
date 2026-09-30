@@ -41,7 +41,7 @@ import {
   buildErrorCategoryWhere,
   buildTimeoutCondition
 } from '../../services/admin/failure-classification';
-import { computeOverviewStats } from '../../services/admin/platform-overview.service';
+import { computeOverviewStats, clearOverviewAllTimeCache } from '../../services/admin/platform-overview.service';
 import { collectManifestDiagnostics } from '../../services/admin/platform-manifest-diagnostics.service';
 import { fetchAgentLogPage, fetchAgentLogWithAttempts } from '../../services/admin/platform-agent-logs.service';
 import { getPlatformActivityFeed } from '../../services/admin/platform-activity.service';
@@ -275,10 +275,12 @@ const overviewStatsInflight = new Map<string, Promise<unknown>>();
 const TOPOLOGY_CACHE_TTL_MS = 45 * 1000;
 const topologyCache = new Map<string, { payload: unknown; cachedAt: number }>();
 
-/** 测试辅助：清空概览/动态缓存与在途句柄（60s TTL 会跨用例复用，污染路由级断言） */
+/** 测试辅助：清空概览/动态缓存与在途句柄（60s TTL 会跨用例复用，污染路由级断言）。
+   * 全量累计子缓存（10min TTL，服务层）一并清：否则路由级用例间会复用上一用例的累计口径 */
 export function clearOverviewStatsCache(): void {
   overviewStatsCache.clear();
   overviewStatsInflight.clear();
+  clearOverviewAllTimeCache();
 }
 
 router.get('/overview/stats', async (req: Request, res: Response) => {
@@ -296,7 +298,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         return res.json({ success: true, data: await inflight });
       }
     }
-    const computation = computeOverviewStats()
+    const computation = computeOverviewStats(wantsFresh)
       .then((data) => {
         overviewStatsCache.set(cacheKey, { payload: data, cachedAt: Date.now() });
         return data;

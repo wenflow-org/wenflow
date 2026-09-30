@@ -127,14 +127,44 @@ function buildGeneratedSkillPrompt(skill: any, name: string): string {
 
 /**
  * 获取所有 Skill 列表（含统计）
+ *
+ * 统计缓存（性能批 2026-09-30）：runtimeStats 是 boot 扇出之一（7d 全窗扫描），
+ * 与 overview/stats 同款 60s TTL + 在途去重；key 含 range 与 skill 名单
+ * （registry 热重载换名单后自然换 key）。Skill 定义本体仍每次实时读 gateway，不受缓存影响。
  */
+const SKILL_LIST_CACHE_TTL_MS = 60 * 1000;
+const skillListStatsCache = new Map<string, { payload: Map<string, SkillRuntimeStats>; cachedAt: number }>();
+const skillListStatsInflight = new Map<string, Promise<Map<string, SkillRuntimeStats>>>();
+
+function getSkillRuntimeStatsCached(skillNames: string[], range: SkillStatsRange): Promise<Map<string, SkillRuntimeStats>> {
+  const cacheKey = `${range}|${skillNames.join(',')}`;
+  const cached = skillListStatsCache.get(cacheKey);
+  if (cached && Date.now() - cached.cachedAt < SKILL_LIST_CACHE_TTL_MS) {
+    return Promise.resolve(cached.payload);
+  }
+  const inflight = skillListStatsInflight.get(cacheKey);
+  if (inflight) return inflight;
+  const computation = getSkillRuntimeStats(skillNames, range)
+    .then((payload) => {
+      skillListStatsCache.set(cacheKey, { payload, cachedAt: Date.now() });
+      return payload;
+    })
+    .finally(() => {
+      if (skillListStatsInflight.get(cacheKey) === computation) {
+        skillListStatsInflight.delete(cacheKey);
+      }
+    });
+  skillListStatsInflight.set(cacheKey, computation);
+  return computation;
+}
+
 router.get('/', async (req: Request, res: Response) => {
   try {
     const gateway = getGateway();
     const skills = gateway.matchSkills({});
     // 时间窗口：all/24h/7d/30d（默认 all 保持兼容；前端目录页默认传 7d）
     const statsRange = (String(req.query.range || 'all')) as SkillStatsRange;
-    const runtimeStats = await getSkillRuntimeStats(skills.map(s => s.definition.name), statsRange);
+    const runtimeStats = await getSkillRuntimeStatsCached(skills.map(s => s.definition.name), statsRange);
     
     const skillList = skills.map(s => {
       const stats = runtimeStats.get(s.definition.name) || s.definition.stats;

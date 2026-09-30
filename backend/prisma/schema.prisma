@@ -78,6 +78,10 @@ model agent_call_logs {
   @@index([parentExecutionId, calledAt])
   @@index([promptCallId, calledAt])
   @@index([executionLayer, calledAt])
+  // 覆盖索引（2026-09-30 性能批）：总览 7d 趋势/失败归因按 calledAt 范围只取 success，
+  // 全量调用计数按 executionLayer 分组只取 success——索引即覆盖，免去 9 万行宽行回表
+  @@index([calledAt, success])
+  @@index([executionLayer, success])
   @@index([providerId, calledAt])
 }
 

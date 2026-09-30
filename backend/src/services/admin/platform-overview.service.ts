@@ -25,7 +25,8 @@ export function buildHourlyTrend(
   logs: Array<{
     calledAt: Date | string;
     success: boolean;
-    errorCode: string | null;
+    /** 7d 趋势行只取 calledAt+success（覆盖索引）；超时分类由失败行覆盖层完成，本字段可缺 */
+    errorCode?: string | null;
     errorCategory?: string | null;
   }>,
   windowStart: Date,
@@ -73,7 +74,56 @@ export function buildHourlyTrend(
   });
 }
 
-export async function computeOverviewStats(): Promise<unknown> {
+/* ===== 全量累计计数（长缓存子层） =====
+ * agent_call_logs 的「全历史调用总数/成功率」是两个全表 groupBy（9 万行宽行扫描，实测各 ~550ms），
+ * 而累计口径天然变化极慢。拆出 10 分钟 TTL 子缓存：60s 主缓存过期重算时不再每次付这两笔全表扫；
+ * fresh=1（总览手动刷新）与进程重启照常绕过。 */
+const ALL_TIME_CACHE_TTL_MS = 10 * 60 * 1000;
+let allTimeCache: { payload: { total: number; success: number; totalAll: number }; cachedAt: number } | null = null;
+let allTimeInflight: Promise<{ total: number; success: number; totalAll: number }> | null = null;
+
+export function clearOverviewAllTimeCache(): void {
+  allTimeCache = null;
+  allTimeInflight = null;
+}
+
+async function computeAllTimeCallStats(realUserScope: { userId: { in: string[] } }, businessExecutionWhere: object, force = false): Promise<{ total: number; success: number; totalAll: number }> {
+  if (!force && allTimeCache && Date.now() - allTimeCache.cachedAt < ALL_TIME_CACHE_TTL_MS) {
+    return allTimeCache.payload;
+  }
+  if (allTimeInflight) return allTimeInflight;
+  const computation = (async () => {
+    const [realGroups, allGroups] = await Promise.all([
+      // Agent 调用统计（真实用户口径：按 userId 归属过滤）
+      prisma.agent_call_logs.groupBy({
+        by: ['success'],
+        where: { ...businessExecutionWhere, ...realUserScope },
+        _count: true,
+      }),
+      // Agent 调用统计全量（含虚拟/测试账号与孤儿行，前端副口径标注）
+      prisma.agent_call_logs.groupBy({
+        by: ['success'],
+        where: businessExecutionWhere,
+        _count: true,
+      }),
+    ]);
+    return {
+      total: realGroups.reduce((sum, s) => sum + s._count, 0),
+      success: realGroups.find((s) => s.success === true)?._count || 0,
+      totalAll: allGroups.reduce((sum, s) => sum + s._count, 0),
+    };
+  })();
+  allTimeInflight = computation;
+  try {
+    const payload = await computation;
+    allTimeCache = { payload, cachedAt: Date.now() };
+    return payload;
+  } finally {
+    if (allTimeInflight === computation) allTimeInflight = null;
+  }
+}
+
+export async function computeOverviewStats(force = false): Promise<unknown> {
     // 获取今日统计（**应用时区本地日**，与学习侧日界同口径）
     const today = startOfDay(new Date());
 
@@ -119,15 +169,13 @@ export async function computeOverviewStats(): Promise<unknown> {
       totalConversations,
       completedConversations,
       activeConversations,
-      totalAgentLogs,
-      totalAgentLogsAll,
+      allTimeStats,
       agentCallsToday,
       agentCallsTodayAll,
       agentCallsTodayVirtual,
       agentSuccessToday,
       agentTimeoutToday,
       activeAgents24h,
-      recentAgentLogs24h,
       wrapupLogs,
       usageTokens7d,
       usageTokens7dAll,
@@ -231,19 +279,8 @@ export async function computeOverviewStats(): Promise<unknown> {
         },
       }),
       
-      // Agent 调用统计（真实用户口径：按 userId 归属过滤；全量见 totalAgentLogsAll）
-      prisma.agent_call_logs.groupBy({
-        by: ['success'],
-        where: { ...businessExecutionWhere, ...realUserScope },
-        _count: true,
-      }),
-
-      // Agent 调用统计全量（含虚拟/测试账号与孤儿行，前端副口径标注）
-      prisma.agent_call_logs.groupBy({
-        by: ['success'],
-        where: businessExecutionWhere,
-        _count: true,
-      }),
+      // 全量累计调用数（长缓存子层：两个全表 groupBy 拆到 10 分钟 TTL，见 computeAllTimeCallStats）
+      computeAllTimeCallStats(realUserScope, businessExecutionWhere, force),
 
       // 今日 Agent 调用数（真实用户口径；全量见 agentCallsTodayAll）
       prisma.agent_call_logs.count({
@@ -328,23 +365,6 @@ export async function computeOverviewStats(): Promise<unknown> {
         }
       }),
 
-      // 最近 24h 调用趋势（P0-1：全量聚合，无 take 截断；时间窗 where 限定 [trendWindowStart, now]，
-      // calledAt 已有索引 @@index([calledAt])；窄 select 避免拉取 error 全文，orderBy 保证聚合顺序稳定）
-      prisma.agent_call_logs.findMany({
-        where: {
-          ...businessExecutionWhere,
-          ...realUserScope,
-          calledAt: { gte: trendWindowStart }
-        },
-        orderBy: { calledAt: 'asc' },
-        select: {
-          calledAt: true,
-          success: true,
-          errorCode: true,
-          errorCategory: true
-        }
-      }),
-
       // wrapup 来源分布抽样（200 → 50：仅用于 wrapupSourceStats 比例估算；真实用户口径）
       prisma.agent_call_logs.findMany({
         where: { agentId: 'skill:session-wrapup', ...realUserScope },
@@ -397,7 +417,9 @@ export async function computeOverviewStats(): Promise<unknown> {
       }),
 
       // 近 7 天失败归因（调用级：与「失败 N」同表同口径，分类见 classifyFailureCategory，
-      // 老行 errorCategory 为空时按 errorCode/error 启发式归并，保证归因之和恒等于失败总数）
+      // 老行 errorCategory 为空时按 errorCode/error 启发式归并，保证归因之和恒等于失败总数）。
+      // calledAt 同时服务 24h 脉搏的超时覆盖（下方 hourlyTrend）：24h 失败行 ⊆ 本结果集，
+      // 不再为 24h 趋势单独拉 3100 行（性能批 2026-09-30）
       prisma.agent_call_logs.findMany({
         where: {
           ...businessExecutionWhere,
@@ -406,7 +428,7 @@ export async function computeOverviewStats(): Promise<unknown> {
           success: false,
         },
         orderBy: { calledAt: 'desc' },
-        select: { errorCategory: true, errorCode: true, error: true },
+        select: { calledAt: true, errorCategory: true, errorCode: true, error: true },
       }),
 
       // G1 总览「近 7 天调用趋势」：行级拉取在端内按本地自然日聚合
@@ -525,15 +547,15 @@ export async function computeOverviewStats(): Promise<unknown> {
     // 计算活跃路径数
     const activePathsCount = activePaths.length;
 
-    // 计算 Agent 成功率 (使用 agentCallLog 的 success 字段)
+    // 计算 Agent 成功率（全量累计口径来自 10 分钟长缓存子层）
     const agentStats = {
-      total: totalAgentLogs.reduce((sum, s) => sum + s._count, 0),
-      success: totalAgentLogs.find(s => s.success === true)?._count || 0,
-      error: totalAgentLogs.find(s => s.success === false)?._count || 0,
+      total: allTimeStats.total,
+      success: allTimeStats.success,
+      error: allTimeStats.total - allTimeStats.success,
     };
     // 全量口径（含虚拟/测试账号）：仅作副指标，前端标注「含虚拟/测试」
     const agentStatsAll = {
-      total: totalAgentLogsAll.reduce((sum, s) => sum + s._count, 0),
+      total: allTimeStats.totalAll,
     };
     
     const agentSuccessRate = agentStats.total > 0 
@@ -544,8 +566,30 @@ export async function computeOverviewStats(): Promise<unknown> {
       ? ((agentSuccessToday / agentCallsToday) * 100).toFixed(1)
       : null;
 
-    // 全量聚合：每行必落 24 桶之一，总数=各小时和；高峰小时在聚合内直接给出（不再前端从抽样推断）
-    const hourlyTrend = buildHourlyTrend(recentAgentLogs24h, trendWindowStart);
+    // 全量聚合：每行必落 24 桶之一，总数=各小时和；高峰小时在聚合内直接给出（不再前端从抽样推断）。
+    // 性能批 2026-09-30：total/success 直接用 7d 趋势行（agentLogs7dRows，(calledAt,success) 覆盖索引免回表）；
+    // 超时分类从 7d 失败行（usageFailuresRows，带 error 字段）过滤出 24h 窗口覆盖——
+    // 24h 失败行 ⊆ 7d 失败行（同 where 同口径），不再为 24h 脉搏单独拉 3100 行。
+    const nowTs = Date.now();
+    const timeoutByHour = new Map<string, number>();
+    for (const row of usageFailuresRows) {
+      const ts = new Date(row.calledAt).getTime();
+      if (ts < trendWindowStart.getTime() || ts > nowTs) continue;
+      if (!isTimeoutLog(row)) continue;
+      const key = hourKeyOf(new Date(row.calledAt));
+      timeoutByHour.set(key, (timeoutByHour.get(key) || 0) + 1);
+    }
+    const hourlyTrend = buildHourlyTrend(agentLogs7dRows, trendWindowStart);
+    // 桶序与 buildHourlyTrend 同源：hourlyTrend[i] = hourKeyOf(当前整点 - (23-i)h)
+    const trendBucketStart = startOfHour(new Date());
+    for (let i = 0; i < hourlyTrend.length; i += 1) {
+      const timeouts = timeoutByHour.get(hourKeyOf(new Date(trendBucketStart.getTime() - (23 - i) * 3600000))) || 0;
+      if (!timeouts) continue;
+      // buildHourlyTrend 把窗口内失败行全部计入 error（7d 行无 error 字段）；超时部分从 error 转入 timeout
+      const bucket = hourlyTrend[i];
+      bucket.timeout = timeouts;
+      bucket.error = Math.max(0, bucket.error - timeouts);
+    }
     const last24hTotal = hourlyTrend.reduce((sum, b) => sum + b.total, 0);
     const peakBucket = hourlyTrend.reduce(
       (best, b) => (b.total > (best?.total || 0) ? b : best),

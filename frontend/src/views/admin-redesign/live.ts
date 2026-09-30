@@ -2030,23 +2030,24 @@ export async function loadLiveData(force = false) {
     announcements: fetchLiveAnnouncements
   }
 
-  // spans 先于 overview（overview 的待办从 spans 推导）
-  try {
-    if (!liveDomainSkippable('spans', force)) {
-      await jobs.spans()
-      liveFetchAt.spans = Date.now()
-    }
-  } catch (e) {
-    liveFailures.value.spans = errMsg(e)
-  }
+  // 首屏门闩两笔并行（性能批 2026-09-30）：spans 与 overview 是两个独立 GET，
+  // 「spans 先于 overview」原本只是总览待办从 spans 推导（数据落地后的响应式计算），
+  // 与请求先后无关；串行 await 会把两笔耗时求和都算进首帧（实测冷启动 6s+6s）。
   const { spans: _s, overview, ...rest } = jobs
-  try {
-    if (!liveDomainSkippable('overview', force)) {
-      await overview()
-      liveFetchAt.overview = Date.now()
-    }
-  } catch (e) {
-    liveFailures.value.overview = errMsg(e)
+  const spansSkippable = liveDomainSkippable('spans', force)
+  const overviewSkippable = liveDomainSkippable('overview', force)
+  const [spansResult, overviewResult] = await Promise.allSettled([
+    spansSkippable ? Promise.resolve() : jobs.spans(),
+    overviewSkippable ? Promise.resolve() : overview(),
+  ])
+  // TTL 时间戳只在真实拉取后刷新：命中缓存跳过时保留原时间戳，否则缓存会被无限续期
+  if (!spansSkippable) {
+    if (spansResult.status === 'fulfilled') liveFetchAt.spans = Date.now()
+    else liveFailures.value.spans = errMsg(spansResult.reason)
+  }
+  if (!overviewSkippable) {
+    if (overviewResult.status === 'fulfilled') liveFetchAt.overview = Date.now()
+    else liveFailures.value.overview = errMsg(overviewResult.reason)
   }
 
   // 核心域（日志）失败才算整体失败；其余局部降级。

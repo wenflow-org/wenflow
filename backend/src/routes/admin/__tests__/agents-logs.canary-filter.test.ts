@@ -107,10 +107,10 @@ describe('执行日志默认排除金丝雀探针（回归）', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    // Promise.all 按序取数：count 第 5 次调用 = canary 计数（total/success/timeout/error 之后）
-    const canaryCountCall = count.mock.calls[4]
-    expect(canaryCountCall).toBeDefined()
-    const canaryWhere = canaryCountCall[0].where
+    // 2026-09-30 性能批：total/success/timeout/error 由 groupBy(2 列)+失败行小拉取合成，
+    // count 只剩 canary 计数一笔（canaryWhere 存在时恰好一次）
+    expect(count).toHaveBeenCalledTimes(1)
+    const canaryWhere = count.mock.calls[0][0].where
     // 排除条件换成仅 canary，其余过滤（时间范围/状态）保持同口径
     expect(canaryWhere.AND).toEqual(expect.arrayContaining([{ sourceEntry: 'system-canary' }]))
     expect(hasCanaryExclusion(canaryWhere.AND)).toBe(false)
@@ -123,7 +123,7 @@ describe('执行日志默认排除金丝雀探针（回归）', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(count).toHaveBeenCalledTimes(4)
+    expect(count).not.toHaveBeenCalled()
     expect(res.body.data.stats.canary).toBe(0)
   })
 })

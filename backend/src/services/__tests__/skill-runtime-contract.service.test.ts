@@ -1,5 +1,5 @@
 const mockPromptGroupBy = jest.fn()
-const mockAgentFindMany = jest.fn()
+const mockAgentQueryRaw = jest.fn()
 const mockPromptFindFirst = jest.fn()
 const mockResolveRoute = jest.fn()
 const mockGetPlatformReliability = jest.fn()
@@ -9,7 +9,8 @@ jest.mock('../../config/database', () => ({
   __esModule: true,
   default: {
     prompt_call_logs: { groupBy: (...args: any[]) => mockPromptGroupBy(...args) },
-    agent_call_logs: { findMany: (...args: any[]) => mockAgentFindMany(...args) },
+    // 2026-09-30 性能批：归属统计改走 $queryRaw（json_extract 单扫），tagged template 直接收 (strings, ...values)
+    $queryRaw: (...args: any[]) => mockAgentQueryRaw(...args),
   },
 }))
 
@@ -72,11 +73,11 @@ describe('skill-runtime-contract.service', () => {
         { agentId: 'skill:goal-conversation', success: true, _count: { _all: 62 } },
         { agentId: 'skill:goal-conversation', success: false, _count: { _all: 20 } },
       ])
-    mockAgentFindMany.mockResolvedValue([
+    mockAgentQueryRaw.mockResolvedValue([
       {
         agentId: 'skill:goal-conversation',
-        metadata: '{"skillId":"goal-conversation"}',
-        success: true,
+        skillId: 'goal-conversation',
+        success: 1,
         durationMs: 1000,
         calledAt: new Date(),
       },
@@ -100,18 +101,18 @@ describe('skill-runtime-contract.service', () => {
 
   it('falls back to agent_call_logs when no prompt logs exist', async () => {
     mockPromptGroupBy.mockResolvedValueOnce([]).mockResolvedValueOnce([])
-    mockAgentFindMany.mockResolvedValue([
+    mockAgentQueryRaw.mockResolvedValue([
       {
         agentId: 'skill:label-generator',
-        metadata: null,
-        success: true,
+        skillId: null,
+        success: 1,
         durationMs: 120,
         calledAt: new Date('2026-07-20T00:00:00.000Z'),
       },
       {
         agentId: 'skill:label-generator',
-        metadata: null,
-        success: false,
+        skillId: null,
+        success: 0,
         durationMs: 80,
         calledAt: new Date('2026-07-21T00:00:00.000Z'),
       },
