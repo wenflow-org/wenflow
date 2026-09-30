@@ -26,6 +26,42 @@
       />
     </section>
 
+    <!-- 状态构成（newui renderGoals 桶组原型移植）：KPI 卡只报 总量/完成率/已取消，
+         这里补上 KPI 缺席的「进行中」并按四态拆条数与占比；卡头 sub 写明「状态构成」以示分工。
+         stats 拉取失败或无数据时整组静默隐藏（比例条同一容错口径）。 -->
+    <section v-if="stats && stats.total > 0" class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">目标对话构成</h3>
+        <span class="mk-card__meta">状态构成 · 四态条数与占比（页头 KPI 只报总量与完成率）</span>
+      </div>
+      <div class="buckets">
+        <div class="bucket">
+          <span class="bucket__v">{{ stats.total }}</span>
+          <span class="bucket__l">目标对话</span>
+          <span class="bucket__bar" aria-hidden="true"><i :style="{ width: '100%', background: 'var(--mk-blue)' }"></i></span>
+          <span class="bucket__l bucket__foot">四态合计</span>
+        </div>
+        <div class="bucket">
+          <span class="bucket__v">{{ stats.active }}</span>
+          <span class="bucket__l">进行中</span>
+          <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcActivePct + '%', background: 'var(--mk-blue)' }"></i></span>
+          <span class="bucket__l bucket__foot">占 {{ gcActivePct }}%</span>
+        </div>
+        <div class="bucket">
+          <span class="bucket__v">{{ stats.completed }}</span>
+          <span class="bucket__l">已完成</span>
+          <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCompletedPct + '%', background: 'var(--mk-green)' }"></i></span>
+          <span class="bucket__l bucket__foot">完成率 {{ stats.completionRate }}%</span>
+        </div>
+        <div class="bucket">
+          <span class="bucket__v">{{ gcCancelledCount }}</span>
+          <span class="bucket__l">已取消</span>
+          <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCancelledPct + '%', background: 'var(--mk-faint)' }"></i></span>
+          <span class="bucket__l bucket__foot">占 {{ gcCancelledPct }}%</span>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== 目标对话列表 ===== -->
     <MkEmptyState
       v-if="!rows.length && !loading && !loadError"
@@ -381,6 +417,11 @@ function gcStatusSeg(n: number): number {
   if (!s || !s.total) return 0
   return Math.round((n / s.total) * 100)
 }
+/* 桶组占比（newui bucketCard 的 pct 参数）：进行中/已取消 = 占总数比例（与 gcStatusSeg 同一算法）；
+   已完成桶直接用后端 completionRate（口径单一来源，避免同屏两算），全部 clamp 0-100。 */
+const gcActivePct = computed(() => gcStatusSeg(stats.value?.active ?? 0))
+const gcCompletedPct = computed(() => Math.max(0, Math.min(100, Math.round(Number(stats.value?.completionRate ?? 0)))))
+const gcCancelledPct = computed(() => gcStatusSeg(gcCancelledCount.value))
 const keyword = ref('')
 const statusFilter = ref('')
 
@@ -839,6 +880,18 @@ onMounted(() => {
 .gc-statusbar__seg--active { background: var(--mk-blue); }
 .gc-statusbar__seg--done { background: var(--mk-green); }
 .gc-statusbar__seg--cancel { background: var(--mk-faint); opacity: 0.5; }
+/* 状态构成桶组（newui renderGoals/bucketCard 原型移植；token 映射：--sp-3→--mk-space-3、
+   --line→--mk-line、--surface→--mk-surface、--r-lg→--mk-radius-lg、--surface-3→--mk-surface-3、
+   --muted→--mk-muted、--fs-micro→--mk-fs-micro）。
+   .buckets 自带 16px 横向内边距：原型里桶组直接落页面，这里落在 mk-card 内（卡无 body padding）。 */
+.buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--mk-space-3); padding: 12px 16px 14px; }
+.bucket { display: grid; gap: 3px; padding: 13px 15px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface); }
+.bucket__v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.bucket__l { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.bucket__bar { height: 4px; border-radius: 999px; background: var(--mk-surface-3); overflow: hidden; margin-top: 5px; }
+.bucket__bar > i { display: block; height: 100%; border-radius: 999px; }
+/* foot（原型 bucketCard 第 5 参 inline style 的类化）：弱化说明文字 */
+.bucket__foot { color: var(--mk-faint); }
 .gc-user .mk-cell-main { min-width: 0; flex: 1; }
 .gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }
 /* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */

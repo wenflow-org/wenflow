@@ -44,6 +44,38 @@
       />
     </section>
 
+    <!-- 路径状态分布（newui 原型 renderPaths「路径状态分布」移植）。数据源 = loadStats 已拉的
+         adminLearningContentApi.getStats() 的 byStatus（服务端按状态 group-by 的全平台计数，
+         服务端 60s 缓存）——响应自带逐状态计数，无需 dashboard 兜底推导，零新增请求。
+         embedded 时随 KPI 区一并隐藏（宿主状态条已承载四态计数）；stats 拉取失败或全零时
+         整卡 v-if 静默隐藏，不留空卡 -->
+    <section v-if="!embedded && pathBandReady" class="mk-card">
+      <div class="mk-card__head">
+        <span class="mk-card__title">路径状态分布</span>
+        <span class="mk-card__meta">按状态聚合 · 共 {{ stats?.total ?? 0 }} 条</span>
+        <div class="mk-card__head-right">
+          <span class="mk-badge mk-badge--ok" title="状态 active 的路径数（服务端全量口径）">{{ byStatus('active') }} 条进行中</span>
+        </div>
+      </div>
+      <div class="oc-bandcard__body">
+        <div class="stageband">
+          <span
+            v-for="seg in pathBandSegments"
+            :key="seg.key"
+            :style="{ width: seg.pct, background: seg.tone }"
+            :title="`${seg.name} · ${seg.n}`"
+          ></span>
+        </div>
+        <div class="stageband__legend">
+          <div v-for="seg in pathBand" :key="seg.key" class="sbl">
+            <span class="sbl__sw" :style="{ background: seg.tone }"></span>
+            <span class="sbl__name">{{ seg.name }}</span>
+            <span class="sbl__n">{{ seg.n }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- 筛选 + 列表（单行头部与教学会话/目标对话 tab 一致：pill 组 + 搜索 + 数据口径 + 列显隐） -->
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
@@ -367,6 +399,43 @@ const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if ((stats.value.byStatus?.failed || 0) > 0) return 'warn'
   return 'ok'
 })
+
+/* ===== 路径状态分布（newui 原型 renderPaths「路径状态分布」移植）=====
+   数据源 = adminLearningContentApi.getStats() 的 byStatus（loadStats 已拉取；服务端按状态
+   group-by 的全平台计数，非本页 1000 条窗口推导）。文案复用 opsShared 的 statusText
+   （与「状态」列同一套）。tone：学习中蓝 / 已完成绿 / 生成失败红 / 已下线灰；
+   byStatus 里四枚举之外的取值归「其它」档（仅实际出现时追加）。 */
+const PATH_BAND_TONE: Record<string, string> = {
+  active: 'var(--mk-blue)',
+  completed: 'var(--mk-green)',
+  failed: 'var(--mk-red)',
+  archived: 'var(--mk-faint)'
+}
+interface PathBandEntry { key: string; name: string; n: number; tone: string }
+const pathBand = computed<PathBandEntry[]>(() => {
+  const entries: PathBandEntry[] = Object.entries(PATH_BAND_TONE).map(([key, tone]) => ({
+    key,
+    name: statusText(key),
+    n: byStatus(key),
+    tone
+  }))
+  let other = 0
+  for (const [k, n] of Object.entries(stats.value?.byStatus || {})) {
+    if (!(k in PATH_BAND_TONE)) other += Number(n) || 0
+  }
+  if (other > 0) entries.push({ key: 'other', name: '其它', n: other, tone: 'var(--mk-faint)' })
+  return entries
+})
+const pathBandTotal = computed(() => pathBand.value.reduce((a, e) => a + e.n, 0))
+/* 段宽 = n / 合计（原型 distBand 口径，合计为 0 时按 1 兜底）；零值段不渲染 */
+const pathBandSegments = computed(() => {
+  const total = pathBandTotal.value || 1
+  return pathBand.value
+    .filter((e) => e.n > 0)
+    .map((e) => ({ ...e, pct: `${(e.n / total) * 100}%` }))
+})
+/* stats 拉取失败（null）或状态合计为 0 → 整卡隐藏（v-if），不留空卡 */
+const pathBandReady = computed(() => !!stats.value && pathBandTotal.value > 0)
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
 const { toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows } = useTableSort<PathRow>({
@@ -704,6 +773,18 @@ defineExpose({ reload: () => void reload(true) })
 .oc-subtask__dot--todo { background: var(--mk-faint); }
 .oc-subtask__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oc-subtask__meta { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+
+/* ===== 状态分布条（newui 原型 stageband/sbl 原样移植；token 映射：
+   --surface-3→--mk-surface-3、--dur/--ease→--mk-dur/--mk-ease-out、
+   --fs-micro→--mk-fs-micro、--muted→--mk-muted、sbl__sw 3px→--mk-radius-xs）===== */
+.oc-bandcard__body { padding: 12px 16px 16px; }
+.stageband { display: flex; gap: 2px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--mk-surface-3); }
+.stageband > span { display: block; height: 100%; transition: width var(--mk-dur) var(--mk-ease-out); }
+.stageband__legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px 18px; margin-top: 14px; }
+.sbl { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }
+.sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }
+.sbl__name { color: var(--mk-muted); }
+.sbl__n { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* 4K：抽屉内容跟随全站节奏 */
 @media (min-width: 2000px) {

@@ -40,6 +40,39 @@
       />
     </section>
 
+    <!-- 记忆分布（newui「教学分组」stageband 原型移植）：到期 / 正常 两段占一条分布条。
+         口径：totals 来自 /admin/memory-review 全量统计；「正常」= traces − due（钳非负，后端无独立字段）。
+         后端没有记忆强度分桶数据，不做「记忆强度分布」；proposed/ambiguous 已由页头 KPI 卡承载，不复读。
+         traces=0（或拉取失败保持 0）时整卡隐藏，不留空卡。 -->
+    <section v-if="totals.traces > 0" class="mk-card">
+      <div class="mk-card__head">
+        <span class="mk-card__title">记忆分布</span>
+        <span class="mk-card__meta">共 {{ totals.traces }} 条记忆痕迹 · 其中 {{ totals.due }} 条到期</span>
+      </div>
+      <div class="mr-dist__body">
+        <div
+          class="stageband"
+          role="img"
+          :aria-label="`记忆分布：到期 ${totals.due} 条（占 ${mrDuePct}%），正常 ${mrNormalCount} 条（占 ${mrNormalPct}%）`"
+        >
+          <span v-if="totals.due > 0" :style="{ width: mrDuePct + '%', background: 'var(--mk-amber)' }" :title="`到期 ${totals.due} 条 · 占 ${mrDuePct}%`"></span>
+          <span v-if="mrNormalCount > 0" :style="{ width: mrNormalPct + '%', background: 'var(--mk-blue)' }" :title="`正常 ${mrNormalCount} 条 · 占 ${mrNormalPct}%`"></span>
+        </div>
+        <div class="stageband__legend">
+          <div class="sbl">
+            <span class="sbl__sw" :style="{ background: 'var(--mk-amber)' }" aria-hidden="true"></span>
+            <span class="sbl__name">到期（到该复习而未复习）</span>
+            <span class="sbl__n">{{ totals.due }}</span>
+          </div>
+          <div class="sbl">
+            <span class="sbl__sw" :style="{ background: 'var(--mk-blue)' }" aria-hidden="true"></span>
+            <span class="sbl__name">正常（未到期）</span>
+            <span class="sbl__n">{{ mrNormalCount }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <h3 class="mk-card__title">用户列表</h3>
@@ -496,6 +529,12 @@ const totals = ref({
 /* ---- 页头 KPI 区（2026-09-28 收口后的派生） ---- */
 const duePct = computed(() => (totals.value.traces ? Math.round((totals.value.due / totals.value.traces) * 100) : 0));
 
+/* 记忆分布（newui stageband 原型移植）：到期 vs 正常 两段。
+   「正常」= traces − due 钳非负（后端无独立字段）；到期段四舍五入，正常段 = 100 − 到期段（两段恰合一条）。 */
+const mrNormalCount = computed(() => Math.max(totals.value.traces - totals.value.due, 0))
+const mrDuePct = computed(() => (totals.value.traces ? Math.min(Math.round((totals.value.due / totals.value.traces) * 100), 100) : 0))
+const mrNormalPct = computed(() => Math.max(100 - mrDuePct.value, 0))
+
 interface OverviewCard {
   label: string
   value: string | number
@@ -799,6 +838,18 @@ onMounted(async () => {
 .mr__due-bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-amber); }
 .mr__due--none .mr__due-bar i { background: var(--mk-faint); opacity: 0.35; }
 .mr__due--high .mr__due-bar i { background: var(--mk-red-fill); }
+
+/* 记忆分布（newui「教学分组」stageband 原型移植；token 映射：--surface-3→--mk-surface-3、
+   --muted→--mk-muted、--fs-micro→--mk-fs-micro、sbl__sw 3px 圆角→--mk-radius-xs）。
+   mk-card 没有 body padding 原语 → 本地 .mr-dist__body（非 mk- 前缀）。 */
+.mr-dist__body { padding: 14px 16px 16px; }
+.stageband { display: flex; gap: 2px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--mk-surface-3); }
+.stageband > span { display: block; height: 100%; }
+.stageband__legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px 18px; margin-top: 14px; }
+.sbl { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }
+.sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }
+.sbl__name { color: var(--mk-muted); }
+.sbl__n { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* 需人工看：>0 抬成琥珀胶囊；0 压成安静破折号 */
 .mr__need {

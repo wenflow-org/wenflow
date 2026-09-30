@@ -31,6 +31,46 @@
       />
     </section>
 
+    <!-- 状态分布条（newui 原型「闭环阶段分布」stageband 移植）：按已加载列表行（rows，最近
+         LIST_LIMIT 条加载窗口）的 status 聚合，非后端全量口径——卡头 meta 如实注明。
+         embedded 时随 KPI 区一并隐藏（宿主状态条承载域计数）；无数据/加载失败不留空卡 -->
+    <section v-if="!embedded && rows.length" class="mk-card">
+      <div class="mk-card__head">
+        <span class="mk-card__title">会话状态分布</span>
+        <span class="mk-card__meta">按状态聚合 · 最近 {{ rows.length }} 条（加载窗口，非全量）</span>
+        <div class="mk-card__head-right">
+          <span v-if="abnormalSessionCount" class="mk-badge mk-badge--warn" title="失败 / 收尾失败 / 超时 合计——需排查">异常 {{ abnormalSessionCount }}</span>
+        </div>
+      </div>
+      <div class="ts-bandcard__body">
+        <div class="stageband">
+          <span
+            v-for="seg in statusBandSegments"
+            :key="seg.key"
+            :style="{ width: seg.pct, background: seg.tone }"
+            :title="`${seg.name} · ${seg.n}`"
+          ></span>
+        </div>
+        <div class="stageband__legend">
+          <!-- 枚举内档位可点 = 状态筛选 toggle（与表头状态下拉同源）；「其它」档无对应筛选项不可点 -->
+          <component
+            :is="seg.clickable ? 'button' : 'div'"
+            v-for="seg in statusBand"
+            :key="seg.key"
+            :type="seg.clickable ? 'button' : undefined"
+            class="sbl"
+            :class="{ 'sbl--link': seg.clickable, 'sbl--on': seg.clickable && statusFilter === seg.key }"
+            :title="seg.clickable ? `点击${statusFilter === seg.key ? '取消筛选' : '筛选'}「${seg.name}」` : `${seg.name} · ${seg.n}`"
+            @click="seg.clickable ? toggleStatusFilter(seg.key) : undefined"
+          >
+            <span class="sbl__sw" :style="{ background: seg.tone }"></span>
+            <span class="sbl__name">{{ seg.name }}</span>
+            <span class="sbl__n">{{ seg.n }}</span>
+          </component>
+        </div>
+      </div>
+    </section>
+
     <!-- 深链未命中提示：?session= 存在但当前列表（最近 LIST_LIMIT 条）中找不到 -->
     <div v-if="deepLinkMiss" class="mk-alert" role="alert">
       未能定位该会话：它可能不在当前列表范围内（最近 {{ LIST_LIMIT }} 条），或已被删除。
@@ -628,6 +668,57 @@ const statusOptions = [
   { value: 'discarded', label: '已废弃' }
 ]
 
+/* ===== 状态分布条（newui 原型「闭环阶段分布」stageband 移植）=====
+   数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口）按 status 聚合；
+   文案复用上方 statusOptions（不另造词）。tone 与表格状态徽章同语义：
+   过程态（初始化/进行中/收尾中）蓝、完成绿、失败族（失败/收尾失败）红、
+   超时/已被替代琥珀、暂停/废弃中性灰；枚举之外的取值归「其它」档（灰）。 */
+const STATUS_BAND_TONE: Record<string, string> = {
+  initializing: 'var(--mk-blue)',
+  active: 'var(--mk-blue)',
+  finalizing: 'var(--mk-blue)',
+  completed: 'var(--mk-green)',
+  failed: 'var(--mk-red)',
+  finalization_failed: 'var(--mk-red)',
+  timeout: 'var(--mk-amber)',
+  superseded: 'var(--mk-amber)',
+  paused: 'var(--mk-faint)',
+  discarded: 'var(--mk-faint)'
+}
+interface StatusBandEntry { key: string; name: string; n: number; tone: string; clickable: boolean }
+const statusBand = computed<StatusBandEntry[]>(() => {
+  const counts = new Map<string, number>()
+  for (const r of rows.value) counts.set(r.status, (counts.get(r.status) || 0) + 1)
+  const known = new Set(statusOptions.map((s) => s.value))
+  const entries: StatusBandEntry[] = statusOptions.map((s) => ({
+    key: s.value,
+    name: s.label,
+    n: counts.get(s.value) || 0,
+    tone: STATUS_BAND_TONE[s.value] || 'var(--mk-faint)',
+    clickable: true
+  }))
+  /* 「其它」档：仅枚举外取值实际出现时追加（无对应筛选项 → 不可点） */
+  let other = 0
+  for (const [k, n] of counts) if (!known.has(k)) other += n
+  if (other > 0) entries.push({ key: 'other', name: '其它', n: other, tone: 'var(--mk-faint)', clickable: false })
+  return entries
+})
+/* 段宽 = n / 合计（原型 distBand 口径，合计为 0 时按 1 兜底）；零值段不渲染 */
+const statusBandSegments = computed(() => {
+  const total = statusBand.value.reduce((a, e) => a + e.n, 0) || 1
+  return statusBand.value
+    .filter((e) => e.n > 0)
+    .map((e) => ({ ...e, pct: `${(e.n / total) * 100}%` }))
+})
+/* 卡头异常 badge：失败/收尾失败/超时合计（与进度列中断态、时间线失败/超时的排查口径一致） */
+const abnormalSessionCount = computed(() =>
+  rows.value.filter((r) => r.status === 'failed' || r.status === 'finalization_failed' || r.status === 'timeout').length
+)
+/* legend 可点档：点击 = 状态筛选 toggle（与表头状态下拉、清除筛选同一 statusFilter） */
+function toggleStatusFilter(key: string) {
+  statusFilter.value = statusFilter.value === key ? '' : key
+}
+
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
 const { toggle: toggleTsSort, sortState: tsSortState, sortRows: sortTsRows } = useTableSort<Row>({
   accessors: {
@@ -928,6 +1019,22 @@ defineExpose({ refreshNow })
   font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
+
+/* ===== 状态分布条（newui 原型 stageband/sbl 原样移植；token 映射：
+   --surface-3→--mk-surface-3、--dur/--ease→--mk-dur/--mk-ease-out、
+   --fs-micro→--mk-fs-micro、--muted→--mk-muted、sbl__sw 3px→--mk-radius-xs）===== */
+.ts-bandcard__body { padding: 12px 16px 16px; }
+.stageband { display: flex; gap: 2px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--mk-surface-3); }
+.stageband > span { display: block; height: 100%; transition: width var(--mk-dur) var(--mk-ease-out); }
+.stageband__legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px 18px; margin-top: 14px; }
+.sbl { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }
+.sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }
+.sbl__name { color: var(--mk-muted); }
+.sbl__n { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* legend 可点档（button 形态的 .sbl）：reset 原生按钮外观，选中档高亮 */
+.sbl--link { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; }
+.sbl--link:hover .sbl__name { color: var(--mk-ink); }
+.sbl--on .sbl__name { color: var(--mk-ink); font-weight: 700; }
 
 
 /* 4K 断点见文件末尾（需在基础样式之后定义） */
