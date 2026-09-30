@@ -156,7 +156,8 @@
           <h2>用 2 分钟，理出一条能执行的路径。</h2>
           <div class="hn-end__acts">
             <router-link :to="primaryPath" class="hn-btn hn-btn--primary hn-btn--lg">{{ primaryLabel }}</router-link>
-            <router-link to="/vision" class="hn-btn hn-btn--light hn-btn--lg">为什么这样学</router-link>
+            <!-- 原型 wf-pend：主 CTA「从一个问题开始」→ 注册；次 CTA「已有账号，登录」→ 登录 -->
+            <router-link :to="loggedIn ? '/dashboard' : '/login'" class="hn-btn hn-btn--light hn-btn--lg">{{ loggedIn ? '回到学习台' : '已有账号，登录' }}</router-link>
           </div>
         </div>
       </section>
@@ -1158,7 +1159,18 @@ main {
   .hn-hero {
     grid-template-columns: 1fr;
     min-height: auto;
-    padding-top: 100px;
+    /* 原型 wf-phero ≤980：44px 上 / 40px 下（原 100px 顶距是旧规格残留） */
+    padding: 44px 0 40px;
+    gap: 28px;
+  }
+  /* 原型移动端 hero CTA：纵向堆叠、按钮 200px 左对齐（原横排两等分） */
+  .hn-hero__cta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .hn-hero__cta .hn-btn {
+    width: 200px;
+    max-width: 100%;
   }
   .hn-stage__chat,
   .hn-stage__desk {
@@ -1207,8 +1219,10 @@ main {
   .hn-shell {
     width: min(100% - 28px, 1180px);
   }
+  /* 原型 wf-phero h1 = clamp(34px,5vw,58px)，390 视口落 34px（原 clamp 42px 偏大） */
   .hn-hero h1 {
-    font-size: clamp(32px, 11vw, 42px);
+    font-size: 34px;
+    line-height: 1.08;
   }
   .hn-foot__brand em {
     display: none;

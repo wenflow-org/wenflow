@@ -301,13 +301,32 @@ onUnmounted(() => {
 }
 
 @media (max-width: 980px) {
-  .mknav__links,
-  .mknav__acts {
+  /* 移动端只留三件：品牌 · 主题钮 · 汉堡（原型 wf-pnav ≤980：links 与两个
+     文字钮全隐，图标钮保留 42px）。汉堡是比原型多带的移动端导航能力。 */
+  .mknav__links {
     display: none;
+  }
+  .mknav__acts {
+    display: flex;
+    margin-left: auto;
+  }
+  .mknav__acts .mknav__btn {
+    display: none;
+  }
+  /* 原型 wf-pnav ≤980：64px 条高 + 36px logo（移动首屏被导航吃掉过多高度） */
+  .mknav__in {
+    min-height: 64px;
+  }
+  .mknav__logo img {
+    height: 36px;
+  }
+  .mknav__icon {
+    width: 42px;
+    height: 42px;
   }
   .mknav__burger {
     display: block;
-    margin-left: auto;
+    margin-left: 10px;
   }
   .mknav__drawer {
     display: grid;

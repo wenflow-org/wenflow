@@ -7,7 +7,7 @@
       <section class="vn-hero vn-shell">
         <div class="vn-hero__copy">
           <span class="vn-pill">WHY WENFLOW</span>
-          <h1>答案越来越多时，更值得练的是提问与判断。</h1>
+          <h1>答案越来越多时，<br />更值得练的是提问与判断。</h1>
           <p>
             AI 能快速给出标准答案时，人更值得练的不只是记住知识，而是定义问题、看见结构、判断取舍，并在反馈里持续修正。
           </p>
@@ -273,10 +273,11 @@ main {
 }
 .vn-hero h1 {
   margin: 0;
-  font-size: clamp(38px, 5.5vw, 64px);
+  /* 原型 wf-pvis__hero h1：clamp(34px,5vw,58px)、15em（390 视口落 34px） */
+  font-size: clamp(34px, 5vw, 58px);
   line-height: 1.1;
   letter-spacing: -0.045em;
-  max-width: 14em;
+  max-width: 15em;
 }
 .vn-hero__copy > p {
   margin: 0;
@@ -615,11 +616,12 @@ main {
   }
   .vn-hero {
     min-height: auto;
-    padding-top: 110px;
+    /* 原型 wf-pvis__hero ≤980：52px 上 / 40px 下（原 110px 顶距是旧规格残留） */
+    padding: 52px 0 40px;
+    gap: 28px;
   }
-  /* 单列窄容器（≤900px）下 38px 标题按字符断行会甩出孤词行（「…提问与 / 判断。」）：
-     balance 均分行宽，保证末行不成孤儿 */
-  .vn-hero h1 { text-wrap: balance; }
+  /* 38px 孤词行问题已由「字号下调 + 逗号后显式换行（原型同款 <br/>）」解决，
+     不再需要 text-wrap: balance 抹掉原型的断行控制 */
   /* 触屏热区：状态区链接 21px、页脚链接 16px、返回首页 20px——宣传页上这些是唯一的外部/返回
      入口，加纵向内边距抬到 ≥34px（配色不变；块内边距同步收一点，页面不至于变高） */
   .vn-status__links { gap: 12px; margin-top: 10px; }
