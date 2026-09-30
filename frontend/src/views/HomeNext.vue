@@ -3,10 +3,6 @@
     <MarketingNav :logged-in="loggedIn" />
 
     <main id="top">
-      <div class="hn-bg" aria-hidden="true">
-        <div class="hn-grid" />
-      </div>
-
       <!-- Hero：大字 + 舞台示意 -->
       <section class="hn-hero hn-shell">
         <div class="hn-hero__copy">
@@ -357,25 +353,6 @@ onUnmounted(() => {
 }
 
 /* Nav 由 MarketingNav 组件提供（首页/愿景共用同一份导航） */
-
-/* BG */
-.hn-bg {
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1200px;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 0;
-}
-.hn-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(23, 32, 51, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(23, 32, 51, 0.035) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), transparent 70%);
-}
 
 main {
   position: relative;

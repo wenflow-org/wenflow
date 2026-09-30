@@ -3,10 +3,6 @@
     <MarketingNav :logged-in="loggedIn" />
 
     <main>
-      <div class="vn-bg" aria-hidden="true">
-        <div class="vn-grid" />
-      </div>
-
       <!-- 时代问题 -->
       <section class="vn-hero vn-shell">
         <div class="vn-hero__copy">
@@ -245,26 +241,6 @@ onUnmounted(() => {
 .vn-btn--lg {
   min-height: 50px;
   padding: 0 24px;
-}
-
-/* BG */
-
-.vn-bg {
-  position: absolute;
-  inset: 0 0 auto;
-  height: 800px;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 0;
-}
-.vn-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(23, 32, 51, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(23, 32, 51, 0.035) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent 72%);
 }
 
 main {

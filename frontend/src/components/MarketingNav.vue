@@ -20,6 +20,17 @@
         <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer" class="mknav__link" @click="closeMenu">GitHub</a>
       </nav>
       <div class="mknav__acts">
+        <!-- 主题切换降噪（原型 wf-pnav 同款）：顶栏内不描边，只留 hover 反馈，
+             让「登录 / 从一个问题开始」保持为唯一两个按钮 -->
+        <button
+          type="button"
+          class="mknav__icon"
+          :aria-label="isDark ? '切换到亮色模式' : '切换到暗色模式'"
+          @click="toggleTheme"
+        >
+          <Sun v-if="isDark" :size="19" :stroke-width="1.75" aria-hidden="true" />
+          <Moon v-else :size="19" :stroke-width="1.75" aria-hidden="true" />
+        </button>
         <router-link :to="secondaryPath" class="mknav__btn mknav__btn--ghost">{{ secondaryLabel }}</router-link>
         <router-link :to="primaryPath" class="mknav__btn mknav__btn--primary">{{ primaryLabel }}</router-link>
       </div>
@@ -58,7 +69,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Moon, Sun } from 'lucide-vue-next'
 import { useIsDark } from '@/composables/useIsDark';
+import { applyDocumentTheme, writeTheme } from '@/utils/theme';
 
 const isDark = useIsDark();
 import { useRoute } from 'vue-router'
@@ -68,6 +81,14 @@ const props = defineProps<{ loggedIn: boolean }>()
 const route = useRoute()
 const scrolled = ref(false)
 const menuOpen = ref(false)
+
+/* 主题切换：与用户侧唯一事实源同一套读写（v2_theme + 兼容 key），
+   公开页此前没有任何切换入口（原型 wf-pnav 带降噪图标钮） */
+function toggleTheme() {
+  const next = !isDark.value
+  applyDocumentTheme(next ? 'dark' : 'light')
+  writeTheme(next ? 'dark' : 'light')
+}
 
 const primaryPath = computed(() => (props.loggedIn ? '/goal-conversation' : '/register'))
 const secondaryPath = computed(() => (props.loggedIn ? '/dashboard' : '/login'))
@@ -183,8 +204,31 @@ onUnmounted(() => {
 }
 .mknav__acts {
   display: flex;
+  align-items: center;
   gap: 10px;
   margin-left: auto;
+}
+/* 主题切换：降噪图标钮（原型 wf-pnav .wf-piconbtn：44px、12px 圆角、无描边底，
+   仅 hover/焦点反馈）——公开页此前无任何主题入口 */
+.mknav__icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted, #5b6577);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.mknav__icon:hover {
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  color: var(--ink, #172033);
+}
+.mknav__icon:focus-visible {
+  outline: 2px solid var(--blue, #2c63d0);
+  outline-offset: 2px;
 }
 .mknav__btn {
   display: inline-flex;
