@@ -24,12 +24,30 @@ describe('R8-1 同题复读禁令：提示词规则已编译进产物', () => {
     expect(CORE).toContain('同题复读禁令');
   });
 
-  it('编译产物 md 含新规则且编号排在末位（不夹在中间破坏既有规则编号）', () => {
+  it('编译产物 md 含新规则且编号未被顶掉（新规则只追加在末位，既有编号不动）', () => {
     expect(MD).toContain('同题复读禁令');
+    const line = MD.split('\n').find((l) => l.includes('同题复读禁令')) || '';
+    expect(line.trimStart().startsWith('31.')).toBe(true);
+    // 「排在末位」只约束追加方式：末位规则可随后续新规则后移，但编号必须连续（不跳号、不夹塞）
+    const nums = [...MD.matchAll(/^(\d+)\.\s/gm)].map((m) => Number(m[1]));
+    expect(nums).toContain(31);
+    expect(Math.max(...nums)).toBe(nums.length);
+  });
+
+  it('补课调用规则（2026-09-30 追加）编译进产物且编号未动', () => {
+    expect(CORE).toContain('补课调用');
+    const line = MD.split('\n').find((l) => l.includes('补课调用（supplementRequest')) || '';
+    expect(line.trimStart().startsWith('32.')).toBe(true);
+  });
+
+  it('最新追加的规则在末位（校内锚，2026-09-30 维度 G 评审）', () => {
+    expect(CORE).toContain('校内锚（schoolAnchor');
     const nums = [...MD.matchAll(/^(\d+)\.\s/gm)].map((m) => Number(m[1]));
     const last = Math.max(...nums);
-    const line = MD.split('\n').find((l) => l.includes('同题复读禁令')) || '';
+    const line = MD.split('\n').find((l) => l.includes('校内锚（schoolAnchor')) || '';
     expect(line.trimStart().startsWith(`${last}.`)).toBe(true);
+    // 编号连续：追加不跳号、不夹塞
+    expect(nums[last - 1]).toBe(last);
   });
 
   it('规则同时约束「不得同题」与「收口课至多 1 节」两个维度', () => {

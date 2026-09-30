@@ -15,6 +15,8 @@ import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
 import { buildStageFillNote } from './stage-fill-note';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
+import { buildSupplementRequest, mergeSupplementTasks, needsLessonSupplement } from './stage-task-supplement';
+import { resolveSchoolAnchorForPathDesign, schoolAnchorCoverage } from './school-anchor';
 import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS } from '../../materials/material-prompt-projection';
@@ -240,6 +242,19 @@ export async function enrichLearningPathWithAnderson(
     }> = [];
     let designedTaskCount = 0;
 
+    // 校内锚（2026-09-30 维度 G 评审）：学习者身处某套教材/考试体系时，把册次单元、
+    // 考试范围、学校进度确定性抽取出来喂给 stage-designer（提示词规则 33 要求阶段目标与
+    // 课标题引用）；抽取不到就不注入该键，非校内路径行为与原先完全一致。
+    const pathSchoolAnchor = resolveSchoolAnchorForPathDesign(normalizedInput);
+    if (pathSchoolAnchor) {
+      logger.info('[school-anchor] 校内锚已解析，注入 stage-designer', {
+        runId,
+        textbook: pathSchoolAnchor.textbook,
+        hasExamScope: !!pathSchoolAnchor.examScope,
+        hasPace: !!pathSchoolAnchor.schoolPace,
+      });
+    }
+
     // 阶段任务设计并发度：串行 M 次 LLM 是纯时钟浪费；
     // 限流 2 路，兼顾 LLM 速率限制与 SQLite 写入串行化。
     const STAGE_DESIGN_CONCURRENCY = 2;
@@ -332,24 +347,94 @@ export async function enrichLearningPathWithAnderson(
           ? { previousStageOutcome: options.previousStageOutcome }
           : {}),
         repairHints: null,
+        ...(pathSchoolAnchor ? { schoolAnchor: pathSchoolAnchor } : {}),
       };
       const stageResult = await executeSkill(stageDesignerDefinition, stageDesignerInput);
 
       const rawStageTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
       // hints 硬执行：模型把 subtasksPerStageRange 当软参考（实测 hints=[2,2] 仍给 5 任务/段），
       // 这里按上界兜底裁剪，否则体量锚在上端失效（输出不随锚变化 ⇒ 连校准都测不了）。
-      const stageTasks = clampStageTasksToHints(rawStageTasks, stageHints || (normalizedInput as any)?.planningHints);
+      let stageTasks = clampStageTasksToHints(rawStageTasks, stageHints || (normalizedInput as any)?.planningHints);
       if (stageTasks.length !== rawStageTasks.length) {
         logger.warn(`[stage-hints-clamp] 任务数按 hints 兜底裁剪：stage${milestone.stageNumber} ${rawStageTasks.length} → ${stageTasks.length}`);
       }
+      // 补课（2026-09-30）：targetSubtasksForStage 是**下限**（提示词规则 30 早已写明），
+      // 但模型惯性仍用长课时顶掉课数（法考案例：每阶段要 30 课、8 阶段 7 个只给 5-10 课，
+      // 实交付 0.18×自述预算）。不足锚的 70% 时做**一次**补课调用，补的是清单外的新方向；
+      // 同阶段标题近似的换皮课一律丢弃（评审实证：强填产同质化）。补不齐留缺口账，不硬塞。
+      const wantedLessons = Number((stageHints as any)?.targetSubtasksForStage);
+      let supplementAudit: Record<string, unknown> | null = null;
+      if (needsLessonSupplement(stageTasks, wantedLessons)) {
+        const initialCount = stageTasks.length;
+        const supplementRequest = buildSupplementRequest(
+          stageTasks,
+          wantedLessons,
+          milestone.stageNumber,
+          ((stageHints as any)?.subtaskMinutesRange as [number, number]) || null,
+        );
+        const supplementResult = await executeSkill(stageDesignerDefinition, {
+          ...stageDesignerInput,
+          supplementRequest,
+        }).catch((error: unknown) => {
+          logger.warn(`[stage-supplement] 补课调用失败，保留原产出：stage${milestone.stageNumber}`, {
+            runId,
+            milestoneId: milestone.id,
+            error: String(error).slice(0, 200),
+          });
+          return null;
+        });
+        const incoming = Array.isArray((supplementResult as any)?.subtasks)
+          ? (supplementResult as any).subtasks
+          : [];
+        if (incoming.length > 0) {
+          const { merged, added, dropped, dropReasons } = mergeSupplementTasks(stageTasks, incoming, {
+            upper: Number((stageHints as any)?.subtasksPerStageRange?.[1]) || null,
+            // 只补首轮缺失的动作族：新增课若把首轮整个认知弧原样重跑，学习者感知到的
+            // 就是「同一件事换说法」（评审实证：类型分布逐族重复，字面相似度却 <0.5）。
+            requireTypeNovelty: 'taskType',
+          });
+          if (added.length > 0) {
+            stageTasks = clampStageTasksToHints(merged, stageHints || (normalizedInput as any)?.planningHints);
+          }
+          supplementAudit = {
+            requested: wantedLessons,
+            initial: initialCount,
+            incoming: incoming.length,
+            added: added.length,
+            dropped: dropped.length,
+            dropReasons,
+            final: stageTasks.length,
+          };
+          logger.warn(`[stage-supplement] stage${milestone.stageNumber} 补课：要 ${wantedLessons} 首轮 ${initialCount} → 新增 ${added.length}（丢弃近重复 ${dropped.length}）→ ${stageTasks.length}`, {
+            runId,
+            milestoneId: milestone.id,
+          });
+        }
+      }
       assertStageTasksPresent(milestone.stageNumber, stageTasks);
+      // 校内锚覆盖观测（只 warn 不阻断）：阶段目标+课标题是否真的引用了教材册次/考试范围。
+      // 评审实证：锚传进上下文却没落进任何阶段——这里把它变成可复盘的事实。
+      if (pathSchoolAnchor) {
+        const coverage = schoolAnchorCoverage(pathSchoolAnchor, [
+          milestone.goal || milestone.title || '',
+          ...stageTasks.map((t: any) => String(t?.title || '')),
+        ]);
+        if (!coverage.referenced) {
+          logger.warn(`[school-anchor] stage${milestone.stageNumber} 阶段目标未引用锚要素：${coverage.missing.join('/')}`, {
+            runId,
+            milestoneId: milestone.id,
+            textbook: pathSchoolAnchor.textbook,
+          });
+        }
+      }
       stageDesignRawOutputs[`stage-${milestone.stageNumber}`] = {
         inputPayload: stageDesignerInput,
         rawModelOutput: stageResult?._debug?.rawModelOutput || null,
         extractedJson: stageResult?._debug?.extractedJson || null,
         normalizedOutput: {
           subtasks: stageTasks,
-        }
+        },
+        ...(supplementAudit ? { supplement: supplementAudit } : {}),
       };
       stageDesignOutputs.push({
         milestoneId: milestone.id,

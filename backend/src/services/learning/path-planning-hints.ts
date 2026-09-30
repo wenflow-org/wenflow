@@ -515,6 +515,19 @@ export function derivePlanningHints(
       })()
     : defaultMinutesRange;
 
+  // 日槽位钳制（2026-09-30 广度跑批 + 校内维度 G 评审实证）：自由文本 timePerSession 只描述
+  // 「一次能学多久」，可能来自**周末/偶尔**的长块（「周末能到两小时」），而学习者真正的日常
+  // 节奏在结构化 timeDimensions.sessionsLengthMin 里（每天 30 分钟）。实测 rw-school5-06：
+  // 自述每天 30 分钟，分钟档却被推成 [36,120]，阶段 3 出现 90 分钟单课——家长按半小时排时间，
+  // 打开课就不可执行，直接违反提示词「单课必须能在用户一次学习坐姿里上完」的硬规则。
+  // 修法：结构化日槽位存在时，**上界不得越过它**（周末长块是学习者自己的选择，不是默认课长）。
+  const structuredSessionMinutes = Number(timeDimensions?.sessionsLengthMin);
+  if (Number.isFinite(structuredSessionMinutes) && structuredSessionMinutes > 0) {
+    const dailyCap = Math.max(8, Math.round(structuredSessionMinutes));
+    const upper = Math.min(subtaskMinutesRange[1], dailyCap);
+    subtaskMinutesRange = [Math.min(subtaskMinutesRange[0], upper), upper];
+  }
+
   const parsedBudgetMinutes = parseBudgetMinutes(timeBudget);
   if (Number.isFinite(parsedBudgetMinutes)) {
     const budgetMinutes = parsedBudgetMinutes as number;

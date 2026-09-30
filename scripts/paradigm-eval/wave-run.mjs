@@ -24,6 +24,7 @@ const idsArg = arg('ids', '');
 const idsFile = arg('ids-file', '');
 const CONC = Math.max(1, Math.min(8, Number(arg('concurrency', '2'))));
 const TAG = arg('tag', 'wave');
+const RUN = Number(arg('run', '1'));
 const ids = (idsFile
   ? fs.readFileSync(path.resolve(HERE, idsFile), 'utf8').split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
   : idsArg.split(',').map((s) => s.trim()).filter(Boolean));
@@ -33,7 +34,7 @@ const SUMMARY = path.join(RESULTS, `wave-${TAG}-summary.jsonl`);
 fs.mkdirSync(RESULTS, { recursive: true });
 const log = (m) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
 
-function stateFile(id) { return path.join(RESULTS, `${id}-r1.json`); }
+function stateFile(id) { return path.join(RESULTS, `${id}-r${RUN}.json`); }
 function readState(id) {
   try { return JSON.parse(fs.readFileSync(stateFile(id), 'utf8')); } catch { return null; }
 }
@@ -52,13 +53,16 @@ async function runCell(id) {
     log(`${id} cleared failed-gen state for retry`);
   }
   const ok = await new Promise((resolve) => {
-    execFile('node', ['drive.mjs', 'cell', id, '1'], { cwd: HERE, timeout: 30 * 60 * 1000, maxBuffer: 32 * 1024 * 1024 }, (err) => resolve(!err));
+    execFile('node', ['drive.mjs', 'cell', id, String(RUN)], { cwd: HERE, timeout: 30 * 60 * 1000, maxBuffer: 32 * 1024 * 1024 }, (err) => resolve(!err));
   });
   st = readState(id);
   const pathId = st?.pathId || null;
+  // 成功判据必须是 drive 侧终态（done = 生成就绪且有课）：
+  // 早先只看 pathId 会把「骨架可用但零课」的失败格记成 DONE，虚高跑批成功率（wave4 实测 4/30）。
+  const reallyDone = st?.status === 'done' && !!pathId;
   const durSec = Math.round((Date.now() - t0) / 1000);
-  record({ id, ok: ok && !!pathId, pathId, durSec, err: ok ? null : 'no-path-or-exit' });
-  log(`${id} ${ok && pathId ? 'DONE' : 'FAIL'} pathId=${pathId || '-'} (${durSec}s)`);
+  record({ id, ok: ok && reallyDone, pathId, durSec, status: st?.status || null, err: ok && !reallyDone ? 'not-done:' + (st?.status || 'unknown') : null });
+  log(`${id} ${ok && reallyDone ? 'DONE' : 'FAIL'} pathId=${pathId || '-'} (${durSec}s) status=${st?.status || '-'}`);
 }
 
 async function pool() {

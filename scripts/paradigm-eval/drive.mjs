@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
-const BASE = 'http://127.0.0.1:3001';
+const BASE = process.env.API_BASE || 'http://127.0.0.1:3001';
 const DB_PATH = path.join(ROOT, 'backend', 'prisma', 'dev.db');
 const RESULTS = path.join(__dirname, 'results');
 const PASSWORD = 'ParadigmEval2026';
