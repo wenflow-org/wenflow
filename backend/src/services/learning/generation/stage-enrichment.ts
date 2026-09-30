@@ -17,6 +17,7 @@ import { buildStageFillNote } from './stage-fill-note';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
 import { buildSupplementRequest, mergeSupplementTasks, needsLessonSupplement } from './stage-task-supplement';
 import { resolveSchoolAnchorForPathDesign, schoolAnchorCoverage } from './school-anchor';
+import { buildAnchorGoalNote } from './school-anchor-goal';
 import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS } from '../../materials/material-prompt-projection';
@@ -246,6 +247,7 @@ export async function enrichLearningPathWithAnderson(
     // 考试范围、学校进度确定性抽取出来喂给 stage-designer（提示词规则 33 要求阶段目标与
     // 课标题引用）；抽取不到就不注入该键，非校内路径行为与原先完全一致。
     const pathSchoolAnchor = resolveSchoolAnchorForPathDesign(normalizedInput);
+    let anchorGoalNotes = 0;
     if (pathSchoolAnchor) {
       logger.info('[school-anchor] 校内锚已解析，注入 stage-designer', {
         runId,
@@ -729,10 +731,16 @@ export async function enrichLearningPathWithAnderson(
               stageHours,
             });
           }
+          // 阶段目标锚补齐（b3 评审）：模型自发引用率 ~30%（抽签），缺锚时确定性追加对照括注
+          const anchorNote = buildAnchorGoalNote(pathSchoolAnchor, String(milestone.goal || ''));
+          if (anchorNote) {
+            anchorGoalNotes += 1;
+          }
           await tx.milestones.update({
             where: { id: milestone.id },
             data: {
               estimatedHours: stageHours,
+              ...(anchorNote ? { goal: `${milestone.goal || ''}${anchorNote}` } : {}),
               ...(fillNote ? { description: fillNote } : {}),
               updatedAt: new Date(),
             }
@@ -764,6 +772,14 @@ export async function enrichLearningPathWithAnderson(
         logger.warn('[stage-enrichment] 路径总量超出学习者时间容量（计划排不完）', {
           pathId: learningPath.id,
           ...capacityOverload,
+        });
+      }
+      if (pathSchoolAnchor && anchorGoalNotes > 0) {
+        logger.info('[school-anchor] 阶段目标缺锚，已按确定性括注补齐', {
+          runId,
+          pathId: learningPath.id,
+          stagesPatched: anchorGoalNotes,
+          totalStages: learningPath.milestones.length,
         });
       }
       const pathHoursToWrite = pathNormalizedHours > 0 ? pathNormalizedHours : undefined;
