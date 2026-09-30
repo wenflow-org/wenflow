@@ -1,67 +1,53 @@
 <template>
   <div v-if="data" class="mk-page">
-    <!-- 结论先行：今日简报 -->
-    <header class="brief-head" :class="`brief-head--${data.tone}`">
-      <div class="brief-head__verdict">
-        <div class="brief-score-wrap">
-          <div class="brief-score" :style="{ '--pct': data.score ?? 0 }" :title="scoreTitle">
-            <svg viewBox="0 0 44 44">
-              <circle class="brief-score__track" cx="22" cy="22" r="19" />
-              <circle class="brief-score__bar" cx="22" cy="22" r="19" :stroke-dasharray="scoreDash" />
-            </svg>
-            <strong>{{ data.score ?? '—' }}</strong>
-          </div>
-          <span class="brief-score__cap">{{ TERMS.healthScore }}</span>
-        </div>
-        <div>
-          <h3>{{ health.headline }}</h3>
-          <p>{{ health.subline }}</p>
-        </div>
+    <!-- 结论先行（原型 .statusbar 形态）：一条状态条承载 今日结论 + 排查入口 + 健康/仿真摘要。
+         原大横幅（健康环 + 行动作列表）按 newui「UI-分支优化设计」原型退役——原型用一条
+         48px 状态条表达同样的层级：点色=结论、粗体=标题、meta=口径与子项、右端=动作；
+         排查/健康/仿真各收成一个可点 meta（悬停有完整口径），信息一项不丢。 -->
+    <div class="mk-status" :class="`mk-status--${data.tone}`">
+      <span class="mk-status__dot"></span>
+      <span class="mk-status__title">{{ health.headline }}</span>
+      <span class="mk-status__sep"></span>
+      <span class="mk-status__meta">{{ health.subline }}</span>
+      <template v-if="effectiveActions.length">
+        <button
+          v-for="(a, i) in effectiveActions"
+          :key="'agent-' + i"
+          type="button"
+          class="mk-status__meta-link"
+          :class="a.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
+          title="去执行日志排查该 Skill 的失败"
+          @click="investigateAgent(a.agentId)"
+        >{{ a.text }}</button>
+      </template>
+      <span v-else class="mk-status__meta">没有需要立即处理的事项</span>
+      <button
+        type="button"
+        class="mk-status__meta-link"
+        :class="healthTone === 'bad' ? 'mk-status__meta--bad' : healthTone === 'warn' ? 'mk-status__meta--warn' : ''"
+        title="查看健康中心完整检查清单"
+        @click="jump('health-center')"
+      >健康 · {{ healthText }}</button>
+      <button
+        type="button"
+        class="mk-status__meta-link"
+        :class="simTone === 'bad' ? 'mk-status__meta--bad' : simTone === 'warn' ? 'mk-status__meta--warn' : ''"
+        :title="simTitle"
+        @click="jump('virtual-learners')"
+      >仿真 · {{ simHeadline }}</button>
+      <button
+        v-if="wrapupIssue"
+        type="button"
+        class="mk-status__meta-link"
+        :class="wrapupIssue.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
+        :title="wrapupIssue.text"
+        @click="jump('teaching-sessions')"
+      >{{ wrapupIssue.text }}</button>
+      <div class="mk-status__actions">
+        <button type="button" class="mk-status__action" @click="jump('health-center')">健康中心 →</button>
+        <button type="button" class="mk-status__action" @click="jump('virtual-learners')">虚拟学习者 →</button>
       </div>
-      <!-- 后续动作：Skill 失败排查 + 系统健康 + 仿真通道（原两条全宽摘要条收拢进此列表，
-           2026-09-27 用户反馈「头部还是比较空」——结论在左、动作在右，宽屏下头部横向撑满，
-           页面也少两层横幅；窄屏仍堆叠在结论下方） -->
-      <ul class="brief-actions">
-        <template v-if="effectiveActions.length">
-          <li v-for="(a, i) in effectiveActions" :key="'agent-' + i">
-            <span class="brief-actions__dot" :class="`brief-actions__dot--${a.tone}`"></span>
-            <span class="brief-actions__text">{{ a.text }}</span>
-            <button type="button" class="brief-actions__btn" @click="investigateAgent(a.agentId)">
-              去排查
-            </button>
-          </li>
-        </template>
-        <li v-else>
-          <span class="brief-actions__dot brief-actions__dot--ok"></span>
-          <span class="brief-actions__text">没有需要立即处理的事项。</span>
-        </li>
-        <li :title="'查看健康中心完整检查清单'">
-          <span class="brief-actions__dot" :class="`brief-actions__dot--${healthTone}`"></span>
-          <span class="brief-actions__text">
-            <strong>系统健康 · {{ healthText }}</strong>
-          </span>
-          <button type="button" class="brief-actions__btn" @click="jump('health-center')">健康中心 →</button>
-        </li>
-        <li :title="simTitle">
-          <span class="brief-actions__dot" :class="`brief-actions__dot--${simTone}`"></span>
-          <span class="brief-actions__text">
-            <strong>仿真通道 · {{ simHeadline }}</strong>
-            <small>今日虚拟调用 {{ runStats.todayCalls.toLocaleString() }} · 完成率 {{ runStats.completionRate }}% · 进行中 {{ runStats.running }} · 失败 {{ runStats.failed }}</small>
-          </span>
-          <button type="button" class="brief-actions__btn" @click="jump('virtual-learners')">虚拟学习者 →</button>
-        </li>
-        <!-- 总结质量条件行（原「总结产出质量」恒真满分卡撤除，走查 2026-09-27）：
-             只有出现兜底/失败才在此露头，健康时整个行动作列表里没有它 -->
-        <li v-if="wrapupIssue" :title="wrapupIssue.text">
-          <span class="brief-actions__dot" :class="`brief-actions__dot--${wrapupIssue.tone}`"></span>
-          <span class="brief-actions__text">
-            <strong>课后总结质量</strong>
-            <small>{{ wrapupIssue.text }}</small>
-          </span>
-          <button type="button" class="brief-actions__btn" @click="jump('teaching-sessions')">教学会话 →</button>
-        </li>
-      </ul>
-    </header>
+    </div>
 
     <div class="brief-grid">
       <!-- KPI 行：今日窗口指标（共享 MkKpi，clickable 跳转） -->
@@ -76,6 +62,28 @@
           clickable
           @click="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
         />
+      </section>
+
+      <!-- 教学闭环（原型 .loop 招牌块）：五环各一卡，展示当前各环规模与去向。
+           口径（悬停可见）：对话/路径/评估来自 overview/stats（随 10s 轮询刷新）；
+           教学回合=会话累计、记忆复习=到期待办（进页拉一次，低频足够）。 -->
+      <section class="brief-card brief-card--full">
+        <div class="brief-card__head">
+          <h4>教学闭环</h4>
+          <span class="brief-card__meta">目标对话 → 路径规划 → 教学回合 → 课后评估 → 记忆复习</span>
+          <span v-if="loopFailedPaths" class="mk-status__filter" title="进行中路径里的失败数">失败 {{ loopFailedPaths }}</span>
+        </div>
+        <div class="mk-loop">
+          <template v-for="(s, i) in loopStages" :key="s.name">
+            <span v-if="i" class="mk-loop__arrow" aria-hidden="true">→</span>
+            <div class="mk-loop__step" :class="`mk-loop__step--${s.tone}`" :title="s.title">
+              <span class="mk-loop__no">阶段 {{ i + 1 }}</span>
+              <span class="mk-loop__name">{{ s.name }}</span>
+              <span class="mk-loop__meta">{{ s.meta }}</span>
+              <span class="mk-loop__val">{{ s.val }}</span>
+            </div>
+          </template>
+        </div>
       </section>
 
       <!-- 系统脉搏 -->
@@ -329,8 +337,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource } from './store';
 import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing, liveVirtualRunStats, type LiveOverviewFull } from './live';
-import { adminHealthCenterApi } from '@/api/adminApi';
-import { TERMS } from './terms';
+import { adminHealthCenterApi, adminMemoryReviewApi, adminTeachingSessionsApi } from '@/api/adminApi';
 import MkKpi from '@/components/mk/MkKpi.vue';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
@@ -360,14 +367,57 @@ const effectiveActions = computed(() => {
 });
 
 const data = computed<BriefData | null>(() => liveOverviewFull.value);
-// 后端滚动窗口桶带 label（'HH:00'），柱图 title 直接用它
-const scoreDash = computed(() => `${(data.value?.score ?? 0) * 1.194} 119.4`);
-const scoreTitle = computed(() => {
-  if (!data.value) return ''
-  const score = data.value.score
-  const label = score == null ? '—' : `${score}%`
-  return `${TERMS.healthScoreTitle}（${label}）\n${health.value.subline}`
+
+/* ===== 教学闭环条（原型 .loop）=====
+   五环规模：对话/路径/评估在 overview/stats 里（随轮询刷新）；
+   教学回合（会话累计）与记忆复习（到期待办）是另外两个端点，进页拉一次——
+   这两环是低频口径（累计数/当日待办），不需要 10s 级新鲜度，也不该进轮询加重负载。 */
+const teachTotal = ref<number | null>(null);
+const memDue = ref<number | null>(null);
+interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title: string }
+const loopStages = computed<LoopStage[]>(() => {
+  const d = data.value;
+  const evalOk = (d?.wrapup.evaluationModel ?? 0) + (d?.wrapup.evaluationAiFallback ?? 0);
+  return [
+    {
+      name: '目标对话', meta: '澄清真实目标与约束',
+      val: `${d?.loop.conversationsActive ?? 0} 进行中`, tone: 'active',
+      title: '进行中的目标对话（overview/stats · 随轮询刷新）',
+    },
+    {
+      name: '路径规划', meta: '生成阶段化学习路径',
+      val: `${d?.loop.pathsActive ?? 0} 进行中`, tone: 'done',
+      title: `进行中路径 ${d?.loop.pathsActive ?? 0} · 失败 ${d?.loop.pathsFailed ?? 0}（overview/stats · 随轮询刷新）`,
+    },
+    {
+      name: '教学回合', meta: '回合式讲解与追问',
+      val: teachTotal.value == null ? '—' : `${teachTotal.value.toLocaleString()} 累计`, tone: 'done',
+      title: '教学会话累计数（教学会话列表 total · 进页时拉取）',
+    },
+    {
+      name: '课后评估', meta: '产出与掌握度评估',
+      val: `${evalOk} 份`, tone: 'done',
+      title: `评估产出 ${evalOk} 份 · 失败 ${d?.wrapup.evaluationFailed ?? 0}（wrapup 样本口径 · 随轮询刷新）`,
+    },
+    {
+      name: '记忆复习', meta: '遗忘曲线调度复习',
+      val: memDue.value == null ? '—' : `${memDue.value} 待办`,
+      tone: (memDue.value ?? 0) > 0 ? 'alert' : 'done',
+      title: '到期未复习的记忆条数（记忆与复盘 totals.due · 进页时拉取）',
+    },
+  ];
 });
+const loopFailedPaths = computed(() => data.value?.loop.pathsFailed ?? 0);
+async function loadLoopExtras() {
+  try {
+    const r = await adminMemoryReviewApi.overview({ limit: 1 });
+    memDue.value = Number(r.data?.data?.totals?.due ?? 0);
+  } catch { /* 拉不到就留「—」，不阻塞页面 */ }
+  try {
+    const r = await adminTeachingSessionsApi.list({ limit: 1 });
+    teachTotal.value = Number(r.data?.data?.total ?? 0);
+  } catch { /* 同上 */ }
+}
 
 /* ===== 统一柱状图（OvBars）数据映射：四个柱状图收敛为同一种视觉语言
    （2026-09-27 走查「四个柱状图两种款式」——脉搏/调用趋势是 ECharts、
@@ -653,6 +703,7 @@ const { start: startAutoRefresh } = useSafePolling(
 )
 onMounted(() => {
   void loadHealth()
+  void loadLoopExtras()
   lastUpdated.value = new Date().toTimeString().slice(0, 5)
   startAutoRefresh()
 })
@@ -700,153 +751,8 @@ watch(liveLoading, (loading) => {
 /* 页面容器已统一走 .mk-page（shared.css）：容器级 padding/边距/超大屏 max-width 封顶随全站规范 */
 /* live 数据不可用时的空态 */
 
-/* 简报头 */
-.brief-head {
-  display: grid;
-  gap: 12px;
-  padding: 16px 18px;
-  border-radius: 12px;
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-}
-.brief-head--warn { border-color: rgba(180, 83, 9, 0.3); background: color-mix(in srgb, var(--mk-amber) 5%, var(--mk-surface)); }
-.brief-head--bad { border-color: rgba(220, 38, 38, 0.35); background: color-mix(in srgb, var(--mk-red) 5%, var(--mk-surface)); }
-.brief-head--muted { background: #fafbfd; }
-
-.brief-head__verdict {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.brief-head__verdict h3 { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 750; }
-.brief-head__verdict p { margin: 3px 0 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-
-.brief-score-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-}
-.brief-score {
-  position: relative;
-  width: 52px;
-  height: 52px;
-}
-.brief-score svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-.brief-score__track { fill: none; stroke: #edf1f8; stroke-width: 5; }
-.brief-score__bar {
-  fill: none;
-  stroke: var(--mk-blue);
-  stroke-width: 5;
-  stroke-linecap: round;
-  transition: stroke-dasharray 0.5s ease;
-}
-.brief-head--warn .brief-score__bar { stroke: var(--mk-amber); }
-.brief-head--bad .brief-score__bar { stroke: var(--mk-red); }
-.brief-head--muted .brief-score__bar { stroke: #c3cede; }
-.brief-score strong {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--mk-fs-body);
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  color: var(--mk-ink);
-}
-.brief-head--warn .brief-score strong { color: var(--mk-amber); }
-.brief-head--bad .brief-score strong { color: var(--mk-red); }
-.brief-head--muted .brief-score strong { color: var(--mk-faint); }
-.brief-score__cap {
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--mk-faint);
-  white-space: nowrap;
-}
-
-.brief-actions {
-  margin: 0;
-  padding: 10px 0 0;
-  list-style: none;
-  border-top: 1px dashed var(--mk-line);
-  display: grid;
-  gap: 8px;
-}
-.brief-actions li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: var(--mk-fs-body);
-}
-.brief-actions__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.brief-actions__dot--bad { background: var(--mk-red); }
-.brief-actions__dot--warn { background: var(--mk-amber); }
-/* muted（健康检查/仿真加载中或空闲）：灰底对齐 feed__dot 默认灰，否则渲染成透明圆点 */
-.brief-actions__dot--muted { background: #c3cede; }
-.brief-actions__text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-.brief-actions__text strong { font-weight: 700; flex-shrink: 0; }
-.brief-actions__btn {
-  flex: 0 0 auto;
-  margin-left: auto;
-  padding: 5px 12px;
-  border: 1px solid rgba(44, 99, 208, 0.28);
-  border-radius: 999px;
-  background: #eef5ff;
-  color: var(--mk-blue);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: 0.12s ease;
-}
-.brief-actions__btn:hover {
-  background: #dbeafe;
-  border-color: rgba(44, 99, 208, 0.45);
-}
-.brief-actions__dot--ok { background: var(--mk-green); }
-/* 系统健康/仿真两行动作：主标题 + 弱化的统计尾巴（长串省略，不挤按钮） */
-.brief-actions__text strong { font-weight: 700; }
-.brief-actions__text small {
-  flex: 1;
-  min-width: 0;
-  margin-left: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--mk-fs-micro);
-  font-weight: 400;
-  color: var(--mk-faint);
-}
-
-/* ≥1281 桌面：结论在左、后续动作在右（走查 2026-09-27 用户反馈「头部还是比较空」：
-   1640 宽的横幅里结论只占左侧一小块）。1280 及以下仍上下堆叠（基础样式）。 */
-@media (min-width: 1281px) {
-  .brief-head {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-    align-items: center;
-    gap: 18px;
-  }
-  .brief-actions {
-    align-self: stretch;
-    align-content: center;
-    padding-top: 0;
-    padding-left: 18px;
-    border-top: 0;
-    border-left: 1px dashed var(--mk-line);
-  }
-}
+/* 教学闭环卡通栏（原型 .loop 在总览占整行；wide2 只跨 2 列不够它用） */
+.brief-card--full { grid-column: 1 / -1; }
 
 /* 总览栅格：三等宽列（等宽才能形成稳定节奏；LLM 宽卡/动态全宽按需跨列） */
 .brief-grid {
@@ -1181,13 +1087,6 @@ watch(liveLoading, (loading) => {
 @media (min-width: 2000px) {
   .brief-card { padding: 20px 24px; }
   .brief-card h4 { font-size: var(--mk-fs-micro); }
-  .brief-score { width: 64px; height: 64px; }
-  .brief-score strong { font-size: var(--mk-fs-emphasis); }
-  .brief-score__cap { font-size: var(--mk-fs-micro); }
-  .brief-head__verdict h3 { font-size: var(--mk-fs-20); }
-  .brief-head__verdict p { font-size: var(--mk-fs-body); }
-  .brief-actions li { font-size: var(--mk-fs-body); }
-  .brief-actions__btn { font-size: var(--mk-fs-body); }
   .brief-card__note { font-size: var(--mk-fs-body); }
   .feed-filter { font-size: var(--mk-fs-micro); }
   .feed__empty { font-size: var(--mk-fs-body); }
@@ -1206,13 +1105,6 @@ watch(liveLoading, (loading) => {
 @media (min-width: 2800px) {
   .brief-card { padding: 24px 30px; }
   .brief-card h4 { font-size: var(--mk-fs-micro); }
-  .brief-score { width: 76px; height: 76px; }
-  .brief-score strong { font-size: var(--mk-fs-emphasis); }
-  .brief-score__cap { font-size: var(--mk-fs-micro); }
-  .brief-head__verdict h3 { font-size: 24px; }
-  .brief-head__verdict p { font-size: var(--mk-fs-body); }
-  .brief-actions li { font-size: var(--mk-fs-body); }
-  .brief-actions__btn { font-size: var(--mk-fs-micro); }
   .brief-card__note { font-size: var(--mk-fs-body); }
   .feed-filter { font-size: var(--mk-fs-micro); }
   .feed__empty { font-size: var(--mk-fs-body); }
@@ -1236,11 +1128,6 @@ watch(liveLoading, (loading) => {
   .brief-card { padding: 28px 36px; }
   .brief-card h4 { font-size: var(--mk-fs-emphasis); }
   .brief-card__note { font-size: var(--mk-fs-micro); }
-  .brief-score { width: 90px; height: 90px; }
-  .brief-score strong { font-size: 23.5px; }
-  .brief-score__cap { font-size: var(--mk-fs-micro); }
-  .brief-actions li { font-size: var(--mk-fs-micro); }
-  .brief-actions__btn { font-size: var(--mk-fs-micro); }
   .feed-filter { font-size: var(--mk-fs-micro); }
   .feed__empty { font-size: var(--mk-fs-micro); }
   .feed li strong { font-size: var(--mk-fs-micro); }
@@ -1258,14 +1145,7 @@ watch(liveLoading, (loading) => {
 
 /* ================= 暗色模式（D1）：总览页硬编码浅色覆写 ================= */
 html[data-theme='dark'] {
-  .brief-head { background: #19191a; }
-  .brief-head--warn { background: linear-gradient(180deg, #2a2410, #19191a); }
-  .brief-head--bad { background: linear-gradient(180deg, #2a1414, #19191a); }
-  .brief-head--muted { background: #19191a; }
-  .brief-score__track { stroke: #2a2b2d; }
   .brief-card { background: #19191a; }
-  .brief-actions__btn { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.35); }
-  .brief-actions__btn:hover { background: rgba(91, 141, 239, 0.26); }
   .ov-skill__track, .usage__bar-track { background: #2a2b2d; }
   .ov-skill:hover, .usage__row--clickable:hover, .feed__item:hover { background: #252627; }
   .feed__item--bad:hover { background: #2a1414; }
@@ -1276,7 +1156,6 @@ html[data-theme='dark'] {
   /* 品牌渐变已 token 化（批23），暗色随 --mk-blue 自动翻转，无需覆写 */
 
   .ov-skill__rank { background: #232325; }
-  .brief-actions__dot--muted { background: #4d4e51; }
   .feed__dot { background: #4d4e51; box-shadow: 0 0 0 3px #19191a; }
   .ov-skill:nth-child(1) .ov-skill__rank { background: rgba(91, 141, 239, 0.22); color: var(--mk-ghost-fg); }
   .feed__toggle:hover { background: #252627; }

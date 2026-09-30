@@ -691,6 +691,43 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-minibar__fill[data-tone='warn'] { background: var(--mk-amber); }
 .mk-minibar__fill[data-tone='bad'] { background: var(--mk-red); }
 
+/* ----- 闭环阶段条（原型 .loop：目标→路径→教学→评估→复习 五段横向流程） -----
+   每段一张证据卡：阶段序号 + 名称 + 一句口径 + 当前读数；段间箭头连接。
+   与 stepper（步骤可视化）的分工：loop 表达**业务闭环的一环**（各段同时各有一批人/在读），
+   stepper 表达**单个对象的推进顺序**（一个会话走到第几步）。语义不同，勿互改。
+   卡面按状态着色：active=主色边、done=绿边、alert=琥珀底（原型 loop__step--*）。 */
+.mk-loop {
+  display: flex;
+  align-items: stretch;
+  gap: var(--mk-space-2);
+  overflow-x: auto;
+  padding: var(--mk-space-1) 0;
+}
+.mk-loop__arrow {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-emphasis);
+}
+.mk-loop__step {
+  flex: 1 1 0;
+  min-width: 138px;
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-lg);
+  background: var(--mk-surface);
+}
+.mk-loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
+.mk-loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
+.mk-loop__step--alert { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); background: var(--mk-amber-bg); }
+.mk-loop__no { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.mk-loop__name { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
+.mk-loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.mk-loop__val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-ink); }
+
 
 /* ----- 业务徽章档位（mk-badge 扩展：字段路由角色 / render / 流转 / 锁定 / core / 完成度五档） -----
    SkillFieldRouting / FieldRoutingTable / Skills 三处收敛共用；色值全部走 token */

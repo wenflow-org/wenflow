@@ -806,6 +806,9 @@ export interface LiveOverviewFull {
   growth7d: { date: string; newUsers: number; activeUsers: number }[]
   feed: { text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; ts?: number; errorCategory?: string; agentId?: string }[]
   actions: { text: string; link: string; tone: 'bad' | 'warn'; agentId: string }[]
+  /** 教学闭环条（原型 .loop）各环规模：overview/stats 直传，零额外请求。
+      教学回合/记忆复习两环另有独立数据源（会话列表 total / memory-review due），由页面侧补齐。 */
+  loop: { conversationsActive: number; pathsActive: number; pathsFailed: number }
 }
 
 export const liveOverviewFull = ref<LiveOverviewFull | null>(null)
@@ -1053,7 +1056,12 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     topSkills: (stats.agents?.topSkills || []).slice(0, 5),
     growth7d: (stats.users?.growth7d || []).slice(0, 7),
     feed: [...feedDeduped.values()].slice(0, 12),
-    actions
+    actions,
+    loop: {
+      conversationsActive: Number(conv.active || 0),
+      pathsActive: Number(learning.activePaths || 0),
+      pathsFailed: Number(learning.failedPaths || 0)
+    }
   }
   return head
 }
