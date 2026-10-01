@@ -197,7 +197,7 @@ export function intentQueryParams(scene: string): Record<string, string> {
 }
 
 /* ---------- 二级页面（drill-in） ---------- */
-export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real'
+export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real' | 'path' | 'skill'
 
 /** 来源记忆：从二级（画像）进三级（会话）后，返回时回到来源页而非直接回一级列表 */
 export interface SubPageFrom {

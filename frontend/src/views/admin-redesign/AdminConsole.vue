@@ -104,6 +104,7 @@ const OpsCenter = asyncPage(() => import('./OpsCenter.vue'));
 const LearnerDetail = asyncPage(() => import('./LearnerDetail.vue'));
 const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
 const UserDetail = asyncPage(() => import('./UserDetail.vue'));
+const PathDetail = asyncPage(() => import('./PathDetail.vue'));
 const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
 const MemoryReview = asyncPage(() => import('./MemoryReview.vue'));
 const BatchExperiments = asyncPage(() => import('./BatchExperiments.vue'));
@@ -144,7 +145,9 @@ const detailComponents: Record<string, unknown> = {
   virtual: VirtualProfile,
   user: UserDetail,
   session: SessionCockpit,
-  'session-real': SessionCockpit
+  'session-real': SessionCockpit,
+  // 路径详情二级页（原型 renderPathDetail 落点；列表行/学习者进度卡下钻）
+  path: PathDetail
 };
 
 export const SCENE_COMPONENTS: Readonly<Record<string, unknown>> = components;
@@ -209,7 +212,7 @@ const router = useRouter()
    二级页此前只存在内存 ref，刷新/深链/前进后退均无法寻址（URL 不显示）。
    打开：openSubPage（任意组件）→ subPage 变化 → URL 补 query；
    恢复：整页刷新 /admin/:page?view=virtual&id=xxx → query watch → subPage 恢复 → 详情组件直接渲染。 */
-const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real']
+const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real', 'path']
 // URL → subPage（深链/刷新/前进后退）；includeTest 透传（虚拟学习者/测试账号深链可查）
 watch(
   () => [route.query.view, route.query.id, route.query.includeTest] as [unknown, unknown, unknown],

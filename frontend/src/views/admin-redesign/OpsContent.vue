@@ -178,15 +178,15 @@
             </tr>
           </thead>
           <tbody>
-            <!-- 行点击进详情（原型 tr data-action="open-path"，.tbl tbody tr cursor:pointer；
-                 键盘可达性同 gc-row/ts-row 判例：tabindex + Enter 触发） -->
+            <!-- 行点击进路径详情二级页（原型 tr data-action="open-path" 进 renderPathDetail，
+                 不再开抽屉；键盘可达性同 gc-row/ts-row 判例：tabindex + Enter 触发） -->
             <tr
               v-for="p in paged"
               :key="p.id"
               class="oc-row"
               tabindex="0"
-              @click="openDetail(p)"
-              @keydown.enter.prevent="openDetail(p)"
+              @click="openPath(p)"
+              @keydown.enter.prevent="openPath(p)"
             >
               <td>
                 <div class="mk-cell-main">
@@ -233,7 +233,7 @@
                 <!-- 操作列文字钮（原型 renderPaths 操作列 btn--sm「详情/下线」+ ⋯ 菜单）；
                      右对齐与 mk-th--right 表头对齐（同 GoalConversations/Users 判例） -->
                 <div class="mk-actions">
-                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(p)">详情</button>
+                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="openPath(p)">详情</button>
                   <button v-if="p.status !== 'archived'" type="button" class="mk-btn mk-btn--sm" :disabled="p.busy" @click.stop="archive(p)">下线</button>
                   <button v-else type="button" class="mk-btn mk-btn--sm" :disabled="p.busy" @click.stop="restore(p)">恢复</button>
                   <div class="mk-menu">
@@ -268,119 +268,19 @@
       />
     </div>
 
-    <!-- 路径结构详情抽屉 -->
-    <Teleport to="body">
-      <div v-if="detailOpen" ref="maskRef" class="mk-drawer">
-        <div class="mk-drawer__mask" @click="detailOpen = false"></div>
-        <div ref="panelRef" class="mk-drawer__panel mk-drawer__panel--wide" role="dialog" aria-label="路径结构">
-          <div class="mk-drawer__head">
-            <!-- 原型 .ovl__head = 头像 + 标题 + 关闭（下边框由 .mk-drawer__head 承载）；
-                 头像字面沿用 renderPathDetail hero 的「路」，用共享 MkCellAvatar 原语 -->
-            <MkCellAvatar name="路" :size="26" />
-            <div>
-              <h3 class="mk-drawer__title">{{ detail?.title || detailRow?.title }}</h3>
-              <!-- 副行只说主题（subject==title 时省略——93% 同值，直出会复读标题）；
-                   用户 / 里程碑数等事实下沉到 mk-facts（原型 openLearner：head 只放标题） -->
-              <span v-if="detailSub" class="mk-drawer__sub">{{ detailSub }}</span>
-            </div>
-            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detailOpen = false">✕</button>
-          </div>
-          <!-- 内容层对齐原型 openLearner 三段式：pills 行 → 事实清单 → 嵌套区块 → foot。
-               pills/事实读自行数据（打开即有，加载中也不空屏），结构详情仍走接口。 -->
-          <div class="mk-drawer__body oc-drawer__body">
-            <div v-if="detailRow" class="oc-drawer__pills">
-              <span class="mk-badge" :class="statusBadge(detailRow.status)">{{ statusText(detailRow.status) }}</span>
-              <span class="mk-badge mk-badge--muted" :title="difficultyTitle(detailRow.difficulty)">{{ difficultyText(detailRow.difficulty) }}</span>
-            </div>
-            <div v-if="detailRow" class="mk-facts">
-              <div><span>用户</span><strong :title="detailRow.user?.email || ''">{{ detailRow.user?.name || '—' }}</strong></div>
-              <div><span>路径 ID</span><strong class="mono" :title="detailRow.id">{{ shortId(detailRow.id, 10, 4) }}</strong></div>
-              <div :title="`${detailRow.completedMilestones}/${detailRow.totalMilestones} 里程碑已完成`">
-                <span>里程碑</span>
-                <strong class="mono">{{ detailRow.completedMilestones }} / {{ detailRow.totalMilestones }}</strong>
-              </div>
-              <div>
-                <span>进度</span>
-                <!-- 原型 kv 的 dd 嵌 meterrow → 事实值嵌 minibar（同目标对话抽屉置信度格） -->
-                <strong class="oc-fact-progress">
-                  <span class="oc-fact-progress__num">{{ progressPct(detailRow) }}%</span>
-                  <span class="mk-minibar oc-fact-progress__bar"><span class="mk-minibar__fill" :data-tone="progressTone(detailRow)" :style="{ width: progressPct(detailRow) + '%' }"></span></span>
-                </strong>
-              </div>
-              <div><span>预计时长</span><strong>{{ detailRow.estimatedHours ? `~${detailRow.estimatedHours}h` : '—' }}</strong></div>
-              <div><span>更新</span><strong :title="fmtDate(detailRow.updatedAt)">{{ timeAgo(detailRow.updatedAt) }}</strong></div>
-            </div>
-            <MkLoading v-if="detailLoading" inline />
-            <!-- 详情加载失败：错误条 + 重试（对齐另两个抽屉；此前失败仅 toast，抽屉留白） -->
-            <div v-else-if="detailError" class="oc-error" role="alert">
-              <span>{{ detailError }}</span>
-              <button type="button" class="mk-link" @click="retryDetail">重试</button>
-            </div>
-            <template v-else-if="detail">
-              <section v-if="detail.description" class="oc-section">
-                <header class="mk-section__head"><h4>目标描述</h4></header>
-                <p class="oc-desc">{{ detail.description }}</p>
-              </section>
-              <section v-if="detail.milestones.length" class="oc-section">
-                <header class="mk-section__head"><h4>路径结构 <span class="mono">{{ detail.milestones.length }}</span></h4></header>
-                <div class="oc-milestones">
-                  <div v-for="m in detail.milestones" :key="m.id" class="oc-milestone">
-                    <div class="oc-milestone__head">
-                      <strong>{{ m.stageNumber }}. {{ m.title }}</strong>
-                      <span class="mk-badge" :class="msBadge(m.status)">{{ msText(m.status) }}</span>
-                      <span class="oc-milestone__meta mono">~{{ m.estimatedHours ?? '—' }}h</span>
-                    </div>
-                    <div v-if="m.subtasks.length" class="oc-subtasks">
-                      <div v-for="t in m.subtasks" :key="t.id" class="oc-subtask">
-                        <span class="oc-subtask__dot" :class="`oc-subtask__dot--${t.status}`"></span>
-                        <span class="oc-subtask__title">{{ t.title }}</span>
-                        <span class="mk-badge mk-badge--sm mk-badge--muted">{{ taskTypeText(t.taskType) }}</span>
-                        <span class="oc-subtask__meta mono">{{ t.estimatedMinutes }}min</span>
-                      </div>
-                    </div>
-                    <p v-else class="mk-na oc-milestone__empty">无子任务</p>
-                  </div>
-                </div>
-              </section>
-            </template>
-          </div>
-          <!-- foot（原型 .ovl__foot：上边框、动作右对齐、危险动作最左）。下线/恢复在抽屉内
-               即可完成（行内按钮被遮罩挡住，此前抽屉打开期间无法下线）；删除仍收 ⋯ 菜单 -->
-          <div v-if="detailRow" class="oc-drawer__foot">
-            <button
-              v-if="detailRow.status !== 'archived'"
-              type="button"
-              class="mk-btn mk-btn--danger"
-              :disabled="detailRow.busy"
-              @click="archive(detailRow)"
-            >下线路径</button>
-            <button
-              v-else
-              type="button"
-              class="mk-btn"
-              :disabled="detailRow.busy"
-              @click="restore(detailRow)"
-            >恢复路径</button>
-            <button type="button" class="mk-btn" @click="detailOpen = false">关闭</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { timeAgo, errMsg, shortId, isPageCacheFresh, markPageFetched } from './live'
-import { intent } from './store'
+import { intent, openSubPage } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { useTableSort } from './useTableSort'
-import { useOverlay, useMaskClose } from './useOverlay'
-import { useEscape } from './useEscape'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -700,64 +600,16 @@ async function remove(p: PathRow) {
   }
 }
 
-/* 详情 */
-interface PathSubtask { id: string; title: string; taskType: string; status: string; estimatedMinutes: number }
-interface PathMilestone { id: string; stageNumber: number; title: string; status: string; estimatedHours?: number | null; description?: string; subtasks: PathSubtask[] }
-interface PathDetail { title: string; subject: string; user?: { name?: string } | null; description?: string; milestones: PathMilestone[] }
-const detailOpen = ref(false)
-const detailLoading = ref(false)
-const detailError = ref('')
-const detail = ref<PathDetail | null>(null)
-/** 最近一次请求详情的行（重试时重放）。ref：抽屉 pills/事实/foot 直读行数据，
- *  下线/恢复在抽屉 foot 操作后状态徽章与按钮要即时翻转 */
-const detailRow = ref<PathRow | null>(null)
-/* 详情抽屉行为四件套（2026-09-26 弹层对齐）：Esc/遮罩/焦点陷阱/滚动锁 */
-const maskRef = ref<HTMLElement | null>(null)
-const panelRef = ref<HTMLElement | null>(null)
-useOverlay(computed(() => detailOpen.value), panelRef)
-useMaskClose(maskRef, () => { detailOpen.value = false })
-useEscape(() => detailOpen.value, () => { detailOpen.value = false })
-
-async function openDetail(p: PathRow) {
-  detailRow.value = p
-  detailOpen.value = true
-  detailLoading.value = true
-  detailError.value = ''
-  detail.value = null
-  try {
-    const res = await adminLearningContentApi.getPathDetail(p.id)
-    detail.value = res.data?.data ?? res.data
-  } catch (e) {
-    // 错误条 + 重试（对齐目标对话/教学会话抽屉）：此前失败仅 toast，抽屉体留白
-    detailError.value = `加载详情失败：${errMsg(e)}`
-    toast.error(detailError.value)
-  } finally {
-    detailLoading.value = false
-  }
+/* 行点击进路径详情二级页（原型 renderPaths 行 data-action="open-path" → renderPathDetail；
+   2026-10-01 结构详情抽屉随行点击改造整体退役，与教学会话行点击进座舱同一交互习惯） */
+function openPath(p: PathRow) {
+  closeMenu()
+  openSubPage('path', p.id)
 }
-
-/** 详情加载失败重试：重放最近一次请求 */
-function retryDetail() {
-  if (detailRow.value) void openDetail(detailRow.value)
-}
-
-/** 抽屉副行：只说主题。93% 的路径 subject 与 title 同值（638 行里 595 行，实测）——
- *  同值时返回空（副行隐藏），不把标题复读第二遍；用户 / 里程碑数等事实由 mk-facts 承载。 */
-const detailSub = computed(() => {
-  const d = detail.value
-  if (!d) return ''
-  if (d.subject && d.title && d.subject.trim() === d.title.trim()) return ''
-  return d.subject || ''
-})
 
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
-function menuDetail(p: PathRow) { closeMenu(); openDetail(p) }
+function menuDetail(p: PathRow) { closeMenu(); openPath(p) }
 function menuDelete(p: PathRow) { closeMenu(); void remove(p) }
-
-const msText = (s: string) => ({ locked: '未解锁', in_progress: '进行中', completed: '已完成' }[s] || s)
-const msBadge = (s: string) =>
-  s === 'completed' ? 'mk-badge--ok' : s === 'in_progress' ? 'mk-badge--info' : 'mk-badge--muted'
-const taskTypeText = (t: string) => ({ practice: '练习', acquire: '习得', reflection: '反思', assessment: '评估' }[t] || t)
 
 /* 深链：独立场景形态（嵌入时由宿主 GoalConversations 消费 intent 并传 initialStatus 预筛）：
    工作台「生成失败路径」→ 预筛 failed（消费后清空，避免菜单直达被残留筛选污染） */
@@ -809,7 +661,7 @@ defineExpose({ reload: () => void reload(true) })
 /* 用户格（原型 .celluser = 头像 + 姓名；同 GoalConversations .gc-user 组合） */
 .oc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .oc-user .mk-cell-main { min-width: 0; flex: 1; }
-/* 行点击进详情（原型 .tbl tbody tr { cursor:pointer } + tr data-action="open-path"） */
+/* 行点击进详情页（原型 .tbl tbody tr { cursor:pointer } + tr data-action="open-path"） */
 .oc-row { cursor: pointer; }
 /* 主题列：subject 字段或为学科或为生成路径时写入的目标文本（可能很长），单行省略 + hover 全文。
    自动布局下列宽随内容，必须给显式截断上限（同 GoalConversations .gc-summary 的 320px） */
@@ -829,45 +681,7 @@ defineExpose({ reload: () => void reload(true) })
 /* 时长：右对齐等宽数字（与表头 mk-th--right 对齐） */
 .oc-hours { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; color: var(--mk-muted); white-space: nowrap; }
 
-/* ===== 抽屉内容层（原型 openLearner 三段式的 body/foot；外壳用共享 .mk-drawer） =====
-   .ovl__body = padding16 + grid gap16（.mk-drawer__body 已带 padding，这里补栅格与间距）；
-   .ovl__foot = 上边框 + 动作右对齐（面板 grid 的隐式第三行，常驻底部不随内容滚走） */
-.oc-drawer__body { display: grid; gap: 16px; align-content: start; }
-.oc-drawer__pills { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.oc-drawer__foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--mk-line);
-}
-/* 事实值嵌 minibar（原型 kv 的 dd 嵌 meterrow；同目标对话抽屉置信度格） */
-.oc-fact-progress { display: grid; gap: 4px; align-items: start; }
-.oc-fact-progress__num { font-family: var(--mk-mono); font-variant-numeric: tabular-nums; }
-.oc-fact-progress__bar { width: 72px; }
-/* 嵌套区块（原型抽屉嵌套无边框卡 → mk-section__head + 内容；同 gc-section/ts-section） */
-.oc-section { display: grid; gap: 8px; }
-
-.oc-desc { color: var(--mk-muted); font-size: var(--mk-fs-micro); line-height: 1.7; margin: 0; }
-.oc-milestone {
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  padding: 10px 12px;
-  margin-bottom: 10px;
-}
-.oc-milestone__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.oc-milestone__head strong { font-size: var(--mk-fs-body); }
-.oc-milestone__meta { margin-left: auto; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.oc-milestone__empty { font-size: var(--mk-fs-micro); margin: 8px 0 0; }
-.oc-subtasks { display: grid; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--mk-line); }
-.oc-subtask { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }
-.oc-subtask__dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.oc-subtask__dot--completed { background: var(--mk-green); }
-.oc-subtask__dot--in_progress { background: var(--mk-blue); }
-.oc-subtask__dot--todo { background: var(--mk-faint); }
-.oc-subtask__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oc-subtask__meta { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+/* 结构详情抽屉已退役（2026-10-01 行点击改走 PathDetail 二级页）；本页只保留列表自身样式 */
 
 /* ===== 状态分布条（newui 原型 stageband/sbl 原样移植；token 映射：
    --surface-3→--mk-surface-3、--dur/--ease→--mk-dur/--mk-ease-out、
@@ -881,27 +695,15 @@ defineExpose({ reload: () => void reload(true) })
 .sbl__name { color: var(--mk-muted); }
 .sbl__n { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 
-/* 4K：抽屉内容跟随全站节奏 */
+/* 4K：进度数字跟随全站节奏 */
 @media (min-width: 2000px) {
   .oc-progress__num { font-size: var(--mk-fs-micro); }
-  .oc-desc { font-size: var(--mk-fs-body); }
-  .oc-milestone__head strong { font-size: var(--mk-fs-body); }
-  .oc-milestone__meta { font-size: var(--mk-fs-micro); }
-  .oc-subtask { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .oc-progress__num { font-size: var(--mk-fs-micro); }
-  .oc-desc { font-size: var(--mk-fs-body); }
-  .oc-milestone__head strong { font-size: var(--mk-fs-body); }
-  .oc-milestone__meta { font-size: var(--mk-fs-micro); }
-  .oc-subtask { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .oc-progress__num { font-size: var(--mk-fs-body); }
-  .oc-desc { font-size: var(--mk-fs-emphasis); }
-  .oc-milestone__head strong { font-size: var(--mk-fs-emphasis); }
-  .oc-milestone__meta { font-size: var(--mk-fs-body); }
-  .oc-subtask { font-size: var(--mk-fs-emphasis); }
 }
 
 /* 暗色模式：补齐暗色覆写（原缺失，与全站 Token 红覆盖对齐） */

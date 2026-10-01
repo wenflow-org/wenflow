@@ -8,7 +8,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import OpsContent from '../OpsContent.vue';
-import { intent } from '../store';
+import { intent, subPage, closeSubPage } from '../store';
 
 const mkPath = (id: string, over: Record<string, unknown> = {}) => ({
   id,
@@ -78,6 +78,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.clearAllMocks();
   document.body.innerHTML = '';
+  closeSubPage();
 });
 
 describe('OpsContent 学习路径 tab 重设计骨架', () => {
@@ -192,48 +193,35 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     w.unmount();
   });
 
-  /** 原型对齐（2026-10-01）：行点击 open-path 打开抽屉（newui renderPaths tr data-action）；
-   *  抽屉内容层 = 原型 openLearner 三段式：ovl__head（头像+标题+关闭）→ ovl__body
-   *  （pills 行 → 事实栅格 → 嵌套区块）→ ovl__foot（危险动作最左、动作右对齐）。 */
-  it('行点击打开抽屉；抽屉 = 头像+标题头、pills+事实栅格体、foot 下线/关闭；Enter 亦可开', async () => {
+  /** 原型对齐（2026-10-01）：行点击 open-path 进 PathDetail 二级页（抽屉退役，
+   *  与教学会话行点击进座舱 / UserDetail/LearnerDetail 同一交互习惯）。
+   *  落点断言走共享 store：subPage.view='path' + 页面内不再渲染抽屉。 */
+  it('行点击 / Enter → 路径详情二级页（subPage=path）；操作列「详情」钮同目标；不再开抽屉', async () => {
+    closeSubPage();
     const w = mount(OpsContent, { props: { embedded: true } });
     await flushPromises();
     await nextTick();
 
-    // 行点击（原型 tr data-action="open-path"）→ 抽屉
+    // 行点击（原型 tr data-action="open-path" → renderPathDetail）
     await w.find('tbody tr.oc-row').trigger('click');
-    await flushPromises();
     await nextTick();
+    expect(subPage.value).toMatchObject({ view: 'path', id: 'lp_a' });
+    // 不再渲染抽屉（结构详情整体退役）
+    expect(document.body.querySelector('.mk-drawer')).toBeNull();
 
-    const panel = document.body.querySelector('.mk-drawer__panel');
-    expect(panel).not.toBeNull();
-    // head：头像（原型 .ovl__head 头像+标题+关闭）+ 标题 + 关闭钮
-    expect(panel!.querySelector('.mk-drawer__head .mk-ava')).not.toBeNull();
-    expect(panel!.querySelector('.mk-drawer__title')!.textContent).toContain('x');
-    // 副行 = 主题（subject 与 title 不同值时直出；同值去重逻辑另有判定，保持不动）
-    expect(panel!.querySelector('.mk-drawer__sub')!.textContent).toContain('另一主题');
-    expect(panel!.querySelector('.mk-drawer__close')).not.toBeNull();
-    // body 第一层：pills 行（状态 + 难度，原型 ovl__body 的 pills 行）
-    expect(panel!.querySelectorAll('.oc-drawer__pills .mk-badge').length).toBe(2);
-    // 事实栅格（共享 .mk-facts = 原型 dl.kv）：六个事实位与顺序
-    const factLabels = Array.from(panel!.querySelectorAll('.mk-facts > div > span')).map((e) => e.textContent);
-    expect(factLabels).toEqual(['用户', '路径 ID', '里程碑', '进度', '预计时长', '更新']);
-    // 进度事实值嵌 minibar（原型 kv 的 dd 嵌 meterrow）
-    expect(panel!.querySelector('.oc-fact-progress .mk-minibar__fill')).not.toBeNull();
-    // foot：危险动作最左 + 关闭（原型 .ovl__foot 右对齐动作组）
-    const footBtns = Array.from(panel!.querySelectorAll('.oc-drawer__foot button')).map((b) => b.textContent!.trim());
-    expect(footBtns).toEqual(['下线路径', '关闭']);
-    expect(panel!.querySelector('.oc-drawer__foot .mk-btn--danger')).not.toBeNull();
-
-    // 关闭钮关抽屉；Enter（键盘可达，同 gc-row/ts-row 判例）再开
-    (panel!.querySelector('.mk-drawer__close') as HTMLButtonElement).click();
+    // 操作列「详情」文字钮 = 同一下钻目标
+    closeSubPage();
+    await w.find('tbody tr.oc-row .mk-actions .mk-btn').trigger('click');
     await nextTick();
-    expect(document.body.querySelector('.mk-drawer__panel')).toBeNull();
+    expect(subPage.value).toMatchObject({ view: 'path', id: 'lp_a' });
+
+    // Enter 键盘可达（同 gc-row/ts-row 判例）
+    closeSubPage();
     await w.find('tbody tr.oc-row').trigger('keydown.enter');
-    await flushPromises();
     await nextTick();
-    expect(document.body.querySelector('.mk-drawer__panel')).not.toBeNull();
+    expect(subPage.value).toMatchObject({ view: 'path', id: 'lp_a' });
 
+    closeSubPage();
     w.unmount();
   });
 });

@@ -67,6 +67,8 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">当前进度</h3>
             <span class="mk-badge mk-badge--info">{{ d.pct }}%</span>
+            <!-- 路径下钻：进路径详情二级页（原型「学习者详情 → 路径」同款；无真实 pathId 时隐藏） -->
+            <button v-if="currentPathId" type="button" class="mk-link" @click="openPathDetail">查看路径结构 →</button>
           </div>
           <div class="ld-progress">
             <strong>{{ d.path }}</strong>
@@ -664,6 +666,8 @@ const graphLoading = ref(false)
 const graphError = ref('')
 /** 路径筛选：空 = 全部路径（用户级聚合图）。切换要重新请求——后端按 pathId 收敛节点与边 */
 const graphPathId = ref<string | null>(null)
+/** 当前学习路径 ID（currentPath.learningPathId / 列表兜底 base.pathId）：路径详情下钻用 */
+const currentPathId = ref<string | null>(null)
 /** 跟随 admin 主题（暗色用同族配色，见 MkGraph 的 colorOf） */
 const graphTheme = computed<'light' | 'dark'>(() =>
   typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
@@ -751,6 +755,7 @@ function resetDerivedState(id: string) {
   loadCurveRaw.value = []
   predictionCalib.value = null
   ldSessionRows.value = []
+  currentPathId.value = null
   // 图谱仅在进入 graph tab 时按需加载（无 watch 兜底重拉）：
   // 只在真正换人时清空；同人重算/刷新若也清空会留下一张再不加载的空图
   if (id !== lastLoadedId) {
@@ -783,6 +788,11 @@ const sessBadgeCls = (s: string) =>
 function openSessionCockpit(sessionId: string) {
   const sp = subPage.value
   openSubPage('session-real', sessionId, sp ? { from: { view: sp.view, id: sp.id, label: liveDetail.value?.name } } : undefined)
+}
+
+/** 当前学习路径 → 路径详情二级页（只认真实 pathId；缺 ID 时入口不渲染） */
+function openPathDetail() {
+  if (currentPathId.value) openSubPage('path', currentPathId.value)
 }
 
 async function loadLdSessions(id: string) {
@@ -838,6 +848,8 @@ async function loadDetail(id: string | undefined) {
     const model = (raw.model as Record<string, unknown>) || raw
     const km = ((model.knowledgeMemory as Record<string, unknown>) || (raw.knowledgeMemory as Record<string, unknown>) || {}) as Record<string, unknown>
     const currentPath = (km.currentPath || {}) as Record<string, unknown>
+    // 路径详情下钻的真实 ID：优先快照里的 currentPath.learningPathId，列表兜底 base.pathId
+    currentPathId.value = String(currentPath.learningPathId || base?.pathId || '') || null
     const progress = (currentPath.progress || {}) as Record<string, number>
     const globalSignals = (km.globalSignals || {}) as Record<string, unknown>
     const conceptStates = Array.isArray(currentPath.conceptStates)
@@ -951,6 +963,8 @@ async function loadDetail(id: string | undefined) {
         }
       }
       setSubPageLabel(base.name)
+      // 列表兜底也保留路径下钻能力（pathId 来自 liveLearners 列表行）
+      currentPathId.value = base.pathId || null
       toast.error(`详情接口暂时不可用，已显示列表快照：${errMsg(e)}`)
     } else {
       detailError.value = true
