@@ -38,19 +38,8 @@
     <!-- 分页：故事池是主工作区，画像/运行/验收各归其页（数量即 tab 角标，不再单设 KPI 行）；
          ⋯ 账号级低频操作常驻 tabs 行右端——每个 tab 都能到达，不依赖操作台是否存在 -->
     <div class="vp-tabsrow">
-      <div class="mk-pills vp-tabs">
-        <button
-          v-for="t in tabs"
-          :key="t.key"
-          type="button"
-          class="mk-pill"
-          :class="{ 'mk-pill--active': activeTab === t.key }"
-          @click="activeTab = t.key"
-        >
-          {{ t.label }}
-          <span v-if="t.count !== undefined" class="vp-tab__count">{{ t.count }}</span>
-        </button>
-      </div>
+      <!-- 二级页签（原型 subtabs 下划线式，同 LearnerDetail/UserDetail）：角标保留「数量即 tab 角标」决策 -->
+      <MkSubTabs v-model="activeTab" :tabs="tabs" />
       <div v-if="isLive" class="mk-menu vp-tabsrow__ops">
         <button
           type="button"
@@ -773,6 +762,7 @@ import {
 } from './vlab-controls'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
+import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkChart from '@/components/mk/MkChart.vue'
@@ -2223,20 +2213,12 @@ async function quietReload(id: string) {
 }
 /* 工作流指引 */
 
-/* 分页：统一 mk-pills 分段控件。tabs 行右端常驻账号级 ⋯ 操作（见 .vp-tabsrow__ops） */
-.vp-tabs { width: fit-content; }
+/* tabs 行右端常驻账号级 ⋯ 操作（页签本体是共享 MkSubTabs 下划线式） */
 .vp-tabsrow { display: flex; align-items: center; gap: 12px; }
 .vp-tabsrow__ops { margin-left: auto; }
 /* 空态文案基类：原先只有 ≥2000px 的字号/内边距覆写、缺基础规则，导致故事池与
    运行记录的空文案没有颜色与内边距（审计 附 A #6）。与 .ld-none / .ud-none 同规格。 */
 .vp-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.vp-tab__count {
-  font-family: var(--mk-mono, ui-monospace, monospace);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  margin-left: 3px;
-}
-.mk-pill--active .vp-tab__count { color: var(--mk-blue); }
 
 .vp-body { display: grid; gap: 14px; }
 
@@ -2550,7 +2532,6 @@ async function quietReload(id: string) {
   .vp-story__stats-item { font-size: var(--mk-fs-micro); }
   .vp-story__latest { font-size: var(--mk-fs-micro); }
   .vp-none { font-size: var(--mk-fs-body); }
-  .vp-tab__count { font-size: var(--mk-fs-micro); margin-left: 4px; }
   .vp-fallback { font-size: var(--mk-fs-body); padding: 12px 16px; }
   .vp-trait { padding: 5px 13px; }
   .vp-goal { padding: 14px 16px; }
@@ -2576,7 +2557,6 @@ async function quietReload(id: string) {
   .vp-story__stats-item { font-size: var(--mk-fs-micro); }
   .vp-story__latest { font-size: var(--mk-fs-micro); }
   .vp-none { font-size: var(--mk-fs-body); }
-  .vp-tab__count { font-size: var(--mk-fs-micro); margin-left: 5px; }
   .vp-fallback { font-size: var(--mk-fs-body); padding: 14px 19px; }
   .vp-trait { padding: 6px 15px; }
   .vp-goal { padding: 16px 19px; }
@@ -2601,7 +2581,6 @@ async function quietReload(id: string) {
   .vp-story__stats-item { font-size: var(--mk-fs-emphasis); }
   .vp-story__latest { font-size: var(--mk-fs-body); }
   .vp-none { font-size: var(--mk-fs-emphasis); }
-  .vp-tab__count { font-size: var(--mk-fs-body); margin-left: 6px; }
   .vp-fallback { font-size: var(--mk-fs-emphasis); padding: 16px 22px; }
   .vp-trait { padding: 7px 18px; }
   .vp-goal { padding: 19px 22px; }

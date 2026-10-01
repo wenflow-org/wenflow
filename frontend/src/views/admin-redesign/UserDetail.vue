@@ -13,9 +13,16 @@
         <button type="button" class="mk-btn mk-btn--primary" @click="toLearner">查看学习者画像 →</button>
       </template>
     </MkDetailHero>
-    <div class="ud-kpis">
-      <MkKpi v-for="s in d.stats" :key="s.label" :label="s.label" :value="s.value" :hint="s.hint" />
-    </div>
+    <!-- 状态条（原型 renderLearnerDetail 的 statstrip：hero 与 subtabs 之间的一行四格读数，
+         一张卡通栏分格，非 KPI 卡栅格——LearnerDetail 同款模板） -->
+    <section class="mk-card">
+      <div class="statstrip" role="list" aria-label="账号概览">
+        <div v-for="s in d.stats" :key="s.label" class="statstrip__stat" role="listitem" :title="s.hint">
+          <span class="statstrip__label">{{ s.label }}</span>
+          <span class="statstrip__value">{{ s.value }}</span>
+        </div>
+      </div>
+    </section>
 
     <!-- 分区二级页签（newui/admin subtabs 形态）：并列分区收成页签；v-show 保持已加载状态 -->
     <MkSubTabs v-model="activeTab" :tabs="TABS" />
@@ -119,7 +126,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { subPage, openSubPage } from './store'
-import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -547,11 +553,20 @@ const subLine = computed(() => {
 /* 骨架版式（形状）走 MkSkeleton；本类只管外层堆叠 */
 .ud-skel { display: grid; gap: 14px; padding-top: 8px; }
 /* 页头身份区走 .mk-entity（shared.css）；本页只保留页头内的统计行 */
-/* 统计行（设计语言统一：MkKpi；页头内网格） */
-.ud-kpis {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+/* 状态条（原型 statstrip：一张卡通栏分格，label 12 / 数值 22，右分隔线；
+   LearnerDetail 同款页本地复刻） */
+.statstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.statstrip__stat {
+  display: grid; gap: 6px; align-content: start;
+  padding: 12px 16px;
+  border-right: 1px solid var(--mk-line);
+}
+.statstrip__stat:last-child { border-right: 0; }
+.statstrip__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.statstrip__value {
+  font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums; color: var(--mk-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* 主区通栏：卡片直接入 .ud 网格堆叠（原双栏右列与 KPI 重复，已删） */
@@ -587,10 +602,6 @@ const subLine = computed(() => {
 .ud-grant__notice--error {
   background: var(--mk-red-bg, #fef2f2);
   color: var(--mk-red, #dc2626);
-}
-
-@media (max-width: 1100px) {
-  .ud-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
