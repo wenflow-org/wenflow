@@ -300,7 +300,7 @@
           v-else-if="!loadFailed"
           :title="rows.length ? '当前筛选无会话' : '暂无教学会话'"
           :description="rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，会话记录将自动出现在这里。'"
-          :action-text="isFiltered && rows.length ? '清除筛选' : ''"
+          :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
       </div>
@@ -647,7 +647,7 @@ function toggleStatusFilter(key: string) {
 }
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
-const { toggle: toggleTsSort, sortState: tsSortState, sortRows: sortTsRows } = useTableSort<Row>({
+const { toggle: toggleTsSort, sortState: tsSortState, sortRows: sortTsRows, sortKey: tsSortKey, sortDir: tsSortDir } = useTableSort<Row>({
   accessors: {
     topic: (r) => r.topic,
     user: (r) => r.userName,
@@ -689,15 +689,15 @@ function clearFilters() {
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
    数据全量在客户端（live 拉取），筛选后按页切片；
-   仅筛选输入变化时回第 1 页：20s 轮询整表替换 rows 也会让 filtered 重算，
-   若监听 filtered 会把用户所在页打回第 1 页（P2）——故监听筛选输入而非结果 */
+   筛选输入 / 排序变化时回第 1 页：20s 轮询整表替换 rows 也会让 filtered 重算，
+   若监听 filtered 会把用户所在页打回第 1 页（P2）——故监听筛选输入与排序而非结果 */
 const page = ref(1)
 const pageSize = ref(15)
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([pill, statusFilter, dateFilter, keyword], () => {
+watch([pill, statusFilter, dateFilter, keyword, tsSortKey, tsSortDir], () => {
   page.value = 1
 })
 

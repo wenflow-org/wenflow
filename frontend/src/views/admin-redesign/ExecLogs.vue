@@ -164,6 +164,17 @@
                       <button type="button" class="exec-trace-btn" title="查看完整调用链路（Trace）：这条调用从进入到出结果的全部阶段" @click.stop="showTrace(log.traceId)">
                         <Waypoints :size="15" :stroke-width="1.75" />
                       </button>
+                      <!-- 复制 trace（原型契约 renderObserve：行内复制 trace + toast 反馈）：
+                           与链路图标并排常显，点击复制 Trace ID；stop 冒泡不触发行展开 -->
+                      <button
+                        type="button"
+                        class="exec-copy-btn"
+                        :title="`复制 Trace ID：${log.traceId}`"
+                        :aria-label="`复制 Trace ID ${log.traceId}`"
+                        @click.stop="copyTrace(log.traceId)"
+                      >
+                        <Copy :size="14" :stroke-width="1.75" />
+                      </button>
                     </div>
                     <div class="exec-cell__line exec-cell__sub">
                       <span v-if="log.errorCode" class="tline__errcode mono" :title="log.errorCode">{{ errorCodeLabel(log.errorCode) ?? `[${log.errorCategory || 'err'}] ${log.errorCode}` }}</span>
@@ -303,8 +314,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Waypoints } from 'lucide-vue-next'
+import { Copy, Waypoints } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
+import { toast } from '@/utils/toast'
 import { intent, openSkillDrawer, clearInvestigation, dataSource, liveSkillStatsMap } from './store'
 import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -387,6 +399,46 @@ const advOpen = ref(false)
 function toggleRowOpen(id: string, e?: Event) {
   if (e && e.target !== e.currentTarget) return
   openId.value = openId.value === id ? '' : id
+}
+
+/* —— 复制 trace（原型契约：执行日志行内复制 trace → toast 反馈）——
+   navigator.clipboard 在 http 非安全上下文不存在（或权限被拒）：
+   先走 Clipboard API，失败回退 execCommand('copy')；两者都失败必须 toast.error 明示，
+   绝不静默失败（用户至少能拿到完整 Trace ID 手动复制）。 */
+function legacyCopy(text: string): boolean {
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.top = '0'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+async function copyTrace(traceId: string) {
+  if (!traceId) {
+    toast.error('该行没有 Trace ID')
+    return
+  }
+  let ok = false
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(traceId)
+      ok = true
+    }
+  } catch {
+    ok = false
+  }
+  if (!ok) ok = legacyCopy(traceId)
+  if (ok) toast.success(`已复制 trace ${traceId}`)
+  else toast.error(`复制失败，请手动复制：${traceId}`)
 }
 
 /* D3 表格增强：列显隐（localStorage 持久化；9 列 → 勾选隐藏） */
@@ -1112,6 +1164,24 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
 }
 .exec-trace-btn svg { width: 15px; height: 15px; }
 .exec-trace-btn:hover { background: var(--mk-blue-bg, #eff6ff); color: var(--mk-blue, #2c63d0); }
+/* 复制 trace 图标按钮：与链路入口同形（28px 可点），失败/非安全上下文由 copyTrace 走兜底 + toast */
+.exec-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mk-faint);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.exec-copy-btn svg { width: 14px; height: 14px; }
+.exec-copy-btn:hover { background: var(--mk-blue-bg, #eff6ff); color: var(--mk-blue, #2c63d0); }
 .exec-cell__sub { flex-wrap: wrap; gap: 5px; }
 /* 节点列：等宽短名，长名 ellipsis（title 全值，点击开 Skill 抽屉）。
    display:inline-block 必须显式声明——span 为 inline 元素时 max-width/overflow/ellipsis 全部失效；

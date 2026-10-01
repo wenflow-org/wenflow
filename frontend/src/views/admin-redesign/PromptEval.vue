@@ -51,7 +51,7 @@
       <div v-else-if="cases.length" class="mk-table-scroll pe-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容；
              长内容（用例名/期望摘要）由 mk-cell-main 上限与 pe-expect 截断兜底 -->
-        <table class="mk-table">
+        <table class="mk-table mk-table--click">
           <thead>
             <tr>
               <th>用例</th>
@@ -64,7 +64,17 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="c in cases" :key="c.id">
+            <!-- 原型 2105：用例行 data-action="open-skill" → 点击/回车打开对应 Skill 详情；
+                 行内按钮一律 stop，键盘冒泡在 openCaseSkill 内按 target 守卫 -->
+            <tr
+              v-for="c in cases"
+              :key="c.id"
+              tabindex="0"
+              role="button"
+              :aria-label="`查看用例 ${c.name} 对应的 Skill 详情`"
+              @click="openCaseSkill(c)"
+              @keydown.enter="openCaseSkill(c, $event)"
+            >
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ c.name }}</strong>
@@ -89,8 +99,8 @@
               <td>
                 <div class="mk-actions">
                   <!-- 原型操作列：文字小钮（.btn--sm 形态）；低频/危险动作留在 ⋯ 菜单 -->
-                  <button type="button" class="mk-btn mk-btn--sm" @click="openEdit(c)">编辑</button>
-                  <button type="button" class="mk-btn mk-btn--sm" @click="toggleEnabled(c)">{{ c.enabled ? '停用' : '启用' }}</button>
+                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="openEdit(c)">编辑</button>
+                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="toggleEnabled(c)">{{ c.enabled ? '停用' : '启用' }}</button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === c.id" @click.stop="toggleMenu(c.id)">⋯</button>
                     <div v-if="openMenu === c.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -459,6 +469,7 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
+import { openSkillDrawer } from './store'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -991,6 +1002,17 @@ const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 function menuEdit(c: EvalCase) { closeMenu(); openEdit(c) }
 function menuDelete(c: EvalCase) { closeMenu(); void removeCase(c) }
 async function menuRunSingle(c: EvalCase) { closeMenu(); await runSingle(c) }
+
+/* 用例行点击 → 对应 Skill 详情（原型 2105：data-action="open-skill"）。
+   用例 agentId 形如 skill:goal-conversation，而 openSkillDrawer 收的是裸 skill id
+   （store 原样存进 subPage.id，SkillDetail 再自行补 skill: 前缀；判例 live.ts:180 同样剥前缀），
+   故必须剥掉 skill: ——直接透传会落到 SkillDetail「未注册或 ID 有误」错误态。
+   e 存在（键盘触发）时，行内按钮/菜单上的回车会冒泡到行：target 非行本身则忽略（判例 ExecLogs.toggleRowOpen）。 */
+function openCaseSkill(c: EvalCase, e?: Event) {
+  if (e && e.target !== e.currentTarget) return
+  const skillId = c.agentId.replace(/^skill:/, '')
+  if (skillId) openSkillDrawer(skillId)
+}
 
 async function removeCase(c: EvalCase) {
   // 删除不可恢复且可能连带调好的期望配置：先二次确认（对齐全站 askConfirm 模式）

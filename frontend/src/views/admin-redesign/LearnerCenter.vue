@@ -149,9 +149,9 @@
           </tr>
         </thead>
         <tbody>
-          <!-- 键盘等价：行点击只是鼠标快捷路径，语义由行内「详情」图标按钮承载（可 Tab 聚焦+回车）；
-               行本身不设 tabindex，避免与行内三个操作按钮形成双份焦点停靠 -->
-          <tr v-for="r in paged" :key="r.id" class="lc-row" @click="openDetail(r)">
+          <!-- 行点击进学习者详情；键盘等价：tabindex + Enter 触发（对齐 gc-row/oc-row 判例），
+               行内控件已 stopPropagation，聚焦自身即可回车，不产生双份焦点停靠 -->
+          <tr v-for="r in paged" :key="r.id" class="lc-row" tabindex="0" @click="openDetail(r)" @keydown.enter.prevent="openDetail(r)">
             <td v-if="!lcHiddenCols.has('learner')">
               <div class="lc-celluser">
                 <MkCellAvatar :name="r.name" :tone="r.isTestAccount ? 'test' : 'default'" />
@@ -213,6 +213,8 @@
           v-else
           :title="pill === 'all' ? '暂无学习者快照' : '当前分组暂无学习者'"
           :description="pill === 'all' ? '学习者产生学习行为后，快照将自动生成。' : '该风险分组暂无匹配的学习者。'"
+          :action-text="isFiltered ? '清除筛选' : ''"
+          @action="clearFilters"
         />
       </div>
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
@@ -614,6 +616,8 @@ async function recomputeAll() {
 }
 .tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
 .lc-row { cursor: pointer; }
+/* 键盘可达（对齐 gc-row/oc-row 判例）：行可聚焦，焦点态描边提示当前位置 */
+.lc-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
 /* ================= 学习状态分析层（原型 renderPeople state 分支） =================
    ①统计四卡 = 共享 .mk-kpi-grid + MkKpi；②直方图复刻原型 .histo（hval/hbar/hcap，
    柱高 = n/max；原型 11px 字级抬到 12px 下限，6/6/3/3 圆角收进 token 档 6/6/4/4）；

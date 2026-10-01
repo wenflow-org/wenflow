@@ -22,8 +22,10 @@
         v-for="s in stages"
         :key="s.id"
         type="button"
+        role="tab"
         class="orch-stage-tab"
         :class="{ 'is-active': !['sandbox', 'overview'].includes(pane) && active === s.id }"
+        :aria-selected="!['sandbox', 'overview'].includes(pane) && active === s.id"
         :title="stageTabTitle(s)"
         @click="selectStage(s.id)"
       >

@@ -8,8 +8,9 @@
     覆写块与 `--el-*` 变量不再被本组件消费（EP 只剩下 ElLoading/ElMessage 这类服务）。
   -->
   <Teleport to="body">
-    <div v-if="visible" class="mk-modal">
-      <!-- 遮罩点击关闭按设计不启用（长表单防误触，:625 注释口径）；焦点陷阱/滚动锁 2026-09-26 补齐 -->
+    <div v-if="visible" ref="maskRef" class="mk-modal">
+      <!-- 遮罩点击关闭统一走 useMaskClose（按下+松开都落在遮罩才关，防面板内选中文本拖到遮罩误关），
+           与全站弹层契约一致（2026-10-02 起；此前沿用 EP :close-on-click-modal=false 默认，非本页设计决策） -->
       <div ref="panelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="账号自动学习">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">账号自动学习</h3>
@@ -274,7 +275,7 @@ import { useSafePolling } from '@/composables/useSafePolling'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { statusText } from './statusText'
 import { useEscape } from './useEscape'
-import { useOverlay } from './useOverlay'
+import { useOverlay, useMaskClose } from './useOverlay'
 
 const props = defineProps<{
   visible: boolean
@@ -672,12 +673,16 @@ watch(
   }
 )
 
-// Esc 关闭（原 EP el-dialog 自带；换成 mk-modal 后需显式登记）。遮罩点击不关闭，
-// 与原 :close-on-click-modal="false" 一致。
+// Esc 关闭（原 EP el-dialog 自带；换成 mk-modal 后需显式登记）。
+// 遮罩点击关闭走 useMaskClose：此前注释称「长表单防误触」沿用 EP :close-on-click-modal=false，
+// 但本面板是启动器（选择任务 + 运行 + 结果查看），并无可丢草稿的长表单——唯一的自由文本
+// 是「源路径 ID」（可选、可重填）。useMaskClose 的按下-松开守卫已能防「面板内选中文本拖到遮罩」误关。
 useEscape(() => props.visible, close)
 /* 焦点陷阱 + 滚动锁（2026-09-26 弹层对齐）：此前 Tab 可逃出弹窗、背景可滚动 */
 const panelRef = ref<HTMLElement | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => props.visible), panelRef)
+useMaskClose(maskRef, close)
 </script>
 
 <style scoped>

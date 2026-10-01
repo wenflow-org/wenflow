@@ -155,8 +155,16 @@
  * 任务详情三段式弹层（openTaskDetail）。
  * 数据口径：全部来自 adminLearningContentApi.getPathDetail(pathId) 的真实字段；
  * 原型有而接口没有的字段（验收点/关联产出/学习证据）不渲染，绝不硬造。
- * 动作口径：导出/重规划为原型假按钮，不搬；hero actions 只放真实能力
- * （下线/恢复真实接口、刷新、查看学习者下钻）。
+ * 动作口径：原型 hero 的「导出」是假按钮不搬；「重规划」（原型 2288 + openReplanConfirm 2637）
+ * 经核查管理员侧无任何可达的重规划能力，按「宁缺勿假」不搬（2026-10-01 核查）：
+ *   - 治理接口 adminLearningContentApi（backend routes/admin/learning-content.ts）只有
+ *     list/detail/archive/restore/delete/stats，没有 replan；
+ *   - 用户侧 POST /learning/paths/:pathId/replan（backend routes/learning.ts:943）走 user
+ *     authMiddleware（req.user.userId）且注释标明「当前仅返回占位结果」，admin 控制台无用户会话、不可达；
+ *   - 管理员可达的只有会话级 POST /admin/virtual-learners/sessions/:sessionId/replan-path
+ *     （adminApi.replanVirtualSessionPath），需要 sessionId，且只用于 SessionCockpit 的
+ *     path-review 流程；路径详情接口不返回任何 sessionId，无法落到具体会话。
+ * 因此 hero actions 只放真实能力（下线/恢复真实接口、刷新、查看学习者下钻）。
  */
 import { computed, ref, watch } from 'vue'
 import { subPage, openSubPage, setSubPageLabel } from './store'

@@ -194,6 +194,17 @@
             <span class="mshell__user-name">{{ adminName }}</span>
           </button>
           <div v-if="userMenuOpen" class="mshell__user-menu" role="menu">
+            <!-- 账户菜单（原型 2772-2776：登录页预览 / 账户设置 / 退出登录）。
+                 登录页预览与账户设置是导航项（.mshell__user-nav），退出登录是动作项
+                 （.mshell__user-item，销毁当前会话）——语义分组不同故类名区分。 -->
+            <button type="button" role="menuitem" class="mshell__user-nav" @click="openLoginPreview">
+              <Shield :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <span>登录页预览</span>
+            </button>
+            <button type="button" role="menuitem" class="mshell__user-nav" @click="openAccountSettings">
+              <Users :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <span>账户设置</span>
+            </button>
             <button type="button" role="menuitem" class="mshell__user-item" @click="logout">
               <LogOut :size="15" :stroke-width="1.75" aria-hidden="true" />
               <span>退出登录</span>
@@ -221,7 +232,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ChevronLeft, CircleHelp, LogOut, Moon, PanelLeftClose, PanelLeftOpen, RotateCw, Search, Sun } from 'lucide-vue-next'
+import { ChevronLeft, CircleHelp, LogOut, Moon, PanelLeftClose, PanelLeftOpen, RotateCw, Search, Shield, Sun, Users } from 'lucide-vue-next'
 import { MOCK_SCENES, type MockSceneDef } from './manifest'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
 import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
@@ -277,7 +288,11 @@ const searchQuery = ref('')
 const searchOpen = ref(false)
 
 const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.current))
-/* 详情页（有 crumb）：主标题=子页名、副行=所属页；L1 页：主标题=页面名、副行=分组 */
+/* 详情页（有 crumb）：主标题=子页实体名；副行=父页名（原型：如「用户与学习者」）。
+   L1 页：主标题=页面名、副行=分组。
+   修复：原先无 from 时副行取 crumbTitle（与实体名相同），顶栏出现「沈奕航 / 沈奕航」重复。
+   现详情页副行取父页名：有上级取上级（crumb 首段），无上级取当前一级页名；
+   若与主标题同名则退到分组，确保主副不再同名。 */
 const topTitle = computed(() => {
   if (props.crumb) {
     const parts = props.crumb.split(' / ')
@@ -286,7 +301,13 @@ const topTitle = computed(() => {
   return currentScene.value?.label ?? '管理控制台'
 })
 const topSub = computed(() => {
-  if (props.crumb) return props.crumbTitle || currentScene.value?.label || ''
+  if (props.crumb) {
+    const parts = props.crumb.split(' / ')
+    if (parts.length > 1) return parts[0] || ''
+    const parentPage = currentScene.value?.label ?? ''
+    if (parentPage && parentPage !== topTitle.value) return parentPage
+    return currentScene.value?.group ?? ''
+  }
   return currentScene.value?.group ?? ''
 })
 
@@ -470,6 +491,19 @@ async function logout() {
   // 带 redirect：登录成功后回到登出时的深链（含二级页 ?view=&id=，Login.safeRedirect 已做同源校验）
   const back = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)
   window.location.replace(`/admin/login?redirect=${back}`)
+}
+
+/* 账户菜单导航项（原型 2772-2776）。
+   两项目标均为真实路由，故以新标签页打开，保留当前管理会话上下文：
+   - /admin/login 为管理端登录页；已登录时守卫会弹回总览（未「记住我」的新标签页则是真实登录页）。
+   - 管理端无独立账户页，账户设置落到用户侧个人中心 /user/account。 */
+function openLoginPreview() {
+  userMenuOpen.value = false
+  window.open('/admin/login', '_blank', 'noopener,noreferrer')
+}
+function openAccountSettings() {
+  userMenuOpen.value = false
+  window.open('/user/account', '_blank', 'noopener,noreferrer')
 }
 
 /** 置顶独立入口（D5）：pinned 项渲染在分组上方（无组标题） */
@@ -919,7 +953,8 @@ watch(
 @media (prefers-reduced-motion: reduce) {
   .mshell__user-menu { animation: none; }
 }
-.mshell__user-item {
+.mshell__user-item,
+.mshell__user-nav {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -935,8 +970,10 @@ watch(
   cursor: pointer;
   text-align: left;
 }
-.mshell__user-item svg { color: var(--mk-muted); flex: none; }
-.mshell__user-item:hover { background: var(--mk-hover-surface); }
+.mshell__user-item svg,
+.mshell__user-nav svg { color: var(--mk-muted); flex: none; }
+.mshell__user-item:hover,
+.mshell__user-nav:hover { background: var(--mk-hover-surface); }
 
 /* 内容区：应用式布局的唯一滚动容器（顶栏/侧栏固定，内容区内滚；
    列表页用 .mk-page--fill 让表格区内滚、分页器吸底。

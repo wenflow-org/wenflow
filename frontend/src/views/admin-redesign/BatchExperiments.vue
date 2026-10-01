@@ -21,7 +21,7 @@
       <div v-else-if="experiments.length" class="mk-table-scroll be-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容；
              长描述由下方 be-desc 截断兜底 -->
-        <table class="mk-table">
+        <table class="mk-table mk-table--click">
           <thead>
             <tr>
               <th>实验</th>
@@ -34,7 +34,17 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="e in experiments" :key="e.id">
+            <!-- 原型 2058：整行 data-action="toast"（打开实验）→ 行点击/回车打开详情抽屉；
+                 行内按钮与 ⋯ 菜单一律 stop，键盘冒泡在 openDetail 内按 target 守卫 -->
+            <tr
+              v-for="e in experiments"
+              :key="e.id"
+              tabindex="0"
+              role="button"
+              :aria-label="`打开实验 ${e.name} 详情`"
+              @click="openDetail(e)"
+              @keydown.enter="openDetail(e, $event)"
+            >
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ e.name }}</strong>
@@ -63,8 +73,8 @@
               <td>
                 <div class="mk-actions">
                   <!-- 原型操作列：文字小钮（.btn--sm 形态，破坏性动作红字钮）；行级动作另留 ⋯ 菜单 -->
-                  <button type="button" class="mk-btn mk-btn--sm" @click="openDetail(e)">详情</button>
-                  <button v-if="e.status === 'running'" type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="e.busy" @click="stop(e)">停止</button>
+                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(e)">详情</button>
+                  <button v-if="e.status === 'running'" type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="e.busy" @click.stop="stop(e)">停止</button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === e.id" @click.stop="toggleMenu(e.id)">⋯</button>
                     <div v-if="openMenu === e.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -514,7 +524,9 @@ async function refreshDetailRuns(experimentId: string) {
   detailRuns.value = (d?.runs || []).map(mapRun)
 }
 
-async function openDetail(e: ExpRow) {
+async function openDetail(e: ExpRow, ev?: Event) {
+  // 行内按钮/⋯ 菜单上回车会冒泡到行：仅当事件源就是行本身时才继续（判例 ExecLogs.toggleRowOpen）
+  if (ev && ev.target !== ev.currentTarget) return
   detail.value = e
   detailOpen.value = true
   detailLoading.value = true

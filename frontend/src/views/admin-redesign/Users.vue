@@ -118,9 +118,9 @@
             </tr>
           </thead>
         <tbody>
-          <!-- 键盘等价：行点击只是鼠标快捷路径，语义由行内「详情」图标按钮承载（可 Tab 聚焦+回车）；
-               行本身不设 tabindex，避免与行内多个控件形成双份焦点停靠 -->
-          <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" @click="openSubPage('user', u.id)">
+          <!-- 行点击进用户详情；键盘等价：tabindex + Enter 触发（对齐 gc-row/oc-row 判例），
+               行内控件已 stopPropagation，聚焦自身即可回车，不产生双份焦点停靠 -->
+          <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id)" @keydown.enter.prevent="openSubPage('user', u.id)">
             <td v-if="isLive && showCol('check')"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isTestAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
               <div class="ul-user">
@@ -808,6 +808,8 @@ function clearFilters() {
 }
 .tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
 .ul-row { cursor: pointer; }
+/* 键盘可达（对齐 gc-row/oc-row 判例）：行可聚焦，焦点态描边提示当前位置 */
+.ul-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
 .ul-row--deleted { opacity: 0.62; filter: saturate(0.2); }
 
 /* ===== 行级设计（2026-09-26）：身份 chip / 等级色阶+升级条 / 登录新鲜度 ===== */

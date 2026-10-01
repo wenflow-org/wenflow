@@ -245,6 +245,15 @@
         <p>{{ verdictText }}</p>
       </div>
 
+      <!-- 底部加载提示（原型 renderObserve trace 页签）：骨架行 + 居中 faint 文案，
+           示意下方还有更早的 Trace；无限滚动暂未实现（保持「加载更多样本」翻页，形态差已登记），
+           故骨架/提示常驻于还有样本时，按钮保留为显式触发 -->
+      <div v-if="waterfallHasMore" class="wf-skel mk-skeleton-rows" aria-hidden="true">
+        <span class="mk-skeleton" style="height: 10px; width: 38%"></span>
+        <span class="mk-skeleton" style="height: 6px; width: 100%"></span>
+      </div>
+      <p v-if="waterfallHasMore" class="wf-skel-hint">滚动到底部加载更早的 Trace…</p>
+
       <!-- 翻页：追加下一页样本（统一 mk-list-more 页脚形态，与全局加载更多页脚同构） -->
       <div v-if="canLoadMoreWaterfall" class="mk-list-more">
         <button
@@ -610,13 +619,14 @@ function locateFailure() {
 const waterfallCapReached = computed(
   () => (waterfallSpans.value?.length ?? 0) >= WATERFALL_MAX_SPANS
 )
-const canLoadMoreWaterfall = computed(() =>
+/** 是否还有更早样本（不含 loading 门控）：骨架行 / 「滚动到底部加载更早的 Trace…」的常驻条件 */
+const waterfallHasMore = computed(() =>
   waterfallSpans.value !== null
   && waterfallTotal.value > 0
   && (waterfallSpans.value?.length ?? 0) < waterfallTotal.value
   && !waterfallCapReached.value
-  && !waterfallLoading.value
 )
+const canLoadMoreWaterfall = computed(() => waterfallHasMore.value && !waterfallLoading.value)
 async function loadMoreWaterfall() {
   await waterfallLoadMore()
 }
@@ -1133,6 +1143,17 @@ const verdictText = computed(() => {
   word-break: break-all;
 }
 .wf-row__detail-actions { display: flex; justify-content: flex-end; }
+
+/* 底部加载提示（原型 renderObserve trace 页签 .skelrow + 居中 faint 文案）：
+   骨架视觉/形状走全局 .mk-skeleton / .mk-skeleton-rows，本页只补与瀑布行对齐的水平内边距 */
+.wf-skel { padding: 12px 14px 4px; }
+.wf-skel-hint {
+  margin: 0;
+  padding: 0 14px 12px;
+  text-align: center;
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
+}
 
 .wf-verdict {
   margin: 12px 14px 14px;
