@@ -40,17 +40,29 @@
               {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
             </button>
           </div>
-          <MkFilterSearch v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
+        <!-- 原型工具栏右侧：主栏只留 chips，次级筛选收敛进「高级筛选」弹层（计数与 pills 重复的
+             「N / N 人」meta 一并撤除——计数唯一住在 pills 上） -->
         <div class="mk-card__head-right">
-          <DataScopeToggle v-if="isLive && pill !== 'deleted'" v-model="includeTest" />
           <MkCols
             :col-defs="ulColDefs"
             storage-key="wf_users_hidden_cols"
             v-model:hidden="hiddenCols"
           />
-          <span class="mk-card__meta">{{ filtered.length }} / {{ users.length }} 人</span>
+          <div class="adv">
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :aria-expanded="advOpen"
+              @click="advOpen = !advOpen"
+            ><Filter :size="14" :stroke-width="1.75" />高级筛选</button>
+            <div v-if="advOpen" class="adv__mask" @click="advOpen = false"></div>
+            <div v-show="advOpen" class="adv__pop" @click.stop>
+              <MkFilterSearch v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
+              <DataScopeToggle v-if="isLive && pill !== 'deleted'" v-model="includeTest" />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -276,6 +288,7 @@ import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
+import { Filter } from 'lucide-vue-next';
 import { useEscape } from './useEscape'
 import { useIsNarrow } from './useIsNarrow'
 import { toast } from '@/utils/toast'
@@ -489,6 +502,9 @@ function closeCreate() {
   if (!creating.value) createOpen.value = false
 }
 useEscape(() => createOpen.value, closeCreate)
+/* 高级筛选弹层：Esc 关闭（遮罩吞外点） */
+const advOpen = ref(false)
+useEscape(() => advOpen.value, () => { advOpen.value = false })
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 
 /** 行内 ⋯ 菜单项：先关菜单再执行 */
@@ -783,6 +799,16 @@ function clearFilters() {
 .ul-ps { font-variant-numeric: tabular-nums; }
 .ul-ps b { font-weight: 600; }
 .ul-ps i { font-style: normal; color: var(--mk-faint); margin: 0 2px; }
+/* 高级筛选（原型工具栏右侧：.btn--sm + filter 图标；弹层复用 mk-menu__pop 视觉语法） */
+.adv { position: relative; display: inline-flex; }
+.adv__mask { position: fixed; inset: 0; z-index: var(--mk-z-menu); }
+.adv__pop {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: var(--mk-z-menu);
+  min-width: 280px; padding: 12px;
+  display: grid; gap: 10px; justify-items: start;
+  background: var(--mk-surface); border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl); box-shadow: var(--mk-shadow-pop);
+}
 /* 视图切换（原型 .tabs 下划线页签，卡内顶部） */
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
 .tab {
