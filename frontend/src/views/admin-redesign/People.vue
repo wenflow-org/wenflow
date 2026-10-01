@@ -15,28 +15,9 @@
       <span class="mk-status__meta" title="学习者快照单次最多加载 50 条">仅加载前 50 位，可按筛选缩小范围</span>
     </div>
 
-    <!-- 视图切换（原型 .tabs 下划线页签，非胶囊）：原型无页签计数，域计数由内容卡承载 -->
-    <div class="tabs pp-tabs" role="tablist" aria-label="视图切换">
-      <button
-        type="button"
-        class="tab"
-        role="tab"
-        :aria-selected="tab === 'account'"
-        @click="switchTab('account')"
-      >账号管理</button>
-      <button
-        type="button"
-        class="tab"
-        role="tab"
-        :aria-selected="tab === 'state'"
-        @click="switchTab('state')"
-      >学习状态</button>
-    </div>
-
-    <!-- 账号管理：Users（embedded 不含状态条；新建用户入口在卡头） -->
-    <Users v-if="tab === 'account'" ref="usersRef" embedded />
-    <!-- 学习状态：LearnerCenter（embedded 不含状态条） -->
-    <LearnerCenter v-else ref="learnersRef" embedded />
+    <!-- 账号管理：Users / 学习状态：LearnerCenter（页签按原型渲染在各自卡内顶部，状态在宿主） -->
+    <Users v-if="tab === 'account'" ref="usersRef" embedded :tab="tab" @switch="switchTab($event)" />
+    <LearnerCenter v-else ref="learnersRef" embedded :tab="tab" @switch="switchTab($event)" />
   </div>
 </template>
 
@@ -108,15 +89,6 @@ watch(
 /* 宿主容器沿用 .mk-page 的响应式内边距（不再用静态 token 覆盖）：
    原覆盖在 ≥1440px 档位与 .mk-page 的 px 内边距脱节，导致本页状态条起始位置/宽度
    与单页容器（如虚拟学习者）不一致。子页签与嵌入页自行承担内容间距。 */
-/* 视图切换 = 原型 .tabs 下划线页签（非胶囊 pills）：通栏底线，激活蓝字+蓝下划线 */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
-.tab {
-  border: 0; background: transparent; color: var(--mk-muted);
-  padding: 9px 12px; cursor: pointer; font-weight: 600;
-  font-size: var(--mk-fs-micro); border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
-.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
 /* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度，表格区内滚 */
 .pp-host > .mk-page--fill {
   flex: 1 1 auto;

@@ -28,6 +28,11 @@
 
 
     <div class="mk-card mk-card--fill">
+      <!-- 视图切换（原型 card > .tabs 下划线页签）：tab 状态由宿主 People 持有 -->
+      <div v-if="embedded" class="tabs" role="tablist" aria-label="视图切换">
+        <button type="button" class="tab" role="tab" :aria-selected="tab === 'account'" @click="$emit('switch', 'account')">账号管理</button>
+        <button type="button" class="tab" role="tab" :aria-selected="tab === 'state'" @click="$emit('switch', 'state')">学习状态</button>
+      </div>
       <div class="mk-card__head">
         <div class="mk-filter">
           <div class="mk-pills">
@@ -230,9 +235,9 @@ import { useEscape } from './useEscape'
 import { adminNotificationsApi, adminLearnerModelsApi } from '@/api/adminApi'
 
 /** 嵌入模式：作为「用户与学习者」页「学习状态」tab 渲染（仅去掉外层壳，状态条/列表/干预弹窗保留）。
-    count 事件：学习者快照就绪后上报（宿主「学习者 N」徽章；embedded 才消费）
-    stats 事件：画像域页级数字（宿主 KPI 区；同样只在 embedded 被消费） */
-withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+    tab/switch：宿主持有的视图页签状态（原型 card > .tabs，页签在卡内顶部） */
+withDefaults(defineProps<{ embedded?: boolean; tab?: string }>(), { embedded: false, tab: 'state' })
+defineEmits<{ (e: 'switch', tab: 'account' | 'state'): void }>()
 
 interface Row {
   id: string
@@ -505,6 +510,15 @@ async function recomputeAll() {
 <style scoped>
 /* 嵌入模式（宿主 People 页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
 .lc-embedded { flex: 1; min-height: 0; overflow: hidden; }
+/* 视图切换（原型 .tabs 下划线页签，卡内顶部） */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tab {
+  border: 0; background: transparent; color: var(--mk-muted);
+  padding: 9px 12px; cursor: pointer; font-weight: 600;
+  font-size: var(--mk-fs-micro); border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
 .lc-row { cursor: pointer; }
 /* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136）。
    注意：本页原先是 6 份副本里唯一补了暗色覆盖的，该暗色规则已提升为全局，

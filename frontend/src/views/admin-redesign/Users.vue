@@ -21,6 +21,11 @@
 
 
     <div class="mk-card mk-card--fill">
+      <!-- 视图切换（原型 card > .tabs 下划线页签）：tab 状态由宿主 People 持有 -->
+      <div v-if="embedded" class="tabs" role="tablist" aria-label="视图切换">
+        <button type="button" class="tab" role="tab" :aria-selected="tab === 'account'" @click="$emit('switch', 'account')">账号管理</button>
+        <button type="button" class="tab" role="tab" :aria-selected="tab === 'state'" @click="$emit('switch', 'state')">学习状态</button>
+      </div>
       <div class="mk-card__head">
         <div class="mk-filter">
           <div class="mk-pills">
@@ -140,24 +145,15 @@
             </td>
             <td v-if="showCol('role')"><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
             <td v-if="showCol('paths')">
-              <!-- 行级设计（批B）：双段迷你条——路径段蓝/会话段青，0 会话弱化；数字+条同列 -->
-              <div class="ul-ps" :title="`路径 ${u.paths} 条 · 会话 ${u.sessions} 次`">
-                <span class="ul-ps__nums"><b>{{ u.paths }}</b><i>/</i><b :class="{ 'ul-ps__zero': !u.sessions }">{{ u.sessions }}</b></span>
-                <span class="ul-ps__bar" aria-hidden="true">
-                  <i v-if="u.paths" class="ul-ps__seg ul-ps__seg--path" :style="{ width: psSegPct(u.paths, u.sessions) + '%' }"></i>
-                  <i v-if="u.sessions" class="ul-ps__seg ul-ps__seg--sess" :style="{ width: psSegPct(u.sessions, u.paths) + '%' }"></i>
-                </span>
-              </div>
+              <!-- 原型列语言：数字列就是 mono 文本，不加自造可视化（双段条退役，计数进悬停） -->
+              <span class="ul-ps" :title="`路径 ${u.paths} 条 · 会话 ${u.sessions} 次`"><b>{{ u.paths }}</b><i>/</i><b :class="{ 'mk-na': !u.sessions }">{{ u.sessions }}</b></span>
             </td>
             <td v-if="showCol('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
-            <td v-if="showCol('lastlogin')">
-              <span class="ul-login" :class="`ul-login--${loginTone(u.lastLogin)}`">
-                <i class="ul-login__dot" aria-hidden="true"></i>{{ u.lastLogin }}
-              </span>
-            </td>
+            <td v-if="showCol('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-icon-btn" title="详情" @click.stop="openSubPage('user', u.id)"><UserRound :size="15" :stroke-width="1.75" /></button>
+                <!-- 原型操作列：文字「详情」描边小钮（.btn--sm 形态），行级管理动作留在 ⋯ 菜单 -->
+                <button type="button" class="mk-btn mk-btn--sm" @click.stop="openSubPage('user', u.id)">详情</button>
                 <div v-if="isLive" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === u.id" @click.stop="toggleMenu(u.id)">⋯</button>
                   <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -283,7 +279,6 @@ import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useIsNarrow } from './useIsNarrow'
 import { toast } from '@/utils/toast'
-import { UserRound } from 'lucide-vue-next';
 import { isTestAccountUser, levelFromXp, levelLabel } from './learner-profile'
 
 /* ---- 行级设计派生（2026-09-26）：身份 chip 色 / 升级进度 / 登录新鲜度 ---- */
@@ -305,23 +300,11 @@ function xpProgress(xp: number): { pct: number; toNext: number } {
 function xpToNext(xp: number): number {
   return xpProgress(xp).toNext
 }
-/** 双段迷你条：各自相对两者之和的宽度（互补关系一眼可读，而非共同分母） */
-function psSegPct(a: number, b: number): number {
-  const sum = (a || 0) + (b || 0)
-  if (!sum) return 0
-  return Math.round(((a || 0) / sum) * 100)
-}
-/** 最后登录新鲜度：自己的 timeAgo 产出格式按关键词分档 */
-function loginTone(text: string): 'fresh' | 'recent' | 'never' {
-  if (/从未/.test(text)) return 'never'
-  if (/分钟|小时|刚刚/.test(text)) return 'fresh'
-  return 'recent'
-}
 
 /** 嵌入模式：作为「用户与学习者」页「账号管理」tab 渲染（仅去掉外层壳，状态条/列表/弹窗保留）。
-    count 事件：用户总量就绪后上报（宿主「用户 N」徽章；embedded 才消费）
-    stats 事件：账号域页级数字（宿主 KPI 区；同样只在 embedded 被消费） */
-withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+    tab/switch：宿主持有的视图页签状态（原型 card > .tabs，页签在卡内顶部） */
+withDefaults(defineProps<{ embedded?: boolean; tab?: string }>(), { embedded: false, tab: 'account' })
+defineEmits<{ (e: 'switch', tab: 'account' | 'state'): void }>()
 
 /** 与后端 validatePasswordRule 一致：≥8 位且同时包含字母和数字 */
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
@@ -452,7 +435,7 @@ const ulColDefs = [
   { key: 'created', label: '注册时间', title: '账号创建时间' },
   { key: 'lastlogin', label: '最后登录', title: '最近登录时间' },
 ] as const
-const hiddenCols = ref<Set<string>>(new Set(['created']))
+const hiddenCols = ref<Set<string>>(new Set(['check', 'created']))
 
 /* 移动端仅保留「名称 / 状态 / 操作」：隐藏勾选列与时间/邮箱等次要列，避免多列挤进横向滚动。
    中屏（≤1320，覆盖最常见的 1280 笔记本减侧栏后的内容区）再收起「邮箱 / 注册时间」——
@@ -796,6 +779,19 @@ function clearFilters() {
 <style scoped>
 /* 嵌入模式（宿主 People 页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
 .u-embedded { flex: 1; min-height: 0; overflow: hidden; }
+/* 路径/会话数字列（原型列语言：mono 文本） */
+.ul-ps { font-variant-numeric: tabular-nums; }
+.ul-ps b { font-weight: 600; }
+.ul-ps i { font-style: normal; color: var(--mk-faint); margin: 0 2px; }
+/* 视图切换（原型 .tabs 下划线页签，卡内顶部） */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tab {
+  border: 0; background: transparent; color: var(--mk-muted);
+  padding: 9px 12px; cursor: pointer; font-weight: 600;
+  font-size: var(--mk-fs-micro); border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
 .ul-row { cursor: pointer; }
 .ul-row--deleted { opacity: 0.62; filter: saturate(0.2); }
 
@@ -810,25 +806,6 @@ function clearFilters() {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: var(--mk-fs-micro); color: var(--mk-muted);
 }
-
-/* 路径/会话双段迷你条（批B） */
-.ul-ps { display: grid; gap: 3px; justify-items: start; }
-.ul-ps__nums { display: inline-flex; align-items: baseline; gap: 4px; font-variant-numeric: tabular-nums; }
-.ul-ps__nums b { font-weight: 700; }
-.ul-ps__nums i { font-style: normal; color: var(--mk-faint); }
-.ul-ps__zero { color: var(--mk-faint); font-weight: 400; }
-.ul-ps__bar { display: flex; width: 64px; height: 4px; border-radius: var(--mk-radius-pill); background: var(--mk-surface-2); overflow: hidden; }
-.ul-ps__seg { display: block; height: 100%; }
-.ul-ps__seg--path { background: var(--mk-blue); opacity: 0.75; }
-.ul-ps__seg--sess { background: var(--mk-teal, #0d9488); opacity: 0.75; }
-
-/* 最后登录：新鲜度点（24h 内绿 / 天级默认 / 从未最弱） */
-.ul-login { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--mk-muted); }
-.ul-login__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mk-faint); flex: none; }
-.ul-login--fresh .ul-login__dot { background: var(--mk-green); }
-.ul-login--fresh { color: var(--mk-ink); }
-.ul-login--never .ul-login__dot { opacity: 0.4; }
-.ul-login--never { color: var(--mk-faint); }
 
 @media (min-width: 2000px) {
   .ul-tags { gap: 6px; margin-top: 3px; }
@@ -871,13 +848,5 @@ html[data-theme='dark'] {
 }
 
 /* ================= D3 表格增强：用户列设置菜单 ================= */
-
-
-
-
-
-
-
-
 
 </style>
