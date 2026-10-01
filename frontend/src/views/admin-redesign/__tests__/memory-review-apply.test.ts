@@ -12,9 +12,12 @@ const detail = vi.hoisted(() => vi.fn());
 const recompute = vi.hoisted(() => vi.fn());
 const apply = vi.hoisted(() => vi.fn());
 const rollback = vi.hoisted(() => vi.fn());
+// 到期带/强度直方图数据窗口（本文件用例不涉及时回空数组 → 对应卡静默隐藏）
+const traceList = vi.hoisted(() => vi.fn());
 
 vi.mock('@/api/adminApi', () => ({
   adminMemoryReviewApi: { overview, detail, recompute, apply, rollback },
+  adminMemoryTracesApi: { list: traceList },
 }));
 const askConfirm = vi.hoisted(() => vi.fn());
 vi.mock('../useConfirm', () => ({ askConfirm }));
@@ -91,6 +94,7 @@ async function mountPage() {
     },
   });
   detail.mockResolvedValue({ data: { data: DETAIL } });
+  traceList.mockResolvedValue({ data: { data: { total: 0, rows: [] } } });
   const w = mount(MemoryReview);
   await flushPromises();
   return w;

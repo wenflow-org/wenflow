@@ -41,45 +41,50 @@
       />
     </section>
 
-    <!-- 记忆分布（newui「教学分组」stageband 原型移植，distBand 判例 = OpsContent 状态分布卡）：
-         到期 / 正常 两段占一条分布条 + sbl 图例，卡头 = title+meta 左组、右组胶囊贴右。
-         口径：totals 来自 /admin/memory-review 全量统计；「正常」= traces − due（钳非负，后端无独立字段）。
-         原型 renderMemory 的六段「到期时间轴」（已逾期/今天/明天/2/3/5 天后）需要逐档到期日计数，
-         后端 overview 只回 totals.due 总数——字段没有的不硬造，两段同构等价。
-         卡头右组胶囊（N 条到期 / 无到期）= 原型复习负载卡 card__tools「N 个逾期 / 无逾期」同位。
-         后端没有记忆强度分桶数据，不做「记忆强度分布」直方图；proposed/ambiguous 已由页头 KPI 卡承载，不复读。
-         traces=0（或拉取失败保持 0）时整卡隐藏，不留空卡。 -->
-    <section v-if="totals.traces > 0" class="mk-card">
-      <div class="mk-card__head">
-        <span class="mk-card__title">记忆分布</span>
-        <span class="mk-card__meta">按到期状态聚合 · 共 {{ totals.traces }} 条记忆痕迹</span>
-        <div class="mk-card__head-right">
-          <span
-            class="mk-badge"
-            :class="totals.due > 0 ? 'mk-badge--warn' : 'mk-badge--ok'"
-            :title="totals.due > 0 ? '到该复习而未复习的记忆痕迹数（到期段琥珀色）' : '当前没有到该复习而未复习的痕迹'"
-          >{{ totals.due > 0 ? `${totals.due} 条到期` : '无到期' }}</span>
+    <!-- 到期时间轴 + 记忆强度分布（newui 原型 renderMemory 2029-2034 两卡 grid 原样移植：
+         stageband 卡在前（1.5fr）、histo 卡在后（1fr），页头 KPI 之后、用户列表之前）。
+         数据源 = adminMemoryTracesApi.list（GET /admin/memory-traces，后端注释即「观察复习调度状态
+         与记忆保持率分布」）：逐条 dueAt → 六档到期带（已逾期/今天/明天/2/3/5 天后，distBand 判例 =
+         OpsContent 状态分布卡：零值段跳过、图例恒六行）；retrievability（FSRS 可提取率）→ 五桶
+         强度直方图（无强度数据的条目不进分母，不硬造）。窗口口径：后端上限 200 条（updatedAt 倒序），
+         卡 meta 如实标注「窗口/非全量」（同 TeachingSessions 分布卡判例）；队列口径 = extractionCount>0
+         （从未提取过的点不进复习队列，与后端 due 统计一致）。拉取失败或队列为空整块隐藏，不留空卡。 -->
+    <section v-if="traceWindowReady" class="mr-bandgrid">
+      <div class="mk-card">
+        <div class="mk-card__head">
+          <span class="mk-card__title">到期时间轴</span>
+          <span class="mk-card__meta" :title="`复习队列 = 已被提取过的记忆痕迹（extractionCount>0）；窗口为最近 ${traceRows.length} 条痕迹（updatedAt 倒序），非全量`">按到期日聚合的复习点分布 · 共 {{ queueRows.length }} 个 · 最近 {{ traceRows.length }} 条窗口</span>
+        </div>
+        <div class="mr-dist__body">
+          <div class="stageband" role="img" :aria-label="mrBandAria">
+            <span
+              v-for="seg in mrDueSegments"
+              :key="seg.key"
+              :style="{ width: seg.pct, background: seg.tone }"
+              :title="`${seg.name} · ${seg.n}`"
+            ></span>
+          </div>
+          <div class="stageband__legend">
+            <div v-for="entry in mrDueBand" :key="entry.key" class="sbl" :title="entry.title">
+              <span class="sbl__sw" :style="{ background: entry.tone }" aria-hidden="true"></span>
+              <span class="sbl__name">{{ entry.name }}</span>
+              <span class="sbl__n">{{ entry.n }}</span>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="mr-dist__body">
-        <div
-          class="stageband"
-          role="img"
-          :aria-label="`记忆分布：到期 ${totals.due} 条（占 ${mrDuePct}%），正常 ${mrNormalCount} 条（占 ${mrNormalPct}%）`"
-        >
-          <span v-if="totals.due > 0" :style="{ width: mrDuePct + '%', background: 'var(--mk-amber)' }" :title="`到期 ${totals.due} 条 · 占 ${mrDuePct}%`"></span>
-          <span v-if="mrNormalCount > 0" :style="{ width: mrNormalPct + '%', background: 'var(--mk-blue)' }" :title="`正常 ${mrNormalCount} 条 · 占 ${mrNormalPct}%`"></span>
+      <div class="mk-card">
+        <div class="mk-card__head">
+          <span class="mk-card__title">记忆强度分布</span>
+          <span class="mk-card__meta" :title="`记忆强度 = FSRS 可提取率 retrievability；无 FSRS 状态的 ${mrStrengthPending} 条不进分母（不硬造）`">按记忆强度分档 · 平均 {{ mrAvgStrengthPct }}% · 有强度 {{ mrStrengthTotal }}/{{ queueRows.length }} 条</span>
         </div>
-        <div class="stageband__legend">
-          <div class="sbl">
-            <span class="sbl__sw" :style="{ background: 'var(--mk-amber)' }" aria-hidden="true"></span>
-            <span class="sbl__name">到期（到该复习而未复习）</span>
-            <span class="sbl__n">{{ totals.due }}</span>
-          </div>
-          <div class="sbl">
-            <span class="sbl__sw" :style="{ background: 'var(--mk-blue)' }" aria-hidden="true"></span>
-            <span class="sbl__name">正常（未到期）</span>
-            <span class="sbl__n">{{ mrNormalCount }}</span>
+        <div class="mr-dist__body">
+          <div class="histo" role="img" :aria-label="mrHistoAria">
+            <div v-for="b in mrStrengthBuckets" :key="b.label" class="hcol">
+              <span class="hval">{{ b.n }}</span>
+              <span class="hbar" :style="{ height: b.h + 'px', background: b.tone }" :title="`${b.label} · ${b.n}`"></span>
+              <span class="hcap">{{ b.label }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -426,7 +431,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { adminMemoryReviewApi } from '@/api/adminApi'
+import { adminMemoryReviewApi, adminMemoryTracesApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -548,11 +553,123 @@ const totals = ref({
 /* ---- 页头 KPI 区（2026-09-28 收口后的派生） ---- */
 const duePct = computed(() => (totals.value.traces ? Math.round((totals.value.due / totals.value.traces) * 100) : 0));
 
-/* 记忆分布（newui stageband 原型移植）：到期 vs 正常 两段。
-   「正常」= traces − due 钳非负（后端无独立字段）；到期段四舍五入，正常段 = 100 − 到期段（两段恰合一条）。 */
-const mrNormalCount = computed(() => Math.max(totals.value.traces - totals.value.due, 0))
-const mrDuePct = computed(() => (totals.value.traces ? Math.min(Math.round((totals.value.due / totals.value.traces) * 100), 100) : 0))
-const mrNormalPct = computed(() => Math.max(100 - mrDuePct.value, 0))
+/* ===== 到期时间轴 + 记忆强度分布（newui 原型 renderMemory dueBand/distBand + sBuckets/histo 移植）=====
+   数据窗口 = adminMemoryTracesApi.list（GET /admin/memory-traces，后端上限 200 条、updatedAt 倒序）。
+   队列口径 = extractionCount > 0 且 dueAt 非空（从未提取过的点不进复习队列，与后端 due 统计一致）。
+   六档到期带按 dueAt 与今天 0 点的日差分桶：桶名 = 起始日（「3天后」= 3–4 天，「5天后」= 5 天及以远）；
+   五桶强度直方图只收 retrievability（FSRS 可提取率）非空的条目——无强度数据的条目不进分母。 */
+
+/** GET /admin/memory-traces 行（只声明本页用到的字段，后端多余字段不声明） */
+interface AdminTraceRow {
+  id: string
+  userId: string
+  conceptKey: string
+  label: string | null
+  extractionCount: number
+  dueAt: string | null
+  retrievability: number | null
+}
+
+const traceRows = ref<AdminTraceRow[]>([])
+const traceFailed = ref(false)
+let traceSeq = 0
+
+async function loadTraceWindow() {
+  const seq = ++traceSeq
+  traceFailed.value = false
+  try {
+    const res: any = await adminMemoryTracesApi.list({ limit: 200, includeVirtual: includeVirtual.value })
+    if (seq !== traceSeq) return // 已有更新的窗口请求在途/完成：丢弃过期响应
+    const body = res.data?.data ?? res.data ?? {}
+    traceRows.value = Array.isArray(body.rows) ? body.rows : []
+  } catch {
+    if (seq !== traceSeq) return
+    traceFailed.value = true // 窗口拉取失败 → 整块静默隐藏（同 OpsContent pathBand 判例），不阻塞页面
+  }
+}
+
+const queueRows = computed(() => traceRows.value.filter((row) => row.extractionCount > 0 && !!row.dueAt))
+
+/* 原型 tone 对照（OpsContent 移植判例口径）：bad→--mk-red、warn→--mk-amber、brand→--mk-blue、
+   #5b8def（2 天后）→ --mk-purple（--mk-* 内最接近的浅蓝紫，避免与「明天」的品牌蓝撞段）、
+   ok→--mk-green、faint→--mk-faint */
+const MR_DUE_BAND: Array<{ key: string; name: string; tone: string; title: string }> = [
+  { key: 'over', name: '已逾期', tone: 'var(--mk-red)', title: '到期时间早于今天' },
+  { key: 'today', name: '今天', tone: 'var(--mk-amber)', title: '今天内到期' },
+  { key: 'tmrw', name: '明天', tone: 'var(--mk-blue)', title: '明天到期' },
+  { key: 'd2', name: '2天后', tone: 'var(--mk-purple)', title: '2 天后到期' },
+  { key: 'd3', name: '3天后', tone: 'var(--mk-green)', title: '3–4 天后到期' },
+  { key: 'd5', name: '5天后', tone: 'var(--mk-faint)', title: '5 天后及以远到期' }
+]
+
+/** 到期日差（天）：按本地日历日取整（UTC 归一，免夏令时/跨日误差），负 = 已逾期 */
+function dayIndexFromToday(dueAt: string, epoch: Date): number {
+  const due = new Date(dueAt)
+  const a = Date.UTC(due.getFullYear(), due.getMonth(), due.getDate())
+  const b = Date.UTC(epoch.getFullYear(), epoch.getMonth(), epoch.getDate())
+  return Math.round((a - b) / 86400000)
+}
+
+const mrDueBand = computed(() => {
+  const epoch = new Date()
+  const counts = MR_DUE_BAND.map(() => 0)
+  for (const row of queueRows.value) {
+    const idx = dayIndexFromToday(row.dueAt as string, epoch)
+    // 日差 → 桶位（桶名 = 起始日，尾部并档）：负 = 已逾期；0/1/2 = 今天/明天/2天后；
+    // 3–4 归「3天后」桶；≥5 归「5天后」桶
+    const bucket = idx < 0 ? 0 : idx <= 2 ? idx + 1 : idx <= 4 ? 4 : 5
+    counts[bucket] += 1
+  }
+  return MR_DUE_BAND.map((def, i) => ({ ...def, n: counts[i] }))
+})
+
+/* 段宽 = n / 合计（原型 distBand 口径，合计为 0 时按 1 兜底）；零值段不渲染，图例恒六行 */
+const mrBandTotal = computed(() => mrDueBand.value.reduce((sum, entry) => sum + entry.n, 0))
+const mrDueSegments = computed(() => {
+  const total = mrBandTotal.value || 1
+  return mrDueBand.value
+    .filter((entry) => entry.n > 0)
+    .map((entry) => ({ key: entry.key, name: entry.name, n: entry.n, tone: entry.tone, pct: `${(entry.n / total) * 100}%` }))
+})
+const mrBandAria = computed(() => `到期时间轴：${mrDueBand.value.map((entry) => `${entry.name} ${entry.n}`).join(' · ')}`)
+
+/* 原型 sBuckets 原样移植：边界 min 含、max 不含（0.2 归 20–39%，0.8 归 80–99%）；上限 1.01 兜住 100% */
+const MR_STRENGTH_BUCKETS = [
+  { label: '0–19%', min: 0, max: 0.2, tone: 'var(--mk-red)' },
+  { label: '20–39%', min: 0.2, max: 0.4, tone: 'var(--mk-red)' },
+  { label: '40–59%', min: 0.4, max: 0.6, tone: 'var(--mk-amber)' },
+  { label: '60–79%', min: 0.6, max: 0.8, tone: 'var(--mk-blue)' },
+  { label: '80–99%', min: 0.8, max: 1.01, tone: 'var(--mk-green)' }
+]
+
+const mrStrengthRows = computed(() => queueRows.value.filter((row) => typeof row.retrievability === 'number'))
+const mrStrengthTotal = computed(() => mrStrengthRows.value.length)
+const mrStrengthPending = computed(() => queueRows.value.length - mrStrengthTotal.value)
+
+const mrStrengthBuckets = computed(() => {
+  const counts = MR_STRENGTH_BUCKETS.map(() => 0)
+  for (const row of mrStrengthRows.value) {
+    const value = row.retrievability as number
+    const idx = MR_STRENGTH_BUCKETS.findIndex((bucket) => value >= bucket.min && value < bucket.max)
+    if (idx >= 0) counts[idx] += 1
+  }
+  const maxB = Math.max(...counts, 1)
+  return MR_STRENGTH_BUCKETS.map((bucket, i) => ({
+    ...bucket,
+    n: counts[i],
+    h: Math.max(6, Math.round((counts[i] / maxB) * 100)) // 原型公式：零桶/极小桶压到 6px 起步
+  }))
+})
+
+const mrAvgStrengthPct = computed(() => {
+  const rows = mrStrengthRows.value
+  if (!rows.length) return 0
+  return Math.round((rows.reduce((sum, row) => sum + (row.retrievability as number), 0) / rows.length) * 100)
+})
+const mrHistoAria = computed(() => `记忆强度分布：${mrStrengthBuckets.value.map((bucket) => `${bucket.label} ${bucket.n}`).join(' · ')}`)
+
+/* 窗口拉取失败或队列为空 → 整块隐藏（不留空卡；失败同 OpsContent pathBandReady 判例静默） */
+const traceWindowReady = computed(() => !traceFailed.value && queueRows.value.length > 0)
 
 interface OverviewCard {
   label: string
@@ -776,9 +893,9 @@ async function openDetail(userId: string) {
   }
 }
 
-/** 页头刷新：概览必刷；已选明细一并刷，避免上下两块数据口径不同步 */
+/** 页头刷新：概览、到期/强度窗口必刷；已选明细一并刷，避免上下两块数据口径不同步 */
 async function refreshAll() {
-  await loadOverview()
+  await Promise.all([loadOverview(), loadTraceWindow()])
   if (selectedId.value) await openDetail(selectedId.value)
 }
 
@@ -830,7 +947,7 @@ async function recompute(userId: string) {
 }
 
 onMounted(async () => {
-  await loadOverview()
+  await Promise.all([loadOverview(), loadTraceWindow()])
   // 深链：/admin/memory-review?userId=xxx 直接落到该用户明细（供学习者详情等入口跳转）
   const queryUserId = route.query.userId
   if (typeof queryUserId === 'string' && queryUserId) {
@@ -870,6 +987,22 @@ onMounted(async () => {
 .sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }
 .sbl__name { color: var(--mk-muted); }
 .sbl__n { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* 到期带 + 强度直方图两卡 grid（原型 renderMemory 2029 行 grid-template-columns:
+   minmax(0,1.5fr) minmax(0,1fr) + align-items:start 原样移植；窄屏收单列） */
+.mr-bandgrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 960px) { .mr-bandgrid { grid-template-columns: minmax(0, 1fr); } }
+
+/* 强度直方图（newui 原型 .histo 579-584 原样移植；token 映射：--mono→--mk-mono、
+   --muted→--mk-muted、--faint→--mk-faint、11px 字号→--mk-fs-micro（设计语言 12px 下限），
+   几何尺寸/圆角保持 px 原值） */
+.histo { display: flex; align-items: flex-end; gap: 10px; height: 132px; padding-top: 10px; }
+.histo .hcol { flex: 1 1 0; min-width: 0; display: grid; align-content: end; justify-items: center; gap: 6px; }
+/* 原型 6/6/3/3px → 圆角档 sm6/xs4（项目圆角四档铁律，xs 为最近档） */
+.histo .hbar { width: 100%; max-width: 52px; border-radius: var(--mk-radius-sm) var(--mk-radius-sm) var(--mk-radius-xs) var(--mk-radius-xs); min-height: 3px; }
+.histo .hval { font-size: var(--mk-fs-micro); font-family: var(--mk-mono); color: var(--mk-muted); }
+.histo .hcap { font-size: var(--mk-fs-micro); color: var(--mk-faint); text-align: center; white-space: nowrap; }
+@media (max-width: 768px) { .histo { height: 108px; gap: 6px; } }
 
 /* 需人工看：>0 抬成琥珀胶囊；0 压成安静破折号 */
 .mr__need {
