@@ -70,17 +70,9 @@
         </div>
 
         <div v-if="filtered.length" class="mk-table-scroll">
-        <table class="mk-table mk-table--fixed">
-          <colgroup>
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-num)">
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-model-wide)">
-            <col style="width:var(--mk-col-model)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-time-full)">
-            <col style="width:var(--mk-col-actions)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap；
+             评论/节点/策略列由 fb- 局部 max-width 截断兜底（全文在 title） -->
+        <table class="mk-table">
           <thead>
             <tr>
               <th
@@ -486,7 +478,17 @@ onMounted(() => {
   vertical-align: bottom;
   color: var(--mk-muted);
 }
-.fb-agent { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 原型 .tbl td：nowrap（长内容由下方 fb- 截断与 mk-cell-main 全局 max-width 兜底） */
+.fb-row td { white-space: nowrap; }
+.fb-agent {
+  display: inline-block;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+}
 .fb-strategy {
   display: inline-block;
   max-width: 200px;

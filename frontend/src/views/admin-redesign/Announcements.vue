@@ -40,15 +40,10 @@
 
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="6" />
       <div v-else-if="filtered.length" class="mk-table-scroll an-list">
-      <table class="mk-table mk-table--fixed">
-        <colgroup>
-          <col style="width:var(--mk-col-text)">
-          <col style="width:var(--mk-col-badge)">
-          <col style="width:var(--mk-col-badge)">
-          <col style="width:var(--mk-col-time-full)">
-          <col style="width:var(--mk-col-time-full)">
-          <col style="width:var(--mk-col-actions-wide)">
-        </colgroup>
+      <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），列按内容自然分宽；
+           标题列 = 原型 .wrap 白名单（双行 cell-main + 正文预览换行），
+           其余列 nowrap，长内容由全局 mk-cell-main max-width / an-body 截断兜底 -->
+      <table class="mk-table">
         <thead>
           <tr>
             <th>公告</th>
@@ -511,6 +506,10 @@ function expiresLabel(iso: string): string {
 .an-list {
   min-height: var(--mk-empty-min-h, calc(100dvh - 230px));
 }
+/* 原型 .tbl td：nowrap（长内容由全局 mk-cell-main max-width 截断兜底）；
+   标题列例外（原型 td.wrap）：双行 cell-main + 正文两行预览需要换行 */
+.an-list .mk-table td { white-space: nowrap; }
+.an-list .mk-table td:first-child { white-space: normal; }
 .an-body {
   max-width: 380px;
   display: -webkit-box;

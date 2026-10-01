@@ -8,25 +8,21 @@
       <span class="mk-status__meta">解锁 {{ totalUnlocked }}</span>
     </div>
 
-    <!-- 主视图切换（统一样板：状态条正下方的独立一行，按内容宽度、左对齐） -->
-    <div class="mk-pills" role="tablist" aria-label="成就视图切换">
-      <button type="button" role="tab" class="mk-pill" :aria-selected="achTab === 'defs'" :class="{ 'mk-pill--active': achTab === 'defs' }" @click="switchAchTab('defs')">成就定义</button>
-      <button type="button" role="tab" class="mk-pill" :aria-selected="achTab === 'records'" :class="{ 'mk-pill--active': achTab === 'records' }" @click="switchAchTab('records')">解锁记录</button>
+    <!-- 主视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
+         2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签；
+         写法与宿主 OpsHub 页签、Users.vue 卡内页签同款） -->
+    <div class="tabs" role="tablist" aria-label="成就视图切换">
+      <button type="button" role="tab" class="tab" :aria-selected="achTab === 'defs'" @click="switchAchTab('defs')">成就定义</button>
+      <button type="button" role="tab" class="tab" :aria-selected="achTab === 'records'" @click="switchAchTab('records')">解锁记录</button>
     </div>
 
     <!-- 成就定义 -->
     <div v-if="achTab === 'defs'" class="mk-card">
       <MockSkeletonTable v-if="defsLoading && !defs.length" :cols="5" />
       <div v-else-if="defs.length" class="mk-table-scroll ac-list">
-        <table class="mk-table mk-table--fixed">
-          <colgroup>
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-num)">
-            <col style="width:var(--mk-col-num)">
-            <col style="width:var(--mk-col-actions-wide)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
+             列按内容自然分宽；长条件/描述由 mk-cell-main / mk-cell-text 的全局截断兜底 -->
+        <table class="mk-table">
           <thead>
             <tr>
               <th>成就</th>
@@ -80,15 +76,9 @@
       </div>
       <MockSkeletonTable v-if="recordsLoading && !records.length" :cols="6" />
       <div v-else-if="records.length" class="mk-table-scroll ac-list">
-        <table class="mk-table mk-table--fixed">
-          <colgroup>
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-num)">
-            <col style="width:var(--mk-col-time-full)">
-            <col style="width:var(--mk-col-actions-wide)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap；
+             成就/用户双行单元格由 mk-cell-main 全局 max-width 截断兜底 -->
+        <table class="mk-table">
           <thead>
             <tr>
               <th>成就</th>
@@ -483,6 +473,31 @@ onMounted(() => {
 .oa-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .ac-list { min-height: 120px; }
 .ac-icon { margin-right: 4px; }
+
+/* ================= 视图切换（原型 .tabs 下划线页签，页面本地复刻） =================
+   与宿主 OpsHub 页签、Users.vue 卡内页签同款：12px/600、激活蓝字+2px 蓝下划线、通栏底线 */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--mk-muted);
+  padding: 9px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--mk-fs-micro);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.tab:hover { color: var(--mk-ink); }
+.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+/* 嵌入模式：宿主页签与本页签之间补 .mk-page 同款 12px 节奏（嵌入根是 block 无 grid gap） */
+.oa-embedded > .tabs { margin-bottom: var(--mk-space-3, 12px); }
+
+/* 原型 .tbl td：nowrap（长内容由 mk-cell-main/mk-cell-text 全局 max-width 截断兜底） */
+.mk-table td { white-space: nowrap; }
 
 
 .ac-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

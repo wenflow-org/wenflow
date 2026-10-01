@@ -116,7 +116,8 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     const w = await mountAudit();
     await findBtn(w, '下一页').trigger('click');
     await flushPromises();
-    await w.findAll('.mk-pill').find((x) => x.text() === '登录审计')!.trigger('click');
+    // 2026-10-01 设计语言对齐：视图切换由胶囊改原型 .tabs 下划线页签，按 .tab 定位
+    await w.findAll('.tab').find((x) => x.text() === '登录审计')!.trigger('click');
     await flushPromises();
     const last = h.getLogs.mock.calls.at(-1)![0];
     expect(last).toMatchObject({ page: 1, scope: 'login' });
@@ -135,7 +136,7 @@ describe('AuditLogs 传统分页（方案 A）', () => {
       }
     }));
     const w = await mountAudit();
-    await w.findAll('.mk-pill').find((x) => x.text() === '登录审计')!.trigger('click');
+    await w.findAll('.tab').find((x) => x.text() === '登录审计')!.trigger('click');
     await flushPromises();
     await nextTick();
     expect(w.text()).toContain('08-14 09:05:07');

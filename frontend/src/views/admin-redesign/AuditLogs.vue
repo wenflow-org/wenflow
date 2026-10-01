@@ -16,16 +16,16 @@
       <span v-if="failed" class="mk-status__meta mono">失败 {{ failed }}<template v-if="failedIsLocal">（本页）</template></span>
     </div>
 
-    <!-- 主视图切换（统一样板：状态条正下方的独立一行，按内容宽度、左对齐） -->
-    <div class="mk-pills" role="tablist" aria-label="审计视图切换">
+    <!-- 主视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
+         2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签） -->
+    <div class="tabs" role="tablist" aria-label="审计视图切换">
       <button
         v-for="t in tabs"
         :key="t.id"
         type="button"
         role="tab"
-        class="mk-pill"
+        class="tab"
         :aria-selected="tab === t.id"
-        :class="{ 'mk-pill--active': tab === t.id }"
         @click="switchTab(t.id)"
       >
         {{ t.label }}
@@ -99,17 +99,9 @@
     <!-- 操作审计列表 -->
     <div v-else-if="tab === 'operation' && logs.length" class="log-body">
       <div class="mk-table-scroll">
-        <table class="mk-table mk-table--click mk-table--fixed">
-          <colgroup>
-            <col v-if="colVisible('time')" style="width:var(--mk-col-datetime)">
-            <col v-if="colVisible('admin')" class="al-col-admin" style="width:var(--mk-col-badge)">
-            <col v-if="colVisible('action')" class="al-col-action" style="width:var(--mk-col-model)">
-            <col v-if="!noTargetTypes && colVisible('tt')" style="width:var(--mk-col-id)">
-            <col v-if="colVisible('target')" style="width:var(--mk-col-model-wide)">
-            <col v-if="colVisible('result')" style="width:var(--mk-col-num)">
-            <col v-if="colVisible('ip')" style="width:var(--mk-col-model-wide)">
-            <col style="width:36px">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），列随 colVisible 增删、
+             按内容自然分宽；操作者/路径/IP 等长值由局部 max-width 截断兜底 -->
+        <table class="mk-table mk-table--click">
           <thead>
             <tr>
               <th
@@ -203,15 +195,8 @@
     <!-- 登录审计列表 -->
     <div v-else-if="tab === 'login' && attempts.length" class="log-body">
       <div class="mk-table-scroll">
-        <table class="mk-table mk-table--fixed">
-          <colgroup>
-            <col style="width:var(--mk-col-datetime)">
-            <col style="width:var(--mk-col-model-wide)">
-            <col style="width:var(--mk-col-model)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-model-wide)">
-            <col style="width:var(--mk-col-actions)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap -->
+        <table class="mk-table">
           <thead>
             <tr>
               <th
@@ -416,7 +401,7 @@ const alColDefs = [
   { key: 'ip', label: 'IP', title: '来源 IP' },
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())
-/* 窄屏（≤720）：目标类型/目标/IP 次要列随 useIsNarrow 隐藏（colgroup/th/td 统一走 colVisible），
+/* 窄屏（≤720）：目标类型/目标/IP 次要列随 useIsNarrow 隐藏（th/td 统一走 colVisible），
    时间/操作者/动作/结果可完整放下，免 8 列横向滚动；行详情信息不丢 */
 const isNarrow = useIsNarrow()
 const MOBILE_HIDDEN_AL = new Set(['tt', 'target', 'ip'])
@@ -705,6 +690,27 @@ function goSessions(username: string) {
 <style scoped>
 /* 状态条走全局 mk-status 体系（shared.css）；此处不再 scoped 覆盖 */
 
+/* ================= 视图切换（原型 .tabs 下划线页签，页面本地复刻） =================
+   2026-10-01 由 mk-pills 胶囊迁入；与 OpsHub 宿主页签、Users.vue 卡内页签同款：
+   12px/600、激活蓝字+2px 蓝下划线、通栏底线 */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--mk-muted);
+  padding: 9px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--mk-fs-micro);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.tab:hover { color: var(--mk-ink); }
+.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+
 /* 加载失败错误态 */
 
 .log-body {
@@ -798,9 +804,9 @@ function goSessions(username: string) {
 /* UI 复查 #11：操作列是末列，贴表格右缘过紧，补右留白 */
 .al-act { padding-right: 16px; }
 /* 窄屏（≤720，次要列已随 useIsNarrow 隐藏）：操作者/动作列收为弹性宽 + 单行截断
-   （全文在 title），固定列宽合计不再超出视口 → 免横向滚动 */
+   （全文在 title），长值不撑列 → 免横向滚动。
+   （原 colgroup 固定列宽的 .al-col-* width:auto 覆盖随 fixed 布局一并退役） */
 @media (max-width: 720px) {
-  .al-col-admin, .al-col-action { width: auto !important; }
   td.log-admin { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   td .log-path { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 }
@@ -982,16 +988,16 @@ html[data-theme='dark'] .log-method--head { background: #2d2d2f; color: #afb1b6;
 
 /* ================= 空态撑满主区剩余高度（P1-1，2026-09-27 走查「空态利用」）=================
    本页是 .mk-page--fill + .mk-card--fill 应用式布局：空态带 mk-empty--min 后若不按本页壳层
-   覆写 --mk-empty-min-h，会用全局默认口径（100dvh - 230px）——本页状态条上方还多一行 pills
+   覆写 --mk-empty-min-h，会用全局默认口径（100dvh - 230px）——本页状态条上方还多一行页签
    切换、卡片内多一层筛选头，默认值会把空态撑出卡片导致底部裁切。走 BatchExperiments.vue
    同款页面覆写口（mk-primitives.css 预留），按本页壳层实测逐项推导（1920×1080、无 zoom；
    本页挂在 AdminConsole 壳层 .mshell__content 内滚动）：
      面包屑 .mshell__crumb         ~32（上下 7px 内边距 + 12px 微字号行高 ~18 + 1px 下边框）
      页面 padding-top               16（.mk-page--fill 的 --mk-space-4）
      状态条 .mk-status              48（min-height，带「刷新」按钮即撑满该高度）
-     gap（状态条 → pills 行）        12（.mk-page--fill 的 gap）
-     pills 视图切换行               ~36（容器 3px×2 + 胶囊 5px×2 + 微字号行高 ~20）
-     gap（pills → 主卡片）           12（.mk-page--fill 的 gap）
+     gap（状态条 → 页签行）          12（.mk-page--fill 的 gap）
+     页签切换行（.tabs）             ~36（tab 上下 padding 9px×2 + 微字号行高 ~18）
+     gap（页签行 → 主卡片）          12（.mk-page--fill 的 gap）
      卡片头 .mk-card__head          ~54（11px 内边距×2 + 32px 筛选控件；失败 TOP chips 换行的
                                        场景必有数据，不会落到空态分支，不参与推导）
      卡片上下边框                    2

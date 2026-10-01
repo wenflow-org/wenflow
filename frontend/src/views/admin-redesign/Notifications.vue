@@ -27,21 +27,13 @@
           <span class="nt-boundary" title="全站横幅公告请到「公告」页管理">横幅公告 → 公告页</span>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
         </div>
-        <span class="mk-card__head-right">
-        </span>
       </div>
 
       <MockSkeletonTable v-if="loading && !items.length" :cols="5" />
       <div v-else-if="items.length" class="mk-table-scroll nt-list">
-        <table class="mk-table mk-table--fixed">
-          <colgroup>
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-time-full)">
-            <col style="width:var(--mk-col-actions)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap，
+             列按内容自然分宽；通知/用户双行单元格由 mk-cell-main 全局 max-width 截断兜底 -->
+        <table class="mk-table">
           <thead>
             <tr>
               <th>通知</th>
@@ -437,6 +429,8 @@ void reload()
   cursor: help;
 }
 .nt-list { flex: 1; min-height: 0; overflow-y: auto; }
+/* 原型 .tbl td：nowrap（双行单元格由 mk-cell-main 全局 max-width 截断兜底，不换行撑行高） */
+.nt-list .mk-table td { white-space: nowrap; }
 .nt-row--unread { background: var(--mk-blue-bg, #f6f9ff); }
 .nt-row--unread .mk-cell-main strong { color: var(--mk-blue); }
 /* 未读状态（批C）：点+文字替代胶囊徽章 */
