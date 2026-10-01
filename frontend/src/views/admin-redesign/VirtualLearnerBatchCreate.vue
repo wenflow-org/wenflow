@@ -9,7 +9,7 @@
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeBatch">✕</button>
       </div>
       <div class="mk-modal__body">
-        <p class="mk-alert mk-alert--info vl-steps">设置人数与故事数，点击创建后立即返回——AI 会在后台为每人生成身份与故事，页面顶部状态条可查看进度。</p>
+        <p class="mk-alert mk-alert--info">设置人数与故事数，点击创建后立即返回——AI 会在后台为每人生成身份与故事，页面顶部状态条可查看进度。</p>
         <div class="vl-batch-config">
           <label class="mk-field vl-batch-config__count">
             <span class="mk-field__label">人数</span>
@@ -20,16 +20,16 @@
             <input v-model.number="batchStoryCount" type="number" class="mk-field__input" min="0" max="5" />
           </label>
           <label class="mk-field vl-batch-config__prefix">
-            <span class="mk-field__label">名称前缀 <em class="vl-req-less">可选</em></span>
+            <span class="mk-field__label">名称前缀 <em class="mk-field__opt">可选</em></span>
             <input v-model="batchPrefix" class="mk-field__input" placeholder="默认 虚拟学习者（自动编号 -01/-02…）" />
           </label>
         </div>
         <label class="mk-field">
-          <span class="mk-field__label">想要哪类人群？ <em class="vl-req-less">可选，留空 AI 自由发挥</em></span>
+          <span class="mk-field__label">想要哪类人群？ <em class="mk-field__opt">可选，留空 AI 自由发挥</em></span>
           <textarea v-model="batchCohort" class="mk-field__textarea" rows="2" placeholder="例如：25-35 岁职场人，最近想系统补 Excel/数据分析；或 高三学生，备考压力大。AI 会据此为每人生成差异化身份" />
         </label>
         <label class="mk-field">
-          <span class="mk-field__label">批次备注 <em class="vl-req-less">可选</em></span>
+          <span class="mk-field__label">批次备注 <em class="mk-field__opt">可选</em></span>
           <input v-model="batchNote" class="mk-field__input" placeholder="这批学习者用于什么实验 / 验收，方便以后识别" />
         </label>
         <div v-if="batchError" class="mk-alert" role="alert">{{ batchError }}</div>
@@ -197,31 +197,9 @@ defineExpose({ open, task: batchTask, retry, dismiss, toggleDetail })
 </script>
 
 <style scoped>
-/* ===== 批量新建配置区 ===== */
-.vl-batch-config { display: flex; gap: 14px; align-items: flex-end; margin-bottom: 12px; flex-wrap: wrap; }
-.vl-batch-config .mk-field { margin-bottom: 0; }
+/* ===== 批量新建配置区（间距由 mk-modal__body 的 grid gap 承担，不再页内写 margin） ===== */
+.vl-batch-config { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
 .vl-batch-config__count { width: 100px; }
 .vl-batch-config__stories { width: 120px; }
 .vl-batch-config__prefix { flex: 1; min-width: 200px; }
-.vl-req-less { font-style: normal; font-weight: 400; color: var(--mk-faint, #94a3b8); font-size: var(--mk-fs-micro); }
-
-/* 弹窗内步骤/结果提示：mk-alert 形态，此处只留边距（本组件独立复制一份） */
-.vl-steps {
-  margin: 0 0 4px;
-  padding: 8px 10px;
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted, #5b6577);
-  font-size: var(--mk-fs-micro);
-  line-height: 1.5;
-}
-@media (min-width: 2000px) {
-  .vl-steps { font-size: var(--mk-fs-micro); padding: 9px 12px; }
-}
-@media (min-width: 2800px) {
-  .vl-steps { font-size: var(--mk-fs-micro); padding: 11px 14px; }
-}
-@media (min-width: 3600px) {
-  .vl-steps { font-size: var(--mk-fs-body); padding: 13px 16px; }
-}
 </style>

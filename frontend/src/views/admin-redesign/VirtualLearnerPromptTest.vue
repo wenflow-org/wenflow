@@ -9,7 +9,7 @@
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="closePromptTest">✕</button>
       </div>
       <div class="mk-modal__body">
-        <p class="mk-alert mk-alert--info vl-steps">
+        <p class="mk-alert mk-alert--info">
           用「{{ testTarget.name }}」的人设和故事直接跑一次对话，检查助手字段产出。不创建用例、不影响正式会话。
         </p>
         <!-- 配置行 -->
@@ -49,13 +49,13 @@
           <!-- 输入 / 输出：评估的完整上下文 -->
           <div v-if="testResult.simMeta || testResult.output?.fields" class="pt-io">
             <div v-if="testResult.simMeta" class="pt-io__col">
-              <div class="pt-io__title">📥 输入</div>
+              <div class="pt-io__title">输入</div>
               <div v-if="testResult.simMeta.demandText" class="pt-io__row"><span class="pt-io__k">学生诉求</span>{{ testResult.simMeta.demandText }}</div>
               <div v-if="personaBriefText" class="pt-io__row"><span class="pt-io__k">学生人设</span>{{ personaBriefText }}</div>
               <div class="pt-io__row"><span class="pt-io__k">模拟参数</span>轮数 {{ testResult.simMeta.dialogueRounds }} · 对抗 {{ frictionLabelText }}</div>
             </div>
             <div v-if="testResult.output?.fields" class="pt-io__col">
-              <div class="pt-io__title">📤 输出字段{{ (testResult.transcript?.length ?? 0) > 1 ? '（最终轮）' : '' }}</div>
+              <div class="pt-io__title">输出字段{{ (testResult.transcript?.length ?? 0) > 1 ? '（最终轮）' : '' }}</div>
               <div class="pt-fields">
                 <span v-for="(fv, fk) in testResult.output.fields" :key="fk" class="pt-field"><b>{{ fk }}</b>={{ shortField(fv) }}</span>
               </div>
@@ -258,8 +258,8 @@ defineExpose({ open })
 </script>
 
 <style scoped>
-/* ===== 单步 Prompt 测试面板 ===== */
-.pt-config { display: grid; grid-template-columns: 1fr 100px 170px; gap: 10px; align-items: end; margin-bottom: 14px; }
+/* ===== 单步 Prompt 测试面板（区块间距由 mk-modal__body 的 grid gap 承担） ===== */
+.pt-config { display: grid; grid-template-columns: 1fr 100px 170px; gap: 10px; align-items: end; }
 .pt-config .mk-field { margin-bottom: 0; }
 .pt-result { display: grid; gap: 10px; }
 .pt-verdict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -301,23 +301,5 @@ html[data-theme='dark'] .pt-content { color: var(--mk-ink, #e7e8e9); }
 html[data-theme='dark'] .pt-io { border-color: #252627; }
 html[data-theme='dark'] .pt-field { background: rgba(129, 140, 248, 0.14); color: #a5b4fc; border-color: rgba(129, 140, 248, 0.3); }
 
-/* 弹窗内步骤/结果提示：mk-alert 形态，此处只留边距（本组件独立复制一份） */
-.vl-steps {
-  margin: 0 0 4px;
-  padding: 8px 10px;
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface-2); /* 走查：原硬编码 #f4f7fc 暗色模式下刺眼，改走 token */
-  color: var(--mk-muted, #5b6577);
-  font-size: var(--mk-fs-micro);
-  line-height: 1.5;
-}
-@media (min-width: 2000px) {
-  .vl-steps { font-size: var(--mk-fs-micro); padding: 9px 12px; }
-}
-@media (min-width: 2800px) {
-  .vl-steps { font-size: var(--mk-fs-micro); padding: 11px 14px; }
-}
-@media (min-width: 3600px) {
-  .vl-steps { font-size: var(--mk-fs-body); padding: 13px 16px; }
-}
+/* 步骤提示已换全局 .mk-alert mk-alert--info（原 .vl-steps 覆写删除） */
 </style>

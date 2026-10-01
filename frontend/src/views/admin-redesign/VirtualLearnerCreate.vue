@@ -8,16 +8,16 @@
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
       </div>
       <div class="mk-modal__body">
-        <p class="mk-alert mk-alert--info vl-steps">
+        <p class="mk-alert mk-alert--info">
           ① 称呼与背景 → ② AI 补全身份（可选）→ ③ 创建 → ④ 画像页生成故事 → ⑤ 按故事运行
         </p>
         <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
-          <span class="mk-field__label">称呼 / 样本名 <em class="vl-req">必填</em></span>
+          <span class="mk-field__label">称呼 / 样本名 <em class="mk-field__req">必填</em></span>
           <input v-model="form.name" class="mk-field__input" placeholder="例如 焦虑的转行者、自由职业写作者" />
           <span v-if="errors.name" class="mk-field__err">{{ errors.name }}</span>
         </label>
         <label class="mk-field" :class="{ 'mk-field--error': errors.story }">
-          <span class="mk-field__label">人物背景 <em class="vl-req">必填</em></span>
+          <span class="mk-field__label">人物背景 <em class="mk-field__req">必填</em></span>
           <textarea
             v-model="form.story"
             class="mk-field__textarea"
@@ -47,7 +47,7 @@
           </button>
           <span class="vl-ai-hint">人设 Skill · 只补稳定身份，不依赖学习目标，不写会话故事{{ sampleType === 'student' ? ' · 学生样本含考试节点与学期节奏' : '' }}</span>
         </div>
-        <p v-if="personaSeed" class="mk-alert mk-alert--ok vl-persona-ok">已回填人设，可改称呼/背景后创建</p>
+        <p v-if="personaSeed" class="mk-alert mk-alert--ok">已回填人设，可改称呼/背景后创建</p>
         <details class="vl-advanced">
           <summary>可选 · 长期学习倾向（不是某次故事的目标）</summary>
           <label class="mk-field">
@@ -172,23 +172,8 @@ defineExpose({ open })
 </script>
 
 <style scoped>
-/* 弹窗内步骤/结果提示：mk-alert 形态，此处只留边距（本组件独立复制一份） */
-.vl-steps {
-  margin: 0 0 4px;
-  padding: 8px 10px;
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted, #5b6577);
-  font-size: var(--mk-fs-micro);
-  line-height: 1.5;
-}
-.vl-req {
-  font-style: normal;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-blue, #2c63d0);
-  margin-left: 4px;
-}
+/* 步骤/人设成功提示走全局 .mk-alert mk-alert--info/--ok 语气，不再页内覆写底色 */
+/* AI 生成身份行：样本类型 pills（全局 mk-pill 单选词汇）+ 触发钮 + 口径 hint */
 .vl-ai-row {
   display: flex;
   flex-wrap: wrap;
@@ -208,67 +193,39 @@ defineExpose({ open })
   color: var(--mk-faint, #8492ab);
   line-height: 1.45;
 }
-.vl-persona-ok {
-  margin: 0;
-  padding: 6px 10px;
-  border-radius: var(--mk-radius-sm);
-  background: #e8f7ee;
-  color: #1a7f4b;
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-}
+/* 高级折叠区（可选字段）：描边浅底盒，色值走 token（暗色由 token 自适应，不再打补丁） */
 .vl-advanced {
   margin-top: 4px;
   border-radius: var(--mk-radius-xl);
-  border: 1px solid #e8ecf2;
-  background: #fafbfd;
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface-2);
   padding: 8px 12px;
 }
 .vl-advanced summary {
   cursor: pointer;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
-  color: var(--mk-muted, #5b6577);
+  color: var(--mk-muted);
   list-style: none;
 }
 .vl-advanced summary::-webkit-details-marker { display: none; }
 .vl-advanced[open] summary { margin-bottom: 8px; }
-.vl-advanced .mk-field { margin-bottom: 0; }
 
 @media (min-width: 2000px) {
-  .vl-steps { font-size: var(--mk-fs-micro); padding: 9px 12px; }
-  .vl-req { font-size: var(--mk-fs-micro); }
   .vl-ai-row { gap: 12px; }
-  .vl-ai-hint { font-size: var(--mk-fs-micro); }
-  .vl-persona-ok { font-size: var(--mk-fs-body); padding: 7px 12px; }
   .vl-advanced { padding: 10px 14px; }
-  .vl-advanced summary { font-size: var(--mk-fs-body); }
   .vl-advanced[open] summary { margin-bottom: 9px; }
 }
 @media (min-width: 2800px) {
-  .vl-steps { font-size: var(--mk-fs-micro); padding: 11px 14px; }
-  .vl-req { font-size: var(--mk-fs-micro); }
   .vl-ai-row { gap: 14px; }
-  .vl-ai-hint { font-size: var(--mk-fs-micro); }
-  .vl-persona-ok { font-size: var(--mk-fs-body); padding: 8px 14px; }
   .vl-advanced { padding: 12px 17px; }
-  .vl-advanced summary { font-size: var(--mk-fs-body); }
   .vl-advanced[open] summary { margin-bottom: 11px; }
 }
 @media (min-width: 3600px) {
-  .vl-steps { font-size: var(--mk-fs-body); padding: 13px 16px; }
-  .vl-req { font-size: var(--mk-fs-body); }
   .vl-ai-row { gap: 16px; }
   .vl-ai-hint { font-size: var(--mk-fs-body); }
-  .vl-persona-ok { font-size: var(--mk-fs-emphasis); padding: 9px 16px; }
   .vl-advanced { padding: 14px 20px; }
-  .vl-advanced summary { font-size: var(--mk-fs-emphasis); }
+  .vl-advanced summary { font-size: var(--mk-fs-body); }
   .vl-advanced[open] summary { margin-bottom: 13px; }
-}
-
-/* 暗色模式：高级区/人设成功提示（硬编码浅底） */
-html[data-theme='dark'] {
-  .vl-advanced { background: #19191a; border-color: #2a2b2d; }
-  .vl-persona-ok { background: rgba(74, 222, 128, 0.12); color: #6ee7a0; }
 }
 </style>

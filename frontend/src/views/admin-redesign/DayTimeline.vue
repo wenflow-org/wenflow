@@ -304,7 +304,8 @@ watch(
 .dt-day__head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .dt-day__label { font-weight: 600; }
 .dt-day__date { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.dt-chip { font-size: var(--mk-fs-micro); padding: 1px 6px; border-radius: 4px; background: rgba(140, 140, 140, 0.12); }
+/* 状态 chip（节奏/信号）：胶囊词汇（同 mk-badge）；难度调整是数据字面量，走 mk-badge--chip 的直角档 */
+.dt-chip { font-size: var(--mk-fs-micro); padding: 1px 8px; border-radius: 999px; background: rgba(140, 140, 140, 0.12); }
 .dt-chip--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .dt-chip--pace-slow { background: var(--mk-amber-bg); color: var(--mk-amber-fill); }
 .dt-chip--pace-fast { background: var(--mk-blue-bg); color: var(--mk-blue); }

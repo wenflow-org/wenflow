@@ -108,13 +108,13 @@ function stageLabel(stage: string | null | undefined): string {
 </script>
 
 <style scoped>
-/* 「正在运行」折叠展开按钮 */
+/* 「正在运行」折叠展开按钮（胶囊钮词汇，字重与 chip 同档 600） */
 .vl-running__more {
   border: 1px dashed var(--mk-line);
   background: var(--mk-surface);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
-  font-weight: 700;
+  font-weight: 600;
   padding: 3px 10px;
   border-radius: 999px;
   cursor: pointer;
@@ -143,13 +143,14 @@ function stageLabel(stage: string | null | undefined): string {
 .vl-batch-detail__text { display: flex; align-items: center; gap: 10px; color: var(--mk-muted, #5b6577); flex: 1; }
 .vl-batch-detail__err { color: var(--mk-red, #dc2626); }
 
-/* ===== 正在运行条：直接列名当前活跃虚拟学习者（绿点呼吸动画） ===== */
+/* ===== 正在运行条：原型 .statusbar 词汇——中性壳（line 描边 + surface 底），
+   活跃感只由绿点脉冲与 chip 色调承载（原整条绿染底/绿描边是另一套状态条语言） ===== */
 .vl-running {
   margin: 10px 0 0;
   padding: 5px 12px;
   border-radius: var(--mk-radius-xl);
-  border: 1px solid color-mix(in srgb, var(--mk-green) 30%, transparent);
-  background: color-mix(in srgb, var(--mk-green) 6%, transparent);
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -159,11 +160,11 @@ function stageLabel(stage: string | null | undefined): string {
   scrollbar-width: thin;
 }
 .vl-running::-webkit-scrollbar { height: 4px; }
-.vl-running::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--mk-green) 30%, transparent); border-radius: var(--mk-radius-xs); }
+.vl-running::-webkit-scrollbar-thumb { background: var(--mk-line); border-radius: var(--mk-radius-xs); }
 .vl-running__label {
   font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  color: var(--mk-green);
+  font-weight: 700;
+  color: var(--mk-ink);
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
@@ -189,7 +190,7 @@ function stageLabel(stage: string | null | undefined): string {
   background: var(--mk-surface);
   color: var(--mk-green);
   font-size: var(--mk-fs-micro);
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   transition: background 0.12s ease;
   flex-shrink: 0;

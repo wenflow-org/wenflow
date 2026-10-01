@@ -697,13 +697,14 @@ useOverlay(computed(() => props.visible), panelRef)
   gap: 3px;
 }
 
+/* 账号边界三格：原型 dl.kv 词汇——label 12px muted、值 body ink（原双 micro 偏「标签化」，值读不清） */
 .ql-account-brief__item span {
   font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
+  color: var(--mk-muted);
 }
 
 .ql-account-brief__item strong {
-  font-size: var(--mk-fs-micro);
+  font-size: var(--mk-fs-body);
   color: var(--mk-ink);
 }
 

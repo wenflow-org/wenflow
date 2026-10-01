@@ -9,7 +9,7 @@
       </div>
       <div class="mk-modal__body">
         <label class="mk-field">
-          <span class="mk-field__label">选择故事 <em class="vl-req">必填</em></span>
+          <span class="mk-field__label">选择故事 <em class="mk-field__req">必填</em></span>
           <select v-model="launchForm.storyId" class="mk-field__select" :disabled="launchStoriesLoading">
             <option disabled value="">
               {{ launchStoriesLoading ? '加载故事中…' : launchStories.length ? '请选择故事' : '暂无故事，请先在画像页生成' }}
@@ -167,20 +167,5 @@ defineExpose({ open })
 </script>
 
 <style scoped>
-.vl-req {
-  font-style: normal;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-blue, #2c63d0);
-  margin-left: 4px;
-}
-@media (min-width: 2000px) {
-  .vl-req { font-size: var(--mk-fs-micro); }
-}
-@media (min-width: 2800px) {
-  .vl-req { font-size: var(--mk-fs-micro); }
-}
-@media (min-width: 3600px) {
-  .vl-req { font-size: var(--mk-fs-body); }
-}
+/* 必填标记走全局 .mk-field__req（原页内 .vl-req 蓝色是另一套「必填」语言） */
 </style>

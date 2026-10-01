@@ -2,7 +2,7 @@
   <div class="mk-page mk-page--fill">
     <!-- 页头（newui/admin pagehead）：页名 + 主操作（新建/批量新建/回收）上移；
          状态条退位为纯状态摘要（人数/筛选/活动会话/截断提示） -->
-    <MkPageHead title="虚拟学习者">
+    <MkPageHead title="虚拟学习者" sub="用合成画像批量压测教学闭环与 Skill 稳定性">
       <template #actions>
         <button
           v-if="partition.stale > 0"
@@ -94,24 +94,9 @@
 
       <MockSkeletonTable v-if="liveLoading && !samples.length" :cols="6" />
       <div v-else-if="filtered.length" class="mk-table-scroll vl-table-scroll">
-      <table class="mk-table mk-table--click mk-table--fixed">
-        <colgroup>
-          <col v-if="isLive && !isNarrow" style="width:32px">
-          <!-- 两个文本列走弹性档（.mk-col--flex）：内容长度不可预测，是唯一该吸收余量的列。
-               此前两列都写死 --mk-col-text(320)，而 10 列基准宽合计 1314 > 容器 1182，
-               fixed 布局按比例回缩后这两列只剩 220px —— 长期倾向 15 行里 9 行被截断。 -->
-          <col class="mk-col--flex">
-          <col v-if="!isNarrow" class="mk-col--flex">
-          <col v-if="!isNarrow" style="width:var(--mk-col-badge)">
-          <col v-if="!isNarrow" style="width:var(--mk-col-num)">
-          <!-- 进行中 = 状态徽章 + 阶段条，需要固定宽度；原写 --mk-col-flex-min
-               （那是弹性列的 min 下限，不是列宽），198px 全落在进度条上。 -->
-          <col style="width:var(--mk-col-model-wide)">
-          <col v-if="!isNarrow" style="width:var(--mk-col-num)">
-          <col v-if="!isNarrow" style="width:var(--mk-col-num)">
-          <col v-if="!isNarrow" style="width:var(--mk-col-time-full)">
-          <col style="width:var(--mk-col-actions-wide)">
-        </colgroup>
+      <!-- 原型 .tbl 词汇：自动布局（无 colgroup），td 靠 nowrap 撑列、长内容列给 px 截断上限；
+           超宽由 .mk-table-scroll 横向滚动兜底（此前 fixed+colgroup 是本页私造的另一种表格语言） -->
+      <table class="mk-table mk-table--click">
         <thead>
           <tr>
             <th v-if="isLive && !isNarrow" scope="col">
@@ -227,19 +212,20 @@
             <td v-if="!isNarrow" class="mk-na">{{ s.created }}</td>
             <td>
               <div class="mk-actions mk-actions--left">
-                <!-- live：整行点击即进入画像详情，此处只留真正的行内操作（运行 / 测试 / 更多） -->
+                <!-- live：整行点击即进入画像详情，此处只留真正的行内操作（运行 / 测试 / 更多）
+                     —— 原型 .btn--sm 文字钮词汇（原 mk-icon-btn--text 是图标钮套文字的混搭） -->
                 <button
                   v-if="isLive"
                   type="button"
-                  class="mk-icon-btn mk-icon-btn--text"
-                  :class="{ 'mk-link--muted': s.storyCount === 0 }"
+                  class="mk-btn mk-btn--sm"
+                  :class="{ 'vl-op--muted': s.storyCount === 0 }"
                   :title="s.storyCount === 0 ? '需先生成故事才能运行' : '运行：启动一次新的实验会话（不影响已有会话）'"
                   @click.stop="openLaunch(s)"
                 ><Play :size="14" :stroke-width="1.75" /><span>{{ s.storyCount === 0 ? '需故事' : '运行' }}</span></button>
                 <button
                   v-if="isLive"
                   type="button"
-                  class="mk-icon-btn mk-icon-btn--text"
+                  class="mk-btn mk-btn--sm"
                   :title="`单步测试：用「${s.name}」的人设和故事直接跑一次 Prompt 对话，看字段产出是否符合预期（不创建用例、不影响正式会话）`"
                   @click.stop="openPromptTest(s)"
                 ><SquareCheckBig :size="14" :stroke-width="1.75" /><span>测试</span></button>
@@ -633,16 +619,11 @@ function openRunningSession(s: Sample) {
 </script>
 
 <style scoped>
-/* 操作列：图标+文字标签按钮 */
-.mk-actions .mk-icon-btn--text {
-  width: auto;
-  padding: 0 5px;
-  gap: 3px;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-}
-.mk-actions .mk-icon-btn--text span { font-size: var(--mk-fs-micro); }
-.mk-actions .mk-icon-btn--text svg { width: 13px; height: 13px; }
+/* 操作列已换 .mk-btn--sm 文字钮（原型 .btn--sm 词汇），图标对齐微调：
+   mk-btn 给 svg 的 6px 右距在本钮偏松，收到与文字同组的 4px */
+.mk-actions .mk-btn--sm svg { margin-right: 4px; }
+/* 无故事的「运行」弱化档（原 mk-link--muted 是链接词汇，误用在按钮上） */
+.vl-op--muted { color: var(--mk-muted); }
 /* 窄屏表格：8 列在 704px 内容区会被压扁操作列，设 min-width 触发 .mk-table-scroll 横向滚动（对齐 AuditLogs 模式） */
 .mk-table-scroll .mk-table { min-width: 860px; }
 /* 窄屏（≤720）次要列已随 useIsNarrow 隐藏，仅剩 3 列可完整放下，不再强制最小宽 */
@@ -650,18 +631,19 @@ function openRunningSession(s: Sample) {
   .mk-table-scroll .mk-table { min-width: 0; }
 }
 .vl-row { cursor: pointer; }
-/* 长期倾向列：单行截断 + title（原可换行撑高行，ADMIN_COLUMN_WIDTH_AUDIT ⑤）；空值统一「未设置」降噪 */
+/* 长期倾向列：自动布局下给 px 截断上限（原 max-width:100% 依赖 fixed 列宽才成立）；
+   空值统一「未设置」降噪（ADMIN_COLUMN_WIDTH_AUDIT ⑤） */
 .vl-goal {
   display: inline-block;
-  max-width: 100%;
+  max-width: 240px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
 }
 .vl-goal--empty { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-/* 状态列：进行中胶囊 / 失败数 / 卡死徽章 分列展示（一列一语义） */
-.vl-state-cell { display: flex; align-items: center; min-height: 26px; }
+/* 状态列：进行中胶囊 / 失败数 / 卡死徽章 分列展示（一列一语义）；gap+wrap 归并为一处定义 */
+.vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 26px; }
 .vl-run {
   display: inline-flex;
   align-items: center;
@@ -671,7 +653,7 @@ function openRunningSession(s: Sample) {
   color: var(--mk-faint);
   white-space: nowrap;
 }
-/* 失败列：全量聚合数字（>0 标红，可点击直达画像页的重试入口） */
+/* 失败列：全量聚合数字（>0 标红，可点击直达画像页的重试入口）；hover 环走 token（原 #eff6ff 硬编码无暗色适配） */
 .vl-num--bad { color: var(--mk-red, #dc2626); font-weight: 800; }
 .vl-faillink {
   border: 0;
@@ -686,8 +668,7 @@ function openRunningSession(s: Sample) {
   border-radius: 4px;
   transition: color 0.12s ease, background 0.12s ease;
 }
-.vl-faillink:hover { color: var(--mk-blue); background: #eff6ff; box-shadow: 0 0 0 3px #eff6ff; }
-/* .mk-num--na 已收敛到既有全局 .mk-na（同一张表里两个类表达同一概念） */
+.vl-faillink:hover { color: var(--mk-blue); background: var(--mk-blue-bg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue) 18%, transparent); }
 
 /* 运行指标带：KPI 独占整行（共享 .mk-kpi-grid + MkKpi，卡自带面/描边，外层不套盒子）；
    下一行是 VL RPM 写控件（读/写分块），一行小字说明口径，省掉只有 hover 才看得见的 title */
@@ -706,7 +687,7 @@ function openRunningSession(s: Sample) {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: var(--mk-faint);
+  color: var(--mk-muted);
   white-space: nowrap;
 }
 .vl-rpm__input { width: 84px; }
@@ -717,11 +698,8 @@ function openRunningSession(s: Sample) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* VL 语境收窄文本列：两列 --mk-col-text 320→200，列宽和 1314→1074，
-   避免「操作」列越出内容区（超出时仍由 .mk-table-scroll 横向滚动兜底）。 */
-.vl-table-scroll { --mk-col-text: 200px; }
-.vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-
+/* 表格已换自动布局（原型 .tbl 词汇），fixed/colgroup 的列宽变量覆写随之删除；
+   长内容截断上限收敛到各内容类（.vl-goal / .mk-cell-main strong） */
 .vl-truncated { color: var(--mk-amber); font-weight: 700; }
 
 /* 走查 2026-09-27：「正在运行」条胶囊按钮由子组件 VirtualLearnerRunningBar 渲染，
@@ -769,9 +747,5 @@ function openRunningSession(s: Sample) {
   min-width: 0;
 }
 
-/* ================= 暗色模式（D1 补完）：虚拟学习者列表 ================= */
-html[data-theme='dark'] {
-  .vl-faillink:hover { background: rgba(91, 141, 239, 0.14); box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.08); }
-  /* 并发条 / 批量详情：已改用 var(--mk-*) token，暗色由全局 token 覆盖，不再需要页面补丁 */
-}
+/* 暗色模式：全量走 var(--mk-*) token（faillink hover 也已 token 化），不再需要页面补丁 */
 </style>

@@ -177,7 +177,8 @@ onMounted(load)
 .sd-settings__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; cursor: pointer; }
 .sd-settings__arrow { color: var(--mk-faint, #6b7c96); font-size: var(--mk-fs-micro); transition: transform 0.15s ease; }
 .sd-settings__arrow[data-open='true'] { transform: rotate(90deg); }
-.sd-settings__title { font-weight: 600; font-size: var(--mk-fs-body); }
+/* 折叠头标题字重对齐卡头/折叠头词汇（mk-card__title、mk-section__summary 均 700） */
+.sd-settings__title { font-weight: 700; font-size: var(--mk-fs-body); }
 .sd-switch { display: flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); cursor: pointer; }
 .sd-settings__body { padding-top: 4px; }
 .sd-settings__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 12px; margin-top: 8px; }

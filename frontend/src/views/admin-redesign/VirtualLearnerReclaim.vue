@@ -8,11 +8,11 @@
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="state.open = false">✕</button>
       </div>
       <div class="mk-modal__body">
-        <p class="mk-alert mk-alert--info vl-steps">
+        <p class="mk-alert mk-alert--info">
           将把{{ state.profileIds ? '选中虚拟人' : '全部' }}超过回收阈值（{{ reclaimThresholdLabel }}）无写入、且无活跃租约的会话标记为失败（failed, reason=stale）。只改状态，不删除任何数据。
         </p>
-        <p v-if="state.loading" class="mk-alert mk-alert--info vl-steps">正在扫描可回收会话…</p>
-        <p v-else-if="!state.preview.length" class="mk-alert mk-alert--ok vl-steps">没有可回收的卡死会话。</p>
+        <p v-if="state.loading" class="mk-alert mk-alert--info">正在扫描可回收会话…</p>
+        <p v-else-if="!state.preview.length" class="mk-alert mk-alert--ok">没有可回收的卡死会话。</p>
         <div v-else class="vl-reclaim-list">
           <div v-for="r in state.preview" :key="r.id" class="vl-reclaim-item">
             <code class="vl-reclaim-id">{{ r.id.slice(0, 14) }}…</code>
@@ -23,7 +23,8 @@
       </div>
       <div class="mk-modal__foot">
         <button type="button" class="mk-btn" @click="state.open = false">取消</button>
-        <button type="button" class="mk-btn mk-btn--primary" :disabled="state.busy || !state.preview.length" @click="confirmReclaim">
+        <!-- 判例「确认弹层=取消+危险主钮右对齐」：回收=把会话批量标记失败（同原型 openBreakConfirm 中断会话的危险钮语气） -->
+        <button type="button" class="mk-btn mk-btn--danger" :disabled="state.busy || !state.preview.length" @click="confirmReclaim">
           {{ state.busy ? '回收中…' : `确认回收 ${state.preview.length} 个会话` }}
         </button>
       </div>
@@ -121,7 +122,7 @@ defineExpose({ open, state })
 </script>
 
 <style scoped>
-/* 一键回收清单 */
+/* 一键回收清单：色值走 token（暗色自适应，原 #fafbfd/#e8ecf2 + 暗色补丁删除） */
 .vl-reclaim-list {
   display: flex;
   flex-direction: column;
@@ -136,42 +137,22 @@ defineExpose({ open, state })
   gap: 10px;
   padding: 7px 10px;
   border-radius: var(--mk-radius-xl);
-  background: #fafbfd;
-  border: 1px solid #e8ecf2;
+  background: var(--mk-surface-2);
+  border: 1px solid var(--mk-line);
   font-size: var(--mk-fs-micro);
 }
 .vl-reclaim-id { font-size: var(--mk-fs-micro); color: var(--mk-muted, #5b6577); }
 .vl-reclaim-stale { margin-left: auto; color: var(--mk-red, #dc2626); font-weight: 700; white-space: nowrap; }
 
-/* 弹窗内步骤/结果提示：mk-alert 形态，此处只留边距（本组件独立复制一份） */
-.vl-steps {
-  margin: 0 0 4px;
-  padding: 8px 10px;
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted, #5b6577);
-  font-size: var(--mk-fs-micro);
-  line-height: 1.5;
-}
+/* 步骤/清单提示已换全局 .mk-alert mk-alert--info/--ok（原 .vl-steps 覆写删除） */
 
 @media (min-width: 2000px) {
-  .vl-steps { font-size: var(--mk-fs-micro); padding: 9px 12px; }
-  .vl-reclaim-item { font-size: var(--mk-fs-micro); padding: 8px 12px; }
-  .vl-reclaim-id { font-size: var(--mk-fs-micro); }
+  .vl-reclaim-item { padding: 8px 12px; }
 }
 @media (min-width: 2800px) {
-  .vl-steps { font-size: var(--mk-fs-micro); padding: 11px 14px; }
-  .vl-reclaim-item { font-size: var(--mk-fs-micro); padding: 9px 14px; }
-  .vl-reclaim-id { font-size: var(--mk-fs-micro); }
+  .vl-reclaim-item { padding: 9px 14px; }
 }
 @media (min-width: 3600px) {
-  .vl-steps { font-size: var(--mk-fs-body); padding: 13px 16px; }
-  .vl-reclaim-item { font-size: var(--mk-fs-body); padding: 11px 16px; }
-  .vl-reclaim-id { font-size: var(--mk-fs-body); }
-}
-
-/* 暗色模式：回收清单（硬编码浅底） */
-html[data-theme='dark'] {
-  .vl-reclaim-item { background: #19191a; border-color: #2a2b2d; }
+  .vl-reclaim-item { padding: 11px 16px; }
 }
 </style>
