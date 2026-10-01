@@ -91,17 +91,8 @@ async function settle() {
 }
 
 /**
- * 点击视图切换 pill（OpsHub 等仍用 pills 的宿主页）。
- * pill 文本带计数徽章（如「站内通知」），按 .mk-pill 定位 + includes 匹配标签。
- */
-async function clickPill(w: ReturnType<typeof mount>, label: string) {
-  const btn = w.findAll('.mk-pill').find((b) => b.text().includes(label));
-  expect(btn, `未找到视图切换 pill：${label}`).toBeTruthy();
-  await btn!.trigger('click');
-}
-
-/**
- * 点击视图切换 tab（People 2026-10-01 起改原型 .tabs 下划线页签，非胶囊）。
+ * 点击视图切换 tab（原型 .tabs 下划线页签：People 与 OpsHub 2026-10-01 起均改下划线式，非胶囊）。
+ * tab 文本带计数角标（如「站内通知」），按 .tab 定位 + includes 匹配标签。
  */
 async function clickTab(w: ReturnType<typeof mount>, label: string) {
   const btn = w.findAll('.tab').find((b) => b.text().includes(label));
@@ -189,7 +180,7 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     expect(w.findComponent(Announcements).exists()).toBe(true);
     expect(w.findComponent(Notifications).exists()).toBe(false);
 
-    await clickPill(w, '站内通知');
+    await clickTab(w, '站内通知');
     await settle();
     expect(w.findComponent(Notifications).exists()).toBe(true);
     expect(router.currentRoute.value.query.tab).toBe('inapp');

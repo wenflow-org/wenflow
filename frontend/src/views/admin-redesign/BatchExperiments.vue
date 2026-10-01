@@ -18,15 +18,9 @@
     <div class="mk-card">
       <MockSkeletonTable v-if="loading && !experiments.length" :cols="6" />
       <div v-else-if="experiments.length" class="mk-table-scroll be-list">
-        <table class="mk-table mk-table--fixed">
-          <colgroup>
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-model-wide)">
-            <col style="width:var(--mk-col-time-full)">
-            <col style="width:var(--mk-col-actions-wide)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容；
+             长描述由下方 be-desc 截断兜底 -->
+        <table class="mk-table">
           <thead>
             <tr>
               <th>实验</th>
@@ -42,7 +36,7 @@
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ e.name }}</strong>
-                  <span class="mk-cell-sub" :title="e.description || ''">{{ e.description || '无描述' }}</span>
+                  <span class="mk-cell-sub be-desc" :title="e.description || ''">{{ e.description || '无描述' }}</span>
                 </div>
               </td>
               <td><span class="mk-badge" :class="statusBadge(e.status)">{{ statusText(e.status) }}</span></td>
@@ -64,8 +58,9 @@
               <td :title="fmtDate(e.createdAt)">{{ timeAgo(e.createdAt) }}</td>
               <td>
                 <div class="mk-actions">
-                  <button type="button" class="mk-link" @click="openDetail(e)">详情</button>
-                  <button v-if="e.status === 'running'" type="button" class="mk-link mk-link--danger" :disabled="e.busy" @click="stop(e)">停止</button>
+                  <!-- 原型操作列：文字小钮（.btn--sm 形态，破坏性动作红字钮）；行级动作另留 ⋯ 菜单 -->
+                  <button type="button" class="mk-btn mk-btn--sm" @click="openDetail(e)">详情</button>
+                  <button v-if="e.status === 'running'" type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="e.busy" @click="stop(e)">停止</button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === e.id" @click.stop="toggleMenu(e.id)">⋯</button>
                     <div v-if="openMenu === e.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -592,6 +587,9 @@ watch(shouldPoll, (on) => (on ? poll.start() : poll.stop()), { immediate: true }
 </script>
 
 <style scoped>
+/* 表格（原型 .tbl）：自动布局下单元格 nowrap；实验描述是自由文本，max-width 截断兜底 */
+.be-list .mk-table td { white-space: nowrap; }
+.be-desc { display: block; max-width: 260px; }
 .be-progress { display: flex; align-items: center; gap: 8px; min-width: 140px; }
 /* 学习者列：失败数红色强调（失败有值时突出，无失败保持副行灰） */
 .be-fail-num { color: var(--mk-red); font-weight: 700; }

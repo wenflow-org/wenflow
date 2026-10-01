@@ -31,13 +31,15 @@
       </template>
     </div>
 
-    <!-- 视图切换 pills（唯一的 tab 控件）：各视图计数随 pill 呈现 -->
-    <div class="mk-pills oh-tabs">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'todo' }" @click="switchTab('todo')">运营待办</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'feedback' }" @click="switchTab('feedback')">反馈<span class="mk-pill__count">{{ domainCount.feedback }}</span></button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'achievements' }" @click="switchTab('achievements')">成就<span class="mk-pill__count">{{ domainCount.achievements }}</span></button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'announce' }" @click="switchTab('announce')">公告<span class="mk-pill__count">{{ announcePillCount }}</span></button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'inapp' }" @click="switchTab('inapp')">站内通知<span class="mk-pill__count">{{ domainCount.inapp }}</span></button>
+    <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
+         2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签。
+         各视图计数以角标随页签呈现，形态同共享 MkSubTabs 的 count 角标） -->
+    <div class="tabs" role="tablist" aria-label="运营中心视图切换">
+      <button type="button" class="tab" role="tab" :aria-selected="tab === 'todo'" @click="switchTab('todo')">运营待办</button>
+      <button type="button" class="tab" role="tab" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span class="tab__count">{{ domainCount.feedback }}</span></button>
+      <button type="button" class="tab" role="tab" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count">{{ domainCount.achievements }}</span></button>
+      <button type="button" class="tab" role="tab" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告<span class="tab__count">{{ announcePillCount }}</span></button>
+      <button type="button" class="tab" role="tab" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span class="tab__count">{{ domainCount.inapp }}</span></button>
     </div>
 
     <!-- ===== Tab1: 运营待办（原运营中心全量内容） ===== -->
@@ -417,8 +419,28 @@ onMounted(() => {
 
 <style scoped>
 /* ================= 宿主布局（tab 宿主：运营待办内滚；嵌入子页占满剩余高度） ================= */
-.oh-tabs { width: fit-content; }
-/* 待办 tab：内容在宿主 flex 列内独立滚动（状态条/pills 固定） */
+/* 视图切换（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签、MkSubTabs 同款：
+   pill 计数角标随迁为 tab__count——faint 微字不抢层级，激活时继承蓝字降透明度） */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--mk-muted);
+  padding: 9px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--mk-fs-micro);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.tab:hover { color: var(--mk-ink); }
+.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+.tab__count { margin-left: 5px; color: var(--mk-faint); font-weight: 600; }
+.tab[aria-selected='true'] .tab__count { color: inherit; opacity: 0.72; }
+/* 待办 tab：内容在宿主 flex 列内独立滚动（状态条/页签固定） */
 .oh-body {
   flex: 1 1 auto;
   min-height: 0;

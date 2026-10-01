@@ -15,10 +15,12 @@
       <span class="mk-status__meta" :title="lastRunHint">{{ lastRunText }}</span>
     </div>
 
-    <!-- 主视图切换（统一样板：状态条正下方的独立一行，按内容宽度、左对齐） -->
-    <div class="mk-pills" role="tablist" aria-label="评估视图切换">
-      <button type="button" role="tab" id="pe-tab-cases" aria-controls="pe-panel-cases" class="mk-pill" :aria-selected="tab === 'cases'" :class="{ 'mk-pill--active': tab === 'cases' }" @click="switchTab('cases')">评估用例</button>
-      <button type="button" role="tab" id="pe-tab-runs" aria-controls="pe-panel-runs" class="mk-pill" :aria-selected="tab === 'runs'" :class="{ 'mk-pill--active': tab === 'runs' }" @click="switchTab('runs')">评估历史</button>
+    <!-- 主视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
+         2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips。页内弹窗的手写/模拟切换
+         共用同一套 pe-tabs 页签语言，不再各持一词） -->
+    <div class="pe-tabs" role="tablist" aria-label="评估视图切换">
+      <button type="button" role="tab" id="pe-tab-cases" aria-controls="pe-panel-cases" class="pe-tab" :aria-selected="tab === 'cases'" @click="switchTab('cases')">评估用例</button>
+      <button type="button" role="tab" id="pe-tab-runs" aria-controls="pe-panel-runs" class="pe-tab" :aria-selected="tab === 'runs'" @click="switchTab('runs')">评估历史</button>
     </div>
 
     <!-- 筛选行 -->
@@ -37,19 +39,9 @@
     <div v-if="tab === 'cases'" id="pe-panel-cases" role="tabpanel" aria-labelledby="pe-tab-cases" class="mk-card">
       <MockSkeletonTable v-if="casesLoading && !cases.length" :cols="6" />
       <div v-else-if="cases.length" class="mk-table-scroll pe-list">
-        <table class="mk-table mk-table--fixed">
-          <!-- 列宽合计不得超过容器宽（1440 下 1182px）：fixed 表的实际宽度取「100%」与
-               「列宽合计」的较大者，7 列原合计 1310 让整表横向溢出 128px。Agent 是短名，
-               用 text-sm 档。 -->
-          <colgroup>
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-text-sm)">
-            <col style="width:var(--mk-col-num)">
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-time-full)">
-            <col style="width:var(--mk-col-actions-wide)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容；
+             长内容（用例名/期望摘要）由 mk-cell-main 上限与 pe-expect 截断兜底 -->
+        <table class="mk-table">
           <thead>
             <tr>
               <th>用例</th>
@@ -69,8 +61,8 @@
                   <span class="mk-cell-sub" :title="c.caseId">{{ c.caseId }}</span>
                 </div>
               </td>
-              <td style="overflow:hidden"><span class="mk-badge mk-badge--info" style="max-width:100%;overflow:hidden;text-overflow:ellipsis">{{ agentLabel(c.agentId) }}</span></td>
-              <td class="mk-num" style="overflow:hidden" :title="c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟用例：学生话由模拟器生成，无需手写消息' : ''">{{ c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟' : c.messages.length }}</td>
+              <td><span class="mk-badge mk-badge--info" :title="agentLabel(c.agentId)">{{ agentLabel(c.agentId) }}</span></td>
+              <td class="mk-num" :title="c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟用例：学生话由模拟器生成，无需手写消息' : ''">{{ c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟' : c.messages.length }}</td>
               <td>
                 <div v-if="expectationText(c)" class="pe-expect" :title="expectationText(c)">{{ expectationText(c) }}</div>
                 <span v-else class="mk-na">无</span>
@@ -86,8 +78,9 @@
               <td :title="fmtDate(c.updatedAt)">{{ timeAgo(c.updatedAt) }}</td>
               <td>
                 <div class="mk-actions">
-                  <button type="button" class="mk-link" @click="openEdit(c)">编辑</button>
-                  <button type="button" class="mk-link" @click="toggleEnabled(c)">{{ c.enabled ? '停用' : '启用' }}</button>
+                  <!-- 原型操作列：文字小钮（.btn--sm 形态）；低频/危险动作留在 ⋯ 菜单 -->
+                  <button type="button" class="mk-btn mk-btn--sm" @click="openEdit(c)">编辑</button>
+                  <button type="button" class="mk-btn mk-btn--sm" @click="toggleEnabled(c)">{{ c.enabled ? '停用' : '启用' }}</button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === c.id" @click.stop="toggleMenu(c.id)">⋯</button>
                     <div v-if="openMenu === c.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -126,16 +119,8 @@
     <div v-else id="pe-panel-runs" role="tabpanel" aria-labelledby="pe-tab-runs" class="mk-card">
       <MockSkeletonTable v-if="runsLoading && !runs.length" :cols="6" />
       <div v-else-if="runs.length" class="mk-table-scroll pe-list">
-        <table class="mk-table mk-table--fixed">
-          <colgroup>
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-model-wide)">
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-num-wide)">
-            <col style="width:var(--mk-col-num)">
-            <col style="width:var(--mk-col-time-full)">
-            <col style="width:var(--mk-col-actions)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容 -->
+        <table class="mk-table">
           <thead>
             <tr>
               <th>运行</th>
@@ -172,7 +157,7 @@
               <td :title="fmtDate(r.createdAt)">{{ timeAgo(r.createdAt) }}</td>
               <td>
                 <div class="mk-actions">
-                  <button type="button" class="mk-link" @click="openRunDetail(r)">详情</button>
+                  <button type="button" class="mk-btn mk-btn--sm" @click="openRunDetail(r)">详情</button>
                 </div>
               </td>
             </tr>
@@ -235,9 +220,9 @@
             <div class="pe-input-block">
               <div class="pe-tabs" role="tablist" aria-label="学生输入方式">
                 <button type="button" class="pe-tab" role="tab" id="pe-tab-manual" aria-controls="pe-input-panel" :aria-selected="form.inputSource === 'manual'"
-                  :class="{ 'pe-tab--on': form.inputSource === 'manual' }" @click="form.inputSource = 'manual'"><PenLine class="pe-tab__icon" :size="14" :stroke-width="1.75" aria-hidden="true" />手写对话</button>
+                  @click="form.inputSource = 'manual'"><PenLine class="pe-tab__icon" :size="14" :stroke-width="1.75" aria-hidden="true" />手写对话</button>
                 <button type="button" class="pe-tab" role="tab" id="pe-tab-simulated" aria-controls="pe-input-panel" :aria-selected="form.inputSource === 'simulated'"
-                  :class="{ 'pe-tab--on': form.inputSource === 'simulated' }" @click="form.inputSource = 'simulated'"><Users class="pe-tab__icon" :size="14" :stroke-width="1.75" aria-hidden="true" />模拟学生</button>
+                  @click="form.inputSource = 'simulated'"><Users class="pe-tab__icon" :size="14" :stroke-width="1.75" aria-hidden="true" />模拟学生</button>
               </div>
 
               <div class="pe-tab-body" id="pe-input-panel" role="tabpanel" :aria-labelledby="form.inputSource === 'manual' ? 'pe-tab-manual' : 'pe-tab-simulated'">
@@ -1139,6 +1124,9 @@ function retryRunDetail() {
 .pe-filter__hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); margin-left: auto; }
 /* 列表高度：空态占位交给 mk-empty--min，有数据时表格自然高度（不再硬撑满屏） */
 .pe-list { min-height: 0; }
+/* 原型 .tbl td：nowrap（自动布局下列宽随内容；长内容由 mk-cell-main 上限与 pe-expect 截断兜底，
+   不换行撑行高） */
+.pe-list .mk-table td { white-space: nowrap; }
 .pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .pe-persona-missing { margin-left: 6px; }
 .pe-result { display: grid; gap: 3px; justify-items: start; }
@@ -1186,7 +1174,8 @@ function retryRunDetail() {
 .pe-guide__steps { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
 /* .mk-field__opt（字段标签内的「（可选）」次级提示）已提升为全局，见 shared.css */
 
-/* ===== 学生输入：标准 tab ===== */
+/* ===== 页签（原型 .tabs/.tab 下划线式：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
+   主视图切换与弹窗内「手写对话/模拟学生」共用一套，激活态走 aria-selected） ===== */
 .pe-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
 .pe-tab {
   display: inline-flex;
@@ -1194,17 +1183,19 @@ function retryRunDetail() {
   gap: 6px;
   border: 0;
   background: transparent;
-  padding: 8px 14px;
+  padding: 9px 12px;
   cursor: pointer;
-  font-size: var(--mk-fs-body);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-muted);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
+  white-space: nowrap;
 }
 .pe-tab__icon { width: 14px; height: 14px; flex: 0 0 auto; }
 .pe-tab:hover { color: var(--mk-ink); }
-.pe-tab--on { color: var(--mk-blue, #2c63d0); border-bottom-color: var(--mk-blue, #2c63d0); }
+.pe-tab[aria-selected='true'] { color: var(--mk-blue, #2c63d0); border-bottom-color: var(--mk-blue, #2c63d0); }
 .pe-tab-body {
   border: 1px solid var(--mk-line);
   border-top: 0;
