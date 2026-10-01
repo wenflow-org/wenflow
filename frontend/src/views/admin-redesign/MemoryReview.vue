@@ -41,14 +41,25 @@
       />
     </section>
 
-    <!-- 记忆分布（newui「教学分组」stageband 原型移植）：到期 / 正常 两段占一条分布条。
+    <!-- 记忆分布（newui「教学分组」stageband 原型移植，distBand 判例 = OpsContent 状态分布卡）：
+         到期 / 正常 两段占一条分布条 + sbl 图例，卡头 = title+meta 左组、右组胶囊贴右。
          口径：totals 来自 /admin/memory-review 全量统计；「正常」= traces − due（钳非负，后端无独立字段）。
-         后端没有记忆强度分桶数据，不做「记忆强度分布」；proposed/ambiguous 已由页头 KPI 卡承载，不复读。
+         原型 renderMemory 的六段「到期时间轴」（已逾期/今天/明天/2/3/5 天后）需要逐档到期日计数，
+         后端 overview 只回 totals.due 总数——字段没有的不硬造，两段同构等价。
+         卡头右组胶囊（N 条到期 / 无到期）= 原型复习负载卡 card__tools「N 个逾期 / 无逾期」同位。
+         后端没有记忆强度分桶数据，不做「记忆强度分布」直方图；proposed/ambiguous 已由页头 KPI 卡承载，不复读。
          traces=0（或拉取失败保持 0）时整卡隐藏，不留空卡。 -->
     <section v-if="totals.traces > 0" class="mk-card">
       <div class="mk-card__head">
         <span class="mk-card__title">记忆分布</span>
-        <span class="mk-card__meta">共 {{ totals.traces }} 条记忆痕迹 · 其中 {{ totals.due }} 条到期</span>
+        <span class="mk-card__meta">按到期状态聚合 · 共 {{ totals.traces }} 条记忆痕迹</span>
+        <div class="mk-card__head-right">
+          <span
+            class="mk-badge"
+            :class="totals.due > 0 ? 'mk-badge--warn' : 'mk-badge--ok'"
+            :title="totals.due > 0 ? '到该复习而未复习的记忆痕迹数（到期段琥珀色）' : '当前没有到该复习而未复习的痕迹'"
+          >{{ totals.due > 0 ? `${totals.due} 条到期` : '无到期' }}</span>
+        </div>
       </div>
       <div class="mr-dist__body">
         <div
@@ -174,7 +185,7 @@
             </thead>
             <tbody>
               <tr v-for="item in detail.reviewPlan.items" :key="item.conceptKey">
-                <td>{{ item.label }}<small class="mr__sub">{{ item.conceptKey }}</small></td>
+                <td><strong>{{ item.label }}</strong><small class="mr__sub">{{ item.conceptKey }}</small></td>
                 <td class="mk-num">
                   <span class="mr-pct" :class="{ 'mr-pct--warn': item.retention < 0.7 }" :title="`记忆强度 ${Math.round(item.retention * 100)}%，低于 70% 优先安排`">
                     <b>{{ Math.round(item.retention * 100) }}%</b>
@@ -212,7 +223,9 @@
           <thead><tr><th>概念</th><th class="mk-num">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th>到期时间</th></tr></thead>
           <tbody>
             <tr v-for="trace in detail.duePreview" :key="trace.conceptKey">
-              <td>{{ trace.label }}</td>
+              <!-- 原型记忆明细表首列 = 知识点 strong；同族重复/归并建议首列是裸 key（无人类可读
+                   label），维持 mr__sub 降档，不冒充正文 -->
+              <td><strong>{{ trace.label }}</strong></td>
               <td class="mk-num">
                 <span class="mr-pct" :class="{ 'mr-pct--warn': trace.retention < 0.7 }" :title="`记忆强度 ${Math.round(trace.retention * 100)}%`">
                   <b>{{ Math.round(trace.retention * 100) }}%</b>
@@ -343,7 +356,14 @@
                     <span class="mr-pct__bar" aria-hidden="true"><i :style="{ width: Math.round(proposal.lexicalSimilarity * 100) + '%' }"></i></span>
                   </span>
                 </td>
-                <td>{{ proposal.autoApplicable ? '是' : '需人工确认' }}</td>
+                <td>
+                  <!-- 词面闸门结果用胶囊（原型记忆域 pill 状态词汇；与上方审计队列「可自动/需人工看」同标签） -->
+                  <span
+                    class="mk-badge"
+                    :class="proposal.autoApplicable ? 'mk-badge--ok' : 'mk-badge--warn'"
+                    :title="proposal.autoApplicable ? '把握度 + 词面闸门都过，默认已勾选' : '未过词面闸门或把握度不足，勾选后需人工确认'"
+                  >{{ proposal.autoApplicable ? '可自动' : '需人工确认' }}</span>
+                </td>
                 <td class="mr__sub">{{ proposal.rationale || '—' }}</td>
               </tr>
             </tbody>
