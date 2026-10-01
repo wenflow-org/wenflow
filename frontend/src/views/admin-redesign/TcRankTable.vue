@@ -57,9 +57,9 @@
         <em class="tc-c__sub">prompt {{ fmtTokens(r.promptTokens) }}<template v-if="(r.completionTokens ?? 0) > 0"> · comp {{ fmtTokens(r.completionTokens) }}</template></em>
       </div>
 
-      <!-- 占比：细条 + 百分比 -->
+      <!-- 占比：迷你进度条（mk-minibar 原语，替代页内自搓渐变条）+ 百分比 -->
       <div class="tc-c tc-c--share" role="cell">
-        <i class="tc-share__track"><b class="tc-share__bar" :style="{ width: shareW(r.tokens) }"></b></i>
+        <span class="mk-minibar tc-share__bar"><span class="mk-minibar__fill" :style="{ width: shareW(r.tokens) }"></span></span>
         <span class="tc-share__num">{{ sharePct(r.tokens) }}</span>
       </div>
     </div>
@@ -191,16 +191,14 @@ function rowTitle(r: RankRow): string {
   color: var(--mk-faint);
 }
 
-/* 行 */
+/* 行（分隔线/hover 走 mk-table 同套 token，与原型 .tbl tbody 行语言一致） */
 .tc-table__row {
   padding: 7px 0;
-  border-bottom: 1px solid #eef1f7;
+  border-bottom: 1px solid var(--mk-table-row-line);
   transition: background 0.12s;
 }
 .tc-table__row:last-child { border-bottom: none; }
-.tc-table__row:hover { background: #f6f9ff; }
-html[data-theme='dark'] .tc-table__row { border-bottom-color: #252627; }
-html[data-theme='dark'] .tc-table__row:hover { background: #202122; }
+.tc-table__row:hover { background: var(--mk-table-row-hover-bg); }
 
 .tc-c { min-width: 0; }
 .tc-c--num { text-align: right; }
@@ -231,12 +229,10 @@ html[data-theme='dark'] .tc-table__row:hover { background: #202122; }
   font-weight: 700;
   font-style: normal;
   color: var(--mk-faint);
-  background: #f0f2f5;
+  background: var(--mk-surface-3);
   font-variant-numeric: tabular-nums;
 }
 .tc-rank__no--top { background: var(--mk-blue-bg); color: var(--mk-blue); }
-html[data-theme='dark'] .tc-rank__no { background: #2d2d2f; color: var(--mk-muted); }
-html[data-theme='dark'] .tc-rank__no--top { background: rgba(91, 141, 239, 0.2); color: #9db8f5; }
 
 /* 名称列 */
 .tc-c--name { display: flex; align-items: center; gap: 9px; }
@@ -281,22 +277,8 @@ html[data-theme='dark'] .tc-rank__no--top { background: rgba(91, 141, 239, 0.2);
 .tc-fail--bad .tc-c__sub { color: var(--mk-red); opacity: 0.75; }
 .tc-fail--ok { color: var(--mk-faint); font-weight: 600; }
 
-/* 占比条 */
-.tc-share__track {
-  display: block;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--mk-line);
-  overflow: hidden;
-}
-.tc-share__bar {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #6fa1f5, var(--mk-accent-deep));
-}
-html[data-theme='dark'] .tc-share__track { background: #2a2b2d; }
-html[data-theme='dark'] .tc-share__bar { background: linear-gradient(90deg, #6fa1f5, #2f6fed); }
+/* 占比条：走 mk-minibar 原语（轨道底/品牌蓝填充/暗色档由原语 token 接管），
+   原页内渐变条（.tc-share__track/__bar 自搓 + 双暗色补丁）已删 */
 .tc-share__num {
   text-align: right;
   font-size: var(--mk-fs-micro);
@@ -312,7 +294,7 @@ html[data-theme='dark'] .tc-share__bar { background: linear-gradient(90deg, #6fa
   .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: var(--mk-fs-body); }
   .tc-c__sub { font-size: var(--mk-fs-micro); }
   .tc-rank__no { width: 22px; height: 22px; font-size: var(--mk-fs-micro); }
-  .tc-share__track { height: 7px; }
+  .tc-share__bar { height: 7px; }
   .tc-share__num { font-size: var(--mk-fs-micro); }
   /* MkCellAvatar 根节点（scoped 可命中子组件根）：排行表紧凑尺寸 + 大屏三档缩放 */
   .mk-ava { width: 22px; height: 22px; font-size: var(--mk-fs-micro); }
@@ -321,7 +303,7 @@ html[data-theme='dark'] .tc-share__bar { background: linear-gradient(90deg, #6fa
   .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: var(--mk-fs-micro); }
   .tc-c__sub { font-size: var(--mk-fs-micro); }
   .tc-rank__no { width: 26px; height: 26px; font-size: var(--mk-fs-micro); border-radius: var(--mk-radius-sm); }
-  .tc-share__track { height: 8px; }
+  .tc-share__bar { height: 8px; }
   .tc-share__num { font-size: var(--mk-fs-micro); }
   .mk-ava { width: 28px; height: 28px; font-size: var(--mk-fs-micro); }
 }
@@ -329,7 +311,7 @@ html[data-theme='dark'] .tc-share__bar { background: linear-gradient(90deg, #6fa
   .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: var(--mk-fs-emphasis); }
   .tc-c__sub { font-size: var(--mk-fs-body); }
   .tc-rank__no { width: 30px; height: 30px; font-size: var(--mk-fs-micro); }
-  .tc-share__track { height: 10px; }
+  .tc-share__bar { height: 10px; }
   .tc-share__num { font-size: var(--mk-fs-body); }
   .mk-ava { width: 32px; height: 32px; font-size: var(--mk-fs-micro); }
 }

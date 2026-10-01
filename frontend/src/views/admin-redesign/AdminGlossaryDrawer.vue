@@ -301,7 +301,7 @@ function close() { emit('close') }
 .agd__panel {
   grid-template-rows: auto auto 1fr;
 }
-.agd__search { display: grid; gap: 8px; padding: 6px 18px 12px; border-bottom: 1px solid var(--mk-line, #e6ebf4); }
+.agd__search { display: grid; gap: 8px; padding: 6px 18px 12px; border-bottom: 1px solid var(--mk-line); }
 /* 加载失败条（错误态：红系底 + role=alert，与全站 mk 错误态同语言） */
 .agd__error {
   display: flex;
@@ -321,10 +321,10 @@ function close() { emit('close') }
   flex-shrink: 0;
   padding: 2px 10px; border: 1px solid transparent; border-radius: 999px;
   /* 底/字色走 token：原 #f1f5fb / #dbe9ff + 暗色补丁 #232325 三处硬编码已归 token */
-  background: var(--mk-surface-2, #eef2fa); color: var(--mk-muted, #5b6577); font: inherit; font-size: var(--mk-fs-micro); font-weight: 700; cursor: pointer;
+  background: var(--mk-surface-2); color: var(--mk-muted); font: inherit; font-size: var(--mk-fs-micro); font-weight: 700; cursor: pointer;
 }
-.agd__nav-item:hover { color: var(--mk-blue, #2c63d0); }
-.agd__nav-item.is-active { background: color-mix(in srgb, var(--mk-blue) 22%, transparent); color: var(--mk-accent-deep, #1f57cc); border-color: rgba(44, 99, 208, 0.35); }
+.agd__nav-item:hover { color: var(--mk-blue); }
+.agd__nav-item.is-active { background: color-mix(in srgb, var(--mk-blue) 22%, transparent); color: var(--mk-accent-deep); border-color: rgba(44, 99, 208, 0.35); }
 .agd__body { padding-top: 6px; }
 .agd__section { margin-top: 14px; }
 /* 滚动修复 #10：分类标题吸顶（抽屉内部滚动时分区标题常驻顶部） */
@@ -335,19 +335,19 @@ function close() { emit('close') }
   margin: 0 0 6px;
   padding: 4px 0 6px;
   /* token 化：原 #fff + 暗色补丁 #1b1c1d 两处硬编码（吸顶必须不透明，故不能用 color-mix） */
-  background: var(--mk-surface, #fff);
+  background: var(--mk-surface);
   font-size: var(--mk-fs-micro);
   font-weight: 800;
   letter-spacing: 0.06em;
-  color: var(--mk-faint, var(--mk-faint-soft));
+  color: var(--mk-faint);
 }
 .agd__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
-.agd__term { display: grid; gap: 1px; padding: 7px 10px; border-radius: var(--mk-radius-xl); background: #f8fafd; }
-.agd__term-name { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink, #1a2a44); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-.agd__term-en { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); font-weight: 600; }
-.agd__term-def { font-size: var(--mk-fs-micro); color: var(--mk-muted, #5b6577); line-height: 1.5; }
-.agd__term-where { font-style: normal; color: var(--mk-blue, #2c63d0); }
-.agd__empty { padding: 8px 0; color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-micro); }
+.agd__term { display: grid; gap: 1px; padding: 7px 10px; border-radius: var(--mk-radius-xl); background: var(--mk-surface-2); }
+.agd__term-name { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.agd__term-en { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
+.agd__term-def { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
+.agd__term-where { font-style: normal; color: var(--mk-blue); }
+.agd__empty { padding: 8px 0; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 @media (min-width: 2000px) {
   .agd__search { padding: 8px 24px 14px; }
@@ -382,9 +382,5 @@ function close() { emit('close') }
 }
 
 /* ================= 暗色模式（D1 补完）：术语表抽屉 =================
-   面板底/分类吸顶底/胶囊底已全部走 token（--mk-surface / --mk-surface-2 / color-mix(blue)），
-   此块只剩内容块自己的底色。 */
-html[data-theme='dark'] {
-  .agd__term { background: #19191a; }
-}
+   词条底已归 --mk-surface-2（token 自带暗色档），此处无页面私有补丁。 */
 </style>

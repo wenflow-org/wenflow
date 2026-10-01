@@ -90,11 +90,11 @@
           <p v-if="!stat.calls" class="msk__note">该工具暂无调用记录，指标将在首次调用后生成。</p>
           <p v-if="skillProfile && statsSourceNote" class="msk__note">{{ statsSourceNote }}</p>
 
-          <!-- 生效模型（skill 模式）：所属/类别已进头部 chips -->
-          <div v-if="skillProfile" class="msk__kv">
-            <span>生效模型</span>
-            <strong class="mono">{{ liveMeta?.model || skillProfile.promptVersion || '默认' }}</strong>
-            <em v-if="liveMeta?.modelSource" class="msk__src">{{ liveMeta.modelSource }}</em>
+          <!-- 生效模型（skill 模式）：所属/类别已进头部 chips；
+               事实区走共享 .mk-facts 三列栅格（原型抽屉 kv 事实清单口径） -->
+          <div v-if="skillProfile" class="mk-facts">
+            <div><span>生效模型</span><strong class="mono">{{ liveMeta?.model || skillProfile.promptVersion || '默认' }}</strong></div>
+            <div v-if="liveMeta?.modelSource"><span>配置来源</span><strong>{{ liveMeta.modelSource }}</strong></div>
           </div>
 
           <section class="msk__section">
@@ -141,8 +141,11 @@
             </div>
           </section>
 
-          <section v-if="skillProfile" class="msk__section msk__section--actions">
-            <button type="button" class="msk__primary-link" @click="goFullEditor">打开 Prompt 设计页 →</button>
+          <section v-if="skillProfile" class="msk__section">
+            <!-- 底部主操作：右对齐动作钮（原型 .ovl__foot 动作排布） -->
+            <div class="msk__cta-row">
+              <button type="button" class="mk-btn mk-btn--primary" @click="goFullEditor">打开 Prompt 设计页 →</button>
+            </div>
             <p class="msk__none">设计页统一承接：协议（core 编辑/发布）、版本、试跑、运行时与工程视图；抽屉仅保留只读速览。</p>
           </section>
           </template>
@@ -687,7 +690,7 @@ watch(
 
 /* ========== 页签（统一 mk-pills 分段控件） ========== */
 .msk__tabs {
-  margin: 0 14px;
+  margin: 0 18px;
   width: fit-content;
   padding: 3px;
 }
@@ -777,7 +780,7 @@ watch(
   gap: 2px;
   padding: 10px 12px 11px;
 }
-.msk__stat + .msk__stat { border-left: 1px solid #eef2f8; }
+.msk__stat + .msk__stat { border-left: 1px solid var(--mk-line); }
 .msk__stat span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
 .msk__stat strong {
   font-family: var(--mk-mono);
@@ -792,24 +795,7 @@ watch(
 .msk__stat strong.is-na { color: var(--mk-faint); }
 .msk__note { margin: -8px 0 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
-/* 生效模型 kv 行 */
-.msk__kv {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px dashed var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-}
-.msk__kv span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
-.msk__kv strong { font-size: var(--mk-fs-micro); color: var(--mk-ink); font-weight: 600; }
-.msk__src {
-  margin-left: auto;
-  font-size: var(--mk-fs-micro);
-  font-style: normal;
-  font-weight: 600;
-  color: var(--mk-faint);
-}
+/* 生效模型事实区：走共享 .mk-facts（mk-primitives.css），无页面私有 kv */
 
 /* 小节系统 */
 .msk__section { display: grid; gap: 8px; }
@@ -823,32 +809,33 @@ watch(
   font-weight: 600;
 }
 
-/* 行列表（下辖 Skill / 最近调用） */
-.msk__list { display: grid; gap: 4px; }
+/* 行列表（最近调用）：原型嵌套卡内 ranklist/feed 行语言——底分隔线，不再逐行描边成卡 */
+.msk__list { display: grid; }
 .msk__row {
   display: grid;
   grid-template-columns: 8px 1fr auto;
   gap: 10px;
   align-items: center;
-  padding: 8px 10px;
-  border: 1px solid #e6ecf6;
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
+  padding: 9px 0;
+  border: 0;
+  border-bottom: 1px solid var(--mk-line);
+  background: transparent;
   font: inherit;
   font-size: var(--mk-fs-micro);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition: background 0.12s ease;
 }
-.msk__row:hover { border-color: rgba(44, 99, 208, 0.35); background: #f8fbff; }
+.msk__row:last-child { border-bottom: 0; }
+.msk__row:hover { background: var(--mk-surface-2); }
 .msk__dot { width: 7px; height: 7px; border-radius: 50%; }
 .msk__dot.is-ok { background: var(--mk-green); }
 .msk__dot.is-warn { background: var(--mk-amber); }
 .msk__dot.is-err { background: var(--mk-red); }
-.msk__dot.is-idle { background: #c3cede; }
+.msk__dot.is-idle { background: var(--mk-faint); }
 .msk__row-title {
   font-weight: 500;
-  color: #223252;
+  color: var(--mk-ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -872,9 +859,9 @@ watch(
   margin: 0;
   padding: 10px 12px;
   border-radius: var(--mk-radius-xl);
-  background: var(--mk-code-bg, #101826);
-  border: 1px solid var(--mk-code-border, #1c2a40);
-  color: var(--mk-code-fg, #9db8dc);
+  background: var(--mk-code-bg);
+  border: 1px solid var(--mk-code-border);
+  color: var(--mk-code-fg);
   font: 12px/1.65 var(--mk-mono);
   white-space: pre-wrap;
   word-break: break-word;
@@ -883,7 +870,7 @@ watch(
 }
 .msk__code--cap { max-height: 140px; }
 
-/* Prompt 版本行 + 设计页跳转 */
+/* Prompt 版本行 + 设计页跳转（mk-link 走全局原语，不再页内重定义） */
 .msk__prompt {
   display: flex;
   align-items: center;
@@ -895,16 +882,6 @@ watch(
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
-.mk-link {
-  border: 0;
-  background: transparent;
-  color: var(--mk-blue, #2c63d0);
-  font: inherit;
-  font-weight: 700;
-  font-size: var(--mk-fs-micro);
-  cursor: pointer;
-  white-space: nowrap;
-}
 
 /* 模型配置抽屉内联表单（与 msk 风格统一） */
 .mt-row {
@@ -912,11 +889,11 @@ watch(
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
-  border: 1px solid #e6ecf6;
+  border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
-  background: #fbfcfe;
+  background: var(--mk-surface-2);
   font-size: var(--mk-fs-micro);
-  color: #41516e;
+  color: var(--mk-muted);
 }
 .mt-row--check input { width: 15px; height: 15px; accent-color: var(--mk-blue); }
 .mt-row--check em { font-style: normal; font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
@@ -924,24 +901,9 @@ watch(
 .mt-rt-msg.is-err { color: var(--mk-red); }
 .mt-btn--danger { color: var(--mk-red); border-color: rgba(220, 38, 38, 0.35); background: transparent; }
 .mt-btn--danger:hover { background: var(--mk-red-bg); }
-.mt-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-/* 底部主操作 */
-.msk__section--actions { padding-top: 2px; }
-.msk__primary-link {
-  border: 1px solid rgba(44, 99, 208, 0.35);
-  background: #eef5ff;
-  color: var(--mk-blue, #2c63d0);
-  font: inherit;
-  font-weight: 700;
-  font-size: var(--mk-fs-micro);
-  padding: 10px 12px;
-  border-radius: var(--mk-radius-xl);
-  cursor: pointer;
-  width: 100%;
-  text-align: left;
-}
-.msk__primary-link:hover { background: #e0edff; }
+/* 底部主操作：右对齐动作钮（原型 ovl foot / pane 底部 od-row 的排布） */
+.msk__cta-row { display: flex; justify-content: flex-end; }
 
 /* ========== 模型测试（model-probe） ========== */
 .mt-fields {
@@ -956,12 +918,12 @@ watch(
   margin: 0;
   padding: 6px 10px;
   border-radius: var(--mk-radius-sm);
-  background: #f2f6fd;
-  border: 1px dashed #d3e0f5;
+  background: var(--mk-surface-2);
+  border: 1px dashed var(--mk-line);
   font-size: var(--mk-fs-micro);
-  color: #41516e;
+  color: var(--mk-muted);
 }
-.mt-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mt-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .mt-err { font-size: var(--mk-fs-micro); color: var(--mk-red); font-weight: 600; }
 .mt-result {
   display: grid;
@@ -993,9 +955,9 @@ watch(
   margin: 0;
   padding: 8px 10px;
   border-radius: var(--mk-radius-sm);
-  background: var(--mk-code-bg, #101826);
-  border: 1px solid var(--mk-code-border, #1c2a40);
-  color: var(--mk-code-fg, #9db8dc);
+  background: var(--mk-code-bg);
+  border: 1px solid var(--mk-code-border);
+  color: var(--mk-code-fg);
   font-size: var(--mk-fs-micro);
   line-height: 1.6;
   white-space: pre-wrap;
@@ -1016,7 +978,6 @@ watch(
   .msk__note { font-size: var(--mk-fs-micro); }
   .mk-section__head h4 { font-size: var(--mk-fs-micro); }
   .msk__sec-meta { font-size: var(--mk-fs-micro); }
-  .msk__kv span { font-size: var(--mk-fs-micro); }
   .msk__code { font-size: var(--mk-fs-micro); }
   .msk__prompt { font-size: var(--mk-fs-micro); }
 }
@@ -1030,7 +991,6 @@ watch(
   .msk__note { font-size: var(--mk-fs-micro); }
   .mk-section__head h4 { font-size: var(--mk-fs-micro); }
   .msk__sec-meta { font-size: var(--mk-fs-micro); }
-  .msk__kv span { font-size: var(--mk-fs-micro); }
   .msk__code { font-size: var(--mk-fs-micro); }
   .msk__prompt { font-size: var(--mk-fs-micro); }
 }
@@ -1045,35 +1005,17 @@ watch(
   .msk__note { font-size: var(--mk-fs-body); }
   .mk-section__head h4 { font-size: var(--mk-fs-body); }
   .msk__sec-meta { font-size: var(--mk-fs-body); }
-  .msk__kv span { font-size: var(--mk-fs-body); }
   .msk__code { font-size: var(--mk-fs-body); }
   .msk__prompt { font-size: var(--mk-fs-emphasis); }
 }
 
-/* ================= 暗色模式（D1 补完）：Skill 抽屉 ================= */
+/* ================= 暗色模式（D1 补完）：Skill 抽屉 =================
+   正文色彩已全部走 --mk-* token（行分隔线/表面/文字），暗色无需再补丁；
+   只留三处亮色专属样式回退：头部渐变、页签徽章底。 */
 html[data-theme='dark'] {
   /* 头部身份台渐变仅亮色生效；暗色回到面板表面色（面板底色由 .mk-drawer__panel 原语接管） */
   .msk__head { background: var(--mk-surface); }
   .msk__tab-badge { background: var(--mk-close-bg); }
   .mk-pill--active .msk__tab-badge { background: rgba(91, 141, 239, 0.22); color: var(--mk-ghost-fg); }
-  .msk__row { background: #1b1c1d; border-color: #2a2b2d; }
-  .msk__row:hover { background: #252627; }
-  /* 补漏：指标条分隔线硬编码亮色 #eef2f8，暗色下过亮 */
-  .msk__stat + .msk__stat { border-left-color: #2a2b2d; }
-  .msk__primary-link:hover { background: rgba(91, 141, 239, 0.14); }
-  .msk__section { background: #19191a; }
-  .mt-result { background: #1b1c1d; border-color: #2a2b2d; }
-  .mt-cell strong { color: var(--mk-ink, #e6edf7); }
-  .mt-resolved { background: rgba(91, 141, 239, 0.1); border-color: rgba(91, 141, 239, 0.3); color: var(--mk-ink, #e6edf7); }
-  .mt-row { background: #19191a; border-color: #2a2b2d; color: var(--mk-ink, #e6edf7); }
-  .mt-row--check em { color: var(--mk-faint); }
-  .mt-rt-msg { color: var(--mk-green); }
-  /* 文字色补漏 */
-  .msk__stat strong,
-  .msk__kv strong,
-  .msk__row-title { color: var(--mk-ink, #e6edf7); }
-  .msk__desc,
-  .msk__prompt,
-  .msk__row-num { color: var(--mk-muted, #afb1b6); }
 }
 </style>

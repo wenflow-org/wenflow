@@ -26,15 +26,9 @@
       <div class="mk-table-scroll">
       <!-- 首载骨架屏（对齐全站「骨架替代空白」约定；此前整表无占位） -->
       <MockSkeletonTable v-if="loading && !cores.length" :cols="6" :rows="8" />
-      <table v-else-if="cores.length" class="mk-table mk-table--click mk-table--fixed">
-        <colgroup>
-          <col style="width:var(--mk-col-text)">
-          <col style="width:var(--mk-col-badge)">
-          <col style="width:var(--mk-col-badge)">
-          <col style="width:var(--mk-col-model)">
-          <col style="width:var(--mk-col-badge)">
-          <col style="width:var(--mk-col-actions)">
-        </colgroup>
+      <!-- 原型 .tbl 口径：自动布局 + 单元格 nowrap（不用 fixed+colgroup 定宽），
+           宽度随内容自适应、横向滚动由 .mk-table-scroll 兜底 -->
+      <table v-else-if="cores.length" class="mk-table mk-table--click pw-table">
         <thead>
           <tr>
             <th>Skill</th>
@@ -53,7 +47,7 @@
             @click="openDesign(item.skillId)"
             @keydown.enter.prevent="openDesign(item.skillId)"
           >
-            <td><code class="mono">{{ item.skillId }}</code></td>
+            <td><code class="mono" :title="item.skillId">{{ item.skillId }}</code></td>
             <td class="mk-na">{{ item.fields }} 字段 · {{ item.channels.length }} 通道</td>
             <td class="mk-na">{{ item.outputMedia }}<template v-if="item.deltaOutput"> · delta</template></td>
             <td><code class="mono pw-hash" :title="item.coreHash">{{ shortHash(item.coreHash) }}</code></td>
@@ -181,11 +175,21 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.pw-ok { color: var(--mk-green, #15803d); }
-.pw-warn { color: var(--mk-amber, #b45309); }
-.pw-na { color: var(--mk-faint, #5b6577); }
+.pw-ok { color: var(--mk-green); }
+.pw-warn { color: var(--mk-amber); }
+.pw-na { color: var(--mk-faint); }
 .pw-hash { font-size: var(--mk-fs-micro); }
 .mk-table--click tbody tr { cursor: pointer; }
+
+/* 原型 .tbl 单元格语言：不换行；首列 skill id 超长时省略号截断（完整 id 挂 title） */
+.pw-table td { white-space: nowrap; }
+.pw-table td:first-child code {
+  display: inline-block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {

@@ -418,9 +418,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   .sdp-parent { font-size: var(--mk-fs-body); }
   .sdp-drift { font-size: var(--mk-fs-body); padding: 14px 18px; }
   .sdp-drift code { font-size: var(--mk-fs-body); }
-  .sdp .mk-pills { padding: 6px; }
-  .sdp .mk-pill { font-size: var(--mk-fs-emphasis); padding: 10px 24px; }
-  .sdp .mk-pills { border-radius: var(--mk-radius-xl); }
+  /* 页签只声明一份：此前 emphasis/10x24 与 body/7x18 两条同特异性规则先后叠加，前者恒被覆盖（死声明） */
+  .sdp .mk-pills { padding: 6px; border-radius: var(--mk-radius-xl); }
   .sdp .mk-pill { font-size: var(--mk-fs-body); padding: 7px 18px; }
 }
 </style>
