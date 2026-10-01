@@ -187,9 +187,7 @@
       <div class="card">
         <div class="card__head">
           <span class="card__title">待处理事项</span>
-          <span class="card__tools">
-            <span v-if="todoItems.length" class="pill pill--warn"><span class="pill__dot"></span>{{ todoItems.length }}</span>
-          </span>
+          <span v-if="todoItems.length" class="pill pill--warn"><span class="pill__dot"></span>{{ todoItems.length }}</span>
         </div>
         <div class="card__body">
           <div class="ranklist">
@@ -575,12 +573,11 @@ watch(dataSource, () => {
 }
 .card__head {
   display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px; border-bottom: 1px solid var(--mk-line); flex-wrap: wrap;
+  padding: 12px 16px; border-bottom: 1px solid var(--mk-line);
 }
-.card__head > :first-child { flex: 1 1 auto; }
 .card__title { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
 .card__sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.card__tools { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card__tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .card__body { padding: 16px; }
 
 /* ---- 胶囊（原型 .pill：卡头 tools 徽标）---- */
