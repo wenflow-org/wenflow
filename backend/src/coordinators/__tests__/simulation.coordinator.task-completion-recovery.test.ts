@@ -281,7 +281,8 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockCompleteTask).toHaveBeenCalledTimes(1)
     expect(mockExecuteSkill).not.toHaveBeenCalled()
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
-    expect(mockEndSession).not.toHaveBeenCalled()
+    // 恢复路径收束授课会话（endSession→wrapup 落库）——2026-10-02 端到端实证
+    expect(mockEndSession).toHaveBeenCalledWith('teaching-1', 'task-completed', 3)
     expect(mockGetSessionDetail).not.toHaveBeenCalled()
     expect(learning.taskRuntime).toEqual(expect.objectContaining({
       status: 'active',
@@ -329,7 +330,8 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(sessionRecord.status).toBe('completed')
     expect(mockExecuteSkill).not.toHaveBeenCalled()
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
-    expect(mockEndSession).not.toHaveBeenCalled()
+    // 恢复路径收束授课会话（endSession→wrapup 落库）——2026-10-02 端到端实证
+    expect(mockEndSession).toHaveBeenCalledWith('teaching-1', 'task-completed', 3)
     expect(mockGetSessionDetail).not.toHaveBeenCalled()
   })
 
@@ -381,7 +383,8 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockCompleteTask).toHaveBeenCalledTimes(1)
     expect(mockExecuteSkill).not.toHaveBeenCalled()
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
-    expect(mockEndSession).not.toHaveBeenCalled()
+    // 恢复路径同样收束授课会话（endSession→finalization 生成 wrapup）——2026-10-02 端到端实证
+    expect(mockEndSession).toHaveBeenCalledWith('teaching-1', 'task-completed', 4)
     expect(learning.taskRuntime).toEqual(expect.objectContaining({
       status: 'active',
       taskId: 'task-2',

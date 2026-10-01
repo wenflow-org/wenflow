@@ -6,6 +6,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -33,28 +34,84 @@ async function adminLogin() {
   const j = await res.json().catch(() => ({}));
   if (!cookie || j.success === false) throw new Error('admin 登录失败');
 }
-async function api(method, urlPath, body, { retries = 5, timeout = 600000 } = {}) {
+/** node:http 直连（绕开 undici headersTimeout=300s：run-full 服务端跑完整个 goal 阶段才回
+ *  响应头，远超 5 分钟，fetch 必死 "fetch failed"（UND_ERR_HEADERS_TIMEOUT）——2026-10-02 实证根因） */
+function httpJson(method, urlPath, body, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(BASE + urlPath);
+    const payload = body !== undefined ? JSON.stringify(body) : null;
+    const req = http.request({
+      hostname: url.hostname,
+      port: url.port || 80,
+      path: url.pathname + url.search,
+      method,
+      // agent:false：每次全新连接。复用 keep-alive socket 会撞上服务端 5s 空闲关闭的
+      // half-open 态（写成功但永无响应 → 挂到 10 分钟超时）——2026-10-02 深跑实测
+      agent: false,
+      headers: {
+        Cookie: cookie,
+        Origin: 'http://localhost:5173',
+        ...(payload !== null ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
+      },
+    }, (res) => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { text += c; });
+      res.on('end', () => {
+        let json; try { json = JSON.parse(text); } catch { json = { raw: text.slice(0, 200) }; }
+        resolve({ status: res.statusCode || 0, json });
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => { const e = new Error('http request timeout'); e.name = 'TimeoutError'; req.destroy(e); });
+    if (payload !== null) req.write(payload);
+    req.end();
+  });
+}
+
+async function api(method, urlPath, body, { retries = 8, timeout = 600000, netBudgetMs = 600000 } = {}) {
   let last = null;
-  for (let i = 0; i <= retries; i++) {
+  let respRetries = 0;
+  let netStart = 0;
+  let netRetries = 0;
+  for (;;) {
     try {
-      const res = await fetch(BASE + urlPath, { method, headers: { Cookie: cookie, Origin: 'http://localhost:5173', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(timeout) });
-      if (res.status === 401 && i < retries) { await adminLogin(); continue; }
-      const text = await res.text();
-      let json; try { json = JSON.parse(text); } catch { json = { raw: text.slice(0, 200) }; }
-      if (!res.ok || json?.success === false) {
-        last = `${res.status} ${String(json?.error?.message || json?.error || text).slice(0, 140)}`;
-        if (res.status === 409 || res.status === 429 || res.status >= 500) { await sleep(8000 * (i + 1)); continue; }
+      const { status: resStatus, json } = await httpJson(method, urlPath, body, timeout);
+      if (resStatus === 401) { await adminLogin(); continue; }
+      if (!resStatus || resStatus >= 400 || json?.success === false) {
+        last = `${resStatus} ${String(json?.error?.message || json?.error || json?.raw || '').slice(0, 140)}`;
+        if (resStatus === 409 || resStatus === 429 || resStatus >= 500) {
+          if (++respRetries > retries) throw new Error(last);
+          await sleep(8000 * respRetries);
+          continue;
+        }
         throw new Error(last);
       }
       return json;
     } catch (e) {
-      if (e?.name === 'TimeoutError' || e?.name === 'AbortError') { last = 'timeout'; await sleep(10000 * (i + 1)); continue; }
-      last = e.message || String(e);
-      if (i === retries) throw new Error(last);
-      await sleep(8000 * (i + 1));
+      const msg = e?.message || String(e);
+      last = msg;
+      if (e?.name === 'TimeoutError' || e?.name === 'AbortError') {
+        if (++respRetries > retries) throw new Error(last);
+        await sleep(10000 * respRetries);
+        continue;
+      }
+      // 网络层瞬断：按时间预算退避重试（预算内不占响应重试次数）；cause 记入 last 供取证
+      const causeStr = (e?.cause?.code || '') + ' ' + (e?.cause?.message || '');
+      if (/fetch failed|ECONNRESET|EPIPE|ETIMEDOUT|ECONNREFUSED|socket|network|UND_ERR|ECONN/i.test(msg + ' ' + causeStr)) {
+        const now = Date.now();
+        if (!netStart) netStart = now;
+        if (now - netStart < netBudgetMs) {
+          netRetries++;
+          last = `net#${netRetries} ${msg} cause=${e?.cause?.code || e?.cause?.message || '-'}`;
+          await sleep(Math.min(30000, 8000 * netRetries) + Math.floor(Math.random() * 4000));
+          continue;
+        }
+        last = `net-exhausted(${netRetries}) ${msg} cause=${e?.cause?.code || e?.cause?.message || '-'}`;
+      }
+      throw new Error(last);
     }
   }
-  throw new Error(last || 'failed');
 }
 
 // 目标清单：ids-file 的 personaId → VL profile（翻到空页为止拉全，tags 分段精确匹配）
@@ -142,7 +199,7 @@ async function runPhase(pid, vl, st, t0) {
       let retried = 0;
       let lastStatus = '';
       while (Date.now() < deadline) {
-        const ps = await api('GET', `/api/admin/virtual-learners/sessions/${st.sessionId}/path-status`);
+        const ps = await api('GET', `/api/admin/virtual-learners/sessions/${st.sessionId}/path-status`, undefined, { timeout: 45000 });
         const d = ps.data || {};
         st.pathId = d.learningPathId || st.pathId;
         // 真实字段：data.status = learningPath.status（生成完成 = active）；milestones/stages 有内容即就绪
@@ -182,14 +239,17 @@ async function runPhase(pid, vl, st, t0) {
       st.phase = 'learn'; saveState(pid, st);
     }
     if (st.phase === 'learn') {
-      const deadline = Date.now() + 30 * 60 * 1000;
+      // 75 分钟：实测带检查点门的首课 30 分钟不够（69 条消息仍在共同卡点攻坚）
+      const deadline = Date.now() + 75 * 60 * 1000;
       let doneTurn = 0;
       while (Date.now() < deadline) {
         const r = await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-step`, {}, { timeout: 300000 });
         const d = r.data || {};
         doneTurn++;
         const s = d.status || d.sessionStatus || d.phase || '';
-        const completedFirst = d.completedTasks >= 1 || d.firstTaskCompleted === true || s === 'task-done' || s === 'completed';
+        // 完课信号：teaching-step 响应的 taskCompleted/isPathCompleted（2026-10-02 实证：
+        // 完课窗口只在下一 step finalize 前存在，读不到信号会永远错过 wrapup 窗口）
+        const completedFirst = d.taskCompleted === true || d.isPathCompleted === true || d.completedTasks >= 1 || d.firstTaskCompleted === true || s === 'task-done' || s === 'completed';
         if (completedFirst) { st.phase = 'learn-done'; st.turns = doneTurn; saveState(pid, st); break; }
         if (s === 'failed') throw new Error('teaching step failed: ' + JSON.stringify(d).slice(0, 120));
         await sleep(2000);
@@ -197,9 +257,35 @@ async function runPhase(pid, vl, st, t0) {
       if (st.phase !== 'learn-done') { record({ id: pid, ok: false, phase: 'learn', err: '首课未完成(超时)', sessionId: st.sessionId, turns: doneTurn }); log(`${pid} learn 超时`); return; }
     }
     if (st.phase === 'learn-done') {
+      // 完课两段式（2026-10-02 实证）：step N 置 task_completion_pending（响应 taskCompleted=true），
+      // step N+1 才 finalize（endSession→wrapup 生成→completeTask→推进）。少走这一步 = 授课会话
+      // 永远 active、wrapup 永远不落库（旧批量 30/30 全空的真机制）。
+      for (let f = 0; f < 2; f++) {
+        try {
+          const fd = await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-step`, {}, { timeout: 300000 });
+          if (fd?.data?.taskCompleted === true) continue; // 连续完课（跨任务）再 finalize 一次
+          break;
+        } catch { break; }
+      }
       await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/wrapup`, {}).catch(() => { });
-      record({ id: pid, ok: true, phase: 'learn-done', sessionId: st.sessionId, pathId: st.pathId, turns: st.turns, durSec: Math.round((Date.now() - t0) / 1000) });
-      log(`${pid} learn 首课 OK (turns=${st.turns})`);
+      // wrapup 落库验证：收束 LLM 生成要 1-3 分钟；当前会话已归档时查历史最后一条
+      let wrapupStatus = 'missing';
+      for (let k = 0; k < 12 && wrapupStatus === 'missing'; k++) {
+        await sleep(15000);
+        try {
+          const td = await api('GET', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-detail`, undefined, { timeout: 30000 });
+          const dd = td.data || {};
+          let w = dd.wrapup || null;
+          if (!w && Array.isArray(dd.teachingSessionHistory) && dd.teachingSessionHistory.length) {
+            const lastHist = dd.teachingSessionHistory[dd.teachingSessionHistory.length - 1];
+            const hd = await api('GET', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-detail?teachingSessionId=${lastHist.teachingSessionId}`, undefined, { timeout: 30000 });
+            w = hd.data?.wrapup || null;
+          }
+          if (w?.status) wrapupStatus = String(w.status);
+        } catch { /* 轮询失败继续等 */ }
+      }
+      record({ id: pid, ok: true, phase: 'learn-done', sessionId: st.sessionId, pathId: st.pathId, turns: st.turns, wrapup: wrapupStatus, durSec: Math.round((Date.now() - t0) / 1000) });
+      log(`${pid} learn 首课 OK (turns=${st.turns}, wrapup=${wrapupStatus})`);
       return;
     }
 }
@@ -231,7 +317,7 @@ function aimdAdjust(rpmStats) {
 const statsLoop = (async () => {
   while (!stopping) {
     try {
-      const res = await api('GET', '/api/admin/virtual-learners/settings');
+      const res = await api('GET', '/api/admin/virtual-learners/settings', undefined, { timeout: 20000 });
       const rpm = res.data?.data?.rpm || res.data?.rpm;
       if (rpm) aimdAdjust(rpm);
     } catch { /* stats 拉取失败不干预调度 */ }

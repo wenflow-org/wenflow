@@ -47,6 +47,7 @@ import {
   buildGoalStepResult,
 } from './simulation.goal.steps';
 import { persistAssistedLearnerMemory } from './simulation.memory';
+import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingCoordinator';
 import { resolveStorySessionDemand } from '../virtual-lab/story-demand';
 import type { SimulationOrchestrator } from './simulation.coordinator';
 
@@ -76,6 +77,23 @@ export async function completeCheckpointedSimulationTask(
     });
     // 记忆回写：画像概念 + 成果物登记（best-effort，失败不阻断）
     await persistAssistedLearnerMemory(sessionId, session, taskMatch.task);
+    // 收束授课会话（best-effort）：endSession 走 finalization 生成 wrapup 并把会话置 completed。
+    // 此前恢复路径只 completeTask 不 endSession → wrapup 永不落库、授课会话恒 active
+    // （2026-10-02 端到端实证；与 checkpoint 路径、timebox-skip 路径行为对齐）
+    const wrapupTeachingSessionId = typeof taskRuntime.teachingSessionId === 'string' ? taskRuntime.teachingSessionId : null;
+    if (wrapupTeachingSessionId) {
+      try {
+        const endTeachingRevision = typeof taskRuntime.teachingRevision === 'number'
+          ? taskRuntime.teachingRevision
+          : (typeof learningState.teachingRevision === 'number' ? learningState.teachingRevision : undefined);
+        await aiTeachingOrchestrator.endSession(wrapupTeachingSessionId, 'task-completed', endTeachingRevision);
+      } catch (error: unknown) {
+        logger.warn('[simulation-coordinator] 完课收束 endSession 失败（不阻断任务完成）', {
+          sessionId,
+          error: asErrorLike(error).message || String(error)
+        });
+      }
+    }
   } catch (error: unknown) {
     const boundedError = boundTaskCompletionError(error);
     const updatedAt = new Date().toISOString();
