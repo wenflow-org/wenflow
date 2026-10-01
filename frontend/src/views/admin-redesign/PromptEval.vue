@@ -357,49 +357,62 @@
         <div class="mk-drawer__mask" @click="runDetailOpen = false"></div>
         <div ref="runPanelRef" class="mk-drawer__panel" role="dialog" aria-label="评估运行详情">
           <div class="mk-drawer__head">
-            <div>
+            <div class="pe-detail__title">
               <h3 class="mk-drawer__title">评估运行详情</h3>
               <span class="mk-drawer__sub">{{ agentLabel(runDetail?.agentId || '') }} · {{ fmtDate(runDetail?.createdAt || '') }}</span>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="runDetailOpen = false">✕</button>
           </div>
-          <div class="mk-drawer__body">
+          <!-- 内容层对齐原型三段式：首段 pills → 事实栅格 → 嵌套卡（用例结果 feed）；仅视觉词汇对齐 -->
+          <div class="mk-drawer__body pe-detail__body">
             <MkLoading v-if="runDetailLoading" inline />
             <template v-else-if="runDetail">
-              <div class="pe-run-summary">
-                <MkKpi label="通过率" :value="`${runDetail.summary.passRate ?? 0}%`" />
-                <MkKpi label="通过/总数" :value="`${runDetail.summary.passedCount ?? 0}/${runDetail.summary.totalRuns ?? 0}`" />
-                <MkKpi label="结构化输出" :value="`${runDetail.summary.structuredSuccessRate ?? 0}%`" />
-                <MkKpi label="总耗时" :value="fmtMs(runDetail.durationMs)" />
+              <!-- 首段徽章行（原型 .ovl__body 首段 pills）：通过率 / 通过数为 summary 行上已有字段 -->
+              <div class="pe-detail__pills">
+                <span class="mk-badge" :class="passTone(runDetail.summary)">通过率 {{ runDetail.summary.passRate ?? 0 }}%</span>
+                <span class="mk-badge mk-badge--muted">通过 {{ runDetail.summary.passedCount ?? 0 }} / {{ runDetail.summary.totalRuns ?? 0 }}</span>
               </div>
-              <div v-if="runDetail.results.length" class="pe-results">
-                <div v-for="(res, i) in runDetail.results" :key="i" class="pe-result-row" :class="{ 'pe-result-row--fail': !res.passed }">
-                  <div class="pe-result-row__head">
-                    <strong>{{ res.caseName }} <span class="mk-na">({{ res.caseId }})</span></strong>
-                    <span class="mk-badge" :class="res.passed ? 'mk-badge--ok' : 'mk-badge--bad'">{{ res.passed ? '通过' : '未通过' }}</span>
-                    <span class="pe-result-row__meta mono">#{{ res.runIndex }} · {{ fmtMs(res.durationMs) }} · 阶段：{{ stageText(res.output?.stage) }}</span>
-                  </div>
-                  <div v-if="!res.passed" class="pe-result-row__checks">
-                    <span v-for="(v, k) in res.checks" :key="k" class="pe-check" :class="v ? 'pe-check--ok' : 'pe-check--fail'">{{ v ? '✓' : '✗' }} {{ checkLabel(String(k)) }}</span>
-                  </div>
-                  <div v-if="res.transcript?.length" class="pe-transcript">
-                    <div v-for="(t, ti) in res.transcript" :key="ti" class="pe-transcript__row">
-                      <span class="pe-transcript__role" :class="t.role === 'goal_agent' ? 'pe-transcript__role--goal' : 'pe-transcript__role--learner'">
-                        {{ t.role === 'goal_agent' ? '助手' : '学生' }}·{{ t.round }}
-                      </span>
-                      <div>
-                        <div class="pe-transcript__content">{{ t.content }}</div>
-                        <div v-if="t.error" class="pe-transcript__meta">⚠️ {{ t.error }}</div>
-                        <div v-if="t.learnerState" class="pe-transcript__meta">
-                          学生状态：被理解 {{ Math.round((t.learnerState.feltUnderstood ?? 0) * 100) }}% · 目标清晰 {{ Math.round((t.learnerState.problemClarity ?? 0) * 100) }}% ·
-                          是否愿意推进：{{ t.learnerState.readyToProceed === true ? '是' : '否' }}{{ t.emotion ? ` · 情绪 ${t.emotion}` : '' }}
+              <!-- 事实清单（原型 dl.kv → 共享 mk-facts 栅格）：summary 数值不再用页面级 MkKpi 卡 -->
+              <div class="mk-facts">
+                <div><span>结构化输出</span><strong class="mono">{{ runDetail.summary.structuredSuccessRate ?? 0 }}%</strong></div>
+                <div><span>总耗时</span><strong class="mono">{{ fmtMs(runDetail.durationMs) }}</strong></div>
+                <div><span>用例数</span><strong class="mono">{{ runDetail.results.length }}</strong></div>
+              </div>
+              <!-- 用例结果：嵌套无边框卡（原型 .card box-shadow:none + card__head/card__body，内 feed 行） -->
+              <section v-if="runDetail.results.length" class="mk-card">
+                <div class="mk-card__head">
+                  <h4 class="mk-card__title">用例结果</h4>
+                  <span class="mk-card__meta mono">{{ runDetail.results.length }}</span>
+                </div>
+                <div class="pe-results">
+                  <div v-for="(res, i) in runDetail.results" :key="i" class="pe-result-row" :class="{ 'pe-result-row--fail': !res.passed }">
+                    <div class="pe-result-row__head">
+                      <strong>{{ res.caseName }} <span class="mk-na">({{ res.caseId }})</span></strong>
+                      <span class="mk-badge" :class="res.passed ? 'mk-badge--ok' : 'mk-badge--bad'">{{ res.passed ? '通过' : '未通过' }}</span>
+                      <span class="pe-result-row__meta mono">#{{ res.runIndex }} · {{ fmtMs(res.durationMs) }} · 阶段：{{ stageText(res.output?.stage) }}</span>
+                    </div>
+                    <div v-if="!res.passed" class="pe-result-row__checks">
+                      <span v-for="(v, k) in res.checks" :key="k" class="pe-check" :class="v ? 'pe-check--ok' : 'pe-check--fail'">{{ v ? '✓' : '✗' }} {{ checkLabel(String(k)) }}</span>
+                    </div>
+                    <div v-if="res.transcript?.length" class="pe-transcript">
+                      <div v-for="(t, ti) in res.transcript" :key="ti" class="pe-transcript__row">
+                        <span class="pe-transcript__role" :class="t.role === 'goal_agent' ? 'pe-transcript__role--goal' : 'pe-transcript__role--learner'">
+                          {{ t.role === 'goal_agent' ? '助手' : '学生' }}·{{ t.round }}
+                        </span>
+                        <div>
+                          <div class="pe-transcript__content">{{ t.content }}</div>
+                          <div v-if="t.error" class="pe-transcript__meta">⚠️ {{ t.error }}</div>
+                          <div v-if="t.learnerState" class="pe-transcript__meta">
+                            学生状态：被理解 {{ Math.round((t.learnerState.feltUnderstood ?? 0) * 100) }}% · 目标清晰 {{ Math.round((t.learnerState.problemClarity ?? 0) * 100) }}% ·
+                            是否愿意推进：{{ t.learnerState.readyToProceed === true ? '是' : '否' }}{{ t.emotion ? ` · 情绪 ${t.emotion}` : '' }}
+                          </div>
                         </div>
                       </div>
                     </div>
+                    <p v-if="res.output?.userVisible" class="pe-result-row__out">{{ res.output.userVisible }}</p>
                   </div>
-                  <p v-if="res.output?.userVisible" class="pe-result-row__out">{{ res.output.userVisible }}</p>
                 </div>
-              </div>
+              </section>
               <MkEmptyState v-else compact title="无结果明细" />
             </template>
             <!-- P2-1（2026-09-27 走查）：详情拉取失败时抽屉正文此前整块空白、无重试入口
@@ -415,6 +428,10 @@
               @action="retryRunDetail"
             />
           </div>
+          <!-- 底部动作（原型 .ovl__foot：上边框、右对齐、常驻滚动区外；同 gc-detail__foot 判例） -->
+          <footer class="pe-detail__foot">
+            <button type="button" class="mk-btn" @click="runDetailOpen = false">关闭</button>
+          </footer>
         </div>
       </div>
     </Teleport>
@@ -433,7 +450,6 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
-import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -1096,6 +1112,13 @@ const runDetail = ref<any>(null)
 /* 当前抽屉对应的运行行：失败空态的「重试」需要拿到它（openRunDetail 入参在抽屉打开后即丢失） */
 const runDetailTarget = ref<EvalRun | null>(null)
 
+/* 通过率徽章基调（原型 pills 只分「达成/未达成」两档，不发明阈值）：全通过 = ok，有未通过 = warn */
+function passTone(summary: { passRate?: number; passedCount?: number; totalRuns?: number } | null | undefined): string {
+  const total = Number(summary?.totalRuns ?? 0)
+  const passed = Number(summary?.passedCount ?? 0)
+  return total > 0 && passed >= total ? 'mk-badge--ok' : 'mk-badge--warn'
+}
+
 async function openRunDetail(r: EvalRun) {
   runDetailTarget.value = r
   runDetailOpen.value = true
@@ -1280,11 +1303,26 @@ function retryRunDetail() {
 .pe-transcript__meta { grid-column: 2; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 
-/* 运行概要：MkKpi 网格容器（统计卡本体由 MkKpi 提供） */
-.pe-run-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
-.pe-results { display: grid; gap: 8px; }
-.pe-result-row { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); padding: 10px 12px; display: grid; gap: 8px; background: var(--mk-surface); }
-.pe-result-row--fail { border-color: rgba(220, 38, 38, 0.35); background: var(--mk-red-bg, #fef2f2); }
+/* 运行详情抽屉（原型 openTurnDetail/openLearner 三段式）：头部标题 + 正文 pills/事实栅格/嵌套卡 + 常驻 foot */
+.pe-detail__title { display: grid; gap: 6px; min-width: 0; }
+.pe-detail__body { display: grid; gap: 16px; align-content: start; }
+/* 首段徽章行（原型 .ovl__body 首段 pills）：通过率 / 通过数 */
+.pe-detail__pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* 底部动作条（原型 .ovl__foot：上边框、右对齐、常驻滚动区外；同 gc-detail__foot 判例） */
+.pe-detail__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--mk-line);
+}
+/* 用例结果：嵌套无边框卡内的 feed 行（原型 .card box-shadow:none 内 feed，行间发丝线分隔） */
+.pe-results { display: grid; }
+.pe-result-row { padding: 12px 16px; display: grid; gap: 8px; }
+.pe-result-row + .pe-result-row { border-top: 1px solid var(--mk-line); }
+/* 未通过行：卡内只留浅红底提示，不再自绘边框/圆角（避免卡内套卡） */
+.pe-result-row--fail { background: var(--mk-red-bg, #fef2f2); }
 .pe-result-row__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pe-result-row__head strong { font-size: var(--mk-fs-micro); }
 .pe-result-row__meta { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
@@ -1321,8 +1359,8 @@ function retryRunDetail() {
 
 /* 暗色模式（D1 补完）：Prompt 评估（此前完全缺失） */
 html[data-theme='dark'] {
-  .pe-result-row { background: #19191a; border-color: #2a2b2d; }
-  .pe-result-row--fail { background: rgba(248, 113, 113, 0.08); border-color: rgba(248, 113, 113, 0.35); }
+  /* 卡底/描边由共享 mk-card 与 --mk-* token 接管；此处只保留未通过行的浅红底 */
+  .pe-result-row--fail { background: rgba(248, 113, 113, 0.08); }
   .pe-check--ok { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
   .pe-check--fail { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
 }

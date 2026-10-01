@@ -151,38 +151,67 @@
       <div v-if="detailOpen" ref="detailMaskRef" class="mk-drawer">
         <div class="mk-drawer__mask" @click="detailOpen = false"></div>
         <div ref="detailPanelRef" class="mk-drawer__panel mk-drawer__panel--wide" role="dialog" aria-label="实验详情">
-          <div class="mk-drawer__head">
-            <div>
+          <!-- 头部（原型 .ovl__head：标题 + grow + 关闭钮，下边框）：状态/学习者数下沉到正文首段徽章行 -->
+          <header class="mk-drawer__head">
+            <div class="be-detail__title">
               <h3 class="mk-drawer__title">{{ detail?.name }}</h3>
-              <span class="mk-drawer__sub">{{ detail?.description || '无描述' }} · {{ (detail?.runs || []).length }} 名学习者</span>
+              <span v-if="detail?.description" class="mk-drawer__sub be-detail__desc" :title="detail.description">{{ detail.description }}</span>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detailOpen = false">✕</button>
-          </div>
-          <div class="mk-drawer__body">
+          </header>
+          <div class="mk-drawer__body be-detail__body">
+            <!-- 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 学习者数均为行上已有字段 -->
+            <div v-if="detail" class="be-detail__pills">
+              <span class="mk-badge" :class="statusBadge(detail.status)">{{ statusText(detail.status) }}</span>
+              <span class="mk-badge mk-badge--muted">学习者 {{ detailRunList.length }} 名</span>
+            </div>
+            <!-- 事实清单（原型 dl.kv → 共享 mk-facts 栅格）：进度格嵌 minibar（同 OpsContent oc-fact-progress） -->
+            <div v-if="detail" class="mk-facts">
+              <div><span>创建人</span><strong :title="detail.createdBy || ''">{{ detail.createdBy || '—' }}</strong></div>
+              <div><span>创建</span><strong :title="fmtDate(detail.createdAt)">{{ timeAgo(detail.createdAt) }}</strong></div>
+              <div><span>更新</span><strong :title="fmtDate(detail.updatedAt)">{{ timeAgo(detail.updatedAt) }}</strong></div>
+              <div><span>完成</span><strong class="mono">{{ detailDone }} / {{ detailRunList.length }}</strong></div>
+              <div><span>进行中</span><strong class="mono">{{ detailActive }}</strong></div>
+              <div>
+                <span>进度</span>
+                <strong class="be-fact-progress">
+                  <span class="be-fact-progress__num">{{ detailProgress }}%</span>
+                  <span class="mk-minibar be-fact-progress__bar"><span class="mk-minibar__fill" :data-tone="detailProgressTone" :style="{ width: detailProgress + '%' }"></span></span>
+                </strong>
+              </div>
+            </div>
+
             <MkLoading v-if="detailLoading" inline />
-            <template v-else-if="detailRuns.length">
-              <div v-for="r in detailRuns" :key="r.id" class="mk-card be-run">
-                <div class="be-run__head">
-                  <strong>{{ r.learnerName }}</strong>
-                  <span class="mk-badge" :class="runStatusBadge(r.status)">{{ runStatusText(r.status) }}</span>
-                  <span class="mk-badge mk-badge--muted">{{ budgetLabel(r.frictionBudget) }}</span>
-                  <span class="be-run__phase mono" :title="r.phase">{{ phaseText(r.phase) }}</span>
-                </div>
-                <div class="be-run__body">
-                  <span class="be-run__meta">任务 {{ r.completedTasks }}<template v-if="r.totalTasks"> / {{ r.totalTasks }}</template></span>
-                  <span v-if="r.currentTask" class="be-run__meta be-run__task" :title="r.currentTask">当前：{{ r.currentTask }}</span>
-                  <span v-if="r.stallCount > 0" class="be-run__meta be-run__stall">卡死 {{ r.stallCount }} 次</span>
-                  <span v-if="r.lastError" class="be-run__meta be-run__error" :title="r.lastError">{{ r.lastError }}</span>
-                  <span class="be-run__meta be-run__time">{{ timeAgo(r.updatedAt) }}</span>
-                </div>
-                <div class="be-run__actions">
-                  <!-- 推进/衰减只对 active run 有意义：后端 advanceRun 对非 active 直接空转，前端禁用并说明原因；快照只读不受限 -->
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail || r.status !== 'active'" :title="r.status === 'active' ? '推进一个阶段：快进到该运行的下一个阶段' : '该运行已结束'" @click="advance(detail!.id, r.id)">推进</button>
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail || r.status !== 'active'" :title="r.status === 'active' ? '模拟跨日衰减：按衰减模型更新该运行的学习状态' : '该运行已结束'" @click="decay(detail!.id, r.id)">衰减</button>
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail" title="保存当前快照（只读，不改变状态）" @click="snapshot(detail!.id, r.id)">快照</button>
+            <!-- 运行记录：嵌套无边框卡（原型 .card box-shadow:none + card__head/card__body，内 feed 行） -->
+            <section v-else-if="detailRuns.length" class="mk-card">
+              <div class="mk-card__head">
+                <h4 class="mk-card__title">运行记录</h4>
+                <span class="mk-card__meta mono">{{ detailRuns.length }}</span>
+              </div>
+              <div class="be-runs">
+                <div v-for="r in detailRuns" :key="r.id" class="be-run">
+                  <div class="be-run__head">
+                    <strong>{{ r.learnerName }}</strong>
+                    <span class="mk-badge" :class="runStatusBadge(r.status)">{{ runStatusText(r.status) }}</span>
+                    <span class="mk-badge mk-badge--muted">{{ budgetLabel(r.frictionBudget) }}</span>
+                    <span class="be-run__phase mono" :title="r.phase">{{ phaseText(r.phase) }}</span>
+                  </div>
+                  <div class="be-run__body">
+                    <span class="be-run__meta">任务 {{ r.completedTasks }}<template v-if="r.totalTasks"> / {{ r.totalTasks }}</template></span>
+                    <span v-if="r.currentTask" class="be-run__meta be-run__task" :title="r.currentTask">当前：{{ r.currentTask }}</span>
+                    <span v-if="r.stallCount > 0" class="be-run__meta be-run__stall">卡死 {{ r.stallCount }} 次</span>
+                    <span v-if="r.lastError" class="be-run__meta be-run__error" :title="r.lastError">{{ r.lastError }}</span>
+                    <span class="be-run__meta be-run__time">{{ timeAgo(r.updatedAt) }}</span>
+                  </div>
+                  <div class="be-run__actions">
+                    <!-- 推进/衰减只对 active run 有意义：后端 advanceRun 对非 active 直接空转，前端禁用并说明原因；快照只读不受限 -->
+                    <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail || r.status !== 'active'" :title="r.status === 'active' ? '推进一个阶段：快进到该运行的下一个阶段' : '该运行已结束'" @click="advance(detail!.id, r.id)">推进</button>
+                    <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail || r.status !== 'active'" :title="r.status === 'active' ? '模拟跨日衰减：按衰减模型更新该运行的学习状态' : '该运行已结束'" @click="decay(detail!.id, r.id)">衰减</button>
+                    <button type="button" class="mk-btn mk-btn--sm" :disabled="runBusy || !detail" title="保存当前快照（只读，不改变状态）" @click="snapshot(detail!.id, r.id)">快照</button>
+                  </div>
                 </div>
               </div>
-            </template>
+            </section>
             <MkEmptyState
               v-else-if="detailError"
               tone="error"
@@ -201,6 +230,10 @@
               compact
             />
           </div>
+          <!-- 底部动作（原型 .ovl__foot：上边框、右对齐、常驻滚动区外；同 gc-detail__foot 判例） -->
+          <footer v-if="detail" class="be-detail__foot">
+            <button type="button" class="mk-btn" @click="detailOpen = false">关闭</button>
+          </footer>
         </div>
       </div>
     </Teleport>
@@ -434,6 +467,23 @@ const detailLoading = ref(false)
    把服务端明明有 runs 的故障误导成真为空（2026-09-27 走查 P1-2） */
 const detailError = ref(false)
 
+/* 抽屉事实区口径：优先用详情接口拉回的 runs（推进/衰减后是权威值），
+   加载中/失败时回落列表行上已有的 runs——打开即有数据，不空屏（同 OpsContent 判例） */
+const detailRunList = computed<BatchExperimentRun[]>(() =>
+  detailRuns.value.length ? detailRuns.value : detail.value?.runs || []
+)
+const detailDone = computed(() => detailRunList.value.filter((r) => r.status === 'done').length)
+const detailActive = computed(() => detailRunList.value.filter((r) => r.status === 'active').length)
+const detailProgress = computed(() =>
+  detailRunList.value.length ? Math.round((detailDone.value / detailRunList.value.length) * 100) : 0
+)
+/* 手动停止产生的 failed 是人工终止不是故障：进度条不标红（与列表 progressTone 同口径） */
+const detailProgressTone = computed(() => {
+  const failed = detailRunList.value.filter((r) => r.status === 'failed').length
+  if (failed > 0 && !(detail.value && stoppedIds.value.has(detail.value.id))) return 'bad'
+  return detailProgress.value >= 100 ? 'ok' : 'warn'
+})
+
 function mapRun(r: Record<string, unknown>): BatchExperimentRun {
   return {
     id: String(r.id),
@@ -606,8 +656,29 @@ watch(shouldPoll, (on) => (on ? poll.start() : poll.stop()), { immediate: true }
 .be-dup-hint { font-size: var(--mk-fs-micro); color: var(--mk-amber); }
 
 
-/* 详情 run 卡：mk-card 形态（边框/圆角/背景由全局类提供，此处只留内部布局） */
-.be-run { padding: 12px 14px; display: grid; gap: 8px; margin-bottom: 10px; }
+/* 详情抽屉（原型 openLearner 三段式）：头部标题 + 正文首段 pills/事实栅格 + 嵌套卡 + 常驻 foot */
+.be-detail__title { display: grid; gap: 6px; min-width: 0; }
+.be-detail__desc { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.be-detail__body { display: grid; gap: 16px; align-content: start; }
+/* 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 学习者数 */
+.be-detail__pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* 事实栅格走共享原语 .mk-facts；进度格嵌 minibar（原型 kv 的 dd 嵌 meterrow，同 OpsContent oc-fact-progress） */
+.be-fact-progress { display: grid; gap: 4px; align-items: start; }
+.be-fact-progress__num { font-family: var(--mk-mono); font-variant-numeric: tabular-nums; }
+.be-fact-progress__bar { width: 72px; }
+/* 底部动作条（原型 .ovl__foot：上边框、右对齐、常驻滚动区外；同 gc-detail__foot 判例） */
+.be-detail__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--mk-line);
+}
+/* 运行记录：嵌套无边框卡内的 feed 行（原型 .card box-shadow:none 内 ranklist，行间发丝线分隔） */
+.be-runs { display: grid; }
+.be-run { padding: 12px 16px; display: grid; gap: 8px; }
+.be-run + .be-run { border-top: 1px solid var(--mk-line); }
 .be-run__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .be-run__head strong { font-size: var(--mk-fs-body); }
 .be-run__phase { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-muted); }

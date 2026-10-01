@@ -158,25 +158,32 @@
       <div v-if="detail" ref="maskRef" class="mk-drawer">
         <div class="mk-drawer__mask" @click="detail = null"></div>
         <aside ref="panelRef" class="mk-drawer__panel fb-panel" role="dialog" aria-label="反馈详情">
+          <!-- 头部（原型 .ovl__head：标题 + grow + 关闭钮，下边框）：状态徽章下沉到正文首段徽章行 -->
           <header class="mk-drawer__head">
             <div class="fb-panel__title">
-              <span class="mk-badge" :class="statusBadge(detail.status)">{{ statusLabel(detail.status) }}</span>
               <h3 class="mk-drawer__title">{{ detail.userName }} 的反馈</h3>
               <span class="fb-panel__id mono">{{ detail.id }}</span>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detail = null">✕</button>
           </header>
           <div class="mk-drawer__body fb-body">
+            <!-- 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 难度适配 / UI 类型 / 轮次（均为行上已有字段） -->
+            <div class="fb-pills">
+              <span class="mk-badge" :class="statusBadge(detail.status)">{{ statusLabel(detail.status) }}</span>
+              <span v-if="detail.difficultyFit" class="mk-badge mk-badge--muted">难度适配 {{ detail.difficultyFit }}</span>
+              <span v-if="detail.uiType" class="mk-badge mk-badge--muted">{{ detail.uiType }}</span>
+              <span v-if="detail.roundNumber != null" class="mk-badge mk-badge--muted">轮次 {{ detail.roundNumber }}</span>
+            </div>
+            <!-- 事实清单（原型 dl.kv → 共享 mk-facts 栅格）：三维评分带点阵；id 类格单行省略、全文在 title -->
             <div class="mk-facts">
               <div><span>评分</span><span class="mk-dots" :class="{ 'mk-dots--warn': detail.rating <= 2 }" role="img" :aria-label="`评分 ${detail.rating}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': d <= detail.rating }"></i></span><strong class="mono">{{ detail.rating }}/5</strong></div>
               <div><span>有用度</span><span class="mk-dots" role="img" :aria-label="`有用度 ${detail.helpfulness ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.helpfulness != null && d <= detail.helpfulness }"></i></span><strong class="mono">{{ detail.helpfulness ?? '—' }}</strong></div>
               <div><span>清晰度</span><span class="mk-dots" role="img" :aria-label="`清晰度 ${detail.clarity ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.clarity != null && d <= detail.clarity }"></i></span><strong class="mono">{{ detail.clarity ?? '—' }}</strong></div>
               <div><span>难度</span><span class="mk-dots" role="img" :aria-label="`难度 ${detail.difficulty ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.difficulty != null && d <= detail.difficulty }"></i></span><strong class="mono">{{ detail.difficulty ?? '—' }}</strong></div>
-              <div><span>难度适配</span><strong>{{ detail.difficultyFit || '—' }}</strong></div>
-              <div><span>轮次</span><strong class="mono">{{ detail.roundNumber ?? '—' }}</strong></div>
-              <div><span>节点</span><strong class="mono">{{ detail.agentId || '—' }}</strong></div>
-              <div><span>策略</span><strong>{{ detail.strategy || '—' }}</strong></div>
-              <div><span>UI 类型</span><strong>{{ detail.uiType || '—' }}</strong></div>
+              <div><span>节点</span><strong class="mono" :title="detail.agentId || ''">{{ detail.agentId || '—' }}</strong></div>
+              <div><span>策略</span><strong :title="detail.strategy || ''">{{ detail.strategy || '—' }}</strong></div>
+              <div><span>任务</span><strong class="mono" :title="detail.taskId || ''">{{ detail.taskId || '—' }}</strong></div>
+              <div><span>会话</span><strong class="mono" :title="detail.sessionId || ''">{{ detail.sessionId || '—' }}</strong></div>
             </div>
 
             <section v-if="detail.comment" class="fb-section">
@@ -194,7 +201,7 @@
             <section v-if="detail.reasonCodes.length" class="fb-section">
               <header class="mk-section__head"><h4>原因标签</h4></header>
               <div class="fb-codes">
-                <span v-for="c in detail.reasonCodes" :key="c" class="fb-code mono">{{ c }}</span>
+                <span v-for="c in detail.reasonCodes" :key="c" class="mk-badge mk-badge--muted mono">{{ c }}</span>
               </div>
             </section>
 
@@ -202,19 +209,15 @@
               <header class="mk-section__head"><h4>内部备注</h4></header>
               <textarea v-model="noteDraft" class="fb-note" rows="3" placeholder="处理记录、归因、跟进结论…"></textarea>
             </section>
-
-            <div class="fb-actions">
-              <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="saving" @click="save('triaged')">
-                {{ saving ? '保存中…' : '标记已分流' }}
-              </button>
-              <button type="button" class="mk-btn mk-btn--sm mk-btn--ok" :disabled="saving" @click="save('resolved')">
-                标记已解决
-              </button>
-              <button type="button" class="mk-btn mk-btn--sm mk-btn--ghost" :disabled="saving" @click="save('dismissed')">忽略</button>
-            </div>
-
-            <p class="fb-meta mono" :title="`task=${detail.taskId || '—'} · session=${detail.sessionId || '—'}`">task={{ detail.taskId || '—' }} · session={{ detail.sessionId || '—' }}</p>
           </div>
+          <!-- 底部动作（原型 .ovl__foot：取消/忽略在左、主钮最右、常驻滚动区外；同 gc-detail__foot 判例） -->
+          <footer class="fb-detail__foot">
+            <button type="button" class="mk-btn mk-btn--ghost" :disabled="saving" @click="save('dismissed')">忽略</button>
+            <button type="button" class="mk-btn mk-btn--ok" :disabled="saving" @click="save('resolved')">标记已解决</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="save('triaged')">
+              {{ saving ? '保存中…' : '标记已分流' }}
+            </button>
+          </footer>
         </aside>
       </div>
     </Teleport>
@@ -506,21 +509,27 @@ onMounted(() => {
    fb- 仅保留内容区布局与覆盖层内细节样式） */
 .fb-panel__title { display: grid; gap: 6px; justify-items: start; }
 .fb-panel__id { font-size: var(--mk-fs-micro); color: var(--mk-faint); word-break: break-all; }
-/* 抽屉内容区：mk-drawer__body 提供滚动/内边距，此处补纵向排布 */
+/* 抽屉内容区：mk-drawer__body 提供滚动/内边距，此处补纵向排布（原型 .ovl__body grid gap16） */
 .fb-body { display: grid; gap: 16px; align-content: start; }
+/* 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 难度适配 / UI 类型 / 轮次 */
+.fb-pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* 底部动作条（原型 .ovl__foot：上边框、右对齐、常驻滚动区外；同 gc-detail__foot 判例） */
+.fb-detail__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--mk-line);
+}
 
 /* 事实栅格走共享原语 .mk-facts（原 .fb-facts 私有三列栅格 + 4K 阶梯已并进原语层） */
 
 .fb-section { display: grid; gap: 8px; }
 .fb-text { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-ink); line-height: 1.7; white-space: pre-wrap; }
+/* 原因标签：胶囊走共享 mk-badge--muted（原自搓 .fb-code 已并入原语） */
 .fb-codes { display: flex; gap: 6px; flex-wrap: wrap; }
-.fb-code {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--mk-line);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-}
 .fb-note {
   width: 100%;
   padding: 8px 10px;
@@ -535,39 +544,29 @@ onMounted(() => {
 }
 .fb-note:focus { outline: none; border-color: var(--mk-blue); }
 
-.fb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.fb-meta { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
 /* 4K：内容区字号跟随壳层放大（面板宽度/头/体由 mk-drawer 全局档接管） */
 @media (min-width: 2000px) {
   .fb-panel__title h3 { font-size: var(--mk-fs-emphasis); }
   .fb-panel__id { font-size: var(--mk-fs-micro); }
-    .fb-text { font-size: var(--mk-fs-body); }
+  .fb-text { font-size: var(--mk-fs-body); }
   .fb-note { font-size: var(--mk-fs-body); }
-  .fb-code { font-size: var(--mk-fs-micro); }
-  .fb-meta { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .fb-panel__title h3 { font-size: var(--mk-fs-emphasis); }
   .fb-panel__id { font-size: var(--mk-fs-micro); }
-    .fb-text { font-size: var(--mk-fs-body); }
+  .fb-text { font-size: var(--mk-fs-body); }
   .fb-note { font-size: var(--mk-fs-body); }
-  .fb-code { font-size: var(--mk-fs-micro); }
-  .fb-meta { font-size: var(--mk-fs-micro); }
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
   .fb-panel__title h3 { font-size: 23px; }
   .fb-panel__id { font-size: var(--mk-fs-body); }
-    .fb-text { font-size: var(--mk-fs-emphasis); }
+  .fb-text { font-size: var(--mk-fs-emphasis); }
   .fb-note { font-size: var(--mk-fs-emphasis); }
-  .fb-code { font-size: var(--mk-fs-body); }
-  .fb-meta { font-size: var(--mk-fs-body); }
 }
 
 /* 暗色模式（D1 补完）：fb- 内容区细节（面板底色/头/体已由 mk-drawer 全局接管） */
 html[data-theme='dark'] {
-  .fb-code { background: #2a2b2d; color: #afb1b6; }
   .fb-note { background: #19191a; border-color: #2a2b2d; color: var(--mk-ink); }
   .fb-note:focus { border-color: var(--mk-blue); }
 }

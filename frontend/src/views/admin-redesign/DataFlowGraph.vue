@@ -362,10 +362,11 @@
     <!-- 字段详情抽屉（含行级编辑，同步回写编排文件） -->
     <Teleport to="body">
       <div v-if="selected" class="mk-drawer">
-        <div class="mk-drawer__mask" @click="selected = null"></div>
+        <!-- 遮罩关闭走 useMaskClose（按下-松开守卫）：防在抽屉内选中文本/拖动画布到遮罩松手误关 -->
+        <div ref="maskRef" class="mk-drawer__mask" @click="selected = null"></div>
         <aside class="mk-drawer__panel dfg-drawer" role="dialog" aria-label="字段详情" :style="semanticVars">
           <div class="mk-drawer__head">
-            <div>
+            <div class="dfg-drawer__title">
               <h3 class="mk-drawer__title mono">{{ selected.fieldId }}</h3>
               <p class="mk-drawer__sub">{{ selected.description || '—' }}</p>
             </div>
@@ -373,6 +374,16 @@
           </div>
 
           <div class="dfg-drawer__body">
+            <!-- 首段徽章行（原型 .ovl__body 首段 pills）：角色 / 可见性 / 锁定 / 内部信令 / 累积，均为字段既有属性 -->
+            <div class="dfg-drawer__pills">
+              <span class="mk-badge" :class="`mk-badge--role-${selected.role}`">{{ roleLabel(selected.role) }}（{{ selected.role }}）</span>
+              <span class="mk-badge" :class="`mk-badge--render-${selected.render}`">{{ selected.render }}</span>
+              <span class="mk-badge" :class="`mk-badge--lock-${selected.lockLevel}`">{{ lockLabel(selected.lockLevel) }}</span>
+              <span v-if="selected.internal" class="mk-badge dfg-badge--internal">内部信令</span>
+              <span v-if="selected.accumulate" class="mk-badge dfg-badge--accum">累积进学习者状态</span>
+            </div>
+
+            <!-- 事实清单（原型 dl.kv：96px 标签列不画线，值可嵌徽标；dfg- 保留字段着色块） -->
             <dl class="dfg-dl">
               <div class="dfg-dl__row">
                 <dt>产出方</dt>
@@ -389,18 +400,6 @@
                 <dd class="mono">{{ selected.valueType || '—' }}</dd>
               </div>
               <div class="dfg-dl__row">
-                <dt>角色</dt>
-                <dd><span class="mk-badge" :class="`mk-badge--role-${selected.role}`">{{ roleLabel(selected.role) }}（{{ selected.role }}）</span></dd>
-              </div>
-              <div class="dfg-dl__row">
-                <dt>可见性</dt>
-                <dd>
-                  <span class="mk-badge" :class="`mk-badge--render-${selected.render}`">{{ selected.render }}</span>
-                  <span v-if="selected.internal" class="dfg-tag dfg-tag--internal">内部信令</span>
-                  <span v-if="selected.accumulate" class="dfg-tag dfg-tag--accum">累积进学习者状态</span>
-                </dd>
-              </div>
-              <div class="dfg-dl__row">
                 <dt>落库键</dt>
                 <dd class="mono">{{ selected.persistKey || selected.fieldId }}</dd>
               </div>
@@ -408,19 +407,15 @@
                 <dt>抽取路径</dt>
                 <dd class="mono">{{ selected.pathInRawOutput }}</dd>
               </div>
-              <div class="dfg-dl__row">
-                <dt>锁定</dt>
-                <dd><span class="mk-badge" :class="`mk-badge--lock-${selected.lockLevel}`">{{ lockLabel(selected.lockLevel) }}</span></dd>
-              </div>
               <div class="dfg-dl__row" v-if="selected.notes">
                 <dt>备注</dt>
                 <dd>{{ selected.notes }}</dd>
               </div>
             </dl>
 
-            <!-- 数据旅程：这条数据在管线里的位置 -->
-            <div class="dfg-flow">
-              <h4 class="dfg-dl__title">数据旅程</h4>
+            <!-- 数据旅程：裸分组改走区块文法（原型 section = 区块头 + 内容，不再自绘虚线框） -->
+            <section class="dfg-section">
+              <header class="mk-section__head"><h4>数据旅程</h4></header>
               <div class="dfg-flow__list">
                 <span class="dfg-flow__chip">{{ journeyOf('producer') }}</span>
                 <span class="dfg-flow__arrow">→</span>
@@ -432,47 +427,56 @@
                 <span v-else class="dfg-flow__chip dfg-flow__chip--out">{{ journeyOf('handoff') }}</span>
               </div>
               <p class="dfg-flow__hint">{{ journeyHint() }}</p>
-            </div>
+            </section>
 
-            <!-- 行级编辑（仅可编辑行） -->
-            <div v-if="!selected.locked" class="dfg-edit">
-              <h4 class="dfg-dl__title">行级编辑（会同步回写编排文件）</h4>
-              <div class="dfg-edit__row">
-                <span class="dfg-edit__label">可见性</span>
-                <span class="dfg-edit__pills">
-                  <button type="button" class="dfg-pill" :class="{ 'is-on': editDraft.render === 'visible' }" @click="editDraft.render = 'visible'">可见</button>
-                  <button type="button" class="dfg-pill" :class="{ 'is-on': editDraft.render === 'hidden' }" @click="editDraft.render = 'hidden'">隐藏</button>
-                </span>
+            <!-- 行级编辑：嵌套无边框卡（原型 .card box-shadow:none + card__head/card__body，内为 field 式表单行） -->
+            <section v-if="!selected.locked" class="mk-card">
+              <div class="mk-card__head">
+                <h4 class="mk-card__title">行级编辑</h4>
+                <span class="mk-card__meta">会同步回写编排文件</span>
               </div>
-              <div class="dfg-edit__row">
-                <span class="dfg-edit__label">移交（handoff）</span>
-                <input v-model="editDraft.handoffText" class="dfg-edit__input mono" placeholder="阶段名 / skill:id / agent，逗号分隔；空 = 不转交" spellcheck="false" />
+              <div class="dfg-edit">
+                <div class="dfg-field">
+                  <span class="dfg-field__label">可见性</span>
+                  <span class="dfg-edit__pills">
+                    <button type="button" class="dfg-pill" :class="{ 'is-on': editDraft.render === 'visible' }" @click="editDraft.render = 'visible'">可见</button>
+                    <button type="button" class="dfg-pill" :class="{ 'is-on': editDraft.render === 'hidden' }" @click="editDraft.render = 'hidden'">隐藏</button>
+                  </span>
+                </div>
+                <div class="dfg-field">
+                  <label class="dfg-field__label" for="dfg-handoff">移交（handoff）</label>
+                  <input id="dfg-handoff" v-model="editDraft.handoffText" class="dfg-edit__input mono" placeholder="阶段名 / skill:id / agent，逗号分隔；空 = 不转交" spellcheck="false" />
+                </div>
+                <div class="dfg-field">
+                  <span class="dfg-field__label">累积</span>
+                  <label class="dfg-check"><input type="checkbox" v-model="editDraft.accumulate" /><span>accumulate（累积进学习者状态）</span></label>
+                </div>
+                <div class="dfg-field">
+                  <span class="dfg-field__label">内部</span>
+                  <label class="dfg-check"><input type="checkbox" v-model="editDraft.internal" /><span>internal（仅供 UI / 平台内部消费）</span></label>
+                </div>
+                <div class="dfg-field">
+                  <label class="dfg-field__label" for="dfg-edit-notes">备注</label>
+                  <input id="dfg-edit-notes" v-model="editDraft.notes" class="dfg-edit__input" placeholder="备注（可选）" spellcheck="false" />
+                </div>
+                <p v-if="editMsg" class="dfg-edit__msg" :class="{ 'is-error': editError }">{{ editMsg }}</p>
               </div>
-              <div class="dfg-edit__row">
-                <span class="dfg-edit__label">累积</span>
-                <label class="dfg-check"><input type="checkbox" v-model="editDraft.accumulate" /><span>accumulate（累积进学习者状态）</span></label>
-              </div>
-              <div class="dfg-edit__row">
-                <span class="dfg-edit__label">内部</span>
-                <label class="dfg-check"><input type="checkbox" v-model="editDraft.internal" /><span>internal（仅供 UI / 平台内部消费）</span></label>
-              </div>
-              <div class="dfg-edit__row">
-                <span class="dfg-edit__label">备注</span>
-                <input v-model="editDraft.notes" class="dfg-edit__input" placeholder="备注（可选）" spellcheck="false" />
-              </div>
-              <p v-if="editMsg" class="dfg-edit__msg" :class="{ 'is-error': editError }">{{ editMsg }}</p>
-              <div class="dfg-edit__actions">
-                <button type="button" class="mk-btn" :disabled="saving" @click="resetDraft">还原</button>
-                <button type="button" class="mk-btn mk-btn--primary" :disabled="saving || !dirty" @click="saveEdit">
-                  {{ saving ? '保存中…' : '保存修改' }}
-                </button>
-              </div>
-            </div>
-            <div v-else class="dfg-edit dfg-edit--locked">
-              <h4 class="dfg-dl__title">行级编辑</h4>
-              <p class="dfg-edit__locked-hint">该字段为系统锁/结构锁：属性由编排文件或代码派生，请使用「编排文件」入口修改。</p>
-            </div>
+            </section>
+            <!-- 锁定字段：原型 .note 语气（只读说明，不给编辑表单） -->
+            <p v-else class="dfg-note">该字段为系统锁/结构锁：属性由编排文件或代码派生，请使用「编排文件」入口修改。</p>
           </div>
+
+          <!-- 底部动作（原型 .ovl__foot：取消在左、主钮右、常驻滚动区外）：编辑动作自表单尾部上提，
+               正文只滚内容、保存/还原不随长 kv 滚走 -->
+          <footer class="dfg-drawer__foot">
+            <button type="button" class="mk-btn" @click="selected = null">关闭</button>
+            <template v-if="!selected.locked">
+              <button type="button" class="mk-btn" :disabled="saving" @click="resetDraft">还原</button>
+              <button type="button" class="mk-btn mk-btn--primary" :disabled="saving || !dirty" @click="saveEdit">
+                {{ saving ? '保存中…' : '保存修改' }}
+              </button>
+            </template>
+          </footer>
         </aside>
       </div>
     </Teleport>
@@ -483,6 +487,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { adminFieldRoutingsApi, adminRuntimeDefinitionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
+import { useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import { ensureLiveTopologyRaw } from './live'
 import {
@@ -1039,6 +1044,10 @@ function openField(c: FlowChip) {
   editDraft.notes = c.notes || ''
 }
 useEscape(() => !!selected.value, () => { selected.value = null })
+/* 遮罩关闭守卫（useMaskClose：按下与松开都落在遮罩上才关）：防在抽屉内选中/拖动文本、
+   或从画布拖选字段到遮罩松手时误关（同 GoalConversations/OpsContent 接法） */
+const maskRef = ref<HTMLElement | null>(null)
+useMaskClose(maskRef, () => { selected.value = null })
 
 /** 旅程摘要：谁产出 / 谁消费 / 交给谁 */
 function producersOf(c: FlowChip): string[] {
@@ -1478,29 +1487,49 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 /* 空态 */
 .dfg-empty { padding: 40px; text-align: center; color: var(--mk-faint); }
 
-/* ========== 抽屉 ========== */
+/* ========== 抽屉（原型 openLearner 三段式：头部标题 + 正文 pills/事实/嵌套卡 + 常驻 foot） ========== */
 .dfg-drawer { background: var(--mk-graph-canvas); }
+.dfg-drawer__title { display: grid; gap: 6px; min-width: 0; }
 .dfg-drawer__body { display: grid; gap: 16px; align-content: start; }
+/* 首段徽章行（原型 .ovl__body 首段 pills）：角色 / 可见性 / 锁定 / 内部信令 / 累积 */
+.dfg-drawer__pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* 内部/累积沿用画布 chip 的色彩编码（内=紫、累=琥珀），形状走共享 mk-badge 胶囊 */
+.dfg-badge--internal { background: var(--mk-graph-flag-purple-bg); color: var(--fam-classroom); }
+.dfg-badge--accum { background: var(--mk-amber-bg); color: var(--fam-knowledge); }
+/* 底部动作条（原型 .ovl__foot：上边框、右对齐、常驻滚动区外；同 gc-detail__foot 判例） */
+.dfg-drawer__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--mk-line);
+}
 
-.dfg-dl { margin: 0; display: grid; gap: 7px; }
-.dfg-dl__title { margin: 0 0 8px; font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-blue); letter-spacing: 0.04em; }
-.dfg-dl__row { display: grid; grid-template-columns: 76px 1fr; gap: 8px; align-items: baseline; }
-.dfg-dl__row dt { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); letter-spacing: 0.04em; }
-.dfg-dl__row dd { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-ink); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* 事实清单（原型 dl.kv：96px 标签列、不画线、标签不描字重，值可嵌徽标/色块） */
+.dfg-dl { margin: 0; display: grid; gap: 8px 14px; }
+.dfg-dl__row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px 14px; align-items: baseline; }
+.dfg-dl__row dt { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.dfg-dl__row dd { margin: 0; font-size: var(--mk-fs-body); color: var(--mk-ink); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .dfg-dl__family { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); display: inline-block; }
 
-.dfg-flow { border: 1px dashed var(--mk-graph-flow-line); border-radius: var(--mk-radius-xl); padding: 10px 12px; background: var(--mk-graph-flow-bg); }
+/* 区块（原型 section = 区块头 + 内容；原 .dfg-flow 虚线自绘框并入此文法） */
+.dfg-section { display: grid; gap: 8px; }
 .dfg-flow__list { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .dfg-flow__chip { padding: 2px 9px; border-radius: 999px; background: var(--mk-blue); color: var(--mk-graph-on-accent); font-size: var(--mk-fs-micro); font-weight: 700; }
 .dfg-flow__chip--soft { background: var(--mk-graph-flow-soft-bg); color: var(--mk-accent-deep); }
 .dfg-flow__chip--out { background: var(--mk-graph-flow-out); }
 .dfg-flow__arrow { color: var(--mk-blue); font-weight: 800; }
-.dfg-flow__hint { margin: 7px 0 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
+.dfg-flow__hint { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
 
-.dfg-edit { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); padding: 12px 14px; display: grid; gap: 10px; }
-.dfg-edit--locked { background: var(--mk-graph-canvas-2); }
-.dfg-edit__row { display: grid; grid-template-columns: 84px 1fr; gap: 8px; align-items: center; }
-.dfg-edit__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
+/* 行级编辑本体（卡体/卡头由共享 mk-card 提供，此处只留排列与 field 行） */
+.dfg-edit { padding: 12px 16px; display: grid; gap: 12px; }
+/* field 行（原型 .field：标签 12px 700 墨色、控件在下一行） */
+.dfg-field { display: grid; gap: 6px; }
+.dfg-field__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
+/* 只读说明（原型 .note 语气：浅底、muted、微字号） */
+.dfg-note { margin: 0; padding: 10px 12px; border-radius: var(--mk-radius-xl); background: var(--mk-surface-3); color: var(--mk-muted); font-size: var(--mk-fs-micro); line-height: 1.6; }
 .dfg-edit__pills { display: inline-flex; gap: 4px; padding: 2px; background: var(--mk-graph-pills-bg); border-radius: var(--mk-radius-sm); width: fit-content; }
 .dfg-pill { padding: 4px 12px; border: 0; border-radius: 6px; background: transparent; font: inherit; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); cursor: pointer; }
 .dfg-pill.is-on { background: var(--mk-graph-pill-on-bg); color: var(--mk-blue); }
@@ -1509,11 +1538,6 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-check { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); cursor: pointer; }
 .dfg-edit__msg { margin: 0; padding: 8px 10px; border-radius: var(--mk-radius-sm); background: var(--mk-graph-flow-bg); color: var(--mk-blue); font-size: var(--mk-fs-micro); font-weight: 600; }
 .dfg-edit__msg.is-error { background: var(--mk-red-bg); color: var(--mk-red); }
-.dfg-edit__locked-hint { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.dfg-edit__actions { display: flex; justify-content: flex-end; gap: 8px; }
-.dfg-tag { padding: 0 5px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 800; line-height: 1.6; }
-.dfg-tag--internal { background: var(--mk-graph-flag-purple-bg); color: var(--fam-classroom); }
-.dfg-tag--accum { background: var(--mk-amber-bg); color: var(--fam-knowledge); }
 
 /* ================= 暗色模式 ================= */
 html[data-theme='dark'] {
@@ -1574,10 +1598,8 @@ html[data-theme='dark'] {
   .dfg-legend__item.is-on { background: rgba(91, 141, 239, 0.18); border-color: rgba(91, 141, 239, 0.45); color: var(--mk-graph-blue-ink); }
   .dfg-drawer { background: var(--mk-graph-canvas); }
   .dfg-drawer__body { background: var(--mk-graph-canvas); }
-  .dfg-flow { background: var(--mk-graph-flow-bg); border-color: var(--mk-graph-flow-line); }
   .dfg-flow__chip--soft { background: var(--mk-graph-flow-soft-bg); color: var(--mk-graph-flow-soft-ink); }
   .dfg-flow__chip--out { background: var(--mk-graph-flow-out); }
-  .dfg-edit--locked { background: var(--mk-graph-canvas-2); }
   .dfg-edit__pills { background: var(--mk-graph-pills-bg); color: var(--mk-muted); }
   .dfg-pill { color: var(--mk-muted); }
   .dfg-pill:hover { color: var(--mk-graph-node-ink); }
@@ -1585,12 +1607,10 @@ html[data-theme='dark'] {
   .dfg-edit__input { background: var(--mk-graph-field); border-color: var(--mk-line); color: var(--mk-ink); }
   .dfg-edit__msg { background: var(--mk-graph-flow-bg); color: var(--mk-accent-deep); }
   .dfg-edit__msg.is-error { background: var(--mk-red-bg); color: var(--mk-graph-err-strong-ink); }
-  .dfg-tag--internal { background: var(--mk-graph-flag-purple-bg); color: var(--mk-graph-flag-purple-ink); }
-  .dfg-tag--accum { background: var(--mk-amber-bg); color: var(--mk-graph-warn-ink); }
+  .dfg-badge--internal { background: var(--mk-graph-flag-purple-bg); color: var(--mk-graph-flag-purple-ink); }
+  .dfg-badge--accum { background: var(--mk-amber-bg); color: var(--mk-graph-warn-ink); }
   .dfg-drawer { color: var(--mk-ink); }
   .dfg-dl__row { color: var(--mk-ink); }
-  .dfg-edit__row { color: var(--mk-ink); }
-  .dfg-edit__actions { color: var(--mk-ink); }
 }
 
 /* 响应式（此前本组件 0 个 @media，窄屏靠 .dfg-frame overflow:hidden 静默裁切）：
