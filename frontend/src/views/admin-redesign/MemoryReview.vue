@@ -112,11 +112,15 @@
             </tr>
           </thead>
           <tbody>
+            <!-- 原型 renderMemory：学习者行/「记忆点」按钮均 data-action="open-learner" → go("learner") 页。
+                 行点击改跳学习者详情页（原型铁令：实体行跳页不开浮层）；「明细」钮保留页内复盘二级视图（记忆点子实体明细，原型允许形态）。 -->
             <tr
               v-for="row in rows"
               :key="row.userId"
               :class="{ 'mr__row--active': row.userId === selectedId }"
-              @click="openDetail(row.userId)"
+              tabindex="0"
+              @click="openSubPage('learner', row.userId)"
+              @keydown.enter.prevent="openSubPage('learner', row.userId)"
             >
               <td>
                 <div class="mr__user">
@@ -433,6 +437,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
 import { askConfirm } from './useConfirm'
 import { useEscape } from './useEscape'
+import { openSubPage } from './store'
 import { toast } from '@/utils/toast'
 import { errMsg, shortId, timeAgo } from './live'
 
