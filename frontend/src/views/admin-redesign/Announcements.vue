@@ -38,11 +38,21 @@
         </span>
       </div>
 
-      <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="6" />
+      <!-- 工具条（原型 1894-1899 .toolbar：左 sub 说明 + grow + 右侧 primary sm「新建公告」）；
+           置于卡头筛选之下、列表之上，与原型 toolbar→tablewrap 次序一致。
+           embedded 态由宿主 OpsHub 提供同款工具行（避免重复入口），故此处仅独立页渲染。 -->
+      <div v-if="!embedded" class="an-toolbar">
+        <span class="an-toolbar__sub">面向学习者的公告、站内信与推送</span>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary an-toolbar__new" @click="openCreate">新建公告</button>
+      </div>
+
+      <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="7" />
       <div v-else-if="filtered.length" class="mk-table-scroll an-list">
       <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），列按内容自然分宽；
            标题列 = 原型 .wrap 白名单（双行 cell-main + 正文预览换行），
-           其余列 nowrap，长内容由全局 mk-cell-main max-width / an-body 截断兜底 -->
+           其余列 nowrap，长内容由全局 mk-cell-main max-width / an-body 截断兜底。
+           列向原型对齐（1895-1898）：标题/状态/时间/创建人为原型列；级别/过期为现状真实
+           能力保留；渠道/受众后端无对应字段，按纪律不硬造。 -->
       <table class="mk-table">
         <thead>
           <tr>
@@ -51,6 +61,7 @@
             <th>状态</th>
             <th>发布</th>
             <th>过期</th>
+            <th>创建人</th>
             <th class="mk-th--right">操作</th>
           </tr>
         </thead>
@@ -68,6 +79,7 @@
             </td>
             <td :class="{ 'mk-na': !r.publishedAt }" :title="r.publishedAt ? fmtDate(r.publishedAt) : ''">{{ r.publishedAt ? timeAgo(r.publishedAt) : '—' }}</td>
             <td :class="[r.expiresAt ? expiresTone(r.expiresAt) : 'mk-na']" :title="r.expiresAt ? fmtDate(r.expiresAt) : ''">{{ r.expiresAt ? expiresLabel(r.expiresAt) : '不过期' }}</td>
+            <td><span class="mono an-author" :title="r.createdBy || ''">{{ r.createdBy || '—' }}</span></td>
             <td>
               <div class="mk-actions">
                 <button v-if="r.status !== 'published'" type="button" class="mk-link" :disabled="r.busy" @click="publish(r)">发布</button>
@@ -205,6 +217,7 @@ interface Row {
   status: 'draft' | 'published' | 'archived'
   publishedAt: string | null
   expiresAt: string | null
+  createdBy: string | null
   busy?: boolean
 }
 
@@ -302,24 +315,42 @@ function menuRemove(r: Row) {
 }
 
 async function publish(r: Row) {
+  const ok = await askConfirm({
+    title: '发布公告',
+    message: `确认发布公告「${r.title}」？\n发布后全站用户立即可见。`,
+    confirmText: '发布',
+    busy: true
+  })
+  if (!ok) return
   r.busy = true
   try {
     await livePublishAnnouncement(r.id)
     toast.success(`「${r.title}」已发布，用户端立即可见`)
+    doneConfirm()
   } catch (e) {
     toast.error(`发布失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     r.busy = false
   }
 }
 
 async function archive(r: Row) {
+  const ok = await askConfirm({
+    title: '下线公告',
+    message: `确认下线公告「${r.title}」？\n下线后用户端将不再展示该公告。`,
+    confirmText: '下线',
+    busy: true
+  })
+  if (!ok) return
   r.busy = true
   try {
     await liveArchiveAnnouncement(r.id)
     toast.success(`「${r.title}」已下线`)
+    doneConfirm()
   } catch (e) {
     toast.error(`下线失败：${errMsg(e)}`)
+    failConfirm()
   } finally {
     r.busy = false
   }
@@ -517,6 +548,19 @@ function expiresLabel(iso: string): string {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* 工具条（原型 249-250 .toolbar）：左说明 + grow + 右侧新建主钮（原型 1894-1899） */
+.an-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.an-toolbar__sub { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.an-toolbar__new { margin-left: auto; }
+/* 创建人列（原型 1898 创建人 mono sub）：mono 由全局 .mono 承载，此处补字号/弱化色 */
+.an-author { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .an-severity { display: flex; gap: 6px; }
 .an-sev {
   padding: 6px 14px;

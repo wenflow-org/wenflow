@@ -50,29 +50,34 @@
       待办数据加载失败，对应计数不可信：{{ wbErrorText }}
     </p>
 
-    <!-- 运营待办（全宽：按严重度排序的行动清单，非统计卡） -->
+    <!-- 运营待办（原型 1905-1914）：先 4 张 metricCard（原型 1704-1706 metricCard：
+         label + 24px value + foot），其下 ranklist 行动行（原型 290-295 .ranklist/.rankrow：
+         事项 + 行尾 mute 类别 pill）。「去处理」保留为行尾按钮——行动能力不因形态改造丢失。 -->
     <section class="mk-card">
       <div class="mk-card__head">
         <h4 class="mk-card__title">运营待办</h4>
         <span class="mk-card__meta">按优先级排序 · 点击直达对应页面</span>
       </div>
-      <div class="ow-todo-list">
+      <div class="oh-metrics">
+        <div v-for="m in todoMetrics" :key="m.key" class="oh-metric">
+          <span class="oh-metric__label">{{ m.label }}</span>
+          <span class="oh-metric__value" :class="{ 'oh-metric__value--bad': m.bad, 'oh-metric__value--na': m.failed }">{{ m.failed ? '—' : m.value }}</span>
+          <span class="oh-metric__foot" :class="{ 'oh-metric__foot--bad': m.failed }">{{ m.failed ? '加载失败，计数不可信' : m.foot }}</span>
+        </div>
+      </div>
+      <div class="ow-ranklist">
         <button
           v-for="t in todoItems"
           :key="t.key"
           type="button"
-          class="ow-todo"
-          :class="[`ow-todo--${t.severity}`, { 'ow-todo--done': t.count === 0 && !t.failed, 'ow-todo--failed': t.failed, 'ow-todo--act': t.actionable }]"
+          class="ow-rankrow"
+          :class="{ 'ow-rankrow--done': t.count === 0 && !t.failed, 'ow-rankrow--failed': t.failed, 'ow-rankrow--act': t.actionable }"
           :title="t.failed ? '该域数据加载失败，计数不可信' : (t.count > 0 ? t.hint : '该事项已清零')"
           @click="t.actionable ? t.action() : undefined"
         >
-          <i class="ow-todo__dot" aria-hidden="true"></i>
-          <span class="ow-todo__main">
-            <strong class="ow-todo__label">{{ t.label }}</strong>
-            <em class="ow-todo__hint">{{ t.hint }}</em>
-          </span>
-          <b class="ow-todo__count" :class="{ 'ow-todo__count--bad': t.count > 0 && !t.failed }">{{ t.failed ? '—' : t.count }}</b>
-          <span class="ow-todo__go">{{ t.failed ? '加载失败' : (t.count > 0 ? '去处理 →' : '已清零') }}</span>
+          <span class="ow-rankrow__main">{{ t.label }}</span>
+          <span class="mk-badge mk-badge--muted">{{ t.category }}</span>
+          <span class="ow-rankrow__go" :class="{ 'ow-rankrow__go--bad': t.failed }">{{ t.failed ? '加载失败' : (t.count > 0 ? '去处理 →' : '已清零') }}</span>
         </button>
       </div>
     </section>
@@ -139,8 +144,16 @@
     <Feedback v-else-if="tab === 'feedback'" ref="feedbackRef" embedded @count="onDomainCount('feedback', $event)" />
     <!-- ===== Tab3: 成就（OpsAchievements embedded） ===== -->
     <OpsAchievements v-else-if="tab === 'achievements'" ref="achievementsRef" embedded @count="onDomainCount('achievements', $event)" />
-    <!-- ===== Tab4: 公告（Announcements embedded） ===== -->
-    <Announcements v-else-if="tab === 'announce'" ref="announceRef" embedded @count="onDomainCount('announce', $event)" />
+    <!-- ===== Tab4: 公告（Announcements embedded） =====
+         嵌入态下 Announcements 隐藏自身承载「新建公告」的状态条，列表非空时无可见入口；
+         由宿主提供工具行并调用其暴露的 openCreate()（defineExpose），不再重复按钮。 -->
+    <template v-else-if="tab === 'announce'">
+      <div class="oh-tabbar">
+        <span class="oh-tabbar__sub">面向学习者的公告、站内信与推送</span>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="announceRef?.openCreate?.()">新建公告</button>
+      </div>
+      <Announcements ref="announceRef" embedded @count="onDomainCount('announce', $event)" />
+    </template>
     <!-- ===== Tab5: 站内通知（Notifications embedded） ===== -->
     <Notifications v-else ref="notifRef" embedded @count="onDomainCount('inapp', $event)" />
   </div>
@@ -312,10 +325,22 @@ const hostTone = computed(() => {
    actionable = 有计数且未失败——「已清零 / 加载失败」行不给 pointer 样式也不挂跳转
    （原实现 cursor 已是 default，点击却仍跳转，是「看起来不可点其实可点」的误导） */
 const todoItems = computed(() => [
-  { key: 'feedback', label: '待处理反馈', hint: '学习者低分反馈等待分流', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback, actionable: !wbErrors.value.feedback && wbPendingFeedback.value > 0 },
-  { key: 'paths', label: '生成失败路径', hint: '目标对话产出路径失败，需排查', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths, actionable: !wbErrors.value.paths && wbFailedPaths.value > 0 },
-  { key: 'dead', label: 'Outbox 死信', hint: '领域事件投递失败，影响画像/成就', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead, actionable: !wbErrors.value.dead && wbDeadLetters.value > 0 },
-  { key: 'draft', label: '草稿公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value, actionable: !annFailed.value && ann.value.draft > 0 },
+  { key: 'feedback', label: '待处理反馈', category: '反馈', hint: '学习者低分反馈等待分流', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback, actionable: !wbErrors.value.feedback && wbPendingFeedback.value > 0 },
+  { key: 'paths', label: '生成失败路径', category: '路径', hint: '目标对话产出路径失败，需排查', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths, actionable: !wbErrors.value.paths && wbFailedPaths.value > 0 },
+  { key: 'dead', label: 'Outbox 死信', category: '通知', hint: '领域事件投递失败，影响画像/成就', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead, actionable: !wbErrors.value.dead && wbDeadLetters.value > 0 },
+  { key: 'draft', label: '草稿公告', category: '公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value, actionable: !annFailed.value && ann.value.draft > 0 },
+])
+
+/**
+ * 运营待办 metricCard 数值（原型 1906-1910 四张卡：待处理反馈 / 生成失败路径 /
+ * Outbox 死信 / 草稿公告）。数值全部取现有统计，foot 用真实口径——
+ * 不硬造「其中新增 N」这类后端未提供的子计数，只作简短定性说明。
+ */
+const todoMetrics = computed(() => [
+  { key: 'feedback', label: '待处理反馈', value: wbPendingFeedback.value, bad: wbPendingFeedback.value > 0, failed: !!wbErrors.value.feedback, foot: wbErrors.value.feedback ? '加载失败，计数不可信' : '等待分流' },
+  { key: 'paths', label: '生成失败路径', value: wbFailedPaths.value, bad: wbFailedPaths.value > 0, failed: !!wbErrors.value.paths, foot: wbErrors.value.paths ? '加载失败，计数不可信' : '需排查重规划' },
+  { key: 'dead', label: 'Outbox 死信', value: wbDeadLetters.value, bad: wbDeadLetters.value > 0, failed: !!wbErrors.value.dead, foot: wbErrors.value.dead ? '加载失败，计数不可信' : '投递失败待重投' },
+  { key: 'draft', label: '草稿公告', value: ann.value.draft, bad: false, failed: annFailed.value, foot: annFailed.value ? '加载失败，计数不可信' : '待发布' },
 ])
 
 /* 公告三态计数（live 层共享，与侧栏徽章同源） */
@@ -451,6 +476,18 @@ onMounted(() => {
 }
 /* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度 */
 .oh-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
+/* 公告 tab 工具行：嵌入态宿主提供「新建公告」唯一入口（子页自身工具条在 embedded 隐藏），
+   形态对齐子页 .an-toolbar（左说明 + grow + 右 primary sm） */
+.oh-tabbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 0 10px;
+}
+.oh-tabbar__sub { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.oh-tabbar .mk-btn { margin-left: auto; }
 
 /* ================= 运营工作台（待办清单 + 状态面板，区别于 Dashboard 统计卡） ================= */
 /* 状态面板：路径 / 公告并列（行式计数 + 比例条，非 KPI 卡） */
@@ -461,78 +498,82 @@ onMounted(() => {
   align-items: start;
 }
 
-/* 待办清单：行动行式（严重度圆点 + 标题/说明 + 计数 + 去处理），非统计卡 */
-.ow-todo-list { padding: 2px 10px 6px; }
-.ow-todo {
+/* 运营待办 · 4 张 metricCard（原型 1704-1706 metricCard：label + 24px value + foot）
+   value 用 token 档（--mk-fs-20）落地，4K 档内继续放大，不写死 px */
+.oh-metrics {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto auto;
-  align-items: center;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
+  padding: 4px 14px 12px;
+}
+.oh-metric {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  background: var(--mk-surface);
+}
+.oh-metric__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.oh-metric__value {
+  font-size: var(--mk-fs-20);
+  font-weight: 800;
+  color: var(--mk-ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.oh-metric__value--bad { color: var(--mk-red); }
+.oh-metric__value--na { color: var(--mk-faint); }
+.oh-metric__foot { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.oh-metric__foot--bad { color: var(--mk-red); }
+
+/* ranklist 行动行（原型 290-295 .ranklist/.rankrow）：事项 + 行尾 mute 类别 pill；
+   「去处理」作为行尾按钮保留（行动能力不丢）。仅可跳转行给 pointer。 */
+.ow-ranklist { padding: 0 14px 6px; }
+.ow-rankrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  padding: 10px 8px;
+  padding: 9px 0;
   border: 0;
-  border-bottom: 1px solid #eef1f7;
+  border-bottom: 1px solid var(--mk-line);
   background: transparent;
   font: inherit;
   text-align: left;
   transition: background 0.12s;
 }
-/* 仅可跳转的行给 pointer：已清零 / 加载失败行不可点（不给「看起来能点」的错觉） */
-.ow-todo--act { cursor: pointer; }
-.ow-todo:last-child { border-bottom: none; }
-.ow-todo:hover { background: #f6f9ff; }
-html[data-theme='dark'] .ow-todo { border-bottom-color: #252627; }
-html[data-theme='dark'] .ow-todo:hover { background: #202122; }
-.ow-todo__dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--mk-faint);
-  flex-shrink: 0;
-}
-.ow-todo--bad .ow-todo__dot { background: var(--mk-red); box-shadow: 0 0 0 3px var(--mk-red-bg); }
-.ow-todo--warn .ow-todo__dot { background: var(--mk-amber); box-shadow: 0 0 0 3px var(--mk-amber-bg); }
-.ow-todo__main { display: grid; gap: 1px; min-width: 0; }
-.ow-todo__label { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
-.ow-todo__hint {
-  font-style: normal;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  line-height: 1.4;
+.ow-rankrow:last-child { border-bottom: 0; }
+.ow-rankrow--act { cursor: pointer; }
+.ow-rankrow--act:hover { background: var(--mk-surface-2); }
+.ow-rankrow__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--mk-fs-body);
+  font-weight: 700;
+  color: var(--mk-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ow-todo__count {
-  font-size: var(--mk-fs-18);
-  font-weight: 800;
-  color: var(--mk-muted);
-  font-variant-numeric: tabular-nums;
-  min-width: 42px;
-  text-align: right;
-}
-.ow-todo__count--bad { color: var(--mk-red); }
-.ow-todo__go {
+.ow-rankrow__go {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-blue);
   white-space: nowrap;
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
   transition: background 0.12s;
 }
-.ow-todo__go:hover { background: rgba(44, 99, 208, 0.08); }
+.ow-rankrow--act:hover .ow-rankrow__go { background: var(--mk-surface-2); }
 /* 已清零：整体弱化 */
-.ow-todo--done { cursor: default; }
-.ow-todo--done .ow-todo__label, .ow-todo--done .ow-todo__count { color: var(--mk-faint); }
-.ow-todo--done .ow-todo__go { color: var(--mk-green); }
-.ow-todo--done:hover { background: transparent; }
-/* 加载失败：与「已清零」明确区分（灰而非绿，且不弱化为完成态） */
-.ow-todo--failed { cursor: default; }
-.ow-todo--failed .ow-todo__count { color: var(--mk-red); }
-.ow-todo--failed .ow-todo__go { color: var(--mk-red); }
-.ow-todo--failed .ow-todo__dot { background: var(--mk-red); }
-.ow-todo--failed:hover { background: transparent; }
+.ow-rankrow--done { cursor: default; }
+.ow-rankrow--done .ow-rankrow__main { color: var(--mk-faint); font-weight: 600; }
+.ow-rankrow--done .ow-rankrow__go { color: var(--mk-green); }
+/* 加载失败：与「已清零」明确区分（红而非绿，不弱化为完成态） */
+.ow-rankrow--failed { cursor: default; }
+.ow-rankrow--failed .ow-rankrow__main { color: var(--mk-red); }
+.ow-rankrow__go--bad { color: var(--mk-red); }
 
 /* 状态面板：比例条 + 行式计数 */
 .ow-state { padding: 8px 14px 12px; display: grid; gap: 10px; }
@@ -625,29 +666,32 @@ html[data-theme='dark'] .ow-ann:hover { background: #202122; }
   .ow-panels { grid-template-columns: 1fr; }
 }
 
-/* 4K：待办/状态行跟随全站节奏 */
+/* 4K：待办 metricCard / ranklist 行跟随全站节奏 */
 @media (min-width: 2000px) {
-  .ow-todo__label { font-size: var(--mk-fs-body); }
-  .ow-todo__hint { font-size: var(--mk-fs-micro); }
-  .ow-todo__count { font-size: var(--mk-fs-20); }
+  .oh-metric__label, .oh-metric__foot { font-size: var(--mk-fs-micro); }
+  .oh-metric__value { font-size: 22px; }
+  .ow-rankrow__main { font-size: var(--mk-fs-body); }
+  .ow-rankrow__go { font-size: var(--mk-fs-micro); }
   .ow-state__row { font-size: var(--mk-fs-micro); }
   .ow-state__row b { font-size: var(--mk-fs-emphasis); }
   .ow-ann__title { font-size: var(--mk-fs-body); }
   .ow-ann__meta, .ow-ann__go { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .ow-todo__label { font-size: var(--mk-fs-body); }
-  .ow-todo__hint { font-size: var(--mk-fs-micro); }
-  .ow-todo__count { font-size: 23px; }
+  .oh-metric__label, .oh-metric__foot { font-size: var(--mk-fs-micro); }
+  .oh-metric__value { font-size: 26px; }
+  .ow-rankrow__main { font-size: var(--mk-fs-body); }
+  .ow-rankrow__go { font-size: var(--mk-fs-micro); }
   .ow-state__row { font-size: var(--mk-fs-micro); }
   .ow-state__row b { font-size: var(--mk-fs-body); }
   .ow-ann__title { font-size: var(--mk-fs-body); }
   .ow-ann__meta, .ow-ann__go { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
-  .ow-todo__label { font-size: var(--mk-fs-emphasis); }
-  .ow-todo__hint { font-size: var(--mk-fs-body); }
-  .ow-todo__count { font-size: 27px; }
+  .oh-metric__label, .oh-metric__foot { font-size: var(--mk-fs-body); }
+  .oh-metric__value { font-size: 30px; }
+  .ow-rankrow__main { font-size: var(--mk-fs-emphasis); }
+  .ow-rankrow__go { font-size: var(--mk-fs-body); }
   .ow-state__row { font-size: var(--mk-fs-body); }
   .ow-state__row b { font-size: var(--mk-fs-emphasis); }
   .ow-ann__title { font-size: var(--mk-fs-emphasis); }

@@ -28,6 +28,33 @@
       </div>
     </header>
 
+    <!-- 状态条（原型 renderVLearnerDetail 的 statstrip，index.html 2473-2478）：hero 下、subtabs 上的一行四格读数。
+         四格固定为 运行次数 / 通过率 / 覆盖场景 / 当前状态；口径与下方各 pane 同源（见 script 的 runStats/sceneStats） -->
+    <section class="mk-card vp-statstrip" role="list" aria-label="虚拟学习者概览">
+      <div class="statstrip">
+        <div class="statstrip__stat" role="listitem">
+          <span class="statstrip__label">运行次数</span>
+          <span class="statstrip__value">
+            {{ runStats.total }}<span v-if="!runStats.exact" class="statstrip__unit">（加载窗口）</span>
+          </span>
+        </div>
+        <div class="statstrip__stat" role="listitem">
+          <span class="statstrip__label">通过率</span>
+          <span class="statstrip__value" :title="`已完成 ${runStats.done} / 窗口内 ${allRuns.length} 次运行`">
+            {{ runStats.passRate == null ? '—' : `${runStats.passRate}%` }}
+          </span>
+        </div>
+        <div class="statstrip__stat" role="listitem">
+          <span class="statstrip__label">覆盖场景</span>
+          <span class="statstrip__value" title="运行记录里出现过的去重场景（故事）数">{{ sceneStats.length || '—' }}</span>
+        </div>
+        <div class="statstrip__stat" role="listitem">
+          <span class="statstrip__label">当前状态</span>
+          <span class="statstrip__value" :title="lifeHint">{{ lifeLabel }}</span>
+        </div>
+      </div>
+    </section>
+
     <!-- 详情接口失败但有列表兜底：明确提示，避免静默降级 -->
     <div v-if="fallbackNotice" class="vp-fallback">
       <span>详情加载失败，正在展示列表缓存数据</span>
@@ -90,6 +117,7 @@
             type="button"
             class="mk-pill"
             :class="{ 'mk-pill--active': storySampleType === 'general' }"
+            :aria-pressed="storySampleType === 'general'"
             @click="storySampleType = 'general'"
           >通用</button>
           <button
@@ -97,6 +125,7 @@
             class="mk-pill"
             :class="{ 'mk-pill--active': storySampleType === 'student' }"
             title="生成传统学生故事：考试节点/课纲压力/作业情境/家长与同伴环境"
+            :aria-pressed="storySampleType === 'student'"
             @click="storySampleType = 'student'"
           >传统学生</button>
         </div>
@@ -142,6 +171,81 @@
     </div>
 
     <div class="vp-body">
+        <!-- ===== 概览 pane（原型 renderVLearnerDetail overview，index.html 2459-2472）=====
+             4 张 metricCard + 「教学闭环定位」五环 + 「画像设定」kv + 「学习状态读数」lsm -->
+        <template v-if="activeTab === 'overview'">
+          <div class="vp-metricgrid">
+            <div v-for="m in overviewMetrics" :key="m.label" class="mk-card vp-metric">
+              <span class="vp-metric__label">{{ m.label }}</span>
+              <span class="vp-metric__value" :title="m.title">{{ m.value }}</span>
+              <span class="vp-metric__foot">{{ m.foot }}</span>
+            </div>
+          </div>
+
+          <section class="mk-card">
+            <div class="mk-card__head">
+              <h3 class="mk-card__title">教学闭环定位</h3>
+              <span class="mk-card__meta">该画像当前正处于闭环的哪一环</span>
+            </div>
+            <div class="vp-cardbody">
+              <div class="loop" role="list" aria-label="教学闭环定位">
+                <template v-for="(s, i) in loopStages" :key="s.name">
+                  <span v-if="i" class="loop__arrow" aria-hidden="true">→</span>
+                  <div class="loop__step" :class="`loop__step--${s.tone}`" role="listitem" :title="s.title">
+                    <span class="loop__no">阶段 {{ i + 1 }}</span>
+                    <span class="loop__name">{{ s.name }}</span>
+                    <span class="loop__meta">{{ s.meta }}</span>
+                    <span class="loop__val">{{ s.val }}</span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </section>
+
+          <div class="vp-2col">
+            <section class="mk-card">
+              <div class="mk-card__head">
+                <h3 class="mk-card__title">画像设定</h3>
+              </div>
+              <dl class="vp-kv">
+                <dt>画像类型</dt>
+                <dd>{{ d.archetype || '—' }}</dd>
+                <dt>主测场景</dt>
+                <dd :title="topScene ? `出现最频繁的运行场景：${topScene}` : '该画像还没有运行记录'">{{ topScene || '—' }}</dd>
+                <dt>当前状态</dt>
+                <dd><span class="mk-badge" :class="lifeBadgeCls">{{ lifeLabel }}</span></dd>
+                <dt>运行信息</dt>
+                <dd class="mono">{{ runInfoText }}</dd>
+              </dl>
+            </section>
+
+            <section class="mk-card">
+              <div class="mk-card__head">
+                <h3 class="mk-card__title">学习状态读数</h3>
+                <span class="mk-card__meta">LSS · KTL · LF · LSB</span>
+              </div>
+              <div class="vp-cardbody">
+                <div v-if="lsmRows.length" class="lsm">
+                  <div v-for="row in lsmRows" :key="row.label" class="lsm__row">
+                    <span class="lsm__label">{{ row.label }}</span>
+                    <span class="lsm__track"><i :data-tone="row.tone" :style="{ width: row.pct + '%' }"></i></span>
+                    <span class="lsm__end">
+                      <span class="lsm__val">{{ row.value }}</span>
+                      <span class="mk-badge" :class="row.refCls">{{ row.ref }}</span>
+                    </span>
+                  </div>
+                </div>
+                <MkEmptyState
+                  v-else
+                  title="暂无学习状态读数"
+                  description="该画像的会话还没有按天学习状态聚合（LSS/KTL/LF/LSB）；运行一次课程后即可读数。"
+                  compact
+                />
+              </div>
+            </section>
+          </div>
+        </template>
+
         <section v-if="activeTab === 'profile'" class="mk-card vp-hero">
           <div class="vp-hero__body">
             <p class="vp-hero__story">{{ d.story || '暂无人物背景' }}</p>
@@ -164,6 +268,57 @@
               <span>{{ p.label }}</span>
               <strong>{{ p.value }}</strong>
             </div>
+          </div>
+        </section>
+
+        <!-- 能力维度评分（原型 portrait pane，index.html 2416-2421）：meterrow + meter；
+             画像接口目前只给身份/偏好类字段（知识水平、性格基线、personalityTraits 枚举），
+             没有可计量的数值化维度 → 渲染空态，不硬造评分（红线） -->
+        <section v-if="activeTab === 'profile'" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">能力维度评分</h3>
+            <span class="mk-card__meta">画像接口的数值化维度</span>
+          </div>
+          <div class="vp-cardbody">
+            <div v-if="abilityDimensions.length" class="lsm">
+              <div v-for="row in abilityDimensions" :key="row.label" class="lsm__row">
+                <span class="lsm__label">{{ row.label }}</span>
+                <span class="lsm__track"><i :data-tone="row.tone" :style="{ width: row.pct + '%' }"></i></span>
+                <span class="lsm__end"><span class="lsm__val">{{ row.value }}</span></span>
+              </div>
+            </div>
+            <MkEmptyState
+              v-else
+              title="暂无能力维度评分"
+              description="画像接口未提供数值化能力维度（现有字段为知识水平与性格偏好枚举，无可计量评分）。"
+              compact
+            />
+          </div>
+        </section>
+
+        <!-- 学习状态读数（同概览 pane 的 lsm 卡，index.html 2422） -->
+        <section v-if="activeTab === 'profile'" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">学习状态读数</h3>
+            <span class="mk-card__meta">LSS · KTL · LF · LSB</span>
+          </div>
+          <div class="vp-cardbody">
+            <div v-if="lsmRows.length" class="lsm">
+              <div v-for="row in lsmRows" :key="row.label" class="lsm__row">
+                <span class="lsm__label">{{ row.label }}</span>
+                <span class="lsm__track"><i :data-tone="row.tone" :style="{ width: row.pct + '%' }"></i></span>
+                <span class="lsm__end">
+                  <span class="lsm__val">{{ row.value }}</span>
+                  <span class="mk-badge" :class="row.refCls">{{ row.ref }}</span>
+                </span>
+              </div>
+            </div>
+            <MkEmptyState
+              v-else
+              title="暂无学习状态读数"
+              description="该画像的会话还没有按天学习状态聚合（LSS/KTL/LF/LSB）。"
+              compact
+            />
           </div>
         </section>
 
@@ -211,11 +366,11 @@
           </div>
         </section>
 
-        <!-- 记忆池：这个虚拟学习者"记住了什么"（已掌握 / 到期复习 / 易混淆 / 最近完成事项） -->
+        <!-- 记忆池：这个虚拟学习者"记住了什么"——4 列表（知识点/记忆强度/复习到期/来源）+ 记忆保持曲线 + 最近完成事项 -->
         <section v-if="activeTab === 'memory'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">记忆池 · {{ memoryCount }}</h3>
-            <span class="mk-card__meta">课后沉淀 · 学过的会被记住，快忘了的会显示为复习点</span>
+            <span class="mk-card__meta">课后沉淀 · 记忆强度＝当前保留率（遗忘曲线调度）</span>
             <!-- 刷新已上移至统一操作台「主动作」槽 -->
           </div>
 
@@ -239,52 +394,40 @@
           />
 
           <template v-else>
-            <!-- 概览 -->
-            <div class="vp-memory__overview" v-if="!isLive || memoryData">
-              <div class="vp-memory__stat">
-                <strong>{{ memoryCounts.mastered }}</strong>
-                <span>已掌握</span>
-              </div>
-              <div class="vp-memory__stat" :class="{ 'vp-memory__stat--warn': memoryCounts.dueReview > 0 }">
-                <strong>{{ memoryCounts.dueReview }}</strong>
-                <span>到期复习</span>
-              </div>
-              <div class="vp-memory__stat" :class="{ 'vp-memory__stat--warn': memoryCounts.struggling > 0 }">
-                <strong>{{ memoryCounts.struggling }}</strong>
-                <span>易混淆</span>
-              </div>
-              <div class="vp-memory__stat">
-                <strong>{{ memoryCounts.completed }}</strong>
-                <span>完成事项</span>
-              </div>
+            <!-- 表 4 列（原型 VL_MEMORYPOOL 表，index.html 2434-2437）：知识点 / 记忆强度 meter+mono% / 复习到期 / 来源。
+                 记忆强度＝概念当前保留率（100%）；「保留 N%」文本已按原型换为 meter；数据字段不变（concepts/retention） -->
+            <div v-if="memoryPoolRows.length" class="mk-table-scroll">
+              <table class="mk-table vp-tbl">
+                <thead>
+                  <tr>
+                    <th>知识点</th>
+                    <th>记忆强度</th>
+                    <th>复习到期</th>
+                    <th>来源</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in memoryPoolRows" :key="row.name">
+                    <td class="vp-td--strong" :title="row.name">{{ row.name }}</td>
+                    <td>
+                      <span v-if="row.strength == null" class="mk-na">—</span>
+                      <div v-else class="vp-meterrow">
+                        <span class="mk-minibar"><i class="mk-minibar__fill" :data-tone="row.tone" :style="{ width: row.strength + '%' }"></i></span>
+                        <span class="vp-meterrow__val mono">{{ row.strength }}%</span>
+                      </div>
+                    </td>
+                    <td>{{ row.due }}</td>
+                    <td class="vp-td--sub">{{ row.source }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-
-            <!-- 已掌握 -->
-            <div v-if="memoryMastered.length" class="vp-memory__group">
-              <div class="vp-memory__group-head">
-                <h4 class="vp-memory__group-title">已掌握</h4>
-                <span class="mk-card__meta">历次课后沉淀的概念</span>
-              </div>
-              <div class="vp-tags">
-                <span v-for="m in memoryMastered" :key="m.name" class="vp-tag vp-tag--ok">{{ m.name }}</span>
-              </div>
-            </div>
-
-            <!-- 到期复习点 -->
-            <div v-if="memoryDueReview.length" class="vp-memory__group">
-              <div class="vp-memory__group-head">
-                <h4 class="vp-memory__group-title">到期复习点</h4>
-                <span class="mk-card__meta">学过但快忘了 · 下一节课会以"旧知唤醒"回到课堂</span>
-              </div>
-              <div class="vp-memory__review">
-                <div v-for="r in memoryDueReview" :key="r.name" class="vp-memory__review-item">
-                  <span class="vp-tag vp-tag--warn">{{ r.name }}</span>
-                  <span class="vp-memory__retention" :title="`保留率 ${Math.round(r.retention * 100)}%`">
-                    保留 {{ Math.round(r.retention * 100) }}%
-                  </span>
-                </div>
-              </div>
-            </div>
+            <MkEmptyState
+              v-else
+              title="记忆池还是空的"
+              description="完成课程后，学到的概念和做过的事会沉淀到这里。还没有学习记录时，记忆池为空是正常的。"
+              compact
+            />
 
             <!-- 记忆保持曲线（Q2/Q8）：到期 / 已掌握概念的保留率随天数衰减 -->
             <div v-if="memoryCurveConcepts.length" class="vp-memory__group">
@@ -311,16 +454,7 @@
               <MkChart :option="memoryChartOption" height="240px" />
             </div>
 
-            <!-- 易混淆 / 卡点 -->
-            <div v-if="memoryStruggling.length" class="vp-memory__group">
-              <div class="vp-memory__group-head">
-                <h4 class="vp-memory__group-title">易混淆 / 卡点</h4>
-                <span class="mk-card__meta">仍在学习或反复出问题的概念</span>
-              </div>
-              <div class="vp-tags">
-                <span v-for="s in memoryStruggling" :key="s.name" class="vp-tag vp-tag--warn">{{ s.name }}</span>
-              </div>
-            </div>
+            <!-- 易混淆 / 卡点：已并入上方 4 列表的「记忆强度」列（低强度即卡点），不再单列标签组 -->
 
             <!-- 最近完成事项（成果物） -->
             <div v-if="memoryCompleted.length" class="vp-memory__group">
@@ -810,6 +944,14 @@ interface Detail {
     turnCapPerLesson?: number
     frictionBudget?: string
   }
+  /** 学习状态读数（LSS/KTL/LF/LSB，0-10 量纲；来自会话 runtime.knowledgeState.learning.currentState，
+      即后端 teachingState。取最近一个含读数的会话；无 → undefined，模板渲染空态） */
+  learningState?: {
+    lss: number | null
+    ktl: number | null
+    lf: number | null
+    lsb: number | null
+  }
 }
 
 interface StoryLatestRun {
@@ -1015,9 +1157,10 @@ const detailError = ref(false)
 /** 详情接口失败但有列表兜底 → 展示兜底数据 + 提示条（区别于 detailError 全失败态） */
 const fallbackNotice = ref(false)
 
-/* 分页：故事池是主工作区（默认页），记忆池/画像/运行各归其页 */
-type ProfileTab = 'stories' | 'runs' | 'timeline' | 'profile' | 'memory'
-const activeTab = ref<ProfileTab>('stories')
+/* 分页：概览（原型默认 pane，renderVLearnerDetail t 默认 "overview"）在前，
+   故事池是主工作区，记忆池/画像/运行/日程各归其页 */
+type ProfileTab = 'overview' | 'stories' | 'runs' | 'timeline' | 'profile' | 'memory'
+const activeTab = ref<ProfileTab>('overview')
 
 const storyFilter = ref('')
 const storyFilterOptions = computed(() => {
@@ -1409,6 +1552,29 @@ function parseSessionStory(session: Record<string, unknown>) {
   }
 }
 
+/** 学习状态读数抽取：sessions[].runtime.knowledgeState.learning.currentState 即后端
+    teachingState（lss/ktl/lf/lsb，0-10 量纲，见 backend learning-state.service.ts）。
+    取最近一个含该读数的会话；都没有 → undefined（模板渲染空态，不硬造数字）。 */
+function toNumOrNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
+}
+function extractLearningState(sessions: Record<string, unknown>[]): NonNullable<Detail['learningState']> | undefined {
+  for (const s of sessions) {
+    const runtime = (s.runtime || {}) as Record<string, unknown>
+    const knowledge = (runtime.knowledgeState || {}) as Record<string, unknown>
+    const learning = (knowledge.learning || {}) as Record<string, unknown>
+    const current = learning.currentState as Record<string, unknown> | null | undefined
+    if (!current || typeof current !== 'object') continue
+    const lss = toNumOrNull(current.lss)
+    const ktl = toNumOrNull(current.ktl)
+    const lf = toNumOrNull(current.lf)
+    const lsb = toNumOrNull(current.lsb)
+    if (lss == null && ktl == null && lf == null && lsb == null) continue
+    return { lss, ktl, lf, lsb }
+  }
+  return undefined
+}
+
 /** 加载序号：quiet 轮询与手动加载竞态时丢弃旧响应（last-wins） */
 let loadSeq = 0
 
@@ -1514,7 +1680,9 @@ async function loadDetail(id?: string, quiet = false) {
           turnCapPerLesson: Number(rp.turnCapPerLesson) || undefined,
           frictionBudget: rp.frictionBudget ? String(rp.frictionBudget) : undefined
         }
-      })()
+      })(),
+      // 学习状态读数（概览/画像 pane 的 lsm 卡）：取最近一个含教学状态读数的会话
+      learningState: extractLearningState(sessions)
     }
     // 深链/刷新进入时 subPage 只有 id（label 缺失 → 面包屑退化成裸 ID），加载出名字后回填
     setSubPageLabel(liveDetail.value.name)
@@ -1927,6 +2095,7 @@ function goCockpit() {
 
 const tabs = computed(() => {
   const list: Array<{ key: ProfileTab; label: string; count?: number }> = [
+    { key: 'overview', label: '概览' },
     { key: 'stories', label: '故事池', count: displayStories.value.length },
     { key: 'runs', label: '运行', count: (d.value?.runs || []).length },
     { key: 'timeline', label: '日程', count: timelineSessionOptions.value.length },
@@ -1960,6 +2129,191 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* 全部运行 feed（人物级全量运行流） */
 const allRuns = computed<RunItem[]>(() => (d.value?.runs || []).slice(0, RUNS_TAB_WINDOW))
+
+/* ===== 概览 pane / 状态条读数（原型 renderVLearnerDetail index.html:2403-2482）=====
+   红线：所有数字只能来自本组件已加载的真实数据（Detail.runs / stories / memoryData）；
+   无字段的读数（原型「平均耗时」「成本」「QPS」等）一律不显示或不硬造。 */
+
+/** 运行次数 / 通过率（原型 statstrip 2473-2478）：来源 Detail.runs（会话流水窗口，上限 RUNS_TAB_WINDOW）。
+    通过率＝终态 completed（tone ok 或 result completed）/ 窗口内运行次数；无运行 → null（模板显示 —）。 */
+const runStats = computed(() => {
+  const total = allRuns.value.length
+  const done = allRuns.value.filter((r) => r.tone === 'ok' || r.result === 'completed').length
+  return {
+    total,
+    done,
+    passRate: total ? Math.round((done / total) * 100) : null,
+    // 恰好达到窗口上限时可能仍被截断 → 保守标注「加载窗口」
+    exact: (d.value?.runs || []).length < RUNS_TAB_WINDOW
+  }
+})
+
+/** 覆盖场景：运行记录里出现过的去重故事（storyId/storyTitle），按出现次数降序。
+    无故事关联的运行不计入（不是「场景」）；无运行 → []，模板显示 —。 */
+const sceneStats = computed(() => {
+  const map = new Map<string, { name: string; count: number; done: number }>()
+  for (const r of allRuns.value) {
+    const key = r.storyId || r.storyTitle || ''
+    if (!key) continue
+    const row = map.get(key) || { name: r.storyTitle || r.storyId || '', count: 0, done: 0 }
+    row.count += 1
+    if (r.tone === 'ok' || r.result === 'completed') row.done += 1
+    map.set(key, row)
+  }
+  return [...map.values()].sort((a, b) => b.count - a.count)
+})
+
+/** 主测场景：出现最频繁的运行场景（无运行 → 空串，模板显示 —） */
+const topScene = computed(() => sceneStats.value[0]?.name || '')
+
+/** 画像设定「运行信息」：运行次数 + 最近一次运行距现在（来源 Detail.runs；无运行 → 明确文案） */
+const runInfoText = computed(() => {
+  const runs = allRuns.value
+  if (!runs.length) return '暂无运行记录'
+  const latestIso = runs.reduce((acc, r) => (String(r.createdAt || '') > acc ? String(r.createdAt || '') : acc), '')
+  return latestIso ? `${runs.length} 次运行 · 最近 ${timeAgo(latestIso)}` : `${runs.length} 次运行`
+})
+
+/** 当前状态徽章语气：VS_STATE_META.tone（muted/warn/ok/bad）→ mk-badge 修饰类（均已全局定义） */
+const lifeBadgeCls = computed(() => `mk-badge--${lifeTone.value}`)
+
+/** 概览 4 张 metricCard（原型 运行次数/通过率/平均耗时/覆盖场景）。原型「平均耗时」无字段
+    （RunItem 只有 createdAt，无耗时）→ 不显示该格，改用同样真实的「记忆点」（记忆池概念数）。 */
+const overviewMetrics = computed(() => {
+  const rs = runStats.value
+  const mem = memoryData.value
+  const memoryPoints = mem
+    ? (mem.counts.mastered || 0) + (mem.counts.dueReview || 0) + (mem.counts.struggling || 0)
+    : null
+  return [
+    { label: '运行次数', value: rs.total, foot: rs.exact ? '全部记录' : '加载窗口内', title: '来源：详情接口 sessions（会话流水）' },
+    { label: '通过率', value: rs.passRate == null ? '—' : `${rs.passRate}%`, foot: rs.total ? `已完成 ${rs.done} / ${rs.total}` : '暂无运行记录', title: '口径：终态 completed / 窗口内运行次数' },
+    { label: '覆盖场景', value: sceneStats.value.length || '—', foot: '去重场景（故事）', title: '来源：运行记录里出现过的去重故事数' },
+    { label: '记忆点', value: memoryPoints ?? '—', foot: memoryPoints == null ? '记忆池未加载' : '已掌握 + 到期 + 卡点', title: '来源：记忆池 counts（不含最近完成事项）' }
+  ]
+})
+
+/** 教学闭环定位（原型 loopStrip index.html:1708-1722，五环）。
+    原型读数是平台级「今日吞吐」；本页只有该画像的数据 → 用故事池 counts 与记忆池 counts 真实汇总，
+    缺失源（记忆池未加载）显示 —，不套用原型数字。 */
+interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title: string }
+const loopStages = computed<LoopStage[]>(() => {
+  const sum = (pick: (s: StoryItem) => number | undefined) => stories.value.reduce((n, s) => n + (pick(s) || 0), 0)
+  const goalTotal = sum((s) => s.goalCount)
+  const pathTotal = sum((s) => s.pathCount)
+  const learnTotal = sum((s) => s.learnCount)
+  const mem = memoryData.value
+  const due = mem ? mem.counts.dueReview : null
+  const completed = mem ? mem.counts.completed : null
+  // 当前环：最近一次会话的 currentStage（RunItem.stage），关键词归类到五环
+  const latest = allRuns.value
+    .slice()
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0]
+  const stage = String(latest?.stage || '').toLowerCase()
+  const currentIdx = stage.includes('goal')
+    ? 0
+    : stage.includes('path')
+      ? 1
+      : stage.includes('learn') || stage.includes('teach')
+        ? 2
+        : stage.includes('wrap') || stage.includes('checkpoint') || stage.includes('evaluat')
+          ? 3
+          : stage.includes('memor') || stage.includes('review')
+            ? 4
+            : -1
+  const toneOf = (i: number): LoopStage['tone'] =>
+    i === 4 && (due ?? 0) > 0 ? 'alert' : i === currentIdx ? 'active' : 'done'
+  return [
+    { name: '目标对话', meta: '澄清真实目标与约束', val: `${goalTotal} 会话`, tone: toneOf(0), title: `来源：故事池 goalCount 合计 ${goalTotal}` },
+    { name: '路径规划', meta: '生成阶段化学习路径', val: `${pathTotal} 路径`, tone: toneOf(1), title: `来源：故事池 pathCount 合计 ${pathTotal}` },
+    { name: '教学回合', meta: '回合式讲解与追问', val: `${learnTotal} 教学会话`, tone: toneOf(2), title: `来源：故事池 learnCount 合计 ${learnTotal}` },
+    { name: '课后评估', meta: '产出与掌握度评估', val: completed == null ? '—' : `${completed} 成果`, tone: toneOf(3), title: completed == null ? '记忆池未加载，暂无完成事项读数' : `来源：记忆池 counts.completed（最近完成事项 ${completed} 项）` },
+    { name: '记忆复习', meta: '遗忘曲线调度复习', val: due == null ? '—' : `${due} 待办`, tone: toneOf(4), title: due == null ? '记忆池未加载，暂无到期读数' : `来源：记忆池 counts.dueReview（到期 ${due} 条）` }
+  ]
+})
+
+/** 学习状态读数（原型 learningState index.html:1723-1737 / lsm）
+    数据来源：Detail.learningState（会话 runtime 里的 teachingState，0-10 真实量纲）。
+    无读数 → []，模板渲染 MkEmptyState；条宽按 0-10 归一（对齐 LearnerDetail，非原型 ktl/320 自造量纲）。 */
+interface LsmRow { label: string; pct: number; tone: 'ok' | 'warn' | 'bad'; value: string; ref: string; refCls: string }
+const lsmRows = computed<LsmRow[]>(() => {
+  const m = d.value?.learningState
+  if (!m) return []
+  const width = (v: number) => Math.min(100, Math.round((v / 10) * 100))
+  const toneLoad = (v: number): LsmRow['tone'] => (v >= 7 ? 'bad' : v <= 4 ? 'ok' : 'warn')
+  const rows: LsmRow[] = []
+  if (m.lss != null) {
+    const t = toneLoad(m.lss)
+    rows.push({ label: 'LSS 学习压力', pct: width(m.lss), tone: t, value: m.lss.toFixed(1), ref: '参考 4–7', refCls: `mk-badge--${t}` })
+  }
+  if (m.ktl != null) {
+    const t = toneLoad(m.ktl)
+    rows.push({ label: 'KTL 训练负荷', pct: width(m.ktl), tone: t, value: m.ktl.toFixed(1), ref: '参考 ≤ 7', refCls: `mk-badge--${t}` })
+  }
+  if (m.lf != null) {
+    const t: LsmRow['tone'] = m.lf >= 6 ? 'bad' : toneLoad(m.lf)
+    rows.push({ label: 'LF 疲劳度', pct: width(m.lf), tone: t, value: m.lf.toFixed(1), ref: '警戒 ≥ 6', refCls: `mk-badge--${t}` })
+  }
+  if (m.lsb != null) {
+    const t: LsmRow['tone'] = m.lsb >= 1 ? 'ok' : m.lsb <= -3 ? 'bad' : 'warn'
+    rows.push({ label: 'LSB 状态平衡', pct: Math.min(100, Math.round(Math.abs(m.lsb) * 8 + 10)), tone: t, value: `${m.lsb > 0 ? '+' : ''}${m.lsb.toFixed(1)}`, ref: '参考 ≥ 0', refCls: `mk-badge--${t}` })
+  }
+  return rows
+})
+
+/** 能力维度评分（原型 portrait pane 的 ranklist/meterrow index.html:2416-2421；原型 VL_DIMENSIONS 为假数据）。
+    画像接口只有身份/偏好枚举（知识水平、性格基线、personalityTraits），无数值化维度 → 恒为空数组渲染空态（红线）。 */
+interface AbilityDim { label: string; pct: number; tone: 'ok' | 'warn' | 'bad'; value: string }
+const abilityDimensions = computed<AbilityDim[]>(() => [])
+
+/** 记忆池表行（原型 VL_MEMORYPOOL index.html:2434-2437）：知识点 / 记忆强度 / 复习到期 / 来源。
+    数据源＝记忆池 concepts（后端由 memory_traces 派生：retention/stability/lastSeenAt/extractionCount）。
+    后端无「来源」字段 → 该列改为真实的「提取 N 次」（extractionCount），不硬造教学回合/测验等来源。 */
+interface MemoryPoolRow { name: string; strength: number | null; tone: 'ok' | 'warn' | 'bad' | undefined; due: string; source: string }
+const memoryPoolRows = computed<MemoryPoolRow[]>(() => {
+  const mem = memoryData.value
+  if (!mem) return []
+  const toneByRetention = (r: number | null): MemoryPoolRow['tone'] =>
+    r == null ? undefined : r >= 0.7 ? 'ok' : r >= 0.4 ? 'warn' : 'bad'
+  const dueText = (c: MemoryConcept): string => {
+    const stability = Number(c.stability)
+    const lastSeen = c.lastSeenAt ? Date.parse(c.lastSeenAt) : NaN
+    if (!Number.isFinite(stability) || stability <= 0 || !Number.isFinite(lastSeen)) {
+      // 无 FSRS 状态时退回桶分类：due 桶＝确实到期，其余无到期读数
+      return c.bucket === 'due' ? '已到期' : '—'
+    }
+    const now = mem.asOf ? Date.parse(mem.asOf) : Date.now()
+    const days = Math.ceil((lastSeen + stability * 86_400_000 - now) / 86_400_000)
+    if (days <= 0) return '已到期'
+    if (days === 1) return '明天'
+    return `${days} 天后`
+  }
+  const concepts = mem.concepts || []
+  if (concepts.length) {
+    return concepts.map((c) => {
+      const retention = Number.isFinite(c.retention) ? c.retention : null
+      return {
+        name: c.label || c.name,
+        strength: retention == null ? null : Math.round(retention * 100),
+        tone: toneByRetention(retention),
+        due: dueText(c),
+        source: c.extractionCount > 0 ? `提取 ${c.extractionCount} 次` : '—'
+      }
+    })
+  }
+  // 兼容旧响应（无 concepts）：仅有名单；到期复习带 retention（真实），其余强度无字段 → —
+  return [
+    ...memoryDueReview.value.map((r): MemoryPoolRow => ({
+      name: r.name,
+      strength: Number.isFinite(r.retention) ? Math.round(r.retention * 100) : null,
+      tone: toneByRetention(Number.isFinite(r.retention) ? r.retention : null),
+      due: '已到期',
+      source: '—'
+    })),
+    ...memoryMastered.value.map((m): MemoryPoolRow => ({ name: m.name, strength: null, tone: undefined, due: '—', source: '—' })),
+    ...memoryStruggling.value.map((s): MemoryPoolRow => ({ name: s.name, strength: null, tone: undefined, due: '—', source: '—' }))
+  ]
+})
 
 /* ---- 日程 tab：日期模拟按天时间线（只读聚合） ---- */
 const timelineSessionId = ref('')
@@ -2222,6 +2576,90 @@ async function quietReload(id: string) {
 .vp-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 .vp-body { display: grid; gap: 14px; }
+
+/* ===== 概览 pane（原型 renderVLearnerDetail index.html:2403-2482）=====
+   状态条 statstrip（2473-2478）+ metricCard 栅格 + 闭环 loop（1708-1722）+ 画像 kv + lsm（1723-1737）。
+   statstrip/lsm 与 LearnerDetail 同款，loop 与 Overview 同款；全部走 --mk-* token。 */
+.statstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.statstrip__stat {
+  display: grid; gap: 6px; align-content: start;
+  padding: 12px 16px;
+  border-right: 1px solid var(--mk-line);
+}
+.statstrip__stat:last-child { border-right: 0; }
+.statstrip__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.statstrip__value {
+  font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums; color: var(--mk-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.statstrip__unit { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); letter-spacing: 0; }
+
+.vp-metricgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.vp-metric { display: grid; gap: 4px; align-content: start; padding: 14px 16px; }
+.vp-metric__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.vp-metric__value {
+  font-size: 24px; font-weight: 700; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums; color: var(--mk-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vp-metric__foot { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+
+.vp-cardbody { padding: 4px 16px 16px; }
+.vp-2col { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; align-items: start; }
+
+/* 画像设定 kv（原型 dl.kv：标签列 + 值列，行间不画线） */
+.vp-kv {
+  --kv-label: 88px;
+  display: grid;
+  grid-template-columns: var(--kv-label) minmax(0, 1fr);
+  gap: 8px 14px;
+  align-items: baseline;
+  margin: 0;
+  padding: 14px 16px;
+}
+.vp-kv dt { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.vp-kv dd { margin: 0; color: var(--mk-ink); font-size: var(--mk-fs-body); line-height: 1.5; word-break: break-word; }
+.vp-kv dd.mono { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+
+/* 教学闭环条（复刻 Overview.vue 的 .loop，原型 loopStrip index.html:1708-1722） */
+.loop { display: flex; align-items: stretch; gap: 8px; overflow-x: auto; padding: 4px 0; }
+.loop__arrow { display: grid; place-items: center; flex: none; color: var(--mk-faint); font-size: var(--mk-fs-emphasis); }
+.loop__step {
+  flex: 1 1 0; min-width: 138px; display: grid; gap: 5px;
+  padding: 12px 14px; border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl); background: var(--mk-surface);
+}
+.loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
+.loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
+.loop__step--alert { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); background: var(--mk-amber-bg); }
+.loop__no { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.loop__name { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
+.loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.loop__val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-ink); }
+
+/* 学习状态读数 lsm（原型 learningState index.html:1723-1737）：label / 轨 / 值+参考 三列 */
+.lsm { display: grid; gap: 12px; }
+.lsm__row { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.lsm__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.lsm__track {
+  display: block; height: 6px; border-radius: 999px;
+  background: var(--mk-minibar-bg); overflow: hidden;
+}
+.lsm__track i { display: block; height: 100%; border-radius: 999px; background: var(--mk-blue); }
+.lsm__track i[data-tone='ok'] { background: var(--mk-green); }
+.lsm__track i[data-tone='warn'] { background: var(--mk-amber); }
+.lsm__track i[data-tone='bad'] { background: var(--mk-red); }
+.lsm__end { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.lsm__val { font-size: var(--mk-fs-micro); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--mk-ink); }
+
+/* 记忆池 4 列表（原型 VL_MEMORYPOOL 表 index.html:2434-2437）：强度＝mk-minibar，来源列次要文字色 */
+.vp-tbl td, .vp-tbl th { vertical-align: middle; }
+.vp-td--strong { font-weight: 700; color: var(--mk-ink); }
+.vp-td--sub { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.vp-meterrow { display: inline-flex; align-items: center; gap: 8px; min-width: 132px; }
+.vp-meterrow .mk-minibar { width: 96px; flex: none; }
+.vp-meterrow__val { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
 
 .vp-hero__body {
   padding: 18px 20px 20px;
@@ -2596,23 +3034,6 @@ async function quietReload(id: string) {
 }
 
 /* ===== 记忆池 ===== */
-/* 概览四格（原型 .statstrip 词汇：通栏分格 + 右分隔线，非独立小卡） */
-.vp-memory__overview {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 12px 16px;
-}
-.vp-memory__stat {
-  display: grid;
-  gap: 2px;
-  align-content: start;
-  padding: 4px 12px;
-  border-right: 1px solid var(--mk-line);
-}
-.vp-memory__stat:last-child { border-right: none; }
-.vp-memory__stat strong { font-size: var(--mk-fs-20); line-height: 1.2; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
-.vp-memory__stat span { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.vp-memory__stat--warn strong { color: var(--mk-amber); }
 .vp-memory__group {
   padding: 4px 18px 18px;
 }
@@ -2627,44 +3048,6 @@ async function quietReload(id: string) {
   font-size: var(--mk-fs-body);
   font-weight: 700;
   color: var(--mk-ink);
-}
-.vp-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-.vp-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 12px;
-  border-radius: 999px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  line-height: 1.4;
-  border: 1px solid transparent;
-}
-/* 记忆池标签（原型 .pill--ok/--warn 语气：tone 底 + 透明描边；色值走 token） */
-.vp-tag--ok {
-  color: var(--mk-green);
-  background: var(--mk-green-bg);
-}
-.vp-tag--warn {
-  color: var(--mk-amber);
-  background: var(--mk-amber-bg);
-}
-.vp-memory__review {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-}
-.vp-memory__review-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.vp-memory__retention {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
 }
 /* 记忆保持曲线（Q2/Q8）：说明 + 概念图例（与曲线同序取色）+ ECharts */
 .vp-memory__curve-hint {

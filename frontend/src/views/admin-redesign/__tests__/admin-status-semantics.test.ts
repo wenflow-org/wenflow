@@ -75,7 +75,9 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     expect(w.text()).toContain('待办数据加载失败')
     // 三个失败域各自标记为失败态，且该行不得显示「已清零」
     // （第 4 行「草稿公告」取自 live 层，未失败 → 仍显示「已清零」是正确的）
-    const failedRows = w.findAll('.ow-todo--failed')
+    // 2026-10-01 对齐原型：待办清单由行动行改为 metricCard 条 + ranklist 行，
+    // 失败类名随之由 .ow-todo--failed 改为 .ow-rankrow--failed（语义断言不变）
+    const failedRows = w.findAll('.ow-rankrow--failed')
     expect(failedRows).toHaveLength(3)
     for (const row of failedRows) {
       expect(row.text()).toContain('加载失败')

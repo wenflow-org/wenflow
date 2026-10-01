@@ -93,7 +93,10 @@
           </p>
         </section>
 
-        <!-- ②b 模型供应商：File-as-Truth 目录（llm-providers.json）的通道视图 -->
+        <!-- ②b 模型供应商：File-as-Truth 目录（llm-providers.json）的通道视图。
+             形态对齐原型 index.html:345-357 .mlist/.mrow 与 1819-1823 供应商行：
+             38px badge 方块（名前 2 字）+ 主行「名 · 用途」+ 副行「id · 承载 N 个模型 · 端点/密钥」
+             + 右侧 ok/warn/off 状态徽标。原型 mrow 的 QPS/成本目录未下发，按「缺字段省略」不硬造 -->
         <section class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">模型供应商</h3>
@@ -107,37 +110,35 @@
           <p v-else-if="data.registry?.lastError" class="ac-mr-note">
             最近一次热重载失败，沿用上一次好目录：{{ data.registry?.lastError }}
           </p>
-          <div class="mk-table-scroll">
-            <table class="mk-table mk-table--dense">
-              <thead>
-                <tr><th>供应商</th><th>端点</th><th>密钥</th><th>推荐</th><th>状态</th><th>模型</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="p in data.providers" :key="p.id">
-                  <td>
-                    <span class="mono">{{ p.id }}</span>
-                    <span class="ac-mr-label">{{ p.name }}</span>
-                  </td>
-                  <td class="mono">
-                    <template v-if="p.endpointSource === 'own'">{{ p.baseUrl }}</template>
-                    <template v-else>继承平台路由</template>
-                  </td>
-                  <td class="mono">
-                    <template v-if="p.endpointSource === 'own'">{{ p.apiKeyEnv }}（{{ p.keyConfigured ? '已配置' : '未配置' }}）</template>
-                    <template v-else>—</template>
-                  </td>
-                  <td>
-                    <span v-if="p.recommended" class="mk-badge mk-badge--ok">推荐</span>
-                    <template v-else>—</template>
-                  </td>
-                  <td>
-                    <span class="mk-badge" :class="p.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ p.enabled ? '启用' : '停用' }}</span>
-                  </td>
-                  <td class="mono">{{ p.modelIds.join(', ') || '—' }}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-if="data.providers?.length" class="ac-mr-mlist" role="list">
+            <div v-for="p in data.providers" :key="p.id" class="ac-mr-mrow" role="listitem">
+              <span class="ac-mr-mrow__badge" aria-hidden="true">{{ providerBadge(p) }}</span>
+              <div class="ac-mr-mrow__grow">
+                <div class="ac-mr-mrow__t">
+                  <span class="ac-mr-mrow__name" :title="p.name">{{ p.name }}</span>
+                  <span v-if="p.description" class="ac-mr-mrow__kind" :title="p.description">· {{ p.description }}</span>
+                  <span v-if="p.recommended" class="mk-badge mk-badge--info">推荐</span>
+                </div>
+                <div class="ac-mr-mrow__d">
+                  <span class="mono">{{ p.id }}</span>
+                  <span class="ac-mr-mrow__sep">·</span>
+                  <span>承载 {{ p.modelIds.length }} 个模型</span>
+                  <template v-if="p.endpointSource === 'own'">
+                    <span class="ac-mr-mrow__sep">·</span>
+                    <span class="mono">{{ p.baseUrl }}</span>
+                    <span class="ac-mr-mrow__sep">·</span>
+                    <span>密钥{{ p.keyConfigured ? '已配置' : '未配置' }}</span>
+                  </template>
+                  <template v-else>
+                    <span class="ac-mr-mrow__sep">·</span>
+                    <span>继承平台路由</span>
+                  </template>
+                </div>
+              </div>
+              <span class="mk-badge ac-mr-mrow__state" :class="providerState(p).cls">{{ providerState(p).label }}</span>
+            </div>
           </div>
+          <MkEmptyState v-else compact title="目录中没有登记的供应商。" />
         </section>
 
         <!-- ③ 模型能力与限额：目录文件 = 唯一写源 -->
@@ -342,6 +343,22 @@ function sourceBadge(source: 'alias' | 'concrete' | 'unset'): string {
   return 'mk-badge--warn'
 }
 
+/** mrow 方块徽标：供应商名前 2 字（原型 index.html:354 .mrow__badge） */
+function providerBadge(p: ModelRegistryOverviewData['providers'][number]): string {
+  return (p.name || p.id || '?').slice(0, 2)
+}
+
+/**
+ * 供应商三态（原型 statusPill ok/warn/off，index.html:1286-1299 / 1819-1823）：
+ * 停用 → off；启用但自带端点且密钥未配置 → warn；其余 → ok。
+ * 全部映射现有真实字段（enabled / endpointSource / keyConfigured），不引入新数据。
+ */
+function providerState(p: ModelRegistryOverviewData['providers'][number]): { cls: string; label: string } {
+  if (!p.enabled) return { cls: 'mk-badge--muted', label: '停用' }
+  if (p.endpointSource === 'own' && p.keyConfigured === false) return { cls: 'mk-badge--warn', label: '密钥未配置' }
+  return { cls: 'mk-badge--ok', label: '启用' }
+}
+
 async function refresh(force = false): Promise<void> {
   if (data.value && !force) return
   failed.value = false
@@ -385,6 +402,75 @@ defineExpose({ refresh })
 }
 .ac-mr-note__item {
   margin-left: 8px;
+}
+/* 模型供应商行列表（原型 index.html:352-357 .mlist/.mrow，容器 345）：
+   方块徽标 + 名/用途主行 + id/承载/端点副行 + 右侧状态徽标 */
+.ac-mr-mlist {
+  display: grid;
+  gap: var(--mk-space-2);
+  padding: 12px 0 4px;
+}
+.ac-mr-mrow {
+  display: flex;
+  align-items: center;
+  gap: var(--mk-space-3);
+  padding: var(--mk-space-3);
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  background: var(--mk-surface);
+}
+.ac-mr-mrow__badge {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+  color: var(--mk-blue);
+  font-family: var(--mk-mono);
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+}
+.ac-mr-mrow__grow {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ac-mr-mrow__t {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.ac-mr-mrow__name {
+  font-weight: 600;
+  color: var(--mk-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ac-mr-mrow__kind {
+  min-width: 0;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ac-mr-mrow__d {
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ac-mr-mrow__sep {
+  margin: 0 4px;
+}
+.ac-mr-mrow__state {
+  flex: none;
 }
 .ac-mr-warnings {
   display: flex;

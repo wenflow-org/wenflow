@@ -53,6 +53,13 @@
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" :aria-pressed="!onlyAttention" @click="onlyAttention = false">全部<span class="mk-pill__count">{{ cards.length }}</span></button>
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" :aria-pressed="onlyAttention" @click="onlyAttention = true">仅看需关注<span class="mk-pill__count">{{ errorCount }}</span></button>
           </div>
+          <!-- P1② 归属 Agent 筛选（原型 renderSkillHub 1662-1706 工具条）：
+               label「归属 Agent」+ select（全部 Agent（N）+ 每 Agent 名（N）），change 即筛 -->
+          <label class="sk-filter-label" for="skillAgentFilter">归属 Agent</label>
+          <select id="skillAgentFilter" v-model="agentFilter" class="mk-filter__select" aria-label="按归属 Agent 筛选">
+            <option value="">全部 Agent（{{ cards.length }}）</option>
+            <option v-for="a in agentOptions" :key="a.id" :value="a.id">{{ a.label }}（{{ a.count }}）</option>
+          </select>
           <select v-model="categoryFilter" class="mk-filter__select" aria-label="按类别筛选">
             <option value="">全部类别</option>
             <option v-for="c in categoryOptions" :key="c" :value="c">{{ categoryText(c) }}</option>
@@ -72,18 +79,23 @@
             :storage-key="SK_COLS_KEY"
             v-model:hidden="hiddenCols"
           />
-          <span class="mk-card__meta">{{ filtered.length }} / {{ cards.length }}</span>
+          <!-- 原型右侧「筛选后 N 个」；总数在状态条「共 N 个 Skill」仍在 -->
+          <span class="mk-card__meta">筛选后 {{ filtered.length }} 个</span>
         </div>
       </div>
 
-      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="10" />
+      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="11" />
       <template v-else>
       <!-- 列表视图：列对齐 + 排序，问题浮顶 -->
       <div class="mk-table-scroll">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
-             单元格 nowrap、列按内容自然分宽；Skill 名/id 两行都设 max-width 截断兜底，
+             单元格 nowrap、列按内容自然分宽；Skill 名/副行两行都设 max-width 截断兜底，
              防长名单列独吃宽度（上限引用 --mk-cell-main-max token） -->
         <table v-if="filtered.length" class="mk-table sk-table">
+          <!-- P1① 列结构对齐原型 renderSkillHub 1662-1706 的 8 列：
+               Skill / 归属 Agent / 版本 / 路由模型 / 24h 调用 / P95 / 通过率 / 状态。
+               数据来源核查见脚本「路由 · 版本元数据」小节；P95 接口缺失 → 占位「—」。
+               原型没有、但本页有的真实信息（类别 / 最近调用）排在原型列之后，操作列收尾。 -->
           <thead>
             <tr>
               <th
@@ -98,7 +110,36 @@
                 class="mk-th--sortable"
                 :aria-sort="sortState('agent')"
                 @click="toggleSort('agent')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('agent')">所属阶段<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('agent')">归属 Agent<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <!-- 版本：/admin/skills 的 definition.version（原型「版本」列） -->
+              <th v-if="showCol('version')" scope="col">版本</th>
+              <!-- 路由模型：skill-model-configs/coverage 的生效 model；未配置 → 「平台默认」 -->
+              <th v-if="showCol('routing')" scope="col" title="skill-model-configs 生效模型；未单独配置 = 平台默认；无覆盖行 = —">路由模型</th>
+              <!-- 原型「24h 调用」：本页窗口由「统计窗口」下拉决定（默认近 7 天），故列名取中性「调用」，口径随窗口 -->
+              <th
+                v-if="showCol('calls')"
+                scope="col"
+                class="mk-th--right mk-th--sortable"
+                :aria-sort="sortState('calls')"
+                @click="toggleSort('calls')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('calls')" title="统计窗口内调用次数（随「统计窗口」下拉切换，默认近 7 天）">调用<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <!-- P95 占位：后端仅日志聚合提供 p50/p99，无技能级 P95；不编造数字 -->
+              <th v-if="showCol('p95')" scope="col" class="mk-th--right" title="接口未提供技能级 P95（后端仅日志聚合 p50/p99）→ 占位 —">P95</th>
+              <th
+                v-if="showCol('rate')"
+                scope="col"
+                class="mk-th--right mk-th--sortable"
+                :aria-sort="sortState('rate')"
+                @click="toggleSort('rate')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')" title="窗口内成功率（= 原始 stats.successRate）">通过率<span class="visually-hidden">成功率</span><span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <!-- 状态 = 对账完成度 status（draft → live），原型「状态」pill 的真实落点 -->
+              <th
+                v-if="showCol('status')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="sortState('status')"
+                @click="toggleSort('status')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('status')" title="完成度对账 status（draft → live）">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('cat')"
                 scope="col"
@@ -106,20 +147,6 @@
                 :aria-sort="sortState('cat')"
                 @click="toggleSort('cat')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('cat')">类别<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
-                v-if="showCol('completion')"
-                scope="col"
-                class="mk-th--sortable"
-                :aria-sort="sortState('completion')"
-                @click="toggleSort('completion')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('completion')">完成度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
-                v-if="showCol('rate')"
-                scope="col"
-                class="mk-th--right mk-th--sortable"
-                :aria-sort="sortState('rate')"
-                @click="toggleSort('rate')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')">成功率<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="showCol('last')">最近调用</th>
               <th scope="col" class="mk-th--right">操作</th>
             </tr>
@@ -131,7 +158,8 @@
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
                   <div class="mk-cell-main">
                     <strong class="sk-name-main mk-ellipsis" :title="s.name">{{ s.name }}</strong>
-                    <span class="sk-id-desc mk-ellipsis mono" :title="s.id">{{ s.id }}</span>
+                    <!-- 原型副行 = desc：/admin/skills 的 description；缺失时回落显示 skill id -->
+                    <span class="sk-sub mk-ellipsis" :class="{ 'sk-sub--id': !descOf(s.id) }" :title="descOf(s.id) || s.id">{{ descOf(s.id) || s.id }}</span>
                   </div>
                 </div>
               </td>
@@ -139,20 +167,10 @@
                 <span v-if="s.agentId" class="sk-agent-tag" :title="s.agentId">{{ s.agentName || s.agentId }}</span>
                 <span v-else class="mk-na">工具类</span>
               </td>
-              <td v-if="showCol('cat')"><span class="mk-badge mk-badge--muted" :title="s.category">{{ categoryText(s.category) }}</span></td>
-              <td v-if="showCol('completion')">
-                <span
-                  v-if="completionBadgeOf(s.id)"
-                  class="mk-badge"
-                  :class="completionBadgeOf(s.id)!.cls"
-                  :title="completionBadgeOf(s.id)!.title"
-                >{{ completionBadgeOf(s.id)!.text }}</span>
-                <!-- 对账未就绪三态：加载中 / 加载失败 / 不在对账口径。
-                     此前失败与无数据同显「—」，整列塌成无意义符号、用户无从判断 -->
-                <span v-else-if="recLoading" class="mk-na" title="对账报告加载中，完成度暂不可用">…</span>
-                <span v-else-if="recError" class="mk-na sk-rec-fail" :title="`对账加载失败：${recError}`">对账失败</span>
-                <span v-else class="mk-na" title="对账报告中无此 Skill（外挂能力等不在对账口径内）">—</span>
-              </td>
+              <td v-if="showCol('version')"><span class="mono">{{ versionOf(s.id) }}</span></td>
+              <td v-if="showCol('routing')"><span class="mono" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
+              <td v-if="showCol('calls')"><span class="mono">{{ s.calls }}</span></td>
+              <td v-if="showCol('p95')"><span class="mk-na" title="接口未提供技能级 P95（后端仅日志聚合 p50/p99）">—</span></td>
               <td v-if="showCol('rate')">
                 <!-- 行级设计（批C）：数字+比例条（与网格卡 sk-card__rate 同语言，消灭同页双形态） -->
                 <div class="sk-rate" :class="rateTone(s)" :title="s.calls ? `成功率 ${s.calls - s.errors}/${s.calls}` : '窗口内无调用'">
@@ -160,6 +178,20 @@
                   <span v-if="s.calls" class="sk-rate__bar" aria-hidden="true"><i :style="{ width: rateNum(s) + '%' }"></i></span>
                 </div>
               </td>
+              <td v-if="showCol('status')">
+                <!-- 状态列（原「完成度」列折入）：对账 completion → mk-badge--rec-* pill；
+                     对账未就绪三态：加载中 / 加载失败 / 不在对账口径（此前失败与无数据同显「—」，整列塌成无意义符号） -->
+                <span
+                  v-if="completionBadgeOf(s.id)"
+                  class="mk-badge"
+                  :class="completionBadgeOf(s.id)!.cls"
+                  :title="completionBadgeOf(s.id)!.title"
+                >{{ completionBadgeOf(s.id)!.text }}</span>
+                <span v-else-if="recLoading" class="mk-na" title="对账报告加载中，状态暂不可用">…</span>
+                <span v-else-if="recError" class="mk-na sk-rec-fail" :title="`对账加载失败：${recError}`">对账失败</span>
+                <span v-else class="mk-na" title="对账报告中无此 Skill（外挂能力等不在对账口径内）">—</span>
+              </td>
+              <td v-if="showCol('cat')"><span class="mk-badge mk-badge--muted" :title="s.category">{{ categoryText(s.category) }}</span></td>
               <td v-if="showCol('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
               <td>
                 <div class="mk-actions">
@@ -198,8 +230,81 @@
       />
     </div>
     </template>
-    <!-- ===== Tab2: 模型路由覆盖矩阵（技能 × 通道 × 参数 × 兜底） ===== -->
-    <SkillModelCoverage v-if="tab === 'model-routing'" />
+
+    <!-- ===== Tab2: 模型路由（原型 renderSkillHub 1665-1681 routing 分支） =====
+         原型结构：4 metricCard（承载模型 / 已路由 Skill / 主模型覆盖 / 降级策略）
+         + 「Skill 模型路由」小节头 + 5 列表（Skill / 归属 Agent / 路由模型 / 备用模型 / 状态）。
+         覆盖矩阵（SkillModelCoverage）保留为增强，置于原型结构之下。 -->
+    <div v-if="tab === 'model-routing'" class="mk-card mk-card--fill sk-routing">
+      <div class="sk-routing__top">
+        <!-- 4 卡数据全部从现有 skills 列表 + coverage 派生（去重模型数 / 已路由 Skill 数 /
+             主模型覆盖占比 / 降级策略），不引入新端点、不编造 -->
+        <div class="mk-kpi-grid">
+          <MkKpi
+            label="承载模型"
+            :value="routeModelCount"
+            hint="去重模型"
+            :title="routeModelTitle"
+          />
+          <MkKpi
+            label="已路由 Skill"
+            :value="cards.length"
+            hint="全部 Skill"
+            title="主目录 Skill 数（不含外挂能力）"
+          />
+          <MkKpi
+            label="主模型覆盖"
+            :value="primaryCoverageText"
+            :hint="primaryModelLabel"
+            :title="primaryCoverageTitle"
+          />
+          <MkKpi
+            label="降级策略"
+            value="自动"
+            :hint="fallbackHint"
+            title="模型重试耗尽后按兜底链切换；无自定义兜底链 = registry 默认"
+          />
+        </div>
+        <div class="sk-routing__head">
+          <span class="mk-card__title">Skill 模型路由</span>
+          <span class="mk-card__meta">覆盖矩阵见下方</span>
+        </div>
+      </div>
+
+      <div class="sk-routing__scroll">
+        <table v-if="cards.length" class="mk-table sk-table">
+          <thead>
+            <tr>
+              <th scope="col">Skill</th>
+              <th scope="col">归属 Agent</th>
+              <th scope="col">路由模型</th>
+              <th scope="col">备用模型</th>
+              <th scope="col">状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- 原型行 data-action="open-skill"：本页行点击同样进 Skill 详情 -->
+            <tr v-for="s in cards" :key="s.id" class="sk-row" tabindex="0" @click="openSubPage('skill', s.id)" @keydown.enter.prevent="openSubPage('skill', s.id)">
+              <td><strong class="sk-name-main mk-ellipsis" :title="s.name">{{ s.name }}</strong></td>
+              <td><span class="mono sk-routing__sub" :title="s.agentId || '工具类'">{{ agentLabelOf(s) }}</span></td>
+              <td><span class="mono" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
+              <td><span class="mono sk-routing__sub" :title="fallbackTitleOf(s.id)">{{ fallbackOf(s.id) }}</span></td>
+              <td>
+                <span v-if="completionBadgeOf(s.id)" class="mk-badge" :class="completionBadgeOf(s.id)!.cls" :title="completionBadgeOf(s.id)!.title">{{ completionBadgeOf(s.id)!.text }}</span>
+                <span v-else-if="recLoading" class="mk-na" title="对账报告加载中，状态暂不可用">…</span>
+                <span v-else class="mk-na" title="对账报告中无此 Skill（外挂能力等不在对账口径内）">—</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <MkEmptyState v-else title="暂无 Skill" description="主目录没有可路由的 Skill。" />
+
+        <!-- 覆盖矩阵（技能 × 通道 × 参数 × 兜底）：原型无此块，作为增强保留在原型结构之下 -->
+        <div class="sk-routing__matrix">
+          <SkillModelCoverage />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -220,6 +325,7 @@ import { useIsNarrow } from './useIsNarrow'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import SkillModelCoverage from './SkillModelCoverage.vue'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
@@ -299,21 +405,29 @@ interface SkillRow {
 const onlyAttention = ref(false)
 const keyword = ref('')
 const categoryFilter = ref('')
+/** 归属 Agent 筛选（P1②）：'' = 全部；'__none__' = 无归属（工具类） */
+const agentFilter = ref('')
 
-/* D3 表格增强：列显隐（持久化 / 点击外部与 Esc 关闭由共享 MkCols 组件承担；Skill 列固定） */
+/* D3 表格增强：列显隐（持久化 / 点击外部与 Esc 关闭由共享 MkCols 组件承担；Skill 列固定）。
+   列序对齐原型 8 列（Skill/归属 Agent/版本/路由模型/调用/P95/通过率/状态），
+   随后是本页独有的真实列（类别/最近调用），操作列固定收尾。 */
 const SK_COLS_KEY = 'wf_skills_hidden_cols'
 const skColDefs = [
-  { key: 'agent', label: '所属阶段', title: '所属顶层 Agent' },
+  { key: 'agent', label: '归属 Agent', title: '所属顶层 Agent' },
+  { key: 'version', label: '版本', title: 'registry definition.version' },
+  { key: 'routing', label: '路由模型', title: '生效模型；未配置=平台默认；无覆盖行=—' },
+  { key: 'calls', label: '调用', title: '统计窗口内调用次数（随窗口筛选）' },
+  { key: 'p95', label: 'P95', title: '接口未提供技能级 P95，占位 —' },
+  { key: 'rate', label: '通过率', title: '窗口内成功率' },
+  { key: 'status', label: '状态', title: '完成度对账 status（draft→live）' },
   { key: 'cat', label: '类别', title: 'Skill 类别' },
-  { key: 'completion', label: '完成度', title: '完成度五档' },
-  { key: 'rate', label: '成功率', title: '窗口内成功率' },
   { key: 'last', label: '最近调用', title: '最近调用时间' },
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())
 
-/* 移动端仅保留「Skill / 状态」：隐藏所属阶段、类别、完成度、最近调用，减少横向滚动 */
+/* 移动端仅保留核心列：隐藏版本/路由/调用/P95/类别/最近调用，减少横向滚动 */
 const isNarrow = useIsNarrow()
-const MOBILE_HIDDEN_COLS = new Set(['agent', 'cat', 'completion', 'last'])
+const MOBILE_HIDDEN_COLS = new Set(['version', 'routing', 'calls', 'p95', 'cat', 'last'])
 const showCol = (key: string) => !hiddenCols.value.has(key) && !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
 const statsRange = liveSkillStatsRange
 
@@ -325,6 +439,20 @@ const categoryOptions = computed(() => {
     if (key && !seen.includes(key)) seen.push(key)
   })
   return seen
+})
+
+/** 归属 Agent 下拉选项（P1② 原型 toolbar）：按 agentId 聚合 + 计数；无归属归「工具类」 */
+interface AgentOption { id: string; label: string; count: number }
+const agentOptions = computed<AgentOption[]>(() => {
+  const m = new Map<string, AgentOption>()
+  for (const c of cards.value) {
+    const id = c.agentId || '__none__'
+    const label = c.agentName || c.agentId || '工具类'
+    const cur = m.get(id)
+    if (cur) cur.count += 1
+    else m.set(id, { id, label, count: 1 })
+  }
+  return [...m.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh'))
 })
 
 /** 成功率阈值着色：<70% 红、<90% 琥珀 */
@@ -342,6 +470,8 @@ watch(statsRange, async () => {
   try {
     await refreshLiveSkills()
     liveSkillsError.value = ''
+    // 版本/描述与统计同源（/admin/skills），窗口切换后一并重取
+    void refreshSkillMeta()
   } catch (e) {
     liveSkillsError.value = errMsg(e)
   } finally {
@@ -383,14 +513,16 @@ function healthLabel(health: Health): string {
 
 /* 表格排序：默认失败数优先（问题浮顶，保持既有行为），表头可点切换。
    数据为 live 注册表全量（有界）→ 客户端排序是诚实的；截断/服务端分页列表不适用本机制。 */
-const { sortState, toggle: toggleSort, sortRows } = useTableSort<SkillRow>({
+const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir } = useTableSort<SkillRow>({
   accessors: {
     errors: (s) => s.errors,
     skill: (s) => s.name || s.id,
     agent: (s) => s.agentName || s.agentId || '',
-    cat: (s) => s.category || '',
-    completion: (s) => completionRank(s.id),
-    rate: (s) => (s.calls > 0 ? (s.calls - s.errors) / s.calls : null)
+    calls: (s) => s.calls,
+    /** 状态列排序 = 完成度五档序号（0=draft … 4=live，无对账行排末尾） */
+    status: (s) => completionRank(s.id),
+    rate: (s) => (s.calls > 0 ? (s.calls - s.errors) / s.calls : null),
+    cat: (s) => s.category || ''
   },
   defaultKey: 'errors',
   defaultDir: 'desc',
@@ -401,6 +533,8 @@ const filtered = computed(() => {
   let list = cards.value
   // "仅看需关注"只含失败节点；"从未调用"（idle）是常态不是问题
   if (onlyAttention.value) list = list.filter((c) => c.health === 'error')
+  if (agentFilter.value === '__none__') list = list.filter((c) => !c.agentId)
+  else if (agentFilter.value) list = list.filter((c) => c.agentId === agentFilter.value)
   if (categoryFilter.value) list = list.filter((c) => String(c.category || '').toLowerCase() === categoryFilter.value)
   const q = keyword.value.trim().toLowerCase()
   if (q) list = list.filter((c) => `${c.name} ${c.id} ${c.category}`.toLowerCase().includes(q))
@@ -432,17 +566,18 @@ const avgLatencyText = computed(() => (avgLatencyMs.value == null ? '—' : avgL
 const RANGE_LABELS: Record<string, string> = { '7d': '近 7 天', '24h': '近 24 小时', '30d': '近 30 天', all: '全部时间' }
 const rangeLabel = computed(() => RANGE_LABELS[statsRange.value] || '近期')
 
-const isFiltered = computed(() => onlyAttention.value || !!keyword.value.trim() || !!categoryFilter.value)
+const isFiltered = computed(() => onlyAttention.value || !!keyword.value.trim() || !!categoryFilter.value || !!agentFilter.value)
 function clearFilters() {
   onlyAttention.value = false
   keyword.value = ''
   categoryFilter.value = ''
+  agentFilter.value = ''
 }
 
 /* 长列表分批渲染：每批 15 行 */
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
    数据全量在客户端（live 拉取），筛选后按页切片；
-   仅筛选条件变化才回第 1 页；后台数据刷新（轮询/窗口切换）不重置页码，
+   筛选条件 / 排序变化才回第 1 页；后台数据刷新（轮询/窗口切换）不重置页码，
    否则每次刷新都把用户翻到的页拽回去；越界时收敛到最后一页；
    recShown 属对账明细，仍用加载更多 */
 const page = ref(1)
@@ -451,7 +586,7 @@ const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([onlyAttention, keyword, categoryFilter], () => {
+watch([onlyAttention, keyword, categoryFilter, agentFilter, sortKey, sortDir], () => {
   page.value = 1
 })
 watch(filtered, (list) => {
@@ -491,10 +626,16 @@ async function refreshReconciliation() {
 
 watch(isLive, () => {
   refreshReconciliation()
+  void refreshSkillMeta()
+  void refreshCoverage()
 })
 
 onMounted(() => {
   refreshReconciliation()
+  // 版本/描述（/admin/skills）与路由模型/兜底链（skill-model-configs/coverage）：
+  // live 层未透出这两组字段，本页按原型列结构自取（只读数据源，不改 live.ts）
+  void refreshSkillMeta()
+  void refreshCoverage()
 })
 
 /** 完成度五档色标（draft → live）；文案单源：glossaryMeta.ts（与后端 glossary-content 对齐） */
@@ -544,6 +685,144 @@ function recGateDetail(completion: SkillCompletion): string {
   }
   return '全部门槛通过'
 }
+
+/* ================= 路由 · 版本元数据（P1① 原型列结构的数据来源） =================
+   原型 renderSkillHub 1662-1706 的 8 列里，版本/路由模型/备用模型三列不在 live.ts 的
+   LiveSkillProfile（id/name/category/agentId/agentName）里，故本页直接取两个只读端点：
+   - GET /admin/skills（同 live 注册表源）：definition.version + description
+   - GET /admin/skill-model-configs/coverage：生效 model / fallbackChain（未配置=平台默认）
+   列可得性核查：
+     Skill ✓ / 归属 Agent ✓ / 版本 ✓ / 路由模型 ✓ / 调用 ✓（stats.callCount，窗口随筛选）
+     / P95 ✗（后端仅日志聚合 p50/p99，无技能级 P95 → 占位「—」）/ 通过率 ✓（stats.successRate）
+     / 状态 ✓（对账 completion status）
+   本页不外发这两个请求的结果，也不改动 live.ts 的档案口径。 */
+interface SkillMetaEntry { version: string; description: string }
+interface SkillRouteEntry { model: string | null; fallbackChain: string[] | null }
+
+const skillMetaById = ref<Map<string, SkillMetaEntry>>(new Map())
+const coverageById = ref<Map<string, SkillRouteEntry>>(new Map())
+/** coverage 是否成功拉到（空列表也算就绪）：区分「没拉到」与「确实无模型配置」 */
+const coverageReady = ref(false)
+
+async function refreshSkillMeta(): Promise<void> {
+  try {
+    const res = await adminSkillsApi.getSkills({ range: statsRange.value })
+    const body = res.data?.data ?? res.data ?? {}
+    const items: Array<Record<string, unknown>> = Array.isArray(body) ? body : body.skills || body.items || []
+    const m = new Map<string, SkillMetaEntry>()
+    for (const s of items) {
+      const id = String(s.skillId || s.id || s.name || '')
+      if (!id) continue
+      m.set(id, { version: String(s.version || ''), description: String(s.description || '') })
+    }
+    skillMetaById.value = m
+  } catch {
+    // 元数据拉取失败：版本列回退「—」，不影响表格其余列
+    skillMetaById.value = new Map()
+  }
+}
+
+async function refreshCoverage(): Promise<void> {
+  try {
+    const res = await adminSkillsApi.getSkillModelCoverage()
+    const data = res.data?.data as { skills?: Array<{ skillId: string; model: string | null; fallbackChain: string[] | null }> } | undefined
+    const m = new Map<string, SkillRouteEntry>()
+    for (const r of data?.skills || []) {
+      if (!r.skillId) continue
+      m.set(r.skillId, { model: r.model ?? null, fallbackChain: Array.isArray(r.fallbackChain) ? r.fallbackChain : null })
+    }
+    coverageById.value = m
+    coverageReady.value = true
+  } catch {
+    coverageById.value = new Map()
+    coverageReady.value = false
+  }
+}
+
+/** Skill 副行：description 优先，缺失回落 id（原型 .sub） */
+function descOf(skillId: string): string {
+  return skillMetaById.value.get(skillId)?.description || ''
+}
+
+/** 版本列：registry definition.version（如 1.1.0）→ 显示 v1.1.0；缺失「—」 */
+function versionOf(skillId: string): string {
+  const v = skillMetaById.value.get(skillId)?.version
+  if (!v) return '—'
+  return /^v/i.test(v) ? v : `v${v}`
+}
+
+/** 路由模型列：coverage 有行 → 生效 model（空=平台默认）；无行/未加载 → 「—」，不伪装成平台默认 */
+function routingOf(skillId: string): string {
+  if (!coverageReady.value) return '—'
+  const row = coverageById.value.get(skillId)
+  if (!row) return '—'
+  return row.model || '平台默认'
+}
+
+function routingTitleOf(skillId: string): string {
+  if (!coverageReady.value) return '模型覆盖数据未加载'
+  const row = coverageById.value.get(skillId)
+  if (!row) return '覆盖矩阵无此 Skill 行（未登记 skill-model-config）'
+  return row.model ? `生效模型：${row.model}` : '未单独配置模型：走平台默认'
+}
+
+/** 备用模型列（路由表）：兜底链 → 「A → B」；无 → 「—」 */
+function fallbackOf(skillId: string): string {
+  const chain = coverageById.value.get(skillId)?.fallbackChain
+  return chain && chain.length ? chain.join(' → ') : '—'
+}
+
+function fallbackTitleOf(skillId: string): string {
+  const chain = coverageById.value.get(skillId)?.fallbackChain
+  return chain && chain.length ? `兜底链：${chain.join(' → ')}` : '无自定义兜底链（registry 默认）'
+}
+
+/** 归属 Agent 文案（路由表 mono 副行） */
+function agentLabelOf(s: { agentId: string; agentName?: string }): string {
+  return s.agentName || s.agentId || '工具类'
+}
+
+/* ---- 路由页签 4 metricCard 派生（全部来自 cards + coverage，不新增端点） ---- */
+/** 有生效路由标签的 Skill（含「平台默认」桶）；未加载 coverage 时为空 */
+const routingLabels = computed(() =>
+  coverageReady.value
+    ? cards.value.map((c) => routingOf(c.id)).filter((v) => v !== '—')
+    : []
+)
+const routeModelCount = computed<number | string>(() =>
+  routingLabels.value.length ? new Set(routingLabels.value).size : '—'
+)
+const routeModelTitle = computed(() =>
+  routingLabels.value.length
+    ? `去重模型 ${new Set(routingLabels.value).size} 个（含「平台默认」桶）`
+    : '模型覆盖数据未加载或无生效路由'
+)
+/** 主模型覆盖 = 使用最多的那个模型占全部 Skill 的比例 */
+const primaryModel = computed(() => {
+  const counts = new Map<string, number>()
+  for (const v of routingLabels.value) counts.set(v, (counts.get(v) || 0) + 1)
+  let label = ''
+  let count = 0
+  for (const [k, n] of counts) if (n > count) { label = k; count = n }
+  return { label, count }
+})
+const primaryCoverageText = computed(() =>
+  routingLabels.value.length ? `${Math.round((primaryModel.value.count / cards.value.length) * 100)}%` : '—'
+)
+const primaryModelLabel = computed(() => primaryModel.value.label || '未配置')
+const primaryCoverageTitle = computed(() =>
+  routingLabels.value.length
+    ? `${primaryModel.value.count} / ${cards.value.length} 个 Skill 使用「${primaryModel.value.label}」`
+    : '模型覆盖数据未加载'
+)
+/** 降级策略副行：有自定义兜底链数 → 计数；否则 registry 默认 */
+const fallbackConfigured = computed(() =>
+  cards.value.filter((c) => (coverageById.value.get(c.id)?.fallbackChain?.length ?? 0) > 0).length
+)
+const fallbackHint = computed(() => {
+  if (!coverageReady.value) return '兜底配置未加载'
+  return fallbackConfigured.value > 0 ? `${fallbackConfigured.value} 个自定义兜底链` : 'registry 默认'
+})
 </script>
 
 <style scoped>
@@ -573,8 +852,8 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-cell { display: flex; align-items: center; gap: 10px; }
 /* 原型 .tbl：自动布局 + 单元格 nowrap（列按内容自然分宽，不再 colgroup 定宽） */
 .sk-table td { white-space: nowrap; }
-/* 中文名主行（正文重色）；英文 id 降副行（等宽灰）。
-   截断上限统一引用 token（--mk-cell-main-max）：自动布局下防长 Skill 名/长 id 独吃列宽 */
+/* 中文名主行（正文重色）；副行 = description（原型 .sub），缺失回落 skill id（等宽）。
+   截断上限统一引用 token（--mk-cell-main-max）：自动布局下防长 Skill 名/长副行独吃列宽 */
 .sk-name-main {
   font-weight: 700;
   max-width: var(--mk-cell-main-max);
@@ -582,8 +861,7 @@ function recGateDetail(completion: SkillCompletion): string {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.sk-id-desc {
-  font-family: var(--mk-mono);
+.sk-sub {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   line-height: 1.5;
@@ -592,6 +870,8 @@ function recGateDetail(completion: SkillCompletion): string {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 回落显示 skill id 时保留等宽语义 */
+.sk-sub--id { font-family: var(--mk-mono); }
 .sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .sk-dot--ok { background: var(--mk-green); }
 .sk-dot--idle { background: #c3cede; }
@@ -610,7 +890,7 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-rate--warn .sk-rate__bar i { background: var(--mk-amber); }
 .sk-rate--bad .sk-rate__bar i { background: var(--mk-red); }
 
-/* 所属阶段标签 */
+/* 归属 Agent 标签 */
 .sk-agent-tag {
   display: inline-flex;
   align-items: center;
@@ -632,27 +912,39 @@ function recGateDetail(completion: SkillCompletion): string {
   flex-shrink: 0;
 }
 
+/* 工具条「归属 Agent」label（原型 toolbar 1667）：12px 重字，与下拉同排 */
+.sk-filter-label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); white-space: nowrap; }
+
+/* ===== 模型路由页签（原型 renderSkillHub 1665-1681 routing 分支）=====
+   KPI 栅格 + 小节头固定在上，路由表与覆盖矩阵共用下方滚动区 */
+.sk-routing__top { flex: none; padding: 14px 16px 0; display: grid; gap: 12px; }
+.sk-routing__head { display: flex; align-items: baseline; gap: 10px; }
+.sk-routing__scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 16px; }
+.sk-routing__sub { color: var(--mk-muted); }
+/* 覆盖矩阵（增强块）与原型路由表分隔 */
+.sk-routing__matrix { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--mk-line); }
+
 /* 大屏档位（mk 体系：2000 ≈×1.15，2800 ≈×1.17，3600 ≈×1.3） */
 @media (min-width: 2000px) {
   .sk-dot { width: 10px; height: 10px; }
   .sk-agent-tag { font-size: var(--mk-fs-micro); padding: 3px 11px; }
 
   .sk-name-main { font-size: var(--mk-fs-micro); }
-  .sk-id-desc { font-size: var(--mk-fs-micro); }
+  .sk-sub { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .sk-dot { width: 12px; height: 12px; }
   .sk-agent-tag { font-size: var(--mk-fs-micro); padding: 4px 13px; }
 
   .sk-name-main { font-size: var(--mk-fs-micro); }
-  .sk-id-desc { font-size: var(--mk-fs-micro); }
+  .sk-sub { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .sk-dot { width: 14px; height: 14px; }
   .sk-agent-tag { font-size: var(--mk-fs-body); padding: 5px 15px; }
 
   .sk-name-main { font-size: var(--mk-fs-emphasis); }
-  .sk-id-desc { font-size: var(--mk-fs-body); }
+  .sk-sub { font-size: var(--mk-fs-body); }
 }
 
 /* ================= 暗色模式（D1 补完）：Skill 运行 ================= */

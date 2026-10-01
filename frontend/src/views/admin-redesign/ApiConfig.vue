@@ -32,7 +32,17 @@
     <!-- 视图切换（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
          胶囊只做筛选 chips，视图/分区切换归页签；外挂能力计数以角标随页签呈现，
          形态同共享 MkSubTabs 的 count 角标）：接入与验证 / 模型路由 / 调用与健康 /
-         安全与访问 / 模型总览 / 外挂能力 -->
+         安全与访问 / 模型总览 / 外挂能力
+
+         原型 4 页签 → 现状 6 页签映射（原型 index.html:1789 renderModels tabs）：
+         · 接入与模型 = 「接入与验证」 + 「模型总览」
+         · 连接与安全 = 「接入与验证」（服务地址 / 密钥 / 连通性）
+                       + 「安全与访问」（访问来源模式 / 私有网络 / 注册策略）
+         · 路由与降级 = 「模型路由」（对话/推理/评估默认路由 + 默认思考）
+                       + 「调用与健康」（重试超时 / 降级守卫 / 能力健康）
+         · 外挂能力   = 「外挂能力」
+         现状 6 页签是能力扩展：原型把「连接与安全」「路由与降级」各压成一页，
+         本页按可独立保存的配置域拆成四页（连接/路由/运行时/策略），页签数量不改。 -->
     <div class="tabs ac-tabs" role="tablist" aria-label="模型与接入视图切换">
       <button type="button" role="tab" class="tab" :aria-selected="tab === 'connection'" @click="switchTab('connection')">接入与验证</button>
       <button type="button" role="tab" class="tab" :aria-selected="tab === 'routing'" @click="switchTab('routing')">模型路由</button>
@@ -138,6 +148,24 @@
         <button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button>
       </div>
       <div class="ac-body">
+        <!-- 路由与降级概览（只读）：原型 index.html:1808-1812 ranklist/.rankrow 形态。
+             角色行取真实路由配置与降级守卫状态，未配置显式标注「未配置」，不臆造模型名；
+             输入能力保留在下方三列输入框（原型为纯只读，本页需保留可编辑路由）。 -->
+        <div class="ac-ranklist" role="list" aria-label="路由角色概览">
+          <div v-for="r in routeOverview" :key="r.role" class="ac-rankrow" role="listitem">
+            <span class="ac-rankrow__grow">
+              <span class="ac-rankrow__role">{{ r.role }}</span>
+              <span class="ac-rankrow__val" :class="{ 'is-unset': !r.configured }">{{ r.value }}</span>
+            </span>
+            <span class="mk-badge" :class="r.badgeCls">{{ r.badgeText }}</span>
+          </div>
+        </div>
+        <!-- 底部 warn 内联提示条（原型 index.html:1812 statusbar）：取真实降级守卫 / 能力健康，
+             均无异常则整条省略（不硬造） -->
+        <div v-if="routeWarnText" class="ac-route-warn" role="status">
+          <span class="ac-route-warn__dot"></span>
+          <span>{{ routeWarnText }}</span>
+        </div>
         <div class="ac-row ac-row--3">
           <label class="mk-field">
             <span class="mk-field__label">对话默认</span>
@@ -236,20 +264,30 @@
         </div>
         <div class="ac-policy ac-policy--2x2">
           <div class="ac-policy__item">
-            <span class="ac-policy__label">Admin 访问范围</span>
-            <div class="mk-seg" role="radiogroup" aria-label="Admin 访问范围">
-              <button
+            <span class="ac-policy__label">访问来源模式</span>
+            <!-- 原型 index.html:1793-1798 访问来源模式：radio 单选卡片
+                 （radiogroup + role=radio + aria-checked，Enter/Space 可切）；
+                 取值与提交逻辑不变，仍为 policy.adminAccessMode -->
+            <div class="ac-radio-row" role="radiogroup" aria-label="访问来源模式">
+              <span
                 v-for="opt in accessOptions"
                 :key="opt.id"
-                type="button"
-                class="mk-seg__item"
-                :class="{ 'mk-seg__item--active': policy.adminAccessMode === opt.id }"
-                :aria-pressed="policy.adminAccessMode === opt.id"
-                @click="policy.adminAccessMode = opt.id; markDirty('policy')"
+                class="ac-radio"
+                role="radio"
+                tabindex="0"
+                :aria-checked="policy.adminAccessMode === opt.id"
+                @click="setAccessMode(opt.id)"
+                @keydown.enter.prevent="setAccessMode(opt.id)"
+                @keydown.space.prevent="setAccessMode(opt.id)"
               >
-                {{ opt.label }}
-              </button>
+                <span class="ac-radio__mark" aria-hidden="true">{{ policy.adminAccessMode === opt.id ? '●' : '○' }}</span>
+                <span class="ac-radio__text">
+                  <span class="ac-radio__title">{{ opt.label }}</span>
+                  <span class="ac-radio__sub">{{ opt.sub }}</span>
+                </span>
+              </span>
             </div>
+            <span class="ac-policy__hint">策略持久化到 System DB 并热生效；环境变量仅作默认值。</span>
             <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">⚠ 公网开放 · 入口无访问限制</span>
             <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
               <span class="mk-field__label">额外允许的客户端 IP（每行一个，可留空）</span>
@@ -989,6 +1027,32 @@ function setEffort(v: string) {
 
 const ready = computed(() => keySet.value && models.value.length > 0 && !!form.defaultModel)
 const routeCount = computed(() => [form.defaultModel, form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length)
+/* 路由与降级概览（原型 index.html:1808-1812 ranklist/.rankrow）：只读三行 = 本系统的三个
+   真实路由角色（对话 / 推理 / 评估默认，对应下方三列输入）。原型第四行「降级备用」本页无
+   独立配置字段，不虚构该行。未配置的行显式标注「未配置」，不臆造模型名。 */
+const routeOverview = computed(() => {
+  const rows = [
+    { role: '对话默认', value: form.defaultModel },
+    { role: '推理默认', value: form.defaultReasoningModel },
+    { role: '评估默认', value: form.defaultEvaluationModel },
+  ]
+  return rows.map((r) => ({
+    role: r.role,
+    value: r.value || '未配置',
+    configured: !!r.value,
+    badgeText: r.value ? '已配置' : '未配置',
+    badgeCls: r.value ? 'mk-badge--ok' : 'mk-badge--muted',
+  }))
+})
+/* 降级内联提示（原型 index.html:1812 statusbar）：与页面能力健康卡同源（health 快照），
+   只列异常/不可用项；无异常或无快照时整条省略（不硬造）。 */
+const routeWarnText = computed(() => {
+  const caps = health.value?.capabilities ?? []
+  const bad = caps.filter((c) => c.status === 'unavailable' || c.status === 'degraded')
+  if (!bad.length) return ''
+  const names = bad.map((c) => c.message || c.id).slice(0, 2).join('、')
+  return `${bad.length} 项能力降级 / 不可用：${names}${bad.length > 2 ? ' 等' : ''}`
+})
 /** 模型清单状态说明：区分「清单未拉取」与「已就绪」，不点「默认路由 3/3」暗示整体就绪 */
 const modelListTitle = computed(() =>
   models.value.length
@@ -1016,10 +1080,16 @@ const keyHintNeeded = computed(
 )
 
 const accessOptions = [
-  { id: 'loopback' as const, label: '仅本机' },
-  { id: 'private' as const, label: '本机 + 局域网' },
-  { id: 'any' as const, label: '不限制' }
+  { id: 'loopback' as const, label: '仅本机', sub: 'localhost / 127.0.0.1' },
+  { id: 'private' as const, label: '私有网段（推荐）', sub: '本机 + RFC1918 局域网' },
+  { id: 'any' as const, label: '不限制', sub: '不建议用于公网' }
 ]
+/** 访问来源模式切换：取值与提交逻辑不变（仅脏位标记），控件由分段按钮改为 radio 卡片 */
+function setAccessMode(mode: 'loopback' | 'private' | 'any') {
+  if (policy.adminAccessMode === mode) return
+  policy.adminAccessMode = mode
+  markDirty('policy')
+}
 
 /* ---------- 操作 ---------- */
 const fetching = ref(false)
@@ -1385,6 +1455,34 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 .ac-policy__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; display: block; }
 .ac-policy__toggle { width: fit-content; }
 .ac-policy__warn { font-size: var(--mk-fs-micro); color: var(--mk-red); font-weight: 600; }
+/* 访问来源模式：radio 单选卡片（复刻原型 index.html:1793-1798 .radio-row/.radio，
+   原型 .radio[aria-checked="true"] = brand 描边 + brand 底 + brand 字 + 600 字重）。
+   描边/圆角/选中态全走 --mk-* token，暗色随 token 自动适配 */
+.ac-radio-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.ac-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: var(--mk-fs-micro);
+  background: var(--mk-surface);
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+.ac-radio:hover { border-color: var(--mk-blue); }
+.ac-radio:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
+.ac-radio[aria-checked='true'] {
+  border-color: var(--mk-blue);
+  background: var(--mk-blue-bg);
+  color: var(--mk-blue);
+  font-weight: 600;
+}
+.ac-radio__mark { flex: none; line-height: 1; }
+.ac-radio__text { display: grid; gap: 0; min-width: 0; }
+.ac-radio__sub { color: var(--mk-muted); font-weight: 500; }
+.ac-radio[aria-checked='true'] .ac-radio__sub { color: inherit; opacity: 0.82; }
 .ac-quota-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ac-quota-seg { width: fit-content; }
 .ac-quota-field {
@@ -1462,6 +1560,37 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 .ac-health__id { font-size: var(--mk-fs-micro); color: var(--mk-ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-health__msg { color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-health__lat { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+/* 路由与降级概览（原型 index.html:1808-1812 ranklist / statusbar 形态，token 化） */
+.ac-ranklist {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 14px;
+}
+.ac-rankrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--mk-line);
+}
+.ac-rankrow:last-child { border-bottom: 0; }
+.ac-rankrow__grow { display: grid; gap: 2px; min-width: 0; }
+.ac-rankrow__role { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-rankrow__val { font-family: var(--mk-mono); font-weight: 600; color: var(--mk-ink); }
+.ac-rankrow__val.is-unset { font-family: inherit; font-weight: 500; color: var(--mk-faint); }
+.ac-route-warn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--mk-amber) 32%, var(--mk-line));
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-amber-bg);
+  color: var(--mk-amber);
+  font-size: var(--mk-fs-micro);
+}
+.ac-route-warn__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
 .ac-health__time { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 .ac-health__foot {
   display: flex;

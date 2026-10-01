@@ -16,43 +16,26 @@
       <button type="button" role="tab" class="tab" :aria-selected="achTab === 'records'" @click="switchAchTab('records')">解锁记录</button>
     </div>
 
-    <!-- 成就定义 -->
+    <!-- 成就定义（原型 1890-1893 卡片栅格：每卡 名 strong + grow + 状态 badge；
+         副行 描述 sub；底行 已解锁 b mono N 人 + grow）。原型底行右侧为「解锁率」，
+         但 /admin/achievements/definitions 只回 unlockCount（全量含虚拟），
+         缺「总学习者」分母——按无数据不硬造，右侧改显真实奖励 +XP；「手动发放」能力保留。 -->
     <div v-if="achTab === 'defs'" class="mk-card">
-      <MockSkeletonTable v-if="defsLoading && !defs.length" :cols="5" />
-      <div v-else-if="defs.length" class="mk-table-scroll ac-list">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-             列按内容自然分宽；长条件/描述由 mk-cell-main / mk-cell-text 的全局截断兜底 -->
-        <table class="mk-table">
-          <thead>
-            <tr>
-              <th>成就</th>
-              <th>类型</th>
-              <th>条件</th>
-              <th class="mk-th--right">XP</th>
-              <th class="mk-th--right">已解锁</th>
-              <th class="mk-th--right">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="d in defs" :key="d.id">
-              <td>
-                <div class="mk-cell-main">
-                  <strong><AchIcon :type="d.type" /> {{ d.name }}</strong>
-                  <span class="mk-cell-sub">{{ d.description }}</span>
-                </div>
-              </td>
-              <td><span class="mk-badge" :class="typeBadge(d.type)">{{ typeText(d.type) }}</span></td>
-              <td class="mk-cell-text" :title="reqTitle(d.requirement)">{{ reqText(d.requirement) }}</td>
-              <td class="mk-num"><span class="oa-xp" :title="`解锁可得 ${d.xpReward} XP`">+{{ d.xpReward }} XP</span></td>
-              <td class="mk-num">{{ d.unlockCount }}</td>
-              <td>
-                <div class="mk-actions">
-                  <button type="button" class="mk-link" @click="openGrant(d)">手动发放</button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <MockSkeletonTable v-if="defsLoading && !defs.length" :cols="3" />
+      <div v-else-if="defs.length" class="ac-grid">
+        <div v-for="d in defs" :key="d.id" class="ac-card">
+          <div class="ac-card__head">
+            <strong class="ac-card__name"><AchIcon :type="d.type" /> {{ d.name }}</strong>
+            <span class="mk-badge" :class="typeBadge(d.type)">{{ typeText(d.type) }}</span>
+          </div>
+          <span class="ac-card__desc">{{ d.description }}</span>
+          <span class="ac-card__cond" :title="reqTitle(d.requirement)">条件：{{ reqText(d.requirement) }}</span>
+          <div class="ac-card__foot">
+            <span class="ac-card__unlocked">已解锁 <b class="mono">{{ d.unlockCount }}</b> 人</span>
+            <span class="oa-xp" :title="`解锁可得 ${d.xpReward} XP`">+{{ d.xpReward }} XP</span>
+            <button type="button" class="mk-link ac-card__grant" @click="openGrant(d)">手动发放</button>
+          </div>
+        </div>
       </div>
       <MkEmptyState
         v-else-if="defsFailed"
@@ -62,15 +45,15 @@
         @action="loadDefs"
       />
       <!-- 原先缺 v-else 兜底：后端返回空数组时卡内什么都不渲染（审计 附 A #10） -->
-      <MkEmptyState v-else icon="◌" title="暂无成就定义" />
+      <MkEmptyState v-else icon="◌" title="暂无成就定义" action-text="刷新" @action="loadDefs" />
     </div>
 
     <!-- 解锁记录 -->
     <div v-else class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="ac-filter">
-          <MkFilterSearch v-model="recordSearch" placeholder="搜索用户姓名 / 邮箱…" @keydown.enter="reloadRecords" />
-          <button type="button" class="mk-btn mk-btn--sm" @click="reloadRecords">查询</button>
+          <MkFilterSearch v-model="recordSearch" placeholder="搜索用户姓名 / 邮箱…" @keydown.enter="reloadRecordsFromFirstPage" />
+          <button type="button" class="mk-btn mk-btn--sm" @click="reloadRecordsFromFirstPage">查询</button>
         </div>
         <DataScopeToggle :model-value="achIncludeTest" @update:model-value="onAchRescope" />
       </div>
@@ -144,6 +127,8 @@
         title="还没有解锁记录"
         description="用户完成任务、连续学习、达成里程碑后自动解锁，也可在「成就定义」手动发放。"
         min
+        :action-text="isRecordsFiltered ? '清除筛选' : ''"
+        @action="clearRecordsFilters"
       />
       <Pagination
         v-if="totalRecords > pageSize"
@@ -315,7 +300,7 @@ const {
 /** 数据范围切换（仅真实/含模拟）→ 立即按新范围重拉 */
 function onAchRescope(v: boolean) {
   achIncludeTest.value = v
-  void reloadRecords()
+  reloadRecordsFromFirstPage()
 }
 
 /* 排序变更：回第 1 页重查（与筛选同义） */
@@ -355,6 +340,20 @@ async function reloadRecords() {
   } finally {
     recordsLoading.value = false
   }
+}
+
+/** 记录页签是否处于筛选态（搜索词 / 含测试账号口径） */
+const isRecordsFiltered = computed(() => !!recordSearch.value.trim() || achIncludeTest.value)
+/** 筛选变化：回第 1 页重查（页码停在越界页会显示空列表） */
+function reloadRecordsFromFirstPage() {
+  recordPage.value = 1
+  void reloadRecords()
+}
+/** 清除记录筛选（搜索 + 数据范围），回第 1 页重查 */
+function clearRecordsFilters() {
+  recordSearch.value = ''
+  achIncludeTest.value = false
+  reloadRecordsFromFirstPage()
 }
 
 function fmtDate(iso?: string | null): string {
@@ -473,6 +472,50 @@ onMounted(() => {
 .oa-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .ac-list { min-height: 120px; }
 .ac-icon { margin-right: 4px; }
+
+/* 成就定义卡片栅格（原型 1890-1893：grid minmax(260px,1fr) + card） */
+.ac-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+.ac-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  background: var(--mk-surface);
+}
+.ac-card__head { display: flex; align-items: center; gap: 8px; }
+.ac-card__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--mk-fs-body);
+  font-weight: 700;
+  color: var(--mk-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ac-card__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
+.ac-card__cond {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ac-card__foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ac-card__unlocked { margin-right: auto; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-card__unlocked b {
+  font-size: var(--mk-fs-body);
+  font-weight: 800;
+  color: var(--mk-ink);
+  font-variant-numeric: tabular-nums;
+}
+.ac-card__grant { font-size: var(--mk-fs-micro); }
 
 /* ================= 视图切换（原型 .tabs 下划线页签，页面本地复刻） =================
    与宿主 OpsHub 页签、Users.vue 卡内页签同款：12px/600、激活蓝字+2px 蓝下划线、通栏底线 */

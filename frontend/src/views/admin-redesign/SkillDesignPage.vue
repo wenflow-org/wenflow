@@ -59,20 +59,10 @@
     />
 
     <template v-if="overview">
-      <!-- Tabs（单层 6 tab：协议 / 试跑 / 版本 / 运行时 / 工程 / 字段路由） -->
-      <nav class="mk-pills">
-        <button
-          v-for="t in tabs"
-          :key="t.key"
-          type="button"
-          class="mk-pill"
-          :class="{ 'mk-pill--active': tab === t.key }"
-          :aria-pressed="tab === t.key"
-          @click="tab = t.key"
-        >
-          {{ t.label }}
-        </button>
-      </nav>
+      <!-- Tabs（单层 6 tab：协议 / 试跑 / 版本 / 运行时 / 工程 / 字段路由）
+           原型 renderSkillDetail 2398-2399 用 .subtabs/.subtab（role=tablist + role=tab + aria-selected）；
+           复用共享 MkSubTabs 原语（role=tablist/tab + aria-selected）替代旧 .mk-pills + aria-pressed。 -->
+      <MkSubTabs :tabs="tabs" :model-value="tab" @update:model-value="onTabSelect" />
 
       <!-- 协议：core YAML（SSOT）编辑与发布（发布链 3 步：保存并编译 → 发布 → 强制发布） -->
       <div v-show="tab === 'protocol'" class="sdp-pane">
@@ -135,6 +125,7 @@ import { TERMS } from './terms'
 import { toast } from '@/utils/toast'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 
 /* ---------- 路由与基础 ---------- */
 const route = useRoute()
@@ -218,6 +209,11 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'engineering', label: '工程' },
   { key: 'routing', label: '字段路由' }
 ]
+const TAB_KEYS = tabs.map((t) => t.key)
+/** MkSubTabs 回传 string：收敛回 TabKey（非法键忽略） */
+function onTabSelect(key: string) {
+  if ((TAB_KEYS as string[]).includes(key)) tab.value = key as TabKey
+}
 // ?tab= 直达 + 旧链接兼容（workbench 已拆入试跑）
 function applyQTab() {
   const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
@@ -419,8 +415,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   .sdp-parent { font-size: var(--mk-fs-body); }
   .sdp-drift { font-size: var(--mk-fs-body); padding: 14px 18px; }
   .sdp-drift code { font-size: var(--mk-fs-body); }
-  /* 页签只声明一份：此前 emphasis/10x24 与 body/7x18 两条同特异性规则先后叠加，前者恒被覆盖（死声明） */
-  .sdp .mk-pills { padding: 6px; border-radius: var(--mk-radius-xl); }
-  .sdp .mk-pill { font-size: var(--mk-fs-body); padding: 7px 18px; }
+  /* MkSubTabs 是子组件：4K 档位需 :deep 命中其内部按钮（父 scoped 属性不落到子组件内部节点） */
+  :deep(.mk-subtab) { font-size: var(--mk-fs-body); padding: 12px 20px; }
 }
 </style>

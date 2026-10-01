@@ -122,12 +122,13 @@
             <h3 class="mk-card__title">最近会话</h3>
             <span class="mk-card__meta">
               <MkLoading v-if="ldSessLoading" inline min text="加载中…" />
-              <template v-else>{{ ldSessError ? '加载失败' : `${ldSessionRows.length} 条` }}</template>
+              <template v-else-if="ldSessError">加载失败</template>
+              <template v-else>{{ ldSessionRows.length > recentSessionRows.length ? `最近 ${recentSessionRows.length} 条 · 共 ${ldSessionRows.length}` : `${recentSessionRows.length} 条` }}</template>
             </span>
           </div>
-          <MkRowList :empty="!ldSessionRows.length" :loading="ldSessLoading" empty-text="暂无教学会话" empty-hint="该学习者上课后，这里会出现会话列表。">
+          <MkRowList :empty="!recentSessionRows.length" :loading="ldSessLoading" empty-text="暂无教学会话" empty-hint="该学习者上课后，这里会出现会话列表。">
             <MkRow
-              v-for="s in ldSessionRows"
+              v-for="s in recentSessionRows"
               :key="s.id"
               clickable
               :title="s.topic"
@@ -140,6 +141,44 @@
               </template>
             </MkRow>
           </MkRowList>
+        </section>
+
+        <!-- 学习状态追踪（原型 renderLearnerDetail 概览 pane 2189 / lsm 样式 517-522）：
+             与证据 tab 指标卡同源（dynamicState.metrics）。同屏不同 tab 复用，证据 tab 保持不动。 -->
+        <section v-if="dynamicState" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">学习状态追踪</h3>
+            <span class="mk-card__meta">LSS · KTL · LF · LSB</span>
+          </div>
+          <div class="ld-lsm">
+            <div v-for="r in learningStateRows" :key="r.label" class="ld-lsm__row">
+              <span class="ld-lsm__label">{{ r.label }}</span>
+              <span class="mk-minibar ld-lsm__track">
+                <i
+                  class="mk-minibar__fill"
+                  :data-tone="r.tone === 'muted' ? undefined : r.tone"
+                  :class="{ 'ld-bar__fill--muted': r.tone === 'muted' }"
+                  :style="{ width: r.width + '%' }"
+                ></i>
+              </span>
+              <span class="ld-lsm__val">{{ r.value }}</span>
+              <span class="ld-lsm__hint">{{ r.hint }}</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 学习者画像 kv（原型 2190）：邮箱/层级/路径数/最近活跃（注册来源无后端字段，不硬造） -->
+        <section v-if="portraitRows.length" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">学习者画像</h3>
+            <span class="mk-card__meta">账号与路径概要</span>
+          </div>
+          <div class="ld-kv">
+            <div v-for="kv in portraitRows" :key="kv.label" class="ld-kv__row">
+              <span>{{ kv.label }}</span>
+              <strong>{{ kv.value }}</strong>
+            </div>
+          </div>
         </section>
       </div>
 
@@ -583,6 +622,136 @@
         />
       </section>
     </div>
+
+    <!-- ============ 学习路径（原型 renderLearnerDetail 2165-2171）：路径卡栅格 → PathDetail ============ -->
+    <div v-else-if="tab === 'paths'" class="ld-tabpage">
+      <section v-if="pathInfo && pathInfo.id" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">学习路径</h3>
+          <span class="mk-card__meta">当前路径快照</span>
+        </div>
+        <div class="ld-pathgrid">
+          <button type="button" class="ld-pathcard" @click="openPathDetail">
+            <div class="ld-pathcard__top">
+              <strong>{{ pathInfo.title || '未命名路径' }}</strong>
+              <span class="mk-badge" :class="`mk-badge--${pathStatus.tone}`">{{ pathStatus.text }}</span>
+            </div>
+            <div class="ld-pathcard__mid">
+              <span class="ld-pathcard__step">{{ pathInfo.task || pathInfo.stage || '—' }}</span>
+              <span class="ld-pathcard__mono">{{ pathInfo.done }} / {{ pathInfo.total }} 里程碑</span>
+            </div>
+            <span class="mk-minibar ld-pathcard__meter">
+              <i class="mk-minibar__fill" :data-tone="pathInfo.pct >= 100 ? 'ok' : undefined" :style="{ width: pathInfo.pct + '%' }"></i>
+            </span>
+          </button>
+        </div>
+      </section>
+      <!-- 空态 CTA：原型为「发起目标对话」，但本页没有目标对话入口；改用可执行的重算快照（路径由快照物化） -->
+      <MkEmptyState
+        v-else
+        icon="◌"
+        title="还没有学习路径"
+        description="为这位学习者澄清目标后，路径会在这里出现。"
+        action-text="重算快照"
+        :action-busy="recomputing"
+        @action="recompute"
+      />
+    </div>
+
+    <!-- ============ 教学会话（原型 2172-2177）：7 列表格，行点击进会话座舱 ============ -->
+    <div v-else-if="tab === 'sessions'" class="ld-tabpage">
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">教学会话</h3>
+          <span class="mk-card__meta">
+            <MkLoading v-if="ldSessLoading" inline min text="加载中…" />
+            <template v-else>{{ ldSessError ? '加载失败' : `${ldSessionRows.length} 条` }}</template>
+          </span>
+        </div>
+        <div v-if="ldSessionRows.length" class="mk-table-scroll">
+          <table class="mk-table">
+            <thead>
+              <tr><th>会话 ID</th><th>Skill</th><th>阶段</th><th>回合</th><th>时长</th><th>状态</th><th>时间</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="s in ldSessionRows" :key="s.id" class="ld-pane-row" @click="openSessionCockpit(s.id)">
+                <td class="ld-mono" :title="s.id">{{ s.id }}</td>
+                <td>{{ s.skill }}</td>
+                <td><span class="mk-badge mk-badge--info">{{ s.stage }}</span></td>
+                <td class="ld-mono" title="口径：用户消息条数（后端无独立回合计数）">{{ s.turns }}</td>
+                <td class="ld-mono">{{ s.duration }}</td>
+                <td><span class="mk-badge" :class="sessPaneBadgeCls(s.status)">{{ statusText(s.status) || '—' }}</span></td>
+                <td class="ld-mono ld-sub">{{ s.startAgo }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <MkEmptyState v-else icon="◌" title="暂无教学会话" description="该学习者还没有产生回合记录。" />
+      </section>
+    </div>
+
+    <!-- ============ 记忆与复习（原型 2178-2183）：6 列表格（FSRS 单源） ============ -->
+    <div v-else-if="tab === 'memory'" class="ld-tabpage">
+      <section v-if="memoryPaneRows.length" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">记忆与复习（FSRS）</h3>
+          <button type="button" class="mk-link" @click="goMemoryReview">打开记忆与复习 →</button>
+        </div>
+        <div class="mk-table-scroll">
+          <table class="mk-table">
+            <thead>
+              <tr><th>知识点</th><th>记忆强度</th><th>复习到期</th><th>来源</th><th>状态</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in memoryPaneRows" :key="r.key">
+                <td class="ld-strong">{{ r.label }}</td>
+                <td>
+                  <span v-if="r.strength != null" class="ld-mt">
+                    <span class="mk-minibar ld-mt__bar">
+                      <i class="mk-minibar__fill" :data-tone="r.tone === 'info' ? undefined : r.tone" :style="{ width: r.strength + '%' }"></i>
+                    </span>
+                    <em>{{ r.strength }}%</em>
+                  </span>
+                  <span v-else class="ld-none">未初始化</span>
+                </td>
+                <td class="ld-sub">{{ r.due }}</td>
+                <td class="ld-sub" title="后端无出处字段，以提取次数/最近提取时间近似标注">{{ r.source }}</td>
+                <td><span class="mk-badge" :class="`mk-badge--${r.tone}`">{{ r.stateText }}</span></td>
+                <td>
+                  <!-- 后端无单点复习接口 → 深链记忆与复习页（userId 契约见 memoryReviewUrl） -->
+                  <button type="button" class="mk-btn mk-btn--sm" @click="goMemoryReview">复习</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <MkEmptyState v-else icon="◌" title="暂无记忆数据" description="该学习者还没有 FSRS 记忆痕迹；完成教学回合后自动生成。" />
+    </div>
+
+    <!-- ============ 操作记录（原型 2184-2187）：feed/feedrow；口径见注释 ============ -->
+    <div v-else-if="tab === 'audit'" class="ld-tabpage">
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">操作记录</h3>
+          <span class="mk-card__meta">学习事件时间线 · 最近 {{ auditRows.length }} 条</span>
+        </div>
+        <div v-if="auditRows.length" class="ld-feed">
+          <div v-for="(a, i) in auditRows" :key="i" class="ld-feedrow">
+            <span class="ld-feedrow__time">{{ a.time }}</span>
+            <div class="ld-feedrow__main">
+              <span class="ld-feedrow__action">{{ a.action }}</span>
+              <span class="ld-feedrow__detail">{{ a.detail }}</span>
+            </div>
+          </div>
+        </div>
+        <MkEmptyState v-else icon="◌" title="暂无操作记录" description="该学习者还没有学习事件流水。" />
+      </section>
+      <!-- 口径标注：后台无管理侧审计流水接口；此处为学习事件（learner_evidence），非管理员操作审计 -->
+      <p class="ld-none">
+        口径说明：后台暂未提供管理侧审计流水接口，本页以学习者学习事件（learner_evidence）如实渲染，语义为「学习事件」而非「管理员操作审计」。
+      </p>
+    </div>
   </div>
 </template>
 
@@ -592,7 +761,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { subPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
-import { conceptBarTone, conceptBarWidth, memoryReviewUrl, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab } from './learner-profile'
+import { conceptBarTone, conceptBarWidth, memoryReviewUrl, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelFromXp } from './learner-profile'
 import { adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import { statusText } from './statusText'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
@@ -649,13 +818,34 @@ const loadCurveRaw = ref<LoadCurvePoint[]>([])
 /** 预测校准（实证命中率 + 最近预测），异步加载失败为 null */
 const predictionCalib = ref<PredictionCalibration | null>(null)
 const recomputing = ref(false)
-const tab = ref<LearnerTab>('overview')
+
+/**
+ * 页签（原型 renderLearnerDetail 2159-2163：subtabs 由 4 项扩到 8 项）。
+ * 名称对齐原型：总览→概览、知识图谱→图谱；新增 学习路径/教学会话/记忆与复习/操作记录。
+ * 新增 id 只在本页扩展——共享的 learner-profile.ts `LearnerTab` 仍是 4 项联合（未改动），
+ * 本地 normalizeLdTab 先识别 8 项，再回落共享 normalizeLearnerTab 处理旧 6-tab 深链重定向。
+ */
+const LD_TAB_IDS = ['overview', 'profile', 'evidence', 'graph', 'paths', 'sessions', 'memory', 'audit'] as const
+type LdTab = (typeof LD_TAB_IDS)[number] | LearnerTab
+function isLdTab(v: unknown): v is (typeof LD_TAB_IDS)[number] {
+  return typeof v === 'string' && (LD_TAB_IDS as readonly string[]).includes(v)
+}
+function normalizeLdTab(v: unknown): LdTab {
+  const s = String(v || '').toLowerCase()
+  return isLdTab(s) ? s : normalizeLearnerTab(s)
+}
+
+const tab = ref<LdTab>('overview')
 
 const tabs = [
-  { id: 'overview' as const, label: '总览' },
+  { id: 'overview' as const, label: '概览' },
   { id: 'profile' as const, label: '画像' },
   { id: 'evidence' as const, label: '证据' },
-  { id: 'graph' as const, label: '知识图谱' }
+  { id: 'graph' as const, label: '图谱' },
+  { id: 'paths' as const, label: '学习路径' },
+  { id: 'sessions' as const, label: '教学会话' },
+  { id: 'memory' as const, label: '记忆与复习' },
+  { id: 'audit' as const, label: '操作记录' }
 ]
 
 /* ── 知识图谱（概念图画布）：进入 tab 才加载，避免给总览页拖一个额外请求 ── */
@@ -668,6 +858,13 @@ const graphError = ref('')
 const graphPathId = ref<string | null>(null)
 /** 当前学习路径 ID（currentPath.learningPathId / 列表兜底 base.pathId）：路径详情下钻用 */
 const currentPathId = ref<string | null>(null)
+/**
+ * 学习路径 pane 的卡数据（原型 2165-2171）：直接来自快照 currentPath 与列表兜底，
+ * 不复用「当前进度」卡 DOM——它已是该学习者能拿到的全部路径信息（快照只存当前路径）。
+ */
+const pathInfo = ref<{ id: string | null; title: string; stage: string; task: string; done: number; total: number; pct: number } | null>(null)
+/** 学习者画像 kv 卡：用户详情补充的层级/路径数/注册时间（后端 findUserDetailForAdmin） */
+const userRecord = ref<{ currentLevel: string; xp: number; pathCount: number; createdAt: string } | null>(null)
 /** 跟随 admin 主题（暗色用同族配色，见 MkGraph 的 colorOf） */
 const graphTheme = computed<'light' | 'dark'>(() =>
   typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
@@ -711,7 +908,7 @@ const tabRouter = useRouter()
 watch(
   () => tabRoute.query.tab,
   (t) => {
-    if (typeof t === 'string' && t && t !== tab.value) tab.value = normalizeLearnerTab(t)
+    if (typeof t === 'string' && t && t !== tab.value) tab.value = normalizeLdTab(t)
   },
   { immediate: true }
 )
@@ -722,9 +919,9 @@ watch(tab, (t) => {
   if (cur !== target) void tabRouter.replace({ query: { ...tabRoute.query, ...(target ? { tab: target } : {}) } })
 })
 
-/** 深链兼容：旧 6-tab 名（cognitive/dynamic/memory/teaching）重定向到新 3-tab */
+/** 深链兼容：旧 6-tab 名（cognitive/dynamic/memory/teaching）重定向到新 tab（本地 8 项优先） */
 function switchTab(id: string) {
-  tab.value = normalizeLearnerTab(id)
+  tab.value = normalizeLdTab(id)
 }
 
 /** 详情加载：成功全量数据；失败但有列表兜底 → 显示兜底；失败且无兜底 → 明确错误态 */
@@ -756,6 +953,8 @@ function resetDerivedState(id: string) {
   predictionCalib.value = null
   ldSessionRows.value = []
   currentPathId.value = null
+  pathInfo.value = null
+  userRecord.value = null
   // 图谱仅在进入 graph tab 时按需加载（无 watch 兜底重拉）：
   // 只在真正换人时清空；同人重算/刷新若也清空会留下一张再不加载的空图
   if (id !== lastLoadedId) {
@@ -766,15 +965,25 @@ function resetDerivedState(id: string) {
   }
 }
 
-// ===== 最近会话（总览左栏；teaching-sessions 支持 userId 过滤，行点击下钻只读座舱） =====
+// ===== 最近会话（概览左栏 + 教学会话 pane；teaching-sessions 支持 userId 过滤，行点击下钻只读座舱） =====
 interface LdSessionRow {
   id: string
   topic: string
   subText: string
   status: string
   startAgo: string
+  /** 教学会话 pane：Skill 列（后端 subject / taskType） */
+  skill: string
+  /** 教学会话 pane：阶段列（后端 progress 里程碑序号，deriveTeachingSessionProgress 推导） */
+  stage: string
+  /** 教学会话 pane：回合列（口径=用户消息条数，后端无独立回合计数） */
+  turns: string
+  /** 教学会话 pane：时长列（后端 duration，秒） */
+  duration: string
 }
 const ldSessionRows = ref<LdSessionRow[]>([])
+/** 概览左栏「最近会话」卡只取前 5 条；教学会话 pane 用全量（同源） */
+const recentSessionRows = computed(() => ldSessionRows.value.slice(0, 5))
 const ldSessLoading = ref(false)
 const ldSessError = ref(false)
 /** 状态徽章降噪（对齐 TeachingSessions.statusBadge）：仅异常态上色，正常态灰 */
@@ -790,6 +999,23 @@ function openSessionCockpit(sessionId: string) {
   openSubPage('session-real', sessionId, sp ? { from: { view: sp.view, id: sp.id, label: liveDetail.value?.name } } : undefined)
 }
 
+/** 会话时长（后端 duration 秒）→ mm 分 ss 秒；0/缺省显 — */
+function formatDuration(sec: number): string {
+  if (!sec || sec <= 0) return '—'
+  const m = Math.floor(sec / 60)
+  const s = Math.round(sec % 60)
+  return m > 0 ? `${m}分${s}秒` : `${s}秒`
+}
+
+/** 教学会话 pane 状态徽章：完成绿 / 进行中蓝 / 异常红 / 被替代琥珀 / 其余灰（与普通状态文案同字典） */
+function sessPaneBadgeCls(s: string): string {
+  if (s === 'completed' || s === 'done' || s === 'succeeded' || s === 'success') return 'mk-badge--ok'
+  if (s === 'active' || s === 'running' || s === 'in_progress' || s === 'started') return 'mk-badge--info'
+  if (s === 'failed' || s === 'timeout' || s === 'discarded' || s === 'finalization_failed') return 'mk-badge--bad'
+  if (s === 'superseded' || s === 'paused') return 'mk-badge--warn'
+  return 'mk-badge--muted'
+}
+
 /** 当前学习路径 → 路径详情二级页（只认真实 pathId；缺 ID 时入口不渲染） */
 function openPathDetail() {
   if (currentPathId.value) openSubPage('path', currentPathId.value)
@@ -801,17 +1027,25 @@ async function loadLdSessions(id: string) {
   ldSessError.value = false
   const stale = () => seq !== detailLoadSeq || subPage.value?.id !== id
   try {
-    const res = await adminTeachingSessionsApi.list({ userId: id, limit: 5, includeTest: subPage.value?.includeTest })
+    // limit 20：教学会话 pane 需要更完整列表（原概览卡只展示 5 条，由 recentSessionRows 截取）
+    const res = await adminTeachingSessionsApi.list({ userId: id, limit: 20, includeTest: subPage.value?.includeTest })
     // 竞态守卫与 loadDetail 同款：换人/重载后丢弃旧响应
     if (stale()) return
     const body = res.data?.data ?? res.data ?? {}
-    ldSessionRows.value = ((body.items as Record<string, unknown>[]) || []).map((s) => ({
-      id: String(s.id),
-      topic: String(s.topic || s.taskId || '未命名会话'),
-      subText: `${String(s.subject || '—')} · ${Number(s.messageCount || 0)} 条消息`,
-      status: String(s.status || ''),
-      startAgo: timeAgo(String(s.startTime || ''))
-    }))
+    ldSessionRows.value = ((body.items as Record<string, unknown>[]) || []).map((s) => {
+      const progress = (s.progress || null) as { milestoneIndex?: number; totalMilestones?: number } | null
+      return {
+        id: String(s.id),
+        topic: String(s.topic || s.taskId || '未命名会话'),
+        subText: `${String(s.subject || '—')} · ${Number(s.messageCount || 0)} 条消息`,
+        status: String(s.status || ''),
+        startAgo: timeAgo(String(s.startTime || '')),
+        skill: String(s.subject || s.taskType || '—'),
+        stage: progress && progress.totalMilestones ? `里程碑 ${progress.milestoneIndex || 0}/${progress.totalMilestones}` : '—',
+        turns: String(Number(s.messageCount || 0)),
+        duration: formatDuration(Number(s.duration || 0))
+      }
+    })
   } catch {
     if (!stale()) ldSessError.value = true
   } finally {
@@ -829,7 +1063,7 @@ async function loadDetail(id: string | undefined) {
   // （此前无条件置 'overview'，会把 ?tab=profile/evidence/graph 的深链与刷新全部冲掉——
   //  与上方「P0-2 tab 路由化：?tab= 深链/刷新保持」的约定相矛盾，实测发现。）
   const urlTab = typeof tabRoute.query.tab === 'string' ? tabRoute.query.tab.trim() : ''
-  tab.value = urlTab ? normalizeLearnerTab(urlTab) : 'overview'
+  tab.value = urlTab ? normalizeLdTab(urlTab) : 'overview'
   const base = liveLearners.value.find((l) => l.userId === id)
   const pathId = base?.pathId
   // 从用户详情显式进入学习者画像时携带 includeTest（虚拟/测试账号可查，默认视图仍排除）
@@ -858,6 +1092,16 @@ async function loadDetail(id: string | undefined) {
     const totalTasks = Number(progress.totalTasks || 0)
     const completedTasks = Number(progress.completedTasks || 0)
     const pct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+    // 学习路径 pane 卡数据：快照 currentPath + 列表兜底（快照只含当前路径，故栅格通常单卡）
+    pathInfo.value = {
+      id: currentPathId.value,
+      title: String((currentPath.pathTitle as string) || model.pathTitle || ''),
+      stage: base?.currentMilestone || String(progress.totalMilestones ? `已完成 ${progress.completedMilestones ?? 0}/${progress.totalMilestones} 个里程碑` : ''),
+      task: base?.currentTask || '',
+      done: Number(progress.completedMilestones || 0),
+      total: Number(progress.totalMilestones || 0),
+      pct
+    }
     const mapEvidence = (e: Record<string, unknown>): EvidenceItem => {
       const raw = e as LearnerEvidenceRaw
       return {
@@ -925,21 +1169,27 @@ async function loadDetail(id: string | undefined) {
     }
     // 面包屑回写详情名（内部 ID → 中文名；title 仍保留全 ID）
     setSubPageLabel(liveDetail.value.name)
-    // 深链直达时列表兜底（base）常缺失，model.userName 又只有 ID：补拉用户记录回填真实姓名/邮箱，
-    // 否则头部 h1 是裸 user_id（快照里没存昵称的账号全中招）
-    if (!base) {
-      void getUserIncludingDeleted(id)
-        .then((res) => {
-          if (stale()) return
-          const u = ((res.data?.data ?? res.data ?? {}) as Record<string, unknown>)
-          const nm = String(u.name || '')
-          if (nm && liveDetail.value && liveDetail.value.name === id) {
-            liveDetail.value = { ...liveDetail.value, name: nm, email: String(u.email || liveDetail.value.email) }
-            setSubPageLabel(nm)
-          }
-        })
-        .catch(() => { /* 名称兜底失败不阻塞详情页 */ })
-    }
+    // 用户记录：原先仅在列表兜底缺失时拉取（补真实姓名/邮箱）。现恒拉一次，
+    // 一并为「学习者画像」kv 卡取层级/路径数/注册时间（后端 findUserDetailForAdmin 的 xp/_count.createdAt）；
+    // 深链直达时它同时负责 h1 姓名回填（快照里没存昵称的账号，否则 h1 是裸 user_id）。
+    void getUserIncludingDeleted(id)
+      .then((res) => {
+        if (stale()) return
+        const u = ((res.data?.data ?? res.data ?? {}) as Record<string, unknown>)
+        const counts = (u._count || {}) as Record<string, unknown>
+        userRecord.value = {
+          currentLevel: String(u.currentLevel || ''),
+          xp: Number(u.xp || 0),
+          pathCount: Number(counts.learning_paths || 0),
+          createdAt: String(u.createdAt || '')
+        }
+        const nm = String(u.name || '')
+        if (nm && liveDetail.value && liveDetail.value.name === id) {
+          liveDetail.value = { ...liveDetail.value, name: nm, email: String(u.email || liveDetail.value.email) }
+          setSubPageLabel(nm)
+        }
+      })
+      .catch(() => { /* 用户记录失败不阻塞详情页 */ })
     // 总览左栏「最近会话」：独立接口，失败不影响主详情
     void loadLdSessions(id)
   } catch (e) {
@@ -965,6 +1215,9 @@ async function loadDetail(id: string | undefined) {
       setSubPageLabel(base.name)
       // 列表兜底也保留路径下钻能力（pathId 来自 liveLearners 列表行）
       currentPathId.value = base.pathId || null
+      pathInfo.value = base.pathId
+        ? { id: base.pathId, title: base.pathTitle || '尚未开始学习', stage: base.currentMilestone || '', task: base.currentTask || '', done: 0, total: 0, pct: 0 }
+        : null
       toast.error(`详情接口暂时不可用，已显示列表快照：${errMsg(e)}`)
     } else {
       detailError.value = true
@@ -1066,7 +1319,9 @@ const EN_ZH: Record<string, string> = {
   slow: '放缓', fast: '加快',
   immediate: '即时', delayed: '延迟', 'on-request': '按需',
   small: '小步', large: '大步',
-  true: '是', false: '否'
+  true: '是', false: '否',
+  /* 用户详情 currentLevel（学习者画像 kv 卡层级） */
+  beginner: '入门', intermediate: '进阶', advanced: '高级'
 }
 const zh = (v: unknown): string => {
   const s = String(v ?? '')
@@ -1528,6 +1783,88 @@ function calOutcomeCls(outcome: string | null | undefined): string {
 
 const riskFactors = computed(() => (teachingHints.value?.riskFactors || []) as string[])
 
+/* ---------- 概览：学习状态追踪（lsm，原型 renderLearnerDetail 2189 / 样式 517-522） ----------
+   与证据 tab 指标卡同源（dynamicState.metrics）；原型 lsm 的 ktl/320、lf/220 是原型自造量纲，
+   后端 KTL/LF 与 LSS 同为 0-10（learning-state.service.ts）——故宽度按真实 0-10 归一，
+   tone 对齐本页 metricCards 的负荷语义（高=坏）。 */
+const learningStateRows = computed(() => {
+  const m = (dynamicState.value?.metrics || {}) as Record<string, number>
+  const width = (v: number | undefined) => (v == null || v === 0 ? 0 : Math.min(100, Math.round((v / 10) * 100)))
+  const tone = (v: number | undefined): 'ok' | 'warn' | 'bad' | 'muted' => {
+    if (v == null || v === 0) return 'muted'
+    return v >= 7 ? 'bad' : v <= 4 ? 'ok' : 'warn'
+  }
+  return [
+    { label: 'LSS 学习压力', value: m.lss ? m.lss.toFixed(1) : '—', width: width(m.lss), tone: tone(m.lss), hint: '0-10，越高越累' },
+    { label: 'KTL 训练负荷', value: m.ktl ? m.ktl.toFixed(1) : '—', width: width(m.ktl), tone: tone(m.ktl), hint: '压力长期累积' },
+    { label: 'LF 疲劳度', value: m.lf ? m.lf.toFixed(1) : '—', width: width(m.lf), tone: m.lf != null && m.lf >= 6 ? 'bad' : tone(m.lf), hint: '≥6 警戒' },
+    {
+      label: 'LSB 状态平衡',
+      value: m.lsb ? `${m.lsb > 0 ? '+' : ''}${m.lsb.toFixed(1)}` : '—',
+      width: m.lsb ? Math.min(100, Math.round(Math.abs(m.lsb) * 8 + 10)) : 0,
+      tone: (m.lsb == null || m.lsb === 0 ? 'muted' : m.lsb >= 1 ? 'ok' : m.lsb <= -3 ? 'bad' : 'warn') as 'ok' | 'warn' | 'bad' | 'muted',
+      hint: 'KTL−LF，正=状态好'
+    }
+  ]
+})
+
+/* ---------- 概览：学习者画像 kv（原型 2190） ----------
+   后端用户详情无「注册来源」字段 → 不渲染该行（不硬造）；路径数取 _count.learning_paths，
+   层级取 levelFromXp(xp)（后端 level.util 同公式）。 */
+const portraitRows = computed(() => {
+  const rows: { label: string; value: string }[] = []
+  if (d.value?.email) rows.push({ label: '邮箱', value: d.value.email })
+  const u = userRecord.value
+  if (u) {
+    const lvl = u.xp > 0 ? `L${levelFromXp(u.xp)}` : ''
+    const lvlZh = zh(u.currentLevel)
+    if (lvl || u.currentLevel) rows.push({ label: '学习层级', value: [lvl, lvlZh].filter(Boolean).join(' · ') })
+    rows.push({ label: '路径数', value: `${u.pathCount} 条` })
+    if (u.createdAt) rows.push({ label: '注册时间', value: timeAgo(u.createdAt) })
+  }
+  const lastActive = recentSessionRows.value[0]?.startAgo || d.value?.sessions[0]?.time
+  if (lastActive) rows.push({ label: '最近活跃', value: lastActive })
+  return rows
+})
+
+/* ---------- 学习路径 pane：路径卡（原型 2165-2171） ---------- */
+const pathStatus = computed<{ text: string; tone: 'ok' | 'info' | 'muted' }>(() => {
+  const p = pathInfo.value
+  if (!p) return { text: '未开始', tone: 'muted' }
+  if (p.pct >= 100) return { text: '已完成', tone: 'ok' }
+  if (p.pct > 0) return { text: '进行中', tone: 'info' }
+  return { text: '未开始', tone: 'muted' }
+})
+
+/* ---------- 记忆与复习 pane（原型 2178-2183）：复用画像 tab 的 FSRS 单源 memoryTraces ----------
+   状态/色调由 retrievability + dueAt 派生（原型 weak/due/stable/learning 四态）；
+   「来源」列：后端无出处字段，用 extractionCount/lastSeenAt 近似标注（口径见 title）。 */
+const memoryPaneRows = computed(() =>
+  memoryTraces.value.map((t) => {
+    const strength = t.retrievability != null ? Math.round(t.retrievability * 100) : null
+    const overdue = !!t.dueAt && new Date(t.dueAt).getTime() <= Date.now()
+    let state: { text: string; tone: 'ok' | 'warn' | 'bad' | 'info' }
+    if (overdue) state = { text: '待复习', tone: 'warn' }
+    else if (strength == null) state = { text: '未初始化', tone: 'info' }
+    else if (strength < 50) state = { text: '薄弱', tone: 'bad' }
+    else if (strength < 80) state = { text: '学习中', tone: 'info' }
+    else state = { text: '稳固', tone: 'ok' }
+    const source = t.extractionCount > 0 ? `累计提取 ${t.extractionCount} 次` : t.lastSeenAt ? `最近提取 ${timeAgo(t.lastSeenAt)}` : '—'
+    return { key: t.conceptKey, label: t.label || t.conceptKey, strength, tone: state.tone, stateText: state.text, due: t.dueAt ? timeAgo(t.dueAt) : '—', source }
+  })
+)
+
+/* ---------- 操作记录 pane（原型 2184-2187）：feed/feedrow ----------
+   口径差异：后台暂无管理侧审计流水接口（无 admin action log 端点）；此处以学习者学习事件
+   时间线（liveEvidence，learner_evidence 合并域事件）如实渲染——语义是「学习事件」，非「管理员操作审计」。 */
+const auditRows = computed(() =>
+  liveEvidence.value.map((e) => ({
+    time: e.time,
+    action: evidenceTypeZh(e.title),
+    detail: e.detail || evidenceSignalZh(e.signal, e.title) || '—'
+  }))
+)
+
 const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.value?.trend === 'down' ? '↘ 下降' : '→ 稳定'))
 const trendBadge = computed(() => (d.value?.trend === 'up' ? 'mk-badge--ok' : d.value?.trend === 'down' ? 'mk-badge--bad' : 'mk-badge--muted'))
 const fatigueBadge = computed(() => (d.value?.fatigue === '高' ? 'mk-badge--bad' : d.value?.fatigue === '中' ? 'mk-badge--warn' : 'mk-badge--ok'))
@@ -1722,6 +2059,45 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-mt { display: inline-flex; align-items: center; gap: 8px; }
 .ld-mt__bar { width: 72px; flex: none; }
 .ld-mt em { font-style: normal; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+
+/* 学习状态追踪（lsm，原型 517-522）：label / track / val / hint 四列 */
+.ld-lsm { padding: 14px 16px; display: grid; gap: 12px; }
+.ld-lsm__row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto 72px; align-items: center; gap: 10px; }
+.ld-lsm__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ld-lsm__track { min-width: 80px; }
+.ld-lsm__val { font-size: var(--mk-fs-micro); font-weight: 700; font-variant-numeric: tabular-nums; }
+.ld-lsm__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); text-align: right; }
+
+/* 学习路径卡栅格（原型 2165-2171） */
+.ld-pathgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; padding: 14px 16px; }
+.ld-pathcard {
+  display: grid; gap: 8px; padding: 14px 16px;
+  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
+  background: var(--mk-surface); font: inherit; color: inherit; text-align: left; cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+.ld-pathcard:hover { border-color: rgba(44, 99, 208, 0.5); }
+.ld-pathcard__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ld-pathcard__top strong { font-size: var(--mk-fs-emphasis); }
+.ld-pathcard__mid { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.ld-pathcard__step { font-size: var(--mk-fs-micro); color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-pathcard__mono { margin-left: auto; font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
+.ld-pathcard__meter { margin-top: 2px; }
+
+/* 表格 pane（教学会话 / 记忆与复习）：行可点击 + 等宽列 */
+.ld-pane-row { cursor: pointer; }
+.ld-mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
+.ld-sub { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.ld-strong { font-weight: 600; }
+
+/* 操作记录 feed（原型 .feed/.feedrow 297-304：62px mono 时间列 + 动作/详情） */
+.ld-feed { display: grid; padding: 4px 16px; }
+.ld-feedrow { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--mk-line); }
+.ld-feedrow:last-child { border-bottom: 0; }
+.ld-feedrow__time { width: 62px; flex: none; font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.ld-feedrow__main { min-width: 0; display: grid; gap: 2px; }
+.ld-feedrow__action { font-size: var(--mk-fs-micro); font-weight: 600; }
+.ld-feedrow__detail { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 
 .ld-metrics {
   display: grid;

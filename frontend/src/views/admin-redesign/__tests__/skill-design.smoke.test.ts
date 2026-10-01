@@ -139,9 +139,9 @@ async function mountPage(initialPath = '/admin/skills/test-skill') {
   return { wrapper, router };
 }
 
-/** 顶层 tab 导航（页面第一个 nav.mk-pills；试跑 pane 内另有 mk-pills 视图切换，需排除） */
+/** 顶层 tab 导航：现走共享 MkSubTabs 原语（role=tablist/tab + aria-selected，原型 .subtab 语义） */
 function tabButtons(wrapper: ReturnType<typeof mount>) {
-  return wrapper.findAll('nav.mk-pills')[0].findAll('button.mk-pill');
+  return wrapper.findAll('.mk-subtabs')[0].findAll('button.mk-subtab');
 }
 
 describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {

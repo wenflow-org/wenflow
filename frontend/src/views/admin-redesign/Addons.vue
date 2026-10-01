@@ -25,62 +25,47 @@
         <span class="mk-alert__msg">能力配置加载失败，以下表格为占位状态，无法反映真实接入情况。</span>
         <button type="button" class="mk-alert__btn" @click="loadConfigs">重试</button>
       </div>
-      <div class="mk-table-scroll">
-        <table v-if="capabilityRows.length" class="mk-table mk-table--fixed">
-          <colgroup>
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-model-wide)">
-            <col style="width:var(--mk-col-num)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-time-full)">
-            <col style="width:var(--mk-col-actions-wide)">
-          </colgroup>
-          <thead>
-            <tr>
-              <th>能力</th>
-              <th>类型</th>
-              <th>模型</th>
-              <th class="mk-th--right">超时</th>
-              <th>配置</th>
-              <th>最近调用</th>
-              <th class="mk-th--right">操作</th>
-            </tr>
-          </thead>
+      <!-- 外挂能力卡片栅格（原型 index.html:1814-1817 addons 卡栅格）：每卡=顶行（名 strong + grow
+           + 状态徽标）/ 副行 id / 真实配置元信息 / 底行右对齐操作钮。卡栅格仍以 tbody(display:grid)
+           承载，保留 .mk-cell-main/.mk-cell-sub 的截断与 title 全值语义（能力名与 id 截断处可读）。 -->
+      <div v-if="capabilityRows.length" class="ac-cap-grid">
+        <table class="ac-cap-table">
           <tbody>
-            <tr v-for="r in capabilityRows" :key="r.id">
-              <td>
-                <div class="mk-cell-main">
-                  <strong :title="r.name">{{ r.name }}</strong>
-                  <span class="mk-cell-sub" :title="r.id">{{ r.id }}</span>
+            <tr v-for="r in capabilityRows" :key="r.id" class="ac-cap-card">
+              <td class="ac-cap-card__cell">
+                <div class="ac-cap-card__top">
+                  <div class="mk-cell-main ac-cap-card__main">
+                    <strong :title="r.name">{{ r.name }}</strong>
+                    <span class="mk-cell-sub" :title="r.id">{{ r.id }}</span>
+                  </div>
+                  <span class="mk-badge ac-cap-card__state" :class="r.ready ? 'mk-badge--ok' : 'mk-badge--warn'">{{ r.ready ? '已接入' : '待配置' }}</span>
                 </div>
-              </td>
-              <td><span class="mk-badge" :class="r.id === 'mcp-tool' ? 'mk-badge--info' : 'mk-badge--muted'">{{ r.id === 'mcp-tool' ? 'MCP' : '能力 Skill' }}</span></td>
-              <td class="mono ac-model" :title="r.ready ? r.model : ''">{{ r.ready ? r.model : '—' }}</td>
-              <td class="mk-num">{{ r.ready ? r.timeout : '—' }}</td>
-              <td><span class="mk-badge" :class="r.ready ? 'mk-badge--ok' : 'mk-badge--warn'">{{ r.ready ? '已接入' : '待配置' }}</span></td>
-              <td :class="{ 'mk-na': !r.ready }">{{ r.ready ? r.last : '—' }}</td>
-              <td>
-                <div class="mk-actions">
-                  <button v-if="r.ready" type="button" class="mk-link" @click="openSkillDrawer(r.id)">详情 / 配置</button>
-                  <button v-else type="button" class="mk-link" @click="goConfig">配置 →</button>
+                <div class="ac-cap-card__meta">
+                  <span class="mk-badge" :class="r.id === 'mcp-tool' ? 'mk-badge--info' : 'mk-badge--muted'">{{ r.id === 'mcp-tool' ? 'MCP' : '能力 Skill' }}</span>
+                  <span v-if="r.ready" class="mono ac-cap-card__kv" :title="r.model">{{ r.model }}</span>
+                  <span v-if="r.ready" class="ac-cap-card__kv">超时 {{ r.timeout }}</span>
+                  <span v-if="r.ready" class="ac-cap-card__kv">最近 {{ r.last }}</span>
+                </div>
+                <div class="ac-cap-card__foot">
+                  <button v-if="r.ready" type="button" class="mk-btn mk-btn--sm" @click="openSkillDrawer(r.id)">详情 / 配置</button>
+                  <button v-else type="button" class="mk-btn mk-btn--sm" @click="goConfig">配置 →</button>
                   <button v-if="r.ready" type="button" class="mk-link" @click="goLogs(r.id)">日志</button>
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
-
-        <MkEmptyState
-          v-if="!capabilityRows.length && !loading"
-          icon="⌥"
-          title="暂无外挂能力"
-          description="后续接入生图、网页搜索等能力后会在这里列出，并进行模型与超时配置。"
-          action-text="前往模型与接入配置 →"
-          min
-          @action="goConfig"
-        />
       </div>
+
+      <MkEmptyState
+        v-if="!capabilityRows.length && !loading"
+        icon="⌥"
+        title="暂无外挂能力"
+        description="后续接入生图、网页搜索等能力后会在这里列出，并进行模型与超时配置。"
+        action-text="前往模型与接入配置 →"
+        min
+        @action="goConfig"
+      />
     </div>
 
     <!-- ② MCP 服务 -->
@@ -544,10 +529,36 @@ function goConfig() {
 .add-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
 
-/* 能力列：主名 + ID 双行，最小宽度兜底（原 51px 截断至 1-2 字符；并栏/窄卡下不被其余列挤压，
-   超宽时由 .mk-table-scroll 横向滚动承接） */
-.mk-table th:first-child,
-.mk-table td:first-child { min-width: 160px; }
+/* 外挂能力卡片栅格（原型 index.html:1814-1817：auto-fit 240 的 card grid，box-shadow:none）。
+   tbody 承载网格、行即卡；卡内为纵向 od-stack，操作收底行右侧。 */
+.ac-cap-grid { padding: 4px 16px 16px; }
+.ac-cap-table { display: block; width: 100%; border-collapse: collapse; }
+.ac-cap-table tbody {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.ac-cap-card { display: block; }
+.ac-cap-card__cell {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  background: var(--mk-surface);
+}
+.ac-cap-card__top { display: flex; align-items: center; gap: 8px; }
+.ac-cap-card__main { flex: 1 1 auto; min-width: 0; }
+.ac-cap-card__state { flex: none; }
+.ac-cap-card__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.ac-cap-card__kv {
+  color: var(--mk-muted);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ac-cap-card__foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 
 /* E3 并栏容器：默认单列全宽；内容少时 1fr 1fr 并排 */
 .ac-cards {
@@ -587,13 +598,6 @@ function goConfig() {
 .ac-mcp__test { font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }
 .ac-mcp__test.is-ok { color: var(--mk-green); }
 .ac-mcp__test.is-bad { color: var(--mk-red); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
-/* 模型列：长模型名单行截断（上限 --mk-col-model-wide 140px + title 全值；原 57px 无截断越界源） */
-.ac-model {
-  max-width: var(--mk-col-model-wide);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .ac-mcp__endpoint {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);

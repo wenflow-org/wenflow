@@ -6,10 +6,10 @@
  *    Orchestrator.vue 编排图节点点击 openSubPage('skill')；两者均不再引用 SkillDrawer
  *  - hero：S 头像 / 技能名 / 归属 Agent · 类别副文 / 健康+类别+模型+版本 pills / 真实动作
  *  - 6 页签（协议 / 试跑 / 版本 / 运行时 / 工程 / 字段路由，原型 dtab 组 skill）
- *  - 协议：输入/输出契约 vrow（真实字段路由 fields 拆分）+ System Prompt 代码卡
+ *  - 协议：输入/输出契约 vrow（真实字段路由 fields 拆分）+ 回合状态机/终止条件空态 + System Prompt 代码卡
  *  - Prompt 编辑是弹层（原型 openPromptModal：modal modal--wide），Esc/关闭可收
- *  - 原型有而后端没有的展示项（回合状态机 / 终止条件 / 试跑对比评分 / 版本日期作者 /
- *    仓库值班 SLO / 脱敏列）不渲染，不硬造
+ *  - 原型有而后端没有数据源的展示块一律空态/省略（回合状态机 / 终止条件 / 执行链路 /
+ *    试跑对比 / 依赖与发布 / 运行时限制 / 版本日期作者 / 脱敏列），不硬造
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -254,12 +254,12 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('协议页签：输入/输出契约 vrow（真实字段拆分）+ System Prompt 代码卡；状态机/终止条件等无源项不渲染', async () => {
+  it('协议页签：输入/输出契约 vrow（真实字段拆分）+ 回合状态机/终止条件空态 + System Prompt 代码卡', async () => {
     const w = mountDetail()
     await settle()
 
     const cards = w.findAll('.skd-pane .mk-card__title').map((t) => t.text())
-    expect(cards).toEqual(['输入契约', '输出契约', 'System Prompt'])
+    expect(cards).toEqual(['输入契约', '输出契约', '回合状态机', '终止条件', 'System Prompt'])
 
     // 输入 = 非产出角色字段（hard-required）；输出 = proposal-output / public-reply 等产出角色
     const ins = w.findAll('.skd-vrow')
@@ -275,9 +275,11 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     // System Prompt：生效内容代码卡 + 截断说明不误报
     expect(w.find('.skd-code').text()).toContain('SYSTEM PROMPT BODY')
     expect(w.text()).not.toContain('已截断')
-    // 原型有而后端无数据源的块不渲染（不硬造）
-    expect(w.text()).not.toContain('回合状态机')
-    expect(w.text()).not.toContain('终止条件')
+    // 回合状态机 / 终止条件：core YAML 无 stateMachine/states/termination/limits → 明确空态（不硬造）
+    expect(w.text()).toContain('回合状态机')
+    expect(w.text()).toContain('暂无回合状态机数据')
+    expect(w.text()).toContain('终止条件')
+    expect(w.text()).toContain('暂无终止条件')
 
     w.unmount()
   })
@@ -333,6 +335,9 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(testSkillMock).toHaveBeenCalledWith('skill-a', { input: '讲讲 p 值' })
     expect(w.find('.skd-code--tall').text()).toContain('explain')
     expect(w.text()).toContain('上次试跑 成功')
+    // 执行链路：testSkill 仅回最终输出（无逐步 steps）→ 空态注明
+    expect(w.text()).toContain('执行链路')
+    expect(w.text()).toContain('本次试跑仅返回最终输出')
     // 原型「试跑对比」评分（ranklist 百分比）后端无此数据，不渲染
     expect(w.text()).not.toContain('试跑对比')
     expect(w.text()).not.toContain('结构完整')
@@ -379,6 +384,8 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     // 模型测试（SkillDrawer 迁入）
     expect(w.text()).toContain('模型测试')
     expect(w.text()).toContain('开始探测')
+    // 运行时限制：无独立 requestTimeoutMs（cfg 未回超时值时为 null）→ 空态注明
+    expect(w.text()).toContain('运行时限制')
     // 最近调用（SkillDrawer 概览迁入）：无日志窗口数据 → 明确空态
     expect(w.text()).toContain('最近调用')
     expect(w.text()).toContain('日志窗口内无调用')
@@ -396,6 +403,9 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.text()).toContain('skill-a')
     expect(w.text()).toContain('教学 Agent')
     expect(w.text()).toContain('prompts/skill.teaching.md')
+    // 依赖与发布：core YAML 无 inputs / 发布流后端无阶段状态 → 空态（依赖 chips 与 feed 不硬造）
+    expect(w.text()).toContain('依赖与发布')
+    expect(w.text()).toContain('暂无依赖清单')
     expect(w.text()).not.toContain('代码仓库')
     expect(w.text()).not.toContain('值班')
     expect(w.text()).not.toContain('SLI / SLO')

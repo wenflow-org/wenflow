@@ -72,22 +72,56 @@
               </div>
             </section>
           </div>
+          <!-- 回合状态机：原型 renderSkillDetail 2384-2386（.steps/.step 圆点序列）；core YAML 无该字段 → 空态 -->
           <section class="mk-card">
             <div class="mk-card__head">
-              <h3 class="mk-card__title">System Prompt</h3>
-              <div class="mk-card__head-right">
-                <span class="mk-card__meta">{{ promptStateText }}</span>
-                <button type="button" class="mk-btn mk-btn--sm" @click="openPromptModal">编辑 Prompt</button>
-              </div>
+              <h3 class="mk-card__title">回合状态机</h3>
+              <span class="mk-card__meta">{{ coreStateNodes.length ? `${coreStateNodes.length} 个状态` : '无状态机声明' }}</span>
             </div>
             <div class="skd-pad">
-              <pre class="skd-code">{{ systemPromptCap || (promptFailed ? '生效 Prompt 加载失败，请刷新重试。' : '暂无生效 Prompt。') }}</pre>
-              <p v-if="promptTruncated" class="skd-none">已截断：仅显示前 1200 字（共 {{ promptLen }} 字），完整内容在设计页查看。</p>
+              <div v-if="coreStateNodes.length" class="skd-steps">
+                <div
+                  v-for="(n, i) in coreStateNodes"
+                  :key="`${n}-${i}`"
+                  class="skd-step"
+                  :aria-current="i === 0 ? 'true' : undefined"
+                >
+                  <span class="skd-step__n">{{ i + 1 }}</span>{{ n }}
+                </div>
+              </div>
+              <p v-else class="skd-none">core YAML 未声明 stateMachine / states 字段，暂无回合状态机数据。</p>
             </div>
           </section>
+          <div class="skd-grid">
+            <!-- 终止条件：原型 renderSkillDetail 2388-2390（.ranklist/.rankrow）；core YAML 无该字段 → 空态 -->
+            <section class="mk-card">
+              <div class="mk-card__head">
+                <h3 class="mk-card__title">终止条件</h3>
+              </div>
+              <div class="skd-pad">
+                <div v-if="coreTerminations.length" class="skd-ranklist">
+                  <div v-for="(t, i) in coreTerminations" :key="`${t}-${i}`" class="skd-rankrow">{{ t }}</div>
+                </div>
+                <p v-else class="skd-none">core YAML 未声明 termination / limits 字段，暂无终止条件。</p>
+              </div>
+            </section>
+            <section class="mk-card">
+              <div class="mk-card__head">
+                <h3 class="mk-card__title">System Prompt</h3>
+                <div class="mk-card__head-right">
+                  <span class="mk-card__meta">{{ promptStateText }}</span>
+                  <button type="button" class="mk-btn mk-btn--sm" @click="openPromptModal">编辑 Prompt</button>
+                </div>
+              </div>
+              <div class="skd-pad">
+                <pre class="skd-code">{{ systemPromptCap || (promptFailed ? '生效 Prompt 加载失败，请刷新重试。' : '暂无生效 Prompt。') }}</pre>
+                <p v-if="promptTruncated" class="skd-none">已截断：仅显示前 1200 字（共 {{ promptLen }} 字），完整内容在设计页查看。</p>
+              </div>
+            </section>
+          </div>
         </template>
 
-        <!-- ========== 试跑（原型 trial：样例输入 textarea + 输出 code；执行链路/对比评分后端无此数据，不硬造） ========== -->
+        <!-- ========== 试跑（原型 trial：样例输入 textarea + 执行链路 vrow + 输出 code + 试跑对比 ranklist） ========== -->
         <template v-else-if="tab === 'trial'">
           <div class="skd-grid">
             <section class="mk-card">
@@ -109,6 +143,24 @@
                 <p v-if="trialError" class="skd-error">{{ trialError }}</p>
               </div>
             </section>
+            <!-- 执行链路：原型 renderSkillDetail 2332-2335（vrow：OK/ERR pill + 步骤名 + ms）；
+                 真实试跑仅回最终输出（testSkill → output/success/duration），无逐步链路 → 空态注明 -->
+            <section class="mk-card">
+              <div class="mk-card__head">
+                <h3 class="mk-card__title">执行链路</h3>
+                <span class="mk-card__meta">{{ trialSteps.length ? `${trialSteps.length} 步` : '—' }}</span>
+              </div>
+              <div class="skd-pad skd-rows">
+                <div v-for="(s, i) in trialSteps" :key="`${s.label}-${i}`" class="skd-vrow">
+                  <span class="mk-badge" :class="s.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ s.ok ? 'OK' : 'ERR' }}</span>
+                  <span class="skd-vrow__desc skd-vrow__desc--strong" :title="s.label">{{ s.label }}</span>
+                  <span class="mono skd-vrow__type">{{ s.ms != null ? `${s.ms} ms` : '—' }}</span>
+                </div>
+                <p v-if="!trialSteps.length" class="skd-none">{{ trialResult ? '本次试跑仅返回最终输出（无逐步链路数据）。' : '试跑后展示执行链路。' }}</p>
+              </div>
+            </section>
+          </div>
+          <div class="skd-grid">
             <section class="mk-card">
               <div class="mk-card__head">
                 <h3 class="mk-card__title">样例输出</h3>
@@ -118,11 +170,29 @@
                 <pre class="skd-code skd-code--tall">{{ trialOutputText || '尚无试跑结果：在左侧输入 JSON 后点「试跑」。' }}</pre>
               </div>
             </section>
+            <!-- 试跑对比：原型 renderSkillDetail 2338-2341（meterrow 维度分）；有评分才渲染 -->
+            <section v-if="trialDims.length" class="mk-card">
+              <div class="mk-card__head">
+                <h3 class="mk-card__title">试跑对比</h3>
+              </div>
+              <div class="skd-pad">
+                <div class="skd-ranklist">
+                  <div v-for="d in trialDims" :key="d.label" class="skd-rankrow">
+                    <div class="skd-meterrow">
+                      <span class="skd-meterrow__label">{{ d.label }}</span>
+                      <span class="skd-meter"><i :style="{ width: `${d.pct}%` }"></i></span>
+                      <span class="mono skd-meterrow__val">{{ d.pct }}%</span>
+                    </div>
+                  </div>
+                </div>
+                <p class="skd-none">试跑在隔离沙箱执行，不写入生产数据，结果仅供调试参考。</p>
+              </div>
+            </section>
           </div>
           <p class="skd-note">试跑直接调用该 Skill 的真实 handler 执行；重跑日志、ACTIVE Prompt 参照等完整诊断在设计页「试跑」页签。</p>
         </template>
 
-        <!-- ========== 版本（原型 versions：.tbl 表格；日期/作者/回滚后端未随列表返回，不硬造） ========== -->
+        <!-- ========== 版本（原型 versions：.tbl 表格；日期/作者/变更说明有字段才补列，回滚投设计页） ========== -->
         <template v-else-if="tab === 'versions'">
           <section class="mk-card">
             <div class="mk-card__head">
@@ -135,12 +205,23 @@
             <div class="skd-tablewrap">
               <table v-if="versions.length" class="mk-table">
                 <thead>
-                  <tr><th>版本</th><th>名称</th><th>状态</th></tr>
+                  <tr>
+                    <th>版本</th>
+                    <th>名称</th>
+                    <!-- 原型 versions 表含 日期/作者/变更说明（index.html 2344-2346）：列表返回了才补列，空则省略 -->
+                    <th v-if="hasVersionMeta">日期</th>
+                    <th v-if="hasVersionMeta">作者</th>
+                    <th v-if="hasVersionMeta" class="skd-th-wrap">变更说明</th>
+                    <th>状态</th>
+                  </tr>
                 </thead>
                 <tbody>
                   <tr v-for="v in versions" :key="v.id">
                     <td class="mono">v{{ v.version }}</td>
                     <td>{{ v.name || '—' }}</td>
+                    <td v-if="hasVersionMeta" class="mono">{{ fmtDate(v.createdAt) }}</td>
+                    <td v-if="hasVersionMeta">{{ v.createdBy || '—' }}</td>
+                    <td v-if="hasVersionMeta" class="skd-td-wrap">{{ v.description || '—' }}</td>
                     <td><span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">{{ versionStatusText(v.status) }}</span></td>
                   </tr>
                 </tbody>
@@ -160,25 +241,42 @@
 
         <!-- ========== 运行时（原型 runtime：指标卡 + 模型与路由 + 保存配置；SkillDrawer 的配置/探测/最近调用迁入此页签） ========== -->
         <template v-else-if="tab === 'runtime'">
+          <!-- 原型 renderSkillDetail 2349-2350：4 张独立 metricCard（KPI label/value/foot），非合体指标格 -->
           <div class="skd-metrics" role="list" aria-label="运行指标">
-            <div class="skd-metric" role="listitem">
+            <section class="mk-card skd-metric" role="listitem">
               <span class="skd-metric__label">调用次数</span>
               <strong class="skd-metric__value">{{ stat.calls }}</strong>
-            </div>
-            <div class="skd-metric" role="listitem">
+            </section>
+            <section class="mk-card skd-metric" role="listitem">
               <span class="skd-metric__label">失败</span>
               <strong class="skd-metric__value" :class="{ 'is-bad': stat.calls > 0 && stat.errors > 0 }">{{ stat.calls ? stat.errors : '—' }}</strong>
-            </div>
-            <div class="skd-metric" role="listitem">
+            </section>
+            <section class="mk-card skd-metric" role="listitem">
               <span class="skd-metric__label">成功率</span>
               <strong class="skd-metric__value" :class="rateTone ? `is-${rateTone}` : ''">{{ successRate }}</strong>
-            </div>
-            <div class="skd-metric" role="listitem">
+            </section>
+            <section class="mk-card skd-metric" role="listitem">
               <span class="skd-metric__label">平均耗时</span>
               <strong class="skd-metric__value">{{ stat.calls ? fmtMs(stat.avgMs) : '—' }}</strong>
-            </div>
+            </section>
           </div>
           <p v-if="statsNote" class="skd-note">统计口径：{{ statsNote }}</p>
+          <!-- 运行时限制：原型 renderSkillDetail 2355-2357（dl.kv）；后端逐 skill 仅 requestTimeoutMs 可得，其余空态 -->
+          <section class="mk-card">
+            <div class="mk-card__head">
+              <h3 class="mk-card__title">运行时限制</h3>
+              <span class="mk-card__meta">{{ runtimeLimits.length ? `${runtimeLimits.length} 项` : '无独立限制' }}</span>
+            </div>
+            <div class="skd-pad">
+              <div v-if="runtimeLimits.length" class="skd-kv">
+                <div v-for="r in runtimeLimits" :key="r.k" class="skd-kv__row">
+                  <span class="skd-kv__k">{{ r.k }}</span>
+                  <span class="mono skd-kv__v">{{ r.v }}</span>
+                </div>
+              </div>
+              <p v-else class="skd-none">后端未返回该 Skill 的独立运行时限制（仅 skill_model_configs.requestTimeoutMs 一项可得）。</p>
+            </div>
+          </section>
           <div class="skd-grid">
             <!-- 模型配置（SkillDrawer「模型配置」页签整体迁入：skill_model_configs CRUD） -->
             <section class="mk-card">
@@ -301,7 +399,7 @@
           </section>
         </template>
 
-        <!-- ========== 工程（原型 engineering：工程信息 kv；仓库/值班/SLO/依赖后端未返回，不硬造） ========== -->
+        <!-- ========== 工程（原型 engineering：工程信息 kv + 依赖与发布 chips/feed） ========== -->
         <template v-else-if="tab === 'engineering'">
           <div class="skd-grid">
             <section class="mk-card">
@@ -320,10 +418,17 @@
             </section>
             <section class="mk-card">
               <div class="mk-card__head">
-                <h3 class="mk-card__title">协议规则与依赖</h3>
+                <h3 class="mk-card__title">依赖与发布</h3>
+                <span class="mk-card__meta">{{ coreDeps.length ? `${coreDeps.length} 项上游依赖` : '无依赖声明' }}</span>
               </div>
               <div class="skd-pad skd-stack">
-                <p class="skd-none">完整工程视图（协议规则 / 依赖视图 / 发布流水）由设计页「工程」页签承载。</p>
+                <!-- 原型 renderSkillDetail 2367-2371（chips + feed）：依赖取 core YAML inputs 的 skill:/sandbox: 引用 -->
+                <div v-if="coreDeps.length" class="skd-chips">
+                  <span v-for="d in coreDeps" :key="d" class="mk-badge mk-badge--muted mono" :title="d">{{ d }}</span>
+                </div>
+                <p v-else class="skd-none">core YAML 未声明输入依赖（inputs 的 skill:/sandbox: 引用），暂无依赖清单。</p>
+                <!-- 四段发布流（草稿/评审/灰度/回滚）后端无阶段状态接口 → 空态；本系统发布链见设计页「协议」页签 -->
+                <p class="skd-none">发布流（草稿 / 评审 / 灰度 / 回滚）阶段状态后端未提供；本系统发布链为「保存并编译 → 发布」。</p>
                 <div class="skd-actions">
                   <button type="button" class="mk-btn mk-btn--primary" @click="goDesign('engineering')">打开工程视图 →</button>
                 </div>
@@ -332,7 +437,9 @@
           </div>
         </template>
 
-        <!-- ========== 字段路由（原型 fields：字段流转表格 + note） ========== -->
+        <!-- ========== 字段路由（原型 fields：字段流转表格 + note）
+             列形差异：原型 5 列 = 字段/来源/目标/转换规则/脱敏（index.html 2374-2377）；
+             本表 6 列把「来源+目标」并在「流向」、把脱敏并进属性 badges；仅当后端下发 masked 布尔才补「脱敏」列。 ========== -->
         <template v-else>
           <section class="mk-card">
             <div class="mk-card__head">
@@ -345,7 +452,10 @@
             <div class="skd-tablewrap">
               <table v-if="routingRows.length" class="mk-table">
                 <thead>
-                  <tr><th>字段</th><th>角色</th><th class="skd-th-wrap">说明</th><th>流向</th><th>渲染</th><th>属性</th></tr>
+                  <tr>
+                    <th>字段</th><th>角色</th><th class="skd-th-wrap">说明</th><th>流向</th><th>渲染</th><th>属性</th>
+                    <th v-if="hasMaskedCol">脱敏</th>
+                  </tr>
                 </thead>
                 <tbody>
                   <tr v-for="r in routingRows" :key="`${r.agentId}:${r.fieldId}`">
@@ -358,6 +468,9 @@
                       <span v-if="r.internal" class="mk-badge mk-badge--flow-internal">内部</span>
                       <span v-if="r.accumulate" class="mk-badge mk-badge--flow-accumulate">累计</span>
                       <span v-if="!r.internal && !r.accumulate" class="mk-na">—</span>
+                    </td>
+                    <td v-if="hasMaskedCol">
+                      <span class="mk-badge" :class="r.masked ? 'mk-badge--warn' : 'mk-badge--muted'">{{ r.masked ? '已脱敏' : '明文' }}</span>
                     </td>
                   </tr>
                 </tbody>
@@ -432,9 +545,13 @@
  * → 单张卡内 6 个 subtab（协议 / 试跑 / 版本 / 运行时 / 工程 / 字段路由，dtab 组 skill）
  * → Prompt 编辑是弹层（openPromptModal：modal modal--wide），不是页签。
  * 数据口径：全部来自现有接口的真实字段——live 注册表档案 + workbench meta +
- * effective-prompt + skill_model_configs + model-probe + 字段路由 + Prompt 版本；
- * 原型有而后端没有的展示项（回合状态机 / 终止条件 / 试跑对比评分 / 仓库与值班 /
- * 依赖 chips / 版本日期作者 / 脱敏列）一律不渲染，绝不硬造。
+ * effective-prompt + skill_model_configs + model-probe + 字段路由 + Prompt 版本 + core YAML；
+ * 原型有而后端没有数据源的展示项一律空态并注明来源缺失（回合状态机 / 终止条件 / 执行链路 /
+ * 试跑对比 / 依赖 chips / 四段发布流 / 运行时限制 / 脱敏列 / 版本日期作者），绝不硬造：
+ *  - 回合状态机 / 终止条件 / 依赖 chips：防御式读 core YAML（stateMachine/states/termination/limits/inputs），
+ *    当前 CoreFile schema 无这些字段 → 空态；
+ *  - 执行链路 / 试跑对比：testSkill 仅回 output/success/duration → 执行链路空态、试跑对比整卡省略；
+ *  - 四段发布流：后端无阶段状态接口 → 空态；
  * 功能口径：SkillDrawer 的四页签能力全部迁入对应页签（概览→运行时指标+最近调用、
  * Prompt→协议页签 System Prompt 卡、模型配置/模型测试→运行时页签），
  * 深度编辑（协议发布 / 版本回滚 / 字段路由编辑）仍由 /admin/skills/:id 设计页承载，
@@ -449,7 +566,8 @@ import {
   adminSkillWorkbenchApi,
   adminFieldRoutingsApi,
   adminAgentPromptsApi,
-  adminPromptOpsApi
+  adminPromptOpsApi,
+  adminPromptWorkbenchApi
 } from '@/api/adminApi'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
@@ -597,7 +715,7 @@ const successRate = computed(() => {
 const fmtMs = (ms: number | null | undefined) => (ms == null || ms === undefined ? '—' : ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
 
 /* ===== 字段路由（协议页签输入/输出契约 + 字段路由页签表格） ===== */
-interface FieldRow { fieldId: string; promptRole?: string; valueType?: string; description?: string }
+interface FieldRow { fieldId: string; promptRole?: string; valueType?: string; description?: string; masked?: boolean }
 interface RoutingRow { agentId: string; fieldId: string; render: string; handoff: string[]; internal: boolean; accumulate: boolean; notes?: string }
 interface RoleMeta { id: string; label: string; hint?: string }
 interface RoutingsData {
@@ -645,18 +763,31 @@ const routingRows = computed(() => {
       handoffText,
       render: r.render === 'hidden' ? 'hidden' : 'visible',
       internal: !!r.internal,
-      accumulate: !!r.accumulate
+      accumulate: !!r.accumulate,
+      // 原型「脱敏」列语义（index.html 2374-2377）：后端 field-routings 无 masked 布尔 → 列不渲染
+      masked: typeof f?.masked === 'boolean' ? f.masked : undefined
     }
   })
 })
+/** 原型字段路由 5 列（字段/来源/目标/转换规则/脱敏）vs 本表 6 列（来源+目标并在「流向」、脱敏变属性 badges）：
+   仅当后端真的下发了 masked 布尔才补出「脱敏」列，否则保持现状并省略（无数据不硬造）。 */
+const hasMaskedCol = computed(() => routingRows.value.some((r) => typeof r.masked === 'boolean'))
 const routingRowsStateText = computed(() => {
   if (routingsLoading.value) return '加载中…'
   if (routingsFailed.value) return '加载失败'
   return `${routingRows.value.length} 行`
 })
 
-/* ===== Prompt 版本（版本页签；日期/作者后端未随列表返回，不渲染） ===== */
-interface VersionItem { id: string; version: string | number; status: string; name: string }
+/* ===== Prompt 版本（版本页签；日期/作者/变更说明取自 agent-prompts 列表真实字段，有才补列） ===== */
+interface VersionItem {
+  id: string
+  version: string | number
+  status: string
+  name: string
+  createdAt: string
+  createdBy: string
+  description: string
+}
 const versions = ref<VersionItem[]>([])
 const versionsLoading = ref(false)
 const versionsFailed = ref(false)
@@ -666,9 +797,77 @@ const versionsStateText = computed(() => {
   return `共 ${versions.value.length} 个`
 })
 const versionStatusText = (s: string) => (s === 'ACTIVE' ? '生效' : s === 'DRAFT' ? '草稿' : s || '—')
+/** 原型 versions 表含 日期/作者/变更说明（index.html 2344-2346）；三项均空则省略列 */
+const hasVersionMeta = computed(() => versions.value.some((v) => v.createdAt || v.createdBy || v.description))
+const fmtDate = (v?: string) => {
+  if (!v) return '—'
+  const t = new Date(v).getTime()
+  return Number.isNaN(t) ? '—' : new Date(t).toLocaleDateString('zh-CN')
+}
 
 /* ===== core 文件路径（工程页签；prompt-ops agent-overview 真实字段） ===== */
 const coreFilePath = ref('')
+
+/* ===== core YAML 投影（协议页签「回合状态机 / 终止条件」+ 工程页签「依赖」） =====
+   原型 SKILL_STATE_MACHINE / SKILL_TERMINATIONS / SKILL_ENGINEERING.deps（index.html 1229-1250）
+   的数据取 core YAML（prompt-lab getCore）；当前 CoreFile schema 无 stateMachine / states /
+   termination / limits 字段 → 一律空态，不硬造（字段名按原型口径做防御式读取，便于后续后端补齐）。 */
+interface CoreInputRef { ref?: string; kind?: string }
+interface CoreSnap {
+  stateMachine?: unknown
+  states?: unknown
+  termination?: unknown
+  terminations?: unknown
+  limits?: unknown
+  inputs?: CoreInputRef[]
+}
+const coreSnap = ref<CoreSnap | null>(null)
+
+/** 任意形状 → 字符串列表（原型 steps/ranklist 只吃字符串；对象键值转「键：值」，对象项取 name/label） */
+function toStringList(raw: unknown): string[] {
+  if (raw == null) return []
+  if (typeof raw === 'string') return raw.trim() ? [raw.trim()] : []
+  if (Array.isArray(raw)) {
+    return raw
+      .map((x) => {
+        if (x == null) return ''
+        if (typeof x === 'string') return x
+        if (typeof x === 'object') {
+          const o = x as Record<string, unknown>
+          return String(o.name ?? o.label ?? o.title ?? o.state ?? o.id ?? '')
+        }
+        return String(x)
+      })
+      .filter(Boolean)
+  }
+  if (typeof raw === 'object') {
+    return Object.entries(raw as Record<string, unknown>).map(([k, v]) => `${k}：${v == null ? '—' : String(v)}`)
+  }
+  return [String(raw)]
+}
+
+/** 回合状态机节点（原型 steps 圆点序列，index.html 2384-2386）；无字段 → [] */
+const coreStateNodes = computed<string[]>(() => {
+  const c = coreSnap.value
+  return c ? toStringList(c.stateMachine ?? c.states) : []
+})
+/** 终止条件（原型 ranklist，index.html 2388-2390）；无字段 → [] */
+const coreTerminations = computed<string[]>(() => {
+  const c = coreSnap.value
+  return c ? toStringList(c.termination ?? c.terminations ?? c.limits) : []
+})
+/** 上游依赖（原型 chips，index.html 2368）：core.inputs 的 skill:/sandbox: 引用即依赖边 */
+const coreDeps = computed<string[]>(() => {
+  const out: string[] = []
+  for (const i of coreSnap.value?.inputs || []) {
+    const ref = String(i?.ref || '').trim()
+    const m = /^(skill|sandbox):([^.\s]+)/.exec(ref)
+    if (!m) continue
+    const label = `${m[1]}:${m[2]}`
+    if (!out.includes(label)) out.push(label)
+  }
+  return out
+})
 
 /* ===== 总加载（各域独立容错：单域失败不拖垮整页，页签内给出局部错误态） ===== */
 let loadSeq = 0
@@ -739,7 +938,10 @@ async function load(force = false) {
           id: String(v.id || ''),
           version: (v.version as string | number) ?? '—',
           status: String(v.status || '—'),
-          name: String(v.name || '')
+          name: String(v.name || ''),
+          createdAt: v.createdAt ? String(v.createdAt) : '',
+          createdBy: v.createdBy ? String(v.createdBy) : '',
+          description: v.description ? String(v.description) : ''
         }))
       } catch {
         if (guard(true)) { versions.value = []; versionsFailed.value = true }
@@ -758,6 +960,16 @@ async function load(force = false) {
         coreFilePath.value = String(found?.file?.path || '')
       } catch {
         if (guard(true)) coreFilePath.value = ''
+      }
+    })(),
+    // core YAML 投影（协议页签状态机/终止条件 + 工程页签依赖；prompt-lab getCore）
+    (async () => {
+      try {
+        const res = await adminPromptWorkbenchApi.getCore(id)
+        if (!guard(true)) return
+        coreSnap.value = (res.data?.core ?? null) as CoreSnap | null
+      } catch {
+        if (guard(true)) coreSnap.value = null
       }
     })()
   ]
@@ -792,12 +1004,57 @@ const statusDotLabel = (s: string) => (s === 'ok' ? '成功' : s === 'err' ? '�
 /* ===== 试跑（试跑页签；adminSkillsApi.testSkill 与设计页 trial-tab 同一接口） ===== */
 const trialInput = ref('{\n  "input": "用一句话介绍你自己"\n}')
 const trialRunning = ref(false)
-const trialResult = ref<{ success?: boolean; duration?: number; cached?: boolean; output?: unknown; data?: unknown } | null>(null)
+/** steps/dimensions/scores 为原型「执行链路 / 试跑对比」防御式读取字段；当前 testSkill 只回最终输出 → 均空 */
+const trialResult = ref<{
+  success?: boolean
+  duration?: number
+  cached?: boolean
+  output?: unknown
+  data?: unknown
+  steps?: unknown
+  dimensions?: unknown
+  scores?: unknown
+} | null>(null)
 const trialError = ref('')
 const trialOutputText = computed(() => {
   if (!trialResult.value) return ''
   const payload = trialResult.value.output ?? trialResult.value.data ?? trialResult.value
   return typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2)
+})
+/** 执行链路（原型 vrow：OK/ERR pill + 步骤名 + ms，index.html 2332-2335）：真实试跑无逐步链路 → [] */
+interface TrialStep { label: string; ms?: number; ok: boolean }
+const trialSteps = computed<TrialStep[]>(() => {
+  const raw = (trialResult.value as Record<string, unknown> | null)?.steps
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((s): TrialStep => {
+      const o = (s || {}) as Record<string, unknown>
+      const msRaw = o.ms ?? o.durationMs
+      return {
+        label: String(o.name ?? o.t ?? o.step ?? o.title ?? ''),
+        ms: msRaw == null ? undefined : Number(msRaw),
+        ok: o.ok !== false && o.success !== false && o.status !== 'error' && o.error == null
+      }
+    })
+    .filter((s) => !!s.label)
+})
+/** 试跑对比维度分（原型 meterrow，index.html 2338-2341）：有评分才渲染，无则整卡省略 */
+interface TrialDim { label: string; pct: number }
+const trialDims = computed<TrialDim[]>(() => {
+  const raw = (trialResult.value as Record<string, unknown> | null)?.dimensions ?? (trialResult.value as Record<string, unknown> | null)?.scores
+  const out: TrialDim[] = []
+  const push = (label: string, num: number) => {
+    if (label && Number.isFinite(num)) out.push({ label, pct: Math.round(num <= 1 ? num * 100 : num) })
+  }
+  if (Array.isArray(raw)) {
+    for (const d of raw) {
+      const o = (d || {}) as Record<string, unknown>
+      push(String(o.name ?? o.label ?? o.dimension ?? ''), Number(o.score ?? o.value ?? o.pct))
+    }
+  } else if (raw && typeof raw === 'object') {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) push(k, Number(v))
+  }
+  return out
 })
 function resetTrial() {
   trialRunning.value = false
@@ -850,6 +1107,14 @@ const rtForm = ref<RtForm>(defaultRtForm())
 const rtSaving = ref(false)
 const rtMsg = ref('')
 const rtErr = ref(false)
+
+/** 运行时限制 kv（原型 SKILL_RUNTIME_LIMITS，index.html 2355-2357）：后端逐 skill 仅 requestTimeoutMs 可得 */
+const runtimeLimits = computed<Array<{ k: string; v: string }>>(() => {
+  const rows: Array<{ k: string; v: string }> = []
+  const ms = rtForm.value.requestTimeoutMs
+  if (ms != null) rows.push({ k: '请求超时', v: `${ms} ms` })
+  return rows
+})
 
 async function loadRuntimeConfig(id: string, guard: (ok: boolean) => boolean) {
   try {
@@ -1000,6 +1265,7 @@ watch(
     versionsLoading.value = false
     versionsFailed.value = false
     coreFilePath.value = ''
+    coreSnap.value = null
     notFound.value = false
     tab.value = 'protocol'
     resetTrial()
@@ -1062,7 +1328,59 @@ useEscape(
 .skd-vrow:last-child { border-bottom: 0; }
 .skd-vrow__name { font-weight: 700; flex: none; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skd-vrow__desc { flex: 1; min-width: 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skd-vrow__desc--strong { color: var(--mk-ink); font-weight: 600; }
 .skd-vrow__type { flex: none; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+
+/* ===== 协议：回合状态机 steps（原型 .steps/.step，index.html 434-439） ===== */
+.skd-steps { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.skd-step { display: flex; align-items: center; gap: 6px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.skd-step__n {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--mk-surface-3);
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+}
+.skd-step[aria-current='true'] { color: var(--mk-blue); font-weight: 600; }
+.skd-step[aria-current='true'] .skd-step__n { background: var(--mk-blue); color: var(--mk-surface); }
+
+/* ===== 协议/试跑：ranklist 与 meterrow（原型 .ranklist/.rankrow/.meter，index.html 297-302 / 2340） ===== */
+.skd-ranklist { display: grid; gap: 2px; }
+.skd-rankrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--mk-line);
+  min-width: 0;
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-micro);
+}
+.skd-rankrow:last-child { border-bottom: 0; }
+.skd-meterrow { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; }
+.skd-meterrow__label { flex: none; min-width: 72px; }
+.skd-meterrow__val { flex: none; width: 44px; text-align: right; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
+.skd-meter { flex: 1; min-width: 60px; height: 6px; border-radius: 999px; background: var(--mk-surface-3); overflow: hidden; }
+.skd-meter i { display: block; height: 100%; background: var(--mk-blue); }
+
+/* ===== 工程：依赖 chips / 运行时限制 kv（原型 .chips/.kv，index.html 2368 / 2355） ===== */
+.skd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.skd-kv { display: grid; gap: 0; }
+.skd-kv__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--mk-line);
+  font-size: var(--mk-fs-micro);
+}
+.skd-kv__row:last-child { border-bottom: 0; }
+.skd-kv__k { color: var(--mk-muted); }
+.skd-kv__v { color: var(--mk-ink); }
 
 /* ===== 代码井（原型 .code：深底 mono 块；System Prompt / 试跑输出 / 探测预览共用） ===== */
 .skd-code {
@@ -1092,10 +1410,9 @@ useEscape(
 .skd-tablewrap .mk-table .skd-td-wrap { white-space: normal; min-width: 160px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .skd-tablewrap .mk-table th.skd-th-wrap { white-space: normal; }
 
-/* ===== 运行时：指标格（原型 metricCard 四格） ===== */
-.skd-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); overflow: hidden; background: var(--mk-surface); }
+/* ===== 运行时：指标卡（原型 metricCard 四张独立卡，index.html 1704 / 2349-2350） ===== */
+.skd-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .skd-metric { display: grid; gap: 4px; padding: 12px 16px; }
-.skd-metric + .skd-metric { border-left: 1px solid var(--mk-line); }
 .skd-metric__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .skd-metric__value {
   font-family: var(--mk-mono);

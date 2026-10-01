@@ -14,19 +14,34 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="nt-filter">
-          <select v-model="kindFilter" class="mk-filter__select" @change="reload">
+          <select v-model="kindFilter" class="mk-filter__select" @change="reloadFromFirstPage">
             <option value="">全部类型</option>
             <option value="system">系统</option>
             <option value="announcement">公告提醒</option>
             <option value="achievement">成就</option>
           </select>
           <label class="mk-field--switch">
-            <input v-model="unreadOnly" type="checkbox" @change="reload" />
+            <input v-model="unreadOnly" type="checkbox" @change="reloadFromFirstPage" />
             <span class="mk-field__label" style="margin:0">仅未读</span>
           </label>
           <span class="nt-boundary" title="全站横幅公告请到「公告」页管理">横幅公告 → 公告页</span>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
         </div>
+      </div>
+
+      <!-- 已读率聚合行（原型 1900-1904 表内「已读率」meter+mono% 列）。
+           粒度差：原型是「投放批次」级聚合（一行一批次），本页数据是逐用户通知
+           （粒度更细，行级已读点保留）；此处据服务端 total/unreadTotal 在同筛选域内
+           补一条聚合已读率，形态对齐原型 meterrow，不改变逐用户明细。 -->
+      <div v-if="!failed && total > 0" class="nt-rate">
+        <span class="nt-rate__label">已读率</span>
+        <span class="nt-rate__bar">
+          <span class="mk-minibar" role="img" :aria-label="`已读率 ${readRate}%`">
+            <i class="mk-minibar__fill" :style="{ width: readRate + '%' }"></i>
+          </span>
+        </span>
+        <b class="mono nt-rate__pct">{{ readRate }}%</b>
+        <span class="nt-rate__note">已读 {{ readCount }} / 送达 {{ total }}<template v-if="isFiltered">（当前筛选）</template></span>
       </div>
 
       <MockSkeletonTable v-if="loading && !items.length" :cols="5" />
@@ -253,13 +268,22 @@ const {
   defaultDir: 'desc',
   storageKey: 'wf_notifications_sort'
 })
-/** 清除筛选并重新加载 */
+/** 筛选变化：回第 1 页重查（页码停在越界页会显示空列表） */
+function reloadFromFirstPage() {
+  page.value = 1
+  void reload()
+}
+/** 清除筛选并重新加载（回第 1 页） */
 function clearFilter() {
   kindFilter.value = ''
   unreadOnly.value = false
-  void reload()
+  reloadFromFirstPage()
 }
 const isFiltered = computed(() => !!kindFilter.value || unreadOnly.value)
+
+/** 已读率聚合（原型 1900-1904 表内「已读率」列）：同筛选域内 已读 = 送达 − 未读 */
+const readCount = computed(() => Math.max(0, total.value - unreadTotal.value))
+const readRate = computed(() => (total.value > 0 ? Math.round((readCount.value / total.value) * 100) : 0))
 
 /* R2 状态语义表：未读是「用户侧状态」，运营无法替用户读 → 不是可行动告警，不得着 warn。
    页头基调只在加载失败时降级为 bad（原实现按 unreadTotal>0 给 warn，属误报）。 */
@@ -431,6 +455,19 @@ void reload()
   cursor: help;
 }
 .nt-list { flex: 1; min-height: 0; overflow-y: auto; }
+/* 已读率聚合行（原型 meterrow：meter 条 + mono %）：条沿用共享 .mk-minibar 原语 */
+.nt-rate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.nt-rate__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.nt-rate__bar { flex: 0 1 220px; min-width: 80px; display: block; }
+.nt-rate__pct { font-size: var(--mk-fs-micro); color: var(--mk-ink); font-variant-numeric: tabular-nums; }
+.nt-rate__note { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 原型 .tbl td：nowrap（双行单元格由 mk-cell-main 全局 max-width 截断兜底，不换行撑行高） */
 .nt-list .mk-table td { white-space: nowrap; }
 .nt-row--unread { background: var(--mk-blue-bg, #f6f9ff); }

@@ -17,8 +17,8 @@
       </template>
     </MkPageHead>
 
-    <!-- 调用成本 2026-09-29 收编进概览区第四张 MkKpi 卡（原私有 cost-strip 金额条
-         与全站 KPI 语言不一致；单价未配置/加载失败态由 KPI 卡 hint + tone 承担） -->
+    <!-- 调用成本 2026-09-29 收编进概览区（原私有 cost-strip 金额条与全站 KPI 语言不一致；
+         单价未配置/加载失败态由 KPI 卡 hint + tone 承担）。2026-10-01 成本批：成本升为第一张卡 -->
 
     <!-- 加载失败（优先于空态） -->
     <MkEmptyState
@@ -77,34 +77,50 @@
         @action="days = 90"
       />
       <template v-else>
-      <!-- 概览卡（统一走共享 .mk-kpi-grid + MkKpi）：四个数字的唯一去处——
-           状态条不再复述；第四张「调用成本」承接原私有 cost-strip 金额条。
-           每张卡的 hint 给派生口径（拆分/均值/失败率/待补单价），不是把数字再说一遍。 -->
+      <!-- 概览卡（统一走共享 .mk-kpi-grid + MkKpi；原型 renderCost 1771-1772 metricCard 四卡：
+           今日成本/本月累计/单会话均值/缓存命中率）。
+           数据源核查（2026-10-01，只读后端 /admin/token-cost/summary）：
+           金额已随接口返回（totals.usd / pricedCalls / callsMissingPricing），但**只按所选窗口聚合**——
+           无分日金额（trend 仅 date/tokens/calls/failed）、无自然月窗口、无会话维度、无缓存命中明细
+           （agent_call_logs 无 cachedTokens 列）。故按可得口径如实重排，缺项不编造金额/不拿 0 冒充：
+           ① 调用成本＝当前窗口金额（承接原型「今日成本/本月累计」，窗口随 pills 切换，口径见 hint）；
+           ② 单次调用均值＝金额 ÷ 已定价调用（原型「单会话均值」无会话维度，如实降级到每次调用）；
+           ③ 总 Token＝用量基线（成本卡的分母，保留）；
+           ④ 缓存命中率＝接口无此口径，显式留空「—」并在 hint 说明。 -->
       <section class="mk-kpi-grid">
-        <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`prompt ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · completion ${summary ? fmtTokens(summary.totals.completionTokens) : '—'}`" />
-        <MkKpi label="调用次数" :value="summary ? summary.totals.calls : '—'" :hint="callsHint" />
-        <MkKpi label="失败调用" :value="summary ? summary.totals.failed : '—'" :tone="summary && summary.totals.failed > 0 ? 'bad' : ''" :hint="failRateHint" />
         <MkKpi
           label="调用成本"
           :value="costLoading ? '…' : costFailed ? '加载失败' : costUsd !== null ? `≈ $${fmtCostUsd(costUsd)}` : (costPricedCalls === 0 && costMissingCalls === 0) ? '无调用' : '单价未配置'"
           :tone="costFailed ? 'warn' : ''"
           :hint="costHint"
         />
+        <MkKpi
+          label="单次调用均值"
+          :value="costLoading ? '…' : costFailed ? '—' : costPerCall !== null ? `≈ $${fmtCostUsd(costPerCall)}` : '—'"
+          :hint="perCallHint"
+        />
+        <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`prompt ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · completion ${summary ? fmtTokens(summary.totals.completionTokens) : '—'} · ${summary ? summary.totals.calls : '—'} 次调用`" />
+        <MkKpi label="缓存命中率" value="—" hint="接口未提供缓存命中明细（agent_call_logs 无 cachedTokens 列），暂不可算" />
       </section>
 
-      <!-- 趋势图 -->
+      <!-- 趋势图（原型 renderCost 1773-1777：近 7 天成本趋势 · barchart + sub「单位：元」）。
+           数据源核查：/admin/token-cost/summary 的 trend 只有 {date,tokens,calls,failed}，**无分日金额**，
+           无法画「元」柱；故如实画 Token 单柱并在卡头写明单位（不假装是钱），同时淘汰原双柱的 failed
+           系列（失败数移入卡尾 note 与柱 title，不再与用量混读）。 -->
       <section class="mk-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">Token 用量趋势 · 近 {{ days }} 天</h3>
+          <div class="tc-card-head__main">
+            <h3 class="mk-card__title">近 {{ days }} 天用量趋势</h3>
+            <span class="mk-card__meta">单位：Token（接口未提供金额）</span>
+          </div>
           <div class="tc-head-links">
             <span class="mk-card__meta" title="本页为 token-cost 端点精确聚合（含重试后终态失败）；总览「LLM 用量」卡为近 7 天汇总 hero">口径：本地自然日 · 精确聚合</span>
             <button type="button" class="mk-link" @click="goOverview">总览趋势 →</button>
             <button type="button" class="mk-link" @click="goExecLogs">逐调用明细 →</button>
           </div>
         </div>
-        <!-- 趋势柱：走全 admin 统一图表语言 OvBars（2026-09-29 自 MkChart/ECharts 换入，
-             与总览「调用趋势 · 近 7 天」同构）。原 ECharts 双系列柱宽不一致（38%/18%），
-             失败柱压在调用柱后只露一条边；OvBars 双柱等宽并排，语义由列 title 承载。 -->
+        <!-- 趋势柱：走全 admin 统一图表语言 OvBars（2026-09-29 自 MkChart/ECharts 换入）。
+             2026-10-01 成本批：原 Token+failed 双柱改为单柱序列（金额缺失，单位=Token）。 -->
         <OvBars v-if="trend.length" :cols="trendCols" :bar-width="44" :min-bars-height="150" />
         <p v-if="trend.length" class="mk-card__note">
           合计 {{ fmtTokens(trend.reduce((acc, d) => acc + d.tokens, 0)) }} token · {{ trend.reduce((acc, d) => acc + d.calls, 0) }} 次调用 · 失败 {{ trend.reduce((acc, d) => acc + d.failed, 0) }} 次
@@ -112,10 +128,12 @@
         <p v-else class="mk-card__note">近 {{ days }} 天暂无调用记录。</p>
       </section>
 
-      <!-- 用量排行：Skill 全宽大表 + 用户/模型半宽侧表 -->
+      <!-- 按 Skill 成本明细（原型 renderCost 1778-1784：Skill/调用/Token 用量/成本/占比 五列，
+           占比 = meter + mono%）。后端 by-skill 条目已带成本桶（usd/pricedCalls/callsMissingPricing），
+           故补真实金额列；单价未配置的 Skill 显式写「单价未配置」且不计入占比（不拿 0 冒充金额）。 -->
       <section class="mk-card tc-card tc-card--skill">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">Skill 用量排行</h3>
+          <h3 class="mk-card__title">按 Skill 成本明细</h3>
           <div class="mk-card__head-right">
             <span class="mk-card__meta">{{ bySkill.length }} 个<template v-if="!skillAll && bySkill.length > skillLimit"> · 显示前 {{ skillLimit }}</template></span>
             <button
@@ -128,7 +146,28 @@
             </button>
           </div>
         </div>
-        <TcRankTable v-if="bySkill.length" :items="skillRows" variant="skill" :total-tokens="totalTokens" />
+        <div v-if="skillRows.length" class="tc-skilltable" role="table" aria-label="按 Skill 成本明细">
+          <div class="tc-skilltable__head" role="row">
+            <span role="columnheader">Skill</span>
+            <span role="columnheader">调用</span>
+            <span role="columnheader">Token 用量</span>
+            <span role="columnheader">成本</span>
+            <span role="columnheader">占比</span>
+          </div>
+          <div v-for="r in skillRows" :key="r.key" class="tc-skilltable__row" role="row" :title="skillRowTitle(r)">
+            <span class="tc-st__name" role="cell"><strong :title="r.display || r.key">{{ r.display || r.key }}</strong></span>
+            <span class="tc-st__num" role="cell">{{ r.calls }}</span>
+            <span class="tc-st__num" role="cell">{{ fmtTokens(r.tokens) }}</span>
+            <span class="tc-st__cost" role="cell">{{ skillRowCost(r) }}</span>
+            <span class="tc-st__share" role="cell">
+              <span class="mk-minibar"><span class="mk-minibar__fill" :style="{ width: skillShareW(r) }"></span></span>
+              <span class="tc-st__pct">{{ skillSharePct(r) }}</span>
+            </span>
+          </div>
+        </div>
+        <p v-if="skillRows.length" class="mk-card__note">
+          成本＝已定价调用金额合计（USD）· 单价未配置的 Skill 不计入占比<template v-if="skillCostTotal <= 0">（当前无已定价调用，占比按 Token 计）</template>
+        </p>
         <p v-else class="mk-card__note">暂无数据。</p>
       </section>
 
@@ -200,7 +239,15 @@ const loading = ref(false)
 const loadFailed = ref(false)
 
 const summary = ref<Summary | null>(null)
-const bySkill = ref<RankRow[]>([])
+/* by-skill 条目在后端 RankEntry（= CostBucket）上已带成本字段；
+   本地接口补类型，供「按 Skill 成本明细」渲染真实金额列与金额占比 */
+interface SkillCostRow extends RankRow {
+  usd?: number | null
+  pricingKnown?: boolean
+  pricedCalls?: number
+  callsMissingPricing?: number
+}
+const bySkill = ref<SkillCostRow[]>([])
 const byUser = ref<RankRow[]>([])
 const byModel = ref<RankRow[]>([])
 
@@ -225,34 +272,60 @@ const totalTokens = computed(() => summary.value?.totals.tokens || 0)
 const summaryEmpty = computed(() => !!summary.value && summary.value.totals.calls === 0)
 const skillRows = computed(() => bySkill.value.slice(0, skillAll.value ? bySkill.value.length : skillLimit))
 const userRows = computed(() => byUser.value.slice(0, userAll.value ? byUser.value.length : userLimit))
-const failRateHint = computed(() => {
-  const s = summary.value?.totals
-  if (!s) return '含重试后的终态失败'
-  const rate = s.calls > 0 ? Math.round((s.failed / s.calls) * 100) : 0
-  return `失败率 ${rate}% · 含重试后的终态失败`
+
+/* 单次调用均值（原型「单会话均值」的可得口径）：仅按已定价调用折算。
+   token-cost 只给 per-user/model/skill 聚合，**无会话维度**，如实不称「会话」。 */
+const costPerCall = computed(() =>
+  costUsd.value !== null && costPricedCalls.value > 0 ? costUsd.value / costPricedCalls.value : null
+)
+const perCallHint = computed(() => {
+  if (costLoading.value) return '金额统计中'
+  if (costFailed.value) return '金额统计拉取失败，可刷新重试'
+  if (costUsd.value === null) return '无已定价调用，暂不可算'
+  return `近 ${days.value} 天 · 按 ${costPricedCalls.value} 次已定价调用折算（接口无会话维度）`
 })
 
-/* 调用次数副行：窗口 + 每次调用的平均 token（派生量，状态条不给） */
-const callsHint = computed(() => {
-  const s = summary.value?.totals
-  const window = `近 ${days.value} 天`
-  if (!s || s.calls <= 0) return window
-  return `${window} · 平均 ${fmtTokens(Math.round(s.tokens / s.calls))}/次`
-})
+/* Skill 明细表占比分母：优先已定价金额合计；全未定价时退回 Token 占比（并在表尾注明） */
+const skillCostTotal = computed(() =>
+  bySkill.value.reduce((acc, r) => acc + (typeof r.usd === 'number' ? r.usd : 0), 0)
+)
+function skillRowCost(r: SkillCostRow): string {
+  if (typeof r.usd === 'number') return `≈ $${fmtCostUsd(r.usd)}`
+  if ((r.callsMissingPricing ?? 0) > 0) return '单价未配置'
+  return '—'
+}
+function skillShareNum(r: SkillCostRow): number {
+  const total = skillCostTotal.value
+  if (total > 0) return typeof r.usd === 'number' ? (r.usd / total) * 100 : 0
+  return totalTokens.value > 0 ? (r.tokens / totalTokens.value) * 100 : 0
+}
+function skillShareW(r: SkillCostRow): string {
+  const p = skillShareNum(r)
+  return `${Math.max(p > 0 ? 3 : 0, p)}%`
+}
+function skillSharePct(r: SkillCostRow): string {
+  const p = skillShareNum(r)
+  return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`
+}
+function skillRowTitle(r: SkillCostRow): string {
+  return `${r.display || r.key} · ${r.calls} 次调用 · Token ${fmtTokens(r.tokens)} · 成本 ${skillRowCost(r)}`
+}
 
-/* 成本卡副行：数值本身只给结论，口径/待补模型明细收在 hint（title 可悬停展开） */
+/* 成本卡副行：数值本身只给结论，口径/待补模型明细收在 hint（title 可悬停展开）。
+   原型此位为「今日成本·预算」——接口无分日金额也无预算配置，故如实给当前窗口口径。 */
 const costHint = computed(() => {
   if (costLoading.value) return '金额统计中'
   if (costFailed.value) return '金额统计拉取失败，可刷新重试；不影响下方逐调用明细'
+  const window = `近 ${days.value} 天`
   if (costUsd.value !== null) {
-    const priced = `已定价 ${costPricedCalls.value} 次`
+    const priced = `${window} · 已定价 ${costPricedCalls.value} 次`
     return costMissingCalls.value > 0 ? `${priced} · ${costMissingCalls.value} 次未定价（未计入）` : priced
   }
-  if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `近 ${days.value} 天没有带 token 的 LLM 调用`
+  if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `${window}没有带 token 的 LLM 调用`
   const missing = missingPricingModels.value
   return missing.length
-    ? `暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}`
-    : 'models.config.ts 的 pricing 尚未填权威单价，暂不展示金额'
+    ? `${window} · 暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}`
+    : `${window} · models.config.ts 的 pricing 尚未填权威单价，暂不展示金额`
 })
 
 /* 跨页互跳：成本聚合页 ⇄ 明细页（执行日志行级 token）/ 总览趋势
@@ -321,7 +394,7 @@ async function load(force = false) {
       adminTokenCostApi.getByModel(params),
     ])
     summary.value = sumRes.data?.data ?? sumRes.data ?? null
-    bySkill.value = (skillRes.data?.data?.items ?? []) as RankRow[]
+    bySkill.value = (skillRes.data?.data?.items ?? []) as SkillCostRow[]
     byUser.value = (userRes.data?.data?.items ?? []) as RankRow[]
     byModel.value = (modelRes.data?.data?.items ?? []) as RankRow[]
     markPageFetched(tokenCostCacheKey())
@@ -348,7 +421,8 @@ function dayLabel(date: string): string {
 }
 
 /* 趋势柱数据映射（OvBars 列式结构，与总览 trend7dCols 同构）：
-   主柱 Token（蓝）、副柱失败调用（琥珀）；数值行给 Token，失败数进 title。 */
+   单柱 Token（蓝）—— 原型为「近 7 天成本趋势 · 单位：元」，但接口 trend 无分日金额，
+   故不画金额/双柱系列；数值行给 Token，调用/失败数进 title 与卡尾 note。 */
 const trendMax = computed(() => Math.max(1, ...trend.value.map((d) => d.tokens)))
 const barPct = (v: number, max: number) => `${v > 0 ? Math.max(Math.round((v / max) * 100), 6) : 3}%`
 const todayKey = computed(() => {
@@ -364,7 +438,6 @@ const trendCols = computed(() => trend.value.map((d) => ({
   title: `${d.date}：Token ${fmtTokens(d.tokens)} · ${d.calls.toLocaleString()} 次调用 · 失败 ${d.failed.toLocaleString()} 次`,
   bars: [
     { pct: barPct(d.tokens, trendMax.value), tone: 'blue' as const },
-    { pct: barPct(d.failed, trendMax.value), tone: 'amber' as const },
   ],
 })))
 </script>
@@ -423,6 +496,78 @@ const trendCols = computed(() => trend.value.map((d) => ({
   transition: background 0.12s;
 }
 .tc-more:hover { background: color-mix(in srgb, var(--mk-blue) 8%, transparent); }
+
+/* 卡头「标题 + 单位副题」成组（原型 .card__head：card__title + card__sub 同排左侧）：
+   单独并列时 .mk-card__head > :first-child 会独占剩余宽度把副题推右，故包一层 */
+.tc-card-head__main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* —— 按 Skill 成本明细（原型 renderCost 1778-1784 .tbl 五列）—— */
+.tc-skilltable {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 14px 0;
+}
+.tc-skilltable__head,
+.tc-skilltable__row {
+  display: grid;
+  grid-template-columns:
+    minmax(150px, 1.4fr)
+    minmax(56px, 0.5fr)
+    minmax(110px, 0.9fr)
+    minmax(96px, 0.8fr)
+    minmax(130px, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.tc-skilltable__head {
+  padding: 7px 0 6px;
+  border-bottom: 1px solid var(--mk-line);
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--mk-faint);
+}
+.tc-skilltable__head > span:not(:first-child) { text-align: right; }
+.tc-skilltable__row {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--mk-table-row-line);
+  transition: background 0.12s;
+}
+.tc-skilltable__row:last-child { border-bottom: none; }
+.tc-skilltable__row:hover { background: var(--mk-table-row-hover-bg); }
+.tc-st__name { min-width: 0; }
+.tc-st__name strong {
+  display: block;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  color: var(--mk-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tc-st__num,
+.tc-st__cost,
+.tc-st__pct {
+  font-family: var(--mk-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  color: var(--mk-ink);
+  text-align: right;
+  white-space: nowrap;
+}
+.tc-st__share {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+}
+.tc-st__pct { color: var(--mk-muted); }
 
 /* 4K 档 tc-trend 规则随 MkChart 迁移移除（批D）；MkChart 高度如需 4K 放大走其组件内档位 */
 
