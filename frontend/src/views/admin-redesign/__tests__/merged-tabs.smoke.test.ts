@@ -20,7 +20,8 @@ import OpsContent from '../OpsContent.vue';
 import Announcements from '../Announcements.vue';
 import Notifications from '../Notifications.vue';
 import TokenCost from '../TokenCost.vue';
-import { intent } from '../store';
+import { intent, subPage } from '../store';
+import { liveLearners } from '../live';
 
 /** API 层整体 mock：任意方法返回 { data: {} }（空数据成功响应），函数型导出为 noop/成功 */
 const { apiObject } = vi.hoisted(() => ({
@@ -208,5 +209,32 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     await settle();
     expect(w2.findComponent(TokenCost).exists()).toBe(false);
     w2.unmount();
+  });
+
+  it('People 学习状态 tab 分析层（原型 renderPeople state 分支）：置信度四卡 + 直方图五档 + 排行行点击进详情', async () => {
+    // 直接播种 live 学习者域（快照无 LSB 字段，分析层以快照置信度 confidence 0~1 作逐人分数；
+    // 丙无进行中任务 → 不计入分布，与表格置信列「—」口径一致）
+    liveLearners.value = [
+      { userId: 'u1', name: '甲', email: 'a@x.com', pathTitle: null, currentTask: '任务A', currentMilestone: null, trend: 'up', fatigue: '低', confidence: 0.92, generatedAt: '2026-10-01T08:00:00Z', struggling: [], fragile: [] },
+      { userId: 'u2', name: '乙', email: 'b@x.com', pathTitle: null, currentTask: '任务B', currentMilestone: null, trend: 'down', fatigue: '高', confidence: 0.32, generatedAt: '2026-10-01T08:00:00Z', struggling: [], fragile: [] },
+      { userId: 'u3', name: '丙', email: 'c@x.com', pathTitle: null, currentTask: '', currentMilestone: null, trend: 'flat', fatigue: '中', confidence: 0, generatedAt: '2026-10-01T08:00:00Z', struggling: [], fragile: [] }
+    ];
+    subPage.value = null;
+    const w = mount(LearnerCenter, { props: { embedded: true, tab: 'state' } });
+    await settle();
+    // ①统计四卡（共享 .mk-kpi-grid，原型 metricCard 四卡行）：总数 / 需关注 / 低置信 / 平均置信度
+    const kpiLabels = w.findAll('.lc-analytics .mk-kpi__label').map((c) => c.text().trim());
+    expect(kpiLabels).toEqual(['学习者', '需关注', '低置信', '平均置信度']);
+    // ②直方图（原型 .histo）：五档 .hcol；副题计数只含有任务的快照
+    expect(w.findAll('.lc-histo .lc-hcol').length).toBe(5);
+    expect(w.find('.lc-section-sub').text()).toContain('共 2 个快照');
+    // ③排行（原型 .ranklist）：置信度由低到高（乙 32% → 甲 92%），行点击 openSubPage('learner')
+    const rankNames = w.findAll('.lc-rankrow .lc-rankrow__name').map((c) => c.text());
+    expect(rankNames).toEqual(['乙', '甲']);
+    await w.findAll('.lc-rankrow')[0].trigger('click');
+    expect(subPage.value).toMatchObject({ view: 'learner', id: 'u2' });
+    w.unmount();
+    liveLearners.value = [];
+    subPage.value = null;
   });
 });

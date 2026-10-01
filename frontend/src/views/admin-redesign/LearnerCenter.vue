@@ -79,18 +79,62 @@
         action-text="重试"
         @action="retryLoad"
       />
-      <div v-else-if="filtered.length" class="mk-table-scroll">
-      <table class="mk-table mk-table--fixed">
-        <colgroup>
-          <col v-if="!lcHiddenCols.has('learner')" style="width:var(--mk-col-text)">
-          <col v-if="!lcHiddenCols.has('progress')" style="width:var(--mk-col-model-wide)">
-          <col v-if="!lcHiddenCols.has('trend')" style="width:var(--mk-col-badge)">
-          <col v-if="!lcHiddenCols.has('fatigue')" style="width:var(--mk-col-badge)">
-          <col v-if="!lcHiddenCols.has('conf')" style="width:var(--mk-col-num-wide)">
-          <col v-if="!lcHiddenCols.has('risk')" style="width:var(--mk-col-text)">
-          <col v-if="!lcHiddenCols.has('updated')" style="width:var(--mk-col-time-full)">
-          <col style="width:var(--mk-col-actions-wide)">
-        </colgroup>
+      <!-- fill 滚动契约（.mk-card--fill > .mk-table-scroll 接管纵向滚动，sticky 表头依赖该类名）：
+           原型 state 分支的分析层（四卡 → 直方图 → 排行）与列表同区滚动，分页器仍在卡尾吸底 -->
+      <div v-else class="mk-table-scroll lc-body">
+        <!-- 学习状态分析层（原型 renderPeople state 分支）：统计四卡 → 置信度分布直方图 → 排行。
+             口径 = 当前加载的学习者快照全集（随「含测试账号」范围联动），
+             不随下方 pill / 搜索筛选变化（与原型从全体学习者聚合一致） -->
+        <div v-if="rows.length" class="lc-analytics">
+          <section class="mk-kpi-grid" aria-label="学习状态概览">
+            <MkKpi label="学习者" :value="rows.length" :hint="includeTest ? '当前口径：含测试账号' : '当前口径：不含测试账号'" />
+            <MkKpi label="需关注" :value="riskCount" :tone="riskCount ? 'warn' : ''" hint="趋势下降 / 疲劳中高 / 有风险摘要" />
+            <MkKpi label="低置信" :value="lowConfCount" :tone="lowConfCount ? 'warn' : ''" hint="快照置信度低于 50%" />
+            <MkKpi label="平均置信度" :value="avgConfText" hint="有学习任务的快照 · 全体口径" />
+          </section>
+
+          <template v-if="confRows.length">
+            <div class="lc-section-head">
+              <span class="lc-section-title">置信度分布</span>
+              <span class="lc-section-sub">学习者按快照置信度分档 · 共 {{ confRows.length }} 个快照</span>
+            </div>
+            <!-- 原型 .histo：.hcol（hval 数值 + hbar 柱 + hcap 档位帽），柱高 = n / maxBin -->
+            <div class="lc-histo" role="img" :aria-label="histoAria">
+              <div v-for="b in histoBins" :key="b.label" class="lc-hcol">
+                <span class="lc-hval">{{ b.n }}</span>
+                <span class="lc-hbar" :class="`lc-hbar--${b.tone}`" :style="{ height: b.h + 'px' }"></span>
+                <span class="lc-hcap">{{ b.label }}</span>
+              </div>
+            </div>
+          </template>
+
+          <template v-if="rankRows.length">
+            <div class="lc-section-head">
+              <span class="lc-section-title">学习状态分布 · 置信度由低到高</span>
+            </div>
+            <!-- 原型 .ranklist/.rankrow：meterrow 迷你条 + mono 数值，行点击进详情（按钮化保键盘可达） -->
+            <div class="lc-ranklist">
+              <button
+                v-for="r in rankRows"
+                :key="r.row.id"
+                type="button"
+                class="lc-rankrow"
+                :title="`查看 ${r.name} 的学习详情`"
+                @click="openDetail(r.row)"
+              >
+                <span class="lc-rankrow__name">{{ r.name }}</span>
+                <span class="mk-minibar lc-rankrow__bar" aria-hidden="true">
+                  <i class="mk-minibar__fill" :data-tone="r.tone" :style="{ width: r.pct + '%' }"></i>
+                </span>
+                <span class="lc-rankrow__val">{{ r.label }}</span>
+              </button>
+            </div>
+          </template>
+        </div>
+
+      <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
+           列按内容自然分宽；长昵称/长任务由 mk-cell-main 上限与下方 max-width 截断兜底 -->
+      <table v-if="filtered.length" class="mk-table">
         <thead>
           <tr>
             <th v-if="!lcHiddenCols.has('learner')">学习者</th>
@@ -108,14 +152,17 @@
                行本身不设 tabindex，避免与行内三个操作按钮形成双份焦点停靠 -->
           <tr v-for="r in paged" :key="r.id" class="lc-row" @click="openDetail(r)">
             <td v-if="!lcHiddenCols.has('learner')">
-              <div class="mk-cell-main">
-                <strong>{{ r.name }}</strong>
-                <span class="mk-cell-sub">{{ r.email }}</span>
+              <div class="lc-celluser">
+                <MkCellAvatar :name="r.name" :tone="r.isTestAccount ? 'test' : 'default'" />
+                <div class="mk-cell-main">
+                  <strong>{{ r.name }}</strong>
+                  <span class="mk-cell-sub">{{ r.email }}</span>
+                </div>
+                <MkVariantBadge v-if="r.isTestAccount" kind="test" />
               </div>
-              <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="虚拟学习者/测试账号不参与风险队列">测试账号</span>
             </td>
             <td v-if="!lcHiddenCols.has('progress')">
-              <div class="mk-cell-main">
+              <div class="mk-cell-main lc-task">
                 <strong class="progress-title">{{ r.task || '未开始' }}</strong>
                 <span class="mk-cell-sub">{{ r.path || '尚未开始学习' }}</span>
               </div>
@@ -140,7 +187,7 @@
                 :title="`置信度 ${Math.round(r.confidence * 100)}%。低于 50% 表示证据不足`"
               >
                 {{ Math.round(r.confidence * 100) }}%<em v-if="evidenceLowConfidence(r.confidence)" class="conf__lack">证据不足</em>
-                <span class="mk-minibar lc-conf__bar" aria-hidden="true"><i :style="{ width: Math.round(r.confidence * 100) + '%' }"></i></span>
+                <span class="mk-minibar lc-conf__bar" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="evidenceLowConfidence(r.confidence) ? 'warn' : undefined" :style="{ width: Math.round(r.confidence * 100) + '%' }"></i></span>
               </span>
               <span v-else class="mk-na" :title="r.task ? '' : '尚未开始学习，暂无置信度'">—</span>
             </td>
@@ -160,13 +207,13 @@
           </tr>
         </tbody>
       </table>
-      </div>
 
-      <MkEmptyState
-        v-else
-        :title="pill === 'all' ? '暂无学习者快照' : '当前分组暂无学习者'"
-        :description="pill === 'all' ? '学习者产生学习行为后，快照将自动生成。' : '该风险分组暂无匹配的学习者。'"
-      />
+        <MkEmptyState
+          v-else
+          :title="pill === 'all' ? '暂无学习者快照' : '当前分组暂无学习者'"
+          :description="pill === 'all' ? '学习者产生学习行为后，快照将自动生成。' : '该风险分组暂无匹配的学习者。'"
+        />
+      </div>
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
       <Pagination
         v-if="filtered.length"
@@ -229,6 +276,9 @@ import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkCols from '@/components/mk/MkCols.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
+import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import { Bell, RotateCw, UserRound } from 'lucide-vue-next'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
@@ -376,6 +426,49 @@ const isRisk = (r: Row) => r.trend === 'down' || r.fatigue !== '低' || !!r.risk
 const riskCount = computed(() => rows.value.filter(isRisk).length)
 const lowConfCount = computed(() => rows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1)).length)
 
+/* —— 学习状态分析层（原型 renderPeople state 分支：①统计四卡 ②分布直方图 ③排行）——
+   原型以 LSB（学习状态平衡分，-30~30）作逐人评分；本仓快照域（live.ts LiveLearner）
+   无该字段，不硬造 LSB，改用快照唯一逐人分数 confidence（0~1）做分布。
+   口径 = rows 全集（随「含测试账号」范围联动），不随 pill / 搜索筛选变化；
+   有学习任务（r.task）才有有效置信度，与表格置信列的「—」口径一致 */
+const confRows = computed(() => rows.value.filter((r) => r.task && r.confidence != null))
+const avgConfText = computed(() => {
+  if (!confRows.value.length) return '—'
+  const avg = confRows.value.reduce((s, r) => s + (r.confidence ?? 0), 0) / confRows.value.length
+  return Math.round(avg * 100) + '%'
+})
+/** 直方图五档（原型 .histo bad→ok 自左向右）：阈值锚定产品既定的 50% 低置信线，
+    <50 区按严重度再分 <25（红）/ 25–49（琥珀）两档；柱高 = n / maxBin（6px 下限，原型同款） */
+const HISTO_BINS = [
+  { label: '< 25%', min: 0, tone: 'bad' },
+  { label: '25–49%', min: 25, tone: 'warn' },
+  { label: '50–74%', min: 50, tone: 'faint' },
+  { label: '75–89%', min: 75, tone: 'brand' },
+  { label: '≥ 90%', min: 90, tone: 'ok' }
+] as const
+const histoBins = computed(() => {
+  const counts = HISTO_BINS.map((b, i) =>
+    confRows.value.filter((r) => {
+      const v = (r.confidence ?? 0) * 100
+      return v >= b.min && (i === HISTO_BINS.length - 1 || v < HISTO_BINS[i + 1].min)
+    }).length
+  )
+  const max = Math.max(1, ...counts)
+  return HISTO_BINS.map((b, i) => ({ ...b, n: counts[i], h: Math.max(6, Math.round((counts[i] / max) * 100)) }))
+})
+const histoAria = computed(() => histoBins.value.map((b) => `${b.label}：${b.n} 人`).join('，'))
+/** 排行（原型 .ranklist slice(0,10)）：置信度由低到高，最不确定的排最前
+    （与列表「先找有问题的人」同取向），行点击进详情；row 携带原行供 openDetail */
+const rankRows = computed(() =>
+  [...confRows.value]
+    .sort((a, b) => (a.confidence ?? 0) - (b.confidence ?? 0))
+    .slice(0, 10)
+    .map((row) => {
+      const pct = Math.round((row.confidence ?? 0) * 100)
+      return { row, name: row.name, pct, label: `${pct}%`, tone: pct >= 90 ? 'ok' as const : pct >= 50 ? undefined : 'warn' as const }
+    })
+)
+
 const filtered = computed(() => {
   let list = rows.value
   if (pill.value === 'risk') list = rows.value.filter(isRisk)
@@ -520,6 +613,46 @@ async function recomputeAll() {
 }
 .tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
 .lc-row { cursor: pointer; }
+/* ================= 学习状态分析层（原型 renderPeople state 分支） =================
+   ①统计四卡 = 共享 .mk-kpi-grid + MkKpi；②直方图复刻原型 .histo（hval/hbar/hcap，
+   柱高 = n/max；原型 11px 字级抬到 12px 下限，6/6/3/3 圆角收进 token 档 6/6/4/4）；
+   ③排行复刻 .ranklist/.rankrow（迷你条 + mono 数值，行点击进详情） */
+.lc-analytics { display: grid; gap: 14px; padding: 14px 16px 6px; }
+.lc-section-head { display: flex; align-items: baseline; gap: 8px; }
+.lc-section-title { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
+.lc-section-sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.lc-histo { display: flex; align-items: flex-end; gap: 10px; height: 132px; padding-top: 10px; }
+.lc-hcol { flex: 1 1 0; min-width: 0; display: grid; align-content: end; justify-items: center; gap: 6px; }
+.lc-hbar {
+  width: 100%; max-width: 52px; min-height: 3px;
+  border-radius: var(--mk-radius-sm) var(--mk-radius-sm) var(--mk-radius-xs) var(--mk-radius-xs);
+  background: var(--mk-blue);
+}
+.lc-hbar--bad { background: var(--mk-red); }
+.lc-hbar--warn { background: var(--mk-amber); }
+.lc-hbar--faint { background: var(--mk-faint); }
+.lc-hbar--ok { background: var(--mk-green); }
+.lc-hval { font-size: var(--mk-fs-micro); font-family: var(--mk-mono); font-variant-numeric: tabular-nums; color: var(--mk-muted); }
+.lc-hcap { font-size: var(--mk-fs-micro); color: var(--mk-faint); text-align: center; white-space: nowrap; }
+@media (max-width: 768px) { .lc-histo { height: 108px; gap: 6px; } }
+.lc-ranklist { display: grid; gap: 2px; }
+.lc-rankrow {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 0;
+  border: 0; border-bottom: 1px solid var(--mk-line);
+  background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.lc-rankrow:last-child { border-bottom: 0; }
+.lc-rankrow__name { flex: 0 1 auto; min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.lc-rankrow:hover .lc-rankrow__name { color: var(--mk-blue); }
+.lc-rankrow__bar { flex: 1 1 0; width: auto; min-width: 40px; }
+.lc-rankrow__val { flex: none; width: 44px; text-align: right; font-family: var(--mk-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+/* 学习者单元格（原型 celluser：头像 + 主行/副行 + 身份徽章，Users.vue ul-user 同款判例） */
+.lc-celluser { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.lc-celluser .mk-cell-main { min-width: 0; flex: 1; }
+.lc-celluser .mk-cell-sub { max-width: 230px; }
+.lc-task .mk-cell-sub { max-width: 240px; }
+/* 原型 .tbl td：nowrap（表自动布局判例见 Users.vue；长内容由上方 max-width 截断兜底） */
+.mk-table td { white-space: nowrap; }
 /* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136）。
    注意：本页原先是 6 份副本里唯一补了暗色覆盖的，该暗色规则已提升为全局，
    因此其余页面的计数锚点在暗色下也不再几乎不可见。 */
