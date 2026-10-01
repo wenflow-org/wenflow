@@ -18,6 +18,9 @@ export async function getPlatformActivityFeed(params: {
   const activityWindowStart = new Date(Date.now() - 24 * 3600000);
 
   // 最近的学习会话
+  // 列裁剪（2026-10-01 性能实测）：无 select 时整行返回含 messages 大列
+  // （活跃会话均摊数百 KB/行），30 条即 13.7MB 响应。feed 只消费 id/subject/topic/
+  // status/时间戳/taskId，精确 select 后响应 ~50KB。
   const recentSessions = await prisma.teaching_sessions.findMany({
     take: limit,
     orderBy: { startTime: 'desc' },
@@ -25,7 +28,16 @@ export async function getPlatformActivityFeed(params: {
       users: ACTIVITY_USER_WHERE,
       startTime: { gte: activityWindowStart },
     },
-    include: {
+    select: {
+      id: true,
+      userId: true,
+      taskId: true,
+      subject: true,
+      topic: true,
+      status: true,
+      startTime: true,
+      updatedAt: true,
+      learningPathId: true,
       users: {
         select: { id: true, email: true, name: true }
       }

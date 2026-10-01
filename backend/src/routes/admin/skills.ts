@@ -132,14 +132,20 @@ function buildGeneratedSkillPrompt(skill: any, name: string): string {
  * 与 overview/stats 同款 60s TTL + 在途去重；key 含 range 与 skill 名单
  * （registry 热重载换名单后自然换 key）。Skill 定义本体仍每次实时读 gateway，不受缓存影响。
  */
+/* 2026-10-01 性能实测：7d 全窗扫描冷载 ~4.8s（boot 扇出之一，与其它启动请求排队后
+   拖慢总览首屏）。长窗口（7d/30d/all）的统计对 5min 延迟不敏感 → TTL 提到 5min；
+   '24h' 窗口保持 60s（短窗时效敏感）。 */
 const SKILL_LIST_CACHE_TTL_MS = 60 * 1000;
+const SKILL_LIST_CACHE_TTL_LONG_RANGE_MS = 300 * 1000;
+const SKILL_LIST_LONG_RANGES: Set<string> = new Set(['7d', '30d', 'all']);
 const skillListStatsCache = new Map<string, { payload: Map<string, SkillRuntimeStats>; cachedAt: number }>();
 const skillListStatsInflight = new Map<string, Promise<Map<string, SkillRuntimeStats>>>();
 
 function getSkillRuntimeStatsCached(skillNames: string[], range: SkillStatsRange): Promise<Map<string, SkillRuntimeStats>> {
   const cacheKey = `${range}|${skillNames.join(',')}`;
+  const ttl = SKILL_LIST_LONG_RANGES.has(range) ? SKILL_LIST_CACHE_TTL_LONG_RANGE_MS : SKILL_LIST_CACHE_TTL_MS;
   const cached = skillListStatsCache.get(cacheKey);
-  if (cached && Date.now() - cached.cachedAt < SKILL_LIST_CACHE_TTL_MS) {
+  if (cached && Date.now() - cached.cachedAt < ttl) {
     return Promise.resolve(cached.payload);
   }
   const inflight = skillListStatsInflight.get(cacheKey);
