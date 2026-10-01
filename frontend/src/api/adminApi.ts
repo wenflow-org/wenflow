@@ -1609,6 +1609,22 @@ export const adminVirtualLearnersApi = {
   batchDeleteVirtualLearners: async (profileIds: string[]) => {
     return adminAxios.post('/admin/virtual-learners/batch-delete', { profileIds });
   },
+
+  /** 学习者卡库：校验卡文档（不落库，返回逐卡 errors/warnings） */
+  cardsValidate: async (data: { content: string; format?: 'yaml' | 'json' }) => {
+    return adminAxios.post('/admin/virtual-learners/cards/validate', data);
+  },
+
+  /** 学习者卡库：导入卡文档（一张卡 = 账号 + 档案 + 故事池；enrich 走 persona-designer 富化） */
+  cardsImport: async (data: { content: string; format?: 'yaml' | 'json'; enrich?: boolean; update?: boolean }) => {
+    // enrich=true 时逐卡调用 persona-designer skill，上游慢：放宽到 AI 请求超时
+    return adminAxios.post('/admin/virtual-learners/cards/import', data, { timeout: AI_REQUEST_TIMEOUT });
+  },
+
+  /** 学习者卡库：导出全部自建卡（yaml 文本） */
+  cardsExport: async () => {
+    return adminAxios.get('/admin/virtual-learners/cards/export');
+  },
 };
 
 // ============================================================
@@ -1766,6 +1782,23 @@ export const adminPromptWorkbenchApi = {
 
   rollbackCore: async (skillId: string, version: number) => {
     return adminAxios.post(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/rollback`, { version });
+  },
+
+  /** A/B 实验变体（2026-10-01）：基线 + 实验臂 + 近 7 天调用指标 */
+  getPromptVariants: async (skillId: string) => {
+    return adminAxios.get(`/admin/prompt-lab/variants/${encodeURIComponent(skillId)}`);
+  },
+  createPromptVariant: async (skillId: string, payload: { variant: string; weight: number; sourceVersion?: number }) => {
+    return adminAxios.post(`/admin/prompt-lab/variants/${encodeURIComponent(skillId)}`, payload);
+  },
+  updatePromptVariantWeight: async (id: string, weight: number) => {
+    return adminAxios.patch(`/admin/prompt-lab/variants/${encodeURIComponent(id)}`, { weight });
+  },
+  stopPromptVariant: async (id: string) => {
+    return adminAxios.post(`/admin/prompt-lab/variants/${encodeURIComponent(id)}/stop`, {});
+  },
+  promotePromptVariant: async (id: string) => {
+    return adminAxios.post(`/admin/prompt-lab/variants/${encodeURIComponent(id)}/promote`, {});
   },
 
   getCoreLineage: async (skillId: string) => {

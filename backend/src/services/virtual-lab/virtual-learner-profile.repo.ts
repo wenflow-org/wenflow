@@ -167,3 +167,20 @@ export function listProfilesWithSessionSamples(skip: number, limit: number) {
 export function countProfiles() {
   return prisma.virtual_learner_profiles.count();
 }
+
+/* ---------- 卡库（card-import.service）取数 ---------- */
+
+/** 全量卡的查重索引取数：profile JSON + tags（cardKey/同源扫描用） */
+export function findAllProfilesForCardIndex() {
+  return prisma.virtual_learner_profiles.findMany({
+    select: { id: true, profile: true, tags: true, userId: true },
+  });
+}
+
+/** 导出用：自建卡（presetKey 为空） */
+export function findCustomCardsForExport() {
+  return prisma.virtual_learner_profiles.findMany({
+    where: { presetKey: null },
+    select: { profile: true, learningGoal: true, knowledgeLevel: true, tags: true, notes: true },
+  });
+}

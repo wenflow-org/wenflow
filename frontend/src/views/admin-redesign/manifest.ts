@@ -26,7 +26,7 @@
 
 import type { Component } from 'vue'
 import {
-  Coins, FlaskConical, HeartPulse, History, Layers, LayoutDashboard, ListChecks,
+  Coins, FlaskConical, HeartPulse, History, IdCard, Layers, LayoutDashboard, ListChecks,
   Megaphone, MessagesSquare, Plug, Route, ScrollText, ShieldCheck, Sparkles,
   Target, Users, Workflow, Wrench,
 } from 'lucide-vue-next'
@@ -55,8 +55,9 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'goal-conversations', label: '目标对话', group: '教学', glyph: '话', icon: Target },
   { id: 'learning-paths', label: '学习路径', group: '教学', glyph: '径', icon: Route },
   { id: 'memory-review', label: '记忆与复习', group: '教学', glyph: '忆', icon: History },
-  // 虚拟学习者组：个体实验 / 规模实验
+  // 虚拟学习者组：个体实验 / 规模实验 / 卡库
   { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟学习者', glyph: '拟', icon: FlaskConical },
+  { id: 'virtual-learner-cards', label: '学习者卡库', group: '虚拟学习者', glyph: '卡', icon: IdCard },
   { id: 'batch-experiments', label: '批量实验', group: '虚拟学习者', glyph: '批', icon: Layers },
   // Skill 组：健康中心已于 2026-09-29 抽出为独立场景（系统组），本组只剩编排图/Skill/Prompt 评估
   // 场景下线，Skill 组由 4 项收敛为 3 项（orchestrator · skills · prompt-eval）。

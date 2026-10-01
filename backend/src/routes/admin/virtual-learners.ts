@@ -75,6 +75,11 @@ import { resolveSessionBudget } from '../../virtual-lab/session-budget';
 import { getVirtualLabSettings, updateVirtualLabSettings, DEFAULT_VIRTUAL_LAB_SETTINGS } from '../../services/virtual-lab-settings.service';
 import { applyRpmLimitsFromSettings, getRpmLimitStats } from '../../services/rpm-limit-config.service';
 import { virtualCleanupService } from '../../services/virtual-lab/virtual-cleanup.service';
+import {
+  validateCards as validateCardDocument,
+  importCards as importCardDocument,
+  exportCards as exportCardLibrary,
+} from '../../services/virtual-lab/card-import.service';
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
 import { safeJsonParse } from '../../utils/safe-json';
 import { asErrorLike } from '../../virtual-lab/vlab-types';
@@ -3763,6 +3768,68 @@ router.post('/batch-create/:batchId/retry', async (req: Request, res) => {
   } catch (error) {
     logger.error('批量任务重试失败:', error);
     res.status(500).json({ success: false, error: (error as Error).message || '批量任务重试失败' });
+  }
+});
+
+/**
+ * 学习者卡库：校验（不落库）
+ * POST /api/admin/virtual-learners/cards/validate
+ * body: { content: string, format?: 'yaml' | 'json' }
+ */
+router.post('/cards/validate', async (req: Request, res) => {
+  try {
+    const content = typeof req.body?.content === 'string' ? req.body.content : '';
+    if (!content.trim()) {
+      return res.status(400).json({ success: false, error: 'content 不能为空' });
+    }
+    const format = req.body?.format === 'json' ? 'json' : 'yaml';
+    const result = await validateCardDocument(content, format);
+    if (result.parseError) {
+      return res.status(400).json({ success: false, error: result.parseError });
+    }
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('学习者卡校验失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || '学习者卡校验失败' });
+  }
+});
+
+/**
+ * 学习者卡库：导入（一张卡 = 账号 + 档案 + 故事池，结构化落库，不经编译链）
+ * POST /api/admin/virtual-learners/cards/import
+ * body: { content: string, format?: 'yaml' | 'json', enrich?: boolean, update?: boolean }
+ */
+router.post('/cards/import', async (req: Request, res) => {
+  try {
+    const content = typeof req.body?.content === 'string' ? req.body.content : '';
+    if (!content.trim()) {
+      return res.status(400).json({ success: false, error: 'content 不能为空' });
+    }
+    const format = req.body?.format === 'json' ? 'json' : 'yaml';
+    const enrich = req.body?.enrich === true;
+    const update = req.body?.update === true;
+    const result = await importCardDocument(content, format, { enrich, update });
+    if (result.parseError) {
+      return res.status(400).json({ success: false, error: result.parseError });
+    }
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('学习者卡导入失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || '学习者卡导入失败' });
+  }
+});
+
+/**
+ * 学习者卡库：导出全部自建卡（yaml 文本）
+ * GET /api/admin/virtual-learners/cards/export
+ */
+router.get('/cards/export', async (_req: Request, res) => {
+  try {
+    const result = await exportCardLibrary();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('学习者卡导出失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || '学习者卡导出失败' });
   }
 });
 

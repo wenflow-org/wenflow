@@ -89,6 +89,7 @@ const TeachingSessions = asyncPage(() => import('./TeachingSessions.vue'));
 const GoalConversations = asyncPage(() => import('./GoalConversations.vue'));
 const LearningPaths = asyncPage(() => import('./OpsContent.vue'));
 const VirtualLearners = asyncPage(() => import('./VirtualLearners.vue'));
+const VirtualLearnerCards = asyncPage(() => import('./VirtualLearnerCards.vue'));
 const Skills = asyncPage(() => import('./Skills.vue'));
 const Orchestrator = asyncPage(() => import('./Orchestrator.vue'));
 const ExecLogs = asyncPage(() => import('./ExecLogs.vue'));
@@ -125,6 +126,8 @@ const components: Record<string, unknown> = {
   'goal-conversations': GoalConversations,
   'learning-paths': LearningPaths,
   'virtual-learners': VirtualLearners,
+  // 学习者卡库（2026-10-01）：角色卡结构化导入/导出，卡=账号+档案+故事池，不经编译链
+  'virtual-learner-cards': VirtualLearnerCards,
   'skills': Skills,
   'orchestrator': Orchestrator,
   'prompt-eval': PromptEval,
