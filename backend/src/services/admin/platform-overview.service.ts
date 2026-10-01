@@ -126,12 +126,10 @@ async function computeAllTimeCallStats(realUserScope: { userId: { in: string[] }
 export async function computeOverviewStats(force = false): Promise<unknown> {
     // 获取今日统计（**应用时区本地日**，与学习侧日界同口径）
     const today = startOfDay(new Date());
-
-    const tomorrow = new Date(startOfDay(new Date()).getTime() + 86400000);
-
-    // 获取昨日统计
-    const yesterday = new Date(startOfDay(new Date()).getTime() - 86400000);
-    const last24HoursStart = new Date(Date.now() - 24 * 3600000);
+    const tomorrow = new Date(today.getTime() + 86400000);
+    const nowTs = Date.now();
+    const sevenDaysAgo = new Date(nowTs - 7 * 86400000);
+    const rolling24hStart = new Date(nowTs - 24 * 3600000);
 
     // 脉搏窗口与桶窗口同源：当前整点 - 23h（[start, now] 恰好 24 个整点桶），
     // 保证「24h 总数 = 各小时之和」恒成立；活跃 Agent 统计仍用严格 24h 滚动窗口。
@@ -148,15 +146,21 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
     // 调用/token 口径（R5）：agent_call_logs / llm_execution_attempts 按 userId 归属过滤，
     // 只统计真实用户（虚拟/测试账号 userId 不在集合内 → 自动剔除；空 userId 孤儿行同样剔除）。
     // 全量口径保留为 *All 副指标，前端标注「含虚拟/测试」，保证诚实展示且可对比。
-    const realUserIds = (
-      await prisma.users.findMany({ where: REAL_USER_WHERE, select: { id: true } })
-    ).map((u) => u.id);
-    const realUserScope = { userId: { in: realUserIds } };
-    // 虚拟/测试账号 = 全部用户 − 真实用户（差集互补，口径严格无遗漏），供「虚拟调用」独立指标
-    const allUserIds = (await prisma.users.findMany({ select: { id: true } })).map((u) => u.id);
-    const virtualUserIds = allUserIds.filter((id) => !realUserIds.includes(id));
+    // 性能批 2026-10-01：扫描合并后 real/virtual 分桶改端内 Set 判定（行级单扫无法带 SQL in 过滤）
+    const realUserSet = new Set(
+      (await prisma.users.findMany({ where: REAL_USER_WHERE, select: { id: true } })).map((u) => u.id)
+    );
+    // 虚拟/测试账号 = 全部用户 − 真实用户（差集互补，口径严格无遗漏），供「虚拟调用」独立指标；
+    // userId 为 NULL 的孤儿行不落入任何口径的「今日虚拟」计数（与原 SQL in 语义一致）
+    const virtualUserSet = new Set(
+      (await prisma.users.findMany({ select: { id: true } })).map((u) => u.id).filter((id) => !realUserSet.has(id))
+    );
 
-    // 并行查询所有统计数据
+    // 并行查询所有统计数据。
+    // 性能批 2026-10-01：原 11 次 agent_call_logs 查询（今日 5 count + 24h groupBy + 7d 双 groupBy
+    // + 失败行/趋势行两次 findMany + skill groupBy）与 3 次 llm_execution_attempts 查询
+    // （双 aggregate + models groupBy）各合并为**一次 7d 窗口行级拉取**，real/virtual/All 口径
+    // 全部端内 Set 分桶聚合——实测重算 21-26s 的主要构成就是这 14 次重复窗口扫描。
     const [
       totalUsers,
       newUsersToday,
@@ -170,23 +174,11 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       completedConversations,
       activeConversations,
       allTimeStats,
-      agentCallsToday,
-      agentCallsTodayAll,
-      agentCallsTodayVirtual,
-      agentSuccessToday,
-      agentTimeoutToday,
-      activeAgents24h,
+      agentScan7d,
+      llmScan7d,
       wrapupLogs,
-      usageTokens7d,
-      usageTokens7dAll,
-      usageCalls7d,
-      usageCalls7dAll,
-      usageModels7d,
-      usageFailuresRows,
-      agentLogs7dRows,
       newUsers7dRows,
-      activeUsers7dRows,
-      agentSkillAgg7d
+      activeUsers7dRows
     ] = await Promise.all([
       // 总用户数（不含虚拟学习者）
       prisma.users.count({
@@ -250,13 +242,13 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       // 口径修复：subtasks.users 关系建在 usersId 上，而生产创建路径只写 userId（usersId 全为 null），
       // 用 users 关系过滤会恒为 0 → 漏斗「任务/完成」永久 0。改为按 userId 归属过滤（与调用/token 同源）。
       prisma.subtasks.count({
-        where: { ...realUserScope },
+        where: { userId: { in: [...realUserSet] } },
       }),
       
       // 已完成任务数（不含虚拟学习者/测试账号）
       prisma.subtasks.count({
         where: {
-          ...realUserScope,
+          userId: { in: [...realUserSet] },
           status: 'completed',
         },
       }),
@@ -280,190 +272,50 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       }),
       
       // 全量累计调用数（长缓存子层：两个全表 groupBy 拆到 10 分钟 TTL，见 computeAllTimeCallStats）
-      computeAllTimeCallStats(realUserScope, businessExecutionWhere, force),
+      computeAllTimeCallStats({ userId: { in: [...realUserSet] } }, businessExecutionWhere, force),
 
-      // 今日 Agent 调用数（真实用户口径；全量见 agentCallsTodayAll）
-      prisma.agent_call_logs.count({
-        where: {
-          ...businessExecutionWhere,
-          ...realUserScope,
-          calledAt: {
-            gte: today,
-            lt: tomorrow,
-          },
-        },
-      }),
-
-      // 今日 Agent 调用数全量（含虚拟/测试）
-      prisma.agent_call_logs.count({
-        where: {
-          ...businessExecutionWhere,
-          calledAt: {
-            gte: today,
-            lt: tomorrow,
-          },
-        },
-      }),
-
-      // 今日虚拟/测试账号调用数（真实口径之外的分母，前端单独成卡与真实调用并列区分）
-      prisma.agent_call_logs.count({
-        where: {
-          ...businessExecutionWhere,
-          calledAt: {
-            gte: today,
-            lt: tomorrow,
-          },
-          userId: { in: virtualUserIds },
-        },
-      }),
-
-      // 今日 Agent 成功调用
-      prisma.agent_call_logs.count({
-        where: {
-          ...businessExecutionWhere,
-          ...realUserScope,
-          calledAt: {
-            gte: today,
-            lt: tomorrow,
-          },
+      /* ===== 单扫 1：agent_call_logs 近 7 天全量行（含虚拟/测试/孤儿，端内分桶） =====
+       * 消费方：今日 5 计数 / activeAgents24h / trend7d / topSkills / last24h 脉搏（含超时覆盖）/
+       * calls7d 与 calls7dAll / 失败归因行。select 按消费方并集取最小列集；
+       * 不 orderBy——所有消费方都按时间键分桶，与行序无关（省一次 3 万行排序）。 */
+      prisma.agent_call_logs.findMany({
+        where: { ...businessExecutionWhere, calledAt: { gte: sevenDaysAgo } },
+        select: {
+          calledAt: true,
           success: true,
+          userId: true,
+          agentId: true,
+          errorCategory: true,
+          errorCode: true,
+          error: true,
         },
       }),
 
-      // 今日超时调用（按 errorCode/errorCategory 识别）。
-      // 保守保留 LIKE 查询：现代 gateway 行带 errorCategory=provider_timeout / errorCode=ATTEMPT_TIMEOUT，
-      // 但旧平台与 skill 行只有 error/errorCode 文本信号（无 errorCategory 列值），
-      // 且 error 字段可能包含 'timed out' 等 errorCode 不含的信号，故不做枚举化改造。
-      prisma.agent_call_logs.count({
-        where: {
-          AND: [
-            businessExecutionWhere,
-            realUserScope,
-            {
-              calledAt: { gte: today, lt: tomorrow },
-              success: false,
-              OR: [
-                { errorCode: { contains: 'TIMEOUT' } },
-                { error: { contains: 'timeout' } },
-                { error: { contains: 'timed out' } },
-                { error: { contains: 'etimedout' } },
-                { error: { contains: 'deadline exceeded' } },
-                { error: { contains: 'request timeout' } }
-              ]
-            }
-          ]
-        }
-      }),
-
-      // 最近 24h 活跃 Agent 数
-      prisma.agent_call_logs.groupBy({
-        by: ['agentId'],
-        where: {
-          ...businessExecutionWhere,
-          ...realUserScope,
-          calledAt: { gte: new Date(Date.now() - 24 * 3600000) }
-        }
+      /* ===== 单扫 2：llm_execution_attempts 近 7 天全量行（端内分桶） =====
+       * 消费方：totalTokens7d / totalTokens7dAll / calls 双口径（_count）/ models7d 分布。 */
+      prisma.llm_execution_attempts.findMany({
+        where: { startedAt: { gte: sevenDaysAgo } },
+        select: { userId: true, resolvedModel: true, totalTokens: true },
       }),
 
       // wrapup 来源分布抽样（200 → 50：仅用于 wrapupSourceStats 比例估算；真实用户口径）
       prisma.agent_call_logs.findMany({
-        where: { agentId: 'skill:session-wrapup', ...realUserScope },
+        where: { agentId: 'skill:session-wrapup', userId: { in: [...realUserSet] } },
         orderBy: { calledAt: 'desc' },
         take: 50,
         select: { output: true }
       }),
 
-      // 近 7 天 LLM 用量聚合（真实用户口径，token 总量；全量见 usageTokens7dAll）
-      prisma.llm_execution_attempts.aggregate({
-        where: { ...realUserScope, startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
-        _sum: { totalTokens: true },
-        _count: true,
-      }),
-
-      // 近 7 天 LLM 用量全量（含虚拟/测试账号，前端副口径标注）
-      prisma.llm_execution_attempts.aggregate({
-        where: { startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
-        _sum: { totalTokens: true },
-        _count: true,
-      }),
-
-      // 近 7 天调用与失败数（真实用户口径；全量见 usageCalls7dAll）
-      prisma.agent_call_logs.groupBy({
-        by: ['success'],
-        where: {
-          ...businessExecutionWhere,
-          ...realUserScope,
-          calledAt: { gte: new Date(Date.now() - 7 * 86400000) }
-        },
-        _count: true,
-      }),
-
-      // 近 7 天调用与失败数全量（含虚拟/测试）
-      prisma.agent_call_logs.groupBy({
-        by: ['success'],
-        where: {
-          ...businessExecutionWhere,
-          calledAt: { gte: new Date(Date.now() - 7 * 86400000) }
-        },
-        _count: true,
-      }),
-
-      // 近 7 天模型用量分布（按解析后的模型名，真实用户口径）
-      prisma.llm_execution_attempts.groupBy({
-        by: ['resolvedModel'],
-        where: { ...realUserScope, startedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
-        _sum: { totalTokens: true },
-        _count: true,
-      }),
-
-      // 近 7 天失败归因（调用级：与「失败 N」同表同口径，分类见 classifyFailureCategory，
-      // 老行 errorCategory 为空时按 errorCode/error 启发式归并，保证归因之和恒等于失败总数）。
-      // calledAt 同时服务 24h 脉搏的超时覆盖（下方 hourlyTrend）：24h 失败行 ⊆ 本结果集，
-      // 不再为 24h 趋势单独拉 3100 行（性能批 2026-09-30）
-      prisma.agent_call_logs.findMany({
-        where: {
-          ...businessExecutionWhere,
-          ...realUserScope,
-          calledAt: { gte: new Date(Date.now() - 7 * 86400000) },
-          success: false,
-        },
-        orderBy: { calledAt: 'desc' },
-        select: { calledAt: true, errorCategory: true, errorCode: true, error: true },
-      }),
-
-      // G1 总览「近 7 天调用趋势」：行级拉取在端内按本地自然日聚合
-      // （SQLite date() 按 UTC 分组会与本地日错位，端内聚合保证「今日=00:00 起」口径一致）
-      prisma.agent_call_logs.findMany({
-        where: {
-          ...businessExecutionWhere,
-          ...realUserScope,
-          calledAt: { gte: new Date(Date.now() - 7 * 86400000) },
-        },
-        orderBy: { calledAt: 'asc' },
-        select: { calledAt: true, success: true },
-      }),
-
       // G2 总览「用户增长」：近 7 天新增注册（真实用户）
       prisma.users.findMany({
-        where: { ...REAL_USER_WHERE, createdAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+        where: { ...REAL_USER_WHERE, createdAt: { gte: sevenDaysAgo } },
         select: { createdAt: true },
       }),
 
       // G3 总览「用户增长」：近 7 天活跃用户（教学会话 startTime 按天去重）
       prisma.teaching_sessions.findMany({
-        where: { users: REAL_USER_WHERE, startTime: { gte: new Date(Date.now() - 7 * 86400000) } },
+        where: { users: REAL_USER_WHERE, startTime: { gte: sevenDaysAgo } },
         select: { startTime: true, userId: true },
-      }),
-
-      // G4 总览「Top Skill」：近 7 天按 agentId×success 聚合
-      prisma.agent_call_logs.groupBy({
-        by: ['agentId', 'success'],
-        where: {
-          ...businessExecutionWhere,
-          ...realUserScope,
-          calledAt: { gte: new Date(Date.now() - 7 * 86400000) },
-        },
-        _count: true,
       })
     ]);
 
@@ -500,20 +352,94 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
     // 计算活跃用户数
     const activeUsersCount = activeUsersToday.length;
 
-    /* ===== G1-G4：总览新增模块（近 7 天趋势 / 用户增长 / Top Skill） ===== */
+    /* ===== 单扫端内聚合（性能批 2026-10-01）=====
+     * 扫描行含虚拟/测试/孤儿（userId NULL）行，逐行 Set 判定归属后分桶，
+     * 三口径语义与合并前的 SQL where 逐一对应：
+     * - All 口径 = 扫描全集（execFilter + 7d 窗口）
+     * - 真实口径 = userId ∈ realUserSet（原 realUserScope）
+     * - 虚拟口径 = userId ∈ virtualUserSet 且非空（原 in virtualUserIds，空集时空转）
+     */
+    type AgentScanRow = {
+      calledAt: Date;
+      success: boolean;
+      userId: string | null;
+      agentId: string | null;
+      errorCategory: string | null;
+      errorCode: string | null;
+      error: string | null;
+    };
+    const agentRows = agentScan7d as AgentScanRow[];
+    const todayStartTs = today.getTime();
+    const tomorrowTs = tomorrow.getTime();
+    const rolling24hTs = rolling24hStart.getTime();
+
+    // 今日超时判定：合并前是 SQL LIKE 计数（errorCode 含 TIMEOUT / error 含 5 类超时文本，
+    // SQLite LIKE 对 ASCII 大小写不敏感 → 端内 toLowerCase 比对同语义）。
+    // 注意它与 24h 趋势覆盖层的 isTimeoutLog（errorCategory/errorCode 维度）是并存的两套口径，
+    // 合并前后各自用途不变，互不替代。
+    const isTodayTimeoutText = (row: { errorCode: string | null; error: string | null }) => {
+      if (String(row.errorCode || '').toLowerCase().includes('timeout')) return true;
+      const text = String(row.error || '').toLowerCase();
+      return ['timeout', 'timed out', 'etimedout', 'deadline exceeded', 'request timeout'].some((s) =>
+        text.includes(s)
+      );
+    };
+
+    // Pass 1（全集）：All/虚拟口径计数 + 真实行收集
+    const realRows: AgentScanRow[] = [];
+    let agent7dAllTotal = 0;
+    let todayCallsAll = 0;
+    let todayCallsVirtual = 0;
+    for (const row of agentRows) {
+      agent7dAllTotal += 1;
+      const ts = new Date(row.calledAt).getTime();
+      if (ts >= todayStartTs && ts < tomorrowTs) {
+        todayCallsAll += 1;
+        if (row.userId != null && virtualUserSet.has(row.userId)) todayCallsVirtual += 1;
+      }
+      if (row.userId != null && realUserSet.has(row.userId)) realRows.push(row);
+    }
+
+    /* ===== G1/G4 前置：趋势桶 + TopSkill 表（真实口径 pass 2 一并产出） ===== */
     const dayKey = (d: Date | string) => dayKeyOf(new Date(d));
     const trendMap = new Map<string, { calls: number; failed: number }>();
     const todayKey = dayKeyOf(new Date());
     for (let i = 6; i >= 0; i--) {
       trendMap.set(addDaysToDayKey(todayKey, -i), { calls: 0, failed: 0 });
     }
-    for (const row of agentLogs7dRows) {
+    const skillMap = new Map<string, { calls: number; failed: number }>();
+    const activeAgentIds = new Set<string>();
+    const realFailureRows: AgentScanRow[] = [];
+    let agent7dTotal = 0;
+    let todayCalls = 0;
+    let todaySuccess = 0;
+    let todayTimeouts = 0;
+    for (const row of realRows) {
+      agent7dTotal += 1;
+      const ts = new Date(row.calledAt).getTime();
+      if (ts >= todayStartTs && ts < tomorrowTs) {
+        todayCalls += 1;
+        if (row.success) todaySuccess += 1;
+        else if (isTodayTimeoutText(row)) todayTimeouts += 1;
+      }
+      if (ts >= rolling24hTs) activeAgentIds.add(String(row.agentId ?? ''));
       const bucket = trendMap.get(dayKey(row.calledAt));
-      if (!bucket) continue;
-      bucket.calls += 1;
-      if (!row.success) bucket.failed += 1;
+      if (bucket) {
+        bucket.calls += 1;
+        if (!row.success) bucket.failed += 1;
+      }
+      const skillKey = String(row.agentId ?? '');
+      const skill = skillMap.get(skillKey) || { calls: 0, failed: 0 };
+      skill.calls += 1;
+      if (!row.success) skill.failed += 1;
+      skillMap.set(skillKey, skill);
+      if (!row.success) realFailureRows.push(row);
     }
     const trend7d = [...trendMap.entries()].map(([date, v]) => ({ date, ...v }));
+    const topSkills = [...skillMap.entries()]
+      .map(([agentId, v]) => ({ agentId, ...v }))
+      .sort((a, b) => b.calls - a.calls)
+      .slice(0, 5);
 
     const newUsersMap = new Map<string, number>();
     for (const u of newUsers7dRows) {
@@ -531,18 +457,6 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       newUsers: newUsersMap.get(date) || 0,
       activeUsers: activeMap.get(date)?.size || 0,
     }));
-
-    const skillMap = new Map<string, { calls: number; failed: number }>();
-    for (const row of agentSkillAgg7d) {
-      const cur = skillMap.get(row.agentId) || { calls: 0, failed: 0 };
-      cur.calls += row._count;
-      if (!row.success) cur.failed += row._count;
-      skillMap.set(row.agentId, cur);
-    }
-    const topSkills = [...skillMap.entries()]
-      .map(([agentId, v]) => ({ agentId, ...v }))
-      .sort((a, b) => b.calls - a.calls)
-      .slice(0, 5);
     
     // 计算活跃路径数
     const activePathsCount = activePaths.length;
@@ -562,24 +476,23 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       ? agentStats.success / agentStats.total 
       : 1.0;
 
-    const agentTodaySuccessRate = agentCallsToday > 0
-      ? ((agentSuccessToday / agentCallsToday) * 100).toFixed(1)
+    const agentTodaySuccessRate = todayCalls > 0
+      ? ((todaySuccess / todayCalls) * 100).toFixed(1)
       : null;
 
     // 全量聚合：每行必落 24 桶之一，总数=各小时和；高峰小时在聚合内直接给出（不再前端从抽样推断）。
-    // 性能批 2026-09-30：total/success 直接用 7d 趋势行（agentLogs7dRows，(calledAt,success) 覆盖索引免回表）；
-    // 超时分类从 7d 失败行（usageFailuresRows，带 error 字段）过滤出 24h 窗口覆盖——
-    // 24h 失败行 ⊆ 7d 失败行（同 where 同口径），不再为 24h 脉搏单独拉 3100 行。
-    const nowTs = Date.now();
+    // total/success 用真实口径 7d 行（realRows，原 agentLogs7dRows）；
+    // 超时分类从真实口径失败行（realFailureRows，带 error 字段）过滤出 24h 窗口覆盖——
+    // 24h 失败行 ⊆ 7d 失败行（同口径），不为 24h 脉搏单独拉行。
     const timeoutByHour = new Map<string, number>();
-    for (const row of usageFailuresRows) {
+    for (const row of realFailureRows) {
       const ts = new Date(row.calledAt).getTime();
       if (ts < trendWindowStart.getTime() || ts > nowTs) continue;
       if (!isTimeoutLog(row)) continue;
       const key = hourKeyOf(new Date(row.calledAt));
       timeoutByHour.set(key, (timeoutByHour.get(key) || 0) + 1);
     }
-    const hourlyTrend = buildHourlyTrend(agentLogs7dRows, trendWindowStart);
+    const hourlyTrend = buildHourlyTrend(realRows, trendWindowStart);
     // 桶序与 buildHourlyTrend 同源：hourlyTrend[i] = hourKeyOf(当前整点 - (23-i)h)
     const trendBucketStart = startOfHour(new Date());
     for (let i = 0; i < hourlyTrend.length; i += 1) {
@@ -597,24 +510,36 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
     );
     const last24hPeak = last24hTotal > 0 && peakBucket ? peakBucket.label : '—';
 
-    /* 近 7 天 LLM 用量与失败归因 */
-    const sum7d = (usageTokens7d as { _sum?: { totalTokens?: number | null } })._sum || {};
-    const sum7dAll = (usageTokens7dAll as { _sum?: { totalTokens?: number | null } })._sum || {};
-    const calls7dTotal = usageCalls7d.reduce((acc, g) => acc + g._count, 0);
-    const calls7dTotalAll = usageCalls7dAll.reduce((acc, g) => acc + g._count, 0);
-    // 失败数 = 失败归因行数（同一查询源，二者恒等，消除「失败 234 vs 归因 168」双口径）
-    const calls7dFailed = usageFailuresRows.length;
-    const models7d = (usageModels7d || [])
-      .filter(g => g.resolvedModel && g.resolvedModel !== 'null')
-      .map(g => ({
-        model: String(g.resolvedModel),
-        calls: g._count,
-        tokens: g._sum.totalTokens || 0,
-      }))
+    /* 近 7 天 LLM 用量与失败归因（单扫 2 端内聚合） */
+    let usageTokens7d = 0;
+    let usageTokens7dAll = 0;
+    let usageCalls7d = 0;
+    let usageCalls7dAll = 0;
+    const modelMap = new Map<string, { calls: number; tokens: number }>();
+    for (const row of llmScan7d as Array<{ userId: string | null; resolvedModel: string | null; totalTokens: number | null }>) {
+      const tokens = Number(row.totalTokens || 0);
+      usageCalls7dAll += 1;
+      usageTokens7dAll += tokens;
+      // 真实口径分桶（原 aggregate/groupBy 的 realUserScope）；孤儿行（userId NULL）只入全量口径
+      if (row.userId == null || !realUserSet.has(row.userId)) continue;
+      usageCalls7d += 1;
+      usageTokens7d += tokens;
+      // 模型分布只收真实口径（原 models7d groupBy 口径），空名/'null' 剔除
+      const model = String(row.resolvedModel || '');
+      if (!model || model === 'null') continue;
+      const m = modelMap.get(model) || { calls: 0, tokens: 0 };
+      m.calls += 1;
+      m.tokens += tokens;
+      modelMap.set(model, m);
+    }
+    const models7d = [...modelMap.entries()]
+      .map(([model, v]) => ({ model, calls: v.calls, tokens: v.tokens }))
       .sort((a, b) => b.tokens - a.tokens)
       .slice(0, 5);
+    // 失败归因（调用级：与「失败 N」同源行，分类见 classifyFailureCategory，
+    // 归因之和恒等于失败总数——失败数即本行集长度）
     const failureCategoryCounts = new Map<string, number>();
-    for (const row of usageFailuresRows) {
+    for (const row of realFailureRows) {
       const cat = classifyFailureCategory(row);
       failureCategoryCounts.set(cat, (failureCategoryCounts.get(cat) || 0) + 1);
     }
@@ -623,14 +548,14 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
     const usage = {
-      calls7d: calls7dTotal,
-      failed7d: calls7dFailed,
-      totalTokens7d: Number(sum7d.totalTokens || 0),
+      calls7d: agent7dTotal,
+      failed7d: realFailureRows.length,
+      totalTokens7d: usageTokens7d,
       models7d,
       failures7d,
       // 全量副口径（含虚拟/测试账号）：totalTokens7dAll / calls7dAll 供前端标注「含虚拟/测试」
-      totalTokens7dAll: Number(sum7dAll.totalTokens || 0),
-      calls7dAll: calls7dTotalAll,
+      totalTokens7dAll: usageTokens7dAll,
+      calls7dAll: agent7dAllTotal,
     };
 
     return {
@@ -659,19 +584,19 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
           totalCalls: agentStats.total,
           successRate: (agentSuccessRate * 100).toFixed(1),
           failedCalls: agentStats.error,
-          activeAgents24h: activeAgents24h.length,
-          todayCalls: agentCallsToday,
+          activeAgents24h: activeAgentIds.size,
+          todayCalls: todayCalls,
           todaySuccessRate: agentTodaySuccessRate,
-          todayTimeouts: agentTimeoutToday,
+          todayTimeouts: todayTimeouts,
           last24h: hourlyTrend,
           last24hTotal,
           last24hPeak,
           wrapup: wrapupSourceStats,
           // 全量副口径（含虚拟/测试账号）：前端标注「含虚拟/测试」
           totalCallsAll: agentStatsAll.total,
-          todayCallsAll: agentCallsTodayAll,
+          todayCallsAll: todayCallsAll,
           // 虚拟/测试账号独立口径（前端「虚拟调用」卡，与真实调用并列区分）
-          todayCallsVirtual: agentCallsTodayVirtual,
+          todayCallsVirtual: todayCallsVirtual,
           // G1/G4：近 7 天每日调用趋势 / Top Skill 活跃榜（总览新增卡）
           trend7d,
           topSkills,

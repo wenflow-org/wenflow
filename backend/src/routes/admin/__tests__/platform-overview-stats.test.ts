@@ -17,7 +17,7 @@ const mockPrisma = {
   subtasks: { count: jest.fn() },
   goal_conversations: { count: jest.fn() },
   agent_call_logs: mockAgentCallLogs,
-  llm_execution_attempts: { aggregate: jest.fn(), groupBy: jest.fn() },
+  llm_execution_attempts: { aggregate: jest.fn(), groupBy: jest.fn(), findMany: jest.fn() },
 };
 
 jest.mock('../../../config/database', () => ({ __esModule: true, default: mockPrisma }));
@@ -197,7 +197,9 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     clearOverviewStatsCache();
 
     mockPrisma.users.count.mockResolvedValue(0);
-    mockPrisma.users.findMany.mockResolvedValue([]);
+    // 默认一个真实用户 u1：扫描行按 userId 归属分桶（real/virtual 端内 Set 判定），
+    // 注入行带 userId: 'u1' 即计入真实口径
+    mockPrisma.users.findMany.mockResolvedValue([{ id: 'u1' }]);
     mockPrisma.teaching_sessions.findMany.mockResolvedValue([]);
     mockPrisma.learning_paths.count.mockResolvedValue(0);
     mockPrisma.learning_paths.findMany.mockResolvedValue([]);
@@ -207,6 +209,7 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     mockAgentCallLogs.count.mockResolvedValue(0);
     mockPrisma.llm_execution_attempts.aggregate.mockResolvedValue({ _sum: { totalTokens: null }, _count: 0 });
     mockPrisma.llm_execution_attempts.groupBy.mockResolvedValue([]);
+    mockPrisma.llm_execution_attempts.findMany.mockResolvedValue([]);
   });
 
   it('注入 120 行（>50）→ 响应 24h 总数=120、高峰=当前小时、24 桶之和=120', async () => {
@@ -215,8 +218,11 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
       id: `trend-${i}`,
       calledAt: now,
       success: i % 3 !== 0,
+      userId: 'u1',
+      agentId: 'skill:demo',
       errorCode: i % 3 === 0 ? 'ATTEMPT_TIMEOUT' : null,
       errorCategory: null,
+      error: null,
     }));
     // 趋势查询：窄 select（无 output）→ 全量行；wrapup 查询：select.output → 空
     mockAgentCallLogs.findMany.mockImplementation((args: any) =>
@@ -250,14 +256,14 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
   it('失败归因（调用级）：列值类别 + 空类别启发式归并，之和恒等于 failed7d', async () => {
     const now = new Date();
     const failureRows = [
-      { errorCategory: 'caller_abort', errorCode: 'CALLER_ABORTED', error: 'API request canceled' },
-      { errorCategory: 'caller_abort', errorCode: 'CALLER_ABORTED', error: 'API request canceled' },
-      { errorCategory: null, errorCode: 'CALLER_ABORTED', error: 'request canceled' },
-      { errorCategory: null, errorCode: null, error: 'request canceled' },
-      { errorCategory: 'protocol', errorCode: 'INVALID_RESPONSE_SCHEMA', error: 'bad envelope' },
-      { errorCategory: null, errorCode: 'ETIMEDOUT', error: null },
-      { errorCategory: null, errorCode: 'SKILL_EXECUTION_FAILED', error: 'boom' },
-      { errorCategory: null, errorCode: null, error: null },
+      { calledAt: now, userId: 'u1', agentId: 'skill:demo', errorCategory: 'caller_abort', errorCode: 'CALLER_ABORTED', error: 'API request canceled' },
+      { calledAt: now, userId: 'u1', agentId: 'skill:demo', errorCategory: 'caller_abort', errorCode: 'CALLER_ABORTED', error: 'API request canceled' },
+      { calledAt: now, userId: 'u1', agentId: 'skill:demo', errorCategory: null, errorCode: 'CALLER_ABORTED', error: 'request canceled' },
+      { calledAt: now, userId: 'u1', agentId: 'skill:demo', errorCategory: null, errorCode: null, error: 'request canceled' },
+      { calledAt: now, userId: 'u1', agentId: 'skill:demo', errorCategory: 'protocol', errorCode: 'INVALID_RESPONSE_SCHEMA', error: 'bad envelope' },
+      { calledAt: now, userId: 'u1', agentId: 'skill:demo', errorCategory: null, errorCode: 'ETIMEDOUT', error: null },
+      { calledAt: now, userId: 'u1', agentId: 'skill:demo', errorCategory: null, errorCode: 'SKILL_EXECUTION_FAILED', error: 'boom' },
+      { calledAt: now, userId: 'u1', agentId: 'skill:demo', errorCategory: null, errorCode: null, error: null },
     ];
     mockAgentCallLogs.findMany.mockImplementation((args: any) =>
       args?.select?.output ? Promise.resolve([]) : Promise.resolve(failureRows)
@@ -279,24 +285,34 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
 
   it('R5 口径：agent/llm 统计按真实用户 id 过滤，且全量副口径字段返回', async () => {
     const now = new Date();
-    const rows = Array.from({ length: 12 }, (_, i) => ({
-      id: `trend-${i}`,
+    // 今日 24 行：12 真实（8 成功/4 失败）+ 12 虚拟（userId=virt1，全成功）。
+    // 性能批 2026-10-01 后单扫不带 userId 过滤，real/virtual 在端内 Set 分桶，
+    // 因此行数据本身必须携带归属，口径由 users.findMany 的两个 id 集合决定。
+    const mkRow = (i: number, userId: string) => ({
+      id: `row-${userId}-${i}`,
       calledAt: now,
-      success: i % 3 !== 0,
-      errorCode: i % 3 === 0 ? 'ATTEMPT_TIMEOUT' : null,
+      success: userId === 'virt1' ? true : i % 3 !== 0,
+      userId,
+      agentId: 'skill:demo',
+      errorCode: userId !== 'virt1' && i % 3 === 0 ? 'ATTEMPT_TIMEOUT' : null,
       errorCategory: null,
-    }));
+      error: null,
+    });
+    const rows = [
+      ...Array.from({ length: 12 }, (_, i) => mkRow(i, 'real1')),
+      ...Array.from({ length: 12 }, (_, i) => mkRow(i, 'virt1')),
+    ];
     mockAgentCallLogs.findMany.mockImplementation((args: any) =>
       args?.select?.output ? Promise.resolve([]) : Promise.resolve(rows)
     );
-    // 真实用户 id 集合：统计查询应带 userId in 过滤；
-    // 两次调用：REAL_USER_WHERE 过滤版（real1/real2）→ 全部用户版（额外带虚拟 virt1/virt2，差集构成虚拟口径）
+    // 真实用户 id 集合：两次调用——REAL_USER_WHERE 过滤版（real1/real2）→
+    // 全部用户版（额外带虚拟 virt1/virt2，差集构成虚拟口径）
     mockPrisma.users.findMany.mockImplementation((args: any) =>
       args?.where?.NOT
         ? Promise.resolve([{ id: 'real1' }, { id: 'real2' }])
         : Promise.resolve([{ id: 'real1' }, { id: 'real2' }, { id: 'virt1' }, { id: 'virt2' }])
     );
-    // 全量 groupBy（两次调用：真实 + All）
+    // 全量累计 groupBy（两次调用：真实 + All）——10 分钟长缓存子层，仍带 SQL userId 过滤
     mockAgentCallLogs.groupBy.mockImplementation((args: any) =>
       args?.where?.userId
         ? Promise.resolve([
@@ -308,19 +324,11 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
             { success: false, _count: 14 },
           ])
     );
-    mockAgentCallLogs.count.mockImplementation((args: any) =>
-      args?.where?.userId ? Promise.resolve(12) : Promise.resolve(24)
-    );
-    mockPrisma.llm_execution_attempts.aggregate.mockImplementation((args: any) =>
-      args?.where?.userId
-        ? Promise.resolve({ _sum: { totalTokens: 300000 }, _count: 12 })
-        : Promise.resolve({ _sum: { totalTokens: 1200000 }, _count: 24 })
-    );
-    mockPrisma.llm_execution_attempts.groupBy.mockImplementation((args: any) =>
-      args?.where?.userId
-        ? Promise.resolve([{ resolvedModel: 'm1', _count: 12, _sum: { totalTokens: 300000 } }])
-        : Promise.resolve([])
-    );
+    // LLM 单扫：startedAt 窗口、无 userId 过滤（端内分桶）；真实 12×2.5 万 + 虚拟 12×7.5 万
+    mockPrisma.llm_execution_attempts.findMany.mockResolvedValue([
+      ...Array.from({ length: 12 }, (_, i) => ({ userId: 'real1', resolvedModel: 'm1', totalTokens: 25000, startedAt: now, id: `lr-${i}` })),
+      ...Array.from({ length: 12 }, (_, i) => ({ userId: 'virt1', resolvedModel: 'm1', totalTokens: 75000, startedAt: now, id: `lv-${i}` })),
+    ]);
 
     const handler = getRouteHandler('/overview/stats', 'get');
     const res = createResponse();
@@ -331,11 +339,19 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     // 真实用户 id 集合来自 users.findMany（REAL_USER_WHERE 过滤）
     expect(mockPrisma.users.findMany).toHaveBeenCalledWith(expect.objectContaining({ select: { id: true } }));
 
-    // 真实口径：userId in 过滤注入到 agent 与 llm 查询
+    // 真实口径：userId in 过滤仍注入到全量累计 groupBy（长缓存子层）
     const agentWhere = mockAgentCallLogs.groupBy.mock.calls.find((c: any) => c[0]?.where?.userId)?.[0].where;
     expect(agentWhere.userId).toEqual({ in: ['real1', 'real2'] });
-    const llmWhere = mockPrisma.llm_execution_attempts.aggregate.mock.calls.find((c: any) => c[0]?.where?.userId)?.[0].where;
-    expect(llmWhere.userId).toEqual({ in: ['real1', 'real2'] });
+
+    // 单扫窗口：agent/llm 都是纯时间窗（无 userId 过滤，端内分桶）
+    const agentScanWhere = mockAgentCallLogs.findMany.mock.calls.find(
+      (c: any) => c[0]?.select && !c[0].select.output
+    )?.[0].where;
+    expect(agentScanWhere.calledAt).toBeDefined();
+    expect(agentScanWhere.userId).toBeUndefined();
+    const llmScan = mockPrisma.llm_execution_attempts.findMany.mock.calls[0]?.[0];
+    expect(llmScan.where.startedAt).toBeDefined();
+    expect(llmScan.where.userId).toBeUndefined();
 
     // P1-9 回归：subtasks 归属必须按 userId 过滤。
     // subtasks.users 关系建在 usersId 上、生产创建路径从不写入（恒 null），旧写法用 users 关系过滤恒为 0。
@@ -357,8 +373,10 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     expect(payload.usage.calls7dAll).toBe(24);
     expect(payload.usage.totalTokens7d).toBe(300000);
     expect(payload.usage.totalTokens7dAll).toBe(1200000);
-    // 失败归因行数 = mock 返回行数（12；where 注入已由上方 agentWhere 断言覆盖）
-    expect(payload.usage.failed7d).toBe(12);
+    // 失败归因行数 = 真实口径失败行（12 真实行中 i%3===0 的 4 行）
+    expect(payload.usage.failed7d).toBe(4);
+    // 模型分布只收真实口径
+    expect(payload.usage.models7d).toEqual([{ model: 'm1', calls: 12, tokens: 300000 }]);
   });
 
   it('缓存去重：TTL 内二次请求命中缓存不重复计算；并发请求共享同一次在途计算', async () => {
