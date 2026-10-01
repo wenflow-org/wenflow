@@ -9,13 +9,38 @@
       </template>
     </MkPageHead>
 
+    <!-- KPI（原型 .grid auto-fit 210 + .card.kpi）：label 12 / 数值 28 / ▲▼趋势 foot。
+         趋势口径 = 昨日同时刻窗口（后端 overview/stats 基线字段），口径注释进悬停 tooltip。 -->
+    <div class="kpigrid">
+      <div
+        v-for="(k, i) in kpiCards"
+        :key="k.label"
+        class="card card--kpi"
+        role="button"
+        tabindex="0"
+        :title="kpiTitle(i)"
+        @click="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
+        @keydown.enter.prevent="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
+      >
+        <div class="kpi">
+          <span class="kpi__label">{{ k.label }}</span>
+          <span class="kpi__value">{{ k.value }}</span>
+          <span class="kpi__foot">
+            <span v-if="k.trend" class="trend" :class="k.trend.up ? 'trend--up' : 'trend--down'">{{ k.trend.up ? '▲' : '▼' }} {{ k.trend.pct }}</span>
+            <span>{{ k.foot }}</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
     <!-- 系统状态（原型 .statusbar）：点色=结论、粗体=标题、meta=子项、右端=动作。
-          排查/健康/仿真各是一个可点 meta（悬停有完整口径）。 -->
+          排查/健康/仿真各是一个可点 meta（悬停有完整口径）。
+          块序对齐原型 1353-1398：pagehead → KPI 栅格 → statusbar → 教学闭环卡。 -->
     <div class="mk-status" :class="`mk-status--${data.tone}`">
       <span class="mk-status__dot"></span>
       <span class="mk-status__title">{{ health.headline }}</span>
       <span class="mk-status__sep"></span>
-      <!-- subline（今日调用/失败）与下方 KPI 前两卡完全重复，不进状态条——
+      <!-- subline（今日调用/失败）与 KPI 前两卡完全重复，不进状态条——
            1280 实测它会把「查看健康中心」动作挤换行（2026-10-01 视觉回顾） -->
       <template v-if="effectiveActions.length">
         <button
@@ -53,30 +78,6 @@
       >{{ wrapupIssue.text }}</button>
       <div class="mk-status__actions">
         <button type="button" class="mk-status__action" @click="jump('health-center')">查看健康中心</button>
-      </div>
-    </div>
-
-    <!-- KPI（原型 .grid auto-fit 210 + .card.kpi）：label 12 / 数值 28 / ▲▼趋势 foot。
-         趋势口径 = 昨日同时刻窗口（后端 overview/stats 基线字段），口径注释进悬停 tooltip。 -->
-    <div class="kpigrid">
-      <div
-        v-for="(k, i) in kpiCards"
-        :key="k.label"
-        class="card card--kpi"
-        role="button"
-        tabindex="0"
-        :title="kpiTitle(i)"
-        @click="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
-        @keydown.enter.prevent="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
-      >
-        <div class="kpi">
-          <span class="kpi__label">{{ k.label }}</span>
-          <span class="kpi__value">{{ k.value }}</span>
-          <span class="kpi__foot">
-            <span v-if="k.trend" class="trend" :class="k.trend.up ? 'trend--up' : 'trend--down'">{{ k.trend.up ? '▲' : '▼' }} {{ k.trend.pct }}</span>
-            <span>{{ k.foot }}</span>
-          </span>
-        </div>
       </div>
     </div>
 

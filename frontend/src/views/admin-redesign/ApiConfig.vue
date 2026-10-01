@@ -1,7 +1,7 @@
 <template>
   <div class="mk-page mk-page--fill ac-host">
     <!-- 页头（newui/admin pagehead）：页名 + 各 tab 的主操作上移；状态条退位为纯状态摘要（随 tab 变化） -->
-    <MkPageHead title="模型与接入">
+    <MkPageHead title="模型与接入" sub="管理模型供应商、Skill 路由与后台访问安全策略">
       <template #actions>
         <button v-if="tab === 'connection'" type="button" class="mk-btn mk-btn--sm" :disabled="fetching || !form.apiUrl" @click="fetchModels">
           <MkLoading v-if="fetching" inline text="拉取中…" />

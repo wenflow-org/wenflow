@@ -1,9 +1,11 @@
 <template>
   <div class="mk-page mk-page--fill">
-    <!-- 页头（newui/admin pagehead）：页名随 tab（审计日志/登录审计）+ 刷新上移；
+    <!-- 页头（newui/admin pagehead）：页名随 tab（审计日志/登录审计）+ 导出/刷新上移；
          状态条退位为纯状态摘要（条数/失败），不再重复页名 -->
-    <MkPageHead :title="statusTitle">
+    <MkPageHead :title="statusTitle" sub="管理员操作与登录行为的完整审计追踪">
       <template #actions>
+        <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注；无数据时禁用 -->
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="!rows.length" @click="exportCurrentPage">导出本页</button>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="applyFilters">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
@@ -16,24 +18,26 @@
       <span v-if="failed" class="mk-status__meta mono">失败 {{ failed }}<template v-if="failedIsLocal">（本页）</template></span>
     </div>
 
-    <!-- 主视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
-         2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签） -->
-    <div class="tabs" role="tablist" aria-label="审计视图切换">
-      <button
-        v-for="t in tabs"
-        :key="t.id"
-        type="button"
-        role="tab"
-        class="tab"
-        :aria-selected="tab === t.id"
-        @click="switchTab(t.id)"
-      >
-        {{ t.label }}
-      </button>
-    </div>
-
-    <!-- 筛选卡片头（关键词 / 时间范围 / 列；tabs 已上移到独立切换行） -->
+    <!-- 单卡容器（原型 renderAudit：card > .tabs 页签 + 页签体，对齐 Users.vue 卡内页签判例）：
+         操作审计 / 登录审计两个页签体与页签共用一张卡。页签为原型 .tabs 下划线页签：
+         12px/600、激活蓝字+2px 蓝下划线、通栏底线（2026-10-01 由 mk-pills 胶囊迁入——
+         胶囊只做筛选 chips，视图/分区切换归页签） -->
     <div class="mk-card mk-card--fill">
+      <div class="tabs" role="tablist" aria-label="审计视图切换">
+        <button
+          v-for="t in tabs"
+          :key="t.id"
+          type="button"
+          role="tab"
+          class="tab"
+          :aria-selected="tab === t.id"
+          @click="switchTab(t.id)"
+        >
+          {{ t.label }}
+        </button>
+      </div>
+
+      <!-- 筛选卡片头（关键词 / 时间范围 / 列） -->
       <div class="mk-card__head">
         <div class="mk-filter">
           <MkFilterSearch
@@ -685,6 +689,18 @@ onMounted(() => {
 function goSessions(username: string) {
   void router.push({ path: '/admin/ops-center', query: { tab: 'security', user: username } })
 }
+
+/** 导出当前筛选页为 JSON（与 ExecLogs.exportJson 同款：仅当前页 rows，非全量筛选结果）。
+    操作审计 / 登录审计两个 tab 共用——rows 随 tab 取对应列表，文件名带 scope 区分 */
+function exportCurrentPage() {
+  const blob = new Blob([JSON.stringify(rows.value, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `audit-logs-${tab.value}-${Date.now()}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 </script>
 
 <style scoped>
@@ -988,26 +1004,25 @@ html[data-theme='dark'] .log-method--head { background: #2d2d2f; color: #afb1b6;
 
 /* ================= 空态撑满主区剩余高度（P1-1，2026-09-27 走查「空态利用」）=================
    本页是 .mk-page--fill + .mk-card--fill 应用式布局：空态带 mk-empty--min 后若不按本页壳层
-   覆写 --mk-empty-min-h，会用全局默认口径（100dvh - 230px）——本页状态条上方还多一行页签
-   切换、卡片内多一层筛选头，默认值会把空态撑出卡片导致底部裁切。走 BatchExperiments.vue
+   覆写 --mk-empty-min-h，会用全局默认口径（100dvh - 230px）——本页状态条之下还有卡内页签
+   切换行与筛选头两层，默认值会把空态撑出卡片导致底部裁切。走 BatchExperiments.vue
    同款页面覆写口（mk-primitives.css 预留），按本页壳层实测逐项推导（1920×1080、无 zoom；
    本页挂在 AdminConsole 壳层 .mshell__content 内滚动）：
      面包屑 .mshell__crumb         ~32（上下 7px 内边距 + 12px 微字号行高 ~18 + 1px 下边框）
      页面 padding-top               16（.mk-page--fill 的 --mk-space-4）
      状态条 .mk-status              48（min-height，带「刷新」按钮即撑满该高度）
-     gap（状态条 → 页签行）          12（.mk-page--fill 的 gap）
-     页签切换行（.tabs）             ~36（tab 上下 padding 9px×2 + 微字号行高 ~18）
-     gap（页签行 → 主卡片）          12（.mk-page--fill 的 gap）
-     卡片头 .mk-card__head          ~54（11px 内边距×2 + 32px 筛选控件；失败 TOP chips 换行的
+     gap（状态条 → 主卡片）          12（.mk-page--fill 的 gap）
+     页签切换行（.tabs，卡内顶部）    ~36（tab 上下 padding 9px×2 + 微字号行高 ~18）
+     卡片头 .mk-card__head          ~54（12px 内边距×2 + 32px 筛选控件；失败 TOP chips 换行的
                                        场景必有数据，不会落到空态分支，不参与推导）
      卡片上下边框                    2
      页面 padding-bottom            20（.mk-page 的 --mk-space-5）
-   合计 ≈232，留 ~8px 余量取整 240（宁少勿溢：多留余量只是空态盒底部差一点撑满，
+   合计 ≈220，留 ~8px 余量取整 228（宁少勿溢：多留余量只是空态盒底部差一点撑满，
    少留则 min-height 顶破 flex 高度被 .mk-page--fill 的 overflow:hidden 裁掉）。
    上限用 min(..., 1200px) 而非 max-height：CSS 里 min-height 优先于 max-height，
    超长竖屏下直接写 max-height 会被 min 顶掉不生效，min() 才能真正收口。
    骨架/错误态/列表分支不带 mk-empty--min，不受影响。 */
 .mk-card--fill > .mk-empty--min {
-  --mk-empty-min-h: min(calc(100dvh - 240px), 1200px);
+  --mk-empty-min-h: min(calc(100dvh - 228px), 1200px);
 }
 </style>

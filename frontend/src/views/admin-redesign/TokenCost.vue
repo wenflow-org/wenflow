@@ -2,10 +2,13 @@
   <div class="mk-page">
     <!-- 页头（newui/admin 原型 pagehead）：标题 + 口径副文 + 主操作上移；
          原状态条承担的「身份+口径+刷新」迁入页头，三个数字仍归下方 KPI 卡
-         （避免同一批数在页头与 KPI 区各说一遍，2026-09-29 口径延续） -->
+         （避免同一批数在页头与 KPI 区各说一遍，2026-09-29 口径延续）。
+         sub 用原型固定文案（2026-10-01 页头对齐批）；动态窗口/测试流量口径
+         转为页名悬停 hint——筛选条上窗口 pill 与 DataScopeToggle 本就可见 -->
     <MkPageHead
-      title="Token 成本"
-      :sub="`近 ${days} 天 · ${includeTest ? '含测试流量' : '仅真实用户'}`"
+      title="成本分析"
+      sub="按模型、Skill 与时间维度追踪模型调用成本"
+      :hint="`近 ${days} 天 · ${includeTest ? '含测试流量' : '仅真实用户'}`"
     >
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="() => load(true)">

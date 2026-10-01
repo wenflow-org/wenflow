@@ -198,8 +198,10 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     expect(labels).toContain('调用成本');
     expect(labels).toContain('总 Token');
     // 页头承担身份 + 口径（newui/admin pagehead 形态），状态条退役；不复述 KPI 数字
+    // 页名对齐原型「成本分析」（2026-10-01 页头对齐批，原「Token 成本」）
     const headText = w.find('.mk-pagehead').text();
-    expect(headText).toContain('Token 成本');
+    expect(headText).toContain('成本分析');
+    expect(headText).toContain('按模型、Skill 与时间维度追踪模型调用成本');
     expect(headText).not.toContain('次调用');
     w.unmount();
 

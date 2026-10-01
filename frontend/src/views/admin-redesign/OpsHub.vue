@@ -1,7 +1,7 @@
 <template>
   <div class="mk-page mk-page--fill oh-host">
     <!-- 页头（newui/admin pagehead）：页名 + 刷新/重试上移；状态条退位为纯状态摘要（随 tab 变化） -->
-    <MkPageHead title="运营中心">
+    <MkPageHead title="运营中心" sub="运营待办、用户反馈、成就与公告运营">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshActive">
           {{ refreshing ? '刷新中…' : (tab === 'todo' && wbHasError ? '重试' : '刷新') }}

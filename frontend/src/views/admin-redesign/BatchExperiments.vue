@@ -1,9 +1,10 @@
 <template>
   <div :class="embedded ? 'be-embedded' : 'mk-page'">
+    <!-- 页头（newui pagehead）：页名 + 口径副文。原型 actions 里的「导出」无真实后端能力，不加
+         （文案不得暗示不存在的功能）；「新建实验」是真实能力，留在状态条原位。 -->
+    <MkPageHead v-if="!embedded" title="批量实验" sub="用多组虚拟画像批量压测教学闭环与 Skill 稳定性" />
     <div v-if="!embedded" class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">批量实验</strong>
-      <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ experiments.length }} 个实验 · 进行中 {{ runningCount }} · 学习者 {{ learnerTotal }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建实验</button>
@@ -16,7 +17,7 @@
     </div>
 
     <div class="mk-card">
-      <MockSkeletonTable v-if="loading && !experiments.length" :cols="6" />
+      <MockSkeletonTable v-if="loading && !experiments.length" :cols="7" />
       <div v-else-if="experiments.length" class="mk-table-scroll be-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容；
              长描述由下方 be-desc 截断兜底 -->
@@ -28,6 +29,7 @@
               <th>学习者</th>
               <th>进度</th>
               <th>创建时间</th>
+              <th>负责人</th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -56,6 +58,8 @@
                 </div>
               </td>
               <td :title="fmtDate(e.createdAt)">{{ timeAgo(e.createdAt) }}</td>
+              <!-- 原型 .sub.mono 列：负责人（createdBy 详情抽屉已在用），空值显 — -->
+              <td class="mono be-owner" :title="e.createdBy || ''">{{ e.createdBy || '—' }}</td>
               <td>
                 <div class="mk-actions">
                   <!-- 原型操作列：文字小钮（.btn--sm 形态，破坏性动作红字钮）；行级动作另留 ⋯ 菜单 -->
@@ -253,6 +257,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { statusText } from './statusText'
 
 /** 嵌入模式：作为虚拟学习者「批量实验」tab 渲染（隐藏页面外壳/状态条） */
@@ -640,6 +645,8 @@ watch(shouldPoll, (on) => (on ? poll.start() : poll.stop()), { immediate: true }
 /* 表格（原型 .tbl）：自动布局下单元格 nowrap；实验描述是自由文本，max-width 截断兜底 */
 .be-list .mk-table td { white-space: nowrap; }
 .be-desc { display: block; max-width: 260px; }
+/* 负责人列（原型 .sub mono）：muted 色 + mono 字形（mono 走全局 .mono），空值由模板显 — */
+.be-owner { color: var(--mk-muted); }
 .be-progress { display: flex; align-items: center; gap: 8px; min-width: 140px; }
 /* 学习者列：失败数红色强调（失败有值时突出，无失败保持副行灰） */
 .be-fail-num { color: var(--mk-red); font-weight: 700; }

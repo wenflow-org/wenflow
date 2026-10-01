@@ -1,11 +1,15 @@
 <template>
   <div class="mk-page mk-page--fill skills-host">
-    <!-- 页头（newui/admin pagehead）：页名；本页无页级动作（范围控件在卡头），状态条承载活状态 -->
-    <MkPageHead title="Skill 运行" />
+    <!-- 页头（newui/admin pagehead）：页名对齐原型（Skill 与提示词）+ 随 tab 切换的口径副文；
+         本页无页级动作（范围控件在卡头），状态条承载活状态 -->
+    <MkPageHead title="Skill 与提示词" :sub="headSub" />
     <div class="mk-status" :class="hostTone">
       <span class="mk-status__dot"></span>
       <template v-if="tab === 'run'">
         <MkLoading v-if="liveLoading && !cards.length" inline text="Skill 加载中…" /><span v-else class="mk-status__meta" :title="skillCountHint">共 {{ cards.length }} 个 Skill</span>
+        <!-- 「N 个 live」（原型 statusbar meta）：完成度对账 status=live 的 Skill 数；
+             对账未就绪/失败时计数为 0 不显示，避免把「读不到」伪装成「0 个 live」 -->
+        <span v-if="liveCount > 0" class="mk-status__meta" title="完成度对账 status=live（ACTIVE prompt 生效）的 Skill 数">{{ liveCount }} 个 live</span>
         <!-- 窗口切换刷新中：先摘掉旧窗口的统计数字，避免新口径加载完成前旧 KPI 滞留误导（live.ts 侧 boot 窗口静默 no-op 属 live.ts，这里只兜 UI 观感） -->
         <MkLoading v-if="rangeRefreshing" inline text="统计刷新中…" />
         <template v-else>
@@ -256,6 +260,10 @@ function switchTab(t: SkillsTab) {
   tab.value = t
   if (route && router && route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
 }
+/* 页头副文（原型 1698）：随 tab 切换口径——运行=目录/版本/提示词，模型路由=路由与降级策略 */
+const headSub = computed(() =>
+  tab.value === 'model-routing' ? 'Skill 的模型路由与降级策略' : 'Skill 目录、版本与提示词管理'
+)
 /* 跨页深链：intent.tab 指向退役 tab（旧调用方还在传 health/drift/recon）也改投独立页 */
 watch(
   () => intent.tab,
@@ -500,6 +508,11 @@ const recCompletionOf = computed(() => {
   for (const r of recReport.value?.items ?? []) m.set(r.skillId, r.completion)
   return m
 })
+
+/** 状态条「N 个 live」（原型 statusbar meta）：完成度对账 status=live（已上线）的 Skill 数 */
+const liveCount = computed(() =>
+  cards.value.filter((c) => recCompletionOf.value.get(c.id)?.status === 'live').length
+)
 
 /** 完成度序号（0=draft … 4=live；无对账行 → null 排末尾），供表头排序 */
 function completionRank(skillId: string): number | null {

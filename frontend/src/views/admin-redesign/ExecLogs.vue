@@ -2,7 +2,7 @@
   <div class="mk-page mk-page--fill">
     <!-- 页头（newui/admin pagehead）：页名 + 导出上移；状态条退位为纯状态摘要
          （总数/失败/成功率/耗时分位/测试入口/筛选标记都是活状态，留状态条） -->
-    <MkPageHead title="执行日志">
+    <MkPageHead title="执行日志" sub="Skill 执行日志、调用 Trace 与失败定位">
       <template #actions>
         <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注；无数据时禁用 -->
         <button type="button" class="mk-btn mk-btn--sm" :disabled="!logs.length" @click="exportJson">导出本页</button>
@@ -29,24 +29,33 @@
       </span>
     </div>
 
-    <!-- 视图切换（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
-         胶囊只做筛选 chips，视图/分区切换归页签）：日志 / Trace 链路
-         （Trace 为执行日志下钻视图）；成本分析 2026-09-29 拆回独立页 /admin/token-cost -->
-    <div class="tabs" role="tablist" aria-label="执行日志视图切换">
-      <button type="button" role="tab" class="tab" :aria-selected="elTab === 'logs'" @click="switchElTab('logs')">日志</button>
-      <button type="button" role="tab" class="tab" :aria-selected="elTab === 'trace'" @click="switchElTab('trace')">Trace 链路</button>
-    </div>
-
-    <!-- ===== Tab2: Trace 链路（嵌入 TraceWaterfall 组件） ===== -->
-    <TraceWaterfall v-if="elTab === 'trace'" embedded />
-
-
-    <!-- ===== Tab1: 日志流（默认） ===== -->
-    <!-- P0 修复：卡片常驻（对齐 Users.vue 结构：卡片壳 + 常驻筛选头，骨架/错误/空态/表格/分页都在卡片内）。
-         旧实现把渲染条件挂在卡片外壳（v-else-if="filtered.length"），空列表时状态 pills / 搜索 /
-         高级筛选 / 列设置 / 保存视图 / 页码器整组消失，只剩一页没有任何筛选出口的死路空态 -->
-    <template v-if="elTab === 'logs'">
+    <!-- 单卡容器（原型 renderObserve：card > .tabs 页签 + 页签体，对齐 Users.vue 卡内页签判例）：
+         日志 / Trace 链路（Trace 为执行日志下钻视图）两个页签体共用一张卡；
+         页签 2026-10-01 由 mk-pills 胶囊迁入下划线页签——胶囊只做筛选 chips，视图/分区切换归页签；
+         成本分析 2026-09-29 拆回独立页 /admin/token-cost -->
     <div class="mk-card mk-card--fill">
+      <div class="tabs" role="tablist" aria-label="执行日志视图切换">
+        <button type="button" role="tab" class="tab" :aria-selected="elTab === 'logs'" @click="switchElTab('logs')">日志</button>
+        <button type="button" role="tab" class="tab" :aria-selected="elTab === 'trace'" @click="switchElTab('trace')">Trace 链路</button>
+      </div>
+
+      <!-- ===== Tab2: Trace 链路（嵌入 TraceWaterfall 组件；embedded 根节点 display:contents，
+           子元素直接成为本卡的 flex 子项，与日志页签体同卡） ===== -->
+      <TraceWaterfall v-if="elTab === 'trace'" embedded />
+
+      <!-- ===== Tab1: 日志流（默认） ===== -->
+      <!-- 卡片常驻（对齐 Users.vue：页签 + 常驻筛选头同卡，骨架/错误/空态/表格/分页都在卡片内）。
+           旧实现把渲染条件挂在卡片外壳（v-else-if="filtered.length"），空列表时状态 pills / 搜索 /
+           高级筛选 / 列设置 / 保存视图 / 页码器整组消失，只剩一页没有任何筛选出口的死路空态 -->
+      <template v-if="elTab === 'logs'">
+      <!-- 错误摘要条（原型 renderObserve 的 alert--error）：errCount>0 时红底提示 + 直达健康中心。
+           走全局 .mk-alert（红底红字，全局错误通道②「区块级提示」），外层留卡头同款内边距 -->
+      <div v-if="errCount > 0" class="exec-alertwrap">
+        <div class="mk-alert mk-alert--row exec-alert">
+          <span class="mk-alert__msg">近 24h 捕获 <b>{{ errCount }}</b> 条错误级日志</span>
+          <button type="button" class="mk-btn mk-btn--sm" @click="goHealthCenter">查看健康中心</button>
+        </div>
+      </div>
       <div class="mk-card__head">
         <!-- 左侧筛选组（对齐 Users：pills + 搜索框） -->
         <div class="mk-filter">
@@ -287,8 +296,8 @@
         @action="clearFilterToAll"
       />
       <Pagination v-if="logs.length" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" />
+      </template>
     </div>
-    </template>
   </div>
 </template>
 
@@ -584,6 +593,11 @@ function exportJson() {
   a.download = `execution-logs-${Date.now()}.json`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+/** 错误摘要条入口：健康中心（2026-09-29 起为独立场景 /admin/health-center） */
+function goHealthCenter() {
+  void router.push('/admin/health-center')
 }
 
 /* live 模式：展开行时拉真实 input/output + 重试时间线 */
@@ -982,6 +996,11 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 }
 .tab:hover { color: var(--mk-ink); }
 .tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+
+/* 错误摘要条（原型 renderObserve 的 alert--error）：外形走全局 .mk-alert--row（红底红字 +
+   消息/按钮两端排布），本页只补卡头同款内边距（.mk-card 无 padding）与按钮不缩（窄屏换行时按钮保完整） */
+.exec-alertwrap { padding: 12px 16px 0; }
+.exec-alert .mk-btn { flex-shrink: 0; }
 
 /* 状态条筛选徽章 / 清除按钮已提升为全局 .mk-status__filter / .mk-status__clear（见 shared.css） */
 

@@ -1,16 +1,18 @@
 <template>
   <div class="mk-page">
+    <!-- 页头（newui pagehead）：页名 + 口径副文，主操作「刷新」从状态条上移（同 AuditLogs/ExecLogs 判例；
+         原型的「生成报告」是无后端能力的假按钮，不加）。状态条退位为纯状态摘要，不再重复页名。 -->
+    <MkPageHead title="健康中心" sub="服务可用性、依赖链路与告警跟踪">
+      <template #actions>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="refresh(true)">{{ loading ? '检测中…' : '刷新' }}</button>
+      </template>
+    </MkPageHead>
     <div class="mk-status" :class="`mk-status--${barTone}`">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">健康中心</strong>
-      <span class="mk-status__sep"></span>
       <span class="mk-status__meta" v-if="displayReport" :title="skillCountTitle">
         技能 {{ global.total }}<template v-if="extraCapabilityCount">（含 {{ extraCapabilityCount }} 个外挂能力）</template> · 上线 {{ completionLive }}/{{ reconciliation.total }} · {{ displayReport.generatedAt ? '更新于 ' + timeAgo(displayReport.generatedAt) : '' }}
       </span>
       <span class="mk-badge" :class="topAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'" v-if="displayReport" :title="badgeTitle">{{ topAbnormal > 0 ? `异常 ${topAbnormal}` : '全部健康' }}</span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="loading" @click="refresh(true)">{{ loading ? '检测中…' : '刷新' }}</button>
-      </span>
     </div>
 
     <MkEmptyState
@@ -98,7 +100,11 @@
             <div class="service__top">
               <span class="service__dot" :class="`service__dot--${card.tone}`"></span>
               <span class="service__name">{{ card.name }}</span>
+              <!-- 原型 statusPill：ok→绿「正常」/ warn→黄「需关注」/ error→红「异常」 -->
+              <span class="mk-badge mk-badge--sm service__badge" :class="serviceBadge(card.tone).cls">{{ serviceBadge(card.tone).label }}</span>
             </div>
+            <!-- 原型 .sub 行：一句话说明该服务域是什么（口径同后端 base 分组语义）+ 真实检查项数 -->
+            <span class="service__sub">{{ serviceDesc(card) }}</span>
             <div class="service__metrics">
               <span>检查 <b>{{ card.total }}</b></span>
               <span>正常 <b>{{ card.ok }}</b></span>
@@ -131,7 +137,8 @@
             <span class="feedrow__time">{{ feedTime }}</span>
             <span class="feedrow__grow">
               <span class="feedrow__title">
-                <i class="feedrow__dot" :class="`feedrow__dot--${item.severity}`"></i>
+                <!-- 原型 feedrow：标题前是 statusPill（.pill→mk-badge 词汇映射），不再裸圆点 -->
+                <span class="mk-badge mk-badge--sm" :class="item.severity === 'error' ? 'mk-badge--bad' : 'mk-badge--warn'">{{ item.severity === 'error' ? '错误' : '警告' }}</span>
                 <span class="t">{{ item.label }}</span>
               </span>
               <span class="d">{{ feedDesc(item) }}</span>
@@ -291,6 +298,7 @@ import { EXTRA_CAPABILITY_SKILLS } from './capabilityCatalog'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import SkillReconciliation from './SkillReconciliation.vue'
 
 /* ---------- 独立场景（2026-09-29 用户拍板：合一 + 独立 + 归系统组） ----------
@@ -449,6 +457,28 @@ const SERVICE_GROUP_NAMES: Record<HealthCenterItem['base'], string> = {
   bidirectional: '双向对账',
   'db:managed': '数据库托管（覆盖行）',
   runtime: '运行时遥测',
+}
+/** 服务卡 sub 行（原型 .sub）：一句话说明该服务域是什么。域语义与后端 health-center.service.ts
+    buildItem 的 base 分组同源（各基准域的检查项 cause/fixHint 口径），非虚构；计数在 serviceDesc 用真实检查项数拼装 */
+const SERVICE_GROUP_DESC: Record<HealthCenterItem['base'], string> = {
+  'file:core.yaml': '以 core.yaml 为基准真源：哈希链与参数声明核对',
+  'file:manifest': '以 manifest 契约为基准真源：与数据库契约登记比对',
+  'file:orchestration': '以编排文件为基准真源：字段/路由登记比对',
+  'file:skills.yaml': '以 skills.yaml 为基准真源：注册与 ACTIVE 版本对账',
+  bidirectional: '双向对等比对：两侧独立维护的声明互相对账',
+  'db:managed': '数据库托管域：admin 手工覆盖行清单（只读观测）',
+  runtime: '运行时遥测：线上调用行为的只读观测记录',
+}
+/** 服务卡 sub 行文案：域描述 + 真实检查项数（同原型「后端 API · 检查项 N 个」形态） */
+function serviceDesc(card: { base: HealthCenterItem['base']; total: number }): string {
+  return `${SERVICE_GROUP_DESC[card.base] || card.base} · 检查项 ${card.total} 个`
+}
+/** 服务卡状态徽章（原型 statusPill→mk-badge）：ok→绿「正常」/ warn→黄「需关注」/ error→红「异常」
+    （tone 入参收 string：computed 对象属性推断会把字面量联合放宽成 string，此处兜底 ok） */
+function serviceBadge(tone: string): { cls: string; label: string } {
+  if (tone === 'warn') return { cls: 'mk-badge--warn', label: '需关注' }
+  if (tone === 'error') return { cls: 'mk-badge--bad', label: '异常' }
+  return { cls: 'mk-badge--ok', label: '正常' }
 }
 /** 13 项检查 → 每基准域一张服务卡：状态点取域内最高严重度，计数为域内检查项的真实分布 */
 const serviceCards = computed(() => {
@@ -700,6 +730,10 @@ defineExpose({ refresh })
 .service__dot--warn { background: var(--mk-amber); }
 .service__dot--error { background: var(--mk-red); }
 .service__name { min-width: 0; font-size: var(--mk-fs-body); font-weight: 700; }
+/* 状态徽章顶行右置（原型 statusPill 挂在 grow 名右侧） */
+.service__badge { margin-left: auto; flex: none; }
+/* 原型 .sub 行：域一句话描述（12px muted，允许换行不截断） */
+.service__sub { color: var(--mk-muted); font-size: var(--mk-fs-micro); line-height: 1.5; }
 .service__metrics { display: flex; flex-wrap: wrap; gap: 14px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .service__metrics b { color: var(--mk-ink); font-weight: 700; font-variant-numeric: tabular-nums; }
 
@@ -717,8 +751,7 @@ defineExpose({ refresh })
 .feedrow__title .t { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .feedrow__grow .d { color: var(--mk-muted); font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .feedrow__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.feedrow__dot--error { background: var(--mk-red); }
-.feedrow__dot--warn { background: var(--mk-amber); }
+/* warn/error 行的裸圆点已换成 mk-badge（原型 statusPill 形态）；--ok 留给「全部正常」行 */
 .feedrow__dot--ok { background: var(--mk-green); }
 
 /* 可折叠头走 .mk-section__summary（shared.css） */
