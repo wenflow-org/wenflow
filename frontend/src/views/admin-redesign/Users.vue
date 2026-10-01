@@ -76,21 +76,9 @@
         @action="retryLoad"
       />
       <div v-else-if="filtered.length" class="mk-table-scroll">
-        <table class="mk-table mk-table--fixed">
-          <!-- 列宽单一来源：<colgroup> + token。列宽合计必须 ≤ 容器宽（1440 下 1182px）：
-               fixed 表按列宽权重等比摊开余量，基准宽越大的列摊到越多。原基准合计 1056，
-               放大 1.12 倍后「角色」「操作」这类 2 字列各占 130px，而真正放昵称+邮箱的
-               用户列只有 358px、长邮箱被截。各列改回与内容相称的档位。 -->
-          <colgroup>
-            <col v-if="isLive && showCol('check')" style="width:32px">
-            <col style="width:var(--mk-col-text)">
-            <col v-if="showCol('email')" style="width:var(--mk-col-text-sm)">
-            <col v-if="showCol('role')" style="width:var(--mk-col-badge)">
-            <col v-if="showCol('paths')" style="width:var(--mk-col-num-wide)">
-            <col v-if="showCol('created')" style="width:var(--mk-col-time)">
-            <col v-if="showCol('lastlogin')" style="width:var(--mk-col-time)">
-            <col style="width:var(--mk-col-actions)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
+             列按内容自然分宽、余量摊给可收缩列；长邮箱/长昵称用 max-width 截断兜底 -->
+        <table class="mk-table">
           <thead>
             <tr>
               <th v-if="isLive && showCol('check')" scope="col">
@@ -826,12 +814,20 @@ function clearFilters() {
 .ul-user .mk-cell-main { min-width: 0; flex: 1; }
 .ul-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }
 
-/* 邮箱列（原型独立邮箱列，sub 字级弱于姓名） */
+/* 邮箱列（原型独立邮箱列，sub 字级弱于姓名）。
+   原型 .tbl 是自动布局：列宽随内容，超长邮箱用 max-width 截断兜底
+   （生产昵称/邮箱是 40+ 字符的机名形态，不设上限会独吃列宽） */
 .ul-email {
-  display: block; min-width: 0;
+  display: block; min-width: 0; max-width: 230px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: var(--mk-fs-micro); color: var(--mk-muted);
 }
+.ul-user .mk-cell-main strong {
+  display: block; max-width: 220px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 原型 .tbl td：nowrap（长内容由上面的 max-width 兜底，不换行撑行高） */
+.mk-table td { white-space: nowrap; }
 
 @media (min-width: 2000px) {
   .ul-tags { gap: 6px; margin-top: 3px; }
