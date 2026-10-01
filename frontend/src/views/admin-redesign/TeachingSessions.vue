@@ -2,7 +2,7 @@
   <div :class="embedded ? 'mk-page--fill ts-embedded' : 'mk-page mk-page--fill'">
     <!-- 教学会话页头（newui/admin pagehead：页名 + 刷新上移；embedded 由宿主承载，本组件不渲染页头）。
          状态条退位为纯状态摘要（有建议/共 N 条/截断提示），embedded 时同样不渲染 -->
-    <MkPageHead v-if="!embedded" title="教学会话">
+    <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 状态分布与需关注识别">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshNow">
           {{ refreshing ? '刷新中…' : '刷新' }}
@@ -121,19 +121,9 @@
 
       <MockSkeletonTable v-if="refreshing && !rows.length" :cols="8" />
       <div v-else class="mk-table-scroll">
-        <table v-if="filtered.length" class="mk-table mk-table--fixed">
-          <colgroup>
-            <col style="width:var(--mk-col-text)">
-            <!-- 用户列放的是 昵称+ID 两行，model-wide(140) 回缩后只剩 165px，昵称被截（-33px）；
-                 进度 只是「3/8」这类组合数字，占 165px 纯属浪费。两者对调档位。 -->
-            <col v-if="!tsHiddenCols.has('user')" style="width:var(--mk-col-text-sm)">
-            <col v-if="!tsHiddenCols.has('status')" style="width:var(--mk-col-badge)">
-            <col v-if="!tsHiddenCols.has('interact')" style="width:var(--mk-col-model)">
-            <col v-if="!tsHiddenCols.has('progress')" style="width:var(--mk-col-model)">
-            <col v-if="!tsHiddenCols.has('output')" style="width:var(--mk-col-badge)">
-            <col v-if="!tsHiddenCols.has('attention')" style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-actions)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
+             列按内容自然分宽；长内容由 .ts-summary-preview / .mk-cell-main 的 max-width 截断兜底 -->
+        <table v-if="filtered.length" class="mk-table">
           <thead>
             <tr>
               <th
@@ -166,7 +156,7 @@
               <th v-if="!tsHiddenCols.has('progress')">进度</th>
               <th v-if="!tsHiddenCols.has('output')">产物</th>
               <th v-if="!tsHiddenCols.has('attention')">关注</th>
-              <th class="mk-th--right">详情</th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -239,9 +229,11 @@
                 >{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span>
               </td>
               <td>
-                <div class="ts-actions">
-                  <button type="button" class="mk-icon-btn" title="链路" @click.stop="goTrace(r)"><Link :size="15" :stroke-width="1.75" /></button>
-                  <button v-if="r.id" type="button" class="mk-icon-btn" title="控制台" @click.stop="goConsole(r)"><SquareTerminal :size="15" :stroke-width="1.75" /></button>
+                <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）；
+                     右对齐走共享 .mk-actions，与 mk-th--right 表头对齐 -->
+                <div class="mk-actions">
+                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="goTrace(r)">链路</button>
+                  <button v-if="r.id" type="button" class="mk-btn mk-btn--sm" @click.stop="goConsole(r)">控制台</button>
                 </div>
               </td>
             </tr>
@@ -407,9 +399,6 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
-/* 操作列图标：模板里的 <Link>/<SquareTerminal> 此前从未 import → 渲染为空白，
-   按钮却仍可点（同 EyeOff 幽灵图标一类，2026-09-29 修） */
-import { Link, SquareTerminal } from 'lucide-vue-next'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
     count 事件：列表加载完成后上报总条数（宿主「教学 N」徽章）
@@ -984,6 +973,10 @@ defineExpose({ refreshNow })
 }
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }
+/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
+   长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。
+   本组件仅列表一张 mk-table（抽屉内无表格），裸选择器即可 */
+.mk-table td { white-space: nowrap; }
 /* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
 /* 互动列（批B）：时长主值+副行 */
 .ts-ia { display: grid; gap: 2px; justify-items: start; }
@@ -1114,7 +1107,10 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
   border-radius: var(--mk-radius-sm);
   background: var(--mk-code-bg);
   color: var(--mk-code-fg);
-  font: 10.5px/1.6 var(--mk-mono);
+  /* 字号下限 12px（设计语言规则 5）：原 10.5px 低于全站文本下限 */
+  font-family: var(--mk-mono);
+  font-size: var(--mk-fs-micro);
+  line-height: 1.6;
   max-height: 220px;
   overflow: auto;
   white-space: pre-wrap;

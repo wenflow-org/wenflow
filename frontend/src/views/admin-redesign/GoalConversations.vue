@@ -111,17 +111,9 @@
           <button type="button" class="mk-link" @click="load(true)">重试</button>
         </div>
         <div v-else-if="filtered.length" class="mk-table-scroll">
-        <table class="mk-table mk-table--fixed">
-          <!-- 列宽单一来源：<colgroup> + token；「目标摘要」为 auto 吸收列 -->
-          <colgroup>
-            <col style="width:var(--mk-col-model-wide)">
-            <col v-if="!gcHiddenCols.has('summary')" style="width:var(--mk-col-text)">
-            <col v-if="!gcHiddenCols.has('status')" style="width:var(--mk-col-badge)">
-            <col v-if="!gcHiddenCols.has('stage')" style="width:var(--mk-col-model-wide)">
-            <col v-if="!gcHiddenCols.has('path')" style="width:var(--mk-col-badge)">
-            <col v-if="!gcHiddenCols.has('created')" style="width:var(--mk-col-time-full)">
-            <col style="width:var(--mk-col-actions-wide)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
+             列按内容自然分宽；长摘要/长邮箱由 .gc-summary / .mk-cell-main 的 max-width 截断兜底 -->
+        <table class="mk-table">
           <thead>
             <tr>
               <th
@@ -185,10 +177,12 @@
               </td>
               <td v-if="!gcHiddenCols.has('created')"><span class="mk-cell-sub" :title="r.createdAt">{{ r.createdAt }}</span></td>
               <td>
-                <div class="mk-actions mk-actions--left">
-                  <button type="button" class="mk-icon-btn" title="链路" @click.stop="goTrace(r)"><Link :size="15" :stroke-width="1.75" /></button>
-                  <button type="button" class="mk-icon-btn" title="控制台" @click.stop="goConsole(r)"><SquareTerminal :size="15" :stroke-width="1.75" /></button>
-                  <button type="button" class="mk-icon-btn" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '重建路径'" @click.stop="regenerate(r)"><RotateCcw :size="15" :stroke-width="1.75" /></button>
+                <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）；
+                     删除属危险低频操作，仍收 ⋯ 菜单。右对齐与 mk-th--right 表头对齐（同 Users.vue 判例） -->
+                <div class="mk-actions">
+                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="goTrace(r)">链路</button>
+                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="goConsole(r)">控制台</button>
+                  <button type="button" class="mk-btn mk-btn--sm" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '重建路径'" @click.stop="regenerate(r)">{{ r.regenerating ? '生成中…' : '重建路径' }}</button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(r.id)">⋯</button>
                     <div v-if="openMenu === r.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -346,7 +340,6 @@ import { isLive } from './store'
 import { useSessionDrill } from './useSessionDrill'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS, statusText } from './statusText'
-import { Link, RotateCcw, SquareTerminal } from 'lucide-vue-next';
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -917,6 +910,9 @@ onMounted(() => {
   white-space: nowrap;
   vertical-align: bottom;
 }
+/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
+   长摘要 .gc-summary 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底） */
+.mk-table td { white-space: nowrap; }
 
 /* 详情面板（与 ts/pcl 面板同构） */
 .gc-detail__title { display: grid; gap: 6px; justify-items: start; }

@@ -11,6 +11,7 @@
          原状态条整体退役 -->
     <MkPageHead
       title="记忆与复习观测"
+      sub="遗忘曲线调度 · 到期积压、课内温故与概念归并审计"
       hint="记忆层（用户级、跨 path）：到期积压 · 课内温故配额 · 概念归并审计；归并默认观察模式，只记录建议，不动 memory_traces"
     >
       <template #actions>
@@ -78,7 +79,7 @@
         <h3 class="mk-card__title">用户列表</h3>
         <!-- 口径：totals.users 是后端全量统计，列表只取痕迹数倒序前 N 且暂无分页——
              两个数字必须同时给出，否则「页头 137 / 表下共 50」读起来像数据缺失 -->
-        <span class="mk-card__meta" title="后端口径为全量有记忆痕迹用户；列表按痕迹数倒序只取前 {{ rows.length }} 名，暂无分页">共 {{ totals.users }} 位有记忆痕迹用户（展示前 {{ rows.length }}）· 按痕迹数倒序</span>
+        <span class="mk-card__meta" :title="`后端口径为全量有记忆痕迹用户；列表按痕迹数倒序只取前 ${rows.length} 名，暂无分页`">共 {{ totals.users }} 位有记忆痕迹用户（展示前 {{ rows.length }}）· 按痕迹数倒序</span>
       </div>
       <p v-if="error" class="mr__error">{{ error }}</p>
       <MockSkeletonTable v-if="loading && !rows.length" :cols="5" :rows="8" />
@@ -87,23 +88,16 @@
            行列表没有表头，右侧两个裸数字（到期积压 / 待人工看）读者无从判断含义。
            保留「只留要动手的信号、其余计数进明细卡」这个决定，只补回表头与排序键：
            用户 | 痕迹（本表倒序键）| 到期 | 需人工看 | 操作。
-           fixed 表的 colgroup 即比例契约，每列都要给宽度（ADMIN_COLUMN_WIDTH_SPEC）。 -->
+           原型 .tbl 自动布局：无 colgroup/无 fixed，列宽随内容、td nowrap（同 Users.vue 判例） -->
       <div v-else class="mk-table-scroll">
-        <table class="mk-table mk-table--click mk-table--fixed">
-          <colgroup>
-            <col style="width:var(--mk-col-text)" />
-            <col style="width:var(--mk-col-num)" />
-            <col style="width:var(--mk-col-num-wide)" />
-            <col style="width:var(--mk-col-num)" />
-            <col style="width:var(--mk-col-actions-wide)" />
-          </colgroup>
+        <table class="mk-table mk-table--click">
           <thead>
             <tr>
               <th>用户</th>
               <th class="mk-num" title="该用户名下的记忆痕迹总数；本表按此列倒序">痕迹</th>
               <th class="mk-num" title="到该复习而未复习的痕迹数；条内小条 = 占该用户痕迹比例">到期</th>
               <th class="mk-num" title="像但不确定的归并候选，需人工确认，不会自动执行">需人工看</th>
-              <th></th>
+              <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -841,8 +835,9 @@ onMounted(async () => {
 
 /* 记忆分布（newui「教学分组」stageband 原型移植；token 映射：--surface-3→--mk-surface-3、
    --muted→--mk-muted、--fs-micro→--mk-fs-micro、sbl__sw 3px 圆角→--mk-radius-xs）。
-   mk-card 没有 body padding 原语 → 本地 .mr-dist__body（非 mk- 前缀）。 */
-.mr-dist__body { padding: 14px 16px 16px; }
+   mk-card 没有 body padding 原语 → 本地 .mr-dist__body（非 mk- 前缀）。
+   12/16 = 原型 .card__body（--sp-3/--sp-4），与 TeachingSessions 分布卡同一档。 */
+.mr-dist__body { padding: 12px 16px 16px; }
 .stageband { display: flex; gap: 2px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--mk-surface-3); }
 .stageband > span { display: block; height: 100%; }
 .stageband__legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px 18px; margin-top: 14px; }
@@ -895,7 +890,7 @@ onMounted(async () => {
 .mr-audit-queue__item--quiet { background: transparent; }
 .mr-audit-queue__item b { font-size: 18px; font-weight: 800; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
 .mr-audit-queue__item b i { font-style: normal; font-size: 12px; font-weight: 600; color: var(--mk-faint); }
-.mr-audit-queue__item span { font-size: 11px; color: var(--mk-muted); }
+.mr-audit-queue__item span { font-size: var(--mk-fs-micro); color: var(--mk-muted); } /* 12px 下限（设计语言规则 5），原 11px */
 .mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
 .mr__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 16px 10px; }
 .mr__warn-inline { color: var(--mk-amber); font-size: var(--mk-fs-micro); }
