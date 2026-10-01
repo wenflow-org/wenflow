@@ -414,6 +414,11 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
     let todayCalls = 0;
     let todaySuccess = 0;
     let todayTimeouts = 0;
+    // KPI 趋势基线：昨日同时刻窗口 = [昨日 00:00, 昨日 00:00 + 今日已流逝时长)，
+    // 与「今日自然日（进行中）」等长对照——不与昨日全日直接比（部分窗口 vs 全日必然失真）
+    let todayCallsBaseline = 0;
+    const baselineStartTs = todayStartTs - 86400000;
+    const baselineEndTs = baselineStartTs + Math.max(0, nowTs - todayStartTs);
     for (const row of realRows) {
       agent7dTotal += 1;
       const ts = new Date(row.calledAt).getTime();
@@ -422,6 +427,7 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
         if (row.success) todaySuccess += 1;
         else if (isTodayTimeoutText(row)) todayTimeouts += 1;
       }
+      if (ts >= baselineStartTs && ts < baselineEndTs) todayCallsBaseline += 1;
       if (ts >= rolling24hTs) activeAgentIds.add(String(row.agentId ?? ''));
       const bucket = trendMap.get(dayKey(row.calledAt));
       if (bucket) {
@@ -457,6 +463,19 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       newUsers: newUsersMap.get(date) || 0,
       activeUsers: activeMap.get(date)?.size || 0,
     }));
+
+    // KPI 趋势基线（昨日同时刻窗口）：新增注册 / 活跃用户（去重）
+    let newTodayBaseline = 0;
+    const activeBaselineSet = new Set<string>();
+    for (const u of newUsers7dRows) {
+      const ts = new Date(u.createdAt).getTime();
+      if (ts >= baselineStartTs && ts < baselineEndTs) newTodayBaseline += 1;
+    }
+    for (const s of activeUsers7dRows) {
+      const ts = new Date(s.startTime).getTime();
+      if (ts >= baselineStartTs && ts < baselineEndTs) activeBaselineSet.add(s.userId);
+    }
+    const activeTodayBaseline = activeBaselineSet.size;
     
     // 计算活跃路径数
     const activePathsCount = activePaths.length;
@@ -564,6 +583,9 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
           newToday: newUsersToday,
           activeToday: activeUsersCount,
           activeRate: totalUsers > 0 ? (activeUsersCount / totalUsers * 100).toFixed(1) : '0.0',
+          // KPI 趋势基线（昨日同时刻窗口）：新增注册 / 活跃用户
+          newTodayBaseline,
+          activeTodayBaseline,
           // G2/G3：近 7 天每日新增注册 / 活跃用户（总览「用户增长」卡）
           growth7d,
         },
@@ -588,6 +610,8 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
           todayCalls: todayCalls,
           todaySuccessRate: agentTodaySuccessRate,
           todayTimeouts: todayTimeouts,
+          // KPI 趋势基线（昨日同时刻窗口）：今日调用对照
+          todayCallsBaseline,
           last24h: hourlyTrend,
           last24hTotal,
           last24hPeak,

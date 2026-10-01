@@ -57,7 +57,7 @@
     </div>
 
     <!-- KPI（原型 .grid auto-fit 210 + .card.kpi）：label 12 / 数值 28 / ▲▼趋势 foot。
-         趋势真实来源：今日调用 vs 昨日（trend7d）、今日活跃 vs 昨日（growth7d）。 -->
+         趋势口径 = 昨日同时刻窗口（后端 overview/stats 基线字段），口径注释进悬停 tooltip。 -->
     <div class="kpigrid">
       <div
         v-for="(k, i) in kpiCards"
@@ -72,7 +72,10 @@
         <div class="kpi">
           <span class="kpi__label">{{ k.label }}</span>
           <span class="kpi__value">{{ k.value }}</span>
-          <span class="kpi__foot">{{ k.foot }}</span>
+          <span class="kpi__foot">
+            <span v-if="k.trend" class="trend" :class="k.trend.up ? 'trend--up' : 'trend--down'">{{ k.trend.up ? '▲' : '▼' }} {{ k.trend.pct }}</span>
+            <span>{{ k.foot }}</span>
+          </span>
         </div>
       </div>
     </div>
@@ -214,7 +217,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource } from './store';
-import { TERMS } from './terms';
 import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing, liveVirtualRunStats, type LiveOverviewFull } from './live';
 import { adminHealthCenterApi, adminMemoryReviewApi, adminTeachingSessionsApi } from '@/api/adminApi';
 import MkPageHead from '@/components/mk/MkPageHead.vue';
@@ -301,13 +303,13 @@ const headSub = computed(() => {
 function refreshNow() { void refreshOverviewTracked(true); }
 
 /* ===== KPI（原型 .kpi）=====
-   原型 kpi__foot 的 ▲▼ 趋势**有意不搬**：我们的窗口是「今日自然日（进行中）」，
-   与「昨日全日」直接相比必然失真——2026-10-01 凌晨实测 ▼-97%（调用）/▼-100%（活跃），
-   数字真实但结论错误。等后端提供「同期对比」（昨日同时刻窗口）再恢复趋势 foot。
-   spec §9.7 已登记。 */
-interface KpiCard { label: string; value: string; foot: string }
+   ▲▼趋势已恢复（2026-10-01）：基线改「昨日同时刻」等长窗口（后端 todayCallsBaseline/
+   activeTodayBaseline），不再与昨日全日直接比——旧趋势 foot 因「今日进行中 vs 昨日全日」
+   失真下线（凌晨 ▼-97% 实证），等的就是这个口径。口径注释（全量含虚拟/测试、总用户）
+   退到悬停 tooltip（hint），foot 只留 超时/失败/新增 与基线说明。 */
+interface KpiCard { label: string; value: string; foot: string; hint: string; trend?: { pct: string; up: boolean } }
 const kpiCards = computed<KpiCard[]>(() =>
-  (data.value?.kpis ?? []).map((k) => ({ label: k.label, value: k.value, foot: k.hint }))
+  (data.value?.kpis ?? []).map((k) => ({ label: k.label, value: k.value, foot: k.foot, hint: k.hint, trend: k.trend }))
 );
 
 /* ===== 近 7 天活跃学习者（原型 .barchart：顶部数值 + 渐变柱 + 星期帽）===== */
@@ -414,14 +416,9 @@ const kpiTargets: Array<{ scene: string; tab?: string }> = [
   { scene: 'goal-conversations' }
 ]
 
-const KPI_HINTS: string[] = [
-  '今日自然日（00:00 起）',
-  `${TERMS.healthScoreTitle}（真实口径）`,
-  '今日新增注册 + 今日有学习会话的用户',
-  '今日进行中的目标对话 + 近 24h 有调用的 Skill',
-]
 function kpiTitle(i: number): string {
-  const hint = KPI_HINTS[i] || ''
+  // 口径说明随数据来（live.ts kpis.hint），前端只补跳转动作
+  const hint = kpiCards.value[i]?.hint || ''
   const target = kpiTargets[i]?.scene || ''
   const label = target === 'execution-logs' ? '执行日志'
     : target === 'people' ? '用户与学习者'
@@ -563,6 +560,10 @@ watch(dataSource, () => {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .kpi__foot { display: flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 趋势（原型 .trend：粗体 tabular；涨绿跌红） */
+.trend { font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
+.trend--up { color: var(--mk-green); }
+.trend--down { color: var(--mk-red); }
 
 /* ---- 卡片（原型 .card：head 12/16 分隔线 + body 16）---- */
 .card {

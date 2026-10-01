@@ -84,7 +84,8 @@ describe('前端术语单源守卫（阶段 1D）', () => {
       'TraceWaterfall.vue',
       'HealthCenter.vue',
       'DriftAuditPanel.vue',
-      'Overview.vue',
+      // Overview.vue → live.ts（2026-10-01）：总览的健康族文案单源消费点移至数据组装层
+      'live.ts',
       'Orchestrator.vue',
       'FieldAddWizard.vue',
     ];

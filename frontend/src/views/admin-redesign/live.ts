@@ -770,7 +770,7 @@ export interface LiveOverviewFull {
   score: number | null
   headline: string
   subline: string
-  kpis: { label: string; value: string; hint: string }[]
+  kpis: { label: string; value: string; foot: string; hint: string; trend?: { pct: string; up: boolean } }[]
   wrapup: {
     sampleSize: number
     summaryModel: number
@@ -988,18 +988,52 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     }))
 
   /* KPI 行：纯真实用户口径（R4：总览回归「真实用户看板」，虚拟/模拟数据不混入；
-     真实 0 显示 0，非数值才显示 —；0 原因给一句导航提示，不展示虚拟数字） */
+     真实 0 显示 0，非数值才显示 —；0 原因给一句导航提示，不展示虚拟数字）。
+     结构对齐原型 kpi：label / 大数值 / ▲▼趋势 + foot / hint 进悬停 tooltip——
+     口径注释（含虚拟/测试全量、总用户口径）不再占 foot 正文。
+     趋势 = 昨日同时刻窗口对照（今日 00:00→now vs 昨日同长窗口），
+     不与昨日全日直接比（部分窗口失真，2026-10-01 凌晨 ▼-97% 实证）；
+     基线 0 无对照 → 不给百分比，foot 落「昨日同时刻无对照」。 */
   const fmt = (n: number, suffix = '') => (Number.isFinite(n) ? `${n}${suffix}` : '—')
   const todayOnlySimulated = todayCalls === 0 && todayCallsAll > 0
-  const kpis = [
-    { label: '今日调用', value: fmt(todayCalls), hint: todayCalls > 0 ? `超时 ${Number(agents.todayTimeouts || 0)}` : todayOnlySimulated ? '今日无真实调用 · 虚拟仿真见「虚拟学习者」' : '等待学习者开始' },
-    { label: TERMS.healthScore, value: todayCalls > 0 ? `${todaySuccessRate}%` : '—', hint: todayFailed > 0 ? `${todayFailed} 次失败` : todayOnlySimulated ? '暂无真实用户调用' : '无失败' },
-    { label: '用户活跃', value: `${fmt(Number(users.newToday || 0))} 新增 / ${fmt(activeUsers)} 活跃`, hint: `总用户 ${users.total ?? 0}（真实，不含测试/虚拟）` },
-    { label: '系统活跃', value: `${fmt(Number(conv.active || 0))} 对话`, hint: `${fmt(Number(agents.activeAgents24h || 0))} Skill 有调用 · 目标澄清 + 近 24h` },
-  ]
-  if (todayCallsAll > todayCalls && !todayOnlySimulated) {
-    kpis[0] = { ...kpis[0], hint: `${kpis[0].hint} · 全量（含虚拟/测试）${todayCallsAll} 次` }
+  const trendOf = (cur: number, base: number) => {
+    if (!(cur > 0) || !(base > 0)) return undefined
+    const pct = ((cur - base) / base) * 100
+    const pctStr = Number.isInteger(pct) ? String(pct) : pct.toFixed(1)
+    return { pct: `${pct >= 0 ? '+' : ''}${pctStr}%`, up: pct >= 0 }
   }
+  const baseNote = (hasTrend: boolean) => (hasTrend ? '较昨日同时刻' : '昨日同时刻无对照')
+  const todayTimeoutsN = Number(agents.todayTimeouts || 0)
+  const callsTrend = trendOf(todayCalls, Number(agents.todayCallsBaseline || 0))
+  const activeTrend = trendOf(activeUsers, Number(users.activeTodayBaseline || 0))
+  const kpis = [
+    {
+      label: '今日调用',
+      value: fmt(todayCalls),
+      trend: callsTrend,
+      foot: [todayTimeoutsN > 0 ? `超时 ${todayTimeoutsN}` : null, baseNote(!!callsTrend)].filter(Boolean).join(' · '),
+      hint: todayCallsAll > todayCalls ? `真实用户口径 · 全量（含虚拟/测试）${fmt(todayCallsAll)} 次` : '真实用户口径 · 今日 00:00 起',
+    },
+    {
+      label: TERMS.healthScore,
+      value: todayCalls > 0 ? `${todaySuccessRate}%` : '—',
+      foot: todayFailed > 0 ? `失败 ${todayFailed}` : todayOnlySimulated ? '今日无真实调用' : '无失败',
+      hint: '失败 / 调用 · 真实用户口径',
+    },
+    {
+      label: '用户活跃',
+      value: fmt(activeUsers),
+      trend: activeTrend,
+      foot: `今日新增 ${fmt(Number(users.newToday || 0))} · ${baseNote(!!activeTrend)}`,
+      hint: `今日有学习会话的用户 · 总用户 ${users.total ?? 0}（真实口径）`,
+    },
+    {
+      label: '系统活跃',
+      value: fmt(Number(conv.active || 0)),
+      foot: `${fmt(Number(agents.activeAgents24h || 0))} Skill 近 24h 有调用`,
+      hint: '进行中目标对话（快照口径，无同时刻对照）',
+    },
+  ]
 
   /* 总结产出质量：wrapup 生成链路健康度（model / fallback / failed） */
   const wrap = (stats.agents?.wrapup || {}) as Record<string, number>

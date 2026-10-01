@@ -377,6 +377,10 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     expect(payload.usage.failed7d).toBe(4);
     // 模型分布只收真实口径
     expect(payload.usage.models7d).toEqual([{ model: 'm1', calls: 12, tokens: 300000 }]);
+    // KPI 趋势基线字段在位（mock 行全部落在今日 → 昨日同时刻窗口为 0）
+    expect(payload.agents.todayCallsBaseline).toBe(0);
+    expect(payload.users.newTodayBaseline).toBe(0);
+    expect(payload.users.activeTodayBaseline).toBe(0);
   });
 
   it('缓存去重：TTL 内二次请求命中缓存不重复计算；并发请求共享同一次在途计算', async () => {
