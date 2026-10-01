@@ -144,7 +144,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in paged" :key="r.id" class="gc-row" tabindex="0" @click="openDetail(r)" @keydown.enter.prevent="openDetail(r)">
+            <tr v-for="r in paged" :key="r.id" class="gc-row" tabindex="0" @click="goLearner(r)" @keydown.enter.prevent="goLearner(r)">
               <td>
                 <div class="gc-user">
                   <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
@@ -173,7 +173,9 @@
                 </div>
               </td>
               <td v-if="!gcHiddenCols.has('path')">
-                <span v-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
+                <!-- 原型 open-path 习惯：生成过的路径成跳转（路径详情二级页）；后端未回 pathId 时回落徽章 -->
+                <button v-if="r.pathId" type="button" class="mk-btn mk-btn--sm" title="查看该目标生成的路径详情" @click.stop="openPathPage(r)">查看路径</button>
+                <span v-else-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
                 <span v-else class="mk-na">—</span>
               </td>
               <td v-if="!gcHiddenCols.has('created')"><span class="mk-cell-sub" :title="r.createdAt">{{ r.createdAt }}</span></td>
@@ -216,147 +218,16 @@
       </div>
     </template>
 
-    <!-- 详情面板 -->
-    <Teleport to="body">
-      <div v-if="detail" ref="maskRef" class="mk-drawer">
-        <div class="mk-drawer__mask" @click="closeDetail"></div>
-        <aside ref="panelRef" class="mk-drawer__panel" role="dialog" aria-label="会话详情">
-          <!-- 头部（原型 .ovl__head：头像 + 标题 + 关闭钮，下边框）：状态徽章下沉到正文首段徽章行 -->
-          <header class="mk-drawer__head">
-            <div class="gc-detail__title">
-              <MkCellAvatar :name="detail.userName" :tone="avatarTone(detail)" />
-              <div class="gc-detail__id">
-                <h3 class="mk-drawer__title">{{ detail.userName }} 的目标对话</h3>
-                <span class="mk-drawer__sub mono">{{ detail.id }}</span>
-              </div>
-            </div>
-            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeDetail">✕</button>
-          </header>
-          <div ref="bodyRef" class="mk-drawer__body gc-detail__body">
-            <!-- 徽章行（原型 .ovl__body 首段 pills）：状态 + 澄清阶段（均为行上已有字段，不新增数据） -->
-            <div class="gc-detail__pills">
-              <span class="mk-badge" :class="statusBadge(detail.status)" :title="statusHint(detail.status)">{{ statusLabel(detail.status) }}</span>
-              <span v-if="stageText(detail.stage)" class="mk-badge" :class="stageBadgeCls(detail.stage)" :title="`阶段：${stageText(detail.stage)}`">{{ stageText(detail.stage) }}</span>
-            </div>
-            <div class="mk-facts">
-              <div><span>邮箱</span><strong :title="detail.userEmail">{{ detail.userEmail || '—' }}</strong></div>
-              <div>
-                <span>置信度</span>
-                <strong v-if="detailConfidence !== null" class="gc-conf-row">
-                  <span class="gc-conf" :class="confToneCls(detailConfidence)">{{ detailConfidence }}%</span>
-                  <span class="mk-minibar gc-conf__bar">
-                    <i class="mk-minibar__fill" :data-tone="confTone(detailConfidence)" :style="{ width: detailConfidence + '%' }"></i>
-                  </span>
-                </strong>
-                <strong v-else>—</strong>
-              </div>
-              <div><span>关联路径</span><strong>{{ detail.hasPath ? '已生成' : '未生成' }}</strong></div>
-              <div><span>创建</span><strong>{{ detail.createdAt }}</strong></div>
-              <div><span>更新</span><strong>{{ detail.updatedAt }}</strong></div>
-              <div><span>完成</span><strong>{{ detail.completedAt || '—' }}</strong></div>
-            </div>
-
-            <MkLoading v-if="detailLoading" inline text="正在加载对话详情…" />
-
-            <!-- P0 修复：详情加载失败行内提示 + 重试 -->
-            <div v-if="detailError" class="gc-error" role="alert">
-              <span>{{ detailError }}</span>
-              <button type="button" class="mk-link" @click="retryDetail">重试</button>
-            </div>
-
-            <!-- 嵌套卡（原型 .card box-shadow:none + card__head/card__body）：mk-card 承边框，正文内边距页内补 -->
-            <section v-if="detail.description" class="mk-card">
-              <div class="mk-card__head"><h4 class="mk-card__title">目标描述</h4></div>
-              <div class="gc-card__body">
-                <p class="gc-desc">{{ detail.description }}</p>
-              </div>
-            </section>
-
-            <!-- 理解与方案（结构化采集：嵌套卡 + 标签/值行组） -->
-            <section
-              v-if="detailUnderstanding.realProblem || detailUnderstanding.successCriterion || detailProposal.direction || detailProposal.stages.length"
-              class="mk-card"
-            >
-              <div class="mk-card__head"><h4 class="mk-card__title">理解与方案</h4></div>
-              <div class="gc-card__body">
-                <div v-if="detailUnderstanding.realProblem" class="gc-insight__row">
-                  <span>真实问题</span>
-                  <p>{{ detailUnderstanding.realProblem }}</p>
-                </div>
-                <div v-if="detailUnderstanding.successCriterion" class="gc-insight__row">
-                  <span>成功标准</span>
-                  <p>{{ detailUnderstanding.successCriterion }}</p>
-                </div>
-                <div v-if="detailUnderstanding.timeBudget" class="gc-insight__row">
-                  <span>时间预算</span>
-                  <p>{{ detailUnderstanding.timeBudget }}</p>
-                </div>
-                <div v-if="detailProposal.direction" class="gc-insight__row">
-                  <span>学习方向</span>
-                  <p>{{ detailProposal.direction }}</p>
-                </div>
-                <div v-if="detailProposal.stages.length" class="gc-insight__row">
-                  <span>关键阶段</span>
-                  <ol class="gc-insight__stages">
-                    <li v-for="(s, i) in detailProposal.stages" :key="i">{{ s }}</li>
-                  </ol>
-                </div>
-              </div>
-            </section>
-
-            <section v-if="detail.messages.length" class="mk-card">
-              <div class="mk-card__head">
-                <h4 class="mk-card__title">对话轮次</h4>
-                <span class="mk-card__meta mono">{{ detail.messages.length }}</span>
-                <button type="button" class="gc-msg-jump" title="滚动到最新消息" @click="scrollMsgsToBottom">最新 ↓</button>
-              </div>
-              <div class="gc-card__body">
-                <div class="gc-msgs">
-                  <div v-for="(m, i) in detail.messages" :key="i" class="gc-msg" :class="`gc-msg--${m.role}`">
-                    <div class="gc-msg__bubble">
-                      <div class="gc-msg__head">
-                        <span class="gc-msg__role">{{ m.role === 'user' ? '用户' : m.role === 'assistant' ? 'AI' : m.role }}</span>
-                        <span v-if="m.time" class="gc-msg__time">{{ m.time }}</span>
-                      </div>
-                      <p>{{ m.text }}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-            <p v-else-if="!detailLoading" class="gc-none">无对话消息记录。</p>
-
-            <details v-if="detail.collectedData" class="gc-raw">
-              <summary>原始数据（完整 JSON）</summary>
-              <pre class="gc-json mono">{{ detail.collectedData }}</pre>
-            </details>
-          </div>
-          <!-- 底部动作（原型 .ovl__foot：上边框、右对齐）：深链文字钮在前，危险/主操作贴右、主操作最右 -->
-          <footer class="gc-detail__foot">
-            <button type="button" class="gc-btn-link" @click="goLearner(detail)">学习者画像 →</button>
-            <button type="button" class="gc-btn-link" @click="goTrace(detail)">Trace 链路 →</button>
-            <button v-if="detail.id" type="button" class="gc-btn-link" @click="goConsole(detail)">进控制台 →</button>
-            <button type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="detail.regenerating" @click="remove(detail)">
-              删除会话
-            </button>
-            <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="detail.regenerating" @click="regenerate(detail)">
-              {{ detail.regenerating ? '生成中…' : '重新生成学习路径' }}
-            </button>
-          </footer>
-        </aside>
-      </div>
-    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { isLive } from './store'
+import { isLive, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS, statusText } from './statusText'
-import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -372,7 +243,6 @@ import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import { adminGoalConversationsApi } from '@/api/adminApi'
-import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
 
 interface Row {
@@ -387,22 +257,14 @@ interface Row {
   stage: string
   summary: string
   hasPath: boolean
+  /** 生成的路径 id（原型路径格 open-path 的跳转目标；未生成/旧响应为 null） */
+  pathId?: string | null
   createdAt: string
   /** 阶段过程步序号（0=创建 1=澄清 2=方案 3=完成，statusText 单源） */
   stageIndex: number
   /** 轻量阶段时间线文本（如「创建 08-12 → 澄清中 08-13」；无数据为空串） */
   timeline: string
   regenerating?: boolean
-}
-
-interface Detail extends Row {
-  description: string
-  updatedAt: string
-  completedAt: string
-  collectedData: string
-  /** 解析后的采集数据对象（understanding / confirmedProposal 等结构化字段） */
-  collectedRaw: Record<string, unknown> | null
-  messages: Array<{ role: string; text: string; time: string }>
 }
 
 const loading = ref(false)
@@ -437,77 +299,43 @@ const gcColDefs = [
   { key: 'created', label: '创建时间', title: '对话创建时间' },
 ] as const
 const gcHiddenCols = ref<Set<string>>(new Set())
-const detail = ref<Detail | null>(null)
 
-/* URL 同步：?goal=id 记录当前打开的详情，支持深链/刷新恢复 */
+/* ?goal= 语义（2026-10-01 对齐原型习惯：目标行点击进学习者页，不再开抽屉）：
+   深链直达座舱（kind=goal 的目标对话控制台），随后清参避免与座舱返回冲突 */
 const route = useRoute()
 const router = useRouter()
-/* URL → detail：页面加载/刷新时恢复 */
 watch(
   () => route.query.goal,
   async (goalId) => {
     const gid = typeof goalId === 'string' ? goalId : ''
-    if (gid && (!detail.value || detail.value.id !== gid)) {
-      // 等列表加载完成（带超时上限）：接口失败时不能无限死等泄漏定时器
-      const waitForRows = () => new Promise<boolean>((resolve) => {
-        let waited = 0
-        const check = () => {
-          if (rows.value.length) { resolve(true); return }
-          if (waited >= 5000) { resolve(false); return }
-          waited += 200
-          setTimeout(check, 200)
-        }
-        check()
-      })
-      const ok = await waitForRows()
-      const r = ok ? rows.value.find((x) => x.id === gid) : undefined
-      if (r) void openDetail(r)
-      else {
-        detail.value = null
-        // 目标可能超出最近 LIST_LIMIT 条或已被删除：明示而非静默关闭
-        toast.warning(`未能定位该会话：可能不在最近 ${LIST_LIMIT} 条内，或已被删除`)
+    if (!gid) return
+    // 等列表加载完成（带超时上限）：接口失败时不能无限死等泄漏定时器
+    const waitForRows = () => new Promise<boolean>((resolve) => {
+      let waited = 0
+      const check = () => {
+        if (rows.value.length) { resolve(true); return }
+        if (waited >= 5000) { resolve(false); return }
+        waited += 200
+        setTimeout(check, 200)
       }
-    } else if (!gid && detail.value) {
-      detail.value = null
+      check()
+    })
+    const ok = await waitForRows()
+    const r = ok ? rows.value.find((x) => x.id === gid) : undefined
+    if (r) {
+      openSubPage('session-real', gid)
+      const q = { ...route.query }; delete q.goal
+      void router.replace({ query: q })
+    } else {
+      // 目标可能超出最近 LIST_LIMIT 条或已被删除：明示而非静默忽略
+      toast.warning(`未能定位该会话：可能不在最近 ${LIST_LIMIT} 条内，或已被删除`)
     }
   },
   { immediate: true }
 )
 
-/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后重拉全量并灰标虚拟/测试行 */
-const includeTest = ref(false)
-
-/* 结构化字段（从 collectedData 提取，供详情面板卡片展示） */
-const detailUnderstanding = computed(() => {
-  const u = (detail.value?.collectedRaw?.understanding ?? detail.value?.collectedRaw?.collected ?? {}) as Record<string, unknown>
-  return {
-    realProblem: String(u.real_problem || u.realProblem || ''),
-    successCriterion: String((u.success_criteria as Record<string, unknown>)?.observable_result || u.successCriteria || ''),
-    timeBudget: String((u.available_resources as Record<string, unknown>)?.time_budget || u.timeBudget || '')
-  }
-})
-const detailProposal = computed(() => {
-  const p = (detail.value?.collectedRaw?.confirmedProposal ?? {}) as Record<string, unknown>
-  return {
-    direction: String(p.learning_direction || p.learningDirection || ''),
-    stages: Array.isArray(p.key_stages) ? p.key_stages.map(String) : []
-  }
-})
-const detailConfidence = computed(() => {
-  const v = Number(detail.value?.collectedRaw?.confidence ?? 0)
-  return Number.isFinite(v) && v > 0 ? Math.round(v * 100) : null
-})
-
-/* 置信度色阶（G2）：<50 红 / 50-80 琥珀 / >80 绿；数字保留，配 6px 迷你条 */
-function confTone(pct: number): 'ok' | 'warn' | 'bad' {
-  return pct < 50 ? 'bad' : pct < 80 ? 'warn' : 'ok'
-}
-function confToneCls(pct: number): string {
-  return confTone(pct) === 'bad' ? 'gc-conf--low' : confTone(pct) === 'warn' ? 'gc-conf--warn' : ''
-}
-
-/* ===== 页头（目标对话：MkPageHead + KPI 卡） ===== */
-
+/* 页头 KPI（对齐原型 goals 页统计行）：总数 / 完成率 / 已取消。
+   刻意不重复卡头 pills 的筛选计数（进行中 / 已完成）——与 People 页同口径纪律 */
 interface KpiCard {
   label: string
   value: string | number
@@ -536,23 +364,16 @@ const kpiCards = computed<KpiCard[]>(() => {
     }
   ]
 })
-useEscape(() => !!detail.value, closeDetail)
+
+/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后重拉全量并灰标虚拟/测试行 */
+const includeTest = ref(false)
+
 const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
 
 /** 菜单项执行：先关菜单再执行（避免菜单残留与整行点击冒泡） */
 function menuRemove(r: Row) {
   closeMenu()
   void remove(r)
-}
-const panelRef = ref<HTMLElement | null>(null)
-const maskRef = ref<HTMLElement | null>(null)
-const bodyRef = ref<HTMLElement | null>(null)
-useOverlay(computed(() => !!detail.value), panelRef)
-useMaskClose(maskRef, closeDetail)
-
-/** P2：消息流「最新 ↓」——滚动抽屉内容到底部（长会话快捷定位） */
-function scrollMsgsToBottom() {
-  bodyRef.value?.scrollTo({ top: bodyRef.value.scrollHeight, behavior: 'smooth' })
 }
 
 const statusPills = computed(() => {
@@ -615,6 +436,7 @@ function mapRow(c: Record<string, unknown>): Row {
     // 其次 collectedData.goal——该大列不再随列表出库）；summaryOf 仅作旧响应兜底
     summary: String(c.summary ?? '') || summaryOf(c),
     hasPath: !!c.learningPathId,
+    pathId: c.learningPathId ? String(c.learningPathId) : null,
     createdAt: timeAgo(String(c.createdAt || '')),
     stageIndex: stageProgressIndex(stage),
     timeline: stageTimelineText({
@@ -715,21 +537,8 @@ async function load(force = false) {
     })
 }
 
-/** 详情面板加载态 */
-/** 详情面板加载态 */
-function retryDetail() {
-  if (detail.value) void openDetail(detail.value)
-}
-
-const detailLoading = ref(false)
-const detailError = ref('')
-/* 详情抽屉竞态：请求代际号，关闭/切换行后丢弃迟到的响应 */
-let detailReqSeq = 0
-
+/** 座舱跳转族收尾：清理 URL 深链（?goal=）是唯一动作 */
 function closeDetail() {
-  detailReqSeq += 1
-  detail.value = null
-  // URL 同步：移除 ?goal 参数
   const q = { ...route.query }
   delete q.goal
   void router.replace({ query: q })
@@ -738,74 +547,9 @@ function closeDetail() {
 /** 真实会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：先提供轻量深链——学习者画像 + Trace 瀑布按 sessionId 归组 */
 const { goLearner, goTrace, goConsole } = useSessionDrill(closeDetail)
 
-/** 归一化消息角色：后端用 ai/assistant，统一为 assistant */
-function normRole(r: unknown): string {
-  const v = String(r || 'unknown').toLowerCase()
-  if (v === 'ai' || v === 'assistant') return 'assistant'
-  if (v === 'user' || v === 'human') return 'user'
-  return v
-}
-
-/** 解析采集数据：兼容字符串与对象；消息在 collectedData.messages（后端无顶层 messages 字段） */
-function parseCollected(raw: unknown): { obj: Record<string, unknown> | null; messages: Array<{ role: string; text: string; time: string }> } {
-  let obj: Record<string, unknown> | null = null
-  if (typeof raw === 'string') {
-    try {
-      obj = JSON.parse(raw)
-    } catch {
-      obj = null
-    }
-  } else if (raw && typeof raw === 'object') {
-    obj = raw as Record<string, unknown>
-  }
-  const msgs = Array.isArray(obj?.messages) ? obj.messages : []
-  const messages = msgs.slice(0, 60).map((m: Record<string, unknown>) => ({
-    role: normRole(m.role),
-    text: String(m.content ?? m.text ?? m.message ?? ''),
-    time: m.time ? timeAgo(String(m.time)) : ''
-  }))
-  return { obj, messages }
-}
-
-async function openDetail(r: Row) {
-  const seq = ++detailReqSeq
-  // URL 同步：记录 ?goal=id
-  if (route.query.goal !== r.id) {
-    void router.push({ query: { ...route.query, goal: r.id } })
-  }
-  detail.value = {
-    ...r,
-    description: '',
-    updatedAt: '—',
-    completedAt: '',
-    collectedData: '',
-    collectedRaw: null,
-    messages: []
-  }
-  detailLoading.value = true
-  detailError.value = ''
-  try {
-    const res = await adminGoalConversationsApi.getDetail(r.id)
-    // 已关闭抽屉或已切换到其他行：丢弃本次响应
-    if (seq !== detailReqSeq || !detail.value || detail.value.id !== r.id) return
-    const c = (res.data?.data ?? res.data ?? {}) as Record<string, unknown>
-    const parsed = parseCollected(c.collectedData ?? c.messages)
-    detail.value = {
-      ...detail.value,
-      description: String(c.description || ''),
-      updatedAt: timeAgo(String(c.updatedAt || '')),
-      completedAt: c.completedAt ? timeAgo(String(c.completedAt)) : '',
-      collectedData: parsed.obj ? JSON.stringify(parsed.obj, null, 2) : '',
-      collectedRaw: parsed.obj,
-      messages: parsed.messages
-    }
-  } catch (e) {
-    if (seq !== detailReqSeq) return
-    detailError.value = `详情加载失败：${errMsg(e)}`
-    toast.error(detailError.value)
-  } finally {
-    if (seq === detailReqSeq) detailLoading.value = false
-  }
+/** 路径格 → 路径详情二级页（原型 open-path 习惯） */
+function openPathPage(r: Row) {
+  if (r.pathId) openSubPage('path', r.pathId)
 }
 
 async function regenerate(r: Row) {
@@ -823,7 +567,6 @@ async function regenerate(r: Row) {
     const d = res.data?.data ?? res.data ?? {}
     toast.success(`已生成路径「${d.learningPathName || '未命名'}」（v${d.version ?? '—'}）`)
     r.hasPath = true
-    if (detail.value?.id === r.id) detail.value.hasPath = true
   } catch (e) {
     toast.error(`重建失败：${errMsg(e)}`)
   } finally {
@@ -842,10 +585,6 @@ async function remove(r: Row) {
   try {
     await adminGoalConversationsApi.remove(r.id)
     rows.value = rows.value.filter((x) => x.id !== r.id)
-    if (detail.value?.id === r.id) {
-      // 走 closeDetail 统一清除 ?goal 深链：否则刷新会落入「深链未命中」路径
-      closeDetail()
-    }
     toast.success('会话已删除')
     doneConfirm()
   } catch (e) {
@@ -866,177 +605,45 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
-/* 2026-09-29 拆回「目标对话」独立页：合并宿主的视图切换 pills（gc-tabs）随之退役。
+<style scoped>/* 2026-09-29 拆回「目标对话」独立页：合并宿主的视图切换 pills（gc-tabs）随之退役。
    宿主容器沿用 .mk-page 的响应式内边距（对齐 pp-host / 虚拟学习者单页容器），
    避免 ≥1440px 档位状态条起始位置与其它页脱节。 */
 /* 子组件根节点（.mk-page--fill）：占满剩余高度，表格区内滚（对齐 pp-host > .mk-page--fill 先例） */
 .gc-host > .mk-page--fill {
   flex: 1 1 auto;
   min-height: 0;
-}
-/* 目标对话内联内容（状态条 + 卡片）：同为 fill 列的直接子级，卡片弹性填满 */
-.gc-host > .mk-status { flex: none; }
-/* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
-.gc-row { cursor: pointer; }
-/* 键盘可达（对齐 TeachingSessions 行写法）：行可聚焦，焦点态描边提示当前位置 */
-.gc-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
-/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
-.gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
-/* 四态比例条（批B）：卡头内的目标对话状态构成 */
-.gc-statusbar { display: inline-flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.gc-statusbar__bar { display: inline-flex; width: 72px; height: 6px; border-radius: var(--mk-radius-pill); overflow: hidden; background: var(--mk-surface-2); }
-.gc-statusbar__seg { display: block; height: 100%; }
-.gc-statusbar__seg--active { background: var(--mk-blue); }
-.gc-statusbar__seg--done { background: var(--mk-green); }
-.gc-statusbar__seg--cancel { background: var(--mk-faint); opacity: 0.5; }
-/* 状态构成桶组（newui renderGoals/bucketCard 原型移植；token 映射：--sp-3→--mk-space-3、
+}/* 目标对话内联内容（状态条 + 卡片）：同为 fill 列的直接子级，卡片弹性填满 */
+.gc-host > .mk-status { flex: none; }/* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
+.gc-row { cursor: pointer; }/* 键盘可达（对齐 TeachingSessions 行写法）：行可聚焦，焦点态描边提示当前位置 */
+.gc-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
+.gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }/* 四态比例条（批B）：卡头内的目标对话状态构成 */
+.gc-statusbar { display: inline-flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }.gc-statusbar__bar { display: inline-flex; width: 72px; height: 6px; border-radius: var(--mk-radius-pill); overflow: hidden; background: var(--mk-surface-2); }.gc-statusbar__seg { display: block; height: 100%; }.gc-statusbar__seg--active { background: var(--mk-blue); }.gc-statusbar__seg--done { background: var(--mk-green); }.gc-statusbar__seg--cancel { background: var(--mk-faint); opacity: 0.5; }/* 状态构成桶组（newui renderGoals/bucketCard 原型移植；token 映射：--sp-3→--mk-space-3、
    --line→--mk-line、--surface→--mk-surface、--r-lg→--mk-radius-lg、--surface-3→--mk-surface-3、
    --muted→--mk-muted、--fs-micro→--mk-fs-micro）。
    .buckets 自带 16px 横向内边距：原型里桶组直接落页面，这里落在 mk-card 内（卡无 body padding）。 */
-.buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--mk-space-3); padding: 12px 16px 14px; }
-.bucket { display: grid; gap: 3px; padding: 13px 15px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface); }
-.bucket__v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-.bucket__l { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.bucket__bar { height: 4px; border-radius: 999px; background: var(--mk-surface-3); overflow: hidden; margin-top: 5px; }
-.bucket__bar > i { display: block; height: 100%; border-radius: 999px; }
-/* foot（原型 bucketCard 第 5 参 inline style 的类化）：弱化说明文字 */
-.bucket__foot { color: var(--mk-faint); }
-.gc-user .mk-cell-main { min-width: 0; flex: 1; }
-.gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }
-/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
-.gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }
-.gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }
-.gc-stage-cell__dots { display: inline-flex; gap: 3px; }
-.gc-stage-cell__dot {
+.buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--mk-space-3); padding: 12px 16px 14px; }.bucket { display: grid; gap: 3px; padding: 13px 15px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface); }.bucket__v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }.bucket__l { font-size: var(--mk-fs-micro); color: var(--mk-muted); }.bucket__bar { height: 4px; border-radius: 999px; background: var(--mk-surface-3); overflow: hidden; margin-top: 5px; }.bucket__bar > i { display: block; height: 100%; border-radius: 999px; }/* foot（原型 bucketCard 第 5 参 inline style 的类化）：弱化说明文字 */
+.bucket__foot { color: var(--mk-faint); }.gc-user .mk-cell-main { min-width: 0; flex: 1; }.gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
+.gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }.gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }.gc-stage-cell__dots { display: inline-flex; gap: 3px; }.gc-stage-cell__dot {
   width: 6px;
   height: 6px;
   border-radius: var(--mk-radius-pill);
   background: #e2e8f2;
-}
-.gc-stage-cell__dot.is-on { background: var(--mk-blue); }
-.gc-stage-cell__dot.is-on:last-child { background: var(--mk-green); }
-.gc-stage-cell__tl {
+}.gc-stage-cell__dot.is-on { background: var(--mk-blue); }.gc-stage-cell__dot.is-on:last-child { background: var(--mk-green); }.gc-stage-cell__tl {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.gc-summary {
+}.gc-summary {
   display: inline-block;
   max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: bottom;
-}
-/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
+}/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
    长摘要 .gc-summary 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底） */
-.mk-table td { white-space: nowrap; }
-
-/* 详情面板（原型 openLearner 三段式：head 头像+标题 / body 徽章行→事实→嵌套卡 / foot 右对齐动作） */
-.gc-detail__title { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
-.gc-detail__id { display: grid; gap: 2px; min-width: 0; }
-.gc-detail__body { display: grid; gap: 16px; align-content: start; }
-/* 徽章行（原型 .ovl__body 首段 pills） */
-.gc-detail__pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-/* 嵌套卡正文：mk-card 承边框/圆角，正文内边距对齐 .buckets 的「卡内补」口径（12 16 14） */
-.gc-card__body { display: grid; gap: 8px; padding: 12px 16px 14px; }
-
-/* 事实栅格走共享原语 .mk-facts（原 .gc-facts 私有三列栅格 + 4K 阶梯已并进原语层） */
-
-/* 置信度 */
-.gc-conf {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  color: var(--mk-green);
-}
-.gc-conf--low { color: var(--mk-red); }
-.gc-conf--warn { color: var(--mk-amber); }
-.gc-conf-row { display: grid; gap: 4px; align-items: start; }
-.gc-conf__bar { width: 72px; }
-
-/* 状态条完成率堆叠条（G3） */
-/* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136） */
-
-/* 理解与方案行组：边框/圆角由外层 mk-card 承担，行间只留发丝线（原型嵌套卡 card__body + 行分隔）；
-   行内边距只留纵向——横向内边距由 gc-card__body 统一给（原型 rankrow padding: 9px 0 同形） */
-.gc-insight__row {
-  display: grid;
-  grid-template-columns: 64px 1fr;
-  gap: 8px 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid #f0f2f5;
-  align-items: baseline;
-}
-.gc-insight__row:last-child { border-bottom: none; }
-.gc-insight__row > span {
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-faint);
-  white-space: nowrap;
-}
-.gc-insight__row p {
-  margin: 0;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  line-height: 1.7;
-}
-.gc-insight__stages {
-  margin: 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 3px;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  line-height: 1.6;
-}
-
-.gc-desc { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.7; }
-
-/* 对话轮次：气泡式（用户右对齐蓝色，AI 左对齐浅灰） */
-.gc-msgs { display: grid; gap: 8px; }
-/* P2：消息流「最新 ↓」按钮（长会话快捷定位）；卡头内与 meta 同组贴右，间距由 mk-card__head gap 给 */
-.gc-msg-jump {
-  border: 1px solid var(--mk-line); background: var(--mk-surface);
-  color: var(--mk-blue); font: inherit; font-size: var(--mk-fs-micro); font-weight: 700;
-  padding: 2px 9px; border-radius: 999px; cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
-.gc-msg-jump:hover { border-color: rgba(44, 99, 208, 0.5); background: #f0f5ff; }
-html[data-theme='dark'] .gc-msg-jump:hover { background: #252627; }.gc-msg { display: flex; }
-.gc-msg--user { justify-content: flex-end; }
-.gc-msg--assistant { justify-content: flex-start; }
-.gc-msg--unknown { justify-content: flex-start; }
-.gc-msg__bubble {
-  max-width: 88%;
-  padding: 8px 12px;
-  border-radius: 12px;
-  display: grid;
-  gap: 4px;
-}
-.gc-msg--assistant .gc-msg__bubble,
-.gc-msg--unknown .gc-msg__bubble {
-  background: #f7f9fc;
-  border: 1px solid var(--mk-line);
-  border-top-left-radius: 4px;
-}
-.gc-msg--user .gc-msg__bubble {
-  background: #eff6ff;
-  border: 1px solid #d6e6ff;
-  border-top-right-radius: 4px;
-}
-.gc-msg__head { display: flex; align-items: center; gap: 8px; }
-.gc-msg__role { font-size: var(--mk-fs-micro); font-weight: 700; }
-.gc-msg--user .gc-msg__role { color: var(--mk-blue); }
-.gc-msg--assistant .gc-msg__role,
-.gc-msg--unknown .gc-msg__role { color: var(--mk-muted); }
-.gc-msg__time { font-size: var(--mk-fs-micro); color: var(--mk-faint); margin-left: auto; white-space: nowrap; }
-.gc-msg__bubble p { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.7; color: var(--mk-ink); white-space: pre-wrap; word-break: break-word; }
-.gc-none { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-
-.gc-error {
+.mk-table td { white-space: nowrap; }.gc-error {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1049,90 +656,21 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #252627; }.gc-msg { dis
   font-size: var(--mk-fs-body);
   font-weight: 600;
   margin-bottom: 14px;
-}
-
-.gc-raw summary {
-  cursor: pointer;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--mk-faint);
-  padding: 2px 0;
-}
-.gc-json {
-  margin: 6px 0 0;
-  padding: 10px 12px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-code-bg, #101826);
-  border: 1px solid var(--mk-code-border, #1c2a40);
-  color: var(--mk-code-fg, #9db8dc);
-  font-size: var(--mk-fs-micro);
-  line-height: 1.6;
-  max-height: 220px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-/* 底部动作（原型 .ovl__foot：上边框、右对齐、gap 8）；不占滚动区——正文滚、动作条常驻 */
-.gc-detail__foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--mk-line);
-}
-.gc-btn-link {
-  border: 0;
-  background: transparent;
-  color: var(--mk-blue);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  cursor: pointer;
-  padding: 8px 4px;
-}
-.gc-btn-link:hover { text-decoration: underline; }
-/* 按钮规格对齐 .mk-btn（8x16 / 12.5px）；危险操作实心红（与 .mk-btn--danger 一致） */
-
+}/* 按钮规格对齐 .mk-btn（8x16 / 12.5px）；危险操作实心红（与 .mk-btn--danger 一致） */
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大 */
 @media (min-width: 2000px) {
 
-  .gc-desc { font-size: var(--mk-fs-body); }
-  .gc-msg { font-size: var(--mk-fs-body); }
-  .gc-msg__role { font-size: var(--mk-fs-micro); }
-  .gc-json { font-size: var(--mk-fs-micro); }
   .mk-btn--sm { font-size: var(--mk-fs-body); }
 }
-@media (min-width: 2800px) {
-
-  .gc-desc { font-size: var(--mk-fs-body); }
-  .gc-msg { font-size: var(--mk-fs-body); }
-  .gc-msg__role { font-size: var(--mk-fs-micro); }
-  .gc-json { font-size: var(--mk-fs-micro); }
-  .mk-btn--sm { font-size: var(--mk-fs-body); }
-}
-/* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
+@media (min-width: 2800px) {.mk-btn--sm { font-size: var(--mk-fs-body); }
+}/* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
 
-  .gc-desc { font-size: var(--mk-fs-emphasis); }
-  .gc-msg { font-size: var(--mk-fs-emphasis); }
-  .gc-msg__role { font-size: var(--mk-fs-body); }
-  .gc-json { font-size: var(--mk-fs-body); }
   .mk-btn--sm { font-size: var(--mk-fs-emphasis); }
-}
-
-/* ================= 暗色模式（D1 补完）：目标对话 ================= */
+}/* ================= 暗色模式（D1 补完）：目标对话 ================= */
 html[data-theme='dark'] {
-  .gc-json { background: #141415; color: var(--mk-pre-fg); }
   /* 消息气泡：容器级旧覆写修正为气泡级（assistant 灰蓝 / user 深蓝） */
-  .gc-msg--assistant .gc-msg__bubble,
-  .gc-msg--unknown .gc-msg__bubble { background: #202122; border-color: #313235; }
-  .gc-msg--user .gc-msg__bubble { background: #202122; border-color: #36383a; }
-  .gc-insight__row { border-bottom-color: #232325; }
   .gc-stage-cell__dot { background: #313235; }
   .gc-error { border-color: rgba(248, 113, 113, 0.35); }
 }
