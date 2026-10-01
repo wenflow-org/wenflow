@@ -1,7 +1,9 @@
 <template>
   <div :class="embedded ? 'mk-page--fill ts-embedded' : 'mk-page mk-page--fill'">
     <!-- 教学会话页头（newui/admin pagehead：页名 + 刷新上移；embedded 由宿主承载，本组件不渲染页头）。
-         状态条退位为纯状态摘要（有建议/共 N 条/截断提示），embedded 时同样不渲染 -->
+         状态条 = 原型 .statusbar 结构（结论粗体 + 分隔线 + meta + 右侧快捷筛选钮）；
+         数字分工：结论取「需关注」——进行中/已完成/失败已由分布卡图例与 KPI 卡承载，
+         同一数字不在两处复读；meta 只留别处没有的「缺总结」与截断提示 -->
     <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 状态分布与需关注识别">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshNow">
@@ -11,14 +13,27 @@
     </MkPageHead>
     <div v-if="!embedded" class="mk-status" :class="tsDashTone === 'bad' ? 'mk-status--bad' : tsDashTone === 'warn' ? 'mk-status--warn' : tsDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
       <span class="mk-status__dot"></span>
-      <span v-if="advisoryCount" class="mk-status__meta" title="含建议的会话数">有建议 {{ advisoryCount }}</span>
-      <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ listTotal }} 条</span>
-      <!-- 达 LIST_LIMIT 上限才提示截断，并用后端 body.total 给出真实总量（不足上限时列表即全量，不渲染该提示） -->
-      <span v-if="truncated" class="mk-status__meta" :title="listTotal > LIST_LIMIT ? `后端共 ${listTotal} 条，页面仅加载最近 ${LIST_LIMIT} 条` : `页面仅加载最近 ${LIST_LIMIT} 条`">仅显示最近 {{ LIST_LIMIT }} 条<template v-if="listTotal > LIST_LIMIT">（共 {{ listTotal }} 条）</template></span>
+      <strong class="mk-status__title">{{ attentionCount }} 个会话需关注</strong>
+      <span class="mk-status__sep"></span>
+      <span class="mk-status__meta" title="终态（已完成 / 失败 / 超时 / 废弃 / 收尾失败）会话缺课后总结数；非终态缺失是过程态不计">缺总结 {{ missingWrapupCount }}</span>
+      <!-- 达 LIST_LIMIT 上限才提示截断（后端真实总量在页头「会话总数」KPI，此处不复读该数字） -->
+      <span v-if="truncated" class="mk-status__meta" :title="`列表仅加载最近 ${LIST_LIMIT} 条；后端全量总数见页头「会话总数」KPI`">仅显示最近 {{ LIST_LIMIT }} 条</span>
+      <!-- 右侧快捷钮（原型 .statusbar__act「只看需关注」）：接页面既有「待关注」筛选，
+           再点取消；纯导航，不新增数据口径 -->
+      <span class="mk-status__actions">
+        <button
+          type="button"
+          class="mk-status__action"
+          :class="{ 'ts-status-action--on': pill === 'attention' }"
+          :aria-pressed="pill === 'attention'"
+          title="只看关注度非低的会话（高 / 中关注），再点取消"
+          @click="pill = pill === 'attention' ? 'all' : 'attention'"
+        >只看需关注</button>
+      </span>
     </div>
 
     <!-- 页头 KPI 区（2026-09-29 拆回独立页）：总数 / 已完成 / 失败 / 有建议。
-         刻意不重说卡头 pills 的筛选计数（进行中 / 待关注 / 缺总结）。 -->
+         刻意不重说状态条结论与卡头 chips 的筛选计数（需关注 / 进行中 / 缺总结）。 -->
     <section v-if="!embedded" class="mk-kpi-grid">
       <MkKpi
         v-for="card in teachingKpiCards"
@@ -31,8 +46,14 @@
       />
     </section>
 
-    <!-- 状态分布条（newui 原型「闭环阶段分布」stageband 移植）：按已加载列表行（rows，最近
-         LIST_LIMIT 条加载窗口）的 status 聚合，非后端全量口径——卡头 meta 如实注明。
+    <!-- 状态分布条（newui 原型 renderSessions「闭环阶段分布」卡同位移植）：distBand 结构 =
+         OpsContent 状态分布卡判例（stageband 五段条 + stageband__legend/sbl 逐行同构）。
+         原型五段按回合状态机 stage（开场澄清/教学回合/介入补强/检查点/收尾·产出）聚合，
+         但教学会话列表/后端均无 stage 字段——字段没有的不硬造，改按现有 status 枚举聚合
+         （文案复用 statusOptions，不另造词；未知取值归「其它」档），卡头 meta 如实注明口径。
+         卡头右组 pill 位（原型 card__tools「N 个介入中」）= 现有「异常」warn 徽章（失败 /
+         收尾失败 / 超时合计，需排查）；介入中需 stage 字段，同样不硬造。
+         数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径。
          embedded 时随 KPI 区一并隐藏（宿主状态条承载域计数）；无数据/加载失败不留空卡 -->
     <section v-if="!embedded && rows.length" class="mk-card">
       <div class="mk-card__head">
@@ -52,7 +73,7 @@
           ></span>
         </div>
         <div class="stageband__legend">
-          <!-- 枚举内档位可点 = 状态筛选 toggle（与表头状态下拉同源）；「其它」档无对应筛选项不可点 -->
+          <!-- 枚举内档位可点 = 状态筛选 toggle（与工具条状态 chips 同源）；「其它」档无对应筛选项不可点 -->
           <component
             :is="seg.clickable ? 'button' : 'div'"
             v-for="seg in statusBand"
@@ -79,23 +100,7 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <div class="mk-pills">
-            <button
-              v-for="p in pills"
-              :key="p.id"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': pill === p.id }"
-              @click="pill = p.id"
-            >
-              {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
-            </button>
-          </div>
           <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / 邮箱 / ID" />
-          <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
-            <option value="">全部状态</option>
-            <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
-          </select>
           <select v-model="dateFilter" class="mk-filter__select" aria-label="按开始时间筛选">
             <option value="">全部时间</option>
             <option value="7d">近 7 天</option>
@@ -111,6 +116,46 @@
             v-model:hidden="tsHiddenCols"
           />
           <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）</span>
+        </div>
+      </div>
+
+      <!-- 卡内工具条（原型 .toolbar：左 chips + grow + 右 chips；原状态下拉 select 已按原型
+           改为右组 chips，枚举严格取现有 statusOptions，不另造取值）。
+           左组 = 页面既有「焦点」筛选（全部 / 进行中 / 待关注 / 缺总结）——
+           原型左组为阶段筛选，但列表无 stage 字段（字段没有的不硬造），
+           故左组沿用既有筛选轴；两组均 aria-pressed 与 .mk-pill--active 同源 -->
+      <div class="ts-toolbar">
+        <div class="mk-pills" role="group" aria-label="焦点筛选">
+          <button
+            v-for="p in pills"
+            :key="p.id"
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': pill === p.id }"
+            :aria-pressed="pill === p.id"
+            @click="pill = p.id"
+          >
+            {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
+          </button>
+        </div>
+        <span class="ts-toolbar__grow"></span>
+        <div class="mk-pills" role="group" aria-label="按状态筛选">
+          <button
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': !statusFilter }"
+            :aria-pressed="!statusFilter"
+            @click="statusFilter = ''"
+          >全部状态</button>
+          <button
+            v-for="s in statusOptions"
+            :key="s.value"
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': statusFilter === s.value }"
+            :aria-pressed="statusFilter === s.value"
+            @click="statusFilter = statusFilter === s.value ? '' : s.value"
+          >{{ s.label }}</button>
         </div>
       </div>
 
@@ -263,11 +308,9 @@
       <div v-if="detail" ref="maskRef" class="mk-drawer">
         <div class="mk-drawer__mask" @click="closeDetail"></div>
         <aside ref="panelRef" class="mk-drawer__panel" role="dialog" aria-label="会话详情">
+          <!-- 头部（原型 .ovl__head：标题 + grow + 关闭钮，下边框）：关注徽章下沉到正文首段徽章行 -->
           <header class="mk-drawer__head">
             <div class="ts-detail__title">
-              <span class="mk-badge" :class="attentionBadge(detail.attention)">
-                {{ detail.attention === 'high' ? '高关注' : detail.attention === 'medium' ? '中关注' : '低关注' }}
-              </span>
               <h3 class="mk-drawer__title">{{ detail.topic }}</h3>
               <span v-if="detail.id" class="mk-drawer__sub mono">{{ detail.id }}</span>
             </div>
@@ -275,6 +318,17 @@
           </header>
 
           <div class="mk-drawer__body ts-detail__body">
+            <!-- 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 关注 / 时长 / 消息
+                 均为行上已有字段；下方事实栅格不再重复这四项 -->
+            <div class="ts-detail__pills">
+              <span class="mk-badge" :class="statusBadge(detail.status)">{{ statusText(detail.status) }}</span>
+              <span class="mk-badge" :class="attentionBadge(detail.attention)">
+                {{ detail.attention === 'high' ? '高关注' : detail.attention === 'medium' ? '中关注' : '低关注' }}
+              </span>
+              <span class="mk-badge mk-badge--muted">时长 {{ detail.duration ? fmtDuration(detail.duration) : '—' }}</span>
+              <span class="mk-badge mk-badge--muted">消息 {{ detail.messageCount }}</span>
+            </div>
+
             <!-- P2-2 抽屉 tabs（对齐 LangSmith side panel） -->
             <div class="ts-tabs" role="tablist" aria-label="会话详情分区">
               <button
@@ -292,13 +346,11 @@
             <!-- 概览 tab -->
             <div v-if="panelTab === 'overview'">
               <div class="mk-facts">
-                <!-- 共享 .mk-facts 的值是单行省略：可能被截断的两格挂 title，别把信息藏起来 -->
+                <!-- 共享 .mk-facts 的值是单行省略：可能被截断的两格挂 title，别把信息藏起来。
+                     状态 / 时长 / 消息已在首段徽章行，此处只留身份与时间事实 -->
                 <div><span>用户</span><strong :title="detail.userName">{{ detail.userName }}</strong></div>
                 <div><span>学科</span><strong :title="detail.subject">{{ detail.subject }}</strong></div>
-                <div><span>状态</span><strong>{{ statusText(detail.status) }}</strong></div>
                 <div><span>开始</span><strong>{{ detail.startAt }}</strong></div>
-                <div><span>时长</span><strong>{{ detail.duration ? fmtDuration(detail.duration) : '—' }}</strong></div>
-                <div><span>消息</span><strong>{{ detail.messageCount }}</strong></div>
               </div>
 
               <!-- 事件时间线（P2-2：非消息事件，对齐 Intercom 左对齐垂直线） -->
@@ -314,6 +366,9 @@
                   </li>
                 </ul>
               </section>
+
+              <!-- 提示条（原型 .ovl__body 末段 .note 语气）：直述行数据里的关注度派生口径 -->
+              <div class="ts-note">关注度为派生档位：失败 / 超时，或已完成但缺总结 → 高关注；命中教学建议 → 中关注；其余为低关注。缺总结仅对已结束（终态）会话计。</div>
             </div>
 
             <!-- 总结 tab -->
@@ -365,12 +420,15 @@
               </details>
             </div>
 
-            <div class="ts-actions">
-              <button v-if="detail.userId" type="button" class="mk-link" @click="goLearner(detail)">学习者详情 →</button>
-              <button type="button" class="mk-link" @click="goTrace(detail)">Trace 链路 →</button>
-              <button v-if="detail.id" type="button" class="mk-link" @click="goConsole(detail)">进控制台 →</button>
-            </div>
           </div>
+
+          <!-- 底部动作条（原型 .ovl__foot：上边框、右对齐；GoalConversations gc-detail__foot
+               判例）：动作移出滚动区常驻，正文只滚内容，动作不随长文滚走 -->
+          <footer class="ts-detail__foot">
+            <button v-if="detail.userId" type="button" class="mk-link" @click="goLearner(detail)">学习者详情 →</button>
+            <button type="button" class="mk-link" @click="goTrace(detail)">Trace 链路 →</button>
+            <button v-if="detail.id" type="button" class="mk-link" @click="goConsole(detail)">进控制台 →</button>
+          </footer>
         </aside>
       </div>
     </Teleport>
@@ -938,8 +996,6 @@ defineExpose({ refreshNow })
 <style scoped>
 /* 嵌入模式（宿主学习会话页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
 .ts-embedded { flex: 1; min-height: 0; overflow: hidden; }
-/* 页头合并（替代独立状态条）：共 N 条 + 刷新按钮，与概览结论同行 */
-/* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136） */
 /* 总结预览行（P1-2）：单行 ellipsis + hover 全文，对齐 Intercom 最后消息预览 */
 .ts-summary-preview {
   display: block;
@@ -964,13 +1020,16 @@ defineExpose({ refreshNow })
 .ts-att--low { color: var(--mk-faint); }
 /* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
 .ts-tags { display: flex; gap: 6px; margin-top: 2px; }
-.ts-tag {
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.03em;
+/* 卡内工具条（原型 .toolbar：左右 chips + grow，底边框分隔表头）：两组筛选 chips 同行 */
+.ts-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--mk-space-2);
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--mk-line);
 }
+.ts-toolbar__grow { flex: 1 1 auto; }
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }
 /* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
@@ -994,8 +1053,13 @@ defineExpose({ refreshNow })
   font-weight: 700;
   white-space: nowrap;
 }
-.ts-actions { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.ts-actions .mk-link { padding: 0; }
+/* 状态条快捷钮选中态（原型 .statusbar__act 语义 = 筛选生效高亮）：与 .mk-pill--active 同词汇。
+   页面前缀命名（规则 1：mk- 前缀属全局原语，页面不得自造） */
+.ts-status-action--on {
+  background: var(--mk-blue-bg);
+  border-color: color-mix(in srgb, var(--mk-blue) 44%, var(--mk-line));
+  color: var(--mk-pill-active-fg);
+}
 /* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字） */
 .ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }
 
@@ -1034,6 +1098,18 @@ defineExpose({ refreshNow })
 /* P2-2 抽屉 tabs（对齐 AntD Tabs 下划线式：选中态底部 2px 品牌蓝 + 蓝字） */
 .ts-detail__title { display: grid; gap: 6px; justify-items: start; }
 .ts-detail__body { display: grid; gap: 16px; align-content: start; }
+/* 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 关注 / 时长 / 消息 */
+.ts-detail__pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* 底部动作条（原型 .ovl__foot / gc-detail__foot 判例：上边框、右对齐、常驻滚动区外） */
+.ts-detail__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--mk-line);
+}
 .ts-tabs { display: flex; gap: 2px; padding-bottom: 0; border-bottom: 1px solid var(--mk-line); position: sticky; top: 0; background: var(--mk-surface); z-index: 1; }
 html[data-theme='dark'] .ts-tabs { background: var(--mk-surface); }
 .ts-tabs__item {
@@ -1063,16 +1139,24 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
 .ts-section { display: grid; gap: 8px; }
 .ts-src { font-size: var(--mk-fs-micro); font-weight: 600; text-transform: none; letter-spacing: 0; }
 .ts-degraded { margin-left: 6px; }
+/* 分区（原型 .field：label 微字 700 + 正文；不再套卡框——框体只留给 .code/.note 两类） */
 .ts-card {
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  padding: 10px 12px;
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
-.ts-card span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
+.ts-card span { font-size: var(--mk-fs-micro); color: var(--mk-ink); font-weight: 700; }
 .ts-card p { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.7; white-space: pre-wrap; }
-.ts-card--advisory { border-color: rgba(180, 83, 9, 0.3); background: #fffdf5; }
+/* 建议分区（原型 .note--warn 语气）：琥珀软底提示，与正文分区同结构 */
+.ts-card--advisory { background: var(--mk-amber-bg); padding: 10px 12px; border-radius: var(--mk-radius-sm); }
+/* 提示条（原型 .note：软底、muted 正文） */
+.ts-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+}
 
 /* 长文本截断 */
 .ts-clamp {
@@ -1138,9 +1222,10 @@ html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surfa
   .ts-more { font-size: var(--mk-fs-emphasis); }
 }
 
-/* ================= 暗色模式（D1 补完）：教学会话 ================= */
+/* ================= 暗色模式（D1 补完）：教学会话 =================
+   .ts-card--advisory 已改用 --mk-amber-bg token（暗色档自带深色等价物），
+   不再需要硬编码暗色覆写 */
 html[data-theme='dark'] {
-  .ts-card--advisory { background: #2a2410; border-color: rgba(251, 191, 36, 0.3); }
   .ts-json { background: #141415; color: var(--mk-pre-fg); }
 }
 
