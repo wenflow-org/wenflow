@@ -809,9 +809,10 @@ const verdictText = computed(() => {
    直接成为宿主 flex 列的子项，与宿主其余区块共享等比间距（此前该类无任何规则 = 死类） */
 .wf-embedded { display: contents; }
 
+/* 卡片形态：1px 发丝线 + 平底 + 12px 圆角（原型 .card 208） */
 .wf {
   border: 1px solid var(--mk-line);
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
 }
 
@@ -844,7 +845,7 @@ const verdictText = computed(() => {
   color: var(--mk-ink);
   outline: none;
 }
-.wf-sort:focus { border-color: rgba(44, 99, 208, 0.5); }
+.wf-sort:focus { border-color: var(--mk-blue); }
 
 /* 跳转目标不在当前加载样本内的提示条（琥珀色，与失败/漂移徽章同族） */
 .wf-notice {
@@ -875,12 +876,14 @@ const verdictText = computed(() => {
 .wf-mode {
   margin-bottom: 10px;
 }/* 链路概要卡 */
+/* 链路概要卡：KPI 格栅同族（原型 .kpi 231-234：标签 + 等宽数字 + faint 小字），
+   单行等分格，`<b>` 走 emphasis 700 + tabular-nums */
 .wf-summary {
   display: flex;
   align-items: stretch;
   gap: 0;
   border: 1px solid var(--mk-line);
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
   overflow: hidden;
 }
@@ -918,7 +921,7 @@ const verdictText = computed(() => {
   color: var(--mk-ink);
   outline: none;
 }
-.wf-tracepick__search:focus { border-color: rgba(44, 99, 208, 0.5); }
+.wf-tracepick__search:focus { border-color: var(--mk-blue); }
 .wf-tracepick__select {
   max-width: 320px;
   padding: 6px 10px;
@@ -936,8 +939,8 @@ const verdictText = computed(() => {
      轨道宽度由 syncRulerTrack() 按首行实测值设置（行尾列 auto 宽度不定） */
   gap: 12px;
   align-items: center;
-  /* 表头与数据行对齐：.wf-row__main 有 padding 9px 14px，表头需一致，否则时间刻度条与瀑布轨道错位（4K 放大后肉眼可见） */
-  padding: 9px 14px;
+  /* 表头与数据行对齐：.wf-row__main 有 padding 10px 16px，表头需一致，否则时间刻度条与瀑布轨道错位（4K 放大后肉眼可见） */
+  padding: 10px 16px;
   border-bottom: 1px solid var(--mk-line);
   background: var(--mk-surface);
 }
@@ -967,18 +970,20 @@ const verdictText = computed(() => {
   background: var(--mk-line);
 }
 
+/* 行分隔与悬停：原型 .tbl tbody tr（265-267）：发丝线分隔 + surface-2 悬停，
+   单元格内边距 10px 16px = 原型 .tbl td（261）。数字列一律等宽。 */
 .wf-row { border-bottom: 1px solid var(--mk-graph-row-line); }
 .wf-row:last-of-type { border-bottom: none; }
 .wf-row--open { background: var(--mk-graph-row-open-bg); }
-.wf-row--err { background: rgba(220, 38, 38, 0.04); }
-.wf-row--err.wf-row--open { background: rgba(220, 38, 38, 0.06); }
+.wf-row--err { background: color-mix(in srgb, var(--mk-red) 5%, transparent); }
+.wf-row--err.wf-row--open { background: color-mix(in srgb, var(--mk-red) 8%, transparent); }
 .wf-row__main {
   display: grid;
   grid-template-columns: 280px 1fr auto;
   gap: 12px;
   align-items: center;
   width: 100%;
-  padding: 9px 14px;
+  padding: 10px 16px;
   border: 0;
   background: transparent;
   font: inherit;
@@ -986,7 +991,7 @@ const verdictText = computed(() => {
   cursor: pointer;
 }
 .wf-row__main:hover { background: var(--mk-graph-row-hover-bg); }
-.wf-row--err .wf-row__main:hover { background: rgba(220, 38, 38, 0.06); }
+.wf-row--err .wf-row__main:hover { background: color-mix(in srgb, var(--mk-red) 8%, transparent); }
 
 .wf-row__stage {
   display: flex;
@@ -1017,7 +1022,7 @@ const verdictText = computed(() => {
 }
 .wf-row__kind {
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--mk-radius-xs);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   flex-shrink: 0;
@@ -1036,7 +1041,7 @@ const verdictText = computed(() => {
   position: absolute;
   top: 3px;
   bottom: 3px;
-  border-radius: 4px;
+  border-radius: var(--mk-radius-xs);
   display: flex;
   align-items: center;
   padding: 0 6px;
@@ -1046,24 +1051,31 @@ const verdictText = computed(() => {
 .wf-row__bar--warn { background: linear-gradient(90deg, var(--mk-graph-bar-warn-a), var(--mk-graph-bar-warn-b)); }
 .wf-row__bar--err { background: linear-gradient(90deg, var(--mk-graph-bar-err-a), var(--mk-graph-bar-err-b)); }
 
-.wf-row__dur { font-size: var(--mk-fs-micro); color: var(--mk-muted); text-align: right; }
+/* 耗时/网关/错误码等尾部数字：等宽数字（原型 .tbl 等宽口径 + .feedrow__time mono） */
+.wf-row__dur {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .wf-row__arrow { font-size: var(--mk-fs-micro); color: var(--mk-faint); transition: transform 0.15s ease; }
 .wf-row--open .wf-row__arrow { transform: rotate(90deg); }
 .wf-row__gw {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   background: var(--mk-graph-fact-bg);
-  border-radius: 4px;
+  border-radius: var(--mk-radius-xs);
   padding: 1px 6px;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .wf-row__tail { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-width: 0; }
 .wf-row__errcode {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-graph-err-ink);
-  background: rgba(220, 38, 38, 0.08);
-  border-radius: 4px;
+  background: color-mix(in srgb, var(--mk-red) 10%, transparent);
+  border-radius: var(--mk-radius-xs);
   padding: 1px 6px;
   white-space: nowrap;
 }
@@ -1071,8 +1083,8 @@ const verdictText = computed(() => {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-amber);
-  background: rgba(217, 119, 6, 0.1);
-  border-radius: 4px;
+  background: color-mix(in srgb, var(--mk-amber) 12%, transparent);
+  border-radius: var(--mk-radius-xs);
   padding: 1px 6px;
   white-space: nowrap;
 }
@@ -1083,13 +1095,13 @@ const verdictText = computed(() => {
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   background: var(--mk-graph-fact-bg);
-  border-radius: 4px;
+  border-radius: var(--mk-radius-xs);
   padding: 2px 8px;
 }
-.wf-fact--bad { color: var(--mk-graph-err-ink); background: rgba(220, 38, 38, 0.08); }
-.wf-fact--warn { color: var(--mk-amber); background: rgba(217, 119, 6, 0.1); font-weight: 700; }
+.wf-fact--bad { color: var(--mk-graph-err-ink); background: color-mix(in srgb, var(--mk-red) 10%, transparent); }
+.wf-fact--warn { color: var(--mk-amber); background: color-mix(in srgb, var(--mk-amber) 12%, transparent); font-weight: 700; }
 .wf-prompt {
-  border-left: 3px solid rgba(217, 119, 6, 0.4);
+  border-left: 3px solid color-mix(in srgb, var(--mk-amber) 40%, transparent);
   padding-left: 10px;
   display: grid;
   gap: 6px;
@@ -1115,7 +1127,7 @@ const verdictText = computed(() => {
 .wf-attempt__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .wf-attempt__dur { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
-.wf-row__detail { padding: 4px 14px 12px 14px; display: grid; gap: 10px; }
+.wf-row__detail { padding: 4px 16px 12px 16px; display: grid; gap: 10px; }
 .wf-row__detail-grid {
   display: grid;
   grid-template-columns: 1fr 1.4fr auto;
@@ -1146,20 +1158,20 @@ const verdictText = computed(() => {
 
 /* 底部加载提示（原型 renderObserve trace 页签 .skelrow + 居中 faint 文案）：
    骨架视觉/形状走全局 .mk-skeleton / .mk-skeleton-rows，本页只补与瀑布行对齐的水平内边距 */
-.wf-skel { padding: 12px 14px 4px; }
+.wf-skel { padding: 12px 16px 4px; }
 .wf-skel-hint {
   margin: 0;
-  padding: 0 14px 12px;
+  padding: 0 16px 12px;
   text-align: center;
   color: var(--mk-faint);
   font-size: var(--mk-fs-micro);
 }
 
 .wf-verdict {
-  margin: 12px 14px 14px;
+  margin: 12px 16px 14px;
   padding: 12px 14px;
   border-radius: var(--mk-radius-xl);
-  border: 1px solid rgba(220, 38, 38, 0.2);
+  border: 1px solid color-mix(in srgb, var(--mk-red) 24%, transparent);
   background: var(--mk-graph-verdict-bg);
   display: grid;
   gap: 4px;
@@ -1178,7 +1190,7 @@ const verdictText = computed(() => {
   .wf-tracepick__count { font-size: var(--mk-fs-micro); }
   .wf-tracepick__search { font-size: var(--mk-fs-micro); padding: 8px 12px; width: 150px; }
   .wf-tracepick__select { font-size: var(--mk-fs-micro); padding: 8px 12px; max-width: 380px; }
-  .wf-ruler { grid-template-columns: 340px 1fr; padding: 9px 14px; }
+  .wf-ruler { grid-template-columns: 340px 1fr; padding: 10px 16px; }
   .wf-ruler__label { font-size: var(--mk-fs-micro); }
   .wf-row__main { grid-template-columns: 340px 1fr auto; }
   .wf-row__stage-name { font-size: var(--mk-fs-micro); }
@@ -1194,7 +1206,7 @@ const verdictText = computed(() => {
   .wf-tracepick__count { font-size: var(--mk-fs-micro); }
   .wf-tracepick__search { font-size: var(--mk-fs-micro); padding: 10px 14px; width: 180px; }
   .wf-tracepick__select { font-size: var(--mk-fs-micro); padding: 10px 14px; max-width: 460px; }
-  .wf-ruler { grid-template-columns: 400px 1fr; padding: 9px 14px; }
+  .wf-ruler { grid-template-columns: 400px 1fr; padding: 10px 16px; }
   .wf-ruler__label { font-size: var(--mk-fs-micro); }
   .wf-row__main { grid-template-columns: 400px 1fr auto; }
   .wf-row__stage-name { font-size: var(--mk-fs-micro); }
@@ -1207,7 +1219,7 @@ const verdictText = computed(() => {
 }
 @media (min-width: 3600px) {
   /* 4K 分辨率（zoom 1.3 档）：字号继续放大 */
-  .wf-ruler { grid-template-columns: 460px 1fr; padding: 9px 14px; }
+  .wf-ruler { grid-template-columns: 460px 1fr; padding: 10px 16px; }
   .wf-ruler__label { font-size: var(--mk-fs-body); }
   .wf-row__main { grid-template-columns: 460px 1fr auto; }
   .wf-row__stage-name { font-size: var(--mk-fs-emphasis); }
@@ -1233,7 +1245,7 @@ html[data-theme='dark'] {
   /* 补漏：分隔线/轨道/标签/结论条（此前硬编码浅色在暗色下残留） */
   .wf-row { border-bottom-color: var(--mk-graph-row-line); }
   .wf-row__track, .wf-row__gw, .wf-fact { background: var(--mk-graph-fact-bg); }
-  .wf-verdict { background: var(--mk-graph-verdict-bg); border-color: rgba(248, 113, 113, 0.3); }
+  .wf-verdict { background: var(--mk-graph-verdict-bg); border-color: color-mix(in srgb, var(--mk-red) 32%, transparent); }
   .wf-notice { background: var(--mk-graph-notice-bg); border-color: var(--mk-graph-notice-line); }
 }
 </style>

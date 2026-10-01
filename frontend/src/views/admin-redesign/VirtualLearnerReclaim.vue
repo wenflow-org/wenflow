@@ -12,7 +12,16 @@
           将把{{ state.profileIds ? '选中虚拟人' : '全部' }}超过回收阈值（{{ reclaimThresholdLabel }}）无写入、且无活跃租约的会话标记为失败（failed, reason=stale）。只改状态，不删除任何数据。
         </p>
         <p v-if="state.loading" class="mk-alert mk-alert--info">正在扫描可回收会话…</p>
-        <p v-else-if="!state.preview.length" class="mk-alert mk-alert--ok">没有可回收的卡死会话。</p>
+        <!-- 空态走共享 MkEmptyState（原型 .empty：图标/标题/下一步，index.html 287-289），带「关闭」CTA；
+             原先的 mk-alert--ok 只有一句状态文案、没有下一步 -->
+        <MkEmptyState
+          v-else-if="!state.preview.length"
+          title="没有可回收的卡死会话"
+          description="当前没有超过回收阈值且无活跃租约的会话，无需清理。"
+          action-text="关闭"
+          compact
+          @action="state.open = false"
+        />
         <div v-else class="vl-reclaim-list">
           <div v-for="r in state.preview" :key="r.id" class="vl-reclaim-item">
             <code class="vl-reclaim-id">{{ r.id.slice(0, 14) }}…</code>
@@ -40,6 +49,7 @@ import { loadLiveData, errMsg, liveVirtualRunStats } from './live'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import type { ReclaimPreviewItem } from './virtualLearnersTypes'
 
 const emit = defineEmits<{ (e: 'done'): void }>()

@@ -33,7 +33,11 @@
           <input v-model="batchNote" class="mk-field__input" placeholder="这批学习者用于什么实验 / 验收，方便以后识别" />
         </label>
         <div v-if="batchError" class="mk-alert" role="alert">{{ batchError }}</div>
-        <button type="button" class="mk-btn mk-btn--primary mk-btn--block" :disabled="batchCreating" @click="doBatchCreate">
+      </div>
+      <!-- 动作收进 .mk-modal__foot（原型 .ovl__foot：上边框、右对齐、常驻滚动区外，index.html 368） -->
+      <div class="mk-modal__foot">
+        <button type="button" class="mk-btn" :disabled="batchCreating" @click="closeBatch">取消</button>
+        <button type="button" class="mk-btn mk-btn--primary" :disabled="batchCreating" @click="doBatchCreate">
           {{ batchCreating ? '创建中…' : `创建 ${batchFillCount || 0} 人 × ${batchStoryCount || 0} 故事（后台生成）` }}
         </button>
       </div>

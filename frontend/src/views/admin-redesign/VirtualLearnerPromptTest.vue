@@ -273,8 +273,10 @@ defineExpose({ open })
 /* 字段明细 chips */
 .pt-fields { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 4px; }
 .pt-field {
-  font-size: var(--mk-fs-micro); padding: 1px 7px; border-radius: 6px; font-family: var(--mk-mono, monospace);
-  background: rgba(99, 102, 241, 0.08); color: var(--mk-purple); border: 1px solid rgba(99, 102, 241, 0.2);
+  font-size: var(--mk-fs-micro); padding: 1px 7px; border-radius: var(--mk-radius-sm); font-family: var(--mk-mono, monospace);
+  background: color-mix(in srgb, var(--mk-purple) 10%, transparent);
+  color: var(--mk-purple);
+  border: 1px solid color-mix(in srgb, var(--mk-purple) 24%, transparent);
   word-break: break-all;
 }
 .pt-field b { font-weight: 700; }
@@ -295,11 +297,8 @@ defineExpose({ open })
   max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
   border-top: 1px dashed var(--mk-line, #e1e8f2); padding-top: 8px;
 }
-html[data-theme='dark'] .pt-check--ok { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
-html[data-theme='dark'] .pt-check--bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
-html[data-theme='dark'] .pt-content { color: var(--mk-ink, #e7e8e9); }
-html[data-theme='dark'] .pt-io { border-color: #252627; }
-html[data-theme='dark'] .pt-field { background: rgba(129, 140, 248, 0.14); color: #a5b4fc; border-color: rgba(129, 140, 248, 0.3); }
+/* 暗色适配由 --mk-* token 承担（--mk-green/--mk-green-bg、--mk-red/--mk-red-bg、--mk-ink、
+   --mk-line、--mk-purple 均有 dark 档）：原 html[data-theme='dark'] 补丁段删除，避免双份维护 */
 
 /* 步骤提示已换全局 .mk-alert mk-alert--info（原 .vl-steps 覆写删除） */
 </style>

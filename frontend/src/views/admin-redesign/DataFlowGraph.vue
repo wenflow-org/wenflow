@@ -336,8 +336,16 @@
           </div>
         </section>
 
-        <!-- 空态 -->
-        <p v-if="flow && !flow.steps.length && !flow.entry.length && !flow.exit.length" class="dfg-empty">该阶段暂无字段路由数据</p>
+        <!-- 空态：原型 .empty 词表（图标 + 结论 + 说明 + 行动入口），不再裸一句话 -->
+        <MkEmptyState
+          v-if="flow && !flow.steps.length && !flow.entry.length && !flow.exit.length"
+          icon="⇅"
+          title="该阶段暂无字段路由数据"
+          description="编排文件未声明字段路由；可在「字段路由」页编辑编排文件后回来。"
+          action-text="刷新"
+          compact
+          @action="load"
+        />
       </div>
     </div>
 
@@ -1178,7 +1186,7 @@ function stepHue(step: FlowStep): string {
   border-bottom: 1px solid var(--mk-line);
 }
 .dfg-toolbar__status { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
-.dfg-stage-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.12); }
+.dfg-stage-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-muted) 12%, transparent); }
 .dfg-title { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
 .dfg-title__agent { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); }
 .dfg-meta { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
@@ -1194,7 +1202,7 @@ function stepHue(step: FlowStep): string {
   outline: none;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
-.dfg-search__input:focus { border-color: var(--mk-blue); box-shadow: 0 0 0 3px rgba(44, 99, 208, 0.12); }
+.dfg-search__input:focus { border-color: var(--mk-blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue) 12%, transparent); }
 .dfg-search__clear {
   position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
   width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; /* 16→24：WCAG 2.5.8 */
@@ -1309,7 +1317,7 @@ function stepHue(step: FlowStep): string {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   transition: background 0.12s ease, box-shadow 0.12s ease;
 }
-.dfg-step__port:hover { background: var(--mk-graph-port-bg-hover); box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.18); }
+.dfg-step__port:hover { background: var(--mk-graph-port-bg-hover); box-shadow: 0 0 0 2px color-mix(in srgb, var(--mk-blue) 18%, transparent); }
 .dfg-step__port b { font-variant-numeric: tabular-nums; }
 html[data-theme='dark'] .dfg-step__port { background: var(--mk-graph-port-bg); border-color: var(--mk-graph-port-line); color: var(--mk-graph-port-ink); }
 html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-bg-hover); }
@@ -1317,8 +1325,8 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 /* 滚动聚焦闪烁（点击端口徽标后目标卡闪两下） */
 .dfg-step.is-flash, .dfg-gate.is-flash { animation: dfg-flash 0.7s ease 2; }
 @keyframes dfg-flash {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(44, 99, 208, 0); }
-  45% { box-shadow: 0 0 0 4px rgba(44, 99, 208, 0.45); }
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  45% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-blue) 45%, transparent); }
 }
 
 /* 进出闸口卡 */
@@ -1376,7 +1384,11 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-step--bare .dfg-step__head { border-bottom: 0; padding-bottom: 5px; }
 .dfg-step__idx {
   width: 21px; height: 21px; display: inline-flex; align-items: center; justify-content: center;
-  border-radius: var(--mk-radius-sm); background: var(--hz); color: var(--mk-graph-on-accent);
+  /* 序号方对齐原型 .odg-col__no（软底 + 彩色字，非实心块）：--hz 软底 12% + 同色相深档字，
+     与下方 .dfg-step__badge--gate 同一混色；原实心 --hz + 白字在浅色 --hz（青 #0d9488）仅 3.74:1 */
+  border-radius: var(--mk-radius-sm);
+  background: color-mix(in srgb, var(--hz) 12%, var(--mk-graph-node-bg));
+  color: color-mix(in srgb, var(--hz) 75%, var(--mk-ink));
   font-size: var(--mk-fs-micro); font-weight: 800; flex-shrink: 0;
 }
 .dfg-step--gate .dfg-step__idx { border-radius: 50%; }
@@ -1484,8 +1496,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-legend__item.is-on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
 .dfg-legend__hint { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
-/* 空态 */
-.dfg-empty { padding: 40px; text-align: center; color: var(--mk-faint); }
+/* 空态走 MkEmptyState（原型 .empty 词表），此处无本地样式 */
 
 /* ========== 抽屉（原型 openLearner 三段式：头部标题 + 正文 pills/事实/嵌套卡 + 常驻 foot） ========== */
 .dfg-drawer { background: var(--mk-graph-canvas); }
@@ -1544,7 +1555,7 @@ html[data-theme='dark'] {
   .dfg-frame { background: var(--mk-graph-canvas); border-color: var(--mk-graph-line); }
   .dfg-toolbar { background: linear-gradient(180deg, var(--mk-graph-toolbar-a), var(--mk-graph-toolbar-b)); border-bottom-color: var(--mk-graph-line); }
   .dfg-search__input { background: var(--mk-graph-field); border-color: var(--mk-line); color: var(--mk-ink); }
-  .dfg-search__input:focus { box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.16); }
+  .dfg-search__input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue) 16%, transparent); }
   .dfg-search__clear { background: var(--mk-line); color: var(--mk-muted); }
   .dfg-search__clear:hover { background: var(--mk-graph-clear-bg-hover); color: var(--mk-ink); }
   .dfg-journey { background: linear-gradient(180deg, var(--mk-graph-journey-a), var(--mk-graph-journey-b)); border-bottom-color: var(--mk-graph-line); }
@@ -1573,13 +1584,13 @@ html[data-theme='dark'] {
   .dfg-step--bare { background: var(--mk-graph-canvas-2); }
   .dfg-step--bare.is-unresolved { border-color: color-mix(in srgb, var(--mk-amber) 45%, var(--mk-line)); }
   .dfg-step--bare.is-orphan { border-color: color-mix(in srgb, var(--mk-red) 40%, var(--mk-line)); background: linear-gradient(180deg, color-mix(in srgb, var(--mk-red) 6%, var(--mk-graph-inset)), var(--mk-graph-inset) 60%); }
-  .dfg-step--bare.is-orphan .dfg-step__badge--warn { background: rgba(248, 113, 113, 0.14); }
+  .dfg-step--bare.is-orphan .dfg-step__badge--warn { background: var(--mk-red-bg); }
   .dfg-step__head { background: linear-gradient(180deg, color-mix(in srgb, var(--hz) 10%, var(--mk-surface)), var(--mk-graph-canvas) 70%); border-bottom-color: color-mix(in srgb, var(--hz) 12%, var(--mk-graph-line)); }
   .dfg-step__name { color: var(--mk-graph-node-ink); }
   .dfg-step__badge { background: var(--mk-graph-badge-bg); color: var(--mk-muted); }
   .dfg-step__badge--gate { background: color-mix(in srgb, var(--hz) 22%, var(--mk-surface)); color: var(--mk-graph-blue-ink); }
   .dfg-step__badge--svc { background: var(--mk-graph-tag-bg); color: var(--mk-muted); }
-  .dfg-step__badge--cross { background: rgba(167, 139, 250, 0.16); color: var(--mk-graph-accent-purple-ink); }
+  .dfg-step__badge--cross { background: var(--mk-graph-flag-purple-bg); color: var(--mk-graph-accent-purple-ink); }
   .dfg-step__badge--warn { background: var(--mk-amber-bg); color: var(--mk-graph-warn-ink); }
   .dfg-step__cond { background: var(--mk-amber-bg); color: var(--mk-graph-warn-ink); }
   .dfg-step__stage { background: var(--mk-blue-bg); color: var(--mk-graph-blue-ink); }
@@ -1595,7 +1606,7 @@ html[data-theme='dark'] {
   .dfg-chip__to--stage { background: color-mix(in srgb, var(--hz) 16%, var(--mk-surface)); color: var(--mk-graph-node-ink); }
   .dfg-legend { background: var(--mk-graph-canvas); }
   .dfg-legend__item:hover { background: var(--mk-graph-hover-bg); }
-  .dfg-legend__item.is-on { background: rgba(91, 141, 239, 0.18); border-color: rgba(91, 141, 239, 0.45); color: var(--mk-graph-blue-ink); }
+  .dfg-legend__item.is-on { background: color-mix(in srgb, var(--mk-blue) 18%, transparent); border-color: color-mix(in srgb, var(--mk-blue) 45%, transparent); color: var(--mk-graph-blue-ink); }
   .dfg-drawer { background: var(--mk-graph-canvas); }
   .dfg-drawer__body { background: var(--mk-graph-canvas); }
   .dfg-flow__chip--soft { background: var(--mk-graph-flow-soft-bg); color: var(--mk-graph-flow-soft-ink); }

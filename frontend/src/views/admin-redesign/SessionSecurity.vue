@@ -14,8 +14,9 @@
       </button>
     </div>
 
-    <!-- 审计日志深链横幅（?user=用户名 → 只看该管理员的会话；含分工说明 + 反向跳转） -->
-    <div v-if="deepLinkUser" class="ss-deeplink">
+    <!-- 审计日志深链横幅（?user=用户名 → 只看该管理员的会话；含分工说明 + 反向跳转）：
+         走全局 .mk-alert--info（原型 .alert--info 词汇），本地只补行内布局 -->
+    <div v-if="deepLinkUser" class="mk-alert mk-alert--info ss-deeplink">
       <strong>来自审计日志 · 查看「{{ deepLinkUser }}」的登录会话</strong>
       <span>这里展示登录成功产生的会话（可强制下线）；登录事件完整历史（含失败尝试）见</span>
       <button type="button" class="mk-link" @click="goAuditLogs">审计日志 · 登录审计 →</button>
@@ -27,14 +28,16 @@
       <button type="button" class="mk-link" @click="goAuditLogs">审计日志 · 登录审计 →</button>
     </div>
 
-    <!-- 加载失败错误态 + 重试 -->
-    <div v-if="loadError" class="ss-error">
-      <div class="ss-error__card">
-        <strong>会话列表加载失败</strong>
-        <span>{{ loadError }}</span>
-        <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" @click="applyFilters">重试</button>
-      </div>
-    </div>
+    <!-- 加载失败错误态：整页无数据可显示 → MkEmptyState tone="error" + 重试（原型 .empty 词汇 + R3 错误态口径） -->
+    <MkEmptyState
+      v-if="loadError"
+      icon="◌"
+      tone="error"
+      title="会话列表加载失败"
+      :description="loadError"
+      action-text="重试"
+      @action="applyFilters"
+    />
 
     <!-- 加载中骨架 -->
     <div v-else class="mk-card mk-card--fill">
@@ -65,8 +68,8 @@
 
     <!-- 按管理员分组的标准表格 -->
     <div v-else-if="groups.length" class="ss-body">
-      <div v-for="{ g, active } in visibleGroups" :key="g.adminId" class="ss-group">
-        <div class="ss-group__head">
+      <div v-for="{ g, active } in visibleGroups" :key="g.adminId" class="mk-card ss-group">
+        <div class="mk-card__head">
           <div class="ss-group__who">
             <strong>{{ g.adminName }}</strong>
             <span v-if="g.adminEmail" class="ss-group__email mono">{{ g.adminEmail }}</span>
@@ -75,7 +78,7 @@
           <button
             v-if="g.active.length"
             type="button"
-            class="ss-group__revokeall"
+            class="mk-btn mk-btn--danger-ghost mk-btn--sm"
             @click="revokeAll(g)"
           >
             下线全部<template v-if="g.active.length > 1">（{{ g.active.length }}）</template>
@@ -154,9 +157,9 @@
           </table>
         </div>
 
-        <!-- 过期/已撤销历史（默认收起；「已撤销」筛选时自动展开） -->
+        <!-- 过期/已撤销历史（默认收起；「已撤销」筛选时自动展开）：折叠头走全局 .mk-section__summary -->
         <details v-if="g.historical.length" class="ss-hist" :open="statusFilter !== ''">
-          <summary class="ss-hist__summary">
+          <summary class="mk-section__summary ss-hist__summary">
             <span class="ss-hist__title">已过期 · 已撤销（{{ g.historical.length }}）</span>
             <span class="ss-hist__meta">过期 {{ g.expiredCount }} · 已撤销 {{ g.revokedCount }}</span>
           </summary>
@@ -543,86 +546,39 @@ onMounted(async () => {
    避免遮蔽全局升级（此前重定义导致 mk-status__actions 等新类不生效） */
 
 /* 审计日志分工说明 / 深链横幅 */
+/* 常驻分工说明（原型 .note：次级表面底 + muted 字，无描边） */
 .ss-note {
   display: flex;
   align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
   padding: 8px 14px;
-  border: 1px dashed var(--mk-line);
   border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
+  background: var(--mk-surface-2);
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
+/* 深链横幅：底色/字色/圆角由 .mk-alert--info 承担，这里只补行内布局 */
 .ss-deeplink {
   display: flex;
   align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 8px 14px;
-  border: 1px solid rgba(44, 99, 208, 0.3);
   border-radius: var(--mk-radius-xl);
-  background: var(--mk-blue-bg);
   font-size: var(--mk-fs-micro);
-  color: var(--mk-ink);
 }
-.ss-deeplink strong { font-weight: 700; }
+.ss-deeplink strong { font-weight: 700; color: var(--mk-ink); }
 .ss-deeplink__clear { color: var(--mk-muted); }
 
-/* 加载失败错误态 */
-.ss-error { padding: 40px 20px; }
-.ss-error__card {
-  max-width: 460px;
-  margin: 0 auto;
-  display: grid;
-  gap: 10px;
-  justify-items: center;
-  padding: 28px 32px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-modal);
-  text-align: center;
-}
-.ss-error__card strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
-.ss-error__card span { font-size: var(--mk-fs-micro); color: var(--mk-muted); word-break: break-all; }
+/* 加载失败错误态走 MkEmptyState（模板内），此处不再自建错误卡 */
 
-.ss-body { display: grid; gap: 14px; }
+.ss-body { display: grid; gap: var(--mk-space-4); }
 
-.ss-group {
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: var(--mk-surface);
-  overflow-x: auto;
-}
-.ss-group__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
-  background: var(--mk-surface);
-  border-bottom: 1px solid var(--mk-line);
-}
+/* 分组卡走全局 .mk-card / .mk-card__head（原型 card 词汇），页面只保留组头内的身份排版 */
 .ss-group__who { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
-.ss-group__who strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
+.ss-group__who strong { font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
 .ss-group__email { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .ss-group__count { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.ss-group__revokeall {
-  border: 0;
-  background: transparent;
-  color: var(--mk-red, #dc2626);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-  padding: 4px 8px;
-  border-radius: var(--mk-radius-sm);
-}
-.ss-group__revokeall:hover { background: var(--mk-red-bg, #fef2f2); text-decoration: underline; }
 
 /* 表格内自定义单元格 */
 .ss-tr--current td { background: var(--mk-blue-bg); }
@@ -661,56 +617,40 @@ onMounted(async () => {
   font-weight: 700;
   border-radius: 999px;
   padding: 2px 9px;
-  background: #eff6ff;
+  background: var(--mk-blue-bg);
   color: var(--mk-accent-deep, #1f57cc);
   white-space: nowrap;
 }
 .ss-na { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
-/* 过期/已撤销折叠组（默认收起，summary 行可点击展开） */
-.ss-hist { border-top: 1px solid #f0f2f5; }
+/* 过期/已撤销折叠组（默认收起，summary 行可点击展开）
+   折叠头形态走全局 .mk-section__summary（▸ 指示 + open 旋转 + hover），此处只覆配色/内衬 */
+.ss-hist { border-top: 1px solid var(--mk-line); }
 .ss-hist__summary {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 7px 14px;
-  background: #f8fafc;
-  cursor: pointer;
-  user-select: none;
-  list-style: none;
+  background: var(--mk-surface-2);
   font-size: var(--mk-fs-micro);
-  font-weight: 700;
   color: var(--mk-muted);
 }
-.ss-hist__summary::-webkit-details-marker { display: none; }
-.ss-hist__summary::before {
-  content: '▸';
-  display: inline-block;
-  margin-right: 2px;
-  color: var(--mk-blue);
-  transition: transform 0.14s ease;
-}
-.ss-hist[open] .ss-hist__summary::before { transform: rotate(90deg); }
-.ss-hist__summary:hover { background: #f4f7fc; }
+.ss-hist__summary:hover { background: var(--mk-hover-surface); }
 .ss-hist__meta { color: var(--mk-faint); font-weight: 600; font-size: var(--mk-fs-micro); }
 
-/* 大屏/4K 适配（全站 mk 体系档位；表格与状态条由 shared.css 档位覆盖） */
+/* 大屏/4K 适配（全站 mk 体系档位；表格与状态条由 shared.css 档位覆盖）。
+   分组名走 --mk-fs-emphasis，随档位自动放大，故不在档位内重复声明。 */
 @media (min-width: 2000px) {
-  .ss-group__head { padding: 12px 18px; }
-  .ss-group__who strong { font-size: var(--mk-fs-body); }
   .ss-group__email { font-size: var(--mk-fs-micro); }
   .ss-group__count { font-size: var(--mk-fs-micro); }
-  .ss-group__revokeall { font-size: var(--mk-fs-micro); }
   .ss-current { font-size: var(--mk-fs-micro); }
   .ss-na { font-size: var(--mk-fs-micro); }
   .ss-time--soon { font-size: var(--mk-fs-micro); }
   .ss-ip { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .ss-group__who strong { font-size: var(--mk-fs-body); }
   .ss-group__email { font-size: var(--mk-fs-micro); }
   .ss-group__count { font-size: var(--mk-fs-micro); }
-  .ss-group__revokeall { font-size: var(--mk-fs-micro); }
   .ss-current { font-size: var(--mk-fs-micro); }
   .ss-na { font-size: var(--mk-fs-micro); }
   .ss-time,
@@ -718,26 +658,11 @@ onMounted(async () => {
   .ss-ip { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
-  .ss-group__head { padding: 14px 22px; }
-  .ss-group__who strong { font-size: var(--mk-fs-emphasis); }
   .ss-group__email { font-size: var(--mk-fs-micro); }
   .ss-group__count { font-size: var(--mk-fs-body); }
-  .ss-group__revokeall { font-size: var(--mk-fs-body); }
   .ss-current { font-size: var(--mk-fs-micro); }
   .ss-na { font-size: var(--mk-fs-body); }
   .ss-time--soon { font-size: var(--mk-fs-micro); }
   .ss-ip { font-size: var(--mk-fs-body); }
-}
-
-/* ================= 暗色模式（D1 补完）：会话安全 ================= */
-html[data-theme='dark'] {
-  .ss-tr--current td { background: rgba(91, 141, 239, 0.1); }
-  .ss-tr--current:hover td { background: rgba(91, 141, 239, 0.16); }
-  .ss-hist__summary:hover { background: #252627; }
-  .ss-dot--linux { background: #f59e0b; }
-  .ss-hist { background: #19191a; border-color: #2a2b2d; }
-  /* 补漏：当前会话徽章/折叠组头浅底 */
-  .ss-current { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
-  .ss-hist__summary { background: #202122; }
 }
 </style>

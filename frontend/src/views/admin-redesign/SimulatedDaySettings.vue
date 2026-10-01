@@ -8,6 +8,7 @@
       title="展开/收起日期模拟设置"
       @click="expanded = !expanded"
       @keydown.enter.prevent="expanded = !expanded"
+      @keydown.space.prevent="expanded = !expanded"
     >
       <span class="sd-settings__title">日期模拟</span>
       <span class="sd-settings__arrow" :data-open="expanded ? 'true' : 'false'" aria-hidden="true">▸</span>

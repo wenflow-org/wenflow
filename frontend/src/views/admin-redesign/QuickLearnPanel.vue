@@ -779,7 +779,7 @@ useMaskClose(maskRef, close)
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
   cursor: pointer;
   font-size: var(--mk-fs-body);
 }
@@ -821,14 +821,6 @@ useMaskClose(maskRef, close)
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-
-
-@keyframes ql-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .ql-status__title {
@@ -903,7 +895,7 @@ useMaskClose(maskRef, close)
 
 .ql-chip {
   background: var(--mk-surface-3);
-  border-radius: 4px;
+  border-radius: var(--mk-radius-xs);
   padding: 2px 8px;
   font-size: var(--mk-fs-micro);
 }

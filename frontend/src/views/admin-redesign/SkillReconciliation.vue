@@ -2,17 +2,18 @@
   <details ref="recPanelRef" class="mk-card sk-rec" :open="recOpen">
     <summary class="mk-card__head sk-rec__summary">
       <div class="sk-rec__title">
-        <strong>技能对账</strong>
+        <h3 class="mk-card__title">技能对账</h3>
         <span class="mk-card__meta" title="核对四个来源的登记是否一致：配置文件清单（manifest）、系统运行注册（gateway）、生效版本（ACTIVE prompt）、技能登记册">配置文件 × 运行注册 × 生效版本 × 登记册</span>
         <button v-if="recDiff" type="button" class="mk-link sk-rec__clear" @click.stop="clearRecDiff">✕ 清除差集定位</button>
       </div>
       <MkLoading v-if="recLoading" inline />
       <template v-else-if="recReport">
+        <!-- 口径 pill（中性 mk-pill）+ 异常计数（mk-badge 语气，替代自造色块） -->
         <div class="sk-rec__pills">
           <span class="mk-pill" :title="`技能登记册全量（含外挂能力）vs 目录`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
-          <span v-if="recReport.summary.unregistered" class="mk-pill sk-pill--bad">未注册 {{ recReport.summary.unregistered }}</span>
-          <span v-if="recReport.summary.activeMissing" class="mk-pill sk-pill--warn" title="缺 ACTIVE：无生效版本">无生效版本 {{ recReport.summary.activeMissing }}</span>
-          <span v-if="recReport.summary.orphanRegistrations" class="mk-pill sk-pill--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
+          <span v-if="recReport.summary.unregistered" class="mk-badge mk-badge--bad">未注册 {{ recReport.summary.unregistered }}</span>
+          <span v-if="recReport.summary.activeMissing" class="mk-badge mk-badge--warn" title="缺 ACTIVE：无生效版本">无生效版本 {{ recReport.summary.activeMissing }}</span>
+          <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
           <span v-else class="mk-pill">失效注册 0</span>
         </div>
         <button type="button" class="sk-rec__refresh" :disabled="recLoading" @click.stop="refresh">刷新</button>
@@ -93,22 +94,22 @@
                 <td><span class="sk-rec-yn sk-rec-yn--ok">✓</span></td>
                 <td>
                   <span :class="['sk-rec-yn', e.row.manifest ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.manifest ? '✓' : '✗' }}</span>
-                  <span v-if="e.row.kind === 'aux' && !e.row.manifest" class="sk-rec-tag">免注册</span>
+                  <span v-if="e.row.kind === 'aux' && !e.row.manifest" class="mk-badge mk-badge--muted sk-rec-tag">免注册</span>
                 </td>
                 <td>
                   <span :class="['sk-rec-yn', e.row.registered ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.registered ? '✓' : '✗' }}</span>
-                  <span v-if="e.row.registrationExempt" class="sk-rec-tag">豁免</span>
+                  <span v-if="e.row.registrationExempt" class="mk-badge mk-badge--muted sk-rec-tag">豁免</span>
                 </td>
                 <td>
                   <span :class="['sk-rec-yn', e.row.active ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.active ? '✓' : '✗' }}</span>
-                  <span v-if="e.row.noPromptFile" class="sk-rec-tag">纯函数</span>
+                  <span v-if="e.row.noPromptFile" class="mk-badge mk-badge--muted sk-rec-tag">纯函数</span>
                 </td>
                 <td>
                   <span class="mk-badge" :class="`mk-badge--rec-${e.row.completion.status}`" :title="recGateDetail(e.row.completion)">{{ recStatusText(e.row.completion.status) }}</span>
                 </td>
                 <td>
-                  <span v-if="e.row.diff === 'unregistered'" class="sk-rec-diff sk-rec-diff--bad">未注册</span>
-                  <span v-else-if="e.row.diff === 'active-missing'" class="sk-rec-diff sk-rec-diff--warn" title="缺 ACTIVE：无生效版本">无生效版本</span>
+                  <span v-if="e.row.diff === 'unregistered'" class="mk-badge mk-badge--bad">未注册</span>
+                  <span v-else-if="e.row.diff === 'active-missing'" class="mk-badge mk-badge--warn" title="缺 ACTIVE：无生效版本">无生效版本</span>
                   <span v-else class="mk-na">—</span>
                 </td>
               </tr>
@@ -121,7 +122,7 @@
       </div>
       <div v-if="recReport.orphanRegistrations.length" class="sk-rec-orphans">
         <strong title="登记册已删除/不存在，但注册记录仍残留">失效注册残留</strong>
-        <span v-for="orphan in recReport.orphanRegistrations" :key="orphan.name" class="sk-rec-tag sk-rec-tag--bad">{{ orphan.name }}</span>
+        <span v-for="orphan in recReport.orphanRegistrations" :key="orphan.name" class="mk-badge mk-badge--bad">{{ orphan.name }}</span>
       </div>
       <div class="sk-rec-legend">
         <span v-for="s in recStatusOrder" :key="s" class="sk-rec-legend__item">
@@ -134,6 +135,10 @@
       v-else
       title="暂无对账数据"
       description="技能尚未登记，或对账报告暂不可用。可点击「刷新」重试。"
+      action-text="刷新"
+      :action-busy="recLoading"
+      action-busy-text="刷新中…"
+      @action="refresh"
     />
   </details>
 </template>
@@ -304,32 +309,29 @@ function openPanel() { recOpen.value = true; }
 .sk-rec[open] > .sk-rec__summary::before { transform: rotate(90deg); }
 .sk-rec-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px 4px; }
 .sk-rec__title { display: flex; flex-direction: column; gap: 2px; }
-.sk-rec__title strong { font-size: var(--mk-fs-body); }
 .sk-rec__clear { width: fit-content; }
 .sk-rec-flash { animation: sk-rec-flash 1.4s ease 2; }
-@keyframes sk-rec-flash { 0%,100% { background: transparent; } 50% { background: #fdf3e3; } }
+/* 差集定位闪烁：琥珀底走 token（暗色自动翻转，亮色档硬编码与暗色补丁已删） */
+@keyframes sk-rec-flash { 0%,100% { background: transparent; } 50% { background: var(--mk-amber-bg); } }
 
-.sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
-.sk-pill--bad { color: var(--mk-red-strong); background: #fdecec; }
-.sk-pill--warn { color: var(--mk-amber); background: #fdf3e3; }
-.sk-rec__refresh { border: 1px solid var(--mk-line); background: #fff; border-radius: var(--mk-radius-sm); padding: 3px 10px; font: inherit; font-size: var(--mk-fs-micro); color: var(--mk-muted); cursor: pointer; white-space: nowrap; }
-.sk-rec__refresh:hover { border-color: rgba(44,99,208,0.4); color: var(--mk-blue); }
+.sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; align-items: center; }
+/* 同行里 mk-pill（中性口径）与 mk-badge（异常语气）统一到同一档尺寸，避免高矮不齐 */
+.sk-rec__pills > * { padding: 5px 12px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 600; }
+.sk-rec__refresh { border: 1px solid var(--mk-line); background: var(--mk-surface); border-radius: var(--mk-radius-sm); padding: 3px 10px; font: inherit; font-size: var(--mk-fs-micro); color: var(--mk-muted); cursor: pointer; white-space: nowrap; }
+.sk-rec__refresh:hover { border-color: var(--mk-blue); color: var(--mk-blue); }
 .sk-rec__refresh:disabled { opacity: 0.5; cursor: default; }
 .sk-rec__skeleton { padding: 12px; }
 .sk-rec-table th, .sk-rec-table td { text-align: left; }
 .sk-rec-yn { font-weight: 700; font-size: var(--mk-fs-body); }
 .sk-rec-yn--ok { color: var(--mk-green); }
 .sk-rec-yn--no { color: var(--mk-red); }
-.sk-rec-tag { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 999px; background: #eef2fa; color: #41516e; font-size: var(--mk-fs-micro); font-weight: 600; vertical-align: 1px; }
-.sk-rec-tag--bad { background: #fdecec; color: var(--mk-red-strong); }
-.sk-rec-diff { font-size: var(--mk-fs-micro); font-weight: 700; }
-.sk-rec-diff--bad { color: var(--mk-red); }
-.sk-rec-diff--warn { color: var(--mk-amber); }
+/* 免注册 / 豁免 / 纯函数：语气归 mk-badge--muted，本类只留与 ✓/✗ 的间距 */
+.sk-rec-tag { margin-left: 4px; vertical-align: 1px; }
 .sk-rec-orphans { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px dashed var(--mk-line); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.sk-rec-orphans .sk-rec-tag { margin-left: 0; }
+.sk-rec-orphans .mk-badge { margin-left: 0; }
 /* 分组行不覆写内边距：单行小字单元格曾因 6px 纵向内边距落到 37px，低于 SPEC §3 的 40px 行高下限。
    跟随 .mk-table td 的档位节奏（9px 起，≥2800 档 14px）后为 43px 且随档位增长。 */
-.sk-rec-group td { background: #f4f7fc; border-bottom: 1px solid var(--mk-line); }
+.sk-rec-group td { background: var(--mk-surface-2); border-bottom: 1px solid var(--mk-line); }
 .sk-rec-group__name { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue); }
 .sk-rec-group__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); margin-left: 10px; }
 .sk-rec-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--mk-line); font-size: var(--mk-fs-micro); }
@@ -363,7 +365,7 @@ function openPanel() { recOpen.value = true; }
 }
 .sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .sk-dot--ok { background: var(--mk-green); }
-.sk-dot--idle { background: #c3cede; }
+.sk-dot--idle { background: var(--mk-faint); }
 .sk-dot--error { background: var(--mk-red); animation: sk-blink 1.2s ease infinite; }
 @keyframes sk-blink { 50% { opacity: 0.3; } }
 
@@ -384,20 +386,6 @@ function openPanel() { recOpen.value = true; }
   .sk-name-desc { font-size: var(--mk-fs-body); }
 }
 
-/* ================= 暗色模式（D1 补完）：Skill 对账 ================= */
-html[data-theme='dark'] {
-  .sk-rec__refresh { background: #1b1c1d; }
-  .sk-rec-tag { background: #2d2d2f; color: #afb1b6; }
-  .sk-rec-tag--bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
-  .sk-rec-group td { background: #19191a; }
-  /* 补漏：pill 语义底 */
-  .sk-pill--bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
-  .sk-pill--warn { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
-  /* 补漏：目录行（同宿主 Skills 暗色档） */
-  .sk-dot--idle { background: #4d4e51; }
-  /* 补漏：差集定位闪烁底色 #fdf3e3 是亮色琥珀，暗色下换成半透明琥珀 */
-  .sk-rec-flash { animation-name: sk-rec-flash-dark; }
-}
-/* 暗色版闪烁关键帧（scoped 会同组件改名，animation-name 与此处配套） */
-@keyframes sk-rec-flash-dark { 0%,100% { background: transparent; } 50% { background: rgba(251, 191, 36, 0.18); } }
+/* 暗色模式：色值全部走 --mk-* token（surface/amber-bg/faint 随主题自动翻转），
+   原先的亮色硬编码 + 暗色补丁段已删（无残留规则）。 */
 </style>

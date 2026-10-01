@@ -1,30 +1,51 @@
 <template>
   <div class="cp-day-timeline">
-    <MkLoading v-if="loading" text="加载中…" />
-    <div v-else-if="error" class="dt-state dt-state--error">
-      <span>{{ error }}</span>
-      <button type="button" class="mk-link" @click="load">重试</button>
+    <!-- 加载态：原型 .skelrow（539）+ .skel（537）语义 = 骨架行/格；视觉与暗色走全局 .mk-skeleton -->
+    <div v-if="loading" class="dt-skel mk-skeleton-cards" aria-hidden="true">
+      <span v-for="i in 6" :key="i" class="mk-skeleton dt-skel__cell"></span>
     </div>
-    <div v-else-if="!clock" class="dt-state">无模拟时钟数据</div>
+
+    <!-- 整页失败：原型 .empty（287-289）语义 → MkEmptyState tone=error（错误态红系图标 + role=alert） -->
+    <MkEmptyState
+      v-else-if="error"
+      compact
+      tone="error"
+      icon="!"
+      :title="error"
+      description="日期模拟数据加载失败，可重试。"
+      action-text="重试"
+      @action="load"
+    />
+
+    <MkEmptyState
+      v-else-if="!clock"
+      compact
+      icon="◌"
+      title="暂无模拟时钟数据"
+      description="该会话尚未初始化日期模拟时钟。"
+    />
 
     <template v-else>
-      <div class="dt-clock">
-        <span class="dt-clock__badge" :class="clock.enabled ? 'is-on' : 'is-off'">
-          {{ clock.enabled ? '日期模拟已开启' : '日期模拟未开启' }}
+      <!-- 时钟状态行：原型 .statusbar（219-229）= 状态点 + 标题 + meta + 右侧动作 -->
+      <div class="dt-status">
+        <span class="dt-status__dot" :class="clock.enabled ? 'is-on' : 'is-off'"></span>
+        <strong class="dt-status__title">{{ clock.enabled ? '日期模拟已开启' : '日期模拟未开启' }}</strong>
+        <span class="dt-status__meta">起点 {{ clock.baseDate }}</span>
+        <span class="dt-status__meta">已推进 {{ clock.dayIndex }} / {{ clock.maxSimulatedDays }} 天</span>
+        <span class="dt-status__meta">{{ clock.timezone }}</span>
+        <span class="dt-status__act">
+          <button type="button" class="mk-link mk-link--danger" :disabled="resetting" title="重置推进进度（dayIndex=0、清空 history；不回改已写时间戳）" @click="resetClock">
+            {{ resetting ? '重置中…' : '重置进度' }}
+          </button>
         </span>
-        <span class="dt-clock__meta">起点 {{ clock.baseDate }}</span>
-        <span class="dt-clock__meta">已推进 {{ clock.dayIndex }} / {{ clock.maxSimulatedDays }} 天</span>
-        <span class="dt-clock__meta">{{ clock.timezone }}</span>
-        <button type="button" class="mk-link" :disabled="resetting" title="重置推进进度（dayIndex=0、清空 history；不回改已写时间戳）" @click="resetClock">
-          {{ resetting ? '重置中…' : '重置进度' }}
-        </button>
       </div>
 
+      <!-- 按钮层级（原型 .btn 191-206）：推进 = 次级，推进并上课 = 主操作 -->
       <div class="dt-controls">
-        <span class="dt-clock__meta">课表 {{ weekdaysLabel(clock.courseWeekdays) }} · 每天 {{ clock.lessonsPerDay }} 节</span>
-        <button type="button" class="mk-link" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 1 个上课日（跳过非上课日）' : '请先开启日期模拟'" @click="advance(1)">推进 1 天</button>
-        <button type="button" class="mk-link" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 5 个上课日' : '请先开启日期模拟'" @click="advance(5)">推进 5 天</button>
-        <button type="button" class="mk-link" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '推进 1 天并真实跑当天课程（业务时间戳落在模拟日；每节消耗 AI 调用）' : '请先开启日期模拟'" @click="advance(1, true)">推进并上课</button>
+        <span class="dt-status__meta">课表 {{ weekdaysLabel(clock.courseWeekdays) }} · 每天 {{ clock.lessonsPerDay }} 节</span>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 1 个上课日（跳过非上课日）' : '请先开启日期模拟'" @click="advance(1)">推进 1 天</button>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 5 个上课日' : '请先开启日期模拟'" @click="advance(5)">推进 5 天</button>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '推进 1 天并真实跑当天课程（业务时间戳落在模拟日；每节消耗 AI 调用）' : '请先开启日期模拟'" @click="advance(1, true)">推进并上课</button>
         <label class="dt-auto" :title="clock.enabled ? '开启后由后台按课表自动推进（仅时钟簿记；当天任务重放归系统层）' : '请先开启日期模拟'">
           <input
             type="checkbox"
@@ -49,58 +70,84 @@
         </div>
       </div>
 
-      <div v-if="!days.length" class="dt-state">暂无按天数据</div>
+      <MkEmptyState
+        v-if="!days.length"
+        compact
+        icon="◌"
+        title="暂无按天数据"
+        description="该会话在此时间窗口内没有可读的按天记录。"
+      />
 
-      <div v-for="day in days" :key="day.dayIndex" class="dt-day">
-        <div class="dt-day__head">
-          <span class="dt-day__label">第 {{ day.dayIndex + 1 }} 天</span>
-          <span class="dt-day__date">{{ day.simulatedDay }}</span>
-          <span v-if="day.pacing" class="dt-chip" :class="`dt-chip--pace-${day.pacing}`">节奏 {{ pacingLabel(day.pacing) }}</span>
-          <span v-for="signal in day.signals" :key="signal" class="dt-chip dt-chip--warn">{{ signalLabel(signal) }}</span>
-        </div>
+      <!-- 日程格：原型 .schgrid/.schcell（544-553）——day（天序）/ slot（mono 日期）/ scene（场景）/ meta（读数）
+           + 四态 done/active/skip/idle -->
+      <div v-else class="schgrid">
+        <div
+          v-for="day in days"
+          :key="day.dayIndex"
+          class="dt-cell schcell"
+          :class="{
+            'schcell--active': dayState(day) === 'active',
+            'schcell--done': dayState(day) === 'done',
+            'schcell--skip': dayState(day) === 'skip',
+            'schcell--idle': dayState(day) === 'idle',
+          }"
+        >
+          <div class="dt-cell__head">
+            <span class="schcell__day">第 {{ day.dayIndex + 1 }} 天</span>
+            <span class="schcell__slot">{{ day.simulatedDay }}</span>
+          </div>
 
-        <div class="dt-metrics">
-          <span v-if="day.dayLoad" class="dt-metric">
-            课量 <b>{{ day.dayLoad.lessons }}</b> 节 · <b>{{ day.dayLoad.minutes }}</b> 分钟
-            <template v-if="day.dayLoad.fatigueBonus"> · 疲劳加成 <b>{{ day.dayLoad.fatigueBonus }}</b></template>
+          <span v-if="day.pacing || day.signals.length" class="schcell__scene">
+            <span v-if="day.pacing" class="dt-chip" :class="`dt-chip--pace-${day.pacing}`">节奏 {{ pacingLabel(day.pacing) }}</span>
+            <span v-for="signal in day.signals" :key="signal" class="dt-chip dt-chip--warn">{{ signalLabel(signal) }}</span>
           </span>
-          <span v-if="day.metrics" class="dt-metric">LSS {{ fmt(day.metrics.lss) }}</span>
-          <span v-if="day.metrics" class="dt-metric">KTL {{ fmt(day.metrics.ktl) }}</span>
-          <span v-if="day.metrics" class="dt-metric">LF {{ fmt(day.metrics.lf) }}</span>
-          <span v-if="day.metrics" class="dt-metric">LSB {{ fmt(day.metrics.lsb) }}</span>
-          <span v-if="day.reviewQuota.limitLoad" class="dt-metric">
-            温故 {{ day.reviewQuota.usedLoad }} / {{ day.reviewQuota.limitLoad }}
-          </span>
-          <span v-if="day.memory.traceCount" class="dt-metric">
-            记忆 {{ day.memory.traceCount }} 点
-            <template v-if="day.memory.avgRetention !== null"> · 均保留率 {{ pct(day.memory.avgRetention) }}</template>
-            <template v-if="day.memory.fragileCount"> · 脆弱 {{ day.memory.fragileCount }}</template>
-          </span>
-        </div>
 
-        <div v-if="day.tasks.length" class="dt-tasks">
-          <div v-for="task in day.tasks" :key="task.taskId" class="dt-task">
-            <span class="dt-task__title" :title="task.title">{{ task.title || task.taskId }}</span>
-            <span class="dt-task__meta">
-              <template v-if="task.actualMinutes !== null">{{ task.actualMinutes }} 分钟</template>
-              <template v-else-if="task.estimatedMinutes !== null">预计 {{ task.estimatedMinutes }} 分钟</template>
-              <template v-if="task.cognitiveLoad"> · {{ task.cognitiveLoad }}</template>
+          <div class="dt-metrics schcell__meta">
+            <span v-if="day.dayLoad" class="dt-metric">
+              课量 <b>{{ day.dayLoad.lessons }}</b> 节 · <b>{{ day.dayLoad.minutes }}</b> 分钟
+              <template v-if="day.dayLoad.fatigueBonus"> · 疲劳加成 <b>{{ day.dayLoad.fatigueBonus }}</b></template>
+            </span>
+            <span v-if="day.metrics" class="dt-metric">LSS {{ fmt(day.metrics.lss) }}</span>
+            <span v-if="day.metrics" class="dt-metric">KTL {{ fmt(day.metrics.ktl) }}</span>
+            <span v-if="day.metrics" class="dt-metric">LF {{ fmt(day.metrics.lf) }}</span>
+            <span v-if="day.metrics" class="dt-metric">LSB {{ fmt(day.metrics.lsb) }}</span>
+            <span v-if="day.reviewQuota.limitLoad" class="dt-metric">
+              温故 {{ day.reviewQuota.usedLoad }} / {{ day.reviewQuota.limitLoad }}
+            </span>
+            <span v-if="day.memory.traceCount" class="dt-metric">
+              记忆 {{ day.memory.traceCount }} 点
+              <template v-if="day.memory.avgRetention !== null"> · 均保留率 {{ pct(day.memory.avgRetention) }}</template>
+              <template v-if="day.memory.fragileCount"> · 脆弱 {{ day.memory.fragileCount }}</template>
             </span>
           </div>
-        </div>
 
-        <div v-if="day.difficultyAdjustments.length" class="dt-adjust">
-          <span class="dt-adjust__label">难度调整</span>
-          <span v-for="(adj, i) in day.difficultyAdjustments" :key="i" class="dt-adjust__item" :title="adj.reasons.join('、')">
-            {{ adj.baseline }} → {{ adj.adjusted }}（{{ directionLabel(adj.direction) }}）
-            <em v-if="adj.applied">已执行</em><em v-else>仅判定</em>
-          </span>
-        </div>
+          <!-- 明细（原型 schcell 之外的补充：任务/难度调整/分路径读数，保留全部既有数据） -->
+          <div v-if="day.tasks.length || day.difficultyAdjustments.length || day.perPath.length > 1" class="dt-cell__detail">
+            <div v-if="day.tasks.length" class="dt-tasks">
+              <div v-for="task in day.tasks" :key="task.taskId" class="dt-task">
+                <span class="dt-task__title" :title="task.title">{{ task.title || task.taskId }}</span>
+                <span class="dt-task__meta">
+                  <template v-if="task.actualMinutes !== null">{{ task.actualMinutes }} 分钟</template>
+                  <template v-else-if="task.estimatedMinutes !== null">预计 {{ task.estimatedMinutes }} 分钟</template>
+                  <template v-if="task.cognitiveLoad"> · {{ task.cognitiveLoad }}</template>
+                </span>
+              </div>
+            </div>
 
-        <div v-if="day.perPath.length > 1" class="dt-paths">
-          <span v-for="p in day.perPath" :key="p.pathId" class="dt-path" :title="p.pathId">
-            路径 {{ p.pathId.slice(-6) }} · LF {{ fmt(p.lf) }}
-          </span>
+            <div v-if="day.difficultyAdjustments.length" class="dt-adjust">
+              <span class="dt-adjust__label">难度调整</span>
+              <span v-for="(adj, i) in day.difficultyAdjustments" :key="i" class="dt-adjust__item" :title="adj.reasons.join('、')">
+                {{ adj.baseline }} → {{ adj.adjusted }}（{{ directionLabel(adj.direction) }}）
+                <em v-if="adj.applied">已执行</em><em v-else>仅判定</em>
+              </span>
+            </div>
+
+            <div v-if="day.perPath.length > 1" class="dt-paths">
+              <span v-for="p in day.perPath" :key="p.pathId" class="dt-path" :title="p.pathId">
+                路径 {{ p.pathId.slice(-6) }} · LF {{ fmt(p.lf) }}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -116,7 +163,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
-import MkLoading from '@/components/mk/MkLoading.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { errMsg } from './live'
 import { askConfirm } from './useConfirm'
 
@@ -255,6 +302,18 @@ function directionLabel(d: string): string {
   return { decrease: '降档', increase: '升档', keep: '不变' }[d] || d
 }
 
+/** 日程格四态（对齐原型 .schcell--done/active/skip/idle，546-549）：
+ *  active = 当前模拟日（服务端 dayIndex，不在前端做时间换算）；
+ *  done   = 当天已有完成任务（actualMinutes 落值）；
+ *  skip   = 当天无课（课量为 0 的非上课日）；
+ *  idle   = 其余（无课量读数/空档）。 */
+function dayState(day: DayEntry): 'active' | 'done' | 'skip' | 'idle' {
+  if (clock.value && day.dayIndex === clock.value.dayIndex) return 'active'
+  if (day.tasks.some((t) => t.actualMinutes !== null)) return 'done'
+  if (day.dayLoad && day.dayLoad.lessons === 0) return 'skip'
+  return 'idle'
+}
+
 async function load() {
   if (!props.sessionId) return
   loading.value = true
@@ -290,35 +349,83 @@ watch(
 
 <style scoped>
 .cp-day-timeline { display: flex; flex-direction: column; gap: 12px; }
-.dt-state { padding: 16px; color: var(--mk-faint); font-size: var(--mk-fs-body); }
-.dt-state--error { color: var(--mk-red); display: flex; gap: 8px; align-items: center; }
-.dt-clock { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: var(--mk-fs-micro); }
-.dt-clock__badge { padding: 2px 8px; border-radius: 999px; font-weight: 600; }
-.dt-clock__badge.is-on { background: var(--mk-green-bg); color: var(--mk-green); }
-.dt-clock__badge.is-off { background: var(--mk-surface-3); color: var(--mk-faint); }
-.dt-clock__meta { color: var(--mk-faint); }
-.dt-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: var(--mk-fs-micro); }
+
+/* 加载骨架格：原型 .skelrow（539）+ .skel（537）语义；视觉走全局 .mk-skeleton，
+   本页只给形状（高度 + mk-skeleton-cards 的自适应列） */
+.dt-skel__cell { height: 76px; }
+
+/* 时钟状态行：原型 .statusbar（219-229）= 状态点 + b 标题 + meta + 右侧动作 */
+.dt-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 14px;
+  min-height: 48px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  background: var(--mk-surface);
+  font-size: var(--mk-fs-micro);
+}
+.dt-status__dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.dt-status__dot.is-on { background: var(--mk-green); }
+.dt-status__dot.is-off { background: var(--mk-faint); }
+.dt-status__title { font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
+.dt-status__meta { color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+.dt-status__act { margin-left: auto; }
+
+/* 控件行：次级按钮 + 主按钮（原型 .btn 191-206）的层级落在这里 */
+.dt-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: var(--mk-fs-micro); }
 .dt-auto { display: flex; align-items: center; gap: 4px; font-size: var(--mk-fs-micro); cursor: pointer; }
 .dt-hint { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.dt-day { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); padding: 10px 12px; }
-.dt-day__head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.dt-day__label { font-weight: 600; }
-.dt-day__date { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-/* 状态 chip（节奏/信号）：胶囊词汇（同 mk-badge）；难度调整是数据字面量，走 mk-badge--chip 的直角档 */
-.dt-chip { font-size: var(--mk-fs-micro); padding: 1px 8px; border-radius: 999px; background: rgba(140, 140, 140, 0.12); }
+
+/* ===== 日程格：原型 .schgrid/.schcell（544-553）=====
+   原型 116px 是「一周仿真日程」的窄格；本页每格承载课量/读数/任务明细，
+   故加宽 minmax 到 240px，其余（gap 10、padding 10/12、gap 4、四态底色）原样。 */
+.schgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.schcell {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 10px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-lg);
+  background: var(--mk-surface);
+}
+.schcell--done { border-color: color-mix(in srgb, var(--mk-green) 30%, var(--mk-line)); }
+.schcell--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
+.schcell--skip,
+.schcell--idle { background: var(--mk-surface-2); }
+.schcell__day { font-weight: 700; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
+.schcell__slot { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.schcell__scene { display: flex; flex-wrap: wrap; gap: 4px; font-size: var(--mk-fs-micro); }
+.schcell__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.schcell--active .schcell__meta { color: var(--mk-blue); font-weight: 600; }
+
+.dt-cell__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.dt-cell__detail { display: grid; gap: 6px; margin-top: 4px; }
+
+/* 状态 chip（节奏/信号）：胶囊词汇，同原型 .pill（238-244） */
+.dt-chip { font-size: var(--mk-fs-micro); padding: 1px 8px; border-radius: 999px; background: var(--mk-surface-3); color: var(--mk-muted); }
 .dt-chip--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .dt-chip--pace-slow { background: var(--mk-amber-bg); color: var(--mk-amber-fill); }
 .dt-chip--pace-fast { background: var(--mk-blue-bg); color: var(--mk-blue); }
-.dt-metrics { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+
+/* 读数行：等宽数字（原型 .meterrow / .kpi__value 的 tabular-nums 口径） */
+.dt-metrics { display: flex; flex-wrap: wrap; gap: 12px; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 .dt-metric b { color: var(--mk-ink); }
-.dt-tasks { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+
+.dt-tasks { display: flex; flex-direction: column; gap: 4px; }
 .dt-task { display: flex; justify-content: space-between; gap: 12px; font-size: var(--mk-fs-micro); }
 .dt-task__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dt-task__meta { color: var(--mk-faint); flex: 0 0 auto; }
-.dt-adjust { margin-top: 8px; font-size: var(--mk-fs-micro); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.dt-task__meta { color: var(--mk-faint); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+
+.dt-adjust { font-size: var(--mk-fs-micro); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .dt-adjust__label { color: var(--mk-faint); }
-.dt-adjust__item { background: rgba(140, 140, 140, 0.1); padding: 1px 6px; border-radius: 4px; }
+.dt-adjust__item { background: var(--mk-surface-3); padding: 1px 6px; border-radius: var(--mk-radius-xs); }
 .dt-adjust__item em { font-style: normal; margin-left: 4px; color: var(--mk-faint); }
-.dt-paths { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+
+.dt-paths { display: flex; flex-wrap: wrap; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+
 .dt-pager { display: flex; justify-content: center; gap: 12px; font-size: var(--mk-fs-micro); }
 </style>

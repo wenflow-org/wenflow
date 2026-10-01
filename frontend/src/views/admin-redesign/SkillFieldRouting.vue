@@ -26,8 +26,8 @@
         </span>
       </div>
 
-      <!-- 与协议 tab 的 core 对账摘要（analyzeCoreFieldsSync 单 skill 投影） -->
-      <div v-if="syncReport && (syncReport.missing.length || syncReport.orphan.length || syncReport.typeMismatch.length)" class="sfr__sync">
+      <!-- 与协议 tab 的 core 对账摘要（analyzeCoreFieldsSync 单 skill 投影）：原型 .note 语义 -->
+      <div v-if="syncReport && (syncReport.missing.length || syncReport.orphan.length || syncReport.typeMismatch.length)" class="note sfr__sync">
         <strong class="sfr__sync-title">与协议 tab 的 core 对账</strong>
         <span v-for="m in syncReport.missing" :key="'m' + m.fieldId" class="sfr__sync-item sfr__sync-item--err" :title="m.detail">
           {{ TERMS.statusMissing }}：<code class="mono">{{ m.fieldId }}</code>
@@ -37,8 +37,8 @@
         </span>
       </div>
 
-      <!-- core 有但未路由（孤儿） -->
-      <div v-if="syncReport?.orphan?.length" class="sfr__orphan">
+      <!-- core 有但未路由（孤儿）：原型 .note--warn 语义 -->
+      <div v-if="syncReport?.orphan?.length" class="note note--warn sfr__orphan">
         <strong class="sfr__orphan-title">core 有但未路由（{{ TERMS.statusOrphan }}）</strong>
         <span v-for="o in syncReport.orphan" :key="o.coreField" class="sfr__orphan-item" :title="o.detail">
           <code class="mono">{{ o.coreField }}</code> 未出现在产出行首段
@@ -101,66 +101,78 @@
         <span v-if="filterActive" class="sfr__filter-count">命中 {{ rows.length }} / {{ data.routings.length }} 行</span>
       </div>
 
-      <!-- 产出字段表 -->
-      <div class="sfr__scroll mk-table-scroll">
-        <!-- 原型 .tbl：自动布局（去 mk-table--fixed 与 <colgroup>，2026-10-01 对齐 Skills 判例），
-             单元格 nowrap、列按内容自然分宽；长内容列（字段/含义/移交/落库键）已有 max-width+ellipsis 截断 -->
-        <table class="mk-table mk-table--dense sfr__table">
-          <thead>
-            <tr>
-              <th scope="col">字段</th>
-              <th scope="col">含义</th>
-              <th scope="col">类型</th>
-              <th scope="col">角色</th>
-              <th scope="col">可见性</th>
-              <th scope="col">移交</th>
-              <th scope="col">内部</th>
-              <th scope="col">累积</th>
-              <th scope="col">落库键</th>
-              <th scope="col">锁定</th>
-              <th scope="col">core 状态</th>
-              <th scope="col" class="mk-th--right">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in rows" :key="row.fieldId">
-              <td class="sfr__fieldcell">
-                <span class="mono sfr__field" :title="row.fieldId">{{ row.fieldId }}</span>
-                <span v-if="row.pathInRawOutput" class="sfr__fieldpath" :title="`抽取路径（pathInRawOutput）：${row.pathInRawOutput}`">抽取 → {{ String(row.pathInRawOutput).split('.').pop() }}</span>
-              </td>
-              <td class="sfr__meaning">
-                <span class="sfr__meaning-text" :title="row.desc">{{ row.desc || '—' }}</span>
-              </td>
-              <td class="mono">{{ row.valueType }}</td>
-              <td>
-                <span v-if="row.role" class="mk-badge" :class="`mk-badge--role-${row.role}`" :title="roleHintOf(row.role)">{{ roleLabelOf(row.role) }}</span>
-                <span v-else class="mk-na">—</span>
-              </td>
-              <td>
-                <span class="mk-badge" :class="`mk-badge--render-${row.render}`" :title="renderHintOf(row)">{{ row.render }}</span>
-              </td>
-              <td><span class="mono sfr__handoff" :title="handoffTitleOf(row)">{{ formatHandoff(row.handoff) }}</span></td>
-              <td>{{ row.internal ? '是' : '否' }}</td>
-              <td>{{ row.accumulate ? '是' : '否' }}</td>
-              <td>
-                <span class="mono sfr__persist" :class="{ 'sfr__persist--alias': row.persistKey !== row.fieldId }" :title="row.persistKey === row.fieldId ? '落库键与字段名一致' : `值实际写入 ${row.persistKey}`">{{ row.persistKey === row.fieldId ? '同字段名' : '别名' }}</span>
-              </td>
-              <td><span class="mk-badge" :class="`mk-badge--lock-${row.lockLevel}`" :title="lockHintOf(row.lockLevel)">{{ lockLabelOf(row.lockLevel) }}</span></td>
-              <td>
-                <span v-if="row.coreState === 'missing'" class="mk-badge mk-badge--core-missing" :title="row.coreStateTitle">⚠ {{ TERMS.statusMissing }}</span>
-                <span v-else-if="row.coreState === 'mismatch'" class="mk-badge mk-badge--core-mismatch" :title="row.coreStateTitle">⚠ 类型不一致</span>
-                <span v-else class="mk-badge mk-badge--core-declared" :title="row.coreStateTitle">✓ 已声明</span>
-              </td>
-              <td class="sfr__ops">
-                <button type="button" class="mk-btn mk-btn--sm" :disabled="!canEditRow(row)" :title="editTitleOf(row)" @click="openEdit(row)">编辑</button>
-                <button type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="!canDeleteRow(row)" :title="deleteTitleOf(row)" @click="onDelete(row)">删除</button>
-              </td>
-            </tr>
-            <tr v-if="!rows.length">
-              <td colspan="12" class="sfr__emptyrow">{{ data.routings.length ? '无匹配行，试试调整搜索或角色过滤' : '该 skill 暂无产出行（无编排路由声明）' }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- 产出字段表（原型 .card：card__head = title + sub 条数） -->
+      <div class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">产出字段</h3>
+          <span class="mk-card__meta">{{ data.routings.length }} 条字段流转</span>
+        </div>
+        <!-- 原型 .tbl：自动布局（去 mk-table--fixed 与 <colgroup>），
+             单元格 nowrap；长文本列（含义）走 wrap 列，长标识列 max-width+ellipsis 截断 -->
+        <div v-if="rows.length" class="sfr__scroll mk-table-scroll">
+          <table class="mk-table mk-table--dense sfr__table">
+            <thead>
+              <tr>
+                <th scope="col">字段</th>
+                <th scope="col" class="sfr__wrap">含义</th>
+                <th scope="col">类型</th>
+                <th scope="col">角色</th>
+                <th scope="col">可见性</th>
+                <th scope="col">移交</th>
+                <th scope="col">内部</th>
+                <th scope="col">累积</th>
+                <th scope="col">落库键</th>
+                <th scope="col">锁定</th>
+                <th scope="col">core 状态</th>
+                <th scope="col" class="mk-th--right">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in rows" :key="row.fieldId">
+                <td class="sfr__fieldcell">
+                  <span class="mono sfr__field" :title="row.fieldId">{{ row.fieldId }}</span>
+                  <span v-if="row.pathInRawOutput" class="sfr__fieldpath" :title="`抽取路径（pathInRawOutput）：${row.pathInRawOutput}`">抽取 → {{ String(row.pathInRawOutput).split('.').pop() }}</span>
+                </td>
+                <td class="sfr__meaning">
+                  <span class="sfr__meaning-text" :title="row.desc">{{ row.desc || '—' }}</span>
+                </td>
+                <td class="mono">{{ row.valueType }}</td>
+                <td>
+                  <span v-if="row.role" class="mk-badge" :class="`mk-badge--role-${row.role}`" :title="roleHintOf(row.role)">{{ roleLabelOf(row.role) }}</span>
+                  <span v-else class="mk-na">—</span>
+                </td>
+                <td>
+                  <span class="mk-badge" :class="`mk-badge--render-${row.render}`" :title="renderHintOf(row)">{{ row.render }}</span>
+                </td>
+                <td><span class="mono sfr__handoff" :title="handoffTitleOf(row)">{{ formatHandoff(row.handoff) }}</span></td>
+                <td>{{ row.internal ? '是' : '否' }}</td>
+                <td>{{ row.accumulate ? '是' : '否' }}</td>
+                <td>
+                  <span class="mono sfr__persist" :class="{ 'sfr__persist--alias': row.persistKey !== row.fieldId }" :title="row.persistKey === row.fieldId ? '落库键与字段名一致' : `值实际写入 ${row.persistKey}`">{{ row.persistKey === row.fieldId ? '同字段名' : '别名' }}</span>
+                </td>
+                <td><span class="mk-badge" :class="`mk-badge--lock-${row.lockLevel}`" :title="lockHintOf(row.lockLevel)">{{ lockLabelOf(row.lockLevel) }}</span></td>
+                <td>
+                  <span v-if="row.coreState === 'missing'" class="mk-badge mk-badge--core-missing" :title="row.coreStateTitle">⚠ {{ TERMS.statusMissing }}</span>
+                  <span v-else-if="row.coreState === 'mismatch'" class="mk-badge mk-badge--core-mismatch" :title="row.coreStateTitle">⚠ 类型不一致</span>
+                  <span v-else class="mk-badge mk-badge--core-declared" :title="row.coreStateTitle">✓ 已声明</span>
+                </td>
+                <td class="sfr__ops">
+                  <button type="button" class="mk-btn mk-btn--sm" :disabled="!canEditRow(row)" :title="editTitleOf(row)" @click="openEdit(row)">编辑</button>
+                  <button type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="!canDeleteRow(row)" :title="deleteTitleOf(row)" @click="onDelete(row)">删除</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- 空态带 CTA（原型 .empty）：筛选无命中 → 清除筛选；无产出行 → 加字段 / 重试 -->
+        <MkEmptyState
+          v-else
+          compact
+          :title="data.routings.length ? '无匹配行' : '该 skill 暂无产出行'"
+          :description="data.routings.length ? '试试调整搜索关键词或角色过滤。' : '该 skill 无编排路由声明。可用「加字段」补全，或先到编排文件声明产出字段。'"
+          :action-text="emptyActionText"
+          @action="onEmptyAction"
+        />
       </div>
 
       <!-- 加字段向导 -->
@@ -283,6 +295,18 @@ const existingNames = computed(() => {
 })
 
 const canAdd = computed(() => Boolean(data.value?.core.exists && syncReport.value))
+
+/** 空态 CTA：筛选无命中 → 清除筛选；无产出行 → 加字段（有 core）/ 重试 */
+const emptyActionText = computed(() => {
+  if (!data.value) return ''
+  if (data.value.routings.length) return '清除筛选'
+  return canAdd.value ? '＋ 加字段' : '重试'
+})
+function onEmptyAction() {
+  if (data.value?.routings.length) { clearFilter(); return }
+  if (canAdd.value) { openWizard(); return }
+  void load()
+}
 
 const filterActive = computed(() => Boolean(keyword.value.trim() || roleFilter.value))
 function clearFilter() {
@@ -569,96 +593,82 @@ onMounted(() => void load())
 
 <style scoped>
 .sfr__status-actions { margin-left: auto; display: inline-flex; gap: 8px; }
-.sfr__sync {
-  display: flex;
-  align-items: baseline;
-  gap: 6px 12px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-  padding: 8px 12px;
-  border: 1px dashed rgba(220, 38, 38, 0.4);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-red-bg, #fef2f2);
+/* 原型 .note：说明/告警行（surface-2 底 + muted 小字；--warn 走琥珀底） */
+.note {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   line-height: 1.5;
 }
-.sfr__sync-title { color: var(--mk-red, #dc2626); font-size: var(--mk-fs-micro); }
+.note--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
+.sfr__sync, .sfr__orphan { display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; }
+.sfr__sync-title { color: var(--mk-ink); font-size: var(--mk-fs-micro); font-weight: 700; }
 .sfr__sync-item { display: inline-flex; gap: 4px; align-items: center; }
-.sfr__sync-item--err { color: var(--mk-red, #dc2626); font-weight: 600; }
-.sfr__sync-item--warn { color: var(--mk-amber, #b45309); font-weight: 600; }
+.sfr__sync-item code { font-family: var(--mk-mono); }
+.sfr__sync-item--err { color: var(--mk-red); font-weight: 600; }
+.sfr__sync-item--warn { color: var(--mk-amber); font-weight: 600; }
 
-.sfr__orphan {
-  display: flex;
-  align-items: baseline;
-  gap: 6px 12px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-  padding: 8px 12px;
-  border: 1px dashed rgba(180, 83, 9, 0.45);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-amber-bg, #fffbeb);
-  font-size: var(--mk-fs-micro);
-}
-.sfr__orphan-title { color: var(--mk-amber, #b45309); font-size: var(--mk-fs-micro); }
-.sfr__orphan-item { display: inline-flex; gap: 4px; align-items: center; color: var(--mk-muted, #5b6577); }
-.sfr__orphan-item code { color: var(--mk-amber, #b45309); font-weight: 700; }
+.sfr__orphan-title { color: var(--mk-amber); font-size: var(--mk-fs-micro); font-weight: 700; }
+.sfr__orphan-item { display: inline-flex; gap: 4px; align-items: center; color: var(--mk-muted); }
+.sfr__orphan-item code { color: var(--mk-amber); font-weight: 700; font-family: var(--mk-mono); }
 
 /* ========== 图例（可折叠，与编排图页同款语义；折叠头走 .mk-section__summary） ========== */
 .sfr__legend {
   margin: 0 0 12px;
-  border: 1px solid var(--mk-line, #e6ebf4);
+  border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface, #fff);
-  box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06));
+  background: var(--mk-surface);
+  box-shadow: var(--mk-shadow-sm);
 }
 /* 展开态的底分隔线是本页特性（mk-section__summary 本体无底边） */
-.sfr__legend[open] > .mk-section__summary { border-bottom: 1px solid var(--mk-line, #e6ebf4); }
+.sfr__legend[open] > .mk-section__summary { border-bottom: 1px solid var(--mk-line); }
 .sfr__legend-body { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; padding: 4px 14px 10px; }
 @media (max-width: 860px) { .sfr__legend-body { grid-template-columns: 1fr; } }
-.sfr__legend-title { margin: 0 0 6px; font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.05em; color: var(--mk-faint, var(--mk-faint-soft)); }
+.sfr__legend-title { margin: 0 0 6px; font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.05em; color: var(--mk-faint); }
 .sfr__legend-group--roles + .sfr__legend-group .sfr__legend-title { margin-top: 10px; }
 .sfr__legend-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
 .sfr__legend-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.sfr__legend-en { flex-shrink: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); }
-.sfr__legend-hint { font-size: var(--mk-fs-micro); color: var(--mk-muted, #5b6577); min-width: 0; }
+.sfr__legend-en { flex-shrink: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.sfr__legend-hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); min-width: 0; }
 
 .sfr__filter { margin-bottom: 12px; }
-.sfr__filter-count { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); font-weight: 600; }
+.sfr__filter-count { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
 
 /* ========== 表格 ========== */
-/* 表格本体已并入 mk-table mk-table--dense（shared.css）：仅保留容器与表内单元格辅助样式 */
-.sfr__scroll { overflow-x: auto; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 12px; background: var(--mk-surface, #fff); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
-@media (max-width: 860px) { .mk-table--dense { min-width: 1180px; } }
+/* 表格本体已并入 mk-table mk-table--dense：容器只留描边与圆角 */
+.sfr__scroll { overflow-x: auto; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); background: var(--mk-surface); }
+/* 窄屏最小宽度挂页面前缀类（页面 scoped 不得定义 mk- 类） */
+@media (max-width: 860px) { .sfr__table { min-width: 1180px; } }
 /* 原型 .tbl td nowrap：自动布局下单元格单行，列按内容自然分宽 */
 .sfr__table td { white-space: nowrap; }
 .sfr__fieldcell { max-width: 300px; display: grid; gap: 2px; min-width: 0; }
-.sfr__field { display: block; min-width: 0; color: var(--mk-ink, #1a2a44); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sfr__fieldpath { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 含义列：单行 ellipsis（原型 .tbl td nowrap + 长内容截断判例；完整文案在 title 浮层） */
-.sfr__meaning { min-width: 200px; }
-.sfr__meaning-text { display: block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); line-height: 1.5; }
-.sfr__handoff { max-width: var(--mk-col-id); color: var(--mk-faint, var(--mk-faint-soft)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sfr__field { display: block; min-width: 0; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sfr__fieldpath { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 原型 .tbl td.wrap：含义是长文本列 → 换行不截断（完整文案仍在 title） */
+.sfr__table th.sfr__wrap, .sfr__table td.sfr__wrap { white-space: normal; min-width: 220px; }
+.sfr__meaning { min-width: 220px; }
+.sfr__meaning-text { display: block; max-width: 340px; white-space: normal; overflow-wrap: anywhere; color: var(--mk-muted); line-height: 1.5; }
+.sfr__handoff { max-width: var(--mk-col-id); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 行内操作钮 = mk-btn--sm 文字钮（编辑/删除），不再覆写尺寸 */
 .sfr__ops { display: flex; gap: 6px; white-space: nowrap; }
 
 /* 角色徽章（与编排图页同款 7 类着色） */
-.sfr__persist { display: inline-block; max-width: var(--mk-col-id); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
-.sfr__persist--alias { color: var(--mk-amber, #b45309); background: var(--mk-amber-bg); border-radius: var(--mk-radius-sm); padding: 0 5px; }
+.sfr__persist { display: inline-block; max-width: var(--mk-col-id); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.sfr__persist--alias { color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: var(--mk-radius-sm); padding: 0 5px; }
 
-/* core 状态列 */
-.sfr__emptyrow { color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; padding: 14px; }
+/* 卡头/卡体：表卡与 .mk-card 同宽，表在窄屏横向滚动 */
 
 /* 4K：字段路由表内容跟随全站节奏 */
 @media (min-width: 2000px) {
-  .sfr__emptyrow { font-size: var(--mk-fs-body); }
   .sfr__persist { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .sfr__emptyrow { font-size: var(--mk-fs-body); }
   .sfr__persist { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
-  .sfr__emptyrow { font-size: var(--mk-fs-emphasis); }
   .sfr__persist { font-size: var(--mk-fs-body); }
 }
 </style>

@@ -27,19 +27,23 @@
           <span v-if="errors.story" class="mk-field__err">{{ errors.story }}</span>
         </label>
         <div v-if="isLive" class="vl-ai-row">
+          <!-- 单选组语言（原型 .radio-row/.radio，index.html 323-325）：role=radio + aria-checked；
+               视觉仍走全局 .mk-pill（描边胶囊 = 原型 .chip/.radio 同族），选中态由 aria-checked 承载语义 -->
           <div class="vl-sample-pills" role="radiogroup" aria-label="样本类型">
             <button
               type="button"
               class="mk-pill"
+              role="radio"
               :class="{ 'mk-pill--active': sampleType === 'general' }"
-              :aria-pressed="sampleType === 'general'"
+              :aria-checked="sampleType === 'general'"
               @click="sampleType = 'general'"
             >通用</button>
             <button
               type="button"
               class="mk-pill"
+              role="radio"
               :class="{ 'mk-pill--active': sampleType === 'student' }"
-              :aria-pressed="sampleType === 'student'"
+              :aria-checked="sampleType === 'student'"
               title="生成传统学生样本：学段/考试节点/学期节奏/家长与同伴环境"
               @click="sampleType = 'student'"
             >传统学生</button>

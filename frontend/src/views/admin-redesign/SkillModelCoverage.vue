@@ -1,9 +1,15 @@
 <template>
   <!-- Skill × 模型 × 参数 × 兜底 覆盖矩阵 -->
-  <div class="skc">
-    <div class="skc__bar">
-      <p class="skc__hint">
-        技能全集（prompts 注册表）× 实际路由。<b>未配置 = 走平台默认</b>（2026-09-28 曾因此把 7 个课后技能静默漏到旧通道）。
+  <div class="mk-card skc">
+    <!-- 原型 .card__head（title + sub）：卡头统一走 mk-card 词表 -->
+    <div class="mk-card__head">
+      <h3 class="mk-card__title">Skill × 模型 × 参数 × 兜底</h3>
+      <span class="mk-card__meta">技能全集（prompts 注册表）× 实际路由</span>
+    </div>
+    <div class="skc__body">
+      <!-- 原型 .note：说明文字走 surface-2 底 + muted 小字（不再自搓提示样式） -->
+      <p class="note">
+        <b>未配置 = 走平台默认</b>（2026-09-28 曾因此把 7 个课后技能静默漏到旧通道）。
         对多个技能套用同一份通道/模型/参数/兜底配置：
       </p>
       <div class="skc__apply">
@@ -15,37 +21,44 @@
         </button>
         <button type="button" class="mk-link" :disabled="loading" @click="load"><MkLoading v-if="loading" inline min text="加载中…" /><template v-else>刷新</template></button>
       </div>
-      <p v-if="bulkMsg" class="skc__msg" :class="{ 'is-err': bulkErr }">{{ bulkMsg }}</p>
-    </div>
+      <p v-if="bulkMsg" class="note" :class="{ 'note--bad': bulkErr }">{{ bulkMsg }}</p>
 
-    <!-- 原型 .tbl：统一 mk-table--dense 词表（自搓 .skc__table 已删）；单元格 nowrap，长内容列截断 -->
-    <div class="mk-table-scroll">
-      <table class="mk-table mk-table--dense skc__table">
-        <thead>
-          <tr>
-            <th><input type="checkbox" :checked="allChecked" @change="toggleAll(($event.target as HTMLInputElement).checked)" /></th>
-            <th>Skill</th>
-            <th>路由来源</th>
-            <th>model</th>
-            <th>参数覆盖</th>
-            <th>兜底链</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="s in rows" :key="s.skillId">
-            <td><input v-model="selected" type="checkbox" :value="s.skillId" /></td>
-            <td class="mono">{{ s.skillId }}</td>
-            <td>
-              <span class="mk-badge" :class="s.source === 'platform-default' ? 'mk-badge--muted' : 'mk-badge--ok'">
-                {{ s.source === 'platform-default' ? '平台默认(未配置)' : s.source === 'skill-channel' ? '独立通道' : '仅技能模型' }}
-              </span>
-            </td>
-            <td class="mono">{{ s.model || '继承' }}</td>
-            <td class="mono skc__clamp" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ s.paramOverrides ? JSON.stringify(s.paramOverrides) : '—' }}</td>
-            <td class="mono skc__clamp" :title="s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : 'registry默认' }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <!-- 原型 .tbl：统一 mk-table--dense 词表；长内容列（参数/兜底链）走 wrap 列 -->
+      <div v-if="rows.length" class="mk-table-scroll">
+        <table class="mk-table mk-table--dense skc__table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" :checked="allChecked" @change="toggleAll(($event.target as HTMLInputElement).checked)" /></th>
+              <th>Skill</th>
+              <th>路由来源</th>
+              <th>model</th>
+              <th>参数覆盖</th>
+              <th class="skc__wrap">兜底链</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in rows" :key="s.skillId">
+              <td><input v-model="selected" type="checkbox" :value="s.skillId" /></td>
+              <td class="mono">{{ s.skillId }}</td>
+              <td>
+                <span class="mk-badge" :class="s.source === 'platform-default' ? 'mk-badge--muted' : 'mk-badge--ok'">
+                  {{ s.source === 'platform-default' ? '平台默认(未配置)' : s.source === 'skill-channel' ? '独立通道' : '仅技能模型' }}
+                </span>
+              </td>
+              <td class="mono">{{ s.model || '继承' }}</td>
+              <td class="mono skc__wrap" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ s.paramOverrides ? JSON.stringify(s.paramOverrides) : '—' }}</td>
+              <td class="mono skc__wrap" :title="s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : 'registry默认' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <MkEmptyState
+        v-else-if="!loading"
+        title="暂无技能覆盖数据"
+        description="技能目录为空，或接口暂不可用。可点击「刷新」重新拉取。"
+        action-text="刷新"
+        @action="load"
+      />
     </div>
 
     <!-- 模型目录候选（File-as-Truth llm-providers.json；带「供应商 · tier」标注） -->
@@ -60,6 +73,7 @@ import { computed, onMounted, ref } from 'vue'
 import { adminSkillsApi } from '@/api/adminApi'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 
 const { options: catalogOptions, load: loadModelCatalog } = useModelCatalog()
 loadModelCatalog()
@@ -138,16 +152,25 @@ onMounted(load)
 </script>
 
 <style scoped>
-.skc { display: grid; gap: 12px; }
-/* 提示语 = 12px muted（原型 .card__sub / .sub 词表） */
-.skc__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; margin: 0; }
+/* 卡体：与 mk-card__head 的 16px 内边距同档 */
+.skc { display: grid; }
+.skc__body { display: grid; gap: var(--mk-space-3); padding: var(--mk-space-4); }
+/* 原型 .note：说明行（surface-2 底 + muted 小字） */
+.note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  line-height: 1.6;
+}
+.note b { color: var(--mk-ink); }
+.note--bad { background: var(--mk-red-bg); color: var(--mk-red); }
 .skc__apply { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .skc__apply .mk-input { max-width: 280px; }
 .skc__apply .is-err { border-color: var(--mk-red); }
-.skc__msg { font-size: var(--mk-fs-micro); margin: 0; }
-.skc__msg.is-err { color: var(--mk-red); }
-/* 表格本体已并入 mk-table mk-table--dense（shared.css）：仅保留单元格截断辅助 */
-.skc__table td { white-space: nowrap; }
-/* 参数覆盖 / 兜底链：JSON 与链条是长内容列，max-width + ellipsis 截断（完整值在 title） */
-.skc__clamp { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+/* 原型 .tbl td.wrap：长文本列（参数覆盖 / 兜底链）换行不截断 */
+.skc__table th.skc__wrap,
+.skc__table td.skc__wrap { white-space: normal; overflow-wrap: anywhere; min-width: 220px; max-width: 320px; }
 </style>

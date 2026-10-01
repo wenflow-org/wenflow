@@ -73,7 +73,7 @@
       </MkRowList>
     </section>
 
-    <!-- 开发视角许可：一行条（未授权 = 徽章 + 一句说明 + 刷新；授权 = 展开范围/到期与打开按钮） -->
+    <!-- 开发视角许可：一行条（原型 .statusbar 词汇：徽章 + 说明 + 右侧动作；按钮走 mk-btn 层级） -->
     <section v-show="activeTab === 'grant'" class="mk-card ud-grant">
       <div class="ud-grant__bar">
         <span class="mk-badge" :class="grantBadgeCls">开发视角许可 · {{ grantStatusLabel }}</span>
@@ -84,13 +84,13 @@
           <template v-else>用户授予协助许可后，可打开开发调试站进入其视角排查问题</template>
         </span>
         <span class="ud-grant__bar-actions">
-          <button type="button" class="mk-status__action" :disabled="grantLoading" @click="loadGrant">
+          <button type="button" class="mk-btn mk-btn--sm" :disabled="grantLoading" @click="loadGrant">
             {{ grantLoading ? '刷新中…' : '刷新' }}
           </button>
           <button
             v-if="grantStatus === 'active'"
             type="button"
-            class="mk-status__action mk-status__action--primary"
+            class="mk-btn mk-btn--primary mk-btn--sm"
             :disabled="grantOpening"
             @click="openDebugStation"
           >
@@ -98,7 +98,8 @@
           </button>
         </span>
       </div>
-      <div v-if="grantMsgTone === 'ud-grant__notice--error'" class="ud-grant__notice ud-grant__notice--error">{{ grantMessage }}</div>
+      <!-- 区块级提示：走全局 .mk-alert（原型 .alert 词汇），仅错误态展示 -->
+      <div v-if="grantMsgTone === 'error'" class="mk-alert ud-grant__notice">{{ grantMessage }}</div>
     </section>
   </div>
 
@@ -281,8 +282,8 @@ const projectionGrant = ref<ProjectionGrant | null>(null)
 const grantLoading = ref(false)
 const grantOpening = ref(false)
 const grantMessage = ref('')
-/** 许可消息语义色：info（蓝色提示）/ error（红色错误） */
-const grantMsgTone = ref('ud-grant__notice--info')
+/** 许可消息语义：info（蓝色提示）/ error（红色错误）；模板按语义挂 .mk-alert--info / .mk-alert */
+const grantMsgTone = ref<'info' | 'error'>('info')
 
 const grantStatus = computed(() => getProjectionGrantStatus(projectionGrant.value))
 const grantStatusLabel = computed(() => {
@@ -366,7 +367,7 @@ async function loadGrant() {
     projectionGrant.value = normalizeProjectionGrant(first) || normalizeProjectionGrant(body)
     if (!projectionGrant.value) {
       grantMessage.value = '当前还没有生效中的协助授权。'
-      grantMsgTone.value = 'ud-grant__notice--info'
+      grantMsgTone.value = 'info'
     }
   } catch (e) {
     // 竞态守卫（回归 R2）：catch 侧同样要比对 id——await 期间已切到别的用户时，
@@ -374,7 +375,7 @@ async function loadGrant() {
     if (subPage.value?.id !== id) return
     projectionGrant.value = null
     grantMessage.value = `许可读取失败：${errMsg(e)}`
-    grantMsgTone.value = 'ud-grant__notice--error'
+    grantMsgTone.value = 'error'
   } finally {
     // loading 复位也要带守卫：新用户请求已在途时，旧请求的 finally 不能提前关掉它的 loading
     if (subPage.value?.id === id) grantLoading.value = false
@@ -413,7 +414,7 @@ async function openDebugStation() {
     window.open('/admin/console', '_blank')
   } catch (e) {
     grantMessage.value = `打开失败：${errMsg(e)}`
-    grantMsgTone.value = 'ud-grant__notice--error'
+    grantMsgTone.value = 'error'
   } finally {
     grantOpening.value = false
   }
@@ -590,36 +591,22 @@ const subLine = computed(() => {
   white-space: nowrap;
 }
 .ud-grant__bar-actions { display: flex; gap: 8px; margin-left: auto; }
-.ud-grant__notice {
-  margin: 0 16px 10px;
-  padding: 8px 10px;
-  border-radius: var(--mk-radius-sm);
-  /* 走 token：浅色 #eff6ff、暗色 rgba(91,141,239,.16)，避免暗色下仍是白底（原硬编码 #eef5ff） */
-  background: var(--mk-blue-bg, #eff6ff);
-  color: var(--mk-blue);
-  font-size: var(--mk-fs-micro);
-}
-.ud-grant__notice--error {
-  background: var(--mk-red-bg, #fef2f2);
-  color: var(--mk-red, #dc2626);
-}
+/* 区块级提示走全局 .mk-alert（阴影/圆角/配色由原语负责），此处只管卡内留白 */
+.ud-grant__notice { margin: 0 16px 10px; }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
   .mk-row__sub { font-size: var(--mk-fs-body); }
   .ud-grant__meta { font-size: var(--mk-fs-body); }
-  .ud-grant__notice { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
   .mk-row__sub { font-size: var(--mk-fs-body); }
   .ud-grant__meta { font-size: var(--mk-fs-body); }
-  .ud-grant__notice { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
   .mk-row__sub { font-size: var(--mk-fs-emphasis); }
   .ud-grant__meta { font-size: var(--mk-fs-emphasis); }
-  .ud-grant__notice { font-size: var(--mk-fs-emphasis); }
 }
 </style>
