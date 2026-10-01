@@ -30,10 +30,11 @@
       </button>
     </div>
 
-    <!-- 子面板 pills：五个面板统一可达——总览（全旅程 odg 画布，缺省）/字段旅程/字段路由/治理/沙盘 -->
-    <div class="mk-pills orch-pane-tabs" role="tablist">
-      <button v-for="pt in ORCH_PANES" :key="pt.id" type="button" role="tab"
-        class="mk-pill" :class="{ 'mk-pill--active': pane === pt.id }"
+    <!-- 子面板页签（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
+         胶囊只做筛选 chips，视图/分区切换归页签）：五个面板统一可达——
+         总览（全旅程 odg 画布，缺省）/字段旅程/字段路由/治理/沙盘 -->
+    <div class="tabs orch-pane-tabs" role="tablist" aria-label="编排图子面板">
+      <button v-for="pt in ORCH_PANES" :key="pt.id" type="button" role="tab" class="tab"
         :aria-selected="pane === pt.id" @click="pane = pt.id">{{ pt.label }}</button>
     </div>
 
@@ -44,10 +45,11 @@
     <section v-if="pane === 'overview' && stages.length" class="mk-card mk-card--fill orch-pane orch-odg-page">
       <div class="mk-card__head">
         <h3 class="mk-card__title">字段数据旅程（逻辑图 · 字段血缘）</h3>
-        <span class="mk-card__meta">
+        <!-- 图例（原型 card__tools：卡头右侧只放工具/图例，title 独占左侧） -->
+        <div class="mk-card__head-right">
           <span class="orch-odg-chip orch-odg-chip--in">阶段入参</span>
           <span class="orch-odg-chip orch-odg-chip--out">阶段产出</span>
-        </span>
+        </div>
       </div>
       <div class="orch-odg-scroll">
         <div ref="odgCanvasEl" class="orch-odg-canvas">
@@ -613,6 +615,24 @@ const govMetaTitle = computed(() =>
 }
 
 /* 阶段导航：五个 tab = 五个阶段（大分段卡，每卡含阶段名 + Skill/调用概要） */
+/* 子面板页签（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签同款） */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--mk-muted);
+  padding: 9px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--mk-fs-micro);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.tab:hover { color: var(--mk-ink); }
+.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
 .orch-pane-tabs { margin-bottom: 2px; }
 /* ===== 阶段工作区（fill 布局：占满剩余视高，底部不再留空白；面板各自内滚，页面不滚） ===== */
 .orch-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }

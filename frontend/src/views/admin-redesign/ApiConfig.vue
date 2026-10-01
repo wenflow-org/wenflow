@@ -29,18 +29,19 @@
       </template>
     </div>
 
-    <!-- 视图切换 pills（唯一的 tab 控件）：接入与模型 / 模型总览 / 外挂能力 -->
-        <div class="mk-pills ac-tabs">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'connection' }" @click="switchTab('connection')">接入与验证</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'routing' }" @click="switchTab('routing')">模型路由</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'runtime' }" @click="switchTab('runtime')">调用与健康</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'security' }" @click="switchTab('security')">安全与访问</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'overview' }" @click="switchTab('overview')">模型总览</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'addons' }" @click="switchTab('addons')">外挂能力<span class="mk-pill__count">{{ addonsCount }}</span></button>
+    <!-- 视图切换（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
+         胶囊只做筛选 chips，视图/分区切换归页签；外挂能力计数以角标随页签呈现，
+         形态同共享 MkSubTabs 的 count 角标）：接入与验证 / 模型路由 / 调用与健康 /
+         安全与访问 / 模型总览 / 外挂能力 -->
+    <div class="tabs ac-tabs" role="tablist" aria-label="模型与接入视图切换">
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'connection'" @click="switchTab('connection')">接入与验证</button>
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'routing'" @click="switchTab('routing')">模型路由</button>
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'runtime'" @click="switchTab('runtime')">调用与健康</button>
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'security'" @click="switchTab('security')">安全与访问</button>
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'overview'" @click="switchTab('overview')">模型总览</button>
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'addons'" @click="switchTab('addons')">外挂能力<span class="tab__count">{{ addonsCount }}</span></button>
     </div>
 
-
-        
     <!-- ===== Tab1-4：接入与验证 / 模型路由 / 调用与健康 / 安全与访问（2026-09-29 由单一大 tab 拆分，每 tab 一张语义卡；分段保存按钮随卡） ===== -->
     <template v-if="isConfigTab">
     <template v-if="tab === 'connection'">
@@ -1243,8 +1244,27 @@ async function saveQuota(enabled: boolean, quota: number) {
 
 <style scoped>
 /* ================= 宿主布局（tab 宿主：模型 tab 内滚；嵌入子页占满剩余高度） ================= */
-.ac-tabs { width: fit-content; }
-/* 模型 tab：内容在宿主 flex 列内独立滚动（状态条/pills 固定；底部保存条 sticky 于滚动容器） */
+/* 视图切换（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签、OpsHub 宿主页签同款） */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--mk-muted);
+  padding: 9px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--mk-fs-micro);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.tab:hover { color: var(--mk-ink); }
+.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+.tab__count { margin-left: 5px; color: var(--mk-faint); font-weight: 600; }
+.tab[aria-selected='true'] .tab__count { color: inherit; opacity: 0.72; }
+/* 模型 tab：内容在宿主 flex 列内独立滚动（状态条/页签固定；底部保存条 sticky 于滚动容器） */
 .ac-tab-body {
   flex: 1 1 auto;
   min-height: 0;

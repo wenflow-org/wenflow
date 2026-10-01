@@ -182,11 +182,12 @@ describe('ApiConfig P1 修复批', () => {
     getReliabilityMock.mockResolvedValue({ data: { data: { settings: { maxUpstreamAttempts: 3, maxTransportRetries: 1, maxLogicalRetries: 1, defaultRequestTimeoutMs: 600000, retryBaseDelayMs: 2000, maxRetryAfterMs: 30000, jitterEnabled: true } } } });
   });
 
-  /** 2026-09-29 拆 tab 后：能力健康/调用参数在「调用与健康」tab，路由在「模型路由」tab */
+  /** 2026-09-29 拆 tab 后：能力健康/调用参数在「调用与健康」tab，路由在「模型路由」tab
+   *  （2026-10-01 设计语言对齐：视图切换由胶囊改原型 .tabs 下划线页签，按 .tab 定位） */
   async function gotoTab(wrapper: ReturnType<typeof mountApiConfig> extends Promise<infer W> ? W : never, label: string) {
-    const pill = wrapper.findAll('.mk-pill').find((b) => b.text().includes(label));
-    expect(pill, `应存在「${label}」tab`).toBeTruthy();
-    await pill!.trigger('click');
+    const tab = wrapper.findAll('.tab').find((b) => b.text().includes(label));
+    expect(tab, `应存在「${label}」tab`).toBeTruthy();
+    await tab!.trigger('click');
     await flushPromises();
   }
 
@@ -292,10 +293,10 @@ describe('ApiConfig P1 修复批', () => {
   it('模型总览 tab：切换后渲染只读总览，状态条显示模型数与提示数', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    const pill = wrapper.findAll('.mk-pill').find((b) => b.text().includes('模型总览'));
-    expect(pill, '应存在「模型总览」tab').toBeTruthy();
+    const tab = wrapper.findAll('.tab').find((b) => b.text().includes('模型总览'));
+    expect(tab, '应存在「模型总览」tab').toBeTruthy();
 
-    await pill!.trigger('click');
+    await tab!.trigger('click');
     await flushPromises();
     await nextTick();
     await flushPromises();

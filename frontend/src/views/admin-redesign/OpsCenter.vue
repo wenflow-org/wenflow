@@ -14,11 +14,12 @@
       <span v-else class="mk-status__meta" :class="securityCount === null ? 'oc-meta--pending' : ''">管理员会话 {{ securityCount === null ? '—' : securityCount }} 个</span>
     </div>
 
-    <!-- 工具/导出/会话安全 tab 切换（唯一的 tab 控件） -->
-    <div class="mk-pills oc-tabs">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'tools' }" @click="switchTab('tools')">运维工具</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'export' }" @click="switchTab('export')">数据导出</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': tab === 'security' }" @click="switchTab('security')">会话安全<span class="mk-pill__count">{{ securityCount === null ? '—' : securityCount }}</span></button>
+    <!-- 视图切换（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
+         胶囊只做筛选 chips，视图/分区切换归页签；会话安全计数以角标随页签呈现） -->
+    <div class="tabs oc-tabs" role="tablist" aria-label="系统工具视图切换">
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'tools'" @click="switchTab('tools')">运维工具</button>
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'export'" @click="switchTab('export')">数据导出</button>
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全<span class="tab__count">{{ securityCount === null ? '—' : securityCount }}</span></button>
     </div>
 
     <!-- ===== Tab1: 运维工具 ===== -->
@@ -86,16 +87,9 @@
       <MkLoading v-if="deadLoading" />
       <template v-else-if="deadItems.length">
         <div class="mk-table-scroll">
-          <table class="mk-table mk-table--fixed">
-            <colgroup>
-              <col style="width:var(--mk-col-text)">
-              <col style="width:var(--mk-col-model-wide)">
-              <col style="width:var(--mk-col-model)">
-              <col style="width:var(--mk-col-num)">
-              <col style="width:var(--mk-col-model-wide)">
-              <col style="width:var(--mk-col-time-full)">
-              <col style="width:var(--mk-col-actions)">
-            </colgroup>
+          <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
+               单元格 nowrap、列按内容自然分宽；事件类型 / 错误信息两处长内容列 max-width 截断兜底 -->
+          <table class="mk-table oc-dead-table">
             <thead>
               <tr>
                 <th>事件</th>
@@ -109,7 +103,7 @@
             </thead>
             <tbody>
               <tr v-for="item in deadItems" :key="item.id">
-                <td><span class="mono" :title="item.eventType">{{ item.eventType }}</span></td>
+                <td><span class="mono oc-ev" :title="item.eventType">{{ item.eventType }}</span></td>
                 <td><span class="mono mk-cell-text">{{ shortId(item.userId || '—', 10, 4) }}</span></td>
                 <td><span class="mono mk-cell-text" :title="item.aggregateId || ''">{{ shortId(item.aggregateId || '—', 10, 4) }}</span></td>
                 <td class="mk-num">{{ item.attemptCount }}</td>
@@ -117,7 +111,7 @@
                 <td :title="fmtDate(item.occurredAt)">{{ timeAgo(item.occurredAt) }}</td>
                 <td>
                   <div class="mk-actions">
-                    <button type="button" class="mk-link" :disabled="requeueBusy" @click="requeueOne(item.eventType)">重放该类</button>
+                    <button type="button" class="mk-btn mk-btn--sm" :disabled="requeueBusy" @click="requeueOne(item.eventType)">重放该类</button>
                   </div>
                 </td>
               </tr>
@@ -475,14 +469,38 @@ watch(tab, (t) => {
 /* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度 */
 .oc-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
 .dt-body { padding: 14px; display: grid; gap: 14px; }
-/* 工具/导出 tab 条（独立一行卡片形态，对齐全站筛选条） */
+/* 视图切换（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签、OpsHub 宿主页签同款：
+   12px/600、激活蓝字+2px 蓝下划线、通栏底线。2026-10-01 由独立胶囊卡片条迁入） */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--mk-muted);
+  padding: 9px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--mk-fs-micro);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.tab:hover { color: var(--mk-ink); }
+.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+.tab__count { margin-left: 5px; color: var(--mk-faint); font-weight: 600; }
+.tab[aria-selected='true'] .tab__count { color: inherit; opacity: 0.72; }
 /* 会话计数尚未就绪（未访问 tab）：弱化显示，区别于已确认的 0 */
 .oc-meta--pending { color: var(--mk-faint); }
-.oc-tabs {
-  padding: 8px 14px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
+/* 死信表（自动布局）：单元格 nowrap；事件类型长名截断（title 全值） */
+.oc-dead-table td { white-space: nowrap; }
+.oc-ev {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 .dt-grid { display: grid; grid-template-columns: 1.6fr 0.7fr 1.4fr auto; gap: 12px; align-items: end; }
 .dt-actions { display: grid; gap: 6px; }
@@ -517,7 +535,8 @@ watch(tab, (t) => {
 
 .dt-err {
   display: inline-block;
-  max-width: 100%;
+  /* 自动布局下 max-content 决定列宽：固定截断上限，长错误信息不独吃表格宽度（title 全值） */
+  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

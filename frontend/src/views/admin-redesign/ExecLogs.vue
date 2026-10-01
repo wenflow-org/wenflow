@@ -29,10 +29,12 @@
       </span>
     </div>
 
-    <!-- 日志 / Trace 链路 tab（Trace 为执行日志下钻视图）；成本分析 2026-09-29 拆回独立页 /admin/token-cost -->
-    <div class="mk-pills">
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'logs' }" @click="switchElTab('logs')">日志</button>
-      <button type="button" class="mk-pill" :class="{ 'mk-pill--active': elTab === 'trace' }" @click="switchElTab('trace')">Trace 链路</button>
+    <!-- 视图切换（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
+         胶囊只做筛选 chips，视图/分区切换归页签）：日志 / Trace 链路
+         （Trace 为执行日志下钻视图）；成本分析 2026-09-29 拆回独立页 /admin/token-cost -->
+    <div class="tabs" role="tablist" aria-label="执行日志视图切换">
+      <button type="button" role="tab" class="tab" :aria-selected="elTab === 'logs'" @click="switchElTab('logs')">日志</button>
+      <button type="button" role="tab" class="tab" :aria-selected="elTab === 'trace'" @click="switchElTab('trace')">Trace 链路</button>
     </div>
 
     <!-- ===== Tab2: Trace 链路（嵌入 TraceWaterfall 组件） ===== -->
@@ -101,20 +103,10 @@
         @action="retryLiveLogs"
       />
       <div v-else-if="logs.length" class="mk-table-scroll">
-        <table class="mk-table mk-table--click mk-table--fixed exec-table">
-
-          <colgroup>
-            <col v-if="!hiddenCols.has('time')" style="width:var(--mk-col-time-full)">
-            <col v-if="!hiddenCols.has('kind')" style="width:36px">
-            <col v-if="!hiddenCols.has('agent')" style="width:var(--mk-col-text-sm)">
-            <!-- 调用文本：弹性吸收列（不设宽度） -->
-            <col v-if="!hiddenCols.has('msg')" style="width:var(--mk-col-text)">
-            <col v-if="!hiddenCols.has('model')" style="width:var(--mk-col-model-wide)">
-            <col v-if="!hiddenCols.has('tokens')" style="width:var(--mk-col-num-wide)">
-            <col v-if="!hiddenCols.has('dur')" style="width:var(--mk-col-num)">
-            <col v-if="!hiddenCols.has('status')" style="width:var(--mk-col-badge)">
-            <col v-if="!hiddenCols.has('trace')" style="width:86px">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
+             单元格 nowrap、列按内容自然分宽；长内容列（节点/调用/模型）设 max-width 截断兜底，
+             勿让单列独吃宽度（9 列全开时容器横向滚动，见 .mk-table-scroll .exec-table min-width） -->
+        <table class="mk-table mk-table--click exec-table">
           <thead>
             <tr>
               <th
@@ -971,8 +963,26 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 </script>
 
 <style scoped>
-/* 全宽布局（与其他管理台页面一致）：9 列固定宽度，宽屏下剩余空间由各列按比例均摊，
-   空白分散到每一列而不是堆在消息列（fixed table-layout 规范行为） */
+/* 视图切换（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签、OpsHub 宿主页签同款：
+   12px/600、激活蓝字+2px 蓝下划线、通栏底线） */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--mk-muted);
+  padding: 9px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--mk-fs-micro);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.tab:hover { color: var(--mk-ink); }
+.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+
 /* 状态条筛选徽章 / 清除按钮已提升为全局 .mk-status__filter / .mk-status__clear（见 shared.css） */
 
 .log-advpanel {
@@ -1001,23 +1011,20 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 
 /* 表头与列表布局见下方 exec-* 区块 */
 
-/* ========== 5 列表格（mk-table 布局）：时间 / 调用 / 模型·Tokens / 耗时 / Trace ==========
-   列宽设计（内容区 1180px、1440 视口）：
-   - 时间：--mk-col-time-full（110px）等宽 HH:MM:SS，跨天 MM-DD HH:MM 不截断
-   - 调用：width auto 吸收剩余空间（≈650px），主行标题 ellipsis
-   - 模型 / Tokens：--excl-model 176px（模型名 116 + 用量 P/C 60），两行堆叠
-   - 耗时：--excl-dur 84px（"123.4ms" 7ch 右对齐）
-   - Trace：--excl-trace 116px（"gw:…8y4tm4" 11ch 右对齐）
-   视觉基调与审计日志对齐（2026-09）：主体统一 12.5px、行 padding 6px 13px、
+/* ========== 日志表（mk-table 自动布局，2026-10-01 去 colgroup/fixed 对齐 Users 判例） ==========
+   列按内容自然分宽、单元格 nowrap；长内容列给 max-width 截断兜底（自动布局下列的
+   max-content 由内容决定，不设上限时长消息会把整列撑到不可读）：
+   - 调用：.exec-cell max-width 460px，主行标题 ellipsis（展开行看全量）
+   - 节点 / 模型：160px / 150px 单行截断（title 全值）
+   - 时间 / 耗时 / Trace：短内容自然宽，右对齐列走 .right
+   视觉基调与审计日志对齐（2026-09）：主体统一 12.5px、行 padding 8px 13px、
    失败行不再整行红底（错误语义交给红标题 + 状态 pill），整体更清爽易扫。 */
-.exec-table { }
 .exec-table th.right,
 .exec-table td.right { text-align: right; }
-.exec-table thead th { white-space: nowrap; }
 /* 行高对齐审计日志节奏（2026-09 统一：td 8px 13px ≈ 43px 行高）：
    双行消息列因副行略高，但主行 12.5px 后整体与审计页同密度 */
 .exec-table th { padding: 8px 13px; }
-.exec-table td { padding: 8px 13px; }
+.exec-table td { padding: 8px 13px; white-space: nowrap; }
 
 .exec-row--open { background: #f6f9ff; }
 /* 连通性/探活测试行：弱化（降饱和降透明度），保留可读但不再与业务日志抢眼 */
@@ -1046,7 +1053,8 @@ html[data-theme='dark'] .exec-kind-group .mk-badge { background: #2d2d2f; color:
   white-space: nowrap;
 }
 html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
-.exec-cell { min-width: 0; }
+/* 消息列：自动布局下由 max-width 兜底（长调用文本不独吃列宽），主行标题在列内 ellipsis */
+.exec-cell { min-width: 0; max-width: 460px; }
 .exec-cell__line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .exec-cell__line + .exec-cell__line { margin-top: 1px; }
 /* 消息主行：标题截断不换行（title 全值）；12.5px 与审计日志主体同字号，
@@ -1087,8 +1095,8 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
 .exec-trace-btn:hover { background: var(--mk-blue-bg, #eff6ff); color: var(--mk-blue, #2c63d0); }
 .exec-cell__sub { flex-wrap: wrap; gap: 5px; }
 /* 节点列：等宽短名，长名 ellipsis（title 全值，点击开 Skill 抽屉）。
-   display:inline-block 必须显式声明——span 为 inline 元素时 max-width/overflow/ellipsis 全部失效，
-   长节点名会溢出节点列侵入消息列（实测 46 字符节点名溢出 132px 与标题重叠） */
+   display:inline-block 必须显式声明——span 为 inline 元素时 max-width/overflow/ellipsis 全部失效；
+   自动布局下 max-content 决定列宽，需固定截断上限（160px）防长节点名撑列（实测 46 字符节点名） */
 .exec-stage {
   display: inline-block;
   font-size: var(--mk-fs-micro);
@@ -1097,10 +1105,11 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  max-width: 160px;
 }
 .exec-stage:hover { text-decoration: underline; }
-/* 模型 / Tokens 独立列：单行截断（同为 inline span，需 inline-block 让截断生效） */
+/* 模型 / Tokens 独立列：单行截断（同为 inline span，需 inline-block 让截断生效；
+   自动布局下同样给固定上限，模型名过长不撑列） */
 .exec-model__name {
   display: inline-block;
   font-size: var(--mk-fs-micro);
@@ -1108,7 +1117,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  max-width: 150px;
 }
 /* 状态列徽章（成功/超时/失败） */
 .exec-status {
@@ -1148,8 +1157,9 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
 }
 .exec-trace:hover { color: var(--mk-amber); text-decoration: underline; }
 
-/* 展开详情行（colspan=5）：浅底 + 内容盒内聚，干扰最小化 */
-.exec-detail td { padding: 6px 14px 14px; background: #fbfcfe; vertical-align: top; }
+/* 展开详情行（colspan=动态列数）：浅底 + 内容盒内聚，干扰最小化；
+   文本可换行（列表行的 nowrap 不下探进详情区） */
+.exec-detail td { padding: 6px 14px 14px; background: #fbfcfe; vertical-align: top; white-space: normal; }
 html[data-theme='dark'] .exec-detail td { background: #161718; }
 .exec-detail__box {
   display: grid;

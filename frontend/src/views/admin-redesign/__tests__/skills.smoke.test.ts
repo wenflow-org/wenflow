@@ -250,7 +250,7 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
 
   it('只剩 Skill 运行 / 模型路由两个 tab，且不再渲染健康中心', async () => {
     const { wrapper } = await mountHost('/admin/skills');
-    const tabs = wrapper.findAll('.skills-tabs .mk-pill');
+    const tabs = wrapper.findAll('.skills-tabs .tab');
     expect(tabs.map((t) => t.text())).toEqual(['Skill 运行', '模型路由']);
     expect(wrapper.find('.hc-embedded').exists()).toBe(false);
     // 运行视图在位：状态条走 run 分支（无档案时「共 0 个 Skill」）
@@ -270,7 +270,7 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
 
   it('点击「模型路由」切换 tab 并同步 ?tab=model-routing', async () => {
     const { wrapper, router } = await mountHost('/admin/skills');
-    await wrapper.findAll('.skills-tabs .mk-pill').find((t) => t.text() === '模型路由')!.trigger('click');
+    await wrapper.findAll('.skills-tabs .tab').find((t) => t.text() === '模型路由')!.trigger('click');
     await flushPromises();
     expect(router.currentRoute.value.query.tab).toBe('model-routing');
     // 离开运行视图后不再渲染目录（状态条换成覆盖矩阵口径）

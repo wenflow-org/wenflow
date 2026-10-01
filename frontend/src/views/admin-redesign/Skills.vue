@@ -30,12 +30,13 @@
       <span v-if="tab === 'run'" class="mk-status__meta">{{ rangeLabel }}</span>
     </div>
 
-    <!-- 视图切换 pills（唯一的 tab 控件）：Skill 运行 / 模型路由。
-         健康检查 · 漂移 · 对账三 tab 已退役（2026-09-29 用户拍板）：三者本就是同一份报表的三刀，
-         合一后独立成 /admin/health-center，侧栏落在「系统」组。 -->
-    <div class="mk-pills skills-tabs" role="tablist" aria-label="Skill 视图切换">
-      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'run'" :class="{ 'mk-pill--active': tab === 'run' }" @click="switchTab('run')">Skill 运行</button>
-      <button type="button" role="tab" class="mk-pill" :aria-selected="tab === 'model-routing'" :class="{ 'mk-pill--active': tab === 'model-routing' }" @click="switchTab('model-routing')">模型路由</button>
+    <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
+         2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签）：
+         Skill 运行 / 模型路由。健康检查 · 漂移 · 对账三 tab 已退役（2026-09-29 用户拍板）：
+         三者本就是同一份报表的三刀，合一后独立成 /admin/health-center，侧栏落在「系统」组。 -->
+    <div class="tabs skills-tabs" role="tablist" aria-label="Skill 视图切换">
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'run'" @click="switchTab('run')">Skill 运行</button>
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'model-routing'" @click="switchTab('model-routing')">模型路由</button>
     </div>
 
     <!-- ===== Tab1: Skill 运行（原 Skills.vue 全量内容） ===== -->
@@ -75,20 +76,10 @@
       <template v-else>
       <!-- 列表视图：列对齐 + 排序，问题浮顶 -->
       <div class="mk-table-scroll">
-        <table v-if="filtered.length" class="mk-table sk-table mk-table--fixed">
-          <colgroup>
-            <!-- Skill 名 + 中文描述是唯一的长内容列，但基准合计 754 远小于容器 1182，
-                fixed 布局把余量按权重等比摊给每一列（放大 1.57 倍）：右边四个 2-5 字列
-                各占 100-220px，真正的 Skill 名反而只有 502px、长名被截。
-                把「所属阶段」「最近调用」降档，让 Skill 列拿回宽度。 -->
-            <col style="width:var(--mk-col-text)">
-            <col v-if="showCol('agent')" style="width:var(--mk-col-badge)">
-            <col v-if="showCol('cat')" style="width:var(--mk-col-badge)">
-            <col v-if="showCol('completion')" style="width:var(--mk-col-badge)">
-            <col v-if="showCol('rate')" style="width:var(--mk-col-num)">
-            <col v-if="showCol('last')" style="width:var(--mk-col-time)">
-            <col style="width:var(--mk-col-actions)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
+             单元格 nowrap、列按内容自然分宽；Skill 名/id 两行都设 max-width 截断兜底，
+             防长名单列独吃宽度（上限引用 --mk-cell-main-max token） -->
+        <table v-if="filtered.length" class="mk-table sk-table">
           <thead>
             <tr>
               <th
@@ -168,8 +159,9 @@
               <td v-if="showCol('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
               <td>
                 <div class="mk-actions">
-                  <!-- 轻运营直达：跳过抽屉一跳，直接进设计页「协议」页签改提示词 -->
-                  <button type="button" class="mk-link" @click.stop="openDesign(s.id)">设计 →</button>
+                  <!-- 轻运营直达：跳过抽屉一跳，直接进设计页「协议」页签改提示词
+                       （原型操作列：文字小钮 .btn--sm 形态，对齐 Users 判例） -->
+                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDesign(s.id)">设计</button>
                 </div>
               </td>
             </tr>
@@ -543,16 +535,33 @@ function recGateDetail(completion: SkillCompletion): string {
 
 <style scoped>
 /* ================= 宿主布局（tab 宿主：运行 tab 内滚；模型路由 tab 自管） ================= */
-.skills-tabs { width: fit-content; }
+/* 视图切换（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签、OpsHub 宿主页签同款：
+   12px/600、激活蓝字+2px 蓝下划线、通栏底线） */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--mk-muted);
+  padding: 9px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--mk-fs-micro);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.tab:hover { color: var(--mk-ink); }
+.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
 
 /* 列表视图 */
 .sk-row { cursor: pointer; }
 .sk-cell { display: flex; align-items: center; gap: 10px; }
-/* 列宽统一走 <colgroup> + token（见模板上方）；Skill 列为 auto 吸收列。
-   此处不再用 th/td:nth-child 写宽——它与 colgroup 冲突，且 nth-child(7~10) 已无对应列，
-   会导致列宽既非 colgroup 也非 token、且不可预测。 */
+/* 原型 .tbl：自动布局 + 单元格 nowrap（列按内容自然分宽，不再 colgroup 定宽） */
+.sk-table td { white-space: nowrap; }
 /* 中文名主行（正文重色，与同站 SkillDrawer 头部一致）；英文 id 降副行（等宽灰）。
-   截断上限统一引用 token（原散落 460px） */
+   截断上限统一引用 token（--mk-cell-main-max）：自动布局下防长 Skill 名/长 id 独吃列宽 */
 .sk-name-main {
   font-weight: 700;
   max-width: var(--mk-cell-main-max);
@@ -565,11 +574,10 @@ function recGateDetail(completion: SkillCompletion): string {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   line-height: 1.5;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
   max-width: var(--mk-cell-main-max);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .sk-dot--ok { background: var(--mk-green); }
