@@ -103,18 +103,21 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
   })
 })
 
-describe('R2：OpsCenter 死信告警使用已定义的状态条语义类', () => {
+describe('R2：OpsCenter 死信告警随死信卡呈现（状态条已按原型退役）', () => {
   beforeEach(() => {
     h.outboxDead.mockReset()
   })
 
-  it('死信 > 0 → 计数使用 .mk-status__meta--bad（而非零定义的 .is-bad）', async () => {
+  it('死信 > 0 → 卡头 warn 徽标计数（而非零定义的 .is-bad；状态条类不再出现）', async () => {
     h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 3, items: [] } } })
 
     const w = mount(OpsCenter)
     await flushPromises()
 
-    expect(w.find('.mk-status__meta--bad').exists()).toBe(true)
+    const warn = w.find('.mk-card__head .mk-badge--warn')
+    expect(warn.exists(), '死信积压要显式 warn 徽标（迁入死信卡头）').toBe(true)
+    expect(warn.text()).toContain('3')
+    expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false)
     // 无效类名不得再出现（它曾让告警静默失效）
     expect(w.find('.is-bad').exists()).toBe(false)
 

@@ -1,26 +1,23 @@
 <template>
   <div class="mk-page mk-page--fill oc-host">
-    <!-- 页头（newui/admin pagehead）：页名 + 刷新上移；状态条退位为纯状态摘要（随 tab 变化） -->
-    <MkPageHead title="系统工具">
+    <!-- 页头（原型 pageTitle：页名+副标+右上主钮「导出数据」切到导出页签；刷新是各页签真实能力，随 tab 显示） -->
+    <MkPageHead title="系统工具" sub="数据导出、会话安全与运维工具">
       <template #actions>
+        <button v-if="tab !== 'export'" type="button" class="mk-btn mk-btn--primary" @click="switchTab('export')">导出数据</button>
         <button v-if="tab === 'tools'" type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
         <button v-else-if="tab === 'security'" type="button" class="mk-btn mk-btn--sm" @click="securityRef?.refresh?.()">刷新</button>
       </template>
     </MkPageHead>
-    <div class="mk-status" :class="statusTone">
-      <span class="mk-status__dot"></span>
-      <span v-if="tab === 'tools'" class="mk-status__meta" :class="hasDeadAttention ? 'mk-status__meta--bad' : ''">outbox 死信 {{ deadMetaText }}</span>
-      <span v-else-if="tab === 'export'" class="mk-status__meta">CSV 下载 · UTF-8（Excel 可直接打开）</span>
-      <span v-else class="mk-status__meta" :class="securityCount === null ? 'oc-meta--pending' : ''">管理员会话 {{ securityCount === null ? '—' : securityCount }} 个</span>
-    </div>
 
-    <!-- 视图切换（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
-         胶囊只做筛选 chips，视图/分区切换归页签；会话安全计数以角标随页签呈现） -->
-    <div class="tabs oc-tabs" role="tablist" aria-label="系统工具视图切换">
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'tools'" @click="switchTab('tools')">运维工具</button>
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'export'" @click="switchTab('export')">数据导出</button>
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全<span class="tab__count">{{ securityCount === null ? '—' : securityCount }}</span></button>
-    </div>
+    <!-- 原型骨架：单张卡内「.tabs 页签 + 页签体」（Users 卡内页签判例）。状态条退役——
+         死信计数在死信卡头、会话计数在页签角标、CSV 说明在导出表单脚注，不再三处投影 -->
+    <section class="mk-card oc-card">
+      <div class="tabs oc-tabs" role="tablist" aria-label="系统工具视图切换">
+        <button type="button" role="tab" class="tab" :aria-selected="tab === 'tools'" @click="switchTab('tools')">运维工具</button>
+        <button type="button" role="tab" class="tab" :aria-selected="tab === 'export'" @click="switchTab('export')">数据导出</button>
+        <button type="button" role="tab" class="tab" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全<span class="tab__count">{{ securityCount === null ? '—' : securityCount }}</span></button>
+      </div>
+      <div class="oc-card__body">
 
     <!-- ===== Tab1: 运维工具 ===== -->
     <template v-if="tab === 'tools'">
@@ -78,6 +75,10 @@
       <div class="mk-card__head">
         <h4 class="mk-card__title">事件 Outbox 死信</h4>
         <span class="mk-card__meta">dead 为无出口终态，worker 不再拾取；修复根因后可人工重放</span>
+        <!-- 死信告警（原状态条语义迁入卡头）：失败显式降 bad，积压 >0 显式 warn——
+             零值与加载中不得伪装成「确认无死信」 -->
+        <span v-if="deadFailed" class="mk-badge mk-badge--bad">加载失败</span>
+        <span v-else-if="!deadLoading && deadCount > 0" class="mk-badge mk-badge--warn">{{ deadCount }} 条待重放</span>
         <div class="mk-card__head-right">
           <button type="button" class="mk-btn mk-btn--sm" :disabled="requeueBusy" @click="requeueAll">
             {{ requeueBusy ? '重放中…' : '重放全部死信' }}
@@ -140,75 +141,59 @@
     </div><!-- /oc-tab-body -->
     </template>
 
-    <!-- ===== Tab2: 数据导出 ===== -->
+    <!-- ===== Tab2: 数据导出（原型表单形态：范围 chips 多选 + 右对齐「开始导出」；
+         时间范围 / JSONL 格式后端导出接口不支持，不渲染假控件） ===== -->
     <template v-else-if="tab === 'export'">
-    <div class="oc-tab-body mk-narrow">
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h4 class="mk-card__title">业务数据</h4>
-          <span class="mk-card__meta">导出前请确认数据范围</span>
+    <div class="oc-tab-body oc-export">
+      <div class="mk-field">
+        <span class="mk-field__label">导出范围</span>
+        <div class="mk-pills" role="group" aria-label="导出范围多选">
+          <button
+            v-for="item in exportDefs"
+            :key="item.key"
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': exportSel.includes(item.key) }"
+            :aria-pressed="exportSel.includes(item.key)"
+            :title="item.desc"
+            @click="toggleExport(item.key)"
+          >{{ item.label }}</button>
         </div>
-        <div class="ex-body">
-          <div v-for="item in exports" :key="item.key" class="ex-row">
-            <div class="ex-row__text">
-              <strong>{{ item.label }}</strong>
-              <span>{{ item.desc }}</span>
-            </div>
-            <button type="button" class="mk-btn mk-btn--sm" :disabled="exporting === item.key" @click="doExport(item.key)">
-              {{ exporting === item.key ? '导出中…' : '导出 CSV' }}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h4 class="mk-card__title">观测与审计</h4>
-          <span class="mk-card__meta">执行日志与审计日志行数较多，导出前可选限制</span>
-        </div>
-        <div class="ex-body">
-          <div v-for="item in auditExports" :key="item.key" class="ex-row">
-            <div class="ex-row__text">
-              <strong>{{ item.label }}</strong>
-              <span>{{ item.desc }}</span>
-            </div>
-            <div class="ex-row__actions">
-              <select v-model="limits[item.key]" class="mk-filter__select" :disabled="exporting === item.key">
-                <option :value="1000">1000 行</option>
-                <option :value="5000">5000 行</option>
-                <option :value="20000">20000 行</option>
-              </select>
-              <button type="button" class="mk-btn mk-btn--sm" :disabled="exporting === item.key" @click="doExport(item.key)">
-                {{ exporting === item.key ? '导出中…' : '导出 CSV' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h4 class="mk-card__title">导出说明</h4>
-        </div>
-        <div class="ex-body ex-notes">
-          <ul>
-            <li>导出的 CSV 带 UTF-8 BOM，Excel / WPS 双击可直接打开，中文不乱码。</li>
-            <li>执行日志默认导出最近 1000 条，可切换行数上限；其余业务表导出最近 20000 条。</li>
-            <li>用户导出默认排除虚拟学习者与测试账号；如需全量请在后端接口加 includeTest=1。</li>
-            <li>导出为只读操作，不产生审计记录；敏感字段（密码哈希、API Key）一律不包含。</li>
-          </ul>
-        </div>
-      </section>
-    </div><!-- /oc-tab-body -->
+      </div>
+      <div v-if="exportSel.some((k) => LOG_EXPORT_KEYS.has(k))" class="mk-field oc-export__limit">
+        <span class="mk-field__label">日志行数上限</span>
+        <select v-model="logLimit" class="mk-filter__select" :disabled="exporting !== ''">
+          <option :value="1000">1000 行</option>
+          <option :value="5000">5000 行</option>
+          <option :value="20000">20000 行</option>
+        </select>
+      </div>
+      <div class="oc-export__foot">
+        <span class="oc-export__hint">已选 {{ exportSel.length }} 项 · CSV（UTF-8 BOM，Excel / WPS 可直接打开）</span>
+        <button
+          type="button"
+          class="mk-btn mk-btn--primary oc-export__go"
+          :disabled="!exportSel.length || exporting !== ''"
+          @click="runExport"
+        >{{ exporting !== '' ? '导出中…' : '开始导出' }}</button>
+      </div>
+      <ul class="oc-export__notes">
+        <li>执行日志默认导出最近 1000 行，可切换上限；其余业务表导出最近 20000 条。</li>
+        <li>用户导出默认排除虚拟学习者与测试账号；如需全量请在后端接口加 includeTest=1。</li>
+        <li>导出为只读操作，不产生审计记录；敏感字段（密码哈希、API Key）一律不包含。</li>
+      </ul>
+    </div>
     </template>
 
     <!-- ===== Tab3: 会话安全（SessionSecurity embedded） ===== -->
     <SessionSecurity v-else ref="securityRef" embedded @count="securityCount = $event" />
+      </div><!-- /oc-card__body -->
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { timeAgo, errMsg, shortId } from './live'
 import { askConfirm } from './useConfirm'
@@ -251,20 +236,6 @@ function switchTab(t: OcTab) {
 const refreshing = ref(false)
 const advanceBusy = ref(false)
 const requeueBusy = ref(false)
-
-/** 死信域需要关注：有死信，或读取失败（deadCount 失败时保持 0，必须与「确实没有死信」区分） */
-const hasDeadAttention = computed(() => deadFailed.value || deadCount.value > 0)
-/** 死信 meta 文案：加载中「…」/ 失败「—」/ 就绪真实数（瞬态 0 会被误读为「确认无死信」） */
-const deadMetaText = computed(() => {
-  if (deadFailed.value) return '—'
-  if (deadLoading.value) return '…'
-  return String(deadCount.value)
-})
-
-const statusTone = computed(() => {
-  if (tab.value === 'tools' && deadFailed.value) return 'mk-status--bad'
-  return tab.value === 'tools' && deadCount.value > 0 ? 'mk-status--warn' : 'mk-status--ok'
-})
 
 /* 时间推进 */
 const advance = ref({ userId: '', days: 30, pathId: '' })
@@ -398,35 +369,39 @@ function pretty(obj: unknown): string {
   }
 }
 
-/* ===== Tab2: 数据导出 ===== */
+/* ===== Tab2: 数据导出（原型表单：范围 chips 多选 + 右对齐「开始导出」） ===== */
 interface ExportDef {
   key: string
   label: string
   desc: string
-  limit?: boolean
 }
 
-const exports: ExportDef[] = [
+const exportDefs: ExportDef[] = [
   { key: 'users', label: '用户', desc: '全部真实用户：ID / 姓名 / 邮箱 / 角色 / XP / 等级 / 注册与登录时间' },
   { key: 'teaching-sessions', label: '教学会话', desc: '会话：学科 / 主题 / 任务类型 / 模式 / 状态 / 时长 / 起止时间' },
   { key: 'feedback', label: '用户反馈', desc: '反馈：评分 / 难度 / 评论 / 处理状态 / 时间' },
   { key: 'goal-conversations', label: '目标对话', desc: '目标澄清：状态 / 阶段 / 描述 / 创建与更新时间' },
+  { key: 'agent-logs', label: '执行日志', desc: 'Agent 调用：成功 / 耗时 / 错误码与分类 / 模型 / Token' },
+  { key: 'audit-logs', label: '审计日志', desc: '管理操作审计：动作 / 目标 / 方法 / 路径 / 状态码 / IP' },
 ]
 
-const auditExports: ExportDef[] = [
-  { key: 'agent-logs', label: '执行日志', desc: 'Agent 调用：成功 / 耗时 / 错误码与分类 / 模型 / Token', limit: true },
-  { key: 'audit-logs', label: '审计日志', desc: '管理操作审计：动作 / 目标 / 方法 / 路径 / 状态码 / IP', limit: true },
-]
+/** 只有日志类导出支持行数上限（后端 ?limit=）；业务表固定最近 20000 条 */
+const LOG_EXPORT_KEYS = new Set(['agent-logs', 'audit-logs'])
+const logLimit = ref<number>(1000)
 
-/* 默认值必须落在下拉选项集内（1000/5000/20000），否则 select 初始显示空白 */
-const limits = reactive<Record<string, number>>({ 'agent-logs': 1000, 'audit-logs': 1000 })
+const exportSel = ref<string[]>([])
+function toggleExport(key: string) {
+  exportSel.value = exportSel.value.includes(key)
+    ? exportSel.value.filter((k) => k !== key)
+    : [...exportSel.value, key]
+}
+
 const exporting = ref('')
 
 async function doExport(key: string) {
   exporting.value = key
   try {
-    const limit = limits[key]
-    const params = limit ? `?limit=${limit}` : ''
+    const params = LOG_EXPORT_KEYS.has(key) ? `?limit=${logLimit.value}` : ''
     const response = await adminAxios.get(`/admin/export/${key}${params}`, { responseType: 'blob' })
     const disposition = String(response.headers['content-disposition'] || '')
     const match = disposition.match(/filename\*=UTF-8''([^;]+)/)
@@ -447,6 +422,14 @@ async function doExport(key: string) {
   }
 }
 
+/** 顺序导出所选项（共用 exporting 守卫，按钮同时禁用防并发） */
+async function runExport() {
+  for (const key of exportSel.value) {
+    if (exporting.value !== '') return
+    await doExport(key)
+  }
+}
+
 /* 死信懒加载：挂载只拉首屏 tab（深链 ?tab=export/security 不预取多打一次）；
    前进/后退经 route watch 直改 tab、不走 switchTab，故以 tab watcher 兜底补拉 */
 if (tab.value === 'tools') void loadDead()
@@ -456,22 +439,33 @@ watch(tab, (t) => {
 </script>
 
 <style scoped>
-/* ================= 宿主布局（tab 宿主：工具/导出内滚；嵌入子页占满剩余高度） ================= */
-/* 工具/导出 tab：内容在宿主 flex 列内独立滚动（状态条/pills 固定） */
-.oc-tab-body {
+/* ================= 宿主布局（原型骨架：页头 → 单卡「页签+页签体」） ================= */
+.oc-card {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+/* 页签体在卡内独立滚动；会话安全嵌入组件（.mk-page--fill.ss-embedded）占满剩余高度内滚 */
+.oc-card__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.oc-card__body > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
+/* 工具/导出页签体：卡体内边距 + 栅格（滚动上移到 oc-card__body） */
+.oc-tab-body {
+  padding: 14px;
   display: grid;
   gap: 12px;
   align-content: start;
 }
-/* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度 */
-.oc-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
 .dt-body { padding: 14px; display: grid; gap: 14px; }
 /* 视图切换（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签、OpsHub 宿主页签同款：
    12px/600、激活蓝字+2px 蓝下划线、通栏底线。2026-10-01 由独立胶囊卡片条迁入） */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); padding: 0 14px; }
 .tab {
   border: 0;
   background: transparent;
@@ -490,8 +484,6 @@ watch(tab, (t) => {
 .tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
 .tab__count { margin-left: 5px; color: var(--mk-faint); font-weight: 600; }
 .tab[aria-selected='true'] .tab__count { color: inherit; opacity: 0.72; }
-/* 会话计数尚未就绪（未访问 tab）：弱化显示，区别于已确认的 0 */
-.oc-meta--pending { color: var(--mk-faint); }
 /* 死信表（自动布局）：单元格 nowrap；事件类型长名截断（title 全值） */
 .oc-dead-table td { white-space: nowrap; }
 .oc-ev {
@@ -551,13 +543,9 @@ watch(tab, (t) => {
 }
 @media (min-width: 2800px) {
   .dt-compare__col pre { font-size: var(--mk-fs-micro); }
-  .ex-row__text strong { font-size: var(--mk-fs-body); }
-  .ex-row__text span { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .dt-compare__col pre { font-size: var(--mk-fs-body); }
-  .ex-row__text strong { font-size: var(--mk-fs-emphasis); }
-  .ex-row__text span { font-size: var(--mk-fs-body); }
 }
 @media (max-width: 1100px) {
   .dt-grid { grid-template-columns: 1fr 1fr; }
@@ -565,27 +553,20 @@ watch(tab, (t) => {
   .dt-compare__col + .dt-compare__col { border-left: none; border-top: 1px dashed var(--mk-line); }
 }
 
-/* Tab2: 数据导出 */
-.ex-body { padding: 8px 14px 12px; display: grid; gap: 2px; }
-.ex-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 10px 2px;
-  border-bottom: 1px solid var(--mk-line);
-  flex-wrap: wrap;
-}
-.ex-row:last-child { border-bottom: none; }
-.ex-row__text { display: grid; gap: 2px; min-width: 0; }
-.ex-row__text strong { font-size: var(--mk-fs-body); }
-.ex-row__text span { font-size: var(--mk-fs-micro); color: var(--mk-muted); max-width: 640px; }
-.ex-row__actions { display: flex; align-items: center; gap: 8px; }
-.ex-row__actions .mk-filter__select { min-width: 110px; height: 32px; padding: 3px 8px; padding-right: 1.75em; }
-.ex-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-@media (min-width: 2000px) {
-  .ex-row__text strong { font-size: var(--mk-fs-body); }
-  .ex-row__text span { font-size: var(--mk-fs-micro); }
+/* Tab2: 数据导出（原型表单：field 范围 chips + 右对齐 foot 主钮 + 脚注说明） */
+.oc-export { gap: 16px; }
+.oc-export__limit { max-width: 320px; }
+.oc-export__foot { display: flex; align-items: center; gap: 12px; }
+.oc-export__go { margin-left: auto; }
+.oc-export__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.oc-export__notes {
+  margin: 0;
+  padding: 10px 12px;
+  border-top: 1px solid var(--mk-line);
+  display: grid;
+  gap: 6px;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
 }
 
 /* ================= 暗色模式（D1 补完）：系统工具 ================= */

@@ -1091,7 +1091,6 @@ useEscape(
 .skd-tablewrap .mk-table td { white-space: nowrap; }
 .skd-tablewrap .mk-table .skd-td-wrap { white-space: normal; min-width: 160px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .skd-tablewrap .mk-table th.skd-th-wrap { white-space: normal; }
-.skd-na, .mk-na { color: var(--mk-faint); }
 
 /* ===== 运行时：指标格（原型 metricCard 四格） ===== */
 .skd-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); overflow: hidden; background: var(--mk-surface); }
