@@ -233,7 +233,6 @@ import { adminNotificationsApi, adminLearnerModelsApi } from '@/api/adminApi'
     count 事件：学习者快照就绪后上报（宿主「学习者 N」徽章；embedded 才消费）
     stats 事件：画像域页级数字（宿主 KPI 区；同样只在 embedded 被消费） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
-const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 interface Row {
   id: string
@@ -408,10 +407,6 @@ const loadFailed = computed(
 function retryLoad() {
   void loadLiveData()
 }
-/* 宿主域计数徽章（embedded 才消费）：快照列表就绪即上报 */
-watch(liveLearners, (list) => {
-  emit('count', list.length)
-}, { immediate: true })
 /* 宿主刷新联动（用户与学习者合并宿主「刷新」按钮 → 重拉 live 学习者域） */
 defineExpose({ refresh: () => { void loadLiveData() } })
 

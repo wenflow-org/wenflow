@@ -322,7 +322,6 @@ function loginTone(text: string): 'fresh' | 'recent' | 'never' {
     count 事件：用户总量就绪后上报（宿主「用户 N」徽章；embedded 才消费）
     stats 事件：账号域页级数字（宿主 KPI 区；同样只在 embedded 被消费） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
-const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 /** 与后端 validatePasswordRule 一致：≥8 位且同时包含字母和数字 */
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
@@ -477,10 +476,6 @@ const loadFailed = computed(
 function retryLoad() {
   void loadLiveData()
 }
-/* 宿主域计数徽章（embedded 才消费）：用户总量变化即上报（live 全局单源） */
-watch(liveUsersTotal, (n) => {
-  emit('count', Number(n || 0))
-}, { immediate: true })
 /* 宿主刷新联动（用户与学习者合并宿主「刷新」按钮 → 重拉 live 用户域） */
 defineExpose({ refresh: () => { void loadLiveData() }, openCreate })
 /* 筛选 pill（角色 / 活跃 / 生命周期单源；已去掉原「全部角色」下拉，避免与「管理员」pill 语义冲突）。

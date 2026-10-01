@@ -91,13 +91,21 @@ async function settle() {
 }
 
 /**
- * 点击视图切换 pill。
- * R1（页头职责边界）落地后，pill 是页内唯一的视图切换控件，且文本带计数徽章
- * （如「学习状态24」），因此按 .mk-pill 定位 + includes 匹配标签。
+ * 点击视图切换 pill（OpsHub 等仍用 pills 的宿主页）。
+ * pill 文本带计数徽章（如「站内通知」），按 .mk-pill 定位 + includes 匹配标签。
  */
 async function clickPill(w: ReturnType<typeof mount>, label: string) {
   const btn = w.findAll('.mk-pill').find((b) => b.text().includes(label));
   expect(btn, `未找到视图切换 pill：${label}`).toBeTruthy();
+  await btn!.trigger('click');
+}
+
+/**
+ * 点击视图切换 tab（People 2026-10-01 起改原型 .tabs 下划线页签，非胶囊）。
+ */
+async function clickTab(w: ReturnType<typeof mount>, label: string) {
+  const btn = w.findAll('.tab').find((b) => b.text().includes(label));
+  expect(btn, `未找到视图切换 tab：${label}`).toBeTruthy();
   await btn!.trigger('click');
 }
 
@@ -117,7 +125,7 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     expect(w.findComponent(Users).exists()).toBe(true);
     expect(w.findComponent(LearnerCenter).exists()).toBe(false);
 
-    await clickPill(w, '学习状态');
+    await clickTab(w, '学习状态');
     await settle();
     expect(w.findComponent(LearnerCenter).exists()).toBe(true);
     expect(w.findComponent(Users).exists()).toBe(false);

@@ -15,25 +15,26 @@
       <span class="mk-status__meta" title="学习者快照单次最多加载 50 条">仅加载前 50 位，可按筛选缩小范围</span>
     </div>
 
-    <!-- 视图切换 pills（唯一的 tab 控件）：各视图计数随 pill 呈现。原型无页头 KPI 带（2026-10-01
-         用户拍板撤除）；域级关键数字由 pills 计数 + 各子视图内指标承载。 -->
-    <div class="mk-pills pp-tabs">
+    <!-- 视图切换（原型 .tabs 下划线页签，非胶囊）：原型无页签计数，域计数由内容卡承载 -->
+    <div class="tabs pp-tabs" role="tablist" aria-label="视图切换">
       <button
         type="button"
-        class="mk-pill"
-        :class="{ 'mk-pill--active': tab === 'account' }"
+        class="tab"
+        role="tab"
+        :aria-selected="tab === 'account'"
         @click="switchTab('account')"
-      >账号管理<span class="mk-pill__count">{{ userCount }}</span></button>
+      >账号管理</button>
       <button
         type="button"
-        class="mk-pill"
-        :class="{ 'mk-pill--active': tab === 'state' }"
+        class="tab"
+        role="tab"
+        :aria-selected="tab === 'state'"
         @click="switchTab('state')"
-      >学习状态<span class="mk-pill__count">{{ learnerCount }}</span></button>
+      >学习状态</button>
     </div>
 
-    <!-- 账号管理：Users（embedded 不含状态条，计数上报宿主；新建用户入口在卡头） -->
-    <Users v-if="tab === 'account'" ref="usersRef" embedded @count="onDomainCount($event)" />
+    <!-- 账号管理：Users（embedded 不含状态条；新建用户入口在卡头） -->
+    <Users v-if="tab === 'account'" ref="usersRef" embedded />
     <!-- 学习状态：LearnerCenter（embedded 不含状态条） -->
     <LearnerCenter v-else ref="learnersRef" embedded />
   </div>
@@ -43,7 +44,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { intent } from './store'
-import { liveUsersTotal, liveLearners } from './live'
+import { liveLearners } from './live'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import Users from './Users.vue'
 import LearnerCenter from './LearnerCenter.vue'
@@ -55,23 +56,9 @@ const tab = ref<PeopleTab>('account')
 const route = useRoute()
 const router = useRouter()
 
-/* ===== 宿主页头（用户与学习者：两域计数随 pills 呈现 + 切视图） ===== */
-/** 账号域计数（Users 上报，兜底用） */
-const domainCount = ref<{ users: number }>({ users: 0 })
-/**
- * 账号总数以全局 live 单源为准：Users 只在「账号管理」Tab 挂载，
- * 若沿用子视图 emit，切到「学习状态」后 users 会停留在旧值、深链直连则取不到。
- * 口径说明：该数跟随当前「含模拟」开关（切换后后端按新口径返回 total），
- * 状态条 tooltip 用固定表述，不再断言「不含测试/虚拟」以免与实际口径漂移。
- */
-const userCount = computed(() => liveUsersTotal.value || domainCount.value.users)
-/** 学习状态计数：live 全局单源（boot 即拉 learners 域，与是否进过该 tab 无关——
- *  2026-09-29 修复：原靠 LearnerCenter 挂载后上报，没点进过「学习状态」就恒显 0，
- *  读起来像「这个域没有数据」） */
+/* ===== 宿主页头 ===== */
+/** 学习状态计数：live 全局单源（boot 即拉 learners 域），供「仅加载前 50 位」截断提示判定 */
 const learnerCount = computed(() => liveLearners.value.length)
-function onDomainCount(n: number) {
-  domainCount.value.users = n
-}
 
 const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
 const learnersRef = ref<{ refresh?: () => void } | null>(null)
@@ -121,9 +108,15 @@ watch(
 /* 宿主容器沿用 .mk-page 的响应式内边距（不再用静态 token 覆盖）：
    原覆盖在 ≥1440px 档位与 .mk-page 的 px 内边距脱节，导致本页状态条起始位置/宽度
    与单页容器（如虚拟学习者）不一致。子页签与嵌入页自行承担内容间距。 */
-.pp-tabs { width: fit-content; }
-/* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136）：
-   原先每页复制一份 pp-/lc-/ts-/gc-/oc-/ms- 私有实现，视觉细节互相漂移。 */
+/* 视图切换 = 原型 .tabs 下划线页签（非胶囊 pills）：通栏底线，激活蓝字+蓝下划线 */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tab {
+  border: 0; background: transparent; color: var(--mk-muted);
+  padding: 9px 12px; cursor: pointer; font-weight: 600;
+  font-size: var(--mk-fs-micro); border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
 /* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度，表格区内滚 */
 .pp-host > .mk-page--fill {
   flex: 1 1 auto;

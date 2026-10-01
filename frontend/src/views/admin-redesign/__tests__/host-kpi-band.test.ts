@@ -68,9 +68,10 @@ function kpiLabels(w: ReturnType<typeof mount>): string[] {
   return w.findAll('.mk-kpi-grid .mk-kpi__label').map((el) => el.text().trim());
 }
 
-async function clickPill(w: ReturnType<typeof mount>, label: string) {
-  const btn = w.findAll('.mk-pill').find((b) => b.text().includes(label));
-  expect(btn, `未找到视图切换 pill：${label}`).toBeTruthy();
+/** People 的视图切换 tab（2026-10-01 起为原型 .tabs 下划线页签，非胶囊） */
+async function clickTab(w: ReturnType<typeof mount>, label: string) {
+  const btn = w.findAll('.tab').find((b) => b.text().includes(label));
+  expect(btn, `未找到视图切换 tab：${label}`).toBeTruthy();
   await btn!.trigger('click');
   await settle();
 }
@@ -92,8 +93,8 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     // 页头 = 原型 pageTitle 形态：页名 + 副题（随视图切换）
     expect(w.find('.mk-pagehead').exists()).toBe(true);
     expect(w.find('.mk-pagehead').text()).toContain('管理学习者档案、学习状态与路径进度');
-    // pills 仍是唯一视图切换控件，副题随 tab 切换
-    await clickPill(w, '学习状态');
+    // 原型 .tabs 下划线页签仍是唯一视图切换控件，副题随 tab 切换
+    await clickTab(w, '学习状态');
     expect(w.find('.mk-pagehead').text()).toContain('学习者学习状态分布与风险跟踪');
     w.unmount();
   });
