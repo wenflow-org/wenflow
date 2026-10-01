@@ -221,8 +221,8 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).toContain('真实会话');
     expect(wrapper.find('.mk-back').text()).toContain('会话列表');
 
-    // 阶段条：4 段 + 进度副标（Path 1/2 里程碑、Goal 对话轮次）
-    expect(wrapper.findAll('.cp-stage')).toHaveLength(4);
+    // 阶段推进 stepper：4 步 + meta 副标（Path 1/2 里程碑、Goal 对话轮次）
+    expect(wrapper.findAll('.cp-stp')).toHaveLength(4);
     expect(wrapper.text()).toContain('1/2 里程碑');
     expect(wrapper.text()).toContain('对话 1 轮');
 
@@ -281,14 +281,14 @@ describe('SessionCockpit 双模式', () => {
 
     const wrapper = await mountCockpit('session-real', 'ts_real_1');
 
-    // Path tab：真实模式空态明示数据边界
-    const stages = wrapper.findAll('.cp-stage');
+    // Path tab（stepper 步点即页签）：真实模式空态明示数据边界
+    const stages = wrapper.findAll('.cp-stp');
     await stages.find((s) => s.text().includes('Path'))!.trigger('click');
     await settle();
     expect(wrapper.text()).toContain('该真实会话尚未生成 Path');
 
     // Learn tab：真实模式无教学记录空态
-    await wrapper.findAll('.cp-stage').find((s) => s.text().includes('Learn'))!.trigger('click');
+    await wrapper.findAll('.cp-stp').find((s) => s.text().includes('Learn'))!.trigger('click');
     await settle();
     expect(wrapper.text()).toContain('尚未生成课程');
 

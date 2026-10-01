@@ -1,6 +1,6 @@
 <template>
   <div class="mk-page cp">
-    <!-- ===== 顶部栏：身份 + 状态（控制全部下沉到下方统一控制台） ===== -->
+    <!-- ===== 顶部栏（sticky 寻路 + 刷新级必须项；身份详情在 hero，阶段轴收敛进「阶段推进」卡） ===== -->
     <header class="cp-topbar">
       <div class="mk-status" :class="`mk-status--${headerHealth}`">
         <span class="mk-status__dot" aria-hidden="true"></span>
@@ -9,15 +9,7 @@
         <!-- 自动驾驶进行中的状态指示（停止按钮在控制台） -->
         <span v-if="autopilotRunning" class="mk-status__meta cp-topbar__autopilot">▶ 自动驾驶 · {{ Number(autopilot.steps || 0) }} 步</span>
         <span class="mk-status__sep"></span>
-        <!-- 双轴状态：生命周期徽章（轴 A）+ 阶段条（轴 B） -->
-        <RunStateBadge :status="runLifecycleState" :hint="statusTitle" :pulse="autopilotRunning" />
-        <RunStageBar
-          :stage="runStageForBar"
-          :status="runLifecycleState"
-          :task-progress="runStageTaskProgress"
-          :show-task-text="false"
-        />
-        <span class="mk-status__sep"></span>
+        <!-- 双轴状态（生命周期徽章 + 阶段条）按原型收敛：生命周期 → hero 状态 pill，阶段 → 「阶段推进」stepper -->
         <span class="mk-status__meta">{{ modeText }}</span>
         <!-- 日期模拟推进进度（虚拟会话；未开启则显示"未开启"） -->
         <span
@@ -58,6 +50,32 @@
       </div>
     </header>
 
+    <!-- ===== hero（原型 renderSessionDetail）：会话身份 + 状态/阶段/回合 pills + 真实能力动作 ===== -->
+    <MkDetailHero class="cp-hero" avatar="S" :title="shortId" :sub="heroSub">
+      <template #pills>
+        <!-- 状态 pill：生命周期合成态（与原顶栏徽章同源，原型 statusPill 位） -->
+        <span class="mk-badge" :class="`mk-badge--${heroStatusTone}`" :title="statusTitle">{{ heroStatusText }}</span>
+        <!-- 阶段 pill：归一后的当前阶段（原型 pill--info 位） -->
+        <span class="mk-badge mk-badge--info">{{ stageLabel(currentStage) }}</span>
+        <!-- 回合 pill：已落库对话的学习者回合数（原型 pill--mute「回合 N」位，真实计数） -->
+        <span class="mk-badge mk-badge--muted">回合 {{ heroTurnCount }}</span>
+      </template>
+      <template #actions>
+        <!-- 动作区只放真实能力（原型「导出日志」假钮不搬）：会话生命周期控制（vlab-controls 统一模型）
+             从统一控制台迁入 hero 动作位；危险动作（停止/删除）用 danger 形态（原型「中断会话」位） -->
+        <button
+          v-for="c in lifeControlsCockpit"
+          :key="c.key"
+          type="button"
+          class="mk-btn"
+          :class="{ 'mk-btn--danger': c.tone === 'danger' }"
+          :disabled="busy"
+          :title="c.hint"
+          @click="runCockpitAction(c)"
+        >{{ c.label }}</button>
+      </template>
+    </MkDetailHero>
+
     <!-- 教学建议条（原教学会话抽屉「建议」页签的文案落点，2026-10-01 随抽屉退役迁入座舱）：
          真实会话控制台接口本就带回 advisory（priority/title/text），数据真实不硬造 -->
     <div v-if="realAdvisory" class="cp-advisory" :class="`cp-advisory--${realAdvisory.priority}`" role="note">
@@ -65,27 +83,8 @@
       <span class="cp-advisory__text"><template v-if="realAdvisory.title">{{ realAdvisory.title }}<template v-if="realAdvisory.text"> · </template></template>{{ realAdvisory.text }}</span>
     </div>
 
-    <!-- ===== 统一控制台：阶段 tab + 该阶段操作（各阶段操作集中置顶，卡片区只留内容） ===== -->
+    <!-- ===== 统一控制台：该阶段操作（原阶段 tab 导航已收敛进「阶段推进」stepper，操作能力原样保留） ===== -->
     <div class="cp-console">
-      <div class="cp-console__tabs" role="tablist">
-        <button
-          v-for="st in stageFlow"
-          :key="st"
-          :id="`cp-tab-${st}`"
-          type="button"
-          role="tab"
-          class="cp-stage"
-          :aria-selected="activeTab === st"
-          :class="[stageCls(st), { 'cp-stage--tab': !isBlackbox && activeTab === st }]"
-          :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `查看 ${stageLabel(st)} 页签`"
-          :disabled="isBlackbox"
-          @click="selectStageTab(st)"
-        >
-          <span class="cp-stage__mark">{{ stageMark(st) }}</span>
-          <span class="cp-stage__label">{{ stageLabel(st) }}</span>
-          <span v-if="stageProgress(st)" class="cp-stage__progress">{{ stageProgress(st) }}</span>
-        </button>
-      </div>
       <div class="cp-console__actions">
         <!-- ① 执行推进（跨阶段：自动驾驶（全流程后台）/ 停止自动驾驶；黑盒与真实会话不提供） -->
         <template v-if="!isRealMode && !isBlackbox">
@@ -129,26 +128,79 @@
           <button v-if="!hasWrapup" type="button" class="cp-btn" :disabled="wrapupDisabled" :title="wrapupTitle" @click="act('wrapup')">生成终局总结</button>
         </template>
 
-        <!-- ③ 会话生命周期（vlab-controls 统一模型：暂停/继续/停止/重试，按状态出现；删除仅终态） -->
-        <template v-if="!isRealMode && lifeControlsCockpit.length">
-          <span class="cp-console__sep"></span>
-          <button
-            v-for="c in lifeControlsCockpit"
-            :key="c.key"
-            type="button"
-            class="cp-btn"
-            :class="{ 'cp-btn--primary': c.tone === 'primary', 'cp-danger-btn': c.tone === 'danger' }"
-            :disabled="busy"
-            :title="c.hint"
-            @click="runCockpitAction(c)"
-          >{{ c.label }}</button>
-        </template>
+        <!-- ③ 会话生命周期已迁至 hero 动作区（原型 hero 右侧动作位），此处不再重复 -->
         <!-- 真实/黑盒模式声明 -->
         <span v-if="isRealMode || isBlackbox" class="cp-console__note">
           {{ isRealMode ? '真实会话：只读监控' : '黑盒模式：由黑盒执行器驱动，辅助控制不可用' }}
         </span>
       </div>
     </div>
+
+    <!-- ===== 教学闭环定位（原型 .loop 五环，静态同构：教学回合为本会话环节，无数据依赖） ===== -->
+    <section class="mk-card cp-loopcard">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">教学闭环定位</h3>
+        <span class="mk-card__meta">该会话在整体闭环中的位置</span>
+      </div>
+      <div class="cp-cardbody">
+        <div class="cp-loop" role="list" aria-label="教学闭环定位">
+          <template v-for="(node, i) in loopNodes" :key="node.name">
+            <span v-if="i" class="cp-loop__arrow" aria-hidden="true">→</span>
+            <div class="cp-loop__step" :class="node.active ? 'cp-loop__step--active' : 'cp-loop__step--done'" role="listitem">
+              <span class="cp-loop__no">阶段 {{ i + 1 }}</span>
+              <span class="cp-loop__name">{{ node.name }}</span>
+              <span class="cp-loop__meta">{{ node.active ? '本会话进行中' : '已完成' }}</span>
+            </div>
+          </template>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 阶段推进（原型 .stepper 三态 + statstrip 三读数；原顶栏阶段轴收敛至此，步点即阶段页签导航） ===== -->
+    <section class="mk-card cp-stepcard">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">阶段推进</h3>
+        <span class="mk-card__meta">回合状态机</span>
+        <span class="cp-stepcard__spacer"></span>
+        <span class="mk-card__meta">已完成 <b class="mono">{{ stageDoneCount }}</b> / {{ stageFlow.length }} 阶段</span>
+      </div>
+      <div class="cp-cardbody">
+        <div class="cp-stepper" role="tablist" aria-label="阶段推进">
+          <button
+            v-for="(st, i) in stageFlow"
+            :key="st"
+            :id="`cp-tab-${st}`"
+            type="button"
+            role="tab"
+            class="cp-stp"
+            :class="`cp-stp--${stepState(st)}`"
+            :aria-selected="activeTab === st"
+            :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `查看 ${stageLabel(st)} 页签`"
+            :disabled="isBlackbox"
+            @click="selectStageTab(st)"
+          >
+            <span class="cp-stp__line" aria-hidden="true"></span>
+            <span class="cp-stp__dot" aria-hidden="true">{{ stepState(st) === 'done' ? '✓' : i + 1 }}</span>
+            <span class="cp-stp__name">{{ stageLabel(st) }}</span>
+            <span class="cp-stp__meta">{{ stepMeta(st) }}</span>
+          </button>
+        </div>
+        <div class="statstrip cp-stepstrip" role="list" aria-label="阶段推进读数">
+          <div class="statstrip__stat" role="listitem">
+            <span class="statstrip__label">当前阶段</span>
+            <span class="statstrip__value">{{ statCurrentStage }}</span>
+          </div>
+          <div class="statstrip__stat" role="listitem">
+            <span class="statstrip__label">已用回合</span>
+            <span class="statstrip__value">{{ heroTurnCount }}</span>
+          </div>
+          <div class="statstrip__stat" role="listitem">
+            <span class="statstrip__label">下一阶段</span>
+            <span class="statstrip__value">{{ statNextStage }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- ===== 主体：左侧内容 + 右侧控制台 ===== -->
     <div class="cp-body">
@@ -158,6 +210,52 @@
         <section v-if="sessionLoadFailed && !session" class="mk-card">
           <p class="cp-degrade">会话数据加载失败 <button type="button" class="mk-link" @click="refresh">重试</button></p>
         </section>
+
+        <!-- ===== 原型双栏（1.5fr/1fr）：回合记录（会话全量对话，真实消息）+ 知识状态更新（真实掌握度，无数据整卡不渲染） ===== -->
+        <div class="cp-detail-grid" :class="{ 'cp-detail-grid--single': !knowledgeRows.length }">
+          <section class="mk-card">
+            <div class="mk-card__head">
+              <h3 class="mk-card__title">回合记录</h3>
+              <span class="mk-card__meta">{{ turnRows.length ? `${turnRows.length} 条对话 · Goal + 课堂按序合并` : '暂无对话记录' }}</span>
+            </div>
+            <!-- 列序对齐原型（# / 类型 / 内容 / …）：Token/耗时/解答分接口没有，不硬造，以真实「时间」列收尾 -->
+            <div v-if="turnRows.length" class="mk-table-scroll">
+              <table class="mk-table cp-turns">
+                <thead>
+                  <tr>
+                    <th scope="col" class="cp-turns__num">#</th>
+                    <th scope="col">类型</th>
+                    <th scope="col" class="cp-turns__wrap">内容</th>
+                    <th scope="col">时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in turnRows" :key="row.key">
+                    <td class="mono cp-turns__num">{{ row.index }}</td>
+                    <td><span class="mk-badge" :class="row.tone">{{ row.type }}</span></td>
+                    <td class="cp-turns__wrap">{{ row.content }}</td>
+                    <td class="mono cp-turns__time">{{ row.time }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-else class="cp-none cp-turns-empty">该会话暂无已落库的对话回合。</p>
+          </section>
+          <section v-if="knowledgeRows.length" class="mk-card">
+            <div class="mk-card__head">
+              <h3 class="mk-card__title">知识状态更新</h3>
+              <span class="mk-card__meta">{{ knowledgeSourceLabel }}</span>
+            </div>
+            <div class="cp-cardbody">
+              <div class="cp-ranklist">
+                <div v-for="k in knowledgeRows" :key="k.name" class="cp-ranklist__row">
+                  <span class="cp-ranklist__name">{{ k.name }}</span>
+                  <span class="cp-ranklist__val mono">{{ k.value }}</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
         <!-- Path 内容 -->
         <section v-if="!isBlackbox && activeTab === 'path'" role="tabpanel" :aria-labelledby="`cp-tab-path`" class="mk-card">
           <div class="mk-card__head">
@@ -710,8 +808,7 @@ import {
 } from './vlab-controls'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
-import RunStateBadge from './RunStateBadge.vue'
-import RunStageBar from './RunStageBar.vue'
+import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { runHealthTone, statusText } from './statusText'
 import { parseLogEntry } from './sessionLog'
@@ -879,16 +976,7 @@ const runLifecycleState = computed(() => {
   if (st === 'running' || st === 'created') return st === 'created' ? 'created' : 'running'
   return st || 'created'
 })
-const runStageForBar = computed(() => {
-  if (!session.value) return null
-  return String(session.value?.currentStage || runtime.value.currentStage || 'goal').toLowerCase()
-})
-const runStageTaskProgress = computed(() => {
-  const done = numberValue(session.value?.completedTasks) || 0
-  const total = numberValue(session.value?.totalTasks) || 0
-  if (total <= 0) return null
-  return { done, total }
-})
+/* 阶段条输入（runStageForBar/runStageTaskProgress 已随 RunStageBar 移除；阶段展示收敛进「阶段推进」stepper） */
 
 /**
  * 状态点健康档（R2，与 RunStateBadge 同源：runHealthTone → runStateTone）。
@@ -1375,13 +1463,137 @@ const {
 } = useCockpitWrapup(stageResults, stageStatus, isRealMode)
 
 const {
-  effectiveStageIndex, stageDone, stageActive, stageCls, stageMark,
+  effectiveStageIndex, stageDone, stageActive,
   stageProgress, stageMiniStatus, learnProgressText
 } = useCockpitStages({
   currentStage, bindings, stageStatus, stageResults,
   isTerminal, isFailedTerminal, hasWrapup,
   goalConversationMessages, pathStatusPath, pathMilestonesView, learnLessons
 })
+
+/* ===== 原型 renderSessionDetail 骨架数据：hero / 教学闭环 / 阶段推进 / 回合记录 / 知识状态更新 =====
+   原则是真数据灌块：后端没有的字段（learner 名、Token、耗时、解答分、阶段回合数）宁缺勿造。 */
+
+/* hero 副文（原型「学习者 · skill · 开始于时间」对齐真实字段，缺源的段不渲染）：
+   学习者名 = 虚拟会话 profile.userName；skill = 真实会话 teaching.subject；开始于 = startTime / createdAt */
+const heroSub = computed(() => {
+  const segments: string[] = []
+  const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
+  if (learnerName) segments.push(`学习者 ${learnerName}`)
+  const subject = firstText(String(asRecord(session.value?.teaching).subject || ''))
+  if (subject) segments.push(subject)
+  const startedRaw = firstText(
+    String(asRecord(session.value?.teaching).startTime || ''),
+    String(session.value?.createdAt || '')
+  )
+  const started = startedRaw ? formatTime(startedRaw) : ''
+  if (started) segments.push(`开始于 ${started}`)
+  return segments.join(' · ')
+})
+
+/* 状态 pill：生命周期合成态（与原顶栏徽章同源）→ mk-badge 档位。
+   真实会话载荷没有顶层 status（只有 runtime.status），为不再误报「已创建」，先取顶层 status，缺源回退 runtime */
+const heroLifecycleState = computed(() => {
+  if (!session.value) return ''
+  return normalized(session.value?.status) || terminalStatus.value || runLifecycleState.value
+})
+const heroStatusText = computed(() => {
+  if (!session.value) return '加载中'
+  return statusText(heroLifecycleState.value) || statusText(runLifecycleState.value) || '—'
+})
+const heroStatusTone = computed(() => {
+  if (!session.value) return 'muted'
+  switch (heroLifecycleState.value) {
+    case 'completed': return 'ok'
+    case 'failed': return 'bad'
+    case 'abandoned': return 'muted'
+    case 'paused':
+    case 'created': return 'warn'
+    default: return 'info'
+  }
+})
+
+/* 回合计数（真实数据）：Goal + 课堂对话里学习者发言数 = 已发生的对话回合 */
+const heroTurnCount = computed(() => {
+  const userTurns = (messages: Array<{ role: string }>) => messages.filter((m) => m.role === 'user').length
+  return userTurns(goalConversationMessages.value) + userTurns(fallbackLearnConversationMessages.value)
+})
+
+/* 教学闭环定位：静态五环（原型同构），教学回合为本会话环节 */
+const loopNodes = ['目标对话', '路径规划', '教学回合', '课后评估', '记忆复习']
+  .map((name) => ({ name, active: name === '教学回合' }))
+
+/* 阶段推进 stepper 三态（done/active/idle 由真实阶段状态机推导）与 meta 文案 */
+function stepState(st: StageKey): 'done' | 'active' | 'idle' {
+  if (stageDone(st)) return 'done'
+  if (stageActive(st)) return 'active'
+  return 'idle'
+}
+function stepMeta(st: StageKey) {
+  if (stageDone(st)) return stageProgress(st) || '已完成'
+  if (stageActive(st)) return '进行中'
+  return '待进入'
+}
+const stageDoneCount = computed(() => stageFlow.reduce((n, st) => n + (stageDone(st as StageKey) ? 1 : 0), 0))
+const statCurrentStage = computed(() => {
+  if (isTerminal.value) return statusText(terminalStatus.value) || stageLabel(currentStage.value)
+  return stageLabel(currentStage.value)
+})
+const statNextStage = computed(() => {
+  if (isTerminal.value) return '—'
+  const next = stageFlow[effectiveStageIndex.value + 1]
+  return next ? stageLabel(next) : '—'
+})
+
+/* 回合记录行：Goal → 课堂按序合并的真实消息（conversationMessages 只留 role/content，这里连带时间一起取） */
+interface TurnRow { key: string; index: number; type: string; tone: string; content: string; time: string }
+const turnRows = computed<TurnRow[]>(() => {
+  const rows: TurnRow[] = []
+  const read = (value: unknown): Array<Record<string, unknown>> =>
+    Array.isArray(value)
+      ? value.map(asRecord).filter((m) => firstText(m.content, m.text, m.message))
+      : []
+  const push = (list: Array<Record<string, unknown>>, phase: 'goal' | 'learn') => {
+    list.forEach((m, i) => {
+      const role = ['assistant', 'teacher', 'ai'].includes(normalized(m.role)) ? 'assistant' : 'user'
+      const time = firstText(m.time, m.timestamp, m.createdAt)
+      rows.push({
+        key: `${phase}-${i}`,
+        index: rows.length + 1,
+        type: role === 'assistant' ? (phase === 'goal' ? '平台 Goal' : '教师') : (isRealMode.value ? '学习者' : '虚拟学习者'),
+        tone: role === 'assistant' ? 'mk-badge--info' : 'mk-badge--muted',
+        content: firstText(m.content, m.text, m.message),
+        time: time ? formatTime(time) : '—'
+      })
+    })
+  }
+  push(read(asRecord(conversations.value.goal).messages), 'goal')
+  push(read(asRecord(conversations.value.learning).messages), 'learn')
+  return rows
+})
+
+/* 知识状态更新（真实掌握度）：真实会话 = teaching.knowledgeState（后端 knowledgePointStates）；
+   虚拟会话 = 当前课课时总结 knowledgeItems。无数据整卡不渲染，不硬造 ±Δ（后端无增量字段） */
+const realTeachingBlock = computed(() => asRecord(isRealMode.value ? session.value?.teaching : null))
+const KNOWLEDGE_STATUS_TEXT: Record<string, string> = { mastered: '已掌握', learning: '学习中', review: '待复习', pending: '未开始' }
+const knowledgeRows = computed<Array<{ name: string; value: string }>>(() => {
+  const raw = isRealMode.value ? realTeachingBlock.value.knowledgeState : lessonWrapup.value?.knowledgeItems
+  if (!Array.isArray(raw)) return []
+  return raw.map(asRecord).map((item) => {
+    const name = firstText(item.name)
+    if (!name) return null
+    // progress 缺失（null/undefined）不得经 Number(null)=0 误读为 0%，回退到状态词
+    const progress = typeof item.progress === 'number' && Number.isFinite(item.progress) ? item.progress : null
+    const value = progress !== null
+      ? `${Math.round(progress)}%`
+      : (KNOWLEDGE_STATUS_TEXT[normalized(item.status)] || '—')
+    return { name, value }
+  }).filter((row): row is { name: string; value: string } => !!row)
+})
+const knowledgeSourceLabel = computed(() =>
+  isRealMode.value ? '知识点掌握度 · 会话知识状态' : '知识点掌握度 · 当前课课时总结'
+)
+
 
 /** 从总结页点击课时 → 跳转到 Learn 标签并打开该课时的总结 */
 function viewLessonSummary(lesson: LearnLesson) {
@@ -2000,10 +2212,10 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-budget.is-full .cp-budget__num { color: var(--mk-red); }
 
 /* ===== 统一控制台（阶段 tab + 该阶段操作，置顶汇聚） ===== */
-/* 教学建议条（原型 .note--warn 词表：琥珀软底 + amber 字，micro 级） */
+/* 教学建议条（原型 .note--warn 词表：琥珀软底 + amber 字，micro 级）；位于 hero 之下、控制台之上 */
 .cp-advisory {
   display: flex; align-items: baseline; gap: 8px;
-  margin: 0 0 12px; padding: 10px 12px;
+  margin: 12px 0 0; padding: 10px 12px;
   border-radius: var(--mk-radius-md);
   background: var(--mk-amber-bg); color: var(--mk-amber);
   font-size: var(--mk-fs-micro); line-height: 1.65;
@@ -2023,41 +2235,80 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
   box-shadow: var(--mk-shadow-sm);
   margin-top: 12px;
 }
-.cp-console__tabs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.cp-console__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.cp-console__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cp-console__sep { width: 1px; height: 18px; background: var(--mk-line); flex-shrink: 0; }
 
 .cp-console__note { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
-/* ----- Stage tabs（pill 形态，置于控制台内） ----- */
-.cp-stage {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 13px;
-  border: 1px solid transparent;
-  border-radius: var(--mk-radius-sm);
-  background: transparent;
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-muted);
-  cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+/* ===== 原型 renderSessionDetail 骨架：hero / 教学闭环 .loop / 阶段推进 .stepper / 双栏 ===== */
+.cp-hero { margin: 12px 2px 0; }
+/* 卡体（mk-card 头下内容衬距；mk 原语无 .mk-card__body，用本页局部类） */
+.cp-cardbody { padding: 12px 14px 16px; }
+
+/* 教学闭环定位（原型 .loop：五环横排，教学回合 active 品牌底，其余 done 绿描边） */
+.cp-loopcard { margin-top: 14px; }
+.cp-loop { display: flex; align-items: stretch; gap: 8px; overflow-x: auto; padding: 2px 0; }
+.cp-loop__arrow { display: grid; place-items: center; flex: none; color: var(--mk-faint); font-size: 15px; }
+.cp-loop__step { flex: 1 1 0; min-width: 138px; display: grid; gap: 5px; padding: 12px 14px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md); background: var(--mk-surface); }
+.cp-loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
+.cp-loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
+.cp-loop__no { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.cp-loop__name { font-weight: 700; font-size: var(--mk-fs-emphasis); }
+.cp-loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+
+/* 阶段推进（原型 .stepper 三态：done 实心 / active 品牌描边 / idle 灰；步点即阶段页签） */
+.cp-stepcard { margin-top: 14px; }
+.cp-stepcard__spacer { flex: 1 1 auto; }
+.cp-stepper { display: flex; align-items: flex-start; }
+.cp-stp {
+  position: relative; flex: 1 1 0; min-width: 0; display: grid; justify-items: center; gap: 6px; text-align: center;
+  border: none; background: transparent; font: inherit; padding: 0; cursor: pointer;
 }
-.cp-stage:hover:not(:disabled) { color: var(--mk-ink); background: var(--mk-surface-2); }
-.cp-stage__mark { font-size: var(--mk-fs-micro); width: 14px; text-align: center; }
-.cp-stage__label { font-size: var(--mk-fs-micro); }
-.cp-stage__progress { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); }
-.cp-stage:disabled { cursor: default; opacity: 0.8; }
-.cp-stage--active { border-color: rgba(44, 99, 208, 0.35); background: var(--mk-blue-bg); color: var(--mk-blue); }
-.cp-stage--active .cp-stage__mark { color: var(--mk-blue); }
-.cp-stage--active .cp-stage__progress { color: var(--mk-blue); }
-.cp-stage--tab { border-color: rgba(44, 99, 208, 0.35); }
-.cp-stage--tab:hover:not(:disabled) { color: var(--mk-blue); }
-.cp-stage--done { color: var(--mk-green); }
-.cp-stage--done .cp-stage__mark { color: var(--mk-green); }
-.cp-stage--done .cp-stage__progress { color: var(--mk-green); }
+.cp-stp:disabled { cursor: default; }
+.cp-stp:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
+.cp-stp__line { position: absolute; top: 9px; left: 50%; width: 100%; height: 2px; background: var(--mk-line); }
+.cp-stp:last-child .cp-stp__line { display: none; }
+.cp-stp--done .cp-stp__line { background: var(--mk-blue); }
+.cp-stp__dot {
+  position: relative; z-index: 1; box-sizing: border-box; width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--mk-surface); border: 2px solid var(--mk-faint);
+  color: var(--mk-faint); font-size: var(--mk-fs-micro); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.cp-stp--done .cp-stp__dot { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--mk-on-fill); }
+.cp-stp--active .cp-stp__dot { background: var(--mk-blue-bg); border-color: var(--mk-blue); color: var(--mk-blue); }
+.cp-stp__name { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); overflow-wrap: anywhere; }
+.cp-stp--active .cp-stp__name { color: var(--mk-ink); font-weight: 700; }
+.cp-stp--idle .cp-stp__name { color: var(--mk-faint); }
+.cp-stp__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.cp-stp--active .cp-stp__meta { color: var(--mk-blue); font-weight: 600; }
+
+/* statstrip 三读数（判例 PathDetail/UserDetail：一张卡通栏分格，label 12 / 值 22） */
+.cp-stepstrip { margin-top: 14px; border-top: 1px solid var(--mk-line); }
+.statstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.statstrip__stat { display: grid; gap: 6px; align-content: start; padding: 12px 16px; border-right: 1px solid var(--mk-line); }
+.statstrip__stat:last-child { border-right: 0; }
+.statstrip__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.statstrip__value {
+  font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums; color: var(--mk-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* 原型双栏：回合记录 1.5fr + 知识状态更新 1fr（无知识数据时收单栏） */
+.cp-detail-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.cp-detail-grid--single { grid-template-columns: minmax(0, 1fr); }
+.cp-turns td { vertical-align: top; }
+.cp-turns__num { width: 48px; white-space: nowrap; }
+.cp-turns__wrap { white-space: normal; min-width: 220px; word-break: break-word; }
+.cp-turns__time { white-space: nowrap; color: var(--mk-faint); }
+.cp-turns-empty { padding: 14px 16px; }
+
+/* 知识状态更新 ranklist（原型 .rankrow 词表：名称 + mono 数值） */
+.cp-ranklist { display: grid; gap: 2px; }
+.cp-ranklist__row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--mk-line); }
+.cp-ranklist__row:last-child { border-bottom: 0; }
+.cp-ranklist__name { flex: 1 1 auto; min-width: 0; font-size: var(--mk-fs-micro); color: var(--mk-ink); overflow-wrap: anywhere; text-align: left; }
+.cp-ranklist__val { font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--mk-fs-micro); color: var(--mk-muted); flex: none; }
 
 /* ===== Body: main + sidebar ===== */
 .cp-body {
@@ -2264,8 +2515,7 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .cp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--mk-on-fill); }
 .cp-btn--primary:hover:not(:disabled) { color: var(--mk-on-fill); opacity: 0.9; }
-.cp-danger-btn { background: var(--mk-red-fill, var(--mk-red)); border-color: var(--mk-red-fill, var(--mk-red)); color: var(--mk-on-fill); }
-.cp-danger-btn:hover:not(:disabled) { color: var(--mk-on-fill); opacity: 0.9; }
+/* 危险动作按钮改用 mk 原语 .mk-btn--danger（hero 动作区）；原 .cp-danger-btn 已删 */
 .cp-turn-cap {
   width: 56px; padding: 5px 6px; border-radius: 6px; border: 1px solid var(--mk-line);
   background: var(--mk-surface); color: var(--mk-ink); font: inherit; font-size: var(--mk-fs-micro);
@@ -2893,13 +3143,13 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 @media (max-width: 1100px) {
   .cp-body { grid-template-columns: 1fr; }
   .cp-sidebar { position: static; max-height: none; }
+  .cp-detail-grid { grid-template-columns: 1fr; }
 }
 @media (min-width: 2000px) {
   .cp-body { grid-template-columns: minmax(0, 1fr) 380px; }
 
-  .cp-stage { font-size: var(--mk-fs-body); }
-  .cp-stage__label { font-size: var(--mk-fs-body); }
-  .cp-stage__progress { font-size: var(--mk-fs-micro); }
+  .cp-stp__name { font-size: var(--mk-fs-body); }
+  .cp-stp__meta { font-size: var(--mk-fs-micro); }
   .cp-btn { font-size: var(--mk-fs-body); padding: 9px 16px; }
   .cp-btn--sm { font-size: var(--mk-fs-micro); padding: 6px 12px; }
   .cp-none { font-size: var(--mk-fs-body); }
@@ -2955,9 +3205,8 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 @media (min-width: 2800px) {
   .cp-body { grid-template-columns: minmax(0, 1fr) 440px; }
 
-  .cp-stage { font-size: var(--mk-fs-body); }
-  .cp-stage__label { font-size: var(--mk-fs-body); }
-  .cp-stage__progress { font-size: var(--mk-fs-micro); }
+  .cp-stp__name { font-size: var(--mk-fs-body); }
+  .cp-stp__meta { font-size: var(--mk-fs-micro); }
   .cp-btn { font-size: var(--mk-fs-body); padding: 11px 20px; }
   .cp-btn--sm { font-size: var(--mk-fs-micro); padding: 7px 14px; }
   .cp-none { font-size: var(--mk-fs-body); }
@@ -3013,12 +3262,13 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 
 /* ================= 暗色模式（D1 补完）：会话座舱 ================= */
 html[data-theme='dark'] {
-  .cp-stage:hover:not(:disabled) { background: #252627; }
-  /* hover 补漏：rgba(0,0,0,0.02) 叠在暗色底上不可见，改用与 cp-stage 同档的实色 */
+  /* hover 补漏：rgba(0,0,0,0.02) 叠在暗色底上不可见，用与阶段步点同档的实色 */
   .cp-sidebar__toggle:hover { background: #252627; }
   .cp-learn-tree__lesson:hover:not(:disabled) { background: #252627; }
-  .cp-stage--active { background: rgba(91, 141, 239, 0.16); color: var(--mk-accent-deep); border-color: rgba(91, 141, 239, 0.4); }
-  .cp-run__autopilot-result { background: #19191a; }
+  /* 原型骨架补漏：闭环 active 环 / stepper active 步点在暗色下的底色 */
+  .cp-loop__step--active { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.4); }
+  .cp-stp--active .cp-stp__dot { background: rgba(91, 141, 239, 0.16); color: var(--mk-accent-deep); }
+  .cp-stp__dot { background: #19191a; }  .cp-run__autopilot-result { background: #19191a; }
   .cp-transcript__message { background: #19191a; border-left-color: #313235; }
   .cp-transcript__message.is-teacher { background: rgba(91, 141, 239, 0.12); border-left-color: var(--mk-blue); }
   .cp-transcript__message.is-learner { background: rgba(45, 212, 191, 0.1); border-left-color: var(--mk-teal); }
