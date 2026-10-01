@@ -9,7 +9,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import TeachingSessions from '../TeachingSessions.vue';
-import { dataSource } from '../store';
+import { dataSource, subPage, closeSubPage } from '../store';
 import { clearPageCache } from '../live';
 
 const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
@@ -211,34 +211,22 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('抽屉三段式：首段徽章行 + field 式分区（事实栅格不再重复状态/时长/消息）+ foot 动作条在滚动区外', async () => {
+  it('行点击 → 座舱二级页（对齐原型 open-session 进详情页习惯，不再开抽屉）', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
         data: { items: [makeItem('a', { status: 'failed', duration: 600, messageCount: 4 })] }
       }
     });
+    closeSubPage();
     const wrapper = await mountLive();
     await wrapper.find('tbody tr').trigger('click');
     await nextTick();
-    const drawer = document.body.querySelector('.mk-drawer');
-    expect(drawer).toBeTruthy();
-    // 首段 pills：状态 / 关注 / 时长 / 消息（均为行上已有字段）
-    const pills = drawer!.querySelector('.ts-detail__pills');
-    expect(pills?.textContent).toContain('失败');
-    expect(pills?.textContent).toContain('高关注');
-    expect(pills?.textContent).toContain('时长 10 分钟');
-    expect(pills?.textContent).toContain('消息 4');
-    // 事实栅格只留身份/时间事实，不再复读首段四项
-    const facts = drawer!.querySelector('.mk-facts');
-    expect(facts?.textContent).toContain('用户');
-    expect(facts?.textContent).not.toContain('状态');
-    // 末段提示条（.note 语气）
-    expect(drawer!.querySelector('.ts-note')?.textContent).toContain('关注度为派生档位');
-    // foot 动作条：上边框右对齐、位于滚动区外
-    const foot = drawer!.querySelector('.ts-detail__foot');
-    expect(foot?.textContent).toContain('Trace 链路');
-    expect(drawer!.querySelector('.mk-drawer__body .ts-detail__foot')).toBeNull();
+    // 原型习惯：会话行点击直达二级详情页（session-real 只读座舱），不再渲染抽屉
+    expect(subPage.value?.view).toBe('session-real');
+    expect(subPage.value?.id).toBe('a');
+    expect(document.body.querySelector('.mk-drawer')).toBeNull();
+    closeSubPage();
     wrapper.unmount();
   });
 });

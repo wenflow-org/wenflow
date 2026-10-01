@@ -211,8 +211,8 @@
               class="ts-row"
               :class="`ts-row--att-${r.attention}`"
               tabindex="0"
-              @click="openDetail(r)"
-              @keydown.enter.prevent="openDetail(r)"
+              @click="goConsole(r)"
+              @keydown.enter.prevent="goConsole(r)"
             >
               <td>
                 <div class="mk-cell-main">
@@ -278,7 +278,7 @@
                      右对齐走共享 .mk-actions，与 mk-th--right 表头对齐 -->
                 <div class="mk-actions">
                   <button type="button" class="mk-btn mk-btn--sm" @click.stop="goTrace(r)">链路</button>
-                  <button v-if="r.id" type="button" class="mk-btn mk-btn--sm" @click.stop="goConsole(r)">控制台</button>
+                  <button v-if="r.id" type="button" class="mk-btn mk-btn--sm" @click.stop="goConsole(r)">详情</button>
                 </div>
               </td>
             </tr>
@@ -302,150 +302,18 @@
         :showTotal="true"
       />
     </div>
-
-    <!-- 详情抽屉 -->
-    <Teleport to="body">
-      <div v-if="detail" ref="maskRef" class="mk-drawer">
-        <div class="mk-drawer__mask" @click="closeDetail"></div>
-        <aside ref="panelRef" class="mk-drawer__panel" role="dialog" aria-label="会话详情">
-          <!-- 头部（原型 .ovl__head：标题 + grow + 关闭钮，下边框）：关注徽章下沉到正文首段徽章行 -->
-          <header class="mk-drawer__head">
-            <div class="ts-detail__title">
-              <h3 class="mk-drawer__title">{{ detail.topic }}</h3>
-              <span v-if="detail.id" class="mk-drawer__sub mono">{{ detail.id }}</span>
-            </div>
-            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeDetail">✕</button>
-          </header>
-
-          <div class="mk-drawer__body ts-detail__body">
-            <!-- 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 关注 / 时长 / 消息
-                 均为行上已有字段；下方事实栅格不再重复这四项 -->
-            <div class="ts-detail__pills">
-              <span class="mk-badge" :class="statusBadge(detail.status)">{{ statusText(detail.status) }}</span>
-              <span class="mk-badge" :class="attentionBadge(detail.attention)">
-                {{ detail.attention === 'high' ? '高关注' : detail.attention === 'medium' ? '中关注' : '低关注' }}
-              </span>
-              <span class="mk-badge mk-badge--muted">时长 {{ detail.duration ? fmtDuration(detail.duration) : '—' }}</span>
-              <span class="mk-badge mk-badge--muted">消息 {{ detail.messageCount }}</span>
-            </div>
-
-            <!-- P2-2 抽屉 tabs（对齐 LangSmith side panel） -->
-            <div class="ts-tabs" role="tablist" aria-label="会话详情分区">
-              <button
-                v-for="t in panelTabs"
-                :key="t.id"
-                type="button"
-                class="ts-tabs__item"
-                :class="{ 'ts-tabs__item--on': panelTab === t.id }"
-                role="tab"
-                :aria-selected="panelTab === t.id"
-                @click="panelTab = t.id"
-              >{{ t.label }}</button>
-            </div>
-
-            <!-- 概览 tab -->
-            <div v-if="panelTab === 'overview'">
-              <div class="mk-facts">
-                <!-- 共享 .mk-facts 的值是单行省略：可能被截断的两格挂 title，别把信息藏起来。
-                     状态 / 时长 / 消息已在首段徽章行，此处只留身份与时间事实 -->
-                <div><span>用户</span><strong :title="detail.userName">{{ detail.userName }}</strong></div>
-                <div><span>学科</span><strong :title="detail.subject">{{ detail.subject }}</strong></div>
-                <div><span>开始</span><strong>{{ detail.startAt }}</strong></div>
-              </div>
-
-              <!-- 事件时间线（P2-2：非消息事件，对齐 Intercom 左对齐垂直线） -->
-              <section v-if="timelineOf(detail).length" class="ts-section">
-                <header class="mk-section__head"><h4>事件时间线</h4></header>
-                <ul class="ts-timeline">
-                  <li v-for="(ev, i) in timelineOf(detail)" :key="i" class="ts-timeline__item" :class="`ts-timeline__item--${ev.tone}`">
-                    <span class="ts-timeline__dot" aria-hidden="true"></span>
-                    <div class="ts-timeline__body">
-                      <strong>{{ ev.text }}</strong>
-                      <span v-if="ev.time">{{ ev.time }}</span>
-                    </div>
-                  </li>
-                </ul>
-              </section>
-
-              <!-- 提示条（原型 .ovl__body 末段 .note 语气）：直述行数据里的关注度派生口径 -->
-              <div class="ts-note">关注度为派生档位：失败 / 超时，或已完成但缺总结 → 高关注；命中教学建议 → 中关注；其余为低关注。缺总结仅对已结束（终态）会话计。</div>
-            </div>
-
-            <!-- 总结 tab -->
-            <div v-if="panelTab === 'wrapup'">
-              <section v-if="detail.wrapup" class="ts-section">
-                <header class="mk-section__head"><h4>会话总结 <span class="ts-src">来源：<span class="mk-badge" :class="detail.wrapupSource === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ detail.wrapupSource }}</span><span v-if="detail.wrapupDegraded" class="mk-badge mk-badge--warn ts-degraded">降级总结 · 未完整结束</span></span></h4></header>
-                <div class="ts-card" v-if="detail.wrapup.topicSummary">
-                  <span>主题摘要</span>
-                  <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('topic') }">{{ detail.wrapup.topicSummary }}</p>
-                  <button v-if="isLong(detail.wrapup.topicSummary)" type="button" class="ts-more" @click="toggleCard('topic')">{{ openCards.has('topic') ? '收起' : '展开全文' }}</button>
-                </div>
-                <div class="ts-card" v-if="detail.wrapup.knowledgeSummary">
-                  <span>知识总结</span>
-                  <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('knowledge') }">{{ detail.wrapup.knowledgeSummary }}</p>
-                  <button v-if="isLong(detail.wrapup.knowledgeSummary)" type="button" class="ts-more" @click="toggleCard('knowledge')">{{ openCards.has('knowledge') ? '收起' : '展开全文' }}</button>
-                </div>
-                <div class="ts-card" v-if="detail.wrapup.practiceAdvice">
-                  <span>练习建议</span>
-                  <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('practice') }">{{ detail.wrapupDegraded ? '本节课未完整结束（超时或提前中断），未生成完整练习建议。' : detail.wrapup.practiceAdvice }}</p>
-                  <button v-if="!detail.wrapupDegraded && isLong(detail.wrapup.practiceAdvice)" type="button" class="ts-more" @click="toggleCard('practice')">{{ openCards.has('practice') ? '收起' : '展开全文' }}</button>
-                </div>
-                <div class="ts-card" v-if="detail.wrapup.learningEvaluation">
-                  <span>学习评估</span>
-                  <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('evaluation') }">{{ detail.wrapup.learningEvaluation }}</p>
-                  <button v-if="isLong(detail.wrapup.learningEvaluation)" type="button" class="ts-more" @click="toggleCard('evaluation')">{{ openCards.has('evaluation') ? '收起' : '展开全文' }}</button>
-                </div>
-              </section>
-              <p v-else class="ts-empty">该会话暂无课后总结。</p>
-            </div>
-
-            <!-- 建议 tab -->
-            <div v-if="panelTab === 'advisory'">
-              <section v-if="detail.advisory && detail.advisory.priority && detail.advisory.priority !== 'none'" class="ts-section">
-                <header class="mk-section__head"><h4>额外建议</h4></header>
-                <div class="ts-card ts-card--advisory">
-                  <span>优先级 {{ detail.advisory.priority || '—' }}<template v-if="detail.advisory.title"> · {{ detail.advisory.title }}</template></span>
-                  <p class="ts-clamp" :class="{ 'ts-clamp--open': openCards.has('advisory') }">{{ detail.advisory.text || '—' }}</p>
-                  <button v-if="isLong(detail.advisory.text)" type="button" class="ts-more" @click="toggleCard('advisory')">{{ openCards.has('advisory') ? '收起' : '展开全文' }}</button>
-                </div>
-              </section>
-              <p v-else class="ts-empty">该会话暂无额外建议。</p>
-            </div>
-
-            <!-- 原始数据 tab -->
-            <div v-if="panelTab === 'raw'">
-              <details class="ts-section ts-raw" open>
-                <summary>原始数据</summary>
-                <pre class="ts-json">{{ detail.rawJson }}</pre>
-              </details>
-            </div>
-
-          </div>
-
-          <!-- 底部动作条（原型 .ovl__foot：上边框、右对齐；GoalConversations gc-detail__foot
-               判例）：动作移出滚动区常驻，正文只滚内容，动作不随长文滚走 -->
-          <footer class="ts-detail__foot">
-            <button v-if="detail.userId" type="button" class="mk-link" @click="goLearner(detail)">学习者详情 →</button>
-            <button type="button" class="mk-link" @click="goTrace(detail)">Trace 链路 →</button>
-            <button v-if="detail.id" type="button" class="mk-link" @click="goConsole(detail)">进控制台 →</button>
-          </footer>
-        </aside>
-      </div>
-    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { dataSource } from './store'
+import { dataSource, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
 import { timeAgo, isPageCacheFresh, markPageFetched, shortId } from './live'
 import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone } from './statusText'
 import type { SessionProgress } from './statusText'
-import { useOverlay, useMaskClose } from './useOverlay'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
-import { useEscape } from './useEscape'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
@@ -875,96 +743,37 @@ const teachingKpiCards = computed<TeachingKpiCard[]>(() => {
   ]
 })
 
-/* 详情 — URL 同步 ?session=id 支持深链/刷新恢复 */
-const detail = ref<Row | null>(null)
-/* P2-2 抽屉 tabs（概览/总结/建议/原始数据） */
-const panelTab = ref<'overview' | 'wrapup' | 'advisory' | 'raw'>('overview')
-const panelTabs = [
-  { id: 'overview' as const, label: '概览' },
-  { id: 'wrapup' as const, label: '总结' },
-  { id: 'advisory' as const, label: '建议' },
-  { id: 'raw' as const, label: '原始数据' }
-]
-/** 事件时间线（P2-2）：由行数据派生非消息事件。
- *  后端无逐事件时间戳：除「会话开始」（真实 startAt）外一律不显示 time，
- *  不再用 startAt 统一虚构各事件时刻（P2：伪造时间轴会误导排查） */
-function timelineOf(r: Row): Array<{ text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }> {
-  const events: Array<{ text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }> = []
-  events.push({ text: '会话开始', time: r.startAt, tone: 'muted' })
-  if (r.status === 'completed' || r.status === 'succeeded') {
-    events.push({ text: '会话完成', time: '', tone: 'ok' })
-  } else if (r.status === 'failed' || r.status === 'timeout') {
-    events.push({ text: `会话${r.status === 'timeout' ? '超时' : '失败'}`, time: '', tone: 'bad' })
-  } else if (r.status === 'active' || r.status === 'initializing' || r.status === 'finalizing') {
-    events.push({ text: '会话进行中', time: '', tone: 'muted' })
-  }
-  if (r.wrapupStatus === 'complete' && r.wrapup) {
-    events.push({ text: `课后总结生成（${r.wrapupSource}）`, time: '', tone: 'ok' })
-  } else if (r.wrapupStatus === 'missing') {
-    /* 时间线与徽章同口径：终态缺失=告警；非终态缺失=过程态（静音） */
-    events.push(isTerminal(r.status)
-      ? { text: '缺少课后总结', time: '', tone: 'warn' }
-      : { text: '总结未生成（会话未结束）', time: '', tone: 'muted' })
-  }
-  if (r.hasAdvisory && r.advisory) {
-    events.push({ text: `建议触发（优先级 ${r.advisory.priority}）`, time: '', tone: r.advisory.priority === 'high' ? 'bad' : 'warn' })
-  }
-  return events
-}
 const route = useRoute()
 const router = useRouter()
 /** 深链存在但列表加载后仍未命中（超出最近 LIST_LIMIT 条 / 已删除） */
 const deepLinkMiss = ref(false)
+/* ?session= 语义（2026-10-01 对齐原型习惯：会话行 → 二级详情页，不再开抽屉）：
+   深链直达座舱只读监控（session-real），随后清掉查询参数避免与座舱返回冲突 */
 watch(
   // 同时监听行数：刷新场景下 immediate 触发时 rows 尚未返回，仅监听 query 会错过恢复时机
   [() => route.query.session, () => rows.value.length],
   ([sid]) => {
     const id = typeof sid === 'string' ? sid : ''
-    if (id && (!detail.value || detail.value.id !== id)) {
-      const r = rows.value.find((x) => x.id === id)
-      if (r) { detail.value = r; openCards.value = new Set(); deepLinkMiss.value = false }
-      else {
-        detail.value = null
-        deepLinkMiss.value = rows.value.length > 0
-      }
-    } else if (!id && detail.value) {
-      detail.value = null
+    if (!id) { deepLinkMiss.value = false; return }
+    const r = rows.value.find((x) => x.id === id)
+    if (r) {
       deepLinkMiss.value = false
+      openSubPage('session-real', id)
+      const q = { ...route.query }; delete q.session
+      void router.replace({ query: q })
+    } else {
+      deepLinkMiss.value = rows.value.length > 0
     }
   },
   { immediate: true }
 )
-useEscape(() => !!detail.value, closeDetail)
-const panelRef = ref<HTMLElement | null>(null)
-const maskRef = ref<HTMLElement | null>(null)
-useOverlay(computed(() => !!detail.value), panelRef)
-useMaskClose(maskRef, closeDetail)
-const openCards = ref<Set<string>>(new Set())
-
-/** 关闭详情面板并同步清除 URL 中的 ?session= 深链参数 */
+/** 座舱跳转族收尾：清理 URL 深链（?session=）是唯一动作 */
 function closeDetail() {
-  detail.value = null
   const q = { ...route.query }; delete q.session; void router.replace({ query: q })
 }
 
-function openDetail(r: Row) {
-  detail.value = r
-  openCards.value = new Set()
-  /* id 缺失（后端历史脏数据）：保持抽屉打开，不写 ?session= 深链避免空串误判为「无深链」 */
-  if (r.id) void router.push({ query: { ...route.query, session: r.id } })
-}
-
 /** 真实教学会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：轻量深链 = 学习者详情 / Trace 瀑布按 sessionId 归组 */
-const { goLearner, goTrace, goConsole } = useSessionDrill(closeDetail)
-
-function toggleCard(key: string) {
-  const next = new Set(openCards.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  openCards.value = next
-}
-
-const isLong = (s?: string) => (s || '').length > 120
+const { goTrace, goConsole } = useSessionDrill(closeDetail)
 
 /* 状态映射统一走共享字典（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
 /* 状态徽章降噪（P0-5）：只对异常态上色，正常态统一灰——对齐 Langfuse「只有
@@ -975,7 +784,6 @@ const statusBadge = (s: string) =>
     : s === 'superseded'
       ? 'mk-badge--warn'
       : 'mk-badge--muted'
-const attentionBadge = (a: string) => (a === 'high' ? 'mk-badge--bad' : a === 'medium' ? 'mk-badge--warn' : 'mk-badge--ok')
 /* 建议徽章带优先级色（T3）：high=bad / medium=warn / 其余 info */
 const advisoryBadge = (p?: string) => (p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info')
 const taskTypeText = (t: string) =>
@@ -993,10 +801,8 @@ function progressTitle(r: Row): string {
 defineExpose({ refreshNow })
 </script>
 
-<style scoped>
-/* 嵌入模式（宿主学习会话页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
-.ts-embedded { flex: 1; min-height: 0; overflow: hidden; }
-/* 总结预览行（P1-2）：单行 ellipsis + hover 全文，对齐 Intercom 最后消息预览 */
+<style scoped>/* 嵌入模式（宿主学习会话页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
+.ts-embedded { flex: 1; min-height: 0; overflow: hidden; }/* 总结预览行（P1-2）：单行 ellipsis + hover 全文，对齐 Intercom 最后消息预览 */
 .ts-summary-preview {
   display: block;
   max-width: 320px;
@@ -1007,20 +813,10 @@ defineExpose({ refreshNow })
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: help;
-}
-.ts-summary-preview::before { content: '📝 '; opacity: 0.7; }
-.ts-row { cursor: pointer; position: relative; }
-/* 关注度行首色条（P0-5）：高关注红 / 中关注琥珀 / 低关注透明——扫视被红色拉住 */
-.ts-row--att-high { box-shadow: inset 3px 0 0 var(--mk-red); }
-.ts-row--att-medium { box-shadow: inset 3px 0 0 var(--mk-amber); }
-/* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
-.ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }
-.ts-att--high { color: var(--mk-red); }
-.ts-att--medium { color: var(--mk-amber); }
-.ts-att--low { color: var(--mk-faint); }
-/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
-.ts-tags { display: flex; gap: 6px; margin-top: 2px; }
-/* 卡内工具条（原型 .toolbar：左右 chips + grow，底边框分隔表头）：两组筛选 chips 同行 */
+}.ts-summary-preview::before { content: '📝 '; opacity: 0.7; }.ts-row { cursor: pointer; position: relative; }/* 关注度行首色条（P0-5）：高关注红 / 中关注琥珀 / 低关注透明——扫视被红色拉住 */
+.ts-row--att-high { box-shadow: inset 3px 0 0 var(--mk-red); }.ts-row--att-medium { box-shadow: inset 3px 0 0 var(--mk-amber); }/* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
+.ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
+.ts-tags { display: flex; gap: 6px; margin-top: 2px; }/* 卡内工具条（原型 .toolbar：左右 chips + grow，底边框分隔表头）：两组筛选 chips 同行 */
 .ts-toolbar {
   display: flex;
   align-items: center;
@@ -1028,23 +824,13 @@ defineExpose({ refreshNow })
   flex-wrap: wrap;
   padding: 10px 16px;
   border-bottom: 1px solid var(--mk-line);
-}
-.ts-toolbar__grow { flex: 1 1 auto; }
-/* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
-.ts-row td:first-child .mk-cell-sub { max-width: 300px; }
-/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
+}.ts-toolbar__grow { flex: 1 1 auto; }/* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
+.ts-row td:first-child .mk-cell-sub { max-width: 300px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
    长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。
    本组件仅列表一张 mk-table（抽屉内无表格），裸选择器即可 */
-.mk-table td { white-space: nowrap; }
-/* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
+.mk-table td { white-space: nowrap; }/* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
 /* 互动列（批B）：时长主值+副行 */
-.ts-ia { display: grid; gap: 2px; justify-items: start; }
-.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }
-.ts-ia__dur--brief { color: var(--mk-faint); font-weight: 400; }
-.ts-prog { display: grid; gap: 4px; max-width: 96px; }
-.ts-prog__num { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }
-.ts-prog__bar { width: 88px; height: 5px; }
-/* 终态完成列（P1 语义修复）：只显「已完成」文字，不再与进度条并存；title 保留历史进度 */
+.ts-ia { display: grid; gap: 2px; justify-items: start; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }.ts-ia__dur--brief { color: var(--mk-faint); font-weight: 400; }.ts-prog { display: grid; gap: 4px; max-width: 96px; }.ts-prog__num { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }.ts-prog__bar { width: 88px; height: 5px; }/* 终态完成列（P1 语义修复）：只显「已完成」文字，不再与进度条并存；title 保留历史进度 */
 .ts-prog--done {
   display: inline-flex;
   align-items: center;
@@ -1052,18 +838,14 @@ defineExpose({ refreshNow })
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   white-space: nowrap;
-}
-/* 状态条快捷钮选中态（原型 .statusbar__act 语义 = 筛选生效高亮）：与 .mk-pill--active 同词汇。
+}/* 状态条快捷钮选中态（原型 .statusbar__act 语义 = 筛选生效高亮）：与 .mk-pill--active 同词汇。
    页面前缀命名（规则 1：mk- 前缀属全局原语，页面不得自造） */
 .ts-status-action--on {
   background: var(--mk-blue-bg);
   border-color: color-mix(in srgb, var(--mk-blue) 44%, var(--mk-line));
   color: var(--mk-pill-active-fg);
-}
-/* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字） */
-.ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }
-
-/* 加载失败错误条 */
+}/* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字） */
+.ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }/* 加载失败错误条 */
 .ts-error {
   display: flex;
   align-items: center;
@@ -1075,158 +857,14 @@ defineExpose({ refreshNow })
   color: var(--mk-red);
   font-size: var(--mk-fs-micro);
   font-weight: 600;
-}
-
-/* ===== 状态分布条（newui 原型 stageband/sbl 原样移植；token 映射：
+}/* ===== 状态分布条（newui 原型 stageband/sbl 原样移植；token 映射：
    --surface-3→--mk-surface-3、--dur/--ease→--mk-dur/--mk-ease-out、
    --fs-micro→--mk-fs-micro、--muted→--mk-muted、sbl__sw 3px→--mk-radius-xs）===== */
-.ts-bandcard__body { padding: 12px 16px 16px; }
-.stageband { display: flex; gap: 2px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--mk-surface-3); }
-.stageband > span { display: block; height: 100%; transition: width var(--mk-dur) var(--mk-ease-out); }
-.stageband__legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px 18px; margin-top: 14px; }
-.sbl { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }
-.sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }
-.sbl__name { color: var(--mk-muted); }
-.sbl__n { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
-/* legend 可点档（button 形态的 .sbl）：reset 原生按钮外观，选中档高亮 */
-.sbl--link { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; }
-.sbl--link:hover .sbl__name { color: var(--mk-ink); }
-.sbl--on .sbl__name { color: var(--mk-ink); font-weight: 700; }
-
-
-/* 4K 断点见文件末尾（需在基础样式之后定义） */
-/* P2-2 抽屉 tabs（对齐 AntD Tabs 下划线式：选中态底部 2px 品牌蓝 + 蓝字） */
-.ts-detail__title { display: grid; gap: 6px; justify-items: start; }
-.ts-detail__body { display: grid; gap: 16px; align-content: start; }
-/* 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 关注 / 时长 / 消息 */
-.ts-detail__pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-/* 底部动作条（原型 .ovl__foot / gc-detail__foot 判例：上边框、右对齐、常驻滚动区外） */
-.ts-detail__foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--mk-line);
-}
-.ts-tabs { display: flex; gap: 2px; padding-bottom: 0; border-bottom: 1px solid var(--mk-line); position: sticky; top: 0; background: var(--mk-surface); z-index: 1; }
-html[data-theme='dark'] .ts-tabs { background: var(--mk-surface); }
-.ts-tabs__item {
-  border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 7px 12px;
-  margin-bottom: -1px; border-radius: 0; font: inherit; font-size: var(--mk-fs-micro); font-weight: 600;
-  color: var(--mk-muted); cursor: pointer; transition: color 0.12s ease, border-color 0.12s ease;
-}
-.ts-tabs__item:hover { color: var(--mk-ink); }
-.ts-tabs__item--on { border-bottom-color: var(--mk-blue); color: var(--mk-blue); font-weight: 700; }
-.ts-empty { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); padding: 12px 0; }
-/* P2-2 事件时间线（左对齐垂直线，对齐 Intercom） */
-.ts-timeline { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; }
-.ts-timeline__item { display: flex; gap: 10px; padding: 7px 0; position: relative; }
-.ts-timeline__item::before { content: ''; position: absolute; left: 4px; top: 18px; bottom: -7px; width: 1px; background: var(--mk-line); }
-.ts-timeline__item:last-child::before { display: none; }
-.ts-timeline__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mk-faint); flex-shrink: 0; margin-top: 4px; z-index: 1; box-shadow: 0 0 0 2px var(--mk-surface); }
-html[data-theme='dark'] .ts-timeline__dot { box-shadow: 0 0 0 2px var(--mk-surface); }
-.ts-timeline__item--ok .ts-timeline__dot { background: var(--mk-green); }
-.ts-timeline__item--warn .ts-timeline__dot { background: var(--mk-amber); }
-.ts-timeline__item--bad .ts-timeline__dot { background: var(--mk-red); }
-.ts-timeline__body { display: grid; gap: 1px; min-width: 0; }
-.ts-timeline__body strong { font-size: var(--mk-fs-micro); color: var(--mk-ink); }
-.ts-timeline__body span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-
-/* 事实栅格走共享原语 .mk-facts（原 .ts-facts 私有三列栅格 + 4K 阶梯已并进原语层） */
-
-.ts-section { display: grid; gap: 8px; }
-.ts-src { font-size: var(--mk-fs-micro); font-weight: 600; text-transform: none; letter-spacing: 0; }
-.ts-degraded { margin-left: 6px; }
-/* 分区（原型 .field：label 微字 700 + 正文；不再套卡框——框体只留给 .code/.note 两类） */
-.ts-card {
-  display: grid;
-  gap: 6px;
-}
-.ts-card span { font-size: var(--mk-fs-micro); color: var(--mk-ink); font-weight: 700; }
-.ts-card p { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.7; white-space: pre-wrap; }
-/* 建议分区（原型 .note--warn 语气）：琥珀软底提示，与正文分区同结构 */
-.ts-card--advisory { background: var(--mk-amber-bg); padding: 10px 12px; border-radius: var(--mk-radius-sm); }
-/* 提示条（原型 .note：软底、muted 正文） */
-.ts-note {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-}
-
-/* 长文本截断 */
-.ts-clamp {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.ts-clamp--open { -webkit-line-clamp: unset; overflow: visible; }
-.ts-more {
-  justify-self: start;
-  border: 0;
-  background: transparent;
-  color: var(--mk-blue, #2c63d0);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  cursor: pointer;
-  padding: 0;
-}
-.ts-raw summary {
-  cursor: pointer;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--mk-faint);
-  padding: 2px 0;
-}
-.ts-json {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-code-bg);
-  color: var(--mk-code-fg);
-  /* 字号下限 12px（设计语言规则 5）：原 10.5px 低于全站文本下限 */
-  font-family: var(--mk-mono);
-  font-size: var(--mk-fs-micro);
-  line-height: 1.6;
-  max-height: 220px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-/* 4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
+.ts-bandcard__body { padding: 12px 16px 16px; }.stageband { display: flex; gap: 2px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--mk-surface-3); }.stageband > span { display: block; height: 100%; transition: width var(--mk-dur) var(--mk-ease-out); }.stageband__legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px 18px; margin-top: 14px; }.sbl { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }.sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }.sbl__name { color: var(--mk-muted); }.sbl__n { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }/* legend 可点档（button 形态的 .sbl）：reset 原生按钮外观，选中档高亮 */
+.sbl--link { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; }.sbl--link:hover .sbl__name { color: var(--mk-ink); }.sbl--on .sbl__name { color: var(--mk-ink); font-weight: 700; }/* 4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {
-    .ts-card p { font-size: var(--mk-fs-body); }
-  .ts-card span { font-size: var(--mk-fs-micro); }
-  .ts-json { font-size: var(--mk-fs-micro); }
-  .ts-more { font-size: var(--mk-fs-micro); }
-}
-@media (min-width: 2800px) {
-    .ts-card p { font-size: var(--mk-fs-body); }
-  .ts-card span { font-size: var(--mk-fs-micro); }
-  .ts-json { font-size: var(--mk-fs-micro); }
-  .ts-more { font-size: var(--mk-fs-micro); }
-}
-/* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
+}/* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-    .ts-card p { font-size: var(--mk-fs-emphasis); }
-  .ts-card span { font-size: var(--mk-fs-body); }
-  .ts-json { font-size: var(--mk-fs-body); }
-  .ts-more { font-size: var(--mk-fs-emphasis); }
-}
-
-/* ================= 暗色模式（D1 补完）：教学会话 =================
-   .ts-card--advisory 已改用 --mk-amber-bg token（暗色档自带深色等价物），
-   不再需要硬编码暗色覆写 */
-html[data-theme='dark'] {
-  .ts-json { background: #141415; color: var(--mk-pre-fg); }
 }
 
 </style>

@@ -58,6 +58,13 @@
       </div>
     </header>
 
+    <!-- 教学建议条（原教学会话抽屉「建议」页签的文案落点，2026-10-01 随抽屉退役迁入座舱）：
+         真实会话控制台接口本就带回 advisory（priority/title/text），数据真实不硬造 -->
+    <div v-if="realAdvisory" class="cp-advisory" :class="`cp-advisory--${realAdvisory.priority}`" role="note">
+      <span class="mk-badge" :class="`mk-badge--${realAdvisory.priority === 'high' ? 'bad' : 'warn'}`">教学建议</span>
+      <span class="cp-advisory__text"><template v-if="realAdvisory.title">{{ realAdvisory.title }}<template v-if="realAdvisory.text"> · </template></template>{{ realAdvisory.text }}</span>
+    </div>
+
     <!-- ===== 统一控制台：阶段 tab + 该阶段操作（各阶段操作集中置顶，卡片区只留内容） ===== -->
     <div class="cp-console">
       <div class="cp-console__tabs" role="tablist">
@@ -901,6 +908,17 @@ const {
 
 /* 阶段分页：阶段条即 tab，默认跟随 currentStage；控制面板与日志常驻 */
 const activeTab = ref<StageKey>('goal')
+
+/** 真实会话的教学建议（advisory）：接口字段为松类型，仅取有效档位渲染 */
+const realAdvisory = computed(() => {
+  const a = (session.value as Record<string, unknown> | null)?.advisory as
+    | { priority?: string; title?: string; text?: string }
+    | null
+    | undefined
+  if (!a || !a.priority || a.priority === 'none') return null
+  if (!a.title && !a.text) return null
+  return a as { priority: string; title?: string; text?: string }
+})
 const sidebarOpen = reactive({ run: true, logs: true, review: false, trace: false })
 function selectStageTab(st: StageKey) {
   if (isBlackbox.value) return
@@ -1982,6 +2000,17 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-budget.is-full .cp-budget__num { color: var(--mk-red); }
 
 /* ===== 统一控制台（阶段 tab + 该阶段操作，置顶汇聚） ===== */
+/* 教学建议条（原型 .note--warn 词表：琥珀软底 + amber 字，micro 级） */
+.cp-advisory {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 0 0 12px; padding: 10px 12px;
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-amber-bg); color: var(--mk-amber);
+  font-size: var(--mk-fs-micro); line-height: 1.65;
+}
+.cp-advisory__text { min-width: 0; }
+.cp-advisory .mk-badge { flex: none; }
+
 .cp-console {
   display: flex;
   align-items: center;
