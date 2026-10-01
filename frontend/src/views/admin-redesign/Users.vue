@@ -67,8 +67,8 @@
           <colgroup>
             <col v-if="isLive && showCol('check')" style="width:32px">
             <col style="width:var(--mk-col-text)">
+            <col v-if="showCol('email')" style="width:var(--mk-col-text-sm)">
             <col v-if="showCol('role')" style="width:var(--mk-col-badge)">
-            <col v-if="showCol('level')" style="width:var(--mk-col-num-wide)">
             <col v-if="showCol('paths')" style="width:var(--mk-col-num-wide)">
             <col v-if="showCol('created')" style="width:var(--mk-col-time)">
             <col v-if="showCol('lastlogin')" style="width:var(--mk-col-time)">
@@ -85,14 +85,8 @@
                 :aria-sort="userSortState('user')"
                 @click="toggleUserSort('user')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th v-if="showCol('email')" scope="col">邮箱</th>
               <th v-if="showCol('role')" scope="col">角色</th>
-              <th
-                v-if="showCol('level')"
-                scope="col"
-                class="mk-th--sortable"
-                :aria-sort="userSortState('level')"
-                @click="toggleUserSort('level')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('level')">等级 / XP<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('paths')"
                 scope="col"
@@ -127,7 +121,11 @@
                 <MkCellAvatar :name="u.name" :tone="avaTone(u)" />
                 <div class="mk-cell-main">
                   <strong>{{ u.name }}</strong>
-                  <span class="mk-cell-sub">{{ u.email }}</span>
+                  <!-- 原型 celluser meta 模式：等级 · N 条路径（XP 细节进悬停） -->
+                  <span
+                    class="mk-cell-sub"
+                    :title="u.xp === 0 ? '尚无经验值' : `${u.xp} XP · 距 L${levelFromXp(u.xp) + 1} 还需 ${xpToNext(u.xp)}`"
+                  >{{ levelLabel(u.xp) }} · {{ u.paths }} 条路径</span>
                 </div>
                 <div class="ul-tags">
                   <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
@@ -137,17 +135,10 @@
                 </div>
               </div>
             </td>
-            <td v-if="showCol('role')"><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
-            <td v-if="showCol('level')">
-              <div class="ul-level">
-                <span class="ul-level__badge" :class="`ul-level__badge--${levelTone(u.xp)}`" :title="`XP 推导等级 ${levelFromXp(u.xp)}`">{{ levelLabel(u.xp) }}</span>
-                <span class="ul-level__xp" :class="{ 'mk-na': u.xp === 0 }">{{ u.xp }} XP</span>
-                <span
-                  class="ul-level__bar"
-                  :title="u.xp === 0 ? '尚无经验值' : `距 L${levelFromXp(u.xp) + 1} 还需 ${xpToNext(u.xp)} XP`"
-                ><i :style="{ width: xpPct(u.xp) + '%' }"></i></span>
-              </div>
+            <td v-if="showCol('email')">
+              <span class="ul-email" :title="u.email">{{ u.email }}</span>
             </td>
+            <td v-if="showCol('role')"><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
             <td v-if="showCol('paths')">
               <!-- 行级设计（批B）：双段迷你条——路径段蓝/会话段青，0 会话弱化；数字+条同列 -->
               <div class="ul-ps" :title="`路径 ${u.paths} 条 · 会话 ${u.sessions} 次`">
@@ -295,21 +286,13 @@ import { toast } from '@/utils/toast'
 import { UserRound } from 'lucide-vue-next';
 import { isTestAccountUser, levelFromXp, levelLabel } from './learner-profile'
 
-/* ---- 行级设计派生（2026-09-26）：身份 chip 色 / 等级色阶 / 升级进度 / 登录新鲜度 ---- */
+/* ---- 行级设计派生（2026-09-26）：身份 chip 色 / 升级进度 / 登录新鲜度 ---- */
 type UlUserLite = { deleted?: boolean; isVirtualLearner?: boolean; name?: string; email?: string; id?: string; xp?: number }
 function avaTone(u: UlUserLite): 'default' | 'virtual' | 'test' | 'muted' {
   if (u.deleted) return 'muted'
   if (u.isVirtualLearner) return 'virtual'
   if (isTestAccountUser(u)) return 'test'
   return 'default'
-}
-/** 等级色阶：L1 安静 → L2 蓝 → L3 紫 → ≥L4 绿（资历越高越醒目） */
-function levelTone(xp: number): 'muted' | 'blue' | 'purple' | 'green' {
-  const lv = levelFromXp(xp)
-  if (lv >= 4) return 'green'
-  if (lv === 3) return 'purple'
-  if (lv === 2) return 'blue'
-  return 'muted'
 }
 /** 升级进度：等级公式 floor(sqrt(xp/100))+1 → 当前级下限 100·(n-1)²，下一级门槛 100·n² */
 function xpProgress(xp: number): { pct: number; toNext: number } {
@@ -318,9 +301,6 @@ function xpProgress(xp: number): { pct: number; toNext: number } {
   const ceil = 100 * n * n
   const pct = Math.min(Math.max(Math.round(((xp - floor) / Math.max(ceil - floor, 1)) * 100), 0), 100)
   return { pct, toNext: Math.max(ceil - xp, 0) }
-}
-function xpPct(xp: number): number {
-  return xpProgress(xp).pct
 }
 function xpToNext(xp: number): number {
   return xpProgress(xp).toNext
@@ -342,19 +322,7 @@ function loginTone(text: string): 'fresh' | 'recent' | 'never' {
     count 事件：用户总量就绪后上报（宿主「用户 N」徽章；embedded 才消费）
     stats 事件：账号域页级数字（宿主 KPI 区；同样只在 embedded 被消费） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
-export interface AccountStats {
-  /** 后端全量用户数（含/不含模拟随 includeTest 口径） */
-  total: number
-  /** 非测试/非虚拟的真实账号数 */
-  real: number
-  /** 测试 + 虚拟学习者账号数（当前口径内的） */
-  testVirtual: number
-  /** 当前是否含模拟口径——false 时 testVirtual 恒 0，KPI 卡按「未纳入」呈现 */
-  includeTest: boolean
-  /** 名下有 ≥1 条学习路径的人数（路径覆盖；与筛选 pill 的口径无关） */
-  withPaths: number
-}
-const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'stats', stats: AccountStats): void }>()
+const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 /** 与后端 validatePasswordRule 一致：≥8 位且同时包含字母和数字 */
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
@@ -474,24 +442,26 @@ watch(includeTest, (v) => {
   }
 })
 
-/* D3 表格增强：列显隐（公共组件 MkCols 接管：菜单 + localStorage 持久化；6 列可隐藏，用户/操作列固定） */
+/* D3 表格增强：列显隐（公共组件 MkCols 接管：菜单 + localStorage 持久化；列可隐藏，用户/操作列固定）。
+   默认列集对齐原型 .tbl（用户/邮箱/角色/路径会话/最后登录/操作）：「注册时间」降为可选列
+   （列菜单可恢复）；等级收进用户单元格 meta（原型 celluser 同款），不再单列。 */
 const ulColDefs = [
   { key: 'check', label: '选择框', title: '批量操作选择框' },
+  { key: 'email', label: '邮箱', title: '登录邮箱' },
   { key: 'role', label: '角色', title: '管理员 / 用户' },
-  { key: 'level', label: '等级 / XP', title: 'XP 推导等级' },
   { key: 'paths', label: '路径 / 会话', title: '学习路径数 / 会话数' },
   { key: 'created', label: '注册时间', title: '账号创建时间' },
   { key: 'lastlogin', label: '最后登录', title: '最近登录时间' },
 ] as const
-const hiddenCols = ref<Set<string>>(new Set())
+const hiddenCols = ref<Set<string>>(new Set(['created']))
 
-/* 移动端仅保留「名称 / 状态 / 操作」：隐藏勾选列与时间/等级等次要列，避免多列挤进横向滚动。
-   中屏（≤1320，覆盖最常见的 1280 笔记本减侧栏后的内容区）再收起「等级 / 注册时间」——
-   9 列全开时操作列会被截出可视区（1280 实测），优先保行内操作可达 */
+/* 移动端仅保留「名称 / 状态 / 操作」：隐藏勾选列与时间/邮箱等次要列，避免多列挤进横向滚动。
+   中屏（≤1320，覆盖最常见的 1280 笔记本减侧栏后的内容区）再收起「邮箱 / 注册时间」——
+   列全开时操作列会被截出可视区（1280 实测），优先保行内操作可达 */
 const isNarrow = useIsNarrow()
 const isMedium = useIsNarrow(1320)
-const MOBILE_HIDDEN_COLS = new Set(['check', 'role', 'level', 'created', 'lastlogin'])
-const MEDIUM_HIDDEN_COLS = new Set(['level', 'created'])
+const MOBILE_HIDDEN_COLS = new Set(['check', 'role', 'email', 'created', 'lastlogin'])
+const MEDIUM_HIDDEN_COLS = new Set(['created', 'email'])
 const showCol = (key: string) =>
   !hiddenCols.value.has(key) &&
   !(isMedium.value && MEDIUM_HIDDEN_COLS.has(key)) &&
@@ -511,20 +481,6 @@ function retryLoad() {
 watch(liveUsersTotal, (n) => {
   emit('count', Number(n || 0))
 }, { immediate: true })
-/* 宿主 KPI 区：账号域三个页级数字。口径与筛选 pill 无关（取全量 live 集），
-   否则点「管理员」pill 会让页头 KPI 跟着缩水，读起来像平台用户数变了 */
-const accountStats = computed<AccountStats>(() => {
-  const all = liveUsers.value
-  const real = all.filter((u) => !isTestAccountUser(u)).length
-  return {
-    total: Number(liveUsersTotal.value || all.length),
-    real,
-    testVirtual: Math.max(all.length - real, 0),
-    includeTest: includeTest.value,
-    withPaths: all.filter((u) => Number(u.paths || 0) > 0).length
-  }
-})
-watch(accountStats, (s) => emit('stats', s), { immediate: true })
 /* 宿主刷新联动（用户与学习者合并宿主「刷新」按钮 → 重拉 live 用户域） */
 defineExpose({ refresh: () => { void loadLiveData() }, openCreate })
 /* 筛选 pill（角色 / 活跃 / 生命周期单源；已去掉原「全部角色」下拉，避免与「管理员」pill 语义冲突）。
@@ -853,31 +809,12 @@ function clearFilters() {
 .ul-user .mk-cell-main { min-width: 0; flex: 1; }
 .ul-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }
 
-/* 等级：色阶 chip + XP + 距下一级进度条（公式 floor(sqrt(xp/100))+1，与后端同源） */
-.ul-level { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 3px 7px; }
-.ul-level__badge {
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  line-height: 1.5;
-  background: var(--mk-surface-3);
-  color: var(--mk-muted);
-  cursor: help;
-  justify-self: start;
+/* 邮箱列（原型独立邮箱列，sub 字级弱于姓名） */
+.ul-email {
+  display: block; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--mk-fs-micro); color: var(--mk-muted);
 }
-.ul-level__badge--blue { background: color-mix(in srgb, var(--mk-blue) 14%, transparent); color: var(--mk-accent-deep); }
-.ul-level__badge--purple { background: color-mix(in srgb, var(--mk-purple) 15%, transparent); color: var(--mk-purple); }
-.ul-level__badge--green { background: color-mix(in srgb, var(--mk-green) 15%, transparent); color: var(--mk-green); }
-.ul-level__xp { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; text-align: right; }
-.ul-level__bar {
-  grid-column: 1 / -1;
-  display: block; height: 4px; border-radius: var(--mk-radius-pill);
-  background: var(--mk-surface-2); overflow: hidden;
-}
-.ul-level__bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-blue); opacity: 0.75; }
-.ul-level__badge--green ~ .ul-level__bar i { background: var(--mk-green); }
 
 /* 路径/会话双段迷你条（批B） */
 .ul-ps { display: grid; gap: 3px; justify-items: start; }

@@ -233,17 +233,7 @@ import { adminNotificationsApi, adminLearnerModelsApi } from '@/api/adminApi'
     count 事件：学习者快照就绪后上报（宿主「学习者 N」徽章；embedded 才消费）
     stats 事件：画像域页级数字（宿主 KPI 区；同样只在 embedded 被消费） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
-export interface LearnerStats {
-  /** 画像份数（后端 limit=50 截断后的列表长度） */
-  total: number
-  /** 趋势下降人数 */
-  down: number
-  /** 疲劳中/高人数（「需关注」的口径之一） */
-  fatigueHigh: number
-  /** 有风险人数：关键概念挣扎 / 记忆待巩固 */
-  atRisk: number
-}
-const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'stats', stats: LearnerStats): void }>()
+const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 interface Row {
   id: string
@@ -422,15 +412,6 @@ function retryLoad() {
 watch(liveLearners, (list) => {
   emit('count', list.length)
 }, { immediate: true })
-/* 宿主 KPI 区：把「需关注」这一档拆成三个可行动维度（趋势/疲劳/风险概念），
-   卡片副行说明它们是「需关注」的构成——宿主层此前只有一个总数，看不出该从哪下手 */
-const learnerStats = computed<LearnerStats>(() => ({
-  total: rows.value.length,
-  down: rows.value.filter((r) => r.trend === 'down').length,
-  fatigueHigh: rows.value.filter((r) => r.fatigue !== '低').length,
-  atRisk: rows.value.filter((r) => !!r.risk).length
-}))
-watch(learnerStats, (s) => emit('stats', s), { immediate: true })
 /* 宿主刷新联动（用户与学习者合并宿主「刷新」按钮 → 重拉 live 学习者域） */
 defineExpose({ refresh: () => { void loadLiveData() } })
 

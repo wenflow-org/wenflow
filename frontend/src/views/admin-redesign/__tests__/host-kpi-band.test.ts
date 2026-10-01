@@ -81,15 +81,20 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     detail.mockResolvedValue({ data: { data: {} } });
   });
 
-  it('People：账号域 KPI（用户总数 / 测试·虚拟 / 有学习路径），切学习状态换成画像三维', async () => {
+  it('People：页头 KPI 带已退役（2026-10-01 用户拍板：原型无此板块），域计数仍由 pills 承担', async () => {
     const { router, ready } = mockRouter('/admin/people');
     await ready;
     const w = mount(People, { global: { plugins: [router] } });
     await settle();
-    expect(kpiLabels(w)).toEqual(['用户总数', '测试 / 虚拟', '有学习路径']);
-
+    // 反向断言：不再渲染任何 KPI 卡
+    expect(kpiLabels(w)).toEqual([]);
+    expect(w.find('.mk-kpi-grid').exists()).toBe(false);
+    // 页头 = 原型 pageTitle 形态：页名 + 副题（随视图切换）
+    expect(w.find('.mk-pagehead').exists()).toBe(true);
+    expect(w.find('.mk-pagehead').text()).toContain('管理学习者档案、学习状态与路径进度');
+    // pills 仍是唯一视图切换控件，副题随 tab 切换
     await clickPill(w, '学习状态');
-    expect(kpiLabels(w)).toEqual(['学习画像', '趋势下降', '疲劳中高', '有风险']);
+    expect(w.find('.mk-pagehead').text()).toContain('学习者学习状态分布与风险跟踪');
     w.unmount();
   });
 
