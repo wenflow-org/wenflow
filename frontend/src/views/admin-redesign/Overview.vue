@@ -201,45 +201,6 @@
           <p v-if="!todoItems.length" class="note">没有待处理的事项。</p>
         </div>
       </div>
-
-      <!-- 模型与失败（原 LLM 宽卡收编）：meterrow 分布行 = 原型「学习状态分布」同款视觉 -->
-      <div class="card">
-        <div class="card__head">
-          <span class="card__title">模型与失败</span>
-          <span class="card__sub">近 7 天 · 真实用户<template v-if="usageFailRate"> · 失败率 {{ usageFailRate }}</template></span>
-        </div>
-        <div class="card__body">
-          <div v-if="usageHasData" class="dist">
-            <div v-if="data.usage.models7d.length" class="dist__group">
-              <span class="dist__label">模型用量</span>
-              <div v-for="m in data.usage.models7d" :key="m.model" class="meterrow">
-                <span class="meterrow__grow" :title="m.model">{{ m.model }}</span>
-                <span class="meter"><i :style="{ width: modelPct(m.tokens), background: 'var(--mk-blue)' }"></i></span>
-                <span class="meterrow__val mono">{{ fmtTokens(m.tokens) }}</span>
-              </div>
-            </div>
-            <div v-if="data.usage.failures7d.length" class="dist__group">
-              <span class="dist__label">失败原因</span>
-              <div
-                v-for="f in data.usage.failures7d"
-                :key="f.category"
-                class="meterrow meterrow--link"
-                :title="`查看 ${f.category} 类别失败日志（近 7 天）`"
-                role="button"
-                tabindex="0"
-                @click="jumpToFailures(f.category)"
-                @keydown.enter.prevent="jumpToFailures(f.category)"
-                @keydown.space.prevent="jumpToFailures(f.category)"
-              >
-                <span class="meterrow__grow">{{ f.category }}</span>
-                <span class="meter"><i :style="{ width: failPct(f.count), background: 'var(--mk-amber)' }"></i></span>
-                <span class="meterrow__val mono">{{ f.count }}</span>
-              </div>
-            </div>
-          </div>
-          <p v-else class="note">近 7 天暂无 LLM 调用记录。</p>
-        </div>
-      </div>
     </div>
   </div>
   <MkLoading v-else-if="liveLoading" min text="正在加载真实数据…" />
@@ -424,21 +385,6 @@ const hasWrapupStats = computed(() => {
   if (!w) return false;
   return w.summaryModel > 0 || w.summaryFallback > 0 || w.evaluationModel > 0 || w.evaluationAiFallback > 0 || w.evaluationFailed > 0;
 });
-const usageHasData = computed(() => {
-  const u = data.value?.usage;
-  return !!u && (u.totalTokens7d > 0 || u.models7d.length > 0);
-});
-const fmtTokens = (n: number) => (n >= 1000000 ? `${(n / 1000000).toFixed(2)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || '—'));
-const modelMax = computed(() => Math.max(1, ...(data.value?.usage.models7d.map((m) => m.tokens) || [])));
-const modelPct = (tokens: number) => `${tokens > 0 ? Math.round((tokens / modelMax.value) * 100) : 0}%`;
-/* 失败率（失败/调用）：裸失败次数没有分母读不出好坏 */
-const usageFailRate = computed(() => {
-  const u = data.value?.usage;
-  if (!u || !u.calls7d) return null;
-  return `${((u.failed7d / u.calls7d) * 100).toFixed(1)}%`;
-});
-const failMax = computed(() => Math.max(1, ...(data.value?.usage.failures7d.map((f) => f.count) || [])));
-const failPct = (count: number) => `${count > 0 ? Math.max(Math.round((count / failMax.value) * 100), 6) : 0}%`;
 
 /* 总结质量条件行：只在出现兜底/失败时露头 */
 const wrapupIssue = computed(() => {
@@ -599,11 +545,11 @@ watch(dataSource, () => {
 <style scoped>
 /* =====================================================================
    总览页 = newui「UI-分支优化设计」renderOverview 的逐类复刻。
-   类名与原型一一对应（card/kpi/barchart/feed/ranklist/meterrow/loop）；
+   类名与原型一一对应（card/kpi/barchart/feed/ranklist/loop）；
    色与圆角全走 --mk-* token（数值与原型 --brand/--r-* 同源）。
    全局原语已覆盖的：页头（MkPageHead=pagehead）、状态条（mk-status=statusbar）、
-   按钮（mk-btn=btn）。原型「学习状态分布」卡在本页由「模型与失败」顶替
-   （后端暂无学习状态聚合口径），meterrow 视觉同构、数据真实。
+   按钮（mk-btn=btn）。原型 row3 第三卡「学习状态分布」不落（后端暂无
+   学习状态聚合口径，用户拍板不做顶替卡，row3 两卡排布，2026-10-01）。
    ===================================================================== */
 
 /* ---- KPI（.grid auto-fit 210 + .card.kpi）---- */
@@ -710,22 +656,6 @@ watch(dataSource, () => {
 .rankrow--link { cursor: pointer; }
 .rankrow--link:hover .rankrow__grow { color: var(--mk-blue); }
 .rankrow__val { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
-
-/* 分布行（模型用量/失败原因）：label + meter + 数值，原型 .meterrow 同构 */
-.dist { display: grid; gap: 14px; }
-.dist__group { display: grid; gap: 6px; }
-.dist__group + .dist__group { padding-top: 12px; border-top: 1px dashed var(--mk-line); }
-.dist__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; }
-.meterrow { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
-.meterrow__grow {
-  flex: 1; min-width: 0; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.meterrow--link { cursor: pointer; border-radius: var(--mk-radius-sm); }
-.meterrow--link:hover { background: var(--mk-btn-hover-bg); }
-.meter { width: 108px; height: 6px; flex: none; border-radius: 999px; background: var(--mk-surface-3); overflow: hidden; }
-.meter > i { display: block; height: 100%; border-radius: 999px; }
-.meterrow__val { width: 52px; flex: none; text-align: right; font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); }
 
 /* 空态/说明行（原型 .note） */
 .note {
