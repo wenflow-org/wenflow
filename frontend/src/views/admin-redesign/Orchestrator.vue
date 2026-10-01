@@ -1,7 +1,7 @@
 ﻿<template>
   <div class="mk-page mk-page--fill">
-    <!-- 页头（newui/admin pagehead）：页名 + 刷新上移；状态条退位为纯状态摘要（阶段/Skill/未解析/W4） -->
-    <MkPageHead title="编排图">
+    <!-- 页头（newui/admin pagehead）：页名 + 刷新上移；状态条退位为纯状态摘要（阶段/Skill/交接/未解析/W4） -->
+    <MkPageHead title="编排图" sub="顶层 Agent 数据流转逻辑图 · 字段血缘与阶段交接">
       <template #actions>
         <!-- 刷新此前只重拉 definitions， stages / 对账仍是旧值（治理面板数字对不上）→ 三个域全拉 -->
         <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
@@ -10,6 +10,8 @@
     <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
       <span class="mk-status__meta">{{ pageLoading ? '—' : stages.length }} 阶段 · {{ pageLoading ? '—' : totalSkills }} 个 Skill</span>
+      <!-- 原型 statusbar meta「N 处阶段交接」：线性拓扑下 = 阶段数 - 1 -->
+      <span class="mk-status__meta">{{ pageLoading ? '—' : handoffCount }} 处阶段交接</span>
       <span v-if="unresolvedCount > 0" class="mk-status__meta mk-status__meta--bad">未解析 {{ unresolvedCount }}</span>
       <span v-if="w4Drifted.length" class="mk-status__meta mk-status__meta--bad">{{ TERMS.driftHashQualified }} {{ w4Drifted.length }}</span>
     </div>
@@ -42,7 +44,8 @@
          五阶段并列列（阶段头 + Skill 节点 + 入/出参 chip + 产出字段），
          列间 SVG 三次贝塞尔连线（箭头 + 下一阶段入参字段标签），layoutOrch 在
          渲染/窗口 resize 时重算；点 Skill 节点进入该技能详情二级页（原型 open-skill）。 -->
-    <section v-if="pane === 'overview' && stages.length" class="mk-card mk-card--fill orch-pane orch-odg-page">
+    <div v-if="pane === 'overview' && stages.length" class="orch-pane orch-overview">
+      <section class="mk-card mk-card--fill orch-odg-page">
       <div class="mk-card__head">
         <h3 class="mk-card__title">字段数据旅程（逻辑图 · 字段血缘）</h3>
         <!-- 图例（原型 card__tools：卡头右侧只放工具/图例，title 独占左侧） -->
@@ -82,21 +85,36 @@
           </div>
         </div>
       </div>
-      <!-- 阶段交接明细（相邻阶段入参即交接契约） -->
-      <table class="mk-table orch-odg-table">
-        <thead>
-          <tr><th class="mono">#</th><th>从</th><th>到</th><th>交接字段（来源阶段产出）</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="(h, i) in stageHandoffs" :key="i">
-            <td class="mono">{{ i + 1 }}</td>
-            <td>{{ h.from }}</td>
-            <td>{{ h.to }}</td>
-            <td class="mono">{{ h.fields.join(' · ') || '—' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
+      </section>
+
+      <!-- 阶段交接明细（原型 1624-1629 独立卡，5 列）：交接 = 相邻阶段 id 对（mono 小写）、
+           上/下游 Agent（mono）；传递字段口径 = 下游阶段的必填入参（stageFieldContract.ins，
+           字段路由 hard-required），即原型 s.in（1651 行）的真实数据对应物——本页 stages 拓扑
+           只有 consumes/produces 汇总、无原型式 in/outs；字段数 = 传递字段条数。
+           画布连线标签（layoutOrch）仍标上游产出（outs）：连线沿边流动的是上游产出，
+           交接表登记的是下游准入契约，两处口径差是有意的 -->
+      <section class="mk-card orch-handoff">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">阶段交接明细</h3>
+        </div>
+        <div class="mk-table-scroll">
+          <table class="mk-table">
+            <thead>
+              <tr><th>交接</th><th>上游 Agent</th><th>下游 Agent</th><th>传递字段</th><th class="mk-th--right">字段数</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(h, i) in stageHandoffs" :key="i">
+                <td class="mono orch-handoff__pair">{{ h.from }} → {{ h.to }}</td>
+                <td class="mono">{{ h.fromAgent }}</td>
+                <td class="mono">{{ h.toAgent }}</td>
+                <td class="orch-handoff__fields">{{ h.fields.join(' · ') || '—' }}</td>
+                <td class="mk-num">{{ h.fields.length }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
     <div v-else-if="pane === 'overview'" class="orch-pane orch-pane--center">
       <!-- 总览无数据：走与既有一致的加载/空态（stages 为空时 current 也为空） -->
       <template v-if="pageLoading">
@@ -471,18 +489,29 @@ function contractOf(id: string): StageFieldContract {
   return stageFieldContract.value[id] ?? { ins: [], outs: [] }
 }
 
-/** 相邻阶段交接：下一阶段的必填入参即交接契约 */
+/** 相邻阶段交接（原型 1624-1629 五列）：交接列用阶段 id（原型 s.id，本页 id 本就小写 mono）；
+ *  传递字段口径 = 下游阶段的必填入参（stageFieldContract.ins，字段路由 hard-required），
+ *  即原型 s.in 的真实数据对应物——本页 stages 拓扑只有 consumes/produces 汇总，无独立 in/outs。
+ *  画布连线标签（layoutOrch）仍标上游产出（outs）：连线沿边流动的是上游产出，
+ *  交接表登记的是下游准入契约，两处口径差是有意的 */
 const stageHandoffs = computed(() => {
-  const out: Array<{ from: string; to: string; fields: string[] }> = []
+  const out: Array<{ from: string; to: string; fromAgent: string; toAgent: string; fields: string[] }> = []
   for (let i = 0; i < stages.value.length - 1; i++) {
+    const up = stages.value[i]
+    const down = stages.value[i + 1]
     out.push({
-      from: stages.value[i].name,
-      to: stages.value[i + 1].name,
-      fields: contractOf(stages.value[i].id).outs,
+      from: up.id,
+      to: down.id,
+      fromAgent: up.agentId,
+      toAgent: down.agentId,
+      fields: contractOf(down.id).ins,
     })
   }
   return out
 })
+
+/** 状态条「N 处阶段交接」：拓扑为线性列时 = 阶段数 - 1（原型 statusbar meta 口径） */
+const handoffCount = computed(() => Math.max(stages.value.length - 1, 0))
 
 function escapeXml(text: string): string {
   return text.replace(/[<>&"]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[ch] ?? ch)
@@ -639,6 +668,11 @@ const govMetaTitle = computed(() =>
 .orch-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .orch-pane--scroll { overflow-y: auto; }
 .orch-pane--center { justify-content: center; }
+/* 总览双卡（原型：odg 画布卡 + margin-top 的交接明细卡）：画布卡弹性填满、交接卡自然高度贴底 */
+.orch-overview { gap: 12px; }
+/* 阶段交接明细（原型 .tbl 的 mono/sub/wrap 形态）：交接列 id 对弱化 mono；传递字段可换行 */
+.orch-handoff__pair { color: var(--mk-muted); white-space: nowrap; }
+.orch-handoff__fields { color: var(--mk-muted); white-space: normal; word-break: break-word; }
 /* 字段路由：卡头 + 工具条吸顶，仅表格区内滚（.frt__scroll 自带 .mk-table-scroll 横向滚动） */
 .orch-routing .frt { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
 .orch-routing .frt__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
@@ -712,7 +746,8 @@ html[data-theme='dark'] {
 <style>
 /* ===== 总览 odg 画布（newui/admin odg-canvas）：连线和字段标签由 layoutOrch 以
    innerHTML 注入，不带 scoped 属性，因此样式放在非 scoped 块并统一 .orch-odg 前缀命名空间 ===== */
-.orch-odg-scroll { overflow-x: auto; padding: 8px 12px 16px; }
+/* 交接明细拆出独立卡后，画布滚动区接管画布卡的剩余高度（否则卡底留白） */
+.orch-odg-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 12px 16px; }
 .orch-odg-canvas { position: relative; display: flex; align-items: flex-start; gap: 120px; min-width: max-content; }
 .orch-odg-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
 .orch-odg-edge { fill: none; stroke: var(--mk-blue, #2c63d0); stroke-width: 1.6; opacity: 0.85; }
@@ -766,6 +801,5 @@ html[data-theme='dark'] {
   font-family: var(--mk-mono, Consolas, monospace);
   font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint);
 }
-.orch-odg-table { margin-top: 4px; }
 </style>
 

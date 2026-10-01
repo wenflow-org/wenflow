@@ -1,30 +1,40 @@
 <template>
   <div class="mk-page">
-    <!-- 页头（newui/admin pagehead）：页名 + 两个主操作上移；状态条退位为计数/最近运行摘要 -->
-    <MkPageHead title="Prompt 评估中心">
+    <!-- 页头（newui/admin pagehead）：页名 + 主操作上移。原型主次=[导出报告][primary 运行评测]；
+         「导出报告」无真实能力不加（文案不得暗示不存在的红线），「批量跑评估」升 primary；
+         「新建用例」下沉到用例页签工具栏右侧（原型 2102 行 toolbar 判例） -->
+    <MkPageHead title="Prompt 评估中心" sub="提示词质量评测 · 用例集与历史运行">
       <template #actions>
         <!-- running：批量/试跑期间互斥禁用，防止并发多批真实 LLM 调用重复烧 token -->
-        <button type="button" class="mk-btn" :disabled="!canRunBatch || running" @click="runBatch">{{ running ? '评估运行中…' : '批量跑评估' }}</button>
-        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openCreate">新建用例</button>
+        <button type="button" class="mk-btn mk-btn--primary" :disabled="!canRunBatch || running" @click="runBatch">{{ running ? '评估运行中…' : '批量跑评估' }}</button>
       </template>
     </MkPageHead>
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
+      <!-- 原型 statusbar 主句（b 最近评测 · 92.4% 通过）：最近一次评估的通过率提为主句；
+           无评估历史时保持下方纯 meta 空态，不虚构 0% -->
+      <template v-if="runs.length">
+        <strong class="mk-status__title">最近评测 · {{ lastPassRate }}% 通过</strong>
+        <span class="mk-status__sep" aria-hidden="true"></span>
+      </template>
       <span class="mk-status__meta">用例 {{ cases.length }}</span>
       <span class="mk-status__meta">评估历史 {{ runs.length }}</span>
       <span class="mk-status__meta" :title="lastRunHint">{{ lastRunText }}</span>
     </div>
 
-    <!-- 主视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
-         2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips。页内弹窗的手写/模拟切换
-         共用同一套 pe-tabs 页签语言，不再各持一词） -->
-    <div class="pe-tabs" role="tablist" aria-label="评估视图切换">
-      <button type="button" role="tab" id="pe-tab-cases" aria-controls="pe-panel-cases" class="pe-tab" :aria-selected="tab === 'cases'" @click="switchTab('cases')">评估用例</button>
-      <button type="button" role="tab" id="pe-tab-runs" aria-controls="pe-panel-runs" class="pe-tab" :aria-selected="tab === 'runs'" @click="switchTab('runs')">评估历史</button>
-    </div>
-
-    <!-- 筛选行 -->
+    <!-- 单卡容器（原型 renderPromptEval：card > .tabs 页签 + 工具栏 + 页签体；
+         对齐 Users.vue / ExecLogs.vue / AuditLogs.vue 卡内页签判例） -->
     <div class="mk-card">
+      <!-- 主视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
+           2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips。页内弹窗的手写/模拟切换
+           共用同一套 pe-tabs 页签语言，不再各持一词） -->
+      <div class="pe-tabs" role="tablist" aria-label="评估视图切换">
+        <button type="button" role="tab" id="pe-tab-cases" aria-controls="pe-panel-cases" class="pe-tab" :aria-selected="tab === 'cases'" @click="switchTab('cases')">评估用例</button>
+        <button type="button" role="tab" id="pe-tab-runs" aria-controls="pe-panel-runs" class="pe-tab" :aria-selected="tab === 'runs'" @click="switchTab('runs')">评估历史</button>
+      </div>
+
+      <!-- 筛选/工具栏行（两页签共用 agent 筛选；原型 cases 工具栏右侧的 primary sm
+           「新建用例」落在同行最右，仅用例页签可见） -->
       <div class="pe-filter">
         <!-- onAgentFilterChange：用例与历史共用该筛选，切换时两边都重拉（原只刷用例） -->
         <select v-model="agentFilter" class="mk-filter__select" aria-label="按 Agent 筛选" @change="onAgentFilterChange">
@@ -32,11 +42,11 @@
           <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.label }}</option>
         </select>
         <span v-if="tab === 'cases'" class="pe-filter__hint">用例驱动：为 goal-conversation 等 Agent 维护评估集，一键跑评估验证 prompt 改动</span>
+        <button v-if="tab === 'cases'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openCreate">新建用例</button>
       </div>
-    </div>
 
     <!-- 用例 Tab -->
-    <div v-if="tab === 'cases'" id="pe-panel-cases" role="tabpanel" aria-labelledby="pe-tab-cases" class="mk-card">
+    <div v-if="tab === 'cases'" id="pe-panel-cases" role="tabpanel" aria-labelledby="pe-tab-cases" class="pe-panel">
       <MockSkeletonTable v-if="casesLoading && !cases.length" :cols="6" />
       <div v-else-if="cases.length" class="mk-table-scroll pe-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容；
@@ -116,7 +126,7 @@
     </div>
 
     <!-- 历史 Tab -->
-    <div v-else id="pe-panel-runs" role="tabpanel" aria-labelledby="pe-tab-runs" class="mk-card">
+    <div v-else id="pe-panel-runs" role="tabpanel" aria-labelledby="pe-tab-runs" class="pe-panel">
       <MockSkeletonTable v-if="runsLoading && !runs.length" :cols="6" />
       <div v-else-if="runs.length" class="mk-table-scroll pe-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容 -->
@@ -182,6 +192,7 @@
         action-text="去评估用例"
         @action="switchTab('cases')"
       />
+    </div>
     </div>
 
     <!-- 用例编辑弹窗 -->
@@ -567,6 +578,8 @@ function onAgentFilterChange() {
 const statusTone = computed(() =>
   (casesFailed.value || runsFailed.value) ? 'mk-status--bad' : 'mk-status--ok'
 )
+/* 原型 statusbar 主句口径：最近一次评估的通过率（runs[0] 即最新一次，reloadRuns 保持接口倒序） */
+const lastPassRate = computed(() => runs.value[0]?.summary.passRate ?? 0)
 const lastRunText = computed(() => (runs.value.length ? `最近 ${timeAgo(runs.value[0]?.createdAt)}` : '暂无评估记录'))
 const lastRunHint = computed(() => (runs.value[0] ? `通过率 ${runs.value[0].summary.passRate ?? 0}%` : ''))
 
@@ -1143,7 +1156,8 @@ function retryRunDetail() {
 </script>
 
 <style scoped>
-.pe-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; }
+/* 筛选/工具栏行收进单卡容器：与页签体之间以发丝线分层（原型 .toolbar border-bottom） */
+.pe-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--mk-line); }
 .pe-filter__hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); margin-left: auto; }
 /* 列表高度：空态占位交给 mk-empty--min，有数据时表格自然高度（不再硬撑满屏） */
 .pe-list { min-height: 0; }
