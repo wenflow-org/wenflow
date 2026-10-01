@@ -266,7 +266,14 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
  * /overview/stats 无业务查询参数，使用固定 key（fresh 仅作绕过开关，不参与 key）；
  * /activity 的 key 含 excludeTest 与 limit。
  */
-const OVERVIEW_CACHE_TTL_MS = 60 * 1000;
+/* 2026-10-01 性能批次：stats 缓存 60s→5min。背景：overview/stats 重算实测 21s
+   （agent_call_logs 的 8 次独立扫描——trend7d/last24h/topSkills/bySource——全打在
+   12 万行的同一张表上；数据增长后从文档口径 4-5s 恶化），60s 边界会让每页的
+   boot 都周期性撞上 21s 重算并堵死整条请求队列。admin 统计页 5min 口径延迟
+   可接受（与 token-cost 300s 同先例）；8 次扫描合一的根治另行批次。
+   activity（动态流，标注「实时」）拆出独立短 TTL，不受本调整影响。 */
+const OVERVIEW_STATS_TTL_MS = 300 * 1000;
+const ACTIVITY_CACHE_TTL_MS = 60 * 1000;
 const overviewStatsCache = new Map<string, { payload: unknown; cachedAt: number }>();
 /** 在途计算去重：key → 未落地的计算 Promise（与缓存共用 key 空间，仅 overview/stats 写入） */
 const overviewStatsInflight = new Map<string, Promise<unknown>>();
@@ -289,7 +296,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
     const wantsFresh = req.query?.fresh === '1';
     if (!wantsFresh) {
       const cached = overviewStatsCache.get(cacheKey);
-      if (cached && Date.now() - cached.cachedAt < OVERVIEW_CACHE_TTL_MS) {
+      if (cached && Date.now() - cached.cachedAt < OVERVIEW_STATS_TTL_MS) {
         return res.json({ success: true, data: cached.payload });
       }
       // 在途去重：已有同 key 计算未落地时直接共享其结果，不再发起第二次聚合
@@ -1164,7 +1171,7 @@ router.get('/agents/logs/:id', async (req: Request, res: Response) => {
 /**
  * GET /api/admin/activity
  * 获取最近活动日志
- * 服务端缓存：60s TTL（与 /overview/stats 共用 OVERVIEW_CACHE_TTL_MS）；key 含 excludeTest 与 limit。
+ * 服务端缓存：60s TTL（ACTIVITY_CACHE_TTL_MS，动态流标注「实时」故独立短窗）；key 含 excludeTest 与 limit。
  */
 router.get('/activity', async (req: Request, res: Response) => {
   try {
@@ -1173,7 +1180,7 @@ router.get('/activity', async (req: Request, res: Response) => {
     const excludeTest = String(req.query.excludeTest || '') === '1';
     const cacheKey = `activity:${excludeTest ? 1 : 0}:${limit}`;
     const cached = overviewStatsCache.get(cacheKey);
-    if (cached && Date.now() - cached.cachedAt < OVERVIEW_CACHE_TTL_MS) {
+    if (cached && Date.now() - cached.cachedAt < ACTIVITY_CACHE_TTL_MS) {
       return res.json({ success: true, data: cached.payload });
     }
     const data = await getPlatformActivityFeed({ limit, excludeTest });
