@@ -30,7 +30,7 @@ import {
   type SkillStat
 } from './store'
 import { EXTRA_COMPONENT_VISIBLE_SKILLS } from './capabilityCatalog'
-import { humanizeHttpError } from './terms'
+import { TERMS, humanizeHttpError } from './terms'
 
 /** 与生产 Skill 目录同口径：外挂能力 Skill 不在主目录展示（归外挂组件页） */
 const isExtraSkill = (id: string) => EXTRA_COMPONENT_VISIBLE_SKILLS.has(id.replace(/^skill:/, ''))
@@ -993,7 +993,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
   const todayOnlySimulated = todayCalls === 0 && todayCallsAll > 0
   const kpis = [
     { label: '今日调用', value: fmt(todayCalls), hint: todayCalls > 0 ? `超时 ${Number(agents.todayTimeouts || 0)}` : todayOnlySimulated ? '今日无真实调用 · 虚拟仿真见「虚拟学习者」' : '等待学习者开始' },
-    { label: '今日成功率', value: todayCalls > 0 ? `${todaySuccessRate}%` : '—', hint: todayFailed > 0 ? `${todayFailed} 次失败` : todayOnlySimulated ? '暂无真实用户调用' : '无失败' },
+    { label: TERMS.healthScore, value: todayCalls > 0 ? `${todaySuccessRate}%` : '—', hint: todayFailed > 0 ? `${todayFailed} 次失败` : todayOnlySimulated ? '暂无真实用户调用' : '无失败' },
     { label: '用户活跃', value: `${fmt(Number(users.newToday || 0))} 新增 / ${fmt(activeUsers)} 活跃`, hint: `总用户 ${users.total ?? 0}（真实，不含测试/虚拟）` },
     { label: '系统活跃', value: `${fmt(Number(conv.active || 0))} 对话`, hint: `${fmt(Number(agents.activeAgents24h || 0))} Skill 有调用 · 目标澄清 + 近 24h` },
   ]

@@ -255,6 +255,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource } from './store';
+import { TERMS } from './terms';
 import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing, liveVirtualRunStats, type LiveOverviewFull } from './live';
 import { adminHealthCenterApi, adminMemoryReviewApi, adminTeachingSessionsApi } from '@/api/adminApi';
 import MkPageHead from '@/components/mk/MkPageHead.vue';
@@ -471,7 +472,7 @@ const kpiTargets: Array<{ scene: string; tab?: string }> = [
 
 const KPI_HINTS: string[] = [
   '今日自然日（00:00 起）',
-  '今日真实调用成功率',
+  `${TERMS.healthScoreTitle}（真实口径）`,
   '今日新增注册 + 今日有学习会话的用户',
   '今日进行中的目标对话 + 近 24h 有调用的 Skill',
 ]
