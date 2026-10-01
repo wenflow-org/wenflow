@@ -3,7 +3,7 @@
     <!-- 吸顶操作条（滚动修复 #1：长表关键操作常驻顶部） -->
     <div class="frt__stickybar">
       <div class="frt__toolbar">
-        <button type="button" class="frt__toolbar-btn" :disabled="!stage" @click="openOrchestration">编排文件</button>
+        <button type="button" class="mk-btn" :disabled="!stage" @click="openOrchestration">编排文件</button>
         <span class="frt__toolbar-hint">编辑 prompts/orchestration/{{ stage }}.yaml（字段路由唯一声明源）</span>
       </div>
     </div>
@@ -18,8 +18,8 @@
         v-for="s in skillSyncs"
         :key="s.skillId"
         type="button"
-        class="frt-syncbar__badge"
-        :class="`frt-syncbar__badge--${s.tone}`"
+        class="frt-syncbar__badge mk-badge"
+        :class="s.tone === 'err' ? 'mk-badge--bad' : `mk-badge--${s.tone}`"
         :title="s.title"
         @click="goSkill(s.skillId)"
       >
@@ -148,19 +148,9 @@
           <span class="frt__agentcount">{{ filteredOf(agent.agentId).length }}<template v-if="filterActive"> / {{ routingsOf(agent.agentId).length }}</template> 行</span>
         </div>
         <div class="frt__scroll mk-table-scroll">
-          <table class="mk-table mk-table--dense mk-table--fixed">
-            <colgroup>
-              <col style="width:var(--mk-col-text)">
-              <col style="width:var(--mk-col-text)">
-              <col style="width:var(--mk-col-badge)">
-              <col style="width:var(--mk-col-badge)">
-              <col style="width:var(--mk-col-badge)">
-              <col style="width:var(--mk-col-badge)">
-              <col style="width:var(--mk-col-badge)">
-              <col style="width:var(--mk-col-badge)">
-              <col style="width:var(--mk-col-model)">
-              <col style="width:var(--mk-col-badge)">
-            </colgroup>
+          <!-- 原型 .tbl：自动布局（去 mk-table--fixed 与 <colgroup>，2026-10-01 对齐 Skills 判例），
+               单元格 nowrap、列按内容自然分宽；长内容列（字段/含义/移交/落库键）已有 max-width+ellipsis 截断 -->
+          <table class="mk-table mk-table--dense frt__table">
             <thead>
               <tr>
                 <th scope="col">字段</th>
@@ -268,13 +258,13 @@
         </div>
         <div class="mk-modal__foot">
           <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="closeOrchestration">关闭</button>
-          <button type="button" class="mk-btn frt__prune" :disabled="orchSaving || orchSyncing || orchPruning" @click="runPrune(false)">
+          <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="runPrune(false)">
             {{ orchPruning ? '清理中…' : '清理孤儿行' }}
           </button>
           <button
             v-if="pruneConfirming"
             type="button"
-            class="mk-btn frt__prune--danger"
+            class="mk-btn mk-btn--danger"
             :disabled="orchSaving || orchSyncing || orchPruning"
             @click="runPrune(true)"
           >确认清理冗余配置</button>
@@ -780,7 +770,7 @@ watch(() => props.stage, () => void loadStage());
   padding: 10px 16px 8px;
   background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(230, 235, 244, 0.9);
+  border-bottom: 1px solid var(--mk-line);
   box-shadow: var(--mk-shadow-sm);
 }
 .frt__stickybar .frt__toolbar { margin-bottom: 0; }
@@ -795,20 +785,6 @@ watch(() => props.stage, () => void loadStage());
   font-weight: 600;
   line-height: 1.55;
 }
-.frt__toolbar-btn {
-  padding: 8px 16px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface);
-  color: var(--mk-blue);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease;
-}
-.frt__toolbar-btn:hover { background: #f6f9ff; border-color: rgba(44, 99, 208, 0.4); }
-.frt__toolbar-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .frt__toolbar-hint { color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-micro); }
 
 /* ========== core 联动提示条（M3） ========== */
@@ -825,29 +801,17 @@ watch(() => props.stage, () => void loadStage());
   font-size: var(--mk-fs-micro);
   line-height: 1.5;
 }
-.frt-syncbar--muted { border-color: var(--mk-line); background: #fafbfd; }
+.frt-syncbar--muted { border-color: var(--mk-line); background: var(--mk-bg); }
 .frt-syncbar__title { font-weight: 800; color: var(--mk-blue); }
+/* 胶囊徽章走全局 .mk-badge（--ok/--warn/--bad/--muted 四态）；本类只保留按钮复位与悬停反馈 */
 .frt-syncbar__badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-weight: 700;
-  font-size: var(--mk-fs-micro);
-  text-decoration: none;
-  border: 0;
-  background: none;
-  font-family: inherit;
   cursor: pointer;
+  text-decoration: none;
+  font-family: inherit;
   transition: filter 0.12s ease;
 }
 .frt-syncbar__badge:hover { filter: brightness(0.97); }
 .frt-syncbar__badge code { font-size: var(--mk-fs-micro); }
-.frt-syncbar__badge--ok { background: var(--mk-green-bg); color: var(--mk-green); }
-.frt-syncbar__badge--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
-.frt-syncbar__badge--err { background: var(--mk-red-bg); color: var(--mk-red); }
-.frt-syncbar__badge--muted { background: var(--mk-surface-2); color: var(--mk-muted); }
 .frt-syncbar__count { font-size: var(--mk-fs-micro); }
 .frt-syncbar__hint { color: var(--mk-muted); }
 
@@ -904,7 +868,7 @@ watch(() => props.stage, () => void loadStage());
   padding: 8px 12px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
-  background: #fafbfd;
+  background: var(--mk-bg);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
@@ -916,7 +880,7 @@ watch(() => props.stage, () => void loadStage());
   padding: 12px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
-  background: #fbfcfe;
+  background: var(--mk-bg);
   color: var(--mk-ink);
   font-size: var(--mk-fs-micro);
   line-height: 1.55;
@@ -936,31 +900,20 @@ watch(() => props.stage, () => void loadStage());
   line-height: 1.5;
 }
 
-/* 清理孤儿行按钮（P2：预检只报告；确认态红色危险按钮） */
-.frt__prune {
-  border-color: rgba(180, 83, 9, 0.35);
-  color: var(--mk-amber);
-}
-.frt__prune--danger {
-  border-color: rgba(220, 38, 38, 0.45);
-  background: var(--mk-red-fill);
-  color: var(--mk-on-fill);
-}
-.frt__prune--danger:hover {
-  background: var(--mk-red-fill-strong);
-  border-color: var(--mk-red-fill-strong);
-}
+/* 清理孤儿行（P2：预检只报告，普通文字钮；确认态走全局 .mk-btn--danger 危险钮，自搓红/琥珀变体已删） */
 /* flex-shrink: 0 —— 拆回独立 tab 后 .frt 被外层 fill 容器约束高度，
    无 shrink:0 时 flex 子项按比例压扁（仿真 10 卡只剩 5-11px 细条），
    改为不收缩 + 外层 .frt 容器自身滚动 */
 .frt__agent { flex-shrink: 0; margin-bottom: 18px; border: 1px solid var(--mk-line); border-radius: 12px; overflow: hidden; background: var(--mk-surface); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
-.frt__agenthead { padding: 10px 14px; background: #fafbfd; border-bottom: 1px solid var(--mk-line); display: flex; align-items: baseline; gap: 10px; }
+.frt__agenthead { padding: 10px 14px; background: var(--mk-bg); border-bottom: 1px solid var(--mk-line); display: flex; align-items: baseline; gap: 10px; }
 .frt__agentname { font-weight: 700; color: var(--mk-ink); }
 .frt__agentdesc { color: var(--mk-faint, var(--mk-faint-soft)); font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .frt__agentcount { margin-left: auto; padding: 1px 9px; border-radius: 999px; background: var(--mk-surface-2); color: var(--mk-muted); font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }
 /* 表格本体已并入 mk-table mk-table--dense（shared.css）：仅保留滚动容器（限高 + 粘性表头生效） */
 /* 横向+纵向滚动容器（滚动修复 #1）：表头 sticky 吸顶，容器限高内部滚动，页面本体不被撑长 */
 .frt__scroll { overflow: auto; max-height: 62vh; }
+/* 原型 .tbl td nowrap：自动布局下单元格单行，列按内容自然分宽 */
+.frt__table td { white-space: nowrap; }
 @media (max-width: 860px) {
   .mk-table--dense { min-width: 1060px; }
 }
@@ -977,14 +930,14 @@ watch(() => props.stage, () => void loadStage());
   text-overflow: ellipsis;
 }
 
-/* 含义列：3 行 clamp → 2 行（-webkit-box 精确行数，替代 max-height:3em 裁半行），
-   行高上限 119px → ~85px，与字段列单行化叠加后行高统一 */
-.frt__meaning { min-width: 200px; max-width: 340px; }
+/* 含义列：单行 ellipsis（原型 .tbl td nowrap + 长内容截断判例；完整文案在 title 浮层） */
+.frt__meaning { min-width: 200px; }
 .frt__meaning-text {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: block;
+  max-width: 340px;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--mk-muted);
   line-height: 1.5;
 }
@@ -1018,7 +971,6 @@ watch(() => props.stage, () => void loadStage());
 .frt__emptyrow { color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; padding: 14px; }
 
 @media (min-width: 2000px) {
-  .frt__toolbar-btn { font-size: var(--mk-fs-body); padding: 10px 20px; }
   .frt__toolbar-hint { font-size: var(--mk-fs-micro); }
   .frt__notice { font-size: var(--mk-fs-micro); padding: 9px 14px; }
   .frt__legend-title { font-size: var(--mk-fs-micro); }
@@ -1039,7 +991,6 @@ watch(() => props.stage, () => void loadStage());
   }
 
 @media (min-width: 2800px) {
-  .frt__toolbar-btn { font-size: var(--mk-fs-body); padding: 12px 24px; }
   .frt__toolbar-hint { font-size: var(--mk-fs-micro); }
   .frt__notice { font-size: var(--mk-fs-micro); padding: 11px 17px; }
   .frt__legend-title { font-size: var(--mk-fs-micro); }
@@ -1059,29 +1010,20 @@ watch(() => props.stage, () => void loadStage());
   .frt__persist { font-size: var(--mk-fs-micro); }
 }
 
-/* ================= 暗色模式（D1 补完）：字段路由表 ================= */
+/* ================= 暗色模式（D1 补完）：字段路由表 =================
+   余下仅吸顶条磨砂底、蓝字提示条的暗色提亮与 agent 名暗色调——
+   浅色硬编码已归 --mk-* token（--mk-bg / --mk-line / --mk-amber-bg 随主题自动翻转）。 */
 html[data-theme='dark'] {
   .frt__stickybar {
     background: rgba(20, 28, 43, 0.94);
-    border-bottom-color: rgba(42, 56, 80, 0.9);
     box-shadow: var(--mk-shadow-sm);
   }
-  .frt__toolbar { background: #19191a; border-color: #2a2b2d; }
-  .frt__toolbar-btn:hover { background: #252627; }
-  .frt__notice { background: #252627; border-color: rgba(91, 141, 239, 0.45); color: var(--mk-accent-deep); }
-  .frt-syncbar { background: #252627; border-color: rgba(91, 141, 239, 0.4); }
-  .frt-syncbar--muted { background: #19191a; }
-  .frt-syncbar__badge--muted { background: var(--mk-close-bg); }
+  /* 品牌蓝在深底上提亮一档（rgba 描边/文字，亮色档不用） */
+  .frt__notice { border-color: rgba(91, 141, 239, 0.45); color: var(--mk-accent-deep); }
+  .frt-syncbar { border-color: rgba(91, 141, 239, 0.4); }
+  .frt__orch-quick { background: rgba(91, 141, 239, 0.12); }
 
-  .frt__agenthead { background: #19191a; }
   /* agent 卡片标题：暗色下从近白降为柔和浅灰蓝（与编排图一致） */
   .frt__agentname { color: #d8d8da; }
-  .frt__agentcount { background: var(--mk-close-bg); }
-  .frt__persist--alias { background: rgba(251, 191, 36, 0.12); }
-
-
-  .frt__orch-summary { background: #161718; }
-  .frt__orch-textarea { background: #141415; }
-  .frt__orch-quick { background: rgba(91, 141, 239, 0.12); }
 }
 </style>

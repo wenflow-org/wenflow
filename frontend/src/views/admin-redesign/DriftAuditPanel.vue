@@ -29,7 +29,7 @@
       <div v-else-if="drift.items.length === 0" class="fdp__empty"><Check :size="14" :stroke-width="1.75" style="vertical-align:-2px" /> 无漂移（编排文件与数据库一致）</div>
       <ul v-else class="fdp__drift-list">
         <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
-          <span class="mono fdp__drift-kind">{{ kindLabel(d.kind) }}</span>
+          <span class="mono mk-badge mk-badge--warn fdp__drift-kind">{{ kindLabel(d.kind) }}</span>
           <span class="mono fdp__drift-key">{{ d.key }}</span>
           <span class="fdp__drift-field">{{ d.field }}</span>
           <span class="mono fdp__drift-val fdp__drift-val--seed">声明={{ stringify(d.seedValue) }}</span>
@@ -44,7 +44,7 @@
       <summary class="mk-section__summary">最近变更（审计）</summary>
       <ul v-if="changes.length" class="fdp__changes-list">
         <li v-for="(c, i) in changes" :key="i" class="fdp__change">
-          <span class="fdp__change-kind">{{ String(c.changeType || '—') }}</span>
+          <span class="mk-badge mk-badge--muted fdp__change-kind">{{ String(c.changeType || '—') }}</span>
           <span class="fdp__change-target">{{ String(c.targetTable || '') }}</span>
           <span class="mono">{{ String(c.targetId || '') }}</span>
         </li>
@@ -153,7 +153,7 @@ watch(() => props.stage, () => {
   font-weight: 700;
 }
 .fdp__guide-file .mono { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue, #2c63d0); }
-.fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: var(--mk-fs-micro); background: #f0f2f5; padding: 1px 6px; border-radius: var(--mk-radius-sm); }
+.fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: var(--mk-fs-micro); background: var(--mk-surface-3); padding: 1px 6px; border-radius: var(--mk-radius-sm); }
 .fdp__drift-list { margin: 0; padding: 6px 14px 12px; list-style: none; }
 .fdp__drift-item {
   display: flex;
@@ -163,20 +163,12 @@ watch(() => props.stage, () => {
   margin-top: 6px;
   border: 1px solid var(--mk-line, #e6ebf4);
   border-radius: var(--mk-radius-xl);
-  background: #fafbfd;
+  background: var(--mk-bg);
   font-size: var(--mk-fs-micro);
   flex-wrap: wrap;
 }
-.fdp__drift-kind {
-  flex-shrink: 0;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--mk-amber-bg, #fffbeb);
-  color: var(--mk-amber, #b45309);
-  font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  }
+/* 类别徽章走全局 .mk-badge 胶囊（自搓 pill 已删）；本类只保留行内布局位 */
+.fdp__drift-kind { flex-shrink: 0; }
 .fdp__drift-key { font-weight: 700; color: var(--mk-ink, #1a2a44); }
 .fdp__drift-field { color: var(--mk-faint, var(--mk-faint-soft)); }
 .fdp__drift-val { font-size: var(--mk-fs-micro); }
@@ -191,19 +183,11 @@ watch(() => props.stage, () => {
   margin-top: 6px;
   border: 1px solid var(--mk-line, #e6ebf4);
   border-radius: var(--mk-radius-xl);
-  background: #fafbfd;
+  background: var(--mk-bg);
   font-size: var(--mk-fs-micro);
   flex-wrap: wrap;
 }
-.fdp__change-kind {
-  flex-shrink: 0;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: #eef2fa;
-  color: var(--mk-muted, #5b6577);
-  font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  }
+.fdp__change-kind { flex-shrink: 0; }
 .fdp__change-target { color: var(--mk-muted, #5b6577); }
 .fdp__empty { padding: 20px; color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; }
 
@@ -214,10 +198,8 @@ watch(() => props.stage, () => {
   .fdp__guide-file .mono { font-size: var(--mk-fs-micro); }
   .fdp__guide-text code { font-size: var(--mk-fs-micro); }
   .fdp__drift-item { font-size: var(--mk-fs-micro); padding: 8px 12px; }
-  .fdp__drift-kind { font-size: var(--mk-fs-micro); padding: 1px 10px; }
   .fdp__drift-val { font-size: var(--mk-fs-micro); }
   .fdp__change { font-size: var(--mk-fs-micro); padding: 8px 12px; }
-  .fdp__change-kind { font-size: var(--mk-fs-micro); padding: 1px 10px; }
   .fdp__empty { padding: 24px; }
 }
 
@@ -228,18 +210,8 @@ watch(() => props.stage, () => {
   .fdp__guide-file .mono { font-size: var(--mk-fs-micro); }
   .fdp__guide-text code { font-size: var(--mk-fs-micro); }
   .fdp__drift-item { font-size: var(--mk-fs-micro); padding: 10px 15px; }
-  .fdp__drift-kind { font-size: var(--mk-fs-micro); padding: 2px 12px; }
   .fdp__drift-val { font-size: var(--mk-fs-micro); }
   .fdp__change { font-size: var(--mk-fs-micro); padding: 10px 15px; }
-  .fdp__change-kind { font-size: var(--mk-fs-micro); padding: 2px 12px; }
   .fdp__empty { padding: 28px; }
-}
-
-/* ================= 暗色模式（D1 补完）：治理漂移审计 ================= */
-html[data-theme='dark'] {
-  .fdp__guide-text code { background: #2d2d2f; }
-  .fdp__drift-item { background: #1b1c1d; }
-  .fdp__change { background: #1b1c1d; }
-  .fdp__change-kind { background: #2d2d2f; color: #afb1b6; }
 }
 </style>

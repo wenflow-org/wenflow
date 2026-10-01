@@ -47,7 +47,8 @@
 
       <!-- 图例：角色 / render / 流转 / 落库键 / 锁定（与编排图页同源人话表） -->
       <details class="sfr__legend" @toggle="legendOpen = ($event.target as HTMLDetailsElement).open">
-        <summary class="sfr__legend-summary">图例：字段角色 / render / 锁定 / 流转 —— 不懂就看这里</summary>
+        <!-- 折叠头走 .mk-section__summary（shared.css，与 FieldRoutingTable / DriftAuditPanel 同款） -->
+        <summary class="mk-section__summary mk-section__summary--muted">图例：字段角色 / render / 锁定 / 流转 —— 不懂就看这里</summary>
         <div class="sfr__legend-body">
           <div class="sfr__legend-group sfr__legend-group--roles">
             <h5 class="sfr__legend-title">字段角色（promptRole）</h5>
@@ -102,21 +103,9 @@
 
       <!-- 产出字段表 -->
       <div class="sfr__scroll mk-table-scroll">
-        <table class="mk-table mk-table--dense mk-table--fixed">
-          <colgroup>
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-text)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-model)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-actions-wide)">
-          </colgroup>
+        <!-- 原型 .tbl：自动布局（去 mk-table--fixed 与 <colgroup>，2026-10-01 对齐 Skills 判例），
+             单元格 nowrap、列按内容自然分宽；长内容列（字段/含义/移交/落库键）已有 max-width+ellipsis 截断 -->
+        <table class="mk-table mk-table--dense sfr__table">
           <thead>
             <tr>
               <th scope="col">字段</th>
@@ -614,7 +603,7 @@ onMounted(() => void load())
 .sfr__orphan-item { display: inline-flex; gap: 4px; align-items: center; color: var(--mk-muted, #5b6577); }
 .sfr__orphan-item code { color: var(--mk-amber, #b45309); font-weight: 700; }
 
-/* ========== 图例（可折叠，与编排图页同款语义） ========== */
+/* ========== 图例（可折叠，与编排图页同款语义；折叠头走 .mk-section__summary） ========== */
 .sfr__legend {
   margin: 0 0 12px;
   border: 1px solid var(--mk-line, #e6ebf4);
@@ -622,18 +611,8 @@ onMounted(() => void load())
   background: var(--mk-surface, #fff);
   box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06));
 }
-.sfr__legend-summary {
-  padding: 9px 14px;
-  cursor: pointer;
-  user-select: none;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-muted, #5b6577);
-  list-style: none;
-}
-.sfr__legend-summary::-webkit-details-marker { display: none; }
-.sfr__legend-summary::before { content: '▸'; display: inline-block; margin-right: 7px; color: var(--mk-blue, #2c63d0); transition: transform 0.14s ease; }
-.sfr__legend[open] .sfr__legend-summary::before { transform: rotate(90deg); }
+/* 展开态的底分隔线是本页特性（mk-section__summary 本体无底边） */
+.sfr__legend[open] > .mk-section__summary { border-bottom: 1px solid var(--mk-line, #e6ebf4); }
 .sfr__legend-body { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; padding: 4px 14px 10px; }
 @media (max-width: 860px) { .sfr__legend-body { grid-template-columns: 1fr; } }
 .sfr__legend-title { margin: 0 0 6px; font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.05em; color: var(--mk-faint, var(--mk-faint-soft)); }
@@ -650,18 +629,21 @@ onMounted(() => void load())
 /* 表格本体已并入 mk-table mk-table--dense（shared.css）：仅保留容器与表内单元格辅助样式 */
 .sfr__scroll { overflow-x: auto; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 12px; background: var(--mk-surface, #fff); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
 @media (max-width: 860px) { .mk-table--dense { min-width: 1180px; } }
+/* 原型 .tbl td nowrap：自动布局下单元格单行，列按内容自然分宽 */
+.sfr__table td { white-space: nowrap; }
 .sfr__fieldcell { max-width: 300px; display: grid; gap: 2px; min-width: 0; }
 .sfr__field { display: block; min-width: 0; color: var(--mk-ink, #1a2a44); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sfr__fieldpath { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sfr__meaning { min-width: 200px; max-width: 340px; }
-.sfr__meaning-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--mk-muted, #5b6577); line-height: 1.5; }
+/* 含义列：单行 ellipsis（原型 .tbl td nowrap + 长内容截断判例；完整文案在 title 浮层） */
+.sfr__meaning { min-width: 200px; }
+.sfr__meaning-text { display: block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); line-height: 1.5; }
 .sfr__handoff { max-width: var(--mk-col-id); color: var(--mk-faint, var(--mk-faint-soft)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 行内操作钮 = mk-btn--sm 文字钮（编辑/删除），不再覆写尺寸 */
 .sfr__ops { display: flex; gap: 6px; white-space: nowrap; }
-.sfr__ops .mk-btn { padding: 3px 10px; font-size: var(--mk-fs-micro); }
 
 /* 角色徽章（与编排图页同款 7 类着色） */
 .sfr__persist { display: inline-block; max-width: var(--mk-col-id); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
-.sfr__persist--alias { color: var(--mk-amber, #b45309); background: #fffbeb; border-radius: var(--mk-radius-sm); padding: 0 5px; }
+.sfr__persist--alias { color: var(--mk-amber, #b45309); background: var(--mk-amber-bg); border-radius: var(--mk-radius-sm); padding: 0 5px; }
 
 /* core 状态列 */
 .sfr__emptyrow { color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; padding: 14px; }
@@ -678,10 +660,5 @@ onMounted(() => void load())
 @media (min-width: 3600px) {
   .sfr__emptyrow { font-size: var(--mk-fs-emphasis); }
   .sfr__persist { font-size: var(--mk-fs-body); }
-}
-
-/* 暗色模式（D1 补完）：字段路由表 */
-html[data-theme='dark'] {
-  .sfr__persist--alias { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
 }
 </style>

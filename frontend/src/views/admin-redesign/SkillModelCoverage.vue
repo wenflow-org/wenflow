@@ -18,32 +18,35 @@
       <p v-if="bulkMsg" class="skc__msg" :class="{ 'is-err': bulkErr }">{{ bulkMsg }}</p>
     </div>
 
-    <table class="skc__table">
-      <thead>
-        <tr>
-          <th><input type="checkbox" :checked="allChecked" @change="toggleAll(($event.target as HTMLInputElement).checked)" /></th>
-          <th>Skill</th>
-          <th>路由来源</th>
-          <th>model</th>
-          <th>参数覆盖</th>
-          <th>兜底链</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="s in rows" :key="s.skillId">
-          <td><input v-model="selected" type="checkbox" :value="s.skillId" /></td>
-          <td class="mono">{{ s.skillId }}</td>
-          <td>
-            <span class="mk-badge" :class="s.source === 'platform-default' ? 'mk-badge--muted' : 'mk-badge--ok'">
-              {{ s.source === 'platform-default' ? '平台默认(未配置)' : s.source === 'skill-channel' ? '独立通道' : '仅技能模型' }}
-            </span>
-          </td>
-          <td class="mono">{{ s.model || '继承' }}</td>
-          <td class="mono">{{ s.paramOverrides ? JSON.stringify(s.paramOverrides) : '—' }}</td>
-          <td class="mono">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : 'registry默认' }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <!-- 原型 .tbl：统一 mk-table--dense 词表（自搓 .skc__table 已删）；单元格 nowrap，长内容列截断 -->
+    <div class="mk-table-scroll">
+      <table class="mk-table mk-table--dense skc__table">
+        <thead>
+          <tr>
+            <th><input type="checkbox" :checked="allChecked" @change="toggleAll(($event.target as HTMLInputElement).checked)" /></th>
+            <th>Skill</th>
+            <th>路由来源</th>
+            <th>model</th>
+            <th>参数覆盖</th>
+            <th>兜底链</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="s in rows" :key="s.skillId">
+            <td><input v-model="selected" type="checkbox" :value="s.skillId" /></td>
+            <td class="mono">{{ s.skillId }}</td>
+            <td>
+              <span class="mk-badge" :class="s.source === 'platform-default' ? 'mk-badge--muted' : 'mk-badge--ok'">
+                {{ s.source === 'platform-default' ? '平台默认(未配置)' : s.source === 'skill-channel' ? '独立通道' : '仅技能模型' }}
+              </span>
+            </td>
+            <td class="mono">{{ s.model || '继承' }}</td>
+            <td class="mono skc__clamp" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ s.paramOverrides ? JSON.stringify(s.paramOverrides) : '—' }}</td>
+            <td class="mono skc__clamp" :title="s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : 'registry默认' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <!-- 模型目录候选（File-as-Truth llm-providers.json；带「供应商 · tier」标注） -->
     <datalist id="skc-model-options">
@@ -136,14 +139,15 @@ onMounted(load)
 
 <style scoped>
 .skc { display: grid; gap: 12px; }
-.skc__hint { font-size: var(--mk-fs-body); color: var(--mk-muted); line-height: 1.6; margin: 0; }
+/* 提示语 = 12px muted（原型 .card__sub / .sub 词表） */
+.skc__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; margin: 0; }
 .skc__apply { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .skc__apply .mk-input { max-width: 280px; }
-.skc__apply .is-err { border-color: var(--mk-red, #c0392b); }
+.skc__apply .is-err { border-color: var(--mk-red); }
 .skc__msg { font-size: var(--mk-fs-micro); margin: 0; }
-.skc__msg.is-err { color: var(--mk-red, #c0392b); }
-.skc__table { width: 100%; border-collapse: collapse; font-size: var(--mk-fs-body); }
-.skc__table th, .skc__table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--mk-line, #e5e7ee); }
-.skc__table th { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
-.mono { font-family: var(--mk-mono, monospace); font-size: var(--mk-fs-micro); }
+.skc__msg.is-err { color: var(--mk-red); }
+/* 表格本体已并入 mk-table mk-table--dense（shared.css）：仅保留单元格截断辅助 */
+.skc__table td { white-space: nowrap; }
+/* 参数覆盖 / 兜底链：JSON 与链条是长内容列，max-width + ellipsis 截断（完整值在 title） */
+.skc__clamp { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
 </style>

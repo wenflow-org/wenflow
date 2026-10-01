@@ -39,46 +39,46 @@
         <template v-else>
           <!-- 表单 -->
           <div class="faw__grid">
-            <label class="faw__field faw__field--full">
-              <span>字段名 <em class="faw__req">*</em>（kebab-case 或点分路径；首段 = core 顶层字段）</span>
+            <label class="mk-field faw__full">
+              <span class="mk-field__label">字段名 <em class="mk-field__req">*</em>（kebab-case 或点分路径；首段 = core 顶层字段）</span>
               <input v-model="form.name" type="text" class="mk-input mono" placeholder="如 summary / understanding.motivation" spellcheck="false" :disabled="mode === 'edit'" @input="checkName" />
-              <span v-if="mode === 'edit'" class="faw__hint">编辑模式：字段名即身份标识，不可修改</span>
-              <span v-else class="faw__hint" :class="nameHintCls">{{ nameHint }}</span>
+              <span v-if="mode === 'edit'" class="mk-field__hint">编辑模式：字段名即身份标识，不可修改</span>
+              <span v-else class="mk-field__hint" :class="nameHintCls">{{ nameHint }}</span>
             </label>
 
-            <label class="faw__field">
-              <span>类型（core 侧） <em class="faw__req">*</em></span>
+            <label class="mk-field">
+              <span class="mk-field__label">类型（core 侧） <em class="mk-field__req">*</em></span>
               <!-- enum 仅 core 侧可声明（编排侧无对应 valueType 写法），置灰防误选；存量 enum 编辑仍回显，由 formProblems 拦提交 -->
               <select v-model="form.type" class="mk-input">
                 <option v-for="t in CORE_TYPES" :key="t" :value="t" :disabled="t === 'enum'">{{ t === 'enum' ? 'enum（仅 core 侧，编排无对应写法）' : t }}</option>
               </select>
-              <span class="faw__hint" :class="typeHintCls">{{ typeHint }}</span>
+              <span class="mk-field__hint" :class="typeHintCls">{{ typeHint }}</span>
             </label>
 
-            <label class="faw__field">
-              <span>角色（promptRole） <em class="faw__req">*</em></span>
+            <label class="mk-field">
+              <span class="mk-field__label">角色（promptRole） <em class="mk-field__req">*</em></span>
               <select v-model="form.role" class="mk-input">
                 <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
               </select>
-              <span class="faw__hint">{{ roleHint }}</span>
+              <span class="mk-field__hint">{{ roleHint }}</span>
             </label>
 
-            <label class="faw__field">
-              <span>render（可见性）</span>
+            <label class="mk-field">
+              <span class="mk-field__label">render（可见性）</span>
               <select v-model="form.render" class="mk-input">
                 <option value="visible">visible 可见（对外交付）</option>
                 <option value="hidden">hidden 隐藏（仅内部流转）</option>
               </select>
             </label>
 
-            <label class="faw__field">
-              <span>handoff（流转目标）</span>
+            <label class="mk-field">
+              <span class="mk-field__label">handoff（流转目标）</span>
               <input v-model="form.handoff" type="text" class="mk-input mono" placeholder="goal-agent, path, skill:xxx" spellcheck="false" />
-              <span class="faw__hint">合法目标：阶段名（{{ STAGE_NAMES.join('/') }}）/ agent / skill:；逗号分隔</span>
+              <span class="mk-field__hint">合法目标：阶段名（{{ STAGE_NAMES.join('/') }}）/ agent / skill:；逗号分隔</span>
             </label>
 
-            <label class="faw__field">
-              <span>visibilityPreset（可见性预设）</span>
+            <label class="mk-field">
+              <span class="mk-field__label">visibilityPreset（可见性预设）</span>
               <select v-model="form.visibilityPreset" class="mk-input">
                 <option value="">缺省（不声明）</option>
                 <option value="user-clarification">user-clarification</option>
@@ -86,8 +86,8 @@
               </select>
             </label>
 
-            <label class="faw__field">
-              <span>locked（锁定）</span>
+            <label class="mk-field">
+              <span class="mk-field__label">locked（锁定）</span>
               <select v-model="form.locked" class="mk-input">
                 <option value="">不锁定</option>
                 <option value="system">system 系统锁（平台派生/代码消费）</option>
@@ -95,19 +95,19 @@
               </select>
             </label>
 
-            <label class="faw__field">
-              <span>落库键（persistKey，别名时填）</span>
+            <label class="mk-field">
+              <span class="mk-field__label">落库键（persistKey，别名时填）</span>
               <input v-model="form.persistKey" type="text" class="mk-input mono" placeholder="缺省 = 与字段名一致" spellcheck="false" />
             </label>
 
-            <label class="faw__field">
-              <span>抽取路径（pathInRawOutput）</span>
+            <label class="mk-field">
+              <span class="mk-field__label">抽取路径（pathInRawOutput）</span>
               <input v-model="form.pathInRawOutput" type="text" class="mk-input mono" placeholder="internal.ext.xxx.…" spellcheck="false" />
-              <span class="faw__hint">嵌套字段建议填；声明字段在产出原始输出里的物理路径</span>
+              <span class="mk-field__hint">嵌套字段建议填；声明字段在产出原始输出里的物理路径</span>
             </label>
 
-            <label class="faw__field faw__field--full">
-              <span>desc（生成指令 / 含义） <em class="faw__req">*</em></span>
+            <label class="mk-field faw__full">
+              <span class="mk-field__label">desc（生成指令 / 含义） <em class="mk-field__req">*</em></span>
               <textarea v-model="form.desc" class="mk-input faw__desc" rows="3" placeholder="说明字段语义与生成要求（core 与编排共用）"></textarea>
             </label>
           </div>
@@ -521,10 +521,9 @@ async function submit() {
 <style scoped>
 .faw__sub { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); }
 .faw__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
-.faw__field { display: grid; gap: 4px; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted, #5b6577); }
-.faw__field--full { grid-column: 1 / -1; }
-.faw__req { color: var(--mk-red, #dc2626); font-style: normal; }
-.faw__hint { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-faint, var(--mk-faint-soft)); line-height: 1.45; }
+/* 表单字段走全局 .mk-field 词表（mk-field__label / __req / __hint，原 faw__field 自搓一套已删）；
+   本文件只保留栅格占位与提示语态色 */
+.faw__full { grid-column: 1 / -1; }
 .faw__hint--ok { color: var(--mk-green, #15803d); }
 .faw__hint--err { color: var(--mk-red, #dc2626); font-weight: 600; }
 .faw__desc { resize: vertical; min-height: 64px; }
@@ -534,11 +533,12 @@ async function submit() {
 .faw__warn { margin: 0; padding: 6px 10px; border: 1px dashed rgba(180, 83, 9, 0.45); border-radius: var(--mk-radius-sm); background: var(--mk-amber-bg, #fffbeb); color: var(--mk-amber, #b45309); font-size: var(--mk-fs-micro); font-weight: 600; }
 .faw__warn--err { border-color: rgba(220, 38, 38, 0.45); background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .faw__preview { border: 1px solid var(--mk-line, #e6ebf4); border-radius: var(--mk-radius-xl); overflow: hidden; }
-.faw__preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 12px; background: #fafbfd; border-bottom: 1px solid var(--mk-line, #e6ebf4); }
+.faw__preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 12px; background: var(--mk-bg); border-bottom: 1px solid var(--mk-line, #e6ebf4); }
 .faw__preview-title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink, #1a2a44); }
 .faw__preview-meta { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); }
-.faw__preview-code { margin: 0; padding: 12px; background: #0f172a; color: #dbeafe; font-size: var(--mk-fs-micro); line-height: 1.55; overflow: auto; max-height: 240px; }
-.faw__msg { margin: 0; padding: 9px 12px; border: 1px solid rgba(44, 99, 208, 0.35); border-radius: var(--mk-radius-xl); background: #f0f5ff; color: var(--mk-blue, #2c63d0); font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1.5; white-space: pre-wrap; }
+/* 代码块走全局 --mk-code-* token（原 #0f172a/#dbeafe 硬编码已归 token，明暗两档自动切换） */
+.faw__preview-code { margin: 0; padding: 12px; background: var(--mk-code-bg); color: var(--mk-code-fg); font-size: var(--mk-fs-micro); line-height: 1.55; overflow: auto; max-height: 240px; }
+.faw__msg { margin: 0; padding: 9px 12px; border: 1px solid rgba(44, 99, 208, 0.35); border-radius: var(--mk-radius-xl); background: var(--mk-blue-bg); color: var(--mk-blue, #2c63d0); font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1.5; white-space: pre-wrap; }
 .faw__msg.is-err { border-color: rgba(220, 38, 38, 0.4); background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .faw__result { border: 1px solid rgba(21, 128, 61, 0.3); border-radius: var(--mk-radius-xl); padding: 12px 14px; background: var(--mk-green-bg, #ecfdf5); }
 .faw__result-title { color: var(--mk-green, #15803d); font-size: var(--mk-fs-body); }
@@ -572,11 +572,10 @@ async function submit() {
   .faw__result-note { font-size: var(--mk-fs-emphasis); }
 }
 
-/* 暗色模式：硬编码浅色块替换为深色等阶（Teleport 覆盖层不继承页面暗色） */
-html[data-theme='dark'] .faw__preview-head { background: #19191a; }
+/* 暗色模式：半透明蓝的边/字提亮（背景已由 --mk-blue-bg / --mk-bg token 自动翻转；
+   Teleport 覆盖层不继承页面暗色，但 html[data-theme] 选择器仍命中） */
 html[data-theme='dark'] .faw__msg {
-  background: rgba(91, 141, 239, 0.16);
   border-color: rgba(91, 141, 239, 0.4);
-  color: #9db8f5;
+  color: var(--mk-accent-deep);
 }
 </style>

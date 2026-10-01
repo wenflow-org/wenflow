@@ -220,7 +220,9 @@
             <span class="mk-card__meta">未注册模型 / 别名为空 / 模型未被引用 / 废弃的 prompt 模型副本</span>
           </div>
           <div v-if="data.warnings.length" class="ac-mr-warnings">
-            <div v-for="(warning, index) in data.warnings" :key="index" class="mk-alert mk-alert--row mk-alert--warn" role="alert">
+            <!-- 配置提示 = 警示语义：走 .note--warn 琥珀档（.mk-alert 本体红档留给错误，
+                 不存在的 mk-alert--warn 幽灵类已删，改由容器覆写着色） -->
+            <div v-for="(warning, index) in data.warnings" :key="index" class="mk-alert mk-alert--row" role="alert">
               <span class="mk-alert__msg">{{ warning }}</span>
             </div>
           </div>
@@ -389,5 +391,11 @@ defineExpose({ refresh })
   flex-direction: column;
   gap: 6px;
   padding: 8px 0;
+}
+/* 警示着色覆写（原 .mk-alert 基类红档 → 原型 .note--warn 琥珀档）：提示不是错误 */
+.ac-mr-warnings .mk-alert {
+  background: var(--mk-amber-bg);
+  color: var(--mk-amber);
+  font-size: var(--mk-fs-micro);
 }
 </style>
