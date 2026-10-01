@@ -91,6 +91,7 @@
               type="button"
               class="mk-pill"
               :class="{ 'mk-pill--active': statusFilter === p.id }"
+              :aria-pressed="statusFilter === p.id"
               @click="statusFilter = statusFilter === p.id ? '' : p.id"
             >
               {{ p.label }}<span class="mk-pill__count">{{ p.count }}</span>

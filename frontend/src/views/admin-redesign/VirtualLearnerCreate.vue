@@ -32,12 +32,14 @@
               type="button"
               class="mk-pill"
               :class="{ 'mk-pill--active': sampleType === 'general' }"
+              :aria-pressed="sampleType === 'general'"
               @click="sampleType = 'general'"
             >通用</button>
             <button
               type="button"
               class="mk-pill"
               :class="{ 'mk-pill--active': sampleType === 'student' }"
+              :aria-pressed="sampleType === 'student'"
               title="生成传统学生样本：学段/考试节点/学期节奏/家长与同伴环境"
               @click="sampleType = 'student'"
             >传统学生</button>

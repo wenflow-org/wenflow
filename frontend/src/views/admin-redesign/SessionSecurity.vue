@@ -47,6 +47,7 @@
               type="button"
               class="mk-pill"
               :class="{ 'mk-pill--active': statusFilter === p.id }"
+              :aria-pressed="statusFilter === p.id"
               :title="`只看${p.label}会话`"
               @click="statusFilter = statusFilter === p.id ? '' : p.id"
             >

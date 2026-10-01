@@ -46,8 +46,8 @@
       <div class="mk-card__head">
         <div class="mk-filter">
           <div class="mk-pills">
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" @click="onlyAttention = false">全部<span class="mk-pill__count">{{ cards.length }}</span></button>
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" @click="onlyAttention = true">仅看需关注<span class="mk-pill__count">{{ errorCount }}</span></button>
+            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" :aria-pressed="!onlyAttention" @click="onlyAttention = false">全部<span class="mk-pill__count">{{ cards.length }}</span></button>
+            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" :aria-pressed="onlyAttention" @click="onlyAttention = true">仅看需关注<span class="mk-pill__count">{{ errorCount }}</span></button>
           </div>
           <select v-model="categoryFilter" class="mk-filter__select" aria-label="按类别筛选">
             <option value="">全部类别</option>

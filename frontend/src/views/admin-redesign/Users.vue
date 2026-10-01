@@ -35,6 +35,7 @@
               type="button"
               class="mk-pill"
               :class="{ 'mk-pill--active': pill === p.id }"
+              :aria-pressed="pill === p.id"
               @click="pill = p.id"
             >
               {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>

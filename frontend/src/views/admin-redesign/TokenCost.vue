@@ -56,6 +56,7 @@
             type="button"
             class="mk-pill"
             :class="{ 'mk-pill--active': days === p.days }"
+            :aria-pressed="days === p.days"
             @click="days = p.days"
           >
             {{ p.label }}

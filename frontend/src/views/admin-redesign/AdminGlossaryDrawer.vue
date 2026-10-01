@@ -29,6 +29,7 @@
               type="button"
               class="mk-pill"
               :class="{ 'mk-pill--active': category === c.id }"
+              :aria-pressed="category === c.id"
               @click="category = c.id"
             >{{ c.label }}（{{ countOf(c.id) }}）</button>
           </div>

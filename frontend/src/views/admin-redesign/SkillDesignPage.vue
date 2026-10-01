@@ -67,6 +67,7 @@
           type="button"
           class="mk-pill"
           :class="{ 'mk-pill--active': tab === t.key }"
+          :aria-pressed="tab === t.key"
           @click="tab = t.key"
         >
           {{ t.label }}

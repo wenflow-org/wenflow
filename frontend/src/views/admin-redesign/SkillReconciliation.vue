@@ -37,8 +37,8 @@
     <template v-else-if="recReport">
       <div class="sk-rec-tools">
         <div class="mk-pills">
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !recOnlyAbnormal }" @click="recOnlyAbnormal = false">全部</button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': recOnlyAbnormal }" @click="recOnlyAbnormal = true">仅看异常</button>
+          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !recOnlyAbnormal }" :aria-pressed="!recOnlyAbnormal" @click="recOnlyAbnormal = false">全部</button>
+          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': recOnlyAbnormal }" :aria-pressed="recOnlyAbnormal" @click="recOnlyAbnormal = true">仅看异常</button>
         </div>
         <span class="mk-card__meta" title="异常 = 未注册（配置文件缺失）/ 缺 ACTIVE（无生效版本）/ 未上线（完成度非 live）">异常 = 未注册 / 无生效版本 / 未上线</span>
       </div>

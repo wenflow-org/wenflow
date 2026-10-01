@@ -156,12 +156,14 @@
                   type="button"
                   class="mk-pill"
                   :class="{ 'mk-pill--active': form.scope === 'all' }"
+                  :aria-pressed="form.scope === 'all'"
                   @click="form.scope = 'all'"
                 >全员（真实用户）</button>
                 <button
                   type="button"
                   class="mk-pill"
                   :class="{ 'mk-pill--active': form.scope === 'user' }"
+                  :aria-pressed="form.scope === 'user'"
                   @click="form.scope = 'user'"
                 >定向用户</button>
               </div>

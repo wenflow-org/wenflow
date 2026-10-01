@@ -47,6 +47,7 @@
                 type="button"
                 class="mk-pill"
                 :class="{ 'mk-pill--active': statusFilter === p.id }"
+                :aria-pressed="statusFilter === p.id"
                 @click="statusFilter = statusFilter === p.id ? '' : p.id"
               >
                 {{ p.label }}<span class="mk-pill__count">{{ p.count }}</span>
@@ -57,6 +58,7 @@
                 type="button"
                 class="mk-pill"
                 :class="{ 'mk-pill--active': lowOnly }"
+                :aria-pressed="lowOnly"
                 @click="lowOnly = !lowOnly"
               >
                 仅低分 ≤2<span class="mk-pill__count">{{ lowCount }}</span>
@@ -101,7 +103,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in paged" :key="r.id" class="fb-row" @click="openDetail(r)">
+            <tr v-for="r in paged" :key="r.id" class="fb-row" tabindex="0" @click="openDetail(r)" @keydown.enter.prevent="openDetail(r)">
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ r.userName }}</strong>
