@@ -102,7 +102,6 @@ export interface InvestigationIntent {
   agentFilter: string
   statusFilter: string
   traceId: string
-  skillDrawerId: string
   /** 业务会话 ID（跳瀑布时优先进入会话分组视图） */
   sessionId: string
   /** 页面级快捷动作（intent 直达并触发页面动作，如新建用户/公告） */
@@ -122,7 +121,6 @@ export const intent = reactive<InvestigationIntent>({
   agentFilter: '',
   statusFilter: '',
   traceId: '',
-  skillDrawerId: '',
   sessionId: '',
   quickAction: '',
   errorCategory: '',
@@ -163,13 +161,10 @@ export function openSession(sessionId: string) {
   intent.scene = 'execution-logs'
 }
 
-/** 打开 Skill 详情抽屉（不切换场景） */
+/** 打开 Skill 详情（原型 open-skill → go("skill") 跳页；保留旧名作兼容入口，
+ *  执行日志/链路水印/插件/健康中心四个消费方零改动获得二级页交互） */
 export function openSkillDrawer(skillId: string) {
-  intent.skillDrawerId = skillId
-}
-
-export function closeSkillDrawer() {
-  intent.skillDrawerId = ''
+  openSubPage('skill', skillId)
 }
 
 export function clearInvestigation() {

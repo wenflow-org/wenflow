@@ -174,9 +174,9 @@
               :title="`${s.agentId}：${s.calls} 次调用 · ${s.failed} 次失败 · 点击查看 Skill 运行`"
               role="button"
               tabindex="0"
-              @click="jump('skills')"
-              @keydown.enter.prevent="jump('skills')"
-              @keydown.space.prevent="jump('skills')"
+              @click="openSubPage('skill', s.agentId)"
+              @keydown.enter.prevent="openSubPage('skill', s.agentId)"
+              @keydown.space.prevent="openSubPage('skill', s.agentId)"
             >
               <span class="rankrow__idx">{{ i + 1 }}</span>
               <span class="rankrow__grow mono">{{ s.agentId }}</span>
@@ -216,7 +216,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { overviewHealth, investigateAgent, intent, dataSource } from './store';
+import { overviewHealth, investigateAgent, intent, dataSource, openSubPage } from './store';
 import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing, liveVirtualRunStats, type LiveOverviewFull } from './live';
 import { adminHealthCenterApi, adminMemoryReviewApi, adminTeachingSessionsApi } from '@/api/adminApi';
 import MkPageHead from '@/components/mk/MkPageHead.vue';

@@ -35,7 +35,6 @@
     </Shell>
 
     <AdminGlossaryDrawer :open="glossaryOpen" @close="glossaryOpen = false" />
-    <SkillDrawer />
   </section>
 </template>
 
@@ -105,6 +104,8 @@ const LearnerDetail = asyncPage(() => import('./LearnerDetail.vue'));
 const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
 const UserDetail = asyncPage(() => import('./UserDetail.vue'));
 const PathDetail = asyncPage(() => import('./PathDetail.vue'));
+// 技能详情二级页（原型 renderSkillDetail 落点；Skill 目录行 / 编排图节点下钻）
+const SkillDetail = asyncPage(() => import('./SkillDetail.vue'));
 const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
 const MemoryReview = asyncPage(() => import('./MemoryReview.vue'));
 const BatchExperiments = asyncPage(() => import('./BatchExperiments.vue'));
@@ -147,7 +148,9 @@ const detailComponents: Record<string, unknown> = {
   session: SessionCockpit,
   'session-real': SessionCockpit,
   // 路径详情二级页（原型 renderPathDetail 落点；列表行/学习者进度卡下钻）
-  path: PathDetail
+  path: PathDetail,
+  // 技能详情二级页（原型 renderSkillDetail 落点；Skill 目录行/编排图节点下钻，替代 SkillDrawer 打开）
+  skill: SkillDetail
 };
 
 export const SCENE_COMPONENTS: Readonly<Record<string, unknown>> = components;
@@ -163,11 +166,10 @@ export const DETAIL_COMPONENTS: Readonly<Record<string, unknown>> = detailCompon
 import { computed, defineAsyncComponent, h, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Shell from './Shell.vue';
-import SkillDrawer from './SkillDrawer.vue';
 import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
 import HealthCenter from './HealthCenter.vue';
 import MockSkeletonTable from './SkeletonTable.vue';
-import { intent, intentQueryParams, subPage, closeSubPage, closeSkillDrawer, type SubPageView } from './store';
+import { intent, intentQueryParams, subPage, closeSubPage, type SubPageView } from './store';
 import { loadLiveData } from './live';
 import { toast } from '@/utils/toast';
 import '@/styles/mk-primitives.css';
@@ -212,7 +214,7 @@ const router = useRouter()
    二级页此前只存在内存 ref，刷新/深链/前进后退均无法寻址（URL 不显示）。
    打开：openSubPage（任意组件）→ subPage 变化 → URL 补 query；
    恢复：整页刷新 /admin/:page?view=virtual&id=xxx → query watch → subPage 恢复 → 详情组件直接渲染。 */
-const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real', 'path']
+const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real', 'path', 'skill']
 // URL → subPage（深链/刷新/前进后退）；includeTest 透传（虚拟学习者/测试账号深链可查）
 watch(
   () => [route.query.view, route.query.id, route.query.includeTest] as [unknown, unknown, unknown],
@@ -297,32 +299,20 @@ watch(scene, (s) => {
     const qid = typeof route.query.id === 'string' ? route.query.id : ''
     if (!(qid && SUBPAGE_VIEWS.includes(qv))) subPage.value = null;
   }
-  // 切换页面时自动关闭 Skill 抽屉，避免遮挡侧栏导航；
-  // 但目标 URL 自带 ?skill= 时以 URL 为准（跨页深链要**开**）：健康中心健康检查行「查看 →」
-  // 跳 /admin/skill-workbench?skill=<id>，落地页（核心文件清单）不消费该参数，抽屉是唯一的落点——
-  // 此前这里无条件关掉，等于点了没反应（2026-09-29 功能走查实测：50ms 采样全程 skillDrawerId=''）。
-  if (!(typeof route.query.skill === 'string' && route.query.skill)) closeSkillDrawer();
 });
-// SkillDrawer ↔ URL query（?skill=xxx）双向同步：刷新后恢复抽屉状态
-watch(
-  () => intent.skillDrawerId,
-  (sid) => {
-    const cur = typeof route.query.skill === 'string' ? route.query.skill : ''
-    if (sid && sid !== cur) {
-      void router.replace({ query: { ...route.query, skill: sid } })
-    } else if (!sid && cur) {
-      const q = { ...route.query }
-      delete q.skill
-      void router.replace({ query: q })
-    }
-  }
-);
+// 旧 ?skill=<id> 深链（健康中心「查看 →」等外部入口）翻译成二级页规范形 ?view=skill&id=<id>，
+// 之后全部走「URL → subPage」标准机制：刷新恢复、前进后退、场景切换清理都免特判。
+// （抽屉已退役：原型 open-skill 是 go("skill") 跳页，详情=SkillDetail 二级页，弹层只留子实体）
 watch(
   () => route.query.skill,
   (s) => {
     const sid = typeof s === 'string' ? s : ''
-    if (sid && sid !== intent.skillDrawerId) {
-      intent.skillDrawerId = sid
+    if (sid && !(route.query.view === 'skill' && route.query.id === sid)) {
+      const q = { ...route.query }
+      delete q.skill
+      q.view = 'skill'
+      q.id = sid
+      void router.replace({ query: q })
     }
   },
   { immediate: true }

@@ -121,7 +121,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" @click="openSkillDrawer(s.id)" @keydown.enter.prevent="openSkillDrawer(s.id)">
+            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" @click="openSubPage('skill', s.id)" @keydown.enter.prevent="openSubPage('skill', s.id)">
               <td>
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
@@ -202,7 +202,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { skillStatOf, openSkillDrawer, isLive, intent } from './store'
+import { skillStatOf, openSubPage, isLive, intent } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
 import { COMPLETION_META, completionMetaOf } from './glossaryMeta'
@@ -560,7 +560,7 @@ function recGateDetail(completion: SkillCompletion): string {
 .sk-cell { display: flex; align-items: center; gap: 10px; }
 /* 原型 .tbl：自动布局 + 单元格 nowrap（列按内容自然分宽，不再 colgroup 定宽） */
 .sk-table td { white-space: nowrap; }
-/* 中文名主行（正文重色，与同站 SkillDrawer 头部一致）；英文 id 降副行（等宽灰）。
+/* 中文名主行（正文重色）；英文 id 降副行（等宽灰）。
    截断上限统一引用 token（--mk-cell-main-max）：自动布局下防长 Skill 名/长 id 独吃列宽 */
 .sk-name-main {
   font-weight: 700;

@@ -41,7 +41,7 @@
     <!-- ===== 总览：全旅程 odg 画布（newui/admin odg-canvas 形态）=====
          五阶段并列列（阶段头 + Skill 节点 + 入/出参 chip + 产出字段），
          列间 SVG 三次贝塞尔连线（箭头 + 下一阶段入参字段标签），layoutOrch 在
-         渲染/窗口 resize 时重算；点节点进入该阶段工作区。 -->
+         渲染/窗口 resize 时重算；点 Skill 节点进入该技能详情二级页（原型 open-skill）。 -->
     <section v-if="pane === 'overview' && stages.length" class="mk-card mk-card--fill orch-pane orch-odg-page">
       <div class="mk-card__head">
         <h3 class="mk-card__title">字段数据旅程（逻辑图 · 字段血缘）</h3>
@@ -66,8 +66,8 @@
                 :key="sk.id"
                 type="button"
                 class="orch-odg-node"
-                :title="`进入「${s.name}」工作区`"
-                @click="openStageFromOverview(s.id)"
+                :title="`查看「${sk.name}」详情`"
+                @click="openSkillFromOverview(sk.id)"
               >
                 <span class="orch-odg-idx mono">{{ i + 1 }}.{{ j + 1 }}</span>
                 <span class="orch-odg-nodename">{{ sk.name }}</span>
@@ -185,7 +185,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { dataSource } from './store'
+import { dataSource, openSubPage } from './store'
 import { liveTopoNodes, liveSkillCatalog, liveLoading, liveFailures, errMsg, reloadLiveTopology } from './live'
 import { TERMS } from './terms'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
@@ -521,9 +521,10 @@ function layoutOrch() {
   svg.innerHTML = out
 }
 
-function openStageFromOverview(id: string) {
-  selectStage(id)
-  pane.value = 'journey'
+/** 总览 odg 节点点击：进该 Skill 详情二级页（原型 odg-node data-action="open-skill" → go("skill")；
+    节点携带真实 skill id（拓扑 skill: 前缀已剥），与 Skills API / 抽屉同一定位参数） */
+function openSkillFromOverview(id: string) {
+  openSubPage('skill', id)
 }
 
 let odgRaf = 0

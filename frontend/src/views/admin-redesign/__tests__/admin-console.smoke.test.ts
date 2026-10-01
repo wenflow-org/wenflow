@@ -114,7 +114,6 @@ describe('AdminConsole 导航冒烟', () => {
     intent.statusFilter = '';
     intent.traceId = '';
     intent.sessionId = '';
-    intent.skillDrawerId = '';
     intent.quickAction = '';
     subPage.value = null;
   });
@@ -200,23 +199,27 @@ describe('AdminConsole 导航冒烟', () => {
     expect(subPage.value).toBeNull();
   });
 
-  /* 2026-09-29 功能走查：健康检查行「查看 →」跳 /admin/skill-workbench?skill=<id>，
-     落地页（核心文件清单）不消费该参数，Skill 抽屉是唯一落点——scene watcher 此前无条件
-     closeSkillDrawer()，把深链要开的抽屉一并关掉，等于点了没反应（真机 50ms 采样全程 id=''）。 */
-  it('跨场景深链带 ?skill= 时抽屉不被场景切换清掉；不带 ?skill= 时仍要关', async () => {
+  /* 2026-09-29 功能走查：健康检查行「查看 →」跳 /admin/skill-workbench?skill=<id>，此前抽屉是
+     唯一落点，scene watcher 无条件关抽屉等于点了没反应。
+     2026-10-01 抽屉退役（原型 open-skill=go("skill") 跳页）：旧 ?skill= 深链翻译成二级页
+     规范形 ?view=skill&id=<id>，由「URL → subPage」标准机制承载；普通跳转（无 query）按
+     URL 权威清掉二级页。 */
+  it('跨场景深链 ?skill= 翻译为技能二级页；不带 ?skill= 的场景切换清掉二级页', async () => {
     const { router } = await mountConsole('/admin/health-center');
-    intent.skillDrawerId = 'goal-conversation'; // 模拟抽屉已打开（URL 同步 watcher 写入 query）
-    await settle();
-    expect(router.currentRoute.value.query.skill).toBe('goal-conversation');
 
     await router.push('/admin/skill-workbench?skill=goal-conversation');
     await settle();
     expect(router.currentRoute.value.params.page).toBe('skill-workbench');
-    expect(intent.skillDrawerId, '场景切换把深链要开的抽屉清掉了').toBe('goal-conversation');
+    expect(router.currentRoute.value.query.skill).toBeUndefined();
+    expect(router.currentRoute.value.query.view).toBe('skill');
+    expect(router.currentRoute.value.query.id).toBe('goal-conversation');
+    expect(subPage.value, '旧 ?skill= 深链要落到 SkillDetail 二级页').not.toBeNull();
+    expect(subPage.value?.view).toBe('skill');
+    expect(subPage.value?.id).toBe('goal-conversation');
 
-    // 反向：目标 URL 不带 ?skill=（侧栏/普通跳转）仍要关，避免遮挡导航
+    // 反向：目标 URL 不带 query（侧栏/普通跳转）按 URL 权威清掉二级页
     await router.push('/admin/execution-logs');
     await settle();
-    expect(intent.skillDrawerId).toBe('');
+    expect(subPage.value).toBeNull();
   });
 });
