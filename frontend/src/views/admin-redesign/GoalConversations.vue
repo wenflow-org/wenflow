@@ -649,7 +649,10 @@ onMounted(() => {
 .gc-host > .mk-status { flex: none; }/* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
 .gc-row { cursor: pointer; }/* 键盘可达（对齐 TeachingSessions 行写法）：行可聚焦，焦点态描边提示当前位置 */
 .gc-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
-.gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }/* 状态构成桶组（newui renderGoals/bucketCard 原型移植；token 映射：--sp-3→--mk-space-3、
+/* 用户格 min-width：本表为自动布局（无 colgroup），补「澄清进度/约束条件」两列后
+   该列会被内容多的列挤到 ~90px（2026-10-02 视觉核对实测），名字/邮箱全截断——
+   给内容格兜底宽度，压缩由可换行的摘要/约束列吸收 */
+.gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }/* 状态构成桶组（newui renderGoals/bucketCard 原型移植；token 映射：--sp-3→--mk-space-3、
    --line→--mk-line、--surface→--mk-surface、--r-lg→--mk-radius-lg、--surface-3→--mk-surface-3、
    --muted→--mk-muted、--fs-micro→--mk-fs-micro）。
    .buckets 自带 16px 横向内边距：原型里桶组直接落页面，这里落在 mk-card 内（卡无 body padding）。 */

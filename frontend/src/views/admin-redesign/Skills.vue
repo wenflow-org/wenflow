@@ -849,7 +849,9 @@ const fallbackHint = computed(() => {
 
 /* 列表视图 */
 .sk-row { cursor: pointer; }
-.sk-cell { display: flex; align-items: center; gap: 10px; }
+/* Skill 格 min-width：本表 11 列自动布局，Skill 名列会被调用/通过率等数字列挤窄
+   （2026-10-02 视觉核对实测主行截成 4 字）——给内容格兜底宽度 */
+.sk-cell { display: flex; align-items: center; gap: 10px; min-width: 200px; }
 /* 原型 .tbl：自动布局 + 单元格 nowrap（列按内容自然分宽，不再 colgroup 定宽） */
 .sk-table td { white-space: nowrap; }
 /* 中文名主行（正文重色）；副行 = description（原型 .sub），缺失回落 skill id（等宽）。
