@@ -146,7 +146,7 @@
             <tr v-for="r in paged" :key="r.id" class="gc-row" tabindex="0" @click="openDetail(r)" @keydown.enter.prevent="openDetail(r)">
               <td>
                 <div class="gc-user">
-                  <MkCellAvatar :name="r.userName" :tone="r.isVirtualLearner ? 'virtual' : (!r.isVirtualLearner && r.isTestAccount ? 'test' : 'default')" />
+                  <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
                   <div class="mk-cell-main">
                     <strong>{{ r.userName }}</strong>
                     <span class="mk-cell-sub">{{ r.userEmail }}</span>
@@ -220,15 +220,23 @@
       <div v-if="detail" ref="maskRef" class="mk-drawer">
         <div class="mk-drawer__mask" @click="closeDetail"></div>
         <aside ref="panelRef" class="mk-drawer__panel" role="dialog" aria-label="会话详情">
+          <!-- 头部（原型 .ovl__head：头像 + 标题 + 关闭钮，下边框）：状态徽章下沉到正文首段徽章行 -->
           <header class="mk-drawer__head">
             <div class="gc-detail__title">
-              <span class="mk-badge" :class="statusBadge(detail.status)">{{ statusLabel(detail.status) }}</span>
-              <h3 class="mk-drawer__title">{{ detail.userName }} 的目标对话</h3>
-              <span class="mk-drawer__sub mono">{{ detail.id }}</span>
+              <MkCellAvatar :name="detail.userName" :tone="avatarTone(detail)" />
+              <div class="gc-detail__id">
+                <h3 class="mk-drawer__title">{{ detail.userName }} 的目标对话</h3>
+                <span class="mk-drawer__sub mono">{{ detail.id }}</span>
+              </div>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeDetail">✕</button>
           </header>
           <div ref="bodyRef" class="mk-drawer__body gc-detail__body">
+            <!-- 徽章行（原型 .ovl__body 首段 pills）：状态 + 澄清阶段（均为行上已有字段，不新增数据） -->
+            <div class="gc-detail__pills">
+              <span class="mk-badge" :class="statusBadge(detail.status)" :title="statusHint(detail.status)">{{ statusLabel(detail.status) }}</span>
+              <span v-if="stageText(detail.stage)" class="mk-badge" :class="stageBadgeCls(detail.stage)" :title="`阶段：${stageText(detail.stage)}`">{{ stageText(detail.stage) }}</span>
+            </div>
             <div class="mk-facts">
               <div><span>邮箱</span><strong :title="detail.userEmail">{{ detail.userEmail || '—' }}</strong></div>
               <div>
@@ -255,18 +263,21 @@
               <button type="button" class="mk-link" @click="retryDetail">重试</button>
             </div>
 
-            <section v-if="detail.description" class="gc-section">
-              <header class="mk-section__head"><h4>目标描述</h4></header>
-              <p class="gc-desc">{{ detail.description }}</p>
+            <!-- 嵌套卡（原型 .card box-shadow:none + card__head/card__body）：mk-card 承边框，正文内边距页内补 -->
+            <section v-if="detail.description" class="mk-card">
+              <div class="mk-card__head"><h4 class="mk-card__title">目标描述</h4></div>
+              <div class="gc-card__body">
+                <p class="gc-desc">{{ detail.description }}</p>
+              </div>
             </section>
 
-            <!-- 理解与方案（结构化卡片） -->
+            <!-- 理解与方案（结构化采集：嵌套卡 + 标签/值行组） -->
             <section
               v-if="detailUnderstanding.realProblem || detailUnderstanding.successCriterion || detailProposal.direction || detailProposal.stages.length"
-              class="gc-section"
+              class="mk-card"
             >
-              <header class="mk-section__head"><h4>理解与方案</h4></header>
-              <div class="gc-insight">
+              <div class="mk-card__head"><h4 class="mk-card__title">理解与方案</h4></div>
+              <div class="gc-card__body">
                 <div v-if="detailUnderstanding.realProblem" class="gc-insight__row">
                   <span>真实问题</span>
                   <p>{{ detailUnderstanding.realProblem }}</p>
@@ -292,18 +303,22 @@
               </div>
             </section>
 
-            <section v-if="detail.messages.length" class="gc-section">
-              <header class="mk-section__head"><h4>对话轮次 <span class="mono">{{ detail.messages.length }}</span>
+            <section v-if="detail.messages.length" class="mk-card">
+              <div class="mk-card__head">
+                <h4 class="mk-card__title">对话轮次</h4>
+                <span class="mk-card__meta mono">{{ detail.messages.length }}</span>
                 <button type="button" class="gc-msg-jump" title="滚动到最新消息" @click="scrollMsgsToBottom">最新 ↓</button>
-              </h4></header>
-              <div class="gc-msgs">
-                <div v-for="(m, i) in detail.messages" :key="i" class="gc-msg" :class="`gc-msg--${m.role}`">
-                  <div class="gc-msg__bubble">
-                    <div class="gc-msg__head">
-                      <span class="gc-msg__role">{{ m.role === 'user' ? '用户' : m.role === 'assistant' ? 'AI' : m.role }}</span>
-                      <span v-if="m.time" class="gc-msg__time">{{ m.time }}</span>
+              </div>
+              <div class="gc-card__body">
+                <div class="gc-msgs">
+                  <div v-for="(m, i) in detail.messages" :key="i" class="gc-msg" :class="`gc-msg--${m.role}`">
+                    <div class="gc-msg__bubble">
+                      <div class="gc-msg__head">
+                        <span class="gc-msg__role">{{ m.role === 'user' ? '用户' : m.role === 'assistant' ? 'AI' : m.role }}</span>
+                        <span v-if="m.time" class="gc-msg__time">{{ m.time }}</span>
+                      </div>
+                      <p>{{ m.text }}</p>
                     </div>
-                    <p>{{ m.text }}</p>
                   </div>
                 </div>
               </div>
@@ -314,19 +329,19 @@
               <summary>原始数据（完整 JSON）</summary>
               <pre class="gc-json mono">{{ detail.collectedData }}</pre>
             </details>
-
-            <div class="gc-actions">
-              <button type="button" class="gc-btn-link" @click="goLearner(detail)">学习者画像 →</button>
-              <button type="button" class="gc-btn-link" @click="goTrace(detail)">Trace 链路 →</button>
-              <button v-if="detail.id" type="button" class="gc-btn-link" @click="goConsole(detail)">进控制台 →</button>
-              <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="detail.regenerating" @click="regenerate(detail)">
-                {{ detail.regenerating ? '生成中…' : '重新生成学习路径' }}
-              </button>
-              <button type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="detail.regenerating" @click="remove(detail)">
-                删除会话
-              </button>
-            </div>
           </div>
+          <!-- 底部动作（原型 .ovl__foot：上边框、右对齐）：深链文字钮在前，危险/主操作贴右、主操作最右 -->
+          <footer class="gc-detail__foot">
+            <button type="button" class="gc-btn-link" @click="goLearner(detail)">学习者画像 →</button>
+            <button type="button" class="gc-btn-link" @click="goTrace(detail)">Trace 链路 →</button>
+            <button v-if="detail.id" type="button" class="gc-btn-link" @click="goConsole(detail)">进控制台 →</button>
+            <button type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="detail.regenerating" @click="remove(detail)">
+              删除会话
+            </button>
+            <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="detail.regenerating" @click="regenerate(detail)">
+              {{ detail.regenerating ? '生成中…' : '重新生成学习路径' }}
+            </button>
+          </footer>
         </aside>
       </div>
     </Teleport>
@@ -552,6 +567,11 @@ const statusPills = computed(() => {
 const statusLabel = (s: string) => statusText(s) || '—'
 const statusBadge = (s: string) =>
   s === 'completed' ? 'mk-badge--ok' : s === 'active' ? 'mk-badge--info' : s === 'cancelled' ? 'mk-badge--warn' : 'mk-badge--muted'
+
+/** 头像 tone（列表行与抽屉头共用；语义与 MkVariantBadge 一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
+function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtual' | 'test' | 'default' {
+  return r.isVirtualLearner ? 'virtual' : r.isTestAccount ? 'test' : 'default'
+}
 
 /** 状态原因提示（UI 复查 #18）：回收机制会把约 30 分钟无心跳的会话标为 abandoned，
  *  列表里给一句解释，避免「会话莫名停下」；不新增后端字段，仅是文案。 */
@@ -914,9 +934,14 @@ onMounted(() => {
    长摘要 .gc-summary 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底） */
 .mk-table td { white-space: nowrap; }
 
-/* 详情面板（与 ts/pcl 面板同构） */
-.gc-detail__title { display: grid; gap: 6px; justify-items: start; }
+/* 详情面板（原型 openLearner 三段式：head 头像+标题 / body 徽章行→事实→嵌套卡 / foot 右对齐动作） */
+.gc-detail__title { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
+.gc-detail__id { display: grid; gap: 2px; min-width: 0; }
 .gc-detail__body { display: grid; gap: 16px; align-content: start; }
+/* 徽章行（原型 .ovl__body 首段 pills） */
+.gc-detail__pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* 嵌套卡正文：mk-card 承边框/圆角，正文内边距对齐 .buckets 的「卡内补」口径（12 16 14） */
+.gc-card__body { display: grid; gap: 8px; padding: 12px 16px 14px; }
 
 /* 事实栅格走共享原语 .mk-facts（原 .gc-facts 私有三列栅格 + 4K 阶梯已并进原语层） */
 
@@ -934,17 +959,13 @@ onMounted(() => {
 /* 状态条完成率堆叠条（G3） */
 /* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136） */
 
-/* 理解与方案卡片 */
-.gc-insight {
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  overflow: hidden;
-}
+/* 理解与方案行组：边框/圆角由外层 mk-card 承担，行间只留发丝线（原型嵌套卡 card__body + 行分隔）；
+   行内边距只留纵向——横向内边距由 gc-card__body 统一给（原型 rankrow padding: 9px 0 同形） */
 .gc-insight__row {
   display: grid;
   grid-template-columns: 64px 1fr;
   gap: 8px 10px;
-  padding: 8px 12px;
+  padding: 8px 0;
   border-bottom: 1px solid #f0f2f5;
   align-items: baseline;
 }
@@ -971,18 +992,15 @@ onMounted(() => {
   line-height: 1.6;
 }
 
-.gc-section { display: grid; gap: 8px; }
-
-.gc-section h4 .mono { margin-left: 4px; }
 .gc-desc { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.7; }
 
 /* 对话轮次：气泡式（用户右对齐蓝色，AI 左对齐浅灰） */
 .gc-msgs { display: grid; gap: 8px; }
-/* P2：消息流「最新 ↓」按钮（长会话快捷定位） */
+/* P2：消息流「最新 ↓」按钮（长会话快捷定位）；卡头内与 meta 同组贴右，间距由 mk-card__head gap 给 */
 .gc-msg-jump {
   border: 1px solid var(--mk-line); background: var(--mk-surface);
   color: var(--mk-blue); font: inherit; font-size: var(--mk-fs-micro); font-weight: 700;
-  padding: 2px 9px; border-radius: 999px; cursor: pointer; margin-left: 8px;
+  padding: 2px 9px; border-radius: 999px; cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease;
 }
 .gc-msg-jump:hover { border-color: rgba(44, 99, 208, 0.5); background: #f0f5ff; }
@@ -1055,7 +1073,16 @@ html[data-theme='dark'] .gc-msg-jump:hover { background: #252627; }.gc-msg { dis
   word-break: break-all;
 }
 
-.gc-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+/* 底部动作（原型 .ovl__foot：上边框、右对齐、gap 8）；不占滚动区——正文滚、动作条常驻 */
+.gc-detail__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--mk-line);
+}
 .gc-btn-link {
   border: 0;
   background: transparent;
