@@ -164,7 +164,7 @@
         <button type="button" class="mk-link" :disabled="refreshing" @click="refreshNow">{{ refreshing ? '重试中…' : '重试' }}</button>
       </div>
 
-      <MockSkeletonTable v-if="refreshing && !rows.length" :cols="8" />
+      <MockSkeletonTable v-if="refreshing && !rows.length" :cols="9" />
       <div v-else class="mk-table-scroll">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
              列按内容自然分宽；长内容由 .ts-summary-preview / .mk-cell-main 的 max-width 截断兜底 -->
@@ -201,6 +201,13 @@
               <th v-if="!tsHiddenCols.has('progress')">进度</th>
               <th v-if="!tsHiddenCols.has('output')">产物</th>
               <th v-if="!tsHiddenCols.has('attention')">关注</th>
+              <th
+                v-if="!tsHiddenCols.has('start')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="tsSortState('start')"
+                @click="toggleTsSort('start')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('start')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -272,6 +279,10 @@
                   :class="`ts-att--${r.attention}`"
                   :title="r.attention === 'high' ? '高关注：需优先介入' : r.attention === 'medium' ? '中关注' : '低关注'"
                 >{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span>
+              </td>
+              <td v-if="!tsHiddenCols.has('start')">
+                <!-- 原型末数据列「时间」.sub mono 形态：相对时间 + title 绝对时间（Users 判例） -->
+                <span class="mk-cell-sub mono" :title="r.startTime || r.startAt">{{ r.startAt || '—' }}</span>
               </td>
               <td>
                 <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）；
@@ -555,6 +566,7 @@ const tsColDefs = [
   { key: 'progress', label: '进度', title: '学习进度' },
   { key: 'output', label: '产物', title: '课后总结 / 建议' },
   { key: 'attention', label: '关注', title: '关注度' },
+  { key: 'start', label: '时间', title: '开始时间（相对 · 悬停看绝对时间）' },
 ] as const
 const tsHiddenCols = ref<Set<string>>(new Set())
 const pills = computed(() => {
@@ -640,7 +652,8 @@ const { toggle: toggleTsSort, sortState: tsSortState, sortRows: sortTsRows } = u
     topic: (r) => r.topic,
     user: (r) => r.userName,
     status: (r) => r.status,
-    interact: (r) => r.duration
+    interact: (r) => r.duration,
+    start: (r) => r.startTime || r.startAt
   },
   storageKey: 'wf_teaching_sessions_sort'
 })
