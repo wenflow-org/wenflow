@@ -5,7 +5,7 @@
          原页面级状态条整体退役（dot 的加载/有数状态由 KPI 卡与列表自明）。 -->
     <MkPageHead
       title="目标对话"
-      sub="仅真实用户口径：用户与系统澄清目标的多轮会话"
+      sub="与学习者澄清真实目标 · 约束条件与澄清轮次（仅真实用户口径）"
     >
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="load(true)">{{ loading ? '刷新中…' : '刷新' }}</button>
@@ -39,19 +39,20 @@
           <span class="bucket__v">{{ stats.active }}</span>
           <span class="bucket__l">进行中</span>
           <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcActivePct + '%', background: 'var(--mk-blue)' }"></i></span>
-          <span class="bucket__l bucket__foot">占 {{ gcActivePct }}%</span>
+          <!-- 桶 foot = 业务释义（原型 bucketCard 语义），占比已由进度条自明不复读 -->
+          <span class="bucket__l bucket__foot">澄清对话进行中</span>
         </div>
         <div class="bucket">
           <span class="bucket__v">{{ stats.completed }}</span>
           <span class="bucket__l">已完成</span>
           <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCompletedPct + '%', background: 'var(--mk-green)' }"></i></span>
-          <span class="bucket__l bucket__foot">完成率 {{ stats.completionRate }}%</span>
+          <span class="bucket__l bucket__foot">已生成学习路径</span>
         </div>
         <div class="bucket">
           <span class="bucket__v">{{ gcCancelledCount }}</span>
           <span class="bucket__l">已取消</span>
-          <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCancelledPct + '%', background: 'var(--mk-faint)' }"></i></span>
-          <span class="bucket__l bucket__foot">占 {{ gcCancelledPct }}%</span>
+          <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCancelledPct + '%', background: 'var(--mk-red)' }"></i></span>
+          <span class="bucket__l bucket__foot">用户取消或中断</span>
         </div>
       </div>
     </section>
@@ -92,20 +93,10 @@
               v-model:hidden="gcHiddenCols"
             />
             <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）<template v-if="stats && stats.total > rows.length"> · 仅显示最近 {{ rows.length }} 条</template></span>
-            <!-- 行级设计（批B）：目标对话四态比例条+完成率（stats 已拉取，此前从未渲染） -->
-            <!-- 四态构成条：只给比例，不给数字——完成率与已取消数已由页头 KPI 卡承载，
-                 同屏再说一遍就是同一数字两处渲染（批27 去重口径）。 -->
-            <span v-if="stats && stats.total > 0" class="gc-statusbar" role="img" :aria-label="`目标对话共 ${stats.total}：进行中 ${stats.active} · 已完成 ${stats.completed} · 已取消 ${gcCancelledCount}`" title="目标对话四态构成（蓝=进行中 / 绿=已完成 / 灰=已取消）">
-              <span class="gc-statusbar__bar" aria-hidden="true">
-                <i class="gc-statusbar__seg gc-statusbar__seg--active" :style="{ width: gcStatusSeg(stats.active) + '%' }"></i>
-                <i class="gc-statusbar__seg gc-statusbar__seg--done" :style="{ width: gcStatusSeg(stats.completed) + '%' }"></i>
-                <i v-if="gcCancelledCount > 0" class="gc-statusbar__seg gc-statusbar__seg--cancel" :style="{ width: gcStatusSeg(gcCancelledCount) + '%' }"></i>
-              </span>
-            </span>
           </div>
         </div>
 
-        <MockSkeletonTable v-if="loading && !rows.length" :cols="6" />
+        <MockSkeletonTable v-if="loading && !rows.length" :cols="9" />
         <!-- P0 修复：加载失败行内错误 + 重试（此前失败伪装成「暂无会话」） -->
         <div v-else-if="loadError" class="gc-error" role="alert">
           <span>{{ loadError }}</span>
@@ -138,6 +129,14 @@
                 :aria-sort="gcSortState('stage')"
                 @click="toggleGcSort('stage')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('stage')">阶段<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="!gcHiddenCols.has('turns')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="gcSortState('turns')"
+                @click="toggleGcSort('turns')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th v-if="!gcHiddenCols.has('constraints')">约束条件</th>
               <th v-if="!gcHiddenCols.has('path')">路径</th>
               <th v-if="!gcHiddenCols.has('created')">创建时间</th>
               <th class="mk-th--right">操作</th>
@@ -158,7 +157,13 @@
                   </div>
                 </div>
               </td>
-              <td v-if="!gcHiddenCols.has('summary')"><span class="gc-summary" :title="r.summary">{{ r.summary }}</span></td>
+              <td v-if="!gcHiddenCols.has('summary')">
+                <!-- 原型目标摘要格 = wrap 两行：strong 摘要 + sub mono 会话 ID -->
+                <div class="mk-cell-main">
+                  <strong class="gc-summary" :title="r.summary">{{ r.summary }}</strong>
+                  <span class="mk-cell-sub mono">{{ r.id }}</span>
+                </div>
+              </td>
               <td v-if="!gcHiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(r.status)" :title="statusHint(r.status)">{{ statusLabel(r.status) }}</span></td>
               <td v-if="!gcHiddenCols.has('stage')">
                 <div class="gc-stage-cell">
@@ -172,13 +177,27 @@
                   <span v-else class="mk-na">—</span>
                 </div>
               </td>
+              <td v-if="!gcHiddenCols.has('turns')">
+                <!-- 原型「澄清进度」列 = meter turns/targetTurns；本系统无目标轮次分母，
+                     只呈现「N 轮」诚实读数（学习者发言条数），不造 meter -->
+                <span v-if="r.turns != null" class="mono" :title="`学习者发言 ${r.turns} 轮`">{{ r.turns }} 轮</span>
+                <span v-else class="mk-na">—</span>
+              </td>
+              <td v-if="!gcHiddenCols.has('constraints')">
+                <!-- 原型「约束条件」列 = pill--mute 多枚 wrap；真实数据为澄清收集的
+                     可用时间/期限文案（稀疏属真实分布），空时 — -->
+                <div v-if="r.constraints.length" class="gc-constraints">
+                  <span v-for="cst in r.constraints" :key="cst" class="mk-badge mk-badge--muted" :title="`约束：${cst}`">{{ cst }}</span>
+                </div>
+                <span v-else class="mk-na">—</span>
+              </td>
               <td v-if="!gcHiddenCols.has('path')">
                 <!-- 原型 open-path 习惯：生成过的路径成跳转（路径详情二级页）；后端未回 pathId 时回落徽章 -->
                 <button v-if="r.pathId" type="button" class="mk-btn mk-btn--sm" title="查看该目标生成的路径详情" @click.stop="openPathPage(r)">查看路径</button>
                 <span v-else-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td v-if="!gcHiddenCols.has('created')"><span class="mk-cell-sub" :title="r.createdAt">{{ r.createdAt }}</span></td>
+              <td v-if="!gcHiddenCols.has('created')"><span class="mk-cell-sub mono" :title="r.createdAt">{{ r.createdAt }}</span></td>
               <td>
                 <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）；
                      删除属危险低频操作，仍收 ⋯ 菜单。右对齐与 mk-th--right 表头对齐（同 Users.vue 判例） -->
@@ -256,6 +275,12 @@ interface Row {
   status: string
   stage: string
   summary: string
+  /** 澄清轮次 = messages 里学习者发言条数（后端库内 json_each 计数，2026-10-01 对齐原型
+   *  「澄清进度」列；原型 meter 的分母 targetTurns 本系统不存在，只呈现「N 轮」不造分母。
+   *  旧响应无此字段为 null） */
+  turns: number | null
+  /** 约束条件（后端库内取 understanding 的可用时间/期限文案；真实数据稀疏，空数组显示 —） */
+  constraints: string[]
   hasPath: boolean
   /** 生成的路径 id（原型路径格 open-path 的跳转目标；未生成/旧响应为 null） */
   pathId?: string | null
@@ -290,11 +315,13 @@ const gcCancelledPct = computed(() => gcStatusSeg(gcCancelledCount.value))
 const keyword = ref('')
 const statusFilter = ref('')
 
-/* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/阶段/路径/创建时间 可隐藏，用户/操作固定 */
+/* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/阶段/澄清进度/约束条件/路径/创建时间 可隐藏，用户/操作固定 */
 const gcColDefs = [
   { key: 'summary', label: '目标摘要', title: '对话目标摘要' },
   { key: 'status', label: '状态', title: '对话状态' },
   { key: 'stage', label: '阶段', title: '澄清阶段 + 过程点' },
+  { key: 'turns', label: '澄清进度', title: '学习者发言轮次（澄清深度）' },
+  { key: 'constraints', label: '约束条件', title: '澄清中收集的可用时间 / 期限等约束' },
   { key: 'path', label: '路径', title: '路径是否已生成' },
   { key: 'created', label: '创建时间', title: '对话创建时间' },
 ] as const
@@ -379,6 +406,8 @@ function menuRemove(r: Row) {
 const statusPills = computed(() => {
   const all = rows.value
   return [
+    // 原型 chips 首枚「全部」（原型 renderGoals filters）：显式复位入口，不再依赖再点一次取消
+    { id: '', label: '全部', count: null as number | null },
     { id: 'active', label: '进行中', count: all.filter((r) => r.status === 'active').length },
     { id: 'completed', label: '已完成', count: all.filter((r) => r.status === 'completed').length },
     { id: 'cancelled', label: '已取消', count: all.filter((r) => r.status === 'cancelled').length }
@@ -388,7 +417,7 @@ const statusPills = computed(() => {
 /** 状态词一律走全局字典（单源）；空值给「—」。原私有字典与 statusText 逐条重合，故删除 */
 const statusLabel = (s: string) => statusText(s) || '—'
 const statusBadge = (s: string) =>
-  s === 'completed' ? 'mk-badge--ok' : s === 'active' ? 'mk-badge--info' : s === 'cancelled' ? 'mk-badge--warn' : 'mk-badge--muted'
+  s === 'completed' ? 'mk-badge--ok' : s === 'active' ? 'mk-badge--info' : s === 'cancelled' ? 'mk-badge--bad' : 'mk-badge--muted'
 
 /** 头像 tone（列表行与抽屉头共用；语义与 MkVariantBadge 一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
 function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtual' | 'test' | 'default' {
@@ -435,6 +464,9 @@ function mapRow(c: Record<string, unknown>): Row {
     // 2026-10-01 列表列裁剪：服务端已按同口径解析 summary（description 优先，
     // 其次 collectedData.goal——该大列不再随列表出库）；summaryOf 仅作旧响应兜底
     summary: String(c.summary ?? '') || summaryOf(c),
+    // 澄清轮次/约束条件（2026-10-01 对齐原型两列）：后端库内 JSON 取数带回；旧响应缺省
+    turns: typeof c.turns === 'number' ? c.turns : null,
+    constraints: Array.isArray(c.constraints) ? (c.constraints as unknown[]).map(String) : [],
     hasPath: !!c.learningPathId,
     pathId: c.learningPathId ? String(c.learningPathId) : null,
     createdAt: timeAgo(String(c.createdAt || '')),
@@ -454,7 +486,8 @@ const { toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows } = u
   accessors: {
     user: (r) => r.userName,
     status: (r) => r.status,
-    stage: (r) => r.stageIndex
+    stage: (r) => r.stageIndex,
+    turns: (r) => r.turns ?? -1
   },
   storageKey: 'wf_goal_conversations_sort'
 })
@@ -616,8 +649,7 @@ onMounted(() => {
 .gc-host > .mk-status { flex: none; }/* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
 .gc-row { cursor: pointer; }/* 键盘可达（对齐 TeachingSessions 行写法）：行可聚焦，焦点态描边提示当前位置 */
 .gc-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
-.gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }/* 四态比例条（批B）：卡头内的目标对话状态构成 */
-.gc-statusbar { display: inline-flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }.gc-statusbar__bar { display: inline-flex; width: 72px; height: 6px; border-radius: var(--mk-radius-pill); overflow: hidden; background: var(--mk-surface-2); }.gc-statusbar__seg { display: block; height: 100%; }.gc-statusbar__seg--active { background: var(--mk-blue); }.gc-statusbar__seg--done { background: var(--mk-green); }.gc-statusbar__seg--cancel { background: var(--mk-faint); opacity: 0.5; }/* 状态构成桶组（newui renderGoals/bucketCard 原型移植；token 映射：--sp-3→--mk-space-3、
+.gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }/* 状态构成桶组（newui renderGoals/bucketCard 原型移植；token 映射：--sp-3→--mk-space-3、
    --line→--mk-line、--surface→--mk-surface、--r-lg→--mk-radius-lg、--surface-3→--mk-surface-3、
    --muted→--mk-muted、--fs-micro→--mk-fs-micro）。
    .buckets 自带 16px 横向内边距：原型里桶组直接落页面，这里落在 mk-card 内（卡无 body padding）。 */
@@ -641,7 +673,8 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: bottom;
-}/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
+}/* 约束条件列：mute 徽章多枚 wrap（原型 .wrap 格内 pill--mute 判例） */
+.gc-constraints { display: flex; flex-wrap: wrap; gap: 5px; max-width: 220px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
    长摘要 .gc-summary 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底） */
 .mk-table td { white-space: nowrap; }.gc-error {
   display: flex;

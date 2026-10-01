@@ -60,9 +60,37 @@ export async function findGoalConversationsForAdmin(where: Prisma.goal_conversat
       if (v) goalMap.set(g.id, String(v));
     }
   }
-  return rows.map((r) => Object.assign(r, {
-    summary: r.description || goalMap.get(r.id) || '—',
-  }));
+
+  // 澄清轮次与约束条件（2026-10-01 对齐原型「澄清进度/约束条件」两列，同列裁剪纪律：
+  // 库内 JSON 取数不整包出库。轮次 = messages 里 role=user 的条数（json_each 计数，
+  // 不传原文）；约束 = understanding 里的可用时间/期限文案（buildGoalNormalizedState
+  // 同源字段，仅理解阶段收集到时非空，稀疏属真实分布）。原型 meter 的分母
+  // targetTurns 本系统不存在，前端只呈现「N 轮」不造分母。
+  const ids = rows.map((r) => r.id);
+  const extraMap = new Map<string, { turns: number; availableTime: string | null; deadlineText: string | null }>();
+  if (ids.length) {
+    const extras = await prisma.$queryRaw<Array<{ id: string; ut: number; at: string | null; dl: string | null }>>`
+      SELECT gc.id,
+             (SELECT COUNT(*) FROM json_each(gc.messages) je
+               WHERE json_extract(je.value, '$.role') = 'user') AS ut,
+             json_extract(gc.collectedData, '$.understanding.background.available_time') AS at,
+             json_extract(gc.collectedData, '$.understanding.deadline_text') AS dl
+      FROM goal_conversations gc
+      WHERE gc.id IN (${Prisma.join(ids)})`;
+    for (const e of extras) {
+      extraMap.set(e.id, { turns: Number(e.ut) || 0, availableTime: e.at == null ? null : String(e.at), deadlineText: e.dl == null ? null : String(e.dl) });
+    }
+  }
+  return rows.map((r) => {
+    const extra = extraMap.get(r.id);
+    return Object.assign(r, {
+      summary: r.description || goalMap.get(r.id) || '—',
+      turns: extra ? extra.turns : null,
+      constraints: extra
+        ? [extra.availableTime, extra.deadlineText].filter((v): v is string => !!v)
+        : [] as string[],
+    });
+  });
 }
 
 /** 列表行摘要（与前端 summaryOf 同口径）：description 优先，其次 collectedData 的 goal 字段 */
