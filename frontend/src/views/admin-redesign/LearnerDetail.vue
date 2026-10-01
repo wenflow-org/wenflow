@@ -310,7 +310,11 @@
                 <td>{{ t.fsrsStability != null ? t.fsrsStability.toFixed(1) : '—' }}</td>
                 <td>{{ t.fsrsDifficulty != null ? t.fsrsDifficulty.toFixed(1) : '—' }}</td>
                 <td>
-                  <span v-if="t.retrievability != null" :class="t.retrievability < 0.5 ? 'ld-mt--low' : t.retrievability < 0.8 ? 'ld-mt--mid' : 'ld-mt--high'">{{ Math.round(t.retrievability * 100) }}%</span>
+                  <!-- 记忆强度列（原型 memory pane 的 meterrow 词汇：meter 条 + mono %） -->
+                  <span v-if="t.retrievability != null" class="ld-mt">
+                    <span class="mk-minibar ld-mt__bar"><i class="mk-minibar__fill" :data-tone="t.retrievability < 0.5 ? 'bad' : t.retrievability < 0.8 ? 'warn' : 'ok'" :style="{ width: Math.round(t.retrievability * 100) + '%' }"></i></span>
+                    <em>{{ Math.round(t.retrievability * 100) }}%</em>
+                  </span>
                   <span v-else class="ld-none">未初始化</span>
                 </td>
                 <td>{{ t.dueAt ? timeAgo(t.dueAt) : '—' }}</td>
@@ -1574,9 +1578,10 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-concept-label--ok { color: var(--mk-green); }
 .ld-concept-label--bad { color: var(--mk-red); }
 .ld-concept-list { display: flex; gap: 6px; flex-wrap: wrap; }
+/* 概念徽章（原型 .pill--ok/--bad 词汇：胶囊 + tone 底） */
 .ld-concept {
-  padding: 3px 10px;
-  border-radius: var(--mk-radius-sm);
+  padding: 2px 9px;
+  border-radius: 999px;
   font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
@@ -1612,13 +1617,14 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-bar__fill--muted { background: var(--mk-faint); }
 
 /* （.ld-trend* 柱图样式已随「7 天活跃趋势」假卡移除） */
+/* 最近动态行（原型 .feedrow 词汇：行间 1px line 分隔 + mono 时间列） */
 .ld-sessions { display: grid; }
 .ld-session {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 11px 16px;
-  border-bottom: 1px solid var(--mk-surface-2);
+  border-bottom: 1px solid var(--mk-line);
 }
 .ld-session:last-child { border-bottom: none; }
 .ld-session__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -1627,9 +1633,9 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-session__dot.is-bad { background: var(--mk-red); }
 .ld-session__dot.is-muted { background: var(--mk-muted); }
 .ld-session__main { flex: 1; display: grid; min-width: 0; }
-.ld-session__main strong { font-size: var(--mk-fs-body); }
-.ld-session__main span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.ld-session__time { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
+.ld-session__main strong { font-size: var(--mk-fs-micro); font-weight: 600; }
+.ld-session__main span { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ld-session__time { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 
 /* 建议行动卡 */
 .ld-actions { padding: 14px 16px; display: grid; gap: 9px; }
@@ -1667,15 +1673,16 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-actions__k--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .ld-actions .mk-status__action { justify-self: start; }
 
-/* 概念 chip（会话/证据行内） */
+/* 概念 chip（会话/证据行内；原型 .chip 词汇：胶囊描边、surface 底、muted 字） */
 .ld-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
 .ld-chip {
   font-size: var(--mk-fs-micro);
   font-weight: 600;
-  color: var(--mk-faint);
-  background: var(--mk-surface-2);
-  border-radius: var(--mk-radius-sm);
-  padding: 0 6px;
+  color: var(--mk-muted);
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-line);
+  border-radius: 999px;
+  padding: 0 8px;
 }
 
 /* 可复用/被阻塞基础 */
@@ -1683,23 +1690,24 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-found > div { display: grid; gap: 7px; align-content: start; }
 
 /* Tab 通用 */
-.ld-kv { display: grid; }
-.ld-kv__row {
+/* 键值对排版（原型 dl.kv：96px 标签列网格、行间不画线、标签 12px muted、值 body 常规字重）；
+   __row 以 display:contents 透传，保持模板结构而网格行为与原型 kv 一致 */
+.ld-kv {
+  --kv-label: 96px;
   display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--mk-surface-2);
-  font-size: var(--mk-fs-micro);
+  grid-template-columns: var(--kv-label) minmax(0, 1fr);
+  gap: 8px 14px;
+  align-items: baseline;
+  padding: 14px 16px;
 }
-.ld-kv__row:last-child { border-bottom: none; }
-.ld-kv__row span { color: var(--mk-faint); }
-.ld-kv__row strong { font-weight: 600; white-space: pre-wrap; }
+.ld-kv__row { display: contents; }
+.ld-kv__row span { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.ld-kv__row strong { font-weight: 400; font-size: var(--mk-fs-body); white-space: pre-wrap; overflow-wrap: anywhere; }
 
-
-.ld-mt--low { color: #d64545; font-weight: 700; }
-.ld-mt--mid { color: #b98900; font-weight: 600; }
-.ld-mt--high { color: #2f9e44; font-weight: 600; }
+/* 记忆强度（原型 meterrow：meter 条 + mono %，沿用 .mk-minibar 原语） */
+.ld-mt { display: inline-flex; align-items: center; gap: 8px; }
+.ld-mt__bar { width: 72px; flex: none; }
+.ld-mt em { font-style: normal; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
 
 .ld-metrics {
   display: grid;
@@ -1721,7 +1729,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   align-items: flex-start;
   gap: 12px;
   padding: 12px 16px 12px 22px;
-  border-bottom: 1px solid var(--mk-surface-2);
+  border-bottom: 1px solid var(--mk-line);
 }
 .ld-ev:last-child { border-bottom: none; }
 /* 竖线时间轴：贯穿每行左侧，末端渐隐；单条时不显示（避免断裂） */
@@ -1767,15 +1775,15 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-ev__signal.is-warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .ld-ev__signal.is-bad { background: var(--mk-red-bg); color: var(--mk-red); }
 .ld-ev__signal.is-muted { background: var(--mk-surface-2); color: var(--mk-muted); }
-/* 证据不足徽章 */
+/* 证据不足徽章（pill 语气：胶囊琥珀） */
 .ld-ev__lack {
   flex-shrink: 0;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-amber);
   background: var(--mk-amber-bg);
-  border-radius: 6px;
-  padding: 1px 6px;
+  border-radius: 999px;
+  padding: 1px 8px;
 }
 /* 置信度迷你条：绿(≥80%) / 蓝(50-79%) / 琥珀(<50%) */
 .ld-ev__conf {
@@ -1810,7 +1818,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   font-family: var(--mk-mono);
   opacity: 0.85;
 }
-.ld-ev__time { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; margin-top: 3px; }
+.ld-ev__time { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; margin-top: 3px; }
 
 /* ---------- 证据页两栏布局：左时间线（主） / 右曲线·建议·密度（侧） ---------- */
 .ld-ev-grid {
@@ -1859,7 +1867,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 /* 校准分布条走 .mk-minibar + data-tone（原为琥珀渐变） */
 .ld-cal__val { color: var(--mk-muted); font-variant-numeric: tabular-nums; text-align: right; }
 .ld-cal__recent { display: grid; gap: 0; border-top: 1px dashed var(--mk-line); padding-top: 8px; }
-.ld-cal__row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: var(--mk-fs-micro); border-bottom: 1px solid #f6f7f9; }
+.ld-cal__row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: var(--mk-fs-micro); border-bottom: 1px solid var(--mk-line); }
 .ld-cal__row:last-child { border-bottom: none; }
 .ld-cal__task { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-ink); font-family: var(--mk-mono); cursor: help; }
 .ld-cal__risk { color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -1909,7 +1917,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-found { padding: 16px 18px; }
   .ld-session { padding: 13px 18px; gap: 14px; }
   .ld-session__dot { width: 9px; height: 9px; }
-  .ld-kv__row { grid-template-columns: 160px 1fr; gap: 14px; padding: 12px 18px; }
+  .ld-kv { --kv-label: 112px; padding: 16px 18px; }
   .ld-metrics { gap: 14px; }
   .ld-flags { padding: 16px 18px; }
   .ld-insights { padding: 14px 18px; }
@@ -1948,7 +1956,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-found { padding: 19px 21px; }
   .ld-session { padding: 15px 21px; gap: 16px; }
   .ld-session__dot { width: 11px; height: 11px; }
-  .ld-kv__row { grid-template-columns: 184px 1fr; gap: 16px; padding: 14px 21px; }
+  .ld-kv { --kv-label: 128px; padding: 18px 21px; }
   .ld-metrics { gap: 16px; }
   .ld-flags { padding: 19px 21px; }
   .ld-insights { padding: 16px 21px; }
@@ -1987,7 +1995,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-found { padding: 22px 25px; }
   .ld-session { padding: 17px 25px; gap: 19px; }
   .ld-session__dot { width: 13px; height: 13px; }
-  .ld-kv__row { grid-template-columns: 216px 1fr; gap: 19px; padding: 16px 25px; }
+  .ld-kv { --kv-label: 152px; padding: 21px 25px; }
   .ld-metrics { gap: 19px; }
   .ld-flags { padding: 22px 25px; }
   .ld-insights { padding: 19px 25px; }
@@ -1996,28 +2004,22 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-ev__dot { width: 13px; height: 13px; }
 }
 
-/* ================= 暗色模式（D1 补完）：学习者详情（此前完全缺失） ================= */
+/* ================= 暗色模式（D1 补完）：学习者详情 ================= */
 html[data-theme='dark'] {
-  /* 进度条/概念账本/会话/证据 浅灰底统一替换 */
+  /* 进度条/概念账本/校准行 深底（行分隔线已走 --mk-line token，随主题自适应，不再需要覆写） */
   .ld-progress__bar,
   .ld-bar__track,
   .ld-bar__ev--zero,
   .ld-cal__bar,
   .ld-cal__outcome.is-pending,
   .ld-ev__signal.is-muted,
-  /* 分隔线（会话/证据/校准行/kv 行） */
-  .ld-session,
-  .ld-ev,
-  .ld-cal__row,
-  .ld-bar__ev,
-  .ld-kv__row { border-bottom-color: #2a2b2d; }
+  .ld-bar__ev { border-bottom-color: #2a2b2d; }
   .ld-bar__ev { background: #2a2b2d; }
   /* 滚动条 thumb 与行分隔线是两种语义：此前误共用一条规则，
      把 .ld-kv__row 整行背景也涂成了 thumb 灰（#393a3c），已拆开 */
   .ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #393a3c; }
-  /* 补漏：操作提示标签/概念 chip/置信条/加载分段 */
+  /* 补漏：操作提示标签/置信条/加载分段（chip/kv 已 token 化） */
   .ld-actions__k { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
-  .ld-chip { background: #2d2d2f; color: #afb1b6; }
   .ld-ev__confbar { background: #2a2b2d; }
 }
 </style>
