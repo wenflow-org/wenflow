@@ -8,18 +8,37 @@
         aria-modal="true"
         aria-labelledby="mk-confirm-title"
       >
-        <h3 id="mk-confirm-title" class="mk-confirm__title">{{ confirmState.title }}</h3>
-        <p class="mk-confirm__msg">{{ confirmState.message }}</p>
-        <label v-if="confirmState.input" class="mk-confirm__input">
-          <span>{{ confirmState.input.label }}</span>
-          <input
-            v-model="confirmState.inputValue"
-            type="text"
-            class="mk-field__input"
-            :placeholder="confirmState.input.placeholder || ''"
-            @keydown.enter="confirm()"
-          />
-        </label>
+        <!-- 结构 = 原型 openConfirm（newui .modal）：ovl__head（shield 图标 + 标题）/
+             ovl__body 正文 / ovl__foot（取消左、危险确认右，均右对齐）三段贴边排布 -->
+        <div class="mk-confirm__head">
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 3l7 3v5.5c0 4.4-3 7.6-7 9.5-4-1.9-7-5.1-7-9.5V6z" />
+          </svg>
+          <h2 id="mk-confirm-title" class="mk-confirm__title">{{ confirmState.title }}</h2>
+        </div>
+        <div class="mk-confirm__body">
+          <p class="mk-confirm__msg">{{ confirmState.message }}</p>
+          <label v-if="confirmState.input" class="mk-confirm__input">
+            <span>{{ confirmState.input.label }}</span>
+            <input
+              v-model="confirmState.inputValue"
+              type="text"
+              class="mk-field__input"
+              :placeholder="confirmState.input.placeholder || ''"
+              @keydown.enter="confirm()"
+            />
+          </label>
+        </div>
         <div class="mk-confirm__actions">
           <button type="button" class="mk-btn" :disabled="confirmState.busy" @click="settleConfirm(false)">取消</button>
           <button
@@ -73,16 +92,37 @@ function confirm() {
 </script>
 
 <style scoped>
+/* 口径源：newui/UI-分支优化设计 index.html 的 .modal / .ovl__head / .ovl__body / .ovl__foot /
+   @keyframes popIn（openConfirm()）。三段贴边排布：head 16px + 分隔线、body 16px、
+   foot 12×16 + 分隔线；卡 480px、r-modal、popIn 入场。 */
 .mk-confirm {
-  width: min(420px, 100%);
-  padding: 18px 20px 16px;
-  border-radius: 16px;
+  width: min(480px, 100%);
+  padding: 0;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-modal);
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-modal);
   display: grid;
+  animation: mk-pop-in 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+@keyframes mk-pop-in {
+  from { transform: translateY(8px) scale(0.98); opacity: 0.4; }
+  to { transform: none; opacity: 1; }
+}
+.mk-confirm__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.mk-confirm__head svg { flex: none; }
+.mk-confirm__title { margin: 0; font-size: var(--mk-fs-16); font-weight: 700; }
+.mk-confirm__body {
+  padding: 16px;
+  display: grid;
   gap: 12px;
 }
-.mk-confirm__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 700; }
 .mk-confirm__msg {
   margin: 0;
   font-size: var(--mk-fs-body);
@@ -96,12 +136,14 @@ function confirm() {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding-top: 4px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--mk-line);
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .mk-confirm { width: min(500px, 100%); padding: 22px 24px 20px; }
+  .mk-confirm { width: min(500px, 100%); }
+  .mk-confirm__head, .mk-confirm__body { padding: 20px 24px; }
   .mk-confirm__title { font-size: var(--mk-fs-emphasis); }
   .mk-confirm__msg { font-size: var(--mk-fs-body); }
   .mk-confirm__input span { font-size: var(--mk-fs-body); }

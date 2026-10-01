@@ -8,10 +8,12 @@
         :class="{ 'sv-pill--active': v.name === activeName }"
       >
         <!-- 应用/删除是两个真按钮的兄弟结构：button 内嵌套交互元素是无效 HTML，
-             原「span × 删除」键盘不可达 -->
+             原「span × 删除」键盘不可达。
+             aria-pressed 对齐全站筛选 chips 口径（原型 .chip[aria-pressed]）：当前命中的视图 = 按下态 -->
         <button
           type="button"
           class="sv-pill__apply"
+          :aria-pressed="v.name === activeName"
           :title="viewTitle(v)"
           @click="$emit('apply', v)"
         >
@@ -93,18 +95,35 @@ function viewTitle(v: SavedView): string {
 </script>
 
 <style scoped>
+/* 胶囊外观 = 全站 .mk-pill（= 原型 .chip）同值：描边胶囊、micro/600、muted 字；
+   激活 = 蓝调底 + 蓝字 + 蓝调描边（.mk-pill--active 同值）。
+   修复点：.sv-pill--active 原先无任何样式（激活态不可见），且 apply 无 aria-pressed。
+   不直接挂 .mk-pill 类：pill 内含 apply/× 两个真按钮，需自有容器。 */
 .sv-bar { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .sv-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  max-width: 200px;
+  gap: 2px;
+  max-width: 220px;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: 999px;
+  background: var(--mk-surface);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+}
+.sv-pill--active {
+  background: var(--mk-blue-bg);
+  border-color: color-mix(in srgb, var(--mk-blue) 44%, var(--mk-line));
+  color: var(--mk-pill-active-fg);
 }
 .sv-pill__apply {
   border: 0;
   background: none;
-  padding: 0;
+  padding: 5px 0;
   font: inherit;
+  font-weight: inherit;
   color: inherit;
   cursor: pointer;
   min-width: 0;
@@ -121,7 +140,7 @@ function viewTitle(v: SavedView): string {
   font: inherit;
   min-width: 20px;
   min-height: 20px;
-  border-radius: 4px;
+  border-radius: 999px;
 }
 .sv-pill__del:hover { color: var(--mk-red); background: var(--mk-red-bg); }
 .sv-name { width: 190px; }

@@ -1,7 +1,10 @@
 <template>
   <div class="mk-pagination">
+    <!-- 信息行 = 原型 .pager__info 口径（newui pager()）：「共 N 条 · 每页 S 条 · 第 P / T 页」恒显、
+         muted 弱化色、tabular-nums，不再加粗当前页。showTotal 保留为兼容 prop（12 个页面在传），
+         原「共 N 条」前缀开关已并入恒显口径。 -->
     <span class="mk-pagination__total">
-      <template v-if="showTotal">共 {{ total }} 条 · </template>第 <strong>{{ page }}</strong> / {{ totalPages }} 页
+      共 {{ total }} 条 · 每页 {{ pageSize }} 条 · 第 {{ page }} / {{ totalPages }} 页
     </span>
     <span class="mk-pagination__right">
       <select
@@ -30,7 +33,7 @@
             type="button"
             class="mk-pagination__num"
             :class="{ 'mk-pagination__num--active': n === page }"
-            :disabled="loading || n === page"
+            :disabled="loading"
             :aria-current="n === page ? 'page' : undefined"
             :aria-label="`第 ${n} 页`"
             @click="$emit('update:page', n)"
@@ -112,37 +115,36 @@ watch(
 </script>
 
 <style scoped>
+/* 口径源：newui/UI-分支优化设计 index.html 头部 <style> 的 .pager / .pager__info / .pager__btn。
+   收口点：foot 内边距 8×16（原型 .card__foot）、主缝 8px（--sp-2）、钮 30×30 + r-sm、
+   hover 只动描边与字色（不铺底）、禁用 = opacity .45、当前页 = brand 实心底白字。 */
 .mk-pagination {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 10px;
-  padding: 9px 14px 11px;
+  gap: 8px;
+  padding: 8px 16px;
   border-top: 1px solid var(--mk-line);
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
 .mk-pagination__total {
-  color: var(--mk-faint);
+  color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.mk-pagination__total strong {
-  color: var(--mk-ink);
-  font-weight: 700;
-}
 .mk-pagination__right {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 .mk-pagination__size {
   padding: 4px 8px;
   border: 1px solid var(--mk-line);
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
@@ -153,45 +155,45 @@ watch(
 .mk-pagination__nav {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 .mk-pagination__btn,
 .mk-pagination__num {
-  min-width: 28px;
-  height: 28px;
+  min-width: 30px;
+  height: 30px;
   padding: 0 9px;
   border: 1px solid var(--mk-line);
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface);
   color: var(--mk-ink);
   font: inherit;
   font-size: var(--mk-fs-micro);
-  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  transition: border-color 0.12s, color 0.12s;
 }
-.mk-pagination__btn:hover:not(:disabled),
-.mk-pagination__num:hover:not(:disabled):not(.mk-pagination__num--active) {
-  border-color: rgba(44, 99, 208, 0.55);
-  color: var(--mk-blue);
-  background: var(--mk-blue-bg);
+/* 原型 hover 只染描边（brand 40% 混线）与字色，不铺底；hover 媒体查询防触屏粘底 */
+@media (hover: hover) {
+  .mk-pagination__btn:hover:not(:disabled),
+  .mk-pagination__num:hover:not(:disabled):not(.mk-pagination__num--active) {
+    border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line));
+    color: var(--mk-blue);
+  }
 }
-.mk-pagination__btn:disabled {
-  color: var(--mk-faint);
+.mk-pagination__btn:disabled,
+.mk-pagination__num:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
-  background: transparent;
 }
-/* 当前页码：实心蓝（AntD Pagination active 形态） */
+/* 当前页码：brand 实心底 + on-brand 白字（原型 .pager__btn[aria-current] 形态） */
 .mk-pagination__num--active {
-  background: var(--mk-blue-fill, #2c63d0);
-  border-color: var(--mk-blue-fill, #2c63d0);
-  color: #fff;
-  cursor: default;
-  font-weight: 700;
+  background: var(--mk-blue-fill);
+  border-color: var(--mk-blue-fill);
+  color: var(--mk-on-fill);
 }
 .mk-pagination__ellipsis {
   min-width: 22px;
@@ -202,7 +204,7 @@ watch(
 
 /* 大屏/4K 适配（全站 mk 体系档位） */
 @media (min-width: 2000px) {
-  .mk-pagination { font-size: var(--mk-fs-micro); gap: 12px; padding: 11px 18px 13px; }
+  .mk-pagination { font-size: var(--mk-fs-micro); gap: 12px; padding: 10px 18px; }
   .mk-pagination__total { font-size: var(--mk-fs-micro); }
   .mk-pagination__size { font-size: var(--mk-fs-micro); padding: 5px 10px; border-radius: var(--mk-radius-sm); }
   .mk-pagination__btn, .mk-pagination__num { font-size: var(--mk-fs-micro); min-width: 32px; height: 32px; padding: 0 10px; }
