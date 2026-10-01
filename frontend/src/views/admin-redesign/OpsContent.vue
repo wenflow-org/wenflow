@@ -1,10 +1,13 @@
 <template>
   <div :class="embedded ? 'mk-page--fill oc-embedded' : 'mk-page mk-page--fill'">
-    <!-- 学习路径页头（单行状态条：页面名 + 四态可点计数 + 里程碑/任务总量 + 刷新）
-         embedded（学习会话合并宿主）时由宿主状态条承载域计数，本组件不再渲染状态条 -->
+    <!-- 学习路径页头（单行状态条：页面名 + 口径副文 + 四态可点计数 + 里程碑/任务总量 + 刷新）
+         embedded（学习会话合并宿主）时由宿主状态条承载域计数，本组件不再渲染状态条
+         副文 = 原型 renderPaths pageTitle 的 sub：「由目标澄清生成的阶段式路径与推进状态」 -->
     <div v-if="!embedded" class="mk-status" :class="`mk-status--${dashTone}`">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">学习路径</strong>
+      <span class="mk-status__sep"></span>
+      <span class="mk-status__meta">由目标澄清生成的阶段式路径与推进状态</span>
       <span class="mk-status__sep"></span>
       <button
         type="button"
@@ -54,7 +57,8 @@
         <span class="mk-card__title">路径状态分布</span>
         <span class="mk-card__meta">按状态聚合 · 共 {{ stats?.total ?? 0 }} 条</span>
         <div class="mk-card__head-right">
-          <span class="mk-badge mk-badge--ok" title="状态 active 的路径数（服务端全量口径）">{{ byStatus('active') }} 条进行中</span>
+          <!-- 原型 renderPaths 卡头 card__tools = pill--ok「N 条已完成」（nDone 口径） -->
+          <span class="mk-badge mk-badge--ok" title="状态 completed 的路径数（服务端全量口径）">{{ byStatus('completed') }} 条已完成</span>
         </div>
       </div>
       <div class="oc-bandcard__body">
@@ -114,21 +118,10 @@
         <button type="button" class="mk-link" @click="reload(true)">重试</button>
       </div>
       <div v-else-if="filtered.length" class="mk-table-scroll oc-list">
-        <table class="mk-table mk-table--fixed">
-          <colgroup>
-            <!-- 路径列不再是 flex 吸收列：min/max-width 对 <col> 无效（fixed 布局下
-                 只认 width），实测被撑到 948px（占表 58%）。改为显式 token 宽度后，
-                 余量按各列宽度权重摊给所有列（.mk-table--fixed 的既定规则）。 -->
-            <col style="width:var(--mk-col-text)">
-            <col v-if="!hiddenCols.has('subject')" style="width:var(--mk-col-model-wide)">
-            <col v-if="!hiddenCols.has('difficulty')" style="width:var(--mk-col-badge)">
-            <col v-if="!hiddenCols.has('hours')" style="width:var(--mk-col-num)">
-            <col v-if="!hiddenCols.has('user')" style="width:var(--mk-col-model)">
-            <col v-if="!hiddenCols.has('status')" style="width:var(--mk-col-badge)">
-            <col v-if="!hiddenCols.has('progress')" style="width:var(--mk-col-model-wide)">
-            <col v-if="!hiddenCols.has('updated')" style="width:var(--mk-col-time-full)">
-            <col style="width:var(--mk-col-actions-wide)">
-          </colgroup>
+        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
+             列按内容自然分宽；长标题/长主题由 .mk-cell-main/.oc-subject 的 max-width 截断兜底
+             （同 GoalConversations 判例）。此前 fixed+colgroup 是为压制超长主题列，截断类已兜住 -->
+        <table class="mk-table">
           <thead>
             <tr>
               <th
@@ -184,7 +177,16 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="p in paged" :key="p.id">
+            <!-- 行点击进详情（原型 tr data-action="open-path"，.tbl tbody tr cursor:pointer；
+                 键盘可达性同 gc-row/ts-row 判例：tabindex + Enter 触发） -->
+            <tr
+              v-for="p in paged"
+              :key="p.id"
+              class="oc-row"
+              tabindex="0"
+              @click="openDetail(p)"
+              @keydown.enter.prevent="openDetail(p)"
+            >
               <td>
                 <div class="mk-cell-main">
                   <strong class="mk-cell-text">{{ p.title }}</strong>
@@ -201,9 +203,17 @@
                 <span class="oc-hours">{{ p.estimatedHours ? `~${p.estimatedHours}h` : '—' }}</span>
               </td>
               <td v-if="!hiddenCols.has('user')">
-                <div class="mk-cell-main">
-                  <strong>{{ p.user?.name || '—' }}</strong>
-                  <span class="mk-cell-sub">{{ p.user?.email || '' }}</span>
+                <!-- 原型学习者格 .celluser = 首字母头像 + 姓名；tone 与行内虚拟/测试标记同语义
+                     （MkCellAvatar 共享原语，同 GoalConversations 用户格） -->
+                <div class="oc-user">
+                  <MkCellAvatar
+                    :name="p.user?.name"
+                    :tone="p.user?.isVirtualLearner ? 'virtual' : p.isTestAccount ? 'test' : 'default'"
+                  />
+                  <div class="mk-cell-main">
+                    <strong>{{ p.user?.name || '—' }}</strong>
+                    <span class="mk-cell-sub">{{ p.user?.email || '' }}</span>
+                  </div>
                 </div>
                 <div class="oc-tags">
                   <span v-if="p.user?.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
@@ -219,10 +229,12 @@
               </td>
               <td v-if="!hiddenCols.has('updated')" :title="fmtDate(p.updatedAt)">{{ timeAgo(p.updatedAt) }}</td>
               <td>
-                <div class="mk-actions mk-actions--left">
-                  <button type="button" class="mk-link" @click="openDetail(p)">详情</button>
-                  <button v-if="p.status !== 'archived'" type="button" class="mk-link mk-link--danger" :disabled="p.busy" @click="archive(p)">下线</button>
-                  <button v-else type="button" class="mk-link" :disabled="p.busy" @click="restore(p)">恢复</button>
+                <!-- 操作列文字钮（原型 renderPaths 操作列 btn--sm「详情/下线」+ ⋯ 菜单）；
+                     右对齐与 mk-th--right 表头对齐（同 GoalConversations/Users 判例） -->
+                <div class="mk-actions">
+                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(p)">详情</button>
+                  <button v-if="p.status !== 'archived'" type="button" class="mk-btn mk-btn--sm" :disabled="p.busy" @click.stop="archive(p)">下线</button>
+                  <button v-else type="button" class="mk-btn mk-btn--sm" :disabled="p.busy" @click.stop="restore(p)">恢复</button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === p.id" @click.stop="toggleMenu(p.id)">⋯</button>
                     <div v-if="openMenu === p.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -261,13 +273,42 @@
         <div class="mk-drawer__mask" @click="detailOpen = false"></div>
         <div ref="panelRef" class="mk-drawer__panel mk-drawer__panel--wide" role="dialog" aria-label="路径结构">
           <div class="mk-drawer__head">
+            <!-- 原型 .ovl__head = 头像 + 标题 + 关闭（下边框由 .mk-drawer__head 承载）；
+                 头像字面沿用 renderPathDetail hero 的「路」，用共享 MkCellAvatar 原语 -->
+            <MkCellAvatar name="路" :size="26" />
             <div>
-              <h3 class="mk-drawer__title">{{ detail?.title }}</h3>
-              <span class="mk-drawer__sub">{{ detailSub }}</span>
+              <h3 class="mk-drawer__title">{{ detail?.title || detailRow?.title }}</h3>
+              <!-- 副行只说主题（subject==title 时省略——93% 同值，直出会复读标题）；
+                   用户 / 里程碑数等事实下沉到 mk-facts（原型 openLearner：head 只放标题） -->
+              <span v-if="detailSub" class="mk-drawer__sub">{{ detailSub }}</span>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detailOpen = false">✕</button>
           </div>
-          <div class="mk-drawer__body">
+          <!-- 内容层对齐原型 openLearner 三段式：pills 行 → 事实清单 → 嵌套区块 → foot。
+               pills/事实读自行数据（打开即有，加载中也不空屏），结构详情仍走接口。 -->
+          <div class="mk-drawer__body oc-drawer__body">
+            <div v-if="detailRow" class="oc-drawer__pills">
+              <span class="mk-badge" :class="statusBadge(detailRow.status)">{{ statusText(detailRow.status) }}</span>
+              <span class="mk-badge mk-badge--muted" :title="difficultyTitle(detailRow.difficulty)">{{ difficultyText(detailRow.difficulty) }}</span>
+            </div>
+            <div v-if="detailRow" class="mk-facts">
+              <div><span>用户</span><strong :title="detailRow.user?.email || ''">{{ detailRow.user?.name || '—' }}</strong></div>
+              <div><span>路径 ID</span><strong class="mono" :title="detailRow.id">{{ shortId(detailRow.id, 10, 4) }}</strong></div>
+              <div :title="`${detailRow.completedMilestones}/${detailRow.totalMilestones} 里程碑已完成`">
+                <span>里程碑</span>
+                <strong class="mono">{{ detailRow.completedMilestones }} / {{ detailRow.totalMilestones }}</strong>
+              </div>
+              <div>
+                <span>进度</span>
+                <!-- 原型 kv 的 dd 嵌 meterrow → 事实值嵌 minibar（同目标对话抽屉置信度格） -->
+                <strong class="oc-fact-progress">
+                  <span class="oc-fact-progress__num">{{ progressPct(detailRow) }}%</span>
+                  <span class="mk-minibar oc-fact-progress__bar"><span class="mk-minibar__fill" :data-tone="progressTone(detailRow)" :style="{ width: progressPct(detailRow) + '%' }"></span></span>
+                </strong>
+              </div>
+              <div><span>预计时长</span><strong>{{ detailRow.estimatedHours ? `~${detailRow.estimatedHours}h` : '—' }}</strong></div>
+              <div><span>更新</span><strong :title="fmtDate(detailRow.updatedAt)">{{ timeAgo(detailRow.updatedAt) }}</strong></div>
+            </div>
             <MkLoading v-if="detailLoading" inline />
             <!-- 详情加载失败：错误条 + 重试（对齐另两个抽屉；此前失败仅 toast，抽屉留白） -->
             <div v-else-if="detailError" class="oc-error" role="alert">
@@ -275,24 +316,51 @@
               <button type="button" class="mk-link" @click="retryDetail">重试</button>
             </div>
             <template v-else-if="detail">
-              <p v-if="detail.description" class="oc-desc">{{ detail.description }}</p>
-              <div v-for="m in detail.milestones" :key="m.id" class="oc-milestone">
-                <div class="oc-milestone__head">
-                  <strong>{{ m.stageNumber }}. {{ m.title }}</strong>
-                  <span class="mk-badge" :class="msBadge(m.status)">{{ msText(m.status) }}</span>
-                  <span class="oc-milestone__meta mono">~{{ m.estimatedHours ?? '—' }}h</span>
-                </div>
-                <div v-if="m.subtasks.length" class="oc-subtasks">
-                  <div v-for="t in m.subtasks" :key="t.id" class="oc-subtask">
-                    <span class="oc-subtask__dot" :class="`oc-subtask__dot--${t.status}`"></span>
-                    <span class="oc-subtask__title">{{ t.title }}</span>
-                    <span class="mk-badge mk-badge--sm mk-badge--muted">{{ taskTypeText(t.taskType) }}</span>
-                    <span class="oc-subtask__meta mono">{{ t.estimatedMinutes }}min</span>
+              <section v-if="detail.description" class="oc-section">
+                <header class="mk-section__head"><h4>目标描述</h4></header>
+                <p class="oc-desc">{{ detail.description }}</p>
+              </section>
+              <section v-if="detail.milestones.length" class="oc-section">
+                <header class="mk-section__head"><h4>路径结构 <span class="mono">{{ detail.milestones.length }}</span></h4></header>
+                <div class="oc-milestones">
+                  <div v-for="m in detail.milestones" :key="m.id" class="oc-milestone">
+                    <div class="oc-milestone__head">
+                      <strong>{{ m.stageNumber }}. {{ m.title }}</strong>
+                      <span class="mk-badge" :class="msBadge(m.status)">{{ msText(m.status) }}</span>
+                      <span class="oc-milestone__meta mono">~{{ m.estimatedHours ?? '—' }}h</span>
+                    </div>
+                    <div v-if="m.subtasks.length" class="oc-subtasks">
+                      <div v-for="t in m.subtasks" :key="t.id" class="oc-subtask">
+                        <span class="oc-subtask__dot" :class="`oc-subtask__dot--${t.status}`"></span>
+                        <span class="oc-subtask__title">{{ t.title }}</span>
+                        <span class="mk-badge mk-badge--sm mk-badge--muted">{{ taskTypeText(t.taskType) }}</span>
+                        <span class="oc-subtask__meta mono">{{ t.estimatedMinutes }}min</span>
+                      </div>
+                    </div>
+                    <p v-else class="mk-na oc-milestone__empty">无子任务</p>
                   </div>
                 </div>
-                <p v-else class="mk-na oc-milestone__empty">无子任务</p>
-              </div>
+              </section>
             </template>
+          </div>
+          <!-- foot（原型 .ovl__foot：上边框、动作右对齐、危险动作最左）。下线/恢复在抽屉内
+               即可完成（行内按钮被遮罩挡住，此前抽屉打开期间无法下线）；删除仍收 ⋯ 菜单 -->
+          <div v-if="detailRow" class="oc-drawer__foot">
+            <button
+              v-if="detailRow.status !== 'archived'"
+              type="button"
+              class="mk-btn mk-btn--danger"
+              :disabled="detailRow.busy"
+              @click="archive(detailRow)"
+            >下线路径</button>
+            <button
+              v-else
+              type="button"
+              class="mk-btn"
+              :disabled="detailRow.busy"
+              @click="restore(detailRow)"
+            >恢复路径</button>
+            <button type="button" class="mk-btn" @click="detailOpen = false">关闭</button>
           </div>
         </div>
       </div>
@@ -318,6 +386,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkCols from '@/components/mk/MkCols.vue'
+import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import { statusText, statusBadge } from './opsShared'
 
@@ -638,8 +707,9 @@ const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detailError = ref('')
 const detail = ref<PathDetail | null>(null)
-/** 最近一次请求详情的行（重试时重放） */
-let detailRow: PathRow | null = null
+/** 最近一次请求详情的行（重试时重放）。ref：抽屉 pills/事实/foot 直读行数据，
+ *  下线/恢复在抽屉 foot 操作后状态徽章与按钮要即时翻转 */
+const detailRow = ref<PathRow | null>(null)
 /* 详情抽屉行为四件套（2026-09-26 弹层对齐）：Esc/遮罩/焦点陷阱/滚动锁 */
 const maskRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
@@ -648,7 +718,7 @@ useMaskClose(maskRef, () => { detailOpen.value = false })
 useEscape(() => detailOpen.value, () => { detailOpen.value = false })
 
 async function openDetail(p: PathRow) {
-  detailRow = p
+  detailRow.value = p
   detailOpen.value = true
   detailLoading.value = true
   detailError.value = ''
@@ -667,19 +737,16 @@ async function openDetail(p: PathRow) {
 
 /** 详情加载失败重试：重放最近一次请求 */
 function retryDetail() {
-  if (detailRow) void openDetail(detailRow)
+  if (detailRow.value) void openDetail(detailRow.value)
 }
 
-/** 抽屉副行：主题 · 用户 · N 个里程碑。
- *  93% 的路径 subject 与 title 同值（638 行里 595 行，实测）——直接并排打印就是
- *  「Python销售报表自动汇总入门」下一行再写「Python销售报表自动汇总入门 · 张三」，
- *  标题看起来出现了两次，故同值时不重复。 */
+/** 抽屉副行：只说主题。93% 的路径 subject 与 title 同值（638 行里 595 行，实测）——
+ *  同值时返回空（副行隐藏），不把标题复读第二遍；用户 / 里程碑数等事实由 mk-facts 承载。 */
 const detailSub = computed(() => {
   const d = detail.value
   if (!d) return ''
-  const parts = [d.subject, d.user?.name || '—', `${d.milestones?.length || 0} 个里程碑`]
-  if (d.subject && d.title && d.subject.trim() === d.title.trim()) parts.shift()
-  return parts.join(' · ')
+  if (d.subject && d.title && d.subject.trim() === d.title.trim()) return ''
+  return d.subject || ''
 })
 
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
@@ -731,15 +798,23 @@ defineExpose({ reload: () => void reload(true) })
   font-weight: 600;
   margin: 10px 14px;
 }
+/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；长内容由截断类兜底） */
+.oc-list td { white-space: nowrap; }
 .oc-progress { display: flex; align-items: center; gap: 8px; min-width: 120px; }
 .oc-progress .mk-minibar { flex: 1; }
 .oc-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 虚拟/测试行内标记（对齐同页 conversations/teaching 行样式） */
 .oc-tags { display: flex; gap: 4px; margin-top: 2px; }
-/* 主题列：subject 字段或为学科或为生成路径时写入的目标文本（可能很长），单行省略 + hover 全文 */
+/* 用户格（原型 .celluser = 头像 + 姓名；同 GoalConversations .gc-user 组合） */
+.oc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.oc-user .mk-cell-main { min-width: 0; flex: 1; }
+/* 行点击进详情（原型 .tbl tbody tr { cursor:pointer } + tr data-action="open-path"） */
+.oc-row { cursor: pointer; }
+/* 主题列：subject 字段或为学科或为生成路径时写入的目标文本（可能很长），单行省略 + hover 全文。
+   自动布局下列宽随内容，必须给显式截断上限（同 GoalConversations .gc-summary 的 320px） */
 .oc-subject {
   display: inline-block;
-  max-width: 100%;
+  max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -750,11 +825,30 @@ defineExpose({ reload: () => void reload(true) })
 
 /* 难度：三个语义值 + 未知；未知降一档灰，不抢视觉 */
 .oc-diff { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
-.oc-diff:empty::after { content: '—'; }
 /* 时长：右对齐等宽数字（与表头 mk-th--right 对齐） */
 .oc-hours { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; color: var(--mk-muted); white-space: nowrap; }
 
-.oc-desc { color: var(--mk-muted); font-size: var(--mk-fs-micro); margin: 0 0 12px; }
+/* ===== 抽屉内容层（原型 openLearner 三段式的 body/foot；外壳用共享 .mk-drawer） =====
+   .ovl__body = padding16 + grid gap16（.mk-drawer__body 已带 padding，这里补栅格与间距）；
+   .ovl__foot = 上边框 + 动作右对齐（面板 grid 的隐式第三行，常驻底部不随内容滚走） */
+.oc-drawer__body { display: grid; gap: 16px; align-content: start; }
+.oc-drawer__pills { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.oc-drawer__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--mk-line);
+}
+/* 事实值嵌 minibar（原型 kv 的 dd 嵌 meterrow；同目标对话抽屉置信度格） */
+.oc-fact-progress { display: grid; gap: 4px; align-items: start; }
+.oc-fact-progress__num { font-family: var(--mk-mono); font-variant-numeric: tabular-nums; }
+.oc-fact-progress__bar { width: 72px; }
+/* 嵌套区块（原型抽屉嵌套无边框卡 → mk-section__head + 内容；同 gc-section/ts-section） */
+.oc-section { display: grid; gap: 8px; }
+
+.oc-desc { color: var(--mk-muted); font-size: var(--mk-fs-micro); line-height: 1.7; margin: 0; }
 .oc-milestone {
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
@@ -789,18 +883,21 @@ defineExpose({ reload: () => void reload(true) })
 /* 4K：抽屉内容跟随全站节奏 */
 @media (min-width: 2000px) {
   .oc-progress__num { font-size: var(--mk-fs-micro); }
+  .oc-desc { font-size: var(--mk-fs-body); }
   .oc-milestone__head strong { font-size: var(--mk-fs-body); }
   .oc-milestone__meta { font-size: var(--mk-fs-micro); }
   .oc-subtask { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .oc-progress__num { font-size: var(--mk-fs-micro); }
+  .oc-desc { font-size: var(--mk-fs-body); }
   .oc-milestone__head strong { font-size: var(--mk-fs-body); }
   .oc-milestone__meta { font-size: var(--mk-fs-micro); }
   .oc-subtask { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .oc-progress__num { font-size: var(--mk-fs-body); }
+  .oc-desc { font-size: var(--mk-fs-emphasis); }
   .oc-milestone__head strong { font-size: var(--mk-fs-emphasis); }
   .oc-milestone__meta { font-size: var(--mk-fs-body); }
   .oc-subtask { font-size: var(--mk-fs-emphasis); }

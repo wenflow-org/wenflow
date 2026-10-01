@@ -36,7 +36,7 @@ vi.mock('@/api/adminApi', () => ({
   adminLearningContentApi: {
     listPaths: listMock,
     getStats: statsMock,
-    getPathDetail: vi.fn(async () => ({ data: { data: { title: 'x', subject: 'x', milestones: [] } } })),
+    getPathDetail: vi.fn(async () => ({ data: { data: { title: 'x', subject: '另一主题', milestones: [] } } })),
     archivePath: vi.fn(async () => ({ data: {} })),
     restorePath: vi.fn(async () => ({ data: {} })),
     deletePath: vi.fn(async () => ({ data: {} })),
@@ -188,6 +188,51 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(w.findAll('.oc-hours').map((e) => e.text())).toEqual(['~21h', '—', '~9h']);
     // 数字列右对齐（表头 mk-th--right + 单元格 mk-num）
     expect(w.findAll('thead th').some((t) => t.text().includes('时长') && t.classes().includes('mk-th--right'))).toBe(true);
+
+    w.unmount();
+  });
+
+  /** 原型对齐（2026-10-01）：行点击 open-path 打开抽屉（newui renderPaths tr data-action）；
+   *  抽屉内容层 = 原型 openLearner 三段式：ovl__head（头像+标题+关闭）→ ovl__body
+   *  （pills 行 → 事实栅格 → 嵌套区块）→ ovl__foot（危险动作最左、动作右对齐）。 */
+  it('行点击打开抽屉；抽屉 = 头像+标题头、pills+事实栅格体、foot 下线/关闭；Enter 亦可开', async () => {
+    const w = mount(OpsContent, { props: { embedded: true } });
+    await flushPromises();
+    await nextTick();
+
+    // 行点击（原型 tr data-action="open-path"）→ 抽屉
+    await w.find('tbody tr.oc-row').trigger('click');
+    await flushPromises();
+    await nextTick();
+
+    const panel = document.body.querySelector('.mk-drawer__panel');
+    expect(panel).not.toBeNull();
+    // head：头像（原型 .ovl__head 头像+标题+关闭）+ 标题 + 关闭钮
+    expect(panel!.querySelector('.mk-drawer__head .mk-ava')).not.toBeNull();
+    expect(panel!.querySelector('.mk-drawer__title')!.textContent).toContain('x');
+    // 副行 = 主题（subject 与 title 不同值时直出；同值去重逻辑另有判定，保持不动）
+    expect(panel!.querySelector('.mk-drawer__sub')!.textContent).toContain('另一主题');
+    expect(panel!.querySelector('.mk-drawer__close')).not.toBeNull();
+    // body 第一层：pills 行（状态 + 难度，原型 ovl__body 的 pills 行）
+    expect(panel!.querySelectorAll('.oc-drawer__pills .mk-badge').length).toBe(2);
+    // 事实栅格（共享 .mk-facts = 原型 dl.kv）：六个事实位与顺序
+    const factLabels = Array.from(panel!.querySelectorAll('.mk-facts > div > span')).map((e) => e.textContent);
+    expect(factLabels).toEqual(['用户', '路径 ID', '里程碑', '进度', '预计时长', '更新']);
+    // 进度事实值嵌 minibar（原型 kv 的 dd 嵌 meterrow）
+    expect(panel!.querySelector('.oc-fact-progress .mk-minibar__fill')).not.toBeNull();
+    // foot：危险动作最左 + 关闭（原型 .ovl__foot 右对齐动作组）
+    const footBtns = Array.from(panel!.querySelectorAll('.oc-drawer__foot button')).map((b) => b.textContent!.trim());
+    expect(footBtns).toEqual(['下线路径', '关闭']);
+    expect(panel!.querySelector('.oc-drawer__foot .mk-btn--danger')).not.toBeNull();
+
+    // 关闭钮关抽屉；Enter（键盘可达，同 gc-row/ts-row 判例）再开
+    (panel!.querySelector('.mk-drawer__close') as HTMLButtonElement).click();
+    await nextTick();
+    expect(document.body.querySelector('.mk-drawer__panel')).toBeNull();
+    await w.find('tbody tr.oc-row').trigger('keydown.enter');
+    await flushPromises();
+    await nextTick();
+    expect(document.body.querySelector('.mk-drawer__panel')).not.toBeNull();
 
     w.unmount();
   });
