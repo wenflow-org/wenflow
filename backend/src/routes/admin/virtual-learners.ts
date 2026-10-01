@@ -129,9 +129,11 @@ function normalizeVirtualLearnerProfileShape(profile: unknown): Record<string, u
 
 const router = express.Router();
 
-/** 模拟会话操作统一注入 sessionId：执行日志/瀑布可按模拟会话归组追溯 */
+/** 模拟会话操作统一注入 sessionId：执行日志/瀑布可按模拟会话归组追溯。
+ *  sourceEntry 用 'simulation'（非 'platform'）：出站 LLM 调用由此计入虚拟学习者专属 RPM 通道
+ *  （api-gateway 按 sourceEntry==='simulation' 选 virtualLearnerRpmLimiter），与真实用户流量分流。 */
 router.param('sessionId', (req, _res, next, sessionId) => {
-  setRequestContext({ ...getRequestContext(), sessionId, sourceEntry: 'platform' });
+  setRequestContext({ ...getRequestContext(), sessionId, sourceEntry: 'simulation' });
   next();
 });
 

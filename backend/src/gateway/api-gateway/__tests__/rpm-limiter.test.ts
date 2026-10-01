@@ -52,6 +52,39 @@ describe('RpmLimiter 令牌桶', () => {
     release1();
     release2();
   });
+
+  it('maxWaitMs：排队超时返回 null（快速失败护栏），且把 waiter 从队列摘除', async () => {
+    jest.useFakeTimers();
+    const limiter = new RpmLimiter('t', 60);
+    const release1 = await limiter.acquire();
+    const pending = limiter.acquire({ maxWaitMs: 500 });
+    await Promise.resolve();
+    expect(limiter.stats().queued).toBe(1);
+
+    await jest.advanceTimersByTimeAsync(600);
+    const result = await pending;
+    expect(result).toBeNull();
+    expect(limiter.stats().queued).toBe(0); // 超时者已离队，不占队列
+
+    // 之后令牌恢复仍可正常获取（离队不影响后续排队者）
+    await jest.advanceTimersByTimeAsync(1100);
+    const release2 = await limiter.acquire();
+    expect(release2).not.toBeNull();
+    release1();
+    release2();
+  });
+
+  it('maxWaitMs：令牌先到则正常放行（不等满超时）', async () => {
+    jest.useFakeTimers();
+    const limiter = new RpmLimiter('t', 60);
+    const release1 = await limiter.acquire();
+    const pending = limiter.acquire({ maxWaitMs: 5000 });
+    await jest.advanceTimersByTimeAsync(1100);
+    const release2 = await pending;
+    expect(release2).not.toBeNull();
+    release1();
+    release2();
+  });
 });
 
 describe('RPM 设置归一化', () => {

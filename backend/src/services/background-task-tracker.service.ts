@@ -48,15 +48,20 @@ export const backgroundTaskTracker = new BackgroundTaskTracker();
 export function runBackgroundTask<T>(
   name: string,
   task: () => Promise<T>,
-  context: Record<string, unknown> = {}
+  context: Record<string, unknown> = {},
+  /** 显式 context 覆盖：调度器发起的后台任务没有请求上下文可继承，
+   *  由调用方按任务归属补关键字段（如虚拟学习者路径补 sourceEntry:'simulation'，
+   *  让出站 LLM 调用计入 VL RPM 通道）。覆盖优先于继承。 */
+  contextOverride: Record<string, unknown> = {}
 ): void {
   // 后台任务脱离请求级 abortSignal：acp-context 中间件会在 HTTP 连接关闭时
   // abort 请求上下文，若后台任务继承该信号，连接一关（响应结束、页面跳转）
   // 进行中的 LLM 调用就会被取消（"API request canceled"）。
   // 保留 traceId/userId 等溯源字段，仅移除 abortSignal。
   const { abortSignal: _detachedAbortSignal, ...detachedContext } = getRequestContext();
+  const mergedContext = { ...detachedContext, ...contextOverride };
   void backgroundTaskTracker
-    .track(name, () => requestContextStorage.run(detachedContext, task))
+    .track(name, () => requestContextStorage.run(mergedContext, task))
     .catch(error => {
       if (error instanceof BackgroundTaskRejectedError) {
         logger.info('[background-task] rejected while draining', { name, ...context });

@@ -1,0 +1,255 @@
+#!/usr/bin/env node
+/** run-vl-batch.mjs — VL 原生批量驱动（Phase 2/3）：goal→path（run-full）→ 轮询就绪 → 可选 learn 首课。
+ * 教训内置：per-VL 状态文件续跑、瞬时退避、admin 登录重登、错峰启动、单摘要 jsonl。
+ * 用法：node scripts/vlab-eval/run-vl-batch.mjs [--ids-file=results/wave6-ids.txt] [--limit=20] [--concurrency=10]
+ *        [--learn] [--tag=w6vl] [--base=http://127.0.0.1:3010]
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(HERE, '../..');
+const arg = (k, d) => { const hit = process.argv.find((a) => a.startsWith(`--${k}=`)); return hit ? hit.split('=').slice(1).join('=') : (process.argv.includes(`--${k}`) ? true : d); };
+const BASE = arg('base', 'http://127.0.0.1:3010');
+const IDS_FILE = arg('ids-file', '');
+const LIMIT = Number(arg('limit', '0'));
+const CONC = Math.max(1, Number(arg('concurrency', '10')));
+const LEARN = process.argv.includes('--learn');
+const TAG = arg('tag', 'vl');
+const RUN_DATE = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`; })();
+const EVAL_DIR = path.join(ROOT, 'doc/local/runs', RUN_DATE, 'vl-evals');
+fs.mkdirSync(EVAL_DIR, { recursive: true });
+const SUMMARY = path.join(EVAL_DIR, `vl-${TAG}-summary.jsonl`);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const log = (m) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
+
+const env = fs.readFileSync(path.join(ROOT, 'backend', '.env'), 'utf8');
+const envGet = (k) => (env.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim() || '';
+let cookie = '';
+async function adminLogin() {
+  const res = await fetch(BASE + '/api/admin-auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' }, body: JSON.stringify({ name: envGet('INIT_ADMIN_NAME'), password: envGet('INIT_ADMIN_PASSWORD'), remember: true }) });
+  cookie = (res.headers.get('set-cookie') || '').split(';')[0];
+  const j = await res.json().catch(() => ({}));
+  if (!cookie || j.success === false) throw new Error('admin 登录失败');
+}
+async function api(method, urlPath, body, { retries = 5, timeout = 600000 } = {}) {
+  let last = null;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await fetch(BASE + urlPath, { method, headers: { Cookie: cookie, Origin: 'http://localhost:5173', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(timeout) });
+      if (res.status === 401 && i < retries) { await adminLogin(); continue; }
+      const text = await res.text();
+      let json; try { json = JSON.parse(text); } catch { json = { raw: text.slice(0, 200) }; }
+      if (!res.ok || json?.success === false) {
+        last = `${res.status} ${String(json?.error?.message || json?.error || text).slice(0, 140)}`;
+        if (res.status === 409 || res.status === 429 || res.status >= 500) { await sleep(8000 * (i + 1)); continue; }
+        throw new Error(last);
+      }
+      return json;
+    } catch (e) {
+      if (e?.name === 'TimeoutError' || e?.name === 'AbortError') { last = 'timeout'; await sleep(10000 * (i + 1)); continue; }
+      last = e.message || String(e);
+      if (i === retries) throw new Error(last);
+      await sleep(8000 * (i + 1));
+    }
+  }
+  throw new Error(last || 'failed');
+}
+
+// 目标清单：ids-file 的 personaId → VL profile（翻到空页为止拉全，tags 分段精确匹配）
+await adminLogin();
+const tagStrings = [];
+for (let page = 1; page < 200; page++) {
+  const list = await api('GET', `/api/admin/virtual-learners?page=${page}&pageSize=100`);
+  const d = list.data || {};
+  const items = d.profiles || [];
+  for (const p of items) tagStrings.push({ id: p.id, tags: String(p.tags || '') });
+  if (!items.length) break;
+}
+log(`VL 档案拉全: ${tagStrings.length} 条`);
+const findByPersona = (pid) => tagStrings.find((t) => t.tags.split(',').map((s) => s.trim()).includes(pid));
+let idsArg = [];
+if (IDS_FILE) idsArg = fs.readFileSync(path.resolve(ROOT, IDS_FILE), 'utf8').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+else idsArg = tagStrings.map((t) => { const segs = t.tags.split(',').map((s) => s.trim()); return segs[1] || ''; }).filter(Boolean);
+if (LIMIT > 0) idsArg = idsArg.slice(0, LIMIT);
+log(`目标 ${idsArg.length} 个 VL，并发 ${CONC}${LEARN ? '（含 learn 首课）' : ''}`);
+
+const record = (o) => fs.appendFileSync(SUMMARY, JSON.stringify(o) + '\n');
+const statePath = (pid) => path.join(EVAL_DIR, `vlstate-${pid}.json`);
+const loadState = (pid) => { try { return JSON.parse(fs.readFileSync(statePath(pid), 'utf8')); } catch { return null; } };
+const saveState = (pid, st) => fs.writeFileSync(statePath(pid), JSON.stringify(st, null, 1));
+
+async function runOne(pid) {
+  const t0 = Date.now();
+  const vl = findByPersona(pid);
+  if (!vl) { record({ id: pid, ok: false, err: 'no-vl-profile' }); log(`${pid} 无对应 VL`); return; }
+  let st = loadState(pid) || { pid, vlId: vl.id, phase: 'start' };
+  // 会话被回收（fast-stale abandon）自愈：探测到终止态 → 重置状态开新会话（最多 2 次）
+  if (st.sessionId && st.restarts === undefined) st.restarts = 0;
+  let attempt = 0;
+  try {
+    for (; attempt <= 2; attempt++) {
+      try {
+        await runPhase(pid, vl, st, t0);
+        return;
+      } catch (e) {
+        const msg = String(e.message || e);
+        const deadSession = /abandoned|已终止|会话.*(结束|不存在)|404/.test(msg);
+        if (deadSession && attempt < 2) {
+          log(`${pid} 会话失效（${msg.slice(0, 40)}），重开新会话 ${attempt + 1}/2`);
+          st = { pid, vlId: vl.id, phase: 'start', restarts: (st.restarts || 0) + 1 };
+          saveState(pid, st);
+          continue;
+        }
+        throw e;
+      }
+    }
+  } catch (e) {
+    const msg = String(e.message || e);
+    record({ id: pid, ok: false, phase: st.phase, err: msg.slice(0, 200) });
+    log(`${pid} FAIL@${st.phase}: ${msg.slice(0, 100)}`);
+    // 限流类失败立即反馈给 AIMD（降并发）；这类格多为"慢"而非"坏"，重跑成本低
+    if (/429|rate_?limit|排队超时|RPM_QUEUE_TIMEOUT|retry.?budget|Too Many Requests/i.test(msg)) {
+      rateLimitedFails++;
+      const next = Math.max(CONC_MIN, targetConc - 2);
+      if (next !== targetConc) { log(`AIMD 限流失败 → 降并发 ${targetConc}→${next}`); targetConc = next; }
+    }
+  }
+}
+
+async function runPhase(pid, vl, st, t0) {
+    if (st.phase === 'start') {
+      const s = await api('POST', `/api/admin/virtual-learners/${vl.id}/start-session`, { storyIndex: 0 });
+      st.sessionId = s.data?.id || s.data?.sessionId; st.phase = 'goal-path';
+      saveState(pid, st);
+    }
+    if (st.phase === 'goal-path') {
+      try {
+        await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/run-full`, { maxRounds: 30, maxMilestones: 10, continueOnTaskComplete: false, autoAdvanceToPath: true, autoAdvanceToLearning: false }, { timeout: 40 * 60 * 1000 });
+      } catch (e) {
+        // autoAdvanceToLearning:false 时 run-full 必然以「未能进入教学阶段（当前阶段：path）」收尾——
+        // 那是"诚实停在 path"的状态标记（run-vl-one.js 同款处理），不是失败；其余错误照抛。
+        const msg = String(e.message || e);
+        if (!/未能进入教学阶段/.test(msg)) throw e;
+        log(`${pid} run-full 止于 path 阶段（预期行为）`);
+      }
+      st.phase = 'poll-path'; saveState(pid, st);
+    }
+    if (st.phase === 'poll-path') {
+      const deadline = Date.now() + 50 * 60 * 1000;
+      let ready = false;
+      let retried = 0;
+      let lastStatus = '';
+      while (Date.now() < deadline) {
+        const ps = await api('GET', `/api/admin/virtual-learners/sessions/${st.sessionId}/path-status`);
+        const d = ps.data || {};
+        st.pathId = d.learningPathId || st.pathId;
+        // 真实字段：data.status = learningPath.status（生成完成 = active）；milestones/stages 有内容即就绪
+        lastStatus = String(d.status || '');
+        const milestones = d.path?.milestones || d.path?.stages || [];
+        if (lastStatus === 'active' || lastStatus === 'ready' || (Array.isArray(milestones) && milestones.length > 0) || d.path?.canStartLearning === true) { ready = true; break; }
+        // 后端 harness 契约：pathGeneration 明确失败且允许重试 → 有界自愈（≤2 次）
+        const pg = d.pathGeneration || null;
+        if (pg && /failed/.test(String(pg.status || ''))) {
+          if (pg.retryAllowed && retried < 2) {
+            retried++;
+            log(`${pid} path 生成失败（${String(pg.reason || '').slice(0, 40)}），自愈重试 ${retried}/2`);
+            await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/retry-path-generation`, {}).catch(() => { });
+            await sleep(15000);
+            continue;
+          }
+          break;
+        }
+        await sleep(10000 + Math.floor(Math.random() * 4000));
+      }
+      // 会话被标记 abandoned 不丢资产：驱动被杀会连累会话标记，路径本体（learningPathId 指向）仍有效
+      if (!ready && st.pathId) {
+        const sp = await api('GET', `/api/admin/virtual-learners/sessions/${st.sessionId}`).catch(() => null);
+        const sess = sp?.data?.session || sp?.data || {};
+        if (sess.status === 'abandoned') { ready = true; log(`${pid} 会话已 abandoned 但路径资产有效，按就绪收`); }
+      }
+      if (!ready) { record({ id: pid, ok: false, phase: 'poll-path', err: `path 未就绪(status=${lastStatus})`, sessionId: st.sessionId }); log(`${pid} path 超时`); return; }
+      st.phase = 'path-ready'; saveState(pid, st);
+    }
+    if (st.phase === 'path-ready' && !LEARN) {
+      record({ id: pid, ok: true, phase: 'path-ready', sessionId: st.sessionId, pathId: st.pathId, durSec: Math.round((Date.now() - t0) / 1000) });
+      log(`${pid} path OK (${Math.round((Date.now() - t0) / 1000)}s)`);
+      return;
+    }
+    if (st.phase === 'path-ready' && LEARN) {
+      await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/start-learning`, {});
+      st.phase = 'learn'; saveState(pid, st);
+    }
+    if (st.phase === 'learn') {
+      const deadline = Date.now() + 30 * 60 * 1000;
+      let doneTurn = 0;
+      while (Date.now() < deadline) {
+        const r = await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-step`, {}, { timeout: 300000 });
+        const d = r.data || {};
+        doneTurn++;
+        const s = d.status || d.sessionStatus || d.phase || '';
+        const completedFirst = d.completedTasks >= 1 || d.firstTaskCompleted === true || s === 'task-done' || s === 'completed';
+        if (completedFirst) { st.phase = 'learn-done'; st.turns = doneTurn; saveState(pid, st); break; }
+        if (s === 'failed') throw new Error('teaching step failed: ' + JSON.stringify(d).slice(0, 120));
+        await sleep(2000);
+      }
+      if (st.phase !== 'learn-done') { record({ id: pid, ok: false, phase: 'learn', err: '首课未完成(超时)', sessionId: st.sessionId, turns: doneTurn }); log(`${pid} learn 超时`); return; }
+    }
+    if (st.phase === 'learn-done') {
+      await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/wrapup`, {}).catch(() => { });
+      record({ id: pid, ok: true, phase: 'learn-done', sessionId: st.sessionId, pathId: st.pathId, turns: st.turns, durSec: Math.round((Date.now() - t0) / 1000) });
+      log(`${pid} learn 首课 OK (turns=${st.turns})`);
+      return;
+    }
+}
+
+// ---- AIMD 自适应并发（P3）：后端 rpm 运行态做反馈 ----
+// queued>0（后端令牌桶在排队）→ 立即降 2；限流类失败 → 立即降 2；
+// 队列空且 90s 内无限流失败 → 缓升 1。上下界由 --concurrency 推导（0.5x ~ 1.7x）。
+let cursor = 0, doneCount = 0, active = 0;
+let targetConc = CONC;
+const CONC_MIN = Math.max(1, Math.round(CONC * 0.5));
+const CONC_MAX = Math.max(CONC, Math.round(CONC * 1.7));
+let rateLimitedFails = 0;
+let lastGrowAt = Date.now();
+let stopping = false;
+
+function aimdAdjust(rpmStats) {
+  const queued = Number(rpmStats?.queued ?? 0);
+  if (queued > 0) {
+    const next = Math.max(CONC_MIN, targetConc - 2);
+    if (next !== targetConc) { log(`AIMD 降并发 ${targetConc}→${next}（后端排队 ${queued}）`); targetConc = next; }
+    return;
+  }
+  if (rateLimitedFails === 0 && Date.now() - lastGrowAt > 90000) {
+    const next = Math.min(CONC_MAX, targetConc + 1);
+    if (next !== targetConc) { log(`AIMD 升并发 ${targetConc}→${next}（队列空·无限流失败）`); targetConc = next; lastGrowAt = Date.now(); rateLimitedFails = 0; }
+  }
+}
+
+const statsLoop = (async () => {
+  while (!stopping) {
+    try {
+      const res = await api('GET', '/api/admin/virtual-learners/settings');
+      const rpm = res.data?.data?.rpm || res.data?.rpm;
+      if (rpm) aimdAdjust(rpm);
+    } catch { /* stats 拉取失败不干预调度 */ }
+    await sleep(30000);
+  }
+})();
+
+const spawner = (async () => {
+  while (cursor < idsArg.length) {
+    if (active >= targetConc) { await sleep(800); continue; }
+    await sleep(1500); // 启动错峰（替代原 workerIdx*3000 固定梯度）
+    if (cursor >= idsArg.length || active >= targetConc) continue;
+    const pid = idsArg[cursor++];
+    active++;
+    runOne(pid).catch(() => { }).finally(() => { active--; log(`progress ${++doneCount}/${idsArg.length}`); });
+  }
+})();
+while (active > 0 || cursor < idsArg.length) await sleep(2000);
+stopping = true;
+await Promise.allSettled([spawner, statsLoop]);
+log('批量完成');

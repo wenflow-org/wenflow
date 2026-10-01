@@ -20,8 +20,9 @@
           "maxOutputTokens": 131072,
           "defaultMaxTokens": 32768,
           "reasoningReserveTokens": 8192,
+          "maxParallelRequests": 18,
           "fallbacks": [],
-          "description": "V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）。显式空链：同通道无同 tier 候选，兜底用 skill 级 fallbackChain 声明"
+          "description": "V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）。显式空链：同通道无同 tier 候选，兜底用 skill 级 fallbackChain 声明。maxParallelRequests=18：本地并发突发闸门（超限抛 rate_limit 进统一退避），正常批量并发 14 不受影响"
         },
         "deepseek-v4-flash": {
           "label": "DeepSeek V4 Flash",

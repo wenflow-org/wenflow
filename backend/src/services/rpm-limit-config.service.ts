@@ -17,13 +17,33 @@ import { logger } from '../utils/logger';
 
 export const RPM_LIMIT_SYNC_INTERVAL_MS = 30_000;
 
+/**
+ * 进程份额：多实例共享同一批上游钥匙时，按环境变量把全局 VL 限额分摊到本进程
+ * （如批量实例 1.0、dev 实例 0.25）。未设置 = 1.0（单实例语义不变）。
+ */
+function virtualLearnerShare(): number {
+  const raw = Number(process.env.VIRTUAL_LEARNER_RPM_SHARE);
+  return Number.isFinite(raw) && raw > 0 && raw <= 1 ? raw : 1;
+}
+
 export async function applyRpmLimitsFromSettings(): Promise<{ platformRpm: number; virtualLearnerRpm: number }> {
   const [reliability, virtualLab] = await Promise.all([
     getRuntimeReliabilitySettings().catch(() => null),
     getRuntimeVirtualLabSettings().catch(() => null)
   ]);
+  const share = virtualLearnerShare();
   if (reliability) platformRpmLimiter.setRpm(reliability.platformRpmLimit);
-  if (virtualLab) virtualLearnerRpmLimiter.setRpm(virtualLab.virtualLearnerRpmLimit);
+  if (virtualLab) {
+    const effective = Math.floor(virtualLab.virtualLearnerRpmLimit * share);
+    virtualLearnerRpmLimiter.setRpm(effective);
+    if (share !== 1 && virtualLab.virtualLearnerRpmLimit > 0) {
+      logger.info('[rpm-limit] VL 限额按进程份额分摊', {
+        global: virtualLab.virtualLearnerRpmLimit,
+        share,
+        effective
+      });
+    }
+  }
   return {
     platformRpm: platformRpmLimiter.getRpm(),
     virtualLearnerRpm: virtualLearnerRpmLimiter.getRpm()

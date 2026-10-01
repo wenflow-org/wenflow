@@ -9,6 +9,7 @@
  */
 import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
+import { ownerContextOverride } from './owner-context';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
 import { pathAgentDefinition } from '../../../skills/path-planning';
@@ -1045,7 +1046,8 @@ export async function generateLearningPath(data: GeneratePathData) {
           }
         : {}),
     }),
-    { pathId: fullPath.id, runId: stageRunId, userId: generationData.userId }
+    { pathId: fullPath.id, runId: stageRunId, userId: generationData.userId },
+    await ownerContextOverride(generationData.userId)
   );
   dashboardGuidanceSnapshotService.refreshInBackground(generationData.userId, 'path-created');
 

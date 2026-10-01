@@ -65,6 +65,7 @@ import {
   markActiveGenerationFailed,
 } from './generation/path-generation.core';
 import { enrichLearningPathWithAnderson } from './generation/stage-enrichment';
+import { ownerContextOverride } from './generation/owner-context';
 import {
   markTaskInProgress,
   assertTaskReadyForLearning,
@@ -127,6 +128,16 @@ class LearningService {
     if (isAppendBlockedByInFlightGeneration(generationStatus, activeRun, pathUpdatedAt)) return [];
     return this.listEmptyMilestoneIds(pathId);
   }
+  /**
+   * 路径归属者是虚拟学习者 → 后台任务显式打 simulation 标。
+   * 调度器/恢复循环发起的后台任务没有请求上下文可继承（capture 为空），
+   * 不补标会让 VL 的 enrichment/recovery 出站调用落进 platform 通道，
+   * 绕开虚拟学习者 RPM 限额（2026-10-01 RPM 改造实证）。实现见 generation/owner-context。
+   */
+  private ownerContextOverride(userId: string | undefined): Promise<Record<string, unknown>> {
+    return ownerContextOverride(userId);
+  }
+
   private async queuePathEnrichmentRetry(
     path: {
       id: string;
@@ -175,7 +186,7 @@ class LearningService {
       sourceConversationId: generationStatus?.sourceConversationId || undefined,
       generationRunId: run.id,
       userProfile: {}
-    }, analysis), { pathId: path.id, runId: run.id, userId: path.userId });
+    }, analysis), { pathId: path.id, runId: run.id, userId: path.userId }, await this.ownerContextOverride(path.userId));
 
     return { retryCount, runId: run.id };
   }
@@ -231,7 +242,7 @@ class LearningService {
       sourceConversationId: generationStatus?.sourceConversationId || undefined,
       generationRunId: run.id,
       userProfile: {}
-    }, analysis, { appendOnly: true }), { pathId: path.id, runId: run.id, userId: path.userId });
+    }, analysis, { appendOnly: true }), { pathId: path.id, runId: run.id, userId: path.userId }, await this.ownerContextOverride(path.userId));
 
     return { retryCount: appendCount, runId: run.id };
   }
@@ -355,7 +366,8 @@ class LearningService {
             runBackgroundTask(
               'learning.path.core-recovery',
               () => this.generateLearningPath(recoveredInput),
-              { pathId: run.learningPathId, runId: replacement.id }
+              { pathId: run.learningPathId, runId: replacement.id },
+              await this.ownerContextOverride(recoveredInput.userId)
             );
           } catch (error) {
             logger.warn('核心路径生成输入快照不可恢复', {

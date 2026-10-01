@@ -8,6 +8,7 @@ import { createHash } from 'crypto';
 import { getAgentOfSkill } from '../../services/agent-manifest.service';
 import { createRuntimeRetryBudget } from '../../services/reliability-settings.service';
 import { platformRpmLimiter, virtualLearnerRpmLimiter } from './rpm-limiter';
+import { GatewayExecutionError } from './failure-classification';
 
 export class APIGateway {
   private router: APIRouter;
@@ -95,11 +96,25 @@ export class APIGateway {
     route = this.applyRouteOverride(route, requestContext.promptRuntimeOverride?.routeOverride);
 
     // 出站 RPM 限流：虚拟学习者（sourceEntry=simulation）与平台全局两条独立通道。
-    // 超预算时在此等待令牌（不报错），让自动驾驶自然变慢。
+    // 超预算时在此等待令牌（不报错），让自动驾驶自然变慢；
+    // 排队护栏 RPM_QUEUE_WAIT_MS（默认 0=不设限）超时后按 rate_limit 快速失败，
+    // 防止饱和时「调用方重试 → 队列更长」的无界放大。
     const rpmLimiter = executionContext.sourceEntry === 'simulation'
       ? virtualLearnerRpmLimiter
       : platformRpmLimiter;
-    const releaseRpm = await rpmLimiter.acquire();
+    const queueWaitMs = Number(process.env.RPM_QUEUE_WAIT_MS) > 0 ? Number(process.env.RPM_QUEUE_WAIT_MS) : 0;
+    const releaseRpm = await rpmLimiter.acquire({ maxWaitMs: queueWaitMs });
+    if (releaseRpm === null) {
+      logger.warn('[api-gateway] RPM 排队超时，按 rate_limit 快速失败', {
+        channel: rpmLimiter === virtualLearnerRpmLimiter ? 'virtual-learner' : 'platform',
+        queueWaitMs,
+        queued: rpmLimiter.stats().queued
+      });
+      throw new GatewayExecutionError(
+        `出站限流排队超时（${Math.round(queueWaitMs / 1000)}s），请稍后重试或下调并发`,
+        { category: 'rate_limit', code: 'RPM_QUEUE_TIMEOUT', statusCode: 429, retryable: true }
+      );
+    }
     try {
       return await this.executor.execute(route, request, executionContext);
     } finally {

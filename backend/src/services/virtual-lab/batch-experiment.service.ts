@@ -20,6 +20,7 @@ import {
 } from '../../virtual-lab/learner-provisioning';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { memoryTraceService } from '../memory/memory-trace.service';
+import { runWithContext } from '../../gateway/api-gateway/context';
 
 export interface BatchLearnerConfig {
   name: string;
@@ -110,6 +111,19 @@ async function collectSnapshot(runId: string): Promise<Record<string, unknown>> 
 export async function advanceRun(runId: string): Promise<string> {
   if (busyRuns.has(runId)) return 'busy';
   busyRuns.add(runId);
+  try {
+    // 推进器跑在调度器 setTimeout/interval 上下文（无 HTTP 请求）：显式声明 simulation 来源，
+    // 出站 LLM 调用才会计入虚拟学习者 RPM 通道（与 autopilot 的 runWithContext 同款）
+    return await runWithContext(
+      { sourceEntry: 'simulation', callerAgent: 'batch-experiment' },
+      () => advanceRunInner(runId)
+    );
+  } finally {
+    busyRuns.delete(runId);
+  }
+}
+
+async function advanceRunInner(runId: string): Promise<string> {
   try {
     const run = await getRun(runId);
     if (!['active'].includes(run.status)) return run.status;
@@ -366,7 +380,7 @@ export async function advanceRun(runId: string): Promise<string> {
 
     return run.phase;
   } finally {
-    busyRuns.delete(runId);
+    // busyRuns 清理由外层 advanceRun wrapper 负责（此处不再重复删除）
   }
 }
 

@@ -64,8 +64,11 @@ export class RpmLimiter {
   /**
    * 获取一个令牌；返回 release()，调用方必须在请求结束后调用（用于在途计数）。
    * rpm<=0 时立即返回，仅计在途。
+   * opts.maxWaitMs > 0 时排队超时返回 null（调用方按 rate_limit 处理）——
+   * 防止饱和时无界排队把延迟越叠越高（调用方重试 → 队列更长 的放大回路）。
    */
-  async acquire(): Promise<() => void> {
+  async acquire(opts?: { maxWaitMs?: number }): Promise<(() => void) | null> {
+    const maxWaitMs = opts?.maxWaitMs ?? 0;
     if (this.rpm <= 0) {
       this.inFlight += 1;
       return () => { this.inFlight = Math.max(0, this.inFlight - 1); };
@@ -76,8 +79,27 @@ export class RpmLimiter {
       this.inFlight += 1;
       return () => { this.inFlight = Math.max(0, this.inFlight - 1); };
     }
-    return new Promise<() => void>((resolve) => {
-      this.waiters.push((release) => resolve(release));
+    return new Promise<(() => void) | null>((resolve) => {
+      let settled = false;
+      let timer: NodeJS.Timeout | null = null;
+      const waiter = (release: () => void) => {
+        if (settled) return;
+        settled = true;
+        if (timer !== null) { clearTimeout(timer); timer = null; }
+        resolve(release);
+      };
+      if (maxWaitMs > 0) {
+        timer = setTimeout(() => {
+          timer = null;
+          const i = this.waiters.indexOf(waiter);
+          if (i >= 0) this.waiters.splice(i, 1);
+          if (settled) return;
+          settled = true;
+          resolve(null);
+        }, maxWaitMs);
+        if (typeof timer.unref === 'function') timer.unref();
+      }
+      this.waiters.push(waiter);
       this.schedule();
     });
   }

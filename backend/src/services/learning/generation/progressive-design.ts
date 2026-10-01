@@ -15,6 +15,7 @@
 import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
 import { runBackgroundTask } from '../../background-task-tracker.service';
+import { ownerContextOverride } from './owner-context';
 import { learnerSnapshotRefreshService } from '../../learner/LearnerSnapshotRefreshService';
 
 /** 渐进式 stage 设计灰度开关（默认关）。 */
@@ -143,15 +144,14 @@ export async function buildPreviousStageOutcome(
  * fire-and-forget：失败只记 warn——学习者可等冷启动兜底（到达未设计 stage 时同步触发）
  * 或下次生成走库优先/重试链补齐。
  */
-export function triggerNextStageDesign(
+export async function triggerNextStageDesign(
   pathId: string,
   userId: string,
   nextMilestoneId: string,
   nextStageNumber: number,
   previousStageNumber: number
-): void {
-  runBackgroundTask('learning.path.stage-design-next', async () => {
-    const previousStageOutcome = await buildPreviousStageOutcome(pathId, userId, previousStageNumber);
+): Promise<void> {
+  runBackgroundTask('learning.path.stage-design-next', async () => {    const previousStageOutcome = await buildPreviousStageOutcome(pathId, userId, previousStageNumber);
     const { createAndClaimGenerationRun } = await import('./run-lifecycle');
     const { enrichLearningPathWithAnderson } = await import('./stage-enrichment');
     const path = await prisma.learning_paths.findUnique({
@@ -193,5 +193,5 @@ export function triggerNextStageDesign(
       }
     );
     logger.info('[progressive-design] 下一阶段设计完成', { pathId, userId, nextStageNumber });
-  }, { pathId, userId, nextStageNumber });
+  }, { pathId, userId, nextStageNumber }, await ownerContextOverride(userId));
 }
