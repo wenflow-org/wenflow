@@ -58,6 +58,35 @@ export function findUsersByIdsWithFlags(userIds: string[]) {
   });
 }
 
+/** 用户列表「薄弱项 / 平均记忆强度 / 最近复习」三列的逐痕迹读数（只对入围 top-N 用户取，
+    全库有痕迹用户的痕迹总量为千级，一次 in 查询成本可忽略）。强度 = FSRS 可提取率，
+    需逐痕迹的 FSRS 状态在内存计算，groupBy 聚合给不了。 */
+export function findTracesForStrengthAgg(userIds: string[]) {
+  if (userIds.length === 0) return Promise.resolve([] as Array<{
+    userId: string;
+    masteryScore: number;
+    extractionCount: number;
+    lastSeenAt: Date | null;
+    fsrsStability: number | null;
+    fsrsDifficulty: number | null;
+    fsrsLapses: number | null;
+    fsrsReps: number | null;
+  }>);
+  return prisma.memory_traces.findMany({
+    where: { userId: { in: userIds } },
+    select: {
+      userId: true,
+      masteryScore: true,
+      extractionCount: true,
+      lastSeenAt: true,
+      fsrsStability: true,
+      fsrsDifficulty: true,
+      fsrsLapses: true,
+      fsrsReps: true,
+    },
+  });
+}
+
 /** 单用户明细头：基础账号信息 */
 export function findUserMemoryProfile(userId: string) {
   return prisma.users.findUnique({

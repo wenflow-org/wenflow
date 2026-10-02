@@ -18,6 +18,7 @@ import {
   findConsolidationAuditProjections,
   findMergeRecordEvidence,
   findUsersByIdsWithFlags,
+  findTracesForStrengthAgg,
   findUserMemoryProfile,
   listUserMemoryTraces,
   findUserIdOnly,
@@ -140,7 +141,8 @@ router.get('/', async (req, res) => {
             : null,
         };
       })
-      .sort((a, b) => b.traces - a.traces);
+      // 原型 renderMemory 排序口径：按待复习（到期）量倒序，同量按痕迹数（存量体积）破平
+      .sort((a, b) => (b.due - a.due) || (b.traces - a.traces));
     // 列表只返回 top limit，但 totals 必须按全量聚合：
     // totals.users 是全量有痕迹用户数，若 traces/due 只对切片求和，
     // 用户数超过 limit 时前端的「覆盖 N 位用户」与到期比例条口径不一致（到期占比被低估）。
@@ -151,6 +153,22 @@ router.get('/', async (req, res) => {
       ? await findUsersByIdsWithFlags(userIds)
       : [];
     const userById = new Map(users.map((row) => [row.id, row]));
+
+    /* 原型 renderMemory 三列（薄弱项/平均记忆强度/最近复习）的读数：强度 = FSRS 可提取率
+       （retentionOf，与「记忆强度分布」卡同一算法）；从未看过（lastSeenAt 空）的痕迹
+       无强度可算，不进分子分母（与分布卡「不硬造」口径一致）。 */
+    const traceAggRows = await findTracesForStrengthAgg(userIds);
+    const aggByUser = new Map<string, { weak: number; seen: number; sum: number; last: Date | null }>();
+    for (const t of traceAggRows) {
+      if (!t.lastSeenAt) continue;
+      const agg = aggByUser.get(t.userId) ?? { weak: 0, seen: 0, sum: 0, last: null as Date | null };
+      const retention = retentionOf(t);
+      agg.seen += 1;
+      agg.sum += retention;
+      if (retention < 0.4) agg.weak += 1;
+      if (!agg.last || t.lastSeenAt > agg.last) agg.last = t.lastSeenAt;
+      aggByUser.set(t.userId, agg);
+    }
 
     const totals = {
       users: ranked.length,
@@ -180,12 +198,19 @@ router.get('/', async (req, res) => {
       success: true,
       data: {
         totals,
-        users: rows.map((row) => ({
-          ...row,
-          name: userById.get(row.userId)?.name ?? null,
-          email: userById.get(row.userId)?.email ?? null,
-          isVirtualLearner: !!userById.get(row.userId)?.isVirtualLearner,
-        })),
+        users: rows.map((row) => {
+          const agg = aggByUser.get(row.userId);
+          return {
+            ...row,
+            name: userById.get(row.userId)?.name ?? null,
+            email: userById.get(row.userId)?.email ?? null,
+            isVirtualLearner: !!userById.get(row.userId)?.isVirtualLearner,
+            /* 薄弱 = 强度<40% 的痕迹数（原型 threshold）；平均强度 0-1，null = 无 FSRS 强度数据 */
+            weak: agg?.weak ?? 0,
+            avgStrength: agg && agg.seen > 0 ? Math.round((agg.sum / agg.seen) * 100) / 100 : null,
+            lastReviewedAt: agg?.last ?? null,
+          };
+        }),
       },
     });
   } catch (error: any) {

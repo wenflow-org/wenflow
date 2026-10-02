@@ -70,7 +70,7 @@ async function mountWithRows(rows: unknown[]) {
     data: {
       data: {
         totals: { users: 1, traces: rows.length, due: 1, usersWithAudit: 0, proposed: 0, autoApplicable: 0, ambiguous: 0, applied: 0, deleted: 0 },
-        users: [{ userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: rows.length, due: 1, audit: null }],
+        users: [{ userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: rows.length, due: 1, audit: null, weak: 1, avgStrength: 0.52, lastReviewedAt: new Date().toISOString() }],
       },
     },
   });

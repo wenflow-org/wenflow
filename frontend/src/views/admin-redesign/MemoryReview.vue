@@ -95,24 +95,27 @@
         <h3 class="mk-card__title">用户列表</h3>
         <!-- 口径：totals.users 是后端全量统计，列表只取痕迹数倒序前 N 且暂无分页——
              两个数字必须同时给出，否则「页头 137 / 表下共 50」读起来像数据缺失 -->
-        <span class="mk-card__meta" :title="`后端口径为全量有记忆痕迹用户；列表按痕迹数倒序只取前 ${rows.length} 名，暂无分页`">共 {{ totals.users }} 位有记忆痕迹用户（展示前 {{ rows.length }}）· 按痕迹数倒序</span>
+        <span class="mk-card__meta" :title="`后端口径为全量有记忆痕迹用户；列表按待复习（到期）量倒序只取前 ${rows.length} 名，暂无分页`">共 {{ totals.users }} 位有记忆痕迹用户（展示前 {{ rows.length }}）· 按待复习量倒序</span>
       </div>
       <p v-if="error" class="mr__error">{{ error }}</p>
-      <MockSkeletonTable v-if="loading && !rows.length" :cols="5" :rows="8" />
-      <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="当前口径内还没有用户产生记忆痕迹。等学习者开始学习并完成概念提取后，这里会按痕迹数倒序列出用户。" />
-      <!-- 用户列表（2026-09-27 由 10 列密表收敛；2026-09-28 收回表头）：
-           行列表没有表头，右侧两个裸数字（到期积压 / 待人工看）读者无从判断含义。
-           保留「只留要动手的信号、其余计数进明细卡」这个决定，只补回表头与排序键：
-           用户 | 痕迹（本表倒序键）| 到期 | 需人工看 | 操作。
+      <MockSkeletonTable v-if="loading && !rows.length" :cols="7" :rows="8" />
+      <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="当前口径内还没有用户产生记忆痕迹。等学习者开始学习并完成概念提取后，这里会按待复习量倒序列出用户。" />
+      <!-- 用户列表（列集 = 原型 renderMemory：学习者 | 待复习 | 薄弱项 | 平均记忆强度 | 最近复习 | 操作；
+           2026-10-02 用户拍板「这个列表的列按新UI来」：撤痕迹列（排序键改到期量，与原型
+           「按待复习量排序」同口径），补薄弱/平均强度 meter/最近复习三列；类型列不设——
+           虚拟标记已住在学习者格 MkVariantBadge（全站判例），另设一列同信息两处渲染。
+           需人工看为本地真实运营信号（归并候选），原型无此列、保留。
            原型 .tbl 自动布局：无 colgroup/无 fixed，列宽随内容、td nowrap（同 Users.vue 判例） -->
       <div v-else class="mk-table-scroll">
         <table class="mk-table mk-table--click">
           <thead>
             <tr>
-              <th>用户</th>
-              <th class="mk-num" title="该用户名下的记忆痕迹总数；本表按此列倒序">痕迹</th>
-              <th class="mk-num" title="到该复习而未复习的痕迹数；条内小条 = 占该用户痕迹比例">到期</th>
+              <th>学习者</th>
+              <th class="mk-num" title="到该复习而未复习的痕迹数；条内小条 = 占该用户痕迹比例；本表按此列倒序">待复习</th>
               <th class="mk-num" title="像但不确定的归并候选，需人工确认，不会自动执行">需人工看</th>
+              <th class="mk-num" title="记忆强度（FSRS 可提取率）< 40% 的痕迹数——临近遗忘，复习优先级最高">薄弱项</th>
+              <th title="该用户全部有强度痕迹的 FSRS 可提取率均值；无强度数据时显示 —">平均记忆强度</th>
+              <th title="该用户最近一次有强度痕迹的看到时间（lastSeenAt 最大值）">最近复习</th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -137,7 +140,6 @@
                   <MkVariantBadge v-if="row.isVirtualLearner" kind="virtual" />
                 </div>
               </td>
-              <td class="mk-num">{{ row.traces }}</td>
               <td class="mk-num">
                 <span class="mr__due" :class="`mr__due--${dueTone(row)}`" :title="`到该复习而未复习 ${row.due} 条，占该用户痕迹 ${duePctOf(row)}%`">
                   <b>{{ row.due }}</b>
@@ -147,6 +149,20 @@
               <td class="mk-num">
                 <span v-if="row.audit?.ambiguous" class="mr__need" :title="`${row.audit.ambiguous} 条归并候选需人工确认，不会自动执行`">{{ row.audit.ambiguous }}</span>
                 <span v-else class="mk-na" title="没有待人工确认的归并候选">—</span>
+              </td>
+              <td class="mk-num">
+                <span v-if="row.weak > 0" class="mr__need" :title="`${row.weak} 条痕迹强度已跌破 40%，临近遗忘`">{{ row.weak }}</span>
+                <span v-else class="mk-na" title="没有跌破 40% 的痕迹">—</span>
+              </td>
+              <td>
+                <span v-if="row.avgStrength != null" class="mr__strength" :title="`全部有强度痕迹的 FSRS 可提取率均值 ${Math.round(row.avgStrength * 100)}%`">
+                  <span class="mk-minibar mr__strength-bar"><i class="mk-minibar__fill" :style="{ width: Math.round(row.avgStrength * 100) + '%' }"></i></span>
+                  <span class="mono">{{ Math.round(row.avgStrength * 100) }}%</span>
+                </span>
+                <span v-else class="mk-na" title="该用户的痕迹都还没有 FSRS 强度数据">—</span>
+              </td>
+              <td class="mk-cell-sub" :title="row.lastReviewedAt ? new Date(row.lastReviewedAt).toLocaleString('zh-CN', { hour12: false }) : undefined">
+                {{ row.lastReviewedAt ? timeAgo(row.lastReviewedAt) : '—' }}
               </td>
               <td class="mk-actions">
                 <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(row.userId)">明细</button>
@@ -468,6 +484,11 @@ interface OverviewRow {
   audit: AuditUserSummary | null
   /** 按次留档的归并凭据计数（权威；审计滚动窗口之外的历史归并也计入） */
   merges?: { rollbackable: number; rolledBack: number }
+  /* 原型 renderMemory 三列（薄弱项/平均记忆强度/最近复习）：薄弱 = FSRS 强度<40% 的痕迹数；
+     平均强度 0-1，null = 该用户没有任何带 FSRS 强度的痕迹（不硬造 0）；最近复习 = lastSeenAt 最大值 */
+  weak: number
+  avgStrength: number | null
+  lastReviewedAt: string | null
 }
 
 interface AppliedMergeView {
@@ -974,6 +995,11 @@ onMounted(async () => {
 .mr__due-bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-amber); }
 .mr__due--none .mr__due-bar i { background: var(--mk-faint); opacity: 0.35; }
 .mr__due--high .mr__due-bar i { background: var(--mk-red-fill); }
+
+/* 平均记忆强度格（原型 meterrow：小条 + mono %；mk-minibar 全局原语管形状，这里只管排布） */
+.mr__strength { display: inline-flex; align-items: center; gap: 8px; }
+.mr__strength .mono { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.mr__strength-bar { width: 64px; height: 4px; }
 
 /* 记忆分布（newui「教学分组」stageband 原型移植；token 映射：--surface-3→--mk-surface-3、
    --muted→--mk-muted、--fs-micro→--mk-fs-micro、sbl__sw 3px 圆角→--mk-radius-xs）。
