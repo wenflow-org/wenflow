@@ -61,12 +61,14 @@ export class PrismaBootRegistry implements BootRegistryLike {
   async oldestLiveBoot(now: Date, livenessMs: number): Promise<Date | null> {
     await this.ensureTable();
     const cutoff = now.getTime() - livenessMs;
-    const rows = await this.db.$queryRawUnsafe<{ min_boot: number | null }[]>(
+    const rows = await this.db.$queryRawUnsafe<{ min_boot: number | bigint | null }[]>(
       'SELECT MIN(boot_at) AS min_boot FROM backend_boot_registry WHERE hb_at >= ?',
       cutoff
     );
-    const minBoot = rows?.[0]?.min_boot;
-    return Number.isFinite(minBoot) ? new Date(Number(minBoot)) : null;
+    // Prisma SQLite 把 INTEGER 列返回为 BigInt，Number.isFinite(BigInt) 恒 false → 必须显式转 Number
+    const raw = rows?.[0]?.min_boot;
+    const minBoot = raw == null ? NaN : Number(raw);
+    return Number.isFinite(minBoot) ? new Date(minBoot) : null;
   }
 }
 
