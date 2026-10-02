@@ -12,48 +12,34 @@
       </template>
     </MkPageHead>
 
-    <!-- 页头 KPI 区（统一形态）：总数 / 完成率 / 已取消。
-         刻意不重说卡头 pills 的筛选计数（进行中 / 已完成…）。 -->
-    <section class="mk-kpi-grid">
-      <MkKpi
-        v-for="card in kpiCards"
-        :key="card.label"
-        :label="card.label"
-        :value="card.value"
-        :hint="card.hint"
-        :tone="card.tone"
-        :title="card.title"
-      />
-    </section>
-
-    <!-- 状态构成（newui renderGoals 桶组原型移植）：KPI 卡只报 总量/完成率/已取消，
-         这里补上 KPI 缺席的「进行中」并按四态拆条数与占比；卡头 sub 写明「状态构成」以示分工。
-         stats 拉取失败或无数据时整组静默隐藏（比例条同一容错口径）。 -->
-    <section v-if="stats && stats.total > 0" class="mk-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">目标对话构成</h3>
-        <span class="mk-card__meta">状态构成 · 三态条数与占比（总量见页头 KPI，不复读）</span>
+    <!-- 状态桶组（newui renderGoals 原型移植）：本页唯一统计带 = 页头 KPI，
+         四桶「进行中 / 已完成 / 已取消 / 完成率」直接落页面（原型 buckets 无卡壳）。
+         此前 kpi 栅格与构成卡两带并存、已取消/已完成数字复读（2026-10-02 用户拍板撤双带）；
+         卡头 pills 因此不带计数。stats 拉取失败或无数据时整组静默隐藏。 -->
+    <section v-if="stats && stats.total > 0" class="buckets" aria-label="目标对话状态构成">
+      <div class="bucket">
+        <span class="bucket__v">{{ stats.active }}</span>
+        <span class="bucket__l">进行中</span>
+        <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcActivePct + '%', background: 'var(--mk-blue)' }"></i></span>
+        <span class="bucket__l bucket__foot">澄清中或待确认</span>
       </div>
-      <div class="buckets">
-        <div class="bucket">
-          <span class="bucket__v">{{ stats.active }}</span>
-          <span class="bucket__l">进行中</span>
-          <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcActivePct + '%', background: 'var(--mk-blue)' }"></i></span>
-          <!-- 桶 foot = 业务释义（原型 bucketCard 语义），占比已由进度条自明不复读 -->
-          <span class="bucket__l bucket__foot">澄清对话进行中</span>
-        </div>
-        <div class="bucket">
-          <span class="bucket__v">{{ stats.completed }}</span>
-          <span class="bucket__l">已完成</span>
-          <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCompletedPct + '%', background: 'var(--mk-green)' }"></i></span>
-          <span class="bucket__l bucket__foot">已生成学习路径</span>
-        </div>
-        <div class="bucket">
-          <span class="bucket__v">{{ gcCancelledCount }}</span>
-          <span class="bucket__l">已取消</span>
-          <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCancelledPct + '%', background: 'var(--mk-red)' }"></i></span>
-          <span class="bucket__l bucket__foot">用户取消或中断</span>
-        </div>
+      <div class="bucket">
+        <span class="bucket__v">{{ stats.completed }}</span>
+        <span class="bucket__l">已完成</span>
+        <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCompletedPct + '%', background: 'var(--mk-green)' }"></i></span>
+        <span class="bucket__l bucket__foot">已生成学习路径</span>
+      </div>
+      <div class="bucket">
+        <span class="bucket__v">{{ gcCancelledCount }}</span>
+        <span class="bucket__l">已取消</span>
+        <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCancelledPct + '%', background: 'var(--mk-red)' }"></i></span>
+        <span class="bucket__l bucket__foot">用户取消或中断</span>
+      </div>
+      <div class="bucket">
+        <span class="bucket__v">{{ stats.completionRate }}%</span>
+        <span class="bucket__l">完成率</span>
+        <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCompletedPct + '%', background: 'var(--mk-blue)' }"></i></span>
+        <span class="bucket__l bucket__foot">已完成 {{ stats.completed }} / 总数 {{ stats.total }}</span>
       </div>
     </section>
 
@@ -79,7 +65,7 @@
                 :aria-pressed="statusFilter === p.id"
                 @click="statusFilter = statusFilter === p.id ? '' : p.id"
               >
-                {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
+                {{ p.label }}
               </button>
             </div>
             <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
@@ -254,7 +240,6 @@ import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
-import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
 import DataScopeToggle from './DataScopeToggle.vue'
@@ -361,37 +346,6 @@ watch(
   { immediate: true }
 )
 
-/* 页头 KPI（对齐原型 goals 页统计行）：总数 / 完成率 / 已取消。
-   刻意不重复卡头 pills 的筛选计数（进行中 / 已完成）——与 People 页同口径纪律 */
-interface KpiCard {
-  label: string
-  value: string | number
-  hint: string
-  title: string
-  tone?: 'ok' | 'warn' | 'bad' | ''
-}
-const kpiCards = computed<KpiCard[]>(() => {
-  const s = stats.value
-  const cancelled = gcCancelledCount.value
-  return [
-    { label: '目标对话', value: s ? s.total : '—', hint: '用户发起', title: '目标对话总数（用户与系统澄清目标的多轮会话）' },
-    {
-      label: '完成率',
-      value: s ? `${s.completionRate}%` : '—',
-      hint: '已完成 / 总数',
-      tone: s && Number(s.completionRate) >= 60 ? 'ok' : s && Number(s.completionRate) < 30 ? 'warn' : '',
-      title: '目标对话走到「已完成」态的比例——偏低说明澄清过程流失'
-    },
-    {
-      label: '已取消',
-      value: s ? cancelled : '—',
-      hint: '用户中途放弃',
-      tone: cancelled > 0 ? 'warn' : '',
-      title: '用户中途取消的对话数（后端无独立字段，按 总数 − 进行中 − 已完成 推导）'
-    }
-  ]
-})
-
 /* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后重拉全量并灰标虚拟/测试行 */
 const includeTest = ref(false)
 
@@ -403,16 +357,14 @@ function menuRemove(r: Row) {
   void remove(r)
 }
 
-const statusPills = computed(() => {
-  const all = rows.value
-  return [
-    // 原型 chips 首枚「全部」（原型 renderGoals filters）：显式复位入口，不再依赖再点一次取消
-    { id: '', label: '全部', count: null as number | null },
-    { id: 'active', label: '进行中', count: all.filter((r) => r.status === 'active').length },
-    { id: 'completed', label: '已完成', count: all.filter((r) => r.status === 'completed').length },
-    { id: 'cancelled', label: '已取消', count: all.filter((r) => r.status === 'cancelled').length }
-  ]
-})
+const statusPills = computed(() => [
+  // 原型 chips 首枚「全部」（原型 renderGoals filters）：显式复位入口，不再依赖再点一次取消。
+  // 计数不进 pills：四态条数由页头桶组单源呈现（原型 chips 同样无计数，避免同屏两套口径）
+  { id: '', label: '全部' },
+  { id: 'active', label: '进行中' },
+  { id: 'completed', label: '已完成' },
+  { id: 'cancelled', label: '已取消' }
+])
 
 /** 状态词一律走全局字典（单源）；空值给「—」。原私有字典与 statusText 逐条重合，故删除 */
 const statusLabel = (s: string) => statusText(s) || '—'
@@ -652,11 +604,10 @@ onMounted(() => {
 /* 用户格 min-width：本表为自动布局（无 colgroup），补「澄清进度/约束条件」两列后
    该列会被内容多的列挤到 ~90px（2026-10-02 视觉核对实测），名字/邮箱全截断——
    给内容格兜底宽度，压缩由可换行的摘要/约束列吸收 */
-.gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }/* 状态构成桶组（newui renderGoals/bucketCard 原型移植；token 映射：--sp-3→--mk-space-3、
+.gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }/* 状态桶组（newui renderGoals/bucketCard 原型移植；token 映射：--sp-3→--mk-space-3、
    --line→--mk-line、--surface→--mk-surface、--r-lg→--mk-radius-lg、--surface-3→--mk-surface-3、
-   --muted→--mk-muted、--fs-micro→--mk-fs-micro）。
-   .buckets 自带 16px 横向内边距：原型里桶组直接落页面，这里落在 mk-card 内（卡无 body padding）。 */
-.buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--mk-space-3); padding: 12px 16px 14px; }.bucket { display: grid; gap: 3px; padding: 13px 15px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface); }.bucket__v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }.bucket__l { font-size: var(--mk-fs-micro); color: var(--mk-muted); }.bucket__bar { height: 4px; border-radius: 999px; background: var(--mk-surface-3); overflow: hidden; margin-top: 5px; }.bucket__bar > i { display: block; height: 100%; border-radius: 999px; }/* foot（原型 bucketCard 第 5 参 inline style 的类化）：弱化说明文字 */
+   --muted→--mk-muted、--fs-micro→--mk-fs-micro）。桶组直接落页面（原型形态），无内边距。 */
+.buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--mk-space-3); }.bucket { display: grid; gap: 3px; padding: 13px 15px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface); }.bucket__v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }.bucket__l { font-size: var(--mk-fs-micro); color: var(--mk-muted); }.bucket__bar { height: 4px; border-radius: 999px; background: var(--mk-surface-3); overflow: hidden; margin-top: 5px; }.bucket__bar > i { display: block; height: 100%; border-radius: 999px; }/* foot（原型 bucketCard 第 5 参 inline style 的类化）：弱化说明文字 */
 .bucket__foot { color: var(--mk-faint); }.gc-user .mk-cell-main { min-width: 0; flex: 1; }.gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
 .gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }.gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }.gc-stage-cell__dots { display: inline-flex; gap: 3px; }.gc-stage-cell__dot {
   width: 6px;
