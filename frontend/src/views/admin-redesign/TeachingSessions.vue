@@ -12,14 +12,30 @@
         </button>
       </template>
     </MkPageHead>
-    <div v-if="!embedded" class="mk-status" :class="tsDashTone === 'bad' ? 'mk-status--bad' : tsDashTone === 'warn' ? 'mk-status--warn' : tsDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'">
+    <!-- 口径标注（P1#4）：状态带里只有「共 N」可能是后端全量口径（后端未回 total 时退化为
+         窗口行数，title 如实降级、不得再声称全量）；需关注 / 有建议 / 缺总结三个计数全部来自
+         最近 LIST_LIMIT 条加载窗口，就地括注「（最近 1000 条）」防窗口冒充全量。
+         bad 档（异常堆积）阈值在条 title 披露（告警条件化纪律：着色必须带阈值） -->
+    <div
+      v-if="!embedded"
+      class="mk-status"
+      :class="tsDashTone === 'bad' ? 'mk-status--bad' : tsDashTone === 'warn' ? 'mk-status--warn' : tsDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'"
+      :title="tsDashTone === 'bad' ? `异常堆积：失败 / 收尾失败 / 超时合计 ${abnormalSessionCount} ≥ ${TS_BAD_THRESHOLD}（最近 ${LIST_LIMIT} 条窗口），页头转红` : undefined"
+    >
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ attentionCount }} 个会话需关注</strong>
+      <strong class="mk-status__title" title="需关注 = 关注度高 / 中的会话数（失败 / 超时 / 终态缺总结 / 高优建议）；最近加载窗口计数，非全量">{{ attentionCount }} 个会话需关注（最近 {{ LIST_LIMIT }} 条）</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" title="后端全量口径；下方分布卡与列表按最近加载窗口展示">共 {{ listTotal || rows.length }}</span>
-      <span class="mk-status__meta" title="含教学建议（完课调整 / 复习建议）的会话数">有建议 {{ advisoryCount }}</span>
-      <span class="mk-status__meta" title="终态（已完成 / 失败 / 超时 / 废弃 / 收尾失败）会话缺课后总结数；非终态缺失是过程态不计">缺总结 {{ missingWrapupCount }}</span>
-      <!-- 达 LIST_LIMIT 上限才提示截断（会话总数已是后端全量口径，此处不复读该数字） -->
+      <span class="mk-status__meta" :title="totalTitle">共 {{ listTotal || rows.length }}</span>
+      <button
+        type="button"
+        class="mk-status__meta-link"
+        :class="{ 'mk-status__meta-link--on': onlyAdvisory }"
+        :aria-pressed="onlyAdvisory"
+        title="含教学建议（完课调整 / 复习建议）的会话数；最近加载窗口计数。点击 = 服务端过滤只看有建议（再点取消）"
+        @click="toggleOnlyAdvisory"
+      >有建议 {{ advisoryCount }}（最近 {{ LIST_LIMIT }} 条）</button>
+      <span class="mk-status__meta" :title="`终态（已完成 / 失败 / 超时 / 废弃 / 收尾失败）会话缺课后总结数；非终态缺失是过程态不计；最近 ${LIST_LIMIT} 条窗口计数`">缺总结 {{ missingWrapupCount }}（最近 {{ LIST_LIMIT }} 条）</span>
+      <!-- 达 LIST_LIMIT 上限才提示截断（「共 N」的口径见上：后端回 total 才是全量，否则窗口行数） -->
       <span v-if="truncated" class="mk-status__meta" :title="`列表仅加载最近 ${LIST_LIMIT} 条`">仅显示最近 {{ LIST_LIMIT }} 条</span>
       <!-- 右侧快捷钮（原型 .statusbar__act「只看需关注」）：接页面既有「待关注」筛选，
            再点取消；纯导航，不新增数据口径 -->
@@ -49,7 +65,16 @@
         <span class="mk-card__title">会话状态分布</span>
         <span class="mk-card__meta">按状态聚合 · 最近 {{ rows.length }} 条（加载窗口，非全量）</span>
         <div class="mk-card__head-right">
-          <span v-if="abnormalSessionCount" class="mk-badge mk-badge--warn" title="失败 / 收尾失败 / 超时 合计——需排查">异常 {{ abnormalSessionCount }}</span>
+          <!-- 异常 badge 可点穿（评审 §5）：点击 = 状态多选筛选（失败 / 收尾失败 / 超时），再点取消 -->
+          <button
+            v-if="abnormalSessionCount"
+            type="button"
+            class="mk-badge mk-badge--warn ts-badge-toggle"
+            :class="{ 'ts-badge-toggle--on': abnormalOnly }"
+            :aria-pressed="abnormalOnly"
+            title="失败 / 收尾失败 / 超时 合计——需排查。点击只看异常会话（状态多选），再点取消"
+            @click="abnormalOnly = !abnormalOnly"
+          >异常 {{ abnormalSessionCount }}</button>
         </div>
       </div>
       <div class="ts-bandcard__body">
@@ -62,10 +87,11 @@
           ></span>
         </div>
         <div class="stageband__legend">
-          <!-- 枚举内档位可点 = 状态筛选 toggle（与工具条状态 chips 同源）；「其它」档无对应筛选项不可点 -->
+          <!-- 枚举内档位可点 = 状态筛选 toggle（与工具条状态 chips 同源）；「其它」档无对应筛选项不可点。
+               零值档不渲染（与段条已滤零的口径一致），折成一行「+N 个零值状态」提示（title 披露档名） -->
           <component
             :is="seg.clickable ? 'button' : 'div'"
-            v-for="seg in statusBand"
+            v-for="seg in statusBandVisible"
             :key="seg.key"
             :type="seg.clickable ? 'button' : undefined"
             class="sbl"
@@ -77,6 +103,7 @@
             <span class="sbl__name">{{ seg.name }}</span>
             <span class="sbl__n">{{ seg.n }}</span>
           </component>
+          <div v-if="zeroBandCount" class="sbl" :title="`零值档未列出：${zeroBandNames}`">+{{ zeroBandCount }} 个零值状态</div>
         </div>
       </div>
     </section>
@@ -213,7 +240,7 @@
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ r.topic }}</strong>
-                  <span class="mk-cell-sub">{{ r.subject }} · {{ taskTypeText(r.taskType) }}</span>
+                  <span class="mk-cell-sub" :title="taskTypeTitle(r.taskType)">{{ r.subject }} · {{ taskTypeText(r.taskType) }}</span>
                   <span
                     v-if="r.wrapup?.topicSummary"
                     class="ts-summary-preview"
@@ -234,9 +261,10 @@
               </td>
               <td v-if="!tsHiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
               <td v-if="!tsHiddenCols.has('interact')">
-                <!-- 行级设计（批B）：时长主值+档位 tone（≥25 分钟挂机红 / <1 分钟秒退弱化），消息/知识点降 sub 行 -->
-                <div class="ts-ia" :title="r.duration ? `时长 ${fmtDuration(r.duration)} · ${r.messageCount} 条消息` : undefined">
-                  <b class="ts-ia__dur" :class="{ 'mk-latency--slow': r.duration >= 1500, 'ts-ia__dur--brief': r.duration > 0 && r.duration < 60 }">{{ r.duration ? fmtDuration(r.duration) : '—' }}</b>
+                <!-- 行级设计（批B）：时长主值+档位 tone（≥25 分钟挂机红 / <1 分钟秒退弱化），消息/知识点降 sub 行；
+                     挂机红阈值（duration ≥ 1500 秒）写进 title 披露（P3） -->
+                <div class="ts-ia" :title="interactTitle(r)">
+                  <b class="ts-ia__dur" :class="{ 'mk-latency--slow': r.duration >= IDLE_RED_SECONDS, 'ts-ia__dur--brief': r.duration > 0 && r.duration < 60 }">{{ r.duration ? fmtDuration(r.duration) : '—' }}</b>
                   <span class="mk-cell-sub">{{ r.messageCount }} 条<template v-if="r.knowledgePointCount"> · 知识 {{ r.knowledgePointCount }} 点</template></span>
                 </div>
               </td>
@@ -259,8 +287,14 @@
                 <span v-else class="mk-na">—</span>
               </td>
               <td v-if="!tsHiddenCols.has('output')">
+                <!-- 建议徽章可读（评审 §5）：行内直出建议标题（首行预览），title 挂完整建议文本 -->
                 <span class="mk-badge" :class="wrapupBadge(r)">{{ wrapupText(r) }}</span>
-                <span v-if="r.hasAdvisory" class="mk-badge" :class="advisoryBadge(r.advisory?.priority)" style="margin-left:4px">建议</span>
+                <span
+                  v-if="r.hasAdvisory"
+                  class="mk-badge ts-adv-badge"
+                  :class="advisoryBadge(r.advisory?.priority)"
+                  :title="r.advisory ? `${r.advisory.title || '教学建议'}：${r.advisory.text}` : '教学建议'"
+                ><span class="ts-adv-badge__txt">{{ r.advisory?.title || '建议' }}</span></span>
               </td>
               <td v-if="!tsHiddenCols.has('attention')">
                 <span
@@ -358,11 +392,9 @@ interface Row {
   /** 原始开始时间戳（日期范围筛选用） */
   startTime?: string
   wrapup: WrapupSummary | null
-  wrapupSource: string
   /** 降级总结：超时/收束失败兜底（summary-only/*-fallback），练习建议是学习者向占位，后台不原样展示 */
   wrapupDegraded: boolean
   advisory: { title: string; text: string; priority: string } | null
-  rawJson: string
   progress: SessionProgress | null
 }
 
@@ -386,6 +418,11 @@ const isTerminal = (s: string) => TERMINAL_STATUSES.has(s)
 
 /* 列表真实总量（后端 body.total）：达 LIST_LIMIT 上限时用于真实截断提示 */
 const listTotal = ref(0)
+/* 后端是否真的返回了 total（P1#4）：false 时「共 N」退化为已加载窗口行数，
+   状态条 title 必须如实降级，不得再声称全量 */
+const totalFromBackend = ref(false)
+/* 「只看有建议」服务端过滤（评审 §5 可点穿）：接 adminApi 既有 onlyWithAdvisory 参数 */
+const onlyAdvisory = ref(false)
 const truncated = computed(() => rows.value.length >= LIST_LIMIT)
 
 /* 静默拉取：成功即整表替换；失败保留旧数据（轮询不闪空态），并标记错误条。
@@ -394,13 +431,19 @@ async function fetchRows(force = false): Promise<boolean> {
   // 页面级 TTL 缓存：切换页面回来时跳过重复请求（轮询/显式刷新传 force 不受影响）
   if (!force && isPageCacheFresh('teaching-sessions') && rows.value.length) return true
   try {
-    const res = await adminTeachingSessionsApi.list({ limit: LIST_LIMIT, includeTest: includeTest.value })
+    const res = await adminTeachingSessionsApi.list({
+      limit: LIST_LIMIT,
+      includeTest: includeTest.value,
+      ...(onlyAdvisory.value ? { onlyWithAdvisory: true } : {})
+    })
     const body = res.data?.data ?? res.data ?? {}
     const items = body.items || []
     rows.value = items.map((s: Record<string, unknown>) => mapRow(s))
-    /* 后端总量：达上限时给「共 N 条 · 仅显示最近 LIST_LIMIT 条」的真实截断提示（此前前端未用） */
+    /* 后端总量：达上限时给「共 N 条 · 仅显示最近 LIST_LIMIT 条」的真实截断提示（此前前端未用）。
+       后端未回 total（非法/缺失）时兜底为窗口行数，且 totalFromBackend=false 禁止「全量」措辞 */
     const total = Number(body.total)
-    listTotal.value = Number.isFinite(total) && total > 0 ? total : rows.value.length
+    totalFromBackend.value = Number.isFinite(total) && total > 0
+    listTotal.value = totalFromBackend.value ? total : rows.value.length
     loadFailed.value = false
     markPageFetched('teaching-sessions')
     return true
@@ -409,6 +452,26 @@ async function fetchRows(force = false): Promise<boolean> {
     return false
   }
 }
+
+/** 「只看有建议」toggle：服务端过滤切换后必须强制重拉（绕过 TTL 缓存） */
+async function toggleOnlyAdvisory() {
+  onlyAdvisory.value = !onlyAdvisory.value
+  refreshing.value = true
+  try {
+    await fetchRows(true)
+  } finally {
+    refreshing.value = false
+  }
+}
+
+/** 「共 N」口径 title（P1#4）：后端真返回 total 才可声称全量；
+    「只看有建议」过滤生效时 total 是过滤口径，同样要说明 */
+const totalTitle = computed(() => {
+  if (onlyAdvisory.value) return `「只看有建议」服务端过滤生效：此处为该过滤口径的总数；列表按最近 ${LIST_LIMIT} 条窗口展示`
+  return totalFromBackend.value
+    ? '后端全量口径；下方分布卡与列表按最近加载窗口展示'
+    : `后端未返回总数：此处为最近加载窗口内已加载行数（≤ ${LIST_LIMIT} 条），非全量`
+})
 
 async function refreshNow() {
   if (refreshing.value) return
@@ -518,10 +581,8 @@ function mapRow(s: Record<string, unknown>): Row {
     startAt: timeAgo(String(s.startTime || '')),
     startTime: s.startTime ? String(s.startTime) : undefined,
     wrapup: summary,
-    wrapupSource: (wrapup?.sources as Record<string, string>)?.summary === 'model' ? '模型生成' : '规则/其他',
     wrapupDegraded,
     advisory,
-    rawJson: JSON.stringify({ wrapup, advisory }, null, 2),
     progress: (s.progress as SessionProgress) || null
   }
 }
@@ -604,6 +665,11 @@ const statusBand = computed<StatusBandEntry[]>(() => {
   if (other > 0) entries.push({ key: 'other', name: '其它', n: other, tone: 'var(--mk-faint)', clickable: false })
   return entries
 })
+/* legend 零值档折叠（P2）：只渲染非零档（与段条已滤零一致），零值折成「+N 个零值状态」提示 */
+const statusBandVisible = computed(() => statusBand.value.filter((e) => e.n > 0))
+const zeroBandEntries = computed(() => statusBand.value.filter((e) => e.n === 0))
+const zeroBandCount = computed(() => zeroBandEntries.value.length)
+const zeroBandNames = computed(() => zeroBandEntries.value.map((e) => e.name).join('、'))
 /* 段宽 = n / 合计（原型 distBand 口径，合计为 0 时按 1 兜底）；零值段不渲染 */
 const statusBandSegments = computed(() => {
   const total = statusBand.value.reduce((a, e) => a + e.n, 0) || 1
@@ -612,9 +678,12 @@ const statusBandSegments = computed(() => {
     .map((e) => ({ ...e, pct: `${(e.n / total) * 100}%` }))
 })
 /* 卡头异常 badge：失败/收尾失败/超时合计（与进度列中断态、时间线失败/超时的排查口径一致） */
+const ABNORMAL_STATUSES = new Set(['failed', 'finalization_failed', 'timeout'])
 const abnormalSessionCount = computed(() =>
-  rows.value.filter((r) => r.status === 'failed' || r.status === 'finalization_failed' || r.status === 'timeout').length
+  rows.value.filter((r) => ABNORMAL_STATUSES.has(r.status)).length
 )
+/* 异常 badge 可点穿（评审 §5）：点击 = 异常状态多选筛选（与单选 statusFilter 叠加为 AND） */
+const abnormalOnly = ref(false)
 /* legend 可点档：点击 = 状态筛选 toggle（与表头状态下拉、清除筛选同一 statusFilter） */
 function toggleStatusFilter(key: string) {
   statusFilter.value = statusFilter.value === key ? '' : key
@@ -637,6 +706,7 @@ const filtered = computed(() => {
   if (pill.value === 'active') list = list.filter((r) => r.status === 'active')
   if (pill.value === 'attention') list = list.filter((r) => r.attention !== 'low')
   if (pill.value === 'missing') list = list.filter(isMissingWrapup)
+  if (abnormalOnly.value) list = list.filter((r) => ABNORMAL_STATUSES.has(r.status))
   if (statusFilter.value) {
     list = list.filter((r) => r.status === statusFilter.value)
   }
@@ -653,9 +723,10 @@ const filtered = computed(() => {
   return sortTsRows(list)
 })
 
-const isFiltered = computed(() => pill.value !== 'all' || !!statusFilter.value || !!dateFilter.value || !!keyword.value.trim())
+const isFiltered = computed(() => pill.value !== 'all' || abnormalOnly.value || !!statusFilter.value || !!dateFilter.value || !!keyword.value.trim())
 function clearFilters() {
   pill.value = 'all'
+  abnormalOnly.value = false
   statusFilter.value = ''
   dateFilter.value = ''
   keyword.value = ''
@@ -692,10 +763,13 @@ const wrapupBadge = (r: Row) =>
 const isMissingWrapup = (r: Row) => wrapupTier(r) === 'missing'
 
 /* 教学概览（ts-dash：会话域结论，状态条承载基调；逐项计数由卡头 pills 承载，不重复渲染）。
-   warn 只由终态缺失 / 待关注触发：missingWrapupCount 已按 P1 口径只数终态会话，
-   进行中会话不再把页头钉死在 warn。 */
+   bad 档（补死代码分支）：失败 / 收尾失败 / 超时合计 ≥ TS_BAD_THRESHOLD 视为异常堆积，页头转红
+   （阈值在状态条 title 披露，见模板）；warn 只由终态缺失 / 待关注触发：missingWrapupCount 已按
+   P1 口径只数终态会话，进行中会话不再把页头钉死在 warn。 */
+const TS_BAD_THRESHOLD = 10
 const tsDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if (!rows.value.length) return 'muted'
+  if (abnormalSessionCount.value >= TS_BAD_THRESHOLD) return 'bad'
   if (missingWrapupCount.value > 0) return 'warn'
   if (attentionCount.value > 0) return 'warn'
   return 'ok'
@@ -744,9 +818,22 @@ const statusBadge = (s: string) =>
       : 'mk-badge--muted'
 /* 建议徽章带优先级色（T3）：high=bad / medium=warn / 其余 info */
 const advisoryBadge = (p?: string) => (p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info')
-const taskTypeText = (t: string) =>
-  ({ reading: '阅读', practice: '练习', project: '项目', quiz: '测验', acquire: '获取', deconstruct: '拆解', model: '建模', execute: '执行', diagnose: '诊断', refine: '打磨', consolidate: '巩固' }[t] || t || '任务')
-const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分钟` : `${sec} 秒`)
+/* 任务类型字典：未命中枚举回退「—」，原文进 title（不裸直出枚举，也不猜词） */
+const TASK_TYPE_TEXT: Record<string, string> = {
+  reading: '阅读', practice: '练习', project: '项目', quiz: '测验', acquire: '获取', deconstruct: '拆解', model: '建模', execute: '执行', diagnose: '诊断', refine: '打磨', consolidate: '巩固'
+}
+const taskTypeText = (t: string) => TASK_TYPE_TEXT[t] || '—'
+const taskTypeTitle = (t: string) => (t && !TASK_TYPE_TEXT[t] ? `任务类型原文：${t}` : undefined)
+/* 时长格式化：分钟向下取整（P3：90 秒显示「1 分钟」而非四舍五入成「2 分钟」） */
+const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.floor(sec / 60)} 分钟` : `${sec} 秒`)
+/** 挂机红阈值（秒）：≥1500s（25 分钟）时长标红；阈值写进互动列 title 披露 */
+const IDLE_RED_SECONDS = 1500
+/** 互动列 title：时长 + 消息数；触发挂机红时披露阈值口径 */
+function interactTitle(r: Row): string | undefined {
+  if (!r.duration) return undefined
+  const base = `时长 ${fmtDuration(r.duration)} · ${r.messageCount} 条消息`
+  return r.duration >= IDLE_RED_SECONDS ? `${base} · 时长 ≥ 25 分钟按挂机标红` : base
+}
 /** 进度工具提示（人话）：阶段 n/m · 任务 x/y；无里程碑维度只给任务 */
 function progressTitle(r: Row): string {
   const p = r.progress
@@ -803,7 +890,10 @@ defineExpose({ refreshNow })
   border-color: color-mix(in srgb, var(--mk-blue) 44%, var(--mk-line));
   color: var(--mk-pill-active-fg);
 }/* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字） */
-.ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }/* 加载失败错误条 */
+.ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }/* 可点异常徽章（button 形态的 .mk-badge）：reset 原生按钮外观保徽章样，选中态描边（token 复用，同 .mk-pill--active 语义） */
+.ts-badge-toggle { border: 0; cursor: pointer; font: inherit; }.ts-badge-toggle--on { outline: 2px solid var(--mk-blue); outline-offset: 1px; }/* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
+   badge 本体 inline-flex，截断由内层文本节点承载（flex 项 overflow!=visible → min-width 归 0 可收缩） */
+.ts-adv-badge { margin-left: 4px; max-width: 168px; }.ts-adv-badge__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }/* 加载失败错误条 */
 .ts-error {
   display: flex;
   align-items: center;

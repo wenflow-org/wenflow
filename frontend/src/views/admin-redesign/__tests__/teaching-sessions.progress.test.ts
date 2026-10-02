@@ -161,7 +161,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
 });
 
 describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对照）', () => {
-  it('状态条：粗体结论 + 缺总结 meta + 「只看需关注」快捷钮（点选接既有待关注筛选）', async () => {
+  it('状态条：粗体结论（带窗口括注）+ 缺总结 meta + 「只看需关注」快捷钮（点选接既有待关注筛选）', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -170,7 +170,8 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     });
     const wrapper = await mountLive();
     const status = wrapper.find('.mk-status');
-    expect(status.find('.mk-status__title').text()).toBe('1 个会话需关注');
+    // P1#4 口径括注：需关注为窗口计数，就地标注「（最近 1000 条）」
+    expect(status.find('.mk-status__title').text()).toBe('1 个会话需关注（最近 1000 条）');
     expect(status.text()).toContain('缺总结 1');
     const quick = status.find('.mk-status__actions button');
     expect(quick.text()).toBe('只看需关注');
@@ -181,6 +182,120 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     const rows = wrapper.findAll('tbody tr');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain('用户a');
+    wrapper.unmount();
+  });
+
+  it('tsDashTone bad 档（补死分支）：失败/收尾失败/超时合计 ≥ 10 → 页头转红 + title 披露阈值', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: { items: Array.from({ length: 10 }, (_, i) => makeItem(`f${i}`, { status: 'failed' })) }
+      }
+    });
+    const wrapper = await mountLive();
+    const status = wrapper.find('.mk-status');
+    expect(status.classes()).toContain('mk-status--bad');
+    expect(status.attributes('title')).toContain('≥ 10');
+    expect(status.attributes('title')).toContain('失败 / 收尾失败 / 超时');
+    wrapper.unmount();
+  });
+
+  it('状态条「有建议」可点穿：服务端 onlyWithAdvisory 过滤 toggle（再点取消）；建议徽章行内预览 + title 全文', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [
+            makeItem('a', {
+              advisory: { shouldSuggest: true, priority: 'high', ui: { title: '建议加强练习', body: '多做错题' } }
+            }),
+            makeItem('b', { status: 'active' })
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const link = wrapper.find('.mk-status__meta-link');
+    expect(link.text()).toContain('有建议 1');
+    expect(link.attributes('aria-pressed')).toBe('false');
+    // 建议徽章：行内直出建议标题（首行预览），title 挂完整建议文本
+    const adv = wrapper.find('.ts-adv-badge');
+    expect(adv.text()).toBe('建议加强练习');
+    expect(adv.attributes('title')).toContain('建议加强练习：多做错题');
+    // 点击 → 服务端过滤（onlyWithAdvisory: true），再点 → 取消（参数收敛）
+    await link.trigger('click');
+    await flushPromises();
+    expect(listMock).toHaveBeenLastCalledWith(expect.objectContaining({ onlyWithAdvisory: true, limit: 1000 }));
+    expect(wrapper.find('.mk-status__meta-link').attributes('aria-pressed')).toBe('true');
+    await wrapper.find('.mk-status__meta-link').trigger('click');
+    await flushPromises();
+    const lastArg = listMock.mock.calls[listMock.mock.calls.length - 1][0];
+    expect(lastArg.onlyWithAdvisory).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('分布卡「异常」badge 可点穿：失败/收尾失败/超时 状态多选筛选 toggle', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [
+            makeItem('a', { status: 'failed' }),
+            makeItem('b', { status: 'active' }),
+            makeItem('c', { status: 'timeout' })
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const abn = wrapper.find('.ts-badge-toggle');
+    expect(abn.text()).toBe('异常 2');
+    expect(abn.attributes('aria-pressed')).toBe('false');
+    await abn.trigger('click');
+    await nextTick();
+    expect(wrapper.findAll('tbody tr')).toHaveLength(2);
+    expect(wrapper.find('.ts-badge-toggle').attributes('aria-pressed')).toBe('true');
+    await wrapper.find('.ts-badge-toggle').trigger('click');
+    await nextTick();
+    expect(wrapper.findAll('tbody tr')).toHaveLength(3);
+    wrapper.unmount();
+  });
+
+  it('分布卡 legend：零值档折叠为「+N 个零值状态」（与段条滤零口径一致），title 披露档名', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: { items: [makeItem('a', { status: 'failed' }), makeItem('b', { status: 'active' })] }
+      }
+    });
+    const wrapper = await mountLive();
+    const legend = wrapper.findAll('.sbl');
+    // 10 档枚举中仅 失败/进行中 非零 + 1 行零值折叠提示
+    expect(legend).toHaveLength(3);
+    expect(legend[2].text()).toBe('+8 个零值状态');
+    expect(legend[2].attributes('title')).toContain('初始化中');
+    wrapper.unmount();
+  });
+
+  it('P3 顺手：90 秒显示「1 分钟」（向下取整）；挂机红阈值进 title；未知任务类型回退「—」+ title 原文', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [
+            makeItem('a', { duration: 90, taskType: 'weird_type' }),
+            makeItem('b', { duration: 1600 })
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const rows = wrapper.findAll('tbody tr');
+    expect(rows[0].text()).toContain('1 分钟');
+    expect(rows[0].text()).not.toContain('2 分钟');
+    expect(rows[0].text()).toContain('—');
+    expect(rows[0].find('td .mk-cell-sub').attributes('title')).toBe('任务类型原文：weird_type');
+    expect(rows[1].find('.ts-ia').attributes('title')).toContain('≥ 25 分钟按挂机标红');
     wrapper.unmount();
   });
 

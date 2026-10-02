@@ -92,9 +92,9 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     // 反向断言：不再渲染任何 KPI 卡
     expect(kpiLabels(w)).toEqual([]);
     expect(w.find('.mk-kpi-grid').exists()).toBe(false);
-    // 页头 = 原型 pageTitle 形态：页名 + 副题（随视图切换）
+    // 页头 = 原型 pageTitle 形态：页名 + 副题（随视图切换）；副题文案随 0a4d9a8a 原型对齐更新
     expect(w.find('.mk-pagehead').exists()).toBe(true);
-    expect(w.find('.mk-pagehead').text()).toContain('管理学习者档案、学习状态与路径进度');
+    expect(w.find('.mk-pagehead').text()).toContain('管理用户账号、角色与登录状态');
     // 原型 .tabs 下划线页签仍是唯一视图切换控件，副题随 tab 切换
     await clickTab(w, '学习状态');
     expect(w.find('.mk-pagehead').text()).toContain('学习者学习状态分布与风险跟踪');
@@ -110,7 +110,8 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     expect(kpiLabels(w)).toEqual([]);
     expect(w.find('.mk-kpi-grid').exists()).toBe(false);
     expect(w.find('.mk-card .buckets').exists()).toBe(false);
-    // buckets 是页面级统计带（原型直接落页面，无卡壳）；mock 空数据（stats=null）下整组隐藏
+    // buckets 是页面级统计带（原型直接落页面，无卡壳）；mock 空数据（stats 未回填且无失败）下整组隐藏
+    // （stats 拉取失败的三态「统计获取失败 · 重试」在 goal-conversations.pagination.test.ts 覆盖）
     expect(w.find('.buckets').exists()).toBe(false);
     // 2026-09-29 拆回独立页：学习会话合并宿主的视图切换 pills 不应再出现
     expect(w.find('.gc-tabs').exists()).toBe(false);
@@ -125,10 +126,17 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     expect(kpiLabels(w)).toEqual([]);
     expect(w.find('.mk-kpi-grid').exists()).toBe(false);
     // 状态条 = 原型 .statusbar 形态：结论粗体 + meta 计数串（总数=后端全量 / 有建议 / 缺总结）
-    const status = w.find('.mk-status').text();
-    expect(status).toContain('共 0');
-    expect(status).toContain('有建议 0');
-    expect(status).toContain('缺总结 0');
+    const status = w.find('.mk-status');
+    expect(status.text()).toContain('共 0');
+    expect(status.text()).toContain('有建议 0');
+    expect(status.text()).toContain('缺总结 0');
+    // P1#4 口径括注：需关注 / 有建议 / 缺总结三个窗口计数就地标注「（最近 1000 条）」
+    expect(status.text()).toContain('（最近 1000 条）');
+    // P1#4 兜底诚实化：后端未回 total（mock 空响应）时「共 N」退化为窗口行数，title 不得声称全量
+    const totalMeta = status.findAll('.mk-status__meta').find((el) => el.text().startsWith('共 '))!;
+    expect(totalMeta).toBeTruthy();
+    expect(totalMeta.attributes('title')).toContain('非全量');
+    expect(totalMeta.attributes('title')).not.toContain('全量口径');
     w.unmount();
   });
 

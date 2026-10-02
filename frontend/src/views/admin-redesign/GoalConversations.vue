@@ -5,7 +5,7 @@
          原页面级状态条整体退役（dot 的加载/有数状态由 KPI 卡与列表自明）。 -->
     <MkPageHead
       title="目标对话"
-      sub="与学习者澄清真实目标 · 约束条件与澄清轮次（仅真实用户口径）"
+      :sub="gcScopeSub"
     >
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="load(true)">{{ loading ? '刷新中…' : '刷新' }}</button>
@@ -15,13 +15,24 @@
     <!-- 状态桶组（newui renderGoals 原型移植）：本页唯一统计带 = 页头 KPI，
          四桶「进行中 / 已完成 / 已取消 / 完成率」直接落页面（原型 buckets 无卡壳）。
          此前 kpi 栅格与构成卡两带并存、已取消/已完成数字复读（2026-10-02 用户拍板撤双带）；
-         卡头 pills 因此不带计数。stats 拉取失败或无数据时整组静默隐藏。 -->
-    <section v-if="stats && stats.total > 0" class="buckets" aria-label="目标对话状态构成">
+         卡头 pills 因此不带计数。
+         三态（P1#6）：stats 拉取失败时桶位显示「统计获取失败 · 重试」，不再整组静默消失；
+         「进行中」桶 foot 携停滞信号（窗口内 active 且超 7 天未更新）；
+         「已取消」桶 foot 写明「取消 / 中断 / 回收合计」口径（= 总数 − 进行中 − 已完成，
+         含 abandoned / failed，不再是纯「用户取消」）。 -->
+    <section v-if="statsError" class="buckets" aria-label="目标对话状态构成">
+      <div class="bucket">
+        <span class="bucket__l">统计获取失败</span>
+        <span class="bucket__l bucket__foot">状态构成（进行中 / 已完成 / 已取消 / 完成率）暂不可用 · <button type="button" class="mk-link" @click="load(true)">重试</button></span>
+      </div>
+    </section>
+    <section v-else-if="stats && stats.total > 0" class="buckets" aria-label="目标对话状态构成">
       <div class="bucket">
         <span class="bucket__v">{{ stats.active }}</span>
         <span class="bucket__l">进行中</span>
         <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcActivePct + '%', background: 'var(--mk-blue)' }"></i></span>
         <span class="bucket__l bucket__foot">澄清中或待确认</span>
+        <span v-if="rows.length" class="bucket__l bucket__foot" :title="`停滞口径：状态「进行中」且最近 ${STALLED_DAYS} 天无更新（updatedAt）；按最近 ${LIST_LIMIT} 条加载窗口估算，非全量`">其中 {{ staleActiveCount }} 条超 {{ STALLED_DAYS }} 天未更新</span>
       </div>
       <div class="bucket">
         <span class="bucket__v">{{ stats.completed }}</span>
@@ -33,7 +44,7 @@
         <span class="bucket__v">{{ gcCancelledCount }}</span>
         <span class="bucket__l">已取消</span>
         <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCancelledPct + '%', background: 'var(--mk-red)' }"></i></span>
-        <span class="bucket__l bucket__foot">用户取消或中断</span>
+        <span class="bucket__l bucket__foot" title="已取消 = 总数 − 进行中 − 已完成：含用户主动取消（cancelled）、失败中断（failed）与无心跳自动回收（abandoned），非全部用户主动取消">取消 / 中断 / 回收合计</span>
       </div>
       <div class="bucket">
         <span class="bucket__v">{{ stats.completionRate }}%</span>
@@ -63,6 +74,7 @@
                 class="mk-pill"
                 :class="{ 'mk-pill--active': statusFilter === p.id }"
                 :aria-pressed="statusFilter === p.id"
+                :title="p.title || undefined"
                 @click="statusFilter = statusFilter === p.id ? '' : p.id"
               >
                 {{ p.label }}
@@ -129,7 +141,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in paged" :key="r.id" class="gc-row" tabindex="0" @click="goLearner(r)" @keydown.enter.prevent="goLearner(r)">
+            <tr v-for="r in paged" :key="r.id" class="gc-row" tabindex="0" @click="goConsole(r)" @keydown.enter.prevent="goConsole(r)">
               <td>
                 <div class="gc-user">
                   <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
@@ -189,7 +201,7 @@
                      删除属危险低频操作，仍收 ⋯ 菜单。右对齐与 mk-th--right 表头对齐（同 Users.vue 判例） -->
                 <div class="mk-actions">
                   <button type="button" class="mk-btn mk-btn--sm" @click.stop="goTrace(r)">链路</button>
-                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="goConsole(r)">控制台</button>
+                  <button type="button" class="mk-btn mk-btn--sm" title="打开会话座舱（只读监控）" @click.stop="goConsole(r)">详情</button>
                   <button type="button" class="mk-btn mk-btn--sm" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '重建路径'" @click.stop="regenerate(r)">{{ r.regenerating ? '生成中…' : '重建路径' }}</button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(r.id)">⋯</button>
@@ -270,6 +282,8 @@ interface Row {
   /** 生成的路径 id（原型路径格 open-path 的跳转目标；未生成/旧响应为 null） */
   pathId?: string | null
   createdAt: string
+  /** 最近更新时间（停滞信号推导用：active 且超 7 天未更新） */
+  updatedAt: string
   /** 阶段过程步序号（0=创建 1=澄清 2=方案 3=完成，statusText 单源） */
   stageIndex: number
   /** 轻量阶段时间线文本（如「创建 08-12 → 澄清中 08-13」；无数据为空串） */
@@ -281,11 +295,25 @@ const loading = ref(false)
 const rows = ref<Row[]>([])
 const loadError = ref('')
 const stats = ref<{ total: number; active: number; completed: number; completionRate: string } | null>(null)
-/* 四态比例条（批B）：已取消 = 总数 − 进行中 − 已完成（stats 无独立字段，推导并钳非负） */
+/* stats 三态（P1#6）：失败置 statsError，桶位显示「统计获取失败 · 重试」而非整组静默消失 */
+const statsError = ref(false)
+/* 「已取消」桶（P1#5）= 总数 − 进行中 − 已完成：把用户取消（cancelled）、失败中断（failed）、
+   无心跳回收（abandoned）合计在内——stats 无独立字段，推导并钳非负；foot 文案与下方 pill 同口径披露 */
 const gcCancelledCount = computed(() => {
   const s = stats.value
   if (!s) return 0
   return Math.max(s.total - s.active - s.completed, 0)
+})
+/* 停滞信号（P1#6 前端可做部分）：列表窗口内 active 且 updatedAt 超 7 天未更新的行数；
+   口径 title「按最近 1000 条窗口」随行披露（全量分位需后端 lastActivity，登记不做） */
+const STALLED_DAYS = 7
+const staleActiveCount = computed(() => {
+  const cutoff = Date.now() - STALLED_DAYS * 86400000
+  return rows.value.filter((r) => {
+    if (r.status !== 'active' || !r.updatedAt) return false
+    const t = new Date(r.updatedAt).getTime()
+    return Number.isFinite(t) && t < cutoff
+  }).length
 })
 function gcStatusSeg(n: number): number {
   const s = stats.value
@@ -312,8 +340,8 @@ const gcColDefs = [
 ] as const
 const gcHiddenCols = ref<Set<string>>(new Set())
 
-/* ?goal= 语义（2026-10-01 对齐原型习惯：目标行点击进学习者页，不再开抽屉）：
-   深链直达座舱（kind=goal 的目标对话控制台），随后清参避免与座舱返回冲突 */
+/* ?goal= 语义（2026-10-01 对齐原型习惯：目标行点击进二级详情页，不再开抽屉）：
+   深链直达座舱（session-real 只读监控），随后清参避免与座舱返回冲突 */
 const route = useRoute()
 const router = useRouter()
 watch(
@@ -359,12 +387,17 @@ function menuRemove(r: Row) {
 
 const statusPills = computed(() => [
   // 原型 chips 首枚「全部」（原型 renderGoals filters）：显式复位入口，不再依赖再点一次取消。
-  // 计数不进 pills：四态条数由页头桶组单源呈现（原型 chips 同样无计数，避免同屏两套口径）
-  { id: '', label: '全部' },
-  { id: 'active', label: '进行中' },
-  { id: 'completed', label: '已完成' },
-  { id: 'cancelled', label: '已取消' }
+  // 计数不进 pills：四态条数由页头桶组单源呈现（原型 chips 同样无计数，避免同屏两套口径）。
+  // 「已取消」pill 与同名桶同口径（P1#5）：筛非 active 且非 completed 的全部行
+  // （= cancelled + failed + abandoned），与桶「取消 / 中断 / 回收合计」算法一致，点进去对得上。
+  { id: '', label: '全部', title: '' },
+  { id: 'active', label: '进行中', title: '' },
+  { id: 'completed', label: '已完成', title: '' },
+  { id: 'cancelled', label: '已取消', title: '取消 / 中断 / 回收合计：cancelled + failed + abandoned（与上方「已取消」桶同口径）' }
 ])
+
+/** 「已取消」筛选谓词：与桶同取补集（非进行中且非已完成），保证 pill 与桶数字/语义一致 */
+const isCancelledBucketRow = (r: Row) => r.status !== 'active' && r.status !== 'completed'
 
 /** 状态词一律走全局字典（单源）；空值给「—」。原私有字典与 statusText 逐条重合，故删除 */
 const statusLabel = (s: string) => statusText(s) || '—'
@@ -422,6 +455,7 @@ function mapRow(c: Record<string, unknown>): Row {
     hasPath: !!c.learningPathId,
     pathId: c.learningPathId ? String(c.learningPathId) : null,
     createdAt: timeAgo(String(c.createdAt || '')),
+    updatedAt: String(c.updatedAt || ''),
     stageIndex: stageProgressIndex(stage),
     timeline: stageTimelineText({
       stage,
@@ -447,7 +481,12 @@ const { toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows } = u
 const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
   return sortGcRows(rows.value.filter((r) => {
-    if (statusFilter.value && r.status !== statusFilter.value) return false
+    if (statusFilter.value === 'cancelled') {
+      // 与「已取消」桶同口径（P1#5）：非 active 且非 completed 全收
+      if (!isCancelledBucketRow(r)) return false
+    } else if (statusFilter.value && r.status !== statusFilter.value) {
+      return false
+    }
     if (!k) return true
     return `${r.userName} ${r.userEmail} ${r.summary}`.toLowerCase().includes(k)
   }))
@@ -502,7 +541,7 @@ async function load(force = false) {
     markPageFetched('goal-conversations')
   }
   /* stats 非阻塞后台拉取：到达后回填四态比例条与域计数。
-     容错取舍：stats 只驱动比例条/徽章，失败时静默置空（比例条隐藏），
+     三态（P1#6）：失败时置 statsError（桶位显示「统计获取失败 · 重试」），
      绝不回滚列表、不阻塞首屏；代际不符（已发起新一轮 load）的迟到响应直接丢弃 */
   void adminGoalConversationsApi.getStats()
     .then((statsRes) => {
@@ -516,9 +555,13 @@ async function load(force = false) {
             completionRate: String(s.completionRate || '0')
           }
         : null
+      statsError.value = false
     })
     .catch(() => {
-      if (seq === statsReqSeq) stats.value = null
+      if (seq === statsReqSeq) {
+        stats.value = null
+        statsError.value = true
+      }
     })
 }
 
@@ -529,8 +572,16 @@ function closeDetail() {
   void router.replace({ query: q })
 }
 
-/** 真实会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：先提供轻量深链——学习者画像 + Trace 瀑布按 sessionId 归组 */
-const { goLearner, goTrace, goConsole } = useSessionDrill(closeDetail)
+/** 真实会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：轻量深链 = 会话座舱（session-real）+ Trace 瀑布按 sessionId 归组。
+    行点击与「详情」钮同走 goConsole（2026-10-02 与 TeachingSessions 行点击语义对齐：两页行点击都进座舱） */
+const { goTrace, goConsole } = useSessionDrill(closeDetail)
+
+/** 页头副题随 includeTest 切换如实（评审 §口径）：默认仅真实，切「含模拟」后不得再声称仅真实用户口径 */
+const gcScopeSub = computed(() =>
+  includeTest.value
+    ? '与学习者澄清真实目标 · 约束条件与澄清轮次（含虚拟学习者与测试账号）'
+    : '与学习者澄清真实目标 · 约束条件与澄清轮次（仅真实用户口径）'
+)
 
 /** 路径格 → 路径详情二级页（原型 open-path 习惯） */
 function openPathPage(r: Row) {
