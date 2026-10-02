@@ -42,8 +42,9 @@ interface AgentConfigRecord {
 
 /**
  * 学习对话链技能（2026-10-02 模型分组 A/B 拍板）：用户自有 provider 上仅这些技能用
- * 用户自己的模型（agnes 组的 A/B 靶面 = 教学对话本身）；目标/路径/评估/收尾链技能
- * 按 skill_model_configs 绑定走 ds（好 key、质量锚定——path 生成质量锚定整条学习路径）。
+ * 用户自己的模型（agnes 组的 A/B 靶面 = 对话学生本尊：goal 阶段对话 + learn 阶段对话）；
+ * 路径/评估/收尾链技能按 skill_model_configs 绑定走 ds（好 key、质量锚定——path 生成
+ * 质量锚定整条学习路径）。
  */
 const LEARN_DIALOGUE_SKILLS = new Set([
   'teaching-turn',
@@ -52,6 +53,7 @@ const LEARN_DIALOGUE_SKILLS = new Set([
   'peer-reinforcement',
   'adaptive-guidance-copy',
   'learning-predictor',
+  'virtual-learner-goal-dialogue-simulator',
 ]);
 
 /** 解析 skill_model_configs.paramOverrides（JSON）。非对象/坏 JSON 一律视为未覆盖。 */
