@@ -9,6 +9,8 @@
 import {
   platformRpmLimiter,
   virtualLearnerRpmLimiter,
+  setSimulationModelRpm,
+  getSimulationModelStats,
   type RpmLimiterStats
 } from '../gateway/api-gateway/rpm-limiter';
 import { getRuntimeReliabilitySettings } from './reliability-settings.service';
@@ -36,6 +38,8 @@ export async function applyRpmLimitsFromSettings(): Promise<{ platformRpm: numbe
   if (virtualLab) {
     const effective = Math.floor(virtualLab.virtualLearnerRpmLimit * share);
     virtualLearnerRpmLimiter.setRpm(effective);
+    // 非默认模型子桶（ds/agnes 分组等）同吃该限额，各桶独立
+    setSimulationModelRpm(effective);
     if (share !== 1 && virtualLab.virtualLearnerRpmLimit > 0) {
       logger.info('[rpm-limit] VL 限额按进程份额分摊', {
         global: virtualLab.virtualLearnerRpmLimit,
@@ -50,10 +54,11 @@ export async function applyRpmLimitsFromSettings(): Promise<{ platformRpm: numbe
   };
 }
 
-export function getRpmLimitStats(): { platform: RpmLimiterStats; virtualLearner: RpmLimiterStats } {
+export function getRpmLimitStats(): { platform: RpmLimiterStats; virtualLearner: RpmLimiterStats; simulationModels: RpmLimiterStats[] } {
   return {
     platform: platformRpmLimiter.stats(),
-    virtualLearner: virtualLearnerRpmLimiter.stats()
+    virtualLearner: virtualLearnerRpmLimiter.stats(),
+    simulationModels: getSimulationModelStats()
   };
 }
 

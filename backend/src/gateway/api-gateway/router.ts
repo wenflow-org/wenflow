@@ -24,6 +24,8 @@ interface Config {
   reasoningEffort?: 'default' | 'low' | 'high' | 'max';
   temperature: number;
   maxTokens: number;
+  /** 通道级结构化输出默认（user-provider 继承 platform 通道设置；skill paramOverrides 仍可覆盖） */
+  responseFormat?: 'none' | 'json_object';
   privateNetworkPolicy: ResolvedRoute['privateNetworkPolicy'];
 }
 
@@ -366,6 +368,16 @@ export class APIRouter {
         return null;
       }
 
+      // user-provider 与平台同渠道时继承其结构化输出默认（渠道开关对两条路由来源同等生效）
+      let responseFormat: 'none' | 'json_object' = 'none';
+      try {
+        const plat = await systemPrisma.platform_api_configs.findUnique({
+          where: { id: 'platform' },
+          select: { defaultResponseFormat: true }
+        });
+        responseFormat = this.normalizeResponseFormat(plat?.defaultResponseFormat);
+      } catch { /* 读不到按 none */ }
+
       return {
         providerId: `user-provider:${userId}`,
         endpoint: config.endpoint,
@@ -377,6 +389,7 @@ export class APIRouter {
         reasoningEffort: 'default',
         temperature: 0.7,
         maxTokens: 2000,
+        responseFormat,
         privateNetworkPolicy: 'public-only'
       };
     } catch (error) {

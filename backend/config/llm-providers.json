@@ -53,7 +53,8 @@
           "supportsReasoningEffort": false,
           "maxOutputTokens": 65536,
           "defaultMaxTokens": 32768,
-          "description": "轻量快速模型，TPS 高，适合 skill 高频调用"
+          "maxParallelRequests": 8,
+          "description": "轻量快速模型，TPS 高，适合 skill 高频调用。maxParallelRequests=8：渠道单 key 突发桶限流实测持续安全档（2026-10-02 阶梯压测）；与 ds 各自独立并发闸门"
         }
       }
     },

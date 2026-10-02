@@ -30,7 +30,7 @@ export class RpmLimiter {
   private waiters: Array<(release: () => void) => void> = [];
   private timer: NodeJS.Timeout | null = null;
 
-  constructor(private readonly name: string, rpm = 0) {
+  constructor(public readonly name: string, rpm = 0) {
     this.rpm = normalizeRpm(rpm);
     this.tokens = this.capacity();
     this.lastRefillMs = Date.now();
@@ -154,5 +154,33 @@ function normalizeRpm(value: unknown): number {
 /** 平台全局出站限流（真实用户 / 平台自身调用） */
 export const platformRpmLimiter = new RpmLimiter('platform', 0);
 
-/** 虚拟学习者专属出站限流（sourceEntry === 'simulation'） */
+/** 虚拟学习者专属出站限流（sourceEntry === 'simulation'，平台默认模型走此主桶） */
 export const virtualLearnerRpmLimiter = new RpmLimiter('virtual-learner', 0);
+
+/**
+ * simulation 通道的非默认模型子桶（如经 user-provider 绑定 agnes 的分组）：
+ * 与主桶同吃 virtualLearnerRpmLimit（按模型各一份），彼此独立——ds/agnes 的并发与
+ * RPM 互不挤占（2026-10-02 模型分组 A/B 跑批引入）。
+ */
+const simulationModelLimiters = new Map<string, RpmLimiter>();
+let simulationModelRpm = 0;
+
+export function getSimulationModelLimiter(model: string): RpmLimiter {
+  const key = String(model || '').trim() || 'default';
+  let limiter = simulationModelLimiters.get(key);
+  if (!limiter) {
+    limiter = new RpmLimiter(`virtual-learner:${key}`, simulationModelRpm);
+    simulationModelLimiters.set(key, limiter);
+  }
+  return limiter;
+}
+
+/** 设置同步：主桶与全部模型子桶统一对齐（新子桶创建时继承 simulationModelRpm） */
+export function setSimulationModelRpm(value: number): void {
+  simulationModelRpm = normalizeRpm(value);
+  for (const limiter of simulationModelLimiters.values()) limiter.setRpm(simulationModelRpm);
+}
+
+export function getSimulationModelStats(): RpmLimiterStats[] {
+  return Array.from(simulationModelLimiters.values()).map((limiter) => limiter.stats());
+}

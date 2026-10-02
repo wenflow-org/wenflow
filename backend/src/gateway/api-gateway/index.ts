@@ -7,7 +7,7 @@ import { logger } from '../../utils/logger';
 import { createHash } from 'crypto';
 import { getAgentOfSkill } from '../../services/agent-manifest.service';
 import { createRuntimeRetryBudget } from '../../services/reliability-settings.service';
-import { platformRpmLimiter, virtualLearnerRpmLimiter } from './rpm-limiter';
+import { platformRpmLimiter, virtualLearnerRpmLimiter, getSimulationModelLimiter } from './rpm-limiter';
 import { GatewayExecutionError } from './failure-classification';
 
 export class APIGateway {
@@ -96,17 +96,23 @@ export class APIGateway {
     route = this.applyRouteOverride(route, requestContext.promptRuntimeOverride?.routeOverride);
 
     // 出站 RPM 限流：虚拟学习者（sourceEntry=simulation）与平台全局两条独立通道。
+    // simulation 内再按模型分桶：平台默认模型（route.source=platform）走主桶（统计/driver 口径
+    // 不变），其它模型（user-provider 绑定 agnes 等分组）各开独立子桶——ds/agnes 并发与 RPM
+    // 互不挤占（2026-10-02 模型分组 A/B）。
     // 超预算时在此等待令牌（不报错），让自动驾驶自然变慢；
     // 排队护栏 RPM_QUEUE_WAIT_MS（默认 0=不设限）超时后按 rate_limit 快速失败，
     // 防止饱和时「调用方重试 → 队列更长」的无界放大。
-    const rpmLimiter = executionContext.sourceEntry === 'simulation'
-      ? virtualLearnerRpmLimiter
-      : platformRpmLimiter;
+    let rpmLimiter = platformRpmLimiter;
+    if (executionContext.sourceEntry === 'simulation') {
+      rpmLimiter = route.source === 'platform'
+        ? virtualLearnerRpmLimiter
+        : getSimulationModelLimiter(route.model);
+    }
     const queueWaitMs = Number(process.env.RPM_QUEUE_WAIT_MS) > 0 ? Number(process.env.RPM_QUEUE_WAIT_MS) : 0;
     const releaseRpm = await rpmLimiter.acquire({ maxWaitMs: queueWaitMs });
     if (releaseRpm === null) {
       logger.warn('[api-gateway] RPM 排队超时，按 rate_limit 快速失败', {
-        channel: rpmLimiter === virtualLearnerRpmLimiter ? 'virtual-learner' : 'platform',
+        channel: rpmLimiter.name,
         queueWaitMs,
         queued: rpmLimiter.stats().queued
       });
