@@ -192,11 +192,13 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
             materials: payload.materials || null,
             milestone: withLoadTargetForMilestone(payload.milestone, payload.cognitiveCore),
             previousMilestone: payload.previousMilestone || null,
+            pathStageMap: payload.pathStageMap || null,
             repairHints: payload.repairHints || null,
           }
         : {
             milestone: withLoadTargetForMilestone(payload.milestone, payload.cognitiveCore),
             previousMilestone: payload.previousMilestone || null,
+            pathStageMap: payload.pathStageMap || null,
             cognitiveCore: payload.cognitiveCore,
             normalizedInput: stripNestedMaterials(payload.normalizedInput),
             materials: payload.materials || null,

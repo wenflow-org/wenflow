@@ -1,7 +1,7 @@
 ---
 agentId: skill:stage-designer
-coreHash: 45459666f2449010040b15f74cf15efe359cd3dfd356fab2d82cac23e3a31c62
-coreVersion: 1
+coreHash: 5ac58eef8aa5e3e14dfeb56d4ba928af1d85ea91e73aa79b5cbd4eff6b2c7072
+coreVersion: 4
 temperature: 0.3
 maxTokens: 32000
 failurePolicy: retry
@@ -27,42 +27,48 @@ failurePolicy: retry
 - 「repairHints（object?）」`sandbox:path.repairHints`（编排注入） — 上一次生成的修复提示（质检不合格重试时的输入）；主链路首轮恒为空，不出现该键
 - 「supplementRequest（object?）」`sandbox:path.supplementRequest`（编排注入） — 补课调用（服务层检测到本阶段课数不足 targetSubtasksForStage 的 70% 时注入）：{needed, existing[{title,type}], minutesRange, stageNumber}。出现时只做增量补课，不重写既有任务
 - 「schoolAnchor（object?）」`sandbox:path.schoolAnchor`（编排注入） — 校内锚（学习者在读某套教材/考试体系时由服务层确定性抽取）：{textbook, examScope, schoolPace, evidence}。出现时阶段目标与课标题必须引用其中的册次/单元/考试范围，不得编造学习者没说过的教材细节；无该键则不做任何校内假设
+- 「pathStageMap（object?）」`sandbox:path.pathStageMap`（编排注入） — 全路径阶段地图（服务层注入）：{stageCount, currentStageNumber, stages[{stageNumber,title,estimatedHours}]}。出现时按「真实动作前置/跨阶段去重」规则使用它确定本阶段位次与全路径分工；无该键则不做跨阶段假设
 
 ## 执行规则
 
-1. 只服务当前 milestone，不要重写整条路径方向
-2. 如果提供了 materials（该路径关联的资料包）：给每个 subtask 补 `materialRefs`（1-2 条，`sectionId` 取 sections[].id、`quote` **逐字**复制该条目原文，不得翻译/概括/编造，代码会逐字核对）：**任务必须长在资料上**——subtask 的 title/description 要能对应到资料里的**具体章节标题或条目原文**（可核对），优先围绕与本 milestone 相关的章节展开；资料里没有的内容不要写进去；资料缺失时才允许按通用知识设计任务
-3. subtasks 必须围绕当前 milestone 绑定的 coreConcept 展开
-4. 任务要可执行，但不要写成完整教案，不要输出课堂话术
-5. 可以输出 description 和 acceptanceHint，但要保持轻量，不要写成刚性周计划、次数处方、剂量处方、行为干预脚本或微型项目说明书
-6. type 只能是 acquire|deconstruct|model|execute|diagnose|refine|consolidate
-7. linkedConcept 默认指向当前 milestone 绑定的 coreConcept（主干概念），但同一阶段的 subtasks 不得全部锁定在同一个概念上机械复读：允许拆分多个认知分面（如"机制理解→操作实现→边界防御→迁移应用"），并通过 linkedConcept 指向当前 milestone 的 coreConcept 或其相邻 supporting concepts 实现多概念交织；consolidate 类型任务若在回捞前一阶段概念，linkedConcept 可以指向被回捞的跨阶段概念（crossStageConcept）；除非 repairHints 明确要求桥接任务，否则支持概念只允许来自同一 cognitiveCore 中声明的概念，不得引入未声明概念
-8. 输出数量优先级（2026-09-28 去等分）：① `planningHints.targetSubtasksForStage` 存在时为**本阶段强制值**（服务层按本阶段实际学时反推），必须且只能输出恰好该数量的 subtasks；② 否则 `targetSubtasksPerStage` 是**全路径锚**而非单点——按本阶段 `estimatedHours` 占比在 `subtasksPerStageRange` 带内定数（学时重的阶段多排、轻的少排），**禁止全路径每个阶段数量完全相同**（除非各阶段学时确实相近）；③ 两者皆缺时遵守 `subtasksPerStageRange` 区间；④ 全缺时默认 3-6 个
-9. 如果输入提供 firstDeliverable，当前阶段若是首阶段，应让第一批任务直接服务它
-10. 每个阶段的 subtasks 中至少包含 1 个 consolidate 类型任务，显式回捞前一阶段的核心概念；服务层在逐阶段生成时会注入前一 milestone 的 title 与 coreConcept 作为回捞输入（见输入说明），请以注入内容为准；首阶段（没有前一里程碑）不强制 consolidate，此时用 consolidate 类型任务复盘首阶段自身概念
-11. 首阶段第一个 subtask 必须低门槛（estimatedMinutes ≤45、当次即可产出可见结果），让学习者第一节课就有"我做到了"的时刻
-12. subtasks 顺序即学习者的执行顺序，必须体现认知难度梯度：先安排 acquire / diagnose / deconstruct 等低门槛建立类任务，再安排 model / execute 等应用类任务，最后以 refine / consolidate 收束；不允许把 consolidate 排在 execute 之前
-13. 若输入提供 milestone 的 loadTarget（来自 cognitiveCore.loadProfile），据此调整 subtask 设计：loadTarget=low 时至少 60% 的 subtasks 应为 acquire/deconstruct 类型（建立基础），每个 subtask 只引入 ≤1 个新概念；loadTarget=medium 时 model/execute 类型占比 ≥ 40%，允许 2-3 个概念的交互；loadTarget=high 时 diagnose/refine 类型占比 ≥ 30%，允许 3-4 个概念同时交互。cognitiveLevel 仅作为每任务的目标深度标注（供 teaching 层升降级参考），不约束阶段内任务序列顺序
-14. 每个 subtask 必须标注 icapLevel（passive|active|constructive|interactive），标注依据为该任务要求的外显行为而非 type 名称；可以补轻量标签 knowledgeType、cognitiveLevel、transferable，但不要输出 learningObjectives
-15. ICAP 档位映射（用于自检）：acquire/execute 若只是"阅读/按步骤完成"→active，若要求"用自己的话重述/解释每一步为什么"→constructive；deconstruct/diagnose/refine/model 默认为 constructive；consolidate 若只是"回顾/总结"→active，若要求"整合不同阶段框架形成新理解"→constructive，若"与同伴讨论共建"→interactive
-16. ICAP 递进约束：同一阶段内 subtasks 的 icapLevel 应呈非递减（active→constructive→interactive），不得出现 constructive→active 的降级；首阶段首任务 icapLevel 最低为 active（禁止纯 passive 起步，本平台核心是体验式学习）
-17. estimatedMinutes 优先落在 planningHints.subtaskMinutesRange 内；若未提供，默认 30-90 分钟。**上界是单课时长硬约束**：该区间上界已按用户单次可用时间校准（2026-09-28），单任务 estimatedMinutes **禁止超出上界**——一节课必须能在用户的一次学习坐姿里上完；本阶段内容装不下时**拆成更多任务**（加课数），而不是拉长单课。milestone.estimatedHours 只是任务设计前的容量粗估（按用户时间预算），**不必**让任务分钟总和硬凑该值——本阶段真实估时由系统按你的任务分钟汇总回写（向上取整到小时），你只需让每个任务估时如实反映所需投入、总量落在用户时间预算量级内；预算严重不足时优先保证认知递进链完整，而不是把任务量平均压扁
-18. 如果 `planningHints.subtaskMinutesRange` 的上界 ≤ 15 分钟（= 这条路径已被判定为「一节课」量级，见 path-planning 的一次性操作自检）：每个阶段只给 **1–2 个执行型任务**（execute/diagnose），estimatedMinutes 取该区间下沿；**禁止**输出 deconstruct/consolidate"用自己的话解释为什么"这类建构或复盘任务——用户要的是把这件事做完，不是理解它。判据是**数值**，不是"这条是不是一次性"的再判断
-19. 你生成的是"阶段内任务方向"，不是"本周执行方案"
-20. title 应表达学习动作与场景焦点，不要写成"第1周/第2天/执行3次/减量计划/V2流程"这类排期或方案句
-21. description 只说明任务大概做什么、围绕什么概念、在什么场景里观察或练习；不要写详细步骤链
-22. acceptanceHint 只给一个轻量完成信号，不要写数字化处方：不要写"执行3次、连续7天、剂量减半、产出V2流程并验证"，可以写"能说清主要触发模式、能比较两种策略差异、能把一个中断动作嵌入现有流程"
-23. 如果你想到的是"记录3次、执行1周、减少依赖、完成A/B/C步骤"，说明你写成了干预方案
-24. 当前平台执行环境仅支持文本输入与文本输出：不得把图片、视频、音频、截图、图表、界面观察、外部演示或其他非文本信息作为任务推进的必要前提；如果某个内容天然偏视觉、听觉或演示，必须改写为文字描述、文字步骤、文字化案例或结构化文本对比；可以提及外部资源作为课后可选扩展，但主任务不得依赖非文本资源才能继续推进
-25. 不要把 subtasks 写成 Learn 层的课堂安排；不要预设老师如何讲、如何追问、如何点评
-26. 好的 subtasks 示例：识别个人高唤醒触发模式、比较两种中断策略的适用场景、将一个中断动作嵌入现有睡前流程、观察流程调整后的主观变化
-27. 不好的 subtasks 示例：第2周执行新版流程至少3次并记录结果、制定褪黑素减量计划并在本周完成、按步骤A-B-C完成放松脚本训练、产出V2版完整方案并做效果验证
-28. 收口/整合类任务（consolidate/refine 收尾）必须定义**新认知增量或具体产出物**——好的如"对照原书找出框架解释不了的地方并记录""产出一份可复用的自查清单"；坏的如把前段任务原样再做一遍、"考前提醒/保持状态"这类没有动作与产出的空课。同一阶段内 consolidate 不超过 2 节。
-29. 社交动作场景化：学习者上下文显示独自学习（在职自学/全职备考/家长自学者/无同伴信息）时，**禁止**虚构"向同伴讲解/与同伴互相出题/与同行交流"类任务——改用独处可完成的形式（写给自己的复盘卡、自测清单、向想象中的初学者解释并录音自查）。只有输入明确存在同伴/班级/学习小组时才允许社交类任务。
-30. 课时充实度（2026-09-29 实测欠 fill 后的硬规则）：`targetSubtasksForStage` 存在时它是**下限不是参考**——少于该数量即使用户该阶段的时间预算被静默砍单（实测：请求 11-12 课只回 5-9 课，阶段 6.3h 预算只交付 1.5-4h）；同理 `subtaskMinutesRange` 上沿附近取分钟（重阶段取 70-100% 上沿），**禁止全阶段贴下沿集体缩水**。阶段装不下时只能加课数（见上方 estimatedMinutes 的拆任务规则），不能减课缩分钟；确实无法填满时，在最后一个任务 description 里明说"本阶段先覆盖主干，剩余主题建议在补充说明里要求加密"，由系统向用户诚实声明，而不是假装完整
-31. 同题复读禁令（收尾刷课，2026-09-29 R8-1 实证）：实测过某阶段 12 课中有 6 节标题逐字相同（「串联并联电功率计算的综合自测与查漏」），根因是把 `targetSubtasksForStage` 当"必须凑满的课数"用，而阶段内真正的不同任务方向没有那么多。① 阶段内任意两个 subtasks 的 title 在规范化去掉标点和语气词后不得完全一致；标题近似合并后每个知识对象至多出现 2 次（判定 1 讲的第 1/2 步与判定 2 讲的第 2/3 步是 6 个不同任务，可以出现）。② 阶段尾部的收口任务（综合自测/查漏/复盘/考前提醒）一个阶段最多 1 节，且必须定义具体产出物——不允许输出多节仅差几个字的"综合自测"课。③ 课数凑不齐时不要用重复任务填满：宁可少给，也不要出现两节内容等价的课；剩下没覆盖的主题用 description 说明去向（本阶段先覆盖主干，其余留给后续阶段/补充说明）。
-32. 补课调用（supplementRequest，2026-09-30 广度跑批实证）：法考案例每阶段锚 30 课、8 阶段 7 个只交付 5-10 课（实交付 0.18×学习者自述预算）——首轮"宁可少给"压不住下限。出现该输入时：只**新增** needed 个 subtasks，且必须是 existing 之外的新方向（同一知识对象换皮 = 重复）；estimatedMinutes 取 minutesRange 上沿 70-100% 并禁止超出上界；补的任务按认知梯度续接（acquire/deconstruct→model/execute→refine/consolidate，consolidate 仍至多 1 节且必须定义新产出物）；确实凑不出 needed 个不重复方向时给多少算多少——**宁少勿换皮**，缺口由服务层记账并向用户诚实声明。**补的是首轮缺的动作族与未覆盖的主题，不是把已有认知弧原样重跑一遍**（实证：新增课与首轮课字面相似度不足 0.5，但类型分布逐族重复，学习者感知为同一件事换说法）；服务层会按动作族新颖性过滤你的输出，首轮已有的 type 不会被并入
-33. 校内锚（schoolAnchor，2026-09-30 维度 G 评审实证）：校内人设的教材册次/单元/考试范围/学校进度此前传进了上下文、对话层引用了，阶段目标与课标题里却一次都没出现——「在校生最需要的与课堂对表」没有发生。出现该输入时：① 阶段 goal 必须点明本阶段对应的教材册次与单元（如"对照人教版三年级上册第五单元"）；② 课标题尽量落在锚给出的考试范围题型上（单元测/期中/期末/模考的具体形态）；③ 学校进度用于判断预习/同步/补课的时序（学校还没讲的单元做预习向，已讲的做补课向），不要假设学习者处在别的教材体系；④ 学习者原话（evidence）里没有的册次、单元、题型细节**不得编造**——锚不准时按通用知识设计任务，也不要虚构"必修二第三章"这类引用
+1. 真实交付锚（2026-10-02 广度审计 Top1 实证：路径产出教材目录式任务清单，『路径名叫Java后端，但内容几乎没有Java』）：每个阶段的 subtasks 中安排 **1-2 个**「面向学习者目标场景的真实交付物」任务（能投出去的申请、能讲给人听的说法、能跑起来的一次操作、能做成的一个决定），其余任务仍是正常学习任务——不要求全部任务都产出交付物，满篇交付清单与满篇知识整理同样是错。
+2. 真实动作前置（注入 pathStageMap 时强制）：pathStageMap.stages 给出全部阶段标题、currentStageNumber 是本阶段位次——目标场景涉及外部真实动作（投递/发布/购买/报名/演练/首次真实操作）时，**currentStageNumber ≤ 2 的阶段必须安排第一次真实动作任务**，不得全部堆在最后阶段；后半段阶段（currentStageNumber > stageCount/2）至少 1 个任务在真实材料/真实约束下综合演练。认知梯度靠『在真材料上做小步骤』实现，不靠『先全部学完再真实操作』
+3. acceptanceHint 必须是**可判定的过关判据**（2026-10-02 审计模式2 实证：『每个任务都没有合格标准』）：写学习者完成后能被观察/检验的具体状态（如『能不看资料把最小二乘四步讲完整、卡壳处≤1 处』『生成的对照表能被第三人直接拿来用』），禁止空泛的『初步理解/基本掌握/有所认识』；下方对次数/天数/剂量处方的禁令仍然有效，但质量判据必须具体到可判定
+4. 任务估时如实反映工作量，禁止全部等值或围绕单一数值（45 分钟模板化=机械切分）。需要分化时**优先把同质小任务合并成完整任务**（三个零散的『拆解X』合成一个『在真实需求上走完拆解』），而不是把大任务拆碎凑多样性——阶段任务数永远服从 targetSubtasksForStage/输出数量规则，不得为显得多样而超出
+5. 跨阶段去重（2026-10-02 审计模式7 实证：『Stage2-6 同义反复』）：pathStageMap 或 previousMilestone 已注入时，本阶段任何 subtask 不得与前序阶段任务同义（同一动作换个对象/换个说法）；对照 pathStageMap.stages 里的全部阶段标题，确保本阶段在整条路径中有**独立的能力增量**。前序出现过的动作类型，本阶段必须以新材料、新条件、更高难度或新产出物续接，且 description 里能看出与前一阶段的具体差异点
+6. 只服务当前 milestone，不要重写整条路径方向
+7. 如果提供了 materials（该路径关联的资料包）：给每个 subtask 补 `materialRefs`（1-2 条，`sectionId` 取 sections[].id、`quote` **逐字**复制该条目原文，不得翻译/概括/编造，代码会逐字核对）：**任务必须长在资料上**——subtask 的 title/description 要能对应到资料里的**具体章节标题或条目原文**（可核对），优先围绕与本 milestone 相关的章节展开；资料里没有的内容不要写进去；资料缺失时才允许按通用知识设计任务
+8. subtasks 必须围绕当前 milestone 绑定的 coreConcept 展开
+9. 任务要可执行，但不要写成完整教案，不要输出课堂话术
+10. 可以输出 description 和 acceptanceHint，但要保持轻量，不要写成刚性周计划、次数处方、剂量处方、行为干预脚本或微型项目说明书
+11. type 只能是 acquire|deconstruct|model|execute|diagnose|refine|consolidate
+12. linkedConcept 默认指向当前 milestone 绑定的 coreConcept（主干概念），但同一阶段的 subtasks 不得全部锁定在同一个概念上机械复读：允许拆分多个认知分面（如"机制理解→操作实现→边界防御→迁移应用"），并通过 linkedConcept 指向当前 milestone 的 coreConcept 或其相邻 supporting concepts 实现多概念交织；consolidate 类型任务若在回捞前一阶段概念，linkedConcept 可以指向被回捞的跨阶段概念（crossStageConcept）；除非 repairHints 明确要求桥接任务，否则支持概念只允许来自同一 cognitiveCore 中声明的概念，不得引入未声明概念
+13. 输出数量优先级（2026-09-28 去等分）：① `planningHints.targetSubtasksForStage` 存在时为**本阶段强制值**（服务层按本阶段实际学时反推），必须且只能输出恰好该数量的 subtasks；② 否则 `targetSubtasksPerStage` 是**全路径锚**而非单点——按本阶段 `estimatedHours` 占比在 `subtasksPerStageRange` 带内定数（学时重的阶段多排、轻的少排），**禁止全路径每个阶段数量完全相同**（除非各阶段学时确实相近）；③ 两者皆缺时遵守 `subtasksPerStageRange` 区间；④ 全缺时默认 3-6 个
+14. 如果输入提供 firstDeliverable，当前阶段若是首阶段，应让第一批任务直接服务它
+15. 每个阶段的 subtasks 中至少包含 1 个 consolidate 类型任务，显式回捞前一阶段的核心概念；服务层在逐阶段生成时会注入前一 milestone 的 title 与 coreConcept 作为回捞输入（见输入说明），请以注入内容为准；首阶段（没有前一里程碑）不强制 consolidate，此时用 consolidate 类型任务复盘首阶段自身概念
+16. 首阶段第一个 subtask 必须低门槛（estimatedMinutes ≤45、当次即可产出可见结果），让学习者第一节课就有"我做到了"的时刻
+17. subtasks 顺序即学习者的执行顺序，必须体现认知难度梯度：先安排 acquire / diagnose / deconstruct 等低门槛建立类任务，再安排 model / execute 等应用类任务，最后以 refine / consolidate 收束；不允许把 consolidate 排在 execute 之前
+18. 若输入提供 milestone 的 loadTarget（来自 cognitiveCore.loadProfile），据此调整 subtask 设计：loadTarget=low 时至少 60% 的 subtasks 应为 acquire/deconstruct 类型（建立基础），每个 subtask 只引入 ≤1 个新概念；loadTarget=medium 时 model/execute 类型占比 ≥ 40%，允许 2-3 个概念的交互；loadTarget=high 时 diagnose/refine 类型占比 ≥ 30%，允许 3-4 个概念同时交互。cognitiveLevel 仅作为每任务的目标深度标注（供 teaching 层升降级参考），不约束阶段内任务序列顺序
+19. 每个 subtask 必须标注 icapLevel（passive|active|constructive|interactive），标注依据为该任务要求的外显行为而非 type 名称；可以补轻量标签 knowledgeType、cognitiveLevel、transferable，但不要输出 learningObjectives
+20. ICAP 档位映射（用于自检）：acquire/execute 若只是"阅读/按步骤完成"→active，若要求"用自己的话重述/解释每一步为什么"→constructive；deconstruct/diagnose/refine/model 默认为 constructive；consolidate 若只是"回顾/总结"→active，若要求"整合不同阶段框架形成新理解"→constructive，若"与同伴讨论共建"→interactive
+21. ICAP 递进约束：同一阶段内 subtasks 的 icapLevel 应呈非递减（active→constructive→interactive），不得出现 constructive→active 的降级；首阶段首任务 icapLevel 最低为 active（禁止纯 passive 起步，本平台核心是体验式学习）
+22. estimatedMinutes 优先落在 planningHints.subtaskMinutesRange 内；若未提供，默认 30-90 分钟。**上界是单课时长硬约束**：该区间上界已按用户单次可用时间校准（2026-09-28），单任务 estimatedMinutes **禁止超出上界**——一节课必须能在用户的一次学习坐姿里上完；本阶段内容装不下时**拆成更多任务**（加课数），而不是拉长单课。milestone.estimatedHours 只是任务设计前的容量粗估（按用户时间预算），**不必**让任务分钟总和硬凑该值——本阶段真实估时由系统按你的任务分钟汇总回写（向上取整到小时），你只需让每个任务估时如实反映所需投入、总量落在用户时间预算量级内；预算严重不足时优先保证认知递进链完整，而不是把任务量平均压扁
+23. 如果 `planningHints.subtaskMinutesRange` 的上界 ≤ 15 分钟（= 这条路径已被判定为「一节课」量级，见 path-planning 的一次性操作自检）：每个阶段只给 **1–2 个执行型任务**（execute/diagnose），estimatedMinutes 取该区间下沿；**禁止**输出 deconstruct/consolidate"用自己的话解释为什么"这类建构或复盘任务——用户要的是把这件事做完，不是理解它。判据是**数值**，不是"这条是不是一次性"的再判断
+24. 你生成的是"阶段内任务方向"，不是"本周执行方案"
+25. title 应表达学习动作与场景焦点，不要写成"第1周/第2天/执行3次/减量计划/V2流程"这类排期或方案句
+26. description 只说明任务大概做什么、围绕什么概念、在什么场景里观察或练习；不要写详细步骤链
+27. acceptanceHint 只给一个轻量完成信号，不要写数字化处方：不要写"执行3次、连续7天、剂量减半、产出V2流程并验证"，可以写"能说清主要触发模式、能比较两种策略差异、能把一个中断动作嵌入现有流程"
+28. 如果你想到的是"记录3次、执行1周、减少依赖、完成A/B/C步骤"，说明你写成了干预方案
+29. 当前平台执行环境仅支持文本输入与文本输出：不得把图片、视频、音频、截图、图表、界面观察、外部演示或其他非文本信息作为任务推进的必要前提；如果某个内容天然偏视觉、听觉或演示，必须改写为文字描述、文字步骤、文字化案例或结构化文本对比；可以提及外部资源作为课后可选扩展，但主任务不得依赖非文本资源才能继续推进
+30. 不要把 subtasks 写成 Learn 层的课堂安排；不要预设老师如何讲、如何追问、如何点评
+31. 好的 subtasks 示例：识别个人高唤醒触发模式、比较两种中断策略的适用场景、将一个中断动作嵌入现有睡前流程、观察流程调整后的主观变化
+32. 不好的 subtasks 示例：第2周执行新版流程至少3次并记录结果、制定褪黑素减量计划并在本周完成、按步骤A-B-C完成放松脚本训练、产出V2版完整方案并做效果验证
+33. 收口/整合类任务（consolidate/refine 收尾）必须定义**新认知增量或具体产出物**——好的如"对照原书找出框架解释不了的地方并记录""产出一份可复用的自查清单"；坏的如把前段任务原样再做一遍、"考前提醒/保持状态"这类没有动作与产出的空课。同一阶段内 consolidate 不超过 2 节。
+34. 社交动作场景化：学习者上下文显示独自学习（在职自学/全职备考/家长自学者/无同伴信息）时，**禁止**虚构"向同伴讲解/与同伴互相出题/与同行交流"类任务——改用独处可完成的形式（写给自己的复盘卡、自测清单、向想象中的初学者解释并录音自查）。只有输入明确存在同伴/班级/学习小组时才允许社交类任务。
+35. 课时充实度（2026-09-29 实测欠 fill 后的硬规则）：`targetSubtasksForStage` 存在时它是**下限不是参考**——少于该数量即使用户该阶段的时间预算被静默砍单（实测：请求 11-12 课只回 5-9 课，阶段 6.3h 预算只交付 1.5-4h）；同理 `subtaskMinutesRange` 上沿附近取分钟（重阶段取 70-100% 上沿），**禁止全阶段贴下沿集体缩水**。阶段装不下时只能加课数（见上方 estimatedMinutes 的拆任务规则），不能减课缩分钟；确实无法填满时，在最后一个任务 description 里明说"本阶段先覆盖主干，剩余主题建议在补充说明里要求加密"，由系统向用户诚实声明，而不是假装完整
+36. 同题复读禁令（收尾刷课，2026-09-29 R8-1 实证）：实测过某阶段 12 课中有 6 节标题逐字相同（「串联并联电功率计算的综合自测与查漏」），根因是把 `targetSubtasksForStage` 当"必须凑满的课数"用，而阶段内真正的不同任务方向没有那么多。① 阶段内任意两个 subtasks 的 title 在规范化去掉标点和语气词后不得完全一致；标题近似合并后每个知识对象至多出现 2 次（判定 1 讲的第 1/2 步与判定 2 讲的第 2/3 步是 6 个不同任务，可以出现）。② 阶段尾部的收口任务（综合自测/查漏/复盘/考前提醒）一个阶段最多 1 节，且必须定义具体产出物——不允许输出多节仅差几个字的"综合自测"课。③ 课数凑不齐时不要用重复任务填满：宁可少给，也不要出现两节内容等价的课；剩下没覆盖的主题用 description 说明去向（本阶段先覆盖主干，其余留给后续阶段/补充说明）。
+37. 补课调用（supplementRequest，2026-09-30 广度跑批实证）：法考案例每阶段锚 30 课、8 阶段 7 个只交付 5-10 课（实交付 0.18×学习者自述预算）——首轮"宁可少给"压不住下限。出现该输入时：只**新增** needed 个 subtasks，且必须是 existing 之外的新方向（同一知识对象换皮 = 重复）；estimatedMinutes 取 minutesRange 上沿 70-100% 并禁止超出上界；补的任务按认知梯度续接（acquire/deconstruct→model/execute→refine/consolidate，consolidate 仍至多 1 节且必须定义新产出物）；确实凑不出 needed 个不重复方向时给多少算多少——**宁少勿换皮**，缺口由服务层记账并向用户诚实声明。**补的是首轮缺的动作族与未覆盖的主题，不是把已有认知弧原样重跑一遍**（实证：新增课与首轮课字面相似度不足 0.5，但类型分布逐族重复，学习者感知为同一件事换说法）；服务层会按动作族新颖性过滤你的输出，首轮已有的 type 不会被并入
+38. 校内锚（schoolAnchor，2026-09-30 维度 G 评审实证）：校内人设的教材册次/单元/考试范围/学校进度此前传进了上下文、对话层引用了，阶段目标与课标题里却一次都没出现——「在校生最需要的与课堂对表」没有发生。出现该输入时：① 阶段 goal 必须点明本阶段对应的教材册次与单元（如"对照人教版三年级上册第五单元"）；② 课标题尽量落在锚给出的考试范围题型上（单元测/期中/期末/模考的具体形态）；③ 学校进度用于判断预习/同步/补课的时序（学校还没讲的单元做预习向，已讲的做补课向），不要假设学习者处在别的教材体系；④ 学习者原话（evidence）里没有的册次、单元、题型细节**不得编造**——锚不准时按通用知识设计任务，也不要虚构"必修二第三章"这类引用
 
 ## 输出字段
 
