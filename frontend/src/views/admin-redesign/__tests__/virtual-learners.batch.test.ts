@@ -9,7 +9,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import VirtualLearners from '../VirtualLearners.vue';
 import Confirm from '../Confirm.vue';
-import { liveVirtuals, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats } from '../live';
+import { liveVirtuals, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats, liveAutopilotConcurrency } from '../live';
 import { settleConfirm, confirmState } from '../useConfirm';
 
 vi.mock('../live', async () => {
@@ -34,6 +34,10 @@ vi.mock('../live', async () => {
       avgDurationMs: 0,
       reclaimThresholdMs: 0
     }),
+    /* P1#19 运行统计三态：本页消费 live 层 loading/error/retry 导出 */
+    liveVirtualStatsLoading: ref(false),
+    liveVirtualStatsError: ref(''),
+    retryLiveVirtualStats: vi.fn(async () => {}),
     liveLoading: ref(false),
     liveFailures: ref<Record<string, string>>({}),
     liveCreateVirtual: vi.fn(async () => 'vl-new'),
@@ -69,6 +73,9 @@ vi.mock('@/api/adminApi', () => ({
     getVirtualLearnerStories: vi.fn(async () => ({ data: { data: { stories: [] } } })),
     startVirtualSession: vi.fn(async () => ({ data: { data: { id: 's' } } })),
     startBlackboxVirtualSession: vi.fn(async () => ({ data: { data: { id: 's' } } })),
+    /* P1#20 速率卡：上限分母只认已保存值（getVirtualLabSettings 回执） */
+    getVirtualLabSettings: vi.fn(async () => ({ data: { data: { settings: { virtualLearnerRpmLimit: 200 }, rpm: { rpm: 120, inFlight: 3, queued: 0 } } } })),
+    updateVirtualLabSettings: vi.fn(async () => ({ data: { data: { rpm: { rpm: 200, inFlight: 3, queued: 0 } } } })),
     terminateVirtualSessions: terminateMock,
     reclaimStaleVirtualSessions: reclaimMock
   }
@@ -133,6 +140,11 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
       reclaimThresholdMs: 0,
       todayCalls: 0
     };
+    /* P1#19 三态复位：默认就绪态 */
+    liveVirtualStatsLoading.value = false;
+    liveVirtualStatsError.value = '';
+    vi.mocked(retryLiveVirtualStats).mockClear();
+    liveAutopilotConcurrency.value = { used: 0, limit: 10, queued: 0 };
     terminateMock.mockReset();
     terminateMock.mockImplementation(async () => ({ data: { data: { dryRun: false, terminated: 2, skippedTerminal: 1 } } }));
     reclaimMock.mockReset();
@@ -152,12 +164,67 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const w = await mountPage();
     // 会话口径：活动 = running 2 + created 3
     expect(w.text()).toContain('活动会话 5');
-    // 画像口径分区筛选计数
+    // 画像口径分区筛选计数（P2：「需关注」已正名「曾失败」，口径=累计失败）
     expect(w.text()).toContain('进行中 1');
     expect(w.text()).toContain('已暂停 1');
-    expect(w.text()).toContain('需关注 1');
+    expect(w.text()).toContain('曾失败 1');
+    expect(w.text()).not.toContain('需关注');
     expect(w.text()).toContain('已截断 · 共 80 人');
     expect(w.text()).toContain('回收卡死（2）');
+  });
+
+  it('P1#19 运行统计三态：stats 拉取失败 → KPI「不可用」弱红可点重试（不再 0% 假绿）', async () => {
+    liveVirtuals.value = [makeVirtual(1)];
+    liveVirtualStatsError.value = 'network down';
+    const w = await mountPage();
+    const kpiNum = (label: string) =>
+      w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
+    // 数字不渲染（防 0% 假绿），错误档显「不可用」+ hint 给动作出口
+    expect(kpiNum('完成率')).toBe('不可用');
+    expect(kpiNum('失败率')).toBe('不可用');
+    expect(kpiNum('今日调用')).toBe('不可用');
+    expect(w.text()).toContain('统计不可用 · 点击重试');
+    expect(w.find('.mk-kpi--bad').exists()).toBe(true);
+    // 点击 KPI 卡 → 调 live 层 retry
+    await w.findAll('.mk-kpi')[0].trigger('click');
+    expect(retryLiveVirtualStats).toHaveBeenCalledTimes(1);
+  });
+
+  it('P1#19 运行统计三态：加载中 → KPI「…」，不渲染 0% 假数字', async () => {
+    liveVirtuals.value = [makeVirtual(1)];
+    liveVirtualStatsLoading.value = true;
+    const w = await mountPage();
+    const kpiNum = (label: string) =>
+      w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
+    expect(kpiNum('完成率')).toBe('…');
+    expect(kpiNum('失败率')).toBe('…');
+    expect(w.text()).toContain('统计加载中');
+  });
+
+  it('P2 并发「已满」：琥珀（资源状态非故障），不再红档', async () => {
+    liveVirtuals.value = [makeVirtual(1)];
+    liveAutopilotConcurrency.value = { used: 10, limit: 10, queued: 0 };
+    const w = await mountPage();
+    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '并发')!;
+    expect(card.text()).toContain('已满');
+    expect(card.classes()).not.toContain('mk-kpi--bad');
+    expect(card.classes()).toContain('mk-kpi--warn');
+  });
+
+  it('P1#20 速率卡：并列「在途 N · 上限 X/分」，分母用已保存回执值（不吃输入框脏值）', async () => {
+    liveVirtuals.value = [makeVirtual(1)];
+    const w = await mountPage();
+    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '速率')!;
+    // getVirtualLabSettings 回执：limit=200 / inFlight=3
+    expect(card.find('.mk-kpi__num').text()).toBe('在途 3 · 上限 200/分');
+  });
+
+  it('P1#20 创建列：相对时间配绝对时间 title', async () => {
+    liveVirtuals.value = [makeVirtual(1, { createdAt: '2026-08-10T10:00:00' })];
+    const w = await mountPage();
+    const td = w.findAll('td').find((c) => c.attributes('title')?.startsWith('创建于 '));
+    expect(td).toBeTruthy();
+    expect(td!.attributes('title')).toContain('2026-08-10 10:00');
   });
 
   it('运行统计展示（A5）：今日调用/完成率/失败率（状态条）', async () => {

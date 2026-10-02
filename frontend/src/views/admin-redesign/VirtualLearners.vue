@@ -28,7 +28,7 @@
         type="button"
         class="mk-status__meta-link"
         :class="{ 'mk-status__meta-link--on': stateFilter === o.key }"
-        :title="`点击筛选「${o.label}」虚拟学习者`"
+        :title="o.hint ? `${o.label}（${o.hint}）· 点击筛选` : `点击筛选「${o.label}」虚拟学习者`"
         @click="stateFilter = stateFilter === o.key ? '' : o.key"
       >{{ o.label }} {{ o.count }}</button>
       <span class="mk-status__meta" title="当前进行中 + 创建中会话数（含卡死）">活动会话 {{ partition.running + partition.created }}</span>
@@ -43,22 +43,49 @@
          现改走共享栅格；每张卡的 hint 给派生口径，不复述数字。
          VL RPM 是「写」控件，与只读 KPI 保持分行/分块，不混进数字栅格。 -->
     <div class="vl-kpi">
+      <!-- P1#19（2026-10-02 人类可读性）：运行统计三态——此前 stats 拉取失败被 .catch 静默吞掉，
+           KPI 恒显「失败率 0%」假绿。现 loading→「…」、error→弱红「不可用」可点重试（调 live 层
+           retryLiveVirtualStats）、仅成功后渲染数字。并发/速率两卡不走该统计接口，不受影响。 -->
       <section class="mk-kpi-grid">
-        <MkKpi label="完成率" :value="`${runStats.completionRate ?? 0}%`" :hint="`已完成 ${runStats.completed} / 全部 ${runStats.totalSessions}`" />
+        <MkKpi
+          label="完成率"
+          :value="statsKpiValue(`${runStats.completionRate ?? 0}%`)"
+          :tone="statsState === 'error' ? 'bad' : ''"
+          :hint="statsKpiHint(`已完成 ${runStats.completed} / 全部 ${runStats.totalSessions}`)"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : ''"
+          :clickable="statsState === 'error'"
+          @click="onStatsRetry"
+        />
         <MkKpi
           label="失败率"
-          :value="`${runStats.systemFailureRate ?? 0}%`"
-          :tone="(runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''"
-          :hint="`系统失败 ${runStats.failed} · 人为终止 ${runStats.abandoned}`"
+          :value="statsKpiValue(`${runStats.systemFailureRate ?? 0}%`)"
+          :tone="statsState === 'error' ? 'bad' : (runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''"
+          :hint="statsKpiHint(`系统失败 ${runStats.failed} · 人为终止 ${runStats.abandoned}`)"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : ''"
+          :clickable="statsState === 'error'"
+          @click="onStatsRetry"
         />
         <MkKpi
           label="并发"
           :value="concurrencyText"
-          :tone="concurrencyTone === 'full' ? 'bad' : concurrencyTone === 'warn' ? 'warn' : 'ok'"
+          :tone="concurrencyTone === 'ok' ? 'ok' : 'warn'"
           hint="自动驾驶并发配额"
+          title="并发 = 自动驾驶同时在跑的会话数占配额比；「已满」是资源占满（后续请求排队），不是故障"
         />
-        <MkKpi label="今日调用" :value="runStats.todayCalls ?? 0" :hint="todayCallsHint" />
-        <MkKpi label="速率" :value="rateText" hint="出站上限，与下方 VL RPM 对应" />
+        <MkKpi
+          label="今日调用"
+          :value="statsKpiValue(String(runStats.todayCalls ?? 0))"
+          :hint="statsKpiHint(todayCallsHint)"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : ''"
+          :clickable="statsState === 'error'"
+          @click="onStatsRetry"
+        />
+        <MkKpi
+          label="速率"
+          :value="rateText"
+          hint="出站上限（已保存值），与下方 VL RPM 对应"
+          title="在途 = 正在出站的调用数；上限 = 已保存的 VL RPM 配置（不含输入框未保存的改动）"
+        />
       </section>
       <!-- VL RPM：写控件单独一行——与只读 KPI 分块（读/写不混排），也让 5 张卡在 1280 仍是一行
            （同排时 RPM 抢走 114px，栅格降成 4 列、第 5 张孤零零换行） -->
@@ -209,7 +236,7 @@
               <span v-if="s.stalledCount > 0" class="mk-badge mk-badge--sm mk-badge--bad" :title="`${s.stalledCount} 个进行中会话已卡死（超过回收阈值无写入），可在状态条一键回收`">卡死 {{ s.stalledCount }}</span>
               <span v-else class="mk-na" title="无卡死会话">—</span>
             </td>
-            <td v-if="!isNarrow" class="mk-na">{{ s.created }}</td>
+            <td v-if="!isNarrow" class="mk-na" :title="s.createdAt ? `创建于 ${fmtDateTime(s.createdAt)}` : undefined">{{ s.created }}</td>
             <td>
               <div class="mk-actions mk-actions--left">
                 <!-- live：整行点击即进入画像详情，此处只留真正的行内操作（运行 / 测试 / 更多）
@@ -290,7 +317,7 @@
 import { computed, ref, reactive, watch, nextTick, onUnmounted } from 'vue'
 import { Play, SquareCheckBig } from 'lucide-vue-next'
 import { openSubPage, intent, isLive } from './store'
-import { liveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency } from './live'
+import { liveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useRowMenu } from './useRowMenu'
 import { useIsNarrow } from './useIsNarrow'
@@ -346,14 +373,15 @@ const samples = computed<Sample[]>(() =>
 const keyword = ref('')
 /** 状态过滤（轴 A 生命周期）：'' = 全部 / running / paused / queued / failed / created */
 const stateFilter = ref('')
-/** 状态过滤 chips 计数（与 samples 联动） */
+/** 状态过滤 chips 计数（与 samples 联动）；hint 进 title（P2 2026-10-02：口径随名披露） */
 const stateFilterOptions = computed(() => {
   const count = (pred: (s: Sample) => boolean) => samples.value.filter(pred).length
   return [
-    { key: '', label: '全部', count: samples.value.length },
-    { key: 'running', label: '进行中', count: count((s) => s.runningCount > 0) },
-    { key: 'paused', label: '已暂停', count: count((s) => (s.pausedCount ?? 0) > 0) },
-    { key: 'failed', label: '需关注', count: count((s) => s.failedCount > 0) },
+    { key: '', label: '全部', count: samples.value.length, hint: '' },
+    { key: 'running', label: '进行中', count: count((s) => s.runningCount > 0), hint: '' },
+    { key: 'paused', label: '已暂停', count: count((s) => (s.pausedCount ?? 0) > 0), hint: '' },
+    // P2（2026-10-02 人类可读性）：原名「需关注」读作当前异常，实为累计曾失败/被终止——正名 + 口径入 title
+    { key: 'failed', label: '曾失败', count: count((s) => s.failedCount > 0), hint: '口径：累计有失败/终止会话的虚拟学习者，非当前异常' },
   ]
 })
 /** live 虚拟人域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
@@ -487,15 +515,19 @@ const concurrency = computed(() => ({
   queued: Number(liveAutopilotConcurrency.value?.queued ?? 0),
 }))
 const concurrencyPct = computed(() => Math.min(100, Math.round((concurrency.value.used / concurrency.value.limit) * 100)))
+/* P2（2026-10-02 人类可读性）：并发「已满」从红改琥珀——资源占满是容量状态（后续请求排队），
+   不是故障；红色留给真实失败信号。≥70% 与已满同档琥珀。 */
 const concurrencyTone = computed(() => {
   const pct = concurrencyPct.value
-  if (pct >= 100) return 'full'
   if (pct >= 70) return 'warn'
   return 'ok'
 })
 
 /* 虚拟学习者专属出站速率（RPM）：设置 + 运行态。与平台全局速率相互独立。 */
 const vlRpm = reactive({ limit: 0, inFlight: 0, queued: 0, rpm: 0 })
+/** 已保存的 RPM 上限（P1#20）：速率卡「上限」分母只认服务端已保存值/保存成功回执，
+    不吃输入框脏值——管理员改到一半的数字不该出现在只读 KPI 里 */
+const vlRpmSavedLimit = ref(0)
 /* 轮询回填保护：limit 是输入框 v-model（写控件），若 10s 轮询无条件覆写，
    会冲掉管理员正在输入/未保存的值 → 仅在非聚焦且无未保存编辑时回填 limit，
    rpm/inFlight/queued 是只读展示字段，始终照常刷新 */
@@ -507,6 +539,7 @@ async function loadVlRpm() {
     const d = res.data?.data ?? {}
     const s = d.settings ?? {}
     const r = d.rpm ?? {}
+    vlRpmSavedLimit.value = Number(s.virtualLearnerRpmLimit ?? 0)
     if (!vlRpmFocused.value && !vlRpmDirty.value) {
       vlRpm.limit = Number(s.virtualLearnerRpmLimit ?? 0)
     }
@@ -521,6 +554,7 @@ async function saveVlRpm() {
   try {
     const res = await adminVirtualLearnersApi.updateVirtualLabSettings({ virtualLearnerRpmLimit: value })
     vlRpmDirty.value = false /* 已保存：服务端值与输入一致，恢复轮询回填 */
+    vlRpmSavedLimit.value = value /* 保存成功：速率卡「上限」分母随之更新（回执口径） */
     const r = res.data?.data?.rpm
     if (r) {
       vlRpm.rpm = Number(r.rpm ?? value)
@@ -561,6 +595,41 @@ const partition = computed(() => {
 /* ===== A5 运行统计：完成率/失败率/平均时长/卡死最长分钟（GET /virtual-learners/stats） ===== */
 const runStats = computed(() => liveVirtualRunStats.value)
 
+/* ===== P1#19 运行统计三态（2026-10-02 人类可读性）：
+     live.ts 导出 liveVirtualStatsLoading/liveVirtualStatsError（stats 拉取失败不再被静默吞掉），
+     本页消费：loading→KPI「…」；error→弱红「不可用」可点重试；仅成功后渲染数字。
+     并发/速率两卡不依赖该接口，保持常显。 */
+const statsState = computed<'loading' | 'error' | 'ready'>(() => {
+  if (liveVirtualStatsLoading.value) return 'loading'
+  if (liveVirtualStatsError.value) return 'error'
+  return 'ready'
+})
+/** 三态取值：仅 ready 渲染真实数字 */
+function statsKpiValue(ready: string): string {
+  if (statsState.value === 'loading') return '…'
+  if (statsState.value === 'error') return '不可用'
+  return ready
+}
+/** 三态 hint：error 档给出动作出口 */
+function statsKpiHint(ready: string): string {
+  if (statsState.value === 'loading') return '统计加载中…'
+  if (statsState.value === 'error') return '统计不可用 · 点击重试'
+  return ready
+}
+/** 点卡片重试（live 层 retryLiveVirtualStats）；非错误态点击是空操作 */
+function onStatsRetry() {
+  if (statsState.value !== 'error') return
+  void retryLiveVirtualStats()
+}
+
+/** 绝对时间（创建列 title，P1#20）：相对时间一律配绝对时间，10 秒内可判断新旧 */
+function fmtDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (!iso || Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 /** 状态筛选（页头 meta-link）：进行中/已暂停/需关注；点激活项取消筛选 */
 const statePillOptions = computed(() => stateFilterOptions.value.filter((o) => o.key))
 
@@ -572,12 +641,12 @@ const concurrencyText = computed(() => {
   return `${c.used}/${c.limit}`
 })
 
-/** 速率文案：在途 / 上限 RPM（排队） */
+/** 速率文案（P1#20）：并列结构「在途 N · 上限 X/分」，个与「个/分钟」不再用斜杠混排；
+    上限读已保存值（vlRpmSavedLimit），不用输入框脏值 */
 const rateText = computed(() => {
-  const cap = vlRpm.limit ? `${vlRpm.limit} RPM` : '不限'
-  return vlRpm.queued > 0
-    ? `${vlRpm.inFlight} 在途 / ${cap} · 排队 ${vlRpm.queued}`
-    : `${vlRpm.inFlight} 在途 / ${cap}`
+  const cap = vlRpmSavedLimit.value > 0 ? `${vlRpmSavedLimit.value}/分` : '不限'
+  const q = vlRpm.queued > 0 ? ` · 排队 ${vlRpm.queued}` : ''
+  return `在途 ${vlRpm.inFlight} · 上限 ${cap}${q}`
 })
 
 /** 「今日调用」卡的 hint：有调用给平均耗时（派生口径，数字不复述），没有就点明计数口径 */

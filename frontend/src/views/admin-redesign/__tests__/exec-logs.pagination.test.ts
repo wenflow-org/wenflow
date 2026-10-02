@@ -317,3 +317,109 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
     expect(router.currentRoute.value.query.status).toBe('err');
   });
 });
+
+/* ---------- P1#24（2026-10-02 人类可读性）：错误摘要条窗口联动 + Top 归因 chip + 只看失败 ---------- */
+describe('P1#24：错误摘要条（窗口随 timeRange / Top chip 下钻 / 只看失败）', () => {
+  beforeEach(() => {
+    h.reload.mockClear();
+    liveLogsPage.value = 1;
+    liveLogsPageSize.value = 30;
+    liveLogsTotal.value = 0;
+    liveLogsFiltered.value = [];
+    liveLogStats.value = null;
+    window.scrollTo = vi.fn();
+    localStorage.clear();
+  });
+
+  function errSpan(i: number, over: Partial<TraceSpan> = {}): TraceSpan {
+    return { ...fakeSpan(i), status: 'err', title: `boom ${i}`, ...over };
+  }
+
+  async function mountExecAt(url: string) {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+    });
+    await router.push(url);
+    await router.isReady();
+    const w = mount(ExecLogs, { global: { plugins: [router] } });
+    await flushPromises();
+    return { w, router };
+  }
+
+  it('stats error>0 → 摘要条出现；默认窗口文案「今天」（不再恒写「近 24h」）', async () => {
+    liveLogStats.value = { total: 100, success: 90, timeout: 2, error: 8, canary: 0 };
+    liveLogsTotal.value = 2;
+    liveLogsFiltered.value = [
+      errSpan(1, { errorCategory: 'provider_timeout', agent: 'skill:a' }),
+      errSpan(2, { errorCategory: 'rate_limit', agent: 'skill:b' }),
+    ];
+    const { w } = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    expect(w.text()).toContain('今天捕获 8 条错误级日志');
+    expect(w.text()).not.toContain('近 24h');
+  });
+
+  it('切「近 7 天」→ 摘要条文案随查询窗口联动', async () => {
+    liveLogStats.value = { total: 700, success: 690, timeout: 2, error: 8, canary: 0 };
+    liveLogsTotal.value = 1;
+    liveLogsFiltered.value = [errSpan(1)];
+    const { w } = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    await findBtn(w, '高级').trigger('click');
+    await w.find('select[aria-label="时间范围筛选"]').setValue('week');
+    await flushPromises();
+    expect(w.text()).toContain('近 7 天捕获 8 条错误级日志');
+  });
+
+  it('Top 错误类别 chip：点击即设 errorCategory 服务端重查（title 披露口径），再点取消', async () => {
+    liveLogStats.value = { total: 100, success: 90, timeout: 0, error: 10, canary: 0 };
+    liveLogsTotal.value = 3;
+    liveLogsFiltered.value = [
+      errSpan(1, { errorCategory: 'provider_timeout', agent: 'skill:a' }),
+      errSpan(2, { errorCategory: 'provider_timeout', agent: 'skill:b' }),
+      errSpan(3, { errorCategory: 'auth', agent: 'skill:a' }),
+    ];
+    const { w } = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    const chip = w.findAll('.exec-err-chip').find((c) => c.text().includes('provider_timeout'))!;
+    expect(chip).toBeTruthy();
+    expect(chip.attributes('title')).toContain('当前页失败行聚合');
+    await chip.trigger('click');
+    await flushPromises();
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ errorCategory: 'provider_timeout' });
+    await w.findAll('.exec-err-chip').find((c) => c.text().includes('provider_timeout'))!.trigger('click');
+    await flushPromises();
+    expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).errorCategory).toBeUndefined();
+  });
+
+  it('Top Skill chip：点击设 agentFilter（服务端 agentId 参数，watch 触发重查）', async () => {
+    liveLogStats.value = { total: 100, success: 90, timeout: 0, error: 10, canary: 0 };
+    liveLogsTotal.value = 2;
+    liveLogsFiltered.value = [
+      errSpan(1, { errorCategory: 'provider_timeout', agent: 'skill:a' }),
+      errSpan(2, { errorCategory: 'provider_timeout', agent: 'skill:a' }),
+    ];
+    const { w } = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    const chip = w.findAll('.exec-err-chip').find((c) => c.text().includes('skill:a'))!;
+    expect(chip).toBeTruthy();
+    await chip.trigger('click');
+    await flushPromises();
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ agentId: 'skill:a' });
+  });
+
+  it('「只看失败」次按钮：status=err 服务端过滤，再点恢复全部', async () => {
+    liveLogStats.value = { total: 100, success: 90, timeout: 0, error: 10, canary: 0 };
+    liveLogsTotal.value = 1;
+    liveLogsFiltered.value = [errSpan(1)];
+    const { w } = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    await findBtn(w, '只看失败').trigger('click');
+    await flushPromises();
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ status: 'error' });
+    await findBtn(w, '只看失败').trigger('click');
+    await flushPromises();
+    expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).status).toBeUndefined();
+  });
+});

@@ -49,11 +49,36 @@
            高级筛选 / 列设置 / 保存视图 / 页码器整组消失，只剩一页没有任何筛选出口的死路空态 -->
       <template v-if="elTab === 'logs'">
       <!-- 错误摘要条（原型 renderObserve 的 alert--error）：errCount>0 时红底提示 + 直达健康中心。
-           走全局 .mk-alert（红底红字，全局错误通道②「区块级提示」），外层留卡头同款内边距 -->
+           走全局 .mk-alert（红底红字，全局错误通道②「区块级提示」），外层留卡头同款内边距。
+           P1#24（2026-10-02 人类可读性）：① 窗口文案随 timeRange 联动（原恒写「近 24h」，而
+           stats 实际跟随查询窗口，切 7 天后文案与数字口径冲突）；② 内联 Top 错误类别/Skill chip
+           （当前页失败样本聚合，点击即设 errorCategory/agentFilter 下钻）+「只看失败」次按钮，
+           判例 = AuditLogs 失败 TOP chip。 -->
       <div v-if="errCount > 0" class="exec-alertwrap">
         <div class="mk-alert mk-alert--row exec-alert">
-          <span class="mk-alert__msg">近 24h 捕获 <b>{{ errCount }}</b> 条错误级日志</span>
-          <button type="button" class="mk-btn mk-btn--sm" @click="goHealthCenter">查看健康中心</button>
+          <span class="mk-alert__msg">
+            {{ errWindowLabel }}捕获 <b>{{ errCount }}</b> 条错误级日志
+            <button
+              v-for="c in errTopChips"
+              :key="c.key"
+              type="button"
+              class="exec-err-chip"
+              :class="{ 'exec-err-chip--on': c.active }"
+              :aria-pressed="c.active"
+              :title="c.title"
+              @click="c.apply()"
+            >{{ c.label }} {{ c.count }}</button>
+          </span>
+          <span class="exec-alert__ops">
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :aria-pressed="statusFilter === 'err'"
+              :title="statusFilter === 'err' ? '已在「只看失败」视图，点击恢复全部' : '只看失败日志（status=err，服务端过滤）'"
+              @click="toggleFailedOnly"
+            >只看失败</button>
+            <button type="button" class="mk-btn mk-btn--sm" @click="goHealthCenter">查看健康中心</button>
+          </span>
         </div>
       </div>
       <div class="mk-card__head">
@@ -656,6 +681,54 @@ function goHealthCenter() {
   void router.push('/admin/health-center')
 }
 
+/* ===== P1#24 错误摘要条（2026-10-02 人类可读性） ===== */
+/** 窗口文案随 timeRange 联动：liveLogStats 跟随查询窗口聚合（原「近 24h」恒写失真） */
+const errWindowLabel = computed(() => {
+  const m: Record<string, string> = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部时间' }
+  return m[timeRange.value] || timeRangeLabels[timeRange.value] || '当前窗口'
+})
+
+/** Top 错误归因 chip：错误类别 + Skill 各取失败行聚合的前 2，按次数合并取前 3。
+    口径 = 当前页失败行样本（服务端分页 30 行），非全量 TOP——title 就地披露。 */
+const errTopChips = computed(() => {
+  const catMap = new Map<string, number>()
+  const agentMap = new Map<string, number>()
+  for (const l of logs.value) {
+    if (l.status !== 'err') continue
+    const cat = l.errorCategory || '其他'
+    catMap.set(cat, (catMap.get(cat) || 0) + 1)
+    if (l.agent) agentMap.set(l.agent, (agentMap.get(l.agent) || 0) + 1)
+  }
+  const topOf = (m: Map<string, number>, n: number) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n)
+  const catChips = topOf(catMap, 2).map(([cat, count]) => ({
+    key: `cat:${cat}`,
+    label: cat,
+    count,
+    active: errorCategory.value === cat,
+    title: `错误类别「${cat}」· 当前页失败行聚合（非全量 TOP）· 点击只看该类别，再点取消`,
+    apply: () => {
+      errorCategory.value = errorCategory.value === cat ? '' : cat
+      void applyServerQuery()
+    },
+  }))
+  const agentChips = topOf(agentMap, 2).map(([agent, count]) => ({
+    key: `agent:${agent}`,
+    label: agent,
+    count,
+    active: agentFilter.value === agent,
+    title: `Skill「${agent}」· 当前页失败行聚合（非全量 TOP）· 点击只看该 Skill，再点取消`,
+    apply: () => {
+      agentFilter.value = agentFilter.value === agent ? '' : agent
+    },
+  }))
+  return [...catChips, ...agentChips].sort((a, b) => b.count - a.count).slice(0, 3)
+})
+
+/** 「只看失败」次按钮：与状态 pill「失败」同源（statusFilter=err，watch 触发服务端重查） */
+function toggleFailedOnly() {
+  statusFilter.value = statusFilter.value === 'err' ? '' : 'err'
+}
+
 /* live 模式：展开行时拉真实 input/output + 重试时间线 */
 const DETAIL_CACHE_MAX = 50
 const detailCache = ref<Record<string, LogDetail>>({})
@@ -1057,6 +1130,28 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
    消息/按钮两端排布），本页只补卡头同款内边距（.mk-card 无 padding）与按钮不缩（窄屏换行时按钮保完整） */
 .exec-alertwrap { padding: 12px 16px 0; }
 .exec-alert .mk-btn { flex-shrink: 0; }
+/* P1#24 摘要条内联归因 chip（判例 = AuditLogs 失败 TOP chip）：透明底描边胶囊，
+   激活反白；红系沿用告警条自身的红变量，不新增视觉档 */
+.exec-err-chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 0 6px;
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.exec-err-chip:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+.exec-err-chip--on { background: var(--mk-red); border-color: var(--mk-red); color: var(--mk-on-fill); }
+/* 右侧动作组：与消息端拉开（mk-alert--row 已两端排布，这里只管组内间距） */
+.exec-alert__ops { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 /* 状态条筛选徽章 / 清除按钮已提升为全局 .mk-status__filter / .mk-status__clear（见 shared.css） */
 

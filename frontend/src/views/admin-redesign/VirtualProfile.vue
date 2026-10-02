@@ -40,8 +40,10 @@
         </div>
         <div class="statstrip__stat" role="listitem">
           <span class="statstrip__label">通过率</span>
-          <span class="statstrip__value" :title="`已完成 ${runStats.done} / 窗口内 ${allRuns.length} 次运行`">
-            {{ runStats.passRate == null ? '—' : `${runStats.passRate}%` }}
+          <!-- P1#21（2026-10-02 人类可读性）：通过率是「加载窗口」口径（Detail.runs 截断于最近 50 次），
+               与主页 KPI「完成率」（全量）同名异义——卡面加「（近 N 次）」小字，title 写明窗口与截断 -->
+          <span class="statstrip__value" :title="passRateTitle">
+            {{ runStats.passRate == null ? '—' : `${runStats.passRate}%` }}<span v-if="runStats.total" class="statstrip__unit">（近 {{ runStats.total }} 次）</span>
           </span>
         </div>
         <div class="statstrip__stat" role="listitem">
@@ -2147,6 +2149,17 @@ const runStats = computed(() => {
     // 恰好达到窗口上限时可能仍被截断 → 保守标注「加载窗口」
     exact: (d.value?.runs || []).length < RUNS_TAB_WINDOW
   }
+})
+
+/** 通过率窗口口径（P1#21，2026-10-02 人类可读性）：卡面「（近 N 次）」小字 +
+    title 写明窗口与截断——与主页 KPI「完成率」（全量口径）同名异义问题就地披露 */
+const passRateTitle = computed(() => {
+  const s = runStats.value
+  if (!s.total) return '暂无运行记录，无通过率'
+  const win = s.exact
+    ? `最近 ${s.total} 次运行`
+    : `最近 ${RUNS_TAB_WINDOW} 次运行（加载窗口上限，非全量口径）`
+  return `口径：${win}中完成 ${s.done} 次；主页 KPI「完成率」为全量口径，两者分母不同`
 })
 
 /** 覆盖场景：运行记录里出现过的去重故事（storyId/storyTitle），按出现次数降序。

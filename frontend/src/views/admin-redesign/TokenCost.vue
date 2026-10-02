@@ -81,25 +81,28 @@
         @action="days = 90"
       />
       <template v-else>
-      <!-- 概览卡（统一走共享 .mk-kpi-grid + MkKpi；原型 renderCost 1771-1772 metricCard 四卡：
-           今日成本/本月累计/单会话均值/缓存命中率）。
+      <!-- 概览卡（统一走共享 .mk-kpi-grid + MkKpi；原型 renderCost 1771-1772 metricCard 四卡）。
            数据源核查（2026-10-01，只读后端 /admin/token-cost/summary）：
            金额已随接口返回（totals.usd / pricedCalls / callsMissingPricing），但**只按所选窗口聚合**——
            无分日金额（trend 仅 date/tokens/calls/failed）、无自然月窗口、无会话维度、无缓存命中明细
            （agent_call_logs 无 cachedTokens 列）。故按可得口径如实重排，缺项不编造金额/不拿 0 冒充：
-           ① 调用成本＝当前窗口金额（承接原型「今日成本/本月累计」，窗口随 pills 切换，口径见 hint）；
+           ① 调用成本＝当前窗口金额（窗口随 pills 切换，口径见 hint）；
            ② 单次调用均值＝金额 ÷ 已定价调用（原型「单会话均值」无会话维度，如实降级到每次调用）；
            ③ 总 Token＝用量基线（成本卡的分母，保留）；
-           ④ 缓存命中率＝接口无此口径，显式留空「—」并在 hint 说明。 -->
+           ④ P1#25（2026-10-02 人类可读性）：原「缓存命中率」恒「—」死卡（接口无此口径）占 KPI 位，
+              换活卡「失败调用」——totals.failed 后端已返回，失败信号值得首屏一位。 -->
       <section class="mk-kpi-grid">
         <!-- hint = 原型 metricCard 的一短句口径；长解释收进卡 title 悬停（复刻调整 2026-10-02：
-             此前 28px 数字下拖整句「待补单价模型 3 个：deepseek-v4-flash、…」小字，非原型节奏） -->
+             此前 28px 数字下拖整句「待补单价模型 3 个：deepseek-v4-flash、…」小字，非原型节奏）。
+             P1#25：单价未配置态可点直达「模型与接入」补单价（决策就近，不再只留一句提示）。 -->
         <MkKpi
           label="调用成本"
           :value="costLoading ? '…' : costFailed ? '加载失败' : costUsd !== null ? `≈ $${fmtCostUsd(costUsd)}` : (costPricedCalls === 0 && costMissingCalls === 0) ? '无调用' : '单价未配置'"
           :tone="costFailed ? 'warn' : ''"
           :hint="costHintShort"
           :title="costHint"
+          :clickable="pricingMissing"
+          @click="pricingMissing && goModelConfig()"
         />
         <MkKpi
           label="单次调用均值"
@@ -108,7 +111,13 @@
           :title="perCallHint"
         />
         <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`prompt ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · completion ${summary ? fmtTokens(summary.totals.completionTokens) : '—'} · ${summary ? summary.totals.calls : '—'} 次调用`" />
-        <MkKpi label="缓存命中率" value="—" hint="接口未提供，暂不可算" title="接口未提供缓存命中明细（agent_call_logs 无 cachedTokens 列）" />
+        <MkKpi
+          label="失败调用"
+          :value="failedCallsText"
+          :tone="failedCalls > 0 ? 'bad' : ''"
+          :hint="failedCalls > 0 ? `占总调用 ${failedPct}%（重试后终态失败）` : '无失败调用'"
+          :title="failedHint"
+        />
       </section>
 
       <!-- 趋势图（原型 renderCost 1773-1777：近 7 天成本趋势 · barchart + sub「单位：元」）。
@@ -117,14 +126,15 @@
            系列（失败数移入卡尾 note 与柱 title，不再与用量混读）。 -->
       <section class="mk-card">
         <div class="mk-card__head">
-          <!-- 卡头 = 原型形态（title + 单位 sub）；口径细节收 title 悬停，右侧只留跨页跳转 -->
-          <div class="tc-card-head__main" title="本页为 token-cost 端点精确聚合（含重试后终态失败）· 口径：本地自然日；总览「LLM 用量」卡为近 7 天汇总 hero">
+          <!-- 卡头 = 原型形态（title + 单位 sub）；口径细节收 title 悬停，右侧只留跨页跳转。
+               P1#25：「接口未提供金额」暴露实现细节 → 「暂无分日金额」（原因留 title） -->
+          <div class="tc-card-head__main" title="本页为 token-cost 端点精确聚合（含重试后终态失败）· 口径：本地自然日；趋势接口暂无分日金额，无法画金额柱；总览「LLM 用量」卡为近 7 天汇总 hero">
             <h3 class="mk-card__title">近 {{ days }} 天用量趋势</h3>
-            <span class="mk-card__meta">单位：Token（接口未提供金额）</span>
+            <span class="mk-card__meta">单位：Token（暂无分日金额）</span>
           </div>
           <div class="tc-head-links">
             <button type="button" class="mk-link" @click="goOverview">总览趋势 →</button>
-            <button type="button" class="mk-link" @click="goExecLogs">逐调用明细 →</button>
+            <button type="button" class="mk-link" @click="goExecLogs()">逐调用明细 →</button>
           </div>
         </div>
         <!-- 趋势柱：走全 admin 统一图表语言 OvBars（2026-09-29 自 MkChart/ECharts 换入）。
@@ -162,7 +172,7 @@
             <span role="columnheader">成本</span>
             <span role="columnheader">占比</span>
           </div>
-          <div v-for="r in skillRows" :key="r.key" class="tc-skilltable__row" role="row" :title="skillRowTitle(r)">
+          <div v-for="r in skillRows" :key="r.key" class="tc-skilltable__row" role="row" :title="skillRowTitle(r)" @click="goSkillLogs(r)">
             <span class="tc-st__name" role="cell"><strong :title="r.display || r.key">{{ r.display || r.key }}</strong></span>
             <span class="tc-st__num" role="cell">{{ r.calls }}</span>
             <span class="tc-st__num" role="cell">{{ fmtTokens(r.tokens) }}</span>
@@ -174,7 +184,7 @@
           </div>
         </div>
         <p v-if="skillRows.length" class="mk-card__note">
-          成本＝已定价调用金额合计（USD）· 单价未配置的 Skill 不计入占比<template v-if="skillCostTotal <= 0">（当前无已定价调用，占比按 Token 计）</template>
+          成本＝已定价调用金额合计（USD）· 单价未配置的 Skill 不计入占比 · 点击行可到执行日志看该 Skill 逐调用明细<template v-if="skillCostTotal <= 0">（当前无已定价调用，占比按 Token 计）</template>
         </p>
         <p v-else class="mk-card__note">暂无数据。</p>
       </section>
@@ -316,7 +326,7 @@ function skillSharePct(r: SkillCostRow): string {
   return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`
 }
 function skillRowTitle(r: SkillCostRow): string {
-  return `${r.display || r.key} · ${r.calls} 次调用 · Token ${fmtTokens(r.tokens)} · 成本 ${skillRowCost(r)}`
+  return `${r.display || r.key} · ${r.calls} 次调用 · Token ${fmtTokens(r.tokens)} · 成本 ${skillRowCost(r)} · 点击查看该 Skill 的逐调用明细`
 }
 
 /* 成本卡副行（长版，收进 KPI 卡 title 悬停）：数值本身只给结论。
@@ -332,8 +342,8 @@ const costHint = computed(() => {
   if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `${window}没有带 token 的 LLM 调用`
   const missing = missingPricingModels.value
   return missing.length
-    ? `${window} · 暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}`
-    : `${window} · models.config.ts 的 pricing 尚未填权威单价，暂不展示金额`
+    ? `${window} · 暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}；点击本卡直达「模型与接入」补单价`
+    : `${window} · models.config.ts 的 pricing 尚未填权威单价，暂不展示金额；点击本卡直达「模型与接入」补单价`
 })
 
 /* KPI hint 短口径（原型 metricCard 的 hint 是一短句）：长解释走卡 title 悬停 */
@@ -343,7 +353,7 @@ const costHintShort = computed(() => {
   if (costUsd.value !== null) return `近 ${days.value} 天 · 已定价 ${costPricedCalls.value} 次`
   if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `近 ${days.value} 天无调用`
   const n = missingPricingModels.value.length
-  return `近 ${days.value} 天 · 单价未配置${n > 0 ? ` · 待补 ${n} 个模型单价` : ''}`
+  return `近 ${days.value} 天 · 单价未配置${n > 0 ? ` · 待补 ${n} 个模型单价` : ''} · 点击去模型接入`
 })
 const perCallHintShort = computed(() => {
   if (costLoading.value) return '金额统计中'
@@ -393,11 +403,26 @@ function exportCsv() {
 /* 跨页互跳：成本聚合页 ⇄ 明细页（执行日志行级 token）/ 总览趋势
    口径说明：本页为 token-cost 端点精确聚合（含重试终态失败）；执行日志展示逐调用行级 token 明细；
    总览「LLM 用量」卡为近 7 天汇总 hero。三处同域但粒度/窗口不同，互跳避免口径黑盒。 */
-function goExecLogs() {
+/* P1#25（2026-10-02 人类可读性）：goExecLogs 支持携 agentFilter 深链——Skill 明细行可点，
+   跳执行日志即得该 Skill 的故障/用量视图（ExecLogs 已消费 intent.agentFilter；AdminConsole
+   按 intentQueryParams 把筛选合进 URL，刷新/分享可还原） */
+function goExecLogs(agentFilter = '') {
+  intent.agentFilter = agentFilter
+  intent.statusFilter = ''
+  intent.errorCategory = ''
+  intent.timeRange = ''
   intent.scene = 'execution-logs'
+}
+/** Skill 明细行点击：key 可能带 skill: 前缀（注册表口径），执行日志行内 agent 是裸名 */
+function goSkillLogs(r: SkillCostRow) {
+  goExecLogs(String(r.key || '').replace(/^skill:/, ''))
 }
 function goOverview() {
   intent.scene = 'overview'
+}
+/** P1#25：单价未配置 → 直达「模型与接入」补单价（决策就近） */
+function goModelConfig() {
+  intent.scene = 'api-config'
 }
 
 const costLoading = ref(false)
@@ -408,8 +433,35 @@ const costPricedCalls = ref(0)
 const costMissingCalls = ref(0)
 const missingPricingModels = ref<string[]>([])
 
+/* P1#25 失败调用活卡（原「缓存命中率」死卡位）：totals.failed 后端已返回，
+   失败率 = failed / calls（窗口随 pills），失败信号值得首屏一位 */
+const failedCalls = computed(() => summary.value?.totals.failed ?? 0)
+const totalCalls = computed(() => summary.value?.totals.calls ?? 0)
+const failedPct = computed(() =>
+  totalCalls.value > 0 ? `${Math.round((failedCalls.value / totalCalls.value) * 100)}%` : '—'
+)
+const failedCallsText = computed(() =>
+  failedCalls.value > 0 ? `${failedCalls.value} 次（${failedPct.value}）` : '0 次'
+)
+const failedHint = computed(() => {
+  const win = `近 ${days.value} 天${includeTest.value ? '（含测试流量）' : ''}`
+  const base = `口径：${win} · 失败/总调用 = ${failedCalls.value}/${totalCalls.value}；重试后仍失败才计入（终态口径）`
+  return failedCalls.value > 0
+    ? `${base}；逐条失败可在「按 Skill 成本明细」点对应行直达执行日志`
+    : base
+})
+
+/* P1#25 单价未配置 = 决策态：卡可点直达「模型与接入」补单价 */
+const pricingMissing = computed(
+  () => !costLoading.value && !costFailed.value && costUsd.value === null && !(costPricedCalls.value === 0 && costMissingCalls.value === 0)
+)
+
+/* P1#25 金额格式：固定 6 位小数改有效数字——固定 6 位对大额是噪音、对微额首屏
+   全是 0.000000 读不出量级。≥1 两位小数 / ≥0.01 四位 / 更小保留 6 位；0 与非法值显「0」 */
 function fmtCostUsd(v: number): string {
-  if (!Number.isFinite(v) || v < 0) return '0.000000'
+  if (!Number.isFinite(v) || v <= 0) return '0'
+  if (v >= 1) return v.toFixed(2)
+  if (v >= 0.01) return v.toFixed(4)
   return v.toFixed(6)
 }
 
@@ -599,6 +651,8 @@ const trendCols = computed(() => trend.value.map((d) => ({
   padding: 7px 0;
   border-bottom: 1px solid var(--mk-table-row-line);
   transition: background 0.12s;
+  /* P1#25：整行可点 → 执行日志携该 Skill 的 agentFilter 深链（hover 反馈已有，补手型） */
+  cursor: pointer;
 }
 .tc-skilltable__row:last-child { border-bottom: none; }
 .tc-skilltable__row:hover { background: var(--mk-table-row-hover-bg); }

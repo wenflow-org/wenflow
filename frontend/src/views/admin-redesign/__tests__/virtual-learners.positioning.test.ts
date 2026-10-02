@@ -35,6 +35,10 @@ vi.mock('../live', async () => {
     }),
     liveLoading: ref(false),
     liveFailures: ref<Record<string, string>>({}),
+    /* P1#19 运行统计三态导出（本页消费 live 层 loading/error/retry） */
+    liveVirtualStatsLoading: ref(false),
+    liveVirtualStatsError: ref(''),
+    retryLiveVirtualStats: vi.fn(async () => {}),
     liveCreateVirtual: vi.fn(async () => 'vl-new'),
     liveDeleteVirtual: vi.fn(async () => {}),
     loadLiveData: vi.fn(async () => {}),
@@ -80,10 +84,10 @@ describe('虚拟学习者定位（D1）', () => {
     const bar = wrapper.find('.mk-status');
     expect(bar.exists()).toBe(true);
     expect(bar.text()).toContain('共 0 人');
-    // 分区筛选计数（画像口径）
+    // 分区筛选计数（画像口径；P2「需关注」已正名「曾失败」，口径=累计失败）
     expect(bar.text()).toContain('进行中 0');
     expect(bar.text()).toContain('已暂停 0');
-    expect(bar.text()).toContain('需关注 0');
+    expect(bar.text()).toContain('曾失败 0');
     expect(bar.text()).not.toContain('创建中');
     wrapper.unmount();
   });

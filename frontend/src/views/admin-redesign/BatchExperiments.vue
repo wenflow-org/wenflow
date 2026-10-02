@@ -6,6 +6,11 @@
     <div v-if="!embedded" class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <span class="mk-status__meta">共 {{ experiments.length }} 个实验 · 进行中 {{ runningCount }} · 学习者 {{ learnerTotal }}</span>
+      <!-- P1#23（2026-10-02 人类可读性）：状态条此前只答「多少在跑」不答「跑得好不好」——
+           补失败/卡死聚合（红/琥珀），口径（已加载 runs 客户端聚合）入 title -->
+      <span v-if="failedRunTotal || stalledRunTotal" class="mk-status__meta" :title="aggregateTitle">
+        <template v-if="failedRunTotal"><b class="be-agg--bad">失败 {{ failedRunTotal }}</b><template v-if="stalledRunTotal"> · </template></template><template v-if="stalledRunTotal"><b class="be-agg--stall">卡死 {{ stalledRunTotal }}</b></template>
+      </span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建实验</button>
       </span>
@@ -17,7 +22,7 @@
     </div>
 
     <div class="mk-card">
-      <MockSkeletonTable v-if="loading && !experiments.length" :cols="7" />
+      <MockSkeletonTable v-if="loading && !experiments.length" :cols="8" />
       <div v-else-if="experiments.length" class="mk-table-scroll be-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容；
              长描述由下方 be-desc 截断兜底 -->
@@ -29,6 +34,9 @@
               <th>学习者</th>
               <th>进度</th>
               <th>创建时间</th>
+              <!-- P1#22（2026-10-02 人类可读性）：「running+0%+刚发起」与「卡死 30 分钟」此前视觉相同——
+                   最近活动列（实验 updatedAt 与 runs updatedAt 取最大）让新鲜度可扫 -->
+              <th title="实验与其全部 runs 的最近一次更新时间（相对）">最近活动</th>
               <th>负责人</th>
               <th class="mk-th--right">操作</th>
             </tr>
@@ -51,7 +59,7 @@
                   <span class="mk-cell-sub be-desc" :title="e.description || ''">{{ e.description || '无描述' }}</span>
                 </div>
               </td>
-              <td><span class="mk-badge" :class="statusBadge(e.status)">{{ statusText(e.status) }}</span></td>
+              <td><span class="mk-badge" :class="statusBadge(e.status)">{{ expStatusText(e.status) }}</span></td>
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ (e.runs || []).length }} 名</strong>
@@ -68,13 +76,28 @@
                 </div>
               </td>
               <td :title="fmtDate(e.createdAt)">{{ timeAgo(e.createdAt) }}</td>
+              <!-- P1#22 最近活动：running 且超阈值无推进 → 琥珀 + title 报「N 分钟无更新，可能卡住」 -->
+              <td :class="{ 'be-activity--stall': isStalled(e) }" :title="activityTitle(e)">
+                {{ timeAgo(lastActivityAt(e)) }}<template v-if="isStalled(e)"> · 可能卡死</template>
+              </td>
               <!-- 原型 .sub.mono 列：负责人（createdBy 详情抽屉已在用），空值显 — -->
               <td class="mono be-owner" :title="e.createdBy || ''">{{ e.createdBy || '—' }}</td>
               <td>
                 <div class="mk-actions">
                   <!-- 原型操作列：文字小钮（.btn--sm 形态，破坏性动作红字钮）；行级动作另留 ⋯ 菜单 -->
                   <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(e)">详情</button>
-                  <button v-if="e.status === 'running'" type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="e.busy" @click.stop="stop(e)">停止</button>
+                  <!-- P1#22 卡死行恢复引导（就地提示）：后端无实验级「重试」端点，恢复手段 =
+                       详情抽屉内逐 run「推进」；确认无法恢复再停止。title 指路，不暗示不存在的按钮 -->
+                  <button
+                    v-if="e.status === 'running'"
+                    type="button"
+                    class="mk-btn mk-btn--sm mk-btn--danger"
+                    :disabled="e.busy"
+                    :title="isStalled(e)
+                      ? `该实验 ${idleMinsOf(e)} 分钟无更新，可能卡住：先「详情」→ 对卡住的 run 用「推进」手动推进验证，确认无法恢复再停止`
+                      : '停止实验：中断进行中的运行，实验不会继续执行'"
+                    @click.stop="stop(e)"
+                  >停止</button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === e.id" @click.stop="toggleMenu(e.id)">⋯</button>
                     <div v-if="openMenu === e.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -176,7 +199,7 @@
           <div class="mk-drawer__body be-detail__body">
             <!-- 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 学习者数均为行上已有字段 -->
             <div v-if="detail" class="be-detail__pills">
-              <span class="mk-badge" :class="statusBadge(detail.status)">{{ statusText(detail.status) }}</span>
+              <span class="mk-badge" :class="statusBadge(detail.status)">{{ expStatusText(detail.status) }}</span>
               <span class="mk-badge mk-badge--muted">学习者 {{ detailRunList.length }} 名</span>
             </div>
             <!-- 事实清单（原型 dl.kv → 共享 mk-facts 栅格）：进度格嵌 minibar（同 OpsContent oc-fact-progress） -->
@@ -186,6 +209,18 @@
               <div><span>更新</span><strong :title="fmtDate(detail.updatedAt)">{{ timeAgo(detail.updatedAt) }}</strong></div>
               <div><span>完成</span><strong class="mono">{{ detailDone }} / {{ detailRunList.length }}</strong></div>
               <div><span>进行中</span><strong class="mono">{{ detailActive }}</strong></div>
+              <!-- P1#23（2026-10-02）：事实栅格此前无「失败」格——失败 run 只藏在运行记录行的红字里，
+                   抽屉首屏扫不到；人工停止实验的 failed run 记「已中止」，不红 -->
+              <div>
+                <span>失败</span>
+                <strong
+                  class="mono"
+                  :class="{ 'be-fact-fail': detailFailedCount > 0 && !detailStopped }"
+                  :title="detailStopped
+                    ? `failed run ${detailFailedCount} 个（人工停止产生，记为已中止，非故障）`
+                    : `failed run ${detailFailedCount} 个；含卡死后判失败的 run，可在下方运行记录看 lastError`"
+                >{{ detailStopped && detailFailedCount > 0 ? `${detailFailedCount}（已中止）` : detailFailedCount }}</strong>
+              </div>
               <div>
                 <span>进度</span>
                 <strong class="be-fact-progress">
@@ -316,6 +351,68 @@ const progressTone = (e: ExpRow) => {
 }
 const progressTitle = (e: ExpRow) =>
   `完成 ${doneRuns(e).length}/${e.runs?.length || 0} · ${failText(e)} ${failedRuns(e).length} · 进行中 ${(e.runs || []).filter((r) => r.status === 'active').length}`
+
+/* P2（2026-10-02 人类可读性）：实验层 done 与 run 层 done 同名「已完成」却不同色
+   （实验蓝灰 / run 绿），同屏两种语义——实验层正名「已结束」，绿色「已完成」只归 run */
+const expStatusText = (s: string) => (s === 'done' ? '已结束' : statusText(s))
+
+/* ===== P1#22 最近活动（2026-10-02 人类可读性）：异步流程页必须有新鲜度读数 ===== */
+/** 卡住阈值（拍板 2026-10-02）：running 且最近活动超过 20 分钟无推进 → 琥珀「可能卡死」。
+    调度器 30s 一推进，正常运行的实验 updatedAt 至少每 30s 动一次；20 分钟覆盖长任务
+    （单任务常规几分钟）且远大于轮询间隔，误报率低。 */
+const BE_STALL_MINUTES = 20
+
+function tsOf(iso?: string): number {
+  const t = new Date(iso || '').getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
+/** 最近活动时间 = max(实验 updatedAt, 全部 runs updatedAt)（数据已在手：列表接口带 runs） */
+const lastActivityAt = (e: ExpRow): string => {
+  let best = e.updatedAt || e.createdAt || ''
+  for (const r of e.runs || []) if (tsOf(r.updatedAt) > tsOf(best)) best = r.updatedAt
+  return best
+}
+
+/** 距最近活动的分钟数（时间不可知 → 0，不误报卡死） */
+const idleMinsOf = (e: ExpRow): number => {
+  const t = tsOf(lastActivityAt(e))
+  if (!t) return 0
+  return Math.max(0, Math.floor((Date.now() - t) / 60000))
+}
+
+/** 卡住嫌疑：仅 running 判定（终态实验不参与）；时间缺失不判 */
+const isStalled = (e: ExpRow): boolean => e.status === 'running' && idleMinsOf(e) >= BE_STALL_MINUTES
+
+/** 最近活动列 title：相对时间配绝对时间；卡死行给出阈值与判语 */
+const activityTitle = (e: ExpRow): string => {
+  const iso = lastActivityAt(e)
+  const abs = iso ? fmtDate(iso) : '无记录'
+  return isStalled(e)
+    ? `最近活动 ${abs}：已 ${idleMinsOf(e)} 分钟无更新（阈值 ${BE_STALL_MINUTES} 分钟），可能卡住`
+    : `最近活动 ${abs}`
+}
+
+/* ===== P1#23 页面级聚合（2026-10-02 人类可读性）：状态条此前只答「多少在跑」不答
+   「跑得好不好」——从已加载实验的 runs 客户端聚合失败/卡死；人工停止实验的 failed run
+   是人工终止不是故障，与行内口径一致（记已中止、不计入失败） */
+const failedRunTotal = computed(() =>
+  experiments.value.reduce((sum, e) => (manualStopped(e) ? sum : sum + failedRuns(e).length), 0)
+)
+const stalledRunTotal = computed(() =>
+  experiments.value.reduce((sum, e) => sum + (e.runs || []).filter((r) => r.status === 'stalled').length, 0)
+)
+const manualStoppedCount = computed(() => experiments.value.filter((e) => manualStopped(e)).length)
+const aggregateTitle = computed(() => {
+  const parts = [
+    `口径：当前已加载 ${experiments.value.length} 个实验的 runs 客户端聚合（随轮询刷新，非后端全量统计）`,
+    `卡死 = run 状态 stalled 或 running 超 ${BE_STALL_MINUTES} 分钟无推进`,
+  ]
+  if (manualStoppedCount.value) {
+    parts.push(`另有 ${manualStoppedCount.value} 个人工停止实验，其 failed run 记为「已中止」，未计入失败`)
+  }
+  return parts.join('；')
+})
 
 function fmtDate(iso: string): string {
   const d = new Date(iso)
@@ -489,6 +586,9 @@ const detailRunList = computed<BatchExperimentRun[]>(() =>
 )
 const detailDone = computed(() => detailRunList.value.filter((r) => r.status === 'done').length)
 const detailActive = computed(() => detailRunList.value.filter((r) => r.status === 'active').length)
+/* P1#23 抽屉「失败」格：与列表口径一致（人工停止 → 已中止，不红） */
+const detailFailedCount = computed(() => detailRunList.value.filter((r) => r.status === 'failed').length)
+const detailStopped = computed(() => !!(detail.value && stoppedIds.value.has(detail.value.id)))
 const detailProgress = computed(() =>
   detailRunList.value.length ? Math.round((detailDone.value / detailRunList.value.length) * 100) : 0
 )
@@ -663,6 +763,13 @@ watch(shouldPoll, (on) => (on ? poll.start() : poll.stop()), { immediate: true }
 /* 学习者列：失败数红色强调（失败有值时突出，无失败保持副行灰） */
 .be-fail-num { color: var(--mk-red); font-weight: 700; }
 .be-cell--fail { color: var(--mk-red); }
+/* P1#23 状态条聚合：失败红 / 卡死琥珀（与行内 be-fail-num、be-run__stall 同色系，跨行同语义同色） */
+.be-agg--bad { color: var(--mk-red); font-weight: 700; }
+.be-agg--stall { color: var(--mk-amber); font-weight: 700; }
+/* P1#22 最近活动列：卡死嫌疑琥珀（资源停滞非故障，不用红） */
+.be-activity--stall { color: var(--mk-amber); font-weight: 700; }
+/* P1#23 抽屉失败格：非人工停止的失败 run 红字 */
+.be-fact-fail { color: var(--mk-red); }
 .be-progress .mk-minibar { flex: 1; }
 .be-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
 
