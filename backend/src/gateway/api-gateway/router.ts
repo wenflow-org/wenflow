@@ -40,6 +40,20 @@ interface AgentConfigRecord {
   maxTokens: number | null;
 }
 
+/**
+ * 学习对话链技能（2026-10-02 模型分组 A/B 拍板）：用户自有 provider 上仅这些技能用
+ * 用户自己的模型（agnes 组的 A/B 靶面 = 教学对话本身）；目标/路径/评估/收尾链技能
+ * 按 skill_model_configs 绑定走 ds（好 key、质量锚定——path 生成质量锚定整条学习路径）。
+ */
+const LEARN_DIALOGUE_SKILLS = new Set([
+  'teaching-turn',
+  'virtual-learner-learn-turn-simulator',
+  'virtual-learner-epistemic-grounding',
+  'peer-reinforcement',
+  'adaptive-guidance-copy',
+  'learning-predictor',
+]);
+
 /** 解析 skill_model_configs.paramOverrides（JSON）。非对象/坏 JSON 一律视为未覆盖。 */
 function parseSkillParamOverrides(raw: unknown): ResolvedRoute['skillParamOverrides'] {
   if (typeof raw !== 'string' || !raw.trim()) return null;
@@ -260,12 +274,13 @@ export class APIRouter {
         : inheritedRoute.source;
 
       // 平台别名覆盖是全局的模型身份重映射:skill 显式模型同样生效(此前仅平台默认路由生效)
-      // 例外：用户自有 provider（user-provider/public-only）上「用户的 chatModel 即权威」——
-      // skill 模型绑定是平台通道概念，不得把用户自己供应商空间的模型身份抢回平台默认
-      // （2026-10-02：VL 分组 A/B 中 28 个 skill 行钉死 dsv4.1，把 agnes 组模型覆盖回 ds 的实锤）。
+      // 用户自有 provider（user-provider/public-only）分层归属（2026-10-02 A/B 拍板）：
+      //   学习对话链技能 → 用户自己的模型（agnes A/B 靶面）；
+      //   其余技能（goal/path/评估/收尾链）→ skill 绑定照常生效（ds 好 key，质量锚定）。
       const platformRecord = await this.getPlatformConfigRecord();
       const overrides = platformRecord ? this.platformAliasOverrides(platformRecord) : null;
-      const model = inheritedUserEndpoint
+      const userModelWins = inheritedUserEndpoint && LEARN_DIALOGUE_SKILLS.has(skillId);
+      const model = userModelWins
         ? inheritedRoute.model
         : config.model
           ? (isReasoning
@@ -280,8 +295,8 @@ export class APIRouter {
         apiKey,
         model,
         // 标记 skill 级是否显式指定了模型（供 resolve-llm-call-params 决定优先级）；
-        // 用户自有端点上模型由用户的 chatModel 决定，skill 绑定未生效 → 不标 explicit
-        modelExplicit: Boolean(config.model) && !inheritedUserEndpoint,
+        // 用户自有端点上学习对话链的模型由用户的 chatModel 决定，skill 绑定未生效 → 不标 explicit
+        modelExplicit: Boolean(config.model) && !userModelWins,
         thinkingMode: this.normalizeThinkingMode(config.thinkingMode || inheritedRoute.thinkingMode),
         reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort || inheritedRoute.reasoningEffort),
         // 2026-09-28 配置体系优化：skill 级参数覆盖（paramOverrides JSON）与兜底链

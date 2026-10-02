@@ -112,14 +112,24 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
       enabled: true
     })
 
-    const resolved = await new APIRouter().resolve({
+    // 路径链技能（非学习对话链）：skill 绑定照常生效（ds 好 key，质量锚定），
+    // 用户端点与公网策略保留
+    const pathRoute = await new APIRouter().resolve({
       agentId: 'path-agent',
       skillId: 'path-planning'
     }, 'user-1')
+    expect(pathRoute).toEqual(expect.objectContaining({
+      endpoint: 'https://user-provider.example/v1',
+      model: 'skill-model',
+      privateNetworkPolicy: 'public-only'
+    }))
 
-    // 用户自有 provider 上「用户的 chatModel 即权威」：skill 模型绑定是平台通道概念，
-    // 不得把用户供应商空间的模型身份抢回平台默认（2026-10-02）；端点与公网策略保留
-    expect(resolved).toEqual(expect.objectContaining({
+    // 学习对话链技能：用户自己的模型即权威（agnes A/B 靶面 = 教学对话本身）
+    const teachRoute = await new APIRouter().resolve({
+      agentId: 'path-agent',
+      skillId: 'teaching-turn'
+    }, 'user-1')
+    expect(teachRoute).toEqual(expect.objectContaining({
       endpoint: 'https://user-provider.example/v1',
       model: 'user-model',
       privateNetworkPolicy: 'public-only'
