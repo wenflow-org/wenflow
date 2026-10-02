@@ -181,6 +181,12 @@ export function findAllProfilesForCardIndex() {
 export function findCustomCardsForExport() {
   return prisma.virtual_learner_profiles.findMany({
     where: { presetKey: null },
-    select: { profile: true, learningGoal: true, knowledgeLevel: true, tags: true, notes: true },
+    select: { profile: true, learningGoal: true, knowledgeLevel: true, tags: true, notes: true, userId: true },
   });
+}
+
+/** 卡导入更新路径：按 profileId 取归属 userId（自带资料要写进该用户的资料库） */
+export async function findProfileUserIdById(id: string): Promise<string | null> {
+  const r = await prisma.virtual_learner_profiles.findUnique({ where: { id }, select: { userId: true } });
+  return r?.userId ?? null;
 }

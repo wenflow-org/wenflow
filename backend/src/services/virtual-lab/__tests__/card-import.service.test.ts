@@ -121,6 +121,20 @@ describe('card-import：validateCard', () => {
     const r = validateCard(card({ story: { ...card().story, visibleOpening: '想学数学' } }), emptyIndex());
     expect(r.warnings.join()).toContain('visibleOpening 长度');
   });
+
+  it('自带资料：缺 title / 缺正文 → error', () => {
+    const noTitle = validateCard(card({ materials: [{ kind: 'book', title: '', content: 'x' }] } as Partial<LearnerCard> as LearnerCard), emptyIndex());
+    expect(noTitle.errors.join()).toContain('title 必填');
+    const noBody = validateCard(card({ materials: [{ kind: 'book', title: '某书' }] } as Partial<LearnerCard> as LearnerCard), emptyIndex());
+    expect(noBody.errors.join()).toContain('content 与 outline 至少给一个');
+  });
+
+  it('自带资料：kind 非法 → error；合法 outline 卡通过', () => {
+    const badKind = validateCard(card({ materials: [{ kind: 'video' as 'book', title: '某课', outline: ['第1章'] }] } as Partial<LearnerCard> as LearnerCard), emptyIndex());
+    expect(badKind.errors.join()).toContain('kind 非法');
+    const ok = validateCard(card({ materials: [{ kind: 'book', title: '《统计学习基础》', outline: ['第1章 监督学习', '第2章 线性模型'] }] } as Partial<LearnerCard> as LearnerCard), emptyIndex());
+    expect(ok.errors).toEqual([]);
+  });
 });
 
 describe('card-import：resolveCardKey（历史卡身份回退）', () => {
